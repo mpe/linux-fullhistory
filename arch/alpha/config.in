@@ -99,7 +99,10 @@ if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
   tristate 'Kernel support for JAVA binaries' CONFIG_BINFMT_JAVA
 fi
 tristate 'Kernel support for Linux/Intel ELF binaries' CONFIG_BINFMT_EM86
-tristate 'Parallel port support' CONFIG_PNP_PARPORT
+tristate 'Parallel port support' CONFIG_PARPORT
+if [ "$CONFIG_PARPORT" != "n" ]; then
+  dep_tristate '  PC-style hardware' CONFIG_PARPORT_PC $CONFIG_PARPORT
+fi
 endmenu
 
 source drivers/pnp/Config.in

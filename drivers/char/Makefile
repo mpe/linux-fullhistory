@@ -59,6 +59,14 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_ROCKETPORT),y)
+L_OBJS += rocket.o
+else
+  ifeq ($(CONFIG_ROCKETPORT),m)
+  M_OBJS += rocket.o
+  endif
+endif
+
 ifeq ($(CONFIG_DIGI),y)
 L_OBJS += pcxx.o
 else

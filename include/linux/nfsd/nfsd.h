@@ -109,10 +109,7 @@ int		nfsd_readdir(struct svc_rqst *, struct svc_fh *,
 int		nfsd_statfs(struct svc_rqst *, struct svc_fh *,
 				struct statfs *);
 int		nfsd_notify_change(struct inode *, struct iattr *);
-int		nfsd_permission(struct svc_export *, struct inode *, int);
-void		nfsd_write_inode(struct inode *);
-struct inode *	nfsd_iget(dev_t dev, ino_t ino);
-int		nfsd_parentdev(dev_t *devp);
+int		nfsd_permission(struct svc_export *, struct dentry *, int);
 
 /*
  * lockd binding

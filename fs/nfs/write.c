@@ -424,7 +424,6 @@ nfs_writepage(struct inode *inode, struct page *page)
 
 /*
  * Update and possibly write a cached page of an NFS file.
- * The page is already locked when we get here.
  *
  * XXX: Keep an eye on generic_file_read to make sure it doesn't do bad
  * things with a page scheduled for an RPC call (e.g. invalidate it).
@@ -441,6 +440,7 @@ nfs_updatepage(struct inode *inode, struct page *page, const char *buffer,
 				inode->i_dev, inode->i_ino,
 				count, page->offset+offset, sync);
 
+	set_bit(PG_locked, &page->flags);
 	page_addr = (u8 *) page_address(page);
 
 	/* If wsize is smaller than page size, update and write

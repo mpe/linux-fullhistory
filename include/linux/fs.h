@@ -677,6 +677,7 @@ extern void invalidate_inode_pages(struct inode *);
 extern void invalidate_buffers(kdev_t dev);
 extern int floppy_is_wp(int minor);
 extern void sync_inodes(kdev_t dev);
+extern void write_inode_now(struct inode *inode);
 extern void sync_dev(kdev_t dev);
 extern int fsync_dev(kdev_t dev);
 extern void sync_supers(kdev_t dev);
@@ -812,6 +813,7 @@ extern int dcache_lookup(struct inode *, const char *, int, unsigned long *);
 
 extern int inode_change_ok(struct inode *, struct iattr *);
 extern void inode_setattr(struct inode *, struct iattr *);
+extern int notify_change(struct inode * inode, struct iattr * attr);
 
 /* kludge to get SCSI modules working */
 #include <linux/minix_fs.h>

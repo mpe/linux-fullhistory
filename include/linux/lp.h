@@ -113,7 +113,7 @@ struct lp_stats {
 };
 
 struct lp_struct {
-	struct ppd *dev;
+	struct pardevice *dev;
 	int flags;
 	unsigned int chars;
 	unsigned int time;

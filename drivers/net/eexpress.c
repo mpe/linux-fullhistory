@@ -1493,7 +1493,7 @@ eexp_set_multicast(struct device *dev)
 #endif
                 oj = jiffies;
                 while ((SCB_CUstat(scb_status(dev)) == 2) &&
-                       ((jiffies-oj) < 100));
+                       ((jiffies-oj) < 2000));
 		if (SCB_CUstat(scb_status(dev)) == 2)
 			printk("%s: warning, CU didn't stop\n", dev->name);
                 lp->started &= ~(STARTED_CU);

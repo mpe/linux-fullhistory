@@ -211,6 +211,7 @@ int get_cluster(struct inode *inode,int cluster);
 extern int fat_bmap(struct inode *inode,int block);
 extern int fat_notify_change(struct inode *,struct iattr *);
 extern void fat_put_inode(struct inode *inode);
+extern void fat_delete_inode(struct inode *inode);
 extern void fat_put_super(struct super_block *sb);
 extern void fat_read_inode(struct inode *inode, struct inode_operations *dir_ops);
 extern struct super_block *fat_read_super(struct super_block *s, void *data, int silent);
@@ -252,34 +253,30 @@ extern struct super_block *msdos_read_super(struct super_block *sb,void *data, i
 
 /* msdos.c - these are for Umsdos */
 extern void msdos_read_inode(struct inode *inode);
-extern int msdos_lookup(struct inode *dir,const char *name,int len, 
-			struct inode **result);
-extern int msdos_create(struct inode *dir,const char *name,int len,int mode,
-			struct inode **result);
-extern int msdos_rmdir(struct inode *dir,const char *name,int len);
-extern int msdos_mkdir(struct inode *dir,const char *name,int len,int mode);
-extern int msdos_unlink(struct inode *dir,const char *name,int len);
-extern int msdos_unlink_umsdos(struct inode *dir,const char *name,int len);
-extern int msdos_rename(struct inode *old_dir,const char *old_name,int old_len,
-			struct inode *new_dir,const char *new_name,int new_len);
+extern int msdos_lookup(struct inode *dir,struct dentry *);
+extern int msdos_create(struct inode *dir,struct dentry *dentry,int mode);
+extern int msdos_rmdir(struct inode *dir,struct dentry *dentry);
+extern int msdos_mkdir(struct inode *dir,struct dentry *dentry,int mode);
+extern int msdos_unlink(struct inode *dir,struct dentry *dentry);
+extern int msdos_unlink_umsdos(struct inode *dir,struct dentry *dentry);
+extern int msdos_rename(struct inode *old_dir,struct dentry *old_dentry,
+			struct inode *new_dir,struct dentry *new_dentry);
 
 /* fatfs_syms.c */
 extern int init_fat_fs(void);
 
 /* vfat/namei.c - these are for dmsdos */
-extern int vfat_create(struct inode *dir,const char *name,int len,int mode,
-		       struct inode **result);
-extern int vfat_unlink(struct inode *dir,const char *name,int len);
-extern int vfat_mkdir(struct inode *dir,const char *name,int len,int mode);
-extern int vfat_rmdir(struct inode *dir,const char *name,int len);
-extern int vfat_rename(struct inode *old_dir,const char *old_name,int old_len,
-		       struct inode *new_dir,const char *new_name,int new_len);
+extern int vfat_create(struct inode *dir,struct dentry *dentry,int mode);
+extern int vfat_unlink(struct inode *dir,struct dentry *dentry);
+extern int vfat_mkdir(struct inode *dir,struct dentry *dentry,int mode);
+extern int vfat_rmdir(struct inode *dir,struct dentry *dentry);
+extern int vfat_rename(struct inode *old_dir,struct dentry *old_dentry,
+		       struct inode *new_dir,struct dentry *new_dentry);
 extern void vfat_put_super(struct super_block *sb);
 extern struct super_block *vfat_read_super(struct super_block *sb,void *data,
 					   int silent);
 extern void vfat_read_inode(struct inode *inode);
-extern int vfat_lookup(struct inode *dir,const char *name,int len,
-		       struct inode **result);
+extern int vfat_lookup(struct inode *dir,struct dentry *);
 
 #endif /* __KERNEL__ */
 

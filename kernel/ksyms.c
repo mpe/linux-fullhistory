@@ -136,6 +136,7 @@ EXPORT_SYMBOL(max_mapnr);
 EXPORT_SYMBOL(num_physpages);
 EXPORT_SYMBOL(high_memory);
 EXPORT_SYMBOL(update_vm_cache);
+EXPORT_SYMBOL(vmtruncate);
 
 /* filesystem internal functions */
 EXPORT_SYMBOL(getname);
@@ -150,6 +151,7 @@ EXPORT_SYMBOL(sys_close);
 EXPORT_SYMBOL(close_fp);
 EXPORT_SYMBOL(d_alloc_root);
 EXPORT_SYMBOL(d_delete);
+EXPORT_SYMBOL(d_validate);
 EXPORT_SYMBOL(d_add);
 EXPORT_SYMBOL(d_move);
 EXPORT_SYMBOL(d_instantiate);
@@ -163,6 +165,8 @@ EXPORT_SYMBOL(fsync_dev);
 EXPORT_SYMBOL(permission);
 EXPORT_SYMBOL(inode_setattr);
 EXPORT_SYMBOL(inode_change_ok);
+EXPORT_SYMBOL(write_inode_now);
+EXPORT_SYMBOL(notify_change);
 EXPORT_SYMBOL(get_hardblocksize);
 EXPORT_SYMBOL(set_blocksize);
 EXPORT_SYMBOL(getblk);

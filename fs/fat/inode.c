@@ -44,8 +44,18 @@ void fat_put_inode(struct inode *inode)
 			MSDOS_I(inode)->i_linked = NULL;
 		}
 		if (MSDOS_I(inode)->i_busy) fat_cache_inval_inode(inode);
-		return;
 	}
+}
+
+void fat_delete_inode(struct inode *inode)
+{
+	struct inode *depend, *linked;
+	struct super_block *sb;
+
+	depend = MSDOS_I(inode)->i_depend;
+	linked = MSDOS_I(inode)->i_linked;
+	sb = inode->i_sb;
+
 	inode->i_size = 0;
 	fat_truncate(inode);
 	if (depend) {

@@ -111,11 +111,11 @@ union nfsctl_res {
 /*
  * Kernel syscall implementation.
  */
-#ifdef CONFIG_NFSD
+#if defined(CONFIG_NFSD) || defined(CONFIG_NFSD_MODULE)
 extern asmlinkage int	sys_nfsservctl(int, struct nfsctl_arg *,
 					    union nfsctl_res *);
 #else
-# define sys_nfsservctl	sys_ni_syscall
+#define sys_nfsservctl		sys_ni_syscall
 #endif
 extern int		exp_addclient(struct nfsctl_client *ncp);
 extern int		exp_delclient(struct nfsctl_client *ncp);

@@ -338,24 +338,37 @@ done_error:
 	return result;
 }
 
-/*
- * This should check "link_count", but doesn't do that yet..
- */
 static struct dentry * do_follow_link(struct dentry *base, struct dentry *dentry)
 {
 	struct inode * inode = dentry->d_inode;
 
 	if (inode && inode->i_op && inode->i_op->follow_link) {
-		struct dentry *result;
+		if (current->link_count < 5) {
+			struct dentry * result;
 
-		/* This eats the base */
-		result = inode->i_op->follow_link(inode, base);
-		base = dentry;
-		dentry = result;
+			current->link_count++;
+			/* This eats the base */
+			result = inode->i_op->follow_link(inode, base);
+			current->link_count--;
+			dput(dentry);
+			return result;
+		}
+		dput(dentry);
+		dentry = ERR_PTR(-ELOOP);
 	}
 	dput(base);
 	return dentry;
 }
+
+/*
+ * Allow a filesystem to translate the character set of
+ * a file name. This allows for filesystems that are not
+ * case-sensitive, for example.
+ *
+ * This is only a dummy define right now, but eventually
+ * it might become something like "(parent)->d_charmap[c]"
+ */
+#define name_translate_char(parent, c) (c)
 
 /*
  * Name resolution.
@@ -397,6 +410,7 @@ struct dentry * lookup_dentry(const char * name, struct dentry * base, int follo
 		c = *name;
 		do {
 			len++; name++;
+			c = name_translate_char(base, c);
 			hash = partial_name_hash(c, hash);
 			c = *name;
 		} while (c && (c != '/'));

@@ -55,12 +55,10 @@ static int
 nfsd_proc_getattr(struct svc_rqst *rqstp, struct nfsd_fhandle  *argp,
 					  struct nfsd_attrstat *resp)
 {
-	dprintk("nfsd: GETATTR  %x/%ld\n",
-				SVCFH_DEV(&argp->fh),
-				SVCFH_INO(&argp->fh));
+	dprintk("nfsd: GETATTR  %p\n", SVCFH_DENTRY(&argp->fh));
 
 	fh_copy(&resp->fh, &argp->fh);
-	RETURN(fh_lookup(rqstp, &resp->fh, 0, MAY_NOP));
+	RETURN(fh_verify(rqstp, &resp->fh, 0, MAY_NOP));
 }
 
 /*
@@ -70,9 +68,7 @@ static int
 nfsd_proc_setattr(struct svc_rqst *rqstp, struct nfsd_sattrargs *argp,
 					  struct nfsd_attrstat  *resp)
 {
-	dprintk("nfsd: SETATTR  %x/%ld\n",
-				SVCFH_DEV(&argp->fh),
-				SVCFH_INO(&argp->fh));
+	dprintk("nfsd: SETATTR  %p\n", SVCFH_DENTRY(&argp->fh));
 
 	fh_copy(&resp->fh, &argp->fh);
 	RETURN(nfsd_setattr(rqstp, &resp->fh, &argp->attrs));
@@ -87,10 +83,7 @@ nfsd_proc_lookup(struct svc_rqst *rqstp, struct nfsd_diropargs *argp,
 {
 	int	nfserr;
 
-	dprintk("nfsd: LOOKUP   %x/%ld %s\n",
-				SVCFH_DEV(&argp->fh),
-				SVCFH_INO(&argp->fh),
-				argp->name);
+	dprintk("nfsd: LOOKUP   %p %s\n", SVCFH_DENTRY(&argp->fh), argp->name);
 
 	nfserr = nfsd_lookup(rqstp, &argp->fh,
 				    argp->name,
@@ -111,9 +104,7 @@ nfsd_proc_readlink(struct svc_rqst *rqstp, struct nfsd_fhandle     *argp,
 	u32		*path;
 	int		dummy, nfserr;
 
-	dprintk("nfsd: READLINK %x/%ld\n",
-				SVCFH_DEV(&argp->fh),
-				SVCFH_INO(&argp->fh));
+	dprintk("nfsd: READLINK %p\n", SVCFH_DENTRY(&argp->fh));
 
 	/* Reserve room for status and path length */
 	svcbuf_reserve(&rqstp->rq_resbuf, &path, &dummy, 2);
@@ -136,10 +127,9 @@ nfsd_proc_read(struct svc_rqst *rqstp, struct nfsd_readargs *argp,
 	u32 *	buffer;
 	int	nfserr, avail;
 
-	dprintk("nfsd: READ %x/%ld %d bytes at %d\n",
-				SVCFH_DEV(&argp->fh),
-				SVCFH_INO(&argp->fh),
-				argp->count, argp->offset);
+	dprintk("nfsd: READ %p %d bytes at %d\n",
+		SVCFH_DENTRY(&argp->fh),
+		argp->count, argp->offset);
 
 	/* Obtain buffer pointer for payload. 19 is 1 word for
 	 * status, 17 words for fattr, and 1 word for the byte count.
@@ -173,10 +163,9 @@ nfsd_proc_write(struct svc_rqst *rqstp, struct nfsd_writeargs *argp,
 {
 	int	nfserr;
 
-	dprintk("nfsd: WRITE    %x/%ld %d bytes at %d\n",
-				SVCFH_DEV(&argp->fh),
-				SVCFH_INO(&argp->fh),
-				argp->len, argp->offset);
+	dprintk("nfsd: WRITE    %p %d bytes at %d\n",
+		SVCFH_DENTRY(&argp->fh),
+		argp->len, argp->offset);
 
 	nfserr = nfsd_write(rqstp, fh_copy(&resp->fh, &argp->fh),
 				   argp->offset,
@@ -204,23 +193,22 @@ nfsd_proc_create(struct svc_rqst *rqstp, struct nfsd_createargs *argp,
 	int		rdonly = 0, exists;
 	dev_t		rdev = NODEV;
 
-	dprintk("nfsd: CREATE   %x/%ld %s\n",
-				SVCFH_DEV(&argp->fh),
-				SVCFH_INO(&argp->fh),
-				argp->name);
+	dprintk("nfsd: CREATE   %p %s\n", SVCFH_DENTRY(&argp->fh), argp->name);
 
 	dirfhp = &argp->fh;
 	newfhp = &resp->fh;
 	attr = &argp->attrs;
 
 	/* Get the directory inode */
-	nfserr = fh_lookup(rqstp, dirfhp, S_IFDIR, MAY_EXEC);
+	nfserr = fh_verify(rqstp, dirfhp, S_IFDIR, MAY_EXEC);
 	if (nfserr)
 		RETURN(nfserr);
-	dirp = dirfhp->fh_inode;
+	dirp = dirfhp->fh_handle.fh_dentry->d_inode;
 
 	/* Check for MAY_WRITE separately. */
-	nfserr = nfsd_permission(dirfhp->fh_export, dirp, MAY_WRITE);
+	nfserr = nfsd_permission(dirfhp->fh_export,
+				 dirfhp->fh_handle.fh_dentry,
+				 MAY_WRITE);
 	if (nfserr == nfserr_rofs) {
 		rdonly = 1;	/* Non-fatal error for echo > /dev/null */
 	} else if (nfserr) {
@@ -230,7 +218,16 @@ nfsd_proc_create(struct svc_rqst *rqstp, struct nfsd_createargs *argp,
 
 	/* First, check if the file already exists.  */
 	exists = !nfsd_lookup(rqstp, dirfhp, argp->name, argp->len, newfhp);
-	inode = newfhp->fh_inode;
+
+	if (newfhp->fh_dverified)
+		inode = newfhp->fh_handle.fh_dentry->d_inode;
+
+	/* Get rid of this soon... */
+	if (exists && !inode) {
+		printk("nfsd_proc_create: Wheee... exists but d_inode==NULL\n");
+		nfserr = nfserr_rofs;
+		goto done;
+	}		
 
 	/* Unfudge the mode bits */
 	if (attr->ia_valid & ATTR_MODE) { 
@@ -311,10 +308,7 @@ nfsd_proc_remove(struct svc_rqst *rqstp, struct nfsd_diropargs *argp,
 {
 	int	nfserr;
 
-	dprintk("nfsd: REMOVE   %x/%ld %s\n",
-				SVCFH_DEV(&argp->fh),
-				SVCFH_INO(&argp->fh),
-				argp->name);
+	dprintk("nfsd: REMOVE   %p %s\n", SVCFH_DENTRY(&argp->fh), argp->name);
 
 	/* Unlink. -SIFDIR means file must not be a directory */
 	nfserr = nfsd_unlink(rqstp, &argp->fh, -S_IFDIR, argp->name, argp->len);
@@ -328,13 +322,9 @@ nfsd_proc_rename(struct svc_rqst *rqstp, struct nfsd_renameargs *argp,
 {
 	int	nfserr;
 
-	dprintk("nfsd: RENAME   %x/%ld %s -> %x/%ld %s\n",
-				SVCFH_DEV(&argp->ffh),
-				SVCFH_INO(&argp->ffh),
-				argp->fname,
-				SVCFH_DEV(&argp->tfh),
-				SVCFH_INO(&argp->tfh),
-				argp->tname);
+	dprintk("nfsd: RENAME   %p %s -> %p %s\n",
+		SVCFH_DENTRY(&argp->ffh), argp->fname,
+		SVCFH_DENTRY(&argp->tfh), argp->tname);
 
 	nfserr = nfsd_rename(rqstp, &argp->ffh, argp->fname, argp->flen,
 				    &argp->tfh, argp->tname, argp->tlen);
@@ -349,12 +339,10 @@ nfsd_proc_link(struct svc_rqst *rqstp, struct nfsd_linkargs *argp,
 {
 	int	nfserr;
 
-	dprintk("nfsd: LINK     %x/%ld -> %x/%ld %s\n",
-				SVCFH_DEV(&argp->ffh),
-				SVCFH_INO(&argp->ffh),
-				SVCFH_DEV(&argp->tfh),
-				SVCFH_INO(&argp->tfh),
-				argp->tname);
+	dprintk("nfsd: LINK     %p -> %p %s\n",
+		SVCFH_DENTRY(&argp->ffh),
+		SVCFH_DENTRY(&argp->tfh),
+		argp->tname);
 
 	nfserr = nfsd_link(rqstp, &argp->tfh, argp->tname, argp->tlen,
 				  &argp->ffh);
@@ -370,10 +358,9 @@ nfsd_proc_symlink(struct svc_rqst *rqstp, struct nfsd_symlinkargs *argp,
 	struct svc_fh	newfh;
 	int		nfserr;
 
-	dprintk("nfsd: SYMLINK  %x/%ld %s -> %s\n",
-				SVCFH_DEV(&argp->ffh),
-				SVCFH_INO(&argp->ffh),
-				argp->fname, argp->tname);
+	dprintk("nfsd: SYMLINK  %p %s -> %s\n",
+		SVCFH_DENTRY(&argp->ffh),
+		argp->fname, argp->tname);
 
 	/*
 	 * Create the link, look up new file and set attrs.
@@ -381,7 +368,7 @@ nfsd_proc_symlink(struct svc_rqst *rqstp, struct nfsd_symlinkargs *argp,
 	nfserr = nfsd_symlink(rqstp, &argp->ffh, argp->fname, argp->flen,
 						 argp->tname, argp->tlen,
 						 &newfh);
-	if (nfserr)
+	if (!nfserr)
 		nfserr = nfsd_setattr(rqstp, &newfh, &argp->attrs);
 
 	fh_put(&argp->ffh);
@@ -398,11 +385,11 @@ nfsd_proc_mkdir(struct svc_rqst *rqstp, struct nfsd_createargs *argp,
 {
 	int	nfserr;
 
-	dprintk("nfsd: MKDIR    %x/%ld %s\n",
-				SVCFH_DEV(&argp->fh),
-				SVCFH_INO(&argp->fh),
-				argp->name);
+	dprintk("nfsd: MKDIR    %p %s\n",
+		SVCFH_DENTRY(&argp->fh),
+		argp->name);
 
+	resp->fh.fh_dverified = 0; /* paranoia */
 	nfserr = nfsd_create(rqstp, &argp->fh, argp->name, argp->len,
 				    &argp->attrs, S_IFDIR, 0, &resp->fh);
 	fh_put(&argp->fh);
@@ -418,10 +405,7 @@ nfsd_proc_rmdir(struct svc_rqst *rqstp, struct nfsd_diropargs *argp,
 {
 	int	nfserr;
 
-	dprintk("nfsd: RMDIR    %x/%ld %s\n",
-				SVCFH_DEV(&argp->fh),
-				SVCFH_INO(&argp->fh),
-				argp->name);
+	dprintk("nfsd: RMDIR    %p %s\n", SVCFH_DENTRY(&argp->fh), argp->name);
 
 	nfserr = nfsd_unlink(rqstp, &argp->fh, S_IFDIR, argp->name, argp->len);
 	fh_put(&argp->fh);
@@ -438,10 +422,9 @@ nfsd_proc_readdir(struct svc_rqst *rqstp, struct nfsd_readdirargs *argp,
 	u32 *	buffer;
 	int	nfserr, count;
 
-	dprintk("nfsd: READDIR  %x/%ld %d bytes at %d\n",
-				SVCFH_DEV(&argp->fh),
-				SVCFH_INO(&argp->fh),
-				argp->count, argp->cookie);
+	dprintk("nfsd: READDIR  %p %d bytes at %d\n",
+		SVCFH_DENTRY(&argp->fh),
+		argp->count, argp->cookie);
 
 	/* Reserve buffer space for status */
 	svcbuf_reserve(&rqstp->rq_resbuf, &buffer, &count, 1);
@@ -470,9 +453,7 @@ nfsd_proc_statfs(struct svc_rqst * rqstp, struct nfsd_fhandle   *argp,
 {
 	int	nfserr;
 
-	dprintk("nfsd: STATFS   %x/%ld\n",
-				SVCFH_DEV(&argp->fh),
-				SVCFH_INO(&argp->fh));
+	dprintk("nfsd: STATFS   %p\n", SVCFH_DENTRY(&argp->fh));
 
 	nfserr = nfsd_statfs(rqstp, &argp->fh, &resp->stats);
 	fh_put(&argp->fh);
@@ -488,34 +469,34 @@ nfsd_proc_statfs(struct svc_rqst * rqstp, struct nfsd_fhandle   *argp,
 struct nfsd_void { int dummy; };
 
 #define PROC(name, argt, rest, relt, cache)	\
- { (svc_procfunc) nfsd_proc_##name,	\
-   (kxdrproc_t) nfssvc_decode_##argt,	\
-   (kxdrproc_t) nfssvc_encode_##rest,	\
-   (kxdrproc_t) nfssvc_release_##relt,	\
-   sizeof(struct nfsd_##argt),		\
-   sizeof(struct nfsd_##rest),		\
-   0,					\
-   cache				\
+ { (svc_procfunc) nfsd_proc_##name,		\
+   (kxdrproc_t) nfssvc_decode_##argt,		\
+   (kxdrproc_t) nfssvc_encode_##rest,		\
+   (kxdrproc_t) nfssvc_release_##relt,		\
+   sizeof(struct nfsd_##argt),			\
+   sizeof(struct nfsd_##rest),			\
+   0,						\
+   cache					\
  }
 struct svc_procedure		nfsd_procedures2[18] = {
-  PROC(null,	 void,		void,		none,	 RC_NOCACHE),
-  PROC(getattr,	 fhandle,	attrstat,	fhandle, RC_NOCACHE),
-  PROC(setattr,  sattrargs,	attrstat,	fhandle, RC_REPLBUFF),
-  PROC(none,	 void,		void,		none,	 RC_NOCACHE),
-  PROC(lookup,	 diropargs,	diropres,	fhandle, RC_NOCACHE),
-  PROC(readlink, fhandle,	readlinkres,	none,	 RC_NOCACHE),
-  PROC(read,	 readargs,	readres,	fhandle, RC_NOCACHE),
-  PROC(none,	 void,		void,		none,	 RC_NOCACHE),
-  PROC(write,	 writeargs,	attrstat,	fhandle, RC_REPLBUFF),
-  PROC(create,	 createargs,	diropres,	fhandle, RC_REPLBUFF),
-  PROC(remove,	 diropargs,	void,		none,	 RC_REPLSTAT),
-  PROC(rename,	 renameargs,	void,		none,	 RC_REPLSTAT),
-  PROC(link,	 linkargs,	void,		none,	 RC_REPLSTAT),
-  PROC(symlink,	 symlinkargs,	void,		none,	 RC_REPLSTAT),
-  PROC(mkdir,	 createargs,	diropres,	fhandle, RC_REPLBUFF),
-  PROC(rmdir,	 diropargs,	void,		none,	 RC_REPLSTAT),
-  PROC(readdir,	 readdirargs,	readdirres,	none,	 RC_REPLSTAT),
-  PROC(statfs,	 fhandle,	statfsres,	none,	 RC_NOCACHE),
+  PROC(null,	 void,		void,		none,		RC_NOCACHE),
+  PROC(getattr,	 fhandle,	attrstat,	fhandle,	RC_NOCACHE),
+  PROC(setattr,  sattrargs,	attrstat,	fhandle,	RC_REPLBUFF),
+  PROC(none,	 void,		void,		none,		RC_NOCACHE),
+  PROC(lookup,	 diropargs,	diropres,	fhandle,	RC_NOCACHE),
+  PROC(readlink, fhandle,	readlinkres,	none,		RC_NOCACHE),
+  PROC(read,	 readargs,	readres,	fhandle,	RC_NOCACHE),
+  PROC(none,	 void,		void,		none,		RC_NOCACHE),
+  PROC(write,	 writeargs,	attrstat,	fhandle,	RC_REPLBUFF),
+  PROC(create,	 createargs,	diropres,	fhandle,	RC_REPLBUFF),
+  PROC(remove,	 diropargs,	void,		none,		RC_REPLSTAT),
+  PROC(rename,	 renameargs,	void,		none,		RC_REPLSTAT),
+  PROC(link,	 linkargs,	void,		none,		RC_REPLSTAT),
+  PROC(symlink,	 symlinkargs,	void,		none,		RC_REPLSTAT),
+  PROC(mkdir,	 createargs,	diropres,	fhandle,	RC_REPLBUFF),
+  PROC(rmdir,	 diropargs,	void,		none,		RC_REPLSTAT),
+  PROC(readdir,	 readdirargs,	readdirres,	none,		RC_REPLSTAT),
+  PROC(statfs,	 fhandle,	statfsres,	none,		RC_NOCACHE),
 };
 
 

@@ -58,7 +58,7 @@ nfsd3_proc_getattr(struct svc_rqst *rqstp, struct nfsd_fhandle  *argp,
 				SVCFH_INO(&argp->fh));
 
 	resp->fh = argp->fh;
-	nfserr = fh_lookup(rqstp, &resp->fh, 0, MAY_NOP);
+	nfserr = fh_verify(rqstp, &resp->fh, 0, MAY_NOP);
 	RETURN(nfserr);
 }
 
@@ -227,7 +227,7 @@ nfsd3_proc_create(struct svc_rqst *rqstp, struct nfsd3_createargs *argp,
 	attr   = &argp->attrs;
 
 	/* Get the directory inode */
-	nfserr = fh_lookup(rqstp, dirfhp, S_IFDIR, MAY_CREATE);
+	nfserr = fh_verify(rqstp, dirfhp, S_IFDIR, MAY_CREATE);
 	if (nfserr)
 		RETURN(nfserr);
 
@@ -241,8 +241,7 @@ nfsd3_proc_create(struct svc_rqst *rqstp, struct nfsd3_createargs *argp,
 
 	/* Now create the file and set attributes */
 	nfserr = nfsd_create(rqstp, dirfhp, argp->name, argp->len,
-				attr, S_IFREG, 0, newfhp,
-				argp->createmode);
+				attr, S_IFREG, 0, newfhp);
 
 	RETURN(nfserr);
 }

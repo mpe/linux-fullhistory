@@ -98,6 +98,10 @@ extern void d_move(struct dentry * entry, struct dentry * newparent, struct qstr
 /* appendix may either be NULL or be used for transname suffixes */
 extern struct dentry * d_lookup(struct dentry * dir, struct qstr * name);
 
+/* validate "insecure" dentry pointer */
+extern int d_validate(struct dentry *dentry, struct dentry *dparent,
+		      unsigned int hash, unsigned int len);
+
 /* write full pathname into buffer and return length */
 extern int d_path(struct dentry * entry, struct dentry * chroot, char * buf);
 

@@ -128,15 +128,16 @@ typedef void nonconst;
 
 static void hpfs_read_inode(struct inode *);
 static void hpfs_put_super(struct super_block *);
-static void hpfs_statfs(struct super_block *, struct statfs *, int);
+static int hpfs_statfs(struct super_block *, struct statfs *, int);
 static int hpfs_remount_fs(struct super_block *, int *, char *);
 
 static const struct super_operations hpfs_sops =
 {
 	hpfs_read_inode,		/* read_inode */
-	NULL,				/* notify_change */
 	NULL,				/* write_inode */
 	NULL,				/* put_inode */
+	NULL,				/* delete_inode */
+	NULL,				/* notify_change */
 	hpfs_put_super,			/* put_super */
 	NULL,				/* write_super */
 	hpfs_statfs,			/* statfs */
@@ -175,6 +176,7 @@ static const struct inode_operations hpfs_file_iops =
 	NULL,				/* mknod */
 	NULL,				/* rename */
 	NULL,				/* readlink */
+	NULL,				/* follow_link */
 	generic_readpage,		/* readpage */
 	NULL,				/* writepage */
 	(int (*)(struct inode *, int))
@@ -189,7 +191,7 @@ static long hpfs_dir_read(struct inode *inode, struct file *filp,
 			  char *buf, unsigned long count);
 static int hpfs_readdir(struct inode *inode, struct file *filp,
 			void *dirent, filldir_t filldir);
-static int hpfs_lookup(struct inode *, const char *, int, struct inode **);
+static int hpfs_lookup(struct inode *, struct dentry *);
 
 static const struct file_operations hpfs_dir_ops =
 {
@@ -485,10 +487,10 @@ struct super_block *hpfs_read_super(struct super_block *s,
 	 * all set.  try it out.
 	 */
 
-	s->s_mounted = iget(s, s->s_hpfs_root);
+	s->s_root = d_alloc_root(iget(s, s->s_hpfs_root), NULL);
 	unlock_super(s);
 
-	if (!s->s_mounted) {
+	if (!s->s_root) {
 		printk("HPFS: hpfs_read_super: inode get failed\n");
 		s->s_dev = 0;
 		MOD_DEC_USE_COUNT;
@@ -501,7 +503,8 @@ struct super_block *hpfs_read_super(struct super_block *s,
 
 	root_dno = fnode_dno(dev, s->s_hpfs_root);
 	if (root_dno)
-		de = map_dirent(s->s_mounted, root_dno, "\001\001", 2, &qbh);
+		de = map_dirent(s->s_root->d_inode, root_dno,
+				"\001\001", 2, &qbh);
 	if (!root_dno || !de) {
 		printk("HPFS: "
 		       "hpfs_read_super: root dir isn't in the root dir\n");
@@ -510,9 +513,9 @@ struct super_block *hpfs_read_super(struct super_block *s,
 		return 0;
 	}
 
-	s->s_mounted->i_atime = local_to_gmt(de->read_date);
-	s->s_mounted->i_mtime = local_to_gmt(de->write_date);
-	s->s_mounted->i_ctime = local_to_gmt(de->creation_date);
+	s->s_root->d_inode->i_atime = local_to_gmt(de->read_date);
+	s->s_root->d_inode->i_mtime = local_to_gmt(de->write_date);
+	s->s_root->d_inode->i_ctime = local_to_gmt(de->creation_date);
 
 	brelse4(&qbh);
 	return s;
@@ -739,7 +742,7 @@ static void hpfs_put_super(struct super_block *s)
  * directory band -- not exactly right but pretty analogous.
  */
 
-static void hpfs_statfs(struct super_block *s, struct statfs *buf, int bufsiz)
+static int hpfs_statfs(struct super_block *s, struct statfs *buf, int bufsiz)
 {
 	struct statfs tmp;
 
@@ -763,7 +766,8 @@ static void hpfs_statfs(struct super_block *s, struct statfs *buf, int bufsiz)
 	tmp.f_files = s->s_hpfs_dirband_size;
 	tmp.f_ffree = s->s_hpfs_n_free_dnodes;
 	tmp.f_namelen = 254;
-	copy_to_user(buf, &tmp, bufsiz);
+
+	return copy_to_user(buf, &tmp, bufsiz) ? -EFAULT : 0;
 }
 
 /*
@@ -1115,17 +1119,17 @@ static secno bplus_lookup(struct inode *inode, struct bplus_header *b,
  * the boondocks.)
  */
 
-static int hpfs_lookup(struct inode *dir, const char *name, int len,
-		       struct inode **result)
+static int hpfs_lookup(struct inode *dir, struct dentry *dentry)
 {
 	struct quad_buffer_head qbh;
 	struct hpfs_dirent *de;
 	struct inode *inode;
 	ino_t ino;
+	const char *name = dentry->d_name.name;
+	int len = dentry->d_name.len;
 
 	/* In case of madness */
 
-	*result = 0;
 	if (dir == 0)
 		return -ENOENT;
 	if (!S_ISDIR(dir->i_mode))
@@ -1197,7 +1201,7 @@ static int hpfs_lookup(struct inode *dir, const char *name, int len,
 	 * Made it.
 	 */
 
-	*result = inode;
+	d_instantiate(dentry, inode);
 	iput(dir);
 	return 0;
 
@@ -1697,7 +1701,7 @@ static void *map_4sectors(kdev_t dev, unsigned secno,
 	if (!data)
 		goto bail;
 
-	qbh->bh[0] = bh = breada(dev, secno, 512, 0, UINT_MAX);
+	qbh->bh[0] = bh = bread(dev, secno, 512);
 	if (!bh)
 		goto bail0;
 	memcpy(data, bh->b_data, 512);

@@ -141,32 +141,31 @@ static inline void write_inode(struct inode *inode)
 		inode->i_sb->s_op->write_inode(inode);
 }
 
+static inline void sync_one(struct list_head *head, struct list_head *clean,
+			    struct list_head *placement, struct inode *inode)
+{
+	list_del(placement);
+	if (test_bit(I_LOCK, &inode->i_state)) {
+		list_add(placement, head);
+		spin_unlock(&inode_lock);
+		__wait_on_inode(inode);
+	} else {
+		list_add(placement, clean);
+		clear_bit(I_DIRTY, &inode->i_state);
+		set_bit(I_LOCK, &inode->i_state);
+		spin_unlock(&inode_lock);
+		write_inode(inode);
+		unlock_inode(inode);
+	}
+	spin_lock(&inode_lock);
+}
+
 static inline void sync_list(struct list_head *head, struct list_head *clean)
 {
 	struct list_head * tmp;
 
-	while ((tmp = head->prev) != head) {
-		struct inode *inode = list_entry(tmp, struct inode, i_list);
-		list_del(tmp);
-
-		/*
-		 * If the inode is locked, it's already being written out.
-		 * We have to wait for it, though.
-		 */
-		if (test_bit(I_LOCK, &inode->i_state)) {
-			list_add(tmp, head);
-			spin_unlock(&inode_lock);
-			__wait_on_inode(inode);
-		} else {
-			list_add(tmp, clean);
-			clear_bit(I_DIRTY, &inode->i_state);
-			set_bit(I_LOCK, &inode->i_state);
-			spin_unlock(&inode_lock);
-			write_inode(inode);
-			unlock_inode(inode);
-		}
-		spin_lock(&inode_lock);
-	}	
+	while ((tmp = head->prev) != head)
+		sync_one(head, clean, tmp, list_entry(tmp, struct inode, i_list));
 }
 
 /*
@@ -178,6 +177,17 @@ void sync_inodes(kdev_t dev)
 {
 	spin_lock(&inode_lock);
 	sync_list(&inode_dirty, &inode_in_use);
+	spin_unlock(&inode_lock);
+}
+
+/*
+ * Needed by knfsd
+ */
+void write_inode_now(struct inode *inode)
+{
+	spin_lock(&inode_lock);
+	if (test_bit(I_DIRTY, &inode->i_state))
+		sync_one(&inode_dirty, &inode_in_use, &inode->i_list, inode);
 	spin_unlock(&inode_lock);
 }
 

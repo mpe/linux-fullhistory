@@ -19,6 +19,7 @@ if [ "$CONFIG_SERIAL_EXTENDED" = "y" ]; then
 fi
 bool 'Non-standard serial port support' CONFIG_SERIAL_NONSTANDARD
 if [ "$CONFIG_SERIAL_NONSTANDARD" = "y" ]; then
+   tristate 'Comtrol Rocketport support' CONFIG_ROCKETPORT
    tristate 'Digiboard Intelligent Async Support' CONFIG_DIGIEPCA
    if [ "$CONFIG_DIGIEPCA" = "n" ]; then
       tristate 'Digiboard PC/Xx Support' CONFIG_DIGI
@@ -36,8 +37,8 @@ if [ "$CONFIG_SERIAL_NONSTANDARD" = "y" ]; then
      int '  FIFO trigger level' CONFIG_ESPSERIAL_TRIGGER_LEVEL 768
    fi
 fi
-if [ "$CONFIG_PNP_PARPORT" != "n" ]; then
-  dep_tristate 'Parallel printer support' CONFIG_PRINTER $CONFIG_PNP_PARPORT
+if [ "$CONFIG_PARPORT" != "n" ]; then
+  dep_tristate 'Parallel printer support' CONFIG_PRINTER $CONFIG_PARPORT
   if [ "$CONFIG_PRINTER" != "n" ]; then
     bool '  Support IEEE1284 status readback' CONFIG_PRINTER_READBACK
   fi

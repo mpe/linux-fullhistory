@@ -543,7 +543,7 @@ out:
 	return error;
 }
 
-asmlinkage int sys_lchown(const char * filename, uid_t user, gid_t group)
+asmlinkage int sys_chown(const char * filename, uid_t user, gid_t group)
 {
 	struct dentry * dentry;
 	int error;
@@ -552,35 +552,12 @@ asmlinkage int sys_lchown(const char * filename, uid_t user, gid_t group)
 	dentry = lnamei(filename);
 
 	error = PTR_ERR(dentry);
-	if (IS_ERR(dentry))
-		goto out;
-
-	error = chown_common(dentry, user, group);
-
-	dput(dentry);
-out:
+	if (!IS_ERR(dentry)) {
+		error = chown_common(dentry, user, group);
+		dput(dentry);
+	}
 	unlock_kernel();
-	return(error);
-}
-
-asmlinkage int sys_chown(const char * filename, uid_t user, gid_t group)
-{
-	struct dentry * dentry;
-	int error;
-
-	lock_kernel();
-	dentry = namei(filename);
-
-	error = PTR_ERR(dentry);
-	if (IS_ERR(dentry))
-		goto out;
-
-	error = chown_common(dentry, user, group);
-
-	dput(dentry);
-out:
-	unlock_kernel();
-	return(error);
+	return error;
 }
 
 asmlinkage int sys_fchown(unsigned int fd, uid_t user, gid_t group)

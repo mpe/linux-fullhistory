@@ -1,4 +1,4 @@
-/* $Id: sys32.S,v 1.1 1997/06/29 03:38:56 davem Exp $
+/* $Id: sys32.S,v 1.2 1997/07/20 09:18:47 davem Exp $
  * sys32.S: I-cache tricks for 32-bit compatability layer simple
  *          conversions.
  *
@@ -306,7 +306,7 @@ sys32_settimeofday:
 	.globl		sys32_sched_setparam, sys32_sched_getparam, sys32_signal
 	.globl		sys32_reboot, sys32_acct, sys32_newuname, sys32_olduname
 	.globl		sys32_sethostname, sys32_gethostname, sys32_setdomainname
-	.globl		sys32_time, sys32_swapoff, sys32_swapon, sys32_nfsservctl
+	.globl		sys32_time, sys32_swapoff, sys32_swapon
 	.globl		sys32_create_module, sys32_init_module, sys32_delete_module
 sys32_bdflush:
 	sra		%o1, 0, %o1
@@ -418,10 +418,4 @@ sys32_swapon:
 	srl		%o0, 0, %o0
 	mov		%o7, %g1
 	call		sys_swapon
-	 mov		%g1, %o7
-sys32_nfsservctl:
-	srl		%o1, 0, %o1
-	mov		%o7, %g1
-	srl		%o2, 0, %o2
-	call		sys_nfsservctl
 	 mov		%g1, %o7

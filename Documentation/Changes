@@ -29,7 +29,7 @@ English-language HTML version.
    Also, don't forget http://www.linuxhq.com/ for all your Linux kernel
 needs.
 
-Last updated: May 31, 1997.
+Last updated: July 22. 1997
 Current Author: Chris Ricker (gt1355b@prism.gatech.edu).
 
 Current Minimal Requirements
@@ -39,11 +39,11 @@ Current Minimal Requirements
 encountered a bug!  If you're unsure what version you're currently
 running, the suggested command should tell you.
 
-- Kernel modules	 modutils-2.1.34         ; insmod -v
+- Kernel modules	 modutils-2.1.42         ; insmod -V
 - Gnu C 		 2.7.2.1                 ; gcc --version
 - Binutils		 2.8.1.0.1               ; ld -v
-- Linux C Library	 5.4.23                  ; ls -l /lib/libc.so.*
-- Dynamic Linker (ld.so) 1.8.5                   ; ldd -v
+- Linux C Library	 5.4.33                  ; ls -l /lib/libc.so.*
+- Dynamic Linker (ld.so) 1.9.2                   ; ldd -v
 - Linux C++ Library	 2.7.2.1                 ; ls -l /usr/lib/libg++.so.*
 - Procps		 1.01                    ; ps --version
 - Procinfo               0.11                    ; procinfo -v
@@ -51,8 +51,9 @@ running, the suggested command should tell you.
 - Net-tools              1.41                    ; hostname -V
 - Loadlin                1.6a
 - Sh-utils               1.16                    ; expr --v
-- Autofs                 0.3.3                   ; automount --version
+- Autofs                 0.3.7                   ; automount --version
 - NFS                    0.4.21                  ; showmount --version
+- Bash                   1.14.7                  ; bash -version
 
 Upgrade notes
 *************
@@ -78,12 +79,12 @@ accordingly.
    For modules to work, you need to be running libc-5.4.x or greater.
 Since updates to libc fix other problems as well (security flaws, for
 example) and since 5.4.7 is missing a few needed symbols, try to get
-the latest 5.4.x you can.  Currently, libc-5.4.23 is the latest public
+the latest 5.4.x you can.  Currently, libc-5.4.33 is the latest public
 release.
 
    If you upgrade to libc-5.4.x, you also have to upgrade your dynamic
-linker (ld.so) to at least 1.8.5, or all sorts of weirdness will
-happen.  Actually, ld.so-1.8.2 and later will work, but 1.8.5 is widely
+linker (ld.so) to at least 1.9.2, or all sorts of weirdness will
+happen.  Actually, ld.so-1.8.2 and later will work, but 1.9.2 is widely
 available, so if you need to upgrade, use it.  If you get a release
 later than 1.8.5, avoid 1.8.10 as it introduces a few bugs that are
 fixed in later releases.
@@ -94,7 +95,8 @@ you're using NIS.
 Modules
 =======
 
-   You need to upgrade to modutils-2.1.34 for kernels 2.1.34 and later.
+   You need to upgrade to modutils-2.1.42 for kernels 2.1.42 and later.
+This version will also work with 2.0.x kernels.
 
 Binutils
 ========
@@ -146,7 +148,8 @@ Memory
 many memory utils, which have to be upgraded.  Get the new procinfo and
 procps (which, AFAIK, is not yet available) to fix this.  Until you
 upgrade, programs which read /proc/meminfo will seg-fault or give an
-error.
+error.  There is an unofficial update to 1.12.2 available that fixes
+most problems.
 
 Mount and network file systems
 ==============================
@@ -167,7 +170,7 @@ DOSEMU
 ======
 
    A new "stable" version of DOSEMU is available for 2.1.x kernels.
-Upgrade to 0.66.1 or later.
+Upgrade to 0.66.7 or later.
 
 Loadlin
 =======
@@ -191,6 +194,13 @@ parallel port may no longer be where you expect it; for example, LPT1
 (under DOS) was sometimes /dev/lp1 in Linux, but will probably be
 /dev/lp0 with the new Plug-and-Play driver.  If printing breaks with
 the new driver, try checking your lpd configuration.
+
+Bash
+====
+
+   Old versions of Bash fail to properly handle symlinks, which can
+cause problems when compiling modules.  Upgrade to at least 1.14 to fix
+this problem.
 
 Where to get the files
 **********************
@@ -218,12 +228,12 @@ ftp://sunsite.unc.edu/pub/Linux/GCC/release.gcc-2.7.2.1
 Linux C Library
 ===============
 
-The 5.4.23 release:
-ftp://tsx-11.mit.edu/pub/linux/packages/GCC/libc-5.4.23.bin.tar.gz
-ftp://sunsite.unc.edu/pub/Linux/GCC/libc-5.4.23.bin.tar.gz
-Installation notes for 5.4.23:
-ftp://tsx-11.mit.edu/pub/linux/packages/GCC/release.libc-5.4.23
-ftp://sunsite.unc.edu/pub/Linux/GCC/release.libc-5.4.23
+The 5.4.33 release:
+ftp://tsx-11.mit.edu/pub/linux/packages/GCC/libc-5.4.33.bin.tar.gz
+ftp://sunsite.unc.edu/pub/Linux/GCC/libc-5.4.33.bin.tar.gz
+Installation notes for 5.4.33:
+ftp://tsx-11.mit.edu/pub/linux/packages/GCC/release.libc-5.4.33
+ftp://sunsite.unc.edu/pub/Linux/GCC/release.libc-5.4.33
 
 Linux C++ Library
 =================
@@ -238,16 +248,16 @@ ftp://sunsite.unc.edu/pub/Linux/GCC/release.libg++-2.7.2.1
 Dynamic Linker
 ==============
 
-The 1.8.5 release:
-ftp://tsx-11.mit.edu/pub/linux/packages/GCC/ld.so-1.8.5.tar.gz
-ftp://sunsite.unc.edu/pub/Linux/GCC/ld.so-1.8.5.tar.gz
+The 1.9.2 release:
+ftp://tsx-11.mit.edu/pub/linux/packages/GCC/ld.so-1.9.2.tar.gz
+ftp://sunsite.unc.edu/pub/Linux/GCC/ld.so-1.9.2.tar.gz
 
 Modules utilities
 =================
 
-The 2.1.34 release:
-ftp://ftp.redhat.com/pub/alphabits/modutils-2.1.34.tar.gz
-ftp://ftp.kernel.org/pub/linux/kernel/v2.1/modutils-2.1.34.tar.gz
+The 2.1.42 release:
+ftp://ftp.redhat.com/pub/alphabits/modutils-2.1.42.tar.gz
+ftp://ftp.kernel.org/pub/linux/kernel/v2.1/modutils-2.1.42.tar.gz
 
 Procps utilities
 ================
@@ -255,6 +265,8 @@ Procps utilities
 The 1.01 release:
 ftp://tsx-11.mit.edu/pub/linux/sources/usr.bin/procps-1.01.tar.gz
 ftp://sunsite.unc.edu/pub/Linux/system/status/ps/procps-1.01.tgz
+The unofficial 1.12.2 release:
+ftp://ftp.debian.org/pub/debian/hamm/hamm/source/base/procps_1.12.2.tar.gz
 
 Procinfo utilities
 ==================
@@ -278,9 +290,9 @@ ftp://ftp.redhat.com/pub/redhat/redhat-4.0/updates/i386/rpm-devel-2.2.7-1.sparc.
 DOSEMU
 ======
 
-The 0.66.1 release:
-ftp://tsx-11.mit.edu/pub/linux/ALPHA/dosemu/dosemu0.66.1.tgz
-ftp://sunsite.unc.edu/pub/Linux/system/emulators/dosemu0.66.1.tgz
+The 0.66.7 release:
+ftp://tsx-11.mit.edu/pub/linux/ALPHA/dosemu/dosemu0.66.7.tgz
+ftp://sunsite.unc.edu/pub/Linux/system/emulators/dosemu0.66.7.tgz
 
 Loadlin
 =======
@@ -305,8 +317,8 @@ ftp://ftp.win.tue.nl/pub/linux/util/mount-2.6g.tar.gz
 Autofs
 ======
 
-The 0.3.3 release:
-ftp://ftp.kernel.org/pub/linux/daemons/autofs/autofs-0.3.3.tar.gz
+The 0.3.7 release:
+ftp://ftp.kernel.org/pub/linux/daemons/autofs/autofs-0.3.7.tar.gz
 
 NFS
 ===
@@ -328,6 +340,12 @@ Ypbind
 The 3.2 release:
 ftp://ftp.uni-paderborn.de/pub/linux/local/yp/ypbind-3.2.tar.gz
 
+Bash
+====
+
+The 1.14.7 release:
+ftp://prep.ai.mit.edu/pub/gnu/bash-1.14.7.tar.gz
+
 Other Info
 ==========
 
@@ -335,12 +353,19 @@ Other Info
 favorite local linux mirror.  If you can, please get them from a closer
 site before checking sunsite.
 
-   Also, for those of you running Red Hat (or RPM on a different
+   You may also want to check for updated versions of this software in a
+package format for the distribution you use.
+
+   For those of you running Red Hat (or RPM on a different
 distribution), most of these are available in RPM format.  Check around
 your favorite Red Hat mirror site before installing the non-RPM
 version.  Remember, you might need to use the -force option to get the
 upgrade to install.  ftp://ftp.redhat.com/pub/contrib/ will have almost
 everything you need.
+
+   Those of you running Debian (or a different distribution that
+supports .deb packages) can look in the "unstable" and
+"project/experimental" directories of your favorite Debian mirror.
 
    For others, David Bourgin has put together a package of everything
 necessary to quickly and easily upgrade to 2.1.x.  See

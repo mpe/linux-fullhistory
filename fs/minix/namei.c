@@ -109,7 +109,7 @@ int minix_lookup(struct inode * dir, struct dentry *dentry)
 
 	bh = minix_find_entry(dir, dentry->d_name.name, dentry->d_name.len, &de);
 	if (bh) {
-		unsigned long ino = le32_to_cpu(de->inode);
+		int ino = de->inode;
 		brelse (bh);
 		inode = iget(dir->i_sb, ino);
  
@@ -593,6 +593,7 @@ int minix_link(struct inode * inode, struct inode * dir,
 	inode->i_nlink++;
 	inode->i_ctime = CURRENT_TIME;
 	mark_inode_dirty(inode);
+	inode->i_count++;
 	d_instantiate(dentry, inode);
 	return 0;
 }

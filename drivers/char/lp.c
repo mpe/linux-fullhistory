@@ -10,7 +10,10 @@
  * "lp=" command line parameters added by Grant Guenther, grant@torque.net
  * lp_read (Status readback) support added by Carsten Gross,
  *                                             carsten@sol.wohnheim.uni-ulm.de
+ * Support for parport by Philip Blundell <Philip.Blundell@pobox.com>
  */
+
+/* This driver is about due for a rewrite. */
 
 #include <linux/module.h>
 
@@ -23,7 +26,6 @@
 #include <linux/ioport.h>
 #include <linux/fcntl.h>
 #include <linux/delay.h>
-#include <linux/init.h>
 
 #include <asm/io.h>
 #include <asm/uaccess.h>
@@ -31,12 +33,7 @@
 #include <linux/parport.h>
 #include <linux/lp.h>
 
-/* the BIOS manuals say there can be up to 4 lpt devices
- * but I have not seen a board where the 4th address is listed
- * if you have different hardware change the table below
- * please let me know if you have different equipment
- * if you have more than 3 printers, remember to increase LP_NO
- */
+/* if you have more than 3 printers, remember to increase LP_NO */
 struct lp_struct lp_table[] =
 {
  {NULL, 0, LP_INIT_CHAR, LP_INIT_TIME, LP_INIT_WAIT, NULL, NULL, 0, 0, 0,
@@ -164,7 +161,7 @@ static inline int lp_char_interrupt(char lpchar, int minor)
 static void lp_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
 	struct parport *pb = (struct parport *) dev_id;
-	struct ppd *pd = pb->cad;
+	struct pardevice *pd = pb->cad;
 	struct lp_struct *lp_dev = (struct lp_struct *) pd->private;
 
 	if (lp_dev->lp_wait_q)
@@ -501,8 +498,9 @@ static int lp_open(struct inode * inode, struct file * file)
 static int lp_release(struct inode * inode, struct file * file)
 {
 	unsigned int minor = MINOR(inode->i_rdev);
+	unsigned int irq;
 
-	if (LP_IRQ(minor) > 0) {
+	if ((irq = LP_IRQ(minor))) {
 		kfree_s(lp_table[minor].lp_buffer, LP_BUFFER_SIZE);
 		lp_table[minor].lp_buffer = NULL;
 	}
@@ -630,7 +628,7 @@ MODULE_PARM(parport, "1-" __MODULE_STRING(LP_NO) "i");
 
 static int parport_ptr = 0;
 
-__initfunc(void lp_setup(char *str, int *ints))
+void lp_setup(char *str, int *ints)
 {
 	/* Ugh. */
 	if (!strncmp(str, "parport", 7)) {
@@ -678,23 +676,18 @@ static int inline lp_searchfor(int list[], int a)
 	return 0;
 }
 
-__initfunc(int lp_init(void))
+int lp_init(void)
 {
 	int count = 0;
 	struct parport *pb;
   
-	if (register_chrdev(LP_MAJOR, "lp", &lp_fops)) {
-  		printk("lp: unable to get major %d\n", LP_MAJOR);
-  		return -EIO;
-	}
-
 	if (parport[0] == -2) return 0;
 
 	pb = parport_enumerate();
 
 	while (pb) {
 		/* We only understand PC-style ports. */
-		if (pb->modes & PARPORT_MODE_SPP) {
+		if (pb->modes & PARPORT_MODE_PCSPP) {
 			if (parport[0] == -1 || lp_searchfor(parport, count) ||
 			    (parport[0] == -3 &&
 			     pb->probe_info.class == PARPORT_CLASS_PRINTER)) {
@@ -704,12 +697,8 @@ __initfunc(int lp_init(void))
 						lp_interrupt, PARPORT_DEV_TRAN,
 						(void *) &lp_table[count]);
 				lp_table[count].flags |= LP_EXIST;
-				printk(KERN_INFO "lp%d: using %s at 0x%x, ", 
-				       count, pb->name, pb->base);
-				if (pb->irq == PARPORT_IRQ_NONE)
-					printk("polling.\n");
-				else
-					printk("irq %d.\n", pb->irq);
+				printk(KERN_INFO "lp%d: using %s (%s).\n", 
+				       count, pb->name, (pb->irq == PARPORT_IRQ_NONE)?"polling":"interrupt-driven");
 			}
 			if (++count == LP_NO)
 				break;
@@ -720,9 +709,14 @@ __initfunc(int lp_init(void))
   	/* Successful specified devices increase count
   	 * Unsuccessful specified devices increase failed
   	 */
-  	if (count)
-  		return 0;
-  
+  	if (count) {
+		if (register_chrdev(LP_MAJOR, "lp", &lp_fops)) {
+			printk("lp: unable to get major %d\n", LP_MAJOR);
+			return -EIO;
+		}
+		return 0;
+	}
+
 	printk(KERN_INFO "lp: driver loaded but no devices found\n");
 #ifdef MODULE
 	return 0;

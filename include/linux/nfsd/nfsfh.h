@@ -21,18 +21,18 @@
 #include <linux/nfsd/debug.h>
 
 /*
- * This is our NFSv2 file handle.
+ * This is the new "dentry style" Linux NFSv2 file handle.
  *
- * The xdev and xino fields are currently used to transport the dev/ino
- * of the exported inode. The xdev field is redundant, though, because
- * we do not allow mount point crossing.
+ * The xino and xdev fields are currently used to transport the
+ * ino/dev of the exported inode.
  */
 struct nfs_fhbase {
-	dev_t			fb_dev;
-	dev_t			fb_xdev;
-	ino_t			fb_ino;
+	struct dentry		*fb_dentry;
+	struct dentry		*fb_dparent;
+	unsigned int		fb_dhash;
+	unsigned int		fb_dlen;
 	ino_t			fb_xino;
-	__u32			fb_version;
+	dev_t			fb_xdev;
 };
 
 #define NFS_FH_PADDING		(NFS_FHSIZE - sizeof(struct nfs_fhbase))
@@ -41,11 +41,12 @@ struct knfs_fh {
 	__u8			fh_cookie[NFS_FH_PADDING];
 };
 
-#define fh_dev			fh_base.fb_dev
-#define fh_xdev			fh_base.fb_xdev
-#define fh_ino			fh_base.fb_ino
+#define fh_dentry		fh_base.fb_dentry
+#define fh_dparent		fh_base.fb_dparent
+#define fh_dhash		fh_base.fb_dhash
+#define fh_dlen			fh_base.fb_dlen
 #define fh_xino			fh_base.fb_xino
-#define fh_version		fh_base.fb_version
+#define fh_xdev			fh_base.fb_xdev
 
 
 #ifdef __KERNEL__
@@ -57,26 +58,24 @@ struct knfs_fh {
 typedef struct svc_fh {
 	struct knfs_fh		fh_handle;	/* FH data */
 	struct svc_export *	fh_export;	/* export pointer */
-	struct dentry *		fh_dentry;	/* file */
 	size_t			fh_pre_size;	/* size before operation */
 	time_t			fh_pre_mtime;	/* mtime before oper */
 	time_t			fh_pre_ctime;	/* ctime before oper */
 	unsigned long		fh_post_version;/* inode version after oper */
 	unsigned char		fh_locked;	/* inode locked by us */
+	unsigned char		fh_dverified;	/* dentry has been checked */
 } svc_fh;
 
 /*
- * Shorthands for dprintk()'s
+ * Shorthand for dprintk()'s
  */
-#define SVCFH_INO(f)		((f)->fh_handle.fh_ino)
-#define SVCFH_DEV(f)		((f)->fh_handle.fh_dev)
+#define SVCFH_DENTRY(f)		((f)->fh_handle.fh_dentry)
 
 /*
  * Function prototypes
  */
-u32             fh_lookup(struct svc_rqst *, struct svc_fh *, int, int);
-void            fh_compose(struct svc_fh *, struct svc_export *,
-                                struct inode *);
+u32             fh_verify(struct svc_rqst *, struct svc_fh *, int, int);
+void            fh_compose(struct svc_fh *, struct svc_export *, struct dentry *);
 
 static __inline__ struct svc_fh *
 fh_copy(struct svc_fh *dst, struct svc_fh *src)
@@ -98,7 +97,7 @@ fh_init(struct svc_fh *fhp)
 static inline void
 fh_lock(struct svc_fh *fhp)
 {
-	struct inode	*inode = fhp->fh_dentry->d_inode;
+	struct inode	*inode = fhp->fh_handle.fh_dentry->d_inode;
 
 	/*
 	dfprintk(FILEOP, "nfsd: fh_lock(%x/%ld) locked = %d\n",
@@ -118,7 +117,7 @@ fh_lock(struct svc_fh *fhp)
 static inline void
 fh_unlock(struct svc_fh *fhp)
 {
-	struct inode	*inode = fhp->fh_dentry->d_inode;
+	struct inode	*inode = fhp->fh_handle.fh_dentry->d_inode;
 
 	if (fhp->fh_locked) {
 		if (!fhp->fh_post_version)
@@ -135,9 +134,9 @@ fh_unlock(struct svc_fh *fhp)
 static inline void
 fh_put(struct svc_fh *fhp)
 {
-	if (fhp->fh_dentry) {
+	if (fhp->fh_dverified) {
 		fh_unlock(fhp);
-		dput(fhp->fh_dentry);
+		dput(fhp->fh_handle.fh_dentry);
 	}
 }
 #else
@@ -148,9 +147,10 @@ __fh_put(struct svc_fh *fhp, char *file, int line)
 {
 	struct dentry	*dentry;
 
-	if (!(dentry = fhp->fh_dentry))
+	if (!fhp->fh_dverified)
 		return;
 
+	dentry = fhp->fh_handle.fh_dentry;
 	if (!dentry->d_count) {
 		printk("nfsd: trying to free free dentry in %s:%d\n"
 		       "      file %s/%s\n",

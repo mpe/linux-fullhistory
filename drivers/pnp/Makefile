@@ -23,29 +23,11 @@ MI_OBJS  :=
 MIX_OBJS :=
 
 ifeq ($(CONFIG_PNP_PARPORT),y)
-  L_OBJS += parport_share.o
-  ifeq ($(CONFIG_PROC_FS),y)
-    L_OBJS += parport_procfs.o
-  endif
-  ifeq ($(CONFIG_PNP_PARPORT_AUTOPROBE),y)
-    L_OBJS += parport_probe.o
-  endif
-  LX_OBJS += parport_init.o
+  LX_OBJS += parport_probe.o
 else
   ifeq ($(CONFIG_PNP_PARPORT),m)
-    MI_OBJS += parport_share.o
-    ifneq ($(CONFIG_PROC_FS),n) 
-      MI_OBJS += parport_procfs.o
-    endif
-    ifeq ($(CONFIG_PNP_PARPORT_AUTOPROBE),y)
-      MI_OBJS += parport_probe.o
-    endif
-    MIX_OBJS += parport_init.o
-    M_OBJS += parport.o
+    MX_OBJS += parport_probe.o
   endif
 endif
 
 include $(TOPDIR)/Rules.make
-
-parport.o: $(MI_OBJS) $(MIX_OBJS)
-	$(LD) $(LD_RFLAG) -r -o $@ $(MI_OBJS) $(MIX_OBJS)

@@ -18,12 +18,19 @@
  * Changes
  *					Changed for 2.1.19 modules
  *	Jan 1997			Initial release
+ *	Jun 1997			2.1.43+ changes
+ *	Jul 1997			proper page locking in readpage
+ *					Changed to work with 2.1.45+ fs
+ *					Fixed follow_link
  */
 
 /* todo:
- *	use malloced memory for file names?
- *	considering write access...
- *	network (tftp) files?
+ *	- see Documentation/filesystems/romfs.txt
+ *	- use malloced memory for file names?
+ *	- considering write access...
+ *	- network (tftp) files?
+ *	- in the ancient times something leaked to made umounts
+ *	  impossible, but I've not seen it in the last months
  */
 
 /*
@@ -74,7 +81,7 @@ romfs_read_super(struct super_block *s, void *data, int silent)
 
 	MOD_INC_USE_COUNT;
 
-	/* I would parse the options, but there are none.. :) */
+	/* I would parse the options here, but there are none.. :) */
 
 	lock_super(s);
 	set_blocksize(dev, ROMBSIZE);
@@ -82,6 +89,7 @@ romfs_read_super(struct super_block *s, void *data, int silent)
 	s->s_blocksize_bits = ROMBSBITS;
 	bh = bread(dev, 0, ROMBSIZE);
 	if (!bh) {
+		/* XXX merge with other printk? */
                 printk ("romfs: unable to read superblock\n");
 		goto outnobh;
 	}
@@ -113,10 +121,11 @@ romfs_read_super(struct super_block *s, void *data, int silent)
 	brelse(bh);
 
 	s->s_op	= &romfs_ops;
+	s->s_root = d_alloc_root(iget(s, sz), NULL);
 
 	unlock_super(s);
 
-	if (!(s->s_mounted = iget(s, sz)))
+	if (!s->s_root)
 		goto outnobh;
 
 	/* Ehrhm; sorry.. :)  And thanks to Hans-Joachim Widmaier  :) */
@@ -145,10 +154,9 @@ romfs_put_super(struct super_block *sb)
 	return;
 }
 
-
 /* That's simple too. */
 
-static void
+static int
 romfs_statfs(struct super_block *sb, struct statfs *buf, int bufsize)
 {
 	struct statfs tmp;
@@ -157,8 +165,11 @@ romfs_statfs(struct super_block *sb, struct statfs *buf, int bufsize)
 	tmp.f_type = ROMFS_MAGIC;
 	tmp.f_bsize = ROMBSIZE;
 	tmp.f_blocks = (sb->u.romfs_sb.s_maxsize+ROMBSIZE-1)>>ROMBSBITS;
-	copy_to_user(buf, &tmp, bufsize);
+	/* XXX tmp.f_namelen = relevant? */
+	return copy_to_user(buf, &tmp, bufsize) ? -EFAULT : 0;
 }
+
+/* some helper routines */
 
 static int
 romfs_strnlen(struct inode *i, unsigned long offset, unsigned long count)
@@ -238,8 +249,6 @@ romfs_copyfrom(struct inode *i, void *dest, unsigned long offset, unsigned long 
 	return res;
 }
 
-/* Directory operations */
-
 static int
 romfs_readdir(struct inode *i, struct file *filp, void *dirent, filldir_t filldir)
 {
@@ -295,14 +304,16 @@ romfs_readdir(struct inode *i, struct file *filp, void *dirent, filldir_t filldi
 }
 
 static int
-romfs_lookup(struct inode *dir, const char *name, int len, struct inode **result)
+romfs_lookup(struct inode *dir, struct dentry *dentry)
 {
 	unsigned long offset, maxoff;
 	int fslen, res;
+	struct inode *inode;
 	char fsname[ROMFS_MAXFN];	/* XXX dynamic? */
 	struct romfs_inode ri;
+	const char *name;		/* got from dentry */
+	int len;
 
-	*result = NULL;
 	if (!dir || !S_ISDIR(dir->i_mode)) {
 		res = -EBADF;
 		goto out;
@@ -316,6 +327,12 @@ romfs_lookup(struct inode *dir, const char *name, int len, struct inode **result
 
 	maxoff = dir->i_sb->u.romfs_sb.s_maxsize;
 	offset = ntohl(ri.spec) & ROMFH_MASK;
+
+	/* ok, now find the file, whose name is in "dentry", in the
+	 * directory specified by "dir".  */
+
+	name = dentry->d_name.name;
+	len = dentry->d_name.len;
 
 	for(;;) {
 		if (!offset || offset >= maxoff
@@ -350,20 +367,19 @@ romfs_lookup(struct inode *dir, const char *name, int len, struct inode **result
 	if ((ntohl(ri.next) & ROMFH_TYPE) == ROMFH_HRD)
 		offset = ntohl(ri.spec) & ROMFH_MASK;
 
-	res = 0;
-	if (!(*result = iget(dir->i_sb, offset)))
-		res = -EACCES;
+	res = -EACCES;
+	if ((inode = iget(dir->i_sb, offset))!=NULL) {
+		res = 0;
+		d_add(dentry, inode);
+	}
 
 out:
-	iput(dir);
 	return res;
 }
 
 /*
  * Ok, we do readpage, to be able to execute programs.  Unfortunately,
- * bmap is not applicable, since we have looser alignments.
- *
- * XXX I'm not quite sure that I need to muck around the PG_xx bits..
+ * we can't use bmap, since we have looser alignments.
  */
 
 static int
@@ -373,8 +389,12 @@ romfs_readpage(struct inode * inode, struct page * page)
 	unsigned long offset, avail, readlen;
 	int result = -EIO;
 
-	buf = page_address(page);
 	atomic_inc(&page->count);
+	set_bit(PG_locked, &page->flags);
+
+	buf = page_address(page);
+	clear_bit(PG_uptodate, &page->flags);
+	clear_bit(PG_error, &page->flags);
 	offset = page->offset;
 	if (offset < inode->i_size) {
 		avail = inode->i_size-offset;
@@ -383,13 +403,19 @@ romfs_readpage(struct inode * inode, struct page * page)
 			if (readlen < PAGE_SIZE) {
 				memset((void *)(buf+readlen),0,PAGE_SIZE-readlen);
 			}
-			result = 0;
 			set_bit(PG_uptodate, &page->flags);
-		} else {
-			memset((void *)buf, 0, PAGE_SIZE);
+			result = 0;
 		}
 	}
+	if (result) {
+		set_bit(PG_error, &page->flags);
+		memset((void *)buf, 0, PAGE_SIZE);
+	}
+
+	clear_bit(PG_locked, &page->flags);
+	wake_up(&page->wait);
 	free_page(buf);
+
 	return result;
 }
 
@@ -415,6 +441,46 @@ romfs_readlink(struct inode *inode, char *buffer, int len)
 out:
 	iput(inode);
 	return mylen;
+}
+
+static struct dentry *romfs_follow_link(struct inode *inode, struct dentry *base)
+{
+	char *link;
+	int len, cnt;
+	struct dentry *dentry;
+
+	/* Note: 2.1.46+ calls this for our strange directories...
+	 * What I do is not really right, but I like it better for now,
+	 * than a separate i_op table.  Anyway, our directories won't
+	 * have multiple "real" links to them, so it maybe loses nothing.  */
+	if (!S_ISLNK(inode->i_mode)) {
+		dentry = dget(i_dentry(inode));
+		goto outnobuf;
+	}
+
+	len = inode->i_size;
+
+	dentry = ERR_PTR(-EAGAIN);			/* correct? */
+	if (!(link = kmalloc(len+1, GFP_KERNEL)))
+		goto outnobuf;
+
+	cnt = romfs_copyfrom(inode, link, inode->u.romfs_i.i_dataoffset, len);
+	if (len != cnt) {
+		dentry = ERR_PTR(-EIO);
+		goto out;
+	} else
+		link[len] = 0;
+
+	dentry = lookup_dentry(link, base, 1);
+	kfree(link);
+
+	if (0) {
+out:
+		kfree(link);
+outnobuf:
+		dput(base);
+	}
+	return dentry;
 }
 
 /* Mapping from our types to the kernel */
@@ -447,6 +513,7 @@ static struct inode_operations romfs_file_inode_operations = {
 	NULL,			/* mknod */
 	NULL,			/* rename */
 	NULL,			/* readlink */
+	NULL,			/* follow_link */
 	romfs_readpage,		/* readpage */
 	NULL,			/* writepage */
 	NULL,			/* bmap -- not really */
@@ -471,7 +538,7 @@ static struct file_operations romfs_dir_operations = {
 	NULL			/* revalidate */
 };
 
-/* Merged dir/symlink op table.  readdir/lookup/readlink
+/* Merged dir/symlink op table.  readdir/lookup/readlink/follow_link
  * will protect from type mismatch.
  */
 
@@ -487,6 +554,7 @@ static struct inode_operations romfs_dirlink_inode_operations = {
 	NULL,			/* mknod */
 	NULL,			/* rename */
 	romfs_readlink,		/* readlink */
+	romfs_follow_link,	/* follow_link */
 	NULL,			/* readpage */
 	NULL,			/* writepage */
 	NULL,			/* bmap */
@@ -519,9 +587,9 @@ romfs_read_inode(struct inode *i)
 	int nextfh, ino;
 	struct romfs_inode ri;
 
-	i->i_op = NULL;
-
 	ino = i->i_ino & ROMFH_MASK;
+	i->i_op = NULL;
+	i->i_mode = 0;
 
 	/* Loop for finding the real hard link */
 	for(;;) {
@@ -549,6 +617,7 @@ romfs_read_inode(struct inode *i)
 		ino = ((ROMFH_SIZE+ino+1+ROMFH_PAD)&ROMFH_MASK);
 	else
 		ino = 0;
+
 	i->u.romfs_i.i_metasize = ino;
 	i->u.romfs_i.i_dataoffset = ino+(i->i_ino&ROMFH_MASK);
 
@@ -573,9 +642,10 @@ romfs_read_inode(struct inode *i)
 
 static struct super_operations romfs_ops = {
 	romfs_read_inode,	/* read inode */
-	NULL,			/* notify change */
 	NULL,			/* write inode */
 	NULL,			/* put inode */
+	NULL,			/* delete inode */
+	NULL,			/* notify change */
 	romfs_put_super,	/* put super */
 	NULL,			/* write super */
 	romfs_statfs,		/* statfs */

@@ -92,6 +92,9 @@ extern char empty_zero_page[PAGE_SIZE];
  */
 #define PARAM	empty_zero_page
 #define EXT_MEM_K (*(unsigned short *) (PARAM+2))
+#ifndef STANDARD_MEMORY_BIOS_CALL
+#define ALT_MEM_K (*(unsigned long *) (PARAM+0x1e0))
+#endif
 #ifdef CONFIG_APM
 #define APM_BIOS_INFO (*(struct apm_bios_info *) (PARAM+64))
 #endif
@@ -120,6 +123,7 @@ __initfunc(void setup_arch(char **cmdline_p,
 	unsigned long * memory_start_p, unsigned long * memory_end_p))
 {
 	unsigned long memory_start, memory_end;
+	unsigned long memory_alt_end;
 	char c = ' ', *to = command_line, *from = COMMAND_LINE;
 	int len = 0;
 	static unsigned char smptrap=0;
@@ -143,10 +147,15 @@ __initfunc(void setup_arch(char **cmdline_p,
 		BIOS_revision = SYS_DESC_TABLE.table[2];
 	}
 	aux_device_present = AUX_DEVICE_INFO;
-#ifdef STANDARD_MEMORY_BIOS_CALL
 	memory_end = (1<<20) + (EXT_MEM_K<<10);
-#else
-	memory_end = (1<<20) + (EXT_MEM_K*64L*1024L);	/* 64kb chunks */
+#ifndef STANDARD_MEMORY_BIOS_CALL
+	memory_alt_end = (1<<20) + (ALT_MEM_K<<10);
+	if (memory_alt_end > memory_end) {
+	    printk("Memory: sized by int13 0e801h\n");
+	    memory_end = memory_alt_end;
+	}
+	else
+	    printk("Memory: sized by int13 088h\n");
 #endif
 	memory_end &= PAGE_MASK;
 #ifdef CONFIG_BLK_DEV_RAM

@@ -43,18 +43,7 @@ struct page * page_hash_table[PAGE_HASH_SIZE];
  * Simple routines for both non-shared and shared mappings.
  */
 
-/*
- * This is a special fast page-free routine that _only_ works
- * on page-cache pages that we are currently using. We can
- * just decrement the page count, because we know that the page
- * has a count > 1 (the page cache itself counts as one, and
- * we're currently using it counts as one). So we don't need
- * the full free_page() stuff..
- */
-static inline void release_page(struct page * page)
-{
-	atomic_dec(&page->count);
-}
+#define release_page(page) __free_page((page))
 
 /*
  * Invalidate the pages of an inode, removing all pages that aren't
@@ -767,6 +756,9 @@ page_read_error:
  * The goto's are kind of ugly, but this streamlines the normal case of having
  * it in the page cache, and handles the special cases reasonably without
  * having a lot of duplicated code.
+ *
+ * WSH 06/04/97: fixed a memory leak and moved the allocation of new_page
+ * ahead of the wait if we're sure to need it.
  */
 static unsigned long filemap_nopage(struct vm_area_struct * area, unsigned long address, int no_share)
 {
@@ -791,8 +783,15 @@ static unsigned long filemap_nopage(struct vm_area_struct * area, unsigned long 
 found_page:
 	/*
 	 * Ok, found a page in the page cache, now we need to check
-	 * that it's up-to-date
+	 * that it's up-to-date.  First check whether we'll need an
+	 * extra page -- better to overlap the allocation with the I/O.
 	 */
+	if (no_share && !new_page) {
+		new_page = __get_free_page(GFP_KERNEL);
+		if (!new_page)
+			goto failure;
+	}
+
 	if (PageLocked(page))
 		goto page_locked_wait;
 	if (!PageUptodate(page))
@@ -817,13 +816,8 @@ success:
 	}
 
 	/*
-	 * Check that we have another page to copy it over to..
+	 * No sharing ... copy to the new page.
 	 */
-	if (!new_page) {
-		new_page = __get_free_page(GFP_KERNEL);
-		if (!new_page)
-			goto failure;
-	}
 	copy_page(new_page, old_page);
 	flush_page_to_ram(new_page);
 	release_page(page);
@@ -887,6 +881,8 @@ page_read_error:
 	 */
 failure:
 	release_page(page);
+	if (new_page)
+		free_page(new_page);
 no_page:
 	return 0;
 }
@@ -935,6 +931,10 @@ static int filemap_write_page(struct vm_area_struct * vma,
 		/* whee.. just mark the buffer heads dirty */
 		struct buffer_head * tmp = bh;
 		do {
+			/*
+			 * WSH: There's a race here: mark_buffer_dirty()
+			 * could block, and the buffers aren't pinned down.
+			 */
 			mark_buffer_dirty(tmp, 0);
 			tmp = tmp->b_this_page;
 		} while (tmp != bh);
@@ -953,6 +953,9 @@ static int filemap_write_page(struct vm_area_struct * vma,
 	file.f_pos = offset;
 	file.f_reada = 0;
 
+	/*
+	 * WSH: could vm_area struct (and inode) be released while writing?
+	 */
 	down(&inode->i_sem);
 	result = do_write_page(inode, &file, (const char *) page, offset);
 	up(&inode->i_sem);
@@ -1295,7 +1298,7 @@ generic_file_write(struct inode *inode, struct file *file, const char *buf, unsi
 	unsigned long	ppos, offset;
 	unsigned int	bytes, written;
 	unsigned long	pos;
-	int		status, sync, didread = 0;
+	int		status, sync, didread;
 
 	if (!inode->i_op || !inode->i_op->updatepage)
 		return -EIO;
@@ -1334,9 +1337,14 @@ generic_file_write(struct inode *inode, struct file *file, const char *buf, unsi
 			page_cache = 0;
 		}
 
-lockit:
-		while (test_and_set_bit(PG_locked, &page->flags))
-			wait_on_page(page);
+		/*
+		 * WSH 06/05/97: restructured slightly to make sure we release
+		 * the page on an error exit.  Removed explicit setting of
+		 * PG_locked, as that's handled below the i_op->xxx interface.
+		 */
+		didread = 0;
+page_wait:
+		wait_on_page(page);
 
 		/*
 		 * If the page is not uptodate, and we're writing less
@@ -1345,28 +1353,24 @@ lockit:
 		 * after the current end of file.
 		 */
 		if (!PageUptodate(page)) {
-			/* Already tried to read it twice... too bad */
-			if (didread > 1) {
-				status = -EIO;
-				break;
-			}
 			if (bytes < PAGE_SIZE && ppos < inode->i_size) {
-				/* readpage implicitly unlocks the page */
-				status = inode->i_op->readpage(inode, page);
+				if (didread < 2)
+				    status = inode->i_op->readpage(inode, page);
+				else 
+				    status = -EIO; /* two tries ... error out */
 				if (status < 0)
-					break;
+					goto done_with_page;
 				didread++;
-				goto lockit;
+				goto page_wait;
 			}
 			set_bit(PG_uptodate, &page->flags);
 		}
-		didread = 0;
 
-		/* Alright, the page is there, and we've locked it. Now
-		 * update it. */
+		/* Alright, the page is there.  Now update it. */
 		status = inode->i_op->updatepage(inode, page, buf,
 							offset, bytes, sync);
-		free_page(page_address(page));
+done_with_page:
+		__free_page(page);
 		if (status < 0)
 			break;
 

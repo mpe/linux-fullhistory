@@ -53,9 +53,10 @@ void msdos_put_super(struct super_block *sb)
 
 struct super_operations msdos_sops = { 
 	msdos_read_inode,
-	fat_notify_change,
 	fat_write_inode,
 	fat_put_inode,
+	fat_delete_inode,
+	fat_notify_change,
 	msdos_put_super,
 	NULL, /* added in 0.96c */
 	fat_statfs,
@@ -190,79 +191,56 @@ static int msdos_find(struct inode *dir,const char *name,int len,
 }
 
 /***** Get inode using directory and name */
-int msdos_lookup(struct inode *dir,const char *name,int len,
-    struct inode **result)
+int msdos_lookup(struct inode *dir,struct dentry *dentry)
 {
 	struct super_block *sb = dir->i_sb;
 	int ino,res;
 	struct msdos_dir_entry *de;
 	struct buffer_head *bh;
-	struct inode *next;
+	struct inode *next, *inode;
 	
 	PRINTK (("msdos_lookup\n"));
 
-	*result = NULL;
-	if (!dir) return -ENOENT;
-	if (!S_ISDIR(dir->i_mode)) {
-		iput(dir);
-		return -ENOENT;
-	}
-	PRINTK (("msdos_lookup 2\n"));
-	if (len == 1 && name[0] == '.') {
-		*result = dir;
+	if ((res = msdos_find(dir,dentry->d_name.name,dentry->d_name.len,&bh,&de,&ino)) < 0) {
+		d_add(dentry, NULL);
 		return 0;
-	}
-	if (len == 2 && name[0] == '.' && name[1] == '.') {
-		ino = fat_parent_ino(dir,0);
-		iput(dir);
-		if (ino < 0) return ino;
-		if (!(*result = iget(dir->i_sb,ino))) return -EACCES;
-		return 0;
-	}
-	PRINTK (("msdos_lookup 3\n"));
-	if ((res = msdos_find(dir,name,len,&bh,&de,&ino)) < 0) {
-		iput(dir);
-		return res;
 	}
 	PRINTK (("msdos_lookup 4\n"));
 	if (bh)
 		fat_brelse(sb, bh);
 	PRINTK (("msdos_lookup 4.5\n"));
-	if (!(*result = iget(dir->i_sb,ino))) {
-		iput(dir);
+	if (!(inode = iget(dir->i_sb,ino)))
 		return -EACCES;
-	}
 	PRINTK (("msdos_lookup 5\n"));
-	if (!(*result)->i_sb ||
-	    ((*result)->i_sb->s_magic != MSDOS_SUPER_MAGIC)) {
+	if (!inode->i_sb ||
+	    (inode->i_sb->s_magic != MSDOS_SUPER_MAGIC)) {
 		/* crossed a mount point into a non-msdos fs */
-		iput(dir);
+		d_add(dentry, inode);
 		return 0;
 	}
-	if (MSDOS_I(*result)->i_busy) { /* mkdir in progress */
-		iput(*result);
-		iput(dir);
-		return -ENOENT;
+	if (MSDOS_I(inode)->i_busy) { /* mkdir in progress */
+		iput(inode);
+		d_add(dentry, NULL);
+		return 0;
 	}
 	PRINTK (("msdos_lookup 6\n"));
-	while (MSDOS_I(*result)->i_old) {
-		next = MSDOS_I(*result)->i_old;
-		iput(*result);
-		if (!(*result = iget(next->i_sb,next->i_ino))) {
+	while (MSDOS_I(inode)->i_old) {
+		next = MSDOS_I(inode)->i_old;
+		iput(inode);
+		if (!(inode = iget(next->i_sb,next->i_ino))) {
 			fat_fs_panic(dir->i_sb,"msdos_lookup: Can't happen");
-			iput(dir);
 			return -ENOENT;
 		}
 	}
 	PRINTK (("msdos_lookup 7\n"));
-	iput(dir);
+	d_add(dentry, inode);
 	PRINTK (("msdos_lookup 8\n"));
 	return 0;
 }
 
 
 /***** Creates a directory entry (name is already formatted). */
-static int msdos_create_entry(struct inode *dir, const char *name,int len,
+static int msdos_create_entry(struct inode *dir, const char *name,
     int is_dir, int is_hid, struct inode **result)
 {
 	struct super_block *sb = dir->i_sb;
@@ -270,6 +248,7 @@ static int msdos_create_entry(struct inode *dir, const char *name,int len,
 	struct msdos_dir_entry *de;
 	int res,ino;
 
+	*result = NULL;
 	if ((res = fat_scan(dir,NULL,&bh,&de,&ino,SCAN_ANY)) < 0) {
 		if (res != -ENOENT) return res;
 		if (dir->i_ino == MSDOS_ROOT_INO) return -ENOSPC;
@@ -300,23 +279,22 @@ static int msdos_create_entry(struct inode *dir, const char *name,int len,
 }
 
 /***** Create a file or directory */
-int msdos_create(struct inode *dir,const char *name,int len,int mode,
-	struct inode **result)
+int msdos_create(struct inode *dir,struct dentry *dentry,int mode)
 {
 	struct super_block *sb = dir->i_sb;
 	struct buffer_head *bh;
 	struct msdos_dir_entry *de;
+	struct inode *inode;
 	char msdos_name[MSDOS_NAME];
 	int ino,res,is_hid;
 
 	if (!dir) return -ENOENT;
 	if ((res = msdos_format_name(MSDOS_SB(dir->i_sb)->options.name_check,
-				     name,len,msdos_name,0,
-				     MSDOS_SB(dir->i_sb)->options.dotsOK)) < 0) {
-		iput(dir);
+				     dentry->d_name.name,dentry->d_name.len,
+				     msdos_name,0,
+				     MSDOS_SB(dir->i_sb)->options.dotsOK)) < 0)
 		return res;
-	}
-	is_hid = (name[0]=='.') && (msdos_name[0]!='.');
+	is_hid = (dentry->d_name.name[0]=='.') && (msdos_name[0]!='.');
 	fat_lock_creation();
 	/* Scan for existing file twice, so that creating a file fails
 	 * with -EINVAL if the other (dotfile/nondotfile) exists.
@@ -325,19 +303,17 @@ int msdos_create(struct inode *dir,const char *name,int len,int mode,
 	if (fat_scan(dir,msdos_name,&bh,&de,&ino,SCAN_HID) >= 0) {
 		fat_unlock_creation();
 		fat_brelse(sb, bh);
-		iput(dir);
 		return is_hid ? -EEXIST : -EINVAL;
  	}
 	if (fat_scan(dir,msdos_name,&bh,&de,&ino,SCAN_NOTHID) >= 0) {
 		fat_unlock_creation();
 		fat_brelse(sb, bh);
-		iput(dir);
 		return is_hid ? -EINVAL : -EEXIST;
  	}
-	res = msdos_create_entry(dir,msdos_name,len,S_ISDIR(mode),is_hid,
-				 result);
+	res = msdos_create_entry(dir,msdos_name,S_ISDIR(mode),is_hid,
+				 &inode);
 	fat_unlock_creation();
-	iput(dir);
+	d_instantiate(dentry, inode);
 	return res;
 }
 
@@ -388,7 +364,7 @@ static int msdos_empty(struct inode *dir)
 }
 
 /***** Remove a directory */
-int msdos_rmdir(struct inode *dir,const char *name,int len)
+int msdos_rmdir(struct inode *dir,struct dentry *dentry)
 {
 	struct super_block *sb = dir->i_sb;
 	int res,ino;
@@ -399,11 +375,10 @@ int msdos_rmdir(struct inode *dir,const char *name,int len)
 	bh = NULL;
 	inode = NULL;
 	res = -EPERM;
-	if (name[0] == '.' && (len == 1 || (len == 2 && name[1] == '.')))
+	if ((res = msdos_find(dir,dentry->d_name.name,dentry->d_name.len,
+			      &bh,&de,&ino)) < 0)
 		goto rmdir_done;
-	if ((res = msdos_find(dir,name,len,&bh,&de,&ino)) < 0) goto rmdir_done;
-	res = -ENOENT;
-	if (!(inode = iget(dir->i_sb,ino))) goto rmdir_done;
+	inode = dentry->d_inode;
 	res = -ENOTDIR;
 	if (!S_ISDIR(inode->i_mode)) goto rmdir_done;
 	res = -EBUSY;
@@ -419,16 +394,15 @@ int msdos_rmdir(struct inode *dir,const char *name,int len)
 	mark_inode_dirty(dir);
 	de->name[0] = DELETED_FLAG;
 	fat_mark_buffer_dirty(sb, bh, 1);
+	d_delete(dentry);
 	res = 0;
 rmdir_done:
 	fat_brelse(sb, bh);
-	iput(dir);
-	iput(inode);
 	return res;
 }
 
 /***** Make a directory */
-int msdos_mkdir(struct inode *dir,const char *name,int len,int mode)
+int msdos_mkdir(struct inode *dir,struct dentry *dentry,int mode)
 {
 	struct super_block *sb = dir->i_sb;
 	struct buffer_head *bh;
@@ -438,37 +412,34 @@ int msdos_mkdir(struct inode *dir,const char *name,int len,int mode)
 	int ino,res,is_hid;
 
 	if ((res = msdos_format_name(MSDOS_SB(dir->i_sb)->options.name_check,
-				     name,len,msdos_name,0,
-				     MSDOS_SB(dir->i_sb)->options.dotsOK)) < 0) {
-		iput(dir);
+				     dentry->d_name.name,dentry->d_name.len,
+				     msdos_name,0,
+				     MSDOS_SB(dir->i_sb)->options.dotsOK)) < 0)
 		return res;
-	}
-	is_hid = (name[0]=='.') && (msdos_name[0]!='.');
+	is_hid = (dentry->d_name.name[0]=='.') && (msdos_name[0]!='.');
 	fat_lock_creation();
 	if (fat_scan(dir,msdos_name,&bh,&de,&ino,SCAN_ANY) >= 0) {
 		fat_unlock_creation();
 		fat_brelse(sb, bh);
-		iput(dir);
 		return -EEXIST;
  	}
-	if ((res = msdos_create_entry(dir,msdos_name,len,1,is_hid,
+	if ((res = msdos_create_entry(dir,msdos_name,1,is_hid,
 				      &inode)) < 0) {
 		fat_unlock_creation();
-		iput(dir);
 		return res;
 	}
 	dir->i_nlink++;
 	inode->i_nlink = 2; /* no need to mark them dirty */
 	MSDOS_I(inode)->i_busy = 1; /* prevent lookups */
 	if ((res = fat_add_cluster(inode)) < 0) goto mkdir_error;
-	if ((res = msdos_create_entry(inode,MSDOS_DOT,1,1,0,&dot)) < 0)
+	if ((res = msdos_create_entry(inode,MSDOS_DOT,1,0,&dot)) < 0)
 		goto mkdir_error;
 	dot->i_size = inode->i_size; /* doesn't grow in the 2nd create_entry */
 	MSDOS_I(dot)->i_start = MSDOS_I(inode)->i_start;
 	dot->i_nlink = inode->i_nlink;
 	mark_inode_dirty(dot);
 	iput(dot);
-	if ((res = msdos_create_entry(inode,MSDOS_DOTDOT,2,1,0,&dot)) < 0)
+	if ((res = msdos_create_entry(inode,MSDOS_DOTDOT,1,0,&dot)) < 0)
 		goto mkdir_error;
 	fat_unlock_creation();
 	dot->i_size = dir->i_size;
@@ -477,12 +448,10 @@ int msdos_mkdir(struct inode *dir,const char *name,int len,int mode)
 	mark_inode_dirty(dot);
 	MSDOS_I(inode)->i_busy = 0;
 	iput(dot);
-	iput(inode);
-	iput(dir);
+	d_instantiate(dentry, inode);
 	return 0;
 mkdir_error:
-	iput(inode);
-	if (msdos_rmdir(dir,name,len) < 0)
+	if (msdos_rmdir(dir,dentry) < 0)
 		fat_fs_panic(dir->i_sb,"rmdir in mkdir failed");
 	fat_unlock_creation();
 	return res;
@@ -491,8 +460,7 @@ mkdir_error:
 /***** Unlink a file */
 static int msdos_unlinkx(
 	struct inode *dir,
-	const char *name,
-	int len,
+	struct dentry *dentry,
 	int nospc)	/* Flag special file ? */
 {
 	struct super_block *sb = dir->i_sb;
@@ -503,12 +471,10 @@ static int msdos_unlinkx(
 
 	bh = NULL;
 	inode = NULL;
-	if ((res = msdos_find(dir,name,len,&bh,&de,&ino)) < 0)
+	if ((res = msdos_find(dir,dentry->d_name.name,dentry->d_name.len,
+			      &bh,&de,&ino)) < 0)
 		goto unlink_done;
-	if (!(inode = iget(dir->i_sb,ino))) {
-		res = -ENOENT;
-		goto unlink_done;
-	}
+	inode = dentry->d_inode;
 	if (!S_ISREG(inode->i_mode) && nospc){
 		res = -EPERM;
 		goto unlink_done;
@@ -524,28 +490,28 @@ static int msdos_unlinkx(
 	mark_inode_dirty(dir);
 	de->name[0] = DELETED_FLAG;
 	fat_mark_buffer_dirty(sb, bh, 1);
+	d_delete(dentry);	/* This also frees the inode */
 unlink_done:
 	fat_brelse(sb, bh);
-	iput(inode);
-	iput(dir);
 	return res;
 }
 
 /***** Unlink, as called for msdosfs */
-int msdos_unlink(struct inode *dir,const char *name,int len)
+int msdos_unlink(struct inode *dir,struct dentry *dentry)
 {
-	return msdos_unlinkx (dir,name,len,1);
+	return msdos_unlinkx (dir,dentry,1);
 }
 
 /***** Unlink, as called for umsdosfs */
-int msdos_unlink_umsdos(struct inode *dir,const char *name,int len)
+int msdos_unlink_umsdos(struct inode *dir,struct dentry *dentry)
 {
-	return msdos_unlinkx (dir,name,len,0);
+	return msdos_unlinkx (dir,dentry,0);
 }
 
 /***** Rename within a directory */
-static int rename_same_dir(struct inode *old_dir,char *old_name,int old_len,
-    struct inode *new_dir,char *new_name,int new_len,
+static int rename_same_dir(struct inode *old_dir,char *old_name,
+    struct dentry *old_dentry,
+    struct inode *new_dir,char *new_name,struct dentry *new_dentry,
     struct buffer_head *old_bh,
     struct msdos_dir_entry *old_de,int old_ino,int is_hid)
 {
@@ -563,10 +529,7 @@ static int rename_same_dir(struct inode *old_dir,char *old_name,int old_len,
 		return -ENOENT;
 	}
 	if (exists) {
-		if (!(new_inode = iget(new_dir->i_sb,new_ino))) {
-			fat_brelse(sb, new_bh);
-			return -EIO;
-		}
+		new_inode = new_dentry->d_inode;
 		error = S_ISDIR(new_inode->i_mode)
 			? (old_de->attr & ATTR_DIR)
 				? msdos_empty(new_inode)
@@ -576,7 +539,6 @@ static int rename_same_dir(struct inode *old_dir,char *old_name,int old_len,
 				: 0;
 		if (!error && (old_de->attr & ATTR_SYS)) error = -EPERM;
 		if (error) {
-			iput(new_inode);
 			fat_brelse(sb, new_bh);
 			return error;
 		}
@@ -589,50 +551,49 @@ static int rename_same_dir(struct inode *old_dir,char *old_name,int old_len,
 		mark_inode_dirty(new_inode);
 		new_de->name[0] = DELETED_FLAG;
 		fat_mark_buffer_dirty(sb, new_bh, 1);
-		iput(new_inode);
 		fat_brelse(sb, new_bh);
 	}
 	memcpy(old_de->name,new_name,MSDOS_NAME);
+	/* Update the dcache */
+	d_move(old_dentry, new_dentry->d_parent, &new_dentry->d_name);
+	d_delete(new_dentry);
 set_hid:
 	old_de->attr = is_hid
 		? (old_de->attr | ATTR_HIDDEN)
 		: (old_de->attr &~ ATTR_HIDDEN);
 	fat_mark_buffer_dirty(sb, old_bh, 1);
 	/* update binary info for conversion, i_attrs */
-	if ((old_inode = iget(old_dir->i_sb,old_ino)) != NULL) {
-		MSDOS_I(old_inode)->i_attrs = is_hid
-			? (MSDOS_I(old_inode)->i_attrs |  ATTR_HIDDEN)
-			: (MSDOS_I(old_inode)->i_attrs &~ ATTR_HIDDEN);
-		iput(old_inode);
-	}
+	old_inode = old_dentry->d_inode;
+	MSDOS_I(old_inode)->i_attrs = is_hid
+		? (MSDOS_I(old_inode)->i_attrs |  ATTR_HIDDEN)
+		: (MSDOS_I(old_inode)->i_attrs &~ ATTR_HIDDEN);
 	return 0;
 }
 
 /***** Rename across directories - a nonphysical move */
-static int rename_diff_dir(struct inode *old_dir,char *old_name,int old_len,
-    struct inode *new_dir,char *new_name,int new_len,
+static int rename_diff_dir(struct inode *old_dir,char *old_name,
+    struct dentry *old_dentry,
+    struct inode *new_dir,char *new_name,struct dentry *new_dentry,
     struct buffer_head *old_bh,
     struct msdos_dir_entry *old_de,int old_ino,int is_hid)
 {
 	struct super_block *sb = old_dir->i_sb;
 	struct buffer_head *new_bh,*free_bh,*dotdot_bh;
 	struct msdos_dir_entry *new_de,*free_de,*dotdot_de;
-	struct inode *old_inode,*new_inode,*free_inode,*dotdot_inode,*walk;
+	struct inode *old_inode,*new_inode,*free_inode,*dotdot_inode;
+	struct dentry *walk;
 	int new_ino,free_ino,dotdot_ino;
 	int error,exists,ino;
 
 	if (old_dir->i_dev != new_dir->i_dev) return -EINVAL;
 	if (old_ino == new_dir->i_ino) return -EINVAL;
-	if (!(walk = iget(new_dir->i_sb,new_dir->i_ino))) return -EIO;
+	walk = new_dentry;
 	/* prevent moving directory below itself */
-	while (walk->i_ino != MSDOS_ROOT_INO) {
-		ino = fat_parent_ino(walk,1);
-		iput(walk);
-		if (ino < 0) return ino;
-		if (ino == old_ino) return -EINVAL;
-		if (!(walk = iget(new_dir->i_sb,ino))) return -EIO;
+	for (;;) {
+		if (walk == old_dentry) return -EINVAL;
+		if (walk == walk->d_parent) break;
+		walk = walk->d_parent;
 	}
-	iput(walk);
 	/* find free spot */
 	while ((error = fat_scan(new_dir,NULL,&free_bh,&free_de,&free_ino,
 	    SCAN_ANY)) < 0) {
@@ -641,14 +602,8 @@ static int rename_diff_dir(struct inode *old_dir,char *old_name,int old_len,
 		if (error) return error;
 	}
 	exists = fat_scan(new_dir,new_name,&new_bh,&new_de,&new_ino,SCAN_ANY) >= 0;
-	if (!(old_inode = iget(old_dir->i_sb,old_ino))) {
-		fat_brelse(sb, free_bh);
-		if (exists)
-			fat_brelse(sb, new_bh);
-		return -EIO;
-	}
+	old_inode = old_dentry->d_inode;
 	if (*(unsigned char *) old_de->name == DELETED_FLAG) {
-		iput(old_inode);
 		fat_brelse(sb, free_bh);
 		if (exists)
 			fat_brelse(sb, new_bh);
@@ -656,11 +611,7 @@ static int rename_diff_dir(struct inode *old_dir,char *old_name,int old_len,
 	}
 	new_inode = NULL; /* to make GCC happy */
 	if (exists) {  /* Trash the old file! */
-		if (!(new_inode = iget(new_dir->i_sb,new_ino))) {
-			iput(old_inode);
-			fat_brelse(sb, new_bh);
-			return -EIO;
-		}
+		new_inode = new_dentry->d_inode;
 		error = S_ISDIR(new_inode->i_mode)
 			? (old_de->attr & ATTR_DIR)
 				? msdos_empty(new_inode)
@@ -670,8 +621,6 @@ static int rename_diff_dir(struct inode *old_dir,char *old_name,int old_len,
 				: 0;
 		if (!error && (old_de->attr & ATTR_SYS)) error = -EPERM;
 		if (error) {
-			iput(new_inode);
-			iput(old_inode);
 			fat_brelse(sb, new_bh);
 			return error;
 		}
@@ -690,10 +639,8 @@ static int rename_diff_dir(struct inode *old_dir,char *old_name,int old_len,
 		free_de->name[0] = DELETED_FLAG;
 /*  Don't mark free_bh as dirty. Both states are supposed to be equivalent. */
 		fat_brelse(sb, free_bh);
-		if (exists) {
-			iput(new_inode);
+		if (exists)
 			fat_brelse(sb, new_bh);
-		}
 		return -EIO;
 	}
 	if (exists && S_ISDIR(new_inode->i_mode)) {
@@ -715,7 +662,6 @@ static int rename_diff_dir(struct inode *old_dir,char *old_name,int old_len,
 		/* Two references now exist to free_inode so increase count */
 		free_inode->i_count++;
 		/* free_inode is put after putting new_inode and old_inode */
-		iput(new_inode);
 		fat_brelse(sb, new_bh);
 	}
 	if (S_ISDIR(old_inode->i_mode)) {
@@ -737,16 +683,18 @@ static int rename_diff_dir(struct inode *old_dir,char *old_name,int old_len,
 		iput(dotdot_inode);
 		fat_brelse(sb, dotdot_bh);
 	}
+	/* Update the dcache */
+	d_move(old_dentry, new_dentry->d_parent, &new_dentry->d_name);
+	d_delete(new_dentry);
 	error = 0;
 rename_done:
 	fat_brelse(sb, free_bh);
-	iput(old_inode);
 	return error;
 }
 
 /***** Rename, a wrapper for rename_same_dir & rename_diff_dir */
-int msdos_rename(struct inode *old_dir,const char *old_name,int old_len,
-		 struct inode *new_dir,const char *new_name,int new_len)
+int msdos_rename(struct inode *old_dir,struct dentry *old_dentry,
+		 struct inode *new_dir,struct dentry *new_dentry)
 {
 	struct super_block *sb = old_dir->i_sb;
 	char old_msdos_name[MSDOS_NAME],new_msdos_name[MSDOS_NAME];
@@ -756,28 +704,30 @@ int msdos_rename(struct inode *old_dir,const char *old_name,int old_len,
 	int is_hid,old_hid; /* if new file and old file are hidden */
 
 	if ((error = msdos_format_name(MSDOS_SB(old_dir->i_sb)->options.name_check,
-				       old_name,old_len,old_msdos_name,1,
+				       old_dentry->d_name.name,
+				       old_dentry->d_name.len,old_msdos_name,1,
 				       MSDOS_SB(old_dir->i_sb)->options.dotsOK))
 	    < 0) goto rename_done;
 	if ((error = msdos_format_name(MSDOS_SB(new_dir->i_sb)->options.name_check,
-				       new_name,new_len,new_msdos_name,0,
+				       new_dentry->d_name.name,
+				       new_dentry->d_name.len,new_msdos_name,0,
 				       MSDOS_SB(new_dir->i_sb)->options.dotsOK))
 	    < 0) goto rename_done;
-	is_hid = (new_name[0]=='.') && (new_msdos_name[0]!='.');
-	old_hid = (old_name[0]=='.') && (old_msdos_name[0]!='.');
+	is_hid = (new_dentry->d_name.name[0]=='.') && (new_msdos_name[0]!='.');
+	old_hid = (old_dentry->d_name.name[0]=='.') && (old_msdos_name[0]!='.');
 	if ((error = fat_scan(old_dir,old_msdos_name,&old_bh,&old_de,
 	    &old_ino,old_hid?SCAN_HID:SCAN_NOTHID)) < 0) goto rename_done;
 	fat_lock_creation();
 	if (old_dir == new_dir)
-		error = rename_same_dir(old_dir,old_msdos_name,old_len,new_dir,
-		    new_msdos_name,new_len,old_bh,old_de,old_ino,is_hid);
-	else error = rename_diff_dir(old_dir,old_msdos_name,old_len,new_dir,
-		    new_msdos_name,new_len,old_bh,old_de,old_ino,is_hid);
+		error = rename_same_dir(old_dir,old_msdos_name,old_dentry,
+		    new_dir,new_msdos_name,new_dentry,
+		    old_bh,old_de,old_ino,is_hid);
+	else error = rename_diff_dir(old_dir,old_msdos_name,old_dentry,
+		     new_dir,new_msdos_name,new_dentry,
+		     old_bh,old_de,old_ino,is_hid);
 	fat_unlock_creation();
 	fat_brelse(sb, old_bh);
 rename_done:
-	iput(old_dir);
-	iput(new_dir);
 	return error;
 }
 

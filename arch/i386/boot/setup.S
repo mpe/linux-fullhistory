@@ -26,6 +26,10 @@
 !
 ! Video handling moved to video.S by Martin Mares, March 1996
 ! <mj@k332.feld.cvut.cz>
+!
+! Extended memory detection scheme retwiddled by orc@pell.chi.il.us (david
+! parsons) to avoid loadlin confusion, July 1997
+!
 
 #define __ASSEMBLY__
 #include <linux/config.h>
@@ -241,53 +245,39 @@ loader_panic_mess:
 loader_ok:
 ! Get memory size (extended mem, kB)
 
-#ifdef STANDARD_MEMORY_BIOS_CALL
-	mov	ah,#0x88
-	int	0x15
-	mov	[2],ax
-#else
-	push	ax
-	push	cx
-	push	dx
-				! which bootloader ?
-	seg cs
-	mov	al,byte ptr type_of_loader
-	and	al,#0xf0
-	cmp	al,#0x10
-	jne	try_xe801	! not Loadlin
-	seg cs
-	cmp	byte ptr type_of_loader,#0x16
-	jbe	oldstylemem	! Loadlin <= 1.6 don't like that
-try_xe801:
-	mov	ax,#0xe801
-	int	0x15
-	jc	oldstylemem
+#ifndef STANDARD_MEMORY_BIOS_CALL
+	push	ebx
 
-! memory size is (ax+(64*bx)) * 1024; we store bx+(ax/64)
+        xor     ebx,ebx		! preload new memory slot with 0k
+        mov	[0x1e0], ebx
 
-	mov	[2],bx		! store extended memory size
-	xor	dx,dx
-	mov	cx,#64		! convert lower memory size from K into
-	div	cx		! 64k chunks.
+        mov     ax,#0xe801
+	int     0x15
+	jc      oldstylemem
 
-	add	[2],ax		! add lower memory into total size.
-	jmp	gotmem
+! memory size is in 1k chunksizes, to avoid confusing loadlin.
+! we store the 0xe801 memory size in a completely different place,
+! because it will most likely be longer than 16 bits.
+! (use 1e0 because that's what Larry Augustine uses in his
+! alternative new memory detection scheme, and it's sensible
+! to write everything into the same place.)
 
+	and     ebx, #0xffff    ! clear sign extend
+	shl     ebx, 6          ! and go from 64k to 1k chunks
+	mov     [0x1e0],ebx     ! store extended memory size
+
+	and     eax, #0xffff    ! clear sign extend
+ 	add     [0x1e0],eax     ! and add lower memory into total size.
+  
+	! and fall into the old memory detection code to populate the
+	! compatability slot.
+
+	pop	ebx
 oldstylemem:
+#endif
 	mov	ah,#0x88
 	int	0x15
-	or	ax,ax		! some BIOSes report ZERO for 64meg
-	mov	word ptr [2],#0x400
-	jz	gotmem
-	mov	cx,#64		! got memory size in kbytes, so we need to
-	xor	dx,dx		! adjust to 64k chunks for the system.
-	div	cx
 	mov	[2],ax
-gotmem:
-	pop	dx
-	pop	cx
-	pop	ax
-#endif
 
 ! Set the keyboard repeat rate to the max
 

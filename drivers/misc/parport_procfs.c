@@ -1,4 +1,4 @@
-/* $Id: parport_procfs.c,v 1.3.2.6 1997/04/16 21:30:38 phil Exp $
+/* $Id: parport_procfs.c,v 1.1.2.2 1997/04/18 15:00:52 phil Exp $
  * Parallel port /proc interface code.
  * 
  * Authors: David Campbell <campbell@tirian.che.curtin.edu.au>
@@ -13,23 +13,23 @@
 #include <asm/io.h>
 #include <asm/dma.h>
 
+#include <linux/config.h>
 #include <linux/delay.h>
 #include <linux/errno.h>
+#include <linux/interrupt.h>
 #include <linux/ioport.h>
 #include <linux/kernel.h>
 #include <linux/malloc.h>
-#include <linux/interrupt.h>
 
 #include <linux/proc_fs.h>
 
 #include <linux/parport.h>
-#include "parport_ll_io.h"
 
 #undef PARPORT_INCLUDE_BENCH
 
 struct proc_dir_entry *base=NULL;
 
-void parport_null_intr_func(int irq, void *dev_id, struct pt_regs *regs);
+extern void parport_null_intr_func(int irq, void *dev_id, struct pt_regs *regs);
 
 static int irq_write_proc(struct file *file, const char *buffer,
 					  unsigned long count, void *data)
@@ -59,7 +59,7 @@ static int irq_write_proc(struct file *file, const char *buffer,
 	pp->irq = newirq;
 
 	if (pp->irq != PARPORT_IRQ_NONE && !(pp->flags & PARPORT_FLAG_COMA)) { 
-		struct ppd *pd = pp->cad;
+		struct pardevice *pd = pp->cad;
 
 		if (pd == NULL) {
 			pd = pp->devices;
@@ -98,7 +98,7 @@ static int devices_read_proc(char *page, char **start, off_t off,
 					 int count, int *eof, void *data)
 {
 	struct parport *pp = (struct parport *)data;
-	struct ppd *pd1;
+	struct pardevice *pd1;
 	int len=0;
 
 	for (pd1 = pp->devices; pd1 ; pd1 = pd1->next) {
@@ -133,6 +133,8 @@ static int hardware_read_proc(char *page, char **start, off_t off,
 		len += sprintf(page+len, "irq:\t%d\n",pp->irq);
 	len += sprintf(page+len, "dma:\t%d\n",pp->dma);
 
+
+#if 0
 	len += sprintf(page+len, "modes:\t");
 	{
 #define printmode(x) {if(pp->modes&PARPORT_MODE_##x){len+=sprintf(page+len,"%s%s",f?",":"",#x);f++;}}
@@ -187,7 +189,7 @@ static int hardware_read_proc(char *page, char **start, off_t off,
 			len += sprintf(page+len, ",EPP");
 	}
 	len += sprintf(page+len, "\n");
-	
+#endif	
 #if 0
 	/* Now no detection, please fix with an external function */
 	len += sprintf(page+len, "chipset:\tunknown\n");

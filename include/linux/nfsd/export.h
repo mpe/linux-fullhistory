@@ -59,7 +59,7 @@ struct svc_export {
 	struct svc_export *	ex_parent;
 	struct svc_client *	ex_client;
 	int			ex_flags;
-	struct inode *		ex_inode;
+	struct dentry *		ex_dentry;
 	dev_t			ex_dev;
 	ino_t			ex_ino;
 	uid_t			ex_anon_uid;

@@ -406,14 +406,30 @@ int try_to_free_page(int priority, int dma, int wait)
 }
 
 /*
+ * Before we start the kernel thread, print out the 
+ * kswapd initialization message (otherwise the init message 
+ * may be printed in the middle of another driver's init 
+ * message).  It looks very bad when that happens.
+ */
+void kswapd_setup(void)
+{
+       int i;
+       char *revision="$Revision: 1.23 $", *s, *e;
+
+       if ((s = strchr(revision, ':')) &&
+           (e = strchr(s, '$')))
+               s++, i = e - s;
+       else
+               s = revision, i = -1;
+       printk ("Starting kswapd v%.*s\n", i, s);
+}
+
+/*
  * The background pageout daemon.
  * Started as a kernel thread from the init process.
  */
 int kswapd(void *unused)
 {
-	int i;
-	char *revision="$Revision: 1.23 $", *s, *e;
-	
 	current->session = 1;
 	current->pgrp = 1;
 	sprintf(current->comm, "kswapd");
@@ -434,13 +450,6 @@ int kswapd(void *unused)
 
 	init_swap_timer();
 	
-	if ((s = strchr(revision, ':')) &&
-	    (e = strchr(s, '$')))
-		s++, i = e - s;
-	else
-		s = revision, i = -1;
-	printk ("Started kswapd v%.*s\n", i, s);
-
 	while (1) {
 		kswapd_awake = 0;
 		current->signal = 0;
@@ -496,7 +505,6 @@ void swap_tick(void)
 	}
 	timer_active |= (1<<SWAP_TIMER);
 }
-
 
 /* 
  * Initialise the swap timer

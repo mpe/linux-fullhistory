@@ -133,9 +133,10 @@ nfsctl_getfh(struct nfsctl_fhparm *data, struct knfs_fh *res)
 #endif
 
 int
-asmlinkage handle_sys_nfsservctl(int cmd, struct nfsctl_arg *argp,
-			         union nfsctl_res *resp)
+asmlinkage handle_sys_nfsservctl(int cmd, void *opaque_argp, void *opaque_resp)
 {
+	struct nfsctl_arg *	argp = opaque_argp;
+	union nfsctl_res *	resp = opaque_resp;
 	struct nfsctl_arg *	arg = NULL;
 	union nfsctl_res *	res = NULL;
 	int			err;

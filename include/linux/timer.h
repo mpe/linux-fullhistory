@@ -54,6 +54,7 @@
 
 #define HD_TIMER2	24
 #define GSCD_TIMER	25
+#define COMTROL_TIMER	26
 
 #define DIGI_TIMER	29
 

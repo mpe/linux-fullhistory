@@ -24,7 +24,7 @@
  * Global file hash table
  */
 #define FILE_NRHASH		32
-#define FILE_HASH(dev, ino)	(((dev) + (ino)) & FILE_NRHASH)
+#define FILE_HASH(dhash)	((dhash) & FILE_NRHASH)
 static struct nlm_file *	nlm_files[FILE_NRHASH];
 static struct semaphore		nlm_file_sema = MUTEX;
 
@@ -43,21 +43,21 @@ nlm_lookup_file(struct svc_rqst *rqstp, struct nlm_file **result,
 {
 	struct nlm_file	*file;
 	struct knfs_fh	*fh = (struct knfs_fh *) f;
-	unsigned int	hash = FILE_HASH(fh->fh_dev, fh->fh_ino);
+	unsigned int	hash = FILE_HASH(fh->fh_dhash);
 	u32		nfserr;
 
-	dprintk("lockd: nlm_file_lookup(%04x/%ld)\n", fh->fh_dev, fh->fh_ino);
+	dprintk("lockd: nlm_file_lookup(%p)\n", fh->fh_dentry);
 
 	/* Lock file table */
 	down(&nlm_file_sema);
 
 	for (file = nlm_files[hash]; file; file = file->f_next) {
-		if (file->f_handle.fh_ino == fh->fh_ino
+		if (file->f_handle.fh_dentry == fh->fh_dentry
 		 && !memcmp(&file->f_handle, fh, sizeof(*fh)))
 			goto found;
 	}
 
-	dprintk("lockd: creating file for %04x/%ld\n", fh->fh_dev, fh->fh_ino);
+	dprintk("lockd: creating file for %p\n", fh->fh_dentry);
 	if (!(file = (struct nlm_file *) kmalloc(sizeof(*file), GFP_KERNEL))) {
 		up(&nlm_file_sema);
 		return nlm_lck_denied_nolocks;
@@ -93,11 +93,11 @@ found:
 static inline void
 nlm_delete_file(struct nlm_file *file)
 {
-	struct inode	*inode = nlmsvc_file_inode(file);
+	struct dentry *dentry = file->f_file.f_dentry;
 	struct nlm_file	**fp, *f;
 
-	dprintk("lockd: closing file %04x/%ld\n", inode->i_dev, inode->i_ino);
-	fp = nlm_files + FILE_HASH(inode->i_dev, inode->i_ino);
+	dprintk("lockd: closing file %p\n", dentry);
+	fp = nlm_files + FILE_HASH(dentry->d_name.hash);
 	while ((f = *fp) != NULL) {
 		if (f == file) {
 			*fp = file->f_next;

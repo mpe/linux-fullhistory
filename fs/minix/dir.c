@@ -92,5 +92,6 @@ static int minix_readdir(struct inode * inode, struct file * filp,
 		} while (offset < 1024 && filp->f_pos < inode->i_size);
 		brelse(bh);
 	}
+	UPDATE_ATIME(inode);
 	return 0;
 }

@@ -150,9 +150,10 @@ int nfssvc_encode_readlinkres(struct svc_rqst *, u32 *, struct nfsd_readlinkres 
 int nfssvc_encode_readres(struct svc_rqst *, u32 *, struct nfsd_readres *);
 int nfssvc_encode_statfsres(struct svc_rqst *, u32 *, struct nfsd_statfsres *);
 int nfssvc_encode_readdirres(struct svc_rqst *, u32 *, struct nfsd_readdirres *);
-int nfssvc_release_fhandle(struct svc_rqst *, u32 *, struct nfsd_fhandle *);
 
 int nfssvc_encode_entry(struct readdir_cd *, const char *name,
 				int namlen, off_t offset, ino_t ino);
+
+int nfssvc_release_fhandle(struct svc_rqst *, u32 *, struct nfsd_fhandle *);
 
 #endif /* LINUX_NFSD_H */

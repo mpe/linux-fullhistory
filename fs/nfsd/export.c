@@ -90,9 +90,25 @@ exp_get(svc_client *clp, dev_t dev, ino_t ino)
 }
 
 /*
+ * Look up the root inode of the parent fs.
+ * We have to go through iget in order to allow for wait_on_inode.
+ */
+static inline int
+nfsd_parentdev(dev_t *devp)
+{
+	struct super_block	*sb;
+
+	if (!(sb = get_super(*devp)) || !sb->s_root->d_covers)
+		return 0;
+	if (*devp == sb->s_root->d_covers->d_inode->i_dev)
+		return 0;
+	*devp = sb->s_root->d_covers->d_inode->i_dev;
+	return 1;
+}
+
+/*
  * Find the parent export entry for a given fs. This function is used
  * only by the export syscall to keep the export tree consistent.
- * nfsd_parentdev(dev) returns the device on which dev is mounted.
  */
 static svc_export *
 exp_parent(svc_client *clp, dev_t dev)
@@ -118,6 +134,7 @@ exp_export(struct nfsctl_export *nxp)
 	svc_client	*clp;
 	svc_export	*exp, *parent;
 	svc_export	**head;
+	struct dentry	*dentry = NULL;
 	struct inode	*inode = NULL;
 	int		i, err;
 	dev_t		dev;
@@ -128,7 +145,7 @@ exp_export(struct nfsctl_export *nxp)
 	    !exp_verify_string(nxp->ex_client, NFSCLNT_IDMAX))
 		return -EINVAL;
 
-	dprintk("exp_export called for %s:%s (%x/%ld fl %x).\n",
+	dprintk("exp_export called for %s:%s (%x/%d fl %x).\n",
 			nxp->ex_client, nxp->ex_path,
 			nxp->ex_dev, nxp->ex_ino, nxp->ex_flags);
 	dev = nxp->ex_dev;
@@ -161,8 +178,19 @@ exp_export(struct nfsctl_export *nxp)
 		goto finish;
 	}
 
-	/* Look up the inode */
-	if (!(inode = nfsd_iget(nxp->ex_dev, nxp->ex_ino))) {
+	/* Look up the dentry */
+	dentry = lookup_dentry(nxp->ex_path, NULL, 0);
+	if (IS_ERR(dentry)) {
+		err = -EINVAL;
+		goto finish;
+	}
+	inode = dentry->d_inode;
+	if(!inode) {
+		err = -ENOENT;
+		goto finish;
+	}
+	if(inode->i_dev != nxp->ex_dev || inode->i_ino != nxp->ex_ino) {
+		/* I'm just being paranoid... */
 		err = -EINVAL;
 		goto finish;
 	}
@@ -175,9 +203,9 @@ exp_export(struct nfsctl_export *nxp)
 
 	/* If this is a sub-export, must be root of FS */
 	if ((parent = exp_parent(clp, dev)) != NULL) {
-		struct super_block *sb;
+		struct super_block *sb = inode->i_sb;
 
-		if ((sb = inode->i_sb) && (inode != sb->s_mounted)) {
+		if (sb && (inode != sb->s_root->d_inode)) {
 			err = -EINVAL;
 			goto finish;
 		}
@@ -192,7 +220,7 @@ exp_export(struct nfsctl_export *nxp)
 	strcpy(exp->ex_path, nxp->ex_path);
 	exp->ex_client = clp;
 	exp->ex_parent = parent;
-	exp->ex_inode = inode;
+	exp->ex_dentry = dentry;
 	exp->ex_flags = nxp->ex_flags;
 	exp->ex_dev = dev;
 	exp->ex_ino = ino;
@@ -219,9 +247,10 @@ exp_export(struct nfsctl_export *nxp)
 	err = 0;
 
 finish:
-	/* Release inode */
-	if (err < 0 && inode)
-		iput(inode);
+	/* Release dentry */
+	if (err < 0 && dentry)
+		dput(dentry);
+
 	/* Unlock hashtable */
 	exp_unlock();
 	return err;
@@ -236,6 +265,7 @@ exp_do_unexport(svc_export *unexp)
 {
 	svc_export	*exp;
 	svc_client	*clp;
+	struct dentry	*dentry;
 	struct inode	*inode;
 	int		i;
 
@@ -247,11 +277,12 @@ exp_do_unexport(svc_export *unexp)
 				exp->ex_parent = unexp->ex_parent;
 	}
 
-	inode = unexp->ex_inode;
+	dentry = unexp->ex_dentry;
+	inode = dentry->d_inode;
 	if (unexp->ex_dev != inode->i_dev || unexp->ex_ino != inode->i_ino)
-		printk(KERN_WARNING "nfsd: bad inode in unexport!\n");
+		printk(KERN_WARNING "nfsd: bad dentry in unexport!\n");
 	else
-		iput(unexp->ex_inode);
+		dput(dentry);
 
 	kfree(unexp);
 }
@@ -326,13 +357,28 @@ exp_rootfh(struct svc_client *clp, dev_t dev, ino_t ino, struct knfs_fh *f)
 {
 	struct svc_export	*exp = NULL;
 	struct svc_fh		fh;
+	struct dentry		*dentry;
+	struct inode		*inode;
 
-	dprintk("nfsd: exp_rootfh(%s:%x/%ld)\n", clp->cl_ident, dev, ino);
+	dprintk("nfsd: exp_rootfh(%s:%x/%d)\n", clp->cl_ident, dev, ino);
 
 	if (!(exp = exp_get(clp, dev, ino)))
 		return -EPERM;
-	exp->ex_inode->i_count++;
-	fh_compose(&fh, exp, exp->ex_inode);
+
+	dentry = exp->ex_dentry;
+	inode = dentry->d_inode;
+	if(!inode) {
+		printk("exp_rootfh: Aieee, NULL d_inode\n");
+		return -EPERM;
+	}
+	if(inode->i_dev != dev || inode->i_ino != ino) {
+		printk("exp_rootfh: Aieee, ino/dev mismatch\n");
+		printk("exp_rootfh: arg[dev(%x):ino(%d)] inode[dev(%x):ino(%ld)]\n",
+		       dev, ino, inode->i_dev, inode->i_ino);
+	}
+
+	dget(dentry);
+	fh_compose(&fh, exp, dentry);
 	memcpy(f, &fh.fh_handle, sizeof(struct knfs_fh));
 	fh_put(&fh);
 
@@ -613,25 +659,6 @@ exp_verify_string(char *cp, int max)
 	return 0;
 }
 
-#if 0
-/*
- * Get the inode associated with a pathname. Used by exp_export.
- */
-struct inode *
-exp_lnamei(char *pathname, int *errp)
-{
-	struct inode	*inode;
-	unsigned long	oldfs;
-
-	oldfs = get_fs();
-	set_fs(KERNEL_DS);
-	*errp = lnamei(pathname, &inode);
-	set_fs(oldfs);
-
-	return inode;
-}
-#endif
-
 /*
  * Initialize the exports module.
  */
@@ -648,7 +675,6 @@ nfsd_export_init(void)
 	clients = NULL;
 
 	initialized = 1;
-	return;
 }
 
 /*
@@ -672,6 +698,4 @@ nfsd_export_shutdown(void)
 	}
 	exp_unlock();
 	dprintk("nfsd: export shutdown complete.\n");
-
-	return;
 }

@@ -18,44 +18,23 @@
 #define NFSDDBG_FACILITY		NFSDDBG_FH
 
 /*
- * Get the inode version number
- */
-static inline int
-nfsd_iversion(struct inode *inode)
-{
-	if (inode->i_sb->s_magic == EXT2_SUPER_MAGIC)
-		return inode->u.ext2_i.i_version;
-	return 0;
-}
-
-/*
- * Get the inode given a file handle.
+ * Perform sanity checks on the dentry in a client's file handle.
  */
 u32
-fh_lookup(struct svc_rqst *rqstp, struct svc_fh *fhp, int type, int access)
+fh_verify(struct svc_rqst *rqstp, struct svc_fh *fhp, int type, int access)
 {
 	struct svc_export *exp;
+	struct dentry	*dentry;
 	struct inode	*inode;
 	struct knfs_fh	*fh = &fhp->fh_handle;
 
-	/* Already checked */
-	if (fhp->fh_inode)
+	if(fhp->fh_dverified)
 		return 0;
 
-	dprintk("nfsd: fh_lookup(exp %x/%ld fh %x/%ld)\n",
-			fh->fh_xdev, fh->fh_xino, fh->fh_dev, fh->fh_ino);
+	dprintk("nfsd: fh_lookup(exp %x/%d fh %p)\n",
+			fh->fh_xdev, fh->fh_xino, fh->fh_dentry);
 
-	/* Make sure that clients don't cheat */
-	if (fh->fh_dev != fh->fh_xdev) {
-		printk(KERN_NOTICE "nfsd: fh with bad dev fields "
-				"(%x != %x) from %08lx:%d\n",
-				fh->fh_dev, fh->fh_xdev,
-				ntohl(rqstp->rq_addr.sin_addr.s_addr),
-				ntohs(rqstp->rq_addr.sin_port));
-		return nfserr_perm;
-	}
-
-	/* Look up the export entry */
+	/* Look up the export entry. */
 	exp = exp_get(rqstp->rq_client, fh->fh_xdev, fh->fh_xino);
 	if (!exp) {
 		/* nfsdstats.fhstale++; */
@@ -71,22 +50,26 @@ fh_lookup(struct svc_rqst *rqstp, struct svc_fh *fhp, int type, int access)
 		return nfserr_perm;
 	}
 
-	/* Set user creds if we haven't done so already */
+	/* Set user creds if we haven't done so already. */
 	nfsd_setuser(rqstp, exp);
 
-	/* Get the inode */
-	if (!(inode = nfsd_iget(fh->fh_dev, fh->fh_ino))
-	 || !inode->i_nlink || fh->fh_version != nfsd_iversion(inode)) {
-		if (inode)
-			iput(inode);
+	dentry = fh->fh_dentry;
+
+	if(!d_validate(dentry, fh->fh_dparent, fh->fh_dhash, fh->fh_dlen) ||
+	   !(inode = dentry->d_inode) ||
+	   !inode->i_nlink) {
+		/* Currently we cannot tell the difference between
+		 * a bogus pointer and a true unlink between fh
+		 * uses.  But who cares about accurate error reporting
+		 * to buggy/malicious clients... -DaveM
+		 */
+
 		/* nfsdstats.fhstale++; */
-		return nfserr_stale;	/* unlinked in the meanwhile */
+		return nfserr_stale;
 	}
 
-	/* This is basically what wait_on_inode does */
-	while (inode->i_lock)
-		sleep_on(&inode->i_wait);
-	fhp->fh_inode  = inode;
+	dget(dentry);
+	fhp->fh_dverified = 1;
 	fhp->fh_export = exp;
 
 	/* Type check. The correct error return for type mismatches
@@ -100,25 +83,28 @@ fh_lookup(struct svc_rqst *rqstp, struct svc_fh *fhp, int type, int access)
 	if (type < 0 && (inode->i_mode & S_IFMT) == -type)
 		return (type == -S_IFDIR)? nfserr_notdir : nfserr_isdir;
 
-	/* Finally, check access permissions */
-	return nfsd_permission(fhp->fh_export, inode, access);
+	/* Finally, check access permissions. */
+	return nfsd_permission(fhp->fh_export, dentry, access);
 }
 
 /*
  * Compose file handle for NFS reply.
  */
 void
-fh_compose(struct svc_fh *fhp, struct svc_export *exp, struct inode *inode)
+fh_compose(struct svc_fh *fhp, struct svc_export *exp, struct dentry *dentry)
 {
-	dprintk("nfsd: fh_compose(exp %x/%ld fh %x/%ld)\n",
-			exp->ex_dev, exp->ex_ino, inode->i_dev, inode->i_ino);
+	dprintk("nfsd: fh_compose(exp %x/%d dentry %p)\n",
+			exp->ex_dev, exp->ex_ino, dentry);
 
 	fh_init(fhp);			/* initialize empty fh */
-	fhp->fh_inode = inode;
-	fhp->fh_export = exp;
-	fhp->fh_handle.fh_dev = inode->i_dev;
-	fhp->fh_handle.fh_ino = inode->i_ino;
+	fhp->fh_handle.fh_dentry = dentry;
+	fhp->fh_handle.fh_dparent = dentry->d_parent;
+	fhp->fh_handle.fh_dhash = dentry->d_name.hash;
+	fhp->fh_handle.fh_dlen = dentry->d_name.len;
 	fhp->fh_handle.fh_xdev = exp->ex_dev;
 	fhp->fh_handle.fh_xino = exp->ex_ino;
-	fhp->fh_handle.fh_version = nfsd_iversion(inode);
+	fhp->fh_export = exp;
+
+	/* We stuck it there, we know it's good. */
+	fhp->fh_dverified = 1;
 }

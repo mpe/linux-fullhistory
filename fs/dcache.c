@@ -17,6 +17,7 @@
 #include <linux/mm.h>
 #include <linux/fs.h>
 #include <linux/malloc.h>
+#include <linux/init.h>
 
 /*
  * This is the single most critical data structure when it comes
@@ -229,6 +230,46 @@ struct dentry * d_lookup(struct dentry * dir, struct qstr * name)
 	return __dlookup(d_hash(dir, name->hash), dir, name);
 }
 
+/*
+ * An insecure source has sent us a dentry, here we verify it.
+ *
+ * This is just to make knfsd able to have the dentry pointer
+ * in the NFS file handle.
+ *
+ * NOTE! Do _not_ dereference the pointers before we have
+ * validated them. We can test the pointer values, but we
+ * must not actually use them until we have found a valid
+ * copy of the pointer in kernel space..
+ */
+int d_validate(struct dentry *dentry, struct dentry *dparent,
+	       unsigned int hash, unsigned int len)
+{
+	struct list_head *base = d_hash(dparent, hash);
+	struct list_head *lhp = base;
+
+	while ((lhp = lhp->next) != base) {
+		if (dentry == list_entry(lhp, struct dentry, d_hash))
+			goto found_it;
+	}
+
+	/* Special case, local mount points don't live in the hashes.
+	 * So if we exhausted the chain, search the super blocks.
+	 */
+	if (dentry && dentry == dparent) {
+		struct super_block *sb;
+
+		for (sb = super_blocks + 0; sb < super_blocks + NR_SUPER; sb++) {
+			if (sb->s_root == dentry)
+				goto found_it;
+		}
+	}
+	return 0;
+found_it:
+	return	(dentry->d_parent == dparent) &&
+		(dentry->d_name.hash == hash) &&
+		(dentry->d_name.len == len);
+}
+
 static inline void d_insert_to_parent(struct dentry * entry, struct dentry * parent)
 {
 	list_add(&entry->d_hash, d_hash(dget(parent), entry->d_name.hash));
@@ -313,13 +354,17 @@ void d_move(struct dentry * dentry, struct dentry * newdir, struct qstr * newnam
 	d_insert_to_parent(dentry, newdir);
 }
 
+/*
+ * This is broken in more ways than one. Unchecked recursion,
+ * unchecked buffer size. Get rid of it.
+ */
 int d_path(struct dentry * entry, struct dentry * chroot, char * buf)
 {
 	if (IS_ROOT(entry) || (chroot && entry == chroot)) {
 		*buf = '/';
 		return 1;
 	} else {
-		int len = d_path(entry->d_parent, chroot, buf);
+		int len = d_path(entry->d_covers->d_parent, chroot, buf);
 
 		buf += len;
 		if (len > 1) {
@@ -331,7 +376,7 @@ int d_path(struct dentry * entry, struct dentry * chroot, char * buf)
 	}
 }
 
-void dcache_init(void)
+__initfunc(void dcache_init(void))
 {
 	int i;
 	struct list_head *d = dentry_hashtable;

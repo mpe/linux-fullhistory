@@ -637,6 +637,7 @@ static int umount_dev(kdev_t dev)
 	if (MAJOR(dev) >= MAX_BLKDEV)
 		return -ENXIO;
 
+	fsync_dev(dev);
 	retval = do_umount(dev,0);
 	if (!retval) {
 		fsync_dev(dev);

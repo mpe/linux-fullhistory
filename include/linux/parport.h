@@ -1,4 +1,4 @@
-/* $Id: parport.h,v 1.2.6.3 1997/04/16 21:21:03 phil Exp $ */
+/* $Id: parport.h,v 1.2.6.3.2.2 1997/04/18 15:03:53 phil Exp $ */
 
 #ifndef _PARPORT_H_
 #define _PARPORT_H_
@@ -11,12 +11,92 @@
 #define PARPORT_MAX  8 
 
 /* Magic numbers */
-#define PARPORT_IRQ_NONE  -1
-#define PARPORT_DMA_NONE  -1
+#define PARPORT_IRQ_NONE  -2
+#define PARPORT_DMA_NONE  -2
+#define PARPORT_IRQ_AUTO  -1
+#define PARPORT_DMA_AUTO  -1
 #define PARPORT_DISABLE   -2
 
-/* Type classes for Plug-and-Play probe */
+/* Define this later. */
+struct parport;
 
+struct pc_parport_state {
+	unsigned int ctr;
+	unsigned int ecr;
+};
+
+struct parport_state {
+	union {
+		struct pc_parport_state pc;
+		/* ARC has no state. */
+		void *misc; 
+	} u;
+};
+
+/* Generic operations vector through the dispatch table. */
+#define parport_write_data(p,x)            (p)->ops->write_data(p,x)
+#define parport_read_data(p)               (p)->ops->read_data(p)
+#define parport_write_control(p,x)         (p)->ops->write_control(p,x)
+#define parport_read_control(p)            (p)->ops->read_control(p)
+#define parport_frob_control(p,m,v)        (p)->ops->frob_control(p,m,v)
+#define parport_write_econtrol(p,x)        (p)->ops->write_econtrol(p,x)
+#define parport_read_econtrol(p)           (p)->ops->read_econtrol(p)
+#define parport_frob_econtrol(p,m,v)       (p)->ops->frob_econtrol(p,m,v)
+#define parport_write_status(p,v)          (p)->ops->write_status(p,v)
+#define parport_read_status(p)             (p)->ops->read_status(p)
+#define parport_write_fifo(p,v)            (p)->ops->write_fifo(p,v)
+#define parport_read_fifo(p)               (p)->ops->read_fifo(p)
+#define parport_change_mode(p,m)           (p)->ops->change_mode(p,m)
+#define parport_release_resources(p)       (p)->ops->release_resources(p)
+#define parport_claim_resources(p)         (p)->ops->claim_resources(p)
+
+struct parport_operations {
+	void (*write_data)(struct parport *, unsigned int);
+	unsigned int (*read_data)(struct parport *);
+	void (*write_control)(struct parport *, unsigned int);
+	unsigned int (*read_control)(struct parport *);
+	unsigned int (*frob_control)(struct parport *, unsigned int mask, unsigned int val);
+	void (*write_econtrol)(struct parport *, unsigned int);
+	unsigned int (*read_econtrol)(struct parport *);
+	unsigned int (*frob_econtrol)(struct parport *, unsigned int mask, unsigned int val);
+	void (*write_status)(struct parport *, unsigned int);
+	unsigned int (*read_status)(struct parport *);
+	void (*write_fifo)(struct parport *, unsigned int);
+	unsigned int (*read_fifo)(struct parport *);
+
+	void (*change_mode)(struct parport *, int);
+
+	void (*release_resources)(struct parport *);
+	int (*claim_resources)(struct parport *);
+
+	unsigned int (*epp_write_block)(struct parport *, void *, unsigned int);
+	unsigned int (*epp_read_block)(struct parport *, void *, unsigned int);
+
+	unsigned int (*ecp_write_block)(struct parport *, void *, unsigned int, void (*fn)(struct parport *, void *, unsigned int), void *);
+	unsigned int (*ecp_read_block)(struct parport *, void *, unsigned int, void (*fn)(struct parport *, void *, unsigned int), void *);
+
+	void (*save_state)(struct parport *, struct parport_state *);
+	void (*restore_state)(struct parport *, struct parport_state *);
+
+	void (*enable_irq)(struct parport *);
+	void (*disable_irq)(struct parport *);
+	int (*examine_irq)(struct parport *);
+};
+
+#define PARPORT_CONTROL_STROBE    0x1
+#define PARPORT_CONTROL_AUTOFD    0x2
+#define PARPORT_CONTROL_INIT      0x4
+#define PARPORT_CONTROL_SELECT    0x8
+#define PARPORT_CONTROL_INTEN     0x10
+#define PARPORT_CONTROL_DIRECTION 0x20
+
+#define PARPORT_STATUS_ERROR      0x8
+#define PARPORT_STATUS_SELECT     0x10
+#define PARPORT_STATUS_PAPEROUT   0x20
+#define PARPORT_STATUS_ACK        0x40
+#define PARPORT_STATUS_BUSY       0x80
+
+/* Type classes for Plug-and-Play probe.  */
 typedef enum {
 	PARPORT_CLASS_LEGACY = 0,       /* Non-IEEE1284 device */
 	PARPORT_CLASS_PRINTER,
@@ -41,12 +121,6 @@ struct parport_device_info {
 	char *description;
 };
 
-/* Definitions for parallel port sharing */
-
-/* Forward declare some stuff so we can use mutually circular structures */
-struct ppd;
-struct parport;
-
 /* Each device can have two callback functions:
  *  1) a preemption function, called by the resource manager to request
  *     that the driver relinquish control of the port.  The driver should
@@ -59,37 +133,27 @@ struct parport;
  *     the port, it should call parport_claim() here.  The return value from
  *     this function is ignored.
  */
-typedef int (*callback_func) (void *);
-
-/* This is an ordinary kernel IRQ handler routine.
- * The dev_id field (void *) will point the the port structure
- * associated with the interrupt request (to allow IRQ sharing)
- * Please make code IRQ sharing as this function may be called
- * when it isn't meant for you...
- */
-typedef void (*irq_handler_func) (int, void *, struct pt_regs *);
 
 /* A parallel port device */
-struct ppd {
+struct pardevice {
 	char *name;
-	struct parport *port;	/* The port this is associated with */
-	callback_func preempt;	/* preemption function */
-	callback_func wakeup;	/* kick function */
+	struct parport *port;
+	int (*preempt)(void *);
+	void (*wakeup)(void *);
 	void *private;
-	irq_handler_func irq_func;
+	void (*irq_func)(int, void *, struct pt_regs *);
 	int flags;
-	unsigned char ctr;	/* SPP CTR register */
-	unsigned char ecr;	/* ECP ECR register */
-	struct ppd *next;
-	struct ppd *prev;
+	struct pardevice *next;
+	struct pardevice *prev;
+	struct parport_state *state;     /* saved status over preemption */
 };
 
-struct parport_dir{
+struct parport_dir {
 	struct proc_dir_entry *entry;    /* Directory /proc/parport/X     */
 	struct proc_dir_entry *irq;      /* IRQ entry /proc/parport/X/irq */
 	struct proc_dir_entry *devices;  /* /proc/parport/X/devices       */
 	struct proc_dir_entry *hardware; /* /proc/parport/X/hardware      */
-    char name[4]; /* /proc/parport/"XXXX" */
+	char name[4];                    /* /proc/parport/"XXXX" */
 };
 
 /* A parallel port */
@@ -100,16 +164,19 @@ struct parport {
 	int irq;		/* interrupt (or -1 for none) */
 	int dma;
 	unsigned int modes;
-	struct ppd *devices;
-	struct ppd *cad;	/* port owner */
-	struct ppd *lurker;
-	unsigned int ctr;	/* SPP CTR register */
-	unsigned int ecr;	/* ECP ECR register */
+
+	struct pardevice *devices;
+	struct pardevice *cad;	/* port owner */
+	struct pardevice *lurker;
+	
 	struct parport *next;
-        unsigned int flags; 
+	unsigned int flags; 
+
 	struct parport_dir pdir;
 	struct parport_device_info probe_info; 
-	int speed;  /* Max Write in Bytes/s */
+
+	struct parport_operations *ops;
+	void *private_data;     /* for lowlevel driver */
 };
 
 /* parport_register_port registers a new parallel port at the given address (if
@@ -117,15 +184,15 @@ struct parport {
  * claiming the I/O region, IRQ and DMA.
  * NULL is returned if initialisation fails. 
  */
-struct parport *parport_register_port(unsigned long base, int irq, int dma);
+struct parport *parport_register_port(unsigned long base, int irq, int dma,
+				      struct parport_operations *ops);
 
 /* parport_in_use returns nonzero if there are devices attached to a port. */
 #define parport_in_use(x)  ((x)->devices != NULL)
 
-/* parport_destroy blows away a parallel port.  This fails if any devices are
- * registered.
- */
-void parport_destroy(struct parport *);
+/* Put a parallel port to sleep; release its hardware resources.  Only possible
+ * if no devices are registered.  */
+void parport_quiesce(struct parport *);
 
 /* parport_enumerate returns a pointer to the linked list of all the ports
  * in this machine.
@@ -140,19 +207,20 @@ struct parport *parport_enumerate(void);
  * Only one lurking driver can be used on a given port. 
  * handle is a user pointer that gets handed to callback functions. 
  */
-struct ppd *parport_register_device(struct parport *port, const char *name,
-				    callback_func pf, callback_func kf,
-				    irq_handler_func irq_func, int flags,
-				    void *handle);
+struct pardevice *parport_register_device(struct parport *port, 
+			  const char *name,
+			  int (*pf)(void *), int (*kf)(void *),
+			  void (*irq_func)(int, void *, struct pt_regs *), 
+			  int flags, void *handle);
 
-/* parport_deregister causes the kernel to forget about a device */
-void parport_unregister_device(struct ppd *dev);
+/* parport_unregister unlinks a device from the chain. */
+void parport_unregister_device(struct pardevice *dev);
 
 /* parport_claim tries to gain ownership of the port for a particular driver.
  * This may fail (return non-zero) if another driver is busy.  If this
  * driver has registered an interrupt handler, it will be enabled. 
  */
-int parport_claim(struct ppd *dev);
+int parport_claim(struct pardevice *dev);
 
 /* parport_release reverses a previous parport_claim.  This can never fail, 
  * though the effects are undefined (except that they are bad) if you didn't
@@ -162,25 +230,24 @@ int parport_claim(struct ppd *dev);
  * If you mess with the port state (enabling ECP for example) you should
  * clean up before releasing the port. 
  */
-void parport_release(struct ppd *dev);
+void parport_release(struct pardevice *dev);
 
 /* The "modes" entry in parport is a bit field representing the following
  * modes.
  * Note that LP_ECPEPP is for the SMC EPP+ECP mode which is NOT
  * 100% compatible with EPP.
  */
-#define PARPORT_MODE_SPP	        0x0001
-#define PARPORT_MODE_PS2		0x0002
-#define PARPORT_MODE_EPP		0x0004
-#define PARPORT_MODE_ECP		0x0008
-#define PARPORT_MODE_ECPEPP		0x0010
-#define PARPORT_MODE_ECR		0x0020  /* ECR Register Exists */
-#define PARPORT_MODE_ECPPS2		0x0040
+#define PARPORT_MODE_PCSPP	        0x0001
+#define PARPORT_MODE_PCPS2		0x0002
+#define PARPORT_MODE_PCEPP		0x0004
+#define PARPORT_MODE_PCECP		0x0008
+#define PARPORT_MODE_PCECPEPP		0x0010
+#define PARPORT_MODE_PCECR		0x0020  /* ECR Register Exists */
+#define PARPORT_MODE_PCECPPS2		0x0040
 
-/* Flags used to identify what a device does
- */
-#define PARPORT_DEV_TRAN	        0x0000
-#define PARPORT_DEV_LURK	        0x0001
+/* Flags used to identify what a device does. */
+#define PARPORT_DEV_TRAN	        0x0000  /* We're transient. */
+#define PARPORT_DEV_LURK	        0x0001  /* We lurk. */
 
 #define PARPORT_FLAG_COMA		1
 
@@ -200,31 +267,5 @@ extern void inc_parport_count(void);
 
 extern int parport_probe(struct parport *port, char *buffer, int len);
 extern void parport_probe_one(struct parport *port);
-
-/* Primitive port access functions */
-extern inline void parport_w_ctrl(struct parport *port, int val) 
-{
-	outb(val, port->base+2);
-}
-
-extern inline int parport_r_ctrl(struct parport *port)
-{
-	return inb(port->base+2);
-}
-
-extern inline void parport_w_data(struct parport *port, int val)
-{
-	outb(val, port->base);
-}
-
-extern inline int parport_r_data(struct parport *port)
-{
-	return inb(port->base);
-}
-
-extern inline int parport_r_status(struct parport *port)
-{
-	return inb(port->base+1);
-}
 
 #endif /* _PARPORT_H_ */

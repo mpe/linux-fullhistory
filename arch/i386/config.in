@@ -46,7 +46,10 @@ choice 'Processor type' \
 	 PPro		CONFIG_M686" Pentium
 bool 'Video mode selection support' CONFIG_VIDEO_SELECT
 
-tristate 'Parallel port support' CONFIG_PNP_PARPORT
+tristate 'Parallel port support' CONFIG_PARPORT
+if [ "$CONFIG_PARPORT" != "n" ]; then
+  dep_tristate '  PC-style hardware' CONFIG_PARPORT_PC $CONFIG_PARPORT
+fi
 
 endmenu
 

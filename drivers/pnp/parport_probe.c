@@ -17,6 +17,7 @@
 #include <linux/kernel.h>
 #include <linux/malloc.h>
 #include <linux/ctype.h>
+#include <linux/module.h>
 
 #include <linux/lp.h>
 
@@ -26,23 +27,23 @@
 static inline int read_nibble(struct parport *port) 
 {
 	unsigned char i;
-	i = parport_r_status(port)>>3;
+	i = parport_read_status(port)>>3;
 	i&=~8;
 	if ( ( i & 0x10) == 0) i|=8;
 	return(i & 0x0f);
 }
 
 static void read_terminate(struct parport *port) {
-	parport_w_ctrl(port, (parport_r_ctrl(port) & ~2) | 8);
+	parport_write_control(port, (parport_read_control(port) & ~2) | 8);
 	/* SelectIN high, AutoFeed low */
 	if (parport_wait_peripheral(port, 0x80, 0)) 
 		/* timeout, SelectIN high, Autofeed low */
 		return;
-	parport_w_ctrl(port, parport_r_ctrl(port) | 2);
+	parport_write_control(port, parport_read_control(port) | 2);
 	/* AutoFeed high */
 	parport_wait_peripheral(port, 0x80, 0x80);
 	/* no timeout possible, Autofeed low, SelectIN high */
-	parport_w_ctrl(port, (parport_r_ctrl(port) & ~2) | 8);
+	parport_write_control(port, (parport_read_control(port) & ~2) | 8);
 	return;
 }
 
@@ -56,14 +57,14 @@ static long read_polled(struct parport *port, char *buf,
 	unsigned char Byte=0;
 
 	for (i=0; ; i++) {
-		parport_w_ctrl(port, parport_r_ctrl(port) | 2); /* AutoFeed high */
+		parport_write_control(port, parport_read_control(port) | 2); /* AutoFeed high */
 		if (parport_wait_peripheral(port, 0x40, 0)) {
 			printk("%s: read1 timeout.\n", port->name);
-			parport_w_ctrl(port, parport_r_ctrl(port) & ~2);
+			parport_write_control(port, parport_read_control(port) & ~2);
 			break;
 		}
 		z = read_nibble(port);
-		parport_w_ctrl(port, parport_r_ctrl(port) & ~2); /* AutoFeed low */
+		parport_write_control(port, parport_read_control(port) & ~2); /* AutoFeed low */
 		if (parport_wait_peripheral(port, 0x40, 0x40)) {
 			printk("%s: read2 timeout.\n", port->name);
 			break;
@@ -75,7 +76,7 @@ static long read_polled(struct parport *port, char *buf,
 			if (count++ == length)
 				temp = NULL;
 			/* Does the error line indicate end of data? */
-			if ((parport_r_status(port) & LP_PERRORP) == LP_PERRORP) 
+			if ((parport_read_status(port) & LP_PERRORP) == LP_PERRORP) 
 				break;
 		} else Byte=z;
 	}
@@ -87,7 +88,7 @@ static struct wait_queue *wait_q = NULL;
 
 static int wakeup(void *ref)
 {
-	struct ppd **dev = (struct ppd **)ref;
+	struct pardevice **dev = (struct pardevice **)ref;
 	
 	if (!wait_q || parport_claim(*dev))
 		return 1;
@@ -98,9 +99,7 @@ static int wakeup(void *ref)
 
 int parport_probe(struct parport *port, char *buffer, int len)
 {
-	struct ppd *dev = parport_register_device(port, "IEEE 1284 probe",
-						  NULL, wakeup, NULL,
-						  PARPORT_DEV_TRAN, &dev);
+	struct pardevice *dev = parport_register_device(port, "IEEE 1284 probe", NULL, wakeup, NULL, PARPORT_DEV_TRAN, &dev);
 
 	int result = 0;
 
@@ -264,3 +263,17 @@ void parport_probe_one(struct parport *port)
 	}
 	kfree(buffer);
 }
+
+#if MODULE
+int init_module(void)
+{
+	struct parport *p;
+	for (p = parport_enumerate(); p; p = p->next) 
+		parport_probe_one(p);
+	return 0;
+}
+
+void cleanup_module(void)
+{
+}
+#endif

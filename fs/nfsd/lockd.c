@@ -24,7 +24,7 @@ nlm_fopen(struct svc_rqst *rqstp, struct knfs_fh *f, struct file *filp)
 
 	fh.fh_handle = *f;
 	fh.fh_export = NULL;
-	fh.fh_inode  = NULL;
+	fh.fh_dverified = 0;
 
 	nfserr = nfsd_open(rqstp, &fh, S_IFREG, 0, filp);
 	fh_put(&fh);

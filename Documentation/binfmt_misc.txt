@@ -69,20 +69,63 @@ or /proc/sys/fs/binfmt_misc/status.
 Emulating binfmt_java:
 ======================
 
-To emulate binfmt_java the following register-strings are necessary
-(the first two for byte-compiled Java binaries, the third for applets
-contained in a html-file). Register exactly in this order!
-  ":Java:M::\xca\xfe\xba\xbe::/usr/local/java/bin/java:"
-  ":JavaC:e::class::/usr/local/java/bin/java:"
+To emulate binfmt_java the following register-strings could be used: 
+for compiled Java programs use
+  ":Java:M::\xca\xfe\xba\xbe::/usr/local/java/bin/javawrapper:"
+for simple applet support use
   ":Applet:E::html::/usr/local/java/bin/appletviewer:"
+for more selective applet support (like binfmt_java) use
+  ":Applet:M::\<\!--applet::/usr/local/java/bin/appletviewer:"
 
-To add a Java-executable to your path you can either make a symbolic
-link to the .class file elsewhere in your path (cut the .class-extension
-in the destination name for convenience) or add the directory of your
-.class files to your PATH environment. In both cases, ensure that the
-.class files are in your CLASSPATH environment!
+Note, that for the more selective applet support you have to modify
+existing html-files to contain <!--applet--> in the first line to
+let this work!
 
-This is sort of ugly - Javas filename handling is just broken.
+For the compiled Java programs you need a wrapper script like the
+following (this is because Java is broken in case of the filename
+handling):
+
+====================== Cut here ===================
+#!/bin/bash
+# /usr/local/java/bin/javawrapper - the wrapper for binfmt_misc/java
+CLASS=$1
+
+# if classname is a link, we follow it (this could be done easier - how?)
+if [ -L "$1" ] ; then
+	CLASS=`ls --color=no -l $1 | tr -s '\t ' '  ' | cut -d ' ' -f 11` 
+fi
+CLASSN=`basename $CLASS | sed s/\.class$//`
+CLASSP=`dirname $CLASS`
+
+FOO=$PATH
+PATH=$CLASSPATH
+if [ -z "`type -p -a $CLASSN.class`" ] ; then
+	# class is not in CLASSPATH
+	if [ -e "$CLASSP/$CLASSN.class" ] ; then
+		# append dir of class to CLASSPATH
+		if [ -z "${CLASSPATH}" ] ; then
+			export CLASSPATH=$CLASSP
+		else
+			export CLASSPATH=$CLASSP:$CLASSPATH
+		fi
+	else
+		# uh! now we would have to create a symbolic link - really
+		# ugly, i.e. print a message that one has to change the setup
+		echo "Hey! This is not a good setup to run $1 !"
+		exit 1
+	fi
+fi
+PATH=$FOO
+
+shift
+/usr/local/java/bin/java $CLASSN $@
+====================== Cut here ===================
+
+To add a Java program to your path best put a symbolic link to the main
+.class file into /usr/bin (or another place you like) omitting the .class
+extension. The directory containing the original .class file will be
+added to your CLASSPATH during execution.
+
 
 
 HINTS:

@@ -1,4 +1,4 @@
-/* $Id: sys_sparc32.c,v 1.43 1997/07/17 02:20:45 davem Exp $
+/* $Id: sys_sparc32.c,v 1.44 1997/07/20 09:18:47 davem Exp $
  * sys_sparc32.c: Conversion between 32bit and 64bit native syscalls.
  *
  * Copyright (C) 1997 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -31,6 +31,12 @@
 #include <linux/ncp_fs.h>
 #include <linux/quota.h>
 #include <linux/file.h>
+#include <linux/module.h>
+#include <linux/sunrpc/svc.h>
+#include <linux/nfsd/nfsd.h>
+#include <linux/nfsd/cache.h>
+#include <linux/nfsd/xdr.h>
+#include <linux/nfsd/syscall.h>
 #include <linux/module.h>
 
 #include <asm/types.h>
@@ -2519,3 +2525,271 @@ sys_get_kernel_syms(struct kernel_sym *table)
 }
 
 #endif  /* CONFIG_MODULES */
+
+/* Stuff for NFS server syscalls... */
+struct nfsctl_svc32 {
+	u16			svc32_port;
+	s32			svc32_nthreads;
+};
+
+struct nfsctl_client32 {
+	s8			cl32_ident[NFSCLNT_IDMAX+1];
+	s32			cl32_naddr;
+	struct in_addr		cl32_addrlist[NFSCLNT_ADDRMAX];
+	s32			cl32_fhkeytype;
+	s32			cl32_fhkeylen;
+	u8			cl32_fhkey[NFSCLNT_KEYMAX];
+};
+
+struct nfsctl_export32 {
+	s8			ex32_client[NFSCLNT_IDMAX+1];
+	s8			ex32_path[NFS_MAXPATHLEN+1];
+	__kernel_dev_t32	ex32_dev;
+	__kernel_ino_t32	ex32_ino;
+	s32			ex32_flags;
+	__kernel_uid_t32	ex32_anon_uid;
+	__kernel_gid_t32	ex32_anon_gid;
+};
+
+struct nfsctl_uidmap32 {
+	u32			ug32_ident;   /* char * */
+	__kernel_uid_t32	ug32_uidbase;
+	s32			ug32_uidlen;
+	u32			ug32_udimap;  /* uid_t * */
+	__kernel_uid_t32	ug32_gidbase;
+	s32			ug32_gidlen;
+	u32			ug32_gdimap;  /* gid_t * */
+};
+
+struct nfsctl_fhparm32 {
+	struct sockaddr		gf32_addr;
+	__kernel_dev_t32	gf32_dev;
+	__kernel_ino_t32	gf32_ino;
+	s32			gf32_version;
+};
+
+struct nfsctl_arg32 {
+	s32			ca32_version;	/* safeguard */
+	union {
+		struct nfsctl_svc32	u32_svc;
+		struct nfsctl_client32	u32_client;
+		struct nfsctl_export32	u32_export;
+		struct nfsctl_uidmap32	u32_umap;
+		struct nfsctl_fhparm32	u32_getfh;
+		u32			u32_debug;
+	} u;
+#define ca32_svc	u.u32_svc
+#define ca32_client	u.u32_client
+#define ca32_export	u.u32_export
+#define ca32_umap	u.u32_umap
+#define ca32_getfh	u.u32_getfh
+#define ca32_authd	u.u32_authd
+#define ca32_debug	u.u32_debug
+};
+
+union nfsctl_res32 {
+	struct knfs_fh		cr32_getfh;
+	u32			cr32_debug;
+};
+
+static int nfs_svc32_trans(struct nfsctl_arg *karg, struct nfsctl_arg32 *arg32)
+{
+	if(__get_user(karg->ca_version, &arg32->ca32_version)			||
+	   __get_user(karg->ca_svc.svc_port, &arg32->ca32_svc.svc32_port)	||
+	   __get_user(karg->ca_svc.svc_nthreads, &arg32->ca32_svc.svc32_nthreads))
+		return -EFAULT;
+	return 0;
+}
+
+static int nfs_clnt32_trans(struct nfsctl_arg *karg, struct nfsctl_arg32 *arg32)
+{
+	if(__get_user(karg->ca_version, &arg32->ca32_version)			||
+	   copy_from_user(&karg->ca_client.cl_ident[0],
+			  &arg32->ca32_client.cl32_ident[0],
+			  NFSCLNT_IDMAX)					||
+	   __get_user(karg->ca_client.cl_naddr, &arg32->ca32_client.cl32_naddr)	||
+	   copy_from_user(&karg->ca_client.cl_addrlist[0],
+			  &arg32->ca32_client.cl32_addrlist[0],
+			  (sizeof(struct in_addr) * NFSCLNT_ADDRMAX))		||
+	   __get_user(karg->ca_client.cl_fhkeytype,
+		      &arg32->ca32_client.cl32_fhkeytype)			||
+	   __get_user(karg->ca_client.cl_fhkeylen,
+		      &arg32->ca32_client.cl32_fhkeylen)			||
+	   copy_from_user(&karg->ca_client.cl_fhkey[0],
+			  &arg32->ca32_client.cl32_fhkey[0],
+			  NFSCLNT_KEYMAX))
+		return -EFAULT;
+	return 0;
+}
+
+static int nfs_exp32_trans(struct nfsctl_arg *karg, struct nfsctl_arg32 *arg32)
+{
+	if(__get_user(karg->ca_version, &arg32->ca32_version)			||
+	   copy_from_user(&karg->ca_export.ex_client[0],
+			  &arg32->ca32_export.ex32_client[0],
+			  NFSCLNT_IDMAX)					||
+	   copy_from_user(&karg->ca_export.ex_path[0],
+			  &arg32->ca32_export.ex32_path[0],
+			  NFS_MAXPATHLEN)					||
+	   __get_user(karg->ca_export.ex_dev,
+		      &arg32->ca32_export.ex32_dev)				||
+	   __get_user(karg->ca_export.ex_ino,
+		      &arg32->ca32_export.ex32_ino)				||
+	   __get_user(karg->ca_export.ex_flags,
+		      &arg32->ca32_export.ex32_flags)				||
+	   __get_user(karg->ca_export.ex_anon_uid,
+		      &arg32->ca32_export.ex32_anon_uid)			||
+	   __get_user(karg->ca_export.ex_anon_gid,
+		      &arg32->ca32_export.ex32_anon_gid))
+		return -EFAULT;
+	return 0;
+}
+
+static int nfs_uud32_trans(struct nfsctl_arg *karg, struct nfsctl_arg32 *arg32)
+{
+	u32 uaddr;
+	int i;
+
+	memset(karg, 0, sizeof(*karg));
+	if(__get_user(karg->ca_version, &arg32->ca32_version))
+		return -EFAULT;
+	karg->ca_umap.ug_ident = (char *)get_free_page(GFP_USER);
+	if(!karg->ca_umap.ug_ident)
+		return -ENOMEM;
+	if(__get_user(uaddr, &arg32->ca32_umap.ug32_ident))
+		return -EFAULT;
+	if(strncpy_from_user(karg->ca_umap.ug_ident,
+			     (char *)A(uaddr), PAGE_SIZE) <= 0)
+		return -EFAULT;
+	if(__get_user(karg->ca_umap.ug_uidbase,
+		      &arg32->ca32_umap.ug32_uidbase)		||
+	   __get_user(karg->ca_umap.ug_uidlen,
+		      &arg32->ca32_umap.ug32_uidlen)		||
+	   __get_user(uaddr, &arg32->ca32_umap.ug32_udimap))
+		return -EFAULT;
+	karg->ca_umap.ug_udimap = kmalloc((sizeof(uid_t) * karg->ca_umap.ug_uidlen),
+					  GFP_USER);
+	if(!karg->ca_umap.ug_udimap)
+		return -EFAULT;
+	for(i = 0; i < karg->ca_umap.ug_uidlen; i++)
+		if(__get_user(karg->ca_umap.ug_udimap[i],
+			      &(((__kernel_uid_t32 *)A(uaddr))[i])))
+			return -EFAULT;
+	if(__get_user(karg->ca_umap.ug_gidbase,
+		      &arg32->ca32_umap.ug32_gidbase)		||
+	   __get_user(karg->ca_umap.ug_uidlen,
+		      &arg32->ca32_umap.ug32_gidlen)		||
+	   __get_user(uaddr, &arg32->ca32_umap.ug32_gdimap))
+		return -EFAULT;
+	karg->ca_umap.ug_gdimap = kmalloc((sizeof(gid_t) * karg->ca_umap.ug_uidlen),
+					  GFP_USER);
+	if(!karg->ca_umap.ug_gdimap)
+		return -EFAULT;
+	for(i = 0; i < karg->ca_umap.ug_gidlen; i++)
+		if(__get_user(karg->ca_umap.ug_gdimap[i],
+			      &(((__kernel_gid_t32 *)A(uaddr))[i])))
+			return -EFAULT;
+
+	/* Success! */
+	return 0;
+}
+
+static int nfs_getfh32_trans(struct nfsctl_arg *karg, struct nfsctl_arg32 *arg32)
+{
+	if(__get_user(karg->ca_version, &arg32->ca32_version)	||
+	   copy_from_user(&karg->ca_getfh.gf_addr,
+			  &arg32->ca32_getfh.gf32_addr,
+			  (sizeof(struct sockaddr)))		||
+	   __get_user(karg->ca_getfh.gf_dev,
+		      &arg32->ca32_getfh.gf32_dev)		||
+	   __get_user(karg->ca_getfh.gf_ino,
+		      &arg32->ca32_getfh.gf32_ino)		||
+	   __get_user(karg->ca_getfh.gf_version,
+		      &arg32->ca32_getfh.gf32_version))
+		return -EFAULT;
+	return 0;
+}
+
+static int nfs_getfh32_res_trans(union nfsctl_res *kres, union nfsctl_res32 *res32)
+{
+	if(copy_to_user(&res32->cr32_getfh,
+			&kres->cr_getfh,
+			sizeof(res32->cr32_getfh))		||
+	   __put_user(kres->cr_debug, &res32->cr32_debug))
+		return -EFAULT;
+	return 0;
+}
+
+extern asmlinkage int sys_nfsservctl(int cmd,
+				     struct nfsctl_arg *arg,
+				     union nfsctl_res *resp);
+
+int asmlinkage sys32_nfsservctl(int cmd, u32 u_argp, u32 u_resp)
+{
+	struct nfsctl_arg32 *arg32 = (struct nfsctl_arg32 *)A(u_argp);
+	union nfsctl_res32 *res32 = (union nfsctl_res32 *)A(u_resp);
+	struct nfsctl_arg *karg = NULL;
+	union nfsctl_res *kres = NULL;
+	unsigned long oldfs;
+	int err;
+
+	karg = kmalloc(sizeof(*karg), GFP_USER);
+	if(!karg)
+		return -ENOMEM;
+	if(res32) {
+		kres = kmalloc(sizeof(*kres), GFP_USER);
+		if(!kres) {
+			kfree(karg);
+			return -ENOMEM;
+		}
+	}
+	switch(cmd) {
+	case NFSCTL_SVC:
+		err = nfs_svc32_trans(karg, arg32);
+		break;
+	case NFSCTL_ADDCLIENT:
+		err = nfs_clnt32_trans(karg, arg32);
+		break;
+	case NFSCTL_DELCLIENT:
+		err = nfs_clnt32_trans(karg, arg32);
+		break;
+	case NFSCTL_EXPORT:
+		err = nfs_exp32_trans(karg, arg32);
+		break;
+	/* This one is unimplemented, be we're ready for it. */
+	case NFSCTL_UGIDUPDATE:
+		err = nfs_uud32_trans(karg, arg32);
+		break;
+	case NFSCTL_GETFH:
+		err = nfs_getfh32_trans(karg, arg32);
+		break;
+	default:
+		err = -EINVAL;
+		break;
+	}
+	if(err)
+		goto done;
+	oldfs = get_fs();
+	set_fs(KERNEL_DS);
+	err = sys_nfsservctl(cmd, karg, kres);
+	set_fs(oldfs);
+
+	if(!err && cmd == NFSCTL_GETFH)
+		err = nfs_getfh32_res_trans(kres, res32);
+
+done:
+	if(karg) {
+		if(cmd == NFSCTL_UGIDUPDATE) {
+			if(karg->ca_umap.ug_ident)
+				kfree(karg->ca_umap.ug_ident);
+			if(karg->ca_umap.ug_udimap)
+				kfree(karg->ca_umap.ug_udimap);
+			if(karg->ca_umap.ug_gdimap)
+				kfree(karg->ca_umap.ug_gdimap);
+		}
+		kfree(karg);
+	}
+	if(kres)
+		kfree(kres);
+	return err;
+}
