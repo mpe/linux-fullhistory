@@ -60,7 +60,9 @@
 #define EXT2_ACL_DATA_INO	 4	/* ACL inode */
 #define EXT2_BOOT_LOADER_INO	 5	/* Boot loader inode */
 #define EXT2_UNDEL_DIR_INO	 6	/* Undelete directory inode */
-#define EXT2_FIRST_INO		11	/* First non reserved inode */
+
+/* First non-reserved inode for old ext2 filesystems */
+#define EXT2_GOOD_OLD_FIRST_INO	11
 
 /*
  * The second extended file system magic number
@@ -90,10 +92,17 @@
 #else
 # define EXT2_BLOCK_SIZE_BITS(s)	((s)->s_log_block_size + 10)
 #endif
-#define	EXT2_INODES_PER_BLOCK(s)	(EXT2_BLOCK_SIZE(s) / sizeof (struct ext2_inode))
 #ifdef __KERNEL__
 #define	EXT2_ADDR_PER_BLOCK_BITS(s)	((s)->u.ext2_sb.s_addr_per_block_bits)
-#define	EXT2_INODES_PER_BLOCK_BITS(s)	((s)->u.ext2_sb.s_inodes_per_block_bits)
+#define EXT2_INODE_SIZE(s)		((s)->u.ext2_sb.s_inode_size)
+#define EXT2_FIRST_INO(s)		((s)->u.ext2_sb.s_first_ino)
+#else
+#define EXT2_INODE_SIZE(s)	(((s)->s_rev_level == EXT2_GOOD_OLD_REV) ? \
+				 EXT2_GOOD_OLD_INODE_SIZE : \
+				 (s)->s_inode_size)
+#define EXT2_FIRST_INO(s)	(((s)->s_rev_level == EXT2_GOOD_OLD_REV) ? \
+				 EXT2_GOOD_OLD_FIRST_INO : \
+				 (s)->s_first_ino)
 #endif
 
 /*
@@ -180,7 +189,8 @@ struct ext2_group_desc
 #define EXT2_IMMUTABLE_FL		0x00000010 /* Immutable file */
 #define EXT2_APPEND_FL			0x00000020 /* writes to file may only append */
 #define EXT2_NODUMP_FL			0x00000040 /* do not dump file */
-
+#define EXT2_RESERVED_FL		0x80000000 /* reserved for ext2 lib */
+	
 /*
  * ioctl commands
  */
@@ -327,14 +337,32 @@ struct ext2_super_block {
 	__u16	s_magic;		/* Magic signature */
 	__u16	s_state;		/* File system state */
 	__u16	s_errors;		/* Behaviour when detecting errors */
-	__u16	s_pad;
+	__u16	s_minor_rev_level; 	/* minor revision level */
 	__u32	s_lastcheck;		/* time of last check */
 	__u32	s_checkinterval;	/* max. time between checks */
 	__u32	s_creator_os;		/* OS */
 	__u32	s_rev_level;		/* Revision level */
 	__u16	s_def_resuid;		/* Default uid for reserved blocks */
 	__u16	s_def_resgid;		/* Default gid for reserved blocks */
-	__u32	s_reserved[235];	/* Padding to the end of the block */
+	/*
+	 * These fields are for EXT2_DYNAMIC_REV superblocks only.
+	 *
+	 * Note: the difference between the compatible feature set and
+	 * the incompatible feature set is that if there is a bit set
+	 * in the incompatible feature set that the kernel doesn't
+	 * know about, it should refuse to mount the filesystem.
+	 * 
+	 * e2fsck's requirements are more strict; if it doesn't know
+	 * about a feature in either the compatible or incompatible
+	 * feature set, it must abort and not try to meddle with
+	 * things it doesn't understand...
+	 */
+	__u32	s_first_ino; 		/* First non-reserved inode */
+	__u16   s_inode_size; 		/* size of inode structure */
+	__u16	s_block_group_nr; 	/* block group # of this superblock */
+	__u32	s_feature_compat; 	/* compatible feature set */
+	__u32	s_feature_incompat; 	/* incompatible feature set */
+	__u32	s_reserved[231];	/* Padding to the end of the block */
 };
 
 /*
@@ -350,8 +378,12 @@ struct ext2_super_block {
  * Revision levels
  */
 #define EXT2_GOOD_OLD_REV	0	/* The good old (original) format */
+#define EXT2_DYNAMIC_REV	1 	/* V2 format w/ dynamic inode sizes */
 
 #define EXT2_CURRENT_REV	EXT2_GOOD_OLD_REV
+#define EXT2_MAX_SUPP_REV	EXT2_DYNAMIC_REV
+
+#define EXT2_GOOD_OLD_INODE_SIZE 128
 
 /*
  * Default values for user and/or group using reserved blocks
@@ -380,6 +412,12 @@ struct ext2_dir_entry {
 #define EXT2_DIR_ROUND 			(EXT2_DIR_PAD - 1)
 #define EXT2_DIR_REC_LEN(name_len)	(((name_len) + 8 + EXT2_DIR_ROUND) & \
 					 ~EXT2_DIR_ROUND)
+
+/*
+ * Feature set definitions --- none are defined as of now
+ */
+#define EXT2_FEATURE_COMPAT_SUPP	0
+#define EXT2_FEATURE_INCOMPAT_SUPP	0
 
 #ifdef __KERNEL__
 /*

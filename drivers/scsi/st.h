@@ -43,6 +43,17 @@ typedef struct {
 #define ST_MODE_SHIFT (7 - ST_NBR_MODE_BITS)
 #define ST_MODE_MASK ((ST_NBR_MODES - 1) << ST_MODE_SHIFT)
 
+/* The status related to each partition */
+typedef struct {
+  unsigned char rw;
+  unsigned char moves_after_eof;
+  unsigned char at_sm;
+  unsigned char last_block_valid;
+  u32 last_block_visited;
+} ST_partstat;
+
+#define ST_NBR_PARTITIONS 4
+
 /* The tape drive descriptor */
 typedef struct {
   kdev_t devt;
@@ -57,9 +68,11 @@ typedef struct {
   unsigned char omit_blklims;
   unsigned char do_auto_lock;
   unsigned char can_bsr;
+  unsigned char can_partitions;
   unsigned char two_fm;
   unsigned char fast_mteom;
   unsigned char restr_dma;
+  unsigned char scsi2_logical;
   unsigned char default_drvbuffer;  /* 0xff = don't touch, value 3 bits */
   int write_threshold;
 
@@ -68,16 +81,17 @@ typedef struct {
   int current_mode;
 
   /* Status variables */
+  int partition;
+  int new_partition;
+  int nbr_partitions;    /* zero until partition support enabled */
+  ST_partstat ps[ST_NBR_PARTITIONS];
   unsigned char dirty;
-  unsigned char rw;
   unsigned char ready;
   unsigned char eof;
   unsigned char write_prot;
   unsigned char drv_write_prot;
   unsigned char in_use;
   unsigned char eof_hit;
-  unsigned char moves_after_eof;
-  unsigned char at_sm;
   unsigned char blksize_changed;
   unsigned char density_changed;
   unsigned char compression_changed;

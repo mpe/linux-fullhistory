@@ -24,8 +24,8 @@
 #include <linux/blk.h>
 #include "scsi.h"
 #include "hosts.h"
-#include "scsi_ioctl.h"
-#include "sg.h"
+#include <scsi/scsi_ioctl.h>
+#include <scsi/sg.h>
 
 static int sg_init(void);
 static int sg_attach(Scsi_Device *);

@@ -161,7 +161,7 @@ static int pipe_select(struct inode * inode, struct file * filp, int sel_type, s
 			select_wait(&PIPE_WAIT(*inode), wait);
 			return 0;
 		case SEL_OUT:
-			if (!PIPE_FULL(*inode) || !PIPE_READERS(*inode))
+			if (PIPE_EMPTY(*inode) || !PIPE_READERS(*inode))
 				return 1;
 			select_wait(&PIPE_WAIT(*inode), wait);
 			return 0;

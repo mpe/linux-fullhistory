@@ -35,7 +35,7 @@
 #include "scsi.h"
 #include "hosts.h"
 #include "sr.h"
-#include "scsi_ioctl.h"   /* For the door lock/unlock commands */
+#include <scsi/scsi_ioctl.h>   /* For the door lock/unlock commands */
 #include "constants.h"
 
 #define MAX_RETRIES 3

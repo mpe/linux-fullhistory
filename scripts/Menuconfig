@@ -222,6 +222,7 @@ function extract_help () {
                         /^$var[ 	]*\$/d
                         /^#.*/d
 			/^[ 	]*\$/q
+                        s/^  //
                         p
                     }" Documentation/Configure.help)
 

@@ -1,6 +1,6 @@
 /********************************************************
 * Header file for eata_pio.c Linux EATA-PIO SCSI driver *
-* (c) 1993,94,95 Michael Neuffer			*
+* (c) 1993-96 Michael Neuffer  	                        *
 *********************************************************
 * last change: 95/06/21					*
 ********************************************************/
@@ -12,7 +12,7 @@
 #include <linux/blk.h>
 #include "scsi.h"
 #include "hosts.h"
-#include <linux/scsicam.h>
+#include <scsi/scsicam.h>
 
 #ifndef HOSTS_C
 #include "eata_generic.h"

@@ -24,15 +24,17 @@
  *    Prohibit APM BIOS calls unless apm_enabled.
  *    (Thanks to Ulrich Windl <Ulrich.Windl@rz.uni-regensburg.de>)
  * April 1996, Stephen Rothwell (Stephen.Rothwell@canb.auug.org.au)
- *    Version 1.0
+ *    Version 1.0 and 1.1
  *
  * History:
  *    0.6b: first version in official kernel, Linux 1.3.46
  *    0.7: changed /proc/apm format, Linux 1.3.58
  *    0.8: fixed gcc 2.7.[12] compilation problems, Linux 1.3.59
  *    0.9: only call bios if bios is present, Linux 1.3.72
- *    1.0: use fixed device number, consolidate /proc/apm into
- *         this file, Linux 1.3.85
+ *    1.0: use fixed device number, consolidate /proc/apm into this file,
+ *         Linux 1.3.85
+ *    1.1: support user-space standby and suspend, power off after system
+ *         halted, Linux 1.3.98
  *
  * Reference:
  *
@@ -113,7 +115,9 @@ extern unsigned long get_cmos_time(void);
  * CONFIG_APM_DISPLAY_BLANK: enable console blanking using the APM.  Some
  * laptops can use this to turn of the LCD backlight when the VC screen
  * blanker blanks the screen.  Note that this is only used by the VC screen
- * blanker, and probably won't turn off the backlight when using X11.
+ * blanker, and probably won't turn off the backlight when using X11.  Some
+ * problems have been reported when using this option with gpm (if you'd
+ * like to debug this, please do so).
  *
  * If you are debugging the APM support for your laptop, note that code for
  * all of these options is contained in this file, so you can #define or
@@ -330,7 +334,7 @@ static struct apm_bios_struct *	user_list = NULL;
 
 static struct timer_list	apm_timer;
 
-static char			driver_version[] = "1.0";/* no spaces */
+static char			driver_version[] = "1.1";/* no spaces */
 
 #ifdef APM_DEBUG
 static char *	apm_event_name[] = {
@@ -427,7 +431,7 @@ static int apm_get_event(apm_event_t *event)
 	return APM_SUCCESS;
 }
 
-static int apm_set_power_state(u_short state)
+int apm_set_power_state(u_short state)
 {
 	u_short	error;
 
@@ -567,13 +571,15 @@ static apm_event_t get_queued_event(struct apm_bios_struct * as)
 	return as->events[as->event_tail];
 }
 
-static int queue_event(apm_event_t event)
+static int queue_event(apm_event_t event, struct apm_bios_struct *sender)
 {
 	struct apm_bios_struct *	as;
 	
 	if (user_list == NULL)
 		return 0;
 	for (as = user_list; as != NULL; as = as->next) {
+		if (as == sender)
+			continue;
 		as->event_head = (as->event_head + 1) % APM_MAX_EVENTS;
 		if (as->event_head == as->event_tail)
 			as->event_tail = (as->event_tail + 1) % APM_MAX_EVENTS;
@@ -656,7 +662,8 @@ static apm_event_t get_event(void)
 	return 0;
 }
 
-static void send_event(apm_event_t event, apm_event_t undo)
+static void send_event(apm_event_t event, apm_event_t undo,
+		       struct apm_bios_struct *sender)
 {
 	callback_list_t *	call;
 	callback_list_t *	fix;
@@ -671,7 +678,7 @@ static void send_event(apm_event_t event, apm_event_t undo)
 		}
 	}
 
-	queue_event(event);
+	queue_event(event, sender);
 }
 
 static void check_events(void)
@@ -682,18 +689,19 @@ static void check_events(void)
 		switch (event) {
 		case APM_SYS_STANDBY:
 		case APM_USER_STANDBY:
-			send_event(event, APM_STANDBY_RESUME);
+			send_event(event, APM_STANDBY_RESUME, NULL);
 			if (standbys_pending <= 0)
 				standby();
 			break;
 
 		case APM_USER_SUSPEND:
 #ifdef CONFIG_APM_IGNORE_USER_SUSPEND
-			apm_set_power_state(APM_STATE_REJECT);
+			if (apm_bios_info.version > 0x100)
+				apm_set_power_state(APM_STATE_REJECT);
 			break;
 #endif
 		case APM_SYS_SUSPEND:
-			send_event(event, APM_NORMAL_RESUME);
+			send_event(event, APM_NORMAL_RESUME, NULL);
 			if (suspends_pending <= 0)
 				suspend();
 			break;
@@ -702,12 +710,12 @@ static void check_events(void)
 		case APM_CRITICAL_RESUME:
 		case APM_STANDBY_RESUME:
 			set_time();
-			send_event(event, 0);
+			send_event(event, 0, NULL);
 			break;
 
 		case APM_LOW_BATTERY:
 		case APM_POWER_STATUS_CHANGE:
-			send_event(event, 0);
+			send_event(event, 0, NULL);
 			break;
 
 		case APM_UPDATE_TIME:
@@ -833,6 +841,17 @@ repeat:
 	while ((i >= sizeof(event)) && !queue_empty(as)) {
 		event = get_queued_event(as);
 		memcpy_tofs(buf, &event, sizeof(event));
+		switch (event) {
+		case APM_SYS_SUSPEND:
+		case APM_USER_SUSPEND:
+			as->suspends_read++;
+			break;
+
+		case APM_SYS_STANDBY:
+		case APM_USER_STANDBY:
+			as->standbys_read++;
+			break;
+		}
 		buf += sizeof(event);
 		i -= sizeof(event);
 	}
@@ -867,22 +886,30 @@ static int do_ioctl(struct inode * inode, struct file *filp,
 	as = filp->private_data;
 	if (check_apm_bios_struct(as, "ioctl"))
 		return -EIO;
+	if (!as->suser)
+		return -EPERM;
 	switch (cmd) {
 	case APM_IOC_STANDBY:
-		if (as->standbys_pending > 0) {
+		if (as->standbys_read > 0) {
+			as->standbys_read--;
 			as->standbys_pending--;
 			standbys_pending--;
-			if (standbys_pending <= 0)
-				standby();
 		}
+		else
+			send_event(APM_USER_STANDBY, APM_STANDBY_RESUME, as);
+		if (standbys_pending <= 0)
+			standby();
 		break;
 	case APM_IOC_SUSPEND:
-		if (as->suspends_pending > 0) {
+		if (as->suspends_read > 0) {
+			as->suspends_read--;
 			as->suspends_pending--;
 			suspends_pending--;
-			if (suspends_pending <= 0)
-				suspend();
 		}
+		else
+			send_event(APM_USER_SUSPEND, APM_NORMAL_RESUME, as);
+		if (suspends_pending <= 0)
+			suspend();
 		break;
 	default:
 		return -EINVAL;
@@ -938,6 +965,7 @@ static int do_open(struct inode * inode, struct file * filp)
 	as->magic = APM_BIOS_MAGIC;
 	as->event_tail = as->event_head = 0;
 	as->suspends_pending = as->standbys_pending = 0;
+	as->suspends_read = as->standbys_read = 0;
 	as->suser = suser();
 	as->next = user_list;
 	user_list = as;

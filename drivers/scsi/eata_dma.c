@@ -48,7 +48,7 @@
  * Thanks also to Greg Hosler who did a lot of testing and  *
  * found quite a number of bugs during the development.	    *
  ************************************************************
- *  last change: 95/11/29                 OS: Linux 1.3.45  *
+ *  last change: 95/04/27                 OS: Linux 1.3.95  *
  ************************************************************/
 
 /* Look in eata_dma.h for configuration and revision information */
@@ -71,7 +71,6 @@
 #include "scsi.h"
 #include "sd.h"
 #include "hosts.h"
-#include <linux/scsicam.h>
 #include "eata_dma.h"
 #include "eata_dma_proc.h" 
 
@@ -371,28 +370,13 @@ int eata_queue(Scsi_Cmnd * cmd, void (* done) (Scsi_Cmnd *))
     hd->last_ccb = y;
 
     if (x >= sh->can_queue) { 
-	uint z;
-	
-	printk(KERN_EMERG "eata_dma: run out of queue slots cmdno:%ld"
-	       " intrno: %ld, can_queue: %d, x: %d, y: %d\n", 
-	       queue_counter, int_counter, sh->can_queue, x, y);
-	printk(KERN_EMERG "Status of queueslots:");
-	for(z = 0; z < sh->can_queue; z +=2) {
-	    switch(hd->ccb[z].status) {
-	    case FREE:
-		printk(KERN_EMERG "Slot %2d is FREE  \t", z);
-		break;
-	    case USED:
-		printk(KERN_EMERG "Slot %2d is USED  \t", z);
-		break;
-	    case LOCKED:
-		printk(KERN_EMERG "Slot %2d is LOCKED\t", z);
-		break;
-	    default:
-		printk(KERN_EMERG "Slot %2d is UNKNOWN\t", z);
-	    }
-	    panic("\nSystem halted.\n");
-	}
+	cmd->result = DID_BUS_BUSY << 16;
+	DBG(DBG_QUEUE && DBG_ABNORM, 
+	    printk(KERN_CRIT "eata_queue pid %ld, HBA QUEUE FULL..., "
+		   "returning DID_BUS_BUSY\n", cmd->pid));
+	done(cmd);
+	restore_flags(flags);
+	return(0);
     }
     cp = &hd->ccb[y];
     
@@ -573,7 +557,7 @@ int eata_abort(Scsi_Cmnd * cmd)
     panic("eata_dma: abort: invalid slot status\n");
 }
 
-int eata_reset(Scsi_Cmnd * cmd)
+int eata_reset(Scsi_Cmnd * cmd, int resetflags)
 {
     ushort x, z; 
     ulong time, limit = 0;
@@ -687,6 +671,87 @@ int eata_reset(Scsi_Cmnd * cmd)
 	return (SCSI_RESET_PUNT);
     }
 }
+
+/* Here we try to determine the optimum queue depth for
+ * each attached device.
+ *
+ * At the moment the algorithm is rather simple
+ */
+static void eata_select_queue_depths(struct Scsi_Host *host, Scsi_Device *devicelist)
+{
+    Scsi_Device *device;
+    int devcount = 0; 
+    int factor = 0;
+    
+    
+    /* First we do a sample run go find out what we have */
+    for(device = devicelist; device != NULL; device = device->next) {
+        if (device->host == host) {
+	    devcount++;
+	    switch(device->type) {
+	    case TYPE_DISK:
+	    case TYPE_MOD:
+	        factor += TYPE_DISK_QUEUE;
+		break;
+	    case TYPE_TAPE:
+	        factor += TYPE_TAPE_QUEUE;
+		break;
+	    case TYPE_WORM:
+	    case TYPE_ROM:
+	        factor += TYPE_ROM_QUEUE;
+		break;
+	    case TYPE_PROCESSOR:
+	    case TYPE_SCANNER:
+	    default:
+	        factor += TYPE_OTHER_QUEUE;
+		break;
+	    }
+	}
+    }
+
+    DBG(DBG_REGISTER, printk(KERN_DEBUG "scsi%d: needed queueslots %d\n", 
+			     host->host_no, factor));
+
+    if(factor == 0)    /* We don't want to get a DIV BY ZERO error */
+        factor = 1;
+
+    factor = (SD(host)->queuesize * 10) / factor;
+
+    DBG(DBG_REGISTER, printk(KERN_DEBUG "scsi%d: using factor %dE-1\n", 
+			     host->host_no, factor));
+
+    /* Now that have the factor we can set the individual queuesizes */
+    for(device = devicelist; device != NULL; device = device->next) {
+        if(device->host == host) {
+	    if(SD(device->host)->bustype != IS_ISA){
+	        switch(device->type) {
+		case TYPE_DISK:
+		case TYPE_MOD:
+		    device->queue_depth = (TYPE_DISK_QUEUE * factor) / 10;
+		    break;
+		case TYPE_TAPE:
+		    device->queue_depth = (TYPE_TAPE_QUEUE * factor) / 10;
+		    break;
+		case TYPE_WORM:
+		case TYPE_ROM:
+	            device->queue_depth = (TYPE_ROM_QUEUE * factor) / 10;
+		    break;
+		case TYPE_PROCESSOR:
+		case TYPE_SCANNER:
+		default:
+		    device->queue_depth = (TYPE_OTHER_QUEUE * factor) / 10;
+		    break;
+		}
+	    } else /* ISA forces us to limit the QS because of bounce buffers*/
+	        device->queue_depth = 2; /* I know this is cruel */
+
+	    printk(KERN_INFO "scsi%d: queue depth for target %d on channel %d set "
+		   "to %d\n", host->host_no, device->id, device->channel,
+		   device->queue_depth);
+	}
+    }
+}
+
 
 char * get_board_data(u32 base, u32 irq, u32 id)
 {
@@ -1040,17 +1105,11 @@ short register_HBA(u32 base, struct get_conf *gc, Scsi_Host_Template * tpnt,
      * SCSI midlevel code should support different HBA ids on every channel
      */
     sh->this_id = gc->scsi_id[3];
+
+    hd->queuesize = ntohs(gc->queuesiz);
     sh->can_queue = ntohs(gc->queuesiz);
-    
-    if (gc->OCS_enabled == TRUE) {
-	if(hd->bustype != IS_ISA)
-	    sh->cmd_per_lun = sh->can_queue/C_P_L_DIV; 
-	else
-	    sh->cmd_per_lun = 8; /* We artificially limit this to conserve 
-				  * memory, which would be needed for ISA 
-				  * bounce buffers */
-    } else 
-	sh->cmd_per_lun = 1;
+    sh->cmd_per_lun = 0;
+    sh->select_queue_depths = eata_select_queue_depths;
     
     /* FIXME:
      * SG should be allocated more dynamically 
@@ -1062,7 +1121,7 @@ short register_HBA(u32 base, struct get_conf *gc, Scsi_Host_Template * tpnt,
      */
     if (gc->SG_64K == TRUE && ntohs(gc->SGsiz) == 64 && hd->bustype != IS_ISA){
 	sh->sg_tablesize = SG_SIZE_BIG;
-	sh->use_clustering = FALSE;
+	sh->use_clustering = TRUE;
     } else {
 	sh->sg_tablesize = ntohs(gc->SGsiz);
 	sh->use_clustering = TRUE;

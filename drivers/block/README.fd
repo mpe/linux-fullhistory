@@ -99,7 +99,7 @@ available: floppy="daring two_fdc" insmod floppy
 floppy=nofifo
 	Disables the FIFO entirely. This is needed if you get "Bus
 	master arbitration error" messages from your ethernet card (or
-	from other devices) while accessing the foppy.
+	from other devices) while accessing the floppy.
 
 floppy=fifo
 	Enables the FIFO (default)
@@ -119,9 +119,9 @@ floppy=fifo
 	higher value, until you only get an occasional Over/Underrun.
 	It is a good idea to compile the floppy driver as a module
 	when doing this tuning. Indeed, it allows to try different
-	fifo values whithout rebooting the machine for each test. Note
+	fifo values without rebooting the machine for each test. Note
 	that you need to do 'floppycontrol --messages' every time you
-	re-inseert the module.
+	re-insert the module.
 	Usually, tuning the fifo threshold should not be needed, as
 	the default (0xa) is reasonable.
 

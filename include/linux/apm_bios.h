@@ -61,6 +61,8 @@ struct apm_bios_struct {
 	int		suser;
 	int		suspends_pending;
 	int		standbys_pending;
+	int		suspends_read;
+	int		standbys_read;
 	int		event_head;
 	int		event_tail;
 	apm_event_t	events[APM_MAX_EVENTS];
@@ -81,6 +83,7 @@ extern void		apm_bios_init(void);
 extern int		apm_register_callback(int (*callback)(apm_event_t));
 extern void		apm_unregister_callback(int (*callback)(apm_event_t));
 
+extern int		apm_set_power_state(ushort state);
 extern int		apm_display_blank(void);
 extern int		apm_display_unblank(void);
 

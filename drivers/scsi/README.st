@@ -1,5 +1,5 @@
 This file contains brief information about the SCSI tape driver.
-Last modified: Sun Apr 21 21:19:22 1996 by root@kai.makisara.fi
+Last modified: Wed May  1 11:51:35 1996 by root@kai.makisara.fi
 
 
 BASICS
@@ -61,6 +61,11 @@ tailored to the system.
 The driver supports fixed and variable block size (within buffer
 limits). Both the auto-rewind (minor equals device number) and
 non-rewind devices (minor is 128 + device number) are implemented.
+
+Support is provided for changing the tape partition and partitioning
+of the tape with one or two partitions. By default support for
+partitioned tape is disabled for each driver and it can be enabled
+with the ioctl MTSETDRVBUFFER.
 
 By default the driver writes one filemark when the device is closed after
 writing and the last operation has been a write. Two filemarks can be
@@ -181,7 +186,20 @@ MTCOMPRESSION Sets compressing or uncompressing drive mode using the
 	SCSI mode page 15. Note that some drives other methods for
 	control of compression. Some drives (like the Exabytes) use
 	density codes for compression control. Some drives use another
-	mode page but this page has not been implemented in the driver.
+	mode page but this page has not been implemented in the
+	driver.
+MTSETPART Moves the tape to the partition given by the argument at the
+	next tape operation. The block at which the tape is positioned
+	is the block where the tape was previously positioned in the
+	new active partition unless the next tape operation is
+	MTSEEK. In this case the tape is moved directly to the block
+	specified by MTSEEK. MTSETPART is inactive unless
+	MT_ST_CAN_PARTITIONS set.
+MTMKPART Formats the tape with one partition (argument zero) or two
+	partitions (the argument gives in megabytes the size of
+	partition 1 that is physically the first partition of the
+	tape). The drive has to support partitions with size specified
+	by the initiator. Inactive unless MT_ST_CAN_PARTITIONS set.
 MTSETDRVBUFFER
 	Is used for several purposes. The command is obtained from count
         with mask MT_SET_OPTIONS, the low order bits are used as argument.
@@ -202,11 +220,18 @@ MTSETDRVBUFFER
 	     MT_ST_FAST_EOM using the SCSI spacing to EOD (global)
 	     MT_ST_AUTO_LOCK automatic locking of the drive door (global)
              MT_ST_DEF_WRITES the defaults are meant only for writes (mode)
-	     MT_ST_CAN_BSR backspacing over records can be used for
-		repositioning the tape (global)
+	     MT_ST_CAN_BSR backspacing over more than one records can
+		be used for repositioning the tape (global)
 	     MT_ST_NO_BLKLIMS the driver does not ask the block limits
 		from the drive (block size can be changed only to
 		variable) (global)
+	     MT_ST_CAN_PARTITIONS enables support for partitioned
+		tapes (global)
+	     MT_ST_SCSI2LOGICAL the logical block number is used in
+		the MTSEEK and MTIOCPOS for SCSI-2 drives instead of
+		the device dependent address. It is recommended to set
+		this flag unless there are tapes using the device
+		dependent (from the old times) (global)
 	     MT_ST_DEBUGGING debugging (global; debugging must be
 		compiled into the driver)
 	MT_ST_SETBOOLEANS
@@ -246,6 +271,15 @@ MTIOCGET Returns some status information.
 	is set if there is no tape in the drive. GMT_EOD means either
 	end of recorded data or end of tape. GMT_EOT means end of tape.
 
+The following ioctls use the structure mtlocation that contains both
+the block number and the partition number. These ioctls are available
+only for SCSI-2 tape drives and the block number is the
+device-indepent logical block number defined by the standard.
+
+MTGETLOC Returns the current block and partition number.
+MTSETLOC Sets the tape to the block and partition specified by the
+	arguments.
+
 
 MISCELLANEOUS COMPILE OPTIONS
 
@@ -257,7 +291,11 @@ ST_MAX_TAPES. If more tapes are detected at driver initialization, the
 maximum is adjusted accordingly.
 
 Immediate return from tape positioning SCSI commands can be enabled by
-defining ST_NOWAIT.
+defining ST_NOWAIT. If this is defined, the user should take care that
+the next tape operation is not started before the previous one has
+finished. The drives and SCSI adapters should handle this condition
+gracefully, but some drive/adapter combinations are known to hang the
+SCSI bus in this case.
 
 The MTEOM command is by default implemented as spacing over 32767
 filemarks. With this method the file number in the status is
@@ -268,8 +306,9 @@ number will be invalid.
 When using read ahead or buffered writes the position within the file
 may not be correct after the file is closed (correct position may
 require backspacing over more than one record). The correct position
-within file can be obtained if ST_IN_FILE_POS is defined. (The
-driver always backs over a filemark crossed by read ahead if the user
-does not request data that far.)
+within file can be obtained if ST_IN_FILE_POS is defined at compile
+time or the MT_ST_CAN_BSR bit is set for the drive with an ioctl.
+(The driver always backs over a filemark crossed by read ahead if the
+user does not request data that far.)
 
 Kai M{kisara

@@ -320,8 +320,10 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 			return -EPERM;
 		if ((!child->dumpable ||
 		    (current->uid != child->euid) ||
+		    (current->uid != child->suid) ||
 		    (current->uid != child->uid) ||
 	 	    (current->gid != child->egid) ||
+	 	    (current->gid != child->sgid) ||
 	 	    (current->gid != child->gid)) && !suser())
 			return -EPERM;
 		/* the same process cannot be attached many times */

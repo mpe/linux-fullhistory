@@ -183,14 +183,14 @@ static inline int lp_write_interrupt(unsigned int minor, const char * buf, int c
 				if (lp_table[minor].runchars > LP_STAT(minor).maxrun)
 					 LP_STAT(minor).maxrun = lp_table[minor].runchars;
 				status = LP_S(minor);
-				if ((status & LP_POUTPA)) {
-					printk(KERN_INFO "lp%d out of paper\n", minor);
-					if (LP_F(minor) & LP_ABORT)
-						return rc?rc:-ENOSPC;
-				} else if (!(status & LP_PSELECD)) {
+				if ((status & LP_OFFL) || !(status & LP_PSELECD)) {
 					printk(KERN_INFO "lp%d off-line\n", minor);
 					if (LP_F(minor) & LP_ABORT)
 						return rc?rc:-EIO;
+				} else if ((status & LP_POUTPA)) {
+					printk(KERN_INFO "lp%d out of paper\n", minor);
+					if (LP_F(minor) & LP_ABORT)
+						return rc?rc:-ENOSPC;
 				} else if (!(status & LP_PERRORP)) {
 					printk(KERN_ERR "lp%d printer error\n", minor);
 					if (LP_F(minor) & LP_ABORT)
@@ -248,18 +248,18 @@ static inline int lp_write_polled(unsigned int minor, const char * buf, int coun
 				 LP_STAT(minor).maxrun = lp_table[minor].runchars;
 			status = LP_S(minor);
 
-			if (status & LP_POUTPA) {
-				printk(KERN_INFO "lp%d out of paper\n", minor);
+			if ((status & LP_OFFL) || !(status & LP_PSELECD)) {
+				printk(KERN_INFO "lp%d off-line\n", minor);
 				if(LP_F(minor) & LP_ABORT)
-					return temp-buf?temp-buf:-ENOSPC;
+					return temp-buf?temp-buf:-EIO;
 				current->state = TASK_INTERRUPTIBLE;
 				current->timeout = jiffies + LP_TIMEOUT_POLLED;
 				schedule();
 			} else
-			if (!(status & LP_PSELECD)) {
-				printk(KERN_INFO "lp%d off-line\n", minor);
+			if (status & LP_POUTPA) {
+				printk(KERN_INFO "lp%d out of paper\n", minor);
 				if(LP_F(minor) & LP_ABORT)
-					return temp-buf?temp-buf:-EIO;
+					return temp-buf?temp-buf:-ENOSPC;
 				current->state = TASK_INTERRUPTIBLE;
 				current->timeout = jiffies + LP_TIMEOUT_POLLED;
 				schedule();

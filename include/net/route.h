@@ -15,7 +15,6 @@
  *		Alexey Kuznetsov:	Major changes for new routing code.
  *
  *	FIXME:
- *		Modules stuff is broken at the moment.
  *		Make atomic ops more generic and hide them in asm/...
  *
  *		This program is free software; you can redistribute it and/or
@@ -33,7 +32,7 @@
  * 1 - rare events and bugs situations (default)
  * 2 - trace mode.
  */
-#define RT_CACHE_DEBUG		1
+#define RT_CACHE_DEBUG		0
 
 #define RT_HASH_DIVISOR	    	256
 #define RT_CACHE_SIZE_MAX    	256

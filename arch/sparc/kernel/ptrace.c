@@ -340,7 +340,7 @@ static inline void read_sunos_user(struct pt_regs *regs, unsigned long offset,
 		break;
 
 	case 948:
-		/* Isn't binary compatability _fun_??? */
+		/* Isn't binary compatibility _fun_??? */
 		if(cregs->psr & PSR_C)
 			regs->u_regs[UREG_I0] = cregs->u_regs[UREG_I0] << 24;
 		else

@@ -110,7 +110,7 @@ static ide_tuneproc_t cmd640_tune_drive;
 
 /* Interface to access cmd640x registers */
 static void (*put_cmd640_reg)(int reg_no, int val);
-static byte (*get_cmd640_reg)(int reg_no);
+       byte (*get_cmd640_reg)(int reg_no);
 
 enum { none, vlb, pci1, pci2 };
 static int	bus_type = none;

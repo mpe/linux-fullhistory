@@ -653,7 +653,7 @@ static void boot_it(void)
 
 	if (!obp_system_intr())
 		ctrl_alt_del();
-	/* sigh.. atempt to prevent multiple entry */
+	/* sigh.. attempt to prevent multiple entry */
 	last_keycode=1;
 	rep = 0;
 }

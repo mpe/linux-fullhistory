@@ -10,7 +10,7 @@
  * Fixes:
  *		Many		:	Split from ip.c , see ip.c for history.
  *		Martin Mares	:	TOS setting fixed.
- *		Alan Cox	:	Fixed a couple of oopses in Martins 
+ *		Alan Cox	:	Fixed a couple of oopses in Martin's 
  *					TOS tweaks.
  */
 

@@ -266,7 +266,7 @@ printk("Required room: %d, Tunnel hlen: %d\n", max_headroom, TUNL_HLEN);
 		new_skb->h.iph = (struct iphdr *) skb_push(new_skb, tunnel_hlen);
 
 		/* Free the old packet, we no longer need it */
-		kfree_skb(skb, FREE_WRITE);
+		dev_kfree_skb(skb, FREE_WRITE);
 		skb = new_skb;
 	}
 

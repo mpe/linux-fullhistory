@@ -73,7 +73,7 @@ int eata_release(struct Scsi_Host *);
 #define eata_release NULL  
 #endif
 
-#include <linux/scsicam.h>
+#include <scsi/scsicam.h>
 
 #define EATA_DMA {                   \
         NULL, NULL,                  \

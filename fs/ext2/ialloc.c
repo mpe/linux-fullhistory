@@ -151,41 +151,6 @@ static int load_inode_bitmap (struct super_block * sb,
 	return 0;
 }
 
-/*
- * This function sets the deletion time for the inode
- *
- * This may be used one day by an 'undelete' program
- */
-static void set_inode_dtime (struct inode * inode,
-			     struct ext2_group_desc * gdp)
-{
-	unsigned long inode_block;
-	struct buffer_head * bh;
-	struct ext2_inode * raw_inode;
-
-	inode_block = gdp->bg_inode_table + (((inode->i_ino - 1) %
-			EXT2_INODES_PER_GROUP(inode->i_sb)) /
-			EXT2_INODES_PER_BLOCK(inode->i_sb));
-	bh = bread (inode->i_sb->s_dev, inode_block, inode->i_sb->s_blocksize);
-	if (!bh)
-		ext2_panic (inode->i_sb, "set_inode_dtime",
-			    "Cannot load inode table block - "
-			    "inode=%lu, inode_block=%lu",
-			    inode->i_ino, inode_block);
-	raw_inode = ((struct ext2_inode *) bh->b_data) +
-			(((inode->i_ino - 1) %
-			EXT2_INODES_PER_GROUP(inode->i_sb)) %
-			EXT2_INODES_PER_BLOCK(inode->i_sb));
-	raw_inode->i_links_count = 0;
-	raw_inode->i_dtime = CURRENT_TIME;
-	mark_buffer_dirty(bh, 1);
-	if (IS_SYNC(inode)) {
-		ll_rw_block (WRITE, 1, &bh);
-		wait_on_buffer (bh);
-	}
-	brelse (bh);
-}
-
 void ext2_free_inode (struct inode * inode)
 {
 	struct super_block * sb;
@@ -222,7 +187,7 @@ void ext2_free_inode (struct inode * inode)
 
 	sb = inode->i_sb;
 	lock_super (sb);
-	if (inode->i_ino < EXT2_FIRST_INO ||
+	if (inode->i_ino < EXT2_FIRST_INO(sb) ||
 	    inode->i_ino > sb->u.ext2_sb.s_es->s_inodes_count) {
 		ext2_error (sb, "free_inode",
 			    "reserved inode or nonexistent inode");
@@ -246,7 +211,6 @@ void ext2_free_inode (struct inode * inode)
 		es->s_free_inodes_count++;
 		mark_buffer_dirty(sb->u.ext2_sb.s_sbh, 1);
 		inode->i_dirt = 0;
-		set_inode_dtime (inode, gdp);
 	}
 	mark_buffer_dirty(bh, 1);
 	if (sb->s_flags & MS_SYNCHRONOUS) {
@@ -269,30 +233,10 @@ static void inc_inode_version (struct inode * inode,
 			       struct ext2_group_desc *gdp,
 			       int mode)
 {
-	unsigned long inode_block;
-	struct buffer_head * bh;
-	struct ext2_inode * raw_inode;
+	inode->u.ext2_i.i_version++;
+	inode->i_dirt = 1;
 
-	inode_block = gdp->bg_inode_table + (((inode->i_ino - 1) %
-			EXT2_INODES_PER_GROUP(inode->i_sb)) /
-			EXT2_INODES_PER_BLOCK(inode->i_sb));
-	bh = bread (inode->i_sb->s_dev, inode_block, inode->i_sb->s_blocksize);
-	if (!bh) {
-		ext2_error (inode->i_sb, "inc_inode_version",
-			    "Cannot load inode table block - "
-			    "inode=%lu, inode_block=%lu\n",
-			    inode->i_ino, inode_block);
-		inode->u.ext2_i.i_version = 1;
-		return;
-	}
-	raw_inode = ((struct ext2_inode *) bh->b_data) +
-			(((inode->i_ino - 1) %
-			EXT2_INODES_PER_GROUP(inode->i_sb)) %
-			EXT2_INODES_PER_BLOCK(inode->i_sb));
-	raw_inode->i_version++;
-	inode->u.ext2_i.i_version = raw_inode->i_version;
-	mark_buffer_dirty(bh, 1);
-	brelse (bh);
+	return;
 }
 
 /*
@@ -434,7 +378,7 @@ repeat:
 		goto repeat;
 	}
 	j += i * EXT2_INODES_PER_GROUP(sb) + 1;
-	if (j < EXT2_FIRST_INO || j > es->s_inodes_count) {
+	if (j < EXT2_FIRST_INO(sb) || j > es->s_inodes_count) {
 		ext2_error (sb, "ext2_new_inode",
 			    "reserved inode or inode > inodes count - "
 			    "block_group = %d,inode=%d", i, j);
@@ -468,6 +412,7 @@ repeat:
 	inode->i_blksize = PAGE_SIZE;	/* This is the optimal IO size (for stat), not the fs block size */
 	inode->i_blocks = 0;
 	inode->i_mtime = inode->i_atime = inode->i_ctime = CURRENT_TIME;
+	inode->u.ext2_i.i_new_inode = 1;
 	inode->u.ext2_i.i_flags = dir->u.ext2_i.i_flags;
 	if (S_ISLNK(mode))
 		inode->u.ext2_i.i_flags &= ~(EXT2_IMMUTABLE_FL | EXT2_APPEND_FL);

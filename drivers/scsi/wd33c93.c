@@ -31,7 +31,7 @@
  *          will benefit from this. The driver defaults to what I'm
  *          'adaptive disconnect' - meaning that each command is
  *          evaluated individually as to whether or not it should
- *          be run with the option to disconnect/reslect (if the
+ *          be run with the option to disconnect/reselect (if the
  *          device chooses), or as a "SCSI-bus-hog".
  *
  *    -  Synchronous data transfers are now supported. Because of
@@ -121,7 +121,7 @@
  * -  nosync:bitmask -bitmask is a byte where the 1st 7 bits correspond with
  *                    the 7 possible SCSI devices. Set a bit to prevent sync
  *                    negotiation on that device. To maintain backwards
- *                    compatability, a command-line such as "wd33c93=255" will
+ *                    compatibility, a command-line such as "wd33c93=255" will
  *                    be automatically translated to "wd33c93=nosync:0xff".
  * -  period:ns      -ns is the minimum # of nanoseconds in a SCSI data transfer
  *                    period. Default is 500; acceptable values are 250 - 1000.

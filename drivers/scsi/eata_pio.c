@@ -10,9 +10,9 @@
  *      -supports all EATA-PIO boards                       *
  *      -only supports DASD devices                         *
  *                                                          *
- *  (c)1993,94,95 Michael Neuffer, Alfred Arnold            *
- *                neuffer@goofy.zdv.uni-mainz.de            *
- *                a.arnold@kfa-juelich.de                   * 
+ *  (c)1993-96 Michael Neuffer, Alfred Arnold               *
+ *             neuffer@goofy.zdv.uni-mainz.de               *
+ *             a.arnold@kfa-juelich.de                      * 
  *                                                          *
  *  This program is free software; you can redistribute it  *
  *  and/or modify it under the terms of the GNU General     *
@@ -32,7 +32,7 @@
  *  Cambridge, MA 02139, USA.                               *
  *                                                          *
  ************************************************************
- *  last change: 95/08/04                 OS: Linux 1.3.15  *
+ *  last change: 95/03/28                 OS: Linux 1.3.80  *
  ************************************************************/
 
 /* Look in eata_pio.h for configuration information */
@@ -240,7 +240,8 @@ void eata_pio_int_handler(int irq, void *dev_id, struct pt_regs * regs)
 	if (cp->status == LOCKED) {
 	    cp->status = FREE;
 	    eata_stat = inb(base + HA_RSTATUS);
-	    printk("eata_pio: int_handler, freeing locked queueslot\n");
+	    printk(KERN_NOTICE "eata_pio: int_handler, freeing locked "
+                   "queueslot\n");
 	    DBG(DBG_INTR&&DBG_DELAY,DEL2(800));
 	    restore_flags(flags);
 	    return;
@@ -248,7 +249,8 @@ void eata_pio_int_handler(int irq, void *dev_id, struct pt_regs * regs)
 	
 #if DBG_INTR2
 	if (stat != 0x50) 
-	    printk("stat: %#.2x, result: %#.8x\n", stat, cmd->result); 
+	    printk(KERN_DEBUG "stat: %#.2x, result: %#.8x\n", stat, 
+                   cmd->result); 
 	DBG(DBG_INTR&&DBG_DELAY,DEL2(800));
 #endif
 	
@@ -301,12 +303,13 @@ int eata_pio_queue(Scsi_Cmnd * cmd, void (*done) (Scsi_Cmnd *))
     
     if (hd->ccb[y].status!=FREE) { 
 	
-	DBG(DBG_QUEUE, printk("can_queue %d, x %d, y %d\n",sh->can_queue,x,y));
+	DBG(DBG_QUEUE, printk(KERN_EMERG "can_queue %d, x %d, y %d\n",
+                              sh->can_queue,x,y));
 #if DEBUG_EATA
-	panic("eata_pio: run out of queue slots cmdno:%ld intrno: %ld\n", 
-	      queue_counter, int_counter);
+	panic(KERN_EMERG "eata_pio: run out of queue slots cmdno:%ld "
+              "intrno: %ld\n", queue_counter, int_counter);
 #else
-	panic("eata_pio: run out of queue slots....\n");
+	panic(KERN_EMERG "eata_pio: run out of queue slots....\n");
 #endif
     }
     
@@ -317,8 +320,8 @@ int eata_pio_queue(Scsi_Cmnd * cmd, void (*done) (Scsi_Cmnd *))
 	
     cp->status = USED;      /* claim free slot */
 
-    DBG(DBG_QUEUE, printk("eata_pio_queue pid %ld, target: %x, lun: %x, y %d\n",
-			  cmd->pid, cmd->target, cmd->lun, y));
+    DBG(DBG_QUEUE, printk(KERN_DEBUG "eata_pio_queue pid %ld, target: %x, lun:"
+                          " %x, y %d\n", cmd->pid, cmd->target, cmd->lun, y));
     DBG(DBG_QUEUE && DBG_DELAY, DEL2(250));
     
     cmd->scsi_done = (void *)done;
@@ -378,8 +381,8 @@ int eata_pio_queue(Scsi_Cmnd * cmd, void (*done) (Scsi_Cmnd *))
     if (eata_pio_send_command(base, EATA_CMD_PIO_SEND_CP)) 
     {
 	cmd->result = DID_BUS_BUSY << 16;
-	printk("eata_pio_queue target %d, pid %ld, HBA busy, returning "
-               "DID_BUS_BUSY, done.\n", cmd->target, cmd->pid);
+	printk(KERN_NOTICE "eata_pio_queue target %d, pid %ld, HBA busy, "
+               "returning DID_BUS_BUSY, done.\n", cmd->target, cmd->pid);
         done(cmd);
         cp->status = FREE;      
         restore_flags(flags);
@@ -390,8 +393,8 @@ int eata_pio_queue(Scsi_Cmnd * cmd, void (*done) (Scsi_Cmnd *))
     outb(EATA_CMD_PIO_TRUNC, base + HA_WCOMMAND);
     for (x = 0; x < hd->cppadlen; x++) outw(0, base + HA_RDATA);
     
-    DBG(DBG_QUEUE,printk("Queued base %#.4lx pid: %ld target: %x lun: %x "
-			 "slot %d irq %d\n", (long)sh->base, cmd->pid, 
+    DBG(DBG_QUEUE,printk(KERN_DEBUG "Queued base %#.4lx pid: %ld target: %x "
+                         "lun: %x slot %d irq %d\n", (long)sh->base, cmd->pid, 
 			 cmd->target, cmd->lun, y, sh->irq));
     DBG(DBG_QUEUE && DBG_DELAY, DEL2(200));
     
@@ -407,38 +410,39 @@ int eata_pio_abort(Scsi_Cmnd * cmd)
     save_flags(flags);
     cli();
     
-    DBG(DBG_ABNORM, printk("eata_pio_abort called pid: %ld target: %x lun: %x"
-                           " reason %x\n", cmd->pid, cmd->target, cmd->lun, 
-                           cmd->abort_reason));
+    DBG(DBG_ABNORM, printk(KERN_WARNING "eata_pio_abort called pid: %ld "
+                           "target: %x lun: %x reason %x\n", cmd->pid, 
+                           cmd->target, cmd->lun, cmd->abort_reason));
     DBG(DBG_ABNORM && DBG_DELAY, DEL2(500));
     
     
     while (inb((uint)(cmd->host->base) + HA_RAUXSTAT) & HA_ABUSY)
 	if (--loop == 0) {
-	    printk("eata_pio: abort, timeout error.\n");
+	    printk(KERN_WARNING "eata_pio: abort, timeout error.\n");
 	    restore_flags(flags);
 	    DBG(DBG_ABNORM && DBG_DELAY, DEL2(500));
 	    return (SCSI_ABORT_ERROR);
 	}
     if (CD(cmd)->status == FREE) {
-	DBG(DBG_ABNORM, printk("Returning: SCSI_ABORT_NOT_RUNNING\n")); 
+	DBG(DBG_ABNORM, printk(KERN_WARNING "Returning: SCSI_ABORT_NOT_RUNNING\n")); 
 	restore_flags(flags);
 	return (SCSI_ABORT_NOT_RUNNING);
     }
     if (CD(cmd)->status == USED) {
-	DBG(DBG_ABNORM, printk("Returning: SCSI_ABORT_BUSY\n"));
+	DBG(DBG_ABNORM, printk(KERN_WARNING "Returning: SCSI_ABORT_BUSY\n"));
 	restore_flags(flags);
 	return (SCSI_ABORT_BUSY);  /* SNOOZE */ 
     }
     if (CD(cmd)->status == RESET) {
 	restore_flags(flags);
-	printk("eata_pio: abort, command reset error.\n");
+	printk(KERN_WARNING "eata_pio: abort, command reset error.\n");
 	DBG(DBG_ABNORM && DBG_DELAY, DEL2(500));
 	return (SCSI_ABORT_ERROR);
     }
     if (CD(cmd)->status == LOCKED) {
 	restore_flags(flags);
-	DBG(DBG_ABNORM, printk("eata_pio: abort, queue slot locked.\n"));
+	DBG(DBG_ABNORM, printk(KERN_WARNING "eata_pio: abort, queue slot "
+                               "locked.\n"));
 	DBG(DBG_ABNORM && DBG_DELAY, DEL2(500));
 	return (SCSI_ABORT_NOT_RUNNING);
     }
@@ -446,7 +450,7 @@ int eata_pio_abort(Scsi_Cmnd * cmd)
     panic("eata_pio: abort: invalid slot status\n");
 }
 
-int eata_pio_reset(Scsi_Cmnd * cmd)
+int eata_pio_reset(Scsi_Cmnd * cmd, int dummy)
 {
     uint x, z, time, limit = 0;
     ulong flags;
@@ -456,12 +460,12 @@ int eata_pio_reset(Scsi_Cmnd * cmd)
     save_flags(flags);
     cli();
     hprint("reset");
-    DBG(DBG_ABNORM, printk("eata_pio_reset called pid:%ld target: %x lun: %x "
-			   "reason %x\n", cmd->pid, cmd->target, cmd->lun, 
-			   cmd->abort_reason));
+    DBG(DBG_ABNORM, printk(KERN_WARNING "eata_pio_reset called pid:%ld target:"
+                           " %x lun: %x reason %x\n", cmd->pid, cmd->target, 
+                           cmd->lun, cmd->abort_reason));
 
     if (HD(cmd)->state == RESET) {
-	printk("eata_pio_reset: exit, already in reset.\n");
+	printk(KERN_WARNING "eata_pio_reset: exit, already in reset.\n");
 	restore_flags(flags);
 	DBG(DBG_ABNORM && DBG_DELAY, DEL2(500));
 	return (SCSI_RESET_ERROR);
@@ -481,7 +485,8 @@ int eata_pio_reset(Scsi_Cmnd * cmd)
 	
 	sp = HD(cmd)->ccb[x].cmd;
 	HD(cmd)->ccb[x].status = RESET;
-	printk("eata_pio_reset: slot %d in reset, pid %ld.\n", x, sp->pid);
+	printk(KERN_WARNING "eata_pio_reset: slot %d in reset, pid %ld.\n", x,
+               sp->pid);
 	DBG(DBG_ABNORM && DBG_DELAY, DEL2(500));
 	
 	if (sp == NULL)
@@ -492,13 +497,14 @@ int eata_pio_reset(Scsi_Cmnd * cmd)
     /* hard reset the HBA  */
     outb((uint) cmd->host->base+HA_WCOMMAND, EATA_CMD_RESET);
     
-    DBG(DBG_ABNORM, printk("eata_pio_reset: board reset done.\n"));
+    DBG(DBG_ABNORM, printk(KERN_WARNING "eata_pio_reset: board reset done.\n"));
     HD(cmd)->state = RESET;
     
     time = jiffies;
     while (jiffies < (time + (3 * HZ)) && limit++ < 10000000);
     
-    DBG(DBG_ABNORM, printk("eata_pio_reset: interrupts disabled, loops %d.\n", limit));
+    DBG(DBG_ABNORM, printk(KERN_WARNING "eata_pio_reset: interrupts disabled, "
+                           "loops %d.\n", limit));
     DBG(DBG_ABNORM && DBG_DELAY, DEL2(500));
     
     for (x = 0; x < cmd->host->can_queue; x++) {
@@ -511,7 +517,7 @@ int eata_pio_reset(Scsi_Cmnd * cmd)
 	sp->result = DID_RESET << 16;
 	
 	/* This mailbox is terminated */
-	printk("eata_pio_reset: reset ccb %d.\n",x);
+	printk(KERN_WARNING "eata_pio_reset: resetted ccb %d.\n",x);
 	HD(cmd)->ccb[x].status = FREE;
 	
 	restore_flags(flags);
@@ -523,11 +529,11 @@ int eata_pio_reset(Scsi_Cmnd * cmd)
     restore_flags(flags);
     
     if (success) { /* hmmm... */
-	DBG(DBG_ABNORM, printk("eata_pio_reset: exit, success.\n"));
+	DBG(DBG_ABNORM, printk(KERN_WARNING "eata_pio_reset: exit, success.\n"));
 	DBG(DBG_ABNORM && DBG_DELAY, DEL2(500));
 	return (SCSI_RESET_SUCCESS);
     } else {
-	DBG(DBG_ABNORM, printk("eata_pio_reset: exit, wakeup.\n"));
+	DBG(DBG_ABNORM, printk(KERN_WARNING "eata_pio_reset: exit, wakeup.\n"));
 	DBG(DBG_ABNORM && DBG_DELAY, DEL2(500));
 	return (SCSI_RESET_PUNT);
     }
@@ -594,7 +600,7 @@ int get_pio_conf_PIO(u32 base, struct get_conf *buf)
 	    return (FALSE);
     
     DBG(DBG_PIO && DBG_PROBE,
-	printk("Issuing PIO READ CONFIG to HBA at %#x\n", base));
+	printk(KERN_DEBUG "Issuing PIO READ CONFIG to HBA at %#x\n", base));
     eata_pio_send_command(base, EATA_CMD_PIO_READ_CONFIG);
 
     loop = R_LIMIT;
@@ -609,8 +615,8 @@ int get_pio_conf_PIO(u32 base, struct get_conf *buf)
     }
     if (!(inb(base + HA_RSTATUS) & HA_SERROR)) {            /* Error ? */
 	if (htonl(EATA_SIGNATURE) == buf->signature) {
-	    DBG(DBG_PIO&&DBG_PROBE, printk("EATA Controller found at %#4x "
-					   "EATA Level: %x\n", base, 
+	    DBG(DBG_PIO&&DBG_PROBE, printk(KERN_NOTICE "EATA Controller found "
+                                           "at %#4x EATA Level: %x\n", base, 
 					   (uint) (buf->version)));
 	    
 	    while (inb(base + HA_RSTATUS) & HA_SDRQ) 
@@ -852,7 +858,8 @@ void find_pio_EISA(struct get_conf *buf, Scsi_Host_Template * tpnt)
 	    if (((pal1 == 0x12) && (pal2 == 0x14)) ||
 		((pal1 == 0x38) && (pal2 == 0xa3) && (pal3 == 0x82)) ||
 		((pal1 == 0x06) && (pal2 == 0x94) && (pal3 == 0x24))) {
-		DBG(DBG_PROBE, printk("EISA EATA id tags found: %x %x %x \n",
+		DBG(DBG_PROBE, printk(KERN_NOTICE "EISA EATA id tags found: "
+                                      "%x %x %x \n",
 				      (int)pal1, (int)pal2, (int)pal3));
 #endif
 		if (get_pio_conf_PIO(base, buf) == TRUE) {
@@ -860,7 +867,8 @@ void find_pio_EISA(struct get_conf *buf, Scsi_Host_Template * tpnt)
 		    if (buf->IRQ) {
 			register_pio_HBA(base, buf, tpnt);
 		    } else
-			printk("eata_dma: No valid IRQ. HBA removed from list\n");
+			printk(KERN_NOTICE "eata_dma: No valid IRQ. HBA "
+                               "removed from list\n");
 		}
 		/* Nothing found here so we take it from the list */
 		EISAbases[i] = 0;
@@ -876,7 +884,8 @@ void find_pio_PCI(struct get_conf *buf, Scsi_Host_Template * tpnt)
 {
 
 #ifndef CONFIG_PCI
-    printk("eata_pio: kernel PCI support not enabled. Skipping scan for PCI HBAs.\n");
+    printk(KERN_ERR "eata_pio: kernel PCI support not enabled. Skipping scan "
+           "for PCI HBAs.\n");
 #else
     
     u8 pci_bus, pci_device_fn;

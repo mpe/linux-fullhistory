@@ -1,0 +1,72 @@
+From: Linus Torvalds <torvalds@cs.helsinki.fi>
+
+How to track down an Oops.. [originally a mail to linux-kernel]
+
+The main trick is having 5 years of experience with those pesky oops 
+messages ;-)
+
+Actually, there are things you can do that make this easier. I have two 
+separate approached:
+
+	gdb /usr/src/linux/vmlinux
+	gdb> disassemble <offending_function>
+
+That's the easy way to find the problem, at least if the bug-report is 
+well made (like this one was - run through ksymoops to get the 
+information of which function and the offset in the function that it 
+happened in).
+
+Oh, it helps if the report happens on a kernel that is compiled with the 
+same compiler and similar setups.
+
+The other thing to do is disassemble the "Code:" part of the bugreprot: 
+ksymoops will do this too with the correct tools (and new version of 
+ksymoops), but if you don't have the tools you can just do a silly 
+program:
+
+	char str[] = "\xXX\xXX\xXX...";
+	main(){}
+
+and compile it with gcc -g and then do "disassemble str" (where the "XX" 
+stuff are the values reported by the Oops - you can just cut-and-paste 
+and do a replace of spaces to "\x" - that's what I do, as I'm too lazy 
+to write a prigram to automate this all).
+
+Finally, if you want to see where the code comes from, you can do
+
+	cd /usr/src/linux
+	make fs/buffer.s 	# or whatever file the bug happened in
+
+and then you get a better idea of what happens than with the gdb 
+disassembly.
+
+Now, the trick is just then to combine all the data you have: the C 
+sources (and general knowledge of what it _should_ do, the assembly 
+listing and the code disassembly (and additionally the register dump you 
+also get from the "oops" message - that can be useful to see _what_ the 
+corrupted pointers were, and when you have the assembler listing you can 
+also match the other registers to whatever C expressions they were used 
+for).
+
+Essentially, you just look at what doesn't match (in this case it was the 
+"Code" disassembly that didn't match with what the compiler generated). 
+Then you need to find out _why_ they don't match. Often it's simple - you 
+see that the code uses a NULL pointer and then you look at the code and 
+wonder how the NULL pointer got there, and if it's a valid thing to do 
+you just check against it..
+
+Now, if somebody gets the idea that this is time-consuming and requires 
+some small amount of concentration, you're right. Which is why I will 
+mostly just ignore any panic reports that don't have the symbol table 
+info etc looked up: it simply gets too hard to look it up (I have some 
+programs to search for specific patterns in the kernel code segment, and 
+sometimes I have been able to look up those kinds of panics too, but 
+that really requires pretty good knowledge of the kernel just to be able 
+to pick out the right sequences etc..)
+
+_Sometimes_ it happens that I just see the disassembled code sequence 
+from the panic, and I know immediately where it's coming from. That's when 
+I get worried that I've been doing this for too long ;-)
+
+		Linus
+

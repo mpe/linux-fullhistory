@@ -422,7 +422,7 @@ static void profile_readahead(int async, struct file *filp)
  * - The number of effective pending IO read requests.
  *   ONE seems to be the only reasonable value.
  * - The total memory pool usage for the file access stream.
- *   This maximum memory usage is implicitely 2 IO read chunks:
+ *   This maximum memory usage is implicitly 2 IO read chunks:
  *   2*(MAX_READAHEAD + PAGE_SIZE) = 156K if CONFIG_READA_SMALL is undefined,
  *   64k if defined.
  */

@@ -4,7 +4,7 @@
 #ifndef _EATA_H
 #define _EATA_H
 
-#include <linux/scsicam.h>
+#include <scsi/scsicam.h>
 
 int eata2x_detect(Scsi_Host_Template *);
 int eata2x_queuecommand(Scsi_Cmnd *, void (*done)(Scsi_Cmnd *));

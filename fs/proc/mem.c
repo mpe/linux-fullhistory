@@ -50,6 +50,32 @@ static int check_range(struct task_struct * tsk, unsigned long addr, int count)
 	return retval;
 }
 
+static struct task_struct * get_task(int pid)
+{
+	struct task_struct * tsk = current;
+
+	if (pid != tsk->pid) {
+		int i;
+		tsk = NULL;
+		for (i = 1 ; i < NR_TASKS ; i++)
+			if (task[i] && task[i]->pid == pid) {
+				tsk = task[i];
+				break;
+			}
+		/*
+		 * allow accesses only under the same circumstances
+		 * that we would allow ptrace to work
+		 */
+		if (tsk) {
+			if (!(tsk->flags & PF_PTRACED)
+			    || tsk->state != TASK_STOPPED
+			    || tsk->p_pptr != current)
+				tsk = NULL;
+		}
+	}
+	return tsk;
+}
+
 static int mem_read(struct inode * inode, struct file * file,char * buf, int count)
 {
 	pgd_t *page_dir;
@@ -57,17 +83,15 @@ static int mem_read(struct inode * inode, struct file * file,char * buf, int cou
 	pte_t pte;
 	char * page;
 	struct task_struct * tsk;
-	unsigned long addr, pid;
+	unsigned long addr;
 	char *tmp;
 	int i;
 
 	if (count < 0)
 		return -EINVAL;
-	pid = inode->i_ino;
-	pid >>= 16;
-	if (pid != current->pid)
-		return -EACCES;
-	tsk = current;
+	tsk = get_task(inode->i_ino >> 16);
+	if (!tsk)
+		return -ESRCH;
 	addr = file->f_pos;
 	count = check_range(tsk, addr, count);
 	if (count < 0)
@@ -117,18 +141,16 @@ static int mem_write(struct inode * inode, struct file * file,char * buf, int co
 	pte_t pte;
 	char * page;
 	struct task_struct * tsk;
-	unsigned long addr, pid;
+	unsigned long addr;
 	char *tmp;
 	int i;
 
 	if (count < 0)
 		return -EINVAL;
 	addr = file->f_pos;
-	pid = inode->i_ino;
-	pid >>= 16;
-	if (pid != current->pid)
-		return -EACCES;
-	tsk = current;
+	tsk = get_task(inode->i_ino >> 16);
+	if (!tsk)
+		return -ESRCH;
 	tmp = buf;
 	while (count > 0) {
 		if (current->signal & ~current->blocked)
@@ -199,19 +221,13 @@ int mem_mmap(struct inode * inode, struct file * file,
 	pte_t *src_table, *dest_table;
 	unsigned long stmp, dtmp;
 	struct vm_area_struct *src_vma = NULL;
-	int i;
 
 	/* Get the source's task information */
 
-	tsk = NULL;
-	for (i = 1 ; i < NR_TASKS ; i++)
-		if (task[i] && task[i]->pid == (inode->i_ino >> 16)) {
-			tsk = task[i];
-			break;
-		}
+	tsk = get_task(inode->i_ino >> 16);
 
 	if (!tsk)
-		return -EACCES;
+		return -ESRCH;
 
 	/* Ensure that we have a valid source area.  (Has to be mmap'ed and
 	 have valid page information.)  We can't map shared memory at the

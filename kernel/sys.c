@@ -4,6 +4,7 @@
  *  Copyright (C) 1991, 1992  Linus Torvalds
  */
 
+#include <linux/config.h>
 #include <linux/errno.h>
 #include <linux/sched.h>
 #include <linux/kernel.h>
@@ -22,6 +23,9 @@
 #include <linux/fcntl.h>
 #include <linux/acct.h>
 #include <linux/tty.h>
+#if defined(CONFIG_APM) && defined(CONFIG_APM_POWER_OFF)
+#include <linux/apm_bios.h>
+#endif
 
 #include <asm/segment.h>
 #include <asm/io.h>
@@ -193,6 +197,9 @@ asmlinkage int sys_reboot(int magic, int magic_too, int flag)
 	else if (flag == 0xCDEF0123) {
 		printk(KERN_EMERG "System halted\n");
 		sys_kill(-1, SIGKILL);
+#if defined(CONFIG_APM) && defined(CONFIG_APM_POWER_OFF)
+		apm_set_power_state(APM_STATE_OFF);
+#endif
 		do_exit(0);
 	} else
 		return -EINVAL;

@@ -270,7 +270,7 @@ static int parse_options (char * options, unsigned long * sb_block,
 static void ext2_setup_super (struct super_block * sb,
 			      struct ext2_super_block * es)
 {
-	if (es->s_rev_level > EXT2_CURRENT_REV) {
+	if (es->s_rev_level > EXT2_MAX_SUPP_REV) {
 			printk ("EXT2-fs warning: revision level too high, "
 				"forcing read/only mode\n");
 			sb->s_flags |= MS_RDONLY;
@@ -400,13 +400,22 @@ struct super_block * ext2_read_super (struct super_block * sb, void * data,
 	sb->u.ext2_sb.s_es = es;
 	sb->s_magic = es->s_magic;
 	if (sb->s_magic != EXT2_SUPER_MAGIC) {
-		sb->s_dev = 0;
-		unlock_super (sb);
-		brelse (bh);
 		if (!silent)
 			printk ("VFS: Can't find an ext2 filesystem on dev "
 				"%s.\n", kdevname(dev));
+	failed_mount:
+		sb->s_dev = 0;
+		unlock_super (sb);
+		if (bh)
+			brelse(bh);
+		MOD_DEC_USE_COUNT;
 		return NULL;
+	}
+	if ((es->s_rev_level > EXT2_GOOD_OLD_REV) &&
+	    (es->s_feature_incompat & !EXT2_FEATURE_INCOMPAT_SUPP)) {
+		printk("EXT2-fs: %s: couldn't mount because of "
+		       "unsupported optional features.\n", kdevname(dev));
+		goto failed_mount;
 	}
 	sb->s_blocksize_bits = sb->u.ext2_sb.s_es->s_log_block_size + 10;
 	sb->s_blocksize = 1 << sb->s_blocksize_bits;
@@ -421,18 +430,27 @@ struct super_block * ext2_read_super (struct super_block * sb, void * data,
 		offset = (sb_block*BLOCK_SIZE) % sb->s_blocksize;
 		bh = bread (dev, logic_sb_block, sb->s_blocksize);
 		if(!bh) {
-		        MOD_DEC_USE_COUNT;
-			return NULL;
-		      }
+			printk("EXT2-fs: Couldn't read superblock on "
+			       "2nd try.\n");
+			goto failed_mount;
+		}
 		es = (struct ext2_super_block *) (((char *)bh->b_data) + offset);
 		sb->u.ext2_sb.s_es = es;
 		if (es->s_magic != EXT2_SUPER_MAGIC) {
-			sb->s_dev = 0;
-			unlock_super (sb);
-			brelse (bh);
 			printk ("EXT2-fs: Magic mismatch, very weird !\n");
-		        MOD_DEC_USE_COUNT;
-			return NULL;
+			goto failed_mount;
+		}
+	}
+	if (es->s_rev_level == EXT2_GOOD_OLD_REV) {
+		sb->u.ext2_sb.s_inode_size = EXT2_GOOD_OLD_INODE_SIZE;
+		sb->u.ext2_sb.s_first_ino = EXT2_GOOD_OLD_FIRST_INO;
+	} else {
+		sb->u.ext2_sb.s_inode_size = es->s_inode_size;
+		sb->u.ext2_sb.s_first_ino = es->s_first_ino;
+		if (sb->u.ext2_sb.s_inode_size != EXT2_GOOD_OLD_INODE_SIZE) {
+			printk ("EXT2-fs: unsupported inode size: %d\n",
+				sb->u.ext2_sb.s_inode_size);
+			goto failed_mount;
 		}
 	}
 	sb->u.ext2_sb.s_frag_size = EXT2_MIN_FRAG_SIZE <<
@@ -446,7 +464,7 @@ struct super_block * ext2_read_super (struct super_block * sb, void * data,
 	sb->u.ext2_sb.s_frags_per_group = es->s_frags_per_group;
 	sb->u.ext2_sb.s_inodes_per_group = es->s_inodes_per_group;
 	sb->u.ext2_sb.s_inodes_per_block = sb->s_blocksize /
-					   sizeof (struct ext2_inode);
+					   EXT2_INODE_SIZE(sb);
 	sb->u.ext2_sb.s_itb_per_group = sb->u.ext2_sb.s_inodes_per_group /
 				        sb->u.ext2_sb.s_inodes_per_block;
 	sb->u.ext2_sb.s_desc_per_block = sb->s_blocksize /
@@ -465,68 +483,42 @@ struct super_block * ext2_read_super (struct super_block * sb, void * data,
 	sb->u.ext2_sb.s_rename_wait = NULL;
 	sb->u.ext2_sb.s_addr_per_block_bits =
 		log2 (EXT2_ADDR_PER_BLOCK(sb));
-	sb->u.ext2_sb.s_inodes_per_block_bits =
-		log2 (EXT2_INODES_PER_BLOCK(sb));
 	sb->u.ext2_sb.s_desc_per_block_bits =
 		log2 (EXT2_DESC_PER_BLOCK(sb));
 	if (sb->s_magic != EXT2_SUPER_MAGIC) {
-		sb->s_dev = 0;
-		unlock_super (sb);
-		brelse (bh);
 		if (!silent)
 			printk ("VFS: Can't find an ext2 filesystem on dev "
 				"%s.\n",
 				kdevname(dev));
-		MOD_DEC_USE_COUNT;
-		return NULL;
+		goto failed_mount;
 	}
 	if (sb->s_blocksize != bh->b_size) {
-		sb->s_dev = 0;
-		unlock_super (sb);
-		brelse (bh);
 		if (!silent)
 			printk ("VFS: Unsupported blocksize on dev "
 				"%s.\n", kdevname(dev));
-		MOD_DEC_USE_COUNT;
-		return NULL;
+		goto failed_mount;
 	}
 
 	if (sb->s_blocksize != sb->u.ext2_sb.s_frag_size) {
-		sb->s_dev = 0;
-		unlock_super (sb);
-		brelse (bh);
 		printk ("EXT2-fs: fragsize %lu != blocksize %lu (not supported yet)\n",
 			sb->u.ext2_sb.s_frag_size, sb->s_blocksize);
-		MOD_DEC_USE_COUNT;
-		return NULL;
+		goto failed_mount;
 	}
 
 	if (sb->u.ext2_sb.s_blocks_per_group > sb->s_blocksize * 8) {
-		sb->s_dev = 0;
-		unlock_super (sb);
-		brelse (bh);
 		printk ("EXT2-fs: #blocks per group too big: %lu\n",
 			sb->u.ext2_sb.s_blocks_per_group);
-		MOD_DEC_USE_COUNT;
-		return NULL;
+		goto failed_mount;
 	}
 	if (sb->u.ext2_sb.s_frags_per_group > sb->s_blocksize * 8) {
-		sb->s_dev = 0;
-		unlock_super (sb);
-		brelse (bh);
 		printk ("EXT2-fs: #fragments per group too big: %lu\n",
 			sb->u.ext2_sb.s_frags_per_group);
-		MOD_DEC_USE_COUNT;
-		return NULL;
+		goto failed_mount;
 	}
 	if (sb->u.ext2_sb.s_inodes_per_group > sb->s_blocksize * 8) {
-		sb->s_dev = 0;
-		unlock_super (sb);
-		brelse (bh);
 		printk ("EXT2-fs: #inodes per group too big: %lu\n",
 			sb->u.ext2_sb.s_inodes_per_group);
-		MOD_DEC_USE_COUNT;
-		return NULL;
+		goto failed_mount;
 	}
 
 	sb->u.ext2_sb.s_groups_count = (es->s_blocks_count -
@@ -537,40 +529,28 @@ struct super_block * ext2_read_super (struct super_block * sb, void * data,
 		   EXT2_DESC_PER_BLOCK(sb);
 	sb->u.ext2_sb.s_group_desc = kmalloc (db_count * sizeof (struct buffer_head *), GFP_KERNEL);
 	if (sb->u.ext2_sb.s_group_desc == NULL) {
-		sb->s_dev = 0;
-		unlock_super (sb);
-		brelse (bh);
 		printk ("EXT2-fs: not enough memory\n");
-		MOD_DEC_USE_COUNT;
-		return NULL;
+		goto failed_mount;
 	}
 	for (i = 0; i < db_count; i++) {
 		sb->u.ext2_sb.s_group_desc[i] = bread (dev, logic_sb_block + i + 1,
 						       sb->s_blocksize);
 		if (!sb->u.ext2_sb.s_group_desc[i]) {
-			sb->s_dev = 0;
-			unlock_super (sb);
 			for (j = 0; j < i; j++)
 				brelse (sb->u.ext2_sb.s_group_desc[j]);
 			kfree_s (sb->u.ext2_sb.s_group_desc,
 				 db_count * sizeof (struct buffer_head *));
-			brelse (bh);
 			printk ("EXT2-fs: unable to read group descriptors\n");
-			MOD_DEC_USE_COUNT;
-			return NULL;
+			goto failed_mount;
 		}
 	}
 	if (!ext2_check_descriptors (sb)) {
-		sb->s_dev = 0;
-		unlock_super (sb);
 		for (j = 0; j < db_count; j++)
 			brelse (sb->u.ext2_sb.s_group_desc[j]);
 		kfree_s (sb->u.ext2_sb.s_group_desc,
 			 db_count * sizeof (struct buffer_head *));
-		brelse (bh);
 		printk ("EXT2-fs: group descriptors corrupted !\n");
-		MOD_DEC_USE_COUNT;
-		return NULL;
+		goto failed_mount;
 	}
 	for (i = 0; i < EXT2_MAX_GROUP_LOADED; i++) {
 		sb->u.ext2_sb.s_inode_bitmap_number[i] = 0;

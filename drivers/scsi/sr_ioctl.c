@@ -10,7 +10,7 @@
 #include "scsi.h"
 #include "hosts.h"
 #include "sr.h"
-#include "scsi_ioctl.h"
+#include <scsi/scsi_ioctl.h>
 
 #include <linux/cdrom.h>
 
@@ -555,12 +555,21 @@ int sr_ioctl(struct inode * inode, struct file * file, unsigned int cmd, unsigne
     }
 	
     case BLKRASET:
+    {
 	if(!suser())  return -EACCES;
 	if(!(inode->i_rdev)) return -EINVAL;
 	if(arg > 0xff) return -EINVAL;
 	read_ahead[MAJOR(inode->i_rdev)] = arg;
 	return 0;
 	RO_IOCTLS(dev,arg);
+    }
+
+    case CDROMRESET:
+    {
+	invalidate_buffers(MKDEV(MAJOR(inode->i_rdev),MINOR(inode->i_rdev)));
+	return 0;
+    }
+
     default:
 	return scsi_ioctl(scsi_CDs[target].device,cmd,(void *) arg);
     }

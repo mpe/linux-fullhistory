@@ -1,7 +1,7 @@
 /*
  * linux/drivers/block/ide-tape.c	Version 1.5 - ALPHA	Apr  12, 1996
  *
- * Copyright (C) 1995, 1996 Gadi Oxman <tgud@tochnapc2.technion.ac.il>
+ * Copyright (C) 1995, 1996 Gadi Oxman <gadio@netvision.net.il>
  *
  * This driver was constructed as a student project in the software laboratory
  * of the faculty of electrical engineering in the Technion - Israel's
@@ -1525,6 +1525,7 @@ void idetape_issue_packet_command  (ide_drive_t *drive,idetape_packet_command_t 
 	}		
 #endif /* CONFIG_BLK_DEV_TRITON */
 
+	OUT_BYTE (drive->ctl,IDETAPE_CONTROL_REG);
 	OUT_BYTE (dma_ok ? 1:0,IDETAPE_FEATURES_REG);			/* Use PIO/DMA */
 	OUT_BYTE (bcount.b.high,IDETAPE_BCOUNTH_REG);
 	OUT_BYTE (bcount.b.low,IDETAPE_BCOUNTL_REG);

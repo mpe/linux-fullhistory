@@ -358,6 +358,10 @@ void proc_root_init(void)
 		S_IFREG | S_IRUGO, 1, 0, 0,
 	});
 #endif
+	proc_register(&proc_root, &(struct proc_dir_entry) {
+		PROC_LOCKS, 5, "locks",
+		S_IFREG | S_IRUGO, 1, 0, 0,
+	});
 
 	proc_register( &proc_root, &(struct proc_dir_entry)
 	   { PROC_MTAB, 6, "mounts", S_IFREG | S_IRUGO, 1, 0, 0, } );

@@ -193,7 +193,7 @@ static void scsi_dump_status(void);
 #ifdef DEBUG
     #define SCSI_TIMEOUT (5*HZ)
 #else
-    #define SCSI_TIMEOUT (1*HZ)
+    #define SCSI_TIMEOUT (2*HZ)
 #endif
 
 #ifdef DEBUG
@@ -201,15 +201,15 @@ static void scsi_dump_status(void);
     #define ABORT_TIMEOUT SCSI_TIMEOUT
     #define RESET_TIMEOUT SCSI_TIMEOUT
 #else
-    #define SENSE_TIMEOUT (5*HZ/10)
-    #define RESET_TIMEOUT (5*HZ/10)
-    #define ABORT_TIMEOUT (5*HZ/10)
+    #define SENSE_TIMEOUT (1*HZ)
+    #define RESET_TIMEOUT (5*HZ)
+    #define ABORT_TIMEOUT (5*HZ)
 #endif
 
-#define MIN_RESET_DELAY (1*HZ)
+#define MIN_RESET_DELAY (3*HZ)
 
 /* Do not call reset on error if we just did a reset within 10 sec. */
-#define MIN_RESET_PERIOD (10*HZ)
+#define MIN_RESET_PERIOD (15*HZ)
 
 /* The following devices are known not to tolerate a lun != 0 scan for
  * one reason or another.  Some will respond to all luns, others will
@@ -580,7 +580,7 @@ int scan_scsis_single (int channel, int dev, int lun, int *max_dev_lun,
   printk("\n");
 #endif
 
-  if (SCpnt->result) {
+if (host_byte(SCpnt->result) != DID_OK) {
     if (((driver_byte (SCpnt->result) & DRIVER_SENSE) ||
          (status_byte (SCpnt->result) & CHECK_CONDITION)) &&
         ((SCpnt->sense_buffer[0] & 0x70) >> 4) == 7) {
@@ -816,9 +816,10 @@ int scan_scsis_single (int channel, int dev, int lun, int *max_dev_lun,
  *  Flag bits for the internal_timeout array
  */
 #define NORMAL_TIMEOUT 0
-#define IN_ABORT 1
-#define IN_RESET 2
+#define IN_ABORT  1
+#define IN_RESET  2
 #define IN_RESET2 4
+#define IN_RESET3 8
 
 /*
  * This is our time out function, called when the timer expires for a
@@ -829,7 +830,7 @@ int scan_scsis_single (int channel, int dev, int lun, int *max_dev_lun,
 static void scsi_times_out (Scsi_Cmnd * SCpnt)
 {
     
-    switch (SCpnt->internal_timeout & (IN_ABORT | IN_RESET | IN_RESET2))
+    switch (SCpnt->internal_timeout & (IN_ABORT | IN_RESET | IN_RESET2 | IN_RESET3))
     {
     case NORMAL_TIMEOUT:
 	{
@@ -851,14 +852,28 @@ static void scsi_times_out (Scsi_Cmnd * SCpnt)
 	 * you might conceivably want the machine up and running
 	 * esp if you have an ide disk. 
 	 */
-	printk("SCSI host %d reset (pid %ld) timed out - trying harder\n",
-	       SCpnt->host->host_no, SCpnt->pid);
+	printk("SCSI host %d channel %d reset (pid %ld) timed out - "
+               "trying harder\n",
+	       SCpnt->host->host_no, SCpnt->channel, SCpnt->pid);
 	SCpnt->internal_timeout &= ~IN_RESET;
 	SCpnt->internal_timeout |= IN_RESET2;
         scsi_reset (SCpnt,
 		    SCSI_RESET_ASYNCHRONOUS | SCSI_RESET_SUGGEST_BUS_RESET);
 	return;
 	
+    case (IN_ABORT | IN_RESET | IN_RESET2):
+	/* Obviously the bus reset didn't work.
+	 * Let's try even harder and call for an HBA reset.
+         * Maybe the HBA itself crashed and this will shake it loose.
+	 */
+	printk("SCSI host %d reset (pid %ld) timed out - trying to shake it loose\n",
+	       SCpnt->host->host_no, SCpnt->pid);
+	SCpnt->internal_timeout &= ~(IN_RESET | IN_RESET2);
+	SCpnt->internal_timeout |= IN_RESET3;
+        scsi_reset (SCpnt,
+		    SCSI_RESET_ASYNCHRONOUS | SCSI_RESET_SUGGEST_HOST_RESET);
+	return;
+		
     default:
 	printk("SCSI host %d reset (pid %ld) timed out again -\n",
 	       SCpnt->host->host_no, SCpnt->pid);
@@ -1946,7 +1961,7 @@ void scsi_mark_host_reset(struct Scsi_Host *Host)
 {
   Scsi_Cmnd *SCpnt;
   for (SCpnt = Host->host_queue; SCpnt; SCpnt = SCpnt->next)
-    scsi_mark_device_reset(SCpnt->device);
+      scsi_mark_device_reset(SCpnt->device);
 }
 
 
@@ -1968,8 +1983,8 @@ int scsi_reset (Scsi_Cmnd * SCpnt, unsigned int reset_flags)
     Scsi_Cmnd * SCpnt1;
     struct Scsi_Host * host = SCpnt->host;
 
-    printk("SCSI bus is being reset for host %d.\n",
-	   host->host_no);
+    printk("SCSI bus is being reset for host %d channel %d.\n",
+	   host->host_no, SCpnt->channel);
  
 #if 0
     /*
@@ -2096,7 +2111,7 @@ int scsi_reset (Scsi_Cmnd * SCpnt, unsigned int reset_flags)
 		else scsi_mark_device_reset(SCpnt->device);
 		save_flags(flags);
 		cli();
-		SCpnt->internal_timeout &= ~IN_RESET;
+		SCpnt->internal_timeout &= ~(IN_RESET|IN_RESET2|IN_RESET3);
 		restore_flags(flags);
 		return 0;
 	    case SCSI_RESET_PENDING:
@@ -2108,7 +2123,7 @@ int scsi_reset (Scsi_Cmnd * SCpnt, unsigned int reset_flags)
 	    case SCSI_RESET_NOT_RUNNING:
 		return 0;
 	    case SCSI_RESET_PUNT:
-                SCpnt->internal_timeout &= ~IN_RESET;
+		SCpnt->internal_timeout &= ~(IN_RESET|IN_RESET2|IN_RESET3);
                 scsi_request_sense (SCpnt);
                 return 0;
 	    case SCSI_RESET_WAKEUP:
@@ -2117,14 +2132,15 @@ int scsi_reset (Scsi_Cmnd * SCpnt, unsigned int reset_flags)
 	        else if (temp & SCSI_RESET_BUS_RESET)
 		  scsi_mark_bus_reset(host, SCpnt->channel);
 		else scsi_mark_device_reset(SCpnt->device);
-		SCpnt->internal_timeout &= ~IN_RESET;
+		SCpnt->internal_timeout &= ~(IN_RESET|IN_RESET2|IN_RESET3);
 		scsi_request_sense (SCpnt);
                 /*
-                 * Since a bus reset was performed, we
+                 * If a bus reset was performed, we
                  * need to wake up each and every command
-                 * that was active on the bus.
+                 * that was active on the bus or if it was a HBA
+                 * reset all active commands on all channels
                  */
-                if( temp & SCSI_RESET_BUS_RESET )
+                if( temp & SCSI_RESET_HOST_RESET )
                 {
 		    SCpnt1 = host->host_queue;
 		    while(SCpnt1) {
@@ -2132,6 +2148,15 @@ int scsi_reset (Scsi_Cmnd * SCpnt, unsigned int reset_flags)
 			    && SCpnt1 != SCpnt)
 			    scsi_request_sense (SCpnt1);
 			SCpnt1 = SCpnt1->next;
+                    }
+                } else if( temp & SCSI_RESET_BUS_RESET ) {
+                    SCpnt1 = host->host_queue;
+                    while(SCpnt1) {
+                        if(SCpnt1->request.rq_status != RQ_INACTIVE
+                           && SCpnt1 != SCpnt 
+                           && SCpnt1->channel == SCpnt->channel)
+                            scsi_request_sense (SCpnt);
+                        SCpnt1 = SCpnt1->next;
                     }
                 }
 		return 0;
@@ -2143,7 +2168,7 @@ int scsi_reset (Scsi_Cmnd * SCpnt, unsigned int reset_flags)
 		 */
 		save_flags(flags);
 		cli();
-		SCpnt->internal_timeout &= ~IN_RESET;
+		SCpnt->internal_timeout &= ~(IN_RESET|IN_RESET2|IN_RESET3);
 		update_timeout(SCpnt, 0);
 		restore_flags(flags);
 		/* If you snooze, you lose... */

@@ -30,7 +30,7 @@
  *
  */
 
-#define RTC_VERSION		"1.04"
+#define RTC_VERSION		"1.05"
 
 #define RTC_IRQ 	8	/* Can't see this changing soon.	*/
 #define RTC_IO_BASE	0x70	/* Or this...				*/
@@ -67,6 +67,8 @@
 
 static struct wait_queue *rtc_wait;
 
+static struct timer_list rtc_irq_timer;
+
 static int rtc_lseek(struct inode *inode, struct file *file, off_t offset,
 			int origin);
 
@@ -81,6 +83,7 @@ static int rtc_select(struct inode *inode, struct file *file,
 
 void get_rtc_time (struct tm *rtc_tm);
 void get_rtc_alm_time (struct tm *alm_tm);
+void rtc_dropped_irq(unsigned long data);
 
 inline void set_rtc_irq_bit(unsigned char bit);
 inline void mask_rtc_irq_bit(unsigned char bit);
@@ -92,8 +95,10 @@ unsigned char rtc_is_updating(void);
  */
 
 #define RTC_IS_OPEN		0x01	/* means /dev/rtc is in use	*/
+#define RTC_TIMER_ON		0x02	/* missed irq timer active	*/
 
 unsigned char rtc_status = 0;		/* bitmapped status byte.	*/
+unsigned long rtc_freq = 0;		/* Current periodic IRQ rate	*/
 unsigned long rtc_irq_data = 0;		/* our output to the world	*/
 
 unsigned char days_in_mo[] = 
@@ -119,6 +124,12 @@ static void rtc_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	rtc_irq_data &= ~0xff;
 	rtc_irq_data |= (CMOS_READ(RTC_INTR_FLAGS) & 0xF0);
 	wake_up_interruptible(&rtc_wait);	
+
+	if (rtc_status & RTC_TIMER_ON) {
+		del_timer(&rtc_irq_timer);
+		rtc_irq_timer.expires = jiffies + HZ/rtc_freq + 2*HZ/100;
+		add_timer(&rtc_irq_timer);
+	}
 }
 
 /*
@@ -157,12 +168,16 @@ static int rtc_read(struct inode *inode, struct file *file, char *buf, int count
 			break;
 		}
 		schedule();
-		continue;
 	}
 
 	if (retval == 0) {
-		memcpy_tofs(buf, &rtc_irq_data, sizeof(unsigned long));
+		unsigned long data, flags;
+		save_flags(flags);
+		cli();
+		data = rtc_irq_data;
 		rtc_irq_data = 0;
+		restore_flags(flags);
+		memcpy_tofs(buf, &data, sizeof(unsigned long));
 		retval = sizeof(unsigned long);
 	}
 
@@ -192,27 +207,30 @@ static int rtc_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 		case RTC_PIE_OFF:	/* Mask periodic int. enab. bit	*/
 		{
 			mask_rtc_irq_bit(RTC_PIE);
+			if (rtc_status & RTC_TIMER_ON) {
+				del_timer(&rtc_irq_timer);
+				rtc_status &= ~RTC_TIMER_ON;
+			}
 			return 0;
 		}
 		case RTC_PIE_ON:	/* Allow periodic ints		*/
 		{
-			unsigned int hz;
-			unsigned char tmp;
-
-			save_flags(flags);
-			cli();
-			tmp = CMOS_READ(RTC_FREQ_SELECT) & 0x0f;
-			restore_flags(flags);
-
-			hz = (tmp ? (65536/(1<<tmp)) : 0);
 
 			/*
 			 * We don't really want Joe User enabling more
 			 * than 64Hz of interrupts on a multi-user machine.
 			 */
-			if ((hz > 64) && (!suser()))
+			if ((rtc_freq > 64) && (!suser()))
 				return -EPERM;
 
+			if (rtc_freq == 0)
+				return -EINVAL;
+
+			if (!(rtc_status & RTC_TIMER_ON)) {
+				rtc_status |= RTC_TIMER_ON;
+				rtc_irq_timer.expires = jiffies + HZ/rtc_freq + 2*HZ/100;
+				add_timer(&rtc_irq_timer);
+			}
 			set_rtc_irq_bit(RTC_PIE);
 			return 0;
 		}
@@ -382,19 +400,13 @@ static int rtc_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 		}
 		case RTC_IRQP_READ:	/* Read the periodic IRQ rate.	*/
 		{
-			unsigned long hz;
 			int retval;
 
 			retval = verify_area(VERIFY_WRITE, (unsigned long*)arg, sizeof(unsigned long));
 			if (retval != 0)
 				return retval;
 
-			save_flags(flags);
-			cli();
-			retval = CMOS_READ(RTC_FREQ_SELECT) & 0x0f;
-			restore_flags(flags);
-			hz = (retval ? (65536/(1<<retval)) : 0);
-			memcpy_tofs((unsigned long*)arg, &hz, sizeof(unsigned long));
+			memcpy_tofs((unsigned long*)arg, &rtc_freq, sizeof(unsigned long));
 			return 0;
 		}
 		case RTC_IRQP_SET:	/* Set periodic IRQ rate.	*/
@@ -405,7 +417,7 @@ static int rtc_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 			/* 
 			 * The max we can do is 8192Hz.
 			 */
-			if (arg > 8192)
+			if ((arg < 2) || (arg > 8192))
 				return -EINVAL;
 			/*
 			 * We don't really want Joe User generating more
@@ -422,6 +434,8 @@ static int rtc_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 			 */
 			if ((arg != 0) && (arg != (1<<tmp)))
 				return -EINVAL;
+
+			rtc_freq = arg;
 
 			save_flags(flags);
 			cli();
@@ -480,6 +494,12 @@ static void rtc_release(struct inode *inode, struct file *file)
 	CMOS_WRITE(tmp, RTC_CONTROL);
 	CMOS_READ(RTC_INTR_FLAGS);
 	restore_flags(flags);
+
+	if (rtc_status & RTC_TIMER_ON) {
+		rtc_status &= ~RTC_TIMER_ON;
+		del_timer(&rtc_irq_timer);
+	}
+
 	rtc_irq_data = 0;
 	rtc_status &= ~RTC_IS_OPEN;
 }
@@ -520,6 +540,8 @@ static struct miscdevice rtc_dev=
 
 int rtc_init(void)
 {
+	unsigned long flags;
+
 	printk("Real Time Clock Driver v%s\n", RTC_VERSION);
 	if(request_irq(RTC_IRQ, rtc_interrupt, SA_INTERRUPT, "rtc", NULL))
 	{
@@ -530,8 +552,44 @@ int rtc_init(void)
 	misc_register(&rtc_dev);
 	/* Check region? Naaah! Just snarf it up. */
 	request_region(RTC_IO_BASE, RTC_IO_EXTENT, "rtc");
+	init_timer(&rtc_irq_timer);
+	rtc_irq_timer.function = rtc_dropped_irq;
 	rtc_wait = NULL;
+	save_flags(flags);
+	cli();
+	rtc_freq = CMOS_READ(RTC_FREQ_SELECT) & 0x0F;
+	restore_flags(flags);
+	rtc_freq = (rtc_freq ? (65536/(1<<rtc_freq)) : 0);
 	return 0;
+}
+
+/*
+ * 	At IRQ rates >= 4096Hz, an interrupt may get lost altogether.
+ *	(usually during an IDE disk interrupt, with IRQ unmasking off)
+ *	Since the interrupt handler doesn't get called, the IRQ status
+ *	byte doesn't get read, and the RTC stops generating interrupts.
+ *	A timer is set, and will call this function if/when that happens.
+ *	To get it out of this stalled state, we just read the status.
+ *	At least a jiffy of interrupts (rtc_freq/HZ) will have been lost.
+ *	(You *really* shouldn't be trying to use a non-realtime system 
+ *	for something that requires a steady > 1KHz signal anyways.)
+ */
+
+void rtc_dropped_irq(unsigned long data)
+{
+	unsigned long flags;
+
+	printk(KERN_INFO "rtc: lost some interrupts at %ldHz.\n", rtc_freq);
+	del_timer(&rtc_irq_timer);
+	rtc_irq_timer.expires = jiffies + HZ/rtc_freq + 2*HZ/100;
+	add_timer(&rtc_irq_timer);
+
+	save_flags(flags);
+	cli();
+	rtc_irq_data += ((rtc_freq/HZ)<<8);
+	rtc_irq_data &= ~0xff;
+	rtc_irq_data |= (CMOS_READ(RTC_INTR_FLAGS) & 0xF0);	/* restart */
+	restore_flags(flags);
 }
 
 /*
@@ -542,11 +600,11 @@ int get_rtc_status(char *buf)
 {
 	char *p;
 	struct tm tm;
-	unsigned char freq, batt, ctrl;
+	unsigned char batt, ctrl;
 	unsigned long flags;
 
 	save_flags(flags);
-	freq = CMOS_READ(RTC_FREQ_SELECT) & 0x0F;
+	cli();
 	batt = CMOS_READ(RTC_VALID) & RTC_VRT;
 	ctrl = CMOS_READ(RTC_CONTROL);
 	restore_flags(flags);
@@ -559,10 +617,11 @@ int get_rtc_status(char *buf)
 	 * There is no way to tell if the luser has the RTC set for local
 	 * time or for Universal Standard Time (GMT). Probably local though.
 	 */
-	p += sprintf(p, "date          : %04d-%02d-%02d\n",
+	p += sprintf(p,
+		"rtc_time\t: %02d:%02d:%02d\n"
+		"rtc_date\t: %04d-%02d-%02d\n",
+		tm.tm_hour, tm.tm_min, tm.tm_sec,
 		tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday);
-	p += sprintf(p, "time          : %02d-%02d-%02d\n",
-		tm.tm_hour, tm.tm_min, tm.tm_sec);
 
 	get_rtc_alm_time(&tm);
 
@@ -571,44 +630,41 @@ int get_rtc_status(char *buf)
 	 * match any value for that particular field. Values that are
 	 * greater than a valid time, but less than 0xc0 shouldn't appear.
 	 */
-	p += sprintf(p, "alarm         : ");
+	p += sprintf(p, "alarm\t\t: ");
 	if (tm.tm_hour <= 24)
-		p += sprintf(p, "%02d", tm.tm_hour);
+		p += sprintf(p, "%02d:", tm.tm_hour);
 	else
-		p += sprintf(p, "**");
-	p += sprintf(p, "-");
+		p += sprintf(p, "**:");
+
 	if (tm.tm_min <= 59)
-		p += sprintf(p, "%02d", tm.tm_min);
+		p += sprintf(p, "%02d:", tm.tm_min);
 	else
-		p += sprintf(p, "**");
-	p += sprintf(p, "-");
+		p += sprintf(p, "**:");
+
 	if (tm.tm_sec <= 59)
-		p += sprintf(p, "%02d", tm.tm_sec);
+		p += sprintf(p, "%02d\n", tm.tm_sec);
 	else
-		p += sprintf(p, "**");
-	p += sprintf(p, "\n");
+		p += sprintf(p, "**\n");
 
-	p += sprintf(p, "daylight      : %s\n",
-		((ctrl & RTC_DST_EN) ? "yes" : "no" ));
-	p += sprintf(p, "bcd           : %s\n",
-		((ctrl & RTC_DM_BINARY) ? "no" : "yes" ));
-	p += sprintf(p, "24hr          : %s\n",
-		((ctrl & RTC_24H) ? "yes" : "no" ));
-	p += sprintf(p, "sqwave        : %s\n",
-		((ctrl & RTC_SQWE) ? "yes" : "no" ));
-
-	p += sprintf(p, "alarm_int     : %s\n",
-		((ctrl & RTC_AIE) ? "yes" : "no" ));
-	p += sprintf(p, "update_int    : %s\n",
-		((ctrl & RTC_UIE) ? "yes" : "no" ));
-	p += sprintf(p, "periodic_int  : %s\n",
-		((ctrl & RTC_PIE) ? "yes" : "no" ));
-
-	p += sprintf(p, "periodic_freq : %d\n",
-		(freq ? (65536/(1<<freq)) : 0));
-
-	p += sprintf(p, "battery_ok    : %s\n",
-		(batt ? "yes" : "no"));
+	p += sprintf(p,
+		"DST_enable\t: %s\n"
+		"BCD\t\t: %s\n"
+		"24hr\t\t: %s\n"
+		"sqare_wave\t: %s\n"
+		"alarm_IRQ\t: %s\n"
+		"update_IRQ\t: %s\n"
+		"periodic_IRQ\t: %s\n"
+		"periodic_freq\t: %ld\n"
+		"batt_status\t: %s\n",
+		(ctrl & RTC_DST_EN) ? "yes" : "no",
+		(ctrl & RTC_DM_BINARY) ? "no" : "yes",
+		(ctrl & RTC_24H) ? "yes" : "no",
+		(ctrl & RTC_SQWE) ? "yes" : "no",
+		(ctrl & RTC_AIE) ? "yes" : "no",
+		(ctrl & RTC_UIE) ? "yes" : "no",
+		(ctrl & RTC_PIE) ? "yes" : "no",
+		rtc_freq,
+		batt ? "okay" : "dead");
 
 	return  p - buf;
 }
@@ -622,6 +678,7 @@ inline unsigned char rtc_is_updating(void)
 	unsigned char uip;
 
 	save_flags(flags);
+	cli();
 	uip = (CMOS_READ(RTC_FREQ_SELECT) & RTC_UIP);
 	restore_flags(flags);
 	return uip;
@@ -744,7 +801,7 @@ inline void set_rtc_irq_bit(unsigned char bit)
 	val |= bit;
 	CMOS_WRITE(val, RTC_CONTROL);
 	CMOS_READ(RTC_INTR_FLAGS);
-	restore_flags(flags);
 	rtc_irq_data = 0;
+	restore_flags(flags);
 }
 

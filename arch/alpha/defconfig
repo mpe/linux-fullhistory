@@ -3,6 +3,11 @@
 #
 
 #
+# Code maturity level options
+#
+# CONFIG_EXPERIMENTAL is not set
+
+#
 # Loadable module support
 #
 CONFIG_MODULES=y
@@ -75,7 +80,6 @@ CONFIG_SKB_LARGE=y
 # CONFIG_IPX is not set
 # CONFIG_ATALK is not set
 # CONFIG_AX25 is not set
-# CONFIG_BRIDGE is not set
 # CONFIG_NETLINK is not set
 
 #
@@ -133,25 +137,21 @@ CONFIG_SCSI_NCR53C7xx_FAST=y
 #
 CONFIG_NETDEVICES=y
 CONFIG_DUMMY=m
-# CONFIG_SLIP is not set
-# CONFIG_PPP is not set
-# CONFIG_STRIP is not set
-# CONFIG_WIC is not set
-# CONFIG_SCC is not set
-# CONFIG_PLIP is not set
 # CONFIG_EQUALIZER is not set
-# CONFIG_DLCI is not set
-# CONFIG_NET_ALPHA is not set
-# CONFIG_NET_VENDOR_SMC is not set
-# CONFIG_LANCE is not set
+# CONFIG_PLIP is not set
+# CONFIG_PPP is not set
+# CONFIG_SLIP is not set
+# CONFIG_NET_RADIO is not set
+CONFIG_NET_ETHERNET=y
 # CONFIG_NET_VENDOR_3COM is not set
+# CONFIG_LANCE is not set
+# CONFIG_NET_VENDOR_SMC is not set
 # CONFIG_NET_ISA is not set
 CONFIG_NET_EISA=y
 # CONFIG_APRICOT is not set
 CONFIG_DE4X5=y
 # CONFIG_DEC_ELCP is not set
 # CONFIG_DGRS is not set
-# CONFIG_ZNET is not set
 # CONFIG_NET_POCKET is not set
 # CONFIG_TR is not set
 # CONFIG_ARCNET is not set

@@ -1632,7 +1632,7 @@ int seagate_st0x_reset (Scsi_Cmnd * SCpnt)
 
 #include <asm/segment.h>
 #include "sd.h"
-#include "scsi_ioctl.h"
+#include <scsi/scsi_ioctl.h>
 
 int seagate_st0x_biosparam(Disk * disk, kdev_t dev, int* ip) {
   unsigned char buf[256 + sizeof(int) * 2], cmd[6], *data, *page;

@@ -57,8 +57,9 @@ struct ext2_sb_info {
 	unsigned short s_mount_state;
 	unsigned short s_pad;
 	int s_addr_per_block_bits;
-	int s_inodes_per_block_bits;
 	int s_desc_per_block_bits;
+	int s_inode_size;
+	int s_first_ino;
 };
 
 #endif	/* _LINUX_EXT2_FS_SB */

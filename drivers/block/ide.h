@@ -313,6 +313,7 @@ typedef struct ide_drive_s {
 	unsigned using_dma	: 1;	/* disk is using dma for read/write */
 	unsigned forced_geom	: 1;	/* 1 if hdx=c,h,s was given at boot */
 	unsigned unmask		: 1;	/* flag: okay to unmask other irqs */
+	unsigned nobios		: 1;	/* flag: do not probe bios for drive */
 	unsigned autotune	: 2;	/* 1=autotune, 2=noautotune, 0=default */
 #if FAKE_FDISK_FOR_EZDRIVE
 	unsigned remap_0_to_1	: 1;	/* flag: partitioned with ezdrive */
@@ -419,6 +420,7 @@ typedef struct hwif_s {
 	unsigned	serialized : 1;	/* serialized operation with mate hwif */
 	unsigned	no_unmask  : 1;	/* disallow setting unmask bits */
 	unsigned	got_irq    : 1;	/* 1 = already alloc'd our irq */
+	unsigned	sharing_irq: 1;	/* 1 = sharing irq with another hwif */
 #ifdef CONFIG_BLK_DEV_PROMISE
 	unsigned	is_promise2: 1;	/* 2nd i/f on promise DC4030 */
 #endif /* CONFIG_BLK_DEV_PROMISE */

@@ -1610,7 +1610,7 @@ check_and_exit:
  * 	    release the bus after transmitting. This must be done when
  * 	    the transmit shift register is empty, not be done when the
  * 	    transmit holding register is empty.  This functionality
- * 	    allows RS485 driver to be written in user space. 
+ * 	    allows an RS485 driver to be written in user space. 
  */
 static int get_lsr_info(struct async_struct * info, unsigned int *value)
 {

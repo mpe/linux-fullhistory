@@ -5,7 +5,7 @@ mainmenu_option next_comment
 comment 'Filesystems'
 
 bool	 'Quota support' CONFIG_QUOTA
-tristate 'Standard (minix) fs support' CONFIG_MINIX_FS
+tristate 'Minix fs support' CONFIG_MINIX_FS
 tristate 'Extended fs support' CONFIG_EXT_FS
 tristate 'Second extended fs support' CONFIG_EXT2_FS
 tristate 'xiafs filesystem support' CONFIG_XIA_FS

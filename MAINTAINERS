@@ -65,8 +65,8 @@ S: Status, one of the following:
 	Orphan:		No current maintainer [but maybe you could take the 
 			role as you write your new code].
 	Obsolete:	Old code. Something tagged obsolete generally means
-			its been replaced by a better system and you should
-			be using that.
+			it has been replaced by a better system and you
+			should be using that.
 
 3C501 NETWORK DRIVER
 P:	Alan Cox

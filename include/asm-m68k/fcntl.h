@@ -51,6 +51,7 @@
 #ifdef __KERNEL__
 #define F_POSIX		1
 #define F_FLOCK		2
+#define F_BROKEN	4	/* broken flock() emulation */
 #endif /* __KERNEL__ */
 
 struct flock {

@@ -36,7 +36,7 @@ uses minor #1, so start with ram2 and go from there.
 
 The old "ramdisk=<ram_size>" has been changed to "ramdisk_size=<ram_size>"
 to make it clearer.  The original "ramdisk=<ram_size>" has been kept around
-for compatiblity reasons, but it will probably be removed in 2.1.x.
+for compatibility reasons, but it will probably be removed in 2.1.x.
 
 The new ramdisk also has the ability to load compressed ramdisk images,
 allowing one to squeeze more programs onto an average installation or 

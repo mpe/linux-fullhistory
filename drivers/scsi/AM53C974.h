@@ -27,7 +27,7 @@
 #ifndef AM53C974_H
 #define AM53C974_H
 
-#include <linux/scsicam.h>
+#include <scsi/scsicam.h>
 
 /***************************************************************************************
 * Default setting of the controller's SCSI id. Edit and uncomment this only if your    *

@@ -9,11 +9,26 @@
 
 /* ioctl()'s for the random number generator */
 
+/* Get the entropy count. */
 #define RNDGETENTCNT	0x01080000
+
+/* Add to (or subtract from) the entropy count.  (Superuser only.) */
 #define RNDADDTOENTCNT	0x01080001
+
+/* Get the contents of the entropy pool.  (Superuser only.) */
 #define RNDGETPOOL	0x01080002
+
+/* 
+ * Write bytes into the entropy pool and add to the entropy count.
+ * (Superuser only.)
+ */
 #define RNDADDENTROPY	0x01080003
+
+/* Clear entropy count to 0.  (Superuser only.) */
 #define RNDZAPENTCNT	0x01080004
+
+/* Clear the entropy pool and associated counters.  (Superuser only.) */
+#define RNDCLEARPOOL	0x01080006
 
 struct rand_pool_info {
 	int	entropy_count;

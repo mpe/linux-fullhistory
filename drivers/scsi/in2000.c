@@ -29,9 +29,9 @@
  * Bill Earnest, Larry Doolittle, Roger Sunshine, John Luckey,
  * Matt Postiff, Peter Lu, zerucha@shell.portal.com, and Eric
  * Youngdale). I should also mention the driver written by
- * Hamish Mcdonald for the (GASP!) Amiga A2091 card, included
+ * Hamish Macdonald for the (GASP!) Amiga A2091 card, included
  * in the Linux-m68k distribution; it gave me a good initial
- * understandng of the proper way to run a WD33c93 chip, and I
+ * understanding of the proper way to run a WD33c93 chip, and I
  * ended up stealing lots of code from it.
  *
  * _This_ driver is (I feel) an improvement over the old one in
@@ -663,7 +663,7 @@ no:
             if ((i = cmd->SCp.this_residual) > (IN2000_FIFO_SIZE - 16) )
                i = IN2000_FIFO_SIZE - 16;
             cmd->SCp.have_data_in = i;    /* this much data in fifo */
-            i >>= 1;                      /* Gulp. Assumimg modulo 2. */
+            i >>= 1;                      /* Gulp. Assuming modulo 2. */
             sp = (unsigned short *)cmd->SCp.ptr;
             f = hostdata->io_base + IO_FIFO;
 
@@ -1035,7 +1035,7 @@ DB(DB_FIFO,printk("{W:%02x} ",read1_io(IO_FIFO_COUNT)))
 DB(DB_INTR,printk("{%02x:%02x-",asr,sr))
 
 /* After starting a FIFO-based transfer, the next _WD3393_ interrupt is
- * guarenteed to be in response to the completion of the transfer.
+ * guaranteed to be in response to the completion of the transfer.
  * If we were reading, there's probably data in the fifo that needs
  * to be copied into RAM - do that here. Also, we have to update
  * 'this_residual' and 'ptr' based on the contents of the
@@ -1851,7 +1851,7 @@ unsigned long timeout;
  *
  * We probably reached this point because of an unlikely race condition
  * between the command completing successfully and the abortion code,
- * so we won't panic, but we will notify the user in case somethign really
+ * so we won't panic, but we will notify the user in case something really
  * broke.
  */
 

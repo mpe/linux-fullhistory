@@ -1734,9 +1734,6 @@ static void reset_interrupt(void)
 #ifdef DEBUGT
 	debugt("reset interrupt:");
 #endif
-#ifdef __sparc__
-	fdc_specify();  /* P3: It gives us "sector not found" without this. */
-#endif
 	result();		/* get the status ready for set_fdc */
 	if (FDCS->reset) {
 		printk("reset set in interrupt, calling %p\n", cont->error);
@@ -4004,6 +4001,10 @@ int floppy_init(void)
 		CLEARSTRUCT(FDCS);
 		FDCS->dtr = -1;
 		FDCS->dor = 0x4;
+#ifdef __sparc__
+		/*sparcs don't have a DOR reset which we can fall back on to*/
+		FDCS->version = FDC_82072A;
+#endif
 	}
 
 	fdc_state[0].address = FDC1;
@@ -4036,6 +4037,7 @@ int floppy_init(void)
 		FDCS->rawcmd = 2;
 		if (user_reset_fdc(-1,FD_RESET_ALWAYS,0)){
 			FDCS->address = -1;
+			FDCS->version = FDC_NONE;
 			continue;
 		}
 		/* Try to determine the floppy controller type */
@@ -4266,7 +4268,7 @@ void floppy_eject(void)
 {
 	int dummy;
 	floppy_grab_irq_and_dma();
-	lock_fdc(0,0);
+	lock_fdc(MAXTIMEOUT,0);
 	dummy=fd_eject(0);
 	process_fd_request();
 	floppy_release_irq_and_dma();

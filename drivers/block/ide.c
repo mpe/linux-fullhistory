@@ -1,5 +1,5 @@
 /*
- *  linux/drivers/block/ide.c	Version 5.37  Apr 6, 1996
+ *  linux/drivers/block/ide.c	Version 5.39  May 3, 1996
  *
  *  Copyright (C) 1994-1996  Linus Torvalds & authors (see below)
  */
@@ -227,6 +227,10 @@
  * Version 5.37		don't use DMA when "noautotune" is specified
  * Version 5.37a (go)	fix shared irq probing (was broken in kernel 1.3.72)
  *			call unplug_device() from ide_do_drive_cmd()
+ * Version 5.38		add "hdx=none" option, courtesy of Joel Maslak
+ *			mask drive irq after use, if sharing with another hwif
+ *			add code to help debug weird cmd640 problems
+ * Version 5.39		fix horrible error in earlier irq sharing "fix"
  *
  *  Some additional driver compile-time options are in ide.h
  *
@@ -749,6 +753,7 @@ static void do_reset1 (ide_drive_t *drive, int  do_not_try_atapi)
 	OUT_BYTE(drive->ctl|6,IDE_CONTROL_REG);	/* set SRST and nIEN */
 	udelay(5);			/* more than enough time */
 	OUT_BYTE(drive->ctl|2,IDE_CONTROL_REG);	/* clear SRST, leave nIEN */
+	udelay(5);			/* more than enough time */
 	hwgroup->poll_timeout = jiffies + WAIT_WORSTCASE;
 	ide_set_handler (drive, &reset_pollfunc, HZ/20);
 #endif	/* OK_TO_RESET_CONTROLLER */
@@ -1476,6 +1481,8 @@ void ide_do_request (ide_hwgroup_t *hwgroup)
 		ide_hwif_t *hwif = hwgroup->hwif;
 		struct request *rq;
 		if ((rq = hwgroup->rq) == NULL) {
+			if (hwif->sharing_irq && hwgroup->drive) /* set nIEN */
+				OUT_BYTE(hwgroup->drive->ctl|2,hwif->ctl_port);
 			/*
 			 * hwgroup->next_hwif is different from hwgroup->hwif
 			 * only when a request is inserted using "ide_next".
@@ -2405,8 +2412,17 @@ static int try_to_identify (ide_drive_t *drive, byte cmd)
 		irqs = probe_irq_off(irqs);	/* get irq number */
 		if (irqs > 0)
 			HWIF(drive)->irq = irqs;
-		else				/* Mmmm.. multiple IRQs */
+		else {				/* Mmmm.. multiple IRQs */
 			printk("%s: IRQ probe failed (%d)\n", drive->name, irqs);
+#ifdef CONFIG_BLK_DEV_CMD640
+			if (HWIF(drive)->chipset == ide_cmd640) {
+				extern byte (*get_cmd640_reg)(int);
+				printk("%s: Hmmm.. probably a driver problem.\n", drive->name);
+				printk("%s: cmd640 reg 09h == 0x%02x\n", drive->name, get_cmd640_reg(9));
+				printk("%s: cmd640 reg 51h == 0x%02x\n", drive->name, get_cmd640_reg(0x51));
+			}
+#endif /* CONFIG_BLK_DEV_CMD640 */
+		}
 	}
 	return rc;
 }
@@ -2542,7 +2558,7 @@ static void probe_cmos_for_drives (ide_hwif_t *hwif)
 	/* Extract drive geometry from CMOS+BIOS if not already setup */
 	for (unit = 0; unit < MAX_DRIVES; ++unit) {
 		ide_drive_t *drive = &hwif->drives[unit];
-		if ((cmos_disks & (0xf0 >> (unit*4))) && !drive->present) {
+		if ((cmos_disks & (0xf0 >> (unit*4))) && !drive->present && !drive->nobios) {
 			drive->cyl   = drive->bios_cyl  = *(unsigned short *)BIOS;
 			drive->head  = drive->bios_head = *(BIOS+2);
 			drive->sect  = drive->bios_sect = *(BIOS+14);
@@ -2683,6 +2699,7 @@ static int match_parm (char *s, const char *keywords[], int vals[], int max_vals
  * "idex=" is recognized for all "x" from "0" to "3", such as "ide1".
  *
  * "hdx=noprobe"	: drive may be present, but do not probe for it
+ * "hdx=none"		: drive is NOT present, ignore cmos and do not probe
  * "hdx=nowerr"		: ignore the WRERR_STAT bit on this drive
  * "hdx=cdrom"		: drive is present, and is a cdrom drive
  * "hdx=cyl,head,sect"	: disk drive is present, with specified geometry
@@ -2737,33 +2754,35 @@ void ide_setup (char *s)
 	 * Look for drive options:  "hdx="
 	 */
 	if (s[0] == 'h' && s[1] == 'd' && s[2] >= 'a' && s[2] <= max_drive) {
-		const char *hd_words[] = {"noprobe", "nowerr", "cdrom", "serialize",
-						"autotune", "noautotune", NULL};
+		const char *hd_words[] = {"none", "noprobe", "nowerr", "cdrom",
+				"serialize", "autotune", "noautotune", NULL};
 		unit = s[2] - 'a';
 		hw   = unit / MAX_DRIVES;
 		unit = unit % MAX_DRIVES;
 		hwif = &ide_hwifs[hw];
 		drive = &hwif->drives[unit];
 		switch (match_parm(&s[3], hd_words, vals, 3)) {
-			case -1: /* "noprobe" */
+			case -1: /* "none" */
+				drive->nobios = 1;  /* drop into "noprobe" */
+			case -2: /* "noprobe" */
 				drive->noprobe = 1;
 				goto done;
-			case -2: /* "nowerr" */
+			case -3: /* "nowerr" */
 				drive->bad_wstat = BAD_R_STAT;
 				hwif->noprobe = 0;
 				goto done;
-			case -3: /* "cdrom" */
+			case -4: /* "cdrom" */
 				drive->present = 1;
 				drive->media = ide_cdrom;
 				hwif->noprobe = 0;
 				goto done;
-			case -4: /* "serialize" */
+			case -5: /* "serialize" */
 				printk(" -- USE \"ide%d=serialize\" INSTEAD", hw);
 				goto do_serialize;
-			case -5: /* "autotune" */
+			case -6: /* "autotune" */
 				drive->autotune = 1;
 				goto done;
-			case -6: /* "noautotune" */
+			case -7: /* "noautotune" */
 				drive->autotune = 2;
 				goto done;
 			case 3: /* cyl,head,sect */
@@ -2856,7 +2875,7 @@ void ide_setup (char *s)
 			}
 #endif /* CONFIG_BLK_DEV_HT6560B */
 #if CONFIG_BLK_DEV_QD6580
-			case -5: /* "qd6580" (no secondary i/f) */
+			case -5: /* "qd6580" (has secondary i/f) */
 			{
 				extern void init_qd6580 (void);
 				init_qd6580();
@@ -3011,12 +3030,13 @@ static int init_irq (ide_hwif_t *hwif)
 	 */
 	for (index = 0; index < MAX_HWIFS; index++) {
 		if (index != hwif->index) {
-			ide_hwif_t *g = &ide_hwifs[index];
-			if (g->irq == hwif->irq || g->irq == mate_irq) {
-				if (hwgroup && !g->hwgroup)
-					g->hwgroup = hwgroup;
+			ide_hwif_t *h = &ide_hwifs[index];
+			if (h->irq == hwif->irq || h->irq == mate_irq) {
+				hwif->sharing_irq = h->sharing_irq = 1;
+				if (hwgroup && !h->hwgroup)
+					h->hwgroup = hwgroup;
 				else if (!hwgroup)
-					hwgroup = g->hwgroup;
+					hwgroup = h->hwgroup;
 			}
 		}
 	}

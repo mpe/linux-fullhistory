@@ -9,11 +9,11 @@
  * PCI System Design Guide
  *
  * PCI Special Interest Group
- * M/S HF3-15A
- * 5200 N.E. Elam Young Parkway
- * Hillsboro, Oregon 97124-6497
- * +1 (503) 696-2000 
- * +1 (800) 433-5177
+ * P.O. Box 14070
+ * Portland, OR 97214
+ * U. S. A.
+ * Phone: 800-433-5177 / +1-503-797-4207
+ * Fax: +1-503-234-6762 
  * 
  * Manuals are $25 each or $50 for all three, plus $7 shipping 
  * within the United States, $35 abroad.

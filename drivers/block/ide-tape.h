@@ -1,7 +1,7 @@
 /*
- * linux/drivers/block/ide-tape.h	Version 1.3 - ALPHA	Feb   9, 1996
+ * linux/drivers/block/ide-tape.h	Version 1.5 - ALPHA	Apr  12, 1996
  *
- * Copyright (C) 1995, 1996 Gadi Oxman <tgud@tochnapc2.technion.ac.il>
+ * Copyright (C) 1995, 1996 Gadi Oxman <gadio@netvision.net.il>
  */
 
 /*

@@ -31,6 +31,24 @@
 # in your own kernel configuration tools. The texts are copyrighted
 # (c) 1995,1996 by Axel Boldt and governed by the GNU Public License.
 
+Prompt for development and/or incomplete code/drivers
+CONFIG_EXPERIMENTAL
+  Some of the various things that Linux supports (such as network 
+  drivers, filesystems, network protocols, etc.) can be in a state 
+  of development where the functionality, stability, or the level of 
+  testing is not yet high enough for general use. This is usually
+  known as the "alpha-test" phase amongst developers. If a feature is
+  currently in alpha-test, then the developers usually discourage 
+  widespread use of this feature by the general public to avoid 
+  "Why doesn't this work?" type mail messages. However, active testing
+  and and detailed bug reports from people familiar with the kernel's
+  internals are usually welcomed by the developers. Unless you intend
+  to help test and develop a feature or driver that falls into this 
+  category, you should probably say N here, which will cause this 
+  configure script to present you with less choices. If you say Y here,
+  you will be offered the choice of using features or drivers that are
+  currently considered to be in the alpha-test phase.
+
 Kernel math emulation
 CONFIG_MATH_EMULATION
   Linux can emulate a math coprocessor (used for floating point
@@ -990,10 +1008,12 @@ CONFIG_ATALK
   say Y. You will need to use the netatalk package so that your Linux
   box can act as a print and file server for macs as well as access
   appletalk printers. Check out
-  http://www.cs.dartmouth.edu/~flowerpt/projects/linux-netatalk/ on
-  the WWW for details (to browse the WWW, you need to have access to a
+  http://artoo.hitchcock.org/~flowerpt/projects/linux-netatalk/ on the
+  WWW for details (to browse the WWW, you need to have access to a
   machine on the Internet that has one of the programs lynx, netscape
-  or Mosaic). This driver is also available as a module ( = code which
+  or Mosaic). The NET-2-HOWTO, available via ftp (user: anonymous) in
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO contains valuable information
+  as well. This driver is also available as a module ( = code which
   can be inserted in and removed from the running kernel whenever you
   want). If you want to compile it as a module, say M here and read
   Documentation/modules.txt. I hear that the GNU boycott of Apple is
@@ -1052,7 +1072,7 @@ CONFIG_BPQETHER
   useful if some other computer on your local network has a direct
   amateur radio connection.
 
-Bridging (test)
+Bridging (EXPERIMENTAL)
 CONFIG_BRIDGE
   If you enable this, your Linux box will be able to act as an
   ethernet bridge, which means that the different ethernet segments it
@@ -1065,9 +1085,7 @@ CONFIG_BRIDGE
   the Multiple-Ethernet-mini-HOWTO, available via ftp (user:
   anonymous) in sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini. The
   Bridging code is still in test. If unsure, say N.
-###
-### How to use?
-###
+  The bridge configuration tools are available via ftp from shadow.cabi.net.
 
 Kernel/User network link driver(ALPHA)
 CONFIG_NETLINK
@@ -1561,6 +1579,12 @@ CONFIG_SLIP_SMART
   RELCOM line fill and keepalive monitoring. Ideal on poor quality
   analogue lines.
 
+Radio network interfaces
+CONFIG_NET_RADIO
+  Radio based interfaces for Linux. Both amateur radio (AX.25) and other
+  systems. In addition shadow.cabi.net carries user mode drivers for the
+  Scarab devices. These need no kernel support.
+
 PPP (point-to-point) support
 CONFIG_PPP
   PPP (Point to Point Protocol) is a newer and better SLIP. It serves
@@ -1641,9 +1665,11 @@ CONFIG_PLIP
   time (you can find the wiring of these cables in
   drivers/net/README?.plip). The cables can be up to 15m long. This
   works also if one of the machines runs DOS and has some PLIP
-  software installed, e.g. NCSA telnet.  If you want to use this, say
-  Y and read the PLIP mini-HOWTO, available via ftp (user: anonymous)
-  in sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini as well as the
+  software installed, e.g. the Crynwr PLIP packet driver
+  (http://sunsite.cnam.fr/packages/Telnet/PC/msdos/misc/pktdrvr.txt)
+  and NCSA's telnet.  If you want to use this, say Y and read the PLIP
+  mini-HOWTO, available via ftp (user: anonymous) in
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini as well as the
   NET-2-HOWTO in sunsite.unc.edu:/pub/Linux/docs/HOWTO. Note that the
   PLIP protocol was changed and this PLIP driver won't work together
   with the PLIP support in Linux versions 1.0.x.  This option enlarges
@@ -1736,20 +1762,6 @@ Sun Intel Ethernet support
 CONFIG_SUN_INTEL
   This is support for the intel ethernet cards on some Sun workstations
   (all those with a network interface 'ie0' under SunOS).
-
-Do you want to be offered ALPHA test drivers
-CONFIG_NET_ALPHA
-  ALPHA means that they might be unstable and buggy; it has nothing to
-  do with the computer architecture of the same name. If you don't
-  have a network card in your computer, say N; otherwise say Y,
-  because in most circumstances buggy support for your hardware is
-  still better than none at all (in particular, it enables you to test
-  and improve the drivers). Note that the answer to this question
-  doesn't directly affect the kernel: saying N will just cause this
-  configure script to present you with less choices. If you plan to
-  use more than one network card under linux, read the
-  Multiple-Ethernet-mini-HOWTO, available via ftp (user anonymous)
-  from sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini.
 
 Western Digital/SMC cards
 CONFIG_NET_VENDOR_SMC
@@ -2447,8 +2459,8 @@ CONFIG_SBPCD
   addresses and drive types; this can help to find facts in cases you
   are not sure, but can consume some time during the boot process if
   none of the supported drives gets found.
-  Once your drive got found, you should enter the reported parameters into
-  linux/include/linux/sbpcd.h and set "DISTRIBUTION 0" there.
+  Once your drive got found, you should enter the reported parameters 
+  into linux/include/linux/sbpcd.h and set "DISTRIBUTION 0" there.
   This driver can support up to four CDROM interface cards, and each
   card can support up to four CDROM drives; if you say Y here, you
   will be asked how many controllers you have. If compiled as a
@@ -2462,12 +2474,13 @@ CONFIG_SBPCD2
   the parameters for the second, third and fourth interface card into
   linux/include/linux/sbpcd.h before compiling the new kernel.
 
-Aztech/Orchid/Okano/Wearnes/TXC (non IDE) CDROM support
+Aztech/Orchid/Okano/Wearnes/TXC/CyDROM  CDROM support
 CONFIG_AZTCD
-  This is your driver if you have an Aztech CDA268-01A, Orchid CD-3110,
-  Okano or Wearnes CDD110 or a Conrad TXC CDROM drive.
-  This driver - just like all these CDROM drivers - is NOT for CDROM
-  drives with IDE/ATAPI interface, such as Aztech CDA269-031SE.
+  This is your driver if you have an Aztech CDA268-01A, Orchid
+  CD-3110, Okano or Wearnes CDD110, Conrad TXC, or CyCDROM CR520 or
+  CR540 CDROM drive.  This driver - just like all these CDROM drivers
+  - is NOT for CDROM drives with IDE/ATAPI interface, such as Aztech
+  CDA269-031SE.
 
 Sony CDU535 CDROM support
 CONFIG_CDU535
@@ -2510,7 +2523,6 @@ CONFIG_ISP16_CDI
   at boot time, please say Y. Boot time command line options (or
   'append=' options in /etc/lilo.conf) are:
                 isp16=<port>,<irq>,<dma>,<drive_type>
-
   Here 'port','irq' and 'dma' are the base i/o address, irq number and
   dma line assumed to be used by the attached cdrom
   drive. 'drive_type' is the type of cdrom drive or its emulation
@@ -2816,7 +2828,7 @@ CONFIG_BSD_DISKLABEL
   FreeBSD uses its own partition scheme on your PC. It requires only
   one entry in the primary partition table of your disk and manages it
   similarly to DOS extended partitions, putting in its first sector a
-  new partition table in disklabel format. Enabling this option allow
+  new partition table in disklabel format. Enabling this option allows
   you to read these disklabels and further mount FreeBSD partitions on
   your Linux box if you also have configured BSD ufs filesystem
   support. If you don't know what all this is about, say N.
@@ -2824,7 +2836,7 @@ CONFIG_BSD_DISKLABEL
 SMD disklabel (Sun partition tables) support
 CONFIG_SMD_DISKLABEL
   Like most systems, SunOS uses its own partition table format,
-  incompatible with each other. Enabling this option allow you to read
+  incompatible with all others. Enabling this option allows you to read
   these partition tables and further mount SunOS disks on your Linux
   box if you also have configured BSD ufs filesystem support. This is
   mainly used to carry data from a Sparc under SunOS to your Linux box
@@ -2868,9 +2880,9 @@ Amiga FFS filesystem support (read only)
 CONFIG_AFFS_FS
   The Fast File System (FFS) is the common filesystem used on harddisks
   by Amiga (tm) Systems since AmigaOS Version 1.3 (34.20). It's also
-  possible to mount Diskfiles used by the Un*X Amiga Emulator by Bernd
+  possible to mount diskfiles used by the Un*X Amiga Emulator by Bernd
   Schmidt (http://www-users.informatik.rwth-aachen.de/~crux/uae.html)
-  If you want to do this, you will also need the loopback device
+  If you want to do the latter, you will also need the loop device
   support. Because it's in an early development state, the AFFS is 
   read only. Say Y if you want to be able to read files from an Amiga
   FFS partition of your harddrive. Amiga floppies however cannot be
@@ -3147,7 +3159,13 @@ CONFIG_APM_DISPLAY_BLANK
   anything to do with your VESA-compliant power-saving monitor).
   Further, this option doesn't work for all laptops -- it might not turn
   off your backlight at all, or it might print a lot of errors to the
-  console.
+  console, especially if you are using gpm.
+
+Power off on shutdown 
+CONFIG_APM_POWER_OFF
+  This option will power off the computer after the Linux kernel is halted
+  (e.g., with the halt(8) command).  As with the other APM options, this
+  option may not work reliably with some APM BIOS implementations.
 
 Watchdog Timer Support 
 CONFIG_WATCHDOG
@@ -3391,4 +3409,7 @@ CONFIG_AP1000
 # LocalWords:  DIGI Xe Xeve digiboard UMISC touchscreens mtu ethernets HBAs MEX
 # LocalWords:  Shifflett netcom js jshiffle WIC DECchip ELCP EtherPower dst RTC
 # LocalWords:  rtc SMP lp Digi Intl RightSwitch DGRS dgrs AFFS Amiga UFS SDL AP
-# LocalWords:  Solaris RISCom riscom syncPPP PCBIT pcbit sparc anu au
+# LocalWords:  Solaris RISCom riscom syncPPP PCBIT pcbit sparc anu au artoo ufs
+# LocalWords:  hitchcock Crynwr cnam pktdrvr NCSA's CyDROM CyCDROM FreeBSD NeXT
+# LocalWords:  NeXTstep disklabel disklabels SMD FFS tm AmigaOS diskfiles Un
+# LocalWords:  Bernd informatik rwth aachen uae affs

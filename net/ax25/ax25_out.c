@@ -405,6 +405,9 @@ void dama_enquiry_response(ax25_cb *ax25)
 	/* gives better performance on FLEXNET nodes. (Why, Gunter?)	  */
 
 	for (ax25o = ax25_list; ax25o != NULL; ax25o = ax25o->next) {
+		if (ax25o == ax25)
+			continue;
+
 		if (ax25o->device != ax25->device)
 			continue;
 

@@ -1913,7 +1913,7 @@ int fdomain_16x0_reset( Scsi_Cmnd *SCpnt )
 }
 
 #include "sd.h"
-#include "scsi_ioctl.h"
+#include <scsi/scsi_ioctl.h>
 
 int fdomain_16x0_biosparam( Scsi_Disk *disk, kdev_t dev, int *info_array )
 {

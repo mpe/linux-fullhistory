@@ -29,6 +29,7 @@
 
 extern int setup_x86_irq(int, struct irqaction *);
 
+#ifndef	CONFIG_APM	/* cycle counter may be unreliable */
 /* Cycle counter value at the previous timer interrupt.. */
 static unsigned long long last_timer_cc = 0;
 static unsigned long long init_timer_cc = 0;
@@ -82,6 +83,7 @@ static unsigned long do_fast_gettimeoffset(void)
 		quotient = 1000000/HZ-1;
 	return quotient;
 }
+#endif
 
 /* This function must be called with interrupts disabled 
  * It was inspired by Steve McCanne's microtime-i386 for BSD.  -- jrs
@@ -176,8 +178,8 @@ void do_settimeofday(struct timeval *tv)
 
 	xtime = *tv;
 	time_state = TIME_BAD;
-	time_maxerror = 0x70000000;
-	time_esterror = 0x70000000;
+	time_maxerror = MAXPHASE;
+	time_esterror = MAXPHASE;
 	sti();
 }
 
@@ -271,6 +273,7 @@ static inline void timer_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	    
 }
 
+#ifndef	CONFIG_APM	/* cycle counter may be unreliable */
 /*
  * This is the same as the above, except we _also_ save the current
  * cycle counter value at the time of the timer interrupt, so that
@@ -284,6 +287,7 @@ static void pentium_timer_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 		 "=d" (((unsigned long *) &last_timer_cc)[1]));
 	timer_interrupt(irq, NULL, regs);
 }
+#endif
 
 /* Converts Gregorian date to seconds since 1970-01-01 00:00:00.
  * Assumes input in normal date format, i.e. 1980-12-31 23:59:59

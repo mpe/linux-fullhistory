@@ -1,3 +1,34 @@
+Wed Apr 24 14:02:04 1996  Theodore Ts'o  <tytso@rsts-11.mit.edu>
+
+	* random.c (add_timer_randomness): Use 2nd derivitive as well to
+		better estimate entropy.
+
+		(rand_initialize): Explicitly initialize all the pointers
+		to NULL.  (Clearing pointers using memset isn't portable.)
+		Initialize the random pool with OS-dependent data.
+
+		(random_write): Add sanity checking to the arguments to
+		random_write(), so that bad arguments won't cause a kernel
+		SEGV. 
+
+		(random_read): Update the access time of the device inode
+		when you return data to the user.
+
+		(random_ioctl): Wake up the random_wait channel when there
+		are only WAIT_INPUT_BITS available.  Add more paranoia
+		checks to make sure entropy_count doesn't go beyond the
+		bounds of (0, POOLSIZE).  Add a few missing verify_area
+		checks.  Add support for the RNDCLEARPOOL ioctl, which
+		zaps the random pool.
+
+		(add_timer_randomness): Wake up the random_wait
+		channel only when there are WAIT_INPUT_BITS available.
+
+		(random_select): Allow a random refresh daemon process to
+		select on /dev/random for writing; wake up the daemon when
+		there are less than WAIT_OUTPUT_BITS bits of randomness
+		available.
+
 Tue Apr 23 22:56:07 1996    <tytso@rsts-11.mit.edu>
 
 	* tty_io.c (init_dev): Change return code when user attempts to

@@ -488,7 +488,7 @@ static struct ax25_route * ax25_find_route(ax25_address *addr)
 	
 	/*
 	 *	Bind to the physical interface we heard them on, or the default
-	 *	route if non is found;
+	 *	route if none is found;
 	 */
 	for (ax25_rt = ax25_route; ax25_rt != NULL; ax25_rt = ax25_rt->next) {
 		if (ax25cmp(&ax25_rt->callsign, addr) == 0 && ax25_rt->dev != NULL)

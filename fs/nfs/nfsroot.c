@@ -51,6 +51,8 @@
  *				without giving a path name. Fix BOOTP request
  *				for domainname (domainname is NIS domain, not
  *				DNS domain!). Skip dummy devices for BOOTP.
+ *	Jacek Zapala	:	Fixed a bug which prevented server-ip address
+ *				from nfsroot parameter from being used.
  *
  */
 
@@ -1060,6 +1062,8 @@ static int root_nfs_name(char *name)
 			break;
 		if (*cp == '.' || octets == 3)
 			octets++;
+		if (octets < 4)
+			cp++;
 		cq = cp;
 	}
 	if (octets == 4 && (*cp == ':' || *cp == '\0')) {

@@ -54,7 +54,7 @@
  */
 
 #if defined(HOSTS_C) || defined(MODULE)
-#include <linux/scsicam.h>
+#include <scsi/scsicam.h>
 
 extern int NCR53c7xx_abort(Scsi_Cmnd *);
 extern int NCR53c7xx_detect(Scsi_Host_Template *tpnt);

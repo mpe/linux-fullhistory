@@ -1,0 +1,56 @@
+		      File Locking Release Notes
+
+		Andy Walker <andy@lysaker.kvaerner.no>
+
+			   15 April 1996
+
+
+What's New?
+-----------
+
+Flock Emulation Warnings
+------------------------
+Many people will have noticed the ugly messages that the file locking
+code started generating with the release of kernel version 1.3.95. The
+messages look something like this:
+
+    fcntl_setlk() called by process XX with broken flock() emulation
+
+This is a warning for people using older C libraries that those libraries
+are still calling the pre 1.3.x flock() emulation routines, instead of
+the real flock() system call. The old routines are quite badly broken,
+especially with respect to parent-child lock sharing, and can give bad
+results if, for example, sendmail attempts to use them.
+
+Fixed versions of the C libraries have been on public release for many
+months. The latest versions are 5.2.18 or 5.3.12 for ELF, and I believe
+somebody made a 4.7.6 release for people using a.out systems.
+
+In 1.3.96 Linus decided to be lenient on the stragglers and changed the
+warning message so that the kernel will only complain five times and
+then shut up. That should make life more bearable even for people who,
+for some reason, don't want to upgrade.
+
+Sendmail Problems
+-----------------
+Because sendmail was unable to use the old flock() emulation, many sendmail
+installations use fcntl() instead of flock(). This is true of Slackware 3.0
+for example. This gave rise to some other subtle problems if sendmail was
+configured to rebuild the alias file. Sendmail tried to lock the aliases.dir
+file with fcntl() at the same time as the GDBM routines tried to lock this
+file with flock(). With pre 1.3.96 kernels this could result in deadlocks that,
+over time, or under a very heavy mail load, would eventually cause the kernel
+to lock solid with deadlocked processes.
+
+I have chosen the rather cruel solution of returning an error when such a
+deadlock would occur. I can't see any other way to handle this situation
+gracefully. The other options are to maintain two entirely separate lists
+for flock() and fcntl() locks, thus defeating any protection between the
+two, or to free locks placed by one method when the same process later
+tries to lock the same file by the other method. Neither option seems
+satisfactory.
+
+Some programs may break (again, groan). In particular the aforementioned
+sendmail may have problems running in 'newaliases' mode. It will no longer
+deadlock though. Recompile sendmail to use flock() and your troubles will
+be over.

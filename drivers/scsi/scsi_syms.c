@@ -21,7 +21,7 @@
 #include <asm/dma.h>
 
 #include "scsi.h"
-#include "scsi_ioctl.h"
+#include <scsi/scsi_ioctl.h>
 #include "hosts.h"
 #include "constants.h"
 

@@ -417,8 +417,11 @@ void destroy_sock(struct sock *sk)
 	{
 		/* this should never happen. */
 		/* actually it can if an ack has just been sent. */
-		printk("Socket destroy delayed (r=%d w=%d)\n",
-			sk->rmem_alloc, sk->wmem_alloc);
+		/*
+		 *	Make this a NETDEBUG at 2.0pre
+		 */
+		/*NETDEBUG(*/printk("Socket destroy delayed (r=%d w=%d)\n",
+			sk->rmem_alloc, sk->wmem_alloc)/*)*/;
 		sk->destroy = 1;
 		sk->ack_backlog = 0;
 		release_sock(sk);

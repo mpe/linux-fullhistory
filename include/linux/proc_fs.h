@@ -42,7 +42,8 @@ enum root_directory_inos {
 	PROC_SYS,
 	PROC_MTAB,
 	PROC_MD,
-	PROC_RTC
+	PROC_RTC,
+	PROC_LOCKS
 };
 
 enum pid_directory_inos {

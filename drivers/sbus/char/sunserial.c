@@ -154,7 +154,8 @@ static int baud_table[] = {
 	0, 50, 75, 110, 134, 150, 200, 300, 600, 1200, 1800, 2400, 4800,
 	9600, 19200, 38400, 57600, 115200, 0 };
 
-/* Reading and writing Zilog8530 registers.  The delays are to make this
+/* 
+ * Reading and writing Zilog8530 registers.  The delays are to make this
  * driver work on the Sun4 which needs a settling delay after each chip
  * register access, other machines handle this in hardware via auxiliary
  * flip-flops which implement the settle time we do in software.
@@ -674,10 +675,9 @@ static void do_serial_hangup(void *private_)
 /*
  * This subroutine is called when the RS_TIMER goes off.  It is used
  * by the serial driver to handle ports that do not have an interrupt
- * (irq=0).  This doesn't work very well for 16450's, but gives barely
- * passable results for a 16550A.  (Although at the expense of much
- * CPU overhead).
+ * (irq=0).  This doesn't work at all for 16450's, as a sun has a Z8530.
  */
+ 
 static void rs_timer(void)
 {
 	printk("rs_timer called\n");
@@ -1009,7 +1009,7 @@ static void rs_fair_output(void)
 		left = MIN(info->xmit_cnt, left-1);
 	}
 
-	/* Last character is being transmitted now (hopefuly). */
+	/* Last character is being transmitted now (hopefully). */
 	zs_conschan->control = RES_Tx_P;
 	udelay(5);
 
@@ -1302,7 +1302,7 @@ check_and_exit:
  * 	    release the bus after transmitting. This must be done when
  * 	    the transmit shift register is empty, not be done when the
  * 	    transmit holding register is empty.  This functionality
- * 	    allows RS485 driver to be written in user space. 
+ * 	    allows an RS485 driver to be written in user space. 
  */
 static int get_lsr_info(struct sun_serial * info, unsigned int *value)
 {

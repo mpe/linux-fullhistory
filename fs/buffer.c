@@ -721,11 +721,17 @@ repeat0:
 	
 	/* Too bad, that was not enough. Try a little harder to grow some. */
 	
-	if (grow_buffers(GFP_ATOMIC, size)) {
-                needed -= PAGE_SIZE;
-		goto repeat0;
+	if (nr_free_pages > min_free_pages + 5) {
+		if (grow_buffers(GFP_BUFFER, size)) {
+	                needed -= PAGE_SIZE;
+			goto repeat0;
+		};
 	}
-	wakeup_bdflush(1);
+	
+	/* and repeat until we find something good */
+	if (!grow_buffers(GFP_ATOMIC, size))
+		wakeup_bdflush(1);
+	needed -= PAGE_SIZE;
 	goto repeat0;
 }
 
@@ -1062,11 +1068,11 @@ static struct buffer_head * get_unused_buffer_head(void)
 static struct buffer_head * create_buffers(unsigned long page, unsigned long size)
 {
 	struct buffer_head *bh, *head;
-	unsigned long offset;
+	long offset;
 
 	head = NULL;
 	offset = PAGE_SIZE;
-	while ((offset -= size) < PAGE_SIZE) {
+	while ((offset -= size) >= 0) {
 		bh = get_unused_buffer_head();
 		if (!bh)
 			goto no_grow;
@@ -1222,21 +1228,18 @@ void mark_buffer_uptodate(struct buffer_head * bh, int on)
 {
 	if (on) {
 		struct buffer_head *tmp = bh;
-		int page_uptodate = 1;
 		set_bit(BH_Uptodate, &bh->b_state);
 		/* If a page has buffers and all these buffers are uptodate,
 		 * then the page is uptodate. */
 		do {
-			if (!test_bit(BH_Uptodate, &tmp->b_state)) {
-				page_uptodate = 0;
-				break;
-			}
+			if (!test_bit(BH_Uptodate, &tmp->b_state))
+				return;
 			tmp=tmp->b_this_page;
 		} while (tmp && tmp != bh);
-		if (page_uptodate)
-			set_bit(PG_uptodate, &mem_map[MAP_NR(bh->b_data)].flags);
-	} else
-		clear_bit(BH_Uptodate, &bh->b_state);
+		set_bit(PG_uptodate, &mem_map[MAP_NR(bh->b_data)].flags);
+		return;
+	}
+	clear_bit(BH_Uptodate, &bh->b_state);
 }
 
 /*
@@ -1360,9 +1363,9 @@ static int grow_buffers(int pri, int size)
 		else
 			break;
 	}
+	tmp->b_this_page = bh;
 	free_list[isize] = bh;
 	mem_map[MAP_NR(page)].buffers = bh;
-	tmp->b_this_page = bh;
 	buffermem += PAGE_SIZE;
 	return 1;
 }
@@ -1818,14 +1821,17 @@ void buffer_init(void)
 	int isize = BUFSIZE_INDEX(BLOCK_SIZE);
 	long memsize = MAP_NR(high_memory) << PAGE_SHIFT;
 
-	if (memsize >= 4*1024*1024) {
-		if(memsize >= 16*1024*1024)
-			 nr_hash = 16381;
-		else
-			 nr_hash = 4093;
-	} else {
-		nr_hash = 997;
-	};
+	if (memsize >= 64*1024*1024)
+		nr_hash = 65521;
+	else if (memsize >= 32*1024*1024)
+		nr_hash = 32749;
+	else if (memsize >= 16*1024*1024)
+		nr_hash = 16381;
+	else if (memsize >= 8*1024*1024)
+		nr_hash = 8191;
+	else if (memsize >= 4*1024*1024)
+		nr_hash = 4093;
+	else nr_hash = 997;
 	
 	hash_table = (struct buffer_head **) vmalloc(nr_hash * 
 						     sizeof(struct buffer_head *));

@@ -57,6 +57,12 @@ extern int kill_sl(int sess, int sig, int priv);
 asmlinkage int printk(const char * fmt, ...)
 	__attribute__ ((format (printf, 1, 2)));
 
+#define pr_debug(show,fmt,arg...) \
+	do { if (show) printk(KERN_DEBUG fmt,##arg); } while (0)
+
+#define pr_info(fmt,arg...) \
+	printk(KERN_INFO fmt,##arg)
+
 /*
  * "suser()" checks against the effective user id, while "fsuser()"
  * is used for file permission checking and checks against the fsuid..

@@ -92,6 +92,8 @@
  *                       Reformat to match kernel tabbing style.
  *                       Add CDROM_GET_UPC ioctl.
  * 3.10  Apr 10, 1996 -- Fix compilation error with STANDARD_ATAPI.
+ * 3.11  Apr 29, 1996 -- Patch from Heiko Eissfeldt <heiko@colossus.escape.de>
+ *                       to remove redundant verify_area calls.
  *
  * NOTE: Direct audio reads will only work on some types of drive.
  * So far, i've received reports of success for Sony and Toshiba drives.
@@ -2079,9 +2081,6 @@ int ide_cdrom_ioctl (ide_drive_t *drive, struct inode *inode,
 		struct cdrom_tocentry tocentry;
 		struct atapi_toc_entry *toce;
 
-		stat = verify_area (VERIFY_READ, (void *) arg,
-				    sizeof (tocentry));
-		if (stat) return stat;
 		stat = verify_area (VERIFY_WRITE, (void *) arg,
 				    sizeof (tocentry));
 		if (stat) return stat;
@@ -2115,9 +2114,6 @@ int ide_cdrom_ioctl (ide_drive_t *drive, struct inode *inode,
 		struct cdrom_subchnl subchnl;
 
 		stat = verify_area (VERIFY_WRITE, (void *) arg,
-				    sizeof (subchnl));
-		if (stat) return stat;
-		stat = verify_area (VERIFY_READ, (void *) arg,
 				    sizeof (subchnl));
 		if (stat) return stat;
 
@@ -2228,9 +2224,6 @@ int ide_cdrom_ioctl (ide_drive_t *drive, struct inode *inode,
 		struct atapi_toc *toc;
 		int stat;
 
-		stat = verify_area (VERIFY_READ,  (void *)arg,
-				    sizeof (ms_info));
-		if (stat) return stat;
 		stat = verify_area (VERIFY_WRITE, (void *)arg,
 				    sizeof (ms_info));
 		if (stat) return stat;
@@ -2327,8 +2320,6 @@ int ide_cdrom_ioctl (ide_drive_t *drive, struct inode *inode,
 			format = 3;
 		}
 
-		stat = verify_area (VERIFY_READ, (char *)arg, sizeof (msf));
-		if (stat) return stat;
 		stat = verify_area (VERIFY_WRITE, (char *)arg, blocksize);
 		if (stat) return stat;
 

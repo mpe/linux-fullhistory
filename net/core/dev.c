@@ -549,7 +549,7 @@ void dev_transmit(void)
 
 /*
  *	When we are called the queue is ready to grab, the interrupts are
- *	on and hardware can interrupt and queue to the receive queue a we
+ *	on and hardware can interrupt and queue to the receive queue as we
  *	run with no problems.
  *	This is run as a bottom half after an interrupt handler that does
  *	mark_bh(NET_BH);

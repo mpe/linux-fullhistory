@@ -1,6 +1,6 @@
 /* aha152x.c -- Adaptec AHA-152x driver
  * Author: Juergen E. Fischer, fischer@et-inf.fho-emden.de
- * Copyright 1993, 1994, 1995 Juergen E. Fischer
+ * Copyright 1993, 1994, 1995, 1996 Juergen E. Fischer
  *
  *
  * This driver is based on
@@ -20,9 +20,13 @@
  * General Public License for more details.
  *
  *
- * $Id: aha152x.c,v 1.14 1996/01/17 15:11:20 fischer Exp fischer $
+ * $Id: aha152x.c,v 1.15 1996/04/30 14:52:06 fischer Exp fischer $
  *
  * $Log: aha152x.c,v $
+ * Revision 1.15  1996/04/30 14:52:06  fischer
+ * - proc info fixed
+ * - support for extended translation for >1GB disks
+ *
  * Revision 1.14  1996/01/17  15:11:20  fischer
  * - fixed lockup in MESSAGE IN phase after reconnection
  *
@@ -1205,18 +1209,23 @@ int aha152x_reset(Scsi_Cmnd *SCpnt)
  */
 int aha152x_biosparam(Scsi_Disk * disk, kdev_t dev, int *info_array)
 {
-  int size = disk->capacity;
-
 #if defined(DEBUG_BIOSPARAM)
   if(HOSTDATA(shpnt)->debug & debug_biosparam)
-    printk("aha152x_biosparam: dev=%s, size=%d, ", kdevname(dev), size);
+    printk("aha152x_biosparam: dev=%s, size=%d, ",
+           kdevname(dev), disk->capacity);
 #endif
   
-/* I took this from other SCSI drivers, since it provides
-   the correct data for my devices. */
-  info_array[0]=64;
-  info_array[1]=32;
-  info_array[2]=size>>11;
+  if(disk->capacity<=1024*64*32) {
+    info_array[0]=64;
+    info_array[1]=32;
+    info_array[2]=disk->capacity / (64 * 32);
+  } else {
+    info_array[0] = 256;
+    info_array[1] = 63;
+    info_array[2] = disk->capacity / (256 * 63);
+    if(info_array[2] > 1023)
+      info_array[2]=1023;
+  }
 
 #if defined(DEBUG_BIOSPARAM)
   if(HOSTDATA(shpnt)->debug & debug_biosparam)

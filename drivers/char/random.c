@@ -1,9 +1,9 @@
 /*
  * random.c -- A strong random number generator
  *
- * Version 0.96, last modified 29-Dec-95
+ * Version 0.97, last modified 24-Apr-96
  * 
- * Copyright Theodore Ts'o, 1994, 1995.  All rights reserved.
+ * Copyright Theodore Ts'o, 1994, 1995, 1996.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -148,6 +148,58 @@
  * particular randomness source.  They do this by keeping track of the
  * first and second order deltas of the event timings.
  *
+ * Ensuring unpredictability at system startup
+ * ============================================
+ * 
+ * When any operating system starts up, it will go through a sequence
+ * of actions that are fairly predictable by an adversary, especially
+ * if the start-up does not involve interaction with a human operator.
+ * This reduces the actual number of bits of unpredictability in the
+ * entropy pool below the value in entropy_count.  In order to
+ * counteract this effect, it helps to carry information in the
+ * entropy pool across shut-downs and start-ups.  To do this, put the
+ * following lines an appropriate script which is run during the boot
+ * sequence: 
+ *
+ *	echo "Initializing random number generator..."
+ *	# Carry a random seed from start-up to start-up
+ *	# Load and then save 512 bytes, which is the size of the entropy pool
+ * 	if [ -f /etc/random-seed ]; then
+ *		cat /etc/random-seed >/dev/urandom
+ * 	fi
+ *	dd if=/dev/urandom of=/etc/random-seed count=1
+ *
+ * and the following lines in an approproate script which is run as
+ * the system is shutdown:
+ * 
+ *	# Carry a random seed from shut-down to start-up
+ *	# Save 512 bytes, which is the size of the entropy pool
+ *	echo "Saving random seed..."
+ *	dd if=/dev/urandom of=/etc/random-seed count=1
+ * 
+ * For example, on many Linux systems, the appropriate scripts are
+ * usually /etc/rc.d/rc.local and /etc/rc.d/rc.0, respectively.
+ * 
+ * Effectively, these commands cause the contents of the entropy pool
+ * to be saved at shut-down time and reloaded into the entropy pool at
+ * start-up.  (The 'dd' in the addition to the bootup script is to
+ * make sure that /etc/random-seed is different for every start-up,
+ * even if the system crashes without executing rc.0.)  Even with
+ * complete knowledge of the start-up activities, predicting the state
+ * of the entropy pool requires knowledge of the previous history of
+ * the system.
+ *
+ * Configuring the /dev/random driver under Linux
+ * ==============================================
+ *
+ * The /dev/random driver under Linux uses minor numbers 8 and 9 of
+ * the /dev/mem major number (#1).  So if your system does not have
+ * /dev/random and /dev/urandom created already, they can be created
+ * by using the commands:
+ *
+ * 	mknod /dev/random c 1 8
+ * 	mknod /dev/urandom c 1 9
+ * 
  * Acknowledgements:
  * =================
  *
@@ -158,6 +210,8 @@
  * entropy pool, taken from PGP 3.0 (under development).  It has since
  * been modified by myself to provide better mixing in the case where
  * the input values to add_entropy_word() are mostly small numbers.
+ * Dale Worley has also contributed many useful ideas and suggestions
+ * to improve this driver.
  * 
  * Any flaws in the design are solely my responsibility, and should
  * not be attributed to the Phil, Colin, or any of authors of PGP.
@@ -173,6 +227,7 @@
  */
 
 #include <linux/sched.h>
+#include <linux/utsname.h>
 #include <linux/kernel.h>
 #include <linux/major.h>
 #include <linux/string.h>
@@ -183,6 +238,10 @@
 #include <asm/segment.h>
 #include <asm/irq.h>
 #include <asm/io.h>
+
+/*
+ * Configuration information
+ */
 
 /*
  * The pool is stirred with a primitive polynomial of degree 128
@@ -207,6 +266,20 @@
 #error No primitive polynomial available for chosen POOLWORDS
 #endif
 
+/*
+ * The minimum number of bits to release a "wait on input".  Should
+ * probably always be 8, since a /dev/random read can return a single
+ * byte.
+ */
+#define WAIT_INPUT_BITS 8
+/* 
+ * The limit number of bits under which to release a "wait on
+ * output".  Should probably always be the same as WAIT_INPUT_BITS, so
+ * that an output wait releases when and only when a wait on input
+ * would block.
+ */
+#define WAIT_OUTPUT_BITS WAIT_INPUT_BITS
+
 /* There is actually only one of these, globally. */
 struct random_bucket {
 	unsigned add_ptr;
@@ -218,7 +291,7 @@ struct random_bucket {
 /* There is one of these per entropy source */
 struct timer_rand_state {
 	unsigned long	last_time;
-	int 		last_delta;
+	int 		last_delta,last_delta2;
 	int		dont_count_entropy:1;
 };
 
@@ -242,18 +315,55 @@ static int random_write(struct inode * inode, struct file * file,
 static int random_ioctl(struct inode * inode, struct file * file,
 			unsigned int cmd, unsigned long arg);
 
+static inline void add_entropy_word(struct random_bucket *r,
+				    const __u32 input);
 
 #ifndef MIN
 #define MIN(a,b) (((a) < (b)) ? (a) : (b))
 #endif
 	
-void rand_initialize(void)
+/*
+ * Initialize the random pool with standard stuff.
+ *
+ * NOTE: This is an OS-dependent function.
+ */
+static void init_std_data(struct random_bucket *r)
+{
+	__u32 word, *p;
+	int i;
+	
+	add_entropy_word(r, xtime.tv_sec);
+	add_entropy_word(r, xtime.tv_usec);
+
+	for (p = (__u32 *) &system_utsname,
+	     i = sizeof(system_utsname) / sizeof(__u32);
+	     i ; i--, p++) {
+		memcpy(&word, p, sizeof(__u32));
+		add_entropy_word(r, word);
+	}
+	
+}
+
+/* Clear the entropy pool and associated counters. */
+static void rand_clear_pool(void)
 {
 	random_state.add_ptr = 0;
 	random_state.entropy_count = 0;
 	random_state.pool = random_pool;
-	memset(irq_timer_state, 0, sizeof(irq_timer_state));
-	memset(blkdev_timer_state, 0, sizeof(blkdev_timer_state));
+	random_state.input_rotate = 0;
+	memset(random_pool, 0, sizeof(random_pool));
+	init_std_data(&random_state);
+}
+
+void rand_initialize(void)
+{
+	int i;
+
+	rand_clear_pool();
+	for (i = 0; i < NR_IRQS; i++)
+		irq_timer_state[i] = NULL;
+	for (i = 0; i < MAX_BLKDEV; i++)
+		blkdev_timer_state[i] = NULL;
 	extract_timer_state.dont_count_entropy = 1;
 	random_wait = NULL;
 }
@@ -353,7 +463,7 @@ static inline void add_entropy_word(struct random_bucket *r,
 static void add_timer_randomness(struct random_bucket *r,
 				 struct timer_rand_state *state, unsigned num)
 {
-	int	delta, delta2;
+	int	delta, delta2, delta3;
 	unsigned	nbits;
 	__u32		time;
 
@@ -397,24 +507,30 @@ static void add_timer_randomness(struct random_bucket *r,
 	if (!state->dont_count_entropy) {
 		delta = time - state->last_time;
 		state->last_time = time;
+		if (delta < 0) delta = -delta;
 
 		delta2 = delta - state->last_delta;
 		state->last_delta = delta;
-
-		if (delta < 0) delta = -delta;
 		if (delta2 < 0) delta2 = -delta2;
-		delta = MIN(delta, delta2) >> 1;
+
+		delta3 = delta2 - state->last_delta2;
+		state->last_delta2 = delta2;
+		if (delta3 < 0) delta3 = -delta3;
+
+		delta = MIN(MIN(delta, delta2), delta3) >> 1;
 		for (nbits = 0; delta; nbits++)
 			delta >>= 1;
 
 		r->entropy_count += nbits;
-	
+
 		/* Prevent overflow */
 		if (r->entropy_count > POOLBITS)
 			r->entropy_count = POOLBITS;
 	}
 		
-	wake_up_interruptible(&random_wait);	
+	/* Wake up waiting processes, if we have enough entropy. */
+	if (r->entropy_count >= WAIT_INPUT_BITS)
+		wake_up_interruptible(&random_wait);	
 }
 
 void add_keyboard_randomness(unsigned char scancode)
@@ -450,6 +566,152 @@ void add_blkdev_randomness(int major)
 			     0x200+major);
 }
 
+#define USE_SHA
+
+#ifdef USE_SHA
+
+#define HASH_BUFFER_SIZE 5
+#define HASH_TRANSFORM SHATransform
+
+/*
+ * SHA transform algorith, taken from code written by Peter Gutman,
+ * and apparently in the public domain.
+ */
+
+/* The SHA f()-functions.  */
+
+#define f1(x,y,z)   ( z ^ ( x & ( y ^ z ) ) )           /* Rounds  0-19 */
+#define f2(x,y,z)   ( x ^ y ^ z )                       /* Rounds 20-39 */
+#define f3(x,y,z)   ( ( x & y ) | ( z & ( x | y ) ) )   /* Rounds 40-59 */
+#define f4(x,y,z)   ( x ^ y ^ z )                       /* Rounds 60-79 */
+
+/* The SHA Mysterious Constants */
+
+#define K1  0x5A827999L                                 /* Rounds  0-19 */
+#define K2  0x6ED9EBA1L                                 /* Rounds 20-39 */
+#define K3  0x8F1BBCDCL                                 /* Rounds 40-59 */
+#define K4  0xCA62C1D6L                                 /* Rounds 60-79 */
+
+#define ROTL(n,X)  ( ( ( X ) << n ) | ( ( X ) >> ( 32 - n ) ) )
+
+#define expand(W,i) ( W[ i & 15 ] = \
+		     ROTL( 1, ( W[ i & 15 ] ^ W[ (i - 14) & 15 ] ^ \
+			        W[ (i - 8) & 15 ] ^ W[ (i - 3) & 15 ] ) ) )
+
+#define subRound(a, b, c, d, e, f, k, data) \
+    ( e += ROTL( 5, a ) + f( b, c, d ) + k + data, b = ROTL( 30, b ) )
+
+
+void SHATransform(__u32 *digest, __u32 *data)
+    {
+    __u32 A, B, C, D, E;     /* Local vars */
+    __u32 eData[ 16 ];       /* Expanded data */
+
+    /* Set up first buffer and local data buffer */
+    A = digest[ 0 ];
+    B = digest[ 1 ];
+    C = digest[ 2 ];
+    D = digest[ 3 ];
+    E = digest[ 4 ];
+    memcpy( eData, data, 16*sizeof(__u32));
+
+    /* Heavy mangling, in 4 sub-rounds of 20 interations each. */
+    subRound( A, B, C, D, E, f1, K1, eData[  0 ] );
+    subRound( E, A, B, C, D, f1, K1, eData[  1 ] );
+    subRound( D, E, A, B, C, f1, K1, eData[  2 ] );
+    subRound( C, D, E, A, B, f1, K1, eData[  3 ] );
+    subRound( B, C, D, E, A, f1, K1, eData[  4 ] );
+    subRound( A, B, C, D, E, f1, K1, eData[  5 ] );
+    subRound( E, A, B, C, D, f1, K1, eData[  6 ] );
+    subRound( D, E, A, B, C, f1, K1, eData[  7 ] );
+    subRound( C, D, E, A, B, f1, K1, eData[  8 ] );
+    subRound( B, C, D, E, A, f1, K1, eData[  9 ] );
+    subRound( A, B, C, D, E, f1, K1, eData[ 10 ] );
+    subRound( E, A, B, C, D, f1, K1, eData[ 11 ] );
+    subRound( D, E, A, B, C, f1, K1, eData[ 12 ] );
+    subRound( C, D, E, A, B, f1, K1, eData[ 13 ] );
+    subRound( B, C, D, E, A, f1, K1, eData[ 14 ] );
+    subRound( A, B, C, D, E, f1, K1, eData[ 15 ] );
+    subRound( E, A, B, C, D, f1, K1, expand( eData, 16 ) );
+    subRound( D, E, A, B, C, f1, K1, expand( eData, 17 ) );
+    subRound( C, D, E, A, B, f1, K1, expand( eData, 18 ) );
+    subRound( B, C, D, E, A, f1, K1, expand( eData, 19 ) );
+
+    subRound( A, B, C, D, E, f2, K2, expand( eData, 20 ) );
+    subRound( E, A, B, C, D, f2, K2, expand( eData, 21 ) );
+    subRound( D, E, A, B, C, f2, K2, expand( eData, 22 ) );
+    subRound( C, D, E, A, B, f2, K2, expand( eData, 23 ) );
+    subRound( B, C, D, E, A, f2, K2, expand( eData, 24 ) );
+    subRound( A, B, C, D, E, f2, K2, expand( eData, 25 ) );
+    subRound( E, A, B, C, D, f2, K2, expand( eData, 26 ) );
+    subRound( D, E, A, B, C, f2, K2, expand( eData, 27 ) );
+    subRound( C, D, E, A, B, f2, K2, expand( eData, 28 ) );
+    subRound( B, C, D, E, A, f2, K2, expand( eData, 29 ) );
+    subRound( A, B, C, D, E, f2, K2, expand( eData, 30 ) );
+    subRound( E, A, B, C, D, f2, K2, expand( eData, 31 ) );
+    subRound( D, E, A, B, C, f2, K2, expand( eData, 32 ) );
+    subRound( C, D, E, A, B, f2, K2, expand( eData, 33 ) );
+    subRound( B, C, D, E, A, f2, K2, expand( eData, 34 ) );
+    subRound( A, B, C, D, E, f2, K2, expand( eData, 35 ) );
+    subRound( E, A, B, C, D, f2, K2, expand( eData, 36 ) );
+    subRound( D, E, A, B, C, f2, K2, expand( eData, 37 ) );
+    subRound( C, D, E, A, B, f2, K2, expand( eData, 38 ) );
+    subRound( B, C, D, E, A, f2, K2, expand( eData, 39 ) );
+
+    subRound( A, B, C, D, E, f3, K3, expand( eData, 40 ) );
+    subRound( E, A, B, C, D, f3, K3, expand( eData, 41 ) );
+    subRound( D, E, A, B, C, f3, K3, expand( eData, 42 ) );
+    subRound( C, D, E, A, B, f3, K3, expand( eData, 43 ) );
+    subRound( B, C, D, E, A, f3, K3, expand( eData, 44 ) );
+    subRound( A, B, C, D, E, f3, K3, expand( eData, 45 ) );
+    subRound( E, A, B, C, D, f3, K3, expand( eData, 46 ) );
+    subRound( D, E, A, B, C, f3, K3, expand( eData, 47 ) );
+    subRound( C, D, E, A, B, f3, K3, expand( eData, 48 ) );
+    subRound( B, C, D, E, A, f3, K3, expand( eData, 49 ) );
+    subRound( A, B, C, D, E, f3, K3, expand( eData, 50 ) );
+    subRound( E, A, B, C, D, f3, K3, expand( eData, 51 ) );
+    subRound( D, E, A, B, C, f3, K3, expand( eData, 52 ) );
+    subRound( C, D, E, A, B, f3, K3, expand( eData, 53 ) );
+    subRound( B, C, D, E, A, f3, K3, expand( eData, 54 ) );
+    subRound( A, B, C, D, E, f3, K3, expand( eData, 55 ) );
+    subRound( E, A, B, C, D, f3, K3, expand( eData, 56 ) );
+    subRound( D, E, A, B, C, f3, K3, expand( eData, 57 ) );
+    subRound( C, D, E, A, B, f3, K3, expand( eData, 58 ) );
+    subRound( B, C, D, E, A, f3, K3, expand( eData, 59 ) );
+
+    subRound( A, B, C, D, E, f4, K4, expand( eData, 60 ) );
+    subRound( E, A, B, C, D, f4, K4, expand( eData, 61 ) );
+    subRound( D, E, A, B, C, f4, K4, expand( eData, 62 ) );
+    subRound( C, D, E, A, B, f4, K4, expand( eData, 63 ) );
+    subRound( B, C, D, E, A, f4, K4, expand( eData, 64 ) );
+    subRound( A, B, C, D, E, f4, K4, expand( eData, 65 ) );
+    subRound( E, A, B, C, D, f4, K4, expand( eData, 66 ) );
+    subRound( D, E, A, B, C, f4, K4, expand( eData, 67 ) );
+    subRound( C, D, E, A, B, f4, K4, expand( eData, 68 ) );
+    subRound( B, C, D, E, A, f4, K4, expand( eData, 69 ) );
+    subRound( A, B, C, D, E, f4, K4, expand( eData, 70 ) );
+    subRound( E, A, B, C, D, f4, K4, expand( eData, 71 ) );
+    subRound( D, E, A, B, C, f4, K4, expand( eData, 72 ) );
+    subRound( C, D, E, A, B, f4, K4, expand( eData, 73 ) );
+    subRound( B, C, D, E, A, f4, K4, expand( eData, 74 ) );
+    subRound( A, B, C, D, E, f4, K4, expand( eData, 75 ) );
+    subRound( E, A, B, C, D, f4, K4, expand( eData, 76 ) );
+    subRound( D, E, A, B, C, f4, K4, expand( eData, 77 ) );
+    subRound( C, D, E, A, B, f4, K4, expand( eData, 78 ) );
+    subRound( B, C, D, E, A, f4, K4, expand( eData, 79 ) );
+
+    /* Build message digest */
+    digest[ 0 ] += A;
+    digest[ 1 ] += B;
+    digest[ 2 ] += C;
+    digest[ 3 ] += D;
+    digest[ 4 ] += E;
+    }
+
+#else
+#define HASH_BUFFER_SIZE 4
+#define HASH_TRANSFORM MD5Transform
+	
 /*
  * MD5 transform algorithm, taken from code written by Colin Plumb,
  * and put into the public domain
@@ -565,6 +827,8 @@ static void MD5Transform(__u32 buf[4],
 #undef F4
 #undef MD5STEP
 
+#endif
+
 
 #if POOLWORDS % 16
 #error extract_entropy() assumes that POOLWORDS is a multiple of 16 words.
@@ -579,7 +843,7 @@ static inline int extract_entropy(struct random_bucket *r, char * buf,
 				  int nbytes, int to_user)
 {
 	int ret, i;
-	__u32 tmp[4];
+	__u32 tmp[HASH_BUFFER_SIZE];
 	
 	add_timer_randomness(r, &extract_timer_state, nbytes);
 	
@@ -602,22 +866,28 @@ static inline int extract_entropy(struct random_bucket *r, char * buf,
 		tmp[1] = 0xefcdab89;
 		tmp[2] = 0x98badcfe;
 		tmp[3] = 0x10325476;
+#ifdef USE_SHA
+		tmp[4] = 0xc3d2e1f0;
+#endif
 		for (i = 0; i < POOLWORDS; i += 16)
-			MD5Transform(tmp, r->pool+i);
+			HASH_TRANSFORM(tmp, r->pool+i);
 		/* Modify pool so next hash will produce different results */
 		add_entropy_word(r, tmp[0]);
 		add_entropy_word(r, tmp[1]);
 		add_entropy_word(r, tmp[2]);
 		add_entropy_word(r, tmp[3]);
+#ifdef USE_SHA
+		add_entropy_word(r, tmp[4]);
+#endif
 		/*
-		 * Run the MD5 Transform one more time, since we want
+		 * Run the hash transform one more time, since we want
 		 * to add at least minimal obscuring of the inputs to
-		 * add_entropy_word().  --- TYT
+		 * add_entropy_word().
 		 */
-		MD5Transform(tmp, r->pool);
+		HASH_TRANSFORM(tmp, r->pool);
 		
 		/* Copy data to destination buffer */
-		i = MIN(nbytes, 16);
+		i = MIN(nbytes, HASH_BUFFER_SIZE*sizeof(__u32));
 		if (to_user)
 			memcpy_tofs(buf, (__u8 const *)tmp, i);
 		else
@@ -682,6 +952,15 @@ random_read(struct inode * inode, struct file * file, char * buf, int nbytes)
 	current->state = TASK_RUNNING;
 	remove_wait_queue(&random_wait, &wait);
 
+	/*
+	 * If we gave the user some bytes and we have an inode pointer,
+	 * update the access time.
+	 */
+	if (inode && count != 0) {
+		inode->i_atime = CURRENT_TIME;
+		inode->i_dirt = 1;
+	}
+	
 	return (count ? count : retval);
 }
 
@@ -696,10 +975,17 @@ static int
 random_select(struct inode *inode, struct file *file,
 		      int sel_type, select_table * wait)
 {
-	if (sel_type == SEL_IN) {
+	switch (sel_type) {
+	case SEL_IN:
 		if (random_state.entropy_count >= 8)
 			return 1;
 		select_wait(&random_wait, wait);
+		break;
+	case SEL_OUT:
+		if (random_state.entropy_count < WAIT_OUTPUT_BITS)
+			return 1;
+		select_wait(&random_wait, wait);
+		break;
 	}
 	return 0;
 }
@@ -710,6 +996,13 @@ random_write(struct inode * inode, struct file * file,
 {
 	int i;
 	__u32 word, *p;
+
+	if (count < 0)
+		return -EINVAL;
+
+	i = verify_area(VERIFY_READ, (void *) buffer, count);
+	if (i)
+		return i;
 
 	for (i = count, p = (__u32 *)buffer;
 	     i >= sizeof(__u32);
@@ -722,8 +1015,10 @@ random_write(struct inode * inode, struct file * file,
 		memcpy_fromfs(&word, p, i);
 		add_entropy_word(&random_state, word);
 	}
-	if (inode)
+	if (inode) {
 		inode->i_mtime = CURRENT_TIME;
+		inode->i_dirt = 1;
+	}
 	return count;
 }
 
@@ -739,7 +1034,8 @@ random_ioctl(struct inode * inode, struct file * file,
 		retval = verify_area(VERIFY_WRITE, (void *) arg, sizeof(int));
 		if (retval)
 			return(retval);
-		put_user(random_state.entropy_count, (int *) arg);
+		ent_count = random_state.entropy_count;
+		put_user(ent_count, (int *) arg);
 		return 0;
 	case RNDADDTOENTCNT:
 		if (!suser())
@@ -747,9 +1043,28 @@ random_ioctl(struct inode * inode, struct file * file,
 		retval = verify_area(VERIFY_READ, (void *) arg, sizeof(int));
 		if (retval)
 			return(retval);
-		random_state.entropy_count += get_user((int *) arg);
-		if (random_state.entropy_count > POOLBITS)
+		ent_count = get_user((int *) arg);
+		/*
+		 * Add i to entropy_count, limiting the result to be
+		 * between 0 and POOLBITS.
+		 */
+		if (ent_count < -random_state.entropy_count)
+			random_state.entropy_count = 0;
+		else if (ent_count > POOLBITS)
 			random_state.entropy_count = POOLBITS;
+		else {
+			random_state.entropy_count += ent_count;
+			if (random_state.entropy_count > POOLBITS)
+				random_state.entropy_count = POOLBITS;
+			if (random_state.entropy_count < 0)
+				random_state.entropy_count = 0;
+		}
+		/*
+		 * Wake up waiting processes if we have enough
+		 * entropy.
+		 */
+		if (random_state.entropy_count >= WAIT_INPUT_BITS)
+			wake_up_interruptible(&random_wait);
 		return 0;
 	case RNDGETPOOL:
 		if (!suser())
@@ -758,18 +1073,22 @@ random_ioctl(struct inode * inode, struct file * file,
 		retval = verify_area(VERIFY_WRITE, (void *) p, sizeof(int));
 		if (retval)
 			return(retval);
-		put_user(random_state.entropy_count, p++);
-		retval = verify_area(VERIFY_READ, (void *) p, sizeof(int));
+		ent_count = random_state.entropy_count;
+		put_user(ent_count, p++);
+		retval = verify_area(VERIFY_WRITE, (void *) p, sizeof(int));
 		if (retval)
 			return(retval);
 		size = get_user(p);
-		put_user(POOLWORDS, p);
+		put_user(POOLWORDS, p++);
 		if (size < 0)
 			return -EINVAL;
 		if (size > POOLWORDS)
 			size = POOLWORDS;
-		memcpy_tofs(++p, random_state.pool,
-			    size*sizeof(__u32));
+		retval = verify_area(VERIFY_WRITE, (void *) p,
+				     size * sizeof(__u32));
+		if (retval)
+			return retval;
+		memcpy_tofs(p, random_state.pool, size*sizeof(__u32));
 		return 0;
 	case RNDADDENTROPY:
 		if (!suser())
@@ -779,16 +1098,42 @@ random_ioctl(struct inode * inode, struct file * file,
 		if (retval)
 			return(retval);
 		ent_count = get_user(p++);
+		if (ent_count < 0)
+			return -EINVAL;
 		size = get_user(p++);
-		(void) random_write(0, file, (const char *) p, size);
-		random_state.entropy_count += ent_count;
-		if (random_state.entropy_count > POOLBITS)
+		retval = random_write(0, file, (const char *) p, size);
+		if (retval)
+			return retval;
+		/*
+		 * Add ent_count to entropy_count, limiting the result to be
+		 * between 0 and POOLBITS.
+		 */
+		if (ent_count > POOLBITS)
 			random_state.entropy_count = POOLBITS;
+		else {
+			random_state.entropy_count += ent_count;
+			if (random_state.entropy_count > POOLBITS)
+				random_state.entropy_count = POOLBITS;
+			if (random_state.entropy_count < 0)
+				random_state.entropy_count = 0;
+		}
+		/*
+		 * Wake up waiting processes if we have enough
+		 * entropy.
+		 */
+		if (random_state.entropy_count >= WAIT_INPUT_BITS)
+			wake_up_interruptible(&random_wait);
 		return 0;
 	case RNDZAPENTCNT:
 		if (!suser())
 			return -EPERM;
 		random_state.entropy_count = 0;
+		return 0;
+	case RNDCLEARPOOL:
+		/* Clear the entropy pool and associated counters. */
+		if (!suser())
+			return -EPERM;
+		rand_clear_pool();
 		return 0;
 	default:
 		return -EINVAL;

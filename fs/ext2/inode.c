@@ -27,12 +27,17 @@
 #include <linux/locks.h>
 #include <linux/mm.h>
 
+static int ext2_update_inode(struct inode * inode, int do_sync);
+
 void ext2_put_inode (struct inode * inode)
 {
 	ext2_discard_prealloc (inode);
 	if (inode->i_nlink || inode->i_ino == EXT2_ACL_IDX_INO ||
 	    inode->i_ino == EXT2_ACL_DATA_INO)
 		return;
+	inode->u.ext2_i.i_dtime	= CURRENT_TIME;
+	inode->i_dirt = 1;
+	ext2_update_inode(inode, IS_SYNC(inode));
 	inode->i_size = 0;
 	if (inode->i_blocks)
 		ext2_truncate (inode);
@@ -495,10 +500,12 @@ void ext2_read_inode (struct inode * inode)
 	unsigned long group_desc;
 	unsigned long desc;
 	unsigned long block;
+	unsigned long offset;
 	struct ext2_group_desc * gdp;
 
 	if ((inode->i_ino != EXT2_ROOT_INO && inode->i_ino != EXT2_ACL_IDX_INO &&
-	     inode->i_ino != EXT2_ACL_DATA_INO && inode->i_ino < EXT2_FIRST_INO) ||
+	     inode->i_ino != EXT2_ACL_DATA_INO &&
+	     inode->i_ino < EXT2_FIRST_INO(inode->i_sb)) ||
 	    inode->i_ino > inode->i_sb->u.ext2_sb.s_es->s_inodes_count) {
 		ext2_error (inode->i_sb, "ext2_read_inode",
 			    "bad inode number: %lu", inode->i_ino);
@@ -515,15 +522,20 @@ void ext2_read_inode (struct inode * inode)
 		ext2_panic (inode->i_sb, "ext2_read_inode",
 			    "Descriptor not loaded");
 	gdp = (struct ext2_group_desc *) bh->b_data;
+	/*
+	 * Figure out the offset within the block group inode table
+	 */
+	offset = ((inode->i_ino - 1) % EXT2_INODES_PER_GROUP(inode->i_sb)) *
+		EXT2_INODE_SIZE(inode->i_sb);
 	block = gdp[desc].bg_inode_table +
-		(((inode->i_ino - 1) % EXT2_INODES_PER_GROUP(inode->i_sb))
-		 >> EXT2_INODES_PER_BLOCK_BITS(inode->i_sb));
+		(offset >> EXT2_BLOCK_SIZE_BITS(inode->i_sb));
 	if (!(bh = bread (inode->i_dev, block, inode->i_sb->s_blocksize)))
 		ext2_panic (inode->i_sb, "ext2_read_inode",
 			    "unable to read i-node block - "
 			    "inode=%lu, block=%lu", inode->i_ino, block);
-	raw_inode = ((struct ext2_inode *) bh->b_data) +
-		((inode->i_ino - 1) & (EXT2_INODES_PER_BLOCK(inode->i_sb) - 1));
+	offset &= (EXT2_BLOCK_SIZE(inode->i_sb) - 1);
+	raw_inode = (struct ext2_inode *) (bh->b_data + offset);
+
 	inode->i_mode = raw_inode->i_mode;
 	inode->i_uid = raw_inode->i_uid;
 	inode->i_gid = raw_inode->i_gid;
@@ -536,6 +548,7 @@ void ext2_read_inode (struct inode * inode)
 	inode->i_blksize = PAGE_SIZE;	/* This is the optimal IO size (for stat), not the fs block size */
 	inode->i_blocks = raw_inode->i_blocks;
 	inode->i_version = ++event;
+	inode->u.ext2_i.i_new_inode = 0;
 	inode->u.ext2_i.i_flags = raw_inode->i_flags;
 	inode->u.ext2_i.i_faddr = raw_inode->i_faddr;
 	inode->u.ext2_i.i_frag_no = raw_inode->i_frag;
@@ -579,7 +592,7 @@ void ext2_read_inode (struct inode * inode)
 		inode->i_flags |= S_IMMUTABLE;
 }
 
-static struct buffer_head * ext2_update_inode (struct inode * inode)
+static int ext2_update_inode(struct inode * inode, int do_sync)
 {
 	struct buffer_head * bh;
 	struct ext2_inode * raw_inode;
@@ -587,9 +600,12 @@ static struct buffer_head * ext2_update_inode (struct inode * inode)
 	unsigned long group_desc;
 	unsigned long desc;
 	unsigned long block;
+	unsigned long offset;
+	int err = 0;
 	struct ext2_group_desc * gdp;
 
-	if ((inode->i_ino != EXT2_ROOT_INO && inode->i_ino < EXT2_FIRST_INO) ||
+	if ((inode->i_ino != EXT2_ROOT_INO &&
+	     inode->i_ino < EXT2_FIRST_INO(inode->i_sb)) ||
 	    inode->i_ino > inode->i_sb->u.ext2_sb.s_es->s_inodes_count) {
 		ext2_error (inode->i_sb, "ext2_write_inode",
 			    "bad inode number: %lu", inode->i_ino);
@@ -606,15 +622,20 @@ static struct buffer_head * ext2_update_inode (struct inode * inode)
 		ext2_panic (inode->i_sb, "ext2_write_inode",
 			    "Descriptor not loaded");
 	gdp = (struct ext2_group_desc *) bh->b_data;
+	/*
+	 * Figure out the offset within the block group inode table
+	 */
+	offset = ((inode->i_ino - 1) % EXT2_INODES_PER_GROUP(inode->i_sb)) *
+		EXT2_INODE_SIZE(inode->i_sb);
 	block = gdp[desc].bg_inode_table +
-		(((inode->i_ino - 1) % EXT2_INODES_PER_GROUP(inode->i_sb))
-		 >> EXT2_INODES_PER_BLOCK_BITS(inode->i_sb));
+		(offset >> EXT2_BLOCK_SIZE_BITS(inode->i_sb));
 	if (!(bh = bread (inode->i_dev, block, inode->i_sb->s_blocksize)))
 		ext2_panic (inode->i_sb, "ext2_write_inode",
 			    "unable to read i-node block - "
 			    "inode=%lu, block=%lu", inode->i_ino, block);
-	raw_inode = ((struct ext2_inode *)bh->b_data) +
-		(inode->i_ino - 1) % EXT2_INODES_PER_BLOCK(inode->i_sb);
+	offset &= EXT2_BLOCK_SIZE(inode->i_sb) - 1;
+	raw_inode = (struct ext2_inode *) (bh->b_data + offset);
+
 	raw_inode->i_mode = inode->i_mode;
 	raw_inode->i_uid = inode->i_uid;
 	raw_inode->i_gid = inode->i_gid;
@@ -638,36 +659,27 @@ static struct buffer_head * ext2_update_inode (struct inode * inode)
 		raw_inode->i_block[block] = inode->u.ext2_i.i_data[block];
 	mark_buffer_dirty(bh, 1);
 	inode->i_dirt = 0;
-	return bh;
-}
-
-void ext2_write_inode (struct inode * inode)
-{
-	struct buffer_head * bh;
-	bh = ext2_update_inode (inode);
-	brelse (bh);
-}
-
-int ext2_sync_inode (struct inode *inode)
-{
-	int err = 0;
-	struct buffer_head *bh;
-
-	bh = ext2_update_inode (inode);
-	if (bh && buffer_dirty(bh))
-	{
+	if (do_sync) {
 		ll_rw_block (WRITE, 1, &bh);
 		wait_on_buffer (bh);
-		if (buffer_req(bh) && !buffer_uptodate(bh))
-		{
+		if (buffer_req(bh) && !buffer_uptodate(bh)) {
 			printk ("IO error syncing ext2 inode ["
 				"%s:%08lx]\n",
 				kdevname(inode->i_dev), inode->i_ino);
 			err = -1;
 		}
 	}
-	else if (!bh)
-		err = -1;
 	brelse (bh);
 	return err;
 }
+
+void ext2_write_inode (struct inode * inode)
+{
+	ext2_update_inode (inode, 0);
+}
+
+int ext2_sync_inode (struct inode *inode)
+{
+	return ext2_update_inode (inode, 1);
+}
+

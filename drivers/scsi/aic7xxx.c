@@ -1686,6 +1686,9 @@ aic7xxx_reset_channel(struct aic7xxx_host *p, char channel,
     {
       aic7xxx_reset_current_bus(base);
     }
+    /* Ensure we don't get a RSTI interrupt from this. */
+    outb(CLRSCSIRSTI | CLRSELTIMEO, CLRSINT1 + base);
+    outb(CLRSCSIINT, CLRINT + base);
     outb(sblkctl, SBLKCTL + base);
 
     UNPAUSE_SEQUENCER(p);
@@ -1703,6 +1706,10 @@ aic7xxx_reset_channel(struct aic7xxx_host *p, char channel,
     {
       aic7xxx_reset_current_bus(base);
     }
+    /* Ensure we don't get a RSTI interrupt from this. */
+    outb(CLRSCSIRSTI | CLRSELTIMEO, CLRSINT1 + base);
+    outb(CLRSCSIINT, CLRINT + base);
+
     RESTART_SEQUENCER(p);
 #ifdef AIC7XXX_DEBUG_ABORT
     printk ("aic7xxx: (reset_channel) Channel reset, sequencer restarted\n");
@@ -3320,19 +3327,27 @@ aic7xxx_register(Scsi_Host_Template *template,
        * so we default it to 100%.
        */
       config->bus_speed = DFTHRSH_100;
-      scsi_conf = config->scsi_id | config->bus_speed;
+      scsi_conf = config->scsi_id | DFTHRSH_100;
+#if 0
       if (config->parity == AIC_ENABLED)
       {
         scsi_conf |= ENSPCHK;
       }
-
+#endif
       outb(scsi_conf, SCSICONF + base);
-      outb(config->bus_speed, DSPCISTATUS + base);
+      outb(DFTHRSH_100, DSPCISTATUS + base);
 
       /*
        * In case we are a wide card...
        */
-      outb(scsi_conf, (SCSICONF + base + 1));
+/*
+ * Try the following:
+ *
+ * 1) outb(config->scsi_id, SCSICONF + base + 1);
+ * 2) outb(scsiconf, SCSICONF + base + 1);
+ *
+ */
+      outb(config->scsi_id, SCSICONF + base + 1);
 
       printk("aic7xxx: Extended translation %sabled.\n",
 	     config->extended ? "en" : "dis");
@@ -3578,7 +3593,7 @@ aic7xxx_register(Scsi_Host_Template *template,
     outb(config->scsi_id_b, SCSIID + base);
     scsi_conf = inb(SCSICONF + base + 1) & (ENSPCHK | STIMESEL);
     outb(scsi_conf | ENSTIMER | ACTNEGEN | STPWEN, SXFRCTL1 + base);
-    outb(ENSELTIMO | ENSCSIRST | ENSCSIPERR, SIMODE1 + base);
+    outb(ENSELTIMO, SIMODE1 + base);
     if (p->ultra_enabled)
     {
       outb(DFON | SPIOEN | ULTRAEN, SXFRCTL0 + base);
@@ -3596,7 +3611,7 @@ aic7xxx_register(Scsi_Host_Template *template,
   outb(config->scsi_id, SCSIID + base);
   scsi_conf = inb(SCSICONF + base) & (ENSPCHK | STIMESEL);
   outb(scsi_conf | ENSTIMER | ACTNEGEN | STPWEN, SXFRCTL1 + base);
-  outb(ENSELTIMO | ENSCSIRST | ENSCSIPERR, SIMODE1 + base);
+  outb(ENSELTIMO, SIMODE1 + base);
   if (p->ultra_enabled)
   {
     outb(DFON | SPIOEN | ULTRAEN, SXFRCTL0 + base);
@@ -3773,6 +3788,10 @@ aic7xxx_register(Scsi_Host_Template *template,
       udelay(1000);
       outb(0, SCSISEQ + base);
 
+      /* Ensure we don't get a RSTI interrupt from this. */
+      outb(CLRSCSIRSTI, CLRSINT1 + base);
+      outb(CLRSCSIINT, CLRINT + base);
+
       /*
        * Select Channel A.
        */
@@ -3782,6 +3801,10 @@ aic7xxx_register(Scsi_Host_Template *template,
     outb(SCSIRSTO, SCSISEQ + base);
     udelay(1000);
     outb(0, SCSISEQ + base);
+
+    /* Ensure we don't get a RSTI interrupt from this. */
+    outb(CLRSCSIRSTI, CLRSINT1 + base);
+    outb(CLRSCSIINT, CLRINT + base);
 
     aic7xxx_delay(AIC7XXX_RESET_DELAY);
 

@@ -17,7 +17,7 @@ UPDATE NEWS: version 1.28 - 27 Apr 96
 
 UPDATE NEWS: version 1.27 - 10 Apr 96
 
-   Fixed a well-hidden bug in the adapative-disconnect code
+   Fixed a well-hidden bug in the adaptive-disconnect code
    that would show up every now and then during extreme
    heavy loads involving 2 or more simultaneously active
    devices. Thanks to Joe Mack for keeping my nose to the
@@ -152,14 +152,14 @@ line with the 'period' keyword.
    I should mention that Drew Eckhardt's 'Generic NCR5380' sources
    were my main inspiration, with lots of reference to the IN2000
    driver currently distributed in the kernel source. I also owe
-   much to a driver written by Hamish Mcdonald for Linux-m68k(!).
+   much to a driver written by Hamish Macdonald for Linux-m68k(!).
    And to Eric Wright for being an ALPHA guinea pig. And to Bill
    Earnest for 2 tons of great input and information. And to David
    Willmore for extensive 'bonnie' testing.
 
    Be forewarned that while I've had good luck with it, this
    is the first time it's been loose out in the wide world.
-   It wouldn't suprise me if people uncover problems that
+   It wouldn't surprise me if people uncover problems that
    I haven't caught....
 
    Please try the driver out. Test it, beat on it. And PLEASE get back

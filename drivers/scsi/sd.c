@@ -41,7 +41,7 @@
 #include "scsi.h"
 #include "hosts.h"
 #include "sd.h"
-#include "scsi_ioctl.h"
+#include <scsi/scsi_ioctl.h>
 #include "constants.h"
 
 #include <linux/genhd.h>

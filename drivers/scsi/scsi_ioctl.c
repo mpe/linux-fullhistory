@@ -19,7 +19,7 @@
 #include <linux/blk.h>
 #include "scsi.h"
 #include "hosts.h"
-#include "scsi_ioctl.h"
+#include <scsi/scsi_ioctl.h>
 
 #define MAX_RETRIES 5   
 #define MAX_TIMEOUT 900

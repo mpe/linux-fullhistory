@@ -5,6 +5,9 @@
     Development Sponsored by Killy Corp. NY NY
 */
 
+#ifndef _SCSI_GENERIC_H
+#define _SCSI_GENERIC_H
+
 /* 
  An SG device is accessed by writing "packets" to it, the replies
  are then read using the read call. The same header is used for 
@@ -34,3 +37,5 @@ struct sg_header
 			  changed if sufficient DMA buffer room available */
 
 #define SG_BIG_BUFF 32768
+
+#endif

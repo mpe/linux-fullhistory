@@ -57,6 +57,8 @@ struct	mtop {
 #define MTLOAD  30	/* execute the SCSI load command */
 #define MTUNLOAD 31	/* execute the SCSI unload command */
 #define MTCOMPRESSION 32/* control compression with SCSI mode page 15 */
+#define MTSETPART 33	/* Change the active tape partition */
+#define MTMKPART  34	/* Format the tape with one or two partitions */
 
 /* structure for MTIOCGET - mag tape get status command */
 
@@ -180,7 +182,6 @@ struct mtconfiginfo {
 #define	MTIOCGETCONFIG	_IOR('m', 4, struct mtconfiginfo) /* get tape config */
 #define	MTIOCSETCONFIG	_IOW('m', 5, struct mtconfiginfo) /* set tape config */
 
-
 /* Generic Mag Tape (device independent) status macros for examining
  * mt_gstat -- HP-UX compatible.
  * There is room for more generic status bits here, but I don't
@@ -235,6 +236,8 @@ struct mtconfiginfo {
 #define MT_ST_DEF_WRITES	0x80
 #define MT_ST_CAN_BSR		0x100
 #define MT_ST_NO_BLKLIMS	0x200
+#define MT_ST_CAN_PARTITIONS    0x400
+#define MT_ST_SCSI2LOGICAL      0x800
 
 /* The mode parameters to be controlled. Parameter chosen with bits 20-28 */
 #define MT_ST_CLEAR_DEFAULT	0xfffff

@@ -64,22 +64,12 @@
 #define MAX_PCI_BUS	16	       /* Maximum # Of Busses Allowed	 */
 
 #define SG_SIZE		64 
-#define SG_SIZE_BIG	509	       /* max. 509 elements, one 4k page */
+#define SG_SIZE_BIG	252	       /* max. 8096 elements, 64k */
 
-#define C_P_L_DIV	2 /* 1 <= C_P_L_DIV <= 8	    
-			   * You can use this parameter to fine-tune
-			   * the driver. Depending on the number of 
-			   * devices and their speed and ability to queue 
-			   * commands, you will get the best results with a
-			   * value
-			   * ~= numdevices-(devices_unable_to_queue_commands/2)
-			   * The reason for this is that the disk driver 
-			   * tends to flood the queue, so that other 
-			   * drivers have problems to queue commands 
-			   * themselves. This can for example result in 
-			   * the effect that the tape stops during disk 
-			   * accesses. 
-			   */
+#define TYPE_DISK_QUEUE  16
+#define TYPE_TAPE_QUEUE  4
+#define TYPE_ROM_QUEUE   4
+#define TYPE_OTHER_QUEUE 2
 
 #define FREE	   0
 #define OK	   0
@@ -350,6 +340,7 @@ typedef struct hstd {
     __u32  last_ccb;		 /* Last used ccb	       */
     __u32  cplen;		 /* size of CP in words	       */
     __u16  cppadlen;		 /* pad length of cp in words  */
+    int    queuesize;
     __u8   hostid;		 /* SCSI ID of HBA	       */
     __u8   devflags;		 /* bits set for detected devices */
     __u8   moresupport;		 /* HBA supports MORE flag     */

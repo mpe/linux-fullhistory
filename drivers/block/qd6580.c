@@ -38,6 +38,9 @@
  * and can work out the answers!
  *
  * I/O ports are 0xb0 0xb2 and 0xb3
+ *
+ * More research on qd6580 being done by willmore@cig.mot.com (David)
+ *	-- this is apparently a *dual* IDE interface
  */
 
 static void tune_qd6580 (ide_drive_t *drive, byte pio)
@@ -61,5 +64,6 @@ static void tune_qd6580 (ide_drive_t *drive, byte pio)
 void init_qd6580 (void)
 {
 	ide_hwifs[0].chipset = ide_qd6580;
+	ide_hwifs[1].chipset = ide_qd6580;
 	ide_hwifs[0].tuneproc = &tune_qd6580;
 }

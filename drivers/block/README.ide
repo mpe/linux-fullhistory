@@ -210,6 +210,7 @@ Summary of ide driver parameters for kernel "command line":
  "idex=" is recognized for all "x" from "0" to "3", such as "ide1".
 
  "hdx=noprobe"		: drive may be present, but do not probe for it
+ "hdx=none"		: drive is NOT present, ignore cmos and do not probe
  "hdx=nowerr"		: ignore the WRERR_STAT bit on this drive
  "hdx=cdrom"		: drive is present, and is a cdrom drive
  "hdx=cyl,head,sect"	: disk drive is present, with specified geometry
