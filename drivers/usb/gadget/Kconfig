@@ -344,8 +344,6 @@ config USB_GADGETFS
 
 config USB_FILE_STORAGE
 	tristate "File-backed Storage Gadget"
-	# we don't support the SA1100 because of its limitations
-	depends on USB_GADGET_SA1100 = n
 	help
 	  The File-backed Storage Gadget acts as a USB Mass Storage
 	  disk drive.  As its storage repository it can use a regular
