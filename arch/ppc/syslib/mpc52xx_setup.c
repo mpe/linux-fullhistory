@@ -46,11 +46,8 @@ mpc52xx_restart(char *cmd)
 
 	/* Turn on the watchdog and wait for it to expire. It effectively
 	  does a reset */
-	if (gpt0 != NULL) {
-		out_be32(&gpt0->count, 0x000000ff);
-		out_be32(&gpt0->mode, 0x00009004);
-	} else
-		printk(KERN_ERR "mpc52xx_restart: Unable to ioremap GPT0 registers, -> looping ...");
+	out_be32(&gpt0->count, 0x000000ff);
+	out_be32(&gpt0->mode, 0x00009004);
 
 	while (1);
 }
