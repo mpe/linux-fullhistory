@@ -1591,7 +1591,6 @@ static int of_finish_dynamic_node(struct device_node *node,
 				  int unused3, int unused4)
 {
 	struct device_node *parent = of_get_parent(node);
-	u32 *regs;
 	int err = 0;
 	phandle *ibm_phandle;
 
@@ -1612,19 +1611,6 @@ static int of_finish_dynamic_node(struct device_node *node,
 	/* fix up new node's linux_phandle field */
 	if ((ibm_phandle = (unsigned int *)get_property(node, "ibm,phandle", NULL)))
 		node->linux_phandle = *ibm_phandle;
-
-	/* now do the rough equivalent of update_dn_pci_info, this
-	 * probably is not correct for phb's, but should work for
-	 * IOAs and slots.
-	 */
-
-	node->phb = parent->phb;
-
-	regs = (u32 *)get_property(node, "reg", NULL);
-	if (regs) {
-		node->busno = (regs[0] >> 16) & 0xff;
-		node->devfn = (regs[0] >> 8) & 0xff;
-	}
 
 out:
 	of_node_put(parent);
