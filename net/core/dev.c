@@ -1305,6 +1305,16 @@ static int dev_ifsioc(struct ifreq *ifr, unsigned int cmd)
 			ifr->ifr_ifindex = dev->ifindex;
 			return 0;
 
+		case SIOCGIFTXQLEN:
+			ifr->ifr_qlen = dev->tx_queue_len;
+			return 0;
+
+		case SIOCSIFTXQLEN:
+			if(ifr->ifr_qlen<2 || ifr->ifr_qlen>1024)
+				return -EINVAL;
+			dev->tx_queue_len = ifr->ifr_qlen;
+			return 0;
+
 		/*
 		 *	Unknown or private ioctl
 		 */
@@ -1396,9 +1406,17 @@ int dev_ioctl(unsigned int cmd, void *arg)
 		case SIOCGIFSLAVE:
 		case SIOCGIFMAP:
 		case SIOCGIFINDEX:
+		case SIOCGIFTXQLEN:
 			ret = dev_ifsioc(&ifr, cmd);
-			if (!ret && copy_to_user(arg, &ifr, sizeof(struct ifreq)))
-				return -EFAULT;
+			if (!ret)
+			{
+#ifdef CONFIG_NET_ALIAS
+				if (colon)
+					*colon = ':';
+#endif
+				if (copy_to_user(arg, &ifr, sizeof(struct ifreq)))
+					return -EFAULT;
+			}
 			return ret;
 
 		/*
@@ -1414,6 +1432,7 @@ int dev_ioctl(unsigned int cmd, void *arg)
 		case SIOCSIFMAP:
 		case SIOCSIFHWADDR:
 		case SIOCSIFSLAVE:
+		case SIOCSIFTXQLEN:
 		case SIOCADDMULTI:
 		case SIOCDELMULTI:
 		case SIOCSIFHWBROADCAST:

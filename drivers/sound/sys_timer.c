@@ -11,6 +11,9 @@
  * Version 2 (June 1991). See the "COPYING" file distributed with this software
  * for more info.
  */
+/*
+ * Thomas Sailer   : ioctl code reworked (vmalloc/vfree removed)
+ */
 #include <linux/config.h>
 
 
@@ -184,94 +187,73 @@ def_tmr_get_time(int dev)
 	return curr_ticks;
 }
 
-static int
-def_tmr_ioctl(int dev,
-	      unsigned int cmd, caddr_t arg)
+/* same as sound_timer.c:timer_ioctl!? */
+static int def_tmr_ioctl(int dev, unsigned int cmd, caddr_t arg)
 {
-	switch (cmd)
-	  {
-	  case SNDCTL_TMR_SOURCE:
-		  return (*(int *) arg = TMR_INTERNAL);
-		  break;
+	int val;
 
-	  case SNDCTL_TMR_START:
-		  tmr_reset();
-		  tmr_running = 1;
-		  return 0;
-		  break;
+	switch (cmd) {
+	case SNDCTL_TMR_SOURCE:
+		return __put_user(TMR_INTERNAL, (int *)arg);
 
-	  case SNDCTL_TMR_STOP:
-		  tmr_running = 0;
-		  return 0;
-		  break;
+	case SNDCTL_TMR_START:
+		tmr_reset();
+		tmr_running = 1;
+		return 0;
 
-	  case SNDCTL_TMR_CONTINUE:
-		  tmr_running = 1;
-		  return 0;
-		  break;
+	case SNDCTL_TMR_STOP:
+		tmr_running = 0;
+		return 0;
 
-	  case SNDCTL_TMR_TIMEBASE:
-		  {
-			  int             val;
+	case SNDCTL_TMR_CONTINUE:
+		tmr_running = 1;
+		return 0;
 
-			  val = *(int *) arg;
+	case SNDCTL_TMR_TIMEBASE:
+		if (__get_user(val, (int *)arg))
+			return -EFAULT;
+		if (val) {
+			if (val < 1)
+				val = 1;
+			if (val > 1000)
+				val = 1000;
+			curr_timebase = val;
+		}
+		return __put_user(curr_timebase, (int *)arg);
 
-			  if (val)
-			    {
-				    if (val < 1)
-					    val = 1;
-				    if (val > 1000)
-					    val = 1000;
-				    curr_timebase = val;
-			    }
-			  return (*(int *) arg = curr_timebase);
-		  }
-		  break;
+	case SNDCTL_TMR_TEMPO:
+		if (__get_user(val, (int *)arg))
+			return -EFAULT;
+		if (val) {
+			if (val < 8)
+				val = 8;
+			if (val > 250)
+				val = 250;
+			tmr_offs = tmr_ctr;
+			ticks_offs += tmr2ticks(tmr_ctr);
+			tmr_ctr = 0;
+			curr_tempo = val;
+			reprogram_timer();
+		}
+		return __put_user(curr_tempo, (int *)arg);
 
-	  case SNDCTL_TMR_TEMPO:
-		  {
-			  int             val;
-
-			  val = *(int *) arg;
-
-			  if (val)
-			    {
-				    if (val < 8)
-					    val = 8;
-				    if (val > 250)
-					    val = 250;
-				    tmr_offs = tmr_ctr;
-				    ticks_offs += tmr2ticks(tmr_ctr);
-				    tmr_ctr = 0;
-				    curr_tempo = val;
-			    }
-			  return (*(int *) arg = curr_tempo);
-		  }
-		  break;
-
-	  case SNDCTL_SEQ_CTRLRATE:
-		  {
-			  int             val;
-
-			  val = *(int *) arg;
-			  if (val != 0)		/* Can't change */
-				  return -EINVAL;
-
-			  return (*(int *) arg = ((curr_tempo * curr_timebase) + 30) / 60);
-		  }
-		  break;
-
-	  case SNDCTL_SEQ_GETTIME:
-		  return (*(int *) arg = curr_ticks);
-		  break;
-
-	  case SNDCTL_TMR_METRONOME:
-		  /* NOP */
-		  break;
-
-	  default:;
-	  }
-
+	case SNDCTL_SEQ_CTRLRATE:
+		if (__get_user(val, (int *)arg))
+			return -EFAULT;
+		if (val != 0)	/* Can't change */
+			return -EINVAL;
+		val = ((curr_tempo * curr_timebase) + 30) / 60;
+		return __put_user(val, (int *)arg);
+		
+	case SNDCTL_SEQ_GETTIME:
+		return __put_user(curr_ticks, (int *)arg);
+		
+	case SNDCTL_TMR_METRONOME:
+		/* NOP */
+		break;
+		
+	default:;
+	}
 	return -EINVAL;
 }
 

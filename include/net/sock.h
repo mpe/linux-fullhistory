@@ -892,7 +892,7 @@ extern __inline__ int sock_queue_rcv_skb(struct sock *sk, struct sk_buff *skb)
 	if (sk->filter)
 	{
 		if (sk_filter(skb, sk->filter_data, sk->filter))
-			return -1;	/* Toss packet */
+			return -EPERM;	/* Toss packet */
 	}
 #endif /* CONFIG_FILTER */
 

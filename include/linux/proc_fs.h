@@ -52,7 +52,8 @@ enum root_directory_inos {
 	PROC_SLABINFO,
 	PROC_PARPORT,
 	PROC_OMIRR, /* whether enabled or not */
-	PROC_PPC_HTAB
+	PROC_PPC_HTAB,
+	PROC_SOUND
 };
 
 enum pid_directory_inos {

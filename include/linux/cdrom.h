@@ -352,6 +352,7 @@ struct cdrom_blk
 #define CDS_DATA_2		102
 #define CDS_XA_2_1		103
 #define CDS_XA_2_2		104
+#define CDS_MIXED		105
 
 /* User-configurable behavior options for the uniform CD-ROM driver */
 #define CDO_AUTO_CLOSE		0x1     /* close tray on first open() */

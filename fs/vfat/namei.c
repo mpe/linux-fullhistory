@@ -173,6 +173,9 @@ static int vfat_hash(struct dentry *dentry, struct qstr *qstr)
 
 	len = qstr->len;
 	name = qstr->name;
+	while (len && name[len-1] == '.')
+		len--;
+
 	hash = init_name_hash();
 	while (len--) {
 		c = tolower(*name++);
@@ -193,14 +196,12 @@ static int vfat_cmp(struct dentry *dentry, struct qstr *a, struct qstr *b)
 	/* A filename cannot end in '.' or we treat it like it has none */
 	alen = a->len;
 	blen = b->len;
-	if (alen != blen) {
-		if (a->name[alen-1] == '.')
-			alen--;
-		if (b->name[blen-1] == '.')
-			blen--;
-		if (alen != blen)
-			return 1;
-	}
+	while (alen && a->name[alen-1] == '.')
+		alen--;
+	while (blen && b->name[blen-1] == '.')
+		blen--;
+	if (alen != blen)
+		return 1;
 
 	return strnicmp(a->name, b->name, alen);
 }
@@ -966,11 +967,8 @@ static int vfat_readdir_cb(
 			  vf->name, vf->len, name, name_len);
 #endif
 
-	/* Filenames cannot end in '.' or we treat like it has none */
 	if (vf->len != name_len) {
-		if ((vf->len != name_len + 1) || (vf->name[name_len] != '.')) {
-			return 0;
-		}
+		return 0;
 	}
 
 	s1 = name; s2 = vf->name;

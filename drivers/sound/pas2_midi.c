@@ -185,12 +185,6 @@ pas_midi_end_read(int dev)
 	return 0;
 }
 
-static int
-pas_midi_ioctl(int dev, unsigned cmd, caddr_t arg)
-{
-	return -EINVAL;
-}
-
 static void
 pas_midi_kick(int dev)
 {
@@ -213,7 +207,7 @@ static struct midi_operations pas_midi_operations =
 	{0},
 	pas_midi_open,
 	pas_midi_close,
-	pas_midi_ioctl,
+	NULL,
 	pas_midi_out,
 	pas_midi_start_read,
 	pas_midi_end_read,

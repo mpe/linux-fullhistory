@@ -10,6 +10,9 @@
  * Version 2 (June 1991). See the "COPYING" file distributed with this software
  * for more info.
  */
+/*
+ * Thomas Sailer   : ioctl code reworked (vmalloc/vfree removed)
+ */
 #include <linux/config.h>
 #include <linux/module.h>
 
@@ -746,45 +749,34 @@ mpu401_end_read(int dev)
 	return 0;
 }
 
-static int
-mpu401_ioctl(int dev, unsigned cmd, caddr_t arg)
+static int mpu401_ioctl(int dev, unsigned cmd, caddr_t arg)
 {
 	struct mpu_config *devc;
-	int             val;
+	mpu_command_rec rec;
+	int val, ret;
 
 	devc = &dev_conf[dev];
+	switch (cmd) {
+	case SNDCTL_MIDI_MPUMODE:
+		if (!(devc->capabilities & MPU_CAP_INTLG)) { /* No intelligent mode */
+			printk("MPU-401: Intelligent mode not supported by the HW\n");
+			return -EINVAL;
+		}
+		if (__get_user(val, (int *)arg))
+			return -EFAULT;
+		set_uart_mode(dev, devc, !val);
+		return 0;
 
-	switch (cmd)
-	  {
-	  case SNDCTL_MIDI_MPUMODE:
-		  if (!(devc->capabilities & MPU_CAP_INTLG))	/* No intelligent mode */
-		    {
-			    printk("MPU-401: Intelligent mode not supported by the HW\n");
-			    return -EINVAL;
-		    }
-		  val = *(int *) arg;
-		  set_uart_mode(dev, devc, !val);
-		  return 0;
-		  break;
+	case SNDCTL_MIDI_MPUCMD:
+		if (__copy_from_user(&rec, arg, sizeof(rec)))
+			return -EFAULT;
+		if ((ret = mpu401_command(dev, &rec)) < 0)
+			return ret;
+		return __copy_to_user(arg, &rec, sizeof(rec));
 
-	  case SNDCTL_MIDI_MPUCMD:
-		  {
-			  int             ret;
-			  mpu_command_rec rec;
-
-			  memcpy((char *) &rec, (&((char *) arg)[0]), sizeof(rec));
-
-			  if ((ret = mpu401_command(dev, &rec)) < 0)
-				  return ret;
-
-			  memcpy((&((char *) arg)[0]), (char *) &rec, sizeof(rec));
-			  return 0;
-		  }
-		  break;
-
-	  default:
-		  return -EINVAL;
-	  }
+	default:
+		return -EINVAL;
+	}
 }
 
 static void

@@ -220,10 +220,10 @@ __initfunc(void ide_init_trm290 (ide_hwif_t *hwif))
 	 && !pcibios_read_config_dword(hwif->pci_bus, hwif->pci_fn, 0x20, &cfgbase) && cfgbase)
 	{
 		hwif->config_data = cfgbase & ~1;
-		printk("TRM290: chip config base at 0x%04x\n", hwif->config_data);
+		printk("TRM290: chip config base at 0x%04lx\n", hwif->config_data);
 	} else {
-		hwif->config_data = 0x3df4;
-		printk("TRM290: using default config base at 0x%04x\n", hwif->config_data);
+		hwif->config_data = 0x3df0;
+		printk("TRM290: using default config base at 0x%04lx\n", hwif->config_data);
 	}
 
 	save_flags(flags);
@@ -241,7 +241,7 @@ __initfunc(void ide_init_trm290 (ide_hwif_t *hwif))
 		hwif->irq = hwif->channel ? 15 : 14;	/* legacy mode */
 	else if (!hwif->irq && hwif->mate && hwif->mate->irq)
 		hwif->irq = hwif->mate->irq;		/* sharing IRQ with mate */
-	ide_setup_dma(hwif, (hwif->channel ? hwif->config_data ^ 0x0080 : hwif->config_data) + 4, 2);
+	ide_setup_dma(hwif, (hwif->config_data + 4) ^ (hwif->channel ? 0x0080 : 0x0000), 2);
 	hwif->dmaproc = &trm290_dmaproc;
 	hwif->selectproc = &trm290_selectproc;
 	hwif->no_autodma = 1;				/* play it safe for now */

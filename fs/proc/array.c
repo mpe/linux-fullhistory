@@ -427,6 +427,14 @@ static int get_arg(int pid, char * buffer)
 	return get_array(p, p->mm->arg_start, p->mm->arg_end, buffer);
 }
 
+/*
+ * These bracket the sleeping functions..
+ */
+extern void scheduling_functions_start_here(void);
+extern void scheduling_functions_end_here(void);
+#define first_sched	((unsigned long) scheduling_functions_start_here)
+#define last_sched	((unsigned long) scheduling_functions_end_here)
+
 static unsigned long get_wchan(struct task_struct *p)
 {
 	if (!p || p == current || p->state == TASK_RUNNING)
@@ -445,8 +453,7 @@ static unsigned long get_wchan(struct task_struct *p)
 			if (ebp < stack_page || ebp >= 4092+stack_page)
 				return 0;
 			eip = *(unsigned long *) (ebp+4);
-			if (eip < (unsigned long) interruptible_sleep_on
-			    || eip >= (unsigned long) add_timer)
+			if (eip < first_sched || eip >= last_sched)
 				return eip;
 			ebp = *(unsigned long *) ebp;
 		} while (count++ < 16);
@@ -466,7 +473,7 @@ static unsigned long get_wchan(struct task_struct *p)
 	    unsigned long pc;
 
 	    pc = thread_saved_pc(&p->tss);
-	    if (pc >= (unsigned long) interruptible_sleep_on && pc < (unsigned long) add_timer) {
+	    if (pc >= first_sched && pc < last_sched) {
 		schedule_frame = ((unsigned long *)p->tss.ksp)[6];
 		return ((unsigned long *)schedule_frame)[12];
 	    }
@@ -488,10 +495,7 @@ static unsigned long get_wchan(struct task_struct *p)
 			    return 0;
 		    pc = ((unsigned long *)fp)[1];
 		/* FIXME: This depends on the order of these functions. */
-		    if ((pc < (unsigned long) __down
-		         || pc >= (unsigned long) add_timer)
-		        && (pc < (unsigned long) schedule
-			    || pc >= (unsigned long) sys_pause))
+		    if (pc < first_sched || pc >= last_sched)
 		      return pc;
 		    fp = *(unsigned long *) fp;
 	    } while (count++ < 16);

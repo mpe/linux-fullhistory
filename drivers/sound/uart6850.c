@@ -1,6 +1,3 @@
-
-
-
 /*
  * sound/uart6850.c
  */
@@ -226,12 +223,6 @@ uart6850_end_read(int dev)
 	return 0;
 }
 
-static int
-uart6850_ioctl(int dev, unsigned cmd, caddr_t arg)
-{
-	return -EINVAL;
-}
-
 static void
 uart6850_kick(int dev)
 {
@@ -256,7 +247,7 @@ static struct midi_operations uart6850_operations =
 	{0},
 	uart6850_open,
 	uart6850_close,
-	uart6850_ioctl,
+	NULL, /* ioctl */
 	uart6850_out,
 	uart6850_start_read,
 	uart6850_end_read,

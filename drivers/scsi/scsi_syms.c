@@ -64,6 +64,7 @@ EXPORT_SYMBOL(scsi_request_queueable);
 EXPORT_SYMBOL(scsi_release_command);
 EXPORT_SYMBOL(print_Scsi_Cmnd);
 EXPORT_SYMBOL(scsi_block_when_processing_errors);
+EXPORT_SYMBOL(scsi_mark_host_reset);
 #if defined(CONFIG_SCSI_LOGGING) /* { */
 EXPORT_SYMBOL(scsi_logging_level);
 #endif

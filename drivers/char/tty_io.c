@@ -1548,12 +1548,16 @@ static int tty_ioctl(struct inode * inode, struct file * file,
 		switch(cmd) {
 		case TIOCSBRK:
 		case TIOCCBRK:
-			return tty->driver.ioctl(tty, file, cmd, arg);
+			if (tty->driver.ioctl)
+				return tty->driver.ioctl(tty, file, cmd, arg);
+			return -EINVAL;
 			
 		/* These two ioctl's always return success; even if */
 		/* the driver doesn't support them. */
 		case TCSBRK:
-		case TCSBRKP:			
+		case TCSBRKP:
+			if (!tty->driver.ioctl)
+				return 0;
 			retval = tty->driver.ioctl(tty, file, cmd, arg);
 			if (retval == -ENOIOCTLCMD)
 				retval = 0;

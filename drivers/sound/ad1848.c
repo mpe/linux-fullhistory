@@ -21,6 +21,9 @@
  * Version 2 (June 1991). See the "COPYING" file distributed with this software
  * for more info.
  */
+/*
+ * Thomas Sailer   : ioctl code reworked (vmalloc/vfree removed)
+ */
 
 #include <linux/config.h>
 #include <linux/module.h>
@@ -121,7 +124,6 @@ static ad1848_info adev_info[MAX_AUDIO_DEV];
 
 static int      ad1848_open(int dev, int mode);
 static void     ad1848_close(int dev);
-static int      ad1848_ioctl(int dev, unsigned int cmd, caddr_t arg);
 static void     ad1848_output_block(int dev, unsigned long buf, int count, int intrflag);
 static void     ad1848_start_input(int dev, unsigned long buf, int count, int intrflag);
 static int      ad1848_prepare_for_output(int dev, int bsize, int bcount);
@@ -524,80 +526,74 @@ ad1848_mixer_reset(ad1848_info * devc)
 		ad_write(devc, 26, ad_read(devc, 26) | 0x40);	/* Mute mono out */
 }
 
-static int
-ad1848_mixer_ioctl(int dev, unsigned int cmd, caddr_t arg)
+static int ad1848_mixer_ioctl(int dev, unsigned int cmd, caddr_t arg)
 {
-	ad1848_info    *devc = mixer_devs[dev]->devc;
+	ad1848_info *devc = mixer_devs[dev]->devc;
+	int val;
 
-	if (cmd == SOUND_MIXER_PRIVATE1)
-	  {
-		  int             val;
+	if (cmd == SOUND_MIXER_PRIVATE1) {
+		if (__get_user(val, (int *)arg))
+			return -EFAULT;
 
-		  val = *(int *) arg;
-
-		  if (val == 0xffff)
-			  return (*(int *) arg = devc->mixer_output_port);
-
-		  val &= (AUDIO_SPEAKER | AUDIO_HEADPHONE | AUDIO_LINE_OUT);
-
-		  devc->mixer_output_port = val;
-		  val |= AUDIO_HEADPHONE | AUDIO_LINE_OUT;	/* Always on */
-		  devc->mixer_output_port = val;
-
-		  if (val & AUDIO_SPEAKER)
-			  ad_write(devc, 26, ad_read(devc, 26) & ~0x40);	/* Unmute mono out */
-		  else
-			  ad_write(devc, 26, ad_read(devc, 26) | 0x40);		/* Mute mono out */
-
-		  return (*(int *) arg = devc->mixer_output_port);
-	  }
-	if (((cmd >> 8) & 0xff) == 'M')
-	  {
-		  int             val;
-
-		  if (_SIOC_DIR(cmd) & _SIOC_WRITE)
-			  switch (cmd & 0xff)
-			    {
-			    case SOUND_MIXER_RECSRC:
-				    val = *(int *) arg;
-				    return (*(int *) arg = ad1848_set_recmask(devc, val));
-				    break;
-
+		if (val != 0xffff) {
+			val &= (AUDIO_SPEAKER | AUDIO_HEADPHONE | AUDIO_LINE_OUT);
+			devc->mixer_output_port = val;
+			val |= AUDIO_HEADPHONE | AUDIO_LINE_OUT;	/* Always on */
+			devc->mixer_output_port = val;
+			if (val & AUDIO_SPEAKER)
+				ad_write(devc, 26, ad_read(devc, 26) & ~0x40);	/* Unmute mono out */
+			else
+				ad_write(devc, 26, ad_read(devc, 26) | 0x40);		/* Mute mono out */
+		}
+		val = devc->mixer_output_port;
+		return __put_user(val, (int *)arg);
+	}
+	if (((cmd >> 8) & 0xff) == 'M') {
+		if (_SIOC_DIR(cmd) & _SIOC_WRITE)
+			switch (cmd & 0xff) {
+			case SOUND_MIXER_RECSRC:
+				if (__get_user(val, (int *)arg))
+					return -EFAULT;
+				val = ad1848_set_recmask(devc, val);
+				return __put_user(val, (int *)arg);
+				
 			    default:
-				    val = *(int *) arg;
-				    return (*(int *) arg = ad1848_mixer_set(devc, cmd & 0xff, val));
-		  } else
-			  switch (cmd & 0xff)	/*
-						 * Return parameters
-						 */
-			    {
+				if (__get_user(val, (int *)arg))
+					return -EFAULT;
+				val = ad1848_mixer_set(devc, cmd & 0xff, val);
+				return __put_user(val, (int *)arg);
+			} 
+		else
+			switch (cmd & 0xff) {
+				/*
+				 * Return parameters
+				 */
+			    
+			case SOUND_MIXER_RECSRC:
+				val = devc->recmask;
+				return __put_user(val, (int *)arg);
+				
+			case SOUND_MIXER_DEVMASK:
+				val = devc->supported_devices;
+				return __put_user(val, (int *)arg);
+				
+			case SOUND_MIXER_STEREODEVS:
+				val = devc->supported_devices;
+				if (devc->model != MD_C930)
+					val &= ~(SOUND_MASK_SPEAKER | SOUND_MASK_IMIX);
+				return __put_user(val, (int *)arg);
+				
+			case SOUND_MIXER_RECMASK:
+				val = devc->supported_rec_devices;
+				return __put_user(val, (int *)arg);
 
-			    case SOUND_MIXER_RECSRC:
-				    return (*(int *) arg = devc->recmask);
-				    break;
+			case SOUND_MIXER_CAPS:
+				return __put_user(SOUND_CAP_EXCL_INPUT, (int *)arg);
 
-			    case SOUND_MIXER_DEVMASK:
-				    return (*(int *) arg = devc->supported_devices);
-				    break;
-
-			    case SOUND_MIXER_STEREODEVS:
-				    if (devc->model == MD_C930)
-					    return (*(int *) arg = devc->supported_devices);
-				    else
-					    return (*(int *) arg = devc->supported_devices & ~(SOUND_MASK_SPEAKER | SOUND_MASK_IMIX));
-				    break;
-
-			    case SOUND_MIXER_RECMASK:
-				    return (*(int *) arg = devc->supported_rec_devices);
-				    break;
-
-			    case SOUND_MIXER_CAPS:
-				    return (*(int *) arg = SOUND_CAP_EXCL_INPUT);
-				    break;
-
-			    default:
-				    return (*(int *) arg = ad1848_mixer_get(devc, cmd & 0xff));
-			    }
+			default:
+				val = ad1848_mixer_get(devc, cmd & 0xff);
+				return __put_user(val, (int *)arg);
+			}
 	} else
 		return -EINVAL;
 }
@@ -784,7 +780,7 @@ static struct audio_driver ad1848_audio_driver =
 	ad1848_close,
 	ad1848_output_block,
 	ad1848_start_input,
-	ad1848_ioctl,
+	NULL,
 	ad1848_prepare_for_input,
 	ad1848_prepare_for_output,
 	ad1848_halt,
@@ -871,12 +867,6 @@ ad1848_close(int dev)
 
 	ad_unmute(devc);
 	restore_flags(flags);
-}
-
-static int
-ad1848_ioctl(int dev, unsigned int cmd, caddr_t arg)
-{
-	return -EINVAL;
 }
 
 static void

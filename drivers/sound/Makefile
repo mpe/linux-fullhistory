@@ -41,7 +41,7 @@ M_OBJS   :=
 L_OBJS   :=
 
 ifeq ($(CONFIG_SOUND),y)
-  L_OBJS += soundcard.o dev_table.o sound_switch.o sequencer.o sys_timer.o sound_timer.o lowlevel/lowlevel.o midi_synth.o midibuf.o sound_firmware.o audio.o dmabuf.o
+  L_OBJS += soundcard.o dev_table.o sequencer.o sys_timer.o sound_timer.o lowlevel/lowlevel.o midi_synth.o midibuf.o sound_firmware.o audio.o dmabuf.o
 else
   ifeq ($(CONFIG_SOUND),m)
      M_OBJS += sound.o
@@ -238,8 +238,8 @@ sb.o: sb_audio.o sb_card.o sb_common.o sb_midi.o sb_mixer.o
 lowlevel/lowlevel.o:
 	cd lowlevel; make
 
-sound.o: soundcard.o dev_table.o sound_switch.o audio.o dmabuf.o sequencer.o sys_timer.o sound_timer.o lowlevel/lowlevel.o midi_synth.o midibuf.o sound_firmware.o
-	ld -r -o sound.o soundcard.o dev_table.o sound_switch.o audio.o dmabuf.o \
+sound.o: soundcard.o dev_table.o audio.o dmabuf.o sequencer.o sys_timer.o sound_timer.o lowlevel/lowlevel.o midi_synth.o midibuf.o sound_firmware.o
+	ld -r -o sound.o soundcard.o dev_table.o audio.o dmabuf.o \
 	       sequencer.o sys_timer.o sound_timer.o lowlevel/lowlevel.o \
 	       midi_synth.o midibuf.o sound_firmware.o
 	rm sound_syms.o

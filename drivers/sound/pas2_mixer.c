@@ -12,6 +12,9 @@
  * Version 2 (June 1991). See the "COPYING" file distributed with this software
  * for more info.
  */
+/*
+ * Thomas Sailer   : ioctl code reworked (vmalloc/vfree removed)
+ */
 #include <linux/config.h>
 
 #include "sound_config.h"
@@ -211,122 +214,97 @@ pas_mixer_reset(void)
 	set_mode(0x04 | 0x01);
 }
 
-static int
-pas_mixer_ioctl(int dev, unsigned int cmd, caddr_t arg)
+static int pas_mixer_ioctl(int dev, unsigned int cmd, caddr_t arg)
 {
+	int level, v;
+
 	DEB(printk("pas2_mixer.c: int pas_mixer_ioctl(unsigned int cmd = %X, unsigned int arg = %X)\n", cmd, arg));
+	if (cmd == SOUND_MIXER_PRIVATE1) { /* Set loudness bit */
+		if (__get_user(level, (int *)arg))
+			return -EFAULT;
+		if (level == -1)  /* Return current settings */
+			level = (mode_control & 0x04);
+		else {
+			mode_control &= ~0x04;
+			if (level)
+				mode_control |= 0x04;
+			set_mode(mode_control);
+		}
+		level = !!level;
+		return __put_user(level, (int *)arg);
+	}
+	if (cmd == SOUND_MIXER_PRIVATE2) { /* Set enhance bit */
+		if (__get_user(level, (int *)arg))
+			return -EFAULT;
+		if (level == -1) { /* Return current settings */
+			if (!(mode_control & 0x03))
+				level = 0;
+			else
+				level = ((mode_control & 0x03) + 1) * 20;
+		} else {
+			int i = 0;
+			
+			level &= 0x7f;
+			if (level)
+				i = (level / 20) - 1;
+			mode_control &= ~0x03;
+			mode_control |= i & 0x03;
+			set_mode(mode_control);
+			if (i)
+				i = (i + 1) * 20;
+			level = i;
+		}
+		return __put_user(level, (int *)arg);
+	}
+	if (cmd == SOUND_MIXER_PRIVATE3) { /* Set mute bit */
+		if (__get_user(level, (int *)arg))
+			return -EFAULT;
+		if (level == -1)	/* Return current settings */
+			level = = !(pas_read(0x0B8A) & 0x20);
+		else {
+			if (level)
+				pas_write(pas_read(0x0B8A) & (~0x20), 0x0B8A);
+			else
+				pas_write(pas_read(0x0B8A) | 0x20, 0x0B8A);
 
-	if (cmd == SOUND_MIXER_PRIVATE1)	/* Set loudness bit */
-	  {
-		  int             level;
-
-		  level = *(int *) arg;
-
-		  if (level == -1)	/* Return current settings */
-		    {
-			    if (mode_control & 0x04)
-				    return (*(int *) arg = 1);
-			    else
-				    return (*(int *) arg = 0);
-		  } else
-		    {
-			    mode_control &= ~0x04;
-			    if (level)
-				    mode_control |= 0x04;
-			    set_mode(mode_control);
-			    return (*(int *) arg = !!level);	/* 0 or 1 */
-		    }
-	  }
-	if (cmd == SOUND_MIXER_PRIVATE2)	/* Set enhance bit */
-	  {
-		  int             level;
-
-		  level = *(int *) arg;
-
-		  if (level == -1)	/* Return current settings */
-		    {
-			    if (!(mode_control & 0x03))
-				    return (*(int *) arg = 0);
-			    return (*(int *) arg = ((mode_control & 0x03) + 1) * 20);
-		  } else
-		    {
-			    int             i = 0;
-
-			    level &= 0x7f;
-			    if (level)
-				    i = (level / 20) - 1;
-
-			    mode_control &= ~0x03;
-			    mode_control |= i & 0x03;
-			    set_mode(mode_control);
-
-			    if (i)
-				    i = (i + 1) * 20;
-
-			    return i;
-		    }
-	  }
-	if (cmd == SOUND_MIXER_PRIVATE3)	/* Set mute bit */
-	  {
-		  int             level;
-
-		  level = *(int *) arg;
-
-		  if (level == -1)	/* Return current settings */
-		    {
-			    return (*(int *) arg = !(pas_read(0x0B8A) & 0x20));
-		  } else
-		    {
-			    if (level)
-				    pas_write(pas_read(0x0B8A) & (~0x20),
-					      0x0B8A);
-			    else
-				    pas_write(pas_read(0x0B8A) | 0x20,
-					      0x0B8A);
-
-			    return !(pas_read(0x0B8A) & 0x20);
-		    }
-	  }
-	if (((cmd >> 8) & 0xff) == 'M')
-	  {
-		  int             v;
-
-		  v = *(int *) arg;
-
-		  if (_SIOC_DIR(cmd) & _SIOC_WRITE)
-			  return (*(int *) arg = pas_mixer_set(cmd & 0xff, v));
-		  else
-		    {
-
-			    switch (cmd & 0xff)
-			      {
-
-			      case SOUND_MIXER_RECSRC:
-				      return (*(int *) arg = rec_devices);
-				      break;
-
-			      case SOUND_MIXER_STEREODEVS:
-				      return (*(int *) arg = SUPPORTED_MIXER_DEVICES & ~(SOUND_MASK_BASS | SOUND_MASK_TREBLE));
-				      break;
-
-			      case SOUND_MIXER_DEVMASK:
-				      return (*(int *) arg = SUPPORTED_MIXER_DEVICES);
-				      break;
-
-			      case SOUND_MIXER_RECMASK:
-				      return (*(int *) arg = POSSIBLE_RECORDING_DEVICES & SUPPORTED_MIXER_DEVICES);
-				      break;
-
-			      case SOUND_MIXER_CAPS:
-				      return (*(int *) arg = 0);	/* No special capabilities */
-				      break;
-
-
-			      default:
-				      return (*(int *) arg = levels[cmd & 0xff]);
-			      }
-		    }
-	  }
+			level = !(pas_read(0x0B8A) & 0x20);
+		}
+		return __put_user(level, (int *)arg);
+	}
+	if (((cmd >> 8) & 0xff) == 'M') {
+		if (__get_user(v, (int *)arg))
+			return -EFAULT;
+		if (_SIOC_DIR(cmd) & _SIOC_WRITE) {
+			v = pas_mixer_set(cmd & 0xff, v);
+		} else {
+			switch (cmd & 0xff) {
+			case SOUND_MIXER_RECSRC:
+				v = rec_devices;
+				break;
+				
+			case SOUND_MIXER_STEREODEVS:
+				v = SUPPORTED_MIXER_DEVICES & ~(SOUND_MASK_BASS | SOUND_MASK_TREBLE);
+				break;
+				
+			case SOUND_MIXER_DEVMASK:
+				v = SUPPORTED_MIXER_DEVICES;
+				break;
+				
+			case SOUND_MIXER_RECMASK:
+				v = POSSIBLE_RECORDING_DEVICES & SUPPORTED_MIXER_DEVICES;
+				break;
+				
+			case SOUND_MIXER_CAPS:
+				v = 0;	/* No special capabilities */
+				break;
+				
+			default:
+				v = levels[cmd & 0xff];
+				break;
+			}
+		}
+		return __put_user(v, (int *)arg);
+	}
 	return -EINVAL;
 }
 

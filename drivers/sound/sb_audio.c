@@ -956,18 +956,13 @@ static void sb16_audio_trigger(int dev, int bits)
 	devc->trigger_bits = bits;
 }
 
-static int sb_audio_ioctl(int dev, unsigned int cmd, caddr_t arg)
-{
-	return -EINVAL;
-}
-
 static struct audio_driver sb1_audio_driver =	/* SB1.x */
 {
 	sb_audio_open,
 	sb_audio_close,
 	sb_set_output_parms,
 	sb_set_input_parms,
-	sb_audio_ioctl,
+	NULL, /* ioctl */
 	sb1_audio_prepare_for_input,
 	sb1_audio_prepare_for_output,
 	sb1_audio_halt_xfer,

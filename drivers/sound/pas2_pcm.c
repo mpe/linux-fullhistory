@@ -8,6 +8,9 @@
  * Version 2 (June 1991). See the "COPYING" file distributed with this software
  * for more info.
  */
+/*
+ * Thomas Sailer   : ioctl code reworked (vmalloc/vfree removed)
+ */
 #include <linux/config.h>
 
 #include "sound_config.h"
@@ -144,51 +147,53 @@ pcm_set_bits(int arg)
 	return pcm_bits;
 }
 
-static int
-pas_audio_ioctl(int dev, unsigned int cmd, caddr_t arg)
+static int pas_audio_ioctl(int dev, unsigned int cmd, caddr_t arg)
 {
-	int             val;
+	int val, ret;
 
 	DEB(printk("pas2_pcm.c: static int pas_audio_ioctl(unsigned int cmd = %X, unsigned int arg = %X)\n", cmd, arg));
 
-	switch (cmd)
-	  {
-	  case SOUND_PCM_WRITE_RATE:
-		  val = *(int *) arg;
-		  return (*(int *) arg = pcm_set_speed(val));
-		  break;
+	switch (cmd) {
+	case SOUND_PCM_WRITE_RATE:
+		if (__get_user(val, (int *)arg)) 
+			return -EFAULT;
+		ret = pcm_set_speed(val);
+		break;
 
-	  case SOUND_PCM_READ_RATE:
-		  return (*(int *) arg = pcm_speed);
-		  break;
+	case SOUND_PCM_READ_RATE:
+		ret = pcm_speed;
+		break;
+		
+	case SNDCTL_DSP_STEREO:
+		if (__get_user(val, (int *)arg)) 
+			return -EFAULT;
+		ret = pcm_set_channels(val + 1) - 1;
+		break;
 
-	  case SNDCTL_DSP_STEREO:
-		  val = *(int *) arg;
-		  return (*(int *) arg = pcm_set_channels(val + 1) - 1);
-		  break;
+	case SOUND_PCM_WRITE_CHANNELS:
+		if (__get_user(val, (int *)arg)) 
+			return -EFAULT;
+		ret = pcm_set_channels(val);
+		break;
 
-	  case SOUND_PCM_WRITE_CHANNELS:
-		  val = *(int *) arg;
-		  return (*(int *) arg = pcm_set_channels(val));
-		  break;
+	case SOUND_PCM_READ_CHANNELS:
+		ret = pcm_channels;
+		break;
 
-	  case SOUND_PCM_READ_CHANNELS:
-		  return (*(int *) arg = pcm_channels);
-		  break;
-
-	  case SNDCTL_DSP_SETFMT:
-		  val = *(int *) arg;
-		  return (*(int *) arg = pcm_set_bits(val));
-		  break;
-
-	  case SOUND_PCM_READ_BITS:
-		  return (*(int *) arg = pcm_bits);
-
-	  default:
-		  return -EINVAL;
-	  }
-
-	return -EINVAL;
+	case SNDCTL_DSP_SETFMT:
+		if (__get_user(val, (int *)arg))
+			return -EFAULT;
+		ret = pcm_set_bits(val);
+		break;
+		
+	case SOUND_PCM_READ_BITS:
+		ret = pcm_bits;
+		break;
+  
+	default:
+		return -EINVAL;
+	}
+	return __put_user(ret, (int *)arg);
 }
 
 static void

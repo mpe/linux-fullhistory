@@ -32,6 +32,9 @@
 # handling
 #
 # 101297 Michael Chastain (mec@shout.net) - remove sound driver cruft.
+#
+# 221297 Michael Chastain (mec@shout.net) - make define_bool actually
+# define its arguments so that later tests on them work right.
 #----------------------------------------------------------------------------
 
 
@@ -100,10 +103,10 @@ function comment () {
 }
 
 #
-# Don't need this yet, but we don't want to puke either.
+# Define a boolean to a specific value.
 #
 function define_bool () {
-	:	
+	eval $1=$2
 }
 
 #
@@ -432,7 +435,7 @@ function l_int () {
 
 			# Semantics of + and ? in GNU expr changed, so
 			# we avoid them:
-			if expr "$answer" : '0$\|\(-[1-9]\|[0-9]\)[0-9]*$' >/dev/null
+			if expr "$answer" : '0$\|-[1-9][0-9]*$\|[1-9][0-9]*$' >/dev/null
 			then
 				eval $2="$answer"
 			else
@@ -1178,7 +1181,7 @@ followed by the <SPACE BAR>.
 Press <?> for additional information about this option."
 
 inputbox_instructions_int="\
-Please enter a decimal value between 1 and 9999. \
+Please enter a decimal value. \
 Fractions will not be accepted.  \
 Use the <TAB> key to move from the input field to the buttons below it."
 

@@ -411,7 +411,7 @@ static void nfs_dentry_delete(struct dentry *dentry)
 		int error;
 		
 		dentry->d_flags &= ~DCACHE_NFSFS_RENAMED;
-#ifdef NFS_DEBUG
+#ifdef NFS_DEBUG_VERBOSE
 printk("nfs_dentry_delete: unlinking %s/%s\n",
 dentry->d_parent->d_name.name, dentry->d_name.name);
 #endif
@@ -647,34 +647,21 @@ static int nfs_mkdir(struct inode *dir, struct dentry *dentry, int mode)
 	if (dentry->d_name.len > NFS_MAXNAMLEN)
 		goto out;
 
-	/* For some reason mode doesn't have the S_IFDIR flag ... */
-	mode |= S_IFDIR;
-	sattr.mode = mode;
+	sattr.mode = mode | S_IFDIR;
 	sattr.uid = sattr.gid = sattr.size = (unsigned) -1;
 	sattr.atime.seconds = sattr.mtime.seconds = (unsigned) -1;
 
 	nfs_invalidate_dircache(dir);
 	error = nfs_proc_mkdir(NFS_SERVER(dir), NFS_FH(dir),
 				dentry->d_name.name, &sattr, &fhandle, &fattr);
-	if (!error) {
-		/*
-		 * Some AIX servers reportedly fail to fill out the fattr.
-		 * Check for a bad mode value and complain, then drop the
-		 * dentry to force a new lookup.
-		 */
-		if (!S_ISDIR(fattr.mode)) {
-			static int complain = 0;
-			if (!complain++)
-				printk("NFS: buggy server! fattr mode=%x\n",
-					fattr.mode);
-			goto drop;
-		}
-		error = nfs_instantiate(dentry, &fhandle, &fattr);
-	}
-	if (error) {
-	drop:
-		d_drop(dentry);
-	}
+
+	/*
+	 * Always drop the dentry, we can't always depend on
+	 * the fattr returned by the server (AIX seems to be
+	 * broken). We're better off doing another lookup than
+	 * depending on potentially bogus information.
+	 */
+	d_drop(dentry);
 out:
 	return error;
 }
@@ -1109,10 +1096,8 @@ new_dentry->d_parent->d_name.name,new_dentry->d_name.name,new_dentry->d_count);
 	 * First check whether the target is busy ... we can't
 	 * safely do _any_ rename if the target is in use.
 	 */
-	if (new_dentry->d_count > 1) {
-		if (new_inode && S_ISDIR(new_inode->i_mode))
-			shrink_dcache_parent(new_dentry);
-	}
+	if (new_dentry->d_count > 1 && !list_empty(&new_dentry->d_subdirs))
+		shrink_dcache_parent(new_dentry);
 	error = -EBUSY;
 	if (new_dentry->d_count > 1) {
 #ifdef NFS_PARANOIA
@@ -1176,28 +1161,33 @@ new_dentry->d_parent->d_name.name,new_dentry->d_name.name,new_dentry->d_count);
 
 do_rename:
 	/*
-	 * We must prevent any new references to the target while
-	 * the rename is in progress, so we unhash the dentry.
+	 * To prevent any new references to the target during the rename,
+	 * we unhash the dentry and free the inode in advance.
 	 */
+#ifdef NFS_PARANOIA
+if (new_inode && 
+    new_inode->i_count > (S_ISDIR(new_inode->i_mode) ? 1 : new_inode->i_nlink))
+printk("nfs_rename: %s/%s inode busy?? i_count=%d, i_nlink=%d\n",
+new_dentry->d_parent->d_name.name, new_dentry->d_name.name,
+new_inode->i_count, new_inode->i_nlink);
+#endif
 	if (!list_empty(&new_dentry->d_hash)) {
 		d_drop(new_dentry);
 		rehash = update;
 	}
+	if (new_inode) {
+		d_delete(new_dentry);
+	}
+
 	nfs_invalidate_dircache(new_dir);
 	nfs_invalidate_dircache(old_dir);
 	error = nfs_proc_rename(NFS_SERVER(old_dir),
 				NFS_FH(old_dir), old_dentry->d_name.name,
 				NFS_FH(new_dir), new_dentry->d_name.name);
-	if (rehash) {
-		d_add(new_dentry, new_inode);
-	}
-#ifdef NFS_PARANOIA
-if (new_dentry->d_count > 1)
-printk("nfs_rename: %s/%s busy after rename, d_count=%d\n",
-new_dentry->d_parent->d_name.name,new_dentry->d_name.name,new_dentry->d_count);
-#endif
 	if (!error) {
 		/* Update the dcache if needed */
+		if (rehash)
+			d_add(new_dentry, NULL);
 		if (update)
 			d_move(old_dentry, new_dentry);
 	}

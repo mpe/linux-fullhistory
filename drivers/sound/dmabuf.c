@@ -121,24 +121,38 @@ close_dmap(int dev, struct dma_buffparms *dmap, int chan)
 }
 
 
-static unsigned int
-default_set_bits(int dev, unsigned int bits)
+static unsigned int default_set_bits(int dev, unsigned int bits)
 {
-	return audio_devs[dev]->d->ioctl(dev, SNDCTL_DSP_SETFMT, (caddr_t) & bits);
+	mm_segment_t fs = get_fs();
+	unsigned int r;
+
+	set_fs(get_ds());
+	r = audio_devs[dev]->d->ioctl(dev, SNDCTL_DSP_SETFMT, (caddr_t)&bits);
+	set_fs(fs);
+	return r;
 }
 
-static int
-default_set_speed(int dev, int speed)
+static int default_set_speed(int dev, int speed)
 {
-	return audio_devs[dev]->d->ioctl(dev, SNDCTL_DSP_SPEED, (caddr_t) & speed);
+	mm_segment_t fs = get_fs();
+	int r;
+
+	set_fs(get_ds());
+	r = audio_devs[dev]->d->ioctl(dev, SNDCTL_DSP_SPEED, (caddr_t)&speed);
+	set_fs(fs);
+	return r;
 }
 
-static short
-default_set_channels(int dev, short channels)
+static short default_set_channels(int dev, short channels)
 {
-	int             c = channels;
+	int c = channels;
+	mm_segment_t fs = get_fs();
+	short r;
 
-	return audio_devs[dev]->d->ioctl(dev, SNDCTL_DSP_CHANNELS, (caddr_t) & c);
+	set_fs(get_ds());
+	r = audio_devs[dev]->d->ioctl(dev, SNDCTL_DSP_CHANNELS, (caddr_t)&c);
+	set_fs(fs);
+	return r;
 }
 
 static void

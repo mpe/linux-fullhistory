@@ -109,8 +109,14 @@ extern void xd_setup(char *str, int *ints);
 #ifdef CONFIG_BLK_DEV_IDE
 extern void ide_setup(char *);
 #endif
-#ifdef CONFIG_BLK_DEV_EZ
-extern void ez_setup(char *str, int *ints);
+#ifdef CONFIG_PARIDE_PD
+extern void pd_setup(char *str, int *ints);
+#endif
+#ifdef CONFIG_PARIDE_PF
+extern void pf_setup(char *str, int *ints);
+#endif
+#ifdef CONFIG_PARIDE_PCD
+extern void pcd_setup(char *str, int *ints);
 #endif
 extern void floppy_setup(char *str, int *ints);
 extern void st_setup(char *str, int *ints);
@@ -165,9 +171,6 @@ extern void sonycd535_setup(char *str, int *ints);
 #ifdef CONFIG_GSCD
 extern void gscd_setup(char *str, int *ints);
 #endif CONFIG_GSCD
-#ifdef CONFIG_BPCD
-extern void bpcd_setup(char *str, int *ints);
-#endif CONFIG_BPCD
 #ifdef CONFIG_CM206
 extern void cm206_setup(char *str, int *ints);
 #endif CONFIG_CM206
@@ -399,10 +402,6 @@ static struct dev_name_struct {
 #endif
 #ifdef CONFIG_BLK_DEV_PS2
 	{ "eda",     0x2400 },
-	{ "eza",     0x2800 },
-#endif
-#ifdef CONFIG_BPCD
-	{ "bpcd",    0x2900 },
 #endif
 #if CONFIG_APBLOCK
 	{ "apblock", APBLOCK_MAJOR << 8},
@@ -585,9 +584,6 @@ static struct kernel_param cooked_params[] __initdata = {
 #ifdef CONFIG_BLK_DEV_XD
 	{ "xd=", xd_setup },
 #endif
-#ifdef CONFIG_BLK_DEV_EZ
-	{ "ez=", ez_setup },
-#endif
 #if defined(CONFIG_BLK_DEV_FD) || defined(CONFIG_AMIGA_FLOPPY) || defined(CONFIG_ATARI_FLOPPY)
 	{ "floppy=", floppy_setup },
 #endif
@@ -616,9 +612,6 @@ static struct kernel_param cooked_params[] __initdata = {
 #ifdef CONFIG_GSCD
 	{ "gscd=", gscd_setup },
 #endif CONFIG_GSCD
-#ifdef CONFIG_BPCD
-	{ "bpcd=", bpcd_setup },
-#endif CONFIG_BPCD
 #ifdef CONFIG_CM206
 	{ "cm206=", cm206_setup },
 #endif CONFIG_CM206
@@ -723,6 +716,15 @@ static struct kernel_param raw_params[] __initdata = {
 #endif
 #ifdef CONFIG_IP_PNP
 	{ "ip=", ip_auto_config_setup },
+#endif
+#ifdef CONFIG_PARIDE_PD
+	{ "pd.", pd_setup },
+#endif
+#ifdef CONFIG_PARIDE_PCD
+	{ "pcd.", pcd_setup },
+#endif
+#ifdef CONFIG_PARIDE_PF
+	{ "pf.", pf_setup },
 #endif
 	{ 0, 0 }
 };

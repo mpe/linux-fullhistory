@@ -966,7 +966,7 @@ static inline long get_it32(struct itimerval *o, struct itimerval32 *i)
 
 static inline long put_it32(struct itimerval32 *o, struct itimerval *i)
 {
-	return (!access_ok(VERIFY_WRITE, i, sizeof(*i)) ||
+	return (!access_ok(VERIFY_WRITE, o, sizeof(*o)) ||
 		(__put_user(i->it_interval.tv_sec, &o->it_interval.tv_sec) |
 		 __put_user(i->it_interval.tv_usec, &o->it_interval.tv_usec) |
 		 __put_user(i->it_value.tv_sec, &o->it_value.tv_sec) |
@@ -1241,7 +1241,7 @@ asmlinkage int osf_wait4(pid_t pid, int *ustatus, int options,
  * seems to be a timeval pointer, and I suspect the second
  * one is the time remaining.. Ho humm.. No documentation.
  */
-asmlinkage int osf_usleep_thread(struct timeval *sleep, struct timeval *remain)
+asmlinkage int osf_usleep_thread(struct timeval32 *sleep, struct timeval32 *remain)
 {
 	struct timeval tmp;
 	unsigned long ticks;

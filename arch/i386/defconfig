@@ -73,7 +73,8 @@ CONFIG_BLK_DEV_IDEDMA=y
 # CONFIG_BLK_DEV_MD is not set
 # CONFIG_BLK_DEV_RAM is not set
 # CONFIG_BLK_DEV_XD is not set
-# CONFIG_BLK_DEV_EZ is not set
+CONFIG_PARIDE_PARPORT=y
+# CONFIG_PARIDE is not set
 # CONFIG_BLK_DEV_HD is not set
 
 #
@@ -240,10 +241,6 @@ CONFIG_LOCKD=y
 CONFIG_AUTOFS_FS=y
 # CONFIG_UFS_FS is not set
 # CONFIG_MAC_PARTITION is not set
-
-#
-# Native Language Support
-#
 # CONFIG_NLS is not set
 
 #
@@ -269,6 +266,7 @@ CONFIG_82C710_MOUSE=y
 # CONFIG_RTC is not set
 # CONFIG_VIDEO_DEV is not set
 # CONFIG_VIDEO_BT848 is not set
+# CONFIG_VIDEO_BWQCAM is not set
 # CONFIG_VIDEO_PMS is not set
 # CONFIG_NVRAM is not set
 # CONFIG_JOYSTICK is not set

@@ -10,6 +10,9 @@
  * Version 2 (June 1991). See the "COPYING" file distributed with this software
  * for more info.
  */
+/*
+ * Thomas Sailer   : ioctl code reworked (vmalloc/vfree removed)
+ */
 #include <linux/config.h>
 #include <linux/module.h>
 
@@ -570,36 +573,31 @@ download_boot_block(void *dev_info, copr_buffer * buf)
 	return 0;
 }
 
-static int
-sscape_coproc_ioctl(void *dev_info, unsigned int cmd, caddr_t arg, int local)
+static int sscape_coproc_ioctl(void *dev_info, unsigned int cmd, caddr_t arg, int local)
 {
+	copr_buffer *buf;
+	int err;
 
-	switch (cmd)
-	  {
-	  case SNDCTL_COPR_RESET:
-		  sscape_coproc_reset(dev_info);
-		  return 0;
-		  break;
+	switch (cmd) {
+	case SNDCTL_COPR_RESET:
+		sscape_coproc_reset(dev_info);
+		return 0;
 
-	  case SNDCTL_COPR_LOAD:
-		  {
-			  copr_buffer    *buf;
-			  int             err;
-
-			  buf = (copr_buffer *) vmalloc(sizeof(copr_buffer));
-			  if (buf == NULL)
-				  return -ENOSPC;
-			  memcpy((char *) buf, (&((char *) arg)[0]), sizeof(*buf));
-			  err = download_boot_block(dev_info, buf);
-			  vfree(buf);
-			  return err;
-		  }
-		  break;
-
-	  default:
-		  return -EINVAL;
-	  }
-
+	case SNDCTL_COPR_LOAD:
+		buf = (copr_buffer *) vmalloc(sizeof(copr_buffer));
+		if (buf == NULL)
+			return -ENOSPC;
+		if (__copy_from_user(buf, arg, sizeof(copr_buffer))) {
+			vfree(buf);
+			return -EFAULT;
+		}
+		err = download_boot_block(dev_info, buf);
+		vfree(buf);
+		return err;
+		
+	default:
+		return -EINVAL;
+	}
 }
 
 static coproc_operations sscape_coproc_operations =

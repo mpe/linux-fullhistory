@@ -2,9 +2,6 @@
 # Native language support configuration
 #
 
-mainmenu_option next_comment
-comment 'Native Language Support'
-
 # msdos and Joliet want NLS
 if [ "$CONFIG_JOLIET" = "y" -o "$CONFIG_FAT_FS" != "n" \
 	-o "$CONFIG_NTFS_FS" != "n" ]; then
@@ -14,6 +11,8 @@ else
 fi
 
 if [ "$CONFIG_NLS" = "y" ]; then
+  mainmenu_option next_comment
+  comment 'Native Language Support'
   tristate 'Codepage 437'      CONFIG_NLS_CODEPAGE_437
   tristate 'Codepage 737'      CONFIG_NLS_CODEPAGE_737
   tristate 'Codepage 775'      CONFIG_NLS_CODEPAGE_775
@@ -40,6 +39,5 @@ if [ "$CONFIG_NLS" = "y" ]; then
   tristate 'NLS ISO 8859-8'    CONFIG_NLS_ISO8859_8
   tristate 'NLS ISO 8859-9'    CONFIG_NLS_ISO8859_9
   tristate 'NLS KOI8-R'        CONFIG_NLS_KOI8_R
+  endmenu
 fi
-
-endmenu

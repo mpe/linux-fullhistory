@@ -27,9 +27,11 @@ else
       if [ "$CONFIG_BLK_DEV_IDEPCI" = "y" ]; then
         bool '     Generic PCI bus-master DMA support' CONFIG_BLK_DEV_IDEDMA
         if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
-          bool '     Tekram TRM290 chipset support (EXPERIMENTAL)' CONFIG_BLK_DEV_TRM290
           bool '     OPTi 82C621 chipset enhanced support (EXPERIMENTAL)' CONFIG_BLK_DEV_OPTI621
-          bool '     NS87415 chipset support (EXPERIMENTAL)' CONFIG_BLK_DEV_NS87415
+          if [ "$CONFIG_BLK_DEV_IDEDMA" = "y" ]; then
+            bool '     Tekram TRM290 chipset support (EXPERIMENTAL)' CONFIG_BLK_DEV_TRM290
+            bool '     NS87415 chipset support (EXPERIMENTAL)' CONFIG_BLK_DEV_NS87415
+          fi
         fi
       fi
     fi
@@ -68,7 +70,16 @@ if [ "$CONFIG_BLK_DEV_RAM" = "y" ]; then
   bool '   Initial RAM disk (initrd) support' CONFIG_BLK_DEV_INITRD
 fi
 tristate 'XT harddisk support' CONFIG_BLK_DEV_XD
-tristate 'SyQuest EZ parallel port disk support' CONFIG_BLK_DEV_EZ
+
+if [ "$CONFIG_PARPORT" = "y" -o "$CONFIG_PARPORT" = "n" ] ; then
+   define_bool CONFIG_PARIDE_PARPORT y
+else
+   define_bool CONFIG_PARIDE_PARPORT m
+fi
+dep_tristate 'Parallel port IDE device support' CONFIG_PARIDE $CONFIG_PARIDE_PARPORT
+if [ "$CONFIG_PARIDE" != "n" ]; then
+  source drivers/block/paride/Config.in
+fi
 
 if [ "$CONFIG_BLK_DEV_HD_IDE" = "y" -o "$CONFIG_BLK_DEV_HD_ONLY" = "y" ]; then
   define_bool CONFIG_BLK_DEV_HD y

@@ -1270,7 +1270,7 @@ static int bttv_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 			v.flags&=~(VIDEO_AUDIO_MUTE|VIDEO_AUDIO_MUTABLE);
 			v.flags|=VIDEO_AUDIO_MUTABLE;
 			strcpy(v.name,"TV");
-			if(copy_to_user(&v,arg,sizeof(v)))
+			if(copy_to_user(arg,&v,sizeof(v)))
 				return -EFAULT;
 			return 0;
 		}

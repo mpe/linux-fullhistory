@@ -128,10 +128,10 @@ sb_midi_end_read(int dev)
 	return 0;
 }
 
-static int
-sb_midi_ioctl(int dev, unsigned cmd, caddr_t arg)
+/* why -EPERM and not -EINVAL?? */
+static int sb_midi_ioctl(int dev, unsigned cmd, caddr_t arg)
 {
-	return -EPERM;
+        return -EPERM;
 }
 
 void

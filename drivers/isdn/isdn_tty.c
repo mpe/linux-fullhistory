@@ -2445,14 +2445,18 @@ isdn_tty_get_msnstr(char *n, char **p)
  * Get phone-number from modem-commandbuffer
  */
 static void
-isdn_tty_getdial(char *p, char *q)
+isdn_tty_getdial(char *p, char *q,int cnt)
 {
 	int first = 1;
+	int limit=39;	/* MUST match the size in isdn_tty_parse to avoid
+				buffer overflow */
 
-	while (strchr("0123456789,#.*WPTS-", *p) && *p) {
+	while (strchr("0123456789,#.*WPTS-", *p) && *p && --cnt>0) {
 		if ((*p >= '0' && *p <= '9') || ((*p == 'S') && first))
 			*q++ = *p;
 		p++;
+		if(!--limit)
+			break;
 		first = 0;
 	}
 	*q = 0;
@@ -2589,7 +2593,7 @@ isdn_tty_cmd_ATand(char **p, modem_info * info)
 					m->mdmreg[i], ((i + 1) % 10) ? " " : "\r\n");
 				isdn_tty_at_cout(rb, info);
 			}
-			sprintf(rb, "\r\nEAZ/MSN: %s\r\n",
+			sprintf(rb, "\r\nEAZ/MSN: %.50s\r\n",
 				strlen(m->msn) ? m->msn : "None");
 			isdn_tty_at_cout(rb, info);
 			break;
@@ -3092,7 +3096,7 @@ isdn_tty_parse_at(modem_info * info)
 				break;
 			case 'D':
 				/* D - Dial */
-				isdn_tty_getdial(++p, ds);
+				isdn_tty_getdial(++p, ds, sizeof ds);
 				p += strlen(p);
 				if (!strlen(m->msn))
 					isdn_tty_modem_result(10, info);

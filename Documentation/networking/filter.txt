@@ -4,14 +4,14 @@ Written by: Jay Schulist <Jay.Schulist@spacs.k12.wi.us>
 Introduction
 ============
 
-	Linux Socket Filtering is a deviation of the Berkely
+	Linux Socket Filtering is derived from the Berkeley
 Packet Filter. There are some distinct differences between
 the BSD and Linux Kernel Filtering.
 
 Linux Socket Filtering (LSF) allows a user-space program to
 attach a filter onto any socket and allow or disallow certain
 types of data to come through the socket. LSF follows exactly
-the same filter code structure as the BSD Berkely Packet Filter
+the same filter code structure as the BSD Berkeley Packet Filter
 (BPF), so refering to the BSD bpf.4 manpage is very helpful in
 creating filters.
 
@@ -39,4 +39,4 @@ setsockopt(sockfd, SOL_SOCKET, SO_ATTACH_FILTER, &Filter, sizeof(Filter));
 setsockopt(sockfd, SOL_SOCKET, SO_DETACH_FILTER, &value, sizeof(value));
 
 See the BSD bpf.4 manpage and the BSD Packet Filter paper written by
-Steven McCanne and Van Jacobson of Lawrence Berkely Laboratory.
+Steven McCanne and Van Jacobson of Lawrence Berkeley Laboratory.

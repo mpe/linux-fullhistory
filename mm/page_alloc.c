@@ -161,11 +161,13 @@ void free_pages(unsigned long addr, unsigned long order)
 	change_bit((index) >> (1+(order)), (area)->map)
 #define CAN_DMA(x) (PageDMA(x))
 #define ADDRESS(x) (PAGE_OFFSET + ((x) << PAGE_SHIFT))
-#define RMQUEUE(order, dma) \
+#define RMQUEUE(order, maxorder, dma) \
 do { struct free_area_struct * area = free_area+order; \
      unsigned long new_order = order; \
-	do { struct page *prev = memory_head(area), *ret; \
-		while (memory_head(area) != (ret = prev->next)) { \
+	do { struct page *prev = memory_head(area), *ret = prev->next; \
+		while (memory_head(area) != ret) { \
+			if (new_order >= maxorder && ret->next == prev) \
+				break; \
 			if (!dma || CAN_DMA(ret)) { \
 				unsigned long map_nr = ret->map_nr; \
 				(prev->next = ret->next)->prev = prev; \
@@ -176,6 +178,7 @@ do { struct free_area_struct * area = free_area+order; \
 				return ADDRESS(map_nr); \
 			} \
 			prev = ret; \
+			ret = ret->next; \
 		} \
 		new_order++; area++; \
 	} while (new_order < NR_MEM_LISTS); \
@@ -196,11 +199,23 @@ do { unsigned long size = 1 << high; \
 
 unsigned long __get_free_pages(int priority, unsigned long order, int dma)
 {
-	unsigned long flags;
-	int reserved_pages;
+	unsigned long flags, maxorder;
 
 	if (order >= NR_MEM_LISTS)
-		return 0;
+		goto nopage;
+
+	/*
+	 * "maxorder" is the highest order number that we're allowed
+	 * to empty in order to find a free page..
+	 */
+	maxorder = order + NR_MEM_LISTS/3;
+	switch (priority) {
+	case GFP_ATOMIC:
+		maxorder = NR_MEM_LISTS;
+		/* fallthrough - no need to jump around */
+	case GFP_NFS:
+		maxorder += NR_MEM_LISTS/3;
+	}
 
 	if (in_interrupt() && priority != GFP_ATOMIC) {
 		static int count = 0;
@@ -211,19 +226,13 @@ unsigned long __get_free_pages(int priority, unsigned long order, int dma)
 		}
 	}
 
-	reserved_pages = 5;
-	if (priority != GFP_NFS)
-		reserved_pages = min_free_pages;
 repeat:
 	spin_lock_irqsave(&page_alloc_lock, flags);
-	if ((priority==GFP_ATOMIC) || nr_free_pages > reserved_pages) {
-		RMQUEUE(order, dma);
-		spin_unlock_irqrestore(&page_alloc_lock, flags);
-		return 0;
-	}
+	RMQUEUE(order, maxorder, dma);
 	spin_unlock_irqrestore(&page_alloc_lock, flags);
-	if (priority != GFP_BUFFER && try_to_free_page(priority, dma, 1))
+	if (priority != GFP_BUFFER && priority != GFP_ATOMIC && try_to_free_page(priority, dma, 1))
 		goto repeat;
+nopage:
 	return 0;
 }
 

@@ -468,6 +468,9 @@ ntfs_create(struct inode* dir,struct dentry *d,int mode)
 	/* It's not a directory */
 	r->i_op=&ntfs_inode_operations_nobmap;
 	r->i_mode=S_IFREG|S_IRUGO;
+#ifdef CONFIG_NTFS_RW
+	r->i_mode|=S_IWUGO;
+#endif
 	r->i_mode &= ~vol->umask;
 
 	d_instantiate(d,r);
@@ -654,9 +657,12 @@ static void ntfs_read_inode(struct inode* inode)
 	{
 		inode->i_op=can_mmap ? &ntfs_inode_operations : 
 			&ntfs_inode_operations_nobmap;
-		inode->i_mode=S_IFREG|S_IRUGO|S_IMMUTABLE;
 		inode->i_mode=S_IFREG|S_IRUGO;
 	}
+#ifdef CONFIG_NTFS_RW
+	if(!data || !data->compressed)
+		inode->i_mode|=S_IWUGO;
+#endif
 	inode->i_mode &= ~vol->umask;
 }
 
@@ -873,7 +879,9 @@ ntfs_read_super_unl:
 	unlock_super(sb);
 	ntfs_debug(DEBUG_OTHER, "unlock_super\n");
 ntfs_read_super_vol:
+	#ifndef NTFS_IN_LINUX_KERNEL
 	ntfs_free(vol);
+	#endif
 ntfs_read_super_dec:
 	ntfs_debug(DEBUG_OTHER, "read_super: done\n");
 	MOD_DEC_USE_COUNT;

@@ -2,7 +2,7 @@
  *  Code extracted from
  *  linux/kernel/hd.c
  *
- *  Copyright (C) 1991, 1992  Linus Torvalds
+ *  Copyright (C) 1991-1998  Linus Torvalds
  *
  *
  *  Thanks to Branko Lankester, lankeste@fwi.uva.nl, who found a bug
@@ -105,6 +105,7 @@ static void add_partition (struct gendisk *hd, int minor, int start, int size)
 static inline int is_extended_partition(struct partition *p)
 {
 	return (SYS_IND(p) == DOS_EXTENDED_PARTITION ||
+		SYS_IND(p) == WIN98_EXTENDED_PARTITION ||
 		SYS_IND(p) == LINUX_EXTENDED_PARTITION);
 }
 

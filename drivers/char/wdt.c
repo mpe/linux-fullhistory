@@ -368,7 +368,7 @@ void cleanup_module(void)
 #ifdef CONFIG_WDT_501	
 	misc_deregister(&temp_miscdev);
 #endif	
-	notifier_chain_unregister(&reboot_notifier_list, &wdt_notifier);
+	unregister_reboot_notifier(&wdt_notifier);
 	release_region(io,8);
 	free_irq(irq, NULL);
 }
@@ -388,7 +388,7 @@ __initfunc(int wdt_init(void))
 	misc_register(&temp_miscdev);
 #endif	
 	request_region(io, 8, "wdt501p");
-	notifier_chain_register(&reboot_notifier_list, &wdt_notifier);
+	register_reboot_notifier(&wdt_notifier);
 	return 0;
 }
 

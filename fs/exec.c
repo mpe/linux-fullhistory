@@ -518,7 +518,7 @@ int flush_old_exec(struct linux_binprm * bprm)
 	 * Release all of the old mmap stuff
 	 */
 	retval = exec_mmap();
-	if (retval) goto flush_failed;
+	if (retval) goto mmap_failed;
 
 	/* This is the point of no return */
 	release_old_signals(oldsig);
@@ -546,6 +546,9 @@ int flush_old_exec(struct linux_binprm * bprm)
 
 	return 0;
 
+mmap_failed:
+	if (current->sig != oldsig)
+		kfree(current->sig);
 flush_failed:
 	current->sig = oldsig;
 	return retval;

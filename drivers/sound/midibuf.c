@@ -10,6 +10,9 @@
  * Version 2 (June 1991). See the "COPYING" file distributed with this software
  * for more info.
  */
+/*
+ * Thomas Sailer   : ioctl code reworked (vmalloc/vfree removed)
+ */
 #include <linux/config.h>
 
 #define MIDIBUF_C
@@ -451,39 +454,33 @@ MIDIbuf_read(int dev, struct fileinfo *file, char *buf, int count)
 	return c;
 }
 
-int
-MIDIbuf_ioctl(int dev, struct fileinfo *file,
-	      unsigned int cmd, caddr_t arg)
+int MIDIbuf_ioctl(int dev, struct fileinfo *file,
+		  unsigned int cmd, caddr_t arg)
 {
-	int             val;
+	int val;
 
 	dev = dev >> 4;
-
-	if (((cmd >> 8) & 0xff) == 'C')
-	  {
+	if (((cmd >> 8) & 0xff) == 'C') {
 		  if (midi_devs[dev]->coproc)	/* Coprocessor ioctl */
 			  return midi_devs[dev]->coproc->ioctl(midi_devs[dev]->coproc->devc, cmd, arg, 0);
-		  else
-			  printk("/dev/midi%d: No coprocessor for this device\n", dev);
-
+		  printk("/dev/midi%d: No coprocessor for this device\n", dev);
 		  return -ENXIO;
 	} else
-		switch (cmd)
-		  {
-
-		  case SNDCTL_MIDI_PRETIME:
-			  val = *(int *) arg;
-			  if (val < 0)
-				  val = 0;
-
-			  val = (HZ * val) / 10;
-			  parms[dev].prech_timeout = val;
-			  return (*(int *) arg = val);
-			  break;
-
-		  default:
-			  return midi_devs[dev]->ioctl(dev, cmd, arg);
-		  }
+		switch (cmd) {
+		case SNDCTL_MIDI_PRETIME:
+			if (__get_user(val, (int *)arg))
+				return -EFAULT;
+			if (val < 0)
+				val = 0;
+			val = (HZ * val) / 10;
+			parms[dev].prech_timeout = val;
+			return __put_user(val, (int *)arg);
+			
+		default:
+			if (!midi_devs[dev]->ioctl)
+				return -EINVAL;
+			return midi_devs[dev]->ioctl(dev, cmd, arg);
+		}
 }
 
 int

@@ -182,6 +182,10 @@ struct task_struct {
 	long counter;
 	long priority;
 	unsigned long flags;	/* per process flags, defined below */
+	mm_segment_t addr_limit;	/* thread address space:
+					 	0-0xBFFFFFFF for user-thead
+						0-0xFFFFFFFF for kernel-thread
+					 */
 	int sigpending;
 	long debugreg[8];  /* Hardware debugging registers */
 	struct exec_domain *exec_domain;
@@ -307,7 +311,7 @@ struct task_struct {
  * your own risk!. Base=0, limit=0x1fffff (=2MB)
  */
 #define INIT_TASK \
-/* state etc */	{ 0,DEF_PRIORITY,DEF_PRIORITY,0,0, \
+/* state etc */	{ 0,DEF_PRIORITY,DEF_PRIORITY,0,KERNEL_DS,0, \
 /* debugregs */ { 0, },            \
 /* exec domain */&default_exec_domain, \
 /* binfmt */	NULL, \

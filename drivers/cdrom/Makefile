@@ -112,14 +112,6 @@ else
   endif
 endif #CONFIG_SJCD
 
-ifeq ($(CONFIG_BPCD),y)
-L_OBJS += bpcd.o
-else
-  ifeq ($(CONFIG_BPCD),m)
-  M_OBJS += bpcd.o
-  endif
-endif #CONFIG_BPCD
-
 ifeq ($(CONFIG_ISP16_CDI),y)
 L_OBJS += isp16.o
 else

@@ -178,14 +178,21 @@ __initfunc(unsigned long paging_init(unsigned long start_mem, unsigned long end_
 		 *	the error...
 		 */
 		if (!smp_scan_config(639*0x400,0x400))	/* Scan the top 1K of base RAM */
-			smp_scan_config(0xF0000,0x10000);	/* Scan the 64K of bios */
+		{
+			if(!smp_scan_config(0xF0000,0x10000))	/* Scan the 64K of bios */
+			{
+				/*
+				 *	If it is an SMP machine we should know now, unless the configuration
+				 *	is in an EISA/MCA bus machine with an extended bios data area. 
+				 */
+		 
+				address = *(unsigned short *)phys_to_virt(0x40E); /* EBDA */
+				address<<=4;	/* Real mode segments to physical */
+				smp_scan_config(address, 0x1000);	/* Scan the EBDA */
+			}
+		}
 	}
-	/*
-	 *	If it is an SMP machine we should know now, unless the configuration
-	 *	is in an EISA/MCA bus machine with an extended bios data area. I don't
-	 *	have such a machine so someone else can fill in the check of the EBDA
-	 *	here.
-	 */
+			
 /*	smp_alloc_memory(8192); */
 #endif
 	start_mem = PAGE_ALIGN(start_mem);

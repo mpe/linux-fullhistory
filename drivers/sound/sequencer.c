@@ -10,6 +10,9 @@
  * Version 2 (June 1991). See the "COPYING" file distributed with this software
  * for more info.
  */
+/*
+ * Thomas Sailer   : ioctl code reworked (vmalloc/vfree removed)
+ */
 #include <linux/config.h>
 
 
@@ -1517,303 +1520,207 @@ seq_panic(void)
 	 */
 }
 
-int
-sequencer_ioctl(int dev, struct fileinfo *file,
-		unsigned int cmd, caddr_t arg)
+int sequencer_ioctl(int dev, struct fileinfo *file,
+		    unsigned int cmd, caddr_t arg)
 {
-	int             midi_dev, orig_dev, val;
-	int             mode = file->mode & O_ACCMODE;
+	int midi_dev, orig_dev, val, err;
+	int mode = file->mode & O_ACCMODE;
+	struct synth_info inf;
+	struct seq_event_rec event_rec;
+	unsigned long flags;
 
 	orig_dev = dev = dev >> 4;
 
-	switch (cmd)
-	  {
-	  case SNDCTL_TMR_TIMEBASE:
-	  case SNDCTL_TMR_TEMPO:
-	  case SNDCTL_TMR_START:
-	  case SNDCTL_TMR_STOP:
-	  case SNDCTL_TMR_CONTINUE:
-	  case SNDCTL_TMR_METRONOME:
-	  case SNDCTL_TMR_SOURCE:
+	switch (cmd) {
+	case SNDCTL_TMR_TIMEBASE:
+	case SNDCTL_TMR_TEMPO:
+	case SNDCTL_TMR_START:
+	case SNDCTL_TMR_STOP:
+	case SNDCTL_TMR_CONTINUE:
+	case SNDCTL_TMR_METRONOME:
+	case SNDCTL_TMR_SOURCE:
+		if (seq_mode != SEQ_2)
+			return -EINVAL;
+		return tmr->ioctl(tmr_no, cmd, arg);
+		
+	case SNDCTL_TMR_SELECT:
+		if (seq_mode != SEQ_2)
+			return -EINVAL;
+		if (__get_user(pending_timer, (int *)arg))
+			return -EFAULT;
+		if (pending_timer < 0 || pending_timer >= num_sound_timers || sound_timer_devs[pending_timer] == NULL) {
+			pending_timer = -1;
+			return -EINVAL;
+		}
+		return __put_user(pending_timer, (int *)arg);
 
-		  if (seq_mode != SEQ_2)
-			  return -EINVAL;
-		  return tmr->ioctl(tmr_no, cmd, arg);
-		  break;
+	case SNDCTL_SEQ_PANIC:
+		seq_panic();
+		break;
+		
+	case SNDCTL_SEQ_SYNC:
+		if (mode == OPEN_READ)
+			return 0;
+		while (qlen > 0 && !signal_pending(current))
+			seq_sync();
+		return qlen ? -EINTR : 0;
+		
+	case SNDCTL_SEQ_RESET:
+		seq_reset();
+		return 0;
 
-	  case SNDCTL_TMR_SELECT:
+	case SNDCTL_SEQ_TESTMIDI:
+		if (__get_user(midi_dev, (int *)arg))
+			return -EFAULT;
+		if (midi_dev < 0 || midi_dev >= max_mididev)
+			return -ENXIO;
+		
+		if (!midi_opened[midi_dev] && 
+		    (err = midi_devs[midi_dev]->open(midi_dev, mode, sequencer_midi_input,
+						     sequencer_midi_output)) < 0)
+			return err;
+		midi_opened[midi_dev] = 1;
+		return 0;
 
-		  if (seq_mode != SEQ_2)
-			  return -EINVAL;
-		  pending_timer = *(int *) arg;
-
-		  if (pending_timer < 0 || pending_timer >= num_sound_timers || sound_timer_devs[pending_timer] == NULL)
-		    {
-			    pending_timer = -1;
-			    return -EINVAL;
-		    }
-		  return (*(int *) arg = pending_timer);
-		  break;
-
-	  case SNDCTL_SEQ_PANIC:
-		  seq_panic();
-		  break;
-
-	  case SNDCTL_SEQ_SYNC:
-
-		  if (mode == OPEN_READ)
+	case SNDCTL_SEQ_GETINCOUNT:
+		if (mode == OPEN_WRITE)
+			return 0;
+		return __put_user(iqlen,  (int *)arg);
+		
+	case SNDCTL_SEQ_GETOUTCOUNT:
+		if (mode == OPEN_READ)
 			  return 0;
-		  while (qlen > 0 && !signal_pending(current))
-			  seq_sync();
-		  if (qlen)
-			  return -EINTR;
-		  else
-			  return 0;
-		  break;
+		val = SEQ_MAX_QUEUE - qlen;
+		return __put_user(val, (int *)arg);
+		
+	case SNDCTL_SEQ_GETTIME:
+		if (seq_mode == SEQ_2)
+			return tmr->ioctl(tmr_no, cmd, arg);
+		if (softsynthp != NULL)
+			val = softsynthp(SSYN_GETTIME, 0, 0, 0);
+		else
+			val = jiffies - seq_time;
+		return __put_user(val, (int *)arg);
+		
+	case SNDCTL_SEQ_CTRLRATE:
+		/*
+		 * If *arg == 0, just return the current rate
+		 */
+		if (seq_mode == SEQ_2)
+			return tmr->ioctl(tmr_no, cmd, arg);
+		
+		if (__get_user(val, (int *)arg))
+			return -EFAULT;
+		if (val != 0)
+			return -EINVAL;
+		return __put_user(HZ, (int *)arg);
 
-	  case SNDCTL_SEQ_RESET:
+	case SNDCTL_SEQ_RESETSAMPLES:
+	case SNDCTL_SYNTH_REMOVESAMPLE:
+	case SNDCTL_SYNTH_CONTROL:
+		if (__get_user(dev, (int *)arg))
+			return -EFAULT;
+		if (dev < 0 || dev >= num_synths || synth_devs[dev] == NULL)
+			return -ENXIO;
+		if (!(synth_open_mask & (1 << dev)) && !orig_dev)
+			return -EBUSY;
+		return synth_devs[dev]->ioctl(dev, cmd, arg);
 
-		  seq_reset();
-		  return 0;
-		  break;
+	case SNDCTL_SEQ_NRSYNTHS:
+		return __put_user(max_synthdev, (int *)arg);
 
-	  case SNDCTL_SEQ_TESTMIDI:
-		  midi_dev = *(int *) arg;
-		  if (midi_dev < 0 || midi_dev >= max_mididev)
-			  return -ENXIO;
+	case SNDCTL_SEQ_NRMIDIS:
+		return __put_user(max_mididev, (int *)arg);
 
-		  if (!midi_opened[midi_dev])
-		    {
-			    int             err, mode;
+	case SNDCTL_SYNTH_MEMAVL:
+		if (__get_user(dev, (int *)arg))
+			return -EFAULT;
+		if (dev < 0 || dev >= num_synths || synth_devs[dev] == NULL)
+			return -ENXIO;
+		if (!(synth_open_mask & (1 << dev)) && !orig_dev)
+			return -EBUSY;
+		val = synth_devs[dev]->ioctl(dev, cmd, arg);
+		return __put_user(val, (int *)arg);
 
-			    mode = file->mode & O_ACCMODE;
-			    if ((err = midi_devs[midi_dev]->open(midi_dev, mode,
-						    sequencer_midi_input,
-					     sequencer_midi_output)) < 0)
-				    return err;
-		    }
-		  midi_opened[midi_dev] = 1;
+	case SNDCTL_FM_4OP_ENABLE:
+		if (__get_user(dev, (int *)arg))
+			return -EFAULT;
+		if (dev < 0 || dev >= num_synths || synth_devs[dev] == NULL)
+			return -ENXIO;
+		if (!(synth_open_mask & (1 << dev)))
+			return -ENXIO;
+		synth_devs[dev]->ioctl(dev, cmd, arg);
+		return 0;
 
-		  return 0;
-		  break;
+	case SNDCTL_SYNTH_INFO:
+		if (__get_user(dev, (int *)(&(((struct synth_info *)arg)->device))))
+			return -EFAULT;
+		if (dev < 0 || dev >= max_synthdev)
+			return -ENXIO;
+		if (!(synth_open_mask & (1 << dev)) && !orig_dev)
+			return -EBUSY;
+		return synth_devs[dev]->ioctl(dev, cmd, arg);
+		
+		/* Like SYNTH_INFO but returns ID in the name field */
+	case SNDCTL_SYNTH_ID:
+		if (__get_user(dev, (int *)(&(((struct synth_info *)arg)->device))))
+			return -EFAULT;
+		if (dev < 0 || dev >= max_synthdev)
+			return -ENXIO;
+		if (!(synth_open_mask & (1 << dev)) && !orig_dev)
+			return -EBUSY;
+		memcpy(&inf, synth_devs[dev]->info, sizeof(inf));
+		strncpy(inf.name, synth_devs[dev]->id, sizeof(inf.name));
+		inf.device = dev;
+		return __copy_to_user(arg, &inf, sizeof(inf));
+		
+	case SNDCTL_SEQ_OUTOFBAND:
+		if (__copy_from_user(&event_rec, arg, sizeof(event_rec)))
+			return -EFAULT;
+		save_flags(flags);
+		cli();
+		play_event(event_rec.arr);
+		restore_flags(flags);
+		return 0;
+		  
+	case SNDCTL_MIDI_INFO:
+		if (__get_user(dev, (int *)(&(((struct synth_info *)arg)->device))))
+			return -EFAULT;
+		if (dev < 0 || dev >= max_mididev)
+			return -ENXIO;
+		midi_devs[dev]->info.device = dev;
+		return __copy_to_user(arg, &midi_devs[dev]->info, sizeof(struct synth_info));
+		
+	case SNDCTL_SEQ_THRESHOLD:
+		if (__get_user(val, (int *)arg))
+			return -EFAULT;
+		if (val < 1)
+			val = 1;
+		if (val >= SEQ_MAX_QUEUE)
+			val = SEQ_MAX_QUEUE - 1;
+		output_threshold = val;
+		return 0;
+		
+	case SNDCTL_MIDI_PRETIME:
+		if (__get_user(val, (int *)arg))
+			return -EFAULT;
+		if (val < 0)
+			val = 0;
+		val = (HZ * val) / 10;
+		pre_event_timeout = val;
+		return __put_user(val, (int *)arg);
 
-	  case SNDCTL_SEQ_GETINCOUNT:
-		  if (mode == OPEN_WRITE)
-			  return 0;
-		  return (*(int *) arg = iqlen);
-		  break;
-
-	  case SNDCTL_SEQ_GETOUTCOUNT:
-
-		  if (mode == OPEN_READ)
-			  return 0;
-		  return (*(int *) arg = SEQ_MAX_QUEUE - qlen);
-		  break;
-
-	  case SNDCTL_SEQ_GETTIME:
-		  if (seq_mode == SEQ_2)
-			  return tmr->ioctl(tmr_no, cmd, arg);
-
-		  if (softsynthp != NULL)
-			  return (*(int *) arg = softsynthp(SSYN_GETTIME, 0, 0, 0));
-		  else
-			  return (*(int *) arg = jiffies - seq_time);
-		  break;
-
-	  case SNDCTL_SEQ_CTRLRATE:
-		  /*
-		   * If *arg == 0, just return the current rate
-		   */
-		  if (seq_mode == SEQ_2)
-			  return tmr->ioctl(tmr_no, cmd, arg);
-
-		  val = *(int *) arg;
-		  if (val != 0)
-			  return -EINVAL;
-
-		  return (*(int *) arg = HZ);
-		  break;
-
-	  case SNDCTL_SEQ_RESETSAMPLES:
-	  case SNDCTL_SYNTH_REMOVESAMPLE:
-	  case SNDCTL_SYNTH_CONTROL:
-		  {
-			  int             err;
-
-			  dev = *(int *) arg;
-			  if (dev < 0 || dev >= num_synths || synth_devs[dev] == NULL)
-			    {
-				    return -ENXIO;
-			    }
-			  if (!(synth_open_mask & (1 << dev)) && !orig_dev)
-			    {
-				    return -EBUSY;
-			    }
-			  err = synth_devs[dev]->ioctl(dev, cmd, arg);
-			  return err;
-		  }
-		  break;
-
-	  case SNDCTL_SEQ_NRSYNTHS:
-		  return (*(int *) arg = max_synthdev);
-		  break;
-
-	  case SNDCTL_SEQ_NRMIDIS:
-		  return (*(int *) arg = max_mididev);
-		  break;
-
-	  case SNDCTL_SYNTH_MEMAVL:
-		  {
-			  int             dev;
-
-			  dev = *(int *) arg;
-
-			  if (dev < 0 || dev >= num_synths || synth_devs[dev] == NULL)
-				  return -ENXIO;
-
-			  if (!(synth_open_mask & (1 << dev)) && !orig_dev)
-				  return -EBUSY;
-
-			  return (*(int *) arg = synth_devs[dev]->ioctl(dev, cmd, arg));
-		  }
-		  break;
-
-	  case SNDCTL_FM_4OP_ENABLE:
-		  {
-			  int             dev;
-
-			  dev = *(int *) arg;
-
-			  if (dev < 0 || dev >= num_synths || synth_devs[dev] == NULL)
-				  return -ENXIO;
-
-			  if (!(synth_open_mask & (1 << dev)))
-				  return -ENXIO;
-
-			  synth_devs[dev]->ioctl(dev, cmd, arg);
-			  return 0;
-		  }
-		  break;
-
-	  case SNDCTL_SYNTH_INFO:
-		  {
-			  struct synth_info inf;
-			  int             dev;
-
-			  memcpy((char *) &inf, (&((char *) arg)[0]), sizeof(inf));
-			  dev = inf.device;
-
-			  if (dev < 0 || dev >= max_synthdev)
-				  return -ENXIO;
-
-			  if (!(synth_open_mask & (1 << dev)) && !orig_dev)
-				  return -EBUSY;
-
-			  return synth_devs[dev]->ioctl(dev, cmd, arg);
-		  }
-		  break;
-
-
-		  /* Like SYNTH_INFO but returns ID in the name field */
-	  case SNDCTL_SYNTH_ID:
-		  {
-			  struct synth_info inf;
-			  int             dev;
-
-			  memcpy((char *) &inf, (&((char *) arg)[0]), sizeof(inf));
-			  dev = inf.device;
-
-			  if (dev < 0 || dev >= max_synthdev)
-				  return -ENXIO;
-
-			  if (!(synth_open_mask & (1 << dev)) && !orig_dev)
-				  return -EBUSY;
-
-			  memcpy((char *) &inf, (char *) synth_devs[dev]->info, sizeof(inf));
-			  strcpy(inf.name, synth_devs[dev]->id);
-			  inf.device = dev;
-			  memcpy((&((char *) arg)[0]), (char *) &inf, sizeof(inf));
-			  return 0;
-		  }
-		  break;
-
-	  case SNDCTL_SEQ_OUTOFBAND:
-		  {
-			  struct seq_event_rec event_rec;
-			  unsigned long   flags;
-
-			  memcpy((char *) &event_rec, (&((char *) arg)[0]), sizeof(event_rec));
-
-			  save_flags(flags);
-			  cli();
-			  play_event(event_rec.arr);
-			  restore_flags(flags);
-
-			  return 0;
-		  }
-		  break;
-
-	  case SNDCTL_MIDI_INFO:
-		  {
-			  struct midi_info inf;
-			  int             dev;
-			  char           *pp;
-
-			  memcpy((char *) &inf, (&((char *) arg)[0]), sizeof(inf));
-			  dev = inf.device;
-
-			  if (dev < 0 || dev >= max_mididev)
-				  return -ENXIO;
-
-			  midi_devs[dev]->info.device = dev;
-			  pp = (char *) &midi_devs[dev]->info;
-			  memcpy((&((char *) arg)[0]), pp, sizeof(inf));
-			  return 0;
-		  }
-		  break;
-
-	  case SNDCTL_SEQ_THRESHOLD:
-		  {
-			  int             tmp;
-
-			  tmp = *(int *) arg;
-
-			  if (tmp < 1)
-				  tmp = 1;
-			  if (tmp >= SEQ_MAX_QUEUE)
-				  tmp = SEQ_MAX_QUEUE - 1;
-			  output_threshold = tmp;
-			  return 0;
-		  }
-		  break;
-
-	  case SNDCTL_MIDI_PRETIME:
-		  {
-			  int             val;
-
-			  val = *(int *) arg;
-
-			  if (val < 0)
-				  val = 0;
-
-			  val = (HZ * val) / 10;
-			  pre_event_timeout = val;
-			  return (*(int *) arg = val);
-		  }
-		  break;
-
-	  default:
-		  if (mode == OPEN_READ)
-			  return -EIO;
-
-		  if (!synth_devs[0])
-			  return -ENXIO;
-		  if (!(synth_open_mask & (1 << 0)))
-			  return -ENXIO;
-		  return synth_devs[0]->ioctl(0, cmd, arg);
-		  break;
-	  }
-
+	default:
+		if (mode == OPEN_READ)
+			return -EIO;
+		if (!synth_devs[0])
+			return -ENXIO;
+		if (!(synth_open_mask & (1 << 0)))
+			return -ENXIO;
+		if (!synth_devs[0]->ioctl)
+			return -EINVAL;
+		return synth_devs[0]->ioctl(0, cmd, arg);
+	}
 	return -EINVAL;
 }
 

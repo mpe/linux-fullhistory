@@ -1,5 +1,5 @@
 /*
- * sound/sb_dsp.c
+ * sound/v_midi.c
  *
  * The low level driver for the Sound Blaster DS chips.
  */
@@ -9,6 +9,7 @@
  * USS/Lite for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
  * Version 2 (June 1991). See the "COPYING" file distributed with this software
  * for more info.
+ * ??
  */
 #include <linux/config.h>
 #include <linux/module.h>
@@ -146,10 +147,10 @@ v_midi_end_read (int dev)
   return 0;
 }
 
-static int
-v_midi_ioctl (int dev, unsigned cmd, caddr_t arg)
+/* why -EPERM and not -EINVAL?? */
+static int v_midi_ioctl (int dev, unsigned cmd, caddr_t arg)
 {
-  return -(EPERM);
+	return -EPERM;
 }
 
 

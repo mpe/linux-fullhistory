@@ -43,6 +43,7 @@ void ntfs_debug(int mask, const char *fmt, ...)
 	}
 }
 
+#ifndef ntfs_malloc
 /* Verbose kmalloc */
 void *ntfs_malloc(int size)
 {
@@ -53,27 +54,34 @@ void *ntfs_malloc(int size)
 
 	return ret;
 }
+#endif
 
+#ifndef ntfs_free
 /* Verbose kfree() */
 void ntfs_free(void *block)
 {
         ntfs_debug(DEBUG_MALLOC, "Freeing memory at %p\n", block);
 	kfree(block);
 }
+#endif
 #else
 void ntfs_debug(int mask, const char *fmt, ...)
 {
 }
 
+#ifndef ntfs_malloc
 void *ntfs_malloc(int size)
 {
 	return kmalloc(size, GFP_KERNEL);
 }
+#endif
 
+#ifndef ntfs_free
 void ntfs_free(void *block)
 {
 	kfree(block);
 }
+#endif
 #endif /* DEBUG */
 
 void ntfs_bzero(void *s, int n)

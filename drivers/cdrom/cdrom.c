@@ -68,8 +68,8 @@
 #include <asm/uaccess.h>
 
 
-#define VERSION "$Id: cdrom.c,v 2.0 1997/11/20 01:58:03 erik Exp $"
-#define REVISION "revision 2.0"
+#define VERSION "$Id: cdrom.c,v 2.1 1997/12/28 15:11:47 david Exp $"
+#define REVISION "$Revision: 2.1 $"
 #define FM_WRITE	0x2                 /* file mode write bit */
 
 /* When VERBOSE_STATUS_INFO is not defined, the debugging printks don't 
@@ -177,7 +177,8 @@ int register_cdrom(struct cdrom_device_info *cdi)
 	ENSURE(reset, CDC_RESET);
 	ENSURE(audio_ioctl, CDC_PLAY_AUDIO);
 	ENSURE(dev_ioctl, CDC_IOCTLS);
-	cdi->options = CDO_AUTO_CLOSE | CDO_USE_FFLAGS | CDO_LOCK | CDO_CHECK_TYPE;
+	cdi->options = CDO_AUTO_CLOSE | CDO_USE_FFLAGS | CDO_LOCK;
+					/* default compatibility mode */
 	cdi->mc_flags = 0;
 	cdo->n_minors = 0;
 	cdinfo(CD_REG_UNREG, "drive \"/dev/%s\" registered\n", cdi->name);
@@ -305,15 +306,13 @@ int open_for_data(struct cdrom_device_info * cdi)
 		ret=-ENOMEDIUM;
 		goto clean_up_and_return;
 	}
-#if 0
-	/* this breaks CD-Players which don't use O_NONBLOCK, workman
-	 * for example, probably others too */
+	/* CD-Players which don't use O_NONBLOCK, workman
+	 * for example, need bit CDO_CHECK_TYPE cleared! */
 	if (cdi->options & CDO_CHECK_TYPE && tracks.data==0) {
 		cdinfo(CD_OPEN, "bummer. wrong media type...\n"); 
 		ret=-EMEDIUMTYPE;
 		goto clean_up_and_return;
 	}
-#endif
 
 	cdinfo(CD_OPEN, "all seems well, opening the device...\n"); 
 
@@ -716,6 +715,10 @@ int cdrom_ioctl(struct inode *ip, struct file *fp,
 	   returns with the above, but this more clearly demonstrates
 	   the problem with the current interface.  Too bad this wasn't 
 	   designed to use bitmasks...         -Erik 
+
+	   Well, now we have the option CDS_MIXED: a mixed-type CD. 
+	   User level programmers might feel the ioctl is not very useful.
+	   					---david
 	*/
 	case CDROM_DISC_STATUS: {
 		tracktype tracks;
@@ -725,11 +728,14 @@ int cdrom_ioctl(struct inode *ip, struct file *fp,
 			return(tracks.error);
 
 		/* Policy mode on */
-		if (tracks.audio>0 && tracks.data==0 && tracks.cdi==0 && tracks.xa==0) 
-			return CDS_AUDIO;
-		if (tracks.cdi>0) return CDS_XA_2_2;
-		if (tracks.xa>0) return CDS_XA_2_1;
-		if (tracks.data>0) return CDS_DATA_1;
+		if (tracks.audio > 0) {
+			if (tracks.data==0 && tracks.cdi==0 && tracks.xa==0) 
+				return CDS_AUDIO;
+			else return CDS_MIXED;
+		}
+		if (tracks.cdi > 0) return CDS_XA_2_2;
+		if (tracks.xa > 0) return CDS_XA_2_1;
+		if (tracks.data > 0) return CDS_DATA_1;
 		/* Policy mode off */
 
 		cdinfo(CD_WARNING,"This disc doesn't have any tracks I recognise!\n");

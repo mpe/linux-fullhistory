@@ -175,12 +175,6 @@ gus_midi_end_read(int dev)
 	return 0;
 }
 
-static int
-gus_midi_ioctl(int dev, unsigned cmd, caddr_t arg)
-{
-	return -EINVAL;
-}
-
 static void
 gus_midi_kick(int dev)
 {
@@ -218,7 +212,7 @@ static struct midi_operations gus_midi_operations =
 	{0},
 	gus_midi_open,
 	gus_midi_close,
-	gus_midi_ioctl,
+	NULL, /* ioctl */
 	gus_midi_out,
 	gus_midi_start_read,
 	gus_midi_end_read,

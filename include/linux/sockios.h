@@ -45,8 +45,8 @@
 #define SIOCSIFMEM	0x8920		/* set memory address (BSD)	*/
 #define SIOCGIFMTU	0x8921		/* get MTU size			*/
 #define SIOCSIFMTU	0x8922		/* set MTU size			*/
-#define	SIOCSIFHWADDR	0x8924		/* set hardware address (NI)	*/
-#define SIOCGIFENCAP	0x8925		/* get/set slip encapsulation   */
+#define	SIOCSIFHWADDR	0x8924		/* set hardware address 	*/
+#define SIOCGIFENCAP	0x8925		/* get/set encapsulations       */
 #define SIOCSIFENCAP	0x8926		
 #define SIOCGIFHWADDR	0x8927		/* Get hardware address		*/
 #define SIOCGIFSLAVE	0x8929		/* Driver slaving support	*/
@@ -63,6 +63,10 @@
 
 #define SIOCGIFBR	0x8940		/* Bridging support		*/
 #define SIOCSIFBR	0x8941		/* Set bridging options 	*/
+
+#define SIOCGIFTXQLEN	0x8942		/* Get the tx queue length	*/
+#define SIOCSIFTXQLEN	0x8943		/* Set the tx queue length 	*/
+
 
 /* ARP cache control calls. */
 		    /*  0x8950 - 0x8952  * obsolete calls, don't re-use */

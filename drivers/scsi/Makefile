@@ -1,4 +1,3 @@
-
 # Makefile for linux/drivers/scsi
 #
 # Note! Dependencies are done automagically by 'make dep', which also
@@ -34,14 +33,13 @@ endif
 ifeq ($(CONFIG_SCSI),y)
   # We must attach scsi_syms.o to scsi.o, as otherwise there is nothing to
   # pull the object file from the archive.
-  SCSI=scsi.o
+  O_TARGET := scsi_n_syms.o
+  O_OBJS   := scsi.o
   ifeq ($(CONFIG_MODULES),y)
-    O_TARGET := scsi_n_syms.o
-    O_OBJS   := scsi.o scsi_error.o scsi_obsolete.o scsi_queue.o
     OX_OBJS  := scsi_syms.o
-    SCSI     := $(O_TARGET)
   endif
-  L_OBJS += $(SCSI) hosts.o scsi_ioctl.o constants.o scsicam.o
+  L_OBJS += scsi_n_syms.o hosts.o scsi_ioctl.o constants.o scsicam.o
+  L_OBJS += scsi_error.o scsi_obsolete.o scsi_queue.o
   ifeq ($(CONFIG_PROC_FS),y)
     L_OBJS += scsi_proc.o
   endif

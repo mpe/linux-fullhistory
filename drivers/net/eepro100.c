@@ -36,7 +36,7 @@ static int rxdmacount = 0;
 static int rx_copybreak = 200;
 
 /* Maximum events (Rx packets, etc.) to handle at each interrupt. */
-static int max_interrupt_work = 20;
+static int max_interrupt_work = 200;
 
 #include <linux/config.h>
 #ifdef MODULE

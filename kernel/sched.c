@@ -104,6 +104,8 @@ struct task_struct * task[NR_TASKS] = {&init_task, };
 
 struct kernel_stat kstat = { 0 };
 
+void scheduling_functions_start_here(void) { }
+
 static inline void add_to_runqueue(struct task_struct * p)
 {
 	if (p->policy != SCHED_OTHER || p->counter > current->counter + 3)
@@ -677,6 +679,8 @@ void sleep_on(struct wait_queue **p)
 {
 	__sleep_on(p,TASK_UNINTERRUPTIBLE);
 }
+
+void scheduling_functions_end_here(void) { }
 
 static inline void cascade_timers(struct timer_vec *tv)
 {

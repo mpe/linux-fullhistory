@@ -5,7 +5,7 @@
  *     Jay Schulist <Jay.Schulist@spacs.k12.wi.us>
  *
  * Based on the design of:
- *     - The Berkely Packet Filter
+ *     - The Berkeley Packet Filter
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License

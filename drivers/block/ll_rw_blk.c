@@ -665,12 +665,6 @@ void ll_rw_swap_file(int rw, kdev_t dev, unsigned int *b, int nb, char *buf)
 		}
 	}
 }
-#ifdef CONFIG_BLK_DEV_EZ
-extern void ez_init( void );
-#endif
-#ifdef CONFIG_BPCD
-extern void bpcd_init( void );
-#endif
 
 __initfunc(int blk_dev_init(void))
 {
@@ -724,8 +718,8 @@ __initfunc(int blk_dev_init(void))
 #ifdef CONFIG_BLK_DEV_XD
 	xd_init();
 #endif
-#ifdef CONFIG_BLK_DEV_EZ
-	ez_init();
+#ifdef CONFIG_PARIDE
+	{ extern void paride_init(void); paride_init(); };
 #endif
 #ifdef CONFIG_MAC_FLOPPY
 	swim3_init();
@@ -761,9 +755,6 @@ __initfunc(int blk_dev_init(void))
 #ifdef CONFIG_GSCD
 	gscd_init();
 #endif CONFIG_GSCD
-#ifdef CONFIG_BPCD
-	bpcd_init();
-#endif CONFIG_BPCD
 #ifdef CONFIG_CM206
 	cm206_init();
 #endif

@@ -1,6 +1,6 @@
 VERSION = 2
 PATCHLEVEL = 1
-SUBLEVEL = 76
+SUBLEVEL = 77
 
 ARCH := $(shell uname -m | sed -e s/i.86/i386/ -e s/sun4u/sparc64/)
 
@@ -155,6 +155,10 @@ endif
 
 ifdef CONFIG_PNP
 DRIVERS := $(DRIVERS) drivers/pnp/pnp.a
+endif
+
+ifeq ($(CONFIG_PARIDE),y)
+DRIVERS := $(DRIVERS) drivers/block/paride/paride.a
 endif
 
 ifdef CONFIG_HAMRADIO
@@ -346,10 +350,10 @@ clean:	archclean
 
 mrproper: clean
 	rm -f include/linux/autoconf.h include/linux/version.h
-	rm -f drivers/net/soundmodem/sm_tbl_{afsk1200,afsk2666,fsk9600}.h
-	rm -f drivers/net/soundmodem/sm_tbl_{hapn4800,psk4800}.h
-	rm -f drivers/net/soundmodem/sm_tbl_{afsk2400_7,afsk2400_8}.h
-	rm -f drivers/net/soundmodem/gentbl
+	rm -f drivers/net/hamradio/soundmodem/sm_tbl_{afsk1200,afsk2666,fsk9600}.h
+	rm -f drivers/net/hamradio/soundmodem/sm_tbl_{hapn4800,psk4800}.h
+	rm -f drivers/net/hamradio/soundmodem/sm_tbl_{afsk2400_7,afsk2400_8}.h
+	rm -f drivers/net/hamradio/soundmodem/gentbl
 	rm -f drivers/char/hfmodem/gentbl drivers/char/hfmodem/tables.h
 	rm -f drivers/sound/*_boot.h drivers/sound/.*.boot
 	rm -f .version .config* config.in config.old

@@ -5,6 +5,7 @@ bool 'IP: multicasting' CONFIG_IP_MULTICAST
 bool 'IP: advanced router' CONFIG_IP_ADVANCED_ROUTER
 if [ "$CONFIG_IP_ADVANCED_ROUTER" = "y" ]; then
   define_bool CONFIG_RTNETLINK y	
+  define_bool CONFIG_NETLINK y
   bool 'IP: policy routing' CONFIG_IP_MULTIPLE_TABLES
   bool 'IP: equal cost multipath' CONFIG_IP_ROUTE_MULTIPATH
   bool 'IP: use TOS value as routing key' CONFIG_IP_ROUTE_TOS

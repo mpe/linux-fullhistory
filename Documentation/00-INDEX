@@ -32,8 +32,6 @@ digiepca.txt
 	- info on Digi Intl. {PC,PCI,EISA}Xx and Xem series cards.
 exception.txt
 	- how linux v2.1 handles exceptions without verify_area etc.
-ez.txt
-	- documentation for the SyQuest parallel port EZ drive support.
 filesystems/
 	- directory with info on the various filesystems that Linux supports.
 ftape.txt
@@ -70,6 +68,8 @@ nfsroot.txt
 	- short guide on setting up a diskless box with NFS root filesystem
 oops-tracing.txt
 	- how to decode those nasty internal kernel error dump messages.
+paride.txt
+	- information about the parallel port IDE subsystem.
 parport.txt
 	- how to use the parallel-port driver.
 ramdisk.txt

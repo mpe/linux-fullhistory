@@ -132,6 +132,7 @@ struct ifreq
 #define	ifr_data	ifr_ifru.ifru_data	/* for use by interface	*/
 #define ifr_ifindex	ifr_ifru.ifru_ivalue	/* interface index	*/
 #define ifr_bandwidth	ifr_ifru.ifru_ivalue    /* link bandwidth	*/
+#define ifr_qlen	ifr_ifru.ifru_ivalue	/* Queue length 	*/
 
 /*
  * Structure used in SIOCGIFCONF request.

@@ -14,6 +14,10 @@
 # In the future, some of these should be built conditionally.
 #
 
+SUB_DIRS     := 
+MOD_SUB_DIRS := $(SUB_DIRS)
+ALL_SUB_DIRS := $(SUB_DIRS) paride
+
 
 L_TARGET := block.a
 L_OBJS   := ll_rw_blk.o genhd.o
@@ -191,14 +195,6 @@ else
   endif
 endif
 
-ifeq ($(CONFIG_BLK_DEV_EZ),y)
-L_OBJS += ez.o
-else
-  ifeq ($(CONFIG_BLK_DEV_EZ),m)
-  M_OBJS += ez.o
-  endif
-endif
-
 ifeq ($(CONFIG_BLK_DEV_MD),y)
 LX_OBJS += md.o
 
@@ -241,6 +237,15 @@ L_OBJS += nbd.o
 else
   ifeq ($(CONFIG_BLK_DEV_NBD),m)
   M_OBJS += nbd.o
+  endif
+endif
+
+ifeq ($(CONFIG_PARIDE),y)
+SUB_DIRS	+= paride
+MOD_SUB_DIRS	+= paride
+else
+  ifeq ($(CONFIG_PARIDE),m)
+  MOD_SUB_DIRS	+= paride
   endif
 endif
 

@@ -60,7 +60,6 @@ Here is a sample of the available modules included in the kernel sources:
 		aztcd:     Aztech,Orchid,Okano,Wearnes
 		cm206:     Philips/LMS CM206
 		gscd:      Goldstar GCDR-420
-		bpcd:      MicroSolutions backpack CDrom
 		mcd, mcdx: Mitsumi LU005, FX001
 		optcd:     Optics Storage Dolphin 8000AT
 		sjcd:      Sanyo CDR-H94A

@@ -1,5 +1,5 @@
 \documentclass{article}
-\def\version{$Id: cdrom-standard.tex,v 1.8 1997/11/19 21:58:33 david Exp $}
+\def\version{$Id: cdrom-standard.tex,v 1.9 1997/12/28 15:42:49 david Exp $}
 \newcommand{\newsection}[1]{\newpage\section{#1}}
 
 \evensidemargin=0pt
@@ -387,46 +387,6 @@ CDS_DRIVE_NOT_READY& something is wrong, tray is moving?\cr
 CDS_DISC_OK& a disc is loaded and everything is fine\cr
 }
 $$
-
-\subsection{$Disc_status$}
-\label{disc status}
-
-As a complement to $drive_status()$, this function can provide {\emph
-{some}} information about the current disc that is inserted in the
-drive. This function is now implemented internally in the \UCD, so the
-low-level drivers do not need to implement this functionality anymore.
-
-The history of development of the CD's use as a carrier medium for
-various digital information has lead to many different disc types. This
-$ioctl$ makes the false assumption that CDs have {\emph {only one}} type
-of data on them. While this is often the case, it is also very common
-for CDs to have some tracks with data, and some tracks with audio.
-Because this is an existing interface, rather than fixing this interface
-by changing the assumptions it was made under, thereby breaking all user
-applications that use this function, the \UCD\ implements this $ioctl$
-as follows: If the CD in question has audio tracks on it, and it has
-absolutly no CD-I, XA, or data tracks on it, it will be reported as
-$CDS_AUDIO$. Failing that, if the CD in question has any CD-I tracks
-on it, it will be reported as $CDS_XA_2_2$. Failing that, if the CD in
-question has any XA tracks on it, it will be reported as $CDS_XA_2_1$.
-Finally, if the CD in question has any data tracks on it, it will be
-reported as a data CD ($CDS_DATA_1$). 
-
-This function can return:
-$$
-\halign{$#$\ \hfil&$/*$ \rm# $*/$\hfil\cr
-CDS_NO_INFO& no information available\cr
-CDS_NO_DISC& no disc is inserted, or tray is opened\cr
-CDS_AUDIO& Audio disc (2352 audio bytes/frame)\cr
-CDS_DATA_1& data disc, mode 1 (2048 user bytes/frame)\cr
-CDS_DATA_2& data disc, mode 2 (2336 user bytes/frame)\cr
-CDS_XA_2_1& mixed data (XA), mode 2, form 1 (2048 user bytes)\cr
-CDS_XA_2_2& mixed data (XA), mode 2, form 1 (2324  user bytes)\cr
-}
-$$
-As far as I know, data \cdrom s are always of type $CDS_DATA_1$. For
-some information concerning frame layout of the various disc types, see
-a recent version of \cdromh. 
 
 \subsection{$Int\ media_changed(struct\ cdrom_device_info * cdi, int\ disc_nr)$}
 
@@ -940,8 +900,46 @@ the current flags.
   given. The special value $CDSL_CURRENT$ requests that information
   about the currently selected slot is returned.
 \item[CDROM_DISC_STATUS] Returns the type of the disc currently in the
-  drive by a call to $disc_status()$. Return values are as defined in
-  section~\ref{disc status}.
+  drive.  It should be viewed as a complement to $CDROM_DRIVE_STATUS$.
+  This $ioctl$ can provide \emph {some} information about the current
+  disc that is inserted in the drive.  This functionality used to be
+  implemented in the low level drivers, but is now carried out
+  entirely in \UCD.
+  
+  The history of development of the CD's use as a carrier medium for
+  various digital information has lead to many different disc types.
+  This $ioctl$ is useful only in the case that CDs have \emph {only
+    one} type of data on them.  While this is often the case, it is
+  also very common for CDs to have some tracks with data, and some
+  tracks with audio.  Because this is an existing interface, rather
+  than fixing this interface by changing the assumptions it was made
+  under, thereby breaking all user applications that use this
+  function, the \UCD\ implements this $ioctl$ as follows: If the CD in
+  question has audio tracks on it, and it has absolutly no CD-I, XA,
+  or data tracks on it, it will be reported as $CDS_AUDIO$.  If it has
+  both audio and data tracks, it will return $CDS_MIXED$.  If there
+  are no audio tracks on the disc, and if the CD in question has any
+  CD-I tracks on it, it will be reported as $CDS_XA_2_2$.  Failing
+  that, if the CD in question has any XA tracks on it, it will be
+  reported as $CDS_XA_2_1$.  Finally, if the CD in question has any
+  data tracks on it, it will be reported as a data CD ($CDS_DATA_1$).
+
+  This $ioctl$ can return:
+  $$
+  \halign{$#$\ \hfil&$/*$ \rm# $*/$\hfil\cr
+    CDS_NO_INFO& no information available\cr
+    CDS_NO_DISC& no disc is inserted, or tray is opened\cr
+    CDS_AUDIO& Audio disc (2352 audio bytes/frame)\cr
+    CDS_DATA_1& data disc, mode 1 (2048 user bytes/frame)\cr
+    CDS_DATA_2& data disc, mode 2 (2336 user bytes/frame)\cr
+    CDS_XA_2_1& mixed data (XA), mode 2, form 1 (2048 user bytes)\cr
+    CDS_XA_2_2& mixed data (XA), mode 2, form 1 (2324  user bytes)\cr
+    CDS_MIXED& mixed audio/data disc\cr
+    }
+  $$
+  For some information concerning frame layout of the various disc
+  types, see a recent version of \cdromh.
+
 \item[CDROM_CHANGER_NSLOTS] Returns the number of slots in a
   juke-box. 
 \end{description}
@@ -1021,4 +1019,3 @@ the first place.
 $ \version\ $
 \eject
 \end{document}
-

@@ -611,7 +611,7 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 			  child->tss.i387.hard.twd = 0xffffffff;
 			}
 #ifdef CONFIG_MATH_EMULATION
-			if ( hard_math ) {
+			if ( boot_cpu_data.hard_math ) {
 #endif
 			  if (last_task_used_math == child) {
 			    clts();
@@ -639,7 +639,7 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 			  }
 			child->used_math = 1;
 #ifdef CONFIG_MATH_EMULATION
-			if ( hard_math ) {
+			if ( boot_cpu_data.hard_math ) {
 #endif
 			  if (last_task_used_math == child) {
 			    /* Discard the state of the FPU */

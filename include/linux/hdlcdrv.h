@@ -1,19 +1,11 @@
 /*
  * hdlcdrv.h  -- HDLC packet radio network driver.
  * The Linux soundcard driver for 1200 baud and 9600 baud packet radio
- * (C) 1996 by Thomas Sailer, HB9JNX/AE4WA
+ * (C) 1996-1998 by Thomas Sailer, HB9JNX/AE4WA
  */
 
 #ifndef _HDLCDRV_H
 #define _HDLCDRV_H
-
-#include <linux/version.h>
-#include <linux/sockios.h>
-#include <linux/version.h>
-#if LINUX_VERSION_CODE < 0x20119
-#include <linux/if_ether.h>
-#endif
-#include <linux/netdevice.h>
 
 /* -------------------------------------------------------------------- */
 /*
@@ -43,9 +35,6 @@ struct hdlcdrv_old_channel_state {
   	int ptt;
   	int dcd;
   	int ptt_keyed;
-#if LINUX_VERSION_CODE < 0x20100
-  	struct enet_statistics stats;
-#endif
 };
 
 struct hdlcdrv_channel_state {
@@ -114,6 +103,9 @@ struct hdlcdrv_ioctl {
 /* -------------------------------------------------------------------- */
 
 #ifdef __KERNEL__
+
+#include <linux/netdevice.h>
+#include <linux/if.h>
 
 #define HDLCDRV_MAGIC      0x5ac6e778
 #define HDLCDRV_IFNAMELEN    6

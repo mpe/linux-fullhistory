@@ -110,7 +110,7 @@ if [ "$CONFIG_ALPHA_BOOK1" = "y" ]; then
 fi
 tristate 'Video For Linux' CONFIG_VIDEO_DEV
 dep_tristate 'BT848 Video For Linux' CONFIG_VIDEO_BT848 $CONFIG_VIDEO_DEV
-#dep_tristate 'Quickcam BW Video For Linux' CONFIG_VIDEO_BWQCAM $CONFIG_VIDEO_DEV
+dep_tristate 'Quickcam BW Video For Linux' CONFIG_VIDEO_BWQCAM $CONFIG_VIDEO_DEV
 dep_tristate 'Mediavision Pro Movie Studio Video For Linux' CONFIG_VIDEO_PMS $CONFIG_VIDEO_DEV
 tristate '/dev/nvram support' CONFIG_NVRAM
 tristate 'PC joystick support' CONFIG_JOYSTICK

@@ -731,6 +731,7 @@ int ntfs_getdir_unsorted(ntfs_inode *ino,ntfs_u32 *p_high,ntfs_u32* p_low,
 		if(buf[byte] & bit)
 			break;
 	}
+	ntfs_free(buf);
 	return 0;
 }
 

@@ -419,8 +419,8 @@ static void pms_swsense(short sense)
 	}
 	else if(decoder==PHILIPS1)
 	{
-		i2c_write(0x42, 0x08, sense);
-		i2c_write(0x42, 0x09, sense);
+		i2c_write(0x42, 0x0A, sense);
+		i2c_write(0x42, 0x0B, sense);
 	}
 }
 
@@ -428,13 +428,11 @@ static void pms_chromagain(short chroma)
 {
 	if(decoder==PHILIPS2)
 	{
-		i2c_write(0x8A, 0x0A, chroma);
-		i2c_write(0x8A, 0x0B, chroma);
+		i2c_write(0x8A, 0x11, chroma);
 	}
 	else if(decoder==PHILIPS1)
 	{
-		i2c_write(0x42, 0x08, chroma);
-		i2c_write(0x42, 0x09, chroma);
+		i2c_write(0x42, 0x11, chroma);
 	}
 }
 
@@ -522,21 +520,21 @@ static void pms_horzdeci(short decinum, short deciden)
 		deciden=640;	/* 768 would be ideal */
 	}
 	
-	while(decinum%2==0 && deciden%2==0)
+	while(((decinum|deciden)&1)==0)
 	{
-		decinum/=2;
-		deciden/=2;
+		decinum>>=1;
+		deciden>>=1;
 	}
 	while(deciden>32)
 	{
-		deciden/=2;
-		decinum=(decinum+1)/2;
+		deciden>>=1;
+		decinum=(decinum+1)>>1;
 	}
 	if(deciden==32)
 		deciden--;
 		
 	mvv_write(0x24, 0x80|deciden);
-	mvv_write(0x25, deciden);
+	mvv_write(0x25, decinum);
 }
 
 static void pms_resolution(short width, short height)
@@ -554,7 +552,7 @@ static void pms_resolution(short width, short height)
 	{
 		mvv_write(0x1A, 0xFC);
 		mvv_write(0x1B, 0x00);
-		if(height>width)
+		if(height>fg_height)
 			pms_vertdeci(240,240);
 		else
 			pms_vertdeci(fg_height,240);
@@ -576,12 +574,12 @@ static void pms_resolution(short width, short height)
 	
 	mvv_write(0x22, width+8);
 	mvv_write(0x23, (width+8)>> 8);
-	
+
 	if(standard==1)
 		pms_horzdeci(width,640);
 	else
 		pms_horzdeci(width+8, 768);
-	
+
 	mvv_write(0x30, mvv_read(0x30)&0xFE);
 	mvv_write(0x08, mvv_read(0x08)|0x01);
 	mvv_write(0x01, mvv_read(0x01)&0xFD);
@@ -610,73 +608,40 @@ static void pms_vcrinput(short input)
 
 static int pms_capture(struct pms_device *dev, char *buf, int rgb555, int count)
 {
-	char dump[16];
 	int y;
-	int ww= dev->width, wh= dev->height;
-	int dinc, zz;
-	int dw=2*ww, loops;
-	unsigned char r8;
+	int dw = 2*dev->width;
+	char *src = (char *)bus_to_virt((void *)mem_base);
+
+	char tmp[dw+16]; /* using a temp buffer is faster than direct  */
+	int cnt = 0;
 	int len=0;
-	
-	short *dst=(short *)buf;
-	short *src=(short *)bus_to_virt((void *)mem_base);
-	
-	if(wh>256)
+	unsigned char r8 = 0x5;  /* value for reg8  */
+
+	if (rgb555)
+		r8 |= 0x20; /* else use untranslated rgb = 565 */
+	mvv_write(0x08,r8); /* capture rgb555/565, init DRAM, PC enable */
+
+/*	printf("%d %d %d %d %d %x %x\n",width,height,voff,nom,den,mvv_buf); */
+  
+	for (y = 0; y < dev->height; y++ ) 
 	{
-		dinc=2*ww; 
-		zz=wh/2; 
-		loops=2;
+		*src = 0;  /* synchronisiert neue Zeile */
+		memcpy(tmp, src, dw+16); /* discard 8 word   */
+		cnt -= dev->height;
+		while (cnt <= 0) 
+		{ 
+			/*
+			 *	Dont copy too far
+			 */
+			int dt=dw;
+			if(dt+len>count)
+				dt=count-len;
+			cnt += dev->height;
+			copy_to_user(buf, tmp+16, dt);
+			buf += dt;    
+			len += dt;
+		}
 	}
-	else
-	{
-		dinc=ww; 
-		zz=wh; 
-		loops=1;
-	}
-	
-	
-	r8=0x5;
-	if(rgb555)
-		r8|=0x20;
-		
-field_cap:
-	
-	mvv_write(0x08, r8);	/* Capture mode, Enable DRAM, PC enable */
-	
-	for(y=0;y<zz;y++)
-	{
-		int n;
-		
-		len+=16;
-		
-		/*
-		 *	Avoid overrunning the given buffer	
-		 */
-		 
-		n=((char *)dst)-buf;		/* Bytes left in frame */
-		n=count-n;
-		if(n>dw)			/* But only as many as needed */
-			n=dw;
-		memcpy(dump, src, 16);		/* Junk */
-		if(n)
-			copy_to_user(dst, src, n);	/* Data */
-		dst+=dinc;
-		*src=0;				/* Synchronization */
-	}
-	
-	if(--loops>0)
-	{
-		mvv_write(0x14, mvv_read(0x14)|0xC0);	/* Other frame */
-		dst=(short *)buf+ww;
-		goto field_cap;
-	}
-	
-	/*
-	 *	Set back to capture even frames
-	 */
-	 
-	if(wh>256)
-		mvv_write(0x14, (mvv_read(0x14)|0x80)&~0x40);
 	return len;
 }
 
@@ -738,6 +703,17 @@ static int pms_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 			v.tuners=1;
 			/* Good question.. its composite or SVHS so.. */
 			v.type = VIDEO_TYPE_CAMERA;
+			switch(v.channel)
+			{
+				case 0:
+					strcpy(v.name, "Composite");break;
+				case 1:
+					strcpy(v.name, "SVideo");break;
+				case 2:
+					strcpy(v.name, "Composite(VCR)");break;
+				case 3:
+					strcpy(v.name, "SVideo(VCR)");break;
+			}
 			if(copy_to_user(arg, &v, sizeof(v)))
 				return -EFAULT;
 			return 0;
@@ -747,7 +723,7 @@ static int pms_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 			int v;
 			if(copy_from_user(&v, arg,sizeof(v)))
 				return -EFAULT;
-			if(v<0 && v>3)
+			if(v<0 || v>3)
 				return -EINVAL;
 			pms_videosource(v&1);
 			pms_vcrinput(v>>1);
@@ -974,7 +950,8 @@ static int init_mediavision(void)
 		idec=1;
 	else 
 		idec=0;
-		
+
+	printk(KERN_INFO "PMS type is %d\n", idec);		
 	if(idec==0)
 		return -ENODEV;	
 
@@ -1050,7 +1027,7 @@ MODULE_PARM(mem_base,"i");
 
 int init_module(void)
 {
-	printk(KERN_INFO "Mediavision Pro Movie Studio driver 0.01\n");
+	printk(KERN_INFO "Mediavision Pro Movie Studio driver 0.02\n");
 	
 	data_port = io_port +1;
 	
@@ -1062,6 +1039,7 @@ int init_module(void)
 	memcpy(&pms_device, &pms_template, sizeof(pms_template));
 	pms_device.height=240;
 	pms_device.width=320;
+	pms_swsense(75);
 	pms_resolution(320,240);
 	return video_register_device((struct video_device *)&pms_device);
 }

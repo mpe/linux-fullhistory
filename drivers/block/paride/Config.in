@@ -1,0 +1,19 @@
+#
+# PARIDE configuration
+#
+comment 'Parallel IDE high-level drivers'
+dep_tristate '  Parallel port IDE disks' CONFIG_PARIDE_PD $CONFIG_PARIDE
+dep_tristate '  Parallel port ATAPI CD-ROMs' CONFIG_PARIDE_PCD $CONFIG_PARIDE
+dep_tristate '  Parallel port ATAPI disks' CONFIG_PARIDE_PF $CONFIG_PARIDE
+comment 'Parallel IDE protocol modules'
+dep_tristate '    ATEN EH-100 protocol' CONFIG_PARIDE_ATEN $CONFIG_PARIDE
+dep_tristate '    MicroSolutions backpack protocol' CONFIG_PARIDE_BPCK $CONFIG_PARIDE
+dep_tristate '    DataStor Commuter protocol' CONFIG_PARIDE_COMM $CONFIG_PARIDE
+dep_tristate '    DataStor EP-2000 protocol' CONFIG_PARIDE_DSTR $CONFIG_PARIDE
+dep_tristate '    Shuttle EPAT/EPEZ protocol' CONFIG_PARIDE_EPAT $CONFIG_PARIDE
+dep_tristate '    Shuttle EPIA protocol' CONFIG_PARIDE_EPIA $CONFIG_PARIDE
+dep_tristate '    FreeCom power protocol' CONFIG_PARIDE_FRPW $CONFIG_PARIDE
+dep_tristate '    KingByte KBIC-951A/971A protocols' CONFIG_PARIDE_KBIC $CONFIG_PARIDE
+dep_tristate '    OnSpec 90c20 protocol' CONFIG_PARIDE_ON20 $CONFIG_PARIDE
+dep_tristate '    OnSpec 90c26 protocol' CONFIG_PARIDE_ON26 $CONFIG_PARIDE
+#

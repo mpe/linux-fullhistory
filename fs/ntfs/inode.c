@@ -850,8 +850,7 @@ void ntfs_decompress(unsigned char *dest, unsigned char *src, ntfs_size_t l)
 	{
 		head = NTFS_GETU16(src) & 0xFFF;
 		/* high bit indicates that compression was performed */
-		comp = NTFS_GETU8(src) & 0x80;
-		comp = (head == 0xFFF);
+		comp = NTFS_GETU16(src) & 0x8000;
 		src += 2;
 		stop = src+head;
 		bits = 0;

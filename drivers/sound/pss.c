@@ -10,6 +10,9 @@
  * Version 2 (June 1991). See the "COPYING" file distributed with this software
  * for more info.
  */
+/*
+ * Thomas Sailer   : ioctl code reworked (vmalloc/vfree removed)
+ */
 #include <linux/config.h>
 #include <linux/module.h>
 
@@ -498,257 +501,177 @@ download_boot_block(void *dev_info, copr_buffer * buf)
 	return 0;
 }
 
-static int
-pss_coproc_ioctl(void *dev_info, unsigned int cmd, caddr_t arg, int local)
+static int pss_coproc_ioctl(void *dev_info, unsigned int cmd, caddr_t arg, int local)
 {
+	copr_buffer *buf;
+	copr_msg *mbuf;
+	copr_debug_buf dbuf;
+	unsigned short tmp;
+	unsigned long flags;
+	unsigned short *data;
+	int i, err;
 	/* printk( "PSS coproc ioctl %x %x %d\n",  cmd,  arg,  local); */
+	
+	switch (cmd) {
+	case SNDCTL_COPR_RESET:
+		pss_coproc_reset(dev_info);
+		return 0;
 
-	switch (cmd)
-	  {
-	  case SNDCTL_COPR_RESET:
-		  pss_coproc_reset(dev_info);
-		  return 0;
-		  break;
+	case SNDCTL_COPR_LOAD:
+		buf = (copr_buffer *) vmalloc(sizeof(copr_buffer));
+		if (buf == NULL)
+			return -ENOSPC;
+		if (__copy_from_user(buf, arg, sizeof(copr_buffer))) {
+			vfree(buf);
+			return -EFAULT;
+		}
+		err = download_boot_block(dev_info, buf);
+		vfree(buf);
+		return err;
+		
+	case SNDCTL_COPR_SENDMSG:
+		mbuf = (copr_msg *)vmalloc(sizeof(copr_msg));
+		if (mbuf == NULL)
+			return -ENOSPC;
+		if (__copy_from_user(mbuf, arg, sizeof(copr_msg))) {
+			vfree(mbuf);
+			return -EFAULT;
+		}
+		data = (unsigned short *)(mbuf->data);
+		save_flags(flags);
+		cli();
+		for (i = 0; i < mbuf->len; i++) {
+			if (!pss_put_dspword(devc, *data++)) {
+				restore_flags(flags);
+				mbuf->len = i;	/* feed back number of WORDs sent */
+				err = __copy_to_user(arg, mbuf, sizeof(copr_msg));
+				vfree(mbuf);
+				return err ? err : -EIO;
+			}
+		}
+		restore_flags(flags);
+		vfree(mbuf);
+		return 0;
 
-	  case SNDCTL_COPR_LOAD:
-		  {
-			  copr_buffer    *buf;
-			  int             err;
+	case SNDCTL_COPR_RCVMSG:
+		err = 0;
+		mbuf = (copr_msg *)vmalloc(sizeof(copr_msg));
+		if (mbuf == NULL)
+			return -ENOSPC;
+		data = (unsigned short *)mbuf->data;
+		save_flags(flags);
+		cli();
+		for (i = 0; i < mbuf->len; i++) {
+			mbuf->len = i;	/* feed back number of WORDs read */
+			if (!pss_get_dspword(devc, data++)) {
+				if (i == 0)
+					err = -EIO;
+				break;
+			}
+		}
+		restore_flags(flags);
+		if (__copy_to_user(arg, mbuf, sizeof(copr_msg)))
+			err = -EFAULT;
+		vfree(mbuf);
+		return err;
+		
+	case SNDCTL_COPR_RDATA:
+		if (__copy_from_user(&dbuf, arg, sizeof(dbuf)))
+			return -EFAULT;
+		save_flags(flags);
+		cli();
+		if (!pss_put_dspword(devc, 0x00d0)) {
+			restore_flags(flags);
+			return -EIO;
+		}
+		if (!pss_put_dspword(devc, (unsigned short)(dbuf.parm1 & 0xffff))) {
+			restore_flags(flags);
+			return -EIO;
+		}
+		if (!pss_get_dspword(devc, &tmp)) {
+			restore_flags(flags);
+			return -EIO;
+		}
+		dbuf.parm1 = tmp;
+		restore_flags(flags);
+		return __copy_to_user(arg, &dbuf, sizeof(dbuf));
+		
+	case SNDCTL_COPR_WDATA:
+		if (__copy_from_user(&dbuf, arg, sizeof(dbuf)))
+			return -EFAULT;
+		save_flags(flags);
+		cli();
+		if (!pss_put_dspword(devc, 0x00d1)) {
+			restore_flags(flags);
+			return -EIO;
+		}
+		if (!pss_put_dspword(devc, (unsigned short) (dbuf.parm1 & 0xffff))) {
+			restore_flags(flags);
+			return -EIO;
+		}
+		tmp = (unsigned int)dbuf.parm2 & 0xffff;
+		if (!pss_put_dspword(devc, tmp)) {
+			restore_flags(flags);
+			return -EIO;
+		}
+		restore_flags(flags);
+		return 0;
+		
+	case SNDCTL_COPR_WCODE:
+		if (__copy_from_user(&dbuf, arg, sizeof(dbuf)))
+			return -EFAULT;
+		save_flags(flags);
+		cli();
+		if (!pss_put_dspword(devc, 0x00d3)) {
+			restore_flags(flags);
+			return -EIO;
+		}
+		if (!pss_put_dspword(devc, (unsigned short)(dbuf.parm1 & 0xffff))) {
+			restore_flags(flags);
+			return -EIO;
+		}
+		tmp = (unsigned int)dbuf.parm2 & 0x00ff;
+		if (!pss_put_dspword(devc, tmp)) {
+			restore_flags(flags);
+			return -EIO;
+		}
+		tmp = ((unsigned int)dbuf.parm2 >> 8) & 0xffff;
+		if (!pss_put_dspword(devc, tmp)) {
+			restore_flags(flags);
+			return -EIO;
+		}
+		restore_flags(flags);
+		return 0;
+		
+	case SNDCTL_COPR_RCODE:
+		if (__copy_from_user(&dbuf, arg, sizeof(dbuf)))
+			return -EFAULT;
+		save_flags(flags);
+		cli();
+		if (!pss_put_dspword(devc, 0x00d2)) {
+			restore_flags(flags);
+			return -EIO;
+		}
+		if (!pss_put_dspword(devc, (unsigned short)(dbuf.parm1 & 0xffff))) {
+			restore_flags(flags);
+			return -EIO;
+		}
+		if (!pss_get_dspword(devc, &tmp)) { /* Read MSB */
+			restore_flags(flags);
+			return -EIO;
+		}
+		dbuf.parm1 = tmp << 8;
+		if (!pss_get_dspword(devc, &tmp)) { /* Read LSB */
+			restore_flags(flags);
+			return -EIO;
+		}
+		dbuf.parm1 |= tmp & 0x00ff;
+		restore_flags(flags);
+		return __copy_to_user(arg, &dbuf, sizeof(dbuf));
 
-			  buf = (copr_buffer *) vmalloc(sizeof(copr_buffer));
-			  if (buf == NULL)
-				  return -ENOSPC;
-
-			  memcpy((char *) buf, (&((char *) arg)[0]), sizeof(*buf));
-			  err = download_boot_block(dev_info, buf);
-			  vfree(buf);
-			  return err;
-		  }
-		  break;
-
-	  case SNDCTL_COPR_SENDMSG:
-		  {
-			  copr_msg       *buf;
-			  unsigned long   flags;
-			  unsigned short *data;
-			  int             i;
-
-			  buf = (copr_msg *) vmalloc(sizeof(copr_msg));
-			  if (buf == NULL)
-				  return -ENOSPC;
-
-			  memcpy((char *) buf, (&((char *) arg)[0]), sizeof(*buf));
-
-			  data = (unsigned short *) (buf->data);
-
-			  save_flags(flags);
-			  cli();
-
-			  for (i = 0; i < buf->len; i++)
-			    {
-				    if (!pss_put_dspword(devc, *data++))
-				      {
-					      restore_flags(flags);
-					      buf->len = i;	/* feed back number of WORDs sent */
-					      memcpy((&((char *) arg)[0]), (char *) buf, sizeof(*buf));
-					      vfree(buf);
-					      return -EIO;
-				      }
-			    }
-
-			  restore_flags(flags);
-			  vfree(buf);
-
-			  return 0;
-		  }
-		  break;
-
-
-	  case SNDCTL_COPR_RCVMSG:
-		  {
-			  copr_msg       *buf;
-			  unsigned long   flags;
-			  unsigned short *data;
-			  unsigned int    i;
-			  int             err = 0;
-
-			  buf = (copr_msg *) vmalloc(sizeof(copr_msg));
-			  if (buf == NULL)
-				  return -ENOSPC;
-
-
-			  data = (unsigned short *) buf->data;
-
-			  save_flags(flags);
-			  cli();
-
-			  for (i = 0; i < buf->len; i++)
-			    {
-				    buf->len = i;	/* feed back number of WORDs read */
-				    if (!pss_get_dspword(devc, data++))
-				      {
-					      if (i == 0)
-						      err = -EIO;
-					      break;
-				      }
-			    }
-
-			  restore_flags(flags);
-
-			  memcpy((&((char *) arg)[0]), (char *) buf, sizeof(*buf));
-			  vfree(buf);
-
-			  return err;
-		  }
-		  break;
-
-
-	  case SNDCTL_COPR_RDATA:
-		  {
-			  copr_debug_buf  buf;
-			  unsigned long   flags;
-			  unsigned short  tmp;
-
-			  memcpy((char *) &buf, (&((char *) arg)[0]), sizeof(buf));
-
-			  save_flags(flags);
-			  cli();
-			  if (!pss_put_dspword(devc, 0x00d0))
-			    {
-				    restore_flags(flags);
-				    return -EIO;
-			    }
-			  if (!pss_put_dspword(devc, (unsigned short) (buf.parm1 & 0xffff)))
-			    {
-				    restore_flags(flags);
-				    return -EIO;
-			    }
-			  if (!pss_get_dspword(devc, &tmp))
-			    {
-				    restore_flags(flags);
-				    return -EIO;
-			    }
-			  buf.parm1 = tmp;
-			  restore_flags(flags);
-
-			  memcpy((&((char *) arg)[0]), (char *) &buf, sizeof(buf));
-			  return 0;
-		  }
-		  break;
-
-	  case SNDCTL_COPR_WDATA:
-		  {
-			  copr_debug_buf  buf;
-			  unsigned long   flags;
-			  unsigned short  tmp;
-
-			  memcpy((char *) &buf, (&((char *) arg)[0]), sizeof(buf));
-
-			  save_flags(flags);
-			  cli();
-			  if (!pss_put_dspword(devc, 0x00d1))
-			    {
-				    restore_flags(flags);
-				    return -EIO;
-			    }
-			  if (!pss_put_dspword(devc, (unsigned short) (buf.parm1 & 0xffff)))
-			    {
-				    restore_flags(flags);
-				    return -EIO;
-			    }
-			  tmp = (unsigned int) buf.parm2 & 0xffff;
-			  if (!pss_put_dspword(devc, tmp))
-			    {
-				    restore_flags(flags);
-				    return -EIO;
-			    }
-			  restore_flags(flags);
-			  return 0;
-		  }
-		  break;
-
-	  case SNDCTL_COPR_WCODE:
-		  {
-			  copr_debug_buf  buf;
-			  unsigned long   flags;
-			  unsigned short  tmp;
-
-			  memcpy((char *) &buf, (&((char *) arg)[0]), sizeof(buf));
-
-			  save_flags(flags);
-			  cli();
-			  if (!pss_put_dspword(devc, 0x00d3))
-			    {
-				    restore_flags(flags);
-				    return -EIO;
-			    }
-			  if (!pss_put_dspword(devc, (unsigned short) (buf.parm1 & 0xffff)))
-			    {
-				    restore_flags(flags);
-				    return -EIO;
-			    }
-			  tmp = (unsigned int) buf.parm2 & 0x00ff;
-			  if (!pss_put_dspword(devc, tmp))
-			    {
-				    restore_flags(flags);
-				    return -EIO;
-			    }
-			  tmp = ((unsigned int) buf.parm2 >> 8) & 0xffff;
-			  if (!pss_put_dspword(devc, tmp))
-			    {
-				    restore_flags(flags);
-				    return -EIO;
-			    }
-			  restore_flags(flags);
-			  return 0;
-		  }
-		  break;
-
-	  case SNDCTL_COPR_RCODE:
-		  {
-			  copr_debug_buf  buf;
-			  unsigned long   flags;
-			  unsigned short  tmp;
-
-			  memcpy((char *) &buf, (&((char *) arg)[0]), sizeof(buf));
-
-			  save_flags(flags);
-			  cli();
-			  if (!pss_put_dspword(devc, 0x00d2))
-			    {
-				    restore_flags(flags);
-				    return -EIO;
-			    }
-			  if (!pss_put_dspword(devc, (unsigned short) (buf.parm1 & 0xffff)))
-			    {
-				    restore_flags(flags);
-				    return -EIO;
-			    }
-			  if (!pss_get_dspword(devc, &tmp))	/* Read MSB */
-			    {
-				    restore_flags(flags);
-				    return -EIO;
-			    }
-			  buf.parm1 = tmp << 8;
-
-			  if (!pss_get_dspword(devc, &tmp))	/* Read LSB */
-			    {
-				    restore_flags(flags);
-				    return -EIO;
-			    }
-			  buf.parm1 |= tmp & 0x00ff;
-
-			  restore_flags(flags);
-
-			  memcpy((&((char *) arg)[0]), (char *) &buf, sizeof(buf));
-			  return 0;
-		  }
-		  break;
-
-	  default:
-		  return -EINVAL;
-	  }
-
+	default:
+		return -EINVAL;
+	}
 	return -EINVAL;
 }
 

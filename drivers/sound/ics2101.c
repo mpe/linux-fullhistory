@@ -10,6 +10,9 @@
  * Version 2 (June 1991). See the "COPYING" file distributed with this software
  * for more info.
  */
+/*
+ * Thomas Sailer   : ioctl code reworked (vmalloc/vfree removed)
+ */
 #include <linux/config.h>
 
 
@@ -115,79 +118,88 @@ static int set_volumes(int dev, int vol)
 
 static int ics2101_mixer_ioctl(int dev, unsigned int cmd, caddr_t arg)
 {
-	if (((cmd >> 8) & 0xff) == 'M')
-	{
-		if (_SIOC_DIR(cmd) & _SIOC_WRITE)
-		{
+	if (((cmd >> 8) & 0xff) == 'M') {
+		if (_SIOC_DIR(cmd) & _SIOC_WRITE) {
 			int val;
+			
+			if (__get_user(val, (int *)arg))
+				return -EFAULT;
+			switch (cmd & 0xff) {
+			case SOUND_MIXER_RECSRC:
+				return gus_default_mixer_ioctl(dev, cmd, arg);
 
-			val = *(int *) arg;
+			case SOUND_MIXER_MIC:
+				val = set_volumes(DEV_MIC, val);
+				break;
+				
+			case SOUND_MIXER_CD:
+				val = set_volumes(DEV_CD, val);
+				break;
 
-			switch (cmd & 0xff)
-			{
-				case SOUND_MIXER_RECSRC:
-					return gus_default_mixer_ioctl(dev, cmd, arg);
+			case SOUND_MIXER_LINE:
+				val = set_volumes(DEV_LINE, val);
+				break;
 
-				case SOUND_MIXER_MIC:
-					return (*(int *) arg = set_volumes(DEV_MIC, val));
+			case SOUND_MIXER_SYNTH:
+				val = set_volumes(DEV_GF1, val);
+				break;
 
-				case SOUND_MIXER_CD:
-					return (*(int *) arg = set_volumes(DEV_CD, val));
+			case SOUND_MIXER_VOLUME:
+				val = set_volumes(DEV_VOL, val);
+				break;
 
-				case SOUND_MIXER_LINE:
-					return (*(int *) arg = set_volumes(DEV_LINE, val));
-
-				case SOUND_MIXER_SYNTH:
-					return (*(int *) arg = set_volumes(DEV_GF1, val));
-
-				case SOUND_MIXER_VOLUME:
-					return (*(int *) arg = set_volumes(DEV_VOL, val));
-
-				default:
-					return -EINVAL;
+			default:
+				return -EINVAL;
 			}
-		}
-		else
-		{
-			switch (cmd & 0xff)	/*
-						 * Return parameters
-						 */
-			{
+			return __put_user(val, (int *)arg);
+		} else {
+			switch (cmd & 0xff) {
+				/*
+				 * Return parameters
+				 */
+			case SOUND_MIXER_RECSRC:
+				return gus_default_mixer_ioctl(dev, cmd, arg);
 
-				case SOUND_MIXER_RECSRC:
-					return gus_default_mixer_ioctl(dev, cmd, arg);
+			case SOUND_MIXER_DEVMASK:
+				val = MIX_DEVS; 
+				break;
 
-				case SOUND_MIXER_DEVMASK:
-					return (*(int *) arg = MIX_DEVS);
+			case SOUND_MIXER_STEREODEVS:
+				val = SOUND_MASK_LINE | SOUND_MASK_CD | SOUND_MASK_SYNTH | SOUND_MASK_VOLUME | SOUND_MASK_MIC; 
+				break;
 
-				case SOUND_MIXER_STEREODEVS:
-					return (*(int *) arg = SOUND_MASK_LINE | SOUND_MASK_CD | SOUND_MASK_SYNTH | SOUND_MASK_VOLUME | SOUND_MASK_MIC);
+			case SOUND_MIXER_RECMASK:
+				val = SOUND_MASK_MIC | SOUND_MASK_LINE; 
+				break;
+				
+			case SOUND_MIXER_CAPS:
+				val = 0; 
+				break;
 
-				case SOUND_MIXER_RECMASK:
-					return (*(int *) arg = SOUND_MASK_MIC | SOUND_MASK_LINE);
+			case SOUND_MIXER_MIC:
+				val = volumes[DEV_MIC];
+				break;
+				
+			case SOUND_MIXER_LINE:
+				val = volumes[DEV_LINE];
+				break;
 
-				case SOUND_MIXER_CAPS:
-				    return (*(int *) arg = 0);
-				    break;
+			case SOUND_MIXER_CD:
+				val = volumes[DEV_CD];
+				break;
 
-				case SOUND_MIXER_MIC:
-					return (*(int *) arg = volumes[DEV_MIC]);
+			case SOUND_MIXER_VOLUME:
+				val = volumes[DEV_VOL];
+				break;
 
-				case SOUND_MIXER_LINE:
-					return (*(int *) arg = volumes[DEV_LINE]);
+			case SOUND_MIXER_SYNTH:
+				val = volumes[DEV_GF1]; 
+				break;
 
-				case SOUND_MIXER_CD:
-					return (*(int *) arg = volumes[DEV_CD]);
-
-				case SOUND_MIXER_VOLUME:
-					return (*(int *) arg = volumes[DEV_VOL]);
-
-				case SOUND_MIXER_SYNTH:
-					return (*(int *) arg = volumes[DEV_GF1]);
-
-				default:
-					return -EINVAL;
+			default:
+				return -EINVAL;
 			}
+			return __put_user(val, (int *)arg);
 		}
 	}
 	return -EINVAL;

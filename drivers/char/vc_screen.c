@@ -56,11 +56,6 @@ static int
 vcs_size(struct inode *inode)
 {
 	int size;
-#ifdef CONFIG_MULTIMON
-   	int currcons = MINOR(inode->i_rdev) & 127;
-	/* Multimon patch	*/
-	if (!vc_cons[currcons].d) return 0;
-#endif
 #ifdef CONFIG_FB_CONSOLE
 	int cons = MINOR(inode->i_rdev) & 127;
 

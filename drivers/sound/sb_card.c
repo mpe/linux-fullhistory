@@ -34,10 +34,10 @@ int
 probe_sb(struct address_info *hw_config)
 {
 	if (check_region(hw_config->io_base, 16))
-	  {
-		  printk("\n\nsb_dsp.c: I/O port %x already in use\n\n", hw_config->io_base);
-		  return 0;
-	  }
+	{
+		printk("\n\nsb_card.c: I/O port %x is already in use\n\n", hw_config->io_base);
+		return 0;
+	}
 	return sb_dsp_detect(hw_config);
 }
 
@@ -85,37 +85,36 @@ static int      sbmpu = 0;
 
 void           *smw_free = NULL;
 
-int
-init_module(void)
+int init_module(void)
 {
-	printk("Soundblaster audio driver Copyright (C) by Hannu Savolainen 1993-1996\n");
+	printk(KERN_INFO "Soundblaster audio driver Copyright (C) by Hannu Savolainen 1993-1996\n");
 
 	if (mad16 == 0 && trix == 0 && pas2 == 0)
-	  {
-		  if (io == -1 || dma == -1 || irq == -1)
-		    {
-			    printk("I/O, IRQ, DMA and type are mandatory\n");
-			    return -EINVAL;
-		    }
-		  config.io_base = io;
-		  config.irq = irq;
-		  config.dma = dma;
-		  config.dma2 = dma16;
-		  config.card_subtype = type;
+	{
+		if (io == -1 || dma == -1 || irq == -1)
+		{
+			printk(KERN_ERR "I/O, IRQ, and DMA are mandatory\n");
+			return -EINVAL;
+		}
+		config.io_base = io;
+		config.irq = irq;
+		config.dma = dma;
+		config.dma2 = dma16;
+		config.card_subtype = type;
 
-		  if (!probe_sb(&config))
-			  return -ENODEV;
-		  attach_sb_card(&config);
+		if (!probe_sb(&config))
+			return -ENODEV;
+		attach_sb_card(&config);
 #ifdef CONFIG_MIDI
-		  config_mpu.io_base = mpu_io;
-		  if (mpu_io && probe_sbmpu(&config_mpu))
-			  sbmpu = 1;
+		config_mpu.io_base = mpu_io;
+		if (mpu_io && probe_sbmpu(&config_mpu))
+			sbmpu = 1;
 #endif
 #ifdef CONFIG_MIDI
-		  if (sbmpu)
-			  attach_sbmpu(&config_mpu);
+		if (sbmpu)
+			attach_sbmpu(&config_mpu);
 #endif
-	  }
+	}
 	SOUND_LOCK;
 	return 0;
 }

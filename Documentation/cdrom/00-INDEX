@@ -2,8 +2,6 @@
 	- this file (info on CD-ROMs and Linux)
 aztcd
 	- info on Aztech/Orchid/Okano/Wearnes/Conrad/CyCDROM driver.
-bpcd
-	- info on MicroSolutions backpack CDROM 
 
 cdrom-standard.tex
 	- LaTeX document on standardizing the CD-ROM programming interface.

@@ -1,13 +1,13 @@
 /*
- *  linux/drivers/block/ide-pci.c	Version 1.00  December 8, 1997
+ *  linux/drivers/block/ide-pci.c	Version 1.02  December 29, 1997
  *
  *  Copyright (c) 1995-1998  Mark Lord
  *  May be copied or modified under the terms of the GNU General Public License
  */
 
 /*
- * This modules provides support for automatic detection and
- * configuration of all PCI IDE interfaces present in a system.  
+ *  This module provides support for automatic detection and
+ *  configuration of all PCI IDE interfaces present in a system.  
  */
 
 #include <linux/config.h>
@@ -41,6 +41,7 @@
 #define DEVID_NS87410	((ide_pci_devid_t){PCI_VENDOR_ID_NS,      PCI_DEVICE_ID_NS_87410})
 #define DEVID_NS87415	((ide_pci_devid_t){PCI_VENDOR_ID_NS,      PCI_DEVICE_ID_NS_87415})
 #define DEVID_HT6565	((ide_pci_devid_t){PCI_VENDOR_ID_HOLTEK,  PCI_DEVICE_ID_HOLTEK_6565})
+#define DEVID_AEC6210	((ide_pci_devid_t){0x1191,                0x0005})
 
 #define IDE_IGNORE	((void *)-1)
 
@@ -102,6 +103,7 @@ static ide_pci_device_t ide_pci_chipsets[] __initdata = {
 	{DEVID_OPTI621X,"OPTI621X",	INIT_OPTI621,	{{0x45,0x80,0x00}, {0x40,0x08,0x00}} },
 	{DEVID_TRM290,	"TRM290",	INIT_TRM290,	{{0x00,0x00,0x00}, {0x00,0x00,0x00}} },
 	{DEVID_NS87415,	"NS87415",	INIT_NS87415,	{{0x00,0x00,0x00}, {0x00,0x00,0x00}} },
+	{DEVID_AEC6210,	"AEC6210",	NULL,		{{0x00,0x00,0x00}, {0x00,0x00,0x00}} },
 	{IDE_PCI_DEVID_NULL, "PCI_IDE",	NULL,		{{0x00,0x00,0x00}, {0x00,0x00,0x00}} }};
 
 /*
@@ -111,7 +113,7 @@ static ide_pci_device_t ide_pci_chipsets[] __initdata = {
  * by the BIOS, to avoid conflicts later in the init cycle,
  * but we don't.	FIXME
  */
-unsigned int ide_find_free_region (unsigned short size) /* __init */
+unsigned long ide_find_free_region (unsigned short size) /* __init */
 {
 	static unsigned short base = 0x5800;	/* it works for me */
 	unsigned short i;
@@ -228,10 +230,11 @@ __initfunc(static int ide_setup_pci_baseregs (byte bus, byte fn, const char *nam
 __initfunc(static void ide_setup_pci_device (byte bus, byte fn, unsigned int ccode, ide_pci_device_t *d))
 {
 	unsigned int port, at_least_one_hwif_enabled = 0, no_autodma = 0;
-	unsigned short pcicmd = 0;
+	unsigned short pcicmd = 0, tried_config = 0;
 	byte tmp = 0, progif = 0, pciirq = 0;
 	ide_hwif_t *hwif, *mate = NULL;
 
+check_if_enabled:
 	if (pcibios_read_config_word(bus, fn, 0x04, &pcicmd)
 	 || pcibios_read_config_byte(bus, fn, 0x09, &progif)
 	 || pcibios_read_config_byte(bus, fn, 0x3c, &pciirq))
@@ -247,21 +250,32 @@ __initfunc(static void ide_setup_pci_device (byte bus, byte fn, unsigned int cco
 		 * Maybe the user deliberately *disabled* the device,
 		 * but we'll eventually ignore it again if no drives respond.
 		 */
-		if (ide_setup_pci_baseregs(bus, fn, d->name)
-		 || pcibios_write_config_word(bus, fn, 0x04, pcicmd|1)
-		 || pcibios_read_config_word(bus, fn, 0x04, &pcicmd)
-		 || !(pcicmd & 1))
+		if (tried_config++
+		 || ide_setup_pci_baseregs(bus, fn, d->name)
+		 || pcibios_write_config_word(bus, fn, 0x04, pcicmd|1))
 		{
 			printk("%s: device disabled (BIOS)\n", d->name);
 			return;
 		}
 		no_autodma = 1;	/* default DMA off if we had to configure it here */
-		printk("%s: device enabled (Linux)\n", d->name);
+		goto check_if_enabled;
 	}
-	if (!pciirq || pciirq >= NR_IRQS) {	/* is pciirq invalid? */
-		if (pciirq || (progif & 0x5))	/* don't complain if using "legacy" mode */
-			printk("%s: BIOS returned %d for IRQ (ignored)\n", d->name, pciirq);
-		pciirq = 0;	/* probe for it instead */
+	if (tried_config)
+		printk("%s: device enabled (Linux)\n", d->name);
+	/*
+	 * Can we trust the reported IRQ?
+	 */
+	if ((ccode >> 16) != PCI_CLASS_STORAGE_IDE || (progif & 5) != 5) {
+		printk("%s: not 100%% native mode: will probe irqs later\n", d->name);
+		pciirq = 0;
+	} else if (tried_config) {
+		printk("%s: will probe irqs later\n", d->name);
+		pciirq = 0;
+	} else if (!pciirq || pciirq >= NR_IRQS) {
+		printk("%s: bad irq from BIOS (%d): will probe later\n", d->name, pciirq);
+		pciirq = 0;
+	} else {
+		printk("%s: 100%% native mode on irq %d\n", d->name, pciirq);
 	}
 	/*
 	 * Set up the IDE ports
@@ -286,7 +300,8 @@ __initfunc(static void ide_setup_pci_device (byte bus, byte fn, unsigned int cco
 		hwif->pci_fn = fn;
 		hwif->pci_devid = d->devid;
 		hwif->channel = port;
-		hwif->irq = pciirq;
+		if (!hwif->irq)
+			hwif->irq = pciirq;
 		if (mate) {
 			hwif->mate = mate;
 			mate->mate = hwif;
@@ -296,7 +311,7 @@ __initfunc(static void ide_setup_pci_device (byte bus, byte fn, unsigned int cco
 #ifdef CONFIG_BLK_DEV_IDEDMA
 		if (IDE_PCI_DEVID_EQ(d->devid, DEVID_PDC20246) || ((ccode >> 16) == PCI_CLASS_STORAGE_IDE && (ccode & 0x8000))) {
 			unsigned int extra = (!mate && IDE_PCI_DEVID_EQ(d->devid, DEVID_PDC20246)) ? 16 : 0;
-			unsigned int dma_base = ide_get_or_set_dma_base(hwif, extra, d->name);
+			unsigned long dma_base = ide_get_or_set_dma_base(hwif, extra, d->name);
 			if (dma_base && !(pcicmd & 4)) {
 				/*
  	 			 * Set up BM-DMA capability (PnP BIOS should have done this)
@@ -311,7 +326,7 @@ __initfunc(static void ide_setup_pci_device (byte bus, byte fn, unsigned int cco
 			if (dma_base)
 				ide_setup_dma(hwif, dma_base, 8);
 			else
-				printk("%s: %s Bus-Master DMA disabled (BIOS), pcicmd=0x%04x, ccode=0x%04x, dma_base=0x%04x\n",
+				printk("%s: %s Bus-Master DMA disabled (BIOS), pcicmd=0x%04x, ccode=0x%04x, dma_base=0x%04lx\n",
 				 hwif->name, d->name, pcicmd, ccode, dma_base);
 		}
 #endif	/* CONFIG_BLK_DEV_IDEDMA */
@@ -352,10 +367,10 @@ static inline void ide_scan_pci_device (unsigned int bus, unsigned int fn)
 			continue;	/* OPTI Viper-M uses same devid for functions 0 and 1 */
 		else if (!IDE_PCI_DEVID_EQ(d->devid, IDE_PCI_DEVID_NULL) || (ccode >> 16) == PCI_CLASS_STORAGE_IDE) {
 			if (IDE_PCI_DEVID_EQ(d->devid, IDE_PCI_DEVID_NULL))
-				printk("%s: unknown IDE device on PCI bus %d function %d, VID=%04x, DID=%04x\n",
+				printk("%s: unknown IDE controller on PCI bus %d function %d, VID=%04x, DID=%04x\n",
 					d->name, bus, fn, devid.vid, devid.did);
 			else
-				printk("%s: PCI bus %d function %d\n", d->name, bus, fn);
+				printk("%s: IDE controller on PCI bus %d function %d\n", d->name, bus, fn);
 			ide_setup_pci_device(bus, fn, ccode, d);
 		}
 	} while (hedt == 0x80 && (++fn & 7));
@@ -379,4 +394,3 @@ void ide_scan_pcibus (void) /* __init */
 		}
 	}
 }
-

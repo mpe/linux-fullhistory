@@ -10,6 +10,9 @@
  * Version 2 (June 1991). See the "COPYING" file distributed with this software
  * for more info.
  */
+/*
+ * Thomas Sailer   : ioctl code reworked (vmalloc/vfree removed)
+ */
 #include <linux/config.h>
 #include <linux/module.h>
 
@@ -102,40 +105,33 @@ static void enter_4op_mode(void)
 
 static int opl3_ioctl(int dev, unsigned int cmd, caddr_t arg)
 {
-	switch (cmd)
-	{
-
-		case SNDCTL_FM_LOAD_INSTR:
-		{
-			struct sbi_instrument ins;
-
-			printk(KERN_WARNING "Warning: Obsolete ioctl(SNDCTL_FM_LOAD_INSTR) used. Fix the program.\n");
-			memcpy((char *) &ins, (&((char *) arg)[0]), sizeof(ins));
-
-			if (ins.channel < 0 || ins.channel >= SBFM_MAXINSTR)
-			{
-				printk("FM Error: Invalid instrument number %d\n", ins.channel);
-				return -EINVAL;
-			}
-			return store_instr(ins.channel, &ins);
-		}
-
-		case SNDCTL_SYNTH_INFO:
-			devc->fm_info.nr_voices = 
-				(devc->nr_voice == 12) ? 6 : devc->nr_voice;
-			memcpy((&((char *) arg)[0]), (char *) &devc->fm_info, sizeof(devc->fm_info));
-			return 0;
-
-		case SNDCTL_SYNTH_MEMAVL:
-			return 0x7fffffff;
-
-		case SNDCTL_FM_4OP_ENABLE:
-			if (devc->model == 2)
-				enter_4op_mode();
-			return 0;
-
-		default:
+	struct sbi_instrument ins;
+	
+	switch (cmd) {
+	case SNDCTL_FM_LOAD_INSTR:
+		printk(KERN_WARNING "Warning: Obsolete ioctl(SNDCTL_FM_LOAD_INSTR) used. Fix the program.\n");
+		if (__copy_from_user(&ins, arg, sizeof(ins)))
+			return -EFAULT;
+		if (ins.channel < 0 || ins.channel >= SBFM_MAXINSTR) {
+			printk("FM Error: Invalid instrument number %d\n", ins.channel);
 			return -EINVAL;
+		}
+		return store_instr(ins.channel, &ins);
+
+	case SNDCTL_SYNTH_INFO:
+		devc->fm_info.nr_voices = (devc->nr_voice == 12) ? 6 : devc->nr_voice;
+		return __copy_to_user(arg, &devc->fm_info, sizeof(devc->fm_info));
+
+	case SNDCTL_SYNTH_MEMAVL:
+		return 0x7fffffff;
+
+	case SNDCTL_FM_4OP_ENABLE:
+		if (devc->model == 2)
+			enter_4op_mode();
+		return 0;
+
+	default:
+		return -EINVAL;
 	}
 }
 

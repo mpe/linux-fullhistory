@@ -416,7 +416,7 @@ static void setup_frame(int sig, struct k_sigaction *ka,
 	{
 		unsigned long seg = __USER_DS;
 		__asm__("mov %w0,%%fs ; mov %w0,%%gs": "=r"(seg) : "0"(seg));
-		set_fs(MAKE_MM_SEG(seg));
+		set_fs(USER_DS);
 		regs->xds = seg;
 		regs->xes = seg;
 		regs->xss = seg;
@@ -488,7 +488,7 @@ static void setup_rt_frame(int sig, struct k_sigaction *ka, siginfo_t *info,
 	{
 		unsigned long seg = __USER_DS;
 		__asm__("mov %w0,%%fs ; mov %w0,%%gs": "=r"(seg) : "0"(seg));
-		set_fs(MAKE_MM_SEG(seg));
+		set_fs(USER_DS);
 		regs->xds = seg;
 		regs->xes = seg;
 		regs->xss = seg;

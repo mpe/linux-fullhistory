@@ -172,7 +172,7 @@ struct thread_struct {
 	_LDT(0),0, \
 	0, 0x8000, \
 	{~0, }, /* ioperm */ \
-	_TSS(0), 0, 0, 0, KERNEL_DS, \
+	_TSS(0), 0, 0, 0, (mm_segment_t) { 0 } /* obsolete */ , \
 	{ { 0, }, },  /* 387 state */ \
 	NULL, 0, 0, 0, 0, 0 /* vm86_info */, \
 }
@@ -180,7 +180,7 @@ struct thread_struct {
 #define start_thread(regs, new_eip, new_esp) do {\
 	unsigned long seg = __USER_DS; \
 	__asm__("mov %w0,%%fs ; mov %w0,%%gs":"=r" (seg) :"0" (seg)); \
-	set_fs(MAKE_MM_SEG(seg)); \
+	set_fs(USER_DS); \
 	regs->xds = seg; \
 	regs->xes = seg; \
 	regs->xss = seg; \

@@ -99,14 +99,6 @@ void conf_printf2(char *name, int base, int irq, int dma, int dma2);
 int ioctl_in(caddr_t arg);
 int ioctl_out(caddr_t arg, int result);
 
-/*	From sound_switch.c	*/
-int sound_read_sw (int dev, struct fileinfo *file, char *buf, int count);
-int sound_write_sw (int dev, struct fileinfo *file, const char *buf, int count);
-int sound_open_sw (int dev, struct fileinfo *file);
-void sound_release_sw (int dev, struct fileinfo *file);
-int sound_ioctl_sw (int dev, struct fileinfo *file,
-	     unsigned int cmd, caddr_t arg);
-
 /*	From opl3.c	*/
 int opl3_detect (int ioaddr, int *osp);
 int opl3_init(int ioaddr, int *osp);

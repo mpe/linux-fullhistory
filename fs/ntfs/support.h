@@ -10,8 +10,14 @@
 #define DEBUG_MALLOC	2
 
 void ntfs_debug(int mask, const char *fmt, ...);
+#ifdef NTFS_IN_LINUX_KERNEL
+#include <linux/slab.h>
+#define ntfs_malloc(size)  kmalloc(size,GFP_KERNEL)
+#define ntfs_free(ptr)     kfree(ptr)
+#else
 void *ntfs_malloc(int size);
 void ntfs_free(void *block);
+#endif
 void ntfs_bzero(void *s, int n);
 void *ntfs_memcpy(void *dest, const void *src, ntfs_size_t n);
 void *ntfs_memmove(void *dest, const void *src, ntfs_size_t n);

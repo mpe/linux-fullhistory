@@ -136,7 +136,7 @@ if [ "$CONFIG_SOFTOSS" = "y" ]; then
 fi
 
 dep_tristate 'FM synthesizer (YM3812/OPL-3) support' CONFIG_YM3812 $CONFIG_SOUND
-dep_tristate 'Loopback MIDI device support' CONFIG_VMIDI $CONFIG_VMIDI
+dep_tristate 'Loopback MIDI device support' CONFIG_VMIDI $CONFIG_SOUND
 
 if [ "$CONFIG_UART6850" = "y" ]; then
     hex 'I/O base for UART 6850 MIDI port (Unknown)' U6850_BASE 0

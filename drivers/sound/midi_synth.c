@@ -10,6 +10,9 @@
  * Version 2 (June 1991). See the "COPYING" file distributed with this software
  * for more info.
  */
+/*
+ * Thomas Sailer   : ioctl code reworked (vmalloc/vfree removed)
+ */
 #include <linux/config.h>
 
 #define USE_SEQ_MACROS
@@ -258,30 +261,23 @@ midi_synth_output(int dev)
 	 */
 }
 
-int
-midi_synth_ioctl(int dev,
-		 unsigned int cmd, caddr_t arg)
+int midi_synth_ioctl(int dev, unsigned int cmd, caddr_t arg)
 {
 	/*
 	 * int orig_dev = synth_devs[dev]->midi_dev;
 	 */
 
-	switch (cmd)
-	  {
+	switch (cmd) {
 
-	  case SNDCTL_SYNTH_INFO:
-		  memcpy((&((char *) arg)[0]), (char *) synth_devs[dev]->info, sizeof(struct synth_info));
+	case SNDCTL_SYNTH_INFO:
+		return __copy_to_user(arg, synth_devs[dev]->info, sizeof(struct synth_info));
+		
+	case SNDCTL_SYNTH_MEMAVL:
+		return 0x7fffffff;
 
-		  return 0;
-		  break;
-
-	  case SNDCTL_SYNTH_MEMAVL:
-		  return 0x7fffffff;
-		  break;
-
-	  default:
-		  return -EINVAL;
-	  }
+	default:
+		return -EINVAL;
+	}
 }
 
 int

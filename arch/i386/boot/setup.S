@@ -274,6 +274,8 @@ loader_ok:
 
 oldstylemem:
 	pop	ebx
+#else
+	mov     dword ptr [0x1e0], #0
 #endif
 	mov	ah,#0x88
 	int	0x15

@@ -572,10 +572,12 @@ S: USA
 
 N: Grant Guenther
 E: grant@torque.net
-D: drivers for parallel port devices: ppa, ez, bpcd
-D: original architect of the parallel-port sharing scheme. 
-S: 906-1001 Bay St.
-S: Toronto, Ontario, M5S 3A6 
+W: http://www.torque.net/linux-pp.html
+D: original author of ppa driver for parallel port ZIP drive
+D: original architect of the parallel-port sharing scheme 
+D: PARIDE subsystem: drivers for parallel port IDE & ATAPI devices
+S: 44 St. Joseph St., Suite 506
+S: Toronto, Ontario, M4Y 2W4
 S: Canada
 
 N: Richard Günther

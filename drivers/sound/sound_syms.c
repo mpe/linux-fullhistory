@@ -13,6 +13,8 @@
 #include "sound_firmware.h"
 
 extern struct notifier_block *sound_locker;
+extern void sound_notifier_chain_register(struct notifier_block *);
+
 
 EXPORT_SYMBOL(mixer_devs);
 EXPORT_SYMBOL(audio_devs);
@@ -63,6 +65,7 @@ EXPORT_SYMBOL(sound_timer_syncinterval);
 
 /* Locking */
 EXPORT_SYMBOL(sound_locker);
+EXPORT_SYMBOL(sound_notifier_chain_register);
 
 /* MIDI symbols */
 EXPORT_SYMBOL(midi_devs);
@@ -86,3 +89,4 @@ EXPORT_SYMBOL(midi_synth_setup_voice);
 EXPORT_SYMBOL(midi_synth_send_sysex);
 EXPORT_SYMBOL(midi_synth_bender);
 EXPORT_SYMBOL(midi_synth_load_patch);
+

@@ -18,49 +18,42 @@
  */
 
 #define MAKE_MM_SEG(s)	((mm_segment_t) { (s) })
-#define KERNEL_DS	MAKE_MM_SEG(0)
-#define USER_DS		MAKE_MM_SEG(3)
+
+
+#define KERNEL_DS	MAKE_MM_SEG(0xFFFFFFFF)
+#define USER_DS		MAKE_MM_SEG(0xC0000000)
 
 #define get_ds()	(KERNEL_DS)
-#define get_fs()	(current->tss.segment)
-#define set_fs(x)	(current->tss.segment = (x))
+#define get_fs()	(current->addr_limit)
+#define set_fs(x)	(current->addr_limit = (x))
 
 #define segment_eq(a,b)	((a).seg == (b).seg)
 
-
-/*
- * Address Ok:
- *
- *				     segment
- *			00 (kernel)		11 (user)
- *
- * high		00	1			1
- * two 		01	1			1
- * bits of	10	1			1
- * address	11	1			0
- */
-#define __addr_ok(x) \
-	((((unsigned long)(x)>>30)&get_fs().seg) != 3)
-
-#define __user_ok(addr,size) \
-	((size <= 0xC0000000UL) && (addr <= 0xC0000000UL - size))
-#define __kernel_ok \
-	(!get_fs().seg)
-
 extern int __verify_write(const void *, unsigned long);
 
-#if CPU > 386
-#define __access_ok(type,addr,size) \
-	(__kernel_ok || __user_ok(addr,size))
-#else
-#define __access_ok(type,addr,size) \
-	(__kernel_ok || (__user_ok(addr,size) && \
-			 ((type) == VERIFY_READ || boot_cpu_data.wp_works_ok || \
-			  __verify_write((void *)(addr),(size)))))
-#endif /* CPU */
+#define __addr_ok(addr) ((unsigned long)(addr) < (current->addr_limit.seg))
 
-#define access_ok(type,addr,size) \
-	__access_ok((type),(unsigned long)(addr),(size))
+/*
+ * Uhhuh, this needs 33-bit arithmetic. We have a carry..
+ */
+#define __range_ok(addr,size) ({ \
+	unsigned long flag,sum; \
+	asm("addl %3,%1 ; sbbl %0,%0; cmpl %1,%4; sbbl $0,%0" \
+		:"=&r" (flag), "=r" (sum) \
+		:"1" (addr),"g" (size),"g" (current->addr_limit.seg)); \
+	flag; })
+
+#if CPU > 386
+
+#define access_ok(type,addr,size) (__range_ok(addr,size) == 0)
+
+#else
+
+#define access_ok(type,addr,size) ( (__range_ok(addr,size) == 0) && \
+			 ((type) == VERIFY_READ || boot_cpu_data.wp_works_ok || \
+			  __verify_write((void *)(addr),(size))))
+
+#endif /* CPU */
 
 extern inline int verify_area(int type, const void * addr, unsigned long size)
 {

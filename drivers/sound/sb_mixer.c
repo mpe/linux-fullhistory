@@ -11,6 +11,9 @@
  * Version 2 (June 1991). See the "COPYING" file distributed with this software
  * for more info.
  */
+/*
+ * Thomas Sailer   : ioctl code reworked (vmalloc/vfree removed)
+ */
 #include <linux/config.h>
 
 
@@ -281,68 +284,61 @@ set_recmask(sb_devc * devc, int mask)
 	return devc->recmask;
 }
 
-static int
-sb_mixer_ioctl(int dev, unsigned int cmd, caddr_t arg)
+static int sb_mixer_ioctl(int dev, unsigned int cmd, caddr_t arg)
 {
-	sb_devc        *devc = mixer_devs[dev]->devc;
-	int             val;
+	sb_devc *devc = mixer_devs[dev]->devc;
+	int val, ret;
 
-/*
- * Use ioctl(fd, SOUND_MIXER_PRIVATE1, &mode) to turn AGC off (0) or on (1).
- */
-	if (cmd == SOUND_MIXER_PRIVATE1 && devc->model == MDL_SB16)
-	  {
-		  int             tmp;
+	/*
+	 * Use ioctl(fd, SOUND_MIXER_PRIVATE1, &mode) to turn AGC off (0) or on (1).
+	 */
+	if (cmd == SOUND_MIXER_PRIVATE1 && devc->model == MDL_SB16) {
+		if (__get_user(val, (int *)arg))
+			return -EFAULT;
+		sb_setmixer(devc, 0x43, (~val) & 0x01);
+		return 0;
+	}
+	if (((cmd >> 8) & 0xff) == 'M') {
+		if (_SIOC_DIR(cmd) & _SIOC_WRITE) {
+			if (__get_user(val, (int *)arg))
+				return -EFAULT;
+			switch (cmd & 0xff) {
+			case SOUND_MIXER_RECSRC:
+				ret = set_recmask(devc, val);
+				break;
 
-		  tmp = *(int *) arg;
-
-		  sb_setmixer(devc, 0x43, (~tmp) & 0x01);
-		  return 0;
-	  }
-	if (((cmd >> 8) & 0xff) == 'M')
-	  {
-		  if (_SIOC_DIR(cmd) & _SIOC_WRITE)
-			  switch (cmd & 0xff)
-			    {
-			    case SOUND_MIXER_RECSRC:
-				    val = *(int *) arg;
-				    return (*(int *) arg = set_recmask(devc, val));
-				    break;
-
-			    default:
-
-				    val = *(int *) arg;
-				    return (*(int *) arg = sb_mixer_set(devc, cmd & 0xff, val));
+			default:
+				ret = sb_mixer_set(devc, cmd & 0xff, val);
+			}
 		  } else
-			  switch (cmd & 0xff)
-			    {
-
-			    case SOUND_MIXER_RECSRC:
-				    return (*(int *) arg = devc->recmask);
-				    break;
-
-			    case SOUND_MIXER_DEVMASK:
-				    return (*(int *) arg = devc->supported_devices);
-				    break;
-
-			    case SOUND_MIXER_STEREODEVS:
-				    if (devc->model == MDL_JAZZ || devc->model == MDL_SMW)
-					    return (*(int *) arg = devc->supported_devices);
-				    else
-					    return (*(int *) arg = devc->supported_devices & ~(SOUND_MASK_MIC | SOUND_MASK_SPEAKER | SOUND_MASK_IMIX));
-				    break;
-
-			    case SOUND_MIXER_RECMASK:
-				    return (*(int *) arg = devc->supported_rec_devices);
-				    break;
-
-			    case SOUND_MIXER_CAPS:
-				    return (*(int *) arg = devc->mixer_caps);
-				    break;
-
-			    default:
-				    return (*(int *) arg = sb_mixer_get(devc, cmd & 0xff));
-			    }
+			  switch (cmd & 0xff) {
+			  case SOUND_MIXER_RECSRC:
+				  ret = devc->recmask;
+				  break;
+				  
+			  case SOUND_MIXER_DEVMASK:
+				  ret = devc->supported_devices;
+				  break;
+				  
+			  case SOUND_MIXER_STEREODEVS:
+				  ret = devc->supported_devices;
+				  if (devc->model != MDL_JAZZ && devc->model != MDL_SMW)
+					  ret &= ~(SOUND_MASK_MIC | SOUND_MASK_SPEAKER | SOUND_MASK_IMIX);
+				  break;
+				  
+			  case SOUND_MIXER_RECMASK:
+				  ret = devc->supported_rec_devices;
+				  break;
+				  
+			  case SOUND_MIXER_CAPS:
+				  ret = devc->mixer_caps;
+				  break;
+				    
+			  default:
+				  ret = sb_mixer_get(devc, cmd & 0xff);
+				  break;
+			  }
+		return __put_user(ret, (int *)arg); 
 	} else
 		return -EINVAL;
 }

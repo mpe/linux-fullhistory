@@ -1,13 +1,10 @@
 /*
  * The Linux soundcard driver for 1200 baud and 9600 baud packet radio
- * (C) 1996 by Thomas Sailer, HB9JNX/AE4WA
+ * (C) 1996-1998 by Thomas Sailer, HB9JNX/AE4WA
  */
 
 #ifndef _SOUNDMODEM_H
 #define _SOUNDMODEM_H
-
-#include <linux/sockios.h>
-#include <linux/if_ether.h>
 
 /* -------------------------------------------------------------------- */
 /*

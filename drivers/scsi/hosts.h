@@ -403,6 +403,8 @@ unsigned int scsi_init(void);
 extern struct Scsi_Host * scsi_register(Scsi_Host_Template *, int j);
 extern void scsi_unregister(struct Scsi_Host * i);
 
+extern void scsi_mark_host_reset(struct Scsi_Host *Host);
+
 #define BLANK_HOST {"", 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 
 struct Scsi_Device_Template

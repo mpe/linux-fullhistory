@@ -25,6 +25,7 @@
  *		Alan Cox	:	Dumb bug: 'B' step PPro's are fine
  *		Ingo Molnar	:	Added APIC timers, based on code
  *					from Jose Renau
+ *		Alan Cox	:	Added EBDA scanning
  */
 
 #include <linux/kernel.h>
@@ -924,7 +925,7 @@ __initfunc(void smp_boot_cpus(void))
 	if (!max_cpus)
 	{
 		smp_found_config = 0;
-		printk("SMP mode deactivated, forcing use of dummy APIC emulation.\n");
+		printk(KERN_INFO "SMP mode deactivated, forcing use of dummy APIC emulation.\n");
 	}
 
 	/*
@@ -1063,7 +1064,7 @@ __initfunc(void smp_boot_cpus(void))
 			if(cpu_present_map&(1<<i))
 				bogosum+=cpu_data[i].loops_per_sec;
 		}
-		printk("Total of %d processors activated (%lu.%02lu BogoMIPS).\n",
+		printk(KERN_INFO "Total of %d processors activated (%lu.%02lu BogoMIPS).\n",
 			cpucount+1,
 			(bogosum+2500)/500000,
 			((bogosum+2500)/5000)%100);

@@ -1,5 +1,5 @@
 /*
- *  linux/drivers/block/ide-dma.c	Version 4.07  December 5, 1997
+ *  linux/drivers/block/ide-dma.c	Version 4.08  December 31, 1997
  *
  *  Copyright (c) 1995-1998  Mark Lord
  *  May be copied or modified under the terms of the GNU General Public License
@@ -171,8 +171,8 @@ int ide_build_dmatable (ide_drive_t *drive)
 		}
 		/*
 		 * Fill in the dma table, without crossing any 64kB boundaries.
-		 * The hardware requires 16-bit alignment of all blocks
-		 * (trm290 requires 32-bit alignment).
+		 * Most hardware requires 16-bit alignment of all blocks,
+		 * but the trm290 requires 32-bit alignment.
 		 */
 		if ((addr & 3)) {
 			printk("%s: misaligned DMA buffer\n", drive->name);
@@ -247,7 +247,7 @@ static int config_drive_for_dma (ide_drive_t *drive)
 int ide_dmaproc (ide_dma_action_t func, ide_drive_t *drive)
 {
 	ide_hwif_t *hwif = HWIF(drive);
-	unsigned int dma_base = hwif->dma_base;
+	unsigned long dma_base = hwif->dma_base;
 	unsigned int count, reading = 0;
 
 	switch (func) {
@@ -288,12 +288,12 @@ int ide_dmaproc (ide_dma_action_t func, ide_drive_t *drive)
 	}
 }
 
-void ide_setup_dma (ide_hwif_t *hwif, unsigned int dma_base, unsigned int num_ports) /* __init */
+void ide_setup_dma (ide_hwif_t *hwif, unsigned long dma_base, unsigned int num_ports) /* __init */
 {
 	static unsigned long dmatable = 0;
 	static unsigned leftover = 0;
 
-	printk("    %s: BM-DMA at 0x%04x-0x%04x", hwif->name, dma_base, dma_base + num_ports - 1);
+	printk("    %s: BM-DMA at 0x%04lx-0x%04lx", hwif->name, dma_base, dma_base + num_ports - 1);
 	if (check_region(dma_base, num_ports)) {
 		printk(" -- ERROR, PORT ADDRESSES ALREADY IN USE\n");
 		return;
@@ -356,25 +356,26 @@ __initfunc(static long read_pcicfg_dword (byte fn, unsigned short reg))
 /*
  * Fetch the DMA Bus-Master-I/O-Base-Address (BMIBA) from PCI space:
  */
-unsigned int ide_get_or_set_dma_base (ide_hwif_t *hwif, int extra, const char *name) /* __init */
+unsigned long ide_get_or_set_dma_base (ide_hwif_t *hwif, int extra, const char *name) /* __init */
 {
-	unsigned int new, dma_base = 0;
+	unsigned long new, dma_base = 0;
 	byte bus = hwif->pci_bus, fn = hwif->pci_fn;
 
 	if (hwif->mate && hwif->mate->dma_base) {
 		dma_base = hwif->mate->dma_base - (hwif->channel ? 0 : 8);
-	} else if (pcibios_read_config_dword(bus, fn, 0x20, &dma_base)) {
+	} else if (pcibios_read_config_dword(bus, fn, 0x20, (unsigned int *)&dma_base)) {
 		printk("%s: failed to read dma_base\n", name);
 		dma_base = 0;
 	} else if ((dma_base &= ~0xf) == 0 || dma_base == ~0xf) {
-		printk("%s: dma_base is invalid (0x%04x, BIOS problem)\n", name, dma_base);
+		printk("%s: dma_base is invalid (0x%04lx, BIOS problem)\n", name, dma_base);
 		new = ide_find_free_region(16 + extra);
 		hwif->no_autodma = 1;	/* default DMA off if we had to configure it here */
 		if (new) {
-			printk("%s: setting dma_base to 0x%04x\n", name, new);
+			printk("%s: setting dma_base to 0x%04lx\n", name, new);
 			new |= 1;
 			(void) pcibios_write_config_dword(bus, fn, 0x20, new);
-			(void) pcibios_read_config_dword(bus, fn, 0x20, &dma_base);
+			dma_base = 0;
+			(void) pcibios_read_config_dword(bus, fn, 0x20, (unsigned int *)&dma_base);
 			if (dma_base != new) {
 				if (bus == 0) {
 					printk("%s: operation failed, bypassing BIOS to try again\n", name);
