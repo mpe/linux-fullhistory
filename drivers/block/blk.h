@@ -95,10 +95,10 @@ extern int ramdisk_size;
 extern unsigned long xd_init(unsigned long mem_start, unsigned long mem_end);
 
 #define RO_IOCTLS(dev,where) \
-  case BLKROSET: if (!suser()) return -EPERM; \
+  case BLKROSET: if (!suser()) return -EACCES; \
 		 set_device_ro((dev),get_fs_long((long *) (where))); return 0; \
   case BLKROGET: { int __err = verify_area(VERIFY_WRITE, (void *) (where), sizeof(long)); \
-		   if (!__err) put_fs_long(is_read_only(dev),(long *) (where)); return __err; }
+		   if (!__err) put_fs_long(0!=is_read_only(dev),(long *) (where)); return __err; }
 		 
 #ifdef MAJOR_NR
 

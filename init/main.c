@@ -98,6 +98,7 @@ extern void sound_setup(char *str, int *ints);
 #ifdef CONFIG_SBPCD
 extern void sbpcd_setup(char *str, int *ints);
 #endif CONFIG_SBPCD
+void ramdisk_setup(char *str, int *ints);
 
 #ifdef CONFIG_SYSVIPC
 extern void ipc_init(void);
@@ -175,6 +176,7 @@ struct {
 	void (*setup_func)(char *, int *);
 } bootsetups[] = {
 	{ "reserve=", reserve_setup },
+	{ "ramdisk=", ramdisk_setup },
 #ifdef CONFIG_INET
 	{ "ether=", eth_setup },
 #endif
@@ -220,6 +222,12 @@ struct {
 #endif CONFIG_SBPCD
 	{ 0, 0 }
 };
+
+void ramdisk_setup(char *str, int *ints)
+{
+   if (ints[0] > 0 && ints[1] >= 0)
+      ramdisk_size = ints[1];
+}
 
 int checksetup(char *line)
 {

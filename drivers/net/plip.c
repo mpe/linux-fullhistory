@@ -774,6 +774,7 @@ plip_send(struct device *dev, enum plip_nibble_state *ns_p, unsigned char data)
 		    break;
 		if (--cx == 0) /* time out */
 		    return 1;
+		udelay(PLIP_DELAY_UNIT);
 	    }
 	    outb(0x10 | (data >> 4), PAR_DATA(dev));
 	    *ns_p = PLIP_NST_2;
@@ -788,6 +789,7 @@ plip_send(struct device *dev, enum plip_nibble_state *ns_p, unsigned char data)
 		    break;
 		if (--cx == 0) /* time out */
 		    return 1;
+		udelay(PLIP_DELAY_UNIT);
 	    }
 	    return 0;
 

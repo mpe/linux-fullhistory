@@ -525,6 +525,7 @@ struct sk_buff *skb_clone(struct sk_buff *skb, int priority)
 	n->tries=0;
 	n->lock=0;
 	n->users=0;
+	n->pkt_type=skb->pkt_type;
 	return n;
 }
 	

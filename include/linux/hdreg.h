@@ -72,4 +72,49 @@ struct hd_geometry {
 #define HDIO_GETMULTCOUNT	0x304
 #define HDIO_SETMULTCOUNT	0x305
 #define HDIO_SETFEATURE  	0x306
+#define HDIO_GETIDENTITY 	0x307
 #endif
+
+/* structure returned by HDIO_GETIDENTITY, as per ASC X3T9.2 rev 4a */
+struct hd_driveid {
+	unsigned short	config;		/* lots of obsolete bit flags */
+	unsigned short	cyls;		/* "physical" cyls */
+	unsigned short	reserved0;	/* reserved */
+	unsigned short	heads;		/* "physical" heads */
+	unsigned short	track_bytes;	/* unformatted bytes per track */
+	unsigned short	sector_bytes;	/* unformatted bytes per sector */
+	unsigned short	sectors;	/* "physical" sectors per track */
+	unsigned short	vendor0;	/* vendor unique */
+	unsigned short	vendor1;	/* vendor unique */
+	unsigned short	vendor2;	/* vendor unique */
+	unsigned char	serial_no[20];	/* big_endian; 0 = not_specified */
+	unsigned short	buf_type;
+	unsigned short	buf_size;	/* 512 byte increments; 0 = not_specified */
+	unsigned short	ecc_bytes;	/* for r/w long cmds; 0 = not_specified */
+	unsigned char	fw_rev[8];	/* big_endian; 0 = not_specified */
+	unsigned char	model[40];	/* big_endian; 0 = not_specified */
+	unsigned char	max_multsect;	/* 0=not_implemented */
+	unsigned char	vendor3;	/* vendor unique */
+	unsigned short	dword_io;	/* 0=not_implemented; 1=implemented */
+	unsigned char	vendor4;	/* vendor unique */
+	unsigned char	capability;	/* bit0:DMA, bit1:LBA */
+	unsigned short	reserved1;	/* reserved */
+	unsigned char	vendor5;	/* vendor unique */
+	unsigned char	tPIO;		/* 0=slow, 1=medium, 2=fast */
+	unsigned char	vendor6;	/* vendor unique */
+	unsigned char	tDMA;		/* 0=slow, 1=medium, 2=fast */
+	unsigned short	cur_valid;	/* when (bit0==1) use logical geom */
+	unsigned short	cur_cyls;	/* logical cylinders */
+	unsigned short	cur_heads;	/* logical heads */
+	unsigned short	cur_sectors;	/* logical sectors per track */
+	unsigned short	cur_capacity0;	/* logical total sectors on drive */
+	unsigned short	cur_capacity1;	/*  (2 words, misaligned int)     */
+	unsigned char	multsect;	/* current multiple sector count */
+	unsigned char	multsect_valid;	/* when (bit0==1) multsect is ok */
+	unsigned int	lba_capacity;	/* total number of sectors */
+	unsigned short	dma_1word;	/* single-word dma info */
+	unsigned short	dma_mword;	/* multiple-word dma info */
+	/* unsigned short reserved2[64];*/	/* reserved */
+	/* unsigned short vendor7  [32];*/	/* vendor unique */
+	/* unsigned short reserved3[96];*/	/* reserved */
+};

@@ -650,7 +650,7 @@ void mount_root(void)
 		wait_for_keypress();
 		/* ugly, ugly */
 		if (floppy_grab_irq_and_dma())
-			printk("Unable to gram floppy IRQ/DMA for mounting root floppy\n");
+			printk("Unable to grab floppy IRQ/DMA for mounting root floppy\n");
 	}
 	for (fs_type = file_systems ; fs_type ; fs_type = fs_type->next) {
 		if (!fs_type->requires_dev)

@@ -17,13 +17,12 @@
  *
  *  IDE IRQ-unmask & drive-id & multiple-mode code added by Mark Lord.
  *
- *  Support for E-IDE BIOS drive geometry translation added by Mark Lord.
- *   -- hd.c no longer chokes on E-IDE drives with "more than 16 heads".
+ *  Support for BIOS drive geometry translation added by Mark Lord.
+ *   -- hd.c no longer chokes on drives with "more than 16 heads".
  */
 
 #define DEFAULT_MULT_COUNT  0	/* set to 0 to disable multiple mode at boot */
 #define DEFAULT_UNMASK_INTR 0	/* set to 0 to *NOT* unmask irq's more often */
-#define VERBOSE_DRIVE_INFO  0	/* set to 1 for more drive info at boot time */
 
 #include <asm/irq.h>
 #include <linux/errno.h>
@@ -35,6 +34,7 @@
 #include <linux/hdreg.h>
 #include <linux/genhd.h>
 #include <linux/config.h>
+#include <linux/malloc.h>
 
 #define REALLY_SLOW_IO
 #include <asm/system.h>
@@ -64,7 +64,8 @@ static inline unsigned char CMOS_READ(unsigned char addr)
 static void recal_intr(void);
 static void bad_rw_intr(void);
 
-static char recalibrate[ MAX_HD ] = { 0, };
+static char recalibrate[MAX_HD] = { 0, };
+static char special_op[MAX_HD] = { 0, };
 static int access_count[MAX_HD] = {0, };
 static char busy[MAX_HD] = {0, };
 static struct wait_queue * busy_wait = NULL;
@@ -82,6 +83,8 @@ unsigned long last_req, read_timer();
 struct hd_i_struct {
 	unsigned int head,sect,cyl,wpcom,lzone,ctl;
 	};
+static struct hd_driveid *hd_ident_info[MAX_HD];
+	
 #ifdef HD_TYPE
 static struct hd_i_struct hd_info[] = { HD_TYPE };
 struct hd_i_struct bios_info[] = { HD_TYPE };
@@ -195,11 +198,13 @@ static void hd_out(unsigned int drive,unsigned int nsect,unsigned int sect,
 {
 	unsigned short port;
 
+#ifdef DEBUG
 	if (drive>1 || head>15) {
 		printk("bad drive mapping, trying to access drive=%d, cyl=%d, head=%d, sect=%d\n",
 			drive, cyl, head, sect);
 		panic("harddisk driver problem");
 	}
+#endif
 #if (HD_DELAY > 0)
 	while (read_timer() - last_req < HD_DELAY)
 		/* nothing */;
@@ -207,7 +212,7 @@ static void hd_out(unsigned int drive,unsigned int nsect,unsigned int sect,
 	if (reset)
 		return;
 	if (!controller_ready(drive, head)) {
-		reset = 1;
+		special_op[drive] += reset = 1;
 		return;
 	}
 	SET_INTR(intr_addr);
@@ -230,7 +235,7 @@ static unsigned int mult_req    [MAX_HD] = {0,}; /* requested MultMode count    
 static unsigned int mult_count  [MAX_HD] = {0,}; /* currently enabled MultMode count */
 static struct request WCURRENT;
 
-static void rawstring (char *prefix, char *s, int n)
+static void rawstring (char *prefix, unsigned char *s, int n)
 {
 	if (prefix)
 		printk(prefix);
@@ -243,78 +248,20 @@ static void rawstring (char *prefix, char *s, int n)
 	}
 }
 
-#if VERBOSE_DRIVE_INFO
-
-char *cfg_str[] =
-{	"", " HardSect", " SoftSect", " NotMFM", " HdSw>15uSec", " SpinMotCtl",
-	" Fixed", " Removeable", " DTR<=5Mbs", " DTR>5Mbs", " DTR>10Mbs",
-	" RotSpdTol>.5%", " dStbOff", " TrkOff", " FmtGapReq", "",
-};
-
-char *ioready[]		= {"no", "?", "yes", "on/off"};
-char *SlowMedFast[]	= {"slow", "medium", "fast"};
-char *BuffType[]	= {"?", "1Sect", "DualPort", "DualPortCache"};
-
-#define YN(b)	(((b)==0)?"no":"yes")
-
-static void dmpstr (char *prefix, unsigned int i, char *s[], unsigned int maxi)
-{
-	printk(prefix);
-	printk( (i > maxi) ? "?" : s[i] );
-}
-
-static void dump_identity (unsigned int dev, unsigned short ib[])
-{
-	int i;
-	char dashes[] = "\n+-------------------------------------------------------------------+\n";
-	printk (dashes);
-	printk ("hd%c:  Drive Identification Info:\n", dev+'a');
-	rawstring (" Model=",(char *)&ib[27],40);
-	rawstring (", FwRev=",(char *)&ib[23],8);
-	rawstring (", SerialNo=",(char *)&ib[10],20);
-	printk ("\n Config={");
-	for (i=0; i<=15; i++) if (ib[0] & (1<<i)) printk (cfg_str[i]);
-	printk (" }\n");
-	printk (" Default CHS=%d/%d/%d, TrkSize=%d, SectSize=%d, ECCbytes=%d\n",
-		ib[1],ib[3],ib[6],ib[4],ib[5], ib[22]);
-	dmpstr (" BuffType=",ib[20],BuffType,3);
-	ib[47] &= 0xFF;
-	printk (", BuffSize=%dKB, MaxMultSect=%d\n", ib[21]/2, ib[47]);
-	printk (" Features: DblWordIO=%s, IORDY=%s, LBA=%s, DMA=%s",
-		YN(ib[48]&1),ioready[(ib[49]&0xC00)>>10],YN(ib[49]&0x200),YN(ib[49]&0x100));
-	dmpstr (", tPIO=",ib[51]>>8,SlowMedFast,2);
-	if (ib[49]&0x100 && (ib[53]&1))
-		dmpstr (", tDMA=",ib[52]>>8,SlowMedFast,2);
-	printk ("\n (%s): Current CHS=%d/%d/%d, TotSect=%d",
-		(((ib[53]&1)==0)?"maybe":"valid"),
-		ib[54],ib[55],ib[56],*(int *)&ib[57]);
-	if (ib[49]&0x200)
-		printk (", MaxLBAsect=%d", *(int *)&ib[60]);
-	printk("\n CurMultSect=%d%s",ib[59]&0xFF,(ib[59]&0x100)?"":"?");
-	if (ib[49]&0x100)
-		printk (", DMA-1w=%04X, DMA-mw=%04X", ib[62], ib[63]);
-	printk ("%s\n",dashes);
-}
-#endif /* VERBOSE_DRIVE_INFO */
-
 static void identify_intr(void)
 {
 	unsigned int dev = DEVICE_NR(CURRENT->dev);
-	unsigned short ib[64], stat = inb_p(HD_STATUS);
+	unsigned short stat = inb_p(HD_STATUS);
+	struct hd_driveid id;
 
 	if (unmask_intr[dev])
 		sti();
 	if (stat & (BUSY_STAT|ERR_STAT))
-		printk ("  hd%c: multiple mode not supported\n", dev+'a');
+		printk ("  hd%c: identity unknown\n", dev+'a');
 	else {
-		insw(HD_DATA,(char *)ib,64); /* get first 128 ID bytes */
-#if VERBOSE_DRIVE_INFO
-		dump_identity(dev, ib);
-#endif
-		printk ("  hd%c: ", dev+'a');
-		rawstring(NULL, (char *)&ib[27], 40);
-		max_mult[dev] = ib[47] & 0xff;
-		if (ib[53]&1 && ib[54] && ib[55] && ib[56]) {
+		insw(HD_DATA, (char *)&id, sizeof(id)/2); /* get ID bytes */
+		max_mult[dev] = id.max_multsect;
+		if ((id.cur_valid&1) && id.cur_cyls && id.cur_heads && (id.cur_heads <= 16) && id.cur_sectors) {
 			/*
 			 * Extract the physical drive geometry for our use.
 			 * Note that we purposely do *not* update the bios_info.
@@ -322,16 +269,23 @@ static void identify_intr(void)
 			 * still have the same logical view as the BIOS does,
 			 * which keeps the partition table from being screwed.
 			 */
-			hd_info[dev].cyl  = ib[54];
-			hd_info[dev].head = ib[55];
-			hd_info[dev].sect = ib[56];
+			hd_info[dev].cyl  = id.cur_cyls;
+			hd_info[dev].head = id.cur_heads;
+			hd_info[dev].sect = id.cur_sectors; 
 		}
-		printk (" (%dMB IDE w/%dKB Cache, MaxMult=%d, CHS=%d/%d/%d)\n",
-			ib[1]*ib[3]*ib[6] / 2048, ib[21]>>1, max_mult[dev],
-			hd_info[dev].cyl, hd_info[dev].head, hd_info[dev].sect);
-		insw(HD_DATA,(char *)ib,64); /* flush remaining 384 ID bytes */
-		insw(HD_DATA,(char *)ib,64);
-		insw(HD_DATA,(char *)ib,64);
+		printk ("  hd%c: ", dev+'a');
+		rawstring(NULL, id.model, sizeof(id.model));
+		printk (", %dMB w/%dKB Cache, CHS=%d/%d/%d, MaxMult=%d\n",
+			id.cyls*id.heads*id.sectors/2048, id.buf_size/2,
+			hd_info[dev].cyl, hd_info[dev].head, hd_info[dev].sect, id.max_multsect);
+		/* save drive info for later query via HDIO_GETIDENTITY */
+		if (NULL != (hd_ident_info[dev] = kmalloc(sizeof(id),GFP_ATOMIC)))
+			*hd_ident_info[dev] = id;
+		
+		/* flush remaining 384 (reserved/undefined) ID bytes: */
+		insw(HD_DATA,(char *)&id,sizeof(id)/2);
+		insw(HD_DATA,(char *)&id,sizeof(id)/2);
+		insw(HD_DATA,(char *)&id,sizeof(id)/2);
 	}
 	hd_request();
 	return;
@@ -443,11 +397,11 @@ static void bad_rw_intr(void)
 	dev = MINOR(CURRENT->dev) >> 6;
 	if (++CURRENT->errors >= MAX_ERRORS || (hd_error & BBD_ERR)) {
 		end_request(0);
-		recalibrate[dev] = 1;
+		special_op[dev] += recalibrate[dev] = 1;
 	} else if (CURRENT->errors % RESET_FREQ == 0)
-		reset = 1;
+		special_op[dev] += reset = 1;
 	else if ((hd_error & TRK0_ERR) || CURRENT->errors % RECAL_FREQ == 0)
-		recalibrate[dev] = 1;
+		special_op[dev] += recalibrate[dev] = 1;
 	/* Otherwise just retry */
 }
 
@@ -644,7 +598,7 @@ static void hd_times_out(void)
 {
 	DEVICE_INTR = NULL;
 	sti();
-	reset = 1;
+	special_op [DEVICE_NR(CURRENT->dev)] += reset = 1;
 	if (!CURRENT)
 		return;
 	printk(KERN_DEBUG "HD timeout\n");
@@ -703,42 +657,45 @@ repeat:
 #endif
 	if (!unmask_intr[dev])
 		cli();
-	if (reset) {
-		int i;
-
-		for (i=0; i < NR_HD; i++)
-			recalibrate[i] = 1;
-		cli(); /* better play it safe, as resets are the last resort */
-		reset_hd();
-		return;
-	}
-	if (recalibrate[dev]) {
-		recalibrate[dev] = 0;
-		hd_out(dev,hd_info[dev].sect,0,0,0,WIN_RESTORE,&recal_intr);
-		if (reset)
+	if (special_op[dev]) {	/* we use "special_op" to reduce overhead on r/w */
+		if (reset) {
+			int i;
+	
+			for (i=0; i < NR_HD; i++)
+				special_op[i] = recalibrate[i] = 1;
+			cli(); /* better play it safe, as resets are the last resort */
+			reset_hd();
+			return;
+		}
+		if (recalibrate[dev]) {
+			recalibrate[dev] = 0;
+			hd_out(dev,hd_info[dev].sect,0,0,0,WIN_RESTORE,&recal_intr);
+			if (reset)
+				goto repeat;
+			return;
+		}	
+		if (!identified[dev]) {
+			identified[dev]  = 1;
+			unmask_intr[dev] = DEFAULT_UNMASK_INTR;
+			mult_req[dev]    = DEFAULT_MULT_COUNT;
+			hd_out(dev,0,0,0,0,WIN_IDENTIFY,&identify_intr);
+			if (reset)
+				goto repeat;
+			return;
+		}
+		if (mult_req[dev] != mult_count[dev]) {
+			hd_out(dev,mult_req[dev],0,0,0,WIN_SETMULT,&set_multmode_intr);
+			if (reset)
+				goto repeat;
+			return;
+		}
+		if (hd_info[dev].head > 16) {
+			printk ("hd%c: cannot handle device with more than 16 heads - giving up\n", dev+'a');
+			end_request(0);
 			goto repeat;
-		return;
-	}	
-	if (!identified[dev]) {
-		identified[dev]  = 1;
-		unmask_intr[dev] = DEFAULT_UNMASK_INTR;
-		mult_req[dev]    = DEFAULT_MULT_COUNT;
-		hd_out(dev,0,0,0,0,WIN_IDENTIFY,&identify_intr);
-		if (reset)
-			goto repeat;
-		return;
-	}
-	if (mult_req[dev] != mult_count[dev]) {
-		hd_out(dev,mult_req[dev],0,0,0,WIN_SETMULT,&set_multmode_intr);
-		if (reset)
-			goto repeat;
-		return;
-	}
-	if (hd_info[dev].head > 16) {
-		printk ("hd%c: cannot handle device with more than 16 heads - giving up\n", dev+'a');
-		end_request(0);
-		goto repeat;
-	}
+		}
+		--special_op[dev];
+	} /* special_op[dev] */
 	if (CURRENT->cmd == READ) {
 		unsigned int cmd = mult_count[dev] > 1 ? WIN_MULTREAD : WIN_READ;
 		hd_out(dev,nsect,sec,head,cyl,cmd,&read_intr);
@@ -792,7 +749,7 @@ static int hd_ioctl(struct inode * inode, struct file * file,
 	struct hd_geometry *loc = (struct hd_geometry *) arg;
 	int dev, err;
 
-	if (!inode)
+	if ((!inode) || (!inode->i_rdev))
 		return -EINVAL;
 	dev = MINOR(inode->i_rdev) >> 6;
 	if (dev >= NR_HD)
@@ -814,21 +771,25 @@ static int hd_ioctl(struct inode * inode, struct file * file,
 			return 0;
 		case BLKRASET:
 			if(!suser())  return -EACCES;
-			if(!inode->i_rdev) return -EINVAL;
 			if(arg > 0xff) return -EINVAL;
 			read_ahead[MAJOR(inode->i_rdev)] = arg;
+			return 0;
+		case BLKRAGET:
+			if (!arg)  return -EINVAL;
+			err = verify_area(VERIFY_WRITE, (long *) arg, sizeof(long));
+			if (err)
+				return err;
+			put_fs_long(read_ahead[MAJOR(inode->i_rdev)],(long *) arg);
 			return 0;
          	case BLKGETSIZE:   /* Return device size */
 			if (!arg)  return -EINVAL;
 			err = verify_area(VERIFY_WRITE, (long *) arg, sizeof(long));
 			if (err)
 				return err;
-			put_fs_long(hd[MINOR(inode->i_rdev)].nr_sects,
-				(long *) arg);
+			put_fs_long(hd[MINOR(inode->i_rdev)].nr_sects, (long *) arg);
 			return 0;
 		case BLKFLSBUF:
 			if(!suser())  return -EACCES;
-			if(!inode->i_rdev) return -EINVAL;
 			fsync_dev(inode->i_rdev);
 			invalidate_buffers(inode->i_rdev);
 			return 0;
@@ -838,8 +799,8 @@ static int hd_ioctl(struct inode * inode, struct file * file,
 
 		case HDIO_SETUNMASKINTR:
 			if (!suser()) return -EACCES;
-			if (MINOR(inode->i_rdev) & 0x3F) return -EINVAL;
 			if (!arg)  return -EINVAL;
+			if (MINOR(inode->i_rdev) & 0x3F) return -EINVAL;
 			err = verify_area(VERIFY_READ, (long *) arg, sizeof(long));
 			if (err)
 				return err;
@@ -876,15 +837,25 @@ static int hd_ioctl(struct inode * inode, struct file * file,
 			cli();	/* a prior request might still be in progress */
 			if (arg > max_mult[dev])
 				err = -EINVAL;	/* out of range for device */
-			else if (mult_req[dev] != mult_count[dev])
+			else if (mult_req[dev] != mult_count[dev]) {
+				++special_op[dev];
 				err = -EBUSY;	/* busy, try again */
-			else {
+			} else {
 				mult_req[dev] = arg;
+				++special_op[dev];
 				err = 0;
 			}
 			restore_flags(flags);
 			return err;
 		}
+		case HDIO_GETIDENTITY:
+			if (!arg)  return -EINVAL;
+			if (MINOR(inode->i_rdev) & 0x3F) return -EINVAL;
+			if (hd_ident_info[dev] == NULL)  return -ENOMSG;
+			err = verify_area(VERIFY_WRITE, (char *) arg, sizeof(struct hd_driveid));
+			if (err)
+				return err;
+			memcpy_tofs((char *)arg, (char *) hd_ident_info[dev], sizeof(struct hd_driveid));
 
 		RO_IOCTLS(inode->i_rdev,arg);
 		default:
@@ -1031,6 +1002,8 @@ static void hd_geninit(void)
 		}
 		hd[i<<6].nr_sects = bios_info[i].head *
 				bios_info[i].sect * bios_info[i].cyl;
+		hd_ident_info[i] = NULL;
+		special_op[i] = 1;
 	}
 	if (NR_HD) {
 		if (irqaction(HD_IRQ,&hd_sigaction)) {

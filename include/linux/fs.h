@@ -105,6 +105,7 @@ extern unsigned long name_cache_init(unsigned long start, unsigned long end);
 #define BLKGETSIZE 4704 /* return device size */
 #define BLKFLSBUF 4705 /* flush buffer cache */
 #define BLKRASET 4706 /* Set read ahead for block device */
+#define BLKRAGET 4707 /* get current read ahead setting */
 
 /* These are a few other constants  only used by scsi  devices */
 

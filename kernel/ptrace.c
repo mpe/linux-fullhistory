@@ -291,8 +291,11 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 	if (request == PTRACE_ATTACH) {
 		if (child == current)
 			return -EPERM;
-		if ((!child->dumpable || (current->uid != child->euid) ||
-	 	    (current->gid != child->egid)) && !suser())
+		if ((!child->dumpable ||
+		    (current->uid != child->euid) ||
+		    (current->uid != child->uid) ||
+	 	    (current->gid != child->egid) ||
+	 	    (current->gid != child->gid)) && !suser())
 			return -EPERM;
 		/* the same process cannot be attached many times */
 		if (child->flags & PF_PTRACED)

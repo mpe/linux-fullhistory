@@ -186,7 +186,7 @@ void rd_load(void)
 
 /* ugly, ugly */
 	if (floppy_grab_irq_and_dma()) {
-		printk("Unable to gram floppy IRQ/DMA for loading ramdisk image\n");
+		printk("Unable to grab floppy IRQ/DMA for loading ramdisk image\n");
 		return;
 	}
 	do_load();
