@@ -252,3 +252,20 @@ int mbx_pcibios_find_class(unsigned int class_code, unsigned short index,
     }
     return PCIBIOS_DEVICE_NOT_FOUND;
 }
+
+__initfunc(
+void
+mbx_pcibios_fixup(void))
+{
+   /* Nothing to do here? */
+}
+
+__initfunc(
+void
+mbx_setup_pci_ptrs(void))
+{
+	set_config_access_method(mbx);
+
+	ppc_md.pcibios_fixup = mbx_pcibios_fixup;
+}
+

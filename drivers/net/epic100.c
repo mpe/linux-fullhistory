@@ -1106,6 +1106,7 @@ static int epic_rx(struct device *dev)
 				memcpy(skb_put(skb, pkt_len),
 					   bus_to_virt(ep->rx_ring[entry].bufaddr), pkt_len);
 #endif
+				ep->rx_ring[entry].status = 0x8000;
 			} else {
 				skb_put(skb = ep->rx_skbuff[entry], pkt_len);
 				ep->rx_skbuff[entry] = NULL;

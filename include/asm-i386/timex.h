@@ -7,6 +7,7 @@
 #define _ASMi386_TIMEX_H
 
 #include <linux/config.h>
+#include <asm/msr.h>
 
 #define CLOCK_TICK_RATE	1193180 /* Underlying HZ */
 #define CLOCK_TICK_FACTOR	20	/* Factor of both 1000000 and CLOCK_TICK_RATE */
@@ -39,7 +40,7 @@ static inline cycles_t get_cycles (void)
 #else
 	unsigned long eax, edx;
 
-	__asm__ __volatile__("rdtsc":"=a" (eax), "=d" (edx));
+	rdtsc(eax,edx);
 	return eax;
 #endif
 }

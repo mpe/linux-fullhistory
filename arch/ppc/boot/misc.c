@@ -1,7 +1,7 @@
 /*
  * misc.c
  *
- * $Id: misc.c,v 1.61 1999/03/08 23:51:02 cort Exp $
+ * $Id: misc.c,v 1.63 1999/04/05 21:48:20 cort Exp $
  * 
  * Adapted for PowerPC by Gary Thomas
  *
@@ -33,14 +33,16 @@ char *avail_ram;
 char *end_avail;
 extern char _end[];
 
-#if defined(CONFIG_SERIAL_CONSOLE)
-char cmd_preset[] = "console=ttyS0,9600n8";
+#ifdef CONFIG_CMDLINE
+#define CMDLINE CONFIG_CMDLINE
 #else
-char cmd_preset[] = "";
+#define CMDLINE "";
 #endif
-char	cmd_buf[256];
-char	*cmd_line = cmd_buf;
+char cmd_preset[] = CMDLINE;
+char cmd_buf[256];
+char *cmd_line = cmd_buf;
 
+int keyb_present = 1;	/* keyboard controller is present by default */
 RESIDUAL hold_resid_buf;
 RESIDUAL *hold_residual = &hold_resid_buf;
 unsigned long initrd_start = 0, initrd_end = 0;
@@ -58,7 +60,8 @@ void _bcopy(char *src, char *dst, int len);
 void * memcpy(void * __dest, __const void * __src,
 			    int __n);
 void gunzip(void *, int, unsigned char *, int *);
-int _cvt(unsigned long val, char *buf, long radix, char *digits);
+static int _cvt(unsigned long val, char *buf, long radix, char *digits);
+unsigned char inb(int);
 
 void pause()
 {
@@ -93,11 +96,14 @@ static void scroll()
 
 tstc(void)
 {
-	return (
 #if defined(CONFIG_SERIAL_CONSOLE)
-		NS16550_tstc(com_port) ||
+	if (keyb_present)
+		return (CRT_tstc() || NS16550_tstc(com_port));
+	else
+		NS16550_tstc(com_port);
+#else
+	return (CRT_tstc() );
 #endif /* CONFIG_SERIAL_CONSOLE */
-		CRT_tstc());
 }
 
 getc(void)
@@ -106,7 +112,8 @@ getc(void)
 #if defined(CONFIG_SERIAL_CONSOLE)
 		if (NS16550_tstc(com_port)) return (NS16550_getc(com_port));
 #endif /* CONFIG_SERIAL_CONSOLE */
-		if (CRT_tstc()) return (CRT_getc());
+		if (keyb_present)
+			if (CRT_tstc()) return (CRT_getc());
 	}
 }
 
@@ -187,6 +194,8 @@ void puts(const char *s)
 			}
 		}
 	}
+
+	cursor(x, y);
 
 	orig_x = x;
 	orig_y = y;
@@ -317,6 +326,8 @@ decompress_kernel(unsigned long load_addr, int num_words, unsigned long cksum,
 	int dev_handle;
 	int mem_info[2];
 	int res, size;
+	unsigned char board_type;
+	unsigned char base_mod;
 
 	lines = 25;
 	cols = 80;
@@ -333,14 +344,30 @@ decompress_kernel(unsigned long load_addr, int num_words, unsigned long cksum,
 	flush_instruction_cache();
 	_put_HID0(_get_HID0() & ~0x0000C000);
 	_put_MSR((orig_MSR = _get_MSR()) & ~0x0030);
-	vga_init(0xC0000000);
 
 #if defined(CONFIG_SERIAL_CONSOLE)
-	com_port = (struct NS16550 *)NS16550_init(1);
+	com_port = (struct NS16550 *)NS16550_init(0);
 #endif /* CONFIG_SERIAL_CONSOLE */
+	vga_init(0xC0000000);
 
 	if (residual)
 	{
+		/* Is this Motorola PPCBug? */
+		if ((1 & residual->VitalProductData.FirmwareSupports) &&
+		    (1 == residual->VitalProductData.FirmwareSupplier)) {
+			board_type = inb(0x800) & 0xF0;
+
+			/* If this is genesis 2 board then check for no
+			 * keyboard controller and more than one processor.
+			 */
+			if (board_type == 0xe0) {	
+				base_mod = inb(0x803);
+				/* if a MVME2300 or a MCME2400 then no keyboard */
+				if((base_mod == 0x9) || (base_mod == 0xF9)) {
+					keyb_present = 0;	/* no keyboard */
+				}
+			}
+		}
 		memcpy(hold_residual,residual,sizeof(RESIDUAL));
 	} else {
 		/* Assume 32M in the absence of more info... */
@@ -429,7 +456,7 @@ decompress_kernel(unsigned long load_addr, int num_words, unsigned long cksum,
 	avail_ram = (char *)PAGE_ALIGN((unsigned long)_end);
 	puts("zimage at:     "); puthex((unsigned long)zimage_start);
 	puts(" "); puthex((unsigned long)(zimage_size+zimage_start)); puts("\n");
-	if ( (unsigned long)zimage_start <= 0x008000000 )
+	if ( (unsigned long)zimage_start <= 0x00800000 )
 	{
 		memcpy( (void *)avail_ram, (void *)zimage_start, zimage_size );
 		zimage_start = (char *)avail_ram;
@@ -458,9 +485,8 @@ decompress_kernel(unsigned long load_addr, int num_words, unsigned long cksum,
 	puts("avail ram:     "); puthex((unsigned long)avail_ram); puts(" ");
 	puthex((unsigned long)end_avail); puts("\n");
 
-#if !defined(CONFIG_SERIAL_CONSOLE)
-	CRT_tstc();  /* Forces keyboard to be initialized */
-#endif
+	if (keyb_present)
+		CRT_tstc();  /* Forces keyboard to be initialized */
 
 	puts("\nLinux/PPC load: ");
 	timer = 0;

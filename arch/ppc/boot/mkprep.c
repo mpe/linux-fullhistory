@@ -14,15 +14,8 @@
  * Modified for x86 hosted builds by Matt Porter <porter@neta.com>
  */
 
-#ifdef linux
-#include <linux/types.h>
-/*#include <asm/stat.h>*/
-/*#include <asm/byteorder.h>*/ /* the byte swap funcs don't work here -- Cort */
-#else
 #include <unistd.h>
-#endif
 #include <sys/stat.h>
-
 #include <stdio.h>
 #include <errno.h>
 
@@ -168,10 +161,10 @@ void write_prep_partition(int in, int out)
   /* set entry point and boot image size skipping over elf header */
 #ifdef __i386__
   *entry = 0x400/*+65536*/;
-  *length = info.st_size+0x400;
+  *length = info.st_size-elfhdr_size+0x400;
 #else
   *entry = cpu_to_le32(0x400/*+65536*/);
-  *length = cpu_to_le32(info.st_size+0x400);
+  *length = cpu_to_le32(info.st_size-elfhdr_size+0x400);
 #endif /* __i386__ */
 
   /* sets magic number for msdos partition (used by linux) */

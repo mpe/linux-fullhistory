@@ -47,9 +47,6 @@ static int apm_resume = 0;
 
 #define compile_assert(x) do { switch (0) { case 1: case !(x): } } while (0)
 
-int usb_mouse_init(void);
-int hub_init(void);
-
 static struct wait_queue *uhci_configure = NULL;
 
 /*
@@ -515,6 +512,7 @@ static struct usb_device *uhci_usb_allocate(struct usb_device *parent)
 
 	dev = kmalloc(sizeof(*dev), GFP_KERNEL);
 	if (!dev) {
+		usb_destroy_configuration(usb_dev);
 		kfree(usb_dev);
 		return NULL;
 	}
@@ -573,6 +571,7 @@ static int uhci_usb_deallocate(struct usb_device *usb_dev)
 	}
 
 	kfree(dev);
+	usb_destroy_configuration(usb_dev);
 	kfree(usb_dev);
 
 	return 0;
@@ -995,6 +994,8 @@ static void release_uhci(struct uhci *uhci)
 	kfree(uhci);
 }
 
+void cleanup_drivers(void);
+
 static int uhci_control_thread(void * __uhci)
 {
 	struct uhci *uhci = (struct uhci *)__uhci;
@@ -1051,6 +1052,8 @@ static int uhci_control_thread(void * __uhci)
 		for(i = 0; i < uhci->root_hub->usb->maxchild; i++)
 			usb_disconnect(uhci->root_hub->usb->children + i);
 #endif
+
+	cleanup_drivers();
 
 	reset_hc(uhci);
 	release_region(uhci->io_addr, 32);
@@ -1199,4 +1202,12 @@ int uhci_init(void)
 		return 0;
 	}
 	return retval;
+}
+
+void cleanup_drivers(void)
+{
+	hub_cleanup();
+#ifdef CONFIG_USB_MOUSE
+	usb_mouse_cleanup();
+#endif
 }

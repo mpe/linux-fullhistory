@@ -634,7 +634,7 @@ static unsigned long shm_nopage(struct vm_area_struct * shmd, unsigned long addr
 
 	pte = __pte(shp->shm_pages[idx]);
 	if (!pte_present(pte)) {
-		unsigned long page = get_free_page(GFP_KERNEL);
+		unsigned long page = get_free_page(GFP_USER);
 		if (!page) {
 			oom(current);
 			return 0;

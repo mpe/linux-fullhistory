@@ -1268,11 +1268,11 @@ out:
 
 int quota_on(kdev_t dev, short type, char *path)
 {
-	struct file *filp = NULL;
-	struct dentry *dentry;
+	struct file *f;
 	struct vfsmount *vfsmnt;
 	struct inode *inode;
 	struct dquot *dquot;
+	struct quota_mount_options *mnt_dquot;
 	char *tmp;
 	int error;
 
@@ -1281,69 +1281,48 @@ int quota_on(kdev_t dev, short type, char *path)
 		return -ENODEV;
 
 	if (is_enabled(vfsmnt, type))
-		return(-EBUSY);
+		return -EBUSY;
+	mnt_dquot = &vfsmnt->mnt_dquot;
 
 	tmp = getname(path);
 	error = PTR_ERR(tmp);
 	if (IS_ERR(tmp))
 		return error;
 
-	dentry = open_namei(tmp, O_RDWR, 0600);
+	f = filp_open(tmp, O_RDWR, 0600);
 	putname(tmp);
+	if (IS_ERR(f))
+		return PTR_ERR(f);
 
-	error = PTR_ERR(dentry);
-	if (IS_ERR(dentry))
-		return error;
-	inode = dentry->d_inode;
+	/* sanity checks */
+	error = -EIO;
+	if (!f->f_op->read && !f->f_op->write)
+		goto cleanup;
+	inode = f->f_dentry->d_inode;
+	error = -EACCES;
+	if (!S_ISREG(inode->i_mode))
+		goto cleanup;
+	error = -EINVAL;
+	if (inode->i_size == 0 || (inode->i_size % sizeof(struct dqblk)) != 0)
+		goto cleanup;
 
-	if (!S_ISREG(inode->i_mode)) {
-		dput(dentry);
-		return -EACCES;
-	}
+	/* OK, there we go */
+	set_enable_flags(vfsmnt, type);
+	mnt_dquot->files[type] = f;
 
-	if (inode->i_size == 0 || (inode->i_size % sizeof(struct dqblk)) != 0) {
-		dput(dentry);
-		return(-EINVAL);
-	}
+	dquot = dqget(dev, 0, type);
+	mnt_dquot->inode_expire[type] = (dquot) ? dquot->dq_itime : MAX_IQ_TIME;
+	mnt_dquot->block_expire[type] = (dquot) ? dquot->dq_btime : MAX_DQ_TIME;
+	dqput(dquot);
 
-	filp = get_empty_filp();
-	if (filp != (struct file *)NULL) {
-		filp->f_mode = (O_RDWR + 1) & O_ACCMODE;
-		filp->f_flags = O_RDWR;
-		filp->f_dentry = dentry;
-		filp->f_pos = 0;
-		filp->f_reada = 0;
-		filp->f_op = inode->i_op->default_file_ops;
-		if (filp->f_op->read || filp->f_op->write) {
-			error = get_write_access(inode);
-			if (!error) {
-				if (filp->f_op && filp->f_op->open)
-					error = filp->f_op->open(inode, filp);
-				if (!error) {
-					set_enable_flags(vfsmnt, type);
-					vfsmnt->mnt_dquot.files[type] = filp;
+	vfsmnt->mnt_sb->dq_op = &dquot_operations;
+	add_dquot_ref(dev, type);
 
-					dquot = dqget(dev, 0, type);
-					vfsmnt->mnt_dquot.inode_expire[type] = (dquot) ? dquot->dq_itime : MAX_IQ_TIME;
-					vfsmnt->mnt_dquot.block_expire[type] = (dquot) ? dquot->dq_btime : MAX_DQ_TIME;
-					dqput(dquot);
+	return(0);
 
-					vfsmnt->mnt_sb->dq_op = &dquot_operations;
-					add_dquot_ref(dev, type);
-
-					return(0);
-				}
-				put_write_access(inode);
-			}
-		} else
-			error = -EIO;
-		put_filp(filp);
-	} else
-		error = -EMFILE;
-
-	dput(dentry);
-
-	return(error);
+cleanup:
+	fput(f);
+	return error;
 }
 
 /*

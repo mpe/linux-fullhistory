@@ -776,7 +776,7 @@ kernel support.
   indicate confusion between the system call creat and the VFS operation
   create. The VFS operation create is only called to create new objects.
   This create call differs from the Unix one in that it is not invoked
-  to return a file descriptor. The trunctate and exclusive options,
+  to return a file descriptor. The truncate and exclusive options,
   together with the mode, could simply be part of the mode as it is
   under Unix.  There should be no flags argument; this is used in open
   (2) to return a file descriptor for READ or WRITE mode.

@@ -29,7 +29,7 @@
 int
 main(void)
 {
-	DEFINE(KERNELBASE, KERNELBASE);
+	/*DEFINE(KERNELBASE, KERNELBASE);*/
 	DEFINE(STATE, offsetof(struct task_struct, state));
 	DEFINE(NEXT_TASK, offsetof(struct task_struct, next_task));
 	DEFINE(COUNTER, offsetof(struct task_struct, counter));

@@ -476,9 +476,7 @@ __initfunc(static void offb_init_nodriver(struct device_node *dp))
 	    printk("no framebuffer address found for %s\n", dp->full_name);
 	    return;
 	}
-	/* needed for the gxt on the f50 -- Cort */
-	if ( dp->addrs[i].address < isa_mem_base )
-		(u_long)dp->addrs[i].address += isa_mem_base;
+
 	address = (u_long)dp->addrs[i].address;
 
 	/* kludge for valkyrie */
@@ -487,6 +485,7 @@ __initfunc(static void offb_init_nodriver(struct device_node *dp))
     }
     offb_init_fb(dp->name, dp->full_name, width, height, depth,
 		 pitch, address);
+    
 }
 
 __initfunc(static void offb_init_fb(const char *name, const char *full_name,

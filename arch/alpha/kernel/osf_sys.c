@@ -1407,8 +1407,9 @@ asmlinkage int sys_old_adjtimex(struct timex32 *txc_p)
 	    copy_from_user(&txc.tick, &txc_p->tick, sizeof(struct timex32) - 
 			   offsetof(struct timex32, time)))
 	  return -EFAULT;
-	
-	if ((ret = do_adjtimex(&txc)))
+
+	ret = do_adjtimex(&txc);	
+	if (ret < 0)
 	  return ret;
 	
 	/* copy back to timex32 */
@@ -1418,5 +1419,5 @@ asmlinkage int sys_old_adjtimex(struct timex32 *txc_p)
 	    (put_tv32(&txc_p->time, &txc.time)))
 	  return -EFAULT;
 
-	return 0;
+	return ret;
 }

@@ -40,10 +40,10 @@
 #include <linux/smp_lock.h>
 #include <linux/init.h>
 #include <asm/mtrr.h>
+#include <asm/msr.h>
 
 #include "irq.h"
 
-extern unsigned long start_kernel;
 extern void update_one_process( struct task_struct *p,
 				unsigned long ticks, unsigned long user,
 				unsigned long system, int cpu);
@@ -147,16 +147,7 @@ int skip_ioapic_setup = 0;				/* 1 if "noapic" boot option passed */
  */
 #define APIC_DEFAULT_PHYS_BASE 0xfee00000
 
-/*
- * Reads and clears the Pentium Timestamp-Counter
- */
-#define READ_TSC(x)	__asm__ __volatile__ (  "rdtsc" \
-				:"=a" (((unsigned long*)&(x))[0]),  \
-				 "=d" (((unsigned long*)&(x))[1]))
-
-#define CLEAR_TSC \
-	__asm__ __volatile__ ("\t.byte 0x0f, 0x30;\n"::\
-		"a"(0x00001000), "d"(0x00001000), "c"(0x10):"memory")
+#define CLEAR_TSC wrmsr(0x10, 0x00001000, 0x00001000)
 
 /*
  *	Setup routine for controlling SMP activation
@@ -899,6 +890,7 @@ int __init start_secondary(void *unused)
  * Everything has been set up for the secondary
  * CPUs - they just need to reload everything
  * from the task structure
+ * This function must not return.
  */
 void __init initialize_secondary(void)
 {
@@ -940,7 +932,6 @@ static void __init do_boot_cpu(int i)
 	/*
 	 *	We need an idle process for each processor.
 	 */
-
 	kernel_thread(start_secondary, NULL, CLONE_PID);
 	cpucount++;
 
@@ -951,6 +942,8 @@ static void __init do_boot_cpu(int i)
 	idle->processor = i;
 	__cpu_logical_map[cpucount] = i;
 	cpu_number_map[i] = cpucount;
+	idle->has_cpu = 1; /* we schedule the first task manually */
+	idle->tss.eip = (unsigned long) start_secondary;
 
 	/* start_eip had better be page-aligned! */
 	start_eip = setup_trampoline();
@@ -1183,6 +1176,7 @@ void __init smp_boot_cpus(void)
 	/*  Must be done before other processors booted  */
 	mtrr_init_boot_cpu ();
 #endif
+	init_idle();
 	/*
 	 *	Initialize the logical to physical CPU number mapping
 	 *	and the per-CPU profiling counter/multiplier
@@ -1781,6 +1775,7 @@ asmlinkage void smp_invalidate_interrupt(void)
 		local_flush_tlb();
 
 	ack_APIC_irq();
+
 }
 
 static void stop_this_cpu (void)
@@ -1949,7 +1944,7 @@ int __init calibrate_APIC_clock(void)
 	/*
 	 * We wrapped around just now. Let's start:
 	 */
-	READ_TSC(t1);
+	rdtscll(t1);
 	tt1=apic_read(APIC_TMCCT);
 
 #define LOOPS (HZ/10)
@@ -1960,7 +1955,7 @@ int __init calibrate_APIC_clock(void)
 		wait_8254_wraparound ();
 
 	tt2=apic_read(APIC_TMCCT);
-	READ_TSC(t2);
+	rdtscll(t2);
 
 	/*
 	 * The APIC bus clock counter is 32 bits only, it

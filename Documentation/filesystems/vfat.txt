@@ -177,7 +177,7 @@ panicking.  To this end, a number of measures are taken:
 
 Because the extended FAT system is backward compatible, it is
 possible for old software to modify directory entries.  Measures must
-be taken to insure the validity of slots.  An extended FAT system can
+be taken to ensure the validity of slots.  An extended FAT system can
 verify that a slot does in fact belong to an 8.3 directory entry by
 the following:
 

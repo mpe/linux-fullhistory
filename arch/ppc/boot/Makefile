@@ -14,7 +14,7 @@
 .s.o:
 	$(AS) -o $*.o $<
 .c.o:
-	$(CC) $(CFLAGS)  -DINITRD_OFFSET=$(IOFF) -DINITRD_SIZE=$(ISZ) -DZIMAGE_OFFSET=$(ZOFF) -DZIMAGE_SIZE=$(ZSZ) -DKERNELBASE=$(KERNELBASE) -c -o $*.o $<
+	$(CC) $(CFLAGS)  -DINITRD_OFFSET=$(IOFF) -DINITRD_SIZE=$(ISZ) -DZIMAGE_OFFSET=$(ZOFF) -DZIMAGE_SIZE=$(ZSZ) -c -o $*.o $<
 .S.s:
 	$(CC) -D__ASSEMBLY__ -traditional -E -o $*.o $<
 .S.o:
@@ -57,7 +57,7 @@ zvmlinux.initrd: zvmlinux
 		-DINITRD_SIZE=`sh size $(OBJDUMP) zvmlinux.initrd initrd` \
 		-DZIMAGE_OFFSET=`sh offset $(OBJDUMP) zvmlinux.initrd image` \
 		-DZIMAGE_SIZE=`sh size $(OBJDUMP) zvmlinux.initrd image` \
-		-DKERNELBASE=$(KERNELBASE) -c -o misc.o misc.c
+		-c -o misc.o misc.c
 	$(LD) $(ZLINKFLAGS) -o zvmlinux.initrd.tmp $(OBJECTS)
 	$(OBJCOPY) $(OBJCOPY_ARGS) -R .comment \
 		--add-section=initrd=ramdisk.image.gz \
@@ -84,7 +84,7 @@ zvmlinux: $(OBJECTS) ../coffboot/vmlinux.gz
 #
 	$(CC) $(CFLAGS) -DINITRD_OFFSET=0 -DINITRD_SIZE=0 \
 		-DZIMAGE_OFFSET=`sh offset $(OBJDUMP) zvmlinux image` \
-		-DZIMAGE_SIZE=`sh size $(OBJDUMP) zvmlinux image` -DKERNELBASE=$(KERNELBASE) \
+		-DZIMAGE_SIZE=`sh size $(OBJDUMP) zvmlinux image` \
 		-c -o misc.o misc.c
 	$(LD) $(ZLINKFLAGS) -o zvmlinux.tmp $(OBJECTS)
 	$(OBJCOPY) $(OBJCOPY_ARGS) -R .comment --add-section=image=../coffboot/vmlinux.gz \
@@ -95,7 +95,7 @@ floppy: $(TOPDIR)/vmlinux zImage
 	dd if=zImage of=/dev/fd0H1440 bs=64b
 
 mkprep : mkprep.c
-	$(HOSTCC) -DKERNELBASE=$(KERNELBASE) -o mkprep mkprep.c
+	$(HOSTCC) -o mkprep mkprep.c
 
 znetboot : zImage
 	cp zImage $(TFTPIMAGE)

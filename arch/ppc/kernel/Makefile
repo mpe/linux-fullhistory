@@ -27,7 +27,7 @@ O_OBJS += totalmp.o
 endif
 
 ifeq ($(CONFIG_MBX),y)
-O_OBJS += mbx_setup.o mbx_pci.o softemu8xx.o
+O_OBJS += mbx_setup.o mbx_pci.o softemu8xx.o i8259.o ppc8xx_pic.o
 else
 ifeq ($(CONFIG_APUS),y)
 O_OBJS += apus_setup.o prom.o openpic.o
@@ -36,7 +36,8 @@ ifneq ($(CONFIG_MBX),y)
 O_OBJS += prep_time.o pmac_time.o chrp_time.o \
 	  pmac_setup.o pmac_support.o \
 	  prep_pci.o pmac_pci.o chrp_pci.o \
-	  residual.o prom.o openpic.o feature.o
+	  residual.o prom.o openpic.o feature.o \
+	  prep_nvram.o open_pic.o i8259.o pmac_pic.o indirect_pci.o
 OX_OBJS += chrp_setup.o prep_setup.o
 endif
 endif

@@ -39,6 +39,7 @@
 #include <asm/io.h>
 #include <asm/smp.h>
 #include <asm/cobalt.h>
+#include <asm/msr.h>
 
 /*
  * Machine setup..
@@ -57,6 +58,7 @@ int MCA_bus = 0;
 unsigned int machine_id = 0;
 unsigned int machine_submodel_id = 0;
 unsigned int BIOS_revision = 0;
+unsigned int mca_pentium_flag = 0;
 
 /*
  * Setup options
@@ -244,11 +246,6 @@ __initfunc(void setup_arch(char **cmdline_p,
 	unsigned long memory_start, memory_end;
 	char c = ' ', *to = command_line, *from = COMMAND_LINE;
 	int len = 0;
-	static unsigned char smptrap=0;
-
-	if (smptrap)
-		return;
-	smptrap=1;
 
 #ifdef CONFIG_VISWS
 	visws_get_board_type_and_rev();
@@ -380,16 +377,6 @@ __initfunc(void setup_arch(char **cmdline_p,
 	 */
 
 }
-
-#define rdmsr(msr,val1,val2) \
-       __asm__ __volatile__("rdmsr" \
-			    : "=a" (val1), "=d" (val2) \
-			    : "c" (msr))
-
-#define wrmsr(msr,val1,val2) \
-     __asm__ __volatile__("wrmsr" \
-			  : /* no outputs */ \
-			  : "c" (msr), "a" (val1), "d" (val2))
 
 __initfunc(static int get_model_name(struct cpuinfo_x86 *c))
 {

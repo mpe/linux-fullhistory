@@ -1,5 +1,5 @@
 /*
- * $Id: prep_pci.c,v 1.25 1999/03/03 15:09:45 cort Exp $
+ * $Id: prep_pci.c,v 1.31 1999/04/21 18:21:37 cort Exp $
  * PReP pci functions.
  * Originally by Gary Thomas
  * rewritten and updated by Cort Dougan (cort@cs.nmt.edu)
@@ -11,11 +11,19 @@
 #include <linux/pci.h>
 #include <linux/kernel.h>
 #include <linux/init.h>
+#include <linux/openpic.h>
 
 #include <asm/byteorder.h>
 #include <asm/io.h>
 #include <asm/ptrace.h>
+#include <asm/prom.h>
+#include <asm/pci-bridge.h>
+#include <asm/residual.h>
 #include <asm/processor.h>
+#include <asm/irq.h>
+#include <asm/machdep.h>
+
+#include "pci.h"
 
 #define MAX_DEVNR 22
 
@@ -168,6 +176,46 @@ static char Genesis_pci_IRQ_routes[] __prepdata =
    	14,	/* Line 3 */
    	15	/* Line 4 */
 };
+   
+/* Motorola Genesis2 MVME26XX, MVME 36XX */
+/* The final version for these boards should use the Raven PPC/PCI bridge 
+interrupt controller which is much sophisticated and allows more
+devices on the PCI bus. */
+static char Genesis2_pci_IRQ_map[23] __prepdata =
+  {
+        0,	/* Slot 0  - ECC memory controller/PCI bridge */
+	0,	/* Slot 1  - unused */
+  	0,	/* Slot 2  - unused */
+  	0,	/* Slot 3  - unused */
+  	0,	/* Slot 4  - unused */
+  	0,	/* Slot 5  - unused */
+  	0,	/* Slot 6  - unused */
+  	0,	/* Slot 7  - unused */
+  	0,	/* Slot 8  - unused */
+  	0,	/* Slot 9  - unused */
+  	0,	/* Slot 10 - unused */
+  	0,	/* Slot 11 - ISA bridge */
+	3,	/* Slot 12 - SCSI */
+  	2,	/* Slot 13 - Universe PCI/VME bridge (and 22..24) */
+  	1,	/* Slot 14 - Ethernet */
+  	0,	/* Slot 15 - Unused (graphics on 3600, would be 20 ?) */
+	4,      /* Slot 16 - PMC slot, assume uses INTA */
+	0,      /* Slot 17 */
+	0,      /* Slot 18 */
+	0,      /* Slot 19 */
+	0,      /* Slot 20 */
+	0,      /* Slot 21 */
+	0,      /* Slot 22 */
+  };
+
+static char Genesis2_pci_IRQ_routes[] __prepdata=
+   {
+   	0,	/* Line 0 - Unused */
+   	10,	/* Line 1 - INTA */
+   	11,	/* Line 2 - INTB */
+   	14,	/* Line 3 - INTC */
+   	15	/* Line 4 - INTD */
+   };
    
 /* Motorola Series-E */
 static char Comet_pci_IRQ_map[16] __prepdata =
@@ -328,106 +376,24 @@ static char Nobis_pci_IRQ_routes[] __prepdata = {
 #define ELCRM_INT7_LVL          0x80
 #define ELCRM_INT5_LVL          0x20
 
-/*
- * Mechanism 1 configuration space access as defined in the PCI spec.
- */
-#define CFG_ADDR (volatile u_int *)0x80000cf8
-#define CFG_DATA 0x80000cfc
-
-#define CFG_DEV_ADDR(b, d, o)	(0x80000000 |	\
-				 ((b) << 16) |	\
-				 ((d) << 8) |	\
-				 ((o) & ~3))
-
-unsigned char max_bus=255;
-
-int mech1_pcibios_read_config_byte(unsigned char bus, unsigned char dev_fn,
-				     unsigned char offset, unsigned char *val)
-{
-	*val = 0xff;
-	if (bus > max_bus)
-		return PCIBIOS_DEVICE_NOT_FOUND;
-	out_le32(CFG_ADDR, CFG_DEV_ADDR(bus, dev_fn, offset));
-	*val = in_8((unsigned char *)CFG_DATA + (offset & 3));
-	return PCIBIOS_SUCCESSFUL;
-}
-
-int mech1_pcibios_read_config_word(unsigned char bus, unsigned char dev_fn,
-				     unsigned char offset, unsigned short *val)
-{
-	*val = 0xffff;
-	if (bus > max_bus)
-		return PCIBIOS_DEVICE_NOT_FOUND;
-	if ((offset & 1) != 0)
-		return PCIBIOS_BAD_REGISTER_NUMBER;
-	out_le32(CFG_ADDR, CFG_DEV_ADDR(bus, dev_fn, offset));
-	*val = in_le16((volatile unsigned short *)(CFG_DATA + (offset&3)));
-	return PCIBIOS_SUCCESSFUL;
-}
-
-int mech1_pcibios_read_config_dword(unsigned char bus, unsigned char dev_fn,
-				      unsigned char offset, unsigned int *val)
-{
-	*val = 0xffffffff;
-	if (bus > max_bus)
-		return PCIBIOS_DEVICE_NOT_FOUND;
-	if ((offset & 3) != 0)
-		return PCIBIOS_BAD_REGISTER_NUMBER;
-	out_le32(CFG_ADDR, CFG_DEV_ADDR(bus, dev_fn, offset));
-	*val = in_le32((volatile unsigned int *)CFG_DATA);
-	return PCIBIOS_SUCCESSFUL;
-}
-
-int mech1_pcibios_write_config_byte(unsigned char bus, unsigned char dev_fn,
-				      unsigned char offset, unsigned char val)
-{
-	if (bus > max_bus)
-		return PCIBIOS_DEVICE_NOT_FOUND;
-	out_le32(CFG_ADDR, CFG_DEV_ADDR(bus, dev_fn, offset));
-	out_8((unsigned char *)CFG_DATA + (offset & 3), val);
-	return PCIBIOS_SUCCESSFUL;
-}
-
-int mech1_pcibios_write_config_word(unsigned char bus, unsigned char dev_fn,
-				      unsigned char offset, unsigned short val)
-{
-	if (bus > max_bus)
-		return PCIBIOS_DEVICE_NOT_FOUND;
-	if ((offset & 1) != 0)
-		return PCIBIOS_BAD_REGISTER_NUMBER;
-	out_le32(CFG_ADDR, CFG_DEV_ADDR(bus, dev_fn, offset));
-	out_le16((volatile unsigned short *)(CFG_DATA + (offset&3)), val);
-	return PCIBIOS_SUCCESSFUL;
-}
-
-int mech1_pcibios_write_config_dword(unsigned char bus, unsigned char dev_fn,
-				    unsigned char offset, unsigned int val)
-{
-	if (bus > max_bus)
-		return PCIBIOS_DEVICE_NOT_FOUND;
-	if ((offset & 1) != 0)
-		return PCIBIOS_BAD_REGISTER_NUMBER;
-	out_le32(CFG_ADDR, CFG_DEV_ADDR(bus, dev_fn, offset));
-	out_le32((volatile unsigned int *)CFG_DATA, val);
-	return PCIBIOS_SUCCESSFUL;
-}
+#define CFGPTR(dev) (0x80800000 | (1<<(dev>>3)) | ((dev&7)<<8) | offset)
+#define DEVNO(dev)  (dev>>3)                                  
 
 __prep
 int
 prep_pcibios_read_config_dword (unsigned char bus,
 			   unsigned char dev, unsigned char offset, unsigned int *val)
 {
-	unsigned long _val;
+	unsigned long _val;                                          
 	unsigned long *ptr;
-	dev >>= 3;
-	
-	if ((bus != 0) || (dev > MAX_DEVNR))
-	{
+
+	if ((bus != 0) || (DEVNO(dev) > MAX_DEVNR))
+	{                   
 		*val = 0xFFFFFFFF;
-		return PCIBIOS_DEVICE_NOT_FOUND;
-	} else
+		return PCIBIOS_DEVICE_NOT_FOUND;    
+	} else                                                                
 	{
-		ptr = (unsigned long *)(0x80800000 | (1<<dev) | offset);
+		ptr = (unsigned long *)CFGPTR(dev);
 		_val = le32_to_cpu(*ptr);
 	}
 	*val = _val;
@@ -439,16 +405,16 @@ int
 prep_pcibios_read_config_word (unsigned char bus,
 			  unsigned char dev, unsigned char offset, unsigned short *val)
 {
-	unsigned short _val;
+	unsigned short _val;                                          
 	unsigned short *ptr;
-	dev >>= 3;
-	if ((bus != 0) || (dev > MAX_DEVNR))
+
+	if ((bus != 0) || (DEVNO(dev) > MAX_DEVNR))
+	{                   
+		*val = 0xFFFF;
+		return PCIBIOS_DEVICE_NOT_FOUND;    
+	} else                                                                
 	{
-		*val = (unsigned short)0xFFFFFFFF;
-		return PCIBIOS_DEVICE_NOT_FOUND;
-	} else
-	{
-		ptr = (unsigned short *)(0x80800000 | (1<<dev) | offset);
+		ptr = (unsigned short *)CFGPTR(dev);
 		_val = le16_to_cpu(*ptr);
 	}
 	*val = _val;
@@ -460,16 +426,16 @@ int
 prep_pcibios_read_config_byte (unsigned char bus,
 			  unsigned char dev, unsigned char offset, unsigned char *val)
 {
-	unsigned char _val;
-	volatile unsigned char *ptr;
-	dev >>= 3;
-	if ((bus != 0) || (dev > MAX_DEVNR))
+	unsigned char _val;                                          
+	unsigned char *ptr;
+
+	if ((bus != 0) || (DEVNO(dev) > MAX_DEVNR))
+	{                   
+		*val = 0xFF;
+		return PCIBIOS_DEVICE_NOT_FOUND;    
+	} else                                                                
 	{
-		*(unsigned long *)val = (unsigned long) 0xFFFFFFFF;
-		return PCIBIOS_DEVICE_NOT_FOUND;
-	} else
-	{
-		ptr = (unsigned char *)(0x80800000 | (1<<dev) | (offset ^ 1));
+		ptr = (unsigned char *)CFGPTR(dev);
 		_val = *ptr;
 	}
 	*val = _val;
@@ -483,14 +449,14 @@ prep_pcibios_write_config_dword (unsigned char bus,
 {
 	unsigned long _val;
 	unsigned long *ptr;
-	dev >>= 3;
+
 	_val = le32_to_cpu(val);
-	if ((bus != 0) || (dev > MAX_DEVNR))
+	if ((bus != 0) || (DEVNO(dev) > MAX_DEVNR))
 	{
 		return PCIBIOS_DEVICE_NOT_FOUND;
 	} else
 	{
-		ptr = (unsigned long *)(0x80800000 | (1<<dev) | offset);
+		ptr = (unsigned long *)CFGPTR(dev);
 		*ptr = _val;
 	}
 	return PCIBIOS_SUCCESSFUL;
@@ -503,14 +469,14 @@ prep_pcibios_write_config_word (unsigned char bus,
 {
 	unsigned short _val;
 	unsigned short *ptr;
-	dev >>= 3;
+
 	_val = le16_to_cpu(val);
-	if ((bus != 0) || (dev > MAX_DEVNR))
+	if ((bus != 0) || (DEVNO(dev) > MAX_DEVNR))
 	{
 		return PCIBIOS_DEVICE_NOT_FOUND;
 	} else
 	{
-		ptr = (unsigned short *)(0x80800000 | (1<<dev) | offset);
+		ptr = (unsigned short *)CFGPTR(dev);
 		*ptr = _val;
 	}
 	return PCIBIOS_SUCCESSFUL;
@@ -523,20 +489,20 @@ prep_pcibios_write_config_byte (unsigned char bus,
 {
 	unsigned char _val;
 	unsigned char *ptr;
-	dev >>= 3;
+
 	_val = val;
-	if ((bus != 0) || (dev > MAX_DEVNR))
+	if ((bus != 0) || (DEVNO(dev) > MAX_DEVNR))
 	{
 		return PCIBIOS_DEVICE_NOT_FOUND;
 	} else
 	{
-		ptr = (unsigned char *)(0x80800000 | (1<<dev) | (offset^1));
+		ptr = (unsigned char *)CFGPTR(dev);
 		*ptr = _val;
 	}
 	return PCIBIOS_SUCCESSFUL;
 }
 
-__initfunc(unsigned long route_pci_interrupts(void))
+__initfunc(unsigned long prep_route_pci_interrupts(void))
 {
 	unsigned char *ibc_pirq = (unsigned char *)0x80800860;
 	unsigned char *ibc_pcicon = (unsigned char *)0x80800840;
@@ -568,11 +534,15 @@ __initfunc(unsigned long route_pci_interrupts(void))
 			Motherboard_map = Utah_pci_IRQ_map;
 			Motherboard_routes = Utah_pci_IRQ_routes;
 			break;
-                case 0xE0: /* MTX -- close enough?? to Genesis, so reuse it */
-                        Motherboard_map_name = "Motorola MTX";
-                        Motherboard_map = Genesis_pci_IRQ_map;
-                        Motherboard_routes = Genesis_pci_IRQ_routes;
-                        break;
+		case 0xE0: /* MVME 26xx, 36xx, MTX ? */
+			Motherboard_map_name = "Genesis2";
+			Motherboard_map = Genesis2_pci_IRQ_map;
+			Motherboard_routes = Genesis2_pci_IRQ_routes;
+
+			/* Return: different ibc_pcicon and
+			   pirq already set up by firmware. */
+			return 0; 
+			break;
 		case 0x40: /* PowerStack */
 		default: /* Can't hurt, can it? */
 			Motherboard_map_name = "Blackhawk (Powerstack)";
@@ -705,5 +675,171 @@ __initfunc(unsigned long route_pci_interrupts(void))
 	/* Enable PCI interrupts */
 	*ibc_pcicon |= 0x20;
 	return 0;
+}
+
+__initfunc(
+static inline void fixup_pci_interrupts(PnP_TAG_PACKET *pkt)) {
+#define data pkt->L4_Pack.L4_Data.L4_PPCPack.PPCData
+        u_int bus = data[16];
+        u_char *End, *p;
+
+        End = data + ld_le16((u_short *)(&pkt->L4_Pack.Count0)) - 1;
+        printk("Interrupt mapping from %d to %d\n", 20, End-data);
+        for (p=data+20; p<End; p+=12){
+                struct pci_dev *dev;
+                for (dev=pci_devices; dev; dev=dev->next) {
+                        unsigned code, irq;
+                        u_char pin;
+
+                        if ( dev->bus->number != bus ||
+                             PCI_SLOT(dev->devfn) != PCI_SLOT(p[1]))
+                                continue;
+                        pci_read_config_byte(dev,  PCI_INTERRUPT_PIN, &pin);
+                        if(!pin) continue;
+                        code=ld_le16((unsigned short *)
+                                    (p+4+2*(pin-1)));
+                        /* Set vector to 0 for unrouted PCI ints. This code
+                         * is ugly but handles correctly the special case of
+                         * interrupt 0 (8259 cascade) on OpenPIC
+                         */
+
+                        irq = (code == 0xffff) ? 0 : code&0x7fff;
+                        if (p[2] == 2) { /* OpenPIC */
+                                if (irq) {
+                                        openpic_set_sense(irq, code<0x8000);
+                                        irq=openpic_to_irq(irq);
+                                } else continue;
+                        } else if (p[2] != 1){ /* Not 8259 */
+                                printk("Unknown or unsupported "
+                                       "interrupt controller"
+                                       "type %d.\n",  p[2]);
+                                continue;
+                        }
+                        dev->irq=irq;
+                }
+
+        }
+}
+
+__initfunc(
+static inline void fixup_bases(struct pci_dev *dev)) {
+        int k;
+        for (k=0; k<6; k++) {
+		/* FIXME: get the base address physical offset from 
+			the Raven instead of hard coding it.
+				-- Troy */
+                if (dev->base_address[k] &&
+                    (dev->base_address[k]&PCI_BASE_ADDRESS_SPACE)
+                    == PCI_BASE_ADDRESS_SPACE_MEMORY)
+                        dev->base_address[k]+=0xC0000000;
+                if ((dev->base_address[k] &
+                     (PCI_BASE_ADDRESS_SPACE |
+                      PCI_BASE_ADDRESS_MEM_TYPE_MASK))
+                     == (PCI_BASE_ADDRESS_SPACE_MEMORY |
+                         PCI_BASE_ADDRESS_MEM_TYPE_64))
+                        k++;
+        }
+}
+
+
+__initfunc(
+void
+prep_pcibios_fixup(void))
+{
+        struct pci_dev *dev;
+        extern unsigned char *Motherboard_map;
+        extern unsigned char *Motherboard_routes;
+        unsigned char i;
+
+        if ( _prep_type == _PREP_Radstone )
+        {
+                printk("Radstone boards require no PCI fixups\n");
+        }
+        else
+        {
+	        prep_route_pci_interrupts();
+                for(dev=pci_devices; dev; dev=dev->next)
+                {
+                        /*
+                         * Use our old hard-coded kludge to figure out what
+                         * irq this device uses.  This is necessary on things
+                         * without residual data. -- Cort
+                         */
+                        unsigned char d = PCI_SLOT(dev->devfn);
+                        dev->irq = Motherboard_routes[Motherboard_map[d]];
+                        for ( i = 0 ; i <= 5 ; i++ )
+                        {
+                                if ( dev->base_address[i] > 0x10000000 )
+                                {
+                                        printk("Relocating PCI address %lx -> %lx\n",
+                                               dev->base_address[i],
+                                               (dev->base_address[i] & 0x00FFFFFF)
+                                               | 0x01000000);
+                                        dev->base_address[i] =
+                                          (dev->base_address[i] & 0x00FFFFFF) | 0x01000000;
+                                        pci_write_config_dword(dev,
+                                                PCI_BASE_ADDRESS_0+(i*0x4),
+                                               dev->base_address[i] );
+                                }
+                        }
+#if 0
+                        /*
+                         * If we have residual data and if it knows about this
+                         * device ask it what the irq is.
+                         *  -- Cort
+                         */
+                        ppcd = residual_find_device_id( ~0L, dev->device,
+                                                        -1,-1,-1, 0);
+#endif
+		}
+	}
+}
+
+decl_config_access_method(indirect);
+
+__initfunc(
+void
+prep_setup_pci_ptrs(void))
+{
+	PPC_DEVICE *hostbridge;
+
+        printk("PReP architecture\n");
+        if ( _prep_type == _PREP_Radstone )
+        {
+		pci_config_address = (unsigned *)0x80000cf8;
+		pci_config_data = (char *)0x80000cfc;
+                set_config_access_method(indirect);		
+        }
+        else
+        {
+                hostbridge = residual_find_device(PROCESSORDEVICE, NULL,
+		       BridgeController, PCIBridge, -1, 0);
+                if (hostbridge &&
+                    hostbridge->DeviceId.Interface == PCIBridgeIndirect) {
+                        PnP_TAG_PACKET * pkt;
+                        set_config_access_method(indirect);
+                        pkt = PnP_find_large_vendor_packet(
+				res->DevicePnPHeap+hostbridge->AllocatedOffset,
+				3, 0);
+                        if(pkt)
+			{
+#define p pkt->L4_Pack.L4_Data.L4_PPCPack
+                                pci_config_address= (unsigned *)ld_le32((unsigned *) p.PPCData);
+				pci_config_data= (unsigned char *)ld_le32((unsigned *) (p.PPCData+8));
+                        }
+			else
+			{
+                                pci_config_address= (unsigned *) 0x80000cf8;
+                                pci_config_data= (unsigned char *) 0x80000cfc;
+                        }
+                }
+		else
+		{
+                        set_config_access_method(prep);
+                }
+
+        }
+
+	ppc_md.pcibios_fixup = prep_pcibios_fixup;
 }
 

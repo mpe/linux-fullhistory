@@ -33,11 +33,13 @@
  *
  *  Added initrd: Werner Almesberger & Hans Lermen, Feb '96
  *
-* 4/25/96 : Made RAM disk size a parameter (default is now 4 MB) 
+ * 4/25/96 : Made RAM disk size a parameter (default is now 4 MB) 
  *		- Chad Page
  *
  * Add support for fs images split across >1 disk, Paul Gortmaker, Mar '98
  *
+ * Make block size and block size shift for RAM disks a global macro
+ * and set blk_size for -ENOSPC,     Werner Fink <werner@suse.de>, Apr '99
  */
 
 #include <linux/config.h>
@@ -47,6 +49,7 @@
 #include <linux/romfs_fs.h>
 #include <linux/fs.h>
 #include <linux/kernel.h>
+#include <linux/hdreg.h>
 #include <linux/string.h>
 #include <linux/mm.h>
 #include <linux/mman.h>
@@ -70,6 +73,15 @@ extern void wait_for_keypress(void);
 #define MAJOR_NR RAMDISK_MAJOR
 #include <linux/blk.h>
 
+/*
+ * We use a block size of 512 bytes in comparision to BLOCK_SIZE
+ * defined in include/linux/blk.h. This because of the finer
+ * granularity for filling up a RAM disk.
+ */
+#define RDBLK_SIZE_BITS		9
+#define RDBLK_SIZE		(1<<RDBLK_SIZE_BITS)
+
+
 /* The RAM disk size is now a parameter */
 #define NUM_RAMDISKS 16		/* This cannot be overridden (yet) */ 
 
@@ -89,8 +101,10 @@ static int initrd_users = 0;
 /* Various static variables go here.  Most are used only in the RAM disk code.
  */
 
-static int rd_length[NUM_RAMDISKS];
-static int rd_blocksizes[NUM_RAMDISKS];
+static unsigned long rd_length[NUM_RAMDISKS];	/* Size of RAM disks in bytes   */
+static int rd_hardsec[NUM_RAMDISKS];		/* Size of real blocks in bytes */
+static int rd_blocksizes[NUM_RAMDISKS];		/* Size of 1024 byte blocks :)  */
+static int rd_kbsize[NUM_RAMDISKS];		/* Size in blocks of 1024 bytes */
 
 /*
  * Parameters for the boot-loading of the RAM disk.  These are set by
@@ -120,9 +134,12 @@ int initrd_below_start_ok = 0;
 static void rd_request(void)
 {
 	unsigned int minor;
-	int offset, len;
+	unsigned long offset, len;
 
 repeat:
+	if (!CURRENT)
+		return;
+
 	INIT_REQUEST;
 	
 	minor = MINOR(CURRENT->rq_dev);
@@ -132,10 +149,16 @@ repeat:
 		goto repeat;
 	}
 	
-	offset = CURRENT->sector << 9;
-	len = CURRENT->current_nr_sectors << 9;
+	offset = CURRENT->sector << RDBLK_SIZE_BITS;
+	len = CURRENT->current_nr_sectors << RDBLK_SIZE_BITS;
 
 	if ((offset + len) > rd_length[minor]) {
+		end_request(0);
+		goto repeat;
+	}
+
+	if ((CURRENT->cmd != READ) && (CURRENT->cmd != WRITE)) {
+		printk(KERN_INFO "RAMDISK: bad command: %d\n", CURRENT->cmd);
 		end_request(0);
 		goto repeat;
 	}
@@ -158,24 +181,31 @@ repeat:
 
 static int rd_ioctl(struct inode *inode, struct file *file, unsigned int cmd, unsigned long arg)
 {
+	unsigned int minor;
+
 	if (!inode || !inode->i_rdev) 	
 		return -EINVAL;
+
+	minor = MINOR(inode->i_rdev);
 
 	switch (cmd) {
 		case BLKFLSBUF:
 			if (!capable(CAP_SYS_ADMIN)) return -EACCES;
 			invalidate_buffers(inode->i_rdev);
 			break;
+
          	case BLKGETSIZE:   /* Return device size */
 			if (!arg)  return -EINVAL;
-			return put_user(rd_length[MINOR(inode->i_rdev)] / 512, 
-				 (long *) arg);
-		case BLKSSZGET:
-			/* Block size of media */
-			return put_user(rd_blocksizes[MINOR(inode->i_rdev)],
-						    (int *)arg);
+			return put_user(rd_length[minor] >> RDBLK_SIZE_BITS, (long *) arg);
+
+		case BLKSSZGET:	   /* Block size of media */
+			if (!arg)  return -EINVAL;
+			return put_user(rd_blocksizes[minor], (int *)arg);
+
+		RO_IOCTLS(inode->i_rdev, arg);
+
 		default:
-			break;
+			return -EINVAL;
 	};
 
 	return 0;
@@ -263,7 +293,7 @@ static struct file_operations fd_fops = {
 	rd_open,	/* open */
 	NULL,		/* flush */
 	rd_release,	/* module needs to decrement use count */
-	block_fsync		/* fsync */ 
+	block_fsync	/* fsync */ 
 };
 
 /* This is the registration and initialization section of the RAM disk driver */
@@ -279,11 +309,16 @@ __initfunc(int rd_init(void))
 	blk_dev[MAJOR_NR].request_fn = &rd_request;
 
 	for (i = 0; i < NUM_RAMDISKS; i++) {
-		rd_length[i] = (rd_size * 1024);
-		rd_blocksizes[i] = 1024;
+		/* rd_size is given in kB */
+		rd_length[i] = (rd_size << BLOCK_SIZE_BITS);
+		rd_hardsec[i] = RDBLK_SIZE;
+		rd_blocksizes[i] = BLOCK_SIZE;
+		rd_kbsize[i] = (rd_length[i] >> BLOCK_SIZE_BITS);
 	}
 
-	blksize_size[MAJOR_NR] = rd_blocksizes;
+	hardsect_size[MAJOR_NR] = rd_hardsec;		/* Size of the RAM disk blocks */
+	blksize_size[MAJOR_NR] = rd_blocksizes;		/* Avoid set_blocksize() check */
+	blk_size[MAJOR_NR] = rd_kbsize;			/* Size of the RAM disk in kB  */
 
 	printk("RAM disk driver initialized:  %d RAM disks of %dK size\n",
 							NUM_RAMDISKS, rd_size);
@@ -295,7 +330,8 @@ __initfunc(int rd_init(void))
 
 #ifdef MODULE
 
-MODULE_PARM (rd_size, "1i");
+MODULE_PARM     (rd_size, "1i");
+MODULE_PARM_DESC(rd_size, "Size of each RAM disk.");
 
 int init_module(void)
 {
@@ -427,7 +463,7 @@ done:
 /*
  * This routine loads in the RAM disk image.
  */
-__initfunc(static void rd_load_image(kdev_t device,int offset))
+__initfunc(static void rd_load_image(kdev_t device, int offset, int unit))
 {
  	struct inode inode, out_inode;
 	struct file infile, outfile;
@@ -440,7 +476,7 @@ __initfunc(static void rd_load_image(kdev_t device,int offset))
 	unsigned short devblocks = 0;
 	char rotator[4] = { '|' , '/' , '-' , '\\' };
 
-	ram_device = MKDEV(MAJOR_NR, 0);
+	ram_device = MKDEV(MAJOR_NR, unit);
 
 	memset(&infile, 0, sizeof(infile));
 	memset(&inode, 0, sizeof(inode));
@@ -480,9 +516,9 @@ __initfunc(static void rd_load_image(kdev_t device,int offset))
 		goto done;
 	}
 
-	if (nblocks > (rd_length[0] >> BLOCK_SIZE_BITS)) {
+	if (nblocks > (rd_length[unit] >> RDBLK_SIZE_BITS)) {
 		printk("RAMDISK: image too big! (%d/%d blocks)\n",
-		       nblocks, rd_length[0] >> BLOCK_SIZE_BITS);
+		       nblocks, rd_length[unit] >> RDBLK_SIZE_BITS);
 		goto done;
 	}
 		
@@ -538,7 +574,7 @@ __initfunc(static void rd_load_image(kdev_t device,int offset))
 
 successful_load:
 	invalidate_buffers(device);
-	ROOT_DEV = MKDEV(MAJOR_NR,0);
+	ROOT_DEV = MKDEV(MAJOR_NR, unit);
 
 done:
 	if (infile.f_op->release)
@@ -547,12 +583,21 @@ done:
 }
 
 
-__initfunc(void rd_load(void))
+__initfunc(static void rd_load_disk(int n))
 {
+#ifdef CONFIG_BLK_DEV_INITRD
+	extern kdev_t real_root_dev;
+#endif
+
 	if (rd_doload == 0)
 		return;
-	
-	if (MAJOR(ROOT_DEV) != FLOPPY_MAJOR) return;
+
+	if (MAJOR(ROOT_DEV) != FLOPPY_MAJOR
+#ifdef CONFIG_BLK_DEV_INITRD
+		&& MAJOR(real_root_dev) != FLOPPY_MAJOR
+#endif
+	)
+		return;
 
 	if (rd_prompt) {
 #ifdef CONFIG_BLK_DEV_FD
@@ -563,15 +608,24 @@ __initfunc(void rd_load(void))
 		wait_for_keypress();
 	}
 
-	rd_load_image(ROOT_DEV,rd_image_start);
+	rd_load_image(ROOT_DEV,rd_image_start, n);
 
 }
 
+__initfunc(void rd_load(void))
+{
+	rd_load_disk(0);
+}
+
+__initfunc(void rd_load_secondary(void))
+{
+	rd_load_disk(1);
+}
 
 #ifdef CONFIG_BLK_DEV_INITRD
 __initfunc(void initrd_load(void))
 {
-	rd_load_image(MKDEV(MAJOR_NR, INITRD_MINOR),0);
+	rd_load_image(MKDEV(MAJOR_NR, INITRD_MINOR),0,0);
 }
 #endif
 
@@ -695,7 +749,14 @@ __initfunc(static int
 crd_load(struct file * fp, struct file *outfp))
 {
 	int result;
-	
+
+	insize = 0;		/* valid bytes in inbuf */
+	inptr = 0;		/* index of next byte to be processed in inbuf */
+	outcnt = 0;		/* bytes in output buffer */
+	exit_code = 0;
+	bytes_out = 0;
+	crc = (ulg)0xffffffffL; /* shift register contents */
+
 	crd_infp = fp;
 	crd_outfp = outfp;
 	inbuf = kmalloc(INBUFSIZ, GFP_KERNEL);

@@ -1053,6 +1053,7 @@ static int netdev_rx(struct device *dev)
 			skb->protocol = eth_type_trans(skb, dev);
 			netif_rx(skb);
 			dev->last_rx = jiffies;
+			np->stats.rx_bytes += pkt_len;
 			np->stats.rx_packets++;
 		}
 		entry = (++np->cur_rx) % RX_RING_SIZE;

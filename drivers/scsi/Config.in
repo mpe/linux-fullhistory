@@ -55,9 +55,7 @@ dep_tristate 'EATA-DMA [Obsolete] (DPT, NEC, AT&T, SNI, AST, Olivetti, Alphatron
 dep_tristate 'EATA-PIO (old DPT PM2001, PM2012A) support' CONFIG_SCSI_EATA_PIO $CONFIG_SCSI
 dep_tristate 'Future Domain 16xx SCSI/AHA-2920A support' CONFIG_SCSI_FUTURE_DOMAIN $CONFIG_SCSI
 if [ "$CONFIG_MCA" = "y" ]; then
-  if [ "$CONFIG_SCSI" = "y" ]; then
-    bool 'Future Domain MCS-600/700 SCSI support' CONFIG_SCSI_FD_MCS
-  fi
+    dep_tristate 'Future Domain MCS-600/700 SCSI support' CONFIG_SCSI_FD_MCS $CONFIG_SCSI
 fi
 dep_tristate 'GDT SCSI Disk Array Controller support' CONFIG_SCSI_GDTH $CONFIG_SCSI
 dep_tristate 'Generic NCR5380/53c400 SCSI support' CONFIG_SCSI_GENERIC_NCR5380 $CONFIG_SCSI

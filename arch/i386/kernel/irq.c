@@ -203,7 +203,7 @@ int i8259A_irq_pending(unsigned int irq)
 
 void make_8259A_irq(unsigned int irq)
 {
-	disable_irq(irq);
+	disable_irq_nosync(irq);
 	io_apic_irqs &= ~(1<<irq);
 	irq_desc[irq].handler = &i8259A_irq_type;
 	enable_irq(irq);
@@ -242,8 +242,11 @@ static void do_8259A_IRQ(unsigned int irq, struct pt_regs * regs)
 		status = desc->status & ~IRQ_REPLAY;
 		action = NULL;
 		if (!(status & (IRQ_DISABLED | IRQ_INPROGRESS)))
+		{
 			action = desc->action;
-		desc->status = status | IRQ_INPROGRESS;
+			status |= IRQ_INPROGRESS;
+		}
+		desc->status = status;
 	}
 	spin_unlock(&irq_controller_lock);
 
@@ -747,7 +750,7 @@ int handle_IRQ_event(unsigned int irq, struct pt_regs * regs, struct irqaction *
  * hardware disable after having gotten the irq
  * controller lock. 
  */
-void disable_irq(unsigned int irq)
+void disable_irq_nosync(unsigned int irq)
 {
 	unsigned long flags;
 
@@ -757,9 +760,21 @@ void disable_irq(unsigned int irq)
 		irq_desc[irq].handler->disable(irq);
 	}
 	spin_unlock_irqrestore(&irq_controller_lock, flags);
+}
 
-	if (irq_desc[irq].status & IRQ_INPROGRESS)
-		synchronize_irq();
+/*
+ * Synchronous version of the above, making sure the IRQ is
+ * no longer running on any other IRQ..
+ */
+void disable_irq(unsigned int irq)
+{
+	disable_irq_nosync(irq);
+
+	if (!local_irq_count[smp_processor_id()] && irq_desc[irq].action) {
+		do {
+			barrier();
+		} while (irq_desc[irq].status & IRQ_INPROGRESS);
+	}
 }
 
 void enable_irq(unsigned int irq)
@@ -769,7 +784,7 @@ void enable_irq(unsigned int irq)
 	spin_lock_irqsave(&irq_controller_lock, flags);
 	switch (irq_desc[irq].depth) {
 	case 1:
-		irq_desc[irq].status &= ~(IRQ_DISABLED | IRQ_INPROGRESS);
+		irq_desc[irq].status &= ~IRQ_DISABLED;
 		irq_desc[irq].handler->enable(irq);
 		/* fall throught */
 	default:
@@ -951,7 +966,7 @@ unsigned long probe_irq_on(void)
 	for (i = NR_IRQS-1; i > 0; i--) {
 		if (!irq_desc[i].action) {
 			unsigned int status = irq_desc[i].status | IRQ_AUTODETECT;
-			irq_desc[i].status = status & ~IRQ_INPROGRESS;
+			irq_desc[i].status = status & ~(IRQ_INPROGRESS|IRQ_DISABLED);
 			irq_desc[i].handler->startup(i);
 		}
 	}
@@ -975,7 +990,7 @@ unsigned long probe_irq_on(void)
 		
 		/* It triggered already - consider it spurious. */
 		if (status & IRQ_INPROGRESS) {
-			irq_desc[i].status = status & ~IRQ_AUTODETECT;
+			irq_desc[i].status = (status & ~(IRQ_INPROGRESS | IRQ_AUTODETECT)) | IRQ_DISABLED;
 			irq_desc[i].handler->shutdown(i);
 		}
 	}
@@ -1005,7 +1020,7 @@ int probe_irq_off(unsigned long unused)
 				irq_found = i;
 			nr_irqs++;
 		}
-		irq_desc[i].status = status & ~IRQ_AUTODETECT;
+		irq_desc[i].status = (status & ~(IRQ_AUTODETECT | IRQ_INPROGRESS)) | IRQ_DISABLED;
 		irq_desc[i].handler->shutdown(i);
 	}
 	spin_unlock_irq(&irq_controller_lock);

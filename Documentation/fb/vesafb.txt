@@ -10,7 +10,7 @@ of the BIOS, and use this as framebuffer device /dev/fb0, like the m68k
 
 This means we decide at boot time whenever we want to run in text or
 graphics mode.  Switching mode later on (in protected mode) is
-impossible; BIOS calls work in real mode only.  VESA BIOS Extentions
+impossible; BIOS calls work in real mode only.  VESA BIOS Extensions
 Version 2.0 are required, because we need a linear frame buffer.
 
 Advantages:
@@ -66,10 +66,10 @@ lilo.conf file and rerun LILO. Then you can type in the descired
 mode at the "vga=ask" prompt. For example if you like to use 
 1024x768x256 colors you have to say "305" at this prompt.
 
-If this does not work, this might be becauce your BIOS does not support
-linear framebuffers or becauce it does not support this mode at all.
+If this does not work, this might be because your BIOS does not support
+linear framebuffers or because it does not support this mode at all.
 Even if your board does, it might be the BIOS which does not.  VESA BIOS
-Extentions v2.0 are required, 1.2 is NOT sufficient.  You will get a
+Extensions v2.0 are required, 1.2 is NOT sufficient.  You will get a
 "bad mode number" message if something goes wrong.
 
 1. Note: LILO cannot handle hex, for booting directly with 
@@ -99,8 +99,8 @@ have these options:
    available) and boot linux with loadlin.
  * use a native driver (matroxfb/atyfb) instead if vesafb.  If none
    is available, write a new one!
- * VBE 3.0 might work too.  I havn't neither a gfx board with VBE 3.0
-   support nor the specs, so I havn't checked this yet.  But maybe...
+ * VBE 3.0 might work too.  I have neither a gfx board with VBE 3.0
+   support nor the specs, so I have not checked this yet.
 
 
 Configuration
@@ -108,7 +108,7 @@ Configuration
 
 The VESA BIOS provides protected mode interface for changing
 some parameters.  vesafb can use it for palette changes and
-to pan the display.  It is turned off by default becauce it
+to pan the display.  It is turned off by default because it
 seems not to work with some BIOS versions, but there are options
 to turn it on.
 
@@ -124,7 +124,7 @@ ypan	enable display panning using the VESA protected mode
 	interface.  The visible screen is just a window of the
 	video memory, console scrolling is done by changing the
 	start of the window.
-	pro:	* scrolling (fullscreen) is fast, becauce there is
+	pro:	* scrolling (fullscreen) is fast, because there is
 		  no need to copy around data.
 		* You'll get scrollback (the Shift-PgUp thing),
 		  the video memory can be used as scrollback buffer

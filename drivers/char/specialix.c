@@ -2355,6 +2355,9 @@ int iobase[SX_NBOARD]  = {0,};
 
 int irq [SX_NBOARD] = {0,};
 
+MODULE_PARM(iobase,"1-" __MODULE_STRING(SX_NBOARD) "i");
+MODULE_PARM(irq,"1-" __MODULE_STRING(SX_NBOARD) "i");
+
 /*
  * You can setup up to 4 boards.
  * by specifying "iobase=0xXXX,0xXXX ..." as insmod parameter.

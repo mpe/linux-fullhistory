@@ -813,7 +813,7 @@ void ide_error (ide_drive_t *drive, const char *msg, byte stat)
 		ide_end_drive_cmd(drive, stat, err);
 		return;
 	}
-	if (stat & BUSY_STAT) {		/* other bits are useless when BUSY */
+	if (stat & BUSY_STAT || ((stat & WRERR_STAT) && !drive->nowerr)) { /* other bits are useless when BUSY */
 		rq->errors |= ERROR_RESET;
 	} else {
 		if (drive->media == ide_disk && (stat & ERR_STAT)) {

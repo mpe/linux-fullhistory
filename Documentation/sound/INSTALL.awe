@@ -17,7 +17,7 @@ The home page of PnP driver project is the following URL:
 	http://www-jcr.lmh.ox.ac.uk/~pnp/
 
 ----------------------------------------------------------------
-* Installation on RedHat 5.0 Sound Driver
+* Installation on Red Hat 5.0 Sound Driver
 
 Please use install-rh.sh under RedHat5.0 directory.
 DO NOT USE install.sh below.
@@ -31,7 +31,7 @@ See INSTALL.RH for more details.
 	% su
 
   2. If you have never configured the kernel tree yet, run make config
-    once (to make depencies and symlinks).
+    once (to make dependencies and symlinks).
 
 	# cd /usr/src/linux
 	# make xconfig
@@ -40,7 +40,7 @@ See INSTALL.RH for more details.
 
 	# sh ./install.sh
 
-  4. Configure your kenrel
+  4. Configure your kernel
 
 	(for Linux 2.[01].x user)
 	# cd /usr/src/linux
@@ -77,7 +77,7 @@ See INSTALL.RH for more details.
     do it by isapnp tools.  Otherwise, skip to 8.
 
 	This section described only a brief explanation.  For more
-	detaills, please see AWE64-Mini-HOWTO or isapnp tools FAQ.
+	details, please see the AWE64-Mini-HOWTO or isapnp tools FAQ.
 
 	7a. If you have no isapnp.conf file, generate it by pnpdump.
 	    Otherwise, skip to 7d.

@@ -9,8 +9,8 @@
 
 This is a sound driver extension for SoundBlaster AWE32 and other
 compatible cards (AWE32-PnP, SB32, SB32-PnP, AWE64 & etc) to enable
-the wave synth operations.  The driver is provided for both Linux
-1.2.x and 2.[01].x kernels, and also FreeBSD, on Intel x86 and DEC
+the wave synth operations.  The driver is provided for Linux 1.2.x
+and 2.[012].x kernels, as well as FreeBSD, on Intel x86 and DEC
 Alpha systems.
 
 This driver was written by Takashi Iwai <iwai@ww.uni-erlangen.de>,
@@ -76,7 +76,7 @@ available in most midi files.
 	% sfxload synthgm
 	% drvmidi -L 2mbgmgs foo.mid
 
-This makes a big differece (believe me)!  For more details, please
+This makes a big difference (believe me)!  For more details, please
 refer to the FAQ list which is available on the URL above.
 
 The current chorus, reverb and equalizer status can be changed by
@@ -97,14 +97,14 @@ The following flags are defined automatically when using installation
 shell script.
 
 - AWE_MODULE_SUPPORT
-    indicates your linux kernel supports module for each soundcard
-    (in recent 2.1 kernels and unofficial patched 2.0 kernels as
-     distributed in the RH5.0 package).
+    indicates your Linux kernel supports module for each sound card
+    (in recent 2.1 or 2.2 kernels and unofficial patched 2.0 kernels
+    as distributed in the RH5.0 package).
     This flag is automatically set when you're using 2.1.x kernels.
     You can pass the base address and memory size via the following
     module options,
 	io = base I/O port address (eg. 0x620)
-	memsize = DRAM size in Kbyes (eg. 512)
+	memsize = DRAM size in kilobytes (eg. 512)
     As default, AWE driver probes these values automatically.
 
 
@@ -117,15 +117,15 @@ Define them only when the driver couldn't detect the card properly.
     0 means to autodetect the address.
 
 - AWE_DEFAULT_MEM_SIZE		(default: not defined)
-    specifies the memory size of your AWE32 card in kilo bytes.
+    specifies the memory size of your AWE32 card in kilobytes.
     -1 means to autodetect its size.
     
 
 [Sample Table Size]
 From ver.0.4.0, sample tables are allocated dynamically (except
 Linux-1.2.x system), so you need NOT to touch these parameters.
-Linux-1.2.x users may need to increase these values to apropriate size 
-if larger DRAM is equipped with the soundcard.
+Linux-1.2.x users may need to increase these values to appropriate size 
+if the sound card is equipped with more DRAM.
 
 - AWE_MAX_SF_LISTS, AWE_MAX_SAMPLES, AWE_MAX_INFOS
 
@@ -139,7 +139,7 @@ if larger DRAM is equipped with the soundcard.
     passthrough channels. 
 
 - AWE_DEBUG_ON			(default: defined)
-    turns on debuggin messages if defined.
+    turns on debugging messages if defined.
 
 - AWE_HAS_GUS_COMPATIBILITY	(default: defined)
     Enables GUS compatibility mode if defined, reading GUS patches and 
@@ -170,7 +170,7 @@ if larger DRAM is equipped with the soundcard.
 - AWE_ALLOW_SAMPLE_SHARING	(default: defined)
    Allow sample sharing for differently loaded patches.
    This function is available only together with awesfx-0.4.3p3.
-   Note that this is still an experimantal option.
+   Note that this is still an experimental option.
 
 - DEF_FM_CHORUS_DEPTH		(default: 0x10)
     The default strength to be sent to the chorus effect engine.
@@ -183,8 +183,8 @@ if larger DRAM is equipped with the soundcard.
 
 * ACKNOWLEDGMENTS
 
-Thanks to Witold Jachimczyk (witek@xfactor.wpi.edu) for many advices
-to programming of AWE32.  Many codes are brought from his AWE32-native 
+Thanks to Witold Jachimczyk (witek@xfactor.wpi.edu) for much advice
+on programming of AWE32.  Much code is brought from his AWE32-native 
 MOD player, ALMP.
 The port of awedrv to FreeBSD is done by Randall Hopper
 (rhh@ct.picker.com).

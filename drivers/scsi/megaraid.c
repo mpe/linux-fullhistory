@@ -9,7 +9,7 @@
  *              as published by the Free Software Foundation; either version
  *              2 of the License, or (at your option) any later version.
  *
- * Version : 0.96
+ * Version : 1.00
  * 
  * Description: Linux device driver for AMI MegaRAID controller
  *
@@ -73,10 +73,28 @@
  *
  * Version 0.96:
  *     762 fully supported.
+ * Version 0.97:
+ *     Changed megaraid_command to use wait_queue.
+ *     Fixed bug of undesirably detecting HP onboard controllers which
+ *      are disabled.
+ *     
+ * Version 1.00:
+ *     Checks to see if an irq ocurred while in isr, and runs through
+ *        routine again.
+ *     Copies mailbox to temp area before processing in isr
+ *     Added barrier() in busy wait to fix volatility bug
+ *     Uses separate list for freed Scbs, keeps track of cmd state
+ *     Put spinlocks around entire queue function for now...
+ *     Full multi-io commands working stablely without previous problems
+ *     Added skipXX LILO option for Madrona motherboard support
+ *
  *
  * BUGS:
  *     Some older 2.1 kernels (eg. 2.1.90) have a bug in pci.c that
  *     fails to detect the controller as a pci device on the system.
+ *
+ *     Timeout period for mid scsi layer is too short for
+ *     this controller.  Must be increased or Aborts will occur.
  *
  *===================================================================*/
 
@@ -86,6 +104,7 @@
 #include <linux/version.h>
 
 #ifdef MODULE
+#include <linux/modversions.h>
 #include <linux/module.h>
 
 #if LINUX_VERSION_CODE >= 0x20100
@@ -213,14 +232,15 @@ void WROUTDOOR (mega_host_config * megaCfg, u_long value)
  *
  *================================================================
  */
-static int MegaIssueCmd (mega_host_config * megaCfg,
+static int megaIssueCmd (mega_host_config * megaCfg,
 			 u_char * mboxData,
 			 mega_scb * scb,
 			 int intr);
 static int build_sglist (mega_host_config * megaCfg, mega_scb * scb,
 			 u_long * buffer, u_long * length);
 
-static void mega_runque (void *);
+static int mega_busyWaitMbox(mega_host_config *);
+static void mega_runpendq (mega_host_config *);
 static void mega_rundoneq (void);
 static void mega_cmd_done (mega_host_config *, mega_scb *, int);
 static mega_scb *mega_ioctl (mega_host_config * megaCfg, Scsi_Cmnd * SCpnt);
@@ -241,15 +261,34 @@ static int ser_printk (const char *fmt,...);
  *
  *================================================================
  */
+
+/*  Use "megaraid=skipXX" to prohibit driver from scanning XX scsi id
+     on each channel.  Used for Madrona motherboard, where SAF_TE
+     processor id cannot be scanned */
+static char *megaraid;
+#if LINUX_VERSION_CODE > 0x20100
+#ifdef MODULE
+MODULE_PARM(megaraid, "s");
+#endif
+#endif
+static int skip_id;
+
 static int numCtlrs = 0;
 static mega_host_config *megaCtlrs[12] = {0};
 
+#if DEBUG
+static u_long maxCmdTime = 0;
+#endif
+
+static mega_scb *pLastScb = NULL;
+
 /* Queue of pending/completed SCBs */
-static mega_scb *qPending = NULL;
 static Scsi_Cmnd *qCompleted = NULL;
 
+#if SERDEBUG
+volatile static spinlock_t serial_lock;
+#endif
 volatile static spinlock_t mega_lock;
-static struct tq_struct runq = {0, 0, mega_runque, NULL};
 
 struct proc_dir_entry proc_scsi_megaraid =
 {
@@ -299,10 +338,12 @@ static int ser_printk (const char *fmt,...)
   int i;
   long flags;
 
+  spin_lock_irqsave(&serial_lock,flags);
   va_start (args, fmt);
   i = vsprintf (strbuf, fmt, args);
   ser_puts (strbuf);
   va_end (args);
+  spin_unlock_irqrestore(&serial_lock,flags);
 
   return i;
 }
@@ -329,27 +370,28 @@ void callDone (Scsi_Cmnd * SCpnt)
  *
  *-------------------------------------------------------------------------*/
 
-/*================================================
- * Initialize SCB structures
- *================================================
+/*=======================
+ * Free a SCB structure
+ *=======================
  */
-static int initSCB (mega_host_config * megaCfg)
+static void freeSCB (mega_host_config *megaCfg, mega_scb * pScb)
 {
-  int idx;
+  mega_scb **ppScb;
 
-  for (idx = 0; idx < megaCfg->max_cmds; idx++) {
-    megaCfg->scbList[idx].idx = -1;
-    megaCfg->scbList[idx].flag = 0;
-    megaCfg->scbList[idx].sgList = kmalloc(sizeof(mega_sglist) * MAX_SGLIST,
-				GFP_ATOMIC | GFP_DMA);
-    if (megaCfg->scbList[idx].sgList == NULL) {
-        printk(KERN_WARNING "Can't allocate sglist for id %d\n",idx);
-        freeSgList(megaCfg);
-        return -1;
+  /* Unlink from pending queue */
+  for(ppScb=&megaCfg->qPending; *ppScb; ppScb=&(*ppScb)->next) {
+    if (*ppScb == pScb) {
+	*ppScb = pScb->next;
+	break;
     }
-    megaCfg->scbList[idx].SCpnt = NULL;
   }
-  return 0;
+
+  /* Link back into list */
+  pScb->state = SCB_FREE;
+  pScb->SCpnt = NULL;
+
+  pScb->next     = megaCfg->qFree;
+  megaCfg->qFree = pScb;
 }
 
 /*===========================
@@ -358,138 +400,134 @@ static int initSCB (mega_host_config * megaCfg)
  */
 static mega_scb * allocateSCB (mega_host_config * megaCfg, Scsi_Cmnd * SCpnt)
 {
-  int idx;
-  long flags;
+  mega_scb *pScb;
 
-  spin_lock_irqsave (&mega_lock, flags);
-  for (idx = 0; idx < megaCfg->max_cmds; idx++) {
-    if (megaCfg->scbList[idx].idx < 0) {
+  /* Unlink command from Free List */
+  if ((pScb = megaCfg->qFree) != NULL) {
+    megaCfg->qFree = pScb->next;
+    
+    pScb->isrcount = jiffies;
+    pScb->next  = NULL;
+    pScb->state = SCB_ACTIVE;
+    pScb->SCpnt = SCpnt;
 
-      /* Set Index and SCB pointer */
-      megaCfg->scbList[idx].idx = idx;
-      spin_unlock_irqrestore (&mega_lock, flags);
-      megaCfg->scbList[idx].flag = 0;
-      megaCfg->scbList[idx].SCpnt = SCpnt;
-      megaCfg->scbList[idx].next = NULL;
-
-      return &megaCfg->scbList[idx];
-    }
+    return pScb;
   }
-  spin_unlock_irqrestore (&mega_lock, flags);
 
   printk (KERN_WARNING "Megaraid: Could not allocate free SCB!!!\n");
 
   return NULL;
 }
 
-/*=======================
- * Free a SCB structure
- *=======================
+/*================================================
+ * Initialize SCB structures
+ *================================================
  */
-static void freeSCB (mega_scb * scb)
+static int initSCB (mega_host_config * megaCfg)
 {
-  scb->flag = 0;
-  scb->next = NULL;
-  scb->SCpnt = NULL;
-    scb->idx = -1;
+  int idx;
+
+  megaCfg->qFree = NULL;
+  for (idx = megaCfg->max_cmds-1; idx >= 0; idx--) {
+    megaCfg->scbList[idx].idx    = idx;
+    megaCfg->scbList[idx].sgList = kmalloc(sizeof(mega_sglist) * MAX_SGLIST,
+					   GFP_ATOMIC | GFP_DMA);
+    if (megaCfg->scbList[idx].sgList == NULL) {
+      printk(KERN_WARNING "Can't allocate sglist for id %d\n",idx);
+      freeSgList(megaCfg);
+      return -1;
+    }
+    
+    if (idx < MAX_COMMANDS) {
+      /* Link to free list */
+      freeSCB(megaCfg, &megaCfg->scbList[idx]);
+    }
+  }
+  return 0;
 }
 
 /* Run through the list of completed requests */
 static void mega_rundoneq ()
 {
-  mega_host_config *megaCfg;
   Scsi_Cmnd *SCpnt;
-  char islogical;
 
   while (1) {
     DEQUEUE (SCpnt, Scsi_Cmnd, qCompleted, host_scribble);
     if (SCpnt == NULL)
       return;
 
-    megaCfg = (mega_host_config *) SCpnt->host->hostdata;
-
-    islogical = (SCpnt->channel == megaCfg->host->max_channel &&
-                 SCpnt->target == 0);
-    if (SCpnt->cmnd[0] == INQUIRY &&
-	((((u_char *) SCpnt->request_buffer)[0] & 0x1F) == TYPE_DISK) &&
-	!islogical) {
-      SCpnt->result = 0xF0;
-    }
-
-    /* Convert result to error */
-    switch (SCpnt->result) {
-    case 0x00:
-    case 0x02:
-      SCpnt->result |= (DID_OK << 16);
-      break;
-    case 0x8:
-      SCpnt->result |= (DID_BUS_BUSY << 16);
-      break;
-    default:
-      SCpnt->result |= (DID_BAD_TARGET << 16);
-      break;
-    }
-
     /* Callback */
     callDone (SCpnt);
   }
 }
 
-/* Add command to the list of completed requests */
-static void mega_cmd_done (mega_host_config * megaCfg, mega_scb * pScb, int status)
+/*
+  Runs through the list of pending requests
+  Assumes that mega_lock spin_lock has been acquired.
+*/
+static void mega_runpendq(mega_host_config *megaCfg)
 {
-  pScb->SCpnt->result = status;
-  ENQUEUE (pScb->SCpnt, Scsi_Cmnd, qCompleted, host_scribble);
-  freeSCB (pScb);
-}
-
-/*----------------------------------------------------
- * Process pending queue list
- *
- * Run as a scheduled task 
- *----------------------------------------------------*/
-static void mega_runque (void *dummy)
-{
-  mega_host_config *megaCfg;
   mega_scb *pScb;
-  long flags;
 
-  /* Take care of any completed requests */
-  mega_rundoneq ();
-
-  DEQUEUE (pScb, mega_scb, qPending, next);
-
-  if (pScb) {
-    if (pScb->SCpnt) {
-        TRACE(("NULL SCpnt for idx %d!\n",pScb->idx));
-    }
-    megaCfg = (mega_host_config *) pScb->SCpnt->host->hostdata;
-
-    if (megaCfg->mbox->busy || megaCfg->flag & (IN_ISR | PENDING)) {
-      TRACE (("%.08lx %.02x <%d.%d.%d> busy%d isr%d pending%d\n",
-	      pScb->SCpnt->serial_number,
-	      pScb->SCpnt->cmnd[0],
-	      pScb->SCpnt->channel,
-	      pScb->SCpnt->target,
-	      pScb->SCpnt->lun,
-	      megaCfg->mbox->busy,
-	      (megaCfg->flag & IN_ISR) ? 1 : 0,
-	      (megaCfg->flag & PENDING) ? 1 : 0));
-    }
-
-    if (MegaIssueCmd (megaCfg, pScb->mboxData, pScb, 1)) {
-      /* We're BUSY... come back later */
-      spin_lock_irqsave (&mega_lock, flags);
-      pScb->next = qPending;
-      qPending = pScb;
-      spin_unlock_irqrestore (&mega_lock, flags);
-
-      if (!(megaCfg->flag & PENDING)) {
-	/* If PENDING, irq will schedule task */
-	queue_task (&runq, &tq_scheduler);
-      }
+  /* Issue any pending commands to the card */
+  for(pScb=megaCfg->qPending; pScb; pScb=pScb->next) {
+    if (pScb->state == SCB_ACTIVE) {
+      megaIssueCmd(megaCfg, pScb->mboxData, pScb, 1);
     }
   }
+}
+
+/* Add command to the list of completed requests */
+static void mega_cmd_done (mega_host_config * megaCfg, mega_scb * pScb, 
+			   int status)
+{
+  int islogical;
+  Scsi_Cmnd *SCpnt;
+
+  if (pScb == NULL) {
+	TRACE(("NULL pScb in mega_cmd_done!"));
+	printk("NULL pScb in mega_cmd_done!");
+  }
+
+  SCpnt = pScb->SCpnt;
+  freeSCB(megaCfg, pScb);
+
+  if (SCpnt == NULL) {
+	TRACE(("NULL SCpnt in mega_cmd_done!"));
+	TRACE(("pScb->idx = ",pScb->idx));
+	TRACE(("pScb->state = ",pScb->state));
+	TRACE(("pScb->state = ",pScb->state));
+	printk("Problem...!\n");
+	while(1);
+  }
+
+  islogical = (SCpnt->channel == megaCfg->host->max_channel &&
+	       SCpnt->target == 0);
+  if (SCpnt->cmnd[0] == INQUIRY &&
+      ((((u_char *) SCpnt->request_buffer)[0] & 0x1F) == TYPE_DISK) &&
+      !islogical) {
+    status = 0xF0;
+  }
+ 
+  SCpnt->result = 0;  /* clear result; otherwise, success returns corrupt
+                         value */
+
+  /* Convert MegaRAID status to Linux error code */
+  switch (status) {
+  case 0x00: /* SUCCESS */
+  case 0x02: /* ERROR_ABORTED */
+    SCpnt->result |= (DID_OK << 16);
+    break;
+  case 0x8:  /* ERR_DEST_DRIVE_FAILED */
+    SCpnt->result |= (DID_BUS_BUSY << 16);
+    break;
+  default:
+    SCpnt->result |= (DID_BAD_TARGET << 16);
+    break;
+  }
+
+  /* Add Scsi_Command to end of completed queue */
+  ENQUEUE_NL(SCpnt, Scsi_Cmnd, qCompleted, host_scribble);
 }
 
 /*-------------------------------------------------------------------
@@ -500,13 +538,19 @@ static void mega_runque (void *dummy)
  * If NULL is returned, the scsi_done function MUST have been called
  *
  *-------------------------------------------------------------------*/
-static mega_scb * mega_build_cmd (mega_host_config * megaCfg, Scsi_Cmnd * SCpnt)
+static mega_scb * mega_build_cmd (mega_host_config * megaCfg, 
+				  Scsi_Cmnd * SCpnt)
 {
   mega_scb *pScb;
   mega_mailbox *mbox;
   mega_passthru *pthru;
   long seg;
   char islogical;
+
+  if (SCpnt == NULL) {
+	printk("NULL SCpnt in mega_build_cmd!\n");
+	while(1);
+  }
 
   if (SCpnt->cmnd[0] & 0x80)	/* ioctl from megamgr */
     return mega_ioctl (megaCfg, SCpnt);
@@ -517,6 +561,12 @@ static mega_scb * mega_build_cmd (mega_host_config * megaCfg, Scsi_Cmnd * SCpnt)
     SCpnt->result = (DID_BAD_TARGET << 16);
     callDone (SCpnt);
     return NULL;
+  }
+
+  if (!islogical && SCpnt->target == skip_id) {
+	SCpnt->result = (DID_BAD_TARGET << 16);
+	callDone (SCpnt);
+	return NULL;
   }
 
   /*-----------------------------------------------------
@@ -738,6 +788,21 @@ static mega_scb * mega_ioctl (mega_host_config * megaCfg, Scsi_Cmnd * SCpnt)
   return (pScb);
 }
 
+#if DEBUG
+static void showMbox(mega_scb *pScb)
+{
+  mega_mailbox *mbox;
+
+  if (pScb == NULL) return;
+
+  mbox = (mega_mailbox *)pScb->mboxData;
+  printk("%u cmd:%x id:%x #scts:%x lba:%x addr:%x logdrv:%x #sg:%x\n",
+	 pScb->SCpnt->pid, 
+	 mbox->cmd, mbox->cmdid, mbox->numsectors,
+	 mbox->lba, mbox->xferaddr, mbox->logdrv,
+	 mbox->numsgelements);
+}
+#endif
 
 /*--------------------------------------------------------------------
  * Interrupt service routine
@@ -745,7 +810,7 @@ static mega_scb * mega_ioctl (mega_host_config * megaCfg, Scsi_Cmnd * SCpnt)
 static void megaraid_isr (int irq, void *devp, struct pt_regs *regs)
 {
   mega_host_config    *megaCfg;
-  u_char byte, idx, sIdx;
+  u_char byte, idx, sIdx, tmpBox[MAILBOX_SIZE];
   u_long dword;
   mega_mailbox *mbox;
   mega_scb *pScb;
@@ -753,13 +818,13 @@ static void megaraid_isr (int irq, void *devp, struct pt_regs *regs)
   int qCnt, qStatus;
 
   megaCfg = (mega_host_config *) devp;
-  mbox = (mega_mailbox *) megaCfg->mbox;
-
-  if (megaCfg->host->irq == irq) {
+  mbox = (mega_mailbox *)tmpBox;
 
 #if LINUX_VERSION_CODE >= 0x20100
-    spin_lock_irqsave (&io_request_lock, flags);
+  spin_lock_irqsave (&io_request_lock, flags);
 #endif
+
+  while (megaCfg->host->irq == irq) {
 
     spin_lock_irqsave (&mega_lock, flags);
 
@@ -769,6 +834,11 @@ static void megaraid_isr (int irq, void *devp, struct pt_regs *regs)
 
     megaCfg->flag |= IN_ISR;
 
+    if (mega_busyWaitMbox(megaCfg)) {
+	printk(KERN_WARNING "Error: mailbox busy in isr!\n");
+    }
+
+
     /* Check if a valid interrupt is pending */
     if (megaCfg->flag & BOARD_QUARTZ) {
       dword = RDOUTDOOR (megaCfg);
@@ -776,12 +846,16 @@ static void megaraid_isr (int irq, void *devp, struct pt_regs *regs)
 	/* Spurious interrupt */
 	megaCfg->flag &= ~IN_ISR;
 	spin_unlock_irqrestore (&mega_lock, flags);
-#if LINUX_VERSION_CODE >= 0x20100
-        spin_unlock_irqrestore (&io_request_lock, flags);
-#endif
-	return;
+	break;
       }
       WROUTDOOR (megaCfg, dword);
+
+      /* Copy to temp location */
+      memcpy(tmpBox, (mega_mailbox *)megaCfg->mbox, MAILBOX_SIZE);
+
+      /* Acknowledge interrupt */
+      WRINDOOR (megaCfg, virt_to_bus (megaCfg->mbox) | 0x2);
+      while (RDINDOOR (megaCfg) & 0x02);
     }
     else {
       byte = READ_PORT (megaCfg->host->io_port, INTR_PORT);
@@ -789,71 +863,74 @@ static void megaraid_isr (int irq, void *devp, struct pt_regs *regs)
 	/* Spurious interrupt */
 	megaCfg->flag &= ~IN_ISR;
 	spin_unlock_irqrestore (&mega_lock, flags);
-#if LINUX_VERSION_CODE >= 0x20100
-        spin_unlock_irqrestore (&io_request_lock, flags);
-#endif
-	return;
+	break;
       }
       WRITE_PORT (megaCfg->host->io_port, INTR_PORT, byte);
+
+      /* Copy to temp location */
+      memcpy(tmpBox, (mega_mailbox *)megaCfg->mbox, MAILBOX_SIZE);
+
+      /* Acknowledge interrupt */
+      CLEAR_INTR (megaCfg->host->io_port);
     }
 
     qCnt = mbox->numstatus;
     qStatus = mbox->status;
 
-    if (qCnt > 1) {
-      TRACE (("ISR: Received %d status\n", qCnt))
-	printk (KERN_DEBUG "Got numstatus = %d\n", qCnt);
-    }
-
     for (idx = 0; idx < qCnt; idx++) {
       sIdx = mbox->completed[idx];
       if (sIdx > 0) {
 	pScb = &megaCfg->scbList[sIdx - 1];
-        /* FVF: let's try to avoid un/locking for no good reason */
-        pScb->SCpnt->result = qStatus;
-        ENQUEUE_NL (pScb->SCpnt, Scsi_Cmnd, qCompleted, host_scribble);
-        freeSCB (pScb);
+
+	/* ASSERT(pScb->state == SCB_ISSUED); */
+
+#if DEBUG
+	if (((jiffies) - pScb->isrcount) > maxCmdTime) {
+	  maxCmdTime = (jiffies) - pScb->isrcount;
+	  printk("cmd time = %u\n", maxCmdTime);
+	}
+#endif
+
+	if (pScb->state == SCB_ABORTED) {
+	  printk("Received aborted SCB! %u\n", (int)((jiffies)-pScb->isrcount));
+	}
+
+	/* Mark command as completed */
+	mega_cmd_done(megaCfg, pScb, qStatus);
       }
+
     }
-    if (megaCfg->flag & BOARD_QUARTZ) {
-      WRINDOOR (megaCfg, virt_to_bus (megaCfg->mbox) | 0x2);
-      while (RDINDOOR (megaCfg) & 0x02);
-    }
-    else {
-      CLEAR_INTR (megaCfg->host->io_port);
-    }
+    spin_unlock_irqrestore (&mega_lock, flags);
 
     megaCfg->flag &= ~IN_ISR;
-    megaCfg->flag &= ~PENDING;
 
-    spin_unlock_irqrestore (&mega_lock, flags);
-    mega_runque (NULL);
+    mega_rundoneq();
+
+    /* Loop through any pending requests */
+    spin_lock_irqsave(&mega_lock, flags);
+    mega_runpendq(megaCfg);
+    spin_unlock_irqrestore(&mega_lock,flags);
+  }
 
 #if LINUX_VERSION_CODE >= 0x20100
-    spin_unlock_irqrestore (&io_request_lock, flags);
+  spin_unlock_irqrestore (&io_request_lock, flags);
 #endif
-
-#if 0
-    /* Queue as a delayed ISR routine */
-    queue_task_irq_off (&runq, &tq_immediate);
-    mark_bh (IMMEDIATE_BH);
-#endif
-
-  }
 }
 
 /*==================================================*/
 /* Wait until the controller's mailbox is available */
 /*==================================================*/
-static int busyWaitMbox (mega_host_config * megaCfg)
+static int mega_busyWaitMbox (mega_host_config * megaCfg)
 {
   mega_mailbox *mbox = (mega_mailbox *) megaCfg->mbox;
   long counter;
 
   for (counter = 0; counter < 10000; counter++) {
-    udelay (100);
-    if (!mbox->busy)
+    if (!mbox->busy) {
       return 0;
+    }
+    udelay (100);
+    barrier();
   }
   return -1;			/* give up after 1 second */
 }
@@ -868,47 +945,55 @@ static int busyWaitMbox (mega_host_config * megaCfg)
  *   int intr         - if 1, interrupt, 0 is blocking
  *=====================================================
  */
-static int MegaIssueCmd (mega_host_config * megaCfg,
+static int megaIssueCmd (mega_host_config * megaCfg,
 	      u_char * mboxData,
 	      mega_scb * pScb,
 	      int intr)
 {
   mega_mailbox *mbox = (mega_mailbox *) megaCfg->mbox;
-  long flags;
   u_char byte;
   u_long cmdDone;
-
-  mboxData[0x1] = (pScb ? pScb->idx + 1 : 0x00);	/* Set cmdid */
+  Scsi_Cmnd *SCpnt;
+  
+  mboxData[0x1] = (pScb ? pScb->idx + 1: 0x0);   /* Set cmdid */
   mboxData[0xF] = 1;		/* Set busy */
 
-  spin_lock_irqsave(&mega_lock,flags);
-
-#ifndef CONFIG_MEGARAID_MULTI_IO
-  if (megaCfg->flag & PENDING) {
-     spin_unlock_irqrestore(&mega_lock,flags);
-     return -1;
+#if 0
+  if (intr && mbox->busy) {
+    return 0;
   }
 #endif
 
   /* Wait until mailbox is free */
-  if (busyWaitMbox (megaCfg)) {
-    if (pScb) {
-      TRACE (("Mailbox busy %.08lx <%d.%d.%d>\n", pScb->SCpnt->serial_number,
-	      pScb->SCpnt->channel, pScb->SCpnt->target, pScb->SCpnt->lun));
-    } else {
-	TRACE(("pScb NULL in MegaIssueCmd!\n"));
-    }
-    spin_unlock_irqrestore(&mega_lock,flags);
-    return -1;
-  }
+  while (mega_busyWaitMbox (megaCfg)) {
+    printk("Blocked mailbox!!\n");
+    udelay(1000);
 
+#if DEBUG
+    showMbox(pLastScb);
+#endif
+    
+    /* Abort command */
+    if (pScb == NULL) {
+	printk("NULL pScb in megaIssue\n");
+	TRACE(("NULL pScb in megaIssue\n"));
+    }
+    SCpnt = pScb->SCpnt;
+    freeSCB(megaCfg, pScb);
+
+    SCpnt->result = (DID_ABORT << 16);
+    callDone(SCpnt);
+    return 0;
+  }
+  pLastScb = pScb;
+
+  
   /* Copy mailbox data into host structure */
-  memset (mbox, 0, 16);
   memcpy (mbox, mboxData, 16);
 
   /* Kick IO */
-  megaCfg->flag |= PENDING;
   if (intr) {
+
     /* Issue interrupt (non-blocking) command */
     if (megaCfg->flag & BOARD_QUARTZ) {
       mbox->mraid_poll = 0;
@@ -919,12 +1004,11 @@ static int MegaIssueCmd (mega_host_config * megaCfg,
       ENABLE_INTR (megaCfg->host->io_port);
       ISSUE_COMMAND (megaCfg->host->io_port);
     }
-    spin_unlock_irqrestore(&mega_lock,flags);
+    pScb->state = SCB_ISSUED;
   }
   else {			/* Issue non-ISR (blocking) command */
-
+    disable_irq(megaCfg->host->irq);
     if (megaCfg->flag & BOARD_QUARTZ) {
-
       mbox->mraid_poll = 0;
       mbox->mraid_ack = 0;
       WRINDOOR (megaCfg, virt_to_bus (megaCfg->mbox) | 0x1);
@@ -932,7 +1016,6 @@ static int MegaIssueCmd (mega_host_config * megaCfg,
       while ((cmdDone = RDOUTDOOR (megaCfg)) != 0x10001234);
       WROUTDOOR (megaCfg, cmdDone);
 
-      spin_unlock_irqrestore(&mega_lock,flags);
       if (pScb) {
 	mega_cmd_done (megaCfg, pScb, mbox->status);
 	mega_rundoneq ();
@@ -940,8 +1023,6 @@ static int MegaIssueCmd (mega_host_config * megaCfg,
 
       WRINDOOR (megaCfg, virt_to_bus (megaCfg->mbox) | 0x2);
       while (RDINDOOR (megaCfg) & 0x2);
-
-      megaCfg->flag &= ~PENDING;
 
     }
     else {
@@ -954,8 +1035,6 @@ static int MegaIssueCmd (mega_host_config * megaCfg,
 
       ENABLE_INTR (megaCfg->host->io_port);
       CLEAR_INTR (megaCfg->host->io_port);
-      megaCfg->flag &= ~PENDING;
-      spin_unlock_irqrestore(&mega_lock,flags);
 
       if (pScb) {
 	mega_cmd_done (megaCfg, pScb, mbox->status);
@@ -966,6 +1045,11 @@ static int MegaIssueCmd (mega_host_config * megaCfg,
       }
 
     }
+    enable_irq(megaCfg->host->irq);
+  }
+  while (mega_busyWaitMbox (megaCfg)) {
+    printk("Blocked mailbox on exit!\n");
+    udelay(1000);
   }
 
   return 0;
@@ -1058,6 +1142,7 @@ static int mega_i_query_adapter (mega_host_config * megaCfg)
   u_long paddr;
 
   spin_lock_init (&mega_lock);
+
   /* Initialize adapter inquiry */
   paddr = virt_to_bus (megaCfg->mega_buffer);
   mbox = (mega_mailbox *) mboxData;
@@ -1070,7 +1155,7 @@ static int mega_i_query_adapter (mega_host_config * megaCfg)
   mbox->xferaddr = paddr;
 
   /* Issue a blocking command to the card */
-  MegaIssueCmd (megaCfg, mboxData, NULL, 0);
+  megaIssueCmd (megaCfg, mboxData, NULL, 0);
 
   /* Initialize host/local structures with Adapter info */
   adapterInfo = (mega_RAIDINQ *) megaCfg->mega_buffer;
@@ -1136,7 +1221,7 @@ static int mega_i_query_adapter (mega_host_config * megaCfg)
  * Returns data to be displayed in /proc/scsi/megaraid/X
  *----------------------------------------------------------*/
 int megaraid_proc_info (char *buffer, char **start, off_t offset,
-		    int length, int inode, int inout)
+		    int length, int host_no, int inout)
 {
   *start = buffer;
   return 0;
@@ -1150,35 +1235,33 @@ int findCard (Scsi_Host_Template * pHostTmpl,
   struct Scsi_Host *host;
   u_char pciBus, pciDevFun, megaIrq;
   u_long megaBase;
-  u_short pciIdx = 0;
+  u_short jdx,pciIdx = 0;
   u_short numFound = 0;
 
 #if LINUX_VERSION_CODE < 0x20100
   while (!pcibios_find_device (pciVendor, pciDev, pciIdx, &pciBus, &pciDevFun)) {
+
 #if 0
+  } /* keep auto-indenters happy */
+#endif
+#else
+  
+  struct pci_dev *pdev = pci_devices;
+  
+  while ((pdev = pci_find_device (pciVendor, pciDev, pdev))) {
+    pciBus = pdev->bus->number;
+    pciDevFun = pdev->devfn;
+#endif
     if (flag & BOARD_QUARTZ) {
-      u_int magic;
-      pcibios_read_config_dword (pciBus, pciDevFun,
-				 PCI_CONF_AMISIG,
-				 &magic);
+      u_short magic;
+      pcibios_read_config_word (pciBus, pciDevFun,
+				PCI_CONF_AMISIG,
+				&magic);
       if (magic != AMI_SIGNATURE) {
         pciIdx++;
 	continue;		/* not an AMI board */
       }
     }
-#endif
-
-#if 0
-    } /* keep auto-indenters happy */
-#endif
-
-#else
-  struct pci_dev *pdev = pci_devices;
-
-  while ((pdev = pci_find_device (pciVendor, pciDev, pdev))) {
-    pciBus = pdev->bus->number;
-    pciDevFun = pdev->devfn;
-#endif
     printk (KERN_INFO "megaraid: found 0x%4.04x:0x%4.04x:idx %d:bus %d:slot %d:fun %d\n",
 	    pciVendor,
 	    pciDev,
@@ -1196,7 +1279,7 @@ int findCard (Scsi_Host_Template * pHostTmpl,
 			      &megaIrq);
 #else
     megaBase = pdev->base_address[0];
-    megaIrq = pdev->irq;
+    megaIrq  = pdev->irq;
 #endif
     pciIdx++;
 
@@ -1214,10 +1297,12 @@ int findCard (Scsi_Host_Template * pHostTmpl,
     megaCfg = (mega_host_config *) host->hostdata;
     memset (megaCfg, 0, sizeof (mega_host_config));
 
-    printk (KERN_INFO " scsi%d: Found a MegaRAID controller at 0x%x, IRQ: %d" CRLFSTR,
+    printk (" scsi%d: Found a MegaRAID controller at 0x%x, IRQ: %d" CRLFSTR,
 	    host->host_no, (u_int) megaBase, megaIrq);
 
     /* Copy resource info into structure */
+    megaCfg->qPending = NULL;
+    megaCfg->qFree    = NULL;
     megaCfg->flag = flag;
     megaCfg->host = host;
     megaCfg->base = megaBase;
@@ -1248,11 +1333,16 @@ int findCard (Scsi_Host_Template * pHostTmpl,
 
     mega_register_mailbox (megaCfg, virt_to_bus ((void *) &megaCfg->mailbox));
     mega_i_query_adapter (megaCfg);
+    
+    for(jdx=0; jdx<MAX_LOGICAL_DRIVES; jdx++) {
+      megaCfg->nReads[jdx] = 0;
+      megaCfg->nWrites[jdx] = 0;
+    }
 
     /* Initialize SCBs */
     if (initSCB (megaCfg)) {
-	scsi_unregister (host);
-	continue;
+      scsi_unregister (host);
+      continue;
     }
 
     numFound++;
@@ -1275,6 +1365,16 @@ int megaraid_detect (Scsi_Host_Template * pHostTmpl)
     return 0;
   }
 #endif
+  skip_id = -1;
+  if (megaraid && !strncmp(megaraid,"skip",strlen("skip"))) {
+      if (megaraid[4] != '\0') {
+          skip_id = megaraid[4] - '0';
+          if (megaraid[5] != '\0') {
+              skip_id = (skip_id * 10) + (megaraid[5] - '0');
+          }
+      }
+      skip_id = (skip_id > 15) ? -1 : skip_id;
+  }
 
   count += findCard (pHostTmpl, 0x101E, 0x9010, 0);
   count += findCard (pHostTmpl, 0x101E, 0x9060, 0);
@@ -1299,10 +1399,11 @@ int megaraid_release (struct Scsi_Host *pSHost)
   memset (mbox, 0, 16);
   mboxData[0] = 0xA;
 
-  /* Issue a blocking (interrupts disabled) command to the card */
-  MegaIssueCmd (megaCfg, mboxData, NULL, 0);
+  free_irq (megaCfg->host->irq, megaCfg);/* Must be freed first, otherwise
+					   extra interrupt is generated */
 
-  schedule ();
+  /* Issue a blocking (interrupts disabled) command to the card */
+  megaIssueCmd (megaCfg, mboxData, NULL, 0);
 
   /* Free our resources */
   if (megaCfg->flag & BOARD_QUARTZ) {
@@ -1311,9 +1412,7 @@ int megaraid_release (struct Scsi_Host *pSHost)
   else {
     release_region (megaCfg->host->io_port, 16);
   }
-  free_irq (megaCfg->host->irq, megaCfg);	/* Must be freed first, otherwise
 
-						   extra interrupt is generated */
   freeSgList(megaCfg);
   scsi_unregister (pSHost);
 
@@ -1369,6 +1468,9 @@ int megaraid_queue (Scsi_Cmnd * SCpnt, void (*pktComp) (Scsi_Cmnd *))
 {
   mega_host_config *megaCfg;
   mega_scb *pScb;
+  long flags;
+
+  spin_lock_irqsave(&mega_lock,flags);
 
   megaCfg = (mega_host_config *) SCpnt->host->hostdata;
 
@@ -1381,14 +1483,37 @@ int megaraid_queue (Scsi_Cmnd * SCpnt, void (*pktComp) (Scsi_Cmnd *))
 
   SCpnt->scsi_done = pktComp;
 
+  /* If driver in abort or reset.. cancel this command */
+  if (megaCfg->flag & IN_ABORT) {
+    SCpnt->result = (DID_ABORT << 16);
+    ENQUEUE_NL(SCpnt, Scsi_Cmnd, qCompleted, host_scribble);
+
+    spin_unlock_irqrestore(&mega_lock,flags);
+    return 0;
+  }
+  else if (megaCfg->flag & IN_RESET) {
+    SCpnt->result = (DID_RESET << 16);
+    ENQUEUE_NL(SCpnt, Scsi_Cmnd, qCompleted, host_scribble);
+
+    spin_unlock_irqrestore(&mega_lock,flags);
+    return 0;
+  }
+
   /* Allocate and build a SCB request */
   if ((pScb = mega_build_cmd (megaCfg, SCpnt)) != NULL) {
     /* Add SCB to the head of the pending queue */
-    ENQUEUE (pScb, mega_scb, qPending, next);
+    ENQUEUE_NL (pScb, mega_scb, megaCfg->qPending, next);
 
-    /* Issue the command to the card */
-    mega_runque (NULL);
+    /* Issue any pending command to the card if not in ISR */
+    if (!(megaCfg->flag & IN_ISR)) {
+      mega_runpendq(megaCfg);
+    }
+    else {
+      printk("IRQ pend...\n");
+    }
   }
+
+  spin_unlock_irqrestore(&mega_lock,flags);
 
   return 0;
 }
@@ -1398,31 +1523,16 @@ int megaraid_queue (Scsi_Cmnd * SCpnt, void (*pktComp) (Scsi_Cmnd *))
  *----------------------------------------------------------------------*/
 volatile static int internal_done_flag = 0;
 volatile static int internal_done_errcode = 0;
+static struct wait_queue *internal_wait = NULL;
 
 static void internal_done (Scsi_Cmnd * SCpnt)
 {
   internal_done_errcode = SCpnt->result;
   internal_done_flag++;
+  wake_up(&internal_wait);
 }
 
-/*
- *      This seems dangerous in an SMP environment because
- *      while spinning on internal_done_flag in 2.0.x SMP
- *      no IRQ's will be taken, including those that might
- *      be needed to clear this.
- *
- *      I think this should be using a wait queue ?
- *                              -- AC
- */      
-
-/*
- *      I'll probably fix this in the next version, but
- *      megaraid_command() will never get called since can_queue is set,
- *      except maybe in a *really* old kernel in which case it's very
- *      unlikely they'd be using SMP anyway.  Really this function is
- *      just here for completeness.
- *                              - JLJ
- */
+/* shouldn't be used, but included for completeness */
 
 int megaraid_command (Scsi_Cmnd * SCpnt)
 {
@@ -1431,8 +1541,9 @@ int megaraid_command (Scsi_Cmnd * SCpnt)
   /* Queue command, and wait until it has completed */
   megaraid_queue (SCpnt, internal_done);
 
-  while (!internal_done_flag)
-    barrier ();
+  while (!internal_done_flag) {
+	interruptible_sleep_on(&internal_wait);
+  }
 
   return internal_done_errcode;
 }
@@ -1443,31 +1554,77 @@ int megaraid_command (Scsi_Cmnd * SCpnt)
 int megaraid_abort (Scsi_Cmnd * SCpnt)
 {
   mega_host_config *megaCfg;
-  int idx;
-  long flags;
+  int   rc, idx;
+  long  flags;
+  mega_scb *pScb;
+
+  rc = SCSI_ABORT_SUCCESS;
 
   spin_lock_irqsave (&mega_lock, flags);
 
   megaCfg = (mega_host_config *) SCpnt->host->hostdata;
 
+  megaCfg->flag |= IN_ABORT;
+
+  for(pScb=megaCfg->qPending; pScb; pScb=pScb->next) {
+    if (pScb->SCpnt == SCpnt) {
+      /* Found an aborting command */
+#if DEBUG
+      showMbox(pScb);
+#endif
+
+      printk("Abort: %d %u\n", 
+	     SCpnt->timeout_per_command,
+	     (uint)((jiffies) - pScb->isrcount));
+
+      switch(pScb->state) {
+      case SCB_ABORTED: /* Already aborted */
+	rc = SCSI_ABORT_SNOOZE;
+	break;
+      case SCB_ISSUED: /* Waiting on ISR result */
+	rc = SCSI_ABORT_PENDING;
+	pScb->state = SCB_ABORTED;
+	break;
+      }
+    }
+  }
+
+#if 0
   TRACE (("ABORT!!! %.08lx %.02x <%d.%d.%d>\n",
-	SCpnt->serial_number, SCpnt->cmnd[0], SCpnt->channel, SCpnt->target,
+	  SCpnt->serial_number, SCpnt->cmnd[0], SCpnt->channel, SCpnt->target,
 	  SCpnt->lun));
+  for(pScb=megaCfg->qPending; pScb; pScb=pScb->next) {
+    if (pScb->SCpnt == SCpnt) { 
+      ser_printk("** %d<%x>  %c\n", pScb->SCpnt->pid, pScb->idx+1,
+		 pScb->state == SCB_ACTIVE ? 'A' : 'I');
+#if DEBUG
+      showMbox(pScb);
+#endif
+    }
+  }
+#endif
+
   /*
    * Walk list of SCBs for any that are still outstanding
    */
   for (idx = 0; idx < megaCfg->max_cmds; idx++) {
-    if (megaCfg->scbList[idx].idx >= 0) {
+    if (megaCfg->scbList[idx].state != SCB_FREE) {
       if (megaCfg->scbList[idx].SCpnt == SCpnt) {
-	freeSCB (&megaCfg->scbList[idx]);
+	freeSCB (megaCfg, &megaCfg->scbList[idx]);
 
-	SCpnt->result = (DID_RESET << 16) | (SUGGEST_RETRY << 24);
-	callDone (SCpnt);
+	SCpnt->result = (DID_ABORT << 16) | (SUGGEST_RETRY << 24);
+	ENQUEUE_NL(SCpnt, Scsi_Cmnd, qCompleted, host_scribble);
       }
     }
   }
+  
+  megaCfg->flag &= ~IN_ABORT;
+
   spin_unlock_irqrestore (&mega_lock, flags);
-  return SCSI_ABORT_SNOOZE;
+
+  mega_rundoneq();
+
+  return rc;
 }
 
 /*---------------------------------------------------------------------
@@ -1483,6 +1640,8 @@ int megaraid_reset (Scsi_Cmnd * SCpnt, unsigned int rstflags)
 
   megaCfg = (mega_host_config *) SCpnt->host->hostdata;
 
+  megaCfg->flag |= IN_RESET;
+
   TRACE (("RESET: %.08lx %.02x <%d.%d.%d>\n",
 	SCpnt->serial_number, SCpnt->cmnd[0], SCpnt->channel, SCpnt->target,
 	  SCpnt->lun));
@@ -1491,14 +1650,21 @@ int megaraid_reset (Scsi_Cmnd * SCpnt, unsigned int rstflags)
    * Walk list of SCBs for any that are still outstanding
    */
   for (idx = 0; idx < megaCfg->max_cmds; idx++) {
-    if (megaCfg->scbList[idx].idx >= 0) {
+    if (megaCfg->scbList[idx].state != SCB_FREE) {
       SCpnt = megaCfg->scbList[idx].SCpnt;
-      freeSCB (&megaCfg->scbList[idx]);
-      SCpnt->result = (DID_RESET << 16) | (SUGGEST_RETRY << 24);
-      callDone (SCpnt);
+      if (SCpnt != NULL) {
+	freeSCB (megaCfg, &megaCfg->scbList[idx]);
+	SCpnt->result = (DID_RESET << 16) | (SUGGEST_RETRY << 24);
+	ENQUEUE_NL(SCpnt, Scsi_Cmnd, qCompleted, host_scribble);
+      }
     }
   }
+
+  megaCfg->flag &= ~IN_RESET;
+
   spin_unlock_irqrestore (&mega_lock, flags);
+
+  mega_rundoneq();
   return SCSI_RESET_PUNT;
 }
 

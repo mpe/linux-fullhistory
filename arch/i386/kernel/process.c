@@ -111,6 +111,8 @@ static int cpu_idle(void *unused)
 	/* endless idle loop with no priority at all */
 	current->priority = 0;
 	current->counter = -100;
+	init_idle();
+
 	for (;;) {
 		if (work)
 			start_idle = jiffies;
@@ -139,6 +141,8 @@ int cpu_idle(void *unused)
 	/* endless idle loop with no priority at all */
 	current->priority = 0;
 	current->counter = -100;
+	init_idle();
+
 	while(1) {
 		if (current_cpu_data.hlt_works_ok && !hlt_counter &&
 				 !current->need_resched)

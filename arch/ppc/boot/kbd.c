@@ -127,6 +127,11 @@ static void kbdreset(void)
 	unsigned char c;
 	int i;
 
+	/* flush input queue */
+	while ((inb(KBSTATP) & KBINRDY))
+	{
+		(void)inb(KBDATAP);
+	}
 	/* Send self-test */
 	while (inb(KBSTATP) & KBOUTRDY) ;
 	outb(KBSTATP,0xAA);

@@ -27,6 +27,7 @@ extern unsigned long smp_proc_in_lock[NR_CPUS];
 
 extern void smp_message_pass(int target, int msg, unsigned long data, int wait);
 extern void smp_store_cpu_info(int id);
+extern void smp_message_recv(void);
 
 #define NO_PROC_ID		0xFF            /* No processor magic marker */
 #define PROC_CHANGE_PENALTY	20

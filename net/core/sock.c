@@ -944,7 +944,7 @@ int sock_no_fcntl(struct socket *sock, unsigned int cmd, unsigned long arg)
 			 */
 			if (current->pgrp != -arg &&
 				current->pid != arg &&
-				!capable(CAP_NET_ADMIN)) return(-EPERM);
+				!capable(CAP_KILL)) return(-EPERM);
 			sk->proc = arg;
 			return(0);
 		case F_GETOWN:

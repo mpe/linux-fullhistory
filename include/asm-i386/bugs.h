@@ -19,12 +19,18 @@
 
 #include <linux/config.h>
 #include <asm/processor.h>
+#include <asm/msr.h>
 
 #define CONFIG_BUGi386
 
 __initfunc(static void no_halt(char *s, int *ints))
 {
 	boot_cpu_data.hlt_works_ok = 0;
+}
+
+__initfunc(static void mca_pentium(char *s, int *ints))
+{
+	mca_pentium_flag = 1;
 }
 
 __initfunc(static void no_387(char *s, int *ints))
@@ -59,6 +65,31 @@ __initfunc(static void check_fpu(void))
 		printk(KERN_EMERG "Giving up.\n");
 		for (;;) ;
 #endif
+		return;
+	}
+	if (mca_pentium_flag) {
+		/* The IBM Model 95 machines with pentiums lock up on
+		 * fpu test, so we avoid it. All pentiums have inbuilt
+		 * FPU and thus should use exception 16. We still do
+		 * the FDIV test, although I doubt there where ever any
+		 * MCA boxes built with non-FDIV-bug cpus.
+		 */
+		__asm__("fninit\n\t"
+			"fldl %1\n\t"
+			"fdivl %2\n\t"
+			"fmull %2\n\t"
+			"fldl %1\n\t"
+			"fsubp %%st,%%st(1)\n\t"
+			"fistpl %0\n\t"
+			"fwait\n\t"
+			"fninit"
+			: "=m" (*&boot_cpu_data.fdiv_bug)
+			: "m" (*&x), "m" (*&y));
+		printk("mca-pentium specified, avoiding FPU coupling test... ");
+		if (!boot_cpu_data.fdiv_bug)
+			printk("??? No FDIV bug? Lucky you...\n");
+		else
+			printk("detected FDIV bug though.\n");
 		return;
 	}
 	/*
@@ -173,10 +204,10 @@ __initfunc(static void check_amd_k6(void))
 
 		n = K6_BUG_LOOP;
 		f_vide = vide;
-		__asm__ ("rdtsc" : "=a" (d));
+		rdtscl(d);
 		while (n--) 
 			f_vide();
-		__asm__ ("rdtsc" : "=a" (d2));
+		rdtscl(d2);
 		d = d2-d;
 
 		/* Knock these two lines out if it debugs out ok */

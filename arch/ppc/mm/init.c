@@ -1,5 +1,5 @@
- /*
- *  $Id: init.c,v 1.150 1999/03/10 08:16:33 cort Exp $
+/*
+ *  $Id: init.c,v 1.163 1999/04/09 06:37:13 cort Exp $
  *
  *  PowerPC version 
  *    Copyright (C) 1995-1996 Gary Thomas (gdt@linuxppc.org)
@@ -132,6 +132,8 @@ struct batrange {		/* stores address ranges mapped by BATs */
 	unsigned long limit;
 	unsigned long phys;
 } bat_addrs[4];
+unsigned long inline v_mapped_by_bats(unsigned long);
+unsigned long inline p_mapped_by_bats(unsigned long);
 #endif /* CONFIG_8xx */
 
 /*
@@ -143,6 +145,7 @@ int __map_without_bats = 0;
 
 /* optimization for 603 to load the tlb directly from the linux table -- Cort */
 #define NO_RELOAD_HTAB 1 /* change in kernel/head.S too! */
+
 
 void __bad_pte(pmd_t *pmd)
 {
@@ -332,15 +335,42 @@ __ioremap(unsigned long addr, unsigned long size, unsigned long flags)
 	 * virt == phys; for addresses below this we use
 	 * space going down from ioremap_base (ioremap_bot
 	 * records where we're up to).
-	 *
-	 * We should also look out for a frame buffer and
-	 * map it with a free BAT register, if there is one.
 	 */
 	p = addr & PAGE_MASK;
 	size = PAGE_ALIGN(addr + size) - p;
+
+	/*
+	 * Don't allow anybody to remap normal RAM that we're using.
+	 * mem_init() sets high_memory so only do the check after that.
+	 */
+	if ( mem_init_done && (p < virt_to_phys(high_memory)) )
+	{
+		printk("__ioremap(): phys addr %0lx is RAM lr %p\n", p,
+		       __builtin_return_address(0));
+		return NULL;
+	}
+
 	if (size == 0)
 		return NULL;
 
+#ifndef CONFIG_8xx
+#if 0	
+	/*
+	 * Is it already mapped?  Perhaps overlapped by a previous
+	 * BAT mapping.  If the whole area is mapped then we're done,
+	 * otherwise remap it since we want to keep the virt addrs for
+	 * each request contiguous.
+	 *
+	 * We make the assumption here that if the bottom and top
+	 * of the range we want are mapped then it's mapped to the
+	 * same virt address (and this is contiguous).
+	 *  -- Cort
+	 */
+	if ( (v = p_mapped_by_bats(addr)) /*&& p_mapped_by_bats(addr+(size-1))*/ )
+		goto out;
+#endif	
+#endif /* CONFIG_8xx */
+	
 	if (mem_init_done) {
 		struct vm_struct *area;
 		area = get_vm_area(size);
@@ -358,9 +388,15 @@ __ioremap(unsigned long addr, unsigned long size, unsigned long flags)
 		flags |= pgprot_val(PAGE_KERNEL);
 	if (flags & (_PAGE_NO_CACHE | _PAGE_WRITETHRU))
 		flags |= _PAGE_GUARDED;
+
+#ifndef CONFIG_8xx	
+	/*
+	 * Is it a candidate for a BAT mapping?
+	 */
+#endif /* CONFIG_8xx */
+	
 	for (i = 0; i < size; i += PAGE_SIZE)
 		map_page(&init_task, v+i, p+i, flags);
-
 	return (void *) (v + (addr & ~PAGE_MASK));
 }
 
@@ -412,9 +448,7 @@ map_page(struct task_struct *tsk, unsigned long va,
 {
 	pmd_t *pd;
 	pte_t *pg;
-#ifndef CONFIG_8xx
-	int b;
-#endif
+	
 	if (tsk->mm->pgd == NULL) {
 		/* Allocate upper level page map */
 		tsk->mm->pgd = (pgd_t *) MMU_get_page();
@@ -422,20 +456,8 @@ map_page(struct task_struct *tsk, unsigned long va,
 	/* Use upper 10 bits of VA to index the first level map */
 	pd = (pmd_t *) (tsk->mm->pgd + (va >> PGDIR_SHIFT));
 	if (pmd_none(*pd)) {
-#ifndef CONFIG_8xx
-		/*
-		 * Need to allocate second-level table, but first
-		 * check whether this address is already mapped by
-		 * the BATs; if so, don't bother allocating the page.
-		 */
-		for (b = 0; b < 4; ++b) {
-			if (va >= bat_addrs[b].start
-			    && va <= bat_addrs[b].limit) {
-				/* XXX should check the phys address matches */
-				return;
-			}
-		}
-#endif /* CONFIG_8xx */
+		if ( v_mapped_by_bats(va) )
+			return;
 		pg = (pte_t *) MMU_get_page();
 		pmd_val(*pd) = (unsigned long) pg;
 	}
@@ -680,6 +702,33 @@ static void get_mem_prop(char *, struct mem_pieces *);
 static void sort_mem_pieces(struct mem_pieces *);
 static void coalesce_mem_pieces(struct mem_pieces *);
 
+/*
+ * Return 1 if this VA is mapped by BATs
+ */
+unsigned long inline v_mapped_by_bats(unsigned long va)
+{
+	int b;
+	for (b = 0; b < 4; ++b)
+		if (va >= bat_addrs[b].start
+	    	    && va < bat_addrs[b].limit)
+			return 1;
+	return 0;
+}
+
+/*
+ * Return VA for a given PA or 0 if not mapped
+ */
+unsigned long inline p_mapped_by_bats(unsigned long pa)
+{
+	int b;
+	for (b = 0; b < 4; ++b)
+		if (pa >= bat_addrs[b].phys
+	    	    && pa < (bat_addrs[b].limit-bat_addrs[b].start)
+		              +bat_addrs[b].phys)
+			return bat_addrs[b].start+(pa-bat_addrs[b].phys);
+	return 0;
+}
+
 __initfunc(static void sort_mem_pieces(struct mem_pieces *mp))
 {
 	unsigned long a, s;
@@ -836,7 +885,7 @@ __initfunc(static void mapin_ram(void))
 
 		setbat(2, KERNELBASE, mem_base, bl, RAM_PAGE);
 		done = (unsigned long)bat_addrs[2].limit - KERNELBASE + 1;
-		if (done < tot) {
+		if ((done < tot) && !bat_addrs[3].limit) {
 			/* use BAT3 to cover a bit more */
 			tot -= done;
 			for (bl = 128<<10; bl < max_size; bl <<= 1)
@@ -990,11 +1039,13 @@ __initfunc(void MMU_init(void))
 	switch (_machine) {
 	case _MACH_prep:
 		setbat(0, 0x80000000, 0x80000000, 0x10000000, IO_PAGE);
-		setbat(1, 0xd0000000, 0xc0000000, 0x10000000, IO_PAGE);
+		setbat(1, 0xf0000000, 0xc0000000, 0x08000000, IO_PAGE);
+		ioremap_base = 0xf0000000;
 		break;
 	case _MACH_chrp:
 		setbat(0, 0xf8000000, 0xf8000000, 0x08000000, IO_PAGE);
 		setbat(1, 0x80000000, 0x80000000, 0x10000000, IO_PAGE);
+		setbat(3, 0x90000000, 0x90000000, 0x10000000, IO_PAGE);
 		break;
 	case _MACH_Pmac:
 		{
@@ -1245,7 +1296,7 @@ __initfunc(unsigned long *pmac_find_end_of_memory(void))
 	int i;
 	
 	/* max amount of RAM we allow -- Cort */
-#define RAM_LIMIT (768<<20)	
+#define RAM_LIMIT (768<<20)
 
 	memory_node = find_devices("memory");
 	if (memory_node == NULL) {
@@ -1530,4 +1581,3 @@ __initfunc(static void hash_init(void))
 	}
 }
 #endif /* ndef CONFIG_8xx */
-

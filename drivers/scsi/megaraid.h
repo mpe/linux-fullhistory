@@ -6,24 +6,23 @@
 #endif
 
 #define IN_ISR                  0x80000000L
-#define NO_INTR                 0x40000000L
-#define IN_TIMEOUT              0x20000000L
-#define PENDING                 0x10000000L
+#define IN_ABORT                0x40000000L
+#define IN_RESET                0x20000000L
 #define BOARD_QUARTZ            0x08000000L
 
-#define SCB_ACTIVE 0x1
-#define SCB_WAITQ  0x2
-#define SCB_ISSUED 0x4
-
-#define SCB_FREE                -1
-#define SCB_RESET               -2
-#define SCB_ABORT               -3
-#define SCB_LOCKED              -4
+#define SCB_FREE     0x0
+#define SCB_ACTIVE   0x1
+#define SCB_WAITQ    0x2
+#define SCB_ISSUED   0x3
+#define SCB_COMPLETE 0x4
+#define SCB_ABORTED  0x5
+#define SCB_RESET    0x6
 
 #define MEGA_CMD_TIMEOUT        10
 
 #define MAX_SGLIST              17
-#define MAX_COMMANDS            254
+#define MAX_COMMANDS            250
+#define MAX_CMD_PER_LUN         63
 
 #define MAX_LOGICAL_DRIVES      8
 #define MAX_CHANNEL             5
@@ -99,7 +98,7 @@
 #define PCI_CONF_BASE_ADDR_OFFSET  0x10
 #define PCI_CONF_IRQ_OFFSET        0x3c
 #define PCI_CONF_AMISIG            0xa0
-#define AMI_SIGNATURE              0x11223344
+#define AMI_SIGNATURE              0x3344
 
 #if LINUX_VERSION_CODE < 0x20100
 #define MEGARAID \
@@ -117,11 +116,11 @@
     megaraid_reset,                     /* Reset Command Function    */\
     NULL,                               /* Slave Attach Function     */\
     megaraid_biosparam,                 /* Disk BIOS Parameters      */\
-    254,                                /* # of cmds that can be\
+    MAX_COMMANDS,                       /* # of cmds that can be\
                                            outstanding at any time */\
     7,                                  /* HBA Target ID             */\
     MAX_SGLIST,                         /* Scatter/Gather Table Size */\
-    64,                                 /* SCSI Commands per LUN     */\
+    MAX_CMD_PER_LUN,                    /* SCSI Commands per LUN     */\
     0,                                  /* Present                   */\
     0,                                  /* Default Unchecked ISA DMA */\
     ENABLE_CLUSTERING }		/* Enable Clustering         */
@@ -138,10 +137,10 @@
     abort:            megaraid_abort,          /* Abort Command Function    */\
     reset:            megaraid_reset,          /* Reset Command Function    */\
     bios_param:       megaraid_biosparam,      /* Disk BIOS Parameters      */\
-    can_queue:        1 /* MAX_COMMANDS */,            /* Can Queue                 */\
+    can_queue:        MAX_COMMANDS,            /* Can Queue                 */\
     this_id:          7,                       /* HBA Target ID             */\
     sg_tablesize:     MAX_SGLIST,              /* Scatter/Gather Table Size */\
-    cmd_per_lun:      64,                      /* SCSI Commands per LUN     */\
+    cmd_per_lun:      MAX_CMD_PER_LUN,         /* SCSI Commands per LUN     */\
     present:          0,                       /* Present                   */\
     unchecked_isa_dma:0,                       /* Default Unchecked ISA DMA */\
     use_clustering:   ENABLE_CLUSTERING       /* Enable Clustering         */\
@@ -250,13 +249,14 @@ typedef struct _mega_sglist {
 typedef struct _mega_scb mega_scb;
 
 struct _mega_scb {
-    int idx;
-    u_long flag;
-    Scsi_Cmnd *SCpnt;
-    u_char mboxData[16];
-    mega_passthru pthru;
-    mega_sglist *sgList;
-    mega_scb *next;
+    int            idx;
+    u_long         state;
+    u_long         isrcount;
+    u_char         mboxData[16];
+    mega_passthru  pthru;
+    Scsi_Cmnd     *SCpnt;
+    mega_sglist   *sgList;
+    mega_scb      *next;
 };
 
 /* Per-controller data */
@@ -264,8 +264,12 @@ typedef struct _mega_host_config {
     u_char numldrv;
     u_long flag;
     u_long base;
+ 
+    mega_scb *qFree;
+    mega_scb *qPending;
 
-    struct tq_struct megaTq;
+  u_long nReads[MAX_LOGICAL_DRIVES];
+  u_long nWrites[MAX_LOGICAL_DRIVES];
 
     /* Host adapter parameters */
     u_char fwVer[7];

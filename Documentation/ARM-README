@@ -70,8 +70,8 @@ Compilation of kernel
   a 'make zImage' instead of 'make all'.
 
 
-Bug reports etc
----------------
+Bug reports etc.
+----------------
 
   Please send patches, bug reports and code for the ARM Linux project
   to linux@arm.uk.linux.org.  Patches will not be included into future
@@ -116,7 +116,7 @@ Kernel initialisation abort codes
   at the top of the screen.  The colours have the following significance
   when run in a 16 colour mode with the default palette:
 
-    Stripes of White,Red,Yellow,Green:
+    Stripes of white, red, yellow, and green:
        Kernel does not support the processor architecture detected.
 
 
@@ -142,11 +142,11 @@ ST506 hard drives
   HDC base to the source.
 
   As of 31/3/96 it works with two drives (you should get the ADFS
-  *configure harddrive set to 2). I've got an internal 20MB and a great
-  big external 5.25" FH 64MB drive (who could ever want more :-) ).
+  *configure hard drive set to 2). I've got an internal 20 MB and a great
+  big external 5.25" FH 64 MB drive (who could ever want more :-) ).
 
-  I've just got 240K/s off it (a dd with bs=128k); thats about half of what
-  RiscOS gets; but it's a heck of a lot better than the 50K/s I was getting
+  I've just got 240 K/s off it (a dd with bs=128k); that's about half of what
+  RiscOS gets, but it's a heck of a lot better than the 50 K/s I was getting
   last week :-)
 
   Known bug: Drive data errors can cause a hang; including cases where

@@ -154,7 +154,9 @@ ENTRY(lcall7)
 	.globl	ret_from_fork
 ret_from_fork:
 #ifdef __SMP__
+	pushl %ebx
 	call SYMBOL_NAME(schedule_tail)
+	addl $4, %esp
 #endif /* __SMP__ */
 	GET_CURRENT(%ebx)
 	jmp	ret_from_sys_call

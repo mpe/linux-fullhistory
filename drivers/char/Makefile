@@ -283,12 +283,12 @@ L_OBJS += rtc.o
 endif
 
 ifeq ($(CONFIG_NVRAM),y)
-  ifeq ($(CONFIG_PMAC)$(CONFIG_CHRP),)
+  ifeq ($(CONFIG_PPC),)
   L_OBJS += nvram.o
   endif
 else
   ifeq ($(CONFIG_NVRAM),m)
-    ifeq ($(CONFIG_PMAC)$(CONFIG_CHRP),)
+    ifeq ($(CONFIG_PPC),)
     M_OBJS += nvram.o
     endif
   endif

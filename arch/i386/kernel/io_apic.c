@@ -1060,8 +1060,9 @@ static void do_edge_ioapic_IRQ(unsigned int irq, struct pt_regs * regs)
 	if (!(status & (IRQ_DISABLED | IRQ_INPROGRESS))) {
 		action = desc->action;
 		status &= ~IRQ_PENDING;
+		status |= IRQ_INPROGRESS;
 	}
-	desc->status = status | IRQ_INPROGRESS;
+	desc->status = status;
 	spin_unlock(&irq_controller_lock);
 
 	/*
@@ -1112,8 +1113,9 @@ static void do_level_ioapic_IRQ(unsigned int irq, struct pt_regs * regs)
 	action = NULL;
 	if (!(status & (IRQ_DISABLED | IRQ_INPROGRESS))) {
 		action = desc->action;
+		status |= IRQ_INPROGRESS;
 	}
-	desc->status = status | IRQ_INPROGRESS;
+	desc->status = status;
 
 	ack_APIC_irq();
 	spin_unlock(&irq_controller_lock);

@@ -149,7 +149,7 @@ PART THREE: configure your kernel
    .
    .
    .
-   make modules_isntall
+   make modules_install
 
 Here's my autoconf.h SOUND section:
 

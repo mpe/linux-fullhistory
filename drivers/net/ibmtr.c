@@ -513,6 +513,7 @@ __initfunc(static int ibmtr_probe1(struct device *dev, int PIOaddr))
 	/* How much shared RAM is on adapter ? */
 #ifdef PCMCIA
 	ti->avail_shared_ram = pcmcia_reality_check(get_sram_size(ti));
+	ibmtr_mem_base = ti->sram_base ; 
 #else
 	ti->avail_shared_ram = get_sram_size(ti);
 #endif

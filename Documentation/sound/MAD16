@@ -23,3 +23,12 @@ modules.conf has:
 alias char-major-14 mad16
 options sb mad16=1
 options mad16 io=0x530 irq=7 dma=0 dma16=1  && /usr/local/bin/aumix -w 15 -p 20 -m 0 -1 0 -2 0 -3 0 -i 0
+
+
+To get the built in mixer to work this needs to be:
+
+options adlib_card io=0x388     # FM synthesizer
+options sb mad16=1
+options mad16 io=0x530 irq=7 dma=0 dma16=1 mpu_io=816 mpu_irq=5 && /usr/local/bin/aumix -w 15 -p 20 -m 0 -1 0 -2 0 -3 0 -i 0
+
+The addition of the "mpu_io=816 mpu_irq=5" to the mad16 options line is

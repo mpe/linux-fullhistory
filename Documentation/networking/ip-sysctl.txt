@@ -96,7 +96,7 @@ tcp_timestamps - BOOLEAN
 	Enable timestamps as defined in RFC1323.
 
 tcp_sack - BOOLEAN
-	Enable select acknowledgements.
+	Enable select acknowledgments.
 
 tcp_retrans_collapse - BOOLEAN
 	Bug-to-bug compatibility with some broken printers.
@@ -119,7 +119,7 @@ icmp_destunreach_rate - INTEGER
 icmp_paramprob_rate - INTEGER
 icmp_timeexceed_rate - INTEGER
 icmp_echoreply_rate - INTEGER (not enabled per default)
-	Limit the maximal rates for sending ICMP packets to specifc targets.
+	Limit the maximal rates for sending ICMP packets to specific targets.
 	0 to disable any limiting, otherwise the maximal rate in jiffies(1)
 	See the source for more information.
 
@@ -173,7 +173,7 @@ redirects - BOOLEAN
 bootp_relay - BOOLEAN
 	Accept packets with source address 0.b.c.d destined
 	not to this host as local ones. It is supposed, that
-	BOOTP relay deamon will catch and forward such packets.
+	BOOTP relay daemon will catch and forward such packets.
 
 	default FALSE
 	Not Implemented Yet.

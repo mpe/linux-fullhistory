@@ -64,11 +64,12 @@ enum {
 #define PMU_IOC_GET_MODEL	_IOR('B', 3, sizeof(__u32*))
 
 #ifdef __KERNEL__
+
 void find_via_pmu(void);
 void via_pmu_init(void);
+
 int pmu_request(struct adb_request *req,
 		void (*done)(struct adb_request *), int nbytes, ...);
-int pmu_send_request(struct adb_request *req);
 void pmu_poll(void);
 
 void pmu_enable_backlight(int on);
@@ -79,6 +80,7 @@ void pmu_enable_irled(int on);
 void pmu_restart(void);
 void pmu_shutdown(void);
 
+int pmu_present(void);
 int pmu_get_model(void);
 
 /*

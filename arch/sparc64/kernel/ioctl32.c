@@ -1,4 +1,4 @@
-/* $Id: ioctl32.c,v 1.60 1999/03/22 10:40:54 jj Exp $
+/* $Id: ioctl32.c,v 1.61 1999/04/28 19:44:31 davem Exp $
  * ioctl32.c: Conversion between 32bit and 64bit native ioctls.
  *
  * Copyright (C) 1997  Jakub Jelinek  (jj@sunsite.mff.cuni.cz)
@@ -26,6 +26,7 @@
 #include <linux/fs.h>
 #include <linux/file.h>
 #include <linux/fd.h>
+#include <linux/ppp_defs.h>
 #include <linux/if_ppp.h>
 #include <linux/mtio.h>
 #include <linux/cdrom.h>

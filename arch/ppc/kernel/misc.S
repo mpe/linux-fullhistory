@@ -36,6 +36,7 @@
  * Returns (address we're running at) - (address we were linked at)
  * for use before the text and data are mapped to KERNELBASE.
  */
+
 _GLOBAL(reloc_offset)
 	mflr	r0
 	bl	1f
@@ -72,8 +73,8 @@ _GLOBAL(_enable_interrupts)
 	beqlr			/* nothing to do if state == 0 */
 _GLOBAL(__sti)
 _GLOBAL(_hard_sti)
-	lis	r4,n_lost_interrupts@ha
-	lwz	r4,n_lost_interrupts@l(r4)
+	lis	r4,ppc_n_lost_interrupts@ha
+	lwz	r4,ppc_n_lost_interrupts@l(r4)
 	mfmsr	r3		/* Get current state */
 	ori	r3,r3,MSR_EE	/* Turn on 'EE' bit */
 	cmpi	0,r4,0		/* lost interrupts to process first? */
@@ -93,8 +94,8 @@ do_lost_interrupts:
 	stw	r0,20(r1)
 	stw	r3,8(r1)
 1:	bl	fake_interrupt
-	lis	r4,n_lost_interrupts@ha
-	lwz	r4,n_lost_interrupts@l(r4)
+	lis	r4,ppc_n_lost_interrupts@ha
+	lwz	r4,ppc_n_lost_interrupts@l(r4)
 	cmpi	0,r4,0
 	bne-	1b
 	lwz	r3,8(r1)
@@ -104,6 +105,20 @@ do_lost_interrupts:
 	mtlr	r0
 	addi	r1,r1,16
 	blr
+
+
+/*
+ * complement mask on the msr then "or" some values on.
+ *     _nmask_and_or_msr(nmask, value_to_or)
+ */
+	_GLOBAL(_nmask_and_or_msr)
+	mfmsr	r0		/* Get current msr */
+	andc	r0,r0,r3	/* And off the bits set in r3 (first parm) */
+	or	r0,r0,r4		/* Or on the bits in r4 (second parm) */
+	sync			/* Some chip revs have problems here... */
+	mtmsr	r0		/* Update machine state */
+	blr			/* Done */
+
 
 /*
  * Flush MMU TLB
@@ -613,16 +628,6 @@ cvt_fd:
 	stfd	0,-4(r5)
 	blr
 
-        .globl  __clear_msr_me
-__clear_msr_me:
-        mfmsr   r0                      /* Get current interrupt state */
-        lis     r3,0
-        ori     r3,r3,MSR_ME
-        andc    r0,r0,r3                /* Clears bit in (r4) */
-        sync                            /* Some chip revs have problems here */
-        mtmsr   r0                      /* Update machine state */
-        blr
-
 _GLOBAL(cvt_df)
 cvt_df:
 	lfd	0,-4(r5)	/* load up fpscr value */
@@ -632,6 +637,16 @@ cvt_df:
 	mffs	0		/* save new fpscr value */
 	stfd	0,-4(r5)
 	blr
+
+        .globl  __clear_msr_me
+__clear_msr_me:
+        mfmsr   r0                      /* Get current interrupt state */
+        lis     r3,0
+        ori     r3,r3,MSR_ME
+        andc    r0,r0,r3                /* Clears bit in (r4) */
+        sync                            /* Some chip revs have problems here */
+        mtmsr   r0                      /* Update machine state */
+        blr
 
 /*
  * Fetch the current SR register
@@ -651,6 +666,8 @@ _GLOBAL(__kernel_thread)
 	sc
 	cmpi	0,r3,0		/* parent or child? */
 	bnelr			/* return if parent */
+	li	r0,0		/* clear out p->tss.regs */
+	stw	r0,TSS+PT_REGS(r2)	/* since we don't have user ctx */
 	mtlr	r4              /* fn addr in lr */
 	mr	r3,r5	        /* load arg and call fn */
 	blrl

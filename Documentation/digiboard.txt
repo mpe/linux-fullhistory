@@ -111,7 +111,7 @@ alias char-major-23    pcxx
 Boot-time configuration when linked into the kernel
 ---------------------------------------------------
 
-Per Board to be configured, pass a digi= commandline parameter to the
+Per board to be configured, pass a digi= command-line parameter to the
 kernel using lilo or loadlin. It consists of a string of comma separated
 identifiers or integers.  The 6 values in order are:
 
@@ -142,7 +142,7 @@ there is an alternate form, in which you must use decimal values only:
 
    append="digi=1,0,0,16,512,851968"
 
-If you don't give a digi= commandline, the compiled-in defaults of
+If you don't give a digi= command line, the compiled-in defaults of
 board 1: io=0x200, membase=0xd0000, altpin=off and numports=16 are used.
 
 If you have the resources (io&mem) free for use, configure your board to
@@ -153,9 +153,9 @@ ports.
 Sources of Information
 ----------------------
 
-Webpage: http://private.fuller.edu/clameter/digi.html
+Web page: http://private.fuller.edu/clameter/digi.html
 
-Mailing List: digiboard@list.fuller.edu
+Mailing list: digiboard@list.fuller.edu
 
 (Write e-mail to that address to subscribe. Common ListServ commands work.
 Archive of messages available)

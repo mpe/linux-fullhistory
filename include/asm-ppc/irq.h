@@ -3,7 +3,7 @@
 #ifndef _ASM_IRQ_H
 #define _ASM_IRQ_H
 
-#include <asm/processor.h>		/* for is_prep() */
+#include <asm/machdep.h>		/* ppc_md */
 
 extern void disable_irq(unsigned int);
 extern void enable_irq(unsigned int);
@@ -42,7 +42,14 @@ extern void enable_irq(unsigned int);
  */
 static __inline__ int irq_cannonicalize(int irq)
 {
-	return (((is_prep || is_chrp) && irq == 2) ? 9 : irq);
+	if (ppc_md.irq_cannonicalize)
+	{
+		return ppc_md.irq_cannonicalize(irq);
+	}
+	else
+	{
+		return irq;
+	}
 }
 #endif
 

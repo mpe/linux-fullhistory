@@ -34,16 +34,22 @@
  *	I try to maintain a web page with the Wireless LAN Howto at :
  *		http://www-uk.hpl.hp.com/people/jt/Linux/Wavelan.html
  *
+ * Debugging and options
+ * ---------------------
+ *	You will find below a set of '#define" allowing a very fine control
+ *	on the driver behaviour and the debug messages printed.
+ *	The main options are :
+ *	o SET_PSA_CRC, to have your card correctly recognised by
+ *	  an access point and the Point-to-Point diagnostic tool.
+ *	o USE_PSA_CONFIG, to read configuration from the PSA (EEprom)
+ *	  (otherwise we always start afresh with some defaults)
+ *
  * wavelan.o is too darned big
  * ---------------------------
  *	That's true!  There is a very simple way to reduce the driver
  *	object by 33%!  Comment out the following line:
  *		#include <linux/wireless.h>
- *
- * Debugging and options
- * ---------------------
- *	You will find below a set of '#define" allowing a very fine control
- *	on the driver behaviour and the debug messages printed.
+ *	Other compile options can also reduce the size of it...
  *
  * MAC address and hardware detection:
  * -----------------------------------
@@ -274,7 +280,17 @@
  *	- Correct i82586 configuration parameters
  *	- Encryption initialisation bug (Robert McCormack)
  *	- New mac addresses detected in the probe
- *	- Increase watchdog for busy envirnoments
+ *	- Increase watchdog for busy environments
+ *
+ * Changes made for release in 2.0.38 & 2.2.7 :
+ * ------------------------------------------
+ *	- Correct the reception logic to better report errors and avoid
+ *	  sending bogus packet up the stack
+ *	- Delay RU config to avoid corrupting first received packet
+ *	- Change config completion code (to actually check something)
+ *	- Avoid reading out of bound in skbuf to transmit
+ *	- Rectify a lot of (useless) debugging code
+ *	- Change the way to `#ifdef SET_PSA_CRC'
  *
  * Wishes & dreams:
  * ----------------
@@ -315,6 +331,24 @@
 #include	"i82586.h"
 #include	"wavelan.h"
 
+/************************** DRIVER OPTIONS **************************/
+/*
+ * `#define' or `#undef' the following constant to change the behaviour
+ * of the driver...
+ */
+#undef SET_PSA_CRC		/* Calculate and set the CRC on PSA (slower) */
+#define USE_PSA_CONFIG		/* Use info from the PSA. */
+#undef STRUCT_CHECK		/* Verify padding of structures. */
+#undef EEPROM_IS_PROTECTED	/* doesn't seem to be necessary */
+#define MULTICAST_AVOID		/* Avoid extra multicast (I'm sceptical). */
+#undef SET_MAC_ADDRESS		/* Experimental */
+
+#ifdef WIRELESS_EXT	/* If wireless extensions exist in the kernel */
+/* Warning:  this stuff will slow down the driver. */
+#define WIRELESS_SPY		/* Enable spying addresses. */
+#undef HISTOGRAM		/* Enable histogram of signal level. */
+#endif
+
 /****************************** DEBUG ******************************/
 
 #undef DEBUG_MODULE_TRACE	/* module insertion/removal */
@@ -324,14 +358,16 @@
 #define DEBUG_INTERRUPT_ERROR	/* problems */
 #undef DEBUG_CONFIG_TRACE	/* Trace the config functions. */
 #undef DEBUG_CONFIG_INFO	/* what's going on */
-#define DEBUG_CONFIG_ERRORS	/* errors on configuration */
+#define DEBUG_CONFIG_ERROR	/* errors on configuration */
 #undef DEBUG_TX_TRACE		/* transmission calls */
 #undef DEBUG_TX_INFO		/* header of the transmitted packet */
-#define DEBUG_TX_ERROR		/* unexpected conditions */
+#undef DEBUG_TX_FAIL		/* Normal failure conditions */
+#define DEBUG_TX_ERROR		/* Unexpected conditions */
 #undef DEBUG_RX_TRACE		/* transmission calls */
-#undef DEBUG_RX_INFO		/* header of the transmitted packet */
-#define DEBUG_RX_ERROR		/* unexpected conditions */
-#undef DEBUG_PACKET_DUMP	16	/* Dump packet on the screen. */
+#undef DEBUG_RX_INFO		/* header of the received packet */
+#undef DEBUG_RX_FAIL		/* Normal failure conditions */
+#define DEBUG_RX_ERROR		/* Unexpected conditions */
+#undef DEBUG_PACKET_DUMP	32	/* Dump packet on the screen. */
 #undef DEBUG_IOCTL_TRACE	/* misc. call by Linux */
 #undef DEBUG_IOCTL_INFO		/* various debugging info */
 #define DEBUG_IOCTL_ERROR	/* what's going wrong */
@@ -343,26 +379,10 @@
 #undef DEBUG_I82586_SHOW	/* Show i82586 status. */
 #undef DEBUG_DEVICE_SHOW	/* Show device parameters. */
 
-/* Options */
-#define USE_PSA_CONFIG		/* Use info from the PSA. */
-#define SET_PSA_CRC		/* Calculate and set the CRC on PSA */
-#define IGNORE_NORMAL_XMIT_ERRS	/* Don't bother with normal conditions. */
-#undef STRUCT_CHECK		/* Verify padding of structures. */
-#undef OLDIES			/* old code (to redo) */
-#undef RECORD_SNR		/* to redo */
-#undef EEPROM_IS_PROTECTED	/* doesn't seem to be necessary */
-#define MULTICAST_AVOID		/* Avoid extra multicast (I'm sceptical). */
-
-#ifdef WIRELESS_EXT	/* If wireless extensions exist in the kernel */
-/* Warning:  this stuff will slow down the driver. */
-#define WIRELESS_SPY		/* Enable spying addresses. */
-#undef HISTOGRAM		/* Enable histogram of signal level. */
-#endif
-
 /************************ CONSTANTS & MACROS ************************/
 
 #ifdef DEBUG_VERSION_SHOW
-static const char	*version	= "wavelan.c : v18 (wireless extensions) 18/2/99\n";
+static const char	*version	= "wavelan.c : v19 (wireless extensions) 20/4/99\n";
 #endif
 
 /* Watchdog temporisation */

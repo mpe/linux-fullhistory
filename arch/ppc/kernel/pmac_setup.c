@@ -44,6 +44,7 @@
 #include <asm/prom.h>
 #include <asm/system.h>
 #include <asm/pgtable.h>
+#include <asm/bitops.h>
 #include <asm/io.h>
 #include <asm/pci-bridge.h>
 #include <asm/adb.h>
@@ -52,7 +53,36 @@
 #include <asm/ohare.h>
 #include <asm/mediabay.h>
 #include <asm/feature.h>
+#include <asm/ide.h>
+#include <asm/machdep.h>
+
 #include "time.h"
+#include "local_irq.h"
+#include "pmac_pic.h"
+
+#undef SHOW_GATWICK_IRQS
+
+unsigned long pmac_get_rtc_time(void);
+int pmac_set_rtc_time(unsigned long nowtime);
+void pmac_read_rtc_time(void);
+void pmac_calibrate_decr(void);
+void pmac_setup_pci_ptrs(void);
+
+extern int mackbd_setkeycode(unsigned int scancode, unsigned int keycode);
+extern int mackbd_getkeycode(unsigned int scancode);
+extern int mackbd_translate(unsigned char scancode, unsigned char *keycode,
+			   char raw_mode);
+extern char mackbd_unexpected_up(unsigned char keycode);
+extern void mackbd_leds(unsigned char leds);
+extern void mackbd_init_hw(void);
+extern unsigned char mackbd_sysrq_xlate[128];
+extern int pckbd_setkeycode(unsigned int scancode, unsigned int keycode);
+extern int pckbd_getkeycode(unsigned int scancode);
+extern int pckbd_translate(unsigned char scancode, unsigned char *keycode,
+			   char raw_mode);
+extern char pckbd_unexpected_up(unsigned char keycode);
+extern void pckbd_leds(unsigned char leds);
+extern void pckbd_init_hw(void);
 
 unsigned char drive_info;
 
@@ -291,15 +321,12 @@ int boot_target;
 int boot_part;
 kdev_t boot_dev;
 
-void __init powermac_init(void)
+__initfunc(void
+pmac_init2(void))
 {
-  	if ( (_machine != _MACH_chrp) && (_machine != _MACH_Pmac) )
-		return;
 	adb_init();
 	pmac_nvram_init();
-	if (_machine == _MACH_Pmac) {
-		media_bay_init();
-	}
+	media_bay_init();
 }
 
 #ifdef CONFIG_SCSI
@@ -402,5 +429,176 @@ void note_bootable_part(kdev_t dev, int part)
 		boot_dev = NODEV;
 		printk(" (root)");
 	}
+}
+
+void
+pmac_restart(char *cmd)
+{
+	struct adb_request req;
+
+	switch (adb_hardware) {
+	case ADB_VIACUDA:
+		cuda_request(&req, NULL, 2, CUDA_PACKET,
+			     CUDA_RESET_SYSTEM);
+		for (;;)
+			cuda_poll();
+		break;
+
+	case ADB_VIAPMU:
+		pmu_restart();
+		break;
+	default:
+	}
+}
+
+void
+pmac_power_off(void)
+{
+	struct adb_request req;
+
+	switch (adb_hardware) {
+	case ADB_VIACUDA:
+		cuda_request(&req, NULL, 2, CUDA_PACKET,
+			     CUDA_POWERDOWN);
+		for (;;)
+			cuda_poll();
+		break;
+
+	case ADB_VIAPMU:
+		pmu_shutdown();
+		break;
+	default:
+	}
+}
+
+void
+pmac_halt(void)
+{
+   pmac_power_off();
+}
+
+
+#if defined(CONFIG_BLK_DEV_IDE) || defined(CONFIG_BLK_DEV_IDE_MODULE)
+/*
+ * IDE stuff.
+ */
+void
+pmac_ide_insw(ide_ioreg_t port, void *buf, int ns)
+{
+	ide_insw(port, buf, ns);
+}
+
+void
+pmac_ide_outsw(ide_ioreg_t port, void *buf, int ns)
+{
+	ide_outsw(port, buf, ns);
+}
+
+int
+pmac_ide_default_irq(ide_ioreg_t base)
+{
+        return 0;
+}
+
+ide_ioreg_t
+pmac_ide_default_io_base(int index)
+{
+#if defined(CONFIG_BLK_DEV_IDE_PMAC)
+        return pmac_ide_regbase[index];
+#else
+	return 0;
+#endif
+}
+
+int
+pmac_ide_check_region(ide_ioreg_t from, unsigned int extent)
+{
+        return 0;
+}
+
+void
+pmac_ide_request_region(ide_ioreg_t from,
+			unsigned int extent,
+			const char *name)
+{
+}
+
+void
+pmac_ide_release_region(ide_ioreg_t from,
+			unsigned int extent)
+{
+}
+
+/* Convert the shorts/longs in hd_driveid from little to big endian;
+ * chars are endian independant, of course, but strings need to be flipped.
+ * (Despite what it says in drivers/block/ide.h, they come up as little
+ * endian...)
+ *
+ * Changes to linux/hdreg.h may require changes here. */
+void
+pmac_ide_fix_driveid(struct hd_driveid *id)
+{
+        ppc_generic_ide_fix_driveid(id);
+}
+
+/* This is declared in drivers/block/ide-pmac.c */
+void pmac_ide_init_hwif_ports (ide_ioreg_t *p, ide_ioreg_t base, int *irq);
+#endif
+
+__initfunc(void
+pmac_init(unsigned long r3, unsigned long r4, unsigned long r5,
+	  unsigned long r6, unsigned long r7))
+{
+	pmac_setup_pci_ptrs();
+
+	/* isa_io_base gets set in pmac_find_bridges */
+	isa_mem_base = PMAC_ISA_MEM_BASE;
+	pci_dram_offset = PMAC_PCI_DRAM_OFFSET;
+	ISA_DMA_THRESHOLD = ~0L;
+	DMA_MODE_READ = 1;
+	DMA_MODE_WRITE = 2;
+
+	ppc_md.setup_arch     = pmac_setup_arch;
+	ppc_md.setup_residual = NULL;
+	ppc_md.get_cpuinfo    = pmac_get_cpuinfo;
+	ppc_md.irq_cannonicalize = NULL;
+	ppc_md.init_IRQ       = pmac_pic_init;
+	ppc_md.do_IRQ         = pmac_do_IRQ;
+	ppc_md.init           = pmac_init2;
+
+	ppc_md.restart        = pmac_restart;
+	ppc_md.power_off      = pmac_power_off;
+	ppc_md.halt           = pmac_halt;
+
+	ppc_md.time_init      = NULL;
+	ppc_md.set_rtc_time   = pmac_set_rtc_time;
+	ppc_md.get_rtc_time   = pmac_get_rtc_time;
+	ppc_md.calibrate_decr = pmac_calibrate_decr;
+
+#ifdef CONFIG_VT
+	ppc_md.kbd_setkeycode    = mackbd_setkeycode;
+	ppc_md.kbd_getkeycode    = mackbd_getkeycode;
+	ppc_md.kbd_translate     = mackbd_translate;
+	ppc_md.kbd_unexpected_up = mackbd_unexpected_up;
+	ppc_md.kbd_leds          = mackbd_leds;
+	ppc_md.kbd_init_hw       = mackbd_init_hw;
+#ifdef CONFIG_MAGIC_SYSRQ
+	ppc_md.kbd_sysrq_xlate	 = mackbd_sysrq_xlate;
+#endif	
+#endif
+
+#if defined(CONFIG_BLK_DEV_IDE_PMAC)
+        ppc_ide_md.insw = pmac_ide_insw;
+        ppc_ide_md.outsw = pmac_ide_outsw;
+        ppc_ide_md.default_irq = pmac_ide_default_irq;
+        ppc_ide_md.default_io_base = pmac_ide_default_io_base;
+        ppc_ide_md.check_region = pmac_ide_check_region;
+        ppc_ide_md.request_region = pmac_ide_request_region;
+        ppc_ide_md.release_region = pmac_ide_release_region;
+        ppc_ide_md.fix_driveid = pmac_ide_fix_driveid;
+        ppc_ide_md.ide_init_hwif = pmac_ide_init_hwif_ports;
+
+        ppc_ide_md.io_base = 0;
+#endif		
 }
 

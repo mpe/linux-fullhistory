@@ -1,5 +1,5 @@
 /*
- * $Id: idle.c,v 1.60 1999/02/12 07:06:26 cort Exp $
+ * $Id: idle.c,v 1.61 1999/03/18 04:15:45 cort Exp $
  *
  * Idle daemon for PowerPC.  Idle daemon will handle any action
  * that needs to be taken when the system becomes idle.
@@ -303,7 +303,14 @@ void power_save(void)
 			hid0 &= ~(HID0_NAP | HID0_SLEEP | HID0_DOZE);
 			hid0 |= (powersave_nap? HID0_NAP: HID0_DOZE) | HID0_DPM;
 			asm("mtspr 1008,%0" : : "r" (hid0));
-			msr |= MSR_POW;
+		
+			/* set the POW bit in the MSR, and enable interrupts
+			 * so we wake up sometime! */
+			_nmask_and_or_msr(0, MSR_POW | MSR_EE);
+
+			/* Disable interrupts again so restore_flags will
+			 * work. */
+			_nmask_and_or_msr(MSR_EE, 0);
 		}
 		restore_flags(msr);
 	default:

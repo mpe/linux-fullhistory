@@ -193,7 +193,6 @@ typedef __u32 kernel_cap_t;
 /* Allow device administration (mknod)*/
 /* Allow examination and configuration of disk quotas */
 /* Allow configuring the kernel's syslog (printk behaviour) */
-/* Allow sending a signal to any process */
 /* Allow setting the domainname */
 /* Allow setting the hostname */
 /* Allow calling bdflush() */

@@ -605,11 +605,13 @@ __initfunc(int chr_dev_init(void))
 	if (register_chrdev(MEM_MAJOR,"mem",&memory_fops))
 		printk("unable to get major %d for memory devs\n", MEM_MAJOR);
 	rand_initialize();
+#ifdef CONFIG_USB
 #ifdef CONFIG_USB_UHCI
 	uhci_init();
 #endif
 #ifdef CONFIG_USB_OHCI
 	ohci_init();
+#endif
 #endif
 #if defined (CONFIG_FB)
 	fbmem_init();

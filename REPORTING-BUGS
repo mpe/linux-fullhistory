@@ -1,6 +1,6 @@
 [Some of this is taken from Frohwalt Egerer's original linux-kernel FAQ]
 
-     What follows is a suggested proceedure for reporting Linux bugs. You
+     What follows is a suggested procedure for reporting Linux bugs. You
 aren't obliged to use the bug reporting format, it is provided as a guide
 to the kind of information that can be useful to developers - no more.
 
@@ -23,11 +23,11 @@ mailing list see http://www.tux.org/lkml/).
 This is a suggested format for a bug report sent to the Linux kernel mailing 
 list. Having a standardized bug report form makes it easier  for you not to 
 overlook things, and easier for the developers to find the pieces of 
-information they're really interested in.
+information they're really interested in. Don't feel you have to follow it.
 
    First run the ver_linux script included as scripts/ver_linux or
 at <URL:ftp://ftp.sai.msu.su/pub/Linux/ver_linux> It checks out
-the version of some important subsystems. Run it with the commnd
+the version of some important subsystems.  Run it with the command
 "sh scripts/ver_linux"
 
 Use that information to fill in all fields of the bug report form, and

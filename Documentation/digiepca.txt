@@ -11,7 +11,7 @@ Currently the driver only autoprobes for supported PCI boards.
 
 The Linux MAKEDEV command does not support generating the Digiboard
 Devices.  Users executing digiConfig to setup EISA and PC series cards
-will have their device nodes automaticly constructed (cud?? for ~CLOCAL,
+will have their device nodes automatically constructed (cud?? for ~CLOCAL,
 and ttyD?? for CLOCAL).  Users wishing to boot their board from the LILO
 prompt, or those users booting PCI cards may use buildDIGI to construct 
 the necessary nodes. 
@@ -19,7 +19,7 @@ the necessary nodes.
 Notes:
 ------
 This driver may be configured via LILO.  For users who have already configured
-their driver using digiConfig, configuring from lilo will override previous 
+their driver using digiConfig, configuring from LILO will override previous 
 settings.  Multiple boards may be configured by issuing multiple LILO command 
 lines.  For examples see the bottom of this document.
 

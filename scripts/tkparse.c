@@ -496,10 +496,15 @@ static void tokenize_line( const char * pnt )
 
     case token_hex:
     case token_int:
-    case token_string:
 	pnt = get_qstring ( pnt, &cfg->label      );
 	pnt = get_string  ( pnt, &cfg->optionname );
 	pnt = get_string  ( pnt, &cfg->value      );
+	break;
+
+    case token_string:
+	pnt = get_qstring ( pnt, &cfg->label      );
+	pnt = get_string  ( pnt, &cfg->optionname );
+	pnt = get_qstring  ( pnt, &cfg->value      );
 	break;
 
     case token_if:

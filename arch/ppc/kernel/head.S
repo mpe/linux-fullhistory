@@ -1,7 +1,7 @@
 /*
  *  arch/ppc/kernel/head.S
  *
- *  $Id: head.S,v 1.121 1999/03/16 10:40:29 cort Exp $
+ *  $Id: head.S,v 1.127 1999/04/07 07:26:55 paulus Exp $
  *
  *  PowerPC version 
  *    Copyright (C) 1995-1996 Gary Thomas (gdt@linuxppc.org)
@@ -91,7 +91,7 @@ LG_CACHE_LINE_SIZE = 4
 #define tlbia \
 	li	r4,128; \
 	mtctr	r4; \
-	lis	r4,0xC000; \
+	lis	r4,KERNELBASE@h; \
 0:	tlbie	r4; \
 	addi	r4,r4,0x1000; \
 	bdnz	0b
@@ -415,7 +415,7 @@ turn_on_mmu:
  * this, we leave this much untouched space on the stack on exception
  * entry.
  */
-#define STACK_UNDERHEAD	64
+#define STACK_UNDERHEAD	0
 	
 /*
  * Exception entry code.  This code runs with address translation
@@ -1495,27 +1495,25 @@ load_up_fpu:
  * On SMP we know the fpu is free, since we give it up every
  * switch.  -- Cort
  */
+	mfmsr	r5
+	ori	r5,r5,MSR_FP
+	SYNC
+	mtmsr	r5			/* enable use of fpu now */
+	SYNC
+/*
+ * For SMP, we don't do lazy FPU switching because it just gets too
+ * horrendously complex, especially when a task switches from one CPU
+ * to another.  Instead we call giveup_fpu in switch_to.
+ */
+#ifndef __SMP__
 #ifndef CONFIG_APUS
 	lis	r6,-KERNELBASE@h
 #else
 	lis	r6,CYBERBASEp@h
 	lwz	r6,0(r6)
 #endif
-
 	addis	r3,r6,last_task_used_math@ha
 	lwz	r4,last_task_used_math@l(r3)
-	mfmsr	r5
-	ori	r5,r5,MSR_FP
-	SYNC
-	mtmsr	r5			/* enable use of fpu now */
-/*
- * All the saving of last_task_used_math is handled
- * by a switch_to() call to smp_giveup_fpu() in SMP so 
- * last_task_used_math is not used.
- * -- Cort
- */
-#ifndef __SMP__
-	SYNC
 	cmpi	0,r4,0
 	beq	1f
 	add	r4,r4,r6
@@ -1529,15 +1527,17 @@ load_up_fpu:
 	li	r20,MSR_FP|MSR_FE0|MSR_FE1
 	andc	r4,r4,r20		/* disable FP for previous task */
 	stw	r4,_MSR-STACK_FRAME_OVERHEAD(r5)
+1:
 #endif /* __SMP__ */
-1:	ori	r23,r23,MSR_FP|MSR_FE0|MSR_FE1	/* enable use of FP after return */
+	/* enable use of FP after return */
+	ori	r23,r23,MSR_FP|MSR_FE0|MSR_FE1
 	mfspr	r5,SPRG3		/* current task's TSS (phys) */
 	lfd	fr0,TSS_FPSCR-4(r5)
 	mtfsf	0xff,fr0
 	REST_32FPRS(0, r5)
+#ifndef __SMP__
 	subi	r4,r5,TSS
 	sub	r4,r4,r6
-#ifndef __SMP__
 	stw	r4,last_task_used_math@l(r3)
 #endif /* __SMP__ */
 	/* restore registers and return */
@@ -1574,48 +1574,44 @@ KernelFP:
 	.align	4
 
 /*
- * Disable FP for the task which had the FPU previously,
- * and save its floating-point registers in its thread_struct.
+ * giveup_fpu(tsk)
+ * Disable FP for the task given as the argument,
+ * and save the floating-point registers in its thread_struct.
  * Enables the FPU for use in the kernel on return.
  */
-/* smp_giveup_fpu() takes an arg to tell it where to save the fpu
- * regs since last_task_used_math can't be trusted (many many race
- * conditions). -- Cort
- */
-	.globl	smp_giveup_fpu
-smp_giveup_fpu:	
-	mr	r4,r3
-	b	12f
 	.globl	giveup_fpu
 giveup_fpu:
-	lis	r3,last_task_used_math@ha
-	lwz	r4,last_task_used_math@l(r3)
-12:		
 	mfmsr	r5
 	ori	r5,r5,MSR_FP
 	SYNC
 	mtmsr	r5			/* enable use of fpu now */
 	SYNC
-	cmpi	0,r4,0
+	cmpi	0,r3,0
 	beqlr-				/* if no previous owner, done */
-	addi	r4,r4,TSS	        /* want TSS of last_task_used_math */
+	addi	r3,r3,TSS	        /* want TSS of task */
+	lwz	r5,PT_REGS(r3)
+	cmpi	0,r5,0
+	SAVE_32FPRS(0, r3)
+	mffs	fr0
+	stfd	fr0,TSS_FPSCR-4(r3)
+	beq	1f
+	lwz	r4,_MSR-STACK_FRAME_OVERHEAD(r5)
+	li	r3,MSR_FP|MSR_FE0|MSR_FE1
+	andc	r4,r4,r3		/* disable FP for previous task */
+	stw	r4,_MSR-STACK_FRAME_OVERHEAD(r5)
+1:
 #ifndef __SMP__
 	li	r5,0
-	stw	r5,last_task_used_math@l(r3)
+	lis	r4,last_task_used_math@ha
+	stw	r5,last_task_used_math@l(r4)
 #endif /* __SMP__ */
-	SAVE_32FPRS(0, r4)
-	mffs	fr0
-	stfd	fr0,TSS_FPSCR-4(r4)
-	lwz	r5,PT_REGS(r4)
-	lwz	r3,_MSR-STACK_FRAME_OVERHEAD(r5)
-	li	r4,MSR_FP|MSR_FE0|MSR_FE1
-	andc	r3,r3,r4		/* disable FP for previous task */
-	stw	r3,_MSR-STACK_FRAME_OVERHEAD(r5)
+	blr
+
 #else  /* CONFIG_8xx */
 	.globl	giveup_fpu
 giveup_fpu:
-#endif /* CONFIG_8xx */
 	blr
+#endif /* CONFIG_8xx */
 
 /*
  * This code is jumped to from the startup code to copy
@@ -2127,8 +2123,8 @@ int_return:
 	lwz	r5,_MSR(r1)
 	and.	r5,r5,r4
 	beq	2f
-3:	lis	r4,n_lost_interrupts@ha
-	lwz	r4,n_lost_interrupts@l(r4)
+3:	lis	r4,ppc_n_lost_interrupts@ha
+	lwz	r4,ppc_n_lost_interrupts@l(r4)
 	cmpi	0,r4,0
 	beq+	1f
 	addi	r3,r1,STACK_FRAME_OVERHEAD

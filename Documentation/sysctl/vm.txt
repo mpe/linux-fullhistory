@@ -178,7 +178,7 @@ page-cluster:
 
 The Linux VM subsystem avoids excessive disk seeks by reading
 multiple pages on a page fault. The number of pages it reads
-is dependant on the amount of memory in your machine.
+is dependent on the amount of memory in your machine.
 
 The number of pages the kernel reads in at once is equal to
 2 ^ page-cluster. Values above 2 ^ 5 don't make much sense

@@ -81,7 +81,7 @@ ver.0.3.3c
 
 ver.0.3.3b
 	- Fix version number in awe_version.h
-	- Fix a small bug in noteoff/relese all
+	- Fix a small bug in noteoff/release all
 
 ver.0.3.3a
 	- Fix all notes/sounds off

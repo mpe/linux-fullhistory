@@ -63,8 +63,16 @@ static void macio_adb_interrupt(int irq, void *arg, struct pt_regs *regs);
 static int macio_adb_send_request(struct adb_request *req, int sync);
 static int macio_adb_autopoll(int devs);
 static void macio_adb_poll(void);
-static int macio_reset_bus(void);
+static int macio_adb_reset_bus(void);
 static void completed(void);
+
+static struct adb_controller	macio_controller = {
+	ADB_MACIO,
+	macio_adb_send_request,
+	macio_adb_autopoll,
+	macio_adb_reset_bus,
+	macio_adb_poll
+};
 
 __openfirmware
 
@@ -106,10 +114,12 @@ void macio_adb_init(void)
 	out_8(&adb->autopoll.r, APE);
 	out_8(&adb->intr_enb.r, DFB | TAG);
 
-	adb_hardware = ADB_MACIO;
-	adb_send_request = macio_adb_send_request;
-	adb_autopoll = macio_adb_autopoll;
-	adb_reset_bus = macio_reset_bus;
+	adb_controller = &macio_controller;
+//	adb_hardware = ADB_MACIO;
+
+//	adb_send_request = macio_adb_send_request;
+//	adb_autopoll = macio_adb_autopoll;
+//	adb_reset_bus = macio_reset_bus;
 }
 
 static int macio_adb_autopoll(int devs)
@@ -120,7 +130,7 @@ static int macio_adb_autopoll(int devs)
 	return 0;
 }
 
-static int macio_reset_bus(void)
+static int macio_adb_reset_bus(void)
 {
 	int timeout = 1000000;
 
@@ -138,7 +148,15 @@ static int macio_reset_bus(void)
 static int macio_adb_send_request(struct adb_request *req, int sync)
 {
 	unsigned long mflags;
-
+	int i;
+	
+	if (req->data[0] != ADB_PACKET)
+		return -EINVAL;
+	
+	for (i = 0; i < req->nbytes - 1; ++i)
+		req->data[i] = req->data[i+1];
+	--req->nbytes;
+	
 	req->next = 0;
 	req->sent = 0;
 	req->complete = 0;

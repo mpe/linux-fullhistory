@@ -1,5 +1,7 @@
 00-INDEX
 	- this file (info on some of the filesystems supported by linux).
+adfs.txt
+	- info and mount options for the Acorn Advanced Disc Filing System.
 affs.txt
 	- info and mount options for the Amiga Fast File System.
 coda.txt

@@ -58,7 +58,7 @@ contributors. (I could have forgotten some names.)
 	Mika Liljeberg	uLaw encoding and decoding routines
 	Jeff Tranter	Linux SOUND HOWTO document
 	Greg Lee	Volume computation algorithm for the GUS and
-			lot's of valuable suggestions.
+			lots of valuable suggestions.
 	Andy Warner	ISC port
 	Jim Lowe,
 	Amancio Hasty Jr	FreeBSD/NetBSD port
@@ -96,7 +96,7 @@ First of all it's highly recommended to contact me before sending anything
 or before even starting to do any work. Tell me what you suggest to be
 changed or what you have planned to do. Also ensure you are using the
 very latest (development) version of OSS/Free since the change may already be
-implemented there. In general it's major waste of time to try to improve
+implemented there. In general it's a major waste of time to try to improve a
 several months old version. Information about the latest version can be found
 from http://www.opensound.com/ossfree. In general there is no point in
 sending me patches relative to production kernels.
@@ -1314,8 +1314,8 @@ which use software configurable I/O port relocation feature of the chip.
 This ESS proprietary feature is supported only by OSS/Linux.
 
 There are ES1688 based cards which use different interrupt pin assignment than
-recommended by ESS (5, 7, 9/2 and 10). In this case all IRQ's don't work.
-At least a card called (Pearl?) Hypersound 16 supports IRQ15 but it doesn't
+recommended by ESS (5, 7, 9/2 and 10). In this case all IRQs don't work.
+At least a card called (Pearl?) Hypersound 16 supports IRQ 15 but it doesn't
 work.
 
 ES1868 is a PnP chip which is (supposed to be) compatible with ESS1688

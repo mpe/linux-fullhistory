@@ -14,12 +14,50 @@
 #include <linux/sched.h>
 #include <linux/kd.h>
 #include <linux/init.h>
+#include <linux/hdreg.h>
+
+/* Get the IDE stuff from the 68k file */
+#define ide_init_hwif_ports m68k_ide_init_hwif_ports
+#define ide_default_irq m68k_ide_default_irq
+#define ide_default_io_base m68k_ide_default_io_base
+#define ide_check_region m68k_ide_check_region
+#define ide_request_region m68k_ide_request_region
+#define ide_release_region m68k_ide_release_region
+#define ide_fix_driveid m68k_ide_fix_driveid
+#include <asm-m68k/ide.h>
+#undef ide_init_hwif_ports
+#define ide_default_irq
+#define ide_default_io_base
+#define ide_check_region
+#define ide_request_region
+#define ide_release_region
+#define ide_fix_driveid
+
 
 #include <asm/setup.h>
 #include <asm/amigahw.h>
 #include <asm/amigappc.h>
 #include <asm/pgtable.h>
 #include <asm/io.h>
+#include <asm/machdep.h>
+#include <asm/ide.h>
+
+#include "time.h"
+#include "local_irq.h"
+
+unsigned long apus_get_rtc_time(void);
+int apus_set_rtc_time(unsigned long nowtime);
+
+/* APUS defs */
+extern int parse_bootinfo(const struct bi_record *);
+extern char _end[];
+#ifdef CONFIG_APUS
+struct mem_info ramdisk;
+unsigned long isa_io_base;
+unsigned long isa_mem_base;
+unsigned long pci_dram_offset;
+#endif
+/* END APUS defs */
 
 unsigned long m68k_machtype;
 char debug_device[6] = "";
@@ -71,6 +109,8 @@ __initfunc(void apus_setup_arch(unsigned long * memory_start_p,
 	extern char cmd_line[];
 	int i;
 	char *p, *q;
+
+	m68k_machtype = MACH_AMIGA;
 
 	/* Parse the command line for arch-specific options.
 	 * For the m68k, this is currently only "debug=xxx" to enable printing
@@ -408,4 +448,195 @@ void cache_clear(__u32 addr, int length)
 	       "icbi 0,%0 \n\t"
 	       "isync \n\t"
 	       : : "r" (addr));
+}
+
+void
+apus_restart(char *cmd)
+{
+	cli();
+
+	APUS_WRITE(APUS_REG_LOCK, 
+		   REGLOCK_BLACKMAGICK1|REGLOCK_BLACKMAGICK2);
+	APUS_WRITE(APUS_REG_LOCK, 
+		   REGLOCK_BLACKMAGICK1|REGLOCK_BLACKMAGICK3);
+	APUS_WRITE(APUS_REG_LOCK, 
+		   REGLOCK_BLACKMAGICK2|REGLOCK_BLACKMAGICK3);
+	APUS_WRITE(APUS_REG_SHADOW, REGSHADOW_SELFRESET);
+	APUS_WRITE(APUS_REG_RESET, REGRESET_AMIGARESET);
+	for(;;);
+}
+
+void
+apus_power_off(void)
+{
+	for (;;);
+}
+
+void
+apus_halt(void)
+{
+   apus_restart(NULL);
+}
+
+void
+apus_do_IRQ(struct pt_regs *regs,
+	    int            cpu,
+            int            isfake)
+{
+        int old_level, new_level;
+
+	/* I don't think we need SMP code here - Corey */
+
+        old_level = ~(regs->mq) & IPLEMU_IPLMASK;
+        new_level = (~(regs->mq) >> 3) & IPLEMU_IPLMASK;
+        if (new_level != 0)
+        {
+                APUS_WRITE(APUS_IPL_EMU, IPLEMU_IPLMASK);
+                APUS_WRITE(APUS_IPL_EMU, (IPLEMU_SETRESET
+                                          | (~(new_level) & IPLEMU_IPLMASK)));
+                APUS_WRITE(APUS_IPL_EMU, IPLEMU_DISABLEINT);
+
+                process_int (VEC_SPUR+new_level, regs);
+                APUS_WRITE(APUS_IPL_EMU, IPLEMU_SETRESET | IPLEMU_DISABLEINT);
+                APUS_WRITE(APUS_IPL_EMU, IPLEMU_IPLMASK);
+                APUS_WRITE(APUS_IPL_EMU, (IPLEMU_SETRESET
+                                          | (~(old_level) & IPLEMU_IPLMASK)));
+        }
+        APUS_WRITE(APUS_IPL_EMU, IPLEMU_DISABLEINT);
+}
+
+#if defined(CONFIG_BLK_DEV_IDE) || defined(CONFIG_BLK_DEV_IDE_MODULE)
+/*
+ * IDE stuff.
+ */
+void
+apus_ide_insw(ide_ioreg_t port, void *buf, int ns)
+{
+	ide_insw(port, buf, ns);
+}
+
+void
+apus_ide_outsw(ide_ioreg_t port, void *buf, int ns)
+{
+	ide_outsw(port, buf, ns);
+}
+
+int
+apus_ide_default_irq(ide_ioreg_t base)
+{
+        m68k_ide_default_irq(base);
+}
+
+ide_ioreg_t
+apus_ide_default_io_base(int index)
+{
+        m68k_ide_default_io_base(index);
+}
+
+int
+apus_ide_check_region(ide_ioreg_t from, unsigned int extent)
+{
+        return m68k_ide_check_region(from, extent);
+}
+
+void
+apus_ide_request_region(ide_ioreg_t from,
+			unsigned int extent,
+			const char *name)
+{
+        m68k_ide_request_region(from, extent, name);
+}
+
+void
+apus_ide_release_region(ide_ioreg_t from,
+			unsigned int extent)
+{
+        m68k_ide_release_region(from, extent);
+}
+
+void
+apus_ide_fix_driveid(struct hd_driveid *id)
+{
+        m68k_ide_fix_driveid(id);
+}
+
+__initfunc(void
+apus_ide_init_hwif_ports (ide_ioreg_t *p, ide_ioreg_t base, int *irq))
+{
+        m68k_ide_init_hwif_ports(p, base, irq);
+}
+#endif
+
+__initfunc(void
+apus_local_init_IRQ(void))
+{
+	ppc_md.mask_irq = amiga_disable_irq;
+	ppc_md.unmask_irq = amiga_enable_irq;
+	apus_init_IRQ();
+}
+
+__initfunc(void
+apus_init(unsigned long r3, unsigned long r4, unsigned long r5,
+	  unsigned long r6, unsigned long r7))
+{
+	/* Parse bootinfo. The bootinfo is located right after
+           the kernel bss */
+	parse_bootinfo((const struct bi_record *)&_end);
+#ifdef CONFIG_BLK_DEV_INITRD
+	/* Take care of initrd if we have one. Use data from
+	   bootinfo to avoid the need to initialize PPC
+	   registers when kernel is booted via a PPC reset. */
+	if ( ramdisk.addr ) {
+		initrd_start = (unsigned long) __va(ramdisk.addr);
+		initrd_end = (unsigned long) 
+			__va(ramdisk.size + ramdisk.addr);
+	}
+	/* Make sure code below is not executed. */
+	r4 = 0;
+	r6 = 0;
+#endif /* CONFIG_BLK_DEV_INITRD */
+
+	ISA_DMA_THRESHOLD = 0x00ffffff;
+
+	ppc_md.setup_arch     = apus_setup_arch;
+	ppc_md.setup_residual = NULL;
+	ppc_md.get_cpuinfo    = apus_get_cpuinfo;
+	ppc_md.irq_cannonicalize = NULL;
+	ppc_md.init_IRQ       = apus_init_IRQ;
+	ppc_md.do_IRQ         = apus_do_IRQ;
+	ppc_md.get_irq_source = NULL;
+	ppc_md.init           = NULL;
+
+	ppc_md.restart        = apus_restart;
+	ppc_md.power_off      = apus_power_off;
+	ppc_md.halt           = apus_halt;
+
+	ppc_md.time_init      = NULL;
+	ppc_md.set_rtc_time   = apus_set_rtc_time;
+	ppc_md.get_rtc_time   = apus_get_rtc_time;
+	ppc_md.calibrate_decr = apus_calibrate_decr;
+
+	/* These should not be used for the APUS yet, since it uses
+	   the M68K keyboard now. */
+	ppc_md.kbd_setkeycode    = NULL;
+	ppc_md.kbd_getkeycode    = NULL;
+	ppc_md.kbd_translate     = NULL;
+	ppc_md.kbd_unexpected_up = NULL;
+	ppc_md.kbd_leds          = NULL;
+	ppc_md.kbd_init_hw       = NULL;
+	ppc_md.kbd_sysrq_xlate	 = NULL;
+
+#if defined(CONFIG_BLK_DEV_IDE) || defined(CONFIG_BLK_DEV_IDE_MODULE)
+        ppc_ide_md.insw = apus_ide_insw;
+        ppc_ide_md.outsw = apus_ide_outsw;
+        ppc_ide_md.default_irq = apus_ide_default_irq;
+        ppc_ide_md.default_io_base = apus_ide_default_io_base;
+        ppc_ide_md.check_region = apus_ide_check_region;
+        ppc_ide_md.request_region = apus_ide_request_region;
+        ppc_ide_md.release_region = apus_ide_release_region;
+        ppc_ide_md.fix_driveid = apus_ide_fix_driveid;
+        ppc_ide_md.ide_init_hwif = apus_ide_init_hwif_ports;
+
+        ppc_ide_md.io_base = _IO_BASE;
+#endif		
 }

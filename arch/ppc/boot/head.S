@@ -6,7 +6,7 @@
 	.text
 
 /*
- * $Id: head.S,v 1.29 1999/03/08 23:41:17 cort Exp $
+ * $Id: head.S,v 1.31 1999/04/22 06:32:00 davem Exp $
  *	
  * Boot loader philosophy:
  *      ROM loads us to some arbitrary location
@@ -23,11 +23,7 @@ start:
 start_:
 	mr	r11,r3		/* Save pointer to residual/board data */
 	mr      r25,r5          /* Save OFW pointer */
-
-	mfmsr	r3		/* Turn off interrupts  */
-	li	r4,0
-	ori	r4,r4,MSR_EE
-	andc	r3,r3,r4
+	li	r3,MSR_IP	/* Establish default MSR value */
 	mtmsr	r3
 
 /* check if we need to relocate ourselves to the link addr or were we
@@ -136,6 +132,20 @@ start_ldr:
 	lis	r10,0xdeadc0de@h
 	ori	r10,r10,0xdeadc0de@l
 	stw	r10,0(r9)
+/*
+ * The Radstone firmware maps PCI memory at 0xc0000000 using BAT2
+ * so disable BATs before setting this to avoid a clash
+ */
+	li      r8,0
+	mtspr   DBAT0U,r8
+	mtspr   DBAT1U,r8
+	mtspr   DBAT2U,r8
+	mtspr   DBAT3U,r8
+	mtspr   IBAT0U,r8
+	mtspr   IBAT1U,r8
+	mtspr   IBAT2U,r8
+	mtspr   IBAT3U,r8
+
 	blr
 hang:
 	b	hang	

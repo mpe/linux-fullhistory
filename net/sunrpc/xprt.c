@@ -200,6 +200,7 @@ xprt_sendmsg(struct rpc_xprt *xprt)
 	msg.msg_name	= (struct sockaddr *) &xprt->addr;
 	msg.msg_namelen = sizeof(xprt->addr);
 	msg.msg_control = NULL;
+	msg.msg_controllen = 0;
 
 	/* Dont repeat bytes */
 	
@@ -256,6 +257,7 @@ xprt_recvmsg(struct rpc_xprt *xprt, struct iovec *iov, int nr, int len)
 	msg.msg_name	= &sin;
 	msg.msg_namelen = sizeof(sin);
 	msg.msg_control = NULL;
+	msg.msg_controllen = 0;
 
 	oldfs = get_fs(); set_fs(get_ds());
 	result = sock_recvmsg(sock, &msg, len, MSG_DONTWAIT);
@@ -268,6 +270,7 @@ xprt_recvmsg(struct rpc_xprt *xprt, struct iovec *iov, int nr, int len)
 	msg.msg_name	= &sin;
 	msg.msg_namelen = sizeof(sin);
 	msg.msg_control = NULL;
+	msg.msg_controllen = 0;
 
 	oldfs = get_fs(); set_fs(get_ds());
 	result = sock->ops->recvmsg(sock, &msg, len, 1, 0, &alen);

@@ -214,7 +214,7 @@ There are several ways of configuring your sound:
 
 3)  In /etc/conf.modules when using modprobe.
 
-4)  Via RedHat's /usr/sbin/sndconfig program (text based).
+4)  Via Red Hat's /usr/sbin/sndconfig program (text based).
 
 5)  Via the OSS soundconf program (with the commercial version
     of the OSS driver.
@@ -240,7 +240,7 @@ For More Information (RTFM):
 
 6)  The comments and code in linux/drivers/sound.
 
-7)  The sndconfig and rhsound documentation from RedHat.
+7)  The sndconfig and rhsound documentation from Red Hat.
 
 8)  The Linux-sound mailing list:  sound-list@redhat.com
 

@@ -132,6 +132,11 @@
 	       Fixed harmless compiler warning in include/asm-i386/mtrr.h
 	       Fixed version numbering and history for v1.23 -> v1.24.
   v1.26
+  
+  v1.26ac	Alan Cox <alan@redhat.com>
+  		Added some K6-II/III support. This needs back merging with
+  		Richard's current code before it goes to Linus really.
+  		
 */
 #include <linux/types.h>
 #include <linux/errno.h>
@@ -163,6 +168,7 @@
 #include <asm/segment.h>
 #include <asm/bitops.h>
 #include <asm/atomic.h>
+#include <asm/msr.h>
 
 #include <asm/hardirq.h>
 #include "irq.h"
@@ -197,7 +203,7 @@
 #  define MTRR_CHANGE_MASK_DEFTYPE   0x04
 #endif
 
-/* In the processor's MTRR interface, the MTRR type is always held in
+/* In the intel processor's MTRR interface, the MTRR type is always held in
    an 8 bit field: */
 typedef u8 mtrr_type;
 
@@ -225,6 +231,7 @@ static spinlock_t main_lock = SPIN_LOCK_UNLOCKED;
 #ifdef CONFIG_PROC_FS
 static void compute_ascii (void);
 #endif
+static int k6_has_ranges(void);
 
 
 struct set_mtrr_context
@@ -236,28 +243,13 @@ struct set_mtrr_context
 };
 
 /*
- * Access to machine-specific registers (available on 586 and better only)
- * Note: the rd* operations modify the parameters directly (without using
- * pointer indirection), this allows gcc to optimize better
+ *	No point continually digging through complex CPU conditionals..
  */
-#define rdmsr(msr,val1,val2) \
-       __asm__ __volatile__("rdmsr" \
-			    : "=a" (val1), "=d" (val2) \
-			    : "c" (msr))
+ 
+static int mtrr_flags;
 
-#define wrmsr(msr,val1,val2) \
-     __asm__ __volatile__("wrmsr" \
-			  : /* no outputs */ \
-			  : "c" (msr), "a" (val1), "d" (val2))
-
-#define rdtsc(low,high) \
-     __asm__ __volatile__("rdtsc" : "=a" (low), "=d" (high))
-
-#define rdpmc(counter,low,high) \
-     __asm__ __volatile__("rdpmc" \
-			  : "=a" (low), "=d" (high) \
-			  : "c" (counter))
-
+#define MTRR_PRESENT		1
+#define MTRR_WRCOMB		2
 
 /* Put the processor into a state where MTRRs can be safely set. */
 static void set_mtrr_prepare(struct set_mtrr_context *ctxt)
@@ -267,13 +259,15 @@ static void set_mtrr_prepare(struct set_mtrr_context *ctxt)
     /* disable interrupts locally */
     __save_flags (ctxt->flags); __cli ();
 
+    if(boot_cpu_data.x86_vendor == X86_VENDOR_AMD)
+    	return;
+
     /* save value of CR4 and clear Page Global Enable (bit 7) */
     asm volatile ("movl  %%cr4, %0\n\t"
 		  "movl  %0, %1\n\t"
 		  "andb  $0x7f, %b1\n\t"
 		  "movl  %1, %%cr4\n\t"
                   : "=r" (ctxt->cr4val), "=q" (tmp) : : "memory");
-
     /* disable and flush caches. Note that wbinvd flushes the TLBs as
        a side-effect. */
     asm volatile ("movl  %%cr0, %0\n\t"
@@ -294,6 +288,9 @@ static void set_mtrr_done(struct set_mtrr_context *ctxt)
 {
     unsigned long tmp;
 
+    if(boot_cpu_data.x86_vendor == X86_VENDOR_AMD)
+    	return;
+    	
     /* flush caches and TLBs */
     asm volatile ("wbinvd" : : : "memory" );
 
@@ -319,6 +316,9 @@ static void set_mtrr_done(struct set_mtrr_context *ctxt)
 static unsigned int get_num_var_ranges (void)
 {
     unsigned long config, dummy;
+    
+    if(boot_cpu_data.x86_vendor == X86_VENDOR_AMD)
+    	return 2;
 
     rdmsr(MTRRcap_MSR, config, dummy);
     return (config & 0xff);
@@ -340,6 +340,46 @@ static void get_mtrr (unsigned int reg, unsigned long *base,
 {
     unsigned long dummy, mask_lo, base_lo;
 
+    if(boot_cpu_data.x86_vendor == X86_VENDOR_AMD)
+    {
+        unsigned long low, high;
+    	rdmsr(0xC0000085,  low, high);
+    	/* Upper dword is region 1, lower is region 0 */
+    	if(reg==1)
+    		low=high;
+    	/* The base masks off on the right alignment */
+    	*base=low&0xFFFE0000;
+    	*type=0;
+    	if(low&1)
+    		*type=MTRR_TYPE_UNCACHABLE;
+    	if(low&2)
+    		*type=MTRR_TYPE_WRCOMB;
+    	if(!(low&3))
+    	{
+    		*size=0;
+    		return;
+    	}
+    	
+	/*
+	 *	This needs a little explaining. The size is stored as an
+	 *	inverted mask of bits of 128K granularity 15 bits long offset
+	 *	2 bits
+	 *
+	 *	So to get a size we do invert the mask and add 1 to the lowest
+	 *	mask bit (4 as its 2 bits in). This gives us a size we then shift
+	 *	to turn into 128K blocks
+	 *
+	 *	eg		111 1111 1111 1100      is 512K
+	 *
+	 *	invert		000 0000 0000 0011
+	 *	+1		000 0000 0000 0100
+	 *	*128K	...
+	 */
+
+    	low=(~low)&0x1FFFC;
+	*size = (low+4)<<15;
+	return;	
+    }
     rdmsr(MTRRphysMask_MSR(reg), mask_lo, dummy);
     if ((mask_lo & 0x800) == 0) {
 	/* Invalid (i.e. free) range. */
@@ -381,16 +421,56 @@ static void set_mtrr_up (unsigned int reg, unsigned long base,
     struct set_mtrr_context ctxt;
 
     if (do_safe) set_mtrr_prepare (&ctxt);
-    if (size == 0)
+    
+    if (boot_cpu_data.x86_vendor == X86_VENDOR_INTEL)
     {
-	/* The invalid bit is kept in the mask, so we simply clear the
-	   relevant mask register to disable a range. */
-	wrmsr (MTRRphysMask_MSR (reg), 0, 0);
+	    if (size == 0)
+	    {
+		/* The invalid bit is kept in the mask, so we simply clear the
+		   relevant mask register to disable a range. */
+		wrmsr (MTRRphysMask_MSR (reg), 0, 0);
+	    }
+	    else
+	    {
+		wrmsr (MTRRphysBase_MSR (reg), base | type, 0);
+		wrmsr (MTRRphysMask_MSR (reg), ~(size - 1) | 0x800, 0);
+	    }
     }
-    else
+    if (boot_cpu_data.x86_vendor == X86_VENDOR_AMD)
     {
-	wrmsr (MTRRphysBase_MSR (reg), base | type, 0);
-	wrmsr (MTRRphysMask_MSR (reg), ~(size - 1) | 0x800, 0);
+        u32 low, high;
+        unsigned long flags;
+        /*
+         *	Low is MTRR0 , High MTRR 1
+         */
+        rdmsr(0xC0000085, low, high);
+        /*
+         *	Blank to disable
+         */
+        if(size==0)
+        	*(reg?&high:&low)=0;
+        else
+        	/* Set the register to the base (already shifted for us), the
+        	   type (off by one) and an inverted bitmask of the size
+        	   
+        	   The size is the only odd bit. We are fed say 512K
+        	   We invert this and we get 111 1111 1111 1011 but
+        	   if you subtract one and invert you get the desired
+        	   111 1111 1111 1100 mask 
+        	*/
+        	
+		*(reg?&high:&low)=(((~(size-1))>>15)&0x0001FFFC)|base|(type+1);
+	
+	/*
+	 *	The writeback rule is quite specific. See the manual. Its
+	 *	disable local interrupts, write back the cache, set the mtrr
+	 */
+	 
+	save_flags(flags);
+	__cli();
+	__asm__ __volatile__("wbinvd" : : : "memory");
+	wrmsr(0xC0000085, low, high);
+	restore_flags(flags);
     }
     if (do_safe) set_mtrr_done (&ctxt);
 }   /*  End Function set_mtrr_up  */
@@ -518,11 +598,17 @@ __initfunc(static void get_mtrr_state(struct mtrr_state *state))
     for (i = 0; i < nvrs; i++)
 	get_mtrr_var_range(i, &vrs[i]);
     
-    get_fixed_ranges(state->fixed_ranges);
+    if(boot_cpu_data.x86_vendor == X86_VENDOR_INTEL)
+    {
+	    get_fixed_ranges(state->fixed_ranges);
 
-    rdmsr(MTRRdefType_MSR, lo, dummy);
-    state->def_type = (lo & 0xff);
-    state->enabled = (lo & 0xc00) >> 10;
+	    rdmsr(MTRRdefType_MSR, lo, dummy);
+	    state->def_type = (lo & 0xff);
+	    state->enabled = (lo & 0xc00) >> 10;
+	    return;
+    }
+    state->def_type = 0;
+    state->enabled = 1;
 }   /*  End Function get_mtrr_state  */
 
 
@@ -545,6 +631,9 @@ __initfunc(static unsigned long set_mtrr_state (struct mtrr_state *state,
     unsigned int i;
     unsigned long change_mask = 0;
 
+    if(boot_cpu_data.x86_vendor == X86_VENDOR_AMD)
+    	return 0UL;
+    	
     for (i = 0; i < state->num_var_ranges; i++)
 	if (set_mtrr_var_range_testing(i, &state->var_ranges[i]))
 	    change_mask |= MTRR_CHANGE_MASK_VARIABLE;
@@ -737,40 +826,58 @@ int mtrr_add (unsigned long base, unsigned long size, unsigned int type,
     mtrr_type ltype;
     unsigned long lbase, lsize, last;
 
-    if ( !(boot_cpu_data.x86_capability & X86_FEATURE_MTRR) ) return -ENODEV;
-    if ( (base & 0xfff) || (size & 0xfff) )
+    if (!(mtrr_flags&MTRR_PRESENT))
+    	return -ENODEV;
+    	
+    if (boot_cpu_data.x86_vendor == X86_VENDOR_AMD)
     {
-	printk ("mtrr: size and base must be multiples of 4kB\n");
-	printk ("mtrr: size: %lx  base: %lx\n", size, base);
-	return -EINVAL;
+    	/* Apply the K6 block alignment and size rules 
+    	   In order
+    	      o Uncached or gathering only
+    	      o 128K or bigger block
+    	      o Power of 2 block
+    	      o base suitably aligned to the power
+    	  */
+    	if(type > 1 || size < (1<<17) || (size & ~(size-1))-size || (base&(size-1)))
+    		return -EINVAL;
     }
-    if (base + size < 0x100000)
+    	
+    if (boot_cpu_data.x86_vendor == X86_VENDOR_INTEL)
     {
-	printk ("mtrr: cannot set region below 1 MByte (0x%lx,0x%lx)\n",
-		base, size);
-	return -EINVAL;
-    }
-    /*  Check upper bits of base and last are equal and lower bits are 0 for
-	base and 1 for last  */
-    last = base + size - 1;
-    for (lbase = base; !(lbase & 1) && (last & 1);
-	 lbase = lbase >> 1, last = last >> 1);
-    if (lbase != last)
-    {
-	printk ("mtrr: base(0x%lx) is not aligned on a size(0x%lx) boundary\n",
-		base, size);
-	return -EINVAL;
-    }
-    if (type >= MTRR_NUM_TYPES)
-    {
-	printk ("mtrr: type: %u illegal\n", type);
-	return -EINVAL;
-    }
-    /*  If the type is WC, check that this processor supports it  */
-    if ( (type == MTRR_TYPE_WRCOMB) && !have_wrcomb () )
-    {
-        printk ("mtrr: your processor doesn't support write-combining\n");
-        return -ENOSYS;
+	    if ( (base & 0xfff) || (size & 0xfff) )
+	    {
+		printk ("mtrr: size and base must be multiples of 4kB\n");
+		printk ("mtrr: size: %lx  base: %lx\n", size, base);
+		return -EINVAL;
+	    }
+	    if (base + size < 0x100000)
+	    {
+		printk ("mtrr: cannot set region below 1 MByte (0x%lx,0x%lx)\n",
+			base, size);
+		return -EINVAL;
+	    }
+	    /*  Check upper bits of base and last are equal and lower bits are 0 for
+		base and 1 for last  */
+	    last = base + size - 1;
+	    for (lbase = base; !(lbase & 1) && (last & 1);
+		 lbase = lbase >> 1, last = last >> 1);
+	    if (lbase != last)
+	    {
+		printk ("mtrr: base(0x%lx) is not aligned on a size(0x%lx) boundary\n",
+			base, size);
+		return -EINVAL;
+	    }
+	    if (type >= MTRR_NUM_TYPES)
+	    {
+		printk ("mtrr: type: %u illegal\n", type);
+		return -EINVAL;
+	    }
+	    /*  If the type is WC, check that this processor supports it  */
+	    if ( (type == MTRR_TYPE_WRCOMB) && !have_wrcomb () )
+	    {
+	        printk ("mtrr: your processor doesn't support write-combining\n");
+	        return -EINVAL;
+	    }
     }
     increment = increment ? 1 : 0;
     max = get_num_var_ranges ();
@@ -834,7 +941,7 @@ int mtrr_del (int reg, unsigned long base, unsigned long size)
     mtrr_type ltype;
     unsigned long lbase, lsize;
 
-    if ( !(boot_cpu_data.x86_capability & X86_FEATURE_MTRR) ) return -ENODEV;
+    if ( !(mtrr_flags&MTRR_PRESENT) ) return -ENODEV;
     max = get_num_var_ranges ();
     spin_lock (&main_lock);
     if (reg < 0)
@@ -1153,10 +1260,15 @@ static struct mtrr_state smp_mtrr_state __initdata = {0, 0};
 
 __initfunc(void mtrr_init_boot_cpu (void))
 {
-    if ( !(boot_cpu_data.x86_capability & X86_FEATURE_MTRR) ) return;
     printk("mtrr: v%s Richard Gooch (rgooch@atnf.csiro.au)\n", MTRR_VERSION);
-
-    get_mtrr_state (&smp_mtrr_state);
+    if (boot_cpu_data.x86_capability & X86_FEATURE_MTRR)
+    {
+	get_mtrr_state (&smp_mtrr_state);
+    }
+    if (boot_cpu_data.x86_vendor == X86_VENDOR_AMD && k6_has_ranges())
+    {
+	get_mtrr_state (&smp_mtrr_state);
+    }
 }   /*  End Function mtrr_init_boot_cpu  */
 
 __initfunc(void mtrr_init_secondary_cpu (void))
@@ -1181,9 +1293,35 @@ __initfunc(void mtrr_init_secondary_cpu (void))
 
 #endif  /*  __SMP__  */
 
+/*
+ *	The extended memory handling is available on the K6-III and the
+ *	K6-II stepping 8 and higher only.
+ */
+ 
+static int k6_has_ranges(void)
+{
+	if(boot_cpu_data.x86 !=5)
+		return 0;
+	if(boot_cpu_data.x86_model == 9 ||
+		(boot_cpu_data.x86_model == 8 && 
+		 boot_cpu_data.x86_mask >= 8))
+		 return 1;
+	return 0;
+}
+
 __initfunc(int mtrr_init(void))
 {
-    if ( !(boot_cpu_data.x86_capability & X86_FEATURE_MTRR) ) return 0;
+    if ( boot_cpu_data.x86_vendor == X86_VENDOR_AMD  && k6_has_ranges())
+    {
+#  ifdef CONFIG_PROC_FS
+	proc_register (&proc_root, &proc_root_mtrr);
+#  endif
+    	mtrr_flags|=MTRR_PRESENT|MTRR_WRCOMB;
+    	init_table();
+    	return 0;
+    }
+    if ( !(boot_cpu_data.x86_capability & X86_FEATURE_MTRR) )
+    	return 0;
 #  ifndef __SMP__
     printk("mtrr: v%s Richard Gooch (rgooch@atnf.csiro.au)\n", MTRR_VERSION);
 #  endif
@@ -1197,6 +1335,7 @@ __initfunc(int mtrr_init(void))
     proc_register (&proc_root, &proc_root_mtrr);
 #  endif
 
+    mtrr_flags|=MTRR_PRESENT;
     init_table ();
     return 0;
 }   /*  End Function mtrr_init  */

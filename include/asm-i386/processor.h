@@ -148,6 +148,7 @@ others may find it useful. */
 extern unsigned int machine_id;
 extern unsigned int machine_submodel_id;
 extern unsigned int BIOS_revision;
+extern unsigned int mca_pentium_flag;
 
 /*
  * User space process size: 3GB (default).

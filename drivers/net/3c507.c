@@ -53,6 +53,7 @@ static const char *version =
 #include <asm/bitops.h>
 #include <asm/io.h>
 #include <asm/dma.h>
+#include <asm/spinlock.h>
 #include <linux/errno.h>
 
 #include <linux/netdevice.h>
@@ -123,6 +124,7 @@ struct net_local {
 	ushort tx_head;
 	ushort tx_cmd_link;
 	ushort tx_reap;
+	spinlock_t lock;
 };
 
 /*
@@ -448,6 +450,7 @@ static int el16_send_packet(struct sk_buff *skb, struct device *dev)
 	struct net_local *lp = (struct net_local *)dev->priv;
 	int ioaddr = dev->base_addr;
 	unsigned long shmem = dev->mem_start;
+	unsigned long flags;
 
 	if (dev->tbusy) 
 	{
@@ -487,7 +490,13 @@ static int el16_send_packet(struct sk_buff *skb, struct device *dev)
 		lp->stats.tx_bytes+=length;
 		/* Disable the 82586's input to the interrupt line. */
 		outb(0x80, ioaddr + MISC_CTRL);
+#ifdef CONFIG_SMP
+		spin_lock_irqsave(&lp->lock, flags);
 		hardware_send_packet(dev, buf, length);
+		spin_unlock_irqrestore(&lp->lock, flags);
+#else
+		hardware_send_packet(dev, buf, length);
+#endif		
 		dev->trans_start = jiffies;
 		/* Enable the 82586 interrupt input. */
 		outb(0x84, ioaddr + MISC_CTRL);
@@ -515,10 +524,13 @@ static void el16_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 		return;
 	}
 	dev->interrupt = 1;
+	
 
 	ioaddr = dev->base_addr;
 	lp = (struct net_local *)dev->priv;
 	shmem = dev->mem_start;
+
+	spin_lock(&lp->lock);
 
 	status = readw(shmem+iSCB_STATUS);
 
@@ -598,6 +610,7 @@ static void el16_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 
 	/* Enable the 82586's interrupt input. */
 	outb(0x84, ioaddr + MISC_CTRL);
+	spin_unlock(&lp->lock);
 
 	return;
 }

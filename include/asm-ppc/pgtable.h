@@ -37,6 +37,7 @@ extern void flush_page_to_ram(unsigned long);
 
 extern unsigned long va_to_phys(unsigned long address);
 extern pte_t *va_to_pte(struct task_struct *tsk, unsigned long address);
+extern unsigned long ioremap_bot, ioremap_base;
 #endif /* __ASSEMBLY__ */
 /*
  * The PowerPC MMU uses a hash table containing PTEs, together with
@@ -95,16 +96,19 @@ extern pte_t *va_to_pte(struct task_struct *tsk, unsigned long address);
  * The vmalloc() routines leaves a hole of 4kB between each vmalloced
  * area for the same reason. ;)
  *
- * The vmalloc_offset MUST be larger than the gap between the bat2 mapping
- * and the size of physical ram.  Since the bat2 mapping can be larger than
- * the amount of ram we have vmalloc_offset must ensure that we don't try
- * to allocate areas that don't exist! This value of 64M will only cause
- * problems when we have >128M -- Cort
+ * We no longer map larger than phys RAM with the BATs so we don't have
+ * to worry about the VMALLOC_OFFSET causing problems.  We do have to worry
+ * about clashes between our early calls to ioremap() that start growing down
+ * from ioremap_base being run into the VM area allocations (growing upwards
+ * from VMALLOC_START).  For this reason we have ioremap_bot to check when
+ * we actually run into our mappings setup in the early boot with the VM
+ * system.  This really does become a problem for machines with good amounts
+ * of RAM.  -- Cort
  */
-#define VMALLOC_OFFSET	(0x4000000) /* 64M */
+#define VMALLOC_OFFSET (0x4000000) /* 64M */
 #define VMALLOC_START ((((long)high_memory + VMALLOC_OFFSET) & ~(VMALLOC_OFFSET-1)))
 #define VMALLOC_VMADDR(x) ((unsigned long)(x))
-#define VMALLOC_END	0xf0000000
+#define VMALLOC_END	ioremap_bot
 
 /*
  * Bits in a linux-style PTE.  These match the bits in the

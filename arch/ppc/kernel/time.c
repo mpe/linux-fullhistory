@@ -1,5 +1,5 @@
 /*
- * $Id: time.c,v 1.45 1999/03/03 15:09:59 cort Exp $
+ * $Id: time.c,v 1.47 1999/03/18 05:11:11 cort Exp $
  * Common time routines among all ppc machines.
  *
  * Written by Cort Dougan (cort@cs.nmt.edu) to merge
@@ -41,17 +41,13 @@
 #include <asm/processor.h>
 #include <asm/nvram.h>
 #include <asm/cache.h>
-#ifdef CONFIG_MBX
-#include <asm/mbx.h>
-#endif
+/* Fixme - Why is this here? - Corey */
 #ifdef CONFIG_8xx
 #include <asm/8xx_immap.h>
 #endif
+#include <asm/machdep.h>
 
 #include "time.h"
-
-/* this is set to the appropriate pmac/prep/chrp func in init_IRQ() */
-int (*set_rtc_time)(unsigned long);
 
 void smp_local_timer_interrupt(struct pt_regs *);
 
@@ -116,16 +112,21 @@ void timer_interrupt(struct pt_regs * regs)
 			 */
 			if ( xtime.tv_sec > last_rtc_update + 660 )
 			{
-				if (set_rtc_time(xtime.tv_sec) == 0)
+				if (ppc_md.set_rtc_time(xtime.tv_sec) == 0) {
 					last_rtc_update = xtime.tv_sec;
-				else
-					last_rtc_update = xtime.tv_sec - 600; /* do it again in 60 s */
+				}
+				else {
+					/* do it again in 60 s */
+					last_rtc_update = xtime.tv_sec - 60;
+				}
 			}
 		}
 	}
 #ifdef __SMP__
 	smp_local_timer_interrupt(regs);
 #endif		
+
+	/* Fixme - make this more generic - Corey */
 #ifdef CONFIG_APUS
 	{
 		extern void apus_heartbeat (void);
@@ -134,28 +135,6 @@ void timer_interrupt(struct pt_regs * regs)
 #endif
 	hardirq_exit(cpu);
 }
-
-#ifdef CONFIG_MBX
-/* A place holder for time base interrupts, if they are ever enabled.
-*/
-void timebase_interrupt(int irq, void * dev, struct pt_regs * regs)
-{
-	printk("timebase_interrupt()\n");
-}
-
-/* The RTC on the MPC8xx is an internal register.
- * We want to protect this during power down, so we need to unlock,
- * modify, and re-lock.
- */
-static int
-mbx_set_rtc_time(unsigned long time)
-{
-	((immap_t *)IMAP_ADDR)->im_sitk.sitk_rtck = KAPWR_KEY;
-	((immap_t *)IMAP_ADDR)->im_sit.sit_rtc = time;
-	((immap_t *)IMAP_ADDR)->im_sitk.sitk_rtck = ~KAPWR_KEY;
-	return(0);
-}
-#endif /* CONFIG_MBX */
 
 /*
  * This version of gettimeofday has microsecond resolution.
@@ -203,199 +182,29 @@ void do_settimeofday(struct timeval *tv)
 
 __initfunc(void time_init(void))
 {
-#ifndef CONFIG_MBX
+        if (ppc_md.time_init != NULL)
+        {
+                ppc_md.time_init();
+        }
+
 	if ((_get_PVR() >> 16) == 1) {
 		/* 601 processor: dec counts down by 128 every 128ns */
 		decrementer_count = DECREMENTER_COUNT_601;
 		count_period_num = COUNT_PERIOD_NUM_601;
 		count_period_den = COUNT_PERIOD_DEN_601;
+        } else if (!smp_processor_id()) {
+                ppc_md.calibrate_decr();
 	}
 
-	switch (_machine) {
-	case _MACH_Pmac:
-		xtime.tv_sec = pmac_get_rtc_time();
-		if ( (_get_PVR() >> 16) != 1 && (!smp_processor_id()) )
-			pmac_calibrate_decr();
-		if ( !smp_processor_id() )
-			set_rtc_time = pmac_set_rtc_time;
-		break;
-	case _MACH_chrp:
-		chrp_time_init();
-		xtime.tv_sec = chrp_get_rtc_time();
-		if ((_get_PVR() >> 16) != 1)
-			chrp_calibrate_decr();
-		set_rtc_time = chrp_set_rtc_time;
-		break;
-	case _MACH_prep:
-		xtime.tv_sec = prep_get_rtc_time();
-		prep_calibrate_decr();
-		set_rtc_time = prep_set_rtc_time;
-		break;
-#ifdef CONFIG_APUS		
-	case _MACH_apus:
-	{
-		xtime.tv_sec = apus_get_rtc_time();
-		apus_calibrate_decr();
-		set_rtc_time = apus_set_rtc_time;
- 		break;
-	}
-#endif	
-	}
-	xtime.tv_usec = 0;
-#else /* CONFIG_MBX */
-	mbx_calibrate_decr();
-	set_rtc_time = mbx_set_rtc_time;
+        xtime.tv_sec = ppc_md.get_rtc_time();
+        xtime.tv_usec = 0;
 
-	/* First, unlock all of the registers we are going to modify.
-	 * To protect them from corruption during power down, registers
-	 * that are maintained by keep alive power are "locked".  To
-	 * modify these registers we have to write the key value to
-	 * the key location associated with the register.
-	 */
-	((immap_t *)IMAP_ADDR)->im_sitk.sitk_tbscrk = KAPWR_KEY;
-	((immap_t *)IMAP_ADDR)->im_sitk.sitk_rtcsck = KAPWR_KEY;
-
-
-	/* Disable the RTC one second and alarm interrupts.
-	*/
-	((immap_t *)IMAP_ADDR)->im_sit.sit_rtcsc &=
-						~(RTCSC_SIE | RTCSC_ALE);
-
-	/* Enabling the decrementer also enables the timebase interrupts
-	 * (or from the other point of view, to get decrementer interrupts
-	 * we have to enable the timebase).  The decrementer interrupt
-	 * is wired into the vector table, nothing to do here for that.
-	 */
-	((immap_t *)IMAP_ADDR)->im_sit.sit_tbscr =
-				((mk_int_int_mask(DEC_INTERRUPT) << 8) |
-					 (TBSCR_TBF | TBSCR_TBE));
-	if (request_irq(DEC_INTERRUPT, timebase_interrupt, 0, "tbint", NULL) != 0)
-		panic("Could not allocate timer IRQ!");
-
-	/* Get time from the RTC.
-	*/
-	xtime.tv_sec = ((immap_t *)IMAP_ADDR)->im_sit.sit_rtc;
-	xtime.tv_usec = 0;
-
-#endif /* CONFIG_MBX */
 	set_dec(decrementer_count);
 	/* mark the rtc/on-chip timer as in sync
 	 * so we don't update right away
 	 */
 	last_rtc_update = xtime.tv_sec;
 }
-
-#ifndef CONFIG_MBX
-/*
- * Uses the on-board timer to calibrate the on-chip decrementer register
- * for prep systems.  On the pmac the OF tells us what the frequency is
- * but on prep we have to figure it out.
- * -- Cort
- */
-int calibrate_done = 0;
-volatile int *done_ptr = &calibrate_done;
-__initfunc(void prep_calibrate_decr(void))
-{
-	unsigned long flags;
-	unsigned long freq, divisor;
-
-	/* the Powerstack II's have trouble with the timer so
-	 * we use a default value -- Cort
-	 */
-	if ( (_prep_type == _PREP_Motorola) &&
-	     ((inb(0x800) & 0xF0) & 0x40) )
-	{
-		static unsigned long t2 = 0;
-		
-		t2 = 998700000/60;
-		freq = t2 * 60;	/* try to make freq/1e6 an integer */
-		divisor = 60;
-		printk("time_init: decrementer frequency = %lu/%lu (%luMHz)\n",
-		       freq, divisor,t2>>20);
-		decrementer_count = freq / HZ / divisor;
-		count_period_num = divisor;
-		count_period_den = freq / 1000000;
-		return;
-	}
-	if ( _prep_type == _PREP_Radstone )
-	{
-		freq = res->VitalProductData.ProcessorBusHz;
-		divisor = 4;
-		printk("time_init: decrementer frequency = %d/%d\n", freq, divisor);
-		decrementer_count = freq / HZ / divisor;
-		count_period_num = divisor;
-		count_period_den = freq / 1000000;
-		return;
-	}
-	
-	save_flags(flags);
-
-#define TIMER0_COUNT 0x40
-#define TIMER_CONTROL 0x43
-	/* set timer to periodic mode */
-	outb_p(0x34,TIMER_CONTROL);/* binary, mode 2, LSB/MSB, ch 0 */
-	/* set the clock to ~100 Hz */
-	outb_p(LATCH & 0xff , TIMER0_COUNT);	/* LSB */
-	outb(LATCH >> 8 , TIMER0_COUNT);	/* MSB */
-	
-	if (request_irq(0, prep_calibrate_decr_handler, 0, "timer", NULL) != 0)
-		panic("Could not allocate timer IRQ!");
-	__sti();
-	while ( ! *done_ptr ) /* nothing */; /* wait for calibrate */
-        restore_flags(flags);
-	free_irq( 0, NULL);
-}
-
-__initfunc(void prep_calibrate_decr_handler(int irq, void *dev, struct pt_regs * regs))
-{
-	unsigned long freq, divisor;
-	static unsigned long t1 = 0, t2 = 0;
-	
-	if ( !t1 )
-		t1 = get_dec();
-	else if (!t2)
-	{
-		t2 = get_dec();
-		t2 = t1-t2;  /* decr's in 1/HZ */
-		t2 = t2*HZ;  /* # decrs in 1s - thus in Hz */
-		freq = t2 * 60;	/* try to make freq/1e6 an integer */
-		divisor = 60;
-		printk("time_init: decrementer frequency = %lu/%lu (%luMHz)\n",
-		       freq, divisor,t2>>20);
-		decrementer_count = freq / HZ / divisor;
-		count_period_num = divisor;
-		count_period_den = freq / 1000000;
-		*done_ptr = 1;
-	}
-}
-
-#else /* CONFIG_MBX */
-
-/* The decrementer counts at the system (internal) clock frequency divided by
- * sixteen, or external oscillator divided by four.  Currently, we only
- * support the MBX, which is system clock divided by sixteen.
- */
-__initfunc(void mbx_calibrate_decr(void))
-{
-	bd_t	*binfo = (bd_t *)res;
-	int freq, fp, divisor;
-
-	if ((((immap_t *)IMAP_ADDR)->im_clkrst.car_sccr & 0x02000000) == 0)
-		printk("WARNING: Wrong decrementer source clock.\n");
-
-	/* The manual says the frequency is in Hz, but it is really
-	 * as MHz.  The value 'fp' is the number of decrementer ticks
-	 * per second.
-	 */
-	fp = (binfo->bi_intfreq * 1000000) / 16;
-	freq = fp*60;	/* try to make freq/1e6 an integer */
-        divisor = 60;
-        printk("time_init: decrementer frequency = %d/%d\n", freq, divisor);
-        decrementer_count = freq / HZ / divisor;
-        count_period_num = divisor;
-        count_period_den = freq / 1000000;
-}
-#endif /* CONFIG_MBX */
 
 /* Converts Gregorian date to seconds since 1970-01-01 00:00:00.
  * Assumes input in normal date format, i.e. 1980-12-31 23:59:59

@@ -1,8 +1,11 @@
 /*
  * USB HID boot protocol mouse support based on MS BusMouse driver, psaux 
- * driver, and Linus's skeleton USB mouse driver
+ * driver, and Linus's skeleton USB mouse driver. Fixed up a lot by Linus.
  *
  * Brad Keryan 4/3/1999
+ *
+ * version 0.20: Linus rewrote read_mouse() to do PS/2 and do it
+ * correctly. Events are added together, not queued, to keep the rodent sober.
  *
  * version 0.02: Hmm, the mouse seems drunk because I'm queueing the events.
  * This is wrong: when an application (like X or gpm) reads the mouse device,
@@ -282,18 +285,9 @@ int usb_mouse_init(void)
 	return 0;
 }
 
-#if 0
-
-int init_module(void)
-{
-	return usb_mouse_init();
-}
-
-void cleanup_module(void)
+void usb_mouse_cleanup(void)
 {
 	/* this, too, probably needs work */
 	usb_deregister(&mouse_driver);
 	misc_deregister(&usb_mouse);
 }
-
-#endif

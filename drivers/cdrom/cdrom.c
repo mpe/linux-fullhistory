@@ -120,11 +120,16 @@
   2.54 Mar 15, 1999 - Jens Axboe <axboe@image.dk>
   -- Check capability mask from low level driver when counting tracks as
   per suggestion from Corey J. Scotts <cstotts@blue.weeg.uiowa.edu>.
+  
+  2.55 Apr 25, 1999 - Jens Axboe <axboe@image.dk>
+  -- autoclose was mistakenly checked against CDC_OPEN_TRAY instead of
+  CDC_CLOSE_TRAY.
+  -- proc info didn't mask against capabilities mask.
 
 -------------------------------------------------------------------------*/
 
-#define REVISION "Revision: 2.54"
-#define VERSION "Id: cdrom.c 2.54 1999/03/15"
+#define REVISION "Revision: 2.55"
+#define VERSION "Id: cdrom.c 2.55 1999/04/25"
 
 /* I use an error-log mask to give fine grain control over the type of
    messages dumped to the system logs.  The available masks include: */
@@ -268,7 +273,7 @@ int register_cdrom(struct cdrom_device_info *cdi)
 	cdo->n_minors = 0;
         cdi->options = CDO_USE_FFLAGS;
 	
-	if (autoclose==1 && cdo->capability & ~cdi->mask & CDC_OPEN_TRAY)
+	if (autoclose==1 && cdo->capability & ~cdi->mask & CDC_CLOSE_TRAY)
 		cdi->options |= (int) CDO_AUTO_CLOSE;
 	if (autoeject==1 && cdo->capability & ~cdi->mask & CDC_OPEN_TRAY)
 		cdi->options |= (int) CDO_AUTO_EJECT;
@@ -1097,27 +1102,27 @@ int cdrom_sysctl_info(ctl_table *ctl, int write, struct file * filp,
 	pos += sprintf(cdrom_drive_info+pos, "\nCan close tray:\t");
 	for (cdi=topCdromPtr;cdi!=NULL;cdi=cdi->next)
 	    pos += sprintf(cdrom_drive_info+pos, "\t%d",
-			   ((cdi->ops->capability & CDC_CLOSE_TRAY)!=0));
+		((cdi->ops->capability & ~cdi->mask & CDC_CLOSE_TRAY)!=0));
 
 	pos += sprintf(cdrom_drive_info+pos, "\nCan open tray:\t");
 	for (cdi=topCdromPtr;cdi!=NULL;cdi=cdi->next)
 	    pos += sprintf(cdrom_drive_info+pos, "\t%d",
-			   ((cdi->ops->capability & CDC_OPEN_TRAY)!=0));
+		   ((cdi->ops->capability & ~cdi->mask & CDC_OPEN_TRAY)!=0));
 
 	pos += sprintf(cdrom_drive_info+pos, "\nCan lock tray:\t");
 	for (cdi=topCdromPtr;cdi!=NULL;cdi=cdi->next)
 	    pos += sprintf(cdrom_drive_info+pos, "\t%d",
-			   ((cdi->ops->capability & CDC_LOCK)!=0));
+		   ((cdi->ops->capability & ~cdi->mask & CDC_LOCK)!=0));
 
 	pos += sprintf(cdrom_drive_info+pos, "\nCan change speed:");
 	for (cdi=topCdromPtr;cdi!=NULL;cdi=cdi->next)
 	    pos += sprintf(cdrom_drive_info+pos, "\t%d",
-			   ((cdi->ops->capability & CDC_SELECT_SPEED)!=0));
+		   ((cdi->ops->capability & ~cdi->mask & CDC_SELECT_SPEED)!=0));
 
 	pos += sprintf(cdrom_drive_info+pos, "\nCan select disk:");
 	for (cdi=topCdromPtr;cdi!=NULL;cdi=cdi->next)
 	    pos += sprintf(cdrom_drive_info+pos, "\t%d",
-			   ((cdi->ops->capability & CDC_SELECT_DISC)!=0));
+		   ((cdi->ops->capability & ~cdi->mask & CDC_SELECT_DISC)!=0));
 
 	pos += sprintf(cdrom_drive_info+pos, "\nCan read multisession:");
 	for (cdi=topCdromPtr;cdi!=NULL;cdi=cdi->next)
@@ -1137,7 +1142,7 @@ int cdrom_sysctl_info(ctl_table *ctl, int write, struct file * filp,
 	pos += sprintf(cdrom_drive_info+pos, "\nCan play audio:\t");
 	for (cdi=topCdromPtr;cdi!=NULL;cdi=cdi->next)
 	    pos += sprintf(cdrom_drive_info+pos, "\t%d",
-			   ((cdi->ops->capability & CDC_PLAY_AUDIO)!=0));
+		   ((cdi->ops->capability & ~cdi->mask & CDC_PLAY_AUDIO)!=0));
 
         strcpy(cdrom_drive_info+pos,"\n\n");
 	*lenp=pos+3;

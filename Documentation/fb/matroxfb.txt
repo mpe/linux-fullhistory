@@ -95,11 +95,11 @@ SVGALib
 =======
 
 Driver contains SVGALib compatibility code. It is turned on by choosing textual
-mode for console. You can do it at boottime by using videomode
+mode for console. You can do it at boot time by using videomode
 2,3,7,0x108-0x10C or 0x1C0. At runtime, `fbset -depth 0' does this work.
 Unfortunately, after SVGALib application exits, screen contents is corrupted.
-Switching to another console and back fixes it. I hope that it is SVGALib and
-not mine problem, but I'm not sure.
+Switching to another console and back fixes it. I hope that it is SVGALib's
+problem and not mine, but I'm not sure.
 
 
 Configuration
@@ -113,7 +113,7 @@ Accepted options:
 mem:X    - size of memory (X can be in megabytes, kilobytes or bytes)
            You can only decrease value determined by driver because of
 	   it always probe for memory. Default is to use whole detected
-	   memory usable for on-screen display (i.e. max. 8MB).
+	   memory usable for on-screen display (i.e. max. 8 MB).
 disabled - do not load driver; you can use also `off', but `disabled'
            is here too.
 enabled  - load driver, if you have `video=matrox:disabled' in LILO
@@ -159,7 +159,7 @@ sdram    - tells to driver that you have G200 with SDRAM memory.
 inv24    - change timings parameters for 24bpp modes on Millenium and
            Millenium II. Specify this if you see strange color shadows around
 	   characters.
-noinv24  - use standard timmings. It is default.
+noinv24  - use standard timings. It is the default.
 inverse  - invert colors on screen (for LCD displays)
 noinverse - show true colors on screen. It is default.
 dev:X    - bind driver to device X. Driver numbers device from 0 up to N,
@@ -252,25 +252,25 @@ Currently there are following known bugs:
    access to /dev/fb* - everyone with access to this device can destroy
    your monitor, believe me...).
  + 24bpp does not support correctly XF-FBDev on big-endian architectures.
- + interlaced text mode is not supported; it looks like hardware limitiation,
+ + interlaced text mode is not supported; it looks like hardware limitation,
    but I'm not sure.
  + G200 SGRAM/SDRAM is not autodetected.
  + maybe more...
 And following misfeatures:
  + SVGALib does not restore screen on exit.
  + pixclock for text modes is limited by hardware to
-    83MHz on G200
-    66MHz on Millenium I
-    60MHz on Millenium II
-   Because of I have not access to other devices, I do not know specific
+    83 MHz on G200
+    66 MHz on Millennium I
+    60 MHz on Millennium II
+   Because I have no access to other devices, I do not know specific
    frequencies for them. So driver does not check this and allows you to
-   set frequency higher that this. It cause sparks, black holes and other
-   pretty effects on screen. Device was not destroyed during tests :-)
- + my Millenium G200 oscillator has frequency range from 35MHz to 380MHz
-   (and it works with 8bpp on about 320MHz dotclocks (and changed mclk)).
-   But Matrox says on product sheet that VCO limit is 50-250MHz, so I believe
-   them (maybe that chip overheates, but it has very big cooler (G100 has
-   not one), so it should work).
+   set frequency higher that this. It causes sparks, black holes and other
+   pretty effects on screen. Device was not destroyed during tests. :-)
+ + my Millennium G200 oscillator has frequency range from 35 MHz to 380 MHz
+   (and it works with 8bpp on about 320 MHz dotclocks (and changed mclk)).
+   But Matrox says on product sheet that VCO limit is 50-250 MHz, so I believe
+   them (maybe that chip overheats, but it has a very big cooler (G100 has
+   none), so it should work).
  + special mixed video/graphics videomodes of Mystique and Gx00 - 2G8V16 and
    G16V16 are not supported
  + color keying is not supported
@@ -281,14 +281,14 @@ And following misfeatures:
    specify vslen=4000 and so on).
  + maybe more...
 And following features:
- + 4bpp is available only on Millenium I and Millenium II. It is hardware
-   limitiation.
+ + 4bpp is available only on Millennium I and Millennium II. It is hardware
+   limitation.
  + current fbset is not able to set 15bpp videomode: you must specify
    depth==16 and green.length==5. fbset does not allow you to set 
    green.length.
  + text mode uses 6 bit VGA palette instead of 8 bit (one of 262144 colors
    instead of one of 16M colors). It is due to hardware limitation of 
-   MilleniumI/II and SVGALib compatibility.
+   Millennium I/II and SVGALib compatibility.
 
 
 Benchmarks
@@ -296,14 +296,14 @@ Benchmarks
 It is time to redraw whole screen 1000 times in 1024x768, 60Hz. It is
 time for draw 6144000 characters on screen through /dev/vcsa
 (for 32bpp it is about 3GB of data (exactly 3000 MB); for 8x16 font in 
-16 seconds, i.e. 187MBps).
+16 seconds, i.e. 187 MBps).
 Times were obtained from one older version of driver, now they are about 3%
-faster, it is kernel-space only time on P-II/350MHz, Millenium I in 33MHz
+faster, it is kernel-space only time on P-II/350 MHz, Millennium I in 33 MHz
 PCI slot, G200 in AGP 2x slot. I did not test vgacon.
 
 NOACCEL
         8x16                 12x22
-        MilleniumI   G200    MilleniumI   G200
+        Millennium I  G200   Millennium I  G200
 8bpp    16.42         9.54   12.33         9.13
 16bpp   21.00        15.70   19.11        15.02
 24bpp   36.66        36.66   35.00        35.00
@@ -311,7 +311,7 @@ NOACCEL
 
 ACCEL, nofastfont
         8x16                 12x22                6x11
-	MilleniumI   G200    MilleniumI   G200    MilleniumI   G200
+	Millennium I  G200   Millennium I  G200    Millennium I G200
 8bpp     7.79         7.24   13.55         7.78   30.00        21.01
 16bpp    9.13         7.78   16.16         7.78   30.00        21.01
 24bpp   14.17        10.72   18.69        10.24   34.99        21.01
@@ -319,7 +319,7 @@ ACCEL, nofastfont
 
 ACCEL, fastfont
         8x16                 12x22                6x11
-	MilleniumI   G200    MilleniumI   G200    MilleniumI   G200
+	Millennium I  G200    Millennium I G200   Millennium I  G200
 8bpp     8.41         6.01    6.54         4.37   16.00        10.51
 16bpp    9.54         9.12    8.76         6.17   17.52        14.01
 24bpp   15.00        12.36   11.67        10.00   22.01        18.32
@@ -327,10 +327,10 @@ ACCEL, fastfont
 
 TEXT
         8x16
-	MilleniumI   G200
+	Millennium I  G200
 TEXT     3.29         1.50
 
 	
-* Yes, it is slower than Millenium I.
+* Yes, it is slower than Millennium I.
 --
 Petr Vandrovec <vandrove@vc.cvut.cz>

@@ -105,7 +105,7 @@ general procedure for configuring Unix98 pty support is:
 
   none            /dev/pts        devpts	gid=5,mode=620    0 0
 
-   (Note:  gid=5 is applicable for RedHat systems for which group "tty" has
+   (Note:  gid=5 is applicable for Red Hat systems for which group "tty" has
    gid 5.  Adjust according to your distribution.  Use mode=600 if you want
    "mesg n" to be default.)
 - Mount /dev/pts
@@ -433,7 +433,7 @@ configuration registers on your PCI devices.
 Xosview
 =======
 
-   /proc interface changes require a recent xosview.
+   Changes to the /proc interface require a recent xosview.
 
 RealPlayer
 ==========

@@ -30,6 +30,9 @@ static spinlock_t hub_event_lock = SPIN_LOCK_UNLOCKED;
 /* List of hubs needing servicing */
 static struct list_head hub_event_list;
 
+/* PID of khubd */
+static int khubd_pid = 0;
+
 /*
  * A irq handler returns non-zero to indicate to
  * the low-level driver that it wants to be re-activated,
@@ -166,7 +169,8 @@ static int hub_probe(struct usb_device *dev)
 	/* Is it a hub? */
 	if (interface->bInterfaceClass != 9)
 		return -1;
-	if (interface->bInterfaceSubClass != 0)
+	if ((interface->bInterfaceSubClass != 0) &&
+	    (interface->bInterfaceSubClass != 1))
 		return -1;
 
 	/* Multiple endpoints? What kind of mutant ninja-hub is this? */
@@ -398,8 +402,10 @@ int hub_init(void)
 
 	usb_register(&hub_driver);
 	pid = kernel_thread(usb_hub_thread, NULL, CLONE_FS | CLONE_FILES | CLONE_SIGHAND);
-	if (pid >= 0)
+	if (pid >= 0) {
+		khubd_pid = pid;
 		return 0;
+	}
 
 	/* Fall through if kernel_thread failed */
 	usb_deregister(&hub_driver);
@@ -407,3 +413,10 @@ int hub_init(void)
 	return 0;
 }
 
+void hub_cleanup(void)
+{
+	if (khubd_pid >= 0)
+		kill_proc(khubd_pid, SIGINT, 1);
+
+	usb_deregister(&hub_driver);
+}

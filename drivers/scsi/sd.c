@@ -719,6 +719,12 @@ static void requeue_sd_request (Scsi_Cmnd * SCpnt)
  	    SCpnt = end_scsi_request(SCpnt, 0, SCpnt->request.nr_sectors);
  	    goto repeat;
  	}
+    if (rscsi_disks[dev].sector_size == 4096) 
+	if((block & 7) || (SCpnt->request.nr_sectors & 7)) {
+	    printk("sd.cBad block number/count requested");
+	    SCpnt = end_scsi_request(SCpnt, 0, SCpnt->request.nr_sectors);
+	    goto repeat;
+	}
      
     switch (SCpnt->request.cmd)
     {
@@ -983,6 +989,13 @@ static void requeue_sd_request (Scsi_Cmnd * SCpnt)
                               this_count, SCpnt->request.nr_sectors));
 
     cmd[1] = (SCpnt->lun << 5) & 0xe0;
+
+     if (rscsi_disks[dev].sector_size == 4096){
+	if(block & 7) panic("sd.c:Bad block number requested");
+	if(this_count & 7) panic("sd.c:Bad block number requested");
+	block = block >> 3;
+	this_count = block >> 3;
+     }
 
      if (rscsi_disks[dev].sector_size == 2048){
  	if(block & 3) panic("sd.c:Bad block number requested");
@@ -1335,6 +1348,7 @@ static int sd_init_onedisk(int i)
 	if (rscsi_disks[i].sector_size != 512 &&
 	    rscsi_disks[i].sector_size != 1024 &&
 	    rscsi_disks[i].sector_size != 2048 &&
+	    rscsi_disks[i].sector_size != 4096 &&
 	    rscsi_disks[i].sector_size != 256)
 	{
 	    printk ("%s : unsupported sector size %d.\n",
@@ -1394,6 +1408,8 @@ static int sd_init_onedisk(int i)
 		nbuff, hard_sector, rscsi_disks[i].capacity,
                 mb, sz_quot, sz_rem);
     }
+	if(rscsi_disks[i].sector_size == 4096)
+	    rscsi_disks[i].capacity <<= 3;
 	if(rscsi_disks[i].sector_size == 2048)
 	    rscsi_disks[i].capacity <<= 2;  /* Change into 512 byte sectors */
 	if(rscsi_disks[i].sector_size == 1024)

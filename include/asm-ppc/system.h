@@ -25,6 +25,9 @@
 #define rmb()  __asm__ __volatile__ ("sync" : : : "memory")
 #define wmb()  __asm__ __volatile__ ("eieio" : : : "memory")
 
+extern void xmon_irq(int, void *, struct pt_regs *);
+extern void xmon(struct pt_regs *excp);
+
 #define __save_flags(flags)	({\
 	__asm__ __volatile__ ("mfmsr %0" : "=r" ((flags)) : : "memory"); })
 #define __save_and_cli(flags)	({__save_flags(flags);__cli();})
@@ -38,10 +41,10 @@ extern __inline__ void dcbf(void *line)
 
 extern __inline__ void __restore_flags(unsigned long flags)
 {
-        extern atomic_t n_lost_interrupts;
+        extern atomic_t ppc_n_lost_interrupts;
 	extern void do_lost_interrupts(unsigned long);
 
-        if ((flags & MSR_EE) && atomic_read(&n_lost_interrupts) != 0) {
+        if ((flags & MSR_EE) && atomic_read(&ppc_n_lost_interrupts) != 0) {
                 do_lost_interrupts(flags);
         } else {
                 __asm__ __volatile__ ("sync; mtmsr %0; isync"
@@ -68,8 +71,8 @@ extern void via_cuda_init(void);
 extern void pmac_nvram_init(void);
 extern void read_rtc_time(void);
 extern void pmac_find_display(void);
-extern void giveup_fpu(void);
-extern void smp_giveup_fpu(struct task_struct *);
+extern void giveup_fpu(struct task_struct *);
+extern void enable_kernel_fp(void);
 extern void cvt_fd(float *from, double *to, unsigned long *fpscr);
 extern void cvt_df(double *from, float *to, unsigned long *fpscr);
 

@@ -1,5 +1,5 @@
 /*
- * $Id: process.c,v 1.75 1999/02/12 07:06:29 cort Exp $
+ * $Id: process.c,v 1.78 1999/04/07 07:27:00 paulus Exp $
  *
  *  linux/arch/ppc/kernel/process.c
  *
@@ -77,15 +77,23 @@ task_top(struct task_struct *tsk)
 int
 dump_fpu(struct pt_regs *regs, elf_fpregset_t *fpregs)
 {
-#ifdef __SMP__
-	if ( regs->msr & MSR_FP )
-		smp_giveup_fpu(current);
-#else
-	if (last_task_used_math == current)
-		giveup_fpu();
-#endif	
+	if (regs->msr & MSR_FP)
+		giveup_fpu(current);
 	memcpy(fpregs, &current->tss.fpr[0], sizeof(*fpregs));
 	return 1;
+}
+
+void
+enable_kernel_fp(void)
+{
+#ifdef __SMP__
+	if (current->tss.regs && (current->tss.regs->msr & MSR_FP))
+		giveup_fpu(current);
+	else
+		giveup_fpu(NULL);	/* just enables FP for kernel */
+#else
+	giveup_fpu(last_task_used_math);
+#endif /* __SMP__ */
 }
 
 /* check to make sure the kernel stack is healthy */
@@ -176,8 +184,8 @@ switch_to(struct task_struct *prev, struct task_struct *new)
 	 * reload its fp regs.
 	 *  -- Cort
 	 */
-	if ( prev->tss.regs->msr & MSR_FP )
-		smp_giveup_fpu(prev);
+	if (prev->tss.regs && (prev->tss.regs->msr & MSR_FP))
+		giveup_fpu(prev);
 
 	prev->last_processor = prev->processor;
 	current_set[smp_processor_id()] = new;
@@ -237,7 +245,12 @@ void instruction_dump (unsigned long *pc)
 
 	printk("Instruction DUMP:");
 	for(i = -3; i < 6; i++)
-		printk("%c%08lx%c",i?' ':'<',pc[i],i?' ':'>');
+	{
+		unsigned long p;
+		if (__get_user( p, &pc[i] ))
+			break;
+		printk("%c%08lx%c",i?' ':'<',p,i?' ':'>');
+	}
 	printk("\n");
 }
 
@@ -290,13 +303,8 @@ copy_thread(int nr, unsigned long clone_flags, unsigned long usp,
 	 * copy fpu info - assume lazy fpu switch now always
 	 *  -- Cort
 	 */
-#ifdef __SMP__
-	if ( regs->msr & MSR_FP )
-		smp_giveup_fpu(current);
-#else	
-	if ( last_task_used_math == current )
-		giveup_fpu();
-#endif	  
+	if (regs->msr & MSR_FP)
+		giveup_fpu(current);
 
 	memcpy(&p->tss.fpr, &current->tss.fpr, sizeof(p->tss.fpr));
 	p->tss.fpscr = current->tss.fpscr;
@@ -424,13 +432,8 @@ asmlinkage int sys_execve(unsigned long a0, unsigned long a1, unsigned long a2,
 	error = PTR_ERR(filename);
 	if (IS_ERR(filename))
 		goto out;
-#ifdef __SMP__	  
-	if ( regs->msr & MSR_FP )
-		smp_giveup_fpu(current);
-#else	  
-	if ( last_task_used_math == current )
-		giveup_fpu();
-#endif	
+	if (regs->msr & MSR_FP)
+		giveup_fpu(current);
 	error = do_execve(filename, (char **) a1, (char **) a2, regs);
 	putname(filename);
 out:

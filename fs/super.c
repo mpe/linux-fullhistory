@@ -1156,12 +1156,22 @@ void __init mount_root(void)
 
 #ifdef CONFIG_BLK_DEV_FD
 	if (MAJOR(ROOT_DEV) == FLOPPY_MAJOR) {
+#ifdef CONFIG_BLK_DEV_RAM
+		extern int rd_doload;
+#endif
 		floppy_eject();
 #ifndef CONFIG_BLK_DEV_RAM
 		printk(KERN_NOTICE "(Warning, this kernel has no ramdisk support)\n");
+#else
+		/* rd_doload is 2 for a dual initrd/ramload setup */
+		if(rd_doload==2)
+			rd_load_secondary();
+		else
 #endif
-		printk(KERN_NOTICE "VFS: Insert root floppy and press ENTER\n");
-		wait_for_keypress();
+		{
+			printk(KERN_NOTICE "VFS: Insert root floppy and press ENTER\n");
+			wait_for_keypress();
+		}
 	}
 #endif
 

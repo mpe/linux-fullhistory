@@ -1,10 +1,13 @@
 /*
- * $Id: smp.c,v 1.48 1999/03/16 10:40:32 cort Exp $
+ * $Id: smp.c,v 1.49 1999/03/18 04:16:31 cort Exp $
  *
  * Smp support for ppc.
  *
  * Written by Cort Dougan (cort@cs.nmt.edu) borrowing a great
  * deal of code from the sparc and intel versions.
+ *
+ * Support for PReP (Motorola MTX/MVME) SMP by Troy Benjegerdes
+ * (troy@microux.com, hozer@drgw.net)
  */
 
 #include <linux/kernel.h>
@@ -253,6 +256,7 @@ void __init smp_boot_cpus(void)
 	 * cpu 0, the master -- Cort
 	 */
 	cpu_callin_map[0] = 1;
+	cpu_callin_map[1] = 0;
         smp_store_cpu_info(0);
         active_kernel_processor = 0;
 	current->processor = 0;

@@ -176,6 +176,9 @@ unsigned long do_mmap(struct file * file, unsigned long addr, unsigned long len,
 	struct vm_area_struct * vma;
 	int error;
 
+	if (file && (!file->f_op || !file->f_op->mmap))
+		return -ENODEV;
+
 	if ((len = PAGE_ALIGN(len)) == 0)
 		return addr;
 
@@ -244,9 +247,6 @@ unsigned long do_mmap(struct file * file, unsigned long addr, unsigned long len,
 	 * specific mapper. the address has already been validated, but
 	 * not unmapped, but the maps are removed from the list.
 	 */
-	if (file && (!file->f_op || !file->f_op->mmap))
-		return -ENODEV;
-
 	vma = kmem_cache_alloc(vm_area_cachep, SLAB_KERNEL);
 	if (!vma)
 		return -ENOMEM;

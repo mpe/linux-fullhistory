@@ -113,7 +113,7 @@ static void adb_mouse_interrupt(unsigned char *buf, int nb)
      *  on a logitech mouseman, the right and mid buttons sometimes behave
      *  strangely until they both have been pressed after booting. */
     /* data valid only if extended mouse format ! */
-    if (nb == 4)
+    if (nb >= 4)
 	buttons = (buttons&6) | (buf[3] & 0x80 ? 1 : 0); /* 1+3 unchanged */
 
     add_mouse_randomness(((~buttons&7) << 16) + ((buf[2]&0x7f) << 8) + (buf[1]&0x7f));

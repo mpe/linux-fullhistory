@@ -38,7 +38,7 @@ digiboard.txt
 digiepca.txt
 	- info on Digi Intl. {PC,PCI,EISA}Xx and Xem series cards.
 exception.txt
-	- how linux v2.1 handles exceptions without verify_area etc.
+	- how Linux v2.2 handles exceptions without verify_area etc.
 filesystems/
 	- directory with info on the various filesystems that Linux supports.
 ftape.txt
@@ -52,11 +52,11 @@ initrd.txt
 ioctl-number.txt
 	- how to implement and register device/driver ioctl calls.
 isdn/
-	- directory with info on the linux ISDN support, and supported cards.
+	- directory with info on the Linux ISDN support, and supported cards.
 java.txt
 	- info on the in-kernel binary support for Java(tm)
 joystick.txt
-	- info on using joystick devices (and driver) with linux.
+	- info on using joystick devices (and driver) with Linux.
 kbuild/
 	- directory with info about the kernel build process
 kmod.txt
@@ -72,7 +72,7 @@ m68k/
 magic-number.txt
 	- list of magic numbers used to mark/protect kernel data structures.
 mandatory.txt
-	- info on the linux implementation of Sys V mandatory file locking.
+	- info on the Linux implementation of Sys V mandatory file locking.
 mca.txt
 	- info on supporting Micro Channel Architecture (e.g. PS/2) systems.
 md.txt
@@ -100,7 +100,7 @@ pci.txt
 pcwd-watchdog.txt
 	- info and sample code for using with the PC Watchdog reset card.
 powerpc/
-	- directory with info on using linux with the PowerPC.
+	- directory with info on using Linux with the PowerPC.
 ramdisk.txt
 	- short guide on how to set up and use the RAM disk.
 riscom8.txt
@@ -110,7 +110,7 @@ rtc.txt
 scsi.txt
 	- short blurb on using SCSI support as a module.
 serial-console.txt
-	- how to set up linux with a serial line console as the default.
+	- how to set up Linux with a serial line console as the default.
 smart-config.txt
 	- description of the Smart Config makefile feature.
 smp.tex

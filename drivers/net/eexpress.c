@@ -107,6 +107,8 @@
 #include <linux/skbuff.h>
 #include <linux/malloc.h>
 
+#include <asm/spinlock.h>
+
 #ifndef NET_DEBUG
 #define NET_DEBUG 4
 #endif
@@ -141,6 +143,7 @@ struct net_local
 	unsigned char width;         /* 0 for 16bit, 1 for 8bit */
 	unsigned char was_promisc;
 	unsigned char old_mc_count;
+	spinlock_t lock;
 };
 
 /* This is the code and data that is downloaded to the EtherExpress card's
@@ -502,12 +505,22 @@ static void unstick_cu(struct device *dev)
 static int eexp_xmit(struct sk_buff *buf, struct device *dev)
 {
 	struct net_local *lp = (struct net_local *)dev->priv;
+	unsigned long flags;
 
 #if NET_DEBUG > 6
 	printk(KERN_DEBUG "%s: eexp_xmit()\n", dev->name);
 #endif
 
 	disable_irq(dev->irq);
+
+	/*
+	 *	Best would be to use synchronize_irq(); spin_lock() here
+	 *	lets make it work first..
+	 */
+	 
+#ifdef CONFIG_SMP
+	spin_lock_irqsave(&lp->lock, flags);
+#endif
 
 	/* If dev->tbusy is set, all our tx buffers are full but the kernel
 	 * is calling us anyway.  Check that nothing bad is happening.
@@ -516,7 +529,13 @@ static int eexp_xmit(struct sk_buff *buf, struct device *dev)
 		int status = scb_status(dev);
   		unstick_cu(dev);
 		if ((jiffies - lp->last_tx) < HZ)
+		{
+#ifdef CONFIG_SMP
+			spin_unlock_irqrestore(&lp->lock, flags);
+#endif
+
 			return 1;
+		}
 		printk(KERN_INFO "%s: transmit timed out, %s?", dev->name,
 		       (SCB_complete(status)?"lost interrupt":
 			"board on fire"));
@@ -544,6 +563,9 @@ static int eexp_xmit(struct sk_buff *buf, struct device *dev)
 	        eexp_hw_tx_pio(dev,data,length);
 	}
 	dev_kfree_skb(buf);
+#ifdef CONFIG_SMP
+	spin_unlock_irqrestore(&lp->lock, flags);
+#endif
 	enable_irq(dev->irq);
 	return 0;
 }
@@ -646,11 +668,14 @@ static void eexp_irq(int irq, void *dev_info, struct pt_regs *regs)
 	lp = (struct net_local *)dev->priv;
 	ioaddr = dev->base_addr;
 
+	spin_lock(&lp->lock);
+
 	old_read_ptr = inw(ioaddr+READ_PTR);
 	old_write_ptr = inw(ioaddr+WRITE_PTR);
 
 	outb(SIRQ_dis|irqrmap[irq],ioaddr+SET_IRQ);
 
+	
 	dev->interrupt = 1;
 
 	status = scb_status(dev);
@@ -726,6 +751,8 @@ static void eexp_irq(int irq, void *dev_info, struct pt_regs *regs)
 #endif
 	outw(old_read_ptr, ioaddr+READ_PTR);
 	outw(old_write_ptr, ioaddr+WRITE_PTR);
+	
+	spin_unlock(&lp->lock);
 	return;
 }
 

@@ -1986,6 +1986,7 @@ int macserial_init(void)
 		info->line = i;
 		info->tty = 0;
 		info->custom_divisor = 16;
+		info->timeout = 0;
 		info->close_delay = 50;
 		info->closing_wait = 3000;
 		info->x_char = 0;
@@ -2058,6 +2059,32 @@ void unregister_serial(int line)
 static void serial_console_write(struct console *co, const char *s,
 				 unsigned count)
 {
+	struct mac_serial *info = zs_soft + co->index;
+	int i;
+
+	/* Turn of interrupts and enable the transmitter. */
+	write_zsreg(info->zs_channel, R1, info->curregs[1] & ~TxINT_ENAB);
+	write_zsreg(info->zs_channel, R5, info->curregs[5] | TxENAB | RTS | DTR);
+
+	for (i=0; i<count; i++) {
+		/* Wait for the transmit buffer to empty. */
+		while ((read_zsreg(info->zs_channel, 0) & Tx_BUF_EMP) == 0) {
+			eieio();
+		}
+
+		write_zsdata(info->zs_channel, s[i]);
+		if (s[i] == 10) {
+			while ((read_zsreg(info->zs_channel, 0) & Tx_BUF_EMP)
+                                == 0)
+				eieio();
+			
+			write_zsdata(info->zs_channel, 13);
+		}
+	}
+
+	/* Restore the values in the registers. */
+	write_zsreg(info->zs_channel, R1, info->curregs[1]);
+	/* Don't disable the transmitter. */
 }
 
 /*
@@ -2065,7 +2092,23 @@ static void serial_console_write(struct console *co, const char *s,
  */
 static int serial_console_wait_key(struct console *co)
 {
-	return 0;
+	struct mac_serial *info = zs_soft + co->index;
+	int           val;
+
+	/* Turn of interrupts and enable the transmitter. */
+	write_zsreg(info->zs_channel, R1, info->curregs[1] & ~INT_ALL_Rx);
+	write_zsreg(info->zs_channel, R3, info->curregs[3] | RxENABLE);
+
+	/* Wait for something in the receive buffer. */
+	while((read_zsreg(info->zs_channel, 0) & Rx_CH_AV) == 0)
+		eieio();
+	val = read_zsdata(info->zs_channel);
+
+	/* Restore the values in the registers. */
+	write_zsreg(info->zs_channel, R1, info->curregs[1]);
+	write_zsreg(info->zs_channel, R3, info->curregs[3]);
+
+	return val;
 }
 
 static kdev_t serial_console_device(struct console *c)
@@ -2081,14 +2124,24 @@ static kdev_t serial_console_device(struct console *c)
  */
 __initfunc(static int serial_console_setup(struct console *co, char *options))
 {
-	struct serial_state *ser;
-	unsigned cval;
-	int	baud = 9600;
+	struct mac_serial *info = zs_soft + co->index;
+	int	baud = 38400;
 	int	bits = 8;
 	int	parity = 'n';
 	int	cflag = CREAD | HUPCL | CLOCAL;
-	int	quot = 0;
+	int	brg;
 	char	*s;
+	long	flags;
+
+	/* Find out how many Z8530 SCCs we have */
+	if (zs_chain == 0)
+		probe_sccs();
+
+	if (zs_chain == 0)
+		return -1;
+
+	/* Reset the channel */
+	write_zsreg(info->zs_channel, R9, CHRA);
 
 	if (options) {
 		baud = simple_strtoul(options, NULL, 10);
@@ -2114,11 +2167,11 @@ __initfunc(static int serial_console_setup(struct console *co, char *options))
 	case 4800:
 		cflag |= B4800;
 		break;
+	case 9600:
+		cflag |= B9600;
+		break;
 	case 19200:
 		cflag |= B19200;
-		break;
-	case 38400:
-		cflag |= B38400;
 		break;
 	case 57600:
 		cflag |= B57600;
@@ -2126,9 +2179,9 @@ __initfunc(static int serial_console_setup(struct console *co, char *options))
 	case 115200:
 		cflag |= B115200;
 		break;
-	case 9600:
+	case 38400:
 	default:
-		cflag |= B9600;
+		cflag |= B38400;
 		break;
 	}
 	switch(bits) {
@@ -2142,13 +2195,97 @@ __initfunc(static int serial_console_setup(struct console *co, char *options))
 	}
 	switch(parity) {
 	case 'o': case 'O':
-		cflag |= PARODD;
+		cflag |= PARENB | PARODD;
 		break;
 	case 'e': case 'E':
 		cflag |= PARENB;
 		break;
 	}
 	co->cflag = cflag;
+
+	save_flags(flags); cli();
+        memset(info->curregs, 0, sizeof(info->curregs));
+
+	info->zs_baud = baud;
+	info->clk_divisor = 16;
+	switch (info->zs_baud) {
+	case ZS_CLOCK/16:	/* 230400 */
+		info->curregs[4] = X16CLK;
+		info->curregs[11] = 0;
+		break;
+	case ZS_CLOCK/32:	/* 115200 */
+		info->curregs[4] = X32CLK;
+		info->curregs[11] = 0;
+		break;
+	default:
+		info->curregs[4] = X16CLK;
+		info->curregs[11] = TCBR | RCBR;
+		brg = BPS_TO_BRG(info->zs_baud, ZS_CLOCK/info->clk_divisor);
+		info->curregs[12] = (brg & 255);
+		info->curregs[13] = ((brg >> 8) & 255);
+		info->curregs[14] = BRENABL;
+	}
+
+	/* byte size and parity */
+	info->curregs[3] &= ~RxNBITS_MASK;
+	info->curregs[5] &= ~TxNBITS_MASK;
+	switch (cflag & CSIZE) {
+	case CS5:
+		info->curregs[3] |= Rx5;
+		info->curregs[5] |= Tx5;
+		break;
+	case CS6:
+		info->curregs[3] |= Rx6;
+		info->curregs[5] |= Tx6;
+		break;
+	case CS7:
+		info->curregs[3] |= Rx7;
+		info->curregs[5] |= Tx7;
+		break;
+	case CS8:
+	default: /* defaults to 8 bits */
+		info->curregs[3] |= Rx8;
+		info->curregs[5] |= Tx8;
+		break;
+	}
+        info->curregs[5] |= TxENAB | RTS | DTR;
+	info->pendregs[3] = info->curregs[3];
+	info->pendregs[5] = info->curregs[5];
+
+	info->curregs[4] &= ~(SB_MASK | PAR_ENA | PAR_EVEN);
+	if (cflag & CSTOPB) {
+		info->curregs[4] |= SB2;
+	} else {
+		info->curregs[4] |= SB1;
+	}
+	if (cflag & PARENB) {
+		info->curregs[4] |= PAR_ENA;
+		if (!(cflag & PARODD)) {
+			info->curregs[4] |= PAR_EVEN;
+		}
+	}
+	info->pendregs[4] = info->curregs[4];
+
+	if (!(cflag & CLOCAL)) {
+		if (!(info->curregs[15] & DCDIE))
+			info->read_reg_zero = read_zsreg(info->zs_channel, 0);
+		info->curregs[15] |= DCDIE;
+	} else
+		info->curregs[15] &= ~DCDIE;
+	if (cflag & CRTSCTS) {
+		info->curregs[15] |= CTSIE;
+		if ((read_zsreg(info->zs_channel, 0) & CTS) != 0)
+			info->tx_stopped = 1;
+	} else {
+		info->curregs[15] &= ~CTSIE;
+		info->tx_stopped = 0;
+	}
+	info->pendregs[15] = info->curregs[15];
+
+	/* Load up the new values */
+	load_zsregs(info->zs_channel, info->curregs);
+
+	restore_flags(flags);
 
 	return 0;
 }
@@ -2170,9 +2307,10 @@ static struct console sercons = {
 /*
  *	Register console.
  */
-__initfunc (void serial_console_init(void))
+__initfunc (long serial_console_init(long kmem_start, long kmem_end))
 {
 	register_console(&sercons);
+	return kmem_start;
 }
 #endif /* ifdef CONFIG_SERIAL_CONSOLE */
 

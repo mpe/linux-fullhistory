@@ -112,10 +112,10 @@ struct sched_param {
  * a separate lock).
  */
 extern rwlock_t tasklist_lock;
-extern spinlock_t scheduler_lock;
 extern spinlock_t runqueue_lock;
 
 extern void sched_init(void);
+extern void init_idle(void);
 extern void show_state(void);
 extern void trap_init(void);
 

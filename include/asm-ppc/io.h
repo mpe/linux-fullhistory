@@ -5,8 +5,6 @@
 #include <asm/page.h>
 #include <asm/byteorder.h>
 
-#define KERNELBASE	0xc0000000
-
 #define SIO_CONFIG_RA	0x398
 #define SIO_CONFIG_RD	0x399
 
@@ -18,7 +16,7 @@
 #define CHRP_ISA_MEM_BASE 	0xf7000000
 #define CHRP_PCI_DRAM_OFFSET 	0
 #define PREP_ISA_IO_BASE 	0x80000000
-#define PREP_ISA_MEM_BASE 	0xd0000000
+#define PREP_ISA_MEM_BASE 	0xc0000000
 #define PREP_PCI_DRAM_OFFSET 	0x80000000
 
 #ifdef CONFIG_MBX
@@ -49,7 +47,7 @@ extern unsigned long pci_dram_offset;
 #define writel(b,addr) ((*(volatile unsigned int *) (addr)) = (b))
 #else
 #define readw(addr) in_le16((volatile unsigned short *)(addr))
-#define readl(addr) in_le32((volatile unsigned *)addr)
+#define readl(addr) in_le32((volatile unsigned *)(addr))
 #define writew(b,addr) out_le16((volatile unsigned short *)(addr),(b))
 #define writel(b,addr) out_le32((volatile unsigned *)(addr),(b))
 #endif

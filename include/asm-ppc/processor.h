@@ -175,67 +175,13 @@ n:
 #define SR15	15
 
 #ifndef __ASSEMBLY__
-/*
- * If we've configured for a specific machine set things
- * up so the compiler can optimize away the other parts.
- * -- Cort
- */
-#ifdef CONFIG_MACH_SPECIFIC
-#ifdef CONFIG_PREP
-#define _machine (_MACH_prep)
-#define is_prep (1)
-#define is_chrp (0)
-#define have_of (0)
-#endif /* CONFIG_PREP */
-
-#ifdef CONFIG_CHRP
-#define _machine (_MACH_chrp)
-#define is_prep (0)
-#define is_chrp (1)
-#define have_of (1)
-#endif /* CONFIG_CHRP */
-
-#ifdef CONFIG_PMAC
-#define _machine (_MACH_Pmac)
-#define is_prep (0)
-#define is_chrp (0)
-#define have_of (1)
-#endif /* CONFIG_PMAC */
-
-#ifdef CONFIG_MBX
-#define _machine (_MACH_mbx)
-#define is_prep (0)
-#define is_chrp (0)
-#define have_of (0)
-#endif /* CONFIG_MBX */
-
-#ifdef CONFIG_FADS
-#define _machine (_MACH_fads)
-#define is_prep (0)
-#define is_chrp (0)
-#define have_of (0)
-#endif /* CONFIG_FADS */
-
-#ifdef CONFIG_APUS
-#define _machine (_MACH_apus)
-#define is_prep (0)
-#define is_chrp (0)
-#define have_of (0)
-#endif /* CONFIG_APUS */
-
-#else /* CONFIG_MACH_SPECIFIC */
-
 extern int _machine;
 
-/* if we're a prep machine */
-#define is_prep (_machine == _MACH_prep)
-
-/* if we're a chrp machine */
-#define is_chrp (_machine == _MACH_chrp)
-
-/* if we have openfirmware */
-extern unsigned long have_of;
-#endif /* CONFIG_MACH_SPECIFIC */
+/* Temporary hacks until we can clean things up better - Corey */
+extern int have_of;
+extern int is_prep;
+extern int is_chrp;
+extern int is_powerplus;
 
 /* what kind of prep workstation we are */
 extern int _prep_type;
@@ -338,14 +284,10 @@ void ll_puts(const char *);
 #define init_task	(init_task_union.task)
 #define init_stack	(init_task_union.stack)
 
+/* In misc.c */
+void _nmask_and_or_msr(unsigned long nmask, unsigned long or_val);
+
 #endif /* ndef ASSEMBLY*/
 
   
 #endif /* __ASM_PPC_PROCESSOR_H */
-
-
-
-
-
-
-

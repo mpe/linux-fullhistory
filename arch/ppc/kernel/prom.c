@@ -1,5 +1,5 @@
 /*
- * $Id: prom.c,v 1.50 1999/03/16 10:40:34 cort Exp $
+ * $Id: prom.c,v 1.53 1999/04/22 22:45:42 cort Exp $
  *
  * Procedures for interfacing to the Open Firmware PROM on
  * Power Macintosh computers.
@@ -16,6 +16,7 @@
 #include <linux/string.h>
 #include <linux/init.h>
 #include <linux/version.h>
+#include <asm/spinlock.h>
 #include <asm/prom.h>
 #include <asm/page.h>
 #include <asm/processor.h>
@@ -263,9 +264,11 @@ __init
 void
 prom_init(int r3, int r4, prom_entry pp)
 {
+#ifdef CONFIG_SMP	
 	int cpu = 0, i;
 	phandle node;
 	char type[16], *path;
+#endif	
 	unsigned long mem;
 	ihandle prom_rtas;
 	unsigned long offset = reloc_offset();
@@ -1141,7 +1144,7 @@ device_is_compatible(struct device_node *device, const char *compat)
 	if (cp == NULL)
 		return 0;
 	while (cplen > 0) {
-		if (strcasecmp(cp, compat) == 0)
+		if (strncasecmp(cp, compat, strlen(compat)) == 0)
 			return 1;
 		l = strlen(cp) + 1;
 		cp += l;
@@ -1277,6 +1280,8 @@ print_properties(struct device_node *np)
 }
 #endif
 
+spinlock_t rtas_lock = SPIN_LOCK_UNLOCKED;
+
 /* this can be called after setup -- Cort */
 __openfirmware
 int
@@ -1307,7 +1312,9 @@ call_rtas(const char *service, int nargs, int nret,
 	for (i = 0; i < nargs; ++i)
 		u.words[i+3] = va_arg(list, unsigned long);
 	va_end(list);
+	spin_lock(&rtas_lock);
 	enter_rtas((void *)__pa(&u));
+	spin_unlock(&rtas_lock);
 	if (nret > 1 && outputs != NULL)
 		for (i = 0; i < nret-1; ++i)
 			outputs[i] = u.words[i+nargs+4];

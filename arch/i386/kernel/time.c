@@ -47,6 +47,7 @@
 #include <asm/io.h>
 #include <asm/irq.h>
 #include <asm/delay.h>
+#include <asm/msr.h>
 
 #include <linux/mc146818rtc.h>
 #include <linux/timex.h>
@@ -83,8 +84,8 @@ static inline unsigned long do_fast_gettimeoffset(void)
 	register unsigned long edx asm("dx");
 
 	/* Read the Time Stamp Counter */
-	__asm__("rdtsc"
-		:"=a" (eax), "=d" (edx));
+
+	rdtsc(eax,edx);
 
 	/* .. relative to previous jiffy (32 bits is enough) */
 	eax -= last_tsc_low;	/* tsc_low delta */
@@ -443,7 +444,8 @@ static void timer_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 		 */
 	
 		/* read Pentium cycle counter */
-		__asm__("rdtsc" : "=a" (last_tsc_low) : : "edx");
+
+		rdtscl(last_tsc_low);
 
 		outb_p(0x00, 0x43);     /* latch the count ASAP */
 
@@ -566,12 +568,12 @@ __initfunc(static unsigned long calibrate_tsc(void))
 		unsigned long endlow, endhigh;
 		unsigned long count;
 
-		__asm__ __volatile__("rdtsc":"=a" (startlow),"=d" (starthigh));
+		rdtsc(startlow,starthigh);
 		count = 0;
 		do {
 			count++;
 		} while ((inb(0x61) & 0x20) == 0);
-		__asm__ __volatile__("rdtsc":"=a" (endlow),"=d" (endhigh));
+		rdtsc(endlow,endhigh);
 
 		last_tsc_low = endlow;
 

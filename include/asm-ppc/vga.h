@@ -46,7 +46,8 @@ extern inline u16 scr_readw(const u16 *addr)
 #define scr_memcpyw_from memcpy
 #define scr_memcpyw_to memcpy
 
-#define VGA_MAP_MEM(x) (x + _ISA_MEM_BASE)
+extern unsigned long vgacon_remap_base;
+#define VGA_MAP_MEM(x) (x + vgacon_remap_base)
 #define vga_readb(x) (*(x))
 #define vga_writeb(x,y) (*(y) = (x))
 

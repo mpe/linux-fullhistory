@@ -14,5 +14,6 @@
 #define __HAVE_ARCH_MEMCHR
 
 extern int strcasecmp(const char *, const char *);
+extern int strncasecmp(const char *, const char *, int);
 
 #endif

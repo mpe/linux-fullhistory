@@ -74,7 +74,7 @@ extern void sock_init(void);
 extern void uidcache_init(void);
 extern void mca_init(void);
 extern void sbus_init(void);
-extern void powermac_init(void);
+extern void ppc_init(void);
 extern void sysctl_init(void);
 extern void filescache_init(void);
 extern void signals_init(void);
@@ -578,6 +578,7 @@ static struct kernel_param cooked_params[] __initdata = {
 	{ "no-hlt", no_halt },
 	{ "no387", no_387 },
 	{ "reboot=", reboot_setup },
+	{ "mca-pentium", mca_pentium },
 #endif
 #ifdef CONFIG_INET
 	{ "ether=", eth_setup },
@@ -901,7 +902,7 @@ static void __init ramdisk_start_setup(char *str, int *ints)
 static void __init load_ramdisk(char *str, int *ints)
 {
    if (ints[0] > 0 && ints[1] >= 0)
-      rd_doload = ints[1] & 1;
+      rd_doload = ints[1] & 3;
 }
 
 static void __init prompt_ramdisk(char *str, int *ints)
@@ -1262,7 +1263,7 @@ static void __init do_basic_setup(void)
 	sbus_init();
 #endif
 #if defined(CONFIG_PPC)
-	powermac_init();
+	ppc_init();
 #endif
 #ifdef CONFIG_MCA
 	mca_init();

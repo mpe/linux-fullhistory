@@ -392,14 +392,8 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 				tmp = get_reg(child, addr);
 			}
 			else if (addr >= PT_FPR0 && addr <= PT_FPSCR) {
-#ifdef __SMP__
-				if (child->tss.regs->msr & MSR_FP )
-					smp_giveup_fpu(child);
-#else			  
-			  /* only current can be last task to use math on SMP */
-				if (last_task_used_math == child)
-					giveup_fpu();
-#endif				
+				if (child->tss.regs->msr & MSR_FP)
+					giveup_fpu(child);
 				tmp = ((long *)child->tss.fpr)[addr - PT_FPR0];
 			}
 			else
@@ -433,13 +427,8 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 				goto out;
 			}
 			if (addr >= PT_FPR0 && addr < PT_FPR0 + 64) {
-#ifndef __SMP__
-				if (last_task_used_math == child)
-					giveup_fpu();
-#else	
-				if (child->tss.regs->msr & MSR_FP )
-					smp_giveup_fpu(child);
-#endif				
+				if (child->tss.regs->msr & MSR_FP)
+					giveup_fpu(child);
 				((long *)child->tss.fpr)[addr - PT_FPR0] = data;
 				ret = 0;
 				goto out;

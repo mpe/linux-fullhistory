@@ -190,6 +190,9 @@ __initfunc(void openpic_init(int main_pic))
 	case 2:
 	    version = "1.2";
 	    break;
+	case 3:
+	    version = "1.3";
+	    break;
 	default:
 	    version = "?";
 	    break;

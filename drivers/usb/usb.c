@@ -213,6 +213,15 @@ static int usb_parse_interface(struct usb_device *dev, struct usb_interface_desc
 		return -1;
 	}
 
+	interface->endpoint = (struct usb_endpoint_descriptor *)
+		kmalloc(interface->bNumEndpoints * sizeof(struct usb_endpoint_descriptor), GFP_KERNEL);
+	if(interface->endpoint==NULL)
+	{
+		printk(KERN_WARNING "usb: out of memory.\n");
+		return -1;	
+	}
+	memset(interface->endpoint, 0, interface->bNumEndpoints*sizeof(struct usb_endpoint_descriptor));
+	
 	for (i = 0; i < interface->bNumEndpoints; i++) {
 //		if(((USB_DT_HID << 8) | 9) == *(unsigned short*)(ptr + parsed)) {
 //			parsed += 9;	/* skip over the HID descriptor for now */
@@ -242,8 +251,18 @@ static int usb_parse_config(struct usb_device *dev, struct usb_config_descriptor
 	{
 		printk(KERN_WARNING "usb: too many interfaces.\n");
 		return -1;
+
 	}
 
+	config->interface = (struct usb_interface_descriptor *)
+		kmalloc(config->bNumInterfaces * sizeof(struct usb_interface_descriptor), GFP_KERNEL);
+	if(config->interface==NULL)
+	{
+		printk(KERN_WARNING "usb: out of memory.\n");
+		return -1;	
+	}
+	memset(config->interface, 0, config->bNumInterfaces*sizeof(struct usb_interface_descriptor));
+	
 	for (i = 0; i < config->bNumInterfaces; i++) {
 		int retval = usb_parse_interface(dev, config->interface + i, ptr + parsed, len);
 		if (retval < 0)
@@ -266,6 +285,14 @@ int usb_parse_configuration(struct usb_device *dev, void *__buf, int bytes)
 		return -1;
 	}
 
+	dev->config = (struct usb_config_descriptor *)
+		kmalloc(dev->descriptor.bNumConfigurations * sizeof(struct usb_config_descriptor), GFP_KERNEL);
+	if(dev->config==NULL)
+	{
+		printk(KERN_WARNING "usb: out of memory.\n");
+		return -1;	
+	}
+	memset(dev->config, 0, dev->descriptor.bNumConfigurations*sizeof(struct usb_config_descriptor));
 	for (i = 0; i < dev->descriptor.bNumConfigurations; i++) {
 		int retval = usb_parse_config(dev, dev->config + i, ptr, bytes);
 		if (retval < 0)
@@ -276,6 +303,31 @@ int usb_parse_configuration(struct usb_device *dev, void *__buf, int bytes)
 	return 0;
 }
 
+void usb_destroy_configuration(struct usb_device *dev)
+{
+	int c, i;
+	struct usb_config_descriptor *cf;
+	struct usb_interface_descriptor *ifp;
+	
+	if(dev->config==NULL)
+		return;
+	for(c=0;c<dev->descriptor.bNumConfigurations;c++)
+	{
+		cf=&dev->config[c];
+		if(cf->interface==NULL)
+			break;
+		for(i=0;i<cf->bNumInterfaces;i++)
+		{
+			ifp=&cf->interface[i];
+			if(ifp->endpoint==NULL)
+				break;
+			kfree(ifp->endpoint);
+		}
+		kfree(cf->interface);
+	}
+	kfree(dev->config);
+}
+			
 void usb_init_root_hub(struct usb_device *dev)
 {
 	dev->devnum = -1;

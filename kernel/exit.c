@@ -32,9 +32,9 @@ static void release(struct task_struct * p)
 		 */
 		for (;;)  {
 			int has_cpu;
-			spin_lock(&scheduler_lock);
+			spin_lock_irq(&runqueue_lock);
 			has_cpu = p->has_cpu;
-			spin_unlock(&scheduler_lock);
+			spin_unlock_irq(&runqueue_lock);
 			if (!has_cpu)
 				break;
 			do {

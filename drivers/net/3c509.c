@@ -568,7 +568,7 @@ el3_start_xmit(struct sk_buff *skb, struct device *dev)
 		 */
 
 #ifdef __SMP__
-		disable_irq(dev->irq);
+		disable_irq_nosync(dev->irq);
 	    	spin_lock(&lp->lock);
 #endif	    	
 	    

@@ -204,8 +204,11 @@ static void do_cobalt_IRQ(unsigned int irq, struct pt_regs * regs)
 		status = desc->status & ~IRQ_REPLAY;
 		action = NULL;
 		if (!(status & (IRQ_DISABLED | IRQ_INPROGRESS)))
+		{
 			action = desc->action;
-		desc->status = status | IRQ_INPROGRESS;
+			status |= IRQ_INPROGRESS;
+		}
+		desc->status = status;
 	}
 	spin_unlock(&irq_controller_lock);
 

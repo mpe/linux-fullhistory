@@ -9,7 +9,7 @@
 #define PAGE_MASK	(~(PAGE_SIZE-1))
 
 #define PAGE_OFFSET	0xc0000000
-
+#define KERNELBASE	PAGE_OFFSET
 
 #ifndef __ASSEMBLY__
 #ifdef __KERNEL__

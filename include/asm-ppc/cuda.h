@@ -5,15 +5,6 @@
  * Copyright (C) 1996 Paul Mackerras.
  */
 
-/* First byte sent to or received from CUDA */
-#define ADB_PACKET	0
-#define CUDA_PACKET	1
-#define ERROR_PACKET	2
-#define TIMER_PACKET	3
-#define POWER_PACKET	4
-#define MACIIC_PACKET	5
-#define PMU_PACKET	6
-
 /* CUDA commands (2nd byte) */
 #define CUDA_WARM_START		0
 #define CUDA_AUTOPOLL		1
@@ -41,7 +32,7 @@ void find_via_cuda(void);
 void via_cuda_init(void);
 int cuda_request(struct adb_request *req,
 		 void (*done)(struct adb_request *), int nbytes, ...);
-int cuda_send_request(struct adb_request *req);
 void cuda_poll(void);
+int cuda_present(void);
 
 #endif	/* __KERNEL */

@@ -29,7 +29,6 @@
 #include <linux/a.out.h>
 #include <linux/stat.h>
 #include <linux/fcntl.h>
-#include <linux/user.h>
 #include <linux/smp_lock.h>
 #include <linux/init.h>
 

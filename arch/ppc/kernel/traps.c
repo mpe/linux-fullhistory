@@ -191,13 +191,8 @@ AlignmentException(struct pt_regs *regs)
 {
 	int fixed;
 
-#ifdef __SMP__
-	if (regs->msr & MSR_FP )
-		smp_giveup_fpu(current);
-#else	
-	if (last_task_used_math == current)
-		giveup_fpu();
-#endif	
+	if (regs->msr & MSR_FP)
+		giveup_fpu(current);
 	fixed = fix_alignment(regs);
 	if (fixed == 1) {
 		regs->nip += 4;	/* skip over emulated instruction */

@@ -53,7 +53,7 @@ but the wavetable needs THREE! My working string is:
 (IO 2 (BASE 0x0E20)) (ACT Y) ))"
 
 Resources 0x0620, 0x0A20 and 0x0E20 should work. Other on-board devices: 
-Gameport and StereoEnhance are not required to be inited.
+Gameport and StereoEnhance are not required to be initialized.
 
 Now you can execute "isapnp /etc/isapnp.conf". No errors should be reported.
 If you correctly installed isapnptools, then isapnp will run every boot time.

@@ -17,7 +17,7 @@
 
 #include <linux/config.h>
 #include <asm/adb.h>
-
+#include <asm/machdep.h>
 #ifdef CONFIG_APUS
 #include <asm-m68k/keyboard.h>
 #else
@@ -26,132 +26,44 @@
 #define DISABLE_KBD_DURING_INTERRUPTS	0
 #define INIT_KBD
 
-extern int mackbd_setkeycode(unsigned int scancode, unsigned int keycode);
-extern int mackbd_getkeycode(unsigned int scancode);
-extern int mackbd_translate(unsigned char scancode, unsigned char *keycode,
-			   char raw_mode);
-extern int mackbd_unexpected_up(unsigned char keycode);
-extern void mackbd_leds(unsigned char leds);
-extern void mackbd_init_hw(void);
-
-extern int pckbd_setkeycode(unsigned int scancode, unsigned int keycode);
-extern int pckbd_getkeycode(unsigned int scancode);
-extern int pckbd_translate(unsigned char scancode, unsigned char *keycode,
-			   char raw_mode);
-extern char pckbd_unexpected_up(unsigned char keycode);
-extern void pckbd_leds(unsigned char leds);
-extern void pckbd_init_hw(void);
-
 static inline int kbd_setkeycode(unsigned int scancode, unsigned int keycode)
 {
-	if ( is_prep || (_machine == _MACH_mbx) )
-		return pckbd_setkeycode(scancode,keycode);
-	else if ( is_chrp )
-#ifndef CONFIG_MAC_KEYBOARD
-		return pckbd_setkeycode(scancode,keycode);
-#else
-		/* I'm not actually sure if it's legal to have a CHRP machine
-		 * without an ADB controller. In any case, this should really
-		 * be changed to be a test to see if an ADB _keyboard_ exists
-		 * (not just a controller), but that's another story for
-		 * another night.
-		 */
-		if ( adb_hardware == ADB_NONE )
-			return pckbd_setkeycode(scancode,keycode);
-		else
-			return mackbd_setkeycode(scancode,keycode);
-#endif
-	else
-		return mackbd_setkeycode(scancode,keycode);
+	return ppc_md.kbd_setkeycode(scancode, keycode);
 }
-
-static inline int kbd_getkeycode(unsigned int x)
+  
+static inline int kbd_getkeycode(unsigned int scancode)
 {
-	if ( is_prep || (_machine == _MACH_mbx) )
-		return pckbd_getkeycode(x);
-	else if ( is_chrp )
-#ifndef CONFIG_MAC_KEYBOARD
-		return pckbd_getkeycode(x);
-#else
-		if ( adb_hardware == ADB_NONE )
-			return pckbd_getkeycode(x);
-		else
-			return mackbd_getkeycode(x);
-#endif
-	else
-		return mackbd_getkeycode(x);
+	return ppc_md.kbd_getkeycode(scancode);
 }
-
+  
 static inline int kbd_translate(unsigned char keycode, unsigned char *keycodep,
-		     char raw_mode)
+				char raw_mode)
 {
-	if ( is_prep || (_machine == _MACH_mbx) )
-		return pckbd_translate(keycode,keycodep,raw_mode);
-	else if ( is_chrp )
-#ifndef CONFIG_MAC_KEYBOARD
-		return pckbd_translate(keycode,keycodep,raw_mode);
-#else
-		if ( adb_hardware == ADB_NONE )
-			return pckbd_translate(keycode,keycodep,raw_mode);
-		else
-			return mackbd_translate(keycode,keycodep,raw_mode);
-#endif
-	else
-		return mackbd_translate(keycode,keycodep,raw_mode);
-	
+	return ppc_md.kbd_translate(keycode, keycodep, raw_mode);
 }
-
+  
 static inline int kbd_unexpected_up(unsigned char keycode)
 {
-	if ( is_prep || (_machine == _MACH_mbx) )
-		return pckbd_unexpected_up(keycode);
-	else if ( is_chrp )
-#ifndef CONFIG_MAC_KEYBOARD
-		return pckbd_unexpected_up(keycode);
-#else
-		if ( adb_hardware == ADB_NONE )
-			return pckbd_unexpected_up(keycode);
-		else
-			return mackbd_unexpected_up(keycode);
-#endif
-	else
-		return mackbd_unexpected_up(keycode);
-	
+	return ppc_md.kbd_unexpected_up(keycode);
 }
-
+  
 static inline void kbd_leds(unsigned char leds)
 {
-	if ( is_prep || (_machine == _MACH_mbx) )
-		pckbd_leds(leds);
-	else if ( is_chrp )
-#ifndef CONFIG_MAC_KEYBOARD
-		pckbd_leds(leds);
-#else
-		if ( adb_hardware == ADB_NONE )
-			pckbd_leds(leds);
-		else
-			mackbd_leds(leds);
-#endif
-	else
-		mackbd_leds(leds);
+	ppc_md.kbd_leds(leds);
 }
-
+  
 static inline void kbd_init_hw(void)
 {
-	if ( is_prep || (_machine == _MACH_mbx) )
-		pckbd_init_hw();
-	else if ( is_chrp )
-#ifndef CONFIG_MAC_KEYBOARD
-		pckbd_init_hw();
-#else
-		if ( adb_hardware == ADB_NONE )
-			pckbd_init_hw();
-		else
-			mackbd_init_hw();
-#endif
-	else
-		mackbd_init_hw();
+	ppc_md.kbd_init_hw();
 }
+
+#define kbd_sysrq_xlate	(ppc_md.kbd_sysrq_xlate)
+
+#ifdef CONFIG_MAC_KEYBOARD
+# define SYSRQ_KEY 0x69
+#else
+# define SYSRQ_KEY 0x54
+#endif
 
 #endif /* CONFIG_APUS */
 

@@ -249,7 +249,8 @@ svc_sendto(struct svc_rqst *rqstp, struct iovec *iov, int nr)
 	msg.msg_namelen = sizeof(rqstp->rq_addr);
 	msg.msg_iov     = iov;
 	msg.msg_iovlen  = nr;
-	msg.msg_control = 0;
+	msg.msg_control = NULL;
+	msg.msg_controllen = 0;
 
 #if LINUX_VERSION_CODE >= 0x020100
 	msg.msg_flags	= MSG_DONTWAIT;
@@ -308,7 +309,8 @@ svc_recvfrom(struct svc_rqst *rqstp, struct iovec *iov, int nr, int buflen)
 	msg.msg_namelen = sizeof(rqstp->rq_addr);
 	msg.msg_iov     = iov;
 	msg.msg_iovlen  = nr;
-	msg.msg_control = 0;
+	msg.msg_control = NULL;
+	msg.msg_controllen = 0;
 
 #if LINUX_VERSION_CODE >= 0x020100
 	msg.msg_flags	= MSG_DONTWAIT;

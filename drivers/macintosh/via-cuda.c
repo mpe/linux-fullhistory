@@ -74,6 +74,7 @@ static unsigned char *reply_ptr;
 static int reading_reply;
 static int data_index;
 static struct device_node *vias;
+static int cuda_fully_inited = 0;
 
 static int init_via(void);
 static void cuda_start(void);
@@ -81,7 +82,17 @@ static void via_interrupt(int irq, void *arg, struct pt_regs *regs);
 static void cuda_input(unsigned char *buf, int nb, struct pt_regs *regs);
 static int cuda_adb_send_request(struct adb_request *req, int sync);
 static int cuda_adb_autopoll(int devs);
-static int cuda_reset_bus(void);
+static int cuda_adb_reset_bus(void);
+static int cuda_send_request(struct adb_request *req);
+
+
+static struct adb_controller	cuda_controller = {
+	ADB_VIACUDA,
+	cuda_adb_send_request,
+	cuda_adb_autopoll,
+	cuda_adb_reset_bus,
+	cuda_poll
+};
 
 __openfirmware
 
@@ -121,7 +132,7 @@ find_via_cuda()
 	via = NULL;
     }
 
-    adb_hardware = ADB_VIACUDA;
+   adb_controller = &cuda_controller;
 }
 
 void
@@ -139,10 +150,7 @@ via_cuda_init(void)
     via[IFR] = 0x7f; eieio();	/* clear interrupts by writing 1s */
     via[IER] = IER_SET|SR_INT; eieio();	/* enable interrupt from SR */
 
-    /* Set function pointers */
-    adb_send_request = cuda_adb_send_request;
-    adb_autopoll = cuda_adb_autopoll;
-    adb_reset_bus = cuda_reset_bus;
+    cuda_fully_inited = 1;
 }
 
 #define WAIT_FOR(cond, what)				\
@@ -201,14 +209,17 @@ cuda_adb_send_request(struct adb_request *req, int sync)
 {
     int i;
 
-    for (i = req->nbytes; i > 0; --i)
-	req->data[i] = req->data[i-1];
-    req->data[0] = ADB_PACKET;
-    ++req->nbytes;
+    if ((via == NULL) || !cuda_fully_inited) {
+	req->complete = 1;
+	return -ENXIO;
+    }
+  
     req->reply_expected = 1;
+
     i = cuda_send_request(req);
     if (i)
 	return i;
+
     if (sync) {
 	while (!req->complete)
 	    cuda_poll();
@@ -216,11 +227,15 @@ cuda_adb_send_request(struct adb_request *req, int sync)
     return 0;
 }
 
+
 /* Enable/disable autopolling */
 static int
 cuda_adb_autopoll(int devs)
 {
     struct adb_request req;
+
+    if ((via == NULL) || !cuda_fully_inited)
+	return -ENXIO;
 
     cuda_request(&req, NULL, 3, CUDA_PACKET, CUDA_AUTOPOLL, (devs? 1: 0));
     while (!req.complete)
@@ -230,9 +245,12 @@ cuda_adb_autopoll(int devs)
 
 /* Reset adb bus - how do we do this?? */
 static int
-cuda_reset_bus(void)
+cuda_adb_reset_bus(void)
 {
     struct adb_request req;
+
+    if ((via == NULL) || !cuda_fully_inited)
+	return -ENXIO;
 
     cuda_request(&req, NULL, 2, ADB_PACKET, 0);		/* maybe? */
     while (!req.complete)
@@ -248,6 +266,11 @@ cuda_request(struct adb_request *req, void (*done)(struct adb_request *),
     va_list list;
     int i;
 
+    if (via == NULL) {
+	req->complete = 1;
+	return -ENXIO;
+    }
+
     req->nbytes = nbytes;
     req->done = done;
     va_start(list, nbytes);
@@ -258,15 +281,11 @@ cuda_request(struct adb_request *req, void (*done)(struct adb_request *),
     return cuda_send_request(req);
 }
 
-int
+static int
 cuda_send_request(struct adb_request *req)
 {
     unsigned long flags;
 
-    if (via == NULL) {
-	req->complete = 1;
-	return -ENXIO;
-    }
     if (req->nbytes < 2 || req->data[0] > CUDA_PACKET) {
 	req->complete = 1;
 	return -EINVAL;
@@ -471,4 +490,10 @@ cuda_input(unsigned char *buf, int nb, struct pt_regs *regs)
 	    printk(" %.2x", buf[i]);
 	printk("\n");
     }
+}
+
+int
+cuda_present(void)
+{
+	return (adb_controller && (adb_controller->kind == ADB_VIACUDA) && via);
 }

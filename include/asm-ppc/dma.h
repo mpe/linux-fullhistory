@@ -35,36 +35,9 @@
 /* Doesn't really apply... */
 #define MAX_DMA_ADDRESS      0xFFFFFFFF
 
-#if defined(CONFIG_MACH_SPECIFIC)
-
-#if defined(CONFIG_PREP)
-#define DMA_MODE_READ 0x44
-#define DMA_MODE_WRITE 0x48
-#define ISA_DMA_THRESHOLD 0x00ffffff
-#endif /* CONFIG_PREP */
-
-#if defined(CONFIG_CHRP)
-#define DMA_MODE_READ 0x44
-#define DMA_MODE_WRITE 0x48
-#define ISA_DMA_THRESHOLD ~0L
-#endif /* CONFIG_CHRP */
-
-#ifdef CONFIG_PMAC
-#define DMA_MODE_READ 1
-#define DMA_MODE_WRITE 2
-#define ISA_DMA_THRESHOLD ~0L
-#endif /* CONFIG_PMAC */
-
-#ifdef CONFIG_APUS
-/* This is bogus and should go away. */
-#define ISA_DMA_THRESHOLD (0x00ffffff)
-#endif
-
-#else
 /* in arch/ppc/kernel/setup.c -- Cort */
 extern unsigned long DMA_MODE_WRITE, DMA_MODE_READ;
 extern unsigned long ISA_DMA_THRESHOLD;
-#endif
 
 
 #ifdef HAVE_REALLY_SLOW_DMA_CONTROLLER
@@ -204,7 +177,7 @@ extern long ppc_cs4232_dma, ppc_cs4232_dma2;
 #define DMA2_EXT_REG               0x4D6
 
 #define DMA_MODE_CASCADE 0xC0   /* pass thru DREQ->HRQ, DACK<-HLDA only */
-#define DMA_AUTOINIT	0x10
+#define DMA_AUTOINIT   	 0x10
 
 extern spinlock_t  dma_spin_lock;
 
@@ -427,9 +400,8 @@ extern int request_dma(unsigned int dmanr, const char * device_id);	/* reserve a
 extern void free_dma(unsigned int dmanr);	/* release it again */
 
 #ifdef CONFIG_PCI_QUIRKS
-extern int isa_dma_bridge_buggy;
-#else
-#define isa_dma_bridge_buggy    (0)
+extern int isa_dma_bridge_buggy;                                        
+#else                                                         
+#define isa_dma_bridge_buggy   (0)
 #endif
-
 #endif /* _ASM_DMA_H */

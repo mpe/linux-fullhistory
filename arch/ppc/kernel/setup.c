@@ -1,5 +1,5 @@
 /*
- * $Id: setup.c,v 1.130 1999/03/11 01:45:15 cort Exp $
+ * $Id: setup.c,v 1.132 1999/03/24 00:32:19 cort Exp $
  * Common prep/pmac/chrp boot and setup code.
  */
 
@@ -30,31 +30,62 @@
 #include <asm/8xx_immap.h>
 #endif
 #include <asm/bootx.h>
+#include <asm/machdep.h>
+#include <asm/ide.h>
 
-/* APUS defs */
-extern unsigned long m68k_machtype;
-extern int parse_bootinfo(const struct bi_record *);
-extern char _end[];
-#ifdef CONFIG_APUS
-extern struct mem_info ramdisk;
-unsigned long isa_io_base;
-unsigned long isa_mem_base;
-unsigned long pci_dram_offset;
-#endif
-/* END APUS defs */
+extern void pmac_init(unsigned long r3,
+                      unsigned long r4,
+                      unsigned long r5,
+                      unsigned long r6,
+                      unsigned long r7);
+
+extern void chrp_init(unsigned long r3,
+                      unsigned long r4,
+                      unsigned long r5,
+                      unsigned long r6,
+                      unsigned long r7);
+
+extern void prep_init(unsigned long r3,
+                      unsigned long r4,
+                      unsigned long r5,
+                      unsigned long r6,
+                      unsigned long r7);
+
+extern void mbx_init(unsigned long r3,
+		     unsigned long r4,
+		     unsigned long r5,
+		     unsigned long r6,
+		     unsigned long r7);
+
+extern void apus_init(unsigned long r3,
+                      unsigned long r4,
+                      unsigned long r5,
+                      unsigned long r6,
+                      unsigned long r7);
 
 extern boot_infos_t *boot_infos;
 extern char cmd_line[512];
 char saved_command_line[256];
 unsigned char aux_device_present;
 
-#if !defined(CONFIG_MACH_SPECIFIC)
+struct ide_machdep_calls ppc_ide_md;
+
 unsigned long ISA_DMA_THRESHOLD;
 unsigned long DMA_MODE_READ, DMA_MODE_WRITE;
-int _machine;
-/* if we have openfirmware */
-unsigned long have_of;
-#endif /* ! CONFIG_MACH_SPECIFIC */
+
+/* Temporary hacks until machdep.h is fully done. */
+int _machine = 0;
+/* do we have OF? */
+int have_of = 0;
+int is_prep = 0;
+int is_chrp = 0;
+/* For MTX/MVME boards.. with Raven/Falcon Chipset
+      Real close to CHRP, but boot like PReP (via PPCbug)
+      There's probably a nicer way to do this.. --Troy */
+int is_powerplus = 0;
+
+struct machdep_calls ppc_md;
+
 
 /* copy of the residual data */
 #ifndef CONFIG_MBX
@@ -64,15 +95,6 @@ unsigned char __res[sizeof(bd_t)] = {0,};
 #endif
 
 RESIDUAL *res = (RESIDUAL *)&__res;
-
-int _prep_type;
-/*
- * This is used to identify the board type from a given PReP board
- * vendor. Board revision is also made available.
- */
-unsigned char ucSystemType;
-unsigned char ucBoardRev;
-unsigned char ucBoardRevMaj, ucBoardRevMin;
 
 /*
  * Perhaps we can put the pmac screen_info[] here
@@ -122,164 +144,28 @@ struct screen_info screen_info = {
 };
 #endif /* CONFIG_MBX */
 
-/* cmd is ignored for now... */
 void machine_restart(char *cmd)
 {
-#ifndef CONFIG_MBX
-	unsigned long flags;
-	struct adb_request req;
-
-	switch(_machine)
-	{
-	case _MACH_Pmac:
-		switch (adb_hardware) {
-		case ADB_VIACUDA:
-			cuda_request(&req, NULL, 2, CUDA_PACKET,
-				     CUDA_RESET_SYSTEM);
-			for (;;)
-				cuda_poll();
-			break;
-		case ADB_VIAPMU:
-			pmu_restart();
-			break;
-		default:
-		}
-		break;
-
-	case _MACH_chrp:
-#if 0		/* RTAS doesn't seem to work on Longtrail.
-		   For now, do it the same way as the PReP. */
-	        /*err = call_rtas("system-reboot", 0, 1, NULL);
-		  printk("RTAS system-reboot returned %d\n", err);
-		  for (;;);*/
-		
-		{
-			extern unsigned int rtas_entry, rtas_data, rtas_size;
-			unsigned long status, value;
-			printk("rtas_ent`ry: %08x rtas_data: %08x rtas_size: %08x\n",
-			       rtas_entry,rtas_data,rtas_size);
-		}
-#endif
-	case _MACH_prep:
-		_disable_interrupts();
-                /* set exception prefix high - to the prom */
-                save_flags( flags );
-                restore_flags( flags|MSR_IP );
-                
-                /* make sure bit 0 (reset) is a 0 */
-                outb( inb(0x92) & ~1L , 0x92 );
-                /* signal a reset to system control port A - soft reset */
-                outb( inb(0x92) | 1 , 0x92 );
-                
-                while ( 1 ) ;
-                break;
-		/*
-		 * Not reached
-		 */
-	case _MACH_apus:
-		cli();
-
-		APUS_WRITE(APUS_REG_LOCK, 
-			   REGLOCK_BLACKMAGICK1|REGLOCK_BLACKMAGICK2);
-		APUS_WRITE(APUS_REG_LOCK, 
-			   REGLOCK_BLACKMAGICK1|REGLOCK_BLACKMAGICK3);
-		APUS_WRITE(APUS_REG_LOCK, 
-			   REGLOCK_BLACKMAGICK2|REGLOCK_BLACKMAGICK3);
-		APUS_WRITE(APUS_REG_SHADOW, REGSHADOW_SELFRESET);
-		APUS_WRITE(APUS_REG_RESET, REGRESET_AMIGARESET);
-		for(;;);
-		break;
-	}
-#else /* CONFIG_MBX */
-        extern void __clear_msr_me(void);
-        __volatile__ unsigned char dummy;
-	
-        cli();
-        ((immap_t *)IMAP_ADDR)->im_clkrst.car_plprcr |= 0x00000080;
-        __clear_msr_me();
-        dummy = ((immap_t *)IMAP_ADDR)->im_clkrst.res[0];
- 
-	printk("Restart failed\n");
-	while(1);
-#endif /* CONFIG_MBX */
+	ppc_md.restart(cmd);
 }
-
+  
 void machine_power_off(void)
 {
-#ifndef CONFIG_MBX	
-	struct adb_request req;
-#if 0	
-	int err;
-#endif	
-
-	switch (_machine) {
-	case _MACH_Pmac:
-		switch (adb_hardware) {
-		case ADB_VIACUDA:
-			cuda_request(&req, NULL, 2, CUDA_PACKET,
-				     CUDA_POWERDOWN);
-			for (;;)
-				cuda_poll();
-			break;
-		case ADB_VIAPMU:
-			pmu_shutdown();
-			break;
-		default:
-		}
-		break;
-
-	case _MACH_chrp:
-#if 0		/* RTAS doesn't seem to work on Longtrail.
-		   For now, do it the same way as the PReP. */
-		err = call_rtas("power-off", 2, 1, NULL, 0, 0);
-		printk("RTAS system-reboot returned %d\n", err);
-		for (;;);
-#endif
-
-	case _MACH_prep:
-		machine_restart(NULL);
-	case _MACH_apus:
-		for (;;);
-	}
-	for (;;);
-#else /* CONFIG_MBX */
-	machine_halt();
-#endif /* CONFIG_MBX */
+	ppc_md.power_off();
 }
-
+  
 void machine_halt(void)
 {
-	if ( _machine == _MACH_Pmac )
-	{
-		machine_power_off();
-	}
-	else /* prep, chrp or apus */
-		machine_restart(NULL);
+	ppc_md.halt();
 }
-
+  
 #if defined(CONFIG_BLK_DEV_IDE) || defined(CONFIG_BLK_DEV_IDE_MODULE)
 void ide_init_hwif_ports (ide_ioreg_t *p, ide_ioreg_t base, int *irq)
 {
-#if !defined(CONFIG_MBX) && !defined(CONFIG_APUS)
-	switch (_machine) {
-#if defined(CONFIG_BLK_DEV_IDE_PMAC)
-	case _MACH_Pmac:
-	  	pmac_ide_init_hwif_ports(p,base,irq);
-		break;
-#endif		
-	case _MACH_chrp:
-		chrp_ide_init_hwif_ports(p,base,irq);
-		break;
-	case _MACH_prep:
-		prep_ide_init_hwif_ports(p,base,irq);
-		break;
+	if (ppc_ide_md.ide_init_hwif != NULL) {
+		ppc_ide_md.ide_init_hwif(p, base, irq);
 	}
-#endif
-#if defined(CONFIG_MBX)
-	mbx_ide_init_hwif_ports(p,base,irq);
-#endif	
 }
-EXPORT_SYMBOL(ide_init_hwif_ports);
 #endif
 
 unsigned long cpu_temp(void)
@@ -313,10 +199,6 @@ unsigned long cpu_temp(void)
 
 int get_cpuinfo(char *buffer)
 {
-	extern int pmac_get_cpuinfo(char *);
-	extern int chrp_get_cpuinfo(char *);	
-	extern int prep_get_cpuinfo(char *);
-	extern int apus_get_cpuinfo(char *);
 	unsigned long len = 0;
 	unsigned long bogosum = 0;
 	unsigned long i;
@@ -380,7 +262,6 @@ int get_cpuinfo(char *buffer)
 			break;
 		}
 		
-#ifndef CONFIG_MBX
 		/*
 		 * Assume here that all clock rates are the same in a
 		 * smp system.  -- Cort
@@ -397,33 +278,11 @@ int get_cpuinfo(char *buffer)
 			len += sprintf(len+buffer, "clock\t\t: %dMHz\n",
 				       *fp / 1000000);
 		}
-		
-		/* PREP's without residual data for some reason will give
-		   incorrect values here */
-		if ( is_prep )
+
+		if (ppc_md.setup_residual != NULL)
 		{
-			len += sprintf(len+buffer, "clock\t\t: ");
-			if ( res->ResidualLength )
-				len += sprintf(len+buffer, "%ldMHz\n",
-				       (res->VitalProductData.ProcessorHz > 1024) ?
-				       res->VitalProductData.ProcessorHz>>20 :
-				       res->VitalProductData.ProcessorHz);
-			else
-				len += sprintf(len+buffer, "???\n");
+			len += ppc_md.setup_residual(buffer + len);
 		}
-#else /* CONFIG_MBX */
-		{
-			bd_t	*bp;
-			extern	RESIDUAL *res;
-			
-			bp = (bd_t *)res;
-			
-			len += sprintf(len+buffer,"clock\t\t: %dMHz\n"
-				      "bus clock\t: %dMHz\n",
-				      bp->bi_intfreq /*/ 1000000*/,
-				      bp->bi_busfreq /*/ 1000000*/);
-		}
-#endif /* CONFIG_MBX */		
 		
 		len += sprintf(len+buffer, "revision\t: %ld.%ld\n",
 			       (GET_PVR & 0xff00) >> 8, GET_PVR & 0xff);
@@ -438,8 +297,8 @@ int get_cpuinfo(char *buffer)
 	if ( i )
 		len += sprintf(buffer+len, "\n");
 	len += sprintf(buffer+len,"total bogomips\t: %lu.%02lu\n",
-	       (bogosum+2500)/500000,
-	       (bogosum+2500)/5000 % 100);
+		       (bogosum+2500)/500000,
+		       (bogosum+2500)/5000 % 100);
 #endif /* __SMP__ */
 
 	/*
@@ -455,27 +314,14 @@ int get_cpuinfo(char *buffer)
 			       zero_cache_hits,zero_cache_calls,
 			       /* : 1 below is so we don't div by zero */
 			       (zero_cache_hits*100) /
-			            ((zero_cache_calls)?zero_cache_calls:1));
+			       ((zero_cache_calls)?zero_cache_calls:1));
 	}
 
-#ifndef CONFIG_MBX
-	switch (_machine)
+	if (ppc_md.get_cpuinfo != NULL)
 	{
-	case _MACH_Pmac:
-		len += pmac_get_cpuinfo(buffer+len);
-		break;
-	case _MACH_prep:
-		len += prep_get_cpuinfo(buffer+len);
-		break;
-	case _MACH_chrp:
-		len += chrp_get_cpuinfo(buffer+len);
-		break;
-	case _MACH_apus:
-		/* Not much point in printing m68k info when it is not
-                   used. */
-		break;
+		len += ppc_md.get_cpuinfo(buffer+len);
 	}
-#endif /* ndef CONFIG_MBX */	
+
 	return len;
 }
 
@@ -487,25 +333,22 @@ unsigned long __init
 identify_machine(unsigned long r3, unsigned long r4, unsigned long r5,
 		 unsigned long r6, unsigned long r7)
 {
-	extern void setup_pci_ptrs(void);
 	
 #ifdef __SMP__
 	if ( first_cpu_booted ) return 0;
 #endif /* __SMP__ */
 	
-#ifndef CONFIG_MBX
 #ifndef CONFIG_MACH_SPECIFIC
 	/* boot loader will tell us if we're APUS */
 	if ( r3 == 0x61707573 )
 	{
 		_machine = _MACH_apus;
-		have_of = 0;
 		r3 = 0;
 	}
 	/* prep boot loader tells us if we're prep or not */
 	else if ( *(unsigned long *)(KERNELBASE) == (0xdeadc0de) ) {
 		_machine = _MACH_prep;
-		have_of = 0;
+		is_prep = 1;
 	} else {
 		char *model;
 
@@ -516,19 +359,49 @@ identify_machine(unsigned long r3, unsigned long r4, unsigned long r5,
 		/* ask the OF info if we're a chrp or pmac */
 		model = get_property(find_path_device("/"), "device_type", NULL);
 		if ( model && !strncmp("chrp",model,4) )
+		{
 			_machine = _MACH_chrp;
+			is_chrp = 1;
+		}
 		else
 		{
 			model = get_property(find_path_device("/"),
 					     "model", NULL);
 			if ( model && !strncmp(model, "IBM", 3))
+			{
 				_machine = _MACH_chrp;
+				is_chrp = 1;
+			}
 			else
+			{
 				_machine = _MACH_Pmac;
+				is_prep = 1;
+			}
 		}
 
 	}
-#endif /* CONFIG_MACH_SPECIFIC */		
+#else /* CONFIG_MACH_SPECIFIC */
+
+#ifdef CONFIG_PREP
+	_machine = _MACH_prep;
+	is_prep  = 1;
+#elif defined(CONFIG_CHRP)
+	_machine = _MACH_chrp;
+	is_chrp  = 1;
+	have_of  = 1;
+#elif defined(CONFIG_PMAC)
+	_machine = _MACH_Pmac;
+	have_of  = 1;
+#elif defined(CONFIG_MBX)
+	_machine = _MACH_mbx;
+#elif defined(CONFIG_FADS)
+	_machine = _MACH_fads;
+#elif defined(CONFIG_APUS)
+	_machine = _MACH_apus;
+#else
+#error "Machine not defined correctly"
+#endif /* CONFIG_APUS */
+#endif /* CONFIG_MACH_SPECIFIC */
 
 	if ( have_of )
 	{
@@ -587,137 +460,30 @@ identify_machine(unsigned long r3, unsigned long r4, unsigned long r5,
 		cmd_line[sizeof(cmd_line) - 1] = 0;
 	}
 
-
 	switch (_machine)
 	{
 	case _MACH_Pmac:
-		setup_pci_ptrs();
-		/* isa_io_base gets set in pmac_find_bridges */
-		isa_mem_base = PMAC_ISA_MEM_BASE;
-		pci_dram_offset = PMAC_PCI_DRAM_OFFSET;
-#if !defined(CONFIG_MACH_SPECIFIC)
-		ISA_DMA_THRESHOLD = ~0L;
-		DMA_MODE_READ = 1;
-		DMA_MODE_WRITE = 2;
-#endif /* ! CONFIG_MACH_SPECIFIC */
+                pmac_init(r3, r4, r5, r6, r7);
 		break;
 	case _MACH_prep:
-		/* make a copy of residual data */
-		if ( r3 )
-			memcpy((void *)res,(void *)(r3+KERNELBASE),
-			       sizeof(RESIDUAL));
-		isa_io_base = PREP_ISA_IO_BASE;
-		isa_mem_base = PREP_ISA_MEM_BASE;
-		pci_dram_offset = PREP_PCI_DRAM_OFFSET;
-#if !defined(CONFIG_MACH_SPECIFIC)
-		ISA_DMA_THRESHOLD = 0x00ffffff;
-		DMA_MODE_READ = 0x44;
-		DMA_MODE_WRITE = 0x48;
-#endif /* ! CONFIG_MACH_SPECIFIC */
-		/* figure out what kind of prep workstation we are */
-		if ( res->ResidualLength != 0 )
-		{
-			if ( !strncmp(res->VitalProductData.PrintableModel,"IBM",3) )
-				_prep_type = _PREP_IBM;
-			else if (!strncmp(res->VitalProductData.PrintableModel,
-					  "Radstone",8))
-			{
-				extern char *Motherboard_map_name;
-
-				_prep_type = _PREP_Radstone;
-				Motherboard_map_name=
-					res->VitalProductData.PrintableModel;
-			}
-			else
-				_prep_type = _PREP_Motorola;
-		}
-		else /* assume motorola if no residual (netboot?) */
-			_prep_type = _PREP_Motorola;
-		setup_pci_ptrs();
-#ifdef CONFIG_BLK_DEV_INITRD
-		/* take care of initrd if we have one */
-		if ( r4 )
-		{
-			initrd_start = r4 + KERNELBASE;
-			initrd_end = r5 + KERNELBASE;
-		}
-#endif /* CONFIG_BLK_DEV_INITRD */
-		/* take care of cmd line */
-		if ( r6 )
-		{
-			*(char *)(r7+KERNELBASE) = 0;
-			strcpy(cmd_line, (char *)(r6+KERNELBASE));
-		}
+                prep_init(r3, r4, r5, r6, r7);
 		break;
 	case _MACH_chrp:
-		setup_pci_ptrs();
-#ifdef CONFIG_BLK_DEV_INITRD
-		/* take care of initrd if we have one */
-		if ( r3 )
-		{
-			initrd_start = r3 + KERNELBASE;
-			initrd_end = r3 + r4 + KERNELBASE;
-		}
-#endif /* CONFIG_BLK_DEV_INITRD */
-		/* pci_dram_offset/isa_io_base/isa_mem_base set by setup_pci_ptrs() */
-#if !defined(CONFIG_MACH_SPECIFIC)
-		ISA_DMA_THRESHOLD = ~0L;
-		DMA_MODE_READ = 0x44;
-		DMA_MODE_WRITE = 0x48;
-#endif /* ! CONFIG_MACH_SPECIFIC */
+                chrp_init(r3, r4, r5, r6, r7);
 		break;
-#ifdef CONFIG_APUS		
+#ifdef CONFIG_APUS
 	case _MACH_apus:
-		/* Parse bootinfo. The bootinfo is located right after
-                   the kernel bss */
-		parse_bootinfo((const struct bi_record *)&_end);
-#ifdef CONFIG_BLK_DEV_INITRD
-		/* Take care of initrd if we have one. Use data from
-		   bootinfo to avoid the need to initialize PPC
-		   registers when kernel is booted via a PPC reset. */
-		if ( ramdisk.addr ) {
-			initrd_start = (unsigned long) __va(ramdisk.addr);
-			initrd_end = (unsigned long) 
-				__va(ramdisk.size + ramdisk.addr);
-		}
-		/* Make sure code below is not executed. */
-		r4 = 0;
-		r6 = 0;
-#endif /* CONFIG_BLK_DEV_INITRD */
-#if !defined(CONFIG_MACH_SPECIFIC)
-		ISA_DMA_THRESHOLD = 0x00ffffff;
-#endif /* ! CONFIG_MACH_SPECIFIC */
+                apus_init(r3, r4, r5, r6, r7);
 		break;
+#endif
+#ifdef CONFIG_MBX
+        case _MACH_mbx:
+                mbx_init(r3, r4, r5, r6, r7);
+                break;
 #endif
 	default:
 		printk("Unknown machine type in identify_machine!\n");
 	}
-
-#else /* CONFIG_MBX */
-
-	if ( r3 )
-		memcpy( (void *)res,(void *)(r3+KERNELBASE), sizeof(bd_t) );
-	
-#ifdef CONFIG_PCI
-	setup_pci_ptrs();
-#endif
-
-#ifdef CONFIG_BLK_DEV_INITRD
-	/* take care of initrd if we have one */
-	if ( r4 )
-	{
-		initrd_start = r4 + KERNELBASE;
-		initrd_end = r5 + KERNELBASE;
-	}
-#endif /* CONFIG_BLK_DEV_INITRD */
-	/* take care of cmd line */
-	if ( r6 )
-	{
-		
-		*(char *)(r7+KERNELBASE) = 0;
-		strcpy(cmd_line, (char *)(r6+KERNELBASE));
-	}
-#endif /* CONFIG_MBX */
 
 	/* Check for nobats option (used in mapin_ram). */
 	if (strstr(cmd_line, "nobats")) {
@@ -740,14 +506,17 @@ void ppc_setup_l2cr(char *str, int *ints)
 	}
 }
 
-__initfunc(void setup_arch(char **cmdline_p,
-	unsigned long * memory_start_p, unsigned long * memory_end_p))
+__initfunc(void
+	   ppc_init(void))
 {
-	extern void pmac_setup_arch(unsigned long *, unsigned long *);
-	extern void chrp_setup_arch(unsigned long *, unsigned long *);
-	extern void prep_setup_arch(unsigned long *, unsigned long *);
-	extern void mbx_setup_arch(unsigned long *, unsigned long *);
-	extern void apus_setup_arch(unsigned long *, unsigned long *);
+	if (ppc_md.init != NULL) {
+		ppc_md.init();
+	}
+}
+
+__initfunc(void setup_arch(char **cmdline_p,
+			   unsigned long * memory_start_p, unsigned long * memory_end_p))
+{
 	extern int panic_timeout;
 	extern char _etext[], _edata[];
 	extern char *klimit;
@@ -776,27 +545,113 @@ __initfunc(void setup_arch(char **cmdline_p,
 	*memory_start_p = find_available_memory();
 	*memory_end_p = (unsigned long) end_of_DRAM;
 
-#ifdef CONFIG_MBX
-	mbx_setup_arch(memory_start_p,memory_end_p);
-#else /* CONFIG_MBX */	
-	switch (_machine) {
-	case _MACH_Pmac:
-		pmac_setup_arch(memory_start_p, memory_end_p);
-		break;
-	case _MACH_prep:
-		prep_setup_arch(memory_start_p, memory_end_p);
-		break;
-	case _MACH_chrp:
-		chrp_setup_arch(memory_start_p, memory_end_p);
-		break;
-#ifdef CONFIG_APUS		
-	case _MACH_apus:
-		m68k_machtype = MACH_AMIGA;
-		apus_setup_arch(memory_start_p,memory_end_p);
-		break;
-#endif
-	default:
-		printk("Unknown machine %d in setup_arch()\n", _machine);
-	}
-#endif /* CONFIG_MBX */	
+	ppc_md.setup_arch(memory_start_p, memory_end_p);
+}
+
+void ppc_generic_ide_fix_driveid(struct hd_driveid *id)
+{
+        int i;
+	unsigned short *stringcast;
+
+
+	id->config         = __le16_to_cpu(id->config);
+	id->cyls           = __le16_to_cpu(id->cyls);
+	id->reserved2      = __le16_to_cpu(id->reserved2);
+	id->heads          = __le16_to_cpu(id->heads);
+	id->track_bytes    = __le16_to_cpu(id->track_bytes);
+	id->sector_bytes   = __le16_to_cpu(id->sector_bytes);
+	id->sectors        = __le16_to_cpu(id->sectors);
+	id->vendor0        = __le16_to_cpu(id->vendor0);
+	id->vendor1        = __le16_to_cpu(id->vendor1);
+	id->vendor2        = __le16_to_cpu(id->vendor2);
+	stringcast = (unsigned short *)&id->serial_no[0];
+	for (i=0; i<(20/2); i++)
+	        stringcast[i] = __le16_to_cpu(stringcast[i]);
+	id->buf_type       = __le16_to_cpu(id->buf_type);
+	id->buf_size       = __le16_to_cpu(id->buf_size);
+	id->ecc_bytes      = __le16_to_cpu(id->ecc_bytes);
+	stringcast = (unsigned short *)&id->fw_rev[0];
+	for (i=0; i<(8/2); i++)
+	        stringcast[i] = __le16_to_cpu(stringcast[i]);
+	stringcast = (unsigned short *)&id->model[0];
+	for (i=0; i<(40/2); i++)
+	        stringcast[i] = __le16_to_cpu(stringcast[i]);
+	id->dword_io       = __le16_to_cpu(id->dword_io);
+	id->reserved50     = __le16_to_cpu(id->reserved50);
+	id->field_valid    = __le16_to_cpu(id->field_valid);
+	id->cur_cyls       = __le16_to_cpu(id->cur_cyls);
+	id->cur_heads      = __le16_to_cpu(id->cur_heads);
+	id->cur_sectors    = __le16_to_cpu(id->cur_sectors);
+	id->cur_capacity0  = __le16_to_cpu(id->cur_capacity0);
+	id->cur_capacity1  = __le16_to_cpu(id->cur_capacity1);
+	id->lba_capacity   = __le32_to_cpu(id->lba_capacity);
+	id->dma_1word      = __le16_to_cpu(id->dma_1word);
+	id->dma_mword      = __le16_to_cpu(id->dma_mword);
+	id->eide_pio_modes = __le16_to_cpu(id->eide_pio_modes);
+	id->eide_dma_min   = __le16_to_cpu(id->eide_dma_min);
+	id->eide_dma_time  = __le16_to_cpu(id->eide_dma_time);
+	id->eide_pio       = __le16_to_cpu(id->eide_pio);
+	id->eide_pio_iordy = __le16_to_cpu(id->eide_pio_iordy);
+	id->word69         = __le16_to_cpu(id->word69);
+	id->word70         = __le16_to_cpu(id->word70);
+	id->word71         = __le16_to_cpu(id->word71);
+	id->word72         = __le16_to_cpu(id->word72);
+	id->word73         = __le16_to_cpu(id->word73);
+	id->word74         = __le16_to_cpu(id->word74);
+	id->word75         = __le16_to_cpu(id->word75);
+	id->word76         = __le16_to_cpu(id->word76);
+	id->word77         = __le16_to_cpu(id->word77);
+	id->word78         = __le16_to_cpu(id->word78);
+	id->word79         = __le16_to_cpu(id->word79);
+	id->word80         = __le16_to_cpu(id->word80);
+	id->word81         = __le16_to_cpu(id->word81);
+	id->command_sets   = __le16_to_cpu(id->command_sets);
+	id->word83         = __le16_to_cpu(id->word83);
+	id->word84         = __le16_to_cpu(id->word84);
+	id->word85         = __le16_to_cpu(id->word85);
+	id->word86         = __le16_to_cpu(id->word86);
+	id->word87         = __le16_to_cpu(id->word87);
+	id->dma_ultra      = __le16_to_cpu(id->dma_ultra);
+	id->word89         = __le16_to_cpu(id->word89);
+	id->word90         = __le16_to_cpu(id->word90);
+	id->word91         = __le16_to_cpu(id->word91);
+	id->word92         = __le16_to_cpu(id->word92);
+	id->word93         = __le16_to_cpu(id->word93);
+	id->word94         = __le16_to_cpu(id->word94);
+	id->word95         = __le16_to_cpu(id->word95);
+	id->word96         = __le16_to_cpu(id->word96);
+	id->word97         = __le16_to_cpu(id->word97);
+	id->word98         = __le16_to_cpu(id->word98);
+	id->word99         = __le16_to_cpu(id->word99);
+	id->word100        = __le16_to_cpu(id->word100);
+	id->word101        = __le16_to_cpu(id->word101);
+	id->word102        = __le16_to_cpu(id->word102);
+	id->word103        = __le16_to_cpu(id->word103);
+	id->word104        = __le16_to_cpu(id->word104);
+	id->word105        = __le16_to_cpu(id->word105);
+	id->word106        = __le16_to_cpu(id->word106);
+	id->word107        = __le16_to_cpu(id->word107);
+	id->word108        = __le16_to_cpu(id->word108);
+	id->word109        = __le16_to_cpu(id->word109);
+	id->word110        = __le16_to_cpu(id->word110);
+	id->word111        = __le16_to_cpu(id->word111);
+	id->word112        = __le16_to_cpu(id->word112);
+	id->word113        = __le16_to_cpu(id->word113);
+	id->word114        = __le16_to_cpu(id->word114);
+	id->word115        = __le16_to_cpu(id->word115);
+	id->word116        = __le16_to_cpu(id->word116);
+	id->word117        = __le16_to_cpu(id->word117);
+	id->word118        = __le16_to_cpu(id->word118);
+	id->word119        = __le16_to_cpu(id->word119);
+	id->word120        = __le16_to_cpu(id->word120);
+	id->word121        = __le16_to_cpu(id->word121);
+	id->word122        = __le16_to_cpu(id->word122);
+	id->word123        = __le16_to_cpu(id->word123);
+	id->word124        = __le16_to_cpu(id->word124);
+	id->word125        = __le16_to_cpu(id->word125);
+	id->word126        = __le16_to_cpu(id->word126);
+	id->word127        = __le16_to_cpu(id->word127);
+	id->security       = __le16_to_cpu(id->security);
+	for (i=0; i<127; i++)
+	        id->reserved[i] = __le16_to_cpu(id->reserved[i]);
 }

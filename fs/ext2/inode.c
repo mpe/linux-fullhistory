@@ -286,7 +286,8 @@ static struct buffer_head * block_getblk (struct inode * inode,
 	u32 * p;
 	struct buffer_head * result;
 	int blocks = inode->i_sb->s_blocksize / 512;
-
+	unsigned long limit;
+	
 	if (!bh)
 		return NULL;
 	if (!buffer_uptodate(bh)) {
@@ -309,13 +310,22 @@ repeat:
 		brelse (result);
 		goto repeat;
 	}
-	if (!create || new_block >= 
-	    (current->rlim[RLIMIT_FSIZE].rlim_cur >> 
-	     EXT2_BLOCK_SIZE_BITS(inode->i_sb))) {
+	*err = -EFBIG;
+	if (!create) {
 		brelse (bh);
-		*err = -EFBIG;
 		return NULL;
 	}
+
+	limit = current->rlim[RLIMIT_FSIZE].rlim_cur;
+	if (limit < RLIM_INFINITY) {
+		limit >>= EXT2_BLOCK_SIZE_BITS(inode->i_sb);
+		if (new_block >= limit) {
+			brelse (bh);
+			send_sig(SIGXFSZ, current, 0);
+			return NULL;
+		}
+	}
+
 	if (inode->u.ext2_i.i_next_alloc_block == new_block)
 		goal = inode->u.ext2_i.i_next_alloc_goal;
 	if (!goal) {

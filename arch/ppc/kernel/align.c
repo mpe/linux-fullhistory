@@ -194,13 +194,8 @@ fix_alignment(struct pt_regs *regs)
 			return -EFAULT;	/* bad address */
 	}
 
-#ifdef __SMP__
-	if ((flags & F) && (regs->msr & MSR_FP) )
-		smp_giveup_fpu(current);
-#else	
-	if ((flags & F) && last_task_used_math == current)
-		giveup_fpu();
-#endif
+	if ((flags & F) && (regs->msr & MSR_FP))
+		giveup_fpu(current);
 	if (flags & M)
 		return 0;		/* too hard for now */
 
@@ -254,27 +249,16 @@ fix_alignment(struct pt_regs *regs)
 		data.d = current->tss.fpr[reg];
 		break;
 	/* these require some floating point conversions... */
-	/* note that giveup_fpu enables the FPU for the kernel */
 	/* we'd like to use the assignment, but we have to compile
 	 * the kernel with -msoft-float so it doesn't use the
 	 * fp regs for copying 8-byte objects. */
 	case LD+F+S:
-#ifdef __SMP__
-		if (regs->msr & MSR_FP )
-			smp_giveup_fpu(current);
-#else	
-		giveup_fpu();
-#endif		
+		enable_kernel_fp();
 		cvt_fd(&data.f, &current->tss.fpr[reg], &current->tss.fpscr);
 		/* current->tss.fpr[reg] = data.f; */
 		break;
 	case ST+F+S:
-#ifdef __SMP__
-		if (regs->msr & MSR_FP )
-			smp_giveup_fpu(current);
-#else	
-		giveup_fpu();
-#endif		
+		enable_kernel_fp();
 		cvt_df(&current->tss.fpr[reg], &data.f, &current->tss.fpscr);
 		/* data.f = current->tss.fpr[reg]; */
 		break;

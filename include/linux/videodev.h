@@ -275,6 +275,7 @@ struct video_unit
 #define VID_HARDWARE_GEMTEK	18
 #define VID_HARDWARE_TYPHOON	19
 #define VID_HARDWARE_VINO	20	/* Reserved for SGI Indy Vino */
+#define VID_HARDWARE_CADET	21	/* Cadet radio */
 
 /*
  *	Initialiser list

@@ -193,7 +193,7 @@ function dep_tristate () {
 	else if [ "$3" = "m" ]; then
 	    mod_bool "$1" "$2"
 	else 
-	    define_bool "$2" "$n"
+	    define_bool "$2" n
 	fi; fi
 }
 

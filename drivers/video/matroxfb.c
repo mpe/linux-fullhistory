@@ -57,6 +57,9 @@
  *               "H. Peter Arvin" <hpa@transmeta.com>
  *                     Ideas
  *
+ *               "Cort Dougan" <cort@cs.nmt.edu>
+ *                     CHRP fixes and PReP cleanup
+ *
  * (following author is not in any relation with this code, but his code
  *  is included in this driver)
  *
@@ -187,13 +190,7 @@
 #if defined(__m68k__)
 #define MAP_BUSTOVIRT
 #else
-#if defined(CONFIG_PPC) && defined(CONFIG_PREP) && defined(_ISA_MEM_BASE)
-/* do not tell me that PPC is not broken... if ioremap() oops with
-   invalid value written to msr... */
-#define MAP_ISAMEMBASE
-#else
 #define MAP_IOREMAP
-#endif
 #endif
 
 #ifdef DEBUG
@@ -354,11 +351,7 @@ static inline int mga_ioremap(unsigned long phys, unsigned long size, int flags,
 #ifdef MAP_BUSTOVIRT
 	virt->vaddr = bus_to_virt(phys);
 #else
-#ifdef MAP_ISAMEMBASE
-	virt->vaddr = (void*)(phys + _ISA_MEM_BASE);
-#else
 #error "Your architecture does not have neither ioremap nor bus_to_virt... Giving up"
-#endif
 #endif
 #endif
 	return (virt->vaddr == 0); /* 0, !0... 0, error_code in future */

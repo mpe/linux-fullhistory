@@ -131,15 +131,16 @@ static int ioctl_internal_command(Scsi_Device *dev, char * cmd,
 	    else printk("SCSI device (ioctl) reports ILLEGAL REQUEST.\n");
 	    break;
 	case NOT_READY: /* This happens if there is no disc in drive */
-	    if(dev->removable){
+	    if(dev->removable && (cmd[0] != TEST_UNIT_READY)){
 		printk(KERN_INFO "Device not ready.  Make sure there is a disc in the drive.\n");
 		break;
-	    };
+	    }
 	case UNIT_ATTENTION:
 	    if (dev->removable){
 		dev->changed = 1;
 		SCpnt->result = 0; /* This is no longer considered an error */
-		printk(KERN_INFO "Disc change detected.\n");
+		/* gag this error, VFS will log it anyway /axboe */
+		/* printk(KERN_INFO "Disc change detected.\n"); */
 		break;
 	    };
 	default: /* Fall through for non-removable media */

@@ -27,6 +27,8 @@
 #include <asm/irq.h>
 #include <asm/feature.h>
 #include <asm/spinlock.h>
+#include <asm/dma.h>
+#include <asm/machdep.h>
 
 #define __KERNEL_SYSCALLS__
 #include <linux/unistd.h>
@@ -40,7 +42,7 @@ extern void AlignmentException(struct pt_regs *regs);
 extern void ProgramCheckException(struct pt_regs *regs);
 extern void SingleStepException(struct pt_regs *regs);
 extern int sys_sigreturn(struct pt_regs *regs);
-extern atomic_t n_lost_interrupts;
+extern atomic_t ppc_n_lost_interrupts;
 extern void do_lost_interrupts(unsigned long);
 extern int do_signal(sigset_t *, struct pt_regs *);
 
@@ -59,16 +61,21 @@ EXPORT_SYMBOL(AlignmentException);
 EXPORT_SYMBOL(ProgramCheckException);
 EXPORT_SYMBOL(SingleStepException);
 EXPORT_SYMBOL(sys_sigreturn);
-EXPORT_SYMBOL(n_lost_interrupts);
+EXPORT_SYMBOL(ppc_n_lost_interrupts);
 EXPORT_SYMBOL(do_lost_interrupts);
 EXPORT_SYMBOL(enable_irq);
 EXPORT_SYMBOL(disable_irq);
-EXPORT_SYMBOL(local_irq_count);
-EXPORT_SYMBOL(local_bh_count);
+EXPORT_SYMBOL(ppc_local_irq_count);
+EXPORT_SYMBOL(ppc_local_bh_count);
 
 EXPORT_SYMBOL(isa_io_base);
 EXPORT_SYMBOL(isa_mem_base);
 EXPORT_SYMBOL(pci_dram_offset);
+EXPORT_SYMBOL(ISA_DMA_THRESHOLD);
+EXPORT_SYMBOL(DMA_MODE_READ);
+EXPORT_SYMBOL(DMA_MODE_WRITE);
+EXPORT_SYMBOL(_prep_type);
+EXPORT_SYMBOL(ucSystemType);
 
 EXPORT_SYMBOL(atomic_add);
 EXPORT_SYMBOL(atomic_sub);
@@ -157,6 +164,7 @@ EXPORT_SYMBOL(_enable_interrupts);
 EXPORT_SYMBOL(flush_instruction_cache);
 EXPORT_SYMBOL(_get_PVR);
 EXPORT_SYMBOL(giveup_fpu);
+EXPORT_SYMBOL(enable_kernel_fp);
 EXPORT_SYMBOL(flush_icache_range);
 EXPORT_SYMBOL(xchg_u32);
 #ifdef __SMP__
@@ -173,18 +181,14 @@ EXPORT_SYMBOL(_write_lock);
 EXPORT_SYMBOL(_write_unlock);
 #endif
 
-#ifndef CONFIG_MACH_SPECIFIC
 EXPORT_SYMBOL(_machine);
-#endif
+EXPORT_SYMBOL(ppc_md);
 
 EXPORT_SYMBOL(adb_request);
-EXPORT_SYMBOL(adb_autopoll);
 EXPORT_SYMBOL(adb_register);
 EXPORT_SYMBOL(cuda_request);
-EXPORT_SYMBOL(cuda_send_request);
 EXPORT_SYMBOL(cuda_poll);
 EXPORT_SYMBOL(pmu_request);
-EXPORT_SYMBOL(pmu_send_request);
 EXPORT_SYMBOL(pmu_poll);
 #ifdef CONFIG_PMAC_PBOOK
 EXPORT_SYMBOL(sleep_notifier_list);
@@ -196,7 +200,6 @@ EXPORT_SYMBOL(find_compatible_devices);
 EXPORT_SYMBOL(find_path_device);
 EXPORT_SYMBOL(find_phandle);
 EXPORT_SYMBOL(get_property);
-EXPORT_SYMBOL(device_is_compatible);
 EXPORT_SYMBOL(pci_io_base);
 EXPORT_SYMBOL(pci_device_loc);
 EXPORT_SYMBOL(feature_set);
@@ -211,9 +214,8 @@ EXPORT_SYMBOL(nvram_read_byte);
 EXPORT_SYMBOL(nvram_write_byte);
 #endif /* CONFIG_PMAC */
 
-#ifdef CONFIG_SOUND_MODULE
 EXPORT_SYMBOL(abs);
-#endif
+EXPORT_SYMBOL(device_is_compatible);
 
 /* The following are special because they're not called
    explicitly (the C compiler generates them).  Fortunately,

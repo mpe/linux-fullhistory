@@ -265,7 +265,7 @@ printk("SIG queue (%s:%d): %d ", t->comm, t->pid, sig);
 	    && ((sig != SIGCONT) || (current->session != t->session))
 	    && (current->euid ^ t->suid) && (current->euid ^ t->uid)
 	    && (current->uid ^ t->suid) && (current->uid ^ t->uid)
-	    && !capable(CAP_SYS_ADMIN))
+	    && !capable(CAP_KILL))
 		goto out_nolock;
 
 	/* The null signal is a permissions and process existance probe.

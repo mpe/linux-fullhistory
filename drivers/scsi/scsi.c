@@ -1926,10 +1926,12 @@ void scsi_build_commandblocks(Scsi_Device * SDpnt)
     SDpnt->device_queue = NULL;
 
     for(j=0;j<SDpnt->queue_depth;j++){
-      SCpnt = (Scsi_Cmnd *)
+        SCpnt = (Scsi_Cmnd *)
               scsi_init_malloc(sizeof(Scsi_Cmnd),
                                GFP_ATOMIC |
                                (host->unchecked_isa_dma ? GFP_DMA : 0));
+	if (NULL == SCpnt)
+	    break; /* If not, the next line will oops ... */
         memset(&SCpnt->eh_timeout, 0, sizeof(SCpnt->eh_timeout));
 	SCpnt->host                      = host;
 	SCpnt->device                    = SDpnt;
@@ -1951,6 +1953,12 @@ void scsi_build_commandblocks(Scsi_Device * SDpnt)
 	SDpnt->device_queue              = SCpnt;
         SCpnt->state                     = SCSI_STATE_UNUSED;
         SCpnt->owner                     = SCSI_OWNER_NOBODY;
+    }
+    if (j < SDpnt->queue_depth) { /* low on space (D.Gilbert 990424) */
+	printk("scsi_build_commandblocks: want=%d, space for=%d blocks\n",
+	       SDpnt->queue_depth, j);
+	SDpnt->queue_depth = j;
+	/* Still problem if 0==j , continue anyway ... */
     }
     SDpnt->has_cmdblocks = 1;
 }

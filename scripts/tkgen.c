@@ -930,8 +930,11 @@ void dump_tk_script( struct kconfig * scfg )
 
 	case token_hex:
 	case token_int:
+	    printf( "set %s %s\n", cfg->optionname, cfg->value ? cfg->value : "0");
+	    break;
+
 	case token_string:
-	    printf( "set %s %s\n", cfg->optionname, cfg->value );
+	    printf( "set %s \"%s\"\n", cfg->optionname, cfg->value ? cfg->value : "");
 	    break;
 	}
     }

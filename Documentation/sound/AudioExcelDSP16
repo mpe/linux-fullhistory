@@ -80,7 +80,7 @@ Follow these steps:
 2) Install your new kernel as the default boot kernel.
 3) Boot MS-DOS and configure the audio card with the boot time device
    driver, for MSS irq10 dma3 in our example.
-4) <ctrl>-<alt>-<del> and boot Linux. This will mantain the DOS configuration
+4) <ctrl>-<alt>-<del> and boot Linux. This will maintain the DOS configuration
    and will boot the new kernel with sound driver. The sound driver will find
    the audio card and will recognize and attach it.
 
