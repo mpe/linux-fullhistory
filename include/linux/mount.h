@@ -30,13 +30,9 @@ struct vfsmount
   kdev_t mnt_dev;			/* Device this applies to */
   char *mnt_devname;			/* Name of device e.g. /dev/dsk/hda1 */
   char *mnt_dirname;			/* Name of directory mounted on */
-  unsigned int mnt_flags;		/* Flags of this device */
   struct super_block *mnt_sb;		/* pointer to superblock */
-  struct quota_mount_options mnt_dquot;	/* Diskquota specific mount options */
   struct vfsmount *mnt_next;		/* pointer to next in linkedlist */
 };
-
-struct vfsmount *lookup_vfsmnt(kdev_t dev);
 
 /*
  *	Umount options

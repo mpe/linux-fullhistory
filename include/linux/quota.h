@@ -174,7 +174,7 @@ struct dquot {
 	int dq_count;			/* Reference count */
 
 	/* fields after this point are cleared when invalidating */
-	struct vfsmount *dq_mnt;	/* VFS_mount_point this applies to */
+	struct super_block *dq_sb;	/* superblock this applies to */
 	unsigned int dq_id;		/* ID this applies to (uid, gid) */
 	kdev_t dq_dev;			/* Device this applies to */
 	short dq_type;			/* Type of quota */

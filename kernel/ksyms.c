@@ -141,7 +141,7 @@ EXPORT_SYMBOL(iget4);
 EXPORT_SYMBOL(iput);
 EXPORT_SYMBOL(__namei);
 EXPORT_SYMBOL(lookup_dentry);
-EXPORT_SYMBOL(open_namei);
+EXPORT_SYMBOL(__open_namei);
 EXPORT_SYMBOL(sys_close);
 EXPORT_SYMBOL(d_alloc_root);
 EXPORT_SYMBOL(d_delete);

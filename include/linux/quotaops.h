@@ -20,7 +20,7 @@
 extern void dquot_initialize(struct inode *inode, short type);
 extern void dquot_drop(struct inode *inode);
 extern void invalidate_dquots(kdev_t dev, short type);
-extern int  quota_off(kdev_t dev, short type);
+extern int  quota_off(struct super_block *sb, short type);
 extern int  sync_dquots(kdev_t dev, short type);
 
 extern int  dquot_alloc_block(const struct inode *inode, unsigned long number, char prealloc);
@@ -103,7 +103,7 @@ extern __inline__ int DQUOT_TRANSFER(struct dentry *dentry, struct iattr *iattr)
 }
 
 #define DQUOT_SYNC(dev)	sync_dquots(dev, -1)
-#define DQUOT_OFF(dev)	quota_off(dev, -1)
+#define DQUOT_OFF(sb)	quota_off(sb, -1)
 
 #else
 
@@ -118,7 +118,7 @@ extern __inline__ int DQUOT_TRANSFER(struct dentry *dentry, struct iattr *iattr)
 #define DQUOT_FREE_BLOCK(sb, inode, nr)		do { } while(0)
 #define DQUOT_FREE_INODE(sb, inode)		do { } while(0)
 #define DQUOT_SYNC(dev)				do { } while(0)
-#define DQUOT_OFF(dev)				do { } while(0)
+#define DQUOT_OFF(sb)				do { } while(0)
 
 /*
  * Special case expands to a simple notify_change.

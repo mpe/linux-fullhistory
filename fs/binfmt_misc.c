@@ -213,7 +213,7 @@ static int load_misc_binary(struct linux_binprm *bprm, struct pt_regs *regs)
 	bprm->argc++;
 	bprm->filename = iname;	/* for binfmt_script */
 
-	dentry = open_namei(iname, 0, 0);
+	dentry = open_namei(iname);
 	retval = PTR_ERR(dentry);
 	if (IS_ERR(dentry))
 		goto _ret;

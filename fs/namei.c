@@ -609,13 +609,13 @@ exit_lock:
  * which is a lot more logical, and also allows the "no perm" needed
  * for symlinks (where the permissions are checked later).
  */
-struct dentry * open_namei(const char * pathname, int flag, int mode)
+struct dentry * __open_namei(const char * pathname, int flag, int mode, struct dentry * dir)
 {
 	int acc_mode, error;
 	struct inode *inode;
 	struct dentry *dentry;
 
-	dentry = lookup_dentry(pathname, NULL, lookup_flags(flag));
+	dentry = lookup_dentry(pathname, dir, lookup_flags(flag));
 	if (IS_ERR(dentry))
 		return dentry;
 
@@ -1012,13 +1012,13 @@ int vfs_unlink(struct inode *dir, struct dentry *dentry)
 	return error;
 }
 
-int do_unlink(const char * name)
+int do_unlink(const char * name, struct dentry * base)
 {
 	int error;
 	struct dentry *dir;
 	struct dentry *dentry;
 
-	dentry = lookup_dentry(name, NULL, 0);
+	dentry = lookup_dentry(name, base, 0);
 	error = PTR_ERR(dentry);
 	if (IS_ERR(dentry))
 		goto exit;
@@ -1043,7 +1043,7 @@ asmlinkage long sys_unlink(const char * pathname)
 	if(IS_ERR(tmp))
 		return PTR_ERR(tmp);
 	lock_kernel();
-	error = do_unlink(tmp);
+	error = do_unlink(tmp, NULL);
 	unlock_kernel();
 	putname(tmp);
 

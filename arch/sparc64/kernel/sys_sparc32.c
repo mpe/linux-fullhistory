@@ -3059,7 +3059,7 @@ do_execve32(char * filename, u32 * argv, u32 * envp, struct pt_regs * regs)
 	memset(bprm.page, 0, MAX_ARG_PAGES * sizeof(bprm.page[0]));
 
 	lock_kernel();
-	dentry = open_namei(filename, 0, 0);
+	dentry = open_namei(filename);
 	unlock_kernel();
 
 	retval = PTR_ERR(dentry);
@@ -4154,7 +4154,7 @@ asmlinkage long sparc32_open(const char * filename, int flags, int mode)
 		if (fd >= 0) {
 			struct file * f;
 			lock_kernel();
-			f = filp_open(tmp, flags, mode);
+			f = filp_open(tmp, flags, mode, NULL);
 			unlock_kernel();
 			error = PTR_ERR(f);
 			if (IS_ERR(f))

@@ -18,10 +18,8 @@
  * 1) It only can handle one directory.
  * 2) Because the directory is represented by the SYSV shm array it
  *    can only be mounted one time.
- * 3) This again leads to SYSV shm not working properly in a chrooted
- *    environment
- * 4) Read and write are not implemented (should they?)
- * 5) No special nodes are supported
+ * 3) Read and write are not implemented (should they?)
+ * 4) No special nodes are supported
  */
 
 #include <linux/config.h>
@@ -57,8 +55,6 @@ static void	      shm_delete   (struct inode *);
 static int	      shm_mmap	   (struct file *, struct vm_area_struct *);
 static int	      shm_readdir  (struct file *, void *, filldir_t);
 
-char shm_path[256] = "/var/shm";
-
 #define SHM_NAME_LEN NAME_MAX
 #define SHM_FMT ".IPC_%08x"
 #define SHM_FMT_LEN 13
@@ -71,7 +67,6 @@ struct shmid_kernel /* private to the kernel */
 	unsigned long		shm_npages; /* size of segment (pages) */
 	pte_t			**shm_dir;  /* ptr to arr of ptrs to frames */ 
 	int			id;
-	int			destroyed; /* set if the final detach kills */
 	union permap {
 		struct shmem {
 			time_t			atime;
@@ -116,7 +111,6 @@ static int newseg (key_t key, const char *name, int namelen, int shmflg, size_t 
 static void killseg_core(struct shmid_kernel *shp, int doacc);
 static void shm_open (struct vm_area_struct *shmd);
 static void shm_close (struct vm_area_struct *shmd);
-static void shm_remove_name(int id);
 static struct page * shm_nopage(struct vm_area_struct *, unsigned long, int);
 static int shm_swapout(struct page *, struct file *);
 #ifdef CONFIG_PROC_FS
@@ -310,20 +304,6 @@ static int shm_remount_fs (struct super_block *sb, int *flags, char *data)
 	if (shm_parse_options (data))
 		return -EINVAL;
 	return 0;
-}
-
-static struct fs_struct *shm_push_root(void)
-{
-	struct fs_struct *old,*new;
-	new=init_task_union.task.fs;
-	old=current->fs;
-	current->fs=new;
-	return old;	
-}
-
-static void shm_pop_root(struct fs_struct *saved)
-{
-	current->fs=saved;
 }
 
 static void shm_put_super(struct super_block *sb)
@@ -893,17 +873,6 @@ static inline unsigned long copy_shminfo_to_user(void *buf, struct shminfo64 *in
 	}
 }
 
-char * shm_getname(int id)
-{
-	char *result;
-
-	if (!(result = __getname ()))
-		return ERR_PTR(-ENOMEM);
-
-	sprintf (result, "%s/" SHM_FMT, shm_path, id); 
-	return result;
-}
-
 asmlinkage long sys_shmctl (int shmid, int cmd, struct shmid_ds *buf)
 {
 	struct shm_setbuf setbuf;
@@ -1033,36 +1002,15 @@ asmlinkage long sys_shmctl (int shmid, int cmd, struct shmid_ds *buf)
 	}
 	case IPC_RMID:
 	{
-		/*
-		 *	We cannot simply remove the file. The SVID states
-		 *	that the block remains until the last person
-		 *	detaches from it, then is deleted. A shmat() on
-		 *	an RMID segment is legal in older Linux and if 
-		 *	we change it apps break...
-		 *
-		 *	Instead we set a destroyed flag, and then blow
-		 *	the name away when the usage hits zero.
-		 */
+		char name[SHM_FMT_LEN+1];
 		if ((shmid % SEQ_MULTIPLIER)== zero_id)
 			return -EINVAL;
+		sprintf (name, SHM_FMT, shmid);
 		lock_kernel();
-		shp = shm_lock(shmid);
-		if(shp==NULL)
-		{
-			unlock_kernel();
-			return -EINVAL;
-		}
-		err=-EIDRM;
-		if(shm_checkid(shp,shmid)==0)
-		{
-			if(shp->shm_nattch==0)
-				shm_remove_name(shmid);
-			else
-				shp->destroyed=1;
-			err=0;
-		}			
-		shm_unlock(shmid);
+		err = do_unlink (name, dget(shm_sb->s_root));
 		unlock_kernel();
+		if (err == -ENOENT)
+			err = -EINVAL;
 		return err;
 	}
 
@@ -1141,8 +1089,7 @@ asmlinkage long sys_shmat (int shmid, char *shmaddr, int shmflg, ulong *raddr)
 	struct file * file;
 	int    err;
 	int    flags;
-	char   *name;
-	struct fs_struct *saved;
+	char   name[SHM_FMT_LEN+1];
 
 	if (!shm_sb || (shmid % SEQ_MULTIPLIER) == zero_id)
 		return -EINVAL;
@@ -1159,19 +1106,13 @@ asmlinkage long sys_shmat (int shmid, char *shmaddr, int shmflg, ulong *raddr)
 	} else
 		flags = MAP_SHARED;
 
-	name = shm_getname(shmid);
-	if (IS_ERR (name))
-		return PTR_ERR (name);
-
+	sprintf (name, SHM_FMT, shmid); 
 	lock_kernel();
-	saved=shm_push_root();
-	file = filp_open (name, O_RDWR, 0);
-	shm_pop_root(saved);
-
-	putname (name);
-	if (IS_ERR (file))
+	file = filp_open(name, O_RDWR, 0, dget(shm_sb->s_root));
+	if (IS_ERR (file)) {
+		unlock_kernel();
 		goto bad_file;
-
+	}
 	*raddr = do_mmap (file, addr, file->f_dentry->d_inode->i_size,
 			  (shmflg & SHM_RDONLY ? PROT_READ :
 			   PROT_READ | PROT_WRITE), flags, 0);
@@ -1184,7 +1125,6 @@ asmlinkage long sys_shmat (int shmid, char *shmaddr, int shmflg, ulong *raddr)
 	return err;
 
 bad_file:
-	unlock_kernel();
 	if ((err = PTR_ERR(file)) == -ENOENT)
 		return -EINVAL;
 	return err;
@@ -1194,23 +1134,6 @@ bad_file:
 static void shm_open (struct vm_area_struct *shmd)
 {
 	shm_inc (shmd->vm_file->f_dentry->d_inode->i_ino);
-}
-
-/*
- *	Remove a name. Must be called with lock_kernel
- */
- 
-static void shm_remove_name(int id)
-{
-	char *name = shm_getname(id);
-	if (!IS_ERR(name))
-	{
-		struct fs_struct *saved;
-		saved=shm_push_root();
-		do_unlink (name);
-		shm_pop_root(saved);
-		putname (name);
-	}
 }
 
 /*
@@ -1230,14 +1153,7 @@ static void shm_close (struct vm_area_struct *shmd)
 	shp->shm_lprid = current->pid;
 	shp->shm_dtim = CURRENT_TIME;
 	shp->shm_nattch--;
-	if(shp->shm_nattch==0 && shp->destroyed)
-	{
-		shp->destroyed=0;
-		shm_remove_name(id);
-		shm_unlock(id);
-	}
-	else		
-		shm_unlock(id);
+	shm_unlock(id);
 }
 
 /*

@@ -495,16 +495,14 @@ static int load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 					
 				current->personality = PER_SVR4;
 				lock_kernel();
-				interpreter_dentry = open_namei(elf_interpreter,
-								0, 0);
+				interpreter_dentry = open_namei(elf_interpreter);
 				unlock_kernel();
 				current->personality = old_pers;
 			} else
 #endif
 			{
 				lock_kernel();
-				interpreter_dentry = open_namei(elf_interpreter,
-								0, 0);
+				interpreter_dentry = open_namei(elf_interpreter);
 				unlock_kernel();
 			}
 			set_fs(old_fs);

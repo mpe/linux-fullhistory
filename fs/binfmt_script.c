@@ -82,7 +82,7 @@ static int load_script(struct linux_binprm *bprm,struct pt_regs *regs)
 	 * OK, now restart the process with the interpreter's dentry.
 	 */
 	lock_kernel();
-	dentry = open_namei(interp, 0, 0);
+	dentry = open_namei(interp);
 	unlock_kernel();
 	if (IS_ERR(dentry))
 		return PTR_ERR(dentry);

@@ -203,7 +203,7 @@ static void go_sync(kdev_t dev, int remount_flag)
 				file->f_mode &= ~2;
 		}
 		file_list_unlock();
-		DQUOT_OFF(dev);
+		DQUOT_OFF(sb);
 		fsync_dev(dev);
 		flags = MS_RDONLY;
 		if (sb->s_op && sb->s_op->remount_fs) {
@@ -212,8 +212,6 @@ static void go_sync(kdev_t dev, int remount_flag)
 				printk("error %d\n", ret);
 			else {
 				sb->s_flags = (sb->s_flags & ~MS_RMT_MASK) | (flags & MS_RMT_MASK);
-				if ((vfsmnt = lookup_vfsmnt(sb->s_dev)))
-					vfsmnt->mnt_flags = sb->s_flags;
 				printk("OK\n");
 			}
 		} else

@@ -644,7 +644,7 @@ out:
  * for the internal routines (ie open_namei()/follow_link() etc). 00 is
  * used by symlinks.
  */
-struct file *filp_open(const char * filename, int flags, int mode)
+struct file *filp_open(const char * filename, int flags, int mode, struct dentry * base)
 {
 	struct inode * inode;
 	struct dentry * dentry;
@@ -661,7 +661,7 @@ struct file *filp_open(const char * filename, int flags, int mode)
 		flag++;
 	if (flag & O_TRUNC)
 		flag |= 2;
-	dentry = open_namei(filename,flag,mode);
+	dentry = __open_namei(filename, flag, mode, base);
 	error = PTR_ERR(dentry);
 	if (IS_ERR(dentry))
 		goto cleanup_file;
@@ -787,7 +787,7 @@ asmlinkage long sys_open(const char * filename, int flags, int mode)
 		if (fd >= 0) {
 			struct file * f;
 			lock_kernel();
-			f = filp_open(tmp, flags, mode);
+			f = filp_open(tmp, flags, mode, NULL);
 			unlock_kernel();
 			error = PTR_ERR(f);
 			if (IS_ERR(f))

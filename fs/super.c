@@ -247,31 +247,8 @@ static struct file_system_type *get_fs_type(const char *name)
 	return fs;
 }
 
-
 struct vfsmount *vfsmntlist = NULL;
 static struct vfsmount *vfsmnttail = NULL, *mru_vfsmnt = NULL;
-
-/* 
- * This part handles the management of the list of mounted filesystems.
- */
-struct vfsmount *lookup_vfsmnt(kdev_t dev)
-{
-	struct vfsmount *lptr;
-
-	if (vfsmntlist == NULL)
-		return NULL;
-
-	if (mru_vfsmnt != NULL && mru_vfsmnt->mnt_dev == dev)
-		return (mru_vfsmnt);
-
-	for (lptr = vfsmntlist; lptr != NULL; lptr = lptr->mnt_next)
-		if (lptr->mnt_dev == dev) {
-			mru_vfsmnt = lptr;
-			return (lptr);
-		}
-
-	return NULL;
-}
 
 static struct vfsmount *add_vfsmnt(struct super_block *sb,
 			const char *dev_name, const char *dir_name)
@@ -286,11 +263,6 @@ static struct vfsmount *add_vfsmnt(struct super_block *sb,
 
 	lptr->mnt_sb = sb;
 	lptr->mnt_dev = sb->s_dev;
-	lptr->mnt_flags = sb->s_flags;
-
-	sema_init(&lptr->mnt_dquot.dqio_sem, 1);
-	sema_init(&lptr->mnt_dquot.dqoff_sem, 1);
-	lptr->mnt_dquot.flags = 0;
 
 	/* N.B. Is it really OK to have a vfsmount without names? */
 	if (dev_name && !IS_ERR(tmp = getname(dev_name))) {
@@ -399,9 +371,9 @@ int get_filesystem_info( char *buf )
 		len += sprintf( buf + len, "%s %s %s %s",
 			tmp->mnt_devname, path,
 			tmp->mnt_sb->s_type->name,
-			tmp->mnt_flags & MS_RDONLY ? "ro" : "rw" );
+			tmp->mnt_sb->s_flags & MS_RDONLY ? "ro" : "rw" );
 		for (fs_infop = fs_info; fs_infop->flag; fs_infop++) {
-		  if (tmp->mnt_flags & fs_infop->flag) {
+		  if (tmp->mnt_sb->s_flags & fs_infop->flag) {
 		    strcpy(buf + len, fs_infop->str);
 		    len += strlen(fs_infop->str);
 		  }
@@ -592,6 +564,9 @@ static struct super_block * read_super(kdev_t dev, struct block_device *bdev,
 	sema_init(&s->s_vfs_rename_sem,1);
 	sema_init(&s->s_nfsd_free_path_sem,1);
 	s->s_type = type;
+	sema_init(&s->s_dquot.dqio_sem, 1);
+	sema_init(&s->s_dquot.dqoff_sem, 1);
+	s->s_dquot.flags = 0;
 	lock_super(s);
 	if (!type->read_super(s, data, silent))
 		goto out_fail;
@@ -688,7 +663,7 @@ static struct block_device *do_umount(kdev_t dev, int unmount_root, int flags)
 	 * on the device. If the umount fails, too bad -- there
 	 * are no quotas running any more. Just turn them on again.
 	 */
-	DQUOT_OFF(dev);
+	DQUOT_OFF(sb);
 	acct_auto_close(dev);
 
 	/*
@@ -990,7 +965,6 @@ out:
 static int do_remount_sb(struct super_block *sb, int flags, char *data)
 {
 	int retval;
-	struct vfsmount *vfsmnt;
 	
 	if (!(flags & MS_RDONLY) && sb->s_dev && is_read_only(sb->s_dev))
 		return -EACCES;
@@ -1007,9 +981,6 @@ static int do_remount_sb(struct super_block *sb, int flags, char *data)
 			return retval;
 	}
 	sb->s_flags = (sb->s_flags & ~MS_RMT_MASK) | (flags & MS_RMT_MASK);
-	vfsmnt = lookup_vfsmnt(sb->s_dev);
-	if (vfsmnt)
-		vfsmnt->mnt_flags = sb->s_flags;
 
 	/*
 	 * Invalidate the inodes, as some mount options may be changed.

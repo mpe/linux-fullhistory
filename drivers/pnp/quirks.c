@@ -18,7 +18,6 @@
 #include <linux/isapnp.h>
 #include <linux/string.h>
 
-
 static void __init quirk_awe32_resources(struct pci_dev *dev)
 {
 	struct isapnp_port *port, *port2, *port3;
@@ -67,6 +66,37 @@ static void __init quirk_cmi8330_resources(struct pci_dev *dev)
 	printk(KERN_INFO "isapnp: CMI8330 quirk - fixing interrupts and dma\n");
 }
 
+static void __init quirk_sb16audio_resources(struct pci_dev *dev)
+{
+	struct isapnp_port *port;
+	struct isapnp_resources *res = dev->sysdata;
+	int    changed = 0;
+
+	/* 
+	 * The default range on the mtu port for these devices is 0x388-0x388.
+	 * Here we increase that range so that two such cards can be
+	 * auto-configured.
+	 */
+	
+	for( ; res ; res = res->alt ) {
+		port = res->port;
+		if(!port)
+			continue;
+		port = port->next;
+		if(!port)
+			continue;
+		port = port->next;
+		if(!port)
+			continue;
+		if(port->min != port->max)
+			continue;
+		port->max += 0x70;
+		changed = 1;
+	}
+	if(changed)
+		printk(KERN_INFO "ISAPnP: SB audio device quirk - increasing port range\n");
+	return;
+}
 
 /*
  *  ISAPnP Quirks
@@ -74,14 +104,31 @@ static void __init quirk_cmi8330_resources(struct pci_dev *dev)
  */
 
 static struct isapnp_fixup isapnp_fixups[] __initdata = {
+	/* Soundblaster awe io port quirk */
 	{ ISAPNP_VENDOR('C','T','L'), ISAPNP_DEVICE(0x0021),
 		quirk_awe32_resources },
 	{ ISAPNP_VENDOR('C','T','L'), ISAPNP_DEVICE(0x0022),
 		quirk_awe32_resources },
 	{ ISAPNP_VENDOR('C','T','L'), ISAPNP_DEVICE(0x0023),
 		quirk_awe32_resources },
-	{ ISAPNP_VENDOR('@','X','@'), ISAPNP_DEVICE(0x0001), // CMI8330 
+	/* CMI 8330 interrupt and dma fix */
+	{ ISAPNP_VENDOR('@','X','@'), ISAPNP_DEVICE(0x0001),
 		quirk_cmi8330_resources },
+	/* Soundblaster audio device io port range quirk */
+	{ ISAPNP_VENDOR('C','T','L'), ISAPNP_DEVICE(0x0001),
+		quirk_sb16audio_resources },
+	{ ISAPNP_VENDOR('C','T','L'), ISAPNP_DEVICE(0x0031),
+		quirk_sb16audio_resources },
+	{ ISAPNP_VENDOR('C','T','L'), ISAPNP_DEVICE(0x0041),
+		quirk_sb16audio_resources },
+	{ ISAPNP_VENDOR('C','T','L'), ISAPNP_DEVICE(0x0042),
+		quirk_sb16audio_resources },
+	{ ISAPNP_VENDOR('C','T','L'), ISAPNP_DEVICE(0x0043),
+		quirk_sb16audio_resources },
+	{ ISAPNP_VENDOR('C','T','L'), ISAPNP_DEVICE(0x0044),
+		quirk_sb16audio_resources },
+	{ ISAPNP_VENDOR('C','T','L'), ISAPNP_DEVICE(0x0045),
+		quirk_sb16audio_resources },
 	{ 0 }
 };
 
