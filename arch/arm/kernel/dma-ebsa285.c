@@ -6,6 +6,7 @@
  * DMA functions specific to EBSA-285/CATS architectures
  */
 
+#include <linux/config.h>
 #include <linux/sched.h>
 #include <linux/malloc.h>
 #include <linux/mman.h>

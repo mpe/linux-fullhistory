@@ -82,7 +82,6 @@
 
 #include <linux/version.h>
 #include <linux/kernel.h>
-#include <linux/head.h>
 #include <linux/types.h>
 #include <linux/pci.h>
 #include <linux/string.h>

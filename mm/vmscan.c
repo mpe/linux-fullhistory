@@ -12,7 +12,6 @@
 
 #include <linux/mm.h>
 #include <linux/sched.h>
-#include <linux/head.h>
 #include <linux/kernel.h>
 #include <linux/kernel_stat.h>
 #include <linux/errno.h>

@@ -292,7 +292,7 @@ static void tcp_sacktag_write_queue(struct sock *sk, struct tcp_sack_block *sp, 
 			/* The retransmission queue is always in order, so
 			 * we can short-circuit the walk early.
 			 */
-			if(!before(start_seq, TCP_SKB_CB(skb)->end_seq))
+			if(after(TCP_SKB_CB(skb)->end_seq, end_seq))
 				break;
 
 			/* We play conservative, we don't allow SACKS to partially
@@ -471,10 +471,9 @@ static void tcp_fast_retrans(struct sock *sk, u32 ack, int not_dup)
                  * to one half the current congestion window, but no less 
                  * than two segments. Retransmit the missing segment.
                  */
+                tp->dup_acks++;
 		if (tp->high_seq == 0 || after(ack, tp->high_seq)) {
-			tp->dup_acks++;
 			if ((tp->fackets_out > 3) || (tp->dup_acks == 3)) {
-				tp->dup_acks++;
                                 tp->snd_ssthresh = max(tp->snd_cwnd >> (TCP_CWND_SHIFT + 1), 2);
                                 tp->snd_cwnd = (tp->snd_ssthresh + 3) << TCP_CWND_SHIFT;
 				tp->high_seq = tp->snd_nxt;
@@ -1712,6 +1711,10 @@ int tcp_rcv_established(struct sock *sk, struct sk_buff *skb,
 	 */
 
 	if (flg == tp->pred_flags && TCP_SKB_CB(skb)->seq == tp->rcv_nxt) {
+		if (!tcp_sequence(tp, TCP_SKB_CB(skb)->seq, TCP_SKB_CB(skb)->end_seq)) {
+			tcp_send_ack(sk);
+			goto discard;
+		}
 		if (len <= th->doff*4) {
 			/* Bulk data transfer: sender */
 			if (len == th->doff*4) {
@@ -1726,13 +1729,8 @@ int tcp_rcv_established(struct sock *sk, struct sk_buff *skb,
 			}
 		} else if (TCP_SKB_CB(skb)->ack_seq == tp->snd_una) {
 			/* Bulk data transfer: receiver */
-			if (atomic_read(&sk->rmem_alloc) > sk->rcvbuf) {
-				/* We must send an ACK for zero window probes. */
-				if (!before(TCP_SKB_CB(skb)->seq,
-						tp->rcv_wup + tp->rcv_wnd))
-					tcp_send_ack(sk);
+			if (atomic_read(&sk->rmem_alloc) > sk->rcvbuf)
 				goto discard;
-			}
 			
 			__skb_pull(skb,th->doff*4);
 

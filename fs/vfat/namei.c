@@ -100,22 +100,6 @@ static struct dentry_operations vfat_dentry_ops[4] = {
 	}
 };
 
-static int strnicmp(const char *s1, const char *s2, int len)
-{
-	int n = 0;
-	while (*s1 && *s2 && (tolower(*s1) == tolower(*s2))) {
-		s1++; s2++; n++;
-		if (n == len) return 0;
-	}
-	if (*s1 == 0 && *s2 == 0) return 0;
-	if (*s1 && *s2) {
-		if (*s1 > *s2) return 1;
-		return -1;
-	}
-	if (*s1) return 1;
-	return -1;
-}
-
 void vfat_put_super(struct super_block *sb)
 {
 	fat_put_super(sb);

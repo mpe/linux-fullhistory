@@ -399,7 +399,7 @@ static void fbcon_setup(int con, int init, int logo)
     int old_rows, old_cols;
     unsigned short *save = NULL, *r, *q;
     /* Only if not module */
-    extern int initmem_freed;
+    int initmem_freed = 1;
     struct fbcon_font_desc *font;
     if (con != fg_console || initmem_freed || p->type == FB_TYPE_TEXT)
     	logo = 0;

@@ -19,7 +19,6 @@
 
 
 #include <linux/stddef.h>
-#include <linux/head.h>
 
 #include <asm/uaccess.h>
 

@@ -12,6 +12,11 @@
 #include <linux/kernel.h>
 #include <linux/umsdos_fs.h>
 
+/* (This file is used outside of the kernel) */
+#ifndef __KERNEL__
+#define KERN_WARNING
+#endif
+
 /*
  * Complete the mangling of the MSDOS fake name
  * based on the position of the entry in the EMD file.

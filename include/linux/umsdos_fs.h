@@ -1,7 +1,8 @@
 #ifndef LINUX_UMSDOS_FS_H
 #define LINUX_UMSDOS_FS_H
 
-#define UMS_DEBUG 1
+/* #define UMSDOS_DEBUG 1 */
+#define UMSDOS_PARANOIA 1
 
 #define UMSDOS_VERSION	0
 #define UMSDOS_RELEASE	4
@@ -16,6 +17,9 @@
 
 #ifndef _LINUX_TYPES_H
 #include <linux/types.h>
+#endif
+#ifndef _LINUX_LIMITS_H
+#include <linux/limits.h>
 #endif
 #ifndef _LINUX_DIRENT_H
 #include <linux/dirent.h>
@@ -38,7 +42,7 @@
  * to shut off.
  */
 #	define PRINTK(x)
-#	ifdef UMS_DEBUG
+#	ifdef UMSDOS_DEBUG
 #		define Printk(x) printk x
 #	else
 #		define Printk(x)

@@ -6,7 +6,6 @@
 
 #include <linux/signal.h>
 #include <linux/sched.h>
-#include <linux/head.h>
 #include <linux/kernel.h>
 #include <linux/errno.h>
 #include <linux/string.h>
@@ -76,7 +75,8 @@ bad_area:
 	return 0;
 }
 
-asmlinkage void do_invalid_op (struct pt_regs *, unsigned long);
+asmlinkage void do_invalid_op(struct pt_regs *, unsigned long);
+extern unsigned long idt;
 
 /*
  * This routine handles page faults.  It determines the address,
@@ -186,7 +186,7 @@ bad_area:
 	if (boot_cpu_data.f00f_bug) {
 		unsigned long nr;
 		
-		nr = (address - (unsigned long) idt) >> 3;
+		nr = (address - idt) >> 3;
 
 		if (nr == 6) {
 			do_invalid_op(regs, 0);

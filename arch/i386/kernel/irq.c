@@ -39,6 +39,7 @@
 #include <asm/delay.h>
 
 #include "irq.h"
+#include "desc.h"
 
 unsigned int local_bh_count[NR_CPUS];
 unsigned int local_irq_count[NR_CPUS];

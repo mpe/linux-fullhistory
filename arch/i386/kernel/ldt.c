@@ -16,6 +16,8 @@
 #include <asm/system.h>
 #include <asm/ldt.h>
 
+#include "desc.h"
+
 static int read_ldt(void * ptr, unsigned long bytecount)
 {
 	void * address = current->mm->segments;
@@ -23,11 +25,9 @@ static int read_ldt(void * ptr, unsigned long bytecount)
 
 	if (!ptr)
 		return -EINVAL;
+	if (!address)
+		return 0;
 	size = LDT_ENTRIES*LDT_ENTRY_SIZE;
-	if (!address) {
-		address = &default_ldt;
-		size = sizeof(default_ldt);
-	}
 	if (size > bytecount)
 		size = bytecount;
 	return copy_to_user(ptr, address, size) ? -EFAULT : size;
@@ -81,7 +81,7 @@ static int write_ldt(void * ptr, unsigned long bytecount, int oldmode)
 		if (!mm->segments) {
 			int i = current->tarray_ptr - &task[0];
 			mm->segments = ldt;
-			set_ldt_desc(gdt+(i<<1)+FIRST_LDT_ENTRY, ldt, LDT_ENTRIES);
+			set_ldt_desc(i, ldt, LDT_ENTRIES);
 			current->tss.ldt = _LDT(i);
 			load_ldt(i);
 			if (atomic_read(&mm->count) > 1)

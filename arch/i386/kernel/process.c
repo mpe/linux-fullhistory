@@ -44,7 +44,9 @@
 #ifdef CONFIG_MATH_EMULATION
 #include <asm/math_emu.h>
 #endif
+
 #include "irq.h"
+#include "desc.h"
 
 spinlock_t semaphore_wake_lock = SPIN_LOCK_UNLOCKED;
 
@@ -553,9 +555,8 @@ void copy_segments(int nr, struct task_struct *p, struct mm_struct *new_mm)
 {
 	struct mm_struct * old_mm = current->mm;
 	void * old_ldt = old_mm->segments, * ldt = old_ldt;
-	int ldt_size = LDT_ENTRIES;
 
-	/* "default_ldt" - use the one from init_task */
+	/* default LDT - use the one from init_task */
 	p->tss.ldt = _LDT(0);
 	if (old_ldt) {
 		if (new_mm) {
@@ -568,7 +569,7 @@ void copy_segments(int nr, struct task_struct *p, struct mm_struct *new_mm)
 			memcpy(ldt, old_ldt, LDT_ENTRIES*LDT_ENTRY_SIZE);
 		}
 		p->tss.ldt = _LDT(nr);
-		set_ldt_desc(gdt+(nr<<1)+FIRST_LDT_ENTRY, ldt, ldt_size);
+		set_ldt_desc(nr, ldt, LDT_ENTRIES);
 		return;
 	}
 }
@@ -595,7 +596,7 @@ int copy_thread(int nr, unsigned long clone_flags, unsigned long esp,
 	p->tss.ss0 = __KERNEL_DS;
 
 	p->tss.tr = _TSS(nr);
-	set_tss_desc(gdt+(nr<<1)+FIRST_TSS_ENTRY,&(p->tss));
+	set_tss_desc(nr,&(p->tss));
 	p->tss.eip = (unsigned long) ret_from_fork;
 
 	savesegment(fs,p->tss.fs);

@@ -9,9 +9,7 @@
 O_TARGET := umsdos.o
 
 O_OBJS   := dir.o  file.o inode.o ioctl.o mangle.o namei.o \
-		rdir.o symlink.o emd.o 
-
-#check.o
+		rdir.o symlink.o emd.o check.o
 
 M_OBJS   := $(O_TARGET)
 

@@ -555,6 +555,7 @@ static struct signature {
 } signatures[] =
 {
   { "Adaptec AHA-1520 BIOS",      0x102e, 21 },  /* Adaptec 152x */
+  { "Adaptec AHA-1520B",            0x0b, 19 },  /* Adaptec 152x rev B */
   { "Adaptec ASW-B626 BIOS",      0x1029, 21 },  /* on-board controller */
   { "Adaptec BIOS: ASW-B626",       0x0f, 22 },  /* on-board controller */
   { "Adaptec ASW-B626 S2",        0x2e6c, 19 },  /* on-board controller */

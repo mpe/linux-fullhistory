@@ -3,7 +3,6 @@
 /* edited by Linus Torvalds */
 /* further hacked for MIPS by David S. Miller (dm@engr.sgi.com) */
 
-#include <linux/head.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/mm.h>

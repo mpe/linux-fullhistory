@@ -4,7 +4,6 @@
  * kernel entry-points
  */
 
-#include <linux/config.h>
 #include <asm/system.h>
 
 #define halt	.long PAL_halt

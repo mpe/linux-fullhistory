@@ -17,7 +17,6 @@
 #include <linux/sched.h>
 #include <linux/kernel.h>
 #include <linux/tty.h>
-#include <linux/head.h>
 #include <linux/unistd.h>
 #include <linux/string.h>
 #include <linux/timer.h>
@@ -1109,9 +1108,8 @@ asmlinkage void __init start_kernel(void)
 #if defined(CONFIG_QUOTA)
 	dquot_init_hash();
 #endif
-	printk("POSIX conformance testing by UNIFIX\n");
-
 	check_bugs();
+	printk("POSIX conformance testing by UNIFIX\n");
 
 	smp_init();
 

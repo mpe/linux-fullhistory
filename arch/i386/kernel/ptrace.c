@@ -3,7 +3,6 @@
 /* edited by Linus Torvalds */
 
 #include <linux/config.h> /* for CONFIG_MATH_EMULATION */
-#include <linux/head.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/mm.h>

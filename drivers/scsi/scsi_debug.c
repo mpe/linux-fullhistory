@@ -13,7 +13,6 @@
 #include <linux/sched.h>
 #include <linux/errno.h>
 #include <linux/timer.h>
-#include <linux/head.h>
 #include <linux/types.h>
 #include <linux/string.h>
 #include <linux/genhd.h>

@@ -3,7 +3,6 @@
 /* edited by Linus Torvalds */
 /* edited for ARM by Russell King */
 
-#include <linux/head.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/mm.h>

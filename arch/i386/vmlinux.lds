@@ -35,12 +35,18 @@ SECTIONS
 
   _edata = .;			/* End of data section */
 
+  . = ALIGN(8192);		/* init_task */
+  .data.init_task : { *(.data.init_task) }
+
   . = ALIGN(4096);		/* Init code and data */
   __init_begin = .;
   .text.init : { *(.text.init) }
   .data.init : { *(.data.init) }
   . = ALIGN(4096);
   __init_end = .;
+
+  . = ALIGN(4096);
+  .data.page_aligned : { *(.data.idt) }
 
   __bss_start = .;		/* BSS */
   .bss : {

@@ -9,7 +9,6 @@
  * state in 'asm.s'.
  */
 #include <linux/config.h>
-#include <linux/head.h>
 #include <linux/sched.h>
 #include <linux/kernel.h>
 #include <linux/string.h>
@@ -29,9 +28,19 @@
 #include <asm/atomic.h>
 #include <asm/debugreg.h>
 
+#include "desc.h"
+
 asmlinkage int system_call(void);
 asmlinkage void lcall7(void);
+
 struct desc_struct default_ldt = { 0, 0 };
+
+/*
+ * The IDT has to be page-aligned to simplify the Pentium
+ * F0 0F bug workaround.. We have a special link segment
+ * for this.
+ */
+struct desc_struct idt_table[256] __attribute__((__section__(".data.idt"))) = { {0, 0}, };
 
 static inline void console_verbose(void)
 {
@@ -467,12 +476,11 @@ __initfunc(void trap_init_f00f_bug(void))
 	 * move the IDT into it and write protect this page.
 	 */
 	page = (unsigned long) vmalloc(PAGE_SIZE);
-	memcpy((void *) page, idt_table, 256*8);
-
 	pgd = pgd_offset(&init_mm, page);
 	pmd = pmd_offset(pgd, page);
 	pte = pte_offset(pmd, page);
-	*pte = pte_wrprotect(*pte);
+	free_page(pte_page(*pte));
+	*pte = mk_pte(&idt_table, PAGE_KERNEL_RO);
 	local_flush_tlb();
 
 	/*
@@ -496,25 +504,24 @@ __asm__ __volatile__ ("movw %%dx,%%ax\n\t" \
 	:"ax","dx")
 
 /*
- * WARNING! If we ever start to insert IDT entries
- * into the IDT at run-time, we need to be aware of
- * the F0 0F bug workaround that marks the IDT
- * read-only. It should be easy enough to just follow
- * the page tables and set the gate directly..
+ * This needs to use 'idt_table' rather than 'idt', and
+ * thus use the _nonmapped_ version of the IDT, as the
+ * Pentium F0 0F bugfix can have resulted in the mapped
+ * IDT being write-protected.
  */
 void set_intr_gate(unsigned int n, void *addr)
 {
-	_set_gate(idt+(n),14,0,addr);
+	_set_gate(idt_table+n,14,0,addr);
 }
 
 static void __init set_trap_gate(unsigned int n, void *addr)
 {
-	_set_gate(idt+(n),15,0,addr);
+	_set_gate(idt_table+n,15,0,addr);
 }
 
 static void __init set_system_gate(unsigned int n, void *addr)
 {
-	_set_gate(idt+(n),15,3,addr);
+	_set_gate(idt_table+n,15,3,addr);
 }
 
 static void __init set_call_gate(void *a, void *addr)
@@ -543,20 +550,19 @@ __asm__ __volatile__ ("movw %3,0(%2)\n\t" \
 	"rorl $16,%%eax" \
 	: "=m"(*(n)) : "a" (addr), "r"(n), "ir"(limit), "i"(type))
 
-void set_tss_desc(void *n, void *addr)
+void set_tss_desc(unsigned int n, void *addr)
 {
-	_set_tssldt_desc(((char *) n),((int)addr), 235, 0x89);
+	_set_tssldt_desc(gdt_table+FIRST_TSS_ENTRY+(n<<1), (int)addr, 235, 0x89);
 }
 
-void set_ldt_desc(void *n, void *addr, unsigned int size)
+void set_ldt_desc(unsigned int n, void *addr, unsigned int size)
 {
-	_set_tssldt_desc(((char *) n), ((int)addr), ((size << 3) - 1), 0x82);
+	_set_tssldt_desc(gdt_table+FIRST_LDT_ENTRY+(n<<1), (int)addr, ((size << 3) - 1), 0x82);
 }
 
 void __init trap_init(void)
 {
 	int i;
-	struct desc_struct * p;
 
 	if (readl(0x0FFFD9) == 'E' + ('I'<<8) + ('S'<<16) + ('A'<<24))
 		EISA_bus = 1;
@@ -582,19 +588,12 @@ void __init trap_init(void)
 	for (i=18;i<48;i++)
 		set_trap_gate(i,&reserved);
 	set_system_gate(0x80,&system_call);
-/* set up GDT task & ldt entries */
-	p = gdt+FIRST_TSS_ENTRY;
-	set_tss_desc(p, &init_task.tss);
-	p++;
-	set_ldt_desc(p, &default_ldt, 1);
-	p++;
-	for(i=1 ; i<NR_TASKS ; i++) {
-		p->a=p->b=0;
-		p++;
-		p->a=p->b=0;
-		p++;
-	}
-/* Clear NT, so that we won't have troubles with that later on */
+
+	/* set up GDT task & ldt entries */
+	set_tss_desc(0, &init_task.tss);
+	set_ldt_desc(0, &default_ldt, 1);
+
+	/* Clear NT, so that we won't have troubles with that later on */
 	__asm__("pushfl ; andl $0xffffbfff,(%esp) ; popfl");
 	load_TR(0);
 	load_ldt(0);

@@ -509,7 +509,6 @@ ENTRY(empty_bad_page_table)
 ENTRY(empty_zero_page)
 
 .org 0x6000
-ENTRY(this_must_match_init_task)
 
 /*
  * This starts the data section. Note that the above is all
@@ -519,10 +518,6 @@ ENTRY(this_must_match_init_task)
 .data
 
 ALIGN
-/* 256 quadwords - 2048 bytes of idt */
-ENTRY(idt_table)
-	.fill 256,8,0		# idt is uninitialized
-
 /*
  * This contains up to 8192 quadwords depending on NR_TASKS - 64kB of
  * gdt entries.  Ugh. 

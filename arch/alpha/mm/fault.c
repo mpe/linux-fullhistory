@@ -14,7 +14,6 @@
 #undef  __EXTERN_INLINE
 
 #include <linux/signal.h>
-#include <linux/head.h>
 #include <linux/errno.h>
 #include <linux/string.h>
 #include <linux/types.h>
