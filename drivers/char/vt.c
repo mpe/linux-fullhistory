@@ -165,7 +165,7 @@ do_kdsk_ioctl(int cmd, struct kbentry *user_kbe, int perm, struct kbd_struct *kb
 			val = K_HOLE;
 		} else
 		    val = (i ? K_HOLE : K_NOSUCHMAP);
-		return __put_user(val, &user_kbe->kb_value);
+		return put_user(val, &user_kbe->kb_value);
 	case KDSKBENT:
 		if (!perm)
 			return -EPERM;
@@ -244,7 +244,7 @@ do_kbkeycode_ioctl(int cmd, struct kbkeycode *user_kbkc, int perm)
 	case KDGETKEYCODE:
 		kc = getkeycode(tmp.scancode);
 		if (kc >= 0)
-			kc = __put_user(kc, &user_kbkc->keycode);
+			kc = put_user(kc, &user_kbkc->keycode);
 		break;
 	case KDSETKEYCODE:
 		if (!perm)
@@ -282,8 +282,8 @@ do_kdgkb_ioctl(int cmd, struct kbsentry *user_kdgkb, int perm)
 		p = func_table[i];
 		if(p)
 			for ( ; *p && sz; p++, sz--)
-				__put_user(*p, q++);
-		__put_user('\0', q);
+				put_user(*p, q++);
+		put_user('\0', q);
 		return ((p && *p) ? -EOVERFLOW : 0);
 	case KDSKBSENT:
 		if (!perm)
@@ -603,12 +603,10 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 	{
 		struct kbdiacrs *a = (struct kbdiacrs *)arg;
 
-		i = verify_area(VERIFY_WRITE, (void *) a, sizeof(struct kbdiacrs));
-		if (i)
-			return i;
-		__put_user(accent_table_size, &a->kb_cnt);
-		__copy_to_user(a->kbdiacr, accent_table,
-			    accent_table_size*sizeof(struct kbdiacr));
+		if (put_user(accent_table_size, &a->kb_cnt))
+			return -EFAULT;
+		if (copy_to_user(a->kbdiacr, accent_table, accent_table_size*sizeof(struct kbdiacr)))
+			return -EFAULT;
 		return 0;
 	}
 
@@ -619,14 +617,13 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 
 		if (!perm)
 			return -EPERM;
-		i = verify_area(VERIFY_READ, (void *) a, sizeof(struct kbdiacrs));
-		if (i)
-			return i;
-		__get_user(ct,&a->kb_cnt);
+		if (get_user(ct,&a->kb_cnt))
+			return -EFAULT;
 		if (ct >= MAX_DIACR)
 			return -EINVAL;
 		accent_table_size = ct;
-		__copy_from_user(accent_table, a->kbdiacr, ct*sizeof(struct kbdiacr));
+		if (copy_from_user(accent_table, a->kbdiacr, ct*sizeof(struct kbdiacr)))
+			return -EFAULT;
 		return 0;
 	}
 
@@ -717,12 +714,12 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 		i = verify_area(VERIFY_WRITE,(void *)vtstat, sizeof(struct vt_stat));
 		if (i)
 			return i;
-		__put_user(fg_console + 1, &vtstat->v_active);
+		put_user(fg_console + 1, &vtstat->v_active);
 		state = 1;	/* /dev/tty0 is always open */
 		for (i = 0, mask = 2; i < MAX_NR_CONSOLES && mask; ++i, mask <<= 1)
 			if (VT_IS_IN_USE(i))
 				state |= mask;
-		return __put_user(state, &vtstat->v_state);
+		return put_user(state, &vtstat->v_state);
 	}
 
 	/*
@@ -856,8 +853,8 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 		i = verify_area(VERIFY_READ, (void *)vtsizes, sizeof(struct vt_sizes));
 		if (i)
 			return i;
-		__get_user(ll, &vtsizes->v_rows);
-		__get_user(cc, &vtsizes->v_cols);
+		get_user(ll, &vtsizes->v_rows);
+		get_user(cc, &vtsizes->v_cols);
 		return vc_resize_all(ll, cc);
 	}
 
@@ -870,12 +867,12 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 		i = verify_area(VERIFY_READ, (void *)vtconsize, sizeof(struct vt_consize));
 		if (i)
 			return i;
-		__get_user(ll, &vtconsize->v_rows);
-		__get_user(cc, &vtconsize->v_cols);
-		__get_user(vlin, &vtconsize->v_vlin);
-		__get_user(clin, &vtconsize->v_clin);
-		__get_user(vcol, &vtconsize->v_vcol);
-		__get_user(ccol, &vtconsize->v_ccol);
+		get_user(ll, &vtconsize->v_rows);
+		get_user(cc, &vtconsize->v_cols);
+		get_user(vlin, &vtconsize->v_vlin);
+		get_user(clin, &vtconsize->v_clin);
+		get_user(vcol, &vtconsize->v_vcol);
+		get_user(ccol, &vtconsize->v_ccol);
 		vlin = vlin ? vlin : video_scan_lines;
 		if ( clin )
 		  {

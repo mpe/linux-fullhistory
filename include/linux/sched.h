@@ -174,6 +174,8 @@ struct mm_struct {
 	unsigned long rss, total_vm, locked_vm;
 	unsigned long def_flags;
 	unsigned long cpu_vm_mask;
+	unsigned long swap_cnt;	/* number of pages to swap on next pass */
+	unsigned long swap_address;
 	/*
 	 * This is an architecture-specific pointer: the portable
 	 * part of Linux does not know about any segments.
@@ -191,7 +193,7 @@ struct mm_struct {
 		0, 0, 0, 				\
 		0, 0, 0, 0,				\
 		0, 0, 0,				\
-		0, 0, NULL }
+		0, 0, 0, 0, NULL }
 
 struct signal_struct {
 	atomic_t		count;
@@ -276,8 +278,6 @@ struct task_struct {
 /* mm fault and swap info: this can arguably be seen as either mm-specific or thread-specific */
 	unsigned long min_flt, maj_flt, nswap, cmin_flt, cmaj_flt, cnswap;
 	int swappable:1;
-	unsigned long swap_address;
-	unsigned long swap_cnt;		/* number of pages to swap on next pass */
 /* process credentials */
 	uid_t uid,euid,suid,fsuid;
 	gid_t gid,egid,sgid,fsgid;
@@ -361,7 +361,7 @@ struct task_struct {
 /* utime */	{0,0,0,0},0, \
 /* per CPU times */ {0, }, {0, }, \
 /* flt */	0,0,0,0,0,0, \
-/* swp */	0,0,0, \
+/* swp */	0, \
 /* process credentials */					\
 /* uid etc */	0,0,0,0,0,0,0,0,				\
 /* suppl grps*/ 0, {0,},					\

@@ -184,6 +184,8 @@ get__netinfo(struct proto *pro, char *buffer, int format, char **start, off_t of
 
 			for (req = sp->tp_pinfo.af_tcp.syn_wait_queue; req;
 			     i++, req = req->dl_next) {
+				if (req->sk)
+					continue;
 				pos += 128;
 				if (pos < offset) 
 					continue;

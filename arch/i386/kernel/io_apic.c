@@ -202,7 +202,7 @@ DO_ACTION( enable,  1, |= 0xff000000, )				/* destination = 0xff */
 DO_ACTION( mask,    0, |= 0x00010000, io_apic_sync())		/* mask = 1 */
 DO_ACTION( unmask,  0, &= 0xfffeffff, )				/* mask = 0 */
 
-static void __init clear_IO_APIC_pin(unsigned int pin)
+static void clear_IO_APIC_pin(unsigned int pin)
 {
 	struct IO_APIC_route_entry entry;
 
@@ -215,6 +215,13 @@ static void __init clear_IO_APIC_pin(unsigned int pin)
 	io_apic_write(0x11 + 2 * pin, *(((int *)&entry) + 1));
 }
 
+static void clear_IO_APIC (void)
+{
+	int pin;
+
+	for (pin = 0; pin < nr_ioapic_registers; pin++)
+		clear_IO_APIC_pin(pin);
+}
 
 /*
  * support for broken MP BIOSs, enables hand-redirection of PIRQ0-7 to
@@ -625,7 +632,7 @@ void __init setup_IO_APIC_irqs(void)
 /*
  * Set up a certain pin as ExtINT delivered interrupt
  */
-void __init setup_ExtINT_pin(unsigned int pin)
+void __init setup_ExtINT_pin(unsigned int pin, int irq)
 {
 	struct IO_APIC_route_entry entry;
 
@@ -635,17 +642,16 @@ void __init setup_ExtINT_pin(unsigned int pin)
 	memset(&entry,0,sizeof(entry));
 
 	entry.delivery_mode = dest_ExtINT;
-	entry.dest_mode = 1;				/* logical delivery */
+	entry.dest_mode = 0;				/* physical delivery */
 	entry.mask = 0;					/* unmask IRQ now */
 	/*
-	 * Careful with this one. We do not use 'true' logical
-	 * delivery, as we set local APICs to LDR == 0. But
-	 * 0xff logical destination is special (broadcast).
-	 * Any other combination will cause problems.
+	 * We use physical delivery to get the timer IRQ
+	 * to the boot CPU. 'boot_cpu_id' is the physical
+	 * APIC ID of the boot CPU.
 	 */
-	entry.dest.logical.logical_dest = 0xff;
+	entry.dest.physical.physical_dest = boot_cpu_id;
 
-	entry.vector = 0;				/* it's ignored */
+	entry.vector = assign_irq_vector(irq);
 
 	entry.polarity = 0;
 	entry.trigger = 0;
@@ -760,7 +766,7 @@ void __init print_IO_APIC(void)
 
 static void __init init_sym_mode(void)
 {
-	int i, pin;
+	int i;
 
 	for (i = 0; i < PIN_MAP_SIZE; i++) {
 		irq_2_pin[i].pin = -1;
@@ -790,8 +796,7 @@ static void __init init_sym_mode(void)
 	/*
 	 * Do not trust the IO-APIC being empty at bootup
 	 */
-	for (pin = 0; pin < nr_ioapic_registers; pin++)
-		clear_IO_APIC_pin(pin);
+	clear_IO_APIC();
 }
 
 /*
@@ -799,6 +804,15 @@ static void __init init_sym_mode(void)
  */
 void init_pic_mode(void)
 {
+	/*
+	 * Clear the IO-APIC before rebooting:
+	 */
+	clear_IO_APIC();
+
+	/*
+	 * Put it back into PIC mode (has an effect only on
+	 * certain boards)
+	 */
 	printk("disabling symmetric IO mode... ");
 		outb_p(0x70, 0x22);
 		outb_p(0x00, 0x23);
@@ -1184,7 +1198,7 @@ static inline void check_timer(void)
 
 		if (pin2 != -1) {
 			printk(".. (found pin %d) ...", pin2);
-			setup_ExtINT_pin(pin2);
+			setup_ExtINT_pin(pin2, 0);
 			make_8259A_irq(0);
 		}
 

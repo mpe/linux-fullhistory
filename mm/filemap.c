@@ -19,6 +19,7 @@
 #include <linux/blkdev.h>
 #include <linux/file.h>
 #include <linux/swapctl.h>
+#include <linux/slab.h>
 
 #include <asm/pgtable.h>
 #include <asm/uaccess.h>
@@ -38,6 +39,26 @@ struct page * page_hash_table[PAGE_HASH_SIZE];
  */
 
 #define release_page(page) __free_page((page))
+
+/* 
+ * Define a request structure for outstanding page write requests
+ * to the background page io daemon
+ */
+
+struct pio_request 
+{
+	struct pio_request *	next;
+	struct file *		file;
+	unsigned long		offset;
+	unsigned long		page;
+};
+static struct pio_request *pio_first = NULL, **pio_last = &pio_first;
+static kmem_cache_t *pio_request_cache;
+static struct wait_queue *pio_wait = NULL;
+
+static inline void 
+make_pio_request(struct file *, unsigned long, unsigned long);
+
 
 /*
  * Invalidate the pages of an inode, removing all pages that aren't
@@ -1079,8 +1100,9 @@ static inline int do_write_page(struct inode * inode, struct file * file,
 }
 
 static int filemap_write_page(struct vm_area_struct * vma,
-	unsigned long offset,
-	unsigned long page)
+			      unsigned long offset,
+			      unsigned long page,
+			      int wait)
 {
 	int result;
 	struct file * file;
@@ -1098,6 +1120,17 @@ static int filemap_write_page(struct vm_area_struct * vma,
 	 * and file could be released ... increment the count to be safe.
 	 */
 	file->f_count++;
+
+	/* 
+	 * If this is a swapping operation rather than msync(), then
+	 * leave the actual IO, and the restoration of the file count,
+	 * to the kpiod thread.  Just queue the request for now.
+	 */
+	if (!wait) {
+		make_pio_request(file, offset, page);
+		return 0;
+	}
+	
 	down(&inode->i_sem);
 	result = do_write_page(inode, file, (const char *) page, offset);
 	up(&inode->i_sem);
@@ -1113,7 +1146,7 @@ static int filemap_write_page(struct vm_area_struct * vma,
  */
 int filemap_swapout(struct vm_area_struct * vma, struct page * page)
 {
-	return filemap_write_page(vma, page->offset, page_address(page));
+	return filemap_write_page(vma, page->offset, page_address(page), 0);
 }
 
 static inline int filemap_sync_pte(pte_t * ptep, struct vm_area_struct *vma,
@@ -1150,7 +1183,7 @@ static inline int filemap_sync_pte(pte_t * ptep, struct vm_area_struct *vma,
 			return 0;
 		}
 	}
-	error = filemap_write_page(vma, address - vma->vm_start + vma->vm_offset, page);
+	error = filemap_write_page(vma, address - vma->vm_start + vma->vm_offset, page, 1);
 	free_page(page);
 	return error;
 }
@@ -1568,4 +1601,121 @@ void put_cached_page(unsigned long addr)
 	clear_bit(PG_locked, &page->flags);
 	wake_up(&page->wait);
 	__free_page(page);
+}
+
+
+/* Add request for page IO to the queue */
+
+static inline void put_pio_request(struct pio_request *p)
+{
+	*pio_last = p;
+	p->next = NULL;
+	pio_last = &p->next;
+}
+
+/* Take the first page IO request off the queue */
+
+static inline struct pio_request * get_pio_request(void)
+{
+	struct pio_request * p = pio_first;
+	pio_first = p->next;
+	if (!pio_first)
+		pio_last = &pio_first;
+	return p;
+}
+
+/* Make a new page IO request and queue it to the kpiod thread */
+
+static inline void make_pio_request(struct file *file,
+				    unsigned long offset,
+				    unsigned long page)
+{
+	struct pio_request *p;
+
+	atomic_inc(&mem_map[MAP_NR(page)].count);
+
+	/* 
+	 * We need to allocate without causing any recursive IO in the
+	 * current thread's context.  We might currently be swapping out
+	 * as a result of an allocation made while holding a critical
+	 * filesystem lock.  To avoid deadlock, we *MUST* not reenter
+	 * the filesystem in this thread.
+	 *
+	 * We can wait for kswapd to free memory, or we can try to free
+	 * pages without actually performing further IO, without fear of
+	 * deadlock.  --sct
+	 */
+
+	while ((p = kmem_cache_alloc(pio_request_cache, GFP_BUFFER)) == NULL) {
+		if (try_to_free_pages(__GFP_WAIT))
+			continue;
+		current->state = TASK_INTERRUPTIBLE;
+		schedule_timeout(HZ/10);
+	}
+	
+	p->file   = file;
+	p->offset = offset;
+	p->page   = page;
+
+	put_pio_request(p);
+	wake_up(&pio_wait);
+}
+
+
+/*
+ * This is the only thread which is allowed to write out filemap pages
+ * while swapping.
+ * 
+ * To avoid deadlock, it is important that we never reenter this thread.
+ * Although recursive memory allocations within this thread may result
+ * in more page swapping, that swapping will always be done by queuing
+ * another IO request to the same thread: we will never actually start
+ * that IO request until we have finished with the current one, and so
+ * we will not deadlock.  
+ */
+
+int kpiod(void * unused)
+{
+	struct wait_queue wait = {current};
+	struct inode * inode;
+	struct dentry * dentry;
+	struct pio_request * p;
+	
+	current->session = 1;
+	current->pgrp = 1;
+	strcpy(current->comm, "kpiod");
+	sigfillset(&current->blocked);
+	init_waitqueue(&pio_wait);
+
+	lock_kernel();
+	
+	pio_request_cache = kmem_cache_create("pio_request", 
+					      sizeof(struct pio_request),
+					      0, SLAB_HWCACHE_ALIGN, 
+					      NULL, NULL);
+	if (!pio_request_cache)
+		panic ("Could not create pio_request slab cache");
+	
+	while (1) {
+		current->state = TASK_INTERRUPTIBLE;
+		add_wait_queue(&pio_wait, &wait);
+		while (!pio_first)
+			schedule();
+		remove_wait_queue(&pio_wait, &wait);
+		current->state = TASK_RUNNING;
+
+		while (pio_first) {
+			p = get_pio_request();
+			dentry = p->file->f_dentry;
+			inode = dentry->d_inode;
+			
+			down(&inode->i_sem);
+			do_write_page(inode, p->file,
+				      (const char *) p->page, p->offset);
+			up(&inode->i_sem);
+			fput(p->file);
+			free_page(p->page);
+			kmem_cache_free(pio_request_cache, p);
+		}
+	}
 }

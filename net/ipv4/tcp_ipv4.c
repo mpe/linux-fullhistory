@@ -1563,12 +1563,6 @@ int tcp_v4_do_rcv(struct sock *sk, struct sk_buff *skb)
 	}
 #endif /* CONFIG_FILTER */
 
-	/*
-	 *	socket locking is here for SMP purposes as backlog rcv
-	 *	is currently called with bh processing disabled.
-	 */
-	lock_sock(sk); 
-
 	/* 
 	 * This doesn't check if the socket has enough room for the packet.
 	 * Either process the packet _without_ queueing it and then free it,
@@ -1579,7 +1573,6 @@ int tcp_v4_do_rcv(struct sock *sk, struct sk_buff *skb)
 	if (sk->state == TCP_ESTABLISHED) { /* Fast path */
 		if (tcp_rcv_established(sk, skb, skb->h.th, skb->len))
 			goto reset;
-		release_sock(sk);
 		return 0; 
 	} 
 
@@ -1590,14 +1583,21 @@ int tcp_v4_do_rcv(struct sock *sk, struct sk_buff *skb)
 		nsk = tcp_v4_hnd_req(sk, skb);
 		if (!nsk) 
 			goto discard;
-		lock_sock(nsk);
-		release_sock(sk);
+
+		/*
+		 * Queue it on the new socket if the new socket is active,
+		 * otherwise we just shortcircuit this and continue with
+		 * the new socket..
+		 */
+		if (atomic_read(&nsk->sock_readers)) {
+			__skb_queue_tail(&nsk->back_log, skb);
+			return 0;
+		}
 		sk = nsk;
 	}
 	
 	if (tcp_rcv_state_process(sk, skb, skb->h.th, skb->len))
 		goto reset;
-	release_sock(sk); 
 	return 0;
 
 reset:
@@ -1609,7 +1609,6 @@ discard:
 	 * might be destroyed here. This current version compiles correctly,
 	 * but you have been warned.
 	 */
-	release_sock(sk);  
 	return 0;
 }
 

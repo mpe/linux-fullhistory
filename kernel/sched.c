@@ -680,8 +680,18 @@ asmlinkage void schedule(void)
 
 	sched_data->prevstate = prev->state;
 
+/* this is the scheduler proper: */
 	{
 		struct task_struct * p = init_task.next_run;
+		int c = -1000;
+
+		/* Default process to select.. */
+		next = idle_task;
+		if (prev->state == TASK_RUNNING) {
+			c = goodness(prev, prev, this_cpu);
+			next = prev;
+		}
+
 		/*
 		 * This is subtle.
 		 * Note how we can enable interrupts here, even
@@ -693,36 +703,27 @@ asmlinkage void schedule(void)
 		 * the scheduler lock
 		 */
 		spin_unlock_irq(&runqueue_lock);
-#ifdef __SMP__
-		prev->has_cpu = 0;
-#endif
-	
 /*
  * Note! there may appear new tasks on the run-queue during this, as
  * interrupts are enabled. However, they will be put on front of the
  * list, so our list starting at "p" is essentially fixed.
  */
-/* this is the scheduler proper: */
-		{
-			int c = -1000;
-			next = idle_task;
-			while (p != &init_task) {
-				if (can_schedule(p)) {
-					int weight = goodness(p, prev, this_cpu);
-					if (weight > c)
-						c = weight, next = p;
-				}
-				p = p->next_run;
+		while (p != &init_task) {
+			if (can_schedule(p)) {
+				int weight = goodness(p, prev, this_cpu);
+				if (weight > c)
+					c = weight, next = p;
 			}
+			p = p->next_run;
+		}
 
-			/* Do we need to re-calculate counters? */
-			if (!c) {
-				struct task_struct *p;
-				read_lock(&tasklist_lock);
-				for_each_task(p)
-					p->counter = (p->counter >> 1) + p->priority;
-				read_unlock(&tasklist_lock);
-			}
+		/* Do we need to re-calculate counters? */
+		if (!c) {
+			struct task_struct *p;
+			read_lock(&tasklist_lock);
+			for_each_task(p)
+				p->counter = (p->counter >> 1) + p->priority;
+			read_unlock(&tasklist_lock);
 		}
 	}
 
@@ -751,10 +752,8 @@ asmlinkage void schedule(void)
 	 * thus we have to lock the previous process from getting
 	 * rescheduled during switch_to().
 	 */
-	prev->has_cpu = 1;
-
- 	next->has_cpu = 1;
  	next->processor = this_cpu;
+ 	next->has_cpu = 1;
 	spin_unlock(&scheduler_lock);
 #endif /* __SMP__ */
  	if (prev != next) {

@@ -107,6 +107,7 @@ EXPORT_SYMBOL(high_memory);
 EXPORT_SYMBOL(update_vm_cache);
 EXPORT_SYMBOL(vmtruncate);
 EXPORT_SYMBOL(find_vma);
+EXPORT_SYMBOL(get_unmapped_area);
 
 /* filesystem internal functions */
 EXPORT_SYMBOL(in_group_p);

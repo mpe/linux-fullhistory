@@ -232,13 +232,15 @@ void clear_inode(struct inode *inode)
 
 /*
  * Dispose-list gets a local list, so it doesn't need to
- * worry about list corruption.
+ * worry about list corruption. It releases the inode lock
+ * while clearing the inodes.
  */
 static void dispose_list(struct list_head * head)
 {
 	struct list_head *next;
 	int count = 0;
 
+	spin_unlock(&inode_lock);
 	next = head->next;
 	for (;;) {
 		struct list_head * tmp = next;
@@ -256,7 +258,6 @@ static void dispose_list(struct list_head * head)
 	spin_lock(&inode_lock);
 	list_splice(head, &inode_unused);
 	inodes_stat.nr_free_inodes += count;
-	spin_unlock(&inode_lock);
 }
 
 /*
@@ -305,52 +306,52 @@ int invalidate_inodes(struct super_block * sb)
 	spin_lock(&inode_lock);
 	busy = invalidate_list(&inode_in_use, sb, &throw_away);
 	busy |= invalidate_list(&sb->s_dirty, sb, &throw_away);
-	spin_unlock(&inode_lock);
-
 	dispose_list(&throw_away);
+	spin_unlock(&inode_lock);
 
 	return busy;
 }
 
 /*
  * This is called with the inode lock held. It searches
- * the in-use for the specified number of freeable inodes.
- * Freeable inodes are moved to a temporary list and then
- * placed on the unused list by dispose_list.
+ * the in-use for freeable inodes, which are moved to a
+ * temporary list and then placed on the unused list by
+ * dispose_list. 
  *
- * Note that we do not expect to have to search very hard:
- * the freeable inodes will be at the old end of the list.
- * 
- * N.B. The spinlock is released to call dispose_list.
+ * We don't expect to have to call this very often.
+ *
+ * N.B. The spinlock is released during the call to
+ *      dispose_list.
  */
 #define CAN_UNUSE(inode) \
-	(((inode)->i_count == 0) && \
-	 (!(inode)->i_state))
+	(((inode)->i_count | (inode)->i_state) == 0)
+#define INODE(entry)	(list_entry(entry, struct inode, i_list))
 
-static int free_inodes(int goal)
+static int free_inodes(void)
 {
-	struct list_head *tmp, *head = &inode_in_use;
-	LIST_HEAD(freeable);
-	int found = 0, depth = goal << 1;
+	struct list_head list, *entry, *freeable = &list;
+	int found = 0;
 
-	while ((tmp = head->prev) != head && depth--) {
-		struct inode * inode = list_entry(tmp, struct inode, i_list);
+	INIT_LIST_HEAD(freeable);
+	entry = inode_in_use.next;
+	while (entry != &inode_in_use) {
+		struct list_head *tmp = entry;
+
+		entry = entry->next;
+		if (!CAN_UNUSE(INODE(tmp)))
+			continue;
 		list_del(tmp);
-		if (CAN_UNUSE(inode)) {
-			list_del(&inode->i_hash);
-			INIT_LIST_HEAD(&inode->i_hash);
-			list_add(tmp, &freeable);
-			if (++found < goal)
-				continue;
-			break;
-		}
-		list_add(tmp, head);
+		list_del(&INODE(tmp)->i_hash);
+		INIT_LIST_HEAD(&INODE(tmp)->i_hash);
+		list_add(tmp, freeable);
+		found = 1;
 	}
+
 	if (found) {
-		spin_unlock(&inode_lock);
-		dispose_list(&freeable);
-		spin_lock(&inode_lock);
+		dispose_list(freeable);
+		found = 1;	/* silly compiler */
 	}
+
 	return found;
 }
 
@@ -374,7 +375,7 @@ static void shrink_dentry_inodes(int goal)
 static void try_to_free_inodes(int goal)
 {
 	shrink_dentry_inodes(goal);
-	if (!free_inodes(goal))
+	if (!free_inodes())
 		shrink_dentry_inodes(goal);
 }
 
@@ -385,7 +386,7 @@ static void try_to_free_inodes(int goal)
 void free_inode_memory(int goal)
 {
 	spin_lock(&inode_lock);
-	free_inodes(goal);
+	free_inodes();
 	spin_unlock(&inode_lock);
 }
 
@@ -450,7 +451,7 @@ static struct inode * grow_inodes(void)
 	inodes_stat.preshrink = 1;
 
 	spin_lock(&inode_lock);
-	free_inodes(inodes_stat.nr_inodes >> 2);
+	free_inodes();
 	{
 		struct list_head *tmp = inode_unused.next;
 		if (tmp != &inode_unused) {
