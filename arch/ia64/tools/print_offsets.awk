@@ -9,9 +9,10 @@ BEGIN {
 	print " */"
 	#
 	# This is a cheesy hack.  Make sure that
-	# PF_PTRACED == 1<<PF_PTRACED_BIT.
+	# PT_PTRACED == 1<<PT_PTRACED_BIT.
 	#
-	print "#define PF_PTRACED_BIT		4"
+	print "#define PT_PTRACED_BIT		0"
+	print "#define PT_TRACESYS_BIT		1"
 }
 
 # look for .tab:

@@ -11,6 +11,8 @@
 NM := $(CROSS_COMPILE)nm -B
 AWK := awk
 
+export AWK
+
 LINKFLAGS = -static -T arch/$(ARCH)/vmlinux.lds
 AFLAGS += -Wa,-x
 EXTRA	=

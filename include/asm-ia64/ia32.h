@@ -241,7 +241,7 @@ typedef struct siginfo32 {
 #define IA32_PAGE_OFFSET	0xc0000000
 
 #define USE_ELF_CORE_DUMP
-#define ELF_EXEC_PAGESIZE	PAGE_SIZE
+#define ELF_EXEC_PAGESIZE	IA32_PAGE_SIZE
 
 /*
  * This is the location that an ET_DYN program is loaded if exec'ed.

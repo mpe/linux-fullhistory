@@ -130,7 +130,7 @@ int __init stnic_probe(void)
       printk (" unable to get IRQ %d.\n", dev->irq);
       kfree(dev->priv);
       dev->priv = NULL;
-      return EAGAIN;
+      return -EAGAIN;
     }
 
   ei_status.name = "eth0";

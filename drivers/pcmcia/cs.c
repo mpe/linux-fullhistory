@@ -106,10 +106,10 @@ MODULE_DESCRIPTION("Linux PCMCIA Card Services " CS_RELEASE
 INT_MODULE_PARM(setup_delay,	HZ/20);		/* ticks */
 INT_MODULE_PARM(resume_delay,	HZ/5);		/* ticks */
 INT_MODULE_PARM(shutdown_delay,	HZ/40);		/* ticks */
-INT_MODULE_PARM(vcc_settle,	HZ*4/10);	/* ticks */
+INT_MODULE_PARM(vcc_settle,	400);		/* msecs */
 INT_MODULE_PARM(reset_time,	10);		/* usecs */
-INT_MODULE_PARM(unreset_delay,	HZ/10);		/* ticks */
-INT_MODULE_PARM(unreset_check,	HZ/10);		/* ticks */
+INT_MODULE_PARM(unreset_delay,	100);		/* msecs */
+INT_MODULE_PARM(unreset_check,	100);		/* msecs */
 INT_MODULE_PARM(unreset_limit,	30);		/* unreset_check's */
 
 /* Access speed for attribute memory windows */
@@ -303,10 +303,10 @@ static int proc_read_clients(char *buf, char **start, off_t pos,
     
 ======================================================================*/
 
-static void setup_socket(u_long i);
-static void shutdown_socket(u_long i);
-static void reset_socket(u_long i);
-static void unreset_socket(u_long i);
+static void setup_socket(socket_info_t *);
+static void shutdown_socket(socket_info_t *);
+static void reset_socket(socket_info_t *);
+static void unreset_socket(socket_info_t *);
 static void parse_events(void *info, u_int events);
 
 socket_info_t *pcmcia_register_socket (int slot,
@@ -323,10 +323,7 @@ socket_info_t *pcmcia_register_socket (int slot,
 
     s->ss_entry = ss_entry;
     s->sock = slot;
-    s->setup.data = sockets;
-    s->setup.function = &setup_socket;
-    s->shutdown.data = sockets;
-    s->shutdown.function = &shutdown_socket;
+
     /* base address = 0, map = 0 */
     s->cis_mem.flags = 0;
     s->cis_mem.speed = cis_speed;
@@ -397,7 +394,7 @@ void pcmcia_unregister_socket(socket_info_t *s)
     }
 #endif
 
-    shutdown_socket(socket);
+    shutdown_socket(s);
     release_cis_mem(s);
     while (s->clients) {
 	client = s->clients;
@@ -449,12 +446,17 @@ static void free_regions(memory_handle_t *list)
 
 static int send_event(socket_info_t *s, event_t event, int priority);
 
-static void shutdown_socket(u_long i)
+static void msleep(unsigned int msec)
 {
-    socket_info_t *s = socket_table[i];
+	current->state = TASK_INTERRUPTIBLE;
+	schedule_timeout( (msec * HZ + 999) / 1000);
+}
+
+static void shutdown_socket(socket_info_t *s)
+{
     client_t **c;
     
-    DEBUG(1, "cs: shutdown_socket(%ld)\n", i);
+    DEBUG(1, "cs: shutdown_socket(%p)\n", s);
 
     /* Blank out the socket state */
     s->state &= SOCKET_PRESENT|SOCKET_SETUP_PENDING;
@@ -488,47 +490,49 @@ static void shutdown_socket(u_long i)
     free_regions(&s->c_region);
 } /* shutdown_socket */
 
-static void setup_socket(u_long i)
+static void setup_socket(socket_info_t *s)
 {
-    int val;
-    socket_info_t *s = socket_table[i];
+	int val;
+	int setup_timeout = 100;
 
-    get_socket_status(s, &val);
-    if (val & SS_PENDING) {
-	/* Does the socket need more time? */
-	DEBUG(2, "cs: setup_socket(%ld): status pending\n", i);
-	if (++s->setup_timeout > 100) {
-	    printk(KERN_NOTICE "cs: socket %ld voltage interrogation"
-		   " timed out\n", i);
-	} else {
-	    s->setup.expires = jiffies + HZ/10;
-	    add_timer(&s->setup);
+	/* Wait for "not pending" */
+	for (;;) {
+		get_socket_status(s, &val);
+		if (!(val & SS_PENDING))
+			break;
+		if (--setup_timeout) {
+			msleep(100);
+			continue;
+		}
+		printk(KERN_NOTICE "cs: socket %p voltage interrogation"
+			" timed out\n", s);
+		return;
 	}
-    } else if (val & SS_DETECT) {
-	DEBUG(1, "cs: setup_socket(%ld): applying power\n", i);
-	s->state |= SOCKET_PRESENT;
-	s->socket.flags = 0;
-	if (val & SS_3VCARD)
-	    s->socket.Vcc = s->socket.Vpp = 33;
-	else if (!(val & SS_XVCARD))
-	    s->socket.Vcc = s->socket.Vpp = 50;
-	else {
-	    printk(KERN_NOTICE "cs: socket %ld: unsupported "
-		   "voltage key\n", i);
-	    s->socket.Vcc = 0;
-	}
-	if (val & SS_CARDBUS) {
-	    s->state |= SOCKET_CARDBUS;
+
+	if (val & SS_DETECT) {
+		DEBUG(1, "cs: setup_socket(%p): applying power\n", s);
+		s->state |= SOCKET_PRESENT;
+		s->socket.flags = 0;
+		if (val & SS_3VCARD)
+		    s->socket.Vcc = s->socket.Vpp = 33;
+		else if (!(val & SS_XVCARD))
+		    s->socket.Vcc = s->socket.Vpp = 50;
+		else {
+		    printk(KERN_NOTICE "cs: socket %p: unsupported "
+			   "voltage key\n", s);
+		    s->socket.Vcc = 0;
+		}
+		if (val & SS_CARDBUS) {
+		    s->state |= SOCKET_CARDBUS;
 #ifndef CONFIG_CARDBUS
-	    printk(KERN_NOTICE "cs: unsupported card type detected!\n");
+		    printk(KERN_NOTICE "cs: unsupported card type detected!\n");
 #endif
-	}
-	set_socket(s, &s->socket);
-	s->setup.function = &reset_socket;
-	s->setup.expires = jiffies + vcc_settle;
-	add_timer(&s->setup);
-    } else
-	DEBUG(0, "cs: setup_socket(%ld): no card!\n", i);
+		}
+		set_socket(s, &s->socket);
+		msleep(vcc_settle);
+		reset_socket(s);
+	} else
+		DEBUG(0, "cs: setup_socket(%p): no card!\n", s);
 } /* setup_socket */
 
 /*======================================================================
@@ -540,33 +544,43 @@ static void setup_socket(u_long i)
     
 ======================================================================*/
 
-static void reset_socket(u_long i)
+static void reset_socket(socket_info_t *s)
 {
-    socket_info_t *s = socket_table[i];
-
-    DEBUG(1, "cs: resetting socket %ld\n", i);
+    DEBUG(1, "cs: resetting socket %p\n", s);
     s->socket.flags |= SS_OUTPUT_ENA | SS_RESET;
     set_socket(s, &s->socket);
     udelay((long)reset_time);
     s->socket.flags &= ~SS_RESET;
     set_socket(s, &s->socket);
-    s->setup_timeout = 0;
-    s->setup.expires = jiffies + unreset_delay;
-    s->setup.function = &unreset_socket;
-    add_timer(&s->setup);
+    msleep(unreset_delay);
+    unreset_socket(s);
 } /* reset_socket */
 
 #define EVENT_MASK \
 (SOCKET_SETUP_PENDING|SOCKET_SUSPEND|SOCKET_RESET_PENDING)
 
-static void unreset_socket(u_long i)
+static void unreset_socket(socket_info_t *s)
 {
-    socket_info_t *s = socket_table[i];
-    int val;
+	int setup_timeout = unreset_limit;
+	int val;
 
-    get_socket_status(s, &val);
-    if (val & SS_READY) {
-	DEBUG(1, "cs: reset done on socket %ld\n", i);
+	/* Wait for "ready" */
+	for (;;) {
+		get_socket_status(s, &val);
+		if (val & SS_READY)
+			break;
+		DEBUG(2, "cs: socket %ld not ready yet\n", i);
+		if (--setup_timeout) {
+			msleep(unreset_check);
+			continue;
+		}
+		printk(KERN_NOTICE "cs: socket %p timed out during"
+			" reset\n", s);
+		s->state &= ~EVENT_MASK;
+		return;
+	}
+
+	DEBUG(1, "cs: reset done on socket %p\n", s);
 	if (s->state & SOCKET_SUSPEND) {
 	    s->state &= ~EVENT_MASK;
 	    if (verify_cis_cache(s) != 0)
@@ -587,17 +601,6 @@ static void unreset_socket(u_long i)
 		  CS_EVENT_PRI_LOW);
 	    s->state &= ~EVENT_MASK;
 	}
-    } else {
-	DEBUG(2, "cs: socket %ld not ready yet\n", i);
-	if (++s->setup_timeout > unreset_limit) {
-	    printk(KERN_NOTICE "cs: socket %ld timed out during"
-		   " reset\n", i);
-	    s->state &= ~EVENT_MASK;
-	} else {
-	    s->setup.expires = jiffies + unreset_check;
-	    add_timer(&s->setup);
-	}
-    }
 } /* unreset_socket */
 
 /*======================================================================
@@ -640,12 +643,11 @@ static void do_shutdown(socket_info_t *s)
 	    client->state |= CLIENT_STALE;
     if (s->state & (SOCKET_SETUP_PENDING|SOCKET_RESET_PENDING)) {
 	DEBUG(0, "cs: flushing pending setup\n");
-	del_timer(&s->setup);
 	s->state &= ~EVENT_MASK;
     }
-    s->shutdown.expires = jiffies + shutdown_delay;
-    add_timer(&s->shutdown);
+    msleep(shutdown_delay);
     s->state &= ~SOCKET_PRESENT;
+    shutdown_socket(s);
 }
 
 static void parse_events(void *info, u_int events)
@@ -653,8 +655,7 @@ static void parse_events(void *info, u_int events)
     socket_info_t *s = info;
     if (events & SS_DETECT) {
 	int status;
-	u_long flags;
-	spin_lock_irqsave(&s->lock, flags);
+
 	get_socket_status(s, &status);
 	if ((s->state & SOCKET_PRESENT) &&
 	    (!(s->state & SOCKET_SUSPEND) ||
@@ -662,19 +663,16 @@ static void parse_events(void *info, u_int events)
 	    do_shutdown(s);
 	if (status & SS_DETECT) {
 	    if (s->state & SOCKET_SETUP_PENDING) {
-		del_timer(&s->setup);
 		DEBUG(1, "cs: delaying pending setup\n");
+		return;
 	    }
 	    s->state |= SOCKET_SETUP_PENDING;
-	    s->setup.function = &setup_socket;
-	    s->setup_timeout = 0;
 	    if (s->state & SOCKET_SUSPEND)
-		s->setup.expires = jiffies + resume_delay;
+		msleep(resume_delay);
 	    else
-		s->setup.expires = jiffies + setup_delay;
-	    add_timer(&s->setup);
+		msleep(setup_delay);
+	    setup_socket(s);
 	}
-	spin_unlock_irqrestore(&s->lock, flags);
     }
     if (events & SS_BATDEAD)
 	send_event(s, CS_EVENT_BATTERY_DEAD, CS_EVENT_PRI_LOW);
@@ -1406,7 +1404,7 @@ int pcmcia_register_client(client_handle_t *handle, client_reg_t *req)
 	if ((status & SS_DETECT) &&
 	    !(s->state & SOCKET_SETUP_PENDING)) {
 	    s->state |= SOCKET_SETUP_PENDING;
-	    setup_socket(ns);
+	    setup_socket(s);
 	}
     }
 
@@ -1991,7 +1989,7 @@ int pcmcia_reset_card(client_handle_t handle, client_req_t *req)
 	DEBUG(1, "cs: resetting socket %d\n", i);
 	send_event(s, CS_EVENT_RESET_PHYSICAL, CS_EVENT_PRI_LOW);
 	s->reset_handle = handle;
-	reset_socket(i);
+	reset_socket(s);
     }
     return CS_SUCCESS;
 } /* reset_card */
@@ -2038,7 +2036,7 @@ int pcmcia_resume_card(client_handle_t handle, client_req_t *req)
 	return CS_IN_USE;
 
     DEBUG(1, "cs: waking up socket %d\n", i);
-    setup_socket(i);
+    setup_socket(s);
 
     return CS_SUCCESS;
 } /* resume_card */
@@ -2095,7 +2093,7 @@ int pcmcia_insert_card(client_handle_t handle, client_req_t *req)
 	spin_unlock_irqrestore(&s->lock, flags);
 	get_socket_status(s, &status);
 	if (status & SS_DETECT)
-	    setup_socket(i);
+	    setup_socket(s);
 	else {
 	    s->state &= ~SOCKET_SETUP_PENDING;
 	    return CS_NO_CARD;

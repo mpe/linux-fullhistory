@@ -196,7 +196,7 @@ cardbus_probe (struct pci_dev *dev, const struct pci_device_id *id)
 			return 0;
 		}
 	}
-	return -1;
+	return -ENODEV;
 }
 
 static void __devexit cardbus_remove (struct pci_dev *dev)
@@ -222,7 +222,7 @@ static void cardbus_resume (struct pci_dev *dev)
 }
 
 
-static struct pci_device_id cardbus_table [] = { {
+static struct pci_device_id cardbus_table [] __devinitdata = { {
 	class:		PCI_CLASS_BRIDGE_CARDBUS << 8,
 	class_mask:	~0,
 
@@ -232,6 +232,7 @@ static struct pci_device_id cardbus_table [] = { {
 	subdevice:	PCI_ANY_ID,
 }, { /* all zeroes */ }
 };
+MODULE_DEVICE_TABLE(pci, cardbus_table);
 
 static struct pci_driver pci_cardbus_driver = {
 	name:		"cardbus",
@@ -242,12 +243,12 @@ static struct pci_driver pci_cardbus_driver = {
 	resume:		cardbus_resume,
 };
 
-static int __devinit pci_socket_init(void)
+static int __init pci_socket_init(void)
 {
 	return pci_module_init (&pci_cardbus_driver);
 }
 
-static void __devexit pci_socket_exit (void)
+static void __exit pci_socket_exit (void)
 {
 	pci_unregister_driver (&pci_cardbus_driver);
 }

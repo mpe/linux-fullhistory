@@ -139,7 +139,7 @@ alive_msg:
 	;;
 #ifdef CONFIG_SMP
 (isAP)	br.call.sptk.few rp=smp_callin
-.ret1:
+.ret0:
 (isAP)	br.cond.sptk.few self
 #endif
 
@@ -150,11 +150,10 @@ alive_msg:
 #ifdef CONFIG_IA64_FW_EMU
 	// initialize PAL & SAL emulator:
 	br.call.sptk.few rp=sys_fw_init
-	;;
+.ret1:
 #endif
 	br.call.sptk.few rp=start_kernel
-.ret2:
-	addl r2=@ltoff(halt_msg),gp
+.ret2:	addl r2=@ltoff(halt_msg),gp
 	;;
 	ld8 out0=[r2]
 	br.call.sptk.few b0=console_print

@@ -66,9 +66,12 @@
 #define UNW_STATS	0	/* WARNING: this disabled interrupts for long time-spans!! */
 
 #if UNW_DEBUG
+  static long unw_debug_level = 1;
+# define debug(level,format...)	if (unw_debug_level > level) printk(format)
 # define dprintk(format...)	printk(format)
 # define inline
 #else
+# define debug(level,format...)
 # define dprintk(format...)
 #endif
 
@@ -1600,11 +1603,10 @@ find_save_locs (struct unw_frame_info *info)
 	int have_write_lock = 0;
 	struct unw_script *scr;
 
-	if ((info->ip & (my_cpu_data.unimpl_va_mask | 0xf))
-	    || REGION_NUMBER(info->ip) != REGION_KERNEL)
+	if ((info->ip & (my_cpu_data.unimpl_va_mask | 0xf)) || rgn_index(info->ip) != RGN_KERNEL)
 	{
 		/* don't let obviously bad addresses pollute the cache */
-		dprintk("unwind: rejecting bad ip=0x%lx\n", info->ip);
+		debug(1, "unwind: rejecting bad ip=0x%lx\n", info->ip);
 		info->rp = 0;
 		return -1;
 	}
@@ -1647,7 +1649,7 @@ unw_unwind (struct unw_frame_info *info)
 
 	/* restore the ip */
 	if (!info->rp) {
-		dprintk("unwind: failed to locate return link (ip=0x%lx)!\n", info->ip);
+		debug(1, "unwind: failed to locate return link (ip=0x%lx)!\n", info->ip);
 		STAT(unw.stat.api.unwind_time += ia64_get_itc() - start; local_irq_restore(flags));
 		return -1;
 	}
@@ -1657,7 +1659,7 @@ unw_unwind (struct unw_frame_info *info)
 		 * We don't have unwind info for the gate page, so we consider that part
 		 * of user-space for the purpose of unwinding.
 		 */
-		dprintk("unwind: reached user-space (ip=0x%lx)\n", ip);
+		debug(1, "unwind: reached user-space (ip=0x%lx)\n", ip);
 		STAT(unw.stat.api.unwind_time += ia64_get_itc() - start; local_irq_restore(flags));
 		return -1;
 	}

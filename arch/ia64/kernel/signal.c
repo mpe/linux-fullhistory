@@ -218,7 +218,7 @@ ia64_rt_sigreturn (struct sigscratch *scr)
 	 * be corrupted.
 	 */
 	retval = (long) &ia64_leave_kernel;
-	if (current->flags & PF_TRACESYS)
+	if (current->ptrace & PT_TRACESYS)
 		/*
 		 * strace expects to be notified after sigreturn
 		 * returns even though the context to which we return
@@ -492,7 +492,7 @@ ia64_do_signal (sigset_t *oldset, struct sigscratch *scr, long in_syscall)
 		if (!signr)
 			break;
 
-		if ((current->flags & PF_PTRACED) && signr != SIGKILL) {
+		if ((current->ptrace & PT_PTRACED) && signr != SIGKILL) {
 			/* Let the debugger run.  */
 			current->exit_code = signr;
 			current->thread.siginfo = &info;
@@ -570,7 +570,6 @@ ia64_do_signal (sigset_t *oldset, struct sigscratch *scr, long in_syscall)
 				/* FALLTHRU */
 
 			      default:
-				lock_kernel();
 				sigaddset(&current->signal, signr);
 				recalc_sigpending(current);
 				current->flags |= PF_SIGNALED;

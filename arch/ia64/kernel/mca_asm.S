@@ -136,8 +136,7 @@ ia64_os_mca_virtual_begin:
         movl		r2=ia64_mca_ucmc_handler;;
         mov		b6=r2;;
         br.call.sptk.few	b0=b6
-        ;;
-
+.ret0:
 	// Revert back to physical mode before going back to SAL
 	PHYSICAL_MODE_ENTER(r2, r3, ia64_os_mca_virtual_end, r4)
 ia64_os_mca_virtual_end:
@@ -766,7 +765,7 @@ IVirtual_Switch:
 	;;
 
 	br.call.sptk.few rp=ia64_init_handler
-	;;
+.ret1:
 
 return_from_init:
 	br.sptk return_from_init

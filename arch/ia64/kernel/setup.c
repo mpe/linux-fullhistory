@@ -241,18 +241,18 @@ get_cpuinfo (char *buffer)
 			sprintf(cp, " 0x%lx", mask);
 
 		p += sprintf(p,
-			     "CPU# %lu\n"
-			     "\tvendor     : %s\n"
-			     "\tfamily     : %s\n"
-			     "\tmodel      : %s\n"
-			     "\trevision   : %u\n"
-			     "\tarchrev    : %u\n"
-			     "\tfeatures   :%s\n"	/* don't change this---it _is_ right! */
-			     "\tcpu number : %lu\n"
-			     "\tcpu regs   : %u\n"
-			     "\tcpu MHz    : %lu.%06lu\n"
-			     "\titc MHz    : %lu.%06lu\n"
-			     "\tBogoMIPS   : %lu.%02lu\n\n",
+			     "processor  : %lu\n"
+			     "vendor     : %s\n"
+			     "family     : %s\n"
+			     "model      : %s\n"
+			     "revision   : %u\n"
+			     "archrev    : %u\n"
+			     "features   :%s\n"	/* don't change this---it _is_ right! */
+			     "cpu number : %lu\n"
+			     "cpu regs   : %u\n"
+			     "cpu MHz    : %lu.%06lu\n"
+			     "itc MHz    : %lu.%06lu\n"
+			     "BogoMIPS   : %lu.%02lu\n\n",
 			     c - cpu_data, c->vendor, family, model, c->revision, c->archrev,
 			     features,
 			     c->ppn, c->number, c->proc_freq / 1000000, c->proc_freq % 1000000,

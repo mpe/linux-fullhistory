@@ -1,162 +1,98 @@
 /*
  * Integer division routine.
  *
- * Copyright (C) 1999 Hewlett-Packard Co
- * Copyright (C) 1999 David Mosberger-Tang <davidm@hpl.hp.com>
+ * Copyright (C) 1999-2000 Hewlett-Packard Co
+ * Copyright (C) 1999-2000 David Mosberger-Tang <davidm@hpl.hp.com>
  */
-/* Simple integer division.  It uses the straight forward division
-   algorithm.  This may not be the absolutely fastest way to do it,
-   but it's not horrible either.  According to ski, the worst case
-   scenario of dividing 0xffffffffffffffff by 1 takes 133 cycles.
-
-   An alternative would be to use an algorithm similar to the
-   floating point division algorithm (Newton-Raphson iteration),
-   but that approach is rather tricky (one has to be very careful
-   to get the last bit right...).
-
-   While this algorithm is straight-forward, it does use a couple
-   of neat ia-64 specific tricks:
-
-	- it uses the floating point unit to determine the initial
-	  shift amount (shift = floor(ld(x)) - floor(ld(y)))
-
-	- it uses predication to avoid a branch in the case where
-	  x < y (this is what p8 is used for)
-
-	- it uses rotating registers and the br.ctop branch to
-	  implement a software-pipelined loop that's unrolled
-	  twice (without any code expansion!)
-
-	- the code is relatively well scheduled to avoid unnecessary
-	  nops while maximizing parallelism
-*/
 
 #include <asm/asmmacro.h>
-#include <asm/break.h>
 
-	.text
-	.psr abi64
-#ifdef __BIG_ENDIAN__
-	.psr msb
-	.msb
-#else
-	.psr lsb
-	.lsb
-#endif
+/*
+ * Compute a 64-bit unsigned integer quotient.
+ *
+ * Use reciprocal approximation and Newton-Raphson iteration to compute the
+ * quotient.  frcpa gives 8.6 significant bits, so we need 3 iterations
+ * to get more than the 64 bits of precision that we need for DImode.
+ *
+ * Must use max precision for the reciprocal computations to get 64 bits of
+ * precision.
+ *
+ * r32 holds the dividend.  r33 holds the divisor.
+ */
 
 #ifdef MODULO
 # define OP	mod
-# define Q	r9
-# define R	r8
 #else
-# define OP div
-# define Q	r8
-# define R	r9
-#endif
-
-#ifdef SINGLE
-# define PREC si
-#else
-# define PREC di
+# define OP	div
 #endif
 
 #ifdef UNSIGNED
-# define SGN		u
-# define INT_TO_FP(a,b)	fma.s0 a=b,f1,f0
-# define FP_TO_INT(a,b)	fcvt.fxu.trunc.s0 a=b
+# define SGN	u
+# define INT_TO_FP(a,b)	fcvt.xuf.s1 a=b
+# define FP_TO_INT(a,b)	fcvt.fxu.trunc.s1 a=b
 #else
 # define SGN
 # define INT_TO_FP(a,b)	fcvt.xf a=b
-# define FP_TO_INT(a,b)	fcvt.fx.trunc.s0 a=b
+# define FP_TO_INT(a,b)	fcvt.fx.trunc.s1 a=b
 #endif
 
 #define PASTE1(a,b)	a##b
 #define PASTE(a,b)	PASTE1(a,b)
-#define NAME		PASTE(PASTE(__,SGN),PASTE(OP,PASTE(PREC,3)))
+#define NAME		PASTE(PASTE(__,SGN),PASTE(OP,di3))
 
 GLOBAL_ENTRY(NAME)
 	UNW(.prologue)
-	alloc r2=ar.pfs,2,6,0,8
-	UNW(.save pr, r18)
-	mov r18=pr
-#ifdef SINGLE
-# ifdef UNSIGNED
-	zxt4 in0=in0
-	zxt4 in1=in1
-# else
-	sxt4 in0=in0
-	sxt4 in1=in1
-# endif
-	;;
-#endif
+	.regstk 2,0,0,0
+	// Transfer inputs to FP registers.
+	setf.sig f8 = in0
+	setf.sig f9 = in1
+	UNW(.fframe 16)
+	UNW(.save.f 0x20)
+	stf.spill [sp] = f17,-16
 
-#ifndef UNSIGNED
-	cmp.lt p6,p0=in0,r0	// x negative?
-	cmp.lt p7,p0=in1,r0	// y negative?
+	// Convert the inputs to FP, to avoid FP software-assist faults.
+	INT_TO_FP(f8, f8)
 	;;
-(p6)	sub in0=r0,in0		// make x positive
-(p7)	sub in1=r0,in1		// ditto for y
-	;;
-#endif
 
-	setf.sig f8=in0
-	UNW(.save ar.lc, r3)
-
+	UNW(.save.f 0x10)
+	stf.spill [sp] = f16
 	UNW(.body)
-
-	mov r3=ar.lc		// save ar.lc
-	setf.sig f9=in1
+	INT_TO_FP(f9, f9)
 	;;
-	mov Q=0			// initialize q
-	mov R=in0		// stash away x in a static register
-	mov r16=1		// r16 = 1
-	INT_TO_FP(f8,f8)
-	cmp.eq p8,p0=0,in0	// x==0?
-	cmp.eq p9,p0=0,in1	// y==0?
+	frcpa.s1 f17, p6 = f8, f9	// y = frcpa(b)
 	;;
-	INT_TO_FP(f9,f9)
-(p8)	br.dpnt.few .L3
-(p9)	break __IA64_BREAK_KDB	// attempted division by zero (should never happen)
-	mov ar.ec=r0		// epilogue count = 0
+	/*
+	 * This is the magic algorithm described in Section 8.6.2 of "IA-64
+	 * and Elementary Functions" by Peter Markstein; HP Professional Books
+	 * (http://www.hp.com/go/retailbooks/)
+	 */
+(p6)	fmpy.s1 f7 = f8, f17		// q = a*y
+(p6)	fnma.s1 f6 = f9, f17, f1	// e = -b*y + 1 
 	;;
-	getf.exp r14=f8		// r14 = exponent of x
-	getf.exp r15=f9		// r15 = exponent of y
-	mov ar.lc=r0		// loop count = 0
+(p6)	fma.s1 f16 = f7, f6, f7		// q1 = q*e + q
+(p6)	fmpy.s1 f7 = f6, f6		// e1 = e*e
 	;;
-	sub r17=r14,r15		// r17 = (exp of x - exp y) = shift amount
-	cmp.ge p8,p0=r14,r15
+(p6)	fma.s1 f16 = f16, f7, f16	// q2 = q1*e1 + q1
+(p6)	fma.s1 f6 = f17, f6, f17	// y1 = y*e + y 
 	;;
-
-	.rotr y[2], mask[2]	// in0 and in1 may no longer be valid after
-				// the first write to a rotating register!
-
-(p8)	shl y[1]=in1,r17	// y[1]    = y<<shift
-(p8)	shl mask[1]=r16,r17	// mask[1] = 1<<shift
-
-(p8)	mov ar.lc=r17		// loop count = r17
+(p6)	fma.s1 f6 = f6, f7, f6		// y2 = y1*e1 + y1
+(p6)	fnma.s1 f7 = f9, f16, f8	// r = -b*q2 + a 
 	;;
-.L1:
-(p8)	cmp.geu.unc p9,p0=R,y[1]// p9 = (x >= y[1])
-(p8)	shr.u mask[0]=mask[1],1	// prepare mask[0] and y[0] for next
-(p8)	shr.u y[0]=y[1],1	// iteration
+(p6)	fma.s1 f17 = f7, f6, f16	// q3 = r*y2 + q2
 	;;
-(p9)	sub R=R,y[1]		// if (x >= y[1]), subtract y[1] from x
-(p9)	add Q=Q,mask[1]		// and set corresponding bit in q (Q)
-	br.ctop.dptk.few .L1	// repeated unless ar.lc-- == 0
+#ifdef MODULO
+	FP_TO_INT(f17, f17)		// round quotient to an unsigned integer
 	;;
-.L2:
-#ifndef UNSIGNED
-# ifdef MODULO
-(p6)	sub R=r0,R		// set sign of remainder according to x
-# else
-(p6)	sub Q=r0,Q		// set sign of quotient
+	INT_TO_FP(f17, f17)		// renormalize
 	;;
-(p7)	sub Q=r0,Q
-# endif
+	fnma.s1 f17 = f17, f9, f8	// compute remainder
+	;;
 #endif
-.L3:
-	mov ar.pfs=r2		// restore ar.pfs
-	mov ar.lc=r3		// restore ar.lc
-	mov pr=r18,0xffffffffffff0000	// restore p16-p63
-	br.ret.sptk.few rp
+	UNW(.restore sp)
+	ldf.fill f16 = [sp], 16
+	FP_TO_INT(f8, f17)		// round result to an (unsigned) integer
+	;;
+	ldf.fill f17 = [sp]
+	getf.sig r8 = f8		// transfer result to result register
+	br.ret.sptk rp
 END(NAME)

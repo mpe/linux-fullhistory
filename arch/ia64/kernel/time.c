@@ -24,7 +24,7 @@
 #include <asm/system.h>
 
 extern rwlock_t xtime_lock;
-extern volatile unsigned long lost_ticks;
+extern unsigned long wall_jiffies;
 
 #ifdef CONFIG_IA64_DEBUG_IRQ
 
@@ -80,7 +80,7 @@ gettimeoffset (void)
 	return 0;
 #else
 	unsigned long now = ia64_get_itc(), last_tick;
-	unsigned long elapsed_cycles, lost = lost_ticks;
+	unsigned long elapsed_cycles, lost = jiffies - wall_jiffies;
 
 	last_tick = (itm.next[smp_processor_id()].count - (lost+1)*itm.delta);
 # if 1
@@ -101,13 +101,15 @@ do_settimeofday (struct timeval *tv)
 	write_lock_irq(&xtime_lock);
 	{
 		/*
-		 * This is revolting. We need to set the xtime.tv_usec
+		 * This is revolting. We need to set "xtime"
 		 * correctly. However, the value in this location is
-		 * is value at the last tick.  Discover what
-		 * correction gettimeofday would have done, and then
-		 * undo it!
+		 * the value at the most recent update of wall time.
+		 * Discover what correction gettimeofday would have
+		 * done, and then undo it!
 		 */
 		tv->tv_usec -= gettimeoffset();
+		tv->tv_usec -= (jiffies - wall_jiffies) * (1000000 / HZ);
+
 		while (tv->tv_usec < 0) {
 			tv->tv_usec += 1000000;
 			tv->tv_sec--;

@@ -240,7 +240,7 @@ sal_emulator (long index, unsigned long in1, unsigned long in2,
 	if (index == SAL_FREQ_BASE) {
 		switch (in1) {
 		      case SAL_FREQ_BASE_PLATFORM:
-			r9 = 100000000;
+			r9 = 200000000;
 			break;
 
 		      case SAL_FREQ_BASE_INTERVAL_TIMER:

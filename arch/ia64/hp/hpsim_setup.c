@@ -63,6 +63,12 @@ ia64_ctl_trace (long on)
 }
 
 void __init
+hpsim_pci_fixup (void)
+{
+}
+
+
+void __init
 hpsim_setup (char **cmdline_p)
 {
 	ROOT_DEV = to_kdev_t(0x0801);		/* default to first SCSI drive */

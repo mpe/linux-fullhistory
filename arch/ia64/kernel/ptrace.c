@@ -942,9 +942,9 @@ sys_ptrace (long request, pid_t pid, unsigned long addr, unsigned long data,
 	ret = -EPERM;
 	if (request == PTRACE_TRACEME) {
 		/* are we already being traced? */
-		if (current->flags & PF_PTRACED)
+		if (current->ptrace & PT_PTRACED)
 			goto out;
-		current->flags |= PF_PTRACED;
+		current->ptrace |= PT_PTRACED;
 		ret = 0;
 		goto out;
 	}
@@ -976,9 +976,9 @@ sys_ptrace (long request, pid_t pid, unsigned long addr, unsigned long data,
 	 	    (current->gid != child->gid)) && !capable(CAP_SYS_PTRACE))
 			goto out_tsk;
 		/* the same process cannot be attached many times */
-		if (child->flags & PF_PTRACED)
+		if (child->ptrace & PT_PTRACED)
 			goto out_tsk;
-		child->flags |= PF_PTRACED;
+		child->ptrace |= PT_PTRACED;
 		if (child->p_pptr != current) {
 			unsigned long flags;
 
@@ -993,7 +993,7 @@ sys_ptrace (long request, pid_t pid, unsigned long addr, unsigned long data,
 		goto out_tsk;
 	}
 	ret = -ESRCH;
-	if (!(child->flags & PF_PTRACED))
+	if (!(child->ptrace & PT_PTRACED))
 		goto out_tsk;
 	if (child->state != TASK_STOPPED) {
 		if (request != PTRACE_KILL)
@@ -1083,9 +1083,9 @@ sys_ptrace (long request, pid_t pid, unsigned long addr, unsigned long data,
 		if (data > _NSIG)
 			goto out_tsk;
 		if (request == PTRACE_SYSCALL)
-			child->flags |= PF_TRACESYS;
+			child->ptrace |= PT_TRACESYS;
 		else
-			child->flags &= ~PF_TRACESYS;
+			child->ptrace &= ~PT_TRACESYS;
 		child->exit_code = data;
 
 		/* make sure the single step/take-branch tra bits are not set: */
@@ -1126,7 +1126,7 @@ sys_ptrace (long request, pid_t pid, unsigned long addr, unsigned long data,
 		if (data > _NSIG)
 			goto out_tsk;
 
-		child->flags &= ~PF_TRACESYS;
+		child->ptrace &= ~PT_TRACESYS;
 		if (request == PTRACE_SINGLESTEP) {
 			ia64_psr(ia64_task_regs(child))->ss = 1;
 		} else {
@@ -1147,7 +1147,7 @@ sys_ptrace (long request, pid_t pid, unsigned long addr, unsigned long data,
 		if (data > _NSIG)
 			goto out_tsk;
 
-		child->flags &= ~(PF_PTRACED|PF_TRACESYS);
+		child->ptrace &= ~(PT_PTRACED|PT_TRACESYS);
 		child->exit_code = data;
 		write_lock_irqsave(&tasklist_lock, flags);
 		REMOVE_LINKS(child);
@@ -1180,7 +1180,7 @@ sys_ptrace (long request, pid_t pid, unsigned long addr, unsigned long data,
 void
 syscall_trace (void)
 {
-	if ((current->flags & (PF_PTRACED|PF_TRACESYS)) != (PF_PTRACED|PF_TRACESYS))
+	if ((current->ptrace & (PT_PTRACED|PT_TRACESYS)) != (PT_PTRACED|PT_TRACESYS))
 		return;
 	current->exit_code = SIGTRAP;
 	set_current_state(TASK_STOPPED);

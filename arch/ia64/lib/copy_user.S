@@ -116,7 +116,7 @@ GLOBAL_ENTRY(__copy_user)
 	cmp.lt p10,p7=COPY_BREAK,len	// if len > COPY_BREAK then long copy 
 
 	xor tmp=src,dst		// same alignment test prepare
-(p10)	br.cond.dptk.few long_memcpy
+(p10)	br.cond.dptk.few long_copy_user
 	;;			// RAW pr.rot/p16 ?
 	//
 	// Now we do the byte by byte loop with software pipeline
@@ -136,7 +136,7 @@ GLOBAL_ENTRY(__copy_user)
 	//
 	// Beginning of long mempcy (i.e. > 16 bytes)
 	//
-long_memcpy:
+long_copy_user:
 	tbit.nz p6,p7=src1,0	// odd alignement
 	and tmp=7,tmp
 	;;

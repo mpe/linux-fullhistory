@@ -130,8 +130,6 @@ typedef struct socket_info_t {
     client_handle_t		clients;
     u_int			real_clients;
     client_handle_t		reset_handle;
-    struct timer_list		setup, shutdown;
-    u_long			setup_timeout;
     pccard_mem_map		cis_mem;
     u_char			*cis_virt;
     config_t			*config;

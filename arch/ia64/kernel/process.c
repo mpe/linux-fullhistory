@@ -1,8 +1,8 @@
 /*
  * Architecture-specific setup.
  *
- * Copyright (C) 1998, 1999 Hewlett-Packard Co
- * Copyright (C) 1998, 1999 David Mosberger-Tang <davidm@hpl.hp.com>
+ * Copyright (C) 1998-2000 Hewlett-Packard Co
+ * Copyright (C) 1998-2000 David Mosberger-Tang <davidm@hpl.hp.com>
  */
 #define __KERNEL_SYSCALLS__	/* see <asm/unistd.h> */
 #include <linux/config.h>
@@ -13,6 +13,7 @@
 #include <linux/kernel.h>
 #include <linux/mm.h>
 #include <linux/sched.h>
+#include <linux/slab.h>
 #include <linux/smp_lock.h>
 #include <linux/stddef.h>
 #include <linux/unistd.h>
@@ -204,24 +205,22 @@ ia64_load_extra (struct task_struct *task)
  * be copied as well.
  *
  * Observe that we copy the unat values that are in pt_regs and
- * switch_stack.  Since the interpretation of unat is dependent upon
- * the address to which the registers got spilled, doing this is valid
- * only as long as we preserve the alignment of the stack.  Since the
- * stack is always page aligned, we know this is the case.
- *
- * XXX Actually, the above isn't true when we create kernel_threads().
- * If we ever needs to create kernel_threads() that preserve the unat
- * values we'll need to fix this.  Perhaps an easy workaround would be
- * to always clear the unat bits in the child thread.
+ * switch_stack.  Spilling an integer to address X causes bit N in
+ * ar.unat to be set to the NaT bit of the register, with N=(X &
+ * 0x1ff)/8.  Thus, copying the unat value preserves the NaT bits ONLY
+ * if the pt_regs structure in the parent is congruent to that of the
+ * child, modulo 512.  Since the stack is page aligned and the page
+ * size is at least 4KB, this is always the case, so there is nothing
+ * to worry about.
  */
 int
-copy_thread (int nr, unsigned long clone_flags, unsigned long usp,
+copy_thread (int nr, unsigned long clone_flags,
+	     unsigned long user_stack_base, unsigned long user_stack_size,
 	     struct task_struct *p, struct pt_regs *regs)
 {
 	unsigned long rbs, child_rbs, rbs_size, stack_offset, stack_top, stack_used;
 	struct switch_stack *child_stack, *stack;
-	extern char ia64_ret_from_syscall_clear_r8;
-	extern char ia64_strace_clear_r8;
+	extern char ia64_ret_from_clone;
 	struct pt_regs *child_ptregs;
 
 #ifdef CONFIG_SMP
@@ -251,10 +250,14 @@ copy_thread (int nr, unsigned long clone_flags, unsigned long usp,
 	/* copy the parent's register backing store to the child: */
 	memcpy((void *) child_rbs, (void *) rbs, rbs_size);
 
-	child_ptregs->r8 = 0;			/* child gets a zero return value */
-	if (user_mode(child_ptregs))
-		child_ptregs->r12 = usp;			/* user stack pointer */
-	else {
+	if (user_mode(child_ptregs)) {
+		if (user_stack_base) {
+			child_ptregs->r12 = user_stack_base + user_stack_size;
+			child_ptregs->ar_bspstore = user_stack_base;
+			child_ptregs->ar_rnat = 0;
+			child_ptregs->loadrs = 0;
+		}
+	} else {
 		/*
 		 * Note: we simply preserve the relative position of
 		 * the stack pointer here.  There is no need to
@@ -265,13 +268,10 @@ copy_thread (int nr, unsigned long clone_flags, unsigned long usp,
 		child_ptregs->r12 = (unsigned long) (child_ptregs + 1); /* kernel sp */
 		child_ptregs->r13 = (unsigned long) p;		/* set `current' pointer */
 	}
-	if (p->flags & PF_TRACESYS)
-		child_stack->b0 = (unsigned long) &ia64_strace_clear_r8;
-	else
-		child_stack->b0 = (unsigned long) &ia64_ret_from_syscall_clear_r8;
+	child_stack->b0 = (unsigned long) &ia64_ret_from_clone;
 	child_stack->ar_bspstore = child_rbs + rbs_size;
 
-	/* copy the thread_struct: */
+	/* copy parts of thread_struct: */
 	p->thread.ksp = (unsigned long) child_stack - 16;
 	/*
 	 * NOTE: The calling convention considers all floating point
@@ -288,18 +288,11 @@ copy_thread (int nr, unsigned long clone_flags, unsigned long usp,
 	 * would be a slight deviation from the normal Linux system
 	 * call behavior where scratch registers are preserved across
 	 * system calls (unless used by the system call itself).
-	 *
-	 * If we wanted to inherit the fph state from the parent to the
-	 * child, we would have to do something along the lines of:
-	 *
-	 *	if (ia64_get_fpu_owner() == current && ia64_psr(regs)->mfh) {
-	 *		p->thread.flags |= IA64_THREAD_FPH_VALID;
-	 *		ia64_save_fpu(&p->thread.fph);
-	 *	} else if (current->thread.flags & IA64_THREAD_FPH_VALID) {
-	 *		memcpy(p->thread.fph, current->thread.fph, sizeof(p->thread.fph));
-	 *	}
 	 */
-	p->thread.flags = (current->thread.flags & ~IA64_THREAD_FPH_VALID);
+#	define THREAD_FLAGS_TO_CLEAR	(IA64_THREAD_FPH_VALID | IA64_THREAD_DBG_VALID)
+#	define THREAD_FLAGS_TO_SET	0
+	p->thread.flags = ((current->thread.flags & ~THREAD_FLAGS_TO_CLEAR)
+			   | THREAD_FLAGS_TO_SET);
 	return 0;
 }
 

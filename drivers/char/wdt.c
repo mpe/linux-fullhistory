@@ -91,6 +91,11 @@ static int __init wdt_setup(char *str)
 __setup("wdt=", wdt_setup);
 
 #endif /* !MODULE */
+
+MODULE_PARM(io, "i");
+MODULE_PARM_DESC(io, "WDT io port (default=0x240)");
+MODULE_PARM(irq, "i");
+MODULE_PARM_DESC(irq, "WDT irq (default=11)");
  
 /*
  *	Programming support

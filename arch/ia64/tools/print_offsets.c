@@ -49,7 +49,7 @@ tab[] =
     { "UNW_FRAME_INFO_SIZE",		sizeof (struct unw_frame_info) },
 #endif
     { "", 0 },			/* spacer */
-    { "IA64_TASK_FLAGS_OFFSET",		offsetof (struct task_struct, flags) },
+    { "IA64_TASK_PTRACE_OFFSET",	offsetof (struct task_struct, ptrace) },
     { "IA64_TASK_SIGPENDING_OFFSET",	offsetof (struct task_struct, sigpending) },
     { "IA64_TASK_NEED_RESCHED_OFFSET",	offsetof (struct task_struct, need_resched) },
     { "IA64_TASK_PROCESSOR_OFFSET",	offsetof (struct task_struct, processor) },
@@ -175,10 +175,12 @@ main (int argc, char **argv)
 	  "arch/ia64/tools/print_offsets.\n *\n */\n\n");
 
   /* This is stretching things a bit, but entry.S needs the bit number
-     for PF_PTRACED and it can't include <linux/sched.h> so this seems
-     like a reasonably solution.  At least the code won't break shoudl
-     PF_PTRACED ever change.  */
-  printf ("#define PF_PTRACED_BIT\t\t\t%u\n\n", ffs (PF_PTRACED) - 1);
+     for PT_PTRACED and it can't include <linux/sched.h> so this seems
+     like a reasonably solution.  At least the code won't break in
+     subtle ways should PT_PTRACED ever change.  Ditto for
+     PT_TRACESYS_BIT. */
+  printf ("#define PT_PTRACED_BIT\t\t\t%u\n", ffs (PT_PTRACED) - 1);
+  printf ("#define PT_TRACESYS_BIT\t\t\t%u\n\n", ffs (PT_TRACESYS) - 1);
 
   for (i = 0; i < sizeof (tab) / sizeof (tab[0]); ++i)
     {

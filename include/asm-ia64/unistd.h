@@ -4,8 +4,8 @@
 /*
  * IA-64 Linux syscall numbers and inline-functions.
  *
- * Copyright (C) 1998, 1999 Hewlett-Packard Co
- * Copyright (C) 1998, 1999 David Mosberger-Tang <davidm@hpl.hp.com>
+ * Copyright (C) 1998-2000 Hewlett-Packard Co
+ * Copyright (C) 1998-2000 David Mosberger-Tang <davidm@hpl.hp.com>
  */
 
 #include <asm/break.h>
@@ -202,6 +202,7 @@
 #define __NR_stat			1210
 #define __NR_lstat			1211
 #define __NR_fstat			1212
+#define __NR_clone2			1213
 
 #if !defined(__ASSEMBLY__) && !defined(ASSEMBLER)
 

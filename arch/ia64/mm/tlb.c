@@ -182,7 +182,7 @@ flush_tlb_range (struct mm_struct *mm, unsigned long start, unsigned long end)
 	unsigned long nbits;
 
 	if (mm != current->active_mm) {
-		/* this doesn't happen often, if at all, so it's not worth optimizing for... */
+		/* this does happen, but perhaps it's not worth optimizing for? */
 		mm->context = 0;
 		return;
 	}

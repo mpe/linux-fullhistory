@@ -185,6 +185,11 @@ static int eth_change_mtu(struct net_device *dev, int new_mtu)
 
 #ifdef CONFIG_FDDI
 
+struct net_device *init_fddidev(struct net_device *dev, int sizeof_priv)
+{
+	return init_netdev(dev, sizeof_priv, "fddi%d", fddi_setup);
+}
+
 static int fddi_change_mtu(struct net_device *dev, int new_mtu)
 {
 	if ((new_mtu < FDDI_K_SNAP_HLEN) || (new_mtu > FDDI_K_SNAP_DLEN))

@@ -10,7 +10,7 @@
 all: ia32.o
 
 O_TARGET := ia32.o
-O_OBJS	 := ia32_entry.o sys_ia32.o ia32_signal.o ia32_support.o ia32_traps.o binfmt_elf32.o
+O_OBJS	 := ia32_entry.o sys_ia32.o ia32_ioctl.o ia32_signal.o ia32_support.o ia32_traps.o binfmt_elf32.o
 
 clean::
 

@@ -197,7 +197,7 @@ final kernel executable:
  > c017e7a7 <do_con_write+e3> movzbl %dl,%esi
 
 The whole user memory access is reduced to 10 x86 machine instructions.
-The instructions bracketed in the .section directives are not longer
+The instructions bracketed in the .section directives are no longer
 in the normal execution path. They are located in a different section 
 of the executable file:
 

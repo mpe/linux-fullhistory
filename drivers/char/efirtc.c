@@ -31,6 +31,7 @@
 #include <linux/types.h>
 #include <linux/errno.h>
 #include <linux/miscdevice.h>
+#include <linux/module.h>
 #include <linux/init.h>
 #include <linux/rtc.h>
 #include <linux/proc_fs.h>

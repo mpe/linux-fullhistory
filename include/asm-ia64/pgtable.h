@@ -111,6 +111,7 @@
 
 #include <asm/bitops.h>
 #include <asm/mmu_context.h>
+#include <asm/processor.h>
 #include <asm/system.h>
 
 /*
@@ -304,6 +305,21 @@ rgn_index (unsigned long address)
 	a.l = address;
 	return a.f.reg;
 }
+
+/*
+ * Return the region offset for virtual address ADDRESS.
+ */
+extern __inline__ unsigned long
+rgn_offset (unsigned long address)
+{
+	ia64_va a;
+
+	a.l = address;
+	return a.f.off;
+}
+
+#define RGN_SIZE	(1UL << 61)
+#define RGN_KERNEL	7
 
 extern __inline__ unsigned long
 pgd_index (unsigned long address)

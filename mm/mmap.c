@@ -69,7 +69,7 @@ int vm_enough_memory(long pages)
 	return free > pages;
 }
 
-/* Remove one vm structure from the inode's i_mmap ring. */
+/* Remove one vm structure from the inode's i_mapping address space. */
 static inline void remove_shared_vm_struct(struct vm_area_struct *vma)
 {
 	struct file * file = vma->vm_file;

@@ -3422,6 +3422,9 @@ static int get_floppy_geometry(int drive, int type, struct floppy_struct **g)
 static int fd_ioctl(struct inode *inode, struct file *filp, unsigned int cmd,
 		    unsigned long param)
 {
+#define IOCTL_MODE_BIT 8
+#define OPEN_WRITE_BIT 16
+#define IOCTL_ALLOWED (filp && (filp->f_mode & IOCTL_MODE_BIT))
 #define OUT(c,x) case c: outparam = (const char *) (x); break
 #define IN(c,x,tag) case c: *(x) = inparam. tag ; return 0
 
@@ -3489,7 +3492,8 @@ static int fd_ioctl(struct inode *inode, struct file *filp, unsigned int cmd,
 		return -EINVAL;
 
 	/* permission checks */
-	if ((cmd & 0x80) && !suser())
+	if (((cmd & 0x40) && !IOCTL_ALLOWED) ||
+	    ((cmd & 0x80) && !suser()))
 		return -EPERM;
 
 	/* copyin */
@@ -3609,6 +3613,7 @@ static int fd_ioctl(struct inode *inode, struct file *filp, unsigned int cmd,
 		return fd_copyout((void *)param, outparam, size);
 	else
 		return 0;
+#undef IOCTL_ALLOWED
 #undef OUT
 #undef IN
 }
@@ -3760,6 +3765,12 @@ static int floppy_open(struct inode * inode, struct file * filp)
 			buffer_track = -1;
 		invalidate_buffers(MKDEV(FLOPPY_MAJOR,old_dev));
 	}
+
+	/* Allow ioctls if we have write-permissions even if read-only open */
+	if ((filp->f_mode & 2) || (permission(inode,2) == 0))
+		filp->f_mode |= IOCTL_MODE_BIT;
+	if (filp->f_mode & 2)
+		filp->f_mode |= OPEN_WRITE_BIT;
 
 	if (UFDCS->rawcmd == 1)
 		UFDCS->rawcmd = 2;

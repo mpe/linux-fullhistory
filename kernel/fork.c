@@ -666,13 +666,6 @@ int do_fork(unsigned long clone_flags, unsigned long usp, struct pt_regs *regs)
 	copy_flags(clone_flags, p);
 	p->pid = get_pid(clone_flags);
 
-	/*
-	 * This is a "shadow run" state. The process
-	 * is marked runnable, but isn't actually on
-	 * any run queue yet.. (that happens at the
-	 * very end).
-	 */
-	p->state = TASK_RUNNING;
 	p->run_list.next = NULL;
 	p->run_list.prev = NULL;
 

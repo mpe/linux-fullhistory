@@ -95,7 +95,6 @@ sys_pipe (long arg0, long arg1, long arg2, long arg3,
 static inline unsigned long
 do_mmap2 (unsigned long addr, unsigned long len, int prot, int flags, int fd, unsigned long pgoff)
 {
-	long start_low, end_low, starting_region, ending_region;
 	unsigned long loff, hoff;
 	struct file *file = 0;
 	/* the virtual address space that is mappable in each region: */
@@ -109,17 +108,15 @@ do_mmap2 (unsigned long addr, unsigned long len, int prot, int flags, int fd, un
 		return addr;
 
 	/* Don't permit mappings into or across the address hole in a region: */
-	loff = REGION_OFFSET(addr);
-	hoff = loff - (REGION_SIZE - OCTANT_SIZE/2);
+	loff = rgn_offset(addr);
+	hoff = loff - (RGN_SIZE - OCTANT_SIZE/2);
 	if ((len | loff | (loff + len)) >= OCTANT_SIZE/2
 	    && (len | hoff | (hoff + len)) >= OCTANT_SIZE/2)
 		return -EINVAL;
 
 	/* Don't permit mappings that would cross a region boundary: */
 
-	starting_region = REGION_NUMBER(addr);
-	ending_region   = REGION_NUMBER(addr + len);
-	if (starting_region != ending_region)
+	if (rgn_index(addr) != rgn_index(addr + len))
 		return -EINVAL;
 
 	flags &= ~(MAP_EXECUTABLE | MAP_DENYWRITE);

@@ -125,6 +125,7 @@ SECTIONS
   /DISCARD/ : {
 	*(.text.exit)
 	*(.data.exit)
+	*(.exitcall.exit)
 	}
 
   /* Stabs debugging sections.  */

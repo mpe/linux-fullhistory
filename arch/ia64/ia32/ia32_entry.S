@@ -63,13 +63,13 @@ END(ia32_ret_from_syscall)
 GLOBAL_ENTRY(ia32_trace_syscall)
 	PT_REGS_UNWIND_INFO(0)
 	br.call.sptk.few rp=invoke_syscall_trace // give parent a chance to catch syscall args
-.Lret4:	br.call.sptk.few rp=b6			// do the syscall
-.Lret5:	cmp.lt p6,p0=r8,r0			// syscall failed?
+.ret0:	br.call.sptk.few rp=b6			// do the syscall
+.ret1:	cmp.lt p6,p0=r8,r0			// syscall failed?
 	adds r2=IA64_PT_REGS_R8_OFFSET+16,sp	// r2 = &pt_regs.r8
 	;;
 	st8.spill [r2]=r8			// store return value in slot for r8
 	br.call.sptk.few rp=invoke_syscall_trace // give parent a chance to catch return value
-.Lret6:	br.cond.sptk.many ia64_leave_kernel	// rp MUST be != ia64_leave_kernel!
+.ret2:	br.cond.sptk.many ia64_leave_kernel	// rp MUST be != ia64_leave_kernel!
 END(ia32_trace_syscall)
 
 GLOBAL_ENTRY(sys32_vfork)
@@ -80,7 +80,7 @@ END(sys32_vfork)
 
 GLOBAL_ENTRY(sys32_fork)
 	UNW(.prologue ASM_UNW_PRLG_RP|ASM_UNW_PRLG_PFS, ASM_UNW_PRLG_GRSAVE(2))
-	alloc r16=ar.pfs,2,2,3,0
+	alloc r16=ar.pfs,2,2,4,0
 	mov out0=SIGCHLD			// out0 = clone_flags
 	;;
 .fork1:
@@ -90,13 +90,11 @@ GLOBAL_ENTRY(sys32_fork)
 
 	UNW(.body)
 
-	adds out2=IA64_SWITCH_STACK_SIZE+16,sp
-	adds r2=IA64_SWITCH_STACK_SIZE+IA64_PT_REGS_R12_OFFSET+16,sp
-	;;
-	ld8 out1=[r2]				// fetch usp from pt_regs.r12
+	mov out1=0
+	mov out2=0
+	adds out3=IA64_SWITCH_STACK_SIZE+16,sp
 	br.call.sptk.few rp=do_fork
-.ret1:
-	mov ar.pfs=loc1
+.ret3:	mov ar.pfs=loc1
 	UNW(.restore sp)
 	adds sp=IA64_SWITCH_STACK_SIZE,sp	// pop the switch stack
 	mov rp=loc0
@@ -137,7 +135,7 @@ ia32_syscall_table:
 	data8 sys32_alarm
 	data8 sys_ni_syscall
 	data8 sys_ni_syscall
-	data8 sys_ni_syscall	  /* 30 */
+	data8 ia32_utime	  /* 30 */
 	data8 sys_ni_syscall	  /* old stty syscall holder */
 	data8 sys_ni_syscall	  /* old gtty syscall holder */
 	data8 sys_access
@@ -161,7 +159,7 @@ ia32_syscall_table:
 	data8 sys_acct
 	data8 sys_umount	  /* recycled never used phys( */
 	data8 sys_ni_syscall	  /* old lock syscall holder */
-	data8 sys_ioctl
+	data8 ia32_ioctl
 	data8 sys_fcntl		  /* 55 */
 	data8 sys_ni_syscall	  /* old mpx syscall holder */
 	data8 sys_setpgid

@@ -1428,9 +1428,15 @@ ia64_handle_unaligned(unsigned long ifa, struct pt_regs *regs)
 		if (unalign_count > 5 && jiffies - last_time > 5*HZ)
 			unalign_count = 0;
 		if (++unalign_count < 5) {
+			char buf[200];	/* comm[] is at most 16 bytes... */
+			size_t len;
+
 			last_time = jiffies;
-			printk("%s(%d): unaligned trap accessing %016lx (ip=%016lx)\n",
-			       current->comm, current->pid, ifa, regs->cr_iip + ipsr->ri);
+			len = sprintf(buf, "%s(%d): unaligned access to 0x%016lx, ip=0x%016lx\n\r",
+				      current->comm, current->pid, ifa, regs->cr_iip + ipsr->ri);
+			tty_write_message(current->tty, buf);
+			buf[len-1] = '\0';	/* drop '\r' */
+			printk("%s", buf);	/* guard against command names containing %s!! */
 		}
 	}
 

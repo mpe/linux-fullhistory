@@ -183,7 +183,7 @@ handle_IPI(int irq, void *dev_id, struct pt_regs *regs)
 				int wait;
 
 				/* release the 'pointer lock' */
-				data = smp_call_function_data;
+				data = (struct smp_call_struct *) smp_call_function_data;
 				func = data->func;
 				info = data->info;
 				wait = data->wait;
@@ -536,7 +536,7 @@ fork_by_hand(void)
 	 * Don't care about the usp and regs settings since we'll never
 	 * reschedule the forked task.
 	 */
-	return do_fork(CLONE_VM|CLONE_PID, 0, 0);
+	return do_fork(CLONE_VM|CLONE_PID, 0, 0, 0);
 }
 
 /*

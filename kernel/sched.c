@@ -209,8 +209,11 @@ static inline int preemption_goodness(struct task_struct * prev, struct task_str
  * We enter with the runqueue spinlock held, but we might end
  * up unlocking it early, so the caller must not unlock the
  * runqueue, it's always done by reschedule_idle().
+ *
+ * This function must be inline as anything that saves and restores
+ * flags has to do so within the same register window on sparc (Anton)
  */
-static void reschedule_idle(struct task_struct * p, unsigned long flags)
+static inline void reschedule_idle(struct task_struct * p, unsigned long flags)
 {
 #ifdef CONFIG_SMP
 	int this_cpu = smp_processor_id();

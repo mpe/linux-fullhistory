@@ -120,8 +120,7 @@ back_from_setup_rbs:
 	stf.spill [base0]=f14,32
 	stf.spill [base1]=f15,32
 	br.call.sptk.few rp=b6			// call the signal handler
-.ret2:
-	adds base0=(BSP_OFF+SIGCONTEXT_OFF),sp
+.ret0:	adds base0=(BSP_OFF+SIGCONTEXT_OFF),sp
 	;;
 	ld8 r15=[base0],(CFM_OFF-BSP_OFF)	// fetch sc_ar_bsp and advance to CFM_OFF
 	mov r14=ar.bsp

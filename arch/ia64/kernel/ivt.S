@@ -170,10 +170,11 @@ ia64_ivt:
 	 * The ITLB basically does the same as the VHPT handler except
 	 * that we always insert exactly one instruction TLB entry.
 	 */
-#if 0
+#if 1
 	/*
-	 * This code works, but I don't want to enable it until I have numbers
-	 * that prove this to be a win.
+	 * Attempt to lookup PTE through virtual linear page table.
+	 * The speculative access will fail if there is no TLB entry
+	 * for the L3 page table page we're trying to access.
 	 */
 	mov r31=pr				// save predicates
 	;;
@@ -244,10 +245,11 @@ ia64_ivt:
 	 * that we always insert exactly one data TLB entry.
 	 */
 	mov r16=cr.ifa				// get address that caused the TLB miss
-#if 0
+#if 1
 	/*
-	 * This code works, but I don't want to enable it until I have numbers
-	 * that prove this to be a win.
+	 * Attempt to lookup PTE through virtual linear page table.
+	 * The speculative access will fail if there is no TLB entry
+	 * for the L3 page table page we're trying to access.
 	 */
 	mov r31=pr				// save predicates
 	;;
@@ -568,7 +570,7 @@ page_fault:
 
 	mov r3=255
 	adds r15=-1024,r15			// r15 contains the syscall number---subtract 1024
-	adds r2=IA64_TASK_FLAGS_OFFSET,r13	// r2 = &current->flags
+	adds r2=IA64_TASK_PTRACE_OFFSET,r13	// r2 = &current->ptrace
 
 	;;
 	cmp.geu.unc p6,p7=r3,r15		// (syscall > 0 && syscall <= 1024+255) ?
@@ -581,7 +583,7 @@ page_fault:
 	ld8 r16=[r16]				// load address of syscall entry point
 	mov rp=r15				// set the real return addr
 	;;
-	ld8 r2=[r2]				// r2 = current->flags
+	ld8 r2=[r2]				// r2 = current->ptrace
 	mov b6=r16
 
 	// arrange things so we skip over break instruction when returning:
@@ -590,7 +592,7 @@ page_fault:
 	adds r17=24,sp				// get pointer to cr_iip
 	;;
 	ld8 r18=[r16]				// fetch cr_ipsr
-	tbit.z p8,p0=r2,5			// (current->flags & PF_TRACESYS) == 0?
+	tbit.z p8,p0=r2,PT_TRACESYS_BIT		// (current->ptrace & PF_TRACESYS) == 0?
 	;;
 	ld8 r19=[r17]				// fetch cr_iip
 	extr.u r20=r18,41,2			// extract ei field
@@ -686,7 +688,7 @@ dispatch_illegal_op_fault:
 	SAVE_REST
 	;;
 	br.call.sptk.few rp=ia64_illegal_op_fault
-	;;
+.ret0:	;;
 	alloc r14=ar.pfs,0,0,3,0	// must be first in insn group
 	mov out0=r9
 	mov out1=r10
@@ -755,16 +757,16 @@ dispatch_to_ia32_handler:
 	ld4 out5=[r14],8         // r13 == ebp
 	;;
 	ld4 out3=[r14],8         // r14 == esi
-	adds r2=IA64_TASK_FLAGS_OFFSET,r13	// r2 = &current->flags
+	adds r2=IA64_TASK_PTRACE_OFFSET,r13	// r2 = &current->ptrace
 	;;
 	ld4 out4=[r14]           // R15 == edi
 	movl r16=ia32_syscall_table
 	;; 
 (p6)    shladd r16=r8,3,r16     // Force ni_syscall if not valid syscall number
-	ld8 r2=[r2]		// r2 = current->flags
+	ld8 r2=[r2]		// r2 = current->ptrace
 	;; 
 	ld8 r16=[r16]
-	tbit.z p8,p0=r2,5	// (current->flags & PF_TRACESYS) == 0?
+	tbit.z p8,p0=r2,PT_TRACESYS_BIT	// (current->ptrace & PT_TRACESYS) == 0?
 	;;
 	mov b6=r16
 	movl r15=ia32_ret_from_syscall
@@ -780,8 +782,7 @@ non_ia32_syscall:
 	add out1=16,sp                          // pointer to pt_regs
 	;;			// avoid WAW on CFM
 	br.call.sptk.few rp=ia32_bad_interrupt
-	;; 
-	movl r15=ia64_leave_kernel
+.ret1:	movl r15=ia64_leave_kernel
 	;;
 	mov rp=r15
 	br.ret.sptk.many rp

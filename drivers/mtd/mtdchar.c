@@ -379,7 +379,7 @@ mod_init_t init_mtdchar(void)
 	if (register_chrdev(MTD_CHAR_MAJOR,"mtd",&mtd_fops)) {
 		printk(KERN_NOTICE "Can't allocate major number %d for Memory Technology Devices.\n",
 		       MTD_CHAR_MAJOR);
-		return EAGAIN;
+		return -EAGAIN;
 	}
 
 	return 0;

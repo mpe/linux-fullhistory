@@ -22,6 +22,8 @@
  *	 The author may be reached at:
  *
  *		Inet: stefani@lkg.dec.com
+ *		(NOTE! this address no longer works -jgarzik)
+ *
  *		Mail: Digital Equipment Corporation
  *			  550 King Street
  *			  M/S: LKG1-3/M07
@@ -44,12 +46,7 @@
  *   Adapter Probe -
  *		The driver scans for supported EISA adapters by reading the
  *		SLOT ID register for each EISA slot and making a match
- *		against the expected value.  The supported PCI adapters are
- *		discovered using successive calls to pcibios_find_device.
- *		The first time the probe routine is called, all supported
- *		devices are discovered and initialized.  The adapters aren't
- *		brought up to an operational state until the open routine is
- *		called.
+ *		against the expected value.
  *
  *   Bus-Specific Initialization -
  *		This driver currently supports both EISA and PCI controller
@@ -196,11 +193,13 @@
  *							single fragment which includes PRH->end of data.
  *		Mar 2000	AC		Did various cleanups for 2.3.x
  *		Jun 2000	jgarzik		PCI and resource alloc cleanups
+ *		Jul 2000	tjeerd		Much cleanup and some bug fixes
  */
 
 /* Include files */
 
 #include <linux/module.h>
+
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/string.h>
@@ -212,6 +211,7 @@
 #include <linux/pci.h>
 #include <linux/delay.h>
 #include <linux/init.h>
+#include <linux/netdevice.h>
 #include <asm/byteorder.h>
 #include <asm/bitops.h>
 #include <asm/io.h>
@@ -223,8 +223,9 @@
 #include "defxx.h"
 
 /* Version information string - should be updated prior to each new release!!! */
-static char version[] __initdata =
-	"defxx.c:v1.05a 2000/06/11  Lawrence V. Stefani (stefani@lkg.dec.com) and others\n";
+
+static char version[] __devinitdata =
+	"defxx.c:v1.05c 2000/07/14  Lawrence V. Stefani and others\n";
 
 #define DYNAMIC_BUFFERS 1
 
@@ -236,8 +237,6 @@ static char version[] __initdata =
 #define NEW_SKB_SIZE (PI_RCV_DATA_K_SIZE_MAX+128)
 
 /* Define module-wide (static) routines */
-
-static struct net_device *dfx_alloc_device(u16 iobase);
 
 static void		dfx_bus_init(struct net_device *dev);
 static void		dfx_bus_config_check(DFX_board_t *bp);
@@ -274,8 +273,7 @@ static void		dfx_xmt_flush(DFX_board_t *bp);
 
 /* Define module-wide (static) variables */
 
-static int		num_boards = 0;			/* total number of adapters configured */
-static int		already_probed = 0;		/* have we already entered dfx_probe? */
+static struct net_device *root_dfx_eisa_dev;
 
 
 /*
@@ -386,131 +384,115 @@ static inline void dfx_port_read_long(
 
 /*
  * =============
- * = dfx_probe =
+ * = dfx_init_one_pci_or_eisa =
  * =============
  *   
  * Overview:
- *   Probes for supported FDDI EISA and PCI controllers
+ *   Initializes a supported FDDI EISA or PCI controller
  *  
  * Returns:
  *   Condition code
  *       
  * Arguments:
- *   dev - pointer to device information
+ *   pdev - pointer to pci device information (NULL for EISA)
  *
  * Functional Description:
- *   This routine is called by the OS once at startup to scan for
- *   DEFXX cards.
  *
  * Return Codes:
  *   0		 - This device (fddi0, fddi1, etc) configured successfully
- *   -ENODEV - No devices present, or no Digital FDDI EISA or PCI device
- *			   present for this device name
+ *   -EBUSY      - Failed to get resources, or dfx_driver_init failed.
  *
  * Assumptions:
- *   For the time being, DEFXX.C is the only FDDI driver under Linux.
- *   As this assumption changes, this routine will likely be impacted.
- *   Also, it is assumed that no more than eight (8) FDDI controllers
- *   will be configured in the system (fddi0 through fddi7).  This
- *   routine will not allocate new device structures.  If more than
- *   eight FDDI controllers need to be configured, drivers/net/Space.c
- *   should be updated as well as the DFX_MAX_NUM_BOARDS constant in
- *   DEFXX.H.
+ *   It compiles so it should work :-( (PCI cards do :-)
  *
  * Side Effects:
  *   Device structures for FDDI adapters (fddi0, fddi1, etc) are
  *   initialized and the board resources are read and stored in
  *   the device structure.
  */
-
-static struct net_device *bp_root;
-static int version_disp;
-static int have_pci_driver;
-
-static struct pci_device_id dfx_pci_tbl[] __initdata = {
-	{ PCI_VENDOR_ID_DEC, PCI_DEVICE_ID_DEC_FDDI, PCI_ANY_ID, PCI_ANY_ID, },
-	{ 0, }
-};
-MODULE_DEVICE_TABLE(pci, dfx_pci_tbl);
-
-static int __init dfx_init_one (struct pci_dev *pdev,
-				const struct pci_device_id *ent)
+static int __devinit dfx_init_one_pci_or_eisa(struct pci_dev *pdev, long ioaddr)
 {
 	struct net_device *dev;
-	DFX_board_t		*bp;			/* board pointer */
-	int port;
-	
-	if (!version_disp) {	/* display version info if adapter is found */
-		version_disp = 1;	/* set display flag to TRUE so that */
-		printk (version);	/* we only display this string ONCE */
+	DFX_board_t	  *bp;			/* board pointer */
+	static int version_disp;
+
+	if (!version_disp)					/* display version info if adapter is found */
+	{
+		version_disp = 1;				/* set display flag to TRUE so that */
+		printk(version);				/* we only display this string ONCE */
 	}
 
-	if (pci_enable_device (pdev))
-		goto err_out;
-	pci_set_master (pdev);
-
-	/* Get I/O base address from PCI Configuration Space */
-	port = pci_resource_start (pdev, 1);
-
-	if (!request_region (port, PFI_K_CSR_IO_LEN, "defxx")) {
-		printk (KERN_ERR
-			"defxx: I/O range allocated to adapter (0x%X-0x%X) is already being used!\n",
-			port, (port + PFI_K_CSR_IO_LEN - 1));
-		goto err_out;
-	}
-
-	/* Allocate a new device structure for this adapter */
-	dev = dfx_alloc_device (port);
-	if (dev == NULL) {
-		printk (KERN_ERR "defxx: alloc device failed\n");
-		goto err_out_region;
-	}
-
-	/* Initialize board structure with bus-specific info */
-	bp = (DFX_board_t *) dev->priv;
-	bp->dev = dev;
-	bp->next = bp_root;
-	bp_root = dev;
-	bp->bus_type = DFX_BUS_TYPE_PCI;
-	bp->pci_dev = pdev;
-	
 	/*
-	 * FIXME FIXME FIXME
-	 * Suck!  The original driver didn't clean up after
-	 * itself at this stage, so we won't either.  Someone
-	 * needs to go back and see what (if anything) we need
-	 * to free here...  -jgarzik
+	 * init_fddidev() allocates a device structure with private data, clears the device structure and private data,
+	 * and  calls fddi_setup() and register_netdev(). Not much left to do for us here.
 	 */
-	if (dfx_driver_init (dev) != DFX_K_SUCCESS) {
-		dev->base_addr = 0;	/* clear port address field in device structure on failure */
-		goto err_out_region;
+	dev = init_fddidev( NULL, sizeof(*bp));
+
+	if (!dev) {
+		printk (KERN_ERR "defxx: unable to allocate fddidev, aborting\n");
+		return -ENOMEM;
 	}
+
+	bp = (DFX_board_t*)dev->priv;
+
+	if (!request_region (ioaddr, pdev ? PFI_K_CSR_IO_LEN : PI_ESIC_K_CSR_IO_LEN, dev->name)) {
+		printk (KERN_ERR "%s: Cannot reserve I/O resource 0x%x @ 0x%lx, aborting\n",
+			dev->name, PFI_K_CSR_IO_LEN, ioaddr);
+		goto err_out;
+	}
+
+	/* Initialize new device structure */
+
+	dev->base_addr			= ioaddr; /* save port (I/O) base address */
+
+	dev->get_stats			= dfx_ctl_get_stats;
+	dev->open			= dfx_open;
+	dev->stop			= dfx_close;
+	dev->hard_start_xmit		= dfx_xmt_queue_pkt;
+	dev->set_multicast_list		= dfx_ctl_set_multicast_list;
+	dev->set_mac_address		= dfx_ctl_set_mac_address;
+
+	if (pdev == NULL) {
+		/* EISA board */
+		bp->bus_type = DFX_BUS_TYPE_EISA;
+		bp->next = root_dfx_eisa_dev;
+		root_dfx_eisa_dev = dev;
+	} else {
+		/* PCI board */
+		bp->bus_type = DFX_BUS_TYPE_PCI;
+		bp->pci_dev = pdev;
+		pdev->driver_data = dev;
+		if (pci_enable_device (pdev))
+			goto err_out_region;
+		pci_set_master (pdev);
+	}
+
+	if (dfx_driver_init(dev) != DFX_K_SUCCESS)
+		goto err_out_region;
 
 	return 0;
 
 err_out_region:
-	release_region (port, PFI_K_CSR_IO_LEN);
+	release_region(ioaddr, pdev ? PFI_K_CSR_IO_LEN : PI_ESIC_K_CSR_IO_LEN);
 err_out:
+	unregister_netdev(dev);
+	kfree(dev);
 	return -ENODEV;
-};
+}
 
-static struct pci_driver dfx_driver = {
-	name:		"defxx",
-	id_table:	dfx_pci_tbl,
-	probe:		dfx_init_one,
-};
-
-static int __init dfx_probe(void)
+static int __devinit dfx_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 {
-	int				i;				/* used in for loops */
-	u16				port;			/* temporary I/O (port) address */
-	u32				slot_id;		/* EISA hardware (slot) ID read from adapter */
-	DFX_board_t		*bp;			/* board pointer */
-	struct net_device *dev;
+	return  dfx_init_one_pci_or_eisa(pdev, pci_resource_start (pdev, 1));
+}
 
-	DBG_printk("In dfx_probe...\n");
+static int __init dfx_eisa_init(void)
+{
+	int rc = -NODEV;
+	int i;			/* used in for loops */
+	u16 port;		/* temporary I/O (port) address */
+	u32 slot_id;		/* EISA hardware (slot) ID read from adapter */
 
-	already_probed = 1;				/* set global flag */
+	DBG_printk("In dfx_eisa_init...\n");
 
 	/* Scan for FDDI EISA controllers */
 
@@ -520,163 +502,13 @@ static int __init dfx_probe(void)
 		slot_id = inl(port);					/* read EISA HW (slot) ID */
 		if ((slot_id & 0xF0FFFFFF) == DEFEA_PRODUCT_ID)
 		{
-			if (!version_disp)					/* display version info if adapter is found */
-			{
-				version_disp = 1;				/* set display flag to TRUE so that */
-				printk(version);				/* we only display this string ONCE */
-			}
-				
 			port = (i << 12);					/* recalc base addr */
 
-			/* Verify port address range is not already being used */
-			if (request_region(port, PI_ESIC_K_CSR_IO_LEN, "defxx"))
-			{
-				/* Allocate a new device structure for this adapter */
-
-				dev = dfx_alloc_device(port);
-				if (dev != NULL)
-				{
-					/* Initialize board structure with bus-specific info */
-					bp = (DFX_board_t *) dev->priv;
-					bp->next = bp_root;
-					bp_root = dev;
-					bp->dev = dev;
-					bp->bus_type = DFX_BUS_TYPE_EISA;
-					if (dfx_driver_init(dev) == DFX_K_SUCCESS)
-						num_boards++;		/* only increment global board count on success */
-					else
-						dev->base_addr = 0;	/* clear port address field in device structure on failure */
-				}
-			}
-			else
-				printk("I/O range allocated to adapter (0x%X-0x%X) is already being used!\n",
-				       port, (port + PI_ESIC_K_CSR_IO_LEN-1));
+			if (dfx_init_one_pci_or_eisa(NULL, port) == 0) rc = 0;
 		}
 	}
-
-	/* Scan for FDDI PCI controllers */
-	i = pci_register_driver (&dfx_driver);
-	if (i > 0) {
-		num_boards += i;
-		have_pci_driver = 1;
-	}
-
-	/*
-	 * If we're at this point we're going through dfx_probe() for the first
-	 * time.  Return success (0) if we've initialized 1 or more boards.
-	 * Otherwise, return failure (-ENODEV).
-	 */
-
-	return (num_boards > 0) ? 0 : -ENODEV;
+	return rc;
 }
-
-
-/*
- * ====================
- * = dfx_alloc_device =
- * ====================
- *   
- * Overview:
- *   Allocate new device structure for adapter
- *  
- * Returns:
- *   Pointer to device structure for this adapter or NULL if
- *   none are available or could not allocate memory for
- *   private board structure.
- *       
- * Arguments:
- *   dev    - pointer to device information for last device
- *   iobase - base I/O address of new adapter
- *
- * Functional Description:
- *   The algorithm for allocating a new device structure is
- *   fairly simple.  Since we're presently the only FDDI driver
- *   under Linux, we'll find the first device structure with an
- *   "fddi*" device name that's free.  If we run out of devices,
- *   we'll fail on error.  This is simpler than trying to
- *   allocate the memory for a new device structure, determine
- *   the next free number (beyond 7) and link it into the chain
- *   of devices.  A user can always modify drivers/net/Space.c
- *   to add new FDDI device structures if necessary.
- *
- *   Beyond finding a free FDDI device structure, this routine
- *   initializes most of the fields, resource tags, and dispatch
- *   pointers in the device structure and calls the common
- *   fddi_setup() routine to perform the rest of the device
- *   structure initialization.
- *
- * Return Codes:
- *   None
- *
- * Assumptions:
- *   If additional FDDI drivers are integrated into Linux,
- *   we'll likely need to use a different approach to
- *   allocate a device structure.  Perhaps one that is
- *   similar to what the Ethernet drivers use.
- *
- * Side Effects:
- *   None
- */
-
-struct net_device __init *dfx_alloc_device(u16 iobase)
-{
-	struct net_device *tmp_dev;		/* pointer to a device structure */
-	int err;
-
-	DBG_printk("In dfx_alloc_device...\n");
-
-	/* Find next free fddi entry */
-
-	tmp_dev = dev_alloc("fddi%d", &err);
-	if (tmp_dev == NULL)
-	{
-		printk(KERN_ERR "Could not find free FDDI device structure for this adapter!\n");
-		return(NULL);
-	}
-	DBG_printk("Device entry free, device name = %s\n", tmp_dev->name);
-
-	/* Allocate space for private board structure */
-
-	tmp_dev->priv = (void *) kmalloc(sizeof(DFX_board_t), GFP_KERNEL);
-	if (tmp_dev->priv == NULL)
-	{
-		printk(KERN_ERR "defxx: Could not allocate memory for private board structure!\n");
-		kfree(tmp_dev);
-		return(NULL);
-	}
-	memset(tmp_dev->priv, 0, sizeof(DFX_board_t));	/* clear structure */
-
-	/* Initialize new device structure */
-
-	tmp_dev->rmem_end	= 0;		/* shared memory isn't used */
-	tmp_dev->rmem_start	= 0;		/* shared memory isn't used */
-	tmp_dev->mem_end	= 0;		/* shared memory isn't used */
-	tmp_dev->mem_start	= 0;		/* shared memory isn't used */
-	tmp_dev->base_addr	= iobase;	/* save port (I/O) base address */
-	tmp_dev->irq		= 0;		/* set in dfx_bus_init() */
-	tmp_dev->if_port	= 0;		/* not applicable to FDDI adapters */
-	tmp_dev->dma		= 0;		/* Bus Master DMA doesn't require channel */
-
-	tmp_dev->get_stats				= &dfx_ctl_get_stats;
-	tmp_dev->open					= &dfx_open;
-	tmp_dev->stop					= &dfx_close;
-	tmp_dev->hard_start_xmit		= &dfx_xmt_queue_pkt;
-	tmp_dev->hard_header			= NULL;		/* set in fddi_setup() */
-	tmp_dev->rebuild_header			= NULL;		/* set in fddi_setup() */
-	tmp_dev->set_multicast_list		= &dfx_ctl_set_multicast_list;
-	tmp_dev->set_mac_address		= &dfx_ctl_set_mac_address;
-	tmp_dev->do_ioctl			= NULL;		/* not supported for now &&& */
-	tmp_dev->set_config			= NULL;		/* not supported for now &&& */
-	tmp_dev->hard_header_cache		= NULL;		/* not supported */
-	tmp_dev->header_cache_update		= NULL;		/* not supported */
-	tmp_dev->change_mtu			= NULL;		/* set in fddi_setup() */
-
-	/* Initialize remaining device structure information */
-
-	fddi_setup(tmp_dev);
-	return(tmp_dev);
-}
-
 
 /*
  * ================
@@ -709,7 +541,7 @@ struct net_device __init *dfx_alloc_device(u16 iobase)
  *   enabled yet.
  */
 
-void __init dfx_bus_init(struct net_device *dev)
+static void __devinit dfx_bus_init(struct net_device *dev)
 {
 	DFX_board_t *bp = (DFX_board_t *)dev->priv;
 	u8			val;	/* used for I/O read/writes */
@@ -732,6 +564,9 @@ void __init dfx_bus_init(struct net_device *dev)
 	 */
 
 	bp->base_addr = dev->base_addr;
+
+	/* And a pointer back to the net_device struct */
+	bp->dev = dev;
 
 	/* Initialize adapter based on bus type */
 
@@ -841,7 +676,7 @@ void __init dfx_bus_init(struct net_device *dev)
  *   None
  */
 
-void __init dfx_bus_config_check(DFX_board_t *bp)
+static void __devinit dfx_bus_config_check(DFX_board_t *bp)
 {
 	int	status;				/* return code from adapter port control call */
 	u32	slot_id;			/* EISA-bus hardware id (DEC3001, DEC3002,...) */
@@ -942,7 +777,7 @@ void __init dfx_bus_config_check(DFX_board_t *bp)
  *   returning from this routine.
  */
 
-int __init dfx_driver_init(struct net_device *dev)
+static int __devinit dfx_driver_init(struct net_device *dev)
 {
 	DFX_board_t *bp = (DFX_board_t *)dev->priv;
 	int			alloc_size;			/* total buffer size needed */
@@ -1161,10 +996,7 @@ int __init dfx_driver_init(struct net_device *dev)
  *   upon a successful return of this routine.
  */
 
-int dfx_adap_init(
-	DFX_board_t *bp
-	)
-
+static int dfx_adap_init(DFX_board_t *bp)
 	{
 	DBG_printk("In dfx_adap_init...\n");
 
@@ -1342,14 +1174,14 @@ int dfx_adap_init(
  *
  * Assumptions:
  *   This routine should only be called for a device that was
- *   initialized successfully during the dfx_probe process.
+ *   initialized successfully.
  *
  * Side Effects:
  *   Adapter should be in LINK_AVAILABLE or LINK_UNAVAILABLE state
  *   if the open is successful.
  */
 
-int dfx_open(struct net_device *dev)
+static int dfx_open(struct net_device *dev)
 {
 	DFX_board_t	*bp = (DFX_board_t *)dev->priv;
 
@@ -1390,6 +1222,8 @@ int dfx_open(struct net_device *dev)
 
 	bp->ind_group_prom	= PI_FSTATE_K_BLOCK;
 	bp->group_prom		= PI_FSTATE_K_BLOCK;
+
+	spin_lock_init(&bp->lock);
 
 	/* Reset and initialize adapter */
 
@@ -1440,7 +1274,7 @@ int dfx_open(struct net_device *dev)
  *   routine.
  */
 
-int dfx_close(struct net_device *dev)
+static int dfx_close(struct net_device *dev)
 {
 	DFX_board_t	*bp = (DFX_board_t *)dev->priv;
 
@@ -1524,10 +1358,7 @@ int dfx_close(struct net_device *dev)
  *   None
  */
 
-void dfx_int_pr_halt_id(
-	DFX_board_t	*bp
-	)
-
+static void dfx_int_pr_halt_id(DFX_board_t	*bp)
 	{
 	PI_UINT32	port_status;			/* PDQ port status register value */
 	PI_UINT32	halt_id;				/* PDQ port status halt ID */
@@ -1632,9 +1463,7 @@ void dfx_int_pr_halt_id(
  *   contents and adapter filter settings.
  */
 
-void dfx_int_type_0_process(
-	DFX_board_t	*bp
-	)
+static void dfx_int_type_0_process(DFX_board_t	*bp)
 
 	{
 	PI_UINT32	type_0_status;		/* Host Interrupt Type 0 register */
@@ -1780,7 +1609,7 @@ void dfx_int_type_0_process(
  *   or updating completion indices.
  */
 
-void dfx_int_common(struct net_device *dev)
+static void dfx_int_common(struct net_device *dev)
 {
 	DFX_board_t 	*bp = (DFX_board_t *) dev->priv;
 	PI_UINT32	port_status;		/* Port Status register */
@@ -1851,12 +1680,7 @@ void dfx_int_common(struct net_device *dev)
  *   Interrupts are disabled, then reenabled at the adapter.
  */
 
-void dfx_interrupt(
-	int				irq,
-	void			*dev_id,
-	struct pt_regs	*regs
-	)
-
+static void dfx_interrupt(int irq, void *dev_id, struct pt_regs	*regs)
 	{
 	struct net_device	*dev = (struct net_device *) dev_id;
 	DFX_board_t		*bp;	/* private board structure pointer */
@@ -1955,10 +1779,7 @@ void dfx_interrupt(
  *   None
  */
 
-struct net_device_stats *dfx_ctl_get_stats(
-	struct net_device *dev
-	)
-
+static struct net_device_stats *dfx_ctl_get_stats(struct net_device *dev)
 	{
 	DFX_board_t	*bp = (DFX_board_t *)dev->priv;
 
@@ -2143,10 +1964,7 @@ struct net_device_stats *dfx_ctl_get_stats(
  *   On-board adapter CAM and filters are updated.
  */
 
-void dfx_ctl_set_multicast_list(
-	struct net_device *dev
-	)
-
+static void dfx_ctl_set_multicast_list(struct net_device *dev)
 	{
 	DFX_board_t			*bp = (DFX_board_t *)dev->priv;
 	int					i;			/* used as index in for loop */
@@ -2261,11 +2079,7 @@ void dfx_ctl_set_multicast_list(
  *   may be updated.
  */
 
-int dfx_ctl_set_mac_address(
-	struct net_device	*dev,
-	void			*addr
-	)
-
+static int dfx_ctl_set_mac_address(struct net_device *dev, void *addr)
 	{
 	DFX_board_t		*bp = (DFX_board_t *)dev->priv;
 	struct sockaddr	*p_sockaddr = (struct sockaddr *)addr;
@@ -2352,10 +2166,7 @@ int dfx_ctl_set_mac_address(
  *   On-board adapter CAM is updated.
  */
 
-int dfx_ctl_update_cam(
-	DFX_board_t *bp
-	)
-
+static int dfx_ctl_update_cam(DFX_board_t *bp)
 	{
 	int			i;				/* used as index */
 	PI_LAN_ADDR	*p_addr;		/* pointer to CAM entry */
@@ -2438,10 +2249,7 @@ int dfx_ctl_update_cam(
  *   On-board adapter filters are updated.
  */
 
-int dfx_ctl_update_filters(
-	DFX_board_t *bp
-	)
-
+static int dfx_ctl_update_filters(DFX_board_t *bp)
 	{
 	int	i = 0;					/* used as index */
 
@@ -2516,10 +2324,7 @@ int dfx_ctl_update_filters(
  *   None
  */
 
-int dfx_hw_dma_cmd_req(
-	DFX_board_t *bp
-	)
-
+static int dfx_hw_dma_cmd_req(DFX_board_t *bp)
 	{
 	int status;			/* adapter status */
 	int timeout_cnt;	/* used in for loops */
@@ -2633,7 +2438,7 @@ int dfx_hw_dma_cmd_req(
  *   None
  */
 
-int dfx_hw_port_ctrl_req(
+static int dfx_hw_port_ctrl_req(
 	DFX_board_t	*bp,
 	PI_UINT32	command,
 	PI_UINT32	data_a,
@@ -2717,7 +2522,7 @@ int dfx_hw_port_ctrl_req(
  *   Internal adapter registers are cleared.
  */
 
-void dfx_hw_adap_reset(
+static void dfx_hw_adap_reset(
 	DFX_board_t	*bp,
 	PI_UINT32	type
 	)
@@ -2766,10 +2571,7 @@ void dfx_hw_adap_reset(
  *   None
  */
 
-int dfx_hw_adap_state_rd(
-	DFX_board_t *bp
-	)
-
+static int dfx_hw_adap_state_rd(DFX_board_t *bp)
 	{
 	PI_UINT32 port_status;		/* Port Status register value */
 
@@ -2809,11 +2611,7 @@ int dfx_hw_adap_state_rd(
  *   Internal adapter registers are cleared.
  */
 
-int dfx_hw_dma_uninit(
-	DFX_board_t	*bp,
-	PI_UINT32	type
-	)
-
+static int dfx_hw_dma_uninit(DFX_board_t *bp, PI_UINT32 type)
 	{
 	int timeout_cnt;	/* used in for loops */
 
@@ -2840,7 +2638,7 @@ int dfx_hw_dma_uninit(
  *
  */
  
-void my_skb_align(struct sk_buff *skb, int n)
+static void my_skb_align(struct sk_buff *skb, int n)
 {
 	u32 x=(u32)skb->data;	/* We only want the low bits .. */
 	u32 v;
@@ -2882,10 +2680,7 @@ void my_skb_align(struct sk_buff *skb, int n)
  *   is notified.
  */
 
-void dfx_rcv_init(
-	DFX_board_t *bp
-	)
-
+static void dfx_rcv_init(DFX_board_t *bp)
 	{
 	int	i, j;					/* used in for loop */
 
@@ -2979,7 +2774,7 @@ void dfx_rcv_init(
  *   None
  */
 
-void dfx_rcv_queue_process(
+static void dfx_rcv_queue_process(
 	DFX_board_t *bp
 	)
 
@@ -3152,7 +2947,7 @@ void dfx_rcv_queue_process(
  *   None
  */
 
-int dfx_xmt_queue_pkt(
+static int dfx_xmt_queue_pkt(
 	struct sk_buff	*skb,
 	struct net_device	*dev
 	)
@@ -3344,10 +3139,7 @@ int dfx_xmt_queue_pkt(
  *   None
  */
 
-int dfx_xmt_done(
-	DFX_board_t *bp
-	)
-
+static int dfx_xmt_done(DFX_board_t *bp)
 	{
 	XMT_DRIVER_DESCR	*p_xmt_drv_descr;	/* ptr to transmit driver descriptor */
 	PI_TYPE_2_CONSUMER	*p_type_2_cons;		/* ptr to rcv/xmt consumer block register */
@@ -3369,7 +3161,7 @@ int dfx_xmt_done(
 
 		/* Return skb to operating system */
 
-		dev_kfree_skb(p_xmt_drv_descr->p_skb);
+		dev_kfree_skb_irq(p_xmt_drv_descr->p_skb);
 
 		/*
 		 * Move to start of next packet by updating completion index
@@ -3425,12 +3217,9 @@ int dfx_xmt_done(
  *   None
  */
 
-void dfx_xmt_flush(
-	DFX_board_t *bp
-	)
-
+static void dfx_xmt_flush( DFX_board_t *bp )
 	{
-	u32					prod_cons;			/* rcv/xmt consumer block longword */
+	u32			prod_cons;		/* rcv/xmt consumer block longword */
 	XMT_DRIVER_DESCR	*p_xmt_drv_descr;	/* ptr to transmit driver descriptor */
 
 	/* Flush all outstanding transmit frames */
@@ -3471,34 +3260,76 @@ void dfx_xmt_flush(
 	return;
 	}
 
+static void __devexit dfx_remove_device(struct pci_dev *pdev, struct net_device *dev)
+{
+	unregister_netdev(dev);
+	release_region(dev->base_addr,  pdev ? PFI_K_CSR_IO_LEN : PI_ESIC_K_CSR_IO_LEN );
+	kfree(dev);
+}
 
+static void __devexit dfx_remove_one (struct pci_dev *pdev)
+{
+	struct net_device *dev = pdev->driver_data;
+
+	dfx_remove_device(pdev, dev);
+}
+
+static struct pci_device_id dfx_pci_tbl[] __devinitdata = {
+	{ PCI_VENDOR_ID_DEC, PCI_DEVICE_ID_DEC_FDDI, PCI_ANY_ID, PCI_ANY_ID, },
+	{ 0, }
+};
+MODULE_DEVICE_TABLE(pci, dfx_pci_tbl);
+
+static struct pci_driver dfx_driver = {
+	name:		"defxx",
+	probe:		dfx_init_one,
+	remove:		dfx_remove_one,
+	id_table:	dfx_pci_tbl,
+};
+
+static int dfx_have_pci;
+static int dfx_have_eisa;
+
+
+static void __exit dfx_eisa_cleanup(void)
+{
+	struct net_device *dev = root_dfx_eisa_dev;
+
+	while (dev)
+	{
+		struct net_device *tmp;
+		DFX_board_t *bp;
+
+		bp = (DFX_board_t*)dev->priv;
+		tmp = bp->next;
+		dfx_remove_device(NULL, dev);
+		dev = tmp;
+	}
+}
+
+static int __init dfx_init(void)
+{
+	int rc_pci, rc_eisa;
+
+	rc_pci = pci_module_init(&dfx_driver);
+	if (rc_pci >= 0) dfx_have_pci = 1;
+	
+	rc_eisa = dfx_eisa_init();
+	if (rc_eisa >= 0) dfx_have_eisa = 1;
+
+	return ((rc_eisa < 0) ? 0 : rc_eisa)  + ((rc_pci < 0) ? 0 : rc_pci); 
+}
 
 static void __exit dfx_cleanup(void)
 {
-	while(bp_root!=NULL)
-	{
-		struct net_device *tmp=bp_root;
-		DFX_board_t *priv=tmp->priv;
-		bp_root=priv->next;
-		
-		/* FIXME: need to unregister FDDI device here?
-		 * The original driver didn't do it, but I think so..
-		 *	-jgarzik
-		 */
-		
-		if (priv->bus_type == DFX_BUS_TYPE_EISA)
-			release_region(tmp->base_addr, PI_ESIC_K_CSR_IO_LEN);
-		else
-			release_region(tmp->base_addr, PFI_K_CSR_IO_LEN);
-		
-		kfree(tmp->priv);
-		kfree(tmp);
-	}
-	if (have_pci_driver)
+	if (dfx_have_pci)
 		pci_unregister_driver(&dfx_driver);
-}
+	if (dfx_have_eisa)
+		dfx_eisa_cleanup();
+		
+}	
 
-module_init(dfx_probe);
+module_init(dfx_init);
 module_exit(dfx_cleanup);
 
 

@@ -6,7 +6,8 @@
  * 06/16/00	A. Mallick	initialize csd/ssd/tssd/cflg for ia32_load_state
  */
 #include <linux/config.h>
-#include <linux/posix_types.h>
+
+#include <linux/types.h>
 
 #include <asm/signal.h>
 #include <asm/ia32.h>
@@ -16,7 +17,9 @@
 /* Override some function names */
 #undef start_thread
 #define start_thread			ia32_start_thread
+#define elf_format			elf32_format
 #define init_elf_binfmt			init_elf32_binfmt
+#define exit_elf_binfmt			exit_elf32_binfmt
 
 #undef CONFIG_BINFMT_ELF
 #ifdef CONFIG_BINFMT_ELF32
@@ -28,10 +31,12 @@
 # define CONFIG_BINFMT_ELF_MODULE	CONFIG_BINFMT_ELF32_MODULE
 #endif
 
-void ia64_elf32_init(struct pt_regs *regs);
-#define ELF_PLAT_INIT(_r)		ia64_elf32_init(_r)
+extern void ia64_elf32_init(struct pt_regs *regs);
+extern void put_dirty_page(struct task_struct * tsk, struct page *page, unsigned long address);
 
+#define ELF_PLAT_INIT(_r)		ia64_elf32_init(_r)
 #define setup_arg_pages(bprm)		ia32_setup_arg_pages(bprm)
+#define elf_map				elf_map32
 
 /* Ugly but avoids duplication */
 #include "../../../fs/binfmt_elf.c"
@@ -200,4 +205,54 @@ int ia32_setup_arg_pages(struct linux_binprm *bprm)
 	}
 	
 	return 0;
+}
+
+static unsigned long
+ia32_mm_addr(unsigned long addr)
+{
+	struct vm_area_struct *vma;
+
+	if ((vma = find_vma(current->mm, addr)) == NULL)
+		return(ELF_PAGESTART(addr));
+	if (vma->vm_start > addr)
+		return(ELF_PAGESTART(addr));
+	return(ELF_PAGEALIGN(addr));
+}
+
+/*
+ *  Normally we would do an `mmap' to map in the process's text section.
+ *  This doesn't work with IA32 processes as the ELF file might specify
+ *  a non page size aligned address.  Instead we will just allocate
+ *  memory and read the data in from the file.  Slightly less efficient
+ *  but it works.
+ */
+extern long ia32_do_mmap (struct file *filep, unsigned int len, unsigned int prot,
+			  unsigned int flags, unsigned int fd, unsigned int offset);
+
+static unsigned long
+elf_map32 (struct file *filep, unsigned long addr, struct elf_phdr *eppnt, int prot, int type)
+{
+	unsigned long retval;
+
+	if (eppnt->p_memsz >= (1UL<<32) || addr > (1UL<<32) - eppnt->p_memsz)
+		return -EINVAL;
+
+#if 1
+	set_brk(ia32_mm_addr(addr), addr + eppnt->p_memsz);
+	memset((char *) addr + eppnt->p_filesz, 0, eppnt->p_memsz - eppnt->p_filesz);
+	kernel_read(filep, eppnt->p_offset, (char *) addr, eppnt->p_filesz);
+	retval = (unsigned long) addr;
+#else
+	/* doesn't work yet... */
+#	define IA32_PAGESTART(_v) ((_v) & ~(unsigned long)(ELF_EXEC_PAGESIZE-1))
+#	define IA32_PAGEOFFSET(_v) ((_v) & (ELF_EXEC_PAGESIZE-1))
+#	define IA32_PAGEALIGN(_v) (((_v) + ELF_EXEC_PAGESIZE - 1) & ~(ELF_EXEC_PAGESIZE - 1))
+
+	down(&current->mm->mmap_sem);
+	retval = ia32_do_mmap(filep, IA32_PAGESTART(addr),
+			      eppnt->p_filesz + IA32_PAGEOFFSET(eppnt->p_vaddr), prot, type,
+			      eppnt->p_offset - IA32_PAGEOFFSET(eppnt->p_vaddr));
+	up(&current->mm->mmap_sem);
+#endif
+	return retval;
 }

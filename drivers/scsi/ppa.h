@@ -10,7 +10,7 @@
 #ifndef _PPA_H
 #define _PPA_H
 
-#define   PPA_VERSION   "2.03 (for Linux 2.2.x)"
+#define   PPA_VERSION   "2.04 (for Linux 2.2.x)"
 
 /* 
  * this driver has been hacked by Matteo Frigo (athena@theory.lcs.mit.edu)
@@ -51,6 +51,12 @@
  *    CONFIG_SCSI_PPA_HAVE_PEDANTIC => CONFIG_SCSI_IZIP_EPP16
  *    added CONFIG_SCSI_IZIP_SLOW_CTR option
  *                                                      [2.03]
+ *
+ * Use ppa_wait() to check for ready AND connected status bits
+ * Add ppa_wait() calls to ppa_completion()
+ *  by Peter Cherriman <pjc@ecs.soton.ac.uk> and
+ *     Tim Waugh <twaugh@redhat.com>
+ *                                                      [2.04]
  */
 /* ------ END OF USER CONFIGURABLE PARAMETERS ----- */
 

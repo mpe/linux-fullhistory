@@ -52,8 +52,8 @@ struct vm_area_struct {
 	struct vm_area_struct * vm_avl_left;
 	struct vm_area_struct * vm_avl_right;
 
-	/* For areas with inode, the list inode->i_mmap, for shm areas,
-	 * the list of attaches, otherwise unused.
+	/* For areas with inode, the list inode->i_mapping->i_mmap, 
+	 * for shm areas, the list of attaches, otherwise unused.
 	 */
 	struct vm_area_struct *vm_next_share;
 	struct vm_area_struct **vm_pprev_share;

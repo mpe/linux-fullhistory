@@ -815,10 +815,8 @@ static int imm_completion(Scsi_Cmnd * cmd)
 		 * Make sure that we transfer even number of bytes
 		 * otherwise it makes imm_byte_out() messy.
 		 */
-		if (cmd->SCp.this_residual & 0x01) {
+		if (cmd->SCp.this_residual & 0x01)
 		    cmd->SCp.this_residual++;
-		    printk("IMM: adjusted buffer for 16 bit transfer\n");
-		}
 	    }
 	}
 	/* Now check to see if the drive is ready to comunicate */
@@ -994,10 +992,8 @@ static int imm_engine(imm_struct * tmp, Scsi_Cmnd * cmd)
 	}
 	cmd->SCp.buffers_residual = cmd->use_sg;
 	cmd->SCp.phase++;
-	if (cmd->SCp.this_residual & 0x01) {
+	if (cmd->SCp.this_residual & 0x01)
 	    cmd->SCp.this_residual++;
-	    printk("IMM: adjusted buffer for 16 bit transfer\n");
-	}
 	/* Phase 5 - Pre-Data transfer stage */
     case 5:
 	/* Spin lock for BUSY */

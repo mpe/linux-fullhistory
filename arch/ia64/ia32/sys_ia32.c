@@ -29,6 +29,7 @@
 #include <linux/smp_lock.h>
 #include <linux/sem.h>
 #include <linux/msg.h>
+#include <linux/mm.h>
 #include <linux/shm.h>
 #include <linux/malloc.h>
 #include <linux/uio.h>
@@ -207,7 +208,7 @@ sys32_newfstat(unsigned int fd, struct stat32 *statbuf)
 
 unsigned long
 do_mmap_fake(struct file *file, unsigned long addr, unsigned long len,
-	unsigned long prot, unsigned long flags, unsigned long off)
+	unsigned long prot, unsigned long flags, loff_t off)
 {
 	struct inode *inode;
 	void *front, *back;
@@ -224,11 +225,11 @@ do_mmap_fake(struct file *file, unsigned long addr, unsigned long len,
 	back = NULL;
 	if ((baddr = (addr & PAGE_MASK)) != addr && get_user(c, (char *)baddr) == 0) {
 		front = kmalloc(addr - baddr, GFP_KERNEL);
-		memcpy(front, (void *)baddr, addr - baddr);
+		__copy_user(front, (void *)baddr, addr - baddr);
 	}
 	if (addr && ((addr + len) & ~PAGE_MASK) && get_user(c, (char *)(addr + len)) == 0) {
 		back = kmalloc(PAGE_SIZE - ((addr + len) & ~PAGE_MASK), GFP_KERNEL);
-		memcpy(back, (char *)addr + len, PAGE_SIZE - ((addr + len) & ~PAGE_MASK));
+		__copy_user(back, (char *)addr + len, PAGE_SIZE - ((addr + len) & ~PAGE_MASK));
 	}
 	down(&current->mm->mmap_sem);
 	r = do_mmap(0, baddr, len + (addr - baddr), prot, flags | MAP_ANONYMOUS, 0);
@@ -238,15 +239,15 @@ do_mmap_fake(struct file *file, unsigned long addr, unsigned long len,
 	if (addr == 0)
 		addr = r;
 	if (back) {
-		memcpy((char *)addr + len, back, PAGE_SIZE - ((addr + len) & ~PAGE_MASK));
+		__copy_user((char *)addr + len, back, PAGE_SIZE - ((addr + len) & ~PAGE_MASK));
 		kfree(back);
 	}
 	if (front) {
-		memcpy((void *)baddr, front, addr - baddr);
+		__copy_user((void *)baddr, front, addr - baddr);
 		kfree(front);
 	}
 	if (flags & MAP_ANONYMOUS) {
-		memset((char *)addr, 0, len);
+		clear_user((char *)addr, len);
 		return(addr);
 	}
 	if (!file)
@@ -256,17 +257,37 @@ do_mmap_fake(struct file *file, unsigned long addr, unsigned long len,
 		return -EINVAL;
 	if (!file->f_op->read)
 		return -EINVAL;
-	lock_kernel();
-	if (file->f_op->llseek) {
-		if (file->f_op->llseek(file,off,0) != off) {
-			unlock_kernel();
-			return -EINVAL;
-		}
-	} else
-		file->f_pos = off;
-	unlock_kernel();
-	r = file->f_op->read(file, (char *)addr, len, &file->f_pos);
+	r = file->f_op->read(file, (char *)addr, len, &off);
 	return (r < 0) ? -EINVAL : addr;
+}
+
+long
+ia32_do_mmap (struct file *file, unsigned int addr, unsigned int len, unsigned int prot,
+	      unsigned int flags, unsigned int fd, unsigned int offset)
+{
+	long error = -EFAULT;
+	unsigned int poff;
+
+	flags &= ~(MAP_EXECUTABLE | MAP_DENYWRITE);
+
+ 	if ((flags & MAP_FIXED) && ((addr & ~PAGE_MASK) || (offset & ~PAGE_MASK)))
+ 		error = do_mmap_fake(file, addr, len, prot, flags, (loff_t)offset);
+ 	else if (!addr && (offset & ~PAGE_MASK)) {
+ 		poff = offset & PAGE_MASK;
+ 		len += offset - poff;
+
+ 		down(&current->mm->mmap_sem);
+ 		error = do_mmap(file, addr, len, prot, flags, poff);
+  		up(&current->mm->mmap_sem);
+
+ 		if (!IS_ERR(error))
+ 			error += offset - poff;
+ 	} else {
+  		down(&current->mm->mmap_sem);
+  		error = do_mmap(file, addr, len, prot, flags, offset);
+ 		up(&current->mm->mmap_sem);
+ 	}
+	return error;
 }
 
 /*
@@ -287,32 +308,22 @@ struct mmap_arg_struct {
 asmlinkage long
 sys32_mmap(struct mmap_arg_struct *arg)
 {
-	int error = -EFAULT;
-	struct file * file = NULL;
 	struct mmap_arg_struct a;
+	struct file *file = NULL;
+	long retval;
 
 	if (copy_from_user(&a, arg, sizeof(a)))
 		return -EFAULT;
 
 	if (!(a.flags & MAP_ANONYMOUS)) {
-		error = -EBADF;
 		file = fget(a.fd);
 		if (!file)
-			goto out;
+			return -EBADF;
 	}
-	a.flags &= ~(MAP_EXECUTABLE | MAP_DENYWRITE);
-
-	if ((a.flags & MAP_FIXED) && ((a.addr & ~PAGE_MASK) || (a.offset & ~PAGE_MASK))) {
-		error = do_mmap_fake(file, a.addr, a.len, a.prot, a.flags, a.offset);
-	} else {
-		down(&current->mm->mmap_sem);
-		error = do_mmap(file, a.addr, a.len, a.prot, a.flags, a.offset);
-		up(&current->mm->mmap_sem);
-	}
+	retval = ia32_do_mmap(file, a.addr, a.len, a.prot, a.flags, a.fd, a.offset);
 	if (file)
 		fput(file);
-out:
-	return error;
+	return retval;
 }
 
 asmlinkage long
@@ -601,6 +612,40 @@ sys32_alarm(unsigned int seconds)
 
 /* Translations due to time_t size differences.  Which affects all
    sorts of things, like timeval and itimerval.  */
+
+struct utimbuf_32 {
+	int	atime;
+	int	mtime;
+};
+
+extern asmlinkage long sys_utimes(char * filename, struct timeval * utimes);
+extern asmlinkage long sys_gettimeofday (struct timeval *tv, struct timezone *tz);
+
+asmlinkage long
+ia32_utime(char * filename, struct utimbuf_32 *times32)
+{
+	mm_segment_t old_fs = get_fs();
+	struct timeval tv[2];
+	long ret;
+
+	if (times32) {
+		get_user(tv[0].tv_sec, &times32->atime);
+		tv[0].tv_usec = 0;
+		get_user(tv[1].tv_sec, &times32->mtime);
+		tv[1].tv_usec = 0;
+		set_fs (KERNEL_DS);
+	} else {
+		set_fs (KERNEL_DS);
+		ret = sys_gettimeofday(&tv[0], 0);
+		if (ret < 0)
+			goto out;
+		tv[1] = tv[0];
+	}
+	ret = sys_utimes(filename, tv);
+  out:
+	set_fs (old_fs);
+	return ret;
+}
 
 extern struct timezone sys_tz;
 extern int do_sys_settimeofday(struct timeval *tv, struct timezone *tz);
@@ -2359,7 +2404,7 @@ sys32_ptrace (long request, pid_t pid, unsigned long addr, unsigned long data,
 		goto out;
 	}
 	ret = -ESRCH;
-	if (!(child->flags & PF_PTRACED))
+	if (!(child->ptrace & PT_PTRACED))
 		goto out;
 	if (child->state != TASK_STOPPED) {
 		if (request != PTRACE_KILL)

@@ -298,12 +298,11 @@ static unsigned char ppa_wait(int host_no)
     unsigned char r;
 
     k = PPA_SPIN_TMO;
-    do {
-	r = r_str(ppb);
-	k--;
-	udelay(1);
+    /* Wait for bit 6 and 7 - PJC */
+    for (r = r_str (ppb); ((r & 0xc0)!=0xc0) && (k); k--) {
+	    udelay (1);
+	    r = r_str (ppb);
     }
-    while (!(r & 0x80) && (k));
 
     /*
      * return some status information.
@@ -637,7 +636,6 @@ static int ppa_completion(Scsi_Cmnd * cmd)
      *  1     Finished data transfer
      */
     int host_no = cmd->host->unique_id;
-    unsigned short ppb = PPA_BASE(host_no);
     unsigned long start_jiffies = jiffies;
 
     unsigned char r, v;
@@ -649,11 +647,7 @@ static int ppa_completion(Scsi_Cmnd * cmd)
 	    (v == WRITE_6) ||
 	    (v == WRITE_10));
 
-    /*
-     * We only get here if the drive is ready to comunicate,
-     * hence no need for a full ppa_wait.
-     */
-    r = (r_str(ppb) & 0xf0);
+    r = ppa_wait(host_no); /* Need a ppa_wait() - PJC */
 
     while (r != (unsigned char) 0xf0) {
 	/*
@@ -691,7 +685,7 @@ static int ppa_completion(Scsi_Cmnd * cmd)
 	    }
 	}
 	/* Now check to see if the drive is ready to comunicate */
-	r = (r_str(ppb) & 0xf0);
+	r = ppa_wait(host_no); /* need ppa_wait() - PJC */
 	/* If not, drop back down to the scheduler and wait a timer tick */
 	if (!(r & 0x80))
 	    return 0;
