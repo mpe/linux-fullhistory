@@ -1,7 +1,7 @@
 /*
  *  linux/arch/alpha/kernel/time.c
  *
- *  Copyright (C) 1991, 1992, 1995, 1999  Linus Torvalds
+ *  Copyright (C) 1991, 1992, 1995, 1999, 2000  Linus Torvalds
  *
  * This file contains the PC-specific time handling details:
  * reading the RTC at bootup, etc..
@@ -21,6 +21,9 @@
  * 1999-04-16	Thorsten Kranzkowski (dl8bcu@gmx.net)
  *	fixed algorithm in do_gettimeofday() for calculating the precise time
  *	from processor cycle counter (now taking lost_ticks into account)
+ * 2000-08-13	Jan-Benedict Glaw <jbglaw@lug-owl.de>
+ * 	Fixed time_init to be aware of epoches != 1900. This prevents
+ * 	booting up in 2048 for me;) Code is stolen from rtc.c.
  */
 #include <linux/config.h>
 #include <linux/errno.h>
@@ -200,7 +203,7 @@ common_init_rtc(void)
 void
 time_init(void)
 {
-	unsigned int year, mon, day, hour, min, sec, cc1, cc2;
+	unsigned int year, mon, day, hour, min, sec, cc1, cc2, epoch;
 	unsigned long cycle_freq, one_percent;
 	long diff;
 
@@ -263,16 +266,24 @@ time_init(void)
 		BCD_TO_BIN(mon);
 		BCD_TO_BIN(year);
 	}
-#ifdef ALPHA_PRE_V1_2_SRM_CONSOLE
-	/*
-	 * The meaning of life, the universe, and everything. Plus
-	 * this makes the year come out right on SRM consoles earlier
-	 * than v1.2.
-	 */
-	year -= 42;
-#endif
-	if ((year += 1900) < 1970)
+
+	/* PC-like is standard; used for year <= 20 || year >= 100 */
+	epoch = 1900;
+	if (year > 20 && year < 48)
+		/* ARC console, used on some not so old boards */
+		epoch = 1980;
+	else if (year >= 48 && year < 70)
+		/* Digital UNIX, used on older boards (eg. AXPpxi33) */
+		epoch = 1952;
+	else if (year >= 70 && year < 100)
+		/* Digital DECstations, very old... */
+		epoch = 1928;
+
+	printk(KERN_INFO "Using epoch = %d\n", epoch);
+
+	if ((year += epoch) < 1970)
 		year += 100;
+
 	xtime.tv_sec = mktime(year, mon, day, hour, min, sec);
 	xtime.tv_usec = 0;
 

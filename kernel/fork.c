@@ -669,6 +669,9 @@ int do_fork(unsigned long clone_flags, unsigned long usp, struct pt_regs *regs)
 	nr_threads++;
 	write_unlock_irq(&tasklist_lock);
 
+	if (p->ptrace & PT_PTRACED)
+		send_sig(SIGSTOP, p, 1);
+
 	wake_up_process(p);		/* do this last */
 	++total_forks;
 

@@ -366,7 +366,7 @@ lli_deliver_call(struct FsmInst *fi, int event, void *arg)
 		 * No need to return "unknown" for calls without OAD,
 		 * cause that's handled in linklevel now (replaced by '0')
 		 */
-		memcpy (&ic.parm.setup, &chanp->proc->para.setup, sizeof(ic.parm.setup));
+		memcpy(&ic.parm.setup, &chanp->proc->para.setup, sizeof(setup_parm));
 		ret = chanp->cs->iif.statcallb(&ic);
 		if (chanp->debug & 1)
 			link_debug(chanp, 1, "statcallb ret=%d", ret);
@@ -383,11 +383,15 @@ lli_deliver_call(struct FsmInst *fi, int event, void *arg)
 				FsmChangeState(fi, ST_IN_PROCEED_SEND);
 				chanp->d_st->lli.l4l3(chanp->d_st, CC_PROCEED_SEND | REQUEST, chanp->proc);
 				if (ret == 5) {
-					memcpy (&chanp->setup, &ic.parm.setup, sizeof(chanp->setup));
+					memcpy(&chanp->setup, &ic.parm.setup, sizeof(setup_parm));
 					chanp->d_st->lli.l4l3(chanp->d_st, CC_REDIR | REQUEST, chanp->proc);
 				}
 				break;
 			case 2:	/* Rejecting Call */
+				break;
+			case 3:	/* incomplete number */
+				FsmDelTimer(&chanp->drel_timer, 61);
+				chanp->d_st->lli.l4l3(chanp->d_st, CC_MORE_INFO | REQUEST, chanp->proc);
 				break;
 			case 0:	/* OK, nobody likes this call */
 			default:	/* statcallb problems */
@@ -795,6 +799,8 @@ static struct FsmNode fnlist[] HISAX_INITDATA =
         {ST_IN_WAIT_LL,         EV_HANGUP,              lli_reject_req},
         {ST_IN_WAIT_LL,         EV_DISCONNECT_IND,      lli_release_req},
         {ST_IN_WAIT_LL,         EV_RELEASE,             lli_dhup_close},
+        {ST_IN_WAIT_LL,         EV_SETUP_IND,           lli_deliver_call},
+        {ST_IN_WAIT_LL,         EV_SETUP_ERR,           lli_error},
         {ST_IN_ALERT_SENT,      EV_SETUP_CMPL_IND,      lli_init_bchan_in},
         {ST_IN_ALERT_SENT,      EV_ACCEPTD,             lli_send_dconnect},
         {ST_IN_ALERT_SENT,      EV_HANGUP,              lli_disconnect_reject},
@@ -956,6 +962,9 @@ dchan_l3l4(struct PStack *st, int pr, void *arg)
 		return;
 
 	switch (pr) {
+		case (CC_MORE_INFO | INDICATION):
+			FsmEvent(&chanp->fi, EV_SETUP_IND, NULL);
+			break;
 		case (CC_DISCONNECT | INDICATION):
 			FsmEvent(&chanp->fi, EV_DISCONNECT_IND, NULL);
 			break;
@@ -1103,7 +1112,7 @@ init_chan(int chan, struct IsdnCardState *csta)
 	chanp->fi.printdebug = callc_debug;
 	FsmInitTimer(&chanp->fi, &chanp->dial_timer);
 	FsmInitTimer(&chanp->fi, &chanp->drel_timer);
-	if (!chan || test_bit(FLG_TWO_DCHAN, &csta->HW_Flags)) {
+	if (!chan || (test_bit(FLG_TWO_DCHAN, &csta->HW_Flags) && chan < 2)) {
 		init_d_st(chanp);
 	} else {
 		chanp->d_st = csta->channel->d_st;
@@ -1176,9 +1185,12 @@ lldata_handler(struct PStack *st, int pr, void *arg)
 
 	switch (pr) {
 		case (DL_DATA  | INDICATION):
-			if (chanp->data_open)
+			if (chanp->data_open) {
+				if (chanp->debug & 0x800)
+					link_debug(chanp, 0, "lldata: %d", skb->len);
 				chanp->cs->iif.rcvcallb_skb(chanp->cs->myid, chanp->chan, skb);
-			else {
+			} else {
+				link_debug(chanp, 0, "lldata: channel not open");
 				dev_kfree_skb(skb);
 			}
 			break;
@@ -1205,10 +1217,12 @@ lltrans_handler(struct PStack *st, int pr, void *arg)
 
 	switch (pr) {
 		case (PH_DATA | INDICATION):
-			if (chanp->data_open)
+			if (chanp->data_open) {
+				if (chanp->debug & 0x800)
+					link_debug(chanp, 0, "lltrans: %d", skb->len);
 				chanp->cs->iif.rcvcallb_skb(chanp->cs->myid, chanp->chan, skb);
-			else {
-				link_debug(chanp, 0, "channel not open");
+			} else {
+				link_debug(chanp, 0, "lltrans: channel not open");
 				dev_kfree_skb(skb);
 			}
 			break;
@@ -1233,6 +1247,8 @@ ll_writewakeup(struct PStack *st, int len)
 	struct Channel *chanp = st->lli.userdata;
 	isdn_ctrl ic;
 
+	if (chanp->debug & 0x800)
+		link_debug(chanp, 0, "llwakeup: %d", len);
 	ic.driver = chanp->cs->myid;
 	ic.command = ISDN_STAT_BSENT;
 	ic.arg = chanp->chan;
@@ -1506,7 +1522,7 @@ HiSax_command(isdn_ctrl * ic)
 				link_debug(chanp, 1, "DIAL %s -> %s (%d,%d)",
 					ic->parm.setup.eazmsn, ic->parm.setup.phone,
 					ic->parm.setup.si1, ic->parm.setup.si2);
-			memcpy (&chanp->setup, &ic->parm.setup, sizeof (chanp->setup));
+			memcpy(&chanp->setup, &ic->parm.setup, sizeof(setup_parm));
 			if (!strcmp(chanp->setup.eazmsn, "0"))
 				chanp->setup.eazmsn[0] = '\0';
 			/* this solution is dirty and may be change, if
@@ -1526,6 +1542,7 @@ HiSax_command(isdn_ctrl * ic)
 			break;
 		case (ISDN_CMD_ACCEPTD):
 			chanp = csta->channel + ic->arg;
+			memcpy(&chanp->setup, &ic->parm.setup, sizeof(setup_parm));
 			if (chanp->debug & 1)
 				link_debug(chanp, 1, "ACCEPTD");
 			FsmEvent(&chanp->fi, EV_ACCEPTD, NULL);
@@ -1722,7 +1739,7 @@ HiSax_command(isdn_ctrl * ic)
 			chanp = csta->channel + ic->arg;
 			if (chanp->debug & 1)
 				link_debug(chanp, 1, "REDIR");
-			memcpy (&chanp->setup, &ic->parm.setup, sizeof(chanp->setup));
+			memcpy(&chanp->setup, &ic->parm.setup, sizeof(setup_parm));
 			FsmEvent(&chanp->fi, EV_REDIR, NULL);
 			break;
 

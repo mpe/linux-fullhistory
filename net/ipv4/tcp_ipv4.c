@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_ipv4.c,v 1.211 2000/08/09 11:59:04 davem Exp $
+ * Version:	$Id: tcp_ipv4.c,v 1.212 2000/08/18 17:10:04 davem Exp $
  *
  *		IPv4 specific functions
  *
@@ -2061,18 +2061,20 @@ static void get_timewait_sock(struct tcp_tw_bucket *tw, char *tmpbuf, int i)
 		atomic_read(&tw->refcnt), tw);
 }
 
+#define TMPSZ 150
+
 int tcp_get_info(char *buffer, char **start, off_t offset, int length)
 {
 	int len = 0, num = 0, i;
 	off_t begin, pos = 0;
-	char tmpbuf[129];
+	char tmpbuf[TMPSZ+1];
 
-	if (offset < 128)
-		len += sprintf(buffer, "%-127s\n",
+	if (offset < TMPSZ)
+		len += sprintf(buffer, "%-*s\n", TMPSZ-1,
 			       "  sl  local_address rem_address   st tx_queue "
 			       "rx_queue tr tm->when retrnsmt   uid  timeout inode");
 
-	pos = 128;
+	pos = TMPSZ;
 
 	/* First, walk listening socket table. */
 	tcp_listen_lock();
@@ -2089,10 +2091,10 @@ int tcp_get_info(char *buffer, char **start, off_t offset, int length)
 			if (!TCP_INET_FAMILY(sk->family))
 				goto skip_listen;
 
-			pos += 128;
+			pos += TMPSZ;
 			if (pos >= offset) {
 				get_tcp_sock(sk, tmpbuf, num);
-				len += sprintf(buffer+len, "%-127s\n", tmpbuf);
+				len += sprintf(buffer+len, "%-*s\n", TMPSZ-1, tmpbuf);
 				if (len >= length) {
 					tcp_listen_unlock();
 					goto out_no_bh;
@@ -2109,11 +2111,11 @@ skip_listen:
 						if (!TCP_INET_FAMILY(req->class->family))
 							continue;
 
-						pos += 128;
+						pos += TMPSZ;
 						if (pos < offset)
 							continue;
 						get_openreq(sk, req, tmpbuf, num, uid);
-						len += sprintf(buffer+len, "%-127s\n", tmpbuf);
+						len += sprintf(buffer+len, "%-*s\n", TMPSZ-1, tmpbuf);
 						if(len >= length) {
 							read_unlock_bh(&tp->syn_wait_lock);
 							tcp_listen_unlock();
@@ -2141,11 +2143,11 @@ skip_listen:
 		for(sk = head->chain; sk; sk = sk->next, num++) {
 			if (!TCP_INET_FAMILY(sk->family))
 				continue;
-			pos += 128;
+			pos += TMPSZ;
 			if (pos < offset)
 				continue;
 			get_tcp_sock(sk, tmpbuf, num);
-			len += sprintf(buffer+len, "%-127s\n", tmpbuf);
+			len += sprintf(buffer+len, "%-*s\n", TMPSZ-1, tmpbuf);
 			if(len >= length) {
 				read_unlock(&head->lock);
 				goto out;
@@ -2156,11 +2158,11 @@ skip_listen:
 		     tw = (struct tcp_tw_bucket *)tw->next, num++) {
 			if (!TCP_INET_FAMILY(tw->family))
 				continue;
-			pos += 128;
+			pos += TMPSZ;
 			if (pos < offset)
 				continue;
 			get_timewait_sock(tw, tmpbuf, num);
-			len += sprintf(buffer+len, "%-127s\n", tmpbuf);
+			len += sprintf(buffer+len, "%-*s\n", TMPSZ-1, tmpbuf);
 			if(len >= length) {
 				read_unlock(&head->lock);
 				goto out;

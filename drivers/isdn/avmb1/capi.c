@@ -1,11 +1,14 @@
 /*
- * $Id: capi.c,v 1.38 2000/07/24 08:49:09 calle Exp $
+ * $Id: capi.c,v 1.39 2000/07/24 13:42:50 calle Exp $
  *
  * CAPI 2.0 Interface for Linux
  *
  * Copyright 1996 by Carsten Paeth (calle@calle.in-berlin.de)
  *
  * $Log: capi.c,v $
+ * Revision 1.39  2000/07/24 13:42:50  calle
+ * - lock_kernel/unlock_kernel for _release functions. (from 2.4)
+ *
  * Revision 1.38  2000/07/24 08:49:09  calle
  * - Bugfix: capiminor_del_all_ack completely wrong :-(
  *
@@ -216,7 +219,7 @@
 #endif /* CONFIG_ISDN_CAPI_MIDDLEWARE */
 #include <linux/slab.h>
 
-static char *revision = "$Revision: 1.38 $";
+static char *revision = "$Revision: 1.39 $";
 
 MODULE_AUTHOR("Carsten Paeth (calle@calle.in-berlin.de)");
 
@@ -325,11 +328,11 @@ static struct capidev *capidev_openlist = 0;
 static struct capiminor *minors = 0;
 #endif /* CONFIG_ISDN_CAPI_MIDDLEWARE */
 
-static kmem_cache_t *capidev_cachep = 0; 
-static kmem_cache_t *capincci_cachep = 0; 
+static kmem_cache_t *capidev_cachep = 0;
+static kmem_cache_t *capincci_cachep = 0;
 #ifdef CONFIG_ISDN_CAPI_MIDDLEWARE
-static kmem_cache_t *capiminor_cachep = 0; 
-static kmem_cache_t *capidh_cachep = 0; 
+static kmem_cache_t *capiminor_cachep = 0;
+static kmem_cache_t *capidh_cachep = 0;
 #endif /* CONFIG_ISDN_CAPI_MIDDLEWARE */
 
 #ifdef CONFIG_ISDN_CAPI_MIDDLEWARE
@@ -1239,7 +1242,7 @@ capi_release(struct inode *inode, struct file *file)
 	capincci_free(cdev, 0xffffffff);
 	capidev_free(cdev);
 	file->private_data = NULL;
-
+	
 	MOD_DEC_USE_COUNT;
 #ifdef _DEBUG_REFCOUNT
 	printk(KERN_DEBUG "capi_release %d\n", GET_USE_COUNT(THIS_MODULE));
@@ -1251,13 +1254,13 @@ capi_release(struct inode *inode, struct file *file)
 static struct file_operations capi_fops =
 {
 	owner:		THIS_MODULE,
-	llseek:         capi_llseek,
-	read:           capi_read,
-	write:          capi_write,
-	poll:           capi_poll,
-	ioctl:          capi_ioctl,
-	open:           capi_open,
-	release:        capi_release,                                           
+	llseek:		capi_llseek,
+	read:		capi_read,
+	write:		capi_write,
+	poll:		capi_poll,
+	ioctl:		capi_ioctl,
+	open:		capi_open,
+	release:	capi_release,
 };
 
 #ifdef CONFIG_ISDN_CAPI_MIDDLEWARE
@@ -1980,9 +1983,9 @@ static void alloc_exit(void)
 
 static int alloc_init(void)
 {
-	capidev_cachep = kmem_cache_create("capi20_dev", 
+	capidev_cachep = kmem_cache_create("capi20_dev",
 					 sizeof(struct capidev),
-					 0, 
+					 0,
 					 SLAB_HWCACHE_ALIGN,
 					 NULL, NULL);
 	if (!capidev_cachep) {
@@ -1990,9 +1993,9 @@ static int alloc_init(void)
 		return -ENOMEM;
 	}
 
-	capincci_cachep = kmem_cache_create("capi20_ncci", 
+	capincci_cachep = kmem_cache_create("capi20_ncci",
 					 sizeof(struct capincci),
-					 0, 
+					 0,
 					 SLAB_HWCACHE_ALIGN,
 					 NULL, NULL);
 	if (!capincci_cachep) {
@@ -2000,18 +2003,18 @@ static int alloc_init(void)
 		return -ENOMEM;
 	}
 #ifdef CONFIG_ISDN_CAPI_MIDDLEWARE
-	capidh_cachep = kmem_cache_create("capi20_dh", 
+	capidh_cachep = kmem_cache_create("capi20_dh",
 					 sizeof(struct datahandle_queue),
-					 0, 
+					 0,
 					 SLAB_HWCACHE_ALIGN,
 					 NULL, NULL);
 	if (!capidh_cachep) {
 		alloc_exit();
 		return -ENOMEM;
 	}
-	capiminor_cachep = kmem_cache_create("capi20_minor", 
+	capiminor_cachep = kmem_cache_create("capi20_minor",
 					 sizeof(struct capiminor),
-					 0, 
+					 0,
 					 SLAB_HWCACHE_ALIGN,
 					 NULL, NULL);
 	if (!capiminor_cachep) {

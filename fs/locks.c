@@ -103,6 +103,11 @@
  *
  *  Fixed /proc/locks interface so that we can't overrun the buffer we are handed.
  *  Andy Walker (andy@lysaker.kvaerner.no), May 12, 1997.
+ *
+ *  Use slab allocator instead of kmalloc/kfree.
+ *  Use generic list implementation from <linux/list.h>.
+ *  Sped up posix_locks_deadlock by only considering blocked locks.
+ *  Matthew Wilcox <willy@thepuffingroup.com>, March, 2000.
  */
 
 #include <linux/malloc.h>
@@ -351,8 +356,8 @@ static void locks_insert_block(struct file_lock *blocker,
 		locks_delete_block(waiter);
 	}
 	list_add_tail(&waiter->fl_block, &blocker->fl_block);
-//	list_add(&waiter->fl_link, &blocked_list);
-//	waiter->fl_next = blocker;
+	list_add(&waiter->fl_link, &blocked_list);
+	waiter->fl_next = blocker;
 }
 
 /* Wake up processes blocked waiting for blocker.
@@ -511,34 +516,27 @@ static int posix_locks_deadlock(struct file_lock *caller_fl,
 				struct file_lock *block_fl)
 {
 	struct list_head *tmp;
-	void		 *caller_owner, *blocked_owner;
+	fl_owner_t caller_owner, blocked_owner;
 	unsigned int	 caller_pid, blocked_pid;
 
 	caller_owner = caller_fl->fl_owner;
 	caller_pid = caller_fl->fl_pid;
 	blocked_owner = block_fl->fl_owner;
 	blocked_pid = block_fl->fl_pid;
+	tmp = blocked_list.next;
 
 next_task:
 	if (caller_owner == blocked_owner && caller_pid == blocked_pid)
 		return 1;
-	list_for_each(tmp, &file_lock_list) {
-		struct list_head *btmp;
+	while (tmp != &blocked_list) {
 		struct file_lock *fl = list_entry(tmp, struct file_lock, fl_link);
-		if (fl->fl_owner == NULL || list_empty(&fl->fl_block))
-			continue;
-		list_for_each(btmp, &fl->fl_block) {
-			struct file_lock *bfl = list_entry(tmp, struct file_lock, fl_block);
-			if (bfl->fl_owner == blocked_owner &&
-			    bfl->fl_pid == blocked_pid) {
-				if (fl->fl_owner == caller_owner &&
-				    fl->fl_pid == caller_pid) {
-					return (1);
-				}
-				blocked_owner = fl->fl_owner;
-				blocked_pid = fl->fl_pid;
-				goto next_task;
-			}
+		tmp = tmp->next;
+		if ((fl->fl_owner == blocked_owner)
+		    && (fl->fl_pid == blocked_pid)) {
+			fl = fl->fl_next;
+			blocked_owner = fl->fl_owner;
+			blocked_pid = fl->fl_pid;
+			goto next_task;
 		}
 	}
 	return 0;
@@ -985,15 +983,14 @@ int fcntl_getlk(unsigned int fd, struct flock *l)
 		 * legacy 32bit flock.
 		 */
 		error = -EOVERFLOW;
-		if (fl->fl_end > OFFT_OFFSET_MAX)
+		if (fl->fl_start > OFFT_OFFSET_MAX)
+			goto out_putf;
+		if ((fl->fl_end != OFFSET_MAX)
+		    && (fl->fl_end > OFFT_OFFSET_MAX))
 			goto out_putf;
 #endif
 		flock.l_start = fl->fl_start;
-#if BITS_PER_LONG == 32
-		flock.l_len = fl->fl_end == OFFT_OFFSET_MAX ? 0 :
-#else
 		flock.l_len = fl->fl_end == OFFSET_MAX ? 0 :
-#endif
 			fl->fl_end - fl->fl_start + 1;
 		flock.l_whence = 0;
 		flock.l_type = fl->fl_type;

@@ -19,13 +19,21 @@
 
 
 /* A4T																*/
-#define I20_DEVICE_ID       	0x6120  /* I20 PCI device ID */
-#define I20_VENDOR_ID       	0x11DE  /* I20 PCI vendor ID */
+#ifndef PCI_VENDOR_ID_ZORAN
+#define PCI_VENDOR_ID_ZORAN	0x11DE
+#endif
+#ifndef PCI_DEVICE_ID_ZORAN_36120
+#define PCI_DEVICE_ID_ZORAN_36120	0x6120
+#endif
 #define	A4T_SUBVEN_ID		0x0871	
 #define	A4T_SUBSYS_ID		0xFFA4
 /* Scitel Quadro 																*/
-#define	PLX_DEVICE_ID		0x9050	/* Scitel Quadro PLX */
-#define	PLX_VENDOR_ID		0x10B5
+#ifndef PCI_VENDOR_ID_PLX
+#define PCI_VENDOR_ID_PLX	0x10B5
+#endif
+#ifndef PCI_DEVICE_ID_PLX_9050
+#define PCI_DEVICE_ID_PLX_9050	0x9050
+#endif
 #define	SCT_SUBVEN_ID		0x0871
 #define	SCT_SUBSYS_ID		0xFFA8
 

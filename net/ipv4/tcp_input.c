@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_input.c,v 1.197 2000/08/12 13:37:58 davem Exp $
+ * Version:	$Id: tcp_input.c,v 1.198 2000/08/15 20:15:23 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -3653,7 +3653,7 @@ int tcp_rcv_state_process(struct sock *sk, struct sk_buff *skb,
 				 * are not waked up, because sk->sleep == NULL
 				 * and sk->socket == NULL.
 				 */
-				if (!sk->socket) {
+				if (sk->socket) {
 					sk->state_change(sk);
 					sk_wake_async(sk,0,POLL_OUT);
 				}

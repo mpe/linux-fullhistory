@@ -1,4 +1,4 @@
-/* $Id: hysdn_proclog.c,v 1.4 2000/03/03 16:37:12 kai Exp $
+/* $Id: hysdn_proclog.c,v 1.7 2000/08/20 16:46:09 keil Exp $
 
  * Linux driver for HYSDN cards, /proc/net filesystem log functions.
  * written by Werner Cornelius (werner@titro.de) for Hypercope GmbH
@@ -20,6 +20,15 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  * $Log: hysdn_proclog.c,v $
+ * Revision 1.7  2000/08/20 16:46:09  keil
+ * Changes for 2.4
+ *
+ * Revision 1.6  2000/06/18 16:08:18  keil
+ * 2.4 PCI changes and some cosmetics
+ *
+ * Revision 1.5  2000/04/23 14:18:36  kai
+ * merge changes from main tree
+ *
  * Revision 1.4  2000/03/03 16:37:12  kai
  * incorporated some cosmetic changes from the official kernel tree back
  * into CVS
@@ -48,8 +57,6 @@
 #include <linux/smp_lock.h>
 
 #include "hysdn_defs.h"
-
-static char *hysdn_proclog_revision = "$Revision: 1.4 $";
 
 /* the proc subdir for the interface is defined in the procconf module */
 extern struct proc_dir_entry *hysdn_proc_entry;
@@ -456,7 +463,7 @@ hysdn_proclog_init(hysdn_card * card)
 		sprintf(pd->log_name, "%s%d", PROC_LOG_BASENAME, card->myid);
 		if ((pd->log = create_proc_entry(pd->log_name, S_IFREG | S_IRUGO | S_IWUSR, hysdn_proc_entry)) != NULL) {
 		        pd->log->proc_fops = &log_fops; 
-		        pd->log->owner = THIS_MODULE; 
+		        pd->log->owner = THIS_MODULE;
 		}
 
 		init_waitqueue_head(&(pd->rd_queue));

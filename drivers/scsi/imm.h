@@ -10,7 +10,7 @@
 #ifndef _IMM_H
 #define _IMM_H
 
-#define   IMM_VERSION   "2.03 (for Linux 2.0.0)"
+#define   IMM_VERSION   "2.04 (for Linux 2.4.0)"
 
 /* 
  * 10 Apr 1998 (Good Friday) - Received EN144302 by email from Iomega.
@@ -59,6 +59,7 @@
  *    CONFIG_SCSI_PPA_HAVE_PEDANTIC => CONFIG_SCSI_IZIP_EPP16
  *    added CONFIG_SCSI_IZIP_SLOW_CTR option
  *                                                      [2.03]
+ *  Fix kernel panic on scsi timeout.		20Aug00 [2.04]
  */
 /* ------ END OF USER CONFIGURABLE PARAMETERS ----- */
 
@@ -171,6 +172,7 @@ int imm_biosparam(Disk *, kdev_t, int *);
                 eh_device_reset_handler:        NULL,                   \
                 eh_bus_reset_handler:           imm_reset,              \
                 eh_host_reset_handler:          imm_reset,              \
+		use_new_eh_code:		1,			\
 		bios_param:		        imm_biosparam,		\
 		this_id:			7,			\
 		sg_tablesize:			SG_ALL,			\

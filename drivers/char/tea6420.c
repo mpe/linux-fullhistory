@@ -9,6 +9,9 @@
  * This code is placed under the terms of the GNU General Public License
  * Code liberally copied from msp3400.c, which is by Gerd Knorr
  *
+ * Changes:
+ * Arnaldo Carvalho de Melo <acme@conectiva.com.br> - 08/14/2000
+ * - resource allocation fixes in tea6300_attach
  */
 
 #include <linux/module.h>
@@ -141,8 +144,10 @@ static int tea6420_attach(struct i2c_adapter *adap, int addr,
         client->addr = addr;
 
 	client->data = tea = kmalloc(sizeof *tea,GFP_KERNEL);
-	if (!tea)
+	if (!tea) {
+		kfree(client);
 		return -ENOMEM;
+	}
 	memset(tea,0,sizeof *tea);
 	do_tea6420_init(client);
 

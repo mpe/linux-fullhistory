@@ -45,6 +45,10 @@ ifdef CONFIG_M586TSC
 CFLAGS += $(shell if $(CC) -march=i586 -S -o /dev/null -xc /dev/null >/dev/null 2>&1; then echo "-march=i586"; fi)
 endif
 
+ifdef CONFIG_M586MMX
+CFLAGS += $(shell if $(CC) -march=i586 -S -o /dev/null -xc /dev/null >/dev/null 2>&1; then echo "-march=i586"; fi)
+endif
+
 ifdef CONFIG_M686
 CFLAGS += $(shell if $(CC) -march=i686 -S -o /dev/null -xc /dev/null >/dev/null 2>&1; then echo "-march=i686"; fi)
 endif

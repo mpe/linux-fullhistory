@@ -157,9 +157,7 @@ static int ingress_enqueue(struct sk_buff *skb,struct Qdisc *sch)
 #endif
 	};
 
-#ifdef CONFIG_NET_CLS_TCINDEX
-         skb->tc_index = TC_H_MIN(res.classid);
-#endif
+	skb->tc_index = TC_H_MIN(res.classid);
 	return result;
 }
 

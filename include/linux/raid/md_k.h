@@ -89,7 +89,7 @@ extern inline mddev_t * kdev_to_mddev (kdev_t dev)
 /*
  * default readahead
  */
-#define MD_READAHEAD	(256 * 512)
+#define MD_READAHEAD	MAX_READAHEAD
 
 extern inline int disk_faulty(mdp_disk_t * d)
 {

@@ -463,7 +463,7 @@ static void __init check_config(void)
 	    && boot_cpu_data.x86 == 5
 	    && boot_cpu_data.x86_model == 2
 	    && (boot_cpu_data.x86_mask < 6 || boot_cpu_data.x86_mask == 11))
-		panic("Kernel compiled for PPro+, assumes a local APIC without the read-before-write bug!");
+		panic("Kernel compiled for PMMX+, assumes a local APIC without the read-before-write bug!");
 #endif
 
 /*

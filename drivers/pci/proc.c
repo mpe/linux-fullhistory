@@ -238,6 +238,13 @@ get_pci_dev_info(char *buf, char **start, off_t pos, int count)
 			} else
 				cnt += len;
 			buf += len;
+			if (cnt >= count)
+				/*
+				 * proc_file_read() gives us 1KB of slack so it's OK if the
+				 * above printfs write a little beyond the buffer end (we
+				 * never write more than 1KB beyond the buffer end).
+				 */
+				break;
 		}
 	}
 	return (count > cnt) ? cnt : count;

@@ -5,7 +5,7 @@
  *
  *		PF_INET protocol family socket handler.
  *
- * Version:	$Id: af_inet.c,v 1.111 2000/08/09 11:59:03 davem Exp $
+ * Version:	$Id: af_inet.c,v 1.112 2000/08/16 16:20:56 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -302,9 +302,6 @@ out:
 
 /*
  *	Create an inet socket.
- *
- *	FIXME: Gcc would generate much better code if we set the parameters
- *	up in in-memory structure order. Gcc68K even more so
  */
 
 static int inet_create(struct socket *sock, int protocol)

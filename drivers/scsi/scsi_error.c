@@ -280,24 +280,7 @@ int scsi_block_when_processing_errors(Scsi_Device * SDpnt)
 STATIC
 void scsi_eh_times_out(Scsi_Cmnd * SCpnt)
 {
-	unsigned long flags;
-	int rtn = FAILED;
-
 	SCpnt->eh_state = SCSI_STATE_TIMEOUT;
-	SCpnt->owner = SCSI_OWNER_LOWLEVEL;
-
-	/*
-	 * As far as the low level driver is concerned, this command is still
-	 * active, so we must give the low level driver a chance to abort it. (DB)
-	 */
-	spin_lock_irqsave(&io_request_lock, flags);
-	if (SCpnt->host->hostt->eh_abort_handler)
-		rtn = SCpnt->host->hostt->eh_abort_handler(SCpnt);
-	spin_unlock_irqrestore(&io_request_lock, flags);
-
-	SCpnt->request.rq_status = RQ_SCSI_DONE;
-	SCpnt->owner = SCSI_OWNER_ERROR_HANDLER;
-
 	SCSI_LOG_ERROR_RECOVERY(5, printk("In scsi_eh_times_out %p\n", SCpnt));
 
 	if (SCpnt->host->eh_action != NULL)
@@ -651,6 +634,26 @@ STATIC void scsi_send_eh_cmnd(Scsi_Cmnd * SCpnt, int timeout)
 		 * In other words, we don't want a callback any more.
 		 */
 		if (SCpnt->eh_state == SCSI_STATE_TIMEOUT) {
+                        SCpnt->owner = SCSI_OWNER_LOWLEVEL;
+
+			/*
+			 * As far as the low level driver is
+			 * concerned, this command is still active, so
+			 * we must give the low level driver a chance
+			 * to abort it. (DB) 
+			 *
+			 * FIXME(eric) - we are not tracking whether we could
+			 * abort a timed out command or not.  Not sure how
+			 * we should treat them differently anyways.
+			 */
+			spin_lock_irqsave(&io_request_lock, flags);
+			if (SCpnt->host->hostt->eh_abort_handler)
+				SCpnt->host->hostt->eh_abort_handler(SCpnt);
+			spin_unlock_irqrestore(&io_request_lock, flags);
+			
+			SCpnt->request.rq_status = RQ_SCSI_DONE;
+			SCpnt->owner = SCSI_OWNER_ERROR_HANDLER;
+			
 			SCpnt->eh_state = FAILED;
 		}
 		SCSI_LOG_ERROR_RECOVERY(5, printk("send_eh_cmnd: %p eh_state:%x\n",

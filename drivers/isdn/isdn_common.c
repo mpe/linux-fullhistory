@@ -1,4 +1,4 @@
-/* $Id: isdn_common.c,v 1.108 2000/06/24 15:52:47 keil Exp $
+/* $Id: isdn_common.c,v 1.111 2000/08/20 07:40:14 keil Exp $
 
  * Linux ISDN subsystem, common used functions (linklevel).
  *
@@ -48,7 +48,7 @@
 
 isdn_dev *dev = (isdn_dev *) 0;
 
-static char *isdn_revision = "$Revision: 1.108 $";
+static char *isdn_revision = "$Revision: 1.111 $";
 
 extern char *isdn_net_revision;
 extern char *isdn_tty_revision;
@@ -1660,6 +1660,8 @@ isdn_open(struct inode *ino, struct file *filep)
 	uint minor = MINOR(ino->i_rdev);
 	int drvidx;
 	int chidx;
+	int retval = -ENODEV;
+
 
 	if (minor == ISDN_MINOR_STATUS) {
 		infostruct *p;
@@ -1670,41 +1672,47 @@ isdn_open(struct inode *ino, struct file *filep)
 			dev->infochain = p;
 			/* At opening we allow a single update */
 			filep->private_data = (char *) 1;
-			return 0;
-		} else
-			return -ENOMEM;
+			retval = 0;
+			goto out;
+		} else {
+			retval = -ENOMEM;
+			goto out;
+		}
 	}
 	if (!dev->channels)
-		return -ENODEV;
+		goto out;
 	if (minor < ISDN_MINOR_CTRL) {
 		printk(KERN_WARNING "isdn_open minor %d obsolete!\n", minor);
 		drvidx = isdn_minor2drv(minor);
 		if (drvidx < 0)
-			return -ENODEV;
+			goto out;
 		chidx = isdn_minor2chan(minor);
 		if (!(dev->drv[drvidx]->flags & DRV_FLAG_RUNNING))
-			return -ENODEV;
+			goto out;
 		if (!(dev->drv[drvidx]->online & (1 << chidx)))
-			return -ENODEV;
+			goto out;
 		isdn_lock_drivers();
-		return 0;
+		retval = 0;
+		goto out;
 	}
 	if (minor <= ISDN_MINOR_CTRLMAX) {
 		drvidx = isdn_minor2drv(minor - ISDN_MINOR_CTRL);
 		if (drvidx < 0)
-			return -ENODEV;
+			goto out;
 		isdn_lock_drivers();
-		return 0;
+		retval = 0;
+		goto out;
 	}
 #ifdef CONFIG_ISDN_PPP
 	if (minor <= ISDN_MINOR_PPPMAX) {
-		int ret;
-		if (!(ret = isdn_ppp_open(minor - ISDN_MINOR_PPP, filep)))
+		retval = isdn_ppp_open(minor - ISDN_MINOR_PPP, filep);
+		if (retval == 0)
 			isdn_lock_drivers();
-		return ret;
+		goto out;
 	}
 #endif
-	return -ENODEV;
+ out:
+	return retval;
 }
 
 static int
@@ -1724,31 +1732,28 @@ isdn_close(struct inode *ino, struct file *filep)
 				else
 					dev->infochain = (infostruct *) (p->next);
 				kfree(p);
-				unlock_kernel();
-				return 0;
+				goto out;
 			}
 			q = p;
 			p = (infostruct *) (p->next);
 		}
 		printk(KERN_WARNING "isdn: No private data while closing isdnctrl\n");
-		unlock_kernel();
-		return 0;
+		goto out;
 	}
 	isdn_unlock_drivers();
-	if (minor < ISDN_MINOR_CTRL) {
-		unlock_kernel();
-		return 0;
-	}
+	if (minor < ISDN_MINOR_CTRL)
+		goto out;
 	if (minor <= ISDN_MINOR_CTRLMAX) {
 		if (dev->profd == current)
 			dev->profd = NULL;
-		unlock_kernel();
-		return 0;
+		goto out;
 	}
 #ifdef CONFIG_ISDN_PPP
 	if (minor <= ISDN_MINOR_PPPMAX)
 		isdn_ppp_release(minor - ISDN_MINOR_PPP, filep);
 #endif
+
+ out:
 	unlock_kernel();
 	return 0;
 }

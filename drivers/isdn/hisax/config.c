@@ -47,7 +47,7 @@
  *   17 MIC card                p0=irq  p1=iobase
  *   18 ELSA Quickstep 1000PCI  no parameter
  *   19 Compaq ISDN S0 ISA card p0=irq  p1=IO0 (HSCX)  p2=IO1 (ISAC) p3=IO2
- *   20 Travers Technologies NETjet PCI card
+ *   20 Travers Technologies NETjet-S PCI card
  *   21 TELES PCI               no parameter
  *   22 Sedlbauer Speed Star    p0=irq p1=iobase
  *   23 reserved
@@ -65,6 +65,7 @@
  *   35 HFC 2BDS0 PCI           none
  *   36 Winbond 6692 PCI        none
  *   37 HFC 2BDS0 S+/SP         p0=irq p1=iobase
+ *   38 Travers Technologies NETspider-U PCI card
  *
  * protocol can be either ISDN_PTYPE_EURO or ISDN_PTYPE_1TR6 or ISDN_PTYPE_NI1
  *
@@ -76,11 +77,11 @@ const char *CardType[] =
  "AVM A1", "Elsa ML", "Elsa Quickstep", "Teles PCMCIA", "ITK ix1-micro Rev.2",
  "Elsa PCMCIA", "Eicon.Diehl Diva", "ISDNLink", "TeleInt", "Teles 16.3c",
  "Sedlbauer Speed Card", "USR Sportster", "ith mic Linux", "Elsa PCI",
- "Compaq ISA", "NETjet", "Teles PCI", "Sedlbauer Speed Star (PCMCIA)",
+ "Compaq ISA", "NETjet-S", "Teles PCI", "Sedlbauer Speed Star (PCMCIA)",
  "AMD 7930", "NICCY", "S0Box", "AVM A1 (PCMCIA)", "AVM Fritz PnP/PCI",
  "Sedlbauer Speed Fax +", "Siemens I-Surf", "Acer P10", "HST Saphir",
  "Telekom A4T", "Scitel Quadro", "Gazel", "HFC 2BDS0 PCI", "Winbond 6692",
- "HFC 2BDS0 SX",
+ "HFC 2BDS0 SX", "NETspider-U",
 };
 
 void HiSax_closecard(int cardnr);
@@ -106,7 +107,6 @@ EXPORT_SYMBOL(elsa_init_pcmcia);
 #define DEFAULT_CFG {11,0x170,0,0}
 int avm_a1_init_pcmcia(void*, int, int*, int);
 EXPORT_SYMBOL(avm_a1_init_pcmcia);
-EXPORT_SYMBOL(HiSax_closecard);
 #endif /* CONFIG_HISAX_AVM_A1_PCMCIA */
 
 #ifdef CONFIG_HISAX_FRITZPCI
@@ -198,7 +198,7 @@ EXPORT_SYMBOL(sedl_init_pcmcia);
 #ifdef CONFIG_HISAX_NETJET
 #undef DEFAULT_CARD
 #undef DEFAULT_CFG
-#define DEFAULT_CARD ISDN_CTYPE_NETJET
+#define DEFAULT_CARD ISDN_CTYPE_NETJET_S
 #define DEFAULT_CFG {0,0,0,0}
 #endif
 
@@ -280,21 +280,28 @@ EXPORT_SYMBOL(sedl_init_pcmcia);
 #define DEFAULT_CFG {0,0,0,0}
 #endif
 
+#ifdef CONFIG_HISAX_NETJET_U
+#undef DEFAULT_CARD
+#undef DEFAULT_CFG
+#define DEFAULT_CARD ISDN_CTYPE_NETJET_U
+#define DEFAULT_CFG {0,0,0,0}
+#endif
+
 #ifdef CONFIG_HISAX_1TR6
 #define DEFAULT_PROTO ISDN_PTYPE_1TR6
 #define DEFAULT_PROTO_NAME "1TR6"
-#endif
-#ifdef CONFIG_HISAX_EURO
-#undef DEFAULT_PROTO
-#define DEFAULT_PROTO ISDN_PTYPE_EURO
-#undef DEFAULT_PROTO_NAME
-#define DEFAULT_PROTO_NAME "EURO"
 #endif
 #ifdef CONFIG_HISAX_NI1
 #undef DEFAULT_PROTO
 #define DEFAULT_PROTO ISDN_PTYPE_NI1
 #undef DEFAULT_PROTO_NAME
 #define DEFAULT_PROTO_NAME "NI1"
+#endif
+#ifdef CONFIG_HISAX_EURO
+#undef DEFAULT_PROTO
+#define DEFAULT_PROTO ISDN_PTYPE_EURO
+#undef DEFAULT_PROTO_NAME
+#define DEFAULT_PROTO_NAME "EURO"
 #endif
 #ifndef DEFAULT_PROTO
 #define DEFAULT_PROTO ISDN_PTYPE_UNKNOWN
@@ -303,6 +310,10 @@ EXPORT_SYMBOL(sedl_init_pcmcia);
 #ifndef DEFAULT_CARD
 #error "HiSax: No cards configured"
 #endif
+
+int hisax_init_pcmcia(void *, int *, struct IsdnCard *);
+EXPORT_SYMBOL(hisax_init_pcmcia);
+EXPORT_SYMBOL(HiSax_closecard);
 
 #define FIRST_CARD { \
 	DEFAULT_CARD, \
@@ -400,9 +411,9 @@ HiSaxVersion(void))
 
 	printk(KERN_INFO "HiSax: Linux Driver for passive ISDN cards\n");
 #ifdef MODULE
-	printk(KERN_INFO "HiSax: Version 3.3e (module)\n");
+	printk(KERN_INFO "HiSax: Version 3.5 (module)\n");
 #else
-	printk(KERN_INFO "HiSax: Version 3.3e (kernel)\n");
+	printk(KERN_INFO "HiSax: Version 3.5 (kernel)\n");
 #endif
 	strcpy(tmp, l1_revision);
 	printk(KERN_INFO "HiSax: Layer1 Revision %s\n", HiSax_getrev(tmp));
@@ -546,8 +557,8 @@ extern int setup_sportster(struct IsdnCard *card);
 extern int setup_mic(struct IsdnCard *card);
 #endif
 
-#if CARD_NETJET
-extern int setup_netjet(struct IsdnCard *card);
+#if CARD_NETJET_S
+extern int setup_netjet_s(struct IsdnCard *card);
 #endif
 
 #if CARD_HFCS
@@ -596,6 +607,10 @@ extern int setup_gazel(struct IsdnCard *card);
 
 #if CARD_W6692
 extern int setup_w6692(struct IsdnCard *card);
+#endif
+
+#if CARD_NETJET_U
+extern int setup_netjet_u(struct IsdnCard *card);
 #endif
 
 /*
@@ -800,7 +815,7 @@ ll_stop(struct IsdnCardState *cs)
 	ic.command = ISDN_STAT_STOP;
 	ic.driver = cs->myid;
 	cs->iif.statcallb(&ic);
-	CallcFreeChan(cs);
+//	CallcFreeChan(cs);
 }
 
 static void
@@ -923,6 +938,8 @@ checkcard(int cardnr, char *id, int *busy_flag))
 	cs->busy_flag = busy_flag;
 	cs->irq_flags = I4L_IRQ_FLAG;
 #if TEI_PER_CARD
+	if (card->protocol == ISDN_PTYPE_NI1)
+		test_and_set_bit(FLG_TWO_DCHAN, &cs->HW_Flags);
 #else
 	test_and_set_bit(FLG_TWO_DCHAN, &cs->HW_Flags);
 #endif
@@ -1067,9 +1084,9 @@ checkcard(int cardnr, char *id, int *busy_flag))
 				ret = setup_mic(card);
 				break;
 #endif
-#if CARD_NETJET
-			case ISDN_CTYPE_NETJET:
-				ret = setup_netjet(card);
+#if CARD_NETJET_S
+			case ISDN_CTYPE_NETJET_S:
+				ret = setup_netjet_s(card);
 				break;
 #endif
 #if CARD_HFCS
@@ -1132,6 +1149,11 @@ checkcard(int cardnr, char *id, int *busy_flag))
 		case ISDN_CTYPE_W6692:
 			ret = setup_w6692(card);
 			break;
+#endif
+#if CARD_NETJET_U
+			case ISDN_CTYPE_NETJET_U:
+				ret = setup_netjet_u(card);
+				break;
 #endif
 		default:
 			printk(KERN_WARNING
@@ -1252,6 +1274,9 @@ HiSax_closecard(int cardnr)
 	if (cards[cardnr].cs) {
 		ll_stop(cards[cardnr].cs);
 		release_tei(cards[cardnr].cs);
+		
+		CallcFreeChan(cards[cardnr].cs);
+		
 		closecard(cardnr);
 		if (cards[cardnr].cs->irq)
 			free_irq(cards[cardnr].cs->irq, cards[cardnr].cs);
@@ -1310,10 +1335,19 @@ HiSax_reportcard(int cardnr, int sel)
 __initfunc(int
 HiSax_init(void))
 {
-	int i;
+	int i,j;
 
 #ifdef MODULE
 	int nzproto = 0;
+	if (!type[0]) {
+		/* We 'll register drivers later, but init basic functions*/
+		CallcNew();
+		Isdnl3New();
+		Isdnl2New();
+		TeiNew();
+		Isdnl1New();
+		return 0;
+	}
 #ifdef CONFIG_HISAX_ELSA
 	if (type[0] == ISDN_CTYPE_ELSA_PCMCIA) {
 		/* we have exported  and return in this case */
@@ -1338,41 +1372,41 @@ HiSax_init(void))
 #ifdef MODULE
 	if (id)			/* If id= string used */
 		HiSax_id = id;
-	for (i = 0; i < HISAX_MAX_CARDS; i++) {
-		cards[i].typ = type[i];
+	for (i = j = 0; j < HISAX_MAX_CARDS; i++) {
+		cards[j].typ = type[i];
 		if (protocol[i]) {
-			cards[i].protocol = protocol[i];
+			cards[j].protocol = protocol[i];
 			nzproto++;
 		}
 		switch (type[i]) {
 			case ISDN_CTYPE_16_0:
-				cards[i].para[0] = irq[i];
-				cards[i].para[1] = mem[i];
-				cards[i].para[2] = io[i];
+				cards[j].para[0] = irq[i];
+				cards[j].para[1] = mem[i];
+				cards[j].para[2] = io[i];
 				break;
 
 			case ISDN_CTYPE_8_0:
-				cards[i].para[0] = irq[i];
-				cards[i].para[1] = mem[i];
+				cards[j].para[0] = irq[i];
+				cards[j].para[1] = mem[i];
 				break;
 
 #ifdef IO0_IO1
 			case ISDN_CTYPE_PNP:
 			case ISDN_CTYPE_NICCY:
-				cards[i].para[0] = irq[i];
-				cards[i].para[1] = io0[i];
-				cards[i].para[2] = io1[i];
+				cards[j].para[0] = irq[i];
+				cards[j].para[1] = io0[i];
+				cards[j].para[2] = io1[i];
 				break;
 			case ISDN_CTYPE_COMPAQ_ISA:
-				cards[i].para[0] = irq[i];
-				cards[i].para[1] = io0[i];
-				cards[i].para[2] = io1[i];
-				cards[i].para[3] = io[i];
+				cards[j].para[0] = irq[i];
+				cards[j].para[1] = io0[i];
+				cards[j].para[2] = io1[i];
+				cards[j].para[3] = io[i];
 				break;
 #endif
 			case ISDN_CTYPE_ELSA:
 			case ISDN_CTYPE_HFC_PCI:
-				cards[i].para[0] = io[i];
+				cards[j].para[0] = io[i];
 				break;
 			case ISDN_CTYPE_16_3:
 			case ISDN_CTYPE_TELESPCMCIA:
@@ -1396,26 +1430,42 @@ HiSax_init(void))
 			case ISDN_CTYPE_HSTSAPHIR:
 			case ISDN_CTYPE_GAZEL:
 		        case ISDN_CTYPE_HFC_SX:
-				cards[i].para[0] = irq[i];
-				cards[i].para[1] = io[i];
+				cards[j].para[0] = irq[i];
+				cards[j].para[1] = io[i];
 				break;
 			case ISDN_CTYPE_ISURF:
-				cards[i].para[0] = irq[i];
-				cards[i].para[1] = io[i];
-				cards[i].para[2] = mem[i];
+				cards[j].para[0] = irq[i];
+				cards[j].para[1] = io[i];
+				cards[j].para[2] = mem[i];
 				break;
 			case ISDN_CTYPE_ELSA_PCI:
-			case ISDN_CTYPE_NETJET:
+			case ISDN_CTYPE_NETJET_S:
 			case ISDN_CTYPE_AMD7930:
 			case ISDN_CTYPE_TELESPCI:
 			case ISDN_CTYPE_W6692:
+			case ISDN_CTYPE_NETJET_U:
 				break;
 			case ISDN_CTYPE_BKM_A4T:
-	  		   	break;
+	  			break;
 			case ISDN_CTYPE_SCT_QUADRO:
-	          	cards[i].para[0] = irq[i];
+				if (irq[i]) {
+					cards[j].para[0] = irq[i];
+				} else {
+				        /* QUADRO is a 4 BRI card */
+					cards[j++].para[0] = 1;
+					cards[j].typ = ISDN_CTYPE_SCT_QUADRO; 
+					cards[j].protocol = protocol[i];
+					cards[j++].para[0] = 2;
+					cards[j].typ = ISDN_CTYPE_SCT_QUADRO; 
+					cards[j].protocol = protocol[i];
+					cards[j++].para[0] = 3;
+					cards[j].typ = ISDN_CTYPE_SCT_QUADRO; 
+					cards[j].protocol = protocol[i];
+					cards[j].para[0] = 4;
+				}
 				break;
 		}
+		j++;
 	}
 	if (!nzproto) {
 		printk(KERN_WARNING "HiSax: Warning - no protocol specified\n");
@@ -1620,3 +1670,21 @@ int avm_a1_init_pcmcia(void *pcm_iob, int pcm_irq, int *busy_flag, int prot)
 	return (0);
 }
 #endif
+
+int hisax_init_pcmcia(void *pcm_iob, int *busy_flag, struct IsdnCard *card)
+{
+	u_char ids[16];
+	int ret = -1;
+
+	cards[nrcards] = *card;
+	if (nrcards)
+		sprintf(ids, "HiSax%d", nrcards);
+	else
+		sprintf(ids, "HiSax");
+	if (!checkcard(nrcards, ids, busy_flag)) {
+		return(-1);
+	}
+	ret = nrcards;
+	nrcards++;
+	return (ret);
+}

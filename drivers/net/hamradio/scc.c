@@ -120,8 +120,8 @@
    please (!) contact me first.
    
    New versions of the driver will be announced on the linux-hams
-   mailing list on vger.rutgers.edu. To subscribe send an e-mail
-   to majordomo@vger.rutgers.edu with the following line in
+   mailing list on vger.kernel.org. To subscribe send an e-mail
+   to majordomo@vger.kernel.org with the following line in
    the body of the mail:
    
 	   subscribe linux-hams

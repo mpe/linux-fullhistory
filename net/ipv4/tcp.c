@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp.c,v 1.172 2000/08/11 00:13:36 davem Exp $
+ * Version:	$Id: tcp.c,v 1.173 2000/08/15 20:15:23 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -2162,7 +2162,7 @@ int tcp_setsockopt(struct sock *sk, int level, int optname, char *optval,
 			err = -EINVAL;
 		else {
 			tp->keepalive_time = val * HZ;
-			if (sk->keepopen) {
+			if (sk->keepopen && !((1<<sk->state)&(TCPF_CLOSE|TCPF_LISTEN))) {
 				__u32 elapsed = tcp_time_stamp - tp->rcv_tstamp;
 				if (tp->keepalive_time > elapsed)
 					elapsed = tp->keepalive_time - elapsed;

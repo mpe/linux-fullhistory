@@ -234,7 +234,7 @@ no_l3_proto_spec(struct PStack *st, isdn_ctrl *ic)
 extern void setstack_dss1(struct PStack *st);
 #endif
 
-#ifdef        CONFIG_HISAX_NI1
+#ifdef  CONFIG_HISAX_NI1
 extern void setstack_ni1(struct PStack *st);
 #endif
 
@@ -356,7 +356,7 @@ setstack_l3dc(struct PStack *st, struct Channel *chanp)
 		setstack_dss1(st);
 	} else
 #endif
-#ifdef        CONFIG_HISAX_NI1
+#ifdef  CONFIG_HISAX_NI1
 	if (st->protocol == ISDN_PTYPE_NI1) {
 		setstack_ni1(st);
 	} else
@@ -544,7 +544,6 @@ static struct FsmNode L3FnList[] HISAX_INITDATA =
 void
 l3_msg(struct PStack *st, int pr, void *arg)
 {
-	
 	switch (pr) {
 		case (DL_DATA | REQUEST):
 			if (st->l3.l3m.state == ST_L3_LC_ESTAB) {

@@ -160,7 +160,7 @@ struct red_sched_data
 
 static int red_ecn_mark(struct sk_buff *skb)
 {
-	if (skb->nh.raw + 20 < skb->tail)
+	if (skb->nh.raw + 20 > skb->tail)
 		return 0;
 
 	switch (skb->protocol) {

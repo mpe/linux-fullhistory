@@ -29,10 +29,10 @@ the Internet using TCP/IP as a reliable link layer. RFC1613 specifies the
 format and behaviour of the protocol. If time permits this option will also
 be actively considered.
 
-A linux-x25 mailing list has been created at vger.rutgers.edu to support the
+A linux-x25 mailing list has been created at vger.kernel.org to support the
 development and use of Linux X.25. It is early days yet, but interested
 parties are welcome to subscribe to it. Just send a message to
-Majordomo@vger.rutgers.edu with the following in the message body:
+majordomo@vger.kernel.org with the following in the message body:
 
 subscribe linux-x25
 end

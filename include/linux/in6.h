@@ -34,21 +34,10 @@ struct in6_addr
 		__u8		u6_addr8[16];
 		__u16		u6_addr16[8];
 		__u32		u6_addr32[4];
-#if (~0UL) > 0xffffffff
-#ifndef __RELAX_IN6_ADDR_ALIGNMENT
-		/* Alas, protocols do not respect 64bit alignmnet.
-		   rsvp/pim/... are broken. However, it is good
-		   idea to force correct alignment always, when
-		   it is possible.
-		 */
-		__u64		u6_addr64[2];
-#endif
-#endif
 	} in6_u;
 #define s6_addr			in6_u.u6_addr8
 #define s6_addr16		in6_u.u6_addr16
 #define s6_addr32		in6_u.u6_addr32
-#define s6_addr64		in6_u.u6_addr64
 };
 
 struct sockaddr_in6 {

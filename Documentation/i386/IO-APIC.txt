@@ -109,8 +109,8 @@ Be prepared that it might happen that you need some strange pirq line:
 
 use smart try-and-err techniques to find out the correct pirq line ...
 
-good luck and mail to linux-smp@vger.rutgers.edu or
-linux-kernel@vger.rutgers.edu if you have any problems that are not covered
+good luck and mail to linux-smp@vger.kernel.org or
+linux-kernel@vger.kernel.org if you have any problems that are not covered
 by this document.
 
 -- mingo

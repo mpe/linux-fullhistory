@@ -38,8 +38,12 @@ const char *niccy_revision = "$Revision: 1.12 $";
 #define NICCY_PCI	2
 
 /* PCI stuff */
-#define PCI_VENDOR_DR_NEUHAUS	0x1267
-#define PCI_NICCY_ID		0x1016
+#ifndef PCI_VENDOR_ID_SATSAGEM
+#define PCI_VENDOR_ID_SATSAGEM	0x1267
+#endif
+#ifndef PCI_DEVICE_ID_SATSAGEM_NICCY
+#define PCI_DEVICE_ID_SATSAGEM_NICCY	0x1016
+#endif
 #define PCI_IRQ_CTRL_REG	0x38
 #define PCI_IRQ_ENABLE		0x1f00
 #define PCI_IRQ_DISABLE		0xff0000
@@ -284,26 +288,26 @@ setup_niccy(struct IsdnCard *card))
 			return(0);
 		}
 		cs->subtyp = 0;
-		if ((niccy_dev = pci_find_device(PCI_VENDOR_DR_NEUHAUS,
-			   PCI_NICCY_ID, niccy_dev))) {
+		if ((niccy_dev = pci_find_device(PCI_VENDOR_ID_SATSAGEM,
+			PCI_DEVICE_ID_SATSAGEM_NICCY, niccy_dev))) {
 			if (pci_enable_device(niccy_dev))
-				return (0);
+				return(0);
 			/* get IRQ */
 			if (!niccy_dev->irq) {
 				printk(KERN_WARNING "Niccy: No IRQ for PCI card found\n");
 				return(0);
 			}
 			cs->irq = niccy_dev->irq;
-			if (!niccy_dev->resource[ 0].start) {
+			cs->hw.niccy.cfg_reg = pci_resource_start(niccy_dev, 0);
+			if (!cs->hw.niccy.cfg_reg) {
 				printk(KERN_WARNING "Niccy: No IO-Adr for PCI cfg found\n");
 				return(0);
 			}
-			cs->hw.niccy.cfg_reg = pci_resource_start(niccy_dev, 0);
-			if (!niccy_dev->resource[ 1].start) {
+			pci_ioaddr = pci_resource_start(niccy_dev, 1);
+			if (!pci_ioaddr) {
 				printk(KERN_WARNING "Niccy: No IO-Adr for PCI card found\n");
 				return(0);
 			}
-			pci_ioaddr = pci_resource_start(niccy_dev, 1);
 			cs->subtyp = NICCY_PCI;
 		} else {
 			printk(KERN_WARNING "Niccy: No PCI card found\n");

@@ -162,7 +162,7 @@ int pcbit_init_dev(int board, int mem_base, int irq)
 	dev->send_seq = 0;
 	dev->unack_seq = 0;
 
-	dev->hl_hdrlen = 10;
+	dev->hl_hdrlen = 16;
 
 	dev_if = kmalloc(sizeof(isdn_if), GFP_KERNEL);
 
@@ -186,7 +186,7 @@ int pcbit_init_dev(int board, int mem_base, int irq)
 			    ISDN_FEATURE_L2_HDLC | ISDN_FEATURE_L2_TRANS );
 
 	dev_if->writebuf_skb = pcbit_xmit;
-	dev_if->hl_hdrlen = 10;
+	dev_if->hl_hdrlen = 16;
 
 	dev_if->maxbufsize = MAXBUFSIZE;
 	dev_if->command  = pcbit_command;
@@ -518,9 +518,6 @@ void pcbit_l3_receive(struct pcbit_dev * dev, ulong msg,
 	struct callb_data cbdata;
 	int complete, err;
 	isdn_ctrl ictl;
-#ifdef DEBUG
-	struct msg_fmt * fmsg;
-#endif
 
 	switch(msg) {
 
@@ -734,9 +731,6 @@ void pcbit_l3_receive(struct pcbit_dev * dev, ulong msg,
 	default:
 		printk(KERN_DEBUG "pcbit_l3_receive: unknown message %08lx\n",
 		       msg);
-		fmsg = (struct msg_fmt *) &msg;
-		printk(KERN_DEBUG "cmd=%02x sub=%02x\n", 
-		       fmsg->cmd, fmsg->scmd);
 		break;
 #endif
 	}

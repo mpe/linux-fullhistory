@@ -883,39 +883,18 @@ void __init smp_boot_cpus(void)
 		phys_cpu_present_map |= (1 << hard_smp_processor_id());
 	}
 
-	{
-		int reg;
-
-		/*
-		 * This is to verify that we're looking at
-		 * a real local APIC.  Check these against
-		 * your board if the CPUs aren't getting
-		 * started for no apparent reason.
-		 */
-
-		reg = apic_read(APIC_LVR);
-		Dprintk("Getting VERSION: %x\n", reg);
-
-		apic_write(APIC_LVR, 0);
-		reg = apic_read(APIC_LVR);
-		Dprintk("Getting VERSION: %x\n", reg);
-
-		/*
-		 * The two version reads above should print the same
-		 * NON-ZERO!!! numbers.  If the second one is zero,
-		 * there is a problem with the APIC write/read
-		 * definitions.
-		 *
-		 * The next two are just to see if we have sane values.
-		 * They're only really relevant if we're in Virtual Wire
-		 * compatibility mode, but most boxes are anymore.
-		 */
-
-		reg = apic_read(APIC_LVT0);
-		Dprintk("Getting LVT0: %x\n", reg);
-
-		reg = apic_read(APIC_LVT1);
-		Dprintk("Getting LVT1: %x\n", reg);
+	/*
+	 * If we couldn't find a local APIC, then get out of here now!
+	 */
+	if (!verify_local_APIC()) {
+		printk(KERN_ERR "BIOS bug, local APIC at 0x%lX not detected!...\n", mp_lapic_addr);
+		printk(KERN_ERR "... forcing use of dummy APIC emulation. (tell your hw vendor)\n");
+#ifndef CONFIG_VISWS
+		io_apic_irqs = 0;
+#endif
+		cpu_online_map = phys_cpu_present_map = 1;
+		smp_num_cpus = 1;
+		goto smp_done;
 	}
 
 	/*

@@ -1521,9 +1521,9 @@ static int device_size_calculation (mddev_t * mddev)
 
 	readahead = MD_READAHEAD;
 	if ((sb->level == 0) || (sb->level == 4) || (sb->level == 5))
-		readahead = mddev->sb->chunk_size * 4 * data_disks;
-		if (readahead < data_disks * MAX_SECTORS*512*2)
-			readahead = data_disks * MAX_SECTORS*512*2;
+		readahead = (mddev->sb->chunk_size>>PAGE_SHIFT) * 4 * data_disks;
+		if (readahead < data_disks * (MAX_SECTORS>>(PAGE_SHIFT-9))*2)
+			readahead = data_disks * (MAX_SECTORS>>(PAGE_SHIFT-9)*2;
 	else {
 		if (sb->level == -3)
 			readahead = 0;
@@ -1531,11 +1531,11 @@ static int device_size_calculation (mddev_t * mddev)
 	md_maxreadahead[mdidx(mddev)] = readahead;
 
 	printk(KERN_INFO "md%d: max total readahead window set to %dk\n",
-		mdidx(mddev), readahead/1024);
+		mdidx(mddev), readahead*(PAGE_SIZE/1024));
 
 	printk(KERN_INFO
 		"md%d: %d data-disks, max readahead per data-disk: %dk\n",
-			mdidx(mddev), data_disks, readahead/data_disks/1024);
+			mdidx(mddev), data_disks, readahead/data_disks*(PAGE_SIZE/1024));
 	return 0;
 abort:
 	return 1;
@@ -3318,7 +3318,7 @@ recheck:
 	/*
 	 * Tune reconstruction:
 	 */
-	window = md_maxreadahead[mdidx(mddev)]/1024;
+	window = MAX_READAHEAD*(PAGE_SIZE/1024);
 	printk(KERN_INFO "md: using %dk window, over a total of %d blocks.\n",window,max_blocks);
 
 	atomic_set(&mddev->recovery_active, 0);

@@ -2183,50 +2183,6 @@ static void enable_dchannel_trace(capidrv_contr *card)
 	send_message(card, &cmdcmsg);
 }
 
-static void disable_dchannel_trace(capidrv_contr *card)
-{
-        __u8 manufacturer[CAPI_MANUFACTURER_LEN];
-        capi_version version;
-	__u16 contr = card->contrnr;
-	__u16 errcode;
-	__u16 avmversion[3];
-
-        errcode = (*capifuncs->capi_get_manufacturer)(contr, manufacturer);
-        if (errcode != CAPI_NOERROR) {
-	   printk(KERN_ERR "%s: can't get manufacturer (0x%x)\n",
-			card->name, errcode);
-	   return;
-	}
-	if (strstr(manufacturer, "AVM") == 0) {
-	   printk(KERN_ERR "%s: not from AVM, no d-channel trace possible (%s)\n",
-			card->name, manufacturer);
-	   return;
-	}
-        errcode = (*capifuncs->capi_get_version)(contr, &version);
-        if (errcode != CAPI_NOERROR) {
-	   printk(KERN_ERR "%s: can't get version (0x%x)\n",
-			card->name, errcode);
-	   return;
-	}
-	avmversion[0] = (version.majormanuversion >> 4) & 0x0f;
-	avmversion[1] = (version.majormanuversion << 4) & 0xf0;
-	avmversion[1] |= (version.minormanuversion >> 4) & 0x0f;
-	avmversion[2] |= version.minormanuversion & 0x0f;
-
-        if (avmversion[0] > 3 || (avmversion[0] == 3 && avmversion[1] > 5)) {
-		printk(KERN_INFO "%s: D2 trace disabled\n", card->name);
-	} else {
-		printk(KERN_INFO "%s: D3 trace disabled\n", card->name);
-	}
-	capi_fill_MANUFACTURER_REQ(&cmdcmsg, global.appid,
-				   card->msgid++,
-				   contr,
-				   0x214D5641,  /* ManuID */
-				   0,           /* Class */
-				   1,           /* Function */
-				   (_cstruct)"\004\000\000\000\000");
-	send_message(card, &cmdcmsg);
-}
 
 static void send_listen(capidrv_contr *card)
 {
@@ -2288,15 +2244,15 @@ static int capidrv_addcontr(__u16 contr, struct capi_profile *profp)
 	card->interface.writecmd = 0;
 	card->interface.readstat = if_readstat;
 	card->interface.features = ISDN_FEATURE_L2_HDLC |
-	    ISDN_FEATURE_L2_TRANS |
-	    ISDN_FEATURE_L3_TRANS |
+	    			   ISDN_FEATURE_L2_TRANS |
+	    			   ISDN_FEATURE_L3_TRANS |
 				   ISDN_FEATURE_P_UNKNOWN |
 				   ISDN_FEATURE_L2_X75I |
 				   ISDN_FEATURE_L2_X75UI |
 				   ISDN_FEATURE_L2_X75BUI;
 	if (profp->support1 & (1<<2))
 		card->interface.features |= ISDN_FEATURE_L2_V11096 |
-	    ISDN_FEATURE_L2_V11019 |
+	    				    ISDN_FEATURE_L2_V11019 |
 	    				    ISDN_FEATURE_L2_V11038;
 	if (profp->support1 & (1<<8))
 		card->interface.features |= ISDN_FEATURE_L2_MODEM;

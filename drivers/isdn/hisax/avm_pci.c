@@ -1,4 +1,4 @@
-/* $Id: avm_pci.c,v 1.17 2000/06/26 08:59:12 keil Exp $
+/* $Id: avm_pci.c,v 1.18 2000/08/20 07:34:04 keil Exp $
  *
  * avm_pci.c    low level stuff for AVM Fritz!PCI and ISA PnP isdn cards
  *              Thanks to AVM, Berlin for informations
@@ -17,13 +17,17 @@
 #include <linux/interrupt.h>
 
 extern const char *CardType[];
-static const char *avm_pci_rev = "$Revision: 1.15 $";
+static const char *avm_pci_rev = "$Revision: 1.18 $";
 
 #define  AVM_FRITZ_PCI		1
 #define  AVM_FRITZ_PNP		2
 
-#define  PCI_VENDOR_AVM		0x1244
-#define  PCI_FRITZPCI_ID	0xa00
+#ifndef PCI_VENDOR_ID_AVM
+#define PCI_VENDOR_ID_AVM	0x1244
+#endif
+#ifndef PCI_DEVICE_ID_AVM_FRITZ
+#define PCI_DEVICE_ID_AVM_FRITZ	0xa00
+#endif
 
 #define  HDLC_FIFO		0x0
 #define  HDLC_STATUS		0x4
@@ -293,7 +297,15 @@ hdlc_empty_fifo(struct BCState *bcs, int count)
 	if (cs->subtyp == AVM_FRITZ_PCI) {
 		outl(idx, cs->hw.avm.cfg_reg + 4);
 		while (cnt < count) {
+#ifdef __powerpc__
+#ifdef CONFIG_APUS
+			*ptr++ = in_le32((unsigned *)(cs->hw.avm.isac +_IO_BASE));
+#else
+			*ptr++ = in_be32((unsigned *)(cs->hw.avm.isac +_IO_BASE));
+#endif /* CONFIG_APUS */
+#else
 			*ptr++ = inl(cs->hw.avm.isac);
+#endif /* __powerpc__ */
 			cnt += 4;
 		}
 	} else {
@@ -349,7 +361,15 @@ hdlc_fill_fifo(struct BCState *bcs)
 	write_ctrl(bcs, 3);  /* sets the correct index too */
 	if (cs->subtyp == AVM_FRITZ_PCI) {
 		while (cnt<count) {
+#ifdef __powerpc__
+#ifdef CONFIG_APUS
+			out_le32((unsigned *)(cs->hw.avm.isac +_IO_BASE), *ptr++);
+#else
+			out_be32((unsigned *)(cs->hw.avm.isac +_IO_BASE), *ptr++);
+#endif /* CONFIG_APUS */
+#else
 			outl(*ptr++, cs->hw.avm.isac);
+#endif /* __powerpc__ */
 			cnt += 4;
 		}
 	} else {
@@ -767,8 +787,8 @@ setup_avm_pcipnp(struct IsdnCard *card))
 			printk(KERN_ERR "FritzPCI: no PCI bus present\n");
 			return(0);
 		}
-		if ((dev_avm = pci_find_device(PCI_VENDOR_AVM,
-			PCI_FRITZPCI_ID,  dev_avm))) {
+		if ((dev_avm = pci_find_device(PCI_VENDOR_ID_AVM,
+			PCI_DEVICE_ID_AVM_FRITZ,  dev_avm))) {
 			cs->irq = dev_avm->irq;
 			if (!cs->irq) {
 				printk(KERN_ERR "FritzPCI: No IRQ for PCI card found\n");
@@ -776,9 +796,9 @@ setup_avm_pcipnp(struct IsdnCard *card))
 			}
 			if (pci_enable_device(dev_avm))
 				return(0);
-			cs->hw.avm.cfg_reg = pci_resource_start (dev_avm, 1);
+			cs->hw.avm.cfg_reg = pci_resource_start(dev_avm, 1);
 			if (!cs->hw.avm.cfg_reg) {
-				printk(KERN_WARNING "FritzPCI: No IO-Adr for PCI card found\n");
+				printk(KERN_ERR "FritzPCI: No IO-Adr for PCI card found\n");
 				return(0);
 			}
 			cs->subtyp = AVM_FRITZ_PCI;

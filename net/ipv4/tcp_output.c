@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_output.c,v 1.126 2000/08/11 00:13:36 davem Exp $
+ * Version:	$Id: tcp_output.c,v 1.127 2000/08/15 20:15:23 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -1152,7 +1152,6 @@ int tcp_connect(struct sock *sk, struct sk_buff *buff)
 	tp->copied_seq = 0;
 
 	tp->rto = TCP_TIMEOUT_INIT;
-	tcp_init_xmit_timers(sk);
 	tp->retransmits = 0;
 	tcp_clear_retrans(tp);
 

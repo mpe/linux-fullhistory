@@ -1,4 +1,4 @@
-/* $Id: socket.c,v 1.2 1999/09/22 09:28:50 davem Exp $
+/* $Id: socket.c,v 1.3 2000/08/14 23:50:31 anton Exp $
  * socket.c: Socket syscall emulation for Solaris 2.6+
  *
  * Copyright (C) 1998 Jakub Jelinek (jj@ultra.linux.cz)
@@ -18,7 +18,6 @@
 #include <asm/string.h>
 #include <asm/oplib.h>
 #include <asm/idprom.h>
-#include <asm/machines.h>
 
 #include "conv.h"
 

@@ -16,6 +16,9 @@ ifeq ($(CONFIG_PROC_FS),y)
     M_OBJS += hysdn.o
     O_TARGET += hysdn.o
     O_OBJS += hysdn_procconf.o hysdn_proclog.o boardergo.o hysdn_boot.o hysdn_sched.o hysdn_net.o
+  ifeq ($(CONFIG_HYSDN_CAPI),y)
+    O_OBJS += hycapi.o
+  endif
     OX_OBJS += hysdn_init.o 
   endif
 endif

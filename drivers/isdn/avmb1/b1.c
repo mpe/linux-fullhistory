@@ -1,11 +1,17 @@
 /*
- * $Id: b1.c,v 1.14 2000/06/19 16:51:53 keil Exp $
+ * $Id: b1.c,v 1.16 2000/08/04 15:36:31 calle Exp $
  * 
  * Common module for AVM B1 cards.
  * 
  * (c) Copyright 1999 by Carsten Paeth (calle@calle.in-berlin.de)
  * 
  * $Log: b1.c,v $
+ * Revision 1.16  2000/08/04 15:36:31  calle
+ * copied wrong from file to file :-(
+ *
+ * Revision 1.15  2000/08/04 12:20:08  calle
+ * - Fix unsigned/signed warning in the right way ...
+ *
  * Revision 1.14  2000/06/19 16:51:53  keil
  * don't free skb in irq context
  *
@@ -95,7 +101,7 @@
 #include "capicmd.h"
 #include "capiutil.h"
 
-static char *revision = "$Revision: 1.14 $";
+static char *revision = "$Revision: 1.16 $";
 
 /* ------------------------------------------------------------- */
 
@@ -597,25 +603,29 @@ void b1_handle_interrupt(avmcard * card)
 		ctrl->ready(ctrl);
 		break;
 
-        case RECEIVE_TASK_READY:
+	case RECEIVE_TASK_READY:
 		ApplId = (unsigned) b1_get_word(card->port);
 		MsgLen = b1_get_slice(card->port, card->msgbuf);
-		card->msgbuf[MsgLen--] = 0;
-		while (    MsgLen >= 0
-		       && (   card->msgbuf[MsgLen] == '\n'
-			   || card->msgbuf[MsgLen] == '\r'))
-			card->msgbuf[MsgLen--] = 0;
+		card->msgbuf[MsgLen] = 0;
+		while (    MsgLen > 0
+		       && (   card->msgbuf[MsgLen-1] == '\n'
+			   || card->msgbuf[MsgLen-1] == '\r')) {
+			card->msgbuf[MsgLen-1] = 0;
+			MsgLen--;
+		}
 		printk(KERN_INFO "%s: task %d \"%s\" ready.\n",
 				card->name, ApplId, card->msgbuf);
 		break;
 
-        case RECEIVE_DEBUGMSG:
+	case RECEIVE_DEBUGMSG:
 		MsgLen = b1_get_slice(card->port, card->msgbuf);
-		card->msgbuf[MsgLen--] = 0;
-		while (    MsgLen >= 0
-		       && (   card->msgbuf[MsgLen] == '\n'
-			   || card->msgbuf[MsgLen] == '\r'))
-			card->msgbuf[MsgLen--] = 0;
+		card->msgbuf[MsgLen] = 0;
+		while (    MsgLen > 0
+		       && (   card->msgbuf[MsgLen-1] == '\n'
+			   || card->msgbuf[MsgLen-1] == '\r')) {
+			card->msgbuf[MsgLen-1] = 0;
+			MsgLen--;
+		}
 		printk(KERN_INFO "%s: DEBUG: %s\n", card->name, card->msgbuf);
 		break;
 

@@ -1,4 +1,4 @@
-/* $Id: hfc_pci.c,v 1.30 2000/06/26 08:59:13 keil Exp $
+/* $Id: hfc_pci.c,v 1.31 2000/08/20 07:32:55 keil Exp $
 
  * hfc_pci.c     low level driver for CCD´s hfc-pci based cards
  *
@@ -34,7 +34,7 @@
 
 extern const char *CardType[];
 
-static const char *hfcpci_revision = "$Revision: 1.30 $";
+static const char *hfcpci_revision = "$Revision: 1.31 $";
 
 /* table entry in the PCI devices list */
 typedef struct {
@@ -44,7 +44,9 @@ typedef struct {
 	char *card_name;
 } PCI_ENTRY;
 
-#define NT_T1_COUNT 20		/* number of 3.125ms interrupts for G2 timeout */
+#define NT_T1_COUNT	20	/* number of 3.125ms interrupts for G2 timeout */
+#define CLKDEL_TE	0x0e	/* CLKDEL in TE mode */
+#define CLKDEL_NT	0x6c	/* CLKDEL in NT mode */
 
 static const PCI_ENTRY id_list[] =
 {
@@ -63,7 +65,10 @@ static const PCI_ENTRY id_list[] =
 	{0x1051, 0x0100, "Motorola MC145575", "MC145575"},
 	{0x1397, 0xB100, "Seyeon", "B100"},
 	{0x15B0, 0x2BD0, "Zoltrix", "2BD0"},
-	{0x114f, 0x71,   "Digi intl.","Digicom"}, 
+	{0x114F, 0x70,"Digi International", "Digi DataFire Micro V IOM2 (Europe)"},
+	{0x114F, 0x71,"Digi International", "Digi DataFire Micro V (Europe)"},
+	{0x114F, 0x72,"Digi International", "Digi DataFire Micro V IOM2 (North America)"},
+	{0x114F, 0x73,"Digi International", "Digi DataFire Micro V (North America)"},
 	{0, 0, NULL, NULL},
 };
 
@@ -130,7 +135,7 @@ reset_hfcpci(struct IsdnCardState *cs)
 	cs->hw.hfcpci.trm = 0 + HFCPCI_BTRANS_THRESMASK;	/* no echo connect , threshold */
 	Write_hfc(cs, HFCPCI_TRM, cs->hw.hfcpci.trm);
 
-	Write_hfc(cs, HFCPCI_CLKDEL, 0x0e);	/* ST-Bit delay for TE-Mode */
+	Write_hfc(cs, HFCPCI_CLKDEL, CLKDEL_TE); /* ST-Bit delay for TE-Mode */
 	cs->hw.hfcpci.sctrl_e = HFCPCI_AUTO_AWAKE;
 	Write_hfc(cs, HFCPCI_SCTRL_E, cs->hw.hfcpci.sctrl_e);	/* S/T Auto awake */
 	cs->hw.hfcpci.bswapped = 0;	/* no exchange */
@@ -254,6 +259,9 @@ hfcpci_empty_fifo(struct BCState *bcs, bzfifo_type * bz, u_char * bdata, int cou
 	    (*(bdata + (zp->z1 - B_SUB_VAL)))) {
 		if (cs->debug & L1_DEB_WARN)
 			debugl1(cs, "hfcpci_empty_fifo: incoming packet invalid length %d or crc", count);
+#ifdef ERROR_STATISTIC
+		bcs->err_inv++;
+#endif
 		bz->za[new_f2].z2 = new_z2;
 		bz->f2 = new_f2;	/* next buffer */
 		skb = NULL;
@@ -320,6 +328,9 @@ receive_dmsg(struct IsdnCardState *cs)
 		    (df->data[zp->z1])) {
 			if (cs->debug & L1_DEB_WARN)
 				debugl1(cs, "empty_fifo hfcpci paket inv. len %d or crc %d", rcnt, df->data[zp->z1]);
+#ifdef ERROR_STATISTIC
+			cs->err_rx++;
+#endif
 			df->f2 = ((df->f2 + 1) & MAX_D_FRAMES) | (MAX_D_FRAMES + 1);	/* next buffer */
 			df->za[df->f2 & D_FREG_MASK].z2 = (zp->z2 + rcnt) & (D_FIFO_SIZE - 1);
 		} else if ((skb = dev_alloc_skb(rcnt - 3))) {
@@ -506,6 +517,9 @@ hfcpci_fill_dfifo(struct IsdnCardState *cs)
 	if (fcnt > (MAX_D_FRAMES - 1)) {
 		if (cs->debug & L1_DEB_ISAC)
 			debugl1(cs, "hfcpci_fill_Dfifo more as 14 frames");
+#ifdef ERROR_STATISTIC
+		cs->err_tx++;
+#endif
 		return;
 	}
 	/* now determine free bytes in FIFO buffer */
@@ -740,6 +754,7 @@ hfcpci_auxcmd(struct IsdnCardState *cs, isdn_ctrl * ic)
 	    (!(cs->hw.hfcpci.int_m1 & (HFCPCI_INTS_B2TRANS + HFCPCI_INTS_B2REC + HFCPCI_INTS_B1TRANS + HFCPCI_INTS_B1REC)))) {
 		save_flags(flags);
 		cli();
+		Write_hfc(cs, HFCPCI_CLKDEL, CLKDEL_NT); /* ST-Bit delay for NT-Mode */
 		Write_hfc(cs, HFCPCI_STATES, HFCPCI_LOAD_STATE | 0);	/* HFC ST G0 */
 		udelay(10);
 		cs->hw.hfcpci.sctrl |= SCTRL_MODE_NT;
@@ -1625,6 +1640,9 @@ __initfunc(int
 	int i;
 	struct pci_dev *tmp_hfcpci = NULL;
 
+#ifdef __BIG_ENDIAN
+#error "not running on big endian machines now"
+#endif
 	strcpy(tmp, hfcpci_revision);
 	printk(KERN_INFO "HiSax: HFC-PCI driver Rev. %s\n", HiSax_getrev(tmp));
 #if CONFIG_PCI
@@ -1645,7 +1663,7 @@ __initfunc(int
 			if (tmp_hfcpci) {
 				if (pci_enable_device(tmp_hfcpci))
 					continue;
-				if ((card->para[0]) && (card->para[0] != pci_resource_start(tmp_hfcpci, 0)))
+				if ((card->para[0]) && (card->para[0] != (tmp_hfcpci->resource[ 0].start & PCI_BASE_ADDRESS_IO_MASK)))
 					continue;
 				else
 					break;

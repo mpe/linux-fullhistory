@@ -18,12 +18,12 @@
 #include "hscx.h"
 #include "jade.h"
 #include "isdnl1.h"
-#include "bkm_ax.h"
 #include <linux/pci.h>
+#include "bkm_ax.h"
 
 extern const char *CardType[];
 
-const char *bkm_a4t_revision = "$Revision: 1.9 $";
+const char *bkm_a4t_revision = "$Revision: 1.11 $";
 
 
 static inline u_char
@@ -287,17 +287,20 @@ __initfunc(int
 		printk(KERN_ERR "bkm_a4t: no PCI bus present\n");
 		return (0);
 	}
-	if ((dev_a4t = pci_find_device(I20_VENDOR_ID, I20_DEVICE_ID, dev_a4t))) {
-		u_int sub_sys_id = 0;
+	while ((dev_a4t = pci_find_device(PCI_VENDOR_ID_ZORAN,
+		PCI_DEVICE_ID_ZORAN_36120, dev_a4t))) {
+		u16 sub_sys;
+		u16 sub_vendor;
 
-		if (pci_enable_device(dev_a4t))
-			return (0);
-		pci_read_config_dword(dev_a4t, PCI_SUBSYSTEM_VENDOR_ID,
-			&sub_sys_id);
-		if (sub_sys_id == ((A4T_SUBSYS_ID << 16) | A4T_SUBVEN_ID)) {
+		sub_vendor = dev_a4t->subsystem_vendor;
+		sub_sys = dev_a4t->subsystem_device;
+		if ((sub_sys == A4T_SUBSYS_ID) && (sub_vendor == A4T_SUBVEN_ID)) {
+			if (pci_enable_device(dev_a4t))
+				return(0);
 			found = 1;
-			pci_memaddr = pci_resource_start (dev_a4t, 0);
+			pci_memaddr = pci_resource_start(dev_a4t, 0);
 			cs->irq = dev_a4t->irq;
+			break;
 		}
 	}
 	if (!found) {

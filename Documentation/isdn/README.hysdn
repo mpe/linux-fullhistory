@@ -1,8 +1,12 @@
-$Id: README.hysdn,v 1.1 2000/02/10 19:46:15 werner Exp $
+$Id: README.hysdn,v 1.3 2000/08/06 09:22:51 armin Exp $
 The hysdn driver has been written by
 by Werner Cornelius (werner@isdn4linux.de or werner@titro.de) 
 for Hypercope GmbH Aachen Germany. Hypercope agreed to publish this driver
 under the GNU Public License.
+
+The CAPI 2.0-support was added by Ulrich Albrecht (ualbrecht@hypercope.de)
+for Hypercope GmbH Aachen, Germany.
+
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -41,15 +45,19 @@ Table of contents
    enable ISDN support in the kernel config and support for HYSDN cards in
    the active cards submenu. The driver may only be compiled and used if 
    support for loadable modules and the process filesystem have been enabled.
-   No other ISDN options need to be enabled for these cards.
 
-   Up to now these cards do not use or require the standard isdn interface
-   module (isdn.o), but registers itself as an ethernet card. All necessary
+   These cards provide two different interfaces to the kernel. Without the
+   optional CAPI 2.0 support, they register as ethernet card. IP-routing
+   to a ISDN-destination is performed on the card itself. All necessary
    handlers for various protocols like ppp and others as well as config info
    and firmware may be fetched from Hypercopes WWW-Site www.hypercope.de.
-   The driver has been included in the i4l tree as a CAPI compliant module
-   is under development and will be connected to the standard i4l modules
-   additionally.
+
+   With CAPI 2.0 support enabled, the card can also be used as a CAPI 2.0 
+   compliant devices with either CAPI 2.0 applications 
+   (check isdn4k-utils) or -using the capidrv module- as a regular
+   isdn4linux device. This is done via the same mechanism as with the 
+   active AVM cards and in fact uses the same module.
+   
 
 2. Loading/Unloading the driver
 
@@ -58,7 +66,14 @@ Table of contents
    If a loaded driver shall be unloaded all open files in the /proc/net/hysdn
    subdir need to be closed and all ethernet interfaces allocated by this 
    driver must be shut down. Otherwise the module counter will avoid a module
-   unload. 
+   unload.
+   
+   If you are using the CAPI 2.0-interface, make sure to load/modprobe the
+   kernelcapi-module first.
+
+   If you plan to use the capidrv-link to isdn4linux, make sure to load
+   capidrv.o after all modules using this driver (i.e. after hysdn and
+   any avm-specific modules).
 
 3. Entries in the /proc filesystem
 
@@ -160,8 +175,11 @@ Table of contents
 6. Where to get additional info and help
 
    If you have any problems concerning the driver or configuration contact 
-   the Hypercope support team (www.hypercope.de) and or the author 
-   Werner Cornelius (werner@isdn4linux or cornelius@titro.de)
+   the Hypercope support team (support@hypercope.de) and or the authors
+   Werner Cornelius (werner@isdn4linux or cornelius@titro.de) or
+   Ulrich Albrecht (ualbrecht@hypercope.de).
+
+
 
 
 

@@ -16,14 +16,16 @@ Axel Boldt, Alessandro Sigala, and countless other users all over the
 'net).
 
 The latest revision of this document, in various formats, can always
-be found at http://cyberbuzz.gatech.edu/kaboom/linux/Changes-2.4/
-<http://cyberbuzz.gatech.edu/kaboom/linux/Changes-2.4/>.
+be found at <http://cyberbuzz.gatech.edu/kaboom/linux/Changes-2.4/>.
 
 Feel free to translate this document.  If you do so, please send me a
 URL to your translation for inclusion in future revisions of this
 document.
 
-Last updated: August 12, 2000
+Smotrite file <http://oblom.rnc.ru/linux/kernel/Changes.ru>, yavlyaushisya
+russkim perevodom dannogo documenta.
+
+Last updated: August 15, 2000
 
 Chris Ricker (kaboom@gatech.edu or chris.ricker@genetics.utah.edu).
 
@@ -46,8 +48,8 @@ o  binutils               2.9.1.0.22              # ld -v
 o  util-linux             2.10o                   # kbdrate -v
 o  modutils               2.3.13                  # insmod -V
 o  e2fsprogs              1.18                    # /sbin/tune2fs --version
-o  pcmcia-cs              3.1.13                  # cardmgr -V
-o  PPP                    2.4.0b1                 # pppd --version
+o  pcmcia-cs              3.1.19                  # cardmgr -V
+o  PPP                    2.4.0                   # pppd --version
 o  isdn4k-utils           3.1beta7                # isdnctrl 2>&1|grep version
 			  
 Kernel compilation
@@ -274,6 +276,10 @@ Modutils
 --------
 o  <ftp://ftp.kernel.org/pub/linux/utils/kernel/modutils/v2.3/modutils-2.3.13.tar.gz>
 
+Mkinitrd
+--------
+o  <ftp://rawhide.redhat.com/pub/rawhide/SRPMS/SRPMS/mkinitrd-2.5-1.src.rpm>
+
 E2fsprogs
 ---------
 o  <http://web.mit.edu/tytso/www/linux/dist/e2fsprogs-1.18.tar.gz>
@@ -285,7 +291,7 @@ o  <http://linux.msede.com/lvm/>
 
 Pcmcia-cs
 ---------
-o  <ftp://sourceforge.org/pcmcia/pcmcia-cs-3.1.13.tar.gz>
+o  <ftp://projects.sourceforge.org/pub/pcmcia/pcmcia-cs-3.1.19.tar.gz>
 
 Jade
 ----
@@ -304,7 +310,7 @@ Network
 
 PPP
 ---
-o  <ftp://linuxcare.com.au/pub/ppp/ppp-2.4.0b1.tar.gz>
+o  <ftp://linuxcare.com.au/pub/ppp/ppp-2.4.0.tar.gz>
 
 Isdn4k-utils
 ------------

@@ -1911,26 +1911,6 @@ extern int DAC960_KernelIOCTL(unsigned int Request, void *Argument);
 
 
 /*
-  Virtual_to_Bus maps from Kernel Virtual Addresses to PCI Bus Addresses.
-*/
-
-static inline DAC960_BusAddress32_T Virtual_to_Bus(void *VirtualAddress)
-{
-  return (DAC960_BusAddress32_T) virt_to_bus(VirtualAddress);
-}
-
-
-/*
-  Bus_to_Virtual maps from PCI Bus Addresses to Kernel Virtual Addresses.
-*/
-
-static inline void *Bus_to_Virtual(DAC960_BusAddress32_T BusAddress)
-{
-  return (void *) bus_to_virt(BusAddress);
-}
-
-
-/*
   DAC960_DriverVersion protects the private portion of this file.
 */
 
@@ -2317,6 +2297,7 @@ typedef struct DAC960_Controller
   boolean EphemeralProgressMessage;
   boolean DriveSpinUpMessageDisplayed;
   boolean MonitoringAlertMode;
+  boolean SuppressEnclosureMessages;
   Timer_T MonitoringTimer;
   GenericDiskInfo_T GenericDiskInfo;
   DAC960_Command_T *FreeCommands;
@@ -2518,6 +2499,26 @@ void DAC960_ReleaseControllerLockIH(DAC960_Controller_T *Controller,
 				    ProcessorFlags_T *ProcessorFlags)
 {
   spin_unlock_irqrestore(&io_request_lock, *ProcessorFlags);
+}
+
+
+/*
+  Virtual_to_Bus maps from Kernel Virtual Addresses to PCI Bus Addresses.
+*/
+
+static inline DAC960_BusAddress32_T Virtual_to_Bus(void *VirtualAddress)
+{
+  return (DAC960_BusAddress32_T) virt_to_bus(VirtualAddress);
+}
+
+
+/*
+  Bus_to_Virtual maps from PCI Bus Addresses to Kernel Virtual Addresses.
+*/
+
+static inline void *Bus_to_Virtual(DAC960_BusAddress32_T BusAddress)
+{
+  return (void *) bus_to_virt(BusAddress);
 }
 
 

@@ -70,7 +70,7 @@ list, mail to linux-arcnet@tichy.ch.uj.edu.pl.
 There are archives of the mailing list at:
 	http://tichy.ch.uj.edu.pl/lists/linux-arcnet
 
-The people on linux-net@vger.rutgers.edu have also been known to be very
+The people on linux-net@vger.kernel.org have also been known to be very
 helpful, especially when we're talking about ALPHA Linux kernels that may or
 may not work right in the first place.
 

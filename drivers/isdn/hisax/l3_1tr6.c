@@ -1,4 +1,4 @@
-/* $Id: l3_1tr6.c,v 2.11 2000/06/26 08:59:14 keil Exp $
+/* $Id: l3_1tr6.c,v 2.12 2000/08/20 07:31:30 keil Exp $
  *
  *  German 1TR6 D-channel protocol
  *
@@ -17,7 +17,7 @@
 #include <linux/ctype.h>
 
 extern char *HiSax_getrev(const char *revision);
-const char *l3_1tr6_revision = "$Revision: 2.11 $";
+const char *l3_1tr6_revision = "$Revision: 2.12 $";
 
 #define MsgHead(ptr, cref, mty, dis) \
 	*ptr++ = dis; \
@@ -883,7 +883,7 @@ down1tr6(struct PStack *st, int pr, void *arg)
 		} else {
 			proc->chan = chan;
 			chan->proc = proc;
-			memcpy (&proc->para.setup, &chan->setup, sizeof (chan->setup));
+			memcpy(&proc->para.setup, &chan->setup, sizeof(setup_parm));
 			proc->callref = cr;
 		}
 	} else {

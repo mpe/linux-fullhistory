@@ -1,4 +1,4 @@
-/* $Id: hfc_2bs0.c,v 1.14 2000/06/26 08:59:13 keil Exp $
+/* $Id: hfc_2bs0.c,v 1.15 2000/07/26 20:46:47 keil Exp $
  *
  *  specific routines for CCD's HFC 2BS0
  *
@@ -203,7 +203,7 @@ hfc_empty_fifo(struct BCState *bcs, int count)
 		ptr = skb_put(skb, count);
 		idx = 0;
 		cip = HFC_CIP | HFC_FIFO_OUT | HFC_REC | HFC_CHANNEL(bcs->channel);
-		while ((idx < count - 3) && WaitNoBusy(cs)) {
+		while ((idx < count) && WaitNoBusy(cs)) {
 			*ptr++ = cs->BC_Read_Reg(cs, HFC_DATA_NODEB, cip);
 			idx++;
 		}

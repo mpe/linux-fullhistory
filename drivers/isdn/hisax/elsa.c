@@ -29,10 +29,10 @@
 
 extern const char *CardType[];
 
-const char *Elsa_revision = "$Revision: 2.20 $";
+const char *Elsa_revision = "$Revision: 2.23 $";
 const char *Elsa_Types[] =
 {"None", "PC", "PCC-8", "PCC-16", "PCF", "PCF-Pro",
- "PCMCIA", "QS 1000", "QS 3000", "QS 1000 PCI", "QS 3000 PCI", 
+ "PCMCIA", "QS 1000", "QS 3000", "Microlink PCI", "QS 3000 PCI", 
  "PCMCIA-IPAC" };
 
 const char *ITACVer[] =
@@ -66,9 +66,15 @@ const char *ITACVer[] =
 #define ELSA_PCMCIA_IPAC 11
 
 /* PCI stuff */
-#define PCI_VENDOR_ELSA	0x1048
-#define PCI_QS1000_ID	0x1000
-#define PCI_QS3000_ID	0x3000
+#ifndef PCI_VENDOR_ID_ELSA
+#define PCI_VENDOR_ID_ELSA	0x1048
+#endif
+#ifndef PCI_DEVICE_ID_ELSA_MIRCOLINK
+#define PCI_DEVICE_ID_ELSA_MIRCOLINK	0x1000
+#endif
+#ifndef PCI_DEVICE_ID_ELSA_QS3000
+#define PCI_DEVICE_ID_ELSA_QS3000	0x3000
+#endif
 #define ELSA_PCI_IRQ_MASK	0x04
 
 /* ITAC Registeradressen (only Microlink PC) */
@@ -723,7 +729,8 @@ Elsa_card_msg(struct IsdnCardState *cs, int mt, void *arg)
 				cs->hw.elsa.status &= ~ELSA_TIMER_AKTIV;
 				printk(KERN_INFO "Elsa: %d timer tics in 110 msek\n",
 				       cs->hw.elsa.counter);
-				if (abs(cs->hw.elsa.counter - 13) < 3) {
+				if ((cs->hw.elsa.counter > 10) &&
+					(cs->hw.elsa.counter < 16)) {
 					printk(KERN_INFO "Elsa: timer and irq OK\n");
 					ret = 0;
 				} else {
@@ -982,18 +989,18 @@ setup_elsa(struct IsdnCard *card)
 			return(0);
 		}
 		cs->subtyp = 0;
-		if ((dev_qs1000 = pci_find_device(PCI_VENDOR_ELSA, PCI_QS1000_ID,
-			 dev_qs1000))) {
+		if ((dev_qs1000 = pci_find_device(PCI_VENDOR_ID_ELSA,
+			PCI_DEVICE_ID_ELSA_MIRCOLINK, dev_qs1000))) {
 			if (pci_enable_device(dev_qs1000))
-				return (0);
+				return(0);
 			cs->subtyp = ELSA_QS1000PCI;
 			cs->irq = dev_qs1000->irq;
 			cs->hw.elsa.cfg = pci_resource_start(dev_qs1000, 1);
 			cs->hw.elsa.base = pci_resource_start(dev_qs1000, 3);
-		} else if ((dev_qs3000 = pci_find_device(PCI_VENDOR_ELSA,
-			PCI_QS3000_ID, dev_qs3000))) {
-			if (pci_enable_device(dev_qs1000))
-				return (0);
+		} else if ((dev_qs3000 = pci_find_device(PCI_VENDOR_ID_ELSA,
+			PCI_DEVICE_ID_ELSA_QS3000, dev_qs3000))) {
+			if (pci_enable_device(dev_qs3000))
+				return(0);
 			cs->subtyp = ELSA_QS3000PCI;
 			cs->irq = dev_qs3000->irq;
 			cs->hw.elsa.cfg = pci_resource_start(dev_qs3000, 1);

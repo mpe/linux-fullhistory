@@ -7,7 +7,8 @@
  *	Maciej W. Rozycki	:	Bits for genuine 82489DX APICs;
  *					thanks to Eric Gilmore
  *					and Rolf G. Tews
- *					for testing these extensively
+ *					for testing these extensively.
+ *	Maciej W. Rozycki	:	Various updates and fixes.
  */
 
 #include <linux/config.h>
@@ -125,6 +126,67 @@ void disable_local_APIC(void)
 	value = apic_read(APIC_SPIV);
 	value &= ~(1<<8);
 	apic_write_around(APIC_SPIV, value);
+}
+
+/*
+ * This is to verify that we're looking at a real local APIC.
+ * Check these against your board if the CPUs aren't getting
+ * started for no apparent reason.
+ */
+int __init verify_local_APIC(void)
+{
+	unsigned int reg0, reg1;
+
+	/*
+	 * The version register is read-only in a real APIC.
+	 */
+	reg0 = apic_read(APIC_LVR);
+	Dprintk("Getting VERSION: %x\n", reg0);
+	apic_write(APIC_LVR, reg0 ^ APIC_LVR_MASK);
+	reg1 = apic_read(APIC_LVR);
+	Dprintk("Getting VERSION: %x\n", reg1);
+
+	/*
+	 * The two version reads above should print the same
+	 * numbers.  If the second one is different, then we
+	 * poke at a non-APIC.
+	 */
+	if (reg1 != reg0)
+		return 0;
+
+	/*
+	 * Check if the version looks reasonably.
+	 */
+	reg1 = GET_APIC_VERSION(reg0);
+	if (reg1 == 0x00 || reg1 == 0xff)
+		return 0;
+	reg1 = get_maxlvt();
+	if (reg1 < 0x02 || reg1 == 0xff)
+		return 0;
+
+	/*
+	 * The ID register is read/write in a real APIC.
+	 */
+	reg0 = apic_read(APIC_ID);
+	Dprintk("Getting ID: %x\n", reg0);
+	apic_write(APIC_ID, reg0 ^ APIC_ID_MASK);
+	reg1 = apic_read(APIC_ID);
+	Dprintk("Getting ID: %x\n", reg1);
+	apic_write(APIC_ID, reg0);
+	if (reg1 != (reg0 ^ APIC_ID_MASK))
+		return 0;
+
+	/*
+	 * The next two are just to see if we have sane values.
+	 * They're only really relevant if we're in Virtual Wire
+	 * compatibility mode, but most boxes are anymore.
+	 */
+	reg0 = apic_read(APIC_LVT0);
+	Dprintk("Getting LVT0: %x\n", reg0);
+	reg1 = apic_read(APIC_LVT1);
+	Dprintk("Getting LVT1: %x\n", reg1);
+
+	return 1;
 }
 
 void __init sync_Arb_IDs(void)
@@ -703,7 +765,7 @@ asmlinkage void smp_error_interrupt(void)
 	   6: Received illegal vector
 	   7: Illegal register address
 	*/
-	printk (KERN_ERR "APIC error on CPU%d: %02x(%02x)\n",
+	printk (KERN_ERR "APIC error on CPU%d: %02lx(%02lx)\n",
 	        smp_processor_id(), v , v1);
 }
 

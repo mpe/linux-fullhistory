@@ -506,7 +506,7 @@ void dev_shutdown(struct net_device *dev)
 	dev->qdisc = &noop_qdisc;
 	dev->qdisc_sleeping = &noop_qdisc;
 	qdisc_destroy(qdisc);
-#ifdef CONFIG_NET_SCH_INGRESS
+#if defined(CONFIG_NET_SCH_INGRESS) || defined(CONFIG_NET_SCH_INGRESS_MODULE)
         if ((qdisc = dev->qdisc_ingress) != NULL) {
 		dev->qdisc_ingress = NULL;
 		qdisc_destroy(qdisc);

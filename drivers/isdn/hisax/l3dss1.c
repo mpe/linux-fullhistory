@@ -721,6 +721,9 @@ check_infoelements(struct l3_process *pc, struct sk_buff *skb, int *checklist)
 	u_char *p, ie;
 	int l, newpos, oldpos;
 	int err_seq = 0, err_len = 0, err_compr = 0, err_ureg = 0;
+	u_char codeset = 0;
+	u_char old_codeset = 0;
+	u_char codelock = 1;
 	
 	p = skb->data;
 	/* skip cr */
@@ -729,20 +732,34 @@ check_infoelements(struct l3_process *pc, struct sk_buff *skb, int *checklist)
 	p += l;
 	mt = *p++;
 	oldpos = 0;
-/* shift codeset procedure not implemented in the moment */
 	while ((p - skb->data) < skb->len) {
-		if ((newpos = ie_in_set(pc, *p, cl))) {
-			if (newpos > 0) {
-				if (newpos < oldpos)
-					err_seq++;
-				else
-					oldpos = newpos;
-			}
-		} else {
-			if (ie_in_set(pc, *p, comp_required))
-				err_compr++;
+		if ((*p & 0xf0) == 0x90) { /* shift codeset */
+			old_codeset = codeset;
+			codeset = *p & 7;
+			if (*p & 0x08)
+				codelock = 0;
 			else
-				err_ureg++;
+				codelock = 1;
+			if (pc->debug & L3_DEB_CHECK)
+				l3_debug(pc->st, "check IE shift%scodeset %d->%d",
+					codelock ? " locking ": " ", old_codeset, codeset);
+			p++;
+			continue;
+		}
+		if (!codeset) { /* only codeset 0 */
+			if ((newpos = ie_in_set(pc, *p, cl))) {
+				if (newpos > 0) {
+					if (newpos < oldpos)
+						err_seq++;
+					else
+						oldpos = newpos;
+				}
+			} else {
+				if (ie_in_set(pc, *p, comp_required))
+					err_compr++;
+				else
+					err_ureg++;
+			}
 		}
 		ie = *p++;
 		if (ie & 0x80) {
@@ -752,12 +769,19 @@ check_infoelements(struct l3_process *pc, struct sk_buff *skb, int *checklist)
 			p += l;
 			l += 2;
 		}
-		if (l > getmax_ie_len(ie))
+		if (!codeset && (l > getmax_ie_len(ie)))
 			err_len++;
+		if (!codelock) {
+			if (pc->debug & L3_DEB_CHECK)
+				l3_debug(pc->st, "check IE shift back codeset %d->%d",
+					codeset, old_codeset);
+			codeset = old_codeset;
+			codelock = 1;
+		}
 	}
 	if (err_compr | err_ureg | err_len | err_seq) {
 		if (pc->debug & L3_DEB_CHECK)
-			l3_debug(pc->st, "check_infoelements mt %x %d/%d/%d/%d",
+			l3_debug(pc->st, "check IE MT(%x) %d/%d/%d/%d",
 				mt, err_compr, err_ureg, err_len, err_seq);
 		if (err_compr)
 			return(ERR_IE_COMPREHENSION);
@@ -959,7 +983,7 @@ l3dss1_release_cmpl(struct l3_process *pc, u_char pr, void *arg)
 
 #if EXT_BEARER_CAPS
 
-u_char *
+static u_char *
 EncodeASyncParams(u_char * p, u_char si2)
 {				// 7c 06 88  90 21 42 00 bb
 
@@ -1024,7 +1048,7 @@ EncodeASyncParams(u_char * p, u_char si2)
 	return p + 3;
 }
 
-u_char
+static  u_char
 EncodeSyncParams(u_char si2, u_char ai)
 {
 
@@ -1889,6 +1913,16 @@ l3dss1_proceed_req(struct l3_process *pc, u_char pr,
 	pc->st->l3.l3l4(pc->st, CC_PROCEED_SEND | INDICATION, pc); 
 }
 
+static void
+l3dss1_setup_ack_req(struct l3_process *pc, u_char pr,
+		   void *arg)
+{
+	newl3state(pc, 25);
+	L3DelTimer(&pc->timer);
+	L3AddTimer(&pc->timer, T302, CC_T302);
+	l3dss1_message(pc, MT_SETUP_ACKNOWLEDGE);
+}
+
 /********************************************/
 /* deliver a incoming display message to HL */
 /********************************************/
@@ -1926,7 +1960,7 @@ l3dss1_progress(struct l3_process *pc, u_char pr, void *arg)
 		if (p[1] != 2) {
 			err = 1;
 			pc->para.cause = 100;
-		} else if (p[2] & 0x60) {
+		} else if (!(p[2] & 0x70)) {
 			switch (p[2]) {
 				case 0x80:
 				case 0x81:
@@ -2030,9 +2064,22 @@ l3dss1_information(struct l3_process *pc, u_char pr, void *arg)
 {
 	int ret;
 	struct sk_buff *skb = arg;
+	u_char *p;
+	char tmp[32];
 
 	ret = check_infoelements(pc, skb, ie_INFORMATION);
-	l3dss1_std_ie_err(pc, ret);
+	if (ret)
+		l3dss1_std_ie_err(pc, ret);
+	if (pc->state == 25) { /* overlap receiving */
+		L3DelTimer(&pc->timer);
+		p = skb->data;
+		if ((p = findie(p, skb->len, 0x70, 0))) {
+			iecpy(tmp, p, 1);
+			strcat(pc->para.setup.eazmsn, tmp);
+			pc->st->l3.l3l4(pc->st, CC_MORE_INFO | INDICATION, pc);
+		}
+		L3AddTimer(&pc->timer, T302, CC_T302);
+	}
 }
 
 /******************************/
@@ -2258,6 +2305,16 @@ l3dss1_dummy(struct l3_process *pc, u_char pr, void *arg)
 }
 
 static void
+l3dss1_t302(struct l3_process *pc, u_char pr, void *arg)
+{
+	L3DelTimer(&pc->timer);
+	pc->para.loc = 0;
+	pc->para.cause = 28; /* invalid number */
+	l3dss1_disconnect_req(pc, pr, NULL);
+	pc->st->l3.l3l4(pc->st, CC_SETUP_ERR, pc);
+}
+
+static void
 l3dss1_t303(struct l3_process *pc, u_char pr, void *arg)
 {
 	if (pc->N303 > 0) {
@@ -2276,6 +2333,7 @@ static void
 l3dss1_t304(struct l3_process *pc, u_char pr, void *arg)
 {
 	L3DelTimer(&pc->timer);
+	pc->para.loc = 0;
 	pc->para.cause = 102;
 	l3dss1_disconnect_req(pc, pr, NULL);
 	pc->st->l3.l3l4(pc->st, CC_SETUP_ERR, pc);
@@ -2315,6 +2373,7 @@ static void
 l3dss1_t310(struct l3_process *pc, u_char pr, void *arg)
 {
 	L3DelTimer(&pc->timer);
+	pc->para.loc = 0;
 	pc->para.cause = 102;
 	l3dss1_disconnect_req(pc, pr, NULL);
 	pc->st->l3.l3l4(pc->st, CC_SETUP_ERR, pc);
@@ -2324,6 +2383,7 @@ static void
 l3dss1_t313(struct l3_process *pc, u_char pr, void *arg)
 {
 	L3DelTimer(&pc->timer);
+	pc->para.loc = 0;
 	pc->para.cause = 102;
 	l3dss1_disconnect_req(pc, pr, NULL);
 	pc->st->l3.l3l4(pc->st, CC_CONNECT_ERR, pc);
@@ -2713,32 +2773,36 @@ static struct stateentry downstatelist[] =
 	 CC_SETUP | REQUEST, l3dss1_setup_req},
 	{SBIT(0),
 	 CC_RESUME | REQUEST, l3dss1_resume_req},
-	{SBIT(1) | SBIT(2) | SBIT(3) | SBIT(4) | SBIT(6) | SBIT(7) | SBIT(8) | SBIT(9) | SBIT(10),
+	{SBIT(1) | SBIT(2) | SBIT(3) | SBIT(4) | SBIT(6) | SBIT(7) | SBIT(8) | SBIT(9) | SBIT(10) | SBIT(25),
 	 CC_DISCONNECT | REQUEST, l3dss1_disconnect_req},
 	{SBIT(12),
 	 CC_RELEASE | REQUEST, l3dss1_release_req},
 	{ALL_STATES,
 	 CC_RESTART | REQUEST, l3dss1_restart},
-	{SBIT(6),
+	{SBIT(6) | SBIT(25),
 	 CC_IGNORE | REQUEST, l3dss1_reset},
-	{SBIT(6),
+	{SBIT(6) | SBIT(25),
 	 CC_REJECT | REQUEST, l3dss1_reject_req},
-	{SBIT(6),
+	{SBIT(6) | SBIT(25),
 	 CC_PROCEED_SEND | REQUEST, l3dss1_proceed_req},
-	{SBIT(6) | SBIT(9),
+	{SBIT(6),
+	 CC_MORE_INFO | REQUEST, l3dss1_setup_ack_req},
+	{SBIT(25),
+	 CC_MORE_INFO | REQUEST, l3dss1_dummy},
+	{SBIT(6) | SBIT(9) | SBIT(25),
 	 CC_ALERTING | REQUEST, l3dss1_alert_req},
-	{SBIT(6) | SBIT(7) | SBIT(9),
+	{SBIT(6) | SBIT(7) | SBIT(9) | SBIT(25),
 	 CC_SETUP | RESPONSE, l3dss1_setup_rsp},
 	{SBIT(10),
 	 CC_SUSPEND | REQUEST, l3dss1_suspend_req},
-        {SBIT(6),
-         CC_PROCEED_SEND | REQUEST, l3dss1_proceed_req},
-        {SBIT(7) | SBIT(9),
+        {SBIT(7) | SBIT(9) | SBIT(25),
          CC_REDIR | REQUEST, l3dss1_redir_req},
         {SBIT(6),
          CC_REDIR | REQUEST, l3dss1_redir_req_early},
         {SBIT(9) | SBIT(25),
          CC_DISCONNECT | REQUEST, l3dss1_disconnect_req},
+	{SBIT(25),
+	 CC_T302, l3dss1_t302},
 	{SBIT(1),
 	 CC_T303, l3dss1_t303},
 	{SBIT(2),
@@ -3081,7 +3145,7 @@ dss1down(struct PStack *st, int pr, void *arg)
 		if ((proc = dss1_new_l3_process(st, cr))) {
 			proc->chan = chan;
 			chan->proc = proc;
-			memcpy (&proc->para.setup, &chan->setup, sizeof (chan->setup));
+			memcpy(&proc->para.setup, &chan->setup, sizeof(setup_parm));
 			proc->callref = cr;
 		}
 	} else {

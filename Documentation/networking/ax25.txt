@@ -8,7 +8,7 @@ who is also the AX.25 Utilities maintainer.
 
 There is an active mailing list for discussing Linux amateur radio matters
 called linux-hams. To subscribe to it, send a message to
-Majordomo@vger.rutgers.edu with the words "subscribe linux-hams" in the body
+majordomo@vger.kernel.org with the words "subscribe linux-hams" in the body
 of the message, the subject field is ignored.
 
 Jonathan G4KLX

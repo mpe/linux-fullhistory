@@ -7,6 +7,11 @@
  * the GNU Public License, incorporated herein by reference.
  */
 
+/*
+ * 19991203 - Fernando Carvalho - takion@superbofh.org
+ * Hacked to compile with egcs and run with current version of isdn modules
+*/
+
 /*        
  *        PCBIT-D low-layer interface definitions
  */
@@ -84,21 +89,20 @@
    Intel 1 2 3 4
 */
 
-struct msg_fmt {
-#ifdef __LITTLE_ENDIAN              /* Little Endian */
-  u_char scmd;
-  u_char cmd;
-  u_char proc;
-  u_char cpu;
+#ifdef __LITTLE_ENDIAN
+#define SET_MSG_SCMD(msg, ch) 	(msg = (msg & 0xffffff00) | (((ch) & 0xff)))
+#define SET_MSG_CMD(msg, ch) 	(msg = (msg & 0xffff00ff) | (((ch) & 0xff) << 8))
+#define SET_MSG_PROC(msg, ch) 	(msg = (msg & 0xff00ffff) | (((ch) & 0xff) << 16))
+#define SET_MSG_CPU(msg, ch) 	(msg = (msg & 0x00ffffff) | (((ch) & 0xff) << 24))
+
+#define GET_MSG_SCMD(msg) 	((msg) & 0xFF)
+#define GET_MSG_CMD(msg) 	((msg) >> 8 & 0xFF)
+#define GET_MSG_PROC(msg) 	((msg) >> 16 & 0xFF)
+#define GET_MSG_CPU(msg) 	((msg) >> 24)
+
 #else
 #error "Non-Intel CPU"
-  u_char cpu;
-  u_char proc;
-  u_char cmd;
-  u_char scmd;
 #endif
-};
-
 
 #define MAX_QUEUED 7
 
@@ -107,14 +111,13 @@ struct msg_fmt {
 
 #define SET_RUN_TIMEOUT 2*HZ /* 2 seconds */
      
-
 struct frame_buf {
         ulong msg;
-        unsigned short refnum;
-        unsigned short dt_len;
-        unsigned short hdr_len;
+        unsigned int refnum;
+        unsigned int dt_len;
+        unsigned int hdr_len;
         struct sk_buff *skb;
-	unsigned short copied;
+	unsigned int copied;
         struct frame_buf * next;
 };
 

@@ -1,4 +1,4 @@
-/*  $Id: process.c,v 1.110 2000/07/28 09:43:39 davem Exp $
+/*  $Id: process.c,v 1.111 2000/08/16 11:13:12 davem Exp $
  *  arch/sparc64/kernel/process.c
  *
  *  Copyright (C) 1995, 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -65,6 +65,9 @@ int cpu_idle(void)
 		 * But this requires writing back the contents of the
 		 * L2 cache etc. so implement this later. -DaveM
 		 */
+		while (!current->need_resched)
+			barrier();
+
 		schedule();
 		check_pgt_cache();
 	}

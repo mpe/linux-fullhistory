@@ -243,6 +243,14 @@ isar_load_firmware(struct IsdnCardState *cs, u_char *buf)
 			printk(KERN_ERR"isar_load_firmware copy_from_user ret %d\n", ret);
 			goto reterror;
 		}
+#ifdef __BIG_ENDIAN
+		sadr = (blk_head.sadr & 0xff)*256 + blk_head.sadr/256;
+		blk_head.sadr = sadr;
+		sadr = (blk_head.len & 0xff)*256 + blk_head.len/256;
+		blk_head.len = sadr;
+		sadr = (blk_head.d_key & 0xff)*256 + blk_head.d_key/256;
+		blk_head.d_key = sadr;
+#endif /* __BIG_ENDIAN */
 		cnt += BLK_HEAD_SIZE;
 		p += BLK_HEAD_SIZE;
 		printk(KERN_DEBUG"isar firmware block (%#x,%5d,%#x)\n",
@@ -284,8 +292,13 @@ isar_load_firmware(struct IsdnCardState *cs, u_char *buf)
 #endif
 			sadr += noc;
 			while(noc) {
+#ifdef __BIG_ENDIAN
+				*mp++ = *sp % 256;
+				*mp++ = *sp / 256;
+#else
 				*mp++ = *sp / 256;
 				*mp++ = *sp % 256;
+#endif /* __BIG_ENDIAN */
 				sp++;
 				noc--;
 			}
@@ -528,8 +541,9 @@ isar_rcv_frame(struct IsdnCardState *cs, struct BCState *bcs)
 			rcv_mbox(cs, ireg, ptr);
 			if (ireg->cmsb & HDLC_FED) {
 				if (bcs->hw.isar.rcvidx < 3) { /* last 2 bytes are the FCS */
-					printk(KERN_WARNING "ISAR: HDLC frame too short(%d)\n",
-						bcs->hw.isar.rcvidx);
+					if (cs->debug & L1_DEB_WARN)
+						debugl1(cs, "isar frame to short %d",
+							bcs->hw.isar.rcvidx);
 				} else if (!(skb = dev_alloc_skb(bcs->hw.isar.rcvidx-2))) {
 					printk(KERN_WARNING "ISAR: receive out of memory\n");
 				} else {
@@ -538,6 +552,7 @@ isar_rcv_frame(struct IsdnCardState *cs, struct BCState *bcs)
 					skb_queue_tail(&bcs->rqueue, skb);
 					isar_sched_event(bcs, B_RCVBUFREADY);
 				}
+				bcs->hw.isar.rcvidx = 0;
 			}
 		}
 		break;
@@ -606,13 +621,16 @@ isar_rcv_frame(struct IsdnCardState *cs, struct BCState *bcs)
 			bcs->hw.isar.rcvidx += ireg->clsb;
 			rcv_mbox(cs, ireg, ptr);
 			if (ireg->cmsb & HDLC_FED) {
+				int len = bcs->hw.isar.rcvidx +
+					dle_count(bcs->hw.isar.rcvbuf, bcs->hw.isar.rcvidx);
 				if (bcs->hw.isar.rcvidx < 3) { /* last 2 bytes are the FCS */
-					printk(KERN_WARNING "ISAR: HDLC frame too short(%d)\n",
-						bcs->hw.isar.rcvidx);
+					if (cs->debug & L1_DEB_WARN)
+						debugl1(cs, "isar frame to short %d",
+							bcs->hw.isar.rcvidx);
 				} else if (!(skb = dev_alloc_skb(bcs->hw.isar.rcvidx))) {
 					printk(KERN_WARNING "ISAR: receive out of memory\n");
 				} else {
-					memcpy(skb_put(skb, bcs->hw.isar.rcvidx),
+					insert_dle((u_char *)skb_put(skb, len),
 						bcs->hw.isar.rcvbuf,
 						bcs->hw.isar.rcvidx);
 					skb_queue_tail(&bcs->rqueue, skb);
@@ -620,7 +638,19 @@ isar_rcv_frame(struct IsdnCardState *cs, struct BCState *bcs)
 					send_DLE_ETX(bcs);
 					isar_sched_event(bcs, B_LL_OK);
 				}
+				bcs->hw.isar.rcvidx = 0;
 			}
+		}
+		if (ireg->cmsb & SART_NMD) { /* ABORT */
+			if (cs->debug & L1_DEB_WARN)
+				debugl1(cs, "isar_rcv_frame: no more data");
+			cs->BC_Write_Reg(cs, 1, ISAR_IIA, 0);
+			bcs->hw.isar.rcvidx = 0;
+			send_DLE_ETX(bcs);
+			sendmsg(cs, SET_DPS(bcs->hw.isar.dpath) |
+				ISAR_HIS_PUMPCTRL, PCTRL_CMD_ESC, 0, NULL);
+			bcs->hw.isar.state = STFAX_ESCAPE;
+			isar_sched_event(bcs, B_LL_NOCARRIER);
 		}
 		break;
 	default:
@@ -1044,6 +1074,9 @@ isar_pump_statev_fax(struct BCState *bcs, u_char devt) {
 				debugl1(cs, "pump stev RSP_DISC");
 			if (bcs->hw.isar.state == STFAX_ESCAPE) {
 				switch(bcs->hw.isar.newcmd) {
+					case 0:
+						bcs->hw.isar.state = STFAX_READY;
+						break;
 					case PCTRL_CMD_FTH:
 					case PCTRL_CMD_FTM:
 						p1 = 10;

@@ -1,4 +1,4 @@
-/* $Id: hysdn_defs.h,v 1.1 2000/02/10 19:44:30 werner Exp $
+/* $Id: hysdn_defs.h,v 1.3 2000/06/13 09:14:26 ualbrecht Exp $
 
  * Linux driver for HYSDN cards, global definitions and exported vars and functions.
  * written by Werner Cornelius (werner@titro.de) for Hypercope GmbH
@@ -20,12 +20,21 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  * $Log: hysdn_defs.h,v $
+ * Revision 1.3  2000/06/13 09:14:26  ualbrecht
+ * Removed obsolete struct for CAPI-application tracking.
+ *
+ * Revision 1.2  2000/05/17 11:41:30  ualbrecht
+ * CAPI 2.0 support added
+ *
  * Revision 1.1  2000/02/10 19:44:30  werner
  *
  * Initial release
  *
  *
  */
+
+#ifndef HYSDN_DEFS_H
+#define HYSDN_DEFS_H
 
 #include <linux/hysdn_if.h>
 #include <linux/interrupt.h>
@@ -41,6 +50,54 @@
 #define word unsigned short
 
 #include "ince1pc.h"
+
+#ifdef CONFIG_HYSDN_CAPI
+#include <linux/capi.h>
+#include "../avmb1/capicmd.h"
+#include "../avmb1/capiutil.h"
+#include "../avmb1/capilli.h"
+
+/***************************/
+/*   CAPI-Profile values.  */
+/***************************/
+
+#define GLOBAL_OPTION_INTERNAL_CONTROLLER 0x0001
+#define GLOBAL_OPTION_EXTERNAL_CONTROLLER 0x0002
+#define GLOBAL_OPTION_HANDSET             0x0004
+#define GLOBAL_OPTION_DTMF                0x0008
+#define GLOBAL_OPTION_SUPPL_SERVICES      0x0010
+#define GLOBAL_OPTION_CHANNEL_ALLOCATION  0x0020
+#define GLOBAL_OPTION_B_CHANNEL_OPERATION 0x0040
+
+#define B1_PROT_64KBIT_HDLC        0x0001
+#define B1_PROT_64KBIT_TRANSPARENT 0x0002
+#define B1_PROT_V110_ASYNCH        0x0004 
+#define B1_PROT_V110_SYNCH         0x0008
+#define B1_PROT_T30                0x0010
+#define B1_PROT_64KBIT_INV_HDLC    0x0020
+#define B1_PROT_56KBIT_TRANSPARENT 0x0040
+
+#define B2_PROT_ISO7776            0x0001
+#define B2_PROT_TRANSPARENT        0x0002
+#define B2_PROT_SDLC               0x0004
+#define B2_PROT_LAPD               0x0008
+#define B2_PROT_T30                0x0010
+#define B2_PROT_PPP                0x0020
+#define B2_PROT_TRANSPARENT_IGNORE_B1_FRAMING_ERRORS 0x0040
+
+#define B3_PROT_TRANSPARENT        0x0001
+#define B3_PROT_T90NL              0x0002
+#define B3_PROT_ISO8208            0x0004
+#define B3_PROT_X25_DCE            0x0008
+#define B3_PROT_T30                0x0010
+#define B3_PROT_T30EXT             0x0020
+
+#define HYSDN_MAXVERSION		8
+
+/* Number of sendbuffers in CAPI-queue */
+#define HYSDN_MAX_CAPI_SKB             20
+
+#endif /* CONFIG_HYSDN_CAPI*/
 
 /************************************************/
 /* constants and bits for debugging/log outputs */
@@ -176,7 +233,29 @@ typedef struct HYSDN_CARD {
 	/* init and deinit stopcard for booting, too */
 	void (*stopcard) (struct HYSDN_CARD *);
 	void (*releasehardware) (struct HYSDN_CARD *);
+#ifdef CONFIG_HYSDN_CAPI
+	struct hycapictrl_info {
+		char cardname[32];
+		spinlock_t lock;
+		int versionlen;
+		char versionbuf[1024];
+		char *version[HYSDN_MAXVERSION];
+
+		char infobuf[128];	/* for function procinfo */
+		
+		struct HYSDN_CARD  *card;
+		struct capi_ctr *capi_ctrl;
+		struct sk_buff *skbs[HYSDN_MAX_CAPI_SKB];
+		int in_idx, out_idx;	/* indexes to buffer ring */
+		int sk_count;		/* number of buffers currently in ring */
+		struct sk_buff *tx_skb;	/* buffer for tx operation */
+	} *hyctrlinfo;
+#endif /* CONFIG_HYSDN_CAPI */
 } hysdn_card;
+
+#ifdef CONFIG_HYSDN_CAPI
+typedef struct hycapictrl_info hycapictrl_info;
+#endif /* CONFIG_HYSDN_CAPI */
 
 
 /*****************/
@@ -227,3 +306,27 @@ extern char *hysdn_net_getname(hysdn_card *);	/* get name of net interface */
 extern void hysdn_tx_netack(hysdn_card *);	/* acknowledge a packet tx */
 extern struct sk_buff *hysdn_tx_netget(hysdn_card *);	/* get next network packet */
 extern void hysdn_rx_netpkt(hysdn_card *, uchar *, word);	/* rxed packet from network */
+
+#ifdef CONFIG_HYSDN_CAPI
+extern struct capi_driver_interface *hy_di;
+extern int hycapi_capi_create(hysdn_card *);	/* create a new capi device */
+extern int hycapi_capi_release(hysdn_card *);	/* delete the device */
+extern int hycapi_capi_stop(hysdn_card *card);   /* suspend */
+extern int hycapi_load_firmware(struct capi_ctr *, capiloaddata *);
+extern void hycapi_reset_ctr(struct capi_ctr *);
+extern void hycapi_remove_ctr(struct capi_ctr *);
+extern void hycapi_register_appl(struct capi_ctr *, __u16 appl,
+				 capi_register_params *);
+extern void hycapi_release_appl(struct capi_ctr *, __u16 appl);
+extern void hycapi_send_message(struct capi_ctr *, struct sk_buff *skb);
+extern char *hycapi_procinfo(struct capi_ctr *);
+extern int hycapi_read_proc(char *page, char **start, off_t off,
+			    int count, int *eof, struct capi_ctr *card);
+extern void hycapi_rx_capipkt(hysdn_card * card, uchar * buf, word len);
+extern void hycapi_tx_capiack(hysdn_card * card);
+extern struct sk_buff *hycapi_tx_capiget(hysdn_card *card);
+extern int hycapi_init(void);
+extern void hycapi_cleanup(void);
+#endif /* CONFIG_HYSDN_CAPI */
+
+#endif /* HYSDN_DEFS_H */

@@ -39,8 +39,11 @@
 #define HW_POWERUP	0x0008
 #define HW_ACTIVATE	0x0010
 #define HW_DEACTIVATE	0x0018
+
+#define HW_INFO1	0x0010
 #define HW_INFO2	0x0020
 #define HW_INFO3	0x0030
+#define HW_INFO4	0x0040
 #define HW_INFO4_P8	0x0040
 #define HW_INFO4_P10	0x0048
 #define HW_RSYNC	0x0060
@@ -90,6 +93,7 @@
 #define CC_SUSPEND	0x0370
 #define CC_PROCEED_SEND 0x0374
 #define CC_REDIR        0x0378
+#define CC_T302		0x0382
 #define CC_T303		0x0383
 #define CC_T304		0x0384
 #define CC_T305		0x0385
@@ -100,6 +104,7 @@
 #define CC_T313		0x0393
 #define CC_T318		0x0398
 #define CC_T319		0x0399
+#define CC_TSPID	0x03A0
 #define CC_NOSETUP_RSP	0x03E0
 #define CC_SETUP_ERR	0x03E1
 #define CC_SUSPEND_ERR	0x03E2
@@ -108,6 +113,7 @@
 #define CC_RELEASE_ERR	0x03E5
 #define CC_RESTART	0x03F4
 #define CC_TDSS1_IO     0x13F4    /* DSS1 IO user timer */
+#define CC_TNI1_IO      0x13F5    /* NI1 IO user timer */
 
 /* define maximum number of possible waiting incoming calls */
 #define MAX_WAITING_CALLS 2
@@ -115,12 +121,18 @@
 
 #ifdef __KERNEL__
 
-/* include only l3dss1 specific process structures, but no other defines */
+/* include l3dss1 & ni1 specific process structures, but no other defines */
 #ifdef CONFIG_HISAX_EURO
   #define l3dss1_process
   #include "l3dss1.h" 
   #undef  l3dss1_process
 #endif CONFIG_HISAX_EURO
+
+#ifdef CONFIG_HISAX_NI1
+  #define l3ni1_process
+  #include "l3ni1.h" 
+  #undef  l3ni1_process
+#endif CONFIG_HISAX_NI1
 
 #define MAX_DFRAME_LEN	260
 #define MAX_DFRAME_LEN_L1	300
@@ -184,6 +196,7 @@ struct L3Timer {
 #define FLG_L1_ACTTIMER		4
 #define FLG_L1_T3RUN		5
 #define FLG_L1_PULL_REQ		6
+#define FLG_L1_UINT		7
 
 struct Layer1 {
 	void *hardware;
@@ -298,7 +311,7 @@ struct PStack {
 	struct Layer3 l3;
 	struct LLInterface lli;
 	struct Management ma;
-	int protocol;		/* EDSS1 or 1TR6 */
+	int protocol;		/* EDSS1, 1TR6 or NI1 */
 
         /* protocol specific data fields */
         union
@@ -306,6 +319,9 @@ struct PStack {
 #ifdef CONFIG_HISAX_EURO
            dss1_stk_priv dss1; /* private dss1 data */
 #endif CONFIG_HISAX_EURO              
+#ifdef CONFIG_HISAX_NI1
+           ni1_stk_priv ni1; /* private ni1 data */
+#endif CONFIG_HISAX_NI1              
 	 } prot;
 };
 
@@ -327,6 +343,9 @@ struct l3_process {
 #ifdef CONFIG_HISAX_EURO 
            dss1_proc_priv dss1; /* private dss1 data */
 #endif CONFIG_HISAX_EURO            
+#ifdef CONFIG_HISAX_NI1
+           ni1_proc_priv ni1; /* private ni1 data */
+#endif CONFIG_HISAX_NI1              
 	 } prot;
 };
 
@@ -373,10 +392,17 @@ struct isar_hw {
 };
 
 struct hdlc_stat_reg {
+#ifdef __BIG_ENDIAN
+	u_char fill __attribute__((packed));
+	u_char mode __attribute__((packed));
+	u_char xml  __attribute__((packed));
+	u_char cmd  __attribute__((packed));
+#else
 	u_char cmd  __attribute__((packed));
 	u_char xml  __attribute__((packed));
 	u_char mode __attribute__((packed));
 	u_char fill __attribute__((packed));
+#endif
 };
 
 struct hdlc_hw {
@@ -805,6 +831,22 @@ struct w6692_chip {
 	int ph_state;
 };
 
+struct icc_chip {
+	int ph_state;
+	u_char *mon_tx;
+	u_char *mon_rx;
+	int mon_txp;
+	int mon_txc;
+	int mon_rxp;
+	struct arcofi_msg *arcofi_list;
+	struct timer_list arcofitimer;
+	wait_queue_head_t arcofi_wait;
+	u_char arcofi_bc;
+	u_char arcofi_state;
+	u_char mocr;
+	u_char adf2;
+};
+
 #define HW_IOM1			0
 #define HW_IPAC			1
 #define HW_ISAR			2
@@ -815,6 +857,7 @@ struct w6692_chip {
 #define FLG_LOCK_ATOMIC 	7
 #define FLG_ARCOFI_TIMER	8
 #define FLG_ARCOFI_ERROR	9
+#define FLG_HW_L1_UINT		10
 
 struct IsdnCardState {
 	unsigned char typ;
@@ -883,6 +926,7 @@ struct IsdnCardState {
 		struct hfcpci_chip hfcpci;
 		struct hfcsx_chip hfcsx;
 		struct w6692_chip w6692;
+		struct icc_chip icc;
 	} dc;
 	u_char *rcvbuf;
 	int rcvidx;
@@ -924,7 +968,7 @@ struct IsdnCardState {
 #define  ISDN_CTYPE_MIC		17
 #define  ISDN_CTYPE_ELSA_PCI	18
 #define  ISDN_CTYPE_COMPAQ_ISA	19
-#define  ISDN_CTYPE_NETJET	20
+#define  ISDN_CTYPE_NETJET_S	20
 #define  ISDN_CTYPE_TELESPCI	21
 #define  ISDN_CTYPE_SEDLBAUER_PCMCIA	22
 #define  ISDN_CTYPE_AMD7930	23
@@ -942,7 +986,8 @@ struct IsdnCardState {
 #define  ISDN_CTYPE_HFC_PCI	35
 #define  ISDN_CTYPE_W6692	36
 #define  ISDN_CTYPE_HFC_SX      37
-#define  ISDN_CTYPE_COUNT	37
+#define  ISDN_CTYPE_NETJET_U	38
+#define  ISDN_CTYPE_COUNT	38
 
 
 #ifdef ISDN_CHIP_ISAC
@@ -1091,12 +1136,12 @@ struct IsdnCardState {
 #endif
 
 #ifdef  CONFIG_HISAX_NETJET
-#define CARD_NETJET 1
+#define CARD_NETJET_S 1
 #ifndef ISDN_CHIP_ISAC
 #define ISDN_CHIP_ISAC 1
 #endif
 #else
-#define CARD_NETJET 0
+#define CARD_NETJET_S 0
 #endif
 
 #ifdef	CONFIG_HISAX_HFCS
@@ -1204,17 +1249,19 @@ struct IsdnCardState {
 #define	CARD_W6692	0
 #endif
 
-#define TEI_PER_CARD 0
-
-#ifdef CONFIG_HISAX_1TR6
-#undef TEI_PER_CARD
-#define TEI_PER_CARD 1
+#ifdef  CONFIG_HISAX_NETJET_U
+#define CARD_NETJET_U 1
+#ifndef ISDN_CHIP_ICC
+#define ISDN_CHIP_ICC 1
+#endif
+#ifndef HISAX_UINTERFACE
+#define HISAX_UINTERFACE 1
+#endif
+#else
+#define CARD_NETJET_U 0
 #endif
 
-#ifdef CONFIG_HISAX_EURO
-#undef TEI_PER_CARD
 #define TEI_PER_CARD 1
-#endif
 
 /* L1 Debug */
 #define	L1_DEB_WARN		0x01
@@ -1238,7 +1285,7 @@ extern void Logl2Frame(struct IsdnCardState *cs, struct sk_buff *skb, char *buf,
 
 struct IsdnCard {
 	int typ;
-	int protocol;		/* EDSS1 or 1TR6 */
+	int protocol;		/* EDSS1, 1TR6 or NI1 */
 	unsigned int para[4];
 	struct IsdnCardState *cs;
 };

@@ -1,4 +1,4 @@
-/* $Id: misc.c,v 1.28 2000/07/06 01:41:30 davem Exp $
+/* $Id: misc.c,v 1.29 2000/08/14 23:50:31 anton Exp $
  * misc.c: Miscelaneous syscall emulation for Solaris
  *
  * Copyright (C) 1997,1998 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -20,7 +20,6 @@
 #include <asm/string.h>
 #include <asm/oplib.h>
 #include <asm/idprom.h>
-#include <asm/machines.h>
 
 #include "conv.h"
 
@@ -179,26 +178,7 @@ static char *machine(void)
 
 static char *platform(char *buffer)
 {
-	int i, len;
-	struct {
-		char *platform;
-		int id_machtype;
-	} platforms [] = {
-		{ "sun4", (SM_SUN4 | SM_4_110) },
-		{ "sun4", (SM_SUN4 | SM_4_260) },
-		{ "sun4", (SM_SUN4 | SM_4_330) },
-		{ "sun4", (SM_SUN4 | SM_4_470) },
-		{ "SUNW,Sun_4_60", (SM_SUN4C | SM_4C_SS1) },
-		{ "SUNW,Sun_4_40", (SM_SUN4C | SM_4C_IPC) },
-		{ "SUNW,Sun_4_65", (SM_SUN4C | SM_4C_SS1PLUS) },
-		{ "SUNW,Sun_4_20", (SM_SUN4C | SM_4C_SLC) },
-		{ "SUNW,Sun_4_75", (SM_SUN4C | SM_4C_SS2) },
-		{ "SUNW,Sun_4_25", (SM_SUN4C | SM_4C_ELC) },
-		{ "SUNW,Sun_4_50", (SM_SUN4C | SM_4C_IPX) },
-		{ "SUNW,Sun_4_600", (SM_SUN4M | SM_4M_SS60) },
-		{ "SUNW,SPARCstation-5", (SM_SUN4M | SM_4M_SS50) },
-		{ "SUNW,SPARCstation-20", (SM_SUN4M | SM_4M_SS40) }
-	};
+	int len;
 
 	*buffer = 0;
 	len = prom_getproperty(prom_root_node, "name", buffer, 256);
@@ -211,10 +191,8 @@ static char *platform(char *buffer)
 			if (*p == '/' || *p == ' ') *p = '_';
 		return buffer;
 	}
-	for (i = 0; i < sizeof (platforms)/sizeof (platforms[0]); i++)
-		if (platforms[i].id_machtype == idprom->id_machtype)
-			return platforms[i].platform;
-	return "sun4c";
+
+	return "sun4u";
 }
 
 static char *serial(char *buffer)

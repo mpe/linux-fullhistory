@@ -24,6 +24,7 @@
 #define START_STOP_TIMEOUT		(60 * HZ)
 #define MOVE_MEDIUM_TIMEOUT		(5 * 60 * HZ)
 #define READ_ELEMENT_STATUS_TIMEOUT	(5 * 60 * HZ)
+#define READ_DEFECT_DATA_TIMEOUT	(60 * HZ )  /* ZIP-250 on parallel port takes as long! */
 
 #define MAX_BUF PAGE_SIZE
 
@@ -283,6 +284,10 @@ int scsi_ioctl_send_command(Scsi_Device * dev, Scsi_Ioctl_Command * sic)
 	case READ_ELEMENT_STATUS:
 		timeout = READ_ELEMENT_STATUS_TIMEOUT;
 		retries = NORMAL_RETRIES;
+		break;
+	case READ_DEFECT_DATA:
+		timeout = READ_DEFECT_DATA_TIMEOUT;
+		retries = 1;
 		break;
 	default:
 		timeout = IOCTL_NORMAL_TIMEOUT;

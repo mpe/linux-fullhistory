@@ -1,4 +1,4 @@
-/* $Id: ioctl32.c,v 1.97 2000/08/09 08:45:39 anton Exp $
+/* $Id: ioctl32.c,v 1.98 2000/08/16 12:33:00 davem Exp $
  * ioctl32.c: Conversion between 32bit and 64bit native ioctls.
  *
  * Copyright (C) 1997-2000  Jakub Jelinek  (jakub@redhat.com)
@@ -21,6 +21,8 @@
 #include <linux/raid/md.h>
 #include <linux/kd.h>
 #include <linux/route.h>
+#include <linux/in6.h>
+#include <linux/ipv6_route.h>
 #include <linux/skbuff.h>
 #include <linux/netlink.h>
 #include <linux/vt.h>
@@ -646,31 +648,69 @@ struct rtentry32 {
 
 };
 
+struct in6_rtmsg32 {
+	struct in6_addr		rtmsg_dst;
+	struct in6_addr		rtmsg_src;
+	struct in6_addr		rtmsg_gateway;
+	u32			rtmsg_type;
+	u16			rtmsg_dst_len;
+	u16			rtmsg_src_len;
+	u32			rtmsg_metric;
+	u32			rtmsg_info;
+	u32			rtmsg_flags;
+	s32			rtmsg_ifindex;
+};
+
+extern struct socket *sockfd_lookup(int fd, int *err);
+
 static inline int routing_ioctl(unsigned int fd, unsigned int cmd, unsigned long arg)
 {
-	struct rtentry r;
+	int ret;
+	void *r = NULL;
+	struct in6_rtmsg r6;
+	struct rtentry r4;
 	char devname[16];
 	u32 rtdev;
-	int ret;
 	mm_segment_t old_fs = get_fs();
 	
-	ret = copy_from_user (&r.rt_dst, &(((struct rtentry32 *)arg)->rt_dst), 3 * sizeof(struct sockaddr));
-	ret |= __get_user (r.rt_flags, &(((struct rtentry32 *)arg)->rt_flags));
-	ret |= __get_user (r.rt_metric, &(((struct rtentry32 *)arg)->rt_metric));
-	ret |= __get_user (r.rt_mtu, &(((struct rtentry32 *)arg)->rt_mtu));
-	ret |= __get_user (r.rt_window, &(((struct rtentry32 *)arg)->rt_window));
-	ret |= __get_user (r.rt_irtt, &(((struct rtentry32 *)arg)->rt_irtt));
-	ret |= __get_user (rtdev, &(((struct rtentry32 *)arg)->rt_dev));
-	if (rtdev) {
-		ret |= copy_from_user (devname, (char *)A(rtdev), 15);
-		r.rt_dev = devname; devname[15] = 0;
-	} else
-		r.rt_dev = 0;
+	struct socket *mysock = sockfd_lookup(fd, &ret);
+
+	if (mysock && mysock->sk && mysock->sk->family == AF_INET6) { /* ipv6 */
+		ret = copy_from_user (&r6.rtmsg_dst, &(((struct in6_rtmsg32 *)arg)->rtmsg_dst),
+			3 * sizeof(struct in6_addr));
+		ret |= __get_user (r6.rtmsg_type, &(((struct in6_rtmsg32 *)arg)->rtmsg_type));
+		ret |= __get_user (r6.rtmsg_dst_len, &(((struct in6_rtmsg32 *)arg)->rtmsg_dst_len));
+		ret |= __get_user (r6.rtmsg_src_len, &(((struct in6_rtmsg32 *)arg)->rtmsg_src_len));
+		ret |= __get_user (r6.rtmsg_metric, &(((struct in6_rtmsg32 *)arg)->rtmsg_metric));
+		ret |= __get_user (r6.rtmsg_info, &(((struct in6_rtmsg32 *)arg)->rtmsg_info));
+		ret |= __get_user (r6.rtmsg_flags, &(((struct in6_rtmsg32 *)arg)->rtmsg_flags));
+		ret |= __get_user (r6.rtmsg_ifindex, &(((struct in6_rtmsg32 *)arg)->rtmsg_ifindex));
+		
+		r = (void *) &r6;
+	} else { /* ipv4 */
+		ret = copy_from_user (&r4.rt_dst, &(((struct rtentry32 *)arg)->rt_dst), 3 * sizeof(struct sockaddr));
+		ret |= __get_user (r4.rt_flags, &(((struct rtentry32 *)arg)->rt_flags));
+		ret |= __get_user (r4.rt_metric, &(((struct rtentry32 *)arg)->rt_metric));
+		ret |= __get_user (r4.rt_mtu, &(((struct rtentry32 *)arg)->rt_mtu));
+		ret |= __get_user (r4.rt_window, &(((struct rtentry32 *)arg)->rt_window));
+		ret |= __get_user (r4.rt_irtt, &(((struct rtentry32 *)arg)->rt_irtt));
+		ret |= __get_user (rtdev, &(((struct rtentry32 *)arg)->rt_dev));
+		if (rtdev) {
+			ret |= copy_from_user (devname, (char *)A(rtdev), 15);
+			r4.rt_dev = devname; devname[15] = 0;
+		} else
+			r4.rt_dev = 0;
+
+		r = (void *) &r4;
+	}
+
 	if (ret)
 		return -EFAULT;
+
 	set_fs (KERNEL_DS);
-	ret = sys_ioctl (fd, cmd, (long)&r);
+	ret = sys_ioctl (fd, cmd, (long) r);
 	set_fs (old_fs);
+
 	return ret;
 }
 

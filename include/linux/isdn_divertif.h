@@ -1,6 +1,5 @@
-/* 
- * $Id: isdn_divertif.h,v 1.3 1999/07/05 20:22:00 werner Exp $
- *
+/* $Id: isdn_divertif.h,v 1.4 2000/05/11 22:29:22 kai Exp $
+
  * Header for the diversion supplementary interface for i4l.
  *
  * Copyright 1998       by Werner Cornelius (werner@isdn4linux.de)
@@ -18,15 +17,6 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. 
- *
- * $Log: isdn_divertif.h,v $
- * Revision 1.3  1999/07/05 20:22:00  werner
- * changes to use diversion sources for all kernel versions.
- * removed static device, only proc filesystem used
- *
- * Revision 1.2  1999/07/04 21:38:38  werner
- * ported from kernel version 2.0
- *
  *
  */
 

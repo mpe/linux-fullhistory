@@ -12,7 +12,7 @@
    Copyright 1992 - 2000 Kai Makisara
    email Kai.Makisara@metla.fi
 
-   Last modified: Sun Aug  6 23:02:13 2000 by makisara@kai.makisara.local
+   Last modified: Tue Aug 15 16:56:35 2000 by makisara@kai.makisara.local
    Some small formal changes - aeb, 950809
 
    Last modified: 18-JAN-1998 Richard Gooch <rgooch@atnf.csiro.au> Devfs support
@@ -2909,6 +2909,8 @@ static int st_ioctl(struct inode *inode, struct file *file,
 				i = mtc.mt_op == MTREW || mtc.mt_op == MTOFFL ||
 				    mtc.mt_op == MTRETEN || mtc.mt_op == MTEOM ||
 				    mtc.mt_op == MTLOCK || mtc.mt_op == MTLOAD ||
+				    mtc.mt_op == MTFSF || mtc.mt_op == MTFSFM ||
+				    mtc.mt_op == MTBSF || mtc.mt_op == MTBSFM ||
 				    mtc.mt_op == MTCOMPRESSION;
 			}
 			i = flush_buffer(STp, i);
@@ -3148,7 +3150,7 @@ static ST_buffer *
 		priority = GFP_KERNEL;
 
 	i = sizeof(ST_buffer) + (st_max_sg_segs - 1) * sizeof(struct scatterlist);
-	tb = (ST_buffer *) kmalloc(i, priority);
+	tb = kmalloc(i, priority);
 	if (tb) {
 		if (need_dma)
 			priority |= GFP_DMA;
@@ -3479,10 +3481,8 @@ static int st_attach(Scsi_Device * SDp)
 			return 1;
 		}
 
-		tmp_da = (Scsi_Tape **) kmalloc(tmp_dev_max * sizeof(Scsi_Tape *),
-						GFP_ATOMIC);
-		tmp_ba = (ST_buffer **) kmalloc(tmp_dev_max * sizeof(ST_buffer *),
-						GFP_ATOMIC);
+		tmp_da = kmalloc(tmp_dev_max * sizeof(Scsi_Tape *), GFP_ATOMIC);
+		tmp_ba = kmalloc(tmp_dev_max * sizeof(ST_buffer *), GFP_ATOMIC);
 		if (tmp_da == NULL || tmp_ba == NULL) {
 			if (tmp_da != NULL)
 				kfree(tmp_da);
@@ -3517,7 +3517,7 @@ static int st_attach(Scsi_Device * SDp)
 	if (i >= st_template.dev_max)
 		panic("scsi_devices corrupt (st)");
 
-	tpnt = (Scsi_Tape *)kmalloc(sizeof(Scsi_Tape), GFP_ATOMIC);
+	tpnt = kmalloc(sizeof(Scsi_Tape), GFP_ATOMIC);
 	if (tpnt == NULL) {
 		SDp->attached--;
 		write_unlock_irqrestore(&st_dev_arr_lock, flags);

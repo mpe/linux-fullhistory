@@ -99,8 +99,8 @@ typedef struct ErrLogEntry_tag {
 #if defined(__TURBOC__)
 #if sizeof(tErrLogEntry) != ERRLOG_ENTRY_SIZE
 #error size of tErrLogEntry != ERRLOG_ENTRY_SIZE
-#endif				/*  */
-#endif				/*  */
+#endif				/*  */
+#endif				/*  */
 
 /*--------------------------------------DPRAM boot spooler------------------*/ 
 				/*  this is the struture used between pc and

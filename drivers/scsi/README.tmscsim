@@ -382,7 +382,7 @@ Please append the output of /proc/scsi/scsi, /proc/scsi/tmscsim/? and
 maybe the DC390 log messages to the report. 
 
 Bug reports should be send to me (Kurt Garloff <dc390@garloff.de>) as well
-as to the linux-scsi list (<linux-scsi@vger.rutgers.edu>), as sometimes bugs
+as to the linux-scsi list (<linux-scsi@vger.kernel.org>), as sometimes bugs
 are caused by the SCSI mid-level code.
 
 I will ask you for some more details and probably I will also ask you to

@@ -818,8 +818,6 @@ extern struct sk_buff		*sock_rmalloc(struct sock *sk,
 					      int priority);
 extern void			sock_wfree(struct sk_buff *skb);
 extern void			sock_rfree(struct sk_buff *skb);
-extern void			sock_cfree(struct sk_buff *skb);
-extern unsigned long		sock_rspace(struct sock *sk);
 extern unsigned long		sock_wspace(struct sock *sk);
 
 extern int			sock_setsockopt(struct socket *sock, int level,
@@ -1143,14 +1141,6 @@ extern __inline__ void skb_set_owner_r(struct sk_buff *skb, struct sock *sk)
 	skb->destructor = sock_rfree;
 	atomic_add(skb->truesize, &sk->rmem_alloc);
 }
-
-extern __inline__ void skb_set_owner_c(struct sk_buff *skb, struct sock *sk)
-{
-	sock_hold(sk);
-	skb->sk = sk;
-	skb->destructor = sock_cfree;
-}
-
 
 extern __inline__ int sock_queue_rcv_skb(struct sock *sk, struct sk_buff *skb)
 {

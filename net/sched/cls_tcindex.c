@@ -170,23 +170,17 @@ static int tcindex_delete(struct tcf_proto *tp, unsigned long arg)
 		int i;
 		struct tcindex_filter **walk = NULL;
 
-		for (i = 0; !f && i < p->hash; i++) {
-			for (walk = p->h+i; !f && *walk; walk = &(*walk)->next) {
+		for (i = 0; i < p->hash; i++)
+			for (walk = p->h+i; *walk; walk = &(*walk)->next)
 				if (&(*walk)->result == r)
-					f = *walk;
-			}
-		}
-		if (!f)
-			return -ENOENT;
-/*
- @@@ OK?  -- No (jhs)
-Look more into it
+					goto found;
+		return -ENOENT;
+
+found:
+		f = *walk;
 		tcf_tree_lock(tp); 
-*/
 		*walk = f->next;
-/*
 		tcf_tree_unlock(tp);
-*/
 	}
 	cl = __cls_set_class(&r->res.class,0);
 	if (cl)

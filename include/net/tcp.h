@@ -840,10 +840,7 @@ static inline void tcp_reset_xmit_timer(struct sock *sk, int what, unsigned long
 
 	if (when > TCP_RTO_MAX) {
 #ifdef TCP_DEBUG
-		__label__ here;
-
-		printk(KERN_DEBUG "reset_xmit_timer sk=%p %d when=0x%lx, caller=%p\n", sk, what, when, &&here);
-here:
+		printk(KERN_DEBUG "reset_xmit_timer sk=%p %d when=0x%lx, caller=%p\n", sk, what, when, current_text_addr());
 #endif
 		when = TCP_RTO_MAX;
 	}

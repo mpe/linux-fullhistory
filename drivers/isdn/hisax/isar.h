@@ -186,7 +186,7 @@
 #define HDLC_ERROR	0x1c
 #define HDLC_ERR_FAD	0x10
 #define HDLC_ERR_RER	0x08
-#define HDLC_ERR_CER	0x01
+#define HDLC_ERR_CER	0x04
 #define SART_NMD	0x01
 
 #define BSTAT_RDM0	0x1

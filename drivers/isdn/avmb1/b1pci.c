@@ -1,11 +1,14 @@
 /*
- * $Id: b1pci.c,v 1.26 2000/07/20 10:21:21 calle Exp $
+ * $Id: b1pci.c,v 1.27 2000/08/08 09:24:19 calle Exp $
  * 
  * Module for AVM B1 PCI-card.
  * 
  * (c) Copyright 1999 by Carsten Paeth (calle@calle.in-berlin.de)
  * 
  * $Log: b1pci.c,v $
+ * Revision 1.27  2000/08/08 09:24:19  calle
+ * calls to pci_enable_device surounded by #ifndef COMPAT_HAS_2_2_PCI
+ *
  * Revision 1.26  2000/07/20 10:21:21  calle
  * Bugfix: driver will not be unregistered, if not cards were detected.
  *         this result in an oops in kcapi.c
@@ -91,13 +94,12 @@
 #include <linux/pci.h>
 #include <linux/capi.h>
 #include <asm/io.h>
-#include <linux/isdn.h>
 #include "capicmd.h"
 #include "capiutil.h"
 #include "capilli.h"
 #include "avmcard.h"
 
-static char *revision = "$Revision: 1.26 $";
+static char *revision = "$Revision: 1.27 $";
 
 /* ------------------------------------------------------------- */
 

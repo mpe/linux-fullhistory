@@ -1,4 +1,4 @@
-/* $Id: hysdn_procconf.c,v 1.4 2000/03/03 16:37:12 kai Exp $
+/* $Id: hysdn_procconf.c,v 1.7 2000/08/20 16:46:09 keil Exp $
 
  * Linux driver for HYSDN cards, /proc/net filesystem dir and conf functions.
  * written by Werner Cornelius (werner@titro.de) for Hypercope GmbH
@@ -20,6 +20,15 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  * $Log: hysdn_procconf.c,v $
+ * Revision 1.7  2000/08/20 16:46:09  keil
+ * Changes for 2.4
+ *
+ * Revision 1.6  2000/05/17 11:41:30  ualbrecht
+ * CAPI 2.0 support added
+ *
+ * Revision 1.5  2000/04/23 14:18:36  kai
+ * merge changes from main tree
+ *
  * Revision 1.4  2000/03/03 16:37:12  kai
  * incorporated some cosmetic changes from the official kernel tree back
  * into CVS
@@ -49,7 +58,7 @@
 
 #include "hysdn_defs.h"
 
-static char *hysdn_procconf_revision = "$Revision: 1.4 $";
+static char *hysdn_procconf_revision = "$Revision: 1.7 $";
 
 #define INFO_OUT_LEN 80		/* length of info line including lf */
 
@@ -335,7 +344,7 @@ hysdn_conf_open(struct inode *ino, struct file *filep)
 		*cp++ = '\n';
 
 		/* and now the data */
-		sprintf(cp, "%d  %3d %4d %4d %3d 0x%04x 0x%08x %7d %9d %3d   %s",
+		sprintf(cp, "%d  %3d %4d %4d %3d 0x%04x 0x%08lx %7d %9d %3d   %s",
 			card->myid,
 			card->bus,
 			PCI_SLOT(card->devfn),

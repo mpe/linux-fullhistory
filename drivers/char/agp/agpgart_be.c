@@ -638,7 +638,7 @@ static int agp_generic_create_gatt_table(void)
 	}
 	table_end = table + ((PAGE_SIZE * (1 << page_order)) - 1);
 
-	for (page = virt_to_page(table); page < virt_to_page(table_end); page++)
+	for (page = virt_to_page(table); page <= virt_to_page(table_end); page++)
 		set_bit(PG_reserved, &page->flags);
 
 	agp_bridge.gatt_table_real = (unsigned long *) table;
@@ -648,7 +648,7 @@ static int agp_generic_create_gatt_table(void)
 	CACHE_FLUSH();
 
 	if (agp_bridge.gatt_table == NULL) {
-		for (page = virt_to_page(table); page < virt_to_page(table_end); page++)
+		for (page = virt_to_page(table); page <= virt_to_page(table_end); page++)
 			clear_bit(PG_reserved, &page->flags);
 
 		free_pages((unsigned long) table, page_order);
@@ -705,7 +705,7 @@ static int agp_generic_free_gatt_table(void)
 	table = (char *) agp_bridge.gatt_table_real;
 	table_end = table + ((PAGE_SIZE * (1 << page_order)) - 1);
 
-	for (page = virt_to_page(table); page < virt_to_page(table_end); page++)
+	for (page = virt_to_page(table); page <= virt_to_page(table_end); page++)
 		clear_bit(PG_reserved, &page->flags);
 
 	free_pages((unsigned long) agp_bridge.gatt_table_real, page_order);
@@ -977,6 +977,7 @@ static int intel_i810_remove_entries(agp_memory * mem, off_t pg_start,
 			 agp_bridge.scratch_page);
 	}
 
+	CACHE_FLUSH();
 	agp_bridge.tlb_flush(mem);
 	return 0;
 }

@@ -17,7 +17,7 @@ describe how to recreate it. That is worth even more than the oops itself.
 The list of maintainers is in the MAINTAINERS file in this directory.
 
       If you are totally stumped as to whom to send the report, send it to
-linux-kernel@vger.rutgers.edu. (For more information on the linux-kernel
+linux-kernel@vger.kernel.org. (For more information on the linux-kernel
 mailing list see http://www.tux.org/lkml/).
 
 This is a suggested format for a bug report sent to the Linux kernel mailing 

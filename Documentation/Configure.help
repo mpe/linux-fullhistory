@@ -2305,7 +2305,7 @@ CONFIG_AGP
 Intel 440LX/BX/GX support
 CONFIG_AGP_INTEL
   This option gives you AGP support for the GLX component of the
-  "soon to be released" XFree86 4.x on Intel 440LX/BX/GX chipsets.
+  XFree86 4.x on Intel 440LX/BX/GX chipsets.
 
   For the moment, you should probably say N, unless you want to test
   the GLX component for XFree86 3.3.6, which can be downloaded from
@@ -2320,7 +2320,7 @@ CONFIG_AGP_I810
 VIA chipset support
 CONFIG_AGP_VIA
   This option gives you AGP support for the GLX component of the
-  "soon to be released" XFree86 4.x on VIA MPV3/Apollo Pro chipsets.
+  XFree86 4.x on VIA MPV3/Apollo Pro chipsets.
 
   For the moment, you should probably say N, unless you want to test
   the GLX component for XFree86 3.3.6, which can be downloaded from
@@ -2329,7 +2329,7 @@ CONFIG_AGP_VIA
 AMD Irongate support
 CONFIG_AGP_AMD
   This option gives you AGP support for the GLX component of the
-  "soon to be released" XFree86 4.x on Intel AMD Irongate chipset.
+  XFree86 4.x on Intel AMD Irongate chipset.
 
   For the moment, you should probably say N, unless you want to test
   the GLX component for XFree86 3.3.6, which can be downloaded from
@@ -2350,7 +2350,7 @@ CONFIG_AGP_SIS
 ALI M1541 support
 CONFIG_AGP_ALI
   This option gives you AGP support for the GLX component of the
-  "soon to be released" XFree86 4.x on the ALi M1541 chipset.
+  XFree86 4.x on the ALi M1541 chipset.
 
   This chipset can do AGP 1x and 2x, but note that there is an
   acknowledged incompatibility with Matrox G200 cards. Due to
@@ -2777,7 +2777,8 @@ CONFIG_M386
      SL/SLC/SLC2/SLC3/SX/SX2 and UMC U5D or U5S.
    - "586" for generic Pentium CPUs, possibly lacking the TSC 
      (time stamp counter) register.
-   - "Pentium-Classic" for the Intel Pentium/Pentium MMX.
+   - "Pentium-Classic" for the Intel Pentium.
+   - "Pentium-MMX" for the Intel Pentium MMX.
    - "Pentium-Pro" for the Intel Pentium Pro/Celeron/Pentium II.
    - "Pentium-III" for the Intel Pentium III.
    - "K6" for the AMD K6, K6-II and K6-III (aka K6-3D).
@@ -14397,6 +14398,10 @@ CONFIG_HISAX_1TR6
   before E-DSS1 was established. Nowadays, all new lines in Germany
   use E-DSS1.
 
+HiSax Support for US NI1
+CONFIG_HISAX_NI1
+  Enable this if you like to use ISDN in US on a NI1 basic rate interface.
+
 Teles 16.0/8.0
 CONFIG_HISAX_16_0
   This enables HiSax support for the Teles ISDN-cards S0-16.0, S0-8
@@ -14525,6 +14530,13 @@ CONFIG_HISAX_NETJET
   See Documentation/isdn/README.HiSax on how to configure it using a
   different D-channel protocol, or non-standard IRQ/port settings.
 
+NETspider U card
+CONFIG_HISAX_NETJET_U
+  This enables HiSax support for the Netspider U interface ISDN card from
+  Traverse Technologies.
+  See Documentation/isdn/README.HiSax on how to configure it using a
+  different D-channel protocol, or non-standard IRQ/port settings.
+
 Niccy PnP/PCI card
 CONFIG_HISAX_NICCY
   This enables HiSax support for the Dr. Neuhaus Niccy PnP or PCI. 
@@ -14642,10 +14654,10 @@ CONFIG_ISDN_DRV_EICON_STANDALONE
   cards and will provide its own IDI interface. You should say N
   here.
 
-Support AT-Fax Class 2 commands
+Support AT-Fax Class 1 and 2 commands
 CONFIG_ISDN_TTY_FAX
   If you say Y here, the modem-emulator will support a subset of the
-  Fax Class 2 commands. Using a getty with fax-support
+  Fax Class 1 and 2 commands. Using a getty with fax-support
   (mgetty+sendfax, hylafax), you will be able to use your Linux box as
   an ISDN-fax-machine. This must be supported by the lowlevel driver
   also. See Documentation/isdn/README.fax for more information.
@@ -14714,6 +14726,10 @@ CONFIG_HYSDN
   Champ, Ergo and Metro. You will then get a module called hysdn.o.
   Please read the file Documentation/isdn/README.hysdn for more
   information.
+
+HYSDN CAPI 2.0 support
+CONFIG_HYSDN_CAPI
+  Say Y here if you like to use Hypercope's CAPI 2.0 interface
 
 Support for Sun4 architecture
 CONFIG_SUN4

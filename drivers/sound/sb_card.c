@@ -44,7 +44,9 @@
  *
  * 25-05-2000 Added Creative SB AWE64 Gold (CTL00B2). 
  * 	Pål-Kristian Engstad <engstad@att.net>
- * 
+ *
+ * 12-08-2000 Added Creative SB32 PnP (CTL009F).
+ * 	Kasatenko Ivan Alex. <skywriter@rnc.ru>
  */
 
 #include <linux/config.h>
@@ -338,6 +340,11 @@ static struct {
 		0,1,1,-1},
 	{"Sound Blaster AWE 32",
 		ISAPNP_VENDOR('C','T','L'), ISAPNP_DEVICE(0x009C), 
+		ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x0041),
+		0,0,0,0,
+		0,1,1,-1},
+	{"Creative SB32 PnP",
+		ISAPNP_VENDOR('C','T','L'), ISAPNP_DEVICE(0x009F),
 		ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x0041),
 		0,0,0,0,
 		0,1,1,-1},

@@ -8,7 +8,7 @@
  *		as published by the Free Software Foundation; either version
  *		2 of the License, or (at your option) any later version.
  *
- * Version:	$Id: af_unix.c,v 1.104 2000/08/10 01:21:14 davem Exp $
+ * Version:	$Id: af_unix.c,v 1.105 2000/08/16 10:58:22 davem Exp $
  *
  * Fixes:
  *		Linus Torvalds	:	Assorted bug cures.
@@ -593,7 +593,8 @@ static unix_socket *unix_find_other(struct sockaddr_un *sunname, int len,
 	int err = 0;
 	
 	if (sunname->sun_path[0]) {
-		if (path_init(sunname->sun_path, LOOKUP_POSITIVE, &nd))
+		if (path_init(sunname->sun_path, 
+			      LOOKUP_POSITIVE|LOOKUP_FOLLOW, &nd))
 			err = path_walk(sunname->sun_path, &nd);
 		if (err)
 			goto fail;

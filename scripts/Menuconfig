@@ -834,7 +834,7 @@ EOM
 			cat <<EOM
 
 Please report this to the maintainer <mec@shout.net>.  You may also
-send a problem report to <linux-kernel@vger.rutgers.edu>.
+send a problem report to <linux-kernel@vger.kernel.org>.
 
 Please indicate the kernel version you are trying to configure and
 which menu you were trying to enter when this error occurred.
@@ -897,7 +897,7 @@ the /usr/src/linux/scripts/lxdialog directory and issuing the
 
 If you have verified that your ncurses install is correct, you may email
 the maintainer <mec@shout.net> or post a message to
-<linux-kernel@vger.rutgers.edu> for additional assistance. 
+<linux-kernel@vger.kernel.org> for additional assistance. 
 
 EOM
 			cleanup

@@ -304,7 +304,14 @@ int capi_tdata_req(struct pcbit_chan* chan, struct sk_buff *skb)
 	
 	data_len = skb->len;
 
-	skb_push(skb, 10);
+	if(skb_headroom(skb) < 10)
+	{
+		printk(KERN_CRIT "No headspace (%u) on headroom %p for capi header\n", skb_headroom(skb), skb);
+	}
+	else
+	{	
+		skb_push(skb, 10);
+	}
 
 	*((u16 *) (skb->data)) = chan->callref;
 	skb->data[2] = chan->layer2link;

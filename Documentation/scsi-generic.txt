@@ -756,7 +756,7 @@ http://www.kernel.dk    Jens Axboe's site for Linux cdrom matters including
                         the SCSI "sr" driver.
 http://www.torque.net/sg
                         My site with sg related information.
-newsgroup:linux-scsi@vger.rutgers.edu
+newsgroup:linux-scsi@vger.kernel.org
                         Newsgroup for Linux related SCSI matters
 /usr/src/linux/MAINTAINERS
                         This is a file in the Linux kernel source that

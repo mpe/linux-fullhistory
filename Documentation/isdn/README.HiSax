@@ -53,7 +53,7 @@ Sedlbauer Speed Star/Speed Star2 (PCMCIA)
 Sedlbauer ISDN-Controller PC/104
 USR Sportster internal TA (compatible Stollmann tina-pp V3)
 ith Kommunikationstechnik GmbH MIC 16 ISA card
-Traverse Technologie NETjet PCI S0 card
+Traverse Technologie NETjet PCI S0 card and NETspider U card
 Dr. Neuhaus Niccy PnP/PCI
 Siemens I-Surf 1.0
 Siemens I-Surf 2.0 (with IPAC, try type 12 asuscom) 
@@ -134,7 +134,12 @@ mem=,0xd0000. See example 6 below.
 
 The parameter for the D-Channel protocol may be omitted if you selected the
 correct one during kernel config. Valid values are "1" for German 1TR6,
-"2" for EDSS1 (Euro ISDN) and "3" for leased lines (no D-Channel).
+"2" for EDSS1 (Euro ISDN), "3" for leased lines (no D-Channel) and "4"
+for US NI1.
+With US NI1 you have to include your SPID into the MSN setting in the form
+<MSN>:<SPID> for example (your phonenumber is 1234 your SPID 5678):
+AT&E1234:5678                       on ttyI interfaces
+isdnctrl eaz ippp0 1234:5678        on network devices
 
 The Creatix/Teles PnP cards use io1= and io2= instead of io= for specifying
 the I/O addresses of the ISAC and HSCX chips, respectively.
@@ -186,8 +191,8 @@ Card types:
    34	Gazel ISDN cards (PCI)   none
    35	HFC 2BDS0 PCI            none
    36	W6692 based PCI cards    none
-   37   HFC 2BDS0 S+, SP/PCMCIA  irq,io (pcmcia must be set with cardmgr)
-
+   37	HFC 2BDS0 S+, SP/PCMCIA  irq,io (pcmcia must be set with cardmgr)
+   38	NETspider U PCI card     none
 
 At the moment IRQ sharing is only possible with PCI cards. Please make sure
 that your IRQ is free and enabled for ISA use.
@@ -291,7 +296,9 @@ type
    34	Gazel ISDN cards (PCI)  no parameter
    35	HFC 2BDS0 PCI           no parameter
    36	W6692 based PCI cards   none
-   37   HFC 2BDS0 S+,SP/PCMCIA  pa=irq, pb=io
+   37	HFC 2BDS0 S+,SP/PCMCIA  ONLY WORKS AS A MODULE !
+   38	NETspider U PCI card    none
+
 
 Running the driver
 ------------------

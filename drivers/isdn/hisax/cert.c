@@ -17,11 +17,9 @@ certification_check(int output) {
 #if CERTIFICATION == 0
 	if (output) {
 		printk(KERN_INFO "HiSax: Approval certification valid\n");
-		printk(KERN_INFO "HiSax: Approved with ELSA Quickstep series cards\n");
-		printk(KERN_INFO "HiSax: Approval registration numbers:\n");
-		printk(KERN_INFO "HiSax: German D133361J CETECOM ICT Services GmbH\n");
-		printk(KERN_INFO "HiSax: EU (D133362J) CETECOM ICT Services GmbH\n");
+		printk(KERN_INFO "HiSax: Approved with ELSA Microlink PCI cards\n");
 		printk(KERN_INFO "HiSax: Approved with Eicon Technology Diva 2.01 PCI cards\n");
+		printk(KERN_INFO "HiSax: Approved with Sedlbauer Speedfax + cards\n");
 	}
 	return(0);
 #endif

@@ -1,4 +1,4 @@
-/* $Id: icn.c,v 1.62 1999/09/06 07:29:35 fritz Exp $
+/* $Id: icn.c,v 1.63 2000/05/06 00:52:39 kai Exp $
 
  * ISDN low-level module for the ICN active ISDN-Card.
  *
@@ -19,6 +19,10 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  * $Log: icn.c,v $
+ * Revision 1.63  2000/05/06 00:52:39  kai
+ * merged changes from kernel tree
+ * fixed timer and net_device->name breakage
+ *
  * Revision 1.62  1999/09/06 07:29:35  fritz
  * Changed my mail-address.
  *
@@ -247,7 +251,7 @@
 #undef MAP_DEBUG
 
 static char
-*revision = "$Revision: 1.62 $";
+*revision = "$Revision: 1.63 $";
 
 static int icn_addcard(int, char *, char *);
 

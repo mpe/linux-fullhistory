@@ -46,8 +46,8 @@ int pcbit_init(void)
 
 	num_boards = 0;
 
-	printk(KERN_INFO 
-	       "PCBIT-D device driver v 0.5 - "
+	printk(KERN_NOTICE 
+	       "PCBIT-D device driver v 0.5-fjpc0 19991204 - "
 	       "Copyright (C) 1996 Universidade de Lisboa\n");
 
 	if (mem[0] || irq[0]) 
@@ -97,7 +97,7 @@ void cleanup_module(void)
 
 	for (board = 0; board < num_boards; board++)
 		pcbit_terminate(board);
-	printk(KERN_INFO 
+	printk(KERN_NOTICE 
 	       "PCBIT-D module unloaded\n");
 }
 

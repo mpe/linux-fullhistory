@@ -1,11 +1,11 @@
    Linux Driver for Mylex DAC960/AcceleRAID/eXtremeRAID PCI RAID Controllers
 
-			Version 2.2.7 for Linux 2.2.16
-			Version 2.4.7 for Linux 2.4.0
+			Version 2.2.8 for Linux 2.2.16
+			Version 2.4.8 for Linux 2.4.0
 
 			      PRODUCTION RELEASE
 
-				 1 August 2000
+				19 August 2000
 
 			       Leonard N. Zubkoff
 			       Dandelion Digital
@@ -28,9 +28,9 @@ The latest information on Linux support for DAC960 PCI RAID Controllers, as
 well as the most recent release of this driver, will always be available from
 my Linux Home Page at URL "http://www.dandelion.com/Linux/".  The Linux DAC960
 driver supports all current Mylex PCI RAID controllers including the new
-eXtremeRAID 2000/3000 and AcceleRAID 352/170 models which have an entirely new
-firmware interface from the older eXtremeRAID 1100, AcceleRAID 150/200/250, and
-DAC960PJ/PG/PU/PD/PL.  See below for a complete controller list as well as
+eXtremeRAID 2000/3000 and AcceleRAID 352/170/160 models which have an entirely
+new firmware interface from the older eXtremeRAID 1100, AcceleRAID 150/200/250,
+and DAC960PJ/PG/PU/PD/PL.  See below for a complete controller list as well as
 minimum firmware version requirements.  For simplicity, in most places this
 documentation refers to DAC960 generically rather than explicitly listing all
 the supported models.
@@ -120,6 +120,12 @@ AcceleRAID 170
 	    100MHz Intel i960RM RISC Processor
 	    16MB/32MB/64MB ECC SDRAM Memory
 
+AcceleRAID 160
+	    1 Wide Ultra-160 LVD SCSI channel
+	    100MHz Intel i960RS RISC Processor
+	    Built in 16M ECC SDRAM Memory
+	    PCI Low Profile Form Factor - fit for 2U height
+
 eXtremeRAID 1100 (DAC1164P)
 	    3 Wide Ultra-2/LVD SCSI channels
 	    233MHz StrongARM SA 110 Processor
@@ -164,8 +170,8 @@ DAC960PL    1/2/3 Wide Fast SCSI-2 Channels
 	    Intel i960 RISC Processor
 	    2MB/4MB/8MB/16MB/32MB DRAM Memory
 
-For the eXtremeRAID 2000/3000 and AcceleRAID 352/170, firmware version 6.00-01
-or above is required.
+For the eXtremeRAID 2000/3000 and AcceleRAID 352/170/160, firmware version
+6.00-01 or above is required.
 
 For the eXtremeRAID 1100, firmware version 5.06-0-52 or above is required.
 
@@ -203,10 +209,10 @@ To install the DAC960 RAID driver, you may use the following commands,
 replacing "/usr/src" with wherever you keep your Linux kernel source tree:
 
   cd /usr/src
-  tar -xvzf DAC960-2.2.7.tar.gz (or DAC960-2.4.7.tar.gz)
+  tar -xvzf DAC960-2.2.8.tar.gz (or DAC960-2.4.8.tar.gz)
   mv README.DAC960 linux/Documentation
   mv DAC960.[ch] linux/drivers/block
-  patch -p0 < DAC960.patch
+  patch -p0 < DAC960.patch (if DAC960.patch is included)
   cd linux
   make config
   make depend

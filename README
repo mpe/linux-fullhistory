@@ -14,7 +14,7 @@ or 2.2.xx.  All features which will be in the 2.3.xx releases will be
 contained in 2.4.xx when the code base has stabilized again. 
 
 If you decide to use 2.3, it is recommended that you join the kernel mailing
-list.  To do this, e-mail majordomo@vger.rutgers.edu, and put in the body
+list.  To do this, e-mail majordomo@vger.kernel.org, and put in the body
 of the message "subscribe linux-kernel" or "subscribe linux-kernel-digest"
 for a daily digest of the mailing list (it is a high-traffic list.)
 

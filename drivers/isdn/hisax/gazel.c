@@ -26,10 +26,18 @@ const char *gazel_revision = "$Revision: 2.8 $";
 #define R742      4
 
 /* Gazel R685 stuff */
-#define GAZEL_MANUFACTURER     0x10b5
-#define GAZEL_R685             0x1030
-#define GAZEL_R753             0x1152
-#define GAZEL_DJINN_ITOO       0x1151
+#ifndef PCI_VENDOR_ID_PLX
+#define PCI_VENDOR_ID_PLX	0x10b5
+#endif
+#ifndef PCI_DEVICE_ID_PLX_R685
+#define PCI_DEVICE_ID_PLX_R685	0x1030
+#endif
+#ifndef PCI_DEVICE_ID_PLX_R753
+#define PCI_DEVICE_ID_PLX_R753	0x1152
+#endif
+#ifndef PCI_DEVICE_ID_PLX_DJINN_ITOO
+#define PCI_DEVICE_ID_PLX_DJINN_ITOO	0x1151
+#endif
 
 #define PLX_CNTRL    0x50	/* registre de controle PLX */
 #define RESET_GAZEL  0x4
@@ -565,25 +573,25 @@ setup_gazelpci(struct IsdnCardState *cs)
 		printk(KERN_WARNING "Gazel: No PCI bus present\n");
 		return 1;
 	}
-	seekcard = GAZEL_R685;
+	seekcard = PCI_DEVICE_ID_PLX_R685;
 	for (nbseek = 0; nbseek < 3; nbseek++) {
-		if ((dev_tel = pci_find_device(GAZEL_MANUFACTURER, seekcard, dev_tel))) {
+		if ((dev_tel = pci_find_device(PCI_VENDOR_ID_PLX, seekcard, dev_tel))) {
 			if (pci_enable_device(dev_tel))
 				return 1;
 			pci_irq = dev_tel->irq;
-			pci_ioaddr0 = dev_tel->resource[ 1].start;
-			pci_ioaddr1 = dev_tel->resource[ 2].start;
+			pci_ioaddr0 = pci_resource_start(dev_tel, 1);
+			pci_ioaddr1 = pci_resource_start(dev_tel, 2);
 			found = 1;
 		}
 		if (found)
 			break;
 		else {
 			switch (seekcard) {
-				case GAZEL_R685:
-					seekcard = GAZEL_R753;
+				case PCI_DEVICE_ID_PLX_R685:
+					seekcard = PCI_DEVICE_ID_PLX_R753;
 					break;
-				case GAZEL_R753:
-					seekcard = GAZEL_DJINN_ITOO;
+				case PCI_DEVICE_ID_PLX_R753:
+					seekcard = PCI_DEVICE_ID_PLX_DJINN_ITOO;
 					break;
 			}
 		}
@@ -612,7 +620,7 @@ setup_gazelpci(struct IsdnCardState *cs)
 	cs->irq_flags |= SA_SHIRQ;
 
 	switch (seekcard) {
-		case GAZEL_R685:
+		case PCI_DEVICE_ID_PLX_R685:
 			printk(KERN_INFO "Gazel: Card PCI R685 found\n");
 			cs->subtyp = R685;
 			cs->dc.isac.adf2 = 0x87;
@@ -623,8 +631,8 @@ setup_gazelpci(struct IsdnCardState *cs)
 			       "Gazel: hscx A:0x%X  hscx B:0x%X\n",
 			     cs->hw.gazel.hscx[0], cs->hw.gazel.hscx[1]);
 			break;
-		case GAZEL_R753:
-		case GAZEL_DJINN_ITOO:
+		case PCI_DEVICE_ID_PLX_R753:
+		case PCI_DEVICE_ID_PLX_DJINN_ITOO:
 			printk(KERN_INFO "Gazel: Card PCI R753 found\n");
 			cs->subtyp = R753;
 			test_and_set_bit(HW_IPAC, &cs->HW_Flags);

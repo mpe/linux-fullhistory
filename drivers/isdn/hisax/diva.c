@@ -47,12 +47,18 @@ const char *Diva_revision = "$Revision: 1.21 $";
 #define DIVA_IPAC_PCI	4
 
 /* PCI stuff */
-#define PCI_VENDOR_EICON_DIEHL	0x1133
-#define PCI_DIVA20PRO_ID	0xe001
-#define PCI_DIVA20_ID		0xe002
-#define PCI_DIVA20PRO_U_ID	0xe003
-#define PCI_DIVA20_U_ID		0xe004
-#define PCI_DIVA_201		0xe005
+#ifndef PCI_VENDOR_ID_EICON
+#define PCI_VENDOR_ID_EICON	0x1133
+#endif
+#ifndef PCI_DEVICE_ID_EICON_DIVA20
+#define PCI_DEVICE_ID_EICON_DIVA20	0xe002
+#endif
+#ifndef PCI_DEVICE_ID_EICON_DIVA20_U
+#define PCI_DEVICE_ID_EICON_DIVA20_U	0xe004
+#endif
+#ifndef PCI_DEVICE_ID_EICON_DIVA201
+#define PCI_DEVICE_ID_EICON_DIVA201	0xe005
+#endif
 
 /* CTRL (Read) */
 #define DIVA_IRQ_STAT	0x01
@@ -70,10 +76,16 @@ const char *Diva_revision = "$Revision: 1.21 $";
 
 /* Siemens PITA */
 #define PITA_MISC_REG		0x1c
+#ifdef __BIG_ENDIAN
+#define PITA_PARA_SOFTRESET	0x00000001
+#define PITA_PARA_MPX_MODE	0x00000004
+#define PITA_INT0_ENABLE	0x00000200
+#else
 #define PITA_PARA_SOFTRESET	0x01000000
 #define PITA_PARA_MPX_MODE	0x04000000
 #define PITA_INT0_ENABLE	0x00020000
-#define PITA_INT0_STATUS	0x00000002
+#endif
+#define PITA_INT0_STATUS	0x02
 
 static inline u_char
 readreg(unsigned int ale, unsigned int adr, u_char off)
@@ -122,7 +134,7 @@ writefifo(unsigned int ale, unsigned int adr, u_char off, u_char *data, int size
 static inline u_char
 memreadreg(unsigned long adr, u_char off)
 {
-	return(0xff & *((unsigned int *)
+	return(*((unsigned char *)
 		(((unsigned int *)adr) + off)));
 }
 
@@ -870,24 +882,24 @@ setup_diva(struct IsdnCard *card))
 		}
 
 		cs->subtyp = 0;
-		if ((dev_diva = pci_find_device(PCI_VENDOR_EICON_DIEHL,
-			PCI_DIVA20_ID, dev_diva))) {
+		if ((dev_diva = pci_find_device(PCI_VENDOR_ID_EICON,
+			PCI_DEVICE_ID_EICON_DIVA20, dev_diva))) {
 			if (pci_enable_device(dev_diva))
-				return (0);
+				return(0);
 			cs->subtyp = DIVA_PCI;
 			cs->irq = dev_diva->irq;
 			cs->hw.diva.cfg_reg = pci_resource_start(dev_diva, 2);
-		} else if ((dev_diva_u = pci_find_device(PCI_VENDOR_EICON_DIEHL,
-			PCI_DIVA20_U_ID, dev_diva_u))) {
+		} else if ((dev_diva_u = pci_find_device(PCI_VENDOR_ID_EICON,
+			PCI_DEVICE_ID_EICON_DIVA20_U, dev_diva_u))) {
 			if (pci_enable_device(dev_diva_u))
-				return (0);
+				return(0);
 			cs->subtyp = DIVA_PCI;
 			cs->irq = dev_diva_u->irq;
 			cs->hw.diva.cfg_reg = pci_resource_start(dev_diva_u, 2);
-		} else if ((dev_diva201 = pci_find_device(PCI_VENDOR_EICON_DIEHL,
-			PCI_DIVA_201, dev_diva201))) {
+		} else if ((dev_diva201 = pci_find_device(PCI_VENDOR_ID_EICON,
+			PCI_DEVICE_ID_EICON_DIVA201, dev_diva201))) {
 			if (pci_enable_device(dev_diva201))
-				return (0);
+				return(0);
 			cs->subtyp = DIVA_IPAC_PCI;
 			cs->irq = dev_diva201->irq;
 			cs->hw.diva.pci_cfg =

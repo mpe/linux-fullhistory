@@ -1,4 +1,4 @@
-/* $Id: isdn_ppp.h,v 1.16 2000/05/18 23:14:18 keil Exp $
+/* $Id: isdn_ppp.h,v 1.17 2000/08/10 22:52:46 kai Exp $
 
  * header for Linux ISDN subsystem, functions for synchronous PPP (linklevel).
  *

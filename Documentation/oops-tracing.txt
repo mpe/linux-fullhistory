@@ -13,7 +13,7 @@ If it occurs repeatably try and describe how to recreate it. Thats
 worth even more than the oops
 
 If you are totally stumped as to whom to send the report, send it to 
-linux-kernel@vger.rutgers.edu. Thanks for your help in making Linux as
+linux-kernel@vger.kernel.org. Thanks for your help in making Linux as
 stable as humanly possible.
 
 Where is the_oops.txt?

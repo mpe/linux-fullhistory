@@ -1,4 +1,4 @@
-/* $Id: boardergo.c,v 1.1 2000/02/10 19:45:18 werner Exp $
+/* $Id: boardergo.c,v 1.3 2000/05/17 11:41:30 ualbrecht Exp $
 
  * Linux driver for HYSDN cards, specific routines for ergo type boards.
  *
@@ -25,6 +25,12 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  * $Log: boardergo.c,v $
+ * Revision 1.3  2000/05/17 11:41:30  ualbrecht
+ * CAPI 2.0 support added
+ *
+ * Revision 1.2  2000/04/23 14:18:36  kai
+ * merge changes from main tree
+ *
  * Revision 1.1  2000/02/10 19:45:18  werner
  *
  * Initial release
@@ -153,6 +159,9 @@ ergo_stopcard(hysdn_card * card)
 	uchar val;
 
 	hysdn_net_release(card);	/* first release the net device if existing */
+#ifdef CONFIG_HYSDN_CAPI
+	hycapi_capi_stop(card);
+#endif /* CONFIG_HYSDN_CAPI */
 	save_flags(flags);
 	cli();
 	val = bytein(card->iobase + PCI9050_INTR_REG);	/* get actual value */
@@ -238,7 +247,7 @@ ergo_writebootimg(struct HYSDN_CARD *card, uchar * buf, ulong offs)
 	uchar *dst;
 	tErgDpram *dpram;
 	int cnt = (BOOT_IMG_SIZE >> 2);		/* number of words to move and swap (byte order!) */
-
+	
 	if (card->debug_flags & LOG_POF_CARD)
 		hysdn_addlog(card, "ERGO: write bootldr offs=0x%lx ", offs);
 
@@ -334,7 +343,6 @@ ergo_writebootseq(struct HYSDN_CARD *card, uchar * buf, int len)
 		}		/* while (nr_write) */
 
 	}			/* while (len) */
-
 	return (0);
 }				/* ergo_writebootseq */
 
@@ -354,7 +362,6 @@ ergo_waitpofready(struct HYSDN_CARD *card)
 
 	if (card->debug_flags & LOG_POF_CARD)
 		hysdn_addlog(card, "ERGO: waiting for pof ready");
-
 	while (timecnt--) {
 		/* wait until timeout  */
 
@@ -375,7 +382,6 @@ ergo_waitpofready(struct HYSDN_CARD *card)
 
 			if (card->debug_flags & LOG_POF_RECORD)
 				hysdn_addlog(card, "ERGO: pof boot success");
-
 			save_flags(flags);
 			cli();
 
@@ -396,6 +402,11 @@ ergo_waitpofready(struct HYSDN_CARD *card)
 				card->state = CARD_STATE_BOOTERR;
 				return (i);
 			}
+#ifdef CONFIG_HYSDN_CAPI
+			if((i = hycapi_capi_create(card))) {
+				printk(KERN_WARNING "HYSDN: failed to create capi-interface.\n");
+			}
+#endif /* CONFIG_HYSDN_CAPI */
 			return (0);	/* success */
 		}		/* data has arrived */
 		sti();

@@ -380,8 +380,8 @@ static void __init probe_roms(void)
 	}
 }
 
-void __init add_memory_region(unsigned long start,
-                                  unsigned long size, int type)
+void __init add_memory_region(unsigned long long start,
+                                  unsigned long long size, int type)
 {
 	int x = e820.nr_map;
 
@@ -398,12 +398,12 @@ void __init add_memory_region(unsigned long start,
 
 #define E820_DEBUG	1
 
-static void __init print_e820_map(void)
+static void __init print_memory_map(char *who)
 {
 	int i;
 
 	for (i = 0; i < e820.nr_map; i++) {
-		printk(" e820: %016Lx @ %016Lx ",
+		printk(" %s: %016Lx @ %016Lx ", who,
 			e820.map[i].size, e820.map[i].addr);
 		switch (e820.map[i].type) {
 		case E820_RAM:	printk("(usable)\n");
@@ -449,7 +449,7 @@ static int __init copy_e820_map(struct e820entry * biosmap, int nr_map)
 		unsigned long long start = biosmap->addr;
 		unsigned long long size = biosmap->size;
 		unsigned long long end = start + size;
-		long type = biosmap->type;
+		unsigned long type = biosmap->type;
 
 		/* Overflow in 64 bits? Ignore the memory map. */
 		if (start > end)
@@ -460,12 +460,12 @@ static int __init copy_e820_map(struct e820entry * biosmap, int nr_map)
 		 * Not right. Fix it up.
 		 */
 		if (type == E820_RAM) {
-			if (start < 0x100000 && end > 0xA0000) {
-				if (start < 0xA0000)
-					add_memory_region(start, 0xA0000-start, type);
-				if (end < 0x100000)
+			if (start < 0x100000ULL && end > 0xA0000ULL) {
+				if (start < 0xA0000ULL)
+					add_memory_region(start, 0xA0000ULL-start, type);
+				if (end < 0x100000ULL)
 					continue;
-				start = 0x100000;
+				start = 0x100000ULL;
 				size = end - start;
 			}
 		}
@@ -482,6 +482,8 @@ static int __init copy_e820_map(struct e820entry * biosmap, int nr_map)
 
 void __init setup_memory_region(void)
 {
+	char *who = "BIOS-e820";
+
 	/*
 	 * Try to copy the BIOS-supplied E820-map.
 	 *
@@ -491,14 +493,21 @@ void __init setup_memory_region(void)
 	if (copy_e820_map(E820_MAP, E820_MAP_NR) < 0) {
 		unsigned long mem_size;
 
-		mem_size = (ALT_MEM_K < EXT_MEM_K) ? EXT_MEM_K : ALT_MEM_K;
+		/* compare results from other methods and take the greater */
+		if (ALT_MEM_K < EXT_MEM_K) {
+			mem_size = EXT_MEM_K;
+			who = "BIOS-88";
+		} else {
+			mem_size = ALT_MEM_K;
+			who = "BIOS-e801";
+		}
 
 		e820.nr_map = 0;
 		add_memory_region(0, LOWMEMSIZE(), E820_RAM);
 		add_memory_region(HIGH_MEMORY, mem_size << 10, E820_RAM);
   	}
 	printk("BIOS-provided physical RAM map:\n");
-	print_e820_map();
+	print_memory_map(who);
 } /* setup_memory_region */
 
 
@@ -568,7 +577,7 @@ static inline void parse_mem_cmdline (char ** cmdline_p)
 	*cmdline_p = command_line;
 	if (usermem) {
 		printk("user-defined physical RAM map:\n");
-		print_e820_map();
+		print_memory_map("user");
 	}
 }
 

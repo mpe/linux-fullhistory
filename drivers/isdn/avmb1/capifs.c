@@ -1,11 +1,20 @@
 /*
- * $Id: capifs.c,v 1.6 2000/04/03 13:29:25 calle Exp $
+ * $Id: capifs.c,v 1.9 2000/08/20 07:30:13 keil Exp $
  * 
  * (c) Copyright 2000 by Carsten Paeth (calle@calle.de)
  *
  * Heavily based on devpts filesystem from H. Peter Anvin
  * 
  * $Log: capifs.c,v $
+ * Revision 1.9  2000/08/20 07:30:13  keil
+ * changes for 2.4
+ *
+ * Revision 1.8  2000/07/20 10:23:13  calle
+ * Include isdn_compat.h for people that don't use -p option of std2kern.
+ *
+ * Revision 1.7  2000/06/18 16:09:54  keil
+ * more changes for 2.4
+ *
  * Revision 1.6  2000/04/03 13:29:25  calle
  * make Tim Waugh happy (module unload races in 2.3.99-pre3).
  * no real problem there, but now it is much cleaner ...
@@ -48,19 +57,22 @@
 #include <linux/param.h>
 #include <linux/module.h>
 #include <linux/string.h>
+#include <linux/fs.h>
 #include <linux/init.h>
 #include <linux/kdev_t.h>
 #include <linux/kernel.h>
 #include <linux/locks.h>
 #include <linux/major.h>
 #include <linux/malloc.h>
+#include <linux/stat.h>
+#include <linux/tty.h>
 #include <linux/ctype.h>
 #include <asm/bitops.h>
 #include <asm/uaccess.h>
 
 MODULE_AUTHOR("Carsten Paeth <calle@calle.de>");
 
-static char *revision = "$Revision: 1.6 $";
+static char *revision = "$Revision: 1.9 $";
 
 struct capifs_ncci {
 	struct inode *inode;
@@ -228,9 +240,9 @@ static void capifs_put_super(struct super_block *sb)
 
 	for ( i = 0 ; i < sbi->max_ncci ; i++ ) {
 		if ( (inode = sbi->nccis[i].inode) ) {
-			if ( atomic_read(&inode->i_count) != 1 )
+			if (atomic_read(&inode->i_count) != 1 )
 				printk("capifs_put_super: badness: entry %d count %d\n",
-				       i, atomic_read(&inode->i_count));
+				       i, (unsigned)atomic_read(&inode->i_count));
 			inode->i_nlink--;
 			iput(inode);
 		}

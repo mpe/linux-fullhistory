@@ -25,6 +25,7 @@ CONFIG_KMOD=y
 # CONFIG_M486 is not set
 # CONFIG_M586 is not set
 # CONFIG_M586TSC is not set
+# CONFIG_M586MMX is not set
 CONFIG_M686=y
 # CONFIG_M686FXSR is not set
 # CONFIG_MK6 is not set
