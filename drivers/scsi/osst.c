@@ -4770,9 +4770,6 @@ static int os_scsi_tape_close(struct inode * inode, struct file * filp)
 {
 	int		      result = 0;
 	struct osst_tape    * STp    = filp->private_data;
-	struct scsi_request * SRpnt  = NULL;
-
-	if (SRpnt) scsi_release_request(SRpnt);
 
 	if (STp->door_locked == ST_LOCKED_AUTO)
 		do_door_lock(STp, 0);
