@@ -28,6 +28,7 @@ static const char *cardname = "smctr";
 #include <linux/version.h>
 #endif
 
+#include <linux/config.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/types.h>

@@ -114,7 +114,6 @@ int iso_date(char * p, int flag)
 		crtime = 0;
 	} else {
 		int monlen[12] = {31,28,31,30,31,30,31,31,30,31,30,31};
-		extern struct timezone sys_tz;
 
 		days = year * 365;
 		if (year > 2)

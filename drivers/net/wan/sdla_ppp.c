@@ -91,7 +91,6 @@
 #include <asm/uaccess.h>
 
 #include <linux/if.h>
-#include <linux/wanpipe.h>
 #include <linux/sdla_ppp.h>		/* PPP firmware API definitions */
 #include <linux/sdlasfm.h>		/* S514 Type Definition */
 /****** Defines & Macros ****************************************************/

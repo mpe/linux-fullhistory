@@ -1264,6 +1264,7 @@ int usb_stor_proc_info (char *buffer, char **start, off_t offset,
 			SPRINTF("%s\n", tmp_ptr);
 		else
 			SPRINTF("Unknown Product\n");
+		kfree(tmp_ptr);
 	}
 
 	SPRINTF("  Protocol: ");
@@ -1494,9 +1495,15 @@ static void * storage_probe(struct usb_device *dev, unsigned int ifnum)
 
 	/* clear the GUID and fetch the strings */
 	GUID_CLEAR(guid);
-	usb_string(dev, dev->descriptor.iManufacturer, mf, sizeof(mf));
-	usb_string(dev, dev->descriptor.iProduct, prod, sizeof(prod));
-	usb_string(dev, dev->descriptor.iSerialNumber, serial, sizeof(serial));
+	memset(mf, 0, sizeof(mf));
+	memset(prod, 0, sizeof(prod));
+	memset(serial, 0, sizeof(serial));
+	if (dev->descriptor.iManufacturer)
+		usb_string(dev, dev->descriptor.iManufacturer, mf, sizeof(mf));
+	if (dev->descriptor.iProduct)
+		usb_string(dev, dev->descriptor.iProduct, prod, sizeof(prod));
+	if (dev->descriptor.iSerialNumber)
+		usb_string(dev, dev->descriptor.iSerialNumber, serial, sizeof(serial));
 	
 	/* let's examine the device now */
 

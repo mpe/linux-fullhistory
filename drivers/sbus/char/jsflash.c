@@ -22,7 +22,6 @@
  * instead. We should discuss this.
  */
 
-#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/types.h>
 #include <linux/errno.h>

@@ -998,8 +998,8 @@ extern ssize_t generic_file_read(struct file *, char *, size_t, loff_t *);
 extern ssize_t generic_file_write(struct file *, const char *, size_t, loff_t *, writepage_t);
 extern void do_generic_file_read(struct file *, loff_t *, read_descriptor_t *, read_actor_t);
 
-extern int vfs_readlink(struct dentry *, char *, int, char *);
-extern struct dentry *vfs_follow_link(struct dentry *, struct dentry *, unsigned, char *);
+extern int vfs_readlink(struct dentry *, char *, int, const char *);
+extern struct dentry *vfs_follow_link(struct dentry *, struct dentry *, unsigned, const char *);
 extern int page_readlink(struct dentry *, char *, int);
 extern struct dentry *page_follow_link(struct dentry *, struct dentry *, unsigned);
 

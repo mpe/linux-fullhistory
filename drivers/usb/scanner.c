@@ -495,13 +495,6 @@ probe_scanner(struct usb_device *dev, unsigned int ifnum)
 		return NULL;
 	}
 
-	ident = kmalloc(256, GFP_KERNEL);
-        if (ident) {
-                usb_string(dev, dev->descriptor.iProduct, ident, 256);
-                info("USB Scanner (%s) found at address %d", ident, dev->devnum);
-                kfree(ident);
-        }
-
 	hps->present = 1;
 	hps->hpscan_dev = dev;
 

@@ -25,6 +25,7 @@
  *        Added proper detection of the AHA-1640 (MCA version of AHA-1540)
  */
 
+#include <linux/config.h>
 #include <linux/module.h>
 
 #include <linux/kernel.h>

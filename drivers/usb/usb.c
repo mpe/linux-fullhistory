@@ -1579,13 +1579,17 @@ int usb_get_configuration(struct usb_device *dev)
 	return result;
 }
 
+/*
+ * usb_string:
+ *	returns string length (> 0) or error (< 0)
+ */
 int usb_string(struct usb_device *dev, int index, char *buf, size_t size)
 {
 	unsigned char *tbuf;
 	int err;
 	unsigned int u, idx;
 
-	if (size <= 0 || !buf)
+	if (size <= 0 || !buf || !index)
 		return -EINVAL;
 	buf[0] = 0;
 	tbuf = kmalloc(256, GFP_KERNEL);
@@ -1602,15 +1606,15 @@ int usb_string(struct usb_device *dev, int index, char *buf, size_t size)
 	err = usb_get_string(dev, dev->string_langid, index, tbuf, tbuf[0]);
 	if (err < 0)
 		goto errout;
-	size--;
-	for (idx = 0, u = 2; u < tbuf[0]; u += 2) {
+
+	size--;		/* leave room for trailing NULL char in output buffer */
+	for (idx = 0, u = 2; u < err; u += 2) {
 		if (idx >= size)
 			break;
-		if (tbuf[u+1]) {
-			buf[idx++] = '?';  /* non ASCII character */
-			continue;
-		}
-		buf[idx++] = tbuf[u];
+		if (tbuf[u+1])			/* high byte */
+			buf[idx++] = '?';  /* non-ASCII character */
+		else
+			buf[idx++] = tbuf[u];
 	}
 	buf[idx] = 0;
 	err = idx;
@@ -1721,9 +1725,12 @@ int usb_new_device(struct usb_device *dev)
 		info("USB device number %d default language ID 0x%x", dev->devnum, dev->string_langid);
 	}
 
-	usb_show_string(dev, "Manufacturer", dev->descriptor.iManufacturer);
-	usb_show_string(dev, "Product", dev->descriptor.iProduct);
-	usb_show_string(dev, "SerialNumber", dev->descriptor.iSerialNumber);
+	if (dev->descriptor.iManufacturer)
+		usb_show_string(dev, "Manufacturer", dev->descriptor.iManufacturer);
+	if (dev->descriptor.iProduct)
+		usb_show_string(dev, "Product", dev->descriptor.iProduct);
+	if (dev->descriptor.iSerialNumber)
+		usb_show_string(dev, "SerialNumber", dev->descriptor.iSerialNumber);
 
 	/* now that the basic setup is over, add a /proc/bus/usb entry */
         usbdevfs_add_device(dev);

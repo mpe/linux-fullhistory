@@ -90,7 +90,7 @@ extern struct kernel_param __setup_start, __setup_end;
 #define __exit
 #define __initdata
 #define __exitdata
-#define __initcall
+#define __initcall(fn)
 /* For assembly routines */
 #define __INIT
 #define __FINIT

@@ -21,6 +21,7 @@
 #ifndef _LINUX_PM_H
 #define _LINUX_PM_H
 
+#include <linux/config.h>
 #include <linux/list.h>
 
 /*

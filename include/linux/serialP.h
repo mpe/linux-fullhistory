@@ -19,11 +19,18 @@
  * For definitions of the flags field, see tty.h
  */
 
-#include <linux/config.h>
 #include <linux/termios.h>
 #include <linux/tqueue.h>
 #include <linux/wait.h>
 
+/*
+ * Counters of the input lines (CTS, DSR, RI, CD) interrupts
+ */
+struct async_icount {
+	__u32	cts, dsr, rng, dcd, tx, rx;
+	__u32	frame, parity, overrun, brk;
+	__u32	buf_overrun;
+};
 
 struct serial_state {
 	int	magic;
@@ -158,7 +165,7 @@ struct pci_board {
 };
 
 struct pci_board_inst {
-	struct pci_board	*board;
+	struct pci_board	board;
 	struct pci_dev		*dev;
 };
 
@@ -172,7 +179,28 @@ struct pci_board_inst {
 #define SPCI_FL_BASE2	0x0002
 #define SPCI_FL_BASE3	0x0003
 #define SPCI_FL_BASE4	0x0004
-#define SPCI_FL_IOMEM		0x0008 /* Use I/O mapped memory */
-#define SPCI_FL_BASE_TABLE	0x0010 /* Use base address table for UART */
+#define SPCI_FL_GET_BASE(x)	(x & SPCI_FL_BASE_MASK)
 
+#define SPCI_FL_IRQ_MASK       (0x0007 << 4)
+#define SPCI_FL_IRQBASE0       (0x0000 << 4)
+#define SPCI_FL_IRQBASE1       (0x0001 << 4)
+#define SPCI_FL_IRQBASE2       (0x0002 << 4)
+#define SPCI_FL_IRQBASE3       (0x0003 << 4)
+#define SPCI_FL_IRQBASE4       (0x0004 << 4)
+#define SPCI_FL_GET_IRQBASE(x)        ((x & SPCI_FL_IRQ_MASK) >> 4)
+	
+/* Use sucessiveentries base resource table */
+#define SPCI_FL_BASE_TABLE	0x0100
+	
+/* Use successive entries in the irq resource table */
+#define SPCI_FL_IRQ_TABLE	0x0200
+	
+/* Use the irq resource table instead of dev->irq */
+#define SPCI_FL_IRQRESOURCE	0x0400
+
+/* Use the Base address register size to cap number of ports */
+#define SPCI_FL_REGION_SZ_CAP	0x0800
+	
+#define SPCI_FL_PNPDEFAULT	(SPCI_FL_IRQRESOURCE)
+	
 #endif /* _LINUX_SERIAL_H */

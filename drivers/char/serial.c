@@ -44,8 +44,8 @@
  *	int rs_init(void);
  */
 
-static char *serial_version = "4.91";
-static char *serial_revdate = "1999-11-17";
+static char *serial_version = "4.92";
+static char *serial_revdate = "2000-1-27";
 
 /*
  * Serial driver configuration section.  Here are the various options:
@@ -74,12 +74,10 @@ static char *serial_revdate = "1999-11-17";
 
 #include <linux/config.h>
 #include <linux/version.h>
-#include <linux/sysrq.h>
 
 #undef SERIAL_PARANOIA_CHECK
 #define CONFIG_SERIAL_NOPAUSE_IO
 #define SERIAL_DO_RESTART
-#define CONFIG_SERIAL_PCI_MEMMAPPED
 
 #if 0
 /* These defines are normally controlled by the autoconf.h */
@@ -97,6 +95,12 @@ static char *serial_revdate = "1999-11-17";
 #endif
 #ifndef CONFIG_SERIAL_MANY_PORTS
 #define CONFIG_SERIAL_MANY_PORTS
+#endif
+#endif
+
+#ifdef CONFIG_ISAPNP
+#ifndef ENABLE_SERIAL_PNP
+#define ENABLE_SERIAL_PNP
 #endif
 #endif
 
@@ -133,31 +137,13 @@ static char *serial_revdate = "1999-11-17";
 #define SERIAL_INLINE
 #endif
   
-#if defined(MODULE) && defined(SERIAL_DEBUG_MCOUNT)
-#define DBG_CNT(s) printk("(%s): [%x] refc=%d, serc=%d, ttyc=%d -> %s\n", \
- kdevname(tty->device), (info->flags), serial_refcount,info->count,tty->count,s)
-#else
-#define DBG_CNT(s)
-#endif
-
 /*
  * End of serial driver configuration section.
  */
 
-#define NEW_MODULES
-#ifdef LOCAL_HEADERS		/* We're building standalone */
-#define MODULE
-#endif
-
-#ifdef NEW_MODULES
 #ifdef MODVERSIONS
 #include <linux/modversions.h>
 #endif
-#else /* !NEW_MODULES */
-#ifdef MODVERSIONS
-#define MODULE
-#endif
-#endif /* NEW_MODULES */
 #include <linux/module.h>
 
 #include <linux/types.h>
@@ -198,13 +184,19 @@ static char *serial_revdate = "1999-11-17";
 #ifdef ENABLE_SERIAL_PCI
 #include <linux/pci.h>
 #endif
+#ifdef ENABLE_SERIAL_PNP
+#include <linux/isapnp.h>
+#endif
+#ifdef CONFIG_MAGIC_SYSRQ
+#include <linux/sysrq.h>
+#endif
 
 /*
  * All of the compatibilty code so we can compile serial.c against
  * older kernels is hidden in serial_compat.h
  */
-#if (LINUX_VERSION_CODE < 0x020317) /* 2.3.23 */
-#include "serial_compat.h"	
+#if defined(LOCAL_HEADERS) || (LINUX_VERSION_CODE < 0x020317) /* 2.3.23 */
+#include "serial_compat.h"
 #endif
 
 #include <asm/system.h>
@@ -276,7 +268,7 @@ static struct serial_uart_config uart_config[] = {
 		  UART_STARTECH }, 
 	{ "TI16750", 64, UART_CLEAR_FIFO | UART_USE_FIFO},
 	{ "Startech", 1, 0},	/* usurped by cyclades.c */
-	{ "16C950", 128, UART_CLEAR_FIFO | UART_USE_FIFO},
+	{ "16C950/954", 128, UART_CLEAR_FIFO | UART_USE_FIFO},
 	{ "ST16654", 64, UART_CLEAR_FIFO | UART_USE_FIFO |
 		  UART_STARTECH }, 
 	{ "XR16850", 128, UART_CLEAR_FIFO | UART_USE_FIFO |
@@ -290,16 +282,35 @@ static struct serial_state rs_table[RS_TABLE_SIZE] = {
 
 #define NR_PORTS	(sizeof(rs_table)/sizeof(struct serial_state))
 
-#ifdef ENABLE_SERIAL_PCI
+#if (defined(ENABLE_SERIAL_PCI) || defined(ENABLE_SERIAL_PNP))
 #define NR_PCI_BOARDS	8
+#ifdef MODULE
+/* We don't unregister PCI boards right now */
 static struct pci_board_inst	serial_pci_board[NR_PCI_BOARDS];
 static int serial_pci_board_idx = 0;
-#ifdef PCI_NUM_RESOURCES
-#define PCI_BASE_ADDRESS(dev, r) ((dev)->resource[r].start)
-#else
-#define PCI_BASE_ADDRESS(dev, r) ((dev)->base_address[r])
 #endif
-#endif	/* ENABLE_SERIAL_PCI  */
+#ifndef PCI_BASE_ADDRESS
+#define PCI_BASE_ADDRESS(dev, r) ((dev)->resource[r].start)
+#define PCI_BASE_REGION_SIZE(dev, r) ((dev)->resource[r].end - \
+				      (dev)->resource[r].start)
+#define IS_PCI_REGION_IOPORT(dev, r) ((dev)->resource[r].flags & \
+				      IORESOURCE_IO)
+#endif
+#ifndef PCI_IRQ_RESOURCE
+#define PCI_IRQ_RESOURCE(dev, r) ((dev)->irq_resource[r].start)
+#endif
+#ifndef pci_get_subvendor
+#define pci_get_subvendor(dev) ((dev)->subsystem_vendor)
+#define pci_get_subdevice(dev)  ((dev)->subsystem_device)
+#endif
+#endif	/* ENABLE_SERIAL_PCI || ENABLE_SERIAL_PNP  */
+
+#ifndef PREPARE_FUNC
+#define PREPARE_FUNC(dev)  (dev->prepare)
+#define ACTIVATE_FUNC(dev)  (dev->activate)
+#define DEACTIVATE_FUNC(dev)  (dev->deactivate)
+#endif
+	
 
 static struct tty_struct *serial_table[NR_PORTS];
 static struct termios *serial_termios[NR_PORTS];
@@ -307,6 +318,13 @@ static struct termios *serial_termios_locked[NR_PORTS];
 
 #ifndef MIN
 #define MIN(a,b)	((a) < (b) ? (a) : (b))
+#endif
+
+#if defined(MODULE) && defined(SERIAL_DEBUG_MCOUNT)
+#define DBG_CNT(s) printk("(%s): [%x] refc=%d, serc=%d, ttyc=%d -> %s\n", \
+ kdevname(tty->device), (info->flags), serial_refcount,info->count,tty->count,s)
+#else
+#define DBG_CNT(s)
 #endif
 
 /*
@@ -355,11 +373,9 @@ static _INLINE_ unsigned int serial_in(struct async_struct *info, int offset)
 		outb(info->hub6 - 1 + offset, info->port);
 		return inb(info->port+1);
 #endif
-#ifdef CONFIG_SERIAL_PCI_MEMMAPPED
 	case SERIAL_IO_MEM:
 		return readb(info->iomem_base +
 			     (offset<<info->iomem_reg_shift));
-#endif
 #ifdef CONFIG_SERIAL_GSC
 	case SERIAL_IO_GSC:
 		return gsc_readb(info->iomem_base + offset);
@@ -379,12 +395,10 @@ static _INLINE_ void serial_out(struct async_struct *info, int offset,
 		outb(value, info->port+1);
 		break;
 #endif
-#ifdef CONFIG_SERIAL_PCI_MEMMAPPED
 	case SERIAL_IO_MEM:
 		writeb(value, info->iomem_base +
 			      (offset<<info->iomem_reg_shift));
 		break;
-#endif
 #ifdef CONFIG_SERIAL_GSC
 	case SERIAL_IO_GSC:
 		gsc_writeb(value, info->iomem_base + offset);
@@ -905,11 +919,16 @@ static void rs_interrupt_multi(int irq, void *dev_id, struct pt_regs * regs)
 			continue;
 
 		info = IRQ_ports[irq];
+		/*
+		 * The user was a bonehead, and misconfigured their
+		 * multiport info.  Rather than lock up the kernel
+		 * in an infinite loop, if we loop too many times,
+		 * print a message and break out of the loop.
+		 */
 		if (pass_counter++ > RS_ISR_PASS_LIMIT) {
-#if 1
-			printk("rs_multi loop break\n");
-#endif
-			break; 	/* Prevent infinite loops */
+			printk("Misconfigured multiport serial info "
+			       "for irq %d.  Breaking out irq loop\n", irq);
+			break; 
 		}
 		if (multi->port_monitor)
 			printk("rs port monitor irq %d: 0x%x, 0x%x\n",
@@ -1540,6 +1559,15 @@ static void change_speed(struct async_struct *info,
 	/* As a last resort, if the quotient is zero, default to 9600 bps */
 	if (!quot)
 		quot = baud_base / 9600;
+	/*
+	 * Work around a bug in the Oxford Semiconductor 952 rev B
+	 * chip which causes it to seriously miscalculate baud rates
+	 * when DLL is 0.
+	 */
+	if (((quot & 0xFF) == 0) && (info->state->type == PORT_16C950) &&
+	    (info->state->revision == 0x5202))
+		quot++;
+	
 	info->quot = quot;
 	info->timeout = ((info->xmit_fifo_size*HZ*bits*quot) / baud_base);
 	info->timeout += HZ/50;		/* Add .02 seconds of slop */
@@ -2090,6 +2118,8 @@ static int set_modem_info(struct async_struct * info, unsigned int cmd,
 		if (arg & TIOCM_OUT2)
 			info->MCR |= UART_MCR_OUT2;
 #endif
+		if (arg & TIOCM_LOOP)
+			info->MCR |= UART_MCR_LOOP;
 		break;
 	case TIOCMBIC:
 		if (arg & TIOCM_RTS)
@@ -2102,6 +2132,8 @@ static int set_modem_info(struct async_struct * info, unsigned int cmd,
 		if (arg & TIOCM_OUT2)
 			info->MCR &= ~UART_MCR_OUT2;
 #endif
+		if (arg & TIOCM_LOOP)
+			info->MCR &= ~UART_MCR_LOOP;
 		break;
 	case TIOCMSET:
 		info->MCR = ((info->MCR & ~(UART_MCR_RTS |
@@ -2109,12 +2141,14 @@ static int set_modem_info(struct async_struct * info, unsigned int cmd,
 					    UART_MCR_OUT1 |
 					    UART_MCR_OUT2 |
 #endif
+					    UART_MCR_LOOP |
 					    UART_MCR_DTR))
 			     | ((arg & TIOCM_RTS) ? UART_MCR_RTS : 0)
 #ifdef TIOCM_OUT1
 			     | ((arg & TIOCM_OUT1) ? UART_MCR_OUT1 : 0)
 			     | ((arg & TIOCM_OUT2) ? UART_MCR_OUT2 : 0)
 #endif
+			     | ((arg & TIOCM_LOOP) ? UART_MCR_LOOP : 0)
 			     | ((arg & TIOCM_DTR) ? UART_MCR_DTR : 0));
 		break;
 	default:
@@ -2579,6 +2613,7 @@ static void rs_close(struct tty_struct *tty, struct file * filp)
 		return;
 	}
 	info->flags |= ASYNC_CLOSING;
+	restore_flags(flags);
 	/*
 	 * Save the termios structure, since this port may have
 	 * separate termios for callout and dialin.
@@ -2630,7 +2665,6 @@ static void rs_close(struct tty_struct *tty, struct file * filp)
 			 ASYNC_CLOSING);
 	wake_up_interruptible(&info->close_wait);
 	MOD_DEC_USE_COUNT;
-	restore_flags(flags);
 }
 
 /*
@@ -2712,6 +2746,8 @@ static void rs_hangup(struct tty_struct *tty)
 	state = info->state;
 	
 	rs_flush_buffer(tty);
+	if (info->flags & ASYNC_CLOSING)
+		return;
 	shutdown(info);
 	info->event = 0;
 	state->count = 0;
@@ -2884,10 +2920,8 @@ static int get_async_struct(int line, struct async_struct **ret_info)
 	info->port = sstate->port;
 	info->flags = sstate->flags;
 	info->io_type = sstate->io_type;
-#ifdef CONFIG_SERIAL_PCI_MEMMAPPED
 	info->iomem_base = sstate->iomem_base;
 	info->iomem_reg_shift = sstate->iomem_reg_shift;
-#endif
 	info->xmit_fifo_size = sstate->xmit_fifo_size;
 	info->line = line;
 	info->tqueue.routine = do_softint;
@@ -3123,43 +3157,47 @@ done:
  * number, and identifies which options were configured into this
  * driver.
  */
-static _INLINE_ void show_serial_version(void)
-{
- 	printk(KERN_INFO "%s version %s%s (%s) with", serial_name,
-	       serial_version, LOCAL_VERSTRING, serial_revdate);
+static char serial_options[] __initdata =
 #ifdef CONFIG_HUB6
-	printk(" HUB-6");
+       " HUB-6"
 #define SERIAL_OPT
 #endif
 #ifdef CONFIG_SERIAL_MANY_PORTS
-	printk(" MANY_PORTS");
+       " MANY_PORTS"
 #define SERIAL_OPT
 #endif
 #ifdef CONFIG_SERIAL_MULTIPORT
-	printk(" MULTIPORT");
+       " MULTIPORT"
 #define SERIAL_OPT
 #endif
 #ifdef CONFIG_SERIAL_SHARE_IRQ
-	printk(" SHARE_IRQ");
+       " SHARE_IRQ"
 #define SERIAL_OPT
 #endif
 #ifdef CONFIG_SERIAL_DETECT_IRQ
-	printk(" DETECT_IRQ");
+       " DETECT_IRQ"
 #define SERIAL_OPT
 #endif
 #ifdef ENABLE_SERIAL_PCI
-	printk(" SERIAL_PCI");
-#ifdef CONFIG_SERIAL_PCI_MEMMAPPED
-	printk(" PCI_IOMEM");
+       " SERIAL_PCI"
+#define SERIAL_OPT
 #endif
+#ifdef ENABLE_SERIAL_PNP
+       " ISAPNP"
 #define SERIAL_OPT
 #endif
 #ifdef SERIAL_OPT
-	printk(" enabled\n");
+       " enabled\n";
 #else
-	printk(" no serial options enabled\n");
+       " no serial options enabled\n";
 #endif
 #undef SERIAL_OPT
+
+static _INLINE_ void show_serial_version(void)
+{
+ 	printk(KERN_INFO "%s version %s%s (%s) with%s", serial_name,
+	       serial_version, LOCAL_VERSTRING, serial_revdate,
+	       serial_options);
 }
 
 /*
@@ -3188,11 +3226,15 @@ static unsigned detect_uart_irq (struct serial_state * state)
 	}
 #endif
 	scr_info.magic = SERIAL_MAGIC;
+	scr_info.state = state;
 	scr_info.port = state->port;
 	scr_info.flags = state->flags;
 #ifdef CONFIG_HUB6
 	scr_info.hub6 = state->hub6;
 #endif
+	scr_info.io_type = state->io_type;
+	scr_info.iomem_base = state->iomem_base;
+	scr_info.iomem_reg_shift = state->iomem_reg_shift;
 
 	/* forget possible initially masked and pending IRQ */
 	probe_irq_off(probe_irq_on());
@@ -3296,7 +3338,8 @@ static void autoconfig_startech_uarts(struct async_struct *info,
 		    (scratch3 == 0x50 || scratch3 == 0x52 ||
 		     scratch3 == 0x54)) {
 			state->type = PORT_16C950;
-			state->revision = serial_icr_read(info, UART_REV);
+			state->revision = serial_icr_read(info, UART_REV) |
+				(scratch3 << 8);
 			return;
 		}
 	}
@@ -3367,10 +3410,8 @@ static void autoconfig(struct serial_state * state)
 	info->hub6 = state->hub6;
 #endif
 	info->io_type = state->io_type;
-#ifdef CONFIG_SERIAL_PCI_MEMMAPPED
 	info->iomem_base = state->iomem_base;
 	info->iomem_reg_shift = state->iomem_reg_shift;
-#endif
 
 	save_flags(flags); cli();
 	
@@ -3536,18 +3577,151 @@ static struct symbol_table serial_syms = {
 };
 #endif
 
+
+#if defined(ENABLE_SERIAL_PCI) || defined(ENABLE_SERIAL_PNP) 
+
+static void __init printk_pnp_dev_id(unsigned short vendor,
+				     unsigned short device)
+{
+	printk("%c%c%c%x%x%x%x",
+	       'A' + ((vendor >> 2) & 0x3f) - 1,
+	       'A' + (((vendor & 3) << 3) | ((vendor >> 13) & 7)) - 1,
+	       'A' + ((vendor >> 8) & 0x1f) - 1,
+	       (device >> 4) & 0x0f,
+	       device & 0x0f,
+	       (device >> 12) & 0x0f,
+	       (device >> 8) & 0x0f);
+}
+
+static _INLINE_ int get_pci_port(struct pci_dev *dev,
+				  struct pci_board *board,
+				  struct serial_struct *state,
+				  int idx)
+{
+	unsigned long port;
+	int base_idx;
+	int max_port;
+
+	base_idx = SPCI_FL_GET_BASE(board->flags);
+	if (board->flags & SPCI_FL_BASE_TABLE)
+		base_idx += idx;
+
+	if (board->flags & SPCI_FL_REGION_SZ_CAP) {
+		max_port = PCI_BASE_REGION_SIZE(dev, base_idx) / 8;
+		if (idx >= max_port)
+			return 1;
+	}
+			
+	port = PCI_BASE_ADDRESS(dev, base_idx) + board->first_uart_offset;
+
+	if ((board->flags & SPCI_FL_BASE_TABLE) == 0)
+		port += idx * (board->uart_offset ? board->uart_offset : 8);
+
+	if (IS_PCI_REGION_IOPORT(dev, base_idx)) {
+		state->port = port;
+		return 0;
+	}
+	state->io_type = SERIAL_IO_MEM;
+	state->iomem_base = ioremap(port, board->uart_offset);
+	state->iomem_reg_shift = board->reg_shift;
+	state->port = 0;
+	return 0;
+}
+
+static _INLINE_ int get_pci_irq(struct pci_dev *dev,
+				struct pci_board *board,
+				int idx)
+{
+	int base_idx;
+
+	if ((board->flags & SPCI_FL_IRQRESOURCE) == 0)
+		return dev->irq;
+
+	base_idx = SPCI_FL_GET_IRQBASE(board->flags);
+	if (board->flags & SPCI_FL_IRQ_TABLE)
+		base_idx += idx;
+	
+	return PCI_IRQ_RESOURCE(dev, base_idx);
+}
+
+/*
+ * Common enabler code shared by both PCI and ISAPNP probes
+ */
+static void __init start_pci_pnp_board(struct pci_dev *dev,
+				       struct pci_board *board)
+{
+	int k, line;
+	struct serial_struct fake_state;
+	int base_baud;
+
+       if (PREPARE_FUNC(dev) && (PREPARE_FUNC(dev))(dev) < 0) {
+	       printk("SERIAL: PNP device '");
+	       printk_pnp_dev_id(board->vendor, board->device);
+	       printk("' prepare failed\n");
+	       return;
+       }
+
+       if (ACTIVATE_FUNC(dev) && (ACTIVATE_FUNC(dev))(dev) < 0) {
+	       printk("SERIAL: PNP device '");
+	       printk_pnp_dev_id(board->vendor, board->device);
+	       printk("' activate failed\n");
+	       return;
+       }
+
+	/*
+	 * Run the initialization function, if any
+	 */
+	if (board->init_fn && ((board->init_fn)(dev, board, 1) != 0))
+		return;
+
+#ifdef MODULE
+	/*
+	 * Register the serial board in the array if we need to
+	 * shutdown the board on a module unload.
+	 */
+	if (DEACTIVATE_FUNC(dev) || board->init_fn) {
+		if (serial_pci_board_idx >= NR_PCI_BOARDS)
+			return;
+		serial_pci_board[serial_pci_board_idx].board = *board;
+		serial_pci_board[serial_pci_board_idx].dev = dev;
+		serial_pci_board_idx++;
+	}
+#endif
+
+	base_baud = board->base_baud;
+	if (!base_baud)
+		base_baud = BASE_BAUD;
+	memset(&fake_state, 0, sizeof(fake_state));
+
+	for (k=0; k < board->num_ports; k++) {
+		fake_state.irq = get_pci_irq(dev, board, k);
+		if (get_pci_port(dev, board, &fake_state, k))
+			break;
+		fake_state.flags = ASYNC_SKIP_TEST;
+#ifdef SERIAL_DEBUG_PCI
+		printk("Setup PCI/PNP port: port %x, irq %d, type %d\n",
+		       fake_state.port, fake_state.irq, fake_state.io_type);
+#endif
+		line = register_serial(&fake_state);
+		if (line < 0)
+			break;
+		rs_table[line].baud_base = base_baud;
+	}
+}
+#endif	/* ENABLE_SERIAL_PCI || ENABLE_SERIAL_PNP */
+
 #ifdef ENABLE_SERIAL_PCI
 /*
  * Some PCI serial cards using the PLX 9050 PCI interface chip require
  * that the card interrupt be explicitly enabled or disabled.  This
  * seems to be mainly needed on card using the PLX which also use I/O
  * mapped memory.
- * 
- * Note that __init is a no-op if MODULE is defined; we depend on this.
  */
-static int __init pci_plx9050_fn(struct pci_dev *dev,
-				  struct pci_board *board,
-				  int enable)
+static int
+#ifndef MODULE
+__init
+#endif
+pci_plx9050_fn(struct pci_dev *dev, struct pci_board *board, int enable)
 {
 	u8 data, *p, scratch;
 
@@ -3559,7 +3733,7 @@ static int __init pci_plx9050_fn(struct pci_dev *dev,
 	
 	/* enable/disable interrupts */
 	p = ioremap(PCI_BASE_ADDRESS(dev, 0), 0x80);
-	if (board->vendor == PCI_VENDOR_ID_PANACOM) {
+	if (dev->vendor == PCI_VENDOR_ID_PANACOM) {
 		scratch = readl(p + 0x4c);
 		if (enable)
 			scratch |= 0x40;
@@ -3598,9 +3772,11 @@ static int __init pci_plx9050_fn(struct pci_dev *dev,
 #define PCI_DEVICE_ID_SIIG_1S_10x (PCI_DEVICE_ID_SIIG_1S_10x_550 & 0xfffc)
 #define PCI_DEVICE_ID_SIIG_2S_10x (PCI_DEVICE_ID_SIIG_2S_10x_550 & 0xfff8)
 
-static int __init pci_siig10x_fn(struct pci_dev *dev,
-                                 struct pci_board *board,
-                                 int enable)
+static int
+#ifndef MODULE
+__init
+#endif
+pci_siig10x_fn(struct pci_dev *dev, struct pci_board *board, int enable)
 {
        u16 data, *p;
 
@@ -3628,9 +3804,11 @@ static int __init pci_siig10x_fn(struct pci_dev *dev,
 #define PCI_DEVICE_ID_SIIG_2S_20x (PCI_DEVICE_ID_SIIG_2S_20x_550 & 0xfffc)
 #define PCI_DEVICE_ID_SIIG_2S1P_20x (PCI_DEVICE_ID_SIIG_2S1P_20x_550 & 0xfffc)
 
-static int __init pci_siig20x_fn(struct pci_dev *dev,
-                                 struct pci_board *board,
-                                 int enable)
+static int
+#ifndef MODULE
+__init
+#endif
+pci_siig20x_fn(struct pci_dev *dev, struct pci_board *board, int enable)
 {
        u8 data;
 
@@ -3649,11 +3827,12 @@ static int __init pci_siig20x_fn(struct pci_dev *dev,
        return 0;
 }
 
+
 /*
  * This is the configuration table for all of the PCI serial boards
  * which we support.
  */
-static struct pci_board pci_boards[] = {
+static struct pci_board pci_boards[] __initdata = {
 	/*
 	 * Vendor ID, 	Device ID,
 	 * Subvendor ID,	Subdevice ID,
@@ -3752,7 +3931,7 @@ static struct pci_board pci_boards[] = {
 	{	PCI_VENDOR_ID_PLX, PCI_DEVICE_ID_PLX_9050,
 		PCI_SUBVENDOR_ID_KEYSPAN,
 		PCI_SUBDEVICE_ID_KEYSPAN_SX2,
-		SPCI_FL_BASE2 | SPCI_FL_IOMEM, 2, 921600,
+		SPCI_FL_BASE2, 2, 921600, /* IOMEM */
 		0x400, 7, pci_plx9050_fn },
 	{	PCI_VENDOR_ID_PANACOM, PCI_DEVICE_ID_PANACOM_QUADMODEM,
 		PCI_ANY_ID, PCI_ANY_ID,
@@ -3798,18 +3977,47 @@ static struct pci_board pci_boards[] = {
 	{	PCI_VENDOR_ID_QUATECH, PCI_DEVICE_ID_QUATECH_ESC100M,
 		PCI_ANY_ID, PCI_ANY_ID,
 		SPCI_FL_BASE1, 8, 115200 },
-	{	PCI_VENDOR_ID_OXSEMI, PCI_DEVICE_ID_OXSEMI_16PCI954,
-		PCI_VENDOR_ID_SPECIALIX, PCI_SUBDEVICE_ID_SPECIALIX_SPEED4,
-		SPCI_FL_BASE0 , 4, 115200 },
 	{	PCI_VENDOR_ID_SPECIALIX, PCI_DEVICE_ID_OXSEMI_16PCI954,
 		PCI_VENDOR_ID_SPECIALIX, PCI_SUBDEVICE_ID_SPECIALIX_SPEED4,
 		SPCI_FL_BASE0 , 4, 921600 },
+	{	PCI_VENDOR_ID_OXSEMI, PCI_DEVICE_ID_OXSEMI_16PCI954,
+		PCI_ANY_ID, PCI_ANY_ID,
+		SPCI_FL_BASE0 , 4, 115200 },
+	{	PCI_VENDOR_ID_OXSEMI, PCI_DEVICE_ID_OXSEMI_16PCI952,
+		PCI_ANY_ID, PCI_ANY_ID,
+		SPCI_FL_BASE0 , 2, 115200 },
+		/* This board uses the size of PCI Base region 0 to
+		 * signal now many ports are available */
+	{	PCI_VENDOR_ID_OXSEMI, PCI_DEVICE_ID_OXSEMI_16PCI95N,
+		PCI_ANY_ID, PCI_ANY_ID,
+		SPCI_FL_BASE0 | SPCI_FL_REGION_SZ_CAP, 32, 115200 },
 	{	PCI_VENDOR_ID_TIMEDIA, PCI_DEVICE_ID_TIMEDIA_1889,
 		PCI_ANY_ID, PCI_ANY_ID,
 		SPCI_FL_BASE0 , 2, 921600 },
-	{	PCI_VENDOR_ID_LAVA, PCI_DEVICE_ID_LAVA_DUAL_SERIAL,
+	{	PCI_VENDOR_ID_LAVA, PCI_DEVICE_ID_LAVA_DSERIAL,
 		PCI_ANY_ID, PCI_ANY_ID,
 		SPCI_FL_BASE0 | SPCI_FL_BASE_TABLE, 2, 115200 },
+	{	PCI_VENDOR_ID_LAVA, PCI_DEVICE_ID_LAVA_QUATRO_A,
+		PCI_ANY_ID, PCI_ANY_ID,
+		SPCI_FL_BASE0 | SPCI_FL_BASE_TABLE, 2, 115200 },
+	{	PCI_VENDOR_ID_LAVA, PCI_DEVICE_ID_LAVA_QUATRO_B,
+		PCI_ANY_ID, PCI_ANY_ID,
+		SPCI_FL_BASE0 | SPCI_FL_BASE_TABLE, 2, 115200 },
+	{	PCI_VENDOR_ID_LAVA, PCI_DEVICE_ID_LAVA_PORT_PLUS,
+		PCI_ANY_ID, PCI_ANY_ID,
+		SPCI_FL_BASE0 | SPCI_FL_BASE_TABLE, 2, 460800 },
+	{	PCI_VENDOR_ID_LAVA, PCI_DEVICE_ID_LAVA_QUAD_A,
+		PCI_ANY_ID, PCI_ANY_ID,
+		SPCI_FL_BASE0 | SPCI_FL_BASE_TABLE, 2, 460800 },
+	{	PCI_VENDOR_ID_LAVA, PCI_DEVICE_ID_LAVA_QUAD_B,
+		PCI_ANY_ID, PCI_ANY_ID,
+		SPCI_FL_BASE0 | SPCI_FL_BASE_TABLE, 2, 460800 },
+	{	PCI_VENDOR_ID_LAVA, PCI_DEVICE_ID_LAVA_SSERIAL,
+		PCI_ANY_ID, PCI_ANY_ID,
+		SPCI_FL_BASE0 | SPCI_FL_BASE_TABLE, 1, 115200 },
+	{	PCI_VENDOR_ID_LAVA, PCI_DEVICE_ID_LAVA_PORT_650,
+		PCI_ANY_ID, PCI_ANY_ID,
+		SPCI_FL_BASE0 | SPCI_FL_BASE_TABLE, 1, 460800 },
 	{	PCI_VENDOR_ID_SIIG, PCI_DEVICE_ID_SIIG_1S_10x_550,
 		PCI_ANY_ID, PCI_ANY_ID,
 		SPCI_FL_BASE2, 1, 460800,
@@ -3945,39 +4153,81 @@ static struct pci_board pci_boards[] = {
 	/* Computone devices submitted by Doug McNash dmcnash@computone.com */
 	{	PCI_VENDOR_ID_COMPUTONE, PCI_DEVICE_ID_COMPUTONE_PG,
 		PCI_SUBVENDOR_ID_COMPUTONE, PCI_SUBDEVICE_ID_COMPUTONE_PG4,
-		SPCI_FL_IOMEM | SPCI_FL_BASE0, 4, 921600,
+		SPCI_FL_BASE0, 4, 921600, /* IOMEM */
 		0x40, 2, NULL, 0x200 },
 	{	PCI_VENDOR_ID_COMPUTONE, PCI_DEVICE_ID_COMPUTONE_PG,
 		PCI_SUBVENDOR_ID_COMPUTONE, PCI_SUBDEVICE_ID_COMPUTONE_PG8,
-		SPCI_FL_IOMEM | SPCI_FL_BASE0, 8, 921600,
+		SPCI_FL_BASE0, 8, 921600, /* IOMEM */
 		0x40, 2, NULL, 0x200 },
 	{	PCI_VENDOR_ID_COMPUTONE, PCI_DEVICE_ID_COMPUTONE_PG,
 		PCI_SUBVENDOR_ID_COMPUTONE, PCI_SUBDEVICE_ID_COMPUTONE_PG6,
-		SPCI_FL_IOMEM | SPCI_FL_BASE0, 6, 921600,
+		SPCI_FL_BASE0, 6, 921600, /* IOMEM */
 		0x40, 2, NULL, 0x200 },
+	/* Digitan DS560-558, from jimd@esoft.com */
+	{	PCI_VENDOR_ID_ATT, PCI_DEVICE_ID_ATT_VENUS_MODEM,
+		PCI_ANY_ID, PCI_ANY_ID,
+		SPCI_FL_BASE1, 1, 115200 },
+	/* 3Com US Robotics 56k Voice Internal PCI model 5610 */
+	{	PCI_VENDOR_ID_USR, 0x1008,
+		PCI_ANY_ID, PCI_ANY_ID,
+		SPCI_FL_BASE0, 1, 115200 },
 	/*
 	 * Untested PCI modems, sent in from various folks...
 	 */
-	/* at+t zoom 56K faxmodem, from dougd@shieldsbag.com */	
-	{	PCI_VENDOR_ID_ATT, 0x442,
-		PCI_ANY_ID, PCI_ANY_ID,
-		SPCI_FL_BASE1, 1, 115200 },
-	/* at&t unknown modem, from jimd@esoft.com */
-	{	PCI_VENDOR_ID_ATT, 0x480,
-		PCI_ANY_ID, PCI_ANY_ID,
-		SPCI_FL_BASE1, 1, 115200 },
 	/* Elsa Model 56K PCI Modem, from Andreas Rath <arh@01019freenet.de> */
 	{	PCI_VENDOR_ID_ROCKWELL, 0x1004,
 		0x1048, 0x1500, 
 		SPCI_FL_BASE1, 1, 115200 },
-	/* 3Com US Robotics 56k* Voice Internal PCI, model# 2884 */
-	/* from evidal@iti.upv.es */
-	/* XXX complete guess this may not work!!! */
-	{	PCI_VENDOR_ID_USR, 0x1006,
-		0x12b9, 0x0060,
-		SPCI_FL_BASE1 | SPCI_FL_IOMEM, 1, 115200 },
-	{	0, }
+	/* Generic serial board */
+	{	0, 0,
+		0, 0,
+		SPCI_FL_BASE0, 1, 115200 },
 };
+
+/*
+ * Given a complete unknown PCI device, try to use some hueristics to
+ * guess what the configuration might be, based on the pitiful PCI
+ * serial specs.  Returns 0 on success, 1 on failure.
+ */
+static int _INLINE_ serial_guess_board(struct pci_dev *dev,
+				       struct pci_board *board)
+{
+	int	num_iomem = 0, num_port = 0, first_port = -1;
+	int	i;
+	
+	/*
+	 * If it is not a communications device or the programming
+	 * interface is greater than 6, give up.
+	 *
+	 * (Should we try to make guesses for multiport serial devices
+	 * later?) 
+	 */
+	if ((dev->class >> 8) != PCI_CLASS_COMMUNICATION_SERIAL ||
+	    (dev->class & 0xff) > 6)
+		return 1;
+
+	for (i=0; i < 6; i++) {
+		if (IS_PCI_REGION_IOPORT(dev, i)) {
+			num_port = 0;
+			if (first_port == -1)
+				first_port = i;
+		} else {
+			num_iomem++;
+		}
+	}
+
+	/*
+	 * If there is 1 or 0 iomem regions, and exactly one port, use
+	 * it.
+	 */
+	if (num_iomem <= 1 && num_port == 1) {
+		board->flags = first_port;
+		return 0;
+	}
+	return 1;
+}
+
+
 
 /*
  * Query PCI space for known serial boards
@@ -3986,19 +4236,22 @@ static struct pci_board pci_boards[] = {
  * Accept a maximum of eight boards
  *
  */
-static void probe_serial_pci(void) 
+static void __init probe_serial_pci(void) 
 {
-	int k, line;
 	struct pci_dev *dev = NULL;
 	struct pci_board *board;
-	struct serial_struct fake_state;
-	int uart_offset, base_baud, base_idx;
-	unsigned long port;
 
 #ifdef SERIAL_DEBUG_PCI
 	printk(KERN_DEBUG "Entered probe_serial_pci()\n");
 #endif
   
+	if (!pcibios_present()) {
+#ifdef SERIAL_DEBUG_PCI
+		printk(KERN_DEBUG "Leaving probe_serial_pci() (no pcibios)\n");
+#endif
+		return;
+	}
+
 	pci_for_each_dev(dev) {
 		for (board = pci_boards; board->vendor; board++) {
 			if (board->vendor != (unsigned short) PCI_ANY_ID &&
@@ -4008,112 +4261,18 @@ static void probe_serial_pci(void)
 			    dev->device != board->device)
 				continue;
 			if (board->subvendor != (unsigned short) PCI_ANY_ID &&
-			    dev->subsystem_vendor != board->subvendor)
+			    pci_get_subvendor(dev) != board->subvendor)
 				continue;
 			if (board->subdevice != (unsigned short) PCI_ANY_ID &&
-			    dev->subsystem_device != board->subdevice)
+			    pci_get_subdevice(dev) != board->subdevice)
 				continue;
 			break;
 		}
 	
-		if (board->vendor == 0) {
-#ifdef SERIAL_DEBUG_PCI
-		printk(KERN_DEBUG
-		       "Found unknown serial board: %x:%x, %x:%x, %x\n",
-		       dev->vendor, dev->device, subvendor, subdevice,
-		       dev->class);
-		printk(KERN_DEBUG
-		       "   Addresses: %lx, %lx, %lx, %lx\n",
-		       PCI_BASE_ADDRESS(dev, 0), PCI_BASE_ADDRESS(dev, 1), 
-		       PCI_BASE_ADDRESS(dev, 2), PCI_BASE_ADDRESS(dev, 3));
-#endif
-			continue; 
-		}
-
-		/*
-		 * Run the initialization function, if any
-		 */
-		if (board->init_fn)
-			if ((board->init_fn)(dev, board, 1) != 0)
-				continue;
-
-		/*
-		 * Register the serial board in the array so we can
-		 * shutdown the board later, if necessary.
-		 */
-		if (serial_pci_board_idx >= NR_PCI_BOARDS)
+		if (board->vendor == 0 && serial_guess_board(dev, board))
 			continue;
-		serial_pci_board[serial_pci_board_idx].board = board;
-		serial_pci_board[serial_pci_board_idx].dev = dev;
-		serial_pci_board_idx++;
-
-		base_idx = board->flags & SPCI_FL_BASE_MASK;
-		port = PCI_BASE_ADDRESS(dev, base_idx) +
-			board->first_uart_offset;
-		if (board->flags & SPCI_FL_IOMEM)
-			port &= PCI_BASE_ADDRESS_MEM_MASK;
-		else
-			port &= PCI_BASE_ADDRESS_IO_MASK;
-
-		/*
-		 * Set some defaults for the loop below, which 
-		 * actually registers each serial port belonging to
-		 * the card.
-		 */
-		uart_offset = board->uart_offset;
-		if (!uart_offset)
-			uart_offset = 8;
-		base_baud = board->base_baud;
-		if (!base_baud)
-			base_baud = BASE_BAUD;
-#ifndef CONFIG_SERIAL_PCI_MEMMAPPED
-		if (board->flags & SPCI_FL_IOMEM) {
-#ifdef SERIAL_DEBUG_PCI
-			printk(KERN_DEBUG
-		           "Can't support memory mapped PCI serial device\n");
-#endif
-			continue; 
-		}
-#endif
-		memset(&fake_state, 0, sizeof(fake_state));
-
-#ifdef SERIAL_DEBUG_PCI
-		printk(KERN_DEBUG
-		       "Found Serial PCI device: %x:%x, %x:%x, %x\n",
-		       dev->vendor, dev->device, subvendor, subdevice,
-		       dev->class);
-		printk(KERN_DEBUG
-		       "   IRQ: %d, base: %lx (%s), num_ports: %d\n",
-		       dev->irq, port, board->flags & SPCI_FL_IOMEM ?
-		       "iomem" : "port", board->num_ports);
-#endif
-		       
-		for (k=0; k < board->num_ports; k++) {
-			if (board->flags & SPCI_FL_BASE_TABLE) {
-				port = PCI_BASE_ADDRESS(dev, base_idx++);
-				if (board->flags & SPCI_FL_IOMEM)
-					port &= PCI_BASE_ADDRESS_MEM_MASK;
-				else
-					port &= PCI_BASE_ADDRESS_IO_MASK;
-			}
-			fake_state.irq = dev->irq;
-			fake_state.port = port;
-#ifdef CONFIG_SERIAL_PCI_MEMMAPPED
-			if (board->flags & SPCI_FL_IOMEM) {
-				fake_state.io_type = SERIAL_IO_MEM;
-				fake_state.iomem_base =
-					ioremap(port, board->uart_offset);
-				fake_state.iomem_reg_shift = board->reg_shift;
-				fake_state.port = 0;
-			}
-#endif
-			port += uart_offset;
-			fake_state.flags = ASYNC_SKIP_TEST | ASYNC_SHARE_IRQ;
-			line = register_serial(&fake_state);
-			if (line < 0)
-				break;
-			rs_table[line].baud_base = base_baud;
-		}
+		
+		start_pci_pnp_board(dev, board);
 	}
 	
 #ifdef SERIAL_DEBUG_PCI
@@ -4123,6 +4282,66 @@ static void probe_serial_pci(void)
 }
 
 #endif /* ENABLE_SERIAL_PCI */
+
+#ifdef ENABLE_SERIAL_PNP
+
+static struct pci_board pnp_devices[] __initdata = {
+	/* Rockwell 56K ACF II Fax+Data+Voice Modem */
+	{	ISAPNP_VENDOR('A', 'K', 'Y'), ISAPNP_DEVICE(0x1021), 0, 0,
+		SPCI_FL_BASE0 | SPCI_FL_PNPDEFAULT, 1, 115200 },
+	/* Boca Research 33,600 ACF Modem */
+	{	ISAPNP_VENDOR('B', 'R', 'I'), ISAPNP_DEVICE(0x1400), 0, 0,
+		SPCI_FL_BASE0 | SPCI_FL_PNPDEFAULT, 1, 115200 },
+	/* Best Data Products Inc. Smart One 336F PnP Modem */
+	{	ISAPNP_VENDOR('B', 'D', 'P'), ISAPNP_DEVICE(0x3336), 0, 0,
+		SPCI_FL_BASE0 | SPCI_FL_PNPDEFAULT, 1, 115200 },
+	/* These ID's are taken from M$ documentation */
+	/* Compaq 14400 Modem */
+	{	ISAPNP_VENDOR('P', 'N', 'P'), ISAPNP_DEVICE(0xC000), 0, 0,
+		SPCI_FL_BASE0 | SPCI_FL_PNPDEFAULT, 1, 115200 },
+	/* Compaq 2400/9600 Modem */
+	{	ISAPNP_VENDOR('P', 'N', 'P'), ISAPNP_DEVICE(0xC001), 0, 0,
+		SPCI_FL_BASE0 | SPCI_FL_PNPDEFAULT, 1, 115200 },
+	/* Generic standard PC COM port	 */
+	{	ISAPNP_VENDOR('P', 'N', 'P'), ISAPNP_DEVICE(0x0500), 0, 0,
+		SPCI_FL_BASE0 | SPCI_FL_PNPDEFAULT, 1, 115200 },
+	/* Generic 16550A-compatible COM port */
+	{	ISAPNP_VENDOR('P', 'N', 'P'), ISAPNP_DEVICE(0x0501), 0, 0,
+		SPCI_FL_BASE0 | SPCI_FL_PNPDEFAULT, 1, 115200 },
+	{	0, }
+};
+
+static void __init probe_serial_pnp(void)
+{
+       struct pci_dev *dev = NULL;
+       struct pci_board *board;
+
+#ifdef SERIAL_DEBUG_PNP
+       printk("Entered probe_serial_pnp()\n");
+#endif
+       if (!isapnp_present()) {
+#ifdef SERIAL_DEBUG_PNP
+               printk("Leaving probe_serial_pnp() (no isapnp)\n");
+#endif
+               return;
+       }
+
+       for (board = pnp_devices; board->vendor; board++) {
+               while ((dev = isapnp_find_dev(NULL, board->vendor,
+					     board->device, dev))) {
+
+		       start_pci_pnp_board(dev, board);
+		       
+               }
+       }
+
+#ifdef SERIAL_DEBUG_PNP
+       printk("Leaving probe_serial_pnp() (probe finished)\n");
+#endif
+       return;
+}
+
+#endif /* ENABLE_SERIAL_PNP */
 
 /*
  * The serial driver boot-time initialization code!
@@ -4270,6 +4489,9 @@ int __init rs_init(void)
 #ifdef ENABLE_SERIAL_PCI
 	probe_serial_pci();
 #endif
+#ifdef ENABLE_SERIAL_PNP
+       probe_serial_pnp();
+#endif
 	return 0;
 }
 
@@ -4282,6 +4504,7 @@ int register_serial(struct serial_struct *req)
 	int i;
 	unsigned long flags;
 	struct serial_state *state;
+	struct async_struct *info;
 
 	save_flags(flags);
 	cli();
@@ -4311,13 +4534,17 @@ int register_serial(struct serial_struct *req)
 	state->port = req->port;
 	state->flags = req->flags;
 	state->io_type = req->io_type;
-#ifdef CONFIG_SERIAL_PCI_MEMMAPPED
 	state->iomem_base = req->iomem_base;
 	state->iomem_reg_shift = req->iomem_reg_shift;
-#endif
 	if (req->baud_base)
 		state->baud_base = req->baud_base;
-
+	if ((info = state->info) != NULL) {
+		info->port = req->port;
+		info->flags = req->flags;
+		info->io_type = req->io_type;
+		info->iomem_base = req->iomem_base;
+		info->iomem_reg_shift = req->iomem_reg_shift;
+	}
 	autoconfig(state);
 	if (state->type == PORT_UNKNOWN) {
 		restore_flags(flags);
@@ -4387,17 +4614,20 @@ void cleanup_module(void)
 		}
 		if ((rs_table[i].type != PORT_UNKNOWN) && rs_table[i].port)
 			release_region(rs_table[i].port, 8);
-#if defined(ENABLE_SERIAL_PCI) && defined (CONFIG_SERIAL_PCI_MEMMAPPED)
+#if defined(ENABLE_SERIAL_PCI) || defined(ENABLE_SERIAL_PNP)
 		if (rs_table[i].iomem_base)
 			iounmap(rs_table[i].iomem_base);
 #endif
 	}
-#ifdef ENABLE_SERIAL_PCI
+#if defined(ENABLE_SERIAL_PCI) || defined(ENABLE_SERIAL_PNP)
 	for (i=0; i < serial_pci_board_idx; i++) {
 		struct pci_board_inst *brd = &serial_pci_board[i];
 		
-		if (brd->board->init_fn)
-			(brd->board->init_fn)(brd->dev, brd->board, 0);
+		if (brd->board.init_fn)
+			(brd->board.init_fn)(brd->dev, &brd->board, 0);
+
+		if (DEACTIVATE_FUNC(brd->dev))
+			(DEACTIVATE_FUNC(brd->dev))(brd->dev);
 	}
 #endif	
 	if (tmp_buf) {
@@ -4599,10 +4829,8 @@ static int __init serial_console_setup(struct console *co, char *options)
 	info->hub6 = state->hub6;
 #endif
 	info->io_type = state->io_type;
-#ifdef CONFIG_SERIAL_PCI_MEMMAPPED
 	info->iomem_base = state->iomem_base;
 	info->iomem_reg_shift = state->iomem_reg_shift;
-#endif
 	quot = state->baud_base / baud;
 	cval = cflag & (CSIZE | CSTOPB);
 #if defined(__powerpc__) || defined(__alpha__)

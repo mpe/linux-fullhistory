@@ -8,7 +8,6 @@
 #ifndef _ASM_APOLLO_DMA_H
 #define _ASM_APOLLO_DMA_H
 
-#include <linux/config.h>
 #include <asm/apollohw.h>		/* need byte IO */
 #include <asm/spinlock.h>	/* And spinlocks */
 #include <linux/delay.h>

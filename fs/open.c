@@ -306,11 +306,12 @@ asmlinkage long sys_access(const char * filename, int mode)
 	struct dentry * dentry;
 	int old_fsuid, old_fsgid;
 	kernel_cap_t old_cap;
-	int res = -EINVAL;
+	int res;
+
+	if (mode & ~S_IRWXO)	/* where's F_OK, X_OK, W_OK, R_OK? */
+		return -EINVAL;
 
 	lock_kernel();
-	if (mode != (mode & S_IRWXO))	/* where's F_OK, X_OK, W_OK, R_OK? */
-		goto out;
 	old_fsuid = current->fsuid;
 	old_fsgid = current->fsgid;
 	old_cap = current->cap_effective;
@@ -337,7 +338,7 @@ asmlinkage long sys_access(const char * filename, int mode)
 	current->fsuid = old_fsuid;
 	current->fsgid = old_fsgid;
 	current->cap_effective = old_cap;
-out:
+
 	unlock_kernel();
 	return res;
 }

@@ -1341,7 +1341,7 @@ asmlinkage long sys_rename(const char * oldname, const char * newname)
 	return error;
 }
 
-int vfs_readlink(struct dentry *dentry, char *buffer, int buflen, char *link)
+int vfs_readlink(struct dentry *dentry, char *buffer, int buflen, const char *link)
 {
 	u32 len;
 
@@ -1359,7 +1359,7 @@ out:
 
 static inline struct dentry *
 __vfs_follow_link(struct dentry *dentry, struct dentry *base,
-		unsigned follow, char *link)
+		unsigned follow, const char *link)
 {
 	struct dentry *result;
 	UPDATE_ATIME(dentry->d_inode);
@@ -1377,7 +1377,7 @@ fail:
 
 struct dentry *
 vfs_follow_link(struct dentry *dentry, struct dentry *base,
-unsigned int follow, char *link)
+unsigned int follow, const char *link)
 {
 	return __vfs_follow_link(dentry,base,follow,link);
 }

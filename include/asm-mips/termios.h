@@ -83,6 +83,7 @@ struct termio {
 #define TIOCM_DSR	0x400		/* data set ready */
 #define TIOCM_OUT1	0x2000
 #define TIOCM_OUT2	0x4000
+#define TIOCM_LOOP	0x8000
 
 /* line disciplines */
 #define N_TTY		0

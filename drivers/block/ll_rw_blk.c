@@ -447,9 +447,6 @@ static inline void attempt_merge (request_queue_t * q,
 {
 	struct request *next = req->next;
 
-	if (req->rq_dev == MKDEV(22, 64))
-		printk("attempt_merge at %lu %lu\n", req->sector, q->current_request->sector);
-
 	if (!next)
 		return;
 	if (req->sector + req->nr_sectors != next->sector)
