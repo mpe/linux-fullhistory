@@ -81,6 +81,7 @@ choice
 
 config ARCH_CLPS7500
 	bool "Cirrus-CL-PS7500FE"
+	select TIMER_ACORN
 
 config ARCH_CLPS711X
 	bool "CLPS711x/EP721x-based"
@@ -111,6 +112,8 @@ config ARCH_FOOTBRIDGE
 
 config ARCH_INTEGRATOR
 	bool "Integrator"
+	select ARM_AMBA
+	select ICST525
 
 config ARCH_IOP3XX
 	bool "IOP3xx-based"
@@ -123,6 +126,7 @@ config ARCH_IXP2000
 
 config ARCH_L7200
 	bool "LinkUp-L7200"
+	select FIQ
 	help
 	  Say Y here if you intend to run this kernel on a LinkUp Systems
 	  L7200 Software Development Board which uses an ARM720T processor.
@@ -138,6 +142,9 @@ config ARCH_PXA
 
 config ARCH_RPC
 	bool "RiscPC"
+	select ARCH_ACORN
+	select FIQ
+	select TIMER_ACORN
 	help
 	  On the Acorn Risc-PC, Linux can support the internal IDE disk and
 	  CD-ROM interface, serial and parallel port, and the floppy drive.
@@ -168,6 +175,8 @@ config ARCH_OMAP
 
 config ARCH_VERSATILE
 	bool "Versatile"
+	select ARM_AMBA
+	select ICST307
 	help
 	  This enables support for ARM Ltd Versatile board.
 
@@ -214,13 +223,9 @@ source "arch/arm/mach-versatile/Kconfig"
 # Definitions to make life easier
 config ARCH_ACORN
 	bool
-	depends on ARCH_RPC
-	default y
 
 config TIMER_ACORN
 	bool
-	depends on ARCH_ACORN || ARCH_CLPS7500
-	default y
 
 #####################################################################
 # SA1111 support
@@ -322,18 +327,12 @@ config PCI_HOST_VIA82C505
 
 config ICST525
 	bool
-	depends on ARCH_INTEGRATOR
-	default y
 
 config ICST307
 	bool
-	depends on ARCH_VERSATILE
-	default y
 
 config ARM_AMBA
 	bool
-	depends on ARCH_INTEGRATOR || ARCH_VERSATILE
-	default y
 
 config ISA
 	bool
@@ -434,7 +433,7 @@ config CPU_FREQ_SA1110
 
 config CPU_FREQ_INTEGRATOR
 	tristate "CPUfreq driver for ARM Integrator CPUs"
-	depends on ARCH_INTEGRATOR && ICST525 && CPU_FREQ
+	depends on ARCH_INTEGRATOR && CPU_FREQ
 	default y
 	help
 	  This enables the CPUfreq driver for ARM Integrator CPUs.
