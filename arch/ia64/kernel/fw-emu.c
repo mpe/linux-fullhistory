@@ -139,6 +139,24 @@ pal_emulator_static:
 	movl r9 =0x100000064		/* proc_ratio (1/100) */
 	movl r10=0x100000100		/* bus_ratio<<32 (1/256) */
 	movl r11=0x100000064		/* itc_ratio<<32 (1/100) */
+	;;
+1:	cmp.eq p6,p7=1,r28		/* PAL_CACHE_FLUSH */
+(p7)	br.cond.sptk.few 1f
+	mov r9=ar.lc
+	movl r8=524288			/* flush 512k million cache lines (16MB) */
+	;;
+	mov ar.lc=r8
+	movl r8=0xe000000000000000
+	;;
+.loop:	fc r8
+	add r8=32,r8
+	br.cloop.sptk.few .loop
+	sync.i
+	;;
+	srlz.i
+	;;
+	mov ar.lc=r9
+	mov r8=r0
 1:	br.cond.sptk.few rp
 	.endp pal_emulator_static\n");
 

@@ -11,7 +11,6 @@
  * for more info.
  */
 
-#include <linux/config.h>
 #include <linux/init.h>
 
 #define _DEV_TABLE_C_

@@ -1,4 +1,4 @@
-/* $Id: sbus.c,v 1.9 2000/02/18 13:48:57 davem Exp $
+/* $Id: sbus.c,v 1.10 2000/03/10 07:52:08 davem Exp $
  * sbus.c: UltraSparc SBUS controller support.
  *
  * Copyright (C) 1999 David S. Miller (davem@redhat.com)
@@ -53,12 +53,17 @@ struct sbus_iommu {
 	 * you must increase the size of the type of
 	 * these counters.  You have been duly warned. -DaveM
 	 */
-/*0x30*/u16			lowest_free[NCLUSTERS];
-};
+/*0x30*/struct {
+		u16	next;
+		u16	flush;
+	} alloc_info[NCLUSTERS];
 
-/* Flushing heuristics */
-#define IOMMU_DIAG_LIM	16
-#define STRBUF_DIAG_LIM	32
+	/* The lowest used consistent mapping entry.  Since
+	 * we allocate consistent maps out of cluster 0 this
+	 * is relative to the beginning of closter 0.
+	 */
+/*0x50*/u32		lowest_consistent_map;
+};
 
 /* Offsets from iommu_regs */
 #define SYSIO_IOMMUREG_BASE	0x2400UL
@@ -73,49 +78,29 @@ struct sbus_iommu {
 
 #define IOMMU_DRAM_VALID	(1UL << 30UL)
 
-static void __iommu_flush(struct sbus_iommu *iommu, u32 base, unsigned long npages)
+static void __iommu_flushall(struct sbus_iommu *iommu)
 {
-	int hit = 0;
+	unsigned long tag = iommu->iommu_regs + IOMMU_TAGDIAG;
+	int entry;
 
-	if (npages <= IOMMU_DIAG_LIM) {
-		while (npages--)
-			upa_writeq(base + (npages << PAGE_SHIFT),
-				   iommu->iommu_regs + IOMMU_FLUSH);
-		hit = 1;
-	} else {
-		u32 limit = base + ((npages << PAGE_SHIFT) - 1UL);
-		unsigned long dram = iommu->iommu_regs + IOMMU_DRAMDIAG;
-		unsigned long tag = iommu->iommu_regs + IOMMU_TAGDIAG;
-		int entry;
-
-		for (entry = 0; entry < 16; entry++, dram += 8, tag += 8) {
-			u32 addr = ((u32)upa_readq(tag) << PAGE_SHIFT);
-			if (addr >= base && addr <= limit) {
-				u64 val = upa_readq(dram);
-
-				if (val & IOMMU_DRAM_VALID) {
-					upa_writeq(addr,
-						   iommu->iommu_regs + IOMMU_FLUSH);
-					hit = 1;
-				}
-			}
-		}
+	for (entry = 0; entry < 16; entry++) {
+		upa_writeq(0, tag);
+		tag += 8UL;
 	}
-	if (hit != 0)
-		upa_readq(iommu->sbus_control_reg);
+	upa_readq(iommu->sbus_control_reg);
+
+	for (entry = 0; entry < NCLUSTERS; entry++) {
+		iommu->alloc_info[entry].flush =
+			iommu->alloc_info[entry].next;
+	}
 }
 
-/* In an effort to keep latency under control, we special
- * case single page IOMMU flushes.
- */
-static __inline__ void iommu_flush(struct sbus_iommu *iommu,
-				   u32 base, unsigned long npages)
+static void iommu_flush(struct sbus_iommu *iommu, u32 base, unsigned long npages)
 {
-	if (npages == 1) {
-		upa_writeq(base, iommu->iommu_regs + IOMMU_FLUSH);
-		upa_readq(iommu->sbus_control_reg);
-	} else
-		__iommu_flush(iommu, base, npages);
+	while (npages--)
+		upa_writeq(base + (npages << PAGE_SHIFT),
+			   iommu->iommu_regs + IOMMU_FLUSH);
+	upa_readq(iommu->sbus_control_reg);
 }
 
 /* Offsets from strbuf_regs */
@@ -132,65 +117,57 @@ static __inline__ void iommu_flush(struct sbus_iommu *iommu,
 
 static void strbuf_flush(struct sbus_iommu *iommu, u32 base, unsigned long npages)
 {
-	int hit = 0;
-
 	iommu->strbuf_flushflag = 0UL;
-	if (npages <= STRBUF_DIAG_LIM) {
-		while (npages--)
-			upa_writeq(base + (npages << PAGE_SHIFT),
-				   iommu->strbuf_regs + STRBUF_PFLUSH);
-		hit = 1;
-	} else {
-		u32 limit = base + ((npages << PAGE_SHIFT) - 1UL);
-		unsigned long tag = iommu->strbuf_regs + STRBUF_PTAGDIAG;
-		int entry;
+	while (npages--)
+		upa_writeq(base + (npages << PAGE_SHIFT),
+			   iommu->strbuf_regs + STRBUF_PFLUSH);
 
-		for (entry = 0; entry < 16; entry++, tag += 8) {
-			u64 val = upa_readq(tag);
-
-			if (val & STRBUF_TAG_VALID) {
-				u32 addr = ((u32)(val & ~3UL)) << (PAGE_SHIFT - 2UL);
-				if (addr >= base && addr <= limit) {
-					upa_writeq(addr,
-						   iommu->strbuf_regs + STRBUF_PFLUSH);
-					hit = 1;
-				}
-			}
-		}
-	}
-	if (hit != 0) {
-		/* Whoopee cushion! */
-		upa_writeq(__pa(&iommu->strbuf_flushflag),
-			   iommu->strbuf_regs + STRBUF_FSYNC);
-		upa_readq(iommu->sbus_control_reg);
-		while (iommu->strbuf_flushflag == 0UL)
-			membar("#LoadLoad");
-	}
+	/* Whoopee cushion! */
+	upa_writeq(__pa(&iommu->strbuf_flushflag),
+		   iommu->strbuf_regs + STRBUF_FSYNC);
+	upa_readq(iommu->sbus_control_reg);
+	while (iommu->strbuf_flushflag == 0UL)
+		membar("#LoadLoad");
 }
 
 static iopte_t *alloc_streaming_cluster(struct sbus_iommu *iommu, unsigned long npages)
 {
-	iopte_t *iopte;
-	unsigned long cnum, ent;
+	iopte_t *iopte, *limit;
+	unsigned long cnum, ent, flush_point;
 
 	cnum = 0;
 	while ((1UL << cnum) < npages)
 		cnum++;
 	iopte  = iommu->page_table + (cnum * CLUSTER_NPAGES);
-	iopte += ((ent = iommu->lowest_free[cnum]) << cnum);
 
-	if (iopte_val(iopte[(1UL << cnum)]) == 0UL) {
-		/* Fast path. */
-		iommu->lowest_free[cnum] = ent + 1;
-	} else {
-		unsigned long pte_off = 1;
+	if (cnum == 0)
+		limit = (iommu->page_table +
+			 iommu->lowest_consistent_map);
+	else
+		limit = (iopte + CLUSTER_NPAGES);
 
-		ent += 1;
-		do {
-			pte_off++;
-			ent++;
-		} while (iopte_val(iopte[(pte_off << cnum)]) != 0UL);
-		iommu->lowest_free[cnum] = ent;
+	iopte += ((ent = iommu->alloc_info[cnum].next) << cnum);
+	flush_point = iommu->alloc_info[cnum].flush;
+
+	for (;;) {
+		if (iopte_val(*iopte) == 0UL) {
+			if ((iopte + (1 << cnum)) >= limit)
+				ent = 0;
+			else
+				ent = ent + 1;
+			iommu->alloc_info[cnum].next = ent;
+			if (ent == flush_point)
+				__iommu_flushall(iommu);
+			break;
+		}
+		iopte += (1 << cnum);
+		ent++;
+		if (iopte >= limit) {
+			iopte = (iommu->page_table + (cnum * CLUSTER_NPAGES));
+			ent = 0;
+		}
+		if (ent == flush_point)
+			__iommu_flushall(iommu);
 	}
 
 	/* I've got your streaming cluster right here buddy boy... */
@@ -208,8 +185,15 @@ static void free_streaming_cluster(struct sbus_iommu *iommu, u32 base, unsigned 
 	ent = (base & CLUSTER_MASK) >> (PAGE_SHIFT + cnum);
 	iopte = iommu->page_table + ((base - MAP_BASE) >> PAGE_SHIFT);
 	iopte_val(*iopte) = 0UL;
-	if (ent < iommu->lowest_free[cnum])
-		iommu->lowest_free[cnum] = ent;
+
+	/* If the global flush might not have caught this entry,
+	 * adjust the flush point such that we will flush before
+	 * ever trying to reuse it.
+	 */
+#define between(X,Y,Z)	(((Z) - (Y)) >= ((X) - (Y)))
+	if (between(ent, iommu->alloc_info[cnum].next, iommu->alloc_info[cnum].flush))
+		iommu->alloc_info[cnum].flush = ent;
+#undef between
 }
 
 /* We allocate consistent mappings from the end of cluster zero. */
@@ -228,8 +212,13 @@ static iopte_t *alloc_consistent_cluster(struct sbus_iommu *iommu, unsigned long
 				if (iopte_val(*iopte) & IOPTE_VALID)
 					break;
 			}
-			if (tmp == 0)
+			if (tmp == 0) {
+				u32 entry = (iopte - iommu->page_table);
+
+				if (entry < iommu->lowest_consistent_map)
+					iommu->lowest_consistent_map = entry;
 				return iopte;
+			}
 		}
 	}
 	return NULL;
@@ -238,6 +227,20 @@ static iopte_t *alloc_consistent_cluster(struct sbus_iommu *iommu, unsigned long
 static void free_consistent_cluster(struct sbus_iommu *iommu, u32 base, unsigned long npages)
 {
 	iopte_t *iopte = iommu->page_table + ((base - MAP_BASE) >> PAGE_SHIFT);
+
+	if ((iopte - iommu->page_table) == iommu->lowest_consistent_map) {
+		iopte_t *walk = iopte + npages;
+		iopte_t *limit;
+
+		limit = iommu->page_table + CLUSTER_NPAGES;
+		while (walk < limit) {
+			if (iopte_val(*walk) != 0UL)
+				break;
+			walk++;
+		}
+		iommu->lowest_consistent_map =
+			(walk - iommu->page_table);
+	}
 
 	while (npages--)
 		*iopte++ = __iopte(0UL);
@@ -301,6 +304,7 @@ void sbus_free_consistent(struct sbus_dev *sdev, size_t size, void *cpu, dma_add
 
 	spin_lock_irq(&iommu->lock);
 	free_consistent_cluster(iommu, dvma, npages);
+	iommu_flush(iommu, dvma, npages);
 	spin_unlock_irq(&iommu->lock);
 
 	order = get_order(size);
@@ -337,7 +341,6 @@ dma_addr_t sbus_map_single(struct sbus_dev *sdev, void *ptr, size_t size, int di
 		phys_base += PAGE_SIZE;
 	}
 	npages = size >> PAGE_SHIFT;
-	iommu_flush(iommu, dma_base, npages);
 	spin_unlock_irqrestore(&iommu->lock, flags);
 
 	return (dma_base | offset);
@@ -472,7 +475,6 @@ int sbus_map_sg(struct sbus_dev *sdev, struct scatterlist *sg, int nents, int di
 #ifdef VERIFY_SG
 	verify_sglist(sg, nents, iopte, npages);
 #endif
-	iommu_flush(iommu, dma_base, npages);
 	spin_unlock_irqrestore(&iommu->lock, flags);
 
 	return used;
@@ -1061,9 +1063,13 @@ void __init sbus_iommu_init(int prom_node, struct sbus_bus *sbus)
 
 	memset(iommu, 0, sizeof(*iommu));
 
-	/* Make sure DMA address 0 is never returned just to allow catching
-	   of buggy drivers.  */
-	iommu->lowest_free[0] = 1;
+	/* We start with no consistent mappings. */
+	iommu->lowest_consistent_map = CLUSTER_NPAGES;
+
+	for (i = 0; i < NCLUSTERS; i++) {
+		iommu->alloc_info[i].flush = 0;
+		iommu->alloc_info[i].next = 0;
+	}
 
 	/* Setup spinlock. */
 	spin_lock_init(&iommu->lock);
@@ -1110,9 +1116,12 @@ void __init sbus_iommu_init(int prom_node, struct sbus_bus *sbus)
 	 */
 	for (i = 0; i < 16; i++) {
 		unsigned long dram = iommu->iommu_regs + IOMMU_DRAMDIAG;
+		unsigned long tag = iommu->iommu_regs + IOMMU_TAGDIAG;
 
 		dram += (unsigned long)i * 8UL;
+		tag += (unsigned long)i * 8UL;
 		upa_writeq(0, dram);
+		upa_writeq(0, tag);
 	}
 	upa_readq(iommu->sbus_control_reg);
 

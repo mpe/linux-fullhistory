@@ -164,13 +164,6 @@ pcibios_fixup_bus(struct pci_bus *b)
 	return;
 }
 
-int
-pci_assign_resource (struct pci_dev *dev, int i)
-{
-	printk("pci_assign_resource: not implemented!\n");
-	return -ENODEV;
-}
-
 void __init
 pcibios_update_resource(struct pci_dev *dev, struct resource *root,
 			struct resource *res, int resource)

@@ -147,7 +147,7 @@ int scsi_free(void *obj, unsigned int len)
 			nbits = len >> 9;
 			mask = (1 << nbits) - 1;
 
-			if ((mask << sector) >= (1 << SECTORS_PER_PAGE))
+			if (sector + nbits > SECTORS_PER_PAGE)
 				panic("scsi_free:Bad memory alignment");
 
 			if ((dma_malloc_freelist[page] &

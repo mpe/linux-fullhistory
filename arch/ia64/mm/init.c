@@ -241,13 +241,13 @@ put_gate_page (struct page *page, unsigned long address)
 	pmd = pmd_alloc(pgd, address);
 	if (!pmd) {
 		__free_page(page);
-		oom(current);
+		panic("Out of memory.");
 		return 0;
 	}
 	pte = pte_alloc(pmd, address);
 	if (!pte) {
 		__free_page(page);
-		oom(current);
+		panic("Out of memory.");
 		return 0;
 	}
 	if (!pte_none(*pte)) {

@@ -27,12 +27,7 @@ EXPORT_SYMBOL(msdos_read_super);
 EXPORT_SYMBOL(msdos_put_super);
 
 
-struct file_system_type msdos_fs_type = {
-	"msdos",
-	FS_REQUIRES_DEV,
-	msdos_read_super, 
-	NULL
-};
+DECLARE_FSTYPE_DEV(msdos_fs_type, "msdos", msdos_read_super);
 
 int __init init_msdos_fs(void)
 {

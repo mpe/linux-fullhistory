@@ -32,7 +32,6 @@
 #include <linux/hfs_fs.h>
 #include <linux/devpts_fs.h>
 #include <linux/bfs_fs.h>
-#include <linux/adfs_fs.h>
 #include <linux/openprom_fs.h>
 #include <linux/major.h>
 #include <linux/smp.h>
@@ -135,10 +134,6 @@ void __init filesystem_setup(void)
 
 #ifdef CONFIG_EFS_FS
 	init_efs_fs();
-#endif
-
-#ifdef CONFIG_ADFS_FS
-	init_adfs_fs();
 #endif
 
 #ifdef CONFIG_DEVPTS_FS

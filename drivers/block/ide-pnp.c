@@ -16,7 +16,6 @@
  * Software Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.  
  */
 
-#include <linux/config.h>
 #include <linux/ide.h>
 #include <linux/isapnp.h>
 

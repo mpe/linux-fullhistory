@@ -456,7 +456,7 @@ ia64_fault (unsigned long vector, unsigned long isr, unsigned long ifa,
 
 	      case 32: /* fp fault */
 	      case 33: /* fp trap */
-		result = handle_fpu_swa((vector == 32) ? 1 : 0, regs, &isr);
+		result = handle_fpu_swa((vector == 32) ? 1 : 0, regs, isr);
 		if (result < 0) {
 			siginfo.si_signo = SIGFPE;
 			siginfo.si_errno = 0;

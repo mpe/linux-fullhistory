@@ -1754,10 +1754,10 @@ static void end_buffer_io_kiobuf(struct buffer_head *bh, int uptodate)
 	mark_buffer_uptodate(bh, uptodate);
 
 	kiobuf = bh->b_kiobuf;
-	if (!uptodate)
-		kiobuf->errno = -EIO;
-	if (atomic_dec_and_test(&kiobuf->io_count))
-		kiobuf->end_io(kiobuf);
+	unlock_buffer(bh);
+	
+	kiobuf = bh->b_kiobuf;
+	end_kio_request(kiobuf, uptodate);
 }
 
 
@@ -1766,8 +1766,7 @@ static void end_buffer_io_kiobuf(struct buffer_head *bh, int uptodate)
  * for them to complete.  Clean up the buffer_heads afterwards.  
  */
 
-static int do_kio(struct kiobuf *kiobuf,
-		  int rw, int nr, struct buffer_head *bh[], int size)
+static int do_kio(int rw, int nr, struct buffer_head *bh[], int size)
 {
 	int iosize;
 	int i;
@@ -1778,18 +1777,20 @@ static int do_kio(struct kiobuf *kiobuf,
 
 	if (rw == WRITE)
 		rw = WRITERAW;
-	atomic_add(nr, &kiobuf->io_count);
-	kiobuf->errno = 0;
 	ll_rw_block(rw, nr, bh);
 
-	kiobuf_wait_for_io(kiobuf);
-	
-	spin_lock(&unused_list_lock);
-	
 	iosize = 0;
+	spin_lock(&unused_list_lock);
+
 	for (i = nr; --i >= 0; ) {
 		iosize += size;
 		tmp = bh[i];
+		if (buffer_locked(tmp)) {
+			spin_unlock(&unused_list_lock);
+			wait_on_buffer(tmp);
+			spin_lock(&unused_list_lock);
+		}
+		
 		if (!buffer_uptodate(tmp)) {
 			/* We are traversing bh'es in reverse order so
                            clearing iosize on error calculates the
@@ -1801,11 +1802,7 @@ static int do_kio(struct kiobuf *kiobuf,
 	
 	spin_unlock(&unused_list_lock);
 
-	if (iosize)
-		return iosize;
-	if (kiobuf->errno)
-		return kiobuf->errno;
-	return -EIO;
+	return iosize;
 }
 
 /*
@@ -1847,8 +1844,6 @@ int brw_kiovec(int rw, int nr, struct kiobuf *iovec[],
 		if ((iobuf->offset & (size-1)) ||
 		    (iobuf->length & (size-1)))
 			return -EINVAL;
-		if (!iobuf->locked)
-			panic("brw_kiovec: iobuf not locked for I/O");
 		if (!iobuf->nr_pages)
 			panic("brw_kiovec: iobuf not initialised");
 	}
@@ -1861,10 +1856,15 @@ int brw_kiovec(int rw, int nr, struct kiobuf *iovec[],
 		iobuf = iovec[i];
 		offset = iobuf->offset;
 		length = iobuf->length;
-
+		iobuf->errno = 0;
+		
 		for (pageind = 0; pageind < iobuf->nr_pages; pageind++) {
 			map  = iobuf->maplist[pageind];
-
+			if (!map) {
+				err = -EFAULT;
+				goto error;
+			}
+			
 			while (length > 0) {
 				blocknr = b[bufind++];
 				tmp = get_unused_buffer_head(0);
@@ -1893,11 +1893,13 @@ int brw_kiovec(int rw, int nr, struct kiobuf *iovec[],
 				length -= size;
 				offset += size;
 
+				atomic_inc(&iobuf->io_count);
+	
 				/* 
 				 * Start the IO if we have got too much 
 				 */
 				if (bhind >= KIO_MAX_SECTORS) {
-					err = do_kio(iobuf, rw, bhind, bh, size);
+					err = do_kio(rw, bhind, bh, size);
 					if (err >= 0)
 						transferred += err;
 					else
@@ -1915,7 +1917,7 @@ int brw_kiovec(int rw, int nr, struct kiobuf *iovec[],
 
 	/* Is there any IO still left to submit? */
 	if (bhind) {
-		err = do_kio(iobuf, rw, bhind, bh, size);
+		err = do_kio(rw, bhind, bh, size);
 		if (err >= 0)
 			transferred += err;
 		else

@@ -51,19 +51,13 @@ static void devpts_put_super(struct super_block *sb)
 
 	kfree(sbi->inodes);
 	kfree(sbi);
-
-#ifdef MODULE
-	MOD_DEC_USE_COUNT;
-#endif
 }
 
 static int devpts_statfs(struct super_block *sb, struct statfs *buf);
 static void devpts_read_inode(struct inode *inode);
-static void devpts_write_inode(struct inode *inode);
 
 static struct super_operations devpts_sops = {
 	read_inode:	devpts_read_inode,
-	write_inode:	devpts_write_inode,
 	put_super:	devpts_put_super,
 	statfs:		devpts_statfs,
 };
@@ -125,9 +119,6 @@ struct super_block *devpts_read_super(struct super_block *s, void *data,
 	struct dentry * root;
 	struct devpts_sb_info *sbi;
 
-	MOD_INC_USE_COUNT;
-
-	lock_super(s);
 	/* Super block already completed? */
 	if (s->s_root)
 		goto out_unlock;
@@ -151,7 +142,6 @@ struct super_block *devpts_read_super(struct super_block *s, void *data,
 	s->s_magic = DEVPTS_SUPER_MAGIC;
 	s->s_op = &devpts_sops;
 	s->s_root = NULL;
-	unlock_super(s); /* shouldn't we keep it locked a while longer? */
 
 	/*
 	 * Get the root inode and dentry, but defer checking for errors.
@@ -183,7 +173,6 @@ struct super_block *devpts_read_super(struct super_block *s, void *data,
 	/*
 	 * Success! Install the root dentry now to indicate completion.
 	 */
-	lock_super(s);
 	s->s_root = root;
 
 	sbi->next = mounts;
@@ -192,14 +181,12 @@ struct super_block *devpts_read_super(struct super_block *s, void *data,
 	sbi->back = &mounts;
 	mounts = s;
 
-	unlock_super(s);
 	return s;
 
 	/*
 	 * Success ... somebody else completed the super block for us. 
 	 */ 
 out_unlock:
-	unlock_super(s);
 	goto out_dec;
 out_dput:
 	if (root)
@@ -207,7 +194,6 @@ out_dput:
 	else
 		iput(root_inode);
 out_dec:
-	MOD_DEC_USE_COUNT;
 	return s;
 	
 	/*
@@ -217,7 +203,6 @@ fail_dput:
 	/*
 	 * dput() can block, so we clear the super block first.
 	 */
-	s->s_dev = 0;
 	dput(root);
 	goto fail_free;
 fail_iput:
@@ -225,16 +210,10 @@ fail_iput:
 	/*
 	 * iput() can block, so we clear the super block first.
 	 */
-	s->s_dev = 0;
 	iput(root_inode);
 fail_free:
 	kfree(sbi);
-	goto fail_dec;
 fail_unlock:
-	unlock_super(s);
-fail_dec:
-	s->s_dev = 0;
-	MOD_DEC_USE_COUNT;
 	return NULL;
 }
 
@@ -280,16 +259,7 @@ static void devpts_read_inode(struct inode *inode)
 	return;
 }
 
-static void devpts_write_inode(struct inode *inode)
-{
-}
-
-static struct file_system_type devpts_fs_type = {
-	"devpts",
-	0,
-	devpts_read_super,
-	NULL
-};
+static DECLARE_FSTYPE(devpts_fs_type, "devpts", devpts_read_super, 0);
 
 void devpts_pty_new(int number, kdev_t device)
 {

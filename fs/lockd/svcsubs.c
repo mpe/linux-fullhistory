@@ -25,15 +25,17 @@
 /*
  * Global file hash table
  */
-#define FILE_NRHASH		32
 #define FILE_HASH_BITS		5
+#define FILE_NRHASH		(1<<FILE_HASH_BITS)
 static struct nlm_file *	nlm_files[FILE_NRHASH];
 static DECLARE_MUTEX(nlm_file_sema);
 
-static unsigned int file_hash(dev_t dev, ino_t ino)
+static inline unsigned int file_hash(struct nfs_fh *f)
 {
-	unsigned long tmp = (unsigned long) ino | (unsigned long) dev;
-	tmp = tmp + (tmp >> FILE_HASH_BITS) + (tmp >> FILE_HASH_BITS*2);
+	unsigned int tmp=0;
+	int i;
+	for (i=0; i<NFS_FHSIZE;i++)
+		tmp += f->data[i];
 	return tmp & (FILE_NRHASH - 1);
 }
 
@@ -50,34 +52,35 @@ u32
 nlm_lookup_file(struct svc_rqst *rqstp, struct nlm_file **result,
 					struct nfs_fh *f)
 {
-	struct knfs_fh	*fh = (struct knfs_fh *) f;
 	struct nlm_file	*file;
 	unsigned int	hash;
 	u32		nfserr;
+	u32		*fhp = (u32*)f->data;
 
-	dprintk("lockd: nlm_file_lookup(%s/%u)\n",
-		kdevname(u32_to_kdev_t(fh->fh_dev)), fh->fh_ino);
+	dprintk("lockd: nlm_file_lookup(%08x %08x %08x %08x %08x %08x)\n",
+		fhp[0], fhp[1], fhp[2], fhp[3], fhp[4], fhp[5]);
 
-	hash = file_hash(u32_to_kdev_t(fh->fh_dev), u32_to_ino_t(fh->fh_ino));
+
+	hash = file_hash(f);
 
 	/* Lock file table */
 	down(&nlm_file_sema);
 
-	for (file = nlm_files[hash]; file; file = file->f_next) {
-		if (file->f_handle.fh_dcookie == fh->fh_dcookie &&
-		    !memcmp(&file->f_handle, fh, sizeof(*fh)))
+	for (file = nlm_files[hash]; file; file = file->f_next)
+		if (!memcmp(&file->f_handle, f, sizeof(*f)))
 			goto found;
-	}
 
-	dprintk("lockd: creating file for %s/%u\n",
-		kdevname(u32_to_kdev_t(fh->fh_dev)), fh->fh_ino);
+	dprintk("lockd: creating file for (%08x %08x %08x %08x %08x %08x)\n",
+		fhp[0], fhp[1], fhp[2], fhp[3], fhp[4], fhp[5]);
+
 	nfserr = nlm_lck_denied_nolocks;
 	file = (struct nlm_file *) kmalloc(sizeof(*file), GFP_KERNEL);
 	if (!file)
 		goto out_unlock;
 
 	memset(file, 0, sizeof(*file));
-	file->f_handle = *fh;
+	file->f_handle = *f;
+	file->f_hash = hash;
 	init_MUTEX(&file->f_sema);
 
 	/* Open the file. Note that this must not sleep for too long, else
@@ -86,7 +89,7 @@ nlm_lookup_file(struct svc_rqst *rqstp, struct nlm_file **result,
 	 * We have to make sure we have the right credential to open
 	 * the file.
 	 */
-	if ((nfserr = nlmsvc_ops->fopen(rqstp, fh, &file->f_file)) != 0) {
+	if ((nfserr = nlmsvc_ops->fopen(rqstp, f, &file->f_file)) != 0) {
 		dprintk("lockd: open failed (nfserr %d)\n", ntohl(nfserr));
 		goto out_free;
 	}
@@ -126,7 +129,7 @@ nlm_delete_file(struct nlm_file *file)
 
 	dprintk("lockd: closing file %s/%ld\n",
 		kdevname(inode->i_dev), inode->i_ino);
-	fp = nlm_files + file_hash(inode->i_dev, inode->i_ino);
+	fp = nlm_files + file->f_hash;
 	while ((f = *fp) != NULL) {
 		if (f == file) {
 			*fp = file->f_next;

@@ -5,7 +5,7 @@
 # License.  See the file "COPYING" in the main directory of this archive
 # for more details.
 #
-# Copyright (C) 1998, 1999 by David Mosberger-Tang <davidm@hpl.hp.com>
+# Copyright (C) 1998-2000 by David Mosberger-Tang <davidm@hpl.hp.com>
 #
 
 NM := $(CROSS_COMPILE)nm -B
@@ -14,12 +14,12 @@ LINKFLAGS = -static -T arch/$(ARCH)/vmlinux.lds
 # next line is for HP compiler backend:
 #AFLAGS += -DGCC_RETVAL_POINTER_IN_R8
 # The next line is needed when compiling with the July snapshot of the Cygnus compiler:
-#EXTRA	= -ma0-bugs -D__GCC_DOESNT_KNOW_IN_REGS__
+#EXTRA	= -D__GCC_DOESNT_KNOW_IN_REGS__
 # next two lines are for the September snapshot of the Cygnus compiler:
 AFLAGS += -D__GCC_MULTIREG_RETVALS__
-EXTRA	= -ma0-bugs -D__GCC_MULTIREG_RETVALS__
+EXTRA	= -D__GCC_MULTIREG_RETVALS__
 
-CFLAGS := -g $(CFLAGS) -pipe $(EXTRA) -ffixed-r13 -mfixed-range=f10-f15,f32-f127
+CFLAGS := $(CFLAGS) -pipe $(EXTRA) -ffixed-r13 -mfixed-range=f10-f15,f32-f127
 
 ifdef CONFIG_IA64_GENERIC
 	CORE_FILES      :=      arch/$(ARCH)/hp/hp.a	\

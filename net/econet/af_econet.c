@@ -38,7 +38,6 @@
 #include <linux/if_ec.h>
 #include <net/udp.h>
 #include <net/ip.h>
-#include <linux/inetdevice.h>
 #include <linux/spinlock.h>
 
 #include <asm/uaccess.h>

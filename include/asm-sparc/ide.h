@@ -1,4 +1,4 @@
-/* $Id: ide.h,v 1.2 2000/01/21 04:56:27 zaitcev Exp $
+/* $Id: ide.h,v 1.3 2000/03/10 04:46:47 davem Exp $
  * ide.h: SPARC PCI specific IDE glue.
  *
  * Copyright (C) 1997  David S. Miller (davem@caip.rutgers.edu)
@@ -11,6 +11,7 @@
 
 #ifdef __KERNEL__
 
+#include <linux/config.h>
 #include <asm/pgtable.h>
 #include <asm/io.h>
 #include <asm/hdreg.h>

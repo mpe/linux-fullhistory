@@ -9,12 +9,13 @@
 
 #include <linux/config.h>
 
+#ifdef CONFIG_SMP
+
 #include <linux/init.h>
 #include <linux/threads.h>
 #include <linux/kernel.h>
 
 #include <asm/ptrace.h>
-#include <asm/spinlock.h>
 #include <asm/io.h>
 
 #define IPI_DEFAULT_BASE_ADDR	0xfee00000
@@ -99,4 +100,5 @@ hard_smp_processor_id(void)
 extern void __init init_smp_config (void);
 extern void smp_do_timer (struct pt_regs *regs);
 
+#endif /* CONFIG_SMP */
 #endif /* _ASM_IA64_SMP_H */

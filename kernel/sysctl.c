@@ -348,25 +348,6 @@ extern asmlinkage long sys_sysctl(struct __sysctl_args *args)
 	return error;
 }
 
-/* Like in_group_p, but testing against egid, not fsgid */
-int in_egroup_p(gid_t grp)
-{
-	if (grp != current->egid) {
-		int i = current->ngroups;
-		if (i) {
-			gid_t *groups = current->groups;
-			do {
-				if (*groups == grp)
-					goto out;
-				groups++;
-				i--;
-			} while (i);
-		}
-		return 0;
-	}
-out:
-	return 1;
-}
 
 /* ctl_perm does NOT grant the superuser all rights automatically, because
    some sysctl variables are readonly even to root. */

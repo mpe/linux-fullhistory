@@ -138,9 +138,10 @@ __down_interruptible (struct semaphore * sem)
 int
 __down_trylock (struct semaphore *sem)
 {
+	unsigned long flags;
 	int sleepers;
 
-	spin_lock_irq(&semaphore_lock);
+	spin_lock_irqsave(&semaphore_lock, flags);
 	sleepers = sem->sleepers + 1;
 	sem->sleepers = 0;
 
@@ -151,7 +152,7 @@ __down_trylock (struct semaphore *sem)
 	if (!atomic_add_negative(sleepers, &sem->count))
 		wake_up(&sem->wait);
 
-	spin_unlock_irq(&semaphore_lock);
+	spin_unlock_irqrestore(&semaphore_lock, flags);
 	return 1;
 }
 

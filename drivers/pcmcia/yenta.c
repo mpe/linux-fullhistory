@@ -555,6 +555,30 @@ static void yenta_clear_maps(pci_socket_t *socket)
 	}
 }
 
+/*
+ * Many chipsets (all TI chips?) seem to have
+ * problems sensing the power state of the card
+ * that was inserted at chip init time, so force
+ * it if necessary..
+ */
+static void yenta_power_sense(pci_socket_t *socket)
+{
+	u32 status = config_readl(socket, CB_SOCKET_STATE);
+
+	/*
+	 * Nothing inserted, nothing to sense..
+	 * ..or sense status already available.
+	 */
+	if (status & (CB_CDETECT1 | CB_CDETECT2 | CB_5VCARD | CB_3VCARD | CB_XVCARD | CB_YVCARD))
+		return;
+
+	/*
+	 * Ho humm. It reports a card, but it doesn't report
+	 * any voltages. Need to redo the VS test..
+	 */
+	cb_writel(socket, CB_SOCKET_FORCE, CB_CVSTEST);
+}
+
 /* Called at resume and initialization events */
 static int yenta_init(pci_socket_t *socket)
 {
@@ -594,6 +618,8 @@ static int yenta_init(pci_socket_t *socket)
 
 	exca_writeb(socket, I365_GBLCTL, 0x00);
 	exca_writeb(socket, I365_GENCTL, 0x00);
+
+	yenta_power_sense(socket);
 
 	yenta_clear_maps(socket);
 	return 0;

@@ -188,9 +188,8 @@ static int awc_pci_init(struct net_device * dev, struct pci_dev *pdev,
     	dev->base_addr = ioaddr;
     	dev->irq = pci_irq_line;
 	dev->tx_timeout = &awc_tx_timeout;
-	dev->watchdog_timeo = TX_TIMEOUT;
+	dev->watchdog_timeo = AWC_TX_TIMEOUT;
 	
-	netif_start_queue (dev);
 
 	request_irq(dev->irq,awc_interrupt, SA_SHIRQ | SA_INTERRUPT ,"Aironet 4X00",dev);
 
@@ -377,7 +376,7 @@ int awc4500_pnp_probe(struct net_device *dev)
 	    	dev->base_addr = isa_ioaddr;
 	    	dev->irq = isa_irq_line;
 		dev->tx_timeout = &awc_tx_timeout;
-		dev->watchdog_timeo = TX_TIMEOUT;
+		dev->watchdog_timeo = AWC_TX_TIMEOUT;
 		
 		netif_start_queue (dev);
 		
@@ -498,7 +497,7 @@ int awc4500_isa_probe(struct net_device *dev)
 
 	if (! io[0] || ! irq[0]){
 	
-		printk("       Both irq and io params must be supplied  for ISA mode !!!\n");
+//		printk("       Both irq and io params must be supplied  for ISA mode !!!\n");
 		return -ENODEV;
 	}
 
@@ -538,10 +537,8 @@ int awc4500_isa_probe(struct net_device *dev)
 	    	dev->base_addr = isa_ioaddr;
 	    	dev->irq = isa_irq_line;
 		dev->tx_timeout = &awc_tx_timeout;
-		dev->watchdog_timeo = TX_TIMEOUT;
+		dev->watchdog_timeo = AWC_TX_TIMEOUT;
 		
-		netif_start_queue (dev);
-
 		request_irq(dev->irq,awc_interrupt ,SA_INTERRUPT ,"Aironet 4X00",dev);
 
 		awc_private_init( dev);
@@ -815,9 +812,8 @@ static int awc_i365_init(struct i365_socket * s) {
     	dev->irq = s->irq;
     	dev->base_addr = s->io;
 	dev->tx_timeout = &awc_tx_timeout;
-	dev->watchdog_timeo = TX_TIMEOUT;
+	dev->watchdog_timeo = AWC_TX_TIMEOUT;
 
-	netif_start_queue (dev);
 
 	awc_private_init( dev);
 
@@ -946,37 +942,40 @@ int init_module(void)
 		
 #ifdef CONFIG_AIRONET4500_PCI
 	if (awc4500_pci_probe(NULL) == -ENODEV){
-		printk("PCI 4X00 aironet cards not found\n");
+//		printk("PCI 4X00 aironet cards not found\n");
 	} else {
 		found++;
-		printk("PCI 4X00 found some cards \n");
+//		printk("PCI 4X00 found some cards \n");
 	}
 #endif
 #ifdef CONFIG_AIRONET4500_PNP
 	if (awc4500_pnp_probe(NULL) == -ENODEV){
-		printk("PNP 4X00 aironet cards not found\n");
+//		printk("PNP 4X00 aironet cards not found\n");
 	} else {
 		found++;
-		printk("PNP 4X00 found some cards \n");
+//		printk("PNP 4X00 found some cards \n");
 	}
 #endif
 #ifdef CONFIG_AIRONET4500_365
 	if ( awc_i365_probe() == -1) {
-		printk("PCMCIA 4X00 aironet cards not found for i365(without card services) initialization\n");
+//		printk("PCMCIA 4X00 aironet cards not found for i365(without card services) initialization\n");
 	} else {
 		 found++ ;
-		 printk("PCMCIA 4X00 found some cards, take care, this code is not supposed to work yet \n");
+//		 printk("PCMCIA 4X00 found some cards, take care, this code is not supposed to work yet \n");
 	}
 #endif
 #ifdef CONFIG_AIRONET4500_ISA
 	if (awc4500_isa_probe(NULL) == -ENODEV){
-		printk("ISA 4X00 aironet ISA-bus non-PNP-mode cards not found\n");
+//		printk("ISA 4X00 aironet ISA-bus non-PNP-mode cards not found\n");
 	} else {
 		found++;
-		printk("ISA 4X00 found some cards \n");
+//		printk("ISA 4X00 found some cards \n");
 	}
 #endif
-	if (!found) return -1;
+	if (!found) {
+		printk(KERN_ERR "No Aironet 4X00 cards were found. Note that for ISA \n cards you should use either automatic PNP mode or \n ISA mode with both io and irq param \n Aironet is also afraid of: being second PNP controller(by slot), having anything(brandname bios weirdnesses) in range 0x100-0x180 and maybe around  0xd0000\n If you PNP type card does not get found, try non-PNP switch before complainig. \n");
+		return -1;
+	}
 	return 0;
 	
 

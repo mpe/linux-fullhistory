@@ -15,6 +15,7 @@
  	november 99, integration with 2.3
 	17.12.99: finally, got SMP near-correct. 
 		timing issues remain- on SMP box its 15% slower on tcp	
+	10.03.00 looks like softnet take us back to normal on SMP
  */
 
 #include <linux/module.h>
@@ -36,6 +37,7 @@
 #include <linux/sched.h>
 #include <linux/delay.h>
 #include "aironet4500.h"
+#include <linux/ip.h>
 
 
 int bap_sleep = 10 ;
@@ -371,7 +373,7 @@ final:
 
 /******************************** 	BAP	*************************/
 
-inline 
+// inline // too long for inline
 int awc_bap_setup(struct awc_command * cmd) {
 
 	int status;
@@ -1524,6 +1526,8 @@ awc_802_11_router_rx(struct net_device * dev,struct awc_fid * rx_buff){
 	rx_buff->skb = NULL;
 	rx_buff->u.rx.payload = NULL;
 	priv->stats.rx_packets++;
+	priv->stats.rx_bytes++;
+	
 	netif_rx(skb);
 	AWC_ENTRY_EXIT_DEBUG("exit\n");
 	return ;
@@ -1577,11 +1581,12 @@ awc_802_11_tx_find_path_and_post(struct net_device * dev,
 	struct awc_fid * fid = NULL;
 //	u16 saved_fid ;
 	u16 p2p_direct =priv->p2p_found;
-//	struct iphdr * ip_hdr;
+	struct iphdr * ip_hdr;
 	//buffer = skb->data;
 
 	AWC_ENTRY_EXIT_DEBUG("awc_802_11_tx_find_path_and_post");	
 
+	// netif_stop_queue(dev);
 	DOWN(&priv->tx_buff_semaphore);
 	if (len  > dev->mtu + 16 ) {
 		printk(KERN_ERR "%s packet size too large %d \n",dev->name, len);
@@ -1644,28 +1649,33 @@ awc_802_11_tx_find_path_and_post(struct net_device * dev,
 			}	
 	};
 
-	if (tx_rate == 2 || tx_rate == 4 || tx_rate== 20 || tx_rate == 22)
-		fid->u.tx.radio_tx.tx_bit_rate  = tx_rate;
+	if (priv->force_tx_rate == 2 || priv->force_tx_rate == 4 || 
+		priv->force_tx_rate== 11 || priv->force_tx_rate == 22){
+			fid->u.tx.radio_tx.tx_bit_rate  = priv->force_tx_rate;
+	} else if (priv->force_tx_rate != 0 ) {
+		printk(KERN_ERR "wrong force_tx_rate=%d changed to default \n",	priv->force_tx_rate);
+		priv->force_tx_rate = 0;
+	};
 	fid->u.tx.radio_tx.TX_Control = 
 		aironet4500_tx_control_tx_ok_event_enable |
 		aironet4500_tx_control_tx_fail_event_enable |
 		aironet4500_tx_control_no_release;
 
-/*	if (len < 100){
+	if (len < priv->force_rts_on_shorter){
 		fid->u.tx.radio_tx.TX_Control |=
 			aironet4500_tx_control_use_rts;
 	};
-*/
-/*	ip_hdr = skb->data + 14;
+
+	ip_hdr = (struct iphdr * ) ((( char * ) skb->data) + 14);
 	if (ip_hdr && skb->data[12] == 0x80 ){
-		if (ip_hdr->tos & IPTOS_RELIABILITY)
+		if (ip_hdr->tos & IPTOS_RELIABILITY && priv->ip_tos_reliability_rts)
 			fid->u.tx.radio_tx.TX_Control |=
 			    aironet4500_tx_control_use_rts;
-		if (ip_hdr->tos & IPTOS_THROUGHPUT)
+		if (ip_hdr->tos & IPTOS_THROUGHPUT && priv->ip_tos_troughput_no_retries)
 			fid->u.tx.radio_tx.TX_Control |=
 			    aironet4500_tx_control_no_retries;
 	};
-*/	
+
 	if (priv->p802_11_send ||  memcmp(dev->dev_addr, skb->data +6, 6)  ){
 		fid->u.tx.radio_tx.TX_Control |=
 			aironet4500_tx_control_header_type_802_11;	
@@ -1683,7 +1693,7 @@ awc_802_11_tx_find_path_and_post(struct net_device * dev,
 			fid->pkt_len = len -12;
 			fid->u.tx.payload = skb->data +12;
 
-			if (!memcmp(dev->dev_addr, skb->data +6, 6)){	
+			if (priv->simple_bridge){	
 				memcpy(fid->u.tx.ieee_802_11.mac1,skb->data,6);
 				memcpy(fid->u.tx.ieee_802_11.mac2,skb->data +6,6);
 				memcpy(fid->u.tx.ieee_802_11.mac3,priv->status.CurrentBssid ,6);
@@ -1691,14 +1701,12 @@ awc_802_11_tx_find_path_and_post(struct net_device * dev,
 				fid->u.tx.ieee_802_11.frame_control = 0x8;
 				fid->u.tx.ieee_802_11.gapLen=6;
 			} else {
-
 				memcpy(fid->u.tx.ieee_802_11.mac1,skb->data,6);
 				memcpy(fid->u.tx.ieee_802_11.mac2,dev->dev_addr,6);
 				memcpy(fid->u.tx.ieee_802_11.mac3,skb->data +6 ,6);
 				memset(fid->u.tx.ieee_802_11.mac4,0 ,6);
 				fid->u.tx.ieee_802_11.frame_control = 0x108;
 				fid->u.tx.ieee_802_11.gapLen=6;                 
-
 			}
 		} else { // plain old 802.3, with hdr copied
 			fid->u.tx.radio_tx.PayloadLength 	= len -12;
@@ -1745,11 +1753,20 @@ awc_802_11_tx_find_path_and_post(struct net_device * dev,
 		
 	};
 	
+	priv->stats.tx_bytes += fid->u.tx.ieee_802_3.payload_length;
+	priv->stats.tx_packets++;
 	
 	
 	awc_fid_queue_push_tail(&priv->tx_in_transmit,fid);
 	udelay(1);
 	awc_transmit_packet(dev,fid);
+	if (priv->tx_large_ready.size <= 2 || priv->tx_small_ready.size <= 2 ){
+		if (netif_running(dev))
+			netif_stop_queue(dev);
+	} else {
+	  	if (netif_running(dev)) 
+			netif_wake_queue(dev);
+	}
 	UP(&priv->tx_buff_semaphore);
 	AWC_ENTRY_EXIT_DEBUG("exit\n");
 	return 0;
@@ -1768,6 +1785,8 @@ awc_802_11_tx_find_path_and_post(struct net_device * dev,
   final:
 	priv->stats.tx_errors++;
 	UP(&priv->tx_buff_semaphore);
+	if (!netif_running(dev)) 
+		netif_start_queue(dev);
 	dev_kfree_skb(skb);
 	AWC_ENTRY_EXIT_DEBUG("BADExit\n");
 	return -1;
@@ -1797,7 +1816,6 @@ awc_802_11_after_tx_packet_to_card_write(struct net_device * dev,
 		dev_kfree_skb(tx_buff->skb);
 		tx_buff->skb = NULL;
 	}
-	netif_wake_queue (dev);
 
 	AWC_ENTRY_EXIT_DEBUG("exit\n");
 };
@@ -1839,7 +1857,7 @@ awc_802_11_after_failed_tx_packet_to_card_write(struct net_device * dev,
 
 };
                                          
-void 
+inline void 
 awc_802_11_after_tx_complete(struct net_device * dev, struct awc_fid * tx_buff){
 
         struct awc_private * priv = (struct awc_private *)dev->priv;
@@ -1861,7 +1879,7 @@ awc_802_11_after_tx_complete(struct net_device * dev, struct awc_fid * tx_buff){
 	}
 
 	tx_buff->busy = 0;
-	netif_wake_queue (dev);
+//	netif_wake_queue (dev);
 
 	AWC_ENTRY_EXIT_DEBUG("exit\n");
 };
@@ -2294,7 +2312,8 @@ awc_interrupt_process(struct net_device * dev){
 
 //	save_flags(flags);
 //	cli();
-//	disable_irq(dev->irq);
+	// here we need it, because on 2.3 SMP there are truly parallel irqs 	
+	disable_irq(dev->irq);
 
 	DEBUG(2," entering interrupt handler %s ",dev->name);
 
@@ -2503,14 +2522,14 @@ start:
 
 //end_here:
 
-//	enable_irq(dev->irq);
+	enable_irq(dev->irq);
 //  	restore_flags(flags);
 
         return 0;
 
 bad_end:
         AWC_ENTRY_EXIT_DEBUG(" bad_end exit \n"); 	
-//	enable_irq(dev->irq);
+	enable_irq(dev->irq);
 //	restore_flags(flags);
 	return -1;
 
@@ -2528,16 +2547,17 @@ static int p802_11_send  =  0; // 1
 static int awc_process_tx_results = 0;
 int tx_queue_len = 10;
 int tx_rate = 0;
-static int channel = 5;
+int channel = 5;
 //static int tx_full_rate = 0;
-static int max_mtu = 2312;
-static int adhoc = 0;
-static int large_buff_mem = 1700 * 10;
-static int small_buff_no	= 20;
-static int awc_full_stats = 0;
-static char SSID[33] = {0};
-static int master= 0;
-static int slave = 0;
+int max_mtu = 2312;
+int adhoc = 0;
+int large_buff_mem = 1700 * 10;
+int small_buff_no	= 20;
+int awc_full_stats = 0;
+char SSID[33] = {0};
+int master= 0;
+int slave = 0;
+int awc_simple_bridge = 0;
 // int debug =0;
 
 #if LINUX_VERSION_CODE >= 0x20100
@@ -2550,6 +2570,7 @@ MODULE_PARM(tx_full_rate,"i");
 MODULE_PARM(adhoc,"i");
 MODULE_PARM(master,"i");
 MODULE_PARM(slave,"i");
+MODULE_PARM(awc_simple_bridge,"i");
 MODULE_PARM(max_mtu,"i");
 MODULE_PARM(large_buff_mem,"i");
 MODULE_PARM(small_buff_no,"i");
@@ -2572,7 +2593,7 @@ EXPORT_SYMBOL(awc_debug);
 EXPORT_SYMBOL(awc_private_init);
 EXPORT_SYMBOL(awc_tx_timeout);
 EXPORT_SYMBOL(awc_start_xmit);
-EXPORT_SYMBOL(awc_rx);
+//EXPORT_SYMBOL(awc_rx);
 EXPORT_SYMBOL(awc_interrupt);
 EXPORT_SYMBOL(awc_get_stats);
 EXPORT_SYMBOL(awc_change_mtu);
@@ -2674,7 +2695,7 @@ char name[] = "ElmerLinux";
 		i++;
 	}
 	
-	// following MUST be consistent with awc_rids !!!
+	// following MUST be consistent with awc_rids in count and ordrering !!!
  	priv->rid_dir[0].buff = &priv->config; // card RID mirrors
 	priv->rid_dir[1].buff = &priv->SSIDs;
 	priv->rid_dir[2].buff = &priv->fixed_APs;
@@ -2726,6 +2747,7 @@ char name[] = "ElmerLinux";
 	if (!adhoc)
 	        priv->config.OperatingMode = MODE_STA_ESS;
 //        priv->config.OperatingMode = MODE_AP;
+// Setting rates does not work with new hardware, use force_tx_rate via proc
 //	priv->config.Rates[0]	=0x82;
 //	priv->config.Rates[1]	=0x4;
 //	priv->config.Rates[2]	=tx_full_rate;
@@ -2738,7 +2760,9 @@ char name[] = "ElmerLinux";
 	if (adhoc && master){
 		priv->config.JoinNetTimeout	= 0x1;//0 is facotry default
 	} else if (adhoc && slave){
-		priv->config.JoinNetTimeout	= 0xffff;
+		// by spec 0xffff, but, this causes immediate bad behaviour
+		// firmware behvaiour changed somehere around ver 2??
+		priv->config.JoinNetTimeout	= 0x7fff;
 	};	
 //	priv->config.AuthenticationType = 1;
 	priv->config.Stationary	=1;
@@ -2761,6 +2785,7 @@ char name[] = "ElmerLinux";
 	// here we go, bad aironet
 	memset(&priv->SSIDs,0,sizeof(priv->SSIDs));
 
+	my_spin_lock_init(&priv->queues_lock);
         priv->SSIDs.ridLen		=0;
         if (!SSID) {
 	        priv->SSIDs.SSID[0].SSID[0] 	='a';
@@ -2839,6 +2864,7 @@ int awc_private_init(struct net_device * dev){
 	my_spin_lock_init(&priv->command_issuing_spinlock);
 	my_spin_lock_init(&priv->both_bap_spinlock);
 	my_spin_lock_init(&priv->bap_setup_spinlock);
+	my_spin_lock_init(&priv->interrupt_spinlock);
 	
 	priv->command_semaphore_on = 0;
 	priv->unlock_command_postponed = 0;
@@ -2877,7 +2903,12 @@ int awc_private_init(struct net_device * dev){
 	priv->p2p_found		=0;
 
 	priv->p802_11_send	=p802_11_send;
-	
+	priv->full_stats	= awc_full_stats;
+	priv->simple_bridge	= awc_simple_bridge;
+	priv->force_rts_on_shorter = 0;
+	priv->force_tx_rate	= tx_rate;
+	priv->ip_tos_reliability_rts = 0;
+	priv->ip_tos_troughput_no_retries = 0 ;	
 
 	priv->ejected		=0;	
 	priv->interrupt_count	=0;
@@ -2960,6 +2991,7 @@ void awc_tx_timeout (struct net_device *dev)
 	struct awc_private *priv = (struct awc_private *) dev->priv;
 	struct awc_fid * fid;
 	int cnt;
+	unsigned long flags;
 
 	DEBUG (2, "%s: awc_tx_timeout \n", dev->name);
 
@@ -2969,11 +3001,11 @@ void awc_tx_timeout (struct net_device *dev)
 		priv->tx_large_ready.size, priv->tx_small_ready.size);
 	priv->stats.tx_errors++;
 
-	// save_flags(flags);
-	// cli();
+	save_flags(flags);
+	cli();
 	fid = priv->tx_in_transmit.head;
 	cnt = 0;
-	while (fid) {
+	while (fid) { // removing all fids older that that
 		if (jiffies - fid->transmit_start_time > (HZ)) {
 			//      printk(KERN_ERR "%s staled tx_buff found, age %uld jiffies\n",dev->name,
 			//              jiffies - fid->transmit_start_time );
@@ -2986,14 +3018,12 @@ void awc_tx_timeout (struct net_device *dev)
 		fid = fid->next;
 		if (cnt++ > 200) {
 			printk ("bbb in awc_fid_queue\n");
-			//              restore_flags(flags);
+			restore_flags(flags);
 			return;
 		};
 
 	}
-	//restore_flags(flags);
-	//debug =0x8;
-
+	restore_flags(flags);
 	dev->trans_start = jiffies;
 	netif_start_queue (dev);
 }
@@ -3002,7 +3032,7 @@ void awc_tx_timeout (struct net_device *dev)
 long long last_tx_q_hack = 0;
 int direction = 1;
 
- int awc_start_xmit(struct sk_buff *skb, struct net_device *dev) {
+int awc_start_xmit(struct sk_buff *skb, struct net_device *dev) {
 
 	struct awc_private *priv = (struct awc_private *)dev->priv;
 	int retval = 0;
@@ -3021,10 +3051,10 @@ int direction = 1;
 		return -1;
 	};
 	
-	if (test_and_set_bit( 0, (void *) &priv->tx_chain_active) ) {
-		netif_start_queue (dev);
-		return 1;
-	}
+//	if (test_and_set_bit( 0, (void *) &priv->tx_chain_active) ) {
+//		netif_start_queue (dev);
+//		return 1;
+//	}
 
 	dev->trans_start = jiffies;
 	retval = awc_802_11_tx_find_path_and_post(dev,skb);
@@ -3035,7 +3065,7 @@ int direction = 1;
 	return retval;
 }
 
-int awc_rx(struct net_device *dev, struct awc_fid * rx_fid) {
+inline int awc_rx(struct net_device *dev, struct awc_fid * rx_fid) {
 
 //	struct awc_private *lp = (struct awc_private *)dev->priv;
 
@@ -3062,19 +3092,22 @@ int awc_rx(struct net_device *dev, struct awc_fid * rx_fid) {
  void awc_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
 	struct net_device *dev = (struct net_device *)dev_id;
-//	struct awc_private *lp;
-//	unsigned long flags;
+	struct awc_private *priv;
+	unsigned long flags;
 
 //	if ((dev == NULL)) return;
 
-//	lp = (struct awc_private *)dev->priv;
+	priv = (struct awc_private *)dev->priv;
 
 
 	
 
 	DEBUG(2, "%s: awc_interrupt \n",  dev->name);
-	
+	my_spin_lock_irqsave(&priv->interrupt_spinlock, flags);	  
+
 	awc_interrupt_process(dev);
+
+	my_spin_unlock_irqrestore(&priv->interrupt_spinlock, flags);	  
 
 	return;
 }
@@ -3105,6 +3138,8 @@ int awc_rx(struct net_device *dev, struct awc_fid * rx_fid) {
 
 	// the very following is the very wrong very probably
 	if (awc_full_stats){
+		priv->stats.rx_bytes		= priv->statistics.HostRxBytes;
+		priv->stats.tx_bytes		= priv->statistics.HostTxBytes;
 		priv->stats.rx_fifo_errors 	= priv->statistics.RxOverrunErr ;
 		priv->stats.rx_crc_errors 	= priv->statistics.RxPlcpCrcErr + priv->statistics.RxMacCrcErr ;
 		priv->stats.rx_frame_errors 	= priv->statistics.RxPlcpFormat ;
@@ -3130,7 +3165,7 @@ int awc_rx(struct net_device *dev, struct awc_fid * rx_fid) {
 int awc_change_mtu(struct net_device *dev, int new_mtu){
 
 //	struct awc_private *priv = (struct awc_private *)dev->priv;
-//        unsigned long flags;
+        unsigned long flags;
 
        if ((new_mtu < 256 ) || (new_mtu > 2312) || (max_mtu && new_mtu > max_mtu) )
                 return -EINVAL;
@@ -3140,14 +3175,17 @@ int awc_change_mtu(struct net_device *dev, int new_mtu){
 
 	};
 	if (dev->mtu != new_mtu) {
-//		save_flags(flags);
-//		cli();
-		awc_disable_MAC(dev);
+		save_flags(flags);
+		cli();
+		 netif_stop_queue(dev);
+		 awc_disable_MAC(dev);
+		restore_flags(flags); 
+				
 		awc_tx_dealloc(dev);
 		dev->mtu = new_mtu;
 		awc_tx_alloc(dev);
 		awc_enable_MAC(dev);
-//		restore_flags(flags);
+		netif_start_queue(dev);
 
 		printk("%s mtu has been changed to %d \n ",dev->name,dev->mtu);
 

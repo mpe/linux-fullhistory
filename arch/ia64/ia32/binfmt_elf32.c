@@ -50,13 +50,13 @@ put_shared_page(struct task_struct * tsk, struct page *page, unsigned long addre
 	pmd = pmd_alloc(pgd, address);
 	if (!pmd) {
 		__free_page(page);
-		oom(tsk);
+		force_sig(SIGKILL, tsk);
 		return 0;
 	}
 	pte = pte_alloc(pmd, address);
 	if (!pte) {
 		__free_page(page);
-		oom(tsk);
+		force_sig(SIGKILL, tsk);
 		return 0;
 	}
 	if (!pte_none(*pte)) {

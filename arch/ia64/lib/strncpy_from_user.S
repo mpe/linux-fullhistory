@@ -1,6 +1,5 @@
 /*
- * Just like strncpy() except for the return value.  If no fault occurs during
- * the copying, the number of bytes copied is returned.  If a fault occurs,
+ * Just like strncpy() except that if a fault occurs during copying,
  * -EFAULT is returned.
  *
  * Inputs:
@@ -10,8 +9,11 @@
  * Outputs:
  *	r8:	-EFAULT in case of fault or number of bytes copied if no fault
  * 
- * Copyright (C) 1998, 1999 Hewlett-Packard Co
- * Copyright (C) 1998, 1999 David Mosberger-Tang <davidm@hpl.hp.com>
+ * Copyright (C) 1998-2000 Hewlett-Packard Co
+ * Copyright (C) 1998-2000 David Mosberger-Tang <davidm@hpl.hp.com>
+ *
+ * 00/03/06 D. Mosberger Fixed to return proper return value (bug found by
+ *			 by Andreas Schwab <schwab@suse.de>).
  */
 
 #define EX(x...)				\
@@ -30,24 +32,26 @@
 	.global __strncpy_from_user
 	.proc __strncpy_from_user
 __strncpy_from_user:
-	alloc r11=ar.pfs,3,0,0,0
+	alloc r2=ar.pfs,3,0,0,0
+	mov r8=0
 	mov r9=in1
+	;;
 	add r10=in1,in2
+	cmp.eq p6,p0=r0,in2
+(p6)	br.ret.spnt.many rp
 
 	// XXX braindead copy loop---this needs to be optimized
 .Loop1:
-	EX(ld1 r8=[in1],1)
+	EX(ld1 r8=[in1],1;; st1 [in0]=r8,1; cmp.ne p6,p7=r8,r0)
 	;;
-	st1 [in0]=r8,1
-	cmp.ltu p6,p0=in1,r10
+(p6)	cmp.ne.unc p8,p0=in1,r10
+(p8)	br.cond.dpnt.few .Loop1
 	;;
-(p6)	cmp.ne.and p6,p0=r8,r0
-	;;
-(p6)	br.cond.dpnt.few .Loop1
+(p6)	mov r8=in2		// buffer filled up---return buffer length
+(p7)	sub r8=in1,r9,1		// return string length (excluding NUL character)
+	br.ret.sptk.few rp
 
-1:	sub r8=in1,r9		// length of string (including NUL character)
 .Lexit:
-	mov ar.pfs=r11
 	br.ret.sptk.few rp
 
 	.endp __strncpy_from_user

@@ -1,4 +1,4 @@
-/* $Id: inode.c,v 1.6 2000/02/27 08:19:47 davem Exp $
+/* $Id: inode.c,v 1.7 2000/03/10 04:45:50 davem Exp $
  * openpromfs.c: /proc/openprom handling routines
  *
  * Copyright (C) 1996-1999 Jakub Jelinek  (jakub@redhat.com)
@@ -982,7 +982,6 @@ static void openprom_read_inode(struct inode * inode)
 
 static void openprom_put_super(struct super_block *sb)
 {
-	MOD_DEC_USE_COUNT;
 }
 
 static int openprom_statfs(struct super_block *sb, struct statfs *buf)
@@ -1007,8 +1006,6 @@ struct super_block *openprom_read_super(struct super_block *s,void *data,
 {
 	struct inode * root_inode;
 
-	MOD_INC_USE_COUNT;
-	lock_super(s);
 	s->s_blocksize = 1024;
 	s->s_blocksize_bits = 10;
 	s->s_magic = OPENPROM_SUPER_MAGIC;
@@ -1019,24 +1016,15 @@ struct super_block *openprom_read_super(struct super_block *s,void *data,
 	s->s_root = d_alloc_root(root_inode);
 	if (!s->s_root)
 		goto out_no_root;
-	unlock_super(s);
 	return s;
 
 out_no_root:
 	printk("openprom_read_super: get root inode failed\n");
 	iput(root_inode);
-	s->s_dev = 0;
-	unlock_super(s);
-	MOD_DEC_USE_COUNT;
 	return NULL;
 }
 
-static struct file_system_type openprom_fs_type = {
-	"openpromfs",
-	0,
-	openprom_read_super,
-	NULL
-};
+static DECLARE_FSTYPE(openprom_fs_type, "openpromfs", openprom_read_super, 0);
 
 int init_openprom_fs(void)
 {

@@ -40,8 +40,9 @@ static int	nfsctl_addclient(struct nfsctl_client *data);
 static int	nfsctl_delclient(struct nfsctl_client *data);
 static int	nfsctl_export(struct nfsctl_export *data);
 static int	nfsctl_unexport(struct nfsctl_export *data);
-static int	nfsctl_getfh(struct nfsctl_fhparm *, struct knfs_fh *);
-static int	nfsctl_getfd(struct nfsctl_fdparm *, struct knfs_fh *);
+static int	nfsctl_getfh(struct nfsctl_fhparm *, __u8 *);
+static int	nfsctl_getfd(struct nfsctl_fdparm *, __u8 *);
+static int	nfsctl_getfs(struct nfsctl_fsparm *, struct knfsd_fh *);
 /* static int	nfsctl_ugidupdate(struct nfsctl_ugidmap *data); */
 
 static int	initialized = 0;
@@ -109,12 +110,37 @@ nfsctl_ugidupdate(nfs_ugidmap *data)
 }
 #endif
 
+#ifdef notyet
 static inline int
-nfsctl_getfd(struct nfsctl_fdparm *data, struct knfs_fh *res)
+nfsctl_getfs(struct nfsctl_fsparm *data, struct knfsd_fh *res)
 {
 	struct sockaddr_in	*sin;
 	struct svc_client	*clp;
 	int			err = 0;
+
+	if (data->gd_addr.sa_family != AF_INET)
+		return -EPROTONOSUPPORT;
+	sin = (struct sockaddr_in *)&data->gd_addr;
+	if (data->gd_maxlen > NFS3_FHSIZE)
+		data->gd_maxlen = NFS3_FHSIZE;
+	exp_readlock();
+	if (!(clp = exp_getclient(sin)))
+		err = -EPERM;
+	else
+		err = exp_rootfh(clp, 0, 0, data->gd_path, res, data->gd_maxlen);
+	exp_unlock();
+
+	return err;
+}
+#endif
+
+static inline int
+nfsctl_getfd(struct nfsctl_fdparm *data, __u8 *res)
+{
+	struct sockaddr_in	*sin;
+	struct svc_client	*clp;
+	int			err = 0;
+	struct	knfsd_fh	fh;
 
 	if (data->gd_addr.sa_family != AF_INET)
 		return -EPROTONOSUPPORT;
@@ -126,18 +152,28 @@ nfsctl_getfd(struct nfsctl_fdparm *data, struct knfs_fh *res)
 	if (!(clp = exp_getclient(sin)))
 		err = -EPERM;
 	else
-		err = exp_rootfh(clp, 0, 0, data->gd_path, res);
+		err = exp_rootfh(clp, 0, 0, data->gd_path, &fh, NFS_FHSIZE);
 	exp_unlock();
+
+	if (err == 0) {
+		if (fh.fh_size > NFS_FHSIZE)
+			err = -EINVAL;
+		else {
+			memset(res,0, NFS_FHSIZE);
+			memcpy(res, fh.fh_base.fh_pad, fh.fh_size);
+		}
+	}
 
 	return err;
 }
 
 static inline int
-nfsctl_getfh(struct nfsctl_fhparm *data, struct knfs_fh *res)
+nfsctl_getfh(struct nfsctl_fhparm *data, __u8 *res)
 {
 	struct sockaddr_in	*sin;
 	struct svc_client	*clp;
 	int			err = 0;
+	struct knfsd_fh		fh;
 
 	if (data->gf_addr.sa_family != AF_INET)
 		return -EPROTONOSUPPORT;
@@ -149,8 +185,17 @@ nfsctl_getfh(struct nfsctl_fhparm *data, struct knfs_fh *res)
 	if (!(clp = exp_getclient(sin)))
 		err = -EPERM;
 	else
-		err = exp_rootfh(clp, to_kdev_t(data->gf_dev), data->gf_ino, NULL, res);
+		err = exp_rootfh(clp, to_kdev_t(data->gf_dev), data->gf_ino, NULL, &fh, NFS_FHSIZE);
 	exp_unlock();
+
+	if (err == 0) {
+		if (fh.fh_size > NFS_FHSIZE)
+			err = -EINVAL;
+		else {
+			memset(res,0, NFS_FHSIZE);
+			memcpy(res, fh.fh_base.fh_pad, fh.fh_size);
+		}
+	}
 
 	return err;
 }
@@ -217,11 +262,15 @@ asmlinkage handle_sys_nfsservctl(int cmd, void *opaque_argp, void *opaque_resp)
 		break;
 #endif
 	case NFSCTL_GETFH:
-		err = nfsctl_getfh(&arg->ca_getfh, &res->cr_getfh);
+		err = nfsctl_getfh(&arg->ca_getfh, res->cr_getfh);
 		break;
 	case NFSCTL_GETFD:
-		err = nfsctl_getfd(&arg->ca_getfd, &res->cr_getfh);
+		err = nfsctl_getfd(&arg->ca_getfd, res->cr_getfh);
 		break;
+#ifdef notyet
+	case NFSCTL_GETFS:
+		err = nfsctl_getfs(&arg->ca_getfs, &res->cr_getfs);
+#endif
 	default:
 		err = -EINVAL;
 	}

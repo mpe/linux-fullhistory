@@ -216,7 +216,9 @@ EXPORT_SYMBOL(scm_detach_fds);
 
 #if defined(CONFIG_BRIDGE) || defined(CONFIG_BRIDGE_MODULE)
 EXPORT_SYMBOL(br_handle_frame_hook);
+#ifdef CONFIG_INET
 EXPORT_SYMBOL(br_ioctl_hook);
+#endif
 #endif
 
 #ifdef CONFIG_INET

@@ -30,22 +30,35 @@ extern int requests_in;
 extern int requests_out;
 #endif
 
-static void 
+static int 
 nbd_end_request(struct request *req)
 {
 	unsigned long flags;
+	int ret = 0;
 
 #ifdef PARANOIA
 	requests_out++;
 #endif
+	/*
+	 * This is a very dirty hack that we have to do to handle
+	 * merged requests because end_request stuff is a bit
+	 * broken. The fact we have to do this only if there
+	 * aren't errors looks even more silly.
+	 */
+	if (!req->errors) {
+		req->sector += req->current_nr_sectors;
+		req->nr_sectors -= req->current_nr_sectors;
+	}
+
 	spin_lock_irqsave(&io_request_lock, flags);
 	if (end_that_request_first( req, !req->errors, "nbd" ))
 		goto out;
+	ret = 1;
 	end_that_request_last( req );
 
 out:
 	spin_unlock_irqrestore(&io_request_lock, flags);
-	return;
+	return ret;
 }
 
 #define MAX_NBD 128
@@ -56,7 +69,6 @@ struct nbd_device {
 	int harderror;		/* Code of hard error			*/
 #define NBD_READ_ONLY 0x0001
 #define NBD_WRITE_NOCHK 0x0002
-#define NBD_INITIALISED 0x0004
 	struct socket * sock;
 	struct file * file; 		/* If == NULL, device is not ready, yet	*/
 	int magic;			/* FIXME: not if debugging is off	*/

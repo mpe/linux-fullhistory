@@ -6,7 +6,7 @@ typedef struct
 	unsigned int pipe;
 }bulk_transfer_t,*pbulk_transfer_t;
 
-#define DABUSB_MINOR 64
+#define DABUSB_MINOR 240		/* some unassigned USB minor */
 #define DABUSB_VERSION 0x1000
 #define IOCTL_DAB_BULK              _IOWR('d', 0x30, bulk_transfer_t)
 #define IOCTL_DAB_OVERRUNS	    _IOR('d',  0x15, int)

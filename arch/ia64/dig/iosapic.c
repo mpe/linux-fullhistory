@@ -12,6 +12,7 @@
 
 #include <linux/kernel.h>
 #include <linux/init.h>
+#include <linux/irq.h>
 #include <linux/pci.h>
 #include <linux/smp.h>
 #include <linux/smp_lock.h>
@@ -19,7 +20,6 @@
 
 #include <asm/io.h>
 #include <asm/iosapic.h>
-#include <asm/irq.h>
 #include <asm/ptrace.h>
 #include <asm/system.h>
 #include <asm/delay.h>
@@ -258,6 +258,21 @@ disable_pin (unsigned int pin, unsigned long iosapic_addr)
 
 #define iosapic_shutdown_irq	iosapic_disable_irq
 
+static unsigned int
+iosapic_startup_irq (unsigned int irq)
+{
+	int pin;
+
+	pin = iosapic_pin(irq);
+	if (pin < 0)
+		/* happens during irq auto probing... */
+		return 0;
+	set_rte(iosapic_addr(irq), pin, iosapic_polarity(irq), iosapic_trigger(irq), 
+		iosapic_dmode(irq), (ia64_get_lid() >> 16) & 0xffff, irq);
+	enable_pin(pin, iosapic_addr(irq));
+	return 0;
+}
+
 static void
 iosapic_enable_irq (unsigned int irq)
 {
@@ -295,58 +310,26 @@ iosapic_version(unsigned long base_addr)
 	return readl(IO_SAPIC_WINDOW + base_addr);
 }
 
-static int
-iosapic_handle_irq (unsigned int irq, struct pt_regs *regs)
+static void
+iosapic_ack_irq (unsigned int irq)
 {
-	struct irqaction *action = 0;
-	struct irq_desc *id = irq_desc + irq;
-	unsigned int status;
-	int retval;
-
-	spin_lock(&irq_controller_lock);
-	{
-		status = id->status;
-
-		/* do we need to do something IOSAPIC-specific to ACK the irq here??? */
-		/* Yes, but only level-triggered interrupts. We'll do that later */
-		if ((status & IRQ_INPROGRESS) == 0 && (status & IRQ_ENABLED) != 0) {
-			action = id->action;
-			status |= IRQ_INPROGRESS;
-		}
-		id->status = status & ~(IRQ_REPLAY | IRQ_WAITING);
-	}
-	spin_unlock(&irq_controller_lock);
-
-	if (!action) {
-		if (!(id->status & IRQ_AUTODETECT))
-			printk("iosapic_handle_irq: unexpected interrupt %u;"
-			       "disabling it (status=%x)\n", irq, id->status);
-		/*
-		 * If we don't have a handler, disable the pin so we
-		 * won't get any further interrupts (until
-		 * re-enabled).  --davidm 99/12/17
-		 */
-		iosapic_disable_irq(irq);
-		return 0;
-	}
-
-	retval = invoke_irq_handlers (irq, regs, action);
-
-	if (iosapic_trigger(irq) == IO_SAPIC_LEVEL)	/* ACK Level trigger interrupts */
-		writel(irq, iosapic_addr(irq) + IO_SAPIC_EOI);
-
-	spin_lock(&irq_controller_lock);
-	{
-		status = (id->status & ~IRQ_INPROGRESS);
-		id->status = status;
-	}
-	spin_unlock(&irq_controller_lock);
-
-	return retval;
 }
 
-void __init
-iosapic_init (unsigned long addr)
+static void
+iosapic_end_irq (unsigned int irq)
+{
+	if (iosapic_trigger(irq) == IO_SAPIC_LEVEL)	/* ACK Level trigger interrupts */
+		writel(irq, iosapic_addr(irq) + IO_SAPIC_EOI);
+}
+
+static void
+iosapic_set_affinity (unsigned int irq, unsigned long mask)
+{
+	printk("iosapic_set_affinity: not implemented yet\n");
+}
+
+void
+iosapic_init (unsigned long address)
 {
 	int	i;
 #ifdef CONFIG_IA64_IRQ_ACPI
@@ -357,18 +340,9 @@ iosapic_init (unsigned long addr)
 #endif
 
 	/*
-	 * Disable all local interrupts
-	 */
-
-	ia64_set_itv(0, 1);
-	ia64_set_lrr0(0, 1);	
-	ia64_set_lrr1(0, 1);	
-
-	/*
 	 * Disable the compatibility mode interrupts (8259 style), needs IN/OUT support
 	 * enabled.
 	 */
-
 	outb(0xff, 0xA1);
 	outb(0xff, 0x21);
 
@@ -376,10 +350,13 @@ iosapic_init (unsigned long addr)
 	memset(iosapic_vector, 0x0, sizeof(iosapic_vector));
 	for (i = 0; i < NR_IRQS; i++) {
 		iosapic_pin(i) = 0xff;
-		iosapic_addr(i) = (unsigned long) ioremap(IO_SAPIC_DEFAULT_ADDR, 0);
+		iosapic_addr(i) = (unsigned long) ioremap(address, 0);
 	}
 	/* XXX this should come from systab or some such: */
+# if 0
+	/* this doesn't look right --davidm 00/03/07 */
 	iosapic_pin(TIMER_IRQ) = 5;	/* System Clock Interrupt */
+# endif
 	iosapic_pin(0x40) = 3;	/* Keyboard */
 	iosapic_pin(0x92) = 9;	/* COM1 Serial Port */
 	iosapic_pin(0x80) = 4;	/* Periodic Interrupt */
@@ -396,7 +373,7 @@ iosapic_init (unsigned long addr)
 	i = -1;
 	while (intr_routing[++i].srcbus != 0xff) {
 		if (intr_routing[i].srcbus == BUS_ISA) {
-			vector = map_legacy_irq(intr_routing[i].srcbusirq);
+			vector = isa_irq_to_vector(intr_routing[i].srcbusirq);
 		} else if (intr_routing[i].srcbus == BUS_PCI) {
 			vector = intr_routing[i].iosapic_pin;
 		} else {
@@ -414,7 +391,7 @@ iosapic_init (unsigned long addr)
 		       iosapic_trigger(vector));
 # endif
 	}
-#else /* !defined(CONFIG_IA64_SOFTSDV_HACKS) && !defined(CONFIG_IA64_IRQ_ACPI) */
+#else /* !defined(CONFIG_IA64_SOFTSDV_HACKS) && defined(CONFIG_IA64_IRQ_ACPI) */
 	/* 
 	 * Map the legacy ISA devices into the IOAPIC data; We'll override these
 	 * later with data from the ACPI Interrupt Source Override table.
@@ -425,8 +402,8 @@ iosapic_init (unsigned long addr)
 	 * here, so that this works on BigSur but will go ask Intel. --wfd 2000-Jan-19
 	 *
 	 */
-	for (i =0 ; i < IA64_MIN_VECTORED_IRQ; i++) {
-		irq = map_legacy_irq(i);
+	for (i =0 ; i < 16; i++) {
+		irq = isa_irq_to_vector(i);
 		iosapic_pin(irq) = i; 
 		iosapic_bus(irq) = BUS_ISA;
 		iosapic_busdata(irq) = 0;
@@ -445,7 +422,9 @@ iosapic_init (unsigned long addr)
 	ia64_boot_param.pci_vectors = (__u64) __va(ia64_boot_param.pci_vectors);
 	vectors = (struct pci_vector_struct *) ia64_boot_param.pci_vectors;
 	for (i = 0; i < ia64_boot_param.num_pci_vectors; i++) {
-		irq = map_legacy_irq(vectors[i].irq);
+		irq = vectors[i].irq;
+		if (irq < 16)
+			irq = isa_irq_to_vector(irq);
 
 		iosapic_bustype(irq) = BUS_PCI;
 		iosapic_pin(irq) = irq - iosapic_baseirq(irq);
@@ -469,34 +448,19 @@ iosapic_init (unsigned long addr)
 #endif /* !CONFIG_IA64_IRQ_ACPI */
 }
 
-static void
-iosapic_startup_irq (unsigned int irq)
-{
-	int pin;
-
-	if (irq == TIMER_IRQ)
-		return;
-	pin = iosapic_pin(irq);
-	if (pin < 0)
-		/* happens during irq auto probing... */
-		return;
-	set_rte(iosapic_addr(irq), pin, iosapic_polarity(irq), iosapic_trigger(irq), 
-		iosapic_dmode(irq), (ia64_get_lid() >> 16) & 0xffff, irq);
-	enable_pin(pin, iosapic_addr(irq));
-}
-
 struct hw_interrupt_type irq_type_iosapic = {
-	"IOSAPIC",
-	iosapic_init,
-	iosapic_startup_irq,
-	iosapic_shutdown_irq,
-	iosapic_handle_irq,
-	iosapic_enable_irq,
-	iosapic_disable_irq
+	typename:	"IOSAPIC",
+	startup:	iosapic_startup_irq,
+	shutdown:	iosapic_shutdown_irq,
+	enable:		iosapic_enable_irq,
+	disable:	iosapic_disable_irq,
+	ack:		iosapic_ack_irq,
+	end:		iosapic_end_irq,
+	set_affinity:	iosapic_set_affinity
 };
 
 void
-dig_irq_init (struct irq_desc desc[NR_IRQS])
+dig_irq_init (void)
 {
 	int i;
 
@@ -505,10 +469,20 @@ dig_irq_init (struct irq_desc desc[NR_IRQS])
 	 * claimed by someone else already (e.g., timer or IPI are
 	 * handled internally).
 	 */
+#if 0
 	for (i = IA64_MIN_VECTORED_IRQ; i <= IA64_MAX_VECTORED_IRQ; ++i) {
-		if (irq_desc[i].handler == &irq_type_default)
+		if (irq_desc[i].handler == &no_irq_type)
 			irq_desc[i].handler = &irq_type_iosapic;
 	}
+#else
+	for (i = 0; i <= IA64_MAX_VECTORED_IRQ; ++i) {
+		if (irq_desc[i].handler == &no_irq_type)
+			irq_desc[i].handler = &irq_type_iosapic;
+	}
+#endif
+#ifndef CONFIG_IA64_DIG
+	iosapic_init(IO_SAPIC_DEFAULT_ADDR);
+#endif
 }
 
 void

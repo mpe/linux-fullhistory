@@ -6,51 +6,16 @@
  *
  * Copyright (C) 1999 VA Linux Systems
  * Copyright (C) 1999 Walt Drummond <drummond@valinux.com>
+ * Copyright (C) 2000 Hewlett-Packard Co
+ * Copyright (C) 2000 David Mosberger-Tang <davidm@hpl.hp.com>
  */
 
-#include <linux/kernel.h>
-#include <linux/sched.h>
+#include <linux/irq.h>
 
-#include <asm/irq.h>
-#include <asm/processor.h>
-#include <asm/ptrace.h>
-
-/*
- * This is identical to IOSAPIC handle_irq.  It may go away . . .
- */
-static int
-internal_handle_irq (unsigned int irq, struct pt_regs *regs)
+static unsigned int
+internal_noop_startup (unsigned int irq)
 {
-	struct irqaction *action = 0;
-	struct irq_desc *id = irq_desc + irq;
-	unsigned int status;
-	int retval;
-
-	spin_lock(&irq_controller_lock);
-	{
-		status = id->status;
-		if ((status & IRQ_ENABLED) != 0)
-			action = id->action;
-		id->status = status & ~(IRQ_REPLAY | IRQ_WAITING);
-	}
-	spin_unlock(&irq_controller_lock);
-
-	if (!action) {
-		if (!(id->status & IRQ_AUTODETECT))
-			printk("irq_hpsim_handle_irq: unexpected interrupt %u\n", irq);
-		return 0;
-	}
-
-	retval = invoke_irq_handlers(irq, regs, action);
-
-	spin_lock(&irq_controller_lock);
-	{
-		status = (id->status & ~IRQ_INPROGRESS);
-		id->status = status;
-	}
-	spin_unlock(&irq_controller_lock);
-
-	return retval;
+	return 0;
 }
 
 static void
@@ -60,12 +25,12 @@ internal_noop (unsigned int irq)
 }
 
 struct hw_interrupt_type irq_type_ia64_internal = {
-	"IA64-internal",
-	(void (*)(unsigned long)) internal_noop,	/* init */
-	internal_noop,					/* startup */
-	internal_noop,					/* shutdown */
-	internal_handle_irq,				/* handle */
-	internal_noop,					/* enable */
-	internal_noop					/* disable */
+	typename:	"IA64-internal",
+	startup:	internal_noop_startup,
+	shutdown:	internal_noop,
+	enable:		internal_noop,
+	disable:	internal_noop,
+	ack:		internal_noop,
+	end:		internal_noop,
+	set_affinity:	(void (*)(unsigned int, unsigned long)) internal_noop
 };
-

@@ -21,7 +21,6 @@
  *  - working around the horridness of the rest
  */
 
-#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/pci.h>
 #include <linux/kernel.h>

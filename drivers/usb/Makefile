@@ -4,7 +4,7 @@
 
 # Subdirs.
 
-SUB_DIRS	:=
+SUB_DIRS	:= serial
 MOD_SUB_DIRS	:= $(SUB_DIRS)
 ALL_SUB_DIRS	:= $(SUB_DIRS)
 
@@ -57,7 +57,6 @@ obj-$(CONFIG_INPUT_EVDEV)	+= evdev.o input.o
 obj-$(CONFIG_USB_SCANNER)	+= scanner.o
 obj-$(CONFIG_USB_ACM)		+= acm.o
 obj-$(CONFIG_USB_PRINTER)	+= printer.o
-obj-$(CONFIG_USB_SERIAL)	+= usb-serial.o
 obj-$(CONFIG_USB_AUDIO)		+= audio.o
 obj-$(CONFIG_USB_CPIA)		+= cpia.o
 obj-$(CONFIG_USB_IBMCAM)	+= ibmcam.o

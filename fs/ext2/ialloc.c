@@ -527,6 +527,7 @@ unsigned long ext2_count_free_inodes (struct super_block * sb)
 #endif
 }
 
+/* Called at mount-time, super-block is locked */
 void ext2_check_inodes_bitmap (struct super_block * sb)
 {
 	struct ext2_super_block * es;
@@ -535,7 +536,6 @@ void ext2_check_inodes_bitmap (struct super_block * sb)
 	struct ext2_group_desc * gdp;
 	int i;
 
-	lock_super (sb);
 	es = sb->u.ext2_sb.s_es;
 	desc_count = 0;
 	bitmap_count = 0;
@@ -564,5 +564,4 @@ void ext2_check_inodes_bitmap (struct super_block * sb)
 			    "stored = %lu, counted = %lu",
 			    (unsigned long) le32_to_cpu(es->s_free_inodes_count),
 			    bitmap_count);
-	unlock_super (sb);
 }

@@ -13,7 +13,6 @@
 
 /* Dummy declarations */
 struct svc_rqst;
-struct knfs_fh;
 struct svc_client;		/* opaque type */
 
 /*
@@ -24,7 +23,7 @@ struct nlmsvc_binding {
 	void			(*exp_unlock)(void);
 	struct svc_client *	(*exp_getclient)(struct sockaddr_in *);
 	u32			(*fopen)(struct svc_rqst *,
-						struct knfs_fh *,
+						struct nfs_fh *,
 						struct file *);
 	void			(*fclose)(struct file *);
 	void			(*detach)(void);

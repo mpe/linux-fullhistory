@@ -87,8 +87,6 @@ static void mousedev_event(struct input_handle *handle, unsigned int type, unsig
 	while (list) {
 		switch (type) {
 			case EV_ABS:
-				if (test_bit(EV_REL, handle->dev->evbit) && test_bit(REL_X, handle->dev->relbit))
-					return;
 				switch (code) {
 					case ABS_X:	
 						size = handle->dev->absmax[ABS_X] - handle->dev->absmin[ABS_X];

@@ -533,7 +533,7 @@ asmlinkage void __init start_kernel(void)
 	vma_init();
 	buffer_init(mempages);
 	page_cache_init(mempages);
-	kiobuf_init();
+	kiobuf_setup();
 	signals_init();
 	bdev_init();
 	inode_init();

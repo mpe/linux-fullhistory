@@ -433,7 +433,7 @@ out:
  */
 int
 exp_rootfh(struct svc_client *clp, kdev_t dev, ino_t ino,
-	   char *path, struct knfs_fh *f)
+	   char *path, struct knfsd_fh *f, int maxsize)
 {
 	struct svc_export	*exp;
 	struct dentry		*dentry = NULL;
@@ -482,11 +482,11 @@ exp_rootfh(struct svc_client *clp, kdev_t dev, ino_t ino,
 	/*
 	 * fh must be initialized before calling fh_compose
 	 */
-	fh_init(&fh);
-	fh_compose(&fh, exp, dentry);
-	memcpy(f, &fh.fh_handle, sizeof(struct knfs_fh));
+	fh_init(&fh, maxsize);
+	err = fh_compose(&fh, exp, dentry);
+	memcpy(f, &fh.fh_handle, sizeof(struct knfsd_fh));
 	fh_put(&fh);
-	return 0;
+	return err;
 
 out:
 	dput(dentry);

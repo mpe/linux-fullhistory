@@ -1107,7 +1107,7 @@ static void __exit cleanup_mad16(void)
 }
 
 module_init(init_mad16);
-module_exit(exit_mad16);
+module_exit(cleanup_mad16);
 
 #ifndef MODULE
 static int __init setup_mad16(char *str)

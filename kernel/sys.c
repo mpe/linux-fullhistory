@@ -801,23 +801,39 @@ asmlinkage long sys_setgroups(int gidsetsize, gid_t *grouplist)
 	return 0;
 }
 
+static int supplemental_group_member(gid_t grp)
+{
+	int i = current->ngroups;
+
+	if (i) {
+		gid_t *groups = current->groups;
+		do {
+			if (*groups == grp)
+				return 1;
+			groups++;
+			i--;
+		} while (i);
+	}
+	return 0;
+}
+
+/*
+ * Check whether we're fsgid/egid or in the supplemental group..
+ */
 int in_group_p(gid_t grp)
 {
-	if (grp != current->fsgid) {
-		int i = current->ngroups;
-		if (i) {
-			gid_t *groups = current->groups;
-			do {
-				if (*groups == grp)
-					goto out;
-				groups++;
-				i--;
-			} while (i);
-		}
-		return 0;
-	}
-out:
-	return 1;
+	int retval = 1;
+	if (grp != current->fsgid)
+		retval = supplemental_group_member(grp);
+	return retval;
+}
+
+int in_egroup_p(gid_t grp)
+{
+	int retval = 1;
+	if (grp != current->egid)
+		retval = supplemental_group_member(grp);
+	return retval;
 }
 
 DECLARE_RWSEM(uts_sem);

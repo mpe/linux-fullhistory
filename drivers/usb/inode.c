@@ -446,7 +446,6 @@ static void usbdevfs_put_super(struct super_block *sb)
 	INIT_LIST_HEAD(&sb->u.usbdevfs_sb.slist);
 	while (!list_empty(&sb->u.usbdevfs_sb.ilist))
 		free_inode(list_entry(sb->u.usbdevfs_sb.ilist.next, struct inode, u.usbdev_i.slist));
-        MOD_DEC_USE_COUNT;
 }
 
 static int usbdevfs_statfs(struct super_block *sb, struct statfs *buf)
@@ -548,8 +547,6 @@ struct super_block *usbdevfs_read_super(struct super_block *s, void *data, int s
 		}
 	}
 	/* fill superblock */
-        MOD_INC_USE_COUNT;
-        lock_super(s);
         s->s_blocksize = 1024;
         s->s_blocksize_bits = 10;
         s->s_magic = USBDEVICE_SUPER_MAGIC;
@@ -569,7 +566,6 @@ struct super_block *usbdevfs_read_super(struct super_block *s, void *data, int s
         if (!s->s_root)
                 goto out_no_root;
 	list_add_tail(&s->u.usbdevfs_sb.slist, &superlist);
-	unlock_super(s);
 	for (i = 0; i < NRSPECIAL; i++) {
 		if (!(inode = iget(s, IROOT+1+i)))
 			continue;
@@ -591,23 +587,14 @@ struct super_block *usbdevfs_read_super(struct super_block *s, void *data, int s
  out_no_root:
         printk("usbdevfs_read_super: get root inode failed\n");
         iput(root_inode);
-        s->s_dev = 0;
-        unlock_super(s);
-	MOD_DEC_USE_COUNT;
         return NULL;
 
  opterr:
         printk(KERN_WARNING "usbdevfs: mount parameter error\n");
-	s->s_dev = 0;
 	return NULL;
 }
 
-static struct file_system_type usbdevice_fs_type = {
-        "usbdevfs",
-        0,
-        usbdevfs_read_super,
-        NULL
-};
+static DECLARE_FSTYPE(usbdevice_fs_type, "usbdevfs", usbdevfs_read_super, 0);
 
 /* --------------------------------------------------------------------- */
 
@@ -671,7 +658,9 @@ void usbdevfs_remove_device(struct usb_device *dev)
 
 /* --------------------------------------------------------------------- */
 
+#ifdef CONFIG_PROC_FS		
 static struct proc_dir_entry *usbdir = NULL;
+#endif	
 
 int __init usbdevfs_init(void)
 {
@@ -684,8 +673,10 @@ int __init usbdevfs_init(void)
 		return ret;
 	if ((ret = register_filesystem(&usbdevice_fs_type)))
 		usb_deregister(&usbdevfs_driver);
+#ifdef CONFIG_PROC_FS		
 	/* create mount point for usbdevfs */
 	usbdir = proc_mkdir("usb", proc_bus);
+#endif	
 	return ret;
 }
 
@@ -693,8 +684,10 @@ void __exit usbdevfs_cleanup(void)
 {
 	usb_deregister(&usbdevfs_driver);
 	unregister_filesystem(&usbdevice_fs_type);
+#ifdef CONFIG_PROC_FS	
         if (usbdir)
                 remove_proc_entry("usb", proc_bus);
+#endif
 }
 
 #if 0

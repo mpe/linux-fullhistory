@@ -33,7 +33,7 @@ static int bfs_move_block(unsigned long from, unsigned long to, kdev_t dev)
 		return -EIO;
 	new = getblk(dev, to, BFS_BSIZE);
 	memcpy(new->b_data, bh->b_data, bh->b_size);
-	mark_buffer_dirty(new, 1);
+	mark_buffer_dirty(new, 0);
 	bforget(bh);
 	brelse(new);
 	return 0;

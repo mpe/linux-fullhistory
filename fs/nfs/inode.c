@@ -143,8 +143,6 @@ nfs_put_super(struct super_block *sb)
 	rpciod_down();		/* release rpciod */
 
 	kfree(server->hostname);
-
-	MOD_DEC_USE_COUNT;
 }
 
 void
@@ -209,7 +207,6 @@ nfs_read_super(struct super_block *sb, void *raw_data, int silent)
 	struct rpc_timeout	timeparms;
 	struct nfs_fattr	fattr;
 
-	MOD_INC_USE_COUNT;
 	if (!data)
 		goto out_miss_args;
 
@@ -226,8 +223,6 @@ nfs_read_super(struct super_block *sb, void *raw_data, int silent)
 	memcpy(&srvaddr, &data->addr, sizeof(srvaddr));
 	if (srvaddr.sin_addr.s_addr == INADDR_ANY)
 		goto out_no_remote;
-
-	lock_super(sb);
 
 	sb->s_flags |= MS_ODD_RENAME; /* This should go away */
 
@@ -312,7 +307,6 @@ nfs_read_super(struct super_block *sb, void *raw_data, int silent)
 	sb->s_root->d_fsdata = root_fh;
 
 	/* We're airborne */
-	unlock_super(sb);
 
 	/* Check whether to start the lockd process */
 	if (!(server->flags & NFS_MOUNT_NONLM))
@@ -350,7 +344,6 @@ out_no_xprt:
 out_free_host:
 	kfree(server->hostname);
 out_unlock:
-	unlock_super(sb);
 	goto out_fail;
 
 out_no_remote:
@@ -361,8 +354,6 @@ out_miss_args:
 	printk("nfs_read_super: missing data argument\n");
 
 out_fail:
-	sb->s_dev = 0;
-	MOD_DEC_USE_COUNT;
 	return NULL;
 }
 
@@ -931,12 +922,7 @@ printk("nfs_refresh_inode: invalidating %ld pages\n", inode->i_nrpages);
 /*
  * File system information
  */
-static struct file_system_type nfs_fs_type = {
-	"nfs",
-	0 /* FS_NO_DCACHE - this doesn't work right now*/,
-	nfs_read_super,
-	NULL
-};
+static DECLARE_FSTYPE(nfs_fs_type, "nfs", nfs_read_super, 0);
 
 extern int nfs_init_fhcache(void);
 extern int nfs_init_wreqcache(void);

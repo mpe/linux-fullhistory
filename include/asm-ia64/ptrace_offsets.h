@@ -167,9 +167,9 @@
 #define PT_CR_IIP		0x0838
 #define PT_CR_IFS		0x0840
 #define PT_AR_UNAT		0x0848
-#define PT_AR_PFS		0x0858
+#define PT_AR_PFS		0x0850
 #define PT_AR_RSC		0x0858
-#define PT_AR_RNAT		0x0868
+#define PT_AR_RNAT		0x0860
 #define PT_AR_BSPSTORE		0x0868
 #define PT_PR			0x0870
 #define PT_B6			0x0878

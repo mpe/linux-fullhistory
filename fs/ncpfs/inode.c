@@ -273,7 +273,6 @@ ncp_read_super(struct super_block *sb, void *raw_data, int silent)
 #endif
 	struct ncp_entry_info finfo;
 
-	MOD_INC_USE_COUNT;
 	if (raw_data == NULL)
 		goto out_no_data;
 	switch (*(int*)raw_data) {
@@ -322,8 +321,6 @@ ncp_read_super(struct super_block *sb, void *raw_data, int silent)
 		goto out_bad_file;
 	if (!S_ISSOCK(ncp_filp->f_dentry->d_inode->i_mode))
 		goto out_bad_file2;
-
-	lock_super(sb);
 
 	sb->s_blocksize = 1024;	/* Eh...  Is this correct? */
 	sb->s_blocksize_bits = 10;
@@ -441,7 +438,6 @@ ncp_read_super(struct super_block *sb, void *raw_data, int silent)
         if (!sb->s_root)
 		goto out_no_root;
 	sb->s_root->d_op = &ncp_dentry_operations;
-	unlock_super(sb);
 	return sb;
 
 out_no_root:
@@ -473,7 +469,6 @@ out_free_server:
 	 * it doesn't proper unlocking.
 	 */
 	fput(ncp_filp);
-	unlock_super(sb);
 	goto out;
 
 out_bad_file2:
@@ -488,8 +483,6 @@ out_bad_mount:
 out_no_data:
 	printk(KERN_ERR "ncp_read_super: missing data argument\n");
 out:
-	sb->s_dev = 0;
-	MOD_DEC_USE_COUNT;
 	return NULL;
 }
 
@@ -524,7 +517,6 @@ static void ncp_put_super(struct super_block *sb)
 		ncp_kfree_s(server->auth.object_name, server->auth.object_name_len);
 	ncp_kfree_s(server->packet, server->packet_size);
 
-	MOD_DEC_USE_COUNT;
 }
 
 static int ncp_statfs(struct super_block *sb, struct statfs *buf)
@@ -704,12 +696,7 @@ int ncp_malloced;
 int ncp_current_malloced;
 #endif
 
-static struct file_system_type ncp_fs_type = {
-	"ncpfs",
-	0 /* FS_NO_DCACHE doesn't work correctly */,
-        ncp_read_super,
-	NULL
-};
+static DECLARE_FSTYPE(ncp_fs_type, "ncpfs", ncp_read_super, 0);
 
 int __init init_ncp_fs(void)
 {

@@ -97,7 +97,7 @@ __flush_tlb_all (void)
 	stride0 = ia64_ptce_info.stride[0];
 	stride1 = ia64_ptce_info.stride[1];
 
-	save_and_cli(flags);
+	__save_and_cli(flags);
 	for (i = 0; i < count0; ++i) {
 		for (j = 0; j < count1; ++j) {
 			asm volatile ("ptc.e %0" :: "r"(addr));
@@ -105,7 +105,7 @@ __flush_tlb_all (void)
 		}
 		addr += stride0;
 	}
-	restore_flags(flags);
+	__restore_flags(flags);
 	ia64_insn_group_barrier();
 	ia64_srlz_i();			/* srlz.i implies srlz.d */
 	ia64_insn_group_barrier();

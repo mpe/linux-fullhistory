@@ -75,13 +75,14 @@ struct nlm_rqst {
  */
 struct nlm_file {
 	struct nlm_file *	f_next;		/* linked list */
-	struct knfs_fh		f_handle;	/* NFS file handle */
+	struct nfs_fh		f_handle;	/* NFS file handle */
 	struct file		f_file;		/* VFS file pointer */
 	struct nlm_share *	f_shares;	/* DOS shares */
 	struct nlm_block *	f_blocks;	/* blocked locks */
 	unsigned int		f_locks;	/* guesstimate # of locks */
 	unsigned int		f_count;	/* reference count */
 	struct semaphore	f_sema;		/* avoid concurrent access */
+	int		       	f_hash;		/* hash of f_handle */
 };
 
 /*

@@ -10,21 +10,17 @@
  */
 #include <linux/config.h>
 #include <linux/init.h>
+#include <linux/interrupt.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/time.h>
 
 #include <asm/delay.h>
 #include <asm/efi.h>
-#include <asm/irq.h>
-#include <asm/machvec.h>
+#include <asm/hw_irq.h>
 #include <asm/ptrace.h>
 #include <asm/sal.h>
 #include <asm/system.h>
-#ifdef CONFIG_KDB
-# include <linux/kdb.h>
-#endif
-
 
 extern rwlock_t xtime_lock;
 extern volatile unsigned long lost_ticks;
@@ -43,7 +39,11 @@ static struct {
 static void
 do_profile (unsigned long ip)
 {
+	extern unsigned long prof_cpu_mask;
 	extern char _stext;
+
+	if (!((1UL << smp_processor_id()) & prof_cpu_mask))
+		return;
 
 	if (prof_buffer && current->pid) {
 		ip -= (unsigned long) &_stext;
@@ -65,7 +65,7 @@ do_profile (unsigned long ip)
  * update to jiffy.  The xtime_lock must be at least read-locked when
  * calling this routine.
  */
-static /*inline*/ unsigned long
+static inline unsigned long
 gettimeoffset (void)
 {
 	unsigned long now = ia64_get_itc();
@@ -198,7 +198,7 @@ ia64_reset_itm (void)
 	unsigned long flags;
 
 	local_irq_save(flags);
-	timer_interrupt(0, 0, current);
+	timer_interrupt(0, 0, ia64_task_regs(current));
 	local_irq_restore(flags);
 }
 
@@ -293,15 +293,19 @@ ia64_init_itm (void)
 	ia64_cpu_local_tick();
 }
 
+static struct irqaction timer_irqaction = {
+	handler:	timer_interrupt,
+	flags:		SA_INTERRUPT,
+	name:		"timer"
+};
+
 void __init
 time_init (void)
 {
-	/*
-	 * Request the IRQ _before_ doing anything to cause that
-	 * interrupt to be posted.
-	 */
-	if (request_irq(TIMER_IRQ, timer_interrupt, 0, "timer", NULL)) 
-		panic("Could not allocate timer IRQ!");
+	/* we can't do request_irq() here because the kmalloc() would fail... */
+	irq_desc[TIMER_IRQ].status = IRQ_DISABLED;
+	irq_desc[TIMER_IRQ].handler = &irq_type_ia64_internal;
+	setup_irq(TIMER_IRQ, &timer_irqaction);
 
 	efi_gettimeofday(&xtime);
 	ia64_init_itm();

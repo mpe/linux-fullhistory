@@ -45,6 +45,18 @@ static void release(struct task_struct * p)
 		current->cmin_flt += p->min_flt + p->cmin_flt;
 		current->cmaj_flt += p->maj_flt + p->cmaj_flt;
 		current->cnswap += p->nswap + p->cnswap;
+		/*
+		 * Potentially available timeslices are retrieved
+		 * here - this way the parent does not get penalized
+		 * for creating too many processes.
+		 *
+		 * (this cannot be used to artificially 'generate'
+		 * timeslices, because any timeslice recovered here
+		 * was given away by the parent in the first place.)
+		 */
+		current->counter += p->counter;
+		if (current->counter > current->priority)
+			current->counter = current->priority;
 		free_task_struct(p);
 	} else {
 		printk("task releasing itself\n");

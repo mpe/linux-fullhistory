@@ -14,7 +14,6 @@ if [ "$CONFIG_NET_PCMCIA" = "y" ]; then
    dep_tristate '  New Media PCMCIA support' CONFIG_PCMCIA_NMCLAN $CONFIG_PCMCIA
    dep_tristate '  SMC 91Cxx PCMCIA support' CONFIG_PCMCIA_SMC91C92 $CONFIG_PCMCIA
    dep_tristate '  Xircom 16-bit PCMCIA support' CONFIG_PCMCIA_XIRC2PS $CONFIG_PCMCIA
-   dep_tristate '  Aironet 4500/4800 PCMCIA support' CONFIG_AIRONET4500_CS $CONFIG_AIRONET4500 $CONFIG_PCMCIA
    dep_tristate '  COM20020 ARCnet PCMCIA support' CONFIG_ARCNET_COM20020_CS $CONFIG_ARCNET_COM20020 $CONFIG_ARCNET $CONFIG_PCMCIA
 
    if [ "$CONFIG_CARDBUS" = "y" ]; then
@@ -27,6 +26,7 @@ if [ "$CONFIG_NET_PCMCIA" = "y" ]; then
       dep_tristate '  Aviator/Raytheon 2.4MHz wireless support' CONFIG_PCMCIA_RAYCS $CONFIG_PCMCIA
       dep_tristate '  Xircom Netwave AirSurfer wireless support' CONFIG_PCMCIA_NETWAVE $CONFIG_PCMCIA
       dep_tristate '  AT&T/Lucent Wavelan wireless support' CONFIG_PCMCIA_WAVELAN $CONFIG_PCMCIA
+      dep_tristate '  Aironet 4500/4800 PCMCIA support' CONFIG_AIRONET4500_CS $CONFIG_AIRONET4500 $CONFIG_PCMCIA
    fi
 fi
 

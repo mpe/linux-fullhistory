@@ -13,7 +13,7 @@
 
 #include <linux/config.h>
 
-#define KEYBOARD_IRQ			1
+#define KEYBOARD_IRQ			isa_irq_to_vector(1)
 #define DISABLE_KBD_DURING_INTERRUPTS	0
 
 extern int pckbd_setkeycode(unsigned int scancode, unsigned int keycode);
@@ -59,7 +59,7 @@ extern unsigned char pckbd_sysrq_xlate[128];
  * Machine specific bits for the PS/2 driver
  */
 
-#define AUX_IRQ 12
+#define AUX_IRQ				isa_irq_to_vector(12)
 
 #define aux_request_irq(hand, dev_id)					\
 	request_irq(AUX_IRQ, hand, SA_SHIRQ, "PS/2 Mouse", dev_id)

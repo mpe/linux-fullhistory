@@ -328,7 +328,7 @@ static struct dentry *splice(struct dentry *child, struct dentry *parent)
  * connection if made.
  */
 static struct dentry *
-find_fh_dentry(struct super_block *sb, struct knfs_fh *fh, int needpath)
+find_fh_dentry(struct super_block *sb, ino_t ino, int generation, ino_t dirino, int needpath)
 {
 	struct dentry *dentry, *result = NULL;
 	struct dentry *tmp;
@@ -347,7 +347,7 @@ find_fh_dentry(struct super_block *sb, struct knfs_fh *fh, int needpath)
 	 * Attempt to find the inode.
 	 */
  retry:
-	result = nfsd_iget(sb, fh->fh_ino, fh->fh_generation);
+	result = nfsd_iget(sb, ino, generation);
 	err = PTR_ERR(result);
 	if (IS_ERR(result))
 		goto err_out;
@@ -370,10 +370,10 @@ find_fh_dentry(struct super_block *sb, struct knfs_fh *fh, int needpath)
 	/* It's a directory, or we are required to confirm the file's
 	 * location in the tree.
 	 */
-	dprintk("nfs_fh: need to look harder for %d/%d\n",sb->s_dev,fh->fh_ino);
+	dprintk("nfs_fh: need to look harder for %d/%ld\n",sb->s_dev,ino);
 	down(&sb->s_nfsd_free_path_sem);
 
-	/* claiming the semaphore might have allow things to get fixed up */
+	/* claiming the semaphore might have allowed things to get fixed up */
 	if (! (result->d_flags & DCACHE_NFSD_DISCONNECTED)) {
 		up(&sb->s_nfsd_free_path_sem);
 		return result;
@@ -383,11 +383,11 @@ find_fh_dentry(struct super_block *sb, struct knfs_fh *fh, int needpath)
 	found = 0;
 	if (!S_ISDIR(result->d_inode->i_mode)) {
 		nfsdstats.fh_nocache_nondir++;
-		if (fh->fh_dirino == 0)
+		if (dirino == 0)
 			goto err_result; /* don't know how to find parent */
 		else {
-			/* need to iget fh->fh_dirino and make sure this inode is in that directory */
-			dentry = nfsd_iget(sb, fh->fh_dirino, 0);
+			/* need to iget dirino and make sure this inode is in that directory */
+			dentry = nfsd_iget(sb, dirino, 0);
 			err = PTR_ERR(dentry);
 			if (IS_ERR(dentry))
 				goto err_result;
@@ -490,38 +490,58 @@ err_out:
 u32
 fh_verify(struct svc_rqst *rqstp, struct svc_fh *fhp, int type, int access)
 {
-	struct knfs_fh	*fh = &fhp->fh_handle;
+	struct knfsd_fh	*fh = &fhp->fh_handle;
 	struct svc_export *exp;
 	struct dentry	*dentry;
 	struct inode	*inode;
 	u32		error = 0;
 
-	dprintk("nfsd: fh_verify(exp %s/%u file (%s/%u dir %u)\n",
-		kdevname(fh->fh_xdev),
-		fh->fh_xino,
-		kdevname(fh->fh_dev),
-		fh->fh_ino,
-		fh->fh_dirino);
+	dprintk("nfsd: fh_verify(%s)\n", SVCFH_fmt(fhp));
 
 	if (!fhp->fh_dverified) {
-		/*
-		 * Security: Check that the fh is internally consistant (from <gam3@acm.org>)
-		 */
-		if (fh->fh_dev != fh->fh_xdev) {
-			printk("fh_verify: Security: export on other device (%s, %s).\n",
-			       kdevname(fh->fh_dev), kdevname(fh->fh_xdev));
-			error = nfserr_stale;
-			nfsdstats.fh_stale++;
-			goto out;
+		kdev_t xdev;
+		ino_t xino;
+		__u32 *datap=NULL;
+		int data_left = fh->fh_size/4;
+		int nfsdev;
+		error = nfserr_stale;
+#if CONFIG_NFSD_V3		
+		if (rqstp->rq_vers == 3)
+			error = nfserr_badhandle;
+#endif
+		if (fh->fh_version == 1) {
+			
+			datap = fh->fh_auth;
+			if (--data_left<0) goto out;
+			switch (fh->fh_auth_type) {
+			case 0: break;
+			default: goto out;
+			}
+
+			switch (fh->fh_fsid_type) {
+			case 0:
+				if ((data_left-=2)<0) goto out;
+				nfsdev = ntohl(*datap++);
+				xdev = MKDEV(nfsdev>>16, nfsdev&0xFFFF);
+				xino = *datap++;
+				break;
+			default:
+				goto out;
+			}
+		} else {
+			if (fh->fh_size != NFS_FHSIZE)
+				goto out;
+			/* assume old filehandle format */
+			xdev = u32_to_kdev_t(fh->ofh_xdev);
+			xino = u32_to_ino_t(fh->ofh_xino);
 		}
 
 		/*
 		 * Look up the export entry.
 		 */
 		error = nfserr_stale; 
-		exp = exp_get(rqstp->rq_client,
-			      u32_to_kdev_t(fh->fh_xdev),
-			      u32_to_ino_t(fh->fh_xino));
+		exp = exp_get(rqstp->rq_client, xdev, xino);
+
 		if (!exp) {
 			/* export entry revoked */
 			nfsdstats.fh_stale++;
@@ -544,11 +564,42 @@ fh_verify(struct svc_rqst *rqstp, struct svc_fh *fhp, int type, int access)
 		/*
 		 * Look up the dentry using the NFS file handle.
 		 */
+		error = nfserr_stale;
+#if CONFIG_NFSD_V3		
+		if (rqstp->rq_vers == 3)
+			error = nfserr_badhandle;
+#endif
 
-		dentry = find_fh_dentry(exp->ex_dentry->d_inode->i_sb,
-					fh,
-					!(exp->ex_flags & NFSEXP_NOSUBTREECHECK));
+		if (fh->fh_version == 1) {
+			/* if fileid_type != 0, and super_operations provide fh_to_dentry lookup,
+			 *  then should use that */
+			switch (fh->fh_fileid_type) {
+			case 0:
+				dentry = dget(exp->ex_dentry);
+				break;
+			case 1:
+				if ((data_left-=2)<0) goto out;
+				dentry = find_fh_dentry(exp->ex_dentry->d_inode->i_sb,
+							datap[0], datap[1],
+							0,
+							!(exp->ex_flags & NFSEXP_NOSUBTREECHECK));
+				break;
+			case 2:
+				if ((data_left-=3)<0) goto out;
+				dentry = find_fh_dentry(exp->ex_dentry->d_inode->i_sb,
+							datap[0], datap[1],
+							datap[2],
+							!(exp->ex_flags & NFSEXP_NOSUBTREECHECK));
+				break;
+			default: goto out;
+			}
+		} else {
 
+			dentry = find_fh_dentry(exp->ex_dentry->d_inode->i_sb,
+						fh->ofh_ino, fh->ofh_generation,
+						fh->ofh_dirino,
+						!(exp->ex_flags & NFSEXP_NOSUBTREECHECK));
+		}
 		if (IS_ERR(dentry)) {
 			error = nfserrno(PTR_ERR(dentry));
 			goto out;
@@ -652,78 +703,106 @@ out:
  * an inode.  In this case a call to fh_update should be made
  * before the fh goes out on the wire ...
  */
-void
+inline int _fh_update(struct dentry *dentry, struct svc_export *exp,
+		      __u32 **datapp, int maxsize)
+{
+	__u32 *datap= *datapp;
+	if (dentry == exp->ex_dentry)
+		return 0;
+	/* if super_operations provides dentry_to_fh lookup, should use that */
+	
+	*datap++ = ino_t_to_u32(dentry->d_inode->i_ino);
+	*datap++ = dentry->d_inode->i_generation;
+	if (S_ISDIR(dentry->d_inode->i_mode) || (exp->ex_flags & NFSEXP_NOSUBTREECHECK)){
+		*datapp = datap;
+		return 1;
+	}
+	*datap++ = ino_t_to_u32(dentry->d_parent->d_inode->i_ino);
+	*datapp = datap;
+	return 2;
+}
+
+int
 fh_compose(struct svc_fh *fhp, struct svc_export *exp, struct dentry *dentry)
 {
 	struct inode * inode = dentry->d_inode;
 	struct dentry *parent = dentry->d_parent;
+	__u32 *datap;
 
 	dprintk("nfsd: fh_compose(exp %x/%ld %s/%s, ino=%ld)\n",
 		exp->ex_dev, (long) exp->ex_ino,
 		parent->d_name.name, dentry->d_name.name,
 		(inode ? inode->i_ino : 0));
 
-	/*
-	 * N.B. We shouldn't need to init the fh -- the call to fh_compose
-	 * may not be done on error paths, but the cleanup must call fh_put.
-	 * Fix this soon!
-	 */
 	if (fhp->fh_dverified || fhp->fh_locked || fhp->fh_dentry) {
 		printk(KERN_ERR "fh_compose: fh %s/%s not initialized!\n",
 			parent->d_name.name, dentry->d_name.name);
 	}
-	fh_init(fhp);
-
-	fhp->fh_handle.fh_dirino = ino_t_to_u32(parent->d_inode->i_ino);
-	fhp->fh_handle.fh_dev    = kdev_t_to_u32(parent->d_inode->i_dev);
-	fhp->fh_handle.fh_xdev   = kdev_t_to_u32(exp->ex_dev);
-	fhp->fh_handle.fh_xino   = ino_t_to_u32(exp->ex_ino);
-	fhp->fh_handle.fh_dcookie = (struct dentry *)0xfeebbaca;
-	if (inode) {
-		fhp->fh_handle.fh_ino = ino_t_to_u32(inode->i_ino);
-		fhp->fh_handle.fh_generation = inode->i_generation;
-		if (S_ISDIR(inode->i_mode) || (exp->ex_flags & NFSEXP_NOSUBTREECHECK))
-			fhp->fh_handle.fh_dirino = 0;
-	}
+	if (fhp->fh_maxsize < NFS_FHSIZE)
+		printk(KERN_ERR "fh_compose: called with maxsize %d! %s/%s\n",
+		       fhp->fh_maxsize, parent->d_name.name, dentry->d_name.name);
 
 	fhp->fh_dentry = dentry; /* our internal copy */
 	fhp->fh_export = exp;
 
+	fhp->fh_handle.fh_version = 1;
+	fhp->fh_handle.fh_auth_type = 0;
+	fhp->fh_handle.fh_fsid_type = 0;
+	datap = fhp->fh_handle.fh_auth+0;
+	/* fsid_type 0 == 2byte major, 2byte minor, 4byte inode */
+	*datap++ = htonl((MAJOR(exp->ex_dev)<<16)| MINOR(exp->ex_dev));
+	*datap++ = ino_t_to_u32(exp->ex_ino);
+
+	if (inode)
+		fhp->fh_handle.fh_fileid_type =
+			_fh_update(dentry, exp, &datap, fhp->fh_maxsize-3);
+
+	fhp->fh_handle.fh_size = (datap-fhp->fh_handle.fh_auth+1)*4;
+
+
 	/* We stuck it there, we know it's good. */
 	fhp->fh_dverified = 1;
 	nfsd_nr_verified++;
+	if (fhp->fh_handle.fh_fileid_type == 255)
+		return nfserr_opnotsupp;
+	return 0;
 }
 
 /*
  * Update file handle information after changing a dentry.
- * This is only called by nfsd_create
+ * This is only called by nfsd_create, nfsd_create_v3 and nfsd_proc_create
  */
-void
+int
 fh_update(struct svc_fh *fhp)
 {
 	struct dentry *dentry;
-	struct inode *inode;
-
+	__u32 *datap;
+	
 	if (!fhp->fh_dverified)
 		goto out_bad;
 
 	dentry = fhp->fh_dentry;
-	inode = dentry->d_inode;
-	if (!inode)
+	if (!dentry->d_inode)
 		goto out_negative;
-	fhp->fh_handle.fh_ino = ino_t_to_u32(inode->i_ino);
-	fhp->fh_handle.fh_generation = inode->i_generation;
-	if (S_ISDIR(inode->i_mode) || (fhp->fh_export->ex_flags & NFSEXP_NOSUBTREECHECK))
-		fhp->fh_handle.fh_dirino = 0;
-
+	if (fhp->fh_handle.fh_fileid_type != 0)
+		goto out_uptodate;
+	datap = fhp->fh_handle.fh_auth+
+		          fhp->fh_handle.fh_size/4 -1;
+	fhp->fh_handle.fh_fileid_type =
+		_fh_update(dentry, fhp->fh_export, &datap, fhp->fh_maxsize-fhp->fh_handle.fh_size);
+	fhp->fh_handle.fh_size = (datap-fhp->fh_handle.fh_auth+1)*4;
 out:
-	return;
+	return 0;
 
 out_bad:
 	printk(KERN_ERR "fh_update: fh not verified!\n");
 	goto out;
 out_negative:
 	printk(KERN_ERR "fh_update: %s/%s still negative!\n",
+		dentry->d_parent->d_name.name, dentry->d_name.name);
+	goto out;
+out_uptodate:
+	printk(KERN_ERR "fh_update: %s/%s already up-to-date!\n",
 		dentry->d_parent->d_name.name, dentry->d_name.name);
 	goto out;
 }

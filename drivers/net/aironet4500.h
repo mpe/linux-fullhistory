@@ -66,8 +66,8 @@ struct awc_cis {
 };
 
 
-/* timeout for transmit watchdog timer */
-#define TX_TIMEOUT			(HZ * 3)
+/* timeout for transmit watchdog timer, AP default is 8 sec */
+#define AWC_TX_TIMEOUT			(HZ * 8) 
 
 
 
@@ -454,7 +454,7 @@ struct awc_fid_queue {
 };
 
 
-extern inline void
+extern  void
 awc_fid_queue_init(struct awc_fid_queue * queue){
 
 	unsigned long flags;
@@ -1429,10 +1429,10 @@ extern struct awc_rid_dir  awc_rids[];
 
 
 struct awc_private {
-	dev_node_t node;
-
-
-	int dummy_test;
+	dev_node_t node; // somewhere back in times PCMCIA needed that
+	
+	int dummy_test; // left for cleanup
+	// card rid inmemory copy
 	struct awc_config 		config; // card RID mirrors
 	struct awc_config 		general_config; // 
 	struct awc_SSIDs  		SSIDs;
@@ -1452,6 +1452,7 @@ struct awc_private {
 	struct awc_wep_key		wep_nonvolatile;
 	struct awc_modulation		modulation;
 
+	// here are just references to rids
 	struct awc_rid_dir		rid_dir[AWC_NOF_RIDS];
 	int	rids_read;
 	
@@ -1493,12 +1494,14 @@ struct awc_private {
 	
 	// Command serialize stuff
 //changed to spinlock        struct semaphore 	command_semaphore;
-	my_spinlock_t		both_bap_spinlock;
+	my_spinlock_t		both_bap_spinlock; // on SMP, card should theorethically live without that
 	unsigned long		both_bap_spinlock_flags;
-	my_spinlock_t		bap_setup_spinlock;
+	my_spinlock_t		bap_setup_spinlock; // on SMP, card should theoretically live without that
 	unsigned long		bap_setup_spinlock_flags;
 	my_spinlock_t		command_issuing_spinlock;
 	unsigned long		command_issuing_spinlock_flags;
+	my_spinlock_t		interrupt_spinlock;
+
         volatile int		unlock_command_postponed;
         struct awc_command	cmd;
         long long		async_command_start;
@@ -1511,6 +1514,13 @@ struct awc_private {
 	int			p2p_uc;
 	int			p2p_found;
 	int			p802_11_send;
+	int			simple_bridge;
+	int			force_rts_on_shorter;
+	int			force_tx_rate;
+	int			ip_tos_reliability_rts;
+	int			ip_tos_troughput_no_retries;
+	int 			full_stats;
+	int 			debug;
 	
 	struct enet_statistics  stats;
 	

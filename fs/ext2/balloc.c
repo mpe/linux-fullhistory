@@ -679,6 +679,7 @@ int ext2_group_sparse(int group)
 		test_root(group, 7));
 }
 
+/* Called at mount-time, super-block is locked */
 void ext2_check_blocks_bitmap (struct super_block * sb)
 {
 	struct buffer_head * bh;
@@ -689,7 +690,6 @@ void ext2_check_blocks_bitmap (struct super_block * sb)
 	struct ext2_group_desc * gdp;
 	int i, j;
 
-	lock_super (sb);
 	es = sb->u.ext2_sb.s_es;
 	desc_count = 0;
 	bitmap_count = 0;
@@ -752,5 +752,4 @@ void ext2_check_blocks_bitmap (struct super_block * sb)
 			    "Wrong free blocks count in super block, "
 			    "stored = %lu, counted = %lu",
 			    (unsigned long) le32_to_cpu(es->s_free_blocks_count), bitmap_count);
-	unlock_super (sb);
 }

@@ -398,28 +398,25 @@ static struct page * follow_page(unsigned long address)
 			return pte_page(*pte);
 	}
 	
-	printk(KERN_ERR "Missing page in follow_page\n");
 	return NULL;
 }
 
 /* 
- * Given a physical address, is there a useful struct page pointing to it?
+ * Given a physical address, is there a useful struct page pointing to
+ * it?  This may become more complex in the future if we start dealing
+ * with IO-aperture pages in kiobufs.
  */
 
-struct page * get_page_map(struct page *page, unsigned long vaddr)
+static inline struct page * get_page_map(struct page *page)
 {
-	if (MAP_NR(vaddr) >= max_mapnr)
-		return 0;
-	if (page == ZERO_PAGE(vaddr))
-		return 0;
-	if (PageReserved(page))
+	if (page > (mem_map + max_mapnr))
 		return 0;
 	return page;
 }
 
 /*
  * Force in an entire range of pages from the current process's user VA,
- * and pin and lock the pages for IO.  
+ * and pin them in physical memory.  
  */
 
 #define dprintk(x...)
@@ -430,8 +427,6 @@ int map_user_kiobuf(int rw, struct kiobuf *iobuf, unsigned long va, size_t len)
 	struct mm_struct *	mm;
 	struct vm_area_struct *	vma = 0;
 	struct page *		map;
-	int			doublepage = 0;
-	int			repeat = 0;
 	int			i;
 	
 	/* Make sure the iobuf is not already mapped somewhere. */
@@ -447,11 +442,10 @@ int map_user_kiobuf(int rw, struct kiobuf *iobuf, unsigned long va, size_t len)
 	if (err)
 		return err;
 
- repeat:
 	down(&mm->mmap_sem);
 
 	err = -EFAULT;
-	iobuf->locked = 1;
+	iobuf->locked = 0;
 	iobuf->offset = va & ~PAGE_MASK;
 	iobuf->length = len;
 	
@@ -471,16 +465,15 @@ int map_user_kiobuf(int rw, struct kiobuf *iobuf, unsigned long va, size_t len)
 		spin_lock(&mm->page_table_lock);
 		map = follow_page(ptr);
 		if (!map) {
+			spin_unlock(&mm->page_table_lock);
 			dprintk (KERN_ERR "Missing page in map_user_kiobuf\n");
-			goto retry;
+			goto out_unlock;
 		}
-		map = get_page_map(map, ptr);
-		if (map) {
-			if (TryLockPage(map)) {
-				goto retry;
-			}
+		map = get_page_map(map);
+		if (map)
 			atomic_inc(&map->count);
-		}
+		else
+			printk (KERN_INFO "Mapped page missing [%d]\n", i);
 		spin_unlock(&mm->page_table_lock);
 		iobuf->maplist[i] = map;
 		iobuf->nr_pages = ++i;
@@ -497,42 +490,6 @@ int map_user_kiobuf(int rw, struct kiobuf *iobuf, unsigned long va, size_t len)
 	unmap_kiobuf(iobuf);
 	dprintk ("map_user_kiobuf: end %d\n", err);
 	return err;
-
- retry:
-
-	/* 
-	 * Undo the locking so far, wait on the page we got to, and try again.
-	 */
-	spin_unlock(&mm->page_table_lock);
-	unmap_kiobuf(iobuf);
-	up(&mm->mmap_sem);
-
-	/* 
-	 * Did the release also unlock the page we got stuck on?
-	 */
-	if (map) {
-		if (!PageLocked(map)) {
-			/* If so, we may well have the page mapped twice
-			 * in the IO address range.  Bad news.  Of
-			 * course, it _might_ * just be a coincidence,
-			 * but if it happens more than * once, chances
-			 * are we have a double-mapped page. */
-			if (++doublepage >= 3) {
-				return -EINVAL;
-			}
-		}
-	
-		/*
-		 * Try again...
-		 */
-		wait_on_page(map);
-	}
-	
-	if (++repeat < 16) {
-		ptr = va & PAGE_MASK;
-		goto repeat;
-	}
-	return -EAGAIN;
 }
 
 
@@ -548,15 +505,118 @@ void unmap_kiobuf (struct kiobuf *iobuf)
 	
 	for (i = 0; i < iobuf->nr_pages; i++) {
 		map = iobuf->maplist[i];
-		
-		if (map && iobuf->locked) {
-			UnlockPage(map);
+		if (map) {
+			if (iobuf->locked)
+				UnlockPage(map);
 			__free_page(map);
 		}
 	}
 	
 	iobuf->nr_pages = 0;
 	iobuf->locked = 0;
+}
+
+
+/*
+ * Lock down all of the pages of a kiovec for IO.
+ *
+ * If any page is mapped twice in the kiovec, we return the error -EINVAL.
+ *
+ * The optional wait parameter causes the lock call to block until all
+ * pages can be locked if set.  If wait==0, the lock operation is
+ * aborted if any locked pages are found and -EAGAIN is returned.
+ */
+
+int lock_kiovec(int nr, struct kiobuf *iovec[], int wait)
+{
+	struct kiobuf *iobuf;
+	int i, j;
+	struct page *page, **ppage;
+	int doublepage = 0;
+	int repeat = 0;
+	
+ repeat:
+	
+	for (i = 0; i < nr; i++) {
+		iobuf = iovec[i];
+
+		if (iobuf->locked)
+			continue;
+		iobuf->locked = 1;
+
+		ppage = iobuf->maplist;
+		for (j = 0; j < iobuf->nr_pages; ppage++, j++) {
+			page = *ppage;
+			if (!page)
+				continue;
+			
+			if (TryLockPage(page))
+				goto retry;
+		}
+	}
+
+	return 0;
+	
+ retry:
+	
+	/* 
+	 * We couldn't lock one of the pages.  Undo the locking so far,
+	 * wait on the page we got to, and try again.  
+	 */
+	
+	unlock_kiovec(nr, iovec);
+	if (!wait)
+		return -EAGAIN;
+	
+	/* 
+	 * Did the release also unlock the page we got stuck on?
+	 */
+	if (!PageLocked(page)) {
+		/* 
+		 * If so, we may well have the page mapped twice
+		 * in the IO address range.  Bad news.  Of
+		 * course, it _might_ just be a coincidence,
+		 * but if it happens more than once, chances
+		 * are we have a double-mapped page. 
+		 */
+		if (++doublepage >= 3) 
+			return -EINVAL;
+		
+		/* Try again...  */
+		wait_on_page(page);
+	}
+	
+	if (++repeat < 16)
+		goto repeat;
+	return -EAGAIN;
+}
+
+/*
+ * Unlock all of the pages of a kiovec after IO.
+ */
+
+int unlock_kiovec(int nr, struct kiobuf *iovec[])
+{
+	struct kiobuf *iobuf;
+	int i, j;
+	struct page *page, **ppage;
+	
+	for (i = 0; i < nr; i++) {
+		iobuf = iovec[i];
+
+		if (!iobuf->locked)
+			continue;
+		iobuf->locked = 0;
+		
+		ppage = iobuf->maplist;
+		for (j = 0; j < iobuf->nr_pages; ppage++, j++) {
+			page = *ppage;
+			if (!page)
+				continue;
+			UnlockPage(page);
+		}
+	}
+	return 0;
 }
 
 static inline void zeromap_pte_range(pte_t * pte, unsigned long address,

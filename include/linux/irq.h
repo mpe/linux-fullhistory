@@ -1,7 +1,12 @@
 #ifndef __irq_h
 #define __irq_h
 
+#include <linux/cache.h>
+#include <linux/spinlock.h>
+
 #include <asm/irq.h>
+#include <asm/ptrace.h>
+
 /*
  * IRQ line status.
  */

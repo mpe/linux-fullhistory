@@ -337,8 +337,6 @@ static struct super_block *qnx4_read_super(struct super_block *s,
 	struct inode *root;
 	const char *errmsg;
 
-	MOD_INC_USE_COUNT;
-	lock_super(s);
 	set_blocksize(dev, QNX4_BLOCK_SIZE);
 	s->s_blocksize = QNX4_BLOCK_SIZE;
 	s->s_blocksize_bits = QNX4_BLOCK_SIZE_BITS;
@@ -393,7 +391,6 @@ static struct super_block *qnx4_read_super(struct super_block *s,
  		goto outi;
 
 	brelse(bh);
-	unlock_super(s);
 	s->s_dirt = 1;
 
 	return s;
@@ -403,9 +400,6 @@ static struct super_block *qnx4_read_super(struct super_block *s,
       out:
 	brelse(bh);
       outnobh:
-	s->s_dev = 0;
-	unlock_super(s);
-	MOD_DEC_USE_COUNT;
 
 	return NULL;
 }
@@ -413,7 +407,6 @@ static struct super_block *qnx4_read_super(struct super_block *s,
 static void qnx4_put_super(struct super_block *sb)
 {
 	kfree_s( sb->u.qnx4_sb.BitMap, sizeof( struct qnx4_inode_entry ) );
-	MOD_DEC_USE_COUNT;
 	return;
 }
 
@@ -496,13 +489,7 @@ static void qnx4_read_inode(struct inode *inode)
 	brelse(bh);
 }
 
-static struct file_system_type qnx4_fs_type =
-{
-	"qnx4",
-	FS_REQUIRES_DEV,
-	qnx4_read_super,
-	NULL
-};
+static DECLARE_FSTYPE_DEV(qnx4_fs_type, "qnx4", qnx4_read_super);
 
 int __init init_qnx4_fs(void)
 {

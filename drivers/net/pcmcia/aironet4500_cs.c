@@ -230,7 +230,6 @@ static dev_link_t *awc_attach(void)
 	dev->init = &awc_pcmcia_init;
 	dev->open = &awc_pcmcia_open;
 	dev->stop = &awc_pcmcia_close;
-	netif_start_queue (dev);
 	
 	link->priv = dev;
 #if CS_RELEASE_CODE > 0x2911

@@ -593,28 +593,18 @@ struct inode_operations msdos_dir_inode_operations = {
 	setattr:	fat_notify_change,
 };
 
-static void msdos_put_super_callback(struct super_block *sb)
-{
-	MOD_DEC_USE_COUNT;
-}
-
 struct super_block *msdos_read_super(struct super_block *sb,void *data, int silent)
 {
 	struct super_block *res;
-
-	MOD_INC_USE_COUNT;
 
 	MSDOS_SB(sb)->options.isvfat = 0;
 	res = fat_read_super(sb, data, silent, &msdos_dir_inode_operations);
 	if (res == NULL)
 		goto out_fail;
-	MSDOS_SB(sb)->put_super_callback=msdos_put_super_callback;
 	sb->s_root->d_op = &msdos_dentry_operations;
 	return res;
 
 out_fail:
-	sb->s_dev = 0;
-	MOD_DEC_USE_COUNT;
 	return NULL;
 }
 

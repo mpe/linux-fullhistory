@@ -58,14 +58,14 @@
 #define awc_RID_gen_BasicRate_11Mbps 			{&aironet4500_RID_Select_General_Config,0x0010, 8,1,1,0,1,0xff,0x96,"BasicRate 11Mbps"}
 
 
-#define awc_RID_gen_Long_retry_limit 			{&aironet4500_RID_Select_General_Config,0x0018,16, 1,1,0,0,0,0,"Short Retry Limit"}
-#define awc_RID_gen_Short_retry_limit 			{&aironet4500_RID_Select_General_Config,0x001A,16, 1,1,0,0,0,0,"Long Retry Limit"}
-#define awc_RID_gen_Tx_MSDU_lifetime 			{&aironet4500_RID_Select_General_Config,0x001C,16, 1,1000,0,0,0,0,"TX MSDU Lifetime"}
-#define awc_RID_gen_Rx_MSDU_lifetime 			{&aironet4500_RID_Select_General_Config,0x001E,16, 1,1000,0,0,0,0,"RX MSDU Lifetime"}
-#define awc_RID_gen_Stationary 				{&aironet4500_RID_Select_General_Config,0x0020,16, 1,1,0,0,0,0,"Stationary"}
-#define awc_RID_gen_BC_MC_Ordering 			{&aironet4500_RID_Select_General_Config,0x0022,16, 1,1,0,0,0,0,"Strictly order Bcast and Mcast"}
-#define awc_RID_gen_Device_type 			{&aironet4500_RID_Select_General_Config,0x0024,16, 1,1,1,0,0xffff,0x0065,"Radio Type PC4500"}
-#define awc_RID_gen_Reserved_0x0026 			{&aironet4500_RID_Select_General_Config,0x0026, 8,10,1,0,0,0,0,"Reserved 0x0028"}
+#define awc_RID_gen_Long_retry_limit 			{&aironet4500_RID_Select_General_Config,0x0018,16, 1,1,0,0,0xffff,0,"Short Retry Limit"}
+#define awc_RID_gen_Short_retry_limit 			{&aironet4500_RID_Select_General_Config,0x001A,16, 1,1,0,0,0xffff,0,"Long Retry Limit"}
+#define awc_RID_gen_Tx_MSDU_lifetime 			{&aironet4500_RID_Select_General_Config,0x001C,16, 1,1000,0,0,0xffff,0,"TX MSDU Lifetime"}
+#define awc_RID_gen_Rx_MSDU_lifetime 			{&aironet4500_RID_Select_General_Config,0x001E,16, 1,1000,0,0,0xffff,0,"RX MSDU Lifetime"}
+#define awc_RID_gen_Stationary 				{&aironet4500_RID_Select_General_Config,0x0020,16, 1,1,0,0,0xffff,0,"Stationary"}
+#define awc_RID_gen_BC_MC_Ordering 			{&aironet4500_RID_Select_General_Config,0x0022,16, 1,1,0,0,0xffff,0,"Strictly order Bcast and Mcast"}
+#define awc_RID_gen_Device_type 			{&aironet4500_RID_Select_General_Config,0x0024,16, 1,1,1,0,0xffff,0x00,"Radio Type"}
+#define awc_RID_gen_Reserved_0x0026 			{&aironet4500_RID_Select_General_Config,0x0026, 8,10,1,0,0,0xff,0,"Reserved0x28"}
 
 
 //SCANNING/ASSOCIATING
@@ -101,7 +101,7 @@
 #define awc_RID_gen_FastListenInterval 		awc_def_gen_RID(0x0056,"FastListenInterval",	16,0xffff,0,"msek")     // 0 default    100 kus    The listen interval to be used immediately after
 #define awc_RID_gen_ListenDecay 			awc_def_gen_RID(0x0058,"ListenDecay",		16,0xffff,0,"times")	//      0 default    2Number of times to use the current listen interval
 #define awc_RID_gen_FastListenDelay 		awc_def_gen_RID(0x005A,"FastListenDelay",	16,0xffff,0,"msek")	//      0 default    200 kus    Time interval to delay before going to fast listen
-#define awc_RID_gen_Reserved0x005C 			awc_def_gen_RID(0x005C,"Reserved0x005C",	32,0,0,"")	//
+#define awc_RID_gen_Reserved0x005C 			awc_def_gen_RID(0x005C,"Reserved0x005C",	32,0xffffffff,0,"")	//
 //ADHOC (or AP) OPERATION
 #define awc_RID_gen_BeaconPeriod 			awc_def_gen_RID(0x0060,"BeaconPeriod",		16,0xffff,0,"msek")	//      0 default    100        0 selects the factory default of [~100 ms].  (kus)
 #define awc_RID_gen_AtimDuration 			awc_def_gen_RID(0x0062,"AtimDuration",		16,0xffff,0,"msek")	//      0 default    5 kus      The time period reserved for ATIMs immediately after (kus)      the beacon. 0xFFFF will disable the ATIM window; power save mode will not operate.This parameter only applies to adhoc/IBSS.
@@ -136,7 +136,7 @@
 #define awc_RID_gen_ARLThreshold 			awc_def_gen_RID(0x0090,"ARLThreshold",		16,0xffff,0,"times")	//       0 default    0xFFFF    0 selects the factory defaults. (which for now is
 #define awc_RID_gen_ARLDecay 			awc_def_gen_RID(0x0092,"ARLDecay",		16,0xffff,0,"times")	//       0 default    0xFFFF    0 selects the factory defaults. (which for now is
 #define awc_RID_gen_ARLDelay 			awc_def_gen_RID(0x0094,"ARLDelay",		16,0xffff,0,"times")	//       0 default    0xFFFF    0 selects the factory defaults. (which for now is
-#define awc_RID_gen_Unused0x0096 			awc_def_gen_RID(0x0096,"Unused",		16,0,0,"")	//
+#define awc_RID_gen_Unused0x0096 			awc_def_gen_RID(0x0096,"Reserved0x96",		16,0xffff,0,"")	//
 #define awc_RID_gen_MagicPacketAction 		awc_def_gen_RID(0x0098,"MagicPacketAction",	8,0xff,0," hell knows what")	//        0  0         0 selects no action to be taken on a magic packet and"
 #define awc_RID_gen_MagicPacketControl 		awc_def_gen_RID(0x0099,"MagicPacketControl",	8,0xff,0," hell know what")	//        0  0         0 will disable the magic packet mode command"
 
@@ -182,14 +182,14 @@
 #define awc_RID_act_BasicRate_11Mbps 			{&aironet4500_RID_Select_Active_Config,0x0010, 8,1,1,0,1,0xff,0x96,"BasicRate 11Mbps"}
 
 
-#define awc_RID_act_Long_retry_limit 		{&aironet4500_RID_Select_Active_Config,0x0018,16, 1,1,0,0,0,0,"Short Retry Limit"}
-#define awc_RID_act_Short_retry_limit 		{&aironet4500_RID_Select_Active_Config,0x001A,16, 1,1,0,0,0,0,"Long Retry Limit"}
-#define awc_RID_act_Tx_MSDU_lifetime 		{&aironet4500_RID_Select_Active_Config,0x001C,16, 1,1000,0,0,0,0,"TX MSDU Lifetime"}
-#define awc_RID_act_Rx_MSDU_lifetime 		{&aironet4500_RID_Select_Active_Config,0x001E,16, 1,1000,0,0,0,0,"RX MSDU Lifetime"}
-#define awc_RID_act_Stationary 			{&aironet4500_RID_Select_Active_Config,0x0020,16, 1,1,0,0,0,0,"Stationary"}
-#define awc_RID_act_BC_MC_Ordering 			{&aironet4500_RID_Select_Active_Config,0x0022,16, 1,1,0,0,0,0,"Strictly order Bcast and Mcast"}
+#define awc_RID_act_Long_retry_limit 		{&aironet4500_RID_Select_Active_Config,0x0018,16, 1,1,0,0,0xffff,0,"Short Retry Limit"}
+#define awc_RID_act_Short_retry_limit 		{&aironet4500_RID_Select_Active_Config,0x001A,16, 1,1,0,0,0xffff,0,"Long Retry Limit"}
+#define awc_RID_act_Tx_MSDU_lifetime 		{&aironet4500_RID_Select_Active_Config,0x001C,16, 1,1000,0,0,0xffff,0,"TX MSDU Lifetime"}
+#define awc_RID_act_Rx_MSDU_lifetime 		{&aironet4500_RID_Select_Active_Config,0x001E,16, 1,1000,0,0,0xffff,0,"RX MSDU Lifetime"}
+#define awc_RID_act_Stationary 			{&aironet4500_RID_Select_Active_Config,0x0020,16, 1,1,0,0,0xffff,0,"Stationary"}
+#define awc_RID_act_BC_MC_Ordering 			{&aironet4500_RID_Select_Active_Config,0x0022,16, 1,1,0,0,0xffff,0,"Strictly order Bcast and Mcast"}
 #define awc_RID_act_Device_type 			{&aironet4500_RID_Select_Active_Config,0x0024,16, 1,1,1,0,0xffff,0x0065,"Radio Type PC4500"}
-#define awc_RID_act_Reserved_0x0026 			{&aironet4500_RID_Select_Active_Config,0x0026, 8,10,1,0,0,0,0,"Reserved 0x0028"}
+#define awc_RID_act_Reserved_0x0026 			{&aironet4500_RID_Select_Active_Config,0x0026, 8,10,1,0,0,0xff,0,"Reserved0x28"}
 
 
 //SCANNING/ASSOCIATING
@@ -260,7 +260,7 @@
 #define awc_RID_act_ARLThreshold 		awc_def_act_RID(0x0090,"ARLThreshold",		16,0xffff,0,"times")	//       0 default    0xFFFF    0 selects the factory defaults. (which for now is
 #define awc_RID_act_ARLDecay 			awc_def_act_RID(0x0092,"ARLDecay",		16,0xffff,0,"times")	//       0 default    0xFFFF    0 selects the factory defaults. (which for now is
 #define awc_RID_act_ARLDelay 			awc_def_act_RID(0x0094,"ARLDelay",		16,0xffff,0,"times")	//       0 default    0xFFFF    0 selects the factory defaults. (which for now is
-#define awc_RID_act_Unused0x0096 		awc_def_act_RID(0x0096,"Unused",		16,0,0,"")	//
+#define awc_RID_act_Unused0x0096 		awc_def_act_RID(0x0096,"Reserved0x96",		16,0xffff,0,"")	//
 #define awc_RID_act_MagicPacketAction 		awc_def_act_RID(0x0098,"MagicPacketAction",	8,0xff,0," hell knows what")	//        0  0         0 selects no action to be taken on a magic packet and"
 #define awc_RID_act_MagicPacketControl 		awc_def_act_RID(0x0099,"MagicPacketControl",	8,0xff,0," hell know what")	//        0  0         0 will disable the magic packet mode command"
 
@@ -275,9 +275,12 @@
 #define awc_RID_SSIDlen1 			awc_def_SSID_RID(0x0002,"SSIDlen1",		16,0xffff,0,"")	//      7      The length of the SSID1 byte string.
 #define awc_RID_SSID1 				awc_def_SSID_RID(0x0004,"SSID1",		255,0,0,"")	//    "tsunami"        The identifier uniquely identifying the wireless system.
 #define awc_RID_SSIDlen2 			awc_def_SSID_RID(0x0024,"SSIDlen2",		16,0xffff,0,"")	//      0      The length of the SSID2 byte string.
-#define awc_RID_SSID2 				awc_def_SSID_RID(0x0026,"SSID2",		255,0,0,"") 	//   0's    The identifier uniquely identifying the wireless system.
+#define awc_RID_SSID2 				awc_def_SSID_RID(0x0026,"SSID2",		255,0,0,"") 	//   
 #define awc_RID_SSIDlen3 			awc_def_SSID_RID(0x0046,"SSIDlen3",		16,0xffff,0,"")	//      0      The length of the SSID3 byte string.
-#define awc_RID_SSID3 				awc_def_SSID_RID(0x0048,"SSID3",		255,0,0,"")	//    0's    The identifier uniquely identifying the wireless system.
+#define awc_RID_SSID3 				awc_def_SSID_RID(0x0048,"SSID3",		255,0,0,"")	//    
+#define awc_RID_SSID1hex 				awc_def_SSID_RID(0x0004,"SSID1hex",		255,0xff,0,"")	
+#define awc_RID_SSID2hex 				awc_def_SSID_RID(0x0026,"SSID2hex",		255,0xff,0,"") 	
+#define awc_RID_SSID3hex 				awc_def_SSID_RID(0x0048,"SSID3hex",		255,0xff,0,"")	
 
 // AP list
 
@@ -1304,6 +1307,9 @@ struct aironet4500_RID awc_SSID_RID[]={
 	awc_RID_SSID2,
 	awc_RID_SSIDlen3,
 	awc_RID_SSID3,
+	awc_RID_SSID1hex,
+	awc_RID_SSID2hex,
+	awc_RID_SSID3hex,
 	{0}
 };
 

@@ -105,11 +105,8 @@ romfs_read_super(struct super_block *s, void *data, int silent)
 	struct romfs_super_block *rsb;
 	int sz;
 
-	MOD_INC_USE_COUNT;
-
 	/* I would parse the options here, but there are none.. :) */
 
-	lock_super(s);
 	set_blocksize(dev, ROMBSIZE);
 	s->s_blocksize = ROMBSIZE;
 	s->s_blocksize_bits = ROMBSBITS;
@@ -153,16 +150,11 @@ romfs_read_super(struct super_block *s, void *data, int silent)
 	if (!s->s_root)
 		goto outnobh;
 
-	unlock_super(s);
-
 	/* Ehrhm; sorry.. :)  And thanks to Hans-Joachim Widmaier  :) */
 	if (0) {
 out:
 		brelse(bh);
 outnobh:
-		s->s_dev = 0;
-		unlock_super(s);
-		MOD_DEC_USE_COUNT;
 		s = NULL;
 	}
 
@@ -174,7 +166,6 @@ outnobh:
 static void
 romfs_put_super(struct super_block *sb)
 {
-	MOD_DEC_USE_COUNT;
 	return;
 }
 
@@ -539,12 +530,7 @@ static struct super_operations romfs_ops = {
 	statfs:		romfs_statfs,
 };
 
-static struct file_system_type romfs_fs_type = {
-	"romfs",
-	FS_REQUIRES_DEV,
-	romfs_read_super,
-	NULL
-};
+static DECLARE_FSTYPE_DEV(romfs_fs_type, "romfs", romfs_read_super);
 
 int __init init_romfs_fs(void)
 {

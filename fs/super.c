@@ -35,9 +35,9 @@
 #include <linux/nfs_fs_sb.h>
 #include <linux/nfs_mount.h>
 
-#ifdef CONFIG_KMOD
 #include <linux/kmod.h>
-#endif
+#define __NO_VERSION__
+#include <linux/module.h>
 
 /*
  * We use a semaphore to synchronize all mount/umount
@@ -60,7 +60,194 @@ int nr_super_blocks = 0;
 int max_super_blocks = NR_SUPER;
 LIST_HEAD(super_blocks);
 
+/*
+ * Handling of filesystem drivers list.
+ * Rules:
+ *	Inclusion to/removals from/scanning of list are protected by spinlock.
+ *	During the unload module must call unregister_filesystem().
+ *	We can access the fields of list element if:
+ *		1) spinlock is held or
+ *		2) we hold the reference to the module.
+ *	The latter can be guaranteed by call of try_inc_mod_count(); if it
+ *	returned 0 we must skip the element, otherwise we got the reference.
+ *	Once the reference is obtained we can drop the spinlock.
+ */
+
 static struct file_system_type *file_systems = NULL;
+static spinlock_t file_systems_lock = SPIN_LOCK_UNLOCKED;
+
+static void put_filesystem(struct file_system_type *fs)
+{
+	if (fs->owner)
+		__MOD_DEC_USE_COUNT(fs->owner);
+}
+
+static struct file_system_type **find_filesystem(const char *name)
+{
+	struct file_system_type **p;
+	for (p=&file_systems; *p; p=&(*p)->next)
+		if (strcmp((*p)->name,name) == 0)
+			break;
+	return p;
+}
+
+int register_filesystem(struct file_system_type * fs)
+{
+	int res = 0;
+	struct file_system_type ** p;
+
+	if (!fs)
+		return -EINVAL;
+	if (fs->next)
+		return -EBUSY;
+	spin_lock(&file_systems_lock);
+	p = find_filesystem(fs->name);
+	if (*p)
+		res = -EBUSY;
+	else
+		*p = fs;
+	spin_unlock(&file_systems_lock);
+	return res;
+}
+
+int unregister_filesystem(struct file_system_type * fs)
+{
+	struct file_system_type ** tmp;
+
+	spin_lock(&file_systems_lock);
+	tmp = &file_systems;
+	while (*tmp) {
+		if (fs == *tmp) {
+			*tmp = fs->next;
+			fs->next = NULL;
+			spin_unlock(&file_systems_lock);
+			return 0;
+		}
+		tmp = &(*tmp)->next;
+	}
+	spin_unlock(&file_systems_lock);
+	return -EINVAL;
+}
+
+static int fs_index(const char * __name)
+{
+	struct file_system_type * tmp;
+	char * name;
+	int err, index;
+
+	name = getname(__name);
+	err = PTR_ERR(name);
+	if (IS_ERR(name))
+		return err;
+
+	err = -EINVAL;
+	spin_lock(&file_systems_lock);
+	for (tmp=file_systems, index=0 ; tmp ; tmp=tmp->next, index++) {
+		if (strcmp(tmp->name,name) == 0) {
+			err = index;
+			break;
+		}
+		index++;
+	}
+	spin_unlock(&file_systems_lock);
+	putname(name);
+	return err;
+}
+
+static int fs_name(unsigned int index, char * buf)
+{
+	struct file_system_type * tmp;
+	int len, res;
+
+	spin_lock(&file_systems_lock);
+	for (tmp = file_systems; tmp; tmp = tmp->next, index--)
+		if (index <= 0 && try_inc_mod_count(tmp->owner))
+				break;
+	spin_unlock(&file_systems_lock);
+	if (!tmp)
+		return -EINVAL;
+
+	/* OK, we got the reference, so we can safely block */
+	len = strlen(tmp->name) + 1;
+	res = copy_to_user(buf, tmp->name, len) ? -EFAULT : 0;
+	put_filesystem(tmp);
+	return res;
+}
+
+static int fs_maxindex(void)
+{
+	struct file_system_type * tmp;
+	int index;
+
+	spin_lock(&file_systems_lock);
+	for (tmp = file_systems, index = 0 ; tmp ; tmp = tmp->next, index++)
+		;
+	spin_unlock(&file_systems_lock);
+	return index;
+}
+
+/*
+ * Whee.. Weird sysv syscall. 
+ */
+asmlinkage long sys_sysfs(int option, unsigned long arg1, unsigned long arg2)
+{
+	int retval = -EINVAL;
+
+	lock_kernel();
+	switch (option) {
+		case 1:
+			retval = fs_index((const char *) arg1);
+			break;
+
+		case 2:
+			retval = fs_name(arg1, (char *) arg2);
+			break;
+
+		case 3:
+			retval = fs_maxindex();
+			break;
+	}
+	unlock_kernel();
+	return retval;
+}
+
+int get_filesystem_list(char * buf)
+{
+	int len = 0;
+	struct file_system_type * tmp;
+
+	spin_lock(&file_systems_lock);
+	tmp = file_systems;
+	while (tmp && len < PAGE_SIZE - 80) {
+		len += sprintf(buf+len, "%s\t%s\n",
+			(tmp->fs_flags & FS_REQUIRES_DEV) ? "" : "nodev",
+			tmp->name);
+		tmp = tmp->next;
+	}
+	spin_unlock(&file_systems_lock);
+	return len;
+}
+
+static struct file_system_type *get_fs_type(const char *name)
+{
+	struct file_system_type *fs;
+	
+	spin_lock(&file_systems_lock);
+	fs = *(find_filesystem(name));
+	if (fs && !try_inc_mod_count(fs->owner))
+		fs = NULL;
+	spin_unlock(&file_systems_lock);
+	if (!fs && (request_module(name) == 0)) {
+		spin_lock(&file_systems_lock);
+		fs = *(find_filesystem(name));
+		if (fs && !try_inc_mod_count(fs->owner))
+			fs = NULL;
+		spin_unlock(&file_systems_lock);
+	}
+	return fs;
+}
+
+
 struct vfsmount *vfsmntlist = NULL;
 static struct vfsmount *vfsmnttail = NULL, *mru_vfsmnt = NULL;
 
@@ -163,115 +350,6 @@ void remove_vfsmnt(kdev_t dev)
 	kfree(tofree->mnt_devname);
 	kfree(tofree->mnt_dirname);
 	kfree_s(tofree, sizeof(struct vfsmount));
-}
-
-int register_filesystem(struct file_system_type * fs)
-{
-	struct file_system_type ** tmp;
-
-	if (!fs)
-		return -EINVAL;
-	if (fs->next)
-		return -EBUSY;
-	tmp = &file_systems;
-	while (*tmp) {
-		if (strcmp((*tmp)->name, fs->name) == 0)
-			return -EBUSY;
-		tmp = &(*tmp)->next;
-	}
-	*tmp = fs;
-	return 0;
-}
-
-int unregister_filesystem(struct file_system_type * fs)
-{
-	struct file_system_type ** tmp;
-
-	tmp = &file_systems;
-	while (*tmp) {
-		if (fs == *tmp) {
-			*tmp = fs->next;
-			fs->next = NULL;
-			return 0;
-		}
-		tmp = &(*tmp)->next;
-	}
-	return -EINVAL;
-}
-
-static int fs_index(const char * __name)
-{
-	struct file_system_type * tmp;
-	char * name;
-	int err, index;
-
-	name = getname(__name);
-	err = PTR_ERR(name);
-	if (IS_ERR(name))
-		return err;
-
-	index = 0;
-	for (tmp = file_systems ; tmp ; tmp = tmp->next) {
-		if (strcmp(tmp->name, name) == 0) {
-			putname(name);
-			return index;
-		}
-		index++;
-	}
-	putname(name);
-	return -EINVAL;
-}
-
-static int fs_name(unsigned int index, char * buf)
-{
-	struct file_system_type * tmp;
-	int len;
-
-	tmp = file_systems;
-	while (tmp && index > 0) {
-		tmp = tmp->next;
-		index--;
-	}
-	if (!tmp)
-		return -EINVAL;
-	len = strlen(tmp->name) + 1;
-	return copy_to_user(buf, tmp->name, len) ? -EFAULT : 0;
-}
-
-static int fs_maxindex(void)
-{
-	struct file_system_type * tmp;
-	int index;
-
-	index = 0;
-	for (tmp = file_systems ; tmp ; tmp = tmp->next)
-		index++;
-	return index;
-}
-
-/*
- * Whee.. Weird sysv syscall. 
- */
-asmlinkage long sys_sysfs(int option, unsigned long arg1, unsigned long arg2)
-{
-	int retval = -EINVAL;
-
-	lock_kernel();
-	switch (option) {
-		case 1:
-			retval = fs_index((const char *) arg1);
-			break;
-
-		case 2:
-			retval = fs_name(arg1, (char *) arg2);
-			break;
-
-		case 3:
-			retval = fs_maxindex();
-			break;
-	}
-	unlock_kernel();
-	return retval;
 }
 
 static struct proc_fs_info {
@@ -378,39 +456,6 @@ int get_filesystem_info( char *buf )
 
 	free_page((unsigned long) buffer);
 	return len;
-}
-
-int get_filesystem_list(char * buf)
-{
-	int len = 0;
-	struct file_system_type * tmp;
-
-	tmp = file_systems;
-	while (tmp && len < PAGE_SIZE - 80) {
-		len += sprintf(buf+len, "%s\t%s\n",
-			(tmp->fs_flags & FS_REQUIRES_DEV) ? "" : "nodev",
-			tmp->name);
-		tmp = tmp->next;
-	}
-	return len;
-}
-
-struct file_system_type *get_fs_type(const char *name)
-{
-	struct file_system_type * fs = file_systems;
-	
-	if (!name)
-		return fs;
-	for (fs = file_systems; fs && strcmp(fs->name, name); fs = fs->next)
-		;
-#ifdef CONFIG_KMOD
-	if (!fs && (request_module(name) == 0)) {
-		for (fs = file_systems; fs && strcmp(fs->name, name); fs = fs->next)
-			;
-	}
-#endif
-
-	return fs;
 }
 
 void __wait_on_super(struct super_block * sb)
@@ -533,25 +578,10 @@ struct super_block *get_empty_super(void)
 }
 
 static struct super_block * read_super(kdev_t dev, struct block_device *bdev,
-				       const char *name, int flags,
+				       struct file_system_type *type, int flags,
 				       void *data, int silent)
 {
 	struct super_block * s;
-	struct file_system_type *type;
-
-	if (!dev)
-		goto out_null;
-	check_disk_change(dev);
-	s = get_super(dev);
-	if (s)
-		goto found;	/* ought to set ->s_bdev */
-
-	type = get_fs_type(name);
-	if (!type) {
-		printk("VFS: on device %s: get_fs_type(%s) failed\n",
-		       kdevname(dev), name);
-		goto out;
-	}
 	s = get_empty_super();
 	if (!s)
 		goto out;
@@ -561,11 +591,11 @@ static struct super_block * read_super(kdev_t dev, struct block_device *bdev,
 	s->s_dirt = 0;
 	sema_init(&s->s_vfs_rename_sem,1);
 	sema_init(&s->s_nfsd_free_path_sem,1);
-	/* N.B. Should lock superblock now ... */
+	s->s_type = type;
+	lock_super(s);
 	if (!type->read_super(s, data, silent))
 		goto out_fail;
-	s->s_type = type;
-bd_get:
+	unlock_super(s);
 	/* tell bdcache that we are going to keep this one */
 	if (bdev)
 		atomic_inc(&bdev->bd_count);
@@ -575,12 +605,10 @@ out:
 out_fail:
 	s->s_dev = 0;
 	s->s_bdev = 0;
-out_null:
-	s = NULL;
-	goto out;
-found:
-	s->s_bdev = bdev;
-	goto bd_get;
+	s->s_type = NULL;
+	put_filesystem(type);
+	unlock_super(s);
+	return NULL;
 }
 
 /*
@@ -720,6 +748,8 @@ static struct block_device *do_umount(kdev_t dev, int unmount_root, int flags)
 	sb->s_dev = 0;		/* Free the superblock */
 	bdev = sb->s_bdev;
 	sb->s_bdev = NULL;
+	put_filesystem(sb->s_type);
+	sb->s_type = NULL;
 	unlock_super(sb);
 
 	remove_vfsmnt(dev);
@@ -854,6 +884,7 @@ int do_mount(struct block_device *bdev, const char *dev_name,
 	struct dentry * dir_d;
 	struct super_block * sb;
 	struct vfsmount *vfsmnt;
+	struct file_system_type *fs_type;
 	int error;
 
 	if (bdev) {
@@ -891,14 +922,27 @@ int do_mount(struct block_device *bdev, const char *dev_name,
 	if (dir_d->d_covers != dir_d)
 		goto dput_and_out;
 
-	/*
-	 * Note: If the superblock already exists,
-	 * read_super just does a get_super().
-	 */
 	error = -EINVAL;
-	sb = read_super(dev, bdev, type, flags, data, 0);
-	if (!sb)
+	if (!dev)
 		goto dput_and_out;
+	check_disk_change(dev);
+	sb = get_super(dev);
+	if (sb) {
+		/* Already mounted */
+		error = -EBUSY;
+		goto dput_and_out;
+	}
+
+	fs_type = get_fs_type(type);
+	if (!fs_type) {
+		printk("VFS: on device %s: get_fs_type(%s) failed\n",
+		       kdevname(dev), type);
+		goto dput_and_out;
+	}
+
+	sb = read_super(dev, bdev, fs_type, flags, data, 0);
+	if (!sb)
+		goto fsput_and_out;
 
 	/*
 	 * We may have slept while reading the super block, 
@@ -918,7 +962,12 @@ int do_mount(struct block_device *bdev, const char *dev_name,
 	}
 
 bdput_and_out:
+	/* FIXME: ->put_super() is needed here */
 	sb->s_bdev = NULL;
+	sb->s_dev = 0;
+	sb->s_type = NULL;
+fsput_and_out:
+	put_filesystem(fs_type);
 	if (bdev)
 		bdput(bdev);
 dput_and_out:
@@ -951,7 +1000,9 @@ static int do_remount_sb(struct super_block *sb, int flags, char *data)
 		if (!fs_may_remount_ro(sb))
 			return -EBUSY;
 	if (sb->s_op && sb->s_op->remount_fs) {
+		lock_super(sb);
 		retval = sb->s_op->remount_fs(sb, &flags, data);
+		unlock_super(sb);
 		if (retval)
 			return retval;
 	}
@@ -1154,6 +1205,7 @@ void __init mount_root(void)
 			}
 			put_unnamed_dev(sb->s_dev);
 			sb->s_dev = 0;
+			put_filesystem(fs_type);
 		}
 		if (!ROOT_DEV) {
 			printk(KERN_ERR "VFS: Unable to mount root fs via NFS, trying floppy.\n");
@@ -1195,6 +1247,14 @@ void __init mount_root(void)
 	    devfs_get_maj_min (handle, &major, &minor);
 	    ROOT_DEV = MKDEV (major, minor);
 	}
+
+	/*
+	 * Probably pure paranoia, but I'm less than happy about delving into
+	 * devfs crap and checking it right now. Later.
+	 */
+	if (!ROOT_DEV)
+		panic("I have no root and I want to sream");
+
 	bdev = bdget(kdev_t_to_nr(ROOT_DEV));
 	if (!bdev)
 		panic(__FUNCTION__ ": unable to allocate root device");
@@ -1216,37 +1276,57 @@ void __init mount_root(void)
 		printk ("VFS: Cannot open root device \"%s\" or %s\n",
 			root_device_name, kdevname (ROOT_DEV));
 		printk ("Please append a correct \"root=\" boot option\n");
+		panic("VFS: Unable to mount root fs on %s",
+			kdevname(ROOT_DEV));
 	}
-	else for (fs_type = file_systems ; fs_type ; fs_type = fs_type->next) {
+
+	check_disk_change(ROOT_DEV);
+
+	spin_lock(&file_systems_lock);
+	for (fs_type = file_systems ; fs_type ; fs_type = fs_type->next) {
   		if (!(fs_type->fs_flags & FS_REQUIRES_DEV))
   			continue;
-  		sb = read_super(ROOT_DEV,bdev,fs_type->name,root_mountflags,NULL,1);
+		if (!try_inc_mod_count(fs_type->owner))
+			continue;
+		spin_unlock(&file_systems_lock);
+		sb = get_super(ROOT_DEV);
 		if (sb) {
-			sb->s_flags = root_mountflags;
-			current->fs->root = dget(sb->s_root);
-			current->fs->pwd = dget(sb->s_root);
-			printk ("VFS: Mounted root (%s filesystem)%s.\n",
-				fs_type->name,
-				(sb->s_flags & MS_RDONLY) ? " readonly" : "");
-			if (path_start >= 0) {
-				devfs_mk_symlink (NULL,
-						  "root", 0, DEVFS_FL_DEFAULT,
-						  path + 5 + path_start, 0,
-						  NULL, NULL);
-				memcpy (path + path_start, "/dev/", 5);
-				vfsmnt = add_vfsmnt (sb, path + path_start,
-						     "/");
-			}
-			else vfsmnt = add_vfsmnt (sb, "/dev/root", "/");
-			if (vfsmnt) {
-				bdput(bdev); /* sb holds a reference */
-				return;
-			}
-			panic("VFS: add_vfsmnt failed for root fs");
+			/* Shouldn't we fail here? Oh, well... */
+			sb->s_bdev = bdev;
+			goto mount_it;
 		}
+  		sb = read_super(ROOT_DEV,bdev,fs_type,root_mountflags,NULL,1);
+		if (sb) 
+			goto mount_it;
+		spin_lock(&file_systems_lock);
+		put_filesystem(fs_type);
 	}
+	spin_unlock(&file_systems_lock);
 	panic("VFS: Unable to mount root fs on %s",
 		kdevname(ROOT_DEV));
+
+mount_it:
+	sb->s_flags = root_mountflags;
+	current->fs->root = dget(sb->s_root);
+	current->fs->pwd = dget(sb->s_root);
+	printk ("VFS: Mounted root (%s filesystem)%s.\n",
+		fs_type->name,
+		(sb->s_flags & MS_RDONLY) ? " readonly" : "");
+	if (path_start >= 0) {
+		devfs_mk_symlink (NULL,
+				  "root", 0, DEVFS_FL_DEFAULT,
+				  path + 5 + path_start, 0,
+				  NULL, NULL);
+		memcpy (path + path_start, "/dev/", 5);
+		vfsmnt = add_vfsmnt (sb, path + path_start,
+				     "/");
+	}
+	else vfsmnt = add_vfsmnt (sb, "/dev/root", "/");
+	if (vfsmnt) {
+		bdput(bdev); /* sb holds a reference */
+		return;
+	}
+	panic("VFS: add_vfsmnt failed for root fs");
 }
 
 

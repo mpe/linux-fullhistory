@@ -2689,15 +2689,6 @@ static int encode_fix(struct fb_fix_screeninfo *fix,
     fix->smem_start = info->frame_buffer_phys;
     fix->smem_len = (u32)info->total_vram;
 
-#ifdef __LITTLE_ENDIAN
-    /*
-     *  Last page of 8 MB little-endian aperture is MMIO
-     *  FIXME: we should use the auxiliary aperture instead so we can acces the
-     *  full 8 MB of video RAM on 8 MB boards
-     */
-    if (fix->smem_len > 0x800000-GUI_RESERVE)
-	fix->smem_len = 0x800000-GUI_RESERVE;
-#endif
     /*
      *  Reg Block 0 (CT-compatible block) is at ati_regbase_phys
      *  Reg Block 1 (multimedia extensions) is at ati_regbase_phys-0x400
@@ -3501,14 +3492,17 @@ static int __init aty_init(struct fb_info_aty *info, const char *name)
     }
 #endif
 
-    if (info->bus_type == ISA)
-	if ((info->total_vram == 0x400000) || (info->total_vram == 0x800000)) {
-	    /* protect GUI-regs if complete Aperture is VRAM */
+    /*
+     *  Last page of 8 MB (4 MB on ISA) aperture is MMIO
+     *  FIXME: we should use the auxiliary aperture instead so we can acces the
+     *  full 8 MB of video RAM on 8 MB boards
+     */
+    if (info->total_vram == 0x800000 ||
+	(info->bus_type == ISA && info->total_vram == 0x400000))
 	    info->total_vram -= GUI_RESERVE;
-	}
 
     /* Clear the video memory */
-    memset_io(info->frame_buffer, 0, info->total_vram);
+    fb_memset((void *)info->frame_buffer, 0, info->total_vram);
 
     disp = &info->disp;
 
@@ -3634,14 +3628,14 @@ int __init atyfb_init(void)
     struct pci_dev *pdev = NULL;
     struct fb_info_aty *info;
     unsigned long addr, res_start, res_size;
+    int i;
 #ifdef __sparc__
     extern void (*prom_palette) (int);
     extern int con_is_present(void);
     struct pcidev_cookie *pcp;
     char prop[128];
-    int node, len;
+    int node, len, j;
     u32 mem, chip_id;
-    int i, j;
 
     /* Do not attach when we have a serial console. */
     if (!con_is_present())
@@ -3654,6 +3648,12 @@ int __init atyfb_init(void)
 	if ((pdev->class >> 16) == PCI_BASE_CLASS_DISPLAY) {
 	    struct resource *rp;
 
+	    for (i = sizeof(aty_features)/sizeof(*aty_features)-1; i >= 0; i--)
+		if (pdev->device == aty_features[i].pci_id)
+		    break;
+	    if (i < 0)
+		continue;
+	    
 	    info = kmalloc(sizeof(struct fb_info_aty), GFP_ATOMIC);
 	    if (!info) {
 		printk("atyfb_init: can't alloc fb_info_aty\n");

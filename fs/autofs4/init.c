@@ -14,12 +14,7 @@
 #include <linux/init.h>
 #include "autofs_i.h"
 
-static struct file_system_type autofs_fs_type = {
-	"autofs",
-	0,
-	autofs4_read_super,
-	NULL
-};
+static DECLARE_FSTYPE(autofs_fs_type, "autofs", autofs4_read_super, 0);
 
 static int __init init_autofs4_fs(void)
 {

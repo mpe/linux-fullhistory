@@ -61,6 +61,4 @@ extern inline int adfs_checkbblk(unsigned char *ptr)
 
 #endif
 
-extern int init_adfs_fs (void);
-
 #endif

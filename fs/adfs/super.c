@@ -158,7 +158,6 @@ static void adfs_put_super(struct super_block *sb)
 	for (i = 0; i < sb->u.adfs_sb.s_map_size; i++)
 		brelse(sb->u.adfs_sb.s_map[i].dm_bh);
 	kfree(sb->u.adfs_sb.s_map);
-	MOD_DEC_USE_COUNT;
 }
 
 static int parse_options(struct super_block *sb, char *options)
@@ -316,8 +315,6 @@ struct super_block *adfs_read_super(struct super_block *sb, void *data, int sile
 	if (parse_options(sb, data))
 		goto error;
 
-	MOD_INC_USE_COUNT;
-	lock_super(sb);
 	set_blocksize(dev, BLOCK_SIZE);
 	if (!(bh = bread(dev, ADFS_DISCRECORD / BLOCK_SIZE, BLOCK_SIZE))) {
 		adfs_error(sb, "unable to read superblock");
@@ -395,7 +392,6 @@ struct super_block *adfs_read_super(struct super_block *sb, void *data, int sile
 	 * set up enough so that we can read an inode
 	 */
 	sb->s_op = &adfs_sops;
-	unlock_super(sb);
 
 	dr = (struct adfs_discrecord *)(sb->u.adfs_sb.s_map[0].dm_bh->b_data + 4);
 
@@ -439,31 +435,24 @@ struct super_block *adfs_read_super(struct super_block *sb, void *data, int sile
 error_free_bh:
 	brelse(bh);
 error_unlock:
-	unlock_super(sb);
 error_dec_use:
-	MOD_DEC_USE_COUNT;
 error:
-	sb->s_dev = 0;
 	return NULL;
 }
 
-static struct file_system_type adfs_fs_type = {
-	"adfs", FS_REQUIRES_DEV, adfs_read_super, NULL
-};
+static DECLARE_FSTYPE_DEV(adfs_fs_type, "adfs", adfs_read_super);
 
-int __init init_adfs_fs(void)
+static int __init init_adfs_fs(void)
 {
 	return register_filesystem(&adfs_fs_type);
 }
 
-#ifdef MODULE
-int init_module(void)
-{
-	return init_adfs_fs();
-}
-
-void cleanup_module(void)
+static void __exit exit_adfs_fs(void)
 {
 	unregister_filesystem(&adfs_fs_type);
 }
-#endif
+
+EXPORT_NO_SYMBOLS;
+
+module_init(init_adfs_fs)
+module_exit(exit_adfs_fs)

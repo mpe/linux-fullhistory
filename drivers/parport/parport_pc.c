@@ -1175,11 +1175,11 @@ static void decode_winbond(int efer, int key, int devid, int devrev, int oldid)
 	else if ((id & ~0x0f) == 0x5210) type="83627";
 	else if ((id & ~0x0f) == 0x6010) type="83697HF";
 	else if ((oldid &0x0f ) == 0x0c) { type="83877TF"; progif=1;}
-	else if ((oldid &0x0f ) == 0x0c) { type="83877ATF"; progif=1;}
+	else if ((oldid &0x0f ) == 0x0d) { type="83877ATF"; progif=1;}
 	else progif=0;
 
 	if(type==NULL) 
-		printk("Winbond unkown chip type\n");
+		printk("Winbond unknown chip type\n");
 	else	
 	 	printk("Winbond chip type %s\n",type);
 
@@ -2161,8 +2161,8 @@ static int __devinit sio_via_686a_probe (struct pci_dev *pdev)
 
 enum parport_pc_sio_types {
 	sio_via_686a = 0,	/* Via VT82C686A motherboard Super I/O */
+	last_sio
 };
-
 
 /* each element directly indexed from enum list, above */
 static struct parport_pc_superio {
@@ -2172,195 +2172,180 @@ static struct parport_pc_superio {
 };
 
 
-static struct pci_device_id parport_pc_pci_tbl[] __devinitdata = {
-	{ 0x1106, 0x0686, PCI_ANY_ID, PCI_ANY_ID, 0, 0, sio_via_686a },
-	{ 0, }, /* terminate list */
+enum parport_pc_pci_cards {
+	siig_1s1p_10x_550 = last_sio,
+	siig_1s1p_10x_650,
+	siig_1s1p_10x_850,
+	siig_1p_10x,
+	siig_2p_10x,
+	siig_2s1p_10x_550,
+	siig_2s1p_10x_650,
+	siig_2s1p_10x_850,
+	siig_1p_20x,
+	siig_2p_20x,
+	siig_2p1s_20x_550,
+	siig_2p1s_20x_650,
+	siig_2p1s_20x_850,
+	siig_1s1p_20x_550,
+	siig_1s1p_20x_650,
+	siig_1s1p_20x_850,
+	siig_2s1p_20x_550,
+	siig_2s1p_20x_650,
+	siig_2s1p_20x_850,
+	lava_parallel,
+	lava_parallel_dual_a,
+	lava_parallel_dual_b,
+	boca_ioppar,
+	plx_9050,
+	afavlab_tk9902,
 };
 
 
-static int __devinit parport_pc_init_superio(void)
+/* each element directly indexed from enum list, above 
+ * (but offset by last_sio) */
+static struct parport_pc_pci {
+	int numports;
+	struct {
+		int lo;
+		int hi; /* -ve if not there */
+	} addr[4];
+} cards[] __devinitdata = {
+	/* siig_1s1p_10x_550 */		{ 1, { { 3, 4 }, } },
+	/* siig_1s1p_10x_650 */		{ 1, { { 3, 4 }, } },
+	/* siig_1s1p_10x_850 */		{ 1, { { 3, 4 }, } },
+	/* siig_1p_10x */		{ 1, { { 2, 3 }, } },
+	/* siig_2p_10x */		{ 2, { { 2, 3 }, { 4, 5 }, } },
+	/* siig_2s1p_10x_550 */		{ 1, { { 4, 5 }, } },
+	/* siig_2s1p_10x_650 */		{ 1, { { 4, 5 }, } },
+	/* siig_2s1p_10x_850 */		{ 1, { { 4, 5 }, } },
+	/* siig_1p_20x */		{ 1, { { 0, 1 }, } },
+	/* siig_2p_20x */		{ 2, { { 0, 1 }, { 2, 3 }, } },
+	/* siig_2p1s_20x_550 */		{ 2, { { 1, 2 }, { 3, 4 }, } },
+	/* siig_2p1s_20x_650 */		{ 2, { { 1, 2 }, { 3, 4 }, } },
+	/* siig_2p1s_20x_850 */		{ 2, { { 1, 2 }, { 3, 4 }, } },
+	/* siig_1s1p_20x_550 */		{ 1, { { 1, 2 }, } },
+	/* siig_1s1p_20x_650 */		{ 1, { { 1, 2 }, } },
+	/* siig_1s1p_20x_850 */		{ 1, { { 1, 2 }, } },
+	/* siig_2s1p_20x_550 */		{ 1, { { 2, 3 }, } },
+	/* siig_2s1p_20x_650 */		{ 1, { { 2, 3 }, } },
+	/* siig_2s1p_20x_850 */		{ 1, { { 2, 3 }, } },
+	/* lava_parallel */		{ 1, { { 0, -1 }, } },
+	/* lava_parallel_dual_a */	{ 1, { { 0, -1 }, } },
+	/* lava_parallel_dual_b */	{ 1, { { 0, -1 }, } },
+	/* boca_ioppar */		{ 1, { { 0, -1 }, } },
+	/* plx_9050 */			{ 2, { { 4, -1 }, { 5, -1 }, } },
+	/* afavlab_tk9902 */		{ 1, { { 0, 1 }, } },
+};
+
+static struct pci_device_id parport_pc_pci_tbl[] __devinitdata = {
+	/* Super-IO onboard chips */
+	{ 0x1106, 0x0686, PCI_ANY_ID, PCI_ANY_ID, 0, 0, sio_via_686a },
+
+	/* PCI cards */
+	{ PCI_VENDOR_ID_SIIG, PCI_DEVICE_ID_SIIG_1S1P_10x_550,
+	  PCI_ANY_ID, PCI_ANY_ID, 0, 0, siig_1s1p_10x_550 },
+	{ PCI_VENDOR_ID_SIIG, PCI_DEVICE_ID_SIIG_1S1P_10x_650,
+	  PCI_ANY_ID, PCI_ANY_ID, 0, 0, siig_1s1p_10x_650 },
+	{ PCI_VENDOR_ID_SIIG, PCI_DEVICE_ID_SIIG_1S1P_10x_850,
+	  PCI_ANY_ID, PCI_ANY_ID, 0, 0, siig_1s1p_10x_850 },
+	{ PCI_VENDOR_ID_SIIG, PCI_DEVICE_ID_SIIG_1P_10x,
+	  PCI_ANY_ID, PCI_ANY_ID, 0, 0, siig_1p_10x },
+	{ PCI_VENDOR_ID_SIIG, PCI_DEVICE_ID_SIIG_2P_10x,
+	  PCI_ANY_ID, PCI_ANY_ID, 0, 0, siig_2p_10x },
+	{ PCI_VENDOR_ID_SIIG, PCI_DEVICE_ID_SIIG_2S1P_10x_550,
+	  PCI_ANY_ID, PCI_ANY_ID, 0, 0, siig_2s1p_10x_550 },
+	{ PCI_VENDOR_ID_SIIG, PCI_DEVICE_ID_SIIG_2S1P_10x_650,
+	  PCI_ANY_ID, PCI_ANY_ID, 0, 0, siig_2s1p_10x_650 },
+	{ PCI_VENDOR_ID_SIIG, PCI_DEVICE_ID_SIIG_2S1P_10x_850,
+	  PCI_ANY_ID, PCI_ANY_ID, 0, 0, siig_2s1p_10x_850 },
+	{ PCI_VENDOR_ID_SIIG, PCI_DEVICE_ID_SIIG_1P_20x,
+	  PCI_ANY_ID, PCI_ANY_ID, 0, 0, siig_1p_20x },
+	{ PCI_VENDOR_ID_SIIG, PCI_DEVICE_ID_SIIG_2P_20x,
+	  PCI_ANY_ID, PCI_ANY_ID, 0, 0, siig_2p_20x },
+	{ PCI_VENDOR_ID_SIIG, PCI_DEVICE_ID_SIIG_2P1S_20x_550,
+	  PCI_ANY_ID, PCI_ANY_ID, 0, 0, siig_2p1s_20x_550 },
+	{ PCI_VENDOR_ID_SIIG, PCI_DEVICE_ID_SIIG_2P1S_20x_650,
+	  PCI_ANY_ID, PCI_ANY_ID, 0, 0, siig_2p1s_20x_650 },
+	{ PCI_VENDOR_ID_SIIG, PCI_DEVICE_ID_SIIG_2P1S_20x_850,
+	  PCI_ANY_ID, PCI_ANY_ID, 0, 0, siig_2p1s_20x_850 },
+	{ PCI_VENDOR_ID_SIIG, PCI_DEVICE_ID_SIIG_1S1P_20x_550,
+	  PCI_ANY_ID, PCI_ANY_ID, 0, 0, siig_2s1p_20x_550 },
+	{ PCI_VENDOR_ID_SIIG, PCI_DEVICE_ID_SIIG_1S1P_20x_650,
+	  PCI_ANY_ID, PCI_ANY_ID, 0, 0, siig_1s1p_20x_650 },
+	{ PCI_VENDOR_ID_SIIG, PCI_DEVICE_ID_SIIG_1S1P_20x_850,
+	  PCI_ANY_ID, PCI_ANY_ID, 0, 0, siig_1s1p_20x_850 },
+	{ PCI_VENDOR_ID_SIIG, PCI_DEVICE_ID_SIIG_2S1P_20x_550,
+	  PCI_ANY_ID, PCI_ANY_ID, 0, 0, siig_2s1p_20x_550 },
+	{ PCI_VENDOR_ID_SIIG, PCI_DEVICE_ID_SIIG_2S1P_20x_650,
+	  PCI_ANY_ID, PCI_ANY_ID, 0, 0, siig_2s1p_20x_650 },
+	{ PCI_VENDOR_ID_SIIG, PCI_DEVICE_ID_SIIG_2S1P_20x_850,
+	  PCI_ANY_ID, PCI_ANY_ID, 0, 0, siig_2s1p_20x_850 },
+	{ PCI_VENDOR_ID_LAVA, PCI_DEVICE_ID_LAVA_PARALLEL,
+	  PCI_ANY_ID, PCI_ANY_ID, 0, 0, lava_parallel },
+	{ PCI_VENDOR_ID_LAVA, PCI_DEVICE_ID_LAVA_DUAL_PAR_A,
+	  PCI_ANY_ID, PCI_ANY_ID, 0, 0, lava_parallel_dual_a },
+	{ PCI_VENDOR_ID_LAVA, PCI_DEVICE_ID_LAVA_DUAL_PAR_B,
+	  PCI_ANY_ID, PCI_ANY_ID, 0, 0, lava_parallel_dual_b },
+	{ PCI_VENDOR_ID_LAVA, PCI_DEVICE_ID_LAVA_BOCA_IOPPAR,
+	  PCI_ANY_ID, PCI_ANY_ID, 0, 0, boca_ioppar },
+	{ PCI_VENDOR_ID_PLX, PCI_DEVICE_ID_PLX_9050,
+	  PCI_SUBVENDOR_ID_EXSYS, PCI_SUBDEVICE_ID_EXSYS_4014, 0,0, plx_9050 },
+	{ PCI_VENDOR_ID_AFAVLAB, PCI_DEVICE_ID_AFAVLAB_TK9902,
+	  PCI_ANY_ID, PCI_ANY_ID, 0, 0, afavlab_tk9902 },
+	{ 0, }, /* terminate list */
+};
+MODULE_DEVICE_TABLE(pci,parport_pc_pci_tbl);
+
+static int __devinit parport_pc_pci_probe (struct pci_dev *dev,
+					   const struct pci_device_id *id)
+{
+	int count, n, i = id->driver_data;
+	if (i < last_sio)
+		/* This is an onboard Super-IO and has already been probed */
+		return 0;
+
+	/* This is a PCI card */
+	i -= last_sio;
+	count = 0;
+	for (n = 0; n < cards[i].numports; n++) {
+		int lo = cards[i].addr[n].lo;
+		int hi = cards[i].addr[n].hi;
+		unsigned long io_lo, io_hi;
+		io_lo = pci_resource_start (dev, lo);
+		io_hi = 0;
+		if (hi >= 0)
+			io_hi = pci_resource_start (dev, hi);
+		/* TODO: test if sharing interrupts works */
+		if (parport_pc_probe_port (io_lo, io_hi, PARPORT_IRQ_NONE,
+					   PARPORT_DMA_NONE, dev))
+			count++;
+	}
+
+	return count;
+}
+
+static struct pci_driver parport_pc_pci_driver = {
+	name:		"parport_pc",
+	id_table:	parport_pc_pci_tbl,
+	probe:		parport_pc_pci_probe,
+};
+
+static int __devinit parport_pc_init_superio (void)
 {
 #ifdef CONFIG_PCI
 	const struct pci_device_id *id;
 	struct pci_dev *pdev;
-	
+
 	pci_for_each_dev(pdev) {
 		id = pci_match_device (parport_pc_pci_tbl, pdev);
-		if (id == NULL)
+		if (id == NULL || id->driver_data >= last_sio)
 			continue;
-		
+
 		return parport_pc_superio_info[id->driver_data].probe (pdev);
 	}
 #endif /* CONFIG_PCI */
-	
+
 	return 0; /* zero devices found */
-}
-
-/* Look for PCI parallel port cards. */
-static int __init parport_pc_init_pci (int irq, int dma)
-{
-#ifndef PCI_VENDOR_ID_AFAVLAB
-#define PCI_VENDOR_ID_AFAVLAB		0x14db
-#define PCI_DEVICE_ID_AFAVLAB_TK9902	0x2120
-#endif
-
-	struct {
-		unsigned int vendor;
-		unsigned int device;
-		unsigned int subvendor;
-		unsigned int subdevice;
-		unsigned int numports;
-		struct {
-			unsigned long lo;
-			unsigned long hi; /* -ve if not there */
-		} addr[4];
-	} cards[] = {
-		{ PCI_VENDOR_ID_SIIG, PCI_DEVICE_ID_SIIG_1S1P_10x_550,
-		  PCI_ANY_ID, PCI_ANY_ID,
-		  1, { { 3, 4 }, } },
-		{ PCI_VENDOR_ID_SIIG, PCI_DEVICE_ID_SIIG_1S1P_10x_650,
-		  PCI_ANY_ID, PCI_ANY_ID,
-		  1, { { 3, 4 }, } },
-		{ PCI_VENDOR_ID_SIIG, PCI_DEVICE_ID_SIIG_1S1P_10x_850,
-		  PCI_ANY_ID, PCI_ANY_ID,
-		  1, { { 3, 4 }, } },
-		{ PCI_VENDOR_ID_SIIG, PCI_DEVICE_ID_SIIG_1P_10x,
-		  PCI_ANY_ID, PCI_ANY_ID,
-		  1, { { 2, 3 }, } },
-		{ PCI_VENDOR_ID_SIIG, PCI_DEVICE_ID_SIIG_2P_10x,
-		  PCI_ANY_ID, PCI_ANY_ID,
-		  2, { { 2, 3 }, { 4, 5 }, } },
-		{ PCI_VENDOR_ID_SIIG, PCI_DEVICE_ID_SIIG_2S1P_10x_550,
-		  PCI_ANY_ID, PCI_ANY_ID,
-		  1, { { 4, 5 }, } },
-		{ PCI_VENDOR_ID_SIIG, PCI_DEVICE_ID_SIIG_2S1P_10x_650,
-		  PCI_ANY_ID, PCI_ANY_ID,
-		  1, { { 4, 5 }, } },
-		{ PCI_VENDOR_ID_SIIG, PCI_DEVICE_ID_SIIG_2S1P_10x_850,
-		  PCI_ANY_ID, PCI_ANY_ID,
-		  1, { { 4, 5 }, } },
-		{ PCI_VENDOR_ID_SIIG, PCI_DEVICE_ID_SIIG_1P_20x,
-		  PCI_ANY_ID, PCI_ANY_ID,
-		  1, { { 0, 1 }, } },
-		{ PCI_VENDOR_ID_SIIG, PCI_DEVICE_ID_SIIG_2P_20x,
-		  PCI_ANY_ID, PCI_ANY_ID,
-		  2, { { 0, 1 }, { 2, 3 }, } },
-		{ PCI_VENDOR_ID_SIIG, PCI_DEVICE_ID_SIIG_2P1S_20x_550,
-		  PCI_ANY_ID, PCI_ANY_ID,
-		  2, { { 1, 2 }, { 3, 4 }, } },
-		{ PCI_VENDOR_ID_SIIG, PCI_DEVICE_ID_SIIG_2P1S_20x_650,
-		  PCI_ANY_ID, PCI_ANY_ID,
-		  2, { { 1, 2 }, { 3, 4 }, } },
-		{ PCI_VENDOR_ID_SIIG, PCI_DEVICE_ID_SIIG_2P1S_20x_850,
-		  PCI_ANY_ID, PCI_ANY_ID,
-		  2, { { 1, 2 }, { 3, 4 }, } },
-		{ PCI_VENDOR_ID_SIIG, PCI_DEVICE_ID_SIIG_1S1P_20x_550,
-		  PCI_ANY_ID, PCI_ANY_ID,
-		  1, { { 1, 2 }, } },
-		{ PCI_VENDOR_ID_SIIG, PCI_DEVICE_ID_SIIG_1S1P_20x_650,
-		  PCI_ANY_ID, PCI_ANY_ID,
-		  1, { { 1, 2 }, } },
-		{ PCI_VENDOR_ID_SIIG, PCI_DEVICE_ID_SIIG_1S1P_20x_850,
-		  PCI_ANY_ID, PCI_ANY_ID,
-		  1, { { 1, 2 }, } },
-		{ PCI_VENDOR_ID_SIIG, PCI_DEVICE_ID_SIIG_2S1P_20x_550,
-		  PCI_ANY_ID, PCI_ANY_ID,
-		  1, { { 2, 3 }, } },
-		{ PCI_VENDOR_ID_SIIG, PCI_DEVICE_ID_SIIG_2S1P_20x_650,
-		  PCI_ANY_ID, PCI_ANY_ID,
-		  1, { { 2, 3 }, } },
-		{ PCI_VENDOR_ID_SIIG, PCI_DEVICE_ID_SIIG_2S1P_20x_850,
-		  PCI_ANY_ID, PCI_ANY_ID,
-		  1, { { 2, 3 }, } },
-		{ PCI_VENDOR_ID_LAVA, PCI_DEVICE_ID_LAVA_PARALLEL,
-		  PCI_ANY_ID, PCI_ANY_ID,
-		  1, { { 0, -1 }, } },
-		{ PCI_VENDOR_ID_LAVA, PCI_DEVICE_ID_LAVA_DUAL_PAR_A,
-		  PCI_ANY_ID, PCI_ANY_ID,
-		  1, { { 0, -1 }, } },
-		{ PCI_VENDOR_ID_LAVA, PCI_DEVICE_ID_LAVA_DUAL_PAR_B,
-		  PCI_ANY_ID, PCI_ANY_ID,
-		  1, { { 0, -1 }, } },
-		{ PCI_VENDOR_ID_LAVA, PCI_DEVICE_ID_LAVA_BOCA_IOPPAR,
-		  PCI_ANY_ID, PCI_ANY_ID,
-		  1, { { 0, -1 }, } },
-		{ PCI_VENDOR_ID_PLX, PCI_DEVICE_ID_PLX_9050,
-		  PCI_SUBVENDOR_ID_EXSYS, PCI_SUBDEVICE_ID_EXSYS_4014,
-		  2, { { 4, -1 }, { 5, -1 }, } },
-		{ PCI_VENDOR_ID_AFAVLAB, PCI_DEVICE_ID_AFAVLAB_TK9902,
-		  PCI_ANY_ID, PCI_ANY_ID,
-		  1, { { 0, 1 }, } },
-		{ 0, }
-	};
-
-	struct pci_dev *pcidev;
-	int count = 0;
-	int i;
-
-	if (!pci_present ())
-		return 0;
-
-	for (i = 0; cards[i].vendor; i++) {
-		pcidev = NULL;
-		while ((pcidev = pci_find_device (cards[i].vendor,
-						  cards[i].device,
-						  pcidev)) != NULL) {
-			int n;
-
-			if (cards[i].subvendor != PCI_ANY_ID &&
-			    cards[i].subvendor != pcidev->subsystem_vendor)
-				continue;
-
-			if (cards[i].subdevice != PCI_ANY_ID &&
-			    cards[i].subdevice != pcidev->subsystem_device)
-				continue;
-
-			for (n = 0; n < cards[i].numports; n++) {
-				unsigned long lo = cards[i].addr[n].lo;
-				unsigned long hi = cards[i].addr[n].hi;
-				unsigned long io_lo, io_hi;
-				io_lo = pcidev->resource[lo].start;
-				io_hi = ((hi < 0) ? 0 :
-					 pcidev->resource[hi].start);
-				if (irq == PARPORT_IRQ_AUTO) {
-					if (parport_pc_probe_port (io_lo,
-								   io_hi,
-								   pcidev->irq,
-								   dma,
-								   pcidev))
-						count++;
-				} else if (parport_pc_probe_port (io_lo, io_hi,
-								  irq, dma,
-								  pcidev))
-					count++;
-			}
-		}
-	}
-
-#ifdef CONFIG_PCI
-	/* Look for parallel controllers that we don't know about. */
-	pci_for_each_dev(pcidev) {
-		const int class_noprogif = pcidev->class & ~0xff;
-		if (class_noprogif != (PCI_CLASS_COMMUNICATION_PARALLEL << 8))
-			continue;
-
-		for (i = 0; cards[i].vendor; i++)
-			if ((cards[i].vendor == pcidev->vendor) &&
-			    (cards[i].device == pcidev->device))
-				break;
-		if (cards[i].vendor)
-			/* We know about this one. */
-			continue;
-
-		printk (KERN_INFO
-			"Unknown PCI parallel I/O card (%04x/%04x)\n"
-			"Please send 'lspci' output to "
-			"tim@cyberelk.demon.co.uk\n",
-			pcidev->vendor, pcidev->device);
-	}
-#endif
-
-	return count;
 }
 
 /* Exported symbols. */
@@ -2401,7 +2386,7 @@ int init_module(void)
 {	
 	/* Work out how many ports we have, then get parport_share to parse
 	   the irq values. */
-	unsigned int i;
+	unsigned int i, n;
 	if (superio) {
 		detect_and_report_winbond ();
 		detect_and_report_smsc ();
@@ -2430,12 +2415,18 @@ int init_module(void)
 			}
 	}
 
-	return (parport_pc_init(io, io_hi, irqval, dmaval)?0:1);
+	n = parport_pc_init_superio ();
+	n += parport_pc_init (io, io_hi, irqval, dmaval);
+	i = pci_register_driver (&parport_pc_pci_driver);
+
+	if (i > 0) n += i;
+	return !n;
 }
 
 void cleanup_module(void)
 {
 	struct parport *p = parport_enumerate(), *tmp;
+	pci_unregister_driver (&parport_pc_pci_driver);
 	while (p) {
 		tmp = p->next;
 		if (p->modes & PARPORT_MODE_PCSPP) { 

@@ -48,7 +48,7 @@ static void	      shm_put_super  (struct super_block *);
 static int	      shm_remount_fs (struct super_block *, int *, char *);
 static void	      shm_read_inode (struct inode *);
 static void	      shm_write_inode(struct inode *);
-static int	      shm_statfs (struct super_block *, struct statfs *, int);
+static int	      shm_statfs (struct super_block *, struct statfs *);
 static int	      shm_create   (struct inode *,struct dentry *,int);
 static struct dentry *shm_lookup   (struct inode *,struct dentry *);
 static int	      shm_unlink   (struct inode *,struct dentry *);
@@ -134,12 +134,7 @@ static struct dentry *zdent;
 
 static struct super_block * shm_sb;
 
-static struct file_system_type shm_fs_type = {
-	"shm",
-	0,
-	shm_read_super,
-	NULL
-};
+static DECLARE_FSTYPE(shm_fs_type, "shm", shm_read_super, 0);
 
 static struct super_operations shm_sops = {
 	read_inode:	shm_read_inode,
@@ -275,7 +270,6 @@ static struct super_block *shm_read_super(struct super_block *s,void *data,
 		return NULL;
 	}
 
-	lock_super(s);
 	shm_ctlall = SHMALL;
 	shm_ctlmni = SHMMNI;
 	shm_mode   = S_IRWXUGO | S_ISVTX;
@@ -300,15 +294,12 @@ static struct super_block *shm_read_super(struct super_block *s,void *data,
 		goto out_no_root;
 	s->u.generic_sbp = (void*) shm_sb;
 	shm_sb = s;
-	unlock_super(s);
 	return s;
 
 out_no_root:
 	printk("proc_read_super: get root inode failed\n");
 	iput(root_inode);
 out_unlock:
-	s->s_dev = 0;
-	unlock_super(s);
 	return NULL;
 }
 
@@ -347,18 +338,16 @@ static void shm_put_super(struct super_block *sb)
 	up(&shm_ids.sem);
 }
 
-static int shm_statfs(struct super_block *sb, struct statfs *buf, int bufsiz)
+static int shm_statfs(struct super_block *sb, struct statfs *buf)
 {
-	struct statfs tmp;
-
-	tmp.f_type = 0;
-	tmp.f_bsize = PAGE_SIZE;
-	tmp.f_blocks = shm_ctlall;
-	tmp.f_bavail = tmp.f_bfree = shm_ctlall - shm_tot;
-	tmp.f_files = shm_ctlmni;
-	tmp.f_ffree = shm_ctlmni - used_segs;
-	tmp.f_namelen = SHM_NAME_LEN;
-	return copy_to_user(buf, &tmp, bufsiz) ? -EFAULT : 0;
+	buf->f_type = 0;
+	buf->f_bsize = PAGE_SIZE;
+	buf->f_blocks = shm_ctlall;
+	buf->f_bavail = buf->f_bfree = shm_ctlall - shm_tot;
+	buf->f_files = shm_ctlmni;
+	buf->f_ffree = shm_ctlmni - used_segs;
+	buf->f_namelen = SHM_NAME_LEN;
+	return 0;
 }
 
 static void shm_write_inode(struct inode * inode)

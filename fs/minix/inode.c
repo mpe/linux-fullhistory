@@ -79,7 +79,6 @@ static void minix_put_super(struct super_block *sb)
 	brelse (sb->u.minix_sb.s_sbh);
 	kfree(sb->u.minix_sb.s_imap);
 
-	MOD_DEC_USE_COUNT;
 	return;
 }
 
@@ -188,13 +187,10 @@ static struct super_block *minix_read_super(struct super_block *s, void *data,
 	if (64 != sizeof(struct minix2_inode))
 		panic("bad V2 i-node size");
 
-	MOD_INC_USE_COUNT;
-
 	hblock = get_hardblocksize(dev);
 	if (hblock && hblock > BLOCK_SIZE)
 		goto out_bad_hblock;
 
-	lock_super(s);
 	set_blocksize(dev, BLOCK_SIZE);
 	if (!(bh = bread(dev,1,BLOCK_SIZE)))
 		goto out_bad_sb;
@@ -286,7 +282,6 @@ static struct super_block *minix_read_super(struct super_block *s, void *data,
 		mark_buffer_dirty(bh, 1);
 		s->s_dirt = 1;
 	}
-	unlock_super(s);
 	if (!(s->u.minix_sb.s_mount_state & MINIX_VALID_FS))
 		printk ("MINIX-fs: mounting unchecked file system, "
 			"running fsck is recommended.\n");
@@ -328,7 +323,7 @@ out_no_fs:
 		       "%s.\n", kdevname(dev));
     out_release:
 	brelse(bh);
-	goto out_unlock;
+	goto out;
 
 out_bad_hblock:
 	printk("MINIX-fs: blocksize too small for device.\n");
@@ -336,11 +331,7 @@ out_bad_hblock:
 
 out_bad_sb:
 	printk("MINIX-fs: unable to read superblock\n");
-    out_unlock:
-	unlock_super(s);
  out:
-	s->s_dev = 0;
-	MOD_DEC_USE_COUNT;
 	return NULL;
 }
 
@@ -1274,12 +1265,7 @@ int minix_sync_inode(struct inode * inode)
 	return err;
 }
 
-static struct file_system_type minix_fs_type = {
-	"minix",
-	FS_REQUIRES_DEV,
-	minix_read_super,
-	NULL
-};
+static DECLARE_FSTYPE_DEV(minix_fs_type,"minix",minix_read_super);
 
 int __init init_minix_fs(void)
 {

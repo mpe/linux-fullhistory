@@ -1,4 +1,4 @@
-/* $Id: pbm.h,v 1.20 2000/02/18 13:50:55 davem Exp $
+/* $Id: pbm.h,v 1.21 2000/03/10 02:42:17 davem Exp $
  * pbm.h: UltraSparc PCI controller software state.
  *
  * Copyright (C) 1997, 1998, 1999 David S. Miller (davem@redhat.com)
@@ -63,12 +63,21 @@ struct pci_iommu {
 	 */
 	unsigned long	write_complete_reg;
 
+	/* The lowest used consistent mapping entry.  Since
+	 * we allocate consistent maps out of cluster 0 this
+	 * is relative to the beginning of closter 0.
+	 */
+	u32		lowest_consistent_map;
+
 	/* If PBM_NCLUSTERS is ever decreased to 4 or lower,
 	 * or if largest supported page_table_sz * 8K goes above
 	 * 2GB, you must increase the size of the type of
 	 * these counters.  You have been duly warned. -DaveM
 	 */
-	u16		lowest_free[PBM_NCLUSTERS];
+	struct {
+		u16	next;
+		u16	flush;
+	} alloc_info[PBM_NCLUSTERS];
 
 	/* Here a PCI controller driver describes the areas of
 	 * PCI memory space where DMA to/from physical memory

@@ -4,8 +4,8 @@
 /*
  * Socket related defines.  This mostly mirrors the Linux/x86 version.
  *
- * Copyright (C) 1998, 1999 Hewlett-Packard Co
- * Copyright (C) 1998, 1999 David Mosberger-Tang <davidm@hpl.hp.com>
+ * Copyright (C) 1998-2000 Hewlett-Packard Co
+ * Copyright (C) 1998-2000 David Mosberger-Tang <davidm@hpl.hp.com>
  */
 
 #include <asm/sockios.h>
@@ -40,11 +40,13 @@
 #define SO_SECURITY_ENCRYPTION_TRANSPORT	23
 #define SO_SECURITY_ENCRYPTION_NETWORK		24
 
-#define SO_BINDTODEVICE	25
+#define SO_BINDTODEVICE		25
 
 /* Socket filtering */
-#define SO_ATTACH_FILTER        26
-#define SO_DETACH_FILTER        27
+#define SO_ATTACH_FILTER	26
+#define SO_DETACH_FILTER	27
+
+#define SO_PEERNAME		28
 
 #define SO_PEERNAME             28
 

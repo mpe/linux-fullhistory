@@ -2502,11 +2502,6 @@ void attach_ms_sound(struct address_info *hw_config)
 	int dma = hw_config->dma;
 	int dma2 = hw_config->dma2;
 
-	if(hw_config->io_base != -1 || hw_config->irq == -1 || hw_config->dma == -1) {
-		printk(KERN_WARNING "ad1848: must give I/O , IRQ and DMA.\n");
-		return;
-	}
-
 	if (hw_config->card_subtype == 1)	/* Has no IRQ/DMA registers */
 	{
 		hw_config->slots[0] = ad1848_init("MS Sound System", hw_config->io_base + 4,
@@ -2573,9 +2568,6 @@ void attach_ms_sound(struct address_info *hw_config)
 					  dma2, 0,
 					  hw_config->osp);
 	request_region(hw_config->io_base, 4, "WSS config");
-
-	SOUND_LOCK;
-	loaded = 1;
 }
 
 void unload_ms_sound(struct address_info *hw_config)
@@ -2710,15 +2702,6 @@ EXPORT_SYMBOL(probe_ms_sound);
 EXPORT_SYMBOL(attach_ms_sound);
 EXPORT_SYMBOL(unload_ms_sound);
 
-MODULE_PARM(io, "i");			/* I/O for a raw AD1848 card */
-MODULE_PARM(irq, "i");			/* IRQ to use */
-MODULE_PARM(dma, "i");			/* First DMA channel */
-MODULE_PARM(dma2, "i");			/* Second DMA channel */
-MODULE_PARM(type, "i");			/* Card type */
-MODULE_PARM(deskpro_xl, "i");		/* Special magic for Deskpro XL boxen */
-MODULE_PARM(deskpro_m, "i");		/* Special magic for Deskpro M box */
-MODULE_PARM(soundpro, "i");		/* More special magic for SoundPro chips */
-
 static int __initdata io = -1;
 static int __initdata irq = -1;
 static int __initdata dma = -1;
@@ -2727,21 +2710,41 @@ static int __initdata type = 0;
 
 static struct address_info cfg;
 
+MODULE_PARM(io, "i");                   /* I/O for a raw AD1848 card */
+MODULE_PARM(irq, "i");                  /* IRQ to use */
+MODULE_PARM(dma, "i");                  /* First DMA channel */
+MODULE_PARM(dma2, "i");                 /* Second DMA channel */
+MODULE_PARM(type, "i");                 /* Card type */
+MODULE_PARM(deskpro_xl, "i");           /* Special magic for Deskpro XL boxen
+*/
+MODULE_PARM(deskpro_m, "i");            /* Special magic for Deskpro M box */
+MODULE_PARM(soundpro, "i");             /* More special magic for SoundPro
+chips */
+
 static int __init init_ad1848(void)
 {
 	printk(KERN_INFO "ad1848/cs4248 codec driver Copyright (C) by Hannu Savolainen 1993-1996\n");
 
-	cfg.irq = irq;
-	cfg.io_base = io;
-	cfg.dma = dma;
-	cfg.dma2 = dma2;
-	cfg.card_subtype = type;
+	if(io != -1) {
+		if(irq == -1 || dma == -1) {
+			printk(KERN_WARNING "ad1848: must give I/O , IRQ and DMA.\n");
+			return -EINVAL;
+		}
 
-	if(probe_ms_sound(&cfg)) {
+		cfg.irq = irq;
+		cfg.io_base = io;
+		cfg.dma = dma;
+		cfg.dma2 = dma2;
+		cfg.card_subtype = type;
+
+		if(!probe_ms_sound(&cfg))
+			return -ENODEV;
 		attach_ms_sound(&cfg);
-		return 0;
-	} else
-		return -ENODEV;
+		loaded = 1;
+	}
+	
+	SOUND_LOCK;
+	return 0;
 }
 
 static void __exit cleanup_ad1848(void)

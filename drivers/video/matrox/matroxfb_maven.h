@@ -6,10 +6,13 @@
 #include <linux/i2c-algo-bit.h>
 #include "matroxfb_base.h"
 
+struct matroxfb_dh_maven_info;
+
 struct i2c_bit_adapter {
 	struct i2c_adapter		adapter;
 	int				initialized;
 	struct i2c_algo_bit_data	bac;
+	struct matroxfb_dh_maven_info  *minfo;
 };
 
 struct matroxfb_dh_maven_info {

@@ -12,9 +12,11 @@ comment 'USB Controllers'
    if [ "$CONFIG_USB_UHCI" != "n" -a "$CONFIG_EXPERIMENTAL" = "y" ]; then
       bool '    USB-UHCI High Bandwidth (EXPERIMENTAL)' CONFIG_USB_UHCI_HIGH_BANDWIDTH
    fi
-   dep_tristate '  UHCI Alternate Driver (JE) support' CONFIG_USB_UHCI_ALT $CONFIG_USB
-   if [ "$CONFIG_USB_UHCI_ALT" != "n" -a "$CONFIG_EXPERIMENTAL" = "y" ]; then
-      bool '    UHCI unlink optimizations (EXPERIMENTAL)' CONFIG_USB_UHCI_ALT_UNLINK_OPTIMIZE
+   if [ "$CONFIG_USB_UHCI" != "y" ]; then
+      dep_tristate '  UHCI Alternate Driver (JE) support' CONFIG_USB_UHCI_ALT $CONFIG_USB
+      if [ "$CONFIG_USB_UHCI_ALT" != "n" -a "$CONFIG_EXPERIMENTAL" = "y" ]; then
+         bool '    UHCI unlink optimizations (EXPERIMENTAL)' CONFIG_USB_UHCI_ALT_UNLINK_OPTIMIZE
+      fi
    fi
    dep_tristate '  OHCI (Compaq, iMacs, OPTi, SiS, ALi, ...) support' CONFIG_USB_OHCI $CONFIG_USB
 

@@ -1336,7 +1336,6 @@ static int proc_read_exca(char *buf, char **start, off_t pos,
 
 static void pcic_proc_setup(unsigned int sock, struct proc_dir_entry *base)
 {
-#ifdef CONFIG_PROC_FS
     socket_info_t *s = &socket[sock];
 
     if (s->flags & IS_ALIVE)
@@ -1345,7 +1344,6 @@ static void pcic_proc_setup(unsigned int sock, struct proc_dir_entry *base)
     create_proc_read_entry("info", 0, base, proc_read_info, s);
     create_proc_read_entry("exca", 0, base, proc_read_exca, s);
     s->proc = base;
-#endif
 }
 
 static void pcic_proc_remove(u_short sock)
@@ -1355,6 +1353,10 @@ static void pcic_proc_remove(u_short sock)
     remove_proc_entry("info", base);
     remove_proc_entry("exca", base);
 }
+
+#else
+
+#define pcic_proc_setup NULL
 
 #endif /* CONFIG_PROC_FS */
 

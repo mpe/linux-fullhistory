@@ -39,6 +39,8 @@ void __init signals_init(void)
 				  sizeof(struct signal_queue),
 				  __alignof__(struct signal_queue),
 				  SIG_SLAB_DEBUG, NULL, NULL);
+	if (!signal_queue_cachep)
+		panic("signals_init(): cannot create signal_queue SLAB cache");
 }
 
 

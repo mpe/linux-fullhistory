@@ -287,6 +287,9 @@ static void* i2c_matroxfb_probe(struct matrox_fb_info* minfo) {
 	matroxfb_DAC_unlock_irqrestore(flags);
 
 	memset(m2info, 0, sizeof(*m2info));
+	m2info->maven.minfo = m2info;
+	m2info->ddc1.minfo = m2info;
+	m2info->ddc2.minfo = m2info;
 	m2info->primary_dev = minfo;
 
 	if (ACCESS_FBINFO(devflags.accelerator) == FB_ACCEL_MATROX_MGA2064W ||

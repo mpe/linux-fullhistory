@@ -801,6 +801,10 @@ int __init dabusb_init (void)
 {
 	unsigned u;
 
+	/* register misc device */
+	if (usb_register(&dabusb_driver))
+		return -1;
+
 	/* initialize struct */
 	for (u = 0; u < NRDABUSB; u++) {
 		pdabusb_t s = &dabusb[u];
@@ -815,11 +819,7 @@ int __init dabusb_init (void)
 		INIT_LIST_HEAD (&s->rec_buff_list);
 	}
 
-	/* register misc device */
-	usb_register (&dabusb_driver);
-
 	dbg("dabusb_init: driver registered");
-
 	return 0;
 }
 

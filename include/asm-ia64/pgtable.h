@@ -343,6 +343,7 @@ extern void __handle_bad_pmd (pmd_t *pmd);
 
 
 extern pgd_t swapper_pg_dir[PTRS_PER_PGD];
+extern void paging_init (void);
 
 /*
  * IA-64 doesn't have any external MMU info: the page tables contain

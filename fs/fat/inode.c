@@ -194,11 +194,6 @@ void fat_put_super(struct super_block *sb)
 		kfree(MSDOS_SB(sb)->options.iocharset);
 		MSDOS_SB(sb)->options.iocharset = NULL;
 	}
-
-	if (MSDOS_SB(sb)->put_super_callback)
-		MSDOS_SB(sb)->put_super_callback(sb);
-	MOD_DEC_USE_COUNT;
-	return;
 }
 
 
@@ -444,9 +439,7 @@ fat_read_super(struct super_block *sb, void *data, int silent,
 	sbi->cvf_format = NULL;
 	sbi->private_data = NULL;
 
-	MOD_INC_USE_COUNT;
 	sbi->dir_ops = fs_dir_inode_ops;
-	sbi->put_super_callback = NULL;
 	sb->s_op = &fat_sops;
 	if (hardsect_size[MAJOR(sb->s_dev)] != NULL){
 		blksize = hardsect_size[MAJOR(sb->s_dev)][MINOR(sb->s_dev)];
@@ -465,7 +458,6 @@ fat_read_super(struct super_block *sb, void *data, int silent,
 	memcpy(&(sbi->options), &opts, sizeof(struct fat_mount_options));
 
 	fat_cache_init();
-	lock_super(sb);
 	if( blksize > 1024 )
 	  {
 	    /* Force the superblock to a larger size here. */
@@ -479,7 +471,6 @@ fat_read_super(struct super_block *sb, void *data, int silent,
 	    set_blocksize(sb->s_dev, 1024);
 	  }
 	bh = bread(sb->s_dev, 0, sb->s_blocksize);
-	unlock_super(sb);
 	if (bh == NULL || !buffer_uptodate(bh)) {
 		brelse (bh);
 		goto out_no_bread;
@@ -693,12 +684,10 @@ out_fail:
 		printk("VFS: freeing iocharset=%s\n", opts.iocharset);
 		kfree(opts.iocharset);
 	}
-	sb->s_dev = 0;
 	if(sbi->private_data)
 		kfree(sbi->private_data);
 	sbi->private_data=NULL;
  
-	MOD_DEC_USE_COUNT;
 	return NULL;
 }
 

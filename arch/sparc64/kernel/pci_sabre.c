@@ -1,4 +1,4 @@
-/* $Id: pci_sabre.c,v 1.14 2000/02/18 13:48:55 davem Exp $
+/* $Id: pci_sabre.c,v 1.15 2000/03/10 02:42:16 davem Exp $
  * pci_sabre.c: Sabre specific PCI controller support.
  *
  * Copyright (C) 1997, 1998, 1999 David S. Miller (davem@caipfs.rutgers.edu)
@@ -1128,11 +1128,14 @@ static void __init sabre_iommu_init(struct pci_controller_info *p,
 	control |= SABRE_IOMMUCTRL_DENAB;
 	sabre_write(p->controller_regs + SABRE_IOMMU_CONTROL, control);
 
-	for(i = 0; i < 16; i++)
+	for(i = 0; i < 16; i++) {
+		sabre_write(p->controller_regs + SABRE_IOMMU_TAG + (i * 8UL), 0);
 		sabre_write(p->controller_regs + SABRE_IOMMU_DATA + (i * 8UL), 0);
+	}
 
-	control &= ~(SABRE_IOMMUCTRL_DENAB);
-	sabre_write(p->controller_regs + SABRE_IOMMU_CONTROL, control);
+	/* Leave diag mode enabled for full-flushing done
+	 * in pci_iommu.c
+	 */
 
 	tsbbase = __get_free_pages(GFP_KERNEL, order = get_order(tsbsize * 1024 * 8));
 	if (!tsbbase) {
@@ -1143,10 +1146,6 @@ static void __init sabre_iommu_init(struct pci_controller_info *p,
 	p->iommu.page_table_map_base = dvma_offset;
 	p->iommu.dma_addr_mask = dma_mask;
 	memset((char *)tsbbase, 0, PAGE_SIZE << order);
-
-	/* Make sure DMA address 0 is never returned just to allow catching
-	   of buggy drivers.  */
-	p->iommu.lowest_free[0] = 1;
 
 	sabre_write(p->controller_regs + SABRE_IOMMU_TSBBASE, __pa(tsbbase));
 
@@ -1168,6 +1167,15 @@ static void __init sabre_iommu_init(struct pci_controller_info *p,
 		break;
 	}
 	sabre_write(p->controller_regs + SABRE_IOMMU_CONTROL, control);
+
+	/* We start with no consistent mappings. */
+	p->iommu.lowest_consistent_map =
+		1 << (p->iommu.page_table_sz_bits - PBM_LOGCLUSTERS);
+
+	for (i = 0; i < PBM_NCLUSTERS; i++) {
+		p->iommu.alloc_info[i].flush = 0;
+		p->iommu.alloc_info[i].next = 0;
+	}
 }
 
 static void __init pbm_register_toplevel_resources(struct pci_controller_info *p,

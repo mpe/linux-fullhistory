@@ -69,7 +69,6 @@ static void isofs_put_super(struct super_block *sb)
 	       check_malloc, check_bread);
 #endif
 
-	MOD_DEC_USE_COUNT;
 	return;
 }
 
@@ -487,10 +486,6 @@ static struct super_block *isofs_read_super(struct super_block *s, void *data,
 	struct inode		      * inode;
 	struct iso9660_options		opt;
 
-	MOD_INC_USE_COUNT;
-	/* lock before any blocking operations */
-	lock_super(s);
-
 	if (!parse_options((char *) data, &opt))
 		goto out_unlock;
 
@@ -825,7 +820,6 @@ root_found:
 	if (opt.check == 'r') table++;
 	s->s_root->d_op = &isofs_dentry_ops[table];
 
-	unlock_super(s);
 	return s;
 
 	/*
@@ -868,9 +862,6 @@ out_unknown_format:
 out_freebh:
 	brelse(bh);
 out_unlock:
-	s->s_dev = 0;
-	unlock_super(s);
-	MOD_DEC_USE_COUNT;
 	return NULL;
 }
 
@@ -1438,12 +1429,7 @@ void leak_check_brelse(struct buffer_head * bh){
 
 #endif
 
-static struct file_system_type iso9660_fs_type = {
-	"iso9660",
-	FS_REQUIRES_DEV,
-	isofs_read_super, 
-	NULL
-};
+static DECLARE_FSTYPE_DEV(iso9660_fs_type, "iso9660", isofs_read_super);
 
 int __init init_iso9660_fs(void)
 {

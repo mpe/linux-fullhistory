@@ -7,13 +7,14 @@
  * This is based on version 2.4 of the manual "Enhanced Mode Processor
  * Abstraction Layer".
  *
- * Copyright (C) 1998, 1999 Hewlett-Packard Co
- * Copyright (C) 1998, 1999 David Mosberger-Tang <davidm@hpl.hp.com>
+ * Copyright (C) 1998-2000 Hewlett-Packard Co
+ * Copyright (C) 1998-2000 David Mosberger-Tang <davidm@hpl.hp.com>
  * Copyright (C) 1999 VA Linux Systems
  * Copyright (C) 1999 Walt Drummond <drummond@valinux.com>
  * Copyright (C) 1999 Srinivasa Prasad Thirumalachar <sprasad@sprasad.engr.sgi.com>
  *
  * 99/10/01	davidm	Make sure we pass zero for reserved parameters.
+ * 00/03/07	davidm	Updated pal_cache_flush() to be in sync with PAL v2.6.
  */
 
 /*
@@ -105,8 +106,8 @@ typedef u64				pal_cache_type_t;
 #define PAL_CACHE_TYPE_INSTRUCTION_DATA	3	/* Both Data & Instruction */
 
 
-#define PAL_CACHE_FLUSH_NO_INVALIDATE	0	/* Don't invalidate clean lines */
 #define PAL_CACHE_FLUSH_INVALIDATE	1	/* Invalidate clean lines */
+#define PAL_CACHE_FLUSH_CHK_INTRS	2	/* check for interrupts/mc while flushing */
 
 /* Processor cache line size in bytes  */
 typedef int				pal_cache_line_size_t;
@@ -723,12 +724,16 @@ ia64_pal_bus_set_features (pal_bus_features_u_t feature_select)
 	return iprv.status;
 }
 
-/* Flush the processor instruction or data caches */
+/*
+ * Flush the processor instruction or data caches.  *PROGRESS must be
+ * initialized to zero before calling this for the first time..
+ */
 extern inline s64 
-ia64_pal_cache_flush (u64 cache_type, u64 invalidate, u64 plat_ack) 
+ia64_pal_cache_flush (u64 cache_type, u64 invalidate, u64 *progress) 
 {	
 	struct ia64_pal_retval iprv;
-	PAL_CALL(iprv, PAL_CACHE_FLUSH, cache_type, invalidate, plat_ack); 
+	PAL_CALL(iprv, PAL_CACHE_FLUSH, cache_type, invalidate, *progress); 
+	*progress = iprv.v1;
 	return iprv.status; 
 }
 

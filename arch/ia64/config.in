@@ -35,7 +35,7 @@ if [ "$CONFIG_IA64_SGI_SN1_SIM" = "y" ]; then
 	define_bool CONFIG_IA64_SOFTSDV_HACKS y
 fi
 
-define_bool CONFIG_KCORE_ELF y	# On IA-64, we always want an ELF /dev/kcore.
+define_bool CONFIG_KCORE_ELF y	# On IA-64, we always want an ELF /proc/kcore.
 
 bool 'SMP support' CONFIG_SMP n
 bool 'Performance monitor support' CONFIG_PERFMON n

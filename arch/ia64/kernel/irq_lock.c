@@ -281,7 +281,7 @@ __global_restore_flags(unsigned long flags)
                 __sti();
                 break;
         default:
-                printk("global_restore_flags: %08lx (%08lx)\n",
-                        flags, (&flags)[-1]);
+		printk("global_restore_flags: %08lx (%08lx) from %p\n",
+		       flags, (&flags)[-1], __builtin_return_address(0));
         }
 }

@@ -49,7 +49,6 @@
  * for more info.
  */
 
-#include <linux/config.h>
 #include <linux/init.h>
 #include "sound_config.h"
 #include "soundmodule.h"

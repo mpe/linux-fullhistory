@@ -315,8 +315,6 @@ smb_put_super(struct super_block *sb)
 	kfree(sb->u.smbfs_sb.temp_buf);
 	if (server->packet)
 		smb_vfree(server->packet);
-
-	MOD_DEC_USE_COUNT;
 }
 
 struct super_block *
@@ -326,14 +324,10 @@ smb_read_super(struct super_block *sb, void *raw_data, int silent)
 	struct inode *root_inode;
 	struct smb_fattr root;
 
-	MOD_INC_USE_COUNT;
-
 	if (!raw_data)
 		goto out_no_data;
 	if (((struct smb_mount_data *) raw_data)->version != SMB_MOUNT_VERSION)
 		goto out_wrong_data;
-
-	lock_super(sb);
 
 	sb->s_blocksize = 1024;	/* Eh...  Is this correct? */
 	sb->s_blocksize_bits = 10;
@@ -389,7 +383,6 @@ smb_read_super(struct super_block *sb, void *raw_data, int silent)
 	if (!sb->s_root)
 		goto out_no_root;
 
-	unlock_super(sb);
 	return sb;
 
 out_no_root:
@@ -401,7 +394,6 @@ out_no_temp:
 	smb_vfree(sb->u.smbfs_sb.packet);
 out_no_mem:
 	printk(KERN_ERR "smb_read_super: allocation failure\n");
-	unlock_super(sb);
 	goto out_fail;
 out_wrong_data:
 	printk(KERN_ERR "SMBFS: need mount version %d\n", SMB_MOUNT_VERSION);
@@ -409,8 +401,6 @@ out_wrong_data:
 out_no_data:
 	printk("smb_read_super: missing data argument\n");
 out_fail:
-	sb->s_dev = 0;
-	MOD_DEC_USE_COUNT;
 	return NULL;
 }
 
@@ -544,12 +534,7 @@ int smb_current_kmalloced;
 int smb_current_vmalloced;
 #endif
 
-static struct file_system_type smb_fs_type = {
-	"smbfs",
-	0 /* FS_NO_DCACHE doesn't work correctly */,
-	smb_read_super,
-	NULL
-};
+static DECLARE_FSTYPE( smb_fs_type, "smbfs", smb_read_super, 0);
 
 int __init init_smb_fs(void)
 {

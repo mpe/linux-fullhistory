@@ -1,4 +1,4 @@
-# $Id: Makefile,v 1.41 1999/12/21 04:02:23 davem Exp $
+# $Id: Makefile,v 1.42 2000/03/09 05:56:43 jj Exp $
 # sparc64/Makefile
 #
 # Makefile for the architecture dependent flags and dependencies on the
@@ -14,8 +14,9 @@ SHELL  =/bin/bash
 
 CC		:= sparc64-linux-gcc
 
-IS_EGCS := $(shell if $(CC) -m64 -mcmodel=medlow -S -o /dev/null -xc /dev/null >/dev/null 2>&1; then echo y; else echo n; fi; )
+NEW_GCC := $(shell if $(CC) -m64 -mcmodel=medlow -S -o /dev/null -xc /dev/null >/dev/null 2>&1; then echo y; else echo n; fi; )
 NEW_GAS := $(shell if $(LD) --version 2>&1 | grep 'elf64_sparc' > /dev/null; then echo y; else echo n; fi)
+UNDECLARED_REGS := $(shell if $(CC) -c -x assembler /dev/null -Wa,--help | grep undeclared-regs > /dev/null; then echo y; else echo n; fi; )
 
 ifneq ($(NEW_GAS),y)
 AS		= sparc64-linux-as
@@ -28,19 +29,26 @@ AS		:= $(AS) -64
 LD		:= $(LD) -m elf64_sparc
 endif
 ELFTOAOUT	= elftoaout
+ifneq ($(UNDECLARED_REGS),y)
+CC_UNDECL	=
+else
+CC_UNDECL	= -Wa,--undeclared-regs
+AS		:= $(AS) --undeclared-regs
+endif
 
 #
 # Uncomment the first CFLAGS if you are doing kgdb source level
 # debugging of the kernel to get the proper debugging information.
 
 #CFLAGS := $(CFLAGS) -g -pipe -fcall-used-g5 -fcall-used-g7 
-ifneq ($(IS_EGCS),y)
+ifneq ($(NEW_GCC),y)
   CFLAGS := $(CFLAGS) -pipe -mno-fpu -mtune=ultrasparc -mmedlow \
 	    -ffixed-g4 -fcall-used-g5 -fcall-used-g7 -Wno-sign-compare
 else
   CFLAGS := $(CFLAGS) -m64 -pipe -mno-fpu -mcpu=ultrasparc -mcmodel=medlow \
-	    -ffixed-g4 -fcall-used-g5 -fcall-used-g7 -Wno-sign-compare
-  AFLAGS += -m64 -mcpu=ultrasparc
+	    -ffixed-g4 -fcall-used-g5 -fcall-used-g7 -Wno-sign-compare \
+	    $(CC_UNDECL)
+  AFLAGS += -m64 -mcpu=ultrasparc $(CC_UNDECL)
 endif
 
 # Uncomment this to get spinlock/rwlock debugging on SMP.

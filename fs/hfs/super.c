@@ -51,11 +51,7 @@ static struct super_operations hfs_super_operations = {
 
 /*================ File-local variables ================*/
 
-static struct file_system_type hfs_fs = {
-        "hfs",
-	FS_REQUIRES_DEV,
-	hfs_read_super, 
-	NULL};
+static DECLARE_FSTYPE_DEV(hfs_fs, "hfs", hfs_read_super);
 
 /*================ File-local functions ================*/
 
@@ -126,8 +122,6 @@ static void hfs_put_super(struct super_block *sb)
 
 	/* restore default blocksize for the device */
 	set_blocksize(sb->s_dev, BLOCK_SIZE);
-
-	MOD_DEC_USE_COUNT;
 }
 
 /*
@@ -406,11 +400,6 @@ struct super_block *hfs_read_super(struct super_block *s, void *data,
 		goto bail3;
 	}
 
-	/* in case someone tries to unload the module while we wait on I/O */
-	MOD_INC_USE_COUNT;
-
-	lock_super(s);
-
 	/* set the device driver to 512-byte blocks */
 	set_blocksize(dev, HFS_SECTOR_SIZE);
 
@@ -470,7 +459,6 @@ struct super_block *hfs_read_super(struct super_block *s, void *data,
 	s->s_root->d_op = &hfs_dentry_operations;
 
 	/* everything's okay */
-	unlock_super(s);
 	return s;
 
 bail_no_root: 
@@ -480,10 +468,7 @@ bail1:
 	hfs_mdb_put(mdb, s->s_flags & MS_RDONLY);
 bail2:
 	set_blocksize(dev, BLOCK_SIZE);
-	unlock_super(s);
-	MOD_DEC_USE_COUNT;
 bail3:
-	s->s_dev = 0;
 	return NULL;	
 }
 

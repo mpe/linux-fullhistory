@@ -71,6 +71,7 @@
 #include <linux/etherdevice.h>
 #include <linux/if_arp.h>
 #include <linux/skbuff.h>
+#include <linux/spinlock.h>
 #include <linux/termios.h>	/* For TIOCOUTQ/INQ */
 #include <net/datalink.h>
 #include <net/p8022.h>
@@ -118,49 +119,50 @@ static struct proto_ops atalk_dgram_ops;
 *                                                                          *
 \**************************************************************************/
 
-static struct sock *atalk_socket_list = NULL;
-
-/*
- * Note: Sockets may not be removed _during_ an interrupt or inet_bh
- * handler using this technique. They can be added although we do not
- * use this facility.
- */
-
-extern inline void atalk_remove_socket(struct sock *sk)
-{
-	sklist_remove_socket(&atalk_socket_list,sk);
-}
+static struct sock *atalk_sockets = NULL;
+static spinlock_t atalk_sockets_lock = SPIN_LOCK_UNLOCKED;
 
 extern inline void atalk_insert_socket(struct sock *sk)
 {
-	sklist_insert_socket(&atalk_socket_list,sk);
+	spin_lock_bh(&atalk_sockets_lock);
+	if ((sk->next = atalk_sockets) != NULL)
+		atalk_sockets->pprev = &sk->next;
+	atalk_sockets = sk;
+	sk->pprev = &atalk_sockets;
+	spin_unlock_bh(&atalk_sockets_lock);
+}
+
+extern inline void atalk_remove_socket(struct sock *sk)
+{
+	spin_lock_bh(&atalk_sockets_lock);
+	if (sk->pprev != NULL) {
+		if (sk->next)
+			sk->next->pprev = sk->pprev;
+		*sk->pprev = sk->next;
+		sk->pprev = NULL;
+	}
+	spin_unlock_bh(&atalk_sockets_lock);
 }
 
 static struct sock *atalk_search_socket(struct sockaddr_at *to, struct atalk_iface *atif)
 {
 	struct sock *s;
 
-	for(s = atalk_socket_list; s != NULL; s = s->next)
-	{
-		if(to->sat_port != s->protinfo.af_at.src_port)
-		{
+	spin_lock_bh(&atalk_sockets_lock);
+	for (s = atalk_sockets; s != NULL; s = s->next) {
+		if (to->sat_port != s->protinfo.af_at.src_port)
 			continue;
-	   	}
 
-	    	if(to->sat_addr.s_net == ATADDR_ANYNET
-			&& to->sat_addr.s_node == ATADDR_BCAST
-			&& s->protinfo.af_at.src_net == atif->address.s_net)
-		{
+	    	if (to->sat_addr.s_net == ATADDR_ANYNET &&
+		    to->sat_addr.s_node == ATADDR_BCAST &&
+		    s->protinfo.af_at.src_net == atif->address.s_net)
 			break;
-	    	}
 
-	    	if(to->sat_addr.s_net == s->protinfo.af_at.src_net
-			&& (to->sat_addr.s_node == s->protinfo.af_at.src_node
-		     	|| to->sat_addr.s_node == ATADDR_BCAST
-			|| to->sat_addr.s_node == ATADDR_ANYNODE))
-		{
+	    	if (to->sat_addr.s_net == s->protinfo.af_at.src_net &&
+		    (to->sat_addr.s_node == s->protinfo.af_at.src_node ||
+		     to->sat_addr.s_node == ATADDR_BCAST ||
+		     to->sat_addr.s_node == ATADDR_ANYNODE))
 			break;
-	   	}
 
 	    	/* XXXX.0 -- we got a request for this router. make sure
 		 * that the node is appropriately set. */
@@ -171,44 +173,80 @@ static struct sock *atalk_search_socket(struct sockaddr_at *to, struct atalk_ifa
 			break; 
 		}
 	}
+	spin_unlock_bh(&atalk_sockets_lock);
 
-	return (s);
+	return s;
 }
 
 /*
- * Find a socket in the list.
+ * Try to find a socket matching ADDR in the socket list,
+ * if found then return it.  If not, insert SK into the
+ * socket list.
+ *
+ * This entire operation must execute atomically.
  */
-static struct sock *atalk_find_socket(struct sockaddr_at *sat)
+static struct sock *atalk_find_or_insert_socket(struct sock *sk, struct sockaddr_at *sat)
 {
 	struct sock *s;
 
-	for(s = atalk_socket_list; s != NULL; s = s->next)
-	{
-		if(s->protinfo.af_at.src_net != sat->sat_addr.s_net)
-		{
-			continue;
-		}
+	spin_lock_bh(&atalk_sockets_lock);
 
-		if(s->protinfo.af_at.src_node != sat->sat_addr.s_node)
-		{
-			continue;
-		}
-
-		if(s->protinfo.af_at.src_port != sat->sat_port)
-		{
-			continue;
-		}
-
-		break;
+	for (s = atalk_sockets; s != NULL; s = s->next) {
+		if (s->protinfo.af_at.src_net == sat->sat_addr.s_net &&
+		    s->protinfo.af_at.src_node == sat->sat_addr.s_node &&
+		    s->protinfo.af_at.src_port == sat->sat_port)
+			break;
 	}
 
-	return (s);
+	if (!s) {
+		/* Wheee, it's free, assign and insert. */
+		if ((sk->next = atalk_sockets) != NULL)
+			atalk_sockets->pprev = &sk->next;
+		atalk_sockets = sk;
+		sk->pprev = &atalk_sockets;
+	}
+
+	spin_unlock_bh(&atalk_sockets_lock);
+
+	return s;
+}
+
+static void atalk_destroy_timer(unsigned long data)
+{
+	struct sock *sk = (struct sock *) data;
+
+	if (atomic_read(&sk->wmem_alloc) == 0 &&
+	    atomic_read(&sk->rmem_alloc) == 0 &&
+	    sk->dead) {
+		sock_put(sk);
+		MOD_DEC_USE_COUNT;
+	} else {
+		sk->timer.expires = jiffies + SOCK_DESTROY_TIME;
+		add_timer(&sk->timer);
+	}
 }
 
 extern inline void atalk_destroy_socket(struct sock *sk)
 {
-	sklist_destroy_socket(&atalk_socket_list, sk);
-	MOD_DEC_USE_COUNT;
+	struct sk_buff *skb;
+
+	atalk_remove_socket(sk);
+
+	while ((skb = skb_dequeue(&sk->receive_queue)) != NULL)
+		kfree_skb(skb);
+
+	if (atomic_read(&sk->wmem_alloc) == 0 &&
+	    atomic_read(&sk->rmem_alloc) == 0 &&
+	    sk->dead) {
+		sock_put(sk);
+		MOD_DEC_USE_COUNT;
+	} else {
+		init_timer(&sk->timer);
+		sk->timer.expires = jiffies + SOCK_DESTROY_TIME;
+		sk->timer.function = atalk_destroy_timer;
+		sk->timer.data = (unsigned long) sk;
+		add_timer(&sk->timer);
+	}
 }
 
 /*
@@ -217,51 +255,52 @@ extern inline void atalk_destroy_socket(struct sock *sk)
 static int atalk_get_info(char *buffer, char **start, off_t offset, int length)
 {
 	struct sock *s;
-	int len=0;
-	off_t pos=0;
-	off_t begin=0;
+	int len = 0;
+	off_t pos = 0;
+	off_t begin = 0;
 
 	/*
 	 * Output the AppleTalk data for the /proc filesystem.
 	 */
 
 	len += sprintf(buffer,"Type local_addr  remote_addr tx_queue rx_queue st uid\n");
-	for(s = atalk_socket_list; s != NULL; s = s->next)
-	{
+
+	spin_lock_bh(&atalk_sockets_lock);
+	for (s = atalk_sockets; s != NULL; s = s->next) {
 		len += sprintf(buffer+len,"%02X   ", s->type);
 		len += sprintf(buffer+len,"%04X:%02X:%02X  ",
-			ntohs(s->protinfo.af_at.src_net),
-			s->protinfo.af_at.src_node,
-			s->protinfo.af_at.src_port);
+			       ntohs(s->protinfo.af_at.src_net),
+			       s->protinfo.af_at.src_node,
+			       s->protinfo.af_at.src_port);
 		len += sprintf(buffer+len,"%04X:%02X:%02X  ",
-			ntohs(s->protinfo.af_at.dest_net),
-			s->protinfo.af_at.dest_node,
-			s->protinfo.af_at.dest_port);
+			       ntohs(s->protinfo.af_at.dest_net),
+			       s->protinfo.af_at.dest_node,
+			       s->protinfo.af_at.dest_port);
 		len += sprintf(buffer+len,"%08X:%08X ",
-			atomic_read(&s->wmem_alloc),
-			atomic_read(&s->rmem_alloc));
+			       atomic_read(&s->wmem_alloc),
+			       atomic_read(&s->rmem_alloc));
 		len += sprintf(buffer+len,"%02X %d\n", s->state, 
-			SOCK_INODE(s->socket)->i_uid);
+			       SOCK_INODE(s->socket)->i_uid);
 
 		/* Are we still dumping unwanted data then discard the record */
 		pos = begin + len;
 
-		if(pos < offset)
-		{
+		if (pos < offset) {
 			len = 0;	/* Keep dumping into the buffer start */
 			begin = pos;
 		}
-		if(pos > offset + length)	/* We have dumped enough */
+		if (pos > offset + length)	/* We have dumped enough */
 			break;
 	}
+	spin_lock_bh(&atalk_sockets_lock);
 
 	/* The data in question runs from begin to begin+len */
 	*start = buffer + (offset - begin);	/* Start of wanted data */
 	len -= (offset - begin);   /* Remove unwanted header data from length */
-	if(len > length)
+	if (len > length)
 		len = length;	   /* Remove unwanted tail data from length */
 
-	return (len);
+	return len;
 }
 
 /**************************************************************************\
@@ -270,8 +309,13 @@ static int atalk_get_info(char *buffer, char **start, off_t offset, int length)
 *                                                                          *
 \**************************************************************************/
 
+/* Anti-deadlock ordering is router_lock --> iface_lock -DaveM */
 static struct atalk_route *atalk_router_list = NULL;
+static rwlock_t atalk_router_lock = RW_LOCK_UNLOCKED;
+
 static struct atalk_iface *atalk_iface_list  = NULL;
+static spinlock_t atalk_iface_lock = SPIN_LOCK_UNLOCKED;
+
 static struct atalk_route atrtr_default; /* For probing devices or in a routerless network */
 
 /*
@@ -287,43 +331,40 @@ static void atif_drop_device(struct net_device *dev)
 	struct atalk_iface **iface = &atalk_iface_list;
 	struct atalk_iface *tmp;
 
-	while((tmp = *iface) != NULL)
-	{
-		if(tmp->dev == dev)
-		{
+	spin_lock_bh(&atalk_iface_lock);
+	while ((tmp = *iface) != NULL) {
+		if (tmp->dev == dev) {
 			*iface = tmp->next;
 			kfree_s(tmp, sizeof(struct atalk_iface));
-			dev->atalk_ptr=NULL;
+			dev->atalk_ptr = NULL;
 			MOD_DEC_USE_COUNT;
-		}
-		else
+		} else
 			iface = &tmp->next;
 	}
-
+	spin_unlock_bh(&atalk_iface_lock);
 }
 
 static struct atalk_iface *atif_add_device(struct net_device *dev, struct at_addr *sa)
 {
 	struct atalk_iface *iface = (struct atalk_iface *)
 		kmalloc(sizeof(*iface), GFP_KERNEL);
-	unsigned long flags;
 
-	if(iface==NULL)
-		return (NULL);
+	if (iface == NULL)
+		return NULL;
 
-	iface->dev=dev;
-	dev->atalk_ptr=iface;
-	iface->address= *sa;
-	iface->status=0;
-	save_flags(flags);
-	cli();
-	iface->next=atalk_iface_list;
-	atalk_iface_list=iface;
-	restore_flags(flags);
+	iface->dev = dev;
+	dev->atalk_ptr = iface;
+	iface->address = *sa;
+	iface->status = 0;
+
+	spin_lock_bh(&atalk_iface_lock);
+	iface->next = atalk_iface_list;
+	atalk_iface_list = iface;
+	spin_unlock_bh(&atalk_iface_lock);
 
 	MOD_INC_USE_COUNT;
 
-	return (iface);
+	return iface;
 }
 
 
@@ -332,60 +373,57 @@ static struct atalk_iface *atif_add_device(struct net_device *dev, struct at_add
  */
 static int atif_probe_device(struct atalk_iface *atif)
 {
-	int netrange=ntohs(atif->nets.nr_lastnet)-ntohs(atif->nets.nr_firstnet)+1;
-	int probe_net=ntohs(atif->address.s_net);
-	int probe_node=atif->address.s_node;
+	int netrange = ntohs(atif->nets.nr_lastnet) - ntohs(atif->nets.nr_firstnet) + 1;
+	int probe_net = ntohs(atif->address.s_net);
+	int probe_node = atif->address.s_node;
 	int netct, nodect;
 
 	/*
 	 * Offset the network we start probing with.
 	 */
 
-	if(probe_net == ATADDR_ANYNET)
-	{
-		if(!netrange)
+	if (probe_net == ATADDR_ANYNET) {
+		if (!netrange)
 			probe_net = ntohs(atif->nets.nr_firstnet);
 		else
-			probe_net = ntohs(atif->nets.nr_firstnet) + (jiffies%netrange);
+			probe_net = ntohs(atif->nets.nr_firstnet) + (jiffies % netrange);
 	}
 
-	if(probe_node == ATADDR_ANYNODE)
-		probe_node = jiffies&0xFF;
+	if (probe_node == ATADDR_ANYNODE)
+		probe_node = jiffies & 0xFF;
 
 	/*
 	 * Scan the networks.
 	 */
 	atif->status |= ATIF_PROBE;
-	for(netct = 0; netct <= netrange; netct++)
-	{
+	for (netct = 0; netct <= netrange; netct++) {
 		/*
 		 * Sweep the available nodes from a given start.
 		 */
 
 		atif->address.s_net = htons(probe_net);
-		for(nodect = 0; nodect < 256; nodect++)
-		{
+		for (nodect = 0; nodect < 256; nodect++) {
 			atif->address.s_node = ((nodect+probe_node) & 0xFF);
-			if(atif->address.s_node > 0 && atif->address.s_node<254)
-			{
+			if (atif->address.s_node > 0 && atif->address.s_node < 254) {
 				/*
 				 * Probe a proposed address.
 				 */
 				aarp_probe_network(atif);
 
-				if(!(atif->status & ATIF_PROBE_FAIL)) {
+				if (!(atif->status & ATIF_PROBE_FAIL)) {
 					atif->status &= ~ATIF_PROBE;
-					return (0);
+					return 0;
 				}
 			}
 			atif->status &= ~ATIF_PROBE_FAIL;
 		}
 		probe_net++;
-		if(probe_net > ntohs(atif->nets.nr_lastnet))
+		if (probe_net > ntohs(atif->nets.nr_lastnet))
 			probe_net = ntohs(atif->nets.nr_firstnet);
 	}
 	atif->status &= ~ATIF_PROBE;
-	return (-EADDRINUSE);	/* Network is full... */
+
+	return -EADDRINUSE;	/* Network is full... */
 }
 
 
@@ -394,46 +432,43 @@ static int atif_probe_device(struct atalk_iface *atif)
  */
 static int atif_proxy_probe_device(struct atalk_iface *atif, struct at_addr* proxy_addr)
 {
-	int netrange=ntohs(atif->nets.nr_lastnet)-ntohs(atif->nets.nr_firstnet)+1;
-	int probe_net=ntohs(atif->address.s_net);	// we probe the interface's network
-	int probe_node=ATADDR_ANYNODE;				// we'll take anything
+	int netrange = ntohs(atif->nets.nr_lastnet) - ntohs(atif->nets.nr_firstnet) + 1;
+	int probe_net = ntohs(atif->address.s_net); /* we probe the interface's network */
+	int probe_node = ATADDR_ANYNODE;	    /* we'll take anything */
 	int netct, nodect;
 
 	/*
 	 * Offset the network we start probing with.
 	 */
 
-	if(probe_net == ATADDR_ANYNET)
-	{
-		if(!netrange)
+	if (probe_net == ATADDR_ANYNET) {
+		if (!netrange)
 			probe_net = ntohs(atif->nets.nr_firstnet);
 		else
-			probe_net = ntohs(atif->nets.nr_firstnet) + (jiffies%netrange);
+			probe_net = ntohs(atif->nets.nr_firstnet) + (jiffies % netrange);
 	}
 
-	if(probe_node == ATADDR_ANYNODE)
-		probe_node = jiffies&0xFF;
+	if (probe_node == ATADDR_ANYNODE)
+		probe_node = jiffies & 0xFF;
 		
 	/*
 	 * Scan the networks.
 	 */
 
-	for(netct = 0; netct <= netrange; netct++)
-	{
+	for (netct = 0; netct <= netrange; netct++) {
 		/*
 		 * Sweep the available nodes from a given start.
 		 */
 
 		proxy_addr->s_net = htons(probe_net);
-		for(nodect = 0; nodect < 256; nodect++)
-		{
-			proxy_addr->s_node = ((nodect+probe_node) & 0xFF);
-			if((proxy_addr->s_node>0) && (proxy_addr->s_node<254))
-			{
+		for (nodect = 0; nodect < 256; nodect++) {
+			proxy_addr->s_node = ((nodect + probe_node) & 0xFF);
+			if ((proxy_addr->s_node > 0) && (proxy_addr->s_node < 254)) {
 				/*
 				 * Tell AARP to probe a proposed address.
 				 */
-				int probe_result = aarp_proxy_probe_network(atif, proxy_addr);
+				int probe_result = aarp_proxy_probe_network(atif,
+									    proxy_addr);
 
 				if (probe_result == 0)
 					return 0;
@@ -447,22 +482,23 @@ static int atif_proxy_probe_device(struct atalk_iface *atif, struct at_addr* pro
 			probe_net = ntohs(atif->nets.nr_firstnet);
 	}
 
-	return (-EADDRINUSE);	/* Network is full... */
+	return -EADDRINUSE;	/* Network is full... */
 }
 
 
 struct at_addr *atalk_find_dev_addr(struct net_device *dev)
 {
-	struct atalk_iface *iface=dev->atalk_ptr;
+	struct atalk_iface *iface = dev->atalk_ptr;
 
 	if(iface)
-		return (&iface->address);
+		return &iface->address;
 
-	return (NULL);
+	return NULL;
 }
 
 static struct at_addr *atalk_find_primary(void)
 {
+	struct at_addr *retval;
 	struct atalk_iface *iface;
 	struct atalk_iface *fiface = NULL;
 
@@ -470,20 +506,27 @@ static struct at_addr *atalk_find_primary(void)
 	 * Return a point-to-point interface only if
 	 * there is no non-ptp interface available.
 	 */
-	for(iface=atalk_iface_list; iface != NULL; iface=iface->next)
-	{
-		if(!fiface && !(iface->dev->flags & IFF_LOOPBACK))
-			fiface=iface;
-		if(!(iface->dev->flags & (IFF_LOOPBACK | IFF_POINTOPOINT)))
-			return (&iface->address);
+	spin_lock_bh(&atalk_iface_lock);
+	for (iface = atalk_iface_list; iface != NULL; iface = iface->next) {
+		if (!fiface && !(iface->dev->flags & IFF_LOOPBACK))
+			fiface = iface;
+		if (!(iface->dev->flags & (IFF_LOOPBACK | IFF_POINTOPOINT))) {
+			retval = &iface->address;
+			goto out;
+		}
 	}
 
-	if(fiface)
-		return (&fiface->address);
-	if(atalk_iface_list != NULL)
-		return (&atalk_iface_list->address);
-	else
-		return (NULL);
+	if (fiface) {
+		retval = &fiface->address;
+	} else if (atalk_iface_list != NULL) {
+		retval = &atalk_iface_list->address;
+	} else {
+		retval = NULL;
+	}
+out:
+	spin_unlock_bh(&atalk_iface_lock);
+
+	return retval;
 }
 
 /*
@@ -494,13 +537,15 @@ static struct atalk_iface *atalk_find_anynet(int node, struct net_device *dev)
 {
 	struct atalk_iface *iface=dev->atalk_ptr;
 
-	if(iface==NULL || (iface->status & ATIF_PROBE))
-		return (NULL);
-	if(node == ATADDR_BCAST || iface->address.s_node == node
-		|| node == ATADDR_ANYNODE)
-		return (iface);
+	if (iface==NULL || (iface->status & ATIF_PROBE))
+		return NULL;
 
-	return (NULL);
+	if (node == ATADDR_BCAST ||
+	    iface->address.s_node == node ||
+	    node == ATADDR_ANYNODE)
+		return iface;
+
+	return NULL;
 }
 
 /*
@@ -510,22 +555,24 @@ static struct atalk_iface *atalk_find_interface(int net, int node)
 {
 	struct atalk_iface *iface;
 
-	for(iface=atalk_iface_list; iface != NULL; iface=iface->next)
-	{
-		if((node==ATADDR_BCAST || node==ATADDR_ANYNODE 
-			|| iface->address.s_node==node)
-			&& iface->address.s_net==net 
-			&& !(iface->status & ATIF_PROBE))
-			return (iface);
+	spin_lock_bh(&atalk_iface_lock);
+	for (iface = atalk_iface_list; iface != NULL; iface = iface->next) {
+		if ((node == ATADDR_BCAST ||
+		     node == ATADDR_ANYNODE ||
+		     iface->address.s_node == node) &&
+		    iface->address.s_net == net &&
+		    !(iface->status & ATIF_PROBE))
+			break;
 
 		/* XXXX.0 -- net.0 returns the iface associated with net */
-		if ((node==ATADDR_ANYNODE) && (net != ATADDR_ANYNET) &&
+		if ((node == ATADDR_ANYNODE) && (net != ATADDR_ANYNET) &&
 		    (ntohs(iface->nets.nr_firstnet) <= ntohs(net)) &&
 		    (ntohs(net) <= ntohs(iface->nets.nr_lastnet)))
-		        return (iface);
+		        break;
 	}
+	spin_unlock_bh(&atalk_iface_lock);
 
-	return (NULL);
+	return iface;
 }
 
 
@@ -544,23 +591,20 @@ static struct atalk_route *atrtr_find(struct at_addr *target)
 	struct atalk_route *r;
 	struct atalk_route *net_route = NULL;
 	
-	for(r=atalk_router_list; r != NULL; r=r->next)
-	{
-		if(!(r->flags & RTF_UP))
+	read_lock_bh(&atalk_router_lock);
+	for (r = atalk_router_list; r != NULL; r = r->next) {
+		if (!(r->flags & RTF_UP))
 			continue;
-		if(r->target.s_net == target->s_net)
-		{
-			if (r->flags & RTF_HOST)
-			{
+
+		if (r->target.s_net == target->s_net) {
+			if (r->flags & RTF_HOST) {
 				/*
 				 * if this host route is for the target,
 				 * the we're done
 				 */
 				if (r->target.s_node == target->s_node)
-					return (r);
-			}
-			else
-			{
+					goto out;
+			} else {
 				/*
 				 * this route will work if there isn't a
 				 * direct host route, so cache it
@@ -574,13 +618,20 @@ static struct atalk_route *atrtr_find(struct at_addr *target)
 	 * if we found a network route but not a direct host
 	 * route, then return it
 	 */
-	if (net_route != NULL)
-		return (net_route);
+	if (net_route != NULL) {
+		r = net_route;
+	} else if (atrtr_default.dev) {
+		r = &atrtr_default;
+	} else {
+		/*
+		 * No route can be found.
+		 */
+		r = NULL;
+	}
 
-	if(atrtr_default.dev)
-		return (&atrtr_default);
-
-	return (NULL);
+out:
+	read_unlock_bh(&atalk_router_lock);
+	return r;
 }
 
 
@@ -590,12 +641,12 @@ static struct atalk_route *atrtr_find(struct at_addr *target)
  */
 struct net_device *atrtr_get_dev(struct at_addr *sa)
 {
-	struct atalk_route *atr=atrtr_find(sa);
+	struct atalk_route *atr = atrtr_find(sa);
 
-	if(atr == NULL)
-		return (NULL);
+	if (atr == NULL)
+		return NULL;
 	else
-		return (atr->dev);
+		return atr->dev;
 }
 
 /*
@@ -616,13 +667,11 @@ static void atrtr_set_default(struct net_device *dev)
  */
 static int atrtr_create(struct rtentry *r, struct net_device *devhint)
 {
-	struct sockaddr_at *ta=(struct sockaddr_at *)&r->rt_dst;
-	struct sockaddr_at *ga=(struct sockaddr_at *)&r->rt_gateway;
+	struct sockaddr_at *ta = (struct sockaddr_at *)&r->rt_dst;
+	struct sockaddr_at *ga = (struct sockaddr_at *)&r->rt_gateway;
 	struct atalk_route *rt;
 	struct atalk_iface *iface, *riface;
-	unsigned long flags;
-
-	save_flags(flags);
+	int retval;
 
 	/*
 	 * Fixme: Raise/Lower a routing change semaphore for these
@@ -632,53 +681,59 @@ static int atrtr_create(struct rtentry *r, struct net_device *devhint)
 	/*
 	 * Validate the request
 	 */
-	if(ta->sat_family != AF_APPLETALK)
-		return (-EINVAL);
-	if(devhint == NULL && ga->sat_family != AF_APPLETALK)
-		return (-EINVAL);
+	if (ta->sat_family != AF_APPLETALK)
+		return -EINVAL;
+
+	if (devhint == NULL && ga->sat_family != AF_APPLETALK)
+		return -EINVAL;
 
 	/*
 	 * Now walk the routing table and make our decisions.
 	 */
-	for(rt=atalk_router_list; rt!=NULL; rt=rt->next)
-	{
-		if(r->rt_flags != rt->flags)
+	write_lock_bh(&atalk_router_lock);
+	for (rt = atalk_router_list; rt != NULL; rt = rt->next) {
+		if (r->rt_flags != rt->flags)
 			continue;
 
-		if(ta->sat_addr.s_net == rt->target.s_net)
-		{
-			if(!(rt->flags & RTF_HOST))
+		if (ta->sat_addr.s_net == rt->target.s_net) {
+			if (!(rt->flags & RTF_HOST))
 				break;
-			if(ta->sat_addr.s_node == rt->target.s_node)
+			if (ta->sat_addr.s_node == rt->target.s_node)
 				break;
 		}
 	}
 
-	if(devhint == NULL)
-	{
-		for(riface = NULL, iface = atalk_iface_list; iface; iface = iface->next)
-		{
-			if(riface == NULL && ntohs(ga->sat_addr.s_net) >= ntohs(iface->nets.nr_firstnet) &&
-				ntohs(ga->sat_addr.s_net) <= ntohs(iface->nets.nr_lastnet))
-			{
-				riface = iface;
-			}
-			if(ga->sat_addr.s_net == iface->address.s_net 
-				&& ga->sat_addr.s_node == iface->address.s_node)
-				riface = iface;
-		}
+	if(devhint == NULL) {
+		riface = NULL;
 
-		if(riface == NULL)
-			return (-ENETUNREACH);
+		spin_lock_bh(&atalk_iface_lock);
+		for (iface = atalk_iface_list; iface; iface = iface->next) {
+			if (riface == NULL &&
+			    ntohs(ga->sat_addr.s_net) >= ntohs(iface->nets.nr_firstnet) &&
+			    ntohs(ga->sat_addr.s_net) <= ntohs(iface->nets.nr_lastnet))
+				riface = iface;
+
+			if (ga->sat_addr.s_net == iface->address.s_net  &&
+			    ga->sat_addr.s_node == iface->address.s_node)
+				riface = iface;
+		}		
+		spin_unlock_bh(&atalk_iface_lock);
+
+		retval = -ENETUNREACH;
+		if (riface == NULL)
+			goto out;
+
 		devhint = riface->dev;
 	}
 
-	if(rt == NULL)
-	{
-		rt = (struct atalk_route *)kmalloc(sizeof(struct atalk_route), GFP_KERNEL);
-		if(rt == NULL)
-			return (-ENOBUFS);
-		cli();
+	if (rt == NULL) {
+		rt = (struct atalk_route *)
+			kmalloc(sizeof(struct atalk_route), GFP_ATOMIC);
+
+		retval = -ENOBUFS;
+		if (rt == NULL)
+			goto out;
+
 		rt->next = atalk_router_list;
 		atalk_router_list = rt;
 	}
@@ -691,33 +746,38 @@ static int atrtr_create(struct rtentry *r, struct net_device *devhint)
 	rt->flags   = r->rt_flags;
 	rt->gateway = ga->sat_addr;
 
-	restore_flags(flags);
+	retval = 0;
 
-	return (0);
+out:
+	write_unlock_bh(&atalk_router_lock);
+
+	return retval;
 }
 
 /*
  * Delete a route. Find it and discard it.
  */
-static int atrtr_delete( struct at_addr *addr )
+static int atrtr_delete(struct at_addr * addr)
 {
 	struct atalk_route **r = &atalk_router_list;
 	struct atalk_route *tmp;
+	int retval = 0;
 
-	while((tmp = *r) != NULL)
-	{
-		if(tmp->target.s_net == addr->s_net
-			&& (!(tmp->flags&RTF_GATEWAY)
-			|| tmp->target.s_node == addr->s_node))
-		{
+	write_lock_bh(&atalk_router_lock);
+	while ((tmp = *r) != NULL) {
+		if (tmp->target.s_net == addr->s_net &&
+		    (!(tmp->flags&RTF_GATEWAY) ||
+		     tmp->target.s_node == addr->s_node)) {
 			*r = tmp->next;
 			kfree_s(tmp, sizeof(struct atalk_route));
-			return (0);
+			goto out;
 		}
 		r = &tmp->next;
 	}
-
-	return (-ENOENT);
+	retval = -ENOENT;
+out:
+	write_unlock_bh(&atalk_router_lock);
+	return retval;
 }
 
 /*
@@ -729,18 +789,18 @@ void atrtr_device_down(struct net_device *dev)
 	struct atalk_route **r = &atalk_router_list;
 	struct atalk_route *tmp;
 
-	while((tmp = *r) != NULL)
-	{
-		if(tmp->dev == dev)
-		{
+	write_lock_bh(&atalk_router_lock);
+	while ((tmp = *r) != NULL) {
+		if (tmp->dev == dev) {
 			*r = tmp->next;
 			kfree_s(tmp, sizeof(struct atalk_route));
-		}
-		else
+		} else {
 			r = &tmp->next;
+		}
 	}
+	write_unlock_bh(&atalk_router_lock);
 
-	if(atrtr_default.dev == dev)
+	if (atrtr_default.dev == dev)
 		atrtr_set_default(NULL);
 }
 
@@ -760,13 +820,12 @@ static inline void atalk_dev_down(struct net_device *dev)
  */
 static int ddp_device_event(struct notifier_block *this, unsigned long event, void *ptr)
 {
-	if(event == NETDEV_DOWN)
-	{
+	if (event == NETDEV_DOWN) {
 		/* Discard any use of this */
 	        atalk_dev_down((struct net_device *) ptr);
 	}
 
-	return (NOTIFY_DONE);
+	return NOTIFY_DONE;
 }
 
 /*
@@ -789,29 +848,28 @@ int atif_ioctl(int cmd, void *arg)
 	struct rtentry rtdef;
 	int	add_route;
 
-	if(copy_from_user(&atreq,arg,sizeof(atreq)))
-		return (-EFAULT);
+	if (copy_from_user(&atreq, arg, sizeof(atreq)))
+		return -EFAULT;
 
-	if((dev = __dev_get_by_name(atreq.ifr_name)) == NULL)
-		return (-ENODEV);
+	if ((dev = __dev_get_by_name(atreq.ifr_name)) == NULL)
+		return -ENODEV;
 
-	sa=(struct sockaddr_at*)&atreq.ifr_addr;
-	atif=atalk_find_dev(dev);
+	sa = (struct sockaddr_at*) &atreq.ifr_addr;
+	atif = atalk_find_dev(dev);
 
-	switch(cmd)
-	{
+	switch (cmd) {
 		case SIOCSIFADDR:
-			if(!capable(CAP_NET_ADMIN))
-				return (-EPERM);
-			if(sa->sat_family != AF_APPLETALK)
-				return (-EINVAL);
-			if(dev->type != ARPHRD_ETHER
-				&& dev->type != ARPHRD_LOOPBACK
-				&& dev->type != ARPHRD_LOCALTLK
-				&& dev->type != ARPHRD_PPP)
-				return (-EPROTONOSUPPORT);
+			if (!capable(CAP_NET_ADMIN))
+				return -EPERM;
+			if (sa->sat_family != AF_APPLETALK)
+				return -EINVAL;
+			if (dev->type != ARPHRD_ETHER &&
+			    dev->type != ARPHRD_LOOPBACK &&
+			    dev->type != ARPHRD_LOCALTLK &&
+			    dev->type != ARPHRD_PPP)
+				return -EPROTONOSUPPORT;
 
-			nr=(struct netrange *)&sa->sat_zero[0];
+			nr = (struct netrange *) &sa->sat_zero[0];
 
 			add_route = 1;
 
@@ -819,8 +877,8 @@ int atif_ioctl(int cmd, void *arg)
 			 * if this is a point-to-point iface, and we already have an 
 			 * iface for this AppleTalk address, then we should not add a route
 			 */
-			if (dev->flags & IFF_POINTOPOINT && atalk_find_interface(sa->sat_addr.s_net, sa->sat_addr.s_node))
-			{
+			if ((dev->flags & IFF_POINTOPOINT) &&
+			    atalk_find_interface(sa->sat_addr.s_net, sa->sat_addr.s_node)) {
 				printk(KERN_DEBUG "AppleTalk: point-to-point interface added with existing address\n");
 				add_route = 0;
 			}
@@ -829,123 +887,123 @@ int atif_ioctl(int cmd, void *arg)
 			 * Phase 1 is fine on LocalTalk but we don't do
 			 * EtherTalk phase 1. Anyone wanting to add it go ahead.
 			 */
-			if(dev->type == ARPHRD_ETHER && nr->nr_phase != 2)
-				return (-EPROTONOSUPPORT);
-			if(sa->sat_addr.s_node == ATADDR_BCAST 
-				|| sa->sat_addr.s_node == 254)
-				return (-EINVAL);
-			if(atif)
-			{
+			if (dev->type == ARPHRD_ETHER && nr->nr_phase != 2)
+				return -EPROTONOSUPPORT;
+			if (sa->sat_addr.s_node == ATADDR_BCAST  ||
+			    sa->sat_addr.s_node == 254)
+				return -EINVAL;
+			if (atif) {
 				/*
 				 * Already setting address.
 				 */
-				if(atif->status&ATIF_PROBE)
-					return (-EBUSY);
+				if (atif->status & ATIF_PROBE)
+					return -EBUSY;
 
 				atif->address.s_net  = sa->sat_addr.s_net;
 				atif->address.s_node = sa->sat_addr.s_node;
 				atrtr_device_down(dev);	/* Flush old routes */
-			}
-			else
-			{
-				atif=atif_add_device(dev, &sa->sat_addr);
+			} else {
+				atif = atif_add_device(dev, &sa->sat_addr);
 				if (atif == NULL)
-					return (-ENOMEM);
+					return -ENOMEM;
 			}
-			atif->nets= *nr;
+			atif->nets = *nr;
 
 			/*
 			 * Check if the chosen address is used. If so we
 			 * error and atalkd will try another.
 			 */
 
-			if(!(dev->flags & IFF_LOOPBACK) && !(dev->flags & IFF_POINTOPOINT) && atif_probe_device(atif) < 0)
-			{
+			if (!(dev->flags & IFF_LOOPBACK) &&
+			    !(dev->flags & IFF_POINTOPOINT) &&
+			    atif_probe_device(atif) < 0) {
 				atif_drop_device(dev);
-				return (-EADDRINUSE);
+				return -EADDRINUSE;
 			}
 
 			/*
 			 * Hey it worked - add the direct routes.
 			 */
 
-			sa = (struct sockaddr_at *)&rtdef.rt_gateway;
+			sa = (struct sockaddr_at *) &rtdef.rt_gateway;
 			sa->sat_family = AF_APPLETALK;
 			sa->sat_addr.s_net  = atif->address.s_net;
 			sa->sat_addr.s_node = atif->address.s_node;
-			sa = (struct sockaddr_at *)&rtdef.rt_dst;
+			sa = (struct sockaddr_at *) &rtdef.rt_dst;
 			rtdef.rt_flags = RTF_UP;
 			sa->sat_family = AF_APPLETALK;
 			sa->sat_addr.s_node = ATADDR_ANYNODE;
-			if((dev->flags & IFF_LOOPBACK) || (dev->flags & IFF_POINTOPOINT))
+			if ((dev->flags & IFF_LOOPBACK) ||
+			    (dev->flags & IFF_POINTOPOINT))
 				rtdef.rt_flags |= RTF_HOST;
 
 			/*
 			 * Routerless initial state.
 			 */
-			if(nr->nr_firstnet == htons(0)
-				&& nr->nr_lastnet == htons(0xFFFE))
-			{
+			if (nr->nr_firstnet == htons(0) &&
+			    nr->nr_lastnet == htons(0xFFFE)) {
 				sa->sat_addr.s_net = atif->address.s_net;
 				atrtr_create(&rtdef, dev);
 				atrtr_set_default(dev);
-			}
-			else
-			{
+			} else {
 				limit = ntohs(nr->nr_lastnet);
-				if(limit - ntohs(nr->nr_firstnet) > 4096)
-				{
+				if (limit - ntohs(nr->nr_firstnet) > 4096) {
 					printk(KERN_WARNING "Too many routes/iface.\n");
-					return (-EINVAL);
+					return -EINVAL;
 				}
-				if (add_route)
-					for(ct=ntohs(nr->nr_firstnet);ct<=limit;ct++)
-					{
+				if (add_route) {
+					for(ct = ntohs(nr->nr_firstnet);ct <= limit; ct++) {
 						sa->sat_addr.s_net = htons(ct);
 						atrtr_create(&rtdef, dev);
 					}
+				}
 			}
 			dev_mc_add(dev, aarp_mcast, 6, 1);
-			return (0);
+			return 0;
 
 		case SIOCGIFADDR:
-			if(atif == NULL)
-				return (-EADDRNOTAVAIL);
-			((struct sockaddr_at *)(&atreq.ifr_addr))->sat_family=AF_APPLETALK;
-			((struct sockaddr_at *)(&atreq.ifr_addr))->sat_addr=atif->address;
+			if (atif == NULL)
+				return -EADDRNOTAVAIL;
+			((struct sockaddr_at *)(&atreq.ifr_addr))->sat_family =
+				AF_APPLETALK;
+			((struct sockaddr_at *)(&atreq.ifr_addr))->sat_addr =
+				atif->address;
 			break;
 
 		case SIOCGIFBRDADDR:
-			if(atif == NULL)
-				return (-EADDRNOTAVAIL);
-			((struct sockaddr_at *)(&atreq.ifr_addr))->sat_family=AF_APPLETALK;
-			((struct sockaddr_at *)(&atreq.ifr_addr))->sat_addr.s_net=atif->address.s_net;
-			((struct sockaddr_at *)(&atreq.ifr_addr))->sat_addr.s_node=ATADDR_BCAST;
+			if (atif == NULL)
+				return -EADDRNOTAVAIL;
+			((struct sockaddr_at *)(&atreq.ifr_addr))->sat_family =
+				AF_APPLETALK;
+			((struct sockaddr_at *)(&atreq.ifr_addr))->sat_addr.s_net =
+				atif->address.s_net;
+			((struct sockaddr_at *)(&atreq.ifr_addr))->sat_addr.s_node =
+				ATADDR_BCAST;
 			break;
 
 	        case SIOCATALKDIFADDR:
 	        case SIOCDIFADDR:
-			if(!capable(CAP_NET_ADMIN))
-				return (-EPERM);
-			if(sa->sat_family != AF_APPLETALK)
-				return (-EINVAL);
+			if (!capable(CAP_NET_ADMIN))
+				return -EPERM;
+			if (sa->sat_family != AF_APPLETALK)
+				return -EINVAL;
 			atalk_dev_down(dev);
 			break;			
 
 		case SIOCSARP:
-			if(!capable(CAP_NET_ADMIN))
-                                return (-EPERM);
-                        if(sa->sat_family != AF_APPLETALK)
-                                return (-EINVAL);
+			if (!capable(CAP_NET_ADMIN))
+                                return -EPERM;
+                        if (sa->sat_family != AF_APPLETALK)
+                                return -EINVAL;
                         if (atif == NULL)
-                                return (-EADDRNOTAVAIL);
+                                return -EADDRNOTAVAIL;
 
                         /*
                          * for now, we only support proxy AARP on ELAP;
                          * we should be able to do it for LocalTalk, too.
                          */
-                        if(dev->type != ARPHRD_ETHER)
-                                return (-EPROTONOSUPPORT);
+                        if (dev->type != ARPHRD_ETHER)
+                                return -EPROTONOSUPPORT;
 
                         /*
                          * atif points to the current interface on this network;
@@ -954,28 +1012,28 @@ int atif_ioctl(int cmd, void *arg)
                          * to probe.  consequently, it must exist.
                          */
                         if (!atif)
-                                return (-EADDRNOTAVAIL);
+                                return -EADDRNOTAVAIL;
 
-                        nr=(struct netrange *)&(atif->nets);
+                        nr = (struct netrange *) &(atif->nets);
                         /*
                          * Phase 1 is fine on Localtalk but we don't do
                          * Ethertalk phase 1. Anyone wanting to add it go ahead.
                          */
-                        if(dev->type == ARPHRD_ETHER && nr->nr_phase != 2)
-                                return (-EPROTONOSUPPORT);
+                        if (dev->type == ARPHRD_ETHER && nr->nr_phase != 2)
+                                return -EPROTONOSUPPORT;
 
-                        if(sa->sat_addr.s_node == ATADDR_BCAST
-                                || sa->sat_addr.s_node == 254)
-                                return (-EINVAL);
+                        if (sa->sat_addr.s_node == ATADDR_BCAST ||
+			    sa->sat_addr.s_node == 254)
+                                return -EINVAL;
 
                         /*
                          * Check if the chosen address is used. If so we
                          * error and ATCP will try another.
                          */
                       	if (atif_proxy_probe_device(atif, &(sa->sat_addr)) < 0)
-                      		return (-EADDRINUSE);
+                      		return -EADDRINUSE;
                       	
-                       /*
+			/*
                          * We now have an address on the local network, and the AARP
                          * code will defend it for us until we take it down.
                          * We don't set up any routes right now, because ATCP will
@@ -984,25 +1042,25 @@ int atif_ioctl(int cmd, void *arg)
                         break;
 
                 case SIOCDARP:
-                        if(!capable(CAP_NET_ADMIN))
-                                return (-EPERM);
-                        if(sa->sat_family != AF_APPLETALK)
-                                return (-EINVAL);
+                        if (!capable(CAP_NET_ADMIN))
+                                return -EPERM;
+                        if (sa->sat_family != AF_APPLETALK)
+                                return -EINVAL;
                         if (atif == NULL)
-                                return (-EADDRNOTAVAIL);
+                                return -EADDRNOTAVAIL;
 
                         /*
                          * give to aarp module to remove proxy entry
                          */
                         aarp_proxy_remove(atif->dev, &(sa->sat_addr));
 
-                        return (0);
-	}
+                        return 0;
+	};
 
-	if(copy_to_user(arg, &atreq, sizeof(atreq)))
-		return (-EFAULT);
+	if (copy_to_user(arg, &atreq, sizeof(atreq)))
+		return -EFAULT;
 
-	return (0);
+	return 0;
 }
 
 /*
@@ -1013,27 +1071,26 @@ static int atrtr_ioctl(unsigned int cmd, void *arg)
 	struct rtentry rt;
 	struct net_device *dev = NULL;
 
-	if(copy_from_user(&rt, arg, sizeof(rt)))
-		return (-EFAULT);
+	if (copy_from_user(&rt, arg, sizeof(rt)))
+		return -EFAULT;
 
-	switch(cmd)
-	{
+	switch (cmd) {
 		case SIOCDELRT:
-			if(rt.rt_dst.sa_family != AF_APPLETALK)
-				return (-EINVAL);
-			return (atrtr_delete(&((struct sockaddr_at *)&rt.rt_dst)->sat_addr));
+			if (rt.rt_dst.sa_family != AF_APPLETALK)
+				return -EINVAL;
+			return atrtr_delete(&((struct sockaddr_at *)&rt.rt_dst)->sat_addr);
 
 		case SIOCADDRT:
 			/* FIX ME: the name of the device is still in user space, isn't it? */
-			if (rt.rt_dev != NULL)
+			if (rt.rt_dev != NULL) {
 				if ((dev = __dev_get_by_name(rt.rt_dev)) == NULL)
-					return -(ENODEV);
-			
-			return (atrtr_create(&rt, dev));
+					return -ENODEV;
+			}			
+			return atrtr_create(&rt, dev);
 
 		default:
-			return (-EINVAL);
-	}
+			return -EINVAL;
+	};
 }
 
 /* Called from proc fs - just make it print the ifaces neatly */
@@ -1041,29 +1098,31 @@ static int atrtr_ioctl(unsigned int cmd, void *arg)
 static int atalk_if_get_info(char *buffer, char **start, off_t offset, int length)
 {
 	struct atalk_iface *iface;
-	int len=0;
-	off_t pos=0;
-	off_t begin=0;
+	int len = 0;
+	off_t pos = 0;
+	off_t begin = 0;
 
 	len += sprintf(buffer,"Interface	  Address   Networks   Status\n");
-	for(iface = atalk_iface_list; iface != NULL; iface = iface->next)
-	{
+
+	spin_lock_bh(&atalk_iface_lock);
+	for (iface = atalk_iface_list; iface != NULL; iface = iface->next) {
 		len += sprintf(buffer+len,"%-16s %04X:%02X  %04X-%04X  %d\n",
-			iface->dev->name, ntohs(iface->address.s_net),
-			iface->address.s_node, ntohs(iface->nets.nr_firstnet),
-			ntohs(iface->nets.nr_lastnet), iface->status);
+			       iface->dev->name, ntohs(iface->address.s_net),
+			       iface->address.s_node, ntohs(iface->nets.nr_firstnet),
+			       ntohs(iface->nets.nr_lastnet), iface->status);
 		pos = begin + len;
-		if(pos < offset)
-		{
+		if (pos < offset) {
 			len   = 0;
 			begin = pos;
 		}
-		if(pos > offset + length)
+		if (pos > offset + length)
 			break;
 	}
+	spin_unlock_bh(&atalk_iface_lock);
+
 	*start = buffer + (offset - begin);
 	len -= (offset - begin);
-	if(len > length)
+	if (len > length)
 		len = length;
 
 	return (len);
@@ -1074,41 +1133,40 @@ static int atalk_if_get_info(char *buffer, char **start, off_t offset, int lengt
 static int atalk_rt_get_info(char *buffer, char **start, off_t offset, int length)
 {
 	struct atalk_route *rt;
-	int len=0;
-	off_t pos=0;
-	off_t begin=0;
+	int len = 0;
+	off_t pos = 0;
+	off_t begin = 0;
 
 	len += sprintf(buffer,"Target        Router  Flags Dev\n");
-	if(atrtr_default.dev)
-	{
+	if (atrtr_default.dev) {
 		rt = &atrtr_default;
 		len += sprintf(buffer+len,"Default     %04X:%02X  %-4d  %s\n",
-			ntohs(rt->gateway.s_net), rt->gateway.s_node, rt->flags,
-			rt->dev->name);
+			       ntohs(rt->gateway.s_net), rt->gateway.s_node,
+			       rt->flags, rt->dev->name);
 	}
 
-	for(rt = atalk_router_list; rt != NULL; rt = rt->next)
-	{
+	read_lock_bh(&atalk_router_lock);
+	for (rt = atalk_router_list; rt != NULL; rt = rt->next) {
 		len += sprintf(buffer+len,"%04X:%02X     %04X:%02X  %-4d  %s\n",
-			ntohs(rt->target.s_net),rt->target.s_node,
-			ntohs(rt->gateway.s_net), rt->gateway.s_node, rt->flags,
-			rt->dev->name);
+			       ntohs(rt->target.s_net), rt->target.s_node,
+			       ntohs(rt->gateway.s_net), rt->gateway.s_node, rt->flags,
+			       rt->dev->name);
 		pos = begin + len;
-		if(pos < offset)
-		{
+		if (pos < offset) {
 			len = 0;
 			begin = pos;
 		}
-		if(pos > offset + length)
+		if (pos > offset + length)
 			break;
 	}
+	read_unlock_bh(&atalk_router_lock);
 
 	*start = buffer + (offset - begin);
 	len -= (offset - begin);
-	if(len > length)
+	if (len > length)
 		len = length;
 
-	return (len);
+	return len;
 }
 
 /**************************************************************************\
@@ -1124,27 +1182,25 @@ static int atalk_rt_get_info(char *buffer, char **start, off_t offset, int lengt
  */
 unsigned short atalk_checksum(struct ddpehdr *ddp, int len)
 {
-	unsigned long sum=0;	/* Assume unsigned long is >16 bits */
-	unsigned char *data=(unsigned char *)ddp;
+	unsigned long sum = 0;	/* Assume unsigned long is >16 bits */
+	unsigned char *data = (unsigned char *) ddp;
 
 	len  -= 4;		/* skip header 4 bytes */
 	data += 4;
 
 	/* This ought to be unwrapped neatly. I'll trust gcc for now */
-	while(len--)
-	{
+	while (len--) {
 		sum += *data;
 		sum <<= 1;
-		if(sum & 0x10000)
-		{
+		if (sum & 0x10000) {
 			sum++;
 			sum &= 0xFFFF;
 		}
 		data++;
 	}
 
-	if(sum)
-		return htons((unsigned short)sum);
+	if (sum)
+		return htons((unsigned short) sum);
 
 	return 0xFFFF;		/* Use 0xFFFF for 0. 0 itself means none */
 }
@@ -1158,11 +1214,10 @@ static int atalk_create(struct socket *sock, int protocol)
 	struct sock *sk;
 
 	sk = sk_alloc(PF_APPLETALK, GFP_KERNEL, 1);
-	if(sk == NULL)
-		return (-ENOMEM);
+	if (sk == NULL)
+		return -ENOMEM;
 
-	switch(sock->type)
-	{
+	switch (sock->type) {
 		/*
 		 * We permit SOCK_DGRAM and RAW is an extension. It is
 		 * trivial to do and gives you the full ELAP frame.
@@ -1182,19 +1237,19 @@ static int atalk_create(struct socket *sock, int protocol)
 			break;
 			*/
 		default:
-			sk_free((void *)sk);
-			return (-ESOCKTNOSUPPORT);
-	}
+			sk_free((void *) sk);
+			return -ESOCKTNOSUPPORT;
+	};
 
 	MOD_INC_USE_COUNT;
 
-	sock_init_data(sock,sk);
+	sock_init_data(sock, sk);
 
 	sk->destruct = NULL;
 	/* Checksums on by default */
 	sk->zapped = 1;
 
-	return (0);
+	return 0;
 }
 
 /*
@@ -1204,32 +1259,63 @@ static int atalk_release(struct socket *sock)
 {
 	struct sock *sk=sock->sk;
 
-	if(sk == NULL)
-		return (0);
+	if (sk == NULL)
+		return 0;
 
-	if(!sk->dead)
+	if (!sk->dead)
 		sk->state_change(sk);
 
 	sk->dead = 1;
 	sock->sk = NULL;
 	atalk_destroy_socket(sk);
 
-	return (0);
+	return 0;
 }
 
 /*
- * Pick a source address if one is not given. Just return
- * an error if not supportable.
+ * Pick a source port when one is not given. If we can
+ * find a suitable free one, we insert the socket into
+ * the tables using it.
+ *
+ * This whole operation must be atomic.
  */
-static int atalk_pick_port(struct sockaddr_at *sat)
+static int atalk_pick_and_bind_port(struct sock *sk, struct sockaddr_at *sat)
 {
-	for(sat->sat_port = ATPORT_RESERVED; sat->sat_port < ATPORT_LAST; sat->sat_port++)
-	{
-		if(atalk_find_socket(sat) == NULL)
-			return sat->sat_port;
+	struct sock *s;
+	int retval;
+
+	spin_lock_bh(&atalk_sockets_lock);
+
+	for (sat->sat_port = ATPORT_RESERVED;
+	     sat->sat_port < ATPORT_LAST;
+	     sat->sat_port++) {
+		for (s = atalk_sockets; s != NULL; s = s->next) {
+			if (s->protinfo.af_at.src_net == sat->sat_addr.s_net &&
+			    s->protinfo.af_at.src_node == sat->sat_addr.s_node &&
+			    s->protinfo.af_at.src_port == sat->sat_port)
+				goto try_next_port;
+		}
+
+		/* Wheee, it's free, assign and insert. */
+		if ((sk->next = atalk_sockets) != NULL)
+			atalk_sockets->pprev = &sk->next;
+		atalk_sockets = sk;
+		sk->pprev = &atalk_sockets;
+
+		sk->protinfo.af_at.src_port = sat->sat_port;
+
+		retval = 0;
+		goto out;
+
+	try_next_port:
+		;
 	}
 
-	return (-EBUSY);
+	retval = -EBUSY;
+out:
+	spin_unlock_bh(&atalk_sockets_lock);
+
+	return retval;
 }
 
 static int atalk_autobind(struct sock *sk)
@@ -1238,20 +1324,18 @@ static int atalk_autobind(struct sock *sk)
 	struct sockaddr_at sat;
 	int n;
 
-	if(ap == NULL || ap->s_net == htons(ATADDR_ANYNET))
-		return (-EADDRNOTAVAIL);
+	if (ap == NULL || ap->s_net == htons(ATADDR_ANYNET))
+		return -EADDRNOTAVAIL;
 
 	sk->protinfo.af_at.src_net  = sat.sat_addr.s_net  = ap->s_net;
 	sk->protinfo.af_at.src_node = sat.sat_addr.s_node = ap->s_node;
 
-	if((n = atalk_pick_port(&sat)) < 0)
-		return (n);
+	if ((n = atalk_pick_and_bind_port(sk, &sat)) < 0)
+		return n;
 
-	sk->protinfo.af_at.src_port = n;
-	atalk_insert_socket(sk);
 	sk->zapped = 0;
 
-	return (0);
+	return 0;
 }
 
 /*
@@ -1260,95 +1344,87 @@ static int atalk_autobind(struct sock *sk)
 static int atalk_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 {
 	struct sock *sk;
-	struct sockaddr_at *addr=(struct sockaddr_at *)uaddr;
+	struct sockaddr_at *addr = (struct sockaddr_at *)uaddr;
 
 	sk = sock->sk;
 
 	if(sk->zapped == 0)
-		return (-EINVAL);
+		return -EINVAL;
 
 	if(addr_len != sizeof(struct sockaddr_at))
-		return (-EINVAL);
+		return -EINVAL;
 
 	if(addr->sat_family != AF_APPLETALK)
-		return (-EAFNOSUPPORT);
+		return -EAFNOSUPPORT;
 
-	if(addr->sat_addr.s_net == htons(ATADDR_ANYNET))
-	{
-		struct at_addr *ap=atalk_find_primary();
+	if(addr->sat_addr.s_net == htons(ATADDR_ANYNET)) {
+		struct at_addr *ap = atalk_find_primary();
 
 		if(ap == NULL)
-			return (-EADDRNOTAVAIL);
+			return -EADDRNOTAVAIL;
 
 		sk->protinfo.af_at.src_net  = addr->sat_addr.s_net = ap->s_net;
 		sk->protinfo.af_at.src_node = addr->sat_addr.s_node= ap->s_node;
-	}
-	else
-	{
-		if(atalk_find_interface(addr->sat_addr.s_net, addr->sat_addr.s_node) == NULL)
-			return (-EADDRNOTAVAIL);
+	} else {
+		if (atalk_find_interface(addr->sat_addr.s_net, addr->sat_addr.s_node) == NULL)
+			return -EADDRNOTAVAIL;
 
 		sk->protinfo.af_at.src_net  = addr->sat_addr.s_net;
 		sk->protinfo.af_at.src_node = addr->sat_addr.s_node;
 	}
 
-	if(addr->sat_port == ATADDR_ANYPORT)
-	{
-		int n = atalk_pick_port(addr);
-		if(n < 0)
-			return (n);
+	if (addr->sat_port == ATADDR_ANYPORT) {
+		int n = atalk_pick_and_bind_port(sk, addr);
 
-		sk->protinfo.af_at.src_port = addr->sat_port = n;
-	}
-	else
+		if (n < 0)
+			return n;
+	} else
 		sk->protinfo.af_at.src_port = addr->sat_port;
 
-	if(atalk_find_socket(addr) != NULL)
-		return (-EADDRINUSE);
+	if (atalk_find_or_insert_socket(sk, addr) != NULL)
+		return -EADDRINUSE;
 
-	atalk_insert_socket(sk);
 	sk->zapped = 0;
 
-	return (0);
+	return 0;
 }
 
 /*
  * Set the address we talk to.
  */
 static int atalk_connect(struct socket *sock, struct sockaddr *uaddr,
-	int addr_len, int flags)
+			 int addr_len, int flags)
 {
-	struct sock *sk=sock->sk;
+	struct sock *sk = sock->sk;
 	struct sockaddr_at *addr;
 
 	sk->state   = TCP_CLOSE;
 	sock->state = SS_UNCONNECTED;
 
-	if(addr_len != sizeof(*addr))
-		return (-EINVAL);
+	if (addr_len != sizeof(*addr))
+		return -EINVAL;
+
 	addr = (struct sockaddr_at *)uaddr;
 
-	if(addr->sat_family != AF_APPLETALK)
-		return (-EAFNOSUPPORT);
+	if (addr->sat_family != AF_APPLETALK)
+		return -EAFNOSUPPORT;
 
-	if(addr->sat_addr.s_node == ATADDR_BCAST && !sk->broadcast)
-	{
+	if (addr->sat_addr.s_node == ATADDR_BCAST && !sk->broadcast) {
 #if 1	
 		printk(KERN_WARNING "%s is broken and did not set SO_BROADCAST. It will break when 2.2 is released.\n",
 			current->comm);
 #else
-		return (-EACCES);
+		return -EACCES;
 #endif			
 	}
 
-	if(sk->zapped)
-	{
-		if(atalk_autobind(sk) < 0)
-			return (-EBUSY);
+	if (sk->zapped) {
+		if (atalk_autobind(sk) < 0)
+			return -EBUSY;
 	}
 
-	if(atrtr_get_dev(&addr->sat_addr) == NULL)
-		return (-ENETUNREACH);
+	if (atrtr_get_dev(&addr->sat_addr) == NULL)
+		return -ENETUNREACH;
 
 	sk->protinfo.af_at.dest_port = addr->sat_port;
 	sk->protinfo.af_at.dest_net  = addr->sat_addr.s_net;
@@ -1357,7 +1433,7 @@ static int atalk_connect(struct socket *sock, struct sockaddr *uaddr,
 	sock->state = SS_CONNECTED;
 	sk->state   = TCP_ESTABLISHED;
 
-	return (0);
+	return 0;
 }
 
 
@@ -1366,30 +1442,27 @@ static int atalk_connect(struct socket *sock, struct sockaddr *uaddr,
  * fields into the sockaddr.
  */
 static int atalk_getname(struct socket *sock, struct sockaddr *uaddr,
-	int *uaddr_len, int peer)
+			 int *uaddr_len, int peer)
 {
 	struct sockaddr_at sat;
 	struct sock *sk;
 
 	sk = sock->sk;
-	if(sk->zapped)
-	{
-		if(atalk_autobind(sk) < 0)
-			return (-ENOBUFS);
+	if (sk->zapped) {
+		if (atalk_autobind(sk) < 0)
+			return -ENOBUFS;
 	}
 
 	*uaddr_len = sizeof(struct sockaddr_at);
 
-	if(peer)
-	{
-		if(sk->state != TCP_ESTABLISHED)
-			return (-ENOTCONN);
+	if (peer) {
+		if (sk->state != TCP_ESTABLISHED)
+			return -ENOTCONN;
+
 		sat.sat_addr.s_net  = sk->protinfo.af_at.dest_net;
 		sat.sat_addr.s_node = sk->protinfo.af_at.dest_node;
 		sat.sat_port = sk->protinfo.af_at.dest_port;
-	}
-	else
-	{
+	} else {
 		sat.sat_addr.s_net  = sk->protinfo.af_at.src_net;
 		sat.sat_addr.s_node = sk->protinfo.af_at.src_node;
 		sat.sat_port = sk->protinfo.af_at.src_port;
@@ -1398,7 +1471,7 @@ static int atalk_getname(struct socket *sock, struct sockaddr *uaddr,
 	sat.sat_family = AF_APPLETALK;
 	memcpy(uaddr, &sat, sizeof(sat));
 
-	return (0);
+	return 0;
 }
 
 /*
@@ -1411,17 +1484,16 @@ static int atalk_getname(struct socket *sock, struct sockaddr *uaddr,
 static int atalk_rcv(struct sk_buff *skb, struct net_device *dev, struct packet_type *pt)
 {
 	struct sock *sock;
-	struct ddpehdr *ddp=(void *)skb->h.raw;
+	struct ddpehdr *ddp = (void *) skb->h.raw;
 	struct atalk_iface *atif;
 	struct sockaddr_at tosat;
         int origlen;
         struct ddpebits ddphv;
 
 	/* Size check */
-	if(skb->len < sizeof(*ddp))
-	{
+	if (skb->len < sizeof(*ddp)) {
 		kfree_skb(skb);
-		return (0);
+		return 0;
 	}
 
 	/*
@@ -1449,26 +1521,24 @@ static int atalk_rcv(struct sk_buff *skb, struct net_device *dev, struct packet_
 	 * (Otherwise we'll detonate most spectacularly
 	 * in the middle of recvmsg()).
 	 */
-	if(skb->len < sizeof(*ddp))
-	{
+	if (skb->len < sizeof(*ddp)) {
 		kfree_skb(skb);
-		return (0);
+		return 0;
 	}
 
 	/*
 	 * Any checksums. Note we don't do htons() on this == is assumed to be
 	 * valid for net byte orders all over the networking code...
 	 */
-	if(ddp->deh_sum && atalk_checksum(ddp, ddphv.deh_len) != ddp->deh_sum)
-	{
+	if (ddp->deh_sum && atalk_checksum(ddp, ddphv.deh_len) != ddp->deh_sum) {
 		/* Not a valid AppleTalk frame - dustbin time */
 		kfree_skb(skb);
-		return (0);
+		return 0;
 	}
 
 	/* Check the packet is aimed at us */
 
-	if(ddp->deh_dnet == 0)	/* Net 0 is 'this network' */
+	if (ddp->deh_dnet == 0)	/* Net 0 is 'this network' */
 		atif = atalk_find_anynet(ddp->deh_dnode, dev);
 	else
 		atif = atalk_find_interface(ddp->deh_dnet, ddp->deh_dnode);
@@ -1476,8 +1546,7 @@ static int atalk_rcv(struct sk_buff *skb, struct net_device *dev, struct packet_
 	/* 
 	 * Not ours, so we route the packet via the correct AppleTalk interface.
 	 */
-	if(atif == NULL)
-	{
+	if (atif == NULL) {
 		struct atalk_route *rt;
 		struct at_addr ta;
 
@@ -1485,8 +1554,7 @@ static int atalk_rcv(struct sk_buff *skb, struct net_device *dev, struct packet_
 		 * Don't route multicast, etc., packets, or packets
 		 * sent to "this network" 
 		 */
-		if (skb->pkt_type != PACKET_HOST || ddp->deh_dnet == 0)
-		{
+		if (skb->pkt_type != PACKET_HOST || ddp->deh_dnet == 0) {
 			/*
 			 * FIX ME:
 			 * Can it ever happen that a packet is from a PPP iface and needs to be broadcast onto the default network?
@@ -1495,7 +1563,7 @@ static int atalk_rcv(struct sk_buff *skb, struct net_device *dev, struct packet_
 				printk(KERN_DEBUG "AppleTalk: didn't forward broadcast packet received from PPP iface\n");
 			
 			kfree_skb(skb);
-			return (0);
+			return 0;
 		}
 
 		ta.s_net  = ddp->deh_dnet;
@@ -1503,10 +1571,9 @@ static int atalk_rcv(struct sk_buff *skb, struct net_device *dev, struct packet_
 
 		/* Route the packet */
 		rt = atrtr_find(&ta);
-		if(rt == NULL || ddphv.deh_hops == DDP_MAXHOPS)
-		{
+		if (rt == NULL || ddphv.deh_hops == DDP_MAXHOPS) {
 			kfree_skb(skb);
-			return (0);
+			return 0;
 		}
 		ddphv.deh_hops++;
 
@@ -1514,8 +1581,7 @@ static int atalk_rcv(struct sk_buff *skb, struct net_device *dev, struct packet_
 		 * Route goes through another gateway, so
 		 * set the target to the gateway instead.
 		 */
-		if(rt->flags & RTF_GATEWAY)
-		{
+		if (rt->flags & RTF_GATEWAY) {
 			ta.s_net  = rt->gateway.s_net;
 			ta.s_node = rt->gateway.s_node;
 		}
@@ -1539,7 +1605,7 @@ static int atalk_rcv(struct sk_buff *skb, struct net_device *dev, struct packet_
 		 *
 		 * Note. ddp-> becomes invalid at the realloc.
 		 */
-		if(skb_headroom(skb) < 22)
+		if (skb_headroom(skb) < 22)
 			/* 22 bytes - 12 ether, 2 len, 3 802.2 5 snap */
 			skb = skb_realloc_headroom(skb, 32);
 		else
@@ -1549,26 +1615,24 @@ static int atalk_rcv(struct sk_buff *skb, struct net_device *dev, struct packet_
 		 * If the buffer didn't vanish into the lack of
 		 * space bitbucket we can send it.
 		 */
-		if(skb)
-		{
-			if(aarp_send_ddp(rt->dev, skb, &ta, NULL) == -1)
+		if (skb) {
+			if (aarp_send_ddp(rt->dev, skb, &ta, NULL) == -1)
 				kfree_skb(skb);
 		}
 
-		return (0);
+		return 0;
 	}
 
 #if defined(CONFIG_IPDDP) || defined(CONFIG_IPDDP_MODULE)
         /*
          *      Check if IP-over-DDP
          */
-        if(skb->data[12] == 22)
-        {
+        if (skb->data[12] == 22) {
                 struct net_device *dev;
 
 		/* This needs to be able to handle ipddp"N" devices */
-                if((dev = __dev_get_by_name("ipddp0")) == NULL)
-                        return (-ENODEV);
+                if ((dev = __dev_get_by_name("ipddp0")) == NULL)
+                        return -ENODEV;
 
                 skb->protocol = htons(ETH_P_IP);
                 skb_pull(skb, 13);
@@ -1576,10 +1640,10 @@ static int atalk_rcv(struct sk_buff *skb, struct net_device *dev, struct packet_
                 skb->h.raw = skb->data;
 
                 ((struct net_device_stats *)dev->priv)->rx_packets++;
-                ((struct net_device_stats *)dev->priv)->rx_bytes += skb->len+13;
+                ((struct net_device_stats *)dev->priv)->rx_bytes += skb->len + 13;
                 netif_rx(skb);  /* Send the SKB up to a higher place. */
 
-                return (0);
+                return 0;
         }
 #endif
 
@@ -1593,10 +1657,10 @@ static int atalk_rcv(struct sk_buff *skb, struct net_device *dev, struct packet_
 
 	sock = atalk_search_socket(&tosat, atif);
 	
-	if(sock == NULL)	/* But not one of our sockets */
-	{
+	if (sock == NULL) {
+		/* But not one of our sockets */
 		kfree_skb(skb);
-		return (0);
+		return 0;
 	}
 
 	/*
@@ -1605,10 +1669,10 @@ static int atalk_rcv(struct sk_buff *skb, struct net_device *dev, struct packet_
 	 
 	skb->sk = sock;
 
-	if(sock_queue_rcv_skb(sock, skb) < 0)
+	if (sock_queue_rcv_skb(sock, skb) < 0)
 		kfree_skb(skb);
 
-	return (0);
+	return 0;
 }
 
 /*
@@ -1624,17 +1688,15 @@ static int ltalk_rcv(struct sk_buff *skb, struct net_device *dev, struct packet_
 	/*
 	 * Expand any short form frames.
 	 */
-	if(skb->mac.raw[2] == 1)
-	{
+	if (skb->mac.raw[2] == 1) {
 		/*
 		 * Find our address.
 		 */
 
 		ap = atalk_find_dev_addr(dev);
-		if(ap == NULL || skb->len < sizeof(struct ddpshdr))
-		{
+		if (ap == NULL || skb->len < sizeof(struct ddpshdr)) {
 			kfree_skb(skb);
-			return (0);
+			return 0;
 		}
 
 		/*
@@ -1673,57 +1735,51 @@ static int ltalk_rcv(struct sk_buff *skb, struct net_device *dev, struct packet_
 	}
 	skb->h.raw = skb->data;
 
-	return (atalk_rcv(skb, dev, pt));
+	return atalk_rcv(skb, dev, pt);
 }
 
-static int atalk_sendmsg(struct socket *sock, struct msghdr *msg, int len,
-	struct scm_cookie *scm)
+static int atalk_sendmsg(struct socket *sock, struct msghdr *msg, int len, struct scm_cookie *scm)
 {
-	struct sock *sk=sock->sk;
-	struct sockaddr_at *usat=(struct sockaddr_at *)msg->msg_name;
+	struct sock *sk = sock->sk;
+	struct sockaddr_at *usat = (struct sockaddr_at *)msg->msg_name;
 	struct sockaddr_at local_satalk, gsat;
 	struct sk_buff *skb;
 	struct net_device *dev;
 	struct ddpehdr *ddp;
 	int size;
 	struct atalk_route *rt;
-	int loopback=0;
+	int loopback = 0;
 	int err;
 	int flags = msg->msg_flags;
 
-	if(flags & ~MSG_DONTWAIT)
-		return (-EINVAL);
+	if (flags & ~MSG_DONTWAIT)
+		return -EINVAL;
 
-	if(len > DDP_MAXSZ)
-		return (-EMSGSIZE);
+	if (len > DDP_MAXSZ)
+		return -EMSGSIZE;
 
-	if(usat)
-	{
-		if(sk->zapped)
-		{
-			if(atalk_autobind(sk) < 0)
-				return (-EBUSY);
+	if (usat) {
+		if(sk->zapped) {
+			if (atalk_autobind(sk) < 0)
+				return -EBUSY;
 		}
 
-		if(msg->msg_namelen < sizeof(*usat))
-			return (-EINVAL);
-		if(usat->sat_family != AF_APPLETALK)
-			return (-EINVAL);
+		if (msg->msg_namelen < sizeof(*usat))
+			return -EINVAL;
+		if (usat->sat_family != AF_APPLETALK)
+			return -EINVAL;
 
 		/* netatalk doesn't implement this check */
-		if(usat->sat_addr.s_node == ATADDR_BCAST && !sk->broadcast)
-		{
+		if (usat->sat_addr.s_node == ATADDR_BCAST && !sk->broadcast) {
 			printk(KERN_INFO "SO_BROADCAST: Fix your netatalk as it will break before 2.2\n");
 #if 0
-			return (-EPERM);
+			return -EPERM;
 #endif
 		}
-	}
-	else
-	{
-		if(sk->state != TCP_ESTABLISHED)
-			return (-ENOTCONN);
-		usat =& local_satalk;
+	} else {
+		if (sk->state != TCP_ESTABLISHED)
+			return -ENOTCONN;
+		usat = &local_satalk;
 		usat->sat_family = AF_APPLETALK;
 		usat->sat_port   = sk->protinfo.af_at.dest_port;
 		usat->sat_addr.s_node = sk->protinfo.af_at.dest_node;
@@ -1732,26 +1788,27 @@ static int atalk_sendmsg(struct socket *sock, struct msghdr *msg, int len,
 
 	/* Build a packet */
 
-	SOCK_DEBUG(sk, "SK %p: Got address.\n",sk);
+	SOCK_DEBUG(sk, "SK %p: Got address.\n", sk);
 
 	/* For headers */
 	size = sizeof(struct ddpehdr) + len + ddp_dl->header_length;
 
-	if(usat->sat_addr.s_net != 0 || usat->sat_addr.s_node == ATADDR_ANYNODE)
-	{
+	if (usat->sat_addr.s_net != 0 || usat->sat_addr.s_node == ATADDR_ANYNODE) {
 		rt = atrtr_find(&usat->sat_addr);
-		if(rt == NULL)
-			return (-ENETUNREACH);
+		if (rt == NULL)
+			return -ENETUNREACH;
+
 		dev = rt->dev;
-	}
-	else
-	{
+	} else {
 		struct at_addr at_hint;
+
 		at_hint.s_node = 0;
 		at_hint.s_net  = sk->protinfo.af_at.src_net;
+
 		rt = atrtr_find(&at_hint);
-		if(rt == NULL)
-			return (-ENETUNREACH);
+		if (rt == NULL)
+			return -ENETUNREACH;
+
 		dev = rt->dev;
 	}
 
@@ -1759,9 +1816,9 @@ static int atalk_sendmsg(struct socket *sock, struct msghdr *msg, int len,
 
 	size += dev->hard_header_len;
 
-	skb = sock_alloc_send_skb(sk, size, 0, flags&MSG_DONTWAIT, &err);
-	if(skb == NULL)
-		return (err);
+	skb = sock_alloc_send_skb(sk, size, 0, (flags & MSG_DONTWAIT), &err);
+	if (skb == NULL)
+		return err;
 	
 	skb->sk = sk;
 	skb_reserve(skb, ddp_dl->header_length);
@@ -1771,7 +1828,7 @@ static int atalk_sendmsg(struct socket *sock, struct msghdr *msg, int len,
 
 	SOCK_DEBUG(sk, "SK %p: Begin build.\n", sk);
 
-	ddp = (struct ddpehdr *)skb_put(skb,sizeof(struct ddpehdr));
+	ddp = (struct ddpehdr *)skb_put(skb, sizeof(struct ddpehdr));
 	ddp->deh_pad  = 0;
 	ddp->deh_hops = 0;
 	ddp->deh_len  = len + sizeof(*ddp);
@@ -1791,14 +1848,13 @@ static int atalk_sendmsg(struct socket *sock, struct msghdr *msg, int len,
 
 	SOCK_DEBUG(sk, "SK %p: Copy user data (%d bytes).\n", sk, len);
 
-	err = memcpy_fromiovec(skb_put(skb,len), msg->msg_iov, len);
-	if(err)
-	{
+	err = memcpy_fromiovec(skb_put(skb, len), msg->msg_iov, len);
+	if (err) {
 		kfree_skb(skb);
-		return (-EFAULT);
+		return -EFAULT;
 	}
 
-	if(sk->no_check == 1)
+	if (sk->no_check == 1)
 		ddp->deh_sum = 0;
 	else
 		ddp->deh_sum = atalk_checksum(ddp, len + sizeof(*ddp));
@@ -1807,24 +1863,20 @@ static int atalk_sendmsg(struct socket *sock, struct msghdr *msg, int len,
 	 * Loopback broadcast packets to non gateway targets (ie routes
 	 * to group we are in)
 	 */
-	if(ddp->deh_dnode == ATADDR_BCAST)
-	{
-		if((!(rt->flags&RTF_GATEWAY)) && (!(dev->flags&IFF_LOOPBACK)))
-		{
+	if (ddp->deh_dnode == ATADDR_BCAST) {
+		if ((!(rt->flags&RTF_GATEWAY)) && (!(dev->flags&IFF_LOOPBACK))) {
 			struct sk_buff *skb2 = skb_copy(skb, GFP_KERNEL);
-			if(skb2)
-			{
+			if (skb2) {
 				loopback = 1;
 				SOCK_DEBUG(sk, "SK %p: send out(copy).\n", sk);
-				if(aarp_send_ddp(dev, skb2, &usat->sat_addr, NULL) == -1)
+				if (aarp_send_ddp(dev, skb2, &usat->sat_addr, NULL) == -1)
 					kfree_skb(skb2);
 				/* else queued/sent above in the aarp queue */
 			}
 		}
 	}
 
-	if((dev->flags & IFF_LOOPBACK) || loopback)
-	{
+	if ((dev->flags & IFF_LOOPBACK) || loopback) {
 		SOCK_DEBUG(sk, "SK %p: Loop back.\n", sk);
 		/* loop back */
 		skb_orphan(skb);
@@ -1834,70 +1886,60 @@ static int atalk_sendmsg(struct socket *sock, struct msghdr *msg, int len,
 		skb_pull(skb,dev->hard_header_len);
 		skb_pull(skb,ddp_dl->header_length);
 		atalk_rcv(skb, dev, NULL);
-	}
-	else
-	{
+	} else {
 		SOCK_DEBUG(sk, "SK %p: send out.\n", sk);
-		if (rt->flags & RTF_GATEWAY)
-		{
+		if (rt->flags & RTF_GATEWAY) {
 		    gsat.sat_addr = rt->gateway;
 		    usat = &gsat;
 		}
 
-		if(aarp_send_ddp(dev, skb, &usat->sat_addr, NULL) == -1)
+		if (aarp_send_ddp(dev, skb, &usat->sat_addr, NULL) == -1)
 			kfree_skb(skb);
 		/* else queued/sent above in the aarp queue */
 	}
 	SOCK_DEBUG(sk, "SK %p: Done write (%d).\n", sk, len);
 
-	return (len);
+	return len;
 }
 
 static int atalk_recvmsg(struct socket *sock, struct msghdr *msg, int size,
-		int flags, struct scm_cookie *scm)
+			 int flags, struct scm_cookie *scm)
 {
-	struct sock *sk=sock->sk;
-	struct sockaddr_at *sat=(struct sockaddr_at *)msg->msg_name;
+	struct sock *sk = sock->sk;
+	struct sockaddr_at *sat = (struct sockaddr_at *)msg->msg_name;
 	struct ddpehdr	*ddp = NULL;
         struct ddpebits ddphv;
 	int copied = 0;
 	struct sk_buff *skb;
 	int err = 0;
 
-
-	skb = skb_recv_datagram(sk,flags&~MSG_DONTWAIT,flags&MSG_DONTWAIT,&err);
-	if(skb == NULL)
-		return (err);
+	skb = skb_recv_datagram(sk, (flags & ~MSG_DONTWAIT),
+				(flags & MSG_DONTWAIT), &err);
+	if (skb == NULL)
+		return err;
 
 	ddp = (struct ddpehdr *)(skb->h.raw);
 	*((__u16 *)&ddphv) = ntohs(*((__u16 *)ddp));
 
-	if(sk->type == SOCK_RAW)
-	{
+	if (sk->type == SOCK_RAW) {
 		copied = ddphv.deh_len;
-		if(copied > size)
-		{
+		if (copied > size) {
 			copied = size;
 			msg->msg_flags |= MSG_TRUNC;
 		}
 
 		err = skb_copy_datagram_iovec(skb, 0, msg->msg_iov, copied);
-	}
-	else
-	{
+	} else {
 		copied = ddphv.deh_len - sizeof(*ddp);
-		if(copied > size)
-		{
+		if (copied > size) {
 			copied = size;
 			msg->msg_flags |= MSG_TRUNC;
 		}
-		err = skb_copy_datagram_iovec(skb,sizeof(*ddp),msg->msg_iov,copied);
+		err = skb_copy_datagram_iovec(skb, sizeof(*ddp), msg->msg_iov, copied);
 	}
 
-	if(!err)
-	{
-		if(sat)
-		{
+	if (!err) {
+		if (sat) {
 			sat->sat_family      = AF_APPLETALK;
 			sat->sat_port        = ddp->deh_sport;
 			sat->sat_addr.s_node = ddp->deh_snode;
@@ -1908,7 +1950,7 @@ static int atalk_recvmsg(struct socket *sock, struct msghdr *msg, int size,
 
 	skb_free_datagram(sk, skb);	/* Free the datagram. */
 
-	return (err ? err : (copied));
+	return err ? err : copied;
 }
 
 

@@ -20,6 +20,7 @@
 #include <linux/stat.h>
 #include <linux/cache.h>
 #include <linux/stddef.h>
+#include <linux/string.h>
 
 #include <asm/atomic.h>
 #include <asm/bitops.h>
@@ -180,8 +181,6 @@ extern void buffer_init(unsigned long);
 extern void inode_init(void);
 extern void file_table_init(void);
 extern void dcache_init(void);
-
-typedef char buffer_block[BLOCK_SIZE];
 
 /* bh state bits */
 #define BH_Uptodate	0	/* 1 if the buffer contains valid data */
@@ -725,8 +724,29 @@ struct file_system_type {
 	const char *name;
 	int fs_flags;
 	struct super_block *(*read_super) (struct super_block *, void *, int);
+	struct module *owner;
 	struct file_system_type * next;
 };
+
+#ifdef MODULE
+#define DECLARE_FSTYPE(var,type,read,flags) \
+struct file_system_type var = { \
+	name:		type, \
+	read_super:	read, \
+	fs_flags:	flags, \
+	owner:		THIS_MODULE, \
+}
+#else
+#define DECLARE_FSTYPE(var,type,read,flags) \
+struct file_system_type var = { \
+	name:		type, \
+	read_super:	read, \
+	fs_flags:	flags, \
+}
+#endif
+
+#define DECLARE_FSTYPE_DEV(var,type,read) \
+	DECLARE_FSTYPE(var,type,read,FS_REQUIRES_DEV)
 
 extern int register_filesystem(struct file_system_type *);
 extern int unregister_filesystem(struct file_system_type *);
@@ -840,8 +860,6 @@ extern struct file_operations rdwr_fifo_fops;
 extern struct file_operations read_pipe_fops;
 extern struct file_operations write_pipe_fops;
 extern struct file_operations rdwr_pipe_fops;
-
-extern struct file_system_type *get_fs_type(const char *);
 
 extern int fs_may_remount_ro(struct super_block *);
 extern int fs_may_mount(kdev_t);

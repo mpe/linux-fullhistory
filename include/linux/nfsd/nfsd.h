@@ -129,8 +129,6 @@ int		nfsd_commit(struct svc_rqst *, struct svc_fh *,
 int		nfsd_notify_change(struct inode *, struct iattr *);
 int		nfsd_permission(struct svc_export *, struct dentry *, int);
 
-/* nfsd/nfsctl.c */
-void		nfsd_modcount(struct inode *, int);
 
 /*
  * lockd binding
@@ -159,6 +157,7 @@ void		nfsd_lockd_unexport(struct svc_client *);
 #define	nfserr_nospc		__constant_htonl(NFSERR_NOSPC)
 #define	nfserr_rofs		__constant_htonl(NFSERR_ROFS)
 #define	nfserr_mlink		__constant_htonl(NFSERR_MLINK)
+#define	nfserr_opnotsupp	__constant_htonl(NFSERR_OPNOTSUPP)
 #define	nfserr_nametoolong	__constant_htonl(NFSERR_NAMETOOLONG)
 #define	nfserr_notempty		__constant_htonl(NFSERR_NOTEMPTY)
 #define	nfserr_dquot		__constant_htonl(NFSERR_DQUOT)

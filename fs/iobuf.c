@@ -12,18 +12,21 @@
 
 static kmem_cache_t *kiobuf_cachep;
 
-/*
- * The default IO completion routine for kiobufs: just wake up
- * the kiobuf, nothing more.  
- */
 
-void simple_wakeup_kiobuf(struct kiobuf *kiobuf)
+void end_kio_request(struct kiobuf *kiobuf, int uptodate)
 {
-	wake_up(&kiobuf->wait_queue);
+	if ((!uptodate) && !kiobuf->errno)
+		kiobuf->errno = -EIO;
+
+	if (atomic_dec_and_test(&kiobuf->io_count)) {
+		if (kiobuf->end_io)
+			kiobuf->end_io(kiobuf);
+		wake_up(&kiobuf->wait_queue);
+	}
 }
 
 
-void __init kiobuf_init(void)
+void __init kiobuf_setup(void)
 {
 	kiobuf_cachep =  kmem_cache_create("kiobuf",
 					   sizeof(struct kiobuf),
@@ -33,6 +36,13 @@ void __init kiobuf_init(void)
 		panic("Cannot create kernel iobuf cache\n");
 }
 
+void kiobuf_init(struct kiobuf *iobuf)
+{
+	memset(iobuf, 0, sizeof(*iobuf));
+	init_waitqueue_head(&iobuf->wait_queue);
+	iobuf->array_len = KIO_STATIC_PAGES;
+	iobuf->maplist   = iobuf->map_array;
+}
 
 int alloc_kiovec(int nr, struct kiobuf **bufp)
 {
@@ -45,12 +55,7 @@ int alloc_kiovec(int nr, struct kiobuf **bufp)
 			free_kiovec(i, bufp);
 			return -ENOMEM;
 		}
-		
-		memset(iobuf, 0, sizeof(*iobuf));
-		init_waitqueue_head(&iobuf->wait_queue);
-		iobuf->end_io = simple_wakeup_kiobuf;
-		iobuf->array_len = KIO_STATIC_PAGES;
-		iobuf->maplist   = iobuf->map_array;
+		kiobuf_init(iobuf);
 		*bufp++ = iobuf;
 	}
 	
@@ -64,6 +69,8 @@ void free_kiovec(int nr, struct kiobuf **bufp)
 	
 	for (i = 0; i < nr; i++) {
 		iobuf = bufp[i];
+		if (iobuf->locked)
+			unlock_kiovec(1, &iobuf);
 		if (iobuf->array_len > KIO_STATIC_PAGES)
 			kfree (iobuf->maplist);
 		kmem_cache_free(kiobuf_cachep, bufp[i]);
@@ -103,6 +110,9 @@ void kiobuf_wait_for_io(struct kiobuf *kiobuf)
 {
 	struct task_struct *tsk = current;
 	DECLARE_WAITQUEUE(wait, tsk);
+
+	if (atomic_read(&kiobuf->io_count) == 0)
+		return;
 
 	add_wait_queue(&kiobuf->wait_queue, &wait);
 repeat:

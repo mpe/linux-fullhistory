@@ -116,7 +116,6 @@ void ext2_put_super (struct super_block * sb)
 			brelse (sb->u.ext2_sb.s_block_bitmap[i]);
 	brelse (sb->u.ext2_sb.s_sbh);
 
-	MOD_DEC_USE_COUNT;
 	return;
 }
 
@@ -402,12 +401,9 @@ struct super_block * ext2_read_super (struct super_block * sb, void * data,
 	set_opt (sb->u.ext2_sb.s_mount_opt, CHECK_NORMAL);
 	if (!parse_options ((char *) data, &sb_block, &resuid, &resgid,
 	    &sb->u.ext2_sb.s_mount_opt)) {
-		sb->s_dev = 0;
 		return NULL;
 	}
 
-	MOD_INC_USE_COUNT;
-	lock_super (sb);
 	set_blocksize (dev, blocksize);
 
 	/*
@@ -421,10 +417,7 @@ struct super_block * ext2_read_super (struct super_block * sb, void * data,
 	}
 
 	if (!(bh = bread (dev, logic_sb_block, blocksize))) {
-		sb->s_dev = 0;
-		unlock_super (sb);
 		printk ("EXT2-fs: unable to read superblock\n");
-		MOD_DEC_USE_COUNT;
 		return NULL;
 	}
 	/*
@@ -439,11 +432,8 @@ struct super_block * ext2_read_super (struct super_block * sb, void * data,
 			printk ("VFS: Can't find an ext2 filesystem on dev "
 				"%s.\n", bdevname(dev));
 	failed_mount:
-		sb->s_dev = 0;
-		unlock_super (sb);
 		if (bh)
 			brelse(bh);
-		MOD_DEC_USE_COUNT;
 		return NULL;
 	}
 	if (le32_to_cpu(es->s_rev_level) > EXT2_GOOD_OLD_REV) {
@@ -616,7 +606,6 @@ struct super_block * ext2_read_super (struct super_block * sb, void * data,
 	sb->u.ext2_sb.s_loaded_inode_bitmaps = 0;
 	sb->u.ext2_sb.s_loaded_block_bitmaps = 0;
 	sb->u.ext2_sb.s_db_per_group = db_count;
-	unlock_super (sb);
 	/*
 	 * set up enough so that it can read an inode
 	 */
@@ -624,7 +613,6 @@ struct super_block * ext2_read_super (struct super_block * sb, void * data,
 	sb->s_op = &ext2_sops;
 	sb->s_root = d_alloc_root(iget(sb, EXT2_ROOT_INO));
 	if (!sb->s_root) {
-		sb->s_dev = 0;
 		for (i = 0; i < db_count; i++)
 			if (sb->u.ext2_sb.s_group_desc[i])
 				brelse (sb->u.ext2_sb.s_group_desc[i]);
@@ -632,7 +620,6 @@ struct super_block * ext2_read_super (struct super_block * sb, void * data,
 			 db_count * sizeof (struct buffer_head *));
 		brelse (bh);
 		printk ("EXT2-fs: get root inode failed\n");
-		MOD_DEC_USE_COUNT;
 		return NULL;
 	}
 	ext2_setup_super (sb, es);
@@ -780,12 +767,7 @@ int ext2_statfs (struct super_block * sb, struct statfs * buf)
 	return 0;
 }
 
-static struct file_system_type ext2_fs_type = {
-	"ext2", 
-	FS_REQUIRES_DEV /* | FS_IBASKET */,	/* ibaskets have unresolved bugs */
-        ext2_read_super, 
-	NULL
-};
+static DECLARE_FSTYPE_DEV(ext2_fs_type, "ext2", ext2_read_super);
 
 static int __init init_ext2_fs(void)
 {

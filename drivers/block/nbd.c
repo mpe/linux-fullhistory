@@ -4,7 +4,7 @@
  * Note that you can not swap over this thing, yet. Seems to work but
  * deadlocks sometimes - you can not swap over TCP in general.
  * 
- * Copyright 1997 Pavel Machek <pavel@atrey.karlin.mff.cuni.cz>
+ * Copyright 1997-2000 Pavel Machek <pavel@ucw.cz>
  * 
  * (part of code stolen from loop.c)
  *
@@ -24,6 +24,7 @@
  *          structure with userland
  */
 
+#undef	NBD_PLUGGABLE
 #define PARANOIA
 #include <linux/major.h>
 
@@ -62,10 +63,11 @@ static int requests_in;
 static int requests_out;
 #endif
 
+static void nbd_plug_device(request_queue_t *q, kdev_t dev) { }
+
 static int nbd_open(struct inode *inode, struct file *file)
 {
 	int dev;
-	struct nbd_device *nbdev;
 
 	if (!inode)
 		return -EINVAL;
@@ -73,13 +75,7 @@ static int nbd_open(struct inode *inode, struct file *file)
 	if (dev >= MAX_NBD)
 		return -ENODEV;
 
-	nbdev = &nbd_dev[dev];
 	nbd_dev[dev].refcnt++;
-	if (!(nbdev->flags & NBD_INITIALISED)) {
-		init_MUTEX(&nbdev->queue_lock);
-		INIT_LIST_HEAD(&nbdev->queue_head);
-		nbdev->flags |= NBD_INITIALISED;
-	}
 	MOD_INC_USE_COUNT;
 	return 0;
 }
@@ -216,12 +212,18 @@ struct request *nbd_read_stat(struct nbd_device *lo)
 void nbd_do_it(struct nbd_device *lo)
 {
 	struct request *req;
+	int dequeued;
 
 	down (&lo->queue_lock);
-	while (!list_empty(&lo->queue_head)) {
+	while (1) {
+		up (&lo->queue_lock);
 		req = nbd_read_stat(lo);
-		if (!req)
+		down (&lo->queue_lock);
+
+		if (!req) {
+			printk(KERN_ALERT "req should never be null\n" );
 			goto out;
+		}
 #ifdef PARANOIA
 		if (req != blkdev_entry_prev_request(&lo->queue_head)) {
 			printk(KERN_ALERT "NBD: I have problem...\n");
@@ -238,9 +240,11 @@ void nbd_do_it(struct nbd_device *lo)
 		list_del(&req->queue);
 		up (&lo->queue_lock);
 		
-		nbd_end_request(req);
+		dequeued = nbd_end_request(req);
 
 		down (&lo->queue_lock);
+		if (!dequeued)
+			list_add(&req->queue, &lo->queue_head);
 	}
  out:
 	up (&lo->queue_lock);
@@ -249,26 +253,36 @@ void nbd_do_it(struct nbd_device *lo)
 void nbd_clear_que(struct nbd_device *lo)
 {
 	struct request *req;
+	int dequeued;
+
+#ifdef PARANOIA
+	if (lo->magic != LO_MAGIC) {
+		printk(KERN_ERR "NBD: nbd_dev[] corrupted: Not enough magic when clearing!\n");
+		return;
+	}
+#endif
 
 	while (!list_empty(&lo->queue_head)) {
 		req = blkdev_entry_prev_request(&lo->queue_head);
 #ifdef PARANOIA
+		if (!req) {
+			printk( KERN_ALERT "NBD: panic, panic, panic\n" );
+			break;
+		}
 		if (lo != &nbd_dev[MINOR(req->rq_dev)]) {
 			printk(KERN_ALERT "NBD: request corrupted when clearing!\n");
 			continue;
-		}
-		if (lo->magic != LO_MAGIC) {
-			printk(KERN_ERR "NBD: nbd_dev[] corrupted: Not enough magic when clearing!\n");
-			return;
 		}
 #endif
 		req->errors++;
 		list_del(&req->queue);
 		up(&lo->queue_lock);
 
-		nbd_end_request(req);
+		dequeued = nbd_end_request(req);
 
 		down(&lo->queue_lock);
+		if (!dequeued)
+			list_add(&req->queue, &lo->queue_head);
 	}
 }
 
@@ -290,6 +304,10 @@ static void do_nbd_request(request_queue_t * q)
 
 	while (!QUEUE_EMPTY) {
 		req = CURRENT;
+#ifdef PARANOIA
+		if (!req)
+			FAIL("que not empty but no request?");
+#endif
 		dev = MINOR(req->rq_dev);
 #ifdef PARANOIA
 		if (dev >= MAX_NBD)
@@ -470,12 +488,17 @@ int nbd_init(void)
 	blksize_size[MAJOR_NR] = nbd_blksizes;
 	blk_size[MAJOR_NR] = nbd_sizes;
 	blk_init_queue(BLK_DEFAULT_QUEUE(MAJOR_NR), do_nbd_request);
+#ifndef NBD_PLUGGABLE
+	blk_queue_pluggable(BLK_DEFAULT_QUEUE(MAJOR_NR), nbd_plug_device);
+#endif
 	blk_queue_headactive(BLK_DEFAULT_QUEUE(MAJOR_NR), 0);
 	for (i = 0; i < MAX_NBD; i++) {
 		nbd_dev[i].refcnt = 0;
 		nbd_dev[i].file = NULL;
 		nbd_dev[i].magic = LO_MAGIC;
 		nbd_dev[i].flags = 0;
+		INIT_LIST_HEAD(&nbd_dev[i].queue_head);
+		init_MUTEX(&nbd_dev[i].queue_lock);
 		nbd_blksizes[i] = 1024;
 		nbd_blksize_bits[i] = 10;
 		nbd_bytesizes[i] = 0x7ffffc00; /* 2GB */

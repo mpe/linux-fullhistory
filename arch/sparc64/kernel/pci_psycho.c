@@ -1,4 +1,4 @@
-/* $Id: pci_psycho.c,v 1.13 2000/02/18 13:48:54 davem Exp $
+/* $Id: pci_psycho.c,v 1.14 2000/03/10 02:42:15 davem Exp $
  * pci_psycho.c: PSYCHO/U2P specific PCI controller support.
  *
  * Copyright (C) 1997, 1998, 1999 David S. Miller (davem@caipfs.rutgers.edu)
@@ -1246,11 +1246,14 @@ static void __init psycho_iommu_init(struct pci_controller_info *p)
 	control = psycho_read(p->controller_regs + PSYCHO_IOMMU_CONTROL);
 	control |= PSYCHO_IOMMU_CTRL_DENAB;
 	psycho_write(p->controller_regs + PSYCHO_IOMMU_CONTROL, control);
-	for(i = 0; i < 16; i++)
+	for(i = 0; i < 16; i++) {
+		psycho_write(p->controller_regs + PSYCHO_IOMMU_TAG + (i * 8UL), 0);
 		psycho_write(p->controller_regs + PSYCHO_IOMMU_DATA + (i * 8UL), 0);
+	}
 
-	control &= ~(PSYCHO_IOMMU_CTRL_DENAB);
-	psycho_write(p->controller_regs + PSYCHO_IOMMU_CONTROL, control);
+	/* Leave diag mode enabled for full-flushing done
+	 * in pci_iommu.c
+	 */
 
 	/* Using assumed page size 8K with 128K entries we need 1MB iommu page
 	 * table (128K ioptes * 8 bytes per iopte).  This is
@@ -1267,9 +1270,14 @@ static void __init psycho_iommu_init(struct pci_controller_info *p)
 	p->iommu.dma_addr_mask = 0xffffffff;
 	memset((char *)tsbbase, 0, PAGE_SIZE << 7);
 
-	/* Make sure DMA address 0 is never returned just to allow catching
-	   of buggy drivers.  */
-	p->iommu.lowest_free[0] = 1;
+	/* We start with no consistent mappings. */
+	p->iommu.lowest_consistent_map =
+		1 << (p->iommu.page_table_sz_bits - PBM_LOGCLUSTERS);
+
+	for (i = 0; i < PBM_NCLUSTERS; i++) {
+		p->iommu.alloc_info[i].flush = 0;
+		p->iommu.alloc_info[i].next = 0;
+	}
 
 	psycho_write(p->controller_regs + PSYCHO_IOMMU_TSBBASE, __pa(tsbbase));
 

@@ -21,10 +21,6 @@
 # define inline
 #endif
 
-/*
- * Size of encoded NFS3 file handle, in words
- */
-#define NFS3_FHANDLE_WORDS	(1 + XDR_QUADLEN(sizeof(struct knfs_fh)))
 
 /*
  * Mapping of S_IF* types to NFS file types
@@ -64,19 +60,36 @@ decode_time3(u32 *p, time_t *secp)
 static inline u32 *
 decode_fh(u32 *p, struct svc_fh *fhp)
 {
-	if (ntohl(*p++) != sizeof(struct knfs_fh))
+	int size;
+	fh_init(fhp, NFS3_FHSIZE);
+	size = ntohl(*p++);
+	if (size > NFS3_FHSIZE)
 		return NULL;
 
-	memcpy(&fhp->fh_handle, p, sizeof(struct knfs_fh));
-	return p + (sizeof(struct knfs_fh) >> 2);
+	memcpy(&fhp->fh_handle.fh_base, p, size);
+	fhp->fh_handle.fh_size = size;
+	return p + XDR_QUADLEN(size);
 }
 
 static inline u32 *
 encode_fh(u32 *p, struct svc_fh *fhp)
 {
-	*p++ = htonl(sizeof(struct knfs_fh));
-	memcpy(p, &fhp->fh_handle, sizeof(struct knfs_fh));
-	return p + (sizeof(struct knfs_fh) >> 2);
+#if 0
+	int size = fhp->fh_handle.fh_size;
+	*p++ = htonl(size);
+	if (size) p[XDR_QUADLEN(size)-1]=0;
+	memcpy(p, &fhp->fh_handle.fh_base, size);
+	return p + XDR_QUADLEN(size);
+#else
+	/* until locked knows about var-length file handles,
+	 * we always return NFS_FHSIZE handles
+	 */
+	int size = fhp->fh_handle.fh_size;
+	*p++ = htonl(NFS_FHSIZE);
+	memset(p, 0, NFS_FHSIZE);
+	memcpy(p, &fhp->fh_handle.fh_base, size);
+	return p + XDR_QUADLEN(NFS_FHSIZE);
+#endif
 }
 
 /*
@@ -698,6 +711,7 @@ encode_entry(struct readdir_cd *cd, const char *name,
 	}
 	*p++ = xdr_one;				   /* mark entry present */
 	p    = xdr_encode_hyper(p, ino);			   /* file id */
+	p[slen - 1] = 0;		/* don't leak kernel data */
 #ifdef XDR_ENCODE_STRING_TAKES_LENGTH
 	p    = xdr_encode_string(p, name, namlen); /* name length & name */
 #else
@@ -706,7 +720,6 @@ encode_entry(struct readdir_cd *cd, const char *name,
 	memcpy(p, name, namlen);
 	p += slen;
 #endif
-	p[slen - 1] = 0;		/* don't leak kernel data */
 
 	cd->offset = p;			/* remember pointer */
 	p = xdr_encode_hyper(p, NFS_OFFSET_MAX);	/* offset of next entry */
@@ -715,7 +728,7 @@ encode_entry(struct readdir_cd *cd, const char *name,
 	if (plus) {
 		struct svc_fh	fh;
 
-		fh_init(&fh);
+		fh_init(&fh, NFS3_FHSIZE);
 		/* Disabled for now because of lock-up */
 		if (0 && nfsd_lookup(cd->rqstp, cd->dirfh, name, namlen, &fh) == 0) {
 			p = encode_post_op_attr(cd->rqstp, p, fh.fh_dentry);

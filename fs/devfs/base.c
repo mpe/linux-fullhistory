@@ -2305,12 +2305,10 @@ static void devfs_put_super (struct super_block *sb)
     if (devfs_debug & DEBUG_S_PUT)
 	printk ("%s: put_super(): devfs ptr: %p\n", DEVFS_NAME, fs_info);
 #endif
-    sb->s_dev = 0;
 #ifdef CONFIG_DEVFS_TUNNEL
     dput (fs_info->table[0]->covered);
 #endif
     delete_fs (fs_info);
-    MOD_DEC_USE_COUNT;
 }   /*  End Function devfs_put_super  */
 
 static int devfs_statfs (struct super_block *sb, struct statfs *buf)
@@ -3148,7 +3146,6 @@ static struct super_block *devfs_read_super (struct super_block *sb,
     {
 	if (strcmp (aopt, "explicit") == 0) fs_info->require_explicit = TRUE;
     }
-    lock_super (sb);
     sb->u.generic_sbp = fs_info;
     sb->s_blocksize = 1024;
     sb->s_blocksize_bits = 10;
@@ -3169,32 +3166,22 @@ static struct super_block *devfs_read_super (struct super_block *sb,
 #ifdef CONFIG_DEVFS_TUNNEL
     di->covered = dget (sb->s_root->d_covered);
 #endif
-    unlock_super (sb);
 #ifdef CONFIG_DEVFS_DEBUG
     if (devfs_debug & DEBUG_DISABLED)
 	printk ("%s: read super, made devfs ptr: %p\n",
 		DEVFS_NAME, sb->u.generic_sbp);
 #endif
-    MOD_INC_USE_COUNT;
     return sb;
 
 out_no_root:
     printk ("devfs_read_super: get root inode failed\n");
     delete_fs (fs_info);
     if (root_inode) iput (root_inode);
-    sb->s_dev = 0;
-    unlock_super (sb);
     return NULL;
 }   /*  End Function devfs_read_super  */
 
 
-static struct file_system_type devfs_fs_type =
-{
-    DEVFS_NAME, 
-    0,
-    devfs_read_super, 
-    NULL,
-};
+static DECLARE_FSTYPE(devfs_fs_type, DEVFS_NAME, devfs_read_super, 0);
 
 
 /*  File operations for devfsd follow  */

@@ -23,7 +23,7 @@ struct timeval;
 struct vm_area_struct;
 
 typedef void ia64_mv_setup_t (char **);
-typedef void ia64_mv_irq_init_t (struct irq_desc *);
+typedef void ia64_mv_irq_init_t (void);
 typedef void ia64_mv_pci_fixup_t (void);
 typedef unsigned long ia64_mv_map_nr_t (unsigned long);
 typedef void ia64_mv_mca_init_t (void);

@@ -29,6 +29,8 @@
 #define KIO_STATIC_PAGES	(KIO_MAX_ATOMIC_IO / (PAGE_SIZE >> 10) + 1)
 #define KIO_MAX_SECTORS		(KIO_MAX_ATOMIC_IO * 2)
 
+/* The main kiobuf struct used for all our IO! */
+
 struct kiobuf 
 {
 	int		nr_pages;	/* Pages actually referenced */
@@ -46,7 +48,6 @@ struct kiobuf
 	unsigned int	locked : 1;	/* If set, pages has been locked */
 	
 	/* Always embed enough struct pages for 64k of IO */
-	unsigned long	page_array[KIO_STATIC_PAGES];
 	struct page *	map_array[KIO_STATIC_PAGES];
 
 	/* Dynamic state for IO completion: */
@@ -61,10 +62,14 @@ struct kiobuf
 
 int	map_user_kiobuf(int rw, struct kiobuf *, unsigned long va, size_t len);
 void	unmap_kiobuf(struct kiobuf *iobuf);
+int	lock_kiovec(int nr, struct kiobuf *iovec[], int wait);
+int	unlock_kiovec(int nr, struct kiobuf *iovec[]);
 
 /* fs/iobuf.c */
 
-void __init kiobuf_init(void);
+void __init kiobuf_setup(void);
+void	kiobuf_init(struct kiobuf *);
+void	end_kio_request(struct kiobuf *, int);
 void	simple_wakeup_kiobuf(struct kiobuf *);
 int	alloc_kiovec(int nr, struct kiobuf **);
 void	free_kiovec(int nr, struct kiobuf **);

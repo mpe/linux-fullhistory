@@ -205,7 +205,6 @@ struct super_block *proc_read_super(struct super_block *s,void *data,
 	struct inode * root_inode;
 	struct task_struct *p;
 
-	lock_super(s);
 	s->s_blocksize = 1024;
 	s->s_blocksize_bits = 10;
 	s->s_magic = PROC_SUPER_MAGIC;
@@ -225,13 +224,10 @@ struct super_block *proc_read_super(struct super_block *s,void *data,
 	parse_options(data, &root_inode->i_uid, &root_inode->i_gid);
 	s->u.generic_sbp = (void*) proc_super_blocks;
 	proc_super_blocks = s;
-	unlock_super(s);
 	return s;
 
 out_no_root:
 	printk("proc_read_super: get root inode failed\n");
 	iput(root_inode);
-	s->s_dev = 0;
-	unlock_super(s);
 	return NULL;
 }

@@ -11,6 +11,7 @@
 #include <linux/config.h>
 
 #include <linux/init.h>
+#include <linux/irq.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/smp.h>
@@ -22,7 +23,6 @@
 #include <asm/efi.h>
 #include <asm/io.h>
 #include <asm/iosapic.h>
-#include <asm/irq.h>
 
 #undef ACPI_DEBUG		/* Guess what this does? */
 
@@ -83,8 +83,8 @@ acpi_iosapic(char *p)
 	 */
 #ifdef CONFIG_IA64_DIG
 	acpi_entry_iosapic_t *iosapic = (acpi_entry_iosapic_t *) p;
-	unsigned int ver;
-	int l, v, pins;
+	unsigned int ver, v;
+	int l, pins;
 
 	ver = iosapic_version(iosapic->address);
 	pins = (ver >> 16) & 0xff;
@@ -94,9 +94,11 @@ acpi_iosapic(char *p)
 	       iosapic->irq_base, iosapic->irq_base + pins);
 	
 	for (l = 0; l < pins; l++) {
-		v = map_legacy_irq(iosapic->irq_base + l);
+		v = iosapic->irq_base + l;
+		if (v < 16)
+			v = isa_irq_to_vector(v);
 		if (v > IA64_MAX_VECTORED_IRQ) {
-			printk("    !!! IRQ %d > 255\n", v);
+			printk("    !!! bad IOSAPIC interrupt vector: %u\n", v);
 			continue;
 		}
 		/* XXX Check for IOSAPIC collisions */
@@ -115,7 +117,7 @@ static void __init
 acpi_legacy_irq(char *p)
 {
 	/*
-	 * This is not good.  ACPI is not necessarily limited to CONFIG_IA64_SV, yet
+	 * This is not good.  ACPI is not necessarily limited to CONFIG_IA64_DIG, yet
 	 * ACPI does not necessarily imply IOSAPIC either.  Perhaps there should be
 	 * a means for platform_setup() to register ACPI handlers?
 	 */
@@ -124,7 +126,7 @@ acpi_legacy_irq(char *p)
 	unsigned char vector; 
 	int i;
 
-	vector = map_legacy_irq(legacy->isa_irq);
+	vector = isa_irq_to_vector(legacy->isa_irq);
 
 	/*
 	 * Clobber any old pin mapping.  It may be that it gets replaced later on

@@ -101,6 +101,7 @@ void __init
 setup_arch (char **cmdline_p)
 {
 	unsigned long max_pfn, bootmap_start, bootmap_size;
+	u64 progress;
 
 	/*
 	 * The secondary bootstrap loader passes us the boot
@@ -167,6 +168,7 @@ setup_arch (char **cmdline_p)
 	conswitchp = &dummy_con;
 # endif
 #endif
+	paging_init();
 	platform_setup(cmdline_p);
 }
 

@@ -39,19 +39,20 @@ static u32	nfs_ftypes[] = {
 static inline u32 *
 decode_fh(u32 *p, struct svc_fh *fhp)
 {
-	fh_init(fhp);
-	memcpy(&fhp->fh_handle, p, sizeof(struct knfs_fh));
+	fh_init(fhp, NFS_FHSIZE);
+	memcpy(&fhp->fh_handle.fh_base, p, NFS_FHSIZE);
+	fhp->fh_handle.fh_size = NFS_FHSIZE;
 
 	/* FIXME: Look up export pointer here and verify
 	 * Sun Secure RPC if requested */
-	return p + (sizeof(struct knfs_fh) >> 2);
+	return p + (NFS_FHSIZE >> 2);
 }
 
 static inline u32 *
 encode_fh(u32 *p, struct svc_fh *fhp)
 {
-	memcpy(p, &fhp->fh_handle, sizeof(struct knfs_fh));
-	return p + (sizeof(struct knfs_fh) >> 2);
+	memcpy(p, &fhp->fh_handle.fh_base, NFS_FHSIZE);
+	return p + (NFS_FHSIZE>> 2);
 }
 
 /*

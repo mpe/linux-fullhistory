@@ -451,9 +451,6 @@ struct super_block * ufs_read_super (struct super_block * sb, void * data,
 	
 	UFSD(("ENTER\n"))
 		
-	MOD_INC_USE_COUNT;
-	lock_super (sb);
-
 	UFSD(("flag %u\n", (int)(sb->s_flags & MS_RDONLY)))
 	
 #ifndef CONFIG_UFS_FS_WRITE
@@ -790,16 +787,12 @@ magic_found:
 		if (!ufs_read_cylinder_structures(sb))
 			goto failed;
 
-	unlock_super(sb);
 	UFSD(("EXIT\n"))
 	return(sb);
 
 failed:
 	if (ubh) ubh_brelse_uspi (uspi);
 	if (uspi) kfree (uspi);
-	sb->s_dev = 0;
-	unlock_super (sb);
-	MOD_DEC_USE_COUNT;
 	UFSD(("EXIT (FAILED)\n"))
 	return(NULL);
 }
@@ -843,8 +836,6 @@ void ufs_put_super (struct super_block * sb)
 	
 	ubh_brelse_uspi (uspi);
 	kfree (sb->u.ufs_sb.s_uspi);
-	sb->s_dev = 0;
-	MOD_DEC_USE_COUNT;
 	return;
 }
 
@@ -958,12 +949,7 @@ static struct super_operations ufs_super_ops = {
 	remount_fs:	ufs_remount,
 };
 
-static struct file_system_type ufs_fs_type = {
-	"ufs", 
-	FS_REQUIRES_DEV,
-	ufs_read_super,
-	NULL
-};
+static DECLARE_FSTYPE_DEV(ufs_fs_type, "ufs", ufs_read_super);
 
 int __init init_ufs_fs(void)
 {

@@ -197,14 +197,17 @@ int raw_ctl_ioctl(struct inode *inode,
 			raw_device_bindings[minor] = 
 				bdget(kdev_t_to_nr(MKDEV(rq.block_major, rq.block_minor)));
 		} else {
+			struct block_device *bdev;
 			kdev_t dev;
-			if (!raw_device_bindings[minor]) {
-				err = -ENODEV;
-				break;
+
+			bdev = raw_device_bindings[minor];
+			if (bdev) {
+				dev = to_kdev_t(bdev->bd_dev);
+				rq.block_major = MAJOR(dev);
+				rq.block_minor = MINOR(dev);
+			} else {
+				rq.block_major = rq.block_minor = 0;
 			}
-			dev = to_kdev_t(raw_device_bindings[minor]->bd_dev);
-			rq.block_major = MAJOR(dev);
-			rq.block_minor = MINOR(dev);
 			err = copy_to_user((void *) arg, &rq, sizeof(rq));
 		}
 		break;
@@ -304,7 +307,12 @@ ssize_t	rw_raw_dev(int rw, struct file *filp, char *buf,
 		err = map_user_kiobuf(rw, iobuf, (unsigned long) buf, iosize);
 		if (err)
 			break;
-		
+#if 0
+		err = lock_kiovec(1, &iobuf, 1);
+		if (err) 
+			break;
+#endif
+	
 		for (i=0; i < blocks; i++) 
 			b[i] = blocknr++;
 		
@@ -316,7 +324,7 @@ ssize_t	rw_raw_dev(int rw, struct file *filp, char *buf,
 			buf += err;
 		}
 
-		unmap_kiobuf(iobuf);
+		unmap_kiobuf(iobuf); /* The unlock_kiobuf is implicit here */
 
 		if (err != iosize)
 			break;

@@ -738,7 +738,7 @@ handle_syscall_error:
 	st8.spill [r2]=r9	// store errno in pt_regs.r8 and set unat bit
 	st8.spill [r3]=r10	// store error indication in pt_regs.r10 and set unat bit
 	br.cond.sptk.many ia64_leave_kernel
-	.endp __ret_from_syscall
+	.endp handle_syscall_error
 
 #ifdef CONFIG_SMP
 	/*
@@ -767,7 +767,9 @@ invoke_schedule_tail:
 invoke_do_softirq:
 	alloc loc0=ar.pfs,8,2,0,0
 	mov loc1=rp
+(pEOI)	mov cr.eoi=r0
 	;;
+(pEOI)	cmp.ne pEOI,p0=r0,r0
 	br.call.sptk.few rp=do_softirq
 .ret9:
 	mov ar.pfs=loc0

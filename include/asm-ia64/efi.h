@@ -180,7 +180,7 @@ typedef struct {
 } efi_config_table_t;
 
 #define EFI_SYSTEM_TABLE_SIGNATURE 0x5453595320494249
-#define EFI_SYSTEM_TABLE_REVISION  ((0 << 16) | (91))
+#define EFI_SYSTEM_TABLE_REVISION  ((0 << 16) | (92))
 
 typedef struct {
 	efi_table_hdr_t hdr;

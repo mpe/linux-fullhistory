@@ -1,0 +1,10 @@
+2000-03-10    <twaugh@redhat.com>
+
+	* parport_pc.c (decode_winbond): Use correct 83877ATF chip ID.
+	(decode_winbond): Fix typo.
+
+2000-03-09    <twaugh@redhat.com>
+
+	* parport_pc.c: Integrate SuperIO PCI probe with normal PCI card
+	probe, so that the MODULE_DEVICE_TABLE is complete.
+

@@ -746,7 +746,6 @@ static void ntfs_put_super(struct super_block *sb)
 	ntfs_free(vol);
 #endif
 	ntfs_debug(DEBUG_OTHER, "ntfs_put_super: done\n");
-	MOD_DEC_USE_COUNT;
 }
 
 /* Called by the kernel when asking for stats */
@@ -818,14 +817,6 @@ struct super_block * ntfs_read_super(struct super_block *sb,
 	struct buffer_head *bh;
 	int i;
 
-	/* When the driver is compiled as a module, kmod must know when it
-	 * can safely remove it from memory. To do this, each module owns a
-	 * reference counter.
-	 */
-	MOD_INC_USE_COUNT;
-	/* Don't put ntfs_debug() before MOD_INC_USE_COUNT, printk() can block
-	 * so this could lead to a race condition with kmod.
-	 */
 	ntfs_debug(DEBUG_OTHER, "ntfs_read_super\n");
 
 #ifdef NTFS_IN_LINUX_KERNEL
@@ -839,9 +830,6 @@ struct super_block * ntfs_read_super(struct super_block *sb,
 	if(!parse_options(vol,(char*)options))
 		goto ntfs_read_super_vol;
 
-	/* Ensure that the super block won't be used until it is completed */
-	lock_super(sb);
-	ntfs_debug(DEBUG_OTHER, "lock_super\n");
 #if 0
 	/* Set to read only, user option might reset it */
 	sb->s_flags |= MS_RDONLY;
@@ -914,48 +902,24 @@ struct super_block * ntfs_read_super(struct super_block *sb,
 		ntfs_error("Could not get root dir inode\n");
 		goto ntfs_read_super_mft;
 	}
-	unlock_super(sb);
-	ntfs_debug(DEBUG_OTHER, "unlock_super\n");
 	ntfs_debug(DEBUG_OTHER, "read_super: done\n");
 	return sb;
 
 ntfs_read_super_mft:
 	ntfs_free(vol->mft);
 ntfs_read_super_unl:
-	sb->s_dev = 0;
-	unlock_super(sb);
-	ntfs_debug(DEBUG_OTHER, "unlock_super\n");
 ntfs_read_super_vol:
 	#ifndef NTFS_IN_LINUX_KERNEL
 	ntfs_free(vol);
 ntfs_read_super_dec:
 	#endif
 	ntfs_debug(DEBUG_OTHER, "read_super: done\n");
-	MOD_DEC_USE_COUNT;
 	return NULL;
 }
 
 /* Define the filesystem
- *
- * Define SECOND if you cannot unload ntfs, and want to avoid rebooting
- * for just one more test
  */
-static struct file_system_type ntfs_fs_type = {
-/* Filesystem name, as used after mount -t */
-#ifndef SECOND
-	"ntfs",
-#else
-	"ntfs2",
-#endif
-/* This filesystem requires a device (a hard disk)
- * May want to add FS_IBASKET when it works
- */
-	FS_REQUIRES_DEV,
-/* Entry point of the filesystem */
-	ntfs_read_super,
-/* Will point to the next filesystem in the kernel table */
-	NULL
-};
+static DECLARE_FSTYPE_DEV(ntfs_fs_type, "ntfs", ntfs_read_super);
 
 /* When this code is not compiled as a module, this is the main entry point,
  * called by do_sys_setup() in fs/filesystems.c

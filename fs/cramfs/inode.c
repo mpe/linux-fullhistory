@@ -153,7 +153,6 @@ static struct super_block * cramfs_read_super(struct super_block *sb, void *data
 	unsigned long root_offset;
 	struct super_block * retval = NULL;
 
-	lock_super(sb);
 	set_blocksize(sb->s_dev, PAGE_CACHE_SIZE);
 	sb->s_blocksize = PAGE_CACHE_SIZE;
 	sb->s_blocksize_bits = PAGE_CACHE_SHIFT;
@@ -198,7 +197,6 @@ static struct super_block * cramfs_read_super(struct super_block *sb, void *data
 	retval = sb;
 
 out:
-	unlock_super(sb);
 	return retval;
 }
 
@@ -367,12 +365,7 @@ static struct super_operations cramfs_ops = {
 	statfs:		cramfs_statfs,
 };
 
-static struct file_system_type cramfs_fs_type = {
-	"cramfs",
-	FS_REQUIRES_DEV,
-	cramfs_read_super,
-	NULL
-};
+static DECLARE_FSTYPE_DEV(cramfs_fs_type, "cramfs", cramfs_read_super);
 
 static int __init init_cramfs_fs(void)
 {

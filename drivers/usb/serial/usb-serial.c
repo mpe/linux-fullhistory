@@ -178,7 +178,7 @@
 
 #define DEBUG
 
-#include "usb.h"
+#include "../usb.h"
 
 #ifdef CONFIG_USB_SERIAL_WHITEHEAT
 #include "whiteheat.h"		/* firmware for the ConnectTech WhiteHEAT device */

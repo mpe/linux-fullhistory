@@ -1,9 +1,9 @@
 /*
  * The DSP56001 Device Driver, saviour of the Free World(tm)
  *
- * Authors: Fredrik Noring   <noring@lysator.liu.se>
- *          lars brinkhoff   <f93labr@dd.chalmers.se>
- *          Tomas Berndtsson <tobe@lysator.liu.se>
+ * Authors: Fredrik Noring   <noring@nocrew.org>
+ *          lars brinkhoff   <lars@nocrew.org>
+ *          Tomas Berndtsson <tomas@nocrew.org>
  *
  * First version May 1996
  *

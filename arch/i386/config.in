@@ -50,9 +50,7 @@ if [ "$CONFIG_MK7" = "y" ]; then
    define_bool CONFIG_X86_PGE y
 fi
 
-if [ "$CONFIG_DEVFS_FS" = "y" ]; then
-   tristate '/dev/cpu/microcode - Intel P6 CPU microcode support' CONFIG_MICROCODE
-fi
+tristate '/dev/cpu/microcode - Intel P6 CPU microcode support' CONFIG_MICROCODE
 
 choice 'High Memory Support' \
 	"off    CONFIG_NOHIGHMEM \

@@ -15,6 +15,9 @@
  */
 #include <asm/page.h>
 
+#define PIPE_DEPTH	6
+#define EPI		p[PIPE_DEPTH-1]
+
 #define lcount		r16
 #define saved_pr	r17
 #define saved_lc	r18
@@ -34,10 +37,10 @@
 	.proc copy_page
 
 copy_page:
-	alloc saved_pfs=ar.pfs,10,0,0,8	// we need 6 roatating (8 minimum)
-					// + 2 input
+	alloc saved_pfs=ar.pfs,3,((2*PIPE_DEPTH+7)&~7),0,((2*PIPE_DEPTH+7)&~7)
 
-	.rotr t1[4], t2[4]	// our 2 pipelines with depth of 4 each
+	.rotr t1[PIPE_DEPTH], t2[PIPE_DEPTH]
+	.rotp p[PIPE_DEPTH]
 
 	mov saved_lc=ar.lc	// save ar.lc ahead of time
 	mov saved_pr=pr		// rotating predicates are preserved
@@ -53,29 +56,30 @@ copy_page:
 	mov pr.rot=1<<16	// pr16=1 & pr[17-63]=0 , 63 not modified
 
 	mov ar.lc=lcount	// set loop counter
-	mov ar.ec=4		// ar.ec must match pipeline depth
+	mov ar.ec=PIPE_DEPTH	// ar.ec must match pipeline depth
 	;;
 
 	// We need to preload the n-1 stages of the pipeline (n=depth).
 	// We do this during the "prolog" of the loop: we execute
 	// n-1 times the "load" bundle. Then both loads & stores are
 	// enabled until we reach the end of the last word of the page
-	// on the load side. Then, we enter the epilogue (controlled by ec)
-	// where we just do the stores and no loads n-1 times : drain the pipe.
+	// on the load side. Then, we enter the epilog (controlled by ec)
+	// where we just do the stores and no loads n times : drain the pipe
+	// (we exit the loop when ec=1).
 	//
 	// The initialization of the prolog is done via the predicate registers:
-	// the choice of pr19 DEPENDS on the depth of the pipeline (n).
+	// the choice of EPI DEPENDS on the depth of the pipeline (n).
 	// When lc > 0 pr63=1 and it is fed back into pr16 and pr16-pr62 
 	// are then shifted right at every iteration,
-	// Thus by initializing pr16=1 and pr17-19=0 (19=16+4-1) before the loop
-	// we get pr19=1 after 4 iterations (n in our case).
+	// Thus by initializing pr16=1 and the rest to 0 before the loop
+	// we get EPI=1 after n iterations.
 	//
 1:				// engage loop now, let the magic happen...
 (p16)	ld8 t1[0]=[src1],16	// new data on top of pipeline in 1st stream
 (p16)	ld8 t2[0]=[src2],16	// new data on top of pipeline in 2nd stream
 	nop.i 0x0
-(p19)	st8 [tgt1]=t1[3],16	// store top of  1st pipeline
-(p19)	st8 [tgt2]=t2[3],16	// store top of 2nd pipeline
+(EPI)	st8 [tgt1]=t1[PIPE_DEPTH-1],16	// store top of  1st pipeline
+(EPI)	st8 [tgt2]=t2[PIPE_DEPTH-1],16	// store top of 2nd pipeline
 	br.ctop.dptk.few 1b	// once lc==0, ec-- & p16=0
 				// stores but no loads anymore
 	;;

@@ -99,7 +99,7 @@ cpu_idle (void *unused)
 			(*pm_idle)();
 #ifdef CONFIG_ITANIUM_ASTEP_SPECIFIC
 		if (ia64_get_itm() < ia64_get_itc()) {
-			extern void ia64_reset_itm();
+			extern void ia64_reset_itm (void);
 
 			printk("cpu_idle: ITM in past, resetting it...\n");
 			ia64_reset_itm();
@@ -238,7 +238,7 @@ void
 ia64_elf_core_copy_regs (struct pt_regs *pt, elf_gregset_t dst)
 {
 	struct switch_stack *sw = ((struct switch_stack *) pt) - 1;
-	unsigned long ar_ec, cfm, ar_bsp, ndirty, *krbs;
+	unsigned long ar_ec, cfm, ar_bsp, ndirty, *krbs, addr;
 
 	ar_ec = (sw->ar_pfs >> 52) & 0x3f;
 
@@ -249,8 +249,18 @@ ia64_elf_core_copy_regs (struct pt_regs *pt, elf_gregset_t dst)
 	}
 
 	krbs = (unsigned long *) current + IA64_RBS_OFFSET/8;
-	ndirty = ia64_rse_num_regs(krbs, krbs + (pt->loadrs >> 16));
-	ar_bsp = (long) ia64_rse_skip_regs((long *) pt->ar_bspstore, ndirty);
+	ndirty = ia64_rse_num_regs(krbs, krbs + (pt->loadrs >> 19));
+	ar_bsp = (unsigned long) ia64_rse_skip_regs((long *) pt->ar_bspstore, ndirty);
+
+	/*
+	 * Write portion of RSE backing store living on the kernel
+	 * stack to the VM of the process.
+	 */
+	for (addr = pt->ar_bspstore; addr < ar_bsp; addr += 8) {
+		long val;
+		if (ia64_peek(pt, current, addr, &val) == 0)
+			access_process_vm(current, addr, &val, sizeof(val), 1);
+	}
 
 	/*	r0-r31
 	 *	NaT bits (for r0-r31; bit N == 1 iff rN is a NaT)
@@ -310,7 +320,6 @@ sys_execve (char *filename, char **argv, char **envp, struct pt_regs *regs)
 {
 	int error;
 
-	lock_kernel();
 	filename = getname(filename);
 	error = PTR_ERR(filename);
 	if (IS_ERR(filename))
@@ -318,7 +327,6 @@ sys_execve (char *filename, char **argv, char **envp, struct pt_regs *regs)
 	error = do_execve(filename, argv, envp, regs);
 	putname(filename);
 out:
-	unlock_kernel();
 	return error;
 }
 

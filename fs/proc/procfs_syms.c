@@ -20,12 +20,7 @@ EXPORT_SYMBOL(proc_net);
 EXPORT_SYMBOL(proc_bus);
 EXPORT_SYMBOL(proc_root_driver);
 
-static struct file_system_type proc_fs_type = {
-	"proc", 
-	0 /* FS_NO_DCACHE doesn't work correctly */,
-	proc_read_super, 
-	NULL
-};
+static DECLARE_FSTYPE(proc_fs_type, "proc", proc_read_super, 0);
 
 int __init init_proc_fs(void)
 {

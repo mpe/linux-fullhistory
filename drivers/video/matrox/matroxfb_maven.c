@@ -892,11 +892,8 @@ static struct matrox_altout maven_altout = {
 
 static int maven_init_client(struct i2c_client* clnt) {
 	struct i2c_adapter* a = clnt->adapter;
-	/* data are set to primary head... maybe I should change it */
-	struct matroxfb_dh_maven_info* m2info =
-		(struct matroxfb_dh_maven_info*)(((u_int8_t*)a) - offsetof(struct matroxfb_dh_maven_info, maven.adapter));
+	struct matroxfb_dh_maven_info* m2info = ((struct i2c_bit_adapter*)a)->minfo;
 	struct maven_data* md = clnt->data;
-	/* add some checks that m2info is matroxfb_dh_fb_info here... */
 	struct matrox_fb_info* minfo = m2info->primary_dev;
 
 	md->mode = MODE_MONITOR;

@@ -15,8 +15,6 @@
 #ifndef _DEV_TABLE_H_
 #define _DEV_TABLE_H_
 
-#include <linux/config.h>
-
 /*
  * Sound card numbers 27 to 999. (1 to 26 are defined in soundcard.h)
  * Numbers 1000 to N are reserved for driver's internal use.

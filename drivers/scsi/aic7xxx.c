@@ -956,7 +956,7 @@ typedef struct {
   unsigned char  numscbs;          /* current number of scbs */
   unsigned char  maxhscbs;         /* hardware scbs */
   unsigned char  maxscbs;          /* max scbs including pageable scbs */
-  unsigned int   hscbs_dma;	   /* DMA handle to hscbs */
+  dma_addr_t	 hscbs_dma;	   /* DMA handle to hscbs */
   unsigned int   hscbs_dma_len;    /* length of the above DMA area */
   void          *hscb_kmalloc_ptr;
 } scb_data_type;

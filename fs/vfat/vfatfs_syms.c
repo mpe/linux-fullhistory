@@ -12,12 +12,7 @@
 #include <linux/mm.h>
 #include <linux/msdos_fs.h>
 
-struct file_system_type vfat_fs_type = {
-	"vfat",
-	FS_REQUIRES_DEV,
-	vfat_read_super,
-	NULL
-};
+DECLARE_FSTYPE_DEV(vfat_fs_type, "vfat", vfat_read_super);
 
 EXPORT_SYMBOL(vfat_create);
 EXPORT_SYMBOL(vfat_unlink);

@@ -713,8 +713,10 @@ int do_fork(unsigned long clone_flags, unsigned long usp, struct pt_regs *regs)
 	 * more scheduling fairness. This is only important in the first
 	 * timeslice, on the long run the scheduling behaviour is unchanged.
 	 */
+	p->counter = (current->counter + 1) >> 1;
 	current->counter >>= 1;
-	p->counter = current->counter;
+	if (!current->counter)
+		current->need_resched = 1;
 
 	/*
 	 * Ok, add it to the run-queues and make it

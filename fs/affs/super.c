@@ -65,7 +65,6 @@ affs_put_super(struct super_block *sb)
 	 */
 	set_blocksize(sb->s_dev, sb->u.affs_sb.s_blksize);
 
-	MOD_DEC_USE_COUNT;
 	return;
 }
 
@@ -262,8 +261,6 @@ affs_read_super(struct super_block *s, void *data, int silent)
 
 	pr_debug("AFFS: read_super(%s)\n",data ? (const char *)data : "no options");
 
-	MOD_INC_USE_COUNT;
-	lock_super(s);
 	s->s_magic             = AFFS_SUPER_MAGIC;
 	s->s_op                = &affs_sops;
 	s->u.affs_sb.s_bitmap  = NULL;
@@ -547,7 +544,6 @@ nobitmap:
 		goto out_no_root;
 	s->s_root->d_op = &affs_dentry_operations;
 
-	unlock_super(s);
 	/* Record date of last change if the bitmap was truncated and
 	 * create data zones if the volume is writable.
 	 */
@@ -615,9 +611,6 @@ out_free_prefix:
 	if (s->u.affs_sb.s_prefix)
 		kfree(s->u.affs_sb.s_prefix);
 out_fail:
-	s->s_dev = 0;
-	unlock_super(s);
-	MOD_DEC_USE_COUNT;
 	return NULL;
 }
 
@@ -677,12 +670,7 @@ affs_statfs(struct super_block *sb, struct statfs *buf)
 	return 0;
 }
 
-static struct file_system_type affs_fs_type = {
-	"affs",
-	FS_REQUIRES_DEV,
-	affs_read_super,
-	NULL
-};
+static DECLARE_FSTYPE_DEV(affs_fs_type, "affs", affs_read_super);
 
 int __init init_affs_fs(void)
 {

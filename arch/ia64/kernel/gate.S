@@ -82,7 +82,7 @@ ia64_sigtramp:
 	br.call.sptk.many rp=invoke_sighandler
 .ret0:	mov r15=__NR_rt_sigreturn
 	break __BREAK_SYSCALL
-	.endp ia64_sigramp
+	.endp ia64_sigtramp
 
 	.proc invoke_sighandler
 invoke_sighandler:
@@ -167,7 +167,7 @@ back_from_restore_rbs:
 	br.ret.sptk.few b6
 cont:	mov ar.pfs=r8				// ar.pfs = CFM0
 	br.ret.sptk.few rp			// re-establish CFM0
-	.endp invoke_signal_handler
+	.endp invoke_sighandler
 
 	.proc setup_rbs
 setup_rbs:

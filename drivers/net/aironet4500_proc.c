@@ -43,7 +43,7 @@
 #endif
 
 
-
+#include "aironet4500.h"
 #include "aironet4500_rid.c"
 
 
@@ -247,8 +247,9 @@ int awc_proc_format_bits(int write,u32 * buff, size_t* lenp, struct awc_rid_dir 
 
 	DEBUG(0x20000,"awc proc int data %x \n",val);
 	
+// both of them are crazy
 //	*lenp = sizeof(int);
- 	*lenp += 1;
+// 	*lenp += 1;
  	
   	AWC_ENTRY_EXIT_DEBUG("exit");
 	return 0;
@@ -385,6 +386,18 @@ ctl_table awc_driver_proc_table[] = {
         {0}
 };
 
+ctl_table awc_driver_level_ctable[] = {
+        {1, "force_rts_on_shorter"	, NULL, sizeof(int), 0600,NULL, proc_dointvec},
+        {2, "force_tx_rate"		, NULL, sizeof(int), 0600,NULL, proc_dointvec},
+        {3, "ip_tos_reliability_rts"	, NULL, sizeof(int), 0600,NULL, proc_dointvec},
+        {4, "ip_tos_troughput_no_retries", NULL, sizeof(int), 0600,NULL, proc_dointvec},
+        {5, "debug"			, NULL, sizeof(int), 0600,NULL, proc_dointvec},
+        {6, "simple_bridge"		, NULL, sizeof(int), 0600,NULL, proc_dointvec},
+        {7, "p802_11_send"		, NULL, sizeof(int), 0600,NULL, proc_dointvec},
+        {8, "full_stats"		, NULL, sizeof(int), 0600,NULL, proc_dointvec},
+        {0}
+};
+
 ctl_table awc_root_table[] = {
         {254, "aironet4500", NULL, 0, 0555, awc_driver_proc_table},
         {0}
@@ -398,12 +411,12 @@ const char awc_procname[]= "awc5";
 int awc_proc_set_device(int device_number){
   int group =0;
   int rid = 0;
-  struct awc_priv * priv;
-
+  struct awc_private * priv;
+  ctl_table * tmp_table_ptr;
  
   AWC_ENTRY_EXIT_DEBUG("awc_proc_set_device");  
   if (!aironet4500_devices[device_number] || (awc_nof_rids <=0 )) return -1 ;
-  priv = (struct awc_priv * )aironet4500_devices[device_number]->priv;
+  priv = (struct awc_private * )aironet4500_devices[device_number]->priv;
 
   awc_rids_setup(aironet4500_devices[device_number]);
 
@@ -413,7 +426,7 @@ int awc_proc_set_device(int device_number){
   awc_proc_priv[device_number].proc_table_device_root[0].ctl_name = device_number+1;
 
   awc_proc_priv[device_number].proc_table_sys_root->child = awc_proc_priv[device_number].proc_table_device_root;
-  memcpy(awc_proc_priv[device_number].proc_name,(struct awc_priv * )aironet4500_devices[device_number]->name,5);
+  memcpy(awc_proc_priv[device_number].proc_name,(struct NET_DEVICE * )aironet4500_devices[device_number]->name,5);
   awc_proc_priv[device_number].proc_name[4]=0;
  // awc_proc_priv[device_number].proc_name[3]=48+device_number;
   awc_proc_priv[device_number].proc_table_device_root[0].procname = &(awc_proc_priv[device_number].proc_name[0]);
@@ -484,6 +497,40 @@ int awc_proc_set_device(int device_number){
   	group++;
 
   };
+// here are driver-level params dir  
+  	awc_proc_priv[device_number].proc_table[group].ctl_name = group +1;
+  	awc_proc_priv[device_number].proc_table[group+1].ctl_name = 0;
+  	awc_proc_priv[device_number].proc_table[group].procname = "driver-level";
+  	awc_proc_priv[device_number].proc_table[group].data	= awc_proc_buff;
+  	awc_proc_priv[device_number].proc_table[group].maxlen  = sizeof(awc_proc_buff) -1;
+  	awc_proc_priv[device_number].proc_table[group].mode	= 0600;
+  	awc_proc_priv[device_number].proc_table[group].child	= kmalloc(sizeof(awc_driver_level_ctable) , GFP_KERNEL);
+  	awc_proc_priv[device_number].proc_table[group].proc_handler = NULL;
+  	awc_proc_priv[device_number].proc_table[group].strategy = NULL;
+  	awc_proc_priv[device_number].proc_table[group].de	= NULL;
+  	awc_proc_priv[device_number].proc_table[group].extra1	= NULL;
+  	awc_proc_priv[device_number].proc_table[group].extra2	= NULL;
+  	if (!awc_proc_priv[device_number].proc_table[group].child) {
+  		awc_proc_priv[device_number].proc_table[group].ctl_name = 0;
+   		printk(KERN_CRIT "Out of memory on aironet4500_proc huge table alloc \n");
+  		return 0;
+  	}
+
+	
+	tmp_table_ptr = awc_proc_priv[device_number].proc_table[group].child;
+	memcpy(tmp_table_ptr,awc_driver_level_ctable,sizeof(awc_driver_level_ctable));
+
+
+        tmp_table_ptr[0].data = 
+         &(priv->force_rts_on_shorter);
+        tmp_table_ptr[1].data =   &priv->force_tx_rate;
+        tmp_table_ptr[2].data = (void *) &priv->ip_tos_reliability_rts;
+        tmp_table_ptr[3].data = (void *) &priv->ip_tos_troughput_no_retries;
+        tmp_table_ptr[4].data = (void *) &priv->debug;
+        tmp_table_ptr[5].data = (void *) &priv->simple_bridge;
+        tmp_table_ptr[6].data = (void *) &priv->p802_11_send;
+        tmp_table_ptr[7].data = (void *) &priv->full_stats;
+
 
 	awc_proc_priv[device_number].sysctl_header = 
 		register_sysctl_table(awc_proc_priv[device_number].proc_table_sys_root,0);

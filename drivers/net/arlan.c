@@ -1,6 +1,6 @@
 /*
  *  Copyright (C) 1997 Cullen Jennings
- *  Copyright (C) 1998 Elmer.Joandi@ut.ee, +37-255-13500        
+ *  Copyright (C) 1998 Elmer Joandiu, elmer@ylenurme.ee
  *  Gnu Public License applies
  * This module provides support for the Arlan 655 card made by Aironet
  */
@@ -638,15 +638,20 @@ static void arlan_registration_timer(unsigned long data)
 		priv->registrationLastSeen = jiffies;
 		priv->registrationLostCount = 0;
 		priv->reRegisterExp = 1;
-		if (!netif_running(dev))
+		if (!netif_running(dev) )
 			netif_wake_queue(dev);
+		if (priv->tx_last_sent > priv->tx_last_cleared &&
+			jiffies - priv->tx_last_sent > 5*HZ ){
+			arlan_command(dev, ARLAN_COMMAND_CLEAN_AND_RESET);		
+			priv->tx_last_cleared = jiffies;
+		};
 	}
 
 
 	if (!registrationBad(dev) && priv->ReTransmitRequested)
 	{
 		IFDEBUG(ARLAN_DEBUG_TX_CHAIN)
-			printk(KERN_ERR "Retranmit from timer \n");
+			printk(KERN_ERR "Retransmit from timer \n");
 		priv->ReTransmitRequested = 0;
 		arlan_retransmit_now(dev);
 	}
@@ -1335,8 +1340,8 @@ static void arlan_tx_timeout (struct net_device *dev)
 	printk(KERN_ERR "%s: arlan transmit timed out, kernel decided\n", dev->name);
 	/* Try to restart the adaptor. */
 	arlan_command(dev, ARLAN_COMMAND_CLEAN_AND_RESET);
-	dev->trans_start = jiffies;
-	netif_start_queue (dev);
+	// dev->trans_start = jiffies;
+	// netif_start_queue (dev);
 }
 
 
@@ -1348,12 +1353,6 @@ static int arlan_tx(struct sk_buff *skb, struct net_device *dev)
 
 	ARLAN_DEBUG_ENTRY("arlan_tx");
 	
-	/*
-	 * If some higher layer thinks we've missed an tx-done interrupt
-	 * we are passed NULL. Caution: dev_tint() handles the cli()/sti()
-	 * itself.
-	 */
-
 	length = ETH_ZLEN < skb->len ? skb->len : ETH_ZLEN;
 	buf = skb->data;
 
