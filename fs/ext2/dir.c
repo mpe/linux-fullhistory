@@ -1,7 +1,9 @@
 /*
  *  linux/fs/ext2/dir.c
  *
- *  Copyright (C) 1992, 1993  Remy Card (card@masi.ibp.fr)
+ *  Copyright (C) 1992, 1993, 1994  Remy Card (card@masi.ibp.fr)
+ *                                  Laboratoire MASI - Institut Blaise Pascal
+ *                                  Universite Pierre et Marie Curie (Paris VI)
  *
  *  from
  *
@@ -14,26 +16,32 @@
 
 #include <asm/segment.h>
 
+#include <linux/autoconf.h>
 #include <linux/errno.h>
 #include <linux/fs.h>
 #include <linux/ext2_fs.h>
 #include <linux/sched.h>
 #include <linux/stat.h>
 
-#if 0
+#ifndef CONFIG_EXT2_FS_DIR_READ
 static int ext2_dir_read (struct inode * inode, struct file * filp,
 			    char * buf, int count)
 {
 	return -EISDIR;
 }
+#else
+int ext2_file_read (struct inode *, struct file *, char *, int);
 #endif
 
-/* static */ int ext2_file_read (struct inode *, struct file *, char *, int);
 static int ext2_readdir (struct inode *, struct file *, struct dirent *, int);
 
 static struct file_operations ext2_dir_operations = {
 	NULL,			/* lseek - default */
+#ifdef CONFIG_EXT2_FS_DIR_READ
 	ext2_file_read,		/* read */
+#else
+	ext2_dir_read,		/* read */
+#endif
 	NULL,			/* write - bad */
 	ext2_readdir,		/* readdir */
 	NULL,			/* select - default */
@@ -92,9 +100,9 @@ int ext2_check_dir_entry (char * function, struct inode * dir,
 static int ext2_readdir (struct inode * inode, struct file * filp,
 			 struct dirent * dirent, int count)
 {
-	unsigned long offset;
-	int i;
-	struct buffer_head * bh;
+	unsigned long offset, blk;
+	int i, num;
+	struct buffer_head * bh, * tmp, * bha[16];
 	struct ext2_dir_entry * de;
 	struct super_block * sb;
 	int err;
@@ -104,16 +112,36 @@ static int ext2_readdir (struct inode * inode, struct file * filp,
 	sb = inode->i_sb;
 	while (filp->f_pos < inode->i_size) {
 		offset = filp->f_pos & (sb->s_blocksize - 1);
-		bh = ext2_bread (inode, (filp->f_pos) >> EXT2_BLOCK_SIZE_BITS(sb),
-				 0, &err);
+		blk = (filp->f_pos) >> EXT2_BLOCK_SIZE_BITS(sb);
+		bh = ext2_bread (inode, blk, 0, &err);
 		if (!bh) {
 			filp->f_pos += sb->s_blocksize - offset;
 			continue;
 		}
+
+		/*
+		 * Do the readahead
+		 */
+		if (!offset) {
+			for (i = 16 >> (EXT2_BLOCK_SIZE_BITS(sb) - 9), num = 0;
+			     i > 0; i--) {
+				tmp = ext2_getblk (inode, ++blk, 0, &err);
+				if (tmp && !tmp->b_uptodate && !tmp->b_lock)
+					bha[num++] = tmp;
+				else
+					brelse (tmp);
+			}
+			if (num) {
+				ll_rw_block (READA, num, bha);
+				for (i = 0; i < num; i++)
+					brelse (bha[i]);
+			}
+		}
+		
 		de = (struct ext2_dir_entry *) (offset + bh->b_data);
 		while (offset < sb->s_blocksize && filp->f_pos < inode->i_size) {
-			if (! ext2_check_dir_entry ("ext2_readdir", inode, de,
-						    bh, offset)) {
+			if (!ext2_check_dir_entry ("ext2_readdir", inode, de,
+						   bh, offset)) {
 				brelse (bh);
 				return 0;
 			}

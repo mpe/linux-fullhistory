@@ -25,17 +25,17 @@
 enum rpc_auth_flavor {
 	RPC_AUTH_NULL = 0,
 	RPC_AUTH_UNIX = 1,
-	RPC_AUTH_SHORT = 2,
+	RPC_AUTH_SHORT = 2
 };
 
 enum rpc_msg_type {
 	RPC_CALL = 0,
-	RPC_REPLY = 1,
+	RPC_REPLY = 1
 };
 
 enum rpc_reply_stat {
 	RPC_MSG_ACCEPTED = 0,
-	RPC_MSG_DENIED = 1,
+	RPC_MSG_DENIED = 1
 };
 
 enum rpc_accept_stat {
@@ -43,12 +43,12 @@ enum rpc_accept_stat {
 	RPC_PROG_UNAVAIL = 1,
 	RPC_PROG_MISMATCH = 2,
 	RPC_PROC_UNAVAIL = 3,
-	RPC_GARBAGE_ARGS = 4,
+	RPC_GARBAGE_ARGS = 4
 };
 
 enum rpc_reject_stat {
 	RPC_MISMATCH = 0,
-	RPC_AUTH_ERROR = 1,
+	RPC_AUTH_ERROR = 1
 };
 
 enum rpc_auth_stat {
@@ -56,7 +56,7 @@ enum rpc_auth_stat {
 	RPC_AUTH_REJECTEDCRED = 2,
 	RPC_AUTH_BADVERF = 3,
 	RPC_AUTH_REJECTEDVERF = 4,
-	RPC_AUTH_TOOWEAK = 5,
+	RPC_AUTH_TOOWEAK = 5
 };
 
 #endif /* __KERNEL__ */
@@ -80,7 +80,7 @@ enum nfs_stat {
 	NFSERR_NOTEMPTY = 66,
 	NFSERR_DQUOT = 69,
 	NFSERR_STALE = 70,
-	NFSERR_WFLUSH = 99,
+	NFSERR_WFLUSH = 99
 };
 
 enum nfs_ftype {
@@ -92,7 +92,7 @@ enum nfs_ftype {
 	NFLNK = 5,
 	NFSOCK = 6,
 	NFBAD = 7,
-	NFFIFO = 8,
+	NFFIFO = 8
 };
 
 #define NFS_PROGRAM		100003

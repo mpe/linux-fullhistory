@@ -1,7 +1,9 @@
 /*
  *  linux/fs/ext2/dcache.c
  *
- *  Copyright (C) 1992, 1993  Remy Card (card@masi.ibp.fr)
+ *  Copyright (C) 1992, 1993, 1994  Remy Card (card@masi.ibp.fr)
+ *                                  Laboratoire MASI - Institut Blaise Pascal
+ *                                  Universite Pierre et Marie Curie (Paris VI)
  *
  */
 
@@ -14,7 +16,6 @@
 
 #include <linux/fs.h>
 #include <linux/ext2_fs.h>
-#include <linux/kernel.h>
 #include <linux/string.h>
 
 #ifndef DONT_USE_DCACHE

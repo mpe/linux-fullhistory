@@ -18,5 +18,4 @@ struct new_utsname system_utsname = {
 
 char *linux_banner = 
 	"Linux version " UTS_RELEASE " (" LINUX_COMPILE_BY "@"
-	LINUX_COMPILE_HOST "." LINUX_COMPILE_DOMAIN ") "
-	UTS_VERSION ": " LINUX_COMPILE_TIME "\n";
+	LINUX_COMPILE_HOST ") " UTS_VERSION "\n";

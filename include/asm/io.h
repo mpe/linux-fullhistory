@@ -7,7 +7,7 @@
  * to guarantee better timings even on fast machines.
  *
  * On the other hand, I'd like to be sure of a non-existent port:
- * I feel a bit unsafe about using 0x80.
+ * I feel a bit unsafe about using 0x80 (should be safe, though)
  *
  *		Linus
  */
@@ -24,73 +24,41 @@
 #define SLOW_DOWN_IO __SLOW_DOWN_IO
 #endif
 
-/* This is the more general version of outb.. */
-extern inline void __outb(unsigned char value, unsigned short port)
-{
-__asm__ __volatile__ ("outb %b0,%w1"
-		: /* no outputs */
-		:"a" (value),"d" (port));
-}
+/*
+ * Talk about misusing macros..
+ */
 
-/* this is used for constant port numbers < 256.. */
-extern inline void __outbc(unsigned char value, unsigned short port)
-{
-__asm__ __volatile__ ("outb %b0,%1"
-		: /* no outputs */
-		:"a" (value),"i" (port));
-}
+#define __OUT1(s,x) \
+extern inline void __out##s(unsigned x value, unsigned short port) {
 
-/* general version of inb */
-extern inline unsigned int __inb(unsigned short port)
-{
-	unsigned int _v;
-__asm__ __volatile__ ("inb %w1,%b0"
-		:"=a" (_v):"d" (port),"0" (0));
-	return _v;
-}
+#define __OUT2(s,s1,s2) \
+__asm__ __volatile__ ("out" #s " %" s1 "0,%" s2 "1"
 
-/* inb with constant port nr 0-255 */
-extern inline unsigned int __inbc(unsigned short port)
-{
-	unsigned int _v;
-__asm__ __volatile__ ("inb %1,%b0"
-		:"=a" (_v):"i" (port),"0" (0));
-	return _v;
-}
+#define __OUT(s,s1,x) \
+__OUT1(s,x) __OUT2(s,s1,"w") : : "a" (value), "d" (port)); } \
+__OUT1(s##c,x) __OUT2(s,s1,"") : : "a" (value), "i" (port)); } \
+__OUT1(s##_p,x) __OUT2(s,s1,"w") : : "a" (value), "d" (port)); SLOW_DOWN_IO; } \
+__OUT1(s##c_p,x) __OUT2(s,s1,"") : : "a" (value), "i" (port)); SLOW_DOWN_IO; }
 
-extern inline void __outb_p(unsigned char value, unsigned short port)
-{
-__asm__ __volatile__ ("outb %b0,%w1"
-		: /* no outputs */
-		:"a" (value),"d" (port));
-	SLOW_DOWN_IO;
-}
+#define __IN1(s) \
+extern inline unsigned int __in##s(unsigned short port) { unsigned int _v;
 
-extern inline void __outbc_p(unsigned char value, unsigned short port)
-{
-__asm__ __volatile__ ("outb %b0,%1"
-		: /* no outputs */
-		:"a" (value),"i" (port));
-	SLOW_DOWN_IO;
-}
+#define __IN2(s,s1,s2) \
+__asm__ __volatile__ ("in" #s " %" s2 "1,%" s1 "0"
 
-extern inline unsigned int __inb_p(unsigned short port)
-{
-	unsigned int _v;
-__asm__ __volatile__ ("inb %w1,%b0"
-		:"=a" (_v):"d" (port),"0" (0));
-	SLOW_DOWN_IO;
-	return _v;
-}
+#define __IN(s,s1,i...) \
+__IN1(s) __IN2(s,s1,"w") : "=a" (_v) : "d" (port) ,##i ); return _v; } \
+__IN1(s##c) __IN2(s,s1,"") : "=a" (_v) : "i" (port) ,##i ); return _v; } \
+__IN1(s##_p) __IN2(s,s1,"w") : "=a" (_v) : "d" (port) ,##i ); SLOW_DOWN_IO; return _v; } \
+__IN1(s##c_p) __IN2(s,s1,"") : "=a" (_v) : "i" (port) ,##i ); SLOW_DOWN_IO; return _v; }
 
-extern inline unsigned int __inbc_p(unsigned short port)
-{
-	unsigned int _v;
-__asm__ __volatile__ ("inb %1,%b0"
-		:"=a" (_v):"i" (port),"0" (0));
-	SLOW_DOWN_IO;
-	return _v;
-}
+__IN(b,"b","0" (0))
+__IN(w,"w","0" (0))
+__IN(l,"")
+
+__OUT(b,"b",char)
+__OUT(w,"w",short)
+__OUT(l,,int)
 
 /*
  * Note that due to the way __builtin_constant_p() works, you
@@ -116,5 +84,45 @@ __asm__ __volatile__ ("inb %1,%b0"
 ((__builtin_constant_p((port)) && (port) < 256) ? \
 	__inbc_p(port) : \
 	__inb_p(port))
+
+#define outw(val,port) \
+((__builtin_constant_p((port)) && (port) < 256) ? \
+	__outwc((val),(port)) : \
+	__outw((val),(port)))
+
+#define inw(port) \
+((__builtin_constant_p((port)) && (port) < 256) ? \
+	__inwc(port) : \
+	__inw(port))
+
+#define outw_p(val,port) \
+((__builtin_constant_p((port)) && (port) < 256) ? \
+	__outwc_p((val),(port)) : \
+	__outw_p((val),(port)))
+
+#define inw_p(port) \
+((__builtin_constant_p((port)) && (port) < 256) ? \
+	__inwc_p(port) : \
+	__inw_p(port))
+
+#define outl(val,port) \
+((__builtin_constant_p((port)) && (port) < 256) ? \
+	__outlc((val),(port)) : \
+	__outl((val),(port)))
+
+#define inl(port) \
+((__builtin_constant_p((port)) && (port) < 256) ? \
+	__inlc(port) : \
+	__inl(port))
+
+#define outl_p(val,port) \
+((__builtin_constant_p((port)) && (port) < 256) ? \
+	__outlc_p((val),(port)) : \
+	__outl_p((val),(port)))
+
+#define inl_p(port) \
+((__builtin_constant_p((port)) && (port) < 256) ? \
+	__inlc_p(port) : \
+	__inl_p(port))
 
 #endif

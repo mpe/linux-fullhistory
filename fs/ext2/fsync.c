@@ -4,6 +4,8 @@
  *  Copyright (C) 1993  Stephen Tweedie (sct@dcs.ed.ac.uk)
  *  from
  *  Copyright (C) 1992  Remy Card (card@masi.ibp.fr)
+ *                      Laboratoire MASI - Institut Blaise Pascal
+ *                      Universite Pierre et Marie Curie (Paris VI)
  *  from
  *  linux/fs/minix/truncate.c   Copyright (C) 1991, 1992  Linus Torvalds
  * 
@@ -171,8 +173,10 @@ int ext2_sync_file (struct inode * inode, struct file * file)
 	if (!(S_ISREG(inode->i_mode) || S_ISDIR(inode->i_mode) ||
 	     S_ISLNK(inode->i_mode)))
 		return -EINVAL;
-	/* Don't sync fast links! */
 	if (S_ISLNK(inode->i_mode) && !(inode->i_blocks))
+		/*
+		 * Don't sync fast links!
+		 */
 		goto skip;
 
 	for (wait=0; wait<=1; wait++)

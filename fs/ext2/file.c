@@ -1,7 +1,9 @@
 /*
  *  linux/fs/ext2/file.c
  *
- *  Copyright (C) 1992, 1993  Remy Card (card@masi.ibp.fr)
+ *  Copyright (C) 1992, 1993, 1994  Remy Card (card@masi.ibp.fr)
+ *                                  Laboratoire MASI - Institut Blaise Pascal
+ *                                  Universite Pierre et Marie Curie (Paris VI)
  *
  *  from
  *
@@ -15,11 +17,11 @@
 #include <asm/segment.h>
 #include <asm/system.h>
 
+#include <linux/autoconf.h>
 #include <linux/errno.h>
 #include <linux/fs.h>
 #include <linux/ext2_fs.h>
 #include <linux/fcntl.h>
-#include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/stat.h>
 #include <linux/locks.h>
@@ -32,8 +34,12 @@
 #include <linux/fs.h>
 #include <linux/ext2_fs.h>
 
-/* static */ int ext2_file_read (struct inode *, struct file *, char *, int);
+#ifndef CONFIG_EXT2_FS_DIR_READ
+static
+#endif
+int ext2_file_read (struct inode *, struct file *, char *, int);
 static int ext2_file_write (struct inode *, struct file *, char *, int);
+static void ext2_release_file (struct inode *, struct file *);
 
 /*
  * We have mostly NULL's here: the current defaults are ok for
@@ -48,7 +54,7 @@ static struct file_operations ext2_file_operations = {
 	ext2_ioctl,		/* ioctl */
 	generic_mmap,  		/* mmap */
 	NULL,			/* no special open is needed */
-	NULL,			/* release */
+	ext2_release_file,	/* release */
 	ext2_sync_file		/* fsync */
 };
 
@@ -70,8 +76,11 @@ struct inode_operations ext2_file_inode_operations = {
 	ext2_permission		/* permission */
 };
 
-/* static */ int ext2_file_read (struct inode * inode, struct file * filp,
-				 char * buf, int count)
+#ifndef CONFIG_EXT2_FS_DIR_READ
+static
+#endif
+int ext2_file_read (struct inode * inode, struct file * filp,
+		    char * buf, int count)
 {
 	int read, left, chars;
 	int block, blocks, offset;
@@ -116,15 +125,17 @@ struct inode_operations ext2_file_inode_operations = {
 			blocks = size - block;
 	}
 
-	/* We do this in a two stage process.  We first try and request
-	   as many blocks as we can, then we wait for the first one to
-	   complete, and then we try and wrap up as many as are actually
-	   done.  This routine is rather generic, in that it can be used
-	   in a filesystem by substituting the appropriate function in
-	   for getblk
-
-	   This routine is optimized to make maximum use of the various
-	   buffers and caches. */
+	/*
+	 * We do this in a two stage process.  We first try and request
+	 * as many blocks as we can, then we wait for the first one to
+	 * complete, and then we try and wrap up as many as are actually
+	 * done.  This routine is rather generic, in that it can be used
+	 * in a filesystem by substituting the appropriate function in
+	 * for getblk
+	 *
+	 * This routine is optimized to make maximum use of the various
+	 * buffers and caches.
+	 */
 
 	do {
 		bhrequest = 0;
@@ -140,8 +151,10 @@ struct inode_operations ext2_file_inode_operations = {
 			if (++bhb == &buflist[NBUF])
 				bhb = buflist;
 
-			/* If the block we have on hand is uptodate, go ahead
-			   and complete processing */
+			/*
+			 * If the block we have on hand is uptodate, go ahead
+			 * and complete processing
+			 */
 			if (uptodate)
 				break;
 
@@ -149,11 +162,16 @@ struct inode_operations ext2_file_inode_operations = {
 				break;
 		}
 
-		/* Now request them all */
+		/*
+		 * Now request them all
+		 */
 		if (bhrequest)
 			ll_rw_block (READ, bhrequest, bhreq);
 
-		do { /* Finish off all I/O that has actually completed */
+		do {
+			/*
+			 * Finish off all I/O that has actually completed
+			 */
 			if (*bhe) {
 				wait_on_buffer (*bhe);
 				if (!(*bhe)->b_uptodate) { /* read error? */
@@ -186,7 +204,9 @@ struct inode_operations ext2_file_inode_operations = {
 		} while (left > 0 && bhe != bhb && (!*bhe || !(*bhe)->b_lock));
 	} while (left > 0);
 
-	/* Release the read-ahead blocks */
+	/*
+	 * Release the read-ahead blocks
+	 */
 	while (bhe != bhb) {
 		brelse (*bhe);
 		if (++bhe == &buflist[NBUF])
@@ -217,6 +237,12 @@ static int ext2_file_write (struct inode * inode, struct file * filp,
 		return -EINVAL;
 	}
 	sb = inode->i_sb;
+	if (sb->s_flags & MS_RDONLY)
+		/*
+		 * This fs has been automatically remounted ro because of errors
+		 */
+		return -ENOSPC;
+
 	if (!S_ISREG(inode->i_mode)) {
 		ext2_warning (sb, "ext2_file_write", "mode = %07o\n",
 			      inode->i_mode);
@@ -268,4 +294,15 @@ static int ext2_file_write (struct inode * inode, struct file * filp,
 	filp->f_pos = pos;
 	inode->i_dirt = 1;
 	return written;
+}
+
+/*
+ * Called when a inode is released. Note that this is different
+ * from ext2_open: open gets called at every open, but release
+ * gets called only when /all/ the files are closed.
+ */
+static void ext2_release_file (struct inode * inode, struct file * filp)
+{
+	if (filp->f_mode & 2)
+		ext2_discard_prealloc (inode);
 }

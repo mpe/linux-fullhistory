@@ -1,7 +1,9 @@
 /*
  *  linux/fs/ext2/inode.c
  *
- *  Copyright (C) 1992, 1993  Remy Card (card@masi.ibp.fr)
+ *  Copyright (C) 1992, 1993, 1994  Remy Card (card@masi.ibp.fr)
+ *                                  Laboratoire MASI - Institut Blaise Pascal
+ *                                  Universite Pierre et Marie Curie (Paris VI)
  *
  *  from
  *
@@ -18,14 +20,22 @@
 #include <linux/errno.h>
 #include <linux/fs.h>
 #include <linux/ext2_fs.h>
-#include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/stat.h>
 #include <linux/string.h>
 #include <linux/locks.h>
 
+#define clear_block(addr,size) \
+	__asm__("cld\n\t" \
+		"rep\n\t" \
+		"stosl" \
+		: \
+		:"a" (0), "c" (size / 4), "D" ((long) (addr)) \
+		:"cx", "di")
+
 void ext2_put_inode (struct inode * inode)
 {
+	ext2_discard_prealloc (inode);
 	if (inode->i_nlink || inode->i_ino == EXT2_ACL_IDX_INO ||
 	    inode->i_ino == EXT2_ACL_DATA_INO)
 		return;
@@ -47,6 +57,78 @@ static int block_bmap (struct buffer_head * bh, int nr)
 	brelse (bh);
 	return tmp;
 }
+
+/* 
+ * ext2_discard_prealloc and ext2_alloc_block are atomic wrt. the
+ * superblock in the same manner as are ext2_free_blocks and
+ * ext2_new_block.  We just wait on the super rather than locking it
+ * here, since ext2_new_block will do the necessary locking and we
+ * can't block until then.
+ */
+void ext2_discard_prealloc (struct inode * inode)
+{
+#ifdef EXT2_PREALLOCATE
+	if (inode->u.ext2_i.i_prealloc_count) {
+		ext2_free_blocks (inode->i_sb,
+				  inode->u.ext2_i.i_prealloc_block,
+				  inode->u.ext2_i.i_prealloc_count);
+		inode->u.ext2_i.i_prealloc_count = 0;
+	}
+#endif
+}
+
+static int ext2_alloc_block (struct inode * inode, unsigned long goal)
+{
+#ifdef EXT2FS_DEBUG
+	static unsigned long alloc_hits = 0, alloc_attempts = 0;
+#endif
+	unsigned long result;
+	struct buffer_head * bh;
+
+	wait_on_super (inode->i_sb);
+
+#ifdef EXT2_PREALLOCATE
+	if (inode->u.ext2_i.i_prealloc_count &&
+	    (goal == inode->u.ext2_i.i_prealloc_block ||
+	     goal + 1 == inode->u.ext2_i.i_prealloc_block))
+	{		
+		result = inode->u.ext2_i.i_prealloc_block++;
+		inode->u.ext2_i.i_prealloc_count--;
+		ext2_debug ("preallocation hit (%lu/%lu).\n",
+			    ++alloc_hits, ++alloc_attempts);
+
+		/* It doesn't matter if we block in getblk() since
+		   we have already atomically allocated the block, and
+		   are only clearing it now. */
+		if (!(bh = getblk (inode->i_sb->s_dev, result,
+				   inode->i_sb->s_blocksize))) {
+			ext2_error (inode->i_sb, "ext2_alloc_block",
+				    "cannot get block %lu", result);
+			return 0;
+		}
+		clear_block (bh->b_data, inode->i_sb->s_blocksize);
+		bh->b_uptodate = 1;
+		bh->b_dirt = 1;
+		brelse (bh);
+	} else {
+		ext2_discard_prealloc (inode);
+		ext2_debug ("preallocation miss (%lu/%lu).\n",
+			    alloc_hits, ++alloc_attempts);
+		if (S_ISREG(inode->i_mode))
+			result = ext2_new_block
+				(inode->i_sb, goal,
+				 &inode->u.ext2_i.i_prealloc_count,
+				 &inode->u.ext2_i.i_prealloc_block);
+		else
+			result = ext2_new_block (inode->i_sb, goal, 0, 0);
+	}
+#else
+	result = ext2_new_block (inode->i_sb, goal, 0, 0);
+#endif
+
+	return result;
+}
+
 
 int ext2_bmap (struct inode * inode, int block)
 {
@@ -147,12 +229,12 @@ repeat:
 
 	ext2_debug ("goal = %d.\n", goal);
 
-	tmp = ext2_new_block (inode->i_sb, goal);
+	tmp = ext2_alloc_block (inode, goal);
 	if (!tmp)
 		return NULL;
 	result = getblk (inode->i_dev, tmp, inode->i_sb->s_blocksize);
 	if (*p) {
-		ext2_free_block (inode->i_sb, tmp);
+		ext2_free_blocks (inode->i_sb, tmp, 1);
 		brelse (result);
 		goto repeat;
 	}
@@ -219,14 +301,14 @@ repeat:
 		if (!goal)
 			goal = bh->b_blocknr + 1;
 	}
-	tmp = ext2_new_block (inode->i_sb, goal);
+	tmp = ext2_alloc_block (inode, goal);
 	if (!tmp) {
 		brelse (bh);
 		return NULL;
 	}
 	result = getblk (bh->b_dev, tmp, blocksize);
 	if (*p) {
-		ext2_free_block (inode->i_sb, tmp);
+		ext2_free_blocks (inode->i_sb, tmp, 1);
 		brelse (result);
 		goto repeat;
 	}
@@ -263,9 +345,11 @@ struct buffer_head * ext2_getblk (struct inode * inode, long block,
 		ext2_warning (inode->i_sb, "ext2_getblk", "block > big");
 		return NULL;
 	}
-	/* If this is a sequential block allocation, set the next_alloc_block
-	   to this block now so that all the indblock and data block
-	   allocations use the same goal zone */
+	/*
+	 * If this is a sequential block allocation, set the next_alloc_block
+	 * to this block now so that all the indblock and data block
+	 * allocations use the same goal zone
+	 */
 
 	ext2_debug ("block %lu, next %lu, goal %lu.\n", block, 
 		    inode->u.ext2_i.i_next_alloc_block,
@@ -379,6 +463,9 @@ void ext2_read_inode (struct inode * inode)
 	inode->u.ext2_i.i_block_group = block_group;
 	inode->u.ext2_i.i_next_alloc_block = 0;
 	inode->u.ext2_i.i_next_alloc_goal = 0;
+	if (inode->u.ext2_i.i_prealloc_count)
+		ext2_error (inode->i_sb, "ext2_read_inode",
+			    "New inode has non-zero prealloc count!");
 	if (S_ISCHR(inode->i_mode) || S_ISBLK(inode->i_mode))
 		inode->i_rdev = raw_inode->i_block[0];
 	else for (block = 0; block < EXT2_N_BLOCKS; block++)

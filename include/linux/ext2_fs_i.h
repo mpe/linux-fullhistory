@@ -1,7 +1,9 @@
 /*
  *  linux/include/linux/ext2_fs_i.h
  *
- *  Copyright (C) 1992, 1993  Remy Card (card@masi.ibp.fr)
+ *  Copyright (C) 1992, 1993, 1994  Remy Card (card@masi.ibp.fr)
+ *                                  Laboratoire MASI - Institut Blaise Pascal
+ *                                  Universite Pierre et Marie Curie (Paris VI)
  *
  *  from
  *
@@ -30,6 +32,8 @@ struct ext2_inode_info {
 	unsigned long  i_block_group;
 	unsigned long  i_next_alloc_block;
 	unsigned long  i_next_alloc_goal;
+	unsigned long  i_prealloc_block;
+	unsigned long  i_prealloc_count;
 };
 
 #endif	/* _LINUX_EXT2_FS_I */

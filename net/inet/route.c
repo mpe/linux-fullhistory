@@ -170,7 +170,6 @@ rt_add(short flags, unsigned long dst, unsigned long gw, struct device *dev)
 	} else {
 		if (!((dst ^ dev->pa_addr) & dev->pa_mask)) {
 			mask = dev->pa_mask;
-			dst &= mask;
 			flags &= ~RTF_GATEWAY;
 			if (flags & RTF_DYNAMIC) {
 				/*printk("Dynamic route to my own net rejected\n");*/
@@ -178,6 +177,7 @@ rt_add(short flags, unsigned long dst, unsigned long gw, struct device *dev)
 			}
 		} else
 			mask = guess_mask(dst);
+		dst &= mask;
 	}
 	if (gw == dev->pa_addr)
 		flags &= ~RTF_GATEWAY;

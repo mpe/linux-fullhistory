@@ -1,7 +1,9 @@
 /*
  *  linux/fs/ext2/namei.c
  *
- *  Copyright (C) 1992, 1993  Remy Card (card@masi.ibp.fr)
+ *  Copyright (C) 1992, 1993, 1994  Remy Card (card@masi.ibp.fr)
+ *                                  Laboratoire MASI - Institut Blaise Pascal
+ *                                  Universite Pierre et Marie Curie (Paris VI)
  *
  *  from
  *
@@ -16,7 +18,6 @@
 #include <linux/fs.h>
 #include <linux/ext2_fs.h>
 #include <linux/fcntl.h>
-#include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/stat.h>
 #include <linux/string.h>
@@ -27,7 +28,15 @@
  * truncated. Else they will be disallowed.
  */
 /* #define NO_TRUNCATE */
-	
+
+/*
+ * define how far ahead to read directories while searching them.
+ */
+#define NAMEI_RA_CHUNKS  2
+#define NAMEI_RA_BLOCKS  4
+#define NAMEI_RA_SIZE        (NAMEI_RA_CHUNKS * NAMEI_RA_BLOCKS)
+#define NAMEI_RA_INDEX(c,b)  (((c) * NAMEI_RA_BLOCKS) + (b))
+
 /*
  * NOTE! unlike strncmp, ext2_match returns 1 for success, 0 for failure.
  */
@@ -38,7 +47,9 @@ static int ext2_match (int len, const char * const name,
 
 	if (!de || !de->inode || len > EXT2_NAME_LEN)
 		return 0;
-	/* "" means "." ---> so paths like "/usr/lib//libc.a" work */
+	/*
+	 * "" means "." ---> so paths like "/usr/lib//libc.a" work
+	 */
 	if (!len && de->name_len == 1 && (de->name[0] == '.') &&
 	   (de->name[1] == '\0'))
 		return 1;
@@ -60,22 +71,22 @@ static int ext2_match (int len, const char * const name,
  * returns the cache buffer in which the entry was found, and the entry
  * itself (as a parameter - res_dir). It does NOT read the inode of the
  * entry - you'll have to do that yourself if you want to.
- *
  */
 static struct buffer_head * ext2_find_entry (struct inode * dir,
 					     const char * const name, int namelen,
 					     struct ext2_dir_entry ** res_dir)
 {
-	unsigned long offset;
-	struct buffer_head * bh;
-	struct ext2_dir_entry * de;
 	struct super_block * sb;
-	int err;
+	struct buffer_head * bh_use[NAMEI_RA_SIZE];
+	struct buffer_head * bh_read[NAMEI_RA_SIZE];
+	unsigned long offset;
+	int block, toread, i, err;
 
 	*res_dir = NULL;
 	if (!dir)
 		return NULL;
 	sb = dir->i_sb;
+
 #ifdef NO_TRUNCATE
 	if (namelen > EXT2_NAME_LEN)
 		return NULL;
@@ -83,34 +94,76 @@ static struct buffer_head * ext2_find_entry (struct inode * dir,
 	if (namelen > EXT2_NAME_LEN)
 		namelen = EXT2_NAME_LEN;
 #endif
-	bh = ext2_bread (dir, 0, 0, &err);
-	if (!bh)
-		return NULL;
-	offset = 0;
-	de = (struct ext2_dir_entry *) bh->b_data;
-	while (offset < dir->i_size) {
-		if (!bh || (char *)de >= sb->s_blocksize + bh->b_data) {
-			brelse (bh);
-			bh = ext2_bread (dir, offset >> EXT2_BLOCK_SIZE_BITS(sb), 0, &err);
-			if (!bh) {
-				offset += sb->s_blocksize;
-				continue;
-			}
-			de = (struct ext2_dir_entry *) bh->b_data;
-		}
-		if (! ext2_check_dir_entry ("ext2_find_entry", dir, de, bh,
-					    offset)) {
-			brelse (bh);
-			return NULL;
-		}
-		if (de->inode != 0 && ext2_match (namelen, name, de)) {
-			*res_dir = de;
-			return bh;
-		}
-		offset += de->rec_len;
-		de = (struct ext2_dir_entry *) ((char *) de + de->rec_len);
+
+	memset (bh_use, 0, sizeof (bh_use));
+	toread = 0;
+	for (block = 0; block < NAMEI_RA_SIZE; ++block) {
+		struct buffer_head * bh;
+
+		if ((block << EXT2_BLOCK_SIZE_BITS (sb)) >= dir->i_size)
+			break;
+		bh = ext2_getblk (dir, block, 0, &err);
+		bh_use[block] = bh;
+		if (bh && !bh->b_uptodate)
+			bh_read[toread++] = bh;
 	}
-	brelse (bh);
+
+	block = 0;
+	offset = 0;
+	while (offset < dir->i_size) {
+		struct buffer_head * bh;
+		struct ext2_dir_entry * de;
+		char * dlimit;
+
+		if ((block % NAMEI_RA_BLOCKS) == 0 && toread) {
+			ll_rw_block (READ, toread, bh_read);
+			toread = 0;
+		}
+		bh = bh_use[block % NAMEI_RA_SIZE];
+		if (!bh)
+			ext2_panic (sb, "ext2_find_entry",
+				    "buffer head pointer is NULL");
+		wait_on_buffer (bh);
+		if (!bh->b_uptodate) {
+			/*
+			 * read error: all bets are off
+			 */
+			break;
+		}
+
+		de = (struct ext2_dir_entry *) bh->b_data;
+		dlimit = bh->b_data + sb->s_blocksize;
+		while ((char *) de < dlimit) {
+			if (!ext2_check_dir_entry ("ext2_find_entry", dir,
+						   de, bh, offset))
+				goto failure;
+			if (de->inode != 0 && ext2_match (namelen, name, de)) {
+				for (i = 0; i < NAMEI_RA_SIZE; ++i) {
+					if (bh_use[i] != bh)
+						brelse (bh_use[i]);
+				}
+				*res_dir = de;
+				return bh;
+			}
+			offset += de->rec_len;
+			de = (struct ext2_dir_entry *)
+				((char *) de + de->rec_len);
+		}
+
+		brelse (bh);
+		if (((block + NAMEI_RA_SIZE) << EXT2_BLOCK_SIZE_BITS (sb)) >=
+		    dir->i_size)
+			bh = NULL;
+		else
+			bh = ext2_getblk (dir, block + NAMEI_RA_SIZE, 0, &err);
+		bh_use[block++ % NAMEI_RA_SIZE] = bh;
+		if (bh && !bh->b_uptodate)
+			bh_read[toread++] = bh;
+	}
+
+failure:
+	for (i = 0; i < NAMEI_RA_SIZE; ++i)
+		brelse (bh_use[i]);
 	return NULL;
 }
 
@@ -187,8 +240,9 @@ static struct buffer_head * ext2_add_entry (struct inode * dir,
 #endif
 	if (!namelen)
 		return NULL;
-	/* Is this a busy deleted directory?  Can't create new files 
-	   if so */
+	/*
+	 * Is this a busy deleted directory?  Can't create new files if so
+	 */
 	if (dir->i_size == 0)
 	{
 		*err = -ENOENT;
@@ -231,8 +285,8 @@ static struct buffer_head * ext2_add_entry (struct inode * dir,
 				de = (struct ext2_dir_entry *) bh->b_data;
 			}
 		}
-		if (! ext2_check_dir_entry ("ext2_add_entry", dir, de, bh,
-					    offset)) {
+		if (!ext2_check_dir_entry ("ext2_add_entry", dir, de, bh,
+					   offset)) {
 			*err = -ENOENT;
 			brelse (bh);
 			return NULL;
@@ -295,13 +349,12 @@ static int ext2_delete_entry (struct ext2_dir_entry * dir,
 	pde = NULL;
 	de = (struct ext2_dir_entry *) bh->b_data;
 	while (i < bh->b_size) {
-		if (! ext2_check_dir_entry ("ext2_delete_entry", NULL, 
-					    de, bh, i))
+		if (!ext2_check_dir_entry ("ext2_delete_entry", NULL, 
+					   de, bh, i))
 			return -EIO;
 		if (de == dir)  {
 			if (pde)
 				pde->rec_len += dir->rec_len;
-			/* XXX - must zero the inode number in every case !! */
 			dir->inode = 0;
 			return 0;
 		}
@@ -548,8 +601,8 @@ static int empty_dir (struct inode * inode)
 			}
 			de = (struct ext2_dir_entry *) bh->b_data;
 		}
-		if (! ext2_check_dir_entry ("empty_dir", inode, de, bh,
-					    offset)) {
+		if (!ext2_check_dir_entry ("empty_dir", inode, de, bh,
+					   offset)) {
 			brelse (bh);
 			return 1;
 		}
@@ -609,10 +662,13 @@ repeat:
 		goto end_rmdir;
 	}
 	if (inode->i_count > 1) {
-		/* Are we deleting the last instance of a busy directory?
-		   Better clean up if so. */
-		/* Make directory empty (it will be truncated when finally
-		   dereferenced).  This also inhibits ext2_add_entry. */
+		/*
+		 * Are we deleting the last instance of a busy directory?
+		 * Better clean up if so.
+		 *
+		 * Make directory empty (it will be truncated when finally
+		 * dereferenced).  This also inhibits ext2_add_entry.
+		 */
 		inode->i_size = 0;
 	}
 	retval = ext2_delete_entry (de, bh);
@@ -969,14 +1025,18 @@ start_up:
 					 &retval);
 	if (!new_bh)
 		goto end_rename;
-/* sanity checking before doing the rename - avoid races */
+	/*
+	 * sanity checking before doing the rename - avoid races
+	 */
 	if (new_inode && (new_de->inode != new_inode->i_ino))
 		goto try_again;
 	if (new_de->inode && !new_inode)
 		goto try_again;
 	if (old_de->inode != old_inode->i_ino)
 		goto try_again;
-/* ok, that's it */
+	/*
+	 * ok, that's it
+	 */
 	new_de->inode = old_inode->i_ino;
 #ifndef DONT_USE_DCACHE
 	ext2_dcache_remove (old_dir->i_dev, old_dir->i_ino, old_de->name,

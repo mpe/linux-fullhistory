@@ -300,7 +300,7 @@ struct super_operations {
 	void (*put_super) (struct super_block *);
 	void (*write_super) (struct super_block *);
 	void (*statfs) (struct super_block *, struct statfs *);
-	int (*remount_fs) (struct super_block *, int *);
+	int (*remount_fs) (struct super_block *, int *, char *);
 };
 
 struct file_system_type {

@@ -5,7 +5,7 @@
 #
 #
 
-VERSION		= 2.3
+VERSION		= 2.3b
 TARGET_OS	= linux
 
 .c.s:

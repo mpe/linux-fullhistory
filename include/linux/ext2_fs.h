@@ -1,7 +1,9 @@
 /*
  *  linux/include/linux/ext2_fs.h
  *
- *  Copyright (C) 1992, 1993  Remy Card (card@masi.ibp.fr)
+ *  Copyright (C) 1992, 1993, 1994  Remy Card (card@masi.ibp.fr)
+ *                                  Laboratoire MASI - Institut Blaise Pascal
+ *                                  Universite Pierre et Marie Curie (Paris VI)
  *
  *  from
  *
@@ -38,20 +40,20 @@
 #undef EXT2FS_PRE_02B_COMPAT
 
 /*
- * Define EXT2FS_PRE_04_COMPAT to convert ext2 fs prior to 0.4
- */
-#define EXT2_PRE_04_COMPAT
-
-/*
  * Define DONT_USE_DCACHE to inhibit the directory cache
  */
 #define DONT_USE_DCACHE
 
 /*
+ * Define EXT2_PREALLOCATE to preallocate data blocks for expanding files
+ */
+#define EXT2_PREALLOCATE
+
+/*
  * The second extended file system version
  */
-#define EXT2FS_DATE		"93/11/19"
-#define EXT2FS_VERSION		"0.4a"
+#define EXT2FS_DATE		"93/12/30"
+#define EXT2FS_VERSION		"0.4b"
 
 /*
  * Debug code
@@ -242,12 +244,32 @@ struct ext2_inode {
 /*
  * Mount flags
  */
-#define EXT2_MOUNT_CHECK		0x0001	/* Do some more checks */
+#define EXT2_MOUNT_CHECK_NORMAL		0x0001	/* Do some more checks */
+#define EXT2_MOUNT_CHECK_STRICT		0x0002	/* Do again more checks */
+#define EXT2_MOUNT_CHECK		(EXT2_MOUNT_CHECK_NORMAL | \
+					 EXT2_MOUNT_CHECK_STRICT)
+#define EXT2_MOUNT_GRPID		0x0004	/* Create files with directory's group */
+#define EXT2_MOUNT_DEBUG		0x0008	/* Some debugging messages */
+#define EXT2_MOUNT_ERRORS_CONT		0x0010	/* Continue on errors */
+#define EXT2_MOUNT_ERRORS_RO		0x0020	/* Remount fs ro on errors */
+#define EXT2_MOUNT_ERRORS_PANIC		0x0040	/* Panic on errors */
 
+#define clear_opt(o, opt)		o &= ~EXT2_MOUNT_##opt
+#define set_opt(o, opt)			o |= EXT2_MOUNT_##opt
+#define test_opt(sb, opt)		((sb)->u.ext2_sb.s_mount_opt & \
+					 EXT2_MOUNT_##opt)
 /*
  * Maximal mount counts between two filesystem checks
  */
 #define EXT2_DFL_MAX_MNT_COUNT		20	/* Allow 20 mounts */
+
+/*
+ * Behaviour when detecting errors
+ */
+#define EXT2_ERRORS_CONTINUE		1	/* Continue execution */
+#define EXT2_ERRORS_RO			2	/* Remount fs read-only */
+#define EXT2_ERRORS_PANIC		3	/* Panic */
+#define EXT2_ERRORS_DEFAULT		EXT2_ERRORS_CONTINUE
 
 /*
  * Structure of the super block
@@ -270,7 +292,9 @@ struct ext2_super_block {
 	unsigned short s_max_mnt_count;	/* Maximal mount count */
 	unsigned short s_magic;		/* Magic signature */
 	unsigned short s_state;		/* File system state */
-	unsigned long  s_reserved[241];	/* Padding to the end of the block */
+	unsigned short s_errors;	/* Behaviour when detecting errors */
+	unsigned short s_pad;
+	unsigned long  s_reserved[240];	/* Padding to the end of the block */
 };
 
 /*
@@ -300,12 +324,28 @@ struct ext2_dir_entry {
  * Function prototypes
  */
 
+/*
+ * Ok, these declarations are also in <linux/kernel.h> but none of the
+ * ext2 source programs needs to include it so they are duplicated here.
+ */
+#if __GNUC__ < 2 || (__GNUC__ == 2 && __GNUC_MINOR__ < 5)
+# define NORET_TYPE    __volatile__
+# define ATTRIB_NORET  /**/
+# define NORET_AND     /**/
+#else
+# define NORET_TYPE    /**/
+# define ATTRIB_NORET  __attribute__((noreturn))
+# define NORET_AND     noreturn,
+#endif
+
 /* acl.c */
 extern int ext2_permission (struct inode *, int);
 
 /* balloc.c */
-extern int ext2_new_block (struct super_block *, unsigned long);
-extern void ext2_free_block (struct super_block *, unsigned long);
+extern int ext2_new_block (struct super_block *, unsigned long,
+			   unsigned long *, unsigned long *);
+extern void ext2_free_blocks (struct super_block *, unsigned long,
+			      unsigned long);
 extern unsigned long ext2_count_free_blocks (struct super_block *);
 extern void ext2_check_blocks_bitmap (struct super_block *);
 
@@ -351,6 +391,7 @@ extern void ext2_read_inode (struct inode *);
 extern void ext2_write_inode (struct inode *);
 extern void ext2_put_inode (struct inode *);
 extern int ext2_sync_inode (struct inode *);
+extern void ext2_discard_prealloc (struct inode *);
 
 /* ioctl.c */
 extern int ext2_ioctl (struct inode *, struct file *, unsigned int,
@@ -374,14 +415,14 @@ extern int ext2_rename (struct inode *, const char *, int,
 /* super.c */
 extern void ext2_error (struct super_block *, const char *, const char *, ...)
 	__attribute__ ((format (printf, 3, 4)));
-extern volatile void ext2_panic (struct super_block *, const char *,
-				 const char *, ...)
-	__attribute__ ((format (printf, 3, 4)));
+extern NORET_TYPE void ext2_panic (struct super_block *, const char *,
+				   const char *, ...)
+	__attribute__ ((NORET_AND format (printf, 3, 4)));
 extern void ext2_warning (struct super_block *, const char *, const char *, ...)
 	__attribute__ ((format (printf, 3, 4)));
 extern void ext2_put_super (struct super_block *);
 extern void ext2_write_super (struct super_block *);
-extern int ext2_remount (struct super_block *, int *);
+extern int ext2_remount (struct super_block *, int *, char *);
 extern struct super_block * ext2_read_super (struct super_block *,void *,int);
 extern void ext2_statfs (struct super_block *, struct statfs *);
 

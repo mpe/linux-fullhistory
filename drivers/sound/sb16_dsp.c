@@ -178,7 +178,7 @@ static int dsp_set_stereo(int mode)
 {
 DEB(printk("dsp_set_stereo(%d)\n",mode));
 
-  if (mode) dsp_stereo=mode;
+  dsp_stereo=mode;
 
   return mode;
 }

@@ -35,7 +35,7 @@ extern void enable_irq(unsigned int);
 	"movl $" STR(USER_DS) ",%edx\n\t" \
 	"mov %dx,%fs\n\t"   \
 	"movl $0,%edx\n\t"  \
-	"movl %edx,%db7\n"
+	"movl %edx,%db7\n\t"
 
 /*
  * SAVE_MOST/RESTORE_MOST is used for the faster version of IRQ handlers,

@@ -49,7 +49,7 @@ typedef enum {
   SS_UNCONNECTED,			/* unconnected to any socket	*/
   SS_CONNECTING,			/* in process of connecting	*/
   SS_CONNECTED,				/* connected to socket		*/
-  SS_DISCONNECTING,			/* in process of disconnecting	*/
+  SS_DISCONNECTING			/* in process of disconnecting	*/
 } socket_state;
 
 #define SO_ACCEPTCON	(1<<16)		/* performed a listen		*/

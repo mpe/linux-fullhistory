@@ -1,7 +1,9 @@
 /*
  * linux/fs/ext2/acl.c
  *
- * Copyright (C) 1993  Remy Card (card@masi.ibp.fr)
+ * Copyright (C) 1993, 1994  Remy Card (card@masi.ibp.fr)
+ *                           Laboratoire MASI - Institut Blaise Pascal
+ *                           Universite Pierre et Marie Curie (Paris VI)
  */
 
 /*
@@ -12,7 +14,6 @@
 #include <linux/errno.h>
 #include <linux/fs.h>
 #include <linux/ext2_fs.h>
-#include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/stat.h>
 
@@ -25,10 +26,14 @@ int ext2_permission (struct inode * inode, int mask)
 {
 	unsigned short mode = inode->i_mode;
 
-	/* Special case, access is always granted for root */
+	/*
+	 * Special case, access is always granted for root
+	 */
 	if (suser ())
 		return 1;
-	/* If no ACL, checks using the file mode */
+	/*
+	 * If no ACL, checks using the file mode
+	 */
 	else if (current->euid == inode->i_uid)
 		mode >>= 6;
 	else if (in_group_p (inode->i_gid))
