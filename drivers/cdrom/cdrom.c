@@ -408,9 +408,9 @@ int register_cdrom(struct cdrom_device_info *cdi)
 	}
 	else {
 		cdi->de =
-		    devfs_register (devfs_handle, vname, 0, DEVFS_FL_DEFAULT,
+		    devfs_register (devfs_handle, vname, DEVFS_FL_DEFAULT,
 				    MAJOR (cdi->dev), MINOR (cdi->dev),
-				    S_IFBLK | S_IRUGO | S_IWUGO, 0, 0,
+				    S_IFBLK | S_IRUGO | S_IWUGO,
 				    &cdrom_fops, NULL);
 	}
 	cdinfo(CD_REG_UNREG, "drive \"/dev/%s\" registered\n", cdi->name);

@@ -785,7 +785,7 @@ int __init loop_init(void)
 	devfs_handle = devfs_mk_dir (NULL, "loop", 0, NULL);
 	devfs_register_series (devfs_handle, "%u", max_loop, DEVFS_FL_DEFAULT,
 			       MAJOR_NR, 0,
-			       S_IFBLK | S_IRUSR | S_IWUSR | S_IRGRP, 0, 0,
+			       S_IFBLK | S_IRUSR | S_IWUSR | S_IRGRP,
 			       &lo_fops, NULL);
 
 	if ((max_loop < 1) || (max_loop > 255)) {

@@ -3509,17 +3509,17 @@ static int st_attach(Scsi_Device * SDp)
 	    /*  Rewind entry  */
 	    sprintf (name, "mt%s", formats[mode]);
 	    tpnt->de_r[mode] =
-		devfs_register (SDp->de, name, 0, DEVFS_FL_DEFAULT,
+		devfs_register (SDp->de, name, DEVFS_FL_DEFAULT,
 				MAJOR_NR, i + (mode << 5),
 				S_IFCHR | S_IRUGO | S_IWUGO,
-				0, 0, &st_fops, NULL);
+				&st_fops, NULL);
 	    /*  No-rewind entry  */
 	    sprintf (name, "mt%sn", formats[mode]);
 	    tpnt->de_n[mode] =
-		devfs_register (SDp->de, name, 0, DEVFS_FL_DEFAULT,
+		devfs_register (SDp->de, name, DEVFS_FL_DEFAULT,
 				MAJOR_NR, i + (mode << 5) + 128,
 				S_IFCHR | S_IRUGO | S_IWUGO,
-				0, 0, &st_fops, NULL);
+				&st_fops, NULL);
 	}
 	devfs_register_tape (tpnt->de_r[0]);
 	tpnt->device = SDp;

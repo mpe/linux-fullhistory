@@ -877,19 +877,19 @@ old_ip2_init(void)
 #ifdef	CONFIG_DEVFS_FS
 			sprintf( name, "ipl%d", i );
 			i2BoardPtrTable[i]->devfs_ipl_handle =
-				devfs_register (devfs_handle, name, 0,
-					DEVFS_FL_NONE,
+				devfs_register (devfs_handle, name,
+					DEVFS_FL_DEFAULT,
 					IP2_IPL_MAJOR, 4 * i,
 					S_IRUSR | S_IWUSR | S_IRGRP | S_IFCHR,
-					0, 0, &ip2_ipl, NULL);
+					&ip2_ipl, NULL);
 
 			sprintf( name, "stat%d", i );
 			i2BoardPtrTable[i]->devfs_stat_handle =
-				devfs_register (devfs_handle, name, 0,
-					DEVFS_FL_NONE,
+				devfs_register (devfs_handle, name,
+					DEVFS_FL_DEFAULT,
 					IP2_IPL_MAJOR, 4 * i + 1,
 					S_IRUSR | S_IWUSR | S_IRGRP | S_IFCHR,
-					0, 0, &ip2_ipl, NULL);
+					&ip2_ipl, NULL);
 
 			for ( box = 0; box < ABS_MAX_BOXES; ++box )
 			{

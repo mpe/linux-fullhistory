@@ -472,6 +472,10 @@
 	       <free_dentries>.
 	       Work sponsored by SGI.
   v0.100
+    20000621   Richard Gooch <rgooch@atnf.csiro.au>
+	       Changed interface to <devfs_register>.
+	       Work sponsored by SGI.
+  v0.101
 */
 #include <linux/types.h>
 #include <linux/errno.h>
@@ -506,7 +510,7 @@
 #include <asm/bitops.h>
 #include <asm/atomic.h>
 
-#define DEVFS_VERSION            "0.100 (20000619)"
+#define DEVFS_VERSION            "0.101 (20000621)"
 
 #define DEVFS_NAME "devfs"
 
@@ -1204,15 +1208,10 @@ static void devfsd_notify (struct devfs_entry *de, unsigned int type, int wait)
  *	@dir: The handle to the parent devfs directory entry. If this is %NULL the
  *		new name is relative to the root of the devfs.
  *	@name: The name of the entry.
- *	@namelen: The number of characters in @name, not including a %NULL
- *		terminator. If this is 0, then @name must be %NULL-terminated and the
- *		length is computed internally.
  *	@flags: A set of bitwise-ORed flags (DEVFS_FL_*).
  *	@major: The major number. Not needed for regular files.
  *	@minor: The minor number. Not needed for regular files.
  *	@mode: The default file mode.
- *	@uid: The default UID of the file.
- *	@guid: The default GID of the file.
  *	@ops: The &file_operations or &block_device_operations structure.
  *		This must not be externally deallocated.
  *	@info: An arbitrary pointer which will be written to the @private_data
@@ -1224,12 +1223,10 @@ static void devfsd_notify (struct devfs_entry *de, unsigned int type, int wait)
  *	On failure %NULL is returned.
  */
 
-devfs_handle_t devfs_register (devfs_handle_t dir,
-			       const char *name, unsigned int namelen,
+devfs_handle_t devfs_register (devfs_handle_t dir, const char *name,
 			       unsigned int flags,
 			       unsigned int major, unsigned int minor,
-			       umode_t mode, uid_t uid, gid_t gid,
-			       void *ops, void *info)
+			       umode_t mode, void *ops, void *info)
 {
     int is_new;
     struct devfs_entry *de;
@@ -1264,7 +1261,6 @@ devfs_handle_t devfs_register (devfs_handle_t dir,
 		DEVFS_NAME, name);
 	return NULL;
     }
-    if (namelen < 1) namelen = strlen (name);
     if ( S_ISCHR (mode) && (flags & DEVFS_FL_AUTO_DEVNUM) )
     {
 	if (next_devnum_char >= MAX_DEVNUM)
@@ -1289,7 +1285,8 @@ devfs_handle_t devfs_register (devfs_handle_t dir,
 	minor = next_devnum_block & 0xff;
 	++next_devnum_block;
     }
-    de = search_for_entry (dir, name, namelen, TRUE, TRUE, &is_new, FALSE);
+    de = search_for_entry (dir, name, strlen (name), TRUE, TRUE, &is_new,
+			   FALSE);
     if (de == NULL)
     {
 	printk ("%s: devfs_register(): could not create entry: \"%s\"\n",
@@ -1333,8 +1330,16 @@ devfs_handle_t devfs_register (devfs_handle_t dir,
     }
     de->info = info;
     de->mode = mode;
-    de->u.fcb.default_uid = uid;
-    de->u.fcb.default_gid = gid;
+    if (flags & DEVFS_FL_CURRENT_OWNER)
+    {
+	de->u.fcb.default_uid = current->uid;
+	de->u.fcb.default_gid = current->gid;
+    }
+    else
+    {
+	de->u.fcb.default_uid = 0;
+	de->u.fcb.default_gid = 0;
+    }
     de->registered = TRUE;
     de->u.fcb.ops = ops;
     de->u.fcb.auto_owner = (flags & DEVFS_FL_AUTO_OWNER) ? TRUE : FALSE;

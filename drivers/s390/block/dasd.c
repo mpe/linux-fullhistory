@@ -792,11 +792,10 @@ register_dasd_last (int di)
                           dasd_info[di]->info.devno,'\0' );
                 dasd_info[di] -> devfs_entry =
                         devfs_register ( NULL /* dir */,
-                                         name, strlen(name),
-                                         0 /* flags */,
+                                         name,
+                                         DEVFS_FL_DEFAULT /* flags */,
                                          DASD_MAJOR, minor,
                                          0755 /* mode */, 
-                                         0 /* uid */ , 0 /* gid */,
                                          &dasd_device_operations, 
                                          (void *)dasd_info[di]);
         }

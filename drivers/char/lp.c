@@ -675,9 +675,9 @@ static int lp_register(int nr, struct parport *port)
 		lp_reset(nr);
 
 	sprintf (name, "%d", nr);
-	devfs_register (devfs_handle, name, 0,
+	devfs_register (devfs_handle, name,
 			DEVFS_FL_DEFAULT, LP_MAJOR, nr,
-			S_IFCHR | S_IRUGO | S_IWUGO, 0, 0,
+			S_IFCHR | S_IRUGO | S_IWUGO,
 			&lp_fops, NULL);
 
 	printk(KERN_INFO "lp%d: using %s (%s).\n", nr, port->name, 

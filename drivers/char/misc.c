@@ -192,9 +192,9 @@ int misc_register(struct miscdevice * misc)
 	if (!devfs_handle)
 		devfs_handle = devfs_mk_dir (NULL, "misc", 4, NULL);
 	misc->devfs_handle =
-	    devfs_register (devfs_handle, misc->name, 0, DEVFS_FL_NONE,
+	    devfs_register (devfs_handle, misc->name, DEVFS_FL_NONE,
 			    MISC_MAJOR, misc->minor,
-			    S_IFCHR | S_IRUSR | S_IWUSR | S_IRGRP, 0, 0,
+			    S_IFCHR | S_IRUSR | S_IWUSR | S_IRGRP,
 			    misc->fops, NULL);
 
 	/*

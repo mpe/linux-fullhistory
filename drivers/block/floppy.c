@@ -3878,10 +3878,10 @@ static void __init register_devfs_entries (int drive)
 	    char name[16];
 
 	    sprintf (name, "%d%s", drive, table[table_sup[UDP->cmos][i]]);
-	    devfs_register (devfs_handle, name, 0, DEVFS_FL_DEFAULT, MAJOR_NR,
+	    devfs_register (devfs_handle, name, DEVFS_FL_DEFAULT, MAJOR_NR,
 			    base_minor + (table_sup[UDP->cmos][i] << 2),
 			    S_IFBLK | S_IRUSR | S_IWUSR | S_IRGRP |S_IWGRP,
-			    0, 0, &floppy_fops, NULL);
+			    &floppy_fops, NULL);
 	} while (table_sup[UDP->cmos][i++]);
     }
 }

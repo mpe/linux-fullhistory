@@ -121,7 +121,7 @@
  * all but one of which we want to go away.  In a non-GENERIC kernel,
  * we want only one, ever.
  *
- * Accomplish this in the GENERIC kernel by puting all of the vectors
+ * Accomplish this in the GENERIC kernel by putting all of the vectors
  * in the .init.data section where they'll go away.  We'll copy the
  * one we want to the real alpha_mv vector in setup_arch.
  *

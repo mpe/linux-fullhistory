@@ -2064,8 +2064,8 @@ int __init optcd_init(void)
 		printk(KERN_ERR "optcd: unable to get major %d\n", MAJOR_NR);
 		return -EIO;
 	}
-	devfs_register (NULL, "optcd", 0, DEVFS_FL_DEFAULT, MAJOR_NR, 0,
-			S_IFBLK | S_IRUGO | S_IWUGO, 0, 0, &opt_fops, NULL);
+	devfs_register (NULL, "optcd", DEVFS_FL_DEFAULT, MAJOR_NR, 0,
+			S_IFBLK | S_IRUGO | S_IWUGO, &opt_fops, NULL);
 	hardsect_size[MAJOR_NR] = &hsecsize;
 	blksize_size[MAJOR_NR] = &blksize;
 	blk_init_queue(BLK_DEFAULT_QUEUE(MAJOR_NR), DEVICE_REQUEST);

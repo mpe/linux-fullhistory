@@ -1031,7 +1031,7 @@ int __init bpp_init(void)
 	}
 	devfs_handle = devfs_mk_dir (NULL, "bpp", 3, NULL);
 	devfs_register_series (devfs_handle, "%u", BPP_NO, DEVFS_FL_DEFAULT,
-			       BPP_MAJOR, 0, S_IFCHR | S_IRUSR | S_IWUSR, 0, 0,
+			       BPP_MAJOR, 0, S_IFCHR | S_IRUSR | S_IWUSR,
 			       &bpp_fops, NULL);
 
 	return 0;

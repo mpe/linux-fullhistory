@@ -1075,8 +1075,8 @@ int result;
 		       MAJOR_NR);
 		return -EIO;
 	}
-	devfs_register (NULL, "gscd", 0, DEVFS_FL_DEFAULT, MAJOR_NR, 0,
-			S_IFBLK | S_IRUGO | S_IWUGO, 0, 0, &gscd_fops, NULL);
+	devfs_register (NULL, "gscd", DEVFS_FL_DEFAULT, MAJOR_NR, 0,
+			S_IFBLK | S_IRUGO | S_IWUGO, &gscd_fops, NULL);
 
 	blk_init_queue(BLK_DEFAULT_QUEUE(MAJOR_NR), DEVICE_REQUEST);
 	blksize_size[MAJOR_NR] = gscd_blocksizes;

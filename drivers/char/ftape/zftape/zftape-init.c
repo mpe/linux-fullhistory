@@ -439,34 +439,34 @@ KERN_INFO
 		char devname[9];
 
 		sprintf (devname, "qft%i", i);
-		devfs_register (NULL, devname, 0, DEVFS_FL_NONE,
+		devfs_register (NULL, devname, DEVFS_FL_DEFAULT,
 			        QIC117_TAPE_MAJOR, i,
-				S_IFCHR | S_IRUSR | S_IWUSR, 0, 0,
+				S_IFCHR | S_IRUSR | S_IWUSR,
 				&zft_cdev, NULL);
 		sprintf (devname, "nqft%i", i);
-		devfs_register (NULL, devname, 0, DEVFS_FL_NONE,
+		devfs_register (NULL, devname, DEVFS_FL_DEFAULT,
 				QIC117_TAPE_MAJOR, i + 4,
-				S_IFCHR | S_IRUSR | S_IWUSR, 0, 0,
+				S_IFCHR | S_IRUSR | S_IWUSR,
 				&zft_cdev, NULL);
 		sprintf (devname, "zqft%i", i);
-		devfs_register (NULL, devname, 0, DEVFS_FL_NONE,
+		devfs_register (NULL, devname, DEVFS_FL_DEFAULT,
 				QIC117_TAPE_MAJOR, i + 16,
-				S_IFCHR | S_IRUSR | S_IWUSR, 0, 0,
+				S_IFCHR | S_IRUSR | S_IWUSR,
 				&zft_cdev, NULL);
 		sprintf (devname, "nzqft%i", i);
-		devfs_register (NULL, devname, 0, DEVFS_FL_NONE,
+		devfs_register (NULL, devname, DEVFS_FL_DEFAULT,
 				QIC117_TAPE_MAJOR, i + 20,
-				S_IFCHR | S_IRUSR | S_IWUSR, 0, 0,
+				S_IFCHR | S_IRUSR | S_IWUSR,
 				&zft_cdev, NULL);
 		sprintf (devname, "rawqft%i", i);
-		devfs_register (NULL, devname, 0, DEVFS_FL_NONE,
+		devfs_register (NULL, devname, DEVFS_FL_DEFAULT,
 				QIC117_TAPE_MAJOR, i + 32,
-				S_IFCHR | S_IRUSR | S_IWUSR, 0, 0,
+				S_IFCHR | S_IRUSR | S_IWUSR,
 				&zft_cdev, NULL);
 		sprintf (devname, "nrawqft%i", i);
-		devfs_register (NULL, devname, 0, DEVFS_FL_NONE,
+		devfs_register (NULL, devname, DEVFS_FL_DEFAULT,
 				QIC117_TAPE_MAJOR, i + 36,
-				S_IFCHR | S_IRUSR | S_IWUSR, 0, 0,
+				S_IFCHR | S_IRUSR | S_IWUSR,
 				&zft_cdev, NULL);
 	}
 

@@ -275,11 +275,6 @@ clipper_srm_device_interrupt(unsigned long vector, struct pt_regs * regs)
 
 	irq = (vector - 0x800) >> 4;
 
-#if 0
-	printk("clipper_srm_device_interrupt: vector 0x%lx IRQ %d cpu %d\n",
-	       vector, irq, smp_processor_id());
-#endif
-
 /*
 	 * The SRM console reports PCI interrupts with a vector calculated by:
 	 *

@@ -565,9 +565,9 @@ static void soundcard_register_devfs (int do_register)
 		for (j = 0; j < num || j == 0; j++) {
 			soundcard_make_name (name_buf, dev_list[i].name, j);
 			if (do_register)
-				devfs_register (NULL, name_buf, 0, DEVFS_FL_NONE,
+				devfs_register (NULL, name_buf, DEVFS_FL_NONE,
 					SOUND_MAJOR, dev_list[i].minor+ (j* 0x10),
-					S_IFCHR | dev_list[i].mode, 0, 0,
+					S_IFCHR | dev_list[i].mode,
 					&oss_sound_fops, NULL);
 			else {
 				devfs_handle_t de;

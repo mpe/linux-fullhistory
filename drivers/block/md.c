@@ -3629,7 +3629,7 @@ int md__init md_init (void)
 	}
 	devfs_handle = devfs_mk_dir (NULL, "md", 0, NULL);
 	devfs_register_series (devfs_handle, "%u",MAX_MD_DEVS,DEVFS_FL_DEFAULT,
-				MAJOR_NR, 0, S_IFBLK | S_IRUSR | S_IWUSR, 0, 0,
+				MAJOR_NR, 0, S_IFBLK | S_IRUSR | S_IWUSR,
 				&md_fops, NULL);
 
 	blk_dev[MD_MAJOR].queue = md_get_queue;

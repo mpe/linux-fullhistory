@@ -28,6 +28,8 @@
                Created <_devfs_convert_name> and supported SCSI and IDE CD-ROMs
     20000203   Richard Gooch <rgooch@atnf.csiro.au>
                Changed operations pointer type to void *.
+    20000621   Richard Gooch <rgooch@atnf.csiro.au>
+               Changed interface to <devfs_register_series>.
 */
 #include <linux/module.h>
 #include <linux/init.h>
@@ -134,8 +136,6 @@ EXPORT_SYMBOL(devfs_register_tape);
  *	@major: The major number. Not needed for regular files.
  *	@minor_start: The starting minor number. Not needed for regular files.
  *	@mode: The default file mode.
- *	@uid: The default UID of the file.
- *	@guid: The default GID of the file.
  *	@ops: The &file_operations or &block_device_operations structure.
  *		This must not be externally deallocated.
  *	@info: An arbitrary pointer which will be written to the private_data
@@ -147,8 +147,7 @@ EXPORT_SYMBOL(devfs_register_tape);
 void devfs_register_series (devfs_handle_t dir, const char *format,
 			    unsigned int num_entries, unsigned int flags,
 			    unsigned int major, unsigned int minor_start,
-			    umode_t mode, uid_t uid, gid_t gid,
-			    void *ops, void *info)
+			    umode_t mode, void *ops, void *info)
 {
     unsigned int count;
     char devname[128];
@@ -156,8 +155,8 @@ void devfs_register_series (devfs_handle_t dir, const char *format,
     for (count = 0; count < num_entries; ++count)
     {
 	sprintf (devname, format, count);
-	devfs_register (dir, devname, 0, flags, major, minor_start + count,
-			mode, uid, gid, ops, info);
+	devfs_register (dir, devname, flags, major, minor_start + count,
+			mode, ops, info);
     }
 }   /*  End Function devfs_register_series  */
 EXPORT_SYMBOL(devfs_register_series);

@@ -1230,9 +1230,9 @@ static int sg_attach(Scsi_Device * scsidp)
     sdp->detached = 0;
     sdp->sg_tablesize = scsidp->host ? scsidp->host->sg_tablesize : 0;
     sdp->i_rdev = MKDEV(SCSI_GENERIC_MAJOR, k);
-    sdp->de = devfs_register (scsidp->de, "generic", 7, DEVFS_FL_NONE,
+    sdp->de = devfs_register (scsidp->de, "generic", DEVFS_FL_DEFAULT,
                              SCSI_GENERIC_MAJOR, k,
-                             S_IFCHR | S_IRUSR | S_IWUSR | S_IRGRP, 0, 0,
+                             S_IFCHR | S_IRUSR | S_IWUSR | S_IRGRP,
                              &sg_fops, NULL);
     sg_template.nr_dev++;
     sg_dev_arr[k] = sdp;

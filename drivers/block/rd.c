@@ -411,7 +411,7 @@ int __init rd_init (void)
 	devfs_handle = devfs_mk_dir (NULL, "rd", 0, NULL);
 	devfs_register_series (devfs_handle, "%u", NUM_RAMDISKS,
 			       DEVFS_FL_DEFAULT, MAJOR_NR, 0,
-			       S_IFBLK | S_IRUSR | S_IWUSR, 0, 0,
+			       S_IFBLK | S_IRUSR | S_IWUSR,
 			       &fd_fops, NULL);
 
 	for (i = 0; i < NUM_RAMDISKS; i++)

@@ -665,7 +665,7 @@ static int __init ppdev_init (void)
 	devfs_handle = devfs_mk_dir (NULL, "parports", 0, NULL);
 	devfs_register_series (devfs_handle, "%u", PARPORT_MAX,
 			       DEVFS_FL_DEFAULT, PP_MAJOR, 0,
-			       S_IFCHR | S_IRUGO | S_IWUGO, 0, 0,
+			       S_IFCHR | S_IRUGO | S_IWUGO,
 			       &pp_fops, NULL);
 
 	printk (KERN_INFO PP_VERSION "\n");

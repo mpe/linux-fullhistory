@@ -175,9 +175,9 @@ static int sound_insert_unit(struct sound_unit **list, struct file_operations *f
 		sprintf (name_buf, "%s", name);
 	else
 		sprintf (name_buf, "%s%d", name, (r - low) / SOUND_STEP);
-	s->de = devfs_register (devfs_handle, name_buf, 0,
+	s->de = devfs_register (devfs_handle, name_buf,
 				DEVFS_FL_NONE, SOUND_MAJOR, s->unit_minor,
-				S_IFCHR | mode, 0, 0, fops, NULL);
+				S_IFCHR | mode, fops, NULL);
 	return r;
 }
 

@@ -519,9 +519,9 @@ int __init dsp56k_init(void)
 		printk("DSP56k driver: Unable to register driver\n");
 		return -ENODEV;
 	}
-	devfs_handle = devfs_register (NULL, "dsp56k", 0, DEVFS_FL_NONE,
+	devfs_handle = devfs_register (NULL, "dsp56k", DEVFS_FL_DEFAULT,
 				       DSP56K_MAJOR, 0,
-				       S_IFCHR | S_IRUSR | S_IWUSR, 0, 0,
+				       S_IFCHR | S_IRUSR | S_IWUSR,
 				       &dsp56k_fops, NULL);
 
 	dsp56k.in_use = 0;

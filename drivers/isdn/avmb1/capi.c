@@ -2053,11 +2053,11 @@ int capi_init(void)
         devfs_register_series (NULL, "capi/r%u", CAPINC_NR_PORTS,
 			      DEVFS_FL_DEFAULT,
                               capi_rawmajor, 0,
-                              S_IFCHR | S_IRUSR | S_IWUSR, 0, 0,
+                              S_IFCHR | S_IRUSR | S_IWUSR,
                               &capinc_raw_fops, NULL);
 #endif /* CONFIG_ISDN_CAPI_MIDDLEWARE */
-	devfs_register (NULL, "isdn/capi20", 0, DEVFS_FL_DEFAULT,
-			capi_major, 0, S_IFCHR | S_IRUSR | S_IWUSR, 0, 0,
+	devfs_register (NULL, "isdn/capi20", DEVFS_FL_DEFAULT,
+			capi_major, 0, S_IFCHR | S_IRUSR | S_IWUSR,
 			&capi_fops, NULL);
 	printk(KERN_NOTICE "capi20: started up with major %d\n", capi_major);
 

@@ -654,8 +654,8 @@ register_framebuffer(struct fb_info *fb_info)
 	}
 	sprintf (name_buf, "%d", i);
 	fb_info->devfs_handle =
-	    devfs_register (devfs_handle, name_buf, 0, DEVFS_FL_NONE,
-			    FB_MAJOR, i, S_IFCHR | S_IRUGO | S_IWUGO, 0, 0,
+	    devfs_register (devfs_handle, name_buf, DEVFS_FL_DEFAULT,
+			    FB_MAJOR, i, S_IFCHR | S_IRUGO | S_IWUGO,
 			    &fb_fops, NULL);
 
 	return 0;

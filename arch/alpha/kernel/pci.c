@@ -426,8 +426,8 @@ pcibios_size_bridge(struct pci_bus *bus, struct pbus_set_ranges_data *outer)
 	inner.mem_end -= inner.mem_start;
 
 	/* Align the sizes up by bridge rules */
-	inner.io_end = ROUND_UP(inner.io_end, 4*1024);
-	inner.mem_end = ROUND_UP(inner.mem_end, 1*1024*1024);
+	inner.io_end = ROUND_UP(inner.io_end, 4*1024) - 1;
+	inner.mem_end = ROUND_UP(inner.mem_end, 1*1024*1024) - 1;
 
 	/* Adjust the bridge's allocation requirements */
 	bridge->resource[0].end = bridge->resource[0].start + inner.io_end;

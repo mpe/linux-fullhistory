@@ -311,9 +311,9 @@ static void devfs_register_partition (struct gendisk *dev, int minor, int part)
 		devfs_flags |= DEVFS_FL_REMOVABLE;
 	sprintf (devname, "part%d", part);
 	dev->part[minor + part].de =
-	    devfs_register (dir, devname, 0, devfs_flags,
+	    devfs_register (dir, devname, devfs_flags,
 			    dev->major, minor + part,
-			    S_IFBLK | S_IRUSR | S_IWUSR, 0, 0,
+			    S_IFBLK | S_IRUSR | S_IWUSR,
 			    dev->fops, NULL);
 }
 

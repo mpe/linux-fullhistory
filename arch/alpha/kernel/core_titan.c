@@ -23,7 +23,6 @@
 #include "proto.h"
 #include "pci_impl.h"
 
-int TITAN_bootcpu;
 unsigned TITAN_agp = 0;
 
 static struct
@@ -343,7 +342,11 @@ titan_init_one_pachip_port(titan_pachip_port *port, int index)
 	 * address range.
 	 */
 	hose->sg_isa = iommu_arena_new(hose, 0x00800000, 0x00800000, 0);
+	hose->sg_isa->align_entry = 8; /* 64KB for ISA */
+
 	hose->sg_pci = iommu_arena_new(hose, 0xc0000000, 0x08000000, 0);
+	hose->sg_pci->align_entry = 4; /* Titan caches 4 PTEs at a time */
+
 	__direct_map_base = 0x40000000;
 	__direct_map_size = 0x80000000;
 
@@ -401,7 +404,7 @@ titan_init_arch(void)
 	printk("%s: CSR_DREV 0x%lx\n", FN, TITAN_dchip->drev.csr);
 #endif
 
-	TITAN_bootcpu = __hard_smp_processor_id();
+	boot_cpuid = __hard_smp_processor_id();
 
 	/* With multiple PCI busses, we play with I/O as physical addrs.  */
 	ioport_resource.end = ~0UL;

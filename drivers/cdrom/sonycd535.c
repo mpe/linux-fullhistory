@@ -1587,11 +1587,11 @@ sony535_init(void)
 					printk("IRQ%d, ", tmp_irq);
 				printk("using %d byte buffer\n", sony_buffer_size);
 
-				devfs_register (NULL, CDU535_HANDLE, 0,
+				devfs_register (NULL, CDU535_HANDLE,
 						DEVFS_FL_DEFAULT,
 						MAJOR_NR, 0,
 						S_IFBLK | S_IRUGO | S_IWUGO,
-						0, 0, &cdu_fops, NULL);
+						&cdu_fops, NULL);
 				if (devfs_register_blkdev(MAJOR_NR, CDU535_HANDLE, &cdu_fops)) {
 					printk("Unable to get major %d for %s\n",
 							MAJOR_NR, CDU535_MESSAGE_NAME);

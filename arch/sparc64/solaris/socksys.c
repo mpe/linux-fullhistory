@@ -181,9 +181,9 @@ init_socksys(void)
 		printk ("Couldn't create socket\n");
 		return ret;
 	}
-	devfs_handle = devfs_register (NULL, "socksys", 0, DEVFS_FL_NONE,
+	devfs_handle = devfs_register (NULL, "socksys", DEVFS_FL_DEFAULT,
 				       30, 0,
-				       S_IFCHR | S_IRUSR | S_IWUSR, 0, 0,
+				       S_IFCHR | S_IRUSR | S_IWUSR,
 				       &socksys_fops, NULL);
 	file = fcheck(ret);
 	/* N.B. Is this valid? Suppose the f_ops are in a module ... */

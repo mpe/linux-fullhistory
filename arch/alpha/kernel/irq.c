@@ -233,7 +233,7 @@ static unsigned long irq_affinity[NR_IRQS] = { [0 ... NR_IRQS-1] = ~0UL };
 static void
 select_smp_affinity(int irq)
 {
-	static int last_cpu = 0;
+	static int last_cpu;
 	int cpu = last_cpu + 1;
 
 	if (! irq_desc[irq].handler->set_affinity || irq_user_affinity[irq])

@@ -166,9 +166,9 @@ int init_vfc_device(struct sbus_dev *sdev,struct vfc_dev *dev, int instance)
 		return -EIO;
 
 	sprintf (devname, "%d", instance);
-	dev->de = devfs_register (devfs_handle, devname, 0, DEVFS_FL_DEFAULT,
+	dev->de = devfs_register (devfs_handle, devname, DEVFS_FL_DEFAULT,
 				  VFC_MAJOR, instance,
-				  S_IFCHR | S_IRUSR | S_IWUSR, 0, 0,
+				  S_IFCHR | S_IRUSR | S_IWUSR,
 				  &vfc_fops, NULL);
 	return 0;
 }

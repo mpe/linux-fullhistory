@@ -1968,8 +1968,6 @@ void tty_register_devfs (struct tty_driver *driver, unsigned int flags,
 {
 #ifdef CONFIG_DEVFS_FS
 	umode_t mode = S_IFCHR | S_IRUSR | S_IWUSR;
-	uid_t uid = 0;
-	gid_t gid = 0;
 	struct tty_struct tty;
 	char buf[32];
 
@@ -1993,14 +1991,11 @@ void tty_register_devfs (struct tty_driver *driver, unsigned int flags,
 	}
 #  ifdef CONFIG_UNIX98_PTYS
 	if ( (driver->major >= UNIX98_PTY_SLAVE_MAJOR) &&
-	     (driver->major < UNIX98_PTY_SLAVE_MAJOR + UNIX98_NR_MAJORS) ) {
-		uid = current->uid;
-		gid = current->gid;
-	}
+	     (driver->major < UNIX98_PTY_SLAVE_MAJOR + UNIX98_NR_MAJORS) )
+		flags |= DEVFS_FL_CURRENT_OWNER;
 #  endif
-	devfs_register (NULL, tty_name (&tty, buf), 0,flags | DEVFS_FL_DEFAULT,
-			driver->major, minor, mode, uid, gid,
-			&tty_fops, NULL);
+	devfs_register (NULL, tty_name (&tty, buf), flags | DEVFS_FL_DEFAULT,
+			driver->major, minor, mode, &tty_fops, NULL);
 #endif /* CONFIG_DEVFS_FS */
 }
 

@@ -314,10 +314,10 @@ int pt_init (void)      /* preliminary initialisation */
 
 	devfs_handle = devfs_mk_dir (NULL, "pt", 2, NULL);
 	devfs_register_series (devfs_handle, "%u", 4, DEVFS_FL_DEFAULT,
-			       major, 0, S_IFCHR | S_IRUSR | S_IWUSR, 0, 0,
+			       major, 0, S_IFCHR | S_IRUSR | S_IWUSR,
 			       &pt_fops, NULL);
 	devfs_register_series (devfs_handle, "%un", 4, DEVFS_FL_DEFAULT,
-			       major, 128, S_IFCHR | S_IRUSR | S_IWUSR, 0, 0,
+			       major, 128, S_IFCHR | S_IRUSR | S_IWUSR,
 			       &pt_fops, NULL);
         return 0;
 }

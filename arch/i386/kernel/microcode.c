@@ -103,9 +103,9 @@ static int __init microcode_init(void)
 			MICROCODE_MINOR);
 		error = 1;
 	}
-	devfs_handle = devfs_register(NULL, "cpu/microcode", 0, 
+	devfs_handle = devfs_register(NULL, "cpu/microcode",
 			DEVFS_FL_DEFAULT, 0, 0, S_IFREG | S_IRUSR | S_IWUSR, 
-			0, 0, &microcode_fops, NULL);
+			&microcode_fops, NULL);
 	if (devfs_handle == NULL && error) {
 		printk(KERN_ERR "microcode: failed to devfs_register()\n");
 		return -EINVAL;

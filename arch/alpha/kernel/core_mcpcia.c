@@ -45,8 +45,6 @@
 
 #define MCPCIA_MAX_HOSES 4
 
-static int mcpcia_hose_count; /* Actual number found. */
-
 /*
  * Given a bus, device, and function number, compute resulting
  * configuration space address and setup the MCPCIA_HAXR2 register
@@ -412,10 +410,9 @@ mcpcia_startup_hose(struct pci_controler *hose)
 	 * Window 2 is direct access 2GB at 2GB
 	 * ??? We ought to scale window 1 with memory.
 	 */
+	hose->sg_isa = iommu_arena_new(hose, 0x00800000, 0x00800000, 0);
+	hose->sg_pci = iommu_arena_new(hose, 0x40000000, 0x08000000, 0);
 
-	/* Make sure to align the arenas. */
-	hose->sg_isa = iommu_arena_new(hose, 0x00800000, 0x00800000, 1);
-	hose->sg_pci = iommu_arena_new(hose, 0x40000000, 0x08000000, 1);
 	__direct_map_base = 0x80000000;
 	__direct_map_size = 0x80000000;
 
@@ -468,20 +465,20 @@ void __init
 mcpcia_init_hoses(void)
 {
 	struct pci_controler *hose;
+	int hose_count;
 	int h;
 
-	mcpcia_hose_count = 0;
-
 	/* First, find how many hoses we have.  */
+	hose_count = 0;
 	for (h = 0; h < MCPCIA_MAX_HOSES; ++h) {
 		if (mcpcia_probe_hose(h)) {
 			if (h != 0)
 				mcpcia_new_hose(h);
-			mcpcia_hose_count++;
+			hose_count++;
 		}
 	}
 
-	printk("mcpcia_init_hoses: found %d hoses\n", mcpcia_hose_count);
+	printk("mcpcia_init_hoses: found %d hoses\n", hose_count);
 
 	/* Now do init for each hose.  */
 	for (hose = hose_head; hose; hose = hose->next)
@@ -564,7 +561,7 @@ static void
 mcpcia_print_system_area(unsigned long la_ptr)
 {
 	struct el_common *frame;
-	int i;
+	struct pci_controler *hose;
 
 	struct IOD_subpacket {
 	  unsigned long base;
@@ -593,12 +590,12 @@ mcpcia_print_system_area(unsigned long la_ptr)
 	} *iodpp;
 
 	frame = (struct el_common *)la_ptr;
-
 	iodpp = (struct IOD_subpacket *) (la_ptr + frame->sys_offset);
 
-	for (i = 0; i < mcpcia_hose_count; i++, iodpp++) {
+	for (hose = hose_head; hose; hose = hose->next, iodpp++) {
+
 	  printk("IOD %d Register Subpacket - Bridge Base Address %16lx\n",
-		 i, iodpp->base);
+		 hose->index, iodpp->base);
 	  printk("  WHOAMI      = %8x\n", iodpp->whoami);
 	  printk("  PCI_REV     = %8x\n", iodpp->pci_rev);
 	  printk("  CAP_CTRL    = %8x\n", iodpp->cap_ctrl);

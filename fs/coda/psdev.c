@@ -417,7 +417,7 @@ int init_coda_psdev(void)
 	devfs_handle = devfs_mk_dir (NULL, "coda", 4, NULL);
 	devfs_register_series (devfs_handle, "%u", MAX_CODADEVS, DEVFS_FL_NONE,
 			       CODA_PSDEV_MAJOR, 0,
-			       S_IFCHR | S_IRUSR | S_IWUSR, 0, 0,
+			       S_IFCHR | S_IRUSR | S_IWUSR,
 			       &coda_psdev_fops, NULL);
 	memset(&coda_upc_comm, 0, sizeof(coda_upc_comm));
 	memset(&coda_super_info, 0, sizeof(coda_super_info));

@@ -469,9 +469,9 @@ int video_register_device(struct video_device *vfd, int type)
 			 *	has serious privacy issues.
 			 */
 			vfd->devfs_handle =
-			    devfs_register (NULL, name, 0, DEVFS_FL_DEFAULT,
+			    devfs_register (NULL, name, DEVFS_FL_DEFAULT,
 					    VIDEO_MAJOR, vfd->minor,
-					    S_IFCHR | S_IRUSR | S_IWUSR, 0, 0,
+					    S_IFCHR | S_IRUSR | S_IWUSR,
 					    &video_fops, NULL);
 
 #if defined(CONFIG_PROC_FS) && defined(CONFIG_VIDEO_PROC_FS)

@@ -5310,7 +5310,7 @@ int __init stli_init(void)
 	devfs_handle = devfs_mk_dir (NULL, "staliomem", 9, NULL);
 	devfs_register_series (devfs_handle, "%u", 4, DEVFS_FL_DEFAULT,
 			       STL_SIOMEMMAJOR, 0,
-			       S_IFCHR | S_IRUSR | S_IWUSR, 0, 0,
+			       S_IFCHR | S_IRUSR | S_IWUSR,
 			       &stli_fsiomem, NULL);
 
 /*

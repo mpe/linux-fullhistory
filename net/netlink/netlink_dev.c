@@ -178,9 +178,9 @@ static devfs_handle_t devfs_handle = NULL;
 
 static void __init make_devfs_entries (const char *name, int minor)
 {
-	devfs_register (devfs_handle, name, 0, DEVFS_FL_DEFAULT,
+	devfs_register (devfs_handle, name, DEVFS_FL_DEFAULT,
 			NETLINK_MAJOR, minor,
-			S_IFCHR | S_IRUSR | S_IWUSR, 0, 0,
+			S_IFCHR | S_IRUSR | S_IWUSR,
 			&netlink_fops, NULL);
 }
 
@@ -201,7 +201,7 @@ int __init init_netlink(void)
 	make_devfs_entries ("IP6_FW", 13);
 	devfs_register_series (devfs_handle, "tap%u", 16, DEVFS_FL_DEFAULT,
 			       NETLINK_MAJOR, 16,
-			       S_IFCHR | S_IRUSR | S_IWUSR, 0, 0,
+			       S_IFCHR | S_IRUSR | S_IWUSR,
 			       &netlink_fops, NULL);
 	return 0;
 }

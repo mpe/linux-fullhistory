@@ -605,9 +605,9 @@ void __init memory_devfs_register (void)
     int i;
 
     for (i=0; i<(sizeof(list)/sizeof(*list)); i++)
-	devfs_register (NULL, list[i].name, 0, DEVFS_FL_NONE,
+	devfs_register (NULL, list[i].name, DEVFS_FL_NONE,
 			MEM_MAJOR, list[i].minor,
-			list[i].mode | S_IFCHR, 0, 0,
+			list[i].mode | S_IFCHR,
 			list[i].fops, NULL);
 }
 

@@ -2581,14 +2581,14 @@ static void isdn_register_devfs(int k)
 
 	sprintf (buf, "isdn%d", k);
 	dev->devfs_handle_isdnX[k] =
-	    devfs_register (devfs_handle, buf, 0, DEVFS_FL_DEFAULT,
-			    ISDN_MAJOR, ISDN_MINOR_B + k,0600 | S_IFCHR, 0, 0,
+	    devfs_register (devfs_handle, buf, DEVFS_FL_DEFAULT,
+			    ISDN_MAJOR, ISDN_MINOR_B + k,0600 | S_IFCHR,
 			    &isdn_fops, NULL);
 	sprintf (buf, "isdnctrl%d", k);
 	dev->devfs_handle_isdnctrlX[k] =
-	    devfs_register (devfs_handle, buf, 0, DEVFS_FL_DEFAULT,
+	    devfs_register (devfs_handle, buf, DEVFS_FL_DEFAULT,
 			    ISDN_MAJOR, ISDN_MINOR_CTRL + k, 0600 | S_IFCHR,
-			    0, 0, &isdn_fops, NULL);
+			    &isdn_fops, NULL);
 }
 
 static void isdn_unregister_devfs(int k)
@@ -2610,19 +2610,19 @@ static void isdn_init_devfs(void)
 
 		sprintf (buf, "ippp%d", i);
 		dev->devfs_handle_ipppX[i] =
-		    devfs_register (devfs_handle, buf, 0, DEVFS_FL_DEFAULT,
+		    devfs_register (devfs_handle, buf, DEVFS_FL_DEFAULT,
 				    ISDN_MAJOR, ISDN_MINOR_PPP + i,
-				    0600 | S_IFCHR, 0, 0, &isdn_fops, NULL);
+				    0600 | S_IFCHR, &isdn_fops, NULL);
 	}
 #  endif
 
 	dev->devfs_handle_isdninfo =
-	    devfs_register (devfs_handle, "isdninfo", 0, DEVFS_FL_DEFAULT,
+	    devfs_register (devfs_handle, "isdninfo", DEVFS_FL_DEFAULT,
 			    ISDN_MAJOR, ISDN_MINOR_STATUS, 0600 | S_IFCHR,
-			    0, 0, &isdn_fops, NULL);
+			    &isdn_fops, NULL);
 	dev->devfs_handle_isdnctrl =
-	    devfs_register (devfs_handle, "isdnctrl", 0, DEVFS_FL_DEFAULT,
-			    ISDN_MAJOR, ISDN_MINOR_CTRL, 0600 | S_IFCHR, 0, 0, 
+	    devfs_register (devfs_handle, "isdnctrl", DEVFS_FL_DEFAULT,
+			    ISDN_MAJOR, ISDN_MINOR_CTRL, 0600 | S_IFCHR,
 			    &isdn_fops, NULL);
 }
 

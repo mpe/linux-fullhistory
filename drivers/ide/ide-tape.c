@@ -5987,14 +5987,14 @@ int idetape_init (void)
 		idetape_setup (drive, tape, minor);
 		idetape_chrdevs[minor].drive = drive;
 		tape->de_r =
-		    devfs_register (drive->de, "mt", 2, DEVFS_FL_DEFAULT,
+		    devfs_register (drive->de, "mt", DEVFS_FL_DEFAULT,
 				    HWIF(drive)->major, minor,
-				    S_IFCHR | S_IRUGO | S_IWUGO, 0, 0,
+				    S_IFCHR | S_IRUGO | S_IWUGO,
 				    &idetape_fops, NULL);
 		tape->de_n =
-		    devfs_register (drive->de, "mtn", 3, DEVFS_FL_DEFAULT,
+		    devfs_register (drive->de, "mtn", DEVFS_FL_DEFAULT,
 				    HWIF(drive)->major, minor + 128,
-				    S_IFCHR | S_IRUGO | S_IWUGO, 0, 0,
+				    S_IFCHR | S_IRUGO | S_IWUGO,
 				    &idetape_fops, NULL);
 		devfs_register_tape (tape->de_r);
 		supported++; failed--;

@@ -398,7 +398,7 @@ static int __init cosa_init(void)
 	devfs_handle = devfs_mk_dir (NULL, "cosa", 4, NULL);
 	devfs_register_series (devfs_handle, "%u", nr_cards, DEVFS_FL_DEFAULT,
 			       cosa_major, 0,
-			       S_IFCHR | S_IRUSR | S_IWUSR, 0, 0,
+			       S_IFCHR | S_IRUSR | S_IWUSR,
 			       &cosa_fops, NULL);
 	if (!nr_cards) {
 		printk(KERN_WARNING "cosa: no devices found.\n");

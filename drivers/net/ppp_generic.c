@@ -718,9 +718,9 @@ int __init ppp_init(void)
 	err = devfs_register_chrdev(PPP_MAJOR, "ppp", &ppp_device_fops);
 	if (err)
 		printk(KERN_ERR "failed to register PPP device (%d)\n", err);
-	devfs_handle = devfs_register(NULL, "ppp", 0, DEVFS_FL_NONE,
+	devfs_handle = devfs_register(NULL, "ppp", DEVFS_FL_DEFAULT,
 				      PPP_MAJOR, 0,
-				      S_IFCHR | S_IRUSR | S_IWUSR, 0, 0,
+				      S_IFCHR | S_IRUSR | S_IWUSR,
 				      &ppp_device_fops, NULL);
 
 	return 0;

@@ -519,9 +519,9 @@ int nbd_init(void)
 	}
 	devfs_handle = devfs_mk_dir (NULL, "nbd", 0, NULL);
 	devfs_register_series (devfs_handle, "%u", MAX_NBD,
-		DEVFS_FL_DEFAULT, MAJOR_NR, 0,
-		S_IFBLK | S_IRUSR | S_IWUSR, 0, 0,
-		&nbd_fops, NULL);
+			       DEVFS_FL_DEFAULT, MAJOR_NR, 0,
+			       S_IFBLK | S_IRUSR | S_IWUSR,
+			       &nbd_fops, NULL);
 
 	return 0;
 }

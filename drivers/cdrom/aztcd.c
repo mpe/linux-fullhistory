@@ -1791,8 +1791,8 @@ int __init aztcd_init(void)
                return -EIO;
 	     }
 	 }
-	devfs_register (NULL, "aztcd", 0, DEVFS_FL_DEFAULT, MAJOR_NR, 0,
-			S_IFBLK | S_IRUGO | S_IWUGO, 0, 0, &azt_fops, NULL);
+	devfs_register (NULL, "aztcd", DEVFS_FL_DEFAULT, MAJOR_NR, 0,
+			S_IFBLK | S_IRUGO | S_IWUGO, &azt_fops, NULL);
 	if (devfs_register_blkdev(MAJOR_NR, "aztcd", &azt_fops) != 0)
 	{
 		printk("aztcd: Unable to get major %d for Aztech CD-ROM\n",

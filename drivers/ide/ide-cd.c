@@ -2199,9 +2199,9 @@ static int ide_cdrom_register (ide_drive_t *drive, int nslots)
 	if (!CDROM_CONFIG_FLAGS (drive)->close_tray)
 		devinfo->mask |= CDC_CLOSE_TRAY;
 
-	devinfo->de = devfs_register(drive->de, "cd", 2, DEVFS_FL_DEFAULT,
+	devinfo->de = devfs_register(drive->de, "cd", DEVFS_FL_DEFAULT,
 				     HWIF(drive)->major, minor,
-				     S_IFBLK | S_IRUGO | S_IWUGO, 0, 0,
+				     S_IFBLK | S_IRUGO | S_IWUGO,
 				     ide_fops, NULL);
 
 	return register_cdrom(devinfo);

@@ -1568,3 +1568,11 @@ Work sponsored by SGI
   <free_dentries>
 
 - Ported to kernel 2.4.0-test2-pre3
+===============================================================================
+Changes for patch v172
+
+Work sponsored by SGI
+
+- Changed interface to <devfs_register>
+
+- Changed interface to <devfs_register_series>

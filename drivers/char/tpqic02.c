@@ -2905,37 +2905,37 @@ int __init qic02_tape_init(void)
 #endif
 	return -ENODEV;
     }
-    devfs_register (NULL, "ntpqic11", 0, DEVFS_FL_NONE,
+    devfs_register (NULL, "ntpqic11", DEVFS_FL_DEFAULT,
 		    QIC02_TAPE_MAJOR, 2,
-		    S_IFCHR | S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP, 0, 0,
+		    S_IFCHR | S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP,
 		    &qic02_tape_fops, NULL);
-    devfs_register (NULL, "tpqic11", 0, DEVFS_FL_NONE,
+    devfs_register (NULL, "tpqic11", DEVFS_FL_DEFAULT,
 		    QIC02_TAPE_MAJOR, 3,
-		    S_IFCHR | S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP, 0, 0,
+		    S_IFCHR | S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP,
 		    &qic02_tape_fops, NULL);
-    devfs_register (NULL, "ntpqic24", 0, DEVFS_FL_NONE,
+    devfs_register (NULL, "ntpqic24", DEVFS_FL_DEFAULT,
 		    QIC02_TAPE_MAJOR, 4,
-		    S_IFCHR | S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP, 0, 0,
+		    S_IFCHR | S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP,
 		    &qic02_tape_fops, NULL);
-    devfs_register (NULL, "tpqic24", 0, DEVFS_FL_NONE,
+    devfs_register (NULL, "tpqic24", DEVFS_FL_DEFAULT,
 		    QIC02_TAPE_MAJOR, 5,
-		    S_IFCHR | S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP, 0, 0,
+		    S_IFCHR | S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP,
 		    &qic02_tape_fops, NULL);
-    devfs_register (NULL, "ntpqic120", 0, DEVFS_FL_NONE,
+    devfs_register (NULL, "ntpqic120", DEVFS_FL_DEFAULT,
 		    QIC02_TAPE_MAJOR, 6,
-		    S_IFCHR | S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP, 0, 0,
+		    S_IFCHR | S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP,
 		    &qic02_tape_fops, NULL);
-    devfs_register (NULL, "tpqic120", 0, DEVFS_FL_NONE,
+    devfs_register (NULL, "tpqic120", DEVFS_FL_DEFAULT,
 		    QIC02_TAPE_MAJOR, 7,
-		    S_IFCHR | S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP, 0, 0,
+		    S_IFCHR | S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP,
 		    &qic02_tape_fops, NULL);
-    devfs_register (NULL, "ntpqic150", 0, DEVFS_FL_NONE,
+    devfs_register (NULL, "ntpqic150", DEVFS_FL_DEFAULT,
 		    QIC02_TAPE_MAJOR, 8,
-		    S_IFCHR | S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP, 0, 0,
+		    S_IFCHR | S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP,
 		    &qic02_tape_fops, NULL);
-    devfs_register (NULL, "tpqic150", 0, DEVFS_FL_NONE,
+    devfs_register (NULL, "tpqic150", DEVFS_FL_DEFAULT,
 		    QIC02_TAPE_MAJOR, 9,
-		    S_IFCHR | S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP, 0, 0,
+		    S_IFCHR | S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP,
 		    &qic02_tape_fops, NULL);
     init_waitqueue_head(&qic02_tape_transfer);
     /* prepare timer */

@@ -1605,9 +1605,9 @@ void __init keyboard_zsinit(void (*put_char)(unsigned char))
 	spin_unlock_irq(&sunkbd_lock);
 
 	/* Register the /dev/kbd interface */
-	devfs_register (NULL, "kbd", 0, DEVFS_FL_NONE,
+	devfs_register (NULL, "kbd", DEVFS_FL_DEFAULT,
 			KBD_MAJOR, 0,
-			S_IFCHR | S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH, 0, 0,
+			S_IFCHR | S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH,
 			&kbd_fops, NULL);
 	if (devfs_register_chrdev (KBD_MAJOR, "kbd", &kbd_fops)){
 		printk ("Could not register /dev/kbd device\n");

@@ -1565,8 +1565,8 @@ int __init sjcd_init( void ){
   }
 
   printk(KERN_INFO "SJCD: Status: port=0x%x.\n", sjcd_base);
-  devfs_register (NULL, "sjcd", 0, DEVFS_FL_DEFAULT, MAJOR_NR, 0,
-		  S_IFBLK | S_IRUGO | S_IWUGO, 0, 0, &sjcd_fops, NULL);
+  devfs_register (NULL, "sjcd", DEVFS_FL_DEFAULT, MAJOR_NR, 0,
+		  S_IFBLK | S_IRUGO | S_IWUGO, &sjcd_fops, NULL);
 
   sjcd_present++;
   return( 0 );

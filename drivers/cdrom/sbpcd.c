@@ -5803,9 +5803,9 @@ int __init SBPCD_INIT(void)
 
 		sprintf (nbuff, "c%dt%d/cd", SBPCD_ISSUE - 1, D_S[j].drv_id);
 		sbpcd_infop->de =
-		    devfs_register (devfs_handle, nbuff, 0, DEVFS_FL_DEFAULT,
+		    devfs_register (devfs_handle, nbuff, DEVFS_FL_DEFAULT,
 				    MAJOR_NR, j, S_IFBLK | S_IRUGO | S_IWUGO,
-				    0, 0, &cdrom_fops, NULL);
+				    &cdrom_fops, NULL);
 		if (register_cdrom(sbpcd_infop))
 		{
                 	printk(" sbpcd: Unable to register with Uniform CD-ROm driver\n");

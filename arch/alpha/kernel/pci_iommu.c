@@ -97,6 +97,10 @@ iommu_arena_alloc(struct pci_iommu_arena *arena, long n)
 	}
 
 	if (i < n) {
+                /* Reached the end.  Flush the TLB and restart the
+                   search from the beginning.  */
+		alpha_mv.mv_pci_tbi(arena->hose, 0, -1);
+
 		p = 0, i = 0;
 		while (i < n && p+i < nent) {
 			if (ptes[p+i])
@@ -197,7 +201,6 @@ pci_map_single(struct pci_dev *pdev, void *cpu_addr, long size, int direction)
 	DBGA("pci_map_single: [%p,%lx] np %ld -> sg %x from %p\n",
 	     cpu_addr, size, npages, ret, __builtin_return_address(0));
 
-	alpha_mv.mv_pci_tbi(hose, ret, ret + size - 1);
 	return ret;
 }
 
@@ -247,6 +250,13 @@ pci_unmap_single(struct pci_dev *pdev, dma_addr_t dma_addr, long size,
 	npages = calc_npages((dma_addr & ~PAGE_MASK) + size);
 	iommu_arena_free(arena, dma_ofs, npages);
 
+
+        /*
+	   If we're freeing ptes above the `next_entry' pointer (they
+           may have snuck back into the TLB since the last wrap flush),
+           we need to flush the TLB before reallocating the latter.
+	*/
+	if (dma_ofs >= arena->next_entry)
 		alpha_mv.mv_pci_tbi(hose, dma_addr, dma_addr + size - 1);
 
 	DBGA("pci_unmap_single: sg [%x,%lx] np %ld from %p\n",
@@ -434,8 +444,6 @@ sg_fill(struct scatterlist *leader, struct scatterlist *end,
 #endif
 	} while (++sg < end && (int) sg->dma_address < 0);
 
-	alpha_mv.mv_pci_tbi(arena->hose, out->dma_address, 
-			    out->dma_address+out->dma_length-1);
 	return 1;
 }
 
@@ -569,6 +577,12 @@ pci_unmap_sg(struct pci_dev *pdev, struct scatterlist *sg, int nents,
 		if (fend < tend) fend = tend;
 	}
 
+        /*
+	   If we're freeing ptes above the `next_entry' pointer (they
+           may have snuck back into the TLB since the last wrap flush),
+           we need to flush the TLB before reallocating the latter.
+	*/
+	if ((fend - arena->dma_base) >> PAGE_SHIFT >= arena->next_entry)
 		alpha_mv.mv_pci_tbi(hose, fbeg, fend);
 
 	DBGA("pci_unmap_sg: %d entries\n", nents - (end - sg));
