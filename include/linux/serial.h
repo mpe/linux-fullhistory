@@ -123,6 +123,8 @@ struct serial_uart_config {
 #define ASYNC_BUGGY_UART  0x4000 /* This is a buggy UART, skip some safety
 				  * checks.  Note: can be dangerous! */
 
+#define ASYNC_AUTOPROBE	 0x8000 /* Port was autoprobed by PCI or PNP code */
+
 #define ASYNC_FLAGS	0x7FFF	/* Possible legal async flags */
 #define ASYNC_USR_MASK	0x3430	/* Legal flags that non-privileged
 				 * users can set or reset */
@@ -137,7 +139,6 @@ struct serial_uart_config {
 #define ASYNC_CHECK_CD		0x02000000 /* i.e., CLOCAL */
 #define ASYNC_SHARE_IRQ		0x01000000 /* for multifunction cards
 					     --- no longer used */
-#define ASYNC_AUTOPROBE		0x00800000 /* Port was autoprobed */
 
 #define ASYNC_INTERNAL_FLAGS	0xFF000000 /* Internal flags */
 

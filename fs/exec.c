@@ -402,7 +402,10 @@ static int exec_mmap(void)
 	if (mm) {
 		struct mm_struct *active_mm = current->active_mm;
 
-		init_new_context(current, mm);
+		if (init_new_context(current, mm)) {
+			mmdrop(mm);
+			return -ENOMEM;
+		}
 		task_lock(current);
 		current->mm = mm;
 		current->active_mm = mm;

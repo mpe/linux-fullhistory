@@ -14,13 +14,12 @@
 #include <linux/init.h>
 
 #include "sound_config.h"
-#include "soundmodule.h"
 
 #include "opl3.h"
 
 static void __init attach_adlib_card(struct address_info *hw_config)
 {
-	hw_config->slots[0] = opl3_init(hw_config->io_base, hw_config->osp);
+	hw_config->slots[0] = opl3_init(hw_config->io_base, hw_config->osp, THIS_MODULE);
 	request_region(hw_config->io_base, 4, "OPL3/OPL2");
 }
 
@@ -50,7 +49,7 @@ static int __init init_adlib(void)
 	if (probe_adlib(&cfg) == 0)
 		return -ENODEV;
 	attach_adlib_card(&cfg);
-	SOUND_LOCK;
+
 	return 0;
 }
 
@@ -59,7 +58,6 @@ static void __exit cleanup_adlib(void)
 	release_region(cfg.io_base, 4);
 	sound_unload_synthdev(cfg.slots[0]);
 	
-	SOUND_LOCK_END;
 }
 
 module_init(init_adlib);

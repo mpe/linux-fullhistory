@@ -1,6 +1,7 @@
 #ifndef __ASM_SH_DMA_H
 #define __ASM_SH_DMA_H
 
+#include <linux/config.h>
 #include <asm/io.h>		/* need byte IO */
 
 #define MAX_DMA_CHANNELS 8

@@ -7,7 +7,6 @@
  * Also definitions of machine independant IO functions.
  */
 
-#include <linux/config.h>
 #include <asm/io.h>
 
 unsigned int _inb(unsigned long port)

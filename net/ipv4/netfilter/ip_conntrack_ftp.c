@@ -21,14 +21,6 @@ struct module *ip_conntrack_ftp = THIS_MODULE;
 #define DEBUGP(format, args...)
 #endif
 
-#define IP_PARTS_NATIVE(n)			\
-(unsigned int)((n)>>24)&0xFF,			\
-(unsigned int)((n)>>16)&0xFF,			\
-(unsigned int)((n)>>8)&0xFF,			\
-(unsigned int)((n)&0xFF)
-
-#define IP_PARTS(n) IP_PARTS_NATIVE(ntohl(n))
-
 static struct {
 	const char *pattern;
 	size_t plen;
@@ -111,7 +103,7 @@ static int help(const struct iphdr *iph, size_t len,
 		struct ip_conntrack *ct,
 		enum ip_conntrack_info ctinfo)
 {
-	/* tcplen not negative guarenteed by ip_conntrack_tcp.c */
+	/* tcplen not negative guaranteed by ip_conntrack_tcp.c */
 	struct tcphdr *tcph = (void *)iph + iph->ihl * 4;
 	const char *data = (const char *)tcph + tcph->doff * 4;
 	unsigned int tcplen = len - iph->ihl * 4;
@@ -142,8 +134,8 @@ static int help(const struct iphdr *iph, size_t len,
 	if (tcp_v4_check(tcph, tcplen, iph->saddr, iph->daddr,
 			 csum_partial((char *)tcph, tcplen, 0))) {
 		DEBUGP("ftp_help: bad csum: %p %u %u.%u.%u.%u %u.%u.%u.%u\n",
-		       tcph, tcplen, IP_PARTS(iph->saddr),
-		       IP_PARTS(iph->daddr));
+		       tcph, tcplen, NIPQUAD(iph->saddr),
+		       NIPQUAD(iph->daddr));
 		return NF_ACCEPT;
 	}
 

@@ -931,6 +931,12 @@ skb_cow(struct sk_buff *skb, unsigned int headroom)
 	return skb;
 }
 
+#define skb_queue_walk(queue, skb) \
+		for (skb = (queue)->next;			\
+		     (skb != (struct sk_buff *)(queue));	\
+		     skb=skb->next)
+
+
 extern struct sk_buff *		skb_recv_datagram(struct sock *sk,unsigned flags,int noblock, int *err);
 extern unsigned int		datagram_poll(struct file *file, struct socket *sock, struct poll_table_struct *wait);
 extern int			skb_copy_datagram(struct sk_buff *from, int offset, char *to,int size);

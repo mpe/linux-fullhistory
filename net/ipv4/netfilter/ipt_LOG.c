@@ -288,14 +288,15 @@ ipt_log_target(struct sk_buff **pskb,
 	if (in && !out) {
 		/* MAC logging for input chain only. */
 		printk("MAC=");
-		if ((*pskb)->dev && (*pskb)->dev->hard_header_len) {
+		if ((*pskb)->dev && (*pskb)->dev->hard_header_len && (*pskb)->mac.raw != iph) {
 			int i;
 			unsigned char *p = (*pskb)->mac.raw;
 			for (i = 0; i < (*pskb)->dev->hard_header_len; i++,p++)
 				printk("%02x%c", *p,
 				       i==(*pskb)->dev->hard_header_len - 1
 				       ? ' ':':');
-		}
+		} else
+			printk(" ");
 	}
 
 	dump_packet(loginfo, iph, (*pskb)->len, 1);

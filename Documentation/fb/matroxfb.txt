@@ -146,6 +146,27 @@ noinit   - tells driver, that devices were already initialized. You should use
 	   strange pattern on screen and so on. Devices not enabled by BIOS
 	   are still initialized. It is default.
 init     - driver initializes every device it knows about.
+memtype  - specifies memory type, implies 'init'. This is valid only for G200 
+           and G400 and has following meaning:
+             G200: 0 -> 2x128Kx32 chips, 2MB onboard, probably sgram
+                   1 -> 2x128Kx32 chips, 4MB onboard, probably sgram
+                   2 -> 2x256Kx32 chips, 4MB onboard, probably sgram
+                   3 -> 2x256Kx32 chips, 8MB onboard, probably sgram
+                   4 -> 2x512Kx16 chips, 8/16MB onboard, probably sdram only
+                   5 -> same as above
+                   6 -> 4x128Kx32 chips, 4MB onboard, probably sgram
+                   7 -> 4x128Kx32 chips, 8MB onboard, probably sgram
+             G400: 0 -> 2x512Kx16 SDRAM, 16/32MB
+                        2x512Kx32 SGRAM, 16/32MB
+                   1 -> 2x256Kx32 SGRAM, 8/16MB
+                   2 -> 4x128Kx32 SGRAM, 8/16MB
+                   3 -> 4x512Kx32 SDRAM, 32MB
+                   4 -> 4x256Kx32 SGRAM, 16/32MB
+                   5 -> 2x1Mx32 SDRAM, 32MB
+                   6 -> reserved
+                   7 -> reserved
+           You should use sdram or sgram parameter in addition to memtype 
+           parameter.
 nomtrr   - disables write combining on frame buffer. This slows down driver but
            there is reported minor incompatibility between GUS DMA and XFree
 	   under high loads if write combining is enabled (sound dropouts).

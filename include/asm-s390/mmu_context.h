@@ -12,7 +12,7 @@
 /*
  * get a new mmu context.. S390 don't know about contexts.
  */
-#define init_new_context(tsk,mm)        do { } while (0)
+#define init_new_context(tsk,mm)        0
 
 #define destroy_context(mm)             flush_tlb_mm(mm)
 

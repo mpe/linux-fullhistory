@@ -537,10 +537,10 @@ aci_mixer_ioctl (int dev, unsigned int cmd, caddr_t arg)
 
 static struct mixer_operations aci_mixer_operations =
 {
-	"ACI",
-	"ACI mixer",
-	aci_mixer_ioctl,
-	NULL
+	owner:	THIS_MODULE,
+	id:	"ACI",
+	name:	"ACI mixer",
+	ioctl:	aci_mixer_ioctl
 };
 
 static unsigned char

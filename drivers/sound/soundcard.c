@@ -43,11 +43,6 @@
 #include <linux/delay.h>
 #include <linux/proc_fs.h>
 #include <linux/smp_lock.h>
-#include <linux/notifier.h>
-
-
-struct notifier_block *sound_locker=(struct notifier_block *)0;
-static int lock_depth = 0;
 
 /*
  * This ought to be moved into include/asm/dma.h
@@ -78,7 +73,6 @@ static char     dma_alloc_map[MAX_DMA_CHANNELS] = {0};
 #define DMA_MAP_BUSY		2
 
 
-static int in_use = 0;	        /* Total # of open devices */
 unsigned long seq_time = 0;	/* Time for /dev/sequencer */
 
 /*
@@ -221,7 +215,7 @@ static int sound_open(struct inode *inode, struct file *file)
 
 	DEB(printk("sound_open(dev=%d)\n", dev));
 	if ((dev >= SND_NDEVS) || (dev < 0)) {
-		/* printk(KERN_ERR "Invalid minor device %d\n", dev);*/
+		printk(KERN_ERR "Invalid minor device %d\n", dev);
 		return -ENXIO;
 	}
 	switch (dev & 0x0f) {
@@ -234,6 +228,9 @@ static int sound_open(struct inode *inode, struct file *file)
 		}
 		if (dev && (dev >= num_mixers || mixer_devs[dev] == NULL))
 			return -ENXIO;
+
+		if (mixer_devs[dev]->owner)
+			__MOD_INC_USE_COUNT (mixer_devs[dev]->owner);
 		break;
 
 	case SND_DEV_SEQ:
@@ -258,10 +255,6 @@ static int sound_open(struct inode *inode, struct file *file)
 		printk(KERN_ERR "Invalid minor device %d\n", dev);
 		return -ENXIO;
 	}
-	in_use++;
-
-	notifier_call_chain(&sound_locker, 1, 0);
-	lock_depth++;
 
 	return 0;
 }
@@ -274,6 +267,8 @@ static int sound_release(struct inode *inode, struct file *file)
 	DEB(printk("sound_release(dev=%d)\n", dev));
 	switch (dev & 0x0f) {
 	case SND_DEV_CTL:
+		if (mixer_devs[dev]->owner)
+			__MOD_DEC_USE_COUNT (mixer_devs[dev]->owner);
 		break;
 		
 	case SND_DEV_SEQ:
@@ -294,10 +289,6 @@ static int sound_release(struct inode *inode, struct file *file)
 	default:
 		printk(KERN_ERR "Sound error: Releasing unknown device 0x%02x\n", dev);
 	}
-	in_use--;
-
-	notifier_call_chain(&sound_locker, 0, 0);
-	lock_depth--;
 	unlock_kernel();
 
 	return 0;
@@ -810,28 +801,4 @@ void conf_printf2(char *name, int base, int irq, int dma, int dma2)
 	}
 	printk("\n");
 #endif
-}
-
-/*
- *	Module and lock management
- */
- 
-/*
- *	When a sound module is registered we need to bring it to the current
- *	lock level...
- */
- 
-void sound_notifier_chain_register(struct notifier_block *bl)
-{
-	int ct=0;
-	
-	notifier_chain_register(&sound_locker, bl);
-	/*
-	 *	Normalise the lock count by calling the entry directly. We
-	 *	have to call the module as it owns its own use counter
-	 */
-	while(ct<lock_depth) {
-		bl->notifier_call(bl, 1, 0);
-		ct++;
-	}
 }

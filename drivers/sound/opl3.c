@@ -31,7 +31,6 @@
  */
 
 #include "sound_config.h"
-#include "soundmodule.h"
 
 #include "opl3.h"
 #include "opl3_hw.h"
@@ -769,7 +768,6 @@ static int opl3_open(int dev, int mode)
 
 	if (devc->busy)
 		return -EBUSY;
-	MOD_INC_USE_COUNT;
 	devc->busy = 1;
 
 	devc->v_alloc->max_voice = devc->nr_voice = (devc->model == 2) ? 18 : 9;
@@ -798,7 +796,6 @@ static void opl3_close(int dev)
 	devc->fm_info.perc_mode = 0;
 
 	opl3_reset(dev);
-	MOD_DEC_USE_COUNT;
 }
 
 static void opl3_hw_control(int dev, unsigned char *event)
@@ -1061,30 +1058,31 @@ static void opl3_setup_voice(int dev, int voice, int chn)
 
 static struct synth_operations opl3_operations =
 {
-	"OPL",
-	NULL,
-	0,
-	SYNTH_TYPE_FM,
-	FM_TYPE_ADLIB,
-	opl3_open,
-	opl3_close,
-	opl3_ioctl,
-	opl3_kill_note,
-	opl3_start_note,
-	opl3_set_instr,
-	opl3_reset,
-	opl3_hw_control,
-	opl3_load_patch,
-	opl3_aftertouch,
-	opl3_controller,
-	opl3_panning,
-	opl3_volume_method,
-	opl3_bender,
-	opl3_alloc_voice,
-	opl3_setup_voice
+	owner:		THIS_MODULE,
+	id:		"OPL",
+	info:		NULL,
+	midi_dev:	0,
+	synth_type:	SYNTH_TYPE_FM,
+	synth_subtype:	FM_TYPE_ADLIB,
+	open:		opl3_open,
+	close:		opl3_close,
+	ioctl:		opl3_ioctl,
+	kill_note:	opl3_kill_note,
+	start_note:	opl3_start_note,
+	set_instr:	opl3_set_instr,
+	reset:		opl3_reset,
+	hw_control:	opl3_hw_control,
+	load_patch:	opl3_load_patch,
+	aftertouch:	opl3_aftertouch,
+	controller:	opl3_controller,
+	panning:	opl3_panning,
+	volume_method:	opl3_volume_method,
+	bender:		opl3_bender,
+	alloc_voice:	opl3_alloc_voice,
+	setup_voice:	opl3_setup_voice
 };
 
-int opl3_init(int ioaddr, int *osp)
+int opl3_init(int ioaddr, int *osp, struct module *owner)
 {
 	int i;
 	int me;
@@ -1131,6 +1129,10 @@ int opl3_init(int ioaddr, int *osp)
 	opl3_operations.info = &devc->fm_info;
 
 	synth_devs[me] = &opl3_operations;
+
+	if (owner)
+		synth_devs[me]->owner = owner;
+	
 	sequencer_init();
 	devc->v_alloc = &opl3_operations.alloc;
 	devc->chn_info = &opl3_operations.chn_info[0];
@@ -1198,11 +1200,11 @@ static int __init init_opl3 (void)
 		{
 			return -ENODEV;
 		}
-		me = opl3_init(io, NULL);
+		me = opl3_init(io, NULL, THIS_MODULE);
 		request_region(io, 4, devc->fm_info.name);
 
 	}
-	SOUND_LOCK;
+
 	return 0;
 }
 
@@ -1216,7 +1218,6 @@ static void __exit cleanup_opl3(void)
 		devc = NULL;
 		sound_unload_synthdev(me);
 	}
-	SOUND_LOCK_END;
 }
 
 module_init(init_opl3);

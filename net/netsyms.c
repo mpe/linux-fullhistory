@@ -315,7 +315,6 @@ EXPORT_SYMBOL(tcp_recvmsg);
 EXPORT_SYMBOL(tcp_send_synack);
 EXPORT_SYMBOL(tcp_check_req);
 EXPORT_SYMBOL(tcp_child_process);
-EXPORT_SYMBOL(tcp_reset_xmit_timer);
 EXPORT_SYMBOL(tcp_parse_options);
 EXPORT_SYMBOL(tcp_rcv_established);
 EXPORT_SYMBOL(tcp_init_xmit_timers);
@@ -355,6 +354,12 @@ EXPORT_SYMBOL(tcp_port_rover);
 EXPORT_SYMBOL(udp_port_rover);
 EXPORT_SYMBOL(tcp_sync_mss);
 EXPORT_SYMBOL(net_statistics); 
+EXPORT_SYMBOL(__tcp_mem_reclaim);
+EXPORT_SYMBOL(tcp_sockets_allocated);
+EXPORT_SYMBOL(sysctl_tcp_reordering);
+EXPORT_SYMBOL(sysctl_tcp_rmem);
+EXPORT_SYMBOL(sysctl_tcp_wmem);
+EXPORT_SYMBOL(tcp_cwnd_application_limited);
 
 EXPORT_SYMBOL(xrlim_allow);
 
@@ -567,51 +572,6 @@ EXPORT_SYMBOL(nf_hook_slow);
 EXPORT_SYMBOL(nf_hooks);
 EXPORT_SYMBOL(nf_setsockopt);
 EXPORT_SYMBOL(nf_getsockopt);
-#endif
-
-#ifdef CONFIG_IP_NF_CONNTRACK
-#include <linux/netfilter_ipv4/ip_conntrack_protocol.h>
-#include <linux/netfilter_ipv4/ip_conntrack_helper.h>
-#include <linux/netfilter_ipv4/ip_conntrack_core.h>
-EXPORT_SYMBOL(ip_conntrack_protocol_register);
-EXPORT_SYMBOL(invert_tuplepr);
-EXPORT_SYMBOL(ip_conntrack_alter_reply);
-EXPORT_SYMBOL(ip_conntrack_destroyed);
-EXPORT_SYMBOL(ip_conntrack_get);
-EXPORT_SYMBOL(ip_conntrack_module);
-EXPORT_SYMBOL(ip_conntrack_helper_register);
-EXPORT_SYMBOL(ip_conntrack_helper_unregister);
-EXPORT_SYMBOL(ip_ct_selective_cleanup);
-EXPORT_SYMBOL(ip_ct_refresh);
-EXPORT_SYMBOL(ip_conntrack_expect_related);
-EXPORT_SYMBOL(ip_conntrack_tuple_taken);
-EXPORT_SYMBOL(ip_ct_gather_frags);
-#ifdef CONFIG_IP_NF_FTP
-#include <linux/netfilter_ipv4/ip_conntrack_ftp.h>
-EXPORT_SYMBOL(ip_ftp_lock);
-#endif
-#endif /*CONFIG_IP_NF_CONNTRACK*/
-
-#ifdef CONFIG_IP_NF_NAT
-#include <linux/netfilter_ipv4/ip_nat.h>
-#include <linux/netfilter_ipv4/ip_nat_helper.h>
-#include <linux/netfilter_ipv4/ip_nat_rule.h>
-EXPORT_SYMBOL(ip_nat_setup_info);
-EXPORT_SYMBOL(ip_nat_helper_register);
-EXPORT_SYMBOL(ip_nat_helper_unregister);
-EXPORT_SYMBOL(ip_nat_expect_register);
-EXPORT_SYMBOL(ip_nat_expect_unregister);
-EXPORT_SYMBOL(ip_nat_cheat_check);
-#endif
-
-#ifdef CONFIG_IP_NF_IPTABLES
-#include <linux/netfilter_ipv4/ip_tables.h>
-EXPORT_SYMBOL(ipt_register_table);
-EXPORT_SYMBOL(ipt_unregister_table);
-EXPORT_SYMBOL(ipt_register_target);
-EXPORT_SYMBOL(ipt_unregister_target);
-EXPORT_SYMBOL(ipt_register_match);
-EXPORT_SYMBOL(ipt_unregister_match);
 #endif
 
 EXPORT_SYMBOL(register_gifconf);

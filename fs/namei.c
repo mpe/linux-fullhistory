@@ -1690,7 +1690,8 @@ int vfs_rename_dir(struct inode *old_dir, struct dentry *old_dentry,
 		triple_up(&old_dir->i_zombie,
 			  &new_dir->i_zombie,
 			  &target->i_zombie);
-		d_rehash(new_dentry);
+		if (d_unhashed(new_dentry))
+			d_rehash(new_dentry);
 		dput(new_dentry);
 	} else
 		double_up(&old_dir->i_zombie,

@@ -634,7 +634,7 @@ int sb_dsp_detect(struct address_info *hw_config, int pci, int pciio, struct sb_
 	return 1;
 }
 
-int sb_dsp_init(struct address_info *hw_config)
+int sb_dsp_init(struct address_info *hw_config, struct module *owner)
 {
 	sb_devc *devc;
 	char name[100];
@@ -812,10 +812,10 @@ int sb_dsp_init(struct address_info *hw_config)
 
 	if (!(devc->caps & SB_NO_MIXER))
 		if (devc->major == 3 || devc->major == 4)
-			sb_mixer_init(devc);
+			sb_mixer_init(devc, owner);
 
 	if (!(devc->caps & SB_NO_MIDI))
-		sb_dsp_midi_init(devc);
+		sb_dsp_midi_init(devc, owner);
 
 	if (hw_config->name == NULL)
 		hw_config->name = "Sound Blaster (8 BIT/MONO ONLY)";
@@ -861,7 +861,7 @@ int sb_dsp_init(struct address_info *hw_config)
 			if (sound_alloc_dma(devc->dma16, "SoundBlaster16"))
 				printk(KERN_WARNING "Sound Blaster:  can't allocate 16 bit DMA channel %d.\n", devc->dma16);
 		}
-		sb_audio_init(devc, name);
+		sb_audio_init(devc, name, owner);
 		hw_config->slots[0]=devc->dev;
 	}
 	else
@@ -1190,18 +1190,18 @@ static int init_Jazz16_midi(sb_devc * devc, struct address_info *hw_config)
 	return 1;
 }
 
-void attach_sbmpu(struct address_info *hw_config)
+void attach_sbmpu(struct address_info *hw_config, struct module *owner)
 {
 	if (last_sb->model == MDL_ESS) {
 #if defined(CONFIG_SOUND_MPU401)
-		attach_mpu401(hw_config);
+		attach_mpu401(hw_config, owner);
 		if (last_sb->irq == -hw_config->irq) {
 			last_sb->midi_irq_cookie=(void *)hw_config->slots[1];
 		}
 #endif
 		return;
 	}
-	attach_uart401(hw_config);
+	attach_uart401(hw_config, THIS_MODULE);
 	last_sb->midi_irq_cookie=midi_devs[hw_config->slots[4]]->devc;
 }
 

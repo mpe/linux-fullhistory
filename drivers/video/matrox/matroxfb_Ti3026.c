@@ -4,14 +4,14 @@
  *
  * (c) 1998,1999,2000 Petr Vandrovec <vandrove@vc.cvut.cz>
  *
- * Version: 1.21 2000/01/09
+ * Version: 1.50 2000/08/10
  *
  * MTRR stuff: 1998 Tom Rini <trini@kernel.crashing.org>
  *
  * Contributors: "menion?" <menion@mindless.com>
  *                     Betatesting, fixes, ideas
  *
- *               "Kurt Garloff" <garloff@kg1.ping.de>
+ *               "Kurt Garloff" <garloff@suse.de>
  *                     Betatesting, fixes, ideas, videomodes, videomodes timmings
  *
  *               "Tom Rini" <trini@kernel.crashing.org>

@@ -42,7 +42,6 @@
 #include <asm/hardware.h>
 #include <asm/system.h>
 
-#include "soundmodule.h"
 #include "sound_config.h"
 #include "waveartist.h"
 
@@ -801,22 +800,21 @@ waveartist_set_bits(int dev, unsigned int arg)
 }
 
 static struct audio_driver waveartist_audio_driver = {
-	waveartist_open,
-	waveartist_close,
-	waveartist_output_block,
-	waveartist_start_input,
-	waveartist_ioctl,
-	waveartist_prepare_for_input,
-	waveartist_prepare_for_output,
-	waveartist_halt,
-	NULL,
-	NULL,
-	waveartist_halt_input,
-	waveartist_halt_output,
-	waveartist_trigger,
-	waveartist_set_speed,
-	waveartist_set_bits,
-	waveartist_set_channels
+	owner:		THIS_MODULE,
+	open:		waveartist_open,
+	close:		waveartist_close,
+	output_block:	waveartist_output_block,
+	start_input:	waveartist_start_input,
+	ioctl:		waveartist_ioctl,
+	prepare_for_input:	waveartist_prepare_for_input,
+	prepare_for_output:	waveartist_prepare_for_output,
+	halt_io:	waveartist_halt,
+	halt_input:	waveartist_halt_input,
+	halt_output:	waveartist_halt_output,
+	trigger:	waveartist_trigger,
+	set_speed:	waveartist_set_speed,
+	set_bits:	waveartist_set_bits,
+	set_channels:	waveartist_set_channels
 };
 
 
@@ -1186,9 +1184,10 @@ waveartist_mixer_ioctl(int dev, unsigned int cmd, caddr_t arg)
 
 static struct mixer_operations waveartist_mixer_operations =
 {
-	"WaveArtist",
-	"WaveArtist NetWinder",
-	waveartist_mixer_ioctl
+	owner:	THIS_MODULE,
+	id:	"WaveArtist",
+	name:	"WaveArtist NetWinder",
+	ioctl:	waveartist_mixer_ioctl
 };
 
 static int
@@ -1794,16 +1793,13 @@ static int __init init_waveartist(void)
 	attach_waveartist(&cfg);
 	attached = 1;
 
-	SOUND_LOCK;
 	return 0;
 }
 
 static void __exit cleanup_waveartist(void)
 {
-	if (attached) {
-		SOUND_LOCK_END;
+	if (attached)
 		unload_waveartist(&cfg);
-	}
 }
 
 module_init(init_waveartist);

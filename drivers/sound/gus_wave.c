@@ -2613,16 +2613,16 @@ static int gus_local_qlen(int dev)
 
 static struct audio_driver gus_audio_driver =
 {
-	gus_audio_open,
-	gus_audio_close,
-	gus_audio_output_block,
-	gus_audio_start_input,
-	gus_audio_ioctl,
-	gus_audio_prepare_for_input,
-	gus_audio_prepare_for_output,
-	gus_audio_reset,
-	gus_local_qlen,
-	NULL
+	owner:		THIS_MODULE,
+	open:		gus_audio_open,
+	close:		gus_audio_close,
+	output_block:	gus_audio_output_block,
+	start_input:	gus_audio_start_input,
+	ioctl:		gus_audio_ioctl,
+	prepare_for_input:	gus_audio_prepare_for_input,
+	prepare_for_output:	gus_audio_prepare_for_output,
+	halt_io:	gus_audio_reset,
+	local_qlen:	gus_local_qlen,
 };
 
 static void guswave_setup_voice(int dev, int voice, int chn)
@@ -2702,27 +2702,28 @@ static int guswave_alloc(int dev, int chn, int note, struct voice_alloc_info *al
 
 static struct synth_operations guswave_operations =
 {
-	"GUS",
-	&gus_info,
-	0,
-	SYNTH_TYPE_SAMPLE,
-	SAMPLE_TYPE_GUS,
-	guswave_open,
-	guswave_close,
-	guswave_ioctl,
-	guswave_kill_note,
-	guswave_start_note,
-	guswave_set_instr,
-	guswave_reset,
-	guswave_hw_control,
-	guswave_load_patch,
-	guswave_aftertouch,
-	guswave_controller,
-	guswave_panning,
-	guswave_volume_method,
-	guswave_bender,
-	guswave_alloc,
-	guswave_setup_voice
+	owner:		THIS_MODULE,
+	id:		"GUS",
+	info:		&gus_info,
+	midi_dev:	0,
+	synth_type:	SYNTH_TYPE_SAMPLE,
+	synth_subtype:	SAMPLE_TYPE_GUS,
+	open:		guswave_open,
+	close:		guswave_close,
+	ioctl:		guswave_ioctl,
+	kill_note:	guswave_kill_note,
+	start_note:	guswave_start_note,
+	set_instr:	guswave_set_instr,
+	reset:		guswave_reset,
+	hw_control:	guswave_hw_control,
+	load_patch:	guswave_load_patch,
+	aftertouch:	guswave_aftertouch,
+	controller:	guswave_controller,
+	panning:	guswave_panning,
+	volume_method:	guswave_volume_method,
+	bender:		guswave_bender,
+	alloc_voice:	guswave_alloc,
+	setup_voice:	guswave_setup_voice
 };
 
 static void set_input_volumes(void)
@@ -2894,9 +2895,10 @@ int gus_default_mixer_ioctl(int dev, unsigned int cmd, caddr_t arg)
 
 static struct mixer_operations gus_mixer_operations =
 {
-	"GUS",
-	"Gravis Ultrasound",
-	gus_default_mixer_ioctl
+	owner:	THIS_MODULE,
+	id:	"GUS",
+	name:	"Gravis Ultrasound",
+	ioctl:	gus_default_mixer_ioctl
 };
 
 static int gus_default_mixer_init(void)
@@ -3050,7 +3052,8 @@ void gus_wave_init(struct address_info *hw_config)
 							-irq, gus_dma2,	/* Playback DMA */
 							gus_dma,	/* Capture DMA */
 							1,		/* Share DMA channels with GF1 */
-							hw_config->osp);
+							hw_config->osp,
+							THIS_MODULE);
 
 				if (num_mixers > old_num_mixers)
 				{

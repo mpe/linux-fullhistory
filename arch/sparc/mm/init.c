@@ -1,4 +1,4 @@
-/*  $Id: init.c,v 1.90 2000/08/09 00:00:15 davem Exp $
+/*  $Id: init.c,v 1.91 2000/08/09 23:10:19 anton Exp $
  *  linux/arch/sparc/mm/init.c
  *
  *  Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -456,8 +456,6 @@ void __init mem_init(void)
 #endif
 
 	highmem_start_page = mem_map + highstart_pfn;
-	/* cache the highmem_mapnr */
-	highmem_mapnr = highstart_pfn;
 
 	/* Saves us work later. */
 	memset((void *)&empty_zero_page, 0, PAGE_SIZE);

@@ -54,7 +54,6 @@
 #include <asm/io.h>
 
 #include "sound_config.h"
-#include "soundmodule.h"
 #include "sb.h"
 
 #include "724hwmcode.h"
@@ -63,11 +62,6 @@
 #define SUPPORT_UART401_MIDI 1
 
 /* ---------------------------------------------------------------------- */
-
-#ifndef SOUND_LOCK
-#define SOUND_LOCK do {} while (0)
-#define SOUND_LOCK_END do {} while (0)
-#endif
 
 #ifndef PCI_VENDOR_ID_YAMAHA
 #define PCI_VENDOR_ID_YAMAHA  0x1073
@@ -641,7 +635,7 @@ static int __init ymf7xx_init(struct pci_dev *pcidev)
 
 static void __init ymf7xxsb_attach_sb(struct address_info *hw_config)
 {
-	if(!sb_dsp_init(hw_config))
+	if(!sb_dsp_init(hw_config, THIS_MODULE))
 		hw_config->slots[0] = -1;
 }
 
@@ -784,7 +778,7 @@ static int __init ymf7xxsb_init_one (struct pci_dev *pcidev, const struct pci_de
 			ymf7xxsb_unload_sb (&sb_data[cards], 0);
 			return -ENODEV;
 		}
-		ymf7xxsb_attach_midi (&mpu_data[cards]);
+		ymf7xxsb_attach_midi (&mpu_data[cards], THIS_MODULE);
 	}
 #endif
 
@@ -804,11 +798,6 @@ static int __init init_ymf7xxsb_module(void)
 {
 	int i;
 
-	/*
-	 *	Binds us to the sound subsystem	
-	 */
-	SOUND_LOCK;
-
 	if ( master_vol < 0 ) master_vol  = 50;
 	if ( master_vol > 100 ) master_vol = 100;
 
@@ -816,10 +805,8 @@ static int __init init_ymf7xxsb_module(void)
 		ymfbase[i] = NULL;
 
 	i = pci_module_init (&ymf7xxsb_driver);
-	if (i < 0) {
-		SOUND_LOCK_END;
+	if (i < 0)
 		return i;
-	}
 
 	printk (KERN_INFO PFX YMFSB_CARD_NAME " loaded\n");
 	
@@ -853,10 +840,6 @@ static void __exit cleanup_ymf7xxsb_module(void)
 
 	free_iomaps();
 
-	/*
-	 *	Final clean up with the sound layer
-	 */
-	SOUND_LOCK_END;
 }
 
 MODULE_AUTHOR("Daisuke Nagano, breeze.nagano@nifty.ne.jp");

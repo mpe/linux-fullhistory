@@ -158,14 +158,14 @@ int sb_dsp_reset (sb_devc *devc);
 void sb_setmixer (sb_devc *devc, unsigned int port, unsigned int value);
 unsigned int sb_getmixer (sb_devc *devc, unsigned int port);
 int sb_dsp_detect (struct address_info *hw_config, int pci, int pciio, struct sb_module_options *sbmo);
-int sb_dsp_init (struct address_info *hw_config);
+int sb_dsp_init (struct address_info *hw_config, struct module *owner);
 void sb_dsp_unload(struct address_info *hw_config, int sbmpu);
-int sb_mixer_init(sb_devc *devc);
+int sb_mixer_init(sb_devc *devc, struct module *owner);
 void sb_mixer_unload(sb_devc *devc);
 void sb_mixer_set_stereo (sb_devc *devc, int mode);
 void smw_mixer_init(sb_devc *devc);
-void sb_dsp_midi_init (sb_devc *devc);
-void sb_audio_init (sb_devc *devc, char *name);
+void sb_dsp_midi_init (sb_devc *devc, struct module *owner);
+void sb_audio_init (sb_devc *devc, char *name, struct module *owner);
 void sb_midi_interrupt (sb_devc *devc);
 void sb_chgmixer (sb_devc * devc, unsigned int reg, unsigned int mask, unsigned int val);
 int sb_common_mixer_set(sb_devc * devc, int dev, int left, int right);
@@ -178,7 +178,7 @@ extern sb_devc *last_sb;
 /*	From sb_common.c */
 void sb_dsp_disable_midi(int port);
 void sb_dsp_disable_recording(int port);
-void attach_sbmpu (struct address_info *hw_config);
+void attach_sbmpu (struct address_info *hw_config, struct module *owner);
 int probe_sbmpu (struct address_info *hw_config);
 void unload_sbmpu (struct address_info *hw_config);
 

@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: route.c,v 1.46 2000/07/07 22:40:35 davem Exp $
+ *	$Id: route.c,v 1.48 2000/08/10 01:17:13 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -93,7 +93,7 @@ struct dst_ops ip6_dst_ops = {
 
 struct rt6_info ip6_null_entry = {
 	{{NULL, ATOMIC_INIT(1), 1, &loopback_dev,
-	  -1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+	  -1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 	  -ENETUNREACH, NULL, NULL,
 	  ip6_pkt_discard, ip6_pkt_discard,
 #ifdef CONFIG_NET_CLS_ROUTE

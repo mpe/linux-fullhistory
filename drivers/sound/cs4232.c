@@ -46,7 +46,6 @@
 #include <linux/init.h>
 
 #include "sound_config.h"
-#include "soundmodule.h"
 
 #include "cs4232.h"
 #include "ad1848.h"
@@ -229,7 +228,8 @@ void attach_cs4232(struct address_info *hw_config)
 					  dma1,		/* Playback DMA */
 					  dma2,		/* Capture DMA */
 					  0,
-					  hw_config->osp);
+					  hw_config->osp,
+					  THIS_MODULE);
 
 	if (hw_config->slots[0] != -1 &&
 		audio_devs[hw_config->slots[0]]->mixer_dev!=-1)
@@ -258,7 +258,7 @@ void attach_cs4232(struct address_info *hw_config)
 		if (probe_uart401(&hw_config2))
 		{
 			mpu_detected = 1;
-			attach_uart401(&hw_config2);
+			attach_uart401(&hw_config2, THIS_MODULE);
 		}
 		else
 		{
@@ -266,7 +266,6 @@ void attach_cs4232(struct address_info *hw_config)
 		}
 		hw_config->slots[1] = hw_config2.slots[1];
 	}
-	SOUND_LOCK;
 }
 
 void unload_cs4232(struct address_info *hw_config)
@@ -376,7 +375,6 @@ static int __init init_cs4232(void)
 static void __exit cleanup_cs4232(void)
 {
         unload_cs4232(&cfg); /* unloads MPU as well, if needed */
-	SOUND_LOCK_END;
 }
 
 module_init(init_cs4232);

@@ -22,8 +22,6 @@
 #include <linux/module.h>
 
 #include "sound_config.h"
-#include "soundmodule.h"
-
 #include "ad1848.h"
 
 static void sleep( unsigned howlong )
@@ -115,7 +113,7 @@ static void __init attach_sgalaxy( struct address_info *ai )
 	
 	request_region( ai->ai_sgbase, 0x10, "SoundGalaxy SB" );
  
-	attach_ms_sound( ai );
+	attach_ms_sound(ai, THIS_MODULE);
 	n=ai->slots[0];
 	
 	if (n!=-1 && audio_devs[n]->mixer_dev != -1 ) {
@@ -163,14 +161,12 @@ static int __init init_sgalaxy(void)
 
 	attach_sgalaxy(&cfg);
 
-	SOUND_LOCK;
 	return 0;
 }
 
 static void __exit cleanup_sgalaxy(void)
 {
 	unload_sgalaxy(&cfg);
-	SOUND_LOCK_END;
 }
 
 module_init(init_sgalaxy);

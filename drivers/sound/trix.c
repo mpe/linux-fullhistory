@@ -21,7 +21,6 @@
 #include <linux/module.h>
 
 #include "sound_config.h"
-#include "soundmodule.h"
 #include "sb.h"
 #include "sound_firmware.h"
 
@@ -259,7 +258,8 @@ static void __init attach_trix_wss(struct address_info *hw_config)
 					  dma1,
 					  dma2,
 					  0,
-					  hw_config->osp);
+					  hw_config->osp,
+					  THIS_MODULE);
 	request_region(hw_config->io_base, 4, "MSS config");
 
 	if (num_mixers > old_num_mixers)	/* Mixer got installed */
@@ -332,7 +332,7 @@ static void __init attach_trix_sb(struct address_info *hw_config)
 	old_quiet = sb_be_quiet;
 	sb_be_quiet = 1;
 
-	sb_dsp_init(hw_config);
+	sb_dsp_init(hw_config, THIS_MODULE);
 
 	sb_be_quiet = old_quiet;
 }
@@ -340,7 +340,7 @@ static void __init attach_trix_sb(struct address_info *hw_config)
 static void __init attach_trix_mpu(struct address_info *hw_config)
 {
 	hw_config->name = "AudioTrix Pro";
-	attach_uart401(hw_config);
+	attach_uart401(hw_config, THIS_MODULE);
 }
 
 static int __init probe_trix_mpu(struct address_info *hw_config)
@@ -515,7 +515,7 @@ static int __init init_trix(void)
 		if (mpu)
 			attach_trix_mpu(&cfg_mpu);
 	}
-	SOUND_LOCK;
+
 	return 0;
 }
 
@@ -528,7 +528,6 @@ static void __exit cleanup_trix(void)
 	if (mpu)
 		unload_trix_mpu(&cfg_mpu);
 	unload_trix_wss(&cfg);
-	SOUND_LOCK_END;
 }
 
 module_init(init_trix);

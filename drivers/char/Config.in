@@ -8,7 +8,7 @@ bool 'Virtual terminal' CONFIG_VT
 if [ "$CONFIG_VT" = "y" ]; then
    bool '  Support for console on virtual terminal' CONFIG_VT_CONSOLE
 fi
-tristate 'Standard/generic (dumb) serial support' CONFIG_SERIAL
+tristate 'Standard/generic (8250/16550 and compatible UARTs) serial support' CONFIG_SERIAL
 if [ "$CONFIG_SERIAL" = "y" ]; then
    bool '  Support for console on serial port' CONFIG_SERIAL_CONSOLE
    if [ "$CONFIG_ARCH_ACORN" = "y" ]; then

@@ -2,7 +2,7 @@
  *
  * Hardware accelerated Matrox Millennium I, II, Mystique, G100, G200 and G400
  *
- * (c) 1998,1999 Petr Vandrovec <vandrove@vc.cvut.cz>
+ * (c) 1998,1999,2000 Petr Vandrovec <vandrove@vc.cvut.cz>
  *
  */
 #ifndef __MATROXFB_H__
@@ -530,6 +530,7 @@ struct matrox_fb_info {
 		unsigned int	textvram;	/* character cells */
 		unsigned int	ydstorg;	/* offset in bytes from video start to usable memory */
 						/* 0 except for 6MB Millenium */
+		int		memtype;
 			      } devflags;
 	struct display_switch	dispsw;
 	struct {
@@ -695,6 +696,7 @@ void matroxfb_unregister_driver(struct matroxfb_driver* drv);
 #define M_VCOUNT	0x1E20
 
 #define M_RESET		0x1E40
+#define M_MEMRDBK	0x1E44
 
 #define M_AGP2PLL	0x1E4C
 

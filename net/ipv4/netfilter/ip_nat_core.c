@@ -206,7 +206,7 @@ do_extra_mangle(u_int32_t var_ip, u_int32_t *other_ipp)
 	/* FIXME: IPTOS_TOS(iph->tos) --RR */
 	if (ip_route_output(&rt, var_ip, 0, 0, 0) != 0) {
 		DEBUGP("do_extra_mangle: Can't get route to %u.%u.%u.%u\n",
-		       IP_PARTS(var_ip));
+		       NIPQUAD(var_ip));
 		return 0;
 	}
 
@@ -312,7 +312,7 @@ find_best_ips_proto(struct ip_conntrack_tuple *tuple,
 			    && *var_ipp != orig_dstip
 			    && !do_extra_mangle(*var_ipp, other_ipp)) {
 				DEBUGP("Range %u %u.%u.%u.%u rt failed!\n",
-				       i, IP_PARTS(*var_ipp));
+				       i, NIPQUAD(*var_ipp));
 				/* Can't route?  This whole range part is
 				 * probably screwed, but keep trying
 				 * anyway. */
@@ -513,8 +513,8 @@ ip_nat_setup_info(struct ip_conntrack *conntrack,
 		       ? " PROTO_SPECIFIED" : "",
 		       (mr->range[i].flags & IP_NAT_RANGE_FULL)
 		       ? " FULL" : "",
-		       IP_PARTS(mr->range[i].min_ip),
-		       IP_PARTS(mr->range[i].max_ip),
+		       NIPQUAD(mr->range[i].min_ip),
+		       NIPQUAD(mr->range[i].max_ip),
 		       mr->range[i].min.all,
 		       mr->range[i].max.all);
 	}
@@ -715,7 +715,7 @@ do_bindings(struct ip_conntrack *ct,
 			       *pskb,
 			       info->manips[i].maniptype == IP_NAT_MANIP_SRC
 			       ? "SRC" : "DST",
-			       IP_PARTS(info->manips[i].manip.ip),
+			       NIPQUAD(info->manips[i].manip.ip),
 			       htons(info->manips[i].manip.u.all));
 			manip_pkt((*pskb)->nh.iph->protocol,
 				  (*pskb)->nh.iph,
@@ -797,7 +797,7 @@ icmp_reply_translation(struct sk_buff *skb,
 			DEBUGP("icmp_reply: inner %s -> %u.%u.%u.%u %u\n",
 			       info->manips[i].maniptype == IP_NAT_MANIP_SRC
 			       ? "DST" : "SRC",
-			       IP_PARTS(info->manips[i].manip.ip),
+			       NIPQUAD(info->manips[i].manip.ip),
 			       ntohs(info->manips[i].manip.u.udp.port));
 			manip_pkt(inner->protocol, inner,
 				  skb->len - ((void *)inner - (void *)iph),
@@ -812,7 +812,7 @@ icmp_reply_translation(struct sk_buff *skb,
 			DEBUGP("icmp_reply: outer %s -> %u.%u.%u.%u\n",
 			       info->manips[i].maniptype == IP_NAT_MANIP_SRC
 			       ? "SRC" : "DST",
-			       IP_PARTS(info->manips[i].manip.ip));
+			       NIPQUAD(info->manips[i].manip.ip));
 			manip_pkt(0, iph, skb->len,
 				  &info->manips[i].manip,
 				  info->manips[i].maniptype,

@@ -160,6 +160,7 @@ typedef struct coproc_operations
 
 struct audio_driver 
 {
+	struct module *owner;
 	int (*open) (int dev, int mode);
 	void (*close) (int dev);
 	void (*output_block) (int dev, unsigned long buf, 
@@ -239,6 +240,7 @@ int *load_mixer_volumes(char *name, int *levels, int present);
 
 struct mixer_operations 
 {
+	struct module *owner;
 	char id[16];
 	char name[64];
 	int (*ioctl) (int dev, unsigned int cmd, caddr_t arg);
@@ -249,6 +251,7 @@ struct mixer_operations
 
 struct synth_operations 
 {
+	struct module *owner;
 	char *id;	/* Unique identifier (ASCII) max 29 char */
 	struct synth_info *info;
 	int midi_dev;
@@ -301,6 +304,7 @@ struct midi_input_info
 
 struct midi_operations 
 {
+	struct module *owner;
 	struct midi_info info;
 	struct synth_operations *converter;
 	struct midi_input_info in_info;
@@ -332,6 +336,7 @@ struct sound_lowlev_timer
 
 struct sound_timer_operations 
 {
+	struct module *owner;
 	struct sound_timer_info info;
 	int priority;
 	int devlink;

@@ -9,6 +9,7 @@
  * Machine specific code for an unknown machine (internal peripherials only)
  */
 
+#include <linux/config.h>
 #include <linux/init.h>
 
 #include <asm/machvec.h>

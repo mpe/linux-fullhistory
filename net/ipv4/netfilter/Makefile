@@ -19,7 +19,8 @@ IP_NF_COMPAT_LAYER:=ip_fw_compat.o ip_fw_compat_redir.o ip_fw_compat_masq.o $(IP
 
 # Link order matters here.
 ifeq ($(CONFIG_IP_NF_CONNTRACK),y)
-O_OBJS += ip_conntrack_standalone.o $(IP_NF_CONNTRACK_OBJ)
+OX_OBJS += ip_conntrack_standalone.o
+O_OBJS += $(IP_NF_CONNTRACK_OBJ)
 else
   ifeq ($(CONFIG_IP_NF_CONNTRACK),m)
   MI_OBJS += $(IP_NF_CONNTRACK_OBJ)

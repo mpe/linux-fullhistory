@@ -57,10 +57,11 @@ get_new_mmu_context(struct mm_struct *mm, unsigned long asid)
  * Initialize the context related info for a new mm_struct
  * instance.
  */
-extern inline void
+extern inline int
 init_new_context(struct task_struct *tsk, struct mm_struct *mm)
 {
 	mm->context = 0;
+	return 0;
 }
 
 extern inline void switch_mm(struct mm_struct *prev, struct mm_struct *next,

@@ -4,10 +4,11 @@
  *
  * (C) 2000 James Morris, this code is GPL.
  *
- * 2000-03-27: Simplified code (thanks to Andi Kleen for clues). (JM)
- * 2000-05-20: Fixed notifier problems (following Miguel Freitas' report). (JM)
+ * 2000-03-27: Simplified code (thanks to Andi Kleen for clues).
+ * 2000-05-20: Fixed notifier problems (following Miguel Freitas' report).
  * 2000-06-19: Fixed so nfmark is copied to metadata (reported by Sebastian 
- *             Zander). (JM)
+ *             Zander).
+ * 2000-08-01: Added Nick Williams' MAC support.
  *
  */
 #include <linux/module.h>
@@ -398,6 +399,14 @@ static struct sk_buff *netlink_build_message(ipq_queue_element_t *e, int *errp)
 	else pm->indev_name[0] = '\0';
 	if (e->info->outdev) strcpy(pm->outdev_name, e->info->outdev->name);
 	else pm->outdev_name[0] = '\0';
+	pm->hw_protocol = e->skb->protocol;
+	if (e->skb->rx_dev) {
+		pm->hw_type = e->skb->rx_dev->type;
+		if (e->skb->rx_dev->hard_header_parse)
+			pm->hw_addrlen =
+				e->skb->rx_dev->hard_header_parse(e->skb,
+				                                  pm->hw_addr);
+	}
 	if (data_len)
 		memcpy(pm->payload, e->skb->data, data_len);
 	nlh->nlmsg_len = skb->tail - old_tail;

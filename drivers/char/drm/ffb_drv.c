@@ -1,4 +1,4 @@
-/* $Id: ffb_drv.c,v 1.5 2000/07/26 01:03:57 davem Exp $
+/* $Id: ffb_drv.c,v 1.6 2000/08/10 05:26:23 davem Exp $
  * ffb_drv.c: Creator/Creator3D direct rendering driver.
  *
  * Copyright (C) 2000 David S. Miller (davem@redhat.com)
@@ -754,6 +754,7 @@ static void align_shm_mapping(struct vm_area_struct *vma, unsigned long kvirt)
 
 extern struct vm_operations_struct drm_vm_ops;
 extern struct vm_operations_struct drm_vm_shm_ops;
+extern struct vm_operations_struct drm_vm_shm_lock_ops;
 
 static int ffb_mmap(struct file *filp, struct vm_area_struct *vma)
 {
@@ -766,7 +767,6 @@ static int ffb_mmap(struct file *filp, struct vm_area_struct *vma)
 	DRM_DEBUG("start = 0x%lx, end = 0x%lx, offset = 0x%lx\n",
 		  vma->vm_start, vma->vm_end, VM_OFFSET(vma));
 
-	lock_kernel();
 	minor = MINOR(filp->f_dentry->d_inode->i_rdev);
 	ffb_priv = NULL;
 	for (i = 0; i < ffb_dev_table_size; i++) {
@@ -774,15 +774,13 @@ static int ffb_mmap(struct file *filp, struct vm_area_struct *vma)
 		if (ffb_priv->miscdev.minor == minor)
 			break;
 	}
-	if (i >= ffb_dev_table_size) {
-		unlock_kernel();
+	if (i >= ffb_dev_table_size)
 		return -EINVAL;
-	}
+
 	/* We don't support/need dma mappings, so... */
-	if (!VM_OFFSET(vma)) {
-		unlock_kernel();
+	if (!VM_OFFSET(vma))
 		return -EINVAL;
-	}
+
 	for (i = 0; i < dev->map_count; i++) {
 		unsigned long off;
 
@@ -794,19 +792,16 @@ static int ffb_mmap(struct file *filp, struct vm_area_struct *vma)
 			break;
 	}
 
-	if (i >= dev->map_count) {
-		unlock_kernel();
+	if (i >= dev->map_count)
 		return -EINVAL;
-	}
+
 	if (!map ||
-	    ((map->flags & _DRM_RESTRICTED) && !capable(CAP_SYS_ADMIN))) {
-		unlock_kernel();
+	    ((map->flags & _DRM_RESTRICTED) && !capable(CAP_SYS_ADMIN)))
 		return -EPERM;
-	}
-	if (map->size != (vma->vm_end - vma->vm_start)) {
-		unlock_kernel();
+
+	if (map->size != (vma->vm_end - vma->vm_start))
 		return -EINVAL;
-	}
+
 	/* Set read-only attribute before mappings are created
 	 * so it works for fb/reg maps too.
 	 */
@@ -829,15 +824,19 @@ static int ffb_mmap(struct file *filp, struct vm_area_struct *vma)
 		if (io_remap_page_range(vma->vm_start,
 					ffb_priv->card_phys_base + VM_OFFSET(vma),
 					vma->vm_end - vma->vm_start,
-					vma->vm_page_prot, 0)) {
-			unlock_kernel();
+					vma->vm_page_prot, 0))
 			return -EAGAIN;
-		}
+
 		vma->vm_ops = &drm_vm_ops;
 		break;
 	case _DRM_SHM:
 		align_shm_mapping(vma, (unsigned long)dev->lock.hw_lock);
-		vma->vm_ops = &drm_vm_shm_ops;
+		if (map->flags & _DRM_CONTAINS_LOCK)
+			vma->vm_ops = &drm_vm_shm_lock_ops;
+		else {
+			vma->vm_ops = &drm_vm_shm_ops;
+			vma->vm_private_data = (void *) map;
+		}
 
 		/* Don't let this area swap.  Change when
 		 * DRM_KERNEL advisory is supported.
@@ -845,10 +844,8 @@ static int ffb_mmap(struct file *filp, struct vm_area_struct *vma)
 		vma->vm_flags |= VM_LOCKED;
 		break;
 	default:
-		unlock_kernel();
 		return -EINVAL;	/* This should never happen. */
 	};
-	unlock_kernel();
 
 	vma->vm_flags |= VM_LOCKED | VM_SHM; /* Don't swap */
 

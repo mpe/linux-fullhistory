@@ -250,7 +250,7 @@ char * strsep(char **s, const char * ct)
 	
 	*s = strpbrk( sbegin, ct);
 	if (*s && **s != '\0')
-		**s++ = '\0';
+		*(*s)++ = '\0';
 	return (sbegin);
 }
 #endif

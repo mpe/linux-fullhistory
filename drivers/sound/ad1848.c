@@ -39,8 +39,6 @@
 #include <linux/stddef.h>
 #include <linux/pm.h>
 
-#include "soundmodule.h"
-
 #define DEB(x)
 #define DEB1(x)
 #include "sound_config.h"
@@ -892,29 +890,28 @@ static unsigned int ad1848_set_bits(int dev, unsigned int arg)
 
 static struct audio_driver ad1848_audio_driver =
 {
-	ad1848_open,
-	ad1848_close,
-	ad1848_output_block,
-	ad1848_start_input,
-	NULL,
-	ad1848_prepare_for_input,
-	ad1848_prepare_for_output,
-	ad1848_halt,
-	NULL,
-	NULL,
-	ad1848_halt_input,
-	ad1848_halt_output,
-	ad1848_trigger,
-	ad1848_set_speed,
-	ad1848_set_bits,
-	ad1848_set_channels
+	owner:		THIS_MODULE,
+	open:		ad1848_open,
+	close:		ad1848_close,
+	output_block:	ad1848_output_block,
+	start_input:	ad1848_start_input,
+	prepare_for_input:	ad1848_prepare_for_input,
+	prepare_for_output:	ad1848_prepare_for_output,
+	halt_io:	ad1848_halt,
+	halt_input:	ad1848_halt_input,
+	halt_output:	ad1848_halt_output,
+	trigger:	ad1848_trigger,
+	set_speed:	ad1848_set_speed,
+	set_bits:	ad1848_set_bits,
+	set_channels:	ad1848_set_channels
 };
 
 static struct mixer_operations ad1848_mixer_operations =
 {
-	"SOUNDPORT",
-	"AD1848/CS4248/CS4231",
-	ad1848_mixer_ioctl
+	owner:	THIS_MODULE,
+	id:	"SOUNDPORT",
+	name:	"AD1848/CS4248/CS4231",
+	ioctl:	ad1848_mixer_ioctl
 };
 
 static int ad1848_open(int dev, int mode)
@@ -1849,7 +1846,8 @@ int ad1848_detect(int io_base, int *ad_flags, int *osp)
 	return 1;
 }
 
-int ad1848_init(char *name, int io_base, int irq, int dma_playback, int dma_capture, int share_dma, int *osp)
+int ad1848_init (char *name, int io_base, int irq, int dma_playback,
+		int dma_capture, int share_dma, int *osp, struct module *owner)
 {
 	/*
 	 * NOTE! If irq < 0, there is another driver which has allocated the IRQ
@@ -1901,7 +1899,10 @@ int ad1848_init(char *name, int io_base, int irq, int dma_playback, int dma_capt
 	portc = (ad1848_port_info *) kmalloc(sizeof(ad1848_port_info), GFP_KERNEL);
 	if(portc==NULL)
 		return -1;
-		
+
+	if (owner)
+		ad1848_audio_driver.owner = owner;
+	
 	if ((my_dev = sound_install_audiodrv(AUDIO_DRIVER_VERSION,
 					     dev_name,
 					     &ad1848_audio_driver,
@@ -2498,7 +2499,7 @@ int probe_ms_sound(struct address_info *hw_config)
 	return ad1848_detect(hw_config->io_base + 4, NULL, hw_config->osp);
 }
 
-void attach_ms_sound(struct address_info *hw_config)
+void attach_ms_sound(struct address_info *hw_config, struct module *owner)
 {
 	static signed char interrupt_bits[12] =
 	{
@@ -2523,7 +2524,8 @@ void attach_ms_sound(struct address_info *hw_config)
 						    hw_config->irq,
 						    hw_config->dma,
 						    hw_config->dma2, 0, 
-						    hw_config->osp);
+						    hw_config->osp,
+						    owner);
 		request_region(hw_config->io_base, 4, "WSS config");
 		return;
 	}
@@ -2581,7 +2583,8 @@ void attach_ms_sound(struct address_info *hw_config)
 	hw_config->slots[0] = ad1848_init("MS Sound System", hw_config->io_base + 4,
 					  hw_config->irq,
 					  dma, dma2, 0,
-					  hw_config->osp);
+					  hw_config->osp,
+					  THIS_MODULE);
 	request_region(hw_config->io_base, 4, "WSS config");
 }
 
@@ -2829,17 +2832,15 @@ static int __init init_ad1848(void)
 
 		if(!probe_ms_sound(&cfg))
 			return -ENODEV;
-		attach_ms_sound(&cfg);
+		attach_ms_sound(&cfg, THIS_MODULE);
 		loaded = 1;
 	}
 	
-	SOUND_LOCK;
 	return 0;
 }
 
 static void __exit cleanup_ad1848(void)
 {
-	SOUND_LOCK_END;
 	if(loaded)
 		unload_ms_sound(&cfg);
 }

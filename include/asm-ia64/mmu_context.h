@@ -84,10 +84,11 @@ get_mmu_context (struct mm_struct *mm)
 	}
 }
 
-extern inline void
+extern inline int
 init_new_context (struct task_struct *p, struct mm_struct *mm)
 {
 	mm->context = 0;
+	return 0;
 }
 
 extern inline void

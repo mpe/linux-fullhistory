@@ -8,7 +8,7 @@
  *		as published by the Free Software Foundation; either version
  *		2 of the License, or (at your option) any later version.
  *
- * Version:	$Id: af_unix.c,v 1.102 2000/07/26 01:04:21 davem Exp $
+ * Version:	$Id: af_unix.c,v 1.104 2000/08/10 01:21:14 davem Exp $
  *
  * Fixes:
  *		Linus Torvalds	:	Assorted bug cures.
@@ -304,6 +304,27 @@ static void unix_write_space(struct sock *sk)
 		sk_wake_async(sk, 2, POLL_OUT);
 	}
 	read_unlock(&sk->callback_lock);
+}
+
+/* When dgram socket disconnects (or changes its peer), we clear its receive
+ * queue of packets arrived from previous peer. First, it allows to do
+ * flow control based only on wmem_alloc; second, sk connected to peer
+ * may receive messages only from that peer. */
+static void unix_dgram_disconnected(struct sock *sk, struct sock *other)
+{
+	if (skb_queue_len(&sk->receive_queue)) {
+		skb_queue_purge(&sk->receive_queue);
+		wake_up_interruptible_all(&sk->protinfo.af_unix.peer_wait);
+
+		/* If one link of bidirectional dgram pipe is disconnected,
+		 * we signal error. Messages are lost. Do not make this,
+		 * when peer was not connected to us.
+		 */
+		if (!other->dead && unix_peer(other) == sk) {
+			other->err = ECONNRESET;
+			other->error_report(other);
+		}
+	}
 }
 
 static void unix_sock_destructor(struct sock *sk)
@@ -788,6 +809,8 @@ static int unix_dgram_connect(struct socket *sock, struct sockaddr *addr,
 		unix_peer(sk)=other;
 		unix_state_wunlock(sk);
 
+		if (other != old_peer)
+			unix_dgram_disconnected(sk, old_peer);
 		sock_put(old_peer);
 	} else {
 		unix_peer(sk)=other;
@@ -1203,6 +1226,7 @@ restart:
 			unix_peer(sk)=NULL;
 			unix_state_wunlock(sk);
 
+			unix_dgram_disconnected(sk, other);
 			sock_put(other);
 			err = -ECONNREFUSED;
 		} else {
@@ -1219,7 +1243,8 @@ restart:
 	if (other->shutdown&RCV_SHUTDOWN)
 		goto out_unlock;
 
-	if (skb_queue_len(&other->receive_queue) > other->max_ack_backlog) {
+	if (unix_peer(other) != sk &&
+	    skb_queue_len(&other->receive_queue) > other->max_ack_backlog) {
 		if (!timeo) {
 			err = -EAGAIN;
 			goto out_unlock;
@@ -1640,7 +1665,6 @@ static int unix_shutdown(struct socket *sock, int mode)
 	return 0;
 }
 
-		
 static int unix_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 {
 	struct sock *sk = sock->sk;
@@ -1736,7 +1760,7 @@ static int unix_read_proc(char *buffer, char **start, off_t offset,
 			s->socket ?
 			(s->state == TCP_ESTABLISHED ? SS_CONNECTED : SS_UNCONNECTED) :
 			(s->state == TCP_ESTABLISHED ? SS_CONNECTING : SS_DISCONNECTING),
-			s->socket ? s->socket->inode->i_ino : 0);
+			sock_i_ino(s));
 
 		if (s->protinfo.af_unix.addr)
 		{

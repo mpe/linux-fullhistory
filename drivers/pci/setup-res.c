@@ -60,7 +60,8 @@ static int pci_assign_bus_resource(const struct pci_bus *bus,
 	struct resource *res,
 	unsigned long size,
 	unsigned long min,
-	unsigned int type_mask)
+	unsigned int type_mask,
+	int resno)
 {
 	int i;
 
@@ -83,7 +84,7 @@ static int pci_assign_bus_resource(const struct pci_bus *bus,
 			continue;
 
 		/* Update PCI config space.  */
-		pcibios_update_resource(dev, r, res, i);
+		pcibios_update_resource(dev, r, res, resno);
 		return 0;
 	}
 	return -EBUSY;
@@ -100,14 +101,14 @@ pci_assign_resource(struct pci_dev *dev, int i)
 	min = (res->flags & IORESOURCE_IO) ? PCIBIOS_MIN_IO : PCIBIOS_MIN_MEM;
 
 	/* First, try exact prefetching match.. */
-	if (pci_assign_bus_resource(bus, dev, res, size, min, IORESOURCE_PREFETCH) < 0) {
+	if (pci_assign_bus_resource(bus, dev, res, size, min, IORESOURCE_PREFETCH, i) < 0) {
 		/*
 		 * That failed.
 		 *
 		 * But a prefetching area can handle a non-prefetching
 		 * window (it will just not perform as well).
 		 */
-		if (!(res->flags & IORESOURCE_PREFETCH) || pci_assign_bus_resource(bus, dev, res, size, min, 0) < 0) {
+		if (!(res->flags & IORESOURCE_PREFETCH) || pci_assign_bus_resource(bus, dev, res, size, min, 0, i) < 0) {
 			printk(KERN_ERR "PCI: Failed to allocate resource %d for %s\n", i, dev->name);
 			return -EBUSY;
 		}

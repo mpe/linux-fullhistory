@@ -12,6 +12,8 @@
 #ifndef __SH_MACHVEC_INIT_H
 #define __SH_MACHVEC_INIT_H
 
+#include <linux/config.h>
+
 /*
  * In a GENERIC kernel, we have lots of these vectors floating about,
  * all but one of which we want to go away.  In a non-GENERIC kernel,

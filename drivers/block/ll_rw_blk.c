@@ -182,8 +182,8 @@ static int __blk_cleanup_queue(struct list_head *head)
  *     Currently, its primary task it to free all the &struct request structures
  *     that were allocated to the queue.
  * Caveat:
- *     Hopefully the low level driver will have finished any outstanding requests
- *     first...
+ *     Hopefully the low level driver will have finished any outstanding
+ *     requests first...
  **/
 void blk_cleanup_queue(request_queue_t * q)
 {
@@ -204,21 +204,23 @@ void blk_cleanup_queue(request_queue_t * q)
  * @active:  A flag indication where the head of the queue is active.
  *
  * Description:
- *    The driver for a block device may choose to leave the currently active request
- *    on the request queue, removing it only when it has completed.  The queue
- *    handling routines assume this by default and will not involved the head of the
- *    request queue in any merging or reordering of requests.
+ *    The driver for a block device may choose to leave the currently active
+ *    request on the request queue, removing it only when it has completed.
+ *    The queue handling routines assume this by default for safety reasons
+ *    and will not involve the head of the request queue in any merging or
+ *    reordering of requests when the queue is unplugged (and thus may be
+ *    working on this particular request).
  *
- *    If a driver removes requests from the queue before processing them, then it may
- *    indicate that it does so, there by allowing the head of the queue to be involved
- *    in merging and reordering.  This is done be calling blk_queue_headactive() with an
- *    @active flag of %1.
+ *    If a driver removes requests from the queue before processing them, then
+ *    it may indicate that it does so, there by allowing the head of the queue
+ *    to be involved in merging and reordering.  This is done be calling
+ *    blk_queue_headactive() with an @active flag of %0.
  *
- *    If a driver processes several requests at once, it must remove them (or at least all
- *    but one of them) from the request queue.
+ *    If a driver processes several requests at once, it must remove them (or
+ *    at least all but one of them) from the request queue.
  *
- *    When a queue is plugged (see blk_queue_pluggable()) the head will be assumed to
- *    be inactive.
+ *    When a queue is plugged (see blk_queue_pluggable()) the head will be
+ *    assumed to be inactive.
  **/
  
 void blk_queue_headactive(request_queue_t * q, int active)
@@ -236,9 +238,9 @@ void blk_queue_headactive(request_queue_t * q, int active)
  *   is empty.  This allows a number of requests to be added before any are
  *   processed, thus providing an opportunity for these requests to be merged
  *   or re-ordered.
- *   The default plugging function (generic_plug_device()) sets the "plugged" flag
- *   for the queue and adds a task the the $tq_disk task queue to unplug the
- *   queue and call the request function at a later time.
+ *   The default plugging function (generic_plug_device()) sets the "plugged"
+ *   flag for the queue and adds a task to the $tq_disk task queue to unplug
+ *   the queue and call the request function at a later time.
  *
  *   A device driver may provide an alternate plugging function by passing it to
  *   blk_queue_pluggable().   This function should set the "plugged" flag if it
@@ -254,20 +256,20 @@ void blk_queue_pluggable (request_queue_t * q, plug_device_fn *plug)
 
 
 /**
- * blk_queue_make_request - define an alternate make_request function for a device
+ * blk_queue_make_request - define an alternate make_request function for a
+ * device
  * @q:  the request queue for the device to be affected
  * @mfn: the alternate make_request function
  *
  * Description:
- *    The normal way for &struct buffer_heads to be passes to a device driver it to
- *    collect into requests on a request queue, and allow the device driver to select
- *    requests off that queue when it is ready.  This works well for many block devices.
- *    However some block devices (typically virtual devices such as md or lvm) do not benefit
- *    from the processes on the request queue, and are served best by having the requests passed
- *    directly to them.  This can be achived by providing a function to blk_queue_make_request().
- *    If this is done, then the rest of the &request_queue_t structure is unused (unless the alternate
- *    make_request function explicitly uses it).  In particular, there is no need to call
- *    blk_init_queue() if blk_queue_make_request() has been called.
+ *    The normal way for &struct buffer_heads to be passed to a device driver
+ *    it to collect into requests on a request queue, and allow the device
+ *    driver to select requests off that queue when it is ready.  This works
+ *    well for many block devices. However some block devices (typically
+ *    virtual devices such as md or lvm) do not benefit from the processes on
+ *    the request queue, and are served best by having the requests passed
+ *    directly to them.  This can be achieved by providing a function to
+ *    blk_queue_make_request().
  **/
 
 void blk_queue_make_request(request_queue_t * q, make_request_fn * mfn)
@@ -390,32 +392,30 @@ static void blk_init_free_list(request_queue_t *q)
  *        placed on the queue.
  *
  * Description:
- *    If a block device wishes to use the stand request handling procedures,
- *    which sorts requests and coalesces adjactent requests, then it must
+ *    If a block device wishes to use the standard request handling procedures,
+ *    which sorts requests and coalesces adjacent requests, then it must
  *    call blk_init_queue().  The function @rfn will be called when there
  *    are requests on the queue that need to be processed.  If the device
- *    supports plugging, then @rfn may not be called immediately that requests
+ *    supports plugging, then @rfn may not be called immediately when requests
  *    are available on the queue, but may be called at some time later instead.
+ *    Plugged queues are generally unplugged when a buffer belonging to one
+ *    of the requests on the queue is needed, or due to memory pressure.
  *
- *    @rfn is not required, or even expected, to remove all requests off the queue, but
- *    only as many as it can handle at a time.  If it does leave requests on the queue,
- *    it is responsible for arranging that the requests get dealt with eventually.
+ *    @rfn is not required, or even expected, to remove all requests off the
+ *    queue, but only as many as it can handle at a time.  If it does leave
+ *    requests on the queue, it is responsible for arranging that the requests
+ *    get dealt with eventually.
  *
- *    A global spin lock $io_spin_lock must held while manipulating the requests
- *    on the request queue.
+ *    A global spin lock $io_request_lock must be held while manipulating the
+ *    requests on the request queue.
  *
- *    The request on the head of the queue is by default assumed to be potentially active,
- *    and it is not considered for re-ordering or merging.  This behaviour can
- *    be changed with blk_queue_headactive().
+ *    The request on the head of the queue is by default assumed to be
+ *    potentially active, and it is not considered for re-ordering or merging
+ *    whenever the given queue is unplugged. This behaviour can be changed with
+ *    blk_queue_headactive().
  *
  * Note:
- *    blk_init_queue() does not need to be called if
- *    blk_queue_make_request() has been called to register an alternate
- *    request handler.  Ofcourse, it may be called if the handler wants
- *    to still use the fields on &request_queue_t, but in a non-standard
- *    way.
- *
- *    blk_init_queue() should be paired with a blk_cleanup-queue() call
+ *    blk_init_queue() must be paired with a blk_cleanup-queue() call
  *    when the block device is deactivated (such as at module unload).
  **/
 static int __make_request(request_queue_t * q, int rw,  struct buffer_head * bh);
@@ -1022,6 +1022,9 @@ int __init blk_dev_init(void)
 	request_cachep = kmem_cache_create("blkdev_requests",
 					   sizeof(struct request),
 					   0, SLAB_HWCACHE_ALIGN, NULL, NULL);
+
+	if (!request_cachep)
+		panic("Can't create request pool slab cache\n");
 
 	for (dev = blk_dev + MAX_BLKDEV; dev-- != blk_dev;)
 		dev->queue = NULL;

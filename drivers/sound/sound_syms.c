@@ -52,11 +52,5 @@ EXPORT_SYMBOL(conf_printf2);
 extern int softoss_dev;
 EXPORT_SYMBOL(softoss_dev);
 
-/* Locking */
-extern struct notifier_block *sound_locker;
-extern void sound_notifier_chain_register(struct notifier_block *);
-EXPORT_SYMBOL(sound_locker);
-EXPORT_SYMBOL(sound_notifier_chain_register);
-
 MODULE_DESCRIPTION("OSS Sound subsystem");
 MODULE_AUTHOR("Hannu Savolainen, et al.");

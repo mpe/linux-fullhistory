@@ -27,7 +27,6 @@
 #include <asm/io.h>
 
 #include "sound_config.h"
-#include "soundmodule.h"
 
 /*
  *	Define our PCI vendor ID here
@@ -137,7 +136,13 @@ static int mycard_install(struct pci_dev *pcidev)
 	 */
 	 
 	mss_data[cards].slots[3] = ad1848_init("MyCard MSS 16bit", 
-			mssbase, mss_data[cards].irq);
+			mssbase,
+			mss_data[cards].irq,
+			mss_data[cards].dma,
+			mss_data[cards].dma,
+			0,
+			0,
+			THIS_MODULE);
 
 	cards++;	
 	return 1;
@@ -187,17 +192,13 @@ int init_module(void)
 		printk(KERN_ERR "No "CARD_NAME" cards found.\n");
 		return -ENODEV;
 	}
-	/*
-	 *	Binds us to the sound subsystem	
-	 */
-	SOUND_LOCK;
+
 	return 0;
 }
 
 /*
  *	This is called when it is removed. It will only be removed 
- *	when its use count is 0. For sound the SOUND_LOCK/SOUND_UNLOCK
- *	macros hide the entire work for this.
+ *	when its use count is 0.
  */
  
 void cleanup_module(void)
@@ -218,9 +219,5 @@ void cleanup_module(void)
 		 */
 		sound_unload_audiodevice(mss_data[i].slots[3]);
 	}
-	/*
-	 *	Final clean up with the sound layer
-	 */
-	SOUND_LOCK_END;
 }
 

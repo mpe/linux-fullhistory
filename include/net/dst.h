@@ -44,6 +44,7 @@ struct dst_entry
 	unsigned		ssthresh;
 	unsigned		cwnd;
 	unsigned		advmss;
+	unsigned		reordering;
 
 	unsigned long		rate_last;	/* rate limiting for ICMP */
 	unsigned long		rate_tokens;

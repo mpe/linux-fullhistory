@@ -28,7 +28,6 @@
 #include <linux/module.h>
 #include <linux/init.h>
 #include "sound_config.h"
-#include "soundmodule.h"
 
 /*
  * Sanity checks
@@ -1357,13 +1356,11 @@ static int __init do_init_aedsp16(void) {
 		 */
 		return -EINVAL;
 	}
-	SOUND_LOCK;
 	return 0;
 }
 
 static void __exit cleanup_aedsp16(void) {
 	uninit_aedsp16();
-	SOUND_LOCK_END;
 }
 
 module_init(do_init_aedsp16);

@@ -660,8 +660,8 @@ unsigned int ip_conntrack_in(unsigned int hooknum,
 	} else if (((*pskb)->nh.iph->daddr & htonl(0x000000FF)) 
 		   == htonl(0x000000FF)) {
 		printk("Should bcast: %u.%u.%u.%u->%u.%u.%u.%u (sk=%p, ptype=%u)\n",
-		       IP_PARTS((*pskb)->nh.iph->saddr),
-		       IP_PARTS((*pskb)->nh.iph->daddr),
+		       NIPQUAD((*pskb)->nh.iph->saddr),
+		       NIPQUAD((*pskb)->nh.iph->daddr),
 		       (*pskb)->sk, (*pskb)->pkt_type);
 	}
 #endif
@@ -998,7 +998,7 @@ getorigdst(struct sock *sk, int optval, void *user, int *len)
 			.tuple.dst.ip;
 
 		DEBUGP("SO_ORIGINAL_DST: %u.%u.%u.%u %u\n",
-		       IP_PARTS(sin.sin_addr.s_addr), ntohs(sin.sin_port));
+		       NIPQUAD(sin.sin_addr.s_addr), ntohs(sin.sin_port));
 		ip_conntrack_put(h->ctrack);
 		if (copy_to_user(user, &sin, sizeof(sin)) != 0)
 			return -EFAULT;
@@ -1006,8 +1006,8 @@ getorigdst(struct sock *sk, int optval, void *user, int *len)
 			return 0;
 	}
 	DEBUGP("SO_ORIGINAL_DST: Can't find %u.%u.%u.%u/%u-%u.%u.%u.%u/%u.\n",
-	       IP_PARTS(tuple.src.ip), ntohs(tuple.src.u.tcp.port),
-	       IP_PARTS(tuple.dst.ip), ntohs(tuple.dst.u.tcp.port));
+	       NIPQUAD(tuple.src.ip), ntohs(tuple.src.u.tcp.port),
+	       NIPQUAD(tuple.dst.ip), ntohs(tuple.dst.u.tcp.port));
 	return -ENOENT;
 }
 

@@ -5,7 +5,7 @@
  *
  *		The IP to API glue.
  *		
- * Version:	$Id: ip_sockglue.c,v 1.50 2000/07/26 01:04:17 davem Exp $
+ * Version:	$Id: ip_sockglue.c,v 1.51 2000/08/09 11:59:04 davem Exp $
  *
  * Authors:	see ip.c
  *
@@ -724,16 +724,14 @@ int ip_getsockopt(struct sock *sk, int level, int optname, char *optval, int *op
 			break;
 		case IP_MULTICAST_IF:
 		{
-			struct ip_mreqn mreq;
-			len = min(len,sizeof(struct ip_mreqn));
-			mreq.imr_ifindex = sk->protinfo.af_inet.mc_index;
-			mreq.imr_address.s_addr = sk->protinfo.af_inet.mc_addr;
-			mreq.imr_multiaddr.s_addr = 0;
+			struct in_addr addr;
+			len = min(len,sizeof(struct in_addr));
+			addr.s_addr = sk->protinfo.af_inet.mc_addr;
 			release_sock(sk);
 
   			if(put_user(len, optlen))
   				return -EFAULT;
-			if(copy_to_user((void *)optval, &mreq, len))
+			if(copy_to_user((void *)optval, &addr, len))
 				return -EFAULT;
 			return 0;
 		}

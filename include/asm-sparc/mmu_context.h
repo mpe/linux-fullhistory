@@ -13,7 +13,7 @@ static inline void enter_lazy_tlb(struct mm_struct *mm, struct task_struct *tsk,
  * Initialize a new mmu context.  This is invoked when a new
  * address space instance (unique or shared) is instantiated.
  */
-#define init_new_context(tsk, mm) ((mm)->context = NO_CONTEXT)
+#define init_new_context(tsk, mm) (((mm)->context = NO_CONTEXT), 0)
 
 /*
  * Destroy a dead context.  This occurs when mmput drops the

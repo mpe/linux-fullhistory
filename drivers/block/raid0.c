@@ -103,7 +103,7 @@ static int create_strip_zones (mddev_t *mddev)
 
 		zone->nb_dev = c;
 		zone->size = (smallest->size - current_offset) * c;
-		printk(" zone->nb_dev: %d, size: %d\n",zone->nb_dev,zone->size);
+		printk(" zone->nb_dev: %d, size: %ld\n",zone->nb_dev,zone->size);
 
 		if (!conf->smallest || (zone->size < conf->smallest->size))
 			conf->smallest = zone;
@@ -112,7 +112,7 @@ static int create_strip_zones (mddev_t *mddev)
 		curr_zone_offset += zone->size;
 
 		current_offset = smallest->size;
-		printk("current zone offset: %d\n", current_offset);
+		printk("current zone offset: %ld\n", current_offset);
 	}
 	printk("done.\n");
 	return 0;
@@ -139,7 +139,7 @@ static int raid0_run (mddev_t *mddev)
 		goto out_free_conf;
 
 	printk("raid0 : md_size is %d blocks.\n", md_size[mdidx(mddev)]);
-	printk("raid0 : conf->smallest->size is %d blocks.\n", conf->smallest->size);
+	printk("raid0 : conf->smallest->size is %ld blocks.\n", conf->smallest->size);
 	nb_zone = md_size[mdidx(mddev)]/conf->smallest->size +
 			(md_size[mdidx(mddev)] % conf->smallest->size ? 1 : 0);
 	printk("raid0 : nb_zone is %ld.\n", nb_zone);

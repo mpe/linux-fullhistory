@@ -54,7 +54,6 @@
 #include <linux/isapnp.h>
 
 #include "sound_config.h"
-#include "soundmodule.h"
 
 #include "sb_mixer.h"
 #include "sb.h"
@@ -88,7 +87,7 @@ static int __initdata sm_games 	= 0;	/* Logitech soundman games? */
 
 static void __init attach_sb_card(struct address_info *hw_config)
 {
-	if(!sb_dsp_init(hw_config))
+	if(!sb_dsp_init(hw_config, THIS_MODULE))
 		hw_config->slots[0] = -1;
 }
 
@@ -684,10 +683,8 @@ static int __init init_sb(void)
 		if (probe_sbmpu(&cfg_mpu[card]))
 			sbmpu[card] = 1;
 		if (sbmpu[card])
-			attach_sbmpu(&cfg_mpu[card]);
+			attach_sbmpu(&cfg_mpu[card], THIS_MODULE);
 	}
-
-	SOUND_LOCK;
 
 	if(isapnp)
 		printk(KERN_NOTICE "sb: %d Soundblaster PnP card(s) found.\n", sb_cards_num);
@@ -718,7 +715,6 @@ static void __exit cleanup_sb(void)
 			opl_dev[i]->deactivate(opl_dev[i]);
 #endif
 	}
-	SOUND_LOCK_END;	
 }
 
 module_init(init_sb);

@@ -10,7 +10,7 @@
  * possibly do the LDT unload here?
  */
 #define destroy_context(mm)		do { } while(0)
-#define init_new_context(tsk,mm)	do { } while (0)
+#define init_new_context(tsk,mm)	0
 
 #ifdef CONFIG_SMP
 

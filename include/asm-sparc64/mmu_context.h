@@ -31,7 +31,7 @@ extern void get_new_mmu_context(struct mm_struct *mm);
  * address space instance (unique or shared) is instantiated.
  * This just needs to set mm->context to an invalid context.
  */
-#define init_new_context(__tsk, __mm)	((__mm)->context = 0UL)
+#define init_new_context(__tsk, __mm)	(((__mm)->context = 0UL), 0)
 
 /* Destroy a dead context.  This occurs when mmput drops the
  * mm_users count to zero, the mmaps have been released, and

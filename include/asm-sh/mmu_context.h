@@ -67,10 +67,11 @@ get_mmu_context(struct mm_struct *mm)
  * Initialize the context related info for a new mm_struct
  * instance.
  */
-extern __inline__ void init_new_context(struct task_struct *tsk,
+extern __inline__ int init_new_context(struct task_struct *tsk,
 					struct mm_struct *mm)
 {
 	mm->context = NO_CONTEXT;
+	return 0;
 }
 
 /*

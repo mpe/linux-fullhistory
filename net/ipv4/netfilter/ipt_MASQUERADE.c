@@ -92,7 +92,7 @@ masquerade_target(struct sk_buff **pskb,
 	}
 
 	newsrc = rt->rt_src;
-	DEBUGP("newsrc = %u.%u.%u.%u\n", IP_PARTS(newsrc));
+	DEBUGP("newsrc = %u.%u.%u.%u\n", NIPQUAD(newsrc));
 	ip_rt_put(rt);
 
 	WRITE_LOCK(&masq_lock);

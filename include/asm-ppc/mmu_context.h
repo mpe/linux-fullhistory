@@ -77,7 +77,7 @@ do { 								\
 /*
  * Set up the context for a new address space.
  */
-#define init_new_context(tsk,mm)	((mm)->context = NO_CONTEXT)
+#define init_new_context(tsk,mm)	(((mm)->context = NO_CONTEXT), 0)
 
 /*
  * We're finished using the context for an address space.

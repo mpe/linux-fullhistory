@@ -5,7 +5,7 @@
  *
  *		The User Datagram Protocol (UDP).
  *
- * Version:	$Id: udp.c,v 1.84 2000/07/08 00:20:43 davem Exp $
+ * Version:	$Id: udp.c,v 1.85 2000/08/09 11:59:04 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -997,8 +997,8 @@ static void get_udp_sock(struct sock *sp, char *tmpbuf, int i)
 		i, src, srcp, dest, destp, sp->state, 
 		atomic_read(&sp->wmem_alloc), atomic_read(&sp->rmem_alloc),
 		timer_active, timer_expires-jiffies, 0,
-		sp->socket->inode->i_uid, 0,
-		sp->socket ? sp->socket->inode->i_ino : 0,
+		sock_i_uid(sp), 0,
+		sock_i_ino(sp),
 		atomic_read(&sp->refcnt), sp);
 }
 

@@ -5,7 +5,7 @@
  *
  *		PACKET - implements raw packet sockets.
  *
- * Version:	$Id: af_packet.c,v 1.39 2000/08/09 08:04:45 davem Exp $
+ * Version:	$Id: af_packet.c,v 1.41 2000/08/10 01:21:14 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -75,11 +75,6 @@
 extern int dlci_ioctl(unsigned int, void*);
 #endif
 
-/*
-   Old SOCK_PACKET. Do exist programs, which use it?
-   (not counting tcpdump) - lots of them yes - AC. 
-   
- */
 #define CONFIG_SOCK_PACKET	1
 
 /*
@@ -89,22 +84,10 @@ extern int dlci_ioctl(unsigned int, void*);
    It is more expensive, but I believe,
    it is really correct solution: reentereble, safe and fault tolerant.
 
-   Differences:
-   - Changing IFF_ALLMULTI from user level is disabled.
-     It could only confused multicast routing daemons, not more.
-   - IFF_PROMISC is faked by keeping reference count and
-     global flag, so that real IFF_PROMISC == (gflag|(count != 0))
-     I'd remove it too, but it would require recompilation tcpdump
-     and another applications, using promiscuous mode.
-   - SIOC{ADD/DEL}MULTI are moved to deprecated state,
-     they work, but complain. I do know who uses them.
-     
- 
-*************FIXME***************
-  Alexey : This doesnt cook Im afraid. We need the low level SIOCADD/DELMULTI
-  and also IFF_ALLMULTI for DECNET, Appletalk and other stuff as well as
-  BSD compatibility issues.
-  
+   IFF_PROMISC/IFF_ALLMULTI/SIOC{ADD/DEL}MULTI are faked by keeping
+   reference count and global flag, so that real status is
+   (gflag|(count != 0)), so that we can use obsolete faulty interface
+   not harming clever users.
  */
 #define CONFIG_PACKET_MULTICAST	1
 
@@ -206,6 +189,7 @@ struct packet_opt
 	unsigned int		frame_size;
 	unsigned int		iovmax;
 	unsigned int		head;
+	int			copy_thresh;
 #endif
 };
 
@@ -537,7 +521,9 @@ static int tpacket_rcv(struct sk_buff *skb, struct net_device *dev,  struct pack
 	struct tpacket_hdr *h;
 	u8 * skb_head = skb->data;
 	unsigned snaplen;
-	unsigned long losing;
+	unsigned long status = TP_STATUS_LOSING|TP_STATUS_USER;
+	unsigned short macoff, netoff;
+	struct sk_buff *copy_skb = NULL;
 
 	if (skb->pkt_type == PACKET_LOOPBACK)
 		goto drop;
@@ -572,6 +558,32 @@ static int tpacket_rcv(struct sk_buff *skb, struct net_device *dev,  struct pack
 			snaplen = res;
 	}
 #endif
+
+	if (sk->type == SOCK_DGRAM) {
+		macoff = netoff = TPACKET_ALIGN(TPACKET_HDRLEN) + 16;
+	} else {
+		unsigned maclen = skb->nh.raw - skb->data;
+		netoff = TPACKET_ALIGN(TPACKET_HDRLEN + (maclen < 16 ? 16 : maclen));
+		macoff = netoff - maclen;
+	}
+
+	if (macoff + snaplen > po->frame_size) {
+		if (po->copy_thresh &&
+		    atomic_read(&sk->rmem_alloc) + skb->truesize < (unsigned)sk->rcvbuf) {
+			if (skb_shared(skb)) {
+				copy_skb = skb_clone(skb, GFP_ATOMIC);
+			} else {
+				copy_skb = skb_get(skb);
+				skb_head = skb->data;
+			}
+			if (copy_skb)
+				skb_set_owner_r(copy_skb, sk);
+		}
+		snaplen = po->frame_size - macoff;
+		if ((int)snaplen < 0)
+			snaplen = 0;
+	}
+
 	spin_lock(&sk->receive_queue.lock);
 	h = po->iovec[po->head];
 
@@ -579,31 +591,22 @@ static int tpacket_rcv(struct sk_buff *skb, struct net_device *dev,  struct pack
 		goto ring_is_full;
 	po->head = po->head != po->iovmax ? po->head+1 : 0;
 	po->stats.tp_packets++;
-	losing = TP_STATUS_LOSING;
+	if (copy_skb) {
+		status |= TP_STATUS_COPY;
+		__skb_queue_tail(&sk->receive_queue, copy_skb);
+	}
 	if (!po->stats.tp_drops)
-		losing = 0;
+		status &= ~TP_STATUS_LOSING;
 	spin_unlock(&sk->receive_queue.lock);
 
-	if (sk->type == SOCK_DGRAM) {
-		h->tp_mac = h->tp_net = TPACKET_ALIGN(TPACKET_HDRLEN) + 16;
-	} else {
-		unsigned maclen = skb->nh.raw - skb->data;
-		h->tp_net = TPACKET_ALIGN(TPACKET_HDRLEN + (maclen < 16 ? 16 : maclen));
-		h->tp_mac = h->tp_net - maclen;
-	}
+	memcpy((u8*)h + macoff, skb->data, snaplen);
 
-	if (h->tp_mac + snaplen > po->frame_size) {
-		snaplen = po->frame_size - h->tp_mac;
-		if ((int)snaplen < 0)
-			snaplen = 0;
-	}
-
-	memcpy((u8*)h + h->tp_mac, skb->data, snaplen);
-
-	h->tp_sec = skb->stamp.tv_sec;
-	h->tp_usec = skb->stamp.tv_usec;
 	h->tp_len = skb->len;
 	h->tp_snaplen = snaplen;
+	h->tp_mac = macoff;
+	h->tp_net = netoff;
+	h->tp_sec = skb->stamp.tv_sec;
+	h->tp_usec = skb->stamp.tv_usec;
 
 	sll = (struct sockaddr_ll*)((u8*)h + TPACKET_ALIGN(sizeof(*h)));
 	sll->sll_halen = 0;
@@ -615,7 +618,7 @@ static int tpacket_rcv(struct sk_buff *skb, struct net_device *dev,  struct pack
 	sll->sll_pkttype = skb->pkt_type;
 	sll->sll_ifindex = dev->ifindex;
 
-	h->tp_status = losing|TP_STATUS_USER;
+	h->tp_status = status;
 	mb();
 
 	sk->data_ready(sk, 0);
@@ -634,6 +637,8 @@ ring_is_full:
 	spin_unlock(&sk->receive_queue.lock);
 
 	sk->data_ready(sk, 0);
+	if (copy_skb)
+		kfree_skb(copy_skb);
 	goto drop_n_restore;
 }
 
@@ -1286,6 +1291,18 @@ packet_setsockopt(struct socket *sock, int level, int optname, char *optval, int
 			return -EFAULT;
 		return packet_set_ring(sk, &req, 0);
 	}
+	case PACKET_COPY_THRESH:
+	{
+		int val;
+
+		if (optlen!=sizeof(val))
+			return -EINVAL;
+		if (copy_from_user(&val,optval,sizeof(val)))
+			return -EFAULT;
+
+		sk->protinfo.af_packet->copy_thresh = val;
+		return 0;
+	}
 #endif
 	default:
 		return -ENOPROTOOPT;
@@ -1814,8 +1831,8 @@ static int packet_read_proc(char *buffer, char **start, off_t offset,
 			     s->protinfo.af_packet->ifindex,
 			     s->protinfo.af_packet->running,
 			     atomic_read(&s->rmem_alloc),
-			     s->socket->inode->i_uid,
-			     s->socket->inode->i_ino
+			     sock_i_uid(s),
+			     sock_i_ino(s)
 			     );
 
 		buffer[len++]='\n';

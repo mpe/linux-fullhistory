@@ -7,7 +7,7 @@
  *
  *	Based on linux/ipv4/udp.c
  *
- *	$Id: udp.c,v 1.55 2000/07/08 00:20:43 davem Exp $
+ *	$Id: udp.c,v 1.56 2000/08/09 11:59:04 davem Exp $
  *
  *	Fixes:
  *	Hideaki YOSHIFUJI	:	sin6_scope_id support
@@ -109,7 +109,10 @@ gotit:
 			    (!sk2->rcv_saddr ||
 			     addr_type == IPV6_ADDR_ANY ||
 			     !ipv6_addr_cmp(&sk->net_pinfo.af_inet6.rcv_saddr,
-					    &sk2->net_pinfo.af_inet6.rcv_saddr)) &&
+					    &sk2->net_pinfo.af_inet6.rcv_saddr) ||
+			     (addr_type == IPV6_ADDR_MAPPED &&
+			      sk2->family == AF_INET &&
+			      sk->rcv_saddr == sk2->rcv_saddr)) &&
 			    (!sk2->reuse || !sk->reuse))
 				goto fail;
 		}
@@ -270,7 +273,6 @@ ipv4_connected:
 			ipv6_addr_set(&np->saddr, 0, 0, 
 				      __constant_htonl(0x0000ffff),
 				      sk->saddr);
-
 		}
 
 		if(ipv6_addr_any(&np->rcv_saddr)) {
@@ -343,7 +345,7 @@ ipv4_connected:
 
 		if(ipv6_addr_any(&np->rcv_saddr)) {
 			ipv6_addr_copy(&np->rcv_saddr, &saddr);
-			sk->rcv_saddr = 0xffffffff;
+			sk->rcv_saddr = LOOPBACK4_IPV6;
 		}
 		sk->state = TCP_ESTABLISHED;
 	}
@@ -923,8 +925,8 @@ static void get_udp6_sock(struct sock *sp, char *tmpbuf, int i)
 		sp->state, 
 		atomic_read(&sp->wmem_alloc), atomic_read(&sp->rmem_alloc),
 		sock_timer_active, timer_expires-jiffies, 0,
-		sp->socket->inode->i_uid, 0,
-		sp->socket ? sp->socket->inode->i_ino : 0,
+		sock_i_uid(sp), 0,
+		sock_i_ino(sp),
 		atomic_read(&sp->refcnt), sp);
 }
 

@@ -15,7 +15,7 @@
 #include <asm/proc-fns.h>
 
 #define destroy_context(mm)		do { } while(0)
-#define init_new_context(tsk,mm)	do { } while(0)
+#define init_new_context(tsk,mm)	0
 
 static inline void enter_lazy_tlb(struct mm_struct *mm, struct task_struct *tsk, unsigned cpu)
 {

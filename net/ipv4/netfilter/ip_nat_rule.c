@@ -226,7 +226,7 @@ alloc_null_binding(struct ip_conntrack *conntrack,
 		= { 1, { { IP_NAT_RANGE_MAP_IPS, ip, ip, { 0 }, { 0 } } } };
 
 	DEBUGP("Allocating NULL binding for %p (%u.%u.%u.%u)\n", conntrack,
-	       IP_PARTS(ip));
+	       NIPQUAD(ip));
 	return ip_nat_setup_info(conntrack, &mr, hooknum);
 }
 

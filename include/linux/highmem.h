@@ -29,6 +29,9 @@ static __inline__ unsigned long kmap(struct page * page) {
 
 #define kunmap(page) do { } while (0)
 
+#define kmap_atomic(page,idx)		kmap(page)
+#define kunmap_atomic(page,idx)		kunmap(page)
+
 #endif /* CONFIG_HIGHMEM */
 
 /* when CONFIG_HIGHMEM is not set these will be plain clear/copy_page */

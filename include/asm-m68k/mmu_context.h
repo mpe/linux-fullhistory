@@ -12,10 +12,11 @@
 static inline void enter_lazy_tlb(struct mm_struct *mm, struct task_struct *tsk, unsigned cpu)
 {
 }
-extern inline void
+extern inline int
 init_new_context(struct task_struct *tsk, struct mm_struct *mm)
 {
 	mm->context = virt_to_phys(mm->pgd);
+	return 0;
 }
 
 #define destroy_context(mm)		do { } while(0)
@@ -108,9 +109,10 @@ extern unsigned char ctx_next_to_die;
 extern unsigned char ctx_live[SUN3_CONTEXTS_NUM];
 
 /* set the context for a new task to unmapped */
-static inline void init_new_context(struct task_struct *tsk, struct mm_struct *mm)
+static inline int init_new_context(struct task_struct *tsk, struct mm_struct *mm)
 {
 	mm->context = SUN3_INVALID_CONTEXT;
+	return 0;
 }
 
 /* find the context given to this process, and if it hasn't already

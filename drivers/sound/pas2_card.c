@@ -8,7 +8,6 @@
 #include <linux/init.h>
 #include <linux/module.h>
 #include "sound_config.h"
-#include "soundmodule.h"
 
 #include "pas2.h"
 #include "sb.h"
@@ -426,14 +425,13 @@ static int __init init_pas2(void)
 	if (!probe_pas(&cfg))
 		return -ENODEV;
 	attach_pas_card(&cfg);
-	SOUND_LOCK;
+
 	return 0;
 }
 
 static void __exit cleanup_pas2(void)
 {
 	unload_pas(&cfg);
-	SOUND_LOCK_END;
 }
 
 module_init(init_pas2);

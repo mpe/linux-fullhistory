@@ -20,7 +20,6 @@
 #include <linux/pm.h>
 #include <linux/delay.h>
 #include "sound_config.h"
-#include "soundmodule.h"
 #include "nm256.h"
 #include "nm256_coeff.h"
 
@@ -926,9 +925,10 @@ nm256_default_mixer_ioctl (int dev, unsigned int cmd, caddr_t arg)
 }
 
 static struct mixer_operations nm256_mixer_operations = {
-    "NeoMagic",
-    "NM256AC97Mixer",
-    nm256_default_mixer_ioctl
+    owner:	THIS_MODULE,
+    id:		"NeoMagic",
+    name:	"NM256AC97Mixer",
+    ioctl:	nm256_default_mixer_ioctl
 };
 
 /*
@@ -1621,22 +1621,16 @@ nm256_audio_local_qlen(int dev)
 
 static struct audio_driver nm256_audio_driver =
 {
-    nm256_audio_open,			/* open                 */
-    nm256_audio_close,			/* close                */
-    nm256_audio_output_block,		/* output_block         */
-    nm256_audio_start_input,    	/* start_input          */
-    nm256_audio_ioctl,			/* ioctl                */
-    nm256_audio_prepare_for_input,	/* prepare_for_input    */
-    nm256_audio_prepare_for_output,	/* prepare_for_output   */
-    nm256_audio_reset,			/* reset                */
-    nm256_audio_local_qlen,		/*+local_qlen           */
-    NULL,				/*+copy_from_user       */
-    NULL,				/*+halt_input           */
-    NULL,				/* halt_output          */
-    NULL,				/*+trigger              */
-    NULL,				/*+set_speed            */
-    NULL,				/*+set_bits             */
-    NULL,				/*+set_channels         */
+    owner:		THIS_MODULE,
+    open:		nm256_audio_open,
+    close:		nm256_audio_close,
+    output_block:	nm256_audio_output_block,
+    start_input:	nm256_audio_start_input,
+    ioctl:		nm256_audio_ioctl,
+    prepare_for_input:	nm256_audio_prepare_for_input,
+    prepare_for_output:nm256_audio_prepare_for_output,
+    halt_io:		nm256_audio_reset,
+    local_qlen:		nm256_audio_local_qlen,
 };
 
 EXPORT_SYMBOL(init_nm256);
@@ -1654,7 +1648,6 @@ static int __init do_init_nm256(void)
     printk (KERN_INFO "NeoMagic 256AV/256ZX audio driver, version 1.1\n");
 
     if (init_nm256 () == 0) {
-	SOUND_LOCK;
 	loaded = 1;
 	return 0;
     }
@@ -1667,8 +1660,6 @@ static void __exit cleanup_nm256 (void)
     if (loaded) {
 	struct nm256_info *card;
 	struct nm256_info *next_card;
-
-	SOUND_LOCK_END;
 
 	for (card = nmcard_list; card != NULL; card = next_card) {
 	    stopPlay (card);

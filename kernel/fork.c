@@ -325,7 +325,8 @@ static inline int copy_mm(unsigned long clone_flags, struct task_struct * tsk)
 	if (retval)
 		goto free_pt;
 
-	init_new_context(tsk,mm);
+	if (init_new_context(tsk,mm))
+		goto free_pt;
 
 good_mm:
 	tsk->mm = mm;

@@ -62,21 +62,13 @@ struct ip_conntrack_tuple
 	} dst;
 };
 
-#define IP_PARTS_NATIVE(n)			\
-(unsigned int)((n)>>24)&0xFF,			\
-(unsigned int)((n)>>16)&0xFF,			\
-(unsigned int)((n)>>8)&0xFF,			\
-(unsigned int)((n)&0xFF)
-
-#define IP_PARTS(n) IP_PARTS_NATIVE(ntohl(n))
-
 #ifdef __KERNEL__
 
 #define DUMP_TUPLE(tp)						\
-DEBUGP("tuple %p: %u %u.%u.%u.%u:%u -> %u.%u.%u.%u:%u\n",	\
+DEBUGP("tuple %p: %u %u.%u.%u.%u:%hu -> %u.%u.%u.%u:%hu\n",	\
        (tp), (tp)->dst.protonum,				\
-       IP_PARTS((tp)->src.ip), ntohs((tp)->src.u.all),		\
-       IP_PARTS((tp)->dst.ip), ntohs((tp)->dst.u.all))
+       NIPQUAD((tp)->src.ip), ntohs((tp)->src.u.all),		\
+       NIPQUAD((tp)->dst.ip), ntohs((tp)->dst.u.all))
 
 #define CTINFO2DIR(ctinfo) ((ctinfo) >= IP_CT_IS_REPLY ? IP_CT_DIR_REPLY : IP_CT_DIR_ORIGINAL)
 

@@ -20,7 +20,6 @@
 #include <linux/module.h>
 
 #include "sound_config.h"
-#include "soundmodule.h"
 #include "sound_firmware.h"
 
 #include <linux/types.h>
@@ -728,7 +727,7 @@ void attach_sscape(struct address_info *hw_config)
 	hw_config->name = "SoundScape";
 
 	hw_config->irq *= -1;	/* Negative value signals IRQ sharing */
-	attach_mpu401(hw_config);
+	attach_mpu401(hw_config, THIS_MODULE);
 	hw_config->irq *= -1;	/* Restore it */
 
 	if (hw_config->slots[1] != -1)	/* The MPU driver installed itself */
@@ -1378,21 +1377,16 @@ static void __init attach_ss_ms_sound(struct address_info *hw_config)
  	if (hw_config->irq == devc->irq)
  		printk(KERN_WARNING "soundscape: Warning! The WSS mode can't share IRQ with MIDI\n");
  				
- 	if (! sscape_is_pnp )
-		hw_config->slots[0] = ad1848_init("SoundScape", hw_config->io_base,
-						  hw_config->irq,
-						  hw_config->dma,
-						  hw_config->dma,
-						  0,
-						  devc->osp);
+	hw_config->slots[0] = ad1848_init(
+			sscape_is_pnp ? "SoundScape" : "SoundScape PNP",
+			hw_config->io_base,
+			hw_config->irq,
+			hw_config->dma,
+			hw_config->dma,
+			0,
+			devc->osp,
+			THIS_MODULE);
 
-	else 
-		hw_config->slots[0] = ad1848_init("SoundScape PNP", hw_config->io_base,
-	 					  hw_config->irq,
-	 					  hw_config->dma,
-	 					  hw_config->dma,
-	 					  0,
-	 					  devc->osp);
  					  
 	if (hw_config->slots[0] != -1)	/* The AD1848 driver installed itself */
 	{
@@ -1497,7 +1491,7 @@ static int __init init_sscape(void)
 
 	if (mss)
 		attach_ss_ms_sound(&cfg);
-	SOUND_LOCK;
+
 	return 0;
 }
 
@@ -1505,7 +1499,6 @@ static void __exit cleanup_sscape(void)
 {
 	if (mss)
 		unload_ss_ms_sound(&cfg);
-	SOUND_LOCK_END;
 	unload_sscape(&cfg_mpu);
 }
 

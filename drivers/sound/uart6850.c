@@ -26,7 +26,6 @@
  */
 
 #include "sound_config.h"
-#include "soundmodule.h"
 
 static int uart6850_base = 0x330;
 
@@ -148,7 +147,6 @@ static int uart6850_open(int dev, int mode,
 		  return -EBUSY;
 	};
 
-	MOD_INC_USE_COUNT;
 	uart6850_cmd(UART_RESET);
 	uart6850_input_loop();
 	midi_input_intr = input;
@@ -165,7 +163,6 @@ static void uart6850_close(int dev)
 	uart6850_cmd(UART_MODE_ON);
 	del_timer(&uart6850_timer);
 	uart6850_opened = 0;
-	MOD_DEC_USE_COUNT;
 }
 
 static int uart6850_out(int dev, unsigned char midi_byte)
@@ -234,18 +231,18 @@ static inline int uart6850_buffer_status(int dev)
 
 static struct midi_operations uart6850_operations =
 {
-	{"6850 UART", 0, 0, SNDCARD_UART6850},
-	&std_midi_synth,
-	{0},
-	uart6850_open,
-	uart6850_close,
-	NULL, /* ioctl */
-	uart6850_out,
-	uart6850_start_read,
-	uart6850_end_read,
-	uart6850_kick,
-	uart6850_command,
-	uart6850_buffer_status
+	owner:		THIS_MODULE,
+	info:		{"6850 UART", 0, 0, SNDCARD_UART6850},
+	converter:	&std_midi_synth,
+	in_info:	{0},
+	open:		uart6850_open,
+	close:		uart6850_close,
+	outputc:	uart6850_out,
+	start_read:	uart6850_start_read,
+	end_read:	uart6850_end_read,
+	kick:		uart6850_kick,
+	command:	uart6850_command,
+	buffer_status:	uart6850_buffer_status
 };
 
 
@@ -338,14 +335,12 @@ static int __init init_uart6850(void)
 	if (probe_uart6850(&cfg_mpu))
 		return -ENODEV;
 
-	SOUND_LOCK;
 	return 0;
 }
 
 static void __exit cleanup_uart6850(void)
 {
 	unload_uart6850(&cfg_mpu);
-	SOUND_LOCK_END;
 }
 
 module_init(init_uart6850);

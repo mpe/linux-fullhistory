@@ -26,7 +26,6 @@
 #include <asm/system.h>
 
 #include "sound_config.h"
-#include "soundmodule.h"
 #include "vidc.h"
 
 #ifndef _SIOC_TYPE
@@ -362,6 +361,7 @@ static void vidc_audio_trigger(int dev, int enable_bits)
 
 static struct audio_driver vidc_audio_driver =
 {
+	owner:			THIS_MODULE,
 	open:			vidc_audio_open,
 	close:			vidc_audio_close,
 	output_block:		vidc_audio_output_block,
@@ -377,6 +377,7 @@ static struct audio_driver vidc_audio_driver =
 };
 
 static struct mixer_operations vidc_mixer_operations = {
+	owner:		THIS_MODULE,
 	id:		"VIDC",
 	name:		"VIDCsound",
 	ioctl:		vidc_mixer_ioctl
@@ -519,16 +520,12 @@ static void __exit unload_vidc(struct address_info *hw_config)
 }
 
 static struct address_info cfg;
-/*
- * Note! Module use count is handled by SOUNDLOCK/SOUND_LOCK_END
- */
 
 static int __init init_vidc(void)
 {
 	if (probe_vidc(&cfg) == 0)
 		return -ENODEV;
 
-	SOUND_LOCK;
 	attach_vidc(&cfg);
 
 	return 0;
@@ -537,7 +534,6 @@ static int __init init_vidc(void)
 static void __exit cleanup_vidc(void)
 {
 	unload_vidc(&cfg);
-	SOUND_LOCK_END;
 }
 
 module_init(init_vidc);

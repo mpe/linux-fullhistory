@@ -32,7 +32,6 @@
 #define NO_SAMPLE		0xffff
 
 #include "sound_config.h"
-#include "soundmodule.h"
 #include "softoss.h"
 #include <linux/ultrasound.h>
 
@@ -1394,27 +1393,28 @@ static void softsyn_reset(int devno)
 
 static struct synth_operations softsyn_operations =
 {
-	"SoftOSS",
-	&softsyn_info,
-	0,
-	SYNTH_TYPE_SAMPLE,
-	0,
-	softsyn_open,
-	softsyn_close,
-	softsyn_ioctl,
-	softsyn_kill_note,
-	softsyn_start_note,
-	softsyn_set_instr,
-	softsyn_reset,
-	softsyn_hw_control,
-	softsyn_load_patch,
-	softsyn_aftertouch,
-	softsyn_controller,
-	softsyn_panning,
-	softsyn_volume_method,
-	softsyn_bender,
-	softsyn_alloc_voice,
-	softsyn_setup_voice
+	owner:		THIS_MODULE,
+	id:		"SoftOSS",
+	info:		&softsyn_info,
+	midi_dev:	0,
+	synth_type:	SYNTH_TYPE_SAMPLE,
+	synth_subtype:	0,
+	open:		softsyn_open,
+	close:		softsyn_close,
+	ioctl:		softsyn_ioctl,
+	kill_note:	softsyn_kill_note,
+	start_note:	softsyn_start_note,
+	set_instr:	softsyn_set_instr,
+	reset:		softsyn_reset,
+	hw_control:	softsyn_hw_control,
+	load_patch:	softsyn_load_patch,
+	aftertouch:	softsyn_aftertouch,
+	controller:	softsyn_controller,
+	panning:	softsyn_panning,
+	volume_method:	softsyn_volume_method,
+	bender:		softsyn_bender,
+	alloc_voice:	softsyn_alloc_voice,
+	setup_voice:	softsyn_setup_voice
 };
 
 /*
@@ -1517,7 +1517,7 @@ static int __init init_softoss(void)
 	if (!probe_softsyn(&cfg))
 		return -ENODEV;
 	attach_softsyn_card(&cfg);
-	SOUND_LOCK;
+
 	return 0;
 }
 
@@ -1526,7 +1526,6 @@ static void __exit cleanup_softoss(void)
 	unload_softsyn(&cfg);
 	sound_unload_synthdev(devc->synthdev);
 	sound_unload_timerdev(devc->timerdev);
-	SOUND_LOCK_END;
 }
 
 module_init(init_softoss);

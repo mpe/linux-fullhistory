@@ -5,7 +5,7 @@
  *
  *		ROUTE - implementation of the IP router.
  *
- * Version:	$Id: route.c,v 1.88 2000/07/07 23:47:45 davem Exp $
+ * Version:	$Id: route.c,v 1.89 2000/08/09 11:59:04 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -1127,8 +1127,6 @@ static void rt_set_nexthop(struct rtable *rt, struct fib_result *res, u32 itag)
 		memcpy(&rt->u.dst.mxlock, fi->fib_metrics, sizeof(fi->fib_metrics));
 		if (fi->fib_mtu == 0) {
 			rt->u.dst.pmtu = rt->u.dst.dev->mtu;
-			if (rt->u.dst.pmtu > IP_MAX_MTU)
-				rt->u.dst.pmtu = IP_MAX_MTU;
 			if (rt->u.dst.mxlock&(1<<RTAX_MTU) &&
 			    rt->rt_gateway != rt->rt_dst &&
 			    rt->u.dst.pmtu > 576)
@@ -1139,9 +1137,9 @@ static void rt_set_nexthop(struct rtable *rt, struct fib_result *res, u32 itag)
 #endif
 	} else {
 		rt->u.dst.pmtu	= rt->u.dst.dev->mtu;
-		if (rt->u.dst.pmtu > IP_MAX_MTU)
-			rt->u.dst.pmtu = IP_MAX_MTU;
 	}
+	if (rt->u.dst.pmtu > IP_MAX_MTU)
+		rt->u.dst.pmtu = IP_MAX_MTU;
 	if (rt->u.dst.advmss == 0)
 		rt->u.dst.advmss = max(rt->u.dst.dev->mtu-40, ip_rt_min_advmss);
 	if (rt->u.dst.advmss > 65535-40)

@@ -78,7 +78,6 @@
 #include <linux/delay.h>
 
 #include "sound_config.h"
-#include "soundmodule.h"
 
 #include <linux/wavefront.h>
 
@@ -2115,28 +2114,25 @@ wavefront_oss_load_patch (int devno, int format, const char *addr,
 
 static struct synth_operations wavefront_operations =
 {
-	"WaveFront",
-	&wavefront_info,
-	0,
-	SYNTH_TYPE_SAMPLE,
-	SAMPLE_TYPE_WAVEFRONT,
-	wavefront_oss_open,
-	wavefront_oss_close,
-	wavefront_oss_ioctl,
-
-	midi_synth_kill_note,
-	midi_synth_start_note,
-	midi_synth_set_instr,
-	midi_synth_reset,
-	NULL, /* hw_control */
-	midi_synth_load_patch,
-	midi_synth_aftertouch,
-	midi_synth_controller,
-	midi_synth_panning,
-	NULL, /* volume method */
-	midi_synth_bender,
-	NULL, /* alloc voice */
-	midi_synth_setup_voice
+	owner:		THIS_MODULE,
+	id:		"WaveFront",
+	info:		&wavefront_info,
+	midi_dev:	0,
+	synth_type:	SYNTH_TYPE_SAMPLE,
+	synth_subtype:	SAMPLE_TYPE_WAVEFRONT,
+	open:		wavefront_oss_open,
+	close:		wavefront_oss_close,
+	ioctl:		wavefront_oss_ioctl,
+	kill_note:	midi_synth_kill_note,
+	start_note:	midi_synth_start_note,
+	set_instr:	midi_synth_set_instr,
+	reset:		midi_synth_reset,
+	load_patch:	midi_synth_load_patch,
+	aftertouch:	midi_synth_aftertouch,
+	controller:	midi_synth_controller,
+	panning:	midi_synth_panning,
+	bender:		midi_synth_bender,
+	setup_voice:	midi_synth_setup_voice
 };
 #endif OSS_SUPPORT_SEQ
 
@@ -3569,14 +3565,12 @@ static int __init init_wavfront (void)
 		return -EIO;
 	}
 
-	SOUND_LOCK;
 	return 0;
 }
 
 static void __exit cleanup_wavfront (void)
 {
 	uninstall_wavefront ();
-	SOUND_LOCK_END;
 }
 
 module_init(init_wavfront);

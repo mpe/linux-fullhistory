@@ -431,9 +431,6 @@ midi_synth_open(int dev, int mode)
 	if ((err = midi_devs[orig_dev]->open(orig_dev, mode,
 			       midi_synth_input, midi_synth_output)) < 0)
 		return err;
-#ifdef MODULE
-	MOD_INC_USE_COUNT;
-#endif
 	inc = &midi_devs[orig_dev]->in_info;
 
 	save_flags(flags);
@@ -461,9 +458,6 @@ midi_synth_close(int dev)
 	midi_devs[orig_dev]->outputc(orig_dev, 0xfe);
 
 	midi_devs[orig_dev]->close(orig_dev);
-#ifdef MODULE
-	MOD_DEC_USE_COUNT;
-#endif
 }
 
 void

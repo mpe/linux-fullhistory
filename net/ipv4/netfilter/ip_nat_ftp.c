@@ -54,13 +54,13 @@ ftp_nat_expected(struct sk_buff **pskb,
 		newdstip = master->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.ip;
 		newsrcip = master->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.ip;
 		DEBUGP("nat_expected: PORT cmd. %u.%u.%u.%u->%u.%u.%u.%u\n",
-		       IP_PARTS(newsrcip), IP_PARTS(newdstip));
+		       NIPQUAD(newsrcip), NIPQUAD(newdstip));
 	} else {
 		/* PASV command: make the connection go to the server */
 		newdstip = master->tuplehash[IP_CT_DIR_REPLY].tuple.src.ip;
 		newsrcip = master->tuplehash[IP_CT_DIR_REPLY].tuple.dst.ip;
 		DEBUGP("nat_expected: PASV cmd. %u.%u.%u.%u->%u.%u.%u.%u\n",
-		       IP_PARTS(newsrcip), IP_PARTS(newdstip));
+		       NIPQUAD(newsrcip), NIPQUAD(newdstip));
 	}
 	UNLOCK_BH(&ip_ftp_lock);
 
@@ -69,7 +69,7 @@ ftp_nat_expected(struct sk_buff **pskb,
 	else
 		newip = newdstip;
 
-	DEBUGP("nat_expected: IP to %u.%u.%u.%u\n", IP_PARTS(newip));
+	DEBUGP("nat_expected: IP to %u.%u.%u.%u\n", NIPQUAD(newip));
 
 	mr.rangesize = 1;
 	/* We don't want to manip the per-protocol, just the IPs... */
@@ -110,7 +110,7 @@ mangle_packet(struct sk_buff **pskb,
 
 	MUST_BE_LOCKED(&ip_ftp_lock);
 	sprintf(buffer, "%u,%u,%u,%u,%u,%u",
-		IP_PARTS(newip), port>>8, port&0xFF);
+		NIPQUAD(newip), port>>8, port&0xFF);
 
 	tcplen = (*pskb)->len - iph->ihl * 4;
 	newtcplen = tcplen - matchlen + strlen(buffer);

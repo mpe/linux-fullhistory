@@ -1,4 +1,4 @@
-# $Id: config.in,v 1.119 2000/08/02 10:45:03 davem Exp $
+# $Id: config.in,v 1.120 2000/08/09 08:45:39 anton Exp $
 # For a description of the syntax of this configuration file,
 # see the Configure script.
 #
@@ -86,24 +86,29 @@ comment 'Block devices'
 
 bool 'Normal floppy disk support' CONFIG_BLK_DEV_FD
 
-bool 'Multiple devices driver support' CONFIG_BLK_DEV_MD
-if [ "$CONFIG_BLK_DEV_MD" = "y" ]; then
-   tristate '  Linear (append) mode' CONFIG_MD_LINEAR
-   tristate '  RAID-0 (striping) mode' CONFIG_MD_STRIPED
-#   tristate '  RAID-1 (mirroring) mode' CONFIG_MD_MIRRORING
-#   tristate '  RAID-4/RAID-5 mode' CONFIG_MD_RAID5
-fi
+tristate 'Loopback device support' CONFIG_BLK_DEV_LOOP
+dep_tristate 'Network block device support' CONFIG_BLK_DEV_NBD $CONFIG_NET
+
+#tristate 'Logical volume manager (LVM) support' CONFIG_BLK_DEV_LVM N
+#if [ "$CONFIG_BLK_DEV_LVM" != "n" ]; then
+#   bool '   LVM information in proc filesystem' CONFIG_LVM_PROC_FS Y
+#fi
+
+tristate 'Multiple devices driver support' CONFIG_BLK_DEV_MD
+dep_tristate '  Linear (append) mode' CONFIG_MD_LINEAR $CONFIG_BLK_DEV_MD
+dep_tristate '  RAID-0 (striping) mode' CONFIG_MD_RAID0 $CONFIG_BLK_DEV_MD
+dep_tristate '  RAID-1 (mirroring) mode' CONFIG_MD_RAID1 $CONFIG_BLK_DEV_MD
+#dep_tristate '  RAID-4/RAID-5 mode' CONFIG_MD_RAID5 $CONFIG_BLK_DEV_MD
+#if [ "$CONFIG_MD_LINEAR" = "y" -o "$CONFIG_MD_RAID0" = "y" -o "$CONFIG_MD_RAID1" = "y" -o "$CONFIG_MD_RAID5" = "y" ]; then
+#        bool '  Boot support' CONFIG_MD_BOOT
+#        bool '  Auto Detect support' CONFIG_AUTODETECT_RAID
+#fi
 
 tristate 'RAM disk support' CONFIG_BLK_DEV_RAM
 if [ "$CONFIG_BLK_DEV_RAM" = "y" -o "$CONFIG_BLK_DEV_RAM" = "m" ]; then
 	int '   Default RAM disk size' CONFIG_BLK_DEV_RAM_SIZE 4096
 fi
-if [ "$CONFIG_BLK_DEV_RAM" = "y" ]; then
-   bool '  Initial RAM disk (initrd) support' CONFIG_BLK_DEV_INITRD
-fi
-
-tristate 'Loopback device support' CONFIG_BLK_DEV_LOOP
-tristate 'Network block device support' CONFIG_BLK_DEV_NBD
+dep_bool '  Initial RAM disk (initrd) support' CONFIG_BLK_DEV_INITRD $CONFIG_BLK_DEV_RAM
 
 endmenu
 

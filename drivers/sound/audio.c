@@ -82,14 +82,15 @@ int audio_open(int dev, struct file *file)
 	if (dev < 0 || dev >= num_audiodevs)
 		return -ENXIO;
 
+	if (audio_devs[dev]->d->owner)
+		__MOD_INC_USE_COUNT (audio_devs[dev]->d->owner);
+
 	if ((ret = DMAbuf_open(dev, mode)) < 0)
 		return ret;
 
-	if (audio_devs[dev]->coproc)
-	{
+	if (audio_devs[dev]->coproc) {
 		if ((ret = audio_devs[dev]->coproc->
-			open(audio_devs[dev]->coproc->devc, COPR_PCM)) < 0)
-		{
+			open(audio_devs[dev]->coproc->devc, COPR_PCM)) < 0) {
 			audio_release(dev, file);
 			printk(KERN_WARNING "Sound: Can't access coprocessor device\n");
 			return ret;
@@ -178,6 +179,9 @@ void audio_release(int dev, struct file *file)
 	if (audio_devs[dev]->coproc)
 		audio_devs[dev]->coproc->close(audio_devs[dev]->coproc->devc, COPR_PCM);
 	DMAbuf_release(dev, mode);
+
+	if (audio_devs[dev]->d->owner)
+		__MOD_DEC_USE_COUNT (audio_devs[dev]->d->owner);
 }
 
 static void translate_bytes(const unsigned char *table, unsigned char *buff, int n)

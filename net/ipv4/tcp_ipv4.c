@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_ipv4.c,v 1.210 2000/07/26 01:04:19 davem Exp $
+ * Version:	$Id: tcp_ipv4.c,v 1.211 2000/08/09 11:59:04 davem Exp $
  *
  *		IPv4 specific functions
  *
@@ -574,9 +574,8 @@ static int tcp_v4_check_established(struct sock *sk)
 			   fall back to VJ's scheme and use initial
 			   timestamp retrieved from peer table.
 			 */
-			if (tw->substate == TCP_TIME_WAIT &&
-			    sysctl_tcp_tw_recycle && tw->ts_recent_stamp) {
-				if ((tp->write_seq = tw->snd_nxt + 2) == 0)
+			if (tw->ts_recent_stamp) {
+				if ((tp->write_seq = tw->snd_nxt+65535+2) == 0)
 					tp->write_seq = 1;
 				tp->ts_recent = tw->ts_recent;
 				tp->ts_recent_stamp = tw->ts_recent_stamp;
@@ -691,7 +690,7 @@ int tcp_v4_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 		daddr = rt->rt_dst;
 
 	err = -ENOBUFS;
-	buff = sock_wmalloc(sk, MAX_TCP_HEADER + 15, 0, GFP_KERNEL);
+	buff = alloc_skb(MAX_TCP_HEADER + 15, GFP_KERNEL);
 
 	if (buff == NULL)
 		goto failure;
@@ -926,7 +925,7 @@ void tcp_v4_err(struct sk_buff *skb, unsigned char *dp, int len)
 		 * we have no reasons to ignore it.
 		 */
 		if (sk->lock.users == 0)
-			tcp_enter_cong_avoid(tp);
+			tcp_enter_cwr(tp);
 		goto out;
 	case ICMP_PARAMETERPROB:
 		err = EPROTO;
@@ -1296,7 +1295,6 @@ int tcp_v4_conn_request(struct sock *sk, struct sk_buff *skb)
 {
 	struct tcp_opt tp;
 	struct open_request *req;
-	struct tcphdr *th = skb->h.th;
 	__u32 saddr = skb->nh.iph->saddr;
 	__u32 daddr = skb->nh.iph->daddr;
 	__u32 isn = TCP_SKB_CB(skb)->when;
@@ -1341,7 +1339,15 @@ int tcp_v4_conn_request(struct sock *sk, struct sk_buff *skb)
 	tp.mss_clamp = 536;
 	tp.user_mss = sk->tp_pinfo.af_tcp.user_mss;
 
-	tcp_parse_options(NULL, th, &tp, want_cookie);
+	tcp_parse_options(skb, &tp);
+
+	if (want_cookie) {
+		tp.sack_ok = 0;
+		tp.wscale_ok = 0;
+		tp.snd_wscale = 0;
+		tp.tstamp_ok = 0;
+		tp.saw_tstamp = 0;
+	}
 
 	if (tp.saw_tstamp && tp.rcv_tsval == 0) {
 		/* Some OSes (unknown ones, but I see them on web server, which
@@ -1359,6 +1365,8 @@ int tcp_v4_conn_request(struct sock *sk, struct sk_buff *skb)
 	req->af.v4_req.rmt_addr = saddr;
 	req->af.v4_req.opt = tcp_v4_save_options(sk, skb);
 	req->class = &or_ipv4;
+	if (!want_cookie)
+		TCP_ECN_create_request(req, skb->h.th);
 
 	if (want_cookie) {
 #ifdef CONFIG_SYN_COOKIES
@@ -1384,8 +1392,6 @@ int tcp_v4_conn_request(struct sock *sk, struct sk_buff *skb)
 		    peer->v4daddr == saddr) {
 			if (xtime.tv_sec < peer->tcp_ts_stamp + TCP_PAWS_MSL &&
 			    (s32)(peer->tcp_ts - req->ts_recent) > TCP_PAWS_WINDOW) {
-				NETDEBUG(printk(KERN_DEBUG "TW_REC: reject openreq %u/%u %u.%u.%u.%u/%u\n", \
-					peer->tcp_ts, req->ts_recent, NIPQUAD(saddr), ntohs(skb->h.th->source)));
 				NET_INC_STATS_BH(PAWSPassiveRejected);
 				dst_release(dst);
 				goto drop_and_free;
@@ -1470,10 +1476,8 @@ struct sock * tcp_v4_syn_recv_sock(struct sock *sk, struct sk_buff *skb,
 		newtp->ext_header_len = newsk->protinfo.af_inet.opt->optlen;
 
 	tcp_sync_mss(newsk, dst->pmtu);
-	tcp_initialize_rcv_mss(newsk);
 	newtp->advmss = dst->advmss;
-
-	tcp_init_buffer_space(newsk);
+	tcp_initialize_rcv_mss(newsk);
 
 	__tcp_v4_hash(newsk);
 	__tcp_inherit_port(sk, newsk);
@@ -1493,33 +1497,30 @@ static struct sock *tcp_v4_hnd_req(struct sock *sk,struct sk_buff *skb)
 	struct open_request *req, **prev;
 	struct tcphdr *th = skb->h.th;
 	struct tcp_opt *tp = &(sk->tp_pinfo.af_tcp);
+	struct sock *nsk;
 
 	/* Find possible connection requests. */
 	req = tcp_v4_search_req(tp, skb->nh.iph, th, &prev);
 	if (req)
 		return tcp_check_req(sk, skb, req, prev);
 
-	if (tp->accept_queue) {
-		struct sock *nsk;
+	nsk = __tcp_v4_lookup_established(skb->nh.iph->saddr,
+					  th->source,
+					  skb->nh.iph->daddr,
+					  ntohs(th->dest),
+					  tcp_v4_iif(skb));
 
-		nsk = __tcp_v4_lookup_established(skb->nh.iph->saddr,
-						  th->source,
-						  skb->nh.iph->daddr,
-						  ntohs(th->dest),
-						  tcp_v4_iif(skb));
-
-		if (nsk) {
-			if (nsk->state != TCP_TIME_WAIT) {
-				bh_lock_sock(nsk);
-				return nsk;
-			}
-			tcp_tw_put((struct tcp_tw_bucket*)sk);
-			return NULL;
+	if (nsk) {
+		if (nsk->state != TCP_TIME_WAIT) {
+			bh_lock_sock(nsk);
+			return nsk;
 		}
+		tcp_tw_put((struct tcp_tw_bucket*)sk);
+		return NULL;
 	}
 
 #ifdef CONFIG_SYN_COOKIES
-	if (!th->rst && (th->syn || th->ack))
+	if (!th->rst && !th->syn && th->ack)
 		sk = cookie_v4_check(sk, skb, &(IPCB(skb)->opt));
 #endif
 	return sk;
@@ -1534,8 +1535,8 @@ static int tcp_v4_checksum_init(struct sk_buff *skb)
 			return -1;
 		}
 		skb->ip_summed = CHECKSUM_UNNECESSARY;
-	} else if (skb->ip_summed != CHECKSUM_UNNECESSARY) {
-		if (skb->len <= 68) {
+	} else {
+		if (skb->len <= 76) {
 			if (tcp_v4_check(skb->h.th,skb->len,skb->nh.iph->saddr,
 					 skb->nh.iph->daddr,
 					 csum_partial((char *)skb->h.th, skb->len, 0)))
@@ -1576,7 +1577,7 @@ int tcp_v4_do_rcv(struct sock *sk, struct sk_buff *skb)
 		return 0; 
 	}
 
-	if (tcp_checksum_complete(skb))
+	if (skb->len < (skb->h.th->doff<<2) || tcp_checksum_complete(skb))
 		goto csum_err;
 
 	if (sk->state == TCP_LISTEN) { 
@@ -1634,10 +1635,13 @@ int tcp_v4_rcv(struct sk_buff *skb, unsigned short len)
 	/* Count it even if it's bad */
 	TCP_INC_STATS_BH(TcpInSegs);
 
-	if (len < sizeof(struct tcphdr))
-		goto bad_packet;
-
-	if (tcp_v4_checksum_init(skb) < 0)
+	/* An explanation is required here, I think.
+	 * Packet length and doff are validated by header prediction,
+	 * provided case of th->doff==0 is elimineted.
+	 * So, we defer the checks. */
+	if (th->doff < sizeof(struct tcphdr)/4 ||
+	    (skb->ip_summed != CHECKSUM_UNNECESSARY &&
+	     tcp_v4_checksum_init(skb) < 0))
 		goto bad_packet;
 
 	TCP_SKB_CB(skb)->seq = ntohl(th->seq);
@@ -1645,6 +1649,8 @@ int tcp_v4_rcv(struct sk_buff *skb, unsigned short len)
 				    len - th->doff*4);
 	TCP_SKB_CB(skb)->ack_seq = ntohl(th->ack_seq);
 	TCP_SKB_CB(skb)->when = 0;
+	TCP_SKB_CB(skb)->flags = skb->nh.iph->tos;
+	TCP_SKB_CB(skb)->sacked = 0;
 	skb->used = 0;
 
 	sk = __tcp_v4_lookup(skb->nh.iph->saddr, th->source,
@@ -1674,7 +1680,7 @@ process:
 	return ret;
 
 no_tcp_socket:
-	if (tcp_checksum_complete(skb)) {
+	if (len < (th->doff<<2) || tcp_checksum_complete(skb)) {
 bad_packet:
 		TCP_INC_STATS_BH(TcpInErrs);
 	} else {
@@ -1691,7 +1697,7 @@ discard_and_relse:
 	goto discard_it;
 
 do_time_wait:
-	if (tcp_checksum_complete(skb)) {
+	if (len < (th->doff<<2) || tcp_checksum_complete(skb)) {
 		TCP_INC_STATS_BH(TcpInErrs);
 		goto discard_and_relse;
 	}
@@ -1734,7 +1740,8 @@ int tcp_v4_rebuild_header(struct sock *sk)
 {
 	struct rtable *rt = (struct rtable *)__sk_dst_check(sk, 0);
 	__u32 new_saddr;
-        int want_rewrite = sysctl_ip_dynaddr && sk->state == TCP_SYN_SENT;
+        int want_rewrite = sysctl_ip_dynaddr && sk->state == TCP_SYN_SENT &&
+		!(sk->userlocks & SOCK_BINDADDR_LOCK);
 
 	if (rt == NULL) {
 		int err;
@@ -1755,11 +1762,7 @@ int tcp_v4_rebuild_header(struct sock *sk)
 		__sk_dst_set(sk, &rt->u.dst);
 	}
 
-	/* Force route checking if want_rewrite.
-	 * The idea is good, the implementation is disguisting.
-	 * Well, if I made bind on this socket, you cannot randomly ovewrite
-	 * its source address. --ANK
-	 */
+	/* Force route checking if want_rewrite. */
 	if (want_rewrite) {
 		int tmp;
 		struct rtable *new_rt;
@@ -1932,11 +1935,18 @@ static int tcp_v4_init_sock(struct sock *sk)
 	tp->snd_cwnd_clamp = ~0;
 	tp->mss_cache = 536;
 
+	tp->reordering = sysctl_tcp_reordering;
+
 	sk->state = TCP_CLOSE;
 
 	sk->write_space = tcp_write_space; 
 
 	sk->tp_pinfo.af_tcp.af_specific = &ipv4_specific;
+
+	sk->sndbuf = sysctl_tcp_wmem[1];
+	sk->rcvbuf = sysctl_tcp_rmem[1];
+
+	atomic_inc(&tcp_sockets_allocated);
 
 	return 0;
 }
@@ -1948,7 +1958,7 @@ static int tcp_v4_destroy_sock(struct sock *sk)
 	tcp_clear_xmit_timers(sk);
 
 	/* Cleanup up the write buffer. */
-  	__skb_queue_purge(&sk->write_queue);
+  	tcp_writequeue_purge(sk);
 
 	/* Cleans up our, hopefuly empty, out_of_order_queue. */
   	__skb_queue_purge(&tp->out_of_order_queue);
@@ -1960,11 +1970,13 @@ static int tcp_v4_destroy_sock(struct sock *sk)
 	if(sk->prev != NULL)
 		tcp_put_port(sk);
 
+	atomic_dec(&tcp_sockets_allocated);
+
 	return 0;
 }
 
 /* Proc filesystem TCP sock list dumping. */
-static void get_openreq(struct sock *sk, struct open_request *req, char *tmpbuf, int i)
+static void get_openreq(struct sock *sk, struct open_request *req, char *tmpbuf, int i, int uid)
 {
 	int ttd = req->expires - jiffies;
 
@@ -1980,7 +1992,7 @@ static void get_openreq(struct sock *sk, struct open_request *req, char *tmpbuf,
 		1,   /* timers active (only the expire timer) */  
 		ttd, 
 		req->retrans,
-		sk->socket ? sk->socket->inode->i_uid : 0,
+		uid,
 		0,  /* non standard timer */  
 		0, /* open_requests have no inode */
 		atomic_read(&sk->refcnt),
@@ -2000,33 +2012,31 @@ static void get_tcp_sock(struct sock *sp, char *tmpbuf, int i)
 	src   = sp->rcv_saddr;
 	destp = ntohs(sp->dport);
 	srcp  = ntohs(sp->sport);
-	timer_active	= 0;
-	timer_expires	= (unsigned) -1;
-	if (timer_pending(&tp->retransmit_timer) && tp->retransmit_timer.expires < timer_expires) {
+	if (tp->pending == TCP_TIME_RETRANS) {
 		timer_active	= 1;
-		timer_expires	= tp->retransmit_timer.expires;
-	} else if (timer_pending(&tp->probe_timer) && tp->probe_timer.expires < timer_expires) {
+		timer_expires	= tp->timeout;
+	} else if (tp->pending == TCP_TIME_PROBE0) {
 		timer_active	= 4;
-		timer_expires	= tp->probe_timer.expires;
-	}
-	if (timer_pending(&sp->timer) && sp->timer.expires < timer_expires) {
+		timer_expires	= tp->timeout;
+	} else if (timer_pending(&sp->timer)) {
 		timer_active	= 2;
 		timer_expires	= sp->timer.expires;
-	}
-	if(timer_active == 0)
+	} else {
+		timer_active	= 0;
 		timer_expires = jiffies;
+	}
 
 	sprintf(tmpbuf, "%4d: %08X:%04X %08X:%04X"
-		" %02X %08X:%08X %02X:%08lX %08X %5d %8d %lu %d %p %u %u %u %u",
+		" %02X %08X:%08X %02X:%08lX %08X %5d %8d %lu %d %p %u %u %u %u %d",
 		i, src, srcp, dest, destp, sp->state, 
 		tp->write_seq-tp->snd_una, tp->rcv_nxt-tp->copied_seq,
 		timer_active, timer_expires-jiffies,
 		tp->retransmits,
-		sp->socket ? sp->socket->inode->i_uid : 0,
+		sock_i_uid(sp),
 		tp->probes_out,
-		sp->socket ? sp->socket->inode->i_ino : 0,
+		sock_i_ino(sp),
 		atomic_read(&sp->refcnt), sp,
-		tp->rto, tp->ack.ato, tp->ack.quick, tp->ack.pingpong
+		tp->rto, tp->ack.ato, tp->ack.quick, tp->ack.pingpong, sp->sndbuf
 		);
 }
 
@@ -2073,6 +2083,7 @@ int tcp_get_info(char *buffer, char **start, off_t offset, int length)
 
 		for (sk = tcp_listening_hash[i]; sk; sk = sk->next, num++) {
 			struct open_request *req;
+			int uid;
 			struct tcp_opt *tp = &(sk->tp_pinfo.af_tcp);
 
 			if (!TCP_INET_FAMILY(sk->family))
@@ -2089,6 +2100,7 @@ int tcp_get_info(char *buffer, char **start, off_t offset, int length)
 			}
 
 skip_listen:
+			uid = sock_i_uid(sk);
 			read_lock_bh(&tp->syn_wait_lock);
 			lopt = tp->listen_opt;
 			if (lopt && lopt->qlen != 0) {
@@ -2100,7 +2112,7 @@ skip_listen:
 						pos += 128;
 						if (pos < offset)
 							continue;
-						get_openreq(sk, req, tmpbuf, num);
+						get_openreq(sk, req, tmpbuf, num, uid);
 						len += sprintf(buffer+len, "%-127s\n", tmpbuf);
 						if(len >= length) {
 							read_unlock_bh(&tp->syn_wait_lock);

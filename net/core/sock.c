@@ -7,7 +7,7 @@
  *		handler for protocols to use and generic option handler.
  *
  *
- * Version:	$Id: sock.c,v 1.96 2000/07/26 01:04:14 davem Exp $
+ * Version:	$Id: sock.c,v 1.97 2000/08/09 11:59:03 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -231,6 +231,7 @@ int sock_setsockopt(struct socket *sock, int level, int optname,
 			if (val > sysctl_wmem_max)
 				val = sysctl_wmem_max;
 
+			sk->userlocks |= SOCK_SNDBUF_LOCK;
 			sk->sndbuf = max(val*2,SOCK_MIN_SNDBUF);
 
 			/*
@@ -249,6 +250,7 @@ int sock_setsockopt(struct socket *sock, int level, int optname,
 			if (val > sysctl_rmem_max)
 				val = sysctl_rmem_max;
 
+			sk->userlocks |= SOCK_RCVBUF_LOCK;
 			/* FIXME: is this lower bound the right one? */
 			sk->rcvbuf = max(val*2,SOCK_MIN_RCVBUF);
 			break;

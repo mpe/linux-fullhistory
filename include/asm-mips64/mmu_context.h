@@ -70,7 +70,7 @@ get_new_cpu_mmu_context(struct mm_struct *mm, unsigned long cpu)
  * Initialize the context related info for a new mm_struct
  * instance.
  */
-extern inline void
+extern inline int
 init_new_context(struct task_struct *tsk, struct mm_struct *mm)
 {
 #ifndef CONFIG_SMP
@@ -82,12 +82,11 @@ init_new_context(struct task_struct *tsk, struct mm_struct *mm)
  	 * Init the "context" values so that a tlbpid allocation 
 	 * happens on the first switch.
  	 */
-	if (mm->context)
-		memset((void *)mm->context, 0, smp_num_cpus * 
-						sizeof(unsigned long));
-	else
-		printk("Warning: init_new_context failed\n");
+	if (mm->context == 0)
+		return -ENOMEM;
+	memset((void *)mm->context, 0, smp_num_cpus * sizeof(unsigned long));
 #endif
+	return 0;
 }
 
 extern inline void switch_mm(struct mm_struct *prev, struct mm_struct *next,

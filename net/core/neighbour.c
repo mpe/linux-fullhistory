@@ -832,7 +832,8 @@ int neigh_update(struct neighbour *neigh, const u8 *lladdr, u8 new, int override
 	if (lladdr != neigh->ha) {
 		memcpy(&neigh->ha, lladdr, dev->addr_len);
 		neigh_update_hhs(neigh);
-		neigh->confirmed = jiffies - (neigh->parms->base_reachable_time<<1);
+		if (!(new&NUD_CONNECTED))
+			neigh->confirmed = jiffies - (neigh->parms->base_reachable_time<<1);
 #ifdef CONFIG_ARPD
 		notify = 1;
 #endif

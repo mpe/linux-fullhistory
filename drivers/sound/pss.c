@@ -35,7 +35,6 @@
 
 #include "sound_config.h"
 #include "sound_firmware.h"
-#include "soundmodule.h"
 
 #include "ad1848.h"
 #include "mpu401.h"
@@ -569,9 +568,10 @@ static int pss_mixer_ioctl (int dev, unsigned int cmd, caddr_t arg)
 
 static struct mixer_operations pss_mixer_operations =
 {
-	"SOUNDPORT",
-	"PSS-AD1848",
-	 pss_mixer_ioctl
+	owner:	THIS_MODULE,
+	id:	"SOUNDPORT",
+	name:	"PSS-AD1848",
+	ioctl:	pss_mixer_ioctl
 };
 
 void attach_pss(struct address_info *hw_config)
@@ -918,7 +918,7 @@ static coproc_operations pss_coproc_operations =
 
 static void __init attach_pss_mpu(struct address_info *hw_config)
 {
-	attach_mpu401(hw_config);	/* Slot 1 */
+	attach_mpu401(hw_config, THIS_MODULE);	/* Slot 1 */
 	if (hw_config->slots[1] != -1)	/* The MPU driver installed itself */
 		midi_devs[hw_config->slots[1]]->coproc = &pss_coproc_operations;
 }
@@ -987,7 +987,7 @@ static void __init attach_pss_mss(struct address_info *hw_config)
 		}
 	}
 	pss_mixer_reset(devc);
-	attach_ms_sound(hw_config);	/* Slot 0 */
+	attach_ms_sound(hw_config, THIS_MODULE);	/* Slot 0 */
 
 	if (hw_config->slots[0] != -1)
 	{
@@ -1087,7 +1087,7 @@ static int __init init_pss(void)
 		pssmss = 1;
 		attach_pss_mss(&cfg2);
 	}
-	SOUND_LOCK;
+
 	return 0;
 }
 
@@ -1100,7 +1100,6 @@ static void __exit cleanup_pss(void)
 	if (pssmpu)
 		unload_pss_mpu(&cfg_mpu);
 	unload_pss(&cfg);
-	SOUND_LOCK_END;
 }
 
 module_init(init_pss);

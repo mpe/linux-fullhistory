@@ -147,24 +147,19 @@ void sb_midi_interrupt(sb_devc * devc)
 
 static struct midi_operations sb_midi_operations =
 {
-	{
-		"Sound Blaster", 0, 0, SNDCARD_SB
-	},
-	&std_midi_synth,
-	{0},
-	sb_midi_open,
-	sb_midi_close,
-	sb_midi_ioctl,
-	sb_midi_out,
-	sb_midi_start_read,
-	sb_midi_end_read,
-	NULL,
-	NULL,
-	NULL,
-	NULL
+	owner:		THIS_MODULE,
+	info:		{"Sound Blaster", 0, 0, SNDCARD_SB},
+	converter:	&std_midi_synth,
+	in_info:	{0},
+	open:		sb_midi_open,
+	close:		sb_midi_close,
+	ioctl:		sb_midi_ioctl,
+	outputc:	sb_midi_out,
+	start_read:	sb_midi_start_read,
+	end_read:	sb_midi_end_read,
 };
 
-void sb_dsp_midi_init(sb_devc * devc)
+void sb_dsp_midi_init(sb_devc * devc, struct module *owner)
 {
 	int dev;
 
@@ -189,6 +184,9 @@ void sb_dsp_midi_init(sb_devc * devc)
 	memcpy((char *) midi_devs[dev], (char *) &sb_midi_operations,
 	       sizeof(struct midi_operations));
 
+	if (owner)
+			midi_devs[dev]->owner = owner;
+	
 	midi_devs[dev]->devc = devc;
 
 

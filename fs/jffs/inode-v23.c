@@ -10,7 +10,7 @@
  * the Free Software Foundation; either version 2 of the License, or
  * (at your option) any later version.
  *
- * $Id: inode-v23.c,v 1.33 2000/08/09 15:59:06 dwmw2 Exp $
+ * $Id: inode-v23.c,v 1.34 2000/08/10 08:58:00 dwmw2 Exp $
  *
  *
  * Ported to Linux 2.3.x and MTD:
@@ -44,7 +44,6 @@
 #include <linux/fs.h>
 #include <linux/locks.h>
 #include <linux/smp_lock.h>
-#include <linux/sched.h>
 #include <linux/ioctl.h>
 #include <linux/stat.h>
 #include <linux/blkdev.h>
@@ -350,7 +349,7 @@ jffs_new_inode(const struct inode * dir, struct jffs_raw_inode *raw_inode,
 	inode->i_mtime = raw_inode->mtime;
 	inode->i_ctime = raw_inode->ctime;
 	inode->i_blksize = PAGE_SIZE;
-	inode->i_blocks = (raw_inode->dsize + PAGE_SIZE - 1) >> PAGE_SHIFT;
+	inode->i_blocks = (inode->i_size + 511) >> 9;
 	inode->i_version = 0;
 	inode->i_flags = sb->s_flags;
 	inode->u.generic_ip = (void *)jffs_find_file(c, raw_inode->ino);
@@ -1571,7 +1570,7 @@ jffs_read_inode(struct inode *inode)
 	inode->i_mtime = f->mtime;
 	inode->i_ctime = f->ctime;
 	inode->i_blksize = PAGE_SIZE;
-	inode->i_blocks = (inode->i_size + PAGE_SIZE - 1) >> PAGE_SHIFT;
+	inode->i_blocks = (inode->i_size + 511) >> 9;
 	if (S_ISREG(inode->i_mode)) {
 		inode->i_op = &jffs_file_inode_operations;
 		inode->i_fop = &jffs_file_operations;

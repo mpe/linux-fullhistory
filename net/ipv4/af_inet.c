@@ -5,7 +5,7 @@
  *
  *		PF_INET protocol family socket handler.
  *
- * Version:	$Id: af_inet.c,v 1.110 2000/04/25 04:13:34 davem Exp $
+ * Version:	$Id: af_inet.c,v 1.111 2000/08/09 11:59:03 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -159,6 +159,8 @@ void inet_sock_destruct(struct sock *sk)
 
 	BUG_TRAP(atomic_read(&sk->rmem_alloc) == 0);
 	BUG_TRAP(atomic_read(&sk->wmem_alloc) == 0);
+	BUG_TRAP(sk->wmem_queued == 0);
+	BUG_TRAP(sk->forward_alloc == 0);
 
 	if (sk->protinfo.af_inet.opt)
 		kfree(sk->protinfo.af_inet.opt);
@@ -494,6 +496,8 @@ static int inet_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 		goto out;
 	}
 
+	if (sk->rcv_saddr)
+		sk->userlocks |= SOCK_BINDADDR_LOCK;
 	sk->sport = htons(sk->num);
 	sk->daddr = 0;
 	sk->dport = 0;

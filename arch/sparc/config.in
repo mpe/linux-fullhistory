@@ -1,4 +1,4 @@
-# $Id: config.in,v 1.100 2000/08/07 18:06:54 anton Exp $
+# $Id: config.in,v 1.101 2000/08/09 18:25:31 anton Exp $
 # For a description of the syntax of this configuration file,
 # see Documentation/kbuild/config-language.txt.
 #
@@ -98,7 +98,7 @@ tristate 'Multiple devices driver support' CONFIG_BLK_DEV_MD
 dep_tristate '  Linear (append) mode' CONFIG_MD_LINEAR $CONFIG_BLK_DEV_MD
 dep_tristate '  RAID-0 (striping) mode' CONFIG_MD_RAID0 $CONFIG_BLK_DEV_MD
 dep_tristate '  RAID-1 (mirroring) mode' CONFIG_MD_RAID1 $CONFIG_BLK_DEV_MD
-dep_tristate '  RAID-4/RAID-5 mode' CONFIG_MD_RAID5 $CONFIG_BLK_DEV_MD
+#dep_tristate '  RAID-4/RAID-5 mode' CONFIG_MD_RAID5 $CONFIG_BLK_DEV_MD
 #if [ "$CONFIG_MD_LINEAR" = "y" -o "$CONFIG_MD_RAID0" = "y" -o "$CONFIG_MD_RAID1" = "y" -o "$CONFIG_MD_RAID5" = "y" ]; then
 #        bool '  Boot support' CONFIG_MD_BOOT
 #        bool '  Auto Detect support' CONFIG_AUTODETECT_RAID

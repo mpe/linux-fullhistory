@@ -30,7 +30,6 @@
 #define USE_SIMPLE_MACROS
 
 #include "sound_config.h"
-#include "soundmodule.h"
 #include "sound_firmware.h"
 
 #include "mpu401.h"
@@ -375,7 +374,7 @@ static void __init attach_maui(struct address_info *hw_config)
 
 	hw_config->irq *= -1;
 	hw_config->name = "Maui";
-	attach_mpu401(hw_config);
+	attach_mpu401(hw_config, THIS_MODULE);
 
 	if (hw_config->slots[1] != -1)	/* The MPU401 driver installed itself */ {
 		struct synth_operations *synth;
@@ -443,7 +442,7 @@ static int __init init_maui(void)
 	if (probe_maui(&cfg) == 0)
 		return -ENODEV;
 	attach_maui(&cfg);
-	SOUND_LOCK;
+
 	return 0;
 }
 
@@ -452,7 +451,6 @@ static void __exit cleanup_maui(void)
 	if (fw_load && maui_os)
 		vfree(maui_os);
 	unload_maui(&cfg);
-	SOUND_LOCK_END;
 }
 
 module_init(init_maui);

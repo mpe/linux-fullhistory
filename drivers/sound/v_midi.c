@@ -23,7 +23,6 @@
 #include <linux/module.h>
 
 #include "sound_config.h"
-#include "soundmodule.h"
 
 #include "v_midi.h"
 
@@ -136,36 +135,30 @@ static inline int v_midi_ioctl (int dev, unsigned cmd, caddr_t arg)
 
 static struct midi_operations v_midi_operations =
 {
-	{"Loopback MIDI Port 1", 0, 0, SNDCARD_VMIDI},
-	&std_midi_synth,
-	{0},
-	v_midi_open,
-	v_midi_close,
-	v_midi_ioctl,
-	v_midi_out,
-	v_midi_start_read,
-	v_midi_end_read,
-	NULL,
-	NULL,
-	NULL,
-	NULL
+	owner:		THIS_MODULE,
+	info:		{"Loopback MIDI Port 1", 0, 0, SNDCARD_VMIDI},
+	converter:	&std_midi_synth,
+	in_info:	{0},
+	open:		v_midi_open,
+	close:		v_midi_close,
+	ioctl:		v_midi_ioctl,
+	outputc:	v_midi_out,
+	start_read:	v_midi_start_read,
+	end_read:	v_midi_end_read,
 };
 
 static struct midi_operations v_midi_operations2 =
 {
-	{"Loopback MIDI Port 2", 0, 0, SNDCARD_VMIDI},
-	&std_midi_synth,
-	{0},
-	v_midi_open,
-	v_midi_close,
-	v_midi_ioctl,
-	v_midi_out,
-	v_midi_start_read,
-	v_midi_end_read,
-	NULL,
-	NULL,
-	NULL,
-	NULL
+	owner:		THIS_MODULE,
+	info:		{"Loopback MIDI Port 2", 0, 0, SNDCARD_VMIDI},
+	converter:	&std_midi_synth,
+	in_info:	{0},
+	open:		v_midi_open,
+	close:		v_midi_close,
+	ioctl:		v_midi_ioctl,
+	outputc:	v_midi_out,
+	start_read:	v_midi_start_read,
+	end_read:	v_midi_end_read,
 };
 
 /*
@@ -284,15 +277,12 @@ static int __init init_vmidi(void)
 		return -ENODEV;
 	attach_v_midi(&cfg);
 
-	SOUND_LOCK;
-
 	return 0;
 }
 
 static void __exit cleanup_vmidi(void)
 {
 	unload_v_midi(&cfg);
-	SOUND_LOCK_END;
 }
 
 module_init(init_vmidi);

@@ -4,14 +4,14 @@
  *
  * (c) 1998,1999,2000 Petr Vandrovec <vandrove@vc.cvut.cz>
  *
- * Version: 1.21 1999/01/09
+ * Version: 1.50 2000/08/10
  *
  * MTRR stuff: 1998 Tom Rini <trini@kernel.crashing.org>
  *
  * Contributors: "menion?" <menion@mindless.com>
  *                     Betatesting, fixes, ideas
  *
- *               "Kurt Garloff" <garloff@kg1.ping.de>
+ *               "Kurt Garloff" <garloff@suse.de>
  *                     Betatesting, fixes, ideas, videomodes, videomodes timmings
  *
  *               "Tom Rini" <trini@kernel.crashing.org>
@@ -62,6 +62,9 @@
  *
  *               "Mark Vojkovich" <mvojkovi@ucsd.edu>
  *                     G400 support
+ *
+ *               "Ken Aaker" <kdaaker@rchland.vnet.ibm.com>
+ *                     memtype extension (needed for GXT130P RS/6000 adapter)
  *
  * (following author is not in any relation with this code, but his code
  *  is included in this driver)
@@ -755,7 +758,7 @@ static int MGAG100_preinit(WPMINFO struct matrox_hw_state* hw){
 	if (ACCESS_FBINFO(devflags.noinit))
 		return 0;
 	hw->MXoptionReg &= 0xC0000100;
-	hw->MXoptionReg |= 0x00078020;
+	hw->MXoptionReg |= 0x00000020;
 	if (ACCESS_FBINFO(devflags.novga))
 		hw->MXoptionReg &= ~0x00000100;
 	if (ACCESS_FBINFO(devflags.nobios))
@@ -763,13 +766,13 @@ static int MGAG100_preinit(WPMINFO struct matrox_hw_state* hw){
 	if (ACCESS_FBINFO(devflags.nopciretry))
 		hw->MXoptionReg |=  0x20000000;
 	pci_write_config_dword(ACCESS_FBINFO(pcidev), PCI_OPTION_REG, hw->MXoptionReg);
-	pci_read_config_dword(ACCESS_FBINFO(pcidev), 0x50, &reg50);
-	reg50 &= ~0x3000;
-	pci_write_config_dword(ACCESS_FBINFO(pcidev), 0x50, reg50);
-
 	DAC1064_setmclk(PMINFO hw, DAC1064_OPT_MDIV2 | DAC1064_OPT_GDIV3 | DAC1064_OPT_SCLK_PCI, 133333);
 
 	if (ACCESS_FBINFO(devflags.accelerator) == FB_ACCEL_MATROX_MGAG100) {
+		pci_read_config_dword(ACCESS_FBINFO(pcidev), 0x50, &reg50);
+		reg50 &= ~0x3000;
+		pci_write_config_dword(ACCESS_FBINFO(pcidev), 0x50, reg50);
+
 		hw->MXoptionReg |= 0x1080;
 		pci_write_config_dword(ACCESS_FBINFO(pcidev), PCI_OPTION_REG, hw->MXoptionReg);
 		mga_outl(M_CTLWTST, 0x00000300);
@@ -797,20 +800,45 @@ static int MGAG100_preinit(WPMINFO struct matrox_hw_state* hw){
 			hw->MXoptionReg &= ~0x1000;
 		}
 #endif
-	} else {
-		hw->MXoptionReg |= 0x00000C00;
+		hw->MXoptionReg |= 0x00078020;
+	} else 	if (ACCESS_FBINFO(devflags.accelerator) == FB_ACCEL_MATROX_MGAG200) {
+		pci_read_config_dword(ACCESS_FBINFO(pcidev), 0x50, &reg50);
+		reg50 &= ~0x3000;
+		pci_write_config_dword(ACCESS_FBINFO(pcidev), 0x50, reg50);
+
+		if (ACCESS_FBINFO(devflags.memtype) == -1)
+			ACCESS_FBINFO(devflags.memtype) = 3;
+		hw->MXoptionReg |= (ACCESS_FBINFO(devflags.memtype) & 7) << 10;
 		if (ACCESS_FBINFO(devflags.sgram))
 			hw->MXoptionReg |= 0x4000;
 		mga_outl(M_CTLWTST, 0x042450A1);
-		mga_outb(0x1E47, 0x00);
-		mga_outb(0x1E46, 0x00);
-		udelay(10);
-		mga_outb(0x1C05, 0x00);
-		mga_outb(0x1C05, 0x80);
+		mga_outl(M_MEMRDBK, 0x00000108);
+		udelay(200);
+		mga_outl(M_MACCESS, 0x00000000);
+		mga_outl(M_MACCESS, 0x00008000);
 		udelay(100);
-		mga_outw(0x1E44, 0x0108);
+		mga_outw(M_MEMRDBK, 0x00000108);
+		hw->MXoptionReg |= 0x00078020;
+	} else {
+		pci_read_config_dword(ACCESS_FBINFO(pcidev), 0x50, &reg50);
+		reg50 &= ~0x00000100;
+		reg50 |=  0x00000000;
+		pci_write_config_dword(ACCESS_FBINFO(pcidev), 0x50, reg50);
+
+		if (ACCESS_FBINFO(devflags.memtype) == -1)
+			ACCESS_FBINFO(devflags.memtype) = 0;
+		hw->MXoptionReg |= (ACCESS_FBINFO(devflags.memtype) & 7) << 10;
+		if (ACCESS_FBINFO(devflags.sgram))
+			hw->MXoptionReg |= 0x4000;
+		mga_outl(M_CTLWTST, 0x042450A1);
+		mga_outl(M_MEMRDBK, 0x00000108);
+		udelay(200);
+		mga_outl(M_MACCESS, 0x00000000);
+		mga_outl(M_MACCESS, 0x00008000);
+		udelay(100);
+		mga_outl(M_MEMRDBK, 0x00000108);
+		hw->MXoptionReg |= 0x00040020;
 	}
-	hw->MXoptionReg = (hw->MXoptionReg & ~0x1F8000) | 0x78000;
 	pci_write_config_dword(ACCESS_FBINFO(pcidev), PCI_OPTION_REG, hw->MXoptionReg);
 	return 0;
 }

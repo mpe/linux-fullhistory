@@ -51,13 +51,16 @@
  *
  *  7/00: Support Timedia/Sunix/Exsys PCI cards
  *
+ *  7/00: fix some returns on failure not using MOD_DEC_USE_COUNT.
+ *	  Arnaldo Carvalho de Melo <acme@conectiva.com.br>
+ *
  * This module exports the following rs232 io functions:
  *
  *	int rs_init(void);
  */
 
-static char *serial_version = "5.01";
-static char *serial_revdate = "2000-05-29";
+static char *serial_version = "5.02";
+static char *serial_revdate = "2000-08-09";
 
 /*
  * Serial driver configuration section.  Here are the various options:
@@ -140,6 +143,10 @@ static char *serial_revdate = "2000-05-29";
 #ifndef CONFIG_SERIAL_SHARE_IRQ
 #define CONFIG_SERIAL_SHARE_IRQ
 #endif
+#endif
+
+#ifdef MODULE
+#undef CONFIG_SERIAL_CONSOLE
 #endif
 
 #define CONFIG_SERIAL_RSA
@@ -260,8 +267,9 @@ static struct rs_multiport_struct rs_multiport[NR_IRQS];
 static int IRQ_timeout[NR_IRQS];
 #ifdef CONFIG_SERIAL_CONSOLE
 static struct console sercons;
+static int lsr_break_flag = 0;
 #endif
-#if defined(CONFIG_SERIAL_CONSOLE) && defined(CONFIG_MAGIC_SYSRQ) && !defined(MODULE)
+#if defined(CONFIG_SERIAL_CONSOLE) && defined(CONFIG_MAGIC_SYSRQ)
 static unsigned long break_pressed; /* break, really ... */
 #endif
 
@@ -281,7 +289,7 @@ static struct serial_uart_config uart_config[] = {
 	{ "16550", 1, 0 }, 
 	{ "16550A", 16, UART_CLEAR_FIFO | UART_USE_FIFO }, 
 	{ "cirrus", 1, 0 }, 	/* usurped by cyclades.c */
-	{ "ST16650", 1, UART_CLEAR_FIFO |UART_STARTECH }, 
+	{ "ST16650", 1, UART_CLEAR_FIFO | UART_STARTECH }, 
 	{ "ST16650V2", 32, UART_CLEAR_FIFO | UART_USE_FIFO |
 		  UART_STARTECH }, 
 	{ "TI16750", 64, UART_CLEAR_FIFO | UART_USE_FIFO},
@@ -295,14 +303,18 @@ static struct serial_uart_config uart_config[] = {
 	{ 0, 0}
 };
 
-#if defined(CONFIG_SERIAL_RSA) && defined(MODULE)
+#ifdef CONFIG_SERIAL_RSA
 
 #define PORT_RSA_MAX 4
 static int probe_rsa[PORT_RSA_MAX];
 static int force_rsa[PORT_RSA_MAX];
 
+#ifdef MODULE
 MODULE_PARM(probe_rsa, "1-" __MODULE_STRING(PORT_RSA_MAX) "i");
+MODULE_PARM_DESC(probe_rsa, "Probe I/O ports for RSA");
 MODULE_PARM(force_rsa, "1-" __MODULE_STRING(PORT_RSA_MAX) "i");
+MODULE_PARM_DESC(force_rsa, "Force I/O ports for RSA");
+#endif
 #endif /* CONFIG_SERIAL_RSA  */
 
 static struct serial_state rs_table[RS_TABLE_SIZE] = {
@@ -313,7 +325,7 @@ static struct serial_state rs_table[RS_TABLE_SIZE] = {
 
 #if (defined(ENABLE_SERIAL_PCI) || defined(ENABLE_SERIAL_PNP))
 #define NR_PCI_BOARDS	8
-/* We don't unregister PCI boards right now */
+
 static struct pci_board_inst	serial_pci_board[NR_PCI_BOARDS];
 static int serial_pci_board_idx = 0;
 
@@ -573,6 +585,23 @@ static _INLINE_ void receive_chars(struct async_struct *info,
 			if (*status & UART_LSR_BI) {
 				*status &= ~(UART_LSR_FE | UART_LSR_PE);
 				icount->brk++;
+				/*
+				 * We do the SysRQ and SAK checking
+				 * here because otherwise the break
+				 * may get masked by ignore_status_mask
+				 * or read_status_mask.
+				 */
+#if defined(CONFIG_SERIAL_CONSOLE) && defined(CONFIG_MAGIC_SYSRQ)
+				if (info->line == sercons.index) {
+					if (!break_pressed) {
+						break_pressed = jiffies;
+						goto ignore_char;
+					}
+					break_pressed = 0;
+				}
+#endif
+				if (info->flags & ASYNC_SAK)
+					do_SAK(tty);
 			} else if (*status & UART_LSR_PE)
 				icount->parity++;
 			else if (*status & UART_LSR_FE)
@@ -591,23 +620,19 @@ static _INLINE_ void receive_chars(struct async_struct *info,
 				goto ignore_char;
 			}
 			*status &= info->read_status_mask;
-		
+
+#ifdef CONFIG_SERIAL_CONSOLE
+			if (info->line == sercons.index) {
+				/* Recover the break flag from console xmit */
+				*status |= lsr_break_flag;
+				lsr_break_flag = 0;
+			}
+#endif
 			if (*status & (UART_LSR_BI)) {
 #ifdef SERIAL_DEBUG_INTR
 				printk("handling break....");
 #endif
-#if defined(CONFIG_SERIAL_CONSOLE) && defined(CONFIG_MAGIC_SYSRQ) && !defined(MODULE)
-				if (info->line == sercons.index) {
-					if (!break_pressed) {
-						break_pressed = jiffies;
-						goto ignore_char;
-					}
-					break_pressed = 0;
-				}
-#endif
 				*tty->flip.flag_buf_ptr = TTY_BREAK;
-				if (info->flags & ASYNC_SAK)
-					do_SAK(tty);
 			} else if (*status & UART_LSR_PE)
 				*tty->flip.flag_buf_ptr = TTY_PARITY;
 			else if (*status & UART_LSR_FE)
@@ -626,7 +651,7 @@ static _INLINE_ void receive_chars(struct async_struct *info,
 					goto ignore_char;
 			}
 		}
-#if defined(CONFIG_SERIAL_CONSOLE) && defined(CONFIG_MAGIC_SYSRQ) && !defined(MODULE)
+#if defined(CONFIG_SERIAL_CONSOLE) && defined(CONFIG_MAGIC_SYSRQ)
 		if (break_pressed && info->line == sercons.index) {
 			if (ch != 0 &&
 			    time_before(jiffies, break_pressed + HZ*5)) {
@@ -1076,7 +1101,7 @@ static void rs_timer(unsigned long dummy)
 #endif
 		restore_flags(flags);
 
-		mod_timer(&serial_timer, jiffies + IRQ_timeout[0] - 2);
+		mod_timer(&serial_timer, jiffies + IRQ_timeout[0]);
 	}
 }
 
@@ -1111,7 +1136,7 @@ static void figure_IRQ_timeout(int irq)
 	}
 	if (!irq)
 		timeout = timeout / 2;
-	IRQ_timeout[irq] = timeout ? timeout : 1;
+	IRQ_timeout[irq] = (timeout > 3) ? timeout-2 : 1;
 }
 
 #ifdef CONFIG_SERIAL_RSA
@@ -2077,7 +2102,7 @@ static int set_serial_info(struct async_struct * info,
 
 	new_serial.irq = irq_cannonicalize(new_serial.irq);
 
-	if ((new_serial.irq >= NR_IRQS) || 
+	if ((new_serial.irq >= NR_IRQS) || (new_serial.irq < 0) || 
 	    (new_serial.baud_base < 9600)|| (new_serial.type < PORT_UNKNOWN) ||
 	    (new_serial.type > PORT_MAX) || (new_serial.type == PORT_CIRRUS) ||
 	    (new_serial.type == PORT_STARTECH)) {
@@ -2310,7 +2335,7 @@ static int set_modem_info(struct async_struct * info, unsigned int cmd,
 
 static int do_autoconfig(struct async_struct * info)
 {
-	int			retval;
+	int irq, retval;
 	
 	if (!capable(CAP_SYS_ADMIN))
 		return -EPERM;
@@ -2323,8 +2348,11 @@ static int do_autoconfig(struct async_struct * info)
 	autoconfig(info->state);
 	if ((info->state->flags & ASYNC_AUTO_IRQ) &&
 	    (info->state->port != 0) &&
-	    (info->state->type != PORT_UNKNOWN))
-		info->state->irq = detect_uart_irq(info->state);
+	    (info->state->type != PORT_UNKNOWN)) {
+		irq = detect_uart_irq(info->state);
+		if (irq > 0)
+			info->state->irq = irq;
+	}
 
 	retval = startup(info);
 	if (retval)
@@ -3111,8 +3139,10 @@ static int rs_open(struct tty_struct *tty, struct file * filp)
 	}
 	tty->driver_data = info;
 	info->tty = tty;
-	if (serial_paranoia_check(info, tty->device, "rs_open"))
+	if (serial_paranoia_check(info, tty->device, "rs_open")) {
+		MOD_DEC_USE_COUNT;		
 		return -ENODEV;
+	}
 
 #ifdef SERIAL_DEBUG_OPEN
 	printk("rs_open %s%d, count = %d\n", tty->driver.name, info->line,
@@ -3125,6 +3155,7 @@ static int rs_open(struct tty_struct *tty, struct file * filp)
 	if (!tmp_buf) {
 		page = get_zeroed_page(GFP_KERNEL);
 		if (!page) {
+			MOD_DEC_USE_COUNT;
 			return -ENOMEM;
 		}
 		if (tmp_buf)
@@ -3140,6 +3171,7 @@ static int rs_open(struct tty_struct *tty, struct file * filp)
 	    (info->flags & ASYNC_CLOSING)) {
 		if (info->flags & ASYNC_CLOSING)
 			interruptible_sleep_on(&info->close_wait);
+		MOD_DEC_USE_COUNT;
 #ifdef SERIAL_DO_RESTART
 		return ((info->flags & ASYNC_HUP_NOTIFY) ?
 			-EAGAIN : -ERESTARTSYS);
@@ -3153,6 +3185,7 @@ static int rs_open(struct tty_struct *tty, struct file * filp)
 	 */
 	retval = startup(info);
 	if (retval) {
+		MOD_DEC_USE_COUNT;
 		return retval;
 	}
 
@@ -3162,6 +3195,7 @@ static int rs_open(struct tty_struct *tty, struct file * filp)
 		printk("rs_open returning after block_til_ready with %d\n",
 		       retval);
 #endif
+		MOD_DEC_USE_COUNT;
 		return retval;
 	}
 
@@ -3486,6 +3520,7 @@ static void autoconfig_startech_uarts(struct async_struct *info,
 		 * (Exoray@isys.ca) claims that it's needed for 952
 		 * dual UART's (which are not recommended for new designs).
 		 */
+		info->ACR = 0;
 		serial_out(info, UART_LCR, 0xBF);
 		serial_out(info, UART_EFR, 0x10);
 		serial_out(info, UART_LCR, 0x00);
@@ -3804,10 +3839,11 @@ static _INLINE_ int get_pci_port(struct pci_dev *dev,
 		if (idx >= max_port)
 			return 1;
 	}
-
+			
 	offset = board->first_uart_offset;
 
 	/* Timedia/SUNIX uses a mixture of BARs and offsets */
+	/* Ugh, this is ugly as all hell --- TYT */
 	if(dev->vendor == PCI_VENDOR_ID_TIMEDIA )  /* 0x1409 */
 		switch(idx) {
 			case 0: base_idx=0;
@@ -4090,6 +4126,62 @@ pci_inteli960ni_fn(struct pci_dev *dev,
 	return(0);
 }
 
+/*
+ * Timedia has an explosion of boards, and to avoid the PCI table from
+ * growing *huge*, we use this function to collapse some 70 entries
+ * in the PCI table into one, for sanity's and compactness's sake.
+ */
+static unsigned short timedia_single_port[] = {
+	0x4025, 0x4027, 0x4028, 0x5025, 0x5027, 0 };
+static unsigned short timedia_dual_port[] = {
+	0x0002, 0x4036, 0x4037, 0x4038, 0x4078, 0x4079, 0x4085,
+	0x4088, 0x4089, 0x5037, 0x5078, 0x5079, 0x5085, 0x6079, 
+	0x7079, 0x8079, 0x8137, 0x8138, 0x8237, 0x8238, 0x9079, 
+	0x9137, 0x9138, 0x9237, 0x9238, 0xA079, 0xB079, 0xC079,
+	0xD079, 0 };
+static unsigned short timedia_quad_port[] = {
+	0x4055, 0x4056, 0x4095, 0x4096, 0x5056, 0x8156, 0x8157, 
+	0x8256, 0x8257, 0x9056, 0x9156, 0x9157, 0x9158, 0x9159, 
+	0x9256, 0x9257, 0xA056, 0xA157, 0xA158, 0xA159, 0xB056,
+	0xB157, 0 };
+static unsigned short timedia_eight_port[] = {
+	0x4065, 0x4066, 0x5065, 0x5066, 0x8166, 0x9066, 0x9166, 
+	0x9167, 0x9168, 0xA066, 0xA167, 0xA168, 0 };
+static struct timedia_struct {
+	int num;
+	unsigned short *ids;
+} timedia_data[] = {
+	{ 1, timedia_single_port },
+	{ 2, timedia_dual_port },
+	{ 4, timedia_quad_port },
+	{ 8, timedia_eight_port },
+	{ 0, 0 }
+};
+
+static int
+#ifndef MODULE
+__init
+#endif
+pci_timedia_fn(struct pci_dev *dev, struct pci_board *board, int enable)
+{
+	int	i, j;
+	unsigned short *ids;
+
+	if (!enable)
+		return 0;
+
+	for (i=0; timedia_data[i].num; i++) {
+		ids = timedia_data[i].ids;
+		for (j=0; ids[j]; j++) {
+			if (pci_get_subvendor(dev) == ids[j]) {
+				board->num_ports = timedia_data[i].num;
+				return 0;
+			}
+		}
+	}
+	return 0;
+}
+
 
 /*
  * This is the configuration table for all of the PCI serial boards
@@ -4116,58 +4208,50 @@ static struct pci_board pci_boards[] __initdata = {
 		PCI_SUBVENDOR_ID_CONNECT_TECH,
 		PCI_SUBDEVICE_ID_CONNECT_TECH_BH2_232,
 		SPCI_FL_BASE1, 2, 1382400 },
-	{	PCI_VENDOR_ID_V3, PCI_DEVICE_ID_V3_V960V2,
+	{	PCI_VENDOR_ID_V3, PCI_DEVICE_ID_V3_V351,
 		PCI_SUBVENDOR_ID_CONNECT_TECH,
 		PCI_SUBDEVICE_ID_CONNECT_TECH_BH8_232,
 		SPCI_FL_BASE1, 8, 1382400 },
-	{	PCI_VENDOR_ID_V3, PCI_DEVICE_ID_V3_V960V2,
+	{	PCI_VENDOR_ID_V3, PCI_DEVICE_ID_V3_V351,
 		PCI_SUBVENDOR_ID_CONNECT_TECH,
 		PCI_SUBDEVICE_ID_CONNECT_TECH_BH4_232,
 		SPCI_FL_BASE1, 4, 1382400 },
-	{	PCI_VENDOR_ID_V3, PCI_DEVICE_ID_V3_V960V2,
+	{	PCI_VENDOR_ID_V3, PCI_DEVICE_ID_V3_V351,
 		PCI_SUBVENDOR_ID_CONNECT_TECH,
 		PCI_SUBDEVICE_ID_CONNECT_TECH_BH2_232,
 		SPCI_FL_BASE1, 2, 1382400 },
-	{	PCI_VENDOR_ID_V3, PCI_DEVICE_ID_V3_V960,
+	{	PCI_VENDOR_ID_V3, PCI_DEVICE_ID_V3_V351,
 		PCI_SUBVENDOR_ID_CONNECT_TECH,
 		PCI_SUBDEVICE_ID_CONNECT_TECH_BH8_485,
 		SPCI_FL_BASE1, 8, 921600 },
-	{	PCI_VENDOR_ID_V3, PCI_DEVICE_ID_V3_V960,
+	{	PCI_VENDOR_ID_V3, PCI_DEVICE_ID_V3_V351,
 		PCI_SUBVENDOR_ID_CONNECT_TECH,
 		PCI_SUBDEVICE_ID_CONNECT_TECH_BH8_485_4_4,
 		SPCI_FL_BASE1, 8, 921600 },
-	{	PCI_VENDOR_ID_V3, PCI_DEVICE_ID_V3_V960,
+	{	PCI_VENDOR_ID_V3, PCI_DEVICE_ID_V3_V351,
 		PCI_SUBVENDOR_ID_CONNECT_TECH,
 		PCI_SUBDEVICE_ID_CONNECT_TECH_BH4_485,
 		SPCI_FL_BASE1, 4, 921600 },
-	{	PCI_VENDOR_ID_V3, PCI_DEVICE_ID_V3_V960,
+	{	PCI_VENDOR_ID_V3, PCI_DEVICE_ID_V3_V351,
 		PCI_SUBVENDOR_ID_CONNECT_TECH,
 		PCI_SUBDEVICE_ID_CONNECT_TECH_BH4_485_2_2,
 		SPCI_FL_BASE1, 4, 921600 },
-	{	PCI_VENDOR_ID_V3, PCI_DEVICE_ID_V3_V960,
+	{	PCI_VENDOR_ID_V3, PCI_DEVICE_ID_V3_V351,
 		PCI_SUBVENDOR_ID_CONNECT_TECH,
 		PCI_SUBDEVICE_ID_CONNECT_TECH_BH2_485,
 		SPCI_FL_BASE1, 2, 921600 },
-	{	PCI_VENDOR_ID_V3, PCI_DEVICE_ID_V3_V960V2,
+	{	PCI_VENDOR_ID_V3, PCI_DEVICE_ID_V3_V351,
 		PCI_SUBVENDOR_ID_CONNECT_TECH,
-		PCI_SUBDEVICE_ID_CONNECT_TECH_BH8_485,
+		PCI_SUBDEVICE_ID_CONNECT_TECH_BH8_485_2_6,
 		SPCI_FL_BASE1, 8, 921600 },
-	{	PCI_VENDOR_ID_V3, PCI_DEVICE_ID_V3_V960V2,
+	{	PCI_VENDOR_ID_V3, PCI_DEVICE_ID_V3_V351,
 		PCI_SUBVENDOR_ID_CONNECT_TECH,
-		PCI_SUBDEVICE_ID_CONNECT_TECH_BH8_485_4_4,
+		PCI_SUBDEVICE_ID_CONNECT_TECH_BH081101V1,
 		SPCI_FL_BASE1, 8, 921600 },
-	{	PCI_VENDOR_ID_V3, PCI_DEVICE_ID_V3_V960V2,
+	{	PCI_VENDOR_ID_V3, PCI_DEVICE_ID_V3_V351,
 		PCI_SUBVENDOR_ID_CONNECT_TECH,
-		PCI_SUBDEVICE_ID_CONNECT_TECH_BH4_485,
+		PCI_SUBDEVICE_ID_CONNECT_TECH_BH041101V1,
 		SPCI_FL_BASE1, 4, 921600 },
-	{	PCI_VENDOR_ID_V3, PCI_DEVICE_ID_V3_V960V2,
-		PCI_SUBVENDOR_ID_CONNECT_TECH,
-		PCI_SUBDEVICE_ID_CONNECT_TECH_BH4_485_2_2,
-		SPCI_FL_BASE1, 4, 921600 },
-	{	PCI_VENDOR_ID_V3, PCI_DEVICE_ID_V3_V960V2,
-		PCI_SUBVENDOR_ID_CONNECT_TECH,
-		PCI_SUBDEVICE_ID_CONNECT_TECH_BH2_485,
-		SPCI_FL_BASE1, 2, 921600 },
 	{	PCI_VENDOR_ID_SEALEVEL, PCI_DEVICE_ID_SEALEVEL_U530,
 		PCI_ANY_ID, PCI_ANY_ID,
 		SPCI_FL_BASE2 | SPCI_FL_BASE_TABLE, 1, 115200 },
@@ -4196,6 +4280,9 @@ static struct pci_board pci_boards[] __initdata = {
 	{	PCI_VENDOR_ID_PLX, PCI_DEVICE_ID_PLX_SPCOM800, 
 		PCI_ANY_ID, PCI_ANY_ID,
 		SPCI_FL_BASE2, 8, 921600 },
+	{	PCI_VENDOR_ID_PLX, PCI_DEVICE_ID_PLX_1077,
+		PCI_ANY_ID, PCI_ANY_ID,
+		SPCI_FL_BASE2, 4, 921600 },
 	{	PCI_VENDOR_ID_PLX, PCI_DEVICE_ID_PLX_9050,
 		PCI_SUBVENDOR_ID_KEYSPAN,
 		PCI_SUBDEVICE_ID_KEYSPAN_SX2,
@@ -4265,75 +4352,10 @@ static struct pci_board pci_boards[] __initdata = {
 	{	PCI_VENDOR_ID_OXSEMI, PCI_DEVICE_ID_OXSEMI_16PCI95N,
 		PCI_ANY_ID, PCI_ANY_ID,
 		SPCI_FL_BASE0 | SPCI_FL_REGION_SZ_CAP, 32, 115200 },
-	/*	PCI_VENDOR_ID_TIMEDIA/Sunix, PCI_DEVICE_ID_TIMEDIA_1889, */
-	{	0x1409, 0x7168, 0x1409, 0x0002, SPCI_FL_BASE_TABLE, 2, 921600 }, /*4036A*/
-	{	0x1409, 0x7168, 0x1409, 0x4025, SPCI_FL_BASE_TABLE, 1, 921600 }, /*4025A*/
-	{	0x1409, 0x7168, 0x1409, 0x4027, SPCI_FL_BASE_TABLE, 1, 921600 }, /*4027A*/
-	{	0x1409, 0x7168, 0x1409, 0x4028, SPCI_FL_BASE_TABLE, 1, 921600 }, /*4028D*/
-	{	0x1409, 0x7168, 0x1409, 0x4036, SPCI_FL_BASE_TABLE, 2, 921600 }, /*4036D*/
-	{	0x1409, 0x7168, 0x1409, 0x4037, SPCI_FL_BASE_TABLE, 2, 921600 }, /*4037A*/
-	{	0x1409, 0x7168, 0x1409, 0x4038, SPCI_FL_BASE_TABLE, 2, 921600 }, /*4038D*/
-	{	0x1409, 0x7168, 0x1409, 0x4055, SPCI_FL_BASE_TABLE, 4, 921600 }, /*4055A*/
-	{	0x1409, 0x7168, 0x1409, 0x4056, SPCI_FL_BASE_TABLE, 4, 921600 }, /*4056A*/
-	{	0x1409, 0x7168, 0x1409, 0x4065, SPCI_FL_BASE_TABLE, 8, 921600 }, /*4065A*/
-	{	0x1409, 0x7168, 0x1409, 0x4066, SPCI_FL_BASE_TABLE, 8, 921600 }, /*4066A*/
-	{	0x1409, 0x7168, 0x1409, 0x4078, SPCI_FL_BASE_TABLE, 2, 921600 }, /*4078A*/
-	{	0x1409, 0x7168, 0x1409, 0x4079, SPCI_FL_BASE_TABLE, 2, 921600 }, /*4079H*/
-	{	0x1409, 0x7168, 0x1409, 0x4085, SPCI_FL_BASE_TABLE, 2, 921600 }, /*4085H*/
-	{	0x1409, 0x7168, 0x1409, 0x4088, SPCI_FL_BASE_TABLE, 2, 921600 }, /*4088A*/
-	{	0x1409, 0x7168, 0x1409, 0x4089, SPCI_FL_BASE_TABLE, 2, 921600 }, /*4089A*/
-	{	0x1409, 0x7168, 0x1409, 0x4095, SPCI_FL_BASE_TABLE, 4, 921600 }, /*4095A*/
-	{	0x1409, 0x7168, 0x1409, 0x4096, SPCI_FL_BASE_TABLE, 4, 921600 }, /*4096A*/
-	{	0x1409, 0x7168, 0x1409, 0x5025, SPCI_FL_BASE_TABLE, 1, 921600 }, /*4025D*/
-	{	0x1409, 0x7168, 0x1409, 0x5027, SPCI_FL_BASE_TABLE, 1, 921600 }, /*4027D*/
-	{	0x1409, 0x7168, 0x1409, 0x5037, SPCI_FL_BASE_TABLE, 2, 921600 }, /*4037D*/
-	{	0x1409, 0x7168, 0x1409, 0x5056, SPCI_FL_BASE_TABLE, 4, 921600 }, /*4056R*/
-	{	0x1409, 0x7168, 0x1409, 0x5065, SPCI_FL_BASE_TABLE, 8, 921600 }, /*4065R*/
-	{	0x1409, 0x7168, 0x1409, 0x5066, SPCI_FL_BASE_TABLE, 8, 921600 }, /*4066R*/
-	{	0x1409, 0x7168, 0x1409, 0x5078, SPCI_FL_BASE_TABLE, 2, 921600 }, /*4078U*/
-	{	0x1409, 0x7168, 0x1409, 0x5079, SPCI_FL_BASE_TABLE, 2, 921600 }, /*4079A*/
-	{	0x1409, 0x7168, 0x1409, 0x5085, SPCI_FL_BASE_TABLE, 2, 921600 }, /*4085U*/
-	{	0x1409, 0x7168, 0x1409, 0x6079, SPCI_FL_BASE_TABLE, 2, 921600 }, /*4079R*/
-	{	0x1409, 0x7168, 0x1409, 0x7079, SPCI_FL_BASE_TABLE, 2, 921600 }, /*4079S*/
-	{	0x1409, 0x7168, 0x1409, 0x8079, SPCI_FL_BASE_TABLE, 2, 921600 }, /*4079D*/
-	{	0x1409, 0x7168, 0x1409, 0x8137, SPCI_FL_BASE_TABLE, 2, 921600 }, /*8137*/
-	{	0x1409, 0x7168, 0x1409, 0x8138, SPCI_FL_BASE_TABLE, 2, 921600 }, /*8138*/
-	{	0x1409, 0x7168, 0x1409, 0x8156, SPCI_FL_BASE_TABLE, 4, 921600 }, /*8156*/
-	{	0x1409, 0x7168, 0x1409, 0x8157, SPCI_FL_BASE_TABLE, 4, 921600 }, /*8157*/
-	{	0x1409, 0x7168, 0x1409, 0x8166, SPCI_FL_BASE_TABLE, 8, 921600 }, /*8166*/
-	{	0x1409, 0x7168, 0x1409, 0x8237, SPCI_FL_BASE_TABLE, 2, 921600 }, /*8237*/
-	{	0x1409, 0x7168, 0x1409, 0x8238, SPCI_FL_BASE_TABLE, 2, 921600 }, /*8238*/
-	{	0x1409, 0x7168, 0x1409, 0x8256, SPCI_FL_BASE_TABLE, 4, 921600 }, /*8256*/
-	{	0x1409, 0x7168, 0x1409, 0x8257, SPCI_FL_BASE_TABLE, 4, 921600 }, /*8257*/
-	{	0x1409, 0x7168, 0x1409, 0x9056, SPCI_FL_BASE_TABLE, 4, 921600 }, /*9056A*/
-	{	0x1409, 0x7168, 0x1409, 0x9066, SPCI_FL_BASE_TABLE, 8, 921600 }, /*9066A*/
-	{	0x1409, 0x7168, 0x1409, 0x9079, SPCI_FL_BASE_TABLE, 2, 921600 }, /*4079E*/
-	{	0x1409, 0x7168, 0x1409, 0x9137, SPCI_FL_BASE_TABLE, 2, 921600 }, /*8137S*/
-	{	0x1409, 0x7168, 0x1409, 0x9138, SPCI_FL_BASE_TABLE, 2, 921600 }, /*8138S*/
-	{	0x1409, 0x7168, 0x1409, 0x9156, SPCI_FL_BASE_TABLE, 4, 921600 }, /*8156S*/
-	{	0x1409, 0x7168, 0x1409, 0x9157, SPCI_FL_BASE_TABLE, 4, 921600 }, /*8157S*/
-	{	0x1409, 0x7168, 0x1409, 0x9158, SPCI_FL_BASE_TABLE, 4, 921600 }, /*9158*/
-	{	0x1409, 0x7168, 0x1409, 0x9159, SPCI_FL_BASE_TABLE, 4, 921600 }, /*9159*/
-	{	0x1409, 0x7168, 0x1409, 0x9166, SPCI_FL_BASE_TABLE, 8, 921600 }, /*8166S*/
-	{	0x1409, 0x7168, 0x1409, 0x9167, SPCI_FL_BASE_TABLE, 8, 921600 }, /*9167*/
-	{	0x1409, 0x7168, 0x1409, 0x9168, SPCI_FL_BASE_TABLE, 8, 921600 }, /*9168*/
-	{	0x1409, 0x7168, 0x1409, 0x9237, SPCI_FL_BASE_TABLE, 2, 921600 }, /*8237S*/
-	{	0x1409, 0x7168, 0x1409, 0x9238, SPCI_FL_BASE_TABLE, 2, 921600 }, /*8238S*/
-	{	0x1409, 0x7168, 0x1409, 0x9256, SPCI_FL_BASE_TABLE, 4, 921600 }, /*8256S*/
-	{	0x1409, 0x7168, 0x1409, 0x9257, SPCI_FL_BASE_TABLE, 4, 921600 }, /*8257S*/
-	{	0x1409, 0x7168, 0x1409, 0xA056, SPCI_FL_BASE_TABLE, 4, 921600 }, /*9056B*/
-	{	0x1409, 0x7168, 0x1409, 0xA066, SPCI_FL_BASE_TABLE, 8, 921600 }, /*9066B*/
-	{	0x1409, 0x7168, 0x1409, 0xA079, SPCI_FL_BASE_TABLE, 2, 921600 }, /*4079F*/
-	{	0x1409, 0x7168, 0x1409, 0xA157, SPCI_FL_BASE_TABLE, 4, 921600 }, /*9157*/
-	{	0x1409, 0x7168, 0x1409, 0xA158, SPCI_FL_BASE_TABLE, 4, 921600 }, /*9158S*/
-	{	0x1409, 0x7168, 0x1409, 0xA159, SPCI_FL_BASE_TABLE, 4, 921600 }, /*9159S*/
-	{	0x1409, 0x7168, 0x1409, 0xA167, SPCI_FL_BASE_TABLE, 8, 921600 }, /*9167S*/
-	{	0x1409, 0x7168, 0x1409, 0xA168, SPCI_FL_BASE_TABLE, 8, 921600 }, /*9168S*/
-	{	0x1409, 0x7168, 0x1409, 0xB056, SPCI_FL_BASE_TABLE, 4, 921600 }, /*9056C*/
-	{	0x1409, 0x7168, 0x1409, 0xB079, SPCI_FL_BASE_TABLE, 2, 921600 }, /*9079A*/
-	{	0x1409, 0x7168, 0x1409, 0xB157, SPCI_FL_BASE_TABLE, 4, 921600 }, /*9157S*/
-	{	0x1409, 0x7168, 0x1409, 0xC079, SPCI_FL_BASE_TABLE, 2, 921600 }, /*9079B*/
-	{	0x1409, 0x7168, 0x1409, 0xD079, SPCI_FL_BASE_TABLE, 2, 921600 }, /*9079C*/
+	{	PCI_VENDOR_ID_TIMEDIA, PCI_DEVICE_ID_TIMEDIA_1889,
+		PCI_VENDOR_ID_TIMEDIA, PCI_ANY_ID,
+		SPCI_FL_BASE_TABLE, 1, 921600,
+		0, 0, pci_timedia_fn },
 	{	PCI_VENDOR_ID_LAVA, PCI_DEVICE_ID_LAVA_DSERIAL,
 		PCI_ANY_ID, PCI_ANY_ID,
 		SPCI_FL_BASE0 | SPCI_FL_BASE_TABLE, 2, 115200 },
@@ -4540,7 +4562,7 @@ static struct pci_board pci_boards[] __initdata = {
 	{	PCI_VENDOR_ID_ROCKWELL, 0x1004,
 		0x1048, 0x1500, 
 		SPCI_FL_BASE1, 1, 115200 },
-#ifdef CONFIG_DDB5074
+#if CONFIG_DDB5074
 	/*
 	 * NEC Vrc-5074 (Nile 4) builtin UART.
 	 * Conditionally compiled in since this is a motherboard device.
@@ -4580,7 +4602,7 @@ static int _INLINE_ serial_pci_guess_board(struct pci_dev *dev,
 
 	for (i=0; i < 6; i++) {
 		if (IS_PCI_REGION_IOPORT(dev, i)) {
-			num_port = 0;
+			num_port++;
 			if (first_port == -1)
 				first_port = i;
 		} else {
@@ -5077,16 +5099,6 @@ static int __init rs_init(void)
 	int i;
 	struct serial_state * state;
 
-	if (serial_timer.function) {
-		printk("RS_TIMER already set, another serial driver "
-		       "already loaded?\n");
-#ifdef MODULE
-		printk("Can't load serial driver module over built-in "
-		       "serial driver\n");
-#endif
-		return -EBUSY;
-	}
-
 	init_bh(SERIAL_BH, do_serial_bh);
 	init_timer(&serial_timer);
 	serial_timer.function = rs_timer;
@@ -5419,6 +5431,8 @@ static void __exit rs_fini(void)
 
 module_init(rs_init);
 module_exit(rs_fini);
+MODULE_DESCRIPTION("Standard/generic (dumb) serial driver");
+MODULE_AUTHOR("Theodore Ts'o <tytso@mit.edu>");
 
 
 /*
@@ -5437,10 +5451,17 @@ static struct async_struct async_sercons;
  */
 static inline void wait_for_xmitr(struct async_struct *info)
 {
-	unsigned int tmout = 1000000;
+	unsigned int status, tmout = 1000000;
 
-	while (--tmout &&
-	       ((serial_in(info, UART_LSR) & BOTH_EMPTY) != BOTH_EMPTY));
+	do {
+		status = serial_in(info, UART_LSR);
+
+		if (status & UART_LSR_BI)
+			lsr_break_flag = UART_LSR_BI;
+		
+		if (--tmout == 0)
+			break;
+	} while((status & BOTH_EMPTY) != BOTH_EMPTY);
 }
 
 

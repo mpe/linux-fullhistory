@@ -41,7 +41,6 @@
 #include <linux/module.h>
 
 #include "sound_config.h"
-#include "soundmodule.h"
 
 #include "ad1848.h"
 #include "mpu401.h"
@@ -436,9 +435,10 @@ static int opl3sa2_mixer_ioctl(int dev, unsigned int cmd, caddr_t arg)
 
 static struct mixer_operations opl3sa2_mixer_operations =
 {
-	"Yamaha",
-	"",
-	 opl3sa2_mixer_ioctl
+	owner:	THIS_MODULE,
+	id:	"Yamaha",
+	name:	"", /* hmm? */
+	ioctl:	opl3sa2_mixer_ioctl
 };
 
 /* End of mixer-related stuff */
@@ -452,7 +452,7 @@ static inline int __init probe_opl3sa2_mpu(struct address_info *hw_config)
 
 static inline void __init attach_opl3sa2_mpu(struct address_info *hw_config)
 {
-	attach_mpu401(hw_config);
+	attach_mpu401(hw_config, THIS_MODULE);
 }
 
 
@@ -493,7 +493,7 @@ static void __init attach_opl3sa2_mss(struct address_info *hw_config)
 
 	opl3sa2_mixer_reset(devc);
 
-	attach_ms_sound(hw_config);	/* Slot 0 */
+	attach_ms_sound(hw_config, THIS_MODULE);	/* Slot 0 */
 	if(hw_config->slots[0] != -1)
 	{
 		/* Did the MSS driver install? */
@@ -699,7 +699,7 @@ static int __init init_opl3sa2(void)
 			attach_opl3sa2_mpu(&cfg_mpu);
 		}
 	}
-	SOUND_LOCK;
+
 	return 0;
 }
 
@@ -711,7 +711,6 @@ static void __exit cleanup_opl3sa2(void)
 	}
 	unload_opl3sa2_mss(&cfg2);
 	unload_opl3sa2(&cfg);
-	SOUND_LOCK_END;
 }
 
 module_init(init_opl3sa2);

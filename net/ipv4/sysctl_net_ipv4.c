@@ -1,7 +1,7 @@
 /*
  * sysctl_net_ipv4.c: sysctl interface to net IPV4 subsystem.
  *
- * $Id: sysctl_net_ipv4.c,v 1.43 2000/01/16 05:11:27 davem Exp $
+ * $Id: sysctl_net_ipv4.c,v 1.44 2000/08/09 11:59:04 davem Exp $
  *
  * Begun April 1, 1996, Mike Shaver.
  * Added /proc/sys/net/ipv4 directory entry (empty =) ). [MS]
@@ -209,6 +209,24 @@ ctl_table ipv4_table[] = {
 	 &proc_dointvec_jiffies, &sysctl_jiffies},
 	{NET_TCP_ORPHAN_RETRIES, "tcp_orphan_retries",
 	 &sysctl_tcp_orphan_retries, sizeof(int), 0644, NULL, &proc_dointvec},
+	{NET_TCP_FACK, "tcp_fack",
+	 &sysctl_tcp_fack, sizeof(int), 0644, NULL, &proc_dointvec},
+	{NET_TCP_REORDERING, "tcp_reordering",
+	 &sysctl_tcp_reordering, sizeof(int), 0644, NULL, &proc_dointvec},
+	{NET_TCP_ECN, "tcp_ecn",
+	 &sysctl_tcp_ecn, sizeof(int), 0644, NULL, &proc_dointvec},
+	{NET_TCP_DSACK, "tcp_dsack",
+	 &sysctl_tcp_dsack, sizeof(int), 0644, NULL, &proc_dointvec},
+	{NET_TCP_MEM, "tcp_mem",
+	 &sysctl_tcp_mem, sizeof(sysctl_tcp_mem), 0644, NULL, &proc_dointvec},
+	{NET_TCP_WMEM, "tcp_wmem",
+	 &sysctl_tcp_wmem, sizeof(sysctl_tcp_wmem), 0644, NULL, &proc_dointvec},
+	{NET_TCP_RMEM, "tcp_rmem",
+	 &sysctl_tcp_rmem, sizeof(sysctl_tcp_rmem), 0644, NULL, &proc_dointvec},
+	{NET_TCP_APP_WIN, "tcp_app_win",
+	 &sysctl_tcp_app_win, sizeof(int), 0644, NULL, &proc_dointvec},
+	{NET_TCP_ADV_WIN_SCALE, "tcp_adv_win_scale",
+	 &sysctl_tcp_adv_win_scale, sizeof(int), 0644, NULL, &proc_dointvec},
 	{0}
 };
 

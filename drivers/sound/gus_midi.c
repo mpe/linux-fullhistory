@@ -186,23 +186,17 @@ static int gus_midi_buffer_status(int dev)
 
 static struct midi_operations gus_midi_operations =
 {
-	{
-		"Gravis UltraSound Midi", 0, 0, SNDCARD_GUS
-	},
-	&std_midi_synth,
-	{0},
-	gus_midi_open,
-	gus_midi_close,
-	NULL, /* ioctl */
-	gus_midi_out,
-	gus_midi_start_read,
-	gus_midi_end_read,
-	gus_midi_kick,
-	NULL,			/*
-				 * command
-				 */
-	gus_midi_buffer_status,
-	NULL
+	owner:		THIS_MODULE,
+	info:		{"Gravis UltraSound Midi", 0, 0, SNDCARD_GUS},
+	converter:	&std_midi_synth,
+	in_info:	{0},
+	open:		gus_midi_open,
+	close:		gus_midi_close,
+	outputc:	gus_midi_out,
+	start_read:	gus_midi_start_read,
+	end_read:	gus_midi_end_read,
+	kick:		gus_midi_kick,
+	buffer_status:	gus_midi_buffer_status,
 };
 
 void gus_midi_init(struct address_info *hw_config)

@@ -205,11 +205,12 @@ ev4_activate_mm(struct mm_struct *prev_mm, struct mm_struct *next_mm)
 # endif
 #endif
 
-extern inline void
+extern inline int
 init_new_context(struct task_struct *tsk, struct mm_struct *mm)
 {
 	mm->context = 0;
         tsk->thread.ptbr = ((unsigned long)mm->pgd - IDENT_ADDR) >> PAGE_SHIFT;
+	return 0;
 }
 
 extern inline void

@@ -15,14 +15,13 @@
  * Alan Cox		modularisation, use normal request_irq, use dev_id
  */
 
-#include <linux/init.h>
 #include <linux/module.h>
+#include <linux/init.h>
 
 #define USE_SEQ_MACROS
 #define USE_SIMPLE_MACROS
 
 #include "sound_config.h"
-#include "soundmodule.h"
 
 #include "coproc.h"
 #include "mpu401.h"
@@ -866,47 +865,45 @@ static void mpu_synth_close(int dev)
 
 static struct synth_operations mpu401_synth_proto =
 {
-	"MPU401",
-	NULL,
-	0,
-	SYNTH_TYPE_MIDI,
-	0,
-	mpu_synth_open,
-	mpu_synth_close,
-	mpu_synth_ioctl,
-	midi_synth_kill_note,
-	midi_synth_start_note,
-	midi_synth_set_instr,
-	midi_synth_reset,
-	midi_synth_hw_control,
-	midi_synth_load_patch,
-	midi_synth_aftertouch,
-	midi_synth_controller,
-	midi_synth_panning,
-	NULL,
-	midi_synth_bender,
-	NULL,			/* alloc */
-	midi_synth_setup_voice,
-	midi_synth_send_sysex
+	owner:		THIS_MODULE,
+	id:		"MPU401",
+	info:		NULL,
+	midi_dev:	0,
+	synth_type:	SYNTH_TYPE_MIDI,
+	synth_subtype:	0,
+	open:		mpu_synth_open,
+	close:		mpu_synth_close,
+	ioctl:		mpu_synth_ioctl,
+	kill_note:	midi_synth_kill_note,
+	start_note:	midi_synth_start_note,
+	set_instr:	midi_synth_set_instr,
+	reset:		midi_synth_reset,
+	hw_control:	midi_synth_hw_control,
+	load_patch:	midi_synth_load_patch,
+	aftertouch:	midi_synth_aftertouch,
+	controller:	midi_synth_controller,
+	panning:	midi_synth_panning,
+	bender:		midi_synth_bender,
+	setup_voice:	midi_synth_setup_voice,
+	send_sysex:	midi_synth_send_sysex
 };
 
 static struct synth_operations *mpu401_synth_operations[MAX_MIDI_DEV];
 
 static struct midi_operations mpu401_midi_proto =
 {
-	{"MPU-401 Midi", 0, MIDI_CAP_MPU401, SNDCARD_MPU401},
-	NULL,
-	{0},
-	mpu401_open,
-	mpu401_close,
-	mpu401_ioctl,
-	mpu401_out,
-	mpu401_start_read,
-	mpu401_end_read,
-	mpu401_kick,
-	NULL,
-	mpu401_buffer_status,
-	mpu401_prefix_cmd
+	owner:		THIS_MODULE,
+	info:		{"MPU-401 Midi", 0, MIDI_CAP_MPU401, SNDCARD_MPU401},
+	in_info:	{0},
+	open:		mpu401_open,
+	close:		mpu401_close,
+	ioctl:		mpu401_ioctl,
+	outputc:	mpu401_out,
+	start_read:	mpu401_start_read,
+	end_read:	mpu401_end_read,
+	kick:		mpu401_kick,
+	buffer_status:	mpu401_buffer_status,
+	prefix_cmd:	mpu401_prefix_cmd
 };
 
 static struct midi_operations mpu401_midi_operations[MAX_MIDI_DEV];
@@ -942,7 +939,7 @@ static void __init mpu401_chk_version(int n, struct mpu_config *devc)
 	restore_flags(flags);
 }
 
-void __init attach_mpu401(struct address_info *hw_config)
+void __init attach_mpu401(struct address_info *hw_config, struct module *owner)
 {
 	unsigned long flags;
 	char revision_char;
@@ -1089,6 +1086,10 @@ void __init attach_mpu401(struct address_info *hw_config)
 		hw_config->slots[2] = mpu_timer_init(m);
 
 	midi_devs[m] = &mpu401_midi_operations[devc->devno];
+	
+	if (owner)
+		midi_devs[m]->owner = owner;
+
 	hw_config->slots[1] = m;
 	sequencer_init();
 }
@@ -1574,15 +1575,16 @@ static void mpu_timer_arm(int dev, long time)
 
 static struct sound_timer_operations mpu_timer =
 {
-	{"MPU-401 Timer", 0},
-	10,			/* Priority */
-	0,			/* Local device link */
-	mpu_timer_open,
-	mpu_timer_close,
-	mpu_timer_event,
-	mpu_timer_get_time,
-	mpu_timer_ioctl,
-	mpu_timer_arm
+	owner:		THIS_MODULE,
+	info:		{"MPU-401 Timer", 0},
+	priority:	10,	/* Priority */
+	devlink:	0,	/* Local device link */
+	open:		mpu_timer_open,
+	close:		mpu_timer_close,
+	event:		mpu_timer_event,
+	get_time:	mpu_timer_get_time,
+	ioctl:		mpu_timer_ioctl,
+	arm_timer:	mpu_timer_arm
 };
 
 static void mpu_timer_interrupt(void)
@@ -1731,10 +1733,9 @@ int init_mpu401(void)
 		cfg.io_base = io;
 		if (probe_mpu401(&cfg) == 0)
 			return -ENODEV;
-		attach_mpu401(&cfg);
+		attach_mpu401(&cfg, THIS_MODULE);
 	}
 	
-	SOUND_LOCK;
 	return 0;
 }
 
@@ -1744,7 +1745,6 @@ void cleanup_mpu401(void)
 		/* Check for use by, for example, sscape driver */
 		unload_mpu401(&cfg);
 	}
-	SOUND_LOCK_END;
 }
 
 module_init(init_mpu401);

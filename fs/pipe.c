@@ -545,9 +545,9 @@ int do_pipe(int *fd)
 	this.len = strlen(name);
 	this.hash = inode->i_ino; /* will go */
 	dentry = d_alloc(pipe_mnt->mnt_sb->s_root, &this);
-	dentry->d_op = &pipefs_dentry_operations;
 	if (!dentry)
 		goto close_f12_inode_i_j;
+	dentry->d_op = &pipefs_dentry_operations;
 	d_add(dentry, inode);
 	f1->f_vfsmnt = f2->f_vfsmnt = mntget(mntget(pipe_mnt));
 	f1->f_dentry = f2->f_dentry = dget(dentry);

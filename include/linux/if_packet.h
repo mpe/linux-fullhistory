@@ -38,6 +38,7 @@ struct sockaddr_ll
 /* Value 4 is still used by obsolete turbo-packet. */
 #define PACKET_RX_RING			5
 #define PACKET_STATISTICS		6
+#define PACKET_COPY_THRESH		7
 
 struct tpacket_stats
 {

@@ -36,7 +36,6 @@
 #include <linux/isapnp.h>
 #include <linux/stddef.h>
 
-#include "soundmodule.h"
 #include "sound_config.h"
 
 #define DEBUGNOISE(x)
@@ -247,13 +246,6 @@ static void ad1816_start_input (int dev, unsigned long buf, int count,
 	devc->audio_mode |= PCM_ENABLE_INPUT;
 	restore_flags (flags);
 }
-
-
-static int ad1816_ioctl (int dev, unsigned int cmd, caddr_t arg)
-{
-	return -(EINVAL);
-}
-
 
 static int ad1816_prepare_for_input (int dev, int bsize, int bcount)
 {
@@ -535,24 +527,20 @@ static void ad1816_close (int dev) /* close device */
 
 static struct audio_driver ad1816_audio_driver =
 {
-	ad1816_open,
-	ad1816_close,
-	ad1816_output_block,
-	ad1816_start_input,
-	ad1816_ioctl,
-	ad1816_prepare_for_input,
-	ad1816_prepare_for_output,
-	ad1816_halt,
-	NULL,
-	NULL,
-	ad1816_halt_input,
-	ad1816_halt_output,
-	ad1816_trigger,
-	ad1816_set_speed,
-	ad1816_set_bits,
-	ad1816_set_channels,
-	NULL,
-	NULL
+	owner:		THIS_MODULE,
+	open:		ad1816_open,
+	close:		ad1816_close,
+	output_block:	ad1816_output_block,
+	start_input:	ad1816_start_input,
+	prepare_for_input:	ad1816_prepare_for_input,
+	prepare_for_output:	ad1816_prepare_for_output,
+	halt_io:		ad1816_halt,
+	halt_input:	ad1816_halt_input,
+	halt_output:	ad1816_halt_output,
+	trigger:	ad1816_trigger,
+	set_speed:	ad1816_set_speed,
+	set_bits:	ad1816_set_bits,
+	set_channels:	ad1816_set_channels,
 };
 
 
@@ -992,9 +980,10 @@ ad1816_mixer_ioctl (int dev, unsigned int cmd, caddr_t arg)
 /* Mixer structure */
 
 static struct mixer_operations ad1816_mixer_operations = {
-	"AD1816",
-	"AD1816 Mixer",
-	ad1816_mixer_ioctl
+	owner:	THIS_MODULE,
+	id:	"AD1816",
+	name:	"AD1816 Mixer",
+	ioctl:	ad1816_mixer_ioctl
 };
 
 
@@ -1424,7 +1413,6 @@ static int __init init_ad1816(void)
 	}
 
 	attach_ad1816(&cfg);
-	SOUND_LOCK;
 
 	return 0;
 }
@@ -1441,7 +1429,6 @@ static void __exit cleanup_ad1816 (void)
 	}     
 	nr_ad1816_devs=0;
 
-	SOUND_LOCK_END;
 #if defined CONFIG_ISAPNP || defined CONFIG_ISAPNP_MODULE
 	if(activated)
 		if(ad1816_dev)

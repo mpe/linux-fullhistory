@@ -144,7 +144,7 @@ static int linear_make_request (mddev_t *mddev,
     
 	if (block >= (tmp_dev->size + tmp_dev->offset)
 				|| block < tmp_dev->offset) {
-		printk ("linear_make_request: Block %ld out of bounds on dev %s size %d offset %d\n", block, kdevname(tmp_dev->dev), tmp_dev->size, tmp_dev->offset);
+		printk ("linear_make_request: Block %ld out of bounds on dev %s size %ld offset %ld\n", block, kdevname(tmp_dev->dev), tmp_dev->size, tmp_dev->offset);
 		return -1;
 	}
 	bh->b_rdev = tmp_dev->dev;

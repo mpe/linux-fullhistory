@@ -247,11 +247,6 @@ static int check(const char *tablename,
 			DEBUGP("REJECT: TCP_RESET illegal for non-tcp\n");
 			return 0;
 		}
-		/* Only for local input.  Rest is too dangerous. */
-		if ((hook_mask & ~(1 << NF_IP_LOCAL_IN)) != 0) {
-			DEBUGP("REJECT: TCP_RESET only from INPUT\n");
-			return 0;
-		}
 	}
 
 	return 1;

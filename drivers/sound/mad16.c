@@ -73,7 +73,6 @@
 #include <linux/module.h>
 
 #include "sound_config.h"
-#include "soundmodule.h"
 
 #include "ad1848.h"
 #include "sb.h"
@@ -710,7 +709,8 @@ static void __init attach_mad16(struct address_info *hw_config)
 					  hw_config->irq,
 					  dma,
 					  dma2, 0,
-					  hw_config->osp);
+					  hw_config->osp,
+					  THIS_MODULE);
 	request_region(hw_config->io_base, 4, "MAD16 WSS config");
 }
 
@@ -724,7 +724,7 @@ static void __init attach_mad16_mpu(struct address_info *hw_config)
 		hw_config->io_base = 0x220;
 
 	hw_config->name = "Mad16/Mozart";
-	sb_dsp_init(hw_config);
+	sb_dsp_init(hw_config, THIS_MODULE);
 	return;
 #endif
 
@@ -733,7 +733,7 @@ static void __init attach_mad16_mpu(struct address_info *hw_config)
 
 	hw_config->driver_use_1 = SB_MIDI_ONLY;
 	hw_config->name = "Mad16/Mozart";
-	attach_uart401(hw_config);
+	attach_uart401(hw_config, THIS_MODULE);
 }
 
 static int __init probe_mad16_mpu(struct address_info *hw_config)
@@ -1094,7 +1094,6 @@ static int __init init_mad16(void)
 	if (found_mpu)
 		attach_mad16_mpu(&cfg_mpu);
 
-	SOUND_LOCK;
 	return 0;
 }
 
@@ -1103,7 +1102,6 @@ static void __exit cleanup_mad16(void)
 	if (found_mpu)
 		unload_mad16_mpu(&cfg_mpu);
 	unload_mad16(&cfg);
-	SOUND_LOCK_END;
 }
 
 module_init(init_mad16);

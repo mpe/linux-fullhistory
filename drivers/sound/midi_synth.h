@@ -22,27 +22,26 @@ static struct synth_info std_synth_info =
 
 static struct synth_operations std_midi_synth =
 {
-  "MIDI",
-  &std_synth_info,
-  0,
-  SYNTH_TYPE_MIDI,
-  0,
-  midi_synth_open,
-  midi_synth_close,
-  midi_synth_ioctl,
-  midi_synth_kill_note,
-  midi_synth_start_note,
-  midi_synth_set_instr,
-  midi_synth_reset,
-  midi_synth_hw_control,
-  midi_synth_load_patch,
-  midi_synth_aftertouch,
-  midi_synth_controller,
-  midi_synth_panning,
-  NULL,
-  midi_synth_bender,
-  NULL,	/* alloc_voice */
-  midi_synth_setup_voice,
-  midi_synth_send_sysex
+	owner:		THIS_MODULE,
+	id:		"MIDI",
+	info:		&std_synth_info,
+	midi_dev:	0,
+	synth_type:	SYNTH_TYPE_MIDI,
+	synth_subtype:	0,
+	open:		midi_synth_open,
+	close:		midi_synth_close,
+	ioctl:		midi_synth_ioctl,
+	kill_note:	midi_synth_kill_note,
+	start_note:	midi_synth_start_note,
+	set_instr:	midi_synth_set_instr,
+	reset:		midi_synth_reset,
+	hw_control:	midi_synth_hw_control,
+	load_patch:	midi_synth_load_patch,
+	aftertouch:	midi_synth_aftertouch,
+	controller:	midi_synth_controller,
+	panning:	midi_synth_panning,
+	bender:		midi_synth_bender,
+	setup_voice:	midi_synth_setup_voice,
+	send_sysex:	midi_synth_send_sysex
 };
 #endif

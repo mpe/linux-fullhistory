@@ -24,7 +24,6 @@
 #include <linux/module.h>
 
 #include "sound_config.h"
-#include "soundmodule.h"
 
 #include "mpu401.h"
 
@@ -206,21 +205,17 @@ static inline int uart401_buffer_status(int dev)
 
 static struct midi_operations uart401_operations =
 {
-	{
-		"MPU-401 (UART) MIDI", 0, 0, SNDCARD_MPU401
-	},
-	&std_midi_synth,
-	{0},
-	uart401_open,
-	uart401_close,
-	NULL, /* ioctl */
-	uart401_out,
-	uart401_start_read,
-	uart401_end_read,
-	uart401_kick,
-	NULL,
-	uart401_buffer_status,
-	NULL
+	owner:		THIS_MODULE,
+	info:		{"MPU-401 (UART) MIDI", 0, 0, SNDCARD_MPU401},
+	converter:	&std_midi_synth,
+	in_info:	{0},
+	open:		uart401_open,
+	close:		uart401_close,
+	outputc:	uart401_out,
+	start_read:	uart401_start_read,
+	end_read:	uart401_end_read,
+	kick:		uart401_kick,
+	buffer_status:	uart401_buffer_status,
 };
 
 static void enter_uart_mode(uart401_devc * devc)
@@ -246,7 +241,7 @@ static void enter_uart_mode(uart401_devc * devc)
 	restore_flags(flags);
 }
 
-void attach_uart401(struct address_info *hw_config)
+void attach_uart401(struct address_info *hw_config, struct module *owner)
 {
 	uart401_devc *devc;
 	char *name = "MPU-401 (UART) MIDI";
@@ -311,6 +306,9 @@ void attach_uart401(struct address_info *hw_config)
 	memcpy((char *) midi_devs[devc->my_dev], (char *) &uart401_operations,
 	       sizeof(struct midi_operations));
 
+	if (owner)
+		midi_devs[devc->my_dev]->owner = owner;
+	
 	midi_devs[devc->my_dev]->devc = devc;
 	midi_devs[devc->my_dev]->converter = (struct synth_operations *)kmalloc(sizeof(struct synth_operations), GFP_KERNEL);
 	if (midi_devs[devc->my_dev]->converter == NULL)
@@ -473,9 +471,9 @@ static int __init init_uart401(void)
 		printk(KERN_INFO "MPU-401 UART driver Copyright (C) Hannu Savolainen 1993-1997");
 		if (probe_uart401(&cfg_mpu) == 0)
 			return -ENODEV;
-		attach_uart401(&cfg_mpu);
+		attach_uart401(&cfg_mpu, THIS_MODULE);
 	}
-	SOUND_LOCK;
+
 	return 0;
 }
 
@@ -483,7 +481,6 @@ static void __exit cleanup_uart401(void)
 {
 	if (cfg_mpu.io_base != -1 && cfg_mpu.irq != -1)
 		unload_uart401(&cfg_mpu);
-	SOUND_LOCK_END;
 }
 
 module_init(init_uart401);

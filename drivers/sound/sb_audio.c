@@ -933,128 +933,103 @@ sb16_audio_mmap(int dev)
 
 static struct audio_driver sb1_audio_driver =	/* SB1.x */
 {
-	sb_audio_open,
-	sb_audio_close,
-	sb_set_output_parms,
-	sb_set_input_parms,
-	NULL, /* ioctl */
-	sb1_audio_prepare_for_input,
-	sb1_audio_prepare_for_output,
-	sb1_audio_halt_xfer,
-	NULL,			/* local_qlen */
-	NULL,			/* copy_from_user */
-	NULL,
-	NULL,
-	sb1_audio_trigger,
-	sb1_audio_set_speed,
-	sb1_audio_set_bits,
-	sb1_audio_set_channels
+	owner:		THIS_MODULE,
+	open:		sb_audio_open,
+	close:		sb_audio_close,
+	output_block:	sb_set_output_parms,
+	start_input:	sb_set_input_parms,
+	prepare_for_input:	sb1_audio_prepare_for_input,
+	prepare_for_output:	sb1_audio_prepare_for_output,
+	halt_io:	sb1_audio_halt_xfer,
+	trigger:	sb1_audio_trigger,
+	set_speed:	sb1_audio_set_speed,
+	set_bits:	sb1_audio_set_bits,
+	set_channels:	sb1_audio_set_channels
 };
 
 static struct audio_driver sb20_audio_driver =	/* SB2.0 */
 {
-	sb_audio_open,
-	sb_audio_close,
-	sb_set_output_parms,
-	sb_set_input_parms,
-	NULL,
-	sb1_audio_prepare_for_input,
-	sb1_audio_prepare_for_output,
-	sb1_audio_halt_xfer,
-	NULL,			/* local_qlen */
-	NULL,			/* copy_from_user */
-	NULL,
-	NULL,
-	sb20_audio_trigger,
-	sb1_audio_set_speed,
-	sb1_audio_set_bits,
-	sb1_audio_set_channels
+	owner:		THIS_MODULE,
+	open:		sb_audio_open,
+	close:		sb_audio_close,
+	output_block:	sb_set_output_parms,
+	start_input:	sb_set_input_parms,
+	prepare_for_input:	sb1_audio_prepare_for_input,
+	prepare_for_output:	sb1_audio_prepare_for_output,
+	halt_io:	sb1_audio_halt_xfer,
+	trigger:	sb20_audio_trigger,
+	set_speed:	sb1_audio_set_speed,
+	set_bits:	sb1_audio_set_bits,
+	set_channels:	sb1_audio_set_channels
 };
 
 static struct audio_driver sb201_audio_driver =		/* SB2.01 */
 {
-	sb_audio_open,
-	sb_audio_close,
-	sb_set_output_parms,
-	sb_set_input_parms,
-	NULL,
-	sb1_audio_prepare_for_input,
-	sb1_audio_prepare_for_output,
-	sb1_audio_halt_xfer,
-	NULL,			/* local_qlen */
-	NULL,			/* copy_from_user */
-	NULL,
-	NULL,
-	sb20_audio_trigger,
-	sb201_audio_set_speed,
-	sb1_audio_set_bits,
-	sb1_audio_set_channels
+	owner:		THIS_MODULE,
+	open:		sb_audio_open,
+	close:		sb_audio_close,
+	output_block:	sb_set_output_parms,
+	start_input:	sb_set_input_parms,
+	prepare_for_input:	sb1_audio_prepare_for_input,
+	prepare_for_output:	sb1_audio_prepare_for_output,
+	halt_io:	sb1_audio_halt_xfer,
+	trigger:	sb20_audio_trigger,
+	set_speed:	sb201_audio_set_speed,
+	set_bits:	sb1_audio_set_bits,
+	set_channels:	sb1_audio_set_channels
 };
 
 static struct audio_driver sbpro_audio_driver =		/* SB Pro */
 {
-	sb_audio_open,
-	sb_audio_close,
-	sb_set_output_parms,
-	sb_set_input_parms,
-	NULL,
-	sbpro_audio_prepare_for_input,
-	sbpro_audio_prepare_for_output,
-	sb1_audio_halt_xfer,
-	NULL,			/* local_qlen */
-	NULL,			/* copy_from_user */
-	NULL,
-	NULL,
-	sb20_audio_trigger,
-	sbpro_audio_set_speed,
-	sb1_audio_set_bits,
-	sbpro_audio_set_channels
+	owner:		THIS_MODULE,
+	open:		sb_audio_open,
+	close:		sb_audio_close,
+	output_block:	sb_set_output_parms,
+	start_input:	sb_set_input_parms,
+	prepare_for_input:	sbpro_audio_prepare_for_input,
+	prepare_for_output:	sbpro_audio_prepare_for_output,
+	halt_io:	sb1_audio_halt_xfer,
+	trigger:	sb20_audio_trigger,
+	set_speed:	sbpro_audio_set_speed,
+	set_bits:	sb1_audio_set_bits,
+	set_channels:	sbpro_audio_set_channels
 };
 
 static struct audio_driver jazz16_audio_driver =	/* Jazz16 and SM Wave */
 {
-	sb_audio_open,
-	sb_audio_close,
-	sb_set_output_parms,
-	sb_set_input_parms,
-	NULL,
-	sbpro_audio_prepare_for_input,
-	sbpro_audio_prepare_for_output,
-	sb1_audio_halt_xfer,
-	NULL,			/* local_qlen */
-	NULL,			/* copy_from_user */
-	NULL,
-	NULL,
-	sb20_audio_trigger,
-	jazz16_audio_set_speed,
-	sb16_audio_set_bits,
-	sbpro_audio_set_channels
+	owner:		THIS_MODULE,
+	open:		sb_audio_open,
+	close:		sb_audio_close,
+	output_block:	sb_set_output_parms,
+	start_input:	sb_set_input_parms,
+	prepare_for_input:	sbpro_audio_prepare_for_input,
+	prepare_for_output:	sbpro_audio_prepare_for_output,
+	halt_io:	sb1_audio_halt_xfer,
+	trigger:	sb20_audio_trigger,
+	set_speed:	jazz16_audio_set_speed,
+	set_bits:	sb16_audio_set_bits,
+	set_channels:	sbpro_audio_set_channels
 };
 
 static struct audio_driver sb16_audio_driver =	/* SB16 */
 {
-	sb_audio_open,
-	sb_audio_close,
-	sb_set_output_parms,
-	sb_set_input_parms,
-	NULL,
-	sb16_audio_prepare_for_input,
-	sb16_audio_prepare_for_output,
-	sb1_audio_halt_xfer,
-	NULL,			/* local_qlen */
-	sb16_copy_from_user,	/* copy_from_user */
-	NULL,
-	NULL,
-	sb16_audio_trigger,
-	sb16_audio_set_speed,
-	sb16_audio_set_bits,
-	sbpro_audio_set_channels,
-	NULL,
-	NULL,
-	sb16_audio_mmap
+	owner:		THIS_MODULE,
+	open:		sb_audio_open,
+	close:		sb_audio_close,
+	output_block:	sb_set_output_parms,
+	start_input:	sb_set_input_parms,
+	prepare_for_input:	sb16_audio_prepare_for_input,
+	prepare_for_output:	sb16_audio_prepare_for_output,
+	halt_io:	sb1_audio_halt_xfer,
+	copy_user:	sb16_copy_from_user,
+	trigger:	sb16_audio_trigger,
+	set_speed:	sb16_audio_set_speed,
+	set_bits:	sb16_audio_set_bits,
+	set_channels:	sbpro_audio_set_channels,
+	mmap:		sb16_audio_mmap
 };
 
-void sb_audio_init(sb_devc * devc, char *name)
+void sb_audio_init(sb_devc * devc, char *name, struct module *owner)
 {
 	int audio_flags = 0;
 	int format_mask = AFMT_U8;
@@ -1111,6 +1086,9 @@ void sb_audio_init(sb_devc * devc, char *name)
 			driver = &sbpro_audio_driver;
 	}
 
+	if (owner)
+			driver->owner = owner;
+	
 	if ((devc->dev = sound_install_audiodrv(AUDIO_DRIVER_VERSION,
 				name,driver, sizeof(struct audio_driver),
 				audio_flags, format_mask, devc,

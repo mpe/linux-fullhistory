@@ -264,15 +264,16 @@ static void timer_arm(int dev, long time)
 
 static struct sound_timer_operations sound_timer =
 {
-	{"Sound Timer", 0},
-	1,			/* Priority */
-	0,			/* Local device link */
-	timer_open,
-	timer_close,
-	timer_event,
-	timer_get_time,
-	timer_ioctl,
-	timer_arm
+	owner:		THIS_MODULE,
+	info:		{"Sound Timer", 0},
+	priority:	1,	/* Priority */
+	devlink:	0,	/* Local device link */
+	open:		timer_open,
+	close:		timer_close,
+	event:		timer_event,
+	get_time:	timer_get_time,
+	ioctl:		timer_ioctl,
+	arm_timer:	timer_arm
 };
 
 void sound_timer_interrupt(void)

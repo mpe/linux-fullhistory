@@ -1,4 +1,4 @@
-/* $Id: sparc64_ksyms.c,v 1.91 2000/08/05 13:30:33 davem Exp $
+/* $Id: sparc64_ksyms.c,v 1.92 2000/08/09 08:45:40 anton Exp $
  * arch/sparc64/kernel/sparc64_ksyms.c: Sparc64 specific ksyms support.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -334,3 +334,7 @@ EXPORT_SYMBOL_NOVERS(memcmp);
 EXPORT_SYMBOL_NOVERS(memcpy);
 EXPORT_SYMBOL_NOVERS(memset);
 EXPORT_SYMBOL_NOVERS(memmove);
+
+void VISenter(void);
+/* RAID code needs this */
+EXPORT_SYMBOL(VISenter);
