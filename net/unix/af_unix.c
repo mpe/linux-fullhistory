@@ -121,8 +121,6 @@
 
 int sysctl_unix_max_dgram_qlen = 10;
 
-static kmem_cache_t *unix_sk_cachep;
-
 struct hlist_head unix_socket_table[UNIX_HASH_SIZE + 1];
 DEFINE_RWLOCK(unix_table_lock);
 static atomic_t unix_nr_socks = ATOMIC_INIT(0);
@@ -539,6 +537,12 @@ static struct proto_ops unix_seqpacket_ops = {
 	.sendpage =	sock_no_sendpage,
 };
 
+static struct proto unix_proto = {
+	.name	  = "UNIX",
+	.owner	  = THIS_MODULE,
+	.obj_size = sizeof(struct unix_sock),
+};
+
 static struct sock * unix_create1(struct socket *sock)
 {
 	struct sock *sk = NULL;
@@ -547,15 +551,13 @@ static struct sock * unix_create1(struct socket *sock)
 	if (atomic_read(&unix_nr_socks) >= 2*files_stat.max_files)
 		goto out;
 
-	sk = sk_alloc(PF_UNIX, GFP_KERNEL, sizeof(struct unix_sock),
-		      unix_sk_cachep);
+	sk = sk_alloc(PF_UNIX, GFP_KERNEL, &unix_proto, 1);
 	if (!sk)
 		goto out;
 
 	atomic_inc(&unix_nr_socks);
 
 	sock_init_data(sock,sk);
-	sk_set_owner(sk, THIS_MODULE);
 
 	sk->sk_write_space	= unix_write_space;
 	sk->sk_max_ack_backlog	= sysctl_unix_max_dgram_qlen;
@@ -2057,26 +2059,28 @@ static inline void unix_sysctl_unregister(void) {}
 
 static int __init af_unix_init(void)
 {
+	int rc = -1;
 	struct sk_buff *dummy_skb;
 
 	if (sizeof(struct unix_skb_parms) > sizeof(dummy_skb->cb)) {
 		printk(KERN_CRIT "%s: panic\n", __FUNCTION__);
-		return -1;
+		goto out;
 	}
-        /* allocate our sock slab cache */
-        unix_sk_cachep = kmem_cache_create("unix_sock",
-					   sizeof(struct unix_sock), 0,
-					   SLAB_HWCACHE_ALIGN, NULL, NULL);
-        if (!unix_sk_cachep)
-                printk(KERN_CRIT
-                        "af_unix_init: Cannot create unix_sock SLAB cache!\n");
+
+	rc = proto_register(&unix_proto, 1);
+        if (rc != 0) {
+                printk(KERN_CRIT "%s: Cannot create unix_sock SLAB cache!\n",
+		       __FUNCTION__);
+		goto out;
+	}
 
 	sock_register(&unix_family_ops);
 #ifdef CONFIG_PROC_FS
 	proc_net_fops_create("unix", 0, &unix_seq_fops);
 #endif
 	unix_sysctl_register();
-	return 0;
+out:
+	return rc;
 }
 
 static void __exit af_unix_exit(void)
@@ -2084,7 +2088,7 @@ static void __exit af_unix_exit(void)
 	sock_unregister(PF_UNIX);
 	unix_sysctl_unregister();
 	proc_net_remove("unix");
-	kmem_cache_destroy(unix_sk_cachep);
+	proto_unregister(&unix_proto);
 }
 
 module_init(af_unix_init);

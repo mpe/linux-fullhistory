@@ -367,18 +367,22 @@ static void l2cap_sock_init(struct sock *sk, struct sock *parent)
 	pi->flush_to = L2CAP_DEFAULT_FLUSH_TO;
 }
 
+static struct proto l2cap_proto = {
+	.name		= "L2CAP",
+	.owner		= THIS_MODULE,
+	.obj_size	= sizeof(struct l2cap_pinfo)
+};
+
 static struct sock *l2cap_sock_alloc(struct socket *sock, int proto, int prio)
 {
 	struct sock *sk;
 
-	sk = sk_alloc(PF_BLUETOOTH, prio, sizeof(struct l2cap_pinfo), NULL);
+	sk = sk_alloc(PF_BLUETOOTH, prio, &l2cap_proto, 1);
 	if (!sk)
 		return NULL;
 
 	sock_init_data(sock, sk);
 	INIT_LIST_HEAD(&bt_sk(sk)->accept_q);
-
-	sk_set_owner(sk, THIS_MODULE);
 
 	sk->sk_destruct = l2cap_sock_destruct;
 	sk->sk_sndtimeo = L2CAP_CONN_TIMEOUT;
@@ -2263,15 +2267,22 @@ static struct hci_proto l2cap_hci_proto = {
 static int __init l2cap_init(void)
 {
 	int err;
-
-	if ((err = bt_sock_register(BTPROTO_L2CAP, &l2cap_sock_family_ops))) {
-		BT_ERR("L2CAP socket registration failed");
+	
+	err = proto_register(&l2cap_proto, 0);
+	if (err < 0)
 		return err;
+
+	err = bt_sock_register(BTPROTO_L2CAP, &l2cap_sock_family_ops);
+	if (err < 0) {
+		BT_ERR("L2CAP socket registration failed");
+		goto error;
 	}
 
-	if ((err = hci_register_proto(&l2cap_hci_proto))) {
+	err = hci_register_proto(&l2cap_hci_proto);
+	if (err < 0) {
 		BT_ERR("L2CAP protocol registration failed");
-		return err;
+		bt_sock_unregister(BTPROTO_L2CAP);
+		goto error;
 	}
 
 	l2cap_proc_init();
@@ -2280,18 +2291,23 @@ static int __init l2cap_init(void)
 	BT_INFO("L2CAP socket layer initialized");
 
 	return 0;
+
+error:
+	proto_unregister(&l2cap_proto);
+	return err;
 }
 
 static void __exit l2cap_exit(void)
 {
 	l2cap_proc_cleanup();
 
-	/* Unregister socket and protocol */
-	if (bt_sock_unregister(BTPROTO_L2CAP))
+	if (bt_sock_unregister(BTPROTO_L2CAP) < 0)
 		BT_ERR("L2CAP socket unregistration failed");
 
-	if (hci_unregister_proto(&l2cap_hci_proto))
+	if (hci_unregister_proto(&l2cap_hci_proto) < 0)
 		BT_ERR("L2CAP protocol unregistration failed");
+
+	proto_unregister(&l2cap_proto);
 }
 
 void l2cap_load(void)

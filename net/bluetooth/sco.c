@@ -413,18 +413,22 @@ static void sco_sock_init(struct sock *sk, struct sock *parent)
 		sk->sk_type = parent->sk_type;
 }
 
+static struct proto sco_proto = {
+	.name		= "SCO",
+	.owner		= THIS_MODULE,
+	.obj_size	= sizeof(struct sco_pinfo)
+};
+
 static struct sock *sco_sock_alloc(struct socket *sock, int proto, int prio)
 {
 	struct sock *sk;
 
-	sk = sk_alloc(PF_BLUETOOTH, prio, sizeof(struct sco_pinfo), NULL);
+	sk = sk_alloc(PF_BLUETOOTH, prio, &sco_proto, 1);
 	if (!sk)
 		return NULL;
 
 	sock_init_data(sock, sk);
 	INIT_LIST_HEAD(&bt_sk(sk)->accept_q);
-
-	sk_set_owner(sk, THIS_MODULE);
 
 	sk->sk_destruct = sco_sock_destruct;
 	sk->sk_sndtimeo = SCO_CONN_TIMEOUT;
@@ -1015,14 +1019,21 @@ static int __init sco_init(void)
 {
 	int err;
 
-	if ((err = bt_sock_register(BTPROTO_SCO, &sco_sock_family_ops))) {
-		BT_ERR("SCO socket registration failed");
+	err = proto_register(&sco_proto, 0);
+	if (err < 0)
 		return err;
+
+	err = bt_sock_register(BTPROTO_SCO, &sco_sock_family_ops);
+	if (err < 0) {
+		BT_ERR("SCO socket registration failed");
+		goto error;
 	}
 
-	if ((err = hci_register_proto(&sco_hci_proto))) {
+	err = hci_register_proto(&sco_hci_proto);
+	if (err < 0) {
 		BT_ERR("SCO protocol registration failed");
-		return err;
+		bt_sock_unregister(BTPROTO_SCO);
+		goto error;
 	}
 
 	sco_proc_init();
@@ -1031,20 +1042,23 @@ static int __init sco_init(void)
 	BT_INFO("SCO socket layer initialized");
 
 	return 0;
+
+error:
+	proto_unregister(&sco_proto);
+	return err;
 }
 
 static void __exit sco_exit(void)
 {
-	int err;
-
 	sco_proc_cleanup();
 
-	/* Unregister socket, protocol and notifier */
-	if ((err = bt_sock_unregister(BTPROTO_SCO)))
-		BT_ERR("SCO socket unregistration failed. %d", err);
+	if (bt_sock_unregister(BTPROTO_SCO) < 0)
+		BT_ERR("SCO socket unregistration failed");
 
-	if ((err = hci_unregister_proto(&sco_hci_proto)))
-		BT_ERR("SCO protocol unregistration failed. %d", err);
+	if (hci_unregister_proto(&sco_hci_proto) < 0)
+		BT_ERR("SCO protocol unregistration failed");
+
+	proto_unregister(&sco_proto);
 }
 
 module_init(sco_init);

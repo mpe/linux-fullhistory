@@ -154,12 +154,10 @@ struct sock_common {
   *	@sk_sndtimeo - %SO_SNDTIMEO setting
   *	@sk_filter - socket filtering instructions
   *	@sk_protinfo - private area, net family specific, when not using slab
-  *	@sk_slab - the slabcache this instance was allocated from
   *	@sk_timer - sock cleanup timer
   *	@sk_stamp - time stamp of last packet received
   *	@sk_socket - Identd and reporting IO signals
   *	@sk_user_data - RPC layer private data
-  *	@sk_owner - module that owns this socket
   *	@sk_sndmsg_page - cached page for sendmsg
   *	@sk_sndmsg_off - cached offset for sendmsg
   *	@sk_send_head - front of stuff to transmit
@@ -231,12 +229,10 @@ struct sock {
 	long			sk_sndtimeo;
 	struct sk_filter      	*sk_filter;
 	void			*sk_protinfo;
-	kmem_cache_t		*sk_slab;
 	struct timer_list	sk_timer;
 	struct timeval		sk_stamp;
 	struct socket		*sk_socket;
 	void			*sk_user_data;
-	struct module		*sk_owner;
 	struct page		*sk_sndmsg_page;
 	struct sk_buff		*sk_send_head;
 	__u32			sk_sndmsg_off;
@@ -546,11 +542,13 @@ struct proto {
 	int			max_header;
 
 	kmem_cache_t		*slab;
-	int			slab_obj_size;
+	unsigned int		obj_size;
 
 	struct module		*owner;
 
 	char			name[32];
+
+	struct list_head	node;
 
 	struct {
 		int inuse;
@@ -558,25 +556,8 @@ struct proto {
 	} stats[NR_CPUS];
 };
 
-extern int sk_alloc_slab(struct proto *prot, char *name);
-extern void sk_free_slab(struct proto *prot);
-
-static __inline__ void sk_set_owner(struct sock *sk, struct module *owner)
-{
-	/*
-	 * One should use sk_set_owner just once, after struct sock creation,
-	 * be it shortly after sk_alloc or after a function that returns a new
-	 * struct sock (and that down the call chain called sk_alloc), e.g. the
-	 * IPv4 and IPv6 modules share tcp_create_openreq_child, so if
-	 * tcp_create_openreq_child called sk_set_owner IPv6 would have to
-	 * change the ownership of this struct sock, with one not needed
-	 * transient sk_set_owner call.
-	 */
-	BUG_ON(sk->sk_owner != NULL);
-
-	sk->sk_owner = owner;
-	__module_get(owner);
-}
+extern int proto_register(struct proto *prot, int alloc_slab);
+extern void proto_unregister(struct proto *prot);
 
 /* Called with local bh disabled */
 static __inline__ void sock_prot_inc_use(struct proto *prot)
@@ -696,8 +677,8 @@ extern void FASTCALL(release_sock(struct sock *sk));
 #define bh_lock_sock(__sk)	spin_lock(&((__sk)->sk_lock.slock))
 #define bh_unlock_sock(__sk)	spin_unlock(&((__sk)->sk_lock.slock))
 
-extern struct sock *		sk_alloc(int family, int priority, int zero_it,
-					 kmem_cache_t *slab);
+extern struct sock		*sk_alloc(int family, int priority,
+					  struct proto *prot, int zero_it);
 extern void			sk_free(struct sock *sk);
 
 extern struct sk_buff		*sock_wmalloc(struct sock *sk,

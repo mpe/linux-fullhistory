@@ -167,6 +167,12 @@ static struct proto_ops bnep_sock_ops = {
 	.mmap       = sock_no_mmap
 };
 
+static struct proto bnep_proto = {
+	.name		= "BNEP",
+	.owner		= THIS_MODULE,
+	.obj_size	= sizeof(struct bt_sock)
+};
+
 static int bnep_sock_create(struct socket *sock, int protocol)
 {
 	struct sock *sk;
@@ -176,12 +182,11 @@ static int bnep_sock_create(struct socket *sock, int protocol)
 	if (sock->type != SOCK_RAW)
 		return -ESOCKTNOSUPPORT;
 
-	if (!(sk = sk_alloc(PF_BLUETOOTH, GFP_KERNEL, sizeof(struct bt_sock), NULL)))
+	sk = sk_alloc(PF_BLUETOOTH, GFP_KERNEL, &bnep_proto, 1);
+	if (!sk)
 		return -ENOMEM;
 
 	sock_init_data(sock, sk);
-
-	sk_set_owner(sk, THIS_MODULE);
 
 	sock->ops = &bnep_sock_ops;
 
@@ -203,13 +208,30 @@ static struct net_proto_family bnep_sock_family_ops = {
 
 int __init bnep_sock_init(void)
 {
-	bt_sock_register(BTPROTO_BNEP, &bnep_sock_family_ops);
+	int err;
+
+	err = proto_register(&bnep_proto, 0);
+	if (err < 0)
+		return err;
+
+	err = bt_sock_register(BTPROTO_BNEP, &bnep_sock_family_ops);
+	if (err < 0)
+		goto error;
+
 	return 0;
+
+error:
+	BT_ERR("Can't register BNEP socket");
+	proto_unregister(&bnep_proto);
+	return err;
 }
 
 int __exit bnep_sock_cleanup(void)
 {
-	if (bt_sock_unregister(BTPROTO_BNEP))
+	if (bt_sock_unregister(BTPROTO_BNEP) < 0)
 		BT_ERR("Can't unregister BNEP socket");
+
+	proto_unregister(&bnep_proto);
+
 	return 0;
 }

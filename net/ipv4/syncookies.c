@@ -179,10 +179,9 @@ static inline struct sock *get_cookie_sock(struct sock *sk, struct sk_buff *skb,
 	struct sock *child;
 
 	child = tp->af_specific->syn_recv_sock(sk, skb, req, dst);
-	if (child) {
-		sk_set_owner(child, sk->sk_owner);
+	if (child)
 		tcp_acceptq_queue(sk, req, child);
-	} else
+	else
 		tcp_openreq_free(req);
 
 	return child;

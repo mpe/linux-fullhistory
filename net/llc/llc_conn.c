@@ -683,7 +683,7 @@ void llc_conn_handler(struct llc_sap *sap, struct sk_buff *skb)
 			goto drop;
 		}
 
-		sk = llc_sk_alloc(parent->sk_family, GFP_ATOMIC);
+		sk = llc_sk_alloc(parent->sk_family, GFP_ATOMIC, parent->sk_prot);
 		if (!sk) {
 			sock_put(parent);
 			goto drop;
@@ -830,16 +830,14 @@ static void llc_sk_init(struct sock* sk)
  *	Allocates a LLC sock and initializes it. Returns the new LLC sock
  *	or %NULL if there's no memory available for one
  */
-struct sock *llc_sk_alloc(int family, int priority)
+struct sock *llc_sk_alloc(int family, int priority, struct proto *prot)
 {
-	struct sock *sk = sk_alloc(family, priority,
-				   sizeof(struct llc_sock), NULL);
+	struct sock *sk = sk_alloc(family, priority, prot, 1);
 
 	if (!sk)
 		goto out;
 	llc_sk_init(sk);
 	sock_init_data(NULL, sk);
-	sk_set_owner(sk, THIS_MODULE);
 #ifdef LLC_REFCNT_DEBUG
 	atomic_inc(&llc_sock_nr);
 	printk(KERN_DEBUG "LLC socket %p created in %s, now we have %d alive\n", sk,

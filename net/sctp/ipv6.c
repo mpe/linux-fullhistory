@@ -594,13 +594,11 @@ static struct sock *sctp_v6_create_accept_sk(struct sock *sk,
 	struct ipv6_pinfo *newnp, *np = inet6_sk(sk);
 	struct sctp6_sock *newsctp6sk;
 
-	newsk = sk_alloc(PF_INET6, GFP_KERNEL, sk->sk_prot->slab_obj_size,
-			 sk->sk_prot->slab);
+	newsk = sk_alloc(PF_INET6, GFP_KERNEL, sk->sk_prot, 1);
 	if (!newsk)
 		goto out;
 
 	sock_init_data(NULL, newsk);
-	sk_set_owner(newsk, THIS_MODULE);
 
 	newsk->sk_type = SOCK_STREAM;
 
@@ -974,14 +972,14 @@ static struct sctp_pf sctp_pf_inet6_specific = {
 /* Initialize IPv6 support and register with inet6 stack.  */
 int sctp_v6_init(void)
 {
-	int rc = sk_alloc_slab(&sctpv6_prot, "sctpv6_sock");
+	int rc = proto_register(&sctpv6_prot, 1);
 
 	if (rc)
 		goto out;
 	/* Register inet6 protocol. */
 	rc = -EAGAIN;
 	if (inet6_add_protocol(&sctpv6_protocol, IPPROTO_SCTP) < 0)
-		goto out_sctp_free_slab;
+		goto out_unregister_sctp_proto;
 
 	/* Add SCTPv6(UDP and TCP style) to inetsw6 linked list. */
 	inet6_register_protosw(&sctpv6_seqpacket_protosw);
@@ -998,8 +996,8 @@ int sctp_v6_init(void)
 	rc = 0;
 out:
 	return rc;
-out_sctp_free_slab:
-	sk_free_slab(&sctpv6_prot);
+out_unregister_sctp_proto:
+	proto_unregister(&sctpv6_prot);
 	goto out;
 }
 
@@ -1011,5 +1009,5 @@ void sctp_v6_exit(void)
 	inet6_unregister_protosw(&sctpv6_seqpacket_protosw);
 	inet6_unregister_protosw(&sctpv6_stream_protosw);
 	unregister_inet6addr_notifier(&sctp_inet6addr_notifier);
-	sk_free_slab(&sctpv6_prot);
+	proto_unregister(&sctpv6_prot);
 }

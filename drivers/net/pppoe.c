@@ -480,6 +480,12 @@ static struct packet_type pppoed_ptype = {
 	.func	= pppoe_disc_rcv,
 };
 
+static struct proto pppoe_sk_proto = {
+	.name	  = "PPPOE",
+	.owner	  = THIS_MODULE,
+	.obj_size = sizeof(struct pppox_sock),
+};
+
 /***********************************************************************
  *
  * Initialize a new struct sock.
@@ -490,12 +496,12 @@ static int pppoe_create(struct socket *sock)
 	int error = -ENOMEM;
 	struct sock *sk;
 
-	sk = sk_alloc(PF_PPPOX, GFP_KERNEL, sizeof(struct pppox_sock), NULL);
+	sk = sk_alloc(PF_PPPOX, GFP_KERNEL, &pppoe_sk_proto, 1);
 	if (!sk)
 		goto out;
 
 	sock_init_data(sock, sk);
-	sk_set_owner(sk, THIS_MODULE);
+
 	sock->state = SS_UNCONNECTED;
 	sock->ops   = &pppoe_ops;
 
@@ -1103,22 +1109,29 @@ static struct pppox_proto pppoe_proto = {
 
 static int __init pppoe_init(void)
 {
- 	int err = register_pppox_proto(PX_PROTO_OE, &pppoe_proto);
+	int err = proto_register(&pppoe_sk_proto, 0);
 
 	if (err)
 		goto out;
 
+ 	err = register_pppox_proto(PX_PROTO_OE, &pppoe_proto);
+	if (err)
+		goto out_unregister_pppoe_proto;
+
 	err = pppoe_proc_init();
-	if (err) {
-		unregister_pppox_proto(PX_PROTO_OE);
-		goto out;
-	}
+	if (err)
+		goto out_unregister_pppox_proto;
 	
 	dev_add_pack(&pppoes_ptype);
 	dev_add_pack(&pppoed_ptype);
 	register_netdevice_notifier(&pppoe_notifier);
 out:
 	return err;
+out_unregister_pppox_proto:
+	unregister_pppox_proto(PX_PROTO_OE);
+out_unregister_pppoe_proto:
+	proto_unregister(&pppoe_sk_proto);
+	goto out;
 }
 
 static void __exit pppoe_exit(void)
@@ -1128,6 +1141,7 @@ static void __exit pppoe_exit(void)
 	dev_remove_pack(&pppoed_ptype);
 	unregister_netdevice_notifier(&pppoe_notifier);
 	remove_proc_entry("pppoe", proc_net);
+	proto_unregister(&pppoe_sk_proto);
 }
 
 module_init(pppoe_init);

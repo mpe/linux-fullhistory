@@ -127,6 +127,11 @@ static void vcc_write_space(struct sock *sk)
 	read_unlock(&sk->sk_callback_lock);
 }
 
+static struct proto vcc_proto = {
+	.name	  = "VCC",
+	.owner	  = THIS_MODULE,
+	.obj_size = sizeof(struct atm_vcc),
+};
  
 int vcc_create(struct socket *sock, int protocol, int family)
 {
@@ -136,11 +141,10 @@ int vcc_create(struct socket *sock, int protocol, int family)
 	sock->sk = NULL;
 	if (sock->type == SOCK_STREAM)
 		return -EINVAL;
-	sk = sk_alloc(family, GFP_KERNEL, sizeof(struct atm_vcc), NULL);
+	sk = sk_alloc(family, GFP_KERNEL, &vcc_proto, 1);
 	if (!sk)
 		return -ENOMEM;
 	sock_init_data(sock, sk);
-	sk_set_owner(sk, THIS_MODULE);
 	sk->sk_state_change = vcc_def_wakeup;
 	sk->sk_write_space = vcc_write_space;
 
@@ -157,7 +161,6 @@ int vcc_create(struct socket *sock, int protocol, int family)
 	vcc->vpi = vcc->vci = 0; /* no VCI/VPI yet */
 	vcc->atm_options = vcc->aal_options = 0;
 	sk->sk_destruct = vcc_sock_destruct;
-	sock->sk = sk;
 	return 0;
 }
 
@@ -759,24 +762,30 @@ static int __init atm_init(void)
 {
 	int error;
 
+	if ((error = proto_register(&vcc_proto, 0)) < 0)
+		goto out;
+
 	if ((error = atmpvc_init()) < 0) {
 		printk(KERN_ERR "atmpvc_init() failed with %d\n", error);
-		goto failure;
+		goto out_unregister_vcc_proto;
 	}
 	if ((error = atmsvc_init()) < 0) {
 		printk(KERN_ERR "atmsvc_init() failed with %d\n", error);
-		goto failure;
+		goto out_atmpvc_exit;
 	}
         if ((error = atm_proc_init()) < 0) {
 		printk(KERN_ERR "atm_proc_init() failed with %d\n",error);
-		goto failure;
+		goto out_atmsvc_exit;
 	}
-	return 0;
-
-failure:
-	atmsvc_exit();
-	atmpvc_exit();
+out:
 	return error;
+out_atmsvc_exit:
+	atmsvc_exit();
+out_atmpvc_exit:
+	atmsvc_exit();
+out_unregister_vcc_proto:
+	proto_unregister(&vcc_proto);
+	goto out;
 }
 
 static void __exit atm_exit(void)
@@ -784,6 +793,7 @@ static void __exit atm_exit(void)
 	atm_proc_exit();
 	atmsvc_exit();
 	atmpvc_exit();
+	proto_unregister(&vcc_proto);
 }
 
 module_init(atm_init);

@@ -1371,7 +1371,7 @@ struct proto udp_prot = {
 	.hash =		udp_v4_hash,
 	.unhash =	udp_v4_unhash,
 	.get_port =	udp_v4_get_port,
-	.slab_obj_size = sizeof(struct udp_sock),
+	.obj_size =	sizeof(struct udp_sock),
 };
 
 /* ------------------------------------------------------------------------ */

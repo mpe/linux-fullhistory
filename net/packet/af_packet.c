@@ -955,6 +955,11 @@ out:
 	return err;
 }
 
+static struct proto packet_proto = {
+	.name	  = "PACKET",
+	.owner	  = THIS_MODULE,
+	.obj_size = sizeof(struct packet_sock),
+};
 
 /*
  *	Create a packet of type SOCK_PACKET. 
@@ -978,8 +983,7 @@ static int packet_create(struct socket *sock, int protocol)
 	sock->state = SS_UNCONNECTED;
 
 	err = -ENOBUFS;
-	sk = sk_alloc(PF_PACKET, GFP_KERNEL,
-		      sizeof(struct packet_sock), NULL);
+	sk = sk_alloc(PF_PACKET, GFP_KERNEL, &packet_proto, 1);
 	if (sk == NULL)
 		goto out;
 
@@ -988,8 +992,7 @@ static int packet_create(struct socket *sock, int protocol)
 	if (sock->type == SOCK_PACKET)
 		sock->ops = &packet_ops_spkt;
 #endif
-	sock_init_data(sock,sk);
-	sk_set_owner(sk, THIS_MODULE);
+	sock_init_data(sock, sk);
 
 	po = pkt_sk(sk);
 	sk->sk_family = PF_PACKET;
@@ -1881,16 +1884,21 @@ static void __exit packet_exit(void)
 	proc_net_remove("packet");
 	unregister_netdevice_notifier(&packet_netdev_notifier);
 	sock_unregister(PF_PACKET);
-	return;
+	proto_unregister(&packet_proto);
 }
 
 static int __init packet_init(void)
 {
+	int rc = proto_register(&packet_proto, 0);
+
+	if (rc != 0)
+		goto out;
+
 	sock_register(&packet_family_ops);
 	register_netdevice_notifier(&packet_netdev_notifier);
 	proc_net_fops_create("packet", 0, &packet_seq_fops);
-
-	return 0;
+out:
+	return rc;
 }
 
 module_init(packet_init);
