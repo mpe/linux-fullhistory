@@ -696,8 +696,8 @@ static int snd_emu10k1_add_controls(emu10k1_t *emu, emu10k1_fx8010_code_t *icode
 {
 	unsigned int i, j;
 	emu10k1_fx8010_control_gpr_t __user *_gctl;
-	emu10k1_fx8010_control_gpr_t *gctl = NULL;
-	snd_emu10k1_fx8010_ctl_t *ctl, *nctl = NULL;
+	emu10k1_fx8010_control_gpr_t *gctl;
+	snd_emu10k1_fx8010_ctl_t *ctl, *nctl;
 	snd_kcontrol_new_t knew;
 	snd_kcontrol_t *kctl;
 	snd_ctl_elem_value_t *val;
@@ -743,10 +743,12 @@ static int snd_emu10k1_add_controls(emu10k1_t *emu, emu10k1_fx8010_code_t *icode
 		nctl->translation = gctl->translation;
 		if (ctl == NULL) {
 			ctl = (snd_emu10k1_fx8010_ctl_t *)kmalloc(sizeof(*ctl), GFP_KERNEL);
-			if (ctl == NULL)
-				continue;
+			if (ctl == NULL) {
+				err = -ENOMEM;
+				goto __error;
+			}
 			knew.private_value = (unsigned long)ctl;
-			memcpy(ctl, &nctl, sizeof(nctl));
+			*ctl = *nctl;
 			if ((err = snd_ctl_add(emu->card, kctl = snd_ctl_new1(&knew, emu))) < 0) {
 				kfree(ctl);
 				goto __error;
@@ -758,7 +760,7 @@ static int snd_emu10k1_add_controls(emu10k1_t *emu, emu10k1_fx8010_code_t *icode
 			/* overwrite */
 			nctl->list = ctl->list;
 			nctl->kcontrol = ctl->kcontrol;
-			memcpy(ctl, &nctl, sizeof(nctl));
+			*ctl = *nctl;
 			snd_ctl_notify(emu->card, SNDRV_CTL_EVENT_MASK_VALUE |
 			                          SNDRV_CTL_EVENT_MASK_INFO, &ctl->kcontrol->id);
 		}
