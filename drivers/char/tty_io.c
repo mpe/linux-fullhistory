@@ -1463,12 +1463,13 @@ void do_SAK( struct tty_struct *tty)
 	tty_hangup(tty);
 #else
 	struct task_struct **p;
-	int session = tty->session;
+	int session;
 	int		i;
 	struct file	*filp;
 	
 	if (!tty)
 		return;
+	session  = tty->session;
 	if (tty->ldisc.flush_buffer)
 		tty->ldisc.flush_buffer(tty);
 	if (tty->driver.flush_buffer)

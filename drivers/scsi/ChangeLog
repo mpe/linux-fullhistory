@@ -1,3 +1,146 @@
+Tue Oct 11 08:47:39 1994  Eric Youngdale  (eric@andante)
+
+	* Linux 1.1.54 released.
+
+	* Add third PCI chip id.  [Drew]
+
+	* buslogic.c: Set BUSLOGIC_CMDLUN back to 1 [Eric].
+
+Sun Oct  9 20:23:14 1994  Eric Youngdale  (eric@andante)
+
+	* Linux 1.1.53 released.
+
+	* scsi.c: Do not allocate dma bounce buffers if we have exactly
+	16Mb.
+
+Fri Sep  9 05:35:30 1994  Eric Youngdale  (eric@andante)
+
+	* Linux 1.1.51 released.
+
+	* aha152x.c: Add support for disabling the parity check.  Update
+	to version 1.4. [Juergen].
+
+	* seagate.c: Tweak debugging message.
+
+Wed Aug 31 10:15:55 1994  Eric Youngdale  (eric@andante)
+
+	* Linux 1.1.50 released.
+
+	* aha152x.c: Add eb800 for Vtech Platinum SMP boards. [Juergen].
+
+	* scsi.c: Add Quantum PD1225S to blacklist.
+
+Fri Aug 26 09:38:45 1994  Eric Youngdale  (eric@andante)
+
+	* Linux 1.1.49 released.
+
+	* sd.c: Fix bug when we were deleting the wrong entry if we
+	get an unsupported sector size device.
+
+	* sr.c: Another spelling patch.
+
+Thu Aug 25 09:15:27 1994  Eric Youngdale  (eric@andante)
+
+	* Linux 1.1.48 released.
+
+	* Throughout: Use new semantics for request_dma, as appropriate.
+
+	* sr.c: Print correct device number.
+
+Sun Aug 21 17:49:23 1994  Eric Youngdale  (eric@andante)
+
+	* Linux 1.1.47 released.
+
+	* NCR5380.c: Add support for LIMIT_TRANSFERSIZE.
+
+	* constants.h: Add prototype for print_Scsi_Cmnd.
+
+	* pas16.c: Some more minor tweaks.  Test for Mediavision board.
+	Allow for disks > 1Gb.  [Drew??]
+
+	* sr.c: Set SCpnt->transfersize.
+
+Tue Aug 16 17:29:35 1994  Eric Youngdale  (eric@andante)
+
+	* Linux 1.1.46 released.
+
+	* Throughout: More spelling fixups.
+
+	* buslogic.c: Add a few more fixups from Dave.  Disk translation
+	mainly.
+
+	* pas16.c: Add a few patches (Drew?).
+
+
+Thu Aug 11 20:45:15 1994  Eric Youngdale  (eric@andante)
+
+	* Linux 1.1.44 released.
+
+	* hosts.c: Add type casts for scsi_init_malloc.
+
+	* scsicam.c: Add type cast.
+
+Wed Aug 10 19:23:01 1994  Eric Youngdale  (eric@andante)
+
+	* Linux 1.1.43 released.
+
+	* Throughout: Spelling cleanups. [??]
+
+	* aha152x.c, NCR53*.c, fdomain.c, g_NCR5380.c, pas16.c, seagate.c,
+	 t128.c: Use request_irq, not irqaction. [??]
+
+	* aha1542.c: Move test for shost before we start to use shost.
+
+	* aha1542.c, aha1740.c, ultrastor.c, wd7000.c: Use new
+	calling sequence for request_irq.
+
+	* buslogic.c: Update from Dave Gentzel.
+
+Tue Aug  9 09:32:59 1994  Eric Youngdale  (eric@andante)
+
+	* Linux 1.1.42 released.
+
+	* NCR5380.c: Change NCR5380_print_status to static.
+
+	* seagate.c: A few more bugfixes.  Only Drew knows what they are
+	for.
+
+	* ultrastor.c: Tweak some __asm__ directives so that it works
+	with newer compilers. [??]
+
+Sat Aug  6 21:29:36 1994  Eric Youngdale  (eric@andante)
+
+	* Linux 1.1.40 released.
+
+	* NCR5380.c: Return SCSI_RESET_WAKEUP from reset function.
+
+	* aha1542.c: Reset mailbox status after a bus device reset.
+
+	* constants.c: Fix typo (;;).
+
+	* g_NCR5380.c: 
+	* pas16.c:  Correct usage of NCR5380_init.
+
+	* scsi.c: Remove redunant (and unused variables).
+
+	* sd.c: Use memset to clear all of rscsi_disks before we use it.
+
+	* sg.c: Ditto, except for scsi_generics.
+
+	* sr.c: Ditto, except for scsi_CDs.
+
+	* st.c: Initialize STp->device.
+
+	* seagate.c: Fix bug. [Drew]
+
+Thu Aug  4 08:47:27 1994  Eric Youngdale  (eric@andante)
+
+	* Linux 1.1.39 released.
+
+	* Makefile: Fix typo in NCR53C7xx.
+
+	* st.c: Print correct number for device.
+
 Sat Jul  9 15:01:03 1994  Eric Youngdale  (eric@esp22)
 
 	More changes to eventually support loadable modules.  Mainly

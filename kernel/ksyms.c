@@ -87,6 +87,8 @@ struct symbol_table symbol_table = { 0, 0, 0, /* for stacked module support */
 	X(namei),
 	X(lnamei),
 	X(open_namei),
+	X(inode_setattr),
+	X(inode_change_ok),
 
 	/* device registration */
 	X(register_chrdev),

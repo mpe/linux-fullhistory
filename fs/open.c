@@ -312,6 +312,7 @@ asmlinkage int sys_fchown(unsigned int fd, uid_t user, gid_t group)
 		user = inode->i_uid;
 	if (group == (gid_t) -1)
 		group = inode->i_gid;
+	newattrs.ia_mode = inode->i_mode;
 	newattrs.ia_uid = user;
 	newattrs.ia_gid = group;
 	newattrs.ia_ctime = CURRENT_TIME;
@@ -320,14 +321,14 @@ asmlinkage int sys_fchown(unsigned int fd, uid_t user, gid_t group)
 	 * If the owner has been changed, remove the setuid bit
 	 */
 	if (user != inode->i_uid && inode->i_mode & S_ISUID) {
-		newattrs.ia_mode = inode->i_mode & ~S_ISUID;
+		newattrs.ia_mode &= ~S_ISUID;
 		newattrs.ia_valid |= ATTR_MODE;
 	}
 	/*
 	 * If the group has been changed, remove the setgid bit
 	 */
 	if (group != inode->i_gid && inode->i_mode & S_ISGID) {
-		newattrs.ia_mode = inode->i_mode & ~S_ISGID;
+		newattrs.ia_mode &= ~S_ISGID;
 		newattrs.ia_valid |= ATTR_MODE;
 	}
 	inode->i_dirt = 1;

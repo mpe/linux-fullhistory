@@ -234,6 +234,7 @@ unsigned long bus_mouse_init(unsigned long kmem_start)
 	mouse.dx = 0;
 	mouse.dy = 0;
 	mouse.wait = NULL;
-	printk("Logitech Bus mouse detected and installed.\n");
+	printk("Logitech Bus mouse detected and installed with IRQ %d.\n",
+	       mouse_irq);
 	return kmem_start;
 }

@@ -638,6 +638,33 @@ repeat:
 }
 
 /*
+ * Yes, I know this is ugly. Don't tell me.
+ */
+unsigned long __get_dma_pages(int priority, unsigned long order)
+{
+	unsigned long list = 0; 
+	unsigned long result;
+	unsigned long limit = 16*1024*1024;
+	
+	/* if (EISA_bus) limit = ~0UL; */
+	if (priority != GFP_ATOMIC)
+		priority = GFP_BUFFER;
+	for (;;) {
+		result = __get_free_pages(priority, order);
+		if (result < limit) /* covers failure as well */
+			break;
+		*(unsigned long *) result = list;
+		list = result;
+	}
+	while (list) {
+		unsigned long tmp = list;
+		list = *(unsigned long *) list;
+		free_pages(tmp, order);
+	}
+	return result;
+}
+
+/*
  * Show free area list (used inside shift_scroll-lock stuff)
  * We also calculate the percentage fragmentation. We do this by counting the
  * memory on each free list with the exception of the first item on the list.

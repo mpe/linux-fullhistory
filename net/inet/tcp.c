@@ -86,6 +86,9 @@
  *		Alan Cox	:	Reset on closedown bug.
  *	Peter De Schrijver	:	ENOTCONN check missing in tcp_sendto().
  *		Michael Pall	:	Handle select() after URG properly in all cases.
+ *		Michael Pall	:	Undo the last fix in tcp_read_urg() (multi URG PUSH broke rlogin).
+ *		Michael Pall	:	Fix the multi URG PUSH problem in tcp_readable(), select() after URG works now.
+ *		Michael Pall	:	recv(...,MSG_OOB) never blocks in the BSD api.
  *
  *
  * To Fix:
@@ -407,14 +410,29 @@ static int tcp_readable(struct sock *sk)
 				amount--;
 			counted += sum;
 		}
+		/*
+		 * Don't count urg data ... but do it in the right place!
+		 * Consider: "old_data (ptr is here) URG PUSH data"
+		 * The old code would stop at the first push because
+		 * it counted the urg (amount==1) and then does amount--
+		 * *after* the loop.  This means tcp_readable() always
+		 * returned zero if any URG PUSH was in the queue, even
+		 * though there was normal data available. If we subtract
+		 * the urg data right here, we even get it to work for more
+		 * than one URG PUSH skb without normal data.
+		 * This means that select() finally works now with urg data
+		 * in the queue.  Note that rlogin was never affected
+		 * because it doesn't use select(); it uses two processes
+		 * and a blocking read().  And the queue scan in tcp_read()
+		 * was correct.  Mike <pall@rz.uni-karlsruhe.de>
+		 */
+		if (skb->h.th->urg)
+			amount--;	/* don't count urg data */
 		if (amount && skb->h.th->psh) break;
 		skb = skb->next;
 	}
 	while(skb != (struct sk_buff *)&sk->receive_queue);
 
-	if (amount && !sk->urginline && sk->urg_data &&
-	    (sk->urg_seq - sk->copied_seq) <= (counted - sk->copied_seq))
-		amount--;		/* don't count urg data */
 	restore_flags(flags);
 	if(sk->debug)
 	  	printk("got %lu bytes.\n",amount);
@@ -434,42 +452,27 @@ static int tcp_select(struct sock *sk, int sel_type, select_table *wait)
 	switch(sel_type) 
 	{
 		case SEL_IN:
-			if(sk->debug)
-				printk("select in");
 			select_wait(sk->sleep, wait);
-			if(sk->debug)
-				printk("-select out");
 			if (skb_peek(&sk->receive_queue) != NULL) 
 			{
 				if ((sk->state == TCP_LISTEN && tcp_find_established(sk)) || tcp_readable(sk)) 
 				{
 					release_sock(sk);
-					if(sk->debug)
-						printk("-select ok data\n");
 					return(1);
 				}
 			}
 			if (sk->err != 0)	/* Receiver error */
 			{
 				release_sock(sk);
-				if(sk->debug)
-					printk("-select ok error");
 				return(1);
 			}
 			if (sk->shutdown & RCV_SHUTDOWN) 
 			{
 				release_sock(sk);
-				if(sk->debug)
-					printk("-select ok down\n");
 				return(1);
 			} 
-			else 
-			{
-				release_sock(sk);
-				if(sk->debug)
-					printk("-select fail\n");
-				return(0);
-			}
+			release_sock(sk);
+			return(0);
 		case SEL_OUT:
 			select_wait(sk->sleep, wait);
 			if (sk->shutdown & SEND_SHUTDOWN) 
@@ -1405,28 +1408,20 @@ static void cleanup_rbuf(struct sock *sk)
 static int tcp_read_urg(struct sock * sk, int nonblock,
 	     unsigned char *to, int len, unsigned flags)
 {
+#ifdef NOTDEF
 	struct wait_queue wait = { current, NULL };
+#endif
 
 	while (len > 0) 
 	{
 		if (sk->urginline || !sk->urg_data || sk->urg_data == URG_READ)
 			return -EINVAL;
-		sk->inuse=1;
+		sk->inuse = 1;
 		if (sk->urg_data & URG_VALID) 
 		{
 			char c = sk->urg_data;
 			if (!(flags & MSG_PEEK))
-			{
-				/* Skip over urgent data, so tcp_readable() returns
-				   something again.  This in turn makes tcp_select()
-				   happy.  Mike <pall@rz.uni-karlsruhe.de> */
-				if (sk->copied_seq + 1 == sk->urg_seq)
-				{
-					wake_up_interruptible(sk->sleep);
-					sk->copied_seq++;
-				}
 				sk->urg_data = URG_READ;
-			}
 			put_fs_byte(c, to);
 			release_sock(sk);
 			return 1;
@@ -1456,6 +1451,16 @@ static int tcp_read_urg(struct sock * sk, int nonblock,
 			return 0;
 		}
 
+		/*
+		 * Fixed the recv(..., MSG_OOB) behaviour.  BSD docs and
+		 * the available implementations agree in this case:
+		 * this call should never block, independent of the
+		 * blocking state of the socket.
+		 * Mike <pall@rz.uni-karlsruhe.de>
+		 */
+		return -EAGAIN;
+#ifdef NOTDEF
+		/* remove the loop, if this dead code gets removed! */
 		if (nonblock)
 			return -EAGAIN;
 
@@ -1469,6 +1474,7 @@ static int tcp_read_urg(struct sock * sk, int nonblock,
 			schedule();
 		remove_wait_queue(sk->sleep, &wait);
 		current->state = TASK_RUNNING;
+#endif
 	}
 	return 0;
 }
