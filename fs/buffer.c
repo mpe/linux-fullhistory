@@ -1518,9 +1518,6 @@ static int __block_commit_write(struct inode *inode, struct page *page,
 			if (!buffer_uptodate(bh))
 				partial = 1;
 		} else {
-		    	/* This can happen for the truncate case */
-		    	if (!buffer_mapped(bh))
-	    			continue;
 			set_bit(BH_Uptodate, &bh->b_state);
 			if (!atomic_set_buffer_dirty(bh)) {
 				__mark_dirty(bh);
@@ -1724,31 +1721,63 @@ int generic_commit_write(struct file *file, struct page *page,
 	return 0;
 }
 
-int block_zero_page(struct address_space *mapping, loff_t from, unsigned length)
+int block_truncate_page(struct address_space *mapping, loff_t from, get_block_t *get_block)
 {
 	unsigned long index = from >> PAGE_CACHE_SHIFT;
 	unsigned offset = from & (PAGE_CACHE_SIZE-1);
+	unsigned blocksize, iblock, length, pos;
 	struct inode *inode = (struct inode *)mapping->host;
 	struct page *page;
+	struct buffer_head *bh;
 	int err;
 
+	blocksize = inode->i_sb->s_blocksize;
+	length = offset & (blocksize - 1);
+
+	/* Block boundary? Nothing to do */
 	if (!length)
 		return 0;
 
-	page = read_cache_page(mapping, index,
-				(filler_t *)mapping->a_ops->readpage, NULL);
+	length = blocksize - length;
+	iblock = index << (PAGE_CACHE_SHIFT - inode->i_sb->s_blocksize_bits);
+	
+	page = grab_cache_page(mapping, index);
 	err = PTR_ERR(page);
 	if (IS_ERR(page))
 		goto out;
-	lock_page(page);
-	err = -EIO;
-	if (!Page_Uptodate(page))
-		goto unlock;
+
+	if (!page->buffers)
+		create_empty_buffers(page, inode, blocksize);
+
+	/* Find the buffer that contains "offset" */
+	bh = page->buffers;
+	pos = blocksize;
+	while (offset >= pos) {
+		bh = bh->b_this_page;
+		iblock++;
+		pos += blocksize;
+	}
+
+	if (!buffer_uptodate(bh)) {
+		err = 0;
+		if (!buffer_mapped(bh)) {
+			get_block(inode, iblock, bh, 0);
+			if (!buffer_mapped(bh))
+				goto unlock;
+		}
+		err = -EIO;
+		bh->b_end_io = end_buffer_io_sync;
+		ll_rw_block(READ, 1, &bh);
+		wait_on_buffer(bh);
+		if (!buffer_uptodate(bh))
+			goto unlock;
+	}
 
 	memset((char *) kmap(page) + offset, 0, length);
 	flush_dcache_page(page);
-	__block_commit_write(inode, page, offset, offset+length);
 	kunmap(page);
+
+	mark_buffer_dirty(bh);
 	err = 0;
 
 unlock:

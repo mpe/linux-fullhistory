@@ -874,7 +874,7 @@ void ext2_truncate (struct inode * inode)
 	int nr = 0;
 	int n;
 	long iblock;
-	unsigned blocksize, tail;
+	unsigned blocksize;
 
 	if (!(S_ISREG(inode->i_mode) || S_ISDIR(inode->i_mode) ||
 	    S_ISLNK(inode->i_mode)))
@@ -887,9 +887,8 @@ void ext2_truncate (struct inode * inode)
 	blocksize = inode->i_sb->s_blocksize;
 	iblock = (inode->i_size + blocksize-1)
 					>> EXT2_BLOCK_SIZE_BITS(inode->i_sb);
-	tail = (iblock << EXT2_BLOCK_SIZE_BITS(inode->i_sb)) - inode->i_size;
 
-	block_zero_page(inode->i_mapping, inode->i_size, tail);
+	block_truncate_page(inode->i_mapping, inode->i_size, ext2_get_block);
 
 	n = ext2_block_to_path(inode, iblock, offsets);
 	if (n == 0)

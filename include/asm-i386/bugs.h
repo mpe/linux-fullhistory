@@ -50,32 +50,22 @@ static int __init no_387(char *s)
 
 __setup("no387", no_387);
 
-static char __initdata fpu_error = 0;
-
-static struct timer_list copro_timer __initdata = {{0, 0}, 0};
-
-static void __init copro_timeout(unsigned long dummy)
-{
-	fpu_error = 1;
-	mod_timer(&copro_timer, jiffies+HZ);
-	printk(KERN_ERR "387 failed: trying to reset\n");
-	send_sig(SIGFPE, current, 1);
-	outb_p(0,0xf1);
-	outb_p(0,0xf0);
-}
-
 static double __initdata x = 4195835.0;
 static double __initdata y = 3145727.0;
 
-#ifdef CONFIG_X86_XMM
-static float __initdata zero[4] = { 0.0, 0.0, 0.0, 0.0 };
-static float __initdata one[4] = { 1.0, 1.0, 1.0, 1.0 };
-#endif
-
+/*
+ * This used to check for exceptions.. 
+ * However, it turns out that to support that,
+ * the XMM trap handlers basically had to
+ * be buggy. So let's have a correct XMM trap
+ * handler, and forget about printing out
+ * some status at boot.
+ *
+ * We should really only care about bugs here
+ * anyway. Not features.
+ */
 static void __init check_fpu(void)
 {
-	unsigned short control_word;
-
 	if (!boot_cpu_data.hard_math) {
 #ifndef CONFIG_MATH_EMULATION
 		printk(KERN_EMERG "No coprocessor found and no math emulation present.\n");
@@ -84,72 +74,8 @@ static void __init check_fpu(void)
 #endif
 		return;
 	}
-	if (mca_pentium_flag) {
-		/* The IBM Model 95 machines with pentiums lock up on
-		 * fpu test, so we avoid it. All pentiums have inbuilt
-		 * FPU and thus should use exception 16. We still do
-		 * the FDIV test, although I doubt there where ever any
-		 * MCA boxes built with non-FDIV-bug cpus.
-		 */
-		__asm__("fninit\n\t"
-			"fldl %1\n\t"
-			"fdivl %2\n\t"
-			"fmull %2\n\t"
-			"fldl %1\n\t"
-			"fsubp %%st,%%st(1)\n\t"
-			"fistpl %0\n\t"
-			"fwait\n\t"
-			"fninit"
-			: "=m" (*&boot_cpu_data.fdiv_bug)
-			: "m" (*&x), "m" (*&y));
-		printk("mca-pentium specified, avoiding FPU coupling test... ");
-		if (!boot_cpu_data.fdiv_bug)
-			printk("??? No FDIV bug? Lucky you...\n");
-		else
-			printk("detected FDIV bug though.\n");
-		return;
-	}
-	/*
-	 * check if exception 16 works correctly.. This is truly evil
-	 * code: it disables the high 8 interrupts to make sure that
-	 * the irq13 doesn't happen. But as this will lead to a lockup
-	 * if no exception16 arrives, it depends on the fact that the
-	 * high 8 interrupts will be re-enabled by the next timer tick.
-	 * So the irq13 will happen eventually, but the exception 16
-	 * should get there first..
-	 */
-	printk(KERN_INFO "Checking 386/387 coupling... ");
-	init_timer(&copro_timer);
-	copro_timer.function = copro_timeout;
-	mod_timer(&copro_timer, jiffies+HZ/2);
-	__asm__("clts ; fninit ; fnstcw %0 ; fwait":"=m" (*&control_word));
-	control_word &= 0xffc0;
-	__asm__("fldcw %0 ; fwait": :"m" (*&control_word));
-	outb_p(inb_p(0x21) | (1 << 2), 0x21);
-	__asm__("fldz ; fld1 ; fdiv %st,%st(1) ; fwait");
-	del_timer(&copro_timer);
-	if (fpu_error)
-		return;
-	if (!ignore_irq13) {
-		printk("OK, FPU using old IRQ 13 error reporting\n");
-		return;
-	}
-	__asm__("fninit\n\t"
-		"fldl %1\n\t"
-		"fdivl %2\n\t"
-		"fmull %2\n\t"
-		"fldl %1\n\t"
-		"fsubp %%st,%%st(1)\n\t"
-		"fistpl %0\n\t"
-		"fwait\n\t"
-		"fninit"
-		: "=m" (*&boot_cpu_data.fdiv_bug)
-		: "m" (*&x), "m" (*&y));
-	if (!boot_cpu_data.fdiv_bug)
-		printk("OK, FPU using exception 16 error reporting.\n");
-	else
-		printk("Hmm, FPU using exception 16 error reporting with FDIV bug.\n");
 
+/* Enable FXSR and company _before_ testing for FP problems. */
 #if defined(CONFIG_X86_FXSR) || defined(CONFIG_X86_RUNTIME_FXSR)
 	/*
 	 * Verify that the FXSAVE/FXRSTOR data will be 16-byte aligned.
@@ -168,18 +94,24 @@ static void __init check_fpu(void)
 		printk(KERN_INFO "Enabling unmasked SIMD FPU exception support... ");
 		set_in_cr4(X86_CR4_OSXMMEXCPT);
 		printk("done.\n");
-
-		/* Check if exception 19 works okay. */
-		load_mxcsr(0x0000);
-		printk(KERN_INFO "Checking SIMD FPU exceptions... ");
-		__asm__("movups %0,%%xmm0\n\t"
-			"movups %1,%%xmm1\n\t"
-			"divps %%xmm0,%%xmm1\n\t"
-			: : "m" (*&zero), "m" (*&one));
-		printk("OK, SIMD FPU using exception 19 error reporting.\n");
 		load_mxcsr(0x1f80);
 	}
 #endif
+
+	/* Test for the divl bug.. */
+	__asm__("fninit\n\t"
+		"fldl %1\n\t"
+		"fdivl %2\n\t"
+		"fmull %2\n\t"
+		"fldl %1\n\t"
+		"fsubp %%st,%%st(1)\n\t"
+		"fistpl %0\n\t"
+		"fwait\n\t"
+		"fninit"
+		: "=m" (*&boot_cpu_data.fdiv_bug)
+		: "m" (*&x), "m" (*&y));
+	if (boot_cpu_data.fdiv_bug)
+		printk("Hmm, FPU with FDIV bug.\n");
 }
 
 static void __init check_hlt(void)

@@ -3486,6 +3486,8 @@ static int st_attach(Scsi_Device * SDp)
 		if (tmp_da == NULL || tmp_ba == NULL) {
 			if (tmp_da != NULL)
 				kfree(tmp_da);
+			if (tmp_ba != NULL)
+				kfree(tmp_ba);
 			SDp->attached--;
 			write_unlock_irqrestore(&st_dev_arr_lock, flags);
 			printk(KERN_ERR "st: Can't extend device array.\n");

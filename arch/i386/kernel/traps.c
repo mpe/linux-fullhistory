@@ -641,7 +641,6 @@ void simd_math_error(void *eip)
 	 */
 	task = current;
 	save_init_fpu(task);
-	load_mxcsr(0x1f80);
 	task->thread.trap_no = 19;
 	task->thread.error_code = 0;
 	info.si_signo = SIGFPE;

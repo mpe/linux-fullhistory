@@ -438,7 +438,7 @@ static unsigned int yenta_events(pci_socket_t *socket)
 	u8 csc;
 	u32 cb_event;
 	unsigned int events;
-	
+
 	/* Clear interrupt status for the event */
 	cb_event = cb_readl(socket, CB_SOCKET_EVENT);
 	cb_writel(socket, CB_SOCKET_EVENT, cb_event);
@@ -551,6 +551,12 @@ static int yenta_socket_thread(void * data)
 	MOD_INC_USE_COUNT;
 	daemonize();
 	strcpy(current->comm, "CardBus Watcher");
+
+	if (request_irq(socket->cb_irq, yenta_interrupt, SA_SHIRQ, socket->dev->name, socket)) {
+		printk ("Yenta: unable to register irq %d\n", socket->cb_irq);
+		MOD_DEC_USE_COUNT;
+		return (1);
+	}
 
 	/* Figure out what the dang thing can do for the PCMCIA layer... */
 	yenta_get_socket_capabilities(socket, isa_interrupts);
@@ -808,8 +814,7 @@ static int yenta_open(pci_socket_t *socket)
 	/* Set up the bridge regions.. */
 	yenta_allocate_resources(socket);
 
-	if (dev->irq && !request_irq(dev->irq, yenta_interrupt, SA_SHIRQ, dev->name, socket))
-		socket->cb_irq = dev->irq;
+	socket->cb_irq = dev->irq;
 
 	/* Do we have special options for the device? */
 	for (i = 0; i < NR_OVERRIDES; i++) {

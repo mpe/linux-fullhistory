@@ -278,7 +278,7 @@ static int via_get_info(char *buffer, char **addr, off_t offset, int count)
 
 #endif
 
-#define FIT(v,min,max) (((v)>(max)?(max):(v))<(min)?(min):(v))
+#define FIT(v,min,max) ((v)>(max)?(max):((v)<(min)?(min):(v)))
 #define ENOUGH(v,un) (((v)-1)/(un)+1)
 
 #ifdef DEBUG

@@ -1650,6 +1650,7 @@ int get_cpuinfo(char * buffer)
 	int i, n;
 
 	for (n = 0; n < NR_CPUS; n++, c++) {
+		int fpu_exception;
 #ifdef CONFIG_SMP
 		if (!(cpu_online_map & (1<<n)))
 			continue;
@@ -1722,7 +1723,9 @@ int get_cpuinfo(char * buffer)
 			  (c->x86_capability & X86_FEATURE_SEP) &&
 			  c->x86_model < 3 &&
 			  c->x86_mask < 3;
-	
+
+		/* We use exception 16 if we have hardware math and we've either seen it or the CPU claims it is internal */
+		fpu_exception = c->hard_math && (ignore_irq13 | (c->x86_capability & X86_FEATURE_FPU));
 		p += sprintf(p, "fdiv_bug\t: %s\n"
 			        "hlt_bug\t\t: %s\n"
 			        "sep_bug\t\t: %s\n"
@@ -1739,7 +1742,7 @@ int get_cpuinfo(char * buffer)
 			     c->f00f_bug ? "yes" : "no",
 			     c->coma_bug ? "yes" : "no",
 			     c->hard_math ? "yes" : "no",
-			     (c->hard_math && ignore_irq13) ? "yes" : "no",
+			     fpu_exception ? "yes" : "no",
 			     c->cpuid_level,
 			     c->wp_works_ok ? "yes" : "no");
 
