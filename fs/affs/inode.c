@@ -691,7 +691,6 @@ affs_read_inode(struct inode *inode)
 	inode->u.affs_i.i_pa_next      = 0;
 	inode->u.affs_i.i_pa_last      = 0;
 	inode->u.affs_i.i_ec           = NULL;
-	inode->u.affs_i.i_cache_users  = 0;
 	inode->u.affs_i.i_lastblock    = -1;
 	inode->i_nlink                 = 1;
 	inode->i_mode                  = 0;
@@ -870,6 +869,12 @@ static void
 affs_put_inode(struct inode *inode)
 {
 	pr_debug("AFFS: put_inode(ino=%lu, nlink=%u)\n",inode->i_ino,inode->i_nlink);
+	lock_super(inode->i_sb);
+	if (inode->u.affs_i.i_ec) {
+		free_page((unsigned long)inode->u.affs_i.i_ec);
+		inode->u.affs_i.i_ec = NULL;
+	}
+	unlock_super(inode->i_sb);
 	if (inode->i_nlink) {
 		return;
 	}
@@ -899,7 +904,7 @@ affs_new_inode(const struct inode *dir)
 		return NULL;
 	}
 
-	atomic_set(&inode->i_count, 1);
+	inode->i_count   = 1;
 	inode->i_nlink   = 1;
 	inode->i_dev     = sb->s_dev;
 	inode->i_uid     = current->fsuid;
@@ -921,7 +926,6 @@ affs_new_inode(const struct inode *dir)
 	inode->u.affs_i.i_pa_next      = 0;
 	inode->u.affs_i.i_pa_last      = 0;
 	inode->u.affs_i.i_ec           = NULL;
-	inode->u.affs_i.i_cache_users  = 0;
 	inode->u.affs_i.i_lastblock    = -1;
 
 	insert_inode_hash(inode);

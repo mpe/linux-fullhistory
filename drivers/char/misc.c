@@ -215,6 +215,9 @@ __initfunc(int misc_init(void))
 #ifdef CONFIG_SUN_MOUSE
 	sun_mouse_init();
 #endif
+#ifdef CONFIG_PC110_PAD
+	pc110pad_init();
+#endif
 /*
  *	Only one watchdog can succeed. We probe the pcwatchdog first,
  *	then the wdt cards and finally the software watchdog which always

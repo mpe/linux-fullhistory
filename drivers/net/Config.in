@@ -84,6 +84,7 @@ if [ "$CONFIG_NET_ETHERNET" = "y" ]; then
     tristate 'Digi Intl. RightSwitch SE-X support' CONFIG_DGRS
     tristate 'EtherExpressPro/100 support' CONFIG_EEXPRESS_PRO100
     if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+      tristate 'TI ThunderLAN support (EXPERIMENTAL)' CONFIG_TLAN
       tristate 'Racal-Interlan EISA ES3210 support (EXPERIMENTAL)' CONFIG_ES3210
       bool 'Zenith Z-Note support (EXPERIMENTAL)' CONFIG_ZNET
     fi
@@ -151,12 +152,14 @@ if [ "$CONFIG_NET_RADIO" != "n" ]; then
       bool 'Soundmodem support for 2400 baud AFSK modulation (8MHz crystal)' CONFIG_SOUNDMODEM_AFSK2400_8
       bool 'Soundmodem support for 4800 baud HAPN-1 modulation' CONFIG_SOUNDMODEM_HAPN4800
       bool 'Soundmodem support for 9600 baud FSK G3RUH modulation' CONFIG_SOUNDMODEM_FSK9600
-      if [ -f drivers/net/soundmodem/sm_afsk2666.c ]; then
-        bool 'Soundmodem support for 2666 baud AFSK modulation' CONFIG_SOUNDMODEM_AFSK2666
-      fi
-      if [ -f drivers/net/soundmodem/sm_psk4800.c ]; then
-        bool 'Soundmodem support for 4800 baud PSK modulation' CONFIG_SOUNDMODEM_PSK4800
-      fi
+# if [ -f doesn't work with xconfig. Enable it again when the drivers are really
+# included.
+#      if [ -f drivers/net/soundmodem/sm_afsk2666.c ]; then
+#        bool 'Soundmodem support for 2666 baud AFSK modulation' CONFIG_SOUNDMODEM_AFSK2666
+#      fi
+#      if [ -f drivers/net/soundmodem/sm_psk4800.c ]; then
+#        bool 'Soundmodem support for 4800 baud PSK modulation' CONFIG_SOUNDMODEM_PSK4800
+#      fi
     fi
   fi
   tristate 'STRIP (Metricom starmode radio IP)' CONFIG_STRIP

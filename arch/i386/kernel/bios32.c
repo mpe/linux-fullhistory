@@ -1,7 +1,7 @@
 /*
  * bios32.c - BIOS32, PCI BIOS functions.
  *
- * $Id: bios32.c,v 1.11 1997/05/07 13:35:21 mj Exp $
+ * $Id: bios32.c,v 1.12 1997/06/26 13:33:46 mj Exp $
  *
  * Sponsored by
  *	iX Multiuser Multitasking Magazine
@@ -59,6 +59,8 @@
  *
  * May 7,  1997 : Added some missing cli()'s. [mj]
  * 
+ * Jun 20, 1997 : Corrected problems in "conf1" type accesses.
+ *      (paubert@iram.es)
  */
 
 #include <linux/config.h>
@@ -512,16 +514,7 @@ static int pci_conf1_read_config_byte(unsigned char bus, unsigned char device_fn
 
     save_flags(flags); cli();
     outl(CONFIG_CMD(bus,device_fn,where), 0xCF8);
-    switch (where & 3) {
-	case 0: *value = inb(0xCFC);
-		break;
-	case 1: *value = inb(0xCFD);
-		break;
-	case 2: *value = inb(0xCFE);
-		break;
-	case 3: *value = inb(0xCFF);
-		break;
-    }
+    *value = inb(0xCFC + (where&3));
     restore_flags(flags);
     return PCIBIOS_SUCCESSFUL;
 }
@@ -531,12 +524,10 @@ static int pci_conf1_read_config_word (unsigned char bus,
 {
     unsigned long flags;
 
+    if (where&1) return PCIBIOS_BAD_REGISTER_NUMBER;
     save_flags(flags); cli();
     outl(CONFIG_CMD(bus,device_fn,where), 0xCF8);    
-    if (where & 2)
-    	*value = inw(0xCFE);
-    else
-    	*value = inw(0xCFC);
+    *value = inw(0xCFC + (where&2));
     restore_flags(flags);
     return PCIBIOS_SUCCESSFUL;    
 }
@@ -546,6 +537,7 @@ static int pci_conf1_read_config_dword (unsigned char bus, unsigned char device_
 {
     unsigned long flags;
 
+    if (where&3) return PCIBIOS_BAD_REGISTER_NUMBER;
     save_flags(flags); cli();
     outl(CONFIG_CMD(bus,device_fn,where), 0xCF8);
     *value = inl(0xCFC);
@@ -560,7 +552,7 @@ static int pci_conf1_write_config_byte (unsigned char bus, unsigned char device_
 
     save_flags(flags); cli();
     outl(CONFIG_CMD(bus,device_fn,where), 0xCF8);    
-    outb(value, 0xCFC);
+    outb(value, 0xCFC + (where&3));
     restore_flags(flags);
     return PCIBIOS_SUCCESSFUL;
 }
@@ -570,9 +562,10 @@ static int pci_conf1_write_config_word (unsigned char bus, unsigned char device_
 {
     unsigned long flags;
 
+    if (where&1) return PCIBIOS_BAD_REGISTER_NUMBER;
     save_flags(flags); cli();
     outl(CONFIG_CMD(bus,device_fn,where), 0xCF8);
-    outw(value, 0xCFC);
+    outw(value, 0xCFC + (where&2));
     restore_flags(flags);
     return PCIBIOS_SUCCESSFUL;
 }
@@ -582,6 +575,7 @@ static int pci_conf1_write_config_dword (unsigned char bus, unsigned char device
 {
     unsigned long flags;
 
+    if (where&3) return PCIBIOS_BAD_REGISTER_NUMBER;
     save_flags(flags); cli();
     outl(CONFIG_CMD(bus,device_fn,where), 0xCF8);
     outl(value, 0xCFC);

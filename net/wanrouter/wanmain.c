@@ -11,15 +11,17 @@
 *
 * Author:	Gene Kozin	<genek@compuserve.com>
 *
-* Copyright:	(c) 1995-1996 Sangoma Technologies Inc.
+* Copyright:	(c) 1995-1997 Sangoma Technologies Inc.
 *
 *		This program is free software; you can redistribute it and/or
 *		modify it under the terms of the GNU General Public License
 *		as published by the Free Software Foundation; either version
 *		2 of the License, or (at your option) any later version.
 * ============================================================================
-* Dec 27, 1996	Gene Kozin	Initial version (based on Sangoma's WANPIPE)
+* Jun 27, 1997  Alan Cox	realigned with vendor code
+* Jan 16, 1997	Gene Kozin	router_devlist made public
 * Jan 31, 1997  Alan Cox	Hacked it about a bit for 2.1
+* Dec 27, 1996	Gene Kozin	Initial version (based on Sangoma's WANPIPE)
 *****************************************************************************/
 
 #include <linux/stddef.h>	/* offsetof(), etc. */
@@ -78,9 +80,9 @@ static int delete_interface (wan_device_t* wandev, char* name, int forse);
  */
 
 static char fullname[]		= "WAN Router";
-static char copyright[]		= "(c) 1995-1996 Sangoma Technologies Inc.";
+static char copyright[]		= "(c) 1995-1997 Sangoma Technologies Inc.";
 static char modname[]		= ROUTER_NAME;	/* short module name */
-static wan_device_t* devlist	= NULL;	/* list of registered devices */
+wan_device_t * router_devlist	= NULL;	/* list of registered devices */
 static int devcnt		= 0;
 
 /*
@@ -199,8 +201,8 @@ int register_wan_device(wan_device_t* wandev)
 	 
 	wandev->ndev = 0;
 	wandev->dev  = NULL;
-	wandev->next = devlist;
-	devlist = wandev;
+	wandev->next = router_devlist;
+	router_devlist = wandev;
 	++devcnt;
         MOD_INC_USE_COUNT;	/* prevent module from unloading */
 	return 0;
@@ -225,7 +227,7 @@ int unregister_wan_device(char* name)
 	if (name == NULL)
 		return -EINVAL;
 
-	for (wandev = devlist, prev = NULL;
+	for (wandev = router_devlist, prev = NULL;
 		wandev && strcmp(wandev->name, name);
 		prev = wandev, wandev = wandev->next)
 		;
@@ -246,7 +248,7 @@ int unregister_wan_device(char* name)
 	if (prev)
 		prev->next = wandev->next;
 	else
-		devlist = wandev->next;
+		router_devlist = wandev->next;
 	--devcnt;
 	wanrouter_proc_delete(wandev);
         MOD_DEC_USE_COUNT;
@@ -613,7 +615,7 @@ static wan_device_t* find_device (char* name)
 {
 	wan_device_t* wandev;
 
-	for (wandev = devlist;wandev && strcmp(wandev->name, name);
+	for (wandev = router_devlist;wandev && strcmp(wandev->name, name);
 		wandev = wandev->next);
 	return wandev;
 }

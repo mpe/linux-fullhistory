@@ -152,8 +152,8 @@ static void qe_init_rings(struct sunqe *qep, int from_irq)
 		skb_put(skb, ETH_FRAME_LEN);
 		skb_reserve(skb, 34);
 
-		/* FIX FOR ULTRA */
-		qb->qe_rxd[i].rx_addr = (unsigned int) skb->data;
+		qb->qe_rxd[i].rx_addr =
+			(unsigned int) ((unsigned long)skb->data);
 		qb->qe_rxd[i].rx_flags =
 			(RXD_OWN | ((RX_BUF_ALLOC_SIZE - 34) & RXD_LENGTH));
 	}
@@ -491,7 +491,8 @@ static inline void qe_rx(struct sunqe *qep)
 	drop_it:
 			/* Return it to the QE. */
 			qep->net_stats.rx_dropped++;
-			this->rx_addr = (unsigned int) qep->rx_skbs[elem]->data;
+			this->rx_addr =
+				(unsigned int) ((unsigned long)qep->rx_skbs[elem]->data);
 			this->rx_flags =
 				(RXD_OWN | (RX_BUF_ALLOC_SIZE & RXD_LENGTH));
 			goto next;
@@ -512,8 +513,8 @@ static inline void qe_rx(struct sunqe *qep)
 			skb_put(new_skb, ETH_FRAME_LEN);
 			skb_reserve(new_skb, 34);
 
-			/* FIX FOR ULTRA */
-			rxbase[elem].rx_addr = (unsigned int) new_skb->data;
+			rxbase[elem].rx_addr =
+				(unsigned int) ((unsigned long)new_skb->data);
 			rxbase[elem].rx_flags =
 				(RXD_OWN | ((RX_BUF_ALLOC_SIZE - 34) & RXD_LENGTH));
 
@@ -533,7 +534,8 @@ static inline void qe_rx(struct sunqe *qep)
 			eth_copy_and_sum(copy_skb, (unsigned char *)skb->data, len, 0);
 
 			/* Reuse original ring buffer. */
-			rxbase[elem].rx_addr = (unsigned int) skb->data;
+			rxbase[elem].rx_addr =
+				(unsigned int) ((unsigned long)skb->data);
 			rxbase[elem].rx_flags =
 				(RXD_OWN | ((RX_BUF_ALLOC_SIZE - 34) & RXD_LENGTH));
 

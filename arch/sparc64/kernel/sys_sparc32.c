@@ -759,14 +759,29 @@ static long do_readv_writev32(int type, struct inode *inode, struct file *file,
 asmlinkage long sys32_readv(int fd, u32 vector, u32 count)
 {
 	struct file *file;
+	struct dentry *dentry;
 	struct inode *inode;
 	long err = -EBADF;
 
 	lock_kernel();
-	if (fd >= NR_OPEN || !(file = current->files->fd[fd]) || !(inode=file->f_inode))
+	if(fd >= NR_OPEN)
 		goto out;
-	if (!(file->f_mode & 1))
+
+	file = current->files->fd[fd];
+	if(!file)
 		goto out;
+
+	if(!(file->f_mode & 1))
+		goto out;
+
+	dentry = file->f_dentry;
+	if(!dentry)
+		goto out;
+
+	inode = dentry->d_inode;
+	if(!inode)
+		goto out;
+
 	err = do_readv_writev32(VERIFY_WRITE, inode, file,
 				(struct iovec32 *)A(vector), count);
 out:
@@ -778,13 +793,28 @@ asmlinkage long sys32_writev(int fd, u32 vector, u32 count)
 {
 	int error = -EBADF;
 	struct file *file;
+	struct dentry *dentry;
 	struct inode *inode;
 
 	lock_kernel();
-	if (fd >= NR_OPEN || !(file = current->files->fd[fd]) || !(inode=file->f_inode))
+	if(fd >= NR_OPEN)
 		goto out;
-	if (!(file->f_mode & 2))
+
+	file = current->files->fd[fd];
+	if(!file)
 		goto out;
+
+	if(!(file->f_mode & 2))
+		goto out;
+
+	dentry = file->f_dentry;
+	if(!dentry)
+		goto out;
+
+	inode = dentry->d_inode;
+	if(!inode)
+		goto out;
+
 	down(&inode->i_sem);
 	error = do_readv_writev32(VERIFY_READ, inode, file,
 				(struct iovec32 *)A(vector), count);
@@ -833,21 +863,34 @@ asmlinkage int old32_readdir(unsigned int fd, u32 dirent, unsigned int count)
 {
 	int error = -EBADF;
 	struct file * file;
+	struct dentry * dentry;
+	struct inode * inode;
 	struct readdir_callback32 buf;
 
 	lock_kernel();
-	if (fd >= NR_OPEN || !(file = current->files->fd[fd]))
+	if(fd >= NR_OPEN)
 		goto out;
+
+	file = current->files->fd[fd];
+	if(!file)
+		goto out;
+
+	dentry = file->f_dentry;
+	if(!dentry)
+		goto out;
+
+	inode = dentry->d_inode;
+	if(!inode)
+		goto out;
+
+	buf.count = 0;
+	buf.dirent = (struct old_linux_dirent32 *)A(dirent);
+
 	error = -ENOTDIR;
 	if (!file->f_op || !file->f_op->readdir)
 		goto out;
-	error = verify_area(VERIFY_WRITE, (void *)A(dirent),
-			    sizeof(struct old_linux_dirent32));
-	if (error)
-		goto out;
-	buf.count = 0;
-	buf.dirent = (struct old_linux_dirent32 *)A(dirent);
-	error = file->f_op->readdir(file->f_inode, file, &buf, fillonedir);
+
+	error = file->f_op->readdir(inode, file, &buf, fillonedir);
 	if (error < 0)
 		goto out;
 	error = buf.count;
@@ -897,30 +940,43 @@ static int filldir(void * __buf, const char * name, int namlen, off_t offset, in
 asmlinkage int sys32_getdents(unsigned int fd, u32 dirent, unsigned int count)
 {
 	struct file * file;
+	struct dentry * dentry;
+	struct inode *inode;
 	struct linux_dirent32 * lastdirent;
 	struct getdents_callback32 buf;
 	int error = -EBADF;
 
 	lock_kernel();
-	if (fd >= NR_OPEN || !(file = current->files->fd[fd]))
+	if(fd >= NR_OPEN)
 		goto out;
-	error = -ENOTDIR;
-	if (!file->f_op || !file->f_op->readdir)
+
+	file = current->files->fd[fd];
+	if(!file)
 		goto out;
-	error = verify_area(VERIFY_WRITE, (void *)A(dirent), count);
-	if (error)
+
+	dentry = file->f_dentry;
+	if(!dentry)
 		goto out;
+
+	inode = dentry->d_inode;
+	if(!inode)
+		goto out;
+
 	buf.current_dir = (struct linux_dirent32 *) A(dirent);
 	buf.previous = NULL;
 	buf.count = count;
 	buf.error = 0;
-	error = file->f_op->readdir(file->f_inode, file, &buf, filldir);
+
+	error = -ENOTDIR;
+	if (!file->f_op || !file->f_op->readdir)
+		goto out;
+
+	error = file->f_op->readdir(inode, file, &buf, filldir);
 	if (error < 0)
 		goto out;
 	lastdirent = buf.previous;
-	if (!lastdirent) {
-		error = buf.error;
-	} else {
+	error = buf.error;
+	if(lastdirent) {
 		put_user(file->f_pos, &lastdirent->d_off);
 		error = count - buf.count;
 	}
@@ -1725,11 +1781,11 @@ extern __inline__ struct socket *sockfd_lookup(int fd, int *err)
 		return NULL;
 	}
 
-	inode = file->f_inode;
+	inode = file->f_dentry->d_inode;
 	if (!inode || !inode->i_sock || !socki_lookup(inode))
 	{
 		*err = -ENOTSOCK;
-		fput(file,inode);
+		fput(file);
 		return NULL;
 	}
 
@@ -1738,7 +1794,7 @@ extern __inline__ struct socket *sockfd_lookup(int fd, int *err)
 
 extern __inline__ void sockfd_put(struct socket *sock)
 {
-	fput(sock->file,sock->inode);
+	fput(sock->file);
 }
 
 struct msghdr32 {
@@ -2168,25 +2224,33 @@ static inline int
 do_execve32(char * filename, u32 * argv, u32 * envp, struct pt_regs * regs)
 {
 	struct linux_binprm bprm;
+	struct dentry * dentry;
 	int retval;
 	int i;
 
 	bprm.p = PAGE_SIZE*MAX_ARG_PAGES-sizeof(void *);
 	for (i=0 ; i<MAX_ARG_PAGES ; i++)	/* clear page-table */
 		bprm.page[i] = 0;
-	retval = open_namei(filename, 0, 0, &bprm.inode, NULL);
-	if (retval)
+
+	dentry = open_namei(filename, 0, 0);
+	retval = PTR_ERR(dentry);
+	if (IS_ERR(dentry))
 		return retval;
+
+	bprm.dentry = dentry;
 	bprm.filename = filename;
 	bprm.sh_bang = 0;
 	bprm.java = 0;
 	bprm.loader = 0;
 	bprm.exec = 0;
-	bprm.dont_iput = 0;
-	if ((bprm.argc = count32(argv)) < 0)
+	if ((bprm.argc = count32(argv)) < 0) {
+		dput(dentry);
 		return bprm.argc;
-	if ((bprm.envc = count32(envp)) < 0)
+	}
+	if ((bprm.envc = count32(envp)) < 0) {
+		dput(dentry);
 		return bprm.envc;
+	}
 
 	retval = prepare_binprm(&bprm);
 	
@@ -2206,8 +2270,9 @@ do_execve32(char * filename, u32 * argv, u32 * envp, struct pt_regs * regs)
 		return retval;
 
 	/* Something went wrong, return the inode and free the argument pages*/
-	if(!bprm.dont_iput)
-		iput(bprm.inode);
+	if(bprm.dentry)
+		dput(bprm.dentry);
+
 	for (i=0 ; i<MAX_ARG_PAGES ; i++)
 		free_page(bprm.page[i]);
 	return(retval);
@@ -2226,17 +2291,22 @@ asmlinkage int sparc32_execve(struct pt_regs *regs)
         if((u32)regs->u_regs[UREG_G1] == 0)
                 base = 1;
 
-        error = getname((char *)(unsigned long)(u32)regs->u_regs[base + UREG_I0], &filename);
-        if(error)
-                return error;
+	lock_kernel();
+        filename = getname((char *)(unsigned long)(u32)regs->u_regs[base + UREG_I0]);
+	error = PTR_ERR(filename);
+        if(IS_ERR(filename))
+                goto out;
         error = do_execve32(filename,
         	(u32 *)A((u32)regs->u_regs[base + UREG_I1]),
         	(u32 *)A((u32)regs->u_regs[base + UREG_I2]), regs);
         putname(filename);
+
 	if(!error) {
 		fprs_write(0);
 		regs->fprs = 0;
 	}
+out:
+	unlock_kernel();
         return error;
 }
 

@@ -1078,6 +1078,7 @@ tulip_rx(struct device *dev)
 			skb->protocol = eth_type_trans(skb,dev);
 			netif_rx(skb);
 			lp->stats.rx_packets++;
+			lp->stats.rx_bytes+=skb->len;
 		}
 
 		lp->rx_ring[entry].status = TRING_OWN;

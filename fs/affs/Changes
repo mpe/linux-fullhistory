@@ -13,10 +13,24 @@ Known bugs:
   reads basically work (but all files are of size 0).
   Alas, I've got no alpha to debug. :-(
 - If an affs mounted filesystem is exported via
-  nfs, it cannot be written to. No networking to
-  test that, either. :-(
+  nfs, it cannot be written to. 
+  As soon as I have my network up and running, I'll
+  try to fix this.
+- The partition checker (drivers/block/genhd.c)
+  doesn't work with devices which have 256 byte
+  blocks (some very old SCSI drives). 
 
 Please direct bug reports to: hjw@zvw.de
+
+Version 3.5
+-----------
+
+- Extension block caches are now allocated on
+  demand instead of when a file is opened, as
+  files can be read and written without opening
+  them (e. g. the loopback device does this).
+
+- Removed an unused function.
 
 Version 3.4
 -----------
@@ -80,7 +94,7 @@ Version 3.0
   interface in Linux 1.3.
 - Write support.
 - Support for hard and symbolic links.
-- Lots of things I remeber even less ...
+- Lots of things I remember even less ...
 
 Version 2.0
 -----------

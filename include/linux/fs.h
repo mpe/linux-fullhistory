@@ -329,7 +329,7 @@ struct inode {
 
 	struct list_head	i_dentry;
 
-	unsigned int		i_state;
+	unsigned long		i_state;
 
 	unsigned int		i_flags;
 	unsigned char		i_pipe;

@@ -180,7 +180,9 @@ static long rtc_read(struct inode *inode, struct file *file, char *buf,
 		data = rtc_irq_data;
 		rtc_irq_data = 0;
 		restore_flags(flags);
-		retval = put_user(data, (unsigned long *)buf) ?: sizeof(unsigned long);
+		retval = put_user(data, (unsigned long *)buf); 
+		if (!retval)
+			retval = sizeof(unsigned long); 
 	}
 
 	current->state = TASK_RUNNING;
@@ -262,7 +264,6 @@ static int rtc_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 			 * "don't care" or "match all". Only the tm_hour,
 			 * tm_min and tm_sec are used.
 			 */
-			int retval;
 			unsigned char hrs, min, sec;
 			struct rtc_time alm_tm;
 
@@ -305,7 +306,6 @@ static int rtc_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 		}
 		case RTC_SET_TIME:	/* Set the RTC */
 		{
-			int retval;
 			struct rtc_time rtc_tm;
 			unsigned char mon, day, hrs, min, sec, leap_yr;
 			unsigned char save_control, save_freq_select;
@@ -418,7 +418,7 @@ static int rtc_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 		default:
 			return -EINVAL;
 	}
-	return copy_to_user(arg, &wtime, sizeof wtime) ? -EFAULT : 0;
+	return copy_to_user((void *)arg, &wtime, sizeof wtime) ? -EFAULT : 0;
 }
 
 /*

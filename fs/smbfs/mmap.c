@@ -119,8 +119,8 @@ smb_mmap(struct inode *inode, struct file *file, struct vm_area_struct *vma)
 		inode->i_atime = CURRENT_TIME;
 		inode->i_dirt = 1;
 	}
-	vma->vm_inode = inode;
-	atomic_inc(&inode->i_count);
+
+	vma->vm_dentry = dget(file->f_dentry);
 	vma->vm_ops = &smb_file_mmap;
 	return 0;
 }

@@ -87,8 +87,9 @@
 #include "hosts.h"
 
 
-#define WD33C93_VERSION    "1.24"
-#define WD33C93_DATE       "29/Jan/1997"
+#define WD33C93_VERSION    "1.25"
+#define WD33C93_DATE       "09/Jul/1997"
+/* NOTE: 1.25 for m68k is related to in2000-1.31 for x86 */
 
 /*
  * Note - the following defines have been moved to 'wd33c93.h':
@@ -107,11 +108,14 @@
 
 
 /*
- * setup_strings is an array of strings that define some of the operating
- * parameters and settings for this driver. It is used unless an amiboot
- * or insmod command line has been specified, in which case those settings
- * are combined with the ones here. The driver recognizes the following
- * keywords (lower case required) and arguments:
+ * 'setup_strings' is a single string used to pass operating parameters and
+ * settings from the kernel/module command-line to the driver. 'setup_args[]'
+ * is an array of strings that define the compile-time default values for
+ * these settings. If Linux boots with an amiboot or insmod command-line,
+ * those settings are combined with 'setup_args[]'. Note that amiboot
+ * command-lines are prefixed with "wd33c93=" while insmod uses a
+ * "setup_strings=" prefix. The driver recognizes the following keywords
+ * (lower case required) and arguments:
  *
  * -  nosync:bitmask -bitmask is a byte where the 1st 7 bits correspond with
  *                    the 7 possible SCSI devices. Set a bit to negotiate for
@@ -139,13 +143,11 @@
  *    _must_ be a colon between a keyword and its numeric argument, with no
  *    spaces.
  * -  Keywords are separated by commas, no spaces, in the standard kernel
- *    command-line manner, except in the case of 'setup_strings[]' (see
- *    below), which is simply a C array of pointers to char. Each element
- *    in the array is a string comprising one keyword & argument.
+ *    command-line manner.
  * -  A keyword in the 'nth' comma-separated command-line member will overwrite
- *    the 'nth' element of setup_strings[]. A blank command-line member (in
+ *    the 'nth' element of setup_args[]. A blank command-line member (in
  *    other words, a comma with no preceding keyword) will _not_ overwrite
- *    the corresponding setup_strings[] element.
+ *    the corresponding setup_args[] element.
  * -  If a keyword is used more than once, the first one applies to the first
  *    SCSI host found, the second to the second card, etc, unless the 'next'
  *    keyword is used to change the order.
@@ -158,8 +160,16 @@
  * -  wd33c93=debug:0x1c
  */
 
-static char *setup_strings[] =
-      {"","","","","","","","","","","",""};
+/* Normally, no defaults are specified */
+static char *setup_args[] =
+      {"","","","","","","","",""};
+
+/* filled in by 'insmod' */
+static char *setup_strings = 0;
+
+#ifdef MODULE_PARM
+MODULE_PARM(setup_strings, "s");
+#endif
 
 
 
@@ -337,9 +347,24 @@ DB(DB_QUEUE_COMMAND,printk("Q-%d-%02x-%ld( ",cmd->target,cmd->cmnd[0],cmd->pid))
       cmd->SCp.this_residual = cmd->request_bufflen;
       }
 
-/* Preset the command status to GOOD, since that's the normal case */
+/* WD docs state that at the conclusion of a "LEVEL2" command, the
+ * status byte can be retrieved from the LUN register. Apparently,
+ * this is the case only for *uninterrupted* LEVEL2 commands! If
+ * there are any unexpected phases entered, even if they are 100%
+ * legal (different devices may choose to do things differently),
+ * the LEVEL2 command sequence is exited. This often occurs prior
+ * to receiving the status byte, in which case the driver does a
+ * status phase interrupt and gets the status byte on its own.
+ * While such a command can then be "resumed" (ie restarted to
+ * finish up as a LEVEL2 command), the LUN register will NOT be
+ * a valid status byte at the command's conclusion, and we must
+ * use the byte obtained during the earlier interrupt. Here, we
+ * preset SCp.Status to an illegal value (0xff) so that when
+ * this command finally completes, we can tell where the actual
+ * status byte is stored.
+ */
 
-   cmd->SCp.Status = GOOD;
+   cmd->SCp.Status = ILLEGAL_STATUS_BYTE;
 
    /*
     * Add the cmd to the end of 'input_Q'. Note that REQUEST SENSE
@@ -701,7 +726,8 @@ use_transfer_pio:
       write_wd33c93(regp, WD_CONTROL, CTRL_IDI | CTRL_EDI | CTRL_DMA);
       write_wd33c93_count(regp,cmd->SCp.this_residual);
 
-      if ((hostdata->level2 >= L2_DATA) || (cmd->SCp.phase == 0)) {
+      if ((hostdata->level2 >= L2_DATA) ||
+          (hostdata->level2 == L2_BASIC && cmd->SCp.phase == 0)) {
          write_wd33c93(regp, WD_COMMAND_PHASE, 0x45);
          write_wd33c93_cmd(regp, WD_CMD_SEL_ATN_XFER);
          hostdata->state = S_RUNNING_LEVEL2;
@@ -786,17 +812,17 @@ DB(DB_INTR,printk("TIMEOUT"))
          hostdata->state = S_UNCONNECTED;
          cmd->scsi_done(cmd);
 
-	 /* From esp.c:
-	  * There is a window of time within the scsi_done() path
-	  * of execution where interrupts are turned back on full
-	  * blast and left that way.  During that time we could
-	  * reconnect to a disconnected command, then we'd bomb
-	  * out below.  We could also end up executing two commands
-	  * at _once_.  ...just so you know why the restore_flags()
-	  * is here...
-	  */
+    /* From esp.c:
+     * There is a window of time within the scsi_done() path
+     * of execution where interrupts are turned back on full
+     * blast and left that way.  During that time we could
+     * reconnect to a disconnected command, then we'd bomb
+     * out below.  We could also end up executing two commands
+     * at _once_.  ...just so you know why the restore_flags()
+     * is here...
+     */
 
-	 restore_flags(flags);
+    restore_flags(flags);
 
 /* We are not connected to a target - check to see if there
  * are commands waiting to be executed.
@@ -887,9 +913,10 @@ DB(DB_INTR,printk("CMND-%02x,%ld",cmd->cmnd[0],cmd->pid))
       case CSR_XFER_DONE|PHS_STATUS:
       case CSR_UNEXP    |PHS_STATUS:
       case CSR_SRV_REQ  |PHS_STATUS:
-DB(DB_INTR,printk("STATUS"))
+DB(DB_INTR,printk("STATUS="))
 
          cmd->SCp.Status = read_1_byte(regp);
+DB(DB_INTR,printk("%02x",cmd->SCp.Status))
          if (hostdata->level2 >= L2_BASIC) {
             sr = read_wd33c93(regp, WD_SCSI_STATUS);  /* clear interrupt */
             hostdata->state = S_RUNNING_LEVEL2;
@@ -897,7 +924,6 @@ DB(DB_INTR,printk("STATUS"))
             write_wd33c93_cmd(regp, WD_CMD_SEL_ATN_XFER);
             }
          else {
-DB(DB_INTR,printk("=%02x",cmd->SCp.Status))
             hostdata->state = S_CONNECTED;
             }
          break;
@@ -1067,21 +1093,22 @@ printk("sync_xfer=%02x",hostdata->sync_xfer[cmd->target]);
 DB(DB_INTR,printk("SX-DONE-%ld",cmd->pid))
             cmd->SCp.Message = COMMAND_COMPLETE;
             lun = read_wd33c93(regp, WD_TARGET_LUN);
-            if (cmd->SCp.Status == GOOD)
-               cmd->SCp.Status = lun;
+DB(DB_INTR,printk(":%d.%d",cmd->SCp.Status,lun))
             hostdata->connected = NULL;
-            if (cmd->cmnd[0] != REQUEST_SENSE)
-               cmd->result = cmd->SCp.Status | (cmd->SCp.Message << 8);
-            else if (cmd->SCp.Status != GOOD)
-               cmd->result = (cmd->result & 0x00ffff) | (DID_ERROR << 16);
             hostdata->busy[cmd->target] &= ~(1 << cmd->lun);
             hostdata->state = S_UNCONNECTED;
+            if (cmd->SCp.Status == ILLEGAL_STATUS_BYTE)
+               cmd->SCp.Status = lun;
+            if (cmd->cmnd[0] == REQUEST_SENSE && cmd->SCp.Status != GOOD)
+               cmd->result = (cmd->result & 0x00ffff) | (DID_ERROR << 16);
+            else
+               cmd->result = cmd->SCp.Status | (cmd->SCp.Message << 8);
             cmd->scsi_done(cmd);
 
 /* We are no longer  connected to a target - check to see if
  * there are commands waiting to be executed.
  */
-	    restore_flags(flags);
+       restore_flags(flags);
             wd33c93_execute(instance);
             }
          else {
@@ -1154,17 +1181,17 @@ DB(DB_INTR,printk("UNEXP_DISC-%ld",cmd->pid))
          hostdata->connected = NULL;
          hostdata->busy[cmd->target] &= ~(1 << cmd->lun);
          hostdata->state = S_UNCONNECTED;
-         if (cmd->cmnd[0] != REQUEST_SENSE)
-            cmd->result = cmd->SCp.Status | (cmd->SCp.Message << 8);
-         else if (cmd->SCp.Status != GOOD)
+         if (cmd->cmnd[0] == REQUEST_SENSE && cmd->SCp.Status != GOOD)
             cmd->result = (cmd->result & 0x00ffff) | (DID_ERROR << 16);
+         else
+            cmd->result = cmd->SCp.Status | (cmd->SCp.Message << 8);
          cmd->scsi_done(cmd);
 
 /* We are no longer connected to a target - check to see if
  * there are commands waiting to be executed.
  */
-	 /* look above for comments on scsi_done() */
-	 restore_flags(flags);
+    /* look above for comments on scsi_done() */
+    restore_flags(flags);
          wd33c93_execute(instance);
          break;
 
@@ -1186,12 +1213,13 @@ DB(DB_INTR,printk("DISC-%ld",cmd->pid))
                hostdata->connected = NULL;
                hostdata->busy[cmd->target] &= ~(1 << cmd->lun);
                hostdata->state = S_UNCONNECTED;
-               if (cmd->cmnd[0] != REQUEST_SENSE)
-                  cmd->result = cmd->SCp.Status | (cmd->SCp.Message << 8);
-               else if (cmd->SCp.Status != GOOD)
+DB(DB_INTR,printk(":%d",cmd->SCp.Status))
+               if (cmd->cmnd[0] == REQUEST_SENSE && cmd->SCp.Status != GOOD)
                   cmd->result = (cmd->result & 0x00ffff) | (DID_ERROR << 16);
+               else
+                  cmd->result = cmd->SCp.Status | (cmd->SCp.Message << 8);
                cmd->scsi_done(cmd);
-	       restore_flags(flags);
+          restore_flags(flags);
                break;
             case S_PRE_TMP_DISC:
             case S_RUNNING_LEVEL2:
@@ -1433,7 +1461,7 @@ Scsi_Cmnd *tmp, *prev;
          cmd->result = DID_ABORT << 16;
          printk("scsi%d: Abort - removing command %ld from input_Q. ",
            instance->host_no, cmd->pid);
-	 enable_irq(cmd->host->irq);
+    enable_irq(cmd->host->irq);
          cmd->scsi_done(cmd);
          return SCSI_ABORT_SUCCESS;
          }
@@ -1523,7 +1551,7 @@ Scsi_Cmnd *tmp, *prev;
          printk("scsi%d: Abort - command %ld found on disconnected_Q - ",
                  instance->host_no, cmd->pid);
          printk("returning ABORT_SNOOZE. ");
-	 enable_irq(cmd->host->irq);
+    enable_irq(cmd->host->irq);
          return SCSI_ABORT_SNOOZE;
          }
       tmp = (Scsi_Cmnd *)tmp->host_scribble;
@@ -1551,10 +1579,11 @@ Scsi_Cmnd *tmp, *prev;
 
 
 #define MAX_WD33C93_HOSTS 4
-#define MAX_SETUP_STRINGS (sizeof(setup_strings) / sizeof(char *))
+#define MAX_SETUP_ARGS (sizeof(setup_args) / sizeof(char *))
 #define SETUP_BUFFER_SIZE 200
 static char setup_buffer[SETUP_BUFFER_SIZE];
-static char setup_used[MAX_SETUP_STRINGS];
+static char setup_used[MAX_SETUP_ARGS];
+static int done_setup = 0;
 
 void wd33c93_setup (char *str, int *ints)
 {
@@ -1583,45 +1612,46 @@ char *p1,*p2;
    setup_buffer[SETUP_BUFFER_SIZE - 1] = '\0';
    p1 = setup_buffer;
    i = 0;
-   while (*p1 && (i < MAX_SETUP_STRINGS)) {
+   while (*p1 && (i < MAX_SETUP_ARGS)) {
       p2 = strchr(p1, ',');
       if (p2) {
          *p2 = '\0';
          if (p1 != p2)
-            setup_strings[i] = p1;
+            setup_args[i] = p1;
          p1 = p2 + 1;
          i++;
          }
       else {
-         setup_strings[i] = p1;
+         setup_args[i] = p1;
          break;
          }
       }
-   for (i=0; i<MAX_SETUP_STRINGS; i++)
+   for (i=0; i<MAX_SETUP_ARGS; i++)
       setup_used[i] = 0;
+   done_setup = 1;
 }
 
 
-/* check_setup_strings() returns index if key found, 0 if not
+/* check_setup_args() returns index if key found, 0 if not
  */
 
-static int check_setup_strings(char *key, int *flags, int *val, char *buf)
+static int check_setup_args(char *key, int *flags, int *val, char *buf)
 {
 int x;
 char *cp;
 
-   for  (x=0; x<MAX_SETUP_STRINGS; x++) {
+   for  (x=0; x<MAX_SETUP_ARGS; x++) {
       if (setup_used[x])
          continue;
-      if (!strncmp(setup_strings[x], key, strlen(key)))
+      if (!strncmp(setup_args[x], key, strlen(key)))
          break;
-      if (!strncmp(setup_strings[x], "next", strlen("next")))
+      if (!strncmp(setup_args[x], "next", strlen("next")))
          return 0;
       }
-   if (x == MAX_SETUP_STRINGS)
+   if (x == MAX_SETUP_ARGS)
       return 0;
    setup_used[x] = 1;
-   cp = setup_strings[x] + strlen(key);
+   cp = setup_args[x] + strlen(key);
    *val = -1;
    if (*cp != ':')
       return ++x;
@@ -1642,6 +1672,9 @@ int i;
 int flags;
 int val;
 char buf[32];
+
+   if (!done_setup && setup_strings)
+      wd33c93_setup(setup_strings,0);
 
    hostdata = (struct WD33C93_hostdata *)instance->hostdata;
 
@@ -1688,26 +1721,29 @@ char buf[32];
 #endif
 
 
-   if (check_setup_strings("nosync",&flags,&val,buf))
+   if (check_setup_args("nosync",&flags,&val,buf))
       hostdata->no_sync = val;
 
-   if (check_setup_strings("nodma",&flags,&val,buf))
+   if (check_setup_args("nodma",&flags,&val,buf))
       hostdata->no_dma = (val == -1) ? 1 : val;
 
-   if (check_setup_strings("period",&flags,&val,buf))
+   if (check_setup_args("period",&flags,&val,buf))
       hostdata->default_sx_per = sx_table[round_period((unsigned int)val)].period_ns;
 
-   if (check_setup_strings("disconnect",&flags,&val,buf)) {
+   if (check_setup_args("disconnect",&flags,&val,buf)) {
       if ((val >= DIS_NEVER) && (val <= DIS_ALWAYS))
          hostdata->disconnect = val;
       else
          hostdata->disconnect = DIS_ADAPTIVE;
       }
 
-   if (check_setup_strings("debug",&flags,&val,buf))
+   if (check_setup_args("level2",&flags,&val,buf))
+      hostdata->level2 = val;
+
+   if (check_setup_args("debug",&flags,&val,buf))
       hostdata->args = val & DB_MASK;
 
-   if (check_setup_strings("clock",&flags,&val,buf)) {
+   if (check_setup_args("clock",&flags,&val,buf)) {
       if (val>7 && val<11)
          val = WD33C93_FS_8_10;
       else if (val>11 && val<16)
@@ -1719,13 +1755,13 @@ char buf[32];
       hostdata->clock_freq = val;
       }
 
-   if ((i = check_setup_strings("next",&flags,&val,buf))) {
+   if ((i = check_setup_args("next",&flags,&val,buf))) {
       while (i)
          setup_used[--i] = 1;
       }
 
 #ifdef PROC_INTERFACE
-   if (check_setup_strings("proc",&flags,&val,buf))
+   if (check_setup_args("proc",&flags,&val,buf))
       hostdata->proc = val;
 #endif
 
@@ -1744,9 +1780,9 @@ char buf[32];
 #else
    printk(" debugging=OFF\n");
 #endif
-   printk("           setup_strings=");
-   for (i=0; i<MAX_SETUP_STRINGS; i++)
-      printk("%s,",setup_strings[i]);
+   printk("           setup_args=");
+   for (i=0; i<MAX_SETUP_ARGS; i++)
+      printk("%s,",setup_args[i]);
    printk("\n");
    printk("           Version %s - %s, Compiled %s at %s\n",
                WD33C93_VERSION,WD33C93_DATE,__DATE__,__TIME__);
@@ -1822,6 +1858,10 @@ static int stop = 0;
          bp += 6;
          hd->no_dma = simple_strtoul(bp,NULL,0);
          }
+      else if (!strncmp(bp,"level2:",7)) {
+         bp += 7;
+         hd->level2 = simple_strtoul(bp,NULL,0);
+         }
       return len;
       }
 
@@ -1838,32 +1878,32 @@ static int stop = 0;
       sprintf(tbuf,"\nclock_freq=%02x no_sync=%02x no_dma=%d",
             hd->clock_freq,hd->no_sync,hd->no_dma);
       strcat(bp,tbuf);
-      strcat(bp,"\nsync_xfer[] =");
-      for (x=0; x<8; x++) {
-         sprintf(tbuf," %02x",hd->sync_xfer[x]);
+      strcat(bp,"\nsync_xfer[] =       ");
+      for (x=0; x<7; x++) {
+         sprintf(tbuf,"\t%02x",hd->sync_xfer[x]);
          strcat(bp,tbuf);
          }
-      strcat(bp,"\nsync_stat[] =");
-      for (x=0; x<8; x++) {
-         sprintf(tbuf," %02x",hd->sync_stat[x]);
+      strcat(bp,"\nsync_stat[] =       ");
+      for (x=0; x<7; x++) {
+         sprintf(tbuf,"\t%02x",hd->sync_stat[x]);
          strcat(bp,tbuf);
          }
       }
 #ifdef PROC_STATISTICS
    if (hd->proc & PR_STATISTICS) {
       strcat(bp,"\ncommands issued:    ");
-      for (x=0; x<8; x++) {
-         sprintf(tbuf," %ld",hd->cmd_cnt[x]);
+      for (x=0; x<7; x++) {
+         sprintf(tbuf,"\t%ld",hd->cmd_cnt[x]);
          strcat(bp,tbuf);
          }
       strcat(bp,"\ndisconnects allowed:");
-      for (x=0; x<8; x++) {
-         sprintf(tbuf," %ld",hd->disc_allowed_cnt[x]);
+      for (x=0; x<7; x++) {
+         sprintf(tbuf,"\t%ld",hd->disc_allowed_cnt[x]);
          strcat(bp,tbuf);
          }
       strcat(bp,"\ndisconnects done:   ");
-      for (x=0; x<8; x++) {
-         sprintf(tbuf," %ld",hd->disc_done_cnt[x]);
+      for (x=0; x<7; x++) {
+         sprintf(tbuf,"\t%ld",hd->disc_done_cnt[x]);
          strcat(bp,tbuf);
          }
       sprintf(tbuf,"\ninterrupts: %ld, DATA_PHASE ints: %ld DMA, %ld PIO",

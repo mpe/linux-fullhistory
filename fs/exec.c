@@ -84,6 +84,10 @@ __initfunc(void binfmt_setup(void))
 	init_aout_binfmt();
 #endif
 
+#ifdef CONFIG_BINFMT_AOUT32
+	init_aout32_binfmt();
+#endif
+
 #ifdef CONFIG_BINFMT_JAVA
 	init_java_binfmt();
 #endif

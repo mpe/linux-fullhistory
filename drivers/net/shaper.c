@@ -70,11 +70,11 @@
 #include <linux/if_arp.h>
 #include <linux/init.h>
 #include <net/dst.h>
-#include "shaper.h"
+#include <linux/if_shaper.h>
 
 int sh_debug;		/* Debug flag */
 
-#define SHAPER_BANNER	"CymruNet Traffic Shaper BETA 0.03 for Linux 2.1\n"
+#define SHAPER_BANNER	"CymruNet Traffic Shaper BETA 0.04 for Linux 2.1\n"
 
 /*
  *	Locking
@@ -426,17 +426,26 @@ static int shaper_header(struct sk_buff *skb, struct device *dev,
 	unsigned short type, void *daddr, void *saddr, unsigned len)
 {
 	struct shaper *sh=dev->priv;
+	int v;
 	if(sh_debug)
 		printk("Shaper header\n");
-	return sh->hard_header(skb,sh->dev,type,daddr,saddr,len);
+	skb->dev=sh->dev;
+	v=sh->hard_header(skb,sh->dev,type,daddr,saddr,len);
+	skb->dev=dev;
+	return v;
 }
 
 static int shaper_rebuild_header(struct sk_buff *skb)
 {
 	struct shaper *sh=skb->dev->priv;
+	struct device *dev=skb->dev;
+	int v;
 	if(sh_debug)
 		printk("Shaper rebuild header\n");
-	return sh->rebuild_header(skb);
+	skb->dev=sh->dev;
+	v=sh->rebuild_header(skb);
+	skb->dev=dev;
+	return v;
 }
 
 static int shaper_cache(struct dst_entry *dst, struct neighbour *neigh, struct hh_cache *hh)
@@ -483,6 +492,7 @@ static int shaper_attach(struct device *shdev, struct shaper *sh, struct device 
 	else
 		shdev->rebuild_header	= NULL;
 	
+#if 0
 	if(dev->hard_header_cache)
 	{
 		sh->hard_header_cache	= dev->hard_header_cache;
@@ -500,6 +510,10 @@ static int shaper_attach(struct device *shdev, struct shaper *sh, struct device 
 	}
 	else
 		shdev->header_cache_update= NULL;
+#else
+	shdev->header_cache_update = NULL;
+	shdev->hard_header_cache = NULL;
+#endif		
 	
 	shdev->hard_header_len=dev->hard_header_len;
 	shdev->type=dev->type;

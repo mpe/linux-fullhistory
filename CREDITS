@@ -81,6 +81,14 @@ S: University of Notre Dame
 S: Notre Dame, Indiana
 S: USA
 
+N: James Banks
+E: james.banks@caldera.com
+D: TLAN network driver
+S: Caldera, Inc.
+S: 633 South 550 East
+S: Provo, UT 84606
+S: USA
+
 N: Peter Bauer
 E: 100136.3530@compuserve.com
 D: Driver for depca-ethernet-board
@@ -971,12 +979,13 @@ S: D-91056 Erlangen
 S: Germany
 
 N: Michael Meskes
-E: meskes@informatik.rwth-aachen.de
+E: meskes@topsystem.de
+P: 1024/04B6E8F5 6C 77 33 CA CC D6 22 03  AB AB 15 A3 AE AD 39 7D
 D: Kernel hacker. Software watchdog daemon.
 D: Maintainer of several Debian packages
-S: Lehrstuhl fuer angewandte Mathematik insb. Informatik
-S: RWTH-Aachen
-S: D-52056 Aachen
+S: topsystem Systemhaus GmbH
+S: Europark A2, Adenauerstr. 20
+S: D-52146 Wuerselen
 S: Germany
 
 N: Nigel Metheringham

@@ -724,7 +724,11 @@ __initfunc(int lp_init(void))
   		return 0;
   
 	printk(KERN_INFO "lp: driver loaded but no devices found\n");
+#ifdef MODULE
+	return 0;
+#else	
 	return 1;
+#endif
 }
 
 #ifdef MODULE

@@ -12,6 +12,7 @@
  *      Rik Faith <faith@cs.unc.edu>
  *      Tommy Thorn <tthorn>
  *      Thomas Wuensche <tw@fgb1.fgb.mw.tu-muenchen.de>
+ *      Andrea Arcangeli <arcangeli@mbox.queen.it>
  *
  *  Modified by Eric Youngdale eric@aib.com to
  *  add scatter-gather, multiple outstanding request, and other
@@ -3508,6 +3509,7 @@ int init_module(void) {
 
 void cleanup_module( void)
 {
+    timer_active &= ~(1 << SCSI_TIMER);
 #if CONFIG_PROC_FS
     proc_scsi_unregister(0, PROC_SCSI_SCSI);
 

@@ -391,6 +391,14 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_TLAN),y)
+L_OBJS += tlan.o
+else
+  ifeq ($(CONFIG_TLAN),m)
+  M_OBJS += tlan.o
+  endif
+endif
+
 ifeq ($(CONFIG_ZNET),y)
 L_OBJS += znet.o
 endif
@@ -793,7 +801,7 @@ dlci.o: dlci.c CONFIG
 sdladrv.o: sdladrv.c CONFIG
 
 wanpipe.o: $(WANPIPE_OBJS)
-	ld -r -o $@ $^
+	ld -r -o $@ $(WANPIPE_OBJS)
 
 sdlamain.o: sdlamain.c CONFIG
 

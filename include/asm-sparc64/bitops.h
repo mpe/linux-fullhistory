@@ -1,4 +1,4 @@
-/* $Id: bitops.h,v 1.18 1997/06/30 12:36:18 davem Exp $
+/* $Id: bitops.h,v 1.19 1997/07/08 10:17:37 davem Exp $
  * bitops.h: Bit string operations on the V9.
  *
  * Copyright 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -23,21 +23,21 @@ extern __inline__ unsigned long test_and_set_bit(unsigned long nr, void *addr)
 {
 	unsigned long oldbit;
 	unsigned long temp0, temp1;
-	unsigned int * m = ((unsigned int *) addr) + (nr >> 5);
+	unsigned long * m = ((unsigned long *) addr) + (nr >> 6);
 
 	__asm__ __volatile__("
-	lduw		[%4], %0
+	ldx		[%4], %0
 1:
 	andcc		%0, %3, %2
-	bne,pn		%%icc, 2f
+	bne,pn		%%xcc, 2f
 	 xor		%0, %3, %1
-	cas 		[%4], %0, %1
+	casx 		[%4], %0, %1
 	cmp		%0, %1
-	bne,a,pn	%%icc, 1b
-	 lduw		[%4], %0
+	bne,a,pn	%%xcc, 1b
+	 ldx		[%4], %0
 2:
 "	: "=&r" (temp0), "=&r" (temp1), "=&r" (oldbit)
-	: "HIr" (1UL << (nr & 31)), "r" (m)
+	: "HIr" (1UL << (nr & 63)), "r" (m)
 	: "cc");
 	return oldbit != 0;
 }
@@ -51,21 +51,21 @@ extern __inline__ unsigned long test_and_clear_bit(unsigned long nr, void *addr)
 {
 	unsigned long oldbit;
 	unsigned long temp0, temp1;
-	unsigned int * m = ((unsigned int *) addr) + (nr >> 5);
+	unsigned long * m = ((unsigned long *) addr) + (nr >> 6);
 
 	__asm__ __volatile__("
-	lduw		[%4], %0
+	ldx		[%4], %0
 1:
 	andcc		%0, %3, %2
-	be,pn		%%icc, 2f
+	be,pn		%%xcc, 2f
 	 xor		%0, %3, %1
-	cas 		[%4], %0, %1
+	casx 		[%4], %0, %1
 	cmp		%0, %1
-	bne,a,pn	%%icc, 1b
-	 lduw		[%4], %0
+	bne,a,pn	%%xcc, 1b
+	 ldx		[%4], %0
 2:
 "	: "=&r" (temp0), "=&r" (temp1), "=&r" (oldbit)
-	: "HIr" (1UL << (nr & 31)), "r" (m)
+	: "HIr" (1UL << (nr & 63)), "r" (m)
 	: "cc");
 	return oldbit != 0;
 }
@@ -79,19 +79,19 @@ extern __inline__ unsigned long test_and_change_bit(unsigned long nr, void *addr
 {
 	unsigned long oldbit;
 	unsigned long temp0, temp1;
-	unsigned int * m = ((unsigned int *) addr) + (nr >> 5);
+	unsigned long * m = ((unsigned long *) addr) + (nr >> 6);
 
 	__asm__ __volatile__("
-	lduw		[%4], %0
+	ldx		[%4], %0
 1:
 	and		%0, %3, %2
 	xor		%0, %3, %1
-	cas 		[%4], %0, %1
+	casx 		[%4], %0, %1
 	cmp		%0, %1
-	bne,a,pn	%%icc, 1b
-	 lduw		[%4], %0
+	bne,a,pn	%%xcc, 1b
+	 ldx		[%4], %0
 "	: "=&r" (temp0), "=&r" (temp1), "=&r" (oldbit)
-	: "HIr" (1UL << (nr & 31)), "r" (m)
+	: "HIr" (1UL << (nr & 63)), "r" (m)
 	: "cc");
 	return oldbit != 0;
 }
@@ -103,7 +103,7 @@ extern __inline__ void change_bit(unsigned long nr, void *addr)
 
 extern __inline__ unsigned long test_bit(int nr, __const__ void *addr)
 {
-	return 1UL & (((__const__ int *) addr)[nr >> 5] >> (nr & 31));
+	return 1UL & (((__const__ long *) addr)[nr >> 6] >> (nr & 63));
 }
 
 /* The easy/cheese version for now. */

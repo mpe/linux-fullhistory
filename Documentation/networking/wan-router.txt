@@ -1,10 +1,11 @@
 ------------------------------------------------------------------------------
 WAN Router for Linux Operating System
 ------------------------------------------------------------------------------
-Version 1.0.0
-December 31, 1996
-Author: Gene Kozin <genek@compuserve.com>
-Copyright (c) 1995-1996 Sangoma Technologies Inc.
+Version 1.0.3 - June 3, 1997
+Version 1.0.1 - January 30, 1997
+Author: Jaspreet Singh <jaspreet@sangoma.com>
+	Gene Kozin <genek@compuserve.com>
+Copyright (c) 1995-1997 Sangoma Technologies Inc.
 ------------------------------------------------------------------------------
 
 INTRODUCTION
@@ -95,12 +96,6 @@ Ave, Cambridge, MA 02139, USA.
 
 
 
-KNOWN BUGS AND LIMITATIONS
-
-/proc user interface is not complete yet.
-
-
-
 ACKNOLEGEMENTS
 
 This product is based on the WANPIPE(tm) Multiprotocol WAN Router developed
@@ -122,9 +117,19 @@ product.
 
 
 REVISION HISTORY
+1.0.3	June 3, 1997
+	o UDP port for multiple boards (Frame relay, PPP)
+	o Continuous Transmission of Configure Request Packet for PPP (this
+	  support is only added for 508 cards)
+	o Connection Timeout for PPP changed from 900 to 0
+	o Flow Control for multiple boards and multiple channels (Frame Relay)
 
-1.0.0	 December 31, 1996
---------------------------
- o Initial version.
+1.0.1	January 30, 1997
+
+	o Implemented user-readable status and statistics via /proc filesystem
+
+1.0.0	December 31, 1996
+
+	o Initial version
 
 >>>>>> END <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<

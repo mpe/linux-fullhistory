@@ -369,7 +369,7 @@ static int msdos_empty(struct inode *dir)
 	struct buffer_head *bh;
 	struct msdos_dir_entry *de;
 
-	if (atomic_read(&dir->i_count) > 1)
+	if (dir->i_count > 1)
 		return -EBUSY;
 	if (MSDOS_I(dir)->i_start) { /* may be zero in mkdir */
 		pos = 0;
@@ -713,7 +713,7 @@ static int rename_diff_dir(struct inode *old_dir,char *old_name,int old_len,
 		MSDOS_I(new_inode)->i_depend = free_inode;
 		MSDOS_I(free_inode)->i_old = new_inode;
 		/* Two references now exist to free_inode so increase count */
-		atomic_inc(&free_inode->i_count);
+		free_inode->i_count++;
 		/* free_inode is put after putting new_inode and old_inode */
 		iput(new_inode);
 		fat_brelse(sb, new_bh);

@@ -14,53 +14,62 @@
  *		for kernel-based devices like TTY.  It interfaces between a
  *		raw TTY, and the kernel's INET protocol layers (via DDI).
  *
- * Version:	@(#)strip.c	0.9.8	June 1996
+ * Version:	@(#)strip.c	1.2	February 1997
  *
  * Author:	Stuart Cheshire <cheshire@cs.stanford.edu>
  *
- * Fixes:	v0.9 12th Feb 1996.
+ * Fixes:	v0.9 12th Feb 1996 (SC)
  *		New byte stuffing (2+6 run-length encoding)
  *		New watchdog timer task
  *		New Protocol key (SIP0)
  *		
- *		v0.9.1 3rd March 1996
+ *		v0.9.1 3rd March 1996 (SC)
  *		Changed to dynamic device allocation -- no more compile
  *		time (or boot time) limit on the number of STRIP devices.
  *		
- *		v0.9.2 13th March 1996
+ *		v0.9.2 13th March 1996 (SC)
  *		Uses arp cache lookups (but doesn't send arp packets yet)
  *		
- *		v0.9.3 17th April 1996
+ *		v0.9.3 17th April 1996 (SC)
  *		Fixed bug where STR_ERROR flag was getting set unneccessarily
+ *		(causing otherwise good packets to be unneccessarily dropped)
  *		
- *		v0.9.4 27th April 1996
+ *		v0.9.4 27th April 1996 (SC)
  *		First attempt at using "&COMMAND" Starmode AT commands
  *		
- *		v0.9.5 29th May 1996
+ *		v0.9.5 29th May 1996 (SC)
  *		First attempt at sending (unicast) ARP packets
  *		
- *		v0.9.6 5th June 1996
- *		Elliot put "message level" tags in every "printk" statement
+ *		v0.9.6 5th June 1996 (Elliot)
+ *		Put "message level" tags in every "printk" statement
  *		
- *		v0.9.7 13th June 1996
- *		Added support for the /proc fs (laik)
+ *		v0.9.7 13th June 1996 (laik)
+ *		Added support for the /proc fs
  *
- *              v0.9.8 July 1996
- *              Added packet logging (Mema)
+ *              v0.9.8 July 1996 (Mema)
+ *              Added packet logging
+ *
+ *              v1.0 November 1996 (SC)
+ *              Fixed (severe) memory leaks in the /proc fs code
+ *              Fixed race conditions in the logging code
+ *
+ *              v1.1 January 1997 (SC)
+ *              Deleted packet logging (use tcpdump instead)
+ *              Added support for Metricom Firmware v204 features
+ *              (like message checksums)
+ *
+ *              v1.2 January 1997 (SC)
+ *              Put portables list back in
  */
 
-/*
- * Undefine this symbol if you don't have PROC_NET_STRIP_STATUS
- * defined in include/linux/proc_fs.h
- */
+#ifdef MODULE
+static const char StripVersion[] = "1.2-STUART.CHESHIRE-MODULAR";
+#else
+static const char StripVersion[] = "1.2-STUART.CHESHIRE";
+#endif
 
-#define DO_PROC_NET_STRIP_STATUS 1
-
-/*
- * Define this symbol if you want to enable STRIP packet tracing.
- */
-
-#define DO_PROC_NET_STRIP_TRACE 0
+#define TICKLE_TIMERS 0
+#define EXT_COUNTERS 1
 
 
 /************************************************************************/
@@ -146,13 +155,19 @@ typedef struct
     __u8 c[24];
 } MetricomAddressString;
 
+/* Encapsulation can expand packet of size x to 65/64x + 1
+ * Sent packet looks like "<CR>*<address>*<key><encaps payload><CR>"
+ *                           1 1   1-18  1  4         ?         1
+ * eg.                     <CR>*0000-1234*SIP0<encaps payload><CR>
+ * We allow 31 bytes for the stars, the key, the address and the <CR>s
+ */
+#define STRIP_ENCAP_SIZE(X) (32 + (X)*65L/64L)
+
 /*
- * Note: A Metricom packet looks like this: *<address>*<key><payload><CR>
- * eg. *0000-1234*SIP0<payload><CR>
- * A STRIP_Header is never really sent over the radio, but making a dummy header
- * for internal use within the kernel that looks like an Ethernet header makes
- * certain other software happier. For example, tcpdump already understands
- * Ethernet headers.
+ * A STRIP_Header is never really sent over the radio, but making a dummy
+ * header for internal use within the kernel that looks like an Ethernet
+ * header makes certain other software happier. For example, tcpdump
+ * already understands Ethernet headers.
  */
 
 typedef struct
@@ -162,83 +177,20 @@ typedef struct
     unsigned short  protocol;		/* The protocol type, using Ethernet codes */
 } STRIP_Header;
 
-typedef struct GeographicLocation
+typedef struct
 {
-    char s[18];
-} GeographicLocation;
-
-typedef enum {
-    NodeValid = 0x1,
-    NodeHasWAN = 0x2,
-    NodeIsRouter = 0x4
-} NodeType;
-
-typedef struct MetricomNode
-{
-    NodeType type;                  /* Some flags about the type of node */
-    GeographicLocation gl;     /* The location of the node. */
-    MetricomAddress addr;      /* The metricom address of this node */
-    int poll_latency;          /* The latency to poll that node ? */
-    int rssi;                  /* The Receiver Signal Strength Indicator */
-    struct MetricomNode *next; /* The next node */
+    char c[60];
 } MetricomNode;
 
+#define NODE_TABLE_SIZE 32
+typedef struct
+{
+    struct timeval timestamp;
+    int            num_nodes;
+    MetricomNode   node[NODE_TABLE_SIZE];
+} MetricomNodeTable;
+
 enum { FALSE = 0, TRUE = 1 };
-
-/*
- * Holds the packet signature for an IP packet.
- */
-typedef struct
-{
-    IPaddr src;
-    /* Data is stored in the following field in network byte order. */
-    __u16 id;
-} IPSignature;
-
-/*
- * Holds the packet signature for an ARP packet.
- */
-typedef struct
-{
-    IPaddr src;
-    /* Data is stored in the following field in network byte order. */
-    __u16 op;
-} ARPSignature;
-
-/*
- * Holds the signature of a packet.
- */
-typedef union
-{
-    IPSignature ip_sig;
-    ARPSignature arp_sig;
-    __u8 print_sig[6];
-} PacketSignature;
-
-typedef enum {
-    EntrySend = 0,
-    EntryReceive = 1
-} LogEntry;
-
-/* Structure for Packet Logging */
-typedef struct stripLog
-{
-    LogEntry entry_type;
-    u_long seqNum;
-    int packet_type;
-    PacketSignature sig;
-    MetricomAddress src;
-    MetricomAddress dest;
-    struct timeval timeStamp;
-    u_long rawSize;
-    u_long stripSize;
-    u_long slipSize;
-    u_long valid;
-} StripLog;
-
-#define ENTRY_TYPE_TO_STRING(X) ((X) ? "r" : "s")
-
-#define BOOLEAN_TO_STRING(X) ((X) ? "true" : "false")
 
 /*
  * Holds the radio's firmware version.
@@ -246,7 +198,7 @@ typedef struct stripLog
 typedef struct
 {
     char c[50];
-} MetricomFirmwareVersion;
+} FirmwareVersion;
 
 /*
  * Holds the radio's serial number.
@@ -254,7 +206,7 @@ typedef struct
 typedef struct
 {
     char c[18];
-} MetricomSerialNumber;
+} SerialNumber;
 
 /*
  * Holds the radio's battery voltage.
@@ -262,7 +214,19 @@ typedef struct
 typedef struct
 {
     char c[11];
-} MetricomBatteryVoltage;
+} BatteryVoltage;
+
+typedef struct
+{
+    char c[8];
+} char8;
+
+enum
+{
+    NoStructure = 0,		/* Really old firmware */
+    StructuredMessages = 1,	/* Parsable AT response msgs */
+    ChecksummedMessages = 2	/* Parsable AT response msgs with checksums */
+} FirmwareLevel;
 
 struct strip
 {
@@ -292,6 +256,25 @@ struct strip
     unsigned long      tx_dropped;		/* When MTU change		*/
     unsigned long      rx_over_errors;		/* Frame bigger then STRIP buf. */
 
+    unsigned long      pps_timer;		/* Timer to determine pps	*/
+    unsigned long      rx_pps_count;		/* Counter to determine pps	*/
+    unsigned long      tx_pps_count;		/* Counter to determine pps	*/
+    unsigned long      sx_pps_count;		/* Counter to determine pps	*/
+    unsigned long      rx_average_pps;		/* rx packets per second * 8	*/
+    unsigned long      tx_average_pps;		/* tx packets per second * 8	*/
+    unsigned long      sx_average_pps;		/* sent packets per second * 8	*/
+
+#ifdef EXT_COUNTERS
+    unsigned long      rx_bytes;                /* total received bytes */
+    unsigned long      tx_bytes;                /* total received bytes */
+    unsigned long      rx_rbytes;               /* bytes thru radio i/f */
+    unsigned long      tx_rbytes;               /* bytes thru radio i/f */
+    unsigned long      rx_sbytes;               /* tot bytes thru serial i/f */
+    unsigned long      tx_sbytes;               /* tot bytes thru serial i/f */
+    unsigned long      rx_ebytes;               /* tot stat/err bytes */
+    unsigned long      tx_ebytes;               /* tot stat/err bytes */
+#endif
+
     /*
      * Internal variables.
      */
@@ -300,52 +283,142 @@ struct strip
     struct strip     **referrer;		/* The pointer that points to us*/
     int                discard;			/* Set if serial error		*/
     int                working;			/* Is radio working correctly?	*/
-    int                structured_messages;	/* Parsable AT response msgs?	*/
+    int                firmware_level;		/* Message structuring level	*/
+    int                next_command;		/* Next periodic command	*/
     int                mtu;			/* Our mtu (to spot changes!)	*/
     long               watchdog_doprobe;	/* Next time to test the radio	*/
     long               watchdog_doreset;	/* Time to do next reset	*/
     long               gratuitous_arp;		/* Time to send next ARP refresh*/
     long               arp_interval;		/* Next ARP interval		*/
     struct timer_list  idle_timer;		/* For periodic wakeup calls	*/
-    MetricomNode      *neighbor_list;		/* The list of neighbor nodes   */
-    int                neighbor_list_locked;    /* Indicates the list is locked */
-    MetricomFirmwareVersion firmware_version;	/* The radio's firmware version */
-    MetricomSerialNumber serial_number;		/* The radio's serial number    */
-    MetricomBatteryVoltage battery_voltage;     /* The radio's battery voltage  */
+    MetricomAddress    true_dev_addr;		/* True address of radio	*/
+    int                manual_dev_addr;		/* Hack: See note below         */
+
+    FirmwareVersion    firmware_version;	/* The radio's firmware version */
+    SerialNumber       serial_number;		/* The radio's serial number    */
+    BatteryVoltage     battery_voltage;		/* The radio's battery voltage  */
 
     /*
      * Other useful structures.
      */
 
     struct tty_struct *tty;			/* ptr to TTY structure		*/
-    char               if_name[8];		/* Dynamically generated name	*/
+    char8              if_name;			/* Dynamically generated name	*/
     struct device      dev;			/* Our device structure		*/
 
     /*
-     * Packet Logging Structures.
+     * Neighbour radio records
      */
 
-    u_long             num_sent;
-    u_long             num_received;
-
-    int next_entry;                            	/* The index of the oldest packet; */
-                                                /* Also the next to be logged. */
-    StripLog packetLog[610];
+    MetricomNodeTable  portables;
+    MetricomNodeTable  poletops;
 };
+
+/*
+ * Note: manual_dev_addr hack
+ * 
+ * It is not possible to change the hardware address of a Metricom radio,
+ * or to send packets with a user-specified hardware source address, thus
+ * trying to manually set a hardware source address is a questionable
+ * thing to do.  However, if the user *does* manually set the hardware
+ * source address of a STRIP interface, then the kernel will believe it,
+ * and use it in certain places. For example, the hardware address listed
+ * by ifconfig will be the manual address, not the true one.
+ * (Both addresses are listed in /proc/net/strip.)
+ * Also, ARP packets will be sent out giving the user-specified address as
+ * the source address, not the real address. This is dangerous, because
+ * it means you won't receive any replies -- the ARP replies will go to
+ * the specified address, which will be some other radio. The case where
+ * this is useful is when that other radio is also connected to the same
+ * machine. This allows you to connect a pair of radios to one machine,
+ * and to use one exclusively for inbound traffic, and the other
+ * exclusively for outbound traffic. Pretty neat, huh?
+ * 
+ * Here's the full procedure to set this up:
+ * 
+ * 1. "slattach" two interfaces, e.g. st0 for outgoing packets,
+ *    and st1 for incoming packets
+ * 
+ * 2. "ifconfig" st0 (outbound radio) to have the hardware address
+ *    which is the real hardware address of st1 (inbound radio).
+ *    Now when it sends out packets, it will masquerade as st1, and
+ *    replies will be sent to that radio, which is exactly what we want.
+ * 
+ * 3. Set the route table entry ("route add default ..." or
+ *    "route add -net ...", as appropriate) to send packets via the st0
+ *    interface (outbound radio). Do not add any route which sends packets
+ *    out via the st1 interface -- that radio is for inbound traffic only.
+ * 
+ * 4. "ifconfig" st1 (inbound radio) to have hardware address zero.
+ *    This tells the STRIP driver to "shut down" that interface and not
+ *    send any packets through it. In particular, it stops sending the
+ *    periodic gratuitous ARP packets that a STRIP interface normally sends.
+ *    Also, when packets arrive on that interface, it will search the
+ *    interface list to see if there is another interface who's manual
+ *    hardware address matches its own real address (i.e. st0 in this
+ *    example) and if so it will transfer ownership of the skbuff to
+ *    that interface, so that it looks to the kernel as if the packet
+ *    arrived on that interface. This is necessary because when the
+ *    kernel sends an ARP packet on st0, it expects to get a reply on
+ *    st0, and if it sees the reply come from st1 then it will ignore
+ *    it (to be accurate, it puts the entry in the ARP table, but
+ *    labelled in such a way that st0 can't use it).
+ * 
+ * Thanks to Petros Maniatis for coming up with the idea of splitting
+ * inbound and outbound traffic between two interfaces, which turned
+ * out to be really easy to implement, even if it is a bit of a hack.
+ * 
+ * Having set a manual address on an interface, you can restore it
+ * to automatic operation (where the address is automatically kept
+ * consistent with the real address of the radio) by setting a manual
+ * address of all ones, e.g. "ifconfig st0 hw strip FFFFFFFFFFFF"
+ * This 'turns off' manual override mode for the device address.
+ * 
+ * Note: The IEEE 802 headers reported in tcpdump will show the *real*
+ * radio addresses the packets were sent and received from, so that you
+ * can see what is really going on with packets, and which interfaces
+ * they are really going through.
+ */
 
 
 /************************************************************************/
 /* Constants								*/
 
-#ifdef MODULE
-static const char StripVersion[] = "0.9.8-STUART.CHESHIRE-MODULAR";
-#else
-static const char StripVersion[] = "0.9.8-STUART.CHESHIRE";
-#endif
+/*
+ * CommandString1 works on all radios
+ * Other CommandStrings are only used with firmware that provides structured responses.
+ * 
+ * ats319=1 Enables Info message for node additions and deletions
+ * ats319=2 Enables Info message for a new best node
+ * ats319=4 Enables checksums
+ * ats319=8 Enables ACK messages
+ */
 
-static const char TickleString1[] = "***&COMMAND*ATS305?\r";
-static const char TickleString2[] = "***&COMMAND*ATS305?\r\r"
-       "*&COMMAND*ATS300?\r\r*&COMMAND*ATS325?\r\r*&COMMAND*AT~I2 nn\r\r";
+static const int MaxCommandStringLength = 32;
+static const int CompatibilityCommand = 1;
+
+static const char CommandString0[] = "*&COMMAND*ATS319=7";	/* Turn on checksums & info messages */
+static const char CommandString1[] = "*&COMMAND*ATS305?";	/* Query radio name */
+static const char CommandString2[] = "*&COMMAND*ATS325?";	/* Query battery voltage */
+static const char CommandString3[] = "*&COMMAND*ATS300?";	/* Query version information */
+static const char CommandString4[] = "*&COMMAND*ATS311?";	/* Query poletop list */
+static const char CommandString5[] = "*&COMMAND*AT~LA";		/* Query portables list */
+typedef struct { const char *string; long length; } StringDescriptor;
+
+static const StringDescriptor CommandString[] =
+    {
+    { CommandString0, sizeof(CommandString0)-1 },
+    { CommandString1, sizeof(CommandString1)-1 },
+    { CommandString2, sizeof(CommandString2)-1 },
+    { CommandString3, sizeof(CommandString3)-1 },
+    { CommandString4, sizeof(CommandString4)-1 },
+    { CommandString5, sizeof(CommandString5)-1 }
+    };
+
+#define GOT_ALL_RADIO_INFO(S)      \
+    ((S)->firmware_version.c[0] && \
+     (S)->battery_voltage.c[0]  && \
+     memcmp(&(S)->true_dev_addr, zero_address.c, sizeof(zero_address)))
 
 static const char            hextable[16]      = "0123456789ABCDEF";
 
@@ -354,26 +427,27 @@ static const MetricomAddress broadcast_address = { { 0xFF,0xFF,0xFF,0xFF,0xFF,0x
 
 static const MetricomKey     SIP0Key           = { { "SIP0" } };
 static const MetricomKey     ARP0Key           = { { "ARP0" } };
-static const MetricomKey     ERR_Key           = { { "ERR_" } };
 static const MetricomKey     ATR_Key           = { { "ATR " } };
+static const MetricomKey     ACK_Key           = { { "ACK_" } };
+static const MetricomKey     INF_Key           = { { "INF_" } };
+static const MetricomKey     ERR_Key           = { { "ERR_" } };
 
 static const long            MaxARPInterval    = 60 * HZ;          /* One minute */
 
 /*
- * Maximum Starmode packet length (including starmode address) is 1183 bytes.
- * Allowing 32 bytes for header, and 65/64 expansion for STRIP encoding,
- * that translates to a maximum payload MTU of 1132.
+ * Maximum Starmode packet length is 1183 bytes. Allowing 4 bytes for
+ * protocol key, 4 bytes for checksum, one byte for CR, and 65/64 expansion
+ * for STRIP encoding, that translates to a maximum payload MTU of 1155.
+ * Note: A standard NFS 1K data packet is a total of 0x480 (1152) bytes
+ * long, including IP header, UDP header, and NFS header. Setting the STRIP
+ * MTU to 1152 allows us to send default sized NFS packets without fragmentation.
  */
-static const unsigned short  MAX_STRIP_MTU          = 1132;
-static const unsigned short  DEFAULT_STRIP_MTU      = 1024;
+static const unsigned short  MAX_SEND_MTU          = 1152;
+static const unsigned short  MAX_RECV_MTU          = 1500; /* Hoping for Ethernet sized packets in the future! */
+static const unsigned short  DEFAULT_STRIP_MTU      = 1152;
 static const int             STRIP_MAGIC            = 0x5303;
 static const long            LongTime               = 0x7FFFFFFF;
 
-static const int             STRIP_NODE_LEN         = 64;
-static const char            STRIP_PORTABLE_CHAR    = 'P';
-static const char            STRIP_ROUTER_CHAR      = 'r';
-static const int             STRIP_PROC_BUFFER_SIZE = 4096;
-static const int             STRIP_LOG_INT_SIZE     = 10;
 
 /************************************************************************/
 /* Global variables							*/
@@ -384,9 +458,17 @@ static struct strip *struct_strip_list = NULL;
 /************************************************************************/
 /* Macros								*/
 
+/* Returns TRUE if text T begins with prefix P */
+#define has_prefix(T,P) (!strncmp((T), (P), sizeof(P)-1))
+
+/* Returns TRUE if text T of length L is equal to string S */
+#define text_equal(T,L,S) (((L) == sizeof(S)-1) && !strncmp((T), (S), sizeof(S)-1))
+
 #define READHEX(X) ((X)>='0' && (X)<='9' ? (X)-'0' :      \
                     (X)>='a' && (X)<='f' ? (X)-'a'+10 :   \
                     (X)>='A' && (X)<='F' ? (X)-'A'+10 : 0 )
+
+#define READHEX16(X) ((__u16)(READHEX(X)))
 
 #define READDEC(X) ((X)>='0' && (X)<='9' ? (X)-'0' : 0)
 
@@ -394,17 +476,6 @@ static struct strip *struct_strip_list = NULL;
 #define MAX(X, Y) ((X) > (Y) ? (X) : (Y))
 #define ELEMENTS_OF(X) (sizeof(X) / sizeof((X)[0]))
 #define ARRAY_END(X) (&((X)[ELEMENTS_OF(X)]))
-
-/* Encapsulation can expand packet of size x to 65/64x + 1              */
-/* Sent packet looks like "*<address>*<key><encaps payload><CR>"        */
-/*                         1   1-18  1  4         ?         1           */
-/* We allow 31 bytes for the stars, the key, the address and the <CR>   */
-#define STRIP_ENCAP_SIZE(X) (32 + (X)*65L/64L)
-
-#define IS_RADIO_ADDRESS(p) (                                                   \
-    isdigit((p)[0]) && isdigit((p)[1]) && isdigit((p)[2]) && isdigit((p)[3]) && \
-    (p)[4] == '-' &&                                                            \
-    isdigit((p)[5]) && isdigit((p)[6]) && isdigit((p)[7]) && isdigit((p)[8])    )
 
 #define JIFFIE_TO_SEC(X) ((X) / HZ)
 
@@ -605,7 +676,15 @@ static __u8 *StuffData(__u8 *src, __u32 length, __u8 *dst, __u8 **code_ptr_ptr)
                 }
                 /* else, we only have one so far, so switch to Stuff_Diff code */
                 code = Stuff_Diff;
-                /* and fall through to Stuff_Diff case below */
+                /* and fall through to Stuff_Diff case below
+                 * Note cunning cleverness here: case Stuff_Diff compares 
+                 * the current character with the previous two to see if it
+                 * has a run of three the same. Won't this be an error if
+                 * there aren't two previous characters stored to compare with?
+                 * No. Because we know the current character is *not* the same
+                 * as the previous one, the first test below will necessarily
+                 * fail and the send half of the "if" won't be executed.
+                 */
 
             /* Stuff_Diff: We have at least two *different* bytes encoded */
             case Stuff_Diff:
@@ -639,10 +718,10 @@ static __u8 *StuffData(__u8 *src, __u32 length, __u8 *dst, __u8 **code_ptr_ptr)
                 src++;    /* Consume the byte */
                 break;
         }
-    if (count == Stuff_MaxCount)
-    {
-        StuffData_FinishBlock(code + count);
-    }
+        if (count == Stuff_MaxCount)
+        {
+            StuffData_FinishBlock(code + count);
+        }
     }
     if (code == Stuff_NoCode)
     {
@@ -758,14 +837,21 @@ static __u8 *UnStuffData(__u8 *src, __u8 *end, __u8 *dst, __u32 dst_length)
  * Convert a string to a Metricom Address.
  */
 
-static void string_to_radio_address(MetricomAddress *addr, __u8 *p)
+#define IS_RADIO_ADDRESS(p) (                                                 \
+  isdigit((p)[0]) && isdigit((p)[1]) && isdigit((p)[2]) && isdigit((p)[3]) && \
+  (p)[4] == '-' &&                                                            \
+  isdigit((p)[5]) && isdigit((p)[6]) && isdigit((p)[7]) && isdigit((p)[8])    )
+
+static int string_to_radio_address(MetricomAddress *addr, __u8 *p)
 {
+    if (!IS_RADIO_ADDRESS(p)) return(1);
     addr->c[0] = 0;
     addr->c[1] = 0;
     addr->c[2] = READHEX(p[0]) << 4 | READHEX(p[1]);
     addr->c[3] = READHEX(p[2]) << 4 | READHEX(p[3]);
     addr->c[4] = READHEX(p[5]) << 4 | READHEX(p[6]);
     addr->c[5] = READHEX(p[7]) << 4 | READHEX(p[8]);
+    return(0);
 }
 
 /*
@@ -780,19 +866,18 @@ static __u8 *radio_address_to_string(const MetricomAddress *addr, MetricomAddres
 
 /*
  * Note: Must make sure sx_size is big enough to receive a stuffed
- * MAX_STRIP_MTU packet. Additionally, we also want to ensure that it's
+ * MAX_RECV_MTU packet. Additionally, we also want to ensure that it's
  * big enough to receive a large radio neighbour list (currently 4K).
  */
 
 static int allocate_buffers(struct strip *strip_info)
 {
     struct device *dev = &strip_info->dev;
-    int stuffedlen = STRIP_ENCAP_SIZE(dev->mtu);
-    int sx_size    = MAX(stuffedlen, 4096);
-    int tx_size    = stuffedlen + sizeof(TickleString2);
-    __u8 *r = kmalloc(MAX_STRIP_MTU, GFP_ATOMIC);
-    __u8 *s = kmalloc(sx_size,       GFP_ATOMIC);
-    __u8 *t = kmalloc(tx_size,       GFP_ATOMIC);
+    int sx_size    = MAX(STRIP_ENCAP_SIZE(MAX_RECV_MTU), 4096);
+    int tx_size    = STRIP_ENCAP_SIZE(dev->mtu) + MaxCommandStringLength;
+    __u8 *r = kmalloc(MAX_RECV_MTU, GFP_ATOMIC);
+    __u8 *s = kmalloc(sx_size,      GFP_ATOMIC);
+    __u8 *t = kmalloc(tx_size,      GFP_ATOMIC);
     if (r && s && t)
     {
         strip_info->rx_buff = r;
@@ -824,10 +909,10 @@ static void strip_changedmtu(struct strip *strip_info)
     unsigned char *otbuff = strip_info->tx_buff;
     InterruptStatus intstat;
 
-    if (dev->mtu > MAX_STRIP_MTU)
+    if (dev->mtu > MAX_SEND_MTU)
     {
         printk(KERN_ERR "%s: MTU exceeds maximum allowable (%d), MTU change cancelled.\n",
-            strip_info->dev.name, MAX_STRIP_MTU);
+            strip_info->dev.name, MAX_SEND_MTU);
         dev->mtu = old_mtu;
         return;
     }
@@ -856,9 +941,8 @@ static void strip_changedmtu(struct strip *strip_info)
             memcpy(strip_info->sx_buff, osbuff, strip_info->sx_count);
         else
         {
-            strip_info->sx_count = 0;
+            strip_info->discard = strip_info->sx_count;
             strip_info->rx_over_errors++;
-            strip_info->discard = 1;
         }
     }
 
@@ -889,7 +973,7 @@ static void strip_unlock(struct strip *strip_info)
     /*
      * Set the time to go off in one second.
      */
-    strip_info->idle_timer.expires  = jiffies + HZ;
+    strip_info->idle_timer.expires  = jiffies + 1*HZ;
     add_timer(&strip_info->idle_timer);
     if (!test_and_clear_bit(0, (void *)&strip_info->dev.tbusy))
         printk(KERN_ERR "%s: trying to unlock already unlocked device!\n",
@@ -899,8 +983,6 @@ static void strip_unlock(struct strip *strip_info)
 
 /************************************************************************/
 /* Callback routines for exporting information through /proc		*/
-
-#if DO_PROC_NET_STRIP_STATUS | DO_PROC_NET_STRIP_TRACE
 
 /*
  * This function updates the total amount of data printed so far. It then
@@ -912,29 +994,29 @@ static void strip_unlock(struct strip *strip_info)
  */
 static int 
 shift_buffer(char *buffer, int requested_offset, int requested_len,
-	     int *total, int *slop, char **buf)
+             int *total, int *slop, char **buf)
 {
     int printed;
 
     /* printk(KERN_DEBUG "shift: buffer: %d o: %d l: %d t: %d buf: %d\n",
-	   (int) buffer, requested_offset, requested_len, *total,
-	   (int) *buf); */
+           (int) buffer, requested_offset, requested_len, *total,
+           (int) *buf); */
     printed = *buf - buffer;
     if (*total + printed <= requested_offset) {
-	*total += printed;
-	*buf = buffer;
+        *total += printed;
+        *buf = buffer;
     }
     else {
-	if (*total < requested_offset) {
-	    *slop = requested_offset - *total;
-	}
-	*total = requested_offset + printed - *slop;
+        if (*total < requested_offset) {
+            *slop = requested_offset - *total;
+        }
+        *total = requested_offset + printed - *slop;
     }
     if (*total > requested_offset + requested_len) {
-	return 1;
+        return 1;
     }
     else {
-	return 0;
+        return 0;
     }
 }
 
@@ -945,12 +1027,12 @@ shift_buffer(char *buffer, int requested_offset, int requested_len,
  */
 static int
 calc_start_len(char *buffer, char **start, int requested_offset,
-	       int requested_len, int total, char *buf)
+               int requested_len, int total, char *buf)
 {
     int return_len, buffer_len;
 
     buffer_len = buf - buffer;
-    if (buffer_len >= STRIP_PROC_BUFFER_SIZE - 1) {
+    if (buffer_len >= 4095) {
  	printk(KERN_ERR "STRIP: exceeded /proc buffer size\n");
     }
 
@@ -960,19 +1042,15 @@ calc_start_len(char *buffer, char **start, int requested_offset,
      */
     return_len = total - requested_offset;
     if (return_len < 0) {
-	return_len = 0;
+        return_len = 0;
     }
     *start = buf - return_len;
     if (return_len > requested_len) {
-	return_len = requested_len;
+        return_len = requested_len;
     }
     /* printk(KERN_DEBUG "return_len: %d\n", return_len); */
     return return_len;
 }
-
-#endif DO_PROC_NET_STRIP_STATUS | DO_PROC_NET_STRIP_TRACE
-
-#if DO_PROC_NET_STRIP_STATUS
 
 /*
  * If the time is in the near future, time_delta prints the number of
@@ -991,537 +1069,171 @@ static char *time_delta(char buffer[], long time)
     return(buffer);
 }
 
+static int sprintf_neighbours(char *buffer, MetricomNodeTable *table, char *title)
+{
+    /* We wrap this in a do/while loop, so if the table changes */
+    /* while we're reading it, we just go around and try again. */
+    struct timeval t;
+    char *ptr;
+    do
+        {
+        int i;
+        t = table->timestamp;
+        ptr = buffer;
+        if (table->num_nodes) ptr += sprintf(ptr, "\n %s\n", title);
+        for (i=0; i<table->num_nodes; i++)
+            {
+            InterruptStatus intstat = DisableInterrupts();
+            MetricomNode node = table->node[i];
+            RestoreInterrupts(intstat);
+            ptr += sprintf(ptr, "  %s\n", node.c);
+            }
+        } while (table->timestamp.tv_sec != t.tv_sec || table->timestamp.tv_usec != t.tv_usec);
+    return ptr - buffer;
+}
+
 /*
- * This function prints radio status information into the specified
- * buffer.
+ * This function prints radio status information into the specified buffer.
+ * I think the buffer size is 4K, so this routine should never print more
+ * than 4K of data into it. With the maximum of 32 portables and 32 poletops
+ * reported, the routine outputs 3107 bytes into the buffer.
  */
 static int
 sprintf_status_info(char *buffer, struct strip *strip_info)
 {
-    char temp_buffer[32];
+    char temp[32];
+    char *p = buffer;
     MetricomAddressString addr_string;
-    char *buf;
 
-    buf = buffer;
-    buf += sprintf(buf, "Interface name\t\t%s\n", strip_info->if_name);
-    buf += sprintf(buf, " Radio working:\t\t%s\n",
-		   strip_info->working &&
-                   (long)jiffies - strip_info->watchdog_doreset < 0 ? "Yes" : "No");
-    (void) radio_address_to_string((MetricomAddress *)
-				   &strip_info->dev.dev_addr,
-				   &addr_string);
-    buf += sprintf(buf, " Device address:\t%s\n", addr_string.c);
-    buf += sprintf(buf, " Firmware version:\t%s\n",
-		   !strip_info->working             ? "Unknown" :
-		   !strip_info->structured_messages ? "Should be upgraded" :
-		   strip_info->firmware_version.c);
-    buf += sprintf(buf, " Serial number:\t\t%s\n", strip_info->serial_number.c);
-    buf += sprintf(buf, " Battery voltage:\t%s\n", strip_info->battery_voltage.c);
-    buf += sprintf(buf, " Transmit queue (bytes):%d\n", strip_info->tx_left);
-    buf += sprintf(buf, " Next watchdog probe:\t%s\n",
-		   time_delta(temp_buffer, strip_info->watchdog_doprobe));
-    buf += sprintf(buf, " Next watchdog reset:\t%s\n",
-		   time_delta(temp_buffer, strip_info->watchdog_doreset));
-    buf += sprintf(buf, " Next gratuitous ARP:\t%s\n",
-		   time_delta(temp_buffer, strip_info->gratuitous_arp));
-    buf += sprintf(buf, " Next ARP interval:\t%ld seconds\n",
-		   JIFFIE_TO_SEC(strip_info->arp_interval));
-    return buf - buffer;
-}
+    /* First, we must copy all of our data to a safe place, */
+    /* in case a serial interrupt comes in and changes it.  */
+    InterruptStatus intstat = DisableInterrupts();
+    int                tx_left             = strip_info->tx_left;
+    unsigned long      rx_average_pps      = strip_info->rx_average_pps;
+    unsigned long      tx_average_pps      = strip_info->tx_average_pps;
+    unsigned long      sx_average_pps      = strip_info->sx_average_pps;
+    int                working             = strip_info->working;
+    int                firmware_level      = strip_info->firmware_level;
+    long               watchdog_doprobe    = strip_info->watchdog_doprobe;
+    long               watchdog_doreset    = strip_info->watchdog_doreset;
+    long               gratuitous_arp      = strip_info->gratuitous_arp;
+    long               arp_interval        = strip_info->arp_interval;
+    FirmwareVersion    firmware_version    = strip_info->firmware_version;
+    SerialNumber       serial_number       = strip_info->serial_number;
+    BatteryVoltage     battery_voltage     = strip_info->battery_voltage;
+    char8              if_name             = strip_info->if_name;
+    MetricomAddress    true_dev_addr       = strip_info->true_dev_addr;
+    MetricomAddress    dev_dev_addr        = *(MetricomAddress*)strip_info->dev.dev_addr;
+    int                manual_dev_addr     = strip_info->manual_dev_addr;
+#ifdef EXT_COUNTERS
+    unsigned long      rx_bytes            = strip_info->rx_bytes;
+    unsigned long      tx_bytes            = strip_info->tx_bytes;
+    unsigned long      rx_rbytes           = strip_info->rx_rbytes;
+    unsigned long      tx_rbytes           = strip_info->tx_rbytes;
+    unsigned long      rx_sbytes           = strip_info->rx_sbytes;
+    unsigned long      tx_sbytes           = strip_info->tx_sbytes;
+    unsigned long      rx_ebytes           = strip_info->rx_ebytes;
+    unsigned long      tx_ebytes           = strip_info->tx_ebytes;
+#endif
+    RestoreInterrupts(intstat);
 
-static int
-sprintf_portables(char *buffer, struct strip *strip_info)
-{
-
-    MetricomAddressString addr_string;
-    MetricomNode          *node;
-    char *buf;
-
-    buf = buffer;
-    buf += sprintf(buf, " portables: name\t\tpoll_latency\tsignal strength\n");
-    for (node = strip_info->neighbor_list; node != NULL;
-	 node = node->next) {
-	if (!(node->type & NodeValid)) {
-	    break;
-	}
-	if (node->type & NodeHasWAN) {
-	    continue;
-	}
-	(void) radio_address_to_string(&node->addr, &addr_string);
-	buf += sprintf(buf, "  %s\t\t\t\t%d\t\t%d\n",
-		       addr_string.c, node->poll_latency, node->rssi);
+    p += sprintf(p, "\nInterface name\t\t%s\n", if_name.c);
+    p += sprintf(p, " Radio working:\t\t%s\n", working ? "Yes" : "No");
+    radio_address_to_string(&true_dev_addr, &addr_string);
+    p += sprintf(p, " Radio address:\t\t%s\n", addr_string.c);
+    if (manual_dev_addr)
+    {
+        radio_address_to_string(&dev_dev_addr, &addr_string);
+        p += sprintf(p, " Device address:\t%s\n", addr_string.c);
     }
-    return buf - buffer;
-}
+    p += sprintf(p, " Firmware version:\t%s", !working        ? "Unknown" :
+                                              !firmware_level ? "Should be upgraded" :
+                                              firmware_version.c);
+    if (firmware_level >= ChecksummedMessages) p += sprintf(p, " (Checksums Enabled)");
+    p += sprintf(p, "\n");
+    p += sprintf(p, " Serial number:\t\t%s\n", serial_number.c);
+    p += sprintf(p, " Battery voltage:\t%s\n", battery_voltage.c);
+    p += sprintf(p, " Transmit queue (bytes):%d\n", tx_left);
+    p += sprintf(p, " Receive packet rate:   %ld packets per second\n", rx_average_pps / 8);
+    p += sprintf(p, " Transmit packet rate:  %ld packets per second\n", tx_average_pps / 8);
+    p += sprintf(p, " Sent packet rate:      %ld packets per second\n", sx_average_pps / 8);
+    p += sprintf(p, " Next watchdog probe:\t%s\n", time_delta(temp, watchdog_doprobe));
+    p += sprintf(p, " Next watchdog reset:\t%s\n", time_delta(temp, watchdog_doreset));
+    p += sprintf(p, " Next gratuitous ARP:\t");
 
-static int
-sprintf_poletops(char *buffer, struct strip *strip_info)
-{
-    MetricomNode    *node;
-    char *buf;
-
-    buf = buffer;
-    buf += sprintf(buf, " poletops: GPS\t\t\tpoll_latency\tsignal strength\n");
-    for (node = strip_info->neighbor_list;
-	 node != NULL; node = node->next) {
-	if (!(node->type & NodeValid)) {
-	    break;
-	}
-	if (!(node->type & NodeHasWAN)) {
-	    continue;
-	}
-	buf += sprintf(buf, "  %s\t\t\t%d\t\t%d\n",
-		       node->gl.s, node->poll_latency, node->rssi);
+    if (!memcmp(strip_info->dev.dev_addr, zero_address.c, sizeof(zero_address)))
+        p += sprintf(p, "Disabled\n");
+    else
+    {
+        p += sprintf(p, "%s\n", time_delta(temp, gratuitous_arp));
+        p += sprintf(p, " Next ARP interval:\t%ld seconds\n", JIFFIE_TO_SEC(arp_interval));
     }
-    return buf - buffer;
+
+    if (working)
+        {
+#ifdef EXT_COUNTERS
+          p += sprintf(p, "\n");
+          p += sprintf(p, " Total bytes:         \trx:\t%lu\ttx:\t%lu\n", rx_bytes, tx_bytes);
+          p += sprintf(p, "  thru radio:         \trx:\t%lu\ttx:\t%lu\n", rx_rbytes, tx_rbytes);
+          p += sprintf(p, "  thru serial port:   \trx:\t%lu\ttx:\t%lu\n", rx_sbytes, tx_sbytes);
+          p += sprintf(p, " Total stat/err bytes:\trx:\t%lu\ttx:\t%lu\n", rx_ebytes, tx_ebytes);
+#endif
+        p += sprintf_neighbours(p, &strip_info->poletops, "Poletops:");
+        p += sprintf_neighbours(p, &strip_info->portables, "Portables:");
+        }
+
+    return p - buffer;
 }
 
 /*
  * This function is exports status information from the STRIP driver through
- * the /proc file system. /proc filesystem should be fixed:
- *    1) slow (sprintfs here, a memory copy in the proc that calls this one)
- *    2) length of buffer not passed
- *    3) dummy isn't client data set when the callback was registered
- *    4) poorly documented (this function is called until the requested amount
- *       of data is returned, buffer is only 4K long, dummy is the permissions
- *       of the file (?), the proc_dir_entry passed to proc_net_register must
- *       be kmalloc-ed)
+ * the /proc file system.
  */
 
-static int
-strip_get_status_info(char *buffer, char **start, off_t requested_offset,
-		      int requested_len, int dummy)
+static int get_status_info(char *buffer, char **start, off_t req_offset, int req_len, int dummy)
 {
-    char            *buf;
-    int             total = 0, slop = 0, len_exceeded;
-    InterruptStatus i_status;
-    struct strip    *strip_info;
+    int           total = 0, slop = 0;
+    struct strip *strip_info = struct_strip_list;
+    char         *buf = buffer;
 
-    buf = buffer;
     buf += sprintf(buf, "strip_version: %s\n", StripVersion);
+    if (shift_buffer(buffer, req_offset, req_len, &total, &slop, &buf)) goto exit;
 
-    i_status = DisableInterrupts();
-    strip_info = struct_strip_list;
-    RestoreInterrupts(i_status);
-
-    while (strip_info != NULL) {
-	i_status = DisableInterrupts();
-	buf += sprintf_status_info(buf, strip_info);
-	RestoreInterrupts(i_status);
-	len_exceeded = shift_buffer(buffer, requested_offset, requested_len,
-				    &total, &slop, &buf);
-	if (len_exceeded) {
-	    goto done;
-	}
-	strip_info->neighbor_list_locked = TRUE;
-	buf += sprintf_portables(buf, strip_info);
-	strip_info->neighbor_list_locked = FALSE;
-	len_exceeded = shift_buffer(buffer, requested_offset, requested_len,
-				    &total, &slop, &buf);
-	if (len_exceeded) {
-	    goto done;
-	}
-	strip_info->neighbor_list_locked = TRUE;
-	buf += sprintf_poletops(buf, strip_info);
-	strip_info->neighbor_list_locked = FALSE;
-	len_exceeded = shift_buffer(buffer, requested_offset, requested_len,
-				    &total, &slop, &buf);
-	if (len_exceeded) {
-	    goto done;
-	}
-	strip_info = strip_info->next;
-    }
-done:
-    return calc_start_len(buffer, start, requested_offset, requested_len,
-				total, buf);
+    while (strip_info != NULL)
+        {
+        buf += sprintf_status_info(buf, strip_info);
+        if (shift_buffer(buffer, req_offset, req_len, &total, &slop, &buf)) break;
+        strip_info = strip_info->next;
+        }
+    exit:
+    return(calc_start_len(buffer, start, req_offset, req_len, total, buf));
 }
 
-#endif DO_PROC_NET_STRIP_STATUS
-
-#if DO_PROC_NET_STRIP_TRACE
-
-/*
- * Convert an Ethernet protocol to a string
- * Returns the number of characters printed.
- */
-
-static int protocol_to_string(int protocol, __u8 *p)
+static const char proc_strip_status_name[] = "strip";
+static struct proc_dir_entry proc_strip_get_status_info =
 {
-    int printed;
-
-    switch (protocol) {
-    case ETH_P_IP:
-	printed = sprintf(p, "IP");
-	break;
-    case ETH_P_ARP:
-	printed = sprintf(p, "ARP");
-	break;
-    default: 
-	printed = sprintf(p, "%d", protocol);
-    }
-    return printed;
-}
-
-static int
-sprintf_log_entry(char *buffer, struct strip *strip_info, int packet_index)
-{
-    StripLog *entry;
-    MetricomAddressString addr_string;
-    __u8     sig_buf[24], *s;
-    char     *buf, proto_buf[10];
-
-    entry = &strip_info->packetLog[packet_index];
-    if (!entry->valid) {
-	return 0;
-    }
-    buf = buffer;
-    buf += sprintf(buf, "%-4s %s   %7lu ", strip_info->if_name,
-		   ENTRY_TYPE_TO_STRING(entry->entry_type), entry->seqNum);
-    (void) protocol_to_string(entry->packet_type, proto_buf);
-    buf += sprintf(buf, "%-4s", proto_buf);
-    s = entry->sig.print_sig;
-    sprintf(sig_buf, "%d.%d.%d.%d.%d.%d", s[0], s[1], s[2], s[3], s[4], s[5]);
-    buf += sprintf(buf, "%-24s", sig_buf);
-    (void) radio_address_to_string((MetricomAddress *) &entry->src,
-				   &addr_string);
-    buf += sprintf(buf, "%-10s", addr_string.c);
-    (void) radio_address_to_string((MetricomAddress *) &entry->dest,
-				   &addr_string);
-    buf += sprintf(buf, "%-10s", addr_string.c);
-    buf += sprintf(buf, "%8d %6d %5lu %6lu %5lu\n", entry->timeStamp.tv_sec,
-		   entry->timeStamp.tv_usec, entry->rawSize,
-		   entry->stripSize, entry->slipSize);
-    return buf - buffer;
-}
-
-/*
- * This function exports trace information from the STRIP driver through the
- * /proc file system.
- */
-
-static int
-strip_get_trace_info(char *buffer, char **start, off_t requested_offset,
-		     int requested_len, int dummy)
-{
-    char            *buf;
-    int             len_exceeded, total = 0, slop = 0, packet_index, oldest;
-    InterruptStatus i_status;
-    struct strip    *strip_info;
-
-    buf = buffer;
-    buf += sprintf(buf, "if   s/r seqnum  t   signature               ");
-    buf += sprintf(buf,
-		   "src       dest      sec      usec   raw   strip  slip\n");
-
-    i_status = DisableInterrupts();
-    strip_info = struct_strip_list;
-    oldest = strip_info->next_entry;
-    RestoreInterrupts(i_status);
-
-    /*
-     * If we disable interrupts for this entire loop,
-     * characters from the serial port could be lost,
-     * so we only disable interrupts when accessing
-     * a log entry. If more than STRIP_LOG_INT_SIZE
-     * packets are logged before the first entry is
-     * printed, then some of the entries could be
-     * printed out of order.
-     */
-    while (strip_info != NULL) {
-	for (packet_index = oldest + STRIP_LOG_INT_SIZE;
-	     packet_index != oldest;
-	     packet_index = (packet_index + 1) %
-		 ELEMENTS_OF(strip_info->packetLog)) {
-	    i_status = DisableInterrupts();
-	    buf += sprintf_log_entry(buf, strip_info, packet_index);
-	    RestoreInterrupts(i_status);
-	    len_exceeded = shift_buffer(buffer, requested_offset,
-					requested_len, &total, &slop, &buf);
-	    if (len_exceeded) {
-		goto done;
-	    }
-	}
-	strip_info = strip_info->next;
-    }
-done:
-    return calc_start_len(buffer, start, requested_offset, requested_len,
-			  total, buf);
-}
-
-static int slip_len(unsigned char *data, int len)
-{
-    static const unsigned char SLIP_END=0300;	/* indicates end of SLIP frame	*/
-    static const unsigned char SLIP_ESC=0333;	/* indicates SLIP byte stuffing	*/
-    int count = len;
-    while (--len >= 0)
-    {
-	if (*data == SLIP_END || *data == SLIP_ESC) count++;
-	data++;
-    }
-    return(count);
-}
-
-/* Copied from kernel/sched.c */
-static void jiffiestotimeval(unsigned long jiffies, struct timeval *value)
-{
-    value->tv_usec = (jiffies % HZ) * (1000000.0 / HZ);
-    value->tv_sec = jiffies / HZ;
-    return;
-}
-
-/*
- * This function logs a packet.
- * A pointer to the packet itself is passed so that some of the data can be
- * used to compute a signature. The pointer should point the the
- * part of the packet following the STRIP_header.
- */
-
-static void packet_log(struct strip *strip_info, __u8 *packet,
-		       LogEntry entry_type, STRIP_Header *hdr, 
-		       int raw_size, int strip_size, int slip_size)
-{
-    StripLog *entry;
-    struct iphdr *iphdr;
-    struct arphdr *arphdr;
-
-    entry = &strip_info->packetLog[strip_info->next_entry];
-    if (entry_type == EntrySend) {
-	entry->seqNum = strip_info->num_sent++;
-    }
-    else {
-	entry->seqNum = strip_info->num_received++;
-    }
-    entry->entry_type = entry_type;
-    entry->packet_type = ntohs(hdr->protocol);
-    switch (entry->packet_type) {
-    case ETH_P_IP:
-	/*
-	 * The signature for IP is the sender's ip address and
-	 * the identification field.
-	 */
-	iphdr = (struct iphdr *) packet;
-	entry->sig.ip_sig.id = iphdr->id;
-	entry->sig.ip_sig.src.l = iphdr->saddr;
-	break;
-    case ETH_P_ARP:
-	/*
-	 * The signature for ARP is the sender's ip address and
-	 * the operation.
-	 */
-	arphdr = (struct arphdr *) packet;
-	entry->sig.arp_sig.op = arphdr->ar_op;
-        memcpy(&entry->sig.arp_sig.src.l, packet + 8 + arphdr->ar_hln,
-	       sizeof(entry->sig.arp_sig.src.l));
-        entry->sig.arp_sig.src.l = entry->sig.arp_sig.src.l;
-	break;
-    default:
-	printk(KERN_DEBUG "STRIP: packet_log: unknown packet type: %d\n",
-	       entry->packet_type);
-	break;
-    }
-    memcpy(&entry->src, &hdr->src_addr, sizeof(MetricomAddress));
-    memcpy(&entry->dest, &hdr->dst_addr, sizeof(MetricomAddress));
-
-    jiffiestotimeval(jiffies, &(entry->timeStamp));
-    entry->rawSize = raw_size;
-    entry->stripSize = strip_size;
-    entry->slipSize = slip_size;
-    entry->valid = 1;
-
-    strip_info->next_entry = (strip_info->next_entry + 1) %
-	ELEMENTS_OF(strip_info->packetLog);
-}
-
-#endif DO_PROC_NET_STRIP_TRACE
-
-/*
- * This function parses the response to the ATS300? command,
- * extracting the radio version and serial number.
- */
-static void get_radio_version(struct strip *strip_info, __u8 *ptr, __u8 *end)
-{
-    __u8 *p, *value_begin, *value_end;
-    int len;
-    
-    /* Determine the beginning of the second line of the payload */
-    p = ptr;
-    while (p < end && *p != 10) p++;
-    if (p >= end) return;
-    p++;
-    value_begin = p;
-    
-    /* Determine the end of line */
-    while (p < end && *p != 10) p++;
-    if (p >= end) return;
-    value_end = p;
-    p++;
-     
-    len = value_end - value_begin;
-    len = MIN(len, sizeof(MetricomFirmwareVersion) - 1);
-    sprintf(strip_info->firmware_version.c, "%.*s", len, value_begin);
-    
-    /* Look for the first colon */
-    while (p < end && *p != ':') p++;
-    if (p >= end) return;
-    /* Skip over the space */
-    p += 2;
-    len = sizeof(MetricomSerialNumber) - 1;
-    if (p + len <= end) {
-	sprintf(strip_info->serial_number.c, "%.*s", len, p);
-    }
-    else {
-     	printk(KERN_ERR "STRIP: radio serial number shorter (%d) than expected (%d)\n",
-     	       end - p, len);
-    }
-}
-
-/*
- * This function parses the response to the ATS325? command,
- * extracting the radio battery voltage.
- */
-static void get_radio_voltage(struct strip *strip_info, __u8 *ptr, __u8 *end)
-{
-    int len;
-
-    len = sizeof(MetricomBatteryVoltage) - 1;
-    if (ptr + len <= end) {
-	sprintf(strip_info->battery_voltage.c, "%.*s", len, ptr);
-    }
-    else {
- 	printk(KERN_ERR "STRIP: radio voltage string shorter (%d) than expected (%d)\n",
- 	       end - ptr, len);
-    }
-}
-
-/*
- * This function parses the response to the AT~I2 command,
- * which gives the names of the radio's nearest neighbors.
- * It relies on the format of the response.
- */
-static void get_radio_neighbors(struct strip *strip_info, __u8 *ptr, __u8 *end)
-{
-    __u8 *p, *line_begin;
-    int num_nodes_reported, num_nodes_counted;
-    MetricomNode *node, *last;
-
-    /* Check if someone is reading the list */
-    if (strip_info->neighbor_list_locked) {
-	return;
-    }
-
-    /* Determine the number of Nodes */
-    p = ptr;
-    num_nodes_reported = simple_strtoul(p, NULL, 10);
-    /* printk(KERN_DEBUG "num_nodes: %d\n", num_nodes_reported); */
-
-    /* Determine the beginning of the next line */
-    while (p < end && *p != 10) p++;
-    if (p >= end) return;
-    p++;
-
-    /*
-     * The node list should never be empty because we allocate one empty
-     * node when the strip_info is allocated. The nodes which were allocated
-     * when the number of neighbors was high but are no longer needed because
-     * there aren't as many neighbors any more are marked invalid. Invalid nodes
-     * are kept at the end of the list.
-     */
-    node = strip_info->neighbor_list;
-    last = node;
-    if (node == NULL) {
-	DumpData("Neighbor list is NULL:", strip_info, p, end);
-	return;
-    }	
-    line_begin = p;
-    num_nodes_counted = 0;
-    while (line_begin < end) {
- 	/* Check to see if the format is what we expect. */
- 	if ((line_begin + STRIP_NODE_LEN) > end) {
- 	    printk(KERN_ERR "STRIP: radio neighbor node string shorter (%d) than expected (%d)\n",
- 	       end - line_begin, STRIP_NODE_LEN);
-	    break;
- 	}
-
-	/* Get a node */
-	if (node == NULL) {
-	    node = kmalloc(sizeof(MetricomNode), GFP_ATOMIC);
-	    node->next = NULL;
-	}
-	node->type = NodeValid;
-
-	/* Fill the node in */
-
-	/* Determine if it has a GPS location and fill it in if it does. */
-	p = line_begin;
-	/* printk(KERN_DEBUG "node: %64s\n", p); */
-	if (p[0] != STRIP_PORTABLE_CHAR) {
-	    node->type |= NodeHasWAN;
-	    sprintf(node->gl.s, "%.*s", (int) sizeof(GeographicLocation) - 1, p);
-	}
-	
-	/* Determine if it is a router */
-	p = line_begin + 18;
-	if (p[0] == STRIP_ROUTER_CHAR) {
-	    node->type |= NodeIsRouter;
-	}
-
-	/* Could be a radio address or some weird poletop address. */
-	p = line_begin + 20;
-	/* printk(KERN_DEBUG "before addr: %6s\n", p); */
-	string_to_radio_address(&node->addr, p);
-	/* radio_address_to_string(&node->addr, addr_string);
-	printk(KERN_DEBUG "after addr: %s\n", addr_string);  */
-	
-	if (IS_RADIO_ADDRESS(p)) {
-	    string_to_radio_address(&node->addr, p);
-	}
-	else {
-	    memset(&node->addr, 0, sizeof(MetricomAddress));
-	}
-	
-	/* Get the poll latency. %$#!@ simple_strtoul can't skip white space */
-	p = line_begin + 41;
-	while (isspace(*p) && (p < end)) {
-	    p++;
-	}
-	node->poll_latency = simple_strtoul(p, NULL, 10);
-	
-	/* Get the signal strength. simple_strtoul doesn't do minus signs */
-	p = line_begin + 60;
-	node->rssi = -simple_strtoul(p, NULL, 10);
-	
-	if (last != node) {
-	    last->next = node;
-	    last = node;
-	}
-	node = node->next;
-	line_begin += STRIP_NODE_LEN;
-	num_nodes_counted++;
-    }
-
-    /* invalidate all remaining nodes */
-    for (;node != NULL; node = node->next) {
-	node->type &= ~NodeValid;
-    }
-
-    /*
-     * If the number of nodes reported is different
-     * from the number counted, might need to up the number
-     * requested.
-     */
-    if (num_nodes_reported != num_nodes_counted) {
-	printk(KERN_DEBUG "nodes reported: %d \tnodes counted: %d\n",
-	       num_nodes_reported, num_nodes_counted);
-    }	
-}
+    PROC_NET_STRIP_STATUS,		/* unsigned short low_ino */
+    sizeof(proc_strip_status_name)-1,	/* unsigned short namelen */
+    proc_strip_status_name,		/* const char *name */
+    S_IFREG | S_IRUGO,			/* mode_t mode */
+    1,					/* nlink_t nlink */
+    0, 0, 0,				/* uid_t uid, gid_t gid, unsigned long size */
+    &proc_net_inode_operations,		/* struct inode_operations * ops */
+    &get_status_info,			/* int (*get_info)(...) */
+    NULL,				/* void (*fill_inode)(struct inode *); */
+    NULL, NULL, NULL,			/* struct proc_dir_entry *next, *parent, *subdir; */
+    NULL				/* void *data; */
+};
 
 
 /************************************************************************/
 /* Sending routines							*/
 
+#define InitString "ate0q1dt**starmode"
+
 static void ResetRadio(struct strip *strip_info)
-{	
-    static const char InitString[] = "\rat\r\rate0q1dt**starmode\r\r**";
+{
+    static const char s[] = "\r" InitString "\r**";
 
     /* If the radio isn't working anymore, we should clear the old status information. */
     if (strip_info->working)
@@ -1530,14 +1242,32 @@ static void ResetRadio(struct strip *strip_info)
         strip_info->firmware_version.c[0] = '\0';
         strip_info->serial_number.c[0] = '\0';
         strip_info->battery_voltage.c[0] = '\0';
+        strip_info->portables.num_nodes = 0;
+        do_gettimeofday(&strip_info->portables.timestamp);
+        strip_info->poletops.num_nodes = 0;
+        do_gettimeofday(&strip_info->poletops.timestamp);
     }
+
+    strip_info->pps_timer      = jiffies;
+    strip_info->rx_pps_count   = 0;
+    strip_info->tx_pps_count   = 0;
+    strip_info->sx_pps_count   = 0;
+    strip_info->rx_average_pps = 0;
+    strip_info->tx_average_pps = 0;
+    strip_info->sx_average_pps = 0;
+
     /* Mark radio address as unknown */
-    *(MetricomAddress*)&strip_info->dev.dev_addr = zero_address;
+    *(MetricomAddress*)&strip_info->true_dev_addr = zero_address;
+    if (!strip_info->manual_dev_addr) *(MetricomAddress*)strip_info->dev.dev_addr = zero_address;
     strip_info->working = FALSE;
-    strip_info->structured_messages = FALSE;
+    strip_info->firmware_level = NoStructure;
+    strip_info->next_command   = CompatibilityCommand;
     strip_info->watchdog_doprobe = jiffies + 10 * HZ;
     strip_info->watchdog_doreset = jiffies + 1 * HZ;
-    strip_info->tty->driver.write(strip_info->tty, 0, (char *)InitString, sizeof(InitString)-1);
+    strip_info->tty->driver.write(strip_info->tty, 0, (char *)s, sizeof(s)-1);
+#ifdef EXT_COUNTERS
+    strip_info->tx_ebytes += sizeof(s) - 1;
+#endif
 }
 
 /*
@@ -1573,6 +1303,9 @@ static void strip_write_some_more(struct tty_struct *tty)
         int num_written = tty->driver.write(tty, 0, strip_info->tx_head, strip_info->tx_left);
         strip_info->tx_left -= num_written;
         strip_info->tx_head += num_written;
+#ifdef EXT_COUNTERS
+        strip_info->tx_sbytes += num_written;
+#endif
         RestoreInterrupts(intstat);
     }
     else            /* Else start transmission of another packet */
@@ -1583,12 +1316,21 @@ static void strip_write_some_more(struct tty_struct *tty)
     }
 }
 
-static unsigned char *strip_make_packet(unsigned char *ptr, struct strip *strip_info, struct sk_buff *skb)
+static __u8 *add_checksum(__u8 *buffer, __u8 *end)
 {
-#if DO_PROC_NET_STRIP_TRACE
-    unsigned char *start_ptr;
-#endif DO_PROC_NET_STRIP_TRACE
+    __u16 sum = 0;
+    __u8 *p = buffer;
+    while (p < end) sum += *p++;
+    end[3] = hextable[sum & 0xF]; sum >>= 4;
+    end[2] = hextable[sum & 0xF]; sum >>= 4;
+    end[1] = hextable[sum & 0xF]; sum >>= 4;
+    end[0] = hextable[sum & 0xF];
+    return(end+4);
+}
 
+static unsigned char *strip_make_packet(unsigned char *buffer, struct strip *strip_info, struct sk_buff *skb)
+{
+    __u8           *ptr = buffer;
     __u8           *stuffstate = NULL;
     STRIP_Header   *header     = (STRIP_Header *)skb->data;
     MetricomAddress haddr      = header->dst_addr;
@@ -1603,7 +1345,6 @@ static unsigned char *strip_make_packet(unsigned char *ptr, struct strip *strip_
     {
         printk(KERN_ERR "%s: strip_make_packet: Unknown packet type 0x%04X\n",
             strip_info->dev.name, ntohs(header->protocol));
-        strip_info->tx_dropped++;
         return(NULL);
     }
 
@@ -1611,7 +1352,6 @@ static unsigned char *strip_make_packet(unsigned char *ptr, struct strip *strip_
     {
         printk(KERN_ERR "%s: Dropping oversized transmit packet: %d bytes\n",
             strip_info->dev.name, len);
-        strip_info->tx_dropped++;
         return(NULL);
     }
 
@@ -1629,6 +1369,12 @@ static unsigned char *strip_make_packet(unsigned char *ptr, struct strip *strip_
 	    }
     }
 
+    /*
+     * If we're sending to ourselves, discard the packet.
+     * (Metricom radios choke if they try to send a packet to their own address.)
+     */
+    if (!memcmp(haddr.c, strip_info->true_dev_addr.c, sizeof(haddr)))
+    	return(NULL);
     *ptr++ = '*';
     *ptr++ = hextable[haddr.c[2] >> 4];
     *ptr++ = hextable[haddr.c[2] & 0xF];
@@ -1645,17 +1391,9 @@ static unsigned char *strip_make_packet(unsigned char *ptr, struct strip *strip_
     *ptr++ = key.c[2];
     *ptr++ = key.c[3];
 
-#if DO_PROC_NET_STRIP_TRACE
-    start_ptr = ptr;
-#endif DO_PROC_NET_STRIP_TRACE
-
     ptr = StuffData(skb->data + sizeof(STRIP_Header), len, ptr, &stuffstate);
 
-#if DO_PROC_NET_STRIP_TRACE
-    packet_log(strip_info, skb->data + sizeof(STRIP_Header), EntrySend,
-	       header, len, ptr-start_ptr,
-	       slip_len(skb->data + sizeof(STRIP_Header), len)); 
-#endif DO_PROC_NET_STRIP_TRACE
+    if (strip_info->firmware_level >= ChecksummedMessages) ptr = add_checksum(buffer+1, ptr);
 
     *ptr++ = 0x0D;
     return(ptr);
@@ -1664,57 +1402,108 @@ static unsigned char *strip_make_packet(unsigned char *ptr, struct strip *strip_
 static void strip_send(struct strip *strip_info, struct sk_buff *skb)
 {
     unsigned char *ptr = strip_info->tx_buff;
+    int doreset = (long)jiffies - strip_info->watchdog_doreset >= 0;
+    int doprobe = (long)jiffies - strip_info->watchdog_doprobe >= 0 && !doreset;
 
-    /* If we have a packet, encapsulate it and put it in the buffer */
+    /*
+     * 1. If we have a packet, encapsulate it and put it in the buffer
+     */
     if (skb)
     {
-        ptr = strip_make_packet(ptr, strip_info, skb);
-        /* If error, unlock and return */
-        if (!ptr) { strip_unlock(strip_info); return; }
-        strip_info->tx_packets++;        /* Count another successful packet */
-        /*DumpData("Sending:", strip_info, strip_info->tx_buff, ptr);*/
-        /*HexDump("Sending", strip_info, strip_info->tx_buff, ptr);*/
-    }
-
-    /* Set up the strip_info ready to send the data */
-    strip_info->tx_head =       strip_info->tx_buff;
-    strip_info->tx_left = ptr - strip_info->tx_buff;
-    strip_info->tty->flags |= (1 << TTY_DO_WRITE_WAKEUP);
-
-    /* If watchdog has expired, reset the radio */
-    if ((long)jiffies - strip_info->watchdog_doreset >= 0)
-    {
-        ResetRadio(strip_info);
-        return;
-        /* Note: if there's a packet to send, strip_write_some_more
-                 will do it after the reset has finished */
-    }
-
-    /* No reset.
-     * If it is time for another tickle, tack it on the end of the packet
-     */
-    if ((long)jiffies - strip_info->watchdog_doprobe >= 0)
-    {
-        /* Send tickle to make radio protest */
-        /*printk(KERN_INFO "%s: Routine radio test.\n", strip_info->dev.name);*/
-        const char *TickleString = TickleString1;
-        int length = sizeof(TickleString1)-1;
-        if (strip_info->structured_messages)
+        char *newptr = strip_make_packet(ptr, strip_info, skb);
+        strip_info->tx_pps_count++;
+        if (!newptr) strip_info->tx_dropped++;
+        else
         {
-            TickleString = TickleString2;
-            length = sizeof(TickleString2)-1;
+            ptr = newptr;
+            strip_info->sx_pps_count++;
+            strip_info->tx_packets++;        /* Count another successful packet */
+#ifdef EXT_COUNTERS
+            strip_info->tx_bytes += skb->len;
+            strip_info->tx_rbytes += ptr - strip_info->tx_buff;
+#endif
+            /*DumpData("Sending:", strip_info, strip_info->tx_buff, ptr);*/
+            /*HexDump("Sending", strip_info, strip_info->tx_buff, ptr);*/
         }
-        memcpy(ptr, TickleString, length);
-        strip_info->tx_left += length;
-        strip_info->watchdog_doprobe = jiffies + 10 * HZ;
-        strip_info->watchdog_doreset = jiffies + 1 * HZ;
     }
 
     /*
-     * If it is time for a periodic ARP, queue one up to be sent
+     * 2. If it is time for another tickle, tack it on, after the packet
+     */
+    if (doprobe)
+    {
+        StringDescriptor ts = CommandString[strip_info->next_command];
+#if TICKLE_TIMERS
+        {
+        struct timeval tv;
+        do_gettimeofday(&tv);
+        printk(KERN_INFO "**** Sending tickle string %d      at %02d.%06d\n",
+            strip_info->next_command, tv.tv_sec % 100, tv.tv_usec);
+        }
+#endif
+        if (ptr == strip_info->tx_buff) *ptr++ = 0x0D;
+
+        *ptr++ = '*'; /* First send "**" to provoke an error message */
+        *ptr++ = '*';
+
+        /* Then add the command */
+        memcpy(ptr, ts.string, ts.length);
+
+        /* Add a checksum ? */
+        if (strip_info->firmware_level < ChecksummedMessages) ptr += ts.length;
+        else ptr = add_checksum(ptr, ptr + ts.length);
+
+        *ptr++ = 0x0D; /* Terminate the command with a <CR> */
+
+        /* Cycle to next periodic command? */
+        if (strip_info->firmware_level >= StructuredMessages)
+                if (++strip_info->next_command >= ELEMENTS_OF(CommandString))
+                        strip_info->next_command = 0;
+#ifdef EXT_COUNTERS
+        strip_info->tx_ebytes += ts.length;
+#endif
+        strip_info->watchdog_doprobe = jiffies + 10 * HZ;
+        strip_info->watchdog_doreset = jiffies + 1 * HZ;
+        /*printk(KERN_INFO "%s: Routine radio test.\n", strip_info->dev.name);*/
+    }
+
+    /*
+     * 3. Set up the strip_info ready to send the data (if any).
+     */
+    strip_info->tx_head = strip_info->tx_buff;
+    strip_info->tx_left = ptr - strip_info->tx_buff;
+    strip_info->tty->flags |= (1 << TTY_DO_WRITE_WAKEUP);
+
+    /*
+     * 4. Debugging check to make sure we're not overflowing the buffer.
+     */
+    if (strip_info->tx_size - strip_info->tx_left < 20)
+        printk(KERN_ERR "%s: Sending%5d bytes;%5d bytes free.\n", strip_info->dev.name,
+            strip_info->tx_left, strip_info->tx_size - strip_info->tx_left);
+
+    /*
+     * 5. If watchdog has expired, reset the radio. Note: if there's data waiting in
+     * the buffer, strip_write_some_more will send it after the reset has finished
+     */
+    if (doreset) { ResetRadio(strip_info); return; }
+
+    /*
+     * 6. If it is time for a periodic ARP, queue one up to be sent.
+     * We only do this if:
+     *  1. The radio is working
+     *  2. It's time to send another periodic ARP
+     *  3. We really know what our address is (and it is not manually set to zero)
+     *  4. We have a designated broadcast address configured
+     * If we queue up an ARP packet when we don't have a designated broadcast
+     * address configured, then the packet will just have to be discarded in
+     * strip_make_packet. This is not fatal, but it causes misleading information
+     * to be displayed in tcpdump. tcpdump will report that periodic APRs are
+     * being sent, when in fact they are not, because they are all being dropped
+     * in the strip_make_packet routine.
      */
     if (strip_info->working && (long)jiffies - strip_info->gratuitous_arp >= 0 &&
-        memcmp(strip_info->dev.dev_addr, zero_address.c, sizeof(zero_address)))
+        memcmp(strip_info->dev.dev_addr, zero_address.c, sizeof(zero_address)) &&
+        *strip_info->dev.broadcast!=0xFF)
     {
         /*printk(KERN_INFO "%s: Sending gratuitous ARP with interval %ld\n",
             strip_info->dev.name, strip_info->arp_interval / HZ);*/
@@ -1722,16 +1511,18 @@ static void strip_send(struct strip *strip_info, struct sk_buff *skb)
         strip_info->arp_interval *= 2;
         if (strip_info->arp_interval > MaxARPInterval)
             strip_info->arp_interval = MaxARPInterval;
-        arp_send(ARPOP_REPLY, ETH_P_ARP, strip_info->dev.pa_addr,
-                        &strip_info->dev, strip_info->dev.pa_addr,
-                        NULL, strip_info->dev.dev_addr, NULL);
+        arp_send(ARPOP_REPLY, ETH_P_ARP,
+            strip_info->dev.pa_addr,	/* Target address of ARP packet is our address */
+            &strip_info->dev,		/* Device to send packet on */
+            strip_info->dev.pa_addr,	/* Source IP address this ARP packet comes from */
+            NULL,			/* Destination HW address is NULL (broadcast it) */
+            strip_info->dev.dev_addr,	/* Source HW address is our HW address */
+            strip_info->dev.dev_addr);	/* Target HW address is our HW address (redundant) */
     }
 
-    if (strip_info->tx_size - strip_info->tx_left < 20)
-        printk(KERN_ERR "%s: Sending%5d bytes;%5d bytes free.\n", strip_info->dev.name,
-            strip_info->tx_left, strip_info->tx_size - strip_info->tx_left);
-
-    /* All ready. Start the transmission */
+    /*
+     * 7. All ready. Start the transmission
+     */
     strip_write_some_more(strip_info->tty);
 }
 
@@ -1752,10 +1543,48 @@ static int strip_xmit(struct sk_buff *skb, struct device *dev)
     if (strip_info->mtu != strip_info->dev.mtu)
         strip_changedmtu(strip_info);
 
+    if (jiffies - strip_info->pps_timer > HZ)
+    {
+        unsigned long t = jiffies - strip_info->pps_timer;
+        unsigned long rx_pps_count = (strip_info->rx_pps_count * HZ * 8 + t/2) / t;
+        unsigned long tx_pps_count = (strip_info->tx_pps_count * HZ * 8 + t/2) / t;
+        unsigned long sx_pps_count = (strip_info->sx_pps_count * HZ * 8 + t/2) / t;
+
+        strip_info->pps_timer = jiffies;
+        strip_info->rx_pps_count = 0;
+        strip_info->tx_pps_count = 0;
+        strip_info->sx_pps_count = 0;
+
+        strip_info->rx_average_pps = (strip_info->rx_average_pps + rx_pps_count + 1) / 2;
+        strip_info->tx_average_pps = (strip_info->tx_average_pps + tx_pps_count + 1) / 2;
+        strip_info->sx_average_pps = (strip_info->sx_average_pps + sx_pps_count + 1) / 2;
+
+        if (rx_pps_count / 8 >= 10)
+            printk(KERN_INFO "%s: WARNING: Receiving %ld packets per second.\n",
+                strip_info->dev.name, rx_pps_count / 8);
+        if (tx_pps_count / 8 >= 10)
+            printk(KERN_INFO "%s: WARNING: Tx        %ld packets per second.\n",
+                strip_info->dev.name, tx_pps_count / 8);
+        if (sx_pps_count / 8 >= 10)
+            printk(KERN_INFO "%s: WARNING: Sending   %ld packets per second.\n",
+                strip_info->dev.name, sx_pps_count / 8);
+    }
+
     strip_send(strip_info, skb);
 
     if (skb) dev_kfree_skb(skb, FREE_WRITE);
     return(0);
+}
+
+/*
+ * IdleTask periodically calls strip_xmit, so even when we have no IP packets
+ * to send for an extended period of time, the watchdog processing still gets
+ * done to ensure that the radio stays in Starmode
+ */
+
+static void strip_IdleTask(unsigned long parameter)
+{
+    strip_xmit(NULL, (struct device *)parameter);
 }
 
 /*
@@ -1772,19 +1601,20 @@ static int strip_xmit(struct sk_buff *skb, struct device *dev)
 static int strip_header(struct sk_buff *skb, struct device *dev,
         unsigned short type, void *daddr, void *saddr, unsigned len)
 {
+    struct strip *strip_info = (struct strip *)(dev->priv);
     STRIP_Header *header = (STRIP_Header *)skb_push(skb, sizeof(STRIP_Header));
 
     /*printk(KERN_INFO "%s: strip_header 0x%04X %s\n", dev->name, type,
         type == ETH_P_IP ? "IP" : type == ETH_P_ARP ? "ARP" : "");*/
 
-    memcpy(header->src_addr.c, dev->dev_addr, dev->addr_len);
+    header->src_addr = strip_info->true_dev_addr;
     header->protocol = htons(type);
 
     /*HexDump("strip_header", (struct strip *)(dev->priv), skb->data, skb->data + skb->len);*/
 
     if (!daddr) return(-dev->hard_header_len);
 
-    memcpy(header->dst_addr.c, daddr, dev->addr_len);
+    header->dst_addr = *(MetricomAddress*)daddr;
     return(dev->hard_header_len);
 }
 
@@ -1811,17 +1641,6 @@ static int strip_rebuild_header(struct sk_buff *skb)
 #endif
 }
 
-/*
- * IdleTask periodically calls strip_xmit, so even when we have no IP packets
- * to send for an extended period of time, the watchdog processing still gets
- * done to ensure that the radio stays in Starmode
- */
-
-static void strip_IdleTask(unsigned long parameter)
-{
-    strip_xmit(NULL, (struct device *)parameter);
-}
-
 
 /************************************************************************/
 /* Receiving routines							*/
@@ -1831,23 +1650,121 @@ static int strip_receive_room(struct tty_struct *tty)
     return 0x10000;  /* We can handle an infinite amount of data. :-) */
 }
 
-static void get_radio_address(struct strip *strip_info, __u8 *p)
+/*
+ * This function parses the response to the ATS300? command,
+ * extracting the radio version and serial number.
+ */
+static void get_radio_version(struct strip *strip_info, __u8 *ptr, __u8 *end)
+{
+    __u8 *p, *value_begin, *value_end;
+    int len;
+    
+    /* Determine the beginning of the second line of the payload */
+    p = ptr;
+    while (p < end && *p != 10) p++;
+    if (p >= end) return;
+    p++;
+    value_begin = p;
+    
+    /* Determine the end of line */
+    while (p < end && *p != 10) p++;
+    if (p >= end) return;
+    value_end = p;
+    p++;
+     
+    len = value_end - value_begin;
+    len = MIN(len, sizeof(FirmwareVersion) - 1);
+    if (strip_info->firmware_version.c[0] == 0)
+        printk(KERN_INFO "%s: Radio Firmware: %.*s\n",
+            strip_info->dev.name, len, value_begin);
+    sprintf(strip_info->firmware_version.c, "%.*s", len, value_begin);
+    
+    /* Look for the first colon */
+    while (p < end && *p != ':') p++;
+    if (p >= end) return;
+    /* Skip over the space */
+    p += 2;
+    len = sizeof(SerialNumber) - 1;
+    if (p + len <= end) {
+        sprintf(strip_info->serial_number.c, "%.*s", len, p);
+    }
+    else {
+     	printk(KERN_DEBUG "STRIP: radio serial number shorter (%d) than expected (%d)\n",
+     	       end - p, len);
+    }
+}
+
+/*
+ * This function parses the response to the ATS325? command,
+ * extracting the radio battery voltage.
+ */
+static void get_radio_voltage(struct strip *strip_info, __u8 *ptr, __u8 *end)
+{
+    int len;
+
+    len = sizeof(BatteryVoltage) - 1;
+    if (ptr + len <= end) {
+        sprintf(strip_info->battery_voltage.c, "%.*s", len, ptr);
+    }
+    else {
+ 	printk(KERN_DEBUG "STRIP: radio voltage string shorter (%d) than expected (%d)\n",
+ 	       end - ptr, len);
+    }
+}
+
+/*
+ * This function parses the responses to the AT~LA and ATS311 commands,
+ * which list the radio's neighbours.
+ */
+static void get_radio_neighbours(MetricomNodeTable *table, __u8 *ptr, __u8 *end)
+{
+    table->num_nodes = 0;
+    while (ptr < end && table->num_nodes < NODE_TABLE_SIZE)
+        {
+        MetricomNode *node = &table->node[table->num_nodes++];
+        char *dst = node->c, *limit = dst + sizeof(*node) - 1;
+        while (ptr < end && *ptr <= 32) ptr++;
+        while (ptr < end && dst < limit && *ptr != 10) *dst++ = *ptr++;
+        *dst++ = 0;
+        while (ptr < end && ptr[-1] != 10) ptr++;
+        }
+    do_gettimeofday(&table->timestamp);
+}
+
+static int get_radio_address(struct strip *strip_info, __u8 *p)
 {
     MetricomAddress addr;
 
-    string_to_radio_address(&addr, p);
+    if (string_to_radio_address(&addr, p)) return(1);
 
     /* See if our radio address has changed */
-    if (memcmp(strip_info->dev.dev_addr, addr.c, sizeof(addr)))
+    if (memcmp(strip_info->true_dev_addr.c, addr.c, sizeof(addr)))
     {
         MetricomAddressString addr_string;
         radio_address_to_string(&addr, &addr_string);
-        printk(KERN_INFO "%s: My radio address = %s\n", strip_info->dev.name, addr_string.c);
-        memcpy(strip_info->dev.dev_addr, addr.c, sizeof(addr));
+        printk(KERN_INFO "%s: Radio address = %s\n", strip_info->dev.name, addr_string.c);
+        strip_info->true_dev_addr = addr;
+        if (!strip_info->manual_dev_addr) *(MetricomAddress*)strip_info->dev.dev_addr = addr;
         /* Give the radio a few seconds to get its head straight, then send an arp */
-        strip_info->gratuitous_arp = jiffies + 6 * HZ;
+        strip_info->gratuitous_arp = jiffies + 15 * HZ;
         strip_info->arp_interval = 1 * HZ;
     }
+    return(0);
+}
+
+static int verify_checksum(struct strip *strip_info)
+{
+    __u8 *p = strip_info->sx_buff;
+    __u8 *end = strip_info->sx_buff + strip_info->sx_count - 4;
+    u_short sum = (READHEX16(end[0]) << 12) | (READHEX16(end[1]) << 8) |
+                  (READHEX16(end[2]) <<  4) | (READHEX16(end[3]));
+    while (p < end) sum -= *p++;
+    if (sum == 0 && strip_info->firmware_level == StructuredMessages)
+    {
+        strip_info->firmware_level = ChecksummedMessages;
+        printk(KERN_INFO "%s: Radio provides message checksums\n", strip_info->dev.name);
+    }
+    return(sum == 0);
 }
 
 static void RecvErr(char *msg, struct strip *strip_info)
@@ -1860,114 +1777,156 @@ static void RecvErr(char *msg, struct strip *strip_info)
 
 static void RecvErr_Message(struct strip *strip_info, __u8 *sendername, const __u8 *msg)
 {
-    static const char ERR_001[] = "001"; /* Not in StarMode! */
-    static const char ERR_002[] = "002"; /* Remap handle */
-    static const char ERR_003[] = "003"; /* Can't resolve name */
-    static const char ERR_004[] = "004"; /* Name too small or missing */
-    static const char ERR_005[] = "005"; /* Bad count specification */
-    static const char ERR_006[] = "006"; /* Header too big */
-    static const char ERR_007[] = "007"; /* Body too big */
-    static const char ERR_008[] = "008"; /* Bad character in name */
-    static const char ERR_009[] = "009"; /* No count or line terminator */
-
-    if (!strncmp(msg, ERR_001, sizeof(ERR_001)-1))
+    if (has_prefix(msg, "001")) /* Not in StarMode! */
     {
         RecvErr("Error Msg:", strip_info);
         printk(KERN_INFO "%s: Radio %s is not in StarMode\n",
             strip_info->dev.name, sendername);
     }
-    else if (!strncmp(msg, ERR_002, sizeof(ERR_002)-1))
+
+    else if (has_prefix(msg, "002")) /* Remap handle */
     {
-        RecvErr("Error Msg:", strip_info);
-#ifdef notyet        /*Kernel doesn't have scanf!*/
-        int handle;
-        __u8 newname[64];
-        sscanf(msg, "ERR_002 Remap handle &%d to name %s", &handle, newname);
-        printk(KERN_INFO "%s: Radio name %s is handle %d\n",
-            strip_info->dev.name, newname, handle);
-#endif
+	/* We ignore "Remap handle" messages for now */
     }
-    else if (!strncmp(msg, ERR_003, sizeof(ERR_003)-1))
+
+    else if (has_prefix(msg, "003")) /* Can't resolve name */
     {
         RecvErr("Error Msg:", strip_info);
         printk(KERN_INFO "%s: Destination radio name is unknown\n",
             strip_info->dev.name);
     }
-    else if (!strncmp(msg, ERR_004, sizeof(ERR_004)-1))
+
+    else if (has_prefix(msg, "004")) /* Name too small or missing */
     {
         strip_info->watchdog_doreset = jiffies + LongTime;
+#if TICKLE_TIMERS
+        {
+        struct timeval tv;
+        do_gettimeofday(&tv);
+        printk(KERN_INFO "**** Got ERR_004 response         at %02d.%06d\n",
+            tv.tv_sec % 100, tv.tv_usec);
+        }
+#endif
         if (!strip_info->working)
         {
             strip_info->working = TRUE;
-            printk(KERN_INFO "%s: Radio now in starmode\n",
-                strip_info->dev.name);
+            printk(KERN_INFO "%s: Radio now in starmode\n", strip_info->dev.name);
             /*
              * If the radio has just entered a working state, we should do our first
              * probe ASAP, so that we find out our radio address etc. without delay.
              */
             strip_info->watchdog_doprobe = jiffies;
         }
-        if (!strip_info->structured_messages && sendername)
+        if (strip_info->firmware_level == NoStructure && sendername)
         {
-            strip_info->structured_messages = TRUE;
-            printk(KERN_INFO "%s: Radio provides structured messages\n",
-                strip_info->dev.name);
+            strip_info->firmware_level = StructuredMessages;
+            strip_info->next_command   = 0; /* Try to enable checksums ASAP */
+            printk(KERN_INFO "%s: Radio provides structured messages\n", strip_info->dev.name);
+        }
+        if (strip_info->firmware_level >= StructuredMessages)
+        {
+            verify_checksum(strip_info);
+            /*
+             * If the radio has structured messages but we don't yet have all our information about it, we should do
+             * probes without delay, until we have gathered all the information
+             */
+            if (!GOT_ALL_RADIO_INFO(strip_info)) strip_info->watchdog_doprobe = jiffies;
         }
     }
-    else if (!strncmp(msg, ERR_005, sizeof(ERR_005)-1))
+
+    else if (has_prefix(msg, "005")) /* Bad count specification */
         RecvErr("Error Msg:", strip_info);
-    else if (!strncmp(msg, ERR_006, sizeof(ERR_006)-1))
+
+    else if (has_prefix(msg, "006")) /* Header too big */
         RecvErr("Error Msg:", strip_info);
-    else if (!strncmp(msg, ERR_007, sizeof(ERR_007)-1))
+
+    else if (has_prefix(msg, "007")) /* Body too big */
     {
-        /*
-         * Note: This error knocks the radio back into
-         * command mode.
-         */
         RecvErr("Error Msg:", strip_info);
-        printk(KERN_ERR "%s: Error! Packet size too big for radio.",
+        printk(KERN_ERR "%s: Error! Packet size too big for radio.\n",
             strip_info->dev.name);
-        strip_info->watchdog_doreset = jiffies;        /* Do reset ASAP */
     }
-    else if (!strncmp(msg, ERR_008, sizeof(ERR_008)-1))
+
+    else if (has_prefix(msg, "008")) /* Bad character in name */
     {
         RecvErr("Error Msg:", strip_info);
         printk(KERN_ERR "%s: Radio name contains illegal character\n",
             strip_info->dev.name);
     }
-    else if (!strncmp(msg, ERR_009, sizeof(ERR_009)-1))
+
+    else if (has_prefix(msg, "009")) /* No count or line terminator */
         RecvErr("Error Msg:", strip_info);
+
+    else if (has_prefix(msg, "010")) /* Invalid checksum */
+        RecvErr("Error Msg:", strip_info);
+
+    else if (has_prefix(msg, "011")) /* Checksum didn't match */
+        RecvErr("Error Msg:", strip_info);
+
+    else if (has_prefix(msg, "012")) /* Failed to transmit packet */
+        RecvErr("Error Msg:", strip_info);
+
     else
         RecvErr("Error Msg:", strip_info);
 }
 
 static void process_AT_response(struct strip *strip_info, __u8 *ptr, __u8 *end)
 {
-    static const char ATS305[] = "ATS305?";
-    static const char ATS300[] = "ATS300?";
-    static const char ATS325[] = "ATS325?";
-    static const char ATI2[] = "AT~I2 nn";
-
-    /* Skip to the first newline character */
     __u8 *p = ptr;
-    while (p < end && *p != 10) p++;
-    if (p >= end) return;
-    p++;
+    while (p < end && p[-1] != 10) p++; /* Skip past first newline character */
+    /* Now ptr points to the AT command, and p points to the text of the response. */
 
-    if (!strncmp(ptr, ATS305, sizeof(ATS305)-1))
+#if TICKLE_TIMERS
     {
-        if (IS_RADIO_ADDRESS(p)) get_radio_address(strip_info, p);
+    struct timeval tv;
+    do_gettimeofday(&tv);
+    printk(KERN_INFO "**** Got AT response %.7s      at %02d.%06d\n",
+        ptr, tv.tv_sec % 100, tv.tv_usec);
     }
-    else if (!strncmp(ptr, ATS300, sizeof(ATS300)-1)) {
-        get_radio_version(strip_info, p, end);
+#endif
+
+    if      (has_prefix(ptr, "ATS300?" )) get_radio_version(strip_info, p, end);
+    else if (has_prefix(ptr, "ATS305?" )) get_radio_address(strip_info, p);
+    else if (has_prefix(ptr, "ATS311?" )) get_radio_neighbours(&strip_info->poletops, p, end);
+    else if (has_prefix(ptr, "ATS319=7")) verify_checksum(strip_info);
+    else if (has_prefix(ptr, "ATS325?" )) get_radio_voltage(strip_info, p, end);
+    else if (has_prefix(ptr, "AT~LA"   )) get_radio_neighbours(&strip_info->portables, p, end);
+    else                                              RecvErr("Unknown AT Response:", strip_info);
+}
+
+static void process_ACK(struct strip *strip_info, __u8 *ptr, __u8 *end)
+{
+    /* Currently we don't do anything with ACKs from the radio */
+}
+
+static void process_Info(struct strip *strip_info, __u8 *ptr, __u8 *end)
+{
+    if (ptr+16 > end) RecvErr("Bad Info Msg:", strip_info);
+}
+
+static struct device *get_strip_dev(struct strip *strip_info)
+{
+    /* If our hardware address is *manually set* to zero, and we know our */
+    /* real radio hardware address, try to find another strip device that has been */
+    /* manually set to that address that we can 'transfer ownership' of this packet to  */
+    if (strip_info->manual_dev_addr &&
+        !memcmp(strip_info->dev.dev_addr, zero_address.c, sizeof(zero_address)) &&
+        memcmp(&strip_info->true_dev_addr, zero_address.c, sizeof(zero_address)))
+    {
+        struct device *dev = dev_base;
+        while (dev)
+        {
+            if (dev->type == strip_info->dev.type &&
+                !memcmp(dev->dev_addr, &strip_info->true_dev_addr, sizeof(MetricomAddress)))
+            {
+                printk(KERN_INFO "%s: Transferred packet ownership to %s.\n",
+                    strip_info->dev.name, dev->name);
+                return(dev);
+            }
+            dev = dev->next;
+        }
     }
-    else if (!strncmp(ptr, ATS325, sizeof(ATS325)-1)) {
-        get_radio_voltage(strip_info, p, end);
-    }
-    else if (!strncmp(ptr, ATI2, sizeof(ATI2)-1)) {
-        get_radio_neighbors(strip_info, p, end);
-    }
-    else RecvErr("Unknown AT Response:", strip_info);
+    return(&strip_info->dev);
 }
 
 /*
@@ -1979,14 +1938,14 @@ static void deliver_packet(struct strip *strip_info, STRIP_Header *header, __u16
     struct sk_buff *skb = dev_alloc_skb(sizeof(STRIP_Header) + packetlen);
     if (!skb)
     {
-        printk(KERN_INFO "%s: memory squeeze, dropping packet.\n", strip_info->dev.name);
+        printk(KERN_ERR "%s: memory squeeze, dropping packet.\n", strip_info->dev.name);
         strip_info->rx_dropped++;
     }
     else
     {
         memcpy(skb_put(skb, sizeof(STRIP_Header)), header, sizeof(STRIP_Header));
         memcpy(skb_put(skb, packetlen), strip_info->rx_buff, packetlen);
-        skb->dev      = &strip_info->dev;
+        skb->dev      = get_strip_dev(strip_info);
         skb->protocol = header->protocol;
         skb->mac.raw  = skb->data;
 
@@ -1997,6 +1956,10 @@ static void deliver_packet(struct strip *strip_info, STRIP_Header *header, __u16
 
         /* Finally, hand the packet up to the next layer (e.g. IP or ARP, etc.) */
         strip_info->rx_packets++;
+        strip_info->rx_pps_count++;
+#ifdef EXT_COUNTERS
+        strip_info->rx_bytes += packetlen;
+#endif
         netif_rx(skb);
     }
 }
@@ -2004,10 +1967,6 @@ static void deliver_packet(struct strip *strip_info, STRIP_Header *header, __u16
 static void process_IP_packet(struct strip *strip_info, STRIP_Header *header, __u8 *ptr, __u8 *end)
 {
     __u16 packetlen;
-
-#if DO_PROC_NET_STRIP_TRACE
-    __u8 *start_ptr = ptr;
-#endif DO_PROC_NET_STRIP_TRACE
 
     /* Decode start of the IP packet header */
     ptr = UnStuffData(ptr, end, strip_info->rx_buff, 4);
@@ -2019,9 +1978,9 @@ static void process_IP_packet(struct strip *strip_info, STRIP_Header *header, __
 
     packetlen = ((__u16)strip_info->rx_buff[2] << 8) | strip_info->rx_buff[3];
 
-    if (packetlen > MAX_STRIP_MTU)
+    if (packetlen > MAX_RECV_MTU)
     {
-        printk(KERN_ERR "%s: Dropping oversized receive packet: %d bytes\n",
+        printk(KERN_INFO "%s: Dropping oversized received IP packet: %d bytes\n",
             strip_info->dev.name, packetlen);
         strip_info->rx_dropped++;
         return;
@@ -2045,11 +2004,6 @@ static void process_IP_packet(struct strip *strip_info, STRIP_Header *header, __
 
     header->protocol = htons(ETH_P_IP);
 
-#if DO_PROC_NET_STRIP_TRACE
-    packet_log(strip_info, strip_info->rx_buff, EntryReceive, header,
-	       packetlen, end-start_ptr, slip_len(strip_info->rx_buff, packetlen)); 
-#endif DO_PROC_NET_STRIP_TRACE
-
     deliver_packet(strip_info, header, packetlen);
 }
 
@@ -2057,10 +2011,6 @@ static void process_ARP_packet(struct strip *strip_info, STRIP_Header *header, _
 {
     __u16 packetlen;
     struct arphdr *arphdr = (struct arphdr *)strip_info->rx_buff;
-
-#if DO_PROC_NET_STRIP_TRACE
-    __u8 *start_ptr = ptr;
-#endif DO_PROC_NET_STRIP_TRACE
 
     /* Decode start of the ARP packet */
     ptr = UnStuffData(ptr, end, strip_info->rx_buff, 8);
@@ -2072,9 +2022,9 @@ static void process_ARP_packet(struct strip *strip_info, STRIP_Header *header, _
 
     packetlen = 8 + (arphdr->ar_hln + arphdr->ar_pln) * 2;
 
-    if (packetlen > MAX_STRIP_MTU)
+    if (packetlen > MAX_RECV_MTU)
     {
-        printk(KERN_ERR "%s: Dropping oversized receive packet: %d bytes\n",
+        printk(KERN_INFO "%s: Dropping oversized received ARP packet: %d bytes\n",
             strip_info->dev.name, packetlen);
         strip_info->rx_dropped++;
         return;
@@ -2100,15 +2050,47 @@ static void process_ARP_packet(struct strip *strip_info, STRIP_Header *header, _
 
     header->protocol = htons(ETH_P_ARP);
 
-#if DO_PROC_NET_STRIP_TRACE
-    packet_log(strip_info, strip_info->rx_buff, EntryReceive, header,
-	       packetlen, end-start_ptr, slip_len(strip_info->rx_buff, packetlen)); 
-#endif DO_PROC_NET_STRIP_TRACE
-
     deliver_packet(strip_info, header, packetlen);
 }
 
-static void process_packet(struct strip *strip_info)
+/*
+ * process_text_message processes a <CR>-terminated block of data received
+ * from the radio that doesn't begin with a '*' character. All normal
+ * Starmode communication messages with the radio begin with a '*',
+ * so any text that does not indicates a serial port error, a radio that
+ * is in Hayes command mode instead of Starmode, or a radio with really
+ * old firmware that doesn't frame its Starmode responses properly.
+ */
+static void process_text_message(struct strip *strip_info)
+{
+    __u8 *msg = strip_info->sx_buff;
+    int len   = strip_info->sx_count;
+
+    /* Check for anything that looks like it might be our radio name */
+    /* (This is here for backwards compatibility with old firmware)  */
+    if (len == 9 && get_radio_address(strip_info, msg) == 0) return;
+
+    if (text_equal(msg, len, "OK"      )) return; /* Ignore 'OK' responses from prior commands */
+    if (text_equal(msg, len, "ERROR"   )) return; /* Ignore 'ERROR' messages */
+    if (text_equal(msg, len, InitString)) return; /* Ignore character echo back from the radio */
+
+    /* Catch other error messages */
+    /* (This is here for backwards compatibility with old firmware) */
+    if (has_prefix(msg, "ERR_")) { RecvErr_Message(strip_info, NULL, &msg[4]); return; }
+    
+    RecvErr("No initial *", strip_info);
+}
+
+/*
+ * process_message processes a <CR>-terminated block of data received
+ * from the radio. If the radio is not in Starmode or has old firmware,
+ * it may be a line of text in response to an AT command. Ideally, with
+ * a current radio that's properly in Starmode, all data received should
+ * be properly framed and checksummed radio message blocks, containing
+ * either a starmode packet, or a other communication from the radio
+ * firmware, like "INF_" Info messages and &COMMAND responses.
+ */
+static void process_message(struct strip *strip_info)
 {
     STRIP_Header header = { zero_address, zero_address, 0 };
     __u8 *ptr = strip_info->sx_buff;
@@ -2116,29 +2098,11 @@ static void process_packet(struct strip *strip_info)
     __u8 sendername[32], *sptr = sendername;
     MetricomKey key;
 
-    /* Ignore 'OK' responses from prior commands */
-    if (strip_info->sx_count == 2 && ptr[0] == 'O' && ptr[1] == 'K') return;
-
-    /* Check for anything that looks like it might be our radio name: dddd-dddd */
-    /* (This is here for backwards compatibility with old firmware)             */
-    if (strip_info->sx_count == 9 && IS_RADIO_ADDRESS(ptr))
-    {
-        get_radio_address(strip_info, ptr);
-        return;
-    }
-
     /*HexDump("Receiving", strip_info, ptr, end);*/
 
     /* Check for start of address marker, and then skip over it */
-    if (*ptr != '*')
-    {
-        /* Catch other error messages */
-        if (ptr[0] == 'E' && ptr[1] == 'R' && ptr[2] == 'R' && ptr[3] == '_')
-            RecvErr_Message(strip_info, NULL, &ptr[4]);
-        else RecvErr("No initial *", strip_info);
-        return;
-    }
-    ptr++; /* Skip the initial '*' */
+    if (*ptr == '*') ptr++;
+    else { process_text_message(strip_info); return; }
 
     /* Copy out the return address */
     while (ptr < end && *ptr != '*' && sptr < ARRAY_END(sendername)-1) *sptr++ = *ptr++;
@@ -2156,14 +2120,37 @@ static void process_packet(struct strip *strip_info)
     /* (This is here for backwards compatibility with old firmware) */
     if (!strcmp(sendername, "&COMMAND"))
     {
-        strip_info->structured_messages = FALSE;
+        strip_info->firmware_level = NoStructure;
+        strip_info->next_command   = CompatibilityCommand;
         return;
     }
 
-    if (ptr+4 >= end)
+    if (ptr+4 > end)
     {
         RecvErr("No proto key", strip_info);
         return;
+    }
+
+    /* Get the protocol key out of the buffer */
+    key.c[0] = *ptr++;
+    key.c[1] = *ptr++;
+    key.c[2] = *ptr++;
+    key.c[3] = *ptr++;
+
+    /* If we're using checksums, verify the checksum at the end of the packet */
+    if (strip_info->firmware_level >= ChecksummedMessages)
+    {
+        end -= 4;	/* Chop the last four bytes off the packet (they're the checksum) */
+        if (ptr > end)
+        {
+            RecvErr("Missing Checksum", strip_info);
+            return;
+        }
+        if (!verify_checksum(strip_info))
+        {
+            RecvErr("Bad Checksum", strip_info);
+            return;
+        }
     }
 
     /*printk(KERN_INFO "%s: Got packet from \"%s\".\n", strip_info->dev.name, sendername);*/
@@ -2173,37 +2160,44 @@ static void process_packet(struct strip *strip_info)
      * We assume that the destination address was our address (the radio does not
      * tell us this). If the radio supplies a source address, then we use it.
      */
-    memcpy(&header.dst_addr, strip_info->dev.dev_addr, sizeof(MetricomAddress));
-    if (IS_RADIO_ADDRESS(sendername)) string_to_radio_address(&header.src_addr, sendername);
+    header.dst_addr = strip_info->true_dev_addr;
+    string_to_radio_address(&header.src_addr, sendername);
 
-    /* Get the protocol key out of the buffer */
-    key.c[0] = *ptr++;
-    key.c[1] = *ptr++;
-    key.c[2] = *ptr++;
-    key.c[3] = *ptr++;
-
-    if      (key.l == SIP0Key.l) process_IP_packet(strip_info, &header, ptr, end);
-    else if (key.l == ARP0Key.l) process_ARP_packet(strip_info, &header, ptr, end);
+#ifdef EXT_COUNTERS
+    if      (key.l == SIP0Key.l) {
+      strip_info->rx_rbytes += (end - ptr);
+      process_IP_packet(strip_info, &header, ptr, end);
+    } else if (key.l == ARP0Key.l) {
+      strip_info->rx_rbytes += (end - ptr);
+      process_ARP_packet(strip_info, &header, ptr, end);
+    } else if (key.l == ATR_Key.l) {
+      strip_info->rx_ebytes += (end - ptr);
+      process_AT_response(strip_info, ptr, end);
+    } else if (key.l == ACK_Key.l) {
+      strip_info->rx_ebytes += (end - ptr);
+      process_ACK(strip_info, ptr, end);
+    } else if (key.l == INF_Key.l) {
+      strip_info->rx_ebytes += (end - ptr);
+      process_Info(strip_info, ptr, end);
+    } else if (key.l == ERR_Key.l) {
+      strip_info->rx_ebytes += (end - ptr);
+      RecvErr_Message(strip_info, sendername, ptr);
+    } else RecvErr("Unrecognized protocol key", strip_info);
+#else
+    if      (key.l == SIP0Key.l) process_IP_packet  (strip_info, &header, ptr, end);
+    else if (key.l == ARP0Key.l) process_ARP_packet (strip_info, &header, ptr, end);
     else if (key.l == ATR_Key.l) process_AT_response(strip_info, ptr, end);
-    else if (key.l == ERR_Key.l) RecvErr_Message(strip_info, sendername, ptr);
-    else /* RecvErr("Unrecognized protocol key", strip_info); */
-
-    /* Note, this "else" block is temporary, until Metricom fix their */
-    /* packet corruption bug */
-    {
-        RecvErr("Unrecognized protocol key (retrying)", strip_info);
-        ptr -= 3; /* Back up and try again */
-        key.c[0] = *ptr++;
-        key.c[1] = *ptr++;
-        key.c[2] = *ptr++;
-        key.c[3] = *ptr++;
-        if      (key.l == SIP0Key.l) process_IP_packet(strip_info, &header, ptr, end);
-        else if (key.l == ARP0Key.l) process_ARP_packet(strip_info, &header, ptr, end);
-        else if (key.l == ATR_Key.l) process_AT_response(strip_info, ptr, end);
-        else if (key.l == ERR_Key.l) RecvErr_Message(strip_info, sendername, ptr);
-        else RecvErr("Unrecognized protocol key", strip_info);
-    }
+    else if (key.l == ACK_Key.l) process_ACK        (strip_info, ptr, end);
+    else if (key.l == INF_Key.l) process_Info       (strip_info, ptr, end);
+    else if (key.l == ERR_Key.l) RecvErr_Message    (strip_info, sendername, ptr);
+    else                         RecvErr("Unrecognized protocol key", strip_info);
+#endif
 }
+
+#define TTYERROR(X) ((X) == TTY_BREAK   ? "Break"            : \
+                     (X) == TTY_FRAME   ? "Framing Error"    : \
+                     (X) == TTY_PARITY  ? "Parity Error"     : \
+                     (X) == TTY_OVERRUN ? "Hardware Overrun" : "Unknown Error")
 
 /*
  * Handle the 'receiver data ready' interrupt.
@@ -2229,17 +2223,23 @@ strip_receive_buf(struct tty_struct *tty, const unsigned char *cp, char *fp, int
     {
     struct timeval tv;
     do_gettimeofday(&tv);
-    printk(KERN_INFO "**** strip_receive_buf: %3d bytes at %d.%06d\n",
+    printk(KERN_INFO "**** strip_receive_buf: %3d bytes at %02d.%06d\n",
         count, tv.tv_sec % 100, tv.tv_usec);
     }
+#endif
+
+#ifdef EXT_COUNTERS
+    strip_info->rx_sbytes += count;
 #endif
 
     /* Read the characters out of the buffer */
     while (cp < end)
     {
+        if (fp && *fp) printk(KERN_INFO "%s: %s on serial port\n", strip_info->dev.name, TTYERROR(*fp));
         if (fp && *fp++ && !strip_info->discard) /* If there's a serial error, record it */
         {
-            strip_info->discard = 1;
+            /* If we have some characters in the buffer, discard them */
+            strip_info->discard = strip_info->sx_count;
             strip_info->rx_errors++;
         }
 
@@ -2249,21 +2249,23 @@ strip_receive_buf(struct tty_struct *tty, const unsigned char *cp, char *fp, int
             if (*cp == 0x0D)                /* If end of packet, decide what to do with it */
             {
                 if (strip_info->sx_count > 3000)
-                    printk(KERN_INFO "Cut a %d byte packet (%d bytes remaining)%s\n",
-                        strip_info->sx_count, end-cp-1,
+                    printk(KERN_INFO "%s: Cut a %d byte packet (%d bytes remaining)%s\n",
+                        strip_info->dev.name, strip_info->sx_count, end-cp-1,
                         strip_info->discard ? " (discarded)" : "");
                 if (strip_info->sx_count > strip_info->sx_size)
                 {
-                    strip_info->discard = 1;
                     strip_info->rx_over_errors++;
                     printk(KERN_INFO "%s: sx_buff overflow (%d bytes total)\n",
                            strip_info->dev.name, strip_info->sx_count);
                 }
-                if (!strip_info->discard) process_packet(strip_info);
+                else if (strip_info->discard)
+                    printk(KERN_INFO "%s: Discarding bad packet (%d/%d)\n",
+                        strip_info->dev.name, strip_info->discard, strip_info->sx_count);
+                else process_message(strip_info);
                 strip_info->discard = 0;
                 strip_info->sx_count = 0;
             }
-            else if (!strip_info->discard) /* If we're not discarding, store the character */
+            else
             {
                 /* Make sure we have space in the buffer */
                 if (strip_info->sx_count < strip_info->sx_size)
@@ -2279,9 +2281,28 @@ strip_receive_buf(struct tty_struct *tty, const unsigned char *cp, char *fp, int
 /************************************************************************/
 /* General control routines						*/
 
-static int strip_set_dev_mac_address(struct device *dev, void *addr)
+static int set_mac_address(struct strip *strip_info, MetricomAddress *addr)
 {
-    return -1;        /* You cannot override a Metricom radio's address */
+    /*
+     * We're using a manually specified address if the address is set
+     * to anything other than all ones. Setting the address to all ones
+     * disables manual mode and goes back to automatic address determination
+     * (tracking the true address that the radio has).
+     */
+    strip_info->manual_dev_addr = memcmp(addr->c, broadcast_address.c, sizeof(broadcast_address));
+    if (strip_info->manual_dev_addr)
+         *(MetricomAddress*)strip_info->dev.dev_addr = *addr;
+    else *(MetricomAddress*)strip_info->dev.dev_addr = strip_info->true_dev_addr;
+    return 0;
+}
+
+static int dev_set_mac_address(struct device *dev, void *addr)
+{
+    struct strip *strip_info = (struct strip *)(dev->priv);
+    struct sockaddr *sa = addr;
+    printk(KERN_INFO "%s: strip_set_dev_mac_address called\n", dev->name);
+    set_mac_address(strip_info, (MetricomAddress *)sa->sa_data);
+    return 0;
 }
 
 static struct net_device_stats *strip_get_stats(struct device *dev)
@@ -2341,7 +2362,8 @@ static int strip_open_low(struct device *dev)
 
     strip_info->discard  = 0;
     strip_info->working  = FALSE;
-    strip_info->structured_messages = FALSE;
+    strip_info->firmware_level = NoStructure;
+    strip_info->next_command   = CompatibilityCommand;
     strip_info->sx_count = 0;
     strip_info->tx_left  = 0;
 
@@ -2442,7 +2464,7 @@ static int strip_dev_init(struct device *dev)
     dev->rebuild_header     = strip_rebuild_header;
     /*  dev->type_trans            unused */
     /*  dev->set_multicast_list   unused */
-    dev->set_mac_address    = strip_set_dev_mac_address;
+    dev->set_mac_address    = dev_set_mac_address;
     /*  dev->do_ioctl             unused */
     /*  dev->set_config           unused */
     dev->get_stats          = strip_get_stats;
@@ -2455,19 +2477,10 @@ static int strip_dev_init(struct device *dev)
 
 static void strip_free(struct strip *strip_info)
 {
-    MetricomNode *node, *free;
-
     *(strip_info->referrer) = strip_info->next;
     if (strip_info->next)
         strip_info->next->referrer = strip_info->referrer;
     strip_info->magic = 0;
-
-    for (node = strip_info->neighbor_list; node != NULL; )
-    {
-        free = node;
-        node = node->next;
-        kfree(free);
-    }
     kfree(strip_info);
 }
 
@@ -2522,13 +2535,9 @@ static struct strip *strip_alloc(void)
     strip_info->idle_timer.data     = (long)&strip_info->dev;
     strip_info->idle_timer.function = strip_IdleTask;
 
-    strip_info->neighbor_list = kmalloc(sizeof(MetricomNode), GFP_KERNEL);
-    strip_info->neighbor_list->type = 0;
-    strip_info->neighbor_list->next = NULL;
-
     /* Note: strip_info->if_name is currently 8 characters long */
-    sprintf(strip_info->if_name, "st%d", channel_id);
-    strip_info->dev.name         = strip_info->if_name;
+    sprintf(strip_info->if_name.c, "st%d", channel_id);
+    strip_info->dev.name         = strip_info->if_name.c;
     strip_info->dev.base_addr    = channel_id;
     strip_info->dev.priv         = (void*)strip_info;
     strip_info->dev.next         = NULL;
@@ -2598,6 +2607,9 @@ static int strip_open(struct tty_struct *tty)
 #ifdef MODULE
     MOD_INC_USE_COUNT;
 #endif
+
+    printk(KERN_INFO "STRIP: device \"%s\" activated\n", strip_info->if_name.c);
+
     /*
      * Done.  We have linked the TTY line to a channel.
      */
@@ -2627,6 +2639,7 @@ static void strip_close(struct tty_struct *tty)
 
     tty->disc_data = 0;
     strip_info->tty = NULL;
+    printk(KERN_INFO "STRIP: device \"%s\" closed down\n", strip_info->if_name.c);
     strip_free(strip_info);
     tty->disc_data = NULL;
 #ifdef MODULE
@@ -2657,12 +2670,17 @@ static int strip_ioctl(struct tty_struct *tty, struct file *file,
             err = verify_area(VERIFY_WRITE, (void*)arg, 16);
             if (err)
                 return -err;
-            copy_to_user((void*)arg, strip_info->dev.name,
-                strlen(strip_info->dev.name) + 1);
-            return 0;
+            return copy_to_user((void*)arg, strip_info->dev.name,
+                strlen(strip_info->dev.name) + 1)?-EFAULT:0;
 
         case SIOCSIFHWADDR:
-            return -EINVAL;
+            {
+            MetricomAddress addr;
+            printk(KERN_INFO "%s: SIOCSIFHWADDR\n", strip_info->dev.name);
+            if(copy_from_user(&addr, (void*)arg, sizeof(MetricomAddress)))
+            	return -EFAULT;
+            return(set_mac_address(strip_info, &addr));
+            }
 
         /*
          * Allow stty to read, but not set, the serial port
@@ -2683,32 +2701,6 @@ static int strip_ioctl(struct tty_struct *tty, struct file *file,
 /* Initialization							*/
 
 /*
- *      Registers with the /proc file system to create different /proc/net files.
- */
-
-static int strip_proc_net_register(unsigned short type, char *file_name,
-                                   int (*get_info)(char *, char **, off_t, int, int))
-{
-    struct proc_dir_entry *strip_entry;
-
-    strip_entry = kmalloc(sizeof(struct proc_dir_entry), GFP_ATOMIC);
-
-    memset(strip_entry, 0, sizeof(struct proc_dir_entry));
-    strip_entry->low_ino = type;
-    strip_entry->namelen = strlen(file_name);
-    strip_entry->name = file_name;
-    strip_entry->mode = S_IFREG | S_IRUGO;
-    strip_entry->nlink = 1;
-    strip_entry->uid = 0;
-    strip_entry->gid = 0;
-    strip_entry->size = 0;
-    strip_entry->ops = &proc_net_inode_operations;
-    strip_entry->get_info = get_info;
-
-    return proc_net_register(strip_entry);
-}
-
-/*
  * Initialize the STRIP driver.
  * This routine is called at boot time, to bootstrap the multi-channel
  * STRIP driver
@@ -2722,7 +2714,7 @@ int strip_init_ctrl_dev(struct device *dummy)
     static struct tty_ldisc strip_ldisc;
     int status;
 
-    printk("STRIP: version %s (unlimited channels)\n", StripVersion);
+    printk(KERN_INFO "STRIP: Version %s (unlimited channels)\n", StripVersion);
 
     /*
      * Fill in our line protocol discipline, and register it
@@ -2747,24 +2739,12 @@ int strip_init_ctrl_dev(struct device *dummy)
     }
 
     /*
-     * Register the status and trace files with /proc
+     * Register the status file with /proc
      */
-
-#if DO_PROC_NET_STRIP_STATUS
-    if (strip_proc_net_register(PROC_NET_STRIP_STATUS, "strip_status",
-                                               &strip_get_status_info) != 0)
+    if (proc_net_register(&proc_strip_get_status_info) != 0)
     {
-        printk(KERN_ERR "strip: status strip_proc_net_register() failed.\n");
+        printk(KERN_ERR "strip: status proc_net_register() failed.\n");
     }
-#endif
-
-#if DO_PROC_NET_STRIP_TRACE
-    if (strip_proc_net_register(PROC_NET_STRIP_TRACE, "strip_trace",
-                    &strip_get_trace_info) != 0)
-    {
-        printk(KERN_ERR "strip: trace strip_proc_net_register() failed.\n");
-    }
-#endif
 
 #ifdef MODULE
      return status;
@@ -2794,16 +2774,12 @@ void cleanup_module(void)
     while (struct_strip_list)
         strip_free(struct_strip_list);
 
-    /* Unregister with the /proc/net files here. */
-
-#if DO_PROC_NET_STRIP_TRACE
-    proc_net_unregister(PROC_NET_STRIP_TRACE);
-#endif
-#if DO_PROC_NET_STRIP_STATUS
+    /* Unregister with the /proc/net file here. */
     proc_net_unregister(PROC_NET_STRIP_STATUS);
-#endif
 
     if ((i = tty_register_ldisc(N_STRIP, NULL)))
         printk(KERN_ERR "STRIP: can't unregister line discipline (err = %d)\n", i);
+
+    printk(KERN_INFO "STRIP: Module Unloaded\n");
 }
 #endif /* MODULE */

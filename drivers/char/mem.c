@@ -20,6 +20,7 @@
 #include <linux/mm.h>
 #include <linux/random.h>
 #include <linux/init.h>
+#include <linux/joystick.h>
 
 #include <asm/uaccess.h>
 #include <asm/io.h>
@@ -531,6 +532,13 @@ __initfunc(int chr_dev_init(void))
 #ifdef CONFIG_SOUND
 	soundcard_init();
 #endif
+#ifdef CONFIG_JOYSTICK
+	/*
+	 *	Some joysticks only appear when the soundcard they are
+	 *	connected too is confgured. Keep the sound/joystick ordering.
+	 */
+	joystick_init();
+#endif	
 #if CONFIG_QIC02_TAPE
 	qic02_tape_init();
 #endif

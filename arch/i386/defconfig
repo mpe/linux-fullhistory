@@ -227,12 +227,14 @@ CONFIG_MOUSE=y
 # CONFIG_MS_BUSMOUSE is not set
 CONFIG_PSMOUSE=y
 CONFIG_82C710_MOUSE=y
+# CONFIG_PC110_PAD is not set
 # CONFIG_UMISC is not set
 # CONFIG_QIC02_TAPE is not set
 # CONFIG_FTAPE is not set
 # CONFIG_APM is not set
 # CONFIG_WATCHDOG is not set
 # CONFIG_RTC is not set
+# CONFIG_JOYSTICK is not set
 
 #
 # Sound

@@ -742,7 +742,7 @@ asmlinkage void do_ptrace(struct pt_regs *regs)
 		cregs->tstate |= psr_to_tstate_icc(psr);
                	if(!((pc | npc) & 3)) {
 			cregs->tpc = pc;
-			cregs->tpc = npc;
+			cregs->tnpc = npc;
 		}
 		cregs->y = y;
 		for(i = 1; i < 16; i++)

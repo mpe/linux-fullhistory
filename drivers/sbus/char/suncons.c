@@ -1,4 +1,4 @@
-/* $Id: suncons.c,v 1.64 1997/06/06 10:56:25 jj Exp $
+/* $Id: suncons.c,v 1.66 1997/07/15 09:48:47 jj Exp $
  *
  * suncons.c: Sun SparcStation console support.
  *
@@ -828,10 +828,14 @@ __initfunc(static int creator_present (void))
 {
 	int root, n;
 
+#ifdef __sparc_v9__
 	root = prom_getchild (prom_root_node);
 	if ((n = prom_searchsiblings (root, "SUNW,ffb")) == 0)
 		return 0;
 	return n;
+#else
+	return 0;
+#endif
 }
 
 __initfunc(static void
@@ -1108,7 +1112,6 @@ __initfunc(static int sparc_console_probe(void))
 		if (!card_found)
 		    card_found = cg14 = cg14_present ();
 		if (!card_found){
-			prom_printf ("Searching for a creator\n");
 			card_found = creator = creator_present ();
 		}
 		if (!card_found){
@@ -1172,7 +1175,7 @@ __initfunc(static int sparc_console_probe(void))
 		if (creator){
 			sparc_framebuffer_setup (!sbdprom, creator, FBTYPE_CREATOR,
 						 0, 0, 0, prom_console_node == creator,
-						 prom_getchild (prom_root_node));
+						 prom_root_node);
 		}
 		break;
 	default:
@@ -1654,11 +1657,10 @@ sun_hw_scursor (struct fbcursor *cursor, fbinfo_t *fb)
 			return -EINVAL;
 		if ((uint) f.size.fby > fb->cursor.hwsize.fby)
 			return -EINVAL;
-		bytes = (f.size.fby * 32)/8;
-		i = verify_area (VERIFY_READ, f.image, bytes);
-		if (i) return i;
-		i = verify_area (VERIFY_READ, f.mask, bytes);
-		if (i) return i;
+		if (f.size.fbx > 32)
+			bytes = f.size.fby << 3;
+		else
+			bytes = f.size.fby << 2;
 	}
 	if (op & FB_CUR_SETCMAP){
 		if (f.cmap.index || f.cmap.count != 2)
@@ -1667,15 +1669,6 @@ sun_hw_scursor (struct fbcursor *cursor, fbinfo_t *fb)
 		    copy_from_user (green, f.cmap.green, 2) ||
 		    copy_from_user (blue, f.cmap.blue, 2))
 			return -EFAULT;
-	}
-	if (op & (FB_CUR_SETCUR | FB_CUR_SETPOS | FB_CUR_SETHOT)){
-		if (op & FB_CUR_SETCUR)
-			fb->cursor.enable = f.enable;
-		if (op & FB_CUR_SETPOS)
-			fb->cursor.cpos = f.pos;
-		if (op & FB_CUR_SETHOT)
-			fb->cursor.chot = f.hot;
-		(*fb->setcursor) (fb);
 	}
 	if (op & FB_CUR_SETCMAP)
 		(*fb->setcursormap) (fb, red, green, blue);
@@ -1687,14 +1680,30 @@ sun_hw_scursor (struct fbcursor *cursor, fbinfo_t *fb)
 		if (copy_from_user (fb->cursor.bits [0], f.mask, bytes) ||
 		    copy_from_user (fb->cursor.bits [1], f.image, bytes))
 			return -EFAULT;
-		u = ~0;
-		if (f.size.fbx < fb->cursor.hwsize.fbx)
-			u = ~(u  >> f.size.fbx);
-		for (i = fb->cursor.size.fby - 1; i >= 0; i--) {
-			fb->cursor.bits [0][i] &= u;
-			fb->cursor.bits [1][i] &= fb->cursor.bits [0][i];
+		if (f.size.fbx <= 32) {
+			u = ~(0xffffffff >> f.size.fbx);
+			for (i = fb->cursor.size.fby - 1; i >= 0; i--) {
+				fb->cursor.bits [0][i] &= u;
+				fb->cursor.bits [1][i] &= fb->cursor.bits [0][i];
+			}
+		} else {
+			u = ~(0xffffffff >> (f.size.fbx - 32));
+			for (i = fb->cursor.size.fby - 1; i >= 0; i--) {
+				fb->cursor.bits [0][2*i+1] &= u;
+				fb->cursor.bits [1][2*i] &= fb->cursor.bits [0][2*i];
+				fb->cursor.bits [1][2*i+1] &= fb->cursor.bits [0][2*i+1];
+			}
 		}
 		(*fb->setcurshape) (fb);
+	}
+	if (op & (FB_CUR_SETCUR | FB_CUR_SETPOS | FB_CUR_SETHOT)){
+		if (op & FB_CUR_SETCUR)
+			fb->cursor.enable = f.enable;
+		if (op & FB_CUR_SETPOS)
+			fb->cursor.cpos = f.pos;
+		if (op & FB_CUR_SETHOT)
+			fb->cursor.chot = f.hot;
+		(*fb->setcursor) (fb);
 	}
 	return 0;
 }

@@ -143,6 +143,14 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_JOYSTICK),y)
+L_OBJS += joystick.o
+else
+  ifeq ($(CONFIG_JOYSTICK),m)
+  M_OBJS += joystick.o
+  endif
+endif
+
 ifeq ($(CONFIG_MS_BUSMOUSE),y)
 M = y
 L_OBJS += msbusmouse.o
@@ -210,6 +218,16 @@ endif
 
 ifdef CONFIG_SUN_MOUSE
 M = y
+endif
+
+ifeq ($(CONFIG_PC110_PAD),y)
+M = y
+L_OBJS += pc110pad.o
+else
+  ifeq ($(CONFIG_PC110_PAD),m)
+    M_OBJS += pc110pad.o
+    MM = m
+  endif
 endif
 
 ifeq ($(CONFIG_SUN_OPENPROMIO),y)

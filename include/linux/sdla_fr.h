@@ -281,7 +281,7 @@ typedef struct	fr_dlc_conf
 } fr_dlc_conf_t;
 
 /*----------------------------------------------------------------------------
- * S502 Interrupt mode control block.
+ * S502 interrupt mode control block.
  *	This structure is passed to the FR_SET_INTR_FLAGS and returned by the
  *	FR_READ_INTR_FLAGS commands.
  */
@@ -292,7 +292,7 @@ typedef struct fr502_intr_ctl
 } fr502_intr_ctl_t;
 
 /*----------------------------------------------------------------------------
- * S508 Interrupt mode control block.
+ * S508 interrupt mode control block.
  *	This structure is passed to the FR_SET_INTR_FLAGS and returned by the
  *	FR_READ_INTR_FLAGS commands.
  */
@@ -306,10 +306,10 @@ typedef struct fr508_intr_ctl
 } fr508_intr_ctl_t;
 
 /*----------------------------------------------------------------------------
- * Channel Status.
+ * Channel status.
  *	This structure is returned by the FR_READ_STATUS command.
  */
-typedef struct	frDLCStatus
+typedef struct	fr_dlc_Status
 {
 	unsigned char status		PACKED;	/* 00h: link/DLCI status */
 	struct
@@ -317,7 +317,7 @@ typedef struct	frDLCStatus
 		unsigned short dlci	PACKED;	/* 01h: DLCI number */
 		unsigned char status	PACKED;	/* 03h: DLCI status */
 	} circuit[1]			PACKED;
-} frDLCStatus_t;
+} fr_dlc_status_t;
 
 /* 'status' defines */
 #define	FR_LINK_INOPER	0x00		/* for global status (DLCI == 0) */
@@ -333,7 +333,7 @@ typedef struct	frDLCStatus
  *	This structure is returned by the FR_READ_STATISTICS command when
  *	dcli == 0.
  */
-typedef struct	frLinkStat
+typedef struct	fr_link_stat
 {
 	unsigned short rx_too_long	PACKED;	/* 00h:  */
 	unsigned short rx_dropped	PACKED;	/* 02h:  */
@@ -363,14 +363,14 @@ typedef struct	frLinkStat
 	unsigned short current_T392	PACKED;	/* 32h:  */
 	unsigned short current_N392	PACKED;	/* 34h:  */
 	unsigned short current_N393	PACKED;	/* 36h:  */
-} frLinkStat_t;
+} fr_link_stat_t;
 
 /*----------------------------------------------------------------------------
- * DLCI Statistics.
+ * DLCI statistics.
  *	This structure is returned by the FR_READ_STATISTICS command when
  *	dlci != 0.
  */
-typedef struct	frDLCIStat
+typedef struct	fr_dlci_stat
 {
 	unsigned long tx_frames		PACKED;	/* 00h:  */
 	unsigned long tx_bytes		PACKED;	/* 04h:  */
@@ -384,13 +384,13 @@ typedef struct	frDLCIStat
 	unsigned long tx_calc_timer	PACKED;	/* 24h:  */
 	unsigned long rx_throughput	PACKED;	/* 28h:  */
 	unsigned long rx_calc_timer	PACKED;	/* 2Ch:  */
-} frDLCIStat_t;
+} fr_dlci_stat_t;
 
 /*----------------------------------------------------------------------------
- * Communications Error Statistics.
+ * Communications error statistics.
  *	This structure is returned by the FR_READ_ERROR_STATS command.
  */
-typedef struct	frCommStat
+typedef struct	fr_comm_stat
 {
 	unsigned char rx_overruns	PACKED;	/* 00h:  */
 	unsigned char rx_bad_crc	PACKED;	/* 01h:  */
@@ -401,7 +401,7 @@ typedef struct	frCommStat
 	unsigned char tx_missed_undr	PACKED;	/* 06h:  */
 	unsigned char dcd_dropped	PACKED;	/* 07h:  */
 	unsigned char cts_dropped	PACKED;	/* 08h:  */
-} frCommStat_t;
+} fr_comm_stat_t;
 
 /*----------------------------------------------------------------------------
  * Defines for the FR_ISSUE_IS_FRAME command.

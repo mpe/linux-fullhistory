@@ -1,4 +1,4 @@
-/* $Id: ioctl32.c,v 1.11 1997/06/16 11:05:00 jj Exp $
+/* $Id: ioctl32.c,v 1.12 1997/07/09 15:05:28 davem Exp $
  * ioctl32.c: Conversion between 32bit and 64bit native ioctls.
  *
  * Copyright (C) 1997 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -22,6 +22,7 @@
 #include <linux/netlink.h>
 #include <linux/vt.h>
 #include <linux/fs.h>
+#include <linux/fd.h>
 
 #include <asm/types.h>
 #include <asm/uaccess.h>
@@ -485,8 +486,13 @@ asmlinkage int sys32_ioctl(unsigned int fd, unsigned int cmd, u32 arg)
 	int error = -EBADF;
 
 	lock_kernel();
-	if (fd >= NR_OPEN || !(filp = current->files->fd[fd]))
+	if(fd >= NR_OPEN)
 		goto out;
+
+	filp = current->files->fd[fd];
+	if(!filp)
+		goto out;
+
 	if (!filp->f_op || !filp->f_op->ioctl) {
 		error = sys_ioctl (fd, cmd, (unsigned long)arg);
 		goto out;
@@ -612,6 +618,15 @@ asmlinkage int sys32_ioctl(unsigned int fd, unsigned int cmd, u32 arg)
 	case FIBMAP:
 	case FIGETBSZ:
 	
+	/* 0x02 -- Floppy ioctls */
+	case FDSETEMSGTRESH:
+	case FDFLUSH:
+	case FDSETMAXERRS:
+	case FDGETMAXERRS:
+	case FDGETDRVTYP:
+	case FDEJECT:
+	/* XXX The rest need struct floppy_* translations. */
+
 	/* 0x12 */
 	case BLKRRPART:
 	case BLKFLSBUF:

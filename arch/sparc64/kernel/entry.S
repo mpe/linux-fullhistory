@@ -1,4 +1,4 @@
-/* $Id: entry.S,v 1.45 1997/07/05 09:52:25 davem Exp $
+/* $Id: entry.S,v 1.50 1997/07/15 16:53:00 davem Exp $
  * arch/sparc64/kernel/entry.S:  Sparc64 trap low-level entry points.
  *
  * Copyright (C) 1995,1997 David S. Miller (davem@caip.rutgers.edu)
@@ -7,6 +7,7 @@
  * Copyright (C) 1996,1997 Jakub Jelinek   (jj@sunsite.mff.cuni.cz)
  */
 
+#include <linux/config.h>
 #include <linux/errno.h>
 
 #include <asm/head.h>
@@ -191,16 +192,18 @@ fpdis_exit:
 	wrpr		%g3, %tstate
 	retry
 
+#ifdef __SMP__
 	/* Note check out head.h, this code isn't even used for UP,
 	 * for SMP things will be different.  In particular the data
 	 * registers for cross calls will be:
 	 *
-	 * DATA 0: Address of function to call
-	 * DATA 1: Argument 1, place in %g6
-	 * DATA 2: Argument 2, place in %g7
+	 * DATA 0: [low 32-bits]  Address of function to call, jmp to this
+	 *         [high 32-bits] MMU Context Argument 0, place in %g5
+	 * DATA 1: Address Argument 1, place in %g6
+	 * DATA 2: Address Argument 2, place in %g7
 	 *
 	 * With this method we can do most of the cross-call tlb/cache
-	 * flushing in very quickly.
+	 * flushing very quickly.
 	 */
 	.align	32
 	.globl	do_ivec
@@ -211,12 +214,14 @@ do_ivec:
 	 mov		0x40, %g2
 
 	/* Load up Interrupt Vector Data 0 register. */
+	sethi		%hi(KERNBASE), %g4
 	ldxa		[%g2] ASI_UDB_INTR_R, %g3
-	sethi		%hi(ivector_to_mask), %g5
+	cmp		%g3, %g4
+	bgeu,pn		%xcc, do_ivec_xcall
+	 nop
 	and		%g3, 0x7ff, %g3
-	orcc		%g5, %lo(ivector_to_mask), %g5
 	sllx		%g3, 3, %g3
-	ldx		[%g5 + %g3], %g2
+	ldx		[%g1 + %g3], %g2
 	brz,pn		%g2, do_ivec_spurious
 	 nop
 
@@ -231,7 +236,14 @@ do_ivec_return:
 	stxa		%g0, [%g0] ASI_INTR_RECEIVE
 	membar		#Sync
 	retry
-
+do_ivec_xcall:
+	srlx		%g3, 32, %g5
+	add		%g2, 0x10, %g2
+	sra		%g3, 0, %g3
+	ldxa		[%g2] ASI_UDB_INTR_R, %g6
+	add		%g2, 0x10, %g2
+	jmpl		%g3, %g0
+	 ldxa		[%g2] ASI_UDB_INTR_R, %g7
 do_ivec_spurious:
 	stxa		%g0, [%g0] ASI_INTR_RECEIVE
 	membar		#Sync
@@ -243,6 +255,7 @@ do_ivec_spurious:
 	 add		%sp, STACK_BIAS + REGWIN_SZ, %o0
 	ba,pt		%xcc, rtrap
 	 clr		%l6
+#endif /* __SMP__ */
 
 	.globl		getcc, setcc
 getcc:
@@ -263,10 +276,104 @@ setcc:
 	retl
 	 stx		%o1, [%o0 + PT_V9_TSTATE]
 
-	/* XXX Here is stuff we still need to write... -DaveM XXX */
-	.globl		floppy_hardint, indirect_syscall, netbsd_syscall
-	.globl		solaris_syscall
+#ifdef CONFIG_BLK_DEV_FD
+	.globl		floppy_hardint
 floppy_hardint:
+	sethi		%hi(doing_pdma), %g1
+	ld		[%g1 + %lo(doing_pdma)], %g2
+	brz,pn		%g2, floppy_dosoftint
+	 sethi		%hi(fdc_status), %g3
+	ldx		[%g3 + %lo(fdc_status)], %g3
+	sethi		%hi(pdma_vaddr), %g5
+	ldx		[%g5 + %lo(pdma_vaddr)], %g4
+	sethi		%hi(pdma_size), %g5
+	ldx		[%g5 + %lo(pdma_size)], %g5
+
+next_byte:
+	ldub		[%g3], %g7
+	andcc		%g7, 0x80, %g0
+	be,pn		%icc, floppy_fifo_emptied
+	 andcc		%g7, 0x20, %g0
+	be,pn		%icc, floppy_overrun
+	 andcc		%g7, 0x40, %g0
+	be,pn		%icc, floppy_write
+	 sub		%g5, 1, %g5
+
+	ldub		[%g3 + 1], %g7
+	orcc		%g0, %g5, %g0
+	stb		%g7, [%g4]
+	bne,pn		%xcc, next_byte
+	 add		%g4, 1, %g4
+
+	b,pt		%xcc, floppy_tdone
+	 nop
+
+floppy_write:
+	ldub		[%g4], %g7
+	orcc		%g0, %g5, %g0
+	stb		%g7, [%g3 + 1]
+	bne,pn		%xcc, next_byte
+	 add		%g4, 1, %g4
+
+floppy_tdone:
+	sethi		%hi(pdma_vaddr), %g1
+	stx		%g4, [%g1 + %lo(pdma_vaddr)]
+	sethi		%hi(pdma_size), %g1
+	stx		%g5, [%g1 + %lo(pdma_size)]
+	sethi		%hi(auxio_register), %g1
+	ldx		[%g1 + %lo(auxio_register)], %g7
+	ldub		[%g7], %g5
+	or		%g5, 0xc2, %g5
+	stb		%g5, [%g7]
+	andn		%g5, 0x02, %g5
+
+	nop; nop;  nop; nop;  nop; nop;
+	nop; nop;  nop; nop;  nop; nop;
+
+	stb		%g5, [%g7]
+	sethi		%hi(doing_pdma), %g1
+	b,pt		%xcc, floppy_dosoftint
+	 st		%g0, [%g1 + %lo(doing_pdma)]
+
+floppy_fifo_emptied:
+	sethi		%hi(pdma_vaddr), %g1
+	stx		%g4, [%g1 + %lo(pdma_vaddr)]
+	sethi		%hi(pdma_size), %g1
+	stx		%g5, [%g1 + %lo(pdma_size)]
+	sethi		%hi(irq_action), %g1
+	or		%g1, %lo(irq_action), %g1
+	ldx		[%g1 + (11 << 3)], %g3		! irqaction[floppy_irq]
+	ldx		[%g3 + 0x10], %g4		! action->mask
+	st		%g0, [%g4]			! SYSIO_ICLR_IDLE
+	membar		#Sync				! probably not needed...
+	retry
+
+floppy_overrun:
+	sethi		%hi(pdma_vaddr), %g1
+	stx		%g4, [%g1 + %lo(pdma_vaddr)]
+	sethi		%hi(pdma_size), %g1
+	stx		%g5, [%g1 + %lo(pdma_size)]
+	sethi		%hi(doing_pdma), %g1
+	st		%g0, [%g1 + %lo(doing_pdma)]
+
+floppy_dosoftint:
+	rdpr		%pil, %g2
+	wrpr		%g0, 15, %pil
+	b,pt		%xcc, etrap_irq
+	 rd		%pc, %g7
+
+	mov		11, %o0
+	mov		0, %o1
+	call		sparc_floppy_irq
+	 add		%sp, STACK_BIAS + REGWIN_SZ, %o2
+
+	b,pt		%xcc, rtrap
+	 clr		%l6
+
+#endif /* CONFIG_BLK_DEV_FD */
+
+	/* XXX Here is stuff we still need to write... -DaveM XXX */
+	.globl		indirect_syscall, netbsd_syscall, solaris_syscall
 indirect_syscall:
 netbsd_syscall:
 solaris_syscall:
@@ -436,16 +543,39 @@ sys_ptrace:	call		do_ptrace
 		ba,pt		%xcc, rtrap
 		 clr		%l6
 	
-	/* This is how fork() was meant to be done, 12 instruction entry. -DaveM */
-	.globl	sys_fork, sys_vfork, sys_clone, ret_from_syscall
+	/* This is how fork() was meant to be done, 12 instruction entry.
+	 *
+	 * I questioned the following code briefly, let me clear things
+	 * up so you must not reason on it like I did.
+	 *
+	 * Know the fork_kpsr etc. we use in the sparc32 port?  We don't
+	 * need it here because the only piece of window state we copy to
+	 * the child is the CWP register.  Even if the parent sleeps,
+	 * we are safe because we stuck it into pt_regs of the parent
+	 * so it will not change.
+	 *
+	 * XXX This raises the question, whether we can do the same on
+	 * XXX sparc32 to get rid of fork_kpsr _and_ fork_kwim.  The
+	 * XXX answer is yes.  We stick fork_kpsr in UREG_G0 and
+	 * XXX fork_kwim in UREG_G1 (global registers are considered
+	 * XXX volatile across a system call in the sparc ABI I think
+	 * XXX if it isn't we can use regs->y instead, anyone who depends
+	 * XXX upon the Y register being preserved across a fork deserves
+	 * XXX to lose).
+	 *
+	 * In fact we should take advantage of that fact for other things
+	 * during system calls...
+	 */
+	.globl	sys_fork, sys_vfork, sys_clone
+	.globl	ret_from_syscall, ret_from_smpfork
 	.align	32
 sys_fork:
 sys_vfork:	mov		SIGCHLD, %o0
 		clr		%o1
 sys_clone:	mov		%o7, %l5
-		save		%sp, -REGWIN_SZ, %sp
+/*???*/		save		%sp, -REGWIN_SZ, %sp
 		flushw
-		restore		%g0, %g0, %g0
+/*???*/		restore		%g0, %g0, %g0
 		rdpr		%cwp, %o4
 		add		%sp, STACK_BIAS + REGWIN_SZ, %o2
 
@@ -453,10 +583,15 @@ sys_clone:	mov		%o7, %l5
 		stx		%o4, [%sp + STACK_BIAS + REGWIN_SZ + PT_V9_G0]
 		call		do_fork
 		 mov		%l5, %o7
-ret_from_syscall:b,pt		%xcc, ret_sys_call
-		  ldx		[%sp + STACK_BIAS + REGWIN_SZ + PT_V9_I0], %o0
-		nop
-		nop
+#ifdef __SMP__
+ret_from_smpfork:
+		sethi		%hi(scheduler_lock), %o4
+		membar		#StoreStore | #LoadStore
+		stb		%g0, [%o4 + %lo(scheduler_lock)]
+#endif
+ret_from_syscall:
+		b,pt		%xcc, ret_sys_call
+		 ldx		[%sp + STACK_BIAS + REGWIN_SZ + PT_V9_I0], %o0
 
 linux_syscall_trace:
 		call		syscall_trace

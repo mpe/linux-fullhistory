@@ -1125,7 +1125,7 @@ static int vfat_empty(struct inode *dir)
 	struct buffer_head *bh;
 	struct msdos_dir_entry *de;
 
-	if (atomic_read(&dir->i_count) > 1)
+	if (dir->i_count > 1)
 		return -EBUSY;
 	if (MSDOS_I(dir)->i_start) { /* may be zero in mkdir */
 		pos = 0;

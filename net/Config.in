@@ -53,6 +53,6 @@ if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
 #  if [ "$CONFIG_LLC" = "y" ]; then
 #   bool 'Netbeui (EXPERIMENTAL)' CONFIG_NETBEUI
 #  fi
-  tristate 'WAN router' CONFIG_WAN_ROUTER
+  bool 'WAN router' CONFIG_WAN_ROUTER
 fi
 endmenu

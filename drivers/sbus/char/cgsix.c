@@ -1,4 +1,4 @@
-/* $Id: cgsix.c,v 1.33 1997/07/01 09:12:05 jj Exp $
+/* $Id: cgsix.c,v 1.34 1997/07/15 09:48:50 jj Exp $
  * cgsix.c: cgsix frame buffer driver
  *
  * Copyright (C) 1996 Miguel de Icaza (miguel@nuclecu.unam.mx)
@@ -321,11 +321,12 @@ cg6_mmap (struct inode *inode, struct file *file, struct vm_area_struct *vma,
 					 map_offset,
 					 map_size, vma->vm_page_prot,
 					 fb->space);
-		if (r) return -EAGAIN;
+		if (r)
+			return -EAGAIN;
 		page += map_size;
 	}
-        vma->vm_inode = inode;
-        atomic_inc(&inode->i_count);
+
+	vma->vm_dentry = dget(file->f_dentry);
         return 0;
 }
 
@@ -512,6 +513,10 @@ __initfunc(void cg6_setup (fbinfo_t *fb, int slot, u32 cg6, int cg6_io))
 	cg6info->bt->control = 0x73 << 24;
 	cg6info->bt->addr = 0x07 << 24;
 	cg6info->bt->control = 0x00 << 24;
+
+#ifdef __sparc_v9__	
+	printk("VA %016lx ", fb->base);
+#endif
 
 	printk("TEC Rev %x ",
 		(cg6info->thc->thc_misc >> CG6_THC_MISC_REV_SHIFT) &

@@ -1,4 +1,4 @@
-/* $Id: head.h,v 1.26 1997/07/07 03:05:23 davem Exp $ */
+/* $Id: head.h,v 1.27 1997/07/13 17:30:43 davem Exp $ */
 #ifndef _SPARC64_HEAD_H
 #define _SPARC64_HEAD_H
 
@@ -115,7 +115,7 @@
 /* On UP this is ok, and worth the effort, for SMP we need
  * a different mechanism and thus cannot do it all in trap table. -DaveM
  */
-#if 0 /* ndef __SMP__ */
+#ifndef __SMP__
 #define TRAP_IVEC				\
 	ldxa	[%g2] ASI_UDB_INTR_R, %g3;	\
 	and	%g3, 0x7ff, %g3;		\

@@ -706,7 +706,7 @@ static void n_tty_set_termios(struct tty_struct *tty, struct termios * old)
 		return;
 	
 	tty->icanon = (L_ICANON(tty) != 0);
-	if (tty->flags & (1<<TTY_HW_COOK_IN)) {
+	if (test_bit(TTY_HW_COOK_IN, &tty->flags)) {
 		tty->raw = 1;
 		tty->real_raw = 1;
 		return;
@@ -912,7 +912,7 @@ do_it_again:
 			tty->minimum_to_wake = (minimum - (b - buf));
 		
 		if (!input_available_p(tty, 0)) {
-			if (tty->flags & (1 << TTY_OTHER_CLOSED)) {
+			if (test_bit(TTY_OTHER_CLOSED, &tty->flags)) {
 				retval = -EIO;
 				break;
 			}
@@ -1030,7 +1030,7 @@ static int write_chan(struct tty_struct * tty, struct file * file,
 			retval = -EIO;
 			break;
 		}
-		if (O_OPOST(tty) && !(tty->flags & (1<<TTY_HW_COOK_OUT))) {
+		if (O_OPOST(tty) && !(test_bit(TTY_HW_COOK_OUT, &tty->flags))) {
 			while (nr > 0) {
 				num = opost_block(tty, b, nr);
 				b += num;
@@ -1072,7 +1072,7 @@ static unsigned int normal_poll(struct tty_struct * tty, struct file * file, pol
 		mask |= POLLIN | POLLRDNORM;
 	if (tty->packet && tty->link->ctrl_status)
 		mask |= POLLPRI | POLLIN | POLLRDNORM;
-	if (tty->flags & (1 << TTY_OTHER_CLOSED))
+	if (test_bit(TTY_OTHER_CLOSED, &tty->flags))
 		mask |= POLLHUP;
 	if (tty_hung_up_p(file))
 		mask |= POLLHUP;

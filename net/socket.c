@@ -149,7 +149,11 @@ static int sockets_in_use  = 0;
 #define MAX_SOCK_ADDR	128		/* 108 for Unix domain - 
 					   16 for IP, 16 for IPX,
 					   24 for IPv6,
-					   about 80 for AX.25 */
+					   about 80 for AX.25 
+					   must be at least one bigger than
+					   the AF_UNIX size (see net/unix/af_unix.c
+					   :unix_mkname()).  
+					 */
  
 int move_addr_to_kernel(void *uaddr, int ulen, void *kaddr)
 {

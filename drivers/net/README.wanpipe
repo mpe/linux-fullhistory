@@ -1,10 +1,10 @@
 ------------------------------------------------------------------------------
 WANPIPE(tm) Multiprotocol WAN Driver for Linux WAN Router
 ------------------------------------------------------------------------------
-Release 3.0.0
-December 31, 1996
+Release 3.1.0
+January 30, 1997
 Author: Gene Kozin <genek@compuserve.com>
-Copyright (c) 1995-1996 Sangoma Technologies Inc.
+Copyright (c) 1995-1997 Sangoma Technologies Inc.
 ------------------------------------------------------------------------------
 
 INTRODUCTION
@@ -80,6 +80,12 @@ include/linux:
 
 
 REVISION HISTORY
+
+3.1.0	January 30, 1997
+
+	o Implemented IOCTL for executing adapter commands.
+	o Fixed a bug in frame relay code causing driver configured as a FR
+	  switch to be stuck in WAN_DISCONNECTED mode.
 
 3.0.0	December 31, 1996
 

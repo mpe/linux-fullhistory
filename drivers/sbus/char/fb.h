@@ -1,4 +1,4 @@
-/* $Id: fb.h,v 1.27 1997/06/06 10:56:28 jj Exp $
+/* $Id: fb.h,v 1.29 1997/07/15 09:48:48 jj Exp $
  * fb.h: contains the definitions of the structures that various sun
  *       frame buffer can use to do console driver stuff.
  *
@@ -33,7 +33,7 @@ struct cg_cursor {
         struct  fbcurpos chot;	/* hot-spot */
         struct  fbcurpos size;	/* size of mask & image fields */
         struct	fbcurpos hwsize; /* hw max size */
-        int     bits[2][32];	/* space for mask & image bits */
+        int     bits[2][128];	/* space for mask & image bits */
 	char    color [6];	/* cursor colors */
 };
 
@@ -55,6 +55,14 @@ struct tcx_info {
 	int tcx_sizes[13];
 	long tcx_offsets[13];
 	int lowdepth;
+};
+
+struct ffb_info {
+	unsigned long physbase;
+	struct ffb_fbc *fbc;
+	struct ffb_dac *dac;
+	int dac_rev;
+	u32	*clut;
 };
 
 struct leo_info {
@@ -113,6 +121,7 @@ typedef struct fbinfo {
 		struct cg14_info  cg14;
 		struct tcx_info   tcx;
 		struct leo_info	  leo;
+		struct ffb_info   ffb;
 	} info;		        /* per frame information */
 	int    space;           /* I/O space this card resides in */
 	int    blanked;		/* true if video blanked */

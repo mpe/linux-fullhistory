@@ -946,7 +946,8 @@ static void happy_meal_init_rings(struct happy_meal *hp, int from_irq)
 		/* Because we reserve afterwards. */
 		skb_put(skb, (ETH_FRAME_LEN + RX_OFFSET));
 
-		hb->happy_meal_rxd[i].rx_addr = (unsigned int) skb->data;
+		hb->happy_meal_rxd[i].rx_addr =
+			(u32) ((unsigned long)skb->data);
 		skb_reserve(skb, RX_OFFSET);
 		hb->happy_meal_rxd[i].rx_flags =
 			(RXFLAG_OWN | ((RX_BUF_ALLOC_SIZE - RX_OFFSET) << 16));
@@ -1615,7 +1616,8 @@ static inline void happy_meal_rx(struct happy_meal *hp, struct device *dev,
 			/* Return it to the Happy meal. */
 	drop_it:
 			hp->net_stats.rx_dropped++;
-			this->rx_addr = (unsigned int) hp->rx_skbs[elem]->data;
+			this->rx_addr =
+				(u32) ((unsigned long)hp->rx_skbs[elem]->data);
 			this->rx_flags =
 				(RXFLAG_OWN | ((RX_BUF_ALLOC_SIZE - RX_OFFSET) << 16));
 			goto next;
@@ -1634,7 +1636,8 @@ static inline void happy_meal_rx(struct happy_meal *hp, struct device *dev,
 			hp->rx_skbs[elem] = new_skb;
 			new_skb->dev = dev;
 			skb_put(new_skb, (ETH_FRAME_LEN + RX_OFFSET));
-			rxbase[elem].rx_addr = (unsigned int) new_skb->data;
+			rxbase[elem].rx_addr =
+				(u32) ((unsigned long)new_skb->data);
 			skb_reserve(new_skb, RX_OFFSET);
 			rxbase[elem].rx_flags =
 				(RXFLAG_OWN | ((RX_BUF_ALLOC_SIZE - RX_OFFSET) << 16));
@@ -1655,7 +1658,8 @@ static inline void happy_meal_rx(struct happy_meal *hp, struct device *dev,
 			memcpy(copy_skb->data, skb->data, len);
 
 			/* Reuse original ring buffer. */
-			rxbase[elem].rx_addr = (unsigned int) skb->data;
+			rxbase[elem].rx_addr =
+				(u32) ((unsigned long)skb->data);
 			rxbase[elem].rx_flags =
 				(RXFLAG_OWN | ((RX_BUF_ALLOC_SIZE - RX_OFFSET) << 16));
 
@@ -1913,7 +1917,8 @@ static int happy_meal_start_xmit(struct sk_buff *skb, struct device *dev)
 
 	SXD(("SX<l[%d]e[%d]>", len, entry));
 	hp->tx_skbs[entry] = skb;
-	hp->happy_block->happy_meal_txd[entry].tx_addr = (unsigned int) skb->data;
+	hp->happy_block->happy_meal_txd[entry].tx_addr =
+		(u32) ((unsigned long)skb->data);
 	hp->happy_block->happy_meal_txd[entry].tx_flags =
 		(TXFLAG_OWN | TXFLAG_SOP | TXFLAG_EOP | (len & TXFLAG_SIZE));
 	hp->tx_new = NEXT_TX(entry);
@@ -2087,6 +2092,8 @@ static inline int happy_meal_ether_init(struct device *dev, struct linux_sbus_de
 	printk("\n");
 
 	hp = (struct happy_meal *) dev->priv;
+	memset(hp, 0, sizeof(*hp));
+
 	hp->happy_sbus_dev = sdev;
 
 	if(sdev->num_registers != 5) {

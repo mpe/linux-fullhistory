@@ -1,4 +1,4 @@
-/*  $Id: setup.c,v 1.9 1997/07/05 09:52:29 davem Exp $
+/*  $Id: setup.c,v 1.10 1997/07/08 11:07:47 jj Exp $
  *  linux/arch/sparc64/kernel/setup.c
  *
  *  Copyright (C) 1995,1996  David S. Miller (davem@caip.rutgers.edu)
@@ -35,6 +35,7 @@
 #include <asm/page.h>
 #include <asm/pgtable.h>
 #include <asm/idprom.h>
+#include <asm/head.h>
 
 struct screen_info screen_info = {
 	0, 0,			/* orig-x, orig-y */
@@ -288,7 +289,7 @@ __initfunc(void setup_arch(char **cmdline_p,
 	*memory_start_p = PAGE_ALIGN(((unsigned long) &end));
 	*memory_end_p = (end_of_phys_memory + PAGE_OFFSET);
 
-#ifndef NO_DAVEM_DEBUGGING
+#ifdef DAVEM_DEBUGGING
 	prom_printf("phys_base[%016lx] memory_start[%016lx] memory_end[%016lx]\n",
 		    phys_base, *memory_start_p, *memory_end_p);
 #endif
@@ -303,8 +304,11 @@ __initfunc(void setup_arch(char **cmdline_p,
 #endif
 #ifdef CONFIG_BLK_DEV_INITRD
 	if (ramdisk_image) {
-		initrd_start = ramdisk_image;
-		if (initrd_start < PAGE_OFFSET) initrd_start += PAGE_OFFSET;
+		unsigned long start = 0;
+		
+		if (ramdisk_image >= (unsigned long)&end - 2 * PAGE_SIZE)
+			ramdisk_image -= KERNBASE;
+		initrd_start = ramdisk_image + phys_base + PAGE_OFFSET;
 		initrd_end = initrd_start + ramdisk_size;
 		if (initrd_end > *memory_end_p) {
 			printk(KERN_CRIT "initrd extends beyond end of memory "
@@ -312,9 +316,11 @@ __initfunc(void setup_arch(char **cmdline_p,
 		       			 initrd_end,*memory_end_p);
 			initrd_start = 0;
 		}
-		if (initrd_start >= *memory_start_p && initrd_start < *memory_start_p + 2 * PAGE_SIZE) {
+		if (initrd_start)
+			start = ramdisk_image + KERNBASE;
+		if (start >= *memory_start_p && start < *memory_start_p + 2 * PAGE_SIZE) {
 			initrd_below_start_ok = 1;
-			*memory_start_p = PAGE_ALIGN (initrd_end);
+			*memory_start_p = PAGE_ALIGN (start + ramdisk_size);
 		}
 	}
 #endif	

@@ -1,4 +1,4 @@
-/* $Id: sparc64_ksyms.c,v 1.8 1997/07/07 04:58:14 davem Exp $
+/* $Id: sparc64_ksyms.c,v 1.11 1997/07/14 23:58:20 davem Exp $
  * arch/sparc64/kernel/sparc64_ksyms.c: Sparc64 specific ksyms support.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -18,6 +18,8 @@
 #include <asm/pgtable.h>
 #include <asm/io.h>
 #include <asm/irq.h>
+#include <asm/softirq.h>
+#include <asm/hardirq.h>
 #include <asm/idprom.h>
 #include <asm/svr4.h>
 #include <asm/head.h>
@@ -79,20 +81,12 @@ EXPORT_SYMBOL(mstk48t02_regs);
 EXPORT_SYMBOL(request_fast_irq);
 EXPORT_SYMBOL(sparc_alloc_io);
 EXPORT_SYMBOL(sparc_free_io);
-#if 0
-EXPORT_SYMBOL(io_remap_page_range);
-EXPORT_SYMBOL(mmu_unlockarea);
-EXPORT_SYMBOL(mmu_lockarea);
+EXPORT_SYMBOL(local_irq_count);
+EXPORT_SYMBOL(__sparc64_bh_counter);
+EXPORT_SYMBOL(sparc_ultra_unmapioaddr);
 EXPORT_SYMBOL(mmu_get_scsi_sgl);
 EXPORT_SYMBOL(mmu_get_scsi_one);
-EXPORT_SYMBOL(mmu_release_scsi_sgl);
-EXPORT_SYMBOL(mmu_release_scsi_one);
-#endif
 EXPORT_SYMBOL(sparc_dvma_malloc);
-#if 0
-EXPORT_SYMBOL(sun4c_unmapioaddr);
-EXPORT_SYMBOL(srmmu_unmapioaddr);
-#endif
 #if CONFIG_SBUS
 EXPORT_SYMBOL(SBus_chain);
 EXPORT_SYMBOL(dma_chain);

@@ -90,10 +90,12 @@ asmlinkage unsigned long sunos_mmap(unsigned long addr, unsigned long len,
 	 * of /dev/zero, transform it into an anonymous mapping.
 	 * SunOS is so stupid some times... hmph!
 	 */
-	if(MAJOR(file->f_inode->i_rdev) == MEM_MAJOR &&
-	   MINOR(file->f_inode->i_rdev) == 5) {
-		flags |= MAP_ANONYMOUS;
-		file = 0;
+	if(file->f_dentry && file->f_dentry->d_inode) {
+		if(MAJOR(file->f_dentry->d_inode->i_rdev) == MEM_MAJOR &&
+		   MINOR(file->f_dentry->d_inode->i_rdev) == 5) {
+			flags |= MAP_ANONYMOUS;
+			file = 0;
+		}
 	}
 	if(!(flags & MAP_FIXED))
 		addr = 0;
@@ -428,16 +430,32 @@ static int sunos_filldir(void * __buf, const char * name, int namlen,
 asmlinkage int sunos_getdents(unsigned int fd, void * dirent, int cnt)
 {
 	struct file * file;
+	struct dentry * dentry;
+	struct inode * inode;
 	struct sunos_dirent * lastdirent;
 	struct sunos_dirent_callback buf;
 	int error = -EBADF;
 
 	lock_kernel();
-	if (fd >= SUNOS_NR_OPEN || !(file = current->files->fd[fd]))
+	if(fd >= SUNOS_NR_OPEN)
 		goto out;
+
+	file = current->files->fd[fd];
+	if(!file)
+		goto out;
+
+	dentry = file->f_dentry;
+	if(!dentry)
+		goto out;
+
+	inode = dentry->d_inode;
+	if(!inode)
+		goto out;
+
 	error = -ENOTDIR;
 	if (!file->f_op || !file->f_op->readdir)
 		goto out;
+
 	error = -EINVAL;
 	if(cnt < (sizeof(struct sunos_dirent) + 255))
 		goto out;
@@ -446,13 +464,12 @@ asmlinkage int sunos_getdents(unsigned int fd, void * dirent, int cnt)
 	buf.previous = NULL;
 	buf.count = cnt;
 	buf.error = 0;
-	error = file->f_op->readdir(file->f_inode, file, &buf, sunos_filldir);
+	error = file->f_op->readdir(inode, file, &buf, sunos_filldir);
 	if (error < 0)
 		goto out;
 	lastdirent = buf.previous;
-	if (!lastdirent) {
-		error = buf.error;
-	} else {
+	error = buf.error;
+	if (lastdirent) {
 		put_user(file->f_pos, &lastdirent->d_off);
 		error = cnt - buf.count;
 	}
@@ -503,16 +520,32 @@ static int sunos_filldirentry(void * __buf, const char * name, int namlen,
 asmlinkage int sunos_getdirentries(unsigned int fd, void * dirent, int cnt, unsigned int *basep)
 {
 	struct file * file;
+	struct dentry * dentry;
+	struct inode * inode;
 	struct sunos_direntry * lastdirent;
 	struct sunos_direntry_callback buf;
 	int error = -EBADF;
 
 	lock_kernel();
-	if (fd >= SUNOS_NR_OPEN || !(file = current->files->fd[fd]))
+	if(fd >= SUNOS_NR_OPEN)
 		goto out;
+
+	file = current->files->fd[fd];
+	if(!file)
+		goto out;
+
+	dentry = file->f_dentry;
+	if(!dentry)
+		goto out;
+
+	inode = dentry->d_inode;
+	if(!inode)
+		goto out;
+
 	error = -ENOTDIR;
 	if (!file->f_op || !file->f_op->readdir)
 		goto out;
+
 	error = -EINVAL;
 	if(cnt < (sizeof(struct sunos_direntry) + 255))
 		goto out;
@@ -521,13 +554,12 @@ asmlinkage int sunos_getdirentries(unsigned int fd, void * dirent, int cnt, unsi
 	buf.previous = NULL;
 	buf.count = cnt;
 	buf.error = 0;
-	error = file->f_op->readdir(file->f_inode, file, &buf, sunos_filldirentry);
+	error = file->f_op->readdir(inode, file, &buf, sunos_filldirentry);
 	if (error < 0)
 		goto out;
 	lastdirent = buf.previous;
-	if (!lastdirent) {
-		error = buf.error;
-	} else {
+	error = buf.error;
+	if (lastdirent) {
 		put_user(file->f_pos, basep);
 		error = cnt - buf.count;
 	}
@@ -725,12 +757,13 @@ sunos_nfs_get_server_fd (int fd, struct sockaddr_in *addr)
 	int    try_port;
 	int    ret;
 	struct socket *socket;
+	struct dentry *dentry;
 	struct inode  *inode;
 	struct file   *file;
 
 	file = current->files->fd [fd];
-	inode = file->f_inode;
-	if (!inode || !inode->i_sock)
+	dentry = file->f_dentry;
+	if(!dentry || !(inode = dentry->d_inode))
 		return 0;
 
 	socket = &inode->u.socket_i;

@@ -1,4 +1,4 @@
-/* $Id: irq.c,v 1.14 1997/06/24 17:30:26 davem Exp $
+/* $Id: irq.c,v 1.16 1997/07/11 03:03:08 davem Exp $
  * irq.c: UltraSparc IRQ handling/init/registry.
  *
  * Copyright (C) 1997 David S. Miller (davem@caip.rutgers.edu)
@@ -47,7 +47,8 @@ unsigned long ivector_to_mask[NUM_IVECS];
 static struct irqaction static_irqaction[MAX_STATIC_ALLOC];
 static int static_irq_count = 0;
 
-static struct irqaction *irq_action[NR_IRQS+1] = {
+/* XXX Must be exported so that fast IRQ handlers can get at it... -DaveM */
+struct irqaction *irq_action[NR_IRQS+1] = {
 	  NULL, NULL, NULL, NULL, NULL, NULL , NULL, NULL,
 	  NULL, NULL, NULL, NULL, NULL, NULL , NULL, NULL
 };
@@ -279,13 +280,13 @@ int request_irq(unsigned int irq, void (*handler)(int, void *, struct pt_regs *)
 	/* If this is flagged as statically allocated then we use our
 	 * private struct which is never freed.
 	 */
-	if(irqflags & SA_STATIC_ALLOC)
+	if(irqflags & SA_STATIC_ALLOC) {
 	    if(static_irq_count < MAX_STATIC_ALLOC)
 		action = &static_irqaction[static_irq_count++];
 	    else
 		printk("Request for IRQ%d (%s) SA_STATIC_ALLOC failed "
 		       "using kmalloc\n", irq, name);
-	
+	}	
 	if(action == NULL)
 	    action = (struct irqaction *)kmalloc(sizeof(struct irqaction),
 						 GFP_KERNEL);
@@ -464,14 +465,101 @@ void sparc_floppy_irq(int irq, void *dev_cookie, struct pt_regs *regs)
 }
 #endif
 
-/* XXX This needs to be written for floppy driver, and soon will be necessary
- * XXX for serial driver as well.
+/* The following assumes that the branch lies before the place we
+ * are branching to.  This is the case for a trap vector...
+ * You have been warned.
  */
+#define SPARC_BRANCH(dest_addr, inst_addr) \
+          (0x10800000 | ((((dest_addr)-(inst_addr))>>2)&0x3fffff))
+
+#define SPARC_NOP (0x01000000)
+
+static void install_fast_irq(unsigned int cpu_irq,
+			     void (*handler)(int, void *, struct pt_regs *))
+{
+	extern unsigned long sparc64_ttable_tl0;
+	unsigned long ttent = (unsigned long) &sparc64_ttable_tl0;
+	unsigned int *insns;
+
+	ttent += 0x820;
+	ttent += (cpu_irq - 1) << 5;
+	insns = (unsigned int *) ttent;
+	insns[0] = SPARC_BRANCH(((unsigned long) handler),
+				((unsigned long)&insns[0]));
+	insns[1] = SPARC_NOP;
+	__asm__ __volatile__("flush %0" : : "r" (ttent));
+}
+
 int request_fast_irq(unsigned int irq,
 		     void (*handler)(int, void *, struct pt_regs *),
 		     unsigned long irqflags, const char *name)
 {
-	return -1;
+	struct irqaction *action;
+	unsigned long flags;
+	unsigned int cpu_irq, *imap, *iclr;
+
+	/* XXX This really is not the way to do it, the "right way"
+	 * XXX is to have drivers set SA_SBUS or something like that
+	 * XXX in irqflags and we base our decision here on whether
+	 * XXX that flag bit is set or not.
+	 *
+	 * In this case nobody can have a fast interrupt at the level
+	 * where TICK interrupts live.
+	 */
+	if(irq == 14)
+		return -EINVAL;
+	cpu_irq = ino_to_pil[irq];
+
+	if(!handler)
+		return -EINVAL;
+	imap = irq_to_imap(irq);
+	action = *(cpu_irq + irq_action);
+	if(action) {
+		if(action->flags & SA_SHIRQ)
+			panic("Trying to register fast irq when already shared.\n");
+		if(irqflags & SA_SHIRQ)
+			panic("Trying to register fast irq as shared.\n");
+		printk("request_fast_irq: Trying to register yet already owned.\n");
+		return -EBUSY;
+	}
+	save_and_cli(flags);
+	if(irqflags & SA_STATIC_ALLOC) {
+		if(static_irq_count < MAX_STATIC_ALLOC)
+			action = &static_irqaction[static_irq_count++];
+		else
+			printk("Request for IRQ%d (%s) SA_STATIC_ALLOC failed "
+			       "using kmalloc\n", irq, name);
+	}
+	if(action == NULL)
+		action = (struct irqaction *)kmalloc(sizeof(struct irqaction),
+						     GFP_KERNEL);
+	if(!action) {
+		restore_flags(flags);
+		return -ENOMEM;
+	}
+	install_fast_irq(cpu_irq, handler);
+
+	if(imap) {
+		int ivindex = (*imap & (SYSIO_IMAP_IGN | SYSIO_IMAP_INO));
+
+		ivector_to_mask[ivindex] = (1 << cpu_irq);
+		iclr = imap_to_iclr(imap);
+		action->mask = (unsigned long) iclr;
+		irqflags |= SA_SYSIO_MASKED;
+	} else
+		action->mask = 0;
+
+	action->handler = handler;
+	action->flags = irqflags;
+	action->dev_id = NULL;
+	action->name = name;
+	action->next = NULL;
+
+	*(cpu_irq + irq_action) = action;
+
+	enable_irq(irq);
+	restore_flags(flags);
+	return 0;
 }
 
 /* We really don't need these at all on the Sparc.  We only have
@@ -496,27 +584,31 @@ static unsigned long tick_offset;
 /* XXX This doesn't belong here, just do this cruft in the timer.c handler code. */
 static void timer_handler(int irq, void *dev_id, struct pt_regs *regs)
 {
-	extern void timer_interrupt(int, void *, struct pt_regs *);
-	unsigned long compare;
-	
 	if (!(get_softint () & 1)) {
 		/* Just to be sure... */
 		clear_softint(1 << 14);
 		printk("Spurious level14 at %016lx\n", regs->tpc);
 		return;
+	} else {
+		unsigned long compare, tick;
+
+		do {
+			extern void timer_interrupt(int, void *, struct pt_regs *);
+
+			timer_interrupt(irq, dev_id, regs);
+
+			/* Acknowledge INT_TIMER */
+			clear_softint(1 << 0);
+
+			/* Set up for next timer tick. */
+			__asm__ __volatile__("rd	%%tick_cmpr, %0\n\t"
+					     "add	%0, %2, %0\n\t"
+					     "wr	%0, 0x0, %%tick_cmpr\n\t"
+					     "rd	%%tick, %1"
+					     : "=&r" (compare), "=r" (tick)
+					     : "r" (tick_offset));
+		} while(tick >= compare);
 	}
-
-	timer_interrupt(irq, dev_id, regs);
-
-	/* Acknowledge INT_TIMER */
-	clear_softint(1 << 0);
-
-	/* Set up for next timer tick. */
-	__asm__ __volatile__("rd	%%tick_cmpr, %0\n\t"
-			     "add	%0, %1, %0\n\t"
-			     "wr	%0, 0x0, %%tick_cmpr"
-			     : "=r" (compare)
-			     : "r" (tick_offset));
 }
 
 /* This is called from time_init() to get the jiffies timer going. */
@@ -584,7 +676,7 @@ static void map_prom_timers(void)
 		prom_timers = (struct sun5_timer *) 0;
 		return;
 	}
-	prom_timers = (struct sun5_timer *) addr[0];
+	prom_timers = (struct sun5_timer *) ((unsigned long)addr[0]);
 }
 
 static void kill_prom_timer(void)

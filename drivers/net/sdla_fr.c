@@ -10,6 +10,49 @@
 *		as published by the Free Software Foundation; either version
 *		2 of the License, or (at your option) any later version.
 * ============================================================================
+*
+* Jun 29, 1997  Alan Cox	 o Hacked up vendor source 1.0.3 to remove
+*				   C++ style comments, and a massive security
+*				   hole (the UDP management junk).
+*
+* May 29, 1997	Jaspreet Singh	 o Fixed major Flow Control Problem
+*				   With multiple boards a problem was seen where
+*				   the second board always stopped transmitting
+*				   packet after running for a while. The code
+*				   got into a stage where the interrupts were
+*				   disabled and dev->tbusy was set to 1.
+*				   This caused the If_send() routine to get into
+*				   the if clause for set_bit(0,dev->tbusy) 
+*				   forever.
+*				   The code got into this stage due to an 
+*				   interrupt occuring within the if clause for 
+*				   set_bit(0,dev->tbusy).  Since an interrupt 
+*				   disables furhter transmit interrupt and 
+* 				   makes dev->tbusy = 0, this effect was undone
+*                                  by making dev->tbusy = 1 in the if clause.
+*				   The Fix checks to see if Transmit interrupts
+*				   are disabled then do not make dev->tbusy = 1
+* 	   			   Introduced a global variable: int_occur and
+*				   added tx_int_enabled in the wan_device 
+*				   structure.	
+* May 21, 1997  Jaspreet Singh   o Fixed UDP Management for multiple
+*                                  boards.
+*
+* Apr 25, 1997  Farhan Thawar    o added UDP Management stuff
+*                                o fixed bug in if_send() and tx_intr() to
+*                                  sleep and wakeup all devices
+* Mar 11, 1997  Farhan Thawar   Version 3.1.1
+*                                o fixed (+1) bug in fr508_rx_intr()
+*                                o changed if_send() to return 0 if
+*                                  wandev.critical() is true
+*                                o free socket buffer in if_send() if
+*                                  returning 0 
+*                                o added tx_intr() routine
+* Jan 30, 1997	Gene Kozin	Version 3.1.0
+*				 o implemented exec() entry point
+*				 o fixed a bug causing driver configured as
+*				   a FR switch to be stuck in WAN_DISCONNECTED
+*				   mode
 * Jan 02, 1997	Gene Kozin	Initial version.
 *****************************************************************************/
 
@@ -22,12 +65,13 @@
 #include <linux/errno.h>	/* return codes */
 #include <linux/string.h>	/* inline memset(), etc. */
 #include <linux/malloc.h>	/* kmalloc(), kfree() */
-#include <linux/router.h>	/* WAN router definitions */
+#include <linux/wanrouter.h>	/* WAN router definitions */
 #include <linux/wanpipe.h>	/* WANPIPE common user API definitions */
 #include <linux/if_arp.h>	/* ARPHRD_* defines */
 #include <linux/init.h>		/* __initfunc et al. */
 #include <asm/byteorder.h>	/* htons(), etc. */
 #include <asm/io.h>		/* for inb(), outb(), etc. */
+#include <asm/uaccess.h>
 
 #define	_GNUC_
 #include <linux/sdla_fr.h>	/* frame relay firmware API definitions */
@@ -67,6 +111,9 @@ typedef struct dlci_status
 	unsigned char state	PACKED;
 } dlci_status_t;
 
+static char TracingEnabled;
+/* variable for checking interrupts within the ISR routine */
+static int int_occur = 0;
 /****** Function Prototypes *************************************************/
 
 /* WAN link driver entry points. These are called by the WAN router module. */
@@ -75,14 +122,16 @@ static int new_if (wan_device_t* wandev, struct device* dev,
 	wanif_conf_t* conf);
 static int del_if (wan_device_t* wandev, struct device* dev);
 
+/* WANPIPE-specific entry points */
+static int wpf_exec (struct sdla* card, void* u_cmd, void* u_data);
+
 /* Network device interface */
 static int if_init   (struct device* dev);
 static int if_open   (struct device* dev);
 static int if_close  (struct device* dev);
 static int if_header (struct sk_buff* skb, struct device* dev,
 	unsigned short type, void* daddr, void* saddr, unsigned len);
-static int if_rebuild_hdr (void* hdr, struct device* dev, unsigned long raddr,
-	struct sk_buff* skb);
+static int if_rebuild_hdr (struct sk_buff* skb);
 static int if_send (struct sk_buff* skb, struct device* dev);
 static struct enet_statistics* if_stats (struct device* dev);
 
@@ -103,6 +152,8 @@ static int fr_configure (sdla_t* card, fr_conf_t *conf);
 static int fr_set_intr_mode (sdla_t* card, unsigned mode, unsigned mtu);
 static int fr_comm_enable (sdla_t* card);
 static int fr_comm_disable (sdla_t* card);
+static int fr_get_err_stats (sdla_t* card);
+static int fr_get_stats (sdla_t* card);
 static int fr_add_dlci (sdla_t* card, int dlci, int num);
 static int fr_activate_dlci (sdla_t* card, int dlci, int num);
 static int fr_issue_isf (sdla_t* card, int isf);
@@ -120,7 +171,6 @@ static void set_chan_state (struct device* dev, int state);
 static struct device* find_channel (sdla_t* card, unsigned dlci);
 static int is_tx_ready (sdla_t* card);
 static unsigned int dec_to_uint (unsigned char* str, int len);
-static unsigned int hex_to_uint (unsigned char* str, int len);
 
 /****** Public Functions ****************************************************/
 
@@ -198,7 +248,7 @@ __initfunc(int wpf_init (sdla_t* card, wandev_conf_t* conf))
 	u.cfg.n392	= 3;
 	u.cfg.n393	= 4;
 	u.cfg.kbps	= conf->bps / 1000;
-	u.cfg.cir_fwd	= max(min(u.cfg.kbps, 512), 1);
+	u.cfg.cir_fwd	= 16;
 	u.cfg.cir_bwd = u.cfg.bc_fwd = u.cfg.bc_bwd = u.cfg.cir_fwd;
 	u.cfg.options	= 0x0081;	/* direct Rx, no CIR check */
 	switch (conf->u.fr.signalling)
@@ -214,7 +264,7 @@ __initfunc(int wpf_init (sdla_t* card, wandev_conf_t* conf))
 	{
 		u.cfg.station = 1;	/* switch emulation mode */
 		card->u.f.node_dlci = conf->u.fr.dlci ? conf->u.fr.dlci : 16;
-		card->u.f.dlci_num  = max(min(conf->u.fr.dlci_num, 1), 100);
+		card->u.f.dlci_num  = min(max(conf->u.fr.dlci_num, 1), 100);
 	}
 	if (conf->clocking == WANOPT_INTERNAL)
 		u.cfg.port |= 0x0001
@@ -270,11 +320,14 @@ __initfunc(int wpf_init (sdla_t* card, wandev_conf_t* conf))
 	card->wandev.clocking	= conf->clocking;
 	card->wandev.station	= conf->station;
 	card->poll		= &wpf_poll;
+	card->exec		= &wpf_exec;
 	card->wandev.update	= &update;
 	card->wandev.new_if	= &new_if;
 	card->wandev.del_if	= &del_if;
 	card->wandev.state	= WAN_DISCONNECTED;
-	return 0;
+        card->wandev.udp_port 	= conf->udp_port;       
+        TracingEnabled          = '0';
+        return 0;
 }
 
 /******* WAN Device Driver Entry Points *************************************/
@@ -284,9 +337,22 @@ __initfunc(int wpf_init (sdla_t* card, wandev_conf_t* conf))
  */
 static int update (wan_device_t* wandev)
 {
-/*
-	sdla_t* card = wandev->private;
-*/
+	sdla_t* card;
+
+	/* sanity checks */
+	if ((wandev == NULL) || (wandev->private == NULL))
+		return -EFAULT
+	;
+	if (wandev->state == WAN_UNCONFIGURED)
+		return -ENODEV
+	;
+	if (test_and_set_bit(0, (void*)&wandev->critical))
+		return -EAGAIN
+	;
+	card = wandev->private;
+	fr_get_err_stats(card);
+	fr_get_stats(card);
+	wandev->critical = 0;
 	return 0;
 }
 
@@ -377,6 +443,43 @@ static int del_if (wan_device_t* wandev, struct device* dev)
 	return 0;
 }
 
+/****** WANPIPE-specific entry points ***************************************/
+
+/*============================================================================
+ * Execute adapter interface command.
+ */
+static int wpf_exec (struct sdla* card, void* u_cmd, void* u_data)
+{
+	fr_mbox_t* mbox = card->mbox;
+	int retry = MAX_CMD_RETRY;
+	int err, len;
+	fr_cmd_t cmd;
+
+	if(copy_from_user((void*)&cmd, u_cmd, sizeof(cmd)))
+		return -EFAULT;
+	/* execute command */
+	do
+	{
+		memcpy(&mbox->cmd, &cmd, sizeof(cmd));
+		if (cmd.length)
+			if(copy_from_user((void*)&mbox->data, u_data, cmd.length))
+				return -EFAULT;
+		if (sdla_exec(mbox))
+			err = mbox->cmd.result;
+		else
+			return -EIO;
+	}
+	while (err && retry-- && fr_event(card, err, mbox));
+
+	/* return result */
+	if(copy_to_user(u_cmd, (void*)&mbox->cmd, sizeof(fr_cmd_t)))
+		return -EFAULT;
+	len = mbox->cmd.length;
+	if (len && u_data && copy_to_user(u_data, (void*)&mbox->data, len))
+		return -EFAULT;
+	return 0;
+}
+
 /****** Network Device Interface ********************************************/
 
 /*============================================================================
@@ -416,6 +519,9 @@ static int if_init (struct device* dev)
 	dev->mem_start	= wandev->maddr;
 	dev->mem_end	= wandev->maddr + wandev->msize - 1;
 
+        /* Set transmit buffer queue length */
+        dev->tx_queue_len = 30;
+   
 	/* Initialize socket buffers */
 	for (i = 0; i < DEV_NUMBUFFS; ++i)
 		skb_queue_head_init(&dev->buffs[i])
@@ -451,12 +557,14 @@ static int if_open (struct device* dev)
 			err = -EIO;
 			goto done;
 		}
+		wanpipe_set_state(card, WAN_CONNECTED);
+
 		if (card->wandev.station == WANOPT_CPE)
 		{
 			/* CPE: issue full status enquiry */
 			fr_issue_isf(card, FR_ISF_FSE);
 		}
-		else	/* Switch: activate DLCI(s) */
+		else	/* FR switch: activate DLCI(s) */
 		{
 			fr_add_dlci(card,
 				card->u.f.node_dlci, card->u.f.dlci_num)
@@ -465,7 +573,6 @@ static int if_open (struct device* dev)
 				card->u.f.node_dlci, card->u.f.dlci_num)
 			;
 		}
-		wanpipe_set_state(card, WAN_CONNECTED);
 	}
 	dev->mtu = min(dev->mtu, card->wandev.mtu - FR_HEADER_LEN);
 	dev->interrupt = 0;
@@ -538,14 +645,13 @@ static int if_header (struct sk_buff* skb, struct device* dev,
  * Return:	1	physical address resolved.
  *		0	physical address not resolved
  */
-static int if_rebuild_hdr (void* hdr, struct device* dev, unsigned long raddr,
-			   struct sk_buff* skb)
+static int if_rebuild_hdr (struct sk_buff* skb)
 {
-	fr_channel_t* chan = dev->priv;
+	fr_channel_t* chan = skb->dev->priv;
 	sdla_t* card = chan->card;
 
 	printk(KERN_INFO "%s: rebuild_header() called for interface %s!\n",
-		card->devname, dev->name)
+		card->devname, skb->dev->name)
 	;
 	return 1;
 }
@@ -570,10 +676,11 @@ static int if_rebuild_hdr (void* hdr, struct device* dev, unsigned long raddr,
  */
 static int if_send (struct sk_buff* skb, struct device* dev)
 {
-	fr_channel_t* chan = dev->priv;
-	sdla_t* card = chan->card;
-	int retry = 0;
-
+	fr_channel_t *chan = dev->priv;
+	sdla_t *card = chan->card;
+	int retry=0, err;
+	struct device *dev2;
+	
 	if (test_and_set_bit(0, (void*)&card->wandev.critical))
 	{
 #ifdef _DEBUG_
@@ -581,7 +688,8 @@ static int if_send (struct sk_buff* skb, struct device* dev)
 			card->devname)
 		;
 #endif
-		return 1;
+		dev_kfree_skb(skb, FREE_WRITE);
+		return 0;
 	}
 
 	if (test_and_set_bit(0, (void*)&dev->tbusy))
@@ -592,23 +700,55 @@ static int if_send (struct sk_buff* skb, struct device* dev)
 		;
 #endif
 		++chan->ifstats.collisions;
+		++card->wandev.stats.collisions;
+
 		retry = 1;
+		if(card->wandev.tx_int_enabled)
+		{
+			for (dev2 = card->wandev.dev; dev2; dev2 = dev2->slave) 
+			{
+		      		dev2->tbusy = 1;
+		   	}
+		}
 	}
-	else if ((card->wandev.state != WAN_CONNECTED) ||
-	    (chan->state != WAN_CONNECTED))
-		++chan->ifstats.tx_dropped
-	;
-	else if (!is_tx_ready(card))
-		retry = 1
-	;
+	else if (card->wandev.state != WAN_CONNECTED)
+	{
+		++chan->ifstats.tx_dropped;
+		++card->wandev.stats.tx_dropped;
+	}
+	else if (chan->state != WAN_CONNECTED)
+	{
+		update_chan_state(dev);
+		++chan->ifstats.tx_dropped;
+		++card->wandev.stats.tx_dropped;
+	}
+	else if (!is_tx_ready(card)) 
+	{
+		retry = 1;
+		if(card->wandev.tx_int_enabled)
+		{
+	   		for (dev2 = card->wandev.dev; dev2; dev2 = dev2->slave)
+ 			{
+	      			dev2->tbusy = 1;
+	   		}
+		}
+	}
 	else
 	{
- 		int err = (card->hw.fwid == SFID_FR508) ?
+ 		err = (card->hw.fwid == SFID_FR508) ?
 			fr508_send(card, chan->dlci, 0, skb->len, skb->data) :
 			fr502_send(card, chan->dlci, 0, skb->len, skb->data)
 		;
-		if (err) ++chan->ifstats.tx_errors;
-		else ++chan->ifstats.tx_packets;
+		if (err)
+		{
+			++chan->ifstats.tx_errors;
+			++card->wandev.stats.tx_errors;
+		}
+		else
+		{
+			++chan->ifstats.tx_packets;
+			++card->wandev.stats.tx_packets;
+		}
 	}
 	if (!retry)
 	{
@@ -618,6 +758,7 @@ static int if_send (struct sk_buff* skb, struct device* dev)
 	card->wandev.critical = 0;
 	return retry;
 }
+
 
 /*============================================================================
  * Get ethernet-style interface statistics.
@@ -663,7 +804,14 @@ static void fr508_isr (sdla_t* card)
 {
 	fr508_flags_t* flags = card->flags;
 	fr_buf_ctl_t* bctl;
-
+	
+	if(int_occur){
+#ifdef _DEBUG_
+		printk(KERN_INFO "%s:Interrupt Occurred within an ISR\n",card->devname);
+#endif
+		return;
+	}
+	int_occur=1;
 	switch (flags->iflag)
 	{
 	case 0x01:	/* receive interrupt */
@@ -681,6 +829,7 @@ static void fr508_isr (sdla_t* card)
 	default:
 		spur_intr(card);
 	}
+	int_occur = 0;
 	flags->iflag = 0;
 }
 
@@ -690,13 +839,14 @@ static void fr508_isr (sdla_t* card)
 static void fr502_rx_intr (sdla_t* card)
 {
 	fr_mbox_t* mbox = card->rxmb;
-	struct sk_buff* skb;
-	struct device* dev;
-	fr_channel_t* chan;
+	struct sk_buff *skb;
+	struct device *dev;
+	fr_channel_t *chan;
 	unsigned dlci, len;
 	void* buf;
-
+   
 	sdla_mapmem(&card->hw, FR502_RX_VECTOR);
+
 	dlci = mbox->cmd.dlci;
 	len  = mbox->cmd.length;
 
@@ -741,13 +891,14 @@ static void fr502_rx_intr (sdla_t* card)
 		/* can't decapsulate packet */
 		dev_kfree_skb(skb, FREE_READ);
 		++chan->ifstats.rx_errors;
+		++card->wandev.stats.rx_errors;
 	}
 	else
 	{
 		netif_rx(skb);
 		++chan->ifstats.rx_packets;
+		++card->wandev.stats.rx_packets;
 	}
-
 rx_done:
 	sdla_mapmem(&card->hw, FR_MB_VECTOR);
 }
@@ -763,7 +914,7 @@ static void fr508_rx_intr (sdla_t* card)
 	fr_channel_t* chan;
 	unsigned dlci, len, offs;
 	void* buf;
-
+   
 	if (frbuf->flag != 0x01)
 	{
 		printk(KERN_INFO "%s: corrupted Rx buffer @ 0x%X!\n",
@@ -804,9 +955,9 @@ static void fr508_rx_intr (sdla_t* card)
 	}
 
 	/* Copy data to the socket buffer */
-	if ((offs + len) > card->u.f.rx_top)
+	if ((offs + len) > card->u.f.rx_top + 1)
 	{
-		unsigned tmp = card->u.f.rx_top - offs;
+		unsigned tmp = card->u.f.rx_top - offs + 1;
 
 		buf = skb_put(skb, tmp);
 		sdla_peek(&card->hw, offs, buf, tmp);
@@ -814,8 +965,7 @@ static void fr508_rx_intr (sdla_t* card)
 		len -= tmp;
 	}
 	buf = skb_put(skb, len);
-	sdla_peek(&card->hw, offs, buf, len);
-
+	sdla_peek(&card->hw, offs, buf, len);   
 	/* Decapsulate packet and pass it up the protocol stack */
 	skb->dev = dev;
 	buf = skb_pull(skb, 1);	/* remove hardware header */
@@ -824,13 +974,14 @@ static void fr508_rx_intr (sdla_t* card)
 		/* can't decapsulate packet */
 		dev_kfree_skb(skb, FREE_READ);
 		++chan->ifstats.rx_errors;
+		++card->wandev.stats.rx_errors;
 	}
 	else
 	{
 		netif_rx(skb);
 		++chan->ifstats.rx_packets;
+		++card->wandev.stats.rx_packets;
 	}
-
 rx_done:
 	/* Release buffer element and calculate a pointer to the next one */
 	frbuf->flag = 0;
@@ -848,7 +999,17 @@ rx_done:
  */
 static void tx_intr (sdla_t* card)
 {
+   struct device* dev = card->wandev.dev;
+
+   for (; dev; dev = dev->slave) {
+      if( !dev || !dev->start ) continue;
+      dev->tbusy = 0;
+      dev_tint(dev);
+   }
+   card->wandev.tx_int_enabled = 0;	
+/*
 	printk(KERN_INFO "%s: transmit interrupt!\n", card->devname);
+*/
 }
 
 /*============================================================================
@@ -877,8 +1038,14 @@ static void spur_intr (sdla_t* card)
  */
 static void wpf_poll (sdla_t* card)
 {
-	fr502_flags_t* flags = card->flags;
+	static unsigned long last_poll;
+	fr502_flags_t* flags;
 
+	if ((jiffies - last_poll) < HZ)
+		return
+	;
+
+	flags = card->flags;
 	if (flags->event)
 	{
 		fr_mbox_t* mbox = card->mbox;
@@ -889,6 +1056,7 @@ static void wpf_poll (sdla_t* card)
 		err = sdla_exec(mbox) ? mbox->cmd.result : CMD_TIMEOUT;
 		if (err) fr_event(card, err, mbox);
 	}
+	last_poll = jiffies;
 }
 
 /****** Frame Relay Firmware-Specific Functions *****************************/
@@ -1021,6 +1189,65 @@ static int fr_comm_disable (sdla_t* card)
 		err = sdla_exec(mbox) ? mbox->cmd.result : CMD_TIMEOUT;
 	}
 	while (err && retry-- && fr_event(card, err, mbox));
+	return err;
+}
+
+/*============================================================================
+ * Get communications error statistics. 
+ */
+static int fr_get_err_stats (sdla_t* card)
+{
+	fr_mbox_t* mbox = card->mbox;
+	int retry = MAX_CMD_RETRY;
+	int err;
+
+	do
+	{
+		memset(&mbox->cmd, 0, sizeof(fr_cmd_t));
+		mbox->cmd.command = FR_READ_ERROR_STATS;
+		err = sdla_exec(mbox) ? mbox->cmd.result : CMD_TIMEOUT;
+	}
+	while (err && retry-- && fr_event(card, err, mbox));
+
+	if (!err)
+	{
+		fr_comm_stat_t* stats = (void*)mbox->data;
+
+		card->wandev.stats.rx_over_errors    = stats->rx_overruns;
+		card->wandev.stats.rx_crc_errors     = stats->rx_bad_crc;
+		card->wandev.stats.rx_missed_errors  = stats->rx_aborts;
+		card->wandev.stats.rx_length_errors  = stats->rx_too_long;
+		card->wandev.stats.tx_aborted_errors = stats->tx_aborts;
+	}
+	return err;
+}
+
+/*============================================================================
+ * Get statistics. 
+ */
+static int fr_get_stats (sdla_t* card)
+{
+	fr_mbox_t* mbox = card->mbox;
+	int retry = MAX_CMD_RETRY;
+	int err;
+
+	do
+	{
+		memset(&mbox->cmd, 0, sizeof(fr_cmd_t));
+		mbox->cmd.command = FR_READ_STATISTICS;
+		err = sdla_exec(mbox) ? mbox->cmd.result : CMD_TIMEOUT;
+	}
+	while (err && retry-- && fr_event(card, err, mbox));
+
+	if (!err)
+	{
+		fr_link_stat_t* stats = (void*)mbox->data;
+
+		card->wandev.stats.rx_frame_errors = stats->rx_bad_format;
+		card->wandev.stats.rx_dropped =
+			stats->rx_dropped + stats->rx_dropped2
+		;
+	}
 	return err;
 }
 
@@ -1363,6 +1590,7 @@ static int is_tx_ready (sdla_t* card)
 
 		if (sb & 0x02) return 1;
 		flags->imask |= 0x02;
+		card->wandev.tx_int_enabled = 1; 
 	}
 	else
 	{
@@ -1386,29 +1614,6 @@ static unsigned int dec_to_uint (unsigned char* str, int len)
 	for (val = 0; len && is_digit(*str); ++str, --len)
 		val = (val * 10) + (*str - (unsigned)'0')
 	;
-	return val;
-}
-
-/*============================================================================
- * Convert hex string to unsigned integer.
- * If len != 0 then only 'len' characters of the string are conferted.
- */
-static unsigned int hex_to_uint (unsigned char* str, int len)
-{
-	unsigned val, ch;
-
-	if (!len) len = strlen(str);
-	for (val = 0; len; ++str, --len)
-	{
-		ch = *str;
-		if (is_digit(ch))
-			val = (val << 4) + (ch - (unsigned)'0')
-		;
-		else if (is_hex_digit(ch))
-			val = (val << 4) + ((ch & 0xDF) - (unsigned)'A' + 10)
-		;
-		else break;
-	}
 	return val;
 }
 

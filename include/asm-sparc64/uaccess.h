@@ -1,4 +1,4 @@
-/* $Id: uaccess.h,v 1.19 1997/06/30 10:31:46 jj Exp $ */
+/* $Id: uaccess.h,v 1.20 1997/07/13 18:23:45 davem Exp $ */
 #ifndef _ASM_UACCESS_H
 #define _ASM_UACCESS_H
 
@@ -255,47 +255,44 @@ __asm__ __volatile__(							\
 
 extern int __get_user_bad(void);
 
-extern __kernel_size_t __memcpy_short(void *to, const void *from, __kernel_size_t size, long asi_src, long asi_dst);
-extern __kernel_size_t __memcpy_entry(void *to, const void *from, __kernel_size_t size, long asi_src, long asi_dst);
-extern __kernel_size_t __memcpy_16plus(void *to, const void *from, __kernel_size_t size, long asi_src, long asi_dst);
-extern __kernel_size_t __memcpy_386plus(void *to, const void *from, __kernel_size_t size, long asi_src, long asi_dst);
+extern __kernel_size_t __memcpy_short(void *to, const void *from,
+				      __kernel_size_t size,
+				      long asi_src, long asi_dst);
 
-#if 0
-extern __inline__ __kernel_size_t __copy_to_user(void *to, void *from, __kernel_size_t size)
-{
-	if (__builtin_constant_p(size)) {
-		if (!size) return 0;
-		if (size < 16)
-			return __memcpy_short(to,(const void *)from,size,ASI_BLK_P,ASI_BLK_S);
-		else if (size < 384)
-			return __memcpy_16plus(to,(const void *)from,size,ASI_BLK_P,ASI_BLK_S);
-		else
-			return __memcpy_386plus(to,(const void *)from,size,ASI_BLK_P,ASI_BLK_S);
-	} else {
-		if (!size) return 0;
-		return __memcpy_entry(to,(const void *)from,size,ASI_BLK_P,ASI_BLK_S);
-	}
-}
+extern __kernel_size_t __memcpy_entry(void *to, const void *from,
+				      __kernel_size_t size,
+				      long asi_src, long asi_dst);
 
-extern __inline__ __kernel_size_t __copy_from_user(void *to, void *from, __kernel_size_t size)
-{
-	if (__builtin_constant_p(size)) {
-		if (!size) return 0;
-		if (size < 16)
-			return __memcpy_short(to,(const void *)from,size,ASI_BLK_S,ASI_BLK_P);
-		else if (size < 384)
-			return __memcpy_16plus(to,(const void *)from,size,ASI_BLK_S,ASI_BLK_P);
-		else
-			return __memcpy_386plus(to,(const void *)from,size,ASI_BLK_S,ASI_BLK_P);
-	} else {
-		if (!size) return 0;
-		return __memcpy_entry(to,(const void *)from,size,ASI_BLK_S,ASI_BLK_P);
-	}
-}
-#else
-extern __kernel_size_t __copy_from_user(void *to, const void *from, __kernel_size_t size);
-extern __kernel_size_t __copy_to_user(void *to, const void *from, __kernel_size_t size);
-#endif
+extern __kernel_size_t __memcpy_16plus(void *to, const void *from,
+				       __kernel_size_t size,
+				       long asi_src, long asi_dst);
+
+extern __kernel_size_t __memcpy_386plus(void *to, const void *from,
+					__kernel_size_t size,
+					long asi_src, long asi_dst);
+
+extern __kernel_size_t __copy_from_user(void *to, const void *from,
+					__kernel_size_t size);
+
+extern __kernel_size_t __copy_to_user(void *to, const void *from,
+				      __kernel_size_t size);
+
+extern __kernel_size_t __copy_in_user(void *to, const void *from,
+				      __kernel_size_t size);
+
+#define copy_from_user(to,from,n)		\
+	__copy_from_user((void *)(to),	\
+		    (void *)(from), (__kernel_size_t)(n))
+
+#define copy_from_user_ret(to,from,n,retval) ({ \
+if (copy_from_user(to,from,n)) \
+	return retval; \
+})
+
+#define __copy_from_user_ret(to,from,n,retval) ({ \
+if (__copy_from_user(to,from,n)) \
+	return retval; \
+})
 
 #define copy_to_user(to,from,n) \
 	__copy_to_user((void *)(to), \
@@ -311,17 +308,17 @@ if (__copy_to_user(to,from,n)) \
 	return retval; \
 })
 
-#define copy_from_user(to,from,n)		\
-	__copy_from_user((void *)(to),	\
-		    (void *)(from), (__kernel_size_t)(n))
+#define copy_in_user(to,from,n) \
+	__copy_in_user((void *)(to), \
+	(void *) (from), (__kernel_size_t)(n))
 
-#define copy_from_user_ret(to,from,n,retval) ({ \
-if (copy_from_user(to,from,n)) \
+#define copy_in_user_ret(to,from,n,retval) ({ \
+if (copy_in_user(to,from,n)) \
 	return retval; \
 })
 
-#define __copy_from_user_ret(to,from,n,retval) ({ \
-if (__copy_from_user(to,from,n)) \
+#define __copy_in_user_ret(to,from,n,retval) ({ \
+if (__copy_in_user(to,from,n)) \
 	return retval; \
 })
 

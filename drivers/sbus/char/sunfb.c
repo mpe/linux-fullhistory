@@ -275,7 +275,8 @@ fb_mmap (struct inode *inode, struct file *file, struct vm_area_struct *vma)
 		int v;
 		
 		v = (*fb->mmap)(inode, file, vma, fb->base, fb);
-		if (v) return v;
+		if (v)
+			return v;
 		vma->vm_flags |= VM_IO;
 		if (!fb->mmaped) {
 			fb->mmaped = 1;

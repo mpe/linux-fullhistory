@@ -10,6 +10,25 @@
 *		as published by the Free Software Foundation; either version
 *		2 of the License, or (at your option) any later version.
 * ============================================================================
+* Jun 29, 1997  Alan Cox	o Dumped the idiot UDP management system.
+*
+* May 22, 1997	Jaspreet Singh	o Added change in the PPP_SET_CONFIG command for
+*				508 card to reflect changes in the new 
+*				ppp508.sfm for supporting:continous transmission
+*				of Configure-Request packets without receiving a
+*				reply 				
+*				OR-ed 0x300 to conf_flags 
+*			        o Changed connect_tmout from 900 to 0
+* May 21, 1997	Jaspreet Singh  o Fixed UDP Management for multiple boards
+* Apr 25, 1997  Farhan Thawar    o added UDP Management stuff
+* Mar 11, 1997  Farhan Thawar   Version 3.1.1
+*                                o fixed (+1) bug in rx_intr()
+*                                o changed if_send() to return 0 if
+*                                  wandev.critical() is true
+*                                o free socket buffer in if_send() if
+*                                  returning 0 
+* Jan 15, 1997	Gene Kozin	Version 3.1.0
+*				 o implemented exec() entry point
 * Jan 06, 1997	Gene Kozin	Initial version.
 *****************************************************************************/
 
@@ -22,11 +41,12 @@
 #include <linux/errno.h>	/* return codes */
 #include <linux/string.h>	/* inline memset(), etc. */
 #include <linux/malloc.h>	/* kmalloc(), kfree() */
-#include <linux/router.h>	/* WAN router definitions */
+#include <linux/wanrouter.h>	/* WAN router definitions */
 #include <linux/wanpipe.h>	/* WANPIPE common user API definitions */
 #include <linux/if_arp.h>	/* ARPHRD_* defines */
 #include <linux/init.h>		/* __initfunc et al. */
 #include <asm/byteorder.h>	/* htons(), etc. */
+#include <asm/uaccess.h>
 
 #define	_GNUC_
 #include <linux/sdla_ppp.h>		/* PPP firmware API definitions */
@@ -57,14 +77,16 @@ static int new_if (wan_device_t* wandev, struct device* dev,
 	wanif_conf_t* conf);
 static int del_if (wan_device_t* wandev, struct device* dev);
 
+/* WANPIPE-specific entry points */
+static int wpp_exec (struct sdla* card, void* u_cmd, void* u_data);
+
 /* Network device interface */
 static int if_init   (struct device* dev);
 static int if_open   (struct device* dev);
 static int if_close  (struct device* dev);
 static int if_header (struct sk_buff* skb, struct device* dev,
 	unsigned short type, void* daddr, void* saddr, unsigned len);
-static int if_rebuild_hdr (void* hdr, struct device* dev, unsigned long raddr,
-	struct sk_buff* skb);
+static int if_rebuild_hdr (struct sk_buff* skb);
 static int if_send (struct sk_buff* skb, struct device* dev);
 static struct enet_statistics* if_stats (struct device* dev);
 
@@ -74,6 +96,7 @@ static int ppp_configure (sdla_t* card, void* data);
 static int ppp_set_intr_mode (sdla_t* card, unsigned mode);
 static int ppp_comm_enable (sdla_t* card);
 static int ppp_comm_disable (sdla_t* card);
+static int ppp_get_err_stats (sdla_t* card);
 static int ppp_send (sdla_t* card, void* data, unsigned len, unsigned proto);
 static int ppp_error (sdla_t *card, int err, ppp_mbox_t* mb);
 
@@ -94,6 +117,7 @@ static int config508 (sdla_t* card);
 static void show_disc_cause (sdla_t* card, unsigned cause);
 static unsigned char bps_to_speed_code (unsigned long bps);
 
+static char TracingEnabled;
 /****** Public Functions ****************************************************/
 
 /*============================================================================
@@ -163,10 +187,13 @@ __initfunc(int wpp_init (sdla_t* card, wandev_conf_t* conf))
 	card->wandev.station	= conf->station;
 	card->isr		= &wpp_isr;
 	card->poll		= &wpp_poll;
+	card->exec		= &wpp_exec;
 	card->wandev.update	= &update;
 	card->wandev.new_if	= &new_if;
 	card->wandev.del_if	= &del_if;
 	card->wandev.state	= WAN_DISCONNECTED;
+        card->wandev.udp_port   = conf->udp_port;
+        TracingEnabled          = '0';
 	return 0;
 }
 
@@ -177,9 +204,22 @@ __initfunc(int wpp_init (sdla_t* card, wandev_conf_t* conf))
  */
 static int update (wan_device_t* wandev)
 {
-/*
-	sdla_t* card = wandev->private;
-*/
+	sdla_t* card;
+
+	/* sanity checks */
+	if ((wandev == NULL) || (wandev->private == NULL))
+		return -EFAULT
+	;
+	if (wandev->state == WAN_UNCONFIGURED)
+		return -ENODEV
+	;
+	if (test_and_set_bit(0, (void*)&wandev->critical))
+		return -EAGAIN
+	;
+	card = wandev->private;
+
+	ppp_get_err_stats(card);
+	wandev->critical = 0;
 	return 0;
 }
 
@@ -228,6 +268,38 @@ static int del_if (wan_device_t* wandev, struct device* dev)
 	return 0;
 }
 
+/****** WANPIPE-specific entry points ***************************************/
+
+/*============================================================================
+ * Execute adapter interface command.
+ */
+static int wpp_exec (struct sdla* card, void* u_cmd, void* u_data)
+{
+	ppp_mbox_t* mbox = card->mbox;
+	int len;
+
+	if(copy_from_user((void*)&mbox->cmd, u_cmd, sizeof(ppp_cmd_t)))
+		return -EFAULT;
+	len = mbox->cmd.length;
+	if (len)
+	{
+		if(copy_from_user((void*)&mbox->data, u_data, len))
+			return -EFAULT;
+	}
+
+	/* execute command */
+	if (!sdla_exec(mbox))
+		return -EIO;
+
+	/* return result */
+	if(copy_to_user(u_cmd, (void*)&mbox->cmd, sizeof(ppp_cmd_t)))
+		return -EFAULT;
+	len = mbox->cmd.length;
+	if (len && u_data && copy_to_user(u_data, (void*)&mbox->data, len))
+			return -EFAULT;
+	return 0;
+}
+
 /****** Network Device Interface ********************************************/
 
 /*============================================================================
@@ -264,6 +336,9 @@ static int if_init (struct device* dev)
 	dev->mem_start		= wandev->maddr;
 	dev->mem_end		= wandev->maddr + wandev->msize - 1;
 
+        /* Set transmit buffer queue length */
+        dev->tx_queue_len = 30;
+   
 	/* Initialize socket buffers */
 	for (i = 0; i < DEV_NUMBUFFS; ++i)
 		skb_queue_head_init(&dev->buffs[i])
@@ -408,13 +483,12 @@ static int if_header (struct sk_buff* skb, struct device* dev,
  * Return:	1	physical address resolved.
  *		0	physical address not resolved
  */
-static int if_rebuild_hdr (void* hdr, struct device* dev, unsigned long raddr,
-			   struct sk_buff* skb)
+static int if_rebuild_hdr (struct sk_buff* skb)
 {
-	sdla_t* card = dev->priv;
+	sdla_t* card = skb->dev->priv;
 
 	printk(KERN_INFO "%s: rebuild_header() called for interface %s!\n",
-		card->devname, dev->name)
+		card->devname, skb->dev->name)
 	;
 	return 1;
 }
@@ -460,8 +534,7 @@ static int if_send (struct sk_buff* skb, struct device* dev)
 #endif
 		++card->wandev.stats.collisions;
 		retry = 1;
-	}
-	else if (card->wandev.state != WAN_CONNECTED)
+	} else if (card->wandev.state != WAN_CONNECTED)
 		++card->wandev.stats.tx_dropped
 	;
 	else if (!skb->protocol)
@@ -489,6 +562,7 @@ static int if_send (struct sk_buff* skb, struct device* dev)
  * Get ethernet-style interface statistics.
  * Return a pointer to struct enet_statistics.
  */
+
 static struct enet_statistics* if_stats (struct device* dev)
 {
 	sdla_t* card = dev->priv;
@@ -599,6 +673,31 @@ static int ppp_comm_disable (sdla_t* card)
 }
 
 /*============================================================================
+ * Get communications error statistics.
+ */
+static int ppp_get_err_stats (sdla_t* card)
+{
+	ppp_mbox_t* mb = card->mbox;
+	int err;
+
+	memset(&mb->cmd, 0, sizeof(ppp_cmd_t));
+	mb->cmd.command = PPP_READ_ERROR_STATS;
+	err = sdla_exec(mb) ? mb->cmd.result : CMD_TIMEOUT;
+	if (err == CMD_OK)
+	{
+		ppp_err_stats_t* stats = (void*)mb->data;
+
+		card->wandev.stats.rx_over_errors    = stats->rx_overrun;
+		card->wandev.stats.rx_crc_errors     = stats->rx_bad_crc;
+		card->wandev.stats.rx_missed_errors  = stats->rx_abort;
+		card->wandev.stats.rx_length_errors  = stats->rx_lost;
+		card->wandev.stats.tx_aborted_errors = stats->tx_abort;
+	}
+	else ppp_error(card, err, mb);
+	return err;
+}
+
+/*============================================================================
  * Send packet.
  *	Return:	0 - o.k.
  *		1 - no transmit buffers available
@@ -701,7 +800,7 @@ static void rx_intr (sdla_t* card)
 	struct sk_buff* skb;
 	unsigned len;
 	void* buf;
-
+   
 	if (rxbuf->flag != 0x01)
 	{
 		printk(KERN_INFO "%s: corrupted Rx buffer @ 0x%X!\n",
@@ -738,9 +837,9 @@ static void rx_intr (sdla_t* card)
 	{
 		unsigned addr = rxbuf->buf.ptr;
 
-		if ((addr + len) > card->u.p.rx_top)
+		if ((addr + len) > card->u.p.rx_top + 1)
 		{
-			unsigned tmp = card->u.p.rx_top - addr;
+			unsigned tmp = card->u.p.rx_top - addr + 1;
 
 			buf = skb_put(skb, tmp);
 			sdla_peek(&card->hw, addr, buf, tmp);
@@ -751,8 +850,8 @@ static void rx_intr (sdla_t* card)
 		sdla_peek(&card->hw, addr, buf, len);
 	}
 
-	/* Decapsulate packet and pass it up the protocol stack */
-	switch (rxbuf->proto)
+	/* Decapsulate packet */
+        switch (rxbuf->proto)
 	{
 	case 0x00:
 		skb->protocol = htons(ETH_P_IP);
@@ -762,10 +861,11 @@ static void rx_intr (sdla_t* card)
 		skb->protocol = htons(ETH_P_IPX);
 		break;
 	}
+
+	/* Pass it up the protocol stack */
 	skb->dev = dev;
 	netif_rx(skb);
 	++card->wandev.stats.rx_packets;
-
 rx_done:
 	/* Release buffer element and calculate a pointer to the next one */
 	rxbuf->flag = (card->hw.fwid == SFID_PPP502) ? 0xFF : 0x00;
@@ -891,13 +991,14 @@ static int config502 (sdla_t* card)
 	cfg.auth_wait_tmr	= 300;
 	cfg.mdm_fail_tmr	= 5;
 	cfg.dtr_drop_tmr	= 1;
-	cfg.connect_tmout	= 900;
+	cfg.connect_tmout	= 0;	/* changed it from 900 */
 	cfg.conf_retry		= 10;
 	cfg.term_retry		= 2;
 	cfg.fail_retry		= 5;
 	cfg.auth_retry		= 10;
 	cfg.ip_options		= 0x80;
 	cfg.ipx_options		= 0xA0;
+        cfg.conf_flags         |= 0x0E;
 /*
 	cfg.ip_local		= dev->pa_addr;
 	cfg.ip_remote		= dev->pa_dstaddr;
@@ -921,6 +1022,7 @@ static int config508 (sdla_t* card)
 	if (card->wandev.interface == WANOPT_RS232)
 		cfg.conf_flags |= 0x0020;
 	;
+        cfg.conf_flags 	|= 0x300; /*send Configure-Request packets forever*/
 	cfg.txbuf_percent	= 60;	/* % of Tx bufs */
 	cfg.mtu_local		= card->wandev.mtu;
 	cfg.mtu_remote		= card->wandev.mtu;
@@ -929,7 +1031,7 @@ static int config508 (sdla_t* card)
 	cfg.auth_wait_tmr	= 300;
 	cfg.mdm_fail_tmr	= 5;
 	cfg.dtr_drop_tmr	= 1;
-	cfg.connect_tmout	= 900;
+	cfg.connect_tmout	= 0; 	/* changed it from 900 */
 	cfg.conf_retry		= 10;
 	cfg.term_retry		= 2;
 	cfg.fail_retry		= 5;

@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_input.c,v 1.53 1997/06/06 20:38:00 freitag Exp $
+ * Version:	$Id: tcp_input.c,v 1.54 1997/07/10 11:19:39 freitag Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -56,14 +56,19 @@ static void tcp_cong_avoid_vanj(struct sock *sk, u32 seq, u32 ack,
 static void tcp_cong_avoid_vegas(struct sock *sk, u32 seq, u32 ack,
 				 u32 seq_rtt);
 
+#ifdef CONFIG_SYSCTL
+#define SYNC_INIT 0 /* let the user enable it */
+#else
+#define SYNC_INIT 1
+#endif
+
 int sysctl_tcp_cong_avoidance;
 int sysctl_tcp_hoe_retransmits;
 int sysctl_tcp_sack;
 int sysctl_tcp_tsack;
 int sysctl_tcp_timestamps;
 int sysctl_tcp_window_scaling;
-int sysctl_tcp_syncookies; 
-int sysctl_tcp_always_syncookie;
+int sysctl_tcp_syncookies = SYNC_INIT; 
 int sysctl_tcp_max_delay_acks = MAX_DELAY_ACK;
 int sysctl_tcp_stdurg;
 

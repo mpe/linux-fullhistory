@@ -1,4 +1,4 @@
-/* $Id: winfixup.S,v 1.15 1997/07/04 01:41:07 davem Exp $
+/* $Id: winfixup.S,v 1.16 1997/07/13 20:02:42 davem Exp $
  *
  * winfixup.S: Handle cases where user stack pointer is found to be bogus.
  *
@@ -68,7 +68,7 @@ fill_fixup:
 	mov		%g5, %l5			! Fault address
 	clr		%l4				! It was a load, not a store
 	wrpr		%g0, 0x0, %tl			! Out of trap levels.
-	wrpr		%l1, (PSTATE_IE | PSTATE_AG), %pstate
+	wrpr		%l1, (PSTATE_IE | PSTATE_AG | PSTATE_RMO), %pstate
 	sethi		%uhi(PAGE_OFFSET), %g4		! Prepare page_offset global reg
 	mov		%o7, %g6
 	b,pt		%xcc, window_scheisse_merge	! And merge.
@@ -186,7 +186,7 @@ fill_fixup_mna:
 	mov		%g5, %o4			! final call to do_sparc64_fault.
 	mov		%g6, %o7			! Stash away current.
 	wrpr		%g0, 0x0, %tl			! Out of trap levels.
-	wrpr		%l1, (PSTATE_IE | PSTATE_AG), %pstate
+	wrpr		%l1, (PSTATE_IE | PSTATE_AG | PSTATE_RMO), %pstate
 	sethi		%uhi(PAGE_OFFSET), %g4		! Set page_offset global reg.
 	mov		%o7, %g6			! Get current back.
 	b,pt		%xcc, window_mna_merge		! And merge.

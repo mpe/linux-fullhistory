@@ -1,20 +1,22 @@
 /*****************************************************************************
-* wanproc.c	WAN Multiprotocol Router Module. proc filesystem interface.
+* wanproc.c	WAN Router Module. /proc filesystem interface.
 *
 *		This module is completely hardware-independent and provides
 *		access to the router using Linux /proc filesystem.
 *
 * Author:	Gene Kozin	<genek@compuserve.com>
 *
-* Copyright:	(c) 1995-1996 Sangoma Technologies Inc.
+* Copyright:	(c) 1995-1997 Sangoma Technologies Inc.
 *
 *		This program is free software; you can redistribute it and/or
 *		modify it under the terms of the GNU General Public License
 *		as published by the Free Software Foundation; either version
 *		2 of the License, or (at your option) any later version.
 * ============================================================================
-* Dec 13, 1996	Gene Kozin	Initial version (based on Sangoma's WANPIPE)
+* Jun 29, 1997	Alan Cox	Merged with 1.0.3 vendor code
+* Jan 29, 1997	Gene Kozin	v1.0.1. Implemented /proc read routines
 * Jan 30, 1997	Alan Cox	Hacked around for 2.1
+* Dec 13, 1996	Gene Kozin	Initial version (based on Sangoma's WANPIPE)
 *****************************************************************************/
 
 #include <linux/stddef.h>	/* offsetof(), etc. */
@@ -39,7 +41,7 @@
 #define max(a,b) (((a)>(b))?(a):(b))
 #endif
 
-#define	ROUTER_PAGE_SZ	4000	/* buffer size for printing proc info */
+#define	PROC_BUFSZ	4000	/* buffer size for printing proc info */
 
 /****** Data Types **********************************************************/
 
@@ -60,7 +62,6 @@ static long router_proc_read(struct inode* inode, struct file* file, char* buf,
 
 /* Methods for preparing data for reading proc entries */
 
-static int about_get_info(char* buf, char** start, off_t offs, int len, int dummy);
 static int config_get_info(char* buf, char** start, off_t offs, int len, int dummy);
 static int status_get_info(char* buf, char** start, off_t offs, int len, int dummy);
 static int wandev_get_info(char* buf, char** start, off_t offs, int len, int dummy);
@@ -76,7 +77,6 @@ static int wandev_get_info(char* buf, char** start, off_t offs, int len, int dum
  */
 
 static char name_root[]	= ROUTER_NAME;
-static char name_info[]	= "about";
 static char name_conf[]	= "config";
 static char name_stat[]	= "status";
 
@@ -84,9 +84,8 @@ static char name_stat[]	= "status";
  *	Structures for interfacing with the /proc filesystem.
  *	Router creates its own directory /proc/net/router with the folowing
  *	entries:
- *	About		general information (version, copyright, etc.)
- *	Conf		device configuration
- *	Stat		global device statistics
+ *	config		device configuration
+ *	status		global device statistics
  *	<device>	entry for each WAN device
  */
 
@@ -194,29 +193,6 @@ static struct proc_dir_entry proc_router =
 };
 
 /*
- *	/proc/net/router/about 
- */
- 
-static struct proc_dir_entry proc_router_info =
-{
-	0,			/* .low_ino */
-	sizeof(name_info) - 1,	/* .namelen */
-	name_info,		/* .name */
-	0444 | S_IFREG,		/* .mode */
-	1,			/* .nlink */
-	0,			/* .uid */
-	0,			/* .gid */
-	0,			/* .size */
-	&router_inode,		/* .ops */
-	&about_get_info,	/* .get_info */
-	NULL,			/* .fill_node */
-	NULL,			/* .next */
-	NULL,			/* .parent */
-	NULL,			/* .subdir */
-	NULL,			/* .data */
-};
-
-/*
  *	/proc/net/router/config 
  */
  
@@ -262,6 +238,16 @@ static struct proc_dir_entry proc_router_stat =
 	NULL,			/* .data */
 };
 
+/* Strings */
+static char conf_hdr[] =
+	"Device name    | port |IRQ|DMA|mem.addr|mem.size|"
+	"option1|option2|option3|option4\n";
+	
+static char stat_hdr[] =
+	"Device name    |station|interface|clocking|baud rate| MTU |ndev"
+	"|link state\n";
+
+
 /*
  *	Interface functions
  */
@@ -272,11 +258,10 @@ static struct proc_dir_entry proc_router_stat =
 
 __initfunc(int wanrouter_proc_init (void))
 {
-	int err = proc_register(&proc_net, &proc_router);
+	int err = proc_register(proc_net, &proc_router);
 
 	if (!err)
 	{
-		proc_register(&proc_router, &proc_router_info);
 		proc_register(&proc_router, &proc_router_conf);
 		proc_register(&proc_router, &proc_router_stat);
 	}
@@ -289,10 +274,9 @@ __initfunc(int wanrouter_proc_init (void))
 
 void wanrouter_proc_cleanup (void)
 {
-	proc_unregister(&proc_router, proc_router_info.low_ino);
 	proc_unregister(&proc_router, proc_router_conf.low_ino);
 	proc_unregister(&proc_router, proc_router_stat.low_ino);
-	proc_unregister(&proc_net, proc_router.low_ino);
+	proc_unregister(proc_net, proc_router.low_ino);
 }
 
 /*
@@ -367,7 +351,7 @@ static long router_proc_read(struct inode* inode, struct file* file,
 	if ((dent == NULL) || (dent->get_info == NULL))
 		return 0;
 		
-	page = kmalloc(ROUTER_PAGE_SZ, GFP_KERNEL);
+	page = kmalloc(PROC_BUFSZ, GFP_KERNEL);
 	if (page == NULL)
 		return -ENOBUFS;
 		
@@ -387,49 +371,86 @@ static long router_proc_read(struct inode* inode, struct file* file,
 }
 
 /*
- *	Prepare data for reading 'About' entry.
- *	Return length of data.
- */
-
-static int about_get_info(char* buf, char** start, off_t offs, int len, 
-				int dummy)
-{
-	int cnt = 0;
-
-	cnt += sprintf(&buf[cnt], "%12s : %u.%u\n",
-		"version", ROUTER_VERSION, ROUTER_RELEASE);
-	return cnt;
-}
-
-/*
  *	Prepare data for reading 'Config' entry.
  *	Return length of data.
- *	NOT YET IMPLEMENTED
  */
 
 static int config_get_info(char* buf, char** start, off_t offs, int len, 
 	int dummy)
 {
-	int cnt = 0;
+	int cnt = sizeof(conf_hdr) - 1;
+	wan_device_t* wandev;
+	strcpy(buf, conf_hdr);
+	for (wandev = router_devlist;
+	     wandev && (cnt < (PROC_BUFSZ - 80));
+	     wandev = wandev->next)
+	{
+		if (wandev->state) cnt += sprintf(&buf[cnt],
+			"%-15s|0x%-4X|%3u|%3u|0x%-6lX|0x%-6X|%7u|%7u|%7u|%7u\n",
+			wandev->name,
+			wandev->ioport,
+			wandev->irq,
+			wandev->dma,
+			wandev->maddr,
+			wandev->msize,
+			wandev->hw_opt[0],
+			wandev->hw_opt[1],
+			wandev->hw_opt[2],
+			wandev->hw_opt[3]);
+	}
 
-	cnt += sprintf(&buf[cnt], "%12s : %u.%u\n",
-		"version", ROUTER_VERSION, ROUTER_RELEASE);
 	return cnt;
 }
 
 /*
  *	Prepare data for reading 'Status' entry.
  *	Return length of data.
- *	NOT YET IMPLEMENTED
  */
 
 static int status_get_info(char* buf, char** start, off_t offs, int len, 
 			int dummy)
 {
-	int cnt = 0;
+	int cnt = sizeof(stat_hdr) - 1;
+	wan_device_t* wandev;
+	strcpy(buf, stat_hdr);
+	for (wandev = router_devlist;
+	     wandev && (cnt < (PROC_BUFSZ - 80));
+	     wandev = wandev->next)
+	{
+		if (!wandev->state) continue;
+		cnt += sprintf(&buf[cnt],
+			"%-15s|%-7s|%-9s|%-8s|%9u|%5u|%3u |",
+			wandev->name,
+			wandev->station ? " DCE" : " DTE",
+			wandev->interface ? " V.35" : " RS-232",
+			wandev->clocking ? "internal" : "external",
+			wandev->bps,
+			wandev->mtu,
+			wandev->ndev)
+		;
+		switch (wandev->state)
+		{
+		case WAN_UNCONFIGURED:
+			cnt += sprintf(&buf[cnt], "%-12s\n", "unconfigured");
+			break;
 
-	cnt += sprintf(&buf[cnt], "%12s : %u.%u\n",
-		"version", ROUTER_VERSION, ROUTER_RELEASE);
+		case WAN_DISCONNECTED:
+			cnt += sprintf(&buf[cnt], "%-12s\n", "disconnected");
+			break;
+
+		case WAN_CONNECTING:
+			cnt += sprintf(&buf[cnt], "%-12s\n", "connecting");
+			break;
+
+		case WAN_CONNECTED:
+			cnt += sprintf(&buf[cnt], "%-12s\n", "connected");
+			break;
+
+		default:
+			cnt += sprintf(&buf[cnt], "%-12s\n", "invalid");
+			break;
+		}
+	}
 	return cnt;
 }
 
@@ -449,7 +470,52 @@ static int wandev_get_info(char* buf, char** start, off_t offs, int len,
 
 	if ((wandev == NULL) || (wandev->magic != ROUTER_MAGIC))
 		return 0;
-	cnt += sprintf(&buf[cnt], "%12s : %s\n", "name", wandev->name);
+	if (!wandev->state)
+		return sprintf(&buf[cnt], "device is not configured!\n")
+	;
+
+	/* Update device statistics */
+	if (wandev->update) wandev->update(wandev);
+
+	cnt += sprintf(&buf[cnt], "%30s: %12lu\n",
+		"total frames received", wandev->stats.rx_packets)
+	;
+	cnt += sprintf(&buf[cnt], "%30s: %12lu\n",
+		"receiver overrun errors", wandev->stats.rx_over_errors)
+	;
+	cnt += sprintf(&buf[cnt], "%30s: %12lu\n",
+		"CRC errors", wandev->stats.rx_crc_errors)
+	;
+	cnt += sprintf(&buf[cnt], "%30s: %12lu\n",
+		"frame length errors", wandev->stats.rx_length_errors)
+	;
+	cnt += sprintf(&buf[cnt], "%30s: %12lu\n",
+		"frame format errors", wandev->stats.rx_frame_errors)
+	;
+	cnt += sprintf(&buf[cnt], "%30s: %12lu\n",
+		"aborted frames received", wandev->stats.rx_missed_errors)
+	;
+	cnt += sprintf(&buf[cnt], "%30s: %12lu\n",
+		"reveived frames dropped", wandev->stats.rx_dropped)
+	;
+	cnt += sprintf(&buf[cnt], "%30s: %12lu\n",
+		"other receive errors", wandev->stats.rx_errors)
+	;
+	cnt += sprintf(&buf[cnt], "\n%30s: %12lu\n",
+		"total frames transmitted", wandev->stats.tx_packets)
+	;
+	cnt += sprintf(&buf[cnt], "%30s: %12lu\n",
+		"aborted frames transmitted", wandev->stats.tx_aborted_errors)
+	;
+	cnt += sprintf(&buf[cnt], "%30s: %12lu\n",
+		"transmit frames dropped", wandev->stats.tx_dropped)
+	;
+	cnt += sprintf(&buf[cnt], "%30s: %12lu\n",
+		"transmit collisions", wandev->stats.collisions)
+	;
+	cnt += sprintf(&buf[cnt], "%30s: %12lu\n",
+		"other transmit errors", wandev->stats.tx_errors)
+	;
 	return cnt;
 }
 

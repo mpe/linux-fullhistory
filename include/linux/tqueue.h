@@ -42,7 +42,7 @@
 
 struct tq_struct {
 	struct tq_struct *next;		/* linked list of active bh's */
-	int sync;			/* must be initialized to zero */
+	unsigned long sync;		/* must be initialized to zero */
 	void (*routine)(void *);	/* function to call */
 	void *data;			/* argument to function */
 };

@@ -1,4 +1,4 @@
-/* $Id: VIScopy.S,v 1.8 1997/06/28 17:21:22 jj Exp $
+/* $Id: VIScopy.S,v 1.9 1997/07/13 18:23:39 davem Exp $
  * VIScopy.S: High speed copy operations utilizing the UltraSparc
  *            Visual Instruction Set.
  *
@@ -315,6 +315,14 @@ __copy_from_user:mov		ASI_BLK_S, asi_src		! IEU0	Group
 		.globl			__copy_to_user
 		.type			__copy_to_user,@function
 __copy_to_user:	mov		ASI_BLK_P, asi_src		! IEU0	Group
+		brnz,pt		%o2, __memcpy_entry		! CTI
+		 mov		ASI_BLK_S, asi_dest		! IEU1
+		retl						! CTI	Group
+		 clr		%o0				! IEU0	Group
+
+		.globl			__copy_in_user
+		.type			__copy_in_user,@function
+__copy_in_user:	mov		ASI_BLK_S, asi_src		! IEU0	Group
 		brnz,pt		%o2, __memcpy_entry		! CTI
 		 mov		ASI_BLK_S, asi_dest		! IEU1
 		retl						! CTI	Group

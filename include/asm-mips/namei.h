@@ -13,6 +13,8 @@
 /* Only one at this time. */
 #define IRIX32_EMUL "usr/gnemul/irix/"
 
+#if 0 /* XXX FIXME */
+
 extern int __namei(int, const char *, struct inode *, char *, struct inode **,
 		   struct inode **, struct qstr *, struct dentry **, int *);
 
@@ -43,6 +45,8 @@ __prefix_namei(int retrieve_mode, const char * name, struct inode * base,
 
 	return 0;
 }
+
+#endif /* XXX FIXME */
 
 #else /* !defined(CONFIG_BINFMT_IRIX) */
 

@@ -1,4 +1,4 @@
-/*  $Id: signal.c,v 1.17 1997/07/05 09:52:31 davem Exp $
+/*  $Id: signal.c,v 1.20 1997/07/14 03:10:28 davem Exp $
  *  arch/sparc64/kernel/signal.c
  *
  *  Copyright (C) 1991, 1992  Linus Torvalds
@@ -317,8 +317,6 @@ new_setup_frame(struct sigaction *sa, struct pt_regs *regs,
 {
 	struct new_signal_frame *sf;
 	int sigframe_size;
-	unsigned long tmp;
-	int i;
 
 	/* 1. Make sure everything is clean */
 	synchronize_user_stack();
@@ -329,16 +327,13 @@ new_setup_frame(struct sigaction *sa, struct pt_regs *regs,
 	sf = (struct new_signal_frame *)
 		(regs->u_regs[UREG_FP] + STACK_BIAS - sigframe_size);
 	
-	if (invalid_frame_pointer (sf, sigframe_size)) {
-		lock_kernel ();
-		do_exit(SIGILL);
-	}
+	if (invalid_frame_pointer (sf, sigframe_size))
+		goto sigill;
 
 	if (current->tss.w_saved != 0) {
 		printk ("%s[%d]: Invalid user stack frame for "
 			"signal delivery.\n", current->comm, current->pid);
-		lock_kernel ();
-		do_exit (SIGILL);
+		goto sigill;
 	}
 
 	/* 2. Save the current process state */
@@ -352,10 +347,10 @@ new_setup_frame(struct sigaction *sa, struct pt_regs *regs,
 	}
 
 	__put_user(oldmask, &sf->info.si_mask);
-	for (i = 0; i < sizeof(struct reg_window)/sizeof(u64); i++) {
-		__get_user(tmp, (((u64 *)(regs->u_regs[UREG_FP]+STACK_BIAS))+i));
-		__put_user(tmp, (((u64 *)sf)+i));
-	}
+
+	copy_in_user((u64 *)sf,
+		     (u64 *)(regs->u_regs[UREG_FP]+STACK_BIAS),
+		     sizeof(struct reg_window));
 	
 	/* 3. return to kernel instructions */
 	__put_user(0x821020d8, &sf->insns[0]); /* mov __NR_sigreturn, %g1 */
@@ -388,6 +383,11 @@ new_setup_frame(struct sigaction *sa, struct pt_regs *regs,
 			: "memory");
 		}
 	}
+	return;
+
+sigill:
+	lock_kernel();
+	do_exit(SIGILL);
 }
 
 static inline void handle_signal(unsigned long signr, struct sigaction *sa,
@@ -396,8 +396,11 @@ static inline void handle_signal(unsigned long signr, struct sigaction *sa,
 	new_setup_frame(sa, regs, signr, oldmask);
 	if(sa->sa_flags & SA_ONESHOT)
 		sa->sa_handler = NULL;
-	if(!(sa->sa_flags & SA_NOMASK))
+	if(!(sa->sa_flags & SA_NOMASK)) {
+		spin_lock_irq(&current->sigmask_lock);
 		current->blocked |= (sa->sa_mask | _S(signr)) & _BLOCKABLE;
+		spin_unlock_irq(&current->sigmask_lock);
+	}
 }
 
 static inline void syscall_restart(unsigned long orig_i0, struct pt_regs *regs,
@@ -439,7 +442,11 @@ asmlinkage int do_signal(unsigned long oldmask, struct pt_regs * regs,
 #endif	
 	while ((signr = current->signal & mask) != 0) {
 		signr = ffz(~signr);
-		clear_bit(signr + 32, &current->signal);
+
+		spin_lock_irq(&current->sigmask_lock);
+		current->signal &= ~(1 << signr);
+		spin_unlock_irq(&current->sigmask_lock);
+
 		sa = current->sig->action + signr;
 		signr++;
 		if ((current->flags & PF_PTRACED) && signr != SIGKILL) {
@@ -453,7 +460,9 @@ asmlinkage int do_signal(unsigned long oldmask, struct pt_regs * regs,
 			if (signr == SIGSTOP)
 				continue;
 			if (_S(signr) & current->blocked) {
+				spin_lock_irq(&current->sigmask_lock);
 				current->signal |= _S(signr);
+				spin_unlock_irq(&current->sigmask_lock);
 				continue;
 			}
 			sa = current->sig->action + signr - 1;
@@ -496,8 +505,10 @@ asmlinkage int do_signal(unsigned long oldmask, struct pt_regs * regs,
 			case SIGQUIT: case SIGILL: case SIGTRAP:
 			case SIGABRT: case SIGFPE: case SIGSEGV: case SIGBUS:
 				if(current->binfmt && current->binfmt->core_dump) {
+					lock_kernel();
 					if(current->binfmt->core_dump(signr, regs))
 						signr |= 0x80;
+					unlock_kernel();
 				}
 #ifdef DEBUG_SIGNALS
 				/* Very useful to debug dynamic linker problems */
@@ -506,9 +517,15 @@ asmlinkage int do_signal(unsigned long oldmask, struct pt_regs * regs,
 #endif
 				/* fall through */
 			default:
+				spin_lock_irq(&current->sigmask_lock);
 				current->signal |= _S(signr & 0x7f);
+				spin_unlock_irq(&current->sigmask_lock);
+
 				current->flags |= PF_SIGNALED;
+
+				lock_kernel();
 				do_exit(signr);
+				unlock_kernel();
 			}
 		}
 		if(restart_syscall)

@@ -389,7 +389,7 @@ void do_tty_hangup(struct tty_struct * tty, struct file_operations *fops)
 		tty->ldisc.flush_buffer(tty);
 	if (tty->driver.flush_buffer)
 		tty->driver.flush_buffer(tty);
-	if ((tty->flags & (1 << TTY_DO_WRITE_WAKEUP)) &&
+	if ((test_bit(TTY_DO_WRITE_WAKEUP, &tty->flags)) &&
 	    tty->ldisc.write_wakeup)
 		(tty->ldisc.write_wakeup)(tty);
 	wake_up_interruptible(&tty->write_wait);
@@ -538,7 +538,7 @@ void start_tty(struct tty_struct *tty)
 	}
 	if (tty->driver.start)
 		(tty->driver.start)(tty);
-	if ((tty->flags & (1 << TTY_DO_WRITE_WAKEUP)) &&
+	if ((test_bit(TTY_DO_WRITE_WAKEUP, &tty->flags)) &&
 	    tty->ldisc.write_wakeup)
 		(tty->ldisc.write_wakeup)(tty);
 	wake_up_interruptible(&tty->write_wait);
@@ -553,7 +553,7 @@ static long tty_read(struct inode * inode, struct file * file,
 	tty = (struct tty_struct *)file->private_data;
 	if (tty_paranoia_check(tty, inode->i_rdev, "tty_read"))
 		return -EIO;
-	if (!tty || (tty->flags & (1 << TTY_IO_ERROR)))
+	if (!tty || (test_bit(TTY_IO_ERROR, &tty->flags)))
 		return -EIO;
 
 	/* This check not only needs to be done before reading, but also
@@ -635,7 +635,7 @@ static long tty_write(struct inode * inode, struct file * file,
 		tty = (struct tty_struct *)file->private_data;
 	if (tty_paranoia_check(tty, inode->i_rdev, "tty_write"))
 		return -EIO;
-	if (!tty || !tty->driver.write || (tty->flags & (1 << TTY_IO_ERROR)))
+	if (!tty || !tty->driver.write || (test_bit(TTY_IO_ERROR, &tty->flags)))
 		return -EIO;
 #if 0
 	if (!is_console && L_TOSTOP(tty) && (tty->pgrp > 0) &&
@@ -824,7 +824,7 @@ static int init_dev(kdev_t device, struct tty_struct **ret_tty)
 	 * opens on a pty master.
 	 */
 fast_track:
-	if (tty->flags & (1 << TTY_CLOSING)) {
+	if (test_bit(TTY_CLOSING, &tty->flags)) {
 		retval = -EIO;
 		goto end_init;
 	}
@@ -1071,9 +1071,9 @@ static void release_dev(struct file * filp)
 	 * to close, and TTY_CLOSING makes sure we can't be reopened.
 	 */
 	if(tty_closing)
-		tty->flags |= (1 << TTY_CLOSING);
+		set_bit(TTY_CLOSING, &tty->flags);
 	if(o_tty_closing)
-		o_tty->flags |= (1 << TTY_CLOSING);
+		set_bit(TTY_CLOSING, &o_tty->flags);
 
 	/*
 	 * If _either_ side is closing, make sure there aren't any

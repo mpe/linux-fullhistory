@@ -62,9 +62,8 @@ void sysv_free_inode(struct inode * inode)
 		printk("sysv_free_inode: inode has no device\n");
 		return;
 	}
-	if (atomic_read(&inode->i_count) != 1) {
-		printk("sysv_free_inode: inode has count=%d\n",
-		       atomic_read(&inode->i_count));
+	if (inode->i_count != 1) {
+		printk("sysv_free_inode: inode has count=%d\n", inode->i_count);
 		return;
 	}
 	if (inode->i_nlink) {
@@ -150,7 +149,7 @@ struct inode * sysv_new_inode(const struct inode * dir)
 	mark_buffer_dirty(sb->sv_bh1, 1); /* super-block has been modified */
 	if (sb->sv_bh1 != sb->sv_bh2) mark_buffer_dirty(sb->sv_bh2, 1);
 	sb->s_dirt = 1; /* and needs time stamp */
-	atomic_set(&inode->i_count, 1);
+	inode->i_count = 1;
 	inode->i_nlink = 1;
 	inode->i_dev = sb->s_dev;
 	inode->i_uid = current->fsuid;

@@ -43,10 +43,12 @@ do {	int ent = nr;		\
 do {	int ent = nr;		\
 	bh_mask &= ~(1 << ent);	\
 	bh_mask_count[ent]++;	\
+	barrier();		\
 } while(0)
 
 #define enable_bh(nr)			\
 do {	int ent = nr;			\
+	barrier();			\
 	if (!--bh_mask_count[ent])	\
 		bh_mask |= 1 << ent;	\
 } while(0)

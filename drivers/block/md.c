@@ -202,10 +202,10 @@ static int do_md_stop (int minor, struct inode *inode)
 {
   int i;
   
-  if (atomic_read(&inode->i_count)>1 || md_dev[minor].busy>1) /* ioctl : one open channel */
+  if (inode->i_count > 1 || md_dev[minor].busy>1) /* ioctl : one open channel */
   {
     printk ("STOP_MD md%x failed : i_count=%d, busy=%d\n", minor,
-	    atomic_read(&inode->i_count), md_dev[minor].busy);
+	    inode->i_count, md_dev[minor].busy);
     return -EBUSY;
   }
   

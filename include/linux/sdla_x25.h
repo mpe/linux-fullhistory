@@ -480,7 +480,7 @@ typedef struct X25Stats
 	unsigned short rxRR		PACKED;	/* 3Ah: RR */
 	unsigned short txRNR		PACKED;	/* 3Ch: RNR */
 	unsigned short rxRNR		PACKED;	/* 3Eh: RNR */
-} X25Stats;
+} TX25Stats;
 
 /*----------------------------------------------------------------------------
  * X25_READ_HISTORY_TABLE Command.

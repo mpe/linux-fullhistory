@@ -1,4 +1,4 @@
-/* $Id: sunos_ioctl32.c,v 1.2 1997/07/05 07:09:16 davem Exp $
+/* $Id: sunos_ioctl32.c,v 1.3 1997/07/09 10:59:55 jj Exp $
  * sunos_ioctl32.c: SunOS ioctl compatability on sparc64.
  *
  * Copyright (C) 1995 Miguel de Icaza (miguel@nuclecu.unam.mx)
@@ -86,14 +86,19 @@ extern asmlinkage int sys_ioctl(unsigned int fd, unsigned int cmd, unsigned long
 extern asmlinkage int sys32_ioctl(unsigned int, unsigned int, u32);
 extern asmlinkage int sys_setsid(void);
 
-asmlinkage int sunos_ioctl (int fd, unsigned long cmd, u32 arg)
+asmlinkage int sunos_ioctl (int fd, u32 cmd, u32 arg)
 {
 	struct file *filp;
 	int ret = -EBADF;
 
 	lock_kernel();
-	if(fd >= SUNOS_NR_OPEN || !(filp = current->files->fd[fd]))
+	if(fd >= SUNOS_NR_OPEN)
 		goto out;
+
+	filp = current->files->fd[fd];
+	if(!filp)
+		goto out;
+
 	if(cmd == TIOCSETD) {
 		unsigned long old_fs = get_fs();
 		int *p, ntty = N_TTY;

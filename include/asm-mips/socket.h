@@ -1,7 +1,6 @@
 #ifndef __ASM_MIPS_SOCKET_H
 #define __ASM_MIPS_SOCKET_H
 
-#include <linux/types.h>
 #include <asm/sockios.h>
 
 /*

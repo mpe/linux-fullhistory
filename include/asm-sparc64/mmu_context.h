@@ -1,4 +1,4 @@
-/* $Id: mmu_context.h,v 1.16 1997/07/05 09:54:46 davem Exp $ */
+/* $Id: mmu_context.h,v 1.17 1997/07/13 19:13:39 davem Exp $ */
 #ifndef __SPARC64_MMU_CONTEXT_H
 #define __SPARC64_MMU_CONTEXT_H
 
@@ -11,11 +11,6 @@
 
 #ifndef __ASSEMBLY__
 
-/* Initialize the context related info for a new mm_struct
- * instance.
- */
-#define init_new_context(mm)	((mm)->context = NO_CONTEXT)
-
 #define destroy_context(mm)	do { } while(0)
 
 extern unsigned long tlb_context_cache;
@@ -25,6 +20,11 @@ extern unsigned long tlb_context_cache;
 #define CTX_FIRST_VERSION	((1UL << CTX_VERSION_SHIFT) + 1UL)
 
 extern void get_new_mmu_context(struct mm_struct *mm, unsigned long ctx);
+
+/* Initialize the context related info for a new mm_struct
+ * instance.
+ */
+#define init_new_context(mm)	get_new_mmu_context((mm), tlb_context_cache)
 
 extern __inline__ void get_mmu_context(struct task_struct *tsk)
 {

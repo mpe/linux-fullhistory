@@ -26,9 +26,10 @@
 #include <linux/module.h>	/* support for loadable modules */
 #include <linux/ioport.h>	/* request_region(), release_region() */
 #include <linux/tqueue.h>	/* for kernel task queues */
-#include <linux/router.h>	/* WAN router definitions */
+#include <linux/wanrouter.h>	/* WAN router definitions */
 #include <linux/wanpipe.h>	/* WANPIPE common user API definitions */
-#include <asm/segment.h>	/* kernel <-> user copy */
+#include <asm/uaccess.h>	/* kernel <-> user copy */
+
 
 /****** Defines & Macros ****************************************************/
 
@@ -404,20 +405,13 @@ static int ioctl_dump (sdla_t* card, sdla_dump_t* u_dump)
 	unsigned long oldvec;	/* DPM window vector */
 	int err = 0;
 
-	if ((u_dump == NULL) ||
-	    verify_area(VERIFY_READ, u_dump, sizeof(sdla_dump_t)))
-		return -EFAULT
-	;
-	memcpy_fromfs((void*)&dump, (void*)u_dump, sizeof(sdla_dump_t));
+	if(copy_from_user((void*)&dump, (void*)u_dump, sizeof(sdla_dump_t)))
+		return -EFAULT;
+		
 	if ((dump.magic != WANPIPE_MAGIC) ||
 	    (dump.offset + dump.length > card->hw.memory))
-		return -EINVAL
-	;
-	if ((dump.ptr == NULL) ||
-	    verify_area(VERIFY_WRITE, dump.ptr, dump.length))
-		return -EFAULT
-	;
-
+		return -EINVAL;
+		
 	winsize = card->hw.dpmsize;
         cli();				/* >>> critical section start <<< */
 	oldvec = card->hw.vector;
@@ -433,9 +427,12 @@ static int ioctl_dump (sdla_t* card, sdla_dump_t* u_dump)
 			err = -EIO;
 			break;
 		}
-		memcpy_tofs((void*)(dump.ptr),
-			(void*)(card->hw.dpmbase + pos), len)
-		;
+		/* FIXME::: COPY TO KERNEL BUFFER FIRST ?? */
+		sti();	/* Not ideal but tough we have to do this */
+		if(copy_to_user((void*)(dump.ptr),
+			(void*)(card->hw.dpmbase + pos), len))	
+			return -EFAULT;
+		cli();
 		dump.length     -= len;
 		dump.offset     += len;
 		(char*)dump.ptr += len;
@@ -456,16 +453,12 @@ static int ioctl_exec (sdla_t* card, sdla_exec_t* u_exec)
 	sdla_exec_t exec;
 
 	if (card->exec == NULL)
-		return -ENODEV
-	;
-	if ((u_exec == NULL) ||
-	    verify_area(VERIFY_READ, u_exec, sizeof(sdla_exec_t)))
-		return -EFAULT
-	;
-	memcpy_fromfs((void*)&exec, (void*)u_exec, sizeof(sdla_exec_t));
+		return -ENODEV;
+		
+	if(copy_from_user((void*)&exec, (void*)u_exec, sizeof(sdla_exec_t)))
+		return -EFAULT;
 	if ((exec.magic != WANPIPE_MAGIC) || (exec.cmd == NULL))
-		return -EINVAL
-	;
+		return -EINVAL;
 	return card->exec(card, exec.cmd, exec.data);
 }
 

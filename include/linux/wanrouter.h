@@ -1,5 +1,5 @@
 /*****************************************************************************
-* wanrouter.h	Definitions for the WAN Multiprotocol Router Module.
+* router.h	Definitions for the WAN Multiprotocol Router Module.
 *		This module provides API and common services for WAN Link
 *		Drivers and is completely hardware-independent.
 *
@@ -12,6 +12,10 @@
 *		as published by the Free Software Foundation; either version
 *		2 of the License, or (at your option) any later version.
 * ============================================================================
+* May 29, 1997 	Jaspreet Singh	Added 'tx_int_enabled' tp 'wan_device_t'
+* May 21, 1997	Jaspreet Singh	Added 'udp_port' to 'wan_device_t'
+* Apr 25, 1997  Farhan Thawar   Added 'udp_port' to 'wandev_conf_t'
+* Jan 16, 1997	Gene Kozin	router_devlist made public
 * Jan 02, 1997	Gene Kozin	Initial version (based on wanpipe.h).
 *****************************************************************************/
 #ifndef	_ROUTER_H
@@ -128,7 +132,8 @@ typedef struct wandev_conf
 	int dma;		/* DMA request level */
 	unsigned bps;		/* data transfer rate */
 	unsigned mtu;		/* maximum transmit unit size */
-	char interface;		/* RS-232/V.35, etc. */
+        unsigned udp_port;      /* UDP port for management */
+        char interface;		/* RS-232/V.35, etc. */
 	char clocking;		/* external/internal */
 	char line_coding;	/* NRZ/NRZI/FM0/FM1, etc. */
 	char station;		/* DTE/DCE, primary/secondary, etc. */
@@ -283,6 +288,8 @@ typedef struct wan_device
 	int dma;			/* DMA request level */
 	unsigned bps;			/* data transfer rate */
 	unsigned mtu;			/* max physical transmit unit size */
+	unsigned udp_port;              /* UDP port for management */
+        unsigned tx_int_enabled; 	/* Transmit Interrupt enabled or not */
 	char interface;			/* RS-232/V.35, etc. */
 	char clocking;			/* external/internal */
 	char line_coding;		/* NRZ/NRZI/FM0/FM1, etc. */
@@ -311,22 +318,24 @@ typedef struct wan_device
 	struct proc_dir_entry dent;	/* proc filesystem entry */
 } wan_device_t;
 
-/* Init Point */
-extern void wanrouter_init(void);
-
 /* Public functions available for device drivers */
-extern int register_wan_device (wan_device_t* wandev);
-extern int unregister_wan_device (char* name);
-unsigned short wanrouter_type_trans (struct sk_buff* skb, struct device* dev);
-int wanrouter_encapsulate (struct sk_buff* skb, struct device* dev);
+extern int register_wandev (wan_device_t* wandev);
+extern int unregister_wandev (char* name);
+unsigned short wan_type_trans (struct sk_buff* skb, struct device* dev);
+int wan_encapsulate (struct sk_buff* skb, struct device* dev);
 
 /* Proc interface functions. These must not be called by the drivers! */
 extern int wanrouter_proc_init (void);
 extern void wanrouter_proc_cleanup (void);
 extern int wanrouter_proc_add (wan_device_t* wandev);
 extern int wanrouter_proc_delete (wan_device_t* wandev);
-extern int wanrouter_ioctl(struct inode* inode, struct file* file,
-	unsigned int cmd, unsigned long arg);
+extern int wanrouter_ioctl(
+	struct inode* inode, struct file* file,
+	unsigned int cmd, unsigned long arg)
+;
+
+/* Public Data */
+extern wan_device_t* router_devlist;	/* list of registered devices */
 
 #endif	/* __KERNEL__ */
 #endif	/* _ROUTER_H */

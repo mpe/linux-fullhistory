@@ -2,7 +2,7 @@
  *    wd33c93.h -  Linux device driver definitions for the
  *                 Commodore Amiga A2091/590 SCSI controller card
  *
- *    IMPORTANT: This file is for version 1.24 - 29/Jan/1997
+ *    IMPORTANT: This file is for version 1.25 - 09/Jul/1997
  *
  * Copyright (c) 1996 John Shifflett, GeoLog Consulting
  *    john@geolog.com
@@ -198,6 +198,8 @@ typedef int (*dma_setup_t) (Scsi_Cmnd *SCpnt, int dir_in);
 typedef void (*dma_stop_t) (struct Scsi_Host *instance, Scsi_Cmnd *SCpnt,
              int status);
 
+
+#define ILLEGAL_STATUS_BYTE   0xff
 
 #define DEFAULT_SX_PER   376     /* (ns) fairly safe */
 #define DEFAULT_SX_OFF   0       /* aka async */

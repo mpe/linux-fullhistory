@@ -138,7 +138,6 @@ struct fb_wid_item {
 	__u32	wi_attrs;
 	__u32	wi_values[32];
 };
-/* XXX 32-bit binary compatability item... -DaveM */
 struct fb_wid_list {
 	__u32	wl_flags;
 	__u32	wl_count;
@@ -149,6 +148,21 @@ struct fb_wid_list {
 #define FBIO_WID_FREE	_IOW('F', 31, struct fb_wid_alloc)
 #define FBIO_WID_PUT	_IOW('F', 32, struct fb_wid_list)
 #define FBIO_WID_GET	_IOWR('F', 33, struct fb_wid_list)
+
+/* Creator ioctls */
+#define FFB_IOCTL	('F'<<8)
+#define FFB_SYS_INFO		(FFB_IOCTL|80)
+#define FFB_CLUTREAD		(FFB_IOCTL|81)
+#define FFB_CLUTPOST		(FFB_IOCTL|82)
+#define FFB_SETDIAGMODE		(FFB_IOCTL|83)
+#define FFB_GETMONITORID	(FFB_IOCTL|84)
+#define FFB_GETVIDEOMODE	(FFB_IOCTL|85)
+#define FFB_SETVIDEOMODE	(FFB_IOCTL|86)
+#define FFB_SETSERVER		(FFB_IOCTL|87)
+#define FFB_SETOVCTL		(FFB_IOCTL|88)
+#define FFB_GETOVCTL		(FFB_IOCTL|89)
+#define FFB_GETSAXNUM		(FFB_IOCTL|90)
+#define FFB_FBDEBUG		(FFB_IOCTL|91)
 
 /* Cg14 ioctls */
 #define MDI_IOCTL          ('M'<<8)
@@ -174,16 +188,15 @@ struct mdi_cfginfo {
  */
 #define MDI_CLEAR_XLUT       (MDI_IOCTL|9)
 
-/* leo ioctls */
-struct leo_clut_alloc {
+/* leo & ffb ioctls */
+struct fb_clut_alloc {
 	__u32	clutid;	/* Set on return */
  	__u32	flag;
  	__u32	index;
 };
 
-/* XXX 32-bit binary compatability item... -DaveM */
-struct leo_clut {
-#define LEO_CLUT_WAIT	0x00000001	/* Not yet implemented */
+struct fb_clut {
+#define FB_CLUT_WAIT	0x00000001	/* Not yet implemented */
  	__u32	flag;
  	__u32	clutid;
  	__u32	offset;
@@ -192,10 +205,21 @@ struct leo_clut {
  	char *	green;
  	char *	blue;
 };
-#define LEO_CLUTALLOC	_IOWR('L', 53, struct leo_clut_alloc)
-#define LEO_CLUTFREE	_IOW('L', 54, struct leo_clut_alloc)
-#define LEO_CLUTREAD	_IOW('L', 55, struct leo_clut)
-#define LEO_CLUTPOST	_IOW('L', 56, struct leo_clut)
+
+struct fb_clut32 {
+ 	__u32	flag;
+ 	__u32	clutid;
+ 	__u32	offset;
+ 	__u32	count;
+ 	__u32	red;
+ 	__u32	green;
+ 	__u32	blue;
+};
+
+#define LEO_CLUTALLOC	_IOWR('L', 53, struct fb_clut_alloc)
+#define LEO_CLUTFREE	_IOW('L', 54, struct fb_clut_alloc)
+#define LEO_CLUTREAD	_IOW('L', 55, struct fb_clut)
+#define LEO_CLUTPOST	_IOW('L', 56, struct fb_clut)
 #define LEO_SETGAMMA	_IOW('L', 68, int) /* Not yet implemented */
 #define LEO_GETGAMMA	_IOR('L', 69, int) /* Not yet implemented */
 

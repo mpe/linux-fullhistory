@@ -24,7 +24,7 @@ typedef void (*structor)(void *);
  * Note for big-sized objects in the range of whole pages, use
  * the fast Linux page allocator instead, directly.
  */
-extern struct simp * simp_create(char * name, long size, long clearable_offset,
+extern struct simp * simp_create(char * name, long size,
 				 structor first_ctor, 
 				 structor again_ctor, 
 				 structor dtor);

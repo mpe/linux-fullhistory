@@ -10,6 +10,17 @@
 *		as published by the Free Software Foundation; either version
 *		2 of the License, or (at your option) any later version.
 * ============================================================================
+* Mar 11, 1997  Farhan Thawar   Version 3.1.1
+*                                o added support for V35
+*                                o changed if_send() to return 0 if
+*                                  wandev.critical() is true
+*                                o free socket buffer in if_send() if
+*                                  returning 0
+*                                o added support for single '@' address to
+*                                  accept all incoming calls
+*                                o fixed bug in set_chan_state() to disconnect
+* Jan 15, 1997	Gene Kozin	Version 3.1.0
+*				 o implemented exec() entry point
 * Jan 07, 1997	Gene Kozin	Initial version.
 *****************************************************************************/
 
@@ -22,10 +33,11 @@
 #include <linux/errno.h>	/* return codes */
 #include <linux/string.h>	/* inline memset(), etc. */
 #include <linux/malloc.h>	/* kmalloc(), kfree() */
-#include <linux/router.h>	/* WAN router definitions */
+#include <linux/wanrouter.h>	/* WAN router definitions */
 #include <linux/wanpipe.h>	/* WANPIPE common user API definitions */
 #include <linux/init.h>		/* __initfunc et al. */
 #include <asm/byteorder.h>	/* htons(), etc. */
+#include <asm/uaccess.h>	/* copy_from_user, etc */
 
 #define	_GNUC_
 #include <linux/sdla_x25.h>	/* X.25 firmware API definitions */
@@ -90,14 +102,16 @@ static int new_if (wan_device_t* wandev, struct device* dev,
 	wanif_conf_t* conf);
 static int del_if (wan_device_t* wandev, struct device* dev);
 
+/* WANPIPE-specific entry points */
+static int wpx_exec (struct sdla* card, void* u_cmd, void* u_data);
+
 /* Network device interface */
 static int if_init   (struct device* dev);
 static int if_open   (struct device* dev);
 static int if_close  (struct device* dev);
 static int if_header (struct sk_buff* skb, struct device* dev,
 	unsigned short type, void* daddr, void* saddr, unsigned len);
-static int if_rebuild_hdr (void* hdr, struct device* dev, unsigned long raddr,
-	struct sk_buff* skb);
+static int if_rebuild_hdr (struct sk_buff* skb);
 static int if_send (struct sk_buff* skb, struct device* dev);
 static struct enet_statistics* if_stats (struct device* dev);
 
@@ -118,6 +132,8 @@ static void poll_active (sdla_t* card);
 /* X.25 firmware interface functions */
 static int x25_get_version (sdla_t* card, char* str);
 static int x25_configure (sdla_t* card, TX25Config* conf);
+static int x25_get_err_stats (sdla_t* card);
+static int x25_get_stats (sdla_t* card);
 static int x25_set_intr_mode (sdla_t* card, int mode);
 static int x25_close_hdlc (sdla_t* card);
 static int x25_open_hdlc (sdla_t* card);
@@ -235,7 +251,9 @@ __initfunc(int wpx_init (sdla_t* card, wandev_conf_t* conf))
 	{
 		u.cfg.station = 0;		/* DCE mode */
 	}
-
+        if (conf->interface != WANOPT_RS232 ) {
+	        u.cfg.hdlcOptions |= 0x80;      /* V35 mode */
+	} 
 	/* adjust MTU */
 	if (!conf->mtu || (conf->mtu >= 1024))
 		card->wandev.mtu = 1024
@@ -299,6 +317,7 @@ __initfunc(int wpx_init (sdla_t* card, wandev_conf_t* conf))
 	card->wandev.station	= conf->station;
 	card->isr		= &wpx_isr;
 	card->poll		= &wpx_poll;
+	card->exec		= &wpx_exec;
 	card->wandev.update	= &update;
 	card->wandev.new_if	= &new_if;
 	card->wandev.del_if	= &del_if;
@@ -313,9 +332,23 @@ __initfunc(int wpx_init (sdla_t* card, wandev_conf_t* conf))
  */
 static int update (wan_device_t* wandev)
 {
-/*
-	sdla_t* card = wandev->private;
-*/
+	sdla_t* card;
+
+	/* sanity checks */
+	if ((wandev == NULL) || (wandev->private == NULL))
+		return -EFAULT
+	;
+	if (wandev->state == WAN_UNCONFIGURED)
+		return -ENODEV
+	;
+	if (test_and_set_bit(0, (void*)&wandev->critical))
+		return -EAGAIN
+	;
+	card = wandev->private;
+
+	x25_get_err_stats(card);
+	x25_get_stats(card);
+	wandev->critical = 0;
 	return 0;
 }
 
@@ -409,6 +442,45 @@ static int del_if (wan_device_t* wandev, struct device* dev)
 		kfree(dev->priv);
 		dev->priv = NULL;
 	}
+	return 0;
+}
+
+/****** WANPIPE-specific entry points ***************************************/
+
+/*============================================================================
+ * Execute adapter interface command.
+ */
+static int wpx_exec (struct sdla* card, void* u_cmd, void* u_data)
+{
+	TX25Mbox* mbox = card->mbox;
+	int retry = MAX_CMD_RETRY;
+	int err, len;
+	TX25Cmd cmd;
+
+	if(copy_from_user((void*)&cmd, u_cmd, sizeof(cmd)))
+		return -EFAULT;
+
+	/* execute command */
+	do
+	{
+		memcpy(&mbox->cmd, &cmd, sizeof(cmd));
+		if (cmd.length)
+			if(copy_from_user((void*)&mbox->data, u_data, cmd.length))
+				return -EFAULT;
+		if (sdla_exec(mbox))
+			err = mbox->cmd.result;
+		else
+			return -EIO;
+	}
+	while (err && retry-- && x25_error(card, err, cmd.command, cmd.lcn));
+
+	/* return result */
+	if(copy_to_user(u_cmd, (void*)&mbox->cmd, sizeof(TX25Cmd)))
+		return -EFAULT;
+	len = mbox->cmd.length;
+	if (len && u_data)
+		if(copy_to_user(u_data, (void*)&mbox->data, len))
+			return -EFAULT;
 	return 0;
 }
 
@@ -555,14 +627,13 @@ static int if_header (struct sk_buff* skb, struct device* dev,
  * Return:	1	physical address resolved.
  *		0	physical address not resolved
  */
-static int if_rebuild_hdr (void* hdr, struct device* dev, unsigned long raddr,
-			   struct sk_buff* skb)
+static int if_rebuild_hdr (struct sk_buff* skb)
 {
-	x25_channel_t* chan = dev->priv;
+	x25_channel_t* chan = skb->dev->priv;
 	sdla_t* card = chan->card;
 
 	printk(KERN_INFO "%s: rebuild_header() called for interface %s!\n",
-		card->devname, dev->name)
+		card->devname, skb->dev->name)
 	;
 	return 1;
 }
@@ -588,7 +659,7 @@ static int if_send (struct sk_buff* skb, struct device* dev)
 {
 	x25_channel_t* chan = dev->priv;
 	sdla_t* card = chan->card;
-	int retry = 0, queued = 0;
+	int queued = 0;
 
 	if (test_and_set_bit(0, (void*)&card->wandev.critical))
 	{
@@ -597,7 +668,8 @@ static int if_send (struct sk_buff* skb, struct device* dev)
 			card->devname)
 		;
 #endif
-		return 1;
+		dev_kfree_skb(skb, FREE_WRITE);
+		return 0;
 	}
 
 	if (test_and_set_bit(0, (void*)&dev->tbusy))
@@ -608,7 +680,10 @@ static int if_send (struct sk_buff* skb, struct device* dev)
 		;
 #endif
 		++chan->ifstats.collisions;
-		retry = 1;
+		++card->wandev.stats.collisions;
+	        dev_kfree_skb(skb, FREE_WRITE);
+	        card->wandev.critical = 0;
+	        return 0;
 	}
 	else if (chan->protocol && (chan->protocol != skb->protocol))
 	{
@@ -646,13 +721,13 @@ static int if_send (struct sk_buff* skb, struct device* dev)
 		++chan->ifstats.tx_dropped;
 	}
 
-	if (!retry && !queued)
+	if (!queued)
 	{
 		dev_kfree_skb(skb, FREE_WRITE);
 		dev->tbusy = 0;
 	}
 	card->wandev.critical = 0;
-	return retry;
+	return 0;
 }
 
 /*============================================================================
@@ -992,6 +1067,62 @@ static int x25_configure (sdla_t* card, TX25Config* conf)
 	} while (err && retry-- &&
 		 x25_error(card, err, X25_SET_CONFIGURATION, 0))
 	;
+	return err;
+}
+
+/*============================================================================
+ * Get communications error statistics.
+ */
+static int x25_get_err_stats (sdla_t* card)
+{
+	TX25Mbox* mbox = card->mbox;
+  	int retry = MAX_CMD_RETRY;
+	int err;
+
+	do
+	{
+		memset(&mbox->cmd, 0, sizeof(TX25Cmd));
+		mbox->cmd.command = X25_HDLC_READ_COMM_ERR;
+		err = sdla_exec(mbox) ? mbox->cmd.result : CMD_TIMEOUT;
+	} while (err && retry-- &&
+		 x25_error(card, err, X25_HDLC_READ_COMM_ERR, 0))
+	;
+	if (!err)
+	{
+		THdlcCommErr* stats = (void*)mbox->data;
+
+		card->wandev.stats.rx_over_errors    = stats->rxOverrun;
+		card->wandev.stats.rx_crc_errors     = stats->rxBadCrc;
+		card->wandev.stats.rx_missed_errors  = stats->rxAborted;
+		card->wandev.stats.tx_aborted_errors = stats->txAborted;
+	}
+	return err;
+}
+
+/*============================================================================
+ * Get protocol statistics.
+ */
+static int x25_get_stats (sdla_t* card)
+{
+	TX25Mbox* mbox = card->mbox;
+  	int retry = MAX_CMD_RETRY;
+	int err;
+
+	do
+	{
+		memset(&mbox->cmd, 0, sizeof(TX25Cmd));
+		mbox->cmd.command = X25_READ_STATISTICS;
+		err = sdla_exec(mbox) ? mbox->cmd.result : CMD_TIMEOUT;
+	} while (err && retry-- &&
+		 x25_error(card, err, X25_READ_STATISTICS, 0))
+	;
+	if (!err)
+	{
+		TX25Stats* stats = (void*)mbox->data;
+
+		card->wandev.stats.rx_packets = stats->rxData;
+		card->wandev.stats.tx_packets = stats->rxData;
+	}
 	return err;
 }
 
@@ -1478,6 +1609,10 @@ static int incomming_call (sdla_t* card, int cmd, int lcn, TX25Mbox* mb)
 		if (strcmp(info->src, chan->addr) == 0)
 			break
 		;
+	        // If just an '@' is specified, accept all incomming calls
+	        if (strcmp(chan->addr, "") == 0)
+	                break
+	        ;
 	}
 
 	if (dev == NULL)
@@ -1755,9 +1890,10 @@ static void set_chan_state (struct device* dev, int state)
 			printk (KERN_INFO "%s: interface %s disconnected!\n",
 				card->devname, dev->name)
 			;
-			if (chan->svc)
-				*(unsigned short*)dev->dev_addr = 0
-			;
+			if (chan->svc) {
+				*(unsigned short*)dev->dev_addr = 0;
+		                chan->lcn = 0;
+			}
 			break;
 		}
 		chan->state = state;

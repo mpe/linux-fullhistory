@@ -11,6 +11,8 @@
 *		as published by the Free Software Foundation; either version
 *		2 of the License, or (at your option) any later version.
 * ============================================================================
+* Jan 15, 1997	Gene Kozin	Version 3.1.0
+*				 o added UDP management stuff
 * Jan 02, 1997	Gene Kozin	Version 3.0.0
 *****************************************************************************/
 #ifndef	_WANPIPE_H
@@ -19,6 +21,11 @@
 #include <linux/wanrouter.h>
 
 /* Defines */
+
+#ifndef	PACKED
+#define	PACKED	__attribute__((packed))
+#endif
+
 #define	WANPIPE_MAGIC	0x414C4453L	/* signatire: 'SDLA' reversed */
 
 /* IOCTL numbers (up to 16) */
@@ -43,6 +50,22 @@ typedef struct sdla_exec	/* WANPIPE_EXEC */
 	void* cmd;		/* -> command structure */
 	void* data;		/* -> data buffer */
 } sdla_exec_t;
+
+/* UDP management stuff */
+
+typedef struct wum_header
+{
+	unsigned char signature[8];	/* 00h: signature */
+	unsigned char type;		/* 08h: request/reply */
+	unsigned char command;		/* 09h: commnand */
+	unsigned char reserved[6];	/* 0Ah: reserved */
+} wum_header_t;
+
+#define	WUM_SIGNATURE_L	0x50495046
+#define	WUM_SIGNATURE_H	0x444E3845
+
+#define	WUM_KILL	0x50
+#define	WUM_EXEC	0x51
 
 #ifdef	__KERNEL__
 /****** Kernel Interface ****************************************************/
@@ -77,6 +100,7 @@ typedef struct sdla
 	wan_device_t wandev;		/* WAN device data space */
 	unsigned open_cnt;		/* number of open interfaces */
 	unsigned long state_tick;	/* link state timestamp */
+/*	unsigned tx_int_enabled; */	/* tranmit interrupt enabled or not */
 	char in_isr;			/* interrupt-in-service flag */
 	void* mbox;			/* -> mailbox */
 	void* rxmb;			/* -> receive mailbox */

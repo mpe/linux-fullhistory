@@ -228,7 +228,7 @@ void fixup_dcache_alias(struct vm_area_struct *vma, unsigned long address, pte_t
 	pte_t *ptep;
 	int alias_found = 0;
 
-	inode = vma->vm_inode;
+	inode = vma->vm_dentry->d_inode;
 	if(!inode)
 		return;
 

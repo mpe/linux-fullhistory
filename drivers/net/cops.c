@@ -40,6 +40,7 @@ static const char *version =
  *	  the driver figure it out.
  */
 
+#include <linux/config.h>
 #ifdef MODULE
 #include <linux/module.h>
 #include <linux/version.h>

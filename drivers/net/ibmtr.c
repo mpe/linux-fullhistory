@@ -55,7 +55,10 @@
  *	+ completed multiple adapter support. (November 20 1996)
  *	+ implemented csum_partial_copy in tr_rx and increased receive 
  *        buffer size and count. Minor fixes. (March 15, 1997)
-*/
+ *
+ *	Changes by Christopher Turcksin <wabbit@rtfc.demon.co.uk>
+ *	+ Now compiles ok as a module again.
+ */
 
 #ifdef PCMCIA
 #define MODULE
@@ -163,9 +166,9 @@ unsigned char ibmtr_debug_trace=0;
 
 int		ibmtr_probe(struct device *dev);
 static int	ibmtr_probe1(struct device *dev, int ioaddr);
-unsigned char	get_sram_size(struct tok_info *adapt_info);
+static unsigned char	get_sram_size(struct tok_info *adapt_info);
 static int	tok_init_card(struct device *dev);
-int		trdev_init(struct device *dev);
+static int	trdev_init(struct device *dev);
 void		tok_interrupt(int irq, void *dev_id, struct pt_regs *regs);
 static void 	initial_tok_int(struct device *dev);
 static void 	open_sap(unsigned char type,struct device *dev);
@@ -1583,7 +1586,7 @@ int init_module(void)
 		dev_ibmtr[i]->init      = &ibmtr_probe;
 
 	        if (register_trdev(dev_ibmtr[i]) != 0) {
-			kfree_s(dev_ibmtr[i], sizeof(struct dev));
+			kfree_s(dev_ibmtr[i], sizeof(struct device));
 			dev_ibmtr[i] = NULL;
 		        if (i == 0) {
 			        printk("ibmtr: register_trdev() returned non-zero.\n");

@@ -318,7 +318,7 @@ static int loop_set_fd(struct loop_device *lo, kdev_t dev, unsigned int arg)
 	}
 
 	lo->lo_inode = inode;
-	atomic_inc(&lo->lo_inode->i_count);
+	lo_inode->i_count++;
 	lo->transfer = NULL;
 	figure_loop_size(lo);
 	MOD_INC_USE_COUNT;

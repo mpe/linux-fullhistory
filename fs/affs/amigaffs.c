@@ -26,27 +26,6 @@ static char ErrorBuffer[256];
  *
  */
 
-/* Find the next used hash entry at or after *HASH_POS in a directory's hash
-   table.  *HASH_POS is assigned that entry's number.  DIR_DATA points to
-   the directory header block in memory.  If there are no more entries,
-   0 is returned.  Otherwise, the key number in the next used hash slot
-   is returned. */
-
-static int
-affs_find_next_hash_entry(int hsize, void *dir_data, int *hash_pos)
-{
-	struct dir_front *dir_front = dir_data;
-	int i;
-
-	for (i = *hash_pos; i < hsize; i++)
-		if (dir_front->hashtable[i] != 0)
-			break;
-	if (i >= hsize)
-		return 0;
-	*hash_pos = i;
-	return htonl(dir_front->hashtable[i]);
-}
-
 /* Set *NAME to point to the file name in a file header block in memory
    pointed to by FH_DATA.  The length of the name is returned. */
 

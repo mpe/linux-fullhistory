@@ -92,9 +92,10 @@ bwtwo_mmap (struct inode *inode, struct file *file, struct vm_area_struct *vma,
 	map_offset = get_phys ((unsigned long) fb->base);
 	r = io_remap_page_range (vma->vm_start, map_offset, map_size,
 				 vma->vm_page_prot, fb->space);
-	if (r) return -EAGAIN;
-	vma->vm_inode = inode;
-	atomic_inc(&inode->i_count);
+	if (r)
+		return -EAGAIN;
+
+	vma->vm_dentry = dget(file->f_dentry);
 	return 0;
 }
 

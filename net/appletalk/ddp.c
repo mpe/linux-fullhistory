@@ -1832,7 +1832,7 @@ static int atalk_sendmsg(struct socket *sock, struct msghdr *msg, int len,
 	{
 		if((!(rt->flags&RTF_GATEWAY))&&(!(dev->flags&IFF_LOOPBACK)))
 		{
-			struct sk_buff *skb2=skb_clone(skb, GFP_KERNEL);
+			struct sk_buff *skb2=skb_copy(skb, GFP_KERNEL);
 			if(skb2)
 			{
 				loopback=1;

@@ -1,4 +1,4 @@
-/* $Id: sunserial.h,v 1.9 1997/04/12 23:33:12 ecd Exp $
+/* $Id: sunserial.h,v 1.11 1997/07/08 10:17:23 davem Exp $
  * serial.h: Definitions for the Sparc Zilog serial driver.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)

@@ -653,7 +653,7 @@ __initfunc(int qlogicpti_detect(Scsi_Host_Template *tpnt))
 			}
 
 			qpti_host->base = (unsigned char *)qregs;
-			qpti_host->io_port = (unsigned int) qregs;
+			qpti_host->io_port = (unsigned int) ((unsigned long)qregs);
 			qpti_host->n_io_port = (unsigned char)
 				qpti->qdev->reg_addrs[0].reg_size;
 
@@ -805,7 +805,7 @@ static inline void cmd_frob(struct Command_Entry *cmd, Scsi_Cmnd *Cmnd,
 	memset(cmd, 0, sizeof(struct Command_Entry));
 	cmd->hdr.entry_cnt = 1;
 	cmd->hdr.entry_type = ENTRY_COMMAND;
-	cmd->handle = (u_int) Cmnd;          /* magic mushroom */
+	cmd->handle = (u_int) ((unsigned long)Cmnd);          /* magic mushroom */
 	cmd->target_id = Cmnd->target;
 	cmd->target_lun = Cmnd->lun;
 	cmd->cdb_length = Cmnd->cmd_len;
@@ -890,7 +890,7 @@ static inline u_int load_cmd(Scsi_Cmnd *Cmnd, struct Command_Entry *cmd,
 							  Cmnd->request_bufflen,
 							  qpti->qdev->my_bus));
 
-		cmd->dataseg[0].d_base = (u_int) Cmnd->SCp.ptr;
+		cmd->dataseg[0].d_base = (u_int) ((unsigned long)Cmnd->SCp.ptr);
 		cmd->dataseg[0].d_count = Cmnd->request_bufflen;
 		cmd->segment_cnt = 1;
 	}
@@ -1062,7 +1062,7 @@ repeat:
 			while(out_ptr != in_ptr) {
 				sts = (struct Status_Entry *) &qpti->res_cpu[out_ptr];
 				out_ptr = NEXT_RES_PTR(out_ptr);
-				Cmnd = (Scsi_Cmnd *) sts->handle; /* but_to_virt?!?! */
+				Cmnd = (Scsi_Cmnd *) ((unsigned long)sts->handle);
 				if(sts->completion_status == CS_RESET_OCCURRED ||
 				   sts->completion_status == CS_ABORTED ||
 				   (sts->status_flags & STF_BUS_RESET))
@@ -1111,8 +1111,8 @@ int qlogicpti_abort(Scsi_Cmnd *Cmnd)
 	qlogicpti_disable_irqs(qpti->qregs);
 	param[0] = MBOX_ABORT;
 	param[1] = (((u_short) Cmnd->target) << 8) | Cmnd->lun;
-	param[2] = ((unsigned int)Cmnd) >> 16;
-	param[3] = ((unsigned int)Cmnd) & 0xffff;
+	param[2] = ((unsigned int)((unsigned long)Cmnd)) >> 16;
+	param[3] = ((unsigned int)((unsigned long)Cmnd)) & 0xffff;
 	if(qlogicpti_mbox_command(qpti, param, 0) ||
 	   (param[0] != MBOX_COMMAND_COMPLETE)) {
 		printk(KERN_EMERG "qlogicpti : scsi abort failure: %x\n", param[0]);

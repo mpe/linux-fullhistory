@@ -232,7 +232,7 @@ static unsigned int connect_poll(struct file * filp, poll_table * wait)
 
 static int pipe_release(struct inode * inode)
 {
-	if (!PIPE_READERS(*inode) && !PIPE_READERS(*inode)) {
+	if (!PIPE_READERS(*inode) && !PIPE_WRITERS(*inode)) {
 		free_page((unsigned long) PIPE_BASE(*inode));
 		PIPE_BASE(*inode) = NULL;
 	}

@@ -439,7 +439,7 @@ int minix_rmdir(struct inode * dir, struct dentry *dentry)
 		retval = -ENOENT;
 		goto end_rmdir;
 	}
-	if (atomic_read(&inode->i_count) > 1) {
+	if (inode->i_count > 1) {
 		retval = -EBUSY;
 		goto end_rmdir;
 	}
@@ -607,7 +607,7 @@ static int subdir(struct inode * new_inode, struct inode * old_inode)
 	int ino;
 	int result;
 
-	atomic_inc(&new_inode->i_count);
+	new_inode->i_count++;
 	result = 0;
 	for (;;) {
 		if (new_inode == old_inode) {
@@ -696,7 +696,7 @@ start_up:
 		if (!empty_dir(new_inode))
 			goto end_rename;
 		retval = -EBUSY;
-		if (atomic_read(&new_inode->i_count) > 1)
+		if (new_inode->i_count > 1)
 			goto end_rename;
 	}
 	retval = -EPERM;

@@ -1,4 +1,4 @@
-/* $Id: misc.c,v 1.7 1997/07/05 09:52:51 davem Exp $
+/* $Id: misc.c,v 1.8 1997/07/14 23:45:28 davem Exp $
  * misc.c:  Miscellaneous prom functions that don't belong
  *          anywhere else.
  *
@@ -133,3 +133,10 @@ void prom_set_trap_table(unsigned long tba)
 {
 	p1275_cmd("SUNW,set-trap-table", P1275_INOUT(1, 0), tba);
 }
+
+#ifdef __SMP__
+void prom_start_cpu(int cpunode, unsigned long pc, unsigned long o0)
+{
+	p1275_cmd("SUNW,start-cpu", P1275_INOUT(3, 0), cpunode, pc, o0);
+}
+#endif

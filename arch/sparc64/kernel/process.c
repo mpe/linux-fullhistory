@@ -1,4 +1,4 @@
-/*  $Id: process.c,v 1.26 1997/07/01 21:15:07 jj Exp $
+/*  $Id: process.c,v 1.28 1997/07/13 18:53:53 davem Exp $
  *  arch/sparc64/kernel/process.c
  *
  *  Copyright (C) 1995, 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -17,6 +17,8 @@
 #include <linux/sched.h>
 #include <linux/kernel.h>
 #include <linux/mm.h>
+#include <linux/smp.h>
+#include <linux/smp_lock.h>
 #include <linux/stddef.h>
 #include <linux/unistd.h>
 #include <linux/ptrace.h>
@@ -263,9 +265,6 @@ void show_stackframe32(struct sparc_stackf32 *sf)
 
 void show_regs(struct pt_regs * regs)
 {
-#if __MPP__
-	printk("CID: %d\n",mpp_cid());
-#endif
         printk("TSTATE: %016lx TPC: %016lx TNPC: %016lx Y: %08x\n", regs->tstate,
 	       regs->tpc, regs->tnpc, regs->y);
 	printk("g0: %016lx g1: %016lx g2: %016lx g3: %016lx\n",
@@ -285,9 +284,6 @@ void show_regs(struct pt_regs * regs)
 
 void show_regs32(struct pt_regs32 *regs)
 {
-#if __MPP__
-	printk("CID: %d\n",mpp_cid());
-#endif
         printk("PSR: %08x PC: %08x NPC: %08x Y: %08x\n", regs->psr,
 	       regs->pc, regs->npc, regs->y);
 	printk("g0: %08x g1: %08x g2: %08x g3: %08x\n",
@@ -365,25 +361,32 @@ void flush_thread(void)
 	__asm__ __volatile__("flush %g6");
 }
 
-static __inline__ struct sparc_stackf *
-clone_stackframe(struct sparc_stackf *dst, struct sparc_stackf *src)
+/* It's a bit more tricky when 64-bit tasks are involved... */
+static unsigned long clone_stackframe(unsigned long csp, unsigned long psp)
 {
-	struct sparc_stackf *sp;
+	unsigned long fp, distance, rval;
 
-#if 0
-	unsigned long size;
-	size = ((unsigned long)src->fp) - ((unsigned long)src);
-	sp = (struct sparc_stackf *)(((unsigned long)dst) - size); 
-
-	if (copy_to_user(sp, src, size))
+	if(!(current->tss.flags & SPARC_FLAG_32BIT)) {
+		csp += STACK_BIAS;
+		psp += STACK_BIAS;
+		__get_user(fp, &(((struct reg_window *)psp)->ins[6]));
+	} else
+		__get_user(fp, &(((struct reg_window32 *)psp)->ins[6]));
+	distance = fp - psp;
+	rval = (csp - distance);
+	if(copy_in_user(rval, psp, distance))
 		return 0;
-	if (put_user(dst, &sp->fp))
-		return 0;
-#endif		
-	return sp;
+	if(current->tss.flags & SPARC_FLAG_32BIT) {
+		if(put_user(((u32)csp), &(((struct reg_window32 *)rval)->ins[6])))
+			return 0;
+		return rval;
+	} else {
+		if(put_user(((u64)csp - STACK_BIAS),
+			    &(((struct reg_window *)rval)->ins[6])))
+			return 0;
+		return rval - STACK_BIAS;
+	}
 }
-
-/* #define DEBUG_WINFIXUPS */
 
 /* Standard stuff. */
 static inline void shift_window_buffer(int first_win, int last_win,
@@ -408,9 +411,6 @@ void synchronize_user_stack(void)
 		int winsize = REGWIN_SZ;
 		int bias = 0;
 
-#ifdef DEBUG_WINFIXUPS
-		printk("sus(%d", (int)window);
-#endif
 		if(tp->flags & SPARC_FLAG_32BIT)
 			winsize = REGWIN32_SZ;
 		else
@@ -426,9 +426,6 @@ void synchronize_user_stack(void)
 				tp->w_saved--;
 			}
 		} while(window--);
-#ifdef DEBUG_WINFIXUPS
-		printk(")");
-#endif
 	}
 }
 
@@ -445,9 +442,6 @@ void fault_in_user_windows(struct pt_regs *regs)
 		bias = STACK_BIAS;
 	flush_user_windows();
 	window = tp->w_saved;
-#ifdef DEBUG_WINFIXUPS
-	printk("fiuw(%d", (int)window);
-#endif
 	if(window != 0) {
 		window -= 1;
 		do {
@@ -459,9 +453,6 @@ void fault_in_user_windows(struct pt_regs *regs)
 		} while(window--);
 	}
 	current->tss.w_saved = 0;
-#ifdef DEBUG_WINFIXUPS
-	printk(")");
-#endif
 }
 
 /* Copy a Sparc thread.  The fork() return value conventions
@@ -485,10 +476,6 @@ int copy_thread(int nr, unsigned long clone_flags, unsigned long sp,
 	char *child_trap_frame;
 	int tframe_size;
 
-#if 0	/* Now all syscall entries flip off the fpu. */
-	if(regs->tstate & TSTATE_PRIV)
-		regs->fprs = 0;
-#endif
 	/* Calculate offset to stack_frame & pt_regs */
 	stack_offset = (((PAGE_SIZE << 1) -
 			((sizeof(unsigned int)*64) + (2*sizeof(unsigned long)))) &
@@ -512,23 +499,14 @@ int copy_thread(int nr, unsigned long clone_flags, unsigned long sp,
 		p->tss.flags &= ~SPARC_FLAG_KTHREAD;
 		p->tss.current_ds = USER_DS;
 		p->tss.ctx = (p->mm->context & 0x1fff);
-#if 0
 		if (sp != regs->u_regs[UREG_FP]) {
-			struct sparc_stackf *childstack;
-			struct sparc_stackf *parentstack;
+			unsigned long csp;
 
-			/*
-			 * This is a clone() call with supplied user stack.
-			 * Set some valid stack frames to give to the child.
-			 */
-			childstack = (struct sparc_stackf *)sp;
-			parentstack = (struct sparc_stackf *)regs->u_regs[UREG_FP];
-			childstack = clone_stackframe(childstack, parentstack);
-			if (!childstack)
+			csp = clone_stackframe(sp, regs->u_regs[UREG_FP]);
+			if(!csp)
 				return -EFAULT;
-			childregs->u_regs[UREG_FP] = (unsigned long)childstack;
+			p->tss.kregs->u_regs[UREG_FP] = csp;
 		}
-#endif
 	}
 
 	/* Set the return value for the child. */
@@ -592,9 +570,11 @@ asmlinkage int sparc_execve(struct pt_regs *regs)
 	if(regs->u_regs[UREG_G1] == 0)
 		base = 1;
 
-	error = getname((char *) regs->u_regs[base + UREG_I0], &filename);
-	if(error)
-		return error;
+	lock_kernel();
+	filename = getname((char *)regs->u_regs[base + UREG_I0]);
+	error = PTR_ERR(filename);
+	if(IS_ERR(filename))
+		goto out;
 	error = do_execve(filename, (char **) regs->u_regs[base + UREG_I1],
 			  (char **) regs->u_regs[base + UREG_I2], regs);
 	putname(filename);
@@ -602,5 +582,7 @@ asmlinkage int sparc_execve(struct pt_regs *regs)
 		fprs_write(0);
 		regs->fprs = 0;
 	}
+out:
+	unlock_kernel();
 	return error;
 }

@@ -11,6 +11,8 @@
 #define SPARC_BSD_EMUL "usr/gnemul/sunos/"
 #define SPARC_SOL_EMUL "usr/gnemul/solaris/"
 
+#if 0 /* XXX FIXME */
+
 extern int __namei(int, const char *, struct inode *, char *, struct inode **,
 		   struct inode **, struct qstr *, struct dentry **, int *);
 
@@ -43,5 +45,7 @@ __prefix_namei(int retrieve_mode, const char * name, struct inode * base,
 
 	return 0;
 }
+
+#endif /* XXX FIXME */
 
 #endif /* __SPARC_NAMEI_H */

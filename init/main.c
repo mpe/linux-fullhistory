@@ -751,6 +751,12 @@ __initfunc(static void parse_options(char *line))
 		if (!strncmp(line,"init=",5)) {
 			line += 5;
 			execute_command = line;
+			/* In case LILO is going to boot us with default command line,
+			 * it prepends "auto" before the whole cmdline which makes
+			 * the shell think it should execute a script with such name.
+			 * So we ignore all arguments entered _before_ init=... [MJ]
+			 */
+			args = 0;
 			continue;
 		}
 		if (checksetup(line))

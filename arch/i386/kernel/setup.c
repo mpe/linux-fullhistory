@@ -244,6 +244,17 @@ static const char * i586model(unsigned int nr)
 	return NULL;
 }
 
+static const char * k5model(unsigned int nr)
+{
+	static const char *model[] = {
+		"SSA5 (PR-75, PR-90, PR-100)", "5k86 (PR-120, PR-133)",
+		"5k86 (PR-166)", "5k86 (PR-200)", "", "", "K6"
+	};
+	if (nr < sizeof(model)/sizeof(char *))
+		return model[nr];
+	return NULL;
+}
+
 static const char * i686model(unsigned int nr)
 {
 	static const char *model[] = {
@@ -263,7 +274,11 @@ static const char * getmodel(int x86, int model)
 			p = i486model(model);
 			break;
 		case 5:
-			p = i586model(model);
+			if(strcmp(x86_vendor_id, "AuthenticAMD") == 0){
+				p = k5model(model);
+			} else {
+				p = i586model(model);
+			}
 			break;
 		case 6:
 			p = i686model(model);

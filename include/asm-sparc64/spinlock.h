@@ -53,6 +53,11 @@ typedef struct { } rwlock_t;
 
 #else /* !(__SMP__) */
 
+/* All of these locking primitives are expected to work properly
+ * even in an RMO memory model, which currently is what the kernel
+ * runs in.
+ */
+
 typedef unsigned char spinlock_t;
 #define SPIN_LOCK_UNLOCKED	0
 #define spin_lock_init(lock)	(*(lock) = 0)
@@ -64,6 +69,7 @@ extern __inline__ void spin_lock(spinlock_t *lock)
 1:	ldstub		[%0], %%g2
 	brnz,a,pn	%%g2, 2f
 	 ldub		[%0], %%g2
+	membar		#LoadLoad | #LoadStore
 	.text		2
 2:	brnz,a,pt	2b
 	 ldub		[%0], %%g2
@@ -77,7 +83,8 @@ extern __inline__ void spin_lock(spinlock_t *lock)
 extern __inline__ int spin_trylock(spinlock_t *lock)
 {
 	unsigned int result;
-	__asm__ __volatile__("ldstub [%1], %0"
+	__asm__ __volatile__("ldstub [%1], %0\n\t"
+			     "membar #LoadLoad | #LoadStore"
 			     : "=r" (result)
 			     : "r" (lock)
 			     : "memory");
@@ -86,7 +93,11 @@ extern __inline__ int spin_trylock(spinlock_t *lock)
 
 extern __inline__ void spin_unlock(spinlock_t *lock)
 {
-	__asm__ __volatile__("stb %%g0, [%0]" : : "r" (lock) : "memory");
+	__asm__ __volatile__("membar	#StoreStore | #LoadStore\n\t"
+			     "stb	%%g0, [%0]"
+			     : /* No outputs */
+			     : "r" (lock)
+			     : "memory");
 }
 
 extern __inline__ void spin_lock_irq(spinlock_t *lock)
@@ -96,6 +107,7 @@ extern __inline__ void spin_lock_irq(spinlock_t *lock)
 	ldstub		[%0], %%g2
 	brnz,a,pn	%%g2, 2f
 	 ldub		[%0], %%g2
+	membar		#LoadLoad | #LoadStore
 	.text		2
 2:	brnz,a,pt	2b
 	 ldub		[%0], %%g2
@@ -109,6 +121,7 @@ extern __inline__ void spin_lock_irq(spinlock_t *lock)
 extern __inline__ void spin_unlock_irq(spinlock_t *lock)
 {
 	__asm__ __volatile__("
+	membar		#StoreStore | #LoadStore
 	stb		%%g0, [%0]
 	wrpr		%%g0, 0x0, %%pil
 "	: /* no outputs */
@@ -116,28 +129,30 @@ extern __inline__ void spin_unlock_irq(spinlock_t *lock)
 	: "memory");
 }
 
-#define spin_lock_irqsave(lock, flags)			\
-do {	register spinlock_t *lp asm("g1");		\
-	lp = lock;					\
-	__asm__ __volatile__(				\
-	"	rdpr		%%pil, %0\n\t"		\
-	"	wrpr		%%g0, 15, %%pil\n\t"	\
-	"1:	ldstub		[%1], %%g2\n\t"		\
-	"	brnz,a,pnt	%%g2, 2f\n\t"		\
-	"	 ldub		[%1], %%g2\n\t"		\
-	"	.text		2\n\t"			\
-	"2:	brnz,a,pt	%%g2, 2b\n\t"		\
-	"	 ldub		[%1], %%g2\n\t"		\
-	"	b,a,pt		%%xcc, 1b\n\t"		\
-	"	.previous\n"				\
-	: "=r" (flags)					\
-	: "r" (lp)					\
-	: "g2", "memory");				\
+#define spin_lock_irqsave(lock, flags)				\
+do {	register spinlock_t *lp asm("g1");			\
+	lp = lock;						\
+	__asm__ __volatile__(					\
+	"	rdpr		%%pil, %0\n\t"			\
+	"	wrpr		%%g0, 15, %%pil\n\t"		\
+	"1:	ldstub		[%1], %%g2\n\t"			\
+	"	brnz,a,pnt	%%g2, 2f\n\t"			\
+	"	 ldub		[%1], %%g2\n\t"			\
+	"	membar		#LoadLoad | #LoadStore\n\t"	\
+	"	.text		2\n\t"				\
+	"2:	brnz,a,pt	%%g2, 2b\n\t"			\
+	"	 ldub		[%1], %%g2\n\t"			\
+	"	b,a,pt		%%xcc, 1b\n\t"			\
+	"	.previous\n"					\
+	: "=r" (flags)						\
+	: "r" (lp)						\
+	: "g2", "memory");					\
 } while(0)
 
 extern __inline__ void spin_unlock_irqrestore(spinlock_t *lock, unsigned long flags)
 {
 	__asm__ __volatile__("
+	membar		#StoreStore | #LoadStore
 	stb		%%g0, [%0]
 	wrpr		%1, 0x0, %%pil
 "	: /* no outputs */
@@ -161,6 +176,7 @@ extern __inline__ void read_lock(rwlock_t *rw)
 	cmp		%%g2, %%g3
 	bne,a,pn	%%xcc, 1b
 	 ldx		[%0],%%g2
+	membar		#LoadLoad | #LoadStore
 	.text		2
 2:	ldx		[%0], %%g2
 3:	brlz,pt		%%g2, 3b
@@ -169,12 +185,13 @@ extern __inline__ void read_lock(rwlock_t *rw)
 	.previous
 "	: /* no outputs */
 	: "r" (rw)
-	: "g2", "g3", "memory");
+	: "g2", "g3", "cc", "memory");
 }
 
 extern __inline__ void read_unlock(rwlock_t *rw)
 {
 	__asm__ __volatile__("
+	membar		#StoreStore | #LoadStore
 	ldx		[%0], %%g2
 1:
 	sub		%%g2, 1, %%g3
@@ -184,7 +201,7 @@ extern __inline__ void read_unlock(rwlock_t *rw)
 	 ldx		[%0], %%g2
 "	: /* no outputs */
 	: "r" (rw)
-	: "g2", "g3", "memory");
+	: "g2", "g3", "cc", "memory");
 }
 
 extern __inline__ void write_lock(rwlock_t *rw)
@@ -203,6 +220,7 @@ extern __inline__ void write_lock(rwlock_t *rw)
 	andncc		%%g3, %%g5, %%g0
 	bne,a,pn	%%xcc, 3f
 	 ldx		[%0], %%g2
+	membar		#LoadLoad | #LoadStore
 	.text		2
 3:
 	andn		%%g2, %%g5, %%g3
@@ -210,6 +228,7 @@ extern __inline__ void write_lock(rwlock_t *rw)
 	cmp		%%g2, %%g3
 	bne,a,pn	%%xcc, 3b
 	 ldx		[%0], %%g2
+	membar		#LoadLoad | #LoadStore
 5:	ldx		[%0], %%g2
 6:	brlz,pt		%%g2, 6b
 	 ldx		[%0], %%g2
@@ -222,6 +241,7 @@ extern __inline__ void write_lock(rwlock_t *rw)
 extern __inline__ void write_unlock(rwlock_t *rw)
 {
 	__asm__ __volatile__("
+	membar		#StoreStore | #LoadStore
 	sethi		%%uhi(0x8000000000000000), %%g5
 	ldx		[%0], %%g2
 	sllx		%%g5, 32, %%g5

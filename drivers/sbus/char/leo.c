@@ -1,7 +1,7 @@
-/* $Id: leo.c,v 1.19 1997/06/06 10:56:30 jj Exp $
+/* $Id: leo.c,v 1.20 1997/07/15 09:48:46 jj Exp $
  * leo.c: SUNW,leo 24/8bit frame buffer driver
  *
- * Copyright (C) 1996 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
+ * Copyright (C) 1996,1997 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
  * Copyright (C) 1997 Michal Rehacek (Michal.Rehacek@st.mff.cuni.cz)
  */
  
@@ -218,11 +218,12 @@ leo_mmap (struct inode *inode, struct file *file, struct vm_area_struct *vma,
 					 map_offset,
 					 map_size, vma->vm_page_prot,
 					 fb->space);
-		if (r) return -EAGAIN;
+		if (r)
+			return -EAGAIN;
 		page += map_size;
 	}
-        vma->vm_inode = inode;
-        atomic_inc(&inode->i_count);
+
+	vma->vm_dentry = dget(file->f_dentry);
         return 0;
 }
 
@@ -376,7 +377,7 @@ static int leo_clutstore (fbinfo_t *fb, int clutid)
 	return 0;
 }
 
-static int leo_clutpost (fbinfo_t *fb, struct leo_clut *lc)
+static int leo_clutpost (fbinfo_t *fb, struct fb_clut *lc)
 {
 	int xlate = 0, i;
 	u32 *clut;
@@ -398,7 +399,7 @@ static int leo_clutpost (fbinfo_t *fb, struct leo_clut *lc)
 	return leo_clutstore (fb, lc->clutid);
 }
 
-static int leo_clutread (fbinfo_t *fb, struct leo_clut *lc)
+static int leo_clutread (fbinfo_t *fb, struct fb_clut *lc)
 {
 	int i;
 	u32 u;
@@ -463,29 +464,29 @@ leo_ioctl (struct inode *inode, struct file *file, unsigned cmd, unsigned long a
 		if (i) return i;
 		return leo_wid_put (fb, (struct fb_wid_list *)arg);
 	case LEO_CLUTPOST:
-		i = verify_area (VERIFY_READ, (void *)arg, sizeof (struct leo_clut));
+		i = verify_area (VERIFY_READ, (void *)arg, sizeof (struct fb_clut));
 		if (i) return i;
-		i = ((struct leo_clut *)arg)->offset + ((struct leo_clut *)arg)->count;
+		i = ((struct fb_clut *)arg)->offset + ((struct fb_clut *)arg)->count;
 		if (i <= 0 || i > 256) return -EINVAL;
-		i = verify_area (VERIFY_READ, ((struct leo_clut *)arg)->red, ((struct leo_clut *)arg)->count);
+		i = verify_area (VERIFY_READ, ((struct fb_clut *)arg)->red, ((struct fb_clut *)arg)->count);
 		if (i) return i;
-		i = verify_area (VERIFY_READ, ((struct leo_clut *)arg)->green, ((struct leo_clut *)arg)->count);
+		i = verify_area (VERIFY_READ, ((struct fb_clut *)arg)->green, ((struct fb_clut *)arg)->count);
 		if (i) return i;
-		i = verify_area (VERIFY_READ, ((struct leo_clut *)arg)->blue, ((struct leo_clut *)arg)->count);
+		i = verify_area (VERIFY_READ, ((struct fb_clut *)arg)->blue, ((struct fb_clut *)arg)->count);
 		if (i) return i;
-		return leo_clutpost (fb, (struct leo_clut *)arg);
+		return leo_clutpost (fb, (struct fb_clut *)arg);
 	case LEO_CLUTREAD:
-		i = verify_area (VERIFY_READ, (void *)arg, sizeof (struct leo_clut));
+		i = verify_area (VERIFY_READ, (void *)arg, sizeof (struct fb_clut));
 		if (i) return i;
-		i = ((struct leo_clut *)arg)->offset + ((struct leo_clut *)arg)->count;
+		i = ((struct fb_clut *)arg)->offset + ((struct fb_clut *)arg)->count;
 		if (i <= 0 || i > 256) return -EINVAL;
-		i = verify_area (VERIFY_WRITE, ((struct leo_clut *)arg)->red, ((struct leo_clut *)arg)->count);
+		i = verify_area (VERIFY_WRITE, ((struct fb_clut *)arg)->red, ((struct fb_clut *)arg)->count);
 		if (i) return i;
-		i = verify_area (VERIFY_WRITE, ((struct leo_clut *)arg)->green, ((struct leo_clut *)arg)->count);
+		i = verify_area (VERIFY_WRITE, ((struct fb_clut *)arg)->green, ((struct fb_clut *)arg)->count);
 		if (i) return i;
-		i = verify_area (VERIFY_WRITE, ((struct leo_clut *)arg)->blue, ((struct leo_clut *)arg)->count);
+		i = verify_area (VERIFY_WRITE, ((struct fb_clut *)arg)->blue, ((struct fb_clut *)arg)->count);
 		if (i) return i;
-		return leo_clutread (fb, (struct leo_clut *)arg);
+		return leo_clutread (fb, (struct fb_clut *)arg);
 		
 	default:
 		return -ENOSYS;

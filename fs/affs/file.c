@@ -43,8 +43,8 @@ static long affs_file_write(struct inode *inode, struct file *filp, const char *
 			    unsigned long count);
 static long affs_file_write_ofs(struct inode *inode, struct file *filp, const char *buf,
 				unsigned long count);
-static int affs_open_file(struct inode *inode, struct file *filp);
 static int affs_release_file(struct inode *inode, struct file *filp);
+static int alloc_ext_cache(struct inode *inode);
 
 static struct file_operations affs_file_operations = {
 	NULL,			/* lseek - default */
@@ -54,7 +54,7 @@ static struct file_operations affs_file_operations = {
 	NULL,			/* poll - default */
 	NULL,			/* ioctl - default */
 	generic_file_mmap,	/* mmap */
-	affs_open_file,		/* special open is needed */
+	NULL,			/* no special open */
 	affs_release_file,	/* release */
 	file_fsync		/* brute force, but works */
 };
@@ -87,7 +87,7 @@ static struct file_operations affs_file_operations_ofs = {
 	NULL,			/* poll - default */
 	NULL,			/* ioctl - default */
 	NULL,			/* mmap */
-	affs_open_file,		/* special open is needed */
+	NULL,			/* no special open */
 	affs_release_file,	/* release */
 	file_fsync		/* brute force, but works */
 };
@@ -248,9 +248,9 @@ affs_bmap(struct inode *inode, int block)
 		return 0;
 	}
 	if (!inode->u.affs_i.i_ec) {
-		affs_error(inode->i_sb,"bmap","No extension cache for open file (inode=%lu)",
-			inode->i_ino);
-		return 0;
+		if (alloc_ext_cache(inode)) {
+			return 0;
+		}
 	}
 
 	/* Try to find the requested key in the cache.
@@ -582,6 +582,12 @@ affs_file_write(struct inode *inode, struct file *filp, const char *buf, unsigne
 		iput(inode);
 		return -EINVAL;
 	}
+	if (!inode->u.affs_i.i_ec) {
+		if (alloc_ext_cache(inode)) {
+			iput(inode);
+			return -ENOMEM;
+		}
+	}
 	if (filp->f_flags & O_APPEND) {
 		pos = inode->i_size;
 	} else
@@ -861,40 +867,6 @@ affs_truncate(struct inode *inode)
 }
 
 static int
-affs_open_file(struct inode *inode, struct file *filp)
-{
-	int	 error;
-	u32	 key;
-	int	 i;
-
-	pr_debug("AFFS: open_file(ino=%lu)\n",inode->i_ino);
-
-	error = 0;
-	inode->u.affs_i.i_cache_users++;
-	lock_super(inode->i_sb);
-	if (!inode->u.affs_i.i_ec) {
-		inode->u.affs_i.i_ec = (struct ext_cache *)get_free_page(GFP_KERNEL);
-		if (!inode->u.affs_i.i_ec) {
-			affs_error(inode->i_sb,"open_file","Cache allocation failed");
-			error = ENOMEM;
-		} else {
-			/* We only have to initialize non-zero values.
-			 * get_free_page() zeroed the page already.
-			 */
-			key = inode->u.affs_i.i_original ? inode->u.affs_i.i_original : inode->i_ino;
-			inode->u.affs_i.i_ec->ec[0] = key;
-			for (i = 0; i < 4; i++) {
-				inode->u.affs_i.i_ec->kc[i].kc_this_key = key;
-				inode->u.affs_i.i_ec->kc[i].kc_last     = -1;
-			}
-		}
-	}
-	unlock_super(inode->i_sb);
-
-	return error;
-}
-
-static int
 affs_release_file(struct inode *inode, struct file *filp)
 {
 	struct affs_zone	*zone;
@@ -916,13 +888,35 @@ affs_release_file(struct inode *inode, struct file *filp)
 			unlock_super(inode->i_sb);
 		}
 	}
+	return 0;
+}
+
+static int
+alloc_ext_cache(struct inode *inode)
+{
+	s32	 key;
+	int	 i;
+
 	lock_super(inode->i_sb);
-	if (--inode->u.affs_i.i_cache_users == 0) {
+	if (!inode->u.affs_i.i_ec) {
+		inode->u.affs_i.i_ec = (struct ext_cache *)get_free_page(GFP_KERNEL);
 		if (inode->u.affs_i.i_ec) {
-			free_page((unsigned long)inode->u.affs_i.i_ec);
-			inode->u.affs_i.i_ec = NULL;
+			/* We only have to initialize non-zero values.
+			 * get_free_page() zeroed the page already.
+			 */
+			key = inode->u.affs_i.i_original ? inode->u.affs_i.i_original : inode->i_ino;
+			inode->u.affs_i.i_ec->ec[0] = key;
+			for (i = 0; i < 4; i++) {
+				inode->u.affs_i.i_ec->kc[i].kc_this_key = key;
+				inode->u.affs_i.i_ec->kc[i].kc_last     = -1;
+			}
 		}
 	}
 	unlock_super(inode->i_sb);
+
+	if (!inode->u.affs_i.i_ec) {
+		affs_error(inode->i_sb,"alloc_ext_cache","Cache allocation failed");
+		return -ENOMEM;
+	}
 	return 0;
 }

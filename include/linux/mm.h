@@ -118,7 +118,7 @@ typedef struct page {
 	unsigned long offset;
 	struct page *next_hash;
 	atomic_t count;
-	unsigned flags;	/* atomic flags, some possibly updated asynchronously */
+	unsigned long flags;	/* atomic flags, some possibly updated asynchronously */
 	unsigned dirty:16,
 		 age:8;
 	struct wait_queue *wait;

@@ -331,7 +331,7 @@ exp_rootfh(struct svc_client *clp, dev_t dev, ino_t ino, struct knfs_fh *f)
 
 	if (!(exp = exp_get(clp, dev, ino)))
 		return -EPERM;
-	atomic_inc(&exp->ex_inode->i_count);
+	exp->ex_inode->i_count++;
 	fh_compose(&fh, exp, exp->ex_inode);
 	memcpy(f, &fh.fh_handle, sizeof(struct knfs_fh));
 	fh_put(&fh);

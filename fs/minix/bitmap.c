@@ -191,8 +191,8 @@ void minix_free_inode(struct inode * inode)
 		printk("free_inode: inode has no device\n");
 		return;
 	}
-	if (atomic_read(&inode->i_count) != 1) {
-		printk("free_inode: inode has count=%d\n",atomic_read(&inode->i_count));
+	if (inode->i_count != 1) {
+		printk("free_inode: inode has count=%d\n",inode->i_count);
 		return;
 	}
 	if (inode->i_nlink) {
@@ -251,7 +251,7 @@ struct inode * minix_new_inode(const struct inode * dir)
 		iput(inode);
 		return NULL;
 	}
-	atomic_set(&inode->i_count, 1);
+	inode->i_count = 1;
 	inode->i_nlink = 1;
 	inode->i_dev = sb->s_dev;
 	inode->i_uid = current->fsuid;

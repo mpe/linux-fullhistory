@@ -594,8 +594,9 @@ asmlinkage int sparc_execve(struct pt_regs *regs)
 		base = 1;
 
 	lock_kernel();
-	error = getname((char *) regs->u_regs[base + UREG_I0], &filename);
-	if(error)
+	filename = getname((char *)regs->u_regs[base + UREG_I0]);
+	error = PTR_ERR(filename);
+	if(IS_ERR(filename))
 		goto out;
 	error = do_execve(filename, (char **) regs->u_regs[base + UREG_I1],
 			  (char **) regs->u_regs[base + UREG_I2], regs);

@@ -343,7 +343,7 @@ affs_rmdir(struct inode *dir, const char *name, int len)
 		retval = -ENOTEMPTY;
 		goto rmdir_done;
 	}
-	if (atomic_read(&inode->i_count) > 1) {
+	if (inode->i_count > 1) {
 		retval = -EBUSY;
 		goto rmdir_done;
 	}
@@ -512,7 +512,7 @@ subdir(struct inode *new_inode, struct inode *old_inode)
     int ino;
     int result;
 
-    atomic_inc(&new_inode->i_count);
+    new_inode->i_count++;
     result = 0;
     for (;;) {
         if (new_inode == old_inode) {
@@ -566,12 +566,12 @@ start_up:
 	old_bh = affs_find_entry(old_dir,old_name,old_len,&old_ino);
 	if (!old_bh)
 		goto end_rename;
-	old_inode = __iget(old_dir->i_sb,old_ino);
+	old_inode = iget(old_dir->i_sb,old_ino);
 	if (!old_inode)
 		goto end_rename;
 	new_bh = affs_find_entry(new_dir,new_name,new_len,&new_ino);
 	if (new_bh) {
-		new_inode = __iget(new_dir->i_sb,new_ino);
+		new_inode = iget(new_dir->i_sb,new_ino);
 		if (!new_inode) {		/* What does this mean? */
 			affs_brelse(new_bh);
 			new_bh = NULL;
@@ -592,7 +592,7 @@ start_up:
 		if (!empty_dir(new_bh,AFFS_I2HSIZE(new_inode)))
 			goto end_rename;
 		retval = -EBUSY;
-		if (atomic_read(&new_inode->i_count) > 1)
+		if (new_inode->i_count > 1)
 			goto end_rename;
 	}
 	if (S_ISDIR(old_inode->i_mode)) {

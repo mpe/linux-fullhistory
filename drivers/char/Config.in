@@ -52,6 +52,7 @@ if [ "$CONFIG_MOUSE" = "y" ]; then
 	if [ "$CONFIG_PSMOUSE" != "n" ]; then
 	  bool 'C&T 82C710 mouse port support (as on TI Travelmate)' CONFIG_82C710_MOUSE
 	fi
+	tristate 'PC110 digitizer pad support' CONFIG_PC110_PAD
 fi
 
 if [ "$CONFIG_MODULES" = "y" ]; then
@@ -97,4 +98,5 @@ if [ "$CONFIG_WATCHDOG" != "n" ]; then
   tristate '   Berkshire Products PC Watchdog' CONFIG_PCWATCHDOG
 fi
 bool 'Enhanced Real Time Clock Support' CONFIG_RTC
+tristate 'PC joystick support' CONFIG_JOYSTICK
 endmenu

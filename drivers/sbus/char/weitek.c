@@ -79,11 +79,12 @@ weitek_mmap(struct inode *inode, struct file *file, struct vm_area_struct *vma,
 					 map_offset,
 					 map_size, vma->vm_page_prot,
 					 fb->space);
-		if (r) return -EAGAIN;
+		if (r)
+			return -EAGAIN;
 		page += map_size;
 	}
-	vma->vm_inode = inode;
-	atomic_inc(&inode->i_count);
+
+	vma->vm_dentry = dget(file->f_dentry);
 	return 0;
 }
 #endif

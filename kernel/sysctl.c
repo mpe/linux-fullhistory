@@ -818,6 +818,12 @@ int proc_dointvec_jiffies(ctl_table *table, int write, struct file *filp,
 
 #else /* CONFIG_PROC_FS */
 
+int proc_dointvec_jiffies(ctl_table *table, int write, struct file *filp,
+			  void *buffer, size_t *lenp)
+{
+  return -ENOSYS; 
+}
+
 int proc_dostring(ctl_table *table, int write, struct file *filp,
 		  void *buffer, size_t *lenp)
 {
@@ -831,6 +837,12 @@ int proc_dointvec(ctl_table *table, int write, struct file *filp,
 }
 
 int proc_dointvec_minmax(ctl_table *table, int write, struct file *filp,
+		    void *buffer, size_t *lenp)
+{
+	return -ENOSYS;
+}
+
+int proc_dointvec_jiffies(ctl_table *table, int write, struct file *filp,
 		    void *buffer, size_t *lenp)
 {
 	return -ENOSYS;
@@ -1031,6 +1043,12 @@ int proc_dointvec(ctl_table *table, int write, struct file *filp,
 }
 
 int proc_dointvec_minmax(ctl_table *table, int write, struct file *filp,
+		    void *buffer, size_t *lenp)
+{
+	return -ENOSYS;
+}
+
+int proc_dointvec_jiffies(ctl_table *table, int write, struct file *filp,
 		    void *buffer, size_t *lenp)
 {
 	return -ENOSYS;
