@@ -54,7 +54,7 @@
 
 #include "coproc.h"
 
-#ifdef PSS_HAVE_BOOT
+#ifdef CONFIG_PSS_HAVE_BOOT
 #include "pss_boot.h"
 #else
 static unsigned char *pss_synth = NULL;

@@ -3,7 +3,7 @@ Configuring version 3.8 (for Linux) with some most common soundcards
 
 This document describes configuring soundcards with freeware version of
 Open Sound Systems (OSS/Free). Information about the commercial version
-(OSS/Linux) and it's configuration is available from 
+(OSS/Linux) and its configuration is available from 
 http://www.opensound.com/linux.html. Information presented here is
 not valid for OSS/Linux. 
 
@@ -67,7 +67,7 @@ to be the most common cause.
 2. Trying to use a PnP (Plug & Play) card just like an ordinary soundcard
 -------------------------------------------------------------------------
 
-Plug & Play is a protocol defined by Intel and Microsoft. It let's operating
+Plug & Play is a protocol defined by Intel and Microsoft. It lets operating
 systems to easily identify and reconfigure I/O ports, IRQs and DMAs of ISA
 cards. The problem with PnP cards is that the standard Linux doesn't currently
 (versions 2.1.x and earlier) don't support PnP. This means that you will have
@@ -293,25 +293,26 @@ Yamaha OPL3-SA1
 4Front Technologies SoftOSS
 
 	SoftOSS is a software based wave table emulation which works with
-	any 16 bit stereo soundcard. Due to it's nature a fast CPU is
-	required (P133 is minumum). Althoug SoftOSS doesn _not_ use MMX
+	any 16 bit stereo soundcard. Due to its nature a fast CPU is
+	required (P133 is minimum). Although SoftOSS does _not_ use MMX
 	instructions it has proven out that recent processors (which appear
 	to have MMX) perform significantly better with SoftOSS than earlier
 	ones. For example a P166MMX beats a PPro200. SoftOSS should not be used
 	on 486 or 386 machines.
 
-	The amount of CPU load caused by SoftOSS can be controlled by 
-	selecting the SOFTOSS_RATE and SOFTOSS_VOICES parameters properly
-	(they will be prompted by make config). It's recommended to set
-	SOFTOSS_VOICES to 32. If you have a P166MMX or faster (PPro200 is
-	not faster) you can set SOFTOSS_RATE to 44100 (kHz). However with
-	slower systems it recommended to use sampling rates around 22050
-	or even 16000 kHz. Selecting too high values for these parameters
-        may hang your system when playing MIDI files with hight degree of
-	polyphony (number of concurrently playing notes). It's also possible to
-	decrease SOFTOSS_VOICES. This makes it possible to use higher sampling
-	rates. However using fewer voices decreases playback quality more than
-	decreasing the sampling rate.
+	The amount of CPU load caused by SoftOSS can be controlled by
+	selecting the CONFIG_SOFTOSS_RATE and CONFIG_SOFTOSS_VOICES
+	parameters properly (they will be prompted by make config). It's
+	recommended to set CONFIG_SOFTOSS_VOICES to 32. If you have a
+	P166MMX or faster (PPro200 is not faster) you can set
+	CONFIG_SOFTOSS_RATE to 44100 (kHz). However with slower systems it
+	recommended to use sampling rates around 22050 or even 16000 kHz.
+	Selecting too high values for these parameters may hang your
+	system when playing MIDI files with hight degree of polyphony
+	(number of concurrently playing notes). It's also possible to
+	decrease CONFIG_SOFTOSS_VOICES. This makes it possible to use
+	higher sampling rates. However using fewer voices decreases
+	playback quality more than decreasing the sampling rate.
 
 	SoftOSS keeps the samples loaded on system's RAM so large RAM is
 	required. SoftOSS should never be used on machines with less than 16M
@@ -330,7 +331,7 @@ Yamaha OPL3-SA1
 
         *********************************************************************
 	IMPORTANT NOTICE! The original patch set distributed with Gravis 
-	Ultrasound card is not in public domain (even it's available from
+	Ultrasound card is not in public domain (even though it's available from
 	some ftp sites). You should contact Voice Crystal (www.voicecrystal.com)
 	if you like to use these patches with SoftOSS included in OSS/Free.
         *********************************************************************
@@ -1125,9 +1126,9 @@ the ioctl() for activating the "solo" mode.
 
 The following configuration parameters have worked fine for the PCM12
 in Markus Kuhn's system, many other configurations might work, too:
-MAD16_BASE=0x530, MAD16_IRQ=11, MAD16_DMA=3, MAD16_DMA2=0,
-MAD16_MPU_BASE=0x330, MAD16_MPU_IRQ=10, DSP_BUFFSIZE=65536,
-SELECTED_SOUND_OPTIONS=0x00281000.
+CONFIG_MAD16_BASE=0x530, CONFIG_MAD16_IRQ=11, CONFIG_MAD16_DMA=3, 
+CONFIG_MAD16_DMA2=0, CONFIG_MAD16_MPU_BASE=0x330, CONFIG_MAD16_MPU_IRQ=10,
+DSP_BUFFSIZE=65536, SELECTED_SOUND_OPTIONS=0x00281000.
 
 The miroSOUND PCM1 pro and the PCM20 are very similar to the PCM12.
 Perhaps the same ACI driver also works for these cards, however this

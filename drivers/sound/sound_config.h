@@ -12,7 +12,7 @@
 
 
 #include "local.h.master"
-
+#include <linux/config.h>
 #include "os.h"
 #include "soundvers.h"
 
@@ -43,20 +43,20 @@
 
 #define FM_MONO		0x388	/* This is the I/O address used by AdLib */
 
-#ifndef PAS_BASE
-#define PAS_BASE	0x388
+#ifndef CONFIG_PAS_BASE
+#define CONFIG_PAS_BASE	0x388
 #endif
 
-#if defined(SB16_DMA) && !defined(SB_DMA2)
-#  define SB_DMA2 SB16_DMA
+#if defined(CONFIG_SB16_DMA) && !defined(CONFIG_SB_DMA2)
+#  define CONFIG_SB_DMA2 CONFIG_SB16_DMA
 #endif
 
-#if defined(SB16MIDI_BASE) && !defined(SB_MPU_BASE)
-#   define SB_MPU_BASE SB16MIDI_BASE
+#if defined(SB16MIDI_BASE) && !defined(CONFIG_SB_MPU_BASE)
+#   define CONFIG_SB_MPU_BASE SB16MIDI_BASE
 #endif
 
-#ifndef SB_MPU_IRQ
-#  define SB_MPU_IRQ SBC_IRQ
+#ifndef CONFIG_SB_MPU_IRQ
+#  define CONFIG_SB_MPU_IRQ CONFIG_SB_IRQ
 #endif
 
 /* SEQ_MAX_QUEUE is the maximum number of sequencer events buffered by the

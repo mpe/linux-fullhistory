@@ -258,48 +258,48 @@ bin2hex: bin2hex.c
 hex2hex: hex2hex.c
 	$(HOSTCC) -o hex2hex hex2hex.c
 
-ifeq ($(MAUI_HAVE_BOOT),y)
+ifeq ($(CONFIG_MAUI_HAVE_BOOT),y)
 
-MAUI_BOOT_FILE := $(patsubst "%", %, $(MAUI_BOOT_FILE))
+CONFIG_MAUI_BOOT_FILE := $(patsubst "%", %, $(CONFIG_MAUI_BOOT_FILE))
 
 maui.o: maui_boot.h
 
-maui_boot.h: $(MAUI_BOOT_FILE) bin2hex
-	bin2hex maui_os < "$(MAUI_BOOT_FILE)" > $@
+maui_boot.h: $(CONFIG_MAUI_BOOT_FILE) bin2hex
+	bin2hex maui_os < "$(CONFIG_MAUI_BOOT_FILE)" > $@
 	@ ( \
-	    echo 'ifeq ($(strip $(MAUI_BOOT_FILE)),$$(strip $$(MAUI_BOOT_FILE)))'; \
+	    echo 'ifeq ($(strip $(CONFIG_MAUI_BOOT_FILE)),$$(strip $$(CONFIG_MAUI_BOOT_FILE)))'; \
 	    echo 'FILES_BOOT_UP_TO_DATE += $@'; \
 	    echo 'endif' \
 	) > .$@.boot
 
 endif
 
-ifeq ($(PSS_HAVE_BOOT),y)
+ifeq ($(CONFIG_PSS_HAVE_BOOT),y)
 
-PSS_BOOT_FILE := $(patsubst "%", %, $(PSS_BOOT_FILE))
+CONFIG_PSS_BOOT_FILE := $(patsubst "%", %, $(CONFIG_PSS_BOOT_FILE))
 
 pss.o: pss_boot.h
 
-pss_boot.h: $(PSS_BOOT_FILE) bin2hex
-	bin2hex pss_synth < "$(PSS_BOOT_FILE)" > $@
+pss_boot.h: $(CONFIG_PSS_BOOT_FILE) bin2hex
+	bin2hex pss_synth < "$(CONFIG_PSS_BOOT_FILE)" > $@
 	@ ( \
-	    echo 'ifeq ($(strip $(PSS_BOOT_FILE)),$$(strip $$(PSS_BOOT_FILE)))'; \
+	    echo 'ifeq ($(strip $(CONFIG_PSS_BOOT_FILE)),$$(strip $$(CONFIG_PSS_BOOT_FILE)))'; \
 	    echo 'FILES_BOOT_UP_TO_DATE += $@'; \
 	    echo 'endif' \
 	) > .$@.boot
 
 endif
 
-ifeq ($(TRIX_HAVE_BOOT),y)
+ifeq ($(CONFIG_TRIX_HAVE_BOOT),y)
 
-TRIX_BOOT_FILE := $(patsubst "%", %, $(TRIX_BOOT_FILE))
+CONFIG_TRIX_BOOT_FILE := $(patsubst "%", %, $(CONFIG_TRIX_BOOT_FILE))
 
 trix.o: trix_boot.h
 
-trix_boot.h: $(TRIX_BOOT_FILE) hex2hex
-	hex2hex trix_boot < "$(TRIX_BOOT_FILE)" > $@
+trix_boot.h: $(CONFIG_TRIX_BOOT_FILE) hex2hex
+	hex2hex trix_boot < "$(CONFIG_TRIX_BOOT_FILE)" > $@
 	@ ( \
-	    echo 'ifeq ($(strip $(TRIX_BOOT_FILE)),$$(strip $$(strip $$(TRIX_BOOT_FILE)))'; \
+	    echo 'ifeq ($(strip $(CONFIG_TRIX_BOOT_FILE)),$$(strip $$(CONFIG_TRIX_BOOT_FILE)))'; \
 	    echo 'FILES_BOOT_UP_TO_DATE += $@'; \
 	    echo 'endif' \
 	) > .$@.boot

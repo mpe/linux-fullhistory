@@ -518,8 +518,8 @@ M:	Alan Cox@linux.org
 S:	Maintained
 
 SPARC:
-P:	David S. Miller
-M:	davem@caip.rutgers.edu
+P:	Eddie C. Dost
+M:	ecd@skynet.be
 L:	sparclinux@vger.rutgers.edu
 S:	Maintained
 

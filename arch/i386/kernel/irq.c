@@ -716,10 +716,8 @@ again:
 
 		irq_exit(cpu, irq);
 		__restore_flags(flags);
-	} else {
-		enable_IO_APIC_irq(irq);
+	} else
 		spin_unlock_irqrestore(&irq_controller_lock, flags);
-	}
 }
 #endif
 

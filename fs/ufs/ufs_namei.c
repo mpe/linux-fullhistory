@@ -20,9 +20,9 @@
 #include "ufs_swab.h"
 
 /*
- * NOTE! unlike strncmp, ext2_match returns 1 for success, 0 for failure.
- * stolen from ext2fs
- * NOTE2: flags *is* used, through this is hidden by macros like SWAB16.
+ * NOTE1: unlike strncmp, ufs_match returns 1 for success, 0 for failure
+ * (stolen from ext2fs.)
+ * NOTE2: flags *is* used, though this is hidden by macros like NAMLEN.
  */
 static int ufs_match (int len, const char * const name, struct ufs_direct * d, __u32 flags)
 {

@@ -6,8 +6,6 @@
  * Laboratory for Computer Science Research Computing Facility
  * Rutgers, The State University of New Jersey
  *
- * $Id: ufs_fs_i.h,v 1.2 1996/05/03 04:02:25 davem Exp $
- *
  * NeXTstep support added on February 5th 1998 by
  * Niels Kristian Bech Jensen <nkbj@image.dk>.
  */

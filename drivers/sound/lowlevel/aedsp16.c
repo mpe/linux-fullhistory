@@ -33,7 +33,7 @@
  * Sanity checks
  */
 
-#if !defined(AEDSP16_BASE)
+#if !defined(CONFIG_AEDSP16_BASE)
 # undef CONFIG_AEDSP16
 #else
 # if defined(MODULE) && defined(CONFIG_AEDSP16_MODULE)
@@ -1181,8 +1181,8 @@ static int init_aedsp16_mss(void)
 	if (ae_config.init & INIT_MSS)
 		return FALSE;
 /*
- * We must check the AEDSP16_BASE region too because these are the I/O ports
- * to access card's control registers.
+ * We must check the CONFIG_AEDSP16_BASE region too because these are the I/O 
+ * ports to access card's control registers.
  */
 	if (!(ae_config.init & INIT_MPU401)) {
 		if (check_region(ae_config.base_io, IOBASE_REGION_SIZE)) {
@@ -1193,8 +1193,8 @@ static int init_aedsp16_mss(void)
 	}
 
 /*
- * We must allocate the AEDSP16_BASE region too because these are the I/O ports
- * to access card's control registers.
+ * We must allocate the CONFIG_AEDSP16_BASE region too because these are the 
+ * I/O ports to access card's control registers.
  */
 	if (!(ae_config.init & INIT_MPU401))
 		request_region(ae_config.base_io, IOBASE_REGION_SIZE,
@@ -1229,8 +1229,8 @@ static int init_aedsp16_mpu(void)
 		return FALSE;
 
 /*
- * We must check the AEDSP16_BASE region too because these are the I/O ports
- * to access card's control registers.
+ * We must check the CONFIG_AEDSP16_BASE region too because these are the I/O 
+ * ports to access card's control registers.
  */
 	if (!(ae_config.init & (INIT_MSS | INIT_SBPRO))) {
 		if (check_region(ae_config.base_io, IOBASE_REGION_SIZE)) {
@@ -1271,19 +1271,19 @@ int init_aedsp16(void)
 	int initialized = FALSE;
 
 #if !defined(MODULE)
-	ae_config.base_io = AEDSP16_BASE;
+	ae_config.base_io = CONFIG_AEDSP16_BASE;
 #if defined(CONFIG_AEDSP16_SBPRO)
-	ae_config.irq = AEDSP16_SBC_IRQ;
-	ae_config.dma = AEDSP16_SBC_DMA;
+	ae_config.irq = CONFIG_AEDSP16_SB_IRQ;
+	ae_config.dma = CONFIG_AEDSP16_SB_DMA;
 #endif
 #if defined(CONFIG_AEDSP16_MSS)
-	ae_config.mss_base = MSS_BASE;
-	ae_config.irq = AEDSP16_MSS_IRQ;
-	ae_config.dma = AEDSP16_MSS_DMA;
+	ae_config.mss_base = CONFIG_MSS_BASE;
+	ae_config.irq = CONFIG_AEDSP16_MSS_IRQ;
+	ae_config.dma = CONFIG_AEDSP16_MSS_DMA;
 #endif
 #if defined(CONFIG_AEDSP16_MPU401)
-	ae_config.mpu_base = MPU_BASE;
-	ae_config.mpu_irq = AEDSP16_MPU_IRQ;
+	ae_config.mpu_base = CONFIG_MPU_BASE;
+	ae_config.mpu_irq = CONFIG_AEDSP16_MPU_IRQ;
 #endif
 #endif /* !MODULE */
 	DBG(("Initializing BASE[0x%x] IRQ[%d] DMA[%d] MIRQ[%d]\n",

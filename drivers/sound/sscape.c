@@ -964,7 +964,7 @@ int init_module(void)
 	}
 	if (mpu_irq == -1 && mpu_io != -1)
 	{
-		  printk(KERN_ERR "MPU_IRQ must be specified if MPU_IO is set.\n");
+		  printk(KERN_ERR "CONFIG_MPU_IRQ must be specified if CONFIG_MPU_IO is set.\n");
 		  return -EINVAL;
 	}
 	config.irq = irq;

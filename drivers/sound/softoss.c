@@ -1503,14 +1503,14 @@ probe_softsyn(struct address_info *hw_config)
 	devc->bits = 16;
 	devc->max_playahead = 32;
 
-#ifdef SOFTOSS_RATE
-	devc->speed = SOFTOSS_RATE;
+#ifdef CONFIG_SOFTOSS_RATE
+	devc->speed = CONFIG_SOFTOSS_RATE;
 #else
 	devc->speed = 32000;
 #endif
 
-#ifdef SOFTOSS_VOICES
-	devc->default_max_voices = SOFTOSS_VOICES;
+#ifdef CONFIG_SOFTOSS_VOICES
+	devc->default_max_voices = CONFIG_SOFTOSS_VOICES;
 #else
 	devc->default_max_voices = 32;
 #endif

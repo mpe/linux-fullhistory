@@ -124,8 +124,8 @@ extern long ppc_cs4232_dma, ppc_cs4232_dma2;
 #define SND_DMA2 ppc_cs4232_dma2
 #else
 #ifdef CONFIG_MSS
-#define SND_DMA1 MSS_DMA
-#define SND_DMA2 MSS_DMA2
+#define SND_DMA1 CONFIG_MSS_DMA
+#define SND_DMA2 CONFIG_MSS_DMA2
 #else
 #define SND_DMA1 -1
 #define SND_DMA2 -1

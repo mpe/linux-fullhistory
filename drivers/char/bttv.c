@@ -1297,11 +1297,10 @@ static int bttv_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 			struct video_audio v;
 			if(copy_from_user(&v,arg, sizeof(v)))
 				return -EFAULT;
+			if(v.audio!=0)
+				return -EINVAL;
 			if(v.flags&VIDEO_AUDIO_MUTE)
 				audio(btv, AUDIO_MUTE);
-			if(v.audio<0||v.audio>2)
-				return -EINVAL;
-			bt848_muxsel(btv,v.audio);
 			if(!(v.flags&VIDEO_AUDIO_MUTE))
 				audio(btv, AUDIO_UNMUTE);
 			btv->audio_dev=v;

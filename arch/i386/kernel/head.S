@@ -637,3 +637,12 @@ ENTRY(gdt_table)
 	.quad 0x00809a0000000000	/* 0x50 APM CS 16 code (16 bit) */
 	.quad 0x00c0920000000000	/* 0x58 APM DS    data */
 	.fill 2*NR_TASKS,8,0		/* space for LDT's and TSS's etc */
+
+/*
+ * This is to aid debugging, the various locking macros will be putting
+ * code fragments here.  When an oops occurs we'd rather know that it's
+ * inside the .text.lock section rather than as some offset from whatever
+ * function happens to be last in the .text segment.
+ */
+.section .text.lock
+ENTRY(stext_lock)

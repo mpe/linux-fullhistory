@@ -148,7 +148,7 @@ static int allowed_drive_mask = 0x33;
 #include <asm/io.h>
 #include <asm/uaccess.h>
 
-static int can_use_virtual_dma=2;
+static int can_use_virtual_dma=0;
 /* =======
  * can use virtual DMA:
  * 0 = use of virtual DMA disallowed by config

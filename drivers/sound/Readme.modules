@@ -1,84 +1,71 @@
-Building a loadable sound driver
+Building a modular sound driver
 ================================
 
-Loadable module support in version 3.5 of the driver is mostly rewritten since
-the previous version (3.0.1). This means that some things have changed.
+  The following information is current as of linux-2.1.85. Check the other
+readme files, especially Readme.cards, for information not specific to
+making sound modular.
 
-To compile the sound driver as a loadable module you have to perform
-the following steps:
+  First, configure your kernel. This is an idea of what you should be
+setting in the sound section:
 
-1) Install modules-1.2.8.tar.gz package (or later if available).
-2a) Check that symbol remap_page_range is defined in linux/init/ksyms.c.
-Insert a line containing "X(remap_page_range)," if required. The driver will
-not load if this line is missing.
-2b) Recompile kernel with soundcard support disabled.
-3) Boot the new kernel.
-4) cd to the sound driver source directory (this directory). It's no
-longer required that the sound driver sources are installed in the
-kernel source tree (linux/drivers/sound). When installing a separately
-distributed sound driver you may install the sources for example to
-/usr/src/sound.
-5) Execute make in the sound driver source directory. Enter
-configuration parameters as described in Readme.cards. Then just wait until
-the driver is compiled OK.
-6) Copy sound.o to the directory where insmod expects to find it. 
-("make install" copies it to /lib/modules/misc).
-7) Use command "insmod sound" to load the driver.
+<M> Sound card support 
 
-8) The sound driver can be removed using command "rmmod sound".
+<M> 100% Sound Blaster compatibles (SB16/32/64, ESS, Jazz16) support 
 
+  I have SoundBlaster. Select your card from the list.
 
-Parameters accepted by the loadable sound driver
-================================================
+<M> Generic OPL2/OPL3 FM synthesizer support 
+<M> FM synthesizer (YM3812/OPL-3) support 
 
-Setting DMA buffer size
------------------------
+  If you don't set these, you will probably find you can play .wav files
+but not .midi. As the help for them says, set them unless you know your
+card does not use one of these chips for FM support.
 
-The driver allocates a DMA buffer (or two for full duplex devices)
-every time the audio device (/dev/dsp or /dev/audio) is opened
-and frees it when the device is closed. Size of this buffer is defined
-when the driver is configured (the last question). The buffer size
-can be redefined when loading the driver if required (note that this is 
-an optional feature which is not normally required). The buffer size
-is redefined by adding dma_pagesize= parameter to the insmod command line.
-For example:
+  Once you are configured, make zlilo, modules, modules_install; reboot.
+Note that it is no longer necessary or possible to configure sound in the
+drivers/sound dir. Now one simply configures and makes one's kernel and
+modules in the usual way.
 
-	insmod sound dma_buffsize=32768
+ Then, add to your /etc/modules.conf or /etc/conf.modules something like:
 
-Minimum buffer size is 4096 and the maximum depends on the DMA channel. 
-For 8 bit channels (0 to 3) the limit is 64k and for 16 bit ones (5 to 7)
-it's 128k. Driver selects a suitable buffer size automatically in case
-you try to specify an invalid size.
+alias char-major-14 sb
+post-install sb modprobe  "-k" "adlib_card"
+options sb io=0x220 irq=7 dma=1 dma16=5 mpu_io=0x330
+options adlib_card io=0x388     # FM synthetiser
 
-Q: What is the right DMA buffer size?
+  The effect of this is that the sound driver and all necessary bits and
+pieces autoload on demand, assuming you use kerneld (a sound choice) and
+autoclean when not in use. Also, options for the device drivers are
+set. They will not work without them. Change as appropriate for your card.
+If you are not yet using the very cool kerneld, you will have to "modprobe
+-k sb" yourself to get things going. Eventually things may be fixed so
+that this kludgery is not necessary; for the time being, it seems to work
+well.
 
-A: It depends on the sampling rate, machine speed and the load of the system.
-Large buffers are required on slow machines, when recording/playing CD-quality
-audio or when there are other processes running on the same system. Also
-recording to hard disk is likely to require large buffers.
+  Replace 'sb' with the driver for your card, and give it the right
+options. To find the filename of the driver, look in
+/lib/modules/<kernel-version>/misc. Mine looks like:
 
-Very small buffers are sufficient when you are just playing 8kHz audio files 
-on an empty P133 system. Using a 128k buffer just wastes 120k (or 250k)
-of valuable physical RAM memory. 
+adlib_card.o # This is the generic OPLx driver
+opl3.o # The OPL3 driver
+sb.o # <<The SoundBlaster driver. Yours may differ.>>
+sound.o # The sound driver
+uart401.o # Used by sb, maybe other cards
 
-The right buffer size can be easily found by making some experiments
-with the dma_buffsize= parameter. I use usually 16k buffers on a DX4/100 system
-and 64k on an old 386 system. 
+ Whichever card you have, try feeding it the options that would be the
+default if you were making the driver wired, not as modules. You can look
+at the init_module() code for the card to see what args are expected.
 
-NOTE!	DMA buffers are used only by /dev/audio# and /dev/dsp# devices.
-	Other device files don't use them but there are two exceptions:
-	GUS driver uses DMA buffers when loading samples to the card.
-	Ensoniq SoundScape driver uses them when downloading the microcode
-	file (sndscape.co[012]) to the card. Using large buffers doesn't
-	increase performance in these cases.
+ Note that at present there is no way to configure the io, irq and other
+parameters for the modular drivers as one does for the wired drivers.. One
+needs to pass the modules the necessary parameters as arguments, either
+with /etc/modules.conf or with command-line args to modprobe, e.g.
 
-Debugging and tracing
----------------------
+modprobe -k sb io=0x220 irq=7 dma=1 dma16=5 mpu_io=0x330
+modprobe -k adlib_card io=0x388
 
-Modularized sound driver doesn't display messages during initialization as
-the kernel compiled one does. This feature can be turned on by adding
-trace_init=1 to the insmod command line.
+ recommend using /etc/modules.conf.
 
-For example:
-
-	insmod sound trace_init=1
+  I'm afraid I know nothing about anything but my setup, being more of a
+text-mode guy anyway. If you have options for other cards or other helpful
+hints, send them to me, Jim Bray, jb@as220.org, http://as220.org/jb.

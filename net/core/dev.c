@@ -1323,7 +1323,7 @@ void dev_set_promiscuity(struct device *dev, int inc)
 #endif
 		dev_mc_upload(dev);
 		printk(KERN_INFO "device %s %s promiscuous mode\n",
-		       dev->name, (dev->flags&IFF_PROMISC) ? "entered" : "leaved");
+		       dev->name, (dev->flags&IFF_PROMISC) ? "entered" : "left");
 	}
 }
 

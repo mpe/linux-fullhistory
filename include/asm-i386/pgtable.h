@@ -200,7 +200,8 @@ static inline void flush_tlb_range(struct mm_struct *mm,
  * memory. 
  */
 #define _PAGE_PRESENT	0x001
-#define _PAGE_RW	0x002
+#define _PAGE_PROTNONE	0x002		/* If not present */
+#define _PAGE_RW	0x002		/* If present */
 #define _PAGE_USER	0x004
 #define _PAGE_WT	0x008
 #define _PAGE_PCD	0x010
@@ -213,7 +214,7 @@ static inline void flush_tlb_range(struct mm_struct *mm,
 #define _KERNPG_TABLE	(_PAGE_PRESENT | _PAGE_RW | _PAGE_ACCESSED | _PAGE_DIRTY)
 #define _PAGE_CHG_MASK	(PAGE_MASK | _PAGE_ACCESSED | _PAGE_DIRTY)
 
-#define PAGE_NONE	__pgprot(_PAGE_PRESENT | _PAGE_ACCESSED)
+#define PAGE_NONE	__pgprot(_PAGE_PROTNONE | _PAGE_ACCESSED)
 #define PAGE_SHARED	__pgprot(_PAGE_PRESENT | _PAGE_RW | _PAGE_USER | _PAGE_ACCESSED)
 #define PAGE_COPY	__pgprot(_PAGE_PRESENT | _PAGE_USER | _PAGE_ACCESSED)
 #define PAGE_READONLY	__pgprot(_PAGE_PRESENT | _PAGE_USER | _PAGE_ACCESSED)
@@ -291,7 +292,7 @@ do { \
 } while (0)
 
 #define pte_none(x)	(!pte_val(x))
-#define pte_present(x)	(pte_val(x) & _PAGE_PRESENT)
+#define pte_present(x)	(pte_val(x) & (_PAGE_PRESENT | _PAGE_PROTNONE))
 #define pte_clear(xp)	do { pte_val(*(xp)) = 0; } while (0)
 
 #define pmd_none(x)	(!pmd_val(x))
@@ -489,9 +490,9 @@ extern inline void update_mmu_cache(struct vm_area_struct * vma,
 {
 }
 
-#define SWP_TYPE(entry) (((entry) >> 1) & 0x7f)
+#define SWP_TYPE(entry) (((entry) >> 2) & 0x3f)
 #define SWP_OFFSET(entry) ((entry) >> 8)
-#define SWP_ENTRY(type,offset) (((type) << 1) | ((offset) << 8))
+#define SWP_ENTRY(type,offset) (((type) << 2) | ((offset) << 8))
 
 #define module_map      vmalloc
 #define module_unmap    vfree

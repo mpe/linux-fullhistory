@@ -877,12 +877,14 @@ static inline void handle_pte_fault(struct task_struct *tsk,
 		do_no_page(tsk, vma, address, write_access, pte, entry);
 		return;
 	}
-	set_pte(pte, pte_mkyoung(entry));
+	entry = pte_mkyoung(entry);
+	set_pte(pte, entry);
 	flush_tlb_page(vma, address);
 	if (!write_access)
 		return;
 	if (pte_write(entry)) {
-		set_pte(pte, pte_mkdirty(entry));
+		entry = pte_mkdirty(entry);
+		set_pte(pte, entry);
 		flush_tlb_page(vma, address);
 		return;
 	}

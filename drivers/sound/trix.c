@@ -27,7 +27,7 @@
 #endif
 #endif
 
-#ifdef TRIX_HAVE_BOOT
+#ifdef CONFIG_TRIX_HAVE_BOOT
 #include "trix_boot.h"
 #else
 static unsigned char *trix_boot = NULL;
@@ -506,12 +506,12 @@ init_module(void)
 
 	if (sb_io != -1 && (sb_irq == -1 || sb_dma == -1))
 	  {
-		  printk(KERN_INFO "SB_IRQ and SB_DMA must be specified if SB_IO is set.\n");
+		  printk(KERN_INFO "CONFIG_SB_IRQ and CONFIG_SB_DMA must be specified if SB_IO is set.\n");
 		  return -EINVAL;
 	  }
 	if (mpu_io != -1 && mpu_irq == -1)
 	  {
-		  printk(KERN_INFO "MPU_IRQ must be specified if MPU_IO is set.\n");
+		  printk(KERN_INFO "CONFIG_MPU_IRQ must be specified if MPU_IO is set.\n");
 		  return -EINVAL;
 	  }
 	if (!trix_boot)

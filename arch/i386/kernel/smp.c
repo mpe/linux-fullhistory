@@ -1420,7 +1420,9 @@ void smp_apic_timer_interrupt(struct pt_regs * regs)
 	 * want to be able to accept NMI tlb invalidates
 	 * during this time.
 	 */
+	spin_lock(&irq_controller_lock);
 	ack_APIC_irq ();
+	spin_unlock(&irq_controller_lock);
 
 	smp_local_timer_interrupt(regs);
 }

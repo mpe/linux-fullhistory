@@ -1761,12 +1761,15 @@ int vfat_rename(struct inode *old_dir,struct dentry *old_dentry,
 	new_inode->i_mtime  = old_inode->i_mtime;
 	new_inode->i_atime  = old_inode->i_atime;
 	new_inode->i_ctime  = old_inode->i_ctime;
+	new_inode->i_nlink  = old_inode->i_nlink;
+	new_inode->i_op     = old_inode->i_op;
 	MSDOS_I(new_inode)->i_ctime_ms = MSDOS_I(old_inode)->i_ctime_ms;
 
 	MSDOS_I(new_inode)->i_start = MSDOS_I(old_inode)->i_start;
 	MSDOS_I(new_inode)->i_logstart = MSDOS_I(old_inode)->i_logstart;
 	MSDOS_I(new_inode)->i_attrs = MSDOS_I(old_inode)->i_attrs;
 
+	fat_cache_inval_inode(old_inode);
 	mark_inode_dirty(new_inode);
 
 	old_dir->i_version = ++event;

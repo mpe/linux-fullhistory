@@ -41,7 +41,7 @@ static int     *maui_osp;
 static int      (*orig_load_patch) (int dev, int format, const char *addr,
 			      int offs, int count, int pmgr_flag) = NULL;
 
-#ifdef MAUI_HAVE_BOOT
+#ifdef CONFIG_MAUI_HAVE_BOOT
 #include "maui_boot.h"
 #else
 static unsigned char *maui_os = NULL;

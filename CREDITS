@@ -364,7 +364,7 @@ S: USA
 N: Eddie C. Dost
 E: ecd@skynet.be
 D: Linux/Sparc kernel hacker
-D: New Linux/Sparc maintainer (while davem is at SGI)
+D: Linux/Sparc maintainer
 S: Rue de la Chapelle 51
 S: 4850 Moresnet
 S: Belgium
@@ -1049,7 +1049,7 @@ D: Initial implementation of VC's, pty's and select()
 N: Pavel Machek
 E: pavel@atrey.karlin.mff.cuni.cz
 D: Softcursor for vga, hypertech cdrom support, vcsa bugfix
-D: Network block device
+D: Network block device, sun4/330 port 
 S: Volkova 1131
 S: 198 00 Praha 9
 S: Czech Republic
@@ -1175,8 +1175,8 @@ D: Sparc hacker
 D: New Linux-Activists maintainer
 D: Linux Emacs elf/qmagic support + other libc/gcc things
 D: Yee bore de yee bore! ;-)
-S: 2 Bristol Court
-S: East Brunswick, New Jersey 08816
+S: 111 Alta Tierra Court
+S: Los Gatos, CA 95032
 S: USA
 
 N: Rick Miller
