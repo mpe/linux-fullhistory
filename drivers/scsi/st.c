@@ -11,7 +11,7 @@
    Copyright 1992 - 2000 Kai Makisara
    email Kai.Makisara@metla.fi
 
-   Last modified: Tue Jan  4 21:43:17 2000 by makisara@kai.makisara.local
+   Last modified: Fri Feb 11 19:43:57 2000 by makisara@kai.makisara.local
    Some small formal changes - aeb, 950809
  */
 
@@ -66,15 +66,15 @@ static int buffer_kbs = 0;
 static int write_threshold_kbs = 0;
 static int max_buffers = (-1);
 static int max_sg_segs = 0;
-#ifdef MODULE
+
 MODULE_AUTHOR("Kai Makisara");
 MODULE_DESCRIPTION("SCSI Tape Driver");
 MODULE_PARM(buffer_kbs, "i");
 MODULE_PARM(write_threshold_kbs, "i");
 MODULE_PARM(max_buffers, "i");
 MODULE_PARM(max_sg_segs, "i");
-#else
 
+#ifndef MODULE
 static struct st_dev_parm {
 	char *name;
 	int *val;
@@ -92,7 +92,6 @@ static struct st_dev_parm {
 		"max_sg_segs", &max_sg_segs
 	}
 };
-
 #endif
 
 
@@ -380,7 +379,7 @@ static void write_behind_check(Scsi_Tape * STp)
 static int cross_eof(Scsi_Tape * STp, int forward)
 {
 	Scsi_Cmnd *SCpnt;
-	unsigned char cmd[10];
+	unsigned char cmd[MAX_COMMAND_SIZE];
 
 	cmd[0] = SPACE;
 	cmd[1] = 0x01;		/* Space FileMarks */
@@ -414,7 +413,7 @@ static int flush_write_buffer(Scsi_Tape * STp)
 {
 	int offset, transfer, blks;
 	int result;
-	unsigned char cmd[10];
+	unsigned char cmd[MAX_COMMAND_SIZE];
 	Scsi_Cmnd *SCpnt;
 	ST_partstat *STps;
 
@@ -443,7 +442,7 @@ static int flush_write_buffer(Scsi_Tape * STp)
 
 		memset((STp->buffer)->b_data + offset, 0, transfer - offset);
 
-		memset(cmd, 0, 10);
+		memset(cmd, 0, MAX_COMMAND_SIZE);
 		cmd[0] = WRITE_6;
 		cmd[1] = 1;
 		blks = transfer / STp->block_size;
@@ -582,7 +581,8 @@ static int scsi_tape_open(struct inode *inode, struct file *filp)
 {
 	unsigned short flags;
 	int i, need_dma_buffer, new_session = FALSE;
-	unsigned char cmd[10];
+	int retval;
+	unsigned char cmd[MAX_COMMAND_SIZE];
 	Scsi_Cmnd *SCpnt;
 	Scsi_Tape *STp;
 	ST_mode *STm;
@@ -601,7 +601,13 @@ static int scsi_tape_open(struct inode *inode, struct file *filp)
 		DEB( printk(ST_DEB_MSG "st%d: Device already in use.\n", dev); )
 		return (-EBUSY);
 	}
+	STp->in_use = 1;
 	STp->rew_at_close = (MINOR(inode->i_rdev) & 0x80) == 0;
+
+	if (scsi_tapes[dev].device->host->hostt->module)
+		__MOD_INC_USE_COUNT(scsi_tapes[dev].device->host->hostt->module);
+	if (st_template.module)
+		__MOD_INC_USE_COUNT(st_template.module);
 
 	if (mode != STp->current_mode) {
                 DEBC(printk(ST_DEB_MSG "st%d: Mode change from %d to %d.\n",
@@ -621,7 +627,8 @@ static int scsi_tape_open(struct inode *inode, struct file *filp)
 		STp->buffer = new_tape_buffer(FALSE, need_dma_buffer);
 		if (STp->buffer == NULL) {
 			printk(KERN_WARNING "st%d: Can't allocate tape buffer.\n", dev);
-			return (-EBUSY);
+			retval = (-EBUSY);
+			goto err_out;
 		}
 	} else
 		STp->buffer = st_buffers[i];
@@ -651,22 +658,14 @@ static int scsi_tape_open(struct inode *inode, struct file *filp)
 	STp->recover_count = 0;
 	DEB( STp->nbr_waits = STp->nbr_finished = 0; )
 
-	if (scsi_tapes[dev].device->host->hostt->module)
-		__MOD_INC_USE_COUNT(scsi_tapes[dev].device->host->hostt->module);
-	if (st_template.module)
-		__MOD_INC_USE_COUNT(st_template.module);
-
-	memset((void *) &cmd[0], 0, 10);
+	memset((void *) &cmd[0], 0, MAX_COMMAND_SIZE);
 	cmd[0] = TEST_UNIT_READY;
 
 	SCpnt = st_do_scsi(NULL, STp, cmd, 0, STp->long_timeout, MAX_READY_RETRIES,
 			   TRUE);
 	if (!SCpnt) {
-		if (scsi_tapes[dev].device->host->hostt->module)
-			__MOD_DEC_USE_COUNT(scsi_tapes[dev].device->host->hostt->module);
-		if (st_template.module)
-			__MOD_DEC_USE_COUNT(st_template.module);
-		return (STp->buffer)->last_result_fatal;
+		retval = (STp->buffer)->last_result_fatal;
+		goto err_out;
 	}
 
 	if ((SCpnt->sense_buffer[0] & 0x70) == 0x70 &&
@@ -674,7 +673,7 @@ static int scsi_tape_open(struct inode *inode, struct file *filp)
 
 		/* Flush the queued UNIT ATTENTION sense data */
 		for (i=0; i < 10; i++) {
-                        memset((void *) &cmd[0], 0, 10);
+                        memset((void *) &cmd[0], 0, MAX_COMMAND_SIZE);
                         cmd[0] = TEST_UNIT_READY;
                         SCpnt = st_do_scsi(SCpnt, STp, cmd, 0, STp->long_timeout,
                                            MAX_READY_RETRIES, TRUE);
@@ -716,14 +715,13 @@ static int scsi_tape_open(struct inode *inode, struct file *filp)
 		STp->ps[0].drv_file = STp->ps[0].drv_block = (-1);
 		STp->partition = STp->new_partition = 0;
 		STp->door_locked = ST_UNLOCKED;
-		STp->in_use = 1;
 		return 0;
 	}
 
 	if (STp->omit_blklims)
 		STp->min_block = STp->max_block = (-1);
 	else {
-		memset((void *) &cmd[0], 0, 10);
+		memset((void *) &cmd[0], 0, MAX_COMMAND_SIZE);
 		cmd[0] = READ_BLOCK_LIMITS;
 
 		SCpnt = st_do_scsi(SCpnt, STp, cmd, 6, STp->timeout, MAX_READY_RETRIES,
@@ -745,7 +743,7 @@ static int scsi_tape_open(struct inode *inode, struct file *filp)
 		}
 	}
 
-	memset((void *) &cmd[0], 0, 10);
+	memset((void *) &cmd[0], 0, MAX_COMMAND_SIZE);
 	cmd[0] = MODE_SENSE;
 	cmd[4] = 12;
 
@@ -780,13 +778,8 @@ static int scsi_tape_open(struct inode *inode, struct file *filp)
 			printk(KERN_NOTICE "st%d: Blocksize %d too large for buffer.\n",
                                dev, STp->block_size);
 			scsi_release_command(SCpnt);
-			(STp->buffer)->in_use = 0;
-			STp->buffer = NULL;
-			if (scsi_tapes[dev].device->host->hostt->module)
-				__MOD_DEC_USE_COUNT(scsi_tapes[dev].device->host->hostt->module);
-			if (st_template.module)
-				__MOD_DEC_USE_COUNT(st_template.module);
-			return (-EIO);
+			retval = (-EIO);
+			goto err_out;
 		}
 		STp->drv_write_prot = ((STp->buffer)->b_data[2] & 0x80) != 0;
 	}
@@ -812,13 +805,8 @@ static int scsi_tape_open(struct inode *inode, struct file *filp)
                 DEBC(printk(ST_DEB_MSG "st%d: Write protected\n", dev));
 
 		if ((flags & O_ACCMODE) == O_WRONLY || (flags & O_ACCMODE) == O_RDWR) {
-			(STp->buffer)->in_use = 0;
-			STp->buffer = NULL;
-			if (scsi_tapes[dev].device->host->hostt->module)
-				__MOD_DEC_USE_COUNT(scsi_tapes[dev].device->host->hostt->module);
-			if (st_template.module)
-				__MOD_DEC_USE_COUNT(st_template.module);
-			return (-EROFS);
+			retval = (-EROFS);
+			goto err_out;
 		}
 	}
 
@@ -829,13 +817,8 @@ static int scsi_tape_open(struct inode *inode, struct file *filp)
                 DEBC(printk(ST_DEB_MSG
                             "st%d: Updating partition number in status.\n", dev));
 		if ((STp->partition = find_partition(inode)) < 0) {
-			(STp->buffer)->in_use = 0;
-			STp->buffer = NULL;
-			if (scsi_tapes[dev].device->host->hostt->module)
-				__MOD_DEC_USE_COUNT(scsi_tapes[dev].device->host->hostt->module);
-			if (st_template.module)
-				__MOD_DEC_USE_COUNT(st_template.module);
-			return STp->partition;
+			retval = STp->partition;
+			goto err_out;
 		}
 		STp->new_partition = STp->partition;
 		STp->nbr_partitions = 1; /* This guess will be updated when necessary */
@@ -845,15 +828,8 @@ static int scsi_tape_open(struct inode *inode, struct file *filp)
 		STp->density_changed = STp->blksize_changed = FALSE;
 		STp->compression_changed = FALSE;
 		if (!(STm->defaults_for_writes) &&
-		    (i = set_mode_densblk(inode, STp, STm)) < 0) {
-			(STp->buffer)->in_use = 0;
-			STp->buffer = NULL;
-			if (scsi_tapes[dev].device->host->hostt->module)
-				__MOD_DEC_USE_COUNT(scsi_tapes[dev].device->host->hostt->module);
-			if (st_template.module)
-				__MOD_DEC_USE_COUNT(st_template.module);
-			return i;
-		}
+		    (retval = set_mode_densblk(inode, STp, STm)) < 0)
+		    goto err_out;
 
 		if (STp->default_drvbuffer != 0xff) {
 			if (st_int_ioctl(inode, MTSETDRVBUFFER, STp->default_drvbuffer))
@@ -862,9 +838,21 @@ static int scsi_tape_open(struct inode *inode, struct file *filp)
 				       dev, STp->default_drvbuffer);
 		}
 	}
-	STp->in_use = 1;
 
 	return 0;
+
+ err_out:
+	if (STp->buffer != NULL) {
+		(STp->buffer)->in_use = 0;
+		STp->buffer = NULL;
+	}
+	STp->in_use = 0;
+	if (scsi_tapes[dev].device->host->hostt->module)
+	    __MOD_DEC_USE_COUNT(scsi_tapes[dev].device->host->hostt->module);
+	if (st_template.module)
+	    __MOD_DEC_USE_COUNT(st_template.module);
+	return retval;
+
 }
 
 
@@ -872,7 +860,7 @@ static int scsi_tape_open(struct inode *inode, struct file *filp)
 static int scsi_tape_flush(struct file *filp)
 {
 	int result = 0, result2;
-	static unsigned char cmd[10];
+	static unsigned char cmd[MAX_COMMAND_SIZE];
 	Scsi_Cmnd *SCpnt;
 	Scsi_Tape *STp;
 	ST_mode *STm;
@@ -890,16 +878,22 @@ static int scsi_tape_flush(struct file *filp)
 	STm = &(STp->modes[STp->current_mode]);
 	STps = &(STp->ps[STp->partition]);
 
+	if (STps->rw == ST_WRITING && !(STp->device)->was_reset) {
+		result = flush_write_buffer(STp);
+		if (result != 0 && result != (-ENOSPC))
+			goto out;
+	}
+
 	if (STp->can_partitions &&
-	    (result = update_partition(inode)) < 0) {
+	    (result2 = update_partition(inode)) < 0) {
                 DEBC(printk(ST_DEB_MSG
                                "st%d: update_partition at close failed.\n", dev));
+		if (result == 0)
+			result = result2;
 		goto out;
 	}
 
 	if (STps->rw == ST_WRITING && !(STp->device)->was_reset) {
-
-		result = flush_write_buffer(STp);
 
                 DEBC(printk(ST_DEB_MSG "st%d: File length %ld bytes.\n",
                             dev, (long) (filp->f_pos));
@@ -907,42 +901,39 @@ static int scsi_tape_flush(struct file *filp)
                             dev, STp->nbr_waits, STp->nbr_finished);
 		)
 
-		if (result == 0 || result == (-ENOSPC)) {
+		memset(cmd, 0, MAX_COMMAND_SIZE);
+		cmd[0] = WRITE_FILEMARKS;
+		cmd[4] = 1 + STp->two_fm;
 
-			memset(cmd, 0, 10);
-			cmd[0] = WRITE_FILEMARKS;
-			cmd[4] = 1 + STp->two_fm;
+		SCpnt = st_do_scsi(NULL, STp, cmd, 0, STp->timeout,
+				   MAX_WRITE_RETRIES, TRUE);
+		if (!SCpnt) {
+			result = (STp->buffer)->last_result_fatal;
+			goto out;
+		}
 
-			SCpnt = st_do_scsi(NULL, STp, cmd, 0, STp->timeout,
-                                           MAX_WRITE_RETRIES, TRUE);
-			if (!SCpnt) {
-				result = (STp->buffer)->last_result_fatal;
-				goto out;
-			}
-
-			if ((STp->buffer)->last_result_fatal != 0 &&
-			    ((SCpnt->sense_buffer[0] & 0x70) != 0x70 ||
-			     (SCpnt->sense_buffer[2] & 0x4f) != 0x40 ||
-			     ((SCpnt->sense_buffer[0] & 0x80) != 0 &&
-			(SCpnt->sense_buffer[3] | SCpnt->sense_buffer[4] |
-			 SCpnt->sense_buffer[5] |
-			 SCpnt->sense_buffer[6]) == 0))) {
-				/* Filter out successful write at EOM */
-				scsi_release_command(SCpnt);
-				SCpnt = NULL;
-				printk(KERN_ERR "st%d: Error on write filemark.\n", dev);
-				if (result == 0)
-					result = (-EIO);
-			} else {
-				scsi_release_command(SCpnt);
-				SCpnt = NULL;
-				if (STps->drv_file >= 0)
-					STps->drv_file++;
-				STps->drv_block = 0;
-				if (STp->two_fm)
-					cross_eof(STp, FALSE);
-				STps->eof = ST_FM;
-			}
+		if ((STp->buffer)->last_result_fatal != 0 &&
+		    ((SCpnt->sense_buffer[0] & 0x70) != 0x70 ||
+		     (SCpnt->sense_buffer[2] & 0x4f) != 0x40 ||
+		     ((SCpnt->sense_buffer[0] & 0x80) != 0 &&
+		      (SCpnt->sense_buffer[3] | SCpnt->sense_buffer[4] |
+		       SCpnt->sense_buffer[5] |
+		       SCpnt->sense_buffer[6]) == 0))) {
+			/* Filter out successful write at EOM */
+			scsi_release_command(SCpnt);
+			SCpnt = NULL;
+			printk(KERN_ERR "st%d: Error on write filemark.\n", dev);
+			if (result == 0)
+				result = (-EIO);
+		} else {
+			scsi_release_command(SCpnt);
+			SCpnt = NULL;
+			if (STps->drv_file >= 0)
+				STps->drv_file++;
+			STps->drv_block = 0;
+			if (STp->two_fm)
+				cross_eof(STp, FALSE);
+			STps->eof = ST_FM;
 		}
 
                 DEBC(printk(ST_DEB_MSG "st%d: Buffer flushed, %d EOF(s) written\n",
@@ -1021,7 +1012,7 @@ static ssize_t
 	ssize_t i, do_count, blks, retval, transfer;
 	int write_threshold;
 	int doing_write = 0;
-	static unsigned char cmd[10];
+	static unsigned char cmd[MAX_COMMAND_SIZE];
 	const char *b_point;
 	Scsi_Cmnd *SCpnt = NULL;
 	Scsi_Tape *STp;
@@ -1153,7 +1144,7 @@ static ssize_t
 
 	total = count;
 
-	memset(cmd, 0, 10);
+	memset(cmd, 0, MAX_COMMAND_SIZE);
 	cmd[0] = WRITE_6;
 	cmd[1] = (STp->block_size != 0);
 
@@ -1331,7 +1322,7 @@ static ssize_t
 static long read_tape(struct inode *inode, long count, Scsi_Cmnd ** aSCpnt)
 {
 	int transfer, blks, bytes;
-	static unsigned char cmd[10];
+	static unsigned char cmd[MAX_COMMAND_SIZE];
 	Scsi_Cmnd *SCpnt;
 	Scsi_Tape *STp;
 	ST_mode *STm;
@@ -1348,7 +1339,7 @@ static long read_tape(struct inode *inode, long count, Scsi_Cmnd ** aSCpnt)
 	if (STps->eof == ST_FM_HIT)
 		return 1;
 
-	memset(cmd, 0, 10);
+	memset(cmd, 0, MAX_COMMAND_SIZE);
 	cmd[0] = READ_6;
 	cmd[1] = (STp->block_size != 0);
 	if (STp->block_size == 0)
@@ -1836,14 +1827,14 @@ static int st_set_options(struct inode *inode, long options)
 static int st_compression(Scsi_Tape * STp, int state)
 {
 	int dev;
-	unsigned char cmd[10];
+	unsigned char cmd[MAX_COMMAND_SIZE];
 	Scsi_Cmnd *SCpnt = NULL;
 
 	if (STp->ready != ST_READY)
 		return (-EIO);
 
 	/* Read the current page contents */
-	memset(cmd, 0, 10);
+	memset(cmd, 0, MAX_COMMAND_SIZE);
 	cmd[0] = MODE_SENSE;
 	cmd[1] = 8;
 	cmd[2] = COMPRESSION_PAGE;
@@ -1879,7 +1870,7 @@ static int st_compression(Scsi_Tape * STp, int state)
 	else
 		(STp->buffer)->b_data[MODE_HEADER_LENGTH + 2] &= ~DCE_MASK;
 
-	memset(cmd, 0, 10);
+	memset(cmd, 0, MAX_COMMAND_SIZE);
 	cmd[0] = MODE_SELECT;
 	cmd[1] = 0x10;
 	cmd[4] = COMPRESSION_PAGE_LENGTH + MODE_HEADER_LENGTH;
@@ -1913,7 +1904,7 @@ static int st_int_ioctl(struct inode *inode,
 	long ltmp;
 	int i, ioctl_result;
 	int chg_eof = TRUE;
-	unsigned char cmd[10];
+	unsigned char cmd[MAX_COMMAND_SIZE];
 	Scsi_Cmnd *SCpnt;
 	Scsi_Tape *STp;
 	ST_partstat *STps;
@@ -1933,7 +1924,7 @@ static int st_int_ioctl(struct inode *inode,
 	blkno = STps->drv_block;
 	at_sm = STps->at_sm;
 
-	memset(cmd, 0, 10);
+	memset(cmd, 0, MAX_COMMAND_SIZE);
 	datalen = 0;
 	switch (cmd_in) {
 	case MTFSFM:
@@ -2368,14 +2359,14 @@ static int get_location(struct inode *inode, unsigned int *block, int *partition
 	Scsi_Tape *STp;
 	int dev = TAPE_NR(inode->i_rdev);
 	int result;
-	unsigned char scmd[10];
+	unsigned char scmd[MAX_COMMAND_SIZE];
 	Scsi_Cmnd *SCpnt;
 
 	STp = &(scsi_tapes[dev]);
 	if (STp->ready != ST_READY)
 		return (-EIO);
 
-	memset(scmd, 0, 10);
+	memset(scmd, 0, MAX_COMMAND_SIZE);
 	if ((STp->device)->scsi_level < SCSI_2) {
 		scmd[0] = QFA_REQUEST_BLOCK;
 		scmd[4] = 3;
@@ -2432,7 +2423,7 @@ static int set_location(struct inode *inode, unsigned int block, int partition,
 	int result, p;
 	unsigned int blk;
 	int timeout;
-	unsigned char scmd[10];
+	unsigned char scmd[MAX_COMMAND_SIZE];
 	Scsi_Cmnd *SCpnt;
 
 	STp = &(scsi_tapes[dev]);
@@ -2462,7 +2453,7 @@ static int set_location(struct inode *inode, unsigned int block, int partition,
 		}
 	}
 
-	memset(scmd, 0, 10);
+	memset(scmd, 0, MAX_COMMAND_SIZE);
 	if ((STp->device)->scsi_level < SCSI_2) {
 		scmd[0] = QFA_SEEK_BLOCK;
 		scmd[2] = (block >> 16);
@@ -2569,13 +2560,13 @@ static int nbr_partitions(struct inode *inode)
 	int dev = TAPE_NR(inode->i_rdev), result;
 	Scsi_Tape *STp;
 	Scsi_Cmnd *SCpnt = NULL;
-	unsigned char cmd[10];
+	unsigned char cmd[MAX_COMMAND_SIZE];
 
 	STp = &(scsi_tapes[dev]);
 	if (STp->ready != ST_READY)
 		return (-EIO);
 
-	memset((void *) &cmd[0], 0, 10);
+	memset((void *) &cmd[0], 0, MAX_COMMAND_SIZE);
 	cmd[0] = MODE_SENSE;
 	cmd[1] = 8;		/* Page format */
 	cmd[2] = PART_PAGE;
@@ -2609,7 +2600,7 @@ static int partition_tape(struct inode *inode, int size)
 	int length;
 	Scsi_Tape *STp;
 	Scsi_Cmnd *SCpnt = NULL;
-	unsigned char cmd[10], *bp;
+	unsigned char cmd[MAX_COMMAND_SIZE], *bp;
 
 	if ((result = nbr_partitions(inode)) < 0)
 		return result;
@@ -2640,7 +2631,7 @@ static int partition_tape(struct inode *inode, int size)
 	bp[MODE_HEADER_LENGTH] &= 0x3f;
 	bp[MODE_HEADER_LENGTH + 1] = length - 2;
 
-	memset(cmd, 0, 10);
+	memset(cmd, 0, MAX_COMMAND_SIZE);
 	cmd[0] = MODE_SELECT;
 	cmd[1] = 0x10;
 	cmd[4] = length + MODE_HEADER_LENGTH;

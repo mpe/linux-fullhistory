@@ -384,7 +384,7 @@ static struct irqaction irq2 = { no_action, 0, 0, "cascade", NULL, NULL};
 #endif
 
 
-void init_ISA_irqs (void)
+void __init init_ISA_irqs (void)
 {
 	int i;
 
