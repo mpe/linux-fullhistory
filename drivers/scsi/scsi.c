@@ -2875,11 +2875,32 @@ static void resize_dma_pool(void)
     for (SDpnt=scsi_devices; SDpnt; SDpnt = SDpnt->next) {
 	host = SDpnt->host;
 
-	if(SDpnt->type != TYPE_TAPE)
+	/*
+	 * sd and sr drivers allocate scatterlists.
+	 * sr drivers may allocate for each command 1x2048 or 2x1024 extra 
+	 * buffers for 2k sector size and 1k fs.
+	 * sg driver allocates buffers < 4k.
+	 * st driver does not need buffers from the dma pool.
+	 * estimate 4k buffer/command for devices of unknown type (should panic).
+	 */
+	if (SDpnt->type == TYPE_WORM || SDpnt->type == TYPE_ROM ||
+	    SDpnt->type == TYPE_DISK || SDpnt->type == TYPE_MOD) {
 	    new_dma_sectors += ((host->sg_tablesize *
 	                         sizeof(struct scatterlist) + 511) >> 9) *
 	                       SDpnt->queue_depth;
-	
+	    if (SDpnt->type == TYPE_WORM || SDpnt->type == TYPE_ROM)
+	        new_dma_sectors += (2048 >> 9) * SDpnt->queue_depth;
+	}
+	else if (SDpnt->type == TYPE_SCANNER || SDpnt->type == TYPE_PROCESSOR) {
+	    new_dma_sectors += (4096 >> 9) * SDpnt->queue_depth;
+	}
+	else {
+	    if (SDpnt->type != TYPE_TAPE) {
+	        printk("resize_dma_pool: unknown device type %d\n", SDpnt->type);
+	        new_dma_sectors += (4096 >> 9) * SDpnt->queue_depth;
+	    }
+        }
+
 	if(host->unchecked_isa_dma &&
 	   scsi_need_isa_bounce_buffers &&
 	   SDpnt->type != TYPE_TAPE) {
@@ -2888,7 +2909,11 @@ static void resize_dma_pool(void)
 	    new_need_isa_buffer++;
 	}
     }
-    
+
+#ifdef DEBUG_INIT
+    printk("resize_dma_pool: needed dma sectors = %d\n", new_dma_sectors);
+#endif
+
     /* limit DMA memory to 32MB: */
     new_dma_sectors = (new_dma_sectors + 15) & 0xfff0;
     
@@ -2945,6 +2970,12 @@ static void resize_dma_pool(void)
     dma_sectors = new_dma_sectors;
     need_isa_buffer = new_need_isa_buffer;
     restore_flags(flags);
+
+#ifdef DEBUG_INIT
+    printk("resize_dma_pool: dma free sectors   = %d\n", dma_free_sectors);
+    printk("resize_dma_pool: dma sectors        = %d\n", dma_sectors);
+    printk("resize_dma_pool: need isa buffers   = %d\n", need_isa_buffer);
+#endif
 }
 
 #ifdef CONFIG_MODULES		/* a big #ifdef block... */

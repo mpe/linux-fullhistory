@@ -551,6 +551,88 @@ static int sun_partition(struct gendisk *hd, kdev_t dev, unsigned long first_sec
 
 #endif /* CONFIG_SUN_PARTITION */
 
+#ifdef CONFIG_AMIGA_PARTITION
+#include <asm/byteorder.h>
+#include <linux/affs_hardblocks.h>
+
+static __inline__ __u32
+checksum_block(__u32 *m, int size)
+{
+	__u32 sum = 0;
+
+	while (size--)
+		sum += htonl(*m++);
+	return sum;
+}
+
+static int
+amiga_partition(struct gendisk *hd, unsigned int dev, unsigned long first_sector)
+{
+	struct buffer_head	*bh;
+	struct RigidDiskBlock	*rdb;
+	struct PartitionBlock	*pb;
+	int			 start_sect;
+	int			 nr_sects;
+	int			 blk;
+	int			 part, res;
+
+	set_blocksize(dev,512);
+	res = 0;
+
+	for (blk = 0; blk < RDB_ALLOCATION_LIMIT; blk++) {
+		if(!(bh = bread(dev,blk,512))) {
+			printk("Dev %d: unable to read RDB block %d\n",dev,blk);
+			goto rdb_done;
+		}
+		if (*(__u32 *)bh->b_data == htonl(IDNAME_RIGIDDISK)) {
+			rdb = (struct RigidDiskBlock *)bh->b_data;
+			if (checksum_block((__u32 *)bh->b_data,htonl(rdb->rdb_SummedLongs) & 0x7F)) {
+				printk("Dev %d: RDB in block %d has bad checksum\n",dev,blk);
+				brelse(bh);
+				continue;
+			}
+			printk(" RDSK");
+			blk = htonl(rdb->rdb_PartitionList);
+			brelse(bh);
+			for (part = 1; blk > 0 && part <= 16; part++) {
+				if (!(bh = bread(dev,blk,512))) {
+					printk("Dev %d: unable to read partition block %d\n",
+						       dev,blk);
+					goto rdb_done;
+				}
+				pb  = (struct PartitionBlock *)bh->b_data;
+				blk = htonl(pb->pb_Next);
+				if (pb->pb_ID == htonl(IDNAME_PARTITION) && checksum_block(
+				    (__u32 *)pb,htonl(pb->pb_SummedLongs) & 0x7F) == 0 ) {
+					
+					/* Tell Kernel about it */
+
+					if (!(nr_sects = (htonl(pb->pb_Environment[10]) + 1 -
+							  htonl(pb->pb_Environment[9])) *
+							 htonl(pb->pb_Environment[3]) *
+							 htonl(pb->pb_Environment[5]))) {
+						continue;
+					}
+					start_sect = htonl(pb->pb_Environment[9]) *
+						     htonl(pb->pb_Environment[3]) *
+						     htonl(pb->pb_Environment[5]);
+					add_partition(hd,current_minor,start_sect,nr_sects);
+					current_minor++;
+					res = 1;
+				}
+				brelse(bh);
+			}
+			printk("\n");
+			break;
+		}
+	}
+
+rdb_done:
+	set_blocksize(dev,BLOCK_SIZE);
+	return res;
+}
+#endif /* CONFIG_AMIGA_PARTITION */
+
 static void check_partition(struct gendisk *hd, kdev_t dev)
 {
 	static int first_time = 1;
@@ -582,6 +664,10 @@ static void check_partition(struct gendisk *hd, kdev_t dev)
 #endif
 #ifdef CONFIG_SUN_PARTITION
 	if(sun_partition(hd, dev, first_sector))
+		return;
+#endif
+#ifdef CONFIG_AMIGA_PARTITION
+	if(amiga_partition(hd, dev, first_sector))
 		return;
 #endif
 	printk(" unknown partition table\n");

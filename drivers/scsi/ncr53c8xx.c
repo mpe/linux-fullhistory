@@ -40,7 +40,7 @@
 */
 
 /*
-**	23 June 1996, version 1.12
+**	21 July 1996, version 1.12b
 **
 **	Supported SCSI-II features:
 **	    Synchronous negotiation
@@ -423,6 +423,10 @@ static struct {
 */
 
 #define ScsiResult(host_code, scsi_code) (((host_code) << 16) + ((scsi_code) & 0x7f))
+
+#if LINUX_VERSION_CODE >= LinuxVersionCode(2,0,0)
+static void ncr53c8xx_select_queue_depths(struct Scsi_Host *host, struct scsi_device *devlist);
+#endif
 
 #if LINUX_VERSION_CODE >= LinuxVersionCode(1,3,70)
 static void ncr53c8xx_intr(int irq, void *dev_id, struct pt_regs * regs);
@@ -3494,6 +3498,9 @@ printf("ncr_attach: unit=%d chip=%d base=%x, io_port=%x, irq=%d\n", unit, chip, 
 	instance->io_port	= io_port;
 	instance->n_io_port	= 128;
 	instance->dma_channel	= 0;
+#if LINUX_VERSION_CODE >= LinuxVersionCode(2,0,0)
+	instance->select_queue_depths = ncr53c8xx_select_queue_depths;
+#endif
 
 	/*
 	**	Patch script to physical addresses
@@ -4786,7 +4793,7 @@ void ncr_init (ncb_p np, char * msg, u_long code)
 	else
 /**	NCR53C815			**/
 	if (ChipDevice == PCI_DEVICE_ID_NCR_53C815) {
-		OUTB(nc_dmode, 0x00);	/* Set 2-transfer burst */
+		OUTB(nc_dmode, 0x80);	/* Set 8-transfer burst */
 	}
 	else
 /**	NCR53C825			**/
@@ -5874,7 +5881,7 @@ static void ncr_int_ma (ncb_p np)
 	if (cp != np->header.cp) {
 	    printf ("%s: SCSI phase error fixup: CCB address mismatch (0x%08lx != 0x%08lx)\n", 
 		    ncr_name (np), (u_long) cp, (u_long) np->header.cp);
-	    return;
+/*	    return;*/
 	}
 
 	/*
@@ -7521,6 +7528,30 @@ static int ncr53c8xx_pci_init(Scsi_Host_Template *tpnt, int unit, int board, int
 		       (int) irq, bus, (uchar) device_fn);
 }
 
+#if LINUX_VERSION_CODE >= LinuxVersionCode(2,0,0)
+/*
+**   Linux select queue depths function
+*/
+static void ncr53c8xx_select_queue_depths(struct Scsi_Host *host, struct scsi_device *devlist)
+{
+	struct scsi_device *device;
+
+	for (device = devlist; device; device = device->next) {
+		if (device->host == host) {
+			if (device->tagged_supported) {
+				device->queue_depth = SCSI_NCR_MAX_TAGS;
+			}
+			else {
+				device->queue_depth = 1;
+			}
+#ifdef DEBUG
+printk("ncr53c8xx_select_queue_depth: id=%d, lun=%d, queue_depth=%d\n",
+	device->id, device->lun, device->queue_depth);
+#endif
+		}
+	}
+}
+#endif
 
 /*
 **   Linux entry point of queuecommand() function

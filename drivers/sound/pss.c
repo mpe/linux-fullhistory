@@ -832,7 +832,9 @@ unload_pss (struct address_info *hw_config)
 void
 unload_pss_mpu (struct address_info *hw_config)
 {
+#if (defined(CONFIG_MPU401) || defined(CONFIG_MPU_EMU)) && defined(CONFIG_MIDI)
   unload_mpu401 (hw_config);
+#endif
 }
 
 void

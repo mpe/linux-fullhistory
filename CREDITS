@@ -1004,9 +1004,10 @@ S: Germany
 
 N: David C. Niemi
 E: niemi@erols.com
-D: Mtools/VFAT/floppy work, benchmarking, random kernel dilettante
+D: Assistant maintainer of Mtools, fdutils, and floppy driver
+D: Administrator of WAUUG Linux Server, http://linux.wauug.org
 S: 2364 Old Trail Drive
-S: Reston, Virginia 22091
+S: Reston, Virginia 20191
 S: USA
 
 N: Michael O'Reilly
@@ -1449,7 +1450,7 @@ S: Fargo, ND  58122
 S: USA
 
 N: Hans-Joachim Widmaier
-E: jbhr@sofal.tynet.sub.org
+E: hjw@zvw.de
 D: AFFS rewrite
 S: Eichenweg 16
 S: 73650 Winterbach

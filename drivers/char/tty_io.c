@@ -755,9 +755,48 @@ static int tty_read(struct inode * inode, struct file * file, char * buf, int co
 	return i;
 }
 
+/*
+ * Split writes up in sane blocksizes to avoid
+ * denial-of-service type attacks
+ */
+static inline int do_tty_write(
+	int (*write)(struct tty_struct *, struct file *, const unsigned char *, unsigned int),
+	struct inode *inode,
+	struct tty_struct *tty,
+	struct file *file,
+	const unsigned char *buf,
+	unsigned int count)
+{
+	int ret = 0, written = 0;
+
+	for (;;) {
+		unsigned int size = PAGE_SIZE*2;
+		if (size > count)
+			size = count;
+		ret = write(tty, file, buf, size);
+		if (ret <= 0)
+			break;
+		count -= ret;
+		written += ret;
+		if (!count)
+			break;
+		ret = -ERESTARTSYS;
+		if (current->signal & ~current->blocked)
+			break;
+		if (need_resched)
+			schedule();
+	}
+	if (written) {
+		inode->i_mtime = CURRENT_TIME;
+		ret = written;
+	}
+	return ret;
+}
+
+
 static int tty_write(struct inode * inode, struct file * file, const char * buf, int count)
 {
-	int i, is_console;
+	int is_console;
 	struct tty_struct * tty;
 
 	is_console = (inode->i_rdev == CONSOLE_DEV);
@@ -781,14 +820,12 @@ static int tty_write(struct inode * inode, struct file * file, const char * buf,
 		}
 	}
 #endif
-	if (tty->ldisc.write)
-		/* XXX casts are for what kernel-wide prototypes should be. */
-		i = (tty->ldisc.write)(tty,file,(const unsigned char *)buf,(unsigned int)count);
-	else
-		i = -EIO;
-	if (i > 0)
-		inode->i_mtime = CURRENT_TIME;
-	return i;
+	if (!tty->ldisc.write)
+		return -EIO;
+	return do_tty_write(tty->ldisc.write,
+		inode, tty, file,
+		(const unsigned char *)buf,
+		(unsigned int)count);
 }
 
 /*

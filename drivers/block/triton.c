@@ -1,5 +1,5 @@
 /*
- *  linux/drivers/block/triton.c	Version 1.10  Apr 3, 1996
+ *  linux/drivers/block/triton.c	Version 1.12  Jul 24, 1996
  *
  *  Copyright (c) 1995-1996  Mark Lord
  *  May be copied or modified under the terms of the GNU General Public License
@@ -322,7 +322,7 @@ static int triton_dmaproc (ide_dma_action_t func, ide_drive_t *drive)
 
 /*
  * print_triton_drive_flags() displays the currently programmed options
- * in the 430FX (Triton) chipset for a given drive.
+ * in the 82371 (Triton) for a given drive.
  *
  *	If fastDMA  is "no", then slow ISA timings are used for DMA data xfers.
  *	If fastPIO  is "no", then slow ISA timings are used for PIO data xfers.
@@ -382,7 +382,7 @@ void ide_init_triton (byte bus, byte fn)
 	unsigned short pcicmd;
 	unsigned int bmiba, timings;
 
-	printk("ide: 430FX (Triton) on PCI bus %d function %d\n", bus, fn);
+	printk("ide: 82371 PIIX (Triton) on PCI bus %d function %d\n", bus, fn);
 	/*
 	 * See if IDE and BM-DMA features are enabled:
 	 */
@@ -439,14 +439,14 @@ void ide_init_triton (byte bus, byte fn)
 		unsigned short time;
 		if (hwif->io_base == 0x1f0) {
 			time = timings & 0xffff;
-			if ((timings & 0x8000) == 0)	/* interface enabled? */
+			if ((time & 0x8000) == 0)	/* interface enabled? */
 				continue;
 			hwif->chipset = ide_triton;
 			if (dma_enabled)
 				init_triton_dma(hwif, bmiba);
 		} else if (hwif->io_base == 0x170) {
 			time = timings >> 16;
-			if ((timings & 0x8000) == 0)	/* interface enabled? */
+			if ((time & 0x8000) == 0)	/* interface enabled? */
 				continue;
 			hwif->chipset = ide_triton;
 			if (dma_enabled)

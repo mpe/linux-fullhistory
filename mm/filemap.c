@@ -415,7 +415,7 @@ static void profile_readahead(int async, struct file *filp)
  * Reasonable means, in this context, not too large but not too small.
  * The actual maximum value is:
  *	MAX_READAHEAD + PAGE_SIZE = 76k is CONFIG_READA_SMALL is undefined
- *      and 32K if defined.
+ *      and 32K if defined (4K page size assumed).
  *
  * Asynchronous read-ahead benefits:
  * ---------------------------------
@@ -442,15 +442,17 @@ static void profile_readahead(int async, struct file *filp)
  * - The total memory pool usage for the file access stream.
  *   This maximum memory usage is implicitly 2 IO read chunks:
  *   2*(MAX_READAHEAD + PAGE_SIZE) = 156K if CONFIG_READA_SMALL is undefined,
- *   64k if defined.
+ *   64k if defined (4K page size assumed).
  */
 
-#if 0 /* small readahead */
-#define MAX_READAHEAD (PAGE_SIZE*7)
-#define MIN_READAHEAD (PAGE_SIZE*2)
-#else
-#define MAX_READAHEAD (PAGE_SIZE*18)
-#define MIN_READAHEAD (PAGE_SIZE*3)
+#define PageAlignSize(size) (((size) + PAGE_SIZE -1) & PAGE_MASK)
+
+#if 0  /* small readahead */
+#define MAX_READAHEAD PageAlignSize(4096*7)
+#define MIN_READAHEAD PageAlignSize(4096*2)
+#else /* large readahead */
+#define MAX_READAHEAD PageAlignSize(4096*18)
+#define MIN_READAHEAD PageAlignSize(4096*3)
 #endif
 
 static inline unsigned long generic_file_readahead(int reada_ok, struct file * filp, struct inode * inode,

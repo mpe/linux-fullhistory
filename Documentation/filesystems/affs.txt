@@ -1,26 +1,28 @@
 Amiga filesystems Overview
 ==========================
 
-Not all varieties of the Amiga filesystems are supported.  The Amiga
-currently knows 6 different filesystems:
+Not all varieties of the Amiga filesystems are supported for reading and
+writing. The Amiga currently knows 6 different filesystems:
 
 DOS\0		The old or original filesystem, not really suited for
 		hard disks and normally not used on them, either.
+		Supported read/write.
 
-DOS\1		The original Fast File System. Supported.
+DOS\1		The original Fast File System. Supported read/write.
 
 DOS\2		The old "international" filesystem. International means that
 		a bug has been fixed so that accented ("international") letters
 		in file names are case-insensitive, as they ought to be.
+		Supported read/write.
 
-DOS\3		The "international" Fast File System.  Supported.
+DOS\3		The "international" Fast File System.  Supported read/write.
 
 DOS\4		The original filesystem with directory cache. The directory
 		cache speeds up directory accesses on floppies considerably,
 		but slows down file creation/deletion. Doesn't make much
-		sense on hard disks. Not supported.
+		sense on hard disks. Supported read only.
 
-DOS\5		The Fast File System with directory cache. Not supported.
+DOS\5		The Fast File System with directory cache. Supported read only.
 
 All of the above filesystems allow block sizes from 512 to 32K bytes.
 Supported block sizes are: 512, 1024, 2048 and 4096 bytes. Larger blocks
@@ -47,9 +49,6 @@ setuid[=uid]	This sets the owner of all files and directories in the file
 
 setgid[=gid]	Same as above, but for gid.
 
-use_mp		The uid and gid are taken from the now covered mount point
-		instead of the current user or value defined.
-
 mode=mode	Sets the mode flags to the given (octal) value, regardless
 		of the original permissions. Directories will get an x
 		permission, if the corresponding r bit is set.
@@ -71,6 +70,13 @@ quiet		The file system will not return an error for disallowed
 
 verbose		The volume name, file system type and block size will
 		be written to the syslog.
+
+prefix=path	Path will be prefixed to every absolute path name of
+		symbolic links on an AFFS partition. Default = /
+
+volume=name	When symbolic links with an absolute path are created
+		on an AFFS partition, volume will be prepended as the
+		volume name. Default = "" (empty string).
 
 Handling of the Users/Groups and protection flags
 =================================================
@@ -109,9 +115,33 @@ The Linux rwxrwxrwx file mode is handled as follows:
 Newly created files and directories will get the user and group id
 of the current user and a mode according to the umask.
 
-Command line example
-====================
-    mount  Archive/Amiga/Workbench3.1.adf /mnt -t affs -o loop,size=1760
+Symbolic links
+==============
+
+Although the Amiga and Linux file systems resemble each other, there
+are some, not always subtle, differences. One of them becomes apparent
+with symbolic links. While Linux has a file system with exactly one
+root directory, the Amiga has a seperate root directory for each
+file system (i. e. partition, floppy disk, ...). With the Amiga,
+these entities are called "volumes". They have symbolic names which
+can be used to access them. Thus, symbolic links can point to a
+different volume. AFFS turns the volume name into a directory name
+and prepends the prefix path (see prefix option) to it.
+
+Example:
+You mount all your Amiga partitions under /amiga/<volume> (where
+<volume> is the name of the volume), and you give the option
+"prefix=/amiga/" when mounting all your AFFS partitions. (They
+might be "User", "WB" and "Graphics", the mount points /amiga/User,
+/amiga/WB and /amiga/Graphics). A symbolic link referring to
+"User:sc/include/dos/dos.h" will be followed to
+"/amiga/User/sc/include/dos/dos.h".
+
+Examples
+========
+
+Command line
+    mount  Archive/Amiga/Workbench3.1.adf /mnt -t affs -o loop,reserved=4
     mount  /dev/sda3 /Amiga -t affs
 
 /etc/fstab example
@@ -151,7 +181,7 @@ Until then, you should do
     ln -s /bin/true /etc/fs/mkfs.affs
 
 It's not possible to read floppy disks with a normal PC or workstation
-due to an incompatibility to the Amiga floppy controller.
+due to an incompatibility with the Amiga floppy controller.
 
 If you are interested in an Amiga Emulator for Linux, look at
 

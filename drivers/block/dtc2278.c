@@ -41,8 +41,8 @@
  *
  * DTC2278S has only a single IDE interface.
  * DTC2278D has two IDE interfaces and is otherwise identical to the S version.
- * DTC2278E has onboard BIOS, while the others do not.
- * DTC2278EB: "works like a charm" -- Kent Bradford <kent@theory.caltech.edu>
+ * DTC2278E also has serial ports and a printer port
+ * DTC2278EB: has onboard BIOS, and "works like a charm" -- Kent Bradford <kent@theory.caltech.edu>
  *
  * There may be a fourth controller type. The S and D versions use the
  * Winbond chip, and I think the E version does also.

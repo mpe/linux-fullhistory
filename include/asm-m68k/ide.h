@@ -62,6 +62,31 @@ static void probe_m68k_ide (void);
 #undef HD_DATA
 #define HD_DATA NULL
 
+/* MSch: changed sti() to STI() wherever possible in ide.c; moved STI() def. 
+ * to asm/ide.h 
+ */
+/* The Atari interrupt structure strictly requires that the IPL isn't lowered
+ * uncontrolled in an interrupt handler. In the concrete case, the IDE
+ * interrupt is already a slow int, so the irq is already disabled at the time
+ * the handler is called, and the IPL has been lowered to the minimum value
+ * possible. To avoid going below that, STI() checks for being called inside
+ * an interrupt, and in that case it does nothing. Hope that is reasonable and
+ * works. (Roman)
+ */
+#if defined(CONFIG_ATARI) && !defined(CONFIG_AMIGA)
+#define	STI()					\
+    do {					\
+	if (!intr_count) sti();			\
+    } while(0)
+#elif defined(CONFIG_ATARI)
+#define	STI()						\
+    do {						\
+	if (!MACH_IS_ATARI || !intr_count) sti();	\
+    } while(0)
+#else /* !defined(CONFIG_ATARI) */
+#define	STI()	sti()
+#endif
+
 #define SELECT_DRIVE(hwif,drive)  OUT_BYTE((drive)->select.all, hwif->io_base+IDE_SELECT_OFFSET);
 
 #define insl(data_reg, buffer, wcount) insw(data_reg, buffer, wcount<<1)

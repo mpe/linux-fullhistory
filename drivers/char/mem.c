@@ -176,6 +176,8 @@ static int read_zero(struct inode * node, struct file * file, char * buf, int co
 	for (left = count; left > 0; left--) {
 		put_user(0,buf);
 		buf++;
+		if (need_resched)
+			schedule();
 	}
 	return count;
 }

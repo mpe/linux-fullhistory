@@ -467,6 +467,7 @@ asmlinkage int sys_shmat (int shmid, char *shmaddr, int shmflg, ulong *raddr)
 	int err;
 	unsigned int id;
 	unsigned long addr;
+	unsigned long len;
 
 	if (shmid < 0) {
 		/* printk("shmat() -> EINVAL because shmid = %d < 0\n",shmid); */
@@ -490,6 +491,12 @@ asmlinkage int sys_shmat (int shmid, char *shmaddr, int shmflg, ulong *raddr)
 		else
 			return -EINVAL;
 	}
+	/*
+	 * Check if addr exceeds TASK_SIZE (from do_mmap)
+	 */
+	len = PAGE_SIZE*shp->shm_npages;
+       if (addr >= TASK_SIZE || len > TASK_SIZE  || addr > TASK_SIZE - len)
+		return -EINVAL;
 	/*
 	 * If shm segment goes below stack, make sure there is some
 	 * space left for the stack to grow (presently 4 pages).

@@ -39,7 +39,7 @@
  *  Daniel v. Mosnenck (he sent me the Technical and Programming Reference)
  *  Gerd Knorr (he lent me his PhotoCD)
  *  Nils Faerber and Roger E. Wolff (extensively tested the LU portion)
- *  Andreas Kies (testing the mysterious hang up's)
+ *  Andreas Kies (testing the mysterious hang-ups)
  *  Heiko Eissfeldt (VERIFY_READ/WRITE)
  *  Marcin Dalecki (improved performance, shortened code)
  *  ... somebody forgotten?

@@ -1,5 +1,5 @@
 /*
- *  linux/drivers/block/ide.c	Version 5.43  May 14, 1996
+ *  linux/drivers/block/ide.c	Version 5.45  Jul 22, 1996
  *
  *  Copyright (C) 1994-1996  Linus Torvalds & authors (see below)
  */
@@ -238,6 +238,11 @@
  * Version 5.42		simplify irq-masking after probe
  *			fix NULL pointer deref in save_match()
  * Version 5.43		Ugh.. unexpected_intr is back: try to exterminate it
+ * Version 5.44		Fix for "irq probe failed" on cmd640
+ *			change path on message regarding MAKEDEV.ide
+ *			add a throttle to the unexpected_intr() messages
+ * Version 5.45		fix ugly parameter parsing bugs (thanks Derek)
+ *			include Gadi's magic fix for cmd640 unexpected_intr
  *
  *  Some additional driver compile-time options are in ide.h
  *
@@ -284,7 +289,6 @@
 #endif /* CONFIG_BLK_DEV_PROMISE */
 
 static const byte	ide_hwif_to_major[MAX_HWIFS] = {IDE0_MAJOR, IDE1_MAJOR, IDE2_MAJOR, IDE3_MAJOR};
-
 static const unsigned short default_io_base[MAX_HWIFS] = {0x1f0, 0x170, 0x1e8, 0x168};
 static const byte	default_irqs[MAX_HWIFS]     = {14, 15, 11, 10};
 
@@ -579,6 +583,8 @@ static void init_gendisk (ide_hwif_t *hwif)
 	gd->sizes = kmalloc (minors * sizeof(int), GFP_KERNEL);
 	gd->part  = kmalloc (minors * sizeof(struct hd_struct), GFP_KERNEL);
 	bs        = kmalloc (minors*sizeof(int), GFP_KERNEL);
+
+	memset(gd->part, 0, minors * sizeof(struct hd_struct));
 
 	/* cdroms and msdos f/s are examples of non-1024 blocksizes */
 	blksize_size[hwif->major] = bs;
@@ -1619,6 +1625,7 @@ static void unexpected_intr (int irq, ide_hwgroup_t *hwgroup)
 	byte stat;
 	unsigned int unit;
 	ide_hwif_t *hwif = hwgroup->hwif;
+	static unsigned long last_time = 0;
 
 	/*
 	 * handle the unexpected interrupt
@@ -1630,8 +1637,12 @@ static void unexpected_intr (int irq, ide_hwgroup_t *hwgroup)
 				if (!drive->present)
 					continue;
 				SELECT_DRIVE(hwif,drive);
-				if (!OK_STAT(stat=GET_STAT(), drive->ready_stat, BAD_STAT))
-					(void) ide_dump_status(drive, "unexpected_intr", stat);
+				if (!OK_STAT(stat=GET_STAT(), drive->ready_stat, BAD_STAT)) {
+					if ((last_time + (HZ/2)) < jiffies && !drive->ignore_unexp) {
+						last_time = jiffies;
+						(void) ide_dump_status(drive, "unexpected_intr", stat);
+					}
+				}
 				if ((stat & DRQ_STAT))
 					try_to_flush_leftover_data(drive);
 			}
@@ -1645,8 +1656,8 @@ static void unexpected_intr (int irq, ide_hwgroup_t *hwgroup)
  */
 void ide_intr (int irq, void *dev_id, struct pt_regs *regs)
 {
-	ide_hwgroup_t  *hwgroup = dev_id;
-	ide_handler_t  *handler;
+	ide_hwgroup_t *hwgroup = dev_id;
+	ide_handler_t *handler;
 
 	if (irq == hwgroup->hwif->irq && (handler = hwgroup->handler) != NULL) {
 		ide_drive_t *drive = hwgroup->drive;
@@ -1658,7 +1669,7 @@ void ide_intr (int irq, void *dev_id, struct pt_regs *regs)
 		cli();	/* this is necessary, as next rq may be different irq */
 		if (hwgroup->handler == NULL) {
 			SET_RECOVERY_TIMER(HWIF(drive));
-			ide_do_request(hwgroup);
+ 			ide_do_request(hwgroup);
 		}
 	} else {
 		unexpected_intr(irq, hwgroup);
@@ -1899,8 +1910,13 @@ static int revalidate_disk(kdev_t i_rdev)
 	};
 
 	drive->part[0].nr_sects = current_capacity(drive);
-	if (drive->media == ide_disk)
-		resetup_one_dev(HWIF(drive)->gd, drive->select.b.unit);
+	if (drive->media != ide_disk)
+		drive->part[0].start_sect = -1;
+	resetup_one_dev(HWIF(drive)->gd, drive->select.b.unit);
+#ifdef CONFIG_BLK_DEV_IDECD
+	if (drive->media == ide_cdrom)
+		ide_cdrom_setup(drive);
+#endif /* CONFIG_BLK_DEV_IDECD */
 
 	drive->busy = 0;
 	wake_up(&drive->wqueue);
@@ -2194,7 +2210,7 @@ static inline void do_identify (ide_drive_t *drive, byte cmd)
 		if ((id->model[0] == 'N' && id->model[1] == 'E') /* NEC */
 		 || (id->model[0] == 'F' && id->model[1] == 'X') /* Mitsumi */
 		 || (id->model[0] == 'P' && id->model[1] == 'i'))/* Pioneer */
-			bswap = 0;	/* Vertos drives may still be weird */
+			bswap ^= 1;	/* Vertos drives may still be weird */
 	}
 	ide_fixstring (id->model,     sizeof(id->model),     bswap);
 	ide_fixstring (id->fw_rev,    sizeof(id->fw_rev),    bswap);
@@ -2367,10 +2383,15 @@ static void delay_10ms (void)
  */
 static int try_to_identify (ide_drive_t *drive, byte cmd)
 {
-	int hd_status, rc;
+	int irqs, rc;
 	unsigned long timeout;
-	int irqs = 0;
+#ifdef CONFIG_BLK_DEV_CMD640
+	int retry = 0;
+	int hd_status;
 
+try_again:
+#endif /* CONFIG_BLK_DEV_CMD640 */
+	irqs = 0;
 	if (!HWIF(drive)->irq) {		/* already got an IRQ? */
 		probe_irq_off(probe_irq_on());	/* clear dangling irqs */
 		irqs = probe_irq_on();		/* start monitoring irqs */
@@ -2428,16 +2449,28 @@ static int try_to_identify (ide_drive_t *drive, byte cmd)
 			irqs = probe_irq_on();
 			OUT_BYTE(drive->ctl|2,IDE_CONTROL_REG); /* mask device irq */
 			udelay(5);
-			(void) GET_STAT();	/* clear drive IRQ */
 			(void) probe_irq_off(irqs);
+			(void) probe_irq_off(probe_irq_on()); /* clear self-inflicted irq */
+			(void) GET_STAT();	/* clear drive IRQ */
+
 		} else {	/* Mmmm.. multiple IRQs.. don't know which was ours */
 			printk("%s: IRQ probe failed (%d)\n", drive->name, irqs);
 #ifdef CONFIG_BLK_DEV_CMD640
 			if (HWIF(drive)->chipset == ide_cmd640) {
 				extern byte (*get_cmd640_reg)(int);
+				byte reg9  = get_cmd640_reg(0x09);
 				printk("%s: Hmmm.. probably a driver problem.\n", drive->name);
-				printk("%s: cmd640 reg 09h == 0x%02x\n", drive->name, get_cmd640_reg(9));
+				printk("%s: cmd640 reg 09h == 0x%02x\n", drive->name, reg9);
 				printk("%s: cmd640 reg 51h == 0x%02x\n", drive->name, get_cmd640_reg(0x51));
+				if (reg9 == 0x0a) {
+					printk("%s: perhaps PCI INTA has not been set to IRQ15?\n", drive->name);
+					if (retry++ == 0) {
+						extern void (*put_cmd640_reg)(int, int);
+						printk("%s: switching secondary interface to legacy mode\n", drive->name);
+						put_cmd640_reg(0x09,0x00);
+						goto try_again;
+					}
+				}
 			}
 #endif /* CONFIG_BLK_DEV_CMD640 */
 		}
@@ -2832,7 +2865,7 @@ void ide_setup (char *s)
 		/*
 		 * Cryptic check to ensure chipset not already set for hwif:
 		 */
-		if (i != -1 && i != -2) {
+		if (i >= 0 || i <= -5) {
 			if (hwif->chipset != ide_unknown)
 				goto bad_option;
 			if (i < 0 && ide_hwifs[1].chipset != ide_unknown)
@@ -2841,7 +2874,7 @@ void ide_setup (char *s)
 		/*
 		 * Interface keywords work only for ide0:
 		 */
-		if (i <= -6 && hw != 0)
+		if (i <= -5 && hw != 0)
 			goto bad_hwif;
 
 		switch (i) {
@@ -3058,7 +3091,9 @@ static void save_match (ide_hwif_t *hwif, ide_hwif_t *new, ide_hwif_t **match)
 static int init_irq (ide_hwif_t *hwif)
 {
 	unsigned long flags;
+#if MAX_HWIFS > 1
 	unsigned int index;
+#endif /* MAX_HWIFS > 1 */
 	ide_hwgroup_t *hwgroup;
 	ide_hwif_t *match = NULL;
 

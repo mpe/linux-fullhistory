@@ -7,6 +7,8 @@
 /*
  * ALI M14xx chipset EIDE controller
  *
+ * Works for ALI M1439/1443/1445/1487/1489 chipsets.
+ *
  * Adapted from code developed by derekn@vw.ece.cmu.edu.  -ml
  * Derek's notes follow:
  *
@@ -23,6 +25,16 @@
  *
  * Derek Noonburg  (derekn@ece.cmu.edu)
  * 95-sep-26
+ *
+ * Update 96-jul-13:
+ *
+ * I've since upgraded to two disks and a CD-ROM, with no trouble, and
+ * I've also heard from several others who have used it successfully.
+ * This driver appears to work with both the 1443/1445 and the 1487/1489
+ * chipsets.  I've added support for PIO mode 4 for the 1487.  This
+ * seems to work just fine on the 1443 also, although I'm not sure it's
+ * advertised as supporting mode 4.  (I've been running a WDC AC21200 in
+ * mode 4 for a while now with no trouble.)  -Derek
  */
 
 #undef REALLY_SLOW_IO           /* most systems can safely undef this */
@@ -45,8 +57,8 @@
  * from 25 to 50.  Setting this too *low* will make the EIDE
  * controller unable to communicate with the disks.
  *
- * I suggest using a default of 50, since it should work ok with any
- * system.  (Low values cause problems because it multiplies by bus speed
+ * The value is 50 by default -- this should work ok with any system.
+ * (Low values cause problems because it multiplies by bus speed
  * to get cycles, and thus gets a too-small cycle count and tries to
  * access the disks too fast.  I tried this once under DOS and it locked
  * up the system.)	-- derekn@vw.ece.cmu.edu
@@ -71,11 +83,13 @@ static RegInitializer initData[] = {
 };
 
 /* default timing parameters for each PIO mode */
-static struct { int time1, time2; } timeTab[4] = {
+#define ALI_MAX_PIO 4
+static struct { int time1, time2; } timeTab[ALI_MAX_PIO+1] = {
 	{600, 165},	/* PIO 0 */
 	{383, 125},	/* PIO 1 */
 	{240, 100},	/* PIO 2 */
-	{180,  80}	/* PIO 3 */
+	{180,  80},	/* PIO 3 */
+	{120,  70}	/* PIO 4 */
 };
 
 /* timing parameter registers for each drive */
@@ -127,20 +141,20 @@ static void ali14xx_tune_drive (ide_drive_t *drive, byte pio)
 
 	if (pio == 255)
 		pio = ide_get_best_pio_mode(drive);
-	if (pio > 3)
-		pio = 3;
+	if (pio > ALI_MAX_PIO)
+		pio = ALI_MAX_PIO;
 
 	/* calculate timing, according to PIO mode */
 	time1 = timeTab[pio].time1;
 	time2 = timeTab[pio].time2;
-	if (pio == 3) {
+	if (pio >= 3) {
 		time1a = (id->capability & 0x08) ? id->eide_pio_iordy : id->eide_pio;
 		if (time1a != 0 && time1a < time1)
 			time1 = time1a;
 	}
 	param3 = param1 = (time2 * ALI_14xx_BUS_SPEED + 999) / 1000;
 	param4 = param2 = (time1 * ALI_14xx_BUS_SPEED + 999) / 1000 - param1;
-	if (pio != 3) {
+	if (pio < 3) {
 		param3 += 8;
 		param4 += 8;
 	}

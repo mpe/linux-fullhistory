@@ -756,26 +756,6 @@ bad_area:
 	return -EFAULT;
 }
 
-static inline void get_empty_page(struct task_struct * tsk, struct vm_area_struct * vma,
-	pte_t * page_table, int write_access)
-{
-	pte_t pte;
-
-	pte = pte_wrprotect(mk_pte(ZERO_PAGE, vma->vm_page_prot));
-	if (write_access) {
-		unsigned long page = get_free_page(GFP_KERNEL);
-		pte = pte_mkwrite(pte_mkdirty(mk_pte(page, vma->vm_page_prot)));
-		vma->vm_mm->rss++;
-		tsk->min_flt++;
-		if (!page) {
-			oom(tsk);
-			pte = BAD_PAGE;
-		}
-		flush_page_to_ram(page);
-	}
-	put_page(page_table, pte);
-}
-
 /*
  * This function zeroes out partial mmap'ed pages at truncation time..
  */
@@ -886,6 +866,9 @@ static inline void do_swap_page(struct task_struct * tsk,
  * tries to share with existing pages, but makes a separate copy if
  * the "write_access" parameter is true in order to avoid the next
  * page fault.
+ *
+ * As this is called only for pages that do not currently exist, we
+ * do not need to flush old virtual caches or the TLB.
  */
 void do_no_page(struct task_struct * tsk, struct vm_area_struct * vma,
 	unsigned long address, int write_access)
@@ -938,21 +921,29 @@ void do_no_page(struct task_struct * tsk, struct vm_area_struct * vma,
 		entry = pte_mkwrite(pte_mkdirty(entry));
 	} else if (mem_map[MAP_NR(page)].count > 1 && !(vma->vm_flags & VM_SHARED))
 		entry = pte_wrprotect(entry);
-	flush_cache_page(vma, address);
 	put_page(page_table, entry);
 	/* no need to invalidate: a not-present page shouldn't be cached */
 	return;
 
-sigbus:
-	force_sig(SIGBUS, current);
-	flush_cache_page(vma, address);
-	put_page(page_table, BAD_PAGE);
-	/* no need to invalidate, wasn't present */
+anonymous_page:
+	entry = pte_wrprotect(mk_pte(ZERO_PAGE, vma->vm_page_prot));
+	if (write_access) {
+		unsigned long page = __get_free_page(GFP_KERNEL);
+		if (!page)
+			goto sigbus;
+		memset((void *) page, 0, PAGE_SIZE);
+		entry = pte_mkwrite(pte_mkdirty(mk_pte(page, vma->vm_page_prot)));
+		vma->vm_mm->rss++;
+		tsk->min_flt++;
+		flush_page_to_ram(page);
+	}
+	put_page(page_table, entry);
 	return;
 
-anonymous_page:
-	flush_cache_page(vma, address);
-	get_empty_page(tsk, vma, page_table, write_access);
+sigbus:
+	force_sig(SIGBUS, current);
+	put_page(page_table, BAD_PAGE);
+	/* no need to invalidate, wasn't present */
 	return;
 
 swap_page:

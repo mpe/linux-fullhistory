@@ -22,7 +22,11 @@ prefer a HTML-ized shopping list.
 documento, consultad la traduccion de Alfredo Sanjuan en
 http://slug.ctv.es/~alfredo/Cambios.html.
 
-Last updated: July 13, 1996.
+   Akik magyarul szeretnenek olvasni az uj kernellel kapcsolatos
+valtozasokrol, az alabbi cimen megtalaljak Nyitrai Tamas forditasat:
+http://www.datanet.hu/generations/linux/newkernel.html.
+
+Last updated: July 21, 1996.
 Current Author: Chris Ricker (gt1355b@prism.gatech.edu).
 
 Current Releases
@@ -40,7 +44,9 @@ Current Releases
 - Gpm			 1.09
 - SysVinit		 2.64
 - Util-linux		 2.5
+- Mount                  2.5k
 - Net-tools              1.32-alpha
+- Kbd                    0.91
 
 Upgrade notes
 *************
@@ -225,6 +231,15 @@ Kbd
    For those of you needing non-ASCII character/font support, you should
 upgrade to ftp.funet.fi:/pub/OS/Linux/PEOPLE/Linus/kbd-0.91.tar.gz.
 
+Mount
+=====
+
+   The mount util is distributed as part of util-linux, which is
+currently at release 2.5.  Some may find, especially when using the
+loop or xiafs file system, NFS, or automounting, that they need to
+upgrade to the latest release of mount, available from
+ftp://ftp.win.tue.nl/pub/linux/util/mount-2.5k.tar.gz.
+
 Console
 =======
 
@@ -318,7 +333,7 @@ ftp://louie.udel.edu/pub/ntp/xntp3.5f.tar.Z.
 Sound driver
 ============
 
-   The sound driver was upgraded in the 1.3.x kernels, breaking vplay.
+   The sound driver was upgraded in the 2.0.x kernels, breaking vplay.
 To fix this problem, get a new version of the sndkit from
 ftp://ftp.best.com/pub/front/tasd/snd-util-3.5.tar.gz.  Some users
 report that various other sound utils (cdd2wav-sbpcd, for example) need
@@ -352,7 +367,7 @@ Loop device
 file as a file system, which can allow for all sorts of cool things
 like encrypted file systems and such.  To use it, you'll need a
 modified version of mount from
-ftp://ftp.win.tue.nl/pub/linux/util/mount-2.5X.tar.gz; preliminary work
+ftp://ftp.win.tue.nl/pub/linux/util/mount-2.5k.tar.gz; preliminary work
 on encrypted file system support can be found in
 ftp.funet.fi:/pub/OS/Linux/BETA/loop/des.1.tar.gz.
 
@@ -463,7 +478,9 @@ groff
 pages due to changes in groff.  If your man pages display <AD> for -
 when present at the end of a line, try setting an appropriate value
 (many have reported success with "latin1", for example) for the
-environmental variable LESSCHARSET.
+environmental variable LESSCHARSET.  Another, and probably better,
+solution is to edit the file /usr/lib/man.config and change all
+`-Tlatin1' options to `-Tascii'.
 
 How to know the version of the installed programs
 *************************************************

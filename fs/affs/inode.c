@@ -44,16 +44,26 @@ affs_put_super(struct super_block *sb)
 	lock_super(sb);
 	for (i = 0; i < sb->u.affs_sb.s_bm_count; i++)
 		affs_brelse(sb->u.affs_sb.s_bitmap[i].bm_bh);
-	ROOT_END_S(sb->u.affs_sb.s_root_bh->b_data,sb)->bm_flag = htonl(1);
-	secs_to_datestamp(CURRENT_TIME,&ROOT_END_S(sb->u.affs_sb.s_root_bh->b_data,sb)->disk_altered);
-	affs_fix_checksum(sb->s_blocksize,sb->u.affs_sb.s_root_bh->b_data,5);
-	mark_buffer_dirty(sb->u.affs_sb.s_root_bh,1);
+	if (!(sb->s_flags & MS_RDONLY)) {
+		ROOT_END_S(sb->u.affs_sb.s_root_bh->b_data,sb)->bm_flag = htonl(1);
+		secs_to_datestamp(CURRENT_TIME,
+				  &ROOT_END_S(sb->u.affs_sb.s_root_bh->b_data,sb)->disk_altered);
+		affs_fix_checksum(sb->s_blocksize,sb->u.affs_sb.s_root_bh->b_data,5);
+		mark_buffer_dirty(sb->u.affs_sb.s_root_bh,1);
+	}
 
 	if (sb->u.affs_sb.s_flags & SF_PREFIX)
 		kfree(sb->u.affs_sb.s_prefix);
 	kfree(sb->u.affs_sb.s_bitmap);
 	affs_brelse(sb->u.affs_sb.s_root_bh);
+
+	/* I'm not happy with this. It would be better to save the previous
+	 * value of this devices blksize_size[][] in the super block and
+	 * restore it here, but with the affs superblock being quite large
+	 * already ...
+	 */
 	set_blocksize(sb->s_dev,BLOCK_SIZE);
+
 	sb->s_dev = 0;
 	unlock_super(sb);
 	MOD_DEC_USE_COUNT;
@@ -63,13 +73,8 @@ affs_put_super(struct super_block *sb)
 static void
 affs_write_super(struct super_block *sb)
 {
-	int			 i, clean = 2;
+	int	 i, clean = 2;
 
-	if ((sb->u.affs_sb.s_flags & SF_USE_MP) && !sb->u.affs_sb.s_uid && sb->s_covered) {
-		sb->s_mounted->i_uid = sb->u.affs_sb.s_uid = sb->s_covered->i_uid;
-		sb->s_mounted->i_gid = sb->u.affs_sb.s_gid = sb->s_covered->i_gid;
-		sb->u.affs_sb.s_flags &= ~SF_USE_MP;
-	}
 	if (!(sb->s_flags & MS_RDONLY)) {
 		lock_super(sb);
 		for (i = 0, clean = 1; i < sb->u.affs_sb.s_bm_count; i++) {
@@ -148,13 +153,6 @@ parse_options(char *options, uid_t *uid, gid_t *gid, int *mode, int *reserved, i
 				return 0;
 			}
 			*mount_opts |= SF_IMMUTABLE;
-		}
-		if (!strcmp(this_char,"usemp")) {
-			if (value) {
-				printk("AFFS: option usemp does not take an argument\n");
-				return 0;
-			}
-			*mount_opts |= SF_USE_MP;
 		}
 		else if (!strcmp(this_char,"verbose")) {
 			if (value) {
@@ -380,6 +378,16 @@ affs_read_super(struct super_block *s,void *data, int silent)
 	bb = affs_bread(dev,0,s->s_blocksize);
 	if (bb) {
 		chksum = htonl(*(__u32 *)bb->b_data);
+
+		/* Dircache filesystems are compatible with non-dircache ones
+		 * when reading. As long as they aren't supported, writing is
+		 * not recommended.
+		 */
+		if ((chksum == FS_DCFFS || chksum == MUFS_DCFFS || chksum == FS_DCOFS
+		     || chksum == MUFS_DCOFS) && !(s->s_flags & MS_RDONLY)) {
+			printk("AFFS: Dircache FS - mounting %s read only.\n",kdevname(dev));
+			s->s_flags |= MS_RDONLY;
+		}
 		switch (chksum) {
 			case MUFS_FS:
 			case MUFS_INTLFFS:
@@ -388,9 +396,11 @@ affs_read_super(struct super_block *s,void *data, int silent)
 			case FS_INTLFFS:
 				s->u.affs_sb.s_flags |= SF_INTL;
 				break;
+			case MUFS_DCFFS:
 			case MUFS_FFS:
 				s->u.affs_sb.s_flags |= SF_MUFS;
 				break;
+			case FS_DCFFS:
 			case FS_FFS:
 				break;
 			case MUFS_OFS:
@@ -399,20 +409,13 @@ affs_read_super(struct super_block *s,void *data, int silent)
 			case FS_OFS:
 				s->u.affs_sb.s_flags |= SF_OFS;
 				break;
+			case MUFS_DCOFS:
 			case MUFS_INTLOFS:
 				s->u.affs_sb.s_flags |= SF_MUFS;
-				/* fall thru */
+			case FS_DCOFS:
 			case FS_INTLOFS:
 				s->u.affs_sb.s_flags |= SF_INTL | SF_OFS;
 				break;
-			case FS_DCOFS:
-			case FS_DCFFS:
-			case MUFS_DCOFS:
-			case MUFS_DCFFS:
-				if (!silent)
-					printk("AFFS: Unsupported filesystem on device %s: %08X\n",
-					        kdevname(dev),chksum);
-				if (0)
 			default:
 				printk("AFFS: Unknown filesystem on device %s: %08X\n",
 				       kdevname(dev),chksum);
@@ -432,8 +435,8 @@ affs_read_super(struct super_block *s,void *data, int silent)
 		       (char *)&chksum,((char *)&chksum)[3] + '0',blocksize);
 	}
 
-	s->s_magic = AFFS_SUPER_MAGIC;
-	s->s_flags = MS_NODEV | MS_NOSUID;
+	s->s_magic  = AFFS_SUPER_MAGIC;
+	s->s_flags |= MS_NODEV | MS_NOSUID;
 
 	/* Keep super block in cache */
 	if (!(s->u.affs_sb.s_root_bh = affs_bread(dev,root_block,s->s_blocksize))) {
@@ -587,6 +590,7 @@ nobitmap:
 	affs_brelse(s->u.affs_sb.s_root_bh);
 	if (s->u.affs_sb.s_bitmap)
 		kfree(s->u.affs_sb.s_bitmap);
+	set_blocksize(dev,BLOCK_SIZE);
 	s->s_dev = 0;
 	unlock_super(s);
 	MOD_DEC_USE_COUNT;
@@ -787,7 +791,7 @@ affs_write_inode(struct inode *inode)
 					gid = inode->i_gid ^ ~0;
 			}
 			if (!(inode->i_sb->u.affs_sb.s_flags & SF_SETUID))
-				file_end->owner_gid = ntohs(uid);
+				file_end->owner_uid = ntohs(uid);
 			if (!(inode->i_sb->u.affs_sb.s_flags & SF_SETGID))
 				file_end->owner_gid = ntohs(gid);
 		}

@@ -64,7 +64,6 @@ struct affs_sb_info {
 #define SF_SETUID	0x0010		/* Ignore Amiga uid */
 #define SF_SETGID	0x0020		/* Ignore Amiga gid */
 #define SF_SETMODE	0x0040		/* Ignore Amiga protection bits */
-#define SF_USE_MP	0x0080		/* Use uid and gid from mount point */
 #define SF_MUFS		0x0100		/* Use MUFS uid/gid mapping */
 #define SF_OFS		0x0200		/* Old filesystem */
 #define SF_PREFIX	0x0400		/* Buffer for prefix is allocated */

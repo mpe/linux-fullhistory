@@ -476,20 +476,11 @@ repeat:
 	return;
 }
 
-static inline unsigned long value(struct inode * inode)
-{
-	if (inode->i_lock)  
-		return 1000;
-	if (inode->i_dirt)
-		return 1000;
-	return inode->i_nrpages;
-}
-
 struct inode * get_empty_inode(void)
 {
 	static int ino = 0;
 	struct inode * inode, * best;
-	unsigned long badness = 1000;
+	unsigned long badness;
 	int i;
 
 	if (nr_inodes < max_inodes && nr_free_inodes < (nr_inodes >> 1))
@@ -497,50 +488,54 @@ struct inode * get_empty_inode(void)
 repeat:
 	inode = first_inode;
 	best = NULL;
+	badness = 1000;
 	for (i = nr_inodes/2; i > 0; i--,inode = inode->i_next) {
 		if (!inode->i_count) {
-			unsigned long i = value(inode);
+			unsigned long i = 999;
+			if (!(inode->i_lock | inode->i_dirt))
+				i = inode->i_nrpages;
 			if (i < badness) {
 				best = inode;
-				if ((badness = i) == 0)
-					break;
+				if (!i)
+					goto found_good;
+				badness = i;
 			}
 		}
 	}
-	if (badness)
-		if (nr_inodes < max_inodes) {
-			if (grow_inodes() == 0)
-				goto repeat;
-		}
-	inode = best;
-	if (!inode) {
+	if (nr_inodes < max_inodes) {
+		if (grow_inodes() == 0)
+			goto repeat;
+		best = NULL;
+	}
+	if (!best) {
 		printk("VFS: No free inodes - contact Linus\n");
 		sleep_on(&inode_wait);
 		goto repeat;
 	}
-	if (inode->i_lock) {
-		wait_on_inode(inode);
+	if (best->i_lock) {
+		wait_on_inode(best);
 		goto repeat;
 	}
-	if (inode->i_dirt) {
-		write_inode(inode);
+	if (best->i_dirt) {
+		write_inode(best);
 		goto repeat;
 	}
-	if (inode->i_count)
+	if (best->i_count)
 		goto repeat;
-	clear_inode(inode);
-	inode->i_count = 1;
-	inode->i_nlink = 1;
-	inode->i_version = ++event;
-	inode->i_sem.count = 1;
-	inode->i_ino = ++ino;
-	inode->i_dev = 0;
+found_good:
+	clear_inode(best);
+	best->i_count = 1;
+	best->i_nlink = 1;
+	best->i_version = ++event;
+	best->i_sem.count = 1;
+	best->i_ino = ++ino;
+	best->i_dev = 0;
 	nr_free_inodes--;
 	if (nr_free_inodes < 0) {
 		printk ("VFS: get_empty_inode: bad free inode count.\n");
 		nr_free_inodes = 0;
 	}
-	return inode;
+	return best;
 }
 
 struct inode * get_pipe_inode(void)

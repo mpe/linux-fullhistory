@@ -1,3 +1,27 @@
+Sun Jul 21  00:00 1996 Gerard Roudier (groudier@club-internet.fr)
+	* ncr53c8xx.c, README.ncr53c8xx
+	Add the ncr53c8xx_select_queue_depths() function.
+	Set queue_depth to SCSI_NCR_MAX_TAGS (4 by default) for devices that 
+	support tagged command queueing.
+	For other devices, set queue_depth to 1. No need to queue a command 
+	to the driver if this command cannot be sent to the device.
+	Each time the driver hide io requests from the kernel and/or from the 
+	driver, it may break a little (or a lot) optimization algorithms that 
+	try to increase throughput by reordering io requests.
+	It is better to enable the disk write caching to reduce latencies for 
+	write operations, and to trust asynchronous read ahead from the device 
+	and from the kernel that can reduce latencies for read operations, 
+	even when tagged command queuing is not supported or enabled.
+
+Sat Jul 20  20:00 1996 Gerard Roudier (groudier@club-internet.fr)
+	* ncr53c8xx.c
+	Minor changes:
+	- Problem of "CCB address mismatch" that happens with the 3 versions 
+	  of the driver. The CCB is correct and Stefan Esser suggests a little 
+	  patch that seems to be a bypass.
+	  Stefan says he will change that in a future version of the BSD driver.
+	- Set burst transfers to 8 for 815 chips.
+
 Sun Jul 14  15:00 1996 Gerard Roudier (groudier@club-internet.fr)
 	* ncr53c8xx.c, Configure.help
 	Memory mapped io donnot work under linux/Alpha for the driver.

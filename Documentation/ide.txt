@@ -107,7 +107,7 @@ IRQ numbers being used by the interfaces (normally IRQ14 & IRQ15).
 Interfaces beyond the first two are not normally probed for, but may be
 specified using kernel "command line" options.  For example,
 
-	ide3=0x168,0x36e,10	/* ioports 0x1e8-0x1ef,0x3f0, irq 11 */
+	ide3=0x168,0x36e,10	/* ioports 0x168-0x16f,0x36e, irq 11 */
 
 Normally the irq number need not be specified, as ide.c will probe for it:
 
@@ -119,6 +119,9 @@ The standard port, and irq values are these:
 	ide1=0x170,0x376,15
 	ide2=0x1e8,0x3ee,11
 	ide3=0x168,0x36e,10
+
+Note that the first parameter reserves 8 contiguous ioports, whereas the
+second value denotes a single ioport. If in doubt, do a 'cat /proc/ioports'.
 
 In all probability the device uses these ports and irqs if it is attached
 to the appropriate ide channel.  Pass the parameter for the correct ide

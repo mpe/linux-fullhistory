@@ -135,7 +135,11 @@ typedef unsigned char	byte;	/* used everywhere */
  * Timeouts for various operations:
  */
 #define WAIT_DRQ	(5*HZ/100)	/* 50msec - spec allows up to 20ms */
+#ifdef CONFIG_APM
+#define WAIT_READY	(5*HZ)		/* 5sec - some laptops are very slow */
+#else
 #define WAIT_READY	(3*HZ/100)	/* 30msec - should be instantaneous */
+#endif /* CONFIG_APM */
 #define WAIT_PIDENTIFY	(1*HZ)	/* 1sec   - should be less than 3ms (?) */
 #define WAIT_WORSTCASE	(30*HZ)	/* 30sec  - worst case when spinning up */
 #define WAIT_CMD	(10*HZ)	/* 10sec  - maximum wait for an IRQ to happen */
@@ -292,6 +296,18 @@ typedef union {
 		} b;
 	} special_t;
 
+#ifdef __BIG_ENDIAN_BITFIELD
+typedef union {
+	unsigned all			: 8;	/* all of the bits together */
+	struct {
+		unsigned bit7		: 1;	/* always 1 */
+		unsigned lba		: 1;	/* using LBA instead of CHS */
+		unsigned bit5		: 1;	/* always 1 */
+		unsigned unit		: 1;	/* drive select number, 0 or 1 */
+		unsigned head		: 4;	/* always zeros here */
+	} b;
+	} select_t;
+#else /* __BIG_ENDIAN_BITFIELD */
 typedef union {
 	unsigned all			: 8;	/* all of the bits together */
 	struct {
@@ -302,6 +318,7 @@ typedef union {
 		unsigned bit7		: 1;	/* always 1 */
 	} b;
 	} select_t;
+#endif /* __BIG_ENDIAN_BITFIELD */
 
 typedef struct ide_drive_s {
 	special_t	special;	/* special action flags */
@@ -315,6 +332,7 @@ typedef struct ide_drive_s {
 	unsigned unmask		: 1;	/* flag: okay to unmask other irqs */
 	unsigned nobios		: 1;	/* flag: do not probe bios for drive */
 	unsigned autotune	: 2;	/* 1=autotune, 2=noautotune, 0=default */
+	unsigned ignore_unexp	: 1;	/* flag: ignore unexpected_intr's */
 #if FAKE_FDISK_FOR_EZDRIVE
 	unsigned remap_0_to_1	: 1;	/* flag: partitioned with ezdrive */
 #endif /* FAKE_FDISK_FOR_EZDRIVE */
@@ -324,7 +342,7 @@ typedef struct ide_drive_s {
 	byte		ready_stat;	/* min status value for drive ready */
 	byte		mult_count;	/* current multiple sector setting */
 	byte 		mult_req;	/* requested multiple sector setting */
-	byte 		pio_req;	/* requested multiple sector setting */
+	byte 		pio_req;	/* requested drive pio setting */
 	byte		io_32bit;	/* 0=16-bit, 1=32-bit, 2/3=32bit+sync */
 	byte		bad_wstat;	/* used for ignoring WRERR_STAT */
 	byte		sect0;		/* offset of first sector for DM6:DDO */
