@@ -62,6 +62,7 @@ extern struct inode_operations cifs_symlink_inode_ops;
 
 /* Functions related to files and directories */
 extern struct file_operations cifs_file_ops;
+extern struct file_operations cifs_file_direct_ops; /* if directio mount */
 extern int cifs_open(struct inode *inode, struct file *file);
 extern int cifs_close(struct inode *inode, struct file *file);
 extern int cifs_closedir(struct inode *inode, struct file *file);

@@ -169,7 +169,7 @@ static void fill_in_inode(struct inode *tmp_inode,
 	}
 
 	if (allocation_size < end_of_file)
-		cFYI(1, ("Possible sparse file: allocation size less than end of file "));
+		cFYI(1, ("May be sparse file, allocation less than file size"));
 	cFYI(1,
 	     ("File Size %ld and blocks %ld and blocksize %ld",
 	      (unsigned long)tmp_inode->i_size, tmp_inode->i_blocks,
@@ -177,7 +177,10 @@ static void fill_in_inode(struct inode *tmp_inode,
 	if (S_ISREG(tmp_inode->i_mode)) {
 		cFYI(1, (" File inode "));
 		tmp_inode->i_op = &cifs_file_inode_ops;
-		tmp_inode->i_fop = &cifs_file_ops;
+		if(cifs_sb->mnt_cifs_flags & CIFS_MOUNT_DIRECT_IO)
+			tmp_inode->i_fop = &cifs_file_direct_ops;
+		else
+			tmp_inode->i_fop = &cifs_file_ops;
 		tmp_inode->i_data.a_ops = &cifs_addr_ops;
 	} else if (S_ISDIR(tmp_inode->i_mode)) {
 		cFYI(1, (" Directory inode"));
@@ -197,6 +200,8 @@ static void unix_fill_in_inode(struct inode *tmp_inode,
 	FILE_UNIX_INFO *pfindData, int *pobject_type)
 {
 	struct cifsInodeInfo *cifsInfo = CIFS_I(tmp_inode);
+	struct cifs_sb_info *cifs_sb = CIFS_SB(tmp_inode->i_sb);
+
 	__u32 type = le32_to_cpu(pfindData->Type);
 	__u64 num_of_bytes = le64_to_cpu(pfindData->NumOfBytes);
 	__u64 end_of_file = le64_to_cpu(pfindData->EndOfFile);
@@ -255,7 +260,10 @@ static void unix_fill_in_inode(struct inode *tmp_inode,
 	if (S_ISREG(tmp_inode->i_mode)) {
 		cFYI(1, ("File inode"));
 		tmp_inode->i_op = &cifs_file_inode_ops;
-		tmp_inode->i_fop = &cifs_file_ops;
+		if(cifs_sb->mnt_cifs_flags & CIFS_MOUNT_DIRECT_IO)
+			tmp_inode->i_fop = &cifs_file_direct_ops;
+		else
+			tmp_inode->i_fop = &cifs_file_ops;
 		tmp_inode->i_data.a_ops = &cifs_addr_ops;
 	} else if (S_ISDIR(tmp_inode->i_mode)) {
 		cFYI(1, ("Directory inode"));

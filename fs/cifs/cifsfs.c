@@ -445,27 +445,12 @@ static ssize_t
 cifs_read_wrapper(struct file * file, char __user *read_data, size_t read_size,
           loff_t * poffset)
 {
-	if(file == NULL)
-		return -EIO;
-	else if(file->f_dentry == NULL)
+	if(file->f_dentry == NULL)
 		return -EIO;
 	else if(file->f_dentry->d_inode == NULL)
 		return -EIO;
 
 	cFYI(1,("In read_wrapper size %zd at %lld",read_size,*poffset));
-
-#ifdef CONFIG_CIFS_EXPERIMENTAL
-	/* check whether we can cache writes locally */
-	if(file->f_dentry->d_sb) {
-		struct cifs_sb_info *cifs_sb;
-		cifs_sb = CIFS_SB(file->f_dentry->d_sb);
-		if(cifs_sb != NULL) {
-			if(cifs_sb->mnt_cifs_flags & CIFS_MOUNT_DIRECT_IO)
-				return cifs_user_read(file,read_data,
-							read_size,poffset);
-		}
-	}
-#endif /* CIFS_EXPERIMENTAL */
 
 	if(CIFS_I(file->f_dentry->d_inode)->clientCanCacheRead) {
 		return generic_file_read(file,read_data,read_size,poffset);
@@ -490,28 +475,13 @@ cifs_write_wrapper(struct file * file, const char __user *write_data,
 {
 	ssize_t written;
 
-	if(file == NULL)
-		return -EIO;
-	else if(file->f_dentry == NULL)
+	if(file->f_dentry == NULL)
 		return -EIO;
 	else if(file->f_dentry->d_inode == NULL)
 		return -EIO;
 
 	cFYI(1,("In write_wrapper size %zd at %lld",write_size,*poffset));
 
-#ifdef CONFIG_CIFS_EXPERIMENTAL    /* BB fixme - fix user char * to kernel char * mapping here BB */
-	/* check whether we can cache writes locally */
-	if(file->f_dentry->d_sb) {
-		struct cifs_sb_info *cifs_sb;
-		cifs_sb = CIFS_SB(file->f_dentry->d_sb);
-		if(cifs_sb != NULL) {
-			if(cifs_sb->mnt_cifs_flags & CIFS_MOUNT_DIRECT_IO) {
-				return cifs_user_write(file,write_data,
-							write_size,poffset);
-			}
-		}
-	}
-#endif /* CIFS_EXPERIMENTAL */
 	written = generic_file_write(file,write_data,write_size,poffset);
 	if(!CIFS_I(file->f_dentry->d_inode)->clientCanCacheAll)  {
 		if(file->f_dentry->d_inode->i_mapping) {
@@ -591,6 +561,26 @@ struct file_operations cifs_file_ops = {
 	.flush = cifs_flush,
 	.mmap  = cifs_file_mmap,
 	.sendfile = generic_file_sendfile,
+#ifdef CONFIG_CIFS_EXPERIMENTAL
+	.readv = generic_file_readv,
+	.writev = generic_file_writev,
+	.aio_read = generic_file_aio_read,
+	.aio_write = generic_file_aio_write,
+	.dir_notify = cifs_dir_notify,
+#endif /* CONFIG_CIFS_EXPERIMENTAL */
+};
+
+struct file_operations cifs_file_direct_ops = {
+	/* no mmap, no aio, no readv - 
+	   BB reevaluate whether they can be done with directio, no cache */
+	.read = cifs_user_read,
+	.write = cifs_user_write,
+	.open = cifs_open,
+	.release = cifs_close,
+	.lock = cifs_lock,
+	.fsync = cifs_fsync,
+	.flush = cifs_flush,
+	.sendfile = generic_file_sendfile, /* BB removeme BB */
 #ifdef CONFIG_CIFS_EXPERIMENTAL
 	.dir_notify = cifs_dir_notify,
 #endif /* CONFIG_CIFS_EXPERIMENTAL */

@@ -99,7 +99,8 @@ cifs_get_inode_info_unix(struct inode **pinode,
 		cFYI(1, (" Old time %ld ", cifsInfo->time));
 		cifsInfo->time = jiffies;
 		cFYI(1, (" New time %ld ", cifsInfo->time));
-		atomic_set(&cifsInfo->inUse,1);	/* ok to set on every refresh of inode */
+		/* this is ok to set on every inode revalidate */
+		atomic_set(&cifsInfo->inUse,1);
 
 		inode->i_atime =
 		    cifs_NTtimeToUnix(le64_to_cpu(findData.LastAccessTime));
@@ -137,17 +138,17 @@ cifs_get_inode_info_unix(struct inode **pinode,
 		   client is writing to it due to potential races */
 
 			i_size_write(inode, end_of_file);
-/* blksize needs to be multiple of two. So safer to default to blksize
-	and blkbits set in superblock so 2**blkbits and blksize will match */
-/*		inode->i_blksize =
-		    (pTcon->ses->server->maxBuf - MAX_CIFS_HDR_SIZE) & 0xFFFFFE00;*/
 
-		/* This seems incredibly stupid but it turns out that
-		i_blocks is not related to (i_size / i_blksize), instead a
-		size of 512 is required to be used for calculating num blocks */
-		 
+		/* blksize needs to be multiple of two. So safer to default to
+		blksize and blkbits set in superblock so 2**blkbits and blksize
+		will match rather than setting to:
+		(pTcon->ses->server->maxBuf - MAX_CIFS_HDR_SIZE) & 0xFFFFFE00;*/
 
-/*		inode->i_blocks = 
+		/* This seems incredibly stupid but it turns out that i_blocks
+		   is not related to (i_size / i_blksize), instead 512 byte size
+		   is required for calculating num blocks */
+
+		/* inode->i_blocks = 
 	                (inode->i_blksize - 1 + num_of_bytes) >> inode->i_blkbits;*/
 
 		/* 512 bytes (2**9) is the fake blocksize that must be used */
@@ -156,14 +157,17 @@ cifs_get_inode_info_unix(struct inode **pinode,
 		}
 
 		if (num_of_bytes < end_of_file)
-			cFYI(1, ("Server inconsistency Error: it says allocation size less than end of file "));
+			cFYI(1, ("allocation size less than end of file "));
 		cFYI(1,
 		     ("Size %ld and blocks %ld ",
 		      (unsigned long) inode->i_size, inode->i_blocks));
 		if (S_ISREG(inode->i_mode)) {
 			cFYI(1, (" File inode "));
 			inode->i_op = &cifs_file_inode_ops;
-			inode->i_fop = &cifs_file_ops;
+			if(cifs_sb->mnt_cifs_flags & CIFS_MOUNT_DIRECT_IO)
+				inode->i_fop = &cifs_file_direct_ops;
+			else
+				inode->i_fop = &cifs_file_ops;
 			inode->i_data.a_ops = &cifs_addr_ops;
 		} else if (S_ISDIR(inode->i_mode)) {
 			cFYI(1, (" Directory inode"));
@@ -198,7 +202,7 @@ cifs_get_inode_info(struct inode **pinode, const unsigned char *search_path,
 
 	if((pfindData == NULL) && (*pinode != NULL)) {
 		if(CIFS_I(*pinode)->clientCanCacheRead) {
-			cFYI(1,("No need to revalidate inode sizes on cached file "));
+			cFYI(1,("No need to revalidate cached inode sizes"));
 			return rc;
 		}
 	}
@@ -259,7 +263,7 @@ cifs_get_inode_info(struct inode **pinode, const unsigned char *search_path,
 			Are there Windows server or network appliances
 			for which IndexNumber field is not guaranteed unique? */
 		
-			/* if(cifs_sb->mnt_cifs_flags & CIFS_MOUNT_SERVER_INUM) {
+			/* if(cifs_sb->mnt_cifs_flags & CIFS_MOUNT_SERVER_INUM){
 				(*pinode)->i_ino = 
 					(unsigned long)pfindData->IndexNumber;
 			} */ /*NB: ino incremented to unique num in new_inode*/
@@ -273,10 +277,10 @@ cifs_get_inode_info(struct inode **pinode, const unsigned char *search_path,
 		cifsInfo->time = jiffies;
 		cFYI(1, (" New time %ld ", cifsInfo->time));
 
-/* blksize needs to be multiple of two. So safer to default to blksize
-        and blkbits set in superblock so 2**blkbits and blksize will match */
-/*		inode->i_blksize =
-		    (pTcon->ses->server->maxBuf - MAX_CIFS_HDR_SIZE) & 0xFFFFFE00;*/
+		/* blksize needs to be multiple of two. So safer to default to
+		blksize and blkbits set in superblock so 2**blkbits and blksize
+		will match rather than setting to:
+		(pTcon->ses->server->maxBuf - MAX_CIFS_HDR_SIZE) & 0xFFFFFE00;*/
 
 		/* Linux can not store file creation time unfortunately so we ignore it */
 		inode->i_atime =
@@ -334,7 +338,10 @@ cifs_get_inode_info(struct inode **pinode, const unsigned char *search_path,
 		if (S_ISREG(inode->i_mode)) {
 			cFYI(1, (" File inode "));
 			inode->i_op = &cifs_file_inode_ops;
-			inode->i_fop = &cifs_file_ops;
+			if(cifs_sb->mnt_cifs_flags & CIFS_MOUNT_DIRECT_IO)
+				inode->i_fop = &cifs_file_direct_ops;
+			else
+				inode->i_fop = &cifs_file_ops;
 			inode->i_data.a_ops = &cifs_addr_ops;
 		} else if (S_ISDIR(inode->i_mode)) {
 			cFYI(1, (" Directory inode "));

@@ -4,7 +4,8 @@ Fix oops in ls when Transact2 FindFirst (or FindNext) returns more than one
 transact response for an SMB request and search entry split across two frames.
 Fix updates of DOS attributes and time fields so that files on NT4 servers
 do not get marked delete on close. Display sizes of cifs buffer pools in
-cifs stats.
+cifs stats. Fix oops in unmount when cifsd thread being killed by 
+shutdown. Add generic readv/writev and aio support.
 
 Version 1.30
 ------------
