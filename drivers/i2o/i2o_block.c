@@ -56,7 +56,8 @@
 
 #define MAX_I2OB	16
 
-#define MAX_I2OB_DEPTH	32
+#define MAX_I2OB_DEPTH	32                
+#define MAX_I2OB_RETRIES 4
 
 /*
  *	Some of these can be made smaller later
@@ -69,8 +70,6 @@ static int i2ob_media_change_flag[MAX_I2OB];
 static u32 i2ob_max_sectors[MAX_I2OB<<4];
 
 static int i2ob_context;
-
-static spinlock_t i2ob_lock = SPIN_LOCK_UNLOCKED;
 
 struct i2ob_device
 {
@@ -110,22 +109,41 @@ static atomic_t queue_depth;		/* For flow control later on */
 static struct i2ob_request i2ob_queue[MAX_I2OB_DEPTH+1];
 static struct i2ob_request *i2ob_qhead;
 
+static struct timer_list i2ob_timer;
+static int i2ob_timer_started = 0;
+
 #define DEBUG( s )
 /* #define DEBUG( s ) printk( s ) 
  */
 
 static int i2ob_install_device(struct i2o_controller *, struct i2o_device *, int);
 static void i2ob_end_request(struct request *);
-static void do_i2ob_request(void);
+static void i2ob_request(void);
+
+/*
+ * Dump messages.
+ */
+static void i2ob_dump_msg(struct i2ob_device *dev,u32 *msg,int size)
+{
+        int cnt;
+
+        printk(KERN_INFO "\n\ni2o message:\n");
+        for (cnt = 0; cnt<size; cnt++)
+        {
+                printk(KERN_INFO "m[%d]=%x\n",cnt,msg[cnt]);
+        }
+        printk(KERN_INFO "\n");
+}
+
 
 /*
  *	Get a message
  */
 
 static u32 i2ob_get(struct i2ob_device *dev)
-{ 
+{
 	struct i2o_controller *c=dev->controller;
-	return I2O_POST_READ32(c);
+   	return I2O_POST_READ32(c);
 }
  
 /*
@@ -141,15 +159,14 @@ static int i2ob_send(u32 m, struct i2ob_device *dev, struct i2ob_request *ireq, 
 	u64 offset;
 	struct request *req = ireq->req;
 	struct buffer_head *bh = req->bh;
-	static int old_qd = 2;
 	int count = req->nr_sectors<<9;
-	
-	/*
-	 *	Build a message
-	 */
-	
+
+	/* Map the message to a virtual address */
 	msg = bus_to_virt(c->mem_offset + m);
 	
+	/*
+         * Build the message based on the request.
+	 */
 	msg[2] = i2ob_context|(unit<<8);
 	msg[3] = ireq->num;
 	msg[5] = req->nr_sectors << 9;
@@ -212,8 +229,7 @@ static int i2ob_send(u32 m, struct i2ob_device *dev, struct i2ob_request *ireq, 
 
 	i2o_post_message(c,m);
 	atomic_inc(&queue_depth);
-	if(atomic_read(&queue_depth)>old_qd)
-		old_qd=atomic_read(&queue_depth);
+
 	return 0;
 }
 
@@ -263,6 +279,7 @@ static void i2ob_end_request(struct request *req)
 
 static void i2o_block_reply(struct i2o_handler *h, struct i2o_controller *c, struct i2o_message *msg)
 {
+	unsigned long flags;
 	struct i2ob_request *ireq;
 	u8 st;
 	u32 *m = (u32 *)msg;
@@ -319,18 +336,61 @@ static void i2o_block_reply(struct i2o_handler *h, struct i2o_controller *c, str
 		if(st!=0)
 		{
 			printk(KERN_ERR "i2ob: error %08X\n", m[4]);
-			/*
-			 *	Now error out the request block
-			 */
 			ireq->req->errors++;	
+			if (ireq->req->errors < MAX_I2OB_RETRIES)
+			{
+				u32 retry_msg;
+				struct i2ob_device *dev;
+
+  				printk(KERN_ERR "i2ob: attempting retry %d for request %p\n",ireq->req->errors+1,ireq->req);
+     				
+		                /* 
+				 * Get a message for this retry.
+				 */
+				dev = &i2ob_dev[(unit&0xF0)];
+                		retry_msg = i2ob_get(dev);
+
+                		/* 
+				 * If we cannot get a message then
+				 * forget the retry and fail the
+				 * request.   Note that since this is
+				 * being called from the interrupt 
+				 * handler, a request has just been 
+				 * completed and there will most likely 
+				 * be space on the inbound message
+				 * fifo so this won't happen often.
+				 */
+                		if(retry_msg!=0xFFFFFFFF)
+				{
+			                /*
+			                 * Decrement the queue depth since
+			                 * this request has completed and
+			                 * it will be incremented again when
+			                 * i2ob_send is called below.
+			                 */
+			                atomic_dec(&queue_depth);
+
+			                /*
+			                 * Send the request again.
+			                 */
+			                i2ob_send(retry_msg, dev,ireq,i2ob[unit].start_sect, (unit&0xF0));
+					/*
+					 * Don't fall through.
+					 */
+					return;
+				}
+			}		
 		}
+		else
+			ireq->req->errors = 0;
 	}
+		
 	/*
-	 *	Dequeue the request.
+	 *	Dequeue the request. We use irqsave locks as one day we
+	 *	may be running polled controllers from a BH...
 	 */
 	
-	spin_lock(&io_request_lock);
-	spin_lock(&i2ob_lock);
+	spin_lock_irqsave(&io_request_lock, flags);
 	i2ob_unhook_request(ireq);
 	i2ob_end_request(ireq->req);
 	
@@ -339,9 +399,8 @@ static void i2o_block_reply(struct i2o_handler *h, struct i2o_controller *c, str
 	 */
 	 
 	atomic_dec(&queue_depth);
-	do_i2ob_request();
-	spin_unlock(&i2ob_lock);
-	spin_unlock(&io_request_lock);
+	i2ob_request();
+	spin_unlock_irqrestore(&io_request_lock, flags);
 }
 
 static struct i2o_handler i2o_block_handler =
@@ -352,6 +411,39 @@ static struct i2o_handler i2o_block_handler =
 	I2O_CLASS_RANDOM_BLOCK_STORAGE
 };
 
+/*
+ * The timer handler will attempt to restart requests 
+ * that are queued to the driver.  This handler
+ * currently only gets called if the controller
+ * had no more room in its inbound fifo.  
+ */
+
+static void i2ob_timer_handler(unsigned long dummy)
+{
+	unsigned long flags;
+
+	/*
+	 * We cannot touch the request queue or the timer
+         * flag without holding the io_request_lock.
+	 */
+	spin_lock_irqsave(&io_request_lock,flags);
+
+	/* 
+	 * Clear the timer started flag so that 
+	 * the timer can be queued again.
+	 */
+	i2ob_timer_started = 0;
+
+	/* 
+	 * Restart any requests.
+	 */
+	i2ob_request();
+
+	/* 
+	 * Free the lock.
+	 */
+	spin_unlock_irqrestore(&io_request_lock,flags);
+}
 
 /*
  *	The I2O block driver is listed as one of those that pulls the
@@ -361,7 +453,7 @@ static struct i2o_handler i2o_block_handler =
  *	we use it.
  */
 
-static void do_i2ob_request(void)
+static void i2ob_request(void)
 {
 	struct request *req;
 	struct i2ob_request *ireq;
@@ -391,13 +483,36 @@ static void do_i2ob_request(void)
 		dev = &i2ob_dev[(unit&0xF0)];
 		/* Get a message */
 		m = i2ob_get(dev);
-		/* No messages -> punt 
-		   FIXME: if we have no messages, and there are no messages 
-		   we deadlock now. Need a timer/callback ?? */
+
 		if(m==0xFFFFFFFF)
 		{
-			printk("i2ob: no messages!\n");
-			break;
+			/* 
+			 * See if the timer has already been queued.
+			 */
+			if (!i2ob_timer_started)
+			{
+				printk(KERN_ERR "i2ob: starting timer\n");
+
+				/*
+				 * Set the timer_started flag to insure
+				 * that the timer is only queued once.
+				 * Queing it more than once will corrupt
+				 * the timer queue.
+				 */
+				i2ob_timer_started = 1;
+
+				/* 
+				 * Set up the timer to expire in
+				 * 500ms.
+				 */
+				i2ob_timer.expires = jiffies + (HZ >> 1);
+
+				/*
+				 * Start it.
+				 */
+				 
+				add_timer(&i2ob_timer);
+			}
 		}
 		req->errors = 0;
 		CURRENT = CURRENT->next;
@@ -412,13 +527,6 @@ static void do_i2ob_request(void)
 	}
 }
 
-static void i2ob_request(void)
-{
-	unsigned long flags;
-	spin_lock_irqsave(&i2ob_lock, flags);
-	do_i2ob_request();
-	spin_unlock_irqrestore(&i2ob_lock, flags);
-}	
 
 /*
  *	SCSI-CAM for ioctl geometry mapping
@@ -1010,6 +1118,14 @@ int i2o_block_init(void)
 	/* Queue is MAX_I2OB + 1... */
 	i2ob_queue[i].next = NULL;
 	i2ob_qhead = &i2ob_queue[0];
+	
+	/*
+	 *	Timers
+	 */
+	 
+	init_timer(&i2ob_timer);
+	i2ob_timer.function = i2ob_timer_handler;
+	i2ob_timer.data = 0;
 	
 	/*
 	 *	Register the OSM handler as we will need this to probe for

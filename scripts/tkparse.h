@@ -14,6 +14,11 @@ enum e_token
     token_choice_item,
     token_comment, 
     token_define_bool,
+    token_define_hex,
+    token_define_int,
+    token_define_string,
+    token_define_tristate,
+    token_dep_bool,
     token_dep_tristate,
     token_else, 
     token_endmenu,
@@ -46,7 +51,8 @@ enum operator
     op_rparen,
     op_constant,
     op_variable,
-    op_kvariable,
+    op_true,
+    op_false,
     op_nuked
 };
 
@@ -55,21 +61,29 @@ enum operator
  * Some operators take strings:
  *
  *   op_constant   "foo"
- *   op_variable   "$ARCH", "$CONFIG_PMAC"
- *   op_kvariable  "$CONFIG_EXPERIMENTAL"
+ *   op_variable   "$ARCH", "$CONFIG_PMAC", "$CONFIG_EXPERIMENTAL"
  *
  * Most "$..." constructs refer to a variable which is defined somewhere
- * in the script, so they become op_kvariable's instead.  Note that it
- * is legal to test variables which are never defined, such as variables
- * that are meaningful only on other architectures.
+ * in the script.  Note that it is legal to test variables which are never
+ * defined, such as variables that are meaningful only on other architectures.
  */
 
 struct condition
 {
-    struct condition * next;
-    enum operator op;
-    const char * str;		/* op_constant, op_variable */
-    struct kconfig * cfg;	/* op_kvariable */
+    struct condition *	next;
+    enum operator	op;
+    const char *	str;		/* op_constant */
+    int			nameindex;	/* op_variable */
+};
+
+/*
+ * Dependency list for dep_bool, dep_tristate
+ */
+
+struct dependency
+{
+    char *		name;
+    struct dependency *	next;
 };
 
 /*
@@ -80,21 +94,28 @@ struct kconfig
 {
     struct kconfig *	next;
     enum e_token	token;
-    char *		optionname;
+    int			nameindex;
     char *		label;
     char *		value;
     struct condition *	cond;
-    char *		depend;		/* token_dep_tristate */
+    struct dependency *	depend;		/* token_dep_tristate */
     struct kconfig *	cfg_parent;	/* token_choice_item */
 
     /* used only in tkgen.c */
-    char		global_written;
     int			menu_number;
     int			menu_line;
     struct kconfig *	menu_next;
 };
 
+struct variable
+{
+    char *	name;
+    char	defined;
+    char	global_written;
+};
 
+extern struct variable vartable[];
+extern int max_varnum;
 
 /*
  * Prototypes
@@ -102,3 +123,4 @@ struct kconfig
 
 extern void fix_conditionals ( struct kconfig * scfg );		/* tkcond.c */
 extern void dump_tk_script   ( struct kconfig * scfg );		/* tkgen.c  */
+extern int get_varnum        ( char * name );			/* tkparse.c */

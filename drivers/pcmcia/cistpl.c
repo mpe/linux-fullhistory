@@ -2,7 +2,7 @@
 
     PCMCIA Card Information Structure parser
 
-    cistpl.c 1.70 1999/09/07 15:18:58
+    cistpl.c 1.72 1999/09/15 15:32:19
 
     The contents of this file are subject to the Mozilla Public
     License Version 1.1 (the "License"); you may not use this file
@@ -54,8 +54,6 @@
 #include <pcmcia/cistpl.h>
 #include "cs_internal.h"
 #include "rsrc_mgr.h"
-
-#define MIN(a, b)		(((a) < (b)) ? (a) : (b))
 
 static const u_char mantissa[] = {
     10, 12, 13, 15, 20, 25, 30, 35,
@@ -524,6 +522,8 @@ int get_next_tuple(client_handle_t handle, tuple_t *tuple)
 
 /*====================================================================*/
 
+#define _MIN(a, b)		(((a) < (b)) ? (a) : (b))
+
 int get_tuple_data(client_handle_t handle, tuple_t *tuple)
 {
     socket_info_t *s;
@@ -542,7 +542,7 @@ int get_tuple_data(client_handle_t handle, tuple_t *tuple)
 	return CS_SUCCESS;
     read_cis_cache(s, SPACE(tuple->Flags),
 		   tuple->CISOffset + tuple->TupleOffset,
-		   MIN(len, tuple->TupleDataMax), tuple->TupleData);
+		   _MIN(len, tuple->TupleDataMax), tuple->TupleData);
     return CS_SUCCESS;
 }
 

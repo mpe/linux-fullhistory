@@ -39,6 +39,7 @@
 #endif				/* __KERNEL__ */
 #include <linux/delay.h>
 #include <linux/proc_fs.h>
+#include <linux/smp_lock.h>
 
 #include "soundmodule.h"
 struct notifier_block *sound_locker=(struct notifier_block *)0;
@@ -375,60 +376,76 @@ static ssize_t sndstat_file_read(struct file * file, char * buf, size_t nbytes, 
 static ssize_t sound_read(struct file *file, char *buf, size_t count, loff_t *ppos)
 {
 	int dev = MINOR(file->f_dentry->d_inode->i_rdev);
+	int ret = -EINVAL;
 
+	/*
+	 *	The OSS drivers aren't remotely happy without this locking,
+	 *	and unless someone fixes them when they are about to bite the
+	 *	big one anyway, we might as well bandage here..
+	 */
+	 
+	lock_kernel();
+	
 	DEB(printk("sound_read(dev=%d, count=%d)\n", dev, count));
 	switch (dev & 0x0f) {
 	case SND_DEV_STATUS:
-		return sndstat_file_read(file, buf, count, ppos);
+		ret = sndstat_file_read(file, buf, count, ppos);
 
 #ifdef CONFIG_AUDIO
 	case SND_DEV_DSP:
 	case SND_DEV_DSP16:
 	case SND_DEV_AUDIO:
-		return audio_read(dev, file, buf, count);
+		ret = audio_read(dev, file, buf, count);
+		break;
 #endif
 
 #ifdef CONFIG_SEQUENCER
 	case SND_DEV_SEQ:
 	case SND_DEV_SEQ2:
-		return sequencer_read(dev, file, buf, count);
+		ret = sequencer_read(dev, file, buf, count);
+		break;
 #endif
 
 #ifdef CONFIG_MIDI
 	case SND_DEV_MIDIN:
-		return MIDIbuf_read(dev, file, buf, count);
+		ret = MIDIbuf_read(dev, file, buf, count);
 #endif
-
-	default:;
 	}
-	return -EINVAL;
+	unlock_kernel();
+	return ret;
 }
 
 static ssize_t sound_write(struct file *file, const char *buf, size_t count, loff_t *ppos)
 {
 	int dev = MINOR(file->f_dentry->d_inode->i_rdev);
-
+	int ret = -EINVAL;
+	
+	lock_kernel();
 	DEB(printk("sound_write(dev=%d, count=%d)\n", dev, count));
 	switch (dev & 0x0f) {
 #ifdef CONFIG_SEQUENCER
 	case SND_DEV_SEQ:
 	case SND_DEV_SEQ2:
-		return sequencer_write(dev, file, buf, count);
+		ret =  sequencer_write(dev, file, buf, count);
+		break;
 #endif
 
 #ifdef CONFIG_AUDIO
 	case SND_DEV_DSP:
 	case SND_DEV_DSP16:
 	case SND_DEV_AUDIO:
-		return audio_write(dev, file, buf, count);
+		ret = audio_write(dev, file, buf, count);
+		break;
 #endif
 
 #ifdef CONFIG_MIDI
 	case SND_DEV_MIDIN:
-		return MIDIbuf_write(dev, file, buf, count);
+		ret =  MIDIbuf_write(dev, file, buf, count);
+		break;
 #endif
 	}
-	return -EINVAL;
+	unlock_kernel();
+	return ret;
 }
 
 static long long sound_lseek(struct file *file, long long offset, int orig)
@@ -858,8 +875,11 @@ static int      sound[20] = {
 
 int traceinit = 0;
 static int dmabuf = 0;
+static int dmabug = 0;
+
 MODULE_PARM(traceinit, "i");
 MODULE_PARM(dmabuf, "i");
+MODULE_PARM(dmabug, "i");
 
 int init_module(void)
 {
@@ -868,6 +888,15 @@ int init_module(void)
 	int             i;
 
 	trace_init=traceinit;
+	
+#ifdef HAS_BRIDGE_BUGGY_FUNC
+	if(dmabug)
+		isa_dma_bridge_buggy = dmabug;
+#else
+	if(dmabug)
+		printk(KERN_ERR "sound: rebuild with PCI_QUIRKS enabled to configure this.\n");
+#endif
+		
 	/*
 	 * "sound=" command line handling by Harald Milz.
 	 */

@@ -64,8 +64,8 @@ static int NR_REAL = -1;
 #endif
 #define START_PARTITION 4
 
-/* Number of jiffies to wait before completing a command */
-#define DISK_SPEED     10
+/* Time to wait before completing a command */
+#define DISK_SPEED     (HZ/10)   /* 100ms */
 #define CAPACITY (0x80000)
 
 static int starts[] =
@@ -378,7 +378,7 @@ int scsi_debug_queuecommand(Scsi_Cmnd * SCpnt, void (*done) (Scsi_Cmnd *))
 				scsi_debug_errsts = (COMMAND_COMPLETE << 8) | (CHECK_CONDITION << 1);
 				break;
 			}	/* End phony disk change code */
-#
+#endif
 
 #ifdef CLEAR
 			memcpy(buff, &target, sizeof(target));

@@ -27,7 +27,6 @@
 
 #define QNX4_VERSION  4
 #define QNX4_BMNAME   ".bitmap"
-#define CHECK_BOOT_SIGNATURE 0
 
 static struct super_operations qnx4_sops;
 
@@ -257,9 +256,6 @@ static const char *qnx4_checkroot(struct super_block *s)
 	int i, j;
 	int found = 0;
 
-	if (s == NULL) {
-		return "no qnx4 filesystem (null superblock).";
-	}
 	if (*(s->u.qnx4_sb.sb->RootDir.di_fname) != '/') {
 		return "no qnx4 filesystem (no root dir).";
 	} else {
@@ -282,6 +278,8 @@ static const char *qnx4_checkroot(struct super_block *s)
 					}
 				}
 			}
+			/* WAIT! s->u.qnx4_sb.BitMap points into bh->b_data
+			   and now we release bh?? */
 			brelse(bh);
 			if (found != 0) {
 				break;
@@ -299,9 +297,8 @@ static struct super_block *qnx4_read_super(struct super_block *s,
 {
 	struct buffer_head *bh;
 	kdev_t dev = s->s_dev;
-#if CHECK_BOOT_SIGNATURE
+	struct inode *root;
 	char *tmpc;
-#endif
 	const char *errmsg;
 
 	MOD_INC_USE_COUNT;
@@ -311,7 +308,9 @@ static struct super_block *qnx4_read_super(struct super_block *s,
 	s->s_blocksize_bits = 9;
 	s->s_dev = dev;
 
-#if CHECK_BOOT_SIGNATURE
+	/* Check the boot signature. Since the qnx4 code is
+	   dangerous, we should leave as quickly as possible
+	   if we don't belong here... */
 	bh = bread(dev, 0, QNX4_BLOCK_SIZE);
 	if (!bh) {
 		printk("qnx4: unable to read the boot sector\n");
@@ -320,11 +319,12 @@ static struct super_block *qnx4_read_super(struct super_block *s,
 	tmpc = (char *) bh->b_data;
 	if (tmpc[4] != 'Q' || tmpc[5] != 'N' || tmpc[6] != 'X' ||
 	    tmpc[7] != '4' || tmpc[8] != 'F' || tmpc[9] != 'S') {
-		printk("qnx4: wrong fsid in boot sector.\n");
+		if (!silent)
+			printk("qnx4: wrong fsid in boot sector.\n");
 		goto out;
 	}
 	brelse(bh);
-#endif
+
 	bh = bread(dev, 1, QNX4_BLOCK_SIZE);
 	if (!bh) {
 		printk("qnx4: unable to read the superblock\n");
@@ -337,23 +337,35 @@ static struct super_block *qnx4_read_super(struct super_block *s,
 #endif
 	s->u.qnx4_sb.sb_buf = bh;
 	s->u.qnx4_sb.sb = (struct qnx4_super_block *) bh->b_data;
-	s->s_root =
-	    d_alloc_root(iget(s, QNX4_ROOT_INO * QNX4_INODES_PER_BLOCK));
-	if (s->s_root == NULL) {
-		printk("qnx4: get inode failed\n");
-		goto out;
-	}
+
+ 
+ 	/* check before allocating dentries, inodes, .. */
 	errmsg = qnx4_checkroot(s);
 	if (errmsg != NULL) {
-		printk("qnx4: %s\n", errmsg);
+ 		if (!silent)
+ 			printk("qnx4: %s\n", errmsg);
 		goto out;
 	}
+ 
+ 	/* does root not have inode number QNX4_ROOT_INO ?? */
+ 	root = iget(s, QNX4_ROOT_INO * QNX4_INODES_PER_BLOCK);
+ 	if (!root) {
+ 		printk("qnx4: get inode failed\n");
+ 		goto out;
+ 	}
+ 
+ 	s->s_root = d_alloc_root(root);
+ 	if (s->s_root == NULL)
+ 		goto outi;
+ 
 	brelse(bh);
 	unlock_super(s);
 	s->s_dirt = 1;
 
 	return s;
 
+      outi:
+	iput(root);
       out:
 	brelse(bh);
       outnobh:

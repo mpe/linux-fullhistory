@@ -1,5 +1,5 @@
 /*
- * bus_ops.h 1.6 1999/08/28 04:12:33
+ * bus_ops.h 1.7 1999/09/10 06:22:33
  *
  * The contents of this file are subject to the Mozilla Public License
  * Version 1.1 (the "License"); you may not use this file except in
@@ -30,6 +30,8 @@
 #ifndef _LINUX_BUS_OPS_H
 #define _LINUX_BUS_OPS_H
 
+#ifdef CONFIG_VIRTUAL_BUS
+
 typedef struct bus_operations {
     void	*priv;
     u32		(*b_in)(void *bus, u32 port, s32 sz);
@@ -51,8 +53,6 @@ typedef struct bus_operations {
 				 void *dev_id);
     void	(*b_free_irq)(void *bus, u_int irq, void *dev_id);
 } bus_operations;
-
-#ifdef CONFIG_VIRTUAL_BUS
 
 #define bus_inb(b,p)		(b)->b_in((b),(p),0)
 #define bus_inw(b,p)		(b)->b_in((b),(p),1)

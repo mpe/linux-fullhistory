@@ -1,19 +1,19 @@
 /*
- * 	linux/drivers/i2o/i2o_lan.c
+ *	linux/drivers/i2o/i2o_lan.c
  *
- *    	I2O LAN CLASS OSM 	Prototyping, July 16th 1999
+ * 	I2O LAN CLASS OSM 	Prototyping, September 17th 1999
  *
  *	(C) Copyright 1999 	University of Helsinki,
  *				Department of Computer Science
  *
- *   	This code is still under development / test.
+ * 	This code is still under development / test.
  *
- *      This program is free software; you can redistribute it and/or
- *      modify it under the terms of the GNU General Public License
- *      as published by the Free Software Foundation; either version
- *      2 of the License, or (at your option) any later version.    
+ *	This program is free software; you can redistribute it and/or
+ *	modify it under the terms of the GNU General Public License
+ *	as published by the Free Software Foundation; either version
+ *	2 of the License, or (at your option) any later version.    
  *
- * 	Authors: 	Auvo Häkkinen <Auvo.Hakkinen@cs.Helsinki.FI>
+ *	Authors: 	Auvo Häkkinen <Auvo.Hakkinen@cs.Helsinki.FI>
  *			Juha Sievänen <Juha.Sievanen@cs.Helsinki.FI>
  *			Deepak Saxena <deepak@plexity.net>
  *
@@ -61,7 +61,6 @@ struct i2o_lan_local {
 	u8 unit;
 	struct i2o_device *i2o_dev;
 	int reply_flag; 		/* needed by scalar/table queries */
-	u32 packet_tresh;		/* treshold for incoming skb's */	
 	struct fddi_statistics stats;   /* see also struct net_device_stats */ 
 	unsigned short (*type_trans)(struct sk_buff *, struct net_device *);
 	/* 
@@ -70,12 +69,22 @@ struct i2o_lan_local {
 	 * the DDM with buckets.
 	 */
 	u32	bucket_count;
+
+   /*
+    * Keep track of no. of outstanding TXes
+    */
+   u32   tx_count;
+   u32   max_tx;
+   u32   tx_full;
+
+   spinlock_t lock;
+
 };
 
 /* function prototypes */
-static int i2o_lan_receive_post(struct net_device *dev);
-static int i2o_lan_receive_post_reply(struct net_device *dev, struct i2o_message *m);
-static void i2o_lan_release_buckets(u32 *msg, struct i2o_lan_local *priv);
+static int i2o_lan_receive_post(struct net_device *dev, u32 count);
+static int i2o_lan_receive_post_reply(struct net_device *dev, u32 *msg);
+static void i2o_lan_release_buckets(struct net_device *dev, u32 *msg);
 
 /*
  * Module params
@@ -90,15 +99,6 @@ static void i2o_lan_reply(struct i2o_handler *h, struct i2o_controller *iop,
 	u32 *msg = (u32 *)m;
 	u8 unit  = (u8)(msg[2]>>16); // InitiatorContext
 	struct net_device *dev = i2o_landevs[unit];
-	struct i2o_lan_local *priv; 
-
-	if(dev)
-		priv = (struct i2o_lan_local *)dev->priv;
-	else
-		priv = NULL;
-	
-	dprintk("Unit: %d Function: %#x\n",
-				unit, msg[1]>>24);
 
     	if (msg[0] & (1<<13)) // Fail bit is set
  	{
@@ -126,20 +126,16 @@ static void i2o_lan_reply(struct i2o_handler *h, struct i2o_controller *iop,
 		{
 			if(!(msg[4]>>24))
 			{
-				i2o_lan_receive_post_reply(dev,m);
+				i2o_lan_receive_post_reply(dev,msg);
 				break;
 			}
-			else
-			{
-				// Something VERY wrong if this is happening
-				 printk( KERN_WARNING "i2olan: Device %s rejected bucket post\n", dev->name);
-				i2o_lan_release_buckets(msg,priv);
-			}
+
+			// Something VERY wrong if this is happening
+			printk( KERN_WARNING "i2olan: Device %s rejected bucket post\n", dev->name);
 		}
-		else
-		{
-			i2o_lan_release_buckets(msg,priv);	
-		}
+
+		// Getting unused buckets back
+		i2o_lan_release_buckets(dev,msg);	
 	
 		break;
 	}
@@ -147,16 +143,21 @@ static void i2o_lan_reply(struct i2o_handler *h, struct i2o_controller *iop,
 	case LAN_PACKET_SEND:
 	case LAN_SDU_SEND: 
 	{
+		struct i2o_lan_local *priv = (struct i2o_lan_local *)dev->priv;	
 		u8 trl_count  = msg[3] & 0x000000FF; 	
 		
 		do { 	// The HDM has handled the outgoing packet
 			dev_kfree_skb((struct sk_buff *)msg[4 + trl_count]);
 			dprintk(KERN_INFO "%s: Request skb freed (trl_count=%d).\n",
 				dev->name,trl_count);
+			priv->tx_count--;
 		} while (--trl_count);
 		
-		dev->tbusy = 0;
-		mark_bh(NET_BH); /* inform upper layers */
+		if(dev->tbusy)
+		{
+			clear_bit(0,(void*)&dev->tbusy);
+			mark_bh(NET_BH); /* inform upper layers */
+		}
 	
 		break;	
 	}
@@ -164,21 +165,20 @@ static void i2o_lan_reply(struct i2o_handler *h, struct i2o_controller *iop,
 	default: 
 		if (msg[2] & 0x80000000)  // reply to a UtilParamsGet/Set
 		{	
-	   	int *flag = (int *)msg[3]; // flag for i2o_post_wait
+	   		int *flag = (int *)msg[3]; // flag for i2o_post_wait
 			if (msg[4] >> 24) // ReqStatus != SUCCESS
-			{
-	     	 	*flag = -(msg[4] & 0xFFFF); // DetailedStatus
+	     	 		*flag = -(msg[4] & 0xFFFF); // DetailedStatus
+	     		else
+	     			*flag = I2O_POST_WAIT_OK;
 	     	}
-	     	else
-	     		*flag = I2O_POST_WAIT_OK;
-		}
 	}
 }
 
-void i2o_lan_release_buckets(u32 *msg, struct i2o_lan_local *priv)
+void i2o_lan_release_buckets(struct net_device *dev, u32 *msg)
 {
+	struct i2o_lan_local *priv = (struct i2o_lan_local *)dev->priv;	
 	u8 trl_count  = (u8)(msg[3] & 0x000000FF); 	
-   u32 *pskb = &msg[6];
+	u32 *pskb = &msg[6];
 	
 	while (trl_count) 
 	{	
@@ -186,8 +186,7 @@ void i2o_lan_release_buckets(u32 *msg, struct i2o_lan_local *priv)
 			(struct sk_buff*)(*pskb));
 		dev_kfree_skb((struct sk_buff*)(*pskb)); 
 		pskb++;
-		if(priv)
-			priv->bucket_count--;
+		priv->bucket_count--;
 		trl_count--;
 	}
 }
@@ -202,9 +201,8 @@ static struct i2o_handler i2o_lan_handler =
 static int lan_context;
 
 
-static int i2o_lan_receive_post_reply(struct net_device *dev, struct i2o_message *m)
+static int i2o_lan_receive_post_reply(struct net_device *dev, u32 *msg)
 {
-	u32 *msg = (u32 *)m;
 	struct i2o_lan_local *priv = (struct i2o_lan_local *)dev->priv;
 	struct i2o_bucket_descriptor *bucket = (struct i2o_bucket_descriptor *)&msg[6];
 	struct i2o_packet_info *packet;
@@ -212,19 +210,23 @@ static int i2o_lan_receive_post_reply(struct net_device *dev, struct i2o_message
 	u8 trl_count  = msg[3] & 0x000000FF; 	
 	struct sk_buff *skb, *newskb;
 
+static int n_calls = 0;
+n_calls++;
+
 #if 0
 	dprintk(KERN_INFO "TrlFlags = 0x%02X, TrlElementSize = %d, TrlCount = %d\n"
 		"msgsize = %d, buckets_remaining = %d\n", 
 		msg[3]>>24, msg[3]&0x0000FF00, trl_count, msg[0]>>16, msg[5]);	
 #endif
 
-	dprintk(KERN_INFO "Buckets_remaining = %d, bucket_count = %d\n",
-		msg[5], priv->bucket_count);
-
-	do {
+	while (trl_count--)
+	{
 		skb = (struct sk_buff *)(bucket->context);		
 		packet = (struct i2o_packet_info *)bucket->packet_info;	
 		priv->bucket_count--;
+
+		dprintk(KERN_INFO "Buckets_remaining = %d, bucket_count = %d, trl_count = %d\n",
+			msg[5], priv->bucket_count, trl_count);
 #if 0
 		dprintk(KERN)INFO "flags = 0x%02X, offset = 0x%06X, status = 0x%02X, length = %d\n",
 			packet->flags, packet->offset, packet->status, packet->len);
@@ -234,8 +236,7 @@ static int i2o_lan_receive_post_reply(struct net_device *dev, struct i2o_message
 					dev_alloc_skb(packet->len+2);	
 			if (newskb) {
 				skb_reserve(newskb,2);
-				memcpy(skb_put(newskb,packet->len), 
-			       skb->data, packet->len);
+				memcpy(skb_put(newskb,packet->len), skb->data, packet->len);
 				newskb->dev = dev;
 				newskb->protocol = priv->type_trans(newskb, dev);
 
@@ -247,7 +248,6 @@ static int i2o_lan_receive_post_reply(struct net_device *dev, struct i2o_message
 				return -ENOMEM;
 			}
 		} else {
-
 			skb_put(skb,packet->len);		
 			skb->dev  = dev;		
 			skb->protocol = priv->type_trans(skb, dev);
@@ -258,33 +258,25 @@ static int i2o_lan_receive_post_reply(struct net_device *dev, struct i2o_message
 			"to upper level.\n",dev->name,packet->len);
 
 		bucket++; // to next Packet Descriptor Block
-	} while (--trl_count);
-
-	if (priv->bucket_count <= bucketthresh) // BucketsRemaining
-	{
-		dprintk("Bucket_count = %d, ",priv->bucket_count);
-		i2o_lan_receive_post(dev);
 	}
 
+	if (priv->bucket_count < bucketpost - bucketthresh)
+		i2o_lan_receive_post(dev, bucketpost - priv->bucket_count);
 
-	if((msg[4]& 0x0000ffff) == 0x05) // I2O_LAN_RECEIVE_OVERRUN
+	if ((msg[4] & 0x000000FF) == I2O_LAN_DSC_BUCKET_OVERRUN)
 	{
-		printk("Bucket overrun! priv->bucketcount = %d\n",
-					priv->bucket_count);
+		printk(KERN_INFO "%s: DDM out of buckets (count = %d)! "
+			 "Number of posts = %d\n", dev->name, msg[5], n_calls);
+		n_calls = 0;
 	}
 
 	return 0;
 }
 
-/*  ====================================================
- *  Interface to i2o:  functions to send lan class request 
- */
-
-
 /* 
  * i2o_lan_receive_post(): Post buckets to receive packets.
  */
-static int i2o_lan_receive_post(struct net_device *dev)
+static int i2o_lan_receive_post(struct net_device *dev, u32 count)
 {	
 	struct i2o_lan_local *priv = (struct i2o_lan_local *)dev->priv;	
 	struct i2o_device *i2o_dev = priv->i2o_dev;
@@ -298,16 +290,16 @@ static int i2o_lan_receive_post(struct net_device *dev)
 	u32 total = 0;
 	int i;
 
-	while (total < bucketpost)
+	while (total < count)
 	{
 		m = I2O_POST_READ32(iop);
 		if (m == 0xFFFFFFFF)
 			return -ETIMEDOUT;		
 		msg = bus_to_virt(iop->mem_offset + m);
-	
-		bucket_count = (total + n_elems < bucketpost)
+
+		bucket_count = (total + n_elems < count)
 			     ? n_elems
-			     : bucketpost - total;
+			     : count - total;
 
 		msg[0] = I2O_MESSAGE_SIZE(4 + 3 *  bucket_count) | SGL_OFFSET_4;
 		msg[1] = LAN_RECEIVE_POST<<24 | HOST_TID<<12 | i2o_dev->id;
@@ -440,11 +432,7 @@ static int i2o_lan_open(struct net_device *dev)
 {
 	struct i2o_lan_local *priv = (struct i2o_lan_local *)dev->priv;	
 	struct i2o_device *i2o_dev = priv->i2o_dev;	
-	struct i2o_controller *iop = i2o_dev->controller;
 
-/*	if (i2o_issue_claim(iop, i2o_dev->id, priv->unit << 16 | lan_context, 1, 
-			    &priv->reply_flag) < 0)
-*/
 	if(i2o_claim_device(i2o_dev, &i2o_lan_handler, I2O_CLAIM_PRIMARY))
 	{
 		printk(KERN_WARNING "%s: Unable to claim the I2O LAN device.\n", dev->name);
@@ -457,10 +445,8 @@ static int i2o_lan_open(struct net_device *dev)
 	dev->tbusy = 0;
 	dev->start = 1;
 
-	priv->packet_tresh = dev->mtu - (dev->mtu >> 3);
-
 	i2o_set_batch_mode(dev);
-	i2o_lan_receive_post(dev);
+	i2o_lan_receive_post(dev, bucketpost);
 
 	MOD_INC_USE_COUNT;
 
@@ -474,20 +460,10 @@ static int i2o_lan_close(struct net_device *dev)
 {
 	struct i2o_lan_local *priv = (struct i2o_lan_local *)dev->priv;	
 	struct i2o_device *i2o_dev = priv->i2o_dev;	
-	struct i2o_controller *iop = i2o_dev->controller;	
 
 	dev->tbusy = 1;
 	dev->start = 0;
-
-// This is the right place for LanSuspend, but it seems to cause 
-// a kernel crash when we are using 82558 HDM proto
-
 	i2o_lan_suspend(dev);
-
-/*
-	if (i2o_issue_claim(iop, i2o_dev->id, priv->unit << 16 | lan_context, 0, 
-			    &priv->reply_flag) < 0)
-*/
 
 	if(i2o_release_device(i2o_dev, &i2o_lan_handler, I2O_CLAIM_PRIMARY))
 		printk(KERN_WARNING "%s: Unable to unclaim I2O LAN device "
@@ -498,6 +474,7 @@ static int i2o_lan_close(struct net_device *dev)
 	return 0;
 }
 
+#if 0
 /* 
  * i2o_lan_sdu_send(): Send a packet, MAC header added by the HDM.
  * Must be supported by Fibre Channel, optional for Ethernet/802.3, 
@@ -505,44 +482,9 @@ static int i2o_lan_close(struct net_device *dev)
  */
 static int i2o_lan_sdu_send(struct sk_buff *skb, struct net_device *dev)
 {	
-#if 0
-/* not yet tested */
-        struct i2o_lan_local *priv = (struct i2o_lan_local *)dev->priv; 
-        struct i2o_device *i2o_dev = priv->i2o_dev;     
-        struct i2o_controller *iop = i2o_dev->controller;
-        u32 m; u32 *msg;
-
-	dprintk(KERN_INFO "LanSDUSend called, skb->len = %d\n", skb->len);
-
-        m = I2O_POST_READ32(iop);
-	if (m == 0xFFFFFFFF) 
-	{
-		dev_kfree_skb(skb);
-		return -ETIMEDOUT;
-	}    
-	msg = bus_to_virt(iop->mem_offset + m);
-
-        msg[0] = NINE_WORD_MSG_SIZE | SGL_OFFSET_4;
-        msg[1] = LAN_SDU_SEND<<24 | HOST_TID<<12 | i2o_dev->id; 
-        msg[2] = priv->unit << 16 | lan_context; // IntiatorContext
-        msg[3] = 1<<4;		// TransmitControlWord: suppress CRC generation
-
-        // create a simple SGL, see fig. 3-26
-        // D7 = 1101 0111 = LE eob 0 1 LA dir bc1 bc0
-
-        msg[4] = 0xD7000000 | (skb->len);  // no MAC hdr included     
-        msg[5] = (u32)skb;		   // TransactionContext
-        memcpy(&msg[6], skb->data, 8);	   // Destination MAC Addr ??
-        msg[7] &= 0x0000FFFF;		   // followed by two bytes zeros
-        msg[8] = virt_to_bus(skb->data);
-        dev->trans_start = jiffies;
-	i2o_post_message(iop,m);
-
-	dprintk(KERN_INFO "%s: Packet (%d bytes) sent to network.\n",
-		dev->name,skb->len);
-#endif
-        return 0;
+        return -EINVAL;
 }
+#endif
 
 /* 
  * i2o_lan_packet_send(): Send a packet as is, including the MAC header.
@@ -555,10 +497,24 @@ static int i2o_lan_packet_send(struct sk_buff *skb, struct net_device *dev)
 	struct i2o_lan_local *priv = (struct i2o_lan_local *)dev->priv;	
 	struct i2o_device *i2o_dev = priv->i2o_dev;	
 	struct i2o_controller *iop = i2o_dev->controller;
-        u32 m; u32 *msg;
+	u32 m, *msg;
+	u32 flags = 0;
 
-        m = I2O_POST_READ32(iop);
+	/* 
+	 * Keep interrupt from changing dev->tbusy from underneath us
+	 * (Do we really need to do this?)
+	 */
+	spin_lock_irqsave(&priv->lock, flags);
+
+	if(test_and_set_bit(0,(void*)&dev->tbusy) != 0)
+	{
+		spin_unlock_irqrestore(&priv->lock, flags);
+		return 1;
+	}
+
+	m = I2O_POST_READ32(iop);
 	if (m == 0xFFFFFFFF) {
+		spin_unlock_irqrestore(&priv->lock, flags);
 		dev_kfree_skb(skb);
 		return -ETIMEDOUT;
 	}    
@@ -576,7 +532,14 @@ static int i2o_lan_packet_send(struct sk_buff *skb, struct net_device *dev)
 	msg[5] = (u32)skb; 			// TransactionContext
 	msg[6] = virt_to_bus(skb->data);
 
-        i2o_post_message(iop,m);
+	i2o_post_message(iop,m);
+
+	// Check to see if HDM queue is full..if so...stay busy
+	if(++priv->tx_count < priv->max_tx)
+		clear_bit(0, (void *)&dev->tbusy);
+
+	spin_unlock_irqrestore(&priv->lock, flags);
+		
 	dprintk(KERN_INFO "%s: Packet (%d bytes) sent to network.\n",
 		dev->name, skb->len);
 
@@ -593,7 +556,7 @@ static struct net_device_stats *i2o_lan_get_stats(struct net_device *dev)
 
         if (i2o_query_scalar(iop, i2o_dev->id, priv->unit << 16 | lan_context, 0x0100, -1, 
         		 val64, sizeof(val64), &priv->reply_flag) < 0)
-        	dprintk("%s: Unable to query LAN_HISTORICAL_STATS.\n",dev->name);
+        	printk("%s: Unable to query LAN_HISTORICAL_STATS.\n",dev->name);
 	else {
         	dprintk("%s: LAN_HISTORICAL_STATS queried.\n",dev->name);
         	priv->stats.tx_packets = val64[0];
@@ -605,13 +568,14 @@ static struct net_device_stats *i2o_lan_get_stats(struct net_device *dev)
 		priv->stats.rx_dropped = val64[6];
 	}
 
-        i2o_query_scalar(iop, i2o_dev->id, priv->unit << 16 | lan_context, 0x0180, -1, 
-        		&supported_group, sizeof(supported_group), &priv->reply_flag);
+        if (i2o_query_scalar(iop, i2o_dev->id, priv->unit << 16 | lan_context, 0x0180, -1, 
+        		&supported_group, sizeof(supported_group), &priv->reply_flag) < 0)
+        	printk("%s: Unable to query LAN_SUPPORTED_OPTIONAL_HISTORICAL_STATS.\n",dev->name);
 
 	if (supported_group[2]) {
         	if (i2o_query_scalar(iop, i2o_dev->id, priv->unit << 16 | lan_context, 0x0183, -1, 
         	 	val64, sizeof(val64), &priv->reply_flag) < 0)
-        		dprintk("%s: Unable to query LAN_OPTIONAL_RX_HISTORICAL_STATS.\n",dev->name);
+        		printk("%s: Unable to query LAN_OPTIONAL_RX_HISTORICAL_STATS.\n",dev->name);
 		else {
         		dprintk("%s: LAN_OPTIONAL_RX_HISTORICAL_STATS queried.\n",dev->name);
 			priv->stats.multicast        = val64[4];
@@ -626,9 +590,9 @@ static struct net_device_stats *i2o_lan_get_stats(struct net_device *dev)
 
         	if (i2o_query_scalar(iop, i2o_dev->id, priv->unit << 16 | lan_context, 0x0200, -1, 
         			 val64, sizeof(val64), &priv->reply_flag) < 0)
-        		dprintk("%s: Unable to query LAN_802_3_HISTORICAL_STATS.\n",dev->name);
+        		printk("%s: Unable to query LAN_802_3_HISTORICAL_STATS.\n",dev->name);
 		else {
-//        		dprintk("%s: LAN_802_3_HISTORICAL_STATS queried.\n",dev->name);
+        		dprintk("%s: LAN_802_3_HISTORICAL_STATS queried.\n",dev->name);
 	 		priv->stats.transmit_collision = val64[1] + val64[2];
 			priv->stats.rx_frame_errors    = val64[0];		
 			priv->stats.tx_carrier_errors  = val64[6];
@@ -636,12 +600,12 @@ static struct net_device_stats *i2o_lan_get_stats(struct net_device *dev)
 
         	if (i2o_query_scalar(iop, i2o_dev->id, priv->unit << 16 | lan_context, 0x0280, -1, 
         			 &supported_stats, 8, &priv->reply_flag) < 0)
-        		dprintk("%s: Unable to query LAN_SUPPORTED_802_3_HISTORICAL_STATS\n", dev->name);
-        
+        		printk("%s: Unable to query LAN_SUPPORTED_802_3_HISTORICAL_STATS\n", dev->name);
+
         	if (supported_stats != 0) {
         		if (i2o_query_scalar(iop, i2o_dev->id, priv->unit << 16 | lan_context, 0x0281, -1, 
         				 val64, sizeof(val64), &priv->reply_flag) < 0)
-        			dprintk("%s: Unable to query LAN_OPTIONAL_802_3_HISTORICAL_STATS.\n",dev->name);
+        			printk("%s: Unable to query LAN_OPTIONAL_802_3_HISTORICAL_STATS.\n",dev->name);
 			else {
         			dprintk("%s: LAN_OPTIONAL_802_3_HISTORICAL_STATS queried.\n",dev->name);
 				if (supported_stats & 0x1)
@@ -658,7 +622,7 @@ static struct net_device_stats *i2o_lan_get_stats(struct net_device *dev)
 	{
         	if (i2o_query_scalar(iop, i2o_dev->id, priv->unit << 16 | lan_context, 0x0300, -1, 
         			 val64, sizeof(val64), &priv->reply_flag) < 0)
-        		dprintk("%s: Unable to query LAN_802_5_HISTORICAL_STATS.\n",dev->name);
+        		printk("%s: Unable to query LAN_802_5_HISTORICAL_STATS.\n",dev->name);
 		else {
 			struct tr_statistics *stats = 
 					(struct tr_statistics *)&priv->stats;
@@ -684,7 +648,7 @@ static struct net_device_stats *i2o_lan_get_stats(struct net_device *dev)
 	{
         	if (i2o_query_scalar(iop, i2o_dev->id, priv->unit << 16 | lan_context, 0x0400, -1, 
         			 val64, sizeof(val64), &priv->reply_flag) < 0)
-        		dprintk("%s: Unable to query LAN_FDDI_HISTORICAL_STATS.\n",dev->name);
+        		printk("%s: Unable to query LAN_FDDI_HISTORICAL_STATS.\n",dev->name);
 		else {
 //        		dprintk("%s: LAN_FDDI_HISTORICAL_STATS queried.\n",dev->name);
 			priv->stats.smt_cf_state = val64[0];
@@ -718,20 +682,6 @@ static void i2o_lan_set_multicast_list(struct net_device *dev)
 	u32 work32[64];
 
 	dprintk(KERN_INFO "%s: Entered i2o_lan_set_multicast_list().\n", dev->name);
-
-if (dev==NULL)
-        printk("dev is NULL\n");
-else if (dev->priv==NULL)
-        printk("dev->priv is NULL\n");
-else if (priv->i2o_dev==NULL)
-        printk("i2o_dev is NULL\n");
-else if (i2o_dev->controller==NULL)
-	printk("iop is NULL\n");
-else {
-	printk("Everything seems to be OK in i2o_lan_set_multicast_list().\n");
-        printk("id = %d, unit = %d, lan_context = %d\n",
-        i2o_dev->id, priv->unit, lan_context);
-}  
 
 return;
 
@@ -810,6 +760,7 @@ struct net_device *i2o_lan_register_device(struct i2o_device *i2o_dev)
 	struct net_device *dev = NULL;
 	struct i2o_lan_local *priv = NULL;
 	u8 hw_addr[8];
+	u32 max_tx = 0;
 	unsigned short (*type_trans)(struct sk_buff *, struct net_device *);
 	void (*unregister_dev)(struct net_device *dev);
 
@@ -893,12 +844,12 @@ struct net_device *i2o_lan_register_device(struct i2o_device *i2o_dev)
 			priv->unit << 16 | lan_context,
 			0x0001, 0, &hw_addr, 8, &priv->reply_flag) < 0)
 	{
-        	printk(KERN_ERR "%s: Unable to query hardware address.\n", dev->name);
+     	printk(KERN_ERR "%s: Unable to query hardware address.\n", dev->name);
 		unit--;
 		unregister_dev(dev);
 		kfree(dev);
       		return NULL;  
-        }
+	}
 
 	dprintk("%s: hwaddr = %02X:%02X:%02X:%02X:%02X:%02X\n",
       		dev->name,hw_addr[0], hw_addr[1], hw_addr[2], hw_addr[3],
@@ -906,6 +857,22 @@ struct net_device *i2o_lan_register_device(struct i2o_device *i2o_dev)
 
 	dev->addr_len = 6;
 	memcpy(dev->dev_addr, hw_addr, 6);
+
+   if (i2o_query_scalar(i2o_dev->controller, i2o_dev->id,
+         priv->unit << 16 | lan_context,
+         0x0007, 2, &max_tx, 4, &priv->reply_flag) < 0)
+   {
+      printk(KERN_ERR "%s: Unable to query max TX queue.\n", dev->name);
+      unit--;
+      unregister_dev(dev);
+      kfree(dev);
+         return NULL;
+   }
+   printk(KERN_INFO "%s: Max TX Outstanding = %d\n", dev->name, max_tx);
+   priv->max_tx = max_tx;
+   priv->tx_count = 0;
+
+	priv->lock = SPIN_LOCK_UNLOCKED;
 
 	dev->open               = i2o_lan_open;
 	dev->stop               = i2o_lan_close;
@@ -920,23 +887,20 @@ struct net_device *i2o_lan_register_device(struct i2o_device *i2o_dev)
 #define i2o_lan_init	init_module
 #endif
 
-__init int i2o_lan_init(void)
+int __init i2o_lan_init(void)
 {
 	struct net_device *dev;
 	int i;
-
-	bucketpost = bucketpost - bucketthresh;
 
 	if (i2o_install_handler(&i2o_lan_handler) < 0)
 	{
  		printk(KERN_ERR "Unable to register I2O LAN OSM.\n");
 		return -EINVAL;
 	}   
-
+	lan_context = i2o_lan_handler.context;
+	
 	for(i=0; i <= MAX_LAN_CARDS; i++)
 		i2o_landevs[i] = NULL;
-
-	lan_context = i2o_lan_handler.context;
 
 	for (i=0; i < MAX_I2O_CONTROLLERS; i++)
 	{
@@ -1026,7 +990,7 @@ EXPORT_NO_SYMBOLS;
 MODULE_AUTHOR("Univ of Helsinki, CS Department");
 MODULE_DESCRIPTION("I2O Lan OSM");
 
-MODULE_PARM(bucketpost, "i");           // Number of buckets to post
+MODULE_PARM(bucketpost, "i");   // Number of buckets to post
 MODULE_PARM(bucketthresh, "i"); // Bucket post threshold
 MODULE_PARM(rx_copybreak, "i");
 

@@ -84,9 +84,11 @@ static struct tunertype tuners[] = {
 	      //  16*170.00,16*450.00,0xa0,0x90,0x30,0x8e,0xc2,623},
 	        16*170.00,16*450.00,0x02,0x04,0x01,0x8e,0xc2,623},
 	{"Temic 4036 FY5 NTSC", TEMIC, NTSC,
-	        16*157.25,16*463.25,0xa0,0x90,0x30,0x8e,0xc2,732},
-        {"Alps HSBH1", TEMIC, NTSC,
-                16*137.25,16*385.25,0x01,0x02,0x08,0x8e,0xc2,732},
+		16*157.25,16*463.25,0xa0,0x90,0x30,0x8e,0xc2,732},
+	{"Alps TSBH1",TEMIC,NTSC,
+		16*137.25,16*385.25,0x01,0x02,0x08,0x8e,0xc2,732},
+	{"Alps TSBE1",TEMIC,PAL,
+		16*137.25,16*385.25,0x01,0x02,0x08,0x8e,0xc2,732},
 };
 
 /* ---------------------------------------------------------------------- */
@@ -192,12 +194,13 @@ static int tuner_attach(struct i2c_device *device)
 
 	/*
 	 *	For now we only try and attach these tuners to the BT848
-	 *	bus. This same module will however work different species
-	 *	of card using these chips. Just change the constraints
+	 *	or ZORAN bus. This same module will however work different
+	 *	species	of card using these chips. Just change the constraints
 	 *	(i2c doesn't have a totally clash free 'address' space)
 	 */
 	 
-	if(device->bus->id!=I2C_BUSID_BT848)
+	if(device->bus->id!=I2C_BUSID_BT848 &&
+	   device->bus->id!=I2C_BUSID_ZORAN)
 		return -EINVAL;
 		
 	device->data = t = kmalloc(sizeof(struct tuner),GFP_KERNEL);

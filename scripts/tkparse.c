@@ -29,6 +29,17 @@
  * 23 January 1999, Michael Elizabeth Chastain, <mec@shout.net>
  * - Remove bug-compatible code.
  *
+ * 07 July 1999, Andrzej M. Krzysztofowicz, <ankry@mif.pg.gda.pl>
+ * - Submenus implemented,
+ * - plenty of option updating/displaying fixes,
+ * - dep_bool, define_hex, define_int, define_string, define_tristate and
+ *   undef implemented,
+ * - dep_tristate fixed to support multiple dependencies,
+ * - handling of variables with an empty value implemented,
+ * - value checking for int and hex fields,
+ * - more checking during condition parsing; choice variables are treated as
+ *   all others now,
+ *
  * TO DO:
  * - xconfig is at the end of its life cycle.  Contact <mec@shout.net> if
  *   you are interested in working on the replacement.
@@ -51,8 +62,6 @@ static void do_source( const char * );
 int my_strcmp( const char * s1, const char * s2 ) { return strcmp( s1, s2 ); }
 #define strcmp my_strcmp
 
-
-
 /*
  * Report a syntax error.
  */
@@ -60,6 +69,30 @@ static void syntax_error( const char * msg )
 {
     fprintf( stderr, "%s: %d: %s\n", current_file, lineno, msg );
     exit( 1 );
+}
+
+
+
+/*
+ * Find index of a specyfic variable in the symbol table.
+ * Create a new entry if it does not exist yet.
+ */
+#define VARTABLE_SIZE 2048
+struct variable vartable[VARTABLE_SIZE];
+int max_varnum = 0;
+
+int get_varnum( char * name )
+{
+    int i;
+    
+    for ( i = 1; i <= max_varnum; i++ )
+	if ( strcmp( vartable[i].name, name ) == 0 )
+	    return i;
+    if (max_varnum > VARTABLE_SIZE-1)
+	syntax_error( "Too many variables defined." );
+    vartable[++max_varnum].name = malloc( strlen( name )+1 );
+    strcpy( vartable[max_varnum].name, name );
+    return max_varnum;
 }
 
 
@@ -138,6 +171,7 @@ static const char * get_qstring( const char * pnt, char ** label )
 }
 
 
+
 /*
  * Tokenize an 'if' statement condition.
  */
@@ -145,6 +179,7 @@ static struct condition * tokenize_if( const char * pnt )
 {
     struct condition * list;
     struct condition * last;
+    struct condition * prev;
 
     /* eat the open bracket */
     while ( *pnt == ' ' || *pnt == '\t' )
@@ -170,30 +205,53 @@ static struct condition * tokenize_if( const char * pnt )
 	cond = malloc( sizeof(*cond) );
 	memset( cond, 0, sizeof(*cond) );
 	if ( last == NULL )
-	    { list = last = cond; }
+	    { list = last = cond; prev = NULL; }
 	else
-	    { last->next = cond; last = cond; }
+	    { prev = last; last->next = cond; last = cond; }
 
 	/* determine the token value */
 	if ( *pnt == '-' && pnt[1] == 'a' )
-	    { cond->op = op_and;  pnt += 2; continue; }
+	{
+	    if ( ! prev || ( prev->op != op_variable && prev->op != op_constant ) )
+		syntax_error( "incorrect argument" );
+	    cond->op = op_and;  pnt += 2; continue;
+	}
 
 	if ( *pnt == '-' && pnt[1] == 'o' )
-	    { cond->op = op_or;   pnt += 2; continue; }
+	{
+	    if ( ! prev || ( prev->op != op_variable && prev->op != op_constant ) )
+		syntax_error( "incorrect argument" );
+	    cond->op = op_or;   pnt += 2; continue;
+	}
 
 	if ( *pnt == '!' && pnt[1] == '=' )
-	    { cond->op = op_neq;  pnt += 2; continue; }
+	{
+	    if ( ! prev || ( prev->op != op_variable && prev->op != op_constant ) )
+		syntax_error( "incorrect argument" );
+	    cond->op = op_neq;  pnt += 2; continue;
+	}
 
 	if ( *pnt == '=' )
-	    { cond->op = op_eq;   pnt += 1; continue; }
+	{
+	    if ( ! prev || ( prev->op != op_variable && prev->op != op_constant ) )
+		syntax_error( "incorrect argument" );
+	    cond->op = op_eq;   pnt += 1; continue;
+	}
 
 	if ( *pnt == '!' )
-	    { cond->op = op_bang; pnt += 1; continue; }
+	{
+	    if ( prev && ( prev->op != op_and && prev->op != op_or
+		      && prev->op != op_bang ) )
+		syntax_error( "incorrect argument" );
+	    cond->op = op_bang; pnt += 1; continue;
+	}
 
 	if ( *pnt == '"' )
 	{
 	    const char * word;
 
+	    if ( prev && ( prev->op == op_variable || prev->op == op_constant ) )
+		syntax_error( "incorrect argument" );
 	    /* advance to the word */
 	    pnt++;
 	    if ( *pnt == '$' )
@@ -217,7 +275,15 @@ static struct condition * tokenize_if( const char * pnt )
 		char * str = malloc( pnt - word + 1 );
 		memcpy( str, word, pnt - word );
 		str [pnt - word] = '\0';
-		cond->str = str;
+		if ( cond->op == op_variable )
+		{
+		    cond->nameindex = get_varnum( str );
+		    free( str );
+		}
+		else /* op_constant */
+		{
+		    cond->str = str;
+		}
 	    }
 
 	    pnt++;
@@ -241,6 +307,7 @@ static const char * tokenize_choices( struct kconfig * cfg_choose,
     for ( ; ; )
     {
 	struct kconfig * cfg;
+	char * buffer = malloc( 64 );
 
 	/* skip whitespace */
 	while ( *pnt == ' ' || *pnt == '\t' )
@@ -262,13 +329,12 @@ static const char * tokenize_choices( struct kconfig * cfg_choose,
 	pnt = get_string( pnt, &cfg->label );
 	while ( *pnt == ' ' || *pnt == '\t' )
 	    pnt++;
-	pnt = get_string( pnt, &cfg->optionname );
+	pnt = get_string( pnt, &buffer );
+	cfg->nameindex = get_varnum( buffer );
     }
 
     return pnt;
 }
-
-
 
 
 
@@ -280,6 +346,8 @@ static void tokenize_line( const char * pnt )
     static struct kconfig * last_menuoption = NULL;
     enum e_token token;
     struct kconfig * cfg;
+    struct dependency ** dep_ptr;
+    char * buffer = malloc( 64 );
 
     /* skip white space */
     while ( *pnt == ' ' || *pnt == '\t' )
@@ -313,6 +381,11 @@ static void tokenize_line( const char * pnt )
 
     case 'd':
 	match_token( token_define_bool, "define_bool" );
+	match_token( token_define_hex, "define_hex" );
+	match_token( token_define_int, "define_int" );
+	match_token( token_define_string, "define_string" );
+	match_token( token_define_tristate, "define_tristate" );
+	match_token( token_dep_bool, "dep_bool" );
 	match_token( token_dep_tristate, "dep_tristate" );
 	break;
 
@@ -371,11 +444,13 @@ static void tokenize_line( const char * pnt )
 	syntax_error( "bogus 'then'" );
     }
 
+#if 0
     if ( token == token_unset )
     {
 	fprintf( stderr, "Ignoring 'unset' command\n" );
 	return;
     }
+#endif
 
     if ( token == token_UNKNOWN )
 	syntax_error( "unknown command" );
@@ -404,8 +479,9 @@ static void tokenize_line( const char * pnt )
 
     case token_bool:
     case token_tristate:
-	pnt = get_qstring ( pnt, &cfg->label      );
-	pnt = get_string  ( pnt, &cfg->optionname );
+	pnt = get_qstring ( pnt, &cfg->label );
+	pnt = get_string  ( pnt, &buffer );
+	cfg->nameindex = get_varnum( buffer );
 	break;
 
     case token_choice_header:
@@ -417,9 +493,7 @@ static void tokenize_line( const char * pnt )
 	    pnt = get_qstring ( pnt, &choice_list );
 	    pnt = get_string  ( pnt, &cfg->value  );
 
-	    cfg->optionname = malloc( 32 );
-	    sprintf( cfg->optionname, "tmpvar_%d", choose_number++ );
-
+	    cfg->nameindex = -(choose_number++);
 	    tokenize_choices( cfg, choice_list );
 	    free( choice_list );
 	}
@@ -436,56 +510,133 @@ static void tokenize_line( const char * pnt )
 	break;
 
     case token_define_bool:
-	pnt = get_string( pnt, &cfg->optionname );
+    case token_define_tristate:
+	pnt = get_string( pnt, &buffer );
+	cfg->nameindex = get_varnum( buffer );
 	while ( *pnt == ' ' || *pnt == '\t' )
 	    pnt++;
-	if      ( *pnt == 'n' || *pnt == 'N' ) cfg->value = "0";
-	else if ( *pnt == 'y' || *pnt == 'Y' ) cfg->value = "1";
-	else if ( *pnt == 'm' || *pnt == 'M' ) cfg->value = "2";
-	else
-	{
-	    syntax_error( "unknown define_bool value" );
-	}
-	break;
-
-    case token_dep_tristate:
-	pnt = get_qstring ( pnt, &cfg->label      );
-	pnt = get_string  ( pnt, &cfg->optionname );
-
-	while ( *pnt == ' ' || *pnt == '\t' )
-	    pnt++;
-
 	if ( ( pnt[0] == 'Y'  || pnt[0] == 'M' || pnt[0] == 'N'
-	||     pnt[0] == 'y'  || pnt[0] == 'm' || pnt[0] == 'n'  )
+	||     pnt[0] == 'y'  || pnt[0] == 'm' || pnt[0] == 'n' )
 	&&   ( pnt[1] == '\0' || pnt[1] == ' ' || pnt[1] == '\t' ) )
 	{
-	    /* dep_tristate 'foo' CONFIG_FOO m */
-	    if      ( pnt[0] == 'Y' || pnt[0] == 'y' )
-		cfg->depend = strdup( "CONSTANT_Y" );
-	    else if ( pnt[0] == 'M' || pnt[0] == 'm' )
-		cfg->depend = strdup( "CONSTANT_M" );
-	    else
-		cfg->depend = strdup( "CONSTANT_N" );
-	    pnt++;
+	    if      ( *pnt == 'n' || *pnt == 'N' ) cfg->value = strdup( "CONSTANT_N" );
+	    else if ( *pnt == 'y' || *pnt == 'Y' ) cfg->value = strdup( "CONSTANT_Y" );
+	    else if ( *pnt == 'm' || *pnt == 'M' ) cfg->value = strdup( "CONSTANT_M" );
 	}
 	else if ( *pnt == '$' )
 	{
 	    pnt++;
-	    pnt = get_string( pnt, &cfg->depend );
+	    pnt = get_string( pnt, &cfg->value );
 	}
 	else
 	{
-	    syntax_error( "can't handle dep_tristate condition" );
+	    syntax_error( "unknown define_bool value" );
 	}
+	get_varnum( cfg->value );
+	break;
+
+    case token_define_hex:
+    case token_define_int:
+	pnt = get_string( pnt, &buffer );
+	cfg->nameindex = get_varnum( buffer );
+	pnt = get_string( pnt, &cfg->value );
+	break;
+
+    case token_define_string:
+	pnt = get_string( pnt, &buffer );
+	cfg->nameindex = get_varnum( buffer );
+	pnt = get_qstring( pnt, &cfg->value );
+	break;
+
+    case token_dep_bool:
+    case token_dep_tristate:
+	pnt = get_qstring ( pnt, &cfg->label );
+	pnt = get_string  ( pnt, &buffer );
+	cfg->nameindex = get_varnum( buffer );
+
+	while ( *pnt == ' ' || *pnt == '\t' )
+	    pnt++;
+
+	dep_ptr = &(cfg->depend);
+
+	do {
+	    *dep_ptr = (struct dependency *) malloc( sizeof( struct dependency ) );
+	    (*dep_ptr)->next = NULL;
+
+	    if ( ( pnt[0] == 'Y'  || pnt[0] == 'M' || pnt[0] == 'N'
+	    ||     pnt[0] == 'y'  || pnt[0] == 'm' || pnt[0] == 'n' )
+	    &&   ( pnt[1] == '\0' || pnt[1] == ' ' || pnt[1] == '\t' ) )
+	    {
+		/* dep_tristate 'foo' CONFIG_FOO m */
+		if      ( pnt[0] == 'Y' || pnt[0] == 'y' )
+		    (*dep_ptr)->name = strdup( "CONSTANT_Y" );
+		else if ( pnt[0] == 'N' || pnt[0] == 'n' )
+		    (*dep_ptr)->name = strdup( "CONSTANT_N" );
+		else
+		    (*dep_ptr)->name = strdup( "CONSTANT_M" );
+		pnt++;
+		get_varnum( (*dep_ptr)->name );
+	    }
+	    else if ( *pnt == '$' )
+	    {
+		pnt++;
+		pnt = get_string( pnt, &(*dep_ptr)->name );
+		get_varnum( (*dep_ptr)->name );
+	    }
+	    else
+	    {
+		syntax_error( "can't handle dep_bool/dep_tristate condition" );
+	    }
+	    dep_ptr = &(*dep_ptr)->next;
+	    while ( *pnt == ' ' || *pnt == '\t' )
+		pnt++;
+	} while ( *pnt );
 
 	/*
-	 * Create a conditional for this object's dependency.
+	 * Create a conditional for this object's dependencies.
 	 */
 	{
 	    char fake_if [1024];
-	    sprintf( fake_if, "[ \"$%s\" = \"y\" -o \"$%s\" = \"m\" ]; then",
-		cfg->depend, cfg->depend );
-	    cfg->cond = tokenize_if( fake_if );
+	    struct dependency * dep;
+	    struct condition ** cond_ptr;
+	    int first = 1;
+
+	    cond_ptr = &(cfg->cond);
+	    for ( dep = cfg->depend; dep; dep = dep->next )
+	    {
+		if ( token == token_dep_tristate
+		&& ! strcmp( dep->name, "CONSTANT_M" ) )
+		{
+		    continue;
+		}
+		if ( first )
+		{
+		    first = 0;
+		}
+		else
+		{
+		    *cond_ptr = malloc( sizeof(struct condition) );
+		    memset( *cond_ptr, 0, sizeof(struct condition) );
+		    (*cond_ptr)->op = op_and;
+		    cond_ptr = &(*cond_ptr)->next;
+		}
+		*cond_ptr = malloc( sizeof(struct condition) );
+		memset( *cond_ptr, 0, sizeof(struct condition) );
+		(*cond_ptr)->op = op_lparen;
+		if ( token == token_dep_tristate )
+		    sprintf( fake_if, "[ \"$%s\" = \"y\" -o \"$%s\" = \"m\" -o \"$%s\" = \"\" ]; then",
+			dep->name, dep->name, dep->name );
+		else
+		    sprintf( fake_if, "[ \"$%s\" = \"y\" -o \"$%s\" = \"\" ]; then",
+			dep->name, dep->name );
+		(*cond_ptr)->next = tokenize_if( fake_if );
+		while ( *cond_ptr )
+		    cond_ptr = &(*cond_ptr)->next;
+		*cond_ptr = malloc( sizeof(struct condition) );
+		memset( *cond_ptr, 0, sizeof(struct condition) );
+		(*cond_ptr)->op = op_rparen;
+		cond_ptr = &(*cond_ptr)->next;
+	    }
 	}
 	break;
 
@@ -496,15 +647,17 @@ static void tokenize_line( const char * pnt )
 
     case token_hex:
     case token_int:
-	pnt = get_qstring ( pnt, &cfg->label      );
-	pnt = get_string  ( pnt, &cfg->optionname );
-	pnt = get_string  ( pnt, &cfg->value      );
+	pnt = get_qstring ( pnt, &cfg->label );
+	pnt = get_string  ( pnt, &buffer );
+	cfg->nameindex = get_varnum( buffer );
+	pnt = get_string  ( pnt, &cfg->value );
 	break;
 
     case token_string:
-	pnt = get_qstring ( pnt, &cfg->label      );
-	pnt = get_string  ( pnt, &cfg->optionname );
-	pnt = get_qstring  ( pnt, &cfg->value      );
+	pnt = get_qstring ( pnt, &cfg->label );
+	pnt = get_string  ( pnt, &buffer );
+	cfg->nameindex = get_varnum( buffer );
+	pnt = get_qstring  ( pnt, &cfg->value );
 	break;
 
     case token_if:
@@ -521,8 +674,25 @@ static void tokenize_line( const char * pnt )
 	else
 	    pnt = get_qstring( pnt, &cfg->label );
 	break;
-    }
 
+    case token_unset:
+	pnt = get_string( pnt, &buffer );
+	cfg->nameindex = get_varnum( buffer );
+	while ( *pnt == ' ' || *pnt == '\t' )
+	    pnt++;
+	while (*pnt)
+	{
+	    cfg->next = (struct kconfig *) malloc( sizeof(struct kconfig) );
+	    memset( cfg->next, 0, sizeof(struct kconfig) );
+	    cfg = cfg->next;
+	    cfg->token = token_unset;
+	    pnt = get_string( pnt, &buffer );
+	    cfg->nameindex = get_varnum( buffer );
+	    while ( *pnt == ' ' || *pnt == '\t' )
+		pnt++;
+	}
+	break;
+    }
     return;
 }
 

@@ -688,7 +688,7 @@ module_exit(cleanup_baycomserfdx);
 
 static int __init baycom_ser_fdx_setup(char *str)
 {
-        static unsigned __initdata nr_dev = 0;
+        static unsigned nr_dev = 0;
         int ints[4];
 
         if (nr_dev >= NR_PORTS)

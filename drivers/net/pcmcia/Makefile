@@ -11,7 +11,7 @@ ALL_SUB_DIRS := $(SUB_DIRS)
 O_TARGET := pcmcia_net.o
 O_OBJS   :=
 M_OBJS   :=
-MOD_LIST_NAME := NET_MODULES
+MOD_LIST_NAME := PCMCIA_MODULES
 
 ifeq ($(CONFIG_PCMCIA_PCNET),y)
   O_OBJS += pcnet_cs.o

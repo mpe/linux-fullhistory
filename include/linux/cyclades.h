@@ -609,6 +609,7 @@ struct cyclades_port {
 #define Cy_EVENT_OPEN_WAKEUP		4
 #define Cy_EVENT_SHUTDOWN_WAKEUP	5
 #define	Cy_EVENT_DELTA_WAKEUP		6
+#define	Cy_EVENT_Z_RX_FULL		7
 
 #define	CLOSING_WAIT_DELAY	30*HZ
 #define CY_CLOSING_WAIT_NONE	65535

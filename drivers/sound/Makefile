@@ -24,7 +24,8 @@ endif
 
 export-objs	:=  ad1848.o audio_syms.o midi_syms.o mpu401.o \
 		    msnd.o opl3.o sb_card.o sequencer_syms.o \
-		    sound_core.o sound_syms.o uart401.o ad1816.o
+		    sound_core.o sound_syms.o uart401.o ad1816.o \
+		    nm256_audio.o
 
 
 
@@ -42,7 +43,6 @@ obj-		:=
 obj-$(CONFIG_SOUND)		+= soundcore.o
 obj-$(CONFIG_DMASOUND)		+= dmasound.o
 obj-$(CONFIG_SOUND_OSS)		+= sound.o
-obj-$(CONFIG_SOUND_ADLIB)	+= adlib_card.o opl3.o
 obj-$(CONFIG_SOUND_CS4232)	+= cs4232.o ad1848.o 
 
 # In theory, there's probably no reason to include the uart401 code
@@ -65,7 +65,7 @@ obj-$(CONFIG_SOUND_PAS)		+= pas2.o sb.o uart401.o
 obj-$(CONFIG_SOUND_PSS)		+= pss.o ad1848.o mpu401.o
 obj-$(CONFIG_SOUND_SB)		+= sb.o uart401.o
 obj-$(CONFIG_SOUND_SOFTOSS)	+= softoss2.o
-obj-$(CONFIG_SOUND_SGALAXY)	+= sgalaxy.o
+obj-$(CONFIG_SOUND_SGALAXY)	+= sgalaxy.o ad1848.o
 obj-$(CONFIG_SOUND_AD1816)      += ad1816.o
 obj-$(CONFIG_SOUND_SSCAPE)	+= sscape.o ad1848.o mpu401.o
 obj-$(CONFIG_SOUND_TRIX)	+= trix.o ad1848.o sb.o uart401.o
@@ -76,6 +76,7 @@ obj-$(CONFIG_SOUND_VIDC)	+= vidc_mod.o
 obj-$(CONFIG_SOUND_VWSND)	+= vwsnd.o
 obj-$(CONFIG_SOUND_WAVEARTIST)	+= waveartist.o
 obj-$(CONFIG_SOUND_WAVEFRONT)   += wavefront.o
+obj-$(CONFIG_SOUND_NM256)	+= nm256.o
 
 obj-$(CONFIG_SOUND_SONICVIBES)	+= sonicvibes.o
 obj-$(CONFIG_SOUND_CMPCI)	+= cmpci.o
@@ -87,7 +88,7 @@ obj-$(CONFIG_SOUND_MAESTRO)	+= maestro.o
 # Declare multi-part drivers.
 
 list-multi	:= sound.o gus.o pas2.o sb.o softoss2.o vidc_mod.o \
-    soundcore.o wavefront.o
+    soundcore.o wavefront.o nm256.o
 
 sound-objs	:= 							\
     dev_table.o soundcard.o sound_syms.o		\
@@ -104,6 +105,7 @@ sb-objs		:= sb_audio.o sb_card.o sb_common.o sb_midi.o sb_mixer.o	\
 softoss2-objs	:= softoss.o softoss_rs.o
 vidc_mod-objs	:= vidc.o vidc_audio.o vidc_fill.o vidc_mixer.o vidc_synth.o
 wavefront-objs  := wavfront.o wf_midi.o yss225.o
+nm256-objs	:= nm256_audio.o ac97.o
 
 
 # Extract lists of the multi-part drivers.
@@ -188,6 +190,9 @@ vidc_mod.o: $(vidc_mod-objs)
 
 wavefront.o: $(wavefront-objs)
 	$(LD) -r -o $@ $(wavefront-objs)
+
+nm256.o: $(nm256-objs)
+	$(LD) -r -o $@ $(nm256-objs)
 
 # Firmware files that need translation
 #

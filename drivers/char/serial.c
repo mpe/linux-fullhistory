@@ -2006,7 +2006,7 @@ static int set_serial_info(struct async_struct * info,
 	info->xmit_fifo_size = state->xmit_fifo_size =
 		new_serial.xmit_fifo_size;
 
-	if (state->port)
+	if (state->type != PORT_UNKNOWN && state->port)
 		release_region(state->port,8);
 	if (change_port || change_irq) {
 		/*
@@ -4082,6 +4082,7 @@ void cleanup_module(void)
 	unsigned long flags;
 	int e1, e2;
 	int i;
+	struct async_struct *info;
 
 	/* printk("Unloading %s: version %s\n", serial_name, serial_version); */
 	save_flags(flags);
@@ -4101,6 +4102,11 @@ void cleanup_module(void)
 	for (i = 0; i < NR_PORTS; i++) {
 		if ((rs_table[i].type != PORT_UNKNOWN) && rs_table[i].port)
 			release_region(rs_table[i].port, 8);
+ 		info = rs_table[i].info;
+ 		if (info) {
+ 			rs_table[i].info = NULL;
+ 			kfree_s(info, sizeof(struct async_struct));
+ 		}
 #if defined(ENABLE_SERIAL_PCI) && defined (CONFIG_SERIAL_PCI_MEMMAPPED)
 		if (rs_table[i].iomem_base)
 			iounmap(rs_table[i].iomem_base);

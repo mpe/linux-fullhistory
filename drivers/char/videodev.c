@@ -57,23 +57,11 @@ extern int init_bw_qcams(struct video_init *);
 #ifdef CONFIG_VIDEO_PLANB
 extern int init_planbs(struct video_init *);
 #endif
-#ifdef CONFIG_RADIO_AZTECH
-extern int aztech_init(struct video_init *);
-#endif
-#ifdef CONFIG_RADIO_RTRACK
-extern int rtrack_init(struct video_init *);
-#endif
 #ifdef CONFIG_RADIO_RTRACK2
 extern int rtrack2_init(struct video_init *);
 #endif
 #ifdef CONFIG_RADIO_SF16FMI
 extern int fmi_init(struct video_init *);
-#endif
-#ifdef CONFIG_RADIO_MIROPCM20
-extern int pcm20_init(struct video_init *);
-#endif
-#ifdef CONFIG_RADIO_GEMTEK
-extern int gemtek_init(struct video_init *);
 #endif
 #ifdef CONFIG_RADIO_TYPHOON
 extern int typhoon_init(struct video_init *);
@@ -83,9 +71,6 @@ extern int cadet_init(struct video_init *);
 #endif
 #ifdef CONFIG_RADIO_TERRATEC
 extern int terratec_init(struct video_init *);
-#endif
-#ifdef CONFIG_VIDEO_PMS
-extern int init_pms_cards(struct video_init *);
 #endif
 #ifdef CONFIG_VIDEO_ZORAN
 extern int init_zoran_cards(struct video_init *);
@@ -105,32 +90,17 @@ static struct video_init video_init_list[]={
 #ifdef CONFIG_VIDEO_BWQCAM
 	{"bw-qcam", init_bw_qcams},
 #endif	
-#ifdef CONFIG_VIDEO_PMS
-	{"PMS", init_pms_cards}, 
-#endif	
 #ifdef CONFIG_VIDEO_PLANB
 	{"planb", init_planbs},
 #endif
-#ifdef CONFIG_RADIO_AZTECH
-	{"Aztech", aztech_init}, 
-#endif	
-#ifdef CONFIG_RADIO_RTRACK
-	{"RTrack", rtrack_init}, 
-#endif 
 #ifdef CONFIG_RADIO_RTRACK2
 	{"RTrack2", rtrack2_init}, 
 #endif
 #ifdef CONFIG_RADIO_SF16FMI
 	{"SF16FMI", fmi_init}, 
 #endif	
-#ifdef CONFIG_RADIO_MIROPCM20
-	{"PCM20", pcm20_init}, 
-#endif
 #ifdef CONFIG_RADIO_CADET
 	{"Cadet", cadet_init},
-#endif
-#ifdef CONFIG_RADIO_GEMTEK
-	{"GemTek", gemtek_init},
 #endif
 #ifdef CONFIG_RADIO_TYPHOON
 	{"radio-typhoon", typhoon_init},
@@ -144,7 +114,6 @@ static struct video_init video_init_list[]={
 	{"end", NULL}
 };
 
-#if LINUX_VERSION_CODE >= 0x020100
 /*
  *	Read will do some smarts later on. Buffer pin etc.
  */
@@ -158,7 +127,6 @@ static ssize_t video_read(struct file *file,
 	else
 		return -EINVAL;
 }
-
 
 
 /*
@@ -190,31 +158,6 @@ static unsigned int video_poll(struct file *file, poll_table * wait)
 		return 0;
 }
 
-
-#else
-static int video_read(struct inode *ino,struct file *file,
-			  char *buf, int count)
-{
-         int err;
-	 struct video_device *vfl=video_device[MINOR(ino->i_rdev)];
-	 if (vfl->read)
-	   return vfl->read(vfl, buf, count, file->f_flags&O_NONBLOCK);
-	 else
-	   return -EINVAL;
-}
-
-static int video_write(struct inode *ino,struct file *file, const char *buf, 
-			int count)
-{
-	int err;
-	struct video_device *vfl=video_device[MINOR(ino->i_rdev)];
-	if (vfl->write)
-	  return vfl->write(vfl, buf, count, file->f_flags&O_NONBLOCK);
-	else
-	  return 0;
-}
-
-#endif
 
 /*
  *	Open a video device.

@@ -18,18 +18,19 @@ Steve Ralston,	LSI Logic Corp.
 Deepak Saxena,	Intel Corp.
 	/proc interface, bug fixes
 	Ioctl interfaces for control
+	Debugging LAN OSM
 
 Philip Rumpf
 	Fixed assorted dumb SMP locking bugs
 
 Juha Sievanen,  University of Helsinki Finland
-	LAN OSM
+	LAN OSM code
 	/proc interface to LAN class
 	Bug fixes
 	Core code extensions
 
 Auvo Häkkinen,  University of Helsinki Finland
-	LAN OSM
+	LAN OSM code
 	/Proc interface to LAN class
 	Bug fixes
 	Core code extensions
@@ -51,13 +52,19 @@ BoxHill Corporation
 European Comission
 	Funding the work done by the University of Helsinki
 
+SysKonnect
+        Loan of FDDI and Gigabit Ethernet cards
+
+ASUSTeK
+        Loan of I2O motherboard 
+
 STATUS:
 
 o	The core setup works within limits.
 o	The scsi layer seems to almost work. I'm still chasing down the hang
 	bug.
 o	The block OSM is fairly minimal but does seem to work.
-o	LAN OSM works with FDDI cards.
+o	LAN OSM works with FDDI and Ethernet cards.
 
 TO DO:
 

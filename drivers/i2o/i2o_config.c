@@ -9,6 +9,9 @@
  *         - Added basic ioctl() support
  *      Modified 06/07/1999 by Deepak Saxena
  *         - Added software download ioctl (still testing)
+ *	Modified 09/10/1999 by Auvo Häkkinen
+ *	   - Changes to i2o_cfg_reply(), ioctl_parms()
+ *	   - Added ioct_validate() (not yet tested)
  *
  *	This program is free software; you can redistribute it and/or
  *	modify it under the terms of the GNU General Public License
@@ -36,11 +39,6 @@ static int i2o_cfg_token = 0;
 static int i2o_cfg_context = -1;
 static void *page_buf;
 static void *i2o_buffer;
-static int i2o_ready;
-static int i2o_pagelen;
-static int i2o_error;
-static int cfg_inuse;
-static int i2o_eof;
 static spinlock_t i2o_config_lock = SPIN_LOCK_UNLOCKED;
 struct wait_queue *i2o_wait_queue;
 
@@ -52,6 +50,7 @@ static int ioctl_html(unsigned long);
 static int ioctl_swdl(unsigned long);
 static int ioctl_swul(unsigned long);
 static int ioctl_swdel(unsigned long);
+static int ioctl_validate(unsigned long); 
 
 /*
  *	This is the callback for any message we have posted. The message itself
@@ -61,8 +60,13 @@ static int ioctl_swdel(unsigned long);
  */
 static void i2o_cfg_reply(struct i2o_handler *h, struct i2o_controller *c, struct i2o_message *m)
 {
-	i2o_cfg_token = I2O_POST_WAIT_OK;
-
+        u32 *msg = (u32 *)m;
+        
+	if (msg[4] >> 24) // RegStatus != SUCCESS
+        	i2o_cfg_token = -(msg[4] & 0xFFFF); // DetailedStatus
+        else
+		i2o_cfg_token = I2O_POST_WAIT_OK;
+               
 	return;
 }
 
@@ -84,7 +88,6 @@ static long long cfg_llseek(struct file *file, long long offset, int origin)
 	return -ESPIPE;
 }
 
-/* i2ocontroller/i2odevice/page/?data */
 
 static ssize_t cfg_write(struct file *file, const char *buf, size_t count, loff_t *ppos)
 {
@@ -93,12 +96,15 @@ static ssize_t cfg_write(struct file *file, const char *buf, size_t count, loff_
 	return 0;
 }
 
-/* To be written for event management support */
+
 static ssize_t cfg_read(struct file *file, char *buf, size_t count, loff_t *ptr)
 {
 	return 0;
 }
 
+/*
+ * IOCTL Handler
+ */
 static int cfg_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 	unsigned long arg)
 {
@@ -141,6 +147,10 @@ static int cfg_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 			ret = ioctl_swdel(arg);
 			break;
 
+		case I2OVALIDATE:
+			ret = ioctl_validate(arg);
+			break;
+			
 		case I2OHTML:
 			ret = ioctl_html(arg);
 			break;
@@ -168,13 +178,11 @@ int ioctl_getiops(unsigned long arg)
 		c = i2o_find_controller(i);
 		if(c)
 		{
-			printk(KERN_INFO "ioctl: iop%d found\n", i);
 			foo[i] = 1;
 			i2o_unlock_controller(c);
 		}
 		else
 		{
-			printk(KERN_INFO "ioctl: iop%d not found\n", i);
 			foo[i] = 0;
 		}
 	}
@@ -189,10 +197,7 @@ int ioctl_gethrt(unsigned long arg)
 	struct i2o_cmd_hrtlct *cmd = (struct i2o_cmd_hrtlct*)arg;
 	struct i2o_cmd_hrtlct kcmd;
 	pi2o_hrt hrt;
-	u32 msg[6];
-	u32 *workspace;
 	int len;
-	int token;
 	u32 reslen;
 	int ret = 0;
 
@@ -208,42 +213,20 @@ int ioctl_gethrt(unsigned long arg)
 	c = i2o_find_controller(kcmd.iop);
 	if(!c)
 		return -ENXIO;
+		
+	hrt = (pi2o_hrt)c->hrt;
 
-	workspace = kmalloc(8192, GFP_KERNEL);
-	hrt = (pi2o_hrt)workspace;
-	if(workspace==NULL)
-	{
-		i2o_unlock_controller(c);
-		return -ENOMEM;
-	}
-
-	memset(workspace, 0, 8192);
-
-	msg[0]= SIX_WORD_MSG_SIZE| SGL_OFFSET_4;
-	msg[1]= I2O_CMD_HRT_GET<<24 | HOST_TID<<12 | ADAPTER_TID;
-	msg[2]= (u32)cfg_handler.context;
-	msg[3]= 0;
-	msg[4]= (0xD0000000 | 8192);
-	msg[5]= virt_to_phys(workspace);
-
-	token = i2o_post_wait(c, ADAPTER_TID, msg, 6*4, &i2o_cfg_token,2);
-	if(token == I2O_POST_WAIT_TIMEOUT)
-	{
-		kfree(workspace);
-		i2o_unlock_controller(c);
-		return -ETIMEDOUT;
-	}
 	i2o_unlock_controller(c);
 
 	len = 8 + ((hrt->entry_len * hrt->num_entries) << 2);
+	
 	/* We did a get user...so assuming mem is ok...is this bad? */
 	put_user(len, kcmd.reslen);
 	if(len > reslen)
 		ret = -ENOBUFS;	
 	if(copy_to_user(kcmd.resbuf, (void*)hrt, len))
-		ret = -EINVAL;
+		ret = -EFAULT;
 
-	kfree(workspace);
 	return ret;
 }
 
@@ -253,10 +236,7 @@ int ioctl_getlct(unsigned long arg)
 	struct i2o_cmd_hrtlct *cmd = (struct i2o_cmd_hrtlct*)arg;
 	struct i2o_cmd_hrtlct kcmd;
 	pi2o_lct lct;
-	u32 msg[9];
-	u32 *workspace;
 	int len;
-	int token;
 	int ret = 0;
 	u32 reslen;
 
@@ -273,32 +253,7 @@ int ioctl_getlct(unsigned long arg)
 	if(!c)
 		return -ENXIO;
 
-	workspace = kmalloc(8192, GFP_KERNEL);
-	lct = (pi2o_lct)workspace;
-	if(workspace==NULL)
-	{
-		i2o_unlock_controller(c);
-		return -ENOMEM;
-	}
-
-	memset(workspace, 0, 8192);
-
-	msg[0]= EIGHT_WORD_MSG_SIZE | SGL_OFFSET_6;
-	msg[1]= I2O_CMD_LCT_NOTIFY<<24 | HOST_TID<<12 | ADAPTER_TID;
-	msg[2]= (u32)cfg_handler.context;
-	msg[3]= 0;
-	msg[4]= 0xFFFFFFFF;
-	msg[5]= 0;
-	msg[6]= (0xD0000000 | 8192);
-	msg[7]= virt_to_phys(workspace);
-
-	token = i2o_post_wait(c, ADAPTER_TID, msg, 8*4, &i2o_cfg_token,2);
-	if(token == I2O_POST_WAIT_TIMEOUT)
-	{
-		kfree(workspace);
-		i2o_unlock_controller(c);
-		return -ETIMEDOUT;
-	}
+	lct = (pi2o_lct)c->lct;
 	i2o_unlock_controller(c);
 
 	len = (unsigned int)lct->table_size << 2;
@@ -306,9 +261,8 @@ int ioctl_getlct(unsigned long arg)
 	if(len > reslen)
 		ret = -ENOBUFS;	
 	else if(copy_to_user(kcmd.resbuf, (void*)lct, len))
-		ret = -EINVAL;
+		ret = -EFAULT;
 
-	kfree(workspace);
 	return ret;
 }
 
@@ -318,16 +272,10 @@ static int ioctl_parms(unsigned long arg, unsigned int type)
 	struct i2o_controller *c;
 	struct i2o_cmd_psetget *cmd = (struct i2o_cmd_psetget*)arg;
 	struct i2o_cmd_psetget kcmd;
-	u32 msg[9];
 	u32 reslen;
-	int token;
 	u8 *ops;
 	u8 *res;
-	u16 *res16;	
-	u32 *res32;
-	u16 count;
 	int len;
-	int i,j;
 
 	u32 i2o_cmd = (type == I2OPARMGET ? 
 				I2O_CMD_UTIL_PARAMS_GET :
@@ -369,47 +317,14 @@ static int ioctl_parms(unsigned long arg, unsigned int type)
 		return -ENOMEM;
 	}
 
-	res16 = (u16*)res;
-
-	msg[0]=NINE_WORD_MSG_SIZE|SGL_OFFSET_5;
-	msg[1]=i2o_cmd<<24|HOST_TID<<12|cmd->tid;
-	msg[2]=(u32)cfg_handler.context;
-	msg[3]=0;
-	msg[4]=0;
-	msg[5]=0x54000000|kcmd.oplen;
-	msg[6]=virt_to_bus(ops);
-	msg[7]=0xD0000000|(65536);
-	msg[8]=virt_to_bus(res);
-
-	/*
-	 * Parm set sometimes takes a little while for some reason
-	 */
-	token = i2o_post_wait(c, kcmd.tid, msg, 9*4, &i2o_cfg_token,10);
-	if(token == I2O_POST_WAIT_TIMEOUT)
-	{
-		i2o_unlock_controller(c);
-		kfree(ops);
-		kfree(res);
-		return -ETIMEDOUT;
-	}
-	i2o_unlock_controller(c);
+        len = i2o_issue_params(i2o_cmd, c, kcmd.tid, cfg_handler.context,
+        			ops, kcmd.oplen, res, 65536, &i2o_cfg_token);
+        i2o_unlock_controller(c);
 	kfree(ops);
-
-	/* 
-  	 * Determine required size...there's got to be a quicker way? 
-	 * Dump data to syslog for debugging failures
-	 */
-	count = res16[0];
-	printk(KERN_INFO "%0#6x\n%0#6x\n", res16[0], res16[1]);
-	len = 4;
-	res16 += 2;
-	for(i = 0; i < count; i++ )
-	{
-		len += res16[0] << 2;	/* BlockSize field in ResultBlock */
-		res32 = (u32*)res16;
-		for(j = 0; j < res16[0]; j++)
-			printk(KERN_INFO "%0#10x\n", res32[j]);
-		res16 += res16[0] << 1;	/* Shift to next block */
+        
+	if (len < 0) {
+		kfree(res);
+		return len; /* -DetailedStatus */
 	}
 
 	put_user(len, kcmd.reslen);
@@ -499,7 +414,7 @@ int ioctl_html(unsigned long arg)
 	}
 
 	token = i2o_post_wait(c, cmd->tid, msg, 9*4, &i2o_cfg_token, 10);
-	if(token == I2O_POST_WAIT_TIMEOUT)
+	if(token != I2O_POST_WAIT_OK)
 	{
 		i2o_unlock_controller(c);
 		kfree(res);
@@ -529,7 +444,7 @@ int ioctl_swdl(unsigned long arg)
 	struct i2o_sw_xfer *pxfer = (struct i2o_sw_xfer *)arg;
 	unsigned char maxfrag = 0, curfrag = 0;
 	unsigned char buffer[8192];
-	u32 msg[MSG_FRAME_SIZE/4];
+	u32 msg[9];
 	unsigned int token = 0, diff = 0, swlen = 0, swxfer = 0;
 	struct i2o_controller *c;
 	int foo = 0;
@@ -588,11 +503,11 @@ int ioctl_swdl(unsigned long arg)
 		return -ENXIO;
 	printk("*** foo%d ***\n", foo++);
 
-	msg[0]= EIGHT_WORD_MSG_SIZE| SGL_OFFSET_7;
+	msg[0]= NINE_WORD_MSG_SIZE | SGL_OFFSET_7;
 	msg[1]= I2O_CMD_SW_DOWNLOAD<<24 | HOST_TID<<12 | ADAPTER_TID;
 	msg[2]= (u32)cfg_handler.context;
 	msg[3]= 0;
-	msg[4]= ((u32)kxfer.dl_flags)<<24|((u32)kxfer.sw_type)<<16|((u32)maxfrag)<<8|((u32)curfrag);
+	msg[4]= ((u32)kxfer.flags)<<24|((u32)kxfer.sw_type)<<16|((u32)maxfrag)<<8|((u32)curfrag);
 	msg[5]= swlen;
 	msg[6]= kxfer.sw_id;
 	msg[7]= (0xD0000000 | 8192);
@@ -611,14 +526,15 @@ int ioctl_swdl(unsigned long arg)
 		msg[4] |= (u32)curfrag;
 
 		__copy_from_user(buffer, kxfer.buf, 8192);
-		swxfer += 8129;
+		swxfer += 8192;
 
 		// Yes...that's one minute, but the spec states that
 		// transfers take a long time, and I've seen just how
 		// long they can take.
-		token = i2o_post_wait(c, ADAPTER_TID, msg, 6*4, &i2o_cfg_token,60);
-		if( token == I2O_POST_WAIT_TIMEOUT )	// Something very wrong
+		token = i2o_post_wait(c, ADAPTER_TID, msg, sizeof(msg), &i2o_cfg_token,60);
+		if (token != I2O_POST_WAIT_OK )	// Something very wrong
 		{
+			i2o_unlock_controller(c);
 			printk("Timeout downloading software");
 			return -ETIMEDOUT;
 		}
@@ -631,13 +547,15 @@ int ioctl_swdl(unsigned long arg)
 	msg[4] |= (u32)maxfrag;
 	msg[7] = (0xD0000000 | diff);
 	__copy_from_user(buffer, kxfer.buf, 8192);
-	token = i2o_post_wait(c, ADAPTER_TID, msg, 6*4, &i2o_cfg_token,60);
-	if( token == I2O_POST_WAIT_TIMEOUT )	// Something very wrong
+	token = i2o_post_wait(c, ADAPTER_TID, msg, sizeof(msg), &i2o_cfg_token,60);
+	if( token != I2O_POST_WAIT_OK )	// Something very wrong
 	{
+		i2o_unlock_controller(c);
 		printk("Timeout downloading software");
 		return -ETIMEDOUT;
 	}
 	__put_user(curfrag, kxfer.curfrag);
+	i2o_unlock_controller(c);
 
 	return 0;
 }
@@ -651,8 +569,38 @@ int ioctl_swul(unsigned long arg)
 /* To be written */
 int ioctl_swdel(unsigned long arg)
 {
-	return 0;
+	return -EINVAL;
 }
+
+int ioctl_validate(unsigned long arg)
+{
+        int token;
+        int iop = (int)arg;
+        u32 msg[4];
+        struct i2o_controller *c;
+
+        c=i2o_find_controller(iop);
+        if (!c)
+                return -ENXIO;
+
+        msg[0] = FOUR_WORD_MSG_SIZE|SGL_OFFSET_0;
+        msg[1] = I2O_CMD_CONFIG_VALIDATE<<24 | HOST_TID<<12 | iop;
+        msg[2] = (u32)i2o_cfg_context;
+        msg[3] = 0;
+
+        token = i2o_post_wait(c, ADAPTER_TID, msg, sizeof(msg),&i2o_cfg_token, 10);
+        i2o_unlock_controller(c);
+
+        if (token != I2O_POST_WAIT_OK)
+        {
+                printk("Can't validate configuration, ErrorStatus = %d\n",
+                	token);
+                return -ETIMEDOUT;
+        }
+
+        return 0;
+}   
+
 
 static int cfg_open(struct inode *inode, struct file *file)
 {
@@ -693,7 +641,7 @@ static struct miscdevice i2o_miscdev = {
 #ifdef MODULE
 int init_module(void)
 #else
-__init int i2o_config_init(void)
+int __init i2o_config_init(void)
 #endif
 {
 	printk(KERN_INFO "i2o configuration manager v 0.02\n");

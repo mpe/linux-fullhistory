@@ -41,6 +41,8 @@ struct i2c_device;
 #define I2C_BUSID_BT848		1	/* I2C bus on a BT848 */
 #define I2C_BUSID_PARPORT	2	/* Bit banging on a parallel port */
 #define I2C_BUSID_BUZ		3
+#define I2C_BUSID_ZORAN		4
+
 /*
  * struct for a driver for a i2c chip (tuner, soundprocessor,
  * videotext, ... ).

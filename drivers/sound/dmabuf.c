@@ -187,7 +187,7 @@ static int open_dmap(struct audio_operations *adev, int mode, struct dma_buffpar
 		printk(KERN_WARNING "Sound: DMA buffers not available\n");
 		return -ENOSPC;	/* Memory allocation failed during boot */
 	}
-	if (sound_open_dma(dmap->dma, adev->name)) {
+	if (dmap->dma >= 0 && sound_open_dma(dmap->dma, adev->name)) {
 		printk(KERN_WARNING "Unable to grab(2) DMA%d for the audio driver\n", dmap->dma);
 		return -EBUSY;
 	}
@@ -209,14 +209,15 @@ static void close_dmap(struct audio_operations *adev, struct dma_buffparms *dmap
 {
 	unsigned long flags;
 	
-	sound_close_dma(dmap->dma);
+	if (dmap->dma >= 0) {
+		sound_close_dma(dmap->dma);
+		flags=claim_dma_lock();
+		disable_dma(dmap->dma);
+		release_dma_lock(flags);
+	}
 	if (dmap->flags & DMA_BUSY)
 		dmap->dma_mode = DMODE_NONE;
 	dmap->flags &= ~DMA_BUSY;
-	
-	flags=claim_dma_lock();
-	disable_dma(dmap->dma);
-	release_dma_lock(flags);
 	
 	if (sound_dmap_flag == DMAP_FREE_ON_CLOSE)
 		sound_free_dmap(dmap);

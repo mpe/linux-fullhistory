@@ -109,7 +109,7 @@ static const int multicast_filter_limit = 32;
 
 #define RUN_AT(x) (jiffies + (x))
 
-#if (LINUX_VERSION_CODE >= 0x20100)
+#ifdef MODULE
 char kernel_version[] = UTS_RELEASE;
 #else
 #ifndef __alpha__
@@ -1056,6 +1056,7 @@ static int netdev_rx(struct net_device *dev)
 				np->rx_skbuff[entry] = NULL;
 			}
 			skb->protocol = eth_type_trans(skb, dev);
+			np->stats.rx_bytes+=skb->len;
 			netif_rx(skb);
 			dev->last_rx = jiffies;
 			np->stats.rx_packets++;

@@ -40,6 +40,7 @@
 #include <linux/ioport.h>
 #include <linux/mc146818rtc.h> /* CMOS defines */
 #include <linux/init.h>
+#include <linux/blkpg.h>
 
 #define REALLY_SLOW_IO
 #include <asm/system.h>

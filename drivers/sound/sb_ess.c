@@ -1209,15 +1209,6 @@ FKS_test (devc);
 			break;
 	}
 
-	/* AAS: info stolen from ALSA: these boards have different clocks */
-	switch(devc->submodel) {
-		case SUBMDL_ES1869:
-		case SUBMDL_ES1887:
-		case SUBMDL_ES1888:
-			devc->caps |= SB_CAP_ES18XX_RATE;
-			break;
-	}
-
 	hw_config->name = name;
 	/* FKS: sb_dsp_reset to enable extended mode???? */
 	sb_dsp_reset(devc); /* Turn on extended mode */

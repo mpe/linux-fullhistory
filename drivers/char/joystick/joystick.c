@@ -42,6 +42,7 @@
 #include <linux/malloc.h>
 #include <linux/mm.h>
 #include <linux/module.h>
+#include <linux/version.h>
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,1,0)
 #include <linux/spinlock.h>
 #include <linux/poll.h>

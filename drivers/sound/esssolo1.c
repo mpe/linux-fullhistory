@@ -2113,14 +2113,14 @@ static int __init init_solo1(void)
 		s->gpbase = RSRCADDRESS(pcidev, 4);
 		s->irq = pcidev->irq;
 		if (check_region(s->iobase, IOBASE_EXTENT) ||
-		    check_region(s->sbbase, SBBASE_EXTENT) ||
+		    check_region(s->sbbase+4, SBBASE_EXTENT-4) ||
 		    check_region(s->ddmabase, DDMABASE_EXTENT) ||
 		    check_region(s->mpubase, MPUBASE_EXTENT)) {
 			printk(KERN_ERR "solo1: io ports in use\n");
 			goto err_region;
 		}
 		request_region(s->iobase, IOBASE_EXTENT, "ESS Solo1");
-		request_region(s->sbbase, SBBASE_EXTENT, "ESS Solo1");
+		request_region(s->sbbase+4, SBBASE_EXTENT-4, "ESS Solo1");  /* allow OPL3 synth module */
 		request_region(s->ddmabase, DDMABASE_EXTENT, "ESS Solo1");
 		request_region(s->mpubase, MPUBASE_EXTENT, "ESS Solo1");
 		if (request_irq(s->irq, solo1_interrupt, SA_SHIRQ, "ESS Solo1", s)) {
@@ -2192,7 +2192,7 @@ static int __init init_solo1(void)
 		free_irq(s->irq, s);
 	err_irq:
 		release_region(s->iobase, IOBASE_EXTENT);
-		release_region(s->sbbase, SBBASE_EXTENT);
+		release_region(s->sbbase+4, SBBASE_EXTENT-4);
 		release_region(s->ddmabase, DDMABASE_EXTENT);
 		release_region(s->mpubase, MPUBASE_EXTENT);
 	err_region:
@@ -2222,7 +2222,7 @@ static void __exit cleanup_solo1(void)
 		pci_write_config_word(s->pcidev, 0x60, 0); /* turn off DDMA controller address space */
 		free_irq(s->irq, s);
 		release_region(s->iobase, IOBASE_EXTENT);
-		release_region(s->sbbase, SBBASE_EXTENT);
+		release_region(s->sbbase+4, SBBASE_EXTENT-4);
 		release_region(s->ddmabase, DDMABASE_EXTENT);
 		release_region(s->mpubase, MPUBASE_EXTENT);
 		unregister_sound_dsp(s->dev_audio);

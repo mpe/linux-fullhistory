@@ -2,12 +2,14 @@
  * ac97.h 
  * 
  * definitions for the AC97, Intel's Audio Codec 97 Spec
+ * also includes support for a generic AC97 interface
  */
 
 #ifndef _AC97_H_
 #define _AC97_H_
+#include "sound_config.h"
+#include "sound_calls.h"
 
-                                             // conections on concert 97 */
 #define  AC97_RESET              0x0000      //  */
 #define  AC97_MASTER_VOL_STEREO  0x0002      // Line Out
 #define  AC97_HEADPHONE_VOL      0x0004      // 
@@ -35,7 +37,6 @@
 
 #define  AC97_VENDOR_ID1         0x007c
 #define  AC97_VENDOR_ID2         0x007e
-
 
 /* volume control bit defines */
 
@@ -95,7 +96,108 @@
 #define AC97_PWR_D3              AC97_PWR_PR0|AC97_PWR_PR1|AC97_PWR_PR2|AC97_PWR_PR3|AC97_PWR_PR4
 #define AC97_PWR_ANLOFF          AC97_PWR_PR2|AC97_PWR_PR3  /* analog section off */
 
-#endif /* _AC97_H_ */
+/* Total number of defined registers.  */
+#define AC97_REG_CNT 64
 
+/* Generic AC97 mixer interface. */
 
+/* Structure describing access to the hardware. */
+struct ac97_hwint
+{
+    /* Perform any hardware-specific reset and initialization.  Returns
+     0 on success, or a negative error code.  */
+    int (*reset_device) (struct ac97_hwint *dev);
 
+    /* Returns the contents of the specified register REG.  The caller
+       should check to see if the desired contents are available in
+       the cache first, if applicable. Returns a positive unsigned value
+       representing the contents of the register, or a negative error
+       code.  */
+    int (*read_reg) (struct ac97_hwint *dev, u8 reg);
+
+    /* Writes VALUE to register REG.  Returns 0 on success, or a
+       negative error code.  */
+    int (*write_reg) (struct ac97_hwint *dev, u8 reg, u16 value);
+
+    /* Hardware-specific information. */
+    void *driver_private;
+
+    /* Three OSS masks. */
+    int mixer_devmask;
+    int mixer_stereomask;
+    int mixer_recmask;
+
+    /* The mixer cache. The indices correspond to the AC97 hardware register
+       number / 2, since the register numbers are always an even number.
+
+       Unknown values are set to -1; unsupported registers contain a
+       -2.  */
+    int last_written_mixer_values[AC97_REG_CNT];
+
+    /* A cache of values written via OSS; we need these so we can return
+       the values originally written by the user.
+
+       Why the original user values?  Because the real-world hardware
+       has less precision, and some existing applications assume that
+       they will get back the exact value that they wrote (aumix).
+
+       A -1 value indicates that no value has been written to this mixer
+       channel via OSS.  */
+    int last_written_OSS_values[SOUND_MIXER_NRDEVICES];
+};
+
+/* Values stored in the register cache.  */
+#define AC97_REGVAL_UNKNOWN -1
+#define AC97_REG_UNSUPPORTED -2
+
+struct ac97_mixer_value_list
+{
+    /* Mixer channel to set.  List is terminated by a value of -1.  */
+    int oss_channel;
+    /* The scaled value to set it to; values generally range from 0-100. */
+    union {
+	struct {
+	    u8 left, right;
+	} stereo;
+	u8 mono;
+    } value;
+};
+
+/* Initialize the ac97 mixer by resetting it.  */
+extern int ac97_init (struct ac97_hwint *dev);
+
+/* Sets the mixer DEV to the values in VALUE_LIST.  Returns 0 on success,
+   or a negative error code.  */
+extern int ac97_set_values (struct ac97_hwint *dev,
+			    struct ac97_mixer_value_list *value_list);
+
+/* Sets one mixer channel OSS_CHANNEL to the scaled value OSS_VALUE.
+   Returns the resulting (rescaled) value, or a negative value
+   representing an error code.
+
+   Stereo channels have two values in OSS_VALUE (the left value is in the
+   lower 8 bits, the right value is in the upper 8 bits). */
+extern int ac97_set_mixer (struct ac97_hwint *dev, int oss_channel,
+			   u16 oss_value);
+
+/* Return the contents of the specified AC97 register REG; it uses the
+   last-written value if it is available.  */
+extern int ac97_get_register (struct ac97_hwint *dev, u8 reg);
+
+/* Writes the specified VALUE to the AC97 register REG in the mixer.
+   Takes care of setting the last-written cache as well.  */
+extern int ac97_put_register (struct ac97_hwint *dev, u8 reg, u16 value);
+
+/* Returns the last OSS value written to the OSS_CHANNEL mixer channel.  */
+extern int ac97_get_mixer_scaled (struct ac97_hwint *dev, int oss_channel);
+
+/* Default ioctl. */
+extern int ac97_mixer_ioctl (struct ac97_hwint *dev, unsigned int cmd,
+			     caddr_t arg);
+#endif
+
+/*
+ * Local variables:
+ *  c-basic-offset: 4
+ * End:
+ */

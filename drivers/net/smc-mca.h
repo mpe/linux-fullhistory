@@ -1,7 +1,7 @@
-/* 
-   djweis weisd3458@uni.edu 
-   most of this file was taken from ps2esdi.h
-*/
+/*
+ * djweis weisd3458@uni.edu
+ * most of this file was taken from ps2esdi.h
+ */
 
 struct {
   unsigned int base_addr;
@@ -25,6 +25,7 @@ struct {
 };
 
 #define MEM_MASK 64
+
 struct {
   unsigned char mem_index;
   unsigned long mem_start;
@@ -50,13 +51,11 @@ struct {
 
 #define IRQ_MASK 243
 struct {
-   unsigned char irq;
+   unsigned char new_irq;
+   unsigned char old_irq;
 } irq_table[] = {
-   {  3 }, 
-   {  4 },
-   { 10 },
-   { 14 }
+   {  3,  3 },
+   {  4,  4 },
+   { 10, 10 },
+   { 14, 15 }
 };
-
- 
-   

@@ -108,12 +108,13 @@ History:
 #include <asm/amigaints.h>
 #endif /* CONFIG_AMIGA */
 #ifdef CONFIG_PPC
+#include <linux/adb.h>
+#include <linux/cuda.h>
+#include <linux/pmu.h>
 #include <asm/prom.h>
+#include <asm/machdep.h>
 #include <asm/io.h>
 #include <asm/dbdma.h>
-#include <asm/adb.h>
-#include <asm/cuda.h>
-#include <asm/pmu.h>
 #include "awacs_defs.h"
 #include <linux/nvram.h>
 #include <linux/vt_kern.h>
@@ -248,6 +249,9 @@ static int awacs_beep_state = 0;
 static short *beep_buf;
 static volatile struct dbdma_cmd *beep_dbdma_cmd;
 static void (*orig_mksound)(unsigned int, unsigned int);
+static int is_pbook_3400;
+static int is_pbook_G3;
+static unsigned char *macio_base;
 
 /* Burgundy functions */
 static void awacs_burgundy_wcw(unsigned addr,unsigned newval);
@@ -261,9 +265,9 @@ static int awacs_burgundy_read_mvolume(unsigned address);
 /*
  * Stuff for restoring after a sleep.
  */
-static int awacs_sleep_notify(struct notifier_block *, unsigned long, void *);
-struct notifier_block awacs_sleep_notifier = {
-	awacs_sleep_notify
+static int awacs_sleep_notify(struct pmu_sleep_notifier *self, int when);
+struct pmu_sleep_notifier awacs_sleep_notifier = {
+	awacs_sleep_notify, SLEEP_LEVEL_SOUND,
 };
 #endif /* CONFIG_PMAC_PBOOK */
 
@@ -3191,7 +3195,7 @@ static void PMacIrqCleanup(void)
 		kfree(beep_buf);
 	kd_mksound = orig_mksound;
 #ifdef CONFIG_PMAC_PBOOK
-	notifier_chain_unregister(&sleep_notifier_list, &awacs_sleep_notifier);
+	pmu_unregister_sleep_notifier(&awacs_sleep_notifier);
 #endif
 }
 #endif /* MODULE */
@@ -3600,14 +3604,15 @@ static void awacs_mksound(unsigned int hz, unsigned int ticks)
 /*
  * Save state when going to sleep, restore it afterwards.
  */
-static int awacs_sleep_notify(struct notifier_block *this,
-			      unsigned long code, void *x)
+static int awacs_sleep_notify(struct pmu_sleep_notifier *self, int when)
 {
-	switch (code) {
-	case PBOOK_SLEEP:
+	switch (when) {
+	case PBOOK_SLEEP_NOW:
 		/* XXX we should stop any dma in progress when going to sleep
 		   and restart it when we wake. */
 		PMacSilence();
+		disable_irq(awacs_irq);
+		disable_irq(awacs_tx_irq);
 		break;
 	case PBOOK_WAKE:
 		out_le32(&awacs->control, MASK_IEPC
@@ -3618,8 +3623,10 @@ static int awacs_sleep_notify(struct notifier_block *this,
 		awacs_write(awacs_reg[2] | MASK_ADDR2);
 		awacs_write(awacs_reg[4] | MASK_ADDR4);
 		out_le32(&awacs->byteswap, sound.hard.format != AFMT_S16_BE);
+		enable_irq(awacs_irq);
+		enable_irq(awacs_tx_irq);
 	}
-	return NOTIFY_DONE;
+	return PBOOK_SLEEP_OK;
 }
 #endif /* CONFIG_PMAC_PBOOK */
 
@@ -3844,7 +3851,7 @@ awacs_enable_amp(int spkr_vol)
 	struct adb_request req;
 
 	awacs_spkr_vol = spkr_vol;
-	if (adb_hardware != ADB_VIACUDA)
+	if (sys_ctrler != SYS_CTRLER_CUDA)
 		return;
 
 	/* turn on headphones */
@@ -4282,7 +4289,8 @@ static int mixer_ioctl(struct inode *inode, struct file *file, u_int cmd,
 
 #ifdef CONFIG_PPC
 	case DMASND_AWACS:
-		if (awacs_revision<AWACS_BURGUNDY) { /* Different IOCTLS for burgundy*/
+		/* Different IOCTLS for burgundy*/
+		if (awacs_revision < AWACS_BURGUNDY) {
 			switch (cmd) {
 			case SOUND_MIXER_INFO: {
 			    mixer_info info;
@@ -4349,7 +4357,8 @@ static int mixer_ioctl(struct inode *inode, struct file *file, u_int cmd,
 				IOCTL_IN(arg, data);
 				return IOCTL_OUT(arg, sound_set_volume(data));
 			case SOUND_MIXER_READ_SPEAKER:
-				if (awacs_revision == 3 && adb_hardware == ADB_VIACUDA)
+				if (awacs_revision == 3
+				    && sys_ctrler == SYS_CTRLER_CUDA)
 					data = awacs_spkr_vol;
 				else
 					data = (awacs_reg[1] & MASK_CMUTE)? 0:
@@ -4357,7 +4366,8 @@ static int mixer_ioctl(struct inode *inode, struct file *file, u_int cmd,
 				return IOCTL_OUT(arg, data);
 			case SOUND_MIXER_WRITE_SPEAKER:
 				IOCTL_IN(arg, data);
-				if (awacs_revision == 3 && adb_hardware == ADB_VIACUDA)
+				if (awacs_revision == 3
+				    && sys_ctrler == SYS_CTRLER_CUDA)
 					awacs_enable_amp(data);
 				else
 					data = awacs_volume_setter(data, 4, MASK_CMUTE, 6);
@@ -4960,7 +4970,7 @@ static int sq_open(struct inode *inode, struct file *file)
 	}
 
 
-#ifdef CONFIG_PCC
+#ifdef CONFIG_PPC
 	if (file->f_mode & FMODE_READ) {
 		if (read_sq.busy) {
 			rc = -EBUSY;
@@ -5009,7 +5019,7 @@ err_out_nobusy:
 		sq.busy = 0;
 		WAKE_UP(sq.open_queue);
 	}
-#ifdef CONFIG_PCC
+#ifdef CONFIG_PPC
 	if (file->f_mode & FMODE_READ) {
 		read_sq.busy = 0;
 		WAKE_UP(read_sq.open_queue);
@@ -5564,9 +5574,33 @@ void __init dmasound_init(void)
 			printk(KERN_WARNING "dmasound: no memory for "
 			       "beep buffer\n");
 #ifdef CONFIG_PMAC_PBOOK
-		notifier_chain_register(&sleep_notifier_list,
-					&awacs_sleep_notifier);
+		pmu_register_sleep_notifier(&awacs_sleep_notifier);
 #endif /* CONFIG_PMAC_PBOOK */
+
+		/* Powerbooks have odd ways of enabling inputs such as
+		   an expansion-bay CD or sound from an internal modem
+		   or a PC-card modem. */
+		if (machine_is_compatible("AAPL,3400/2400")) {
+			is_pbook_3400 = 1;
+			/*
+			 * Enable CD and PC-card sound inputs.
+			 * This is done by reading from address
+			 * f301a000, + 0x10 to enable the expansion-bay
+			 * CD sound input, + 0x80 to enable the PC-card
+			 * sound input.  The 0x100 seems to enable the
+			 * MESH and/or its SCSI bus drivers.
+			 */
+			in_8((unsigned char *)0xf301a190);
+		} else if (machine_is_compatible("PowerBook1,1")) {
+			np = find_devices("mac-io");
+			if (np && np->n_addrs > 0) {
+				is_pbook_G3 = 1;
+				macio_base = (unsigned char *)
+					ioremap(np->addrs[0].address, 0x40);
+				/* enable CD sound input */
+				out_8(macio_base + 0x37, 3);
+			}
+		}
 	}
 #endif /* CONFIG_PPC */
 

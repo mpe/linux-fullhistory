@@ -340,7 +340,7 @@ MODULE_AUTHOR("Red Hat Software");
 MODULE_DESCRIPTION("I2O PCI Interface");
 
 #else
-__init void i2o_pci_init(void)
+void __init i2o_pci_init(void)
 {
 	printk(KERN_INFO "Linux I2O PCI support (c) 1999 Red Hat Software.\n");
 	if(i2o_pci_scan()>=0)

@@ -1,5 +1,5 @@
 /*
- * mem_op.h 1.10 1999/08/28 04:12:33
+ * mem_op.h 1.11 1999/09/15 07:14:03
  *
  * The contents of this file are subject to the Mozilla Public License
  * Version 1.1 (the "License"); you may not use this file except in
@@ -49,7 +49,7 @@ static inline void copy_pc_to_user(void *to, const void *from, size_t n)
     size_t odd = (n & 3);
     n -= odd;
     while (n) {
-	put_user(readl_ns(from), (int *)to);
+	put_user(__raw_readl(from), (int *)to);
 	(char *)from += 4; (char *)to += 4; n -= 4;
     }
     while (odd--)
@@ -64,7 +64,7 @@ static inline void copy_user_to_pc(void *to, const void *from, size_t n)
     n -= odd;
     while (n) {
 	get_user(l, (int *)from);
-	writel_ns(l, to);
+	__raw_writel(l, to);
 	(char *)to += 4; (char *)from += 4; n -= 4;
     }
     while (odd--) {

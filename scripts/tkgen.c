@@ -92,12 +92,27 @@
  *
  * 23 January 1999, Michael Elizabeth Chastain <mec@shout.net>
  * - Remove bug-compatible code.
+ *
+ * 07 July 1999, Andrzej M. Krzysztofowicz <ankry@mif.pg.gda.pl>
+ * Some bugfixes, including
+ * - disabling "m" options when CONFIG_MODULES is set to "n" as well as "y"
+ *   option in dep_tristate when dependency is set to "m",
+ * - deactivating choices which should not be available,
+ * - basic validation for int and hex introduced if the entered one is not 
+ *   valid,
+ * - updates of all opened menus instead of the active only. I was afraid
+ *   that it would slow down updates, but I don't even see any speed difference
+ *   on my machine. If it slows you can still work with only a single menu
+ *   opened,
+ * - fixed error when focussing non-existent window (especially Help windows),
+ * Higher level submenus implemented.
  */
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <unistd.h>
+#include <string.h>
 #include "tkparse.h"
-
 
 
 /*
@@ -105,20 +120,30 @@
  */
 static int tot_menu_num = 0;
 
-
+/*
+ * Pointers to mainmenu_option and endmenu of each menu.
+ */
+struct kconfig * menu_first [100];
+struct kconfig * menu_last  [100];
 
 /*
  * Generate portion of wish script for the beginning of a submenu.
  * The guts get filled in with the various options.
  */
-static void start_proc( char * label, int menu_num, int flag )
+static void start_proc( char * label, int menu_num, int toplevel )
 {
-    if ( flag )
+    if ( toplevel )
 	printf( "menu_option menu%d %d \"%s\"\n", menu_num, menu_num, label );
     printf( "proc menu%d {w title} {\n", menu_num );
-    printf( "\tcatch {destroy $w}\n" );
+    printf( "\tset oldFocus [focus]\n" );
+    if ( menu_first[menu_num]->menu_number != 0 )
+	printf( "\tcatch {focus .menu%d}\n",
+		menu_first[menu_num]->menu_number );
+    printf( "\tcatch {destroy $w; unregister_active %d}\n", menu_num );
     printf( "\ttoplevel $w -class Dialog\n" );
     printf( "\twm withdraw $w\n" );
+    printf( "\tglobal active_menus\n" );
+    printf( "\tset active_menus [lsort -integer [linsert $active_menus end %d]]\n", menu_num );
     printf( "\tmessage $w.m -width 400 -aspect 300 -text \\\n" );
     printf( "\t\t\"%s\"  -relief raised\n", label );
     printf( "\tpack $w.m -pady 10 -side top -padx 10\n" );
@@ -127,16 +152,41 @@ static void start_proc( char * label, int menu_num, int flag )
     /*
      * Attach the "Prev", "Next" and "OK" buttons at the end of the window.
      */
-    printf( "\tset oldFocus [focus]\n" );
     printf( "\tframe $w.f\n" );
-    printf( "\tbutton $w.f.back -text \"Main Menu\" \\\n" );
-    printf( "\t\t-width 15 -command \"destroy $w; focus $oldFocus; update_mainmenu $w\"\n" );
+    if ( toplevel )
+	printf( "\tbutton $w.f.back -text \"Main Menu\" \\\n" );
+    else
+	printf( "\tbutton $w.f.back -text \"OK\" \\\n" );
+    printf( "\t\t-width 15 -command \"catch {focus $oldFocus}; destroy $w; unregister_active %d\"\n",
+	menu_num );
     printf( "\tbutton $w.f.next -text \"Next\" \\\n" );
-    printf( "\t\t-width 15 -command \" destroy $w; focus $oldFocus;  menu%d .menu%d \\\"$title\\\"\"\n", menu_num+1, menu_num+1 );
+    printf( "\t\t-width 15 -command \"catch {focus $oldFocus}; " );
+    /* 
+     * We are checking which windows should be destroyed and which are 
+     * common parrents with the next one. Remember that menu_num field
+     * in mainmenu_option record reports number of its *parent* menu.
+     */
+    if ( menu_num < tot_menu_num
+    && menu_first[menu_num + 1]->menu_number != menu_num )
+    {
+	int to_destr;
+
+	printf( "destroy $w; unregister_active %d; ", menu_num );
+	to_destr = menu_first[menu_num]->menu_number;
+	while ( to_destr > 0 && menu_first[menu_num + 1]->menu_number != to_destr )
+	{
+	    printf( "catch {destroy .menu%d}; unregister_active %d; ",
+		to_destr, to_destr );
+	    to_destr = menu_first[to_destr]->menu_number;
+	}
+    }
+    printf( "menu%d .menu%d \\\"$title\\\"\"\n",
+	menu_num+1, menu_num+1 );
     if ( menu_num == tot_menu_num )
 	printf( "\t$w.f.next configure -state disabled\n" );
     printf( "\tbutton $w.f.prev -text \"Prev\" \\\n" );
-    printf( "\t\t-width 15 -command \" destroy $w; focus $oldFocus; menu%d .menu%d \\\"$title\\\"\"\n", menu_num-1, menu_num-1 );
+    printf( "\t\t-width 15 -command \"catch {focus $oldFocus}; destroy $w; unregister_active %d; menu%d .menu%d \\\"$title\\\"\"\n",
+	menu_num, menu_num-1, menu_num-1 );
     if ( menu_num == 1 )
 	printf( "\t$w.f.prev configure -state disabled\n" );
     printf( "\tpack $w.f.back $w.f.next $w.f.prev -side left -expand on\n" );
@@ -177,12 +227,11 @@ static void start_proc( char * label, int menu_num, int flag )
  * a global declaration so we know whether we need to insert one for a
  * given function or not.
  */
-void clear_globalflags( struct kconfig * scfg )
+static void clear_globalflags(void)
 {
-    struct kconfig * cfg;
-
-    for ( cfg = scfg; cfg != NULL; cfg = cfg->next )
-	cfg->global_written = 0;
+    int i;
+    for ( i = 1; i <= max_varnum; i++ )
+	vartable[i].global_written = 0;
 }
 
 
@@ -194,7 +243,7 @@ void clear_globalflags( struct kconfig * scfg )
  */
 void global( const char *var )
 {
-    printf( "\tglobal %s; vfix %s\n", var, var );
+    printf( "\tglobal %s\n", var );
 }
 
 
@@ -207,6 +256,21 @@ void generate_if( struct kconfig * cfg, struct condition * ocond,
     int menu_num, int line_num )
 {
     struct condition * cond;
+    struct dependency * tmp;
+    struct kconfig * cfg1;
+
+    if ( line_num >= -1 )
+    {
+	if ( cfg->token == token_define_bool || cfg->token == token_define_hex
+	||   cfg->token == token_define_int || cfg->token == token_define_string
+	||   cfg->token == token_define_tristate || cfg->token == token_unset )
+	    return;
+    }
+    else
+    {
+	if ( cfg->token == token_string || cfg->token == token_mainmenu_option )
+	    return;
+    }
 
     /*
      * First write any global declarations we need for this conditional.
@@ -219,14 +283,10 @@ void generate_if( struct kconfig * cfg, struct condition * ocond,
 	    break;
 
 	case op_variable:
-	    global( cond->str );
-	    break;
-
-	case op_kvariable:
-	    if ( ! cond->cfg->global_written )
+	    if ( ! vartable[cond->nameindex].global_written )
 	    {
-		cond->cfg->global_written = 1;
-		global( cond->cfg->optionname );
+		vartable[cond->nameindex].global_written = 1;
+		global( vartable[cond->nameindex].name );
 	    }
 	    break;
 	}
@@ -235,10 +295,10 @@ void generate_if( struct kconfig * cfg, struct condition * ocond,
     /*
      * Now write this option.
      */
-    if ( ! cfg->global_written && cfg->optionname != NULL )
+    if ( cfg->nameindex > 0 && ! vartable[cfg->nameindex].global_written )
     {
-	cfg->global_written = 1;
-	global( cfg->optionname );
+	vartable[cfg->nameindex].global_written = 1;
+	global( vartable[cfg->nameindex].name );
     }
 
     /*
@@ -262,138 +322,279 @@ void generate_if( struct kconfig * cfg, struct condition * ocond,
 	case op_rparen: printf( ")"    ); break;
 
 	case op_variable:
-	    printf( "$%s", cond->str );
-	    break;
-
-	case op_kvariable:
-	    printf( "$%s", cond->cfg->optionname );
+	    printf( "$%s", vartable[cond->nameindex].name );
 	    break;
 
 	case op_constant:
 	    if      ( strcmp( cond->str, "y" ) == 0 ) printf( "1" );
 	    else if ( strcmp( cond->str, "n" ) == 0 ) printf( "0" );
 	    else if ( strcmp( cond->str, "m" ) == 0 ) printf( "2" );
+	    else if ( strcmp( cond->str, "" ) == 0 )  printf( "4" );
 	    else
 		printf( "\"%s\"", cond->str );
 	    break;
 	}
     }
-    printf( "} then { " );
+    printf( "} then {" );
 
     /*
      * Generate a procedure call to write the value.
      * This code depends on procedures in header.tk.
      */
-    switch ( cfg->token )
+    if ( line_num >= -1 )
     {
-    default:
-	printf( " }\n" );
-	break;
-
-    case token_bool:
-	printf( ".menu%d.config.f.x%d.y configure -state normal;",
-	    menu_num, line_num );
-	printf( ".menu%d.config.f.x%d.n configure -state normal;",
-	    menu_num, line_num );
-	printf( ".menu%d.config.f.x%d.l configure -state normal;",
-	    menu_num, line_num );
-	printf( "set %s [expr $%s&15];",
-	    cfg->optionname, cfg->optionname );
-	printf( "} else { ");
-	printf( ".menu%d.config.f.x%d.y configure -state disabled;",
-	    menu_num, line_num );
-	printf( ".menu%d.config.f.x%d.n configure -state disabled;",
-	    menu_num, line_num );
-	printf( ".menu%d.config.f.x%d.l configure -state disabled;",
-	    menu_num, line_num );
-	printf( "set %s [expr $%s|16];}\n",
-	    cfg->optionname, cfg->optionname );
-	break;
-
-    case token_choice_header:
-	fprintf( stderr, "Internal error on token_choice_header\n" );
-	exit( 1 );
-
-    case token_choice_item:
-	fprintf( stderr, "Internal error on token_choice_item\n" );
-	exit( 1 );
-
-    case token_define_bool:
-	printf( "set %s %s } \n",
-	    cfg->optionname, cfg->value );
-	break;
-
-    case token_dep_tristate:
-    case token_tristate:
-	if ( cfg->token == token_dep_tristate )
+	switch ( cfg->token )
 	{
-	    global( cfg->depend );
-	    printf( "if { $%s != 1 && $%s != 0 } then {",
-		cfg->depend, cfg->depend );
-	    printf( ".menu%d.config.f.x%d.y configure -state disabled;",
+	default:
+	    printf( " }\n" );
+	    break;
+
+	case token_dep_bool:
+	    printf( "\n" );
+	    for ( tmp = cfg->depend; tmp; tmp = tmp->next )
+		if ( ! vartable[get_varnum( tmp->name )].global_written )
+		{
+		    global( tmp->name );
+		}
+	    printf( "\tset tmpvar_dep [effective_dep [list" );
+	    for ( tmp = cfg->depend; tmp; tmp = tmp->next )
+		printf( " $%s", tmp->name );
+	    printf( "]];set %s [sync_bool $%s $tmpvar_dep];",
+		vartable[cfg->nameindex].name, vartable[cfg->nameindex].name );
+	    printf( "if {$tmpvar_dep != 1} then {" );
+	    printf( "configure_entry .menu%d.config.f.x%d disabled {y};",
 		menu_num, line_num );
 	    printf( "} else {" );
-	    printf( ".menu%d.config.f.x%d.y configure -state normal;",
-		menu_num, line_num);
-	    printf( "}; " );
-	}
-	else
-	{
-	    printf( ".menu%d.config.f.x%d.y configure -state normal;",
+	    printf( "configure_entry .menu%d.config.f.x%d normal {y};",
 		menu_num, line_num );
-	}
+	    printf( "}; " );
+	case token_bool:
+	    if ( cfg->token == token_bool )
+		printf( "\n\t" );
+	    printf( "configure_entry .menu%d.config.f.x%d normal {n l",
+		menu_num, line_num );
+	    if ( cfg->token == token_bool )
+		printf( " y" );
+	    printf( "}" );
+	    printf( "} else {");
+	    printf( "configure_entry .menu%d.config.f.x%d disabled {y n l}}\n",
+		menu_num, line_num );
+	    break;
 
-	printf( ".menu%d.config.f.x%d.n configure -state normal;",
-	    menu_num, line_num );
-	printf( "global CONFIG_MODULES; if {($CONFIG_MODULES == 1)} then { .menu%d.config.f.x%d.m configure -state normal };",
-	    menu_num, line_num );
-	printf( ".menu%d.config.f.x%d.l configure -state normal;",
-	    menu_num, line_num );
+	case token_choice_header:
+	    printf( "configure_entry .menu%d.config.f.x%d normal {x l}",
+		menu_num, line_num );
+	    printf( "} else {" );
+	    printf( "configure_entry .menu%d.config.f.x%d disabled {x l}",
+		menu_num, line_num );
+	    printf( "}\n" );
+	    break;
+
+	case token_choice_item:
+	    fprintf( stderr, "Internal error on token_choice_item\n" );
+	    exit( 1 );
+
+	case token_dep_tristate:
+	    printf( "\n" );
+	    for ( tmp = cfg->depend; tmp; tmp = tmp->next )
+		if ( ! vartable[get_varnum( tmp->name )].global_written )
+		{
+		    global( tmp->name );
+		}
+	    printf( "\tset tmpvar_dep [effective_dep [list" );
+	    for ( tmp = cfg->depend; tmp; tmp = tmp->next )
+		printf( " $%s", tmp->name );
+	    printf( "]];set %s [sync_tristate $%s $tmpvar_dep];",
+		vartable[cfg->nameindex].name, vartable[cfg->nameindex].name );
+	    printf( "\tif {$tmpvar_dep != 1} then {" );
+	    printf( "configure_entry .menu%d.config.f.x%d disabled {y}",
+		menu_num, line_num );
+	    printf( "} else {" );
+	    printf( "configure_entry .menu%d.config.f.x%d normal {y}",
+		menu_num, line_num );
+	    printf( "}; " );
+	    printf( "if {$tmpvar_dep == 0} then {" );
+	    printf( "configure_entry .menu%d.config.f.x%d disabled {m}",
+		menu_num, line_num );
+	    printf( "} else {" );
+	    printf( "configure_entry .menu%d.config.f.x%d normal {m}",
+		menu_num, line_num );
+	    printf( "}; " );
+	case token_tristate:
+	    if ( cfg->token == token_tristate )
+	    {
+		printf( "\n\tconfigure_entry .menu%d.config.f.x%d normal {y}; ",
+		    menu_num, line_num );
+	    }
+	    printf( "if {($CONFIG_MODULES == 1)} then {" );
+	    printf( "configure_entry .menu%d.config.f.x%d normal {m}} else {",
+		menu_num, line_num );
+	    printf( "configure_entry .menu%d.config.f.x%d disabled {m}}; ",
+		menu_num, line_num );
+	    printf( "configure_entry .menu%d.config.f.x%d normal {n l}",
+		menu_num, line_num );
 
 	/*
 	 * Or in a bit to the variable - this causes all of the radiobuttons
 	 * to be deselected (i.e. not be red).
 	 */
-	printf( "set %s [expr $%s&15];",
-	    cfg->optionname, cfg->optionname );
-	printf( "} else { " );
-	printf( ".menu%d.config.f.x%d.y configure -state disabled;",
-	    menu_num, line_num );
-	printf( ".menu%d.config.f.x%d.n configure -state disabled;",
-	    menu_num, line_num );
-	printf( ".menu%d.config.f.x%d.m configure -state disabled;",
-	    menu_num, line_num );
-	printf( ".menu%d.config.f.x%d.l configure -state disabled;",
-	    menu_num, line_num );
+	    printf( "} else {" );
+	    printf( "configure_entry .menu%d.config.f.x%d disabled {y n m l}}\n",
+		menu_num, line_num );
+	    break;
+
+	case token_hex:
+	case token_int:
+	case token_string:
+	    printf( ".menu%d.config.f.x%d.x configure -state normal -foreground [ cget .ref -foreground ]; ",
+		menu_num, line_num );
+	    printf( ".menu%d.config.f.x%d.l configure -state normal; ",
+		menu_num, line_num );
+	    printf( "} else {" );
+	    printf( ".menu%d.config.f.x%d.x configure -state disabled -foreground [ cget .ref -disabledforeground ]; ",
+		menu_num, line_num );
+	    printf( ".menu%d.config.f.x%d.l configure -state disabled}\n",
+		menu_num, line_num );
+	    break;
+
+	case token_mainmenu_option:
+	    if ( line_num >= 0 )
+	    {
+		printf( "configure_entry .menu%d.config.f.x%d normal {m}",
+		    menu_num, line_num );
+		printf( "} else {" );
+		printf( "configure_entry .menu%d.config.f.x%d disabled {m}}\n",
+		    menu_num, line_num );
+	    }
+	    else
+		printf( ".f0.x%d configure -state normal } else { .f0.x%d configure -state disabled }\n",
+		    menu_num, menu_num );
+	    break;
+	}
+    }
+    else
+    {
+	switch ( cfg->token )
+	{
+	default:
+	    printf( " }\n" );
+	    break;
+
+	case token_dep_bool:
+	    printf( "\n" );
+	    for ( tmp = cfg->depend; tmp; tmp = tmp->next )
+		if ( ! vartable[get_varnum( tmp->name )].global_written )
+		{
+		    global( tmp->name );
+		}
+	    printf( "\tset tmpvar_dep [effective_dep [list" );
+	    for ( tmp = cfg->depend; tmp; tmp = tmp->next )
+		printf( " $%s", tmp->name );
+	    printf( "]];set %s [sync_bool $%s $tmpvar_dep];",
+		vartable[cfg->nameindex].name, vartable[cfg->nameindex].name );
+	case token_bool:
+	    if ( cfg->token == token_bool )
+		printf( "\n\t" );
+	    printf( "set %s [expr $%s&15]",
+		vartable[cfg->nameindex].name, vartable[cfg->nameindex].name );
+	    printf( "} else {");
+	    printf( "set %s [expr $%s|16]}\n",
+		vartable[cfg->nameindex].name, vartable[cfg->nameindex].name );
+	    break;
+
+	case token_choice_header:
+	    printf( "} else {" );
+	    for ( cfg1  = cfg->next;
+		  cfg1 != NULL && cfg1->token == token_choice_item;
+		  cfg1  = cfg1->next )
+		printf( "set %s 4;", vartable[cfg1->nameindex].name );
+	    printf( "}\n" );
+	    break;
+
+	case token_choice_item:
+	    fprintf( stderr, "Internal error on token_choice_item\n" );
+	    exit( 1 );
+
+	case token_define_bool:
+	case token_define_tristate:
+	    if ( ! vartable[get_varnum( cfg->value )].global_written )
+	    {
+		global( cfg->value );
+	    }
+	    printf( "set %s $%s }\n",
+		vartable[cfg->nameindex].name, cfg->value );
+	    break;
+
+	case token_define_hex:
+	case token_define_int:
+	    printf( "set %s %s }\n",
+		vartable[cfg->nameindex].name, cfg->value );
+	    break;
+
+	case token_define_string:
+	    printf( "set %s \"%s\" }\n",
+		vartable[cfg->nameindex].name, cfg->value );
+	    break;
+
+	case token_dep_tristate:
+	    printf( "\n" );
+	    for ( tmp = cfg->depend; tmp; tmp = tmp->next )
+		if ( ! vartable[get_varnum( tmp->name )].global_written )
+		{
+		    global( tmp->name );
+		}
+	    printf( "\tset tmpvar_dep [effective_dep [list" );
+	    for ( tmp = cfg->depend; tmp; tmp = tmp->next )
+		printf( " $%s", tmp->name );
+	    printf( "]]; set %s [sync_tristate $%s $tmpvar_dep]; ",
+		vartable[cfg->nameindex].name, vartable[cfg->nameindex].name );
+	case token_tristate:
+	    if ( cfg->token == token_tristate )
+		printf( "if {($CONFIG_MODULES == 0) && ($%s == 2)} then {set %s 1}; ",
+		    vartable[cfg->nameindex].name,
+		    vartable[cfg->nameindex].name );
+	/*
+	 * Or in a bit to the variable - this causes all of the radiobuttons
+	 * to be deselected (i.e. not be red).
+	 */
+	    printf( "set %s [expr $%s&15]",
+		vartable[cfg->nameindex].name, vartable[cfg->nameindex].name );
+	    printf( "} else {" );
 
 	/*
 	 * Clear the disable bit to enable the correct radiobutton.
 	 */
-	printf( "set %s [expr $%s|16];}\n",
-	    cfg->optionname, cfg->optionname );
-	break;
+	    printf( "set %s [expr $%s|16]}\n",
+		vartable[cfg->nameindex].name, vartable[cfg->nameindex].name );
+	    break;
 
-    case token_hex:
-    case token_int:
-    case token_string:
-	printf( ".menu%d.config.f.x%d.x configure -state normal -foreground [ cget .ref -foreground ]; ",
-	    menu_num, line_num);
-	printf( ".menu%d.config.f.x%d.l configure -state normal; ",
-	    menu_num, line_num);
-	printf( "} else { " );
-	printf( ".menu%d.config.f.x%d.x configure -state disabled -foreground [ cget .ref -disabledforeground ];",
-	    menu_num, line_num );
-	printf( ".menu%d.config.f.x%d.l configure -state disabled;}\n",
-	    menu_num, line_num );
-	break;
+	case token_hex:
+	case token_int:
+	    if ( cfg->value && *cfg->value == '$' )
+	    {
+		int index = get_varnum( cfg->value+1 );
+		printf( "\n" );
+		if ( ! vartable[index].global_written )
+		{
+		    global( vartable[index].name );
+		}
+		printf( "\t" );
+	    }
+	    if ( cfg->token == token_hex )
+		printf( "validate_hex " );
+	    else if ( cfg->token == token_int )
+		printf( "validate_int " );
+	    printf( "%s \"$%s\" %s}\n",
+		vartable[cfg->nameindex].name, vartable[cfg->nameindex].name,
+		cfg->value );
+	    break;
 
-    case token_mainmenu_option:
-	printf( ".f0.x%d configure -state normal } else { .f0.x%d configure -state disabled }\n",
-	    menu_num, menu_num );
-	break;
+	case token_unset:
+	    printf( "set %s 4}\n", vartable[cfg->nameindex].name );
+	    break;
+	}
     }
 }
-
 
 
 /*
@@ -402,16 +603,29 @@ void generate_if( struct kconfig * cfg, struct condition * ocond,
 void generate_writeconfig( struct kconfig * cfg )
 {
     struct condition * cond;
-
+    struct dependency * tmp;
+    
     /*
      * Generate global declaration for this symbol.
      */
     if ( cfg->token != token_comment )
     {
-	if ( ! cfg->global_written )
+	if ( cfg->nameindex > 0 && ! vartable[cfg->nameindex].global_written )
 	{
-	    cfg->global_written = 1;
-	    printf( "\tglobal %s\n", cfg->optionname );
+	    vartable[cfg->nameindex].global_written = 1;
+	    global( vartable[cfg->nameindex].name );
+	}
+	if ( cfg->token == token_define_tristate || cfg->token == token_define_bool )
+	{
+	    if ( ! vartable[get_varnum( cfg->value )].global_written )
+	    {
+		vartable[get_varnum( cfg->value )].global_written = 1;
+		global( cfg->value );
+	    }
+	}
+	else if ( cfg->nameindex <= 0 && cfg->token == token_choice_header )
+	{
+	    printf( "\tglobal tmpvar_%d\n", -(cfg->nameindex) );
 	}
     }
 
@@ -426,14 +640,10 @@ void generate_writeconfig( struct kconfig * cfg )
 	    break;
 
 	case op_variable:
-	    global( cond->str );
-	    break;
-
-	case op_kvariable:
-	    if ( ! cond->cfg->global_written )
+	    if ( ! vartable[cond->nameindex].global_written )
 	    {
-		cond->cfg->global_written = 1;
-		global( cond->cfg->optionname );
+		vartable[cond->nameindex].global_written = 1;
+		global( vartable[cond->nameindex].name );
 	    }
 	    break;
 	}
@@ -442,7 +652,6 @@ void generate_writeconfig( struct kconfig * cfg )
     /*
      * Generate indentation.
      */
-    if ( cfg->token != token_choice_header )
 	printf( "\t" );
 
     /*
@@ -466,17 +675,14 @@ void generate_writeconfig( struct kconfig * cfg )
 	    case op_rparen:    printf( ")"    ); break;
 
 	    case op_variable:
-		printf( "$%s", cond->str );
-		break;
-
-	    case op_kvariable:
-		printf( "$%s", cond->cfg->optionname );
+		printf( "$%s", vartable[cond->nameindex].name );
 		break;
 
 	    case op_constant:
 		if      ( strcmp( cond->str, "n" ) == 0 ) printf( "0" );
 		else if ( strcmp( cond->str, "y" ) == 0 ) printf( "1" );
 		else if ( strcmp( cond->str, "m" ) == 0 ) printf( "2" );
+		else if ( strcmp( cond->str, "" ) == 0 )  printf( "4" );
 		else
 		    printf( "\"%s\"", cond->str );
 		break;
@@ -499,10 +705,8 @@ void generate_writeconfig( struct kconfig * cfg )
 
     case token_bool:
     case token_tristate:
-	if ( cfg->cond )
-	    printf( " " );
-	printf( "write_tristate $cfg $autocfg %s $%s $notmod", 
-	    cfg->optionname, cfg->optionname );
+	printf( "write_tristate $cfg $autocfg %s $%s [list $notmod]", 
+	    vartable[cfg->nameindex].name, vartable[cfg->nameindex].name );
 	if ( cfg->cond != NULL )
 	    printf( " }" );
 	printf( "\n" );
@@ -520,12 +724,15 @@ void generate_writeconfig( struct kconfig * cfg )
 		  cfg1 != NULL && cfg1->token == token_choice_item;
 		  cfg1  = cfg1->next )
 	    {
-		printf("\tif { $%s == \"%s\" } then { write_tristate $cfg $autocfg %s 1 $notmod } else { write_tristate $cfg $autocfg %s 0 $notmod }\n",
-		    cfg->optionname, cfg1->label,
-		    cfg1->optionname,
-		    cfg1->optionname );
+		printf("\n\tif { $tmpvar_%d == \"%s\" } then { write_tristate $cfg $autocfg %s 1 [list $notmod] } else { write_tristate $cfg $autocfg %s 0 [list $notmod] }",
+		    -(cfg->nameindex), cfg1->label,
+		    vartable[cfg1->nameindex].name,
+		    vartable[cfg1->nameindex].name );
 	    }
 	}
+	if ( cfg->cond != NULL )
+	    printf( "}" );
+	printf( "\n" );
 	break;
 
     case token_choice_item:
@@ -541,53 +748,74 @@ void generate_writeconfig( struct kconfig * cfg )
 	break;
 
     case token_define_bool:
+    case token_define_tristate:
 	if ( cfg->cond == NULL )
 	{
-	    printf( "write_tristate $cfg $autocfg %s $%s $notmod\n",
-		cfg->optionname, cfg->optionname );
+	    printf( "write_tristate $cfg $autocfg %s $%s [list $notmod]\n",
+		vartable[cfg->nameindex].name, vartable[cfg->nameindex].name );
 	}
 	else
 	{
-	    printf( "write_tristate $cfg $autocfg %s %s $notmod }\n",
-		cfg->optionname, cfg->value );
+	    printf( "write_tristate $cfg $autocfg %s $%s [list $notmod] }\n",
+		vartable[cfg->nameindex].name, cfg->value );
 	}
 	break;
 
+    case token_dep_bool:
     case token_dep_tristate:
-	if ( cfg->cond )
-	    printf( " " );
-	printf( "write_tristate $cfg $autocfg %s $%s $%s",
-	    cfg->optionname, cfg->optionname, cfg->depend );
+	printf( "write_tristate $cfg $autocfg %s $%s [list",
+	    vartable[cfg->nameindex].name, vartable[cfg->nameindex].name );
+	for ( tmp = cfg->depend; tmp; tmp = tmp->next )
+	    printf( " $%s", tmp->name );
+	printf( "]" );
 	if ( cfg->cond != NULL )
 	    printf( " }" );
-	printf( " \n" );
+	printf( "\n" );
+	break;
+
+    case token_define_hex:
+	printf( "write_hex $cfg $autocfg %s %s $notmod",
+	    vartable[cfg->nameindex].name, cfg->value );
+	if ( cfg->cond != NULL )
+	    printf( " }" );
+	printf( "\n" );
+	break;
+
+    case token_define_int:
+	printf( "write_int $cfg $autocfg %s %s $notmod",
+	    vartable[cfg->nameindex].name, cfg->value );
+	if ( cfg->cond != NULL )
+	    printf( " }" );
+	printf( "\n" );
+	break;
+
+    case token_define_string:
+	printf( "write_string $cfg $autocfg %s \"%s\" $notmod",
+	    vartable[cfg->nameindex].name, cfg->value );
+	if ( cfg->cond != NULL )
+	    printf( " }" );
+	printf( "\n" );
 	break;
 
     case token_hex:
-	if ( cfg->cond != NULL )
-	    printf( " " );
 	printf( "write_hex $cfg $autocfg %s $%s $notmod",
-	    cfg->optionname, cfg->optionname );
+	    vartable[cfg->nameindex].name, vartable[cfg->nameindex].name );
 	if ( cfg->cond != NULL )
 	    printf( " }" );
 	printf( "\n" );
 	break;
 
     case token_int:
-	if ( cfg->cond != NULL )
-	    printf( " " );
 	printf( "write_int $cfg $autocfg %s $%s $notmod",
-	    cfg->optionname, cfg->optionname );
+	    vartable[cfg->nameindex].name, vartable[cfg->nameindex].name );
 	if ( cfg->cond != NULL )
 	    printf( " }" );
 	printf( "\n" );
 	break;
 
     case token_string:
-	if ( cfg->cond != NULL )
-	    printf( " " );
-	printf( "write_string $cfg $autocfg %s $%s $notmod",
-	    cfg->optionname, cfg->optionname );
+	printf( "write_string $cfg $autocfg %s \"$%s\" $notmod",
+	    vartable[cfg->nameindex].name, vartable[cfg->nameindex].name );
 	if ( cfg->cond != NULL )
 	    printf( " }" );
 	printf( "\n" );
@@ -595,6 +823,112 @@ void generate_writeconfig( struct kconfig * cfg )
     }
 }
 
+static void generate_update_var( struct kconfig * scfg, int menu_num )
+{
+    struct kconfig * cfg;
+
+    if ( menu_num>0 )
+    {
+	printf( "proc update_define_menu%d {} {\n", menu_num );
+	printf( "\tupdate_define_mainmenu\n" );
+    }
+    else
+	printf( "proc update_define_mainmenu {} {\n" );
+    clear_globalflags();
+    global( "CONFIG_MODULES" );
+    vartable[ get_varnum( "CONFIG_MODULES" ) ].global_written = 1;
+    for ( cfg = scfg; cfg != NULL; cfg = cfg->next )
+    {
+	if ( cfg->menu_number == menu_num && (cfg->token == token_define_bool || cfg->token == token_define_tristate
+	||   cfg->token == token_define_hex || cfg->token == token_define_int
+	||   cfg->token == token_define_string || cfg->token == token_unset 
+	||   cfg->token == token_tristate) )
+	{
+	    if ( ! vartable[cfg->nameindex].global_written )
+	    {
+		vartable[cfg->nameindex].global_written = 1;
+		global( vartable[cfg->nameindex].name );
+	    }
+	}
+    }
+
+    for ( cfg = scfg; cfg != NULL; cfg = cfg->next )
+    {
+	char tmp[20];
+	struct kconfig * cfg1;
+
+	if ( cfg->menu_number == menu_num )
+	{
+	    switch ( cfg->token )
+	    {
+	    default:
+	    case token_choice_item:
+		break;
+	    case token_choice_header:
+		sprintf( tmp, "tmpvar_%d", -(cfg->nameindex) );
+		global( tmp );
+		for ( cfg1  = cfg->next;
+		      cfg1 != NULL && cfg1->token == token_choice_item;
+		      cfg1  = cfg1->next )
+		{
+		    vartable[cfg1->nameindex].global_written = 1;
+		    global( vartable[cfg1->nameindex].name );
+		    printf( "\tif {$tmpvar_%d == \"%s\"} then {set %s 1} else {set %s 0}\n",
+			-(cfg->nameindex), cfg1->label,
+			vartable[cfg1->nameindex].name,
+			vartable[cfg1->nameindex].name );
+		}
+		break;
+	    case token_bool:
+	    case token_define_bool:
+	    case token_define_tristate:
+	    case token_define_hex:
+	    case token_define_int:
+	    case token_define_string:
+	    case token_dep_bool:
+	    case token_dep_tristate:
+	    case token_int:
+	    case token_hex:
+	    case token_mainmenu_option:
+	    case token_tristate:
+	    case token_unset:
+		if ( cfg->cond != NULL )
+		    generate_if( cfg, cfg->cond, menu_num, -2 );
+		else switch ( cfg->token )
+		{
+		case token_tristate:
+		    printf( "\n\tif {($CONFIG_MODULES == 0)} then {if {($%s == 2)} then {set %s 1}}\n",
+			vartable[cfg->nameindex].name, vartable[cfg->nameindex].name );
+		    break;
+		case token_define_bool:
+		case token_define_tristate:
+		    if ( ! vartable[get_varnum( cfg->value )].global_written )
+		    {
+			vartable[get_varnum( cfg->value )].global_written = 1;
+			global( cfg->value );
+		    }
+		    printf( "\tset %s $%s\n", vartable[cfg->nameindex].name,
+			cfg->value );
+		    break;
+		case token_define_hex:
+		case token_define_int:
+		    printf( "\tset %s %s\n", vartable[cfg->nameindex].name,
+			cfg->value );
+		    break;
+		case token_define_string:
+		    printf( "\tset %s \"%s\"\n", vartable[cfg->nameindex].name,
+			cfg->value );
+		    break;
+		case token_unset:
+		    printf( "\tset %s 4\n", vartable[cfg->nameindex].name );
+		default:
+		    break;
+		}
+	    }
+	}
+    }
+    printf( "}\n\n\n" );
+}
 
 
 /*
@@ -603,13 +937,24 @@ void generate_writeconfig( struct kconfig * cfg )
 static void end_proc( struct kconfig * scfg, int menu_num )
 {
     struct kconfig * cfg;
+    int i;
 
     printf( "\n\n\n" );
     printf( "\tfocus $w\n" );
-    printf( "\tupdate_menu%d $w.config.f\n",
-	menu_num );
+    printf( "\tupdate_active\n" );
     printf( "\tglobal winx; global winy\n" );
-    printf( "\tset winx [expr [winfo x .]+30]; set winy [expr [winfo y .]+30]\n" );
+    if ( menu_first[menu_num]->menu_number != 0 )
+    {
+	printf( "\tif {[winfo exists .menu%d] == 0} then ",
+		menu_first[menu_num]->menu_number );
+	printf( "{menu%d .menu%d \"%s\"}\n",
+		menu_first[menu_num]->menu_number, menu_first[menu_num]->menu_number,
+		menu_first[menu_first[menu_num]->menu_number]->label );
+	printf( "\tset winx [expr [winfo x .menu%d]+30]; set winy [expr [winfo y .menu%d]+30]\n",
+		menu_first[menu_num]->menu_number, menu_first[menu_num]->menu_number );
+    }
+    else
+	printf( "\tset winx [expr [winfo x .]+30]; set winy [expr [winfo y .]+30]\n" );
     printf( "\twm geometry $w +$winx+$winy\n" );
 
     /*
@@ -660,27 +1005,12 @@ static void end_proc( struct kconfig * scfg, int menu_num )
      * widgets, and will be called first when the window is mapped,
      * and each time one of the buttons in the window are clicked.
      */
-    printf( "proc update_menu%d {w}  {\n", menu_num );
-    printf( "\tupdate_define\n" );
+    printf( "proc update_menu%d {} {\n", menu_num );
 
     /*
      * Clear all of the booleans that are defined in this menu.
      */
-    clear_globalflags( scfg );
-    for ( cfg = scfg; cfg != NULL; cfg = cfg->next )
-    {
-	if ( cfg->menu_number == menu_num && cfg->token == token_define_bool
-	&&   cfg->optionname  != NULL )
-	{
-	    if ( ! cfg->global_written )
-	    {
-		cfg->global_written = 1;
-		printf( "\tglobal %s\n", cfg->optionname );
-		printf( "\tset %s 0\n",  cfg->optionname );
-	    }
-	}
-    }
-
+    clear_globalflags();
     for ( cfg = scfg; cfg != NULL; cfg = cfg->next )
     {
 	if ( cfg->menu_number == menu_num
@@ -688,28 +1018,47 @@ static void end_proc( struct kconfig * scfg, int menu_num )
 	&&   cfg->token != token_choice_item )
 	{
 	    if ( cfg->cond != NULL )
+	    {
+		int i;
+		if ( (cfg->token == token_tristate || cfg->token == token_dep_tristate)
+		&& ! vartable[i = get_varnum( "CONFIG_MODULES" )].global_written )
+		{
+		    global( "CONFIG_MODULES" );
+		    vartable[i].global_written = 1;
+		}
 		generate_if( cfg, cfg->cond, cfg->menu_number, cfg->menu_line );
+	    }
 	    else
 	    {
-		/*
-		 * Treat tristate like conditional here.
-		 */
-		if ( cfg->token == token_dep_tristate )
+		if ( cfg->token == token_tristate )
 		{
-		    global( cfg->depend );
-		    printf( "\tif {$%s != 1 && $%s != 0 } then { .menu%d.config.f.x%d.y configure -state disabled } else { .menu%d.config.f.x%d.y configure -state normal}\n",
-			cfg->depend, cfg->depend,
+		    if ( ! vartable[cfg->nameindex].global_written )
+		    {
+			vartable[cfg->nameindex].global_written = 1;
+			printf( "\tglobal %s\n", vartable[cfg->nameindex].name );
+		    }
+		    if ( ! vartable[i = get_varnum( "CONFIG_MODULES" )].global_written )
+		    {
+			global( "CONFIG_MODULES" );
+			vartable[i].global_written = 1;
+		    }
+		    printf( "\n\tif {($CONFIG_MODULES == 1)} then {configure_entry .menu%d.config.f.x%d normal {m}} else {configure_entry .menu%d.config.f.x%d disabled {m}}\n",
 			menu_num, cfg->menu_line,
 			menu_num, cfg->menu_line );
 		}
 	    }
 	}
+	else if ( cfg->token == token_mainmenu_option
+	     &&   cfg->menu_number == menu_num
+	     &&   cfg->cond != NULL )
+	{
+	    generate_if( cfg, cfg->cond, menu_num, cfg->menu_line );
+	}
     }
-
     printf("}\n\n\n");
+
+    generate_update_var( scfg, menu_num );
 }
-
-
 
 /*
  * This is the top level function for generating the tk script.
@@ -718,18 +1067,20 @@ void dump_tk_script( struct kconfig * scfg )
 {
     int menu_depth;
     int menu_num [64];
-    struct kconfig * menu_first [256];
-    struct kconfig * menu_last  [256];
-    int imenu;
+    int imenu, i;
+    int top_level_num = 0;
     struct kconfig * cfg;
     struct kconfig * cfg1 = NULL;
     const char * name = "No Name";
 
     /*
-    * Thread the menu pointers so I can walk each menu separately.
-    */
+     * Mark begin and end of each menu so I can omit submenus when walking
+     * over a parent menu.
+     */
     tot_menu_num = 0;
     menu_depth   = 0;
+    menu_num [0] = 0;
+
     for ( cfg = scfg; cfg != NULL; cfg = cfg->next )
     {
 	switch ( cfg->token )
@@ -744,14 +1095,22 @@ void dump_tk_script( struct kconfig * scfg )
 	case token_mainmenu_option:
 	    if ( ++menu_depth >= 64 )
 		{ fprintf( stderr, "menus too deep\n" ); exit( 1 ); }
-	    if ( ++tot_menu_num >= 256 )
+	    if ( ++tot_menu_num >= 100 )
 		{ fprintf( stderr, "too many menus\n" ); exit( 1 ); }
 	    menu_num   [menu_depth]   = tot_menu_num;
 	    menu_first [tot_menu_num] = cfg;
 	    menu_last  [tot_menu_num] = cfg;
+	    /*
+	     * Note, that menu_number is set to the number of parent 
+	     * (upper level) menu.
+	     */
+	    cfg->menu_number = menu_num[menu_depth - 1];
+	    if ( menu_depth == 1 )
+		++top_level_num;
 	    break;
 
 	case token_endmenu:
+	    menu_last [menu_num [menu_depth]] = cfg;
 	    /* flatten menus with proper scoping */
 	    if ( --menu_depth < 0 )
 		{ fprintf( stderr, "unmatched endmenu\n" ); exit( 1 ); }
@@ -760,19 +1119,24 @@ void dump_tk_script( struct kconfig * scfg )
 	case token_bool:
 	case token_choice_header:
 	case token_choice_item:
+	case token_dep_bool:
 	case token_dep_tristate:
 	case token_hex:
 	case token_int:
 	case token_string:
 	case token_tristate:
+	    cfg->menu_number = menu_num[menu_depth];
 	    if ( menu_depth == 0 )
 		{ fprintf( stderr, "statement not in menu\n" ); exit( 1 ); }
-	    menu_last [menu_num [menu_depth]]->menu_next = cfg;
-	    menu_last [menu_num [menu_depth]]            = cfg;
-	    cfg->menu_next                               = NULL;
 	    break;
 
 	case token_define_bool:
+	case token_define_hex:
+	case token_define_int:
+	case token_define_string:
+	case token_define_tristate:
+	case token_unset:
+	    cfg->menu_number = menu_num[menu_depth];
 	    break;
 	}
     }
@@ -784,7 +1148,21 @@ void dump_tk_script( struct kconfig * scfg )
      *   one blank button
      *   add two to round up for division
      */
-    printf( "set menus_per_column %d\n\n", (tot_menu_num + 4 + 1 + 2) / 3 );
+    printf( "set menus_per_column %d\n", (top_level_num + 4 + 1 + 2) / 3 );
+    printf( "set total_menus %d\n\n", tot_menu_num );
+
+    printf( "proc toplevel_menu {num} {\n" );
+    for ( imenu = 1; imenu <= tot_menu_num; ++imenu )
+    {
+	int parent = 1;
+
+	if ( menu_first[imenu]->menu_number == 0 )
+	    parent = menu_first[imenu]->menu_number;
+	else
+	    printf( "\tif {$num == %d} then {return %d}\n",
+		imenu, menu_first[imenu]->menu_number );
+    }
+    printf( "\treturn $num\n}\n\n" );
 
     /*
      * Generate the menus.
@@ -793,24 +1171,33 @@ void dump_tk_script( struct kconfig * scfg )
     for ( imenu = 1; imenu <= tot_menu_num; ++imenu )
     {
 	int menu_line = 0;
+	int nr_submenu = imenu;
 
-	clear_globalflags( scfg );
-	start_proc( menu_first[imenu]->label, imenu, 1 );
+	clear_globalflags();
+	start_proc( menu_first[imenu]->label, imenu, 
+		!menu_first[imenu]->menu_number );
 
-	for ( cfg = menu_first[imenu]; cfg != NULL; cfg = cfg->menu_next )
+	for ( cfg = menu_first[imenu]->next; cfg != NULL && cfg != menu_last[imenu]; cfg = cfg->next )
 	{
-	    cfg->menu_number = imenu;
-
 	    switch ( cfg->token )
 	    {
 	    default:
+		break;
+
+	    case token_mainmenu_option:
+		while ( menu_first[++nr_submenu]->menu_number > imenu )
+		    ;
+		cfg->menu_line = menu_line++;
+		printf( "\tsubmenu $w.config.f %d %d \"%s\" %d\n",
+		    cfg->menu_number, cfg->menu_line, cfg->label, nr_submenu );
+		cfg = menu_last[nr_submenu];
 		break;
 
 	    case token_bool:
 		cfg->menu_line = menu_line++;
 		printf( "\tbool $w.config.f %d %d \"%s\" %s\n",
 		    cfg->menu_number, cfg->menu_line, cfg->label,
-		    cfg->optionname );
+		    vartable[cfg->nameindex].name );
 		break;
 
 	    case token_choice_header:
@@ -819,54 +1206,61 @@ void dump_tk_script( struct kconfig * scfg )
 		 * help text from Documentation/Configure.help.
 		 */
 		cfg->menu_line = menu_line++;
-		printf( "\tglobal %s\n", cfg->optionname );
-		printf( "\tminimenu $w.config.f %d %d \"%s\" %s %s\n",
+		printf( "\tglobal tmpvar_%d\n", -(cfg->nameindex) );
+		printf( "\tminimenu $w.config.f %d %d \"%s\" tmpvar_%d %s\n",
 		    cfg->menu_number, cfg->menu_line, cfg->label,
-		    cfg->optionname, cfg->next->optionname );
+		    -(cfg->nameindex), vartable[cfg->next->nameindex].name );
 		printf( "\tmenu $w.config.f.x%d.x.menu\n", cfg->menu_line );
 		cfg1 = cfg;
 		break;
 
 	    case token_choice_item:
 		/* note: no menu line; uses choice header menu line */
-		printf( "\t$w.config.f.x%d.x.menu add radiobutton -label \"%s\" -variable %s -value \"%s\" -command \"update_menu%d .menu%d.config.f\"\n",
-		    cfg1->menu_line, cfg->label, cfg1->optionname,
-		    cfg->label, cfg1->menu_number, cfg1->menu_number );
+		printf( "\t$w.config.f.x%d.x.menu add radiobutton -label \"%s\" -variable tmpvar_%d -value \"%s\" -command \"update_active\"\n",
+		    cfg1->menu_line, cfg->label, -(cfg1->nameindex),
+		    cfg->label );
+		break;
+
+	    case token_dep_bool:
+		cfg->menu_line = menu_line++;
+		printf( "\tdep_bool $w.config.f %d %d \"%s\" %s\n",
+		    cfg->menu_number, cfg->menu_line, cfg->label,
+		    vartable[cfg->nameindex].name );
 		break;
 
 	    case token_dep_tristate:
 		cfg->menu_line = menu_line++;
-		printf( "\tdep_tristate $w.config.f %d %d \"%s\" %s %s\n",
+		printf( "\tdep_tristate $w.config.f %d %d \"%s\" %s\n",
 		    cfg->menu_number, cfg->menu_line, cfg->label,
-		    cfg->optionname, cfg->depend );
+		    vartable[cfg->nameindex].name );
 		break;
 
 	    case token_hex:
 		cfg->menu_line = menu_line++;
 		printf( "\thex $w.config.f %d %d \"%s\" %s\n",
 		    cfg->menu_number, cfg->menu_line, cfg->label,
-		    cfg->optionname );
+		    vartable[cfg->nameindex].name );
 		break;
 
 	    case token_int:
 		cfg->menu_line = menu_line++;
 		printf( "\tint $w.config.f %d %d \"%s\" %s\n",
 		    cfg->menu_number, cfg->menu_line, cfg->label,
-		    cfg->optionname );
+		    vartable[cfg->nameindex].name );
 		break;
 
 	    case token_string:
 		cfg->menu_line = menu_line++;
 		printf( "\tistring $w.config.f %d %d \"%s\" %s\n",
 		    cfg->menu_number, cfg->menu_line, cfg->label,
-		    cfg->optionname );
+		    vartable[cfg->nameindex].name );
 		break;
 
 	    case token_tristate:
 		cfg->menu_line = menu_line++;
 		printf( "\ttristate $w.config.f %d %d \"%s\" %s\n",
 		    cfg->menu_number, cfg->menu_line, cfg->label,
-		    cfg->optionname );
+		    vartable[cfg->nameindex].name );
 		break;
 	    }
 	}
@@ -875,36 +1269,21 @@ void dump_tk_script( struct kconfig * scfg )
     }
 
     /*
-     * The top level menu also needs an update function.  When we exit a
+     * The top level menu also needs an update function.  When we update a
      * submenu, we may need to disable one or more of the submenus on
      * the top level menu, and this procedure will ensure that things are
      * correct.
      */
-    clear_globalflags( scfg );
-    printf( "proc update_mainmenu {w}  {\n" );
-    for ( cfg = scfg; cfg != NULL; cfg = cfg->next )
+    clear_globalflags();
+    printf( "proc update_mainmenu {}  {\n" );
+    for ( imenu = 1; imenu <= tot_menu_num; imenu++ )
     {
-	if ( cfg->token == token_mainmenu_option && cfg->cond != NULL )
-	    generate_if( cfg, cfg->cond, cfg->menu_number, cfg->menu_line );
+	if ( menu_first[imenu]->cond != NULL && menu_first[imenu]->menu_number == 0 )
+	    generate_if( menu_first[imenu], menu_first[imenu]->cond, imenu, -1 );
     }
     printf( "}\n\n\n" );
 
-#if 0
-    /*
-     * Generate code to set the variables that are "defined".
-     */
-    for ( cfg = config; cfg != NULL; cfg = cfg->next )
-    {
-	if ( cfg->token == token_define_bool )
-	{
-	    if ( cfg->cond != NULL ) 
-		generate_if( cfg, cfg->cond, menu_num, cfg->menu_line );
-	    else
-		printf( "\twrite_define %s %s\n", cfg->optionname, cfg->value );
-	}
-    }
-    #endif
-
+    clear_globalflags();
     /*
      * Generate code to load the default settings into the variables.
      * The script in tail.tk will attempt to load .config,
@@ -919,24 +1298,47 @@ void dump_tk_script( struct kconfig * scfg )
 
 	case token_bool:
 	case token_choice_item:
+	case token_dep_bool:
 	case token_dep_tristate:
 	case token_tristate:
-	    printf( "set %s 0\n", cfg->optionname );
+	    if ( ! vartable[cfg->nameindex].global_written )
+	    {
+		printf( "set %s 0\n", vartable[cfg->nameindex].name );
+		vartable[cfg->nameindex].global_written = 1;
+	    }
 	    break;
 
 	case token_choice_header:
-	    printf( "set %s \"(not set)\"\n", cfg->optionname );
+	    printf( "set tmpvar_%d \"(not set)\"\n", -(cfg->nameindex) );
 	    break;
 
 	case token_hex:
 	case token_int:
-	    printf( "set %s %s\n", cfg->optionname, cfg->value ? cfg->value : "0");
+	    if ( ! vartable[cfg->nameindex].global_written )
+	    {
+		printf( "set %s %s\n", vartable[cfg->nameindex].name, cfg->value ? cfg->value : "0" );
+		vartable[cfg->nameindex].global_written = 1;
+	    }
 	    break;
 
 	case token_string:
-	    printf( "set %s \"%s\"\n", cfg->optionname, cfg->value ? cfg->value : "");
+	    if ( ! vartable[cfg->nameindex].global_written )
+	    {
+		printf( "set %s \"%s\"\n", vartable[cfg->nameindex].name, cfg->value );
+		vartable[cfg->nameindex].global_written = 1;
+	    }
 	    break;
 	}
+    }
+
+    /*
+     * Define to an empty value all other variables (which are never defined)
+     */
+    for ( i = 1; i <= max_varnum; i++ )
+    {
+	if ( ! vartable[i].global_written
+	&&   strncmp( vartable[i].name, "CONSTANT_", 9 ) )
+	    printf( "set %s 4\n", vartable[i].name );
     }
 
     /*
@@ -956,7 +1358,7 @@ void dump_tk_script( struct kconfig * scfg )
     printf( "\tputs $autocfg \" */\"\n" );
     printf( "\tputs $autocfg \"#define AUTOCONF_INCLUDED\"\n" );
 
-    clear_globalflags( scfg );
+    clear_globalflags();
     for ( cfg = scfg; cfg != NULL; cfg = cfg->next )
     {
 	switch ( cfg->token )
@@ -968,6 +1370,11 @@ void dump_tk_script( struct kconfig * scfg )
 	case token_choice_header:
 	case token_comment:
 	case token_define_bool:
+	case token_define_hex:
+	case token_define_int:
+	case token_define_string:
+	case token_define_tristate:
+	case token_dep_bool:
 	case token_dep_tristate:
 	case token_hex:
 	case token_int:
@@ -996,7 +1403,8 @@ void dump_tk_script( struct kconfig * scfg )
 		  cfg1  = cfg1->next )
 	    {
 		printf( "\tglobal %s; set %s 0\n",
-		    cfg1->optionname, cfg1->optionname );
+		    vartable[cfg1->nameindex].name,
+		    vartable[cfg1->nameindex].name );
 	    }
 	}
     }
@@ -1007,41 +1415,22 @@ void dump_tk_script( struct kconfig * scfg )
     {
 	if ( cfg->token == token_choice_header )
 	{
-	    printf( "\tglobal %s\n", cfg->optionname );
+	    printf( "\tglobal tmpvar_%d\n", -(cfg->nameindex) );
+	    printf("\tset tmpvar_%d \"%s\"\n", -(cfg->nameindex), cfg->value);
 	    for ( cfg1  = cfg->next; 
 		  cfg1 != NULL && cfg1->token == token_choice_item;
 		  cfg1  = cfg1->next )
 	    {
-		printf( "\tglobal %s\n", cfg1->optionname );
-		printf( "\tif { $%s == 1 } then { set %s \"%s\" }\n",
-		    cfg1->optionname, cfg->optionname, cfg1->label );
+		printf( "\tglobal %s\n", vartable[cfg1->nameindex].name );
+		printf( "\tif { $%s == 1 } then { set tmpvar_%d \"%s\" }\n",
+		    vartable[cfg1->nameindex].name,
+		    -(cfg->nameindex), cfg1->label );
 	    }
 	}
     }
     printf( "}\n\n\n" );
 
-    printf( "proc update_define { } {\n" );
-    clear_globalflags( scfg );
-    for ( cfg = scfg; cfg != NULL; cfg = cfg->next )
-    {
-	if ( cfg->token == token_define_bool )
-	{
-	    cfg->global_written = 1;
-	    printf( "\tglobal %s\n", cfg->optionname );
-	}
-    }
-
-    for ( cfg = scfg; cfg != NULL; cfg = cfg->next )
-    {
-	if( cfg->token == token_define_bool )
-	{
-	    if ( cfg->cond == NULL )
-		printf( "\tset %s %s\n", cfg->optionname, cfg->value );
-	    else
-		generate_if( cfg, cfg->cond, -1, 0 );
-	}
-    }
-    printf( "}\n\n\n" );
+    generate_update_var( scfg, 0 );
 
     /*
      * That's it.  We are done.  The output of this file will have header.tk

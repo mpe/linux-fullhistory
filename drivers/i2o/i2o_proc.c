@@ -1,7 +1,7 @@
 /*
  *   procfs handler for Linux I2O subsystem
  *
- *   Copyright (c) 1999 Intel Corporation
+ *   Copyright (c) 1999 Deepak Saxena
  *   
  *   Originally written by Deepak Saxena(deepak@plexity.net)
  *
@@ -314,48 +314,17 @@ int i2o_proc_read_hrt(char *buf, char **start, off_t offset, int len,
 		      int *eof, void *data)
 {
 	struct i2o_controller *c = (struct i2o_controller *)data;
-	pi2o_hrt hrt;
-	u32 msg[6];
-	u32 *workspace;
+	pi2o_hrt hrt = (pi2o_hrt)c->hrt;
 	u32 bus;
 	int count;
 	int i;
-	int token;
 
 	spin_lock(&i2o_proc_lock);
 
 	len = 0;
 
-	workspace = kmalloc(2048, GFP_KERNEL);
-	hrt = (pi2o_hrt)workspace;
-	if(workspace==NULL)
-	{
-		len += sprintf(buf, "No free memory for HRT buffer\n");
-		spin_unlock(&i2o_proc_lock);
-		return len;
-	}
-
-	memset(workspace, 0, 2048);
-
-	msg[0]= SIX_WORD_MSG_SIZE| SGL_OFFSET_4;
-	msg[1]= I2O_CMD_HRT_GET<<24 | HOST_TID<<12 | ADAPTER_TID;
-	msg[2]= (u32)proc_context;
-	msg[3]= 0;
-	msg[4]= (0xD0000000 | 2048); 
-	msg[5]= virt_to_phys(workspace); 
-
-	token = i2o_post_wait(c, ADAPTER_TID, msg, 6*4, &i2o_proc_token,2);
-	if(token == I2O_POST_WAIT_TIMEOUT)
-	{
-		kfree(workspace);
-		len += sprintf(buf, "Timeout waiting for HRT\n");
-		spin_unlock(&i2o_proc_lock);
-		return len;
-	}
-
 	if(hrt->hrt_version)
 	{
-		kfree(workspace);
 		len += sprintf(buf+len, 
 			       "HRT table for controller is too new a version.\n");
 		spin_unlock(&i2o_proc_lock);
@@ -366,7 +335,6 @@ int i2o_proc_read_hrt(char *buf, char **start, off_t offset, int len,
 
 	if((count * hrt->entry_len + 8) > 2048) {
 		printk(KERN_WARNING "i2o_proc: HRT does not fit into buffer\n");
-		kfree(workspace);
 		len += sprintf(buf+len,
 			       "HRT table too big to fit in buffer.\n");
 		spin_unlock(&i2o_proc_lock);
@@ -448,8 +416,6 @@ int i2o_proc_read_hrt(char *buf, char **start, off_t offset, int len,
 			len += sprintf(buf+len, "   Unknown Bus Type\n");
 	}
 
-	kfree(workspace);
-
 	spin_unlock(&i2o_proc_lock);
 	
 	return len;
@@ -459,11 +425,8 @@ int i2o_proc_read_lct(char *buf, char **start, off_t offset, int len,
 	int *eof, void *data)
 {
 	struct i2o_controller *c = (struct i2o_controller*)data;
-	u32 msg[8];
-	u32 *workspace;
-	pi2o_lct lct; /* = (pi2o_lct)c->lct; */
+	pi2o_lct lct = (pi2o_lct)c->lct;
 	int entries;
-	int token;
 	int i;
 
 #define BUS_TABLE_SIZE 3
@@ -477,35 +440,6 @@ int i2o_proc_read_lct(char *buf, char **start, off_t offset, int len,
 	spin_lock(&i2o_proc_lock);
 
 	len = 0;
-
-	workspace = kmalloc(8192, GFP_KERNEL);
-	lct = (pi2o_lct)workspace;
-	if(workspace==NULL)
-	{
-		len += sprintf(buf, "No free memory for LCT buffer\n");
-		spin_unlock(&i2o_proc_lock);
-		return len;
-	}
-
-	memset(workspace, 0, 8192);
-
-	msg[0] = FOUR_WORD_MSG_SIZE|SGL_OFFSET_6;
-	msg[1] = I2O_CMD_LCT_NOTIFY<<24 | HOST_TID<<12 | ADAPTER_TID;
-	msg[2] = (u32)proc_context;
-	msg[3] = 0;
-	msg[4] = 0xFFFFFFFF; /* All devices */
-	msg[5] = 0x00000000; /* Report now */
-	msg[6] = 0xD0000000|8192;
-	msg[7] = virt_to_bus(workspace);
-
-	token = i2o_post_wait(c, ADAPTER_TID, msg, 8*4, &i2o_proc_token,2);
-	if(token == I2O_POST_WAIT_TIMEOUT)
-	{
-		kfree(workspace);
-		len += sprintf(buf, "Timeout waiting for LCT\n");
-		spin_unlock(&i2o_proc_lock);
-		return len;
-	}
 
 	entries = (lct->table_size - 3)/9;
 
@@ -618,7 +552,6 @@ int i2o_proc_read_lct(char *buf, char **start, off_t offset, int len,
 				lct->lct_entry[i].device_flags);
 	}
 
-	kfree(workspace);
 	spin_unlock(&i2o_proc_lock);
 	
 	return len;
@@ -986,8 +919,8 @@ int i2o_proc_read_ddm_table(char *buf, char **start, off_t offset, int len,
 			len += sprintf(buf+len, "                ");
 		}
 
-		len += sprintf(buf+len, "%-0#7x", ddm_table.i2o_vendor_id);
-		len += sprintf(buf+len, "%-0#7x", ddm_table.module_id);
+		len += sprintf(buf+len, "%0#7x", ddm_table.i2o_vendor_id);
+		len += sprintf(buf+len, "%0#7x", ddm_table.module_id);
 		len += sprintf(buf+len, "%-25s", chtostr(ddm_table.module_name, 24));
 		len += sprintf(buf+len, "%-6s", chtostr(ddm_table.module_version,4));
 		len += sprintf(buf+len, "%8d  ", ddm_table.data_size);
@@ -1123,8 +1056,8 @@ int i2o_proc_read_dst(char *buf, char **start, off_t offset, int len,
 			len += sprintf(buf+len, "%-d", dst.module_state);
 #endif
 
-		len += sprintf(buf+len, "%-0#7x", dst.i2o_vendor_id);
-		len += sprintf(buf+len, "%-0#8x", dst.module_id);
+		len += sprintf(buf+len, "%#7x", dst.i2o_vendor_id);
+		len += sprintf(buf+len, "%#8x", dst.module_id);
 		len += sprintf(buf+len, "%-29s", chtostr(dst.module_name_version,28));
 		len += sprintf(buf+len, "%-9s", chtostr(dst.date,8));
 		len += sprintf(buf+len, "%8d ", dst.module_size);
@@ -1198,7 +1131,7 @@ int i2o_proc_read_groups(char *buf, char **start, off_t offset, int len,
 	{
 		len += sprintf(buf+len, "%-3d", i);
 
-		len += sprintf(buf+len, "%-0#6x ", group[0]);
+		len += sprintf(buf+len, "%#6x ", group[0]);
 		len += sprintf(buf+len, "%10d ", group[1]);
 		len += sprintf(buf+len, "%8d ", group[2]);
 
@@ -1928,8 +1861,8 @@ int i2o_proc_read_lan_dev_info(char *buf, char **start, off_t offset, int len,
 		       work8[16],work8[17],work8[18],work8[19],
 		       work8[20],work8[21],work8[22],work8[23]);
 
-	len += sprintf(buf+len, "Max Tx wire speed   : %d bps\n", work64[3]);
-	len += sprintf(buf+len, "Max Rx wire speed   : %d bps\n", work64[4]);
+	len += sprintf(buf+len, "Max Tx wire speed   : %d bps\n", (int)work64[3]);
+	len += sprintf(buf+len, "Max Rx wire speed   : %d bps\n", (int)work64[4]);
 
 	len += sprintf(buf+len, "Min SDU packet size : 0x%08x\n", work32[10]);
 	len += sprintf(buf+len, "Max SDU packet size : 0x%08x\n", work32[11]);
@@ -2232,8 +2165,8 @@ int i2o_proc_read_lan_media_operation(char *buf, char **start, off_t offset,
 	len += sprintf(buf+len, "Connection type        : %s\n",
 		       i2o_get_connection_type(work32[1]));
 
-	len += sprintf(buf+len, "Current Tx wire speed  : %d bps\n", work64[1]);
-	len += sprintf(buf+len, "Current Rx wire speed  : %d bps\n", work64[2]);
+	len += sprintf(buf+len, "Current Tx wire speed  : %d bps\n", (int)work64[1]);
+	len += sprintf(buf+len, "Current Rx wire speed  : %d bps\n", (int)work64[2]);
 
 	len += sprintf(buf+len, "Duplex mode            : %s duplex\n", 
 			(work8[24]&1)?"Full":"Half");
@@ -3046,9 +2979,6 @@ static int destroy_i2o_procfs(void)
 	struct i2o_controller *pctrl = NULL;
 	int i;
 
-	if(!i2o_find_controller(0))
-		return -1;
-	
 	for(i = 0; i < MAX_I2O_CONTROLLERS; i++)
 	{
 		pctrl = i2o_find_controller(i);
@@ -3057,7 +2987,7 @@ static int destroy_i2o_procfs(void)
 			i2o_proc_remove_controller(pctrl, i2o_proc_dir_root);
 			i2o_unlock_controller(pctrl);
 		}
-	};
+	}
 
 	if(!i2o_proc_dir_root->count)
 		remove_proc_entry("i2o", 0);
@@ -3071,7 +3001,7 @@ static int destroy_i2o_procfs(void)
 #define i2o_proc_init init_module
 #endif
 
-__init int i2o_proc_init(void)
+int __init i2o_proc_init(void)
 {
 	if(create_i2o_procfs())
 		return -EBUSY;

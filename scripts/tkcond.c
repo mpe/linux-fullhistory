@@ -14,6 +14,12 @@
  *   every architecture and comparing it character-for-character against
  *   the output of the old tkparse.
  *
+ * 07 July 1999, Andrzej M. Krzysztofowicz <ankry@mif.pg.gda.pl>
+ * - kvariables removed; all variables are stored in a single table now
+ * - some elimination of options non-valid for current architecture
+ *   implemented.
+ * - negation (!) eliminated from conditions
+ *
  * TO DO:
  * - xconfig is at the end of its life cycle.  Contact <mec@shout.net> if
  *   you are interested in working on the replacement.
@@ -28,73 +34,88 @@
 
 
 /*
- * Transform op_variable to op_kvariable.
- *
- * This works, but it's gross, speed-wise.  It would benefit greatly
- * from a simple hash table that maps names to cfg.
- *
- * Note well: this is actually better than the loop structure xconfig
- * has been staggering along with for three years, which performs
- * this whole procedure inside *another* loop on active conditionals.
+ * Mark variables which are defined anywhere.
  */
-void transform_to_kvariable( struct kconfig * scfg )
+static void mark_variables( struct kconfig * scfg )
 {
     struct kconfig * cfg;
+    int i;
 
+    for ( i = 1; i <= max_varnum; i++ )
+	vartable[i].defined = 0;
     for ( cfg = scfg; cfg != NULL; cfg = cfg->next )
     {
-	struct condition * cond;
-
-	for ( cond = cfg->cond; cond != NULL; cond = cond->next )
+	if ( cfg->token == token_bool
+	||   cfg->token == token_choice_item
+	||   cfg->token == token_define_bool
+	||   cfg->token == token_define_hex
+	||   cfg->token == token_define_int
+	||   cfg->token == token_define_string
+	||   cfg->token == token_define_tristate
+	||   cfg->token == token_dep_bool
+	||   cfg->token == token_dep_tristate
+	||   cfg->token == token_hex
+	||   cfg->token == token_int
+	||   cfg->token == token_string
+	||   cfg->token == token_tristate
+	||   cfg->token == token_unset )
 	{
-	    if ( cond->op == op_variable )
+	    if ( cfg->nameindex > 0 )	/* paranoid */
 	    {
-		/* Here's where it gets DISGUSTING. */
-		struct kconfig * cfg1;
-
-		for ( cfg1 = scfg; cfg1 != NULL; cfg1 = cfg1->next )
-		{
-		    if ( cfg1->token == token_bool
-		    ||   cfg1->token == token_choice_item
-		    ||   cfg1->token == token_dep_tristate
-		    ||   cfg1->token == token_hex
-		    ||   cfg1->token == token_int
-		    ||   cfg1->token == token_string
-		    ||   cfg1->token == token_tristate )
-		    {
-			if ( strcmp( cond->str, cfg1->optionname ) == 0 )
-			{
-			    cond->op  = op_kvariable;
-			    cond->str = NULL;
-			    cond->cfg = cfg1;
-			    break;
-			}
-		    }
-		}
+		vartable[cfg->nameindex].defined = 1;
 	    }
-
-#if 0
-	    /*
-	     * Maybe someday this will be useful, but right now it
-	     * gives a lot of false positives on files like
-	     * drivers/video/Config.in that are meant for more
-	     * than one architecture.  Turn it on if you want to play
-	     * with it though; it does work.  -- mec
-	     */
-	    if ( cond->op == op_variable )
-	    {
-		if ( strcmp( cond->str, "ARCH"       ) != 0
-		&&   strcmp( cond->str, "CONSTANT_Y" ) != 0
-		&&   strcmp( cond->str, "CONSTANT_M" ) != 0
-		&&   strcmp( cond->str, "CONSTANT_N" ) != 0 )
-		{
-		    fprintf( stderr, "warning: $%s used but not defined\n",
-			cond->str );
-		}
-	    }
-#endif
 	}
     }
+}
+
+
+
+static void free_cond( struct condition *cond )
+{
+    struct condition *tmp, *tmp1;
+    for ( tmp = cond; tmp; tmp = tmp1 )
+    {
+	tmp1 = tmp->next;
+	free( (void*)tmp );
+    }
+}
+
+
+
+/*
+ * Remove the bang operator from a condition to avoid priority problems.
+ * "!" has different priorities as "test" command argument and in 
+ * a tk script.
+ */
+static struct condition * remove_bang( struct condition * condition )
+{
+    struct condition * conda, * condb, * prev = NULL;
+
+    for ( conda = condition; conda; conda = conda->next )
+    {
+	if ( conda->op == op_bang && conda->next &&
+	   ( condb = conda->next->next ) )
+	{
+	    if ( condb->op == op_eq || condb->op == op_neq )
+	    {
+		condb->op = (condb->op == op_eq) ? op_neq : op_eq;
+		conda->op = op_nuked;
+		if ( prev )
+		{
+		    prev->next = conda->next;
+		}
+		else
+		{
+		    condition = conda->next;
+		}
+		conda->next = NULL;
+		free_cond( conda );
+		conda = condb;
+	    }
+	}
+	prev = conda;
+    }
+    return condition;
 }
 
 
@@ -103,27 +124,65 @@ void transform_to_kvariable( struct kconfig * scfg )
  * Make a new condition chain by joining the current condition stack with
  * the "&&" operator for glue.
  */
-struct condition * join_condition_stack( struct condition * conditions [],
+static struct condition * join_condition_stack( struct condition * conditions [],
     int depth )
 {
     struct condition * cond_list;
     struct condition * cond_last;
-    int i;
+    int i, is_first = 1;
 
     cond_list = cond_last = NULL;
+
+    for ( i = 0; i < depth; i++ )
+    {
+	if ( conditions[i]->op == op_false )
+	{
+	    struct condition * cnew;
+
+	    /* It is always false condition */
+	    cnew = malloc( sizeof(*cnew) );
+	    memset( cnew, 0, sizeof(*cnew) );
+	    cnew->op = op_false;
+	    cond_list = cond_last = cnew;
+	    goto join_done;
+	}
+    }
     for ( i = 0; i < depth; i++ )
     {
 	struct condition * cond;
 	struct condition * cnew;
+	int add_paren;
 
-	/* add a '(' */
-	cnew = malloc( sizeof(*cnew) );
-	memset( cnew, 0, sizeof(*cnew) );
-	cnew->op = op_lparen;
-	if ( cond_last == NULL )
-	    { cond_list = cond_last = cnew; }
+	/* omit always true conditions */
+	if ( conditions[i]->op == op_true )
+	    continue;
+
+	/* if i have another condition, add an '&&' operator */
+	if ( !is_first )
+	{
+	    cnew = malloc( sizeof(*cnew) );
+	    memset( cnew, 0, sizeof(*cnew) );
+	    cnew->op = op_and;
+	    cond_last->next = cnew;
+	    cond_last = cnew;
+	}
+
+	if ( conditions[i]->op != op_lparen )
+	{
+	    /* add a '(' */
+	    add_paren = 1;
+	    cnew = malloc( sizeof(*cnew) );
+	    memset( cnew, 0, sizeof(*cnew) );
+	    cnew->op = op_lparen;
+	    if ( cond_last == NULL )
+		{ cond_list = cond_last = cnew; }
+	    else
+		{ cond_last->next = cnew; cond_last = cnew; }
+	}
 	else
-	    { cond_last->next = cnew; cond_last = cnew; }
+	{
+	    add_paren = 0;
+	}
 
 	/* duplicate the chain */
 	for ( cond = conditions [i]; cond != NULL; cond = cond->next )
@@ -132,27 +191,23 @@ struct condition * join_condition_stack( struct condition * conditions [],
 	    cnew->next      = NULL;
 	    cnew->op        = cond->op;
 	    cnew->str       = cond->str ? strdup( cond->str ) : NULL;
-	    cnew->cfg       = cond->cfg;
-	    cond_last->next = cnew;
-	    cond_last       = cnew;
+	    cnew->nameindex = cond->nameindex;
+	    if ( cond_last == NULL )
+		{ cond_list = cond_last = cnew; }
+	    else
+		{ cond_last->next = cnew; cond_last = cnew; }
 	}
 
-	/* add a ')' */
-	cnew = malloc( sizeof(*cnew) );
-	memset( cnew, 0, sizeof(*cnew) );
-	cnew->op = op_rparen;
-	cond_last->next = cnew;
-	cond_last = cnew;
-
-	/* if i have another condition, add an '&&' operator */
-	if ( i < depth - 1 )
+	if ( add_paren )
 	{
+	    /* add a ')' */
 	    cnew = malloc( sizeof(*cnew) );
 	    memset( cnew, 0, sizeof(*cnew) );
-	    cnew->op = op_and;
+	    cnew->op = op_rparen;
 	    cond_last->next = cnew;
 	    cond_last = cnew;
 	}
+	is_first = 0;
     }
 
     /*
@@ -171,7 +226,7 @@ struct condition * join_condition_stack( struct condition * conditions [],
 		cond1e = cond1d->next; if ( cond1e == NULL ) break;
 		cond1f = cond1e->next; if ( cond1f == NULL ) break;
 
-		if ( cond1b->op == op_kvariable
+		if ( cond1b->op == op_variable
 		&& ( cond1c->op == op_eq || cond1c->op == op_neq )
 		&&   cond1d->op == op_constant 
 		&&   cond1e->op == op_rparen )
@@ -189,8 +244,8 @@ struct condition * join_condition_stack( struct condition * conditions [],
 			    cond2f = cond2e->next;
 
 			    /* look for match */
-			    if ( cond2b->op == op_kvariable
-			    &&   cond2b->cfg == cond1b->cfg
+			    if ( cond2b->op == op_variable
+			    &&   cond2b->nameindex == cond1b->nameindex
 			    &&   cond2c->op == cond1c->op
 			    &&   cond2d->op == op_constant
 			    &&   strcmp( cond2d->str, cond1d->str ) == 0
@@ -219,7 +274,144 @@ struct condition * join_condition_stack( struct condition * conditions [],
 	}
     }
 
+join_done:
     return cond_list;
+}
+
+
+
+static char * current_arch = NULL;
+
+/*
+ * Eliminating conditions with ARCH = <not current>.
+ */
+static struct condition *eliminate_other_arch( struct condition *list )
+{
+    struct condition *cond1a = list, *cond1b = NULL, *cond1c = NULL, *cond1d = NULL;
+    if ( current_arch == NULL )
+	current_arch = getenv( "ARCH" );
+    if ( current_arch == NULL )
+    {
+	fprintf( stderr, "error: ARCH undefined\n" );
+	exit( 1 );
+    }
+    if ( cond1a->op == op_variable
+    && ! strcmp( vartable[cond1a->nameindex].name, "ARCH" ) )
+    {
+	cond1b = cond1a->next; if ( cond1b == NULL ) goto done;
+	cond1c = cond1b->next; if ( cond1c == NULL ) goto done;
+	cond1d = cond1c->next;
+	if ( cond1c->op == op_constant && cond1d == NULL )
+	{
+	    if ( (cond1b->op == op_eq && strcmp( cond1c->str, current_arch ))
+	    ||   (cond1b->op == op_neq && ! strcmp( cond1c->str, current_arch )) )
+	    {
+		/* This is for another architecture */ 
+		cond1a->op = op_false;
+		cond1a->next = NULL;
+		free_cond( cond1b );
+		return cond1a;
+	    }
+	    else if ( (cond1b->op == op_neq && strcmp( cond1c->str, current_arch ))
+		 ||   (cond1b->op == op_eq && ! strcmp( cond1c->str, current_arch )) )
+	    {
+		/* This is for current architecture */
+		cond1a->op = op_true;
+		cond1a->next = NULL;
+		free_cond( cond1b );
+		return cond1a;
+	    }
+	}
+	else if ( cond1c->op == op_constant && cond1d->op == op_or )
+	{
+	    if ( (cond1b->op == op_eq && strcmp( cond1c->str, current_arch ))
+	    ||   (cond1b->op == op_neq && ! strcmp( cond1c->str, current_arch )) )
+	    {
+		/* This is for another architecture */ 
+		cond1b = cond1d->next;
+		cond1d->next = NULL;
+		free_cond( cond1a );
+		return eliminate_other_arch( cond1b );
+	    }
+	    else if ( (cond1b->op == op_neq && strcmp( cond1c->str, current_arch ))
+		 || (cond1b->op == op_eq && ! strcmp( cond1c->str, current_arch )) )
+	    {
+		/* This is for current architecture */
+		cond1a->op = op_true;
+		cond1a->next = NULL;
+		free_cond( cond1b );
+		return cond1a;
+	    }
+	}
+	else if ( cond1c->op == op_constant && cond1d->op == op_and )
+	{
+	    if ( (cond1b->op == op_eq && strcmp( cond1c->str, current_arch ))
+	    ||   (cond1b->op == op_neq && ! strcmp( cond1c->str, current_arch )) )
+	    {
+		/* This is for another architecture */
+		int l_par = 0;
+		
+		for ( cond1c = cond1d->next; cond1c; cond1c = cond1c->next )
+		{
+		    if ( cond1c->op == op_lparen )
+			l_par++;
+		    else if ( cond1c->op == op_rparen )
+			l_par--;
+		    else if ( cond1c->op == op_or && l_par == 0 )
+		    /* Expression too complex - don't touch */
+			return cond1a;
+		    else if ( l_par < 0 )
+		    {
+			fprintf( stderr, "incorrect condition: programming error ?\n" );
+			exit( 1 );
+		    }
+		}
+		cond1a->op = op_false;
+		cond1a->next = NULL;
+		free_cond( cond1b );
+		return cond1a;
+	    }
+	    else if ( (cond1b->op == op_neq && strcmp( cond1c->str, current_arch ))
+		 || (cond1b->op == op_eq && ! strcmp( cond1c->str, current_arch )) )
+	    {
+		/* This is for current architecture */
+		cond1b = cond1d->next;
+		cond1d->next = NULL;
+		free_cond( cond1a );
+		return eliminate_other_arch( cond1b );
+	    }
+	}
+    }
+    if ( cond1a->op == op_variable && ! vartable[cond1a->nameindex].defined )
+    {
+	cond1b = cond1a->next; if ( cond1b == NULL ) goto done;
+	cond1c = cond1b->next; if ( cond1c == NULL ) goto done;
+	cond1d = cond1c->next;
+
+	if ( cond1c->op == op_constant
+	&& ( cond1d == NULL || cond1d->op == op_and ) ) /*???*/
+	{
+	    if ( cond1b->op == op_eq && strcmp( cond1c->str, "" ) )
+	    {
+		cond1a->op = op_false;
+		cond1a->next = NULL;
+		free_cond( cond1b );
+		return cond1a;
+	    }
+	}
+	else if ( cond1c->op == op_constant && cond1d->op == op_or )
+	{
+	    if ( cond1b->op == op_eq && strcmp( cond1c->str, "" ) )
+	    {
+		cond1b = cond1d->next;
+		cond1d->next = NULL;
+		free_cond( cond1a );
+		return eliminate_other_arch( cond1b );
+	    }
+	}
+    }
+done:
+    return list;
 }
 
 
@@ -234,49 +426,7 @@ void fix_conditionals( struct kconfig * scfg )
     /*
      * Transform op_variable to op_kvariable.
      */
-    transform_to_kvariable( scfg );
-
-    /*
-     * Transform conditions that use variables from "choice" statements.
-     * Choice values appear to the user as a collection of booleans, and the
-     * script can test the individual booleans.  But internally, all I have is
-     * the N-way value of an unnamed temporary for the whole statement.  So I
-     * have to tranform '"$CONFIG_M386" != "y"'
-     * into '"$tmpvar_N" != "CONFIG_M386"'.
-     */
-    for ( cfg = scfg; cfg != NULL; cfg = cfg->next )
-    {
-	struct condition * cond;
-
-	for ( cond = cfg->cond; cond != NULL; cond = cond->next )
-	{
-	    if ( cond->op == op_kvariable && cond->cfg->token == token_choice_item )
-	    {
-		/*
-		 * Look two more tokens down for the comparison token.
-		 * It has to be "y" for this trick to work.
-		 *
-		 * If you get this error, don't even think about relaxing the
-		 * strcmp test.  You will produce incorrect TK code.  Instead,
-		 * look for the place in your Config.in script where you are
-		 * comparing a 'choice' variable to a value other than 'y',
-		 * and rewrite the comparison to be '= "y"' or '!= "y"'.
-		 */
-		struct condition * cond2 = cond->next->next;
-		const char * label;
-
-		if ( strcmp( cond2->str, "y" ) != 0 )
-		{
-		    fprintf( stderr, "tkparse choked in fix_choice_cond\n" );
-		    exit( 1 );
-		}
-
-		label = cond->cfg->label;
-		cond->cfg  = cond->cfg->cfg_parent;
-		cond2->str = strdup( label );
-	    }
-	}
-    }
+    mark_variables( scfg );
 
     /*
      * Walk the statement list, maintaining a stack of current conditions.
@@ -290,16 +440,19 @@ void fix_conditionals( struct kconfig * scfg )
     {
 	struct condition * cond_stack [32];
 	int depth = 0;
+	struct kconfig * prev = NULL;
 
 	for ( cfg = scfg; cfg != NULL; cfg = cfg->next )
 	{
+	    int good = 1;
 	    switch ( cfg->token )
 	    {
 	    default:
 		break;
 
 	    case token_if:
-		cond_stack [depth++] = cfg->cond;
+		cond_stack [depth++] =
+		    remove_bang( eliminate_other_arch( cfg->cond ) );
 		cfg->cond = NULL;
 		break;
 
@@ -325,6 +478,8 @@ void fix_conditionals( struct kconfig * scfg )
 			case op_or:  cond->op = op_and1; break;
 			case op_neq: cond->op = op_eq;   break;
 			case op_eq:  cond->op = op_neq;  break;
+			case op_true: cond->op = op_false;break;
+			case op_false:cond->op = op_true; break;
 			}
 		    }
 		}
@@ -336,25 +491,109 @@ void fix_conditionals( struct kconfig * scfg )
 
 	    case token_bool:
 	    case token_choice_item:
+	    case token_choice_header:
 	    case token_comment:
 	    case token_define_bool:
+	    case token_define_hex:
+	    case token_define_int:
+	    case token_define_string:
+	    case token_define_tristate:
 	    case token_hex:
 	    case token_int:
 	    case token_mainmenu_option:
 	    case token_string:
 	    case token_tristate:
+	    case token_unset:
 		cfg->cond = join_condition_stack( cond_stack, depth );
+		if ( cfg->cond && cfg->cond->op == op_false )
+		{
+		    good = 0;
+		    if ( prev )
+			prev->next = cfg->next;
+		    else
+			scfg = cfg->next;
+		}
 		break;
 
+	    case token_dep_bool:
 	    case token_dep_tristate:
 		/*
 		 * Same as the other simple statements, plus an additional
 		 * condition for the dependency.
 		 */
-		cond_stack [depth] = cfg->cond;
-		cfg->cond = join_condition_stack( cond_stack, depth+1 );
+		if ( cfg->cond )
+		{
+		    cond_stack [depth] = eliminate_other_arch( cfg->cond );
+		    cfg->cond = join_condition_stack( cond_stack, depth+1 );
+		}
+		else
+		{
+		    cfg->cond = join_condition_stack( cond_stack, depth );
+		}
+		if ( cfg->cond && cfg->cond->op == op_false )
+		{
+		    good = 0;
+		    if ( prev )
+			prev->next = cfg->next;
+		    else
+			scfg = cfg->next;
+		}
 		break;
 	    }
+	    if ( good )
+		prev = cfg;
 	}
     }
 }
+
+
+
+#if 0
+void dump_condition( struct condition *list )
+{
+    struct condition *tmp;
+    for ( tmp = list; tmp; tmp = tmp->next )
+    {
+	switch (tmp->op)
+	{
+	default:
+	    break;
+	case op_variable:
+	    printf( " %s", vartable[tmp->nameindex].name );
+	    break;
+	case op_constant: 
+	    printf( " %s", tmp->str );
+	    break;
+	case op_eq:
+	    printf( " =" );
+	    break;
+	case op_bang:
+	    printf( " !" );
+	    break;
+	case op_neq:
+	    printf( " !=" );
+	    break;
+	case op_and:
+	case op_and1:
+	    printf( " -a" );
+	    break;
+	case op_or:
+	    printf( " -o" );
+	    break;
+	case op_true:
+	    printf( " TRUE" );
+	    break;
+	case op_false:
+	    printf( " FALSE" );
+	    break;
+	case op_lparen:
+	    printf( " (" );
+	    break;
+	case op_rparen:
+	    printf( " )" );
+	    break;
+	}
+    }
+    printf( "\n" );
+}
+#endif

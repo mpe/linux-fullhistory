@@ -62,6 +62,8 @@
  */
 
 #define FAST_READ2_IO()    \
+({ \
+int __dummy_1,__dummy_2; \
    __asm__ __volatile__ ("\n \
    cld                    \n \
    orl %%ecx, %%ecx       \n \
@@ -69,11 +71,14 @@
    rep                    \n \
    insw (%%dx),%%es:(%%edi) \n \
 1: "                       \
-   : "=D" (sp)                   /* output */   \
-   : "d" (f), "D" (sp), "c" (i)  /* input */    \
-   : "edx", "ecx", "edi" )       /* trashed */
+   : "=D" (sp) ,"=c" (__dummy_1) ,"=d" (__dummy_2)  /* output */   \
+   : "2" (f), "0" (sp), "1" (i)  /* input */    \
+   );       /* trashed */ \
+})
 
 #define FAST_WRITE2_IO()   \
+({ \
+int __dummy_1,__dummy_2; \
    __asm__ __volatile__ ("\n \
    cld                    \n \
    orl %%ecx, %%ecx       \n \
@@ -81,10 +86,10 @@
    rep                    \n \
    outsw %%ds:(%%esi),(%%dx) \n \
 1: "                       \
-   : "=S" (sp)                   /* output */   \
-   : "d" (f), "S" (sp), "c" (i)  /* input */    \
-   : "edx", "ecx", "esi" )       /* trashed */
-
+   : "=S" (sp) ,"=c" (__dummy_1) ,"=d" (__dummy_2)/* output */   \
+   : "2" (f), "0" (sp), "1" (i)  /* input */    \
+   );       /* trashed */ \
+})
 
 /* IN2000 io_port offsets */
 #define IO_WD_ASR       0x00     /* R - 3393 auxstat reg */

@@ -2,9 +2,9 @@
 
     A PCMCIA ethernet driver for the 3com 3c589 card.
     
-    Copyright (C) 1998 David A. Hinds -- dhinds@hyper.stanford.edu
+    Copyright (C) 1999 David A. Hinds -- dhinds@hyper.stanford.edu
 
-    3c589_cs.c 1.126 1999/06/14 17:35:34
+    3c589_cs.c 1.134 1999/09/15 15:33:09
 
     The network driver code is based on Donald Becker's 3c589 code:
     
@@ -18,6 +18,7 @@
 ======================================================================*/
 
 #include <linux/module.h>
+#include <linux/init.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/ptrace.h>
@@ -53,8 +54,9 @@
 #define EL3_TIMER	0x0a
 #define EL3_CMD		0x0e
 #define EL3_STATUS	0x0e
-#define ID_PORT		0x100
-#define	EEPROM_READ	0x80
+
+#define EEPROM_READ	0x0080
+#define EEPROM_BUSY	0x8000
 
 #define EL3WINDOW(win_num) outw(SelectWindow + (win_num), ioaddr + EL3_CMD)
 
@@ -113,7 +115,7 @@ static int pc_debug = PCMCIA_DEBUG;
 MODULE_PARM(pc_debug, "i");
 #define DEBUG(n, args...) if (pc_debug>(n)) printk(KERN_DEBUG args)
 static char *version =
-"3c589_cs.c 1.126 1999/06/14 17:35:34 (David Hinds)";
+"3c589_cs.c 1.134 1999/09/15 15:33:09 (David Hinds)";
 #else
 #define DEBUG(n, args...)
 #endif
@@ -329,10 +331,10 @@ static void tc589_detach(dev_link_t *link)
 	if (link->dev != NULL)
 	    unregister_netdev(dev);
 	if (dev->priv)
-	    kfree_s(dev->priv, sizeof(struct el3_private));
-	kfree_s(link->priv, sizeof(struct net_device));
+	    kfree(dev->priv);
+	kfree(link->priv);
     }
-    kfree_s(link, sizeof(struct dev_link_t));
+    kfree(link);
     
 } /* tc589_detach */
 
@@ -444,14 +446,15 @@ static void tc589_config(dev_link_t *link)
     else
 	printk(KERN_NOTICE "3c589_cs: invalid if_port requested\n");
     
-    printk(KERN_INFO "%s: 3Com 3c%s, io %#3lx, irq %d, %s xcvr, "
-	   "hw_addr ", dev->name, (multi ? "562" : "589"),
-	   dev->base_addr, dev->irq, if_names[dev->if_port]);
+    printk(KERN_INFO "%s: 3Com 3c%s, io %#3lx, irq %d, hw_addr ",
+	   dev->name, (multi ? "562" : "589"), dev->base_addr,
+	   dev->irq);
     for (i = 0; i < 6; i++)
 	printk("%02X%s", dev->dev_addr[i], ((i<5) ? ":" : "\n"));
     i = inl(ioaddr);
-    printk(KERN_INFO "  %dK FIFO split %s Rx:Tx\n",
-	   (i & 7) ? 32 : 8, ram_split[(i >> 16) & 3]);
+    printk(KERN_INFO "  %dK FIFO split %s Rx:Tx, %s xcvr\n",
+	   (i & 7) ? 32 : 8, ram_split[(i >> 16) & 3],
+	   if_names[dev->if_port]);
     return;
 
 cs_failed:
@@ -513,7 +516,7 @@ static int tc589_event(event_t event, int priority,
 	link->state &= ~DEV_PRESENT;
 	if (link->state & DEV_CONFIG) {
 	    dev->tbusy = 1; dev->start = 0;
-	    link->release.expires = jiffies + (HZ/20);
+	    link->release.expires = jiffies + HZ/20;
 	    add_timer(&link->release);
 	}
 	break;
@@ -574,7 +577,7 @@ static ushort read_eeprom(short ioaddr, int index)
     outw(EEPROM_READ + index, ioaddr + 10);
     /* Reading the eeprom takes 162 us */
     for (i = 1620; i >= 0; i--)
-	if ((inw(ioaddr + 10) & 0x8000) == 0)
+	if ((inw(ioaddr + 10) & EEPROM_BUSY) == 0)
 	    break;
     return inw(ioaddr + 12);
 }
@@ -600,8 +603,10 @@ static void tc589_set_xcvr(struct net_device *dev, int if_port)
     EL3WINDOW(4);
     outw(MEDIA_LED | ((if_port < 2) ? MEDIA_TP : 0), ioaddr + WN4_MEDIA);
     EL3WINDOW(1);
-    lp->media_status = (if_port < 2) ? 0x8800 : 0x4800;
-    lp->last_irq = jiffies;
+    if (if_port == 2)
+	lp->media_status = ((dev->if_port == 0) ? 0x8000 : 0x4000);
+    else
+	lp->media_status = ((dev->if_port == 0) ? 0x4010 : 0x8800);
 }
 
 static void dump_status(struct net_device *dev)
@@ -898,7 +903,7 @@ static void media_check(u_long arg)
     }
     if (lp->fast_poll) {
 	lp->fast_poll--;
-	lp->media.expires = jiffies + 2;
+	lp->media.expires = jiffies + 1;
 	add_timer(&lp->media);
 	return;
     }
@@ -918,8 +923,9 @@ static void media_check(u_long arg)
 	errs = inb(ioaddr + 0);
 	outw(StatsEnable, ioaddr + EL3_CMD);
 	lp->stats.tx_carrier_errors += errs;
-	if (errs) media |= 0x0010;
+	if (errs || (lp->media_status & 0x0010)) media |= 0x0010;
     }
+
     if (media != lp->media_status) {
 	if ((media & lp->media_status & 0x8000) &&
 	    ((lp->media_status ^ media) & 0x0800))
@@ -927,8 +933,8 @@ static void media_check(u_long arg)
 		   (lp->media_status & 0x0800 ? "lost" : "found"));
 	else if ((media & lp->media_status & 0x4000) &&
 		 ((lp->media_status ^ media) & 0x0010))
-	    printk(KERN_INFO "%s: cable %s\n", dev->name,
-		   (lp->media_status & 0x0010 ? "fixed" : "problem"));
+	    printk(KERN_INFO "%s: coax cable %s\n", dev->name,
+		   (lp->media_status & 0x0010 ? "ok" : "problem"));
 	if (dev->if_port == 0) {
 	    if (media & 0x8000) {
 		if (media & 0x0800)
@@ -936,8 +942,7 @@ static void media_check(u_long arg)
 			   dev->name);
 		else
 		    tc589_set_xcvr(dev, 2);
-	    }
-	    if (media & 0x4000) {
+	    } else if (media & 0x4000) {
 		if (media & 0x0010)
 		    tc589_set_xcvr(dev, 1);
 		else
@@ -1147,7 +1152,7 @@ static int el3_close(struct net_device *dev)
 
 /*====================================================================*/
 
-int init_3c589_cs(void)
+static int __init init_3c589_cs(void)
 {
     servinfo_t serv;
     DEBUG(0, "%s\n", version);
@@ -1157,21 +1162,17 @@ int init_3c589_cs(void)
 	       "does not match!\n");
 	return -1;
     }
-    register_pcmcia_driver(&dev_info, &tc589_attach, &tc589_detach);
+    register_pccard_driver(&dev_info, &tc589_attach, &tc589_detach);
     return 0;
 }
 
-#ifdef MODULE
-int init_module(void)
-{
-	return init_3c589_cs();
-}
-
-void cleanup_module(void)
+static void __exit exit_3c589_cs(void)
 {
     DEBUG(0, "3c589_cs: unloading\n");
-    unregister_pcmcia_driver(&dev_info);
+    unregister_pccard_driver(&dev_info);
     while (dev_list != NULL)
 	tc589_detach(dev_list);
 }
-#endif
+
+module_init(init_3c589_cs);
+module_exit(exit_3c589_cs);

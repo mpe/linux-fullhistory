@@ -2,7 +2,7 @@
 
     Cardbus device enabler
 
-    cb_enabler.c 1.21 1999/08/28 04:01:45
+    cb_enabler.c 1.23 1999/09/15 15:32:19
 
     The contents of this file are subject to the Mozilla Public
     License Version 1.1 (the "License"); you may not use this file
@@ -40,6 +40,7 @@
 ======================================================================*/
 
 #include <linux/module.h>
+#include <linux/init.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/malloc.h>
@@ -57,7 +58,7 @@ static int pc_debug = PCMCIA_DEBUG;
 MODULE_PARM(pc_debug, "i");
 #define DEBUG(n, args...) if (pc_debug>(n)) printk(KERN_DEBUG args)
 static char *version =
-"cb_enabler.c 1.21 1999/08/28 04:01:45 (David Hinds)";
+"cb_enabler.c 1.23 1999/09/15 15:32:19 (David Hinds)";
 #else
 #define DEBUG(n, args...) do { } while (0)
 #endif
@@ -107,7 +108,6 @@ static void cb_detach(dev_link_t *);
 
 static bus_info_t bus_table[MAX_DRIVER];
 
-
 /*====================================================================*/
 
 static void cs_error(client_handle_t handle, int func, int ret)
@@ -129,8 +129,6 @@ struct dev_link_t *cb_attach(int n)
     MOD_INC_USE_COUNT;
     link = kmalloc(sizeof(struct dev_link_t), GFP_KERNEL);
     memset(link, 0, sizeof(struct dev_link_t));
-    link->release.function = &cb_release;
-    link->release.data = (u_long)link;
 
     link->conf.IntType = INT_CARDBUS;
     link->conf.Vcc = 33;
@@ -166,7 +164,6 @@ static void cb_detach(dev_link_t *link)
     driver_info_t *dev = link->priv;
     dev_link_t **linkp;
     bus_info_t *b = (void *)link->win;
-    u_long flags;
     
     DEBUG(0, "cb_detach(0x%p)\n", link);
     
@@ -176,14 +173,6 @@ static void cb_detach(dev_link_t *link)
     if (*linkp == NULL)
 	return;
 
-    save_flags(flags);
-    cli();
-    if (link->state & DEV_RELEASE_PENDING) {
-	del_timer(&link->release);
-	link->state &= ~DEV_RELEASE_PENDING;
-    }
-    restore_flags(flags);
-    
     if (link->state & DEV_CONFIG)
 	cb_release((u_long)link);
     
@@ -309,11 +298,8 @@ static int cb_event(event_t event, int priority,
     switch (event) {
     case CS_EVENT_CARD_REMOVAL:
 	link->state &= ~DEV_PRESENT;
-	if (link->state & DEV_CONFIG) {
-	    link->release.expires = jiffies + HZ/20;
-	    link->state |= DEV_RELEASE_PENDING;
-	    add_timer(&link->release);
-	}
+	if (link->state & DEV_CONFIG)
+	    cb_release((u_long)link);
 	break;
     case CS_EVENT_CARD_INSERTION:
 	link->state |= DEV_PRESENT | DEV_CONFIG_PENDING;
@@ -386,7 +372,8 @@ void unregister_driver(struct driver_operations *ops)
 
 /*====================================================================*/
 
-int init_module(void) {
+static int __init init_cb_enabler(void)
+{
     servinfo_t serv;
     DEBUG(0, "%s\n", version);
     CardServices(GetCardServicesInfo, &serv);
@@ -398,8 +385,13 @@ int init_module(void) {
     return 0;
 }
 
-void cleanup_module(void) {
+static void __exit exit_cb_enabler(void)
+{
     DEBUG(0, "cb_enabler: unloading\n");
 }
 
+module_init(init_cb_enabler);
+module_exit(exit_cb_enabler);
+
 /*====================================================================*/
+

@@ -16,8 +16,6 @@
 #include "sound_config.h"
 #include "soundmodule.h"
 
-#ifdef CONFIG_YM3812
-
 void attach_adlib_card(struct address_info *hw_config)
 {
 	hw_config->slots[0] = opl3_init(hw_config->io_base, hw_config->osp);
@@ -69,5 +67,4 @@ void cleanup_module(void)
 	SOUND_LOCK_END;
 }
 
-#endif
 #endif

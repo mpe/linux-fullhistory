@@ -272,7 +272,7 @@ extern struct proc_dir_entry *proc_pccard;
 
 #ifdef PCMCIA_DEBUG
 extern int pc_debug;
-#define DEBUG(n, args...) do { if (pc_debug>(n)) printk(args); } while (0)
+#define DEBUG(n, args...) do { if (pc_debug>(n)) printk(KERN_DEBUG args); } while (0)
 #else
 #define DEBUG(n, args...) do { } while (0)
 #endif

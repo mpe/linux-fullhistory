@@ -3,7 +3,7 @@
     Device driver for Intel 82365 and compatible PC Card controllers,
     and Yenta-compatible PCI-to-CardBus controllers.
 
-    i82365.c 1.251 1999/09/07 15:19:23
+    i82365.c 1.254 1999/09/15 15:32:19
 
     The contents of this file are subject to the Mozilla Public
     License Version 1.1 (the "License"); you may not use this file
@@ -33,6 +33,8 @@
 ======================================================================*/
 
 #include <linux/module.h>
+#include <linux/init.h>
+#include <linux/config.h>
 #include <linux/types.h>
 #include <linux/fcntl.h>
 #include <linux/string.h>
@@ -72,9 +74,9 @@
 #ifdef PCMCIA_DEBUG
 static int pc_debug = PCMCIA_DEBUG;
 MODULE_PARM(pc_debug, "i");
-#define DEBUG(n, args...) do { if (pc_debug>(n)) printk(KERN_DEBUG args); } while (0)
+#define DEBUG(n, args...) if (pc_debug>(n)) printk(KERN_DEBUG args)
 static const char *version =
-"i82365.c $Revision: 1.249 $ $Date: 1999/08/28 04:01:46 $ (David Hinds)";
+"i82365.c 1.254 1999/09/15 15:32:19 (David Hinds)";
 #else
 #define DEBUG(n, args...) do { } while (0)
 #endif
@@ -82,11 +84,10 @@ static const char *version =
 static void irq_count(int, void *, struct pt_regs *);
 static inline int _check_irq(int irq, int flags)
 {
-    if (request_irq(irq, irq_count, flags, "x", NULL) == 0) {
-	free_irq(irq, NULL);
-	return 0;
-    }
-    return -1;
+    if (request_irq(irq, irq_count, flags, "x", NULL) != 0)
+	return -1;
+    free_irq(irq, NULL);
+    return 0;
 }
 
 /*====================================================================*/
@@ -576,7 +577,7 @@ static int cirrus_set_irq_mode(u_short s, int pcsc, int pint)
 }
 #endif /* CONFIG_PCI */
 
-static u_int cirrus_set_opts(u_short s, char *buf)
+static u_int __init cirrus_set_opts(u_short s, char *buf)
 {
     socket_info_t *t = &socket[s];
     cirrus_state_t *p = &socket[s].state.cirrus;
@@ -660,7 +661,7 @@ static void vg46x_set_state(u_short s)
 	i365_set(s, VG469_EXT_MODE, p->ema);
 }
 
-static u_int vg46x_set_opts(u_short s, char *buf)
+static u_int __init vg46x_set_opts(u_short s, char *buf)
 {
     vg46x_state_t *p = &socket[s].state.vg46x;
     
@@ -742,7 +743,7 @@ static int ti113x_set_irq_mode(u_short s, int pcsc, int pint)
     return 0;
 }
 
-static u_int ti113x_set_opts(u_short s, char *buf)
+static u_int __init ti113x_set_opts(u_short s, char *buf)
 {
     socket_info_t *t = &socket[s];
     ti113x_state_t *p = &t->state.ti113x;
@@ -838,7 +839,7 @@ static void rl5c4xx_set_state(u_short s)
     pci_writew(t->bus, t->devfn, RL5C4XX_16BIT_MEM_0, p->mem);
 }
 
-static u_int rl5c4xx_set_opts(u_short s, char *buf)
+static u_int __init rl5c4xx_set_opts(u_short s, char *buf)
 {
     rl5c4xx_state_t *p = &socket[s].state.rl5c4xx;
     u_int mask = 0xffff;
@@ -939,7 +940,7 @@ static void o2micro_set_state(u_short s)
     }
 }
 
-static u_int o2micro_set_opts(u_short s, char *buf)
+static u_int __init o2micro_set_opts(u_short s, char *buf)
 {
     socket_info_t *t = &socket[s];
     o2micro_state_t *p = &socket[s].state.o2micro;
@@ -1009,7 +1010,7 @@ static int topic_set_irq_mode(u_short s, int pcsc, int pint)
     }
 }
 
-static u_int topic_set_opts(u_short s, char *buf)
+static u_int __init topic_set_opts(u_short s, char *buf)
 {
     topic_state_t *p = &socket[s].state.topic;
 
@@ -1034,38 +1035,34 @@ static u_int topic_set_opts(u_short s, char *buf)
 static void cb_get_state(u_short s)
 {
     socket_info_t *t = &socket[s];
-    struct pci_dev *dev = pci_find_slot(t->bus, t->devfn);
-
-    if (!dev)
-	return;
-    pci_read_config_byte(dev, PCI_CACHE_LINE_SIZE, &t->cache);
-    pci_read_config_byte(dev, PCI_LATENCY_TIMER, &t->pci_lat);
-    pci_read_config_byte(dev, CB_LATENCY_TIMER, &t->cb_lat);
-    pci_read_config_byte(dev, CB_CARDBUS_BUS, &t->cap.cardbus);
-    pci_read_config_byte(dev, CB_SUBORD_BUS, &t->sub_bus);
-    pci_read_config_word(dev, CB_BRIDGE_CONTROL, &t->bcr);
-
-    t->cap.pci_irq = dev->irq;
+    
+    pci_readb(t->bus, t->devfn, PCI_CACHE_LINE_SIZE, &t->cache);
+    pci_readb(t->bus, t->devfn, PCI_LATENCY_TIMER, &t->pci_lat);
+    pci_readb(t->bus, t->devfn, CB_LATENCY_TIMER, &t->cb_lat);
+    pci_readb(t->bus, t->devfn, CB_CARDBUS_BUS, &t->cap.cardbus);
+    pci_readb(t->bus, t->devfn, CB_SUBORD_BUS, &t->sub_bus);
+    pci_readw(t->bus, t->devfn, CB_BRIDGE_CONTROL, &t->bcr);
+    {
+	struct pci_dev *pdev = pci_find_slot(t->bus, t->devfn);
+	t->cap.pci_irq = (pdev) ? pdev->irq : 0;
+    }
     if (t->cap.pci_irq >= NR_IRQS) t->cap.pci_irq = 0;
 }
 
 static void cb_set_state(u_short s)
 {
     socket_info_t *t = &socket[s];
-    struct pci_dev *dev = pci_find_slot(t->bus, t->devfn);
-
     if (t->pmcs)
-	pci_write_config_word(dev, t->pmcs, PCI_PMCS_PWR_STATE_D0);
-
-    pci_write_config_dword(dev, CB_LEGACY_MODE_BASE, 0);
-    pci_write_config_dword(dev, PCI_BASE_ADDRESS_0, t->cb_phys);
-    pci_write_config_word(dev, PCI_COMMAND, CMD_DFLT);
-    pci_write_config_byte(dev, PCI_CACHE_LINE_SIZE, t->cache);
-    pci_write_config_byte(dev, PCI_LATENCY_TIMER, t->pci_lat);
-    pci_write_config_byte(dev, CB_LATENCY_TIMER, t->cb_lat);
-    pci_write_config_byte(dev, CB_CARDBUS_BUS, t->cap.cardbus);
-    pci_write_config_byte(dev, CB_SUBORD_BUS, t->sub_bus);
-    pci_write_config_word(dev, CB_BRIDGE_CONTROL, t->bcr);
+	pci_writew(t->bus, t->devfn, t->pmcs, PCI_PMCS_PWR_STATE_D0);
+    pci_writel(t->bus, t->devfn, CB_LEGACY_MODE_BASE, 0);
+    pci_writel(t->bus, t->devfn, PCI_BASE_ADDRESS_0, t->cb_phys);
+    pci_writew(t->bus, t->devfn, PCI_COMMAND, CMD_DFLT);
+    pci_writeb(t->bus, t->devfn, PCI_CACHE_LINE_SIZE, t->cache);
+    pci_writeb(t->bus, t->devfn, PCI_LATENCY_TIMER, t->pci_lat);
+    pci_writeb(t->bus, t->devfn, CB_LATENCY_TIMER, t->cb_lat);
+    pci_writeb(t->bus, t->devfn, CB_CARDBUS_BUS, t->cap.cardbus);
+    pci_writeb(t->bus, t->devfn, CB_SUBORD_BUS, t->sub_bus);
+    pci_writew(t->bus, t->devfn, CB_BRIDGE_CONTROL, t->bcr);
 }
 
 static int cb_get_irq_mode(u_short s)
@@ -1086,9 +1083,9 @@ static int cb_set_irq_mode(u_short s, int pcsc, int pint)
     return 0;
 }
 
-static void pci_scan(u_short sock);
+static void __init pci_scan(u_short sock);
 
-static void cb_set_opts(u_short s, char *buf)
+static void __init cb_set_opts(u_short s, char *buf)
 {
     socket_info_t *t = &socket[s];
     t->bcr |= CB_BCR_WRITE_POST;
@@ -1181,7 +1178,7 @@ static void set_host_state(u_short s)
 #endif
 }
 
-static u_int set_host_opts(u_short s, u_short ns)
+static u_int __init set_host_opts(u_short s, u_short ns)
 {
     u_short i;
     u_int m = 0xffff;
@@ -1247,10 +1244,10 @@ static void irq_count(int irq, void *dev, struct pt_regs *regs)
 #endif
     i365_get(irq_sock, I365_CSC);
     irq_hits++;
-    DEBUG(2, ("-> hit on irq %d\n", irq));
+    DEBUG(2, "-> hit on irq %d\n", irq);
 }
 
-static u_int test_irq(u_short sock, int irq, int pci)
+static u_int __init test_irq(u_short sock, int irq, int pci)
 {
     u_char csc = (pci) ? 0 : irq;
     DEBUG(2, "  testing %s irq %d\n", pci ? "PCI" : "ISA", irq);
@@ -1262,7 +1259,7 @@ static u_int test_irq(u_short sock, int irq, int pci)
     schedule_timeout(HZ/100);
     if (irq_hits) {
 	free_irq(irq, NULL);
-	DEBUG(2, ("    spurious hit!\n"));
+	DEBUG(2, "    spurious hit!\n");
 	return 1;
     }
 
@@ -1296,7 +1293,7 @@ static u_int test_irq(u_short sock, int irq, int pci)
 
 #ifdef CONFIG_ISA
 
-static u_int isa_scan(u_short sock, u_int mask0)
+static u_int __init isa_scan(u_short sock, u_int mask0)
 {
     u_int mask1 = 0;
     int i;
@@ -1349,7 +1346,7 @@ static u_int isa_scan(u_short sock, u_int mask0)
 
 #ifdef CONFIG_PCI
 
-static void pci_scan(u_short sock)
+static void __init pci_scan(u_short sock)
 {
     u_int i;
 
@@ -1385,7 +1382,7 @@ static int to_ns(int cycles)
 
 #ifdef CONFIG_ISA
 
-static int identify(u_short port, u_short sock)
+static int __init identify(u_short port, u_short sock)
 {
     u_char val;
     int type = -1;
@@ -1455,7 +1452,7 @@ static int identify(u_short port, u_short sock)
     
 ======================================================================*/
 
-static int is_alive(u_short sock)
+static int __init is_alive(u_short sock)
 {
     u_char stat;
     u_short start, stop;
@@ -1475,7 +1472,7 @@ static int is_alive(u_short sock)
 
 /*====================================================================*/
 
-static void add_socket(u_short port, int psock, int type)
+static void __init add_socket(u_short port, int psock, int type)
 {
     socket[sockets].ioaddr = port;
     socket[sockets].psock = psock;
@@ -1486,7 +1483,7 @@ static void add_socket(u_short port, int psock, int type)
     sockets++;
 }
 
-static void add_pcic(int ns, int type)
+static void __init add_pcic(int ns, int type)
 {
     u_int mask = 0, i, base;
     int use_pci = 0, isa_irq = 0;
@@ -1595,8 +1592,8 @@ static void add_pcic(int ns, int type)
 #ifdef CONFIG_PCI
 
 typedef struct pci_dev *pci_id_t;
-static int pci_lookup(u_int class, pci_id_t *id,
-		      u_char *bus, u_char *devfn)
+static int __init pci_lookup(u_int class, pci_id_t *id,
+			     u_char *bus, u_char *devfn)
 {
     if ((*id = pci_find_class(class<<8, *id)) != NULL) {
 	*bus = (*id)->bus->number;
@@ -1605,8 +1602,8 @@ static int pci_lookup(u_int class, pci_id_t *id,
     } else return -1;
 }
 
-static void add_pci_bridge(int type, u_char bus, u_char devfn,
-			   u_short v, u_short d)
+static void __init add_pci_bridge(int type, u_char bus, u_char devfn,
+				  u_short v, u_short d)
 {
     socket_info_t *s = &socket[sockets];
     u_short i, ns;
@@ -1625,8 +1622,8 @@ static void add_pci_bridge(int type, u_char bus, u_char devfn,
     add_pcic(ns, type);
 }
 
-static void add_cb_bridge(int type, u_char bus, u_char devfn,
-			  u_short v, u_short d0)
+static void __init add_cb_bridge(int type, u_char bus, u_char devfn,
+				 u_short v, u_short d0)
 {
     socket_info_t *s = &socket[sockets];
     u_short d, ns;
@@ -1739,8 +1736,8 @@ static void add_cb_bridge(int type, u_char bus, u_char devfn,
     }
 }
 
-static void pci_probe(u_int class, void (add_fn)(int, u_char, u_char,
-						 u_short, u_short))
+static void __init pci_probe(u_int class, void (add_fn)
+			     (int, u_char, u_char, u_short, u_short))
 {
     u_short i, v, d;
     u_char bus, devfn;
@@ -1763,7 +1760,7 @@ static void pci_probe(u_int class, void (add_fn)(int, u_char, u_char,
 
 #ifdef CONFIG_ISA
 
-static void isa_probe(void)
+static void __init isa_probe(void)
 {
     int i, j, sock, k;
     int ns, id;
@@ -1815,8 +1812,15 @@ static void isa_probe(void)
 
 /*====================================================================*/
 
-static int pcic_init(void)
+static int __init init_i82365(void)
 {
+    servinfo_t serv;
+    CardServices(GetCardServicesInfo, &serv);
+    if (serv.Revision != CS_RELEASE_CODE) {
+	printk(KERN_NOTICE "i82365: Card Services release "
+	       "does not match!\n");
+	return -1;
+    }
     DEBUG(0, "%s\n", version);
     printk(KERN_INFO "Intel PCIC probe: ");
     sockets = 0;
@@ -1837,7 +1841,7 @@ static int pcic_init(void)
 	return -ENODEV;
     }
 
-    /* Set up interrupt handler, and/or polling */
+    /* Set up interrupt handler(s) */
 #ifdef CONFIG_ISA
     if (grab_irq != 0)
 	request_irq(cs_irq, pcic_interrupt, 0, "i82365", NULL);
@@ -1868,11 +1872,11 @@ static int pcic_init(void)
     
     return 0;
     
-} /* pcic_init */
+} /* init_i82365 */
   
 /*====================================================================*/
 
-static void pcic_finish(void)
+static void __exit exit_i82365(void)
 {
     int i;
 #ifdef CONFIG_PROC_FS
@@ -1906,7 +1910,7 @@ static void pcic_finish(void)
 #endif
 	    release_region(socket[i].ioaddr, 2);
     }
-} /* pcic_finish */
+} /* exit_i82365 */
 
 /*====================================================================*/
 
@@ -1917,7 +1921,8 @@ static void pcic_interrupt_wrapper(u_long data)
     add_timer(&poll_timer);
 }
 
-static void pcic_interrupt(int irq, void *dev, struct pt_regs *regs)
+static void pcic_interrupt(int irq, void *dev,
+				    struct pt_regs *regs)
 {
     int i, j, csc;
     u_int events, active;
@@ -1968,7 +1973,7 @@ static void pcic_interrupt(int irq, void *dev, struct pt_regs *regs)
     if (j == 20)
 	printk(KERN_NOTICE "i82365: infinite loop in interrupt handler\n");
 
-    DEBUG(4, ("i82365: interrupt done\n"));
+    DEBUG(4, "i82365: interrupt done\n");
 } /* pcic_interrupt */
 
 /*====================================================================*/
@@ -2641,7 +2646,6 @@ static int proc_read_exca(char *buf, char **start, off_t pos,
     return (p - buf);
 }
 
-
 #ifdef CONFIG_PCI
 static int proc_read_pci(char *buf, char **start, off_t pos,
 			 int count, int *eof, void *data)
@@ -2793,31 +2797,8 @@ static int pcic_service(u_int sock, u_int cmd, void *arg)
 
 /*====================================================================*/
 
-int pcmcia_i82365_init(void)
-{
-    servinfo_t serv;
-    CardServices(GetCardServicesInfo, &serv);
-    if (serv.Revision != CS_RELEASE_CODE) {
-	printk(KERN_NOTICE "i82365: Card Services release "
-	       "does not match!\n");
-	return -1;
-    }
-    return pcic_init();
-}
-
-#ifdef MODULE
-
-int init_module(void)
-{
-	return pcmcia_i82365_init();
-}
-
-void cleanup_module(void)
-{
-    pcic_finish();
-}
-
-#endif
+module_init(init_i82365);
+module_exit(exit_i82365);
 
 /*====================================================================*/
 

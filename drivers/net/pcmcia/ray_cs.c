@@ -2297,7 +2297,7 @@ int  build_auth_frame(ray_dev_t *local, UCHAR *dest, int auth_type)
     return 0;
 } /* End build_auth_frame */
 /*===========================================================================*/
-int init_ray_cs(void)
+static int __init init_ray_cs(void)
 {
     int rc;
     servinfo_t serv;
@@ -2310,30 +2310,29 @@ int init_ray_cs(void)
     }
     rc = register_pcmcia_driver(&dev_info, &ray_attach, &ray_detach);
     DEBUG(1, "raylink init_module register_pcmcia_driver returns 0x%x\n",rc);
+#ifdef CONFIG_PROC_FS    
     proc_register(&proc_root, &ray_cs_proc_entry);
+#endif    
     if (translate != 0) translate = 1;
     return 0;
-} /* init_module */
+} /* init_ray_cs */
+
+#ifndef MODULE
 
 static char init_ess_id[ESSID_SIZE];
-
 static int __init essid_setup(char *str)
 {
 	strncpy(init_ess_id, str, ESSID_SIZE);
 	essid = init_ess_id;
 	return 1;
 }
-
 __setup("essid=", essid_setup);
 
-/*===========================================================================*/
-#ifdef MODULE
-int init_module(void)
-{
-	init_ray_cs();
-}
+#endif
 
-void cleanup_module(void)
+/*===========================================================================*/
+
+static void __exit exit_ray_cs(void)
 {
     DEBUG(0, "ray_cs: cleanup_module\n");
 
@@ -2342,7 +2341,12 @@ void cleanup_module(void)
         if (dev_list->state & DEV_CONFIG) ray_release((u_long)dev_list);
         ray_detach(dev_list);
     }
+#ifdef CONFIG_PROC_FS    
     proc_unregister(&proc_root, ray_cs_proc_entry.low_ino);
-} /* cleanup_module */
-#endif
+#endif   
+} /* exit_ray_cs */
+
+module_init(init_ray_cs);
+module_exit(exit_ray_cs);
+
 /*===========================================================================*/

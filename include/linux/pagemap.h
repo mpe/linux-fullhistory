@@ -103,7 +103,6 @@ extern void ___wait_on_page(struct page *);
 
 static inline void wait_on_page(struct page * page)
 {
-
 	if (PageLocked(page))
 		___wait_on_page(page);
 }

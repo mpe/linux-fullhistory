@@ -184,7 +184,7 @@ static int __init atp_probe1(struct net_device *dev, short ioaddr)
 	/* IRQEN=0, SLCTB=high INITB=high, AUTOFDB=high, STBB=high. */
 	outb(0x04, ioaddr + PAR_CONTROL);
 	write_reg_high(ioaddr, CMR1, CMR1h_RESET);
-	eeprom_delay(2048);
+	udelay(100);
 	status = read_nibble(ioaddr, CMR1);
 
 	if ((status & 0x78) != 0x08) {
@@ -299,12 +299,12 @@ static unsigned short __init eeprom_op(short ioaddr, unsigned int cmd)
 	while (--num_bits >= 0) {
 		char outval = test_bit(num_bits, &cmd) ? EE_DATA_WRITE : 0;
 		write_reg_high(ioaddr, PROM_CMD, outval | EE_CLK_LOW);
-		eeprom_delay(5);
+		udelay(5);
 		write_reg_high(ioaddr, PROM_CMD, outval | EE_CLK_HIGH);
 		eedata_out <<= 1;
 		if (read_nibble(ioaddr, PROM_DATA) & EE_DATA_READ)
 			eedata_out++;
-		eeprom_delay(5);
+		udelay(5);
 	}
 	write_reg_high(ioaddr, PROM_CMD, EE_CLK_LOW & ~EE_CS);
 	return eedata_out;

@@ -125,7 +125,7 @@ static char old_hardware = 0;
 static void sleep(unsigned howlong)
 {
 	current->state = TASK_INTERRUPTIBLE;
-	schedule_timeout(1);
+	schedule_timeout(howlong);
 }
 
 static unsigned char sscape_read(struct sscape_info *devc, int reg)

@@ -1216,6 +1216,9 @@ static int internal_command (unsigned char target, unsigned char lun,
 
 /* SJT: Start. Slow Write. */
 #ifdef SEAGATE_USE_ASM
+
+int __dummy_1,__dummy_2;
+
 /*
  *      We loop as long as we are in a data out phase, there is data to send, 
  *      and BSY is still active.
@@ -1246,9 +1249,9 @@ static int internal_command (unsigned char target, unsigned char lun,
                     "movb %%al, (%%edi)\n\t"
                     "loop 1b\n\t"
                 "2:\n"
-/* output */    : "=S" (data), "=c" (len) 
-/* input */     : "0" (data), "1" (len), "b" (phys_to_virt(st0x_cr_sr)), "D" (phys_to_virt(st0x_dr)) 
-/* clobbered */ : "eax", "ebx", "edi"); 
+/* output */    : "=S" (data), "=c" (len)  ,"=b" (__dummy_1) ,"=D" (__dummy_2)
+/* input */     : "0" (data), "1" (len), "2" (phys_to_virt(st0x_cr_sr)), "3" (phys_to_virt(st0x_dr)) 
+/* clobbered */ : "eax"); 
 #else /* SEAGATE_USE_ASM */
             while (len)
             {
@@ -1374,6 +1377,11 @@ static int internal_command (unsigned char target, unsigned char lun,
 
 /* SJT: Start. */
 #ifdef SEAGATE_USE_ASM
+
+int __dummy_3,__dummy_4;
+
+/* Dummy clobbering variables for the new gcc-2.95 */
+
 /*
  *      We loop as long as we are in a data in phase, there is room to read, 
  *      and BSY is still active
@@ -1405,9 +1413,9 @@ static int internal_command (unsigned char target, unsigned char lun,
                 "stosb\n\t"   
                 "loop 1b\n\t"
             "2:\n"
-/* output */    : "=D" (data), "=c" (len) 
-/* input */     : "0" (data), "1" (len), "S" (phys_to_virt(st0x_cr_sr)), "b" (phys_to_virt(st0x_dr)) 
-/* clobbered */ : "eax","ebx", "esi"); 
+/* output */    : "=D" (data), "=c" (len) ,"=S" (__dummy_3) ,"=b" (__dummy_4)
+/* input */     : "0" (data), "1" (len), "2" (phys_to_virt(st0x_cr_sr)), "3" (phys_to_virt(st0x_dr)) 
+/* clobbered */ : "eax" ); 
 #else /* SEAGATE_USE_ASM */
             while (len)
             {

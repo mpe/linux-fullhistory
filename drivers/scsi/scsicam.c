@@ -26,6 +26,7 @@
 static int setsize(unsigned long capacity, unsigned int *cyls, unsigned int *hds,
 		   unsigned int *secs);
 
+
 /*
  * Function : int scsicam_bios_param (Disk *disk, int dev, int *ip)
  *
@@ -47,7 +48,12 @@ int scsicam_bios_param(Disk * disk,	/* SCSI disk */
 	int size = disk->capacity;
 	unsigned long temp_cyl;
 
-	if (!(bh = bread(MKDEV(MAJOR(dev), MINOR(dev) & ~0xf), 0, 1024)))
+	int block = 1024; 
+
+	if(blksize_size[MAJOR(dev)])
+		block = blksize_size[MAJOR(dev)][MINOR(dev)];
+		
+	if (!(bh = bread(MKDEV(MAJOR(dev), MINOR(dev) & ~0xf), 0, block)))
 		return -1;
 
 	/* try to infer mapping from partition table */

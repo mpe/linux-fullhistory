@@ -2,7 +2,7 @@
   
     Cardbus device configuration
     
-    cardbus.c 1.57 1999/09/07 15:19:32
+    cardbus.c 1.59 1999/09/15 15:32:19
 
     The contents of this file are subject to the Mozilla Public
     License Version 1.1 (the "License"); you may not use this file
@@ -40,6 +40,7 @@
 
 #include <linux/module.h>
 #include <linux/kernel.h>
+#include <linux/config.h>
 #include <linux/string.h>
 #include <linux/malloc.h>
 #include <linux/mm.h>
@@ -324,7 +325,9 @@ int cb_alloc(socket_info_t *s)
 	pci_readl(bus, i, PCI_CLASS_REVISION, &c[i].dev.class);
 	c[i].dev.class >>= 8;
 	c[i].dev.hdr_type = hdr;
+#ifdef CONFIG_PROC_FS	
 	pci_proc_attach_device(&c[i].dev);
+#endif	
     }
     
     return CS_SUCCESS;
@@ -332,24 +335,24 @@ int cb_alloc(socket_info_t *s)
 
 void cb_free(socket_info_t *s)
 {
-    struct pci_dev **p, *q;
     cb_config_t *c = s->cb_config;
 
     if (c) {
+	struct pci_dev **p, *q;
 	/* Unlink from PCI device chain */
 	for (p = &pci_devices; *p; p = &((*p)->next))
 	    if (*p == &c[0].dev) break;
 	for (q = *p; q; q = q->next) {
 	    if (q->bus != (*p)->bus) break;
+#ifdef CONFIG_PROC_FS	    
 	    pci_proc_detach_device(q);
+#endif	    
 	}
 	if (*p) *p = q;
 	s->cap.cb_bus->devices = NULL;
-    }
-    printk(KERN_INFO "cs: cb_free(bus %d)\n", s->cap.cardbus);
-    if (s->cb_config) {
 	kfree(s->cb_config);
 	s->cb_config = NULL;
+	printk(KERN_INFO "cs: cb_free(bus %d)\n", s->cap.cardbus);
     }
 }
 

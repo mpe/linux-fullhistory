@@ -20,7 +20,7 @@
  *        Recognize that DMA0 is valid DMA channel -- 13-Jul-98
  *  Modified by Chris Faulhaber	<jedgar@fxp.org>
  *        Added module command-line options
- *        18-Jul-99
+ *        19-Jul-99
  */
 
 #include <linux/module.h>
@@ -482,7 +482,10 @@ static void aha1542_intr_handle(int irq, void *dev_id, struct pt_regs *regs)
       }
       
       my_done = SCtmp->scsi_done;
-      if (SCtmp->host_scribble) scsi_free(SCtmp->host_scribble, 512);
+      if (SCtmp->host_scribble) {
+	  scsi_free(SCtmp->host_scribble, 512);
+	  SCtmp->host_scribble = 0;
+      }
       
       /* Fetch the sense data, and tuck it away, in the required slot.  The
 	 Adaptec automatically fetches it, and there is no guarantee that
@@ -556,15 +559,18 @@ int aha1542_queuecommand(Scsi_Cmnd * SCpnt, void (*done)(Scsi_Cmnd *))
       done(SCpnt); return 0;});
     
     if(*cmd == REQUEST_SENSE){
-#ifndef DEBUG
-      if (bufflen != sizeof(SCpnt->sense_buffer)) {
-	printk("Wrong buffer length supplied for request sense (%d)\n",bufflen);
-      };
+      /* Don't do the command - we have the sense data already */
+#if 0
+      /* scsi_request_sense() provides a buffer of size 256,
+	 so there is no reason to expect equality */
+      if (bufflen != sizeof(SCpnt->sense_buffer))
+	printk("aha1542: Wrong buffer length supplied "
+	       "for request sense (%d)\n", bufflen);
 #endif
       SCpnt->result = 0;
       done(SCpnt); 
       return 0;
-    };
+    }
 
 #ifdef DEBUG
     if (*cmd == READ_10 || *cmd == WRITE_10)
@@ -964,11 +970,30 @@ int aha1542_detect(Scsi_Host_Template * tpnt)
     tpnt->proc_dir = &proc_scsi_aha1542;
 
 #ifdef MODULE
-    bases[0] = 4;
-    bases[1] = aha1542[0];
-    bases[2] = aha1542[1];
-    bases[3] = aha1542[2];
-    bases[4] = aha1542[3];
+    bases[0]        = aha1542[0];              
+    setup_buson[0]  = aha1542[1];              
+    setup_busoff[0] = aha1542[2];              
+    {                                          
+      int atbt = -1;                           
+      switch (aha1542[3]) {                    
+        case 5:                                
+            atbt = 0x00;                       
+            break;                             
+        case 6:                                
+            atbt = 0x04;                       
+            break;                             
+        case 7:                                
+            atbt = 0x01;                       
+            break;                             
+        case 8:                                
+            atbt = 0x02;                       
+            break;                             
+        case 10:                               
+            atbt = 0x03;                       
+            break;                             
+      };                                       
+    setup_dmaspeed[0] = atbt;                  
+    }
 #endif
 
     for(indx = 0; indx < sizeof(bases)/sizeof(bases[0]); indx++)

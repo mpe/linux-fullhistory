@@ -124,7 +124,7 @@ static struct timer_list esdi_timer = {NULL, NULL, 0, 0L, ps2esdi_reset_timer};
 static int reset_status;
 static int ps2esdi_slot = -1;
 int tp720esdi = 0;		/* Is it Integrated ESDI of ThinkPad-720? */
-
+int intg_esdi = 0;              /* If integrated adapter */
 struct ps2esdi_i_struct {
 	unsigned int head, sect, cyl, wpcom, lzone, ctl;
 };
@@ -387,7 +387,7 @@ static void __init ps2esdi_geninit(struct gendisk *ignored)
 	reset_status = 0;
 	reset_start = jiffies;
 	while (!reset_status) {
-		esdi_timer.expires = 100;
+		esdi_timer.expires = HZ;
 		esdi_timer.data = 0;
 		esdi_timer.next = esdi_timer.prev = NULL;
 		add_timer(&esdi_timer);
@@ -401,8 +401,9 @@ static void __init ps2esdi_geninit(struct gendisk *ignored)
 
 
 	/* Integrated ESDI Disk and Controller has only one drive! */
-	if (adapterID == INTG_ESDI_ID)	/* if not "normal" PS2 ESDI adapter */
-		ps2esdi_drives = 1;	/* then we have only one physical disk! */
+	if (adapterID == INTG_ESDI_ID) {/* if not "normal" PS2 ESDI adapter */
+		ps2esdi_drives = 1;	/* then we have only one physical disk! */		intg_esdi = 1;
+	}
 
 
 
@@ -560,7 +561,7 @@ static void reset_ctrl(void)
 		/*BA */
 		printk("%s: hard reset...\n", DEVICE_NAME);
 		outb_p(CTRL_HARD_RESET, ESDI_CONTROL);
-		expire = jiffies + 200;
+		expire = jiffies + 2*HZ;
 		while (time_before(jiffies, expire));
 		outb_p(1, ESDI_CONTROL);
 	}			/* hard reset */
@@ -812,7 +813,8 @@ static void ps2esdi_geometry_int_handler(u_int int_ret_code)
 						ps2esdi_info[0].wpcom = 0;
 						ps2esdi_info[0].lzone = reply[3];
 					} else {
-						ps2esdi_drives++;
+						if (!intg_esdi)
+							ps2esdi_drives++;
 					}
 				}
 #ifdef OBSOLETE

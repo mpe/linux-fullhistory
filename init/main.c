@@ -84,7 +84,7 @@ extern void ppc_init(void);
 extern void sysctl_init(void);
 extern void filescache_init(void);
 extern void signals_init(void);
-extern int pcmcia_init(void);
+extern int init_pcmcia_ds(void);
 
 extern void free_initmem(void);
 extern void filesystem_setup(void);
@@ -659,7 +659,7 @@ static void __init do_basic_setup(void)
 	irda_device_init(); /* Must be done after protocol initialization */
 #endif
 #ifdef CONFIG_PCMCIA
-	pcmcia_init();		/* Do this last */
+	init_pcmcia_ds();		/* Do this last */
 #endif
 	/* Mount the root filesystem.. */
 	mount_root();

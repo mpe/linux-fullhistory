@@ -59,6 +59,7 @@
 #include <linux/watchdog.h>
 #include <linux/init.h>
 #include <linux/proc_fs.h>
+#include <linux/spinlock.h>
 
 #include <asm/uaccess.h>
 #include <asm/io.h>
@@ -96,6 +97,7 @@ static int pcwd_ioports[] = { 0x270, 0x350, 0x370, 0x000 };
 
 static int current_readport, revision, temp_panic;
 static int is_open, initial_status, supports_temp, mode_debug;
+static spinlock_t io_lock;
 
 /*
  * PCWD_CHECKCARD
@@ -246,10 +248,12 @@ static int pcwd_ioctl(struct inode *inode, struct file *file,
 		return i ? -EFAULT : 0;
 
 	case WDIOC_GETSTATUS:
+		spin_lock(&io_lock);
 		if (revision == PCWD_REVISION_A) 
-		cdat = inb(current_readport);
+			cdat = inb(current_readport);
 		else
 			cdat = inb(current_readport + 1 );
+		spin_unlock(&io_lock);
 		rv = 0;
 
 		if (revision == PCWD_REVISION_A) 
@@ -312,7 +316,9 @@ static int pcwd_ioctl(struct inode *inode, struct file *file,
 		rv = 0;
 		if ((supports_temp) && (mode_debug == 0)) 
 		{
+			spin_lock(&io_lock);
 			rv = inb(current_readport);
+			spin_unlock(&io_lock);
 			if(put_user(rv, (int*) arg))
 				return -EFAULT;
 		} else if(put_user(rv, (int*) arg))
@@ -327,9 +333,11 @@ static int pcwd_ioctl(struct inode *inode, struct file *file,
 
 			if (rv & WDIOS_DISABLECARD) 
 			{
+				spin_lock(&io_lock);
 				outb_p(0xA5, current_readport + 3);
 				outb_p(0xA5, current_readport + 3);
 				cdat = inb_p(current_readport + 2);
+				spin_unlock(&io_lock);
 				if ((cdat & 0x10) == 0) 
 				{
 					printk("pcwd: Could not disable card.\n");
@@ -341,8 +349,10 @@ static int pcwd_ioctl(struct inode *inode, struct file *file,
 
 			if (rv & WDIOS_ENABLECARD) 
 			{
+				spin_lock(&io_lock);
 				outb_p(0x00, current_readport + 3);
 				cdat = inb_p(current_readport + 2);
+				spin_unlock(&io_lock);
 				if (cdat & 0x10) 
 				{
 					printk("pcwd: Could not enable card.\n");
@@ -391,7 +401,11 @@ static int pcwd_open(struct inode *ino, struct file *filep)
                     MOD_INC_USE_COUNT;
                     /*  Enable the port  */
                     if (revision == PCWD_REVISION_C)
-                        outb_p(0x00, current_readport + 3);
+                    {
+                    	spin_lock(&io_lock);
+                    	outb_p(0x00, current_readport + 3);
+                    	spin_unlock(&io_lock);
+                    }
                     is_open = 1;
                     return(0);
                 case TEMP_MINOR:
@@ -405,7 +419,7 @@ static int pcwd_open(struct inode *ino, struct file *filep)
 static ssize_t pcwd_read(struct file *file, char *buf, size_t count,
 			 loff_t *ppos)
 {
-	unsigned short c = inb(current_readport);
+	unsigned short c;
 	unsigned char cp;
 
 	/*  Can't seek (pread) on this device  */
@@ -418,6 +432,8 @@ static ssize_t pcwd_read(struct file *file, char *buf, size_t count,
 			 * Convert metric to Fahrenheit, since this was
 			 * the decided 'standard' for this return value.
 			 */
+			
+			c = inb(current_readport);
 			cp = (c * 9 / 5) + 32;
 			if(copy_to_user(buf, &cp, 1))
 				return -EFAULT;
@@ -436,8 +452,10 @@ static int pcwd_close(struct inode *ino, struct file *filep)
 #ifndef CONFIG_WATCHDOG_NOWAYOUT
 		/*  Disable the board  */
 		if (revision == PCWD_REVISION_C) {
+			spin_lock(&io_lock);
 			outb_p(0xA5, current_readport + 3);
 			outb_p(0xA5, current_readport + 3);
+			spin_unlock(&io_lock);
 		}
 #endif
 	}
@@ -452,11 +470,15 @@ static inline void get_support(void)
 
 static inline int get_revision(void)
 {
+	int r = PCWD_REVISION_C;
+	
+	spin_lock(&io_lock);
 	if ((inb(current_readport + 2) == 0xFF) ||
 	    (inb(current_readport + 3) == 0xFF))
-		return(PCWD_REVISION_A);
+		r=PCWD_REVISION_A;
+	spin_unlock(&io_lock);
 
-	return(PCWD_REVISION_C);
+	return r;
 }
 
 static int __init send_command(int cmd)
@@ -584,7 +606,8 @@ int __init pcwatchdog_init(void)
 #endif
 {
 	int i, found = 0;
-
+	spin_lock_init(&io_lock);
+	
 	revision = PCWD_REVISION_A;
 
 	printk("pcwd: v%s Ken Hollis (kenji@bitgate.com)\n", WD_VER);

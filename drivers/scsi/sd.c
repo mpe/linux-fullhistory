@@ -1097,6 +1097,22 @@ static int check_scsidisk_media_change(kdev_t full_dev)
 	return retval;
 }
 
+static void sd_wait_cmd (Scsi_Cmnd * SCpnt, const void *cmnd ,
+		  void *buffer, unsigned bufflen, void (*done)(Scsi_Cmnd *),
+		  int timeout, int retries)
+{
+	DECLARE_MUTEX_LOCKED(sem);
+	
+	SCpnt->request.sem = &sem;
+	SCpnt->request.rq_status = RQ_SCSI_BUSY;
+	scsi_do_cmd (SCpnt, (void *) cmnd,
+        	buffer, bufflen, done, timeout, retries);
+	spin_unlock_irq(&io_request_lock);
+	down (&sem);
+	spin_lock_irq(&io_request_lock);
+	SCpnt->request.sem = NULL;
+}
+
 static void sd_init_done(Scsi_Cmnd * SCpnt)
 {
 	struct request *req;
@@ -1113,8 +1129,8 @@ static int sd_init_onedisk(int i)
 	unsigned char cmd[10];
 	char nbuff[6];
 	unsigned char *buffer;
-	unsigned long spintime;
-	int the_result, retries;
+	unsigned long spintime_value = 0;
+	int the_result, retries, spintime;
 	Scsi_Cmnd *SCpnt;
 
 	/*
@@ -1145,6 +1161,7 @@ static int sd_init_onedisk(int i)
 	/* Spinup needs to be done for module loads too. */
 	do {
 		retries = 0;
+		
 		while (retries < 3) {
 			cmd[0] = TEST_UNIT_READY;
 			cmd[1] = (rscsi_disks[i].device->lun << 5) & 0xe0;
@@ -1153,20 +1170,8 @@ static int sd_init_onedisk(int i)
 			SCpnt->sense_buffer[0] = 0;
 			SCpnt->sense_buffer[2] = 0;
 
-			{
-				DECLARE_MUTEX_LOCKED(sem);
-				/* Mark as really busy again */
-				SCpnt->request.rq_status = RQ_SCSI_BUSY;
-				SCpnt->request.sem = &sem;
-				scsi_do_cmd(SCpnt,
-					    (void *) cmd, (void *) buffer,
-					    512, sd_init_done, SD_TIMEOUT,
-					    MAX_RETRIES);
-				spin_unlock_irq(&io_request_lock);
-				down(&sem);
-				spin_lock_irq(&io_request_lock);
-				SCpnt->request.sem = NULL;
-			}
+			sd_wait_cmd (SCpnt, (void *) cmd, (void *) buffer,
+				512, sd_init_done,  SD_TIMEOUT, MAX_RETRIES);
 
 			the_result = SCpnt->result;
 			retries++;
@@ -1178,9 +1183,11 @@ static int sd_init_onedisk(int i)
 		/* Look for non-removable devices that return NOT_READY.
 		 * Issue command to spin up drive for these cases. */
 		if (the_result && !rscsi_disks[i].device->removable &&
-		    SCpnt->sense_buffer[2] == NOT_READY) {
+		    SCpnt->sense_buffer[2] == NOT_READY) 
+		{
 			unsigned long time1;
-			if (!spintime) {
+			if (!spintime) 
+			{
 				printk("%s: Spinning up disk...", nbuff);
 				cmd[0] = START_STOP;
 				cmd[1] = (rscsi_disks[i].device->lun << 5) & 0xe0;
@@ -1191,30 +1198,20 @@ static int sd_init_onedisk(int i)
 				SCpnt->sense_buffer[0] = 0;
 				SCpnt->sense_buffer[2] = 0;
 
-				{
-					DECLARE_MUTEX_LOCKED(sem);
-					/* Mark as really busy again */
-					SCpnt->request.rq_status = RQ_SCSI_BUSY;
-					SCpnt->request.sem = &sem;
-					scsi_do_cmd(SCpnt,
-					   (void *) cmd, (void *) buffer,
-					   512, sd_init_done, SD_TIMEOUT,
-						    MAX_RETRIES);
-					spin_unlock_irq(&io_request_lock);
-					down(&sem);
-					spin_lock_irq(&io_request_lock);
-					SCpnt->request.sem = NULL;
-				}
-
-				spintime = jiffies;
+				sd_wait_cmd(SCpnt, (void *) cmd, (void *) buffer,
+					512, sd_init_done, SD_TIMEOUT, MAX_RETRIES);
 			}
+
+			spintime = 1;
+			spintime_value = jiffies;
 			time1 = jiffies + HZ;
 			spin_unlock_irq(&io_request_lock);
-			while (jiffies < time1);	/* Wait 1 second for next try */
+			while(time_before(jiffies, time1)); /* Wait 1 second for next try */
 			printk(".");
 			spin_lock_irq(&io_request_lock);
 		}
-	} while (the_result && spintime && spintime + 100 * HZ > jiffies);
+	} while(the_result && spintime && time_after(spintime_value+100*HZ, jiffies));
+
 	if (spintime) {
 		if (the_result)
 			printk("not responding...\n");
@@ -1231,20 +1228,8 @@ static int sd_init_onedisk(int i)
 		SCpnt->sense_buffer[0] = 0;
 		SCpnt->sense_buffer[2] = 0;
 
-		{
-			DECLARE_MUTEX_LOCKED(sem);
-			/* Mark as really busy again */
-			SCpnt->request.rq_status = RQ_SCSI_BUSY;
-			SCpnt->request.sem = &sem;
-			scsi_do_cmd(SCpnt,
-				    (void *) cmd, (void *) buffer,
-				    8, sd_init_done, SD_TIMEOUT,
-				    MAX_RETRIES);
-			spin_unlock_irq(&io_request_lock);
-			down(&sem);	/* sleep until it is ready */
-			spin_lock_irq(&io_request_lock);
-			SCpnt->request.sem = NULL;
-		}
+		sd_wait_cmd(SCpnt, (void *) cmd, (void *) buffer,
+			8, sd_init_done, SD_TIMEOUT, MAX_RETRIES);
 
 		the_result = SCpnt->result;
 		retries--;
@@ -1320,14 +1305,15 @@ static int sd_init_onedisk(int i)
 				rscsi_disks[i].capacity = 0;
 			} else {
 				printk("scsi : deleting disk entry.\n");
+				sd_detach(rscsi_disks[i].device);
 				rscsi_disks[i].device = NULL;
-				sd_template.nr_dev--;
-				SD_GENDISK(i).nr_real--;
 
 				/* Wake up a process waiting for device */
 				wake_up(&SCpnt->device->device_wait);
 				scsi_release_command(SCpnt);
 				SCpnt = NULL;
+				scsi_free(buffer, 512);
+				spin_unlock_irq(&io_request_lock);
 
 				return i;
 			}
@@ -1402,19 +1388,8 @@ static int sd_init_onedisk(int i)
 		SCpnt->sense_buffer[2] = 0;
 
 		/* same code as READCAPA !! */
-		{
-			DECLARE_MUTEX_LOCKED(sem);
-			SCpnt->request.rq_status = RQ_SCSI_BUSY;	/* Mark as really busy again */
-			SCpnt->request.sem = &sem;
-			scsi_do_cmd(SCpnt,
-				    (void *) cmd, (void *) buffer,
-				    512, sd_init_done, SD_TIMEOUT,
-				    MAX_RETRIES);
-			spin_unlock_irq(&io_request_lock);
-			down(&sem);
-			spin_lock_irq(&io_request_lock);
-			SCpnt->request.sem = NULL;
-		}
+		sd_wait_cmd(SCpnt, (void *) cmd, (void *) buffer,
+				512, sd_init_done, SD_TIMEOUT, MAX_RETRIES);
 
 		the_result = SCpnt->result;
 
@@ -1673,6 +1648,8 @@ int revalidate_scsidisk(kdev_t dev, int maxusage)
 #endif
 
 	sd_gendisks->part[start].nr_sects = CAPACITY;
+	if (!rscsi_disks[target].device)
+		return -EBUSY;
 	resetup_one_dev(&SD_GENDISK(target),
 			target % SCSI_DISKS_PER_MAJOR);
 

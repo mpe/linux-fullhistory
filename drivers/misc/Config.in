@@ -4,6 +4,10 @@
 mainmenu_option next_comment
 comment 'Misc devices'
 
+if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+  tristate 'Generic ACPI support' CONFIG_ACPI
+fi
+
 # PIIX4 ACPI requires PCI for setup and a hardcoded TSC for timing
 if [ "$CONFIG_PCI" = "y" -a "$CONFIG_X86_TSC" = "y" -a "$CONFIG_EXPERIMENTAL" = "y" ]; then
   bool 'PIIX4 ACPI support' CONFIG_PIIX4_ACPI

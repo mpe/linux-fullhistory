@@ -87,9 +87,9 @@ void __init ide_probe_for_rz100x (void)	/* called from ide.c */
 {
 	struct pci_dev *dev = NULL;
 
-	while (dev = pci_find_device(PCI_VENDOR_ID_PCTECH, PCI_DEVICE_ID_PCTECH_RZ1000, dev))
+	while ((dev = pci_find_device(PCI_VENDOR_ID_PCTECH, PCI_DEVICE_ID_PCTECH_RZ1000, dev))!=NULL)
 		init_rz1000 (dev, "RZ1000");
-	while (dev = pci_find_device(PCI_VENDOR_ID_PCTECH, PCI_DEVICE_ID_PCTECH_RZ1001, dev))
+	while ((dev = pci_find_device(PCI_VENDOR_ID_PCTECH, PCI_DEVICE_ID_PCTECH_RZ1001, dev))!=NULL)
 		init_rz1000 (dev, "RZ1001");
 }
 

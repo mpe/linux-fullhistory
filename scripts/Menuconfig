@@ -68,6 +68,12 @@
 #
 # 24 January 1999, Michael Elizabeth Chastain, <mec@shout.net>
 # - Improve the exit message (Jeff Ronne).
+#
+# 06 July 1999, Andrzej M. Krzysztofowicz, <ankry@mif.pg.gda.pl>
+# - Support for multiple conditions in dep_tristate().
+# - Implemented new functions: define_tristate(), define_int(), define_hex(),
+#   define_string(), dep_bool().
+# 
 
 
 #
@@ -132,6 +138,22 @@ function define_bool () {
 	eval $1=$2
 }
 
+function define_tristate () {
+	eval $1=$2
+}
+
+function define_hex () {
+	eval $1=$2
+}
+
+function define_int () {
+	eval $1=$2
+}
+
+function define_string () {
+	eval $1="$2"
+}
+
 #
 # Create a boolean (Yes/No) function for our current menu
 # which calls our local bool function.
@@ -188,13 +210,52 @@ function tristate () {
 #       else in the kernel.
 #
 function dep_tristate () {
-	if [ "$3" = "y" ]; then
-	    tristate "$1" "$2"
-	else if [ "$3" = "m" ]; then
-	    mod_bool "$1" "$2"
+	ques="$1"
+	var="$2"
+	dep=y
+	shift 2
+	while [ $# -gt 0 ]; do
+		if   [ "$1" = y ]; then
+			shift
+		elif [ "$1" = m ]; then
+			dep=m
+			shift
+		else
+			dep=n
+			shift $#
+		fi
+	done
+	if [ "$dep" = y ]; then
+	    tristate "$ques" "$var"
+	elif [ "$dep" = m ]; then
+	    mod_bool "$ques" "$var"
 	else 
-	    define_bool "$2" n
-	fi; fi
+	    define_tristate "$var" n
+	fi
+}
+
+#
+#   Same as above, but now only Y and N are allowed as dependency
+#   (i.e. third and next arguments).
+#
+function dep_bool () {
+	ques="$1"
+	var="$2"
+	dep=y
+	shift 2
+	while [ $# -gt 0 ]; do
+		if [ "$1" = y ]; then
+			shift
+		else
+			dep=n
+			shift $#
+		fi
+	done
+	if [ "$dep" = y ]; then
+	    bool "$ques" "$var"
+	else 
+	    define_bool "$var" n
+	fi
 }
 
 #
@@ -633,12 +694,13 @@ function parser(ifile,menu) {
 
 			printf("submenu %s MCmenu%s\n", $0, menu_no) >>menu
 
+			newmenu = sprintf("MCmenu%d", menu_no);
 			printf( "function MCmenu%s () {\n"\
 				"default=$1\n"\
 				"menu_name %s\n",\
-				 menu_no, $0) >"MCmenu"menu_no
+				 menu_no, $0) >newmenu
 
-			parser(ifile, "MCmenu"menu_no)
+			parser(ifile, newmenu)
 		}
 		else if ($1 ~ "endmenu") {
 			printf("}\n") >>menu
@@ -988,13 +1050,37 @@ save_configuration () {
 
 	function tristate () {
 		set_x_info "$2" "n"
-		eval define_bool "$2" "$x"
+		eval define_tristate "$2" "$x"
 	}
 
 	function dep_tristate () {
 		set_x_info "$2" "n"
-		if [ "$3" = "m" -a "$x" = "y" ]; then x="m"; fi
-		define_bool "$2" "$x"
+		var="$2"
+		shift 2
+		while [ $# -gt 0 ]; do
+			if   [ "$1" = y ]; then
+				shift
+			elif [ "$1" = m -a "$x" != n ]; then
+				x=m; shift
+			else 
+				x=n; shift $#
+			fi
+		done
+		define_tristate "$var" "$x"
+	}
+
+	function dep_bool () {
+		set_x_info "$2" "n"
+		var="$2"
+		shift 2
+		while [ $# -gt 0 ]; do
+			if   [ "$1" = y ]; then
+				shift
+			else 
+				x=n; shift $#
+			fi
+		done
+		define_bool "$var" "$x"
 	}
 
 	function int () {
@@ -1015,7 +1101,29 @@ save_configuration () {
 		echo "#define $2 \"$x\""	>>$CONFIG_H
 	}
 
+	function define_hex () {
+		eval $1="$2"
+               	echo "$1=$2"			>>$CONFIG
+		echo "#define $1 0x${2##*[x,X]}"	>>$CONFIG_H
+	}
+
+	function define_int () {
+		eval $1="$2"
+		echo "$1=$2" 			>>$CONFIG
+		echo "#define $1 ($2)"		>>$CONFIG_H
+	}
+
+	function define_string () {
+		eval $1="$2"
+		echo "$1=\"$2\""		>>$CONFIG
+		echo "#define $1 \"$2\""	>>$CONFIG_H
+	}
+
 	function define_bool () {
+		define_tristate "$1" "$2"
+	}
+
+	function define_tristate () {
 		eval $1="$2"
 
    		case "$2" in

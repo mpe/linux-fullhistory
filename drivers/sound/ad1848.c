@@ -106,7 +106,7 @@ int soundpro = 1;
 int soundpro = 0;
 #endif
 
-static volatile char irq2dev[17] = {
+static volatile signed char irq2dev[17] = {
 	-1, -1, -1, -1, -1, -1, -1, -1,
 	-1, -1, -1, -1, -1, -1, -1, -1, -1
 };
@@ -2434,11 +2434,12 @@ int probe_ms_sound(struct address_info *hw_config)
 
 void attach_ms_sound(struct address_info *hw_config)
 {
-	static char     interrupt_bits[12] =
+	static signed char interrupt_bits[12] =
 	{
 		-1, -1, -1, -1, -1, 0x00, -1, 0x08, -1, 0x10, 0x18, 0x20
 	};
-	char            bits, dma2_bit = 0;
+	signed char     bits;
+	char            dma2_bit = 0;
 
 	static char     dma_bits[4] =
 	{

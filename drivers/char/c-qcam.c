@@ -16,6 +16,7 @@
 #include <linux/sched.h>
 #include <linux/version.h>
 #include <linux/videodev.h>
+#include <asm/semaphore.h>
 #include <asm/uaccess.h>
 
 struct qcam_device {
@@ -28,6 +29,7 @@ struct qcam_device {
 	int contrast, brightness, whitebal;
 	int top, left;
 	unsigned int bidirectional;
+	struct semaphore lock;
 };
 
 /* The three possible QuickCam modes */
@@ -516,10 +518,12 @@ static int qcam_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 			qcam->brightness = p.brightness>>8;
 			qcam->contrast = p.contrast>>8;
 			qcam->whitebal = p.whiteness>>8;
-			
+
+			down(&qcam->lock);			
 			parport_claim_or_block(qcam->pdev);
 			qc_setup(qcam); 
 			parport_release(qcam->pdev);
+			up(&qcam->lock);
 			return 0;
 		}
 		case VIDIOCSWIN:
@@ -564,9 +568,11 @@ static int qcam_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 #endif
 			/* Ok we figured out what to use from our 
 			   wide choice */
+			down(&qcam->lock);
 			parport_claim_or_block(qcam->pdev);
 			qc_setup(qcam);
 			parport_release(qcam->pdev);
+			up(&qcam->lock);
 			return 0;
 		}
 		case VIDIOCGWIN:
@@ -608,10 +614,13 @@ static long qcam_read(struct video_device *v, char *buf, unsigned long count,  i
 {
 	struct qcam_device *qcam=(struct qcam_device *)v;
 	int len;
+
+	down(&qcam->lock);
 	parport_claim_or_block(qcam->pdev);
 	/* Probably should have a semaphore against multiple users */
 	len = qc_capture(qcam, buf,count); 
 	parport_release(qcam->pdev);
+	up(&qcam->lock);
 	return len;
 }
 
@@ -660,6 +669,7 @@ static struct qcam_device *qcam_init(struct parport *port)
 	
 	memcpy(&q->vdev, &qcam_template, sizeof(qcam_template));
 
+	init_MUTEX(&q->lock);
 	q->width = q->ccd_width = 320;
 	q->height = q->ccd_height = 240;
 	q->mode = QC_MILLIONS | QC_DECIMATION_1;

@@ -2,7 +2,7 @@
 
     PCMCIA Bulk Memory Services
 
-    bulkmem.c 1.29 1999/08/28 04:01:45
+    bulkmem.c 1.32 1999/09/15 15:32:19
 
     The contents of this file are subject to the Mozilla Public
     License Version 1.1 (the "License"); you may not use this file
@@ -112,7 +112,7 @@ static int do_mtd_request(memory_handle_t handle, mtd_request_t *req,
 
 static void insert_queue(erase_busy_t *head, erase_busy_t *entry)
 {
-    DEBUG(2, ("cs: adding 0x%p to queue 0x%p\n", entry, head));
+    DEBUG(2, "cs: adding 0x%p to queue 0x%p\n", entry, head);
     entry->next = head;
     entry->prev = head->prev;
     head->prev->next = entry;
@@ -121,7 +121,7 @@ static void insert_queue(erase_busy_t *head, erase_busy_t *entry)
 
 static void remove_queue(erase_busy_t *entry)
 {
-    DEBUG(2, ("cs: unqueueing 0x%p\n", entry));
+    DEBUG(2, "cs: unqueueing 0x%p\n", entry);
     entry->next->prev = entry->prev;
     entry->prev->next = entry->next;
 }
@@ -134,7 +134,7 @@ static void retry_erase(erase_busy_t *busy, u_int cause)
     socket_info_t *s;
     int ret;
 
-    DEBUG(2, ("cs: trying erase request 0x%p...\n", busy));
+    DEBUG(2, "cs: trying erase request 0x%p...\n", busy);
     if (busy->next)
 	remove_queue(busy);
     req.Function = MTD_REQ_ERASE | cause;
@@ -146,7 +146,7 @@ static void retry_erase(erase_busy_t *busy, u_int cause)
     mtd->event_callback_args.mtdrequest = &req;
     ret = EVENT(mtd, CS_EVENT_MTD_REQUEST, CS_EVENT_PRI_LOW);
     if (ret == CS_BUSY) {
-	DEBUG(2, ("  Status = %d, requeueing.\n", req.Status));
+	DEBUG(2, "  Status = %d, requeueing.\n", req.Status);
 	switch (req.Status) {
 	case MTD_WAITREQ:
 	case MTD_WAITPOWER:
@@ -162,7 +162,7 @@ static void retry_erase(erase_busy_t *busy, u_int cause)
 	}
     } else {
 	/* update erase queue status */
-	DEBUG(2, ("  Ret = %d\n", ret));
+	DEBUG(2, "  Ret = %d\n", ret);
 	switch (ret) {
 	case CS_SUCCESS:
 	    erase->State = ERASE_PASSED; break;
@@ -190,7 +190,7 @@ void retry_erase_list(erase_busy_t *list, u_int cause)
 {
     erase_busy_t tmp = *list;
 
-    DEBUG(2, ("cs: rescanning erase queue list 0x%p\n", list));
+    DEBUG(2, "cs: rescanning erase queue list 0x%p\n", list);
     if (list->next == list)
 	return;
     /* First, truncate the original list */
@@ -207,7 +207,7 @@ void retry_erase_list(erase_busy_t *list, u_int cause)
 
 static void handle_erase_timeout(u_long arg)
 {
-    DEBUG(0, ("cs: erase timeout for entry 0x%lx\n", arg));
+    DEBUG(0, "cs: erase timeout for entry 0x%lx\n", arg);
     retry_erase((erase_busy_t *)arg, MTD_REQ_TIMEOUT);
 }
 
@@ -326,8 +326,8 @@ static void setup_regions(client_handle_t handle, int attr,
     cistpl_device_geo_t geo;
     memory_handle_t r;
 
-    DEBUG(1, ("cs: setup_regions(0x%p, %d, 0x%p)\n",
-	      handle, attr, list));
+    DEBUG(1, "cs: setup_regions(0x%p, %d, 0x%p)\n",
+	  handle, attr, list);
 
     code = (attr) ? CISTPL_DEVICE_A : CISTPL_DEVICE;
     if (read_tuple(handle, code, &device) != CS_SUCCESS)
@@ -447,8 +447,8 @@ int register_mtd(client_handle_t handle, mtd_reg_t *reg)
 	list = s->a_region;
     else
 	list = s->c_region;
-    DEBUG(1, ("cs: register_mtd(0x%p, '%s', 0x%x)\n",
-	      handle, handle->dev_info, reg->Offset));
+    DEBUG(1, "cs: register_mtd(0x%p, '%s', 0x%x)\n",
+	  handle, handle->dev_info, reg->Offset);
     while (list) {
 	if (list->info.CardOffset == reg->Offset) break;
 	list = list->info.next;
@@ -466,7 +466,7 @@ int register_mtd(client_handle_t handle, mtd_reg_t *reg)
 
 /*======================================================================
 
-    
+    Erase queue management functions
     
 ======================================================================*/
 
@@ -535,8 +535,8 @@ int open_memory(client_handle_t *handle, open_mem_t *open)
     }
     if (region && region->mtd) {
 	*handle = (client_handle_t)region;
-	DEBUG(1, ("cs: open_memory(0x%p, 0x%x) = 0x%p\n",
-		  handle, open->Offset, region));
+	DEBUG(1, "cs: open_memory(0x%p, 0x%x) = 0x%p\n",
+	      handle, open->Offset, region);
 	return CS_SUCCESS;
     } else
 	return CS_BAD_OFFSET;
@@ -552,7 +552,7 @@ int open_memory(client_handle_t *handle, open_mem_t *open)
 
 int close_memory(memory_handle_t handle)
 {
-    DEBUG(1, ("cs: close_memory(0x%p)\n", handle));
+    DEBUG(1, "cs: close_memory(0x%p)\n", handle);
     if (CHECK_REGION(handle))
 	return CS_BAD_HANDLE;
     return CS_SUCCESS;
@@ -612,6 +612,7 @@ int write_memory(memory_handle_t handle, mem_op_t *req, caddr_t buf)
 
 /*======================================================================
 
+    This isn't needed for anything I could think of.
     
 ======================================================================*/
 
@@ -620,5 +621,5 @@ int copy_memory(memory_handle_t handle, copy_op_t *req)
     if (CHECK_REGION(handle))
 	return CS_BAD_HANDLE;
     return CS_UNSUPPORTED_FUNCTION;
-} /* close_memory */
+}
 

@@ -2,7 +2,7 @@
 
     PC Card Driver Services
     
-    ds.c 1.96 1999/09/02 18:35:34
+    ds.c 1.98 1999/09/15 15:32:19
     
     The contents of this file are subject to the Mozilla Public
     License Version 1.1 (the "License"); you may not use this file
@@ -32,6 +32,7 @@
 ======================================================================*/
 
 #include <linux/module.h>
+#include <linux/init.h>
 #include <linux/kernel.h>
 #include <linux/major.h>
 #include <linux/string.h>
@@ -56,7 +57,7 @@ int pc_debug = PCMCIA_DEBUG;
 MODULE_PARM(pc_debug, "i");
 #define DEBUG(n, args...) if (pc_debug>(n)) printk(KERN_DEBUG args)
 static const char *version =
-"ds.c 1.96 1999/09/02 18:35:34 (David Hinds)";
+"ds.c 1.98 1999/09/15 15:32:19 (David Hinds)";
 #else
 #define DEBUG(n, args...)
 #endif
@@ -537,7 +538,7 @@ static int ds_release(struct inode *inode, struct file *file)
 /*====================================================================*/
 
 static ssize_t ds_read(struct file *file, char *buf,
-			      size_t count, loff_t *ppos)
+		       size_t count, loff_t *ppos)
 {
     socket_t i = MINOR(file->f_dentry->d_inode->i_rdev);
     socket_info_t *s;
@@ -566,7 +567,7 @@ static ssize_t ds_read(struct file *file, char *buf,
 /*====================================================================*/
 
 static ssize_t ds_write(struct file *file, const char *buf,
-			       size_t count, loff_t *ppos)
+			size_t count, loff_t *ppos)
 {
     socket_t i = MINOR(file->f_dentry->d_inode->i_rdev);
     socket_info_t *s;
@@ -804,7 +805,7 @@ EXPORT_SYMBOL(unregister_pccard_driver);
 
 /*====================================================================*/
 
-int pcmcia_ds_init(void)
+int __init init_pcmcia_ds(void)
 {
     client_reg_t client_reg;
     servinfo_t serv;
@@ -879,12 +880,12 @@ int pcmcia_ds_init(void)
 
 #ifdef MODULE
 
-static int init_module(void)
+int __init init_module(void)
 {
-	return pcmcia_ds_init();
+    return init_pcmcia_ds();
 }
 
-void cleanup_module(void)
+void __exit cleanup_module(void)
 {
     int i;
     if (major_dev != -1)

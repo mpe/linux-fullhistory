@@ -142,7 +142,8 @@
 #include <linux/stddef.h>
 #include <linux/spinlock.h>
 #include <asm/fixmap.h>
-#include <asm/sgi-cobalt.h>
+#include <asm/cobalt.h>
+#include <asm/semaphore.h>
 
 #include "sound_config.h"
 

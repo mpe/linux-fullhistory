@@ -5,8 +5,12 @@
 mainmenu_option next_comment
 comment 'PCMCIA network devices'
 
-tristate 'PCMCIA ethernet cards (NE2000 compatibles: DE-650, ...)' CONFIG_PCMCIA_PCNET
-tristate '3Com 3c589 PCMCIA card' CONFIG_PCMCIA_3C589
-tristate 'Aviator/Raytheon 2.4MHz wireless' CONFIG_PCMCIA_RAYCS
+dep_tristate 'PCMCIA ethernet cards (NE2000 compatibles: DE-650, ...)' CONFIG_PCMCIA_PCNET $CONFIG_PCMCIA
+dep_tristate '3Com 3c589 PCMCIA card' CONFIG_PCMCIA_3C589 $CONFIG_PCMCIA
+dep_tristate 'Aviator/Raytheon 2.4MHz wireless' CONFIG_PCMCIA_RAYCS $CONFIG_PCMCIA
+
+if [ "$CONFIG_PCMCIA_3C589" = "y" -o "$CONFIG_PCMCIA_RAYCS" = "y" -o "$CONFIG_PCMCIA_PCNET" = "y" ]; then
+   define_bool CONFIG_PCMCIA_NETCARD y
+fi
 
 endmenu

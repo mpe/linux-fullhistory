@@ -166,7 +166,7 @@ static const char __init *vgacon_startup(void)
 {
 	const char *display_desc = NULL;
 	u16 saved1, saved2;
-	u16 *p;
+	volatile u16 *p;
 
 	if (ORIG_VIDEO_ISVGA == VIDEO_TYPE_VLFB) {
 	no_vga:
@@ -285,7 +285,7 @@ static const char __init *vgacon_startup(void)
 	 *	Find out if there is a graphics card present.
 	 *	Are there smarter methods around?
 	 */
-	p = (u16 *)vga_vram_base;
+	p = (volatile u16 *)vga_vram_base;
 	saved1 = scr_readw(p);
 	saved2 = scr_readw(p + 1);
 	scr_writew(0xAA55, p);

@@ -23,6 +23,9 @@
  *	Added soft_margin; use upon insmod to change the timer delay.
  *	NB: uses same minor as wdt (WATCHDOG_MINOR); we could use separate
  *	    minors.
+ *
+ *  19980911 Alan Cox
+ *	Made SMP safe for 2.3.x
  */
  
 #include <linux/module.h>
@@ -106,10 +109,8 @@ static void softdog_ping(void)
 	/*
 	 *	Refresh the timer.
 	 */
-	del_timer(&watchdog_ticktock);
-	watchdog_ticktock.expires=jiffies + (soft_margin * HZ);
-	add_timer(&watchdog_ticktock);
-	return;
+
+	mod_timer(&watchdog_ticktock, jiffies + (soft_margin * HZ));
 }
 
 static ssize_t softdog_write(struct file *file, const char *data, size_t len, loff_t *ppos)

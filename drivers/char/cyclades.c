@@ -1,7 +1,7 @@
-#define BLOCKMOVE
+#undef	BLOCKMOVE
 #define	Z_WAKE
 static char rcsid[] =
-"$Revision: 2.3.2.1 $$Date: 1999/09/27 11:01:22 $";
+"$Revision: 2.3.2.2 $$Date: 1999/10/01 11:27:43 $";
 
 /*
  *  linux/drivers/char/cyclades.c
@@ -30,13 +30,22 @@ static char rcsid[] =
  *   void cleanup_module(void);
  *
  * $Log: cyclades.c,v $
- * Revision 2.3.2.1   1999/09/27 11:01:22 ivan
+ * Revision 2.3.2.2   1999/10/01 11:27:43 ivan
+ * Fixed bug in cyz_poll that would make all ports but port 0
+ * unable to transmit/receive data (Cyclades-Z only);
+ * Implemented logic to prevent the RX buffer from being stuck with
+ * due to a driver / firmware race condition in interrupt op mode
+ * (Cyclades-Z only);
+ * Fixed bug in block_til_ready logic that would lead to a system crash;
+ * Revisited cy_close spinlock usage;
+ *
+ * Revision 2.3.2.1   1999/09/28 11:01:22 ivan
  * Revisited CONFIG_PCI conditional compilation for PCI board support;
  * Implemented TIOCGICOUNT and TIOCMIWAIT ioctl support;
  * _Major_ cleanup on the Cyclades-Z interrupt support code / logic;
  * Removed CTS handling from the driver -- this is now completely handled
  * by the firmware (Cyclades-Z only);
- * Flush RX on-board buffers as well on close (Cyclades-Z only);
+ * Flush RX on-board buffers on a port open (Cyclades-Z only);
  * Fixed handling of ASYNC_SPD_* TTY flags;
  * Module unload now unmaps all memory area allocated by ioremap;
  *
@@ -855,6 +864,7 @@ static unsigned short	cy_pci_dev_id[] = {
 
 static void cy_start(struct tty_struct *);
 static void set_line_char(struct cyclades_port *);
+static int cyz_issue_cmd(struct cyclades_card *, uclong, ucchar, uclong);
 #ifndef CONFIG_COBALT_27
 static unsigned detect_isa_irq (volatile ucchar *);
 #endif /* CONFIG_COBALT_27 */
@@ -875,6 +885,9 @@ static struct timer_list
 cyz_timerlist = {
     NULL, NULL, 0, 0, cyz_poll
 };
+#else /* CONFIG_CYZ_INTR */
+static void cyz_rx_restart(unsigned long);
+static struct timer_list cyz_rx_full_timer[NR_PORTS];
 #endif /* CONFIG_CYZ_INTR */
 
 /**************************************************
@@ -979,6 +992,14 @@ do_softint(void *private_)
     if (test_and_clear_bit(Cy_EVENT_OPEN_WAKEUP, &info->event)) {
         wake_up_interruptible(&info->open_wait);
     }
+#ifdef CONFIG_CYZ_INTR
+    if (test_and_clear_bit(Cy_EVENT_Z_RX_FULL, &info->event)) {
+	cyz_rx_full_timer[info->line].expires = jiffies + 1;
+	cyz_rx_full_timer[info->line].function = cyz_rx_restart;
+	cyz_rx_full_timer[info->line].data = (unsigned long)info;
+	add_timer(&cyz_rx_full_timer[info->line]);
+    }
+#endif
     if (test_and_clear_bit(Cy_EVENT_DELTA_WAKEUP, &info->event)) {
 	wake_up_interruptible(&info->delta_msr_wait);
     }
@@ -1645,6 +1666,9 @@ cyz_handle_rx(struct cyclades_port *info, volatile struct BUF_CTRL *buf_ctrl)
 #else
 	    while(char_count--){
 		if (tty->flip.count >= TTY_FLIPBUF_SIZE){
+#ifdef CONFIG_CYZ_INTR
+		    cy_sched_event(info, Cy_EVENT_Z_RX_FULL);
+#endif
 		    break;
 		}
 		data = cy_readb(cinfo->base_addr +
@@ -1653,7 +1677,7 @@ cyz_handle_rx(struct cyclades_port *info, volatile struct BUF_CTRL *buf_ctrl)
 		tty->flip.count++;
 		*tty->flip.flag_buf_ptr++ = TTY_NORMAL;
 		*tty->flip.char_buf_ptr++ = data;
-		info->idle_stats.recv_bytes += small_count;
+		info->idle_stats.recv_bytes++;
 		info->icount.rx++;
 	    }
 #endif
@@ -1812,7 +1836,7 @@ cyz_handle_cmd(struct cyclades_card *cinfo)
 		if (info->flags & ASYNC_CHECK_CD){
 		    if ((fw_ver > 241 ? 
 			  ((u_long)param) : 
-			  cy_readl(&ch_ctrl[channel].rs_status)) & C_RS_DCD) {
+			  cy_readl(&ch_ctrl->rs_status)) & C_RS_DCD) {
 			cy_sched_event(info, Cy_EVENT_OPEN_WAKEUP);
 		    }else if(!((info->flags & ASYNC_CALLOUT_ACTIVE)
 			     &&(info->flags & ASYNC_CALLOUT_NOHUP))){
@@ -1840,6 +1864,7 @@ cyz_handle_cmd(struct cyclades_card *cinfo)
 #ifdef CONFIG_CYZ_INTR
 	    case C_CM_RXHIWM:
 	    case C_CM_RXNNDT:
+	    case C_CM_INTBACK2:
 		/* Reception Interrupt */
 #ifdef CY_DEBUG_INTERRUPTS
 		printk("cyz_interrupt: rcvd intr, card %d, port %ld\n\r", 
@@ -1897,6 +1922,21 @@ cyz_interrupt(int irq, void *dev_id, struct pt_regs *regs)
     return;
 } /* cyz_interrupt */
 
+static void
+cyz_rx_restart(unsigned long arg)
+{
+    struct cyclades_port *info = (struct cyclades_port *)arg;
+    int retval;
+    int card = info->card;
+    uclong channel = (info->line) - (cy_card[card].first_line);
+
+    cyz_rx_full_timer[info->card].expires = jiffies + HZ;
+    retval = cyz_issue_cmd(&cy_card[card], channel, C_CM_INTBACK2, 0L);
+    if (retval != 0){
+	printk("cyc:cyz_rx_restart retval was %x\n", retval);
+    }
+}
+
 #else /* CONFIG_CYZ_INTR */
 
 static void
@@ -1928,6 +1968,7 @@ cyz_poll(unsigned long arg)
 	firm_id = (struct FIRM_ID *)(cinfo->base_addr + ID_ADDRESS);
 	zfw_ctrl = (struct ZFW_CTRL *)
 		   (cinfo->base_addr + cy_readl(&firm_id->zfwctrl_addr));
+	board_ctrl = &(zfw_ctrl->board_ctrl);
 
 	cyz_handle_cmd(cinfo);
 
@@ -1940,7 +1981,7 @@ cyz_poll(unsigned long arg)
 	    cyz_handle_rx(info, buf_ctrl);
 	    cyz_handle_tx(info, buf_ctrl);
 	}
-	/* poll every 40 ms */
+	/* poll every 'cyz_polling_cycle' period */
 	cyz_timerlist.expires = jiffies + cyz_polling_cycle;
     }
     add_timer(&cyz_timerlist);
@@ -2095,10 +2136,15 @@ startup(struct cyclades_port * info)
 #endif /* CONFIG_CYZ_INTR */
 #endif /* Z_WAKE */
 
-	retval = cyz_issue_cmd( &cy_card[card],
-	    channel, C_CM_IOCTL, 0L);	/* was C_CM_RESET */
+	retval = cyz_issue_cmd(&cy_card[card], channel, C_CM_IOCTL, 0L);
 	if (retval != 0){
 	    printk("cyc:startup(1) retval was %x\n", retval);
+	}
+
+	/* Flush RX buffers before raising DTR and RTS */
+	retval = cyz_issue_cmd(&cy_card[card], channel, C_CM_FLUSH_RX, 0L);
+	if (retval != 0){
+	    printk("cyc:startup(2) retval was %x\n", retval);
 	}
 
 	/* set timeout !!! */
@@ -2108,7 +2154,7 @@ startup(struct cyclades_port * info)
 	retval = cyz_issue_cmd(&cy_card[info->card],
 	    channel, C_CM_IOCTLM, 0L);
 	if (retval != 0){
-	    printk("cyc:startup(2) retval was %x\n", retval);
+	    printk("cyc:startup(3) retval was %x\n", retval);
 	}
 #ifdef CY_DEBUG_DTR
 	    printk("cyc:startup raising Z DTR\n");
@@ -2417,7 +2463,7 @@ block_til_ready(struct tty_struct *tty, struct file * filp,
 	    set_current_state(TASK_INTERRUPTIBLE);
 	    if (tty_hung_up_p(filp)
 	    || !(info->flags & ASYNC_INITIALIZED) ){
-		return ((info->flags & ASYNC_HUP_NOTIFY) ? 
+		retval = ((info->flags & ASYNC_HUP_NOTIFY) ? 
 		    -EAGAIN : -ERESTARTSYS);
 		break;
 	    }
@@ -2478,7 +2524,7 @@ block_til_ready(struct tty_struct *tty, struct file * filp,
 	    set_current_state(TASK_INTERRUPTIBLE);
 	    if (tty_hung_up_p(filp)
 	    || !(info->flags & ASYNC_INITIALIZED) ){
-		return ((info->flags & ASYNC_HUP_NOTIFY) ?
+		retval = ((info->flags & ASYNC_HUP_NOTIFY) ?
 		    -EAGAIN : -ERESTARTSYS);
 		break;
 	    }
@@ -2845,7 +2891,7 @@ cy_close(struct tty_struct *tty, struct file *filp)
 	    retval = cyz_issue_cmd(&cy_card[info->card], channel, 
 				   C_CM_IOCTLW, 0L);
 	    if (retval != 0){
-		printk("cyc:cy_close retval (1) was %x\n", retval);
+		printk("cyc:cy_close retval was %x\n", retval);
 	    }
 	    CY_UNLOCK(info, flags);
 	    interruptible_sleep_on(&info->shutdown_wait);
@@ -2860,28 +2906,19 @@ cy_close(struct tty_struct *tty, struct file *filp)
         tty->driver.flush_buffer(tty);
     if (tty->ldisc.flush_buffer)
         tty->ldisc.flush_buffer(tty);
-    if (IS_CYC_Z(cy_card[info->card])) { /* If it is a Z card, flush the
-					    on-board RX buffers as well */
-	int retval;
-	int channel = info->line - cy_card[info->card].first_line;
-
-	retval = cyz_issue_cmd(&cy_card[info->card], channel,
-				C_CM_FLUSH_RX, 0L);
-	if (retval != 0) {
-	    printk("cyc: cy_close retval (2) was %x\n", retval);
-	}
-    }
     CY_LOCK(info, flags);
 
     tty->closing = 0;
     info->event = 0;
     info->tty = 0;
     if (info->blocked_open) {
+	CY_UNLOCK(info, flags);
         if (info->close_delay) {
             current->state = TASK_INTERRUPTIBLE;
             schedule_timeout(info->close_delay);
         }
         wake_up_interruptible(&info->open_wait);
+	CY_LOCK(info, flags);
     }
     info->flags &= ~(ASYNC_NORMAL_ACTIVE|ASYNC_CALLOUT_ACTIVE|
                      ASYNC_CLOSING);

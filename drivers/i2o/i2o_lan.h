@@ -17,7 +17,7 @@
 
 /* Tunable parameters first */
 
-#define I2O_BUCKET_COUNT 	64
+#define I2O_BUCKET_COUNT 	256
 #define I2O_BUCKET_THRESH	16
 
 /* LAN types */

@@ -358,6 +358,7 @@
  * <pci-ids@ucw.cz>.
  */
 #define PCI_VENDOR_ID_COMPAQ		0x0e11
+#define PCI_DEVICE_ID_COMPAQ_TOKENRING	0x0508
 #define PCI_DEVICE_ID_COMPAQ_1280	0x3033
 #define PCI_DEVICE_ID_COMPAQ_TRIFLEX	0x4000
 #define PCI_DEVICE_ID_COMPAQ_SMART2P	0xae10
@@ -1179,8 +1180,8 @@
 
 #define PCI_VENDOR_ID_LAVA		0x1407
 #define PCI_DEVICE_ID_LAVA_PARALLEL	0x8000
-#define PCI_DEVICE_ID_LAVA_DUAL_PAR_A	0x8001 /* The Lava Dual Parallel is */
-#define PCI_DEVICE_ID_LAVA_DUAL_PAR_B	0x8002 /* two PCI devices on a card */
+#define PCI_DEVICE_ID_LAVA_DUAL_PAR_A	0x8002 /* The Lava Dual Parallel is */
+#define PCI_DEVICE_ID_LAVA_DUAL_PAR_B	0x8003 /* two PCI devices on a card */
 
 #define PCI_VENDOR_ID_PANACOM		0x14d4
 #define PCI_DEVICE_ID_PANACOM_QUADMODEM	0x0400
@@ -1575,6 +1576,10 @@ extern inline struct pci_dev *pci_find_class(unsigned int class, struct pci_dev 
 
 extern inline struct pci_dev *pci_find_slot(unsigned int bus, unsigned int devfn)
 { return NULL; }
+
+extern inline void pci_set_master(struct pci_dev *dev) 
+{ return; }
+
 
 #endif /* !CONFIG_PCI */
 

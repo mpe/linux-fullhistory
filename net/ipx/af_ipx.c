@@ -744,7 +744,9 @@ static int ipxitf_rcv(ipx_interface *intrfc, struct sk_buff *skb)
 
 	if(ipx->ipx_type == IPX_TYPE_PPROP
 		&& ipx->ipx_tctrl < 8 
-		&& skb->pkt_type != PACKET_OTHERHOST) 
+		&& skb->pkt_type != PACKET_OTHERHOST
+		   /* header + 8 network numbers */ 
+		&& ntohs(ipx->ipx_pktsize) >= sizeof(struct ipxhdr) + 8 * 4) 
 	{
 		int i;
         	ipx_interface *ifcs;
@@ -2043,6 +2045,10 @@ int ipx_rcv(struct sk_buff *skb, struct net_device *dev, struct packet_type *pt)
 	
 	/* Too small? */
 	if(ntohs(ipx->ipx_pktsize) < sizeof(struct ipxhdr))
+		goto drop;
+
+	/* Invalid header */
+	if(ntohs(ipx->ipx_pktsize) > skb->len)
 		goto drop;
 		
 	/* Not ours */	

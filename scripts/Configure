@@ -143,6 +143,10 @@ function comment () {
 #	define_bool define value
 #
 function define_bool () {
+	define_tristate $1 $2
+}
+
+function define_tristate () {
 	case "$2" in
 	 "y")
 		echo "$1=y" >>$CONFIG
@@ -213,11 +217,11 @@ function tristate () {
 	  while :; do
 	    readln "$1 ($2) [$defprompt] " "$def" "$old"
 	    case "$ans" in
-	      [yY] | [yY]es ) define_bool "$2" "y"
+	      [yY] | [yY]es ) define_tristate "$2" "y"
 			      break ;;
-	      [nN] | [nN]o )  define_bool "$2" "n"
+	      [nN] | [nN]o )  define_tristate "$2" "n"
 			      break ;;
-	      [mM] )          define_bool "$2" "m"
+	      [mM] )          define_tristate "$2" "m"
 			      break ;;
 	      * )             help "$2"
 			      ;;
@@ -246,7 +250,7 @@ function dep_tristate () {
 	while [ $# -gt 0 ]; do
 	  case "$1" in
  	    n)
-	      define_bool "$var" "n"
+	      define_tristate "$var" "n"
 	      return
 	      ;;
 	    m)
@@ -268,9 +272,9 @@ function dep_tristate () {
 		while :; do
 		  readln "$ques ($var) [$defprompt] " "$def" "$old"
 		  case "$ans" in
-		      [nN] | [nN]o )  define_bool "$var" "n"
+		      [nN] | [nN]o )  define_tristate "$var" "n"
 				      break ;;
-		      [mM] )          define_bool "$var" "m"
+		      [mM] )          define_tristate "$var" "m"
 				      break ;;
 		      [yY] | [yY]es ) echo 
    echo "  This answer is not allowed, because it is not consistent with"
@@ -288,6 +292,23 @@ function dep_tristate () {
 	else
 	   tristate "$ques" "$var"
 	fi
+}
+
+function dep_bool () {
+	ques=$1
+	var=$2
+	shift 2
+	while [ $# -gt 0 ]; do
+	  case "$1" in
+	    m | n)
+	      define_bool "$var" "n"
+	      return
+	      ;;
+	  esac
+	  shift
+	done
+
+	bool "$ques" "$var"
 }
 
 #

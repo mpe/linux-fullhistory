@@ -106,7 +106,7 @@ static void p9100_margins (struct fb_info_sbusfb *fb, struct display *p, int x_m
 
 static char idstring[60] __initdata = { 0 };
 
-__initfunc(char *p9100fb_init(struct fb_info_sbusfb *fb))
+char * __init p9100fb_init(struct fb_info_sbusfb *fb)
 {
 	struct fb_fix_screeninfo *fix = &fb->fix;
 	struct display *disp = &fb->disp;

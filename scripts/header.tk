@@ -32,7 +32,7 @@ proc cget { w option } {
 proc vfix { var } {
 	global $var
 	if [ catch {eval concat $$var} ] {
-		set $var 0
+		set $var 4
 	}
 }
 
@@ -42,6 +42,7 @@ proc vfix { var } {
 set CONSTANT_Y 1
 set CONSTANT_M 2
 set CONSTANT_N 0
+set CONSTANT_E 4
 
 #
 # Create a "reference" object to steal colors from.
@@ -67,9 +68,11 @@ proc mainmenu_name { text } {
 
 proc menu_option { w menu_num text } {
 	global menus_per_column
-	if { $menu_num <= $menus_per_column } then {
+	global processed_top_level
+	set processed_top_level [expr $processed_top_level + 1]
+	if { $processed_top_level <= $menus_per_column } then {
 	    set myframe left
-	} elseif { $menu_num <= [expr 2 * $menus_per_column] } then {
+	} elseif { $processed_top_level <= [expr 2 * $menus_per_column] } then {
 	    set myframe middle
 	} else {
 	    set myframe right
@@ -211,7 +214,7 @@ proc read_config { filename } {
 	}
 	close $file1
 	update_choices
-	update_mainmenu .rdupd
+	update_mainmenu
 }
 proc write_comment { file1 file2 text } {
     	puts $file1 ""
@@ -223,17 +226,49 @@ proc write_comment { file1 file2 text } {
 	puts $file2 " */"
 }
 
-proc write_tristate { file1 file2 varname variable dep } {
-	if { $variable == 0 } \
-		then { puts $file1 "# $varname is not set"; \
-		       puts $file2 "#undef  $varname"} \
-	elseif { $variable == 2 || ($dep == 2 && $variable == 1) } \
+proc effective_dep { deplist } {
+	global CONFIG_MODULES
+	set depend 1
+	foreach i $deplist {
+		if {$i == 0} then {set depend 0}
+		if {$i == 2 && $depend == 1} then {set depend 2}
+	}
+	if {$depend == 2 && $CONFIG_MODULES == 0} then {set depend 0}
+	return $depend
+}
+
+proc sync_tristate { var dep } {
+	global CONFIG_MODULES
+	if {$dep == 0 && ($var == 1 || $var == 2)} then {
+		set var 0
+	} elseif {$dep == 2 && $var == 1} then {
+		set var 2
+	} elseif {$var == 2 && $CONFIG_MODULES == 0} then {
+		if {$dep == 1} then {set var 1} else {set var 0}
+	}
+	return $var
+}
+
+proc sync_bool { var dep } {
+	set var [sync_tristate $var $dep]
+	if {$dep == 2} then {
+		set var 0
+	}
+	return $var
+}
+
+proc write_tristate { file1 file2 varname variable deplist } {
+	set variable [sync_tristate $variable [effective_dep $deplist]]
+	if { $variable == 1 }\
+		then { puts $file1 "$varname=y"; \
+		       puts $file2 "#define $varname 1" } \
+	elseif { $variable == 2 } \
 		then { puts $file1 "$varname=m"; \
 		       puts $file2 "#undef  $varname"; \
 		       puts $file2 "#define ${varname}_MODULE 1" } \
-	elseif { $variable == 1 && $dep != 2 } \
-		then { puts $file1 "$varname=y"; \
-		       puts $file2 "#define $varname 1" } \
+	elseif { $variable == 0 } \
+		then { puts $file1 "# $varname is not set"; \
+		       puts $file2 "#undef  $varname"} \
 	else { \
 	    puts stdout "ERROR - Attempting to write value for unconfigured variable ($varname)." \
 	}
@@ -245,7 +280,7 @@ proc write_int { file1 file2 varname variable dep } {
 		       puts $file2 "#undef  $varname"} \
 	else {
 		puts $file1 "$varname=$variable"; \
-		puts $file2 "#define $varname $variable"; \
+		puts $file2 "#define $varname ($variable)"; \
 	}
 }
 
@@ -255,7 +290,8 @@ proc write_hex { file1 file2 varname variable dep } {
 		       puts $file2 "#undef  $varname"} \
 	else {
 		puts $file1 "$varname=$variable"; \
-		puts $file2 "#define $varname 0x$variable"; \
+		puts -nonewline $file2 "#define $varname 0x"; \
+		puts $file2 [exec echo $variable | sed s/^0\[xX\]//]; \
 	}
 }
 
@@ -282,11 +318,11 @@ proc option_name {w mnum line text helpidx} {
 proc toggle_switch2 {w mnum line text variable} {
 	frame $w.x$line -relief sunken
 	radiobutton $w.x$line.y -text "y" -variable $variable -value 1 \
-		-relief groove -width 2 -command "update_menu$mnum .menu$mnum"
+		-relief groove -width 2 -command "update_active"
 	radiobutton $w.x$line.m -text "-"  -variable $variable -value 2 \
-		-relief groove -width 2 -command "update_menu$mnum .menu$mnum"
+		-relief groove -width 2 -command "update_active"
 	radiobutton $w.x$line.n -text "n"  -variable $variable -value 0 \
-		-relief groove -width 2 -command "update_menu$mnum .menu$mnum"
+		-relief groove -width 2 -command "update_active"
 		
 	option_name $w $mnum $line $text $variable
 		
@@ -296,11 +332,11 @@ proc toggle_switch2 {w mnum line text variable} {
 proc toggle_switch3 {w mnum line text variable} {
 	frame $w.x$line -relief sunken
 	radiobutton $w.x$line.y -text "y" -variable $variable -value 1 \
-		-relief groove -width 2 -command "update_menu$mnum .menu$mnum"
+		-relief groove -width 2 -command "update_active"
 	radiobutton $w.x$line.m -text "m"  -variable $variable -value 2 \
-		-relief groove -width 2 -command "update_menu$mnum .menu$mnum"
+		-relief groove -width 2 -command "update_active"
 	radiobutton $w.x$line.n -text "n"  -variable $variable -value 0 \
-		-relief groove -width 2 -command "update_menu$mnum .menu$mnum"
+		-relief groove -width 2 -command "update_active"
 		
 	option_name $w $mnum $line $text $variable
 		
@@ -322,8 +358,12 @@ proc tristate {w mnum line text variable } {
 	pack $w.x$line -anchor w -fill both -expand on
 }
 
-proc dep_tristate {w mnum line text variable depend } {
+proc dep_tristate {w mnum line text variable } {
 	tristate $w $mnum $line $text $variable
+}
+
+proc dep_bool {w mnum line text variable } {
+	bool $w $mnum $line $text $variable
 }
 
 proc int { w mnum line text variable } {
@@ -355,6 +395,18 @@ proc minimenu { w mnum line text variable helpidx } {
 		-anchor w
 	option_name $w $mnum $line $text $helpidx
 	pack $w.x$line.x -anchor w -side right -fill y
+	pack $w.x$line -anchor w -fill both -expand on
+}
+
+proc submenu { w mnum line text subnum } {
+	frame $w.x$line
+	button $w.x$line.l -text "" -width 15 -relief groove
+	$w.x$line.l configure -activefore [cget $w.x$line.l -fg] \
+		-activeback [cget $w.x$line.l -bg] -state disabled
+	button $w.x$line.m -text "$text" -relief raised -anchor w \
+		-command "catch {destroy .menu$subnum}; menu$subnum .menu$subnum \"$text\""
+	pack $w.x$line.l -side left -fill both
+	pack $w.x$line.m -anchor w -side right -fill both -expand on
 	pack $w.x$line -anchor w -fill both -expand on
 }
 
@@ -417,7 +469,7 @@ ${var}:\\
 	#
 	frame $w.f2
 	button $w.f2.ok -text "OK" \
-		-width 10 -command "destroy $w; focus $oldFocus"
+		-width 10 -command "destroy $w; catch {focus $oldFocus}"
 	pack $w.f2.ok -side bottom -pady 6 -anchor n
 	pack $w.f2 -side bottom -padx 10 -anchor s
 
@@ -458,6 +510,55 @@ proc wrapup {w }  {
 
 }
 
+proc unregister_active {num} {
+	global active_menus
+	set index [lsearch -exact $active_menus $num]
+	if {$index != -1} then {set active_menus [lreplace $active_menus $index $index]}
+}
+
+proc update_active {} {
+	global active_menus total_menus
+	set max 0
+	if {[llength $active_menus] > 0} then {
+		set max [lindex $active_menus end]
+		update_define [toplevel_menu [lindex $active_menus 0]] $max 0
+	}
+	foreach i $active_menus {
+		if {[winfo exists .menu$i] == 0} then {
+			unregister_active $i
+		} else {
+			update_menu$i
+		}
+	}
+	update_define [expr $max + 1] $total_menus 1
+	update_mainmenu
+}
+
+proc configure_entry {w option items} {
+	foreach i $items {
+		$w.$i configure -state $option
+	}
+}
+
+proc validate_int {name val default} {
+	if {([exec echo $val | sed s/^-//g | tr -d \[:digit:\] ] != "")} then {
+		global $name; set $name $default
+	}
+}
+
+proc validate_hex {name val default} {
+	if {([exec echo $val | tr -d \[:xdigit:\] ] != "")} then {
+		global $name; set $name $default
+	}
+}
+
+proc update_define {first last allow_update} {
+	for {set i $first} {$i <= $last} {incr i} {
+		update_define_menu$i
+		if {$allow_update == 1} then update
+	}
+}
+
 #
 # Next set up the particulars for the top level menu, and define a few
 # buttons which we will stick down at the bottom.
@@ -468,3 +569,5 @@ frame .f0.left
 frame .f0.middle
 frame .f0.right
 
+set active_menus [list]
+set processed_top_level 0

@@ -461,7 +461,7 @@ no_psmouse:
 	int	0x15		! ignore return code
 
 	mov	ax,#0x05303	! 32 bit connect
-	xor	bx,bx
+	xor	ebx,ebx
 	int	0x15
 	jc	no_32_apm_bios	! error
 

@@ -385,6 +385,11 @@ extern void scsi_sleep(int);
  */
 
 extern void scsi_do_cmd(Scsi_Cmnd *, const void *cmnd,
+			 void *buffer, unsigned bufflen, 
+			 void (*done)(struct scsi_cmnd *),
+			 int timeout, int retries);
+
+extern void scsi_wait_cmd (Scsi_Cmnd *, const void *cmnd ,
 			void *buffer, unsigned bufflen,
 			void (*done) (struct scsi_cmnd *),
 			int timeout, int retries);
@@ -570,12 +575,16 @@ struct scsi_cmnd {
 				   reconnects.   Probably == sector
 				   size */
 
+	int	resid;		/* Number of bytes requested to be
+				   transferred less actual number
+				   transferred (0 if not supported) */
 
 	struct request request;	/* A copy of the command we are
 				   working on */
 
-	unsigned char sense_buffer[16];		/* Sense for this command, 
-						   needed */
+	unsigned char sense_buffer[64];  /* obtained by REQUEST SENSE when
+					    CHECK CONDITION is received on
+					    original command (auto-sense) */
 
 	unsigned flags;
 

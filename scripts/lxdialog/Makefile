@@ -30,8 +30,11 @@ all: ncurses lxdialog
 lxdialog: $(OBJS)
 
 ncurses:
-	@x=`find /lib/ /usr/lib/ /usr/local/lib/ -maxdepth 1 -name 'libncurses.*'` ;\
-	if [ ! "$$x" ]; then \
+	@echo "main() {}" > lxtemp.c
+	@if $(CC) -lncurses lxtemp.c ; then \
+		rm -f lxtemp.c a.out; \
+	else \
+		rm -f lxtemp.c; \
 		echo -e "\007" ;\
 		echo ">> Unable to find the Ncurses libraries." ;\
 		echo ">>" ;\

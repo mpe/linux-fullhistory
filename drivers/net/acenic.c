@@ -24,6 +24,7 @@
 
 #include <linux/config.h>
 #include <linux/module.h>
+#include <linux/version.h>
 #include <linux/types.h>
 #include <linux/errno.h>
 #include <linux/ioport.h>
@@ -572,7 +573,7 @@ static inline void ace_issue_cmd(struct ace_regs *regs, struct cmd *cmd)
 }
 
 
-static __init int ace_init(struct net_device *dev, int board_idx)
+static int __init ace_init(struct net_device *dev, int board_idx)
 {
 	struct ace_private *ap;
 	struct ace_regs *regs;

@@ -1,6 +1,6 @@
 VERSION = 2
 PATCHLEVEL = 3
-SUBLEVEL = 18
+SUBLEVEL = 19
 EXTRAVERSION =
 
 ARCH := $(shell uname -m | sed -e s/i.86/i386/ -e s/sun4u/sparc64/ -e s/arm.*/arm/ -e s/sa110/arm/)
@@ -146,8 +146,11 @@ ifdef CONFIG_PCI
 DRIVERS := $(DRIVERS) drivers/pci/pci.a
 endif
 
-ifdef CONFIG_PCMCIA
+ifeq ($(CONFIG_PCMCIA),y)
 DRIVERS := $(DRIVERS) drivers/pcmcia/pcmcia.o
+endif
+
+ifeq ($(CONFIG_PCMCIA_NETCARD),y)
 DRIVERS := $(DRIVERS) drivers/net/pcmcia/pcmcia_net.o
 endif
 
@@ -345,6 +348,7 @@ modules_install:
 	if [ -f FC4_MODULES   ]; then inst_mod FC4_MODULES   fc4;   fi; \
 	if [ -f IRDA_MODULES  ]; then inst_mod IRDA_MODULES  net;   fi; \
 	if [ -f USB_MODULES   ]; then inst_mod USB_MODULES   usb;   fi; \
+	if [ -f PCMCIA_MODULES ]; then inst_mod PCMCIA_MODULES pcmcia; fi; \
 	\
 	ls *.o > $$MODLIB/.allmods; \
 	echo $$MODULES | tr ' ' '\n' | sort | comm -23 $$MODLIB/.allmods - > $$MODLIB/.misc; \
@@ -366,9 +370,9 @@ endif
 
 clean:	archclean
 	rm -f kernel/ksyms.lst include/linux/compile.h
-	rm -f core `find . -name '*.[oas]' ! -regex '.*lxdialog/.*' -print`
+	find . -name '*.[oas]' -type f -print | grep -v lxdialog/ | xargs rm -f
 	rm -f core `find . -type f -name 'core' -print`
-	rm -f core `find . -name '.*.flags' -print`
+	rm -f core `find . -type f -name '.*.flags' -print`
 	rm -f vmlinux System.map
 	rm -f .tmp*
 	rm -f drivers/char/consolemap_deftbl.c drivers/video/promcon_tbl.c
@@ -395,8 +399,8 @@ mrproper: clean archmrproper
 	rm -f .menuconfig.log
 	rm -f include/asm
 	rm -rf include/config
-	rm -f .depend `find . -name .depend -print`
-	rm -f core `find . -size 0 -print`
+	rm -f .depend `find . -type f -name .depend -print`
+	rm -f core `find . -type f -size 0 -print`
 	rm -f .hdepend scripts/mkdep scripts/split-include
 	rm -f $(TOPDIR)/include/linux/modversions.h
 	rm -rf $(TOPDIR)/include/linux/modules

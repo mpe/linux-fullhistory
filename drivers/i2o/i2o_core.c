@@ -24,9 +24,7 @@
 #include <linux/kernel.h>
 #include <linux/pci.h>
 
-#if defined(CONFIG_I2O_PCI) || defined (CONFIG_I2O_PCI_MODULE)
 #include <linux/i2o.h>
-#endif
 
 #include <linux/errno.h>
 #include <linux/init.h>
@@ -261,11 +259,12 @@ int i2o_install_controller(struct i2o_controller *c)
 int i2o_delete_controller(struct i2o_controller *c)
 {
 	struct i2o_controller **p;
+	int users;
 
 	spin_lock(&i2o_configuration_lock);
-	if(atomic_read(&c->users))
+	if((users=atomic_read(&c->users)))
 	{
-		printk("Someone is using controller iop%d\n", c->unit);
+		printk("I2O: %d users for controller iop%d\n", users, c->unit);
 		spin_unlock(&i2o_configuration_lock);
 		return -EBUSY;
 	}
@@ -278,7 +277,6 @@ int i2o_delete_controller(struct i2o_controller *c)
 			return -EBUSY;
 		}
 	}
-//	c->destructor(c); /* We dont want to free the IRQ yet */
 
 	p=&i2o_controller_chain;
 
@@ -397,7 +395,8 @@ int i2o_release_device(struct i2o_device *d, struct i2o_handler *h, u32 type)
 			err = -ENOENT;
 		else
 		{
-			if(i2o_issue_claim(d->controller,d->id, h->context, 0, &reply_flag, type) < 0)
+			if(i2o_issue_claim(d->controller, d->id, h->context, 0,
+					   &reply_flag, type) < 0)
 			{
 				err = -ENXIO;
 			}
@@ -420,7 +419,7 @@ int i2o_release_device(struct i2o_device *d, struct i2o_handler *h, u32 type)
 		atomic_dec(&d->controller->users);
 
 		if(i2o_issue_claim(d->controller,d->id, h->context, 0, 
-									&reply_flag, type) < 0)
+				   &reply_flag, type) < 0)
 			err = -ENXIO;
 	}
 
@@ -2172,6 +2171,7 @@ EXPORT_SYMBOL(i2o_row_delete_table);
 EXPORT_SYMBOL(i2o_post_this);
 EXPORT_SYMBOL(i2o_post_wait);
 EXPORT_SYMBOL(i2o_issue_claim);
+EXPORT_SYMBOL(i2o_issue_params);
 
 EXPORT_SYMBOL(i2o_report_status);
 
@@ -2218,7 +2218,7 @@ extern int i2o_pci_init(void);
 extern int i2o_proc_init(void);
 extern int i2o_scsi_init(void);
 
-__init int i2o_init(void)
+int __init i2o_init(void)
 {
         if (i2o_install_handler(&i2o_core_handler) < 0)
         {

@@ -76,7 +76,7 @@ int drm_flush(struct file *filp)
 	drm_device_t  *dev    = priv->dev;
 
 	DRM_DEBUG("pid = %d, device = 0x%x, open_count = %d, f_count = %d\n",
-		  current->pid, dev->device, dev->open_count, filp->f_count);
+		  current->pid, dev->device, dev->open_count, atomic_read(&filp->f_count));
 	return 0;
 }
 

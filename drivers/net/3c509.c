@@ -226,9 +226,6 @@ int el3_probe(struct net_device *dev)
 				 * detected and is enabled
 				 */
 
-				printk("3c509: found %s at slot %d\n",
-					el3_mca_adapters[j].name, slot + 1 );
-
 				pos4 = mca_read_stored_pos( slot, 4 );
 				pos5 = mca_read_stored_pos( slot, 5 );
 
@@ -241,6 +238,9 @@ int el3_probe(struct net_device *dev)
 					slot++;         /* probing next slot */
 					continue;
 				}
+
+				printk("3c509: found %s at slot %d\n",
+					el3_mca_adapters[j].name, slot + 1 );
 
 				/* claim the slot */
 				mca_set_adapter_name(slot, el3_mca_adapters[j].name);

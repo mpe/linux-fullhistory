@@ -2,7 +2,7 @@
 
     Resource management routines
 
-    rsrc_mgr.c 1.70 1999/09/07 15:19:32
+    rsrc_mgr.c 1.71 1999/09/15 15:32:19
 
     The contents of this file are subject to the Mozilla Public
     License Version 1.1 (the "License"); you may not use this file
@@ -34,6 +34,7 @@
 #define __NO_VERSION__
 
 #include <linux/module.h>
+#include <linux/init.h>
 #include <linux/sched.h>
 #include <linux/kernel.h>
 #include <linux/errno.h>
@@ -113,9 +114,6 @@ typedef struct resource_entry_t {
 
 /* Ordered linked lists of allocated IO and memory blocks */
 static resource_entry_t io_list = { 0, 0, NULL, NULL };
-#ifndef HAVE_MEMRESERVE
-static resource_entry_t mem_list = { 0, 0, NULL, NULL };
-#endif
 
 static resource_entry_t *find_gap(resource_entry_t *root,
 				  resource_entry_t *entry)
@@ -218,7 +216,6 @@ int proc_read_io(char *buf, char **start, off_t pos,
     return (p - buf);
 }
 #endif
-
 
 /*======================================================================
 
@@ -361,7 +358,6 @@ static int do_mem_probe(u_long base, u_long num,
 
     printk(KERN_INFO "cs: memory probe 0x%06lx-0x%06lx:",
 	   base, base+num-1);
-
     bad = fail = 0;
     step = (num < 0x20000) ? 0x2000 : ((num>>4) & ~0x1fff);
     for (i = base; i < base+num; i = j + step) {
@@ -385,7 +381,6 @@ static int do_mem_probe(u_long base, u_long num,
 	}
     }
     printk(bad ? "\n" : " clean.\n");
-
     return (num - bad);
 }
 
@@ -492,7 +487,6 @@ int find_io_region(ioaddr_t *base, ioaddr_t num, char *name)
     }
     
     for (align = 1; align < num; align *= 2) ;
-
     for (m = io_db.next; m != &io_db; m = m->next) {
 	for (*base = (m->base + align - 1) & (~(align-1));
 	     *base+align <= m->base + m->num;
@@ -793,10 +787,4 @@ void release_resource_db(void)
 	v = u->next;
 	kfree(u);
     }
-#ifndef HAVE_MEMRESERVE
-    for (u = mem_list.next; u; u = v) {
-	v = u->next;
-	kfree(u);
-    }
-#endif
 }

@@ -36,111 +36,6 @@ struct i2o_message
 	/* List follows */
 };
 
-/**************************************************************************
- * HRT related constants and structures
- **************************************************************************/
-#define I2O_BUS_LOCAL	0
-#define I2O_BUS_ISA	1
-#define I2O_BUS_EISA	2
-#define I2O_BUS_MCA	3
-#define I2O_BUS_PCI	4
-#define I2O_BUS_PCMCIA	5
-#define I2O_BUS_NUBUS	6
-#define I2O_BUS_CARDBUS	7
-#define I2O_BUS_UNKNOWN	0x80
-
-typedef struct _i2o_pci_bus {
-	u8 PciFunctionNumber;
-	u8 PciDeviceNumber;
-	u8 PciBusNumber;
-	u8 reserved;
-	u16 PciVendorID;
-	u16 PciDeviceID;
-} i2o_pci_bus, *pi2o_pci_bus;
-
-typedef struct _i2o_local_bus {
-	u16 LbBaseIOPort;
-	u16 reserved;
-	u32 LbBaseMemoryAddress;
-} i2o_local_bus, *pi2o_local_bus;
-
-typedef struct _i2o_isa_bus {
-	u16 IsaBaseIOPort;
-	u8 CSN;
-	u8 reserved;
-	u32 IsaBaseMemoryAddress;
-} i2o_isa_bus, *pi2o_isa_bus;
-
-typedef struct _i2o_eisa_bus_info {
-	u16 EisaBaseIOPort;
-	u8 reserved;
-	u8 EisaSlotNumber;
-	u32 EisaBaseMemoryAddress;
-} i2o_eisa_bus, *pi2o_eisa_bus;
-
-typedef struct _i2o_mca_bus {
-	u16 McaBaseIOPort;
-	u8 reserved;
-	u8 McaSlotNumber;
-	u32 McaBaseMemoryAddress;
-} i2o_mca_bus, *pi2o_mca_bus;
-
-typedef struct _i2o_other_bus {
-	u16 BaseIOPort;
-	u16 reserved;
-	u32 BaseMemoryAddress;
-} i2o_other_bus, *pi2o_other_bus;
-
-
-typedef struct _i2o_hrt_entry {
-	u32 adapter_id;
-	u32 parent_tid:12;
-	u32 state:4;
-	u32 bus_num:8;
-	u32 bus_type:8;
-	union {
-		i2o_pci_bus pci_bus;
-		i2o_local_bus local_bus;
-		i2o_isa_bus isa_bus;
-		i2o_eisa_bus eisa_bus;
-		i2o_mca_bus mca_bus;
-		i2o_other_bus other_bus;
-	} bus;
-} i2o_hrt_entry, *pi2o_hrt_entry;
-
-typedef struct _i2o_hrt {
-	u16 num_entries;
-	u8 entry_len;
-	u8 hrt_version;
-	u32 change_ind;
-	i2o_hrt_entry hrt_entry[1];
-} i2o_hrt, *pi2o_hrt;
-
-typedef struct _i2o_lct_entry {
-	u32 entry_size:16;
-	u32 tid:12;
-	u32 reserved:4;
-	u32 change_ind;
-	u32 device_flags;
-	u32 class_id;
-	u32 sub_class;
-	u32 user_tid:12;
-	u32 parent_tid:12;
-	u32 bios_info:8;
-	u8 identity_tag[8];
-	u32 event_capabilities;
-} i2o_lct_entry, *pi2o_lct_entry;
-
-typedef struct _i2o_lct {
-	u32 table_size:16;
-	u32 boot_tid:12;
-	u32 lct_ver:4;
-	u32 iop_flags;
-	u32 current_change_ind;
-	i2o_lct_entry lct_entry[1];
-} i2o_lct, *pi2o_lct;
-
-
 /*
  *	Each I2O device entity has one or more of these. There is one
  *	per device. *FIXME* how to handle multiple types on one unit.
@@ -329,6 +224,8 @@ extern int i2o_release_device(struct i2o_device *, struct i2o_handler *, u32);
 extern int i2o_post_this(struct i2o_controller *, int, u32 *, int);
 extern int i2o_post_wait(struct i2o_controller *, int, u32 *, int, int *, int);
 extern int i2o_issue_claim(struct i2o_controller *, int, int, int, int *, u32);
+extern int i2o_issue_params(int, struct i2o_controller *, int, int, void *,
+			    int, void *, int, int *); 
 
 extern int i2o_query_scalar(struct i2o_controller *, int, int, int, int, 
 			void *, int, int *);
@@ -602,7 +499,7 @@ extern const char *i2o_get_class_name(int);
 #define I2O_DSC_DEVICE_NOT_AVAILABLE           0x001C
 
 /* Device Claim Types */
-#define	I2O_CLAIM_PRIMARY						0x01000000
+#define	I2O_CLAIM_PRIMARY					0x01000000
 #define	I2O_CLAIM_MANAGEMENT					0x02000000
 #define	I2O_CLAIM_AUTHORIZED					0x03000000
 #define	I2O_CLAIM_SECONDARY					0x04000000
@@ -659,67 +556,177 @@ extern const char *i2o_get_class_name(int);
 
 #endif /* __KERNEL__ */
 
-#include <asm/ioctl.h>
+#include <linux/ioctl.h>
 
 /*
  * I2O Control IOCTLs and structures
  */
 #define I2O_MAGIC_NUMBER	'i'
-#define I2OGETIOPS		_IO(I2O_MAGIC_NUMBER,0)
-#define I2OHRTGET		_IO(I2O_MAGIC_NUMBER,1)
-#define I2OLCTGET		_IO(I2O_MAGIC_NUMBER,2)
-#define I2OPARMSET		_IO(I2O_MAGIC_NUMBER,3)
-#define I2OPARMGET		_IO(I2O_MAGIC_NUMBER,4)
-#define I2OSWDL			_IO(I2O_MAGIC_NUMBER,5)
-#define I2OSWUL			_IO(I2O_MAGIC_NUMBER,6)
-#define I2OSWDEL		_IO(I2O_MAGIC_NUMBER,7)
-#define I2OHTML			_IO(I2O_MAGIC_NUMBER,8)
+#define I2OGETIOPS		_IOR(I2O_MAGIC_NUMBER,0,u8[MAX_I2O_CONTROLLERS])
+#define I2OHRTGET		_IOWR(I2O_MAGIC_NUMBER,1,struct i2o_cmd_hrtlct)
+#define I2OLCTGET		_IOWR(I2O_MAGIC_NUMBER,2,struct i2o_cmd_hrtlct)
+#define I2OPARMSET		_IOWR(I2O_MAGIC_NUMBER,3,struct i2o_cmd_psetget)
+#define I2OPARMGET		_IOWR(I2O_MAGIC_NUMBER,4,struct i2o_cmd_psetget)
+#define I2OSWDL			_IOWR(I2O_MAGIC_NUMBER,5,struct i2o_sw_xfer)
+#define I2OSWUL			_IOWR(I2O_MAGIC_NUMBER,6,struct i2o_sw_xfer)
+#define I2OSWDEL		_IOWR(I2O_MAGIC_NUMBER,7,struct i2o_sw_xfer)
+#define I2OVALIDATE		_IOR(I2O_MAGIC_NUMBER,8,u32)
+#define I2OHTML			_IOWR(I2O_MAGIC_NUMBER,9,struct i2o_html)
 
 /* On hold until we figure this out
-#define I2OEVTREG		_IO(I2O_MAGIC_NUMBER,9)
-#define I2OEVTCLR		_IO(I2O_MAGIC_NUMBER,10)
-#define I2OEVTGET		_IO(I2O_MAGIC_NUMBER,11)
+#define I2OEVTREG		_IO(I2O_MAGIC_NUMBER,10)
+#define I2OEVTCLR		_IO(I2O_MAGIC_NUMBER,11)
+#define I2OEVTGET		_IO(I2O_MAGIC_NUMBER,12)
  */
 
 struct i2o_cmd_hrtlct
 {
-	unsigned int iop;  /* IOP unit number */
-	void  *resbuf;  /* Buffer for result */
-	unsigned int *reslen;  /* Buffer length in bytes */
+	unsigned int iop;	/* IOP unit number */
+	void *resbuf;		/* Buffer for result */
+	unsigned int *reslen;	/* Buffer length in bytes */
 };
-
 
 struct i2o_cmd_psetget
 {
-	unsigned int iop;      /* IOP unit number */
-	unsigned int tid;      /* Target device TID */
-	void  *opbuf;   /* Operation List buffer */
-	unsigned int   oplen;    /* Operation List buffer length in bytes */
-	void  *resbuf;  /* Result List buffer */
-	unsigned int  *reslen;  /* Result List buffer length in bytes */
+	unsigned int iop;	/* IOP unit number */
+	unsigned int tid;	/* Target device TID */
+	void *opbuf;		/* Operation List buffer */
+	unsigned int oplen;	/* Operation List buffer length in bytes */
+	void *resbuf;		/* Result List buffer */
+	unsigned int *reslen;	/* Result List buffer length in bytes */
 };
 
 struct i2o_sw_xfer
 {
 	unsigned int iop;	/* IOP unit number */
-	unsigned char dl_flags;	/* DownLoadFlags field */
+	unsigned char flags;	/* Flags field */
 	unsigned char sw_type;	/* Software type */
-	unsigned int sw_id;     /* Software ID */
-	void  *buf;      	/* Pointer to software buffer */
-	unsigned int *swlen;    /* Length of software data */
-	unsigned int *maxfrag;  /* Maximum fragment count */
-        unsigned int *curfrag;  /* Current fragment count */
+	unsigned int sw_id;	/* Software ID */
+	void *buf;		/* Pointer to software buffer */
+	unsigned int *swlen;	/* Length of software data */
+	unsigned int *maxfrag;	/* Maximum fragment count */
+        unsigned int *curfrag;	/* Current fragment count */
 };
 
 struct i2o_html
 {
-	unsigned int iop;      /* IOP unit number */
-	unsigned int tid;      /* Target device ID */
-	unsigned int page;     /* HTML page */
-	void  *resbuf;  /* Buffer for reply HTML page */
-	unsigned int *reslen;  /* Length in bytes of reply buffer */
-	void  *qbuf;    /* Pointer to HTTP query string */
-	unsigned int qlen;     /* Length in bytes of query string buffer */
+	unsigned int iop;	/* IOP unit number */
+	unsigned int tid;	/* Target device ID */
+	unsigned int page;	/* HTML page */
+	void *resbuf;		/* Buffer for reply HTML page */
+	unsigned int *reslen;	/* Length in bytes of reply buffer */
+	void *qbuf;		/* Pointer to HTTP query string */
+	unsigned int qlen;	/* Length in bytes of query string buffer */
 };
+
+
+/**************************************************************************
+ * HRT related constants and structures
+ **************************************************************************/
+#define I2O_BUS_LOCAL	0
+#define I2O_BUS_ISA	1
+#define I2O_BUS_EISA	2
+#define I2O_BUS_MCA	3
+#define I2O_BUS_PCI	4
+#define I2O_BUS_PCMCIA	5
+#define I2O_BUS_NUBUS	6
+#define I2O_BUS_CARDBUS	7
+#define I2O_BUS_UNKNOWN	0x80
+
+#ifndef __KERNEL__
+typedef unsigned char u8;
+typedef unsigned short u16;
+typedef unsigned int u32;
+#endif /* __KERNEL__ */
+
+typedef struct _i2o_pci_bus {
+	u8 PciFunctionNumber;
+	u8 PciDeviceNumber;
+	u8 PciBusNumber;
+	u8 reserved;
+	u16 PciVendorID;
+	u16 PciDeviceID;
+} i2o_pci_bus, *pi2o_pci_bus;
+
+typedef struct _i2o_local_bus {
+	u16 LbBaseIOPort;
+	u16 reserved;
+	u32 LbBaseMemoryAddress;
+} i2o_local_bus, *pi2o_local_bus;
+
+typedef struct _i2o_isa_bus {
+	u16 IsaBaseIOPort;
+	u8 CSN;
+	u8 reserved;
+	u32 IsaBaseMemoryAddress;
+} i2o_isa_bus, *pi2o_isa_bus;
+
+typedef struct _i2o_eisa_bus_info {
+	u16 EisaBaseIOPort;
+	u8 reserved;
+	u8 EisaSlotNumber;
+	u32 EisaBaseMemoryAddress;
+} i2o_eisa_bus, *pi2o_eisa_bus;
+
+typedef struct _i2o_mca_bus {
+	u16 McaBaseIOPort;
+	u8 reserved;
+	u8 McaSlotNumber;
+	u32 McaBaseMemoryAddress;
+} i2o_mca_bus, *pi2o_mca_bus;
+
+typedef struct _i2o_other_bus {
+	u16 BaseIOPort;
+	u16 reserved;
+	u32 BaseMemoryAddress;
+} i2o_other_bus, *pi2o_other_bus;
+
+typedef struct _i2o_hrt_entry {
+	u32 adapter_id;
+	u32 parent_tid:12;
+	u32 state:4;
+	u32 bus_num:8;
+	u32 bus_type:8;
+	union {
+		i2o_pci_bus pci_bus;
+		i2o_local_bus local_bus;
+		i2o_isa_bus isa_bus;
+		i2o_eisa_bus eisa_bus;
+		i2o_mca_bus mca_bus;
+		i2o_other_bus other_bus;
+	} bus;
+} i2o_hrt_entry, *pi2o_hrt_entry;
+
+typedef struct _i2o_hrt {
+	u16 num_entries;
+	u8 entry_len;
+	u8 hrt_version;
+	u32 change_ind;
+	i2o_hrt_entry hrt_entry[1];
+} i2o_hrt, *pi2o_hrt;
+
+typedef struct _i2o_lct_entry {
+	u32 entry_size:16;
+	u32 tid:12;
+	u32 reserved:4;
+	u32 change_ind;
+	u32 device_flags;
+	u32 class_id;
+	u32 sub_class;
+	u32 user_tid:12;
+	u32 parent_tid:12;
+	u32 bios_info:8;
+	u8 identity_tag[8];
+	u32 event_capabilities;
+} i2o_lct_entry, *pi2o_lct_entry;
+
+typedef struct _i2o_lct {
+	u32 table_size:16;
+	u32 boot_tid:12;
+	u32 lct_ver:4;
+	u32 iop_flags;
+	u32 current_change_ind;
+	i2o_lct_entry lct_entry[1];
+} i2o_lct, *pi2o_lct;
 
 #endif

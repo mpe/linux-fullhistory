@@ -2,7 +2,7 @@
 
     PCMCIA Card Services -- core services
 
-    cs.c 1.225 1999/09/07 15:19:32
+    cs.c 1.228 1999/09/15 15:32:19
     
     The contents of this file are subject to the Mozilla Public
     License Version 1.1 (the "License"); you may not use this file
@@ -32,7 +32,9 @@
 ======================================================================*/
 
 #include <linux/module.h>
+#include <linux/init.h>
 #include <linux/kernel.h>
+#include <linux/config.h>
 #include <linux/string.h>
 #include <linux/major.h>
 #include <linux/errno.h>
@@ -43,6 +45,7 @@
 #include <linux/ioport.h>
 #include <linux/delay.h>
 #include <linux/proc_fs.h>
+#include <linux/compile.h>
 #include <asm/system.h>
 #include <asm/irq.h>
 
@@ -67,11 +70,13 @@ static int handle_apm_event(apm_event_t event);
 int pc_debug = PCMCIA_DEBUG;
 MODULE_PARM(pc_debug, "i");
 static const char *version =
-"cs.c 1.225 1999/09/07 15:19:32 (David Hinds)";
+"cs.c 1.228 1999/09/15 15:32:19 (David Hinds)";
 #endif
 
 static const char *release = "Linux PCMCIA Card Services " CS_RELEASE;
-
+#ifdef MODULE
+static const char *kernel = "kernel build: " UTS_RELEASE " " UTS_VERSION;
+#endif
 static const char *options = "options: "
 #ifdef CONFIG_PCI
 " [pci]"
@@ -82,7 +87,8 @@ static const char *options = "options: "
 #ifdef CONFIG_APM
 " [apm]"
 #endif
-#if !defined(CONFIG_CARDBUS) && !defined(CONFIG_PCI) && !defined(CONFIG_APM)
+#if !defined(CONFIG_CARDBUS) && !defined(CONFIG_PCI) && \
+    !defined(CONFIG_APM) && !defined(CONFIG_PNP_BIOS)
 " none"
 #endif
 ;
@@ -2197,9 +2203,12 @@ EXPORT_SYMBOL(unregister_ss_entry);
 EXPORT_SYMBOL(CardServices);
 EXPORT_SYMBOL(MTDHelperEntry);
 
-static int pcmcia_cs_init(void)
+static int __init init_pcmcia_cs(void)
 {
     printk(KERN_INFO "%s\n", release);
+#ifdef MODULE
+    printk(KERN_INFO "  %s\n", kernel);
+#endif
     printk(KERN_INFO "  %s\n", options);
     DEBUG(0, "%s\n", version);
 #ifdef CONFIG_APM
@@ -2212,14 +2221,7 @@ static int pcmcia_cs_init(void)
     return 0;
 }
 
-#ifdef MODULE
-
-int init_module(void)
-{
-	return pcmcia_cs_init();
-}
-
-void cleanup_module(void)
+static void __exit exit_pcmcia_cs(void)
 {
     printk(KERN_INFO "unloading PCMCIA Card Services\n");
 #ifdef CONFIG_PROC_FS
@@ -2234,36 +2236,8 @@ void cleanup_module(void)
     release_resource_db();
 }
 
-#else
-
-extern int pcmcia_ds_init(void);
-extern int pcmcia_i82365_init(void);
-extern int init_pcnet_cs(void);
-extern int init_ray_cs(void);
-
-int pcmcia_init(void)
-{
-	/* Start core services */
-	pcmcia_cs_init();
-
-	/* Load the socket drivers */
-	pcmcia_i82365_init();
-
-	/* Get the ball rolling.. */
-	pcmcia_ds_init();
-
-#ifdef CONFIG_PCMCIA_PCNET
-	init_pcnet_cs();
-#endif
-#ifdef CONFIG_PCMCIA_3C589
-	init_3c589_cs();
-#endif
-#ifdef CONFIG_PCMCIA_RAYCS
-	init_ray_cs();
-#endif
-	return 0;
-}
-
-#endif
+module_init(init_pcmcia_cs);
+module_exit(exit_pcmcia_cs);
 
 /*====================================================================*/
+

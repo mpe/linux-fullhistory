@@ -9,9 +9,9 @@
     Conrad ethernet card, and the Kingston KNE-PCM/x in shared-memory
     mode.  It will also handle the Socket EA card in either mode.
 
-    Copyright (C) 1998 David A. Hinds -- dhinds@hyper.stanford.edu
+    Copyright (C) 1999 David A. Hinds -- dhinds@hyper.stanford.edu
 
-    pcnet_cs.c 1.94 1999/07/29 06:04:49
+    pcnet_cs.c 1.99 1999/09/15 15:33:09
     
     The network driver code is based on Donald Becker's NE2000 code:
 
@@ -29,6 +29,7 @@
 ======================================================================*/
 
 #include <linux/module.h>
+#include <linux/init.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/ptrace.h>
@@ -40,7 +41,7 @@
 #include <asm/system.h>
 
 #include <linux/netdevice.h>
-#include "../8390.h"
+#include <../drivers/net/8390.h>
 
 #include <pcmcia/version.h>
 #include <pcmcia/cs_types.h>
@@ -66,13 +67,12 @@
 
 static char *if_names[] = { "auto", "10baseT", "10base2"};
 
-#define PCMCIA_DEBUG 6
 #ifdef PCMCIA_DEBUG
 static int pc_debug = PCMCIA_DEBUG;
 MODULE_PARM(pc_debug, "i");
 #define DEBUG(n, args...) if (pc_debug>(n)) printk(KERN_DEBUG args)
 static char *version =
-"pcnet_cs.c 1.94 1999/07/29 06:04:49 (David Hinds)";
+"pcnet_cs.c 1.99 1999/09/15 15:33:09 (David Hinds)";
 #else
 #define DEBUG(n, args...)
 #endif
@@ -125,6 +125,8 @@ static int pcnet_event(event_t event, int priority,
 
 static int pcnet_open(struct net_device *dev);
 static int pcnet_close(struct net_device *dev);
+static void ei_irq_wrapper(int irq, void *dev_id, struct pt_regs *regs);
+static void ei_watchdog(u_long arg);
 
 static void pcnet_reset_8390(struct net_device *dev);
 
@@ -226,6 +228,9 @@ typedef struct pcnet_dev_t {
     dev_node_t		node;
     u_long		flags;
     caddr_t		base;
+    struct timer_list	watchdog;
+    int			stale;
+    u_short		fast_poll;
 } pcnet_dev_t;
 
 /*======================================================================
@@ -890,7 +895,13 @@ static int pcnet_open(struct net_device *dev)
     }
     
     set_misc_reg(dev);
-    request_irq(dev->irq, ei_interrupt, SA_SHIRQ, dev_info, dev);
+    request_irq(dev->irq, ei_irq_wrapper, SA_SHIRQ, dev_info, dev);
+
+    info->watchdog.function = &ei_watchdog;
+    info->watchdog.data = (u_long)info;
+    info->watchdog.expires = jiffies + HZ;
+    add_timer(&info->watchdog);
+
     return ei_open(dev);
 } /* pcnet_open */
 
@@ -909,8 +920,9 @@ static int pcnet_close(struct net_device *dev)
     free_irq(dev->irq, dev);
     
     link->open--; dev->start = 0;
+    del_timer(&((pcnet_dev_t *)dev)->watchdog);
     if (link->state & DEV_STALE_CONFIG) {
-	link->release.expires = jiffies+HZ/20;
+	link->release.expires = jiffies + HZ/20;
 	link->state |= DEV_RELEASE_PENDING;
 	add_timer(&link->release);
     }
@@ -969,6 +981,44 @@ static int set_config(struct net_device *dev, struct ifmap *map)
 	    return -EINVAL;
     }
     return 0;
+}
+
+/* ======================================================================= */
+
+static void ei_irq_wrapper(int irq, void *dev_id, struct pt_regs *regs)
+{
+    pcnet_dev_t *info = dev_id;
+    info->stale = 0;
+    ei_interrupt(irq, dev_id, regs);
+}
+
+static void ei_watchdog(u_long arg)
+{
+    pcnet_dev_t *info = (pcnet_dev_t *)(arg);
+    struct net_device *dev = &info->dev;
+    int nic_base = dev->base_addr;
+
+    if (dev->start == 0) goto reschedule;
+
+    /* Check for pending interrupt with expired latency timer: with
+       this, we can limp along even if the interrupt is blocked */
+    outb_p(E8390_NODMA+E8390_PAGE0, nic_base + E8390_CMD);
+    if (info->stale++ && inb_p(nic_base + EN0_ISR)) {
+	if (!info->fast_poll)
+	    printk(KERN_INFO "%s: interrupt(s) dropped!\n", dev->name);
+	ei_irq_wrapper(dev->irq, dev, NULL);
+	info->fast_poll = HZ;
+    }
+    if (info->fast_poll) {
+	info->fast_poll--;
+	info->watchdog.expires = jiffies + 1;
+	add_timer(&info->watchdog);
+	return;
+    }
+
+reschedule:
+    info->watchdog.expires = jiffies + HZ;
+    add_timer(&info->watchdog);
 }
 
 /* ======================================================================= */
@@ -1180,7 +1230,7 @@ static void copyin(unsigned char *dest, unsigned char *src, int c)
     odd = (c & 01); c >>= 1;
 
     if (c) {
-	do { *d++ = readw(s++); } while (--c);
+	do { *d++ = __raw_readw(s++); } while (--c);
     }
     /* get last byte by fetching a word and masking */
     if (odd)
@@ -1198,7 +1248,7 @@ static void copyout(unsigned char *dest, const unsigned char *src, int c)
     odd = (c & 01); c >>= 1;
 
     if (c) {
-	do { writew(*s++, d++); } while (--c);
+	do { __raw_writew(*s++, d++); } while (--c);
     }
     /* copy last byte doing a read-modify-write */
     if (odd)
@@ -1291,10 +1341,10 @@ static int setup_shmem_window(dev_link_t *link, int start_pg,
     /* Try scribbling on the buffer */
     info->base = ioremap(req.Base, window_size);
     for (i = 0; i < (TX_PAGES<<8); i += 2)
-	writew((i>>1), info->base+offset+i);
+	__raw_writew((i>>1), info->base+offset+i);
     udelay(100);
     for (i = 0; i < (TX_PAGES<<8); i += 2)
-	if (readw(info->base+offset+i) != (i>>1)) break;
+	if (__raw_readw(info->base+offset+i) != (i>>1)) break;
     pcnet_reset_8390(dev);
     if (i != (TX_PAGES<<8)) {
 	iounmap(info->base);
@@ -1327,11 +1377,7 @@ failed:
 
 /*====================================================================*/
 
-#ifdef MODULE
-int init_module(void)
-#else
-int init_pcnet_cs(void)
-#endif
+static int __init init_pcnet_cs(void)
 {
     servinfo_t serv;
     DEBUG(0, "%s\n", version);
@@ -1341,19 +1387,17 @@ int init_pcnet_cs(void)
 	       "does not match!\n");
 	return -1;
     }
-    register_pcmcia_driver(&dev_info, &pcnet_attach, &pcnet_detach);
-    DEBUG(0, "pcnet driver registered\n" );
+    register_pccard_driver(&dev_info, &pcnet_attach, &pcnet_detach);
     return 0;
 }
 
-//__initcall(init_pcnet_cs);
-
-#ifdef MODULE
-void cleanup_module(void)
+static void __exit exit_pcnet_cs(void)
 {
     DEBUG(0, "pcnet_cs: unloading\n");
-    unregister_pcmcia_driver(&dev_info);
+    unregister_pccard_driver(&dev_info);
     while (dev_list != NULL)
 	pcnet_detach(dev_list);
 }
-#endif
+
+module_init(init_pcnet_cs);
+module_exit(exit_pcnet_cs);

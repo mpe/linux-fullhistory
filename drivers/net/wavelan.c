@@ -2094,7 +2094,7 @@ wavelan_ioctl(struct net_device *	dev,	/* device on which the ioctl is applied *
 	  wrq->u.data.length = sizeof(struct iw_range);
 
 	  /* Set information in the range struct.  */
-	  range.throughput = 1.6 * 1024 * 1024;	/* don't argue on this ! */
+	  range.throughput = 1.6 * 1000 * 1000;	/* don't argue on this ! */
 	  range.min_nwid = 0x0000;
 	  range.max_nwid = 0xFFFF;
 
@@ -2240,7 +2240,10 @@ wavelan_ioctl(struct net_device *	dev,	/* device on which the ioctl is applied *
 
     case SIOCSIPQTHR:
       if(!suser())
-	return -EPERM;
+        {
+	  ret = -EPERM;
+	  break;
+	}
       psa.psa_quality_thr = *(wrq->u.name) & 0x0F;
       psa_write(ioaddr, lp->hacr, (char *)&psa.psa_quality_thr - (char *)&psa,
 	       (unsigned char *)&psa.psa_quality_thr, 1);
@@ -2259,7 +2262,10 @@ wavelan_ioctl(struct net_device *	dev,	/* device on which the ioctl is applied *
     case SIOCSIPHISTO:
       /* Verify that the user is root. */
       if(!suser())
-	return -EPERM;
+        {
+	  ret = -EPERM;
+	  break;
+	}
 
       /* Check the number of intervals. */
       if(wrq->u.data.length > 16)

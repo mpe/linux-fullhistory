@@ -3,13 +3,13 @@ Linux I2O User Space Interface
 rev 0.3 - 04/20/99
 
 =============================================================================
-Originally written by Deepak Saxena(deepak.saxena@intel.com)
-Currently maintained by Deepak Saxena(deepak.saxena@intel.com)
+Originally written by Deepak Saxena(deepak@plexity.net)
+Currently maintained by Deepak Saxena(deepak@plexity.net)
 =============================================================================
 
 I. Introduction
 
-The Linux I2O susbsytem provides a set of ioctl() commands than can be
+The Linux I2O subsystem provides a set of ioctl() commands that can be
 utilized by user space applications to communicate with IOPs and devices
 on individual IOPs. This document defines the specific ioctl() commands
 that are available to the user and provides examples of their uses.
@@ -20,7 +20,7 @@ on the specification, see http://www.i2osig.org
 
 This document and the I2O user space interface are currently maintained
 by Deepak Saxena.  Please send all comments, errata, and bug fixes to
-deepak.saxena@intel.com
+deepak@plexity.net
 
 II. IOP Access
 
@@ -50,9 +50,9 @@ III. Determining the IOP Count
    Returns 0 if no errors occur, and -1 otherwise.  If an error occurs,
    errno is set appropriately:
 
-      EIO      Unkown error
+     EFAULT   Invalid user space pointer was passed
 
-IV. ExecHrtGet Message
+IV. Getting Hardware Resource Table
 
    SYNOPSIS 
  
@@ -67,25 +67,21 @@ IV. ExecHrtGet Message
 
    DESCRIPTION
 
-   This function posts an ExecHrtHet message to the IOP specified by
-   hrt->iop and returns the data in the buffer pointed to by hrt->buf
-   The size of the data written is placed into the memory pointed to
-   by hrt->len.
+   This function returns the Hardware Resource Table of the IOP specified 
+   by hrt->iop in the buffer pointed to by hrt->resbuf. The actual size of 
+   the data is written into *(hrt->reslen).
 
    RETURNS
 
    This function returns 0 if no errors occur. If an error occurs, -1 
    is returned and errno is set appropriately:
 
-      ETIMEDOUT   Timeout waiting for reply message
-      ENOMEM      Kernel memory allocation error
-      ENOBUFS     Buffer not large enough.  If this occurs, the required
-                  buffer length is written into *(hrt->reslen)
       EFAULT      Invalid user space pointer was passed
       ENXIO       Invalid IOP number
-      EIO         Unkown error
+      ENOBUFS     Buffer not large enough.  If this occurs, the required
+                  buffer length is written into *(hrt->reslen)
   
-V. ExecLctNotify Message
+V. Getting Logical Configuration Table
    
    SYNOPSIS 
  
@@ -100,25 +96,21 @@ V. ExecLctNotify Message
 
    DESCRIPTION
 
-   This function posts an ExecLctGet message to the IOP specified by 
-   lct->iop and returns the data in the buffer pointed to by lct->buf
-   The size of the data written is placed into the memory pointed to
-   by lct->reslen.
+   This function returns the Logical Configuration Table of the IOP specified
+   by lct->iop in the buffer pointed to by lct->resbuf. The actual size of 
+   the data is written into *(lct->reslen).
 
    RETURNS
 
    This function returns 0 if no errors occur. If an error occurs, -1 
    is returned and errno is set appropriately:
 
-      ETIMEDOUT   Timeout waiting for reply message
-      ENOMEM      Kernel memory allocation error
-      ENOBUFS     Buffer not large enough.  If this occurs, the required
-                  buffer length is written into *(lct->reslen)
       EFAULT      Invalid user space pointer was passed
       ENXIO       Invalid IOP number
-      EIO         Unkown error
+      ENOBUFS     Buffer not large enough.  If this occurs, the required
+                  buffer length is written into *(lct->reslen)
 
-VI. UtilParamsSet Message
+VI. Settting Parameters
    
    SYNOPSIS 
  
@@ -138,8 +130,8 @@ VI. UtilParamsSet Message
 
    This function posts a UtilParamsSet message to the device identified
    by ops->iop and ops->tid.  The operation list for the message is 
-   sent through the ops->oplen buffer, and the result list is written
-   into the buffer pointed to by ops->oplen.  The number of bytes 
+   sent through the ops->opbuf buffer, and the result list is written
+   into the buffer pointed to by ops->resbuf.  The number of bytes 
    written is placed into *(ops->reslen). 
 
    RETURNS
@@ -148,19 +140,18 @@ VI. UtilParamsSet Message
    ops->resbuf if no errors occur.  If an error occurs, -1 is returned 
    and errno is set appropriatly:
 
-      ETIMEDOUT   Timeout waiting for reply message
-      ENOMEM      Kernel memory allocation error
-      ENOBUFS     Buffer not large enough.  If this occurs, the required
-                  buffer length is written into *(ops->reslen)
       EFAULT      Invalid user space pointer was passed
       ENXIO       Invalid IOP number
-      EIO         Unkown error
+      ENOBUFS     Buffer not large enough.  If this occurs, the required
+                  buffer length is written into *(ops->reslen)
+      ETIMEDOUT   Timeout waiting for reply message
+      ENOMEM      Kernel memory allocation error
 
    A return value of 0 does not mean that the value was actually
    changed properly on the IOP.  The user should check the result
    list to determine the specific status of the transaction.
 
-VII. UtilParamsGet Message
+VII. Getting Parameters
    
    SYNOPSIS 
  
@@ -180,25 +171,24 @@ VII. UtilParamsGet Message
 
    This function posts a UtilParamsGet message to the device identified
    by ops->iop and ops->tid.  The operation list for the message is 
-   sent through the ops->oplen buffer, and the result list is written
-   into the buffer pointed to by ops->oplen.  The actual size of data
+   sent through the ops->opbuf buffer, and the result list is written
+   into the buffer pointed to by ops->resbuf.  The actual size of data
    written is placed into *(ops->reslen).
 
    RETURNS
 
-      ETIMEDOUT   Timeout waiting for reply message
-      ENOMEM      Kernel memory allocation error
-      ENOBUFS     Buffer not large enough.  If this occurs, the required
-                  buffer length is written into *(ops->reslen)
       EFAULT      Invalid user space pointer was passed
       ENXIO       Invalid IOP number
-      EIO         Unkown error
+      ENOBUFS     Buffer not large enough.  If this occurs, the required
+                  buffer length is written into *(ops->reslen)
+      ETIMEDOUT   Timeout waiting for reply message
+      ENOMEM      Kernel memory allocation error
 
    A return value of 0 does not mean that the value was actually
    properly retreived.  The user should check the result list 
    to determine the specific status of the transaction.
 
-VIII. ExecSwDownload Message
+VIII. Downloading Software
    
    SYNOPSIS 
  
@@ -207,21 +197,21 @@ VIII. ExecSwDownload Message
       struct i2o_sw_xfer
       {
          u32   iop;       /* IOP unit number */
-         u8    dl_flags;  /* DownLoadFlags field */
+         u8    flags;     /* DownloadFlags field */
          u8    sw_type;   /* Software type */
          u32   sw_id;     /* Software ID */
          void  *buf;      /* Pointer to software buffer */
-         u32   *swlen;    /* Length of software data */        
+         u32   *swlen;    /* Length of software buffer */        
          u32   *maxfrag;  /* Number of fragments */
          u32   *curfrag;  /* Current fragment number */
       };
 
    DESCRIPTION
 
-   This function downloads the software pointed to by  sw->buf to the
-   iop identified by sw->iop. The DownloadFlags, SwID, and SwType fields
-   of the ExecSwDownload message are filed in with the values of 
-   sw->dl_flags, sw->sw_id, and sw->sw_type.
+   This function downloads the software pointed by sw->buf to the
+   iop identified by sw->iop. The DownloadFlags, SwID, SwType and SwSize 
+   fields of the ExecSwDownload message are filled in with the values of 
+   sw->flags, sw->sw_id, sw->sw_type and *(sw->swlen).
 
    Once the ioctl() is called and software transfer begins, the 
    user can read the value *(sw->maxfrag) and *(sw->curfrag) to
@@ -236,15 +226,12 @@ VIII. ExecSwDownload Message
    This function returns 0 no errors occur. If an error occurs, -1 
    is returned and errno is set appropriatly:
 
-      ETIMEDOUT   Timeout waiting for reply message
-      ENOMEM      Kernel memory allocation error
-      ENOBUFS     Buffer not large enough.  If this occurs, the required
-                  buffer length is written into *(ops->reslen)
       EFAULT      Invalid user space pointer was passed
       ENXIO       Invalid IOP number
-      EIO         Unkown error
+      ETIMEDOUT   Timeout waiting for reply message
+      ENOMEM      Kernel memory allocation error
 
-IX. ExecSwUpload Message
+IX. Uploading Software
    
    SYNOPSIS 
  
@@ -253,11 +240,11 @@ IX. ExecSwUpload Message
       struct i2o_sw_xfer
       {
          u32   iop;      /* IOP unit number */
-         u8    flags;    /* Unused */
+         u8    flags; 	 /* UploadFlags */
          u8    sw_type;  /* Software type */
          u32   sw_id;    /* Software ID */
          void  *buf;     /* Pointer to software buffer */
-         u32   *swlen;   /* Length in bytes of software */        
+         u32   *swlen;   /* Length of software buffer */        
          u32   *maxfrag; /* Number of fragments */
          u32   *curfrag; /* Current fragment number */
       };
@@ -265,10 +252,10 @@ IX. ExecSwUpload Message
    DESCRIPTION
 
    This function uploads software from the IOP identified by sw->iop
-   and places it in the buffer pointed to by sw->buf.  The SwID, SwType
-   and SwSize fields of the ExecSwDownload message are filed in 
-   with the values of sw->sw_id, sw->sw_type, sw->swlen, and.  The 
-   actual size of the module is written into *(sw->buflen).
+   and places it in the buffer pointed to by sw->buf. The length of the
+   buffer is given in *(sw->swlen). The UploadFlags, SwID and SwType
+   fields of the ExecSwUpload message are filled in 
+   with the values of sw->flags, sw->sw_id and sw->sw_type. 
 
    Once the ioctl() is called and software transfer begins, the 
    user can read the value *(sw->maxfrag) and *(sw->curfrag) to
@@ -283,15 +270,12 @@ IX. ExecSwUpload Message
    This function returns 0 if no errors occur.  If an error occurs, -1
    is returned and errno is set appropriatly:
 
-      ETIMEDOUT   Timeout waiting for reply message
-      ENOMEM      Kernel memory allocation error
-      ENOBUFS     Buffer not large enough.  If this occurs, the required
-                  buffer length is written into *(ops->reslen)
       EFAULT      Invalid user space pointer was passed
       ENXIO       Invalid IOP number
-      EIO         Unkown error
+      ETIMEDOUT   Timeout waiting for reply message
+      ENOMEM      Kernel memory allocation error
          
-X. ExecSwRemove Message
+X. Removing Software
    
    SYNOPSIS 
  
@@ -300,42 +284,61 @@ X. ExecSwRemove Message
       struct i2o_sw_xfer
       {
          u32   iop;      /* IOP unit number */
-         u8    flags;    /* Unused */
+         u8    flags; 	 /* RemoveFlags */
          u8    sw_type;  /* Software type */
          u32   sw_id;    /* Software ID */
          void  *buf;     /* Unused */
-         u32   *swlen;   /* Length in bytes of software data */        
+         u32   *swlen;   /* Length of the software data */        
          u32   *maxfrag; /* Unused */
          u32   *curfrag; /* Unused */
       };
 
    DESCRIPTION
 
-   This function uploads software from the IOP identified by sw->iop
-   and places it in the buffer pointed to by sw->buf.  The SwID, SwType
-   and SwSize fields of the ExecSwDownload message are filed in 
-   with the values of sw->dl_flags, sw->sw_id, and sw->sw_type.  The 
-   actual size of the module is written into *(sw->buflen).
+   This function removes software from the IOP identified by sw->iop.
+   The RemoveFlags, SwID, SwType and SwSize fields of the ExecSwRemove message 
+   are filled in with the values of sw->flags, sw->sw_id, sw->sw_type and 
+   *(sw->swlen). Give zero in *(sw->len) if the value is unknown. IOP uses 
+   *(sw->swlen) value to verify correct identication of the module to remove. 
+   The actual size of the module is written into *(sw->swlen).
 
    RETURNS
 
    This function returns 0 if no errors occur.  If an error occurs, -1
    is returned and errno is set appropriatly:
 
-      ETIMEDOUT   Timeout waiting for reply message
-      ENOMEM      Kernel memory allocation error
-      ENOBUFS     Buffer not large enough.  If this occurs, the required
-                  buffer length is written into *(ops->reslen)
       EFAULT      Invalid user space pointer was passed
       ENXIO       Invalid IOP number
-      EIO         Unkown error
+      ETIMEDOUT   Timeout waiting for reply message
+      ENOMEM      Kernel memory allocation error
 
-X. UtilConfigDialog Message
+X. Validating Configuration
+
+   SYNOPSIS
+
+   ioctl(fd, I2OVALIDATE, int *iop);
+	u32 iop;
+
+   DESCRIPTION
+
+   This function posts an ExecConfigValidate message to the controller
+   identified by iop. This message indicates that the the current
+   configuration is accepted. The iop changes the status of suspect drivers 
+   to valid and may delete old drivers from its store.
+
+   RETURNS
+
+   This function returns 0 if no erro occur.  If an error occurs, -1 is
+   returned and errno is set appropriatly:
+
+      ETIMEDOUT   Timeout waiting for reply message
+      ENXIO       Invalid IOP number
+
+XI. Configuration Dialog
    
    SYNOPSIS 
  
    ioctl(fd, I2OHTML, struct i2o_html *htquery);
-
       struct i2o_html
       {
          u32   iop;      /* IOP unit number */
@@ -356,22 +359,21 @@ X. UtilConfigDialog Message
    string that is to be sent to the device, it should be sent in the buffer
    pointed to by htquery->qbuf.  If there is no query string, this field
    should be set to NULL. The actual size of the reply received is written
-   into *(htquery->reslen)
+   into *(htquery->reslen).
   
    RETURNS
 
    This function returns 0 if no error occur. If an error occurs, -1
-   is returned and J errno is set appropriatly:
+   is returned and errno is set appropriatly:
 
-      ETIMEDOUT   Timeout waiting for reply message
-      ENOMEM      Kernel memory allocation error
-      ENOBUFS     Buffer not large enough.  If this occurs, the required
-                  buffer length is written into *(ops->reslen)
       EFAULT      Invalid user space pointer was passed
       ENXIO       Invalid IOP number
-      EIO         Unkown error
+      ENOBUFS     Buffer not large enough.  If this occurs, the required
+                  buffer length is written into *(ops->reslen)
+      ETIMEDOUT   Timeout waiting for reply message
+      ENOMEM      Kernel memory allocation error
 
-XI. Events
+XII. Events
 
     In the process of determining this.  Current idea is to have use
     the select() interface to allow user apps to periodically poll
@@ -394,5 +396,3 @@ Rev 0.2 - 04/06/99
 Rev 0.3 - 04/20/99
 - Changed all ioctls() to use pointers to user data instead of actual data
 - Updated error values to match the code
-
-

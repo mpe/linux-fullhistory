@@ -471,6 +471,28 @@ __setup("max_scsi_luns=", scsi_luns_setup);
 #endif
 
 /*
+ *	Issue a command and wait for it to complete
+ */
+ 
+void scsi_wait_cmd (Scsi_Cmnd * SCpnt, const void *cmnd ,
+		  void *buffer, unsigned bufflen, void (*done)(Scsi_Cmnd *),
+		  int timeout, int retries)
+{
+	unsigned long flags;
+	DECLARE_MUTEX_LOCKED(sem);
+	
+	SCpnt->request.sem = &sem;
+	SCpnt->request.rq_status = RQ_SCSI_BUSY;
+	spin_lock_irqsave(&io_request_lock, flags);
+	scsi_do_cmd (SCpnt, (void *) cmnd,
+        	buffer, bufflen, done, timeout, retries);
+	spin_unlock_irqrestore(&io_request_lock, flags);
+	down (&sem);
+	SCpnt->request.sem = NULL;
+}
+
+
+/*
  *  Detecting SCSI devices :
  *  We scan all present host adapter's busses,  from ID 0 to ID (max_id).
  *  We use the INQUIRY command, determine device type, and pass the ID /
@@ -709,18 +731,10 @@ int scan_scsis_single(int channel, int dev, int lun, int *max_dev_lun,
 	SCpnt->target = SDpnt->id;
 	SCpnt->lun = SDpnt->lun;
 	SCpnt->channel = SDpnt->channel;
-	{
-		DECLARE_MUTEX_LOCKED(sem);
-		SCpnt->request.sem = &sem;
-		SCpnt->request.rq_status = RQ_SCSI_BUSY;
-		spin_lock_irq(&io_request_lock);
-		scsi_do_cmd(SCpnt, (void *) scsi_cmd,
-			    (void *) NULL,
-			    0, scan_scsis_done, SCSI_TIMEOUT + 4 * HZ, 5);
-		spin_unlock_irq(&io_request_lock);
-		down(&sem);
-		SCpnt->request.sem = NULL;
-	}
+
+	scsi_wait_cmd (SCpnt, (void *) scsi_cmd,
+                  (void *) NULL,
+                  0, scan_scsis_done, SCSI_TIMEOUT + 4 * HZ, 5);
 
 	SCSI_LOG_SCAN_BUS(3, printk("scsi: scan_scsis_single id %d lun %d. Return code 0x%08x\n",
 				    dev, lun, SCpnt->result));
@@ -750,18 +764,10 @@ int scan_scsis_single(int channel, int dev, int lun, int *max_dev_lun,
 	scsi_cmd[4] = 255;
 	scsi_cmd[5] = 0;
 	SCpnt->cmd_len = 0;
-	{
-		DECLARE_MUTEX_LOCKED(sem);
-		SCpnt->request.sem = &sem;
-		SCpnt->request.rq_status = RQ_SCSI_BUSY;
-		spin_lock_irq(&io_request_lock);
-		scsi_do_cmd(SCpnt, (void *) scsi_cmd,
-			    (void *) scsi_result,
-			    256, scan_scsis_done, SCSI_TIMEOUT, 3);
-		spin_unlock_irq(&io_request_lock);
-		down(&sem);
-		SCpnt->request.sem = NULL;
-	}
+
+	scsi_wait_cmd (SCpnt, (void *) scsi_cmd,
+                  (void *) scsi_result,
+                  256, scan_scsis_done, SCSI_TIMEOUT, 3);
 
 	SCSI_LOG_SCAN_BUS(3, printk("scsi: INQUIRY %s with code 0x%x\n",
 		SCpnt->result ? "failed" : "successful", SCpnt->result));
@@ -892,18 +898,9 @@ int scan_scsis_single(int channel, int dev, int lun, int *max_dev_lun,
 		scsi_cmd[4] = 0x2a;
 		scsi_cmd[5] = 0;
 		SCpnt->cmd_len = 0;
-		{
-			DECLARE_MUTEX_LOCKED(sem);
-			SCpnt->request.rq_status = RQ_SCSI_BUSY;
-			SCpnt->request.sem = &sem;
-			spin_lock_irq(&io_request_lock);
-			scsi_do_cmd(SCpnt, (void *) scsi_cmd,
-				    (void *) scsi_result, 0x2a,
-				    scan_scsis_done, SCSI_TIMEOUT, 3);
-			spin_unlock_irq(&io_request_lock);
-			down(&sem);
-			SCpnt->request.sem = NULL;
-		}
+		scsi_wait_cmd (SCpnt, (void *) scsi_cmd,
+                	(void *) scsi_result, 0x2a,
+                	scan_scsis_done, SCSI_TIMEOUT, 3);
 	}
 	/*
 	 * Detach the command from the device. It was just a temporary to be used while
@@ -1112,6 +1109,7 @@ Scsi_Cmnd *scsi_request_queueable(struct request * req, Scsi_Device * device)
 	SCpnt->use_sg = 0;	/* Reset the scatter-gather flag */
 	SCpnt->old_use_sg = 0;
 	SCpnt->transfersize = 0;
+	SCpnt->resid = 0;
 	SCpnt->underflow = 0;
 	SCpnt->cmd_len = 0;
 
@@ -1283,7 +1281,7 @@ Scsi_Cmnd *scsi_allocate_device(struct request ** reqp, Scsi_Device * device,
 	SCpnt->old_use_sg = 0;
 	SCpnt->transfersize = 0;	/* No default transfer size */
 	SCpnt->cmd_len = 0;
-
+	SCpnt->resid = 0;
 	SCpnt->underflow = 0;	/* Do not flag underflow conditions */
 
 	/* Since not everyone seems to set the device info correctly
@@ -1964,6 +1962,7 @@ void scsi_build_commandblocks(Scsi_Device * SDpnt)
 		SCpnt->old_cmd_len = 0;
 		SCpnt->underflow = 0;
 		SCpnt->transfersize = 0;
+		SCpnt->resid = 0;
 		SCpnt->serial_number = 0;
 		SCpnt->serial_number_at_timeout = 0;
 		SCpnt->host_scribble = NULL;
@@ -3244,7 +3243,7 @@ static void scsi_dump_status(int level)
 			}
 		}
 	}
-	printk("wait_for_request = %p\n", wait_for_request);
+	/* printk("wait_for_request = %p\n", &wait_for_request); */
 #endif	/* CONFIG_SCSI_LOGGING */ /* } */
 #endif				/* CONFIG_PROC_FS */
 }

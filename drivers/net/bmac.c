@@ -19,6 +19,11 @@
 #include <asm/page.h>
 #include <asm/pgtable.h>
 #include <asm/feature.h>
+#ifdef CONFIG_PMAC_PBOOK
+#include <linux/adb.h>
+#include <linux/pmu.h>
+#include <asm/irq.h>
+#endif
 #include "bmac.h"
 
 #define trunc_page(x)	((void *)(((unsigned long)(x)) & ~((unsigned long)(PAGE_SIZE - 1))))
@@ -116,6 +121,13 @@ bmac_reg_entry_t reg_entries[N_REG_ENTRIES] = {
 
 struct net_device *bmac_devs = NULL;
 static int is_bmac_plus;
+
+#ifdef CONFIG_PMAC_PBOOK
+int bmac_sleep_notify(struct pmu_sleep_notifier *self, int when);
+static struct pmu_sleep_notifier bmac_sleep_notifier = {
+	bmac_sleep_notify, SLEEP_LEVEL_NET,
+};
+#endif
 
 #if 0
 /*
@@ -244,7 +256,7 @@ bmac_reset_chip(struct net_device *dev)
 	udelay(10000);
 }
 
-#define MIFDELAY	udelay(500)
+#define MIFDELAY	udelay(10)
 
 static unsigned int
 bmac_mif_readbits(struct net_device *dev, int nb)
@@ -427,8 +439,8 @@ bmac_start_chip(struct net_device *dev)
 	udelay(20000);
 }
 
-static int
-bmac_init_chip(struct net_device *dev)
+static void
+bmac_init_phy(struct net_device *dev)
 {
 	unsigned int addr;
 
@@ -451,9 +463,53 @@ bmac_init_chip(struct net_device *dev)
 		} else
 			bmac_mif_write(dev, 0, 0x1000);
 	}
+}
+
+static int
+bmac_init_chip(struct net_device *dev)
+{
+	bmac_init_phy(dev);
 	bmac_init_registers(dev);
 	return 1;
 }
+
+#ifdef CONFIG_PMAC_PBOOK
+int
+bmac_sleep_notify(struct pmu_sleep_notifier *self, int when)
+{
+	struct bmac_data *bp;
+
+	if (bmac_devs == 0)
+		return PBOOK_SLEEP_OK;
+		
+	bp = (struct bmac_data *) bmac_devs->priv;
+	
+	switch (when) {
+	case PBOOK_SLEEP_REQUEST:
+		break;
+	case PBOOK_SLEEP_REJECT:
+		break;
+	case PBOOK_SLEEP_NOW:
+		/* prolly should wait for dma to finish & turn off the chip */
+		disable_irq(bmac_devs->irq);
+		disable_irq(bp->tx_dma_intr);
+		disable_irq(bp->rx_dma_intr);
+		feature_set(bp->node, FEATURE_BMac_reset);
+		udelay(10000);
+		feature_clear(bp->node, FEATURE_BMac_IO_enable);
+		udelay(10000);
+		break;
+	case PBOOK_WAKE:
+		/* see if this is enough */
+		bmac_reset_and_enable(bmac_devs, 1);
+		enable_irq(bmac_devs->irq);
+		enable_irq(bp->tx_dma_intr);
+		enable_irq(bp->rx_dma_intr);
+		break;
+	}
+	return PBOOK_SLEEP_OK;
+}
+#endif
 
 static int bmac_set_address(struct net_device *dev, void *addr)
 {
@@ -1220,7 +1276,12 @@ bmac_probe(struct net_device *dev)
 	if (bmacs == NULL) return -ENODEV;
 	next_bmac = bmacs->next;
 
-	bmac_devs = dev; /* KLUDGE!! */
+	if (bmac_devs == 0) {
+		bmac_devs = dev; /* KLUDGE!! */
+#ifdef CONFIG_PMAC_PBOOK
+		pmu_register_sleep_notifier(&bmac_sleep_notifier);
+#endif
+	}
 
 	if (bmacs->n_addrs != 3 || bmacs->n_intrs != 3) {
 		printk(KERN_ERR "can't use BMAC %s: expect 3 addrs and 3 intrs\n",
@@ -1556,15 +1617,24 @@ int init_module(void)
     res = bmac_probe(NULL);
     return res;
 }
+
 void cleanup_module(void)
 {
-    struct bmac_data *bp = (struct bmac_data *) bmac_devs->priv;
+    struct bmac_data *bp;
+
+    if (bmac_devs == 0)
+	return;
+
+    bp = (struct bmac_data *) bmac_devs->priv;
     unregister_netdev(bmac_devs);
 
     free_irq(bmac_devs->irq, bmac_misc_intr);
     free_irq(bp->tx_dma_intr, bmac_txdma_intr);
     free_irq(bp->rx_dma_intr, bmac_rxdma_intr);
 
+#ifdef CONFIG_PMAC_PBOOK
+    pmu_unregister_sleep_notifier(&bmac_sleep_notifier);
+#endif
     kfree(bmac_devs);
     bmac_devs = NULL;
 }

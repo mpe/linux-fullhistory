@@ -57,7 +57,8 @@
  *                     reported by Johan Maes <joma@telindus.be>
  *    22.03.99   0.12  return EAGAIN instead of EBUSY when O_NONBLOCK
  *                     read/write cannot be executed
- *
+ *    20 09 99   0.13  merged the generic changes in sonicvibes since this
+ *		       diverged.
  */
 
 /*****************************************************************************/
@@ -585,8 +586,9 @@ static int prog_dmabuf(struct cm_state *s, unsigned rec)
 	db->hwptr = db->swptr = db->total_bytes = db->count = db->error = db->endcleared = 0;
 	if (!db->rawbuf) {
 		db->ready = db->mapped = 0;
-		for (order = DMABUF_DEFAULTORDER; order >= DMABUF_MINORDER && !db->rawbuf; order--)
-			db->rawbuf = (void *)__get_free_pages(GFP_KERNEL | GFP_DMA, order);
+		for (order = DMABUF_DEFAULTORDER; order >= DMABUF_MINORDER; order--)
+			if ((db->rawbuf = (void *)__get_free_pages(GFP_KERNEL | GFP_DMA, order)))
+				break;
 		if (!db->rawbuf)
 			return -ENOMEM;
 		db->buforder = order;
@@ -1152,9 +1154,9 @@ static int drain_dac(struct cm_state *s, int nonblock)
                         current->state = TASK_RUNNING;
                         return -EBUSY;
                 }
-		tmo = (count * HZ) / s->ratedac;
+		tmo = 3 * HZ * (count + s->dma_dac.fragsize) / 2 / s->ratedac;
 		tmo >>= sample_shift[(s->fmt >> CM_CFMT_DACSHIFT) & CM_CFMT_MASK];
-		if (!schedule_timeout(tmo ? : 1) && tmo)
+		if (!schedule_timeout(tmo + 1))
 			printk(KERN_DEBUG "cm: dma timed out??\n");
         }
         remove_wait_queue(&s->dma_dac.wait, &wait);
@@ -1630,9 +1632,11 @@ static int cm_ioctl(struct inode *inode, struct file *file, unsigned int cmd, un
         case SOUND_PCM_READ_BITS:
 		return put_user((s->fmt & ((file->f_mode & FMODE_READ) ? (CM_CFMT_16BIT << CM_CFMT_ADCSHIFT) : (CM_CFMT_16BIT << CM_CFMT_DACSHIFT))) ? 16 : 8, (int *)arg);
 
+        case SOUND_PCM_READ_FILTER:
+		return put_user((file->f_mode & FMODE_READ) ? s->rateadc : s->ratedac, (int *)arg);
+
         case SOUND_PCM_WRITE_FILTER:
         case SNDCTL_DSP_SETSYNCRO:
-        case SOUND_PCM_READ_FILTER:
                 return -EINVAL;
 		
 	}
@@ -1732,6 +1736,7 @@ static /*const*/ struct file_operations cm_audio_fops = {
 static ssize_t cm_midi_read(struct file *file, char *buffer, size_t count, loff_t *ppos)
 {
 	struct cm_state *s = (struct cm_state *)file->private_data;
+	DECLARE_WAITQUEUE(wait, current);
 	ssize_t ret;
 	unsigned long flags;
 	unsigned ptr;
@@ -1742,7 +1747,10 @@ static ssize_t cm_midi_read(struct file *file, char *buffer, size_t count, loff_
 		return -ESPIPE;
 	if (!access_ok(VERIFY_WRITE, buffer, count))
 		return -EFAULT;
+	if (count == 0)
+		return 0;
 	ret = 0;
+	add_wait_queue(&s->midi.iwait, &wait);
 	while (count > 0) {
 		spin_lock_irqsave(&s->lock, flags);
 		ptr = s->midi.ird;
@@ -1753,15 +1761,27 @@ static ssize_t cm_midi_read(struct file *file, char *buffer, size_t count, loff_
 		if (cnt > count)
 			cnt = count;
 		if (cnt <= 0) {
-			if (file->f_flags & O_NONBLOCK)
-				return ret ? ret : -EAGAIN;
-			interruptible_sleep_on(&s->midi.iwait);
-			if (signal_pending(current))
-				return ret ? ret : -ERESTARTSYS;
+			if (file->f_flags & O_NONBLOCK) 
+			{
+				if (!ret)
+					ret = -EAGAIN;
+				break;
+			}
+			__set_current_state(TASK_INTERRUPTIBLE);
+			schedule();
+			if (signal_pending(current)) 
+			{
+				if (!ret)
+					ret = -ERESTARTSYS;
+				break;
+			}
 			continue;
 		}
-		if (copy_to_user(buffer, s->midi.ibuf + ptr, cnt))
-			return ret ? ret : -EFAULT;
+		if (copy_to_user(buffer, s->midi.ibuf + ptr, cnt)) {
+			if (!ret)
+				ret = -EFAULT;
+			break;
+		}
 		ptr = (ptr + cnt) % MIDIINBUF;
 		spin_lock_irqsave(&s->lock, flags);
 		s->midi.ird = ptr;
@@ -1770,13 +1790,17 @@ static ssize_t cm_midi_read(struct file *file, char *buffer, size_t count, loff_
 		count -= cnt;
 		buffer += cnt;
 		ret += cnt;
+		break;
 	}
+	__set_current_state(TASK_RUNNING);
+	remove_wait_queue(&s->midi.iwait, &wait);
 	return ret;
 }
 
 static ssize_t cm_midi_write(struct file *file, const char *buffer, size_t count, loff_t *ppos)
 {
 	struct cm_state *s = (struct cm_state *)file->private_data;
+	DECLARE_WAITQUEUE(wait, current);
 	ssize_t ret;
 	unsigned long flags;
 	unsigned ptr;
@@ -1787,7 +1811,10 @@ static ssize_t cm_midi_write(struct file *file, const char *buffer, size_t count
 		return -ESPIPE;
 	if (!access_ok(VERIFY_READ, buffer, count))
 		return -EFAULT;
+	if (count == 0)
+		return 0;
 	ret = 0;
+	add_wait_queue(&s->midi.owait, &wait);
 	while (count > 0) {
 		spin_lock_irqsave(&s->lock, flags);
 		ptr = s->midi.owr;
@@ -1800,15 +1827,25 @@ static ssize_t cm_midi_write(struct file *file, const char *buffer, size_t count
 		if (cnt > count)
 			cnt = count;
 		if (cnt <= 0) {
-			if (file->f_flags & O_NONBLOCK)
-				return ret ? ret : -EAGAIN;
-			interruptible_sleep_on(&s->midi.owait);
-			if (signal_pending(current))
-				return ret ? ret : -ERESTARTSYS;
+			if (file->f_flags & O_NONBLOCK) {
+				if (!ret)
+					ret = -EAGAIN;
+				break;
+			}
+			__set_current_state(TASK_INTERRUPTIBLE);
+			schedule();
+			if (signal_pending(current)) {
+				if (!ret)
+					ret = -ERESTARTSYS;
+				break;
+			}
 			continue;
 		}
-		if (copy_from_user(s->midi.obuf + ptr, buffer, cnt))
-			return ret ? ret : -EFAULT;
+		if (copy_from_user(s->midi.obuf + ptr, buffer, cnt)) {
+			if (!ret)
+				ret = -EFAULT;
+			break;
+		}
 		ptr = (ptr + cnt) % MIDIOUTBUF;
 		spin_lock_irqsave(&s->lock, flags);
 		s->midi.owr = ptr;
@@ -1821,6 +1858,8 @@ static ssize_t cm_midi_write(struct file *file, const char *buffer, size_t count
 		cm_handle_midi(s);
 		spin_unlock_irqrestore(&s->lock, flags);
 	}
+	__set_current_state(TASK_RUNNING);
+	remove_wait_queue(&s->midi.owait, &wait);
 	return ret;
 }
 
@@ -1915,7 +1954,7 @@ static int cm_midi_release(struct inode *inode, struct file *file)
 	VALIDATE_STATE(s);
 
 	if (file->f_mode & FMODE_WRITE) {
-		current->state = TASK_INTERRUPTIBLE;
+		__set_current_state(TASK_INTERRUPTIBLE);
 		add_wait_queue(&s->midi.owait, &wait);
 		for (;;) {
 			spin_lock_irqsave(&s->lock, flags);
@@ -1927,7 +1966,7 @@ static int cm_midi_release(struct inode *inode, struct file *file)
 				break;
 			if (file->f_flags & O_NONBLOCK) {
 				remove_wait_queue(&s->midi.owait, &wait);
-				current->state = TASK_RUNNING;
+				set_current_state(TASK_RUNNING);
 				return -EBUSY;
 			}
 			tmo = (count * HZ) / 3100;
@@ -1935,7 +1974,7 @@ static int cm_midi_release(struct inode *inode, struct file *file)
 				printk(KERN_DEBUG "cm: midi timed out??\n");
 		}
 		remove_wait_queue(&s->midi.owait, &wait);
-		current->state = TASK_RUNNING;
+		set_current_state(TASK_RUNNING);
 	}
 	down(&s->open_sem);
 	s->open_mode &= (~(file->f_mode << FMODE_MIDI_SHIFT)) & (FMODE_MIDI_READ|FMODE_MIDI_WRITE);
@@ -2344,11 +2383,6 @@ int __init init_cmpci(void)
 /* --------------------------------------------------------------------- */
 
 #ifdef MODULE
-
-#if 0
-MODULE_PARM(wavetable, "1-" __MODULE_STRING(NR_DEVICE) "i");
-MODULE_PARM_DESC(wavetable, "if 1 the wavetable synth is enabled");
-#endif
 
 MODULE_AUTHOR("ChenLi Tien, cltien@home.com");
 MODULE_DESCRIPTION("CMPCI Audio Driver");

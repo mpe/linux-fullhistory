@@ -164,10 +164,23 @@
   drivers are updated as well.
   -- Various other cleanups.
 
+  3.04 Sep 12, 1999 - Jens Axboe <axboe@image.dk>
+  -- Fixed a couple of possible memory leaks (if an operation failed and
+  we didn't free the buffer before returning the error).
+  -- Integrated Uniform CD Changer handling from Richard Sharman
+  <rsharman@pobox.com>.
+  -- Defined CD_DVD and CD_CHANGER log levels.
+  -- Fixed the CDROMREADxxx ioctls.
+  -- CDROMPLAYTRKIND uses the GPCMD_PLAY_AUDIO_MSF command - too few
+  drives supported it. We loose the index part, however.
+  -- Small modifications to accomodate opens of /dev/hdc1, required
+  for ide-cd to handle multisession discs.
+  -- Export cdrom_mode_sense and cdrom_mode_select.
+  -- init_cdrom_command() for setting up a cgc command.
 -------------------------------------------------------------------------*/
 
-#define REVISION "Revision: 3.03"
-#define VERSION "Id: cdrom.c 3.03 1999/09/01"
+#define REVISION "Revision: 3.04"
+#define VERSION "Id: cdrom.c 3.04 1999/09/14"
 
 /* I use an error-log mask to give fine grain control over the type of
    messages dumped to the system logs.  The available masks include: */
@@ -178,6 +191,8 @@
 #define CD_OPEN		0x8
 #define CD_CLOSE	0x10
 #define CD_COUNT_TRACKS 0x20
+#define CD_CHANGER	0x40
+#define CD_DVD		0x80
 
 /* Define this to remove _all_ the debugging messages */
 /* #define ERRLOGMASK CD_NOTHING */
@@ -210,7 +225,8 @@ static int keeplocked = 0;
 static int autoclose=1;
 static int autoeject=0;
 static int lockdoor = 1;
-static int check_media_type = 1;
+/* will we ever get to use this... sigh. */
+static int check_media_type = 0;
 MODULE_PARM(debug, "i");
 MODULE_PARM(autoclose, "i");
 MODULE_PARM(autoeject, "i");
@@ -311,7 +327,6 @@ int register_cdrom(struct cdrom_device_info *cdi)
 	ENSURE(tray_move, CDC_CLOSE_TRAY | CDC_OPEN_TRAY);
 	ENSURE(lock_door, CDC_LOCK);
 	ENSURE(select_speed, CDC_SELECT_SPEED);
-	ENSURE(select_disc, CDC_SELECT_DISC);
 	ENSURE(get_last_session, CDC_MULTI_SESSION);
 	ENSURE(get_mcn, CDC_MCN);
 	ENSURE(reset, CDC_RESET);
@@ -374,6 +389,18 @@ struct cdrom_device_info *cdrom_find_device (kdev_t dev)
 	cdi = topCdromPtr;
 	while (cdi != NULL && cdi->dev != dev)
 		cdi = cdi->next;
+
+	/* we need to find the device this way when IDE devices such
+	 * as /dev/hdc2 are opened. SCSI drives will be found above and
+	 * so will /dev/hdc, for instance.
+	 */
+	if (cdi == NULL) {
+		kdev_t cd_dev = MKDEV(MAJOR(dev), MINOR(dev) | CD_PART_MASK);
+		cdi = topCdromPtr;
+		while (cdi != NULL && cdi->dev != cd_dev)
+			cdi = cdi->next;
+	}
+	
 	return cdi;
 }
 
@@ -579,7 +606,7 @@ static
 int cdrom_release(struct inode *ip, struct file *fp)
 {
 	kdev_t dev = ip->i_rdev;
-	struct cdrom_device_info *cdi = cdrom_find_device (dev);
+	struct cdrom_device_info *cdi = cdrom_find_device(dev);
 	struct cdrom_device_ops *cdo = cdi->ops;
 	int opened_for_data;
 
@@ -610,6 +637,133 @@ int cdrom_release(struct inode *ip, struct file *fp)
 	return 0;
 }
 
+static int cdrom_read_mech_status(struct cdrom_device_info *cdi, 
+				  struct cdrom_changer_info *buf)
+{
+	struct cdrom_generic_command cgc;
+	struct cdrom_device_ops *cdo = cdi->ops;
+	int length;
+
+	length = sizeof(struct cdrom_mechstat_header) +
+		 cdi->capacity * sizeof(struct cdrom_slot);
+
+	init_cdrom_command(&cgc, buf, length);
+	cgc.cmd[0] = GPCMD_MECHANISM_STATUS;
+	cgc.cmd[8] = (length >> 8) & 0xff;
+	cgc.cmd[9] = length & 0xff;
+	return cdo->generic_packet(cdi, &cgc);
+}
+
+static int cdrom_slot_status(struct cdrom_device_info *cdi, int slot)
+{
+	struct cdrom_changer_info info;
+	int ret;
+
+	cdinfo(CD_CHANGER, "entering cdrom_slot_status()\n"); 
+	if (cdi->sanyo_slot)
+		return CDS_NO_INFO;
+	
+	if ((ret = cdrom_read_mech_status(cdi, &info)))
+		return ret;
+
+	if (info.slots[slot].disc_present)
+		return CDS_DISC_OK;
+	else
+		return CDS_NO_DISC;
+
+}
+
+/* Return the number of slots for an ATAPI/SCSI cdrom, 
+ * return 1 if not a changer. 
+ */
+int cdrom_number_of_slots(struct cdrom_device_info *cdi) 
+{
+	int status;
+	int nslots = 1;
+	struct cdrom_changer_info info;
+
+	cdinfo(CD_CHANGER, "entering cdrom_number_of_slots()\n"); 
+	/* cdrom_read_mech_status requires a valid value for capacity: */
+	cdi->capacity = 0; 
+
+	if ((status = cdrom_read_mech_status(cdi, &info)) == 0)
+		nslots = info.hdr.nslots;
+
+	return nslots;
+}
+
+
+/* If SLOT < 0, unload the current slot.  Otherwise, try to load SLOT. */
+static int cdrom_load_unload(struct cdrom_device_info *cdi, int slot) 
+{
+	struct cdrom_generic_command cgc;
+
+	cdinfo(CD_CHANGER, "entering cdrom_load_unload()\n"); 
+	if (cdi->sanyo_slot && slot < 0)
+		return 0;
+
+	init_cdrom_command(&cgc, NULL, 0);
+	cgc.cmd[0] = GPCMD_LOAD_UNLOAD;
+	cgc.cmd[4] = 2 + (slot >= 0);
+	cgc.cmd[8] = slot;
+
+	/* The Sanyo 3 CD changer uses byte 7 of the 
+	GPCMD_TEST_UNIT_READY to command to switch CDs instead of
+	using the GPCMD_LOAD_UNLOAD opcode. */
+	if (cdi->sanyo_slot && slot) {
+		cgc.cmd[0] = GPCMD_TEST_UNIT_READY;
+		cgc.cmd[7] = slot;
+		cdi->sanyo_slot = slot ? slot : 3;
+	}
+
+	return cdi->ops->generic_packet(cdi, &cgc);
+}
+
+int cdrom_select_disc (struct cdrom_device_info *cdi, int slot)
+{
+	struct cdrom_changer_info info;
+	int curslot;
+	int ret;
+
+	cdinfo(CD_CHANGER, "entering cdrom_select_disc()\n"); 
+	if (!CDROM_CAN(CDC_SELECT_DISC))
+		return -EDRIVE_CANT_DO_THIS;
+
+	if (slot == CDSL_NONE) {
+		/* set media changed bits, on both queues */
+		cdi->mc_flags = 0x3;
+		return cdrom_load_unload(cdi, -1);
+	}
+
+	if ((ret = cdrom_read_mech_status(cdi, &info)))
+		return ret;
+
+	curslot = info.hdr.curslot;
+
+	if (cdi->use_count > 1 || keeplocked) {
+		if (slot == CDSL_CURRENT) {
+	    		return curslot;
+		} else {
+			return -EBUSY;
+		}
+	}
+
+	/* Specifying CDSL_CURRENT will attempt to load the currnet slot,
+	which is useful if it had been previously unloaded.
+	Whether it can or not, it returns the current slot. 
+	Similarly,  if slot happens to be the current one, we still
+	try and load it. */
+	if (slot == CDSL_CURRENT)
+		slot = curslot;
+
+	/* set media changed bits on both queues */
+	cdi->mc_flags = 0x3;
+	if ((ret = cdrom_load_unload(cdi, slot)))
+		return ret;
+
+	return slot;
+}
+
 /* We want to make media_changed accessible to the user through an
  * ioctl. The main problem now is that we must double-buffer the
  * low-level implementation, to assure that the VFS and the user both
@@ -636,7 +790,7 @@ int media_changed(struct cdrom_device_info *cdi, int queue)
 static
 int cdrom_media_changed(kdev_t dev)
 {
-	struct cdrom_device_info *cdi = cdrom_find_device (dev);
+	struct cdrom_device_info *cdi = cdrom_find_device(dev);
 	/* This talks to the VFS, which doesn't like errors - just 1 or 0.  
 	 * Returning "0" is always safe (media hasn't been changed). Do that 
 	 * if the low-level cdrom driver dosn't support media changed. */ 
@@ -734,6 +888,14 @@ void sanitize_format(union cdrom_addr *addr,
 	*curr = requested;
 }
 
+void init_cdrom_command(struct cdrom_generic_command *cgc,
+			void *buffer, int len)
+{
+	memset(cgc, 0, sizeof(*cgc));
+	cgc->buffer = (char *) buffer;
+	cgc->buflen = len;
+}
+
 /* DVD handling */
 
 #define copy_key(dest,src)	memcpy((dest), (src), sizeof(dvd_key))
@@ -758,19 +920,16 @@ static int dvd_do_auth (struct cdrom_device_info *cdi, dvd_authinfo *ai)
 	struct cdrom_generic_command cgc;
 	struct cdrom_device_ops *cdo = cdi->ops;
 
-	memset(&cgc, 0, sizeof(cgc));
-	memset(buf, 0x93, sizeof(buf));
-	cgc.buffer = buf;
+	init_cdrom_command(&cgc, buf, 0);
 
 	switch (ai->type) {
 	/* LU data send */
 	case DVD_LU_SEND_AGID:
-		cdinfo(CD_DO_IOCTL, "entering DVD_LU_SEND_AGID\n"); 
+		cdinfo(CD_DVD, "entering DVD_LU_SEND_AGID\n"); 
 		setup_report_key (&cgc, 0, 0);
 		cgc.buflen = cgc.cmd[9] = 8;
 
-		ret = cdo->generic_packet(cdi, &cgc);
-		if (ret)
+		if ((ret = cdo->generic_packet(cdi, &cgc)))
 			return ret;
 
 		ai->lsa.agid = buf[7] >> 6;
@@ -778,24 +937,24 @@ static int dvd_do_auth (struct cdrom_device_info *cdi, dvd_authinfo *ai)
 		break;
 
 	case DVD_LU_SEND_KEY1:
-		cdinfo(CD_DO_IOCTL, "entering DVD_LU_SEND_KEY1\n"); 
+		cdinfo(CD_DVD, "entering DVD_LU_SEND_KEY1\n"); 
 		setup_report_key (&cgc, ai->lsk.agid, 2);
 		cgc.buflen = cgc.cmd[9] = 12;
 
-		ret = cdo->generic_packet(cdi, &cgc);
-		if (ret) return ret;
+		if ((ret = cdo->generic_packet(cdi, &cgc)))
+			return ret;
 
 		copy_key(ai->lsk.key, &buf[4]);
 		/* Returning data, let host change state */
 		break;
 
 	case DVD_LU_SEND_CHALLENGE:
-		cdinfo(CD_DO_IOCTL, "entering DVD_LU_SEND_CHALLENGE\n"); 
+		cdinfo(CD_DVD, "entering DVD_LU_SEND_CHALLENGE\n"); 
 		setup_report_key (&cgc, ai->lsc.agid, 1);
 		cgc.buflen = cgc.cmd[9] = 16;
 
-		ret = cdo->generic_packet(cdi, &cgc);
-		if (ret) return ret;
+		if ((ret = cdo->generic_packet(cdi, &cgc)))
+			return ret;
 
 		copy_chal(ai->lsc.chal, &buf[4]);
 		/* Returning data, let host change state */
@@ -803,7 +962,7 @@ static int dvd_do_auth (struct cdrom_device_info *cdi, dvd_authinfo *ai)
 
 	/* Post-auth key */
 	case DVD_LU_SEND_TITLE_KEY:
-		cdinfo(CD_DO_IOCTL, "entering DVD_LU_SEND_TITLE_KEY\n"); 
+		cdinfo(CD_DVD, "entering DVD_LU_SEND_TITLE_KEY\n"); 
 		setup_report_key (&cgc, ai->lstk.agid, 4);
 		cgc.cmd[5] = ai->lstk.lba;
 		cgc.cmd[4] = ai->lstk.lba >> 8;
@@ -811,8 +970,8 @@ static int dvd_do_auth (struct cdrom_device_info *cdi, dvd_authinfo *ai)
 		cgc.cmd[2] = ai->lstk.lba >> 24;
 		cgc.buflen = cgc.cmd[9] = 12;
 
-		ret = cdo->generic_packet(cdi, &cgc);
-		if (ret) return ret;
+		if ((ret = cdo->generic_packet(cdi, &cgc)))
+			return ret;
 
 		ai->lstk.cpm = (buf[4] >> 7) & 1;
 		ai->lstk.cp_sec = (buf[4] >> 6) & 1;
@@ -822,32 +981,32 @@ static int dvd_do_auth (struct cdrom_device_info *cdi, dvd_authinfo *ai)
 		break;
 
 	case DVD_LU_SEND_ASF:
-		cdinfo(CD_DO_IOCTL, "entering DVD_LU_SEND_ASF\n"); 
+		cdinfo(CD_DVD, "entering DVD_LU_SEND_ASF\n"); 
 		setup_report_key (&cgc, ai->lsasf.asf, 5);
 		cgc.buflen = cgc.cmd[9] = 8;
-
-		ret = cdo->generic_packet(cdi, &cgc);
-		if (ret) return ret;
+		
+		if ((ret = cdo->generic_packet(cdi, &cgc)))
+			return ret;
 
 		ai->lsasf.asf = buf[7] & 1;
 		break;
 
 	/* LU data receive (LU changes state) */
 	case DVD_HOST_SEND_CHALLENGE:
-		cdinfo(CD_DO_IOCTL, "entering DVD_HOST_SEND_CHALLENGE\n"); 
+		cdinfo(CD_DVD, "entering DVD_HOST_SEND_CHALLENGE\n"); 
 		setup_send_key (&cgc, ai->hsc.agid, 1);
 		cgc.buflen = cgc.cmd[9] = 16;
 		buf[1] = 14;
 		copy_chal (&buf[4], ai->hsc.chal);
 
-		ret = cdo->generic_packet(cdi, &cgc);
-		if (ret) return ret;
+		if ((ret = cdo->generic_packet(cdi, &cgc)))
+			return ret;
 
 		ai->type = DVD_LU_SEND_KEY1;
 		break;
 
 	case DVD_HOST_SEND_KEY2:
-		cdinfo(CD_DO_IOCTL, "entering DVD_HOST_SEND_KEY2\n"); 
+		cdinfo(CD_DVD, "entering DVD_HOST_SEND_KEY2\n"); 
 		setup_send_key (&cgc, ai->hsk.agid, 3);
 		cgc.buflen = cgc.cmd[9] = 12;
 		buf[1] = 10;
@@ -863,10 +1022,10 @@ static int dvd_do_auth (struct cdrom_device_info *cdi, dvd_authinfo *ai)
 
 	/* Misc */
 	case DVD_INVALIDATE_AGID:
-		cdinfo(CD_DO_IOCTL, "entering DVD_INVALIDATE_AGID\n"); 
+		cdinfo(CD_DVD, "entering DVD_INVALIDATE_AGID\n"); 
 		setup_report_key (&cgc, ai->lsa.agid, 0x3f);
-		ret = cdo->generic_packet(cdi, &cgc);
-		if (ret) return ret;
+		if ((ret = cdo->generic_packet(cdi, &cgc)))
+			return ret;
 		break;
 
 	default:
@@ -886,16 +1045,14 @@ static int dvd_read_physical (struct cdrom_device_info *cdi, dvd_struct *s)
 	struct cdrom_device_ops *cdo = cdi->ops;
 
 	memset(buf, 0, sizeof(buf));
-	memset(&cgc, 0, sizeof(cgc));
-	cgc.buffer = buf;
-	cgc.buflen = sizeof(buf);
+	init_cdrom_command(&cgc, buf, sizeof(buf));
 	cgc.cmd[0] = GPCMD_READ_DVD_STRUCTURE;
 	cgc.cmd[6] = s->physical.layer_num;
 	cgc.cmd[7] = s->type;
 	cgc.cmd[9] = cgc.buflen & 0xff;
 
-	ret = cdo->generic_packet(cdi, &cgc);
-	if (ret) return ret;
+	if ((ret = cdo->generic_packet(cdi, &cgc)))
+		return ret;
 
 	base = &buf[4];
 	layer = &s->physical.layer[0];
@@ -930,17 +1087,14 @@ static int dvd_read_copyright(struct cdrom_device_info *cdi, dvd_struct *s)
 	struct cdrom_device_ops *cdo = cdi->ops;
 
 	memset(buf, 0, sizeof(buf));
-	memset(&cgc, 0, sizeof(cgc));
-	cgc.buffer = buf;
-	cgc.buflen = sizeof(buf);
+	init_cdrom_command(&cgc, buf, sizeof(buf));
 	cgc.cmd[0] = GPCMD_READ_DVD_STRUCTURE;
 	cgc.cmd[6] = s->copyright.layer_num;
 	cgc.cmd[7] = s->type;
 	cgc.cmd[8] = cgc.buflen >> 8;
 	cgc.cmd[9] = cgc.buflen & 0xff;
 
-	ret = cdo->generic_packet(cdi, &cgc);
-	if (ret)
+	if ((ret = cdo->generic_packet(cdi, &cgc)))
 		return ret;
 
 	s->copyright.cpst = buf[4];
@@ -957,20 +1111,17 @@ static int dvd_read_disckey (struct cdrom_device_info *cdi, dvd_struct *s)
 	struct cdrom_device_ops *cdo = cdi->ops;
 
 	memset(buf, 0, sizeof (buf));
-	memset(&cgc, 0, sizeof (cgc));
-
-	cgc.buffer = buf;
-	cgc.buflen = sizeof(buf);
+	init_cdrom_command(&cgc, buf, sizeof(buf));
 	cgc.cmd[0] = GPCMD_READ_DVD_STRUCTURE;
 	cgc.cmd[7] = s->type;
 	cgc.cmd[8] = sizeof(buf) >> 8;
 	cgc.cmd[9] = cgc.buflen & 0xff;
 	cgc.cmd[10] = s->disckey.agid << 6;
 
-	ret = cdo->generic_packet(cdi, &cgc);
-	if (ret) return ret;
+	if ((ret = cdo->generic_packet(cdi, &cgc)))
+		return ret;
 
-	memcpy (s->disckey.value, &buf[4], 2048);
+	memcpy(s->disckey.value, &buf[4], 2048);
 
 	return 0;
 }
@@ -983,15 +1134,13 @@ static int dvd_read_bca(struct cdrom_device_info *cdi, dvd_struct *s)
 	struct cdrom_device_ops *cdo = cdi->ops;
 
 	memset(buf, 0, sizeof (buf));
-	memset(&cgc, 0, sizeof (cgc));
-	cgc.buffer = buf;
-	cgc.buflen = sizeof(buf);
+	init_cdrom_command(&cgc, buf, sizeof(buf));
 	cgc.cmd[0] = GPCMD_READ_DVD_STRUCTURE;
 	cgc.cmd[7] = s->type;
 	cgc.cmd[9] = cgc.buflen = 0xff;
 
-	ret = cdo->generic_packet(cdi, &cgc);
-	if (ret) return ret;
+	if ((ret = cdo->generic_packet(cdi, &cgc)))
+		return ret;
 
 	s->bca.len = buf[0] << 8 | buf[1];
 	if (s->bca.len < 12 || s->bca.len > 188) {
@@ -1011,16 +1160,15 @@ static int dvd_read_manufact(struct cdrom_device_info *cdi, dvd_struct *s)
 	struct cdrom_device_ops *cdo = cdi->ops;
 
 	memset(buf, 0, sizeof(buf));
-	memset(&cgc, 0, sizeof(cgc));
-	cgc.buffer = buf;
+	init_cdrom_command(&cgc, buf, sizeof(buf));
 	cgc.cmd[0] = GPCMD_READ_DVD_STRUCTURE;
 	cgc.cmd[7] = s->type;
 	cgc.buflen = sizeof(buf);
 	cgc.cmd[8] = sizeof(buf) >> 8;
 	cgc.cmd[9] = cgc.buflen & 0xff;
 
-	ret = cdo->generic_packet(cdi, &cgc);
-	if (ret) return ret;
+	if ((ret = cdo->generic_packet(cdi, &cgc)))
+		return ret;
 
 	s->manufact.len = buf[0] << 8 | buf[1];
 	if (s->manufact.len < 0 || s->manufact.len > 2048) {
@@ -1057,9 +1205,9 @@ static int dvd_read_struct(struct cdrom_device_info *cdi, dvd_struct *s)
 	}
 }
 
-static int cdrom_mode_sense(struct cdrom_device_info *cdi,
-			    struct cdrom_generic_command *cgc,
-			    int page_code, int page_control)
+int cdrom_mode_sense(struct cdrom_device_info *cdi,
+		     struct cdrom_generic_command *cgc,
+		     int page_code, int page_control)
 {
 	struct cdrom_device_ops *cdo = cdi->ops;
 
@@ -1072,8 +1220,8 @@ static int cdrom_mode_sense(struct cdrom_device_info *cdi,
 	return cdo->generic_packet(cdi, cgc);
 }
 
-static int cdrom_mode_select(struct cdrom_device_info *cdi,
-			     struct cdrom_generic_command *cgc)
+int cdrom_mode_select(struct cdrom_device_info *cdi,
+		      struct cdrom_generic_command *cgc)
 {
 	struct cdrom_device_ops *cdo = cdi->ops;
 
@@ -1094,13 +1242,12 @@ static int cdrom_read_subchannel(struct cdrom_device_info *cdi,
 	char buffer[32];
 	int ret;
 
-	memset(&cgc, 0, sizeof(cgc));
+	init_cdrom_command(&cgc, buffer, 16);
 	cgc.cmd[0] = GPCMD_READ_SUBCHANNEL;
 	cgc.cmd[1] = 2;     /* MSF addressing */
 	cgc.cmd[2] = 0x40;  /* request subQ data */
 	cgc.cmd[3] = mcn ? 2 : 1;
-	cgc.cmd[8] = cgc.buflen = 16;
-	cgc.buffer = buffer;
+	cgc.cmd[8] = 16;
 
 	if ((ret = cdo->generic_packet(cdi, &cgc)))
 		return ret;
@@ -1138,12 +1285,16 @@ static int cdrom_read_block(struct cdrom_device_info *cdi,
 	cgc->cmd[4] = (lba >>  8) & 0xff;
 	cgc->cmd[5] = lba & 0xff;
 	/* number of blocks */
-	cgc->cmd[8] = nblocks;
+	cgc->cmd[6] = (nblocks >> 16) & 0xff;
+	cgc->cmd[7] = (nblocks >>  8) & 0xff;
+	cgc->cmd[8] = nblocks & 0xff;
 	cgc->buflen = blksize * nblocks;
+	
+	/* set the header info returned */
 	switch (blksize) {
-	case CD_FRAMESIZE_RAW0	: cgc->cmd[9] = 0x58;
-	case CD_FRAMESIZE_RAW1	: cgc->cmd[9] = 0x78;
-	case CD_FRAMESIZE_RAW	: cgc->cmd[9] = 0xf8;
+	case CD_FRAMESIZE_RAW0	: cgc->cmd[9] = 0x58; break;
+	case CD_FRAMESIZE_RAW1	: cgc->cmd[9] = 0x78; break;
+	case CD_FRAMESIZE_RAW	: cgc->cmd[9] = 0xf8; break;
 	default			: cgc->cmd[9] = 0x10;
 	}
 	
@@ -1168,7 +1319,7 @@ int cdrom_ioctl(struct inode *ip, struct file *fp,
 		unsigned int cmd, unsigned long arg)
 {
 	kdev_t dev = ip->i_rdev;
-	struct cdrom_device_info *cdi = cdrom_find_device (dev);
+	struct cdrom_device_info *cdi = cdrom_find_device(dev);
 	struct cdrom_device_ops *cdo;
 	int ret;
 
@@ -1235,15 +1386,22 @@ int cdrom_ioctl(struct inode *ip, struct file *fp,
 		}
 
 	case CDROM_MEDIA_CHANGED: {
+		struct cdrom_changer_info info;
+
 		cdinfo(CD_DO_IOCTL, "entering CDROM_MEDIA_CHANGED\n"); 
 		if (!CDROM_CAN(CDC_MEDIA_CHANGED))
 			return -ENOSYS;
 		if (!CDROM_CAN(CDC_SELECT_DISC) || arg == CDSL_CURRENT)
 			/* cannot select disc or select current disc */
 			return media_changed(cdi, 1);
-		if ((unsigned int)arg >= cdi->capacity)
+		if ((unsigned int)arg >= cdi->capacity) {
 			return -EINVAL;
-		return cdo->media_changed (cdi, arg);
+		}
+
+		if ((ret = cdrom_read_mech_status(cdi, &info)))
+			return ret;
+
+		return info.slots[arg].change;
 		}
 
 	case CDROM_SET_OPTIONS: {
@@ -1286,11 +1444,22 @@ int cdrom_ioctl(struct inode *ip, struct file *fp,
 		cdinfo(CD_DO_IOCTL, "entering CDROM_SELECT_DISC\n"); 
 		if (!CDROM_CAN(CDC_SELECT_DISC))
 			return -ENOSYS;
-                if ((arg == CDSL_CURRENT) || (arg == CDSL_NONE)) 
-			return cdo->select_disc(cdi, arg);
-		if ((int)arg >= cdi->capacity)
+
+                if ((arg != CDSL_CURRENT) && (arg != CDSL_NONE)) {
+		    if ((int)arg >= cdi->capacity)
 			return -EINVAL;
-		return cdo->select_disc(cdi, arg);
+		}
+		/* cdo->select_disc is a hook to allow a driver-specific
+		 * way of seleting disc.  However, since there is no
+		 * equiv hook for cdrom_slot_status this may not 
+		 * actually be useful...
+		 */
+		if (cdo->select_disc != NULL)
+			return cdo->select_disc(cdi, arg);
+
+		/* no driver specific select_disc(), call our own */
+		cdinfo(CD_CHANGER, "Using generic cdrom_select_disc()\n"); 
+		return cdrom_select_disc(cdi, arg);
 		}
 
 	case CDROMRESET: {
@@ -1304,12 +1473,10 @@ int cdrom_ioctl(struct inode *ip, struct file *fp,
 
 	case CDROM_LOCKDOOR: {
 		cdinfo(CD_DO_IOCTL, "%socking door.\n", arg ? "L" : "Unl");
-		if (!CDROM_CAN(CDC_LOCK)) {
+		if (!CDROM_CAN(CDC_LOCK))
 			return -EDRIVE_CANT_DO_THIS;
-		} else {
-			keeplocked = arg ? 1 : 0;
-			return cdo->lock_door(cdi, arg);
-		}
+		keeplocked = arg ? 1 : 0;
+		return cdo->lock_door(cdi, arg);
 		}
 
 	case CDROM_DEBUG: {
@@ -1352,7 +1519,7 @@ int cdrom_ioctl(struct inode *ip, struct file *fp,
 			return cdo->drive_status(cdi, CDSL_CURRENT);
 		if (((int)arg >= cdi->capacity))
 			return -EINVAL;
-		return cdo->drive_status(cdi, arg);
+		return cdrom_slot_status(cdi, arg);
 		}
 
 	/* Ok, this is where problems start.  The current interface for the
@@ -1383,7 +1550,8 @@ int cdrom_ioctl(struct inode *ip, struct file *fp,
 		if (tracks.audio > 0) {
 			if (tracks.data==0 && tracks.cdi==0 && tracks.xa==0) 
 				return CDS_AUDIO;
-			else return CDS_MIXED;
+			else
+				return CDS_MIXED;
 		}
 		if (tracks.cdi > 0) return CDS_XA_2_2;
 		if (tracks.xa > 0) return CDS_XA_2_1;
@@ -1552,15 +1720,13 @@ static int mmc_ioctl(struct cdrom_device_info *cdi, unsigned int cmd,
 		switch (cmd) {
 		case CDROMREADRAW:
 			blocksize = CD_FRAMESIZE_RAW;
-			format = 0;
 			break;
 		case CDROMREADMODE1:
-			blocksize = CD_FRAMESIZE; break;
+			blocksize = CD_FRAMESIZE;
 			format = 2;
 			break;
 		case CDROMREADMODE2:
-			blocksize = CD_FRAMESIZE_RAW0; break;
-			format = 0;
+			blocksize = CD_FRAMESIZE_RAW0;
 			break;
 		}
 		IOCTL_IN(arg, struct cdrom_msf, msf);
@@ -1574,7 +1740,7 @@ static int mmc_ioctl(struct cdrom_device_info *cdi, unsigned int cmd,
 		ret = cdrom_read_block(cdi, &cgc, lba, 1, format, blocksize);
 		if (!ret)
 			if (copy_to_user((char *)arg, cgc.buffer, blocksize))
-				return -EFAULT;
+				ret = -EFAULT;
 		kfree(cgc.buffer);
 		return ret;
 		}
@@ -1606,8 +1772,10 @@ static int mmc_ioctl(struct cdrom_device_info *cdi, unsigned int cmd,
 						   GFP_KERNEL)) == NULL)
 			return -ENOMEM;
 
-		if (!access_ok(VERIFY_WRITE, ra.buf, ra.nframes*CD_FRAMESIZE_RAW))
+		if (!access_ok(VERIFY_WRITE, ra.buf, ra.nframes*CD_FRAMESIZE_RAW)) {
+			kfree(cgc.buffer);
 			return -EFAULT;
+		}
 
 		while (ra.nframes > 0) {
 			ret = cdrom_read_block(cdi, &cgc, lba, ra.nframes, 1,
@@ -1642,13 +1810,29 @@ static int mmc_ioctl(struct cdrom_device_info *cdi, unsigned int cmd,
 		}
 	case CDROMPLAYTRKIND: {
 		struct cdrom_ti ti;
+		struct cdrom_tocentry entry;
+
 		cdinfo(CD_DO_IOCTL, "entering CDROMPLAYTRKIND\n");
 		IOCTL_IN(arg, struct cdrom_ti, ti);
-		cgc.cmd[0] = GPCMD_PLAYAUDIO_TI;
-		cgc.cmd[4] = ti.cdti_trk0;
-		cgc.cmd[5] = ti.cdti_ind0;
-		cgc.cmd[7] = ti.cdti_trk1;
-		cgc.cmd[8] = ti.cdti_ind1;
+		entry.cdte_format = CDROM_MSF;
+
+		/* get toc entry for start and end track */
+		entry.cdte_track = ti.cdti_trk0;
+		if (cdi->ops->audio_ioctl(cdi, CDROMREADTOCENTRY, &entry))
+			return -EINVAL;
+
+		cgc.cmd[3] = entry.cdte_addr.msf.minute;
+		cgc.cmd[4] = entry.cdte_addr.msf.second;
+		cgc.cmd[5] = entry.cdte_addr.msf.frame;
+
+		entry.cdte_track = ti.cdti_trk1;
+		if (cdi->ops->audio_ioctl(cdi, CDROMREADTOCENTRY, &entry))
+			return -EINVAL;
+
+		cgc.cmd[6] = entry.cdte_addr.msf.minute;
+		cgc.cmd[7] = entry.cdte_addr.msf.second;
+		cgc.cmd[8] = entry.cdte_addr.msf.frame;
+		cgc.cmd[0] = GPCMD_PLAY_AUDIO_MSF;
 		return cdo->generic_packet(cdi, &cgc);
 		}
 	case CDROMPLAYMSF: {
@@ -1669,12 +1853,12 @@ static int mmc_ioctl(struct cdrom_device_info *cdi, unsigned int cmd,
 		cdinfo(CD_DO_IOCTL, "entering CDROMPLAYBLK\n");
 		IOCTL_IN(arg, struct cdrom_blk, blk);
 		cgc.cmd[0] = GPCMD_PLAY_AUDIO_10;
-		cgc.cmd[2] = blk.from >> 24;
-		cgc.cmd[3] = blk.from >> 16;
-		cgc.cmd[4] = blk.from >> 8;
-		cgc.cmd[5] = blk.from;
-		cgc.cmd[7] = blk.len >> 8;
-		cgc.cmd[8] = blk.len;
+		cgc.cmd[2] = (blk.from >> 24) & 0xff;
+		cgc.cmd[3] = (blk.from >> 16) & 0xff;
+		cgc.cmd[4] = (blk.from >>  8) & 0xff;
+		cgc.cmd[5] = blk.from & 0xff;
+		cgc.cmd[7] = (blk.len >> 8) & 0xff;
+		cgc.cmd[8] = blk.len & 0xff;
 		return cdo->generic_packet(cdi, &cgc);
 		}
 	case CDROMVOLCTRL:
@@ -1688,8 +1872,7 @@ static int mmc_ioctl(struct cdrom_device_info *cdi, unsigned int cmd,
 
 		cgc.buffer = buffer;
 		cgc.buflen = 24;
-		if ((ret = cdrom_mode_sense(cdi, &cgc, 
-				GPMODE_AUDIO_CTL_PAGE, 0)))
+		if ((ret = cdrom_mode_sense(cdi, &cgc, GPMODE_AUDIO_CTL_PAGE, 0)))
 		    return ret;
 		
 		/* some drives have longer pages, adjust and reread. */
@@ -1757,11 +1940,10 @@ static int mmc_ioctl(struct cdrom_device_info *cdi, unsigned int cmd,
 			return -ENOSYS;
 		cdinfo(CD_DO_IOCTL, "entering dvd_read_struct\n"); 
 		IOCTL_IN(arg, dvd_struct, s);
-		if ((ret = dvd_read_struct(cdi, &s)) == 0) {
-			IOCTL_OUT(arg, dvd_struct, s);
-			return 0;
-		}
-		return ret;
+		if ((ret = dvd_read_struct(cdi, &s)))
+			return ret;
+		IOCTL_OUT(arg, dvd_struct, s);
+		return 0;
 		}
 
 	case DVD_AUTH: {
@@ -1783,10 +1965,8 @@ static int mmc_ioctl(struct cdrom_device_info *cdi, unsigned int cmd,
 		IOCTL_IN(arg, struct cdrom_generic_command, cgc);
 		cgc.buffer = kmalloc(cgc.buflen, GFP_KERNEL);
 		ret = cdo->generic_packet(cdi, &cgc);
-		if (copy_to_user((void*)arg, cgc.buffer, cgc.buflen)) {
-			kfree(cgc.buffer);
-			return -EFAULT;
-		}
+		if (copy_to_user((void*)arg, cgc.buffer, cgc.buflen))
+			ret = -EFAULT;
 		kfree(cgc.buffer);
 		return ret;
 		}
@@ -1810,23 +1990,22 @@ static int mmc_ioctl(struct cdrom_device_info *cdi, unsigned int cmd,
 }
 
 static int cdrom_get_track_info(kdev_t dev, __u16 track, __u8 type,
-				 track_information *ti)
+				track_information *ti)
 {
-        struct cdrom_device_info *cdi = cdrom_find_device (dev);
+        struct cdrom_device_info *cdi = cdrom_find_device(dev);
 	struct cdrom_device_ops *cdo = cdi->ops;
 	struct cdrom_generic_command cgc;
 	int ret;
 
-	memset(&cgc, 0, sizeof(cgc));
+	init_cdrom_command(&cgc, ti, 8);
 	cgc.cmd[0] = GPCMD_READ_TRACK_RZONE_INFO;
 	cgc.cmd[1] = type & 3;
 	cgc.cmd[4] = (track & 0xff00) >> 8;
 	cgc.cmd[5] = track & 0xff;
-	cgc.cmd[8] = cgc.buflen = 8;
-	cgc.buffer = (char *)ti;
+	cgc.cmd[8] = 8;
 
-	ret = cdo->generic_packet(cdi, &cgc);
-	if (ret) return ret;
+	if ((ret = cdo->generic_packet(cdi, &cgc)))
+		return ret;
 	
 	cgc.cmd[8] = cgc.buflen = be16_to_cpu(ti->track_information_length) +
 		     sizeof(ti->track_information_length);
@@ -1835,16 +2014,15 @@ static int cdrom_get_track_info(kdev_t dev, __u16 track, __u8 type,
 
 static int cdrom_get_disc_info(kdev_t dev, disc_information *di)
 {
-	struct cdrom_device_info *cdi = cdrom_find_device (dev);
+	struct cdrom_device_info *cdi = cdrom_find_device(dev);
 	struct cdrom_device_ops *cdo = cdi->ops;
 	struct cdrom_generic_command cgc;
 
 	/* set up command and get the disc info */
-	memset(&cgc, 0, sizeof(cgc));
+	init_cdrom_command(&cgc, di, sizeof(*di));
 	memset(di, 0, sizeof(disc_information));
 	cgc.cmd[0] = GPCMD_READ_DISC_INFO;
-	cgc.cmd[8] = cgc.buflen = sizeof(*di);
-	cgc.buffer = (char *)di;
+	cgc.cmd[8] = cgc.buflen;
 
 	return cdo->generic_packet(cdi, &cgc);
 }
@@ -1854,7 +2032,7 @@ static int cdrom_get_disc_info(kdev_t dev, disc_information *di)
    file system. */
 int cdrom_get_last_written(kdev_t dev, long *last_written)
 {	
-	struct cdrom_device_info *cdi = cdrom_find_device (dev);
+	struct cdrom_device_info *cdi = cdrom_find_device(dev);
 	struct cdrom_tocentry toc;
 	disc_information di;
 	track_information ti;
@@ -1906,7 +2084,7 @@ use_toc:
 /* return the next writable block. also for udf file system. */
 int cdrom_get_next_writable(kdev_t dev, long *next_writable)
 {
-	struct cdrom_device_info *cdi = cdrom_find_device (dev);
+	struct cdrom_device_info *cdi = cdrom_find_device(dev);
 	disc_information di;
 	track_information ti;
 	__u16 last_track;
@@ -1953,6 +2131,11 @@ EXPORT_SYMBOL(cdrom_count_tracks);
 EXPORT_SYMBOL(register_cdrom);
 EXPORT_SYMBOL(unregister_cdrom);
 EXPORT_SYMBOL(cdrom_fops);
+EXPORT_SYMBOL(cdrom_number_of_slots);
+EXPORT_SYMBOL(cdrom_select_disc);
+EXPORT_SYMBOL(cdrom_mode_select);
+EXPORT_SYMBOL(cdrom_mode_sense);
+EXPORT_SYMBOL(init_cdrom_command);
 
 #ifdef CONFIG_SYSCTL
 

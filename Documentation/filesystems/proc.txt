@@ -886,27 +886,53 @@ swapctl
 
 3.6  /proc/sys/dev - Device specific parameters
 
-Currently there is only support for CDROM drives, and for those, there
-is only one read only file containing information about the CD-ROM
-drives attached to the system:
+Currently there is only support for CDROM drives, but other drivers may
+wish to register themselves in here in the future. The cdrom/ directory
+contains several files that either control or supply information about
+the CDROM subsystem. 
 
 >cat /proc/sys/dev/cdrom/info
-CD-ROM information
+CD-ROM information, Id: cdrom.c 3.04 1999/09/12
 
-drive name:           sr0  hdc
-drive speed:           0    6
-drive # of slots:      1    0
-Can close tray:        1    1
-Can open tray:         1    1
-Can lock tray:         1    1
-Can change speed:      1    1
-Can select disk:       0    1
-Can read multisession: 1    1
-Can read MCN:          1    1
-Reports media changed: 1    1
-Can play audio:        1    1
+drive name:		hdd	hdc	hdb	hda
+drive speed:		32	24	10	0
+drive # of slots:	1	1	1	1
+Can close tray:		1	1	1	1
+Can open tray:		1	1	1	1
+Can lock tray:		1	1	1	1
+Can change speed:	1	1	1	1
+Can select disk:	0	0	0	0
+Can read multisession:	1	1	1	1
+Can read MCN:		1	1	1	1
+Reports media changed:	1	1	1	1
+Can play audio:		1	1	1	1
+Can write CD-R:		0	1	0	0
+Can write CD-RW:	0	1	0	0
+Can read DVD:		0	0	0	1
+Can write DVD-R:	0	0	0	0
+Can write DVD-RAM:	0	0	0	0
 
-You see two drives, sr0 and hdc, and their lists of features.
+You see four drives and their lists of features. These are all ATAPI
+drives - SCSI drives will be numbered sr0, sr1, and so forth.
+
+The remaining files all set options in the driver.
+
+autoclose
+    Close the drive tray when the drive is accessed.
+
+autoeject
+    Eject the tray when the drive is umounted.
+
+check_media
+    Verify the media type when opening the device. This is generally
+    meant for audio CD's.
+
+debug
+    Print debugging messages.
+
+lock
+    Lock the tray when the drive is in use.
+
 
 3.7  /proc/sys/sunrpc - Remote procedure calls
 

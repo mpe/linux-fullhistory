@@ -18,6 +18,14 @@ M_OBJS   :=
 O_OBJS   :=
 OX_OBJS  :=
 
+ifeq ($(CONFIG_ACPI),y)
+  O_OBJS += acpi.o
+else
+  ifeq ($(CONFIG_ACPI),m)
+    M_OBJS += acpi.o
+  endif
+endif
+
 ifdef CONFIG_PIIX4_ACPI
 O_OBJS += piix4_acpi.o
 endif

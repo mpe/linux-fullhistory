@@ -103,11 +103,6 @@ static const char *version = "82596.c:v1.0 15/07/98\n";
 #define PORT_ALTSCP		0x02	/* alternate SCB address */
 #define PORT_ALTDUMP		0x03	/* Alternate DUMP address */
 
-#ifndef HAVE_PORTRESERVE
-#define check_region(addr, size)	0
-#define request_region(addr, size,name)	do ; while(0)
-#endif
-
 #ifndef HAVE_ALLOC_SKB
 #define alloc_skb(size, priority) (struct sk_buff *) kmalloc(size,priority)
 #define kfree_skbmem(buff, size) kfree_s(buff,size)

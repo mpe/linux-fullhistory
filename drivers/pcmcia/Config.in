@@ -6,7 +6,9 @@ comment 'PCMCIA/Cardbus support'
 
 tristate 'PCMCIA/Cardbus support' CONFIG_PCMCIA
 if [ "$CONFIG_PCMCIA" != "n" ]; then
-  bool '  CardBus support' CONFIG_CARDBUS
+   if [ "$CONFIG_PCI" != "n" ]; then
+      bool '  CardBus support' CONFIG_CARDBUS
+   fi
 fi
 
 endmenu

@@ -48,6 +48,7 @@ EXPORT_SYMBOL(scsicam_bios_param);
 EXPORT_SYMBOL(scsi_partsize);
 EXPORT_SYMBOL(scsi_allocate_device);
 EXPORT_SYMBOL(scsi_do_cmd);
+EXPORT_SYMBOL(scsi_wait_cmd);
 EXPORT_SYMBOL(scsi_command_size);
 EXPORT_SYMBOL(scsi_init_malloc);
 EXPORT_SYMBOL(scsi_init_free);

@@ -629,7 +629,8 @@ struct init_cb {
 #define QLOGICFC_MAX_ID    0x7d
 #endif
 
-#define QLOGICFC_MAX_LOOP_ID 0x7d
+#define QLOGICFC_MAX_LUN	128
+#define QLOGICFC_MAX_LOOP_ID	0x7d
 
 /* adapter_state values */
 #define AS_FIRMWARE_DEAD      -1
@@ -744,6 +745,7 @@ int isp2x00_detect(Scsi_Host_Template * tmpt)
 
 		        host = scsi_register(tmpt, sizeof(struct isp2x00_hostdata));
 			host->max_id = QLOGICFC_MAX_ID + 1;
+			host->max_lun = QLOGICFC_MAX_LUN;
 			host->hostt->use_new_eh_code = 1;
 			hostdata = (struct isp2x00_hostdata *) host->hostdata;
 
