@@ -177,6 +177,7 @@ struct inode {
 	time_t		i_ctime;
 	unsigned long	i_blksize;
 	unsigned long	i_blocks;
+	unsigned long	i_version;
 	struct semaphore i_sem;
 	struct inode_operations * i_op;
 	struct super_block * i_sb;

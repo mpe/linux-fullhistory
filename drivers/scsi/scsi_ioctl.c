@@ -73,16 +73,12 @@ static int ioctl_probe(struct Scsi_Host * host, void *buffer)
 static void scsi_ioctl_done (Scsi_Cmnd * SCpnt)
 {
   struct request * req;
-  struct task_struct * p;
   
   req = &SCpnt->request;
   req->dev = 0xfffe; /* Busy, but indicate request done */
   
-  if ((p = req->waiting) != NULL) {
-    req->waiting = NULL;
-    p->state = TASK_RUNNING;
-    if (p->counter > current->counter)
-      need_resched = 1;
+  if (req->sem != NULL) {
+    up(req->sem);
   }
 }	
 
@@ -97,8 +93,10 @@ static int ioctl_internal_command(Scsi_Device *dev, char * cmd)
 			MAX_RETRIES);
 
 	if (SCpnt->request.dev != 0xfffe){
-	  SCpnt->request.waiting = current;
-	  current->state = TASK_UNINTERRUPTIBLE;
+	  struct semaphore sem = MUTEX_LOCKED;
+	  SCpnt->request.sem = &sem;
+	  down(&sem);
+	  /* Hmm.. Have to ask about this one */
 	  while (SCpnt->request.dev != 0xfffe) schedule();
 	};
 
@@ -181,8 +179,10 @@ static int ioctl_command(Scsi_Device *dev, void *buffer)
 			MAX_RETRIES);
 
 	if (SCpnt->request.dev != 0xfffe){
-	  SCpnt->request.waiting = current;
-	  current->state = TASK_UNINTERRUPTIBLE;
+	  struct semaphore sem = MUTEX_LOCKED;
+	  SCpnt->request.sem = &sem;
+	  down(&sem);
+	  /* Hmm.. Have to ask about this one */
 	  while (SCpnt->request.dev != 0xfffe) schedule();
 	};
 

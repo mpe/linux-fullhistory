@@ -522,7 +522,6 @@ static void end_scsi_request(Scsi_Cmnd * SCpnt, int uptodate, int sectors)
 {
 	struct request * req;
 	struct buffer_head * bh;
-	struct task_struct * p;
 
 	req = &SCpnt->request;
 	req->errors = 0;
@@ -554,12 +553,8 @@ static void end_scsi_request(Scsi_Cmnd * SCpnt, int uptodate, int sectors)
 	  return;
 	};
 	DEVICE_OFF(req->dev);
-	if ((p = req->waiting) != NULL) {
-		req->waiting = NULL;
-		p->swapping = 0;
-		p->state = TASK_RUNNING;
-		if (p->counter > current->counter)
-			need_resched = 1;
+	if (req->sem != NULL) {
+		up(req->sem);
 	}
 	req->dev = -1;
 	wake_up(&SCpnt->device->device_wait);

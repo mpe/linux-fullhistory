@@ -8,7 +8,7 @@
 include CONFIG
 include MODULES
 
-NETDRV_OBJS := net.a(Space.o) net.a(auto_irq.o) net.a(net_init.o) net.a(loopback.o)
+NETDRV_OBJS := Space.o auto_irq.o net_init.o loopback.o
 CFLAGS := $(CFLAGS) -I../../net/inet
 CPP := $(CPP) -I../../net/inet
 
@@ -25,28 +25,28 @@ NETDRV_OBJS := $(NETDRV_OBJS) net.a(sk_g16.o)
 endif
 
 ifdef CONFIG_WD80x3
-NETDRV_OBJS := $(NETDRV_OBJS) net.a(wd.o)
+NETDRV_OBJS := $(NETDRV_OBJS) wd.o
 CONFIG_8390 = CONFIG_8390
 wd.o:	wd.c CONFIG
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(WD_OPTS) -c $<
 endif
 
 ifdef CONFIG_EL2
-NETDRV_OBJS := $(NETDRV_OBJS) net.a(3c503.o)
+NETDRV_OBJS := $(NETDRV_OBJS) 3c503.o
 CONFIG_8390 = CONFIG_8390
 3c503.o:	3c503.c CONFIG
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(EL2_OPTS) -c $<
 endif
 
 ifdef CONFIG_NE2000
-NETDRV_OBJS := $(NETDRV_OBJS) net.a(ne.o)
+NETDRV_OBJS := $(NETDRV_OBJS) ne.o
 CONFIG_8390 = CONFIG_8390
 ne.o:	ne.c CONFIG
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(NE_OPTS) -c $<
 endif
 
 ifdef CONFIG_HPLAN
-NETDRV_OBJS := $(NETDRV_OBJS) net.a(hp.o)
+NETDRV_OBJS := $(NETDRV_OBJS) hp.o
 CONFIG_8390 = CONFIG_8390
 hp.o:	hp.c CONFIG
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(HP_OPTS) -c $<
@@ -58,47 +58,47 @@ CONFIG_8390 = CONFIG_8390
 endif
 
 ifdef CONFIG_ULTRA
-NETDRV_OBJS := $(NETDRV_OBJS) net.a(smc-ultra.o)
+NETDRV_OBJS := $(NETDRV_OBJS) smc-ultra.o
 CONFIG_8390 = CONFIG_8390
 endif
 
 ifdef CONFIG_E2100
-NETDRV_OBJS := $(NETDRV_OBJS) net.a(e2100.o)
+NETDRV_OBJS := $(NETDRV_OBJS) e2100.o
 CONFIG_8390 = CONFIG_8390
 endif
 
 ifdef CONFIG_PLIP
-NETDRV_OBJS := $(NETDRV_OBJS) net.a(plip.o)
+NETDRV_OBJS := $(NETDRV_OBJS) plip.o
 plip.o:	plip.c CONFIG
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(PLIP_OPTS) -c $<
 endif
 
 ifdef CONFIG_PPP
-NETDRV_OBJS := $(NETDRV_OBJS) net.a(ppp.o) net.a(slhc.o)
+NETDRV_OBJS := $(NETDRV_OBJS) ppp.o slhc.o
 endif
 
 ifdef CONFIG_SLIP
-NETDRV_OBJS := $(NETDRV_OBJS) net.a(slip.o) net.a(slhc.o)
+NETDRV_OBJS := $(NETDRV_OBJS) slip.o slhc.o
 slip.o:	slip.c CONFIG
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $<
 endif
 
 ifdef CONFIG_DE650
-NETDRV_OBJS := $(NETDRV_OBJS) net.a(de650.o)
+NETDRV_OBJS := $(NETDRV_OBJS) de650.o
 CONFIG_8390 = CONFIG_8390
 endif
 ifdef CONFIG_3C589
-NETDRV_OBJS := $(NETDRV_OBJS) net.a(3c589.o)
+NETDRV_OBJS := $(NETDRV_OBJS) 3c589.o
 endif
 
 ifdef CONFIG_DUMMY
-NETDRV_OBJS := $(NETDRV_OBJS) net.a(dummy.o)
+NETDRV_OBJS := $(NETDRV_OBJS) dummy.o
 dummy.o: dummy.c CONFIG
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $<
 endif
 
 ifdef CONFIG_DE600
-NETDRV_OBJS := $(NETDRV_OBJS) net.a(de600.o)
+NETDRV_OBJS := $(NETDRV_OBJS) de600.o
 endif
 de600.o: de600.c CONFIG
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(DE600_OPTS) -c $<
@@ -110,48 +110,48 @@ de620.o: de620.c CONFIG
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(DE620_OPTS) -c $<
 	
 ifdef CONFIG_AT1500
-NETDRV_OBJS := $(NETDRV_OBJS) net.a(lance.o)
+NETDRV_OBJS := $(NETDRV_OBJS) lance.o
 endif
 ifdef CONFIG_LANCE
-NETDRV_OBJS := $(NETDRV_OBJS) net.a(lance.o)
+NETDRV_OBJS := $(NETDRV_OBJS) lance.o
 endif
 ifdef CONFIG_AT1700
-NETDRV_OBJS := $(NETDRV_OBJS) net.a(at1700.o)
+NETDRV_OBJS := $(NETDRV_OBJS) at1700.o
 endif
 ifdef CONFIG_EL1
-NETDRV_OBJS := $(NETDRV_OBJS) net.a(3c501.o)
+NETDRV_OBJS := $(NETDRV_OBJS) 3c501.o
 endif
 ifdef CONFIG_EL16
-NETDRV_OBJS := $(NETDRV_OBJS) net.a(3c507.o)
+NETDRV_OBJS := $(NETDRV_OBJS) 3c507.o
 endif
 ifdef CONFIG_EL3
-NETDRV_OBJS := $(NETDRV_OBJS) net.a(3c509.o)
+NETDRV_OBJS := $(NETDRV_OBJS) 3c509.o
 endif
 ifdef CONFIG_EEXPRESS
-NETDRV_OBJS := $(NETDRV_OBJS) net.a(eexpress.o)
+NETDRV_OBJS := $(NETDRV_OBJS) eexpress.o
 endif
 ifdef CONFIG_ZNET
-NETDRV_OBJS := $(NETDRV_OBJS) net.a(znet.o)
+NETDRV_OBJS := $(NETDRV_OBJS) znet.o
 endif
 ifdef CONFIG_DEPCA
-NETDRV_OBJS := $(NETDRV_OBJS) net.a(depca.o)
+NETDRV_OBJS := $(NETDRV_OBJS) depca.o
 depca.o: depca.c CONFIG
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(DEPCA_OPTS) -c $<
 endif
 ifdef CONFIG_ATP
-NETDRV_OBJS := $(NETDRV_OBJS) net.a(atp.o)
+NETDRV_OBJS := $(NETDRV_OBJS) atp.o
 endif
 ifdef CONFIG_NI52
-NETDRV_OBJS := $(NETDRV_OBJS) net.a(ni52.o)
+NETDRV_OBJS := $(NETDRV_OBJS) ni52.o
 endif
 ifdef CONFIG_NI65
-NETDRV_OBJS := $(NETDRV_OBJS) net.a(ni65.o)
+NETDRV_OBJS := $(NETDRV_OBJS) ni65.o
 endif
 ifdef CONFIG_ELPLUS
-NETDRV_OBJS := $(NETDRV_OBJS) net.a(3c505.o)
+NETDRV_OBJS := $(NETDRV_OBJS) 3c505.o
 endif
 ifdef CONFIG_AC3200
-NETDRV_OBJS := $(NETDRV_OBJS) net.a(ac3200.o)
+NETDRV_OBJS := $(NETDRV_OBJS) ac3200.o
 CONFIG_8390 = CONFIG_8390
 endif
 ifdef CONFIG_APRICOT
@@ -159,17 +159,19 @@ NETDRV_OBJS := $(NETDRV_OBJS) net.a(apricot.o)
 endif
 
 ifdef CONFIG_8390
-NETDRV_OBJS := $(NETDRV_OBJS) net.a(8390.o)
+NETDRV_OBJS := $(NETDRV_OBJS) 8390.o
 endif
 
 ifdef CONFIG_PI
-NETDRV_OBJS := $(NETDRV_OBJS) net.a(pi2.o)
+NETDRV_OBJS := $(NETDRV_OBJS) pi2.o
 CONFIG_PI = CONFIG_PI
 pi2.o:  pi2.c CONFIG
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(PI_OPTS) -c $<
 endif
 
 net.a: $(NETDRV_OBJS)
+	rm -f net.a
+	ar rc net.a $(NETDRV_OBJS)
 	ranlib net.a
 
 clean:

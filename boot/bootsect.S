@@ -25,7 +25,7 @@ SYSSIZE = DEF_SYSSIZE
 ! buffer cache as in minix (and especially now that the kernel is 
 ! compressed :-)
 !
-! The loader has been made as simple as possible, and continuos
+! The loader has been made as simple as possible, and continuous
 ! read errors will result in a unbreakable loop. Reboot by hand. It
 ! loads pretty fast by getting whole tracks at a time whenever possible.
 
@@ -69,7 +69,7 @@ _main:
 	jmpi	go,INITSEG
 
 go:	mov	ax,cs		
-	mov	dx,#0x4000-12	! 0x4000 is arbitrary value >= length of
+	mov	di,#0x4000-12	! 0x4000 is arbitrary value >= length of
 				! bootsect + length of setup + room for stack
 				! 12 is disk parm size
 
@@ -82,7 +82,7 @@ go:	mov	ax,cs
 	mov	ds,ax
 	mov	es,ax
 	mov	ss,ax		! put stack at INITSEG:0x4000-12.
-	mov	sp,dx
+	mov	sp,di
 /*
  *	Many BIOS's default disk parameter tables will not 
  *	recognize multi-sector reads beyond the maximum sector number
@@ -92,40 +92,38 @@ go:	mov	ax,cs
  *	Since single sector reads are slow and out of the question,
  *	we must take care of this by creating new parameter tables
  *	(for the first disk) in RAM.  We will set the maximum sector
- *	count to 18 - the most we will encounter on an HD 1.44.  
+ *	count to 36 - the most we will encounter on an ED 2.88.  
  *
  *	High doesn't hurt.  Low does.
  *
  *	Segments are as follows: ds=es=ss=cs - INITSEG,
- *		fs = 0, gs = parameter table segment
+ *		fs = 0, gs is unused.
  */
 
 	push	#0
 	pop	fs
 	mov	bx,#0x78		! fs:bx is parameter table address
+	push	ds
 	seg fs
-	lgs	si,(bx)			! gs:si is source
+	lds	si,(bx)			! ds:si is source
 
-	mov	di,dx			! es:di is destination
 	mov	cx,#6			! copy 12 bytes
 	cld
+	push	di
 
 	rep
-	seg gs
 	movsw
 
-	mov	di,dx
-	movb	4(di),*18		! patch sector count
+	pop	di
+	pop	ds
+
+	movb	4(di),*36		! patch sector count
 
 	seg fs
 	mov	(bx),di
 	seg fs
 	mov	2(bx),es
 
-	mov	ax,cs
-	mov	fs,ax
-	mov	gs,ax
-	
 	xor	ah,ah			! reset FDC 
 	xor	dl,dl
 	int 	0x13	
@@ -170,26 +168,31 @@ ok_load_setup:
 #else
 
 ! It seems that there is no BIOS call to get the number of sectors.  Guess
-! 18 sectors if sector 18 can be read, 15 if sector 15 can be read.
-! Otherwise guess 9.
+! 36 sectors if sector 36 can be read, 18 sectors if sector 18 can be read,
+! 15 if sector 15 can be read.  Otherwise guess 9.
 
+	mov	si,#disksizes		! table of sizes to try
+
+probe_loop:
+	lodsb
+	cbw				! extend to word
+	seg cs
+	mov	sectors, ax
+	cmp	si,#disksizes+4
+	jae	got_sectors		! if all else fails, try 9
+	xchg	ax, cx			! cx = track and sector
 	xor	dx, dx			! drive 0, head 0
-	mov	cx,#0x0012		! sector 18, track 0
 	mov	bx,#0x0200+SETUPSECS*0x200  ! address after setup (es = cs)
 	mov	ax,#0x0201		! service 2, 1 sector
 	int	0x13
-	jnc	got_sectors
-	mov	cl,#0x0f		! sector 15
-	mov	ax,#0x0201		! service 2, 1 sector
-	int	0x13
-	jnc	got_sectors
-	mov	cl,#0x09
+	jc	probe_loop		! try next value
 
 #endif
 
 got_sectors:
-	seg cs
-	mov	sectors,cx
+
+! Restore es
+
 	mov	ax,#INITSEG
 	mov	es,ax
 
@@ -216,8 +219,8 @@ got_sectors:
 
 ! After that we check which root-device to use. If the device is
 ! defined (!= 0), nothing is done and the given device is used.
-! Otherwise, either /dev/PS0 (2,28) or /dev/at0 (2,8), depending
-! on the number of sectors that the BIOS reports currently.
+! Otherwise, one of /dev/fd0H2880 (2,32) or /dev/PS0 (2,28) or /dev/at0 (2,8),
+! depending on the number of sectors we pretend to know we have.
 
 	seg cs
 	mov	ax,root_dev
@@ -228,10 +231,13 @@ got_sectors:
 	mov	ax,#0x0208		! /dev/ps0 - 1.2Mb
 	cmp	bx,#15
 	je	root_defined
-	mov	ax,#0x021c		! /dev/PS0 - 1.44Mb
+	mov	al,#0x1c		! /dev/PS0 - 1.44Mb
 	cmp	bx,#18
 	je	root_defined
-	mov	ax,#0x0200		! /dev/fd0 - autodetect
+	mov	al,#0x20		! /dev/fd0H2880 - 2.88Mb
+	cmp	bx,#36
+	je	root_defined
+	mov	al,#0			! /dev/fd0 - autodetect
 root_defined:
 	seg cs
 	mov	root_dev,ax
@@ -362,7 +368,7 @@ print_loop:
 	push	cx		! save count left
 	call	print_nl	! nl for readability
 
-	cmp	cl, 5
+	cmp	cl, #5
 	jae	no_reg		! see if register name is needed
 	
 	mov	ax, #0xe05 + 'A - 1
@@ -399,15 +405,12 @@ print_hex:
 	mov	dx, (bp)	! load word into dx
 print_digit:
 	rol	dx, #4		! rotate so that lowest 4 bits are used
-	mov	ah, #0xe	
-	mov	al, dl		! mask off so we have only next nibble
-	and	al, #0xf
-	add	al, #'0		! convert to 0-based digit
-	cmp	al, #'9		! check for overflow
-	jbe	good_digit
-	add	al, #'A - '0 - 10
-
-good_digit:
+	mov	ax, #0xe0f	! ah = request, al = mask for nybble
+	and	al, dl
+	add	al, #0x90	! convert al to ascii hex (four instructions)
+	daa
+	adc	al, #0x40
+	daa
 	int	0x10
 	loop	print_digit
 	ret
@@ -428,6 +431,9 @@ kill_motor:
 
 sectors:
 	.word 0
+
+disksizes:
+	.byte 36,18,15,9
 
 msg1:
 	.byte 13,10

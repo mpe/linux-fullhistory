@@ -26,11 +26,8 @@ static void sr_ioctl_done(Scsi_Cmnd * SCpnt)
   req = &SCpnt->request;
   req->dev = 0xfffe; /* Busy, but indicate request done */
   
-  if ((p = req->waiting) != NULL) {
-    req->waiting = NULL;
-    p->state = TASK_RUNNING;
-    if (p->counter > current->counter)
-      need_resched = 1;
+  if (req->sem != NULL) {
+    up(&req->sem);
   }
 }
 
@@ -50,8 +47,10 @@ static int do_ioctl(int target, unsigned char * sr_cmd, void * buffer, unsigned 
 
 
 	if (SCpnt->request.dev != 0xfffe){
-	  SCpnt->request.waiting = current;
-	  current->state = TASK_UNINTERRUPTIBLE;
+	  struct semaphore sem = MUTEX_LOCKED;
+	  SCpnt->request.sem = &sem;
+	  down(&sem);
+	  /* Hmm.. Have to ask about this */
 	  while (SCpnt->request.dev != 0xfffe) schedule();
 	};
 

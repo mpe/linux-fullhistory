@@ -17,6 +17,7 @@ struct semaphore {
 };
 
 #define MUTEX ((struct semaphore) { 1, NULL })
+#define MUTEX_LOCKED ((struct semaphore) { 0, NULL })
 
 struct select_table_entry {
 	struct wait_queue wait;

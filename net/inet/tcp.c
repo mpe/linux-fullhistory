@@ -155,7 +155,7 @@
 #include <asm/segment.h>
 #include <linux/mm.h>
 
-#define TCP_FASTPATH
+#undef TCP_FASTPATH
 
 #define SEQ_TICK 3
 unsigned long seq_offset;

@@ -233,7 +233,7 @@ repeat:
 			req = req->next;
 		while (req) {
 			if (req->dev == bh->b_dev &&
-			    !req->waiting &&
+			    !req->sem &&
 			    req->cmd == rw &&
 			    req->sector + req->nr_sectors == sector &&
 			    req->nr_sectors < 244)
@@ -247,7 +247,7 @@ repeat:
 			}
 
 			if (req->dev == bh->b_dev &&
-			    !req->waiting &&
+			    !req->sem &&
 			    req->cmd == rw &&
 			    req->sector - count == sector &&
 			    req->nr_sectors < 244)
@@ -292,7 +292,7 @@ repeat:
 	req->nr_sectors = count;
 	req->current_nr_sectors = count;
 	req->buffer = bh->b_data;
-	req->waiting = NULL;
+	req->sem = NULL;
 	req->bh = bh;
 	req->bhtail = bh;
 	req->next = NULL;
@@ -303,6 +303,7 @@ void ll_rw_page(int rw, int dev, int page, char * buffer)
 {
 	struct request * req;
 	unsigned int major = MAJOR(dev);
+	struct semaphore sem = MUTEX_LOCKED;
 
 	if (major >= MAX_BLKDEV || !(blk_dev[major].request_fn)) {
 		printk("Trying to read nonexistent block-device %04x (%d)\n",dev,page*8);
@@ -324,16 +325,11 @@ void ll_rw_page(int rw, int dev, int page, char * buffer)
 	req->nr_sectors = 8;
 	req->current_nr_sectors = 8;
 	req->buffer = buffer;
-	req->waiting = current;
+	req->sem = &sem;
 	req->bh = NULL;
 	req->next = NULL;
-	current->swapping = 1;
-	current->state = TASK_SWAPPING;
 	add_request(major+blk_dev,req);
-	/* The I/O may have inadvertently chagned the task state.
-	   Make sure we really wait until the I/O is done */
-	if (current->swapping) current->state = TASK_SWAPPING;
-	schedule();
+	down(&sem);
 }
 
 /* This function can be used to request a number of buffers from a block
@@ -435,6 +431,7 @@ void ll_rw_swap_file(int rw, int dev, unsigned int *b, int nb, char *buf)
 	int buffersize;
 	struct request * req;
 	unsigned int major = MAJOR(dev);
+	struct semaphore sem = MUTEX_LOCKED;
 
 	if (major >= MAX_BLKDEV || !(blk_dev[major].request_fn)) {
 		printk("ll_rw_swap_file: trying to swap nonexistent block-device\n");
@@ -463,16 +460,11 @@ void ll_rw_swap_file(int rw, int dev, unsigned int *b, int nb, char *buf)
 		req->nr_sectors = buffersize >> 9;
 		req->current_nr_sectors = buffersize >> 9;
 		req->buffer = buf;
-		req->waiting = current;
+		req->sem = &sem;
 		req->bh = NULL;
 		req->next = NULL;
-		current->swapping = 1;
-		current->state = TASK_UNINTERRUPTIBLE;
 		add_request(major+blk_dev,req);
-		/* The I/O may have inadvertently chagned the task state.
-		   Make sure we really wait until the I/O is done */
-		if (current->swapping) current->state = TASK_UNINTERRUPTIBLE;
-		schedule();
+		down(&sem);
 	}
 }
 

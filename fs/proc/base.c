@@ -70,7 +70,7 @@ static struct proc_dir_entry base_dir[] = {
 
 int proc_match(int len,const char * name,struct proc_dir_entry * de)
 {
-	register int same __asm__("ax");
+	register int same;
 
 	if (!de || !de->low_ino)
 		return 0;
@@ -79,7 +79,8 @@ int proc_match(int len,const char * name,struct proc_dir_entry * de)
 		return 1;
 	if (de->namelen != len)
 		return 0;
-	__asm__("cld\n\t"
+	__asm__ __volatile__(
+		"cld\n\t"
 		"repe ; cmpsb\n\t"
 		"setz %%al"
 		:"=a" (same)

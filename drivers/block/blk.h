@@ -21,8 +21,8 @@
 /*
  * Ok, this is an expanded form so that we can use the same
  * request for paging requests when that is implemented. In
- * paging, 'bh' is NULL, and 'waiting' is used to wait for
- * read/write completion.
+ * paging, 'bh' is NULL, and the semaphore is used to wait
+ * for read/write completion.
  */
 struct request {
 	int dev;		/* -1 if no request */
@@ -32,7 +32,7 @@ struct request {
 	unsigned long nr_sectors;
 	unsigned long current_nr_sectors;
 	char * buffer;
-	struct task_struct * waiting;
+	struct semaphore * sem;
 	struct buffer_head * bh;
 	struct buffer_head * bhtail;
 	struct request * next;
@@ -271,7 +271,6 @@ static void end_request(int uptodate)
 {
 	struct request * req;
 	struct buffer_head * bh;
-	struct task_struct * p;
 
 	req = CURRENT;
 	req->errors = 0;
@@ -302,13 +301,8 @@ static void end_request(int uptodate)
 	}
 	DEVICE_OFF(req->dev);
 	CURRENT = req->next;
-	if ((p = req->waiting) != NULL) {
-		req->waiting = NULL;
-		p->swapping = 0;
-		p->state = TASK_RUNNING;
-		if (p->counter > current->counter)
-			need_resched = 1;
-	}
+	if (req->sem != NULL)
+		up(req->sem);
 	req->dev = -1;
 	wake_up(&wait_for_request);
 }

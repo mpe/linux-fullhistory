@@ -334,6 +334,13 @@ static void scan_scsis (struct Scsi_Host * shpnt)
 	  
 	  if (!the_result)
 	    {
+		/* It would seem some TOSHIBA CD-ROM gets things wrong */
+		if (!strncmp(scsi_result+8,"TOSHIBA",7) &&
+		    !strncmp(scsi_result+16,"CD-ROM",6) &&
+		    scsi_result[0] == TYPE_DISK) {
+			scsi_result[0] = TYPE_ROM;
+			scsi_result[1] |= 0x80;  /* removable */
+		}
 	      SDpnt->removable = (0x80 & 
 				  scsi_result[1]) >> 7;
 	      SDpnt->lockable = SDpnt->removable;
@@ -617,14 +624,14 @@ Scsi_Cmnd * request_queueable (struct request * req, Scsi_Device * device)
       SCpnt->request.nr_sectors -= req->nr_sectors;
       req->current_nr_sectors = bh->b_size >> 9;
       req->buffer = bh->b_data;
-      SCpnt->request.waiting = NULL; /* Wait until whole thing done */
+      SCpnt->request.sem = NULL; /* Wait until whole thing done */
     } else {
       req->dev = -1;
       wake_up(&wait_for_request);
     };      
   } else {
     SCpnt->request.dev = 0xffff; /* Busy, but no request */
-    SCpnt->request.waiting = NULL;  /* And no one is waiting for the device either */
+    SCpnt->request.sem = NULL;  /* And no one is waiting for the device either */
   };
 
   SCpnt->use_sg = 0;  /* Reset the scatter-gather flag */
@@ -716,7 +723,7 @@ Scsi_Cmnd * allocate_device (struct request ** reqp, Scsi_Device * device,
 	    SCpnt->request.nr_sectors -= req->nr_sectors;
 	    req->current_nr_sectors = bh->b_size >> 9;
 	    req->buffer = bh->b_data;
-	    SCpnt->request.waiting = NULL; /* Wait until whole thing done */
+	    SCpnt->request.sem = NULL; /* Wait until whole thing done */
 	  }
 	  else 
 	    {
@@ -726,7 +733,7 @@ Scsi_Cmnd * allocate_device (struct request ** reqp, Scsi_Device * device,
 	    };
 	} else {
 	  SCpnt->request.dev = 0xffff; /* Busy */
-	  SCpnt->request.waiting = NULL;  /* And no one is waiting for this to complete */
+	  SCpnt->request.sem = NULL;  /* And no one is waiting for this to complete */
 	};
 	sti();
 	break;
@@ -1914,7 +1921,7 @@ scsi_dump_status(void)
     for(SCpnt=shpnt->host_queue; SCpnt; SCpnt = SCpnt->next)
       {
 	/*  (0) 0:0:0 (802 123434 8 8 0) (3 3 2) (%d %d %d) %d %x      */
-	printk("(%d) %d:%d:%d (%4.4x %d %d %d %d) (%d %d %x) (%d %d %d) %x %x %d %x\n",
+	printk("(%d) %d:%d:%d (%4.4x %d %d %d %d) (%d %d %x) (%d %d %d) %x %x %x\n",
 	       i, SCpnt->host->host_no,
 	       SCpnt->target,
 	       SCpnt->lun,
@@ -1931,8 +1938,6 @@ scsi_dump_status(void)
 	       SCpnt->internal_timeout,
 	       SCpnt->cmnd[0],
 	       SCpnt->sense_buffer[2],
-	       (SCpnt->request.waiting ? 
-		SCpnt->request.waiting->pid : 0),
 	       SCpnt->result);
       };
   printk("wait_for_request = %x\n", wait_for_request);
@@ -1945,14 +1950,12 @@ scsi_dump_status(void)
 	printk("%d: ", i);
 	req = blk_dev[i].current_request;
 	while(req) {
-	  printk("(%x %d %d %d %d %d) ",
+	  printk("(%x %d %d %d %d) ",
 		 req->dev,
 		 req->cmd,
 		 req->sector,
 		 req->nr_sectors,
-		 req->current_nr_sectors,
-		 (req->waiting ? 
-		  req->waiting->pid : 0));
+		 req->current_nr_sectors);
 	  req = req->next;
 	}
 	printk("\n");

@@ -285,8 +285,8 @@ _tmp_floppy_area:
 /*
  * floppy_track_buffer is used to buffer one track of floppy data: it
  * has to be separate from the tmp_floppy area, as otherwise a single-
- * sector read/write can mess it up. It can contain one full track of
- * data (18*2*512 bytes).
+ * sector read/write can mess it up. It can contain one full cylinder (sic) of
+ * data (36*2*512 bytes).
  */
 _floppy_track_buffer:
 	.fill 512*2*36,1,0

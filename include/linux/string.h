@@ -25,7 +25,8 @@ extern "C" {
  
 extern inline char * strcpy(char * dest,const char *src)
 {
-__asm__("cld\n"
+__asm__ __volatile__(
+	"cld\n"
 	"1:\tlodsb\n\t"
 	"stosb\n\t"
 	"testb %%al,%%al\n\t"
@@ -37,7 +38,8 @@ return dest;
 
 extern inline char * strncpy(char * dest,const char *src,size_t count)
 {
-__asm__("cld\n"
+__asm__ __volatile__(
+	"cld\n"
 	"1:\tdecl %2\n\t"
 	"js 2f\n\t"
 	"lodsb\n\t"
@@ -54,7 +56,8 @@ return dest;
 
 extern inline char * strcat(char * dest,const char * src)
 {
-__asm__("cld\n\t"
+__asm__ __volatile__(
+	"cld\n\t"
 	"repne\n\t"
 	"scasb\n\t"
 	"decl %1\n"
@@ -69,7 +72,8 @@ return dest;
 
 extern inline char * strncat(char * dest,const char * src,size_t count)
 {
-__asm__("cld\n\t"
+__asm__ __volatile__(
+	"cld\n\t"
 	"repne\n\t"
 	"scasb\n\t"
 	"decl %1\n\t"
@@ -90,8 +94,9 @@ return dest;
 
 extern inline int strcmp(const char * cs,const char * ct)
 {
-register int __res __asm__("ax");
-__asm__("cld\n"
+register int __res;
+__asm__ __volatile__(
+	"cld\n"
 	"1:\tlodsb\n\t"
 	"scasb\n\t"
 	"jne 2f\n\t"
@@ -108,8 +113,9 @@ return __res;
 
 extern inline int strncmp(const char * cs,const char * ct,size_t count)
 {
-register int __res __asm__("ax");
-__asm__("cld\n"
+register int __res;
+__asm__ __volatile__(
+	"cld\n"
 	"1:\tdecl %3\n\t"
 	"js 2f\n\t"
 	"lodsb\n\t"
@@ -128,8 +134,9 @@ return __res;
 
 extern inline char * strchr(const char * s,char c)
 {
-register char * __res __asm__("ax");
-__asm__("cld\n\t"
+register char * __res;
+__asm__ __volatile__(
+	"cld\n\t"
 	"movb %%al,%%ah\n"
 	"1:\tlodsb\n\t"
 	"cmpb %%ah,%%al\n\t"
@@ -145,8 +152,9 @@ return __res;
 
 extern inline char * strrchr(const char * s,char c)
 {
-register char * __res __asm__("dx");
-__asm__("cld\n\t"
+register char * __res;
+__asm__ __volatile__(
+	"cld\n\t"
 	"movb %%al,%%ah\n"
 	"1:\tlodsb\n\t"
 	"cmpb %%ah,%%al\n\t"
@@ -160,8 +168,9 @@ return __res;
 
 extern inline size_t strspn(const char * cs, const char * ct)
 {
-register char * __res __asm__("si");
-__asm__("cld\n\t"
+register char * __res;
+__asm__ __volatile__(
+	"cld\n\t"
 	"movl %4,%%edi\n\t"
 	"repne\n\t"
 	"scasb\n\t"
@@ -184,8 +193,9 @@ return __res-cs;
 
 extern inline size_t strcspn(const char * cs, const char * ct)
 {
-register char * __res __asm__("si");
-__asm__("cld\n\t"
+register char * __res;
+__asm__ __volatile__(
+	"cld\n\t"
 	"movl %4,%%edi\n\t"
 	"repne\n\t"
 	"scasb\n\t"
@@ -208,8 +218,9 @@ return __res-cs;
 
 extern inline char * strpbrk(const char * cs,const char * ct)
 {
-register char * __res __asm__("si");
-__asm__("cld\n\t"
+register char * __res;
+__asm__ __volatile__(
+	"cld\n\t"
 	"movl %4,%%edi\n\t"
 	"repne\n\t"
 	"scasb\n\t"
@@ -235,8 +246,9 @@ return __res;
 
 extern inline char * strstr(const char * cs,const char * ct)
 {
-register char * __res __asm__("ax");
-__asm__("cld\n\t" \
+register char * __res;
+__asm__ __volatile__(
+	"cld\n\t" \
 	"movl %4,%%edi\n\t"
 	"repne\n\t"
 	"scasb\n\t"
@@ -262,8 +274,9 @@ return __res;
 
 extern inline size_t strlen(const char * s)
 {
-register int __res __asm__("cx");
-__asm__("cld\n\t"
+register int __res;
+__asm__ __volatile__(
+	"cld\n\t"
 	"repne\n\t"
 	"scasb\n\t"
 	"notl %0\n\t"
@@ -277,7 +290,8 @@ extern char * ___strtok;
 extern inline char * strtok(char * s,const char * ct)
 {
 register char * __res;
-__asm__("testl %1,%1\n\t"
+__asm__ __volatile__(
+	"testl %1,%1\n\t"
 	"jne 1f\n\t"
 	"testl %0,%0\n\t"
 	"je 8f\n\t"
@@ -335,7 +349,8 @@ return __res;
 
 extern inline void * memcpy(void * to, const void * from, size_t n)
 {
-__asm__("cld\n\t"
+__asm__ __volatile__(
+	"cld\n\t"
 	"movl %%edx, %%ecx\n\t"
 	"shrl $2,%%ecx\n\t"
 	"rep ; movsl\n\t"
@@ -355,14 +370,16 @@ return (to);
 extern inline void * memmove(void * dest,const void * src, size_t n)
 {
 if (dest<src)
-__asm__("cld\n\t"
+__asm__ __volatile__(
+	"cld\n\t"
 	"rep\n\t"
 	"movsb"
 	: /* no output */
 	:"c" (n),"S" (src),"D" (dest)
 	:"cx","si","di");
 else
-__asm__("std\n\t"
+__asm__ __volatile__(
+	"std\n\t"
 	"rep\n\t"
 	"movsb\n\t"
 	"cld"
@@ -376,8 +393,9 @@ return dest;
 
 extern inline int memcmp(const void * cs,const void * ct,size_t count)
 {
-register int __res __asm__("ax");
-__asm__("cld\n\t"
+register int __res;
+__asm__ __volatile__(
+	"cld\n\t"
 	"repe\n\t"
 	"cmpsb\n\t"
 	"je 1f\n\t"
@@ -391,10 +409,11 @@ return __res;
 
 extern inline void * memchr(const void * cs,char c,size_t count)
 {
-register void * __res __asm__("di");
+register void * __res;
 if (!count)
 	return NULL;
-__asm__("cld\n\t"
+__asm__ __volatile__(
+	"cld\n\t"
 	"repne\n\t"
 	"scasb\n\t"
 	"je 1f\n\t"
@@ -407,7 +426,8 @@ return __res;
 
 extern inline void * memset(void * s,char c,size_t count)
 {
-__asm__("cld\n\t"
+__asm__ __volatile__(
+	"cld\n\t"
 	"rep\n\t"
 	"stosb"
 	: /* no output */
