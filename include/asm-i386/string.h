@@ -496,6 +496,25 @@ __asm__ __volatile__(
 return (s);	
 }
 
+/* Added by Gertjan van Wingerde to make minix and sysv module work */
+#define __HAVE_ARCH_STRNLEN
+extern inline size_t strnlen(const char * s, size_t count)
+{
+register int __res;
+__asm__ __volatile__(
+	"movl %1,%0\n\t"
+	"jmp 2f\n"
+	"1:\tcmpb $0,(%0)\n\t"
+	"je 3f\n\t"
+	"incl %0\n"
+	"2:\tdecl %2\n\t"
+	"cmpl $-1,%2\n\t"
+	"jne 1b\n"
+	"3:\tsubl %1,%0"
+	:"=a" (__res):"c" (s),"d" (count));
+return __res;
+}
+/* end of additional stuff */
 
 /*
  * This looks horribly ugly, but the compiler can optimize it totally,

@@ -34,8 +34,6 @@ static int proc_readscsi(struct inode * inode, struct file * file,
 			 char * buf, int count);
 static int proc_writescsi(struct inode * inode, struct file * file,
 			 const char * buf, int count);
-static int proc_readscsidir(struct inode *, struct file *, 
-			    void *, filldir_t filldir);
 static int proc_lookupscsi(struct inode *,const char *,int,struct inode **);
 static int proc_scsilseek(struct inode *, struct file *, off_t, int);
 
@@ -50,7 +48,7 @@ static struct file_operations proc_scsi_operations = {
     proc_scsilseek,	/* lseek   */
     proc_readscsi,	/* read	   */
     proc_writescsi,	/* write   */
-    proc_readscsidir,	/* readdir */
+    NULL,		/* readdir */
     NULL,		/* select  */
     NULL,		/* ioctl   */
     NULL,		/* mmap	   */
@@ -78,15 +76,6 @@ struct inode_operations proc_scsi_inode_operations = {
     NULL,	    /* bmap	   */
     NULL,	    /* truncate	   */
     NULL	    /* permission  */
-};
-
-struct proc_dir_entry proc_scsi = {
-	PROC_SCSI, 4, "scsi",
-	S_IFDIR | S_IRUGO | S_IXUGO, 2, 0, 0,
-	0, &proc_scsi_inode_operations,
-	NULL, NULL,
-	NULL,
-	&proc_root, NULL
 };
 
 struct proc_dir_entry scsi_dir[PROC_SCSI_FILE - PROC_SCSI_SCSI + 3]; 
@@ -175,36 +164,6 @@ static int proc_lookupscsi(struct inode * dir, const char * name, int len,
     }
     iput(dir);
     return(-ENOENT);
-}
-
-static int proc_readscsidir(struct inode * inode, struct file * filp,
-			    void * dirent, filldir_t filldir)
-{
-    struct proc_dir_entry * de;
-    uint index, num;
- 
-    num = 0;
-
-    if (!inode || !S_ISDIR(inode->i_mode))
-	return(-EBADF);
-
-    index = count_dir_entries(inode->i_ino, &num);
-
-    while (((unsigned) filp->f_pos + index) < index + num) {
-	if (dispatch_scsi_info_ptr) {
-	    if (inode->i_ino <= PROC_SCSI_SCSI)
-		de = scsi_dir + filp->f_pos;
-	    else
-		de = scsi_hba_dir + filp->f_pos + index;
-        }
-	else {
-	    de = scsi_dir2 + filp->f_pos;
-        }
-	if (filldir(dirent, de->name, de->namelen, filp->f_pos, de->low_ino)<0)
-	    break;
-	filp->f_pos++;
-    }
-    return(0);
 }
 
 int get_not_present_info(char *buffer, char **start, off_t offset, int length)

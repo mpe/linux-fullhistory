@@ -175,27 +175,36 @@ smb_dont_catch_keepalive(struct smb_server *server)
 }
 
 /*
- * smb_receive
- * fs points to the correct segment, server != NULL, sock!=NULL
+ * smb_receive_raw
+ * fs points to the correct segment, sock != NULL, target != NULL
+ * The smb header is only stored if want_header != 0.
  */
 static int
-smb_receive(struct smb_server *server, struct socket *sock)
+smb_receive_raw(struct socket *sock, unsigned char *target,
+                int max_raw_length, int want_header)
 {
         int len, result;
+        int already_read;
         unsigned char peek_buf[4];
+        unsigned short fs;      /* We fool the kernel to believe
+                                   we call from user space. */
+
 
  re_recv:
 
+	fs = get_fs();
+	set_fs(get_ds());
         result = sock->ops->recvfrom(sock, (void *)peek_buf, 4, 0,
-                                     MSG_PEEK, NULL, NULL);
+                                     0, NULL, NULL);
+        set_fs(fs);
 
         if (result < 0) {
-                DPRINTK("smb_receive: recv error = %d\n", -result);
+                DPRINTK("smb_receive_raw: recv error = %d\n", -result);
                 return result;
         }
 
-        if (result == 0) {
-                DPRINTK("smb_receive: got 0 bytes\n");
+        if (result < 4) {
+                DPRINTK("smb_receive_raw: got less than 4 bytes\n");
                 return -EIO;
         }
 
@@ -206,51 +215,72 @@ smb_receive(struct smb_server *server, struct socket *sock)
                 break;
 
         case 0x85:
-                DPRINTK("smb_receive: Got SESSION KEEP ALIVE\n");
-                sock->ops->recvfrom(sock, (void *)peek_buf, 4, 1,
-                                    0, NULL, NULL);
+                DPRINTK("smb_receive_raw: Got SESSION KEEP ALIVE\n");
                 goto re_recv;
                 
         default:
-                printk("smb_receive: Invalid packet\n");
+                printk("smb_receive_raw: Invalid packet\n");
                 return -EIO;
         }
 
-        /* Length not including first four bytes. */
-	len = smb_len(peek_buf) + 4; 
-        if (len > server->max_xmit) { 
-                printk("smb_receive: Received length (%d) > max_xmit (%d)!\n", 
-		       len, server->max_xmit);
+        /* The length in the RFC NB header is the raw data length */
+	len = smb_len(peek_buf); 
+        if (len > max_raw_length) { 
+                printk("smb_receive_raw: Received length (%d) > max_xmit (%d)!\n", 
+		       len, max_raw_length);
                 return -EIO;
 	}
-        else
-        {
-                int already_read = 0;
 
-                while (already_read < len) {
+        if (want_header != 0) {
+                memcpy_tofs(target, peek_buf, 4);
+                target += 4;
+        }
+
+        already_read = 0;
+
+        while (already_read < len) {
                 
-                        result = sock->ops->
-                                recvfrom(sock,
-                                         (void *)(server->packet+already_read),
-                                         len - already_read, 0, 0,
-                                         NULL, NULL);
+                result = sock->ops->
+                        recvfrom(sock,
+                                 (void *)(target+already_read),
+                                 len - already_read, 0, 0,
+                                 NULL, NULL);
    
-                        if (result < 0) {
-                                printk("SMB: notice message: error = %d\n",
-                                       -result);
-                                return result;
-                        }
-
-                        already_read += result;
+                if (result < 0) {
+                        printk("smb_receive_raw: recvfrom error = %d\n",
+                               -result);
+                        return result;
                 }
-                result = already_read;
+
+                already_read += result;
+        }
+        return already_read;
+}
+
+/*
+ * smb_receive
+ * fs points to the correct segment, server != NULL, sock!=NULL
+ */
+static int
+smb_receive(struct smb_server *server, struct socket *sock)
+{
+        int result;
+
+        result = smb_receive_raw(sock, server->packet,
+                                 server->max_xmit - 4, /* max_xmit in server
+                                                          includes NB header */
+                                 1); /* We want the header */
+
+        if (result < 0) {
+                printk("smb_receive: receive error: %d\n", result);
+                return result;
         }
 
         server->rcls = *((unsigned char *)(server->packet+9));
         server->err  = *((unsigned short *)(server->packet+11));
 
         if (server->rcls != 0) {
-                DPRINTK("smb_response: rcls=%d, err=%d\n",
+                DPRINTK("smb_receive: rcls=%d, err=%d\n",
                         server->rcls, server->err);
         }
 
@@ -447,12 +477,6 @@ smb_request(struct smb_server *server)
         if (server->state != CONN_VALID)
                 return -EIO;
         	
-#if 0
-	while (server->lock)
-		sleep_on(&server->wait);
-	server->lock = 1;
-#endif
-
         if ((result = smb_dont_catch_keepalive(server)) != 0) {
                 server->state = CONN_INVALID;
                 smb_invalidate_all_inodes(server);
@@ -485,11 +509,6 @@ smb_request(struct smb_server *server)
         if ((result2 = smb_catch_keepalive(server)) < 0) {
                 result = result2;
         }
-
-#if 0
-	server->lock = 0;
-	wake_up(&server->wait);
-#endif
 
         if (result < 0) {
                 server->state = CONN_INVALID;
@@ -526,12 +545,6 @@ smb_trans2_request(struct smb_server *server,
         if (server->state != CONN_VALID)
                 return -EIO;
         	
-#if 0
-	while (server->lock)
-		sleep_on(&server->wait);
-	server->lock = 1;
-#endif
-
         if ((result = smb_dont_catch_keepalive(server)) != 0) {
                 server->state = CONN_INVALID;
                 smb_invalidate_all_inodes(server);
@@ -540,12 +553,12 @@ smb_trans2_request(struct smb_server *server,
 
         len = smb_len(buffer) + 4;
 
-        DDPRINTK("smb_request: len = %d cmd = 0x%X\n", len, buffer[8]);
-
 	old_mask = current->blocked;
 	current->blocked |= ~(_S(SIGKILL) | _S(SIGSTOP));
 	fs = get_fs();
 	set_fs(get_ds());
+
+        DDPRINTK("smb_request: len = %d cmd = 0x%X\n", len, buffer[8]);
 
         result = sock->ops->send(sock, (void *)buffer, len, 0, 0);
         if (result < 0) {
@@ -567,17 +580,162 @@ smb_trans2_request(struct smb_server *server,
                 result = result2;
         }
 
-#if 0
-	server->lock = 0;
-	wake_up(&server->wait);
-#endif
-
         if (result < 0) {
                 server->state = CONN_INVALID;
                 smb_invalidate_all_inodes(server);
         }
         
         DDPRINTK("smb_trans2_request: result = %d\n", result);
+
+	return result;
+}
+
+/* target must be in user space */
+int
+smb_request_read_raw(struct smb_server *server,
+                     unsigned char *target, int max_len)
+{
+	unsigned long old_mask;
+	int len, result, result2;
+	unsigned short fs;      /* We fool the kernel to believe
+                                   we call from user space. */
+
+	struct socket *sock = server_sock(server);
+	unsigned char *buffer = (server == NULL) ? NULL : server->packet;
+
+	if ((sock == NULL) || (buffer == NULL)) {
+		printk("smb_request_read_raw: Bad server!\n");
+		return -EBADF;
+	}
+
+        if (server->state != CONN_VALID)
+                return -EIO;
+        	
+        if ((result = smb_dont_catch_keepalive(server)) != 0) {
+                server->state = CONN_INVALID;
+                smb_invalidate_all_inodes(server);
+                return result;
+        }
+
+        len = smb_len(buffer) + 4;
+
+	old_mask = current->blocked;
+	current->blocked |= ~(_S(SIGKILL) | _S(SIGSTOP));
+	fs = get_fs();
+	set_fs(get_ds());
+
+        DPRINTK("smb_request_read_raw: len = %d cmd = 0x%X\n",
+                len, buffer[8]);
+        DPRINTK("smb_request_read_raw: target=%X, max_len=%d\n",
+                (unsigned int)target, max_len);
+        DPRINTK("smb_request_read_raw: buffer=%X, sock=%X\n",
+                (unsigned int)buffer, (unsigned int)sock);
+
+        result = sock->ops->send(sock, (void *)buffer, len, 0, 0);
+
+        DPRINTK("smb_request_read_raw: send returned %d\n", result);
+
+	set_fs(fs);             /* We recv into user space */
+
+        if (result < 0) {
+                printk("smb_request_read_raw: send error = %d\n", result);
+        }
+        else {
+                result = smb_receive_raw(sock, target, max_len, 0);
+        }
+
+        /* read/write errors are handled by errno */
+        current->signal &= ~_S(SIGPIPE);
+	current->blocked = old_mask;
+
+        if ((result2 = smb_catch_keepalive(server)) < 0) {
+                result = result2;
+        }
+
+        if (result < 0) {
+                server->state = CONN_INVALID;
+                smb_invalidate_all_inodes(server);
+        }
+        
+        DPRINTK("smb_request_read_raw: result = %d\n", result);
+
+	return result;
+}
+
+/* Source must be in user space. smb_request_write_raw assumes that
+ * the request SMBwriteBraw has been completed successfully, so that
+ * we can send the raw data now.  */
+int
+smb_request_write_raw(struct smb_server *server,
+                      unsigned const char *source, int length)
+{
+	unsigned long old_mask;
+	int result, result2;
+	unsigned short fs;      /* We fool the kernel to believe
+                                   we call from user space. */
+        byte nb_header[4];
+
+	struct socket *sock = server_sock(server);
+	unsigned char *buffer = (server == NULL) ? NULL : server->packet;
+
+	if ((sock == NULL) || (buffer == NULL)) {
+                printk("smb_request_write_raw: Bad server!\n");
+		return -EBADF;
+	}
+
+        if (server->state != CONN_VALID)
+                return -EIO;
+        	
+        if ((result = smb_dont_catch_keepalive(server)) != 0) {
+                server->state = CONN_INVALID;
+                smb_invalidate_all_inodes(server);
+                return result;
+        }
+
+	old_mask = current->blocked;
+	current->blocked |= ~(_S(SIGKILL) | _S(SIGSTOP));
+	fs = get_fs();
+	set_fs(get_ds());
+
+        smb_encode_smb_length(nb_header, length);
+
+        result = sock->ops->send(sock, (void *)nb_header, 4, 0, 0);
+
+        if (result == 4) {
+                set_fs(fs);     /* source is in user-land */
+                result = sock->ops->send(sock, (void *)source, length, 0, 0);
+                set_fs(get_ds());
+        } else {
+                result = -EIO;
+        }
+
+        DPRINTK("smb_request_write_raw: send returned %d\n", result);
+
+        if (result == length) {
+                result = smb_receive(server, sock);
+        } else {
+                result = -EIO;
+        }
+
+        /* read/write errors are handled by errno */
+        current->signal &= ~_S(SIGPIPE);
+	current->blocked = old_mask;
+	set_fs(fs);
+
+        if ((result2 = smb_catch_keepalive(server)) < 0) {
+                result = result2;
+        }
+
+        if (result < 0) {
+                server->state = CONN_INVALID;
+                smb_invalidate_all_inodes(server);
+        }
+
+        if (result > 0) {
+                result = length;
+        }
+        
+        DPRINTK("smb_request_write_raw: result = %d\n", result);
 
 	return result;
 }

@@ -21,7 +21,7 @@
 #undef REALLY_SLOW_IO			/* most systems can safely undef this */
 #include <asm/io.h>
 
-#define	REALLY_FAST_IO			/* define if ide ports are perfect */
+#undef 	REALLY_FAST_IO			/* define if ide ports are perfect */
 #define INITIAL_MULT_COUNT	0	/* off=0; on=2,4,8,16,32, etc.. */
 
 #ifndef DISK_RECOVERY_TIME		/* off=0; on=access_delay_time */
@@ -121,14 +121,6 @@ typedef unsigned char	byte;	/* used everywhere */
 
 #ifdef CONFIG_BLK_DEV_IDECD
 
-struct packet_command {
-  char *buffer;
-  int buflen;
-  int stat;
-  unsigned char c[12];
-};
-
-
 struct atapi_request_sense {
   unsigned char error_code : 7;
   unsigned char valid      : 1;
@@ -144,6 +136,14 @@ struct atapi_request_sense {
   byte ascq;
   byte fru;
   byte sense_key_specific[3];
+};
+
+struct packet_command {
+  char *buffer;
+  int buflen;
+  int stat;
+  struct atapi_request_sense *sense_data;
+  unsigned char c[12];
 };
 
 /* Space to hold the disk TOC. */
@@ -165,6 +165,9 @@ struct atapi_toc_entry {
 };
 
 struct atapi_toc {
+  int    last_session_lba;
+  int    xa_flag;
+  unsigned capacity;
   struct atapi_toc_header hdr;
   struct atapi_toc_entry  ent[MAX_TRACKS+1];  /* One extra for the leadout. */
 };
@@ -230,14 +233,13 @@ typedef struct ide_drive_s {
 	unsigned vlb_32bit	: 1;	/* use 32bit in/out for data */
 	unsigned vlb_sync	: 1;	/* needed for some 32bit chip sets */
 	unsigned removeable	: 1;	/* 1 if need to do check_media_change */
-	unsigned dma_capable	: 1;	/* for Intel Triton chipset, others.. */
+	unsigned using_dma	: 1;	/* disk is using dma for read/write */
+	unsigned unmask		: 1;	/* flag: okay to unmask other irqs */
+	media_t		media;		/* disk, cdrom, tape */
 	select_t	select;		/* basic drive/head select reg value */
-	byte		unmask;		/* flag: okay to unmask other irqs */
 	void		*hwif;		/* actually (ide_hwif_t *) */
 	byte		ctl;		/* "normal" value for IDE_CONTROL_REG */
 	byte		ready_stat;	/* min status value for drive ready */
-	byte		wpcom;		/* ignored by all IDE drives */
-	media_t		media;		/* disk, cdrom, tape */
 	byte		mult_count;	/* current multiple sector setting */
 	byte 		mult_req;	/* requested multiple sector setting */
 	byte		chipset;	/* interface chipset access method */
@@ -259,22 +261,38 @@ typedef struct ide_drive_s {
 #endif /* CONFIG_BLK_DEV_IDECD */
 	} ide_drive_t;
 
+/*
+ * An ide_dmaproc_t() initiates/aborts DMA read/write operations on a drive.
+ *
+ * The caller is assumed to have selected the drive and programmed the drive's
+ * sector address using CHS or LBA.  All that remains is to prepare for DMA
+ * and then issue the actual read/write DMA/PIO command to the drive.
+ *
+ * Returns 0 if all went well.
+ * Returns 1 if DMA read/write could not be started, in which case the caller
+ * should either try again later, or revert to PIO for the current request.
+ */
+typedef enum {ide_dma_read = 0, ide_dma_write = 1, ide_dma_abort = 2, ide_dma_check = 3} ide_dma_action_t;
+typedef int (ide_dmaproc_t)(ide_dma_action_t, ide_drive_t *);
+
 typedef struct hwif_s {
 	struct hwif_s	*next;		/* for linked-list in ide_hwgroup_t */
 	void		*hwgroup;	/* actually (ide_hwgroup_t *) */
 	unsigned short	io_base;	/* base io port addr */
 	unsigned short	ctl_port;	/* usually io_base+0x206 */
-	ide_drive_t		drives[MAX_DRIVES];	/* drive info */
+	ide_drive_t	drives[MAX_DRIVES];	/* drive info */
 	struct gendisk	*gd;		/* gendisk structure */
+	ide_dmaproc_t	*dmaproc;	/* dma read/write/abort routine */
+	unsigned long	*dmatable;	/* dma physical region descriptor table */
+	unsigned short	dma_base;	/* base addr for dma ports (triton) */
 	byte		irq;		/* our irq number */
 	byte		major;		/* our major number */
 	byte		drivecount;	/* how many drives attached */
 	char 		name[5];	/* name of interface, eg. "ide0" */
 	unsigned	noprobe : 1;	/* don't probe for this interface */
 	unsigned	present : 1;	/* this interface exists */
-	unsigned long	reset_timeout;	/* timeout value during ide resets */
 #if (DISK_RECOVERY_TIME > 0)
-	unsigned long	last_timer;	/* time when previous rq was done */
+	unsigned long	last_time;	/* time when previous rq was done */
 #endif
 #ifdef CONFIG_BLK_DEV_IDECD
 	struct request request_sense_request;	/* from ide-cd.c */
@@ -283,7 +301,7 @@ typedef struct hwif_s {
 	} ide_hwif_t;
 
 /*
- *  our internal interrupt handler type
+ *  internal ide interrupt handler type
  */
 typedef void (ide_handler_t)(ide_drive_t *);
 
@@ -294,6 +312,10 @@ typedef struct hwgroup_s {
 	struct request		*rq;	/* current request */
 	struct timer_list	timer;	/* failsafe timer */
 	struct request		wrq;	/* local copy of current write rq */
+	unsigned long	reset_timeout;	/* timeout value during ide resets */
+#ifdef CONFIG_BLK_DEV_IDECD
+	int			doing_atapi_reset;
+#endif /* CONFIG_BLK_DEV_IDECD */
 	} ide_hwgroup_t;
 
 /*
@@ -363,6 +385,23 @@ int ide_wait_stat (ide_drive_t *drive, byte good, byte bad, unsigned long timeou
  */
 int ide_xlate_1024(dev_t, int, const char *);
 
+/*
+ * Start a reset operation for an IDE interface.
+ * Returns 0 if the reset operation is still in progress,
+ *  in which case the drive MUST return, to await completion.
+ * Returns 1 if the reset is complete (success or failure).
+ */
+int ide_do_reset (ide_drive_t *);
+
+/*
+ * ide_alloc(): memory allocation for use *only* during driver initialization.
+ * If "within_area" is non-zero, the memory will be allocated such that
+ * it lies entirely within a "within_area" sized area (eg. 4096).  This is
+ * needed for DMA stuff.  "within_area" must be a power of two (not validated).
+ * All allocations are longword aligned.
+ */
+void *ide_alloc (unsigned long bytecount, unsigned long within_area);
+
 #ifdef CONFIG_BLK_DEV_IDECD
 /*
  * These are routines in ide-cd.c invoked from ide.c
@@ -374,3 +413,8 @@ int ide_cdrom_open (struct inode *, struct file *, ide_drive_t *);
 void ide_cdrom_release (struct inode *, struct file *, ide_drive_t *);
 void ide_cdrom_setup (ide_drive_t *);
 #endif /* CONFIG_BLK_DEV_IDECD */
+
+#ifdef CONFIG_BLK_DEV_TRITON
+void ide_init_triton (ide_hwif_t *);
+#endif /* CONFIG_BLK_DEV_TRITON */
+

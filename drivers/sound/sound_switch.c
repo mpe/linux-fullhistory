@@ -479,7 +479,7 @@ sound_ioctl_sw (int dev, struct fileinfo *file,
 {
   DEB (printk ("sound_ioctl_sw(dev=%d, cmd=0x%x, arg=0x%x)\n", dev, cmd, arg));
 
-  if ((cmd >> 8) & 0xff == 'M' && num_mixers > 0)	/* Mixer ioctl */
+  if (((cmd >> 8) & 0xff) == 'M' && num_mixers > 0)	/* Mixer ioctl */
     if ((dev & 0x0f) != SND_DEV_CTL)
       {
 	int             dtype = dev & 0x0f;

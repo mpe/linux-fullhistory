@@ -95,13 +95,13 @@ struct vm_operations_struct {
 	void (*close)(struct vm_area_struct * area);
 	void (*unmap)(struct vm_area_struct *area, unsigned long, size_t);
 	void (*protect)(struct vm_area_struct *area, unsigned long, size_t, unsigned int newprot);
-	void (*sync)(struct vm_area_struct *area, unsigned long, size_t, unsigned int flags);
+	int (*sync)(struct vm_area_struct *area, unsigned long, size_t, unsigned int flags);
 	void (*advise)(struct vm_area_struct *area, unsigned long, size_t, unsigned int advise);
 	unsigned long (*nopage)(struct vm_area_struct * area, unsigned long address,
 		unsigned long page, int write_access);
 	unsigned long (*wppage)(struct vm_area_struct * area, unsigned long address,
 		unsigned long page);
-	void (*swapout)(struct vm_area_struct *,  unsigned long, pte_t *);
+	int (*swapout)(struct vm_area_struct *,  unsigned long, pte_t *);
 	pte_t (*swapin)(struct vm_area_struct *, unsigned long, unsigned long);
 };
 

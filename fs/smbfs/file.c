@@ -102,10 +102,25 @@ smb_file_read(struct inode *inode, struct file *file, char *buf, int count)
 	/* First read in as much as possible for each bufsize. */
         while (already_read < count) {
 
-                to_read = min(bufsize, count - already_read);
+                result = 0;
+                to_read = 0;
+                
+                if ((SMB_SERVER(inode)->blkmode & 1) != 0) {
+                        to_read = min(65535, count - already_read);
+                        DPRINTK("smb_file_read: Raw %d bytes\n", to_read);
+                        result = smb_proc_read_raw(SMB_SERVER(inode),
+                                                   SMB_FINFO(inode),
+                                                   pos, to_read, buf);
+                        DPRINTK("smb_file_read: returned %d\n", result);
+                }
 
-		result = smb_proc_read(SMB_SERVER(inode), SMB_FINFO(inode),
-                                       pos, to_read, buf, 1);
+                if (result <= 0) {
+                        to_read = min(bufsize, count - already_read);
+                        result = smb_proc_read(SMB_SERVER(inode),
+                                               SMB_FINFO(inode),
+                                               pos, to_read, buf, 1);
+                }
+
 		if (result < 0)
 			return result;
 		pos += result;
@@ -162,12 +177,30 @@ smb_file_write(struct inode *inode, struct file *file, const char *buf, int coun
 
         already_written = 0;
 
+        DPRINTK("smb_write_file: blkmode = %d, blkmode & 2 = %d\n",
+                SMB_SERVER(inode)->blkmode,
+                SMB_SERVER(inode)->blkmode & 2);
+        
         while (already_written < count) {
 
-                to_write = min(bufsize, count - already_written);
+                result = 0;
+                to_write = 0;
 
-		result = smb_proc_write(SMB_SERVER(inode), SMB_FINFO(inode), 
-					pos, to_write, buf);
+                if ((SMB_SERVER(inode)->blkmode & 2) != 0) {
+                        to_write = min(65535, count - already_written);
+                        DPRINTK("smb_file_write: Raw %d bytes\n", to_write);
+                        result = smb_proc_write_raw(SMB_SERVER(inode),
+                                                    SMB_FINFO(inode), 
+                                                    pos, to_write, buf);
+                        DPRINTK("smb_file_write: returned %d\n", result);
+                }
+
+                if (result <= 0) {
+                        to_write = min(bufsize, count - already_written);
+                        result = smb_proc_write(SMB_SERVER(inode),
+                                                SMB_FINFO(inode), 
+                                                pos, to_write, buf);
+                }
 
 		if (result < 0)
 			return result;

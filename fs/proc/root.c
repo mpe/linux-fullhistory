@@ -22,6 +22,53 @@
 static int proc_root_readdir(struct inode *, struct file *, void *, filldir_t);
 static int proc_root_lookup(struct inode *,const char *,int,struct inode **);
 
+/*
+ * These are the generic /proc directory operations. They
+ * use the in-memory "struct proc_dir_entry" tree to parse
+ * the /proc directory.
+ *
+ * NOTE! The /proc/scsi directory currently does not correctly
+ * build up the proc_dir_entry tree, and will show up empty.
+ */
+static struct file_operations proc_dir_operations = {
+	NULL,			/* lseek - default */
+	NULL,			/* read - bad */
+	NULL,			/* write - bad */
+	proc_readdir,		/* readdir */
+	NULL,			/* select - default */
+	NULL,			/* ioctl - default */
+	NULL,			/* mmap */
+	NULL,			/* no special open code */
+	NULL,			/* no special release code */
+	NULL			/* can't fsync */
+};
+
+/*
+ * proc directories can do almost nothing..
+ */
+static struct inode_operations proc_dir_inode_operations = {
+	&proc_dir_operations,	/* default net directory file-ops */
+	NULL,			/* create */
+	proc_lookup,		/* lookup */
+	NULL,			/* link */
+	NULL,			/* unlink */
+	NULL,			/* symlink */
+	NULL,			/* mkdir */
+	NULL,			/* rmdir */
+	NULL,			/* mknod */
+	NULL,			/* rename */
+	NULL,			/* readlink */
+	NULL,			/* follow_link */
+	NULL,			/* bmap */
+	NULL,			/* truncate */
+	NULL			/* permission */
+};
+
+/*
+ * The root /proc directory is special, as it has the
+ * <pid> directories. Thus we don't use the generic
+ * directory handling functions for that..
+ */
 static struct file_operations proc_root_operations = {
 	NULL,			/* lseek - default */
 	NULL,			/* read - bad */
@@ -36,7 +83,7 @@ static struct file_operations proc_root_operations = {
 };
 
 /*
- * proc directories can do almost nothing..
+ * proc root can do almost nothing..
  */
 static struct inode_operations proc_root_inode_operations = {
 	&proc_root_operations,	/* default base directory file-ops */
@@ -61,8 +108,26 @@ static struct inode_operations proc_root_inode_operations = {
  */
 struct proc_dir_entry proc_root = {
 	PROC_ROOT_INO, 5, "/proc",
-	S_IFDIR | S_IRUGO | S_IXUGO, 3, 0, 0,
+	S_IFDIR | S_IRUGO | S_IXUGO, 2, 0, 0,
 	0, &proc_root_inode_operations,
+	NULL, NULL,
+	NULL,
+	&proc_root, NULL
+};
+
+struct proc_dir_entry proc_net = {
+	PROC_NET, 3, "net",
+	S_IFDIR | S_IRUGO | S_IXUGO, 2, 0, 0,
+	0, &proc_dir_inode_operations,
+	NULL, NULL,
+	NULL,
+	NULL, NULL	
+};
+
+struct proc_dir_entry proc_scsi = {
+	PROC_SCSI, 4, "scsi",
+	S_IFDIR | S_IRUGO | S_IXUGO, 2, 0, 0,
+	0, &proc_dir_inode_operations,
 	NULL, NULL,
 	NULL,
 	&proc_root, NULL

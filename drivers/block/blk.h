@@ -336,7 +336,7 @@ static void (DEVICE_REQUEST)(void);
 
 #if ! SCSI_MAJOR(MAJOR_NR)
 
-#ifdef _IDE_CD_C	/* ide-cd.c uses copy from ide.c */
+#if defined(_IDE_CD_C) || defined(_TRITON_C) /* shares copy with ide.c */
 void ide_end_request(byte uptodate, ide_hwgroup_t *hwgroup);
 #else
 

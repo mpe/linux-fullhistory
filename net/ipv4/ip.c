@@ -205,6 +205,26 @@ static int ip_send(struct sk_buff *skb, unsigned long daddr, int len, struct dev
 	return mac;
 }
 
+static int ip_send_room(struct sk_buff *skb, unsigned long daddr, int len, struct device *dev, unsigned long saddr)
+{
+	int mac = 0;
+
+	skb->dev = dev;
+	skb->arp = 1;
+	if (dev->hard_header)
+	{
+		skb_reserve(skb,MAX_HEADER);
+		mac = dev->hard_header(skb, dev, ETH_P_IP, NULL, NULL, len);
+		if (mac < 0)
+		{
+			mac = -mac;
+			skb->arp = 0;
+			skb->raddr = daddr;	/* next routing address */
+		}
+	}
+	return mac;
+}
+
 int ip_id_count = 0;
 
 /*
@@ -287,7 +307,10 @@ int ip_build_header(struct sk_buff *skb, unsigned long saddr, unsigned long dadd
 	 *	Now build the MAC header.
 	 */
 
-	tmp = ip_send(skb, raddr, len, *dev, saddr);
+	if(type==IPPROTO_TCP)
+		tmp = ip_send_room(skb, raddr, len, *dev, saddr);
+	else
+		tmp = ip_send(skb, raddr, len, *dev, saddr);
 
 	/*
 	 *	Book keeping
@@ -1300,6 +1323,15 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	int err;
 #endif	
 
+#ifdef CONFIG_NET_IPV6
+	/* 
+	 *	Intercept IPv6 frames. We dump ST-II and invalid types just below..
+	 */
+	 
+	if(iph->version == 6)
+		return ipv6_rcv(skb,dev,pt);
+#endif		
+
 	ip_statistics.IpInReceives++;
 
 	/*
@@ -1571,13 +1603,13 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 		{
 			struct sock *sknext=NULL;
 			struct sk_buff *skb1;
-			raw_sk=get_sock_raw(raw_sk, hash,  iph->saddr, iph->daddr);
+			raw_sk=get_sock_raw(raw_sk, iph->protocol,  iph->saddr, iph->daddr);
 			if(raw_sk)	/* Any raw sockets */
 			{
 				do
 				{
 					/* Find the next */
-					sknext=get_sock_raw(raw_sk->next, hash, iph->saddr, iph->daddr);
+					sknext=get_sock_raw(raw_sk->next, iph->protocol, iph->saddr, iph->daddr);
 					if(sknext)
 						skb1=skb_clone(skb, GFP_ATOMIC);
 					else

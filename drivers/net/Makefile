@@ -298,7 +298,8 @@ ewrk3.o: ewrk3.c CONFIG
 depca.o: depca.c CONFIG
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(DEPCA_OPTS) -c $<
 
-Space.o: ../../include/linux/autoconf.h
+Space.o: Space.c ../../include/linux/autoconf.h CONFIG
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(OPTS) -c $<
 
 net_init.o: ../../include/linux/autoconf.h
 

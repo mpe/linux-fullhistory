@@ -517,4 +517,5 @@ ENTRY(sys_call_table)
 	.long SYMBOL_NAME(sys_getdents)
 	.long SYMBOL_NAME(sys_select)
 	.long SYMBOL_NAME(sys_flock)
-	.space (NR_syscalls-143)*4
+	.long SYMBOL_NAME(sys_msync)
+	.space (NR_syscalls-144)*4

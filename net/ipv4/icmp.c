@@ -102,7 +102,7 @@
      (OK... we don't use it)
    MUST discard received REPLYs if not using this system (OK)
    MUST NOT send replies unless specifically made agent for this sort
-     of thing. (NOT YET)
+     of thing. (OK)
 */
 
 #include <linux/types.h>

@@ -1630,12 +1630,11 @@ static int bpq_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *
 	return ax25_rcv(skb, dev, &port_call, ptype);
 }
 
-static int ax25_sendto(struct socket *sock, const void *ubuf, int len, int noblock,
-	unsigned flags, struct sockaddr *usip, int addr_len)
+static int ax25_sendmsg(struct socket *sock, struct msghdr *msg, int len, int noblock, int flags)
 {
 	struct sock *sk = (struct sock *)sock->data;
-	struct sockaddr_ax25 *usax = (struct sockaddr_ax25 *)usip;
-	unsigned char *uaddr = (unsigned char *)usip;
+	struct sockaddr_ax25 *usax = (struct sockaddr_ax25 *)msg->msg_name;
+	unsigned char *uaddr = (unsigned char *)msg->msg_name;
 	int err;
 	struct sockaddr_ax25 sax;
 	struct sk_buff *skb;
@@ -1644,14 +1643,17 @@ static int ax25_sendto(struct socket *sock, const void *ubuf, int len, int noblo
 	ax25_digi *dp;
 	ax25_digi dtmp;
 	int lv;
+	int addr_len=msg->msg_namelen;
 	
 	if (sk->err) {
+		cli();
 		err     = sk->err;
 		sk->err = 0;
+		sti();
 		return -err;
 	}
 
-	if (flags)
+	if (flags|| msg->msg_accrights)
 		return -EINVAL;
 
 	if (sk->zapped)
@@ -1731,7 +1733,7 @@ static int ax25_sendto(struct socket *sock, const void *ubuf, int len, int noblo
 		printk("AX.25: Appending user data\n");
 
 	/* User data follows immediately after the AX.25 data */
-	memcpy_fromfs(skb_put(skb, len), ubuf, len);
+	memcpy_fromiovec(skb_put(skb, len), msg->msg_iov, len);
 
 	/* Add the PID, usually AX25_TEXT */
 	asmptr  = skb_push(skb, 1);
@@ -1780,6 +1782,22 @@ static int ax25_sendto(struct socket *sock, const void *ubuf, int len, int noblo
 		
 }
 
+static int ax25_sendto(struct socket *sock, const void *ubuf, int size, int noblock, unsigned flags,
+		struct sockaddr *sa, int addr_len)
+{
+	struct iovec iov;
+	struct msghdr msg;
+	iov.iov_base=(void *)ubuf;
+	iov.iov_len=size;
+	msg.msg_name=(void *)sa;
+	msg.msg_namelen=addr_len;
+	msg.msg_accrights=NULL;
+	msg.msg_iov=&iov;
+	msg.msg_iovlen=1;
+	return ax25_sendmsg(sock,&msg,size,noblock,flags);	
+}
+
+
 static int ax25_send(struct socket *sock, const void *ubuf, int size, int noblock, unsigned flags)
 {
 	return ax25_sendto(sock, ubuf, size, noblock, flags, NULL, 0);
@@ -1787,22 +1805,23 @@ static int ax25_send(struct socket *sock, const void *ubuf, int size, int nobloc
 
 static int ax25_write(struct socket *sock, const char *ubuf, int size, int noblock)
 {
-	return ax25_send(sock, ubuf, size, noblock, 0);
+	return ax25_sendto(sock, ubuf, size, noblock, 0, NULL, 0);
 }
 
-static int ax25_recvfrom(struct socket *sock, void *ubuf, int size, int noblock,
-		   unsigned flags, struct sockaddr *sip, int *addr_len)
+static int ax25_recvmsg(struct socket *sock, struct msghdr *msg, int size, int noblock, int flags, int *addr_len)
 {
 	struct sock *sk = (struct sock *)sock->data;
-	struct sockaddr_ax25 *sax = (struct sockaddr_ax25 *)sip;
-	char *addrptr = (char *)sip;
+	struct sockaddr_ax25 *sax = (struct sockaddr_ax25 *)msg->msg_name;
+	char *addrptr = (char *)msg->msg_name;
 	int copied, length;
 	struct sk_buff *skb;
 	int er;
 
 	if (sk->err) {
+		cli();
 		er      = -sk->err;
 		sk->err = 0;
+		sti();
 		return er;
 	}
 	
@@ -1830,7 +1849,7 @@ static int ax25_recvfrom(struct socket *sock, void *ubuf, int size, int noblock,
 	}
 
 	copied = (size < length) ? size : length;
-	skb_copy_datagram(skb, 0, ubuf, copied);
+	skb_copy_datagram_iovec(skb, 0, msg->msg_iov, copied);
 	
 	if (sax) {
 		struct sockaddr_ax25 addr;
@@ -1858,6 +1877,23 @@ static int ax25_recvfrom(struct socket *sock, void *ubuf, int size, int noblock,
 
 	return copied;
 }		
+
+static int ax25_recvfrom(struct socket *sock, void *ubuf, int size, int noblock, unsigned flags,
+		struct sockaddr *sa, int *addr_len)
+{
+	struct iovec iov;
+	struct msghdr msg;
+	iov.iov_base=ubuf;
+	iov.iov_len=size;
+	msg.msg_name=(void *)sa;
+	msg.msg_namelen=0;
+	if (addr_len)
+		msg.msg_namelen = *addr_len;
+	msg.msg_accrights=NULL;
+	msg.msg_iov=&iov;
+	msg.msg_iovlen=1;
+	return ax25_recvmsg(sock,&msg,size,noblock,flags,addr_len);	
+}
 
 static int ax25_recv(struct socket *sock, void *ubuf, int size , int noblock,
 	unsigned flags)
@@ -2076,6 +2112,8 @@ static struct proto_ops ax25_proto_ops = {
 	ax25_setsockopt,
 	ax25_getsockopt,
 	ax25_fcntl,
+	ax25_sendmsg,
+	ax25_recvmsg
 };
 
 /* Called by socket.c on kernel start up */

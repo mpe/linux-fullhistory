@@ -1,7 +1,7 @@
 smbfs is a filesystem which understands the SMB protocol. This is the
 protocol Windows for Workgroups, Windows NT or Lan Manager use to talk
-to each other. It was inspired by samba, the program by Andrew
-Tridgell that turns any unix site into a file server for DOS or
+to each other. smbfs was inspired by samba, the program written by
+Andrew Tridgell that turns any unix host into a file server for DOS or
 Windows clients.  See ftp://nimbus.anu.edu.au/pub/tridge/samba/ for
 this interesting program suite and lots of more information on SMB and
 NetBIOS over TCP/IP. There you also find explanation for conceps like

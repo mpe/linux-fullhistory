@@ -90,7 +90,7 @@ struct nr_neigh {
 extern struct nr_parms_struct nr_default;
 extern int  nr_rx_frame(struct sk_buff *, struct device *);
 extern void nr_destroy_socket(struct sock *);
-extern int  nr_get_info(char *, char **, off_t, int, int);
+/*extern int  nr_get_info(char *, char **, off_t, int, int);*/
 
 /* nr_dev.c */
 extern int  nr_rx_ip(struct sk_buff *, struct device *);

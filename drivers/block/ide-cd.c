@@ -110,8 +110,6 @@
 #define PACKET_COMMAND 4315
 #define REQUEST_SENSE_COMMAND 4316
 
-#define WIN_PACKETCMD 0xa0  /* Send a packet command. */
-
 /* Some ATAPI command opcodes (just like SCSI).
    (Some other cdrom-specific codes are in cdrom.h.) */
 #define TEST_UNIT_READY         0x00

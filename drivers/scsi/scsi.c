@@ -107,9 +107,9 @@ Scsi_Cmnd * last_cmnd = NULL;
  * It is only initialized to !=0 if the scsi code is present 
  */ 
 extern int (* dispatch_scsi_info_ptr)(int ino, char *buffer, char **start, 
-                                      off_t offset, int length, int inout); 
+				      off_t offset, int length, int inout); 
 extern int dispatch_scsi_info(int ino, char *buffer, char **start, 
-                              off_t offset, int length, int inout); 
+			      off_t offset, int length, int inout); 
 
 
 /*
@@ -202,19 +202,19 @@ static struct dev_info device_list[] =
 {"NEC","CD-ROM DRIVE:841","1.0", BLIST_NOLUN},  /* Locks-up when LUN>0 polled. */
 {"RODIME","RO3000S","2.33", BLIST_NOLUN},       /* Locks up if polled for lun != 0 */
 {"SEAGATE", "ST157N", "\004|j", BLIST_NOLUN},   /* causes failed REQUEST SENSE on lun 1 
-                                                 * for aha152x controller, which causes 
-                                                 * SCSI code to reset bus.*/
+						 * for aha152x controller, which causes 
+						 * SCSI code to reset bus.*/
 {"SEAGATE", "ST296","921", BLIST_NOLUN},        /* Responds to all lun */
 {"SONY","CD-ROM CDU-541","4.3d", BLIST_NOLUN},
 {"SONY","CD-ROM CDU-55S","1.0i", BLIST_NOLUN},
 {"SONY","CD-ROM CDU-561","1.7x", BLIST_NOLUN},
 {"TANDBERG","TDC 3600","U07", BLIST_NOLUN},     /* Locks up if polled for lun != 0 */
 {"TEAC","CD-ROM","1.06", BLIST_NOLUN},          /* causes failed REQUEST SENSE on lun 1 
-                                                 * for seagate controller, which causes 
-                                                 * SCSI code to reset bus.*/
+						 * for seagate controller, which causes 
+						 * SCSI code to reset bus.*/
 {"TEXEL","CD-ROM","1.06", BLIST_NOLUN},         /* causes failed REQUEST SENSE on lun 1 
-                                                 * for seagate controller, which causes 
-                                                 * SCSI code to reset bus.*/
+						 * for seagate controller, which causes 
+						 * SCSI code to reset bus.*/
 {"QUANTUM","LPS525S","3110", BLIST_NOLUN},      /* Locks sometimes if polled for lun != 0 */
 {"QUANTUM","PD1225S","3110", BLIST_NOLUN},      /* Locks sometimes if polled for lun != 0 */
 {"MEDIAVIS","CDR-H93MV","1.31", BLIST_NOLUN},   /* Locks up if polled for lun != 0 */
@@ -407,12 +407,12 @@ void scan_scsis (struct Scsi_Host * shpnt, unchar hardcoded,
 		
 		/*
 		 * We need the for so our continue, etc. work fine.
-                 * We put this in a variable so that we can override
-                 * it during the scan if we detect a device *KNOWN*
-                 * to have multiple logical units.
+		 * We put this in a variable so that we can override
+		 * it during the scan if we detect a device *KNOWN*
+		 * to have multiple logical units.
 		 */
-                max_dev_lun = (max_scsi_luns < shpnt->max_lun ? 
-                               max_scsi_luns : shpnt->max_lun);
+		max_dev_lun = (max_scsi_luns < shpnt->max_lun ? 
+			       max_scsi_luns : shpnt->max_lun);
 
 		for (lun = 0; lun < max_dev_lun; ++lun)
 		{
@@ -555,8 +555,8 @@ void scan_scsis (struct Scsi_Host * shpnt, unchar hardcoded,
 				SDpnt->manufacturer = SCSI_MAN_NEC;
 			} else if (!strncmp(scsi_result+8,"TOSHIBA",7))
 			    SDpnt->manufacturer = SCSI_MAN_TOSHIBA;
-                        else if (!strncmp(scsi_result+8,"SONY",4))
-                            SDpnt->manufacturer = SCSI_MAN_SONY;
+			else if (!strncmp(scsi_result+8,"SONY",4))
+			    SDpnt->manufacturer = SCSI_MAN_SONY;
 			else
 			    SDpnt->manufacturer = SCSI_MAN_UNKNOWN;
 			
@@ -569,7 +569,7 @@ void scan_scsis (struct Scsi_Host * shpnt, unchar hardcoded,
 			SDpnt->changed = 0;
 			SDpnt->access_count = 0;
 			SDpnt->busy = 0;
-                        SDpnt->has_cmdblocks = 0;
+			SDpnt->has_cmdblocks = 0;
 			/*
 			 * Currently, all sequential devices are assumed to be
 			 * tapes, all random devices disk, with the appropriate
@@ -599,7 +599,7 @@ void scan_scsis (struct Scsi_Host * shpnt, unchar hardcoded,
 #endif
 			}
 			
-                        SDpnt->single_lun = 0;
+			SDpnt->single_lun = 0;
 			SDpnt->soft_reset =
 			    (scsi_result[7] & 1) && ((scsi_result[3] &7) == 2);
 			SDpnt->random = (type == TYPE_TAPE) ? 0 : 1;
@@ -640,10 +640,10 @@ void scan_scsis (struct Scsi_Host * shpnt, unchar hardcoded,
 
 			    SDpnt->disconnect = 0;
 
-                            /*
-                             * Get any flags for this device.
-                             */
-                            bflags = get_device_flags(scsi_result);
+			    /*
+			     * Get any flags for this device.
+			     */
+			    bflags = get_device_flags(scsi_result);
 
 			    
 			    /*
@@ -654,16 +654,16 @@ void scan_scsis (struct Scsi_Host * shpnt, unchar hardcoded,
 			     * change it here if it turns out that it isn't
 			     * a TEXEL drive.
 			     */
-                            if( (bflags & BLIST_BORKEN) == 0 )
-                            {
+			    if( (bflags & BLIST_BORKEN) == 0 )
+			    {
 				SDpnt->borken = 0;
-                            }
+			    }
 			    
 			    
 			    /* These devices need this "key" to unlock the
 			     * devices so we can use it 
 			     */
-                            if( (bflags & BLIST_KEY) != 0 ) {
+			    if( (bflags & BLIST_KEY) != 0 ) {
 				printk("Unlocked floptical drive.\n");
 				SDpnt->lockable = 0;
 				scsi_cmd[0] = MODE_SENSE;
@@ -706,28 +706,28 @@ void scan_scsis (struct Scsi_Host * shpnt, unchar hardcoded,
 			     */
 			    if(bflags & BLIST_NOLUN) break;
 
-                            /*
-                             * If we want to only allow I/O to one of the luns
-                             * attached to this device at a time, then we set this
-                             * flag.
-                             */
-                            if(bflags & BLIST_SINGLELUN)
-                            {
-                                SDpnt->single_lun = 1;
-                            }
+			    /*
+			     * If we want to only allow I/O to one of the luns
+			     * attached to this device at a time, then we set this
+			     * flag.
+			     */
+			    if(bflags & BLIST_SINGLELUN)
+			    {
+				SDpnt->single_lun = 1;
+			    }
 
-                            /*
-                             * If this device is known to support multiple units, override
-                             * the other settings, and scan all of them.
-                             */
-                            if(bflags & BLIST_FORCELUN)
-                            {
-                                /*
-                                 * We probably want to make this a variable, but this
-                                 * will do for now.
-                                 */
-                                max_dev_lun = 8;
-                            }
+			    /*
+			     * If this device is known to support multiple units, override
+			     * the other settings, and scan all of them.
+			     */
+			    if(bflags & BLIST_FORCELUN)
+			    {
+				/*
+				 * We probably want to make this a variable, but this
+				 * will do for now.
+				 */
+				max_dev_lun = 8;
+			    }
  
 
 			    /* Old drives like the MAXTOR XT-3280 say vers=0 */
@@ -741,10 +741,10 @@ void scan_scsis (struct Scsi_Host * shpnt, unchar hardcoded,
 			}
 		    }       /* if result == DID_OK ends */
 
-                    /*
-                     * This might screw us up with multi-lun devices, but the user can
-                     * scan for them too.
-                     */
+		    /*
+		     * This might screw us up with multi-lun devices, but the user can
+		     * scan for them too.
+		     */
 		    if(hardcoded == 1)
 			goto leave;
 		} /* for lun ends */
@@ -850,35 +850,35 @@ Scsi_Cmnd * request_queueable (struct request * req, Scsi_Device * device)
       
     SCpnt = device->host->host_queue;
     if (!device->single_lun) {
-        while(SCpnt){
-            if(SCpnt->target == device->id &&
-               SCpnt->lun == device->lun) {
-                if(SCpnt->request.dev < 0) break;
-            }
-            SCpnt = SCpnt->next;
-        }
+	while(SCpnt){
+	    if(SCpnt->target == device->id &&
+	       SCpnt->lun == device->lun) {
+		if(SCpnt->request.dev < 0) break;
+	    }
+	    SCpnt = SCpnt->next;
+	}
     } else {
-        while(SCpnt){
-            if(SCpnt->target == device->id) {
-                if (SCpnt->lun == device->lun) {
-                    if(found == NULL 
-                       && SCpnt->request.dev < 0) 
-                    {
-                        found=SCpnt;
-                    }
-                } 
-                if(SCpnt->request.dev >= 0) {
-                    /*
-                     * I think that we should really limit things to one
-                     * outstanding command per device - this is what tends to trip
-                     * up buggy firmware.
-                     */
-                    return NULL;
-                }
-            }
-            SCpnt = SCpnt->next;
-        }
-        SCpnt = found;
+	while(SCpnt){
+	    if(SCpnt->target == device->id) {
+		if (SCpnt->lun == device->lun) {
+		    if(found == NULL 
+		       && SCpnt->request.dev < 0) 
+		    {
+			found=SCpnt;
+		    }
+		} 
+		if(SCpnt->request.dev >= 0) {
+		    /*
+		     * I think that we should really limit things to one
+		     * outstanding command per device - this is what tends to trip
+		     * up buggy firmware.
+		     */
+		    return NULL;
+		}
+	    }
+	    SCpnt = SCpnt->next;
+	}
+	SCpnt = found;
     }
     
     if (!SCpnt) return NULL;
@@ -975,41 +975,41 @@ Scsi_Cmnd * allocate_device (struct request ** reqp, Scsi_Device * device,
     if (intr_count && SCSI_BLOCK(host)) return NULL;
     
     while (1==1){
-        SCpnt = device->host->host_queue;
-        if (!device->single_lun) {
-            while(SCpnt){
-                if(SCpnt->target == device->id &&
-                   SCpnt->lun == device->lun) {
-                   SCwait = SCpnt;
-                    if(SCpnt->request.dev < 0) break;
-                }
-                SCpnt = SCpnt->next;
-            }
-        } else {
-            while(SCpnt){
-                if(SCpnt->target == device->id) {
-                    if (SCpnt->lun == device->lun) {
-                        SCwait = SCpnt;
-                        if(found == NULL 
-                           && SCpnt->request.dev < 0) 
-                        {
-                            found=SCpnt;
-                        }
-                    } 
-                    if(SCpnt->request.dev >= 0) {
-                        /*
-                         * I think that we should really limit things to one
-                         * outstanding command per device - this is what tends to trip
-                         * up buggy firmware.
-                         */
-                        found = NULL;
-                        break;
-                    }
-                }
-                SCpnt = SCpnt->next;
-            }
-            SCpnt = found;
-        }
+	SCpnt = device->host->host_queue;
+	if (!device->single_lun) {
+	    while(SCpnt){
+		if(SCpnt->target == device->id &&
+		   SCpnt->lun == device->lun) {
+		   SCwait = SCpnt;
+		    if(SCpnt->request.dev < 0) break;
+		}
+		SCpnt = SCpnt->next;
+	    }
+	} else {
+	    while(SCpnt){
+		if(SCpnt->target == device->id) {
+		    if (SCpnt->lun == device->lun) {
+			SCwait = SCpnt;
+			if(found == NULL 
+			   && SCpnt->request.dev < 0) 
+			{
+			    found=SCpnt;
+			}
+		    } 
+		    if(SCpnt->request.dev >= 0) {
+			/*
+			 * I think that we should really limit things to one
+			 * outstanding command per device - this is what tends to trip
+			 * up buggy firmware.
+			 */
+			found = NULL;
+			break;
+		    }
+		}
+		SCpnt = SCpnt->next;
+	    }
+	    SCpnt = found;
+	}
 
 	save_flags(flags);
 	cli();
@@ -2198,7 +2198,8 @@ void * scsi_init_malloc(unsigned int size, int priority)
 		scsi_init_memory_start += size;
 	    }
 	}
-    memset((void *) retval, 0, size);
+    if (retval)
+	memset((void *) retval, 0, size);
     return (void *) retval;
 }
 
@@ -2341,19 +2342,22 @@ unsigned long scsi_dev_init (unsigned long memory_start, unsigned long memory_en
     
     dma_sectors = (dma_sectors + 15) & 0xfff0;
     dma_free_sectors = dma_sectors;  /* This must be a multiple of 16 */
+
+    if (dma_sectors)
+    {
+	dma_malloc_freelist = (unsigned char *)
+	    scsi_init_malloc(dma_sectors >> 3, GFP_ATOMIC);
+	memset(dma_malloc_freelist, 0, dma_sectors >> 3);
+
+	dma_malloc_pages = (unsigned char **)
+	    scsi_init_malloc(dma_sectors >> 1, GFP_ATOMIC);
+	memset(dma_malloc_pages, 0, dma_sectors >> 1);
+
+	for(i=0; i< dma_sectors >> 3; i++)
+	    dma_malloc_pages[i] = (unsigned char *)
+		scsi_init_malloc(PAGE_SIZE, GFP_ATOMIC | GFP_DMA);
     
-    dma_malloc_freelist = (unsigned char *)
-	scsi_init_malloc(dma_sectors >> 3, GFP_ATOMIC);
-    memset(dma_malloc_freelist, 0, dma_sectors >> 3);
-    
-    dma_malloc_pages = (unsigned char **)
-	scsi_init_malloc(dma_sectors >> 1, GFP_ATOMIC);
-    memset(dma_malloc_pages, 0, dma_sectors >> 1);
-    
-    for(i=0; i< dma_sectors >> 3; i++)
-	dma_malloc_pages[i] = (unsigned char *)
-	    scsi_init_malloc(PAGE_SIZE, GFP_ATOMIC | GFP_DMA);
-    
+    }
     /* OK, now we finish the initialization by doing spin-up, read
      * capacity, etc, etc 
      */
@@ -2440,40 +2444,40 @@ int scsi_proc_info(char *buffer, char **start, off_t offset, int length,
     HBA_ptr = scsi_hostlist;
 
     if(inout == 0) { 
-        size = sprintf(buffer+len,"Attached devices: %s\n", (scd)?"":"none");
-        len += size; 
-        pos = begin + len;
-        while (HBA_ptr) {
+	size = sprintf(buffer+len,"Attached devices: %s\n", (scd)?"":"none");
+	len += size; 
+	pos = begin + len;
+	while (HBA_ptr) {
 #if 0
-            size += sprintf(buffer+len,"scsi%2d: %s\n", (int) HBA_ptr->host_no, HBA_ptr->hostt->procname);
-            len += size; 
-            pos = begin + len;
+	    size += sprintf(buffer+len,"scsi%2d: %s\n", (int) HBA_ptr->host_no, HBA_ptr->hostt->procname);
+	    len += size; 
+	    pos = begin + len;
 #endif
-            scd = scsi_devices;
-            while (scd) {
-                if (scd->host == HBA_ptr) {
-                    proc_print_scsidevice(scd, buffer, &size, len);
-                    len += size; 
-                    pos = begin + len;
-                    
-                    if (pos < offset) {
-                        len = 0;
-                        begin = pos;
-                    }
-                    if (pos > offset + length)
-                        goto stop_output;
-                }
-                scd = scd->next;
-            }
+	    scd = scsi_devices;
+	    while (scd) {
+		if (scd->host == HBA_ptr) {
+		    proc_print_scsidevice(scd, buffer, &size, len);
+		    len += size; 
+		    pos = begin + len;
+		    
+		    if (pos < offset) {
+			len = 0;
+			begin = pos;
+		    }
+		    if (pos > offset + length)
+			goto stop_output;
+		}
+		scd = scd->next;
+	    }
 	    HBA_ptr = HBA_ptr->next;
-        }
-        
+	}
+	
     stop_output:
-        *start=buffer+(offset-begin);   /* Start of wanted data */
-        len-=(offset-begin);	    /* Start slop */
-        if(len>length)
-            len = length;		    /* Ending slop */
-        return (len);     
+	*start=buffer+(offset-begin);   /* Start of wanted data */
+	len-=(offset-begin);	    /* Start slop */
+	if(len>length)
+	    len = length;		    /* Ending slop */
+	return (len);     
     }
 
     if(!buffer || length < 25 || strncmp("scsi", buffer, 4))
@@ -2623,15 +2627,18 @@ static int scsi_register_host(Scsi_Host_Template * tpnt)
 	 */
 	if( new_dma_sectors < dma_sectors )
 	    new_dma_sectors = dma_sectors;
-	
-	new_dma_malloc_freelist = (unsigned char *)
-	    scsi_init_malloc(new_dma_sectors >> 3, GFP_ATOMIC);
-	memset(new_dma_malloc_freelist, 0, new_dma_sectors >> 3);
-	
-	new_dma_malloc_pages = (unsigned char **)
-	    scsi_init_malloc(new_dma_sectors >> 1, GFP_ATOMIC);
-	memset(new_dma_malloc_pages, 0, new_dma_sectors >> 1);
-	
+
+	if (new_dma_sectors)
+	{
+	    new_dma_malloc_freelist = (unsigned char *)
+		scsi_init_malloc(new_dma_sectors >> 3, GFP_ATOMIC);
+	    memset(new_dma_malloc_freelist, 0, new_dma_sectors >> 3);
+
+	    new_dma_malloc_pages = (unsigned char **)
+		scsi_init_malloc(new_dma_sectors >> 1, GFP_ATOMIC);
+	    memset(new_dma_malloc_pages, 0, new_dma_sectors >> 1);
+	}
+
 	/*
 	 * If we need more buffers, expand the list.
 	 */
@@ -2646,13 +2653,19 @@ static int scsi_register_host(Scsi_Host_Template * tpnt)
 	 */
 	save_flags(flags);
 	cli();
-	memcpy(new_dma_malloc_freelist, dma_malloc_freelist, dma_sectors >> 3);
-	scsi_init_free(dma_malloc_freelist, dma_sectors>>3);
+	if (dma_malloc_freelist)
+	{
+	    memcpy(new_dma_malloc_freelist, dma_malloc_freelist, dma_sectors >> 3);
+	    scsi_init_free(dma_malloc_freelist, dma_sectors>>3);
+	}
 	dma_malloc_freelist = new_dma_malloc_freelist;
 	
-	memcpy(new_dma_malloc_pages, dma_malloc_pages, dma_sectors >> 1);
-	scsi_init_free((char *) dma_malloc_pages, dma_sectors>>1);
-	
+	if (dma_malloc_pages)
+	{
+	    memcpy(new_dma_malloc_pages, dma_malloc_pages, dma_sectors >> 1);
+	    scsi_init_free((char *) dma_malloc_pages, dma_sectors>>1);
+	}
+
 	dma_free_sectors += new_dma_sectors - dma_sectors;
 	dma_malloc_pages = new_dma_malloc_pages;
 	dma_sectors = new_dma_sectors;
@@ -2739,7 +2752,7 @@ static void scsi_unregister_host(Scsi_Host_Template * tpnt)
 		scsi_init_free((char *) sdpnt->host->host_queue, sizeof(Scsi_Cmnd));
 		sdpnt->host->host_queue = SCpnt;
 		if (SCpnt) SCpnt->prev = NULL;
-                sdpnt->has_cmdblocks = 0;
+		sdpnt->has_cmdblocks = 0;
 	    }
     
     /* Next free up the Scsi_Device structures for this host */
@@ -2904,7 +2917,7 @@ static int scsi_unregister_device(struct Scsi_Device_Template * tpnt)
 		    scsi_init_free((char *) SCpnt, sizeof(*SCpnt));
 		}
 	    }
-            SDpnt->has_cmdblocks = 0;
+	    SDpnt->has_cmdblocks = 0;
 	}
     }
     /*

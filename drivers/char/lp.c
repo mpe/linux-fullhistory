@@ -33,7 +33,7 @@
 
 /* the BIOS manuals say there can be up to 4 lpt devices
  * but I have not seen a board where the 4th address is listed
- * if you have different hardware change the table below 
+ * if you have different hardware change the table below
  * please let me know if you have different equipment
  * if you have more than 3 printers, remember to increase LP_NO
  */
@@ -41,7 +41,7 @@ struct lp_struct lp_table[] = {
 	{ 0x3bc, 0, 0, LP_INIT_CHAR, LP_INIT_TIME, LP_INIT_WAIT, NULL, NULL, 0, 0, 0, {0} },
 	{ 0x378, 0, 0, LP_INIT_CHAR, LP_INIT_TIME, LP_INIT_WAIT, NULL, NULL, 0, 0, 0, {0} },
 	{ 0x278, 0, 0, LP_INIT_CHAR, LP_INIT_TIME, LP_INIT_WAIT, NULL, NULL, 0, 0, 0, {0} },
-}; 
+};
 #define LP_NO 3
 
 /* Test if printer is ready (and optionally has no error conditions) */
@@ -51,9 +51,9 @@ struct lp_struct lp_table[] = {
   ((LP_F(minor) & LP_CAREFUL) ? _LP_CAREFUL_READY(status) : 1)
 #define _LP_CAREFUL_READY(status) \
    (status & (LP_PBUSY|LP_POUTPA|LP_PSELECD|LP_PERRORP)) == \
-      (LP_PBUSY|LP_PSELECD|LP_PERRORP) 
+      (LP_PBUSY|LP_PSELECD|LP_PERRORP)
 
-/* 
+/*
  * All my debugging code assumes that you debug with only one printer at
  * a time. RWWH
  * Debug info moved into stats area, so this is no longer true (Rob Janssen)
@@ -72,7 +72,7 @@ static int lp_reset(int minor)
 static inline int lp_char_polled(char lpchar, int minor)
 {
 	int status, wait = 0;
-	unsigned long count  = 0; 
+	unsigned long count  = 0;
 	struct lp_stats *stats;
 
 	do {
@@ -92,10 +92,10 @@ static inline int lp_char_polled(char lpchar, int minor)
 	/* must wait before taking strobe high, and after taking strobe
 	   low, according spec.  Some printers need it, others don't. */
 	while(wait != LP_WAIT(minor)) wait++;
-        /* control port takes strobe high */
+	/* control port takes strobe high */
 	outb_p(( LP_PSELECP | LP_PINITP | LP_PSTROBE ), ( LP_C( minor )));
 	while(wait) wait--;
-        /* take strobe low */
+	/* take strobe low */
 	outb_p(( LP_PSELECP | LP_PINITP ), ( LP_C( minor )));
 	/* update waittime statistics */
 	if (count > stats->maxwait) {
@@ -116,7 +116,7 @@ static inline int lp_char_polled(char lpchar, int minor)
 static inline int lp_char_interrupt(char lpchar, int minor)
 {
 	int wait;
-	unsigned long count = 0; 
+	unsigned long count = 0;
 	unsigned char status;
 	struct lp_stats *stats;
 
@@ -269,7 +269,7 @@ static inline int lp_write_polled(unsigned int minor, const char * buf, int coun
 				current->timeout = jiffies + LP_TIMEOUT_POLLED;
 				schedule();
 			} else
-	                /* not offline or out of paper. on fire? */
+			/* not offline or out of paper. on fire? */
 			if (!(status & LP_PERRORP)) {
 				printk(KERN_ERR "lp%d reported invalid error status (on fire, eh?)\n", minor);
 				if(LP_F(minor) & LP_ABORT)
@@ -340,7 +340,7 @@ static int lp_open(struct inode * inode, struct file * file)
 	   have commandeered O_NONBLOCK, even though it is being used in
 	   a non-standard manner.  This is strictly a Linux hack, and
 	   should most likely only ever be used by the tunelp application. */
-        if ((LP_F(minor) & LP_ABORTOPEN) && !(file->f_flags & O_NONBLOCK)) {
+	if ((LP_F(minor) & LP_ABORTOPEN) && !(file->f_flags & O_NONBLOCK)) {
 		int status = LP_S(minor);
 		if (status & LP_POUTPA) {
 			printk(KERN_INFO "lp%d out of paper\n", minor);
@@ -545,7 +545,7 @@ long lp_init(long kmem_start)
 		printk("lp: unable to get major %d\n", LP_MAJOR);
 #ifdef MODULE
 		return -EIO;
-#else		
+#else
 		return kmem_start;
 #endif
 	}
@@ -577,7 +577,7 @@ long lp_init(long kmem_start)
 
 #ifdef MODULE
 	return 0;
-#else	
+#else
 	return kmem_start;
 #endif
 }
@@ -586,14 +586,19 @@ long lp_init(long kmem_start)
 #ifdef MODULE
 void cleanup_module(void)
 {
-        int offset;
-	if(MOD_IN_USE)
-               printk("lp: busy - remove delayed\n");
-        else {
-               unregister_chrdev(LP_MAJOR,"lp");
-	       for (offset = 0; offset < LP_NO; offset++) 
-			if (LP_F(offset) & LP_EXIST) 
-		 		release_region(LP_B(offset),3);
+	int offset;
+
+	if(MOD_IN_USE) {
+	       printk("lp: busy - remove delayed\n");
+	       return;
+	}
+	unregister_chrdev(LP_MAJOR,"lp");
+	for (offset = 0; offset < LP_NO; offset++) {
+		int base, size;
+		base = LP_B(offset);
+		size = (base == 0x3bc)? 3 : 8;
+		if (LP_F(offset) & LP_EXIST)
+			release_region(LP_B(offset),size);
 	}
 }
 

@@ -55,6 +55,13 @@ static struct swap_info_struct {
 
 extern int shm_swap (int, unsigned long);
 
+/*
+ * To save us from swapping out pages which have just been swapped in and
+ * have not been modified since then, we keep in swap_cache[page>>PAGE_SHIFT]
+ * the swap entry which was last used to fill the page, or zero if the
+ * page does not currently correspond to a page in swap. PAGE_DIRTY makes
+ * this info useless.
+ */
 unsigned long *swap_cache;
 
 #ifdef SWAP_CACHE_INFO
@@ -366,12 +373,14 @@ static inline int try_to_swap_out(struct vm_area_struct* vma, unsigned long addr
 		return 0;
 	}	
 	if (pte_dirty(pte)) {
-		if (mem_map[MAP_NR(page)] != 1)
-			return 0;
 		if (vma->vm_ops && vma->vm_ops->swapout) {
+			pid_t pid = vma->vm_task->pid;
 			vma->vm_task->mm->rss--;
-			vma->vm_ops->swapout(vma, address-vma->vm_start, page_table);
+			if (vma->vm_ops->swapout(vma, address - vma->vm_start + vma->vm_offset, page_table))
+				kill_proc(pid, SIGBUS, 1);
 		} else {
+			if (mem_map[MAP_NR(page)] != 1)
+				return 0;
 			if (!(entry = get_swap_page()))
 				return 0;
 			vma->vm_task->mm->rss--;

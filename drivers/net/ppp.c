@@ -1775,7 +1775,7 @@ ppp_xmit(struct sk_buff *skb, struct device *dev)
 
   /* If doing demand dial then divert the first frame to pppd. */
   if (ppp->flags & SC_IP_DOWN) {
-    if (ppp->flags & SC_IP_FLUSH == 0) {
+    if ((ppp->flags & SC_IP_FLUSH) == 0) {
       if (ppp_us_queue (ppp, proto, p, len))
 	ppp->flags |= SC_IP_FLUSH;
     }

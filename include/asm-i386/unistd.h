@@ -149,6 +149,7 @@
 #define __NR_getdents		141
 #define __NR__newselect		142
 #define __NR_flock		143
+#define __NR_msync		144
 
 /* XXX - _foo needs to be __foo, while __NR_bar could be _NR_bar. */
 #define _syscall0(type,name) \

@@ -1502,7 +1502,7 @@ static int ip_fw_fwd_procinfo(char *buffer, char **start, off_t offset,
 #ifdef CONFIG_IP_MASQUERADE
 
 static int ip_msqhst_procinfo(char *buffer, char **start, off_t offset,
-			      int length)
+			      int length, int unused)
 {
 	off_t pos=0, begin=0;
 	struct ip_masq *ms;

@@ -1171,6 +1171,7 @@ unsigned long bread_page(unsigned long address, dev_t dev, int b[], int size, in
 	return address;
 }
 
+#if 0
 /*
  * bwrite_page writes a page out to the buffer cache and/or the physical device.
  * It's used for mmap writes (the same way bread_page() is used for mmap reads).
@@ -1192,9 +1193,10 @@ void bwrite_page(unsigned long address, dev_t dev, int b[], int size)
 			mark_buffer_dirty(bh[i], 0);
 			brelse(bh[i]);
 		} else
-			memset((void *) address, 0, size);
+			memset((void *) address, 0, size); /* ???!?!! */
 	}	
 }
+#endif
 
 /*
  * Try to increase the number of buffers available: the size argument

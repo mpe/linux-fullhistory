@@ -191,7 +191,7 @@ aha152x.o: aha152x.c
 	$(CC) $(CFLAGS) $(AHA152X) -c aha152x.c 
 
 aic7xxx_asm:	aic7xxx_asm.c
-	$(CC) $(CFLAGS) -o $@ aic7xxx_asm.c
+	$(HOSTCC) -o $@ aic7xxx_asm.c
 
 aic7xxx.c: aic7xxx_seq.h
 aic7xxx_seq.h:	aic7xxx_asm aic7xxx.seq

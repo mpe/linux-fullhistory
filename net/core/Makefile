@@ -9,10 +9,10 @@
 
 O_TARGET := core.o
 
-O_OBJS	:=
+O_OBJS	:= sock.o skbuff.o iovec.o datagram.o
 
 ifdef CONFIG_NET
-O_OBJS	+= sock.o dev.o dev_mcast.o iovec.o skbuff.o datagram.o
+O_OBJS	+= dev.o dev_mcast.o
 endif
 
 include $(TOPDIR)/Rules.make

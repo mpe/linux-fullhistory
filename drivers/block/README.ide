@@ -3,7 +3,12 @@ README.ide -- Information regarding ide.c and ide-cd.c (IDE driver in 1.3.x)
 Supported by:  mlord@bnr.ca           -- disks, interfaces, probing
                snyder@fnald0.fnal.gov -- cdroms, ATAPI, audio
 
-(see description later on below for handling BIG IDE drives with >1024 cyls).
+   +-----------------------------------------------------------------+
+   |  The hdparm utility for controlling various IDE features is     |
+   |  packaged separately.  Look for it on popular linux FTP sites.  |
+   +-----------------------------------------------------------------+
+
+See description later on below for handling BIG IDE drives with >1024 cyls.
 
 Major features of ide.c & ide-cd.c:
 
@@ -35,16 +40,29 @@ NEW!	- transparent support for DiskManager 6.0x and "Dynamic Disk Overlay"
 NEW!		- should work for for EZ-Drive disks as well (not verified)
 		- works with Linux fdisk, LILO, loadlin, bootln, etc..
 NEW!	- ide-cd.c now compiles separate from ide.c
+NEW!	- Bus-Master DMA support for Intel PCI Triton chipset IDE interfaces
+		- for details, see comments at top of triton.c
 
-For a list of work underway, see the comments near the top of ide.c and ide-cd.c
+For work in progress, see the comments in ide.c, ide-cd.c, and triton.c.
 
 ***
-
-IMPORTANT NOTICE:  "CMD" EIDE Interfaces will not (by default) work *reliably*
-when drives are attached to the second interface.  To "fix" this, supply the
-special kernel "command line" parameter to LILO:    ide1=serialize
-Failure to do so can cause severe data corruption!
-
+***  IMPORTANT NOTICES:
+***  ==================
+***
+***  "CMD" EIDE Interfaces will not (by default) work *reliably* when drives
+***  are attached to the second interface.  This is due to a flaw in the
+***  hardware.  To "fix" this, supply the special kernel "command line"
+***  parameter to LILO or LOADLIN:    ide1=serialize
+***
+***  "CMD 640B" EIDE Interfaces will not work *reliably* when "hdparm -u1"
+***  (interrupt unmasking) is used.  This is due to a flaw in the hardware,
+***  and is only a problem when "hdparm -u1" is used after booting.
+***
+***  "RZ1000" EIDE Interfaces will also not work *reliably* when "hdparm -u1"
+***  (interrupt unmasking) is used.  This is due to a flaw in the hardware,
+***  and is only a problem when "hdparm -u1" is used after booting.
+***
+***  Failure to abide by these restrictions can cause severe data corruption!
 ***
 
 To access devices on the 2nd/3rd/4th interfaces, device entries must first be
@@ -76,7 +94,7 @@ seldom occurs.  Be careful, and if in doubt, don't do it!
 
 Drives are normally found by auto-probing and/or examining the CMOS/BIOS data.
 For really weird situations, the apparent (fdisk) geometry can also be specified
-on the kernel "command line" using LILO.  The format of such lines is:   
+on the kernel "command line" using LILO.  The format of such lines is:
 
 	hdx=cyls,heads,sects,wpcom,irq
 or	hdx=cdrom
@@ -139,9 +157,6 @@ and still allows newer hardware to run on the 2nd/3rd/4th IDE ports
 under control of ide.c.   To have ide.c also "take over" the primary
 IDE port in this situation, use the "command line" parameter:  ide0=0x1f0
 
-The hdparm.c program for controlling various IDE features is now packaged
-separately.  Look for it on popular linux FTP sites.
-
 mlord@bnr.ca
 snyder@fnald0.fnal.gov
 ================================================================================
@@ -151,7 +166,7 @@ Summary of ide driver parameters for kernel "command line":
 
   "hdx="  is recognized for all "x" from "a" to "h", such as "hdc".
   "idex=" is recognized for all "x" from "0" to "3", such as "ide1".
- 
+
   "hdx=noprobe"		: drive may be present, but do not probe for it
   "hdx=nowerr"		: ignore the WRERR_STAT bit on this drive
   "hdx=cdrom"		: drive is present, and is a cdrom drive
@@ -300,7 +315,7 @@ by doing the following after installing slackware (or whatever):
 	0. Boot from the "boot floppy" created during the installation
         1. Mount your DOS partition as /dos (and stick it in /etc/fstab)
         2. Move your kernel (/vmlinuz) to /dos/vmlinuz with:  mv /vmlinuz /dos
-        3. Edit /etc/lilo.conf to change /vmlinuz to /dos/vmlinuz 
+        3. Edit /etc/lilo.conf to change /vmlinuz to /dos/vmlinuz
         4. Move /boot to /dos/boot with:  cp -a /boot /dos ; rm -r /boot
         5. Create a symlink for LILO to use with:  ln -s /dos/boot /boot
         6. Re-run LILO with:  lilo

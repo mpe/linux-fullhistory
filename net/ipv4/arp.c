@@ -691,7 +691,7 @@ int arp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
  *	Check for bad requests for 127.x.x.x and requests for multicast
  *	addresses.  If this is one such, delete it.
  */
-	if (IN_LOOPBACK(tip) || IN_MULTICAST(tip))
+	if (LOOPBACK(tip) || MULTICAST(tip))
 	{
 		kfree_skb(skb, FREE_READ);
 		return 0;

@@ -73,7 +73,7 @@ struct pci_dev_info dev_info[] = {
 	BRIDGE( INTEL,		INTEL_82434,	"82434LX Mercury/Neptune", 0x00),
 	DEVICE( INTEL,		INTEL_82430,	"82430ZX Aries"),
 	DEVICE( INTEL,		INTEL_82437,	"82437 Triton"),
-	DEVICE( INTEL,		INTEL_82371,	"82471 Triton"),
+	DEVICE( INTEL,		INTEL_82371,	"82371 Triton"),
 	DEVICE( INTEL,		INTEL_82438,	"82438"),
 	DEVICE( INTEL,		INTEL_7116,	"SAA7116"),
 	DEVICE( INTEL,		INTEL_82865,	"82865"),
@@ -261,7 +261,7 @@ const char *pci_strclass (unsigned int class)
 	      case PCI_CLASS_NOT_DEFINED_VGA:		return "VGA compatible device";
 
 	      case PCI_CLASS_STORAGE_SCSI:		return "SCSI storage controller";
-	      case PCI_CLASS_STORAGE_IDE:		return "IDE controller";
+	      case PCI_CLASS_STORAGE_IDE:		return "IDE interface";
 	      case PCI_CLASS_STORAGE_FLOPPY:		return "Floppy disk controller";
 	      case PCI_CLASS_STORAGE_IPI:		return "IPI bus controller";
 	      case PCI_CLASS_STORAGE_RAID:		return "RAID bus controller";

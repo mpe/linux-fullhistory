@@ -106,6 +106,10 @@ ifdef CONFIG_BLK_DEV_IDE
 L_OBJS += ide.o
 endif
 
+ifdef CONFIG_BLK_DEV_TRITON
+L_OBJS += triton.o
+endif
+
 ifdef CONFIG_BLK_DEV_IDECD
 L_OBJS += ide-cd.o
 endif

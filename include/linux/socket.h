@@ -48,6 +48,7 @@ struct msghdr
 #define AF_BRIDGE	7	/* Multiprotocol bridge 	*/
 #define AF_AAL5		8	/* Reserved for Werner's ATM 	*/
 #define AF_X25		9	/* Reserved for X.25 project 	*/
+#define AF_INET6	10	/* IP version 6			*/
 #define AF_MAX		12	/* For now.. */
 
 /* Protocol families, same as address families. */
@@ -61,6 +62,7 @@ struct msghdr
 #define PF_BRIDGE	AF_BRIDGE
 #define PF_AAL5		AF_AAL5
 #define PF_X25		AF_X25
+#define PF_INET6	AF_INET6
 
 #define PF_MAX		AF_MAX
 

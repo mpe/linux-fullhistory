@@ -363,6 +363,7 @@ extern __inline__ void skb_trim(struct sk_buff *skb, int len)
 extern struct sk_buff *		skb_recv_datagram(struct sock *sk,unsigned flags,int noblock, int *err);
 extern int			datagram_select(struct sock *sk, int sel_type, select_table *wait);
 extern void			skb_copy_datagram(struct sk_buff *from, int offset, char *to,int size);
+extern void			skb_copy_datagram_iovec(struct sk_buff *from, int offset, struct iovec *to,int size);
 extern void			skb_free_datagram(struct sk_buff *skb);
 
 #endif	/* __KERNEL__ */

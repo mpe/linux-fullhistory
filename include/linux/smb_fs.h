@@ -124,13 +124,18 @@ int smb_conn_is_valid(struct smb_server *server);
 
 /* linux/fs/smbfs/proc.c */
 dword smb_len(unsigned char *packet);
+byte *smb_encode_smb_length(byte *p, dword len);
 int smb_proc_open(struct smb_server *server, const char *pathname,
                   int len, struct smb_dirent *entry);
 int smb_proc_close(struct smb_server *server, struct smb_dirent *finfo);
 int smb_proc_read(struct smb_server *server, struct smb_dirent *finfo, 
 		  off_t offset, long count, char *data, int fs);
+int smb_proc_read_raw(struct smb_server *server, struct smb_dirent *finfo, 
+                      off_t offset, long count, char *data);
 int smb_proc_write(struct smb_server *server, struct smb_dirent *finfo,
 		   off_t offset, int count, const char *data);
+int smb_proc_write_raw(struct smb_server *server, struct smb_dirent *finfo, 
+                       off_t offset, long count, const char *data);
 int smb_proc_create(struct smb_server *server, const char *path,
                     int len, struct smb_dirent *entry);
 int smb_proc_mknew(struct smb_server *server, const char *path, int len,
@@ -161,6 +166,10 @@ int smb_proc_trunc(struct smb_server *server, word fid, dword length);
 int smb_release(struct smb_server *server);
 int smb_connect(struct smb_server *server);
 int smb_request(struct smb_server *server);
+int smb_request_read_raw(struct smb_server *server,
+                         unsigned char *target, int max_len);
+int smb_request_write_raw(struct smb_server *server,
+                          unsigned const char *source, int length);
 int smb_catch_keepalive(struct smb_server *server);
 int smb_dont_catch_keepalive(struct smb_server *server);
 int smb_trans2_request(struct smb_server *server,

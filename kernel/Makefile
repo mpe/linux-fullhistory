@@ -20,6 +20,8 @@ O_OBJS     += $(SYMTAB_OBJS)
 
 ifdef CONFIG_MODVERSIONS
 $(O_TARGET): $(SYMTAB_OBJS:.o=.ver)
+dep: $(SYMTAB_OBJS:.o=.ver)
+fastdep: $(SYMTAB_OBJS:.o=.ver)
 endif
 
 include $(TOPDIR)/Rules.make

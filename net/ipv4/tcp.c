@@ -886,7 +886,7 @@ void tcp_err(int err, unsigned char *header, unsigned long daddr,
 	 * until we time out, or the user gives up.
 	 */
 
-	if (icmp_err_convert[err & 0xff].fatal || sk->state == TCP_SYN_SENT) 
+	if (err < 13 && (icmp_err_convert[err & 0xff].fatal || sk->state == TCP_SYN_SENT))
 	{
 		if (sk->state == TCP_SYN_SENT) 
 		{

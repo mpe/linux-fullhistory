@@ -252,7 +252,7 @@ ad_leave_MCE (ad1848_info * devc)
   prev = INB (io_Index_Addr (devc));
   OUTB (0x00, io_Index_Addr (devc));	/* Clear the MCE bit */
 
-  if (prev & 0x40 == 0)		/* Not in MCE mode */
+  if ((prev & 0x40) == 0)		/* Not in MCE mode */
     {
       RESTORE_INTR (flags);
       return;

@@ -14,9 +14,8 @@ function fileExists(f,    TMP, dummy, result) {
 			return "Yes"
 		} else {return ""}
 	}
-	ERRNO=""
-	getline dummy < f
-	if(!length(ERRNO)) {
+	ERRNO = getline dummy < f
+	if(ERRNO >= 0) {
 		close(f)
 		return FILEHASH[f]="Yes"
 	} else {

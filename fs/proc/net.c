@@ -36,49 +36,6 @@
 #include <linux/config.h>
 #include <linux/mm.h>
 
-static struct file_operations proc_netdir_operations = {
-	NULL,			/* lseek - default */
-	NULL,			/* read - bad */
-	NULL,			/* write - bad */
-	proc_readdir,		/* readdir */
-	NULL,			/* select - default */
-	NULL,			/* ioctl - default */
-	NULL,			/* mmap */
-	NULL,			/* no special open code */
-	NULL,			/* no special release code */
-	NULL			/* can't fsync */
-};
-
-/*
- * proc directories can do almost nothing..
- */
-static struct inode_operations proc_netdir_inode_operations = {
-	&proc_netdir_operations,	/* default net directory file-ops */
-	NULL,			/* create */
-	proc_lookup,		/* lookup */
-	NULL,			/* link */
-	NULL,			/* unlink */
-	NULL,			/* symlink */
-	NULL,			/* mkdir */
-	NULL,			/* rmdir */
-	NULL,			/* mknod */
-	NULL,			/* rename */
-	NULL,			/* readlink */
-	NULL,			/* follow_link */
-	NULL,			/* bmap */
-	NULL,			/* truncate */
-	NULL			/* permission */
-};
-
-struct proc_dir_entry proc_net = {
-	PROC_NET, 3, "net",
-	S_IFDIR | S_IRUGO | S_IXUGO, 2, 0, 0,
-	0, &proc_netdir_inode_operations,
-	NULL, NULL,
-	NULL,
-	NULL, NULL	
-};
-
 #define PROC_BLOCK_SIZE	(3*1024)		/* 4K page size but our output routines use some slack for overruns */
 
 static int proc_readnet(struct inode * inode, struct file * file,

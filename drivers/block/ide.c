@@ -1,5 +1,5 @@
 /*
- *  linux/drivers/block/ide.c	Version 5.03  Aug 13, 1995
+ *  linux/drivers/block/ide.c	Version 5.10  Aug 26, 1995
  *
  *  Copyright (C) 1994, 1995  Linus Torvalds & authors (see below)
  */
@@ -115,12 +115,20 @@
  *  Version 5.03	tune-ups, comments, remove "busy wait" from drive resets
  *			removed PROBE_FOR_IRQS option -- no longer needed
  *			OOOPS!  fixed "bad access" bug for 2nd drive on an i/f
+ *  Version 5.04	changed "ira %d" to "irq %d" in DEBUG message
+ *			added more comments, cleaned up unexpected_intr()
+ *			OOOPS!  fixed null pointer problem in ide reset code
+ *			added autodetect for Triton chipset -- no effect yet
+ *  Version 5.05	OOOPS!  fixed bug in revalidate_disk()
+ *			OOOPS!  fixed bug in ide_do_request()
+ *			added ATAPI reset sequence for cdroms
+ *  Version 5.10	added Bus-Mastered DMA support for Triton Chipset
+ *			some (mostly) cosmetic changes
  *
  *  Driver compile-time options are in ide.h
  *
  *  To do, in likely order of completion:
  *	- add in several updates from my email collection (soon folks!)
- *	- add full support for Intel Triton chipset, including bus-mastered DMA
  *	- improved CMD support:  handing this off to someone else
  *	- find someone to work on IDE *tape drive* support
  */
@@ -141,6 +149,10 @@
 #include <linux/genhd.h>
 #include <asm/byteorder.h>
 #include <asm/irq.h>
+
+#ifdef CONFIG_PCI
+#include <linux/bios32.h>
+#endif /* CONFIG_PCI */
 
 #include "ide.h"
 
@@ -196,49 +208,45 @@ void ide_set_recovery_timer (ide_hwif_t *hwif)
  * ide_drive_t structs as needed, rather than always consuming memory
  * for the max possible number (MAX_HWIFS * MAX_DRIVES) of them.
  */
+#define MAGIC_COOKIE 0x12345678
 static void init_ide_data (void)
 {
+	byte *p;
 	unsigned int h, unit;
-	static unsigned long magic_cookie = 0x12345678;
+	static unsigned long magic_cookie = MAGIC_COOKIE;
 
-	if (magic_cookie != 0x12345678)
+	if (magic_cookie != MAGIC_COOKIE)
 		return;		/* already initialized */
 	magic_cookie = 0;
 
 	for (h = 0; h < 16; ++h)
 		 irq_to_hwgroup[h] = NULL;
 
+	/* bulk initialize hwif & drive info with zeros */
+	p = ((byte *) ide_hwifs) + sizeof(ide_hwifs);
+	do {
+		*--p = 0;
+	} while (p > (byte *) ide_hwifs);
+
 	for (h = 0; h < MAX_HWIFS; ++h) {
 		ide_hwif_t *hwif = &ide_hwifs[h];
 
+		/* fill in any non-zero initial values */
 		hwif->noprobe	= (h > 1);
-		hwif->hwgroup	= NULL;
 		hwif->io_base	= default_io_base[h];
 		hwif->ctl_port	= hwif->io_base ? hwif->io_base + 0x206 : 0x000;
 #ifdef CONFIG_BLK_DEV_HD
 		if (hwif->io_base == HD_DATA)
 			hwif->noprobe = 1; /* may be overriden by ide_setup() */
 #endif /* CONFIG_BLK_DEV_HD */
-		hwif->gd	= NULL;
-		hwif->irq	= 0;  /* default_irqs[h] used when probe fails */
 		hwif->major	= ide_hwif_to_major[h];
 		hwif->name[0]	= 'i';
 		hwif->name[1]	= 'd';
 		hwif->name[2]	= 'e';
 		hwif->name[3]	= '0' + h;
-		hwif->name[4]	= '\0';
-		hwif->present	= 0;
-		hwif->next	= NULL;
-		hwif->reset_timeout = 0;
 
 		for (unit = 0; unit < MAX_DRIVES; ++unit) {
 			ide_drive_t *drive = &hwif->drives[unit];
-
-			/* bulk initialize drive info with zeros */
-			byte *p = ((byte *) drive) + sizeof(ide_drive_t);
-			do {
-				*--p = 0;
-			} while (p > (byte *) drive);
 
 			/* fill in any non-zero initial values */
 			drive->select.all		= (unit<<4)|0xa0;
@@ -257,7 +265,13 @@ static void init_ide_data (void)
 
 #ifdef __i386__
 #define VLB_SYNC 1
-
+/*
+ * Some localbus EIDE interfaces require a special access sequence
+ * when using 32-bit I/O instructions to transfer data.  We call this
+ * the "vlb_sync" sequence, which consists of three successive reads
+ * of the sector count register location, with interrupts disabled
+ * to ensure that the reads all happen together.
+ */
 static inline void do_vlb_sync (unsigned short port) {
 	unsigned int _v;
 	__asm__ __volatile__	(
@@ -404,16 +418,30 @@ static void ide_geninit (struct gendisk *gd)
 }
 
 /*
- * ide_alloc(): memory allocation for using during driver initialization.
+ * ide_alloc(): memory allocation for use *only* during driver initialization.
+ * If "within_area" is non-zero, the memory will be allocated such that
+ * it lies entirely within a "within_area" sized area (eg. 4096).  This is
+ * needed for DMA stuff.  "within_area" must be a power of two (not validated).
+ * All allocations are longword aligned.
  */
-static unsigned long init_mem_start = 0uL;	/* used by init routines */
+static unsigned long ide_mem_start = 0uL;	/* used by ide_alloc() */
 
-static inline void *ide_alloc (unsigned long bytecount)
+void *ide_alloc (unsigned long bytecount, unsigned long within_area)
 {
-	unsigned long p = init_mem_start;
-	if (!p) panic("ide: ide_alloc() not valid now\n");
-	init_mem_start += (bytecount + 3uL) & ~3uL;
-	return (void *) p;
+	const unsigned long longsize_m1 = (sizeof(long) - 1);
+	void *p;
+
+	if (!ide_mem_start)
+		panic("ide: ide_alloc() not valid now\n");
+	ide_mem_start = (ide_mem_start + longsize_m1) & ~longsize_m1;
+	if (within_area) {
+		unsigned long fraction = within_area - (ide_mem_start & (within_area - 1));
+		if (fraction < bytecount)
+			ide_mem_start += fraction; /* realign to a new page */
+	}
+	p = (void *) ide_mem_start;
+	ide_mem_start += (bytecount + longsize_m1) & ~longsize_m1;
+	return p;
 }
 
 /*
@@ -434,10 +462,10 @@ static void init_gendisk (ide_hwif_t *hwif)
 			break;
 	}
 	minors    = units * (1<<PARTN_BITS);
-	gd        = ide_alloc(sizeof(struct gendisk));
-	gd->sizes = ide_alloc(minors * sizeof(int));
-	gd->part  = ide_alloc(minors * sizeof(struct hd_struct));
-	bs        = ide_alloc(minors*sizeof(int));
+	gd        = ide_alloc (sizeof(struct gendisk), 0);
+	gd->sizes = ide_alloc (minors * sizeof(int), 0);
+	gd->part  = ide_alloc (minors * sizeof(struct hd_struct), 0);
+	bs        = ide_alloc (minors*sizeof(int), 0);
 
 	/* cdroms and msdos f/s are examples of non-1024 blocksizes */
 	blksize_size[hwif->major] = bs;
@@ -470,7 +498,12 @@ static void unexpected_intr (int, ide_hwgroup_t *);
  */
 static void reset_ihandler (ide_drive_t *drive)
 {
+	unsigned long flags;
+
+	save_flags(flags);
+	cli();
 	unexpected_intr (HWIF(drive)->irq, HWGROUP(drive));
+	restore_flags(flags);
 }
 
 /*
@@ -481,15 +514,49 @@ static void start_reset_timer (ide_hwif_t *hwif)
 {
 	ide_hwgroup_t *hwgroup = hwif->hwgroup;
 
-	hwif->reset_timeout = jiffies + WAIT_WORSTCASE;	/* max waiting time */
+	hwgroup->reset_timeout = jiffies + WAIT_WORSTCASE; /* max waiting time */
 	hwgroup->handler = &reset_ihandler;		/* dummy irq handler */
 	hwgroup->timer.expires = jiffies + (HZ/20);	/* polling interval */
 	add_timer(&(hwgroup->timer));
 }
 
+#ifdef CONFIG_BLK_DEV_IDECD
+/*
+ * atapi_reset_handler() gets invoked to poll the interface for completion every 50ms
+ * during an atapi drive reset operation. If the drive has not yet responded,
+ * and we have not yet hit our maximum waiting time, then the timer is restarted
+ * for another 50ms.
+ *
+ * Returns 1 if waiting for another 50ms, returns 0 otherwise.
+ */
+static int atapi_reset_handler (ide_hwgroup_t *hwgroup)
+{
+	ide_hwif_t *hwif = hwgroup->hwif;
+	ide_drive_t *drive = hwgroup->drive;
+	byte stat;
+
+	OUT_BYTE (drive->select.all, IDE_SELECT_REG);
+	udelay (10);
+
+	if (!OK_STAT(stat=GET_STAT(), 0, BUSY_STAT)) {
+		if (jiffies < hwgroup->reset_timeout) {
+			start_reset_timer (hwif);
+			return 1;
+		}
+		printk("%s: ATAPI reset timed-out, status=0x%02x\n", drive->name, stat);
+		return ide_do_reset (drive);	/* do it the old fashioned way */
+	}
+	hwgroup->doing_atapi_reset = 0;
+	hwgroup->handler = NULL;	/* allow new requests to be processed */
+	hwgroup->reset_timeout = 0;	/* signal end of ide reset operation */
+	printk("%s: ATAPI reset complete\n", drive->name);
+	return 0;
+}
+#endif /* CONFIG_BLK_DEV_IDECD */
+
 /*
  * reset_handler() gets invoked to poll the interface for completion every 50ms
- * during an ide reset operation. If the drives have not not responded,
+ * during an ide reset operation. If the drives have not yet responded,
  * and we have not yet hit our maximum waiting time, then the timer is restarted
  * for another 50ms.
  *
@@ -501,8 +568,13 @@ static int reset_handler (ide_hwgroup_t *hwgroup)
 	ide_drive_t *drive = hwgroup->drive;
 	byte tmp;
 
+#ifdef CONFIG_BLK_DEV_IDECD
+	if (hwgroup->doing_atapi_reset)
+		return atapi_reset_handler(hwgroup);
+#endif /* CONFIG_BLK_DEV_IDECD */
+
 	if (!OK_STAT(tmp=GET_STAT(), 0, BUSY_STAT)) {
-		if (jiffies < hwif->reset_timeout) {
+		if (jiffies < hwgroup->reset_timeout) {
 			start_reset_timer (hwif);
 			return 1;
 		}
@@ -532,7 +604,7 @@ static int reset_handler (ide_hwgroup_t *hwgroup)
 		}
 	}
 	hwgroup->handler = NULL;	/* allow new requests to be processed */
-	hwif->reset_timeout = 0;	/* signal end of ide reset operation */
+	hwgroup->reset_timeout = 0;	/* signal end of ide reset operation */
 	return 0;
 }
 
@@ -542,9 +614,8 @@ static int reset_handler (ide_hwgroup_t *hwgroup)
  * the same interface, so it can really be thought of as resetting the
  * interface rather than resetting the drive.
  *
- * ATAPI devices have their own reset mechanism (not handled here),
- * which allows them to be individually reset without clobbering other
- * devices on the same interface.  ide-cd.c will handle those separately.
+ * ATAPI devices have their own reset mechanism which allows them to be
+ * individually reset without clobbering other devices on the same interface.
  *
  * Unfortunately, the IDE interface does not generate an interrupt to let
  * us know when the reset operation has finished, so we must poll for this.
@@ -552,14 +623,34 @@ static int reset_handler (ide_hwgroup_t *hwgroup)
  * (up to 30 seconds worstcase).  So, instead of busy-waiting here for it,
  * we set a timer to poll at 50ms intervals.
  */
-static int ide_do_reset (ide_drive_t *drive)
+int ide_do_reset (ide_drive_t *drive)
 {
 	unsigned int unit;
 	unsigned long flags;
 	ide_hwif_t *hwif = HWIF(drive);
+	ide_hwgroup_t *hwgroup = HWGROUP(drive);
 
 	save_flags(flags);
 	cli();		/* Why ? */
+
+#ifdef CONFIG_BLK_DEV_IDECD
+	/* For an ATAPI device, first try an ATAPI SRST. */
+	if (drive->media == cdrom) {
+		if (!hwgroup->doing_atapi_reset) {
+			hwgroup->doing_atapi_reset = 1;
+			if (!drive->keep_settings)
+				drive->unmask = 0;
+			OUT_BYTE (drive->select.all, IDE_SELECT_REG);
+			OUT_BYTE (WIN_SRST, IDE_COMMAND_REG);
+			udelay (10);
+			hwgroup->reset_timeout = jiffies + WAIT_WORSTCASE;
+			start_reset_timer (hwif); /* begin periodic polling */
+			restore_flags (flags);
+			return 1;
+		}
+	}
+	hwgroup->doing_atapi_reset = 0;
+#endif /* CONFIG_BLK_DEV_IDECD */
 
 	/*
 	 * First, reset any device state data we were maintaining
@@ -589,10 +680,10 @@ static int ide_do_reset (ide_drive_t *drive)
 	 * This single interrupt gives us a "fast poll" for drives that
 	 * recover from reset very quickly, saving us the first 50ms wait time.
 	 */
-	OUT_BYTE(drive->ctl|6,IDE_CONTROL_REG);	/* set nIEN and SRST */
+	OUT_BYTE(drive->ctl|6,IDE_CONTROL_REG);	/* set SRST and nIEN */
 	udelay(5);			/* more than enough time */
 	OUT_BYTE(drive->ctl|2,IDE_CONTROL_REG);	/* clear SRST, leave nIEN */
-	hwif->reset_timeout = jiffies + WAIT_WORSTCASE;
+	hwgroup->reset_timeout = jiffies + WAIT_WORSTCASE;
 	start_reset_timer (hwif);	/* begin periodic polling */
 #endif	/* OK_TO_RESET_CONTROLLER */
 
@@ -640,7 +731,7 @@ byte ide_dump_status (ide_drive_t *drive, const char *msg, byte stat)
 			printk("Busy ");
 		else {
 			if (stat & READY_STAT)	printk("DriveReady ");
-			if (stat & WRERR_STAT)	printk("WriteFault ");
+			if (stat & WRERR_STAT)	printk("DeviceFault ");
 			if (stat & SEEK_STAT)	printk("SeekComplete ");
 			if (stat & DRQ_STAT)	printk("DataRequest ");
 			if (stat & ECC_STAT)	printk("CorrectedError ");
@@ -746,6 +837,12 @@ int ide_error (ide_drive_t *drive, const char *msg, byte stat)
 	if (GET_STAT() & (BUSY_STAT|DRQ_STAT))
 		rq->errors |= ERROR_RESET;	/* Mmmm.. timing problem */
 
+	if (rq->errors > 3 && drive->using_dma) {	/* DMA troubles? */
+		drive->using_dma = 0;
+		printk("%s: DMA disabled\n", drive->name);
+		--rq->errors;
+		return 0;
+	}
 	if (rq->errors >= ERROR_MAX)
 		ide_end_request(0, HWGROUP(drive));
 	else {
@@ -916,7 +1013,7 @@ static void multwrite_intr (ide_drive_t *drive)
  * Issue a simple drive command
  * The drive must be selected beforehand.
  */
-static inline void ide_cmd(ide_drive_t *drive, byte cmd, byte nsect, ide_handler_t *handler)
+static void ide_cmd(ide_drive_t *drive, byte cmd, byte nsect, ide_handler_t *handler)
 {
 	ide_set_handler (drive, handler);
 	OUT_BYTE(drive->ctl,IDE_CONTROL_REG);
@@ -924,6 +1021,9 @@ static inline void ide_cmd(ide_drive_t *drive, byte cmd, byte nsect, ide_handler
 	OUT_BYTE(cmd,IDE_COMMAND_REG);
 }
 
+/*
+ * set_multmode_intr() is invoked on completion of a WIN_SETMULT cmd.
+ */
 static void set_multmode_intr (ide_drive_t *drive)
 {
 	byte stat = GET_STAT();
@@ -939,6 +1039,9 @@ static void set_multmode_intr (ide_drive_t *drive)
 	IDE_DO_REQUEST;
 }
 
+/*
+ * set_geometry_intr() is invoked on completion of a WIN_SPECIFY cmd.
+ */
 static void set_geometry_intr (ide_drive_t *drive)
 {
 	byte stat = GET_STAT();
@@ -950,6 +1053,9 @@ static void set_geometry_intr (ide_drive_t *drive)
 	IDE_DO_REQUEST;
 }
 
+/*
+ * recal_intr() is invoked on completion of a WIN_RESTORE (recalibrate) cmd.
+ */
 static void recal_intr (ide_drive_t *drive)
 {
 	byte stat = GET_STAT();
@@ -961,6 +1067,10 @@ static void recal_intr (ide_drive_t *drive)
 	IDE_DO_REQUEST;
 }
 
+#ifdef IDE_DRIVE_CMD
+/*
+ * drive_cmd_intr() is invoked on completion of a special DRIVE_CMD.
+ */
 static void drive_cmd_intr (ide_drive_t *drive)
 {
 	byte stat = GET_STAT();
@@ -972,8 +1082,14 @@ static void drive_cmd_intr (ide_drive_t *drive)
 		return;
 	IDE_DO_REQUEST;
 }
+#endif	/* IDE_DRIVE_CMD */
 
-static void do_special (ide_drive_t *drive)
+/*
+ * do_special() is used to issue WIN_SPECIFY, WIN_RESTORE, and WIN_SETMULT
+ * commands to a drive.  It used to do much more, but has been scaled back
+ * in recent updates, and could be completely eliminated with a bit more effort.
+ */
+static inline void do_special (ide_drive_t *drive)
 {
 	special_t *s = &drive->special;
 #ifdef DEBUG
@@ -1044,6 +1160,11 @@ int ide_wait_stat (ide_drive_t *drive, byte good, byte bad, unsigned long timeou
 	return 1;
 }
 
+/*
+ * do_rw_disk() issues WIN_{MULT}READ and WIN_{MULT}WRITE commands to a disk,
+ * using LBA if supported, or CHS otherwise, to address sectors.  It also takes
+ * care of issuing special DRIVE_CMDs.
+ */
 static inline void do_rw_disk (ide_drive_t *drive, struct request *rq, unsigned long block)
 {
 	OUT_BYTE(drive->ctl,IDE_CONTROL_REG);
@@ -1075,11 +1196,15 @@ static inline void do_rw_disk (ide_drive_t *drive, struct request *rq, unsigned 
 #endif
 	}
 	if (rq->cmd == READ) {
+		if (drive->using_dma && !(HWIF(drive)->dmaproc(ide_dma_read, drive)))
+			return;
 		ide_set_handler(drive, &read_intr);
 		OUT_BYTE(drive->mult_count ? WIN_MULTREAD : WIN_READ, IDE_COMMAND_REG);
 		return;
 	}
 	if (rq->cmd == WRITE) {
+		if (drive->using_dma && !(HWIF(drive)->dmaproc(ide_dma_write, drive)))
+			return;
 		OUT_BYTE(drive->mult_count ? WIN_MULTWRITE : WIN_WRITE, IDE_COMMAND_REG);
 		if (ide_wait_stat(drive, DATA_READY, drive->bad_wstat, WAIT_DRQ)) {
 			printk("%s: no DRQ after issuing %s\n", drive->name,
@@ -1108,6 +1233,10 @@ static inline void do_rw_disk (ide_drive_t *drive, struct request *rq, unsigned 
 			ide_cmd(drive, args[0], args[1], &drive_cmd_intr);
 			return;
 		} else {
+			/*
+			 * NULL is actually a valid way of waiting for
+			 * all current requests to be flushed from the queue.
+			 */
 #ifdef DEBUG
 			printk("%s: DRIVE_CMD (null)\n", drive->name);
 #endif
@@ -1120,6 +1249,9 @@ static inline void do_rw_disk (ide_drive_t *drive, struct request *rq, unsigned 
 	ide_end_request(0, HWGROUP(drive));
 }
 
+/*
+ * do_request() initiates handling of a new I/O request
+ */
 static inline void do_request (ide_hwif_t *hwif, struct request *rq)
 {
 	unsigned int minor, unit;
@@ -1137,18 +1269,21 @@ static inline void do_request (ide_hwif_t *hwif, struct request *rq)
 		goto kill_rq;
 	}
 	drive = &hwif->drives[unit];
+#ifdef DEBUG
 	if (rq->bh && !rq->bh->b_lock) {
 		printk("%s: block not locked\n", drive->name);
 		goto kill_rq;
 	}
+#endif
 	block    = rq->sector;
 	blockend = block + rq->nr_sectors;
 	if ((blockend < block) || (blockend > drive->part[minor&PARTN_MASK].nr_sects)) {
-		printk("%s: bad access: block=%ld, count=%ld\n",
-			drive->name, block, rq->nr_sectors);
+		printk("%s%c: bad access: block=%ld, count=%ld\n", drive->name,
+		 (minor&PARTN_MASK)?'0'+(minor&PARTN_MASK):' ', block, rq->nr_sectors);
 		goto kill_rq;
 	}
 	block += drive->part[minor&PARTN_MASK].start_sect + drive->sect0;
+	((ide_hwgroup_t *)hwif->hwgroup)->drive = drive;
 #if (DISK_RECOVERY_TIME > 0)
 	while ((read_timer() - hwif->last_time) < DISK_RECOVERY_TIME);
 #endif
@@ -1158,7 +1293,6 @@ static inline void do_request (ide_hwif_t *hwif, struct request *rq)
 		return;
 
 	}
-	((ide_hwgroup_t *)hwif->hwgroup)->drive = drive;
 	if (!drive->special.all) {
 #ifdef CONFIG_BLK_DEV_IDECD
 		switch (drive->media) {
@@ -1202,7 +1336,6 @@ kill_rq:
 void ide_do_request (ide_hwgroup_t *hwgroup)
 {
 	cli();	/* paranoia */
-
 	if (hwgroup->handler != NULL) {
 		printk("%s: EEeekk!! handler not NULL in ide_do_request()\n", hwgroup->hwif->name);
 		return;
@@ -1218,14 +1351,25 @@ void ide_do_request (ide_hwgroup_t *hwgroup)
 					goto got_rq;
 			} while ((hwif = hwif->next) != hwgroup->hwif);
 			return;		/* no work left for this hwgroup */
+		got_rq:
+			blk_dev[hwif->major].current_request = rq->next;
 		}
-	got_rq:
-		blk_dev[hwif->major].current_request = rq->next;
 		do_request(hwgroup->hwif = hwif, hwgroup->rq = rq);
 		cli();
 	} while (hwgroup->handler == NULL);
 }
 
+/*
+ * do_hwgroup_request() invokes ide_do_request() after first masking
+ * all possible interrupts for the current hwgroup.  This prevents race
+ * conditions in the event that an unexpected interrupt occurs while
+ * we are in the driver.
+ *
+ * Note that when an interrupt is used to reenter the driver, the first level
+ * handler will already have masked the irq that triggered, but any other ones
+ * for the hwgroup will still be unmasked.  The driver tries to be careful
+ * about such things.
+ */
 static void do_hwgroup_request (ide_hwgroup_t *hwgroup)
 {
 	if (hwgroup->handler == NULL) {
@@ -1270,7 +1414,7 @@ static void timer_expiry (unsigned long data)
 	save_flags(flags);
 	cli();
 
-	if (hwgroup->hwif->reset_timeout != 0) { /* ide reset in progress? */
+	if (hwgroup->reset_timeout != 0) { /* ide reset in progress? */
 		if (!reset_handler(hwgroup))
 			do_hwgroup_request (hwgroup);
 	} else if (hwgroup->handler == NULL) {	 /* not waiting for anything? */
@@ -1278,6 +1422,8 @@ static void timer_expiry (unsigned long data)
 		printk("%s: marginal timeout\n", drive->name);
 	} else {				 /* drive not responding */
 		hwgroup->handler = NULL;
+		if (hwgroup->hwif->dmaproc) 
+			(void) hwgroup->hwif->dmaproc (ide_dma_abort, drive);
 		if (!ide_error(drive, "irq timeout", GET_STAT()))
 			do_hwgroup_request (hwgroup);
 	}
@@ -1293,24 +1439,32 @@ static void timer_expiry (unsigned long data)
  * On laptops (and "green" PCs), an unexpected interrupt occurs whenever the
  * drive enters "idle", "standby", or "sleep" mode, so if the status looks
  * "good", we just ignore the interrupt completely.
+ *
+ * This routine assumes cli() is in effect when called.
+ *
+ * If an unexpected interrupt happens on irq15 while we are handling irq14
+ * and if the two interfaces are "serialized" (CMD640B), then it looks like
+ * we could screw up by interfering with a new request being set up for irq15.
+ *
+ * In reality, this is a non-issue.  The new command is not sent unless the
+ * drive is ready to accept one, in which case we know the drive is not
+ * trying to interrupt us.  And ide_set_handler() is always invoked before
+ * completing the issuance of any new drive command, so we will not be 
+ * accidently invoked as a result of any valid command completion interrupt.
+ *
  */
 static void unexpected_intr (int irq, ide_hwgroup_t *hwgroup)
 {
 	byte stat;
 	unsigned int unit;
 	ide_hwif_t *hwif = hwgroup->hwif;
-	unsigned long flags;
-
-	save_flags(flags);
-	cli();
 
 	/*
 	 * check for ide reset in progress
 	 */
-	if (hwif->reset_timeout != 0) {
+	if (hwgroup->reset_timeout != 0) {
 		if (!reset_handler(hwgroup))
 			do_hwgroup_request (hwgroup);
-		restore_flags(flags);
 		return;
 	}
 
@@ -1330,7 +1484,6 @@ static void unexpected_intr (int irq, ide_hwgroup_t *hwgroup)
 			}
 		}
 	} while ((hwif = hwif->next) != hwgroup->hwif);
-	restore_flags(flags);
 }
 
 /*
@@ -1340,13 +1493,8 @@ static void ide_intr (int irq, struct pt_regs *regs)
 {
 	ide_hwgroup_t  *hwgroup = irq_to_hwgroup[irq];
 	ide_handler_t  *handler;
-	if (irq != hwgroup->hwif->irq) {
-#ifdef DEBUG
-		printk("ide_intr: expected ira %d, got irq %d instead\n",
-			hwgroup->hwif->irq, irq);
-#endif
-		unexpected_intr(irq, hwgroup);
-	} else if ((handler = hwgroup->handler) != NULL) {
+
+	if (irq == hwgroup->hwif->irq && (handler = hwgroup->handler) != NULL) {
 		ide_drive_t *drive = hwgroup->drive;
 		hwgroup->handler = NULL;
 		del_timer(&(hwgroup->timer));
@@ -1354,12 +1502,15 @@ static void ide_intr (int irq, struct pt_regs *regs)
 			sti();
 		handler(drive);
 	} else {
-		sti();
 		unexpected_intr(irq, hwgroup);
 	}
 	cli();
 }
 
+/*
+ * get_info_ptr() returns the (ide_drive_t *) for a given device number.
+ * It returns NULL if the given device number does not match any present drives.
+ */
 static ide_drive_t *get_info_ptr (int i_rdev)
 {
 	int		major = MAJOR(i_rdev);
@@ -1381,18 +1532,6 @@ static ide_drive_t *get_info_ptr (int i_rdev)
 }
 
 #ifdef IDE_DRIVE_CMD
-static int write_fs_long (unsigned long useraddr, long value)
-{
-	int err;
-
-	if (NULL == (long *)useraddr)
-		return -EINVAL;
-	if ((err = verify_area(VERIFY_WRITE, (long *)useraddr, sizeof(long))))
-		return err;
-	put_user((unsigned)value, (long *) useraddr);
-	return 0;
-}
-
 /*
  * This function issues a specific IDE drive command onto the
  * tail of the request queue, and waits for it to be completed.
@@ -1513,7 +1652,7 @@ static int revalidate_disk(dev_t  i_rdev)
 	if ((drive = get_info_ptr(i_rdev)) == NULL)
 		return -ENODEV;
 
-	major = MAJOR(i_rdev);
+	major = MAJOR(i_rdev) << 8;
 	minor = drive->select.b.unit << PARTN_BITS;
 	save_flags(flags);
 	cli();
@@ -1537,6 +1676,18 @@ static int revalidate_disk(dev_t  i_rdev)
 
 	drive->busy = 0;
 	wake_up(&drive->wqueue);
+	return 0;
+}
+
+static int write_fs_long (unsigned long useraddr, long value)
+{
+	int err;
+
+	if (NULL == (long *)useraddr)
+		return -EINVAL;
+	if ((err = verify_area(VERIFY_WRITE, (long *)useraddr, sizeof(long))))
+		return err;
+	put_user((unsigned)value, (long *) useraddr);
 	return 0;
 }
 
@@ -1590,6 +1741,9 @@ static int ide_ioctl (struct inode *inode, struct file *file,
                 case HDIO_GET_UNMASKINTR:
 			return write_fs_long(arg, drive->unmask);
 
+                case HDIO_GET_DMA:
+			return write_fs_long(arg, drive->using_dma);
+
                 case HDIO_GET_CHIPSET:
 			return write_fs_long(arg, drive->chipset);
 
@@ -1602,13 +1756,18 @@ static int ide_ioctl (struct inode *inode, struct file *file,
 			if (drive->id == NULL)
 				return -ENOMSG;
 			err = verify_area(VERIFY_WRITE, (char *)arg, sizeof(*drive->id));
-			if (err) return err;
-			memcpy_tofs((char *)arg, (char *)drive->id, sizeof(*drive->id));
-			return 0;
+			if (!err)
+				memcpy_tofs((char *)arg, (char *)drive->id, sizeof(*drive->id));
+			return err;
 
 			case HDIO_GET_NOWERR:
 			return write_fs_long(arg, drive->bad_wstat == BAD_R_STAT);
 
+		case HDIO_SET_DMA:
+			if (drive->media != disk)
+				return -EPERM;
+			if (!drive->id || !(drive->id->capability & 1) || !HWIF(drive)->dmaproc)
+				return -EPERM;
 		case HDIO_SET_KEEPSETTINGS:
 		case HDIO_SET_UNMASKINTR:
 		case HDIO_SET_NOWERR:
@@ -1622,6 +1781,9 @@ static int ide_ioctl (struct inode *inode, struct file *file,
 			save_flags(flags);
 			cli();
 			switch (cmd) {
+				case HDIO_SET_DMA:
+					drive->using_dma = arg;
+					break;
 				case HDIO_SET_KEEPSETTINGS:
 					drive->keep_settings = arg;
 					break;
@@ -1645,7 +1807,8 @@ static int ide_ioctl (struct inode *inode, struct file *file,
 			return 0;
 
 		case HDIO_SET_MULTCOUNT:
-			if (!suser()) return -EACCES;
+			if (!suser())
+				return -EACCES;
 			if (inode->i_rdev & PARTN_MASK)
 				return -EINVAL;
 			if ((drive->id != NULL) && (arg > drive->id->max_multsect))
@@ -1738,13 +1901,13 @@ static void fixstring (byte *s, const int bytecount, const int byteswap)
 		*p++ = '\0';
 }
 
-static void do_identify (ide_drive_t *drive, byte cmd)
+static inline void do_identify (ide_drive_t *drive, byte cmd)
 {
 	int bswap;
 	struct hd_driveid *id;
 	unsigned long capacity, check;
 
-	id = drive->id = ide_alloc(SECTOR_WORDS*4);
+	id = drive->id = ide_alloc (SECTOR_WORDS*4, 0);
 	ide_input_data(drive, id, SECTOR_WORDS);	/* read 512 bytes of id info */
 	sti();
 
@@ -1764,11 +1927,11 @@ static void do_identify (ide_drive_t *drive, byte cmd)
 	 */
 	bswap = 1;
 	if (cmd == WIN_PIDENTIFY) {
-		if ((id->model[0] == 'N' && id->model[1] == 'E')
-		 || (id->model[0] == 'F' && id->model[1] == 'X')
-		 || (id->model[0] == 'P' && id->model[1] == 'i'))
-			bswap = 0;	/* NEC, Pioneer and *some* Mitsumi units */
-	}				/* Vertos drives may still be weird */
+		if ((id->model[0] == 'N' && id->model[1] == 'E') /* NEC */
+		 || (id->model[0] == 'F' && id->model[1] == 'X') /* Mitsumi */
+		 || (id->model[0] == 'P' && id->model[1] == 'i'))/* Pioneer */
+			bswap = 0;	/* Vertos drives may still be weird */
+	}
 	fixstring (id->model,     sizeof(id->model),     bswap);
 	fixstring (id->fw_rev,    sizeof(id->fw_rev),    bswap);
 	fixstring (id->serial_no, sizeof(id->serial_no), bswap);
@@ -1862,7 +2025,10 @@ static void do_identify (ide_drive_t *drive, byte cmd)
 			drive->mult_req = id->max_multsect;
 		if (drive->mult_req || ((id->multsect_valid & 1) && id->multsect))
 			drive->special.b.set_multmode = 1;
-		printk(", MaxMult=%d", id->max_multsect);
+	}
+	if (HWIF(drive)->dmaproc != NULL) {	/* hwif supports DMA? */
+		if (!(HWIF(drive)->dmaproc(ide_dma_check, drive)))
+			printk(", DMA");
 	}
 	printk("\n");
 }
@@ -1998,7 +2164,7 @@ static int do_probe (ide_drive_t *drive, byte cmd)
  * Returns:	0  no device was found
  *		1  device was found (note: drive->present might still be 0)
  */
-static byte probe_for_drive (ide_drive_t *drive)
+static inline byte probe_for_drive (ide_drive_t *drive)
 {
 	if (drive->noprobe)			/* skip probing? */
 		return drive->present;
@@ -2306,6 +2472,7 @@ int ide_xlate_1024 (dev_t i_rdev, int need_offset, const char *msg)
  * 0x19 for an 8 bit type, drive 1, 0x1a for drive 2 in CMOS.  A non-zero value 
  * means we have an AT controller hard disk for that drive.
  */
+
 static void probe_cmos_for_drives (ide_hwif_t *hwif)
 {
 #ifdef __i386__
@@ -2320,11 +2487,9 @@ static void probe_cmos_for_drives (ide_hwif_t *hwif)
 		ide_drive_t *drive = &hwif->drives[unit];
 		if ((cmos_disks & (0xf0 >> (unit*4))) && !drive->present) {
 			drive->cyl   = drive->bios_cyl  = *(unsigned short *)BIOS;
-			drive->head  = drive->bios_head = * (BIOS+2);
-			drive->sect  = drive->bios_sect = * (BIOS+14);
-			drive->wpcom = (*(unsigned short *)(BIOS+5))>>2;
+			drive->head  = drive->bios_head = *(BIOS+2);
+			drive->sect  = drive->bios_sect = *(BIOS+14);
 			drive->ctl   = *(BIOS+8);
-			drive->wpcom = 0;
 			drive->media = disk;
 			drive->present = 1;
 		}
@@ -2362,12 +2527,16 @@ static int init_irq (ide_hwif_t *hwif)
 	 * Got the irq,  now set everything else up
 	 */
 	if ((hwgroup = irq_to_hwgroup[hwif->irq]) == NULL) {
-		hwgroup = ide_alloc(sizeof(ide_hwgroup_t));
+		hwgroup = ide_alloc (sizeof(ide_hwgroup_t), 0);
 		irq_to_hwgroup[hwif->irq] = hwgroup;
 		hwgroup->hwif 	 = hwif->next = hwif;
 		hwgroup->rq      = NULL;
 		hwgroup->handler = NULL;
 		hwgroup->drive   = NULL;
+		hwgroup->reset_timeout = 0;
+#ifdef CONFIG_BLK_DEV_IDECD
+		hwgroup->doing_atapi_reset = 0;
+#endif /* CONFIG_BLK_DEV_IDECD */
 		init_timer(&hwgroup->timer);
 		hwgroup->timer.function = &timer_expiry;
 		hwgroup->timer.data = (unsigned long) hwgroup;
@@ -2456,6 +2625,7 @@ static void try_to_init_dtc2278 (void)
 }
 #endif /* SUPPORT_DTC2278 */
 
+
 /*
  * This is gets invoked once during initialization, to set *everything* up
  */
@@ -2463,7 +2633,7 @@ unsigned long ide_init (unsigned long mem_start, unsigned long mem_end)
 {
 	int h;
 
-	init_mem_start = (mem_start + 3uL) & ~3uL;	/* for ide_alloc() */
+	ide_mem_start = mem_start;	/* for ide_alloc () */
 	init_ide_data ();
 	/*
 	 * First, we determine what hardware is present
@@ -2472,6 +2642,20 @@ unsigned long ide_init (unsigned long mem_start, unsigned long mem_end)
 	if (probe_dtc2278)
 		try_to_init_dtc2278();
 #endif /* SUPPORT_DTC2278 */
+#ifdef CONFIG_PCI
+	/*
+	 * Look for pci disk interfaces.
+	 */
+	if (pcibios_present()) {
+#ifdef CONFIG_BLK_DEV_TRITON
+		ide_init_triton (ide_hwifs);
+#endif /* CONFIG_BLK_DEV_TRITON */
+	}
+#endif /* CONFIG_PCI */
+
+	/*
+	 * Probe for drives in the usual way.. CMOS/BIOS, then poke at ports
+	 */
 	for (h = 0; h < MAX_HWIFS; ++h) {
 		ide_hwif_t *hwif = &ide_hwifs[h];
 		if (!hwif->noprobe) {
@@ -2491,6 +2675,7 @@ unsigned long ide_init (unsigned long mem_start, unsigned long mem_end)
 			if (hwif->irq == HD_IRQ && hwif->io_base != HD_DATA) {
 				printk("%s: CANNOT SHARE IRQ WITH OLD HARDDISK DRIVER (hd.c)\n", hwif->name);
 				hwif->present = 0;
+B
 			}
 #endif /* CONFIG_BLK_DEV_HD */
 		}
@@ -2535,7 +2720,7 @@ unsigned long ide_init (unsigned long mem_start, unsigned long mem_end)
 			hwif->present = 1;	/* success */
 		}
 	}
-	mem_start = init_mem_start;
-	init_mem_start = 0uL;	/* prevent further use of ide_alloc() */
+	mem_start = ide_mem_start;
+	ide_mem_start = 0uL;	/* prevent further use of ide_alloc() */
 	return mem_start;
 }

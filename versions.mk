@@ -26,6 +26,6 @@ $(TOPINCL)/modversions.h: $(SYMTAB_OBJS:.o=.ver)
 	do echo "#include <linux/modules/$${f}>"; done) \
 	> $(TOPINCL)/modversions.h
 
-dep: $(TOPINCL)/modversions.h
+fastdep: $(TOPINCL)/modversions.h
 
 endif

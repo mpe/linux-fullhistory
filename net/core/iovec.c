@@ -64,9 +64,10 @@ void memcpy_toiovec(struct iovec *iov, unsigned char *kdata, int len)
 {
 	while(len>0)
 	{
-		memcpy_tofs(iov->iov_base, kdata,iov->iov_len);
-		kdata+=iov->iov_len;
-		len-=iov->iov_len;
+		int copy = min(iov->iov_len,len);
+		memcpy_tofs(iov->iov_base,kdata,copy);
+		kdata+=copy;
+		len-=copy;
 		iov++;
 	}
 }

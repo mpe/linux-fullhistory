@@ -103,14 +103,24 @@ void setup_arch(char **cmdline_p,
 	init_task.mm->brk = TASK_SIZE + (unsigned long) &_end;
 
 	for (;;) {
+		/*
+		 * "mem=nopentium" disables the 4MB page tables.
+		 * "mem=XXX[kKmM]" overrides the BIOS-reported
+		 * memory size
+		 */
 		if (c == ' ' && *(const unsigned long *)from == *(const unsigned long *)"mem=") {
-			memory_end = simple_strtoul(from+4, &from, 0);
-			if ( *from == 'K' || *from == 'k' ) {
-				memory_end = memory_end << 10;
-				from++;
-			} else if ( *from == 'M' || *from == 'm' ) {
-				memory_end = memory_end << 20;
-				from++;
+			if (!memcmp(from+4, "nopentium", 9)) {
+				from += 9+4;
+				x86_capability &= ~8;
+			} else {
+				memory_end = simple_strtoul(from+4, &from, 0);
+				if ( *from == 'K' || *from == 'k' ) {
+					memory_end = memory_end << 10;
+					from++;
+				} else if ( *from == 'M' || *from == 'm' ) {
+					memory_end = memory_end << 20;
+					from++;
+				}
 			}
 		}
 		c = *(from++);

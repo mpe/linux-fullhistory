@@ -56,12 +56,18 @@
 #define WIN_DOORLOCK		0xde	/* lock door on removeable drives */
 #define WIN_DOORUNLOCK		0xdf	/* unlock door on removeable drives */
 
-#define WIN_PIDENTIFY		0xA1	/* identify ATA-PI device	*/
-#define WIN_MULTREAD		0xC4	/* read multiple sectors	*/
-#define WIN_MULTWRITE		0xC5	/* write multiple sectors	*/
-#define WIN_SETMULT		0xC6	/* enable read multiple		*/
+#define WIN_MULTREAD		0xC4	/* read sectors using multiple mode */
+#define WIN_MULTWRITE		0xC5	/* write sectors using multiple mode */
+#define WIN_SETMULT		0xC6	/* enable/disable multiple mode */
 #define WIN_IDENTIFY		0xEC	/* ask drive to identify itself	*/
-#define WIN_SETFEATURES		0xEF	/* set special drive features   */
+#define WIN_SETFEATURES		0xEF	/* set special drive features */
+#define WIN_READDMA		0xc8	/* read sectors using DMA transfers */
+#define WIN_WRITEDMA		0xca	/* write sectors using DMA transfers */
+
+/* Additional drive command codes used by ATAPI devices. */
+#define WIN_PIDENTIFY		0xA1	/* identify ATAPI device	*/
+#define WIN_SRST		0x08	/* ATAPI soft reset command */
+#define WIN_PACKETCMD		0xa0	/* Send a packet command. */
 
 /* Bits for HD_ERROR */
 #define MARK_ERR	0x01	/* Bad address mark */
@@ -80,13 +86,13 @@ struct hd_geometry {
 
 /* hd/ide ctl's that pass (arg) ptrs to user space are numbered 0x30n/0x31n */
 #define HDIO_GETGEO		0x301	/* get device geometry */
-#define HDIO_REQ		HDIO_GETGEO	/* obsolete, use HDIO_GETGEO */
 #define HDIO_GET_UNMASKINTR	0x302	/* get current unmask setting */
 #define HDIO_GET_MULTCOUNT	0x304	/* get current IDE blockmode setting */
 #define HDIO_GET_IDENTITY 	0x307	/* get IDE identification info */
 #define HDIO_GET_KEEPSETTINGS 	0x308	/* get keep-settings-on-reset flag */
 #define HDIO_GET_CHIPSET	0x309	/* get current interface type setting */
-#define HDIO_GET_NOWERR	0x30a	/* get ignore-write-error flag */
+#define HDIO_GET_NOWERR		0x30a	/* get ignore-write-error flag */
+#define HDIO_GET_DMA		0x30b	/* get use-dma flag */
 #define HDIO_DRIVE_CMD		0x31f	/* execute a special drive command */
 
 /* hd/ide ctl's that pass (arg) non-ptr values are numbered 0x32n/0x33n */
@@ -94,7 +100,8 @@ struct hd_geometry {
 #define HDIO_SET_UNMASKINTR	0x322	/* permit other irqs during I/O */
 #define HDIO_SET_KEEPSETTINGS	0x323	/* keep ioctl settings on reset */
 #define HDIO_SET_CHIPSET	0x324	/* optimise driver for interface type */
-#define HDIO_SET_NOWERR	0x325	/* set ignore-write-error flag */
+#define HDIO_SET_NOWERR		0x325	/* set ignore-write-error flag */
+#define HDIO_SET_DMA		0x326	/* set use-dma flag */
 
 /* structure returned by HDIO_GET_IDENTITY, as per ANSI ATA2 rev.2f spec */
 struct hd_driveid {

@@ -13,6 +13,7 @@
  *		Michael Callahan	:	Made routing work
  *		Wesley Craig		:	Fix probing to listen to a
  *						passed node id.
+ *		Alan Cox		:	Added send/recvmsg support
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -1466,11 +1467,10 @@ int atalk_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	return(0);
 }
 
-static int atalk_sendto(struct socket *sock, const void *ubuf, int len, int noblock,
-	unsigned flags, struct sockaddr *sat, int addr_len)
+static int atalk_sendmsg(struct socket *sock, struct msghdr *msg, int len, int nonblock, int flags)
 {
 	atalk_socket *sk=(atalk_socket *)sock->data;
-	struct sockaddr_at *usat=(struct sockaddr_at *)sat;
+	struct sockaddr_at *usat=(struct sockaddr_at *)msg->msg_name;
 	struct sockaddr_at local_satalk, gsat;
 	struct sk_buff *skb;
 	struct device *dev;
@@ -1495,7 +1495,7 @@ static int atalk_sendto(struct socket *sock, const void *ubuf, int len, int nobl
 				return -EBUSY;
 		}
 
-		if(addr_len <sizeof(*usat))
+		if(msg->msg_namelen <sizeof(*usat))
 			return(-EINVAL);
 		if(usat->sat_family != AF_APPLETALK)
 			return -EINVAL;
@@ -1581,7 +1581,7 @@ static int atalk_sendto(struct socket *sock, const void *ubuf, int len, int nobl
 	if(sk->debug)
 		printk("SK %p: Copy user data (%d bytes).\n", sk, len);
 		
-	memcpy_fromfs(skb_put(skb,len),ubuf,len);
+	memcpy_fromiovec(skb_put(skb,len),msg->msg_iov,len);
 
 	if(sk->no_check==1)
 		ddp->deh_sum=0;
@@ -1643,16 +1643,32 @@ static int atalk_sendto(struct socket *sock, const void *ubuf, int len, int nobl
 	return len;
 }
 
+
+static int atalk_sendto(struct socket *sock, const void *ubuf, int size, int noblock, unsigned flags,
+		struct sockaddr *sa, int addr_len)
+{
+	struct iovec iov;
+	struct msghdr msg;
+	iov.iov_base=(void *)ubuf;
+	iov.iov_len=size;
+	msg.msg_name=(void *)sa;
+	msg.msg_namelen=addr_len;
+	msg.msg_accrights=NULL;
+	msg.msg_iov=&iov;
+	msg.msg_iovlen=1;
+	return atalk_sendmsg(sock,&msg,size,noblock,flags);	
+}
+
+
 static int atalk_send(struct socket *sock, const void *ubuf, int size, int noblock, unsigned flags)
 {
 	return atalk_sendto(sock,ubuf,size,noblock,flags,NULL,0);
 }
 
-static int atalk_recvfrom(struct socket *sock, void *ubuf, int size, int noblock,
-		   unsigned flags, struct sockaddr *sip, int *addr_len)
+static int atalk_recvmsg(struct socket *sock, struct msghdr *msg, int size, int noblock, int flags, int *addr_len)
 {
 	atalk_socket *sk=(atalk_socket *)sock->data;
-	struct sockaddr_at *sat=(struct sockaddr_at *)sip;
+	struct sockaddr_at *sat=(struct sockaddr_at *)msg->msg_name;
 	struct ddpehdr	*ddp = NULL;
 	int copied = 0;
 	struct sk_buff *skb;
@@ -1678,14 +1694,14 @@ static int atalk_recvfrom(struct socket *sock, void *ubuf, int size, int noblock
 		copied=ddp->deh_len;
 		if(copied > size)
 			copied=size;
-		skb_copy_datagram(skb,0,ubuf,copied);
+		skb_copy_datagram_iovec(skb,0,msg->msg_iov,copied);
 	}
 	else
 	{
 		copied=ddp->deh_len - sizeof(*ddp);
 		if (copied > size)
 			copied = size;
-		skb_copy_datagram(skb,sizeof(*ddp),ubuf,copied);
+		skb_copy_datagram_iovec(skb,sizeof(*ddp),msg->msg_iov,copied);
 	}
 	if(sat)
 	{
@@ -1704,6 +1720,23 @@ static int atalk_write(struct socket *sock, const char *ubuf, int size, int nobl
 	return atalk_send(sock,ubuf,size,noblock,0);
 }
 
+
+static int atalk_recvfrom(struct socket *sock, void *ubuf, int size, int noblock, unsigned flags,
+		struct sockaddr *sa, int *addr_len)
+{
+	struct iovec iov;
+	struct msghdr msg;
+	iov.iov_base=ubuf;
+	iov.iov_len=size;
+	msg.msg_name=(void *)sa;
+	msg.msg_namelen=0;
+	if (addr_len)
+		msg.msg_namelen = *addr_len;
+	msg.msg_accrights=NULL;
+	msg.msg_iov=&iov;
+	msg.msg_iovlen=1;
+	return atalk_recvmsg(sock,&msg,size,noblock,flags,addr_len);	
+}
 
 static int atalk_recv(struct socket *sock, void *ubuf, int size , int noblock,
 	unsigned flags)
@@ -1848,6 +1881,8 @@ static struct proto_ops atalk_proto_ops = {
 	atalk_setsockopt,
 	atalk_getsockopt,
 	atalk_fcntl,
+	atalk_sendmsg,
+	atalk_recvmsg
 };
 
 static struct notifier_block ddp_notifier={
@@ -1886,6 +1921,6 @@ void atalk_proto_init(struct net_proto *pro)
 		atalk_if_get_info
 	});
 
-	printk("Appletalk BETA 0.11 for Linux NET3.030\n");
+	printk("Appletalk BETA 0.12 for Linux NET3.030\n");
 }
 #endif

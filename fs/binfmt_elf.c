@@ -172,7 +172,7 @@ unsigned long * create_elf_tables(char * p,int argc,int envc,struct elfhdr * exe
 static unsigned int load_elf_interp(struct elfhdr * interp_elf_ex,
 			     struct inode * interpreter_inode, unsigned int *interp_load_addr)
 {
-        struct file * file;
+	struct file * file;
 	struct elf_phdr *elf_phdata  =  NULL;
 	struct elf_phdr *eppnt;
 	unsigned int len;
@@ -258,7 +258,7 @@ static unsigned int load_elf_interp(struct elfhdr * interp_elf_ex,
 
 	SYS(close)(elf_exec_fileno);
 	if(error < 0 && error > -1024) {
-	        kfree(elf_phdata);
+		kfree(elf_phdata);
 		return 0xffffffff;
 	}
 
@@ -386,7 +386,7 @@ load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 	retval = read_exec(bprm->inode, elf_ex.e_phoff, (char *) elf_phdata,
 			   elf_ex.e_phentsize * elf_ex.e_phnum, 1);
 	if (retval < 0) {
-	        kfree (elf_phdata);
+		kfree (elf_phdata);
 		MOD_DEC_USE_COUNT;
 		return retval;
 	}
@@ -399,7 +399,7 @@ load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 	elf_exec_fileno = open_inode(bprm->inode, O_RDONLY);
 
 	if (elf_exec_fileno < 0) {
-	        kfree (elf_phdata);
+		kfree (elf_phdata);
 		MOD_DEC_USE_COUNT;
 		return elf_exec_fileno;
 	}
@@ -458,7 +458,7 @@ load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 	
 	/* Some simple consistency checks for the interpreter */
 	if(elf_interpreter){
-	        interpreter_type = INTERPRETER_ELF | INTERPRETER_AOUT;
+		interpreter_type = INTERPRETER_ELF | INTERPRETER_AOUT;
 		if(retval < 0) {
 			kfree(elf_interpreter);
 			kfree(elf_phdata);
@@ -500,10 +500,10 @@ load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 		  }
 		}
 		if (!bprm->p) {
-		        if(elf_interpreter) {
+			if(elf_interpreter) {
 			      kfree(elf_interpreter);
 			}
-		        kfree (elf_phdata);
+			kfree (elf_phdata);
 			MOD_DEC_USE_COUNT;
 			return -E2BIG;
 		}
@@ -662,6 +662,15 @@ load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 				MAP_FIXED | MAP_PRIVATE, 0);
 	}
 
+	/* SVR4/i386 ABI (pages 3-31, 3-32) says that when the program
+	   starts %edx contains a pointer to a function which might be
+	   registered using `atexit'.  This provides a mean for the
+	   dynamic linker to call DT_FINI functions for shared libraries
+	   that have been loaded before the code runs.
+
+	   A value of 0 tells we have no such handler.  */
+	regs->edx = 0;
+
 	start_thread(regs, elf_entry, bprm->p);
 	if (current->flags & PF_PTRACED)
 		send_sig(SIGTRAP, current, 0);
@@ -674,7 +683,7 @@ load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 
 static int
 load_elf_library(int fd){
-        struct file * file;
+	struct file * file;
 	struct elfhdr elf_ex;
 	struct elf_phdr *elf_phdata  =  NULL;
 	struct  inode * inode;
@@ -751,7 +760,7 @@ load_elf_library(int fd){
 	
 	SYS(close)(fd);
 	if (error != (elf_phdata->p_vaddr & 0xfffff000)) {
-	        kfree(elf_phdata);
+		kfree(elf_phdata);
 		MOD_DEC_USE_COUNT;
 		return error;
 	}

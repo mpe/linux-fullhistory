@@ -5,8 +5,8 @@
  *
  *		Currently this contains all but the file descriptor passing code.
  *		Before that goes in the odd bugs in the iovec handlers need 
- *		fixing, and this bit testing. BSD fd passing is a trivial part
- *		of the exercise.
+ *		fixing, and this bit testing. BSD fd passing is not a trivial part
+ *		of the exercise it turns out. Anyone like writing garbage collectors.
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -15,8 +15,9 @@
  *
  * Fixes:
  *		Linus Torvalds	:	Assorted bug cures.
- *		Niibe Yutaka	:	async I/O support
+ *		Niibe Yutaka	:	async I/O support.
  *		Carsten Paeth	:	PF_UNIX check, address fixes.
+ *		Alan Cox	:	Limit size of allocated blocks.
  */
 
 #include <linux/config.h>
@@ -681,7 +682,7 @@ static int unix_sendmsg(struct socket *sock, struct msghdr *msg, int len, int no
 	if(sun==NULL)
 	{
 		if(sk->protinfo.af_unix.other==NULL)
-			return -EINVAL;
+			return -ENOTCONN;
 	}
 
 	/*
@@ -694,6 +695,13 @@ static int unix_sendmsg(struct socket *sock, struct msghdr *msg, int len, int no
 		if(sock->type==SOCK_DGRAM)
 			return -EMSGSIZE;
 		len=(sk->sndbuf-sizeof(struct sk_buff))/2;
+		/*
+		 *	Keep to page sized kmalloc()'s as various people
+		 *	have suggested. Big mallocs stress the vm too
+		 *	much.
+		 */
+		if(len > 4000 && sock->type!=SOCK_DGRAM)
+			len = 4000;
 	}
 	 
 	size=/*protocol_size(&proto_unix)+*/len;
@@ -1044,7 +1052,7 @@ static struct proto_ops unix_proto_ops = {
 
 void unix_proto_init(struct net_proto *pro)
 {
-	printk("NET3: Unix domain sockets 0.07 BETA for Linux NET3.030.\n");
+	printk("NET3: Unix domain sockets 0.09 BETA for Linux NET3.030.\n");
 	sock_register(unix_proto_ops.family, &unix_proto_ops);
 	proc_net_register(&(struct proc_dir_entry) {
 		PROC_NET_UNIX,  4, "unix",

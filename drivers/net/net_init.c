@@ -341,13 +341,13 @@ void unregister_netdev(struct device *dev)
 			restore_flags(flags);
 			return;
 		}
-		for (i = 0; i < MAX_ETH_CARDS; ++i) 
+	}
+	for (i = 0; i < MAX_ETH_CARDS; ++i) 
+	{
+		if (ethdev_index[i] == dev) 
 		{
-			if (ethdev_index[i] == dev) 
-			{
-				ethdev_index[i] = NULL;
-				break;
-			}
+			ethdev_index[i] = NULL;
+			break;
 		}
 	}
 	restore_flags(flags);

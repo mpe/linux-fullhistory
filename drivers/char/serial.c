@@ -31,7 +31,6 @@
 #include <linux/string.h>
 #include <linux/fcntl.h>
 #include <linux/ptrace.h>
-#include <linux/major.h>
 #include <linux/ioport.h>
 #include <linux/mm.h>
 

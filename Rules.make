@@ -45,7 +45,8 @@ first_rule: sub_dirs $(O_TARGET) $(L_TARGET)
 # Rule to compile a set of .o files into one .o file
 #
 ifdef O_TARGET
-$(O_TARGET): $(O_OBJS)
+$(O_TARGET): $(O_OBJS) $(TOPDIR)/include/linux/config.h
+	rm -f $@
 ifdef O_OBJS
 	$(LD) $(EXTRA_LDFLAGS) -r -o $@ $(O_OBJS)
 else
@@ -57,7 +58,7 @@ endif
 # Rule to compile a set of .o files into one .a file
 #
 ifdef L_TARGET
-$(L_TARGET): $(L_OBJS)
+$(L_TARGET): $(L_OBJS) $(TOPDIR)/include/linux/config.h
 	rm -f $@
 	$(AR) $(EXTRA_ARFLAGS) rcs $@ $(L_OBJS)
 endif

@@ -36,6 +36,7 @@
 #include <linux/string.h>
 #include <linux/sockios.h>
 #include <linux/net.h>
+#include <linux/stat.h>
 #include <net/ax25.h>
 #include <linux/inet.h>
 #include <linux/netdevice.h>
@@ -53,7 +54,7 @@
 #include <linux/proc_fs.h>
 #include <net/ip.h>
 #include <net/arp.h>
-
+#include <linux/if_arp.h>
 #include <linux/proc_fs.h>
 
 /************************************************************************\
@@ -1411,16 +1412,19 @@ void nr_proto_init(struct net_proto *pro)
 	proc_net_register(&(struct proc_dir_entry) {
 		PROC_NET_NR, 2, "nr",
 		S_IFREG | S_IRUGO, 1, 0, 0,
+		0, &proc_net_inode_operations, 
 		nr_get_info
 	});
 	proc_net_register(&(struct proc_dir_entry) {
 		PROC_NET_NR_NEIGH, 8, "nr_neigh",
 		S_IFREG | S_IRUGO, 1, 0, 0,
+		0, &proc_net_inode_operations, 
 		nr_neigh_get_info
 	});
 	proc_net_register(&(struct proc_dir_entry) {
 		PROC_NET_NR_NODES, 8, "nr_nodes",
 		S_IFREG | S_IRUGO, 1, 0, 0,
+		0, &proc_net_inode_operations, 
 		nr_nodes_get_info
 	});
 }

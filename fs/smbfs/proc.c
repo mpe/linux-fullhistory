@@ -69,18 +69,7 @@ smb_decode_word(byte *p, word *data)
 	return &p[2];
 }
 
-static byte *
-smb_decode_dword(byte *p, dword *data)
-{
-#if (ARCH == i386)
-	*data = *((dword *)p);
-#else
-	*data = (dword)p[0] | p[1] << 8 | p[2] << 16 | p[3] << 24;
-#endif
-	return &p[4];
-}
-
-static byte *
+byte *
 smb_encode_smb_length(byte *p, dword len)
 {
 	p[0] = p[1] = 0;
@@ -320,6 +309,9 @@ smb_errno(int errcls, int error)
 			case ERRlock:       return EDEADLOCK;
 			case ERRfilexists:  return EEXIST;
 			case 87:            return 0; /* Unknown error!! */
+			/* This next error seems to occur on an mv when
+			 * the destination exists */
+			case 183:	    return EEXIST;
 			default:            return EIO;
 		}
 	else if (errcls == ERRSRV) 
@@ -655,6 +647,33 @@ smb_proc_read(struct smb_server *server, struct smb_dirent *finfo,
         return data_len;
 }
 
+/* count must be <= 65535. No error number is returned.  A result of 0
+   indicates an error, which has to be investigated by a normal read
+   call. */
+int
+smb_proc_read_raw(struct smb_server *server, struct smb_dirent *finfo, 
+                  off_t offset, long count, char *data)
+{
+        char *buf = server->packet;
+        int result;
+
+        if ((count <= 0) || (count > 65535)) {
+                return -EINVAL;
+        }
+
+	smb_setup_header_exclusive(server, SMBreadbraw, 8, 0);
+
+        WSET(buf, smb_vwv0, finfo->fileid);
+        DSET(buf, smb_vwv1, offset);
+        WSET(buf, smb_vwv3, count);
+        WSET(buf, smb_vwv4, 0);
+        DSET(buf, smb_vwv5, 0);
+
+        result = smb_request_read_raw(server, data, count);
+        smb_unlock_server(server);
+        return result;
+}
+
 int
 smb_proc_write(struct smb_server *server, struct smb_dirent *finfo,
                off_t offset, int count, const char *data)
@@ -681,6 +700,61 @@ smb_proc_write(struct smb_server *server, struct smb_dirent *finfo,
 
 	return res;
 }
+
+/* count must be <= 65535 */
+int
+smb_proc_write_raw(struct smb_server *server, struct smb_dirent *finfo, 
+                   off_t offset, long count, const char *data)
+{
+        char *buf = server->packet;
+        int result;
+
+        if ((count <= 0) || (count > 65535)) {
+                return -EINVAL;
+        }
+
+	smb_setup_header_exclusive(server, SMBwritebraw, 11, 0);
+
+        WSET(buf, smb_vwv0, finfo->fileid);
+        WSET(buf, smb_vwv1, count);
+        WSET(buf, smb_vwv2, 0); /* reserved */
+        DSET(buf, smb_vwv3, offset);
+        DSET(buf, smb_vwv5, 0); /* timeout */
+        WSET(buf, smb_vwv7, 1); /* send final result response */
+        DSET(buf, smb_vwv8, 0); /* reserved */
+        WSET(buf, smb_vwv10, 0); /* no data in this buf */
+        WSET(buf, smb_vwv11, 0); /* no data in this buf */
+
+        result = smb_request_ok(server, SMBwritebraw, 1, 0);
+
+        DPRINTK("smb_proc_write_raw: first request returned %d\n", result);
+        
+        if (result < 0) {
+                smb_unlock_server(server);
+                return result;
+        }
+        
+        result = smb_request_write_raw(server, data, count);
+
+        DPRINTK("smb_proc_write_raw: raw request returned %d\n", result);
+        
+        if (result > 0) {
+                /* We have to do the checks of smb_request_ok here as well */
+                if (smb_valid_packet(server->packet) != 0) {
+                        DPRINTK("not a valid packet!\n");
+                        result = -EIO;
+                } else if (server->rcls != 0) {
+                        result = -smb_errno(server->rcls, server->err);
+                } else if (smb_verify(server->packet, SMBwritec,1,0) != 0) {
+                        DPRINTK("smb_verify failed\n");
+                        result = -EIO;
+                }
+        }
+
+        smb_unlock_server(server);
+        return result;
+}
+
 
 /* smb_proc_do_create: We expect entry->attry & entry->ctime to be set. */
 
@@ -1642,12 +1716,14 @@ smb_proc_reconnect(struct smb_server *server)
                         server->m.password);
                 DPRINTK("smb_proc_connect: usernam = %s\n",
                         server->m.username);
+                DPRINTK("smb_proc_connect: blkmode = %d\n",
+                        WVAL(server->packet, smb_vwv5));
 
-                p = smb_decode_word(p, &(server->maxxmt));
-                p = smb_decode_word(p, &(server->maxmux));
-                p = smb_decode_word(p, &(server->maxvcs));
-                p = smb_decode_word(p, &(server->blkmode));
-                p = smb_decode_dword(p, &(server->sesskey));
+                server->maxxmt = WVAL(server->packet, smb_vwv2);
+                server->maxmux = WVAL(server->packet, smb_vwv3);
+                server->maxvcs = WVAL(server->packet, smb_vwv4);
+                server->blkmode= WVAL(server->packet, smb_vwv5);
+                server->sesskey= DVAL(server->packet, smb_vwv6);
 
                 smb_setup_header(server, SMBsesssetupX, 10,
                                  2 + userlen + passlen);
@@ -1673,6 +1749,15 @@ smb_proc_reconnect(struct smb_server *server)
                         goto fail;
                 }
                 smb_decode_word(server->packet+32, &(server->server_uid));
+        }
+        else
+
+        {
+                server->maxxmt = 0;
+                server->maxmux = 0;
+                server->maxvcs = 0;
+                server->blkmode = 0;
+                server->sesskey = 0;
         }
 
 	/* Fine! We have a connection, send a tcon message. */

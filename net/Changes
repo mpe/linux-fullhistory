@@ -140,9 +140,9 @@ o	TCP does rerouting for most cases		[TESTED]
 
 ------->>>>>    1.3.14  <<<<<----------
 
-o	IPX works					[IN]
-o	NetROM works					[IN]
-o	AX.25 works					[IN]
+o	IPX works					[TESTED]
+o	NetROM works					[TESTED]
+o	AX.25 works					[TESTED]
 o	Most modules need recompiling even though they
 	load OK 					[BLAME LINUS]
 o	Appletalk works nicely				[CHECKED]
@@ -150,14 +150,14 @@ o	Fast IP forwarding part 1 works			[CHECKED]
 
 ------->>>>>   1.3.15  <<<<<---------
 o	Mike Shaver has started RFC1122 verification	[IN PROGRESS]
-o	Minor bug fixes					[IN]
+o	Minor bug fixes					[TESTED]
 
 ------->>>> 1.3.16 <<<--------
 
 o	Missing patches for device change in TCP	[TESTED]
 o	Device locking					[TESTED]
-o	Infinite slip devices				[IN]
-o	New AF_UNIX sockets				[IN]
+o	Infinite slip devices				[IN - BUG]
+o	New AF_UNIX sockets				[TESTED]
 o	Sendmsg/recvmsg (for some stuff only)		[IN]
 o	Device unload loopholes fixed			[TESTED]
 o	Extra firewall abilities			[IN]
@@ -165,11 +165,17 @@ o	Appletalk node probe bug fix			[TESTED]
 
 ------->>>> 1.3.18 <<<<---------
 
-o	AF_UNIX debugging				[IN]
-o	TCP explode on SWS bug fix			[IN]
-o	John Naylor's ARP hwtype fix			[IN]
-o	Datagram select matches BSD semantics		[IN]
+o	AF_UNIX debugging				[TESTED]
+o	TCP explode on SWS bug fix			[TESTED]
+o	John Naylor's ARP hwtype fix			[TESTED]
+o	Datagram select matches BSD semantics		[TESTED]
 
+-------->>>>> 1.3.21 <<<<<---------
+
+o	AF_UNIX fixes and 4K limiter			[IN]
+o	Sendmsg/recvmsg for AX.25/Appletalk		[IN]
+o	Datagram generic iovec support			[IN]
+o	Misc minor bug fixes				[IN]
 
 o	Finish merging the bridge code
 o	SIOCSLEEPRT patch
@@ -177,7 +183,7 @@ o	Options support in ip_build_xmit		[PENDING]
 o	Fast checksum/copy on outgoing TCP
 o	Fast dev_grab_next() transmit reload function
 	and dev_push_failed() ??
-o	Faster ip_forward last hit cache		[PENDING]
+o	Faster ip_forward last hit cache		[PENDING(GuruA0)]
 o	Forwarding queue control (+ fairness algorithms ??)
 o	IP forward flow control.
 o	Infinite PPP devices.
@@ -186,6 +192,10 @@ o	Clean up RAW AX.25 sockets.
 o	Finish 802.2 Class I code to be compliant to the oddities of 802.2
 o	Full variable length AX.25 support		[JSN doing]
 o	Tidy BPQ support
+o	Strange eth0-eth3 bug 
+o	Finish IPIP bug fixes
+o	Why doesnt the PROTO_UNREACH get sent ?
+
 
 0.2
 ---
@@ -282,9 +292,10 @@ their hands. [Provisionally taken]
 17.	PPP multilink. Another nasty job.
 
 18.	Implement swIPe under Linux.
-[In progress]
+[Reportedly in progress]
 
 19.	IPv4 IP-AH and IP-ESP.
+[Taken]
 
 BTW: Don't let the magic words 'kernel programming' worry you. Its like DOS
 - you make a mistake you have to reboot. You do at least get dumps and a

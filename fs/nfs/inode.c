@@ -143,6 +143,7 @@ struct super_block *nfs_read_super(struct super_block *sb, void *raw_data,
 	if (data->addr.sin_addr.s_addr == INADDR_ANY) {  /* No address passed */
 	  if (((struct sockaddr_in *)(&server->toaddr))->sin_addr.s_addr == INADDR_ANY) {
 	    printk("NFS: Error passed unconnected socket and no address\n") ;
+	    MOD_DEC_USE_COUNT;
 	    return NULL ;
 	  } else {
 	    /* Need access to socket internals  JSP */

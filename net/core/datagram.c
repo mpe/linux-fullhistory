@@ -17,6 +17,7 @@
  *		Florian  La Roche:	Changed for my new skbuff handling.
  *		Darryl Miles	:	Fixed non-blocking SOCK_SEQPACKET.
  *		Linus Torvalds	:	BSD semantic fixes.
+ *		Alan Cox	:	Datagram iovec handling
  *
  *	Note:
  *		A lot of this will change when the protocol/socket separation
@@ -164,9 +165,23 @@ void skb_free_datagram(struct sk_buff *skb)
 	restore_flags(flags);
 }
 
+/*
+ *	Copy a datagram to a linear buffer.
+ */
+
 void skb_copy_datagram(struct sk_buff *skb, int offset, char *to, int size)
 {
 	memcpy_tofs(to,skb->h.raw+offset,size);
+}
+
+
+/*
+ *	Copy a datagram to an iovec.
+ */
+ 
+void skb_copy_datagram_iovec(struct sk_buff *skb, int offset, struct iovec *to, int size)
+{
+	memcpy_toiovec(to,skb->h.raw+offset,size);
 }
 
 /*

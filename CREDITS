@@ -962,12 +962,14 @@ D: The Linux Support Team Erlangen
 N: Matt Welsh
 E: mdw@sunsite.unc.edu
 D: Linux Documentation Project coordinator
-D: Author, Linux Installation and Getting Started
-D: HOWTO coordinator and writer
-D: Maintainer of sunsite.unc.edu Linux doc archives
-D: Moderator, comp.os.linux.announce
-S: 205 Gray Street NE
-S: Wilson, North Carolina 27893
+D: Author, _Running_Linux_ and I&GS guide
+D: Linuxdoc-SGML formatting system
+D: Keithley DAS1200 device driver
+D: Maintainer of sunsite WWW and FTP, moderator c.o.l.answers
+S: Cornell University Computer Science Department
+S: Robotics and Vision Laboratory
+S: 4130 Upson Hall
+S: Ithaca NY 14850
 S: USA
 
 N: Marco van Wieringen

@@ -105,8 +105,9 @@ static int msdos_find(struct inode *dir,const char *name,int len,
 	char msdos_name[MSDOS_NAME];
 	int res;
 
-	if ((res = msdos_format_name(MSDOS_SB(dir->i_sb)->name_check,name,len,
-	    msdos_name,1)) < 0) return res;
+	res = msdos_format_name(MSDOS_SB(dir->i_sb)->name_check,name,len, msdos_name,1);
+	if (res < 0)
+		return -ENOENT;
 	return msdos_scan(dir,msdos_name,bh,de,ino);
 }
 

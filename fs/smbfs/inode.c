@@ -345,13 +345,18 @@ smb_notify_change(struct inode *inode, struct iattr *attr)
 	if ((error = inode_change_ok(inode, attr)) < 0)
 		return error;
 
-        if (!S_ISREG(inode->i_mode))
+	if (((attr->ia_valid & ATTR_UID) && 
+	     (attr->ia_uid != SMB_SERVER(inode)->m.uid)))
+		return -EPERM;
+
+	if (((attr->ia_valid & ATTR_GID) && 
+	     (attr->ia_uid != SMB_SERVER(inode)->m.gid)))
                 return -EPERM;
 
-        if ((attr->ia_valid & (ATTR_MODE | ATTR_UID | ATTR_GID)) != 0) {
-                return -EPERM;
-        }
-        
+	if (((attr->ia_valid & ATTR_MODE) &&
+	     (attr->ia_mode & ~(S_IFREG | S_IFDIR | S_IRWXU | S_IRWXG | S_IRWXO))))
+		return -EPERM;
+
         if ((attr->ia_valid & ATTR_SIZE) != 0) {
 
                 if ((error = smb_make_open(inode, O_WRONLY)) < 0)

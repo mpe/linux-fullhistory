@@ -30,7 +30,7 @@ int sd_ioctl(struct inode * inode, struct file * file, unsigned int cmd, unsigne
     struct hd_geometry *loc = (struct hd_geometry *) arg;
     
     switch (cmd) {
-    case HDIO_REQ:   /* Return BIOS disk parameters */
+    case HDIO_GETGEO:   /* Return BIOS disk parameters */
 	if (!loc)  return -EINVAL;
 	error = verify_area(VERIFY_WRITE, loc, sizeof(*loc));
 	if (error)

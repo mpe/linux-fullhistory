@@ -41,6 +41,7 @@
 
 #include <net/ip.h>
 #include <net/arp.h>
+#include <linux/if_arp.h>
 
 #include <net/ax25.h>
 #include <net/netrom.h>

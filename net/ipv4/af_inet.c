@@ -95,7 +95,7 @@ extern int afinet_get_info(char *, char **, off_t, int, int);
 extern int tcp_get_info(char *, char **, off_t, int, int);
 extern int udp_get_info(char *, char **, off_t, int, int);
 
-int (*rarp_ioctl_hook)(int,void*) = NULL;
+int (*rarp_ioctl_hook)(unsigned int,void*) = NULL;
 
 /*
  *	See if a socket number is in use.

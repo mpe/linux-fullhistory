@@ -127,4 +127,23 @@ struct sockaddr_in {
 
 #endif
 
+/*
+ *	IPv6 definitions as we start to include them. This is just
+ *	a beginning dont get excited 8)
+ */
+ 
+struct in_addr6
+{
+	unsigned char s6_addr[16];
+};
+
+struct sockaddr_in6
+{
+	unsigned short sin6_family;
+	unsigned short sin6_port;
+	unsigned long sin6_flowinfo;
+	struct in_addr6 sin6_addr;
+};
+
+
 #endif	/* _LINUX_IN_H */

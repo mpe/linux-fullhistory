@@ -1,10 +1,12 @@
-/*	$Id: optcd.c,v 1.7 1995/06/28 20:20:13 root Exp $
+/*	$Id: optcd.c,v 1.3 1995/08/24 19:54:27 root Exp root $
 	linux/drivers/block/optcd.c - Optics Storage 8000 AT CDROM driver
 
 	Copyright (C) 1995 Leo Spiekman (spiekman@dutette.et.tudelft.nl)
 
 	Based on Aztech CD268 CDROM driver by Werner Zimmermann and preworks
-	by Eberhard Moenkeberg.
+	by Eberhard Moenkeberg (emoenke@gwdg.de). ISP16 detection and
+	configuration by Eric van der Maarel (maarel@marin.nl), with some data
+	communicated by Vadim V. Model (vadim@rbrf.msk.su).
 
 	This program is free software; you can redistribute it and/or modify
 	it under the terms of the GNU General Public License as published by
@@ -38,6 +40,12 @@
 				should go into its own driver. The driver now
 				has its own major nr.
 				Disk change detection now seems to work, too.
+				This version became part of the standard
+				kernel as of version 1.3.7
+	24-9-95		v0.4	Re-inserted ISP-16 interface code which I
+				copied from sjcd.c, with a few changes.
+				Updated README.optcd. Submitted for
+				inclusion in 1.3.21
 */
 
 #include <linux/major.h>
@@ -68,6 +76,59 @@
 # include "blk.h"
 #define optcd_port optcd	/* Needed for the modutils. */
 # include <linux/optcd.h>
+
+
+/* Some (Media)Magic */
+/* define types of drive the interface on an ISP16 card may be looking at */
+#define ISP16_DRIVE_X 0x00
+#define ISP16_SONY  0x02
+#define ISP16_PANASONIC0 0x02
+#define ISP16_SANYO0 0x02
+#define ISP16_MITSUMI  0x04
+#define ISP16_PANASONIC1 0x06
+#define ISP16_SANYO1 0x06
+#define ISP16_DRIVE_NOT_USED 0x08  /* not used */
+#define ISP16_DRIVE_SET_MASK 0xF1  /* don't change 0-bit or 4-7-bits*/
+/* ...for port */
+#define ISP16_DRIVE_SET_PORT 0xF8D
+/* set io parameters */
+#define ISP16_BASE_340  0x00
+#define ISP16_BASE_330  0x40
+#define ISP16_BASE_360  0x80
+#define ISP16_BASE_320  0xC0
+#define ISP16_IRQ_X  0x00
+#define ISP16_IRQ_5  0x04  /* shouldn't be used due to soundcard conflicts */
+#define ISP16_IRQ_7  0x08  /* shouldn't be used due to soundcard conflicts */
+#define ISP16_IRQ_3  0x0C
+#define ISP16_IRQ_9  0x10
+#define ISP16_IRQ_10  0x14
+#define ISP16_IRQ_11  0x18
+#define ISP16_DMA_X  0x03
+#define ISP16_DMA_3  0x00
+#define ISP16_DMA_5  0x00
+#define ISP16_DMA_6  0x01
+#define ISP16_DMA_7  0x02
+#define ISP16_IO_SET_MASK  0x20  /* don't change 5-bit */
+/* ...for port */
+#define ISP16_IO_SET_PORT  0xF8E
+/* enable the drive */
+#define ISP16_NO_IDE__ENABLE_CDROM_PORT  0xF90  /* ISP16 without IDE interface */
+#define ISP16_IDE__ENABLE_CDROM_PORT  0xF91  /* ISP16 with IDE interface */
+#define ISP16_ENABLE_CDROM  0x80  /* seven bit */
+
+/* the magic stuff */
+#define ISP16_CTRL_PORT  0xF8F
+#define ISP16_NO_IDE__CTRL  0xE2  /* ISP16 without IDE interface */
+#define ISP16_IDE__CTRL  0xE3  /* ISP16 with IDE interface */
+
+static short isp16_detect(void);
+static short isp16_no_ide__detect(void);
+static short isp16_with_ide__detect(void);
+static short isp16_config( int base, u_char drive_type, int irq, int dma );
+static short isp16_type; /* dependent on type of interface card */
+static u_char isp16_ctrl;
+static u_short isp16_enable_cdrom_port;
+
 
 static short optcd_port = OPTCD_PORTBASE;
 
@@ -1363,6 +1424,29 @@ int init_module(void) {
 			optcd_port);
 		RETURN_EIO;
 	}
+
+	if (!check_region(ISP16_DRIVE_SET_PORT, 5)) {
+	/* If someone else has'nt already reserved these ports,
+	   probe for an ISP16 interface card, and enable SONY mode
+	   with no interrupts and no DMA. (As far as I know, all optics
+	   drives come with a SONY interface.) */
+  if ( (isp16_type=isp16_detect()) < 0 )
+    printk( "No ISP16 cdrom interface found.\n" );
+  else {
+    u_char expected_drive;
+
+    printk( "ISP16 cdrom interface (%s optional IDE) detected.\n",
+      (isp16_type==2)?"with":"without" );
+
+    expected_drive = (isp16_type?ISP16_SANYO1:ISP16_SANYO0);
+
+    if ( isp16_config( optcd_port, ISP16_SONY, 0, 0 ) < 0 ) {
+      printk( "ISP16 cdrom interface has not been properly configured.\n" );
+      return(mem_start);
+    }
+  }
+	}
+
 	if (!optResetDrive()) {
 		printk("optcd: drive at 0x%x not ready\n", optcd_port);
 		RETURN_EIO;
@@ -1406,3 +1490,191 @@ void cleanup_module(void) {
 	printk("optcd: module released.\n");
 }
 #endif MODULE
+
+
+/*
+ * -- ISP16 detection and configuration
+ *
+ *    Copyright (c) 1995, Eric van der Maarel <maarel@marin.nl>
+ *
+ *    Version 0.5
+ *
+ *    Detect cdrom interface on ISP16 soundcard.
+ *    Configure cdrom interface.
+ *
+ *    Algorithm for the card with no IDE support option taken
+ *    from the CDSETUP.SYS driver for MSDOS,
+ *    by OPTi Computers, version 2.03.
+ *    Algorithm for the IDE supporting ISP16 as communicated
+ *    to me by Vadim Model and Leo Spiekman.
+ *
+ *    Use, modifification or redistribution of this software is
+ *    allowed under the terms of the GPL.
+ *
+ */
+
+
+#define ISP16_IN(p) (outb(isp16_ctrl,ISP16_CTRL_PORT), inb(p))
+#define ISP16_OUT(p,b) (outb(isp16_ctrl,ISP16_CTRL_PORT), outb(b,p))
+
+static short
+isp16_detect(void)
+{
+
+  if ( !( isp16_with_ide__detect() < 0 ) )
+    return(2);
+  else
+    return( isp16_no_ide__detect() );
+}
+
+static short
+isp16_no_ide__detect(void)
+{
+  u_char ctrl;
+  u_char enable_cdrom;
+  u_char io;
+  short i = -1;
+
+  isp16_ctrl = ISP16_NO_IDE__CTRL;
+  isp16_enable_cdrom_port = ISP16_NO_IDE__ENABLE_CDROM_PORT;
+
+  /* read' and write' are a special read and write, respectively */
+
+  /* read' ISP16_CTRL_PORT, clear last two bits and write' back the result */
+  ctrl = ISP16_IN( ISP16_CTRL_PORT ) & 0xFC;
+  ISP16_OUT( ISP16_CTRL_PORT, ctrl );
+
+  /* read' 3,4 and 5-bit from the cdrom enable port */
+  enable_cdrom = ISP16_IN( ISP16_NO_IDE__ENABLE_CDROM_PORT ) & 0x38;
+
+  if ( !(enable_cdrom & 0x20) ) {  /* 5-bit not set */
+    /* read' last 2 bits of ISP16_IO_SET_PORT */
+    io = ISP16_IN( ISP16_IO_SET_PORT ) & 0x03;
+    if ( ((io&0x01)<<1) == (io&0x02) ) {  /* bits are the same */
+      if ( io == 0 ) {  /* ...the same and 0 */
+        i = 0;
+        enable_cdrom |= 0x20;
+      }
+      else {  /* ...the same and 1 */  /* my card, first time 'round */
+        i = 1;
+        enable_cdrom |= 0x28;
+      }
+      ISP16_OUT( ISP16_NO_IDE__ENABLE_CDROM_PORT, enable_cdrom );
+    }
+    else {  /* bits are not the same */
+      ISP16_OUT( ISP16_CTRL_PORT, ctrl );
+      return(i); /* -> not detected: possibly incorrect conclusion */
+    }
+  }
+  else if ( enable_cdrom == 0x20 )
+    i = 0;
+  else if ( enable_cdrom == 0x28 )  /* my card, already initialised */
+    i = 1;
+
+  ISP16_OUT( ISP16_CTRL_PORT, ctrl );
+
+  return(i);
+}
+
+static short
+isp16_with_ide__detect(void)
+{
+  u_char ctrl;
+  u_char tmp;
+
+  isp16_ctrl = ISP16_IDE__CTRL;
+  isp16_enable_cdrom_port = ISP16_IDE__ENABLE_CDROM_PORT;
+
+  /* read' and write' are a special read and write, respectively */
+
+  /* read' ISP16_CTRL_PORT and save */
+  ctrl = ISP16_IN( ISP16_CTRL_PORT );
+
+  /* write' zero to the ctrl port and get response */
+  ISP16_OUT( ISP16_CTRL_PORT, 0 );
+  tmp = ISP16_IN( ISP16_CTRL_PORT );
+
+  if ( tmp != 2 )  /* isp16 with ide option not detected */
+    return(-1);
+
+  /* restore ctrl port value */
+  ISP16_OUT( ISP16_CTRL_PORT, ctrl );
+  
+  return(2);
+}
+
+static short
+isp16_config( int base, u_char drive_type, int irq, int dma )
+{
+  u_char base_code;
+  u_char irq_code;
+  u_char dma_code;
+  u_char i;
+
+  if ( (drive_type == ISP16_MITSUMI) && (dma != 0) )
+    printk( "Mitsumi cdrom drive has no dma support.\n" );
+
+  switch (base) {
+  case 0x340: base_code = ISP16_BASE_340; break;
+  case 0x330: base_code = ISP16_BASE_330; break;
+  case 0x360: base_code = ISP16_BASE_360; break;
+  case 0x320: base_code = ISP16_BASE_320; break;
+  default:
+    printk( "Base address 0x%03X not supported by cdrom interface on ISP16.\n", base );
+    return(-1);
+  }
+  switch (irq) {
+  case 0: irq_code = ISP16_IRQ_X; break; /* disable irq */
+  case 5: irq_code = ISP16_IRQ_5;
+          printk( "Irq 5 shouldn't be used by cdrom interface on ISP16,"
+            " due to possible conflicts with the soundcard.\n");
+          break;
+  case 7: irq_code = ISP16_IRQ_7;
+          printk( "Irq 7 shouldn't be used by cdrom interface on ISP16,"
+            " due to possible conflicts with the soundcard.\n");
+          break;
+  case 3: irq_code = ISP16_IRQ_3; break;
+  case 9: irq_code = ISP16_IRQ_9; break;
+  case 10: irq_code = ISP16_IRQ_10; break;
+  case 11: irq_code = ISP16_IRQ_11; break;
+  default:
+    printk( "Irq %d not supported by cdrom interface on ISP16.\n", irq );
+    return(-1);
+  }
+  switch (dma) {
+  case 0: dma_code = ISP16_DMA_X; break;  /* disable dma */
+  case 1: printk( "Dma 1 cannot be used by cdrom interface on ISP16,"
+            " due to conflict with the soundcard.\n");
+          return(-1); break;
+  case 3: dma_code = ISP16_DMA_3; break;
+  case 5: dma_code = ISP16_DMA_5; break;
+  case 6: dma_code = ISP16_DMA_6; break;
+  case 7: dma_code = ISP16_DMA_7; break;
+  default:
+    printk( "Dma %d not supported by cdrom interface on ISP16.\n", dma );
+    return(-1);
+  }
+
+  if ( drive_type != ISP16_SONY && drive_type != ISP16_PANASONIC0 &&
+    drive_type != ISP16_PANASONIC1 && drive_type != ISP16_SANYO0 &&
+    drive_type != ISP16_SANYO1 && drive_type != ISP16_MITSUMI &&
+    drive_type != ISP16_DRIVE_X ) {
+    printk( "Drive type (code 0x%02X) not supported by cdrom"
+     " interface on ISP16.\n", drive_type );
+    return(-1);
+  }
+
+  /* set type of interface */
+  i = ISP16_IN(ISP16_DRIVE_SET_PORT) & ISP16_DRIVE_SET_MASK;  /* clear some bits */
+  ISP16_OUT( ISP16_DRIVE_SET_PORT, i|drive_type );
+
+  /* enable cdrom on interface with ide support */
+  if ( isp16_type > 1 )
+    ISP16_OUT( isp16_enable_cdrom_port, ISP16_ENABLE_CDROM );
+
+  /* set base address, irq and dma */
+  i = ISP16_IN(ISP16_IO_SET_PORT) & ISP16_IO_SET_MASK;  /* keep some bits */
+  ISP16_OUT( ISP16_IO_SET_PORT, i|base_code|irq_code|dma_code );
+
+  return(0);
+}
