@@ -410,7 +410,7 @@ static const lookup_t error_table[] = {
 #ifndef CONFIG_APM_ALLOW_INTS
 #	define APM_DO_CLI	__cli()
 #else
-#	define APM_DO_CLI
+#	define APM_DO_CLI	__sti()
 #endif
 #ifdef APM_ZERO_SEGS
 #	define APM_DECL_SEGS \

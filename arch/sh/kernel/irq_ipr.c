@@ -21,6 +21,7 @@
 
 #include <asm/system.h>
 #include <asm/io.h>
+#include <asm/machvec.h>
 
 struct ipr_data {
 	unsigned int addr;	/* Address of Interrupt Priority Register */
@@ -29,15 +30,8 @@ struct ipr_data {
 };
 static struct ipr_data ipr_data[NR_IRQS];
 
-void set_ipr_data(unsigned int irq, unsigned int addr, int pos, int priority)
-{
-	ipr_data[irq].addr = addr;
-	ipr_data[irq].shift = pos*4; /* POSition (0-3) x 4 means shift */
-	ipr_data[irq].priority = priority;
-}
-
 static void enable_ipr_irq(unsigned int irq);
-void disable_ipr_irq(unsigned int irq);
+static void disable_ipr_irq(unsigned int irq);
 
 /* shutdown is same as "disable" */
 #define shutdown_ipr_irq disable_ipr_irq
@@ -61,7 +55,7 @@ static struct hw_interrupt_type ipr_irq_type = {
 	end_ipr_irq
 };
 
-void disable_ipr_irq(unsigned int irq)
+static void disable_ipr_irq(unsigned int irq)
 {
 	unsigned long val, flags;
 	unsigned int addr = ipr_data[irq].addr;
@@ -90,18 +84,11 @@ static void enable_ipr_irq(unsigned int irq)
 	restore_flags(flags);
 }
 
-void make_ipr_irq(unsigned int irq)
-{
-	disable_irq_nosync(irq);
-	irq_desc[irq].handler = &ipr_irq_type;
-	disable_ipr_irq(irq);
-}
-
 static void mask_and_ack_ipr(unsigned int irq)
 {
 	disable_ipr_irq(irq);
 
-#ifdef CONFIG_CPU_SUBTYPE_SH7709
+#if defined(CONFIG_CPU_SUBTYPE_SH7707) || defined(CONFIG_CPU_SUBTYPE_SH7709)
 	/* This is needed when we use edge triggered setting */
 	/* XXX: Is it really needed? */
 	if (IRQ0_IRQ <= irq && irq <= IRQ5_IRQ) {
@@ -118,18 +105,39 @@ static void end_ipr_irq(unsigned int irq)
 	enable_ipr_irq(irq);
 }
 
+void make_ipr_irq(unsigned int irq, unsigned int addr, int pos, int priority)
+{
+	disable_irq_nosync(irq);
+	ipr_data[irq].addr = addr;
+	ipr_data[irq].shift = pos*4; /* POSition (0-3) x 4 means shift */
+	ipr_data[irq].priority = priority;
+
+	irq_desc[irq].handler = &ipr_irq_type;
+	disable_ipr_irq(irq);
+}
+
 void __init init_IRQ(void)
 {
-	int i;
+	make_ipr_irq(TIMER_IRQ, TIMER_IPR_ADDR, TIMER_IPR_POS, TIMER_PRIORITY);
+	make_ipr_irq(RTC_IRQ, RTC_IPR_ADDR, RTC_IPR_POS, RTC_PRIORITY);
 
-	for (i = TIMER_IRQ; i < NR_IRQS; i++) {
-		irq_desc[i].handler = &ipr_irq_type;
-	}
+	make_ipr_irq(SCI_ERI_IRQ, SCI_IPR_ADDR, SCI_IPR_POS, SCI_PRIORITY);
+	make_ipr_irq(SCI_RXI_IRQ, SCI_IPR_ADDR, SCI_IPR_POS, SCI_PRIORITY);
+	make_ipr_irq(SCI_TXI_IRQ, SCI_IPR_ADDR, SCI_IPR_POS, SCI_PRIORITY);
 
-	set_ipr_data(TIMER_IRQ, TIMER_IPR_ADDR, TIMER_IPR_POS, TIMER_PRIORITY);
-	set_ipr_data(RTC_IRQ, RTC_IPR_ADDR, RTC_IPR_POS, RTC_PRIORITY);
+#ifdef SCIF_ERI_IRQ
+	make_ipr_irq(SCIF_ERI_IRQ, SCIF_IPR_ADDR, SCIF_IPR_POS, SCIF_PRIORITY);
+	make_ipr_irq(SCIF_RXI_IRQ, SCIF_IPR_ADDR, SCIF_IPR_POS, SCIF_PRIORITY);
+	make_ipr_irq(SCIF_TXI_IRQ, SCIF_IPR_ADDR, SCIF_IPR_POS, SCIF_PRIORITY);
+#endif
 
-#ifdef CONFIG_CPU_SUBTYPE_SH7709
+#ifdef IRDA_ERI_IRQ
+	make_ipr_irq(IRDA_ERI_IRQ, IRDA_IPR_ADDR, IRDA_IPR_POS, IRDA_PRIORITY);
+	make_ipr_irq(IRDA_RXI_IRQ, IRDA_IPR_ADDR, IRDA_IPR_POS, IRDA_PRIORITY);
+	make_ipr_irq(IRDA_TXI_IRQ, IRDA_IPR_ADDR, IRDA_IPR_POS, IRDA_PRIORITY);
+#endif
+
+#if defined(CONFIG_CPU_SUBTYPE_SH7707) || defined(CONFIG_CPU_SUBTYPE_SH7709)
 	/*
 	 * Initialize the Interrupt Controller (INTC)
 	 * registers to their power on values
@@ -161,11 +169,16 @@ void __init init_IRQ(void)
 	 * You should set corresponding bits of PFC to "00"
 	 * to enable these interrupts.
 	 */
-	set_ipr_data(IRQ0_IRQ, IRQ0_IRP_ADDR, IRQ0_IRP_POS, IRQ0_PRIORITY);
-	set_ipr_data(IRQ1_IRQ, IRQ1_IRP_ADDR, IRQ1_IRP_POS, IRQ1_PRIORITY);
-	set_ipr_data(IRQ2_IRQ, IRQ2_IRP_ADDR, IRQ2_IRP_POS, IRQ2_PRIORITY);
-	set_ipr_data(IRQ3_IRQ, IRQ3_IRP_ADDR, IRQ3_IRP_POS, IRQ3_PRIORITY);
-	set_ipr_data(IRQ4_IRQ, IRQ4_IRP_ADDR, IRQ4_IRP_POS, IRQ4_PRIORITY);
-	set_ipr_data(IRQ5_IRQ, IRQ5_IRP_ADDR, IRQ5_IRP_POS, IRQ5_PRIORITY);
-#endif /* CONFIG_CPU_SUBTYPE_SH7709 */
+	make_ipr_irq(IRQ0_IRQ, IRQ0_IRP_ADDR, IRQ0_IRP_POS, IRQ0_PRIORITY);
+	make_ipr_irq(IRQ1_IRQ, IRQ1_IRP_ADDR, IRQ1_IRP_POS, IRQ1_PRIORITY);
+	make_ipr_irq(IRQ2_IRQ, IRQ2_IRP_ADDR, IRQ2_IRP_POS, IRQ2_PRIORITY);
+	make_ipr_irq(IRQ3_IRQ, IRQ3_IRP_ADDR, IRQ3_IRP_POS, IRQ3_PRIORITY);
+	make_ipr_irq(IRQ4_IRQ, IRQ4_IRP_ADDR, IRQ4_IRP_POS, IRQ4_PRIORITY);
+	make_ipr_irq(IRQ5_IRQ, IRQ5_IRP_ADDR, IRQ5_IRP_POS, IRQ5_PRIORITY);
+#endif /* CONFIG_CPU_SUBTYPE_SH7707 || CONFIG_CPU_SUBTYPE_SH7709 */
+
+	/* Perform the machine specific initialisation */
+	if (sh_mv.mv_init_irq != NULL) {
+		sh_mv.mv_init_irq();
+	}
 }

@@ -8,6 +8,9 @@
  *
  */
 
+/* NOTE: Will not work on level 15 */
+
+
 #include <linux/ptrace.h>
 #include <linux/errno.h>
 #include <linux/kernel_stat.h>
@@ -71,7 +74,7 @@ void static inline set_interrupt_registers(int ip)
 		     : "r" (~0xf0), "r" (ip << 4));
 }
 
-void disable_imask_irq(unsigned int irq)
+static void disable_imask_irq(unsigned int irq)
 {
 	clear_bit(irq, &imask_mask);
 	if (interrupt_priority < IMASK_PRIORITY - irq)

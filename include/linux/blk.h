@@ -85,7 +85,7 @@ void initrd_init(void);
  * code duplication in drivers.
  */
 
-extern inline void blkdev_dequeue_request(struct request * req)
+static inline void blkdev_dequeue_request(struct request * req)
 {
 	if (req->e) {
 		req->e->dequeue_fn(req);
@@ -99,6 +99,9 @@ void end_that_request_last(struct request *req);
 
 #if defined(MAJOR_NR) || defined(IDE_DRIVER)
 
+#undef DEVICE_ON
+#undef DEVICE_OFF
+
 /*
  * Add entries as needed.
  */
@@ -106,8 +109,6 @@ void end_that_request_last(struct request *req);
 #ifdef IDE_DRIVER
 
 #define DEVICE_NR(device)	(MINOR(device) >> PARTN_BITS)
-#define DEVICE_ON(device)	/* nothing */
-#define DEVICE_OFF(device)	/* nothing */
 #define DEVICE_NAME "ide"
 
 #elif (MAJOR_NR == RAMDISK_MAJOR)
@@ -116,8 +117,6 @@ void end_that_request_last(struct request *req);
 #define DEVICE_NAME "ramdisk"
 #define DEVICE_REQUEST rd_request
 #define DEVICE_NR(device) (MINOR(device))
-#define DEVICE_ON(device) 
-#define DEVICE_OFF(device)
 #define DEVICE_NO_RANDOM
 
 #elif (MAJOR_NR == Z2RAM_MAJOR)
@@ -126,8 +125,6 @@ void end_that_request_last(struct request *req);
 #define DEVICE_NAME "Z2RAM"
 #define DEVICE_REQUEST do_z2_request
 #define DEVICE_NR(device) (MINOR(device))
-#define DEVICE_ON(device)
-#define DEVICE_OFF(device)
 
 #elif (MAJOR_NR == FLOPPY_MAJOR)
 
@@ -137,7 +134,6 @@ static void floppy_off(unsigned int nr);
 #define DEVICE_INTR do_floppy
 #define DEVICE_REQUEST do_fd_request
 #define DEVICE_NR(device) ( (MINOR(device) & 3) | ((MINOR(device) & 0x80 ) >> 5 ))
-#define DEVICE_ON(device)
 #define DEVICE_OFF(device) floppy_off(DEVICE_NR(device))
 
 #elif (MAJOR_NR == HD_MAJOR)
@@ -148,16 +144,12 @@ static void floppy_off(unsigned int nr);
 #define TIMEOUT_VALUE (6*HZ)
 #define DEVICE_REQUEST do_hd_request
 #define DEVICE_NR(device) (MINOR(device)>>6)
-#define DEVICE_ON(device)
-#define DEVICE_OFF(device)
 
 #elif (SCSI_DISK_MAJOR(MAJOR_NR))
 
 #define DEVICE_NAME "scsidisk"
 #define TIMEOUT_VALUE (2*HZ)
 #define DEVICE_NR(device) (((MAJOR(device) & SD_MAJOR_MASK) << (8 - 4)) + (MINOR(device) >> 4))
-#define DEVICE_ON(device)
-#define DEVICE_OFF(device)
 
 /* Kludge to use the same number for both char and block major numbers */
 #elif  (MAJOR_NR == MD_MAJOR) && defined(MD_DRIVER)
@@ -165,47 +157,35 @@ static void floppy_off(unsigned int nr);
 #define DEVICE_NAME "Multiple devices driver"
 #define DEVICE_REQUEST do_md_request
 #define DEVICE_NR(device) (MINOR(device))
-#define DEVICE_ON(device)
-#define DEVICE_OFF(device)
 
 #elif (MAJOR_NR == SCSI_TAPE_MAJOR)
 
 #define DEVICE_NAME "scsitape"
 #define DEVICE_INTR do_st  
 #define DEVICE_NR(device) (MINOR(device) & 0x7f)
-#define DEVICE_ON(device)
-#define DEVICE_OFF(device)
 
 #elif (MAJOR_NR == SCSI_CDROM_MAJOR)
 
 #define DEVICE_NAME "CD-ROM"
 #define DEVICE_NR(device) (MINOR(device))
-#define DEVICE_ON(device)
-#define DEVICE_OFF(device)
 
 #elif (MAJOR_NR == XT_DISK_MAJOR)
 
 #define DEVICE_NAME "xt disk"
 #define DEVICE_REQUEST do_xd_request
 #define DEVICE_NR(device) (MINOR(device) >> 6)
-#define DEVICE_ON(device)
-#define DEVICE_OFF(device)
 
 #elif (MAJOR_NR == PS2ESDI_MAJOR)
 
 #define DEVICE_NAME "PS/2 ESDI"
 #define DEVICE_REQUEST do_ps2esdi_request
 #define DEVICE_NR(device) (MINOR(device) >> 6)
-#define DEVICE_ON(device)
-#define DEVICE_OFF(device)
 
 #elif (MAJOR_NR == CDU31A_CDROM_MAJOR)
 
 #define DEVICE_NAME "CDU31A"
 #define DEVICE_REQUEST do_cdu31a_request
 #define DEVICE_NR(device) (MINOR(device))
-#define DEVICE_ON(device)
-#define DEVICE_OFF(device)
 
 #elif (MAJOR_NR == ACSI_MAJOR) && (defined(CONFIG_ATARI_ACSI) || defined(CONFIG_ATARI_ACSI_MODULE))
 
@@ -213,8 +193,6 @@ static void floppy_off(unsigned int nr);
 #define DEVICE_INTR do_acsi
 #define DEVICE_REQUEST do_acsi_request
 #define DEVICE_NR(device) (MINOR(device) >> 4)
-#define DEVICE_ON(device)
-#define DEVICE_OFF(device)
 
 #elif (MAJOR_NR == MITSUMI_CDROM_MAJOR)
 
@@ -222,8 +200,6 @@ static void floppy_off(unsigned int nr);
 /* #define DEVICE_INTR do_mcd */
 #define DEVICE_REQUEST do_mcd_request
 #define DEVICE_NR(device) (MINOR(device))
-#define DEVICE_ON(device)
-#define DEVICE_OFF(device)
 
 #elif (MAJOR_NR == MITSUMI_X_CDROM_MAJOR)
 
@@ -231,48 +207,36 @@ static void floppy_off(unsigned int nr);
 /* #define DEVICE_INTR do_mcdx */
 #define DEVICE_REQUEST do_mcdx_request
 #define DEVICE_NR(device) (MINOR(device))
-#define DEVICE_ON(device)
-#define DEVICE_OFF(device)
 
 #elif (MAJOR_NR == MATSUSHITA_CDROM_MAJOR)
 
 #define DEVICE_NAME "Matsushita CD-ROM controller #1"
 #define DEVICE_REQUEST do_sbpcd_request
 #define DEVICE_NR(device) (MINOR(device))
-#define DEVICE_ON(device)
-#define DEVICE_OFF(device)
 
 #elif (MAJOR_NR == MATSUSHITA_CDROM2_MAJOR)
 
 #define DEVICE_NAME "Matsushita CD-ROM controller #2"
 #define DEVICE_REQUEST do_sbpcd2_request
 #define DEVICE_NR(device) (MINOR(device))
-#define DEVICE_ON(device)
-#define DEVICE_OFF(device)
 
 #elif (MAJOR_NR == MATSUSHITA_CDROM3_MAJOR)
 
 #define DEVICE_NAME "Matsushita CD-ROM controller #3"
 #define DEVICE_REQUEST do_sbpcd3_request
 #define DEVICE_NR(device) (MINOR(device))
-#define DEVICE_ON(device)
-#define DEVICE_OFF(device)
 
 #elif (MAJOR_NR == MATSUSHITA_CDROM4_MAJOR)
 
 #define DEVICE_NAME "Matsushita CD-ROM controller #4"
 #define DEVICE_REQUEST do_sbpcd4_request
 #define DEVICE_NR(device) (MINOR(device))
-#define DEVICE_ON(device)
-#define DEVICE_OFF(device)
 
 #elif (MAJOR_NR == AZTECH_CDROM_MAJOR)
 
 #define DEVICE_NAME "Aztech CD-ROM"
 #define DEVICE_REQUEST do_aztcd_request
 #define DEVICE_NR(device) (MINOR(device))
-#define DEVICE_ON(device)
-#define DEVICE_OFF(device)
 
 #elif (MAJOR_NR == CDU535_CDROM_MAJOR)
 
@@ -280,55 +244,41 @@ static void floppy_off(unsigned int nr);
 #define DEVICE_INTR do_cdu535
 #define DEVICE_REQUEST do_cdu535_request
 #define DEVICE_NR(device) (MINOR(device))
-#define DEVICE_ON(device)
-#define DEVICE_OFF(device)
 
 #elif (MAJOR_NR == GOLDSTAR_CDROM_MAJOR)
 
 #define DEVICE_NAME "Goldstar R420"
 #define DEVICE_REQUEST do_gscd_request
 #define DEVICE_NR(device) (MINOR(device))
-#define DEVICE_ON(device)
-#define DEVICE_OFF(device)
 
 #elif (MAJOR_NR == CM206_CDROM_MAJOR)
 #define DEVICE_NAME "Philips/LMS CD-ROM cm206"
 #define DEVICE_REQUEST do_cm206_request
 #define DEVICE_NR(device) (MINOR(device))
-#define DEVICE_ON(device)
-#define DEVICE_OFF(device)
 
 #elif (MAJOR_NR == OPTICS_CDROM_MAJOR)
 
 #define DEVICE_NAME "DOLPHIN 8000AT CD-ROM"
 #define DEVICE_REQUEST do_optcd_request
 #define DEVICE_NR(device) (MINOR(device))
-#define DEVICE_ON(device)
-#define DEVICE_OFF(device)
 
 #elif (MAJOR_NR == SANYO_CDROM_MAJOR)
 
 #define DEVICE_NAME "Sanyo H94A CD-ROM"
 #define DEVICE_REQUEST do_sjcd_request
 #define DEVICE_NR(device) (MINOR(device))
-#define DEVICE_ON(device)
-#define DEVICE_OFF(device)
 
 #elif (MAJOR_NR == APBLOCK_MAJOR)
 
 #define DEVICE_NAME "apblock"
 #define DEVICE_REQUEST ap_request
 #define DEVICE_NR(device) (MINOR(device))
-#define DEVICE_ON(device) 
-#define DEVICE_OFF(device)
 
 #elif (MAJOR_NR == DDV_MAJOR)
 
 #define DEVICE_NAME "ddv"
 #define DEVICE_REQUEST ddv_request
 #define DEVICE_NR(device) (MINOR(device)>>PARTN_BITS)
-#define DEVICE_ON(device) 
-#define DEVICE_OFF(device)
 
 #elif (MAJOR_NR == MFM_ACORN_MAJOR)
 
@@ -336,41 +286,30 @@ static void floppy_off(unsigned int nr);
 #define DEVICE_INTR do_mfm
 #define DEVICE_REQUEST do_mfm_request
 #define DEVICE_NR(device) (MINOR(device) >> 6)
-#define DEVICE_ON(device)
-#define DEVICE_OFF(device)
 
 #elif (MAJOR_NR == NBD_MAJOR)
 
 #define DEVICE_NAME "nbd"
 #define DEVICE_REQUEST do_nbd_request
 #define DEVICE_NR(device) (MINOR(device))
-#define DEVICE_ON(device) 
-#define DEVICE_OFF(device)
-
 
 #elif (MAJOR_NR == MDISK_MAJOR)
 
 #define DEVICE_NAME "mdisk"
 #define DEVICE_REQUEST mdisk_request
 #define DEVICE_NR(device) (MINOR(device))
-#define DEVICE_ON(device) 
-#define DEVICE_OFF(device)
 
 #elif (MAJOR_NR == DASD_MAJOR)
 
 #define DEVICE_NAME "dasd"
 #define DEVICE_REQUEST do_dasd_request
 #define DEVICE_NR(device) (MINOR(device) >> PARTN_BITS)
-#define DEVICE_ON(device) 
-#define DEVICE_OFF(device)
 
 #elif (MAJOR_NR == I2O_MAJOR)
 
 #define DEVICE_NAME "I2O block"
 #define DEVICE_REQUEST do_i2ob_request
 #define DEVICE_NR(device) (MINOR(device)>>4)
-#define DEVICE_ON(device) 
-#define DEVICE_OFF(device)
 
 #elif (MAJOR_NR == COMPAQ_SMART2_MAJOR)
 
@@ -378,10 +317,17 @@ static void floppy_off(unsigned int nr);
 #define TIMEOUT_VALUE (25*HZ)
 #define DEVICE_REQUEST do_ida_request0
 #define DEVICE_NR(device) (MINOR(device) >> 4)
-#define DEVICE_ON(device)
-#define DEVICE_OFF(device)
 
 #endif /* MAJOR_NR == whatever */
+
+/* provide DEVICE_xxx defaults, if not explicitly defined
+ * above in the MAJOR_NR==xxx if-elif tree */
+#ifndef DEVICE_ON
+#define DEVICE_ON(device) do {} while (0)
+#endif
+#ifndef DEVICE_OFF
+#define DEVICE_OFF(device) do {} while (0)
+#endif
 
 #if (MAJOR_NR != SCSI_TAPE_MAJOR)
 #if !defined(IDE_DRIVER)
@@ -434,7 +380,7 @@ static void (DEVICE_REQUEST)(request_queue_t *);
 
 #if ! SCSI_BLK_MAJOR(MAJOR_NR) && (MAJOR_NR != COMPAQ_SMART2_MAJOR)
 
-static void end_request(int uptodate) {
+static inline void end_request(int uptodate) {
 	struct request *req = CURRENT;
 
 	if (end_that_request_first(req, uptodate, DEVICE_NAME))

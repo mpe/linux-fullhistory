@@ -115,7 +115,8 @@ static void handle_vmalloc_fault(struct mm_struct *mm, unsigned long address)
 	 * ITLB is not affected by "ldtlb" instruction.
 	 * So, we need to flush the entry by ourselves.
 	 */
-	__flush_tlb_page(mm, address&PAGE_MASK);
+	if (mm)
+		__flush_tlb_page(mm, address&PAGE_MASK);
 #endif
 	update_mmu_cache(NULL, address, entry);
 }
@@ -281,15 +282,14 @@ void update_mmu_cache(struct vm_area_struct * vma,
 	save_and_cli(flags);
 
 #if defined(__SH4__)
-	if ((vma->vm_flags & VM_SHARED)) {
+	if (vma && (vma->vm_flags & VM_SHARED)) {
+		struct page *pg;
+
 		pteval = pte_val(pte);
 		pteval &= PAGE_MASK; /* Physicall page address */
-
 		__flush_tlb_phys(vma->vm_mm, pteval);
-
-		/* It would be good we had routine which takes
-		   physical memory as argument */
-		flush_cache_page(vma, address&PAGE_MASK);
+		pg = virt_to_page(__va(pteval));
+		flush_dcache_page(pg);
 	}
 #endif
 

@@ -82,7 +82,7 @@ typedef unsigned long pgprot_t;
 #  endif /* !STRICT_MM_TYPECHECKS */
 
 /*
- * Note: the MAP_NR() macro can't use __pa() because MAP_NR(X) MUST
+ * Note: the MAP_NR_*() macro can't use __pa() because MAP_NR_*(X) MUST
  * map to something >= max_mapnr if X is outside the identity mapped
  * kernel space.
  */
@@ -100,12 +100,13 @@ typedef unsigned long pgprot_t;
 #define MAP_NR_SN1(addr)	(((unsigned long) (addr) - PAGE_OFFSET) >> PAGE_SHIFT)
 
 #ifdef CONFIG_IA64_GENERIC
-# define MAP_NR(addr)	platform_map_nr(addr)
+# define virt_to_page(kaddr)	(mem_map + platform_map_nr(kaddr))
 #elif defined (CONFIG_IA64_SN_SN1_SIM)
-# define MAP_NR(addr)	MAP_NR_SN1(addr)
+# define virt_to_page(kaddr)	(mem_map + MAP_NR_SN1(kaddr))
 #else
-# define MAP_NR(addr)	MAP_NR_DENSE(addr)
+# define virt_to_page(kaddr)	(mem_map + MAP_NR_DENSE(kaddr))
 #endif
+#define VALID_PAGE(page)	((page - mem_map) < max_mapnr)
 
 # endif /* __KERNEL__ */
 

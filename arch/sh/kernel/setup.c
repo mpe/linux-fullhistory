@@ -30,13 +30,16 @@
 #endif
 #include <linux/bootmem.h>
 #include <linux/console.h>
+#include <linux/ctype.h>
 #include <asm/processor.h>
 #include <asm/page.h>
 #include <asm/pgtable.h>
 #include <asm/uaccess.h>
 #include <asm/system.h>
 #include <asm/io.h>
+#include <asm/io_generic.h>
 #include <asm/smp.h>
+#include <asm/machvec.h>
 #ifdef CONFIG_SH_EARLY_PRINTK
 #include <asm/sh_bios.h>
 #endif
@@ -53,9 +56,17 @@ extern int rd_prompt;		/* 1 = prompt for ramdisk, 0 = don't prompt */
 extern int rd_image_start;	/* starting block # of image */
 #endif
 
+#if defined(CONFIG_SH_GENERIC) || defined(CONFIG_SH_UNKNOWN)
+struct sh_machine_vector sh_mv;
+#endif
+
 extern void fpu_init(void);
 extern int root_mountflags;
 extern int _text, _etext, _edata, _end;
+
+#define MV_NAME_SIZE 32
+
+static struct sh_machine_vector* __init get_mv_byname(const char* name);
 
 /*
  * This is set up by the setup-routine at boot-time
@@ -180,8 +191,10 @@ void sh_console_unregister(void)
 
 #endif
 
-
-static inline void parse_mem_cmdline (char ** cmdline_p)
+static inline void parse_cmdline (char ** cmdline_p, char mv_name[MV_NAME_SIZE],
+				  struct sh_machine_vector** mvp,
+				  unsigned long *mv_io_base,
+				  int *mv_mmio_enable)
 {
 	char c = ' ', *to = command_line, *from = COMMAND_LINE;
 	int len = 0;
@@ -208,6 +221,35 @@ static inline void parse_mem_cmdline (char ** cmdline_p)
 				memory_end = memory_start + mem_size;
 			}
 		}
+		if (c == ' ' && !memcmp(from, "sh_mv=", 6)) {
+			char* mv_end;
+			char* mv_comma;
+			int mv_len;
+			if (to != command_line)
+				to--;
+			from += 6;
+			mv_end = strchr(from, ' ');
+			if (mv_end == NULL)
+				mv_end = from + strlen(from);
+
+			mv_comma = strchr(from, ',');
+			if ((mv_comma != NULL) && (mv_comma < mv_end)) {
+				int ints[3];
+				get_options(mv_comma+1, ARRAY_SIZE(ints), ints);
+				*mv_io_base = ints[1];
+				*mv_mmio_enable = ints[2];
+				mv_len = mv_comma - from;
+			} else {
+				mv_len = mv_end - from;
+			}
+			if (mv_len > (MV_NAME_SIZE-1))
+				mv_len = MV_NAME_SIZE-1;
+			memcpy(mv_name, from, mv_len);
+			mv_name[mv_len] = '\0';
+			from = mv_end;
+
+			*mvp = get_mv_byname(mv_name);
+		}
 		c = *(from++);
 		if (!c)
 			break;
@@ -221,6 +263,10 @@ static inline void parse_mem_cmdline (char ** cmdline_p)
 
 void __init setup_arch(char **cmdline_p)
 {
+	struct sh_machine_vector *mv = NULL;
+	char mv_name[MV_NAME_SIZE] = "";
+	unsigned long mv_io_base = 0;
+	int mv_mmio_enable = 0;
 	unsigned long bootmap_size;
 	unsigned long start_pfn, max_pfn, max_low_pfn;
 
@@ -248,7 +294,58 @@ void __init setup_arch(char **cmdline_p)
 	data_resource.start = virt_to_bus(&_etext);
 	data_resource.end = virt_to_bus(&_edata)-1;
 
-	parse_mem_cmdline(cmdline_p);
+	parse_cmdline(cmdline_p, mv_name, &mv, &mv_io_base, &mv_mmio_enable);
+
+#ifdef CONFIG_SH_GENERIC
+	if (mv == NULL) {
+		extern struct sh_machine_vector mv_unknown;
+		mv = &mv_unknown;
+		if (*mv_name != '\0') {
+			printk("Warning: Unsupported machine %s, using unknown\n",
+			       mv_name);
+		}
+	}
+	sh_mv = *mv;
+#endif
+#ifdef CONFIG_SH_UNKNOWN
+	sh_mv = mv_unknown;
+#endif
+
+#if defined(CONFIG_SH_GENERIC) || defined(CONFIG_SH_UNKNOWN)
+	if (mv_io_base != 0) {
+		sh_mv.mv_inb = generic_inb;
+		sh_mv.mv_inw = generic_inw;
+		sh_mv.mv_inl = generic_inl;
+		sh_mv.mv_outb = generic_outb;
+		sh_mv.mv_outw = generic_outw;
+		sh_mv.mv_outl = generic_outl;
+
+		sh_mv.mv_inb_p = generic_inb_p;
+		sh_mv.mv_inw_p = generic_inw_p;
+		sh_mv.mv_inl_p = generic_inl_p;
+		sh_mv.mv_outb_p = generic_outb_p;
+		sh_mv.mv_outw_p = generic_outw_p;
+		sh_mv.mv_outl_p = generic_outl_p;
+
+		sh_mv.mv_insb = generic_insb;
+		sh_mv.mv_insw = generic_insw;
+		sh_mv.mv_insl = generic_insl;
+		sh_mv.mv_outsb = generic_outsb;
+		sh_mv.mv_outsw = generic_outsw;
+		sh_mv.mv_outsl = generic_outsl;
+
+		sh_mv.mv_isa_port2addr = generic_isa_port2addr;
+		generic_io_base = mv_io_base;
+	}
+	if (mv_mmio_enable != 0) {
+		sh_mv.mv_readb = generic_readb;
+		sh_mv.mv_readw = generic_readw;
+		sh_mv.mv_readl = generic_readl;
+		sh_mv.mv_writeb = generic_writeb;
+		sh_mv.mv_writew = generic_writew;
+		sh_mv.mv_writel = generic_writel;
+	}
+#endif
 
 #define PFN_UP(x)	(((x) + PAGE_SIZE-1) >> PAGE_SHIFT)
 #define PFN_DOWN(x)	((x) >> PAGE_SHIFT)
@@ -358,6 +455,11 @@ void __init setup_arch(char **cmdline_p)
 #endif
 #endif
 
+	/* Perform the machine specific initialisation */
+	if (sh_mv.mv_init_arch != NULL) {
+		sh_mv.mv_init_arch();
+	}
+
 #if defined(__SH4__)
 	/* We already grab/initialized FPU in head.S.  Make it consisitent. */
 	init_task.used_math = 1;
@@ -366,10 +468,32 @@ void __init setup_arch(char **cmdline_p)
 	paging_init();
 }
 
+struct sh_machine_vector* __init get_mv_byname(const char* name)
+{
+	extern int strcasecmp(const char *, const char *);
+	extern long __machvec_start, __machvec_end;
+	struct sh_machine_vector *all_vecs =
+		(struct sh_machine_vector *)&__machvec_start;
+
+	int i, n = ((unsigned long)&__machvec_end
+		    - (unsigned long)&__machvec_start)/
+		sizeof(struct sh_machine_vector);
+
+	for (i = 0; i < n; ++i) {
+		struct sh_machine_vector *mv = &all_vecs[i];
+		if (mv == NULL)
+			continue;
+		if (strcasecmp(name, mv->mv_name) == 0) {
+			return mv;
+		}
+	}
+	return NULL;
+}
+
 /*
  *	Get CPU information for use by the procfs.
  */
-
+#ifdef CONFIG_PROC_FS
 int get_cpuinfo(char *buffer)
 {
 	char *p = buffer;
@@ -384,6 +508,7 @@ int get_cpuinfo(char *buffer)
 	p += sprintf(p, "bogomips\t: %lu.%02lu\n\n",
 		     (loops_per_sec+2500)/500000,
 		     ((loops_per_sec+2500)/5000) % 100);
+	p += sprintf(p, "Machine: %s\n", sh_mv.mv_name);
 
 #define PRINT_CLOCK(name, value) \
 	p += sprintf(p, name " clock: %d.%02dMHz\n", \
@@ -395,3 +520,4 @@ int get_cpuinfo(char *buffer)
 
 	return p - buffer;
 }
+#endif

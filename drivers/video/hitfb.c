@@ -110,8 +110,10 @@ static int hitfb_encode_fix(struct fb_fix_screeninfo *fix,
     default:
     case 8:
 	fix->line_length = par->x;
+	break;
     case 16:
 	fix->line_length = par->x*2;
+	break;
     }
 
     return 0;

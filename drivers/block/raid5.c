@@ -1017,7 +1017,6 @@ static void handle_stripe_write (mddev_t *mddev , raid5_conf_t *conf,
 	int nr_failed_other, int nr_cache_overwrite, int nr_failed_overwrite)
 {
 	int i, allclean;
-	request_queue_t *q;
 	unsigned int block;
 	struct buffer_head *bh;
 	int method1 = INT_MAX, method2 = INT_MAX;
@@ -1088,21 +1087,18 @@ static void handle_stripe_write (mddev_t *mddev , raid5_conf_t *conf,
 					PRINTK("writing spare %d\n", i);
 					atomic_inc(&sh->nr_pending);
 					bh->b_dev = bh->b_rdev = conf->spare->dev;
-					q = blk_get_queue(bh->b_rdev);
-					generic_make_request(q, WRITERAW, bh);
+					generic_make_request(WRITERAW, bh);
 				} else {
 #if 0
 					atomic_inc(&sh->nr_pending);
 					bh->b_dev = bh->b_rdev = conf->disks[i].dev;
-					q = blk_get_queue(bh->b_rdev);
-					generic_make_request(q, WRITERAW, bh);
+					generic_make_request(WRITERAW, bh);
 #else
 					if (!allclean || (i==sh->pd_idx)) {
 						PRINTK("writing dirty %d\n", i);
 						atomic_inc(&sh->nr_pending);
 						bh->b_dev = bh->b_rdev = conf->disks[i].dev;
-						q = blk_get_queue(bh->b_rdev);
-						generic_make_request(q, WRITERAW, bh);
+						generic_make_request(WRITERAW, bh);
 					} else {
 						PRINTK("not writing clean %d\n", i);
 						raid5_end_request(bh, 1);
@@ -1147,8 +1143,7 @@ static void handle_stripe_write (mddev_t *mddev , raid5_conf_t *conf,
 		lock_get_bh(sh->bh_old[i]);
 		atomic_inc(&sh->nr_pending);
 		sh->bh_old[i]->b_dev = sh->bh_old[i]->b_rdev = conf->disks[i].dev;
-		q = blk_get_queue(sh->bh_old[i]->b_rdev);
-		generic_make_request(q, READ, sh->bh_old[i]);
+		generic_make_request(READ, sh->bh_old[i]);
 		atomic_dec(&sh->bh_old[i]->b_count);
 	}
 	PRINTK("handle_stripe() %lu, reading %d old buffers\n", sh->sector, md_atomic_read(&sh->nr_pending));
@@ -1163,7 +1158,6 @@ static void handle_stripe_read (mddev_t *mddev , raid5_conf_t *conf,
 	int nr_failed_other, int nr_cache_overwrite, int nr_failed_overwrite)
 {
 	int i;
-	request_queue_t *q;
 	int method1 = INT_MAX;
 
 	method1 = nr_read - nr_cache_overwrite;
@@ -1194,8 +1188,7 @@ static void handle_stripe_read (mddev_t *mddev , raid5_conf_t *conf,
 			lock_get_bh(sh->bh_old[i]);
 			atomic_inc(&sh->nr_pending);
 			sh->bh_old[i]->b_dev = sh->bh_old[i]->b_rdev = conf->disks[i].dev;
-			q = blk_get_queue(sh->bh_old[i]->b_rdev);
-			generic_make_request(q, READ, sh->bh_old[i]);
+			generic_make_request(READ, sh->bh_old[i]);
 			atomic_dec(&sh->bh_old[i]->b_count);
 		}
 		PRINTK("handle_stripe() %lu, phase READ_OLD, pending %d buffers\n", sh->sector, md_atomic_read(&sh->nr_pending));
@@ -1224,8 +1217,7 @@ static void handle_stripe_read (mddev_t *mddev , raid5_conf_t *conf,
 		lock_get_bh(sh->bh_req[i]);
 		atomic_inc(&sh->nr_pending);
 		sh->bh_req[i]->b_dev = sh->bh_req[i]->b_rdev = conf->disks[i].dev;
-		q = blk_get_queue(sh->bh_req[i]->b_rdev);
-		generic_make_request(q, READ, sh->bh_req[i]);
+		generic_make_request(READ, sh->bh_req[i]);
 		atomic_dec(&sh->bh_req[i]->b_count);
 	}
 	PRINTK("handle_stripe() %lu, phase READ, pending %d\n", sh->sector, md_atomic_read(&sh->nr_pending));
@@ -1239,7 +1231,6 @@ static void handle_stripe_sync (mddev_t *mddev , raid5_conf_t *conf,
 	int parity, int parity_failed, int nr_cache, int nr_cache_other,
 	int nr_failed_other, int nr_cache_overwrite, int nr_failed_overwrite)
 {
-	request_queue_t *q;
 	struct buffer_head *bh;
 	int i, pd_idx;
 	
@@ -1262,8 +1253,7 @@ static void handle_stripe_sync (mddev_t *mddev , raid5_conf_t *conf,
 			lock_get_bh(bh);
 			atomic_inc(&sh->nr_pending);
 			bh->b_dev = bh->b_rdev = conf->disks[i].dev;
-			q = blk_get_queue(bh->b_rdev);
-			generic_make_request(q, READ, bh);
+			generic_make_request(READ, bh);
 			md_sync_acct(bh->b_rdev, bh->b_size/512);
 			atomic_dec(&sh->bh_old[i]->b_count);
 		}
@@ -1292,8 +1282,7 @@ static void handle_stripe_sync (mddev_t *mddev , raid5_conf_t *conf,
 				atomic_inc(&sh->nr_pending);
 				lock_get_bh(bh);
 				bh->b_dev = bh->b_rdev = conf->spare->dev;
-				q = blk_get_queue(bh->b_rdev);
-				generic_make_request(q, WRITERAW, bh);
+				generic_make_request(WRITERAW, bh);
 				md_sync_acct(bh->b_rdev, bh->b_size/512);
 				atomic_dec(&bh->b_count);
 		PRINTK("handle_stripe_sync() %lu, phase WRITE, pending %d buffers\n", sh->sector, md_atomic_read(&sh->nr_pending));
@@ -1319,8 +1308,7 @@ static void handle_stripe_sync (mddev_t *mddev , raid5_conf_t *conf,
 		lock_get_bh(bh);
 		atomic_inc(&sh->nr_pending);
 		bh->b_dev = bh->b_rdev = conf->disks[pd_idx].dev;
-		q = blk_get_queue(bh->b_rdev);
-		generic_make_request(q, WRITERAW, bh);
+		generic_make_request(WRITERAW, bh);
 		md_sync_acct(bh->b_rdev, bh->b_size/512);
 		atomic_dec(&bh->b_count);
 		PRINTK("handle_stripe_sync() %lu phase WRITE, pending %d buffers\n",

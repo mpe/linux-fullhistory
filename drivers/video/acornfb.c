@@ -1663,8 +1663,12 @@ acornfb_init(void)
 			 sizeof(modedb) / sizeof(*modedb),
 			 &acornfb_default_mode, DEFAULT_BPP);
 
-	if (!rc && fb_find_mode(&init_var, &fb_info, NULL, NULL, 0,
-				&acornfb_default_mode, DEFAULT_BPP)) {
+	/*
+	 * If we didn't find an exact match, try the
+	 * generic database.
+	 */
+	if (rc != 1 && fb_find_mode(&init_var, &fb_info, NULL, NULL, 0,
+				    &acornfb_default_mode, DEFAULT_BPP)) {
 		printk("Acornfb: no valid mode found\n");
 	}
 

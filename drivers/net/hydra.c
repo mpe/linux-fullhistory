@@ -13,6 +13,11 @@
 /* The Amiganet is a Zorro-II board made by Hydra Systems. It contains a    */
 /* NS8390 NIC (network interface controller) clone, 16 or 64K on-board RAM  */
 /* and 10BASE-2 (thin coax) and AUI connectors.                             */
+/*                                                                          */
+/* Changes                                                                  */
+/* Arnaldo Carvalho de Melo <acme@conectiva.com.br> - 08/06/2000            */
+/* - check init_etherdev in hydra_probe                                     */
+/* - dev->priv is already zeroed by init_etherdev                           */
 
 
 #include <linux/module.h>
@@ -176,8 +181,13 @@ int __init hydra_probe(struct net_device *dev)
 		strcpy(z->name, "Hydra Ethernet Card");
 
 		dev = init_etherdev(NULL, sizeof(struct hydra_private));
-		memset(dev->priv, 0, sizeof(struct hydra_private));
-    
+
+		if (!dev) {
+		    	release_mem_region(base_addr, 0x20);
+		    	release_mem_region(board, 0x4000);
+			continue;
+		}
+
 		for(j = 0; j < ETHER_ADDR_LEN; j++)
 			dev->dev_addr[j] = *((u8 *)ZTWO_VADDR(board + HYDRA_ADDRPROM + 2*j));
     

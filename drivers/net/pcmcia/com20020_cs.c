@@ -21,6 +21,11 @@
  * modified by SRC, incorporated herein by reference.
  * 
  * **********************
+ * Changes:
+ * Arnaldo Carvalho de Melo <acme@conectiva.com.br> - 08/08/2000
+ * - reorganize kmallocs in com20020_attach, checking all for failure
+ *   and releasing the previous allocations if one fails
+ * **********************
  * 
  * For more details, see drivers/net/arcnet.c
  *
@@ -198,7 +203,24 @@ static dev_link_t *com20020_attach(void)
     link = kmalloc(sizeof(struct dev_link_t), GFP_KERNEL);
     if (!link)
 	return NULL;
+
+    info = kmalloc(sizeof(struct com20020_dev_t), GFP_KERNEL);
+    if (!info)
+	goto fail_alloc_info;
+
+    lp =  kmalloc(sizeof(struct arcnet_local), GFP_KERNEL);
+    if (!lp)
+	goto fail_alloc_lp;
+
+    dev = dev_alloc("arc%d", &ret);
+    if (!dev)
+	goto fail_alloc_dev;
+
+    memset(info, 0, sizeof(struct com20020_dev_t));
+    memset(lp, 0, sizeof(struct arcnet_local));
     memset(link, 0, sizeof(struct dev_link_t));
+    dev->priv = lp;
+
     link->release.function = &com20020_release;
     link->release.data = (u_long)link;
     link->io.Attributes1 = IO_DATA_PATH_WIDTH_8;
@@ -215,19 +237,6 @@ static dev_link_t *com20020_attach(void)
     link->conf.Vcc = 50;
     link->conf.IntType = INT_MEMORY_AND_IO;
     link->conf.Present = PRESENT_OPTION;
-
-    info = kmalloc(sizeof(struct com20020_dev_t), GFP_KERNEL);
-    if (!info)
-	return NULL;
-    memset(info, 0, sizeof(struct com20020_dev_t));
-
-    dev = dev_alloc("arc%d", &ret);
-    if (!dev)
-	return NULL;
-    lp = dev->priv = kmalloc(sizeof(struct arcnet_local), GFP_KERNEL);
-    if (!lp)
-	return NULL;
-    memset(lp, 0, sizeof(struct arcnet_local));
 
     /* fill in our module parameters as defaults */
     dev->dev_addr[0] = node;
@@ -260,6 +269,14 @@ static dev_link_t *com20020_attach(void)
     }
 
     return link;
+
+fail_alloc_dev:
+    kfree(lp);
+fail_alloc_lp:
+    kfree(info);
+fail_alloc_info:
+    kfree(link);
+    return NULL;
 } /* com20020_attach */
 
 /*======================================================================

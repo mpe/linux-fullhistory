@@ -73,10 +73,8 @@ static void __init init_smsc(void)
 /*
  * Initialize IRQ setting
  */
-static void __init init_se_IRQ(void)
+void __init init_se_IRQ(void)
 {
-	int i;
-
 	/*
 	 * Super I/O (Just mimic PC):
 	 *  1: keyboard
@@ -88,43 +86,34 @@ static void __init init_se_IRQ(void)
 	 * 12: mouse
 	 * 14: ide0
 	 */
-	set_ipr_data(14, BCR_ILCRA, 2, 0x0f-14);
-	set_ipr_data(12, BCR_ILCRA, 1, 0x0f-12); 
-	set_ipr_data( 8, BCR_ILCRB, 1, 0x0f- 8); 
-	set_ipr_data( 6, BCR_ILCRC, 3, 0x0f- 6);
-	set_ipr_data( 5, BCR_ILCRC, 2, 0x0f- 5);
-	set_ipr_data( 4, BCR_ILCRC, 1, 0x0f- 4);
-	set_ipr_data( 3, BCR_ILCRC, 0, 0x0f- 3);
-	set_ipr_data( 1, BCR_ILCRD, 3, 0x0f- 1);
+	make_ipr_irq(14, BCR_ILCRA, 2, 0x0f-14);
+	make_ipr_irq(12, BCR_ILCRA, 1, 0x0f-12); 
+	make_ipr_irq( 8, BCR_ILCRB, 1, 0x0f- 8); 
+	make_ipr_irq( 6, BCR_ILCRC, 3, 0x0f- 6);
+	make_ipr_irq( 5, BCR_ILCRC, 2, 0x0f- 5);
+	make_ipr_irq( 4, BCR_ILCRC, 1, 0x0f- 4);
+	make_ipr_irq( 3, BCR_ILCRC, 0, 0x0f- 3);
+	make_ipr_irq( 1, BCR_ILCRD, 3, 0x0f- 1);
 
-	set_ipr_data(10, BCR_ILCRD, 1, 0x0f-10); /* LAN */
+	make_ipr_irq(10, BCR_ILCRD, 1, 0x0f-10); /* LAN */
 
-	set_ipr_data( 0, BCR_ILCRE, 3, 0x0f- 0); /* PCIRQ3 */
-	set_ipr_data(11, BCR_ILCRE, 2, 0x0f-11); /* PCIRQ2 */
-	set_ipr_data( 9, BCR_ILCRE, 1, 0x0f- 9); /* PCIRQ1 */
-	set_ipr_data( 7, BCR_ILCRE, 0, 0x0f- 7); /* PCIRQ0 */
+	make_ipr_irq( 0, BCR_ILCRE, 3, 0x0f- 0); /* PCIRQ3 */
+	make_ipr_irq(11, BCR_ILCRE, 2, 0x0f-11); /* PCIRQ2 */
+	make_ipr_irq( 9, BCR_ILCRE, 1, 0x0f- 9); /* PCIRQ1 */
+	make_ipr_irq( 7, BCR_ILCRE, 0, 0x0f- 7); /* PCIRQ0 */
 
 	/* #2, #13 are allocated for SLOT IRQ #1 and #2 (for now) */
 	/* NOTE: #2 and #13 are not used on PC */
-	set_ipr_data(13, BCR_ILCRG, 1, 0x0f-13); /* SLOTIRQ2 */
-	set_ipr_data( 2, BCR_ILCRG, 0, 0x0f- 2); /* SLOTIRQ1 */
-
-	for (i = 0; i < 15; i++) {
-		make_ipr_irq(i);
-	}
+	make_ipr_irq(13, BCR_ILCRG, 1, 0x0f-13); /* SLOTIRQ2 */
+	make_ipr_irq( 2, BCR_ILCRG, 0, 0x0f- 2); /* SLOTIRQ1 */
 }
+
 
 /*
  * Initialize the board
  */
-int __init setup_se(void)
+void __init setup_se(void)
 {
-	init_se_IRQ();
 	init_smsc();
 	/* XXX: RTC setting comes here */
-
-	printk(KERN_INFO "Hitach SolutionEngine Setup...done\n");
-	return 0;
 }
-
-module_init(setup_se);

@@ -105,7 +105,8 @@ register unsigned long PAGE_OFFSET asm("g4");
 
 #define __pa(x)			((unsigned long)(x) - PAGE_OFFSET)
 #define __va(x)			((void *)((unsigned long) (x) + PAGE_OFFSET))
-#define MAP_NR(addr)		((__pa(addr)-phys_base) >> PAGE_SHIFT)
+#define virt_to_page(kaddr)	(mem_map + ((__pa(kaddr)-phys_base) >> PAGE_SHIFT))
+#define VALID_PAGE(page)	((page - mem_map) < max_mapnr)
 
 #define virt_to_phys __pa
 #define phys_to_virt __va

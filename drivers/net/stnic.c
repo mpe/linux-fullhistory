@@ -20,6 +20,7 @@
 #include <asm/system.h>
 #include <asm/io.h>
 #include <asm/hitachi_se.h>
+#include <asm/machvec.h>
 
 #include "8390.h"
 
@@ -99,6 +100,10 @@ int __init stnic_probe(void)
 
   tmp.base_addr = 0x1000;
   dev = &tmp;
+
+  /* If we are not running on a SolutionEngine, give up now */
+  if (! MACH_SE)
+    return -ENODEV;
 
   if (load_8390_module ("stnic.c"))
     return -ENOSYS;

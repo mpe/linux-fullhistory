@@ -25,19 +25,20 @@ enum sis900_registers {
 	ier=0x18,               //Interrupt Enable Register
 	epar=0x18,              //Enhanced PHY Access Register
 	txdp=0x20,              //Transmit Descriptor Pointer Register
-	txcfg=0x24,             //Transmit Configuration Register
-	rxdp=0x30,              //Receive Descriptor Pointer Register
-	rxcfg=0x34,             //Receive Configuration Register
-	flctrl=0x38,            //Flow Control Register
-	rxlen=0x3c,             //Receive Packet Length Register
-	rfcr=0x48,              //Receive Filter Control Register
-	rfdr=0x4C,              //Receive Filter Data Register
-	pmctrl=0xB0,            //Power Management Control Register
-	pmer=0xB4               //Power Management Wake-up Event Register
+        txcfg=0x24,             //Transmit Configuration Register
+        rxdp=0x30,              //Receive Descriptor Pointer Register
+        rxcfg=0x34,             //Receive Configuration Register
+        flctrl=0x38,            //Flow Control Register
+        rxlen=0x3c,             //Receive Packet Length Register
+        rfcr=0x48,              //Receive Filter Control Register
+        rfdr=0x4C,              //Receive Filter Data Register
+        pmctrl=0xB0,            //Power Management Control Register
+        pmer=0xB4               //Power Management Wake-up Event Register
 };
 
 /* Symbolic names for bits in various registers */
 enum sis900_command_register_bits {
+	RELOAD  = 0x00000400,
 	RESET   = 0x00000100, SWI = 0x00000080, RxRESET = 0x00000020,
 	TxRESET = 0x00000010, RxDIS = 0x00000008, RxENA = 0x00000004,
 	TxDIS   = 0x00000002, TxENA = 0x00000001
@@ -214,6 +215,10 @@ enum mii_stsout_register_bits {
 enum mii_stssum_register_bits {
 	MII_STSSUM_LINK = 0x0008, MII_STSSUM_DPLX = 0x0004,
 	MII_STSSUM_AUTO = 0x0002, MII_STSSUM_SPD  = 0x0001
+};
+
+enum sis630_revision_id {
+	SIS630E_REV = 0x81, SIS630EA1_REV = 0x83
 };
 
 #define FDX_CAPABLE_DUPLEX_UNKNOWN      0

@@ -1372,7 +1372,6 @@ asmlinkage long sys_sendmsg(int fd, struct msghdr *msg, unsigned flags)
 	{
 		if (ctl_len > sizeof(ctl))
 		{
-			err = -ENOBUFS;
 			ctl_buf = sock_kmalloc(sock->sk, ctl_len, GFP_KERNEL);
 			if (ctl_buf == NULL) 
 				goto out_freeiov;

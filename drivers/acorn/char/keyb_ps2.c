@@ -341,6 +341,5 @@ int __init ps2kbd_init_hw(void)
 	(void)IOMD_KARTRX;
 	restore_flags (flags);
 
-	printk (KERN_INFO "PS/2 keyboard driver v%d.%02d\n", VERSION/100, VERSION%100);
 	return 0;
 }

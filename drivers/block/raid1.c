@@ -551,7 +551,6 @@ static int raid1_make_request (mddev_t *mddev, int rw,
 	int disks = MD_SB_DISKS;
 	int i, sum_bhs = 0, sectors;
 	struct mirror_info *mirror;
-	request_queue_t *q;
 
 	if (!buffer_locked(bh))
 		BUG();
@@ -628,8 +627,7 @@ static int raid1_make_request (mddev_t *mddev, int rw,
 	/*	bh_req->b_rsector = bh->n_rsector; */
 		bh_req->b_end_io = raid1_end_request;
 		bh_req->b_private = r1_bh;
-		q = blk_get_queue(bh_req->b_rdev);
-		generic_make_request (q, rw, bh_req);
+		generic_make_request (rw, bh_req);
 		return 0;
 	}
 
@@ -704,8 +702,7 @@ static int raid1_make_request (mddev_t *mddev, int rw,
 	while(bh) {
 		struct buffer_head *bh2 = bh;
 		bh = bh->b_next;
-		q = blk_get_queue(bh2->b_rdev);
-		generic_make_request(q, rw, bh2);
+		generic_make_request(rw, bh2);
 	}
 	return (0);
 }
@@ -1124,7 +1121,6 @@ static void raid1d (void *data)
 	struct raid1_bh *r1_bh;
 	struct buffer_head *bh;
 	unsigned long flags;
-	request_queue_t *q;
 	mddev_t *mddev;
 	kdev_t dev;
 
@@ -1206,8 +1202,7 @@ static void raid1d (void *data)
 				while (mbh) {
 					struct buffer_head *bh1 = mbh;
 					mbh = mbh->b_next;
-					q = blk_get_queue(bh1->b_rdev);
-					generic_make_request(q, WRITE, bh1);
+					generic_make_request(WRITE, bh1);
 					md_sync_acct(bh1->b_rdev, bh1->b_size/512);
 				}
 			} else {
@@ -1220,8 +1215,7 @@ static void raid1d (void *data)
 					printk (REDIRECT_SECTOR,
 						partition_name(bh->b_dev), bh->b_blocknr);
 					bh->b_rdev = bh->b_dev;
-					q = blk_get_queue(bh->b_rdev);
-					generic_make_request (q, READ, bh);
+					generic_make_request(READ, bh);
 				}
 			}
 
@@ -1238,8 +1232,7 @@ static void raid1d (void *data)
 				printk (REDIRECT_SECTOR,
 					partition_name(bh->b_dev), bh->b_blocknr);
 				bh->b_rdev = bh->b_dev;
-				q = blk_get_queue(bh->b_rdev);
-				generic_make_request (q, r1_bh->cmd, bh);
+				generic_make_request (r1_bh->cmd, bh);
 			}
 			break;
 		}
@@ -1348,7 +1341,6 @@ static int raid1_sync_request (mddev_t *mddev, unsigned long block_nr)
 {
 	raid1_conf_t *conf = mddev_to_conf(mddev);
 	struct mirror_info *mirror;
-	request_queue_t *q;
 	struct raid1_bh *r1_bh;
 	struct buffer_head *bh;
 	int bsize;
@@ -1435,8 +1427,7 @@ static int raid1_sync_request (mddev_t *mddev, unsigned long block_nr)
 	bh->b_rsector = block_nr<<1;
 	init_waitqueue_head(&bh->b_wait);
 
-	q = blk_get_queue(bh->b_rdev);
-	generic_make_request(q, READ, bh);
+	generic_make_request(READ, bh);
 	md_sync_acct(bh->b_rdev, bh->b_size/512);
 
 	return (bsize >> 10);

@@ -26,6 +26,7 @@
 #include <asm/io.h>
 #include <asm/irq.h>
 #include <asm/delay.h>
+#include <asm/machvec.h>
 
 #include <linux/timex.h>
 #include <linux/irq.h>
@@ -224,6 +225,11 @@ static inline void do_timer_interrupt(int irq, void *dev_id, struct pt_regs *reg
 #if 0
 	if (!user_mode(regs))
 		sh_do_profile(regs->pc);
+#endif
+
+#ifdef CONFIG_HEARTBEAT
+	if (sh_mv.mv_heartbeat != NULL) 
+		sh_mv.mv_heartbeat();
 #endif
 
 	/*
@@ -441,11 +447,11 @@ void __init time_init(void)
 		tmp  = (frqcr & 0x2000) >> 11;
 		tmp |= frqcr & 0x0003;
 		pfc = pfc_table[tmp];
-#ifdef CONFIG_SH_HP600
-		master_clock = cpu_clock/6;
-#else
-		master_clock = cpu_clock;
-#endif
+		if (MACH_HP600) {
+			master_clock = cpu_clock/6;
+		} else {
+			master_clock = cpu_clock;
+		}
 		bus_clock = master_clock/pfc;
 	}
 #elif defined(__SH4__)

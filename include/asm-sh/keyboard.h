@@ -3,7 +3,8 @@
 /*
  *	$Id: keyboard.h,v 1.1 2000/06/10 21:45:48 yaegashi Exp $
  */
-#include <linux/config.h>
+
+#include <asm/machvec.h>
 
 static __inline__ int kbd_setkeycode(unsigned int scancode,
 				     unsigned int keycode)
@@ -32,13 +33,13 @@ static __inline__ void kbd_leds(unsigned char leds)
 {
 }
 
-#ifdef CONFIG_SH_HP600
-void __init hp600_kbd_init_hw(void);
-#define kbd_init_hw hp600_kbd_init_hw
-#else
+extern void hp600_kbd_init_hw(void);
+
 static __inline__ void kbd_init_hw(void)
 {
+	if (MACH_HP600) {
+		hp600_kbd_init_hw();
+	}
 }
-#endif
 
 #endif

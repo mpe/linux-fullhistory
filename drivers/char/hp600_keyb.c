@@ -5,7 +5,9 @@
  */
 
 #include <linux/kernel.h>
+#include <linux/sched.h>
 #include <linux/init.h>
+#include <asm/delay.h>
 #include <asm/io.h>
 #include "scan_keyb.h"
 
@@ -23,7 +25,7 @@ static const unsigned char hp690_japanese_table[]={
 	0x00, 0x00, 0x00, 0x2c, 0x00, 0x1c, 0x28, 0x35,
 	0x31, 0x30, 0x32, 0x33, 0x34, 0x2f, 0x2e, 0x2d,
 
-	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x40, 0x50,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x4d, 0x50,
 	0x7b, 0x38, 0x00, 0x00, 0x4b, 0x00, 0x00, 0x00,
 
 	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -46,25 +48,35 @@ static const unsigned char hp690_japanese_table[]={
 };
 
 
+static const unsigned char hp690_switch[]= {
+	0xfd, 0xff,
+	0xdf, 0xff,
+	0x7f, 0xff,
+	0xff, 0xfe,
+	0xff, 0xfd,
+	0xff, 0xf7,
+	0xff, 0xbf,
+	0xff, 0x7f,
+};
+
+
 static void hp690_japanese_scan_kbd(unsigned char *s)
 {
-	ctrl_outb(0xfd, PDDR); ctrl_outb(0xff, PEDR);
-	*s++=ctrl_inb(PCDR); *s++=ctrl_inb(PFDR);
-	ctrl_outb(0xdf, PDDR); ctrl_outb(0xff, PEDR);
-	*s++=ctrl_inb(PCDR); *s++=ctrl_inb(PFDR);
-	ctrl_outb(0x7f, PDDR); ctrl_outb(0xff, PEDR);
-	*s++=ctrl_inb(PCDR); *s++=ctrl_inb(PFDR);
-	ctrl_outb(0xff, PDDR); ctrl_outb(0xfe, PEDR);
-	*s++=ctrl_inb(PCDR); *s++=ctrl_inb(PFDR);
-	ctrl_outb(0xff, PDDR); ctrl_outb(0xfd, PEDR);
-	*s++=ctrl_inb(PCDR); *s++=ctrl_inb(PFDR);
-	ctrl_outb(0xff, PDDR); ctrl_outb(0xf7, PEDR);
-	*s++=ctrl_inb(PCDR); *s++=ctrl_inb(PFDR);
-	ctrl_outb(0xff, PDDR); ctrl_outb(0xbf, PEDR);
-	*s++=ctrl_inb(PCDR); *s++=ctrl_inb(PFDR);
-	ctrl_outb(0xff, PDDR); ctrl_outb(0x7f, PEDR);
-	*s++=ctrl_inb(PCDR); *s++=ctrl_inb(PFDR);
-	*s++=ctrl_inb(PGDR); *s++=ctrl_inb(PHDR);
+	int i;
+	unsigned const char *t=hp690_switch;
+
+	for(i=0; i<9; i++) {
+		ctrl_outb(*t++, PDDR);
+		ctrl_outb(*t++, PEDR);
+		*s++=ctrl_inb(PCDR);
+		*s++=ctrl_inb(PFDR);
+	}
+
+	ctrl_outb(0xff, PDDR);
+	ctrl_outb(0xff, PEDR);
+
+	*s++=ctrl_inb(PGDR);
+	*s++=ctrl_inb(PHDR);
 }
 
 

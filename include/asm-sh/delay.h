@@ -33,7 +33,7 @@ extern __inline__ void __udelay(unsigned long usecs, unsigned long lps)
 #ifdef CONFIG_SMP
 #define __udelay_val cpu_data[smp_processor_id()].udelay_val
 #else
-#define __udelay_val loops_per_sec
+#define __udelay_val (current_cpu_data.loops_per_sec)
 #endif
 
 #define udelay(usecs) __udelay((usecs),__udelay_val)

@@ -1,4 +1,4 @@
-/* $Id: pgtable.h,v 1.128 2000/08/05 13:30:34 davem Exp $
+/* $Id: pgtable.h,v 1.130 2000/08/09 00:00:17 davem Exp $
  * pgtable.h: SpitFire page table operations.
  *
  * Copyright 1996,1997 David S. Miller (davem@caip.rutgers.edu)
@@ -56,9 +56,6 @@
 #define PTE_TABLE_SIZE	0x2000	/* 1024 entries 8 bytes each */
 #define PMD_TABLE_SIZE	0x2000	/* 2048 entries 4 bytes each */
 #define PGD_TABLE_SIZE	0x1000	/* 1024 entries 4 bytes each */
-
-/* the no. of pointers that fit on a page */
-#define PTRS_PER_PAGE	(1UL << (PAGE_SHIFT-3))
 
 /* NOTE: TLB miss handlers depend heavily upon where this is. */
 #define VMALLOC_START		0x0000000140000000UL

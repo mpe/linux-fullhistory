@@ -14,15 +14,18 @@
 #include <asm/io.h>
 #include <asm/irq.h>
 
-#ifdef CONFIG_SH_SOLUTION_ENGINE
 #include <asm/hitachi_se.h>
+
+
 /*
+ * SolutionEngine
+ *
  * 0xB8400000 : Common Memory
  * 0xB8500000 : Attribute
  * 0xB8600000 : I/O
  */
 
-int __init cf_init(void)
+static int __init cf_init_se(void)
 {
 	if ((ctrl_inw(MRSHPC_CSR) & 0x000c) != 0)
 		return 0;	/* Not detected */
@@ -68,11 +71,15 @@ int __init cf_init(void)
 	ctrl_outb(0x42, PA_MRSHPC_MW2 + 0x200);
 	return 0;
 }
-#else /* then generic system type */
+
 #define CF_CIS_BASE	0xb8000000
 /*
  * You can connect Compact Flash directly to the bus of SuperH.
  * This is the enabler for that.
+ *
+ * SIM: How generic is this really? It looks pretty board, or at
+ * least SH sub-type, specific to me.
+ * I know it doesn't work on the Overdrive!
  */
 
 /*
@@ -81,7 +88,7 @@ int __init cf_init(void)
  * 0xBA000000 : I/O
  */
 
-int __init cf_init(void)
+static int __init cf_init_default(void)
 {
 	/* Enable the card, and set the level interrupt */
 	ctrl_outw(0x0042, CF_CIS_BASE+0x0200);
@@ -89,6 +96,13 @@ int __init cf_init(void)
 	disable_irq(14);
 	return 0;
 }
-#endif
+
+int __init cf_init(void)
+{
+	if (MACH_SE) {
+		return cf_init_se();
+	}
+	return cf_init_default();
+}
 
 __initcall (cf_init);

@@ -8920,8 +8920,15 @@ CONFIG_EEPRO100
 
 Enable Power Management (EXPERIMENTAL)
 CONFIG_EEPRO100_PM
-  If you want to play around with power management code
-  that has been reported to lock up some machines, say Y here.
+  Many Intel EtherExpress PRO/100 PCI network cards are capable
+  of providing power management capabilities.  To make use of these
+  capabilities, say Y.
+
+  WARNING:  This option is intended for kernel developers and testers.
+  It is still very experimental, with some people reporting complete
+  lockups.
+
+  It is recommended to say N here.
 
 ICL EtherTeam 16i/32 support (EXPERIMENTAL)
 CONFIG_ETH16I

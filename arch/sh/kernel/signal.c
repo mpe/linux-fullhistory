@@ -198,13 +198,16 @@ static inline int save_sigcontext_fpu(struct sigcontext *sc)
 {
 	struct task_struct *tsk = current;
 	unsigned long flags;
+	int val;
 
 	if (!tsk->used_math) {
-		__copy_to_user(&sc->sc_ownedfp, 0, sizeof(int));
+	  val = 0;
+		__copy_to_user(&sc->sc_ownedfp, &val, sizeof(int));
 		return 0;
 	}
 
-	__copy_to_user(&sc->sc_ownedfp, 1, sizeof(int));
+	val = 1;
+	__copy_to_user(&sc->sc_ownedfp, &val, sizeof(int));
 
 	/* This will cause a "finit" to be triggered by the next
 	   attempted FPU operation by the 'current' process.

@@ -1,14 +1,16 @@
 /*
  * JFFS -- Journalling Flash File System, Linux implementation.
  *
- * Copyright (C) 1999, 2000  Finn Hakansson, Axis Communications, Inc.
+ * Copyright (C) 1999, 2000  Axis Communications AB.
+ *
+ * Created by Finn Hakansson <finn@axis.com>.
  *
  * This is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by
  * the Free Software Foundation; either version 2 of the License, or
  * (at your option) any later version.
  *
- * $Id: jffs.h,v 1.5 2000/06/13 14:22:48 alex Exp $
+ * $Id: jffs.h,v 1.11 2000/08/04 12:46:34 dwmw2 Exp $
  *
  * Ported to Linux 2.3.x and MTD:
  * Copyright (C) 2000  Alexander Larsson (alex@cendio.se), Cendio Systems AB
@@ -59,9 +61,6 @@
 #define JFFS_MODIFY_DATA  0x04
 #define JFFS_MODIFY_EXIST 0x08
 
-/* Using the garbage collection mechanism.  */
-#define USE_GC
-
 struct jffs_control;
 
 /* The JFFS raw inode structure: Used for storage on physical media.  */
@@ -87,7 +86,7 @@ struct jffs_raw_inode
 	__u8 nsize;       /* Name length.  */
 	__u8 nlink;       /* Number of links.  */
 	__u8 spare : 6;   /* For future use.  */
-	__u8 rename : 1;  /* Is this a special rename?  */
+	__u8 rename : 1;  /* Rename to a name of an already existing file?  */
 	__u8 deleted : 1; /* Has this file been deleted?  */
 	__u8 accurate;    /* The inode is obsolete if accurate == 0.  */
 	__u32 dchksum;    /* Checksum for the data.  */
@@ -161,17 +160,34 @@ struct jffs_file
 };
 
 
+/* This is just a definition of a simple list used for keeping track of
+   files deleted due to a rename.  This list is only used during the
+   mounting of the file system and only if there have been rename operations
+   earlier.  */
+struct jffs_delete_list
+{
+	__u32 ino;
+	struct jffs_delete_list *next;
+};
+
+
 /* A struct for the overall file system control.  Pointers to
    jffs_control structs are named `c' in the source code.  */
 struct jffs_control
 {
-	struct super_block *sb;  /* Reference to the VFS super block.  */
-	struct jffs_file *root;  /* The root directory file.  */
-	struct list_head *hash; /* Hash table for finding files by ino.  */
-	struct jffs_fmcontrol *fmc; /* Flash memory control structure.  */
-	__u32 hash_len;    /* The size of the hash table.  */
-	__u32 next_ino;    /* Next inode number to use for new files.  */
-	__u16 building_fs; /* Is the file system being built right now?  */
+	struct super_block *sb;		/* Reference to the VFS super block.  */
+	struct jffs_file *root;		/* The root directory file.  */
+	struct list_head *hash;		/* Hash table for finding files by ino.  */
+	struct jffs_fmcontrol *fmc;	/* Flash memory control structure.  */
+	__u32 hash_len;			/* The size of the hash table.  */
+	__u32 next_ino;			/* Next inode number to use for new files.  */
+	__u16 building_fs;		/* Is the file system being built right now?  */
+	struct jffs_delete_list *delete_list; /* Track deleted files.  */
+	pid_t thread_pid;		/* GC thread's PID */
+	struct task_struct *gc_task;	/* GC task struct */
+	struct semaphore gc_thread_sem; /* GC thread exit mutex */
+	__u32 gc_minfree_threshold;	/* GC trigger thresholds */
+	__u32 gc_maxdirty_threshold;
 };
 
 

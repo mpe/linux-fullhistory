@@ -2674,6 +2674,7 @@ void unblank_screen(void)
 	console_blanked = 0;
 	if (console_blank_hook)
 		console_blank_hook(0);
+	set_palette(currcons);
 	if (sw->con_blank(vc_cons[currcons].d, 0))
 		/* Low-level driver cannot restore -> do it ourselves */
 		update_screen(fg_console);

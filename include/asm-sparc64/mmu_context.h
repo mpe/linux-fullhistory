@@ -1,4 +1,4 @@
-/* $Id: mmu_context.h,v 1.42 2000/02/08 07:47:03 davem Exp $ */
+/* $Id: mmu_context.h,v 1.43 2000/08/09 08:04:45 davem Exp $ */
 #ifndef __SPARC64_MMU_CONTEXT_H
 #define __SPARC64_MMU_CONTEXT_H
 
@@ -29,11 +29,9 @@ extern void get_new_mmu_context(struct mm_struct *mm);
 
 /* Initialize a new mmu context.  This is invoked when a new
  * address space instance (unique or shared) is instantiated.
- * A fresh mm_struct is cleared out to zeros, so this need not
- * do anything on Sparc64 since the only thing we care about
- * is that mm->context is an invalid context (ie. zero).
+ * This just needs to set mm->context to an invalid context.
  */
-#define init_new_context(__tsk, __mm)	do { } while(0)
+#define init_new_context(__tsk, __mm)	((__mm)->context = 0UL)
 
 /* Destroy a dead context.  This occurs when mmput drops the
  * mm_users count to zero, the mmaps have been released, and

@@ -172,12 +172,10 @@ static int busmouse_release(struct inode *inode, struct file *file)
 	busmouse_fasync(-1, file, 0);
 
 	if (--mse->active == 0) {
-		if (mse->ops) {
-			if (mse->ops->release)
-				ret = mse->ops->release(inode, file);
-		   	if (mse->ops->owner)
-				__MOD_DEC_USE_COUNT(mse->ops->owner);
-		}
+		if (mse->ops->release)
+			ret = mse->ops->release(inode, file);
+	   	if (mse->ops->owner)
+			__MOD_DEC_USE_COUNT(mse->ops->owner);
 		mse->ready = 0;
 	}
 	unlock_kernel();
@@ -189,7 +187,7 @@ static int busmouse_open(struct inode *inode, struct file *file)
 {
 	struct busmouse_data *mse;
 	unsigned int mousedev;
-	int ret = -ENODEV;
+	int ret;
 
 	mousedev = DEV_TO_MOUSE(inode->i_rdev);
 	if (mousedev >= NR_MICE)
@@ -197,13 +195,15 @@ static int busmouse_open(struct inode *inode, struct file *file)
 
 	down(&mouse_sem);
 	mse = busmouse_data[mousedev];
-	if (!mse)
-		/* shouldn't happen, but... */
+	ret = -ENODEV;
+	if (!mse || !mse->ops)	/* shouldn't happen, but... */
 		goto end;
-	
-	if (mse->ops && mse->ops->owner)
-		__MOD_INC_USE_COUNT(mse->ops->owner);
-	if (mse->ops && mse->ops->open) {
+
+	if (mse->ops->owner && !try_inc_mod_count(mse->ops->owner))
+		goto end;
+
+	ret = 0;
+	if (mse->ops->open) {
 		ret = mse->ops->open(inode, file);
 		if (ret && mse->ops->owner)
 			__MOD_DEC_USE_COUNT(mse->ops->owner);
@@ -222,10 +222,7 @@ static int busmouse_open(struct inode *inode, struct file *file)
 	mse->ready   = 0;
 	mse->dxpos   = 0;
 	mse->dypos   = 0;
-	if (mse->ops)
-		mse->buttons = mse->ops->init_button_state;
-	else
-		mse->buttons = 7;
+	mse->buttons = mse->ops->init_button_state;
 
 	spin_unlock_irq(&mse->lock);
 end:

@@ -10,6 +10,9 @@
 
 	.global	startup
 startup:
+	/* Load initial status register */
+	mov.l   init_sr, r1
+	ldc     r1, sr
 
 	/* First clear BSS */
 	mov.l	end_addr, r1
@@ -20,10 +23,6 @@ l1:
 	cmp/eq	r1,r2
 	bf	l1
 
-	/* Load initial status register */
-	mov.l   init_sr, r1
-	ldc     r1, sr
-	
 	/* Set the initial pointer. */
 	mov.l	init_stack_addr, r0
 	mov.l	@r0, r15
@@ -44,7 +43,7 @@ bss_start_addr:
 end_addr:
 	.long	_end
 init_sr:
-	.long	0x50000000	/* Privileged mode, Bank=0, Block=1, I3-I0=0 */
+	.long	0x40000000	/* Privileged mode, Bank=0, Block=0, I3-I0=0 */
 init_stack_addr:
 	.long	stack_start
 decompress_kernel_addr:

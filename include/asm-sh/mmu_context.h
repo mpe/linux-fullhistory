@@ -164,15 +164,15 @@ extern __inline__ void switch_mm(struct mm_struct *prev,
 				 struct mm_struct *next,
 				 struct task_struct *tsk, unsigned int cpu)
 {
-	set_bit(cpu, &next->cpu_vm_mask);
 	if (prev != next) {
 		unsigned long __pgdir = (unsigned long)next->pgd;
 
+		clear_bit(cpu, &prev->cpu_vm_mask);
+		set_bit(cpu, &next->cpu_vm_mask);
 		__asm__ __volatile__("mov.l	%0, %1"
 				     : /* no output */
 				     : "r" (__pgdir), "m" (__m(MMU_TTB)));
 		activate_context(next);
-		clear_bit(cpu, &prev->cpu_vm_mask);
 	}
 }
 

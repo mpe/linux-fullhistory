@@ -185,15 +185,65 @@ ENTRY(csum_partial_copy_generic)
 	mov.l	r5,@-r15
 	mov.l	r6,@-r15
 
+	mov	#3, r0			! Check src and dest are equally aligned
+	mov	r4, r1
+	and	r0, r1
+	and	r5, r0
+	cmp/eq	r1, r0
+	bf	3f			! Different alignments, use slow version
+	tst	#1,r0			! Check dest word aligned
+	bf	3f			! If not, do it the slow way
+
 	mov	#2,r0
-	tst	r0,r5			! Check alignment. 
+	tst	r0,r5			! Check dest alignment. 
 	bt	2f			! Jump if alignment is ok.
 	add	#-2,r6			! Alignment uses up two bytes.
 	cmp/pz	r6			! Jump if we had at least two bytes.
 	bt/s	1f
 	 clrt
 	bra	4f
-	 add	#2,r6			! $r6 was < 2.  Deal with it.
+	 add	#2,r6			! $r6 was < 2.	Deal with it.
+
+3:	! Handle different src and dest alinments.
+	! This is not common, so simple byte by byte copy will do.
+	mov	r6, r2
+	shlr	r6
+	tst	r6, r6
+	bt	4f
+	clrt
+SRC(5:	mov.b	@r4+,r0	)
+DST(	mov.b	r0,@r5	)
+	add	#1, r5
+SRC(	mov.b	@r4+,r1	)
+DST(	mov.b	r1,@r5	)
+	add	#1,r5
+
+	extu.b	r0,r0
+	extu.b	r1,r1
+#ifdef	__LITTLE_ENDIAN__
+	shll8	r1
+#else
+	shll8	r0
+#endif
+	or	r1,r0	
+
+	addc	r0,r7
+	movt	r0
+	dt	r6
+	bf/s	5b
+	 cmp/eq	#1,r0
+	mov	#0,r0
+	addc	r0, r7
+
+	mov	r2, r0
+	tst	#1, r0
+	bt	7f	
+	bra	5f
+	 clrt
+
+	! src and dest equally aligned, but to a two byte boundary.
+	! Handle first two bytes as a special case
+	.align	5
 SRC(1:	mov.w	@r4+,r0	)
 DST(	mov.w	r0,@r5	)
 	add	#2,r5

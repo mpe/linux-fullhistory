@@ -92,6 +92,20 @@ static void hd64461_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	       inw(HD64461_NIRR), inw(HD64461_NIMR));
 }
 
+int hd64461_irq_demux(int irq)
+{
+	if (irq == CONFIG_HD64461_IRQ) {
+		unsigned short bit;
+		unsigned short nirr = inw(HD64461_NIRR);
+		unsigned short nimr = inw(HD64461_NIMR);
+		nirr &= ~nimr;
+		for (bit = 1, irq = 0; irq < 16; bit <<= 1, irq++)
+			if (nirr & bit) break;
+		if (irq == 16) irq = CONFIG_HD64461_IRQ;
+		else irq += HD64461_IRQBASE;
+	}
+	return irq;
+}
 
 static struct irqaction irq0  = { hd64461_interrupt, SA_INTERRUPT, 0, "HD64461", NULL, NULL};
 
@@ -100,10 +114,13 @@ int __init setup_hd64461(void)
 {
 	int i;
 
+	if (!MACH_HD64461)
+		return 0;
+
 	printk(KERN_INFO "HD64461 configured at 0x%x on irq %d(mapped into %d to %d)\n",
 	       CONFIG_HD64461_IOBASE, CONFIG_HD64461_IRQ,
 	       HD64461_IRQBASE, HD64461_IRQBASE+15);
-#if 1
+#ifdef CONFIG_CPU_SUBTYPE_SH7709
 	/* IRQ line for HD64461 should be set level trigger mode("10"). */
 	/* And this should be done earlier than the kernel starts. */
 	ctrl_outw(0x0200, INTC_ICR1); /* when connected to IRQ4. */

@@ -79,3 +79,5 @@ extern pg_data_t sa1100_node_data[];
 		(((unsigned long)ADDR_TO_MAPBASE((kaddr)) - PAGE_OFFSET) / \
 		sizeof(mem_map_t)))
 
+#define virt_to_page(kaddr)	(mem_map + MAP_NR(kaddr))
+#define VALID_PAGE(page)	((page - mem_map) < max_mapnr)

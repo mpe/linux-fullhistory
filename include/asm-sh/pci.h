@@ -9,6 +9,15 @@
 
 #define pcibios_assign_all_busses()	0
 
+/* These are currently the correct values for the STM overdrive board. 
+ * We need some way of setting this on a board specific way, it will 
+ * not be the same on other boards I think
+ */
+#if 1 /* def CONFIG_SH_OVERDRIVE */
+#define PCIBIOS_MIN_IO		0x2000
+#define PCIBIOS_MIN_MEM		0x10000000
+#endif
+
 extern inline void pcibios_set_master(struct pci_dev *dev)
 {
 	/* No special bus mastering setup handling */
@@ -59,7 +68,7 @@ extern void pci_free_consistent(struct pci_dev *hwdev, size_t size,
  * until either pci_unmap_single or pci_dma_sync_single is performed.
  */
 extern inline dma_addr_t pci_map_single(struct pci_dev *hwdev, void *ptr,
-					size_t size)
+					size_t size,int directoin)
 {
 	return virt_to_bus(ptr);
 }
@@ -72,7 +81,7 @@ extern inline dma_addr_t pci_map_single(struct pci_dev *hwdev, void *ptr,
  * whatever the device wrote there.
  */
 extern inline void pci_unmap_single(struct pci_dev *hwdev, dma_addr_t dma_addr,
-				    size_t size)
+				    size_t size,int direction)
 {
 	/* Nothing to do */
 }
@@ -93,7 +102,7 @@ extern inline void pci_unmap_single(struct pci_dev *hwdev, dma_addr_t dma_addr,
  * the same here.
  */
 extern inline int pci_map_sg(struct pci_dev *hwdev, struct scatterlist *sg,
-			     int nents)
+			     int nents,int direction)
 {
 	return nents;
 }
@@ -103,7 +112,7 @@ extern inline int pci_map_sg(struct pci_dev *hwdev, struct scatterlist *sg,
  * pci_unmap_single() above.
  */
 extern inline void pci_unmap_sg(struct pci_dev *hwdev, struct scatterlist *sg,
-				int nents)
+				int nents,int direction)
 {
 	/* Nothing to do */
 }
@@ -119,7 +128,7 @@ extern inline void pci_unmap_sg(struct pci_dev *hwdev, struct scatterlist *sg,
  */
 extern inline void pci_dma_sync_single(struct pci_dev *hwdev,
 				       dma_addr_t dma_handle,
-				       size_t size)
+				       size_t size,int direction)
 {
 	/* Nothing to do */
 }
@@ -132,7 +141,7 @@ extern inline void pci_dma_sync_single(struct pci_dev *hwdev,
  */
 extern inline void pci_dma_sync_sg(struct pci_dev *hwdev,
 				   struct scatterlist *sg,
-				   int nelems)
+				   int nelems,int direction)
 {
 	/* Nothing to do */
 }

@@ -114,8 +114,9 @@ static inline void* ___va(unsigned long p)
 #define __pa(x) ___pa ((unsigned long)(x))
 #define __va(x) ___va ((unsigned long)(x))
 
-#define MAP_NR(addr)		(((unsigned long)addr-PAGE_OFFSET) >> PAGE_SHIFT)
 #define MAP_PAGE_RESERVED	(1<<15)
+#define virt_to_page(kaddr)	(mem_map + (((unsigned long)kaddr-PAGE_OFFSET) >> PAGE_SHIFT))
+#define VALID_PAGE(page)	((page - mem_map) < max_mapnr)
 
 extern unsigned long get_zero_page_fast(void);
 

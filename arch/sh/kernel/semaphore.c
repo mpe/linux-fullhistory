@@ -12,6 +12,8 @@
 #include <asm/semaphore.h>
 #include <asm/semaphore-helper.h>
 
+spinlock_t semaphore_wake_lock;
+
 /*
  * Semaphores are implemented using a two-way counter:
  * The "count" variable is decremented for each process

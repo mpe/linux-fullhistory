@@ -65,7 +65,8 @@ typedef struct { unsigned long pgprot; } pgprot_t;
 #define PAGE_OFFSET		(0x80000000)
 #define __pa(x)			((unsigned long)(x)-PAGE_OFFSET)
 #define __va(x)			((void *)((unsigned long)(x)+PAGE_OFFSET))
-#define MAP_NR(addr)		((__pa(addr)-__MEMORY_START) >> PAGE_SHIFT)
+#define virt_to_page(kaddr)	(mem_map + ((__pa(kaddr)-__MEMORY_START) >> PAGE_SHIFT))
+#define VALID_PAGE(page)	((page - mem_map) < max_mapnr)
 
 #ifndef __ASSEMBLY__
 

@@ -11,8 +11,8 @@
 
 O_TARGET := kernel.o
 O_OBJS   := process.o signal.o entry.o traps.o irq.o irq_ipr.o \
-            ptrace.o setup.o time.o sys_sh.o semaphore.o pci-sh.o \
-	    irq_imask.o
+            ptrace.o setup.o time.o sys_sh.o semaphore.o \
+            irq_imask.o io.o
 OX_OBJS  := sh_ksyms.o
 MX_OBJS  :=
 
@@ -21,26 +21,45 @@ O_OBJS += cf-enabler.o
 endif
 
 ifdef CONFIG_SH_GENERIC
+
+O_OBJS += mach_se.o setup_se.o setup_cqreek.o io_se.o led_se.o \
+	  mach_hp600.o io_hd64461.o \
+	  mach_unknown.o io_unknown.o \
+	  io_generic.o
+
+else
+
+ifdef CONFIG_SH_HP600
+O_OBJS += mach_hp600.o io_hd64461.o io_generic.o
+endif
+
+ifdef CONFIG_SH_OVERDRIVE
 O_OBJS += io_generic.o
 endif
 
 ifdef CONFIG_SH_SOLUTION_ENGINE
-O_OBJS += setup_se.o io_se.o
+O_OBJS += mach_se.o setup_se.o io_se.o io_generic.o led_se.o
 endif
 
-ifdef CONFIG_SH_OVERDRIVE
-O_OBJS += setup_od.o io_generic.o
+ifdef CONFIG_SH_CQREEK
+O_OBJS += setup_cqreek.o
 endif
 
-ifdef CONFIG_SH_HP600
-O_OBJS += io_hd64461.o
+ifdef CONFIG_SH_UNKNOWN
+O_OBJS += mach_unknown.o io_unknown.o io_generic.o
+endif
+
 endif
 
 ifdef CONFIG_CPU_SH4
 O_OBJS += fpu.o
 endif
 
-ifdef CONFIG_HD64461
+ifdef CONFIG_PCI
+O_OBJS += pci-sh.o 
+endif
+
+ifneq ($(CONFIG_SH_GENERIC)$(CONFIG_HD64461),)
 O_OBJS += setup_hd64461.o
 endif
 

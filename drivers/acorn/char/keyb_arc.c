@@ -33,6 +33,7 @@
 
 #include "../../char/busmouse.h"
 
+extern struct tasklet_struct keyboard_tasklet;
 extern void kbd_reset_kdown(void);
 
 #define VERSION 108
@@ -402,7 +403,7 @@ static void a5kkbd_rx(int irq, void *dev_id, struct pt_regs *regs)
 {
 	kbd_pt_regs = regs;
 	if (handle_rawcode(inb(IOC_KARTRX)))
-		mark_bh (KEYBOARD_BH);
+		tasklet_schedule(&keyboard_tasklet);
 }
 
 static void a5kkbd_tx(int irq, void *dev_id, struct pt_regs *regs)

@@ -20,11 +20,11 @@
 #define SCIx_RXI_IRQ 1
 #define SCIx_TXI_IRQ 2
 
-/*                     ERI, RXI, TXI,   INTC reg, INTC pos */
-#define SCI_IRQS      { 23,  24,  25 }, INTC_IPRB, 1
-#define SH3_SCIF_IRQS { 56,  57,  59 }, INTC_IPRE, 1
-#define SH3_IRDA_IRQS { 52,  53,  55 }, INTC_IPRE, 2
-#define SH4_SCIF_IRQS { 40,  41,  43 }, INTC_IPRC, 1
+/*                     ERI, RXI, TXI,  */
+#define SCI_IRQS      { 23,  24,  25 }
+#define SH3_SCIF_IRQS { 56,  57,  59 }
+#define SH3_IRDA_IRQS { 52,  53,  55 }
+#define SH4_SCIF_IRQS { 40,  41,  43 }
 
 #if defined(CONFIG_CPU_SUBTYPE_SH7708)
 # define SCI_NPORTS 1
@@ -34,12 +34,12 @@
 # define SCSPTR 0xffffff7c /* 8 bit */
 # define SCSCR_INIT(port)          0x30 /* TIE=0,RIE=0,TE=1,RE=1 */
 # define SCI_ONLY
-#elif defined(CONFIG_CPU_SUBTYPE_SH7709)
+#elif defined(CONFIG_CPU_SUBTYPE_SH7707) || defined(CONFIG_CPU_SUBTYPE_SH7709)
 # define SCI_NPORTS 3
 # define SCI_INIT { \
-  { {}, PORT_SCI,  0xfffffe80, SCI_IRQS,        sci_init_pins_sci  }, \
-  { {}, PORT_SCIF, 0xA4000150, SH3_SCIF_IRQS, sci_init_pins_scif },   \
-  { {}, PORT_SCIF, 0xA4000140, SH3_IRDA_IRQS, sci_init_pins_irda }    \
+  { {}, PORT_SCI,  0xfffffe80, SCI_IRQS,      sci_init_pins_sci  }, \
+  { {}, PORT_SCIF, 0xA4000150, SH3_SCIF_IRQS, sci_init_pins_scif }, \
+  { {}, PORT_SCIF, 0xA4000140, SH3_IRDA_IRQS, sci_init_pins_irda }  \
 }
 # define SCPCR  0xA4000116 /* 16 bit SCI and SCIF */
 # define SCPDR  0xA4000136 /* 8  bit SCI and SCIF */
@@ -68,32 +68,32 @@
 #define SCI_CTRL_FLAGS_TE   0x20 /* all */
 #define SCI_CTRL_FLAGS_RE   0x10 /* all */
 /*      SCI_CTRL_FLAGS_REIE 0x08  * 7750 SCIF */
-/*      SCI_CTRL_FLAGS_MPIE 0x08  * 7708 SCI, 7709 SCI, 7750 SCI */
-/*      SCI_CTRL_FLAGS_TEIE 0x04  * 7708 SCI, 7709 SCI, 7750 SCI */
+/*      SCI_CTRL_FLAGS_MPIE 0x08  * 7707 SCI, 7708 SCI, 7709 SCI, 7750 SCI */
+/*      SCI_CTRL_FLAGS_TEIE 0x04  * 7707 SCI, 7708 SCI, 7709 SCI, 7750 SCI */
 /*      SCI_CTRL_FLAGS_CKE1 0x02  * all */
-/*      SCI_CTRL_FLAGS_CKE0 0x01  * 7708 SCI, 7709 SCI/SCIF, 7750 SCI */
+/*      SCI_CTRL_FLAGS_CKE0 0x01  * 7707 SCI/SCIF, 7708 SCI, 7709 SCI/SCIF, 7750 SCI */
 
 /* SCxSR SCI */
-#define SCI_TDRE  0x80 /* 7708 SCI, 7709 SCI, 7750 SCI */
-#define SCI_RDRF  0x40 /* 7708 SCI, 7709 SCI, 7750 SCI */
-#define SCI_ORER  0x20 /* 7708 SCI, 7709 SCI, 7750 SCI */
-#define SCI_FER   0x10 /* 7708 SCI, 7709 SCI, 7750 SCI */
-#define SCI_PER   0x08 /* 7708 SCI, 7709 SCI, 7750 SCI */
-#define SCI_TEND  0x04 /* 7708 SCI, 7709 SCI, 7750 SCI */
-/*      SCI_MPB   0x02  * 7708 SCI, 7709 SCI, 7750 SCI */
-/*      SCI_MPBT  0x01  * 7708 SCI, 7709 SCI, 7750 SCI */
+#define SCI_TDRE  0x80 /* 7707 SCI, 7708 SCI, 7709 SCI, 7750 SCI */
+#define SCI_RDRF  0x40 /* 7707 SCI, 7708 SCI, 7709 SCI, 7750 SCI */
+#define SCI_ORER  0x20 /* 7707 SCI, 7708 SCI, 7709 SCI, 7750 SCI */
+#define SCI_FER   0x10 /* 7707 SCI, 7708 SCI, 7709 SCI, 7750 SCI */
+#define SCI_PER   0x08 /* 7707 SCI, 7708 SCI, 7709 SCI, 7750 SCI */
+#define SCI_TEND  0x04 /* 7707 SCI, 7708 SCI, 7709 SCI, 7750 SCI */
+/*      SCI_MPB   0x02  * 7707 SCI, 7708 SCI, 7709 SCI, 7750 SCI */
+/*      SCI_MPBT  0x01  * 7707 SCI, 7708 SCI, 7709 SCI, 7750 SCI */
 
 #define SCI_ERRORS ( SCI_PER | SCI_FER | SCI_ORER)
 
 /* SCxSR SCIF */
-#define SCIF_ER    0x0080 /* 7709 SCIF, 7750 SCIF */
-#define SCIF_TEND  0x0040 /* 7709 SCIF, 7750 SCIF */
-#define SCIF_TDFE  0x0020 /* 7709 SCIF, 7750 SCIF */
-#define SCIF_BRK   0x0010 /* 7709 SCIF, 7750 SCIF */
-#define SCIF_FER   0x0008 /* 7709 SCIF, 7750 SCIF */
-#define SCIF_PER   0x0004 /* 7709 SCIF, 7750 SCIF */
-#define SCIF_RDF   0x0002 /* 7709 SCIF, 7750 SCIF */
-#define SCIF_DR    0x0001 /* 7709 SCIF, 7750 SCIF */
+#define SCIF_ER    0x0080 /* 7707 SCIF, 7709 SCIF, 7750 SCIF */
+#define SCIF_TEND  0x0040 /* 7707 SCIF, 7709 SCIF, 7750 SCIF */
+#define SCIF_TDFE  0x0020 /* 7707 SCIF, 7709 SCIF, 7750 SCIF */
+#define SCIF_BRK   0x0010 /* 7707 SCIF, 7709 SCIF, 7750 SCIF */
+#define SCIF_FER   0x0008 /* 7707 SCIF, 7709 SCIF, 7750 SCIF */
+#define SCIF_PER   0x0004 /* 7707 SCIF, 7709 SCIF, 7750 SCIF */
+#define SCIF_RDF   0x0002 /* 7707 SCIF, 7709 SCIF, 7750 SCIF */
+#define SCIF_DR    0x0001 /* 7707 SCIF, 7709 SCIF, 7750 SCIF */
 
 #define SCIF_ERRORS ( SCIF_PER | SCIF_FER | SCIF_ER | SCIF_BRK)
 
@@ -128,8 +128,6 @@
 #define SCFCR_TFRST 0x0004
 #define SCFCR_MCE   0x0008
 
-#define SCI_PRIORITY	3
-
 #define SCI_MAJOR		204
 #define SCI_MINOR_START		8
 
@@ -161,14 +159,22 @@
 
 #define SCI_MAGIC 0xbabeface
 
+/*
+ * Events are used to schedule things to happen at timer-interrupt
+ * time, instead of at rs interrupt time.
+ */
+#define SCI_EVENT_WRITE_WAKEUP	0
+
 struct sci_port {
 	struct gs_port gs;
 	int type;
 	unsigned int base;
 	unsigned char irqs[3]; /* ERI, RXI, TXI */
-	unsigned int intc_addr, intc_pos;
 	void (*init_pins)(struct sci_port* port, unsigned int cflag);
 	unsigned int old_cflag;
+	struct async_icount icount;
+	struct tq_struct tqueue;
+	unsigned long event;
 };
 
 #define SCI_IN(size, offset)					\

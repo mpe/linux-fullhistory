@@ -103,7 +103,6 @@ typedef struct {
 	const char *name;
 } XD_SIGNATURE;
 
-static int xd_setup (char *);
 #ifndef MODULE
 static int xd_manual_geo_init (char *command);
 #endif /* MODULE */

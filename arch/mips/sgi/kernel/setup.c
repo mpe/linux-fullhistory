@@ -130,9 +130,9 @@ static void __init sgi_irq_setup(void)
 
 int __init page_is_ram(unsigned long pagenr)
 {
-	if (pagenr < MAP_NR(PAGE_OFFSET + 0x2000UL))
+	if ((pagenr<<PAGE_SHIFT) < 0x2000UL)
 		return 1;
-	if (pagenr > MAP_NR(PAGE_OFFSET + 0x08002000))
+	if ((pagenr<<PAGE_SHIFT) > 0x08002000)
 		return 1;
 	return 0;
 }

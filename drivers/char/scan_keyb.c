@@ -91,9 +91,9 @@ int register_scan_keyboard(void (*scan)(unsigned char *buffer),
 
 	kbd->s0=kbd->s1=NULL;
 	if((kbd->s0=kmalloc(length, GFP_KERNEL))==NULL)
-		goto error_out;
+		goto error_mem_free;
 	if((kbd->s1=kmalloc(length, GFP_KERNEL))==NULL)
-		goto error_out;
+		goto error_mem_free;
 
 	kbd->scan(kbd->s0);
 	kbd->scan(kbd->s1);

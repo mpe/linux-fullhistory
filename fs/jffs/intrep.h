@@ -10,13 +10,13 @@
  * the Free Software Foundation; either version 2 of the License, or
  * (at your option) any later version.
  *
- * $Id: intrep.h,v 1.2 2000/05/24 13:13:56 alex Exp $
+ * $Id: intrep.h,v 1.6 2000/08/04 14:29:17 dwmw2 Exp $
  *
  */
 
 #ifndef __LINUX_JFFS_INTREP_H__
 #define __LINUX_JFFS_INTREP_H__
-
+#include "jffs_fm.h"
 inline int jffs_min(int a, int b);
 inline int jffs_max(int a, int b);
 __u32 jffs_checksum(const void *data, int size);
@@ -34,6 +34,7 @@ void jffs_free_node(struct jffs_node *node);
 
 int jffs_foreach_file(struct jffs_control *c, int (*func)(struct jffs_file *));
 int jffs_free_node_list(struct jffs_file *f);
+int jffs_free_file(struct jffs_file *f);
 int jffs_possibly_delete_file(struct jffs_file *f);
 int jffs_build_file(struct jffs_file *f);
 int jffs_insert_file_into_hash(struct jffs_file *f);
@@ -49,7 +50,26 @@ int jffs_write_node(struct jffs_control *c, struct jffs_node *node,
 int jffs_read_data(struct jffs_file *f, char *buf, __u32 read_offset, __u32 size);
 
 /* Garbage collection stuff.  */
-int jffs_garbage_collect(struct jffs_control *c);
+int jffs_garbage_collect_thread(void *c);
+void jffs_garbage_collect_trigger(struct jffs_control *c);
+int jffs_garbage_collect_now(struct jffs_control *c);
+
+/* Is there enough space on the flash?  */
+static inline int JFFS_ENOUGH_SPACE(struct jffs_control *c)
+{
+	struct jffs_fmcontrol *fmc = c->fmc;
+
+	while (1) {
+		if ((fmc->flash_size - (fmc->used_size + fmc->dirty_size)) 
+			>= fmc->min_free_size) {
+			return 1;
+		}
+		if (fmc->dirty_size < fmc->sector_size)
+			return 0;
+
+		jffs_garbage_collect_now(c);
+	}
+}
 
 /* For debugging purposes.  */
 void jffs_print_node(struct jffs_node *n);

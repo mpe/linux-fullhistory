@@ -131,6 +131,7 @@ static inline int dup_mmap(struct mm_struct * mm)
 	flush_cache_mm(current->mm);
 	mm->locked_vm = 0;
 	mm->mmap = NULL;
+	mm->mmap_avl = NULL;
 	mm->mmap_cache = NULL;
 	mm->map_count = 0;
 	mm->context = 0;
@@ -301,7 +302,6 @@ static inline int copy_mm(unsigned long clone_flags, struct task_struct * tsk)
 	}
 
 	retval = -ENOMEM;
-	mm = mm_alloc();
 	mm = allocate_mm();
 	if (!mm)
 		goto fail_nomem;

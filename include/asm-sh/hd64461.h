@@ -7,30 +7,37 @@
  */
 #include <linux/config.h>
 
-#define HD64461_CPTWAR	0x1030	
-#define HD64461_CPTWDR	0x1032
-#define HD64461_CPTRAR	0x1034	
-#define HD64461_CPTRDR	0x1036
+#define HD64461_STBCR	0x10000
+#define HD64461_SYSCR	0x10002
+#define HD64461_SCPUCR	0x10004
 
-#define HD64461_PCC0ISR         0x2000
-#define HD64461_PCC0GCR         0x2002
-#define HD64461_PCC0CSCR        0x2004
-#define HD64461_PCC0CSCIER      0x2006
-#define HD64461_PCC0SCR         0x2008
-#define HD64461_PCC1ISR         0x2010
-#define HD64461_PCC1GCR         0x2012
-#define HD64461_PCC1CSCR        0x2014
-#define HD64461_PCC1CSCIER      0x2016
-#define HD64461_PCC1SCR         0x2018
-#define HD64461_P0OCR           0x202a
-#define HD64461_P1OCR           0x202c
-#define HD64461_PGCR            0x202e
+#define HD64461_CPTWAR	0x11030	
+#define HD64461_CPTWDR	0x11032
+#define HD64461_CPTRAR	0x11034	
+#define HD64461_CPTRDR	0x11036
 
-#define HD64461_NIRR		0x5000
-#define HD64461_NIMR		0x5002
+#define HD64461_PCC0ISR         0x12000
+#define HD64461_PCC0GCR         0x12002
+#define HD64461_PCC0CSCR        0x12004
+#define HD64461_PCC0CSCIER      0x12006
+#define HD64461_PCC0SCR         0x12008
+#define HD64461_PCC1ISR         0x12010
+#define HD64461_PCC1GCR         0x12012
+#define HD64461_PCC1CSCR        0x12014
+#define HD64461_PCC1CSCIER      0x12016
+#define HD64461_PCC1SCR         0x12018
+#define HD64461_P0OCR           0x1202a
+#define HD64461_P1OCR           0x1202c
+#define HD64461_PGCR            0x1202e
+
+#define HD64461_NIRR		0x15000
+#define HD64461_NIMR		0x15002
 
 #ifndef CONFIG_HD64461_IOBASE
 #define CONFIG_HD64461_IOBASE	0xb0000000
+#endif
+#ifndef CONFIG_HD64461_IRQ
+#define CONFIG_HD64461_IRQ	36
 #endif
 
 #define HD64461_IRQBASE	64

@@ -28,12 +28,19 @@ choice 'SuperH system type'					\
 	"Generic		CONFIG_SH_GENERIC		\
 	 SolutionEngine		CONFIG_SH_SOLUTION_ENGINE	\
 	 Overdrive		CONFIG_SH_OVERDRIVE		\
-	 HP600			CONFIG_SH_HP600" Generic
+	 HP600			CONFIG_SH_HP600			\
+	 CqREEK			CONFIG_SH_CQREEK		\
+	 BareCPU		CONFIG_SH_UNKNOWN" Generic
 
 choice 'Processor type' \
-   "SH7708 CONFIG_CPU_SUBTYPE_SH7708 \
+   "SH7707 CONFIG_CPU_SUBTYPE_SH7707 \
+    SH7708 CONFIG_CPU_SUBTYPE_SH7708 \
     SH7709 CONFIG_CPU_SUBTYPE_SH7709 \
     SH7750 CONFIG_CPU_SUBTYPE_SH7750" SH7708
+if [ "$CONFIG_CPU_SUBTYPE_SH7707" = "y" ]; then
+   define_bool CONFIG_CPU_SH3 y
+   define_bool CONFIG_CPU_SH4 n
+fi
 if [ "$CONFIG_CPU_SUBTYPE_SH7708" = "y" ]; then
    define_bool CONFIG_CPU_SH3 y
    define_bool CONFIG_CPU_SH4 n
@@ -52,7 +59,6 @@ if [ "$CONFIG_SH_SOLUTION_ENGINE" = "y" -o "$CONFIG_SH_HP600" = "y" -o \
   define_hex CONFIG_MEMORY_START 0c000000
 else
   hex 'Physical memory start address' CONFIG_MEMORY_START 08000000
-  hex 'I/O port offset address' CONFIG_IOPORT_START ba000000
 fi
 endmenu
 
@@ -178,6 +184,12 @@ bool 'Unix98 PTY support' CONFIG_UNIX98_PTYS
 if [ "$CONFIG_UNIX98_PTYS" = "y" ]; then
    int 'Maximum number of Unix98 PTYs in use (0-2048)' CONFIG_UNIX98_PTY_COUNT 256
 fi
+
+if [ "$CONFIG_SH_GENERIC" = "y" -o \
+     "$CONFIG_SH_OVERDRIVE" = "y" -o "$CONFIG_SH_SOLUTION_ENGINE" = "y" ]; then
+  bool 'Heartbeat LED' CONFIG_HEARTBEAT
+fi
+
 if [ "$CONFIG_PARPORT" != "n" ]; then
    dep_tristate 'Parallel printer support' CONFIG_PRINTER $CONFIG_PARPORT
    if [ "$CONFIG_PRINTER" != "n" ]; then
@@ -221,7 +233,8 @@ comment 'Kernel hacking'
 bool 'Magic SysRq key' CONFIG_MAGIC_SYSRQ
 bool 'Use LinuxSH standard BIOS' CONFIG_SH_STANDARD_BIOS
 if [ "$CONFIG_SH_STANDARD_BIOS" = "y" ]; then
-    bool 'GDB Stub kernel debug' CONFIG_DEBUG_KERNEL_WITH_GDB_STUB
-    bool 'Early printk support' CONFIG_SH_EARLY_PRINTK
+   hex ' GDB Stub VBR' CONFIG_GDB_STUB_VBR a0000000
+   bool 'GDB Stub kernel debug' CONFIG_DEBUG_KERNEL_WITH_GDB_STUB
+   bool 'Early printk support' CONFIG_SH_EARLY_PRINTK
 fi
 endmenu

@@ -62,7 +62,7 @@ ENOSYS = 38
 #if defined(__sh3__)
 TRA     = 0xffffffd0
 EXPEVT  = 0xffffffd4
-#ifdef CONFIG_CPU_SUBTYPE_SH7709
+#if defined(CONFIG_CPU_SUBTYPE_SH7707) || defined(CONFIG_CPU_SUBTYPE_SH7709)
 INTEVT  = 0xa4000000		! INTEVTE2(0xa4000000)
 #else
 INTEVT  = 0xffffffd8
@@ -182,7 +182,7 @@ tlb_protection_violation_store:
 1:	.long	SYMBOL_NAME(do_page_fault)
 2:	.long	MMU_TEA
 
-#ifdef CONFIG_DEBUG_KERNEL_WITH_GDB_STUB
+#if defined(CONFIG_DEBUG_KERNEL_WITH_GDB_STUB) || defined(CONFIG_SH_STANDARD_BIOS)
 	.align	2
 	/* Unwind the stack and jmp to the debug entry */
 debug_kernel:
@@ -219,12 +219,12 @@ debug_kernel:
 	 ldc	$k1, $ssr
 	.align	2
 1:	.long	0x300000f0
-2:	.long	0xa0000100
+2:	.long	CONFIG_GDB_STUB_VBR + 0x100
 #endif
 
 	.align	2
 debug_trap:	
-#ifdef CONFIG_DEBUG_KERNEL_WITH_GDB_STUB
+#if defined(CONFIG_DEBUG_KERNEL_WITH_GDB_STUB) || defined(CONFIG_SH_STANDARD_BIOS)
 	mov	#SR, $r0
 	mov.l	@($r0,$r15), $r0	! get status register
 	shll	$r0
@@ -829,7 +829,7 @@ ENTRY(interrupt_table)
 	.long	SYMBOL_NAME(do_IRQ)	!      rovi
 	.long	SYMBOL_NAME(do_IRQ)
 	.long	SYMBOL_NAME(do_IRQ)
-#if defined(CONFIG_CPU_SUBTYPE_SH7709)
+#if  defined(CONFIG_CPU_SUBTYPE_SH7707) || defined(CONFIG_CPU_SUBTYPE_SH7709)
 	.long	SYMBOL_NAME(do_IRQ)	! 32 IRQ  irq0
 	.long	SYMBOL_NAME(do_IRQ)	! 33      irq1
 	.long	SYMBOL_NAME(do_IRQ)	! 34      irq2
@@ -859,6 +859,11 @@ ENTRY(interrupt_table)
 	.long	SYMBOL_NAME(do_IRQ)	! 58      bri2
 	.long	SYMBOL_NAME(do_IRQ)	! 59      txi2
 	.long	SYMBOL_NAME(do_IRQ)	! 60 ADC  adi
+#if defined(CONFIG_CPU_SUBTYPE_SH7707)
+	.long   SYMBOL_NAME(do_IRQ)	! 61 LCDC lcdi
+	.long   SYMBOL_NAME(do_IRQ)	! 62 PCC  pcc0i
+	.long   SYMBOL_NAME(do_IRQ)	! 63      pcc1i
+#endif
 #elif defined(__SH4__)
 	.long	SYMBOL_NAME(do_IRQ)	! Hitachi UDI
 	.long	SYMBOL_NAME(do_IRQ)	! GPIO

@@ -5,6 +5,10 @@
  * Copyright (C) 2000 Paul Mackerras & Ben. Herrenschmidt
  * 
  * portions based on sunhme.c by David S. Miller
+ *
+ * Changes:
+ * Arnaldo Carvalho de Melo <acme@conectiva.com.br> - 08/06/2000
+ * - check init_etherdev return in gmac_probe1
  * 
  */
 
@@ -1178,7 +1182,13 @@ gmac_probe1(struct device_node *gmac)
 	}
 
 	dev = init_etherdev(0, sizeof(struct gmac));
-	memset(dev->priv, 0, sizeof(struct gmac));
+
+	if (!dev) {
+		printk(KERN_ERR "GMAC: init_etherdev failed, out of memory\n");
+		free_page(tx_descpage);
+		free_page(rx_descpage);
+		return;
+	}
 
 	gm = (struct gmac *) dev->priv;
 	dev->base_addr = gmac->addrs[0].address;

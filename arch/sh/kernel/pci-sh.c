@@ -4,9 +4,22 @@
 #include <linux/init.h>
 #include <linux/ioport.h>
 #include <linux/errno.h>
+#include <asm/machvec.h>
 
-unsigned long resource_fixup(struct pci_dev * dev, struct resource * res,
-			     unsigned long start, unsigned long size)
+void __init pcibios_init(void)
 {
-	return start;
+	if (sh_mv.mv_init_pci != NULL) {
+		sh_mv.mv_init_pci();
+	}
 }
+
+/* Haven't done anything here as yet */
+char * __init pcibios_setup(char *str)
+{
+	return str;
+}
+
+/* We don't have anything here to fixup */
+struct pci_fixup pcibios_fixups[] = {
+	{0, 0, 0, NULL}
+};

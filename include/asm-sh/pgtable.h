@@ -23,6 +23,7 @@ extern void paging_init(void);
  *  - flush_cache_page(mm, vmaddr) flushes a single page
  *  - flush_cache_range(mm, start, end) flushes a range of pages
  *
+ *  - flush_dcache_page(pg) flushes(wback&invalidates) a page for dcache
  *  - flush_page_to_ram(page) write back kernel page to ram
  *  - flush_icache_range(start, end) flushes(invalidates) a range for icache
  *  - flush_icache_page(vma, pg) flushes(invalidates) a page for icache
@@ -48,6 +49,7 @@ extern void flush_cache_range(struct mm_struct *mm, unsigned long start,
 			      unsigned long end);
 extern void flush_cache_page(struct vm_area_struct *vma, unsigned long addr);
 extern void flush_page_to_ram(struct page *page);
+extern void flush_dcache_page(struct page *pg);
 extern void flush_icache_range(unsigned long start, unsigned long end);
 extern void flush_icache_page(struct vm_area_struct *vma, struct page *pg);
 #endif
@@ -99,6 +101,9 @@ extern unsigned long empty_zero_page[1024];
 #define _PAGE_USER	0x040  /* PR1-bit : user space access allowed */
 #define _PAGE_PROTNONE	0x080  /* software: if not present */
 /*			0x100     V-bit   : page is valid */
+/*			0x200     can be used as software flag */
+/*			0x400     can be used as software flag */
+/*			0x800     can be used as software flag */
 
 #if defined(__sh3__)
 /* Mask which drop software flags */

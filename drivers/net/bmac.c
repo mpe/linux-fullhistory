@@ -1292,6 +1292,12 @@ static void __init bmac_probe1(struct device_node *bmac, int is_bmac_plus)
 
 	dev = init_etherdev(NULL, PRIV_BYTES);
 
+	if (!dev) {
+		printk(KERN_ERR "init_etherdev failed, out of memory for BMAC %s\n",
+		       bmac->full_name);
+		return;
+	}
+
 	dev->base_addr = (unsigned long)
 		ioremap(bmac->addrs[0].address, bmac->addrs[0].size);
 	dev->irq = bmac->intrs[0].line;

@@ -19,6 +19,12 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA
+ *
+ * Changes:
+ * Arnaldo Carvalho de Melo <acme@conectiva.com.br> - 08/08/2000
+ * - reorganize kmallocs in ray_attach, checking all for failure
+ *   and releasing the previous allocations if one fails
+ *
  * 
 =============================================================================*/
 
@@ -333,7 +339,25 @@ static dev_link_t *ray_attach(void)
 
     /* Initialize the dev_link_t structure */
     link = kmalloc(sizeof(struct dev_link_t), GFP_KERNEL);
+
+    if (!link)
+	    return NULL;
+
+    /* Allocate space for private device-specific data */
+    dev = kmalloc(sizeof(struct net_device), GFP_KERNEL);
+
+    if (!dev)
+	    goto fail_alloc_dev;
+
+    local = kmalloc(sizeof(ray_dev_t), GFP_KERNEL);
+
+    if (!local)
+	    goto fail_alloc_local;
+
     memset(link, 0, sizeof(struct dev_link_t));
+    memset(dev, 0, sizeof(struct net_device));
+    memset(local, 0, sizeof(ray_dev_t));
+
     link->release.function = &ray_release;
     link->release.data = (u_long)link;
 
@@ -355,14 +379,9 @@ static dev_link_t *ray_attach(void)
     link->conf.ConfigIndex = 1;
     link->conf.Present = PRESENT_OPTION;
 
-    /* Allocate space for private device-specific data */
-    dev = kmalloc(sizeof(struct net_device), GFP_KERNEL);
-    memset(dev, 0, sizeof(struct net_device));
     link->priv = dev;
     link->irq.Instance = dev;
     
-    local = kmalloc(sizeof(ray_dev_t), GFP_KERNEL);
-    memset(local, 0, sizeof(ray_dev_t));
     dev->priv = local;
     local->finder = link;
     link->dev = &local->node;
@@ -416,6 +435,12 @@ static dev_link_t *ray_attach(void)
     }
     DEBUG(2,"ray_cs ray_attach ending\n");
     return link;
+
+fail_alloc_local:
+    kfree(dev);
+fail_alloc_dev:
+    kfree(link);
+    return NULL;
 } /* ray_attach */
 /*=============================================================================
     This deletes a driver "instance".  The device is de-registered

@@ -10,7 +10,7 @@
  * the Free Software Foundation; either version 2 of the License, or
  * (at your option) any later version.
  *
- * $Id: jffs_fm.h,v 1.3 2000/07/04 16:15:42 dwmw2 Exp $
+ * $Id: jffs_fm.h,v 1.7 2000/08/08 09:10:39 dwmw2 Exp $
  *
  * Ported to Linux 2.3.x and MTD:
  * Copyright (C) 2000  Alexander Larsson (alex@cendio.se), Cendio Systems AB
@@ -23,6 +23,7 @@
 #include <linux/types.h>
 #include <linux/jffs.h>
 #include <linux/mtd/mtd.h>
+#include <linux/config.h>
 
 /* The alignment between two nodes in the flash memory.  */
 #define JFFS_ALIGN_SIZE 4
@@ -30,18 +31,37 @@
 /* Mark the on-flash space as obsolete when appropriate.  */
 #define JFFS_MARK_OBSOLETE 0
 
-#define CONFIG_JFFS_FS_VERBOSE 0
+#ifndef CONFIG_JFFS_FS_VERBOSE
+#define CONFIG_JFFS_FS_VERBOSE 1
+#endif
+
+#if CONFIG_JFFS_FS_VERBOSE > 0
+#define D(x) x
+#define D1(x) D(x)
+#else
+#define D(x)
+#define D1(x)
+#endif
+
+#if CONFIG_JFFS_FS_VERBOSE > 1
+#define D2(x) D(x)
+#else
+#define D2(x)
+#endif
+
+#if CONFIG_JFFS_FS_VERBOSE > 2
+#define D3(x) D(x)
+#else
+#define D3(x)
+#endif
+
+#define ASSERT(x) x
 
 /* How many padding bytes should be inserted between two chunks of data
    on the flash?  */
 #define JFFS_GET_PAD_BYTES(size) ((JFFS_ALIGN_SIZE                     \
 				  - ((__u32)(size) % JFFS_ALIGN_SIZE)) \
 				  % JFFS_ALIGN_SIZE)
-
-/* Is there enough space on the flash?  */
-#define JFFS_ENOUGH_SPACE(fmc) (((fmc)->flash_size - (fmc)->used_size \
-				 - (fmc)->dirty_size) >= (fmc)->min_free_size)
-
 
 struct jffs_node_ref
 {
@@ -71,12 +91,13 @@ struct jffs_fmcontrol
 				 to perform garbage collections.  */
 	__u32 max_chunk_size; /* The maximum size of a chunk of data.  */
 	struct mtd_info *mtd;
-	__u32 no_call_gc;
+	struct semaphore gclock;
 	struct jffs_control *c;
 	struct jffs_fm *head;
 	struct jffs_fm *tail;
 	struct jffs_fm *head_extra;
 	struct jffs_fm *tail_extra;
+	struct semaphore wlock;  
 };
 
 /* Notice the two members head_extra and tail_extra in the jffs_control

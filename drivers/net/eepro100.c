@@ -568,8 +568,11 @@ static const char is_mii[] = { 0, 1, 1, 0, 1, 1, 0, 1 };
 static int eepro100_init_one(struct pci_dev *pdev,
 		const struct pci_device_id *ent);
 static void eepro100_remove_one (struct pci_dev *pdev);
+
+#ifdef CONFIG_EEPRO100_PM
 static void eepro100_suspend (struct pci_dev *pdev);
 static void eepro100_resume (struct pci_dev *pdev);
+#endif /* CONFIG_EEPRO100_PM */
 
 static int do_eeprom_cmd(long ioaddr, int cmd, int cmd_len);
 static int mdio_read(long ioaddr, int phy_id, int location);
@@ -2182,6 +2185,9 @@ static void set_rx_mode(struct net_device *dev)
 	sp->rx_mode = new_rx_mode;
 }
 
+
+#ifdef CONFIG_EEPRO100_PM
+
 static void eepro100_suspend(struct pci_dev *pdev)
 {
 	struct net_device *dev = pdev->driver_data;
@@ -2213,6 +2219,8 @@ static void eepro100_resume(struct pci_dev *pdev)
 	sp->flow_ctrl = sp->partner = 0;
 	set_rx_mode(dev);
 }
+
+#endif /* CONFIG_EEPRO100_PM */
 
 static void __devexit eepro100_remove_one (struct pci_dev *pdev)
 {
@@ -2252,7 +2260,8 @@ static struct pci_driver eepro100_driver = {
 	id_table:	eepro100_pci_tbl,
 	probe:		eepro100_init_one,
 	remove:		eepro100_remove_one,
-#if 0	/* These seem to be broken.. */
+
+#ifdef CONFIG_EEPRO100_PM
 	suspend:	eepro100_suspend,
 	resume:		eepro100_resume,
 #endif

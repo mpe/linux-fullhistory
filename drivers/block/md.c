@@ -2741,7 +2741,7 @@ static int md_ioctl (struct inode *inode, struct file *file,
 			if (md_copy_from_user(&info, (void*)arg, sizeof(info)))
 				err = -EFAULT;
 			else
-				err = add_new_disk(mddev, (void *)arg);
+				err = add_new_disk(mddev, &info);
 			goto done_unlock;
 		}
 		case HOT_REMOVE_DISK:

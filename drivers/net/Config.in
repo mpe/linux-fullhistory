@@ -51,7 +51,7 @@ if [ "$CONFIG_NET_ETHERNET" = "y" ]; then
    if [ "$CONFIG_SGI_IP27" = "y" ]; then
       bool '  SGI IOC3 Ethernet' CONFIG_SGI_IOC3_ETH
    fi
-   if [ "$CONFIG_SUPERH" = "y" -a "$CONFIG_SH_SOLUTION_ENGINE" = "y" ]; then
+   if [ "$CONFIG_SUPERH" = "y" ]; then
       tristate '  National DP83902AV  support' CONFIG_STNIC
    fi
    bool '  3COM cards' CONFIG_NET_VENDOR_3COM

@@ -10,28 +10,17 @@
  * the Free Software Foundation; either version 2 of the License, or
  * (at your option) any later version.
  *
- * $Id: jffs_fm.c,v 1.8 2000/07/13 13:15:33 scote1 Exp $
+ * $Id: jffs_fm.c,v 1.14 2000/08/09 14:26:35 dwmw2 Exp $
  *
  * Ported to Linux 2.3.x and MTD:
  * Copyright (C) 2000  Alexander Larsson (alex@cendio.se), Cendio Systems AB
  *
  */
 #define __NO_VERSION__
-#include <linux/config.h>
 #include <linux/malloc.h>
 #include <linux/blkdev.h>
 #include <linux/jffs.h>
 #include "jffs_fm.h"
-
-#if defined(CONFIG_JFFS_FS_VERBOSE) && CONFIG_JFFS_FS_VERBOSE
-#define D(x) x
-#else
-#define D(x)
-#endif
-#define D1(x) D(x)
-#define D2(x) 
-#define D3(x) 
-#define ASSERT(x) x
 
 #if defined(JFFS_MARK_OBSOLETE) && JFFS_MARK_OBSOLETE
 static int jffs_mark_obsolete(struct jffs_fmcontrol *fmc, __u32 fm_offset);
@@ -72,12 +61,13 @@ jffs_build_begin(struct jffs_control *c, kdev_t dev)
 	fmc->max_chunk_size = fmc->sector_size >> 1;
 	fmc->min_free_size = (fmc->sector_size << 1) - fmc->max_chunk_size;
 	fmc->mtd = mtd;
-	fmc->no_call_gc = 0;
+	init_MUTEX(&fmc->gclock);
 	fmc->c = c;
 	fmc->head = 0;
 	fmc->tail = 0;
 	fmc->head_extra = 0;
 	fmc->tail_extra = 0;
+	init_MUTEX(&fmc->wlock);
 	return fmc;
 }
 
@@ -425,18 +415,18 @@ int
 jffs_add_node(struct jffs_node *node)
 {
 	struct jffs_node_ref *ref;
-	struct jffs_fm *fm = node->fm;
-	int s = sizeof(struct jffs_node_ref);
 
 	D3(printk("jffs_add_node(): ino = %u\n", node->ino));
 
-	if (!(ref = (struct jffs_node_ref *)kmalloc(s, GFP_KERNEL))) {
+	ref = (struct jffs_node_ref *)kmalloc(sizeof(struct jffs_node_ref),
+					      GFP_KERNEL);
+	if (!ref)
 		return -ENOMEM;
-	}
+
 	DJM(no_jffs_node_ref++);
 	ref->node = node;
-	ref->next = fm->nodes;
-	fm->nodes = ref;
+	ref->next = node->fm->nodes;
+	node->fm->nodes = ref;
 	return 0;
 }
 
@@ -614,16 +604,16 @@ jffs_flash_erasable_size(struct mtd_info *mtd, __u32 offset, __u32 size)
         ssize = mtd->erasesize;
 
 	if (offset % ssize) {
-		printk(KERN_WARNING "jffs_flash_erasable_size() given non-aligned offset %lx (erasesize %lx)\n", offset, ssize);
+		printk(KERN_WARNING "jffs_flash_erasable_size() given non-aligned offset %x (erasesize %lx)\n", offset, ssize);
 		/* The offset is not sector size aligned.  */
 		return -1;
 	}
 	else if (offset > mtd->size) {
-		printk(KERN_WARNING "jffs_flash_erasable_size given offset off the end of device (%lx > %lx)\n", offset, mtd->size);
+		printk(KERN_WARNING "jffs_flash_erasable_size given offset off the end of device (%x > %lx)\n", offset, mtd->size);
 		return -2;
 	}
 	else if (offset + size > mtd->size) {
-		printk(KERN_WARNING "jffs_flash_erasable_size() given length which runs off the end of device (ofs %lx + len %lx = %lx, > %lx)\n", offset,size, offset+size, mtd->size);
+		printk(KERN_WARNING "jffs_flash_erasable_size() given length which runs off the end of device (ofs %x + len %x = %x, > %lx)\n", offset,size, offset+size, mtd->size);
 		return -3;
 	}
 

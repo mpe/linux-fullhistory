@@ -1,4 +1,4 @@
-/* $Id: pgtable.h,v 1.99 2000/08/05 13:30:34 davem Exp $ */
+/* $Id: pgtable.h,v 1.101 2000/08/09 00:00:17 davem Exp $ */
 #ifndef _SPARC_PGTABLE_H
 #define _SPARC_PGTABLE_H
 
@@ -146,9 +146,6 @@ extern pte_t pg2[1024];
 extern pte_t pg3[1024];
 
 extern unsigned long ptr_in_current_pgd;
-
-/* the no. of pointers that fit on a page: this will go away */
-#define PTRS_PER_PAGE   (PAGE_SIZE/sizeof(void*))
 
 /* Here is a trick, since mmap.c need the initializer elements for
  * protection_map[] to be constant at compile time, I set the following

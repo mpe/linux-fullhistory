@@ -77,7 +77,7 @@ extern void __br_lock_usage_bug (void);
 
 #ifdef __BRLOCK_USE_ATOMICS
 
-extern inline void br_read_lock (enum brlock_indices idx)
+static inline void br_read_lock (enum brlock_indices idx)
 {
 	/*
 	 * This causes a link-time bug message if an
@@ -89,7 +89,7 @@ extern inline void br_read_lock (enum brlock_indices idx)
 	read_lock(&__brlock_array[smp_processor_id()][idx]);
 }
 
-extern inline void br_read_unlock (enum brlock_indices idx)
+static inline void br_read_unlock (enum brlock_indices idx)
 {
 	if (idx >= __BR_END)
 		__br_lock_usage_bug();
@@ -98,7 +98,7 @@ extern inline void br_read_unlock (enum brlock_indices idx)
 }
 
 #else /* ! __BRLOCK_USE_ATOMICS */
-extern inline void br_read_lock (enum brlock_indices idx)
+static inline void br_read_lock (enum brlock_indices idx)
 {
 	unsigned int *ctr;
 	spinlock_t *lock;
@@ -124,7 +124,7 @@ again:
 	}
 }
 
-extern inline void br_read_unlock (enum brlock_indices idx)
+static inline void br_read_unlock (enum brlock_indices idx)
 {
 	unsigned int *ctr;
 
@@ -143,14 +143,14 @@ extern inline void br_read_unlock (enum brlock_indices idx)
 extern void FASTCALL(__br_write_lock (enum brlock_indices idx));
 extern void FASTCALL(__br_write_unlock (enum brlock_indices idx));
 
-extern inline void br_write_lock (enum brlock_indices idx)
+static inline void br_write_lock (enum brlock_indices idx)
 {
 	if (idx >= __BR_END)
 		__br_lock_usage_bug();
 	__br_write_lock(idx);
 }
 
-extern inline void br_write_unlock (enum brlock_indices idx)
+static inline void br_write_unlock (enum brlock_indices idx)
 {
 	if (idx >= __BR_END)
 		__br_lock_usage_bug();

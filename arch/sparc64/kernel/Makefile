@@ -1,4 +1,4 @@
-# $Id: Makefile,v 1.60 2000/07/16 18:21:24 ecd Exp $
+# $Id: Makefile,v 1.61 2000/08/09 08:25:19 jj Exp $
 # Makefile for the linux kernel.
 #
 # Note! Dependencies are done automagically by 'make dep', which also
@@ -64,7 +64,7 @@ binfmt_elf32.o: $(TOPDIR)/fs/binfmt_elf.c
 ifneq ($(NEW_GCC),y)
   CMODEL_CFLAG := -mmedlow
 else
-  CMODEL_CFLAG := -mcmodel=medlow
+  CMODEL_CFLAG := -m64 -mcmodel=medlow
 endif
 
 check_asm: dummy

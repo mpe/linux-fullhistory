@@ -177,7 +177,8 @@ extern __inline__ int get_order(unsigned long size)
 #define PAGE_OFFSET	0xf0000000
 #define __pa(x)                 ((unsigned long)(x) - PAGE_OFFSET)
 #define __va(x)                 ((void *)((unsigned long) (x) + PAGE_OFFSET))
-#define MAP_NR(addr)            (__pa(addr) >> PAGE_SHIFT)
+#define virt_to_page(kaddr)	(mem_map + (__pa(kaddr) >> PAGE_SHIFT))
+#define VALID_PAGE(page)	((page - mem_map) < max_mapnr)
 
 #endif /* __KERNEL__ */
 

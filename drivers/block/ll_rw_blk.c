@@ -842,10 +842,10 @@ end_io:
 	return 0;
 }
 
-void generic_make_request (request_queue_t *q, int rw, struct buffer_head * bh)
+void generic_make_request (int rw, struct buffer_head * bh)
 {
 	int major = MAJOR(bh->b_rdev);
-
+	request_queue_t *q;
 	if (blk_size[major]) {
 		unsigned long maxsector = (blk_size[major][MINOR(bh->b_rdev)] << 1) + 1;
 		unsigned int sector, count;
@@ -877,12 +877,21 @@ void generic_make_request (request_queue_t *q, int rw, struct buffer_head * bh)
 	 * still free to implement/resolve their own stacking
 	 * by explicitly returning 0)
 	 */
-	while (q->make_request_fn(q, rw, bh))
-		/* NOTE: we don't repeat the blk_size check even though we now have a
-		 * new device.  stacking drivers are expected to know what
-		 * they are doing.
-		 */
+	/* NOTE: we don't repeat the blk_size check for each new device.
+	 * Stacking drivers are expected to know what they are doing.
+	 */
+	do {
 		q = blk_get_queue(bh->b_rdev);
+		if (!q) {
+			printk(KERN_ERR
+			       "generic_make_request: Trying to access nonexistent block-device %s (%ld)\n",
+			       kdevname(bh->b_rdev), bh->b_rsector);
+			buffer_IO_error(bh);
+			break;
+		}
+
+	}
+	while (q->make_request_fn(q, rw, bh));
 }
 
 /* This function can be used to request a number of buffers from a block
@@ -892,19 +901,11 @@ void generic_make_request (request_queue_t *q, int rw, struct buffer_head * bh)
 void ll_rw_block(int rw, int nr, struct buffer_head * bhs[])
 {
 	struct buffer_head *bh;
-	request_queue_t *q;
 	unsigned int major;
 	int correct_size;
 	int i;
 
 	major = MAJOR(bhs[0]->b_dev);
-	q = blk_get_queue(bhs[0]->b_dev);
-	if (!q) {
-		printk(KERN_ERR
-	"ll_rw_block: Trying to read nonexistent block-device %s (%ld)\n",
-		kdevname(bhs[0]->b_dev), bhs[0]->b_blocknr);
-		goto sorry;
-	}
 
 	/* Determine correct block size for this device. */
 	correct_size = BLOCK_SIZE;
@@ -948,7 +949,7 @@ void ll_rw_block(int rw, int nr, struct buffer_head * bhs[])
 		bh->b_rdev = bh->b_dev;
 		bh->b_rsector = bh->b_blocknr * (bh->b_size>>9);
 
-		generic_make_request(q, rw, bh);
+		generic_make_request(rw, bh);
 	}
 	return;
 

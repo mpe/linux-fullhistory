@@ -56,7 +56,7 @@ shifted_port(unsigned int port)
   printk("bad PC-like io %s for port 0x%x at 0x%08x\n", \
 	 #name, (port), (__u32) __builtin_return_address(0))
 
-unsigned long inb(unsigned int port)
+unsigned long se_inb(unsigned int port)
 {
 	if (sh_pcic_io_start <= port && port <= sh_pcic_io_stop)
 		return *(__u8 *) (sh_pcic_io_wbase + 0x40000 + port); 
@@ -66,7 +66,7 @@ unsigned long inb(unsigned int port)
 		return (*port2adr(port))&0xff; 
 }
 
-unsigned long inb_p(unsigned int port)
+unsigned long se_inb_p(unsigned int port)
 {
 	unsigned long v;
 
@@ -80,7 +80,7 @@ unsigned long inb_p(unsigned int port)
 	return v;
 }
 
-unsigned long inw(unsigned int port)
+unsigned long se_inw(unsigned int port)
 {
 	if (port >= 0x2000 ||
 	    (sh_pcic_io_start <= port && port <= sh_pcic_io_stop))
@@ -90,13 +90,13 @@ unsigned long inw(unsigned int port)
 	return 0;
 }
 
-unsigned long inl(unsigned int port)
+unsigned long se_inl(unsigned int port)
 {
 	maybebadio(inl, port);
 	return 0;
 }
 
-void outb(unsigned long value, unsigned int port)
+void se_outb(unsigned long value, unsigned int port)
 {
 	if (sh_pcic_io_start <= port && port <= sh_pcic_io_stop)
 		*(__u8 *)(sh_pcic_io_wbase + port) = value; 
@@ -106,7 +106,7 @@ void outb(unsigned long value, unsigned int port)
 		*(port2adr(port)) = value;
 }
 
-void outb_p(unsigned long value, unsigned int port)
+void se_outb_p(unsigned long value, unsigned int port)
 {
 	if (sh_pcic_io_start <= port && port <= sh_pcic_io_stop)
 		*(__u8 *)(sh_pcic_io_wbase + port) = value; 
@@ -117,7 +117,7 @@ void outb_p(unsigned long value, unsigned int port)
 	delay();
 }
 
-void outw(unsigned long value, unsigned int port)
+void se_outw(unsigned long value, unsigned int port)
 {
 	if (port >= 0x2000 ||
 	    (sh_pcic_io_start <= port && port <= sh_pcic_io_stop))
@@ -126,12 +126,12 @@ void outw(unsigned long value, unsigned int port)
 		maybebadio(outw, port);
 }
 
-void outl(unsigned long value, unsigned int port)
+void se_outl(unsigned long value, unsigned int port)
 {
 	maybebadio(outl, port);
 }
 
-void insb(unsigned int port, void *addr, unsigned long count)
+void se_insb(unsigned int port, void *addr, unsigned long count)
 {
 	volatile __u16 *p = port2adr(port);
 
@@ -148,19 +148,19 @@ void insb(unsigned int port, void *addr, unsigned long count)
 	}
 }
 
-void insw(unsigned int port, void *addr, unsigned long count)
+void se_insw(unsigned int port, void *addr, unsigned long count)
 {
 	volatile __u16 *p = port2adr(port);
 	while (count--)
 		*((__u16 *) addr)++ = *p;
 }
 
-void insl(unsigned int port, void *addr, unsigned long count)
+void se_insl(unsigned int port, void *addr, unsigned long count)
 {
 	maybebadio(insl, port);
 }
 
-void outsb(unsigned int port, const void *addr, unsigned long count)
+void se_outsb(unsigned int port, const void *addr, unsigned long count)
 {
 	volatile __u16 *p = port2adr(port);
 
@@ -177,16 +177,46 @@ void outsb(unsigned int port, const void *addr, unsigned long count)
 	}
 }
 
-void outsw(unsigned int port, const void *addr, unsigned long count)
+void se_outsw(unsigned int port, const void *addr, unsigned long count)
 {
 	volatile __u16 *p = port2adr(port);
 	while (count--)
 		*p = *((__u16 *) addr)++;
 }
 
-void outsl(unsigned int port, const void *addr, unsigned long count)
+void se_outsl(unsigned int port, const void *addr, unsigned long count)
 {
 	maybebadio(outsw, port);
+}
+
+unsigned long se_readb(unsigned long addr)
+{
+	return *(volatile unsigned char*)addr;
+}
+
+unsigned long se_readw(unsigned long addr)
+{
+	return *(volatile unsigned short*)addr;
+}
+
+unsigned long se_readl(unsigned long addr)
+{
+	return *(volatile unsigned long*)addr;
+}
+
+void se_writeb(unsigned char b, unsigned long addr)
+{
+	*(volatile unsigned char*)addr = b;
+}
+
+void se_writew(unsigned short b, unsigned long addr)
+{
+	*(volatile unsigned short*)addr = b;
+}
+
+void se_writel(unsigned int b, unsigned long addr)
+{
+        *(volatile unsigned long*)addr = b;
 }
 
 /* Map ISA bus address to the real address. Only for PCMCIA.  */
@@ -194,7 +224,7 @@ void outsl(unsigned int port, const void *addr, unsigned long count)
 /* ISA page descriptor.  */
 static __u32 sh_isa_memmap[256];
 
-int
+static int
 sh_isa_mmap(__u32 start, __u32 length, __u32 offset)
 {
 	int idx;
@@ -212,7 +242,7 @@ sh_isa_mmap(__u32 start, __u32 length, __u32 offset)
 }
 
 unsigned long
-sh_isa_slot(unsigned long offset)
+se_isa_port2addr(unsigned long offset)
 {
 	int idx;
 

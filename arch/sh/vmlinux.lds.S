@@ -61,6 +61,9 @@ SECTIONS
   __initcall_start = .;
   .initcall.init : { *(.initcall.init) }
   __initcall_end = .;
+  __machvec_start = .;
+  .machvec.init : { *(.machvec.init) }
+  __machvec_end = .;
   . = ALIGN(4096);
   __init_end = .;
 

@@ -166,7 +166,7 @@ struct atm_mpoa_qos *atm_mpoa_add_qos(uint32_t dst_ip, struct atm_qos *qos)
 		return entry;
 	}
 
-	entry = kmalloc(sizeof(struct atm_qos), GFP_KERNEL);
+	entry = kmalloc(sizeof(struct atm_mpoa_qos), GFP_KERNEL);
 	if (entry == NULL) {
 		printk("mpoa: atm_mpoa_add_qos: out of memory\n");
 		return entry;
