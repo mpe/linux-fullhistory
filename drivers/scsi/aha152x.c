@@ -311,6 +311,7 @@ static void *addresses[] =
   (void *) 0xd8000,
   (void *) 0xe0000,
   (void *) 0xf0000,
+  (void *) 0xeb800,   /* VTech Platinum SMP */
 };
 #define ADDRESS_COUNT (sizeof( addresses ) / sizeof( unsigned ))
 

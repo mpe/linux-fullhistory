@@ -17,6 +17,7 @@
  *					top level.
  *		Alan Cox	:	Move address structures to/from user
  *					mode above the protocol layers.
+ *		Rob Janssen	:	Allow 0 length sends
  *
  *
  *		This program is free software; you can redistribute it and/or
@@ -924,8 +925,6 @@ static int sock_send(int fd, void * buff, int len, unsigned flags)
 
 	if(len<0)
 		return -EINVAL;
-	if(len==0)
-		return 0;
 	err=verify_area(VERIFY_READ, buff, len);
 	if(err)
 		return err;
@@ -953,8 +952,6 @@ static int sock_sendto(int fd, void * buff, int len, unsigned flags,
 
 	if(len<0)
 		return -EINVAL;
-	if(len==0)
-		return 0;
 	err=verify_area(VERIFY_READ,buff,len);
 	if(err)
 	  	return err;

@@ -30,6 +30,9 @@
  *		Alan Cox	:	Drop data when a device is downed.
  *		Alan Cox	:	Use init_timer().
  *		Alan Cox	:	Double lock fixes.
+ *		Martin Seine	:	Move the arphdr structure
+ *					to if_arp.h for compatibility
+ *					with BSD based programs.
  */
 
 #include <linux/types.h>
@@ -86,29 +89,6 @@ struct arp_table
 	struct sk_buff_head		skb;			/* list of queued packets 	*/
 };
 
-/*
- *	This structure defines an ethernet arp header.
- */
-
-struct arphdr
-{
-	unsigned short	ar_hrd;		/* format of hardware address	*/
-	unsigned short	ar_pro;		/* format of protocol address	*/
-	unsigned char	ar_hln;		/* length of hardware address	*/
-	unsigned char	ar_pln;		/* length of protocol address	*/
-	unsigned short	ar_op;		/* ARP opcode (command)		*/
-
-#if 0
-	 /*
-	  *	 Ethernet looks like this : This bit is variable sized however...
-	  */
-	unsigned char		ar_sha[ETH_ALEN];	/* sender hardware address	*/
-	unsigned char		ar_sip[4];		/* sender IP address		*/
-	unsigned char		ar_tha[ETH_ALEN];	/* target hardware address	*/
-	unsigned char		ar_tip[4];		/* target IP address		*/
-#endif
-
-};
 
 /*
  *	Configurable Parameters (don't touch unless you know what you are doing

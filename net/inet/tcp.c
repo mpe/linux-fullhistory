@@ -80,14 +80,12 @@
  *		Alan Cox	:	Window clamping
  *		Michael Riepe	:	Bug in tcp_check()
  *		Matt Dillon	:	More TCP improvements and RST bug fixes
+ *		Matt Dillon	:	Yet more small nasties remove from the TCP code
+ *					(Be very nice to this man if tcp finally works 100%) 8)
+ *		Alan Cox	:	BSD accept sematics. 
  *
  *
  * To Fix:
- *			Possibly a problem with accept(). BSD accept never fails after
- *		it causes a select. Linux can - given the official select semantics I
- *		feel that _really_ its the BSD network programs that are bust (notably
- *		inetd, which hangs occasionally because of this).
- *
  *			Fast path the code. Two things here - fix the window calculation
  *		so it doesn't iterate over the queue, also spot packets with no funny
  *		options arriving in order and process directly.
@@ -223,6 +221,40 @@ int tcp_select_window(struct sock *sk)
 		return(sk->window);
 	return(new_window);
 }
+
+/*
+ *	Find someone to 'accept'. Must be called with
+ *	sk->inuse=1 or cli()
+ */ 
+
+static struct sk_buff *tcp_find_established(struct sock *s)
+{
+	struct sk_buff *p=skb_peek(&s->receive_queue);
+	if(p==NULL)
+		return NULL;
+	do
+	{
+		if(p->sk->state>=TCP_ESTABLISHED)
+			return p;
+		p=p->next;
+	}
+	while(p!=skb_peek(&s->receive_queue));
+	return NULL;
+}
+
+static struct sk_buff *tcp_dequeue_established(struct sock *s)
+{
+	struct sk_buff *skb;
+	unsigned long flags;
+	save_flags(flags);
+	cli(); 
+	skb=tcp_find_established(s);
+	if(skb!=NULL)
+		skb_unlink(skb);	/* Take it off the queue */
+	restore_flags(flags);
+	return skb;
+}
+
 
 /*
  *	Enter the time wait state. 
@@ -406,7 +438,7 @@ static int tcp_select(struct sock *sk, int sel_type, select_table *wait)
 				printk("-select out");
 			if (skb_peek(&sk->receive_queue) != NULL) 
 			{
-				if (sk->state == TCP_LISTEN || tcp_readable(sk)) 
+				if ((sk->state == TCP_LISTEN && tcp_find_established(sk)) || tcp_readable(sk)) 
 				{
 					release_sock(sk);
 					if(sk->debug)
@@ -445,12 +477,11 @@ static int tcp_select(struct sock *sk, int sel_type, select_table *wait)
 			}
 
 			/*
-			 * FIXME:
-			 * Hack so it will probably be able to write
-			 * something if it says it's ok to write.
+			 * This is now right thanks to a small fix
+			 * by Matt Dillon.
 			 */
 			
-			if (sk->prot->wspace(sk) >= sk->mss) 
+			if (sk->prot->wspace(sk) >= sk->mtu+128+sk->prot->max_header) 
 			{
 				release_sock(sk);
 				/* This should cause connect to work ok. */
@@ -2523,15 +2554,7 @@ static int tcp_ack(struct sock *sk, struct tcphdr *th, unsigned long saddr, int 
 	if (sk->retransmits && sk->timeout == TIME_KEEPOPEN)
 	  	sk->retransmits = 0;
 
-#if 0
-/*
- *	Not quite clear why the +1 and -1 here, and why not +1 in next line 
- */
- 
-	if (after(ack, sk->sent_seq+1) || before(ack, sk->rcv_ack_seq-1)) 
-#else	
 	if (after(ack, sk->sent_seq) || before(ack, sk->rcv_ack_seq)) 
-#endif	
 	{
 		if(sk->debug)
 			printk("Ack ignored %lu %lu\n",ack,sk->sent_seq);
@@ -2941,7 +2964,8 @@ static int tcp_ack(struct sock *sk, struct tcphdr *th, unsigned long saddr, int 
 	/*
 	 * Incoming ACK to a FIN we sent in the case of our initiating the close.
 	 *
-	 * Move to FIN_WAIT2 to await a FIN from the other end.
+	 * Move to FIN_WAIT2 to await a FIN from the other end. Set
+	 * SEND_SHUTDOWN but not RCV_SHUTDOWN as data can still be coming in.
 	 */
 
 	if (sk->state == TCP_FIN_WAIT1) 
@@ -2952,13 +2976,15 @@ static int tcp_ack(struct sock *sk, struct tcphdr *th, unsigned long saddr, int 
 		if (sk->rcv_ack_seq == sk->write_seq) 
 		{
 			flag |= 1;
+#ifdef THIS_BIT_IS_WRONG			
 			if (sk->acked_seq != sk->fin_seq) 
 			{
 				tcp_time_wait(sk);
 			}
 			else
+#endif			
 			{
-				sk->shutdown = SHUTDOWN_MASK;
+				sk->shutdown |= SEND_SHUTDOWN;
 				tcp_set_state(sk,TCP_FIN_WAIT2);
 			}
 		}
@@ -3065,7 +3091,7 @@ static int tcp_data(struct sk_buff *skb, struct sock *sk,
 	{
 		new_seq= th->seq + skb->len + th->syn;	/* Right edge of _data_ part of frame */
 		
-		if(after(new_seq,sk->copied_seq+1))	/* If the right edge of this frame is after the last copied byte
+		if(after(new_seq,sk->/*copied*/acked_seq+1))	/* If the right edge of this frame is after the last copied byte
 							   then it contains data we will never touch. We send an RST to 
 							   ensure the far end knows it never got to the application */
 		{
@@ -3448,6 +3474,7 @@ static int tcp_fin(struct sk_buff *skb, struct sock *sk, struct tcphdr *th,
 			 */
 			reset_timer(sk, TIME_CLOSE, TCP_TIMEWAIT_LEN);
 			/*sk->fin_seq = th->seq+1;*/
+			sk->shutdown|=SHUTDOWN_MASK;
 			tcp_set_state(sk,TCP_TIME_WAIT);
 			break;
 		case TCP_CLOSE:
@@ -3490,7 +3517,7 @@ tcp_accept(struct sock *sk, int flags)
 	cli();
 	sk->inuse = 1;
 
-	while((skb = skb_dequeue(&sk->receive_queue)) == NULL) 
+	while((skb = tcp_dequeue_established(sk)) == NULL) 
 	{
 		if (flags & O_NONBLOCK) 
 		{

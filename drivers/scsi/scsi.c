@@ -156,6 +156,7 @@ static struct blist blacklist[] =
    {"TEXEL","CD-ROM","1.06"},   /* causes failed REQUEST SENSE on lun 1 for seagate
 				 * controller, which causes SCSI code to reset bus.*/
    {"QUANTUM","LPS525S","3110"},/* Locks sometimes if polled for lun != 0 */
+   {"QUANTUM","PD1225S","3110"},/* Locks sometimes if polled for lun != 0 */
    {NULL, NULL, NULL}};	
 
 static int blacklisted(unsigned char * response_data){

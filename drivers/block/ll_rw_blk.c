@@ -232,7 +232,7 @@ repeat:
 	     || major == SCSI_CDROM_MAJOR)
 	    && (req = blk_dev[major].current_request))
 	{
-	        if (major == HD_MAJOR)
+	        if (major == HD_MAJOR || major == FLOPPY_MAJOR)
 			req = req->next;
 		while (req) {
 			if (req->dev == bh->b_dev &&

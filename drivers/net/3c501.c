@@ -237,7 +237,9 @@ el_open(struct device *dev)
 static int
 el_start_xmit(struct sk_buff *skb, struct device *dev)
 {
-
+    unsigned long flags;
+    
+    save_flags(flags);
     if (dev->tbusy) {
 	if (jiffies - dev->trans_start < 20) {
 	    if (el_debug > 2)
@@ -251,12 +253,14 @@ el_start_xmit(struct sk_buff *skb, struct device *dev)
 #ifdef oldway
 	el_reset(dev);
 #else
+	cli();
 	outb(TX_NORM, TX_CMD);
 	outb(RX_NORM, RX_CMD);
 	outb(AX_OFF, AX_CMD);	/* Just trigger a false interrupt. */
 #endif
 	outb(AX_RX, AX_CMD);	/* Aux control, irq and receive enabled */
 	dev->tbusy = 0;
+	restore_flags(flags);
 	dev->trans_start = jiffies;
     }
 
@@ -269,9 +273,12 @@ el_start_xmit(struct sk_buff *skb, struct device *dev)
 	return 0;
 
     /* Avoid timer-based retransmission conflicts. */
+    cli();
     if (set_bit(0, (void*)&dev->tbusy) != 0)
+    {
 	printk("%s: Transmitter access conflict.\n", dev->name);
-    else {
+	restore_flags(flags);
+    } else {
 	int gp_start = 0x800 - (ETH_ZLEN < skb->len ? skb->len : ETH_ZLEN);
 	unsigned char *buf = skb->data;
 
@@ -283,6 +290,7 @@ el_start_xmit(struct sk_buff *skb, struct device *dev)
 	inb(TX_STATUS);
 	outb(0x00, RX_BUF_CLR);	/* Set rx packet area to 0. */
 	outw(gp_start, GP_LOW);
+	restore_flags(flags);
 	outsb(DATAPORT,buf,skb->len);
 	outw(gp_start, GP_LOW);
 	outb(AX_XMIT, AX_CMD);		/* Trigger xmit.  */

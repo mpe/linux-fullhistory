@@ -87,10 +87,10 @@ register_8022_client(unsigned char type, int (*rcvfunc)(struct sk_buff *, struct
 		proto->rcvfunc = rcvfunc;
 		proto->header_length = 3;
 		proto->datalink_header = p8022_datalink_header;
-	}
 
-	proto->next = p8022_list;
-	p8022_list = proto;
+		proto->next = p8022_list;
+		p8022_list = proto;
+	}
 
 	return proto;
 }

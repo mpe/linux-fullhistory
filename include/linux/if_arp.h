@@ -11,6 +11,7 @@
  *		Portions taken from the KA9Q/NOS (v2.00m PA0GRI) source.
  *		Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
+ *		Florian La Roche.
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -59,5 +60,28 @@ struct arpreq {
 #define	ATF_PUBL	0x08		/* publish entry		*/
 #define	ATF_USETRAILERS	0x10		/* has requested trailers	*/
 
+/*
+ *	This structure defines an ethernet arp header.
+ */
+
+struct arphdr
+{
+	unsigned short	ar_hrd;		/* format of hardware address	*/
+	unsigned short	ar_pro;		/* format of protocol address	*/
+	unsigned char	ar_hln;		/* length of hardware address	*/
+	unsigned char	ar_pln;		/* length of protocol address	*/
+	unsigned short	ar_op;		/* ARP opcode (command)		*/
+
+#if 0
+	 /*
+	  *	 Ethernet looks like this : This bit is variable sized however...
+	  */
+	unsigned char		ar_sha[ETH_ALEN];	/* sender hardware address	*/
+	unsigned char		ar_sip[4];		/* sender IP address		*/
+	unsigned char		ar_tha[ETH_ALEN];	/* target hardware address	*/
+	unsigned char		ar_tip[4];		/* target IP address		*/
+#endif
+
+};
 
 #endif	/* _LINUX_IF_ARP_H */
