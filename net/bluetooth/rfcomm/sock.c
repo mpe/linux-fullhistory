@@ -196,9 +196,6 @@ static void rfcomm_sock_destruct(struct sock *sk)
 	rfcomm_dlc_unlock(d);
 
 	rfcomm_dlc_put(d);
-
-	if (sk->sk_protinfo)
-		kfree(sk->sk_protinfo);
 }
 
 static void rfcomm_sock_cleanup_listen(struct sock *parent)
@@ -838,7 +835,7 @@ int rfcomm_connect_ind(struct rfcomm_session *s, u8 channel, struct rfcomm_dlc *
 		return 0;
 
 	/* Check for backlog size */
-	if (parent->sk_ack_backlog > parent->sk_max_ack_backlog) {
+	if (sk_acceptq_is_full(parent)) {
 		BT_DBG("backlog full %d", parent->sk_ack_backlog); 
 		goto done;
 	}

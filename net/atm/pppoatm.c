@@ -345,7 +345,7 @@ static int pppoatm_ioctl(struct socket *sock, unsigned int cmd,
 	return -ENOIOCTLCMD;
 }
 
-struct atm_ioctl pppoatm_ioctl_ops = {
+static struct atm_ioctl pppoatm_ioctl_ops = {
 	.owner	= THIS_MODULE,
 	.ioctl	= pppoatm_ioctl,
 };
