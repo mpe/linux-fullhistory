@@ -1,5 +1,5 @@
 /*
- * ti_pcilynx.c - Texas Instruments PCILynx driver
+ * pcilynx.c - Texas Instruments PCILynx driver
  * Copyright (C) 1999,2000 Andreas Bombe <andreas.bombe@munich.netsurf.de>,
  *                         Stephan Linz <linz@mazet.de>
  *                         Manfred Weihs <weihs@ict.tuwien.ac.at>
