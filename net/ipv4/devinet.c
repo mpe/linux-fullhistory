@@ -1,7 +1,7 @@
 /*
  *	NET3	IP device support routines.
  *
- *	Version: $Id: devinet.c,v 1.37 2000/07/26 01:04:15 davem Exp $
+ *	Version: $Id: devinet.c,v 1.38 2000/08/19 23:22:56 davem Exp $
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -470,9 +470,7 @@ int devinet_ioctl(unsigned int cmd, void *arg)
 	struct in_ifaddr **ifap = NULL;
 	struct in_ifaddr *ifa = NULL;
 	struct net_device *dev;
-#ifdef CONFIG_IP_ALIAS
 	char *colon;
-#endif
 	int ret = 0;
 
 	/*
@@ -483,11 +481,9 @@ int devinet_ioctl(unsigned int cmd, void *arg)
 		return -EFAULT;
 	ifr.ifr_name[IFNAMSIZ-1] = 0;
 
-#ifdef CONFIG_IP_ALIAS
 	colon = strchr(ifr.ifr_name, ':');
 	if (colon)
 		*colon = 0;
-#endif
 
 #ifdef CONFIG_KMOD
 	dev_load(ifr.ifr_name);
@@ -530,10 +526,8 @@ int devinet_ioctl(unsigned int cmd, void *arg)
 		goto done;
 	}
 
-#ifdef CONFIG_IP_ALIAS
 	if (colon)
 		*colon = ':';
-#endif
 
 	if ((in_dev=__in_dev_get(dev)) != NULL) {
 		for (ifap=&in_dev->ifa_list; (ifa=*ifap) != NULL; ifap=&ifa->ifa_next)
@@ -564,7 +558,6 @@ int devinet_ioctl(unsigned int cmd, void *arg)
 			goto rarok;
 
 		case SIOCSIFFLAGS:
-#ifdef CONFIG_IP_ALIAS
 			if (colon) {
 				if (ifa == NULL) {
 					ret = -EADDRNOTAVAIL;
@@ -574,7 +567,6 @@ int devinet_ioctl(unsigned int cmd, void *arg)
 					inet_del_ifa(in_dev, ifap, 1);
 				break;
 			}
-#endif
 			ret = dev_change_flags(dev, ifr.ifr_flags);
 			break;
 	
@@ -589,12 +581,10 @@ int devinet_ioctl(unsigned int cmd, void *arg)
 					ret = -ENOBUFS;
 					break;
 				}
-#ifdef CONFIG_IP_ALIAS
 				if (colon)
 					memcpy(ifa->ifa_label, ifr.ifr_name, IFNAMSIZ);
 				else
-#endif
-				memcpy(ifa->ifa_label, dev->name, IFNAMSIZ);
+					memcpy(ifa->ifa_label, dev->name, IFNAMSIZ);
 			} else {
 				ret = 0;
 				if (ifa->ifa_local == sin->sin_addr.s_addr)

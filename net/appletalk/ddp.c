@@ -1611,7 +1611,10 @@ static int atalk_rcv(struct sk_buff *skb, struct net_device *dev, struct packet_
 			struct sk_buff *newskb;
 			/* 22 bytes - 12 ether, 2 len, 3 802.2 5 snap */
 			newskb = skb_realloc_headroom(skb, 32);
-			kfree(skb);
+			kfree_skb(skb);
+			if (!newskb) 
+				return 0;
+			skb = newskb;
 		}
 		else
 			skb = skb_unshare(skb, GFP_ATOMIC);

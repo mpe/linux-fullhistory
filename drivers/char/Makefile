@@ -36,12 +36,11 @@ obj-y	 += tty_io.o n_tty.o tty_ioctl.o mem.o raw.o pty.o misc.o random.o
 # All of the (potential) objects that export symbols.
 # This list comes from 'grep -l EXPORT_SYMBOL *.[hc]'.
 
-export-objs     :=	busmouse.o console.o i2c-old.o keyboard.o sysrq.o \
-			misc.o pty.o random.o selection.o serial.o videodev.o \
-			tty_io.o bttv-if.o cpia.o
+export-objs     :=	busmouse.o console.o keyboard.o sysrq.o \
+			misc.o pty.o random.o selection.o serial.o \
+			tty_io.o
 
-list-multi	:=	bttv.o
-bttv-objs	:=	bttv-driver.o bttv-cards.o bttv-if.o
+list-multi	:=	
 
 KEYMAP   =defkeymap.o
 KEYBD    =pc_keyb.o
@@ -143,12 +142,12 @@ obj-$(CONFIG_ATIXL_BUSMOUSE) += atixlmouse.o
 obj-$(CONFIG_LOGIBUSMOUSE) += logibusmouse.o
 obj-$(CONFIG_PRINTER) += lp.o
 
-ifeq ($(CONFIG_JOYSTICK),y)
+ifeq ($(CONFIG_INPUT),y)
 obj-y += joystick/js.o
 SUB_DIRS += joystick
 MOD_SUB_DIRS += joystick
 else
-  ifeq ($(CONFIG_JOYSTICK),m)
+  ifeq ($(CONFIG_INPUT),m)
   MOD_SUB_DIRS += joystick
   endif
 endif
@@ -176,45 +175,12 @@ ifeq ($(CONFIG_PPC),)
   obj-$(CONFIG_NVRAM) += nvram.o
 endif
 
-obj-$(CONFIG_VIDEO_DEV) += videodev.o
-
 obj-$(CONFIG_21285_WATCHDOG) += wdt285.o
 obj-$(CONFIG_977_WATCHDOG) += wdt977.o
 obj-$(CONFIG_I810_TCO) += i810-tco.o
 obj-$(CONFIG_DS1620) += ds1620.o
 obj-$(CONFIG_INTEL_RNG) += i810_rng.o
 
-obj-$(CONFIG_BUS_I2C) += i2c-old.o
-obj-$(CONFIG_VIDEO_BT848) += bttv.o msp3400.o \
-	tda7432.o tda8425.o tda985x.o tda9875.o tea6300.o tea6420.o tuner.o
-obj-$(CONFIG_SOUND_TVMIXER) += tvmixer.o
-
-obj-$(CONFIG_VIDEO_ZR36120) += zoran.o i2c-old.o tuner.o saa7110.o saa7111.o saa7185.o 
-obj-$(CONFIG_I2C_PARPORT) += i2c-parport.o i2c-old.o
-obj-$(CONFIG_VIDEO_SAA5249) += saa5249.o i2c-old.o
-obj-$(CONFIG_VIDEO_CQCAM) += c-qcam.o
-obj-$(CONFIG_VIDEO_BWQCAM) += bw-qcam.o
-obj-$(CONFIG_VIDEO_ZORAN) += buz.o i2c-old.o saa7110.o saa7111.o saa7185.o 
-obj-$(CONFIG_VIDEO_LML33) += bt856.o bt819.o
-obj-$(CONFIG_VIDEO_PMS) += pms.o
-obj-$(CONFIG_VIDEO_PLANB) += planb.o
-obj-$(CONFIG_VIDEO_VINO) += vino.o
-obj-$(CONFIG_VIDEO_STRADIS) += stradis.o
-obj-$(CONFIG_VIDEO_CPIA) += cpia.o
-obj-$(CONFIG_VIDEO_CPIA_PP) += cpia_pp.o
-obj-$(CONFIG_VIDEO_CPIA_USB) += cpia_usb.o
-obj-$(CONFIG_RADIO_AZTECH) += radio-aztech.o
-obj-$(CONFIG_RADIO_RTRACK2) += radio-rtrack2.o
-obj-$(CONFIG_RADIO_SF16FMI) += radio-sf16fmi.o
-obj-$(CONFIG_RADIO_CADET) += radio-cadet.o
-obj-$(CONFIG_RADIO_TYPHOON) += radio-typhoon.o
-obj-$(CONFIG_RADIO_TERRATEC) += radio-terratec.o
-obj-$(CONFIG_RADIO_RTRACK) += radio-aimslab.o
-obj-$(CONFIG_RADIO_ZOLTRIX) += radio-zoltrix.o
-obj-$(CONFIG_RADIO_MIROPCM20) += radio-miropcm20.o
-obj-$(CONFIG_RADIO_GEMTEK) += radio-gemtek.o
-obj-$(CONFIG_RADIO_TRUST) += radio-trust.o
-obj-$(CONFIG_TUNER_3036) += tuner-3036.o
 obj-$(CONFIG_QIC02_TAPE) += tpqic02.o
 
 ifeq ($(CONFIG_FTAPE),y)
@@ -302,10 +268,3 @@ consolemap_deftbl.o: consolemap_deftbl.c $(TOPDIR)/include/linux/types.h
 
 defkeymap.c: defkeymap.map
 	loadkeys --mktable defkeymap.map > defkeymap.c
-
-zoran.o: zr36120.o zr36120_i2c.o zr36120_mem.o
-	$(LD) $(LD_RFLAG) -r -o $@ zr36120.o zr36120_i2c.o zr36120_mem.o
-
-bttv.o: $(bttv-objs)
-	$(LD) $(LD_RFLAG) -r -o $@ $(bttv-objs)
-

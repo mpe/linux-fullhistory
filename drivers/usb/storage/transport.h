@@ -1,7 +1,7 @@
 /* Driver for USB Mass Storage compliant devices
  * Transport Functions Header File
  *
- * $Id: transport.h,v 1.6 2000/07/27 14:42:43 groovyjava Exp $
+ * $Id: transport.h,v 1.8 2000/08/08 01:23:55 webbb Exp $
  *
  * Current development and maintainance by:
  *   (c) 1999, 2000 Matthew Dharm (mdharm-usb@one-eyed-alien.net)
@@ -41,7 +41,6 @@
 #ifndef _TRANSPORT_H_
 #define _TRANSPORT_H_
 
-#include <linux/config.h>
 #include <linux/blk.h>
 #include "usb.h"
 #include "scsi.h"
@@ -58,6 +57,7 @@
 #define US_PR_EUSB_SDDR09	0x81	/* SCM-SCSI bridge for
 						SDDR-09 */
 #endif
+#define US_PR_DPCM_USB  0xf0		/* Combination CB/SDDR09 */
 
 /*
  * Bulk only data structures
@@ -132,5 +132,7 @@ extern int usb_stor_Bulk_max_lun(struct us_data*);
 extern int usb_stor_Bulk_reset(struct us_data*);
 
 void usb_stor_invoke_transport(Scsi_Cmnd *, struct us_data *);
+
+extern int dpcm_transport(Scsi_Cmnd *srb, struct us_data *us);
 
 #endif

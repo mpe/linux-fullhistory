@@ -43,6 +43,7 @@
  *	added timeouts to bulk_msg calls.  Minor updates, docs.
  * 03 Nov, 1999 -- update for 2.3.25 kernel API changes.
  * 08 Jan, 2000 .. multiple camera support
+ * 12 Aug, 2000 .. add some real locking, remove an Oops
  *
  * Thanks to:  the folk who've provided USB product IDs, sent in
  * patches, and shared their sucesses!
@@ -60,7 +61,6 @@
 #include <linux/module.h>
 #undef DEBUG
 #include <linux/usb.h>
-#include <linux/smp_lock.h>
 
 
 
@@ -114,7 +114,7 @@ struct camera_state {
 	int			outEP;		/* write endpoint */
 	const struct camera	*info;		/* DC-240, etc */
 	int			subminor;	/* which minor dev #? */
-	int			isActive;	/* I/O taking place? */
+	struct semaphore	sem;		/* locks this struct */
 
 	/* this is non-null iff the device is open */
 	char			*buf;		/* buffer for I/O */
@@ -127,21 +127,25 @@ struct camera_state {
 /* Support multiple cameras, possibly of different types.  */
 static struct camera_state *minor_data [MAX_CAMERAS];
 
+/* make this an rwlock if contention becomes an issue */
+static DECLARE_MUTEX (state_table_mutex);
 
 static ssize_t camera_read (struct file *file,
 	char *buf, size_t len, loff_t *ppos)
 {
 	struct camera_state	*camera;
 	int			retries;
+	int			retval = 0;
 
 	if (len > MAX_PACKET_SIZE)
 		return -EINVAL;
 
 	camera = (struct camera_state *) file->private_data;
-	if (!camera->dev)
+	down (&camera->sem);
+	if (!camera->dev) {
+		up (&camera->sem);
 		return -ENODEV;
-	if (camera->isActive++)
-		return -EBUSY;
+	}
 
 	/* Big reads are common, for image downloading.  Smaller ones
 	 * are also common (even "directory listing" commands don't
@@ -150,37 +154,33 @@ static ssize_t camera_read (struct file *file,
 	 */
 	for (retries = 0; retries < MAX_READ_RETRY; retries++) {
 		int			count;
-		int			result;
 
 		if (signal_pending (current)) {
-			camera->isActive = 0;
-			return -EINTR;
-		}
-		if (!camera->dev) {
-			camera->isActive = 0;
-			return -ENODEV;
+			retval = -EINTR;
+			break;
 		}
 
-		result = usb_bulk_msg (camera->dev,
+		retval = usb_bulk_msg (camera->dev,
 			  usb_rcvbulkpipe (camera->dev, camera->inEP),
 			  camera->buf, len, &count, HZ*10);
 
-		dbg ("read (%d) - 0x%x %d", len, result, count);
+		dbg ("read (%d) - 0x%x %d", len, retval, count);
 
-		if (!result) {
+		if (!retval) {
 			if (copy_to_user (buf, camera->buf, count))
-				return -EFAULT;
-			camera->isActive = 0;
-			return count;
+				retval = -EFAULT;
+			else
+				retval = count;
+			break;
 		}
-		if (result != USB_ST_TIMEOUT)
+		if (retval != USB_ST_TIMEOUT)
 			break;
 		interruptible_sleep_on_timeout (&camera->wait, RETRY_TIMEOUT);
 
 		dbg ("read (%d) - retry", len);
 	}
-	camera->isActive = 0;
-	return -EIO;
+	up (&camera->sem);
+	return retval;
 }
 
 static ssize_t camera_write (struct file *file,
@@ -193,10 +193,11 @@ static ssize_t camera_write (struct file *file,
 		return -EINVAL;
 
 	camera = (struct camera_state *) file->private_data;
-	if (!camera->dev)
+	down (&camera->sem);
+	if (!camera->dev) {
+		up (&camera->sem);
 		return -ENODEV;
-	if (camera->isActive++)
-		return -EBUSY;
+	}
 	
 	/* most writes will be small: simple commands, sometimes with
 	 * parameters.  putting images (like borders) into the camera
@@ -224,18 +225,13 @@ static ssize_t camera_write (struct file *file,
 					bytes_written = -EINTR;
 				goto done;
 			}
-			if (!camera->dev) {
-				if (!bytes_written)
-					bytes_written = -ENODEV;
-				goto done;
-			}
 
 			result = usb_bulk_msg (camera->dev,
 				 usb_sndbulkpipe (camera->dev, camera->outEP),
 				 obuf, thistime, &count, HZ*10);
 
 			if (result)
-				dbg ("write USB err - %x", result);
+				dbg ("write USB err - %d", result);
 
 			if (count) {
 				obuf += count;
@@ -264,49 +260,69 @@ static ssize_t camera_write (struct file *file,
 		buf += copy_size;
 	}
 done:
-	camera->isActive = 0;
+	up (&camera->sem);
 	dbg ("wrote %d", bytes_written); 
 	return bytes_written;
 }
 
 static int camera_open (struct inode *inode, struct file *file)
 {
-	struct camera_state	*camera;
+	struct camera_state	*camera = NULL;
 	int			subminor;
+	int			value = 0;
 
+	down (&state_table_mutex);
 	subminor = MINOR (inode->i_rdev) - USB_CAMERA_MINOR_BASE;
 	if (subminor < 0 || subminor >= MAX_CAMERAS
 			|| !(camera = minor_data [subminor])) {
+		up (&state_table_mutex);
 		return -ENODEV;
+	}
+	down (&camera->sem);
+	up (&state_table_mutex);
+
+	if (camera->buf) {
+		value = -EBUSY;
+		goto done;
 	}
 
 	if (!(camera->buf = (char *) kmalloc (MAX_PACKET_SIZE, GFP_KERNEL))) {
-		return -ENOMEM;
+		value = -ENOMEM;
+		goto done;
 	}
 
-	dbg ("open"); 
+	dbg ("open #%d", subminor); 
 
-	camera->isActive = 0;
 	file->private_data = camera;
-	return 0;
+done:
+	up (&camera->sem);
+	return value;
 }
 
 static int camera_release (struct inode *inode, struct file *file)
 {
-	struct camera_state *camera;
+	struct camera_state	*camera;
+	int			subminor;
 
 	camera = (struct camera_state *) file->private_data;
-	kfree (camera->buf);
+	down (&state_table_mutex);
+	down (&camera->sem);
+
+	if (camera->buf) {
+		kfree (camera->buf);
+		camera->buf = 0;
+	}
+	subminor = camera->subminor;
 
 	/* If camera was unplugged with open file ... */
-	lock_kernel();
 	if (!camera->dev) {
-		minor_data [camera->subminor] = NULL;
+		minor_data [subminor] = NULL;
 		kfree (camera);
 	}
-	unlock_kernel();
+	up (&camera->sem);
+	up (&state_table_mutex);
 
-	dbg ("close"); 
+	dbg ("close #%d", subminor); 
 
 	return 0;
 }
@@ -333,7 +349,7 @@ static void * camera_probe(struct usb_device *dev, unsigned int ifnum)
 	struct usb_interface_descriptor	*interface;
 	struct usb_endpoint_descriptor	*endpoint;
 	int				direction, ep;
-	struct camera_state		*camera;
+	struct camera_state		*camera = NULL;
 
 	/* Is it a supported camera? */
 	for (i = 0; i < sizeof (cameras) / sizeof (struct camera); i++) {
@@ -368,27 +384,30 @@ static void * camera_probe(struct usb_device *dev, unsigned int ifnum)
 
 
 	/* select "subminor" number (part of a minor number) */
+	down (&state_table_mutex);
 	for (i = 0; i < MAX_CAMERAS; i++) {
 		if (!minor_data [i])
 			break;
 	}
 	if (i >= MAX_CAMERAS) {
 		info ("Ignoring additional USB Camera");
-		return NULL;
+		up (&state_table_mutex);
+		goto bye;
 	}
 
 	/* allocate & init camera state */
 	camera = minor_data [i] = kmalloc (sizeof *camera, GFP_KERNEL);
 	if (!camera) {
 		err ("no memory!");
-		return NULL;
+		up (&state_table_mutex);
+		goto bye;
 	}
+
+	init_MUTEX (&camera->sem);
 	camera->info = camera_info;
 	camera->subminor = i;
-	camera->isActive = 0;
 	camera->buf = NULL;
 	init_waitqueue_head (&camera->wait);
-	info ("USB Camera #%d connected", camera->subminor);
 
 
 	/* get input and output endpoints (either order) */
@@ -417,25 +436,28 @@ static void * camera_probe(struct usb_device *dev, unsigned int ifnum)
 		goto error;
 	}
 
-
-	if (usb_set_configuration (dev, dev->config[0].bConfigurationValue)) {
-		err ("Failed usb_set_configuration");
-		goto error;
-	}
+	info ("USB Camera #%d connected", camera->subminor);
 
 	camera->dev = dev;
-	return camera;
+	usb_inc_dev_use (dev);
+	goto bye;
 
 error:
 	minor_data [camera->subminor] = NULL;
 	kfree (camera);
-	return NULL;
+	camera = NULL;
+bye:
+	up (&state_table_mutex);
+	return camera;
 }
 
 static void camera_disconnect(struct usb_device *dev, void *ptr)
 {
 	struct camera_state	*camera = (struct camera_state *) ptr;
 	int			subminor = camera->subminor;
+
+	down (&state_table_mutex);
+	down (&camera->sem);
 
 	/* If camera's not opened, we can clean up right away.
 	 * Else apps see a disconnect on next I/O; the release cleans.
@@ -447,6 +469,10 @@ static void camera_disconnect(struct usb_device *dev, void *ptr)
 		camera->dev = NULL;
 
 	info ("USB Camera #%d disconnected", subminor);
+	usb_dec_dev_use (dev);
+
+	up (&camera->sem);
+	up (&state_table_mutex);
 }
 
 static /* const */ struct usb_driver camera_driver = {

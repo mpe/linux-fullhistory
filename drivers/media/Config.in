@@ -1,0 +1,11 @@
+#
+# Multimedia device configuration
+#
+mainmenu_option next_comment
+comment 'Multimedia devices'
+
+# wow, you just got to love this :)
+source drivers/media/video/Config.in
+source drivers/media/radio/Config.in
+
+endmenu

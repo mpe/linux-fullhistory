@@ -67,7 +67,7 @@ static int do_microcode_update(void);
 static void do_update_one(void *);
 
 /* read()/write()/ioctl() are serialized on this */
-DECLARE_RWSEM(microcode_rwsem);
+static DECLARE_RWSEM(microcode_rwsem);
 
 static struct microcode *microcode; /* array of 2048byte microcode blocks */
 static unsigned int microcode_num;  /* number of chunks in microcode */

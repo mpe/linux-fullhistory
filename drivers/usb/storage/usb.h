@@ -1,7 +1,7 @@
 /* Driver for USB Mass Storage compliant devices
  * Main Header File
  *
- * $Id: usb.h,v 1.4 2000/07/28 20:14:49 groovyjava Exp $
+ * $Id: usb.h,v 1.7 2000/08/15 00:06:38 mdharm Exp $
  *
  * Current development and maintainance by:
  *   (c) 1999, 2000 Matthew Dharm (mdharm-usb@one-eyed-alien.net)
@@ -77,6 +77,8 @@ static inline void make_guid( __u32 *pg, __u16 vendor, __u16 product, char *seri
 	}
 }
 
+struct us_data;
+
 /*
  * Unusual device list definitions 
  */
@@ -89,9 +91,11 @@ struct us_unusual_dev {
 	__u16 bcdDeviceMax;
 
 	/* the list specifies these parameters */
-	const char* name;
+	const char* vendorName;
+	const char* productName;
 	__u8  useProtocol;
 	__u8  useTransport;
+	int (*initFunction)(struct us_data *);
 	unsigned int flags;
 };
 
@@ -100,14 +104,10 @@ struct us_unusual_dev {
 #define US_FL_MODE_XLATE      0x00000002 /* translate _6 to _10 comands for
 						    Win/MacOS compatibility */
 #define US_FL_START_STOP      0x00000004 /* ignore START_STOP commands	    */
-#define US_FL_ALT_LENGTH      0x00000008 /* use the alternate algorithm for
-						    us_transfer_length()    */
 #define US_FL_IGNORE_SER      0x00000010 /* Ignore the serial number given  */
-#define US_FL_NEED_INIT	      0x00000020 /* Device needs initialization     */
+#define US_FL_SCM_MULT_TARG   0x00000020 /* supports multiple targets */
 
 #define USB_STOR_STRING_LEN 32
-
-struct us_data;
 
 typedef int (*trans_cmnd)(Scsi_Cmnd*, struct us_data*);
 typedef int (*trans_reset)(struct us_data*);
@@ -176,6 +176,7 @@ struct us_data {
 	/* mutual exclusion structures */
 	struct semaphore	notify;		 /* thread begin/end	    */
 	struct semaphore	queue_exclusion; /* to protect data structs */
+	struct us_unusual_dev   *unusual_dev;	 /* If unusual device       */
 	void			*extra;		 /* Any extra data          */
 	void (*extra_destructor)(void *);	 /* extra data destructor   */
 };
@@ -183,5 +184,10 @@ struct us_data {
 /* The list of structures and the protective lock for them */
 extern struct us_data *us_list;
 extern struct semaphore us_list_semaphore;
+
+/* Function to fill an inquiry response. See usb.c for details */
+
+extern void fill_inquiry_response(struct us_data *us,
+	unsigned char *data, unsigned int data_len);
 
 #endif

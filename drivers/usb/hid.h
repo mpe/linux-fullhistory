@@ -2,7 +2,7 @@
 #define __HID_H
 
 /*
- * $Id: hid.h,v 1.4 2000/05/29 09:01:52 vojtech Exp $
+ * $Id: hid.h,v 1.7 2000/05/31 22:57:48 vojtech Exp $
  *
  *  Copyright (c) 1999 Andreas Gal
  *  Copyright (c) 2000 Vojtech Pavlik
@@ -208,10 +208,11 @@ struct hid_global {
  * This is the local enviroment. It is resistent up the the next main-item.
  */
 
-#define MAX_USAGES 1024
+#define HID_MAX_DESCRIPTOR_SIZE		4096
+#define HID_MAX_USAGES			1024
 
 struct hid_local {
-	unsigned usage[MAX_USAGES]; /* usage array */
+	unsigned usage[HID_MAX_USAGES]; /* usage array */
 	unsigned usage_index;
 	unsigned usage_minimum;
 	unsigned delimiter_depth;
@@ -275,6 +276,14 @@ struct hid_report_enum {
 
 #define HID_REPORT_TYPES 3
 
+#define HID_BUFFER_SIZE		32
+#define HID_CONTROL_FIFO_SIZE	8
+
+struct hid_control_fifo {
+	devrequest dr;
+	char buffer[HID_BUFFER_SIZE];
+};
+
 struct hid_device {							/* device report descriptor */
 	 __u8 *rdesc;
 	unsigned rsize;
@@ -286,11 +295,13 @@ struct hid_device {							/* device report descriptor */
 	struct usb_device *dev;						/* USB device */
 	int ifnum;							/* USB interface number */
 
-	char buffer[32];						/* Receive buffer */
-	char bufout[32];						/* Transmit buffer */
-	devrequest dr;							/* Startup packet */
 	struct urb urb;							/* USB URB structure */
+	char buffer[HID_BUFFER_SIZE];					/* Rx buffer */
+
 	struct urb urbout;						/* Output URB */
+	struct hid_control_fifo out[HID_CONTROL_FIFO_SIZE];		/* Transmit buffer */
+	unsigned char outhead, outtail;					/* Tx buffer head & tail */
+
 	struct input_dev input;						/* input device structure */
 	int open;							/* is the device open by input? */
 	int quirks;							/* Various nasty tricks the device can pull on us */

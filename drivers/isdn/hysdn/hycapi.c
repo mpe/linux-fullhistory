@@ -42,7 +42,6 @@
  */
 
 #define __NO_VERSION__
-#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/version.h>
 #include <linux/signal.h>

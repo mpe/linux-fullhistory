@@ -302,8 +302,9 @@ endmenu
 
 source drivers/char/Config.in
 
-
 #source drivers/misc/Config.in
+
+source drivers/media/Config.in
 
 source fs/Config.in
 
@@ -334,6 +335,7 @@ fi
 endmenu
 
 source drivers/usb/Config.in
+source drivers/input/Config.in
 
 mainmenu_option next_comment
 comment 'Kernel hacking'

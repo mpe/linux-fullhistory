@@ -1,5 +1,5 @@
 /*
- * $Id: mousedev.c,v 1.10 2000/06/23 09:23:00 vojtech Exp $
+ * $Id: mousedev.c,v 1.15 2000/08/14 21:05:26 vojtech Exp $
  *
  *  Copyright (c) 1999-2000 Vojtech Pavlik
  *
@@ -62,7 +62,7 @@ struct mousedev_list {
 	struct mousedev *mousedev;
 	struct mousedev_list *next;
 	int dx, dy, dz, oldx, oldy;
-	char ps2[6];
+	signed char ps2[6];
 	unsigned long buttons;
 	unsigned char ready, buffer, bufsiz;
 	unsigned char mode, genseq, impseq;
@@ -91,6 +91,8 @@ static void mousedev_event(struct input_handle *handle, unsigned int type, unsig
 		while (list) {
 			switch (type) {
 				case EV_ABS:
+					if (test_bit(BTN_TRIGGER, handle->dev->keybit))
+						break;
 					switch (code) {
 						case ABS_X:	
 							size = handle->dev->absmax[ABS_X] - handle->dev->absmin[ABS_X];
@@ -104,6 +106,7 @@ static void mousedev_event(struct input_handle *handle, unsigned int type, unsig
 							break;
 					}
 					break;
+
 				case EV_REL:
 					switch (code) {
 						case REL_X:	list->dx += value; break;
@@ -252,7 +255,7 @@ static void mousedev_packet(struct mousedev_list *list, unsigned char off)
 	list->bufsiz = off + 3;
 
 	if (list->mode > 1)
-		list->ps2[off] |= ((list->buttons & 0x30) << 2);
+		list->ps2[off] |= ((list->buttons & 0x18) << 3);
 	
 	if (list->mode) {
 		list->ps2[off + 3] = (list->dz > 127 ? 127 : (list->dz < -127 ? -127 : list->dz));

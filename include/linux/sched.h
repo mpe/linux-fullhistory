@@ -367,6 +367,9 @@ struct task_struct {
 	struct signal_queue *sigqueue, **sigqueue_tail;
 	unsigned long sas_ss_sp;
 	size_t sas_ss_size;
+	int (*notifier)(void *priv);
+	void *notifier_data;
+	sigset_t *notifier_mask;
 	
 /* Thread group tracking */
    	u32 parent_exec_id;
@@ -545,6 +548,9 @@ extern void proc_caches_init(void);
 extern void flush_signals(struct task_struct *);
 extern void flush_signal_handlers(struct task_struct *);
 extern int dequeue_signal(sigset_t *, siginfo_t *);
+extern void block_all_signals(int (*notifier)(void *priv), void *priv,
+			      sigset_t *mask);
+extern void unblock_all_signals(void);
 extern int send_sig_info(int, struct siginfo *, struct task_struct *);
 extern int force_sig_info(int, struct siginfo *, struct task_struct *);
 extern int kill_pg_info(int, struct siginfo *, pid_t);

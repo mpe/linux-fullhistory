@@ -296,6 +296,8 @@ fi
 if [ "$CONFIG_DECSTATION" != "y" -a \
      "$CONFIG_SGI_IP22" != "y" ]; then
    source drivers/char/Config.in
+
+   source drivers/media/Config.in
 fi
 
 if [ "$CONFIG_DECSTATION" = "y" ]; then
@@ -376,6 +378,7 @@ if [ "$CONFIG_SGI_IP22" = "y" ]; then
 fi
 
 source drivers/usb/Config.in
+source drivers/input/Config.in
 
 mainmenu_option next_comment
 comment 'Kernel hacking'

@@ -19,6 +19,19 @@ O_OBJS		:=
 
 export-objs	:= serio.o gameport.o
 
+# I-Force may need both USB and RS-232
+
+ifeq ($(CONFIG_INPUT_IFORCE_232),m)
+	ifeq ($(CONFIG_INPUT_IFORCE_USB),y)
+		CONFIG_INPUT_IFORCE_USB := m
+	endif
+endif
+ifeq ($(CONFIG_INPUT_IFORCE_USB),m)
+	ifeq ($(CONFIG_INPUT_IFORCE_232),y)
+		CONFIG_INPUT_IFORCE_232 := m
+	endif
+endif
+
 # Object file lists.
 
 obj-y	:=
@@ -38,7 +51,8 @@ obj-$(CONFIG_INPUT_WARRIOR)	+= warrior.o serio.o
 obj-$(CONFIG_INPUT_MAGELLAN)	+= magellan.o serio.o
 obj-$(CONFIG_INPUT_SPACEORB)	+= spaceorb.o serio.o
 obj-$(CONFIG_INPUT_SPACEBALL)	+= spaceball.o serio.o
-obj-$(CONFIG_INPUT_IFORCE_232)	+= serio.o
+obj-$(CONFIG_INPUT_IFORCE_232)	+= iforce.o serio.o
+obj-$(CONFIG_INPUT_IFORCE_USB)	+= iforce.o
 
 obj-$(CONFIG_INPUT_ANALOG)	+= analog.o gameport.o
 obj-$(CONFIG_INPUT_A3D)		+= a3d.o gameport.o

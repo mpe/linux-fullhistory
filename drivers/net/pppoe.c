@@ -5,19 +5,22 @@
  * PPPoE --- PPP over Ethernet (RFC 2516)
  *
  *
- * Version:    0.6.1
+ * Version:    0.6.2
  *
  * 030700 :     Fixed connect logic to allow for disconnect.
  * 270700 :	Fixed potential SMP problems; we must protect against 
  *		simultaneous invocation of ppp_input 
  *		and ppp_unregister_channel.
  * 040800 :	Respect reference count mechanisms on net-devices.
+ * 200800 :     fix kfree(skb) in pppoe_rcv (acme)
  *
  *		Module reference count is decremented in the right spot now,
  *		guards against sock_put not actually freeing the sk 
  *		in pppoe_release.
  *
  * Author:	Michal Ostrowski <mostrows@styx.uwaterloo.ca>
+ * Contributors:
+ * 		Arnaldo Carvalho de Melo <acme@conectiva.com.br>
  *
  * License:
  *		This program is free software; you can redistribute it and/or
@@ -353,7 +356,7 @@ static int pppoe_rcv(struct sk_buff *skb,
 	po = get_item((unsigned long) ph->sid, skb->mac.ethernet->h_source);
 
 	if(!po){
-		kfree(skb);
+		kfree_skb(skb);
 		return 0;
 	}
 

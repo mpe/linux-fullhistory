@@ -5,7 +5,7 @@
  *
  *		The Internet Protocol (IP) module.
  *
- * Version:	$Id: ip_input.c,v 1.48 2000/04/15 01:48:10 davem Exp $
+ * Version:	$Id: ip_input.c,v 1.49 2000/08/21 20:41:55 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -297,7 +297,6 @@ int ip_local_deliver(struct sk_buff *skb)
 		skb = ip_defrag(skb);
 		if (!skb)
 			return 0;
-		iph = skb->nh.iph;
 	}
 
 	return NF_HOOK(PF_INET, NF_IP_LOCAL_IN, skb, skb->dev, NULL,

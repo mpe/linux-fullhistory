@@ -18,6 +18,8 @@
  .
  . author:
  . 	Erik Stahlman				( erik@vt.edu )
+ . contributors:
+ .      Arnaldo Carvalho de Melo <acme@conectiva.com.br>
  .
  . Hardware multicast code from Peter Cammaert ( pc@denkart.be )
  .
@@ -47,6 +49,7 @@
  .	03/06/96  Erik Stahlman  Added hardware multicast from Peter Cammaert
  .	04/14/00  Heiko Pruessing (SMA Regelsysteme)  Fixed bug in chip memory
  .				 allocation
+ .      08/20/00  Arnaldo Melo   fix kfree(skb) in smc_hardware_send_packet
  ----------------------------------------------------------------------------*/
 
 static const char *version =
@@ -623,7 +626,7 @@ static void smc_hardware_send_packet( struct net_device * dev )
 	if ( packet_no & 0x80 ) {
 		/* or isn't there?  BAD CHIP! */
 		printk(KERN_DEBUG CARDNAME": Memory allocation failed. \n");
-		kfree(skb);
+		kfree_skb(skb);
 		lp->saved_skb = NULL;
 		netif_wake_queue(dev);
 		return;

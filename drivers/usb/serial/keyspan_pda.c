@@ -1,8 +1,9 @@
 /*
  * USB Keyspan PDA Converter driver
  *
- *	Copyright (C) 1999, 2000
- *	    Greg Kroah-Hartman (greg@kroah.com)
+ * Copyright (c) 1999, 2000 Greg Kroah-Hartman	<greg@kroah.com>
+ * Copyright (c) 1999, 2000 Brian Warner	<warner@lothar.com>
+ * Copyright (c) 2000 Al Borchers		<borchers@steinerpoint.com>
  *
  *	This program is free software; you can redistribute it and/or modify
  *	it under the terms of the GNU General Public License as published by
@@ -11,6 +12,24 @@
  *
  * See Documentation/usb/usb-serial.txt for more information on using this driver
  * 
+ * (07/20/2000) borchers
+ *	- keyspan_pda_write no longer sleeps if it is called on interrupt time;
+ *	  PPP and the line discipline with stty echo on can call write on
+ *	  interrupt time and this would cause an oops if write slept
+ *	- if keyspan_pda_write is in an interrupt, it will not call
+ *	  usb_control_msg (which sleeps) to query the room in the device
+ *	  buffer, it simply uses the current room value it has
+ *	- if the urb is busy or if it is throttled keyspan_pda_write just
+ *	  returns 0, rather than sleeping to wait for this to change; the
+ *	  write_chan code in n_tty.c will sleep if needed before calling
+ *	  keyspan_pda_write again
+ *	- if the device needs to be unthrottled, write now queues up the
+ *	  call to usb_control_msg (which sleeps) to unthrottle the device
+ *	- the wakeups from keyspan_pda_write_bulk_callback are queued rather
+ *	  than done directly from the callback to avoid the race in write_chan
+ *	- keyspan_pda_chars_in_buffer also indicates its buffer is full if the
+ *	  urb status is -EINPROGRESS, meaning it cannot write at the moment
+ *      
  * (07/19/2000) gkh
  *	Added module_init and module_exit functions to handle the fact that this
  *	driver is a loadable module now.
@@ -35,6 +54,7 @@
 #include <linux/tty.h>
 #include <linux/module.h>
 #include <linux/spinlock.h>
+#include <linux/tqueue.h>
 
 #ifdef CONFIG_USB_SERIAL_DEBUG
 	#define DEBUG
@@ -56,6 +76,8 @@ struct ezusb_hex_record {
 struct keyspan_pda_private {
 	int			tx_room;
 	int			tx_throttled;
+	struct tq_struct	wakeup_task;
+	struct tq_struct	unthrottle_task;
 };
 
 #define KEYSPAN_VENDOR_ID		0x06cd
@@ -67,6 +89,45 @@ static __u16	keyspan_vendor_id		= KEYSPAN_VENDOR_ID;
 static __u16	keyspan_pda_fake_product_id	= KEYSPAN_PDA_FAKE_ID;
 static __u16	keyspan_pda_product_id		= KEYSPAN_PDA_ID;
 
+
+
+static void keyspan_pda_wakeup_write( struct usb_serial_port *port )
+{
+
+	struct tty_struct *tty = port->tty;
+
+	/* wake up port processes */
+	wake_up_interruptible( &port->write_wait );
+
+	/* wake up line discipline */
+	if( (tty->flags & (1 << TTY_DO_WRITE_WAKEUP))
+	&& tty->ldisc.write_wakeup )
+		(tty->ldisc.write_wakeup)(tty);
+
+	/* wake up other tty processes */
+	wake_up_interruptible( &tty->write_wait );
+	/* For 2.2.16 backport -- wake_up_interruptible( &tty->poll_wait ); */
+
+}
+
+static void keyspan_pda_request_unthrottle( struct usb_serial *serial )
+{
+
+	dbg(" request_unthrottle");
+	/* ask the device to tell us when the tx buffer becomes
+	   sufficiently empty */
+	usb_control_msg(serial->dev, 
+			     usb_sndctrlpipe(serial->dev, 0),
+			     7, /* request_unthrottle */
+			     USB_TYPE_VENDOR | USB_RECIP_INTERFACE
+			     | USB_DIR_OUT,
+			     16, /* value: threshold */
+			     0, /* index */
+			     NULL,
+			     0,
+			     2*HZ);
+
+}
 
 
 static void keyspan_pda_rx_interrupt (struct urb *urb)
@@ -113,8 +174,8 @@ static void keyspan_pda_rx_interrupt (struct urb *urb)
 		case 2: /* tx unthrottle interrupt */
 			tty = serial->port[0].tty;
 			priv->tx_throttled = 0;
-			wake_up(&port->write_wait); /* wake up writer */
-			wake_up(&tty->write_wait); /* them too */
+			/* queue up a wakeup at scheduler time */
+			queue_task( &priv->wakeup_task, &tq_scheduler );
 			break;
 		default:
 			break;
@@ -355,7 +416,6 @@ static int keyspan_pda_write(struct usb_serial_port *port, int from_user,
 	int request_unthrottle = 0;
 	int rc = 0;
 	struct keyspan_pda_private *priv;
-	DECLARE_WAITQUEUE(wait, current);
 
 	priv = (struct keyspan_pda_private *)(port->private);
 	/* guess how much room is left in the device's ring buffer, and if we
@@ -376,53 +436,22 @@ static int keyspan_pda_write(struct usb_serial_port *port, int from_user,
 	   the TX urb is in-flight (wait until it completes)
 	   the device is full (wait until it says there is room)
 	*/
-	while (port->write_urb->status == -EINPROGRESS) {
-		if (0 /* file->f_flags & O_NONBLOCK */) {
-			rc = -EAGAIN;
-			goto err;
-		}
-		interruptible_sleep_on(&port->write_wait);
-		if (signal_pending(current)) {
-			rc = -ERESTARTSYS;
-			goto err;
-		}
+	if (port->write_urb->status == -EINPROGRESS || priv->tx_throttled ) {
+		return( 0 );
 	}
 
-	/* at this point the URB is in our control, nobody else can submit it
+	/* At this point the URB is in our control, nobody else can submit it
 	   again (the only sudden transition was the one from EINPROGRESS to
-	   finished) */
-
-	/* the next potential block is that our TX process might be throttled.
-	   The transition from throttled->not happens because of an Rx
-	   interrupt, and the wake_up occurs during the same interrupt, so we
-	   have to be careful to avoid a race that would cause us to sleep
-	   forever. */
-
-	add_wait_queue(&port->write_wait, &wait);
-	set_current_state(TASK_INTERRUPTIBLE);
-	while (priv->tx_throttled) {
-		/* device can't accomodate any more characters. Sleep until it
-		   can. Woken up by an Rx interrupt message, which clears
-		   tx_throttled first. */
-		dbg(" tx_throttled, going to sleep");
-		if (signal_pending(current)) {
-			current->state = TASK_RUNNING;
-			remove_wait_queue(&port->write_wait, &wait);
-			dbg(" woke up because of signal");
-			rc = -ERESTARTSYS;
-			goto err;
-		}
-		schedule();
-		dbg(" woke up");
-	}
-	remove_wait_queue(&port->write_wait, &wait);
-	set_current_state(TASK_RUNNING);
+	   finished).  Also, the tx process is not throttled. So we are
+	   ready to write. */
 
 	count = (count > port->bulk_out_size) ? port->bulk_out_size : count;
-	if (count > priv->tx_room) {
+
+	/* Check if we might overrun the Tx buffer.   If so, ask the
+	   device how much room it really has.  This is done only on
+	   scheduler time, since usb_control_msg() sleeps. */
+	if (count > priv->tx_room && !in_interrupt()) {
 		unsigned char room;
-		/* Looks like we might overrun the Tx buffer. Ask the device
-		   how much room it really has */
 		rc = usb_control_msg(serial->dev, 
 				     usb_rcvctrlpipe(serial->dev, 0),
 				     6, /* write_room */
@@ -443,19 +472,20 @@ static int keyspan_pda_write(struct usb_serial_port *port, int from_user,
 		}
 		dbg(" roomquery says %d", room);
 		priv->tx_room = room;
-		if (count > priv->tx_room) {
-			/* we're about to completely fill the Tx buffer, so
-			   we'll be throttled afterwards. */
-			count = priv->tx_room;
-			request_unthrottle = 1;
-		}
 	}
-	priv->tx_room -= count;
+	if (count > priv->tx_room) {
+		/* we're about to completely fill the Tx buffer, so
+		   we'll be throttled afterwards. */
+		count = priv->tx_room;
+		request_unthrottle = 1;
+	}
 
 	if (count) {
 		/* now transfer data */
 		if (from_user) {
-			copy_from_user(port->write_urb->transfer_buffer, buf, count);
+			if( copy_from_user(port->write_urb->transfer_buffer,
+			buf, count) )
+				return( -EFAULT );
 		}
 		else {
 			memcpy (port->write_urb->transfer_buffer, buf, count);
@@ -463,6 +493,8 @@ static int keyspan_pda_write(struct usb_serial_port *port, int from_user,
 		/* send the data out the bulk port */
 		port->write_urb->transfer_buffer_length = count;
 		
+		priv->tx_room -= count;
+
 		if (usb_submit_urb(port->write_urb))
 			dbg(" usb_submit_urb(write bulk) failed");
 	}
@@ -473,25 +505,11 @@ static int keyspan_pda_write(struct usb_serial_port *port, int from_user,
 	}
 
 	if (request_unthrottle) {
-		dbg(" request_unthrottle");
-		/* ask the device to tell us when the tx buffer becomes
-		   sufficiently empty */
 		priv->tx_throttled = 1; /* block writers */
-		rc = usb_control_msg(serial->dev, 
-				     usb_sndctrlpipe(serial->dev, 0),
-				     7, /* request_unthrottle */
-				     USB_TYPE_VENDOR | USB_RECIP_INTERFACE
-				     | USB_DIR_OUT,
-				     16, /* value: threshold */
-				     0, /* index */
-				     NULL,
-				     0,
-				     2*HZ);
+		queue_task( &priv->unthrottle_task, &tq_scheduler );
 	}
 
 	return (count);
- err:
-	return (rc);
 }
 
 
@@ -499,7 +517,9 @@ static void keyspan_pda_write_bulk_callback (struct urb *urb)
 {
 	struct usb_serial_port *port = (struct usb_serial_port *)urb->context;
 	struct usb_serial *serial;
-       	struct tty_struct *tty;
+	struct keyspan_pda_private *priv;
+
+	priv = (struct keyspan_pda_private *)(port->private);
 
 	if (port_paranoia_check (port, "keyspan_pda_rx_interrupt")) {
 		return;
@@ -510,14 +530,9 @@ static void keyspan_pda_write_bulk_callback (struct urb *urb)
 		return;
 	}
 	
-	wake_up_interruptible(&port->write_wait);
+	/* queue up a wakeup at scheduler time */
+	queue_task( &priv->wakeup_task, &tq_scheduler );
 
-	tty = port->tty;
-	if ((tty->flags & (1 << TTY_DO_WRITE_WAKEUP)) && 
-	    tty->ldisc.write_wakeup)
-		(tty->ldisc.write_wakeup)(tty);
-
-	wake_up_interruptible(&tty->write_wait);
 }
 
 
@@ -541,7 +556,7 @@ static int keyspan_pda_chars_in_buffer (struct usb_serial_port *port)
 	
 	/* when throttled, return at least WAKEUP_CHARS to tell select() (via
 	   n_tty.c:normal_poll() ) that we're not writeable. */
-	if (priv->tx_throttled)
+	if( port->write_urb->status == -EINPROGRESS || priv->tx_throttled )
 		return 256;
 	return 0;
 }
@@ -644,14 +659,25 @@ static int keyspan_pda_fake_startup (struct usb_serial *serial)
 
 static int keyspan_pda_startup (struct usb_serial *serial)
 {
+
+	struct keyspan_pda_private *priv;
+
 	/* allocate the private data structures for all ports. Well, for all
 	   one ports. */
 
-	serial->port[0].private = kmalloc(sizeof(struct keyspan_pda_private),
-					   GFP_KERNEL);
-	if (!serial->port[0].private)
+	priv = serial->port[0].private
+		= kmalloc(sizeof(struct keyspan_pda_private), GFP_KERNEL);
+	if (!priv)
 		return (1); /* error */
 	init_waitqueue_head(&serial->port[0].write_wait);
+	priv->wakeup_task.next = NULL;
+	priv->wakeup_task.sync = 0;
+	priv->wakeup_task.routine = (void *)keyspan_pda_wakeup_write;
+	priv->wakeup_task.data = (void *)(&serial->port[0]);
+	priv->unthrottle_task.next = NULL;
+	priv->unthrottle_task.sync = 0;
+	priv->unthrottle_task.routine = (void *)keyspan_pda_request_unthrottle;
+	priv->unthrottle_task.data = (void *)(serial);
 	return (0);
 }
 

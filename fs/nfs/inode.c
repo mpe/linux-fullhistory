@@ -402,9 +402,6 @@ nfs_read_super(struct super_block *sb, void *raw_data, int silent)
 		server->rsize = nfs_block_size(fsinfo.rtpref, NULL);
 	if (data->wsize == 0)
 		server->wsize = nfs_block_size(fsinfo.wtpref, NULL);
-	server->dtsize = nfs_block_size(fsinfo.dtpref, NULL);
-	if (server->dtsize > PAGE_CACHE_SIZE)
-		server->dtsize = PAGE_CACHE_SIZE;
 	/* NFSv3: we don't have bsize, but rather rtmult and wtmult... */
 	if (!fsinfo.bsize)
 		fsinfo.bsize = (fsinfo.rtmult>fsinfo.wtmult) ? fsinfo.rtmult : fsinfo.wtmult;
@@ -433,6 +430,12 @@ nfs_read_super(struct super_block *sb, void *raw_data, int silent)
 		server->wpages = NFS_WRITE_MAXIOV;
                 server->wsize = server->wpages << PAGE_CACHE_SHIFT;
 	}
+
+	server->dtsize = nfs_block_size(fsinfo.dtpref, NULL);
+	if (server->dtsize > PAGE_CACHE_SIZE)
+		server->dtsize = PAGE_CACHE_SIZE;
+	if (server->dtsize > server->rsize)
+		server->dtsize = server->rsize;
 
         maxlen = (version == 2) ? NFS2_MAXNAMLEN : NFS3_MAXNAMLEN;
 

@@ -1,5 +1,7 @@
 /* Driver for SCM Microsystems USB-ATAPI cable
  *
+ * $Id: shuttle_usbat.c,v 1.2 2000/08/03 00:03:39 groovyjava Exp $
+ *
  * SCM driver v0.2:
  *
  * Removed any reference to maxlen for bulk transfers.

@@ -507,6 +507,13 @@ E: nconway.list@ukaea.org.uk
 D: Assorted sched/mm titbits
 S: Oxfordshire, UK.
 
+N: Mark Corner
+E: mcorner@umich.edu
+W: http://www.eecs.umich.edu/~mcorner/
+D: USB Bluetooth Driver
+S: University of Michigan
+S: Ann Arbor, MI
+
 N: Alan Cox
 W: http://roadrunner.swansea.linux.org.uk/alan.shtml
 E: alan@lxorguk.ukuu.org.uk
@@ -1641,7 +1648,7 @@ S: Santa Clara, CA 95052
 S: USA
 
 N: Petko Manolov
-E: petkan@spct.net
+E: petkan@dce.bg
 D: USB ethernet (pegasus) driver
 D: optimizing i[45]86 string routines
 D: i386 task swithing hacks
@@ -1678,6 +1685,16 @@ D: XF86_Mach32
 D: XF86_Mach8
 D: XF86_8514
 D: cfdisk (curses based disk partitioning program)
+
+N: Torben Mathiasen
+E: torben.mathiasen@compaq.com
+E: tmm@image.dk
+W: http://tlan.kernel.dk
+D: ThunderLAN maintainer
+D: ThunderLAN updates and other kernel fixes.
+S: Bremensgade 29, st.th
+S: 2300 Copenhagen S
+S: Denmark
 
 N: Claudio S. Matsuoka
 E: claudio@conectiva.com

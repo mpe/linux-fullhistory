@@ -3673,27 +3673,6 @@ CONFIG_IP_ROUTE_NAT
   can be gotten from the document
   http://www.csn.tu-chemnitz.de/~mha/linux-ip-nat/diplom/nat.html
 
-IP: optimize as router not host
-CONFIG_IP_ROUTER
-  Some Linux network drivers use a technique called copy and checksum
-  to optimize host performance. For a machine which acts as a router
-  most of the time and is forwarding most packets to another host this
-  is however a loss. If you say Y here, copy and checksum will be
-  switched off. In the future, it may make other changes which
-  optimize for router operation.
-
-  Note that your box can only act as a router if you enable IP
-  forwarding in your kernel; you can do that by saying Y to "/proc
-  file system support" and "Sysctl support" below and executing the
-  line
-
-    echo "1" > /proc/sys/net/ipv4/ip_forward
-
-  at boot time after the /proc file system has been mounted. You can
-  do that even if you say N here.
-
-  If unsure, say N here.
-
 IP: kernel level autoconfiguration
 CONFIG_IP_PNP
   This enables automatic configuration of IP addresses of devices and
@@ -3762,26 +3741,6 @@ CONFIG_NET_IPGRE_BROADCAST
   Network), which looks like a normal Ethernet LAN (Local Area
   Network), but can be distributed all over the Internet. If you want
   to do that, say Y here and to "IP: multicast routing" below.
-
-IP: aliasing support
-CONFIG_IP_ALIAS
-  Sometimes it is useful to give several IP addresses to a single
-  physical network interface (serial port or Ethernet card). The most
-  common case is that you want to serve different WWW or FTP documents
-  to the outside depending on which of your host names was used to
-  connect to you. This is called "multihosting" or "virtual domains"
-  or "virtual hosting services" and is explained in the
-  Virtual-Services-HOWTO, available from
-  http://www.linuxdoc.org/docs.html#howto .
-
-  Another scenario would be that there are two logical networks living
-  on your local Ethernet and you want to access them both with the
-  same Ethernet card. This can also be done if you say Y here.
-
-  The configuration of these alias addresses is done with a special
-  name syntax explained in Documentation/networking/alias.txt and in
-  the IP-Alias mini-HOWTO. If you want this, say Y. Most people don't
-  need it and say N.
 
 IP: multicast routing
 CONFIG_IP_MROUTE
@@ -10245,16 +10204,19 @@ USB ADMtek Pegasus-based ethernet device support
 CONFIG_USB_PEGASUS
   Say Y if you want to use your USB ethernet device. Supported
   cards until now are:
+    ADMtek AN986 (eval. board)
     Accton 10/100
     Billington USB-100
     Corega FEter USB-TX
     MELCO/BUFFALO LUA-TX
-    D-Link DSB-650TX, DSB-650TX-PNA
-    Linksys USB100TX
-    SNC 202
+    D-Link DSB-650TX, DSB-650TX-PNA, DSB-650, DU-E10, DU-E100
+    Linksys USB100TX, USB10TX
+    LANEED Ethernet LD-USB/TX
+    SMC 202
+    SOHOware NUB Ethernet
   If you have devices with vendor IDs other than noted above
   you should add them in the driver code and send a message
-  to me (petkan@spct.net) for update.
+  to me (petkan@dce.bg) for update.
 
   This code is also available as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want).
@@ -14110,6 +14072,12 @@ Creative EMU10K1 based PCI sound cards
 CONFIG_SOUND_EMU10K1
   Say Y or M if you have a PCI sound card using the EMU10K1
   chipset, such as the Creative SBLive!,  SB PCI512 or Emu-APS.
+
+Crystal SoundFusion (CS4280/461x)
+CONFIG_SOUND_FUSION
+  This module drives the Crystal SoundFusion devices (CS4280/46xx series)
+  when wired as native sound drivers with AC97 codecs. If this driver
+  does not work try the CS4232 driver.
 
 Ensoniq ES1370 based PCI sound cards
 CONFIG_SOUND_ES1370

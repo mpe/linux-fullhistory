@@ -107,6 +107,7 @@ static void iforce_process_packet(struct input_dev *dev, unsigned char id, int i
 	}
 }
 
+#ifdef IFORCE_USB
 
 static int iforce_open(struct input_dev *dev)
 {
@@ -126,6 +127,8 @@ static void iforce_close(struct input_dev *dev)
 	if (dev->idbus == BUS_USB && !--iforce->open)
 		usb_unlink_urb(&iforce->irq);
 }
+
+#endif
 
 static void iforce_input_setup(struct iforce *iforce)
 {
@@ -156,8 +159,11 @@ static void iforce_input_setup(struct iforce *iforce)
 	}
 
 	iforce->dev.private = iforce;
+
+#ifdef IFORCE_USB
 	iforce->dev.open = iforce_open;
 	iforce->dev.close = iforce_close;
+#endif
 
 	input_register_device(&iforce->dev);
 }

@@ -1,5 +1,5 @@
 /*
- * $Id: hid.c,v 1.6 2000/05/29 09:01:52 vojtech Exp $
+ * $Id: hid.c,v 1.14 2000/08/14 21:05:26 vojtech Exp $
  *
  *  Copyright (c) 1999 Andreas Gal
  *  Copyright (c) 2000 Vojtech Pavlik
@@ -65,8 +65,8 @@ static unsigned char hid_keyboard[256] = {
 	105,108,103, 69, 98, 55, 74, 78, 96, 79, 80, 81, 75, 76, 77, 71,
 	 72, 73, 82, 83, 86,127,116,117, 85, 89, 90, 91, 92, 93, 94, 95,
 	120,121,122,123,134,138,130,132,128,129,131,137,133,135,136,113,
-	115,114,unk,unk,unk,unk,unk,124,unk,unk,unk,unk,unk,unk,unk,unk,
-	unk,unk,unk,unk,unk,unk,unk,unk,unk,unk,unk,unk,unk,unk,unk,unk,
+	115,114,unk,unk,unk,124,unk,181,182,183,184,185,186,187,188,189,
+	190,191,192,193,194,195,196,197,198,unk,unk,unk,unk,unk,unk,unk,
 	unk,unk,unk,unk,unk,unk,unk,unk,unk,unk,unk,unk,unk,unk,unk,unk,
 	unk,unk,unk,unk,unk,unk,unk,unk,unk,unk,unk,unk,unk,unk,unk,unk,
 	unk,unk,unk,unk,unk,unk,unk,unk,unk,unk,unk,unk,unk,unk,unk,unk,
@@ -149,7 +149,7 @@ static int open_collection(struct hid_parser *parser, unsigned type)
 
 	usage = parser->local.usage[0];
 
-	if (type == HID_COLLECTION_APPLICATION)
+	if (type == HID_COLLECTION_APPLICATION && !parser->device->application)
 		parser->device->application = usage;
 
 	if (parser->collection_stack_ptr < HID_COLLECTION_STACK_SIZE) { /* PUSH on stack */
@@ -197,7 +197,7 @@ static unsigned hid_lookup_collection(struct hid_parser *parser, unsigned type)
 
 static int hid_add_usage(struct hid_parser *parser, unsigned usage)
 {
-	if (parser->local.usage_index >= MAX_USAGES) {
+	if (parser->local.usage_index >= HID_MAX_USAGES) {
 		dbg("usage index exceeded");
 		return -1;
 	}
@@ -346,7 +346,7 @@ static int hid_parser_global(struct hid_parser *parser, struct hid_item *item)
 			return 0;
 
 		case HID_GLOBAL_ITEM_TAG_REPORT_COUNT:
-			if ((parser->global.report_count = item_udata(item)) > MAX_USAGES) {
+			if ((parser->global.report_count = item_udata(item)) > HID_MAX_USAGES) {
 				dbg("invalid report_count %d", parser->global.report_count);
 				return -1;
 			}
@@ -1224,10 +1224,31 @@ static int hid_find_field(struct hid_device *hid, unsigned int type, unsigned in
 	return -1;
 }
 
+static int hid_submit_out(struct hid_device *hid)
+{
+	hid->urbout.transfer_buffer_length = hid->out[hid->outtail].dr.length;
+	hid->urbout.transfer_buffer = hid->out[hid->outtail].buffer;
+	hid->urbout.setup_packet = (void *) &(hid->out[hid->outtail].dr);
+
+	if (usb_submit_urb(&hid->urbout)) {
+		err("usb_submit_urb(out) failed");
+		return -1;
+	}
+
+	return 0;
+}
+
 static void hid_ctrl(struct urb *urb)
 {
+	struct hid_device *hid = urb->context;
+
         if (urb->status)
-                warn("ctrl urb status %d received", urb->status);
+		warn("ctrl urb status %d received", urb->status);
+	
+	hid->outtail = (hid->outtail + 1) & (HID_CONTROL_FIFO_SIZE - 1);
+
+	if (hid->outhead != hid->outtail)
+		hid_submit_out(hid);
 }       
 
 static int hid_event(struct input_dev *dev, unsigned int type, unsigned int code, int value)
@@ -1242,22 +1263,18 @@ static int hid_event(struct input_dev *dev, unsigned int type, unsigned int code
 	}
 
 	hid_set_field(field, offset, value);
+	hid_output_report(field->report, hid->out[hid->outhead].buffer);
 
-	if (hid->urbout.status == -EINPROGRESS) {
-		warn("had to kill output urb");
-		usb_unlink_urb(&hid->urbout);
-	}
+	hid->out[hid->outhead].dr.value = 0x200 | field->report->id;
+	hid->out[hid->outhead].dr.length = ((field->report->size - 1) >> 3) + 1;
 
-	hid_output_report(field->report, hid->bufout);
+	hid->outhead = (hid->outhead + 1) & (HID_CONTROL_FIFO_SIZE - 1);
 
-	hid->dr.value = 0x200 | field->report->id;
-	hid->dr.length = ((field->report->size - 1) >> 3) + 1;
-	hid->urbout.transfer_buffer_length = hid->dr.length;
+	if (hid->outhead == hid->outtail)
+		hid->outtail = (hid->outtail + 1) & (HID_CONTROL_FIFO_SIZE - 1);
 
-	if (usb_submit_urb(&hid->urbout)) {
-		err("usb_submit_urb(out) failed");
-		return -1;
-	}
+	if (hid->urbout.status != -EINPROGRESS)
+		hid_submit_out(hid);
 
 	return 0;
 }
@@ -1364,7 +1381,7 @@ static struct hid_device *usb_hid_configure(struct usb_device *dev, int ifnum, c
 		if (hdesc->desc[n].bDescriptorType == USB_DT_REPORT)
 			rsize = le16_to_cpu(hdesc->desc[n].wDescriptorLength);
 
-	if (!rsize || rsize > 1024) {
+	if (!rsize || rsize > HID_MAX_DESCRIPTOR_SIZE) {
 		dbg("weird size of report descriptor (%u)", rsize);
 		return NULL;
 	}
@@ -1420,11 +1437,11 @@ static struct hid_device *usb_hid_configure(struct usb_device *dev, int ifnum, c
 	hid->dev = dev;
 	hid->ifnum = interface->bInterfaceNumber;
 
-	hid->dr.requesttype = USB_TYPE_CLASS | USB_RECIP_INTERFACE;
-	hid->dr.request = USB_REQ_SET_REPORT;
-	hid->dr.value = 0x200;
-	hid->dr.index = hid->ifnum;
-	hid->dr.length = 1;
+	for (n = 0; n < HID_CONTROL_FIFO_SIZE; n++) {
+		hid->out[n].dr.requesttype = USB_TYPE_CLASS | USB_RECIP_INTERFACE;
+		hid->out[n].dr.request = USB_REQ_SET_REPORT;
+		hid->out[n].dr.index = hid->ifnum;
+	}
 
 	hid->input.name = hid->name;
 	hid->input.idbus = BUS_USB;
@@ -1441,7 +1458,7 @@ static struct hid_device *usb_hid_configure(struct usb_device *dev, int ifnum, c
 			hid->input.idvendor, hid->input.idproduct);
 
 	FILL_CONTROL_URB(&hid->urbout, dev, usb_sndctrlpipe(dev, 0),
-		(void*) &hid->dr, hid->bufout, 1, hid_ctrl, hid);
+		(void*) &hid->out[0].dr, hid->out[0].buffer, 1, hid_ctrl, hid);
 
 	if (interface->bInterfaceSubClass == 1)
         	usb_set_protocol(dev, hid->ifnum, 1);

@@ -45,6 +45,42 @@ void __init signals_init(void)
 }
 
 
+/* Given the mask, find the first available signal that should be serviced. */
+
+static int
+next_signal(sigset_t *signal, sigset_t *mask)
+{
+	unsigned long i, *s, *m, x;
+	int sig = 0;
+	
+	s = signal->sig;
+	m = mask->sig;
+	switch (_NSIG_WORDS) {
+	default:
+		for (i = 0; i < _NSIG_WORDS; ++i, ++s, ++m)
+			if ((x = *s &~ *m) != 0) {
+				sig = ffz(~x) + i*_NSIG_BPW + 1;
+				break;
+			}
+		break;
+
+	case 2: if ((x = s[0] &~ m[0]) != 0)
+			sig = 1;
+		else if ((x = s[1] &~ m[1]) != 0)
+			sig = _NSIG_BPW + 1;
+		else
+			break;
+		sig += ffz(~x);
+		break;
+
+	case 1: if ((x = *s &~ *m) != 0)
+			sig = ffz(~x) + 1;
+		break;
+	}
+	
+	return sig;
+}
+
 /*
  * Flush all pending signals for a task.
  */
@@ -86,6 +122,32 @@ flush_signal_handlers(struct task_struct *t)
 	}
 }
 
+/* Notify the system that a driver wants to block all signals for this
+ * process, and wants to be notified if any signals at all were to be
+ * sent/acted upon.  If the notifier routine returns non-zero, then the
+ * signal will be acted upon after all.  If the notifier routine returns 0,
+ * then then signal will be blocked.  Only one block per process is
+ * allowed.  priv is a pointer to private data that the notifier routine
+ * can use to determine if the signal should be blocked or not.  */
+
+void
+block_all_signals(int (*notifier)(void *priv), void *priv, sigset_t *mask)
+{
+	current->notifier_mask = mask;
+	current->notifier_data = priv;
+	current->notifier = notifier;
+}
+
+/* Notify the system that blocking has ended. */
+
+void
+unblock_all_signals(void)
+{
+	current->notifier = NULL;
+	current->notifier_data = NULL;
+	recalc_sigpending(current);
+}
+
 /*
  * Dequeue a signal and return the element to the caller, which is 
  * expected to free it.
@@ -96,7 +158,6 @@ flush_signal_handlers(struct task_struct *t)
 int
 dequeue_signal(sigset_t *mask, siginfo_t *info)
 {
-	unsigned long i, *s, *m, x;
 	int sig = 0;
 
 #if DEBUG_SIG
@@ -104,30 +165,22 @@ printk("SIG dequeue (%s:%d): %d ", current->comm, current->pid,
 	signal_pending(current));
 #endif
 
-	/* Find the first desired signal that is pending.  */
-	s = current->signal.sig;
-	m = mask->sig;
-	switch (_NSIG_WORDS) {
-	default:
-		for (i = 0; i < _NSIG_WORDS; ++i, ++s, ++m)
-			if ((x = *s &~ *m) != 0) {
-				sig = ffz(~x) + i*_NSIG_BPW + 1;
-				break;
-			}
-		break;
+	sig = next_signal(&current->signal, mask);
+	if (current->notifier) {
+		sigset_t merged;
+		int i;
+		int altsig;
 
-	case 2: if ((x = s[0] &~ m[0]) != 0)
-			sig = 1;
-		else if ((x = s[1] &~ m[1]) != 0)
-			sig = _NSIG_BPW + 1;
-		else
-			break;
-		sig += ffz(~x);
-		break;
-
-	case 1: if ((x = *s &~ *m) != 0)
-			sig = ffz(~x) + 1;
-		break;
+		for (i = 0; i < _NSIG_WORDS; i++)
+			merged.sig[i] = mask->sig[i]
+			    | current->notifier_mask->sig[i];
+		altsig = next_signal(&current->signal, &merged);
+		if (sig != altsig) {
+			if (!(current->notifier)(current->notifier_data)) {
+				current->sigpending = 0;
+				return 0;
+		        }
+		}
 	}
 
 	if (sig) {
@@ -657,6 +710,8 @@ EXPORT_SYMBOL(notify_parent);
 EXPORT_SYMBOL(recalc_sigpending);
 EXPORT_SYMBOL(send_sig);
 EXPORT_SYMBOL(send_sig_info);
+EXPORT_SYMBOL(block_all_signals);
+EXPORT_SYMBOL(unblock_all_signals);
 
 
 /*

@@ -1222,9 +1222,7 @@ static int usb_parse_interface(struct usb_device *dev, struct usb_interface *int
 
 int usb_parse_configuration(struct usb_device *dev, struct usb_config_descriptor *config, char *buffer)
 {
-	int i;
-	int retval;
-	int size;
+	int i, retval, size;
 	struct usb_descriptor_header *header;
 
 	memcpy(config, buffer, USB_DT_CONFIG_SIZE);
@@ -1252,19 +1250,54 @@ int usb_parse_configuration(struct usb_device *dev, struct usb_config_descriptor
 	size -= config->bLength;
 	
 	for (i = 0; i < config->bNumInterfaces; i++) {
-		header = (struct usb_descriptor_header *)buffer;
-		if ((header->bLength > size) || (header->bLength <= 2)) {
-			err("ran out of descriptors parsing");
-			return -1;
-		}
-		
-		if (header->bDescriptorType != USB_DT_INTERFACE) {
-			warn("unexpected descriptor 0x%X",
-				header->bDescriptorType);
+		int numskipped, len;
+		char *begin;
+
+		/* Skip over the rest of the Class Specific or Vendor */
+		/*  Specific descriptors */
+		begin = buffer;
+		numskipped = 0;
+		while (size >= sizeof(struct usb_descriptor_header)) {
+			header = (struct usb_descriptor_header *)buffer;
+
+			if ((header->bLength > size) || (header->bLength < 2)) {
+				err("invalid descriptor length of %d", header->bLength);
+				return -1;
+			}
+
+			/* If we find another descriptor which is at or below */
+			/*  us in the descriptor heirarchy then we're done  */
+			if ((header->bDescriptorType == USB_DT_ENDPOINT) ||
+			    (header->bDescriptorType == USB_DT_INTERFACE) ||
+			    (header->bDescriptorType == USB_DT_CONFIG) ||
+			    (header->bDescriptorType == USB_DT_DEVICE))
+				break;
+
+			dbg("skipping descriptor 0x%X", header->bDescriptorType);
+			numskipped++;
 
 			buffer += header->bLength;
 			size -= header->bLength;
-			continue;
+		}
+		if (numskipped)
+			dbg("skipped %d class/vendor specific endpoint descriptors", numskipped);
+
+		/* Copy any unknown descriptors into a storage area for */
+		/*  drivers to later parse */
+		len = (int)(buffer - begin);
+		if (!len) {
+			config->extra = NULL;
+			config->extralen = 0;
+		} else {
+			config->extra = kmalloc(len, GFP_KERNEL);
+			if (!config->extra) {
+				err("couldn't allocate memory for config extra descriptors");
+				config->extralen = 0;
+				return -1;
+			}
+
+			memcpy(config->extra, begin, len);
+			config->extralen = len;
 		}
 
 		retval = usb_parse_interface(dev, config->interface + i, buffer, size);

@@ -5,6 +5,7 @@
 O_TARGET	:= usb-storage.o
 M_OBJS		:= usb-storage.o
 O_OBJS		:= scsiglue.o protocol.o transport.o usb.o 
+MOD_LIST_NAME	:= USB_STORAGE_MODULES
 
 CFLAGS_scsiglue.o:= -I../../scsi/
 CFLAGS_protocol.o:= -I../../scsi/
@@ -13,6 +14,7 @@ CFLAGS_debug.o:= -I../../scsi/
 CFLAGS_usb.o:= -I../../scsi/
 CFLAGS_shuttle_usbat.o:= -I../../scsi/
 CFLAGS_sddr09.o:= -I../../scsi/
+CFLAGS_dpcm.o:= -I../../scsi/
 
 ifeq ($(CONFIG_USB_STORAGE_DEBUG),y)
 	O_OBJS += debug.o
@@ -36,6 +38,10 @@ endif
 
 ifeq ($(CONFIG_USB_STORAGE_SHUTTLE_COMPACTFLASH),y)
 	O_OBJS += shuttle_cf.o
+endif
+
+ifeq ($(CONFIG_USB_STORAGE_DPCM),y)
+	O_OBJS += dpcm.o
 endif
  
 include $(TOPDIR)/Rules.make

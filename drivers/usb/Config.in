@@ -68,31 +68,23 @@ comment 'USB Devices'
    dep_tristate '  DABUSB driver' CONFIG_USB_DABUSB $CONFIG_USB
    if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
       dep_tristate '  PLUSB Prolific USB-Network driver (EXPERIMENTAL)' CONFIG_USB_PLUSB $CONFIG_USB $CONFIG_NET
-      dep_tristate '  USB ADMtek Pegasus-based device support (EXPERIMENTAL)' CONFIG_USB_PEGASUS $CONFIG_USB $CONFIG_NET
+      dep_tristate '  USB ADMtek Pegasus-based ethernet device support (EXPERIMENTAL)' CONFIG_USB_PEGASUS $CONFIG_USB $CONFIG_NET
       dep_tristate '  USB Diamond Rio500 support (EXPERIMENTAL)' CONFIG_USB_RIO500 $CONFIG_USB
       dep_tristate '  D-Link USB FM radio support (EXPERIMENTAL)' CONFIG_USB_DSBR $CONFIG_USB $CONFIG_VIDEO_DEV
       dep_tristate '  USB Bluetooth support (EXPERIMENTAL)' CONFIG_USB_BLUETOOTH $CONFIG_USB
    fi
 
-comment 'USB HID'
-   dep_tristate '  USB Human Interface Device (HID) support' CONFIG_USB_HID $CONFIG_USB
-   if [ "$CONFIG_USB_HID" != "y" ]; then
-      dep_tristate '  USB HIDBP Keyboard support' CONFIG_USB_KBD $CONFIG_USB
-      dep_tristate '  USB HIDBP Mouse support' CONFIG_USB_MOUSE $CONFIG_USB
-   fi
-   dep_tristate '  Wacom Intuos/Graphire tablet support' CONFIG_USB_WACOM $CONFIG_USB
-   dep_tristate '  I-Force joysticks/wheels' CONFIG_INPUT_IFORCE_USB $CONFIG_USB
-      if [ "$CONFIG_INPUT_IFORCE_USB" != "n" ];  then
-         define_tristate CONFIG_INPUT_IFORCE $CONFIG_INPUT_IFORCE_USB
+   comment 'USB HID'
+   if [ "$CONFIG_INPUT" != "n" ]; then
+      dep_tristate '  USB Human Interface Device (HID) support' CONFIG_USB_HID $CONFIG_USB $CONFIG_INPUT
+      if [ "$CONFIG_USB_HID" != "y" ]; then
+         dep_tristate '  USB HIDBP Keyboard support' CONFIG_USB_KBD $CONFIG_USB $CONFIG_INPUT
+         dep_tristate '  USB HIDBP Mouse support' CONFIG_USB_MOUSE $CONFIG_USB $CONFIG_INPUT
       fi
-   dep_tristate '  Keyboard support' CONFIG_INPUT_KEYBDEV $CONFIG_USB
-   dep_tristate '  Mouse support' CONFIG_INPUT_MOUSEDEV $CONFIG_USB
-   if [ "$CONFIG_INPUT_MOUSEDEV" != "n" ]; then
-      int '   Horizontal screen resolution' CONFIG_INPUT_MOUSEDEV_SCREEN_X 1024
-      int '   Vertical screen resolution' CONFIG_INPUT_MOUSEDEV_SCREEN_Y 768
+      dep_tristate '  Wacom Intuos/Graphire tablet support' CONFIG_USB_WACOM $CONFIG_USB $CONFIG_INPUT
+   else
+      comment '   Input core support is needed for USB HID'
    fi
-   dep_tristate '  Joystick support' CONFIG_INPUT_JOYDEV $CONFIG_USB
-   dep_tristate '  Event interface support' CONFIG_INPUT_EVDEV $CONFIG_USB
 fi
 
 endmenu

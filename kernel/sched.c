@@ -283,11 +283,17 @@ static inline void reschedule_idle(struct task_struct * p, unsigned long flags)
 			goto send_now_idle;
 		goto preempt_now;
 	}
+	if (p->has_cpu) {
+		p->need_resched = 1;
+		cpu_curr(p->processor)->need_resched = 1;
+	}
+
 
 	spin_unlock_irqrestore(&runqueue_lock, flags);
 	return;
 		
 send_now_idle:
+
 	/*
 	 * If need_resched == -1 then we can skip sending the IPI
 	 * altogether, tsk->need_resched is actively watched by the
@@ -454,20 +460,22 @@ signed long schedule_timeout(signed long timeout)
  */
 static inline void __schedule_tail(struct task_struct *prev)
 {
-	current->need_resched |= prev->need_resched;
-#ifdef CONFIG_SMP
-	if ((prev->state == TASK_RUNNING) &&
-			(prev != idle_task(smp_processor_id()))) {
-		unsigned long flags;
+	unsigned long flags;
 
-		spin_lock_irqsave(&runqueue_lock, flags);
-		prev->has_cpu = 0;
+	/*
+	 * Wakeups to the previous process could result in
+	 * the process not being rescheduled properly, because
+	 * has_cpu is 1 until now. (so both the currently running
+	 * process and the previous process has has_cpu==1)
+	 */
+	spin_lock_irqsave(&runqueue_lock, flags);
+	current->need_resched |= prev->need_resched;
+	prev->has_cpu = 0;
+	if ((prev->state == TASK_RUNNING) &&
+			(prev != idle_task(smp_processor_id())))
 		reschedule_idle(prev, flags); // spin_unlocks runqueue
-	} else {
-		wmb();
-		prev->has_cpu = 0;
-	}
-#endif /* CONFIG_SMP */
+	else
+		spin_unlock_irqrestore(&runqueue_lock, flags);
 }
 
 void schedule_tail(struct task_struct *prev)

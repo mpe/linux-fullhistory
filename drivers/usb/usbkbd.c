@@ -1,5 +1,5 @@
 /*
- * $Id: usbkbd.c,v 1.11 2000/05/29 09:01:52 vojtech Exp $
+ * $Id: usbkbd.c,v 1.16 2000/08/14 21:05:26 vojtech Exp $
  *
  *  Copyright (c) 1999-2000 Vojtech Pavlik
  *
@@ -47,8 +47,8 @@ static unsigned char usb_kbd_keycode[256] = {
 	105,108,103, 69, 98, 55, 74, 78, 96, 79, 80, 81, 75, 76, 77, 71,
 	 72, 73, 82, 83, 86,127,116,117, 85, 89, 90, 91, 92, 93, 94, 95,
 	120,121,122,123,134,138,130,132,128,129,131,137,133,135,136,113,
-	115,114,  0,  0,  0,  0,  0,124,  0,  0,  0,  0,  0,  0,  0,  0,
-	  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+	115,114,  0,  0,  0,124,  0,181,182,183,184,185,186,187,188,189,
+	190,191,192,193,194,195,196,197,198,  0,  0,  0,  0,  0,  0,  0,
 	  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
 	  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
 	  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
@@ -63,7 +63,7 @@ struct usb_kbd {
 	unsigned char old[8];
 	struct urb irq, led;
 	devrequest dr;
-	unsigned char leds;
+	unsigned char leds, newleds;
 	char name[128];
 	int open;
 };
@@ -104,28 +104,37 @@ int usb_kbd_event(struct input_dev *dev, unsigned int type, unsigned int code, i
 
 	if (type != EV_LED) return -1;
 
-	if (kbd->led.status == -EINPROGRESS) {
-		warn("had to kill led urb");
-		usb_unlink_urb(&kbd->led);
-	}
 
-	kbd->leds = (!!test_bit(LED_KANA,    dev->led) << 3) | (!!test_bit(LED_COMPOSE, dev->led) << 3) |
-		    (!!test_bit(LED_SCROLLL, dev->led) << 2) | (!!test_bit(LED_CAPSL,   dev->led) << 1) |
-		    (!!test_bit(LED_NUML,    dev->led));
+	kbd->newleds = (!!test_bit(LED_KANA,    dev->led) << 3) | (!!test_bit(LED_COMPOSE, dev->led) << 3) |
+		       (!!test_bit(LED_SCROLLL, dev->led) << 2) | (!!test_bit(LED_CAPSL,   dev->led) << 1) |
+		       (!!test_bit(LED_NUML,    dev->led));
 
+	if (kbd->led.status == -EINPROGRESS)
+		return 0;
 
-	if (usb_submit_urb(&kbd->led)) {
+	if (kbd->leds == kbd->newleds)
+		return 0;
+
+	kbd->leds = kbd->newleds;
+	if (usb_submit_urb(&kbd->led))
 		err("usb_submit_urb(leds) failed");
-		return -1;
-	}
 
 	return 0;
 }
 
 static void usb_kbd_led(struct urb *urb)
 {
+	struct usb_kbd *kbd = urb->private;
+
 	if (urb->status)
 		warn("led urb status %d received", urb->status);
+	
+	if (kbd->leds == kbd->newleds)
+		return 0;
+
+	kbd->leds = kbd->newleds;
+	if (usb_submit_urb(&kbd->led))
+		err("usb_submit_urb(leds) failed");
 }
 
 static int usb_kbd_open(struct input_dev *dev)

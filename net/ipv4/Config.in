@@ -25,7 +25,6 @@ if [ "$CONFIG_IP_PNP" = "y" ]; then
 # not yet ready..
 #   bool '    IP: ARP support' CONFIG_IP_PNP_ARP		
 fi
-bool '  IP: optimize as router not host' CONFIG_IP_ROUTER
 tristate '  IP: tunneling' CONFIG_NET_IPIP
 tristate '  IP: GRE tunnels over IP' CONFIG_NET_IPGRE
 if [ "$CONFIG_IP_MULTICAST" = "y" ]; then
@@ -38,7 +37,6 @@ if [ "$CONFIG_IP_MULTICAST" = "y" ]; then
       bool '    IP: PIM-SM version 2 support' CONFIG_IP_PIMSM_V2
    fi
 fi
-bool '  IP: aliasing support' CONFIG_IP_ALIAS
 if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
    if [ "$CONFIG_RTNETLINK" = "y" ]; then
       bool '  IP: ARP daemon support (EXPERIMENTAL)' CONFIG_ARPD

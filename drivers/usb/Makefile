@@ -17,11 +17,7 @@ O_OBJS		:=
 
 # Objects that export symbols.
 
-export-objs		:= usb.o input.o
-
-# Objects which appear many times
-
-common-objs	:= input.o
+export-objs		:= usb.o
 
 # Multipart objects.
 
@@ -48,15 +44,10 @@ obj-$(CONFIG_USB_UHCI)		+= usb-uhci.o
 obj-$(CONFIG_USB_UHCI_ALT)	+= uhci.o
 obj-$(CONFIG_USB_OHCI)		+= usb-ohci.o
 
-obj-$(CONFIG_USB_MOUSE)		+= usbmouse.o input.o
-obj-$(CONFIG_USB_HID)		+= hid.o input.o
-obj-$(CONFIG_USB_KBD)		+= usbkbd.o input.o
-obj-$(CONFIG_USB_WACOM)		+= wacom.o input.o
-obj-$(CONFIG_INPUT_IFORCE)	+= iforce.o input.o
-obj-$(CONFIG_INPUT_KEYBDEV)	+= keybdev.o input.o
-obj-$(CONFIG_INPUT_MOUSEDEV)	+= mousedev.o input.o
-obj-$(CONFIG_INPUT_JOYDEV)	+= joydev.o input.o
-obj-$(CONFIG_INPUT_EVDEV)	+= evdev.o input.o
+obj-$(CONFIG_USB_MOUSE)		+= usbmouse.o
+obj-$(CONFIG_USB_HID)		+= hid.o
+obj-$(CONFIG_USB_KBD)		+= usbkbd.o
+obj-$(CONFIG_USB_WACOM)		+= wacom.o
 
 obj-$(CONFIG_USB_SCANNER)	+= scanner.o
 obj-$(CONFIG_USB_ACM)		+= acm.o
@@ -94,13 +85,6 @@ else
 		MOD_IN_SUB_DIRS += storage
 	endif
 endif
-
-# Remove duplicates.
-# The 'common-*' lists are intermediate lists used to filter out
-# duplicates.
-
-common-y	:= $(filter $(obj-y),$(common-obj))
-obj-y		:= $(filter-out $(common-y), $(obj-y)) $(common-y)
 
 # Extract lists of the multi-part drivers.
 # The 'int-*' lists are the intermediate files used to build the multi's.

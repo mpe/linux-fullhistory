@@ -1,5 +1,5 @@
 /*
- * $Id: joydev.c,v 1.11 2000/06/23 09:23:00 vojtech Exp $
+ * $Id: joydev.c,v 1.13 2000/08/14 21:05:26 vojtech Exp $
  *
  *  Copyright (c) 1999-2000 Vojtech Pavlik 
  *  Copyright (c) 1999 Colin Van Dyke 
@@ -390,7 +390,7 @@ static struct input_handle *joydev_connect(struct input_handler *handler, struct
 	int i, j, minor;
 
 	if (!(test_bit(EV_KEY, dev->evbit) && test_bit(EV_ABS, dev->evbit) &&
-	      test_bit(ABS_X, dev->absbit) && test_bit(ABS_Y, dev->absbit) &&
+	     (test_bit(ABS_X, dev->absbit) || test_bit(ABS_Y, dev->absbit)) &&
 	     (test_bit(BTN_TRIGGER, dev->keybit) || test_bit(BTN_A, dev->keybit)
 		|| test_bit(BTN_1, dev->keybit)))) return NULL; 
 

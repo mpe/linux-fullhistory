@@ -1,10 +1,10 @@
 /*
- * printer.c  Version 0.5
+ * printer.c  Version 0.6
  *
  * Copyright (c) 1999 Michael Gee	<michael@linuxspecific.com>
  * Copyright (c) 1999 Pavel Machek	<pavel@suse.cz>
- * Copyright (c) 2000 Vojtech Pavlik	<vojtech@suse.cz>
  * Copyright (c) 2000 Randy Dunlap	<randy.dunlap@intel.com>
+ * Copyright (c) 2000 Vojtech Pavlik	<vojtech@suse.cz>
  *
  * USB Printer Device Class driver for USB printers and printer cables
  *
@@ -16,6 +16,7 @@
  *	v0.3 - cleaner again, waitqueue fixes
  *	v0.4 - fixes in unidirectional mode
  *	v0.5 - add DEVICE_ID string support
+ *	v0.6 - never time out
  */
 
 /*
@@ -71,7 +72,7 @@ MFG:HEWLETT-PACKARD;MDL:DESKJET 970C;CMD:MLC,PCL,PML;CLASS:PRINTER;DESCRIPTION:H
 #define USBLP_MINORS		16
 #define USBLP_MINOR_BASE	0
 
-#define USBLP_WRITE_TIMEOUT	(60*60*HZ)		/* 60 minutes */
+#define USBLP_WRITE_TIMEOUT	(5*HZ)			/* 5 seconds */
 
 struct usblp {
 	struct usb_device 	*dev;			/* USB device */
@@ -83,10 +84,10 @@ struct usblp {
 	unsigned char		used;			/* True if open */
 	unsigned char		bidir;			/* interface is bidirectional */
 	unsigned char		*device_id_string;	/* IEEE 1284 DEVICE ID string (ptr) */
-					/* first 2 bytes are (big-endian) length */
+							/* first 2 bytes are (big-endian) length */
 };
 
-static struct usblp *usblp_table[USBLP_MINORS] = { NULL, /* ... */ };
+static struct usblp *usblp_table[USBLP_MINORS];
 
 /*
  * Functions for usblp control messages.
@@ -121,7 +122,8 @@ static void usblp_bulk(struct urb *urb)
 		return;
 
 	if (urb->status)
-		warn("nonzero read/write bulk status received: %d", urb->status);
+		warn("usblp%d: nonzero read/write bulk status received: %d",
+			usblp->minor, urb->status);
 
 	wake_up_interruptible(&usblp->wait);
 }
@@ -130,29 +132,27 @@ static void usblp_bulk(struct urb *urb)
  * Get and print printer errors.
  */
 
-static int usblp_check_status(struct usblp *usblp)
+static char *usblp_messages[] = { "ok", "out of paper", "off-line", "on fire" };
+
+static int usblp_check_status(struct usblp *usblp, int err)
 {
-	unsigned char status;
+	unsigned char status, newerr = 0;
 
 	if (usblp_read_status(usblp, &status)) {
-		err("failed reading usblp status");
-		return -EIO;
+		err("usblp%d: failed reading printer status", usblp->minor);
+		return 0;
 	}
 
 	if (~status & LP_PERRORP) {
-		if (status & LP_POUTPA) {
-			info("usblp%d: out of paper", usblp->minor);
-			return -ENOSPC;
-		}
-		if (~status & LP_PSELECD) {
-			info("usblp%d: off-line", usblp->minor);
-			return -EIO;
-		}
-		info("usblp%d: on fire", usblp->minor);
-		return -EIO;
+		newerr = 3;
+		if (status & LP_POUTPA) newerr = 1;
+		if (~status & LP_PSELECD) newerr = 2;
 	}
 
-	return 0;
+	if (newerr != err)
+		info("usblp%d: %s", usblp->minor, usblp_messages[newerr]);
+
+	return newerr;
 }
 
 /*
@@ -179,8 +179,10 @@ static int usblp_open(struct inode *inode, struct file *file)
 	if (usblp->used)
 		goto out;
 
-	if ((retval = usblp_check_status(usblp)))
+	if ((retval = usblp_check_status(usblp, 0))) {
+		retval = retval > 1 ? -EIO : -ENOSPC;
 		goto out;
+	}
 
 	usblp->used = 1;
 	file->private_data = usblp;
@@ -228,27 +230,30 @@ static unsigned int usblp_poll(struct file *file, struct poll_table_struct *wait
 
 static int usblp_ioctl(struct inode *inode, struct file *file, unsigned int cmd, unsigned long arg)
 {
-	int	length;
 	struct usblp *usblp = file->private_data;
+	int length;
 
 	if ((_IOC_TYPE(cmd) != 'P') || (_IOC_DIR(cmd) != _IOC_READ))
 		return -EINVAL;
 
 	switch (_IOC_NR(cmd)) {
-	case IOCNR_GET_DEVICE_ID:		/* get the DEVICE_ID string */
-		length =  (usblp->device_id_string[0] << 8) + usblp->device_id_string[1]; /* big-endian */
-#if 0
-		dbg ("usblp_ioctl GET_DEVICE_ID: actlen=%d, user size=%d, string='%s'",
-			length, _IOC_SIZE(cmd), &usblp->device_id_string[2]);
-#endif
-		if (length > _IOC_SIZE(cmd))
-			length = _IOC_SIZE(cmd);	/* truncate */
-		if (copy_to_user ((unsigned char *)arg, usblp->device_id_string, (unsigned long) length))
-		    	return -EFAULT;
-		break;
 
-	default:
-		return -EINVAL;
+		case IOCNR_GET_DEVICE_ID: /* get the DEVICE_ID string */
+
+			length = (usblp->device_id_string[0] << 8) + usblp->device_id_string[1]; /* big-endian */
+
+			dbg ("usblp_ioctl GET_DEVICE_ID actlen: %d, size: %d, string: '%s'",
+				length, _IOC_SIZE(cmd), &usblp->device_id_string[2]);
+
+			if (length > _IOC_SIZE(cmd)) length = _IOC_SIZE(cmd); /* truncate */
+
+			if (copy_to_user((unsigned char *) arg, usblp->device_id_string, (unsigned long) length))
+				return -EFAULT;
+
+			break;
+
+		default:
+			return -EINVAL;
 	}
 
 	return 0;
@@ -257,7 +262,7 @@ static int usblp_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 static ssize_t usblp_write(struct file *file, const char *buffer, size_t count, loff_t *ppos)
 {
 	struct usblp *usblp = file->private_data;
-	int retval, timeout, writecount = 0;
+	int timeout, err = 0, writecount = 0;
 
 	while (writecount < count) {
 
@@ -276,27 +281,16 @@ static ssize_t usblp_write(struct file *file, const char *buffer, size_t count, 
 			}
 		}
 
-		if (usblp->writeurb.status == -EINPROGRESS) {
-			usb_unlink_urb(&usblp->writeurb);
-			err("usblp%d: timed out", usblp->minor);
-			return -EIO;
-		}
-
 		if (!usblp->dev)
 			return -ENODEV;
 
-		if (!usblp->writeurb.status) {
-			writecount += usblp->writeurb.transfer_buffer_length;
-			usblp->writeurb.transfer_buffer_length = 0;
-		} else {
-			if (!(retval = usblp_check_status(usblp))) {
-				err("usblp%d: error %d writing to printer (retval=%d)",
-					usblp->minor, usblp->writeurb.status, retval);
-				return -EIO;
-			}
-
-			return retval;
+		if (usblp->writeurb.status) {
+			err = usblp_check_status(usblp, err);
+			continue;
 		}
+
+		writecount += usblp->writeurb.transfer_buffer_length;
+		usblp->writeurb.transfer_buffer_length = 0;
 
 		if (writecount == count)
 			continue;
@@ -368,14 +362,14 @@ static void *usblp_probe(struct usb_device *dev, unsigned int ifnum)
 		interface = &dev->actconfig->interface[ifnum].altsetting[i];
 
 		if (interface->bInterfaceClass != 7 || interface->bInterfaceSubClass != 1 ||
-		   (interface->bInterfaceProtocol != 1 && interface->bInterfaceProtocol != 2) ||
-		   (interface->bInterfaceProtocol > interface->bNumEndpoints))
+		    interface->bInterfaceProtocol < 1 || interface->bInterfaceProtocol > 3 ||
+		   (interface->bInterfaceProtocol > 1 && interface->bNumEndpoints < 2))
 			continue;
 
 		if (alts == -1)
 			alts = i;
 
-		if (!bidir && interface->bInterfaceProtocol == 2) {
+		if (!bidir && interface->bInterfaceProtocol > 1) {
 			bidir = 1;
 			alts = i;
 		}

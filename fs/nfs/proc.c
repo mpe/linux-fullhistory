@@ -321,11 +321,7 @@ nfs_proc_readdir(struct file *file, __u64 cookie, void *entry,
 	struct nfs_readdirargs	arg;
 	struct nfs_readdirres	res;
 	struct rpc_message	msg = { NFSPROC_READDIR, &arg, &res, cred };
-	struct nfs_server       *server = NFS_DSERVER(dir);
 	int			status;
-
-	if (server->rsize < size)
-		size = server->rsize;
 
 	arg.fh = NFS_FH(dir);
 	arg.cookie = cookie;

@@ -58,6 +58,7 @@
  *					the backlog queue.
  *	Paul Rusty Russell	:	SIOCSIFNAME
  *              Pekka Riikonen  :	Netdev boot-time settings code
+ *              Andrew Morton   :       Make unregister_netdevice wait indefinitely on dev->refcnt
  */
 
 #include <asm/uaccess.h>
@@ -2311,7 +2312,7 @@ int netdev_finish_unregister(struct net_device *dev)
 
 int unregister_netdevice(struct net_device *dev)
 {
-	unsigned long now;
+	unsigned long now, warning_time;
 	struct net_device *d, **dp;
 
 	/* If device is running, close it first. */
@@ -2379,31 +2380,30 @@ int unregister_netdevice(struct net_device *dev)
 	printk("unregister_netdevice: waiting %s refcnt=%d\n", dev->name, atomic_read(&dev->refcnt));
 #endif
 
-	/* EXPLANATION. If dev->refcnt is not 1 now (1 is our own reference)
-	   it means that someone in the kernel still has reference
+	/* EXPLANATION. If dev->refcnt is not now 1 (our own reference)
+	   it means that someone in the kernel still has a reference
 	   to this device and we cannot release it.
 
 	   "New style" devices have destructors, hence we can return from this
-	   function and destructor will do all the work later.
+	   function and destructor will do all the work later.  As of kernel 2.4.0
+	   there are very few "New Style" devices.
 
-	   "Old style" devices expect that device is free of any references
-	   upon exit from this function. WE CANNOT MAKE such release
-	   without delay. Note that it is not new feature. Referencing devices
-	   after they are released occured in 2.0 and 2.2.
-	   Now we just can know about each fact of illegal usage.
+	   "Old style" devices expect that the device is free of any references
+	   upon exit from this function.
+	   We cannot return from this function until all such references have
+	   fallen away.  This is because the caller of this function will probably
+	   immediately kfree(*dev) and then be unloaded via sys_delete_module.
 
-	   So, we linger for 10*HZ (it is an arbitrary number)
+	   So, we linger until all references fall away.  The duration of the
+	   linger is basically unbounded! It is driven by, for example, the
+	   current setting of sysctl_ipfrag_time.
 
 	   After 1 second, we start to rebroadcast unregister notifications
 	   in hope that careless clients will release the device.
 
-	   If timeout expired, we have no choice how to cross fingers
-	   and return. Real alternative would be block here forever
-	   and we will make it eventually, when all peaceful citizens
-	   will be notified and repaired.
 	 */
 
-	now = jiffies;
+	now = warning_time = jiffies;
 	while (atomic_read(&dev->refcnt) != 1) {
 		if ((jiffies - now) > 1*HZ) {
 			/* Rebroadcast unregister notification */
@@ -2412,12 +2412,13 @@ int unregister_netdevice(struct net_device *dev)
 		current->state = TASK_INTERRUPTIBLE;
 		schedule_timeout(HZ/4);
 		current->state = TASK_RUNNING;
-		if ((jiffies - now) > 10*HZ)
-			break;
+		if ((jiffies - warning_time) > 10*HZ) {
+			printk(KERN_EMERG "unregister_netdevice: waiting for %s to "
+					"become free. Usage count = %d\n",
+					dev->name, atomic_read(&dev->refcnt));
+			warning_time = jiffies;
+		}
 	}
-
-	if (atomic_read(&dev->refcnt) != 1)
-		printk("unregister_netdevice: Old style device %s leaked(refcnt=%d). Wait for crash.\n", dev->name, atomic_read(&dev->refcnt)-1);
 	dev_put(dev);
 	return 0;
 }

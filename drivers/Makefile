@@ -7,12 +7,12 @@
 #
 # Note 2! The CFLAGS definitions are now in the main makefile.
 
-SUB_DIRS     := block char net parport sound misc
+SUB_DIRS     := block char net parport sound misc media
 MOD_SUB_DIRS := $(SUB_DIRS)
 ALL_SUB_DIRS := $(SUB_DIRS) pci sgi ide scsi sbus cdrom isdn pnp i2o \
 				ieee1394 macintosh video dio zorro fc4 \
 				usb nubus tc atm pcmcia i2c telephony \
-				acpi mtd
+				acpi mtd input
 
 ifdef CONFIG_DIO
 SUB_DIRS += dio
@@ -74,6 +74,15 @@ MOD_SUB_DIRS += usb
 else
   ifeq ($(CONFIG_USB),m)
   MOD_SUB_DIRS += usb
+  endif
+endif 
+
+ifeq ($(CONFIG_INPUT),y)
+SUB_DIRS += input
+MOD_SUB_DIRS += input
+else
+  ifeq ($(CONFIG_INPUT),m)
+  MOD_SUB_DIRS += input
   endif
 endif 
 

@@ -656,6 +656,14 @@ int r128_lock(struct inode *inode, struct file *filp, unsigned int cmd,
 #endif
 
         if (!ret) {
+		sigemptyset(&dev->sigmask);
+		sigaddset(&dev->sigmask, SIGSTOP);
+		sigaddset(&dev->sigmask, SIGTSTP);
+		sigaddset(&dev->sigmask, SIGTTIN);
+		sigaddset(&dev->sigmask, SIGTTOU);
+		dev->sigdata.context = lock.context;
+		dev->sigdata.lock    = dev->lock.hw_lock;
+		block_all_signals(drm_notifier, &dev->sigdata, &dev->sigmask);
                 if (lock.flags & _DRM_LOCK_READY) {
 				/* Wait for space in DMA/FIFO */
 		}
@@ -719,6 +727,6 @@ int r128_unlock(struct inode *inode, struct file *filp, unsigned int cmd,
 		current->priority = DEF_PRIORITY;
 	}
 #endif
-
+	unblock_all_signals();
 	return 0;
 }

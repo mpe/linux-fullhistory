@@ -97,6 +97,12 @@
  *	
  *	v1.8a May 28, 2000   - Minor updates.
  *
+ *	v1.9 July 25, 2000   - Fixed a few remaining Full-Duplex issues.
+ *     			     - Updated with timer fixes from Andrew Morton.
+ *     			     - Fixed module race in TLan_Open.
+ *			     - Added routine to monitor PHY status.
+ *			     - Added activity led support for Proliant devices.
+ *
  *******************************************************************************/
 
 
@@ -138,7 +144,7 @@ static  int		debug = 0;
 static	int		bbuf = 0;
 static	u8		*TLanPadBuffer;
 static	char		TLanSignature[] = "TLAN";
-static const char *tlan_banner = "ThunderLAN driver v1.8a\n";
+static const char *tlan_banner = "ThunderLAN driver v1.9\n";
 
 const char *media[] = {
 	"10BaseT-HD ", "10BaseT-FD ","100baseTx-HD ", 
@@ -181,7 +187,7 @@ static TLanAdapterEntry TLanAdapterList[] __initdata = {
 	{ PCI_VENDOR_ID_COMPAQ,
 	  PCI_DEVICE_ID_NETELLIGENT_10_100_PROLIANT,
 	  "Compaq Netelligent Integrated 10/100 TX UTP",
-	  TLAN_ADAPTER_NONE,
+	  TLAN_ADAPTER_ACTIVITY_LED,
 	  0x83
 	},
 	{ PCI_VENDOR_ID_COMPAQ,
@@ -272,6 +278,7 @@ static void	TLan_PhyPowerUp( struct net_device * );
 static void	TLan_PhyReset( struct net_device * );
 static void	TLan_PhyStartLink( struct net_device * );
 static void	TLan_PhyFinishAutoNeg( struct net_device * );
+static void	TLan_PhyMonitor( struct net_device * );
 /*
 static int	TLan_PhyNop( struct net_device * );
 static int	TLan_PhyInternalCheck( struct net_device * );
@@ -701,7 +708,8 @@ static int TLan_Open( struct net_device *dev )
 	
 	if ( err ) {
 		printk(KERN_ERR "TLAN:  Cannot open %s because IRQ %d is already in use.\n", dev->name, dev->irq );
-		return -EAGAIN;
+		MOD_DEC_USE_COUNT;
+		return err;
 	}
 	
 	netif_start_queue(dev);
@@ -942,7 +950,7 @@ static int TLan_Close(struct net_device *dev)
 	TLan_ReadAndClearStats( dev, TLAN_RECORD );
 	outl( TLAN_HC_AD_RST, dev->base_addr + TLAN_HOST_CMD );
 	if ( priv->timer.function != NULL ) {
-		del_timer( &priv->timer );
+		del_timer_sync( &priv->timer );
 		priv->timer.function = NULL;
 	}
 	free_irq( dev->irq, dev );
@@ -1590,6 +1598,9 @@ void TLan_Timer( unsigned long data )
 	priv->timer.function = NULL;
 
 	switch ( priv->timerType ) {
+		case TLAN_TIMER_LINK_BEAT:
+			TLan_PhyMonitor( dev );
+			break;
 		case TLAN_TIMER_PHY_PDOWN:
 			TLan_PhyPowerDown( dev );
 			break;
@@ -2041,6 +2052,12 @@ TLan_FinishReset( struct net_device *dev )
 			}
 
 			TLan_DioWrite8( dev->base_addr, TLAN_LED_REG, TLAN_LED_LINK );
+			
+			/* We have link beat..for now anyway */
+			priv->link = 1;
+			/*Enabling link beat monitoring */
+			TLan_SetTimer( dev, (10*HZ), TLAN_TIMER_LINK_BEAT );
+
 		}
 	}
 
@@ -2062,7 +2079,8 @@ TLan_FinishReset( struct net_device *dev )
 		}
 		outl( virt_to_bus( priv->rxList ), dev->base_addr + TLAN_CH_PARM );
 		outl( TLAN_HC_GO | TLAN_HC_RT, dev->base_addr + TLAN_HOST_CMD );
-	} else {
+
+		} else {
 		printk( "TLAN: %s: Link inactive, will retry in 10 secs...\n", dev->name );
 		TLan_SetTimer( dev, (10*HZ), TLAN_TIMER_FINISH_RESET );
 		return;
@@ -2329,12 +2347,14 @@ void TLan_PhyStartLink( struct net_device *dev )
 			TLan_MiiWriteReg( dev, phy, MII_GEN_CTL, 0x0000);
 		} else if ( priv->speed == TLAN_SPEED_10 &&
 			    priv->duplex == TLAN_DUPLEX_FULL) {
+			    priv->tlanFullDuplex = TRUE;
 			    TLan_MiiWriteReg( dev, phy, MII_GEN_CTL, 0x0100);
 		} else if ( priv->speed == TLAN_SPEED_100 &&
 			    priv->duplex == TLAN_DUPLEX_HALF) {
 			    TLan_MiiWriteReg( dev, phy, MII_GEN_CTL, 0x2000);
 		} else if ( priv->speed == TLAN_SPEED_100 &&
 			    priv->duplex == TLAN_DUPLEX_FULL) {
+			    priv->tlanFullDuplex = TRUE;
 			    TLan_MiiWriteReg( dev, phy, MII_GEN_CTL, 0x2100);
 		} else {
 	
@@ -2418,9 +2438,9 @@ void TLan_PhyFinishAutoNeg( struct net_device *dev )
 	TLan_MiiReadReg( dev, phy, MII_AN_LPA, &an_lpa );
 	mode = an_adv & an_lpa & 0x03E0;
 	if ( mode & 0x0100 ) {
-		priv->tlanFullDuplex = TRUE;
+		priv->tlanFullDuplex = TRUE;	
 	} else if ( ! ( mode & 0x0080 ) && ( mode & 0x0040 ) ) {
-		priv->tlanFullDuplex = TRUE;
+		priv->tlanFullDuplex = TRUE;	
 	}
 
 	if ( ( ! ( mode & 0x0180 ) ) && ( priv->adapter->flags & TLAN_ADAPTER_USE_INTERN_10 ) && ( priv->phyNum != 0 ) ) {
@@ -2448,6 +2468,61 @@ void TLan_PhyFinishAutoNeg( struct net_device *dev )
 } /* TLan_PhyFinishAutoNeg */
 
 
+
+
+	/*********************************************************************
+	 *
+	 * 	TLan_PhyMonitor
+	 *
+	 * 	Returns: 
+	 * 		None
+	 *
+	 * 	Params:
+	 * 		dev		The device structure of this device.
+	 *
+	 *	
+	 *	This function monitors PHY condition by reading the status
+	 *	register via the MII bus. This can be used to give info
+	 *	about link changes (up/down), and possible switch to alternate
+	 *	media.
+	 *
+	 * ******************************************************************/
+
+void TLan_PhyMonitor( struct net_device *dev )
+{
+	TLanPrivateInfo *priv = (TLanPrivateInfo *) dev->priv;
+	u16	phy;
+	u16	phy_status;
+
+	phy = priv->phy[priv->phyNum];
+
+	/* Get PHY status register */
+	TLan_MiiReadReg( dev, phy, MII_GEN_STS, &phy_status );
+
+	/* Check if link has been lost */
+	if (!(phy_status & MII_GS_LINK)) { 
+		if (priv->link) {
+			priv->link = 0;
+			printk(KERN_DEBUG "TLAN: %s has lost link\n", dev->name);
+			dev->flags &= ~IFF_RUNNING;
+			TLan_SetTimer( dev, (2*HZ), TLAN_TIMER_LINK_BEAT );
+			return;
+		}
+	}
+
+	/* Link restablished? */
+	if ((phy_status & MII_GS_LINK) && !priv->link) {
+		priv->link = 1;
+		printk(KERN_DEBUG "TLAN: %s has reestablished link\n", dev->name);
+		dev->flags |= IFF_RUNNING;
+		TLan_SetTimer( dev, (2*HZ), TLAN_TIMER_LINK_BEAT );
+	}
+
+	/* Setup a new monitor */
+	TLan_SetTimer( dev, (2*HZ), TLAN_TIMER_LINK_BEAT );
+
+}
+	
 
 
 /*****************************************************************************

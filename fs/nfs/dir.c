@@ -890,9 +890,8 @@ static int nfs_safe_remove(struct dentry *dentry)
 	struct inode *inode = dentry->d_inode;
 	int error = -EBUSY, rehash = 0;
 		
-	dfprintk(VFS, "NFS: safe_remove(%s/%s, %ld)\n",
-		dentry->d_parent->d_name.name, dentry->d_name.name,
-		inode->i_ino);
+	dfprintk(VFS, "NFS: safe_remove(%s/%s)\n",
+		dentry->d_parent->d_name.name, dentry->d_name.name);
 
 	/*
 	 * Unhash the dentry while we remove the file ...
@@ -910,7 +909,8 @@ static int nfs_safe_remove(struct dentry *dentry)
 		goto out;
 	}
 	nfs_zap_caches(dir_i);
-	NFS_CACHEINV(inode);
+	if (inode)
+		NFS_CACHEINV(inode);
 	error = NFS_PROTO(dir_i)->remove(dir, &dentry->d_name);
 	if (error < 0)
 		goto out;

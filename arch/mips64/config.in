@@ -210,8 +210,9 @@ endmenu
 
 source drivers/char/Config.in
 
-
 #source drivers/misc/Config.in
+
+source drivers/media/Config.in
 
 source fs/Config.in
 
@@ -247,6 +248,7 @@ if [ "$CONFIG_SGI_IP22" = "y" ]; then
 fi
 
 source drivers/usb/Config.in
+source drivers/input/Config.in
 
 mainmenu_option next_comment
 comment 'Kernel hacking'

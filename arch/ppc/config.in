@@ -263,6 +263,9 @@ source drivers/video/Config.in
 endmenu
 
 source drivers/char/Config.in
+
+source drivers/media/Config.in
+
 source fs/Config.in
 
 mainmenu_option next_comment
@@ -284,6 +287,7 @@ source arch/ppc/8260_io/Config.in
 fi
 
 source drivers/usb/Config.in
+source drivers/input/Config.in
 
 mainmenu_option next_comment
 comment 'Kernel hacking'

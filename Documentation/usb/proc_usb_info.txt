@@ -1,6 +1,6 @@
 /proc/bus/usb filesystem output
 ===============================
-(version 2000.03.24)
+(version 2000.08.15)
 
 
 The /proc filesystem for USB devices generates
@@ -9,6 +9,23 @@ The /proc filesystem for USB devices generates
 /proc/bus/usb/drivers lists the registered drivers,
 one per line, with each driver's USB minor dev node
 number range if applicable.
+
+**NOTE**: If /proc/bus/usb appears empty, you need
+          to mount the filesystem, issue the command (as root):
+
+      mount -t usbdevfs none /proc/bus/usb
+
+	  An alternative and more permanent method would be to add
+
+      none  /proc/bus/usb  usbdevfs  defaults  0  0
+
+	  to /etc/fstab.  This will mount usbdevfs at each reboot.
+	  You can then issue `cat /proc/bus/usb/devices` to extract
+	  USB device information.
+
+For more information on mounting the usbdevfs file system, see the
+"USB Device Filesystem" section of the USB Guide. The latest copy 
+of the USB Guide can be found at http://www.linux-usb.org/
 
 In /proc/bus/usb/devices, each device's output has multiple
 lines of ASCII output.

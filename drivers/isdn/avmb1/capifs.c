@@ -57,15 +57,12 @@
 #include <linux/param.h>
 #include <linux/module.h>
 #include <linux/string.h>
-#include <linux/fs.h>
 #include <linux/init.h>
 #include <linux/kdev_t.h>
 #include <linux/kernel.h>
 #include <linux/locks.h>
 #include <linux/major.h>
 #include <linux/malloc.h>
-#include <linux/stat.h>
-#include <linux/tty.h>
 #include <linux/ctype.h>
 #include <asm/bitops.h>
 #include <asm/uaccess.h>

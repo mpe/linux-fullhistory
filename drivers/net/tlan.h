@@ -187,6 +187,7 @@ typedef struct tlan_private_tag {
 	u8			tlanFullDuplex;
 	char                    devName[8];
 	spinlock_t		lock;
+	u8			link;
 } TLanPrivateInfo;
 
 
@@ -197,7 +198,7 @@ typedef struct tlan_private_tag {
 	 *
 	 ****************************************************************/
 
-#define TLAN_TIMER_LINK			1
+#define TLAN_TIMER_LINK_BEAT		1
 #define TLAN_TIMER_ACTIVITY		2
 #define TLAN_TIMER_PHY_PDOWN		3
 #define TLAN_TIMER_PHY_PUP		4
@@ -381,9 +382,9 @@ typedef struct tlan_private_tag {
 #define 	MII_GIL_OUI		0xFC00
 #define 	MII_GIL_MODEL		0x03F0
 #define 	MII_GIL_REVISION	0x000F
-#define MII_AN_ADV			0x04
-#define MII_AN_LPA			0x05
-#define MII_AN_EXP			0x06
+#define MII_AN_ADV			0x0004
+#define MII_AN_LPA			0x0005
+#define MII_AN_EXP			0x0006
 
 /* ThunderLAN Specific MII/PHY Registers */
 

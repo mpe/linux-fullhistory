@@ -261,7 +261,7 @@ struct usb_interface_descriptor {
 
   	struct usb_endpoint_descriptor *endpoint;
 
-	unsigned char *extra;
+   	unsigned char *extra;   /* Extra descriptors */
 	int extralen;
 } __attribute__ ((packed));
 
@@ -288,6 +288,9 @@ struct usb_config_descriptor {
 	__u8  MaxPower;
 
 	struct usb_interface *interface;
+
+   	unsigned char *extra;   /* Extra descriptors */
+	int extralen;
 } __attribute__ ((packed));
 
 /* String descriptor */

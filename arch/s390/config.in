@@ -59,6 +59,8 @@ source fs/Config.in
 
 # source drivers/char/Config.in
 
+# source drivers/media/Config.in
+
 mainmenu_option next_comment
 comment 'Kernel hacking'
 

@@ -1,12 +1,13 @@
 /* Driver for USB Mass Storage compliant devices
  *
- * $Id: transport.c,v 1.5 2000/07/28 22:40:20 mdharm Exp $
+ * $Id: transport.c,v 1.12 2000/08/08 15:22:38 gowdy Exp $
  *
  * Current development and maintainance by:
  *   (c) 1999, 2000 Matthew Dharm (mdharm-usb@one-eyed-alien.net)
  *
  * Developed with the assistance of:
  *   (c) 2000 David L. Brown, Jr. (usb-storage@davidb.org)
+ *   (c) 2000 Stephen J. Gowdy (SGowdy@lbl.gov)
  *
  * Initial work by:
  *   (c) 1999 Michael Gee (michael@linuxspecific.com)
@@ -50,6 +51,353 @@
 #include <linux/sched.h>
 #include <linux/errno.h>
 #include <linux/malloc.h>
+
+/***********************************************************************
+ * Helper routines
+ ***********************************************************************/
+
+/* Calculate the length of the data transfer (not the command) for any
+ * given SCSI command
+ */
+static unsigned int us_transfer_length(Scsi_Cmnd *srb, struct us_data *us)
+{
+	int i;
+	unsigned int total = 0;
+	struct scatterlist *sg;
+
+	/* support those devices which need the length calculated
+	 * differently 
+	 */
+	if (srb->cmnd[0] == INQUIRY) {
+		srb->cmnd[4] = 36;
+	}
+
+	if ((srb->cmnd[0] == INQUIRY) || (srb->cmnd[0] == MODE_SENSE))
+		return srb->cmnd[4];
+
+	if (srb->cmnd[0] == TEST_UNIT_READY)
+		return 0;
+
+	/* Are we going to scatter gather? */
+	if (srb->use_sg) {
+		/* Add up the sizes of all the scatter-gather segments */
+		sg = (struct scatterlist *) srb->request_buffer;
+		for (i = 0; i < srb->use_sg; i++)
+			total += sg[i].length;
+
+		return total;
+	}
+	else
+		/* Just return the length of the buffer */
+		return srb->request_bufflen;
+}
+
+/* Calculate the length of the data transfer (not the command) for any
+ * given SCSI command
+ */
+static unsigned int us_transfer_length_new(Scsi_Cmnd *srb, struct us_data *us)
+{
+      	int i;
+	int doDefault = 0;
+	unsigned int len = 0;
+	unsigned int total = 0;
+	struct scatterlist *sg;
+
+	/* This table tells us:
+	   X = command not supported
+	   L = return length in cmnd[4] (8 bits).
+	   M = return length in cmnd[8] (8 bits).
+	   G = return length in cmnd[3] and cmnd[4] (16 bits)
+	   H = return length in cmnd[7] and cmnd[8] (16 bits)
+	   I = return length in cmnd[8] and cmnd[9] (16 bits)
+	   C = return length in cmnd[2] to cmnd[5] (32 bits)
+	   D = return length in cmnd[6] to cmnd[9] (32 bits)
+	   B = return length in blocksize so we use buff_len
+	   R = return length in cmnd[2] to cmnd[4] (24 bits)
+	   S = return length in cmnd[3] to cmnd[5] (24 bits)
+	   T = return length in cmnd[6] to cmnd[8] (24 bits)
+	   U = return length in cmnd[7] to cmnd[9] (24 bits)
+	   0-9 = fixed return length
+	   V = 20 bytes
+	   W = 24 bytes
+	   Z = return length is mode dependant or not in command, use buff_len
+	*/
+
+	static char *lengths =
+		
+		/* 0123456789ABCDEF   0123456789ABCDEF */
+		
+		"00XLZ6XZBXBBXXXB" "00LBBLG0R0L0GG0X"  /* 00-1F */
+		"XXXXT8XXB4B0BBBB" "ZZZ0B00HCSSZTBHH"  /* 20-3F */
+		"M0HHB0X000H0HH0X" "XHH00HXX0TH0H0XX"  /* 40-5F */
+		"XXXXXXXXXXXXXXXX" "XXXXXXXXXXXXXXXX"  /* 60-7F */
+		"XXXXXXXXXXXXXXXX" "XXXXXXXXXXXXXXXX"  /* 80-9F */
+		"X0XXX00XB0BXBXBB" "ZZZ0XUIDU000XHBX"  /* A0-BF */
+		"XXXXXXXXXXXXXXXX" "XXXXXXXXXXXXXXXX"  /* C0-DF */
+		"XDXXXXXXXXXXXXXX" "XXW00HXXXXXXXXXX"; /* E0-FF */
+
+	/* Commands checked in table:
+
+	   CHANGE_DEFINITION 40
+	   COMPARE 39
+	   COPY 18
+	   COPY_AND_VERIFY 3a
+	   ERASE 19
+	   ERASE_10 2c
+	   ERASE_12 ac
+	   EXCHANGE_MEDIUM a6
+	   FORMAT_UNIT 04
+	   GET_DATA_BUFFER_STATUS 34
+	   GET_MESSAGE_10 28
+	   GET_MESSAGE_12 a8
+	   GET_WINDOW 25   !!! Has more data than READ_CAPACITY, need to fix table
+	   INITIALIZE_ELEMENT_STATUS 07 !!! REASSIGN_BLOCKS luckily uses buff_len
+	   INQUIRY 12
+	   LOAD_UNLOAD 1b
+	   LOCATE 2b
+	   LOCK_UNLOCK_CACHE 36
+	   LOG_SELECT 4c
+	   LOG_SENSE 4d
+	   MEDIUM_SCAN 38     !!! This was M
+	   MODE_SELECT6 15
+	   MODE_SELECT_10 55
+	   MODE_SENSE_6 1a
+	   MODE_SENSE_10 5a
+	   MOVE_MEDIUM a5
+	   OBJECT_POSITION 31  !!! Same as SEARCH_DATA_EQUAL
+	   PAUSE_RESUME 4b
+	   PLAY_AUDIO_10 45
+	   PLAY_AUDIO_12 a5
+	   PLAY_AUDIO_MSF 47
+	   PLAY_AUDIO_TRACK_INDEX 48
+   	   PLAY_AUDIO_TRACK_RELATIVE_10 49
+	   PLAY_AUDIO_TRACK_RELATIVE_12 a9
+	   POSITION_TO_ELEMENT 2b
+      	   PRE-FETCH 34
+	   PREVENT_ALLOW_MEDIUM_REMOVAL 1e
+	   PRINT 0a             !!! Same as WRITE_6 but is always in bytes
+	   READ_6 08
+	   READ_10 28
+	   READ_12 a8
+	   READ_BLOCK_LIMITS 05
+	   READ_BUFFER 3c
+	   READ_CAPACITY 25
+	   READ_CDROM_CAPACITY 25
+	   READ_DEFECT_DATA 37
+	   READ_DEFECT_DATA_12 b7
+	   READ_ELEMENT_STATUS b8 !!! Think this is in bytes
+	   READ_GENERATION 29 !!! Could also be M?
+	   READ_HEADER 44     !!! This was L
+	   READ_LONG 3e
+	   READ_POSITION 34   !!! This should be V but conflicts with PRE-FETCH
+	   READ_REVERSE 0f
+	   READ_SUB-CHANNEL 42 !!! Is this in bytes?
+	   READ_TOC 43         !!! Is this in bytes?
+	   READ_UPDATED_BLOCK 2d
+	   REASSIGN_BLOCKS 07
+	   RECEIVE 08        !!! Same as READ_6 probably in bytes though
+	   RECEIVE_DIAGNOSTIC_RESULTS 1c
+	   RECOVER_BUFFERED_DATA 14 !!! For PRINTERs this is bytes
+	   RELEASE_UNIT 17
+	   REQUEST_SENSE 03
+	   REQUEST_VOLUME_ELEMENT_ADDRESS b5 !!! Think this is in bytes
+	   RESERVE_UNIT 16
+	   REWIND 01
+	   REZERO_UNIT 01
+	   SCAN 1b          !!! Conflicts with various commands, should be L
+	   SEARCH_DATA_EQUAL 31
+	   SEARCH_DATA_EQUAL_12 b1
+	   SEARCH_DATA_LOW 30
+	   SEARCH_DATA_LOW_12 b0
+	   SEARCH_DATA_HIGH 32
+	   SEARCH_DATA_HIGH_12 b2
+	   SEEK_6 0b         !!! Conflicts with SLEW_AND_PRINT
+	   SEEK_10 2b
+	   SEND 0a           !!! Same as WRITE_6, probably in bytes though
+	   SEND 2a           !!! Similar to WRITE_10 but for scanners
+	   SEND_DIAGNOSTIC 1d
+	   SEND_MESSAGE_6 0a   !!! Same as WRITE_6 - is in bytes
+	   SEND_MESSAGE_10 2a  !!! Same as WRITE_10 - is in bytes
+	   SEND_MESSAGE_12 aa  !!! Same as WRITE_12 - is in bytes
+	   SEND_VOLUME_TAG b6 !!! Think this is in bytes
+	   SET_LIMITS 33
+	   SET_LIMITS_12 b3
+	   SET_WINDOW 24
+	   SLEW_AND_PRINT 0b !!! Conflicts with SEEK_6
+	   SPACE 11
+	   START_STOP_UNIT 1b
+	   STOP_PRINT 1b
+	   SYNCHRONIZE_BUFFER 10
+	   SYNCHRONIZE_CACHE 35
+	   TEST_UNIT_READY 00
+	   UPDATE_BLOCK 3d
+	   VERIFY 13
+	   VERIFY 2f
+	   VERIFY_12 af
+	   WRITE_6 0a
+	   WRITE_10 2a
+	   WRITE_12 aa
+	   WRITE_AND_VERIFY 2e
+	   WRITE_AND_VERIFY_12 ae
+	   WRITE_BUFFER 3b
+	   WRITE_FILEMARKS 10
+	   WRITE_LONG 3f
+	   WRITE_SAME 41
+	*/
+
+	/* Not sure this is right as an INQUIRY can contain nonstandard info */
+	if (srb->cmnd[0] == INQUIRY)
+		srb->cmnd[4] = 36;
+	   
+	if (srb->sc_data_direction == SCSI_DATA_WRITE) {
+     		doDefault = 1;
+	}
+	else
+		switch (lengths[srb->cmnd[0]]) {
+		case 'L':
+			len = srb->cmnd[4];
+			break;
+
+		case 'M':
+			len = srb->cmnd[8];
+			break;
+
+		case '0':
+		case '1':
+		case '2':
+		case '3':
+		case '4':
+		case '5':
+		case '6':
+		case '7':
+		case '8':
+		case '9':
+			len = lengths[srb->cmnd[0]]-'0';
+			break;
+
+		case 'G':
+			len = (((unsigned int)srb->cmnd[3])<<8) |
+				srb->cmnd[4];
+			break;
+
+		case 'H':
+			len = (((unsigned int)srb->cmnd[7])<<8) |
+				srb->cmnd[8];
+			break;
+
+		case 'I':
+			len = (((unsigned int)srb->cmnd[8])<<8) |
+				srb->cmnd[9];
+			break;
+				   
+		case 'R':
+			len = (((unsigned int)srb->cmnd[2])<<16) |
+				(((unsigned int)srb->cmnd[3])<<8) |
+				srb->cmnd[4];
+			break;
+				   
+		case 'S':
+			len = (((unsigned int)srb->cmnd[3])<<16) |
+				(((unsigned int)srb->cmnd[4])<<8) |
+				srb->cmnd[5];
+			break;
+				   
+		case 'T':
+			len = (((unsigned int)srb->cmnd[6])<<16) |
+				(((unsigned int)srb->cmnd[7])<<8) |
+				srb->cmnd[8];
+			break;
+				   
+		case 'U':
+			len = (((unsigned int)srb->cmnd[7])<<16) |
+				(((unsigned int)srb->cmnd[8])<<8) |
+				srb->cmnd[9];
+			break;
+				   
+		case 'C':
+			len = (((unsigned int)srb->cmnd[2])<<24) |
+				(((unsigned int)srb->cmnd[3])<<16) |
+				(((unsigned int)srb->cmnd[4])<<8) |
+				srb->cmnd[5];
+			break;
+				   
+		case 'D':
+			len = (((unsigned int)srb->cmnd[6])<<24) |
+				(((unsigned int)srb->cmnd[7])<<16) |
+				(((unsigned int)srb->cmnd[8])<<8) |
+				srb->cmnd[9];
+			break;
+				   
+		case 'V':
+			len = 20;
+			break;
+				   
+		case 'W':
+			len = 24;
+			break;
+				   
+		case 'B':
+			/* Use buffer size due to different block sizes */
+			doDefault = 1;
+			break;
+				   
+		case 'X':
+			US_DEBUGP("Error: UNSUPPORTED COMMAND %02X\n",
+				  srb->cmnd[0]);
+			doDefault = 1;
+			break;
+				   
+		case 'Z':
+			/* Use buffer size due to mode dependence */
+			doDefault = 1;
+			break;
+				   
+		default:
+			US_DEBUGP("Error: COMMAND %02X out of range or table inconsistent (%c).\n",
+				  srb->cmnd[0], lengths[srb->cmnd[0]] );
+			doDefault = 1;
+		}
+	   
+	if ( doDefault == 1 ) {
+		/* Are we going to scatter gather? */
+		if (srb->use_sg) {
+			/* Add up the sizes of all the sg segments */
+			sg = (struct scatterlist *) srb->request_buffer;
+			for (i = 0; i < srb->use_sg; i++)
+				total += sg[i].length;
+			len = total;
+		}
+		else
+			/* Just return the length of the buffer */
+			len = srb->request_bufflen;
+	}
+
+	return len;
+}
+
+/* This is a version of usb_clear_halt() that doesn't read the status from
+ * the device -- this is because some devices crash their internal firmware
+ * when the status is requested after a halt
+ */
+static int clear_halt(struct usb_device *dev, int pipe)
+{
+	int result;
+	int endp = usb_pipeendpoint(pipe) | (usb_pipein(pipe) << 7);
+
+	result = usb_control_msg(dev, usb_sndctrlpipe(dev, 0),
+				 USB_REQ_CLEAR_FEATURE, USB_RECIP_ENDPOINT, 0,
+				 endp, NULL, 0, HZ * 3);
+
+	/* this is a failure case */
+	if (result < 0)
+		return result;
+
+	/* reset the toggles and endpoint flags */
+	usb_endpoint_running(dev, usb_pipeendpoint(pipe), usb_pipeout(pipe));
+	usb_settoggle(dev, usb_pipeendpoint(pipe), usb_pipeout(pipe), 0);
+
+	return 0;
+}
 
 /***********************************************************************
  * Data transfer routines
@@ -217,7 +565,7 @@ static int us_transfer_partial(struct us_data *us, char *buf, int length)
 	/* if we stall, we need to clear it before we go on */
 	if (result == -EPIPE) {
 		US_DEBUGP("clearing endpoint halt for pipe 0x%x\n", pipe);
-		usb_clear_halt(us->pusb_dev, pipe);
+		clear_halt(us->pusb_dev, pipe);
 	}
 	
 	/* did we send all the data? */
@@ -287,44 +635,6 @@ static void us_transfer(Scsi_Cmnd *srb, struct us_data* us)
 	srb->result = result;
 }
 
-/* Calculate the length of the data transfer (not the command) for any
- * given SCSI command
- */
-static unsigned int us_transfer_length(Scsi_Cmnd *srb, struct us_data *us)
-{
-	int i;
-	unsigned int total = 0;
-	struct scatterlist *sg;
-
-	/* support those devices which need the length calculated
-	 * differently 
-	 */
-	if (us->flags & US_FL_ALT_LENGTH) {
-		if (srb->cmnd[0] == INQUIRY) {
-			srb->cmnd[4] = 36;
-		}
-
-		if ((srb->cmnd[0] == INQUIRY) || (srb->cmnd[0] == MODE_SENSE))
-			return srb->cmnd[4];
-
-		if (srb->cmnd[0] == TEST_UNIT_READY)
-			return 0;
-	}
-
-	/* Are we going to scatter gather? */
-	if (srb->use_sg) {
-		/* Add up the sizes of all the scatter-gather segments */
-		sg = (struct scatterlist *) srb->request_buffer;
-		for (i = 0; i < srb->use_sg; i++)
-			total += sg[i].length;
-
-		return total;
-	}
-	else
-		/* Just return the length of the buffer */
-		return srb->request_bufflen;
-}
-
 /***********************************************************************
  * Transport routines
  ***********************************************************************/
@@ -363,7 +673,7 @@ void usb_stor_invoke_transport(Scsi_Cmnd *srb, struct us_data *us)
 	 * of determining status on it's own, we need to auto-sense almost
 	 * every time.
 	 */
-	if (us->protocol == US_PR_CB) {
+	if (us->protocol == US_PR_CB || us->protocol == US_PR_DPCM_USB) {
 		US_DEBUGP("-- CB transport device requiring auto-sense\n");
 		need_auto_sense = 1;
 
@@ -490,7 +800,7 @@ void usb_stor_invoke_transport(Scsi_Cmnd *srb, struct us_data *us)
 	 * This is necessary because the auto-sense for some devices always
 	 * sets byte 0 == 0x70, even if there is no error
 	 */
-	if ((us->protocol == US_PR_CB) && 
+	if ((us->protocol == US_PR_CB || us->protocol == US_PR_DPCM_USB) && 
 	    (result == USB_STOR_TRANSPORT_GOOD) &&
 	    ((srb->sense_buffer[2] & 0xf) == 0x0))
 		srb->sense_buffer[0] = 0x0;
@@ -548,10 +858,10 @@ int usb_stor_CBI_transport(Scsi_Cmnd *srb, struct us_data *us)
 		/* STALL must be cleared when they are detected */
 		if (result == -EPIPE) {
 			US_DEBUGP("-- Stall on control pipe. Clearing\n");
-			result = usb_clear_halt(us->pusb_dev,	
-						usb_sndctrlpipe(us->pusb_dev,
-								0));
-			US_DEBUGP("-- usb_clear_halt() returns %d\n", result);
+			result = clear_halt(us->pusb_dev,	
+					    usb_sndctrlpipe(us->pusb_dev,
+							    0));
+			US_DEBUGP("-- clear_halt() returns %d\n", result);
 			return USB_STOR_TRANSPORT_FAILED;
 		}
 
@@ -652,10 +962,10 @@ int usb_stor_CB_transport(Scsi_Cmnd *srb, struct us_data *us)
 		/* a stall is a fatal condition from the device */
 		if (result == -EPIPE) {
 			US_DEBUGP("-- Stall on control pipe. Clearing\n");
-			result = usb_clear_halt(us->pusb_dev, 
-						usb_sndctrlpipe(us->pusb_dev,
-								0));
-			US_DEBUGP("-- usb_clear_halt() returns %d\n", result);
+			result = clear_halt(us->pusb_dev, 
+					    usb_sndctrlpipe(us->pusb_dev,
+							    0));
+			US_DEBUGP("-- clear_halt() returns %d\n", result);
 			return USB_STOR_TRANSPORT_FAILED;
 		}
 
@@ -710,7 +1020,7 @@ int usb_stor_Bulk_max_lun(struct us_data *us)
 	/* if we get a STALL, clear the stall */
 	if (result == -EPIPE) {
 		US_DEBUGP("clearing endpoint halt for pipe 0x%x\n", pipe);
-		usb_clear_halt(us->pusb_dev, pipe);
+		clear_halt(us->pusb_dev, pipe);
 	}
 
 	/* return the default -- no LUNs */
@@ -757,7 +1067,7 @@ int usb_stor_Bulk_transport(Scsi_Cmnd *srb, struct us_data *us)
 	/* if we stall, we need to clear it before we go on */
 	if (result == -EPIPE) {
 		US_DEBUGP("clearing endpoint halt for pipe 0x%x\n", pipe);
-		usb_clear_halt(us->pusb_dev, pipe);
+		clear_halt(us->pusb_dev, pipe);
 	} else if (result) {
 		/* unknown error -- we've got a problem */
 		return USB_STOR_TRANSPORT_ERROR;
@@ -796,7 +1106,7 @@ int usb_stor_Bulk_transport(Scsi_Cmnd *srb, struct us_data *us)
 	/* did the attempt to read the CSW fail? */
 	if (result == -EPIPE) {
 		US_DEBUGP("clearing endpoint halt for pipe 0x%x\n", pipe);
-		usb_clear_halt(us->pusb_dev, pipe);
+		clear_halt(us->pusb_dev, pipe);
 	       
 		/* get the status again */
 		US_DEBUGP("Attempting to get CSW (2nd try)...\n");
@@ -810,7 +1120,7 @@ int usb_stor_Bulk_transport(Scsi_Cmnd *srb, struct us_data *us)
 		/* if it fails again, we need a reset and return an error*/
 		if (result == -EPIPE) {
 			US_DEBUGP("clearing halt for pipe 0x%x\n", pipe);
-			usb_clear_halt(us->pusb_dev, pipe);
+			clear_halt(us->pusb_dev, pipe);
 			return USB_STOR_TRANSPORT_ERROR;
 		}
 	}
@@ -877,10 +1187,10 @@ int usb_stor_CB_reset(struct us_data *us)
 	schedule_timeout(HZ*6);
 
 	US_DEBUGP("CB_reset: clearing endpoint halt\n");
-	usb_clear_halt(us->pusb_dev, 
-		       usb_rcvbulkpipe(us->pusb_dev, us->ep_in));
-	usb_clear_halt(us->pusb_dev, 
-		       usb_rcvbulkpipe(us->pusb_dev, us->ep_out));
+	clear_halt(us->pusb_dev, 
+		   usb_rcvbulkpipe(us->pusb_dev, us->ep_in));
+	clear_halt(us->pusb_dev, 
+		   usb_rcvbulkpipe(us->pusb_dev, us->ep_out));
 
 	US_DEBUGP("CB_reset done\n");
 	return 0;
@@ -904,14 +1214,13 @@ int usb_stor_Bulk_reset(struct us_data *us)
 	if (result < 0)
 		US_DEBUGP("Bulk hard reset failed %d\n", result);
 
-	usb_clear_halt(us->pusb_dev, 
-		       usb_rcvbulkpipe(us->pusb_dev, us->ep_in));
-	usb_clear_halt(us->pusb_dev, 
-		       usb_sndbulkpipe(us->pusb_dev, us->ep_out));
+	clear_halt(us->pusb_dev, 
+		   usb_rcvbulkpipe(us->pusb_dev, us->ep_in));
+	clear_halt(us->pusb_dev, 
+		   usb_sndbulkpipe(us->pusb_dev, us->ep_out));
 
 	/* long wait for reset */
 	schedule_timeout(HZ*6);
 
 	return result;
 }
-

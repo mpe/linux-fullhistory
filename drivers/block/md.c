@@ -1520,21 +1520,21 @@ static int device_size_calculation (mddev_t * mddev)
 		md_size[mdidx(mddev)] = sb->size * data_disks;
 
 	readahead = MD_READAHEAD;
-	if ((sb->level == 0) || (sb->level == 4) || (sb->level == 5))
+	if ((sb->level == 0) || (sb->level == 4) || (sb->level == 5)) {
 		readahead = (mddev->sb->chunk_size>>PAGE_SHIFT) * 4 * data_disks;
 		if (readahead < data_disks * (MAX_SECTORS>>(PAGE_SHIFT-9))*2)
-			readahead = data_disks * (MAX_SECTORS>>(PAGE_SHIFT-9)*2;
-	else {
+			readahead = data_disks * (MAX_SECTORS>>(PAGE_SHIFT-9))*2;
+	} else {
 		if (sb->level == -3)
 			readahead = 0;
 	}
 	md_maxreadahead[mdidx(mddev)] = readahead;
 
-	printk(KERN_INFO "md%d: max total readahead window set to %dk\n",
+	printk(KERN_INFO "md%d: max total readahead window set to %ldk\n",
 		mdidx(mddev), readahead*(PAGE_SIZE/1024));
 
 	printk(KERN_INFO
-		"md%d: %d data-disks, max readahead per data-disk: %dk\n",
+		"md%d: %d data-disks, max readahead per data-disk: %ldk\n",
 			mdidx(mddev), data_disks, readahead/data_disks*(PAGE_SIZE/1024));
 	return 0;
 abort:
