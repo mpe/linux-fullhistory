@@ -15,13 +15,9 @@
 #include "fcp.h"
 #include "fc-al.h"
 
+#include <asm/io.h>
 #ifdef __sparc__
-
 #include <asm/sbus.h>
-typedef u32	dma_handle;
-
-#else
-#error Need to port FC layer to your architecture
 #endif
 
 /* 0 or 1 */
@@ -49,11 +45,11 @@ typedef struct fcp_cmnd {
 	unsigned short		token;
 	unsigned int		did;
 	/* FCP SCSI stuff */
-	dma_handle		data;
+	dma_addr_t		data;
 	/* From now on this cannot be touched for proto == TYPE_SCSI_FCP */
 	fc_hdr			fch;
-	dma_handle		cmd;
-	dma_handle		rsp;
+	dma_addr_t		cmd;
+	dma_addr_t		rsp;
 	int			cmdlen;
 	int			rsplen;
 	int			class;
@@ -85,6 +81,8 @@ typedef struct _fc_channel {
 	svc_parm		*class_svcs;
 #ifdef __sparc__	
 	struct sbus_dev		*dev;
+#else
+	struct pci_dev		*dev;
 #endif
 	struct module		*module;
 	/* FCP SCSI stuff */
@@ -93,7 +91,7 @@ typedef struct _fc_channel {
 	int			rsp_size;
 	fcp_cmd			*scsi_cmd_pool;
 	char			*scsi_rsp_pool;
-	dma_handle		dma_scsi_cmd, dma_scsi_rsp;
+	dma_addr_t		dma_scsi_cmd, dma_scsi_rsp;
 	long			*scsi_bitmap;
 	long			scsi_bitmap_end;
 	int			scsi_free;

@@ -159,10 +159,12 @@ static inline unsigned long pgprot_noncached(unsigned long prot)
 #elif defined(__powerpc__)
 	prot |= _PAGE_NO_CACHE | _PAGE_GUARDED;
 #elif defined(__mc68000__)
-	if (CPU_IS_020_OR_030)
+	if (MMU_IS_SUN3)
+		prot |= SUN3_PAGE_NOCACHE;
+	else if (MMU_IS_851 || MMU_IS_030)
 		prot |= _PAGE_NOCACHE030;
 	/* Use no-cache mode, serialized */
-	if (CPU_IS_040_OR_060)
+	else if (MMU_IS_040 || MMU_IS_060)
 		prot = (prot & _CACHEMASK040) | _PAGE_NOCACHE_S;
 #elif defined(__mips__)
 	prot = (prot & ~_CACHE_MASK) | _CACHE_UNCACHED;

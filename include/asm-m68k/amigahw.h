@@ -281,7 +281,7 @@ struct CIA {
 #define CHIP_PHYSADDR	    (0x000000)
 #define chipaddr ((unsigned long)(zTwoBase + CHIP_PHYSADDR))
 void amiga_chip_init (void);
-void *amiga_chip_alloc (long size);
+void *amiga_chip_alloc (long size, const char *name);
 void amiga_chip_free (void *);
 unsigned long amiga_chip_avail( void ); /*MILAN*/
 

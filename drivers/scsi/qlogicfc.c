@@ -77,7 +77,7 @@
 /* Set the following to 1 to include fabric support, fabric support is 
  * currently not as well tested as the other aspects of the driver */
 
-#define ISP2x00_FABRIC          0
+#define ISP2x00_FABRIC          1
 
 /*  Macros used for debugging */
 /*
@@ -649,11 +649,11 @@ struct isp2x00_hostdata {
 	/* this is here so the queues are nicely aligned */
 	long send_marker;	/* do we need to send a marker? */
 
-	char res[RES_QUEUE_LEN + 1][QUEUE_ENTRY_LEN];
-	char req[QLOGICFC_REQ_QUEUE_LEN + 1][QUEUE_ENTRY_LEN];
+	char * res;
+	char * req;
 	struct init_cb control_block;
 	int adapter_state;
-	unsigned long int tag_ages[126];
+	unsigned long int tag_ages[QLOGICFC_MAX_ID + 1];
 	Scsi_Cmnd *handle_ptrs[QLOGICFC_REQ_QUEUE_LEN + 1];
 	unsigned long handle_serials[QLOGICFC_REQ_QUEUE_LEN + 1];
 	struct id_name_map port_db[QLOGICFC_MAX_ID + 1];
@@ -662,6 +662,7 @@ struct isp2x00_hostdata {
 	u_int port_id;
 	u_char queued;
 	u_char host_id;
+        struct timer_list explore_timer;
 };
 
 
@@ -676,7 +677,7 @@ static void isp2x00_disable_irqs(struct Scsi_Host *);
 static int isp2x00_init(struct Scsi_Host *);
 static int isp2x00_reset_hardware(struct Scsi_Host *);
 static int isp2x00_mbox_command(struct Scsi_Host *, u_short[]);
-static int isp2x00_return_status(struct Status_Entry *);
+static int isp2x00_return_status(Scsi_Cmnd *, struct Status_Entry *);
 static void isp2x00_intr_handler(int, void *, struct pt_regs *);
 static void do_isp2x00_intr_handler(int, void *, struct pt_regs *);
 static int isp2x00_make_portdb(struct Scsi_Host *);
@@ -744,13 +745,26 @@ int isp2x00_detect(Scsi_Host_Template * tmpt)
 
 			memset(hostdata, 0, sizeof(struct isp2x00_hostdata));
 			hostdata->pci_dev = pdev;
+			hostdata->res = (char *) kmalloc((RES_QUEUE_LEN + 1)*QUEUE_ENTRY_LEN, GFP_KERNEL);
+			if (!hostdata->res){
+			        printk("qlogicfc%d : could not allocate memory for response queue.\n", hostdata->host_id);
+			        scsi_unregister(host);
+				continue;
+			}
+			hostdata->req = (char *) kmalloc((QLOGICFC_REQ_QUEUE_LEN + 1)*QUEUE_ENTRY_LEN, GFP_KERNEL);
+			if (!hostdata->req){
+			        printk("qlogicfc%d : could not allocate memory for request queue.\n", hostdata->host_id);
+			        kfree(hostdata->res);
+			        scsi_unregister(host);
+				continue;
+			}
 
 			hostdata->queued = 0;
 			/* set up the control block */
 			hostdata->control_block.version = 0x1;
-			hostdata->control_block.firm_opts = 0x0108;
+			hostdata->control_block.firm_opts = 0x000e;
 			hostdata->control_block.max_frame_len = 2048;
-			hostdata->control_block.max_iocb = 256;
+			hostdata->control_block.max_iocb = QLOGICFC_REQ_QUEUE_LEN;
 			hostdata->control_block.exec_throttle = QLOGICFC_CMD_PER_LUN;
 			hostdata->control_block.retry_delay = 5;
 			hostdata->control_block.retry_cnt = 1;
@@ -761,16 +775,18 @@ int isp2x00_detect(Scsi_Host_Template * tmpt)
 			hostdata->control_block.hard_addr = 0x0003;
 			hostdata->control_block.req_queue_len = QLOGICFC_REQ_QUEUE_LEN + 1;
 			hostdata->control_block.res_queue_len = RES_QUEUE_LEN + 1;
-			hostdata->control_block.res_queue_addr_lo = virt_to_bus_low32(&hostdata->res);
-			hostdata->control_block.res_queue_addr_high = virt_to_bus_high32(&hostdata->res);
-			hostdata->control_block.req_queue_addr_lo = virt_to_bus_low32(&hostdata->req);
-			hostdata->control_block.req_queue_addr_high = virt_to_bus_high32(&hostdata->req);
-
+			hostdata->control_block.res_queue_addr_lo = virt_to_bus_low32(hostdata->res);
+			hostdata->control_block.res_queue_addr_high = virt_to_bus_high32(hostdata->res);
+			hostdata->control_block.req_queue_addr_lo = virt_to_bus_low32(hostdata->req);
+			hostdata->control_block.req_queue_addr_high = virt_to_bus_high32(hostdata->req);
 
 			hostdata->adapter_state = AS_LOOP_DOWN;
+			hostdata->explore_timer.data = 1;
 			hostdata->host_id = hosts;
-		
+
 			if (isp2x00_init(host) || isp2x00_reset_hardware(host)) {
+			        kfree(hostdata->res);
+				kfree(hostdata->req);
 			        scsi_unregister(host);
 				continue;
 			}
@@ -779,6 +795,8 @@ int isp2x00_detect(Scsi_Host_Template * tmpt)
 			if (request_irq(host->irq, do_isp2x00_intr_handler, SA_INTERRUPT | SA_SHIRQ, "qlogicfc", host)) {
 			        printk("qlogicfc%d : interrupt %d already in use\n",
 				       hostdata->host_id, host->irq);
+			        kfree(hostdata->res);
+				kfree(hostdata->req);
 				scsi_unregister(host);
 				continue;
 			}
@@ -787,6 +805,8 @@ int isp2x00_detect(Scsi_Host_Template * tmpt)
 				       "in use\n",
 				       hostdata->host_id, host->io_port, host->io_port + 0xff);
 				free_irq(host->irq, host);
+			        kfree(hostdata->res);
+				kfree(hostdata->req);
 				scsi_unregister(host);
 				continue;
 			}
@@ -803,6 +823,7 @@ int isp2x00_detect(Scsi_Host_Template * tmpt)
 			        printk("qlogicfc%d : link is not up\n", hostdata->host_id);
 			}
 			hosts++;
+			hostdata->explore_timer.data = 0;
 		}
 	}
 
@@ -1078,6 +1099,9 @@ int isp2x00_release(struct Scsi_Host *host)
 
 	release_region(host->io_port, 0xff);
 
+	kfree(hostdata->res);
+	kfree(hostdata->req);
+
 	LEAVE("isp2x00_release");
 
 	return 0;
@@ -1133,7 +1157,12 @@ int isp2x00_queuecommand(Scsi_Cmnd * Cmnd, void (*done) (Scsi_Cmnd *))
 		hostdata->adapter_state = AS_LOOP_GOOD;
 		printk("qlogicfc%d : Port Database\n", hostdata->host_id);
 		for (i = 0; hostdata->port_db[i].wwn != 0; i++) {
-			printk("wwn: %08x%08x  scsi_id: %x  loop_id: %x\n", (u_int) (hostdata->port_db[i].wwn >> 32), (u_int) hostdata->port_db[i].wwn, i, hostdata->port_db[i].loop_id);
+			printk("wwn: %08x%08x  scsi_id: %x  loop_id: ", (u_int) (hostdata->port_db[i].wwn >> 32), (u_int) hostdata->port_db[i].wwn, i);
+			if (hostdata->port_db[i].loop_id != hostdata->port_db[0].loop_id || i == 0)
+			        printk("%x", hostdata->port_db[i].loop_id);
+			else
+			        printk("Not Available");
+			printk("\n");
 		}
 	}
 	if (hostdata->adapter_state == AS_FIRMWARE_DEAD) {
@@ -1148,7 +1177,7 @@ int isp2x00_queuecommand(Scsi_Cmnd * Cmnd, void (*done) (Scsi_Cmnd *))
 	DEBUG(printk("qlogicfc%d : request queue depth %d\n", hostdata->host_id,
 		     REQ_QUEUE_DEPTH(in_ptr, out_ptr)));
 
-	cmd = (struct Command_Entry *) &hostdata->req[in_ptr][0];
+	cmd = (struct Command_Entry *) &hostdata->req[in_ptr*QUEUE_ENTRY_LEN];
 	in_ptr = (in_ptr + 1) & QLOGICFC_REQ_QUEUE_LEN;
 	if (in_ptr == out_ptr) {
 		DEBUG(printk("qlogicfc%d : request queue overflow\n", hostdata->host_id));
@@ -1175,7 +1204,7 @@ int isp2x00_queuecommand(Scsi_Cmnd * Cmnd, void (*done) (Scsi_Cmnd *))
 			DEBUG(printk("qlogicfc%d : request queue overflow\n", hostdata->host_id));
 			return 1;
 		}
-		cmd = (struct Command_Entry *) &hostdata->req[in_ptr][0];
+		cmd = (struct Command_Entry *) &hostdata->req[in_ptr*QUEUE_ENTRY_LEN];
 		in_ptr = (in_ptr + 1) & QLOGICFC_REQ_QUEUE_LEN;
 	}
 	TRACE("queue command", in_ptr, Cmnd);
@@ -1197,6 +1226,7 @@ int isp2x00_queuecommand(Scsi_Cmnd * Cmnd, void (*done) (Scsi_Cmnd *))
 				printk("slot %d has %p\n", i, hostdata->handle_ptrs[i]);
 			}
 		}
+		return 1;
 	}
 
 	cmd->hdr.entry_type = ENTRY_COMMAND;
@@ -1234,7 +1264,7 @@ int isp2x00_queuecommand(Scsi_Cmnd * Cmnd, void (*done) (Scsi_Cmnd *))
 		while (sg_count > 0) {
 			++cmd->hdr.entry_cnt;
 			cont = (struct Continuation_Entry *)
-			    &hostdata->req[in_ptr][0];
+			    &hostdata->req[in_ptr*QUEUE_ENTRY_LEN];
 			memset(cont, 0, sizeof(struct Continuation_Entry));
 			in_ptr = (in_ptr + 1) & QLOGICFC_REQ_QUEUE_LEN;
 			if (in_ptr == out_ptr) {
@@ -1334,8 +1364,57 @@ int isp2x00_queuecommand(Scsi_Cmnd * Cmnd, void (*done) (Scsi_Cmnd *))
 }
 
 
-#define ASYNC_EVENT_INTERRUPT	0x01
+/* we have received an event, such as a lip or an RSCN, which may mean that
+ * our port database is incorrect so the port database must be recreated.
+ */
+static void redo_port_db(unsigned long arg)
+{
 
+        struct Scsi_Host * host = (struct Scsi_Host *) arg;
+	struct isp2x00_hostdata * hostdata;
+	unsigned long flags;
+	int i;
+
+	hostdata = (struct isp2x00_hostdata *) host->hostdata;
+	hostdata->explore_timer.data = 0;
+	del_timer(&hostdata->explore_timer);
+
+	spin_lock_irqsave(&io_request_lock, flags);
+
+	if (hostdata->adapter_state & AS_REDO_FABRIC_PORTDB || hostdata->adapter_state & AS_REDO_LOOP_PORTDB) {
+		isp2x00_make_portdb(host);
+		printk("qlogicfc%d : Port Database\n", hostdata->host_id);
+		for (i = 0; hostdata->port_db[i].wwn != 0; i++) {
+			printk("wwn: %08x%08x  scsi_id: %x  loop_id: ", (u_int) (hostdata->port_db[i].wwn >> 32), (u_int) hostdata->port_db[i].wwn, i);
+			if (hostdata->port_db[i].loop_id != hostdata->port_db[0].loop_id || i == 0)
+			        printk("%x", hostdata->port_db[i].loop_id);
+			else
+			        printk("Not Available");
+			printk("\n");
+		}
+		
+	        for (i = 0; i < QLOGICFC_REQ_QUEUE_LEN; i++){ 
+		        if (hostdata->handle_ptrs[i] && (hostdata->port_db[hostdata->handle_ptrs[i]->target].loop_id > QLOGICFC_MAX_LOOP_ID || hostdata->adapter_state & AS_REDO_LOOP_PORTDB)){
+                                if (hostdata->port_db[hostdata->handle_ptrs[i]->target].loop_id != hostdata->port_db[0].loop_id){
+					 hostdata->handle_ptrs[i]->result = DID_SOFT_ERROR << 16;
+					 if (hostdata->handle_ptrs[i]->scsi_done){
+					   (*hostdata->handle_ptrs[i]->scsi_done) (hostdata->handle_ptrs[i]);
+					 }
+					 else printk("qlogicfc%d : done is null?\n", hostdata->host_id);
+					 hostdata->handle_ptrs[i] = NULL;
+					 hostdata->handle_serials[i] = 0;
+				}
+			}
+		}
+		
+		hostdata->adapter_state = AS_LOOP_GOOD;
+	}
+
+	spin_unlock_irqrestore(&io_request_lock, flags);
+
+}
+
+#define ASYNC_EVENT_INTERRUPT	0x01
 
 void do_isp2x00_intr_handler(int irq, void *dev_id, struct pt_regs *regs)
 {
@@ -1378,23 +1457,24 @@ void isp2x00_intr_handler(int irq, void *dev_id, struct pt_regs *regs)
 		switch (status) {
 		case LOOP_UP:
 		case POINT_TO_POINT_UP:
-		        printk("qlogicfc%d : link is up\n", hostdata->host_id);
+		        printk("qlogicfc%d : Link is Up\n", hostdata->host_id);
 			hostdata->adapter_state = AS_REDO_FABRIC_PORTDB | AS_REDO_LOOP_PORTDB;
 			break;
 		case LOOP_DOWN:
-		        printk("qlogicfc%d : link is down\n", hostdata->host_id);
+		        printk("qlogicfc%d : Link is Down\n", hostdata->host_id);
 			hostdata->adapter_state = AS_LOOP_DOWN;
 			break;
 		case CONNECTION_MODE:
 		        printk("received CONNECTION_MODE irq %x\n", inw(host->io_port + MBOX1));
 			break;
 		case CHANGE_NOTIFICATION:
+		        printk("qlogicfc%d : RSCN Received\n", hostdata->host_id);
 			if (hostdata->adapter_state == AS_LOOP_GOOD)
 				hostdata->adapter_state = AS_REDO_FABRIC_PORTDB;
 			break;		        
 		case LIP_OCCURED:
-		case PORT_DB_CHANGED:
 		case LIP_RECEIVED:
+		        printk("qlogicfc%d : Loop Reinitialized\n", hostdata->host_id);
 			if (hostdata->adapter_state == AS_LOOP_GOOD)
 				hostdata->adapter_state = AS_REDO_LOOP_PORTDB;
 			break;
@@ -1429,22 +1509,27 @@ void isp2x00_intr_handler(int irq, void *dev_id, struct pt_regs *regs)
 		default:
 			printk("qlogicfc%d : got an unknown status? %x\n", hostdata->host_id, status);
 		}
+		if ((hostdata->adapter_state & AS_REDO_LOOP_PORTDB || hostdata->adapter_state & AS_REDO_FABRIC_PORTDB) && hostdata->explore_timer.data == 0){
+                        hostdata->explore_timer.function = redo_port_db;
+			hostdata->explore_timer.data = (unsigned long)host;
+			hostdata->explore_timer.expires = jiffies + (HZ/4);
+			init_timer(&hostdata->explore_timer);
+			add_timer(&hostdata->explore_timer);
+		}
 		outw(0x0, host->io_port + PCI_SEMAPHORE);
 	} else {
 		DEBUG_INTR(printk("qlogicfc%d : response queue update\n", hostdata->host_id));
 		DEBUG_INTR(printk("qlogicfc%d : response queue depth %d\n", hostdata->host_id, RES_QUEUE_DEPTH(in_ptr, out_ptr)));
 
 		while (out_ptr != in_ptr) {
-			sts = (struct Status_Entry *) &hostdata->res[out_ptr][0];
+			sts = (struct Status_Entry *) &hostdata->res[out_ptr*QUEUE_ENTRY_LEN];
 			out_ptr = (out_ptr + 1) & RES_QUEUE_LEN;
                  
 			TRACE("done", out_ptr, Cmnd);
 			DEBUG_INTR(isp2x00_print_status_entry(sts));
 			if (sts->hdr.entry_type == ENTRY_STATUS && (Cmnd = hostdata->handle_ptrs[sts->handle])) {
-				Cmnd->result = isp2x00_return_status(sts);
-				hostdata->handle_ptrs[sts->handle] = NULL;
+				Cmnd->result = isp2x00_return_status(Cmnd, sts);
 				hostdata->queued--;
-
 				/* 
 				 * if any of the following are true we do not
 				 * call scsi_done.  if the status is CS_ABORTED
@@ -1454,6 +1539,7 @@ void isp2x00_intr_handler(int irq, void *dev_id, struct pt_regs *regs)
 				if (hostdata->handle_serials[sts->handle] != Cmnd->serial_number 
 				    || sts->completion_status == CS_ABORTED){
 					hostdata->handle_serials[sts->handle] = 0;
+					hostdata->handle_ptrs[sts->handle] = NULL;
 					outw(out_ptr, host->io_port + MBOX5);
 					continue;
 				}
@@ -1473,6 +1559,8 @@ void isp2x00_intr_handler(int irq, void *dev_id, struct pt_regs *regs)
 				outw(out_ptr, host->io_port + MBOX5);
 				continue;
 			}
+
+			hostdata->handle_ptrs[sts->handle] = NULL;
 
 			if (sts->completion_status == CS_RESET_OCCURRED
 			    || (sts->status_flags & STF_BUS_RESET))
@@ -1515,7 +1603,7 @@ void isp2x00_intr_handler(int irq, void *dev_id, struct pt_regs *regs)
 }
 
 
-static int isp2x00_return_status(struct Status_Entry *sts)
+static int isp2x00_return_status(Scsi_Cmnd *Cmnd, struct Status_Entry *sts)
 {
 	int host_status = DID_ERROR;
 #if DEBUG_ISP2x00_INTR
@@ -1559,7 +1647,10 @@ static int isp2x00_return_status(struct Status_Entry *sts)
 		host_status = DID_ERROR;
 		break;
 	case CS_DATA_UNDERRUN:
-		host_status = DID_OK;
+	        if (Cmnd->underflow <= (Cmnd->request_bufflen - sts->residual))
+		        host_status = DID_OK;
+		else
+		        host_status = DID_ERROR;
 		break;
 	case CS_PORT_UNAVAILABLE:
 	case CS_PORT_LOGGED_OUT:

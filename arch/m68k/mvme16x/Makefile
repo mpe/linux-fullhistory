@@ -9,6 +9,6 @@
 
 O_TARGET := mvme16x.o
 O_OBJS   := config.o 16xints.o rtc.o
-#OX_OBJS = ksyms.o
+OX_OBJS  := mvme16x_ksyms.o
 
 include $(TOPDIR)/Rules.make

@@ -111,11 +111,12 @@ asmlinkage int old_mmap(struct mmap_arg_struct *arg)
 
 	a.flags &= ~(MAP_EXECUTABLE | MAP_DENYWRITE);
 
-	error = do_mmap2(file, a.addr, a.len, a.prot, a.flags, a.offset >> PAGE_SHIFT);
+	error = do_mmap2(a.addr, a.len, a.prot, a.flags, a.fd, a.offset >> PAGE_SHIFT);
 out:
 	return error;
 }
 
+#if 0
 struct mmap_arg_struct64 {
 	__u32 addr;
 	__u32 len;
@@ -160,6 +161,7 @@ out:
 	up(&current->mm->mmap_sem);
 	return error;
 }
+#endif
 
 extern asmlinkage int sys_select(int, fd_set *, fd_set *, fd_set *, struct timeval *);
 

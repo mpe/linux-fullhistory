@@ -50,13 +50,7 @@
 #ifndef _3W_XXXX_H
 #define _3W_XXXX_H
 
-/* Convert Linux Version, Patch-level, Sub-level to LINUX_VERSION_CODE. */
-#define TW_LINUX_VERSION(V, P, S)	(((V) * 65536) + ((P) * 256) + (S))
-
-#ifndef LINUX_VERSION_CODE
 #include <linux/version.h>
-#endif /* LINUX_VERSION_CODE */
-
 #include <linux/types.h>
 #include <linux/kdev_t.h>
 
@@ -142,13 +136,7 @@
 #define TW_IOCTL                              0x80
 #define TW_MAX_AEN_TRIES                      100
 
-#if LINUX_VERSION_CODE > TW_LINUX_VERSION(2,3,39)
 #define TW_IN_INTR                            1
-#endif #endif /* version > v2.3.39 */
-
-#ifndef MAJOR_NR 
-#define MAJOR_NR			      8 /* SCSI */
-#endif
 
 /* Macros */
 #define TW_STATUS_ERRORS(x) \
@@ -163,10 +151,6 @@
 #else
 #define dprintk(msg...) do { } while(0);
 #endif
-
-#if LINUX_VERSION_CODE < TW_LINUX_VERSION(2,3,28)
-extern struct proc_dir_entry tw_scsi_proc_entry;
-#endif /* version < v2.3.28 */
 
 /* Scatter Gather List Entry */
 typedef struct TAG_TW_SG_Entry {
@@ -302,9 +286,7 @@ typedef struct TAG_TW_Device_Extension {
 	unsigned short		aen_queue[TW_Q_LENGTH];
 	unsigned char		aen_head;
 	unsigned char		aen_tail;
-#if LINUX_VERSION_CODE > TW_LINUX_VERSION(2,3,39)
 	u32			flags;
-#endif
 } TW_Device_Extension;
 
 /* Function prototypes */
@@ -350,8 +332,7 @@ int tw_state_request_finish(TW_Device_Extension *tw_dev,int request_id);
 int tw_state_request_start(TW_Device_Extension *tw_dev, int *request_id);
 void tw_unmask_command_interrupt(TW_Device_Extension *tw_dev);
 
-#ifdef HOSTS_C
-#if LINUX_VERSION_CODE > TW_LINUX_VERSION(2,3,39)
+#if defined(HOSTS_C) || defined(MODULE)
 /* Scsi_Host_Template Initializer */
 #define TWXXXX {					\
 	next : NULL,					\
@@ -384,35 +365,5 @@ void tw_unmask_command_interrupt(TW_Device_Extension *tw_dev);
  	use_new_eh_code : 1,				\
 	emulated : 1					\
 }
-#else /* version < v2.2.?? */
-#define TWXXXX {					\
-	next : NULL,					\
-	module : NULL,					\
-	proc_dir : &tw_scsi_proc_entry,			\
-	proc_info : tw_scsi_proc_info,			\
-	name : "3ware Storage Controller",		\
-	detect : tw_scsi_detect,			\
-	release : tw_scsi_release,			\
-	info : NULL,					\
-	ioctl : NULL,					\
-	command : NULL,					\
-	queuecommand : tw_scsi_queue,			\
-	eh_strategy_handler : NULL,			\
-	eh_abort_handler : tw_scsi_eh_abort,		\
-	eh_device_reset_handler : NULL,			\
-	abort : NULL,					\
-	reset : NULL,					\
-	slave_attach : NULL,				\
-	bios_param : tw_scsi_biosparam,			\
-	can_queue : TW_Q_LENGTH,			\
-	this_id: -1,					\
-	sg_tablesize : TW_MAX_SGL_LENGTH,		\
-	cmd_per_lun: TW_MAX_CMDS_PER_LUN,		\
-	present : 0,					\
-	unchecked_isa_dma : 0,				\
-	use_clustering : ENABLE_CLUSTERING,		\
-	use_new_eh_code : 1				\
-}
-#endif /* version < v2.2.?? */
 #endif /* HOSTS_C */
 #endif /* _3W_XXXX_H */

@@ -37,7 +37,7 @@
 #include "../scsi/sd.h"
 
 #include "usb.h"
-#include "usb_scsi.h"
+#include "usb_storage.h"
 
 /* direction table -- this indicates the direction of the data
  * transfer for each command code -- a 1 indicates input
@@ -957,6 +957,8 @@ static int pop_CB_status(Scsi_Cmnd *srb)
 			return USB_STOR_TRANSPORT_ERROR;
 		}
 	}
+	US_DEBUGP("pop_CB_status, reached end of function\n");
+	return USB_STOR_TRANSPORT_ERROR;
 }
 
 static int Bulk_reset(struct us_data *us)

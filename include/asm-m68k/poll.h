@@ -11,6 +11,7 @@
 #define POLLWRNORM	POLLOUT
 #define POLLRDBAND	128
 #define POLLWRBAND	256
+#define POLLMSG		0x0400
 
 struct pollfd {
 	int fd;

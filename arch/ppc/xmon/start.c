@@ -70,13 +70,22 @@ xmon_map_scc(void)
 		sccd = sccc + (0xf3013030 - 0xf3013020);
 #endif
 	}
-	else
+	else if ( _machine & _MACH_chrp )
 	{
 		/* should already be mapped by the kernel boot */
 		sccc = (volatile unsigned char *) (isa_io_base + 0x3fd);
 		sccd = (volatile unsigned char *) (isa_io_base + 0x3f8);
 		TXRDY = 0x20;
 		RXRDY = 1;
+	}
+	else if ( _machine & _MACH_gemini )
+	{
+		/* should already be mapped by the kernel boot */
+		sccc = (volatile unsigned char *) 0xffeffb0d;
+		sccd = (volatile unsigned char *) 0xffeffb08;
+		TXRDY = 0x20;
+		RXRDY = 1;
+		console = 1;
 	}
 }
 
@@ -226,7 +235,7 @@ static unsigned char scc_inittab[] = {
 void
 xmon_init_scc()
 {
-	if ( _machine == _MACH_chrp )
+	if ( _machine & (_MACH_chrp|_MACH_gemini) )
 	{
 		sccd[3] = 0x83; eieio();	/* LCR = 8N1 + DLAB */
 		sccd[0] = 3; eieio();		/* DLL = 38400 baud */
@@ -235,7 +244,7 @@ xmon_init_scc()
 		sccd[3] = 3; eieio();		/* LCR = 8N1 */
 		sccd[1] = 0; eieio();		/* IER = 0 */
 	}
-	else
+	else if ( _machine == _MACH_Pmac )
 	{
 		int i, x;
 

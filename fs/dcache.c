@@ -412,20 +412,18 @@ void shrink_dcache_parent(struct dentry * parent)
  */
 int shrink_dcache_memory(int priority, unsigned int gfp_mask, zone_t * zone)
 {
-	if (gfp_mask & __GFP_IO) {
-		int count = 0;
-		lock_kernel();
-		if (priority)
-			count = dentry_stat.nr_unused / priority;
-		prune_dcache(count);
-		unlock_kernel();
-		/* FIXME: kmem_cache_shrink here should tell us
-		   the number of pages freed, and it should
-		   work in a __GFP_DMA/__GFP_HIGHMEM behaviour
-		   to free only the interesting pages in
-		   function of the needs of the current allocation. */
-		kmem_cache_shrink(dentry_cache);
-	}
+	int count = 0;
+	lock_kernel();
+	if (priority)
+		count = dentry_stat.nr_unused / priority;
+	prune_dcache(count);
+	unlock_kernel();
+	/* FIXME: kmem_cache_shrink here should tell us
+	   the number of pages freed, and it should
+	   work in a __GFP_DMA/__GFP_HIGHMEM behaviour
+	   to free only the interesting pages in
+	   function of the needs of the current allocation. */
+	kmem_cache_shrink(dentry_cache);
 
 	return 0;
 }

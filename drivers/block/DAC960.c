@@ -1009,6 +1009,45 @@ static boolean DAC960_ReportDeviceConfiguration(DAC960_Controller_T *Controller)
 }
 
 
+static int DAC_merge_fn(request_queue_t *q, struct request *req, 
+			struct buffer_head *bh) 
+{
+	int max_segments;
+	DAC960_Controller_T * Controller = q->queuedata;
+
+	max_segments = Controller->MaxSegmentsPerRequest[MINOR(req->rq_dev)];
+
+	if (req->bhtail->b_data + req->bhtail->b_size != bh->b_data) {
+		if (req->nr_segments < max_segments) {
+			req->nr_segments++;
+			return 1;
+		}
+		return 0;
+	}
+
+	return 1;
+}
+
+static int DAC_merge_requests_fn(request_queue_t *q,
+				 struct request *req,
+				 struct request *next)
+{
+	int max_segments;
+	DAC960_Controller_T * Controller = q->queuedata;
+	int total_segments = req->nr_segments + next->nr_segments;
+
+	max_segments = Controller->MaxSegmentsPerRequest[MINOR(req->rq_dev)];
+
+	if (req->bhtail->b_data + req->bhtail->b_size == next->bh->b_data)
+		total_segments--;
+    
+	if (total_segments > max_segments)
+		return 0;
+
+	req->nr_segments = total_segments;
+	return 1;
+}
+
 /*
   DAC960_RegisterBlockDevice registers the Block Device structures
   associated with Controller.
@@ -1016,6 +1055,8 @@ static boolean DAC960_ReportDeviceConfiguration(DAC960_Controller_T *Controller)
 
 static boolean DAC960_RegisterBlockDevice(DAC960_Controller_T *Controller)
 {
+  request_queue_t * q;
+
   static void (*RequestFunctions[DAC960_MaxControllers])(request_queue_t *) =
     { DAC960_RequestFunction0, DAC960_RequestFunction1,
       DAC960_RequestFunction2, DAC960_RequestFunction3,
@@ -1036,8 +1077,13 @@ static boolean DAC960_RegisterBlockDevice(DAC960_Controller_T *Controller)
   /*
     Initialize the I/O Request Function.
   */
-  blk_init_queue(BLK_DEFAULT_QUEUE(MajorNumber), 
-		 RequestFunctions[Controller->ControllerNumber]);
+  q = BLK_DEFAULT_QUEUE(MajorNumber);
+  blk_init_queue(q, RequestFunctions[Controller->ControllerNumber]);
+  blk_queue_headactive(q, 0);
+  q->merge_fn = DAC_merge_fn;
+  q->merge_requests_fn = DAC_merge_requests_fn;
+  q->queuedata = (void *) Controller;
+
   /*
     Initialize the Disk Partitions array, Partition Sizes array, Block Sizes
     array, Max Sectors per Request array, and Max Segments per Request array.
@@ -1054,7 +1100,6 @@ static boolean DAC960_RegisterBlockDevice(DAC960_Controller_T *Controller)
   Controller->GenericDiskInfo.sizes = Controller->PartitionSizes;
   blksize_size[MajorNumber] = Controller->BlockSizes;
   max_sectors[MajorNumber] = Controller->MaxSectorsPerRequest;
-  max_segments[MajorNumber] = Controller->MaxSegmentsPerRequest;
   /*
     Initialize Read Ahead to 128 sectors.
   */

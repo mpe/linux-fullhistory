@@ -60,15 +60,11 @@ void __up(struct semaphore *sem)
  *
  */
 
-#define DOWN_VAR				\
-	struct task_struct *tsk = current;	\
-	wait_queue_t wait;			\
-	init_waitqueue_entry(&wait, tsk);
 
 #define DOWN_HEAD(task_state)						\
 									\
 									\
-	tsk->state = (task_state);					\
+	current->state = (task_state);					\
 	add_wait_queue(&sem->wait, &wait);				\
 									\
 	/*								\
@@ -89,14 +85,15 @@ void __up(struct semaphore *sem)
 	for (;;) {
 
 #define DOWN_TAIL(task_state)			\
-		tsk->state = (task_state);	\
+		current->state = (task_state);	\
 	}					\
-	tsk->state = TASK_RUNNING;		\
+	current->state = TASK_RUNNING;		\
 	remove_wait_queue(&sem->wait, &wait);
 
 void __down(struct semaphore * sem)
 {
-	DOWN_VAR
+	DECLARE_WAITQUEUE(wait, current);
+
 	DOWN_HEAD(TASK_UNINTERRUPTIBLE)
 	if (waking_non_zero(sem))
 		break;
@@ -106,11 +103,12 @@ void __down(struct semaphore * sem)
 
 int __down_interruptible(struct semaphore * sem)
 {
+	DECLARE_WAITQUEUE(wait, current);
 	int ret = 0;
-	DOWN_VAR
+
 	DOWN_HEAD(TASK_INTERRUPTIBLE)
 
-	ret = waking_non_zero_interruptible(sem, tsk);
+	ret = waking_non_zero_interruptible(sem, current);
 	if (ret)
 	{
 		if (ret == 1)
@@ -126,4 +124,112 @@ int __down_interruptible(struct semaphore * sem)
 int __down_trylock(struct semaphore * sem)
 {
 	return waking_non_zero_trylock(sem);
+}
+
+
+/* Wait for the lock to become unbiased.  Readers
+ * are non-exclusive. =)
+ */
+void down_read_failed(struct rw_semaphore *sem)
+{
+	DECLARE_WAITQUEUE(wait, current);
+
+	__up_read(sem);	/* this takes care of granting the lock */
+
+	add_wait_queue(&sem->wait, &wait);
+
+	while (atomic_read(&sem->count) < 0) {
+		set_task_state(current, TASK_UNINTERRUPTIBLE);
+		if (atomic_read(&sem->count) >= 0)
+			break;
+		schedule();
+	}
+
+	remove_wait_queue(&sem->wait, &wait);
+	current->state = TASK_RUNNING;
+}
+
+void down_read_failed_biased(struct rw_semaphore *sem)
+{
+	DECLARE_WAITQUEUE(wait, current);
+
+	add_wait_queue(&sem->wait, &wait);	/* put ourselves at the head of the list */
+
+	for (;;) {
+		if (sem->read_bias_granted && xchg(&sem->read_bias_granted, 0))
+			break;
+		set_task_state(current, TASK_UNINTERRUPTIBLE);
+                if (!sem->read_bias_granted)
+			schedule();
+	}
+
+	remove_wait_queue(&sem->wait, &wait);
+	current->state = TASK_RUNNING;
+}
+
+
+/* Wait for the lock to become unbiased. Since we're
+ * a writer, we'll make ourselves exclusive.
+ */
+void down_write_failed(struct rw_semaphore *sem)
+{
+	DECLARE_WAITQUEUE(wait, current);
+
+	__up_write(sem);	/* this takes care of granting the lock */
+
+	add_wait_queue_exclusive(&sem->wait, &wait);
+
+	while (atomic_read(&sem->count) < 0) {
+		set_task_state(current, TASK_UNINTERRUPTIBLE | TASK_EXCLUSIVE);
+		if (atomic_read(&sem->count) >= 0)
+			break;	/* we must attempt to aquire or bias the lock */
+		schedule();
+	}
+
+	remove_wait_queue(&sem->wait, &wait);
+	current->state = TASK_RUNNING;
+}
+
+void down_write_failed_biased(struct rw_semaphore *sem)
+{
+	DECLARE_WAITQUEUE(wait, current);
+
+	add_wait_queue_exclusive(&sem->write_bias_wait, &wait);	/* put ourselves at the end of the list */
+
+	for (;;) {
+		if (sem->write_bias_granted && xchg(&sem->write_bias_granted, 0))
+			break;
+		set_task_state(current, TASK_UNINTERRUPTIBLE | TASK_EXCLUSIVE);
+		if (!sem->write_bias_granted)
+			schedule();
+	}
+
+	remove_wait_queue(&sem->write_bias_wait, &wait);
+	current->state = TASK_RUNNING;
+
+	/* if the lock is currently unbiased, awaken the sleepers
+	 * FIXME: this wakes up the readers early in a bit of a
+	 * stampede -> bad!
+	 */
+	if (atomic_read(&sem->count) >= 0)
+		wake_up(&sem->wait);
+}
+
+
+/* Called when someone has done an up that transitioned from
+ * negative to non-negative, meaning that the lock has been
+ * granted to whomever owned the bias.
+ */
+void rwsem_wake_readers(struct rw_semaphore *sem)
+{
+	if (xchg(&sem->read_bias_granted, 1))
+		BUG();
+	wake_up(&sem->wait);
+}
+
+void rwsem_wake_writer(struct rw_semaphore *sem)
+{
+	if (xchg(&sem->write_bias_granted, 1))
+		BUG();
+	wake_up(&sem->write_bias_wait);
 }

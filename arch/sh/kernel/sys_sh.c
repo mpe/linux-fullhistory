@@ -170,9 +170,9 @@ asmlinkage int sys_uname(struct old_utsname * name)
 	int err;
 	if (!name)
 		return -EFAULT;
-	down(&uts_sem);
+	down_read(&uts_sem);
 	err=copy_to_user(name, &system_utsname, sizeof (*name));
-	up(&uts_sem);
+	up_read(&uts_sem);
 	return err?-EFAULT:0;
 }
 

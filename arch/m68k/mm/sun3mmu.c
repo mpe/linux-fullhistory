@@ -80,7 +80,7 @@ unsigned long __init paging_init(unsigned long start_mem,
 		/* now change pg_table to kernel virtual addresses */
 		pg_table = (pte_t *) __va ((unsigned long) pg_table);
 		for (i=0; i<PTRS_PER_PTE; ++i, ++pg_table) {
-			pte_t pte = mk_pte (address, PAGE_INIT);
+			pte_t pte = __mk_pte(address, PAGE_INIT);
 			if (address >= end_mem)
 				pte_val (pte) = 0;
 			set_pte (pg_table, pte);

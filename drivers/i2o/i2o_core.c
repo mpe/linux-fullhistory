@@ -1411,24 +1411,30 @@ int i2o_init_outbound_q(struct i2o_controller *c)
 	}
 	memset(status, 0, 4);
 	
-	msg[0]= EIGHT_WORD_MSG_SIZE| TRL_OFFSET_6;
+	msg[0]= EIGHT_WORD_MSG_SIZE| SGL_OFFSET_6;
 	msg[1]= I2O_CMD_OUTBOUND_INIT<<24 | HOST_TID<<12 | ADAPTER_TID;
 	msg[2]= core_context;
 	msg[3]= 0x0106;			/* Transaction context */
 	msg[4]= 4096;			/* Host page frame size */
-	msg[5]= MSG_FRAME_SIZE<<16|0x80;	/* Outbound msg frame size and Initcode */
+	/* Frame size is in words. Pick 128, its what everyone elses uses and
+	   other sizes break some adapters. */
+	msg[5]= (MSG_FRAME_SIZE>>2)<<16|0x80;	/* Outbound msg frame size and Initcode */
 	msg[6]= 0xD0000004;		/* Simple SG LE, EOB */
-	msg[7]= virt_to_phys(status);
+	msg[7]= virt_to_bus(status);
 
 	i2o_post_message(c,m);
 	
 	barrier();	
 	time=jiffies;
-	while(status[0]!=I2O_CMD_OUTBOUND_INIT_COMPLETE)
+	while(status[0]<0x02)
 	{
 		if((jiffies-time)>=5*HZ)
 		{
-			printk(KERN_ERR "%s: Outbound Q initialize timeout.\n",
+			if(status[0]==0x00)
+				printk(KERN_ERR "%s: Ignored queue initialize request.\n",
+					c->name);
+			else
+				printk(KERN_ERR "%s: Outbound queue initialize timeout.\n",
 					c->name);
 			kfree(status);
 			return -ETIMEDOUT;
@@ -1437,6 +1443,13 @@ int i2o_init_outbound_q(struct i2o_controller *c)
 		barrier();
 	}
 
+	if(status[0] != I2O_CMD_OUTBOUND_INIT_COMPLETE)
+	{
+		printk(KERN_ERR "%s: Outbound queue initialize rejected (%d).\n",
+			c->name, status[0]);
+		kfree(status);
+		return -EINVAL;
+	}
 	/* Alloc space for IOP's outbound queue message frames */
 
 	c->page_frame = kmalloc(MSG_POOL_SIZE, GFP_KERNEL);

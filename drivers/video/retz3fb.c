@@ -1423,85 +1423,93 @@ int __init retz3fb_setup(char *options)
 int __init retz3fb_init(void)
 {
 	unsigned long board_addr, board_size;
-	unsigned int key;
-	const struct ConfigDev *cd;
+	struct zorro_dev *z = NULL;
 	volatile unsigned char *regs;
 	struct retz3fb_par par;
 	struct retz3_fb_info *zinfo;
 	struct fb_info *fb_info;
 	short i;
+	int res = -ENXIO;
 
-	if (!(key = zorro_find(ZORRO_PROD_MACROSYSTEMS_RETINA_Z3, 0, 0)))
-		return -ENXIO;
-
-	if (!(zinfo = kmalloc(sizeof(struct retz3_fb_info), GFP_KERNEL)))
-		return -ENOMEM;
-	memset(zinfo, 0, sizeof(struct retz3_fb_info));
-
-	cd = zorro_get_board (key);
-	zorro_config_board (key, 0);
-	board_addr = (unsigned long)cd->cd_BoardAddr;
-	board_size = (unsigned long)cd->cd_BoardSize;
-
-	zinfo->base = ioremap(board_addr, board_size);
-	zinfo->regs = zinfo->base;
-	zinfo->fbmem = zinfo->base + VIDEO_MEM_OFFSET;
-	/* Get memory size - for now we asume its a 4MB board */
-	zinfo->fbsize = 0x00400000; /* 4 MB */
-	zinfo->physregs = board_addr;
-	zinfo->physfbmem = board_addr + VIDEO_MEM_OFFSET;
-
-	fb_info = fbinfo(zinfo);
-
-	for (i = 0; i < 256; i++){
-		for (i = 0; i < 256; i++){
-			zinfo->color_table[i][0] = i;
-			zinfo->color_table[i][1] = i;
-			zinfo->color_table[i][2] = i;
+	while ((z = zorro_find_device(ZORRO_PROD_MACROSYSTEMS_RETINA_Z3, z))) {
+		board_addr = z->resource.start;
+		board_size = z->resource.end-z->resource.start+1;
+		if (!request_mem_region(board_addr, 0x0c00000,
+			    		"ncr77c32blt")) {
+			continue;
+		if (!request_mem_region(board_addr+VIDEO_MEM_OFFSET,
+			    		0x00400000, "RAM"))
+			release_mem_region(board_addr, 0x00c00000);
+			continue;
 		}
+		strcpy(z->name, "Retina Z3 Graphics ");
+		if (!(zinfo = kmalloc(sizeof(struct retz3_fb_info),
+				      GFP_KERNEL)))
+			return -ENOMEM;
+		memset(zinfo, 0, sizeof(struct retz3_fb_info));
+
+		zinfo->base = ioremap(board_addr, board_size);
+		zinfo->regs = zinfo->base;
+		zinfo->fbmem = zinfo->base + VIDEO_MEM_OFFSET;
+		/* Get memory size - for now we asume its a 4MB board */
+		zinfo->fbsize = 0x00400000; /* 4 MB */
+		zinfo->physregs = board_addr;
+		zinfo->physfbmem = board_addr + VIDEO_MEM_OFFSET;
+
+		fb_info = fbinfo(zinfo);
+
+		for (i = 0; i < 256; i++){
+			for (i = 0; i < 256; i++){
+				zinfo->color_table[i][0] = i;
+				zinfo->color_table[i][1] = i;
+				zinfo->color_table[i][2] = i;
+			}
+		}
+
+		regs = zinfo->regs;
+		/* Disable hardware cursor */
+		seq_w(regs, SEQ_CURSOR_Y_INDEX, 0x00);
+
+		retz3_setcolreg (255, 56<<8, 100<<8, 160<<8, 0, fb_info);
+		retz3_setcolreg (254, 0, 0, 0, 0, fb_info);
+
+		strcpy(fb_info->modename, retz3fb_name);
+		fb_info->changevar = NULL;
+		fb_info->node = -1;
+		fb_info->fbops = &retz3fb_ops;
+		fb_info->disp = &zinfo->disp;
+		fb_info->switch_con = &z3fb_switch;
+		fb_info->updatevar = &z3fb_updatevar;
+		fb_info->blank = &z3fb_blank;
+		fb_info->flags = FBINFO_FLAG_DEFAULT;
+		strncpy(fb_info->fontname, fontname, 40);
+
+		if (z3fb_mode == -1)
+			retz3fb_default = retz3fb_predefined[0].var;
+
+		retz3_decode_var(&retz3fb_default, &par);
+		retz3_encode_var(&retz3fb_default, &par);
+
+		do_fb_set_var(fb_info, &retz3fb_default, 0);
+		retz3fb_get_var(&zinfo->disp.var, -1, fb_info);
+
+		retz3fb_set_disp(-1, fb_info);
+
+		do_install_cmap(0, fb_info);
+
+		if (register_framebuffer(fb_info) < 0)
+			return -EINVAL;
+
+		printk(KERN_INFO "fb%d: %s frame buffer device, using %ldK of "
+		       "video memory\n", GET_FB_IDX(fb_info->node),
+		       fb_info->modename, zinfo->fbsize>>10);
+
+		/* TODO: This driver cannot be unloaded yet */
+		MOD_INC_USE_COUNT;
+
+		res = 0;
 	}
-
-	regs = zinfo->regs;
-	/* Disable hardware cursor */
-	seq_w(regs, SEQ_CURSOR_Y_INDEX, 0x00);
-
-	retz3_setcolreg (255, 56<<8, 100<<8, 160<<8, 0, fb_info);
-	retz3_setcolreg (254, 0, 0, 0, 0, fb_info);
-
-	strcpy(fb_info->modename, retz3fb_name);
-	fb_info->changevar = NULL;
-	fb_info->node = -1;
-	fb_info->fbops = &retz3fb_ops;
-	fb_info->disp = &zinfo->disp;
-	fb_info->switch_con = &z3fb_switch;
-	fb_info->updatevar = &z3fb_updatevar;
-	fb_info->blank = &z3fb_blank;
-	fb_info->flags = FBINFO_FLAG_DEFAULT;
-	strncpy(fb_info->fontname, fontname, 40);
-
-	if (z3fb_mode == -1)
-		retz3fb_default = retz3fb_predefined[0].var;
-
-	retz3_decode_var(&retz3fb_default, &par);
-	retz3_encode_var(&retz3fb_default, &par);
-
-	do_fb_set_var(fb_info, &retz3fb_default, 0);
-	retz3fb_get_var(&zinfo->disp.var, -1, fb_info);
-
-	retz3fb_set_disp(-1, fb_info);
-
-	do_install_cmap(0, fb_info);
-
-	if (register_framebuffer(fb_info) < 0)
-		return -EINVAL;
-
-	printk(KERN_INFO "fb%d: %s frame buffer device, using %ldK of video memory\n",
-	       GET_FB_IDX(fb_info->node), fb_info->modename,zinfo->fbsize>>10);
-
-	/* TODO: This driver cannot be unloaded yet */
-	MOD_INC_USE_COUNT;
-
-	return 0;
+	return res;
 }
 
 

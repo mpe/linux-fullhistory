@@ -3,7 +3,7 @@
  *
  *    Zorro Bus Services
  *
- *    Copyright (C) 1995-1998 Geert Uytterhoeven
+ *    Copyright (C) 1995-2000 Geert Uytterhoeven
  *
  *    This file is subject to the terms and conditions of the GNU General Public
  *    License.  See the file COPYING in the main directory of this archive
@@ -20,120 +20,47 @@
 #include <asm/amigahw.h>
 
 
+extern void zorro_namedevice(struct zorro_dev *dev);
+
     /*
-     *  Expansion Devices
+     *  Zorro Expansion Devices
      */
 
 u_int zorro_num_autocon = 0;
-struct ConfigDev zorro_autocon[ZORRO_NUM_AUTO];
-static u32 zorro_autocon_parts[ZORRO_NUM_AUTO] = { 0, };
+struct zorro_dev zorro_autocon[ZORRO_NUM_AUTO];
 
-   
+
+#if 0
     /*
-     *  Find the key for the next unconfigured expansion device of a specific
-     *  type.
-     *
-     *  Part is a device specific number (0 <= part <= 31) to allow for the
-     *  independent configuration of independent parts of an expansion board.
-     *  Thanks to Jes Soerensen for this idea!
-     *
-     *  Index is used to specify the first board in the autocon list
-     *  to be tested. It was inserted in order to solve the problem
-     *  with the GVP boards that use the same product code, but
-     *  it should help if there are other companies which use the same
-     *  method as GVP. Drivers for boards which are not using this
-     *  method do not need to think of this - just set index = 0.
-     *
-     *  Example:
-     *
-     *      while ((key = zorro_find(ZORRO_PROD_MY_BOARD, MY_PART, 0))) {
-     *      	cd = zorro_get_board(key);
-     *      	initialise_this_board;
-     *      	zorro_config_board(key, MY_PART);
-     *      }
+     *  Zorro Bus Resources
+     *  Order _does_ matter! (see code below)
      */
 
-u_int zorro_find(zorro_id id, u_int part, u_int index)
+static struct resource zorro_res[4] = {
+    { "Zorro II exp", 0x00e80000, 0x00efffff },
+    { "Zorro II mem", 0x00200000, 0x009fffff },
+    { "Zorro III exp", 0xff000000, 0xffffffff },
+    { "Zorro III cfg", 0x40000000, 0x7fffffff }
+};
+#endif
+   
+
+    /*
+     *  Find Zorro Devices
+     */
+
+struct zorro_dev *zorro_find_device(zorro_id id, struct zorro_dev *from)
 {
-    u16 manuf = ZORRO_MANUF(id);
-    u8 prod = ZORRO_PROD(id);
-    u8 epc = ZORRO_EPC(id);
-    u_int key;
-    const struct ConfigDev *cd;
-    u32 addr;
+    struct zorro_dev *dev;
 
     if (!MACH_IS_AMIGA || !AMIGAHW_PRESENT(ZORRO))
-	return 0;
-
-    if (part > 31) {
-	printk("zorro_find: bad part %d\n", part);
-	return 0;
-    }
-
-    for (key = index+1; key <= zorro_num_autocon; key++) {
-	cd = &zorro_autocon[key-1];
-	addr = (u32)cd->cd_BoardAddr;
-	if ((cd->cd_Rom.er_Manufacturer == manuf) &&
-	    (cd->cd_Rom.er_Product == prod) &&
-	    !(zorro_autocon_parts[key-1] & (1<<part)) &&
-	    (manuf != ZORRO_MANUF(ZORRO_PROD_GVP_EPC_BASE) ||
-	     prod != ZORRO_PROD(ZORRO_PROD_GVP_EPC_BASE) || /* GVP quirk */
-	     (*(u16 *)ZTWO_VADDR(addr+0x8000) & GVP_PRODMASK) == epc))
-	    return key;
-    }
-    return 0;
-}
-
-
-    /*
-     *  Get the board corresponding to a specific key
-     */
-
-const struct ConfigDev *zorro_get_board(u_int key)
-{
-    if ((key < 1) || (key > zorro_num_autocon)) {
-	printk("zorro_get_board: bad key %d\n", key);
 	return NULL;
-    }
-    return &zorro_autocon[key-1];
-}
 
-
-    /*
-     *  Mark a part of a board as configured
-     */
-
-void zorro_config_board(u_int key, u_int part)
-{
-    if ((key < 1) || (key > zorro_num_autocon))
-	printk("zorro_config_board: bad key %d\n", key);
-    else if (part > 31)
-	printk("zorro_config_board: bad part %d\n", part);
-    else if (zorro_autocon_parts[key-1] & (1<<part))
-	printk("zorro_config_board: key %d part %d is already configured\n",
-	       key, part);
-    else
-	zorro_autocon_parts[key-1] |= 1<<part;
-}
-
-
-    /*
-     *  Mark a part of a board as unconfigured
-     *
-     *  This function is mainly intended for the unloading of LKMs
-     */
-
-void zorro_unconfig_board(u_int key, u_int part)
-{
-    if ((key < 1) || (key > zorro_num_autocon))
-	printk("zorro_unconfig_board: bad key %d\n", key);
-    else if (part > 31)
-	printk("zorro_unconfig_board: bad part %d\n", part);
-    else if (!(zorro_autocon_parts[key-1] & (1<<part)))
-	printk("zorro_config_board: key %d part %d is not yet configured\n",
-	       key, part);
-    else
-	zorro_autocon_parts[key-1] &= ~(1<<part);
+    dev = from ? from+1 : &zorro_autocon[0];
+    for (; dev < zorro_autocon+zorro_num_autocon; dev++)
+	if (id == ZORRO_WILDCARD || id == dev->id)
+	    return dev;
+    return NULL;
 }
 
 
@@ -153,17 +80,16 @@ void zorro_unconfig_board(u_int key, u_int part)
 u32 zorro_unused_z2ram[4] = { 0, 0, 0, 0 };
 
 
-static void __init mark_region(u32 addr, u_int size, int flag)
+static void __init mark_region(unsigned long start, unsigned long end,
+			       int flag)
 {
-    u32 start, end;
+    if (flag)
+	start += Z2RAM_CHUNKMASK;
+    else
+	end += Z2RAM_CHUNKMASK;
+    start &= ~Z2RAM_CHUNKMASK;
+    end &= ~Z2RAM_CHUNKMASK;
 
-    if (flag) {
-	start = (addr+Z2RAM_CHUNKMASK) & ~Z2RAM_CHUNKMASK;
-	end = (addr+size) & ~Z2RAM_CHUNKMASK;
-    } else {
-	start = addr & ~Z2RAM_CHUNKMASK;
-	end = (addr+size+Z2RAM_CHUNKMASK) & ~Z2RAM_CHUNKMASK;
-    }
     if (end <= Z2RAM_START || start >= Z2RAM_END)
 	return;
     start = start < Z2RAM_START ? 0x00000000 : start-Z2RAM_START;
@@ -185,27 +111,46 @@ static void __init mark_region(u32 addr, u_int size, int flag)
 
 void __init zorro_init(void)
 {
+    struct zorro_dev *dev;
     u_int i;
 
-    if (!MACH_IS_AMIGA || !AMIGAHW_PRESENT(ZORRO)) {
-	printk("Zorro: No Zorro bus detected\n");
+    if (!MACH_IS_AMIGA || !AMIGAHW_PRESENT(ZORRO))
 	return;
-    }
 
     printk("Zorro: Probing AutoConfig expansion devices: %d device%s\n",
 	   zorro_num_autocon, zorro_num_autocon == 1 ? "" : "s");
 
+    /* Request the resources */
+#if 0
+    for (i = 0; i < (AMIGAHW_PRESENT(ZORRO3) ? 4 : 2); i++)
+	request_resource(&iomem_resource, &zorro_res[i]);
+#endif
+    for (i = 0; i < zorro_num_autocon; i++) {
+	dev = &zorro_autocon[i];
+	dev->id = (dev->rom.er_Manufacturer<<16) | (dev->rom.er_Product<<8);
+	if (dev->id == ZORRO_PROD_GVP_EPC_BASE) {
+	    /* GVP quirk */
+	    unsigned long magic = dev->resource.start+0x8000;
+	    dev->id |= *(u16 *)ZTWO_VADDR(magic) & GVP_PRODMASK;
+	}
+	dev->resource.name = dev->name;
+	zorro_namedevice(dev);
+	if (request_resource(&iomem_resource, &dev->resource))
+	    printk("zorro_init: cannot request resource for board %d\n", i);
+    }
+
     /* Mark all available Zorro II memory */
     for (i = 0; i < zorro_num_autocon; i++) {
-	const struct ConfigDev *cd = &zorro_autocon[i];
-	if (cd->cd_Rom.er_Type & ERTF_MEMLIST)
-	    mark_region((u32)cd->cd_BoardAddr, cd->cd_BoardSize, 1);
+	dev = &zorro_autocon[i];
+	if (dev->rom.er_Type & ERTF_MEMLIST)
+	    mark_region(dev->resource.start, dev->resource.end+1, 1);
     }
 
     /* Unmark all used Zorro II memory */
     for (i = 0; i < m68k_num_memory; i++)
 	if (m68k_memory[i].addr < 16*1024*1024)
-	    mark_region(m68k_memory[i].addr, m68k_memory[i].size, 0);
+	    mark_region(m68k_memory[i].addr,
+			m68k_memory[i].addr+m68k_memory[i].size, 0);
 
 #ifdef CONFIG_PROC_FS
     zorro_proc_init();

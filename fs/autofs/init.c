@@ -21,25 +21,18 @@ static struct file_system_type autofs_fs_type = {
 	NULL
 };
 
-#ifdef MODULE
-int init_module(void)
+static int __init init_autofs_fs(void)
 {
 	return register_filesystem(&autofs_fs_type);
 }
 
-void cleanup_module(void)
+static void __exit exit_autofs_fs(void)
 {
 	unregister_filesystem(&autofs_fs_type);
 }
 
-#else /* MODULE */
-
-int __init init_autofs_fs(void)
-{
-	return register_filesystem(&autofs_fs_type);
-}
-
-#endif /* !MODULE */
+module_init(init_autofs_fs) 
+module_exit(exit_autofs_fs)
 
 #ifdef DEBUG
 void autofs_say(const char *name, int len)

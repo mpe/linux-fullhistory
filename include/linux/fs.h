@@ -19,6 +19,7 @@
 #include <linux/dcache.h>
 #include <linux/stat.h>
 #include <linux/cache.h>
+#include <linux/stddef.h>
 
 #include <asm/atomic.h>
 #include <asm/bitops.h>
@@ -65,10 +66,6 @@ extern int max_super_blocks, nr_super_blocks;
 #define SPECIAL 4	/* For non-blockdevice requests in request queue */
 
 #define WRITERAW 5	/* raw write - don't play with buffer lists */
-
-#ifndef NULL
-#define NULL ((void *) 0)
-#endif
 
 #define NIL_FILP	((struct file *)0)
 #define SEL_IN		1

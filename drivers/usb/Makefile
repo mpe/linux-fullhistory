@@ -23,15 +23,15 @@ export-objs		:= usb.o input.o
 
 list-multi		:= usbcore.o
 usbcore-objs		:= usb.o usb-debug.o usb-core.o hub.o
-usb-scsi-objs		:= usb_scsi.o
+usb-storage-objs	:= usb_storage.o
 
 # Optional parts of multipart objects.
 
 ifeq ($(CONFIG_USB_DEVICEFS),y)
 	usbcore-objs	+= devio.o inode.o drivers.o devices.o
 endif
-ifeq ($(CONFIG_USB_SCSI_DEBUG),y)
-	usb-scsi-objs	+= usb_scsi_debug.o
+ifeq ($(CONFIG_USB_STORAGE_DEBUG),y)
+	usb-storage-objs	+= usb_storage_debug.o
 endif
 
 # Object file lists.
@@ -65,7 +65,7 @@ obj-$(CONFIG_USB_AUDIO)		+= audio.o
 obj-$(CONFIG_USB_CPIA)		+= cpia.o
 obj-$(CONFIG_USB_IBMCAM)	+= ibmcam.o
 obj-$(CONFIG_USB_DC2XX)		+= dc2xx.o
-obj-$(CONFIG_USB_SCSI)		+= usb-scsi.o
+obj-$(CONFIG_USB_STORAGE)	+= usb-storage.o
 obj-$(CONFIG_USB_USS720)	+= uss720.o
 obj-$(CONFIG_USB_DABUSB)	+= dabusb.o
 obj-$(CONFIG_USB_OV511)		+= ov511.o
@@ -105,5 +105,5 @@ include $(TOPDIR)/Rules.make
 usbcore.o: $(usbcore-objs)
 	$(LD) -r -o $@ $(usbcore-objs)
 
-usb-scsi.o: $(usb-scsi-objs)
-	$(LD) -r -o $@ $(usb-scsi-objs)
+usb-storage.o: $(usb-storage-objs)
+	$(LD) -r -o $@ $(usb-storage-objs)

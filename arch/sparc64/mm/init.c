@@ -1,4 +1,4 @@
-/*  $Id: init.c,v 1.143 1999/12/16 16:15:14 davem Exp $
+/*  $Id: init.c,v 1.144 2000/01/23 07:16:11 davem Exp $
  *  arch/sparc64/mm/init.c
  *
  *  Copyright (C) 1996-1999 David S. Miller (davem@caip.rutgers.edu)
@@ -39,8 +39,6 @@ unsigned long *sparc64_valid_addr_bitmap;
 
 /* Ugly, but necessary... -DaveM */
 unsigned long phys_base;
-
-static unsigned long totalram_pages = 0;
 
 /* get_new_mmu_context() uses "cache + 1".  */
 spinlock_t ctx_alloc_lock = SPIN_LOCK_UNLOCKED;
@@ -125,7 +123,7 @@ void show_mem(void)
 	show_free_areas();
 	printk("Free swap:       %6dkB\n",
 	       nr_swap_pages << (PAGE_SHIFT-10));
-	printk("%ld pages of RAM\n", totalram_pages);
+	printk("%ld pages of RAM\n", num_physpages);
 	printk("%d free pages\n", nr_free_pages());
 	printk("%d pages in page table cache\n",pgtable_cache_size);
 #ifndef __SMP__
@@ -1088,7 +1086,6 @@ void __init free_mem_map_range(struct page *first, struct page *last)
 		ClearPageReserved(mem_map + MAP_NR(first));
 		set_page_count(mem_map + MAP_NR(first), 1);
 		free_page((unsigned long)first);
-		totalram_pages++;
 		num_physpages++;
 
 		first = (struct page *)((unsigned long)first + PAGE_SIZE);
@@ -1180,7 +1177,7 @@ void __init mem_init(void)
 #ifdef DEBUG_BOOTMEM
 	prom_printf("mem_init: Calling free_all_bootmem().\n");
 #endif
-	num_physpages = totalram_pages = free_all_bootmem();
+	num_physpages = free_all_bootmem();
 #if 0
 	free_unused_mem_map();
 #endif
@@ -1202,7 +1199,6 @@ void __init mem_init(void)
 		memset(empty_pg_dir, 0, sizeof(empty_pg_dir));
 		addr += alias_base;
 		free_pgd_fast((pgd_t *)addr);
-		totalram_pages++;
 		num_physpages++;
 	}
 #endif
@@ -1245,14 +1241,13 @@ void free_initmem (void)
 		ClearPageReserved(p);
 		set_page_count(p, 1);
 		__free_page(p);
-		totalram_pages++;
 		num_physpages++;
 	}
 }
 
 void si_meminfo(struct sysinfo *val)
 {
-	val->totalram = totalram_pages;
+	val->totalram = num_physpages;
 	val->sharedram = 0;
 	val->freeram = nr_free_pages();
 	val->bufferram = atomic_read(&buffermem_pages);

@@ -138,10 +138,6 @@ void __init filesystem_setup(void)
 	init_efs_fs();
 #endif
 
-#ifdef CONFIG_AUTOFS_FS
-	init_autofs_fs();
-#endif
-
 #ifdef CONFIG_ADFS_FS
 	init_adfs_fs();
 #endif

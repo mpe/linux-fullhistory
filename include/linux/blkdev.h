@@ -25,7 +25,8 @@ struct request {
 	int errors;
 	unsigned long sector;
 	unsigned long nr_sectors;
-	unsigned long nr_segments;
+	unsigned int nr_segments;
+	unsigned int nr_hw_segments;
 	unsigned long current_nr_sectors;
 	void * special;
 	char * buffer;

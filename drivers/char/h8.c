@@ -19,7 +19,6 @@
 #include <linux/stddef.h>
 #include <linux/timer.h>
 #include <linux/fcntl.h>
-#include <linux/malloc.h>
 #include <linux/linkage.h>
 #include <linux/stat.h>
 #include <linux/proc_fs.h>
@@ -27,6 +26,8 @@
 #include <linux/lists.h>
 #include <linux/ioport.h>
 #include <linux/poll.h>
+#include <linux/init.h>
+#include <linux/slab.h>
 
 #define __KERNEL_SYSCALLS__
 #include <asm/unistd.h>
@@ -294,35 +295,7 @@ static void h8_intr(int irq, void *dev_id, struct pt_regs *regs)
 	return;
 }
 
-#ifdef MODULE
-
-int init_module(void)
-{
-        printk("H8 module at %X(Interrupt %d)\n", h8_base, h8_irq);
-        if(request_irq(h8_irq, h8_intr, SA_INTERRUPT, "h8", NULL))
-        {
-                printk("H8: error: IRQ %d is not free.\n", h8_irq);
-                return -EIO;
-        }
-
-        misc_register(&h8_device);
-        request_region(h8_base, 8, "h8");
-
-        create_proc_info_entry("driver/h8", 0, NULL, h8_get_info);
-
-	QUEUE_INIT(&h8_actq, link, h8_cmd_q_t *);
-	QUEUE_INIT(&h8_cmdq, link, h8_cmd_q_t *);
-	QUEUE_INIT(&h8_freeq, link, h8_cmd_q_t *);
-	h8_alloc_queues();
-
-	h8_hw_init();
-
-	kernel_thread(h8_monitor_thread, NULL, 0);
-
-        return 0;
-}
-
-void cleanup_module(void)
+static void __exit h8_cleanup (void)
 {
 	remove_proc_entry("driver/h8", NULL);
         misc_deregister(&h8_device);
@@ -330,16 +303,14 @@ void cleanup_module(void)
         free_irq(h8_irq, NULL);
 }
 
-#else /* MODULE */
-
-int h8_init(void)
+static int __init h8_init(void)
 {
         if(request_irq(h8_irq, h8_intr, SA_INTERRUPT, "h8", NULL))
         {
-                printk("H8: error: IRQ %d is not free\n", h8_irq);
+                printk(KERN_ERR "H8: error: IRQ %d is not free\n", h8_irq);
                 return -EIO;
         }
-        printk("H8 at 0x%x IRQ %d\n", h8_base, h8_irq);
+        printk(KERN_INFO "H8 at 0x%x IRQ %d\n", h8_base, h8_irq);
 
         create_proc_info_entry("driver/h8", 0, NULL, h8_get_info);
 
@@ -357,9 +328,11 @@ int h8_init(void)
 
         return 0;
 }
-#endif /* MODULE */
 
-void h8_hw_init(void)
+module_init(h8_init);
+module_exit(h8_cleanup);
+
+static void __init h8_hw_init(void)
 {
 	u_char	buf[H8_MAX_CMD_SIZE];
 

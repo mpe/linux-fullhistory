@@ -226,7 +226,7 @@ icside_build_dmatable(ide_drive_t *drive, int reading)
 	unsigned long addr, size;
 	unsigned char *virt_addr;
 	unsigned int count = 0;
-	dmasg_t *sg = (dmasg_t *)HWIF(drive)->dmatable;
+	dmasg_t *sg = (dmasg_t *)HWIF(drive)->dmatable_cpu;
 
 	do {
 		if (bh == NULL) {
@@ -393,7 +393,7 @@ icside_dmaproc(ide_dma_action_t func, ide_drive_t *drive)
 		 */
 		set_dma_speed(hwif->hw.dma, drive->drive_data);
 
-		set_dma_sg(hwif->hw.dma, (dmasg_t *)hwif->dmatable, count);
+		set_dma_sg(hwif->hw.dma, (dmasg_t *)hwif->dmatable_cpu, count);
 		set_dma_mode(hwif->hw.dma, reading ? DMA_MODE_READ
 			     : DMA_MODE_WRITE);
 
@@ -458,7 +458,7 @@ icside_setup_dma(ide_hwif_t *hwif, int autodma)
 	if (!table)
 		printk(" -- ERROR, unable to allocate DMA table\n");
 	else {
-		hwif->dmatable = (void *)table;
+		hwif->dmatable_cpu = (void *)table;
 		hwif->dmaproc = icside_dmaproc;
 		hwif->autodma = autodma;
 
@@ -466,7 +466,7 @@ icside_setup_dma(ide_hwif_t *hwif, int autodma)
 			", auto-enable" : "");
 	}
 
-	return hwif->dmatable != NULL;
+	return hwif->dmatable_cpu != NULL;
 }
 #endif
 

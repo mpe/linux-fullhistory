@@ -15,7 +15,7 @@
  *		ftp://prep.ai.mit.edu/pub/gnu/GPL
  *	Each contributing author retains all rights to their own work.
  *
- *  (C) 1998-1999 Ben Fennema
+ *  (C) 1998-2000 Ben Fennema
  *  (C) 1999 Stelias Computing Inc 
  *
  * HISTORY
@@ -39,14 +39,17 @@
 static void udf_pc_to_char(char *from, int fromlen, char *to)
 {
 	struct PathComponent *pc;
-	int elen = 0, len = 0;
+	int elen = 0;
 	char *p = to;
 
-	while (elen < fromlen) {
+	while (elen < fromlen)
+	{
 		pc = (struct PathComponent *)(from + elen);
-		switch (pc->componentType) {
+		switch (pc->componentType)
+		{
 			case 1:
-				if (pc->lengthComponentIdent == 0) {
+				if (pc->lengthComponentIdent == 0)
+				{
 					p = to;
 					*p++ = '/';
 				}
@@ -61,17 +64,16 @@ static void udf_pc_to_char(char *from, int fromlen, char *to)
 				/* that would be . - just ignore */
 				break;
 			case 5:
-				memcpy(p+len, pc->componentIdent,
-					pc->lengthComponentIdent);
+				memcpy(p, pc->componentIdent, pc->lengthComponentIdent);
 				p += pc->lengthComponentIdent;
 				*p++ = '/';
 		}
 		elen += sizeof(struct PathComponent) + pc->lengthComponentIdent;
 	}
-
-	if (p>to+1) {
+	if (p > to+1)
 		p[-1] = '\0';
-	}
+	else
+		p[0] = '\0';
 }
 
 static int udf_symlink_filler(struct dentry * dentry, struct page *page)
@@ -79,20 +81,20 @@ static int udf_symlink_filler(struct dentry * dentry, struct page *page)
 	struct inode *inode = dentry->d_inode;
 	struct buffer_head *bh = NULL;
 	char *symlink;
-	int err;
-
-	char *p = (char*)kmap(page);
+	int err = -EIO;
+	char *p = (char *)kmap(page);
 	
-	err = -EIO;
-	if (UDF_I_ALLOCTYPE(inode) == ICB_FLAG_AD_IN_ICB) {
-		bh = udf_tread(inode->i_sb, inode->i_ino,
-				inode->i_sb->s_blocksize);
+	if (UDF_I_ALLOCTYPE(inode) == ICB_FLAG_AD_IN_ICB)
+	{
+		bh = udf_tread(inode->i_sb, inode->i_ino, inode->i_sb->s_blocksize);
 
 		if (!bh)
 			goto out;
 
 		symlink = bh->b_data + udf_file_entry_alloc_offset(inode);
-	} else {
+	}
+	else
+	{
 		bh = bread(inode->i_dev, udf_block_map(inode, 0),
 				inode->i_sb->s_blocksize);
 
@@ -104,6 +106,7 @@ static int udf_symlink_filler(struct dentry * dentry, struct page *page)
 
 	udf_pc_to_char(symlink, inode->i_size, p);
 	udf_release_data(bh);
+
 	SetPageUptodate(page);
 	kunmap(page);
 	UnlockPage(page);
@@ -112,14 +115,29 @@ out:
 	SetPageError(page);
 	kunmap(page);
 	UnlockPage(page);
-	return -EIO;
+	return err;
 }
 
 /*
  * symlinks can't do much...
  */
 struct inode_operations udf_symlink_inode_operations = {
-	readlink:	page_readlink,
-	follow_link:	page_follow_link,
-	readpage:	udf_symlink_filler,
+	NULL,				/* no file-operations */
+	NULL,				/* create */
+	NULL,				/* lookup */
+	NULL,				/* link */
+	NULL,				/* unlink */
+	NULL,				/* symlink */
+	NULL,				/* mkdir */
+	NULL,				/* rmdir */
+	NULL,				/* mknod */
+	NULL,				/* rename */
+	page_readlink,		/* readlink */
+	page_follow_link,	/* follow_link */
+	NULL,				/* get_block */
+	udf_symlink_filler,	/* readpage */
+	NULL,				/* writepage */
+	NULL,				/* truncate */
+	NULL,				/* permission */
+	NULL				/* revalidate */
 };

@@ -148,7 +148,7 @@ static ssize_t camera_read (struct file *file,
 	 * they matter in the application protocol.
 	 */
 	for (retries = 0; retries < MAX_READ_RETRY; retries++) {
-		unsigned long		count;
+		int			count;
 		int			result;
 
 		if (signal_pending (current)) {
@@ -216,7 +216,7 @@ static ssize_t camera_write (struct file *file,
 		}
 		while (thistime) {
 			int		result;
-			unsigned long	count;
+			int		count;
 
 			if (signal_pending (current)) {
 				if (!bytes_written)

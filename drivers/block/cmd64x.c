@@ -228,6 +228,7 @@ static int cmd646_1_dmaproc (ide_dma_action_t func, ide_drive_t *drive)
 		dma_stat = inb(dma_base+2);		/* get DMA status */
 		outb(inb(dma_base)&~1, dma_base);	/* stop DMA */
 		outb(dma_stat|6, dma_base+2);		/* clear the INTR & ERROR bits */
+		ide_destroy_dmatable(drive);		/* and free any DMA resources */
 		return (dma_stat & 7) != 4;		/* verify good DMA status */
 	}
 

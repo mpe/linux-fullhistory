@@ -47,13 +47,8 @@
 #include <linux/modversions.h>
 #endif
 
-#ifdef MODULE
 #include <linux/module.h>
 #include <linux/version.h>
-#else
-#define MOD_INC_USE_COUNT
-#define MOD_DEC_USE_COUNT
-#endif
 
 #define KERNEL
 #include <linux/types.h>
@@ -66,7 +61,7 @@
 #include <asm/io.h>		/* for inb_p, outb_p, inb, outb, etc. */
 #include <asm/uaccess.h>	/* for get_user, etc. */
 #include <linux/wait.h>		/* for wait_queue */
-#include <linux/init.h>		/* for __init */
+#include <linux/init.h>		/* for __init, module_{init,exit} */
 #include <linux/poll.h>		/* for POLLIN, etc. */
 #include <linux/dtlk.h>		/* local header file for DoubleTalk values */
 
@@ -364,7 +359,7 @@ static int dtlk_release(struct inode *inode, struct file *file)
 	return 0;
 }
 
-int __init dtlk_init(void)
+static int __init dtlk_init(void)
 {
 	dtlk_port_lpc = 0;
 	dtlk_port_tts = 0;
@@ -385,13 +380,7 @@ int __init dtlk_init(void)
 	return 0;
 }
 
-#ifdef MODULE
-int init_module(void)
-{
-	return dtlk_init();
-}
-
-void cleanup_module(void)
+static void __exit dtlk_cleanup (void)
 {
 	dtlk_write_bytes("goodbye", 8);
 	current->state = TASK_INTERRUPTIBLE;
@@ -405,7 +394,8 @@ void cleanup_module(void)
 	release_region(dtlk_port_lpc, DTLK_IO_EXTENT);
 }
 
-#endif
+module_init(dtlk_init);
+module_exit(dtlk_cleanup);
 
 /* ------------------------------------------------------------------------ */
 

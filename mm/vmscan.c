@@ -33,7 +33,7 @@
  * using a process that no longer actually exists (it might
  * have died while we slept).
  */
-static int try_to_swap_out(struct vm_area_struct* vma, unsigned long address, pte_t * page_table, int gfp_mask, zone_t *zone)
+static int try_to_swap_out(struct vm_area_struct* vma, unsigned long address, pte_t * page_table, int gfp_mask)
 {
 	pte_t pte;
 	swp_entry_t entry;
@@ -58,9 +58,7 @@ static int try_to_swap_out(struct vm_area_struct* vma, unsigned long address, pt
 		goto out_failed;
 	}
 
-	if (PageReserved(page)
-	    || PageLocked(page)
-	    || (zone && (!memclass(page->zone, zone))))
+	if (PageReserved(page) || PageLocked(page))
 		goto out_failed;
 
 	/*
@@ -195,7 +193,7 @@ out_failed:
  * (C) 1993 Kai Petzke, wpp@marie.physik.tu-berlin.de
  */
 
-static inline int swap_out_pmd(struct vm_area_struct * vma, pmd_t *dir, unsigned long address, unsigned long end, int gfp_mask, zone_t *zone)
+static inline int swap_out_pmd(struct vm_area_struct * vma, pmd_t *dir, unsigned long address, unsigned long end, int gfp_mask)
 {
 	pte_t * pte;
 	unsigned long pmd_end;
@@ -217,7 +215,7 @@ static inline int swap_out_pmd(struct vm_area_struct * vma, pmd_t *dir, unsigned
 	do {
 		int result;
 		vma->vm_mm->swap_address = address + PAGE_SIZE;
-		result = try_to_swap_out(vma, address, pte, gfp_mask, zone);
+		result = try_to_swap_out(vma, address, pte, gfp_mask);
 		if (result)
 			return result;
 		address += PAGE_SIZE;
@@ -226,7 +224,7 @@ static inline int swap_out_pmd(struct vm_area_struct * vma, pmd_t *dir, unsigned
 	return 0;
 }
 
-static inline int swap_out_pgd(struct vm_area_struct * vma, pgd_t *dir, unsigned long address, unsigned long end, int gfp_mask, zone_t *zone)
+static inline int swap_out_pgd(struct vm_area_struct * vma, pgd_t *dir, unsigned long address, unsigned long end, int gfp_mask)
 {
 	pmd_t * pmd;
 	unsigned long pgd_end;
@@ -246,7 +244,7 @@ static inline int swap_out_pgd(struct vm_area_struct * vma, pgd_t *dir, unsigned
 		end = pgd_end;
 	
 	do {
-		int result = swap_out_pmd(vma, pmd, address, end, gfp_mask, zone);
+		int result = swap_out_pmd(vma, pmd, address, end, gfp_mask);
 		if (result)
 			return result;
 		address = (address + PMD_SIZE) & PMD_MASK;
@@ -255,7 +253,7 @@ static inline int swap_out_pgd(struct vm_area_struct * vma, pgd_t *dir, unsigned
 	return 0;
 }
 
-static int swap_out_vma(struct vm_area_struct * vma, unsigned long address, int gfp_mask, zone_t *zone)
+static int swap_out_vma(struct vm_area_struct * vma, unsigned long address, int gfp_mask)
 {
 	pgd_t *pgdir;
 	unsigned long end;
@@ -270,7 +268,7 @@ static int swap_out_vma(struct vm_area_struct * vma, unsigned long address, int 
 	if (address >= end)
 		BUG();
 	do {
-		int result = swap_out_pgd(vma, pgdir, address, end, gfp_mask, zone);
+		int result = swap_out_pgd(vma, pgdir, address, end, gfp_mask);
 		if (result)
 			return result;
 		address = (address + PGDIR_SIZE) & PGDIR_MASK;
@@ -279,7 +277,7 @@ static int swap_out_vma(struct vm_area_struct * vma, unsigned long address, int 
 	return 0;
 }
 
-static int swap_out_mm(struct mm_struct * mm, int gfp_mask, zone_t *zone)
+static int swap_out_mm(struct mm_struct * mm, int gfp_mask)
 {
 	unsigned long address;
 	struct vm_area_struct* vma;
@@ -300,7 +298,7 @@ static int swap_out_mm(struct mm_struct * mm, int gfp_mask, zone_t *zone)
 			address = vma->vm_start;
 
 		for (;;) {
-			int result = swap_out_vma(vma, address, gfp_mask, zone);
+			int result = swap_out_vma(vma, address, gfp_mask);
 			if (result)
 				return result;
 			vma = vma->vm_next;
@@ -322,7 +320,7 @@ static int swap_out_mm(struct mm_struct * mm, int gfp_mask, zone_t *zone)
  * N.B. This function returns only 0 or 1.  Return values != 1 from
  * the lower level routines result in continued processing.
  */
-static int swap_out(unsigned int priority, int gfp_mask, zone_t *zone)
+static int swap_out(unsigned int priority, int gfp_mask)
 {
 	struct task_struct * p;
 	int counter;
@@ -383,7 +381,7 @@ static int swap_out(unsigned int priority, int gfp_mask, zone_t *zone)
 			int ret;
 
 			atomic_inc(&best->mm_count);
-			ret = swap_out_mm(best, gfp_mask, zone);
+			ret = swap_out_mm(best, gfp_mask);
 			mmdrop(best);
 
 			if (!ret)
@@ -424,16 +422,18 @@ static int do_try_to_free_pages(unsigned int gfp_mask, zone_t *zone)
 				goto done;
 		}
 
-		/* don't be too light against the d/i cache since
-		   shrink_mmap() almost never fail when there's
-		   really plenty of memory free. */
-		count -= shrink_dcache_memory(priority, gfp_mask, zone);
-		count -= shrink_icache_memory(priority, gfp_mask, zone);
-		if (count <= 0)
-			goto done;
 
 		/* Try to get rid of some shared memory pages.. */
 		if (gfp_mask & __GFP_IO) {
+			/*
+			 * don't be too light against the d/i cache since
+		   	 * shrink_mmap() almost never fail when there's
+		   	 * really plenty of memory free. 
+			 */
+			count -= shrink_dcache_memory(priority, gfp_mask, zone);
+			count -= shrink_icache_memory(priority, gfp_mask, zone);
+			if (count <= 0)
+				goto done;
 			while (shm_swap(priority, gfp_mask, zone)) {
 				if (!--count)
 					goto done;
@@ -441,7 +441,7 @@ static int do_try_to_free_pages(unsigned int gfp_mask, zone_t *zone)
 		}
 
 		/* Then, try to page stuff out.. */
-		while (swap_out(priority, gfp_mask, zone)) {
+		while (swap_out(priority, gfp_mask)) {
 			if (!--count)
 				goto done;
 		}
@@ -534,8 +534,11 @@ int try_to_free_pages(unsigned int gfp_mask, zone_t *zone)
 	int retval = 1;
 
 	wake_up_process(kswapd_process);
-	if (gfp_mask & __GFP_WAIT)
+	if (gfp_mask & __GFP_WAIT) {
+		current->flags |= PF_MEMALLOC;
 		retval = do_try_to_free_pages(gfp_mask, zone);
+		current->flags &= ~PF_MEMALLOC;
+	}
 	return retval;
 }
 

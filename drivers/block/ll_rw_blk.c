@@ -118,23 +118,11 @@ int * max_readahead[MAX_BLKDEV] = { NULL, NULL, };
  */
 int * max_sectors[MAX_BLKDEV] = { NULL, NULL, };
 
-/*
- * Max number of segments per request
- */
-int * max_segments[MAX_BLKDEV] = { NULL, NULL, };
-
 static inline int get_max_sectors(kdev_t dev)
 {
 	if (!max_sectors[MAJOR(dev)])
 		return MAX_SECTORS;
 	return max_sectors[MAJOR(dev)][MINOR(dev)];
-}
-
-static inline int get_max_segments(kdev_t dev)
-{
-	if (!max_segments[MAJOR(dev)])
-		return MAX_SEGMENTS;
-	return max_segments[MAJOR(dev)][MINOR(dev)];
 }
 
 /*
@@ -167,24 +155,52 @@ void blk_queue_pluggable(request_queue_t * q, int use_plug)
 	q->use_plug        = use_plug;
 }
 
+static int ll_merge_fn(request_queue_t *q, struct request *req, 
+		       struct buffer_head *bh) 
+{
+	if (req->bhtail->b_data + req->bhtail->b_size != bh->b_data) {
+		if (req->nr_segments < MAX_SEGMENTS) {
+			req->nr_segments++;
+			return 1;
+		}
+		return 0;
+	}
+	return 1;
+}
+
+static int ll_merge_requests_fn(request_queue_t *q, struct request *req,
+				struct request *next)
+{
+	int total_segments = req->nr_segments + next->nr_segments;
+
+	if (req->bhtail->b_data + req->bhtail->b_size == next->bh->b_data)
+		total_segments--;
+    
+	if (total_segments > MAX_SEGMENTS)
+		return 0;
+
+	req->nr_segments = total_segments;
+	return 1;
+}
+
 void blk_init_queue(request_queue_t * q, request_fn_proc * rfn)
 {
-	q->request_fn      = rfn;
-	q->current_request = NULL;
-	q->merge_fn        = NULL;
-	q->merge_requests_fn = NULL;
-	q->plug_tq.sync    = 0;
-	q->plug_tq.routine = &unplug_device;
-	q->plug_tq.data    = q;
-	q->plugged         = 0;
+	q->request_fn		= rfn;
+	q->current_request	= NULL;
+	q->merge_fn		= ll_merge_fn;
+	q->merge_requests_fn	= ll_merge_requests_fn;
+	q->plug_tq.sync		= 0;
+	q->plug_tq.routine	= unplug_device;
+	q->plug_tq.data		= q;
+	q->plugged		= 0;
 	/*
 	 * These booleans describe the queue properties.  We set the
 	 * default (and most common) values here.  Other drivers can
 	 * use the appropriate functions to alter the queue properties.
 	 * as appropriate.
 	 */
-	q->use_plug        = 1;
-	q->head_active     = 1;
+	q->use_plug		= 1;
+	q->head_active		= 1;
 }
 
 /*
@@ -427,11 +443,12 @@ out:
  */
 static inline void attempt_merge (request_queue_t * q,
 				  struct request *req, 
-				  int max_sectors,
-				  int max_segments)
+				  int max_sectors)
 {
 	struct request *next = req->next;
-	int total_segments;
+
+	if (req->rq_dev == MKDEV(22, 64))
+		printk("attempt_merge at %lu %lu\n", req->sector, q->current_request->sector);
 
 	if (!next)
 		return;
@@ -439,29 +456,15 @@ static inline void attempt_merge (request_queue_t * q,
 		return;
 	if (next->sem || req->cmd != next->cmd || req->rq_dev != next->rq_dev || req->nr_sectors + next->nr_sectors > max_sectors)
 		return;
-	total_segments = req->nr_segments + next->nr_segments;
-	if (req->bhtail->b_data + req->bhtail->b_size == next->bh->b_data)
-		total_segments--;
-	if (total_segments > max_segments)
-		return;
 
-	if( q->merge_requests_fn != NULL )
-	{
-		/*
-		 * If we are not allowed to merge these requests, then
-		 * return.  If we are allowed to merge, then the count
-		 * will have been updated to the appropriate number,
-		 * and we shouldn't do it here too.
-		 */
-		if( !(q->merge_requests_fn)(q, req, next) )
-		{
-			return;
-		}
-	}
-	else
-	{
-		req->nr_segments = total_segments;
-	}
+	/*
+	 * If we are not allowed to merge these requests, then
+	 * return.  If we are allowed to merge, then the count
+	 * will have been updated to the appropriate number,
+	 * and we shouldn't do it here too.
+	 */
+	if(!(q->merge_requests_fn)(q, req, next))
+		return;
 
 	req->bhtail->b_reqnext = next->bh;
 	req->bhtail = next->bhtail;
@@ -478,7 +481,7 @@ static void __make_request(request_queue_t * q,
 {
 	unsigned int sector, count;
 	struct request * req;
-	int rw_ahead, max_req, max_sectors, max_segments;
+	int rw_ahead, max_req, max_sectors;
 	unsigned long flags;
 
 	count = bh->b_size >> 9;
@@ -570,7 +573,6 @@ static void __make_request(request_queue_t * q,
 	 * Try to coalesce the new request with old requests
 	 */
 	max_sectors = get_max_sectors(bh->b_rdev);
-	max_segments = get_max_segments(bh->b_rdev);
 
 	/*
 	 * Now we acquire the request spinlock, we have to be mega careful
@@ -584,162 +586,88 @@ static void __make_request(request_queue_t * q,
 		    major != DDV_MAJOR && major != NBD_MAJOR
 		    && q->use_plug)
 			plug_device(q); /* is atomic */
-	} else switch (major) {
-	     /*
-	      * FIXME(eric) - this entire switch statement is going away
-	      * soon, and we will instead key off of q->head_active to decide
-	      * whether the top request in the queue is active on the device
-	      * or not.
-	      */
-	     case IDE0_MAJOR:	/* same as HD_MAJOR */
-	     case IDE1_MAJOR:
-	     case FLOPPY_MAJOR:
-	     case IDE2_MAJOR:
-	     case IDE3_MAJOR:
-	     case IDE4_MAJOR:
-	     case IDE5_MAJOR:
-	     case IDE6_MAJOR:
-	     case IDE7_MAJOR:
-	     case IDE8_MAJOR:
-	     case IDE9_MAJOR:
-	     case ACSI_MAJOR:
-	     case MFM_ACORN_MAJOR:
+		goto get_rq;
+	}
+
+	if (q->head_active && !q->plugged) {
 		/*
 		 * The scsi disk and cdrom drivers completely remove the request
 		 * from the queue when they start processing an entry.  For this
-		 * reason it is safe to continue to add links to the top entry for
-		 * those devices.
+		 * reason it is safe to continue to add links to the top entry
+		 * for those devices.
 		 *
 		 * All other drivers need to jump over the first entry, as that
-		 * entry may be busy being processed and we thus can't change it.
+		 * entry may be busy being processed and we thus can't change
+		 * it.
 		 */
-		if (req == q->current_request)
-	        	req = req->next;
-		if (!req)
-			break;
-		/* fall through */
-
-	     case SCSI_DISK0_MAJOR:
-	     case SCSI_DISK1_MAJOR:
-	     case SCSI_DISK2_MAJOR:
-	     case SCSI_DISK3_MAJOR:
-	     case SCSI_DISK4_MAJOR:
-	     case SCSI_DISK5_MAJOR:
-	     case SCSI_DISK6_MAJOR:
-	     case SCSI_DISK7_MAJOR:
-	     case SCSI_CDROM_MAJOR:
-	     case DAC960_MAJOR+0:
-	     case DAC960_MAJOR+1:
-	     case DAC960_MAJOR+2:
-	     case DAC960_MAJOR+3:
-	     case DAC960_MAJOR+4:
-	     case DAC960_MAJOR+5:
-	     case DAC960_MAJOR+6:
-	     case DAC960_MAJOR+7:
-	     case I2O_MAJOR:
-	     case COMPAQ_SMART2_MAJOR+0:
-	     case COMPAQ_SMART2_MAJOR+1:
-	     case COMPAQ_SMART2_MAJOR+2:
-	     case COMPAQ_SMART2_MAJOR+3:
-	     case COMPAQ_SMART2_MAJOR+4:
-	     case COMPAQ_SMART2_MAJOR+5:
-	     case COMPAQ_SMART2_MAJOR+6:
-	     case COMPAQ_SMART2_MAJOR+7:
-
-		do {
-			if (req->sem)
-				continue;
-			if (req->cmd != rw)
-				continue;
-			if (req->nr_sectors + count > max_sectors)
-				continue;
-			if (req->rq_dev != bh->b_rdev)
-				continue;
-			/* Can we add it to the end of this request? */
-			if (req->sector + req->nr_sectors == sector) {
-				/*
-				 * The merge_fn is a more advanced way
-				 * of accomplishing the same task.  Instead
-				 * of applying a fixed limit of some sort
-				 * we instead define a function which can
-				 * determine whether or not it is safe to
-				 * merge the request or not.
-				 */
-				if( q->merge_fn == NULL )
-				{
-					if (req->bhtail->b_data + req->bhtail->b_size
-					    != bh->b_data) {
-						if (req->nr_segments < max_segments)
-							req->nr_segments++;
-						else continue;
-					}
-				}
-				else
-				{
-					/*
-					 * See if this queue has rules that
-					 * may suggest that we shouldn't merge
-					 * this 
-					 */
-					if( !(q->merge_fn)(q, req, bh) )
-					{
-						continue;
-					}
-				}
-				req->bhtail->b_reqnext = bh;
-				req->bhtail = bh;
-			    	req->nr_sectors += count;
-				drive_stat_acct(req, count, 0);
-				/* Can we now merge this req with the next? */
-				attempt_merge(q, req, max_sectors, max_segments);
-			/* or to the beginning? */
-			} else if (req->sector - count == sector) {
-				/*
-				 * The merge_fn is a more advanced way
-				 * of accomplishing the same task.  Instead
-				 * of applying a fixed limit of some sort
-				 * we instead define a function which can
-				 * determine whether or not it is safe to
-				 * merge the request or not.
-				 */
-				if( q->merge_fn == NULL )
-				{
-					if (bh->b_data + bh->b_size
-					    != req->bh->b_data) {
-						if (req->nr_segments < max_segments)
-							req->nr_segments++;
-						else continue;
-					}
-				}
-				else
-				{
-					/*
-					 * See if this queue has rules that
-					 * may suggest that we shouldn't merge
-					 * this 
-					 */
-					if( !(q->merge_fn)(q, req, bh) )
-					{
-						continue;
-					}
-				}
-			    	bh->b_reqnext = req->bh;
-			    	req->bh = bh;
-			    	req->buffer = bh->b_data;
-			    	req->current_nr_sectors = count;
-			    	req->sector = sector;
-			    	req->nr_sectors += count;
-				drive_stat_acct(req, count, 0);
-			} else
-				continue;
-
-			spin_unlock_irqrestore(&io_request_lock,flags);
-		    	return;
-
-		} while ((req = req->next) != NULL);
+		if ((req = req->next) == NULL)
+			goto get_rq;
 	}
 
+	do {
+		if (req->sem)
+			continue;
+		if (req->cmd != rw)
+			continue;
+		if (req->nr_sectors + count > max_sectors)
+			continue;
+		if (req->rq_dev != bh->b_rdev)
+			continue;
+		/* Can we add it to the end of this request? */
+		if (req->sector + req->nr_sectors == sector) {
+			/*
+			 * The merge_fn is a more advanced way
+			 * of accomplishing the same task.  Instead
+			 * of applying a fixed limit of some sort
+			 * we instead define a function which can
+			 * determine whether or not it is safe to
+			 * merge the request or not.
+			 *
+			 * See if this queue has rules that
+			 * may suggest that we shouldn't merge
+			 * this 
+			 */
+			if(!(q->merge_fn)(q, req, bh))
+				continue;
+			req->bhtail->b_reqnext = bh;
+			req->bhtail = bh;
+		    	req->nr_sectors += count;
+			drive_stat_acct(req, count, 0);
+			/* Can we now merge this req with the next? */
+			attempt_merge(q, req, max_sectors);
+		/* or to the beginning? */
+		} else if (req->sector - count == sector) {
+			/*
+			 * The merge_fn is a more advanced way
+			 * of accomplishing the same task.  Instead
+			 * of applying a fixed limit of some sort
+			 * we instead define a function which can
+			 * determine whether or not it is safe to
+			 * merge the request or not.
+			 *
+			 * See if this queue has rules that
+			 * may suggest that we shouldn't merge
+			 * this 
+			 */
+			if(!(q->merge_fn)(q, req, bh))
+				continue;
+		    	bh->b_reqnext = req->bh;
+		    	req->bh = bh;
+		    	req->buffer = bh->b_data;
+		    	req->current_nr_sectors = count;
+		    	req->sector = sector;
+		    	req->nr_sectors += count;
+			drive_stat_acct(req, count, 0);
+		} else
+			continue;
+
+		spin_unlock_irqrestore(&io_request_lock,flags);
+	    	return;
+
+	} while ((req = req->next) != NULL);
+
 /* find an unused request. */
+get_rq:
 	req = get_request(max_req, bh->b_rdev);
 
 	spin_unlock_irqrestore(&io_request_lock,flags);
@@ -758,6 +686,7 @@ static void __make_request(request_queue_t * q,
 	req->nr_sectors = count;
 	req->current_nr_sectors = count;
 	req->nr_segments = 1; /* Always 1 for a new request. */
+	req->nr_hw_segments = 1; /* Always 1 for a new request. */
 	req->buffer = bh->b_data;
 	req->sem = NULL;
 	req->bh = bh;

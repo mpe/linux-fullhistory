@@ -551,11 +551,11 @@ L:	linux-m68k@lists.linux-m68k.org
 S:	Maintained
 
 M68K ON APPLE MACINTOSH
-P:	Alan Cox
-M:	Alan.Cox@linux.org
-W:	http://www.mac.linux-m68k.org/home.html
-L:	linux-mac68k@wave.lm.com
-S:	As time permits [Michael confess, you are the mac68k maintainer 8)]
+P:	Joshua Thompson
+M:	funaho@jurai.org
+W:	http://www.mac.linux-m68k.org/
+L:	linux-mac68k@mac.linux-m68k.org
+S:	Maintained
 
 M68K ON HP9000/300
 P:	Philip Blundell

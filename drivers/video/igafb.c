@@ -623,7 +623,6 @@ static int __init iga_init(struct fb_info_iga *info)
 	return 1;
 }
 
-
 int __init igafb_init(void)
 {
         struct pci_dev *pdev;
@@ -643,10 +642,10 @@ int __init igafb_init(void)
 		 * XXX We tried to use cyber2000fb.c for IGS 2000.
 		 * But it does not initialize the chip in JavaStation-E, alas.
 		 */
-        	pdev = pci_find_device(PCI_VENDOR_ID_INTERG, 
-                               0x2000, 0);
-        	if(pdev == NULL)
+        	pdev = pci_find_device(PCI_VENDOR_ID_INTERG, 0x2000, 0);
+        	if(pdev == NULL) {
         	        return -ENXIO;
+		}
 		iga2000 = 1;
 	}
 
@@ -657,15 +656,18 @@ int __init igafb_init(void)
         }
         memset(info, 0, sizeof(struct fb_info_iga));
 
-	info->frame_buffer = ioremap(pdev->resource[0].start, 1024*1024*2);
-	if (!info->frame_buffer) {
+	if ((addr = pdev->resource[0].start) == 0) {
+                printk("igafb_init: no memory start\n", addr);
 		kfree(info);
 		return -ENXIO;
 	}
 
-	addr = pdev->resource[0].start;
-	if (!addr)
+	if ((info->frame_buffer = ioremap(addr, 1024*1024*2)) == 0) {
+                printk("igafb_init: can't remap %lx[2M]\n", addr);
+		kfree(info);
 		return -ENXIO;
+	}
+
 	info->frame_buffer_phys = addr & PCI_BASE_ADDRESS_MEM_MASK;
 
 #ifdef __sparc__
@@ -693,8 +695,9 @@ int __init igafb_init(void)
 	} else {
 		info->io_base_phys = 0x30000000;	/* XXX */
 	}
-	info->io_base = (int) ioremap(info->io_base_phys, 0x1000);
-	if (!info->io_base) {
+	if ((info->io_base = (int) ioremap(info->io_base_phys, 0x1000)) == 0) {
+                printk("igafb_init: can't remap %lx[4K]\n", info->io_base_phys);
+		iounmap(info->frame_buffer);
                 kfree(info);
 		return -ENXIO;
 	}
@@ -709,8 +712,9 @@ int __init igafb_init(void)
 
 	info->mmap_map = kmalloc(4 * sizeof(*info->mmap_map), GFP_ATOMIC);
 	if (!info->mmap_map) {
-                printk("igafb_init: can't alloc mmap_map\n");
-		/* XXX Here we left I/O allocated */
+		printk("igafb_init: can't alloc mmap_map\n");
+		iounmap(info->io_base);
+		iounmap(info->frame_buffer);
                 kfree(info);
 		return -ENOMEM;
 	}
@@ -763,7 +767,9 @@ int __init igafb_init(void)
 
 #endif
 
-        if (!iga_init(info)) {
+	if (!iga_init(info)) {
+		iounmap(info->io_base);
+		iounmap(info->frame_buffer);
 		if (info->mmap_map)
 			kfree(info->mmap_map);
 		kfree(info);

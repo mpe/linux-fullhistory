@@ -235,6 +235,7 @@
 
 #include <linux/utsname.h>
 #include <linux/config.h>
+#include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/major.h>
 #include <linux/string.h>
@@ -626,7 +627,7 @@ static int batch_entropy_init(int size, struct entropy_store *r)
 	return 0;
 }
 
-static void batch_entropy_store(__u32 a, __u32 b, int num)
+void batch_entropy_store(u32 a, u32 b, int num)
 {
 	int	new;
 
@@ -2238,3 +2239,12 @@ __u32 check_tcp_syn_cookie(__u32 cookie, __u32 saddr, __u32 daddr, __u16 sport,
 	return (cookie - tmp[17]) & COOKIEMASK;	/* Leaving the data behind */
 }
 #endif
+
+
+
+EXPORT_SYMBOL(add_keyboard_randomness);
+EXPORT_SYMBOL(add_mouse_randomness);
+EXPORT_SYMBOL(add_interrupt_randomness);
+EXPORT_SYMBOL(add_blkdev_randomness);
+EXPORT_SYMBOL(batch_entropy_store);
+

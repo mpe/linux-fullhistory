@@ -683,7 +683,7 @@ int ncp_notify_change(struct dentry *dentry, struct iattr *attr)
 		DPRINTK("ncpfs: trying to change size to %ld\n",
 			attr->ia_size);
 
-		if ((result = ncp_make_open(inode, O_RDWR)) < 0) {
+		if ((result = ncp_make_open(inode, O_WRONLY)) < 0) {
 			return -EACCES;
 		}
 		ncp_write_kernel(NCP_SERVER(inode), NCP_FINFO(inode)->file_handle,

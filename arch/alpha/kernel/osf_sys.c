@@ -504,7 +504,7 @@ asmlinkage int osf_utsname(char *name)
 {
 	int error;
 
-	down(&uts_sem);
+	down_read(&uts_sem);
 	error = -EFAULT;
 	if (copy_to_user(name + 0, system_utsname.sysname, 32))
 		goto out;
@@ -519,7 +519,7 @@ asmlinkage int osf_utsname(char *name)
 
 	error = 0;
 out:
-	up(&uts_sem);	
+	up_read(&uts_sem);	
 	return error;
 }
 
@@ -569,7 +569,6 @@ asmlinkage int osf_getdomainname(char *name, int namelen)
 	unsigned len;
 	int i, error;
 
-	lock_kernel();
 	error = verify_area(VERIFY_WRITE, name, namelen);
 	if (error)
 		goto out;
@@ -578,15 +577,14 @@ asmlinkage int osf_getdomainname(char *name, int namelen)
 	if (namelen > 32)
 		len = 32;
 
-	down(&uts_sem);
+	down_read(&uts_sem);
 	for (i = 0; i < len; ++i) {
 		__put_user(system_utsname.domainname[i], name + i);
 		if (system_utsname.domainname[i] == '\0')
 			break;
 	}
-	up(&uts_sem);
+	up_read(&uts_sem);
 out:
-	unlock_kernel();
 	return error;
 }
 
@@ -810,7 +808,6 @@ asmlinkage long osf_sysinfo(int command, char *buf, long count)
 	char *res;
 	long len, err = -EINVAL;
 
-	lock_kernel();
 	offset = command-1;
 	if (offset >= sizeof(sysinfo_table)/sizeof(char *)) {
 		/* Digital UNIX has a few unpublished interfaces here */
@@ -818,7 +815,7 @@ asmlinkage long osf_sysinfo(int command, char *buf, long count)
 		goto out;
 	}
 	
-	down(&uts_sem);
+	down_read(&uts_sem);
 	res = sysinfo_table[offset];
 	len = strlen(res)+1;
 	if (len > count)
@@ -827,9 +824,8 @@ asmlinkage long osf_sysinfo(int command, char *buf, long count)
 		err = -EFAULT;
 	else
 		err = 0;
-	up(&uts_sem);
+	up_read(&uts_sem);
 out:
-	unlock_kernel();
 	return err;
 }
 

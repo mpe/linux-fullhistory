@@ -14,6 +14,12 @@
  *
  * See Documentation/usb/usb-serial.txt for more information on using this driver
  * 
+ * (01/25/2000) gkh
+ *	Added initial framework for FTDI serial converter so that Bill Ryder
+ *	has a place to put his code.
+ *	Added the vendor specific info from Handspring. Now we can print out
+ *	informational debug messages as well as understand what is happening.
+ *
  * (01/23/2000) gkh
  *	Fixed problem of crash when trying to open a port that didn't have a
  *	device assigned to it. Made the minor node finding a little smarter,
@@ -153,15 +159,16 @@ static void usb_serial_disconnect(struct usb_device *dev, void *ptr);
 
 /* USB Serial devices vendor ids and device ids that this driver supports */
 #define BELKIN_VENDOR_ID		0x056c
-#define BELKIN_SERIAL_CONVERTER		0x8007
+#define BELKIN_SERIAL_CONVERTER_ID	0x8007
 #define PERACOM_VENDOR_ID		0x0565
-#define PERACOM_SERIAL_CONVERTER	0x0001
+#define PERACOM_SERIAL_CONVERTER_ID	0x0001
 #define CONNECT_TECH_VENDOR_ID		0x0710
 #define CONNECT_TECH_FAKE_WHITE_HEAT_ID	0x0001
 #define CONNECT_TECH_WHITE_HEAT_ID	0x8001
 #define HANDSPRING_VENDOR_ID		0x082d
 #define HANDSPRING_VISOR_ID		0x0100
-
+#define FTDI_VENDOR_ID			0x0403
+#define FTDI_SERIAL_CONVERTER_ID	0x8372
 
 #define SERIAL_TTY_MAJOR	188	/* Nice legal number now */
 #define SERIAL_TTY_MINORS	16	/* Actually we are allowed 255, but this is good for now */
@@ -279,7 +286,7 @@ static void etek_serial_close		(struct tty_struct *tty, struct file *filp);
 #ifdef CONFIG_USB_SERIAL_BELKIN
 /* All of the device info needed for the Belkin Serial Converter */
 static __u16	belkin_vendor_id	= BELKIN_VENDOR_ID;
-static __u16	belkin_product_id	= BELKIN_SERIAL_CONVERTER;
+static __u16	belkin_product_id	= BELKIN_SERIAL_CONVERTER_ID;
 static struct usb_serial_device_type belkin_device = {
 	name:			"Belkin",
 	idVendor:		&belkin_vendor_id,	/* the Belkin vendor id */
@@ -303,7 +310,7 @@ static struct usb_serial_device_type belkin_device = {
 #ifdef CONFIG_USB_SERIAL_PERACOM
 /* All of the device info needed for the Peracom Serial Converter */
 static __u16	peracom_vendor_id	= PERACOM_VENDOR_ID;
-static __u16	peracom_product_id	= PERACOM_SERIAL_CONVERTER;
+static __u16	peracom_product_id	= PERACOM_SERIAL_CONVERTER_ID;
 static struct usb_serial_device_type peracom_device = {
 	name:			"Peracom",
 	idVendor:		&peracom_vendor_id,	/* the Peracom vendor id */
@@ -371,6 +378,58 @@ static struct usb_serial_device_type whiteheat_device = {
 
 
 #ifdef CONFIG_USB_SERIAL_VISOR
+
+/****************************************************************************
+ * Handspring Visor Vendor specific request codes (bRequest values)
+ * A big thank you to Handspring for providing the following information.
+ * If anyone wants the original file where these values and structures came
+ * from, send email to <greg@kroah.com>.
+ ****************************************************************************/
+
+/****************************************************************************
+ * VISOR_REQUEST_BYTES_AVAILABLE asks the visor for the number of bytes that
+ * are available to be transfered to the host for the specified endpoint.
+ * Currently this is not used, and always returns 0x0001
+ ****************************************************************************/
+#define VISOR_REQUEST_BYTES_AVAILABLE		0x01
+
+/****************************************************************************
+ * VISOR_CLOSE_NOTIFICATION is set to the device to notify it that the host
+ * is now closing the pipe. An empty packet is sent in response.
+ ****************************************************************************/
+#define VISOR_CLOSE_NOTIFICATION		0x02
+
+/****************************************************************************
+ * VISOR_GET_CONNECTION_INFORMATION is sent by the host during enumeration to
+ * get the endpoints used by the connection.
+ ****************************************************************************/
+#define VISOR_GET_CONNECTION_INFORMATION	0x03
+
+
+/****************************************************************************
+ * VISOR_GET_CONNECTION_INFORMATION returns data in the following format
+ ****************************************************************************/
+struct visor_connection_info {
+	__u16	num_ports;
+	struct {
+		__u8	port_function_id;
+		__u8	port;
+	} connections[2];
+};
+
+
+/* struct visor_connection_info.connection[x].port defines: */
+#define VISOR_ENDPOINT_1		0x01
+#define VISOR_ENDPOINT_2		0x02
+
+/* struct visor_connection_info.connection[x].port_function_id defines: */
+#define VISOR_FUNCTION_GENERIC		0x00
+#define VISOR_FUNCTION_DEBUGGER		0x01
+#define VISOR_FUNCTION_HOTSYNC		0x02
+#define VISOR_FUNCTION_CONSOLE		0x03
+#define VISOR_FUNCTION_REMOTE_FILE_SYS	0x04
+
+
 /* function prototypes for a handspring visor */
 static int  visor_serial_open		(struct tty_struct *tty, struct file *filp);
 static void visor_serial_close		(struct tty_struct *tty, struct file *filp);
@@ -403,6 +462,34 @@ static struct usb_serial_device_type handspring_device = {
 };
 #endif
 
+
+#ifdef CONFIG_USB_SERIAL_FTDI
+/* function prototypes for a FTDI serial converter */
+static int  ftdi_serial_open	(struct tty_struct *tty, struct file *filp);
+static void ftdi_serial_close	(struct tty_struct *tty, struct file *filp);
+
+/* All of the device info needed for the Handspring Visor */
+static __u16	ftdi_vendor_id	= FTDI_VENDOR_ID;
+static __u16	ftdi_product_id	= FTDI_SERIAL_CONVERTER_ID;
+static struct usb_serial_device_type ftdi_device = {
+	name:			"FTDI",
+	idVendor:		&ftdi_vendor_id,	/* the FTDI vendor ID */
+	idProduct:		&ftdi_product_id,	/* the FTDI product id */
+	needs_interrupt_in:	MUST_HAVE_NOT,		/* this device must not have an interrupt in endpoint */
+	needs_bulk_in:		MUST_HAVE,		/* this device must have a bulk in endpoint */
+	needs_bulk_out:		MUST_HAVE,		/* this device must have a bulk out endpoint */
+	num_interrupt_in:	0,
+	num_bulk_in:		1,
+	num_bulk_out:		1,
+	num_ports:		1,
+	open:			ftdi_serial_open,
+	close:			ftdi_serial_close,
+	write:			generic_serial_write,
+	write_room:		generic_write_room,
+	chars_in_buffer:	generic_chars_in_buffer
+};
+#endif
+
 /* To add support for another serial converter, create a usb_serial_device_type
    structure for that device, and add it to this list, making sure that the last
    entry is NULL. */
@@ -422,6 +509,9 @@ static struct usb_serial_device_type *usb_serial_devices[] = {
 #endif
 #ifdef CONFIG_USB_SERIAL_VISOR
 	&handspring_device,
+#endif
+#ifdef CONFIG_USB_SERIAL_FTDI
+	&ftdi_device,
 #endif
 	NULL
 };
@@ -1032,9 +1122,18 @@ static void visor_serial_close(struct tty_struct *tty, struct file * filp)
 {
 	struct usb_serial *serial = (struct usb_serial *) tty->driver_data;
 	int port = MINOR(tty->device) - serial->minor;
+	unsigned char *transfer_buffer =  kmalloc (0x12, GFP_KERNEL);
 	
 	dbg("visor_serial_close port %d", port);
 			 
+	if (!transfer_buffer) {
+		err("visor_serial_close: kmalloc(%d) failed.\n", 0x12);
+	} else {
+		/* send a shutdown message to the device */
+		usb_control_msg (serial->dev, usb_rcvctrlpipe(serial->dev, 0), VISOR_CLOSE_NOTIFICATION,
+				0xc2, 0x0000, 0x0000, transfer_buffer, 0x12, 300);
+	}
+
 	/* shutdown our bulk reads and writes */
 	usb_unlink_urb (&serial->write_urb[port]);
 	usb_unlink_urb (&serial->read_urb[port]);
@@ -1069,50 +1168,8 @@ static void visor_unthrottle (struct tty_struct * tty)
 }
 
 
-/*
- Here's the raw dump of the vendor specific command data that the Visor sends on Win98
-______________________________________________________________________
-SETUP(0xB4) ADDR(0x02) ENDP(0x0) CRC5(0x15)
-______________________________________________________________________
-DATA0(0xC3) DATA(C2 03 00 00 00 00 12 00 ) CRC16(0xB0BB)
-______________________________________________________________________
-ACK(0x4B)
-______________________________________________________________________
-IN(0x96) ADDR(0x02) ENDP(0x0) CRC5(0x15)
-______________________________________________________________________
-DATA1(0xD2) DATA(02 00 00 01 02 02 ) CRC16(0xF4E6)
-______________________________________________________________________
-ACK(0x4B)
-______________________________________________________________________
-OUT(0x87) ADDR(0x02) ENDP(0x0) CRC5(0x15)
-______________________________________________________________________
-DATA1(0xD2) DATA() CRC16(0x0000)
-______________________________________________________________________
-ACK(0x4B)
-______________________________________________________________________
-SETUP(0xB4) ADDR(0x02) ENDP(0x0) CRC5(0x15)
-______________________________________________________________________
-DATA0(0xC3) DATA(C2 01 00 00 05 00 02 00 ) CRC16(0xC488)
-______________________________________________________________________
-ACK(0x4B)
-______________________________________________________________________
-IN(0x96) ADDR(0x02) ENDP(0x0) CRC5(0x15)
-______________________________________________________________________
-DATA1(0xD2) DATA(01 00 ) CRC16(0xFFFB)
-______________________________________________________________________
-ACK(0x4B)
-______________________________________________________________________
-OUT(0x87) ADDR(0x02) ENDP(0x0) CRC5(0x15)
-______________________________________________________________________
-DATA1(0xD2) DATA() CRC16(0x0000)
-______________________________________________________________________
-ACK(0x4B)
-______________________________________________________________________
-*/
-
 static int  visor_startup (struct usb_serial *serial)
 {
-	/* send out two unknown commands that I found by looking at a Win98 trace */
 	int response;
 	int i;
 	unsigned char *transfer_buffer =  kmalloc (256, GFP_KERNEL);
@@ -1127,22 +1184,44 @@ static int  visor_startup (struct usb_serial *serial)
 	dbg("visor_setup: Set config to 1");
 	usb_set_configuration (serial->dev, 1);
 
-	response = usb_control_msg (serial->dev, usb_rcvctrlpipe(serial->dev, 0), 0x03, 0xc2, 0x0000, 0x0000, transfer_buffer, 0x12, 300);
+	/* send a get connection info request */
+	response = usb_control_msg (serial->dev, usb_rcvctrlpipe(serial->dev, 0), VISOR_GET_CONNECTION_INFORMATION,
+					0xc2, 0x0000, 0x0000, transfer_buffer, 0x12, 300);
 	if (response < 0) {
-		err("visor_startup: error getting first vendor specific message");
+		err("visor_startup: error getting connection information");
 	} else {
-		dbg("visor_startup: First vendor specific message successful, data received:");
-		for (i = 0; i < response; ++i)
-			dbg("    0x%.2x", transfer_buffer[i]);
+#ifdef DEBUG
+		struct visor_connection_info *connection_info = (struct visor_connection_info *)transfer_buffer;
+		char *string;
+		dbg("%s: Number of ports: %d", serial->type->name, connection_info->num_ports);
+		for (i = 0; i < connection_info->num_ports; ++i) {
+			switch (connection_info->connections[i].port_function_id) {
+				case VISOR_FUNCTION_GENERIC:
+					string = "Generic";
+					break;
+				case VISOR_FUNCTION_DEBUGGER:
+					string = "Debugger";
+					break;
+				case VISOR_FUNCTION_HOTSYNC:
+					string = "HotSync";
+					break;
+				case VISOR_FUNCTION_REMOTE_FILE_SYS:
+					string = "Remote File System";
+					break;
+				default:
+					string = "unknown";
+					break;	
+			}
+			dbg("%s: port %d, is for %s", serial->type->name, connection_info->connections[i].port, string);
+		}
+#endif
 	}
 
-	response = usb_control_msg (serial->dev, usb_rcvctrlpipe(serial->dev, 0), 0x01, 0xc2, 0x0000, 0x0005, transfer_buffer, 0x02, 300);
+	/* ask for the number of bytes available, but ignore the response as it is broken */
+	response = usb_control_msg (serial->dev, usb_rcvctrlpipe(serial->dev, 0), VISOR_REQUEST_BYTES_AVAILABLE,
+					0xc2, 0x0000, 0x0005, transfer_buffer, 0x02, 300);
 	if (response < 0) {
-		err("visor_startup: error getting second vendor specific message");
-	} else {
-		dbg("visor_startup: Second vendor specific message successful, data received:");
-		for (i = 0; i < response; ++i)
-			dbg("    0x%.2x", transfer_buffer[i]);
+		err("visor_startup: error getting bytes available request");
 	}
 
 	kfree (transfer_buffer);
@@ -1153,6 +1232,54 @@ static int  visor_startup (struct usb_serial *serial)
 
 
 #endif	/* CONFIG_USB_SERIAL_VISOR*/
+
+
+#ifdef CONFIG_USB_SERIAL_FTDI
+/******************************************************************************
+ * FTDI Serial Converter specific driver functions
+ ******************************************************************************/
+static int  ftdi_serial_open (struct tty_struct *tty, struct file *filp)
+{
+	struct usb_serial *serial = (struct usb_serial *) tty->driver_data; 
+	int port = MINOR(tty->device) - serial->minor;
+
+	dbg("ftdi_serial_open port %d", port);
+
+	if (serial->active[port]) {
+		dbg ("device already open");
+		return -EINVAL;
+	}
+	serial->active[port] = 1;
+ 
+	/*Start reading from the device*/
+	if (usb_submit_urb(&serial->read_urb[port]))
+		dbg("usb_submit_urb(read bulk) failed");
+
+	/* Need to do device specific setup here (control lines, baud rate, etc.) */
+	/* FIXME!!! */
+
+	return (0);
+}
+
+
+static void ftdi_serial_close (struct tty_struct *tty, struct file *filp)
+{
+	struct usb_serial *serial = (struct usb_serial *) tty->driver_data; 
+	int port = MINOR(tty->device) - serial->minor;
+
+	dbg("ftdi_serial_close port %d", port);
+	
+	/* Need to change the control lines here */
+	/* FIXME */
+	
+	/* shutdown our bulk reads and writes */
+	usb_unlink_urb (&serial->write_urb[port]);
+	usb_unlink_urb (&serial->read_urb[port]);
+	serial->active[port] = 0;
+}
+
+
+#endif
 
 
 /*****************************************************************************
@@ -1398,7 +1525,7 @@ static void * usb_serial_probe(struct usb_device *dev, unsigned int ifnum)
 				}
 
 				for (i = 0; i < num_bulk_out; ++i) {
-					serial->bulk_out_size[i] = bulk_out_endpoint[i]->wMaxPacketSize;
+					serial->bulk_out_size[i] = bulk_out_endpoint[i]->wMaxPacketSize * 2;
 					serial->bulk_out_buffer[i] = kmalloc (serial->bulk_out_size[i], GFP_KERNEL);
 					if (!serial->bulk_out_buffer[i]) {
 						err("Couldn't allocate bulk_out_buffer");

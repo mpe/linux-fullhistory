@@ -316,7 +316,7 @@ static const struct {
 #ifdef CONFIG_ZORRO
 static const struct {
 	clgen_board_t btype;
-	int key, key2;
+	zorro_id id, id2;
 } clgen_zorro_probe_list[] __initdata = {
 	{ BT_SD64,
 		ZORRO_PROD_HELFRICH_SD64_RAM,
@@ -414,8 +414,6 @@ struct clgenfb_info {
 	} fbcon_cmap;
 
 #ifdef CONFIG_ZORRO
-	int keyRAM;		/* RAM, REG zorro board keys */
-	int keyREG;
 	unsigned long board_addr,
 		      board_size;
 #endif
@@ -2714,22 +2712,26 @@ static int __init clgen_pci_setup (struct clgenfb_info *info,
 
 
 #ifdef CONFIG_ZORRO
-static int __init clgen_zorro_find (int *key_o, int *key2_o, clgen_board_t *btype)
+static int __init clgen_zorro_find (struct zorro_dev **z_o,
+				    struct zorro_dev **z2_o,
+				    clgen_board_t *btype)
 {
-	int i, key = 0;
-	
-	assert (key_o != NULL);
+	struct zorro_dev *z = NULL;
+	int i;
+
+	assert (z_o != NULL);
 	assert (btype != NULL);
 
-	for (i = 0; i < arraysize(clgen_zorro_probe_list) && !key; i++)
-		key = zorro_find (clgen_zorro_probe_list[i].key, 0, 0);
+	for (i = 0; i < arraysize(clgen_zorro_probe_list); i++)
+		if ((z = zorro_find_device(clgen_zorro_probe_list[i].id, NULL)))
+			break;
 
-	if (key) {
-		*key_o = key;
-		if (clgen_zorro_probe_list[i].key2)
-			*key2_o = zorro_find (clgen_zorro_probe_list[i].key2, 0, 0);
+	if (z) {
+		*z_o = z;
+		if (clgen_zorro_probe_list[i].id2)
+			*z2_o = zorro_find_device(clgen_zorro_probe_list[i].id2, NULL);
 		else
-			*key2_o = 0;
+			*z2_o = NULL;
 		*btype = clgen_zorro_probe_list[i - 1].btype;
 		
 		printk (KERN_INFO "clgen: %s board detected; ",
@@ -2766,26 +2768,21 @@ static void clgen_zorro_unmap (struct clgenfb_info *info)
 static int __init clgen_zorro_setup (struct clgenfb_info *info,
 				     clgen_board_t *btype)
 {
-	int key = 0, key2 = 0;
-	const struct ConfigDev *cd = NULL;
-	const struct ConfigDev *cd2 = NULL;
+	struct zorro_dev *z = NULL, *z2 = NULL;
 	unsigned long board_addr, board_size;
 	
 	assert (info != NULL);
 	assert (btype != NULL);
 
-	if (clgen_zorro_find (&key, &key2, btype))
+	if (clgen_zorro_find (&z, &z2, btype))
 		return -1;
 
-	assert (key > 0);
-	assert (key2 >= 0);
+	assert (z > 0);
+	assert (z2 >= 0);
 	assert (*btype != BT_NONE);
 	
-	info->keyRAM = key;
-	info->keyREG = key2;
-	cd = zorro_get_board (key);
-	info->board_addr = board_addr = (unsigned long) cd->cd_BoardAddr;
-	info->board_size = board_size = (unsigned long) cd->cd_BoardSize;
+	info->board_addr = board_addr = z->resource.start;
+	info->board_size = board_size = z->resource.end-z->resource.start+1;
 
 	if (!request_mem_region(board_addr, board_size, "clgenfb")) {
 		printk(KERN_ERR "clgen: cannot reserve region 0x%lu, abort\n",
@@ -2810,8 +2807,7 @@ static int __init clgen_zorro_setup (struct clgenfb_info *info,
 		info->fbmem_phys = board_addr + 16777216;
 		info->fbmem = ioremap (info->fbmem_phys, 16777216);
 	} else {
-		cd2 = zorro_get_board (key2);
-		printk (" REG at $%lx\n", (unsigned long) cd2->cd_BoardAddr);
+		printk (" REG at $%lx\n", (unsigned long) z2->resource.start);
 
 		info->fbmem_phys = board_addr;
 		if (board_addr > 0x01000000)
@@ -2820,16 +2816,11 @@ static int __init clgen_zorro_setup (struct clgenfb_info *info,
 			info->fbmem = (caddr_t) ZTWO_VADDR (board_addr);
 
 		/* set address for REG area of board */
-		info->regs = (caddr_t) ZTWO_VADDR (cd2->cd_BoardAddr);
-		info->fbregs_phys = (unsigned long) cd2->cd_BoardAddr;
+		info->regs = (caddr_t) ZTWO_VADDR (z2->resource.start);
+		info->fbregs_phys = z2->resource.start;
 
 		DPRINTK ("clgen: Virtual address for board set to: $%p\n", info->regs);
 	}
-
-	/* mark this board as "autoconfigured" */
-	zorro_config_board (key, 0);
-	if (*btype != BT_PICASSO4)
-		zorro_config_board (key2, 0);
 
 	printk (KERN_INFO "Cirrus Logic chipset on Zorro bus\n");
 	
@@ -2968,10 +2959,6 @@ static void clgenfb_cleanup (struct clgenfb_info *info)
 	switch_monitor (info, 0);
 
 	clgen_zorro_unmap (info);
-
-	zorro_unconfig_board (info->keyRAM, 0);
-	if (info->btype != BT_PICASSO4)
-		zorro_unconfig_board (info->keyREG, 0);
 #else
 	clgen_pci_unmap (info);
 #endif				/* CONFIG_ZORRO */

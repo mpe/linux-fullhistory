@@ -722,9 +722,16 @@ static int proc_doutsstring(ctl_table *table, int write, struct file *filp,
 		  void *buffer, size_t *lenp)
 {
 	int r;
-	down(&uts_sem);
-	r=proc_dostring(table,write,filp,buffer,lenp);
-	up(&uts_sem);
+
+	if (!write) {
+		down_read(&uts_sem);
+		r=proc_dostring(table,0,filp,buffer,lenp);
+		up_read(&uts_sem);
+	} else {
+		down_write(&uts_sem);
+		r=proc_dostring(table,1,filp,buffer,lenp);
+		up_write(&uts_sem);
+	}
 	return r;
 }
 

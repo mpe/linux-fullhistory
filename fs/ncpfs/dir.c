@@ -868,6 +868,7 @@ int ncp_create_new(struct inode *dir, struct dentry *dentry, int mode,
 	struct ncp_server *server = NCP_SERVER(dir);
 	struct ncp_entry_info finfo;
 	int error, result, len = dentry->d_name.len + 1;
+	int opmode;
 	__u8 __name[len];
 	
 	PPRINTK("ncp_create_new: creating %s/%s, mode=%x\n",
@@ -886,15 +887,22 @@ int ncp_create_new(struct inode *dir, struct dentry *dentry, int mode,
 	result = ncp_open_create_file_or_subdir(server, dir, __name,
 				OC_MODE_CREATE | OC_MODE_OPEN | OC_MODE_REPLACE,
 				attributes, AR_READ | AR_WRITE, &finfo);
-	if (!result) {
-		finfo.access = O_RDWR;
-		error = ncp_instantiate(dir, dentry, &finfo);
-	} else {
-		if (result == 0x87) error = -ENAMETOOLONG;
-		DPRINTK("ncp_create: %s/%s failed\n",
-			dentry->d_parent->d_name.name, dentry->d_name.name);
+	opmode = O_RDWR;
+	if (result) {
+		result = ncp_open_create_file_or_subdir(server, dir, __name,
+				OC_MODE_CREATE | OC_MODE_OPEN | OC_MODE_REPLACE,
+				attributes, AR_WRITE, &finfo);
+		if (result) {
+			if (result == 0x87)
+				error = -ENAMETOOLONG;
+			DPRINTK("ncp_create: %s/%s failed\n",
+				dentry->d_parent->d_name.name, dentry->d_name.name);
+			goto out;
+		}
+		opmode = O_WRONLY;
 	}
-
+	finfo.access = opmode;
+	error = ncp_instantiate(dir, dentry, &finfo);
 out:
 	return error;
 }

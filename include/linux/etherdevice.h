@@ -24,7 +24,6 @@
 #ifndef _LINUX_ETHERDEVICE_H
 #define _LINUX_ETHERDEVICE_H
 
-#include <linux/config.h>
 #include <linux/if_ether.h>
 
 #ifdef __KERNEL__

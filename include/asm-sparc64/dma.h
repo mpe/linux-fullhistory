@@ -218,4 +218,10 @@ extern int isa_dma_bridge_buggy;
 #define isa_dma_bridge_buggy 	(0)
 #endif
 
+/* We support dynamic DMA remapping and adjacent SG entries
+ * which have addresses modulo DMA_CHUNK_SIZE will be merged
+ * by dma_prepare_sg().
+ */
+#define DMA_CHUNK_SIZE 8192
+
 #endif /* !(_ASM_SPARC64_DMA_H) */

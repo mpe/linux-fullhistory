@@ -18,6 +18,8 @@
 #define FASYNC		020000	/* fcntl, for BSD compatibility */
 #define O_DIRECTORY	040000	/* must be a directory */
 #define O_NOFOLLOW	0100000	/* don't follow links */
+#define O_DIRECT	0200000	/* direct disk access hint - currently ignored */
+#define O_LARGEFILE	0400000
 
 #define F_DUPFD		0	/* dup */
 #define F_GETFD		1	/* get f_flags */

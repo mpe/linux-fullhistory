@@ -25,16 +25,14 @@
  
 #ifndef __ASSEMBLY__
  
-#define STRICT_MM_TYPECHECKS
-
-#define get_user_page(vaddr)	__get_free_page(GFP_KERNEL)
+#define get_user_page(vaddr)		__get_free_page(GFP_KERNEL)
 #define free_user_page(page, addr)	free_page(addr)
 
 /*
  * We don't need to check for alignment etc.
  */
 #ifdef CPU_M68040_OR_M68060_ONLY
-static inline void copy_page(unsigned long to, unsigned long from)
+static inline void copy_page(void *to, void *from)
 {
   unsigned long tmp;
 
@@ -49,11 +47,10 @@ static inline void copy_page(unsigned long to, unsigned long from)
 		       );
 }
 
-static inline void clear_page(unsigned long page)
+static inline void clear_page(void *page)
 {
-	unsigned long data, sp, tmp;
-
-	sp = page;
+	unsigned long data, tmp;
+	void *sp = page;
 
 	data = 0;
 
@@ -75,11 +72,10 @@ static inline void clear_page(unsigned long page)
 }
 
 #else
-#define clear_page(page)	memset((void *)(page), 0, PAGE_SIZE)
-#define copy_page(to,from)	memcpy((void *)(to), (void *)(from), PAGE_SIZE)
+#define clear_page(page)	memset((page), 0, PAGE_SIZE)
+#define copy_page(to,from)	memcpy((to), (from), PAGE_SIZE)
 #endif
 
-#ifdef STRICT_MM_TYPECHECKS
 /*
  * These are used to make use of C type-checking..
  */
@@ -98,55 +94,29 @@ typedef struct { unsigned long pgprot; } pgprot_t;
 #define __pgd(x)	((pgd_t) { (x) } )
 #define __pgprot(x)	((pgprot_t) { (x) } )
 
-#else
-/*
- * .. while these make it easier on the compiler
- */
-typedef unsigned long pte_t;
-typedef struct { unsigned long pmd[16]; } pmd_t;
-typedef unsigned long pgd_t;
-typedef unsigned long pgprot_t;
-
-#define pte_val(x)	(x)
-#define pmd_val(x)	((&x)->pmd[0])
-#define pgd_val(x)	(x)
-#define pgprot_val(x)	(x)
-
-#define __pte(x)	(x)
-#define __pmd(x)	((pmd_t) { (x) } )
-#define __pgd(x)	(x)
-#define __pgprot(x)	(x)
-
-#endif
-
 /* to align the pointer to the (next) page boundary */
 #define PAGE_ALIGN(addr)	(((addr)+PAGE_SIZE-1)&PAGE_MASK)
 
-/* This handles the memory map.. */
-#ifndef CONFIG_SUN3
-#define PAGE_OFFSET		0
-#else
-#define PAGE_OFFSET		0x0E000000
-#endif
+#endif /* !__ASSEMBLY__ */
+
+#include <asm/page_offset.h>
+
+#define PAGE_OFFSET		(PAGE_OFFSET_RAW)
+
+#ifndef __ASSEMBLY__
 
 #ifndef CONFIG_SUN3
-#define __pa(x)			((unsigned long)(x)-PAGE_OFFSET)
-/*
- * A hacky workaround for the problems with mmap() of frame buffer
- * memory in the lower 16MB physical memoryspace.
- *
- * This is a short term solution, we will have to deal properly
- * with this in 2.3.x.
- */
-extern inline void *__va(unsigned long physaddr)
-{
-#ifdef CONFIG_AMIGA
-	if (MACH_IS_AMIGA && (physaddr < 16*1024*1024))
-		return (void *)0xffffffff;
-	else
+
+#ifdef CONFIG_SINGLE_MEMORY_CHUNK
+extern unsigned long m68k_memoffset;
+
+#define __pa(vaddr)		((unsigned long)(vaddr)+m68k_memoffset)
+#define __va(paddr)		((void *)((unsigned long)(paddr)-m68k_memoffset))
+#else
+#define __pa(vaddr)		virt_to_phys((void *)vaddr)
+#define __va(paddr)		phys_to_virt((unsigned long)paddr)
 #endif
-		return (void *)(physaddr+PAGE_OFFSET);
-}
+
 #else	/* !CONFIG_SUN3 */
 /* This #define is a horrible hack to suppress lots of warnings. --m */
 #define __pa(x) ___pa((unsigned long)x)
@@ -172,9 +142,7 @@ static inline void *__va(unsigned long x)
 }
 #endif	/* CONFIG_SUN3 */
 
-#define MAP_NR(addr)		(__pa(addr) >> PAGE_SHIFT)
-
-#endif /* !__ASSEMBLY__ */
+#define MAP_NR(addr)		(((unsigned long)(addr)-PAGE_OFFSET) >> PAGE_SHIFT)
 
 #ifndef CONFIG_SUN3
 #define BUG() do { \
@@ -191,6 +159,8 @@ static inline void *__va(unsigned long x)
 #define PAGE_BUG(page) do { \
 	BUG(); \
 } while (0)
+
+#endif /* __ASSEMBLY__ */
 
 #endif /* __KERNEL__ */
 

@@ -208,6 +208,31 @@ ide_startstop_t ide_dma_intr (ide_drive_t *drive)
 	return ide_error(drive, "dma_intr", stat);
 }
 
+static int ide_build_sglist (ide_hwif_t *hwif, struct request *rq)
+{
+	struct buffer_head *bh;
+	struct scatterlist *sg = hwif->sg_table;
+	int nents = 0;
+
+	bh = rq->bh;
+	do {
+		unsigned char *virt_addr = bh->b_data;
+		unsigned int size = bh->b_size;
+
+		while ((bh = bh->b_reqnext) != NULL) {
+			if ((virt_addr + size) != (unsigned char *) bh->b_data)
+				break;
+			size += bh->b_size;
+		}
+		memset(&sg[nents], 0, sizeof(*sg));
+		sg[nents].address = virt_addr;
+		sg[nents].length = size;
+		nents++;
+	} while (bh != NULL);
+
+	return pci_map_sg(hwif->pci_dev, sg, nents);
+}
+
 /*
  * ide_build_dmatable() prepares a dma request.
  * Returns 0 if all went okay, returns 1 otherwise.
@@ -215,93 +240,68 @@ ide_startstop_t ide_dma_intr (ide_drive_t *drive)
  */
 int ide_build_dmatable (ide_drive_t *drive, ide_dma_action_t func)
 {
-	struct request *rq = HWGROUP(drive)->rq;
-	struct buffer_head *bh = rq->bh;
-	unsigned int size, addr, *table = (unsigned int *)HWIF(drive)->dmatable;
-	unsigned char *virt_addr;
+	unsigned int *table = HWIF(drive)->dmatable_cpu;
 #ifdef CONFIG_BLK_DEV_TRM290
 	unsigned int is_trm290_chipset = (HWIF(drive)->chipset == ide_trm290);
 #else
 	const int is_trm290_chipset = 0;
 #endif
 	unsigned int count = 0;
+	int i;
+	struct scatterlist *sg;
 
-	do {
-		/*
-		 * Determine addr and size of next buffer area.  We assume that
-		 * individual virtual buffers are always composed linearly in
-		 * physical memory.  For example, we assume that any 8kB buffer
-		 * is always composed of two adjacent physical 4kB pages rather
-		 * than two possibly non-adjacent physical 4kB pages.
-		 */
-		if (bh == NULL) {  /* paging requests have (rq->bh == NULL) */
-			virt_addr = rq->buffer;
-			addr = virt_to_bus (virt_addr);
-			size = rq->nr_sectors << 9;
-		} else {
-			/* group sequential buffers into one large buffer */
-			virt_addr = bh->b_data;
-			addr = virt_to_bus (virt_addr);
-			size = bh->b_size;
-			while ((bh = bh->b_reqnext) != NULL) {
-				if ((addr + size) != virt_to_bus (bh->b_data))
-					break;
-				size += bh->b_size;
-			}
-		}
-		/*
-		 * Fill in the dma table, without crossing any 64kB boundaries.
-		 * Most hardware requires 16-bit alignment of all blocks,
-		 * but the trm290 requires 32-bit alignment.
-		 */
-		if ((addr & 3)) {
-			printk("%s: misaligned DMA buffer\n", drive->name);
-			return 0;
-		}
+	HWIF(drive)->sg_nents = i = ide_build_sglist(HWIF(drive), HWGROUP(drive)->rq);
 
-		/*
-		 * Some CPUs without cache snooping need to invalidate/write
-		 * back their caches before DMA transfers to guarantee correct
-		 * data.        -- rmk
-		 */
-		if (size) {
-			if (func == ide_dma_read) {
-				dma_cache_inv((unsigned int)virt_addr, size);
-			} else {
-				dma_cache_wback((unsigned int)virt_addr, size);
-			}
-		}
+	sg = HWIF(drive)->sg_table;
+	while (i && sg_dma_len(sg)) {
+		u32 cur_addr;
+		u32 cur_len;
 
-		while (size) {
+		cur_addr = sg_dma_address(sg);
+		cur_len = sg_dma_len(sg);
+
+		while (cur_len) {
 			if (++count >= PRD_ENTRIES) {
 				printk("%s: DMA table too small\n", drive->name);
+				pci_unmap_sg(HWIF(drive)->pci_dev,
+					     HWIF(drive)->sg_table,
+					     HWIF(drive)->sg_nents);
 				return 0; /* revert to PIO for this request */
 			} else {
-				unsigned int xcount, bcount = 0x10000 - (addr & 0xffff);
-				if (bcount > size)
-					bcount = size;
-				*table++ = cpu_to_le32(addr);
+				u32 xcount, bcount = 0x10000 - (cur_addr & 0xffff);
+
+				if (bcount > cur_len)
+					bcount = cur_len;
+				*table++ = cpu_to_le32(cur_addr);
 				xcount = bcount & 0xffff;
 				if (is_trm290_chipset)
 					xcount = ((xcount >> 2) - 1) << 16;
 				*table++ = cpu_to_le32(xcount);
-				addr += bcount;
-				size -= bcount;
+				cur_addr += bcount;
+				cur_len -= bcount;
 			}
 		}
-	} while (bh != NULL);
-	if (!count) {
-		printk("%s: empty DMA table?\n", drive->name);
-	} else {
-		if (!is_trm290_chipset)
-			*--table |= cpu_to_le32(0x80000000);	/* set End-Of-Table (EOT) bit */
-		/*
-		 * Some CPUs need to flush the DMA table to physical RAM
-		 * before DMA can start.        -- rmk
-		 */
-		dma_cache_wback((unsigned long)HWIF(drive)->dmatable, count * sizeof(unsigned int) * 2);
+
+		sg++;
+		i--;
 	}
+
+	if (!count)
+		printk("%s: empty DMA table?\n", drive->name);
+	else if (!is_trm290_chipset)
+		*--table |= cpu_to_le32(0x80000000);
+
 	return count;
+}
+
+/* Teardown mappings after DMA has completed.  */
+void ide_destroy_dmatable (ide_drive_t *drive)
+{
+	struct pci_dev *dev = HWIF(drive)->pci_dev;
+	struct scatterlist *sg = HWIF(drive)->sg_table;
+	int nents = HWIF(drive)->sg_nents;
+
+	pci_unmap_sg(dev, sg, nents);
 }
 
 /*
@@ -413,7 +413,7 @@ int ide_dmaproc (ide_dma_action_t func, ide_drive_t *drive)
 		case ide_dma_write:
 			if (!(count = ide_build_dmatable(drive, func)))
 				return 1;	/* try PIO instead of DMA */
-			outl(virt_to_bus(hwif->dmatable), dma_base + 4); /* PRD table */
+			outl(hwif->dmatable_dma, dma_base + 4); /* PRD table */
 			outb(reading, dma_base);			/* specify r/w */
 			outb(inb(dma_base+2)|6, dma_base+2);		/* clear INTR & ERROR flags */
 			drive->waiting_for_dma = 1;
@@ -434,6 +434,7 @@ int ide_dmaproc (ide_dma_action_t func, ide_drive_t *drive)
 			outb(inb(dma_base)&~1, dma_base);	/* stop DMA */
 			dma_stat = inb(dma_base+2);		/* get DMA status */
 			outb(dma_stat|6, dma_base+2);	/* clear the INTR & ERROR bits */
+			ide_destroy_dmatable(drive);	/* purge DMA mappings */
 			return (dma_stat & 7) != 4;	/* verify good DMA status */
 		case ide_dma_test_irq: /* returns 1 if dma irq issued, 0 otherwise */
 			dma_stat = inb(dma_base+2);
@@ -458,9 +459,16 @@ int ide_dmaproc (ide_dma_action_t func, ide_drive_t *drive)
  */
 int ide_release_dma (ide_hwif_t *hwif)
 {
-	if (hwif->dmatable) {
-		clear_page((void *)hwif->dmatable);	/* clear PRD 1st */
-		free_page((unsigned long)hwif->dmatable);	/* free PRD 2nd */
+	if (hwif->dmatable_cpu) {
+		pci_free_consistent(hwif->pci_dev,
+				    PRD_ENTRIES * PRD_BYTES,
+				    hwif->dmatable_cpu,
+				    hwif->dmatable_dma);
+		hwif->dmatable_cpu = NULL;
+	}
+	if (hwif->sg_table) {
+		kfree(hwif->sg_table);
+		hwif->sg_table = NULL;
 	}
 	if ((hwif->dma_extra) && (hwif->channel == 0))
 		release_region((hwif->dma_base + 16), hwif->dma_extra);
@@ -474,9 +482,6 @@ int ide_release_dma (ide_hwif_t *hwif)
  
 void ide_setup_dma (ide_hwif_t *hwif, unsigned long dma_base, unsigned int num_ports)
 {
-	static unsigned long dmatable = 0;
-	static unsigned leftover = 0;
-
 	printk("    %s: BM-DMA at 0x%04lx-0x%04lx", hwif->name, dma_base, dma_base + num_ports - 1);
 	if (check_region(dma_base, num_ports)) {
 		printk(" -- ERROR, PORT ADDRESSES ALREADY IN USE\n");
@@ -484,31 +489,33 @@ void ide_setup_dma (ide_hwif_t *hwif, unsigned long dma_base, unsigned int num_p
 	}
 	request_region(dma_base, num_ports, hwif->name);
 	hwif->dma_base = dma_base;
-	if (leftover < (PRD_ENTRIES * PRD_BYTES)) {
-		/*
-		 * The BM-DMA uses full 32bit addr, so we can
-		 * safely use __get_free_page() here instead
-		 * of __get_dma_pages() -- no ISA limitations.
-		 */
-		dmatable = __get_free_pages(GFP_KERNEL,1);
-		leftover = dmatable ? PAGE_SIZE : 0;
-	}
-	if (!dmatable) {
-		printk(" -- ERROR, UNABLE TO ALLOCATE PRD TABLE\n");
-	} else {
-		hwif->dmatable = (unsigned long *) dmatable;
-		dmatable += (PRD_ENTRIES * PRD_BYTES);
-		leftover -= (PRD_ENTRIES * PRD_BYTES);
-		hwif->dmaproc = &ide_dmaproc;
+	hwif->dmatable_cpu = pci_alloc_consistent(hwif->pci_dev,
+						  PRD_ENTRIES * PRD_BYTES,
+						  &hwif->dmatable_dma);
+	if (hwif->dmatable_cpu == NULL)
+		goto dma_alloc_failure;
 
-		if (hwif->chipset != ide_trm290) {
-			byte dma_stat = inb(dma_base+2);
-			printk(", BIOS settings: %s:%s, %s:%s",
-			       hwif->drives[0].name, (dma_stat & 0x20) ? "DMA" : "pio",
-			       hwif->drives[1].name, (dma_stat & 0x40) ? "DMA" : "pio");
-		}
-		printk("\n");
+	hwif->sg_table = kmalloc(sizeof(struct scatterlist) * PRD_ENTRIES,
+				 GFP_KERNEL);
+	if (hwif->sg_table == NULL) {
+		pci_free_consistent(hwif->pci_dev, PRD_ENTRIES * PRD_BYTES,
+				    hwif->dmatable_cpu, hwif->dmatable_dma);
+		goto dma_alloc_failure;
 	}
+
+	hwif->dmaproc = &ide_dmaproc;
+
+	if (hwif->chipset != ide_trm290) {
+		byte dma_stat = inb(dma_base+2);
+		printk(", BIOS settings: %s:%s, %s:%s",
+		       hwif->drives[0].name, (dma_stat & 0x20) ? "DMA" : "pio",
+		       hwif->drives[1].name, (dma_stat & 0x40) ? "DMA" : "pio");
+	}
+	printk("\n");
+	return;
+
+dma_alloc_failure:
+	printk(" -- ERROR, UNABLE TO ALLOCATE DMA TABLES\n");
 }
 
 /*

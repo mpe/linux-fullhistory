@@ -37,6 +37,8 @@ struct parport_pc_private {
 
 	/* buffer suitable for DMA, if DMA enabled */
 	char *dma_buf;
+	dma_addr_t dma_handle;
+	struct pci_dev *dev;
 };
 
 extern __inline__ void parport_pc_write_data(struct parport *p, unsigned char d)
@@ -175,6 +177,7 @@ extern void parport_pc_dec_use_count(void);
 /* PCMCIA code will want to get us to look at a port.  Provide a mechanism. */
 extern struct parport *parport_pc_probe_port (unsigned long base,
 					      unsigned long base_hi,
-					      int irq, int dma);
+					      int irq, int dma,
+					      struct pci_dev *dev);
 
 #endif

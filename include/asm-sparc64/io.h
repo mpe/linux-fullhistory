@@ -13,7 +13,7 @@
 #define __SLOW_DOWN_IO	do { } while (0)
 #define SLOW_DOWN_IO	do { } while (0)
 
-#undef NEW_PCI_DMA_MAP
+#define NEW_PCI_DMA_MAP
 
 #ifndef NEW_PCI_DMA_MAP
 #define PCI_DVMA_HASHSZ	256

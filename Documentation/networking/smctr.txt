@@ -2,9 +2,7 @@ Text File for the SMC TokenCard TokenRing Linux driver (smctr.c).
         By Jay Schulist <jschlst@turbolinux.com>
 
 The Linux SMC Token Ring driver works with the SMC TokenCard Elite (8115T) 
-ISA adapters. Preliminary support for the SMC TokenCard Elite/A (8115T/A) 
-MCA adapter has been started but is not complete. (Contact me for information
-if you have the proper setup to finish the MCA parts).
+ISA and SMC TokenCard Elite/A (8115T/A) MCA adapters.
 
 Latest information on this driver can be obtained on the Linux-SNA WWW site.
 Please point your browser to: http://www.linux-sna.org

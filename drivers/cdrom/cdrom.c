@@ -227,7 +227,6 @@
 #include <linux/sysctl.h>
 #include <linux/proc_fs.h>
 #include <linux/init.h>
-#include <linux/blkdev.h>
 
 #include <asm/fcntl.h>
 #include <asm/segment.h>
@@ -355,8 +354,6 @@ int register_cdrom(struct cdrom_device_info *cdi)
 	cdinfo(CD_REG_UNREG, "drive \"/dev/%s\" registered\n", cdi->name);
 	cdi->next = topCdromPtr; 	
 	topCdromPtr = cdi;
-	/*FIXME:as soon as we'll switch to real thing, pass device number here*/
-	register_disk(NULL, cdi->dev, 1, &cdrom_fops, 0);
 	return 0;
 }
 #undef ENSURE
@@ -384,7 +381,6 @@ int unregister_cdrom(struct cdrom_device_info *unreg)
 		prev->next = cdi->next;
 	else
 		topCdromPtr = cdi->next;
-/*	unregister_disk();	*/
 	cdi->ops->n_minors--;
 	cdinfo(CD_REG_UNREG, "drive \"/dev/%s\" unregistered\n", cdi->name);
 	return 0;
@@ -409,11 +405,9 @@ struct cdrom_device_info *cdrom_find_device(kdev_t dev)
 		while (cdi != NULL && cdi->dev != cd_dev)
 			cdi = cdi->next;
 	}
-	
+
 	return cdi;
 }
-
-static int cdrom_setup_writemode(struct cdrom_device_info *cdi);
 
 /* We use the open-option O_NONBLOCK to indicate that the
  * purpose of opening is only for subsequent ioctl() calls; no device
@@ -447,9 +441,6 @@ int cdrom_open(struct inode *ip, struct file *fp)
 		ret = open_for_data(cdi);
 
 	if (!ret) cdi->use_count++;
-
-	if (fp->f_mode & FMODE_WRITE && !cdi->write.writeable)
-		cdi->write.writeable = !cdrom_setup_writemode(cdi);
 
 	cdinfo(CD_OPEN, "Use count for \"/dev/%s\" now %d\n", cdi->name, cdi->use_count);
 	/* Do this on open.  Don't wait for mount, because they might
@@ -2097,8 +2088,8 @@ static int mmc_ioctl(struct cdrom_device_info *cdi, unsigned int cmd,
 	return -ENOTTY;
 }
 
-static int cdrom_get_track_info(kdev_t dev, __u16 track, __u8 type,
-				track_information *ti)
+int cdrom_get_track_info(kdev_t dev, __u16 track, __u8 type,
+			 track_information *ti)
 {
         struct cdrom_device_info *cdi = cdrom_find_device(dev);
 	struct cdrom_device_ops *cdo = cdi->ops;
@@ -2120,7 +2111,7 @@ static int cdrom_get_track_info(kdev_t dev, __u16 track, __u8 type,
 	return cdo->generic_packet(cdi, &cgc);
 }
 
-static int cdrom_get_disc_info(kdev_t dev, disc_information *di)
+int cdrom_get_disc_info(kdev_t dev, disc_information *di)
 {
 	struct cdrom_device_info *cdi = cdrom_find_device(dev);
 	struct cdrom_device_ops *cdo = cdi->ops;
@@ -2232,98 +2223,8 @@ use_last_written:
 	}
 }
 
-/* return the buffer size of writeable drives */
-static int cdrom_read_buffer_capacity(struct cdrom_device_info *cdi)
-{
-	struct cdrom_device_ops *cdo = cdi->ops;
-	struct cdrom_generic_command cgc;
-	struct {
-		unsigned int pad;
-		unsigned int buffer_size;
-		unsigned int buffer_free;
-	} buf;
-	int ret;
-
-	init_cdrom_command(&cgc, &buf, 12);
-	cgc.cmd[0] = 0x5c;
-	cgc.cmd[8] = 12;
-
-	if ((ret = cdo->generic_packet(cdi, &cgc)))
-		return ret;
-	
-	return be32_to_cpu(buf.buffer_size);
-}
-
-/* return 0 if succesful and the disc can be considered writeable. */
-static int cdrom_setup_writemode(struct cdrom_device_info *cdi)
-{
-	struct cdrom_generic_command cgc;
-	write_param_page wp;
-	disc_information di;
-	track_information ti;
-	int ret, last_track;
-
-	memset(&di, 0, sizeof(disc_information));
-	memset(&ti, 0, sizeof(track_information));
-	memset(&cdi->write, 0, sizeof(struct cdrom_write_settings));
-
-	if ((ret = cdrom_get_disc_info(cdi->dev, &di)))
-		return ret;
-
-	last_track = (di.last_track_msb << 8) | di.last_track_lsb;
-	if ((ret = cdrom_get_track_info(cdi->dev, last_track, 1, &ti)))
-		return ret;
-
-	/* if the media is erasable, then it is either CD-RW or
-	 * DVD-RW - use fixed packets for those. non-erasable media
-	 * indicated CD-R or DVD-R media, use varible sized packets for
-	 * those (where the packet size is a bit less than the buffer
-	 * capacity of the drive. */
-	if (di.erasable) {
-		cdi->write.fpacket = 1;
-		/* FIXME: DVD-RW is 16, should get the packet size instead */
-		cdi->write.packet_size = 32;
-	} else {
-		int buf_size;		
-		cdi->write.fpacket = 0;
-		buf_size = cdrom_read_buffer_capacity(cdi);
-		buf_size -= 100*1024;
-		cdi->write.packet_size = buf_size / CD_FRAMESIZE;
-	}
-
-	init_cdrom_command(&cgc, &wp, 0x3c);
-	if ((ret = cdrom_mode_sense(cdi, &cgc, GPMODE_WRITE_PARMS_PAGE, 0)))
-		return ret;
-
-	/* sanity checks */
-	if ((ti.damage && !ti.nwa_v) || ti.blank) {
-		cdinfo(CD_WARNING, "can't write to this disc\n"); 
-		return 1;
-	}
-
-	/* NWA is only for CD-R and DVD-R. -RW media is randomly
-	 * writeable once it has been formatted. */
-	cdi->write.nwa = ti.nwa_v ? be32_to_cpu(ti.next_writable) : 0;
-
-	wp.fp			= cdi->write.fpacket ? 1 : 0;
-	wp.track_mode		= 0;
-	wp.write_type		= 0;
-	wp.data_block_type 	= 8;
-	wp.session_format 	= 0;
-	wp.multi_session	= 3;
-	wp.audio_pause		= cpu_to_be16(0x96);
-	wp.packet_size		= cdi->write.fpacket ? cpu_to_be32(cdi->write.packet_size) : 0;
-	wp.track_mode		= 5; /* should be ok with both CD and DVD */
-
-	if ((ret = cdrom_mode_select(cdi, &cgc)))
-		return ret;
-
-	cdinfo(CD_WARNING, "%s: writeable with %lu block %s packets\n",
-				cdi->name, cdi->write.packet_size,
-				cdi->write.fpacket ? "fixed" : "variable");
-	return 0;
-}
-
+EXPORT_SYMBOL(cdrom_get_disc_info);
+EXPORT_SYMBOL(cdrom_get_track_info);
 EXPORT_SYMBOL(cdrom_get_next_writable);
 EXPORT_SYMBOL(cdrom_get_last_written);
 EXPORT_SYMBOL(cdrom_count_tracks);

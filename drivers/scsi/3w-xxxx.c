@@ -6,6 +6,8 @@
 
    Kernel compatablity By: 	Andre Hedrick <andre@suse.com>
    Non-Copyright (C) 2000	Andre Hedrick <andre@suse.com>
+   
+   Further tiny build fixes and trivial hoovering    Alan Cox
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -47,22 +49,10 @@
    http://www.3ware.com
 */
 
-/* Convert Linux Version, Patch-level, Sub-level to LINUX_VERSION_CODE. */
-#define TW_LINUX_VERSION(V, P, S)	(((V) * 65536) + ((P) * 256) + (S))
-
-#include <linux/config.h>
-
-#ifndef LINUX_VERSION_CODE
-#include <linux/version.h>
-#endif /* LINUX_VERSION_CODE */
-
-#ifdef MODULE
-#include <linux/modversions.h>
 #include <linux/module.h>
-char kernel_version[] = UTS_RELEASE;
+
 MODULE_AUTHOR ("3ware Inc.");
 MODULE_DESCRIPTION ("3ware Storage Controller Linux Driver");
-#endif
 
 #include <linux/kernel.h>
 #include <linux/pci.h>
@@ -75,47 +65,24 @@ MODULE_DESCRIPTION ("3ware Storage Controller Linux Driver");
 #include <linux/string.h>
 #include <linux/delay.h>
 #include <linux/smp.h>
-#if LINUX_VERSION_CODE > TW_LINUX_VERSION(2,3,39)
 #include <linux/spinlock.h>
-#endif
+
 #include <asm/errno.h>
 #include <asm/io.h>
 #include <asm/irq.h>
 #include <asm/uaccess.h>
-#if LINUX_VERSION_CODE < TW_LINUX_VERSION(2,3,0)
-#include <asm/spinlock.h>
-#endif
 
 #define __3W_C			/* let 3w-xxxx.h know it is use */
 
-#ifdef MODULE
-#include "/usr/src/linux/drivers/scsi/sd.h"
-#include "/usr/src/linux/drivers/scsi/scsi.h"
-#include "/usr/src/linux/drivers/scsi/hosts.h"
-#else
 #include "sd.h"
 #include "scsi.h"
 #include "hosts.h"
-#endif
 
 #include "3w-xxxx.h"
 
 static int tw_copy_info(TW_Info *info, char *fmt, ...);
 static void tw_copy_mem_info(TW_Info *info, char *data, int len);
 static void tw_interrupt(int irq, void *dev_instance, struct pt_regs *regs);
-
-#if LINUX_VERSION_CODE < TW_LINUX_VERSION(2,3,8)
-/* We will eventually need to be added to proc_fs.h */
-struct proc_dir_entry tw_scsi_proc_entry = {
-#if !defined(PROC_SCSI_3W_XXXX)
-	PROC_SCSI_IDESCSI,
-#else
-	PROC_SCSI_3W_XXXX,
-#endif
-	7, "3w-xxxx",
-	S_IFDIR | S_IRUGO | S_IXUGO, 2
-};
-#endif
 
 /* Globals */
 char *tw_driver_version="0.4.001";
@@ -593,11 +560,7 @@ int tw_findcards(Scsi_Host_Template *tw_host)
 	struct Scsi_Host *host;
 	TW_Device_Extension *tw_dev;
 	TW_Device_Extension *tw_dev2;
-#if LINUX_VERSION_CODE > TW_LINUX_VERSION(2,3,39)
 	struct pci_dev *tw_pci_dev = NULL;
-#else
-	struct pci_dev *tw_pci_dev = pci_devices;
-#endif
 	u32 status_reg_value;
 
 	dprintk(KERN_NOTICE "3w-xxxx: tw_findcards()\n");
@@ -619,19 +582,11 @@ int tw_findcards(Scsi_Host_Template *tw_host)
 		}
 
 		/* Calculate the cards register addresses */
-#if LINUX_VERSION_CODE > TW_LINUX_VERSION(2,3,39)
 		tw_dev->registers.base_addr = tw_pci_dev->resource[0].start;
 		tw_dev->registers.control_reg_addr = (tw_pci_dev->resource[0].start & ~15);
 		tw_dev->registers.status_reg_addr = ((tw_pci_dev->resource[0].start & ~15) + 0x4);
 		tw_dev->registers.command_que_addr = ((tw_pci_dev->resource[0].start & ~15) + 0x8);
 		tw_dev->registers.response_que_addr = ((tw_pci_dev->resource[0].start & ~15) + 0xC);
-#else
-		tw_dev->registers.base_addr = tw_pci_dev->base_address[0];
-		tw_dev->registers.control_reg_addr = (tw_pci_dev->base_address[0] & ~15);
-		tw_dev->registers.status_reg_addr = ((tw_pci_dev->base_address[0] & ~15) + 0x4);
-		tw_dev->registers.command_que_addr = ((tw_pci_dev->base_address[0] & ~15) + 0x8);
-		tw_dev->registers.response_que_addr = ((tw_pci_dev->base_address[0] & ~15) + 0xC);
-#endif
 		/* Save pci_dev struct to device extension */
 		tw_dev->tw_pci_dev = tw_pci_dev;
 
@@ -684,19 +639,10 @@ int tw_findcards(Scsi_Host_Template *tw_host)
 		}
 
 		/* Make sure that io region isn't already taken */
-#if LINUX_VERSION_CODE > TW_LINUX_VERSION(2,3,39)
-		if (check_region((tw_dev->tw_pci_dev->resource[0].start & ~15), TW_IO_ADDRESS_RANGE)) {
-#else
-		if (check_region((tw_dev->tw_pci_dev->base_address[0] & ~15), TW_IO_ADDRESS_RANGE)) {
-#endif
+		if (check_region((tw_dev->tw_pci_dev->resource[0].start), TW_IO_ADDRESS_RANGE)) {
 			printk(KERN_WARNING "3w-xxxx: tw_findcards(): Couldn't get io range 0x%lx-0x%lx for card %d.\n", 
-#if LINUX_VERSION_CODE > TW_LINUX_VERSION(2,3,39)
-				(tw_dev->tw_pci_dev->resource[0].start & ~15), 
-				(tw_dev->tw_pci_dev->resource[0].start & ~15) + 
-#else
-				(tw_dev->tw_pci_dev->base_address[0] & ~15),
-				(tw_dev->tw_pci_dev->base_address[0] & ~15) +
-#endif
+				(tw_dev->tw_pci_dev->resource[0].start), 
+				(tw_dev->tw_pci_dev->resource[0].start) + 
 				TW_IO_ADDRESS_RANGE, numcards);
 			tw_free_device_extension(tw_dev);
 			kfree(tw_dev);
@@ -704,19 +650,11 @@ int tw_findcards(Scsi_Host_Template *tw_host)
 		}
     
 		/* Reserve the io address space */
-#if LINUX_VERSION_CODE > TW_LINUX_VERSION(2,3,39)
-		request_region((tw_dev->tw_pci_dev->resource[0].start & ~15), TW_IO_ADDRESS_RANGE, TW_DEVICE_NAME);
-#else
-		request_region((tw_dev->tw_pci_dev->base_address[0] & ~15), TW_IO_ADDRESS_RANGE, TW_DEVICE_NAME);
-#endif
+		request_region((tw_dev->tw_pci_dev->resource[0].start), TW_IO_ADDRESS_RANGE, TW_DEVICE_NAME);
 		error = tw_initialize_units(tw_dev);
 		if (error) {
 			printk(KERN_WARNING "3w-xxxx: tw_findcards(): Couldn't initialize units for card %d.\n", numcards);
-#if LINUX_VERSION_CODE > TW_LINUX_VERSION(2,3,39)
-			release_region((tw_dev->tw_pci_dev->resource[0].start & ~15), TW_IO_ADDRESS_RANGE);
-#else
-			release_region((tw_dev->tw_pci_dev->base_address[0] & ~15), TW_IO_ADDRESS_RANGE);
-#endif
+			release_region((tw_dev->tw_pci_dev->resource[0].start), TW_IO_ADDRESS_RANGE);
 			tw_free_device_extension(tw_dev);
 			kfree(tw_dev);
 			continue;
@@ -725,11 +663,7 @@ int tw_findcards(Scsi_Host_Template *tw_host)
 		error = tw_initconnection(tw_dev);
 		if (error) {
 			printk(KERN_WARNING "3w-xxxx: tw_findcards(): Couldn't initconnection for card %d.\n", numcards);
-#if LINUX_VERSION_CODE > TW_LINUX_VERSION(2,3,39)
-			release_region((tw_dev->tw_pci_dev->resource[0].start & ~15), TW_IO_ADDRESS_RANGE);
-#else
-			release_region((tw_dev->tw_pci_dev->base_address[0] & ~15), TW_IO_ADDRESS_RANGE);
-#endif
+			release_region((tw_dev->tw_pci_dev->resource[0].start), TW_IO_ADDRESS_RANGE);
 			tw_free_device_extension(tw_dev);
 			kfree(tw_dev);
 			continue;
@@ -741,15 +675,13 @@ int tw_findcards(Scsi_Host_Template *tw_host)
 
 		/* Register the card with the kernel SCSI layer */
 		host = scsi_register(tw_host, sizeof(TW_Device_Extension));
+		
+		/* FIXME - check for NULL */
 
 		status_reg_value = inl(tw_dev->registers.status_reg_addr);
 
 		dprintk(KERN_NOTICE "scsi%d : Found a 3ware Storage Controller at 0x%x, IRQ: %d P-chip: %d.%d\n", host->host_no,
-#if LINUX_VERSION_CODE > TW_LINUX_VERSION(2,3,39)
-				(u32)(tw_pci_dev->resource[0].start & ~15), tw_pci_dev->irq, 
-#else
-				(u32)(tw_pci_dev->base_address[0] & ~15), tw_pci_dev->irq,
-#endif
+				(u32)(tw_pci_dev->resource[0].start), tw_pci_dev->irq, 
 				(status_reg_value & TW_STATUS_MAJOR_VERSION_MASK) >> 28, 
 				(status_reg_value & TW_STATUS_MINOR_VERSION_MASK) >> 24);
 
@@ -763,11 +695,7 @@ int tw_findcards(Scsi_Host_Template *tw_host)
 		} else { 
 			printk(KERN_WARNING "3w-xxxx: tw_findcards(): Bad scsi host data for card %d.\n", numcards-1);
 			scsi_unregister(host);
-#if LINUX_VERSION_CODE > TW_LINUX_VERSION(2,3,39)
-			release_region((tw_dev->tw_pci_dev->resource[0].start & ~15), TW_IO_ADDRESS_RANGE);
-#else
-			release_region((tw_dev->tw_pci_dev->base_address[0] & ~15), TW_IO_ADDRESS_RANGE);
-#endif
+			release_region((tw_dev->tw_pci_dev->resource[0].start), TW_IO_ADDRESS_RANGE);
 			tw_free_device_extension(tw_dev);
 			kfree(tw_dev);
 			continue;
@@ -781,11 +709,7 @@ int tw_findcards(Scsi_Host_Template *tw_host)
 		if (error) {
 			printk(KERN_WARNING "3w-xxxx: tw_findcards(): Error requesting irq for card %d.\n", numcards-1);
 			scsi_unregister(host);
-#if LINUX_VERSION_CODE > TW_LINUX_VERSION(2,3,39)
-			release_region((tw_dev->tw_pci_dev->resource[0].start & ~15), TW_IO_ADDRESS_RANGE);
-#else
-			release_region((tw_dev->tw_pci_dev->base_address[0] & ~15), TW_IO_ADDRESS_RANGE);
-#endif
+			release_region((tw_dev->tw_pci_dev->resource[0].start), TW_IO_ADDRESS_RANGE);
 
 			tw_free_device_extension(tw_dev);
 			kfree(tw_dev);
@@ -945,9 +869,7 @@ int tw_initialize_device_extension(TW_Device_Extension *tw_dev)
 	tw_dev->sector_count = 0;
 	tw_dev->max_sector_count = 0;
 	spin_lock_init(&tw_dev->tw_lock);
-#if LINUX_VERSION_CODE > TW_LINUX_VERSION(2,3,39)
 	tw_dev->flags = 0;
-#endif
 	return 0;
 } /* End tw_initialize_device_extension() */
 
@@ -1088,10 +1010,8 @@ static void tw_interrupt(int irq, void *dev_instance, struct pt_regs *regs)
 	int flags = 0;
 	int flags2 = 0;
 	TW_Command *command_packet;
-#if LINUX_VERSION_CODE > TW_LINUX_VERSION(2,3,39)
 	if (test_and_set_bit(TW_IN_INTR, &tw_dev->flags))
 		return;
-#endif
 	spin_lock_irqsave(&io_request_lock, flags);
 
 	if (tw_dev->tw_pci_dev->irq == irq) {
@@ -1236,9 +1156,7 @@ static void tw_interrupt(int irq, void *dev_instance, struct pt_regs *regs)
 		spin_unlock_irqrestore(&tw_dev->tw_lock, flags2);
 	}
 	spin_unlock_irqrestore(&io_request_lock, flags);
-#if LINUX_VERSION_CODE > TW_LINUX_VERSION(2,3,39)
 	clear_bit(TW_IN_INTR, &tw_dev->flags);
-#endif
 }	/* End tw_interrupt() */
 
 /* This function handles ioctls from userspace to the driver */
@@ -1873,11 +1791,7 @@ int tw_scsi_release(struct Scsi_Host *tw_host)
 	dprintk(KERN_NOTICE "3w-xxxx: tw_scsi_release()\n");
 
 	/* Free up the IO region */
-#if LINUX_VERSION_CODE > TW_LINUX_VERSION(2,3,39)
-	release_region((tw_dev->tw_pci_dev->resource[0].start & ~15), TW_IO_ADDRESS_RANGE);
-#else
-	release_region((tw_dev->tw_pci_dev->base_address[0] & ~15), TW_IO_ADDRESS_RANGE);
-#endif
+	release_region((tw_dev->tw_pci_dev->resource[0].start), TW_IO_ADDRESS_RANGE);
 
 	/* Free up the IRQ */
 	free_irq(tw_dev->tw_pci_dev->irq, tw_dev);
@@ -2302,7 +2216,8 @@ void tw_unmask_command_interrupt(TW_Device_Extension *tw_dev)
 } /* End tw_unmask_command_interrupt() */
 
 /* Now get things going */
+
 #ifdef MODULE
 Scsi_Host_Template driver_template = TWXXXX;
-#include "/usr/src/linux/drivers/scsi/scsi_module.c"
+#include "scsi_module.c"
 #endif

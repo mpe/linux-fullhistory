@@ -1,0 +1,143 @@
+			Dynamic DMA mapping
+			===================
+
+		 David S. Miller <davem@redhat.com>
+		 Richard Henderson <rth@cygnus.com>
+		  Jakub Jelinek <jakub@redhat.com>
+
+Most of the 64bit platforms have special hardware that translates bus
+addresses (DMA addresses) to physical addresses similarly to how page
+tables and/or TLB translate virtual addresses to physical addresses.
+This is needed so that e.g. PCI devices can access with a Single Address
+Cycle (32bit DMA address) any page in the 64bit physical address space.
+Previously in Linux those 64bit platforms had to set artificial limits on
+the maximum RAM size in the system, so that the virt_to_bus() static scheme
+works (the DMA address translation tables were simply filled on bootup
+to map each bus address to the physical page __pa(bus_to_virt())).
+
+So that Linux can use the dynamic DMA mapping, it needs some help from the
+drivers, namely it has to take into account that DMA addresses should be
+mapped only for the time they are actually used and unmapped after the DMA
+transfer.
+
+The following API will work of course even on platforms where no such
+hardware exists, see e.g. include/asm-i386/pci.h for how it is implemented on
+top of the virt_to_bus interface.
+
+First of all, you should make sure
+
+#include <linux/pci.h>
+
+is in your driver. This file defines a dma_addr_t type which should be
+used everywhere you hold a DMA (bus) address returned from the DMA mapping
+functions.
+
+There are two types of DMA mappings:
+- static DMA mappings which are usually mapped at driver initialization,
+  unmapped at the end and for which the hardware should not assume
+  sequential accesses (from both the DMA engine in the card and CPU).
+- streaming DMA mappings which are usually mapped for one DMA transfer,
+  unmapped right after it (unless you use pci_dma_sync below) and for which
+  hardware can optimize for sequential accesses.
+
+To allocate and map a static DMA region, you should do:
+
+	dma_addr_t dma_handle;
+
+	cpu_addr = pci_alloc_consistent(dev, size, &dma_handle);
+
+where dev is a struct pci_dev *. You should pass NULL for PCI like buses
+where devices don't have struct pci_dev (like ISA, EISA).
+This argument is needed because the DMA translations may be bus
+specific (and often is private to the bus which the device is attached to).
+Size is the length of the region you want to allocate.
+This routine will allocate RAM for that region, so it acts similarly to
+__get_free_pages (but takes size instead of page order).
+It returns two values: the virtual address which you can use to access it
+from the CPU and dma_handle which you pass to the card.
+The return address is guaranteed to be page aligned.
+
+To unmap and free such DMA region, you call:
+
+	pci_free_consistent(dev, size, cpu_addr, dma_handle);
+
+where dev, size are the same as in the above call and cpu_addr and
+dma_handle are the values pci_alloc_consistent returned.
+
+The streaming DMA mapping routines can be called from interrupt context.
+There are two versions of each map/unmap, one which map/unmap a single
+memory region, one which map/unmap a scatterlist.
+
+To map a single region, you do:
+
+	dma_addr_t dma_handle;
+
+	dma_handle = pci_map_single(dev, addr, size);
+
+and to unmap it:
+
+	pci_unmap_single(dev, dma_handle, size);
+
+You should call pci_unmap_single when the DMA activity is finished, e.g.
+from interrupt which told you the DMA transfer is done.
+
+Similarly with scatterlists, you map a region gathered from several regions by:
+
+	int i, count = pci_map_sg(dev, sglist, nents);
+	struct scatterlist *sg;
+
+	for (i = 0, sg = sglist; i < count; i++, sg++) {
+		hw_address[i] = sg_dma_address(sg);
+		hw_len[i] = sg_dma_len(sg);
+	}
+
+where nents is the number of entries in the sglist.
+The implementation is free to merge several consecutive sglist entries
+into one (e.g. if DMA mapping is done with PAGE_SIZE granularity, any
+consecutive sglist entries can be merged into one provided the first one
+ends and the second one starts on a page boundary - in fact this is a huge
+advantage for cards which either cannot do scatter-gather or have very
+limited number of scatter-gather entries) and returns the actual number
+of sg entries it mapped them too.
+Then you should loop count times (note: this can be less than nents times)
+and use sg_dma_address() and sg_dma_length() macros where you previously
+accessed sg->address and sg->length as shown above.
+
+To unmap a scatterlist, just call:
+
+	pci_unmap_sg(dev, sglist, nents);
+
+Again, make sure DMA activity finished.
+Every pci_map_{single,sg} call should have its pci_unmap_{single,sg}
+counterpart, because the bus address space is a shared resource (although
+in some ports the mapping is per each BUS so less devices contend for the
+same bus address space) and you could render the machine unusable by eating
+all bus addresses.
+
+If you need to use the same streaming DMA region multiple times and touch
+the data in between the DMA transfers, just map it
+with pci_map_{single,sg}, after each DMA transfer call either:
+
+	pci_dma_sync_single(dev, dma_handle, size);
+
+or:
+
+	pci_dma_sync_sg(dev, sglist, nents);
+
+and after the last DMA transfer call one of the DMA unmap routines
+pci_unmap_{single,sg}. If you don't touch the data from the first pci_map_*
+call till pci_unmap_*, then you don't have to call pci_sync_* routines.
+
+Drivers converted fully to this interface should not use virt_to_bus any
+longer, nor should they use bus_to_virt. Some drivers have to be changed a
+little bit, because there is no longer an equivalent to bus_to_virt in the
+dynamic DMA mapping scheme - you have to always store the DMA addresses
+returned by the pci_alloc_consistent and pci_map_single calls (pci_map_sg
+stores them in the scatterlist itself if the platform supports dynamic DMA
+mapping in hardware) in your driver structures and/or in the card registers.
+
+For PCI cards which recognize fewer address lines than 32 in Single
+Address Cycle, you should set corresponding pci_dev's dma_mask field to a
+different mask. The dma mapping routines then should either honour your request
+and allocate the DMA only with the bus address with bits set in your
+dma_mask or should complain that the device is not supported on that platform.

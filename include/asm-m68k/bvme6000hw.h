@@ -95,6 +95,7 @@ typedef struct {
 
 #define BVME_SCC_A_ADDR	0xffb0000b
 #define BVME_SCC_B_ADDR	0xffb00003
+#define BVME_SCC_RTxC	7372800
 
 #define BVME_CONFIG_REG	0xff500003
 

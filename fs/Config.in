@@ -6,6 +6,7 @@ comment 'Filesystems'
 
 bool 'Quota support' CONFIG_QUOTA
 tristate 'Kernel automounter support' CONFIG_AUTOFS_FS
+tristate 'Kernel automounter version 4 support (also supports v3)' CONFIG_AUTOFS4_FS
 
 
 dep_tristate 'ADFS filesystem support (read only) (EXPERIMENTAL)' CONFIG_ADFS_FS $CONFIG_EXPERIMENTAL

@@ -1795,7 +1795,8 @@ int __init amiga_floppy_init(void)
 		return -EBUSY;
 	}
 
-	if ((raw_buf = (char *)amiga_chip_alloc (RAW_BUF_SIZE)) == NULL) {
+	if ((raw_buf = (char *)amiga_chip_alloc (RAW_BUF_SIZE, "Floppy")) ==
+	    NULL) {
 		printk("fd: cannot get chip mem buffer\n");
 		unregister_blkdev(MAJOR_NR,"fd");
 		return -ENOMEM;

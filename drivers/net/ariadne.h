@@ -403,12 +403,13 @@ struct MC68230 {
      *	Ariadne Expansion Board Structure
      */
 
-struct AriadneBoard {
-    u_char Pad1[0x360];
-    struct Am79C960 Lance;
-    u_char Pad2[0xc88];
-    struct MC68230 PiT;
-    u_char Pad3[0x2fc0];
-    volatile u_short BootPROM[0x2000];	/* I guess it's here :-) */
-    volatile u_short RAM[0x4000];	/* Always access WORDs!! */
-};
+#define ARIADNE_LANCE		0x360
+
+#define ARIADNE_PIT		0x1000
+
+#define ARIADNE_BOOTPROM	0x4000	/* I guess it's here :-) */
+#define ARIADNE_BOOTPROM_SIZE	0x4000
+
+#define ARIADNE_RAM		0x8000	/* Always access WORDs!! */
+#define ARIADNE_RAM_SIZE	0x8000
+

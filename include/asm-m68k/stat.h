@@ -38,8 +38,40 @@ struct stat {
 	unsigned long  __unused5;
 };
 
-/* stat64 struct goes here -- someone please make
- * it mesh with whatever glibc does in userland on
- * m68k's.
+/* This matches struct stat64 in glibc2.1, hence the absolutely
+ * insane amounts of padding around dev_t's.
  */
+struct stat64 {
+	unsigned short	st_dev;
+	unsigned char	__pad0[10];
+
+	unsigned long	st_ino;
+	unsigned int	st_mode;
+	unsigned int	st_nlink;
+
+	unsigned long	st_uid;
+	unsigned long	st_gid;
+
+	unsigned short	st_rdev;
+	unsigned char	__pad3[10];
+
+	long long	st_size;
+	unsigned long	st_blksize;
+
+	unsigned long	st_blocks;	/* Number 512-byte blocks allocated. */
+	unsigned long	__pad4;		/* future possible st_blocks high bits */
+
+	unsigned long	st_atime;
+	unsigned long	__pad5;
+
+	unsigned long	st_mtime;
+	unsigned long	__pad6;
+
+	unsigned long	st_ctime;
+	unsigned long	__pad7;		/* will be high 32 bits of ctime someday */
+
+	unsigned long	__unused1;
+	unsigned long	__unused2;
+};
+
 #endif /* _M68K_STAT_H */

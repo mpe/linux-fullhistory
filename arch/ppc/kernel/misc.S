@@ -1068,4 +1068,6 @@ _GLOBAL(sys_call_table)
 	.long sys_ni_syscall		/* streams2 */
 	.long sys_vfork
 	.long sys_getrlimit	/* 190 */
-	.space (NR_syscalls-190)*4
+	.rept NR_syscalls-190
+		.long sys_ni_syscall
+	.endr

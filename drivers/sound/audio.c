@@ -228,7 +228,7 @@ int audio_write(int dev, struct file *file, const char *buf, int count)
 		{
 			    /* Handle nonblocking mode */
 			if ((file->f_flags & O_NONBLOCK) && err == -EAGAIN)
-				return p;	/* No more space. Return # of accepted bytes */
+				return p? p : -EAGAIN;	/* No more space. Return # of accepted bytes */
 			return err;
 		}
 		l = c;
@@ -308,11 +308,11 @@ int audio_read(int dev, struct file *file, char *buf, int count)
 			 *	Nonblocking mode handling. Return current # of bytes
 			 */
 
-			if ((file->f_flags & O_NONBLOCK) && buf_no == -EAGAIN)
-				return p;
-
 			if (p > 0) 		/* Avoid throwing away data */
 				return p;	/* Return it instead */
+
+			if ((file->f_flags & O_NONBLOCK) && buf_no == -EAGAIN)
+				return -EAGAIN;
 
 			return buf_no;
 		}

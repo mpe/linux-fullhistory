@@ -38,24 +38,24 @@ int udf_ustr_to_dchars(Uint8 *dest, const struct ustr *src, int strlen)
 {
 	if ( (!dest) || (!src) || (!strlen) || (src->u_len > strlen) )
 		return 0;
-	memcpy(dest+1, src->u_name, src->u_len-1);
+	memcpy(dest+1, src->u_name, src->u_len);
 	dest[0] = src->u_cmpID;
-	return src->u_len;
+	return src->u_len + 1;
 }
 
 int udf_ustr_to_char(Uint8 *dest, const struct ustr *src, int strlen)
 {
 	if ( (!dest) || (!src) || (!strlen) || (src->u_len >= strlen) )
 		return 0;
-	memcpy(dest, src->u_name, src->u_len-1);
-	return src->u_len - 1;
+	memcpy(dest, src->u_name, src->u_len);
+	return src->u_len;
 }
 
 int udf_ustr_to_dstring(dstring *dest, const struct ustr *src, int dlength)
 {
 	if ( udf_ustr_to_dchars(dest, src, dlength-1) )
 	{
-		dest[dlength-1] = src->u_len;
+		dest[dlength-1] = src->u_len + 1;
 		return dlength;
 	}
 	else
@@ -69,8 +69,8 @@ int udf_dchars_to_ustr(struct ustr *dest, const Uint8 *src, int strlen)
 	memset(dest, 0, sizeof(struct ustr));
 	memcpy(dest->u_name, src+1, strlen-1);
 	dest->u_cmpID = src[0];
-	dest->u_len = strlen;
-	return strlen;
+	dest->u_len = strlen-1;
+	return strlen-1;
 }
 
 int udf_char_to_ustr(struct ustr *dest, const Uint8 *src, int strlen)
@@ -80,8 +80,8 @@ int udf_char_to_ustr(struct ustr *dest, const Uint8 *src, int strlen)
 	memset(dest, 0, sizeof(struct ustr));
 	memcpy(dest->u_name, src, strlen);
 	dest->u_cmpID = 0x08;
-	dest->u_len = strlen + 1;
-	return strlen + 1;
+	dest->u_len = strlen;
+	return strlen;
 }
 
 
@@ -182,38 +182,21 @@ int udf_CS0toUTF8(struct ustr *utf_o, struct ustr *ocu_i)
 		/* Expand OSTA compressed Unicode to Unicode */
 		c = ocu[i++];
 		if (cmp_id == 16)
-		{
 			c = (c << 8) | ocu[i++];
-#ifdef __KERNEL__
-			if (c & 0xFF00)
-				udf_debug("cmd_id == 16 (0x%2x%2x)\n",
-					((c >> 8) & 0xFF), (c & 0xFF));
-#endif
-		}
 
 		/* Compress Unicode to UTF-8 */
 		if (c < 0x80U)
 			utf_o->u_name[utf_o->u_len++] = (Uint8)c;
-		else if (c < 0x800U) {
+		else if (c < 0x800U)
+		{
 			utf_o->u_name[utf_o->u_len++] = (Uint8)(0xc0 | (c >> 6));
 			utf_o->u_name[utf_o->u_len++] = (Uint8)(0x80 | (c & 0x3f));
-#ifdef __KERNEL__
-			udf_debug("(0x%2x%2x) -> (%2x) (%2x)\n",
-				((c >> 8) & 0xFF), (c & 0xFF),
-				utf_o->u_name[utf_o->u_len-2],
-				utf_o->u_name[utf_o->u_len-1]);
-#endif
-		} else {
+		}
+		else
+		{
 			utf_o->u_name[utf_o->u_len++] = (Uint8)(0xe0 | (c >> 12));
 			utf_o->u_name[utf_o->u_len++] = (Uint8)(0x80 | ((c >> 6) & 0x3f));
 			utf_o->u_name[utf_o->u_len++] = (Uint8)(0x80 | (c & 0x3f));
-#ifdef __KERNEL__
-			udf_debug("(0x%2x%2x) -> (%2x) (%2x) (%2x)\n",
-				((c >> 8) & 0xFF), (c & 0xFF),
-				utf_o->u_name[utf_o->u_len-3],
-				utf_o->u_name[utf_o->u_len-2],
-				utf_o->u_name[utf_o->u_len-1]);
-#endif
 		}
 	}
 	utf_o->u_cmpID=8;
@@ -259,34 +242,49 @@ int udf_UTF8toCS0(dstring *ocu, struct ustr *utf, int length)
 try_again:
 	utf_char = 0U;
 	utf_cnt = 0U;
-	for (i = 0U; i < utf->u_len; i++) {
-		c = (unsigned)utf->u_name[i];
+	for (i = 0U; i < utf->u_len; i++)
+	{
+		c = (Uint8)utf->u_name[i];
 
 		/* Complete a multi-byte UTF-8 character */
-		if (utf_cnt) {
+		if (utf_cnt)
+		{
 			utf_char = (utf_char << 6) | (c & 0x3fU);
 			if (--utf_cnt)
 				continue;
-		} else {
+		}
+		else
+		{
 			/* Check for a multi-byte UTF-8 character */
-			if (c & 0x80U) {
+			if (c & 0x80U)
+			{
 				/* Start a multi-byte UTF-8 character */
-				if ((c & 0xe0U) == 0xc0U) {
+				if ((c & 0xe0U) == 0xc0U)
+				{
 					utf_char = c & 0x1fU;
 					utf_cnt = 1;
-				} else if ((c & 0xf0U) == 0xe0U) {
+				}
+				else if ((c & 0xf0U) == 0xe0U)
+				{
 					utf_char = c & 0x0fU;
 					utf_cnt = 2;
-				} else if ((c & 0xf8U) == 0xf0U) {
+				}
+				else if ((c & 0xf8U) == 0xf0U)
+				{
 					utf_char = c & 0x07U;
 					utf_cnt = 3;
-				} else if ((c & 0xfcU) == 0xf8U) {
+				}
+				else if ((c & 0xfcU) == 0xf8U)
+				{
 					utf_char = c & 0x03U;
 					utf_cnt = 4;
-				} else if ((c & 0xfeU) == 0xfcU) {
+				}
+				else if ((c & 0xfeU) == 0xfcU)
+				{
 					utf_char = c & 0x01U;
 					utf_cnt = 5;
-				} else
+				}
+				else
 					goto error_out;
 				continue;
 			} else
@@ -295,8 +293,10 @@ try_again:
 		}
 
 		/* Choose no compression if necessary */
-		if (utf_char > max_val) {
-			if ( 0xffU == max_val ) {
+		if (utf_char > max_val)
+		{
+			if ( 0xffU == max_val )
+			{
 				max_val = 0xffffU;
 				ocu[0] = (Uint8)0x10U;
 				goto try_again;
@@ -305,11 +305,15 @@ try_again:
 		}
 
 		if (max_val == 0xffffU)
+		{
 			ocu[++u_len] = (Uint8)(utf_char >> 8);
+		}
 		ocu[++u_len] = (Uint8)(utf_char & 0xffU);
 	}
 
-	if (utf_cnt) {
+
+	if (utf_cnt)
+	{
 error_out:
 #ifdef __KERNEL__
 		printk(KERN_ERR "udf: bad UTF-8 character\n");
@@ -317,8 +321,8 @@ error_out:
 		return 0;
 	}
 
-	ocu[length - 1] = (Uint8)u_len;
-	return u_len;
+	ocu[length - 1] = (Uint8)u_len + 1;
+	return u_len + 1;
 }
 
 #ifdef __KERNEL__

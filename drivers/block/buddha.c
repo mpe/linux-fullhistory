@@ -111,24 +111,28 @@ static int buddha_ack_intr(ide_hwif_t *hwif)
 
 static int find_buddha(void)
 {
-    u_int key;
-    const struct ConfigDev *cd;
+    struct zorro_dev *z = NULL;
 
     buddha_num_hwifs = 0;
-    if ((key = zorro_find(ZORRO_PROD_INDIVIDUAL_COMPUTERS_BUDDHA, 0, 0)))
-	buddha_num_hwifs = BUDDHA_NUM_HWIFS;
-    else if ((key = zorro_find(ZORRO_PROD_INDIVIDUAL_COMPUTERS_CATWEASEL, 0,
-			       0)))
-	buddha_num_hwifs = CATWEASEL_NUM_HWIFS;
-    if (key) {
-	cd = zorro_get_board(key);
-	buddha_board = (u_long)cd->cd_BoardAddr;
-	if (buddha_board) {
-	    buddha_board = ZTWO_VADDR(buddha_board);
-	    /* write to BUDDHA_IRQ_MR to enable the board IRQ */
-	    *(char *)(buddha_board+BUDDHA_IRQ_MR) = 0;
-	    zorro_config_board(key, 0);
-	}
+    while ((z = zorro_find_device(ZORRO_WILDCARD, z))) {
+	unsigned long board;
+	const char *name;
+	if (z->id == ZORRO_PROD_INDIVIDUAL_COMPUTERS_BUDDHA) {
+	    buddha_num_hwifs = BUDDHA_NUM_HWIFS;
+	    name = "Buddha IDE Interface";
+	} else if (z->id == ZORRO_PROD_INDIVIDUAL_COMPUTERS_CATWEASEL) {
+	    buddha_num_hwifs = CATWEASEL_NUM_HWIFS;
+	    name = "Catweasel IDE Interface and Floppy Controller";
+	} else
+	    continue;
+	board = z->resource.start;
+	if (!request_mem_region(board+BUDDHA_BASE1, 0x800, "IDE"))
+	    continue;
+	strcpy(z->name, name);
+	buddha_board = ZTWO_VADDR(board);
+	/* write to BUDDHA_IRQ_MR to enable the board IRQ */
+	*(char *)(buddha_board+BUDDHA_IRQ_MR) = 0;
+	break;
     }
     return buddha_num_hwifs;
 }

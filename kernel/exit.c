@@ -416,9 +416,6 @@ fake_volatile:
 	tsk->exit_code = code;
 	exit_notify();
 	task_unlock(tsk);
-#ifdef DEBUG_PROC_TREE
-	audit_ptree();
-#endif
 	if (tsk->exec_domain && tsk->exec_domain->module)
 		__MOD_DEC_USE_COUNT(tsk->exec_domain->module);
 	if (tsk->binfmt && tsk->binfmt->module)
@@ -508,9 +505,6 @@ repeat:
 					notify_parent(p, SIGCHLD);
 				} else
 					release(p);
-#ifdef DEBUG_PROC_TREE
-				audit_ptree();
-#endif
 				goto end_wait4;
 			default:
 				continue;

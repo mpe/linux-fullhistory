@@ -668,7 +668,7 @@ static inline void soc_init(struct sbus_dev *sdev, int no)
 	memset (cq, 0, sizeof(cq));
 	
 	size = (SOC_CQ_REQ0_SIZE + SOC_CQ_REQ1_SIZE) * sizeof(soc_req);
-	s->req_cpu = sbus_alloc_consistant(sdev, size, &s->req_dvma);
+	s->req_cpu = sbus_alloc_consistent(sdev, size, &s->req_dvma);
 	s->req[0].pool = s->req_cpu;
 	cq[0].address = s->req_dvma;
 	s->req[1].pool = s->req[0].pool + SOC_CQ_REQ0_SIZE;
@@ -765,7 +765,7 @@ void cleanup_module(void)
 			sbus_iounmap(s->xram, sdev->reg_addrs[1].reg_size);
 			sbus_iounmap(s->regs, sdev->reg_addrs[2].reg_size);
 		}
-		sbus_free_consistant(sdev,
+		sbus_free_consistent(sdev,
 				     (SOC_CQ_REQ0_SIZE+SOC_CQ_REQ1_SIZE)*sizeof(soc_req),
 				     s->req_cpu, s->req_dvma);
 	}

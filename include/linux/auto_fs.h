@@ -20,7 +20,8 @@
 #include <linux/ioctl.h>
 #include <asm/types.h>
 
-#define AUTOFS_PROTO_VERSION 3
+#define AUTOFS_MIN_PROTO_VERSION 3	/* Min version we support */
+#define AUTOFS_PROTO_VERSION 4		/* Current version */
 
 /*
  * Architectures where both 32- and 64-bit binaries can be executed
@@ -46,6 +47,7 @@ typedef unsigned long autofs_wqt_t;
 enum autofs_packet_type {
 	autofs_ptype_missing,	/* Missing entry (mount request) */
 	autofs_ptype_expire,	/* Expire entry (umount request) */
+	autofs_ptype_expire_multi,	/* Expire entry (umount request) */
 };
 
 struct autofs_packet_hdr {
@@ -60,10 +62,26 @@ struct autofs_packet_missing {
 	char name[NAME_MAX+1];
 };	
 
+/* v3 expire (via ioctl) */
 struct autofs_packet_expire {
 	struct autofs_packet_hdr hdr;
 	int len;
 	char name[NAME_MAX+1];
+};
+
+/* v4 multi expire (via pipe) */
+struct autofs_packet_expire_multi {
+	struct autofs_packet_hdr hdr;
+        autofs_wqt_t wait_queue_token;
+	int len;
+	char name[NAME_MAX+1];
+};
+
+union autofs_packet_union {
+	struct autofs_packet_hdr hdr;
+	struct autofs_packet_missing missing;
+	struct autofs_packet_expire expire;
+	struct autofs_packet_expire_multi expire_multi;
 };
 
 #define AUTOFS_IOC_READY      _IO(0x93,0x60)
@@ -72,6 +90,7 @@ struct autofs_packet_expire {
 #define AUTOFS_IOC_PROTOVER   _IOR(0x93,0x63,int)
 #define AUTOFS_IOC_SETTIMEOUT _IOWR(0x93,0x64,unsigned long)
 #define AUTOFS_IOC_EXPIRE     _IOR(0x93,0x65,struct autofs_packet_expire)
+#define AUTOFS_IOC_EXPIRE_MULTI _IOW(0x93,0x66,int)
 
 #ifdef __KERNEL__
 

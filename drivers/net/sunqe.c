@@ -833,10 +833,10 @@ static int __init qec_ether_init(struct net_device *dev, struct sbus_dev *sdev)
 			goto qec_free_devs;
 		}
 
-		qeps[i]->qe_block = sbus_alloc_consistant(qesdevs[i],
+		qeps[i]->qe_block = sbus_alloc_consistent(qesdevs[i],
 							  PAGE_SIZE,
 							  &qeps[i]->qblock_dvma);
-		qeps[i]->buffers = sbus_alloc_consistant(qesdevs[i],
+		qeps[i]->buffers = sbus_alloc_consistent(qesdevs[i],
 							 sizeof(struct sunqe_buffers),
 							 &qeps[i]->buffers_dvma);
 		if (qeps[i]->qe_block == NULL ||
@@ -907,12 +907,12 @@ qec_free_devs:
 				if (qe->mregs)
 					sbus_iounmap(qe->mregs, MREGS_REG_SIZE);
 				if (qe->qe_block != NULL)
-					sbus_free_consistant(qe->qe_sdev,
+					sbus_free_consistent(qe->qe_sdev,
 							     PAGE_SIZE,
 							     qe->qe_block,
 							     qe->qblock_dvma);
 				if (qe->buffers != NULL)
-					sbus_free_consistant(qe->qe_sdev,
+					sbus_free_consistent(qe->qe_sdev,
 							     sizeof(struct sunqe_buffers),
 							     qe->buffers,
 							     qe->buffers_dvma);
@@ -1006,11 +1006,11 @@ cleanup_module(void)
 			unregister_netdev(root_qec_dev->qes[i]->dev);
 			sbus_iounmap(root_qec_dev->qes[i]->qcregs, CREG_REG_SIZE);
 			sbus_iounmap(root_qec_dev->qes[i]->mregs, MREGS_REG_SIZE);
-			sbus_free_consistant(root_qec_dev->qes[i]->qe_sdev,
+			sbus_free_consistent(root_qec_dev->qes[i]->qe_sdev,
 					     PAGE_SIZE,
 					     root_qec_dev->qes[i]->qe_block,
 					     root_qec_dev->qes[i]->qblock_dvma);
-			sbus_free_consistant(root_qec_dev->qes[i]->qe_sdev,
+			sbus_free_consistent(root_qec_dev->qes[i]->qe_sdev,
 					     sizeof(struct sunqe_buffers),
 					     root_qec_dev->qes[i]->buffers,
 					     root_qec_dev->qes[i]->buffers_dvma);

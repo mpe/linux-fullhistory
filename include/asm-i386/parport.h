@@ -39,16 +39,16 @@ parport_pc_init(int *io, int *io_hi, int *irq, int *dma)
 		do {
 			if (!*io_hi) *io_hi = 0x400 + *io;
 			if (parport_pc_probe_port(*(io++), *(io_hi++),
-						  *(irq++), *(dma++)))
+						  *(irq++), *(dma++), NULL))
 				count++;
 		} while (*io && (++i < PARPORT_PC_MAX_PORTS));
 	} else {
 		/* Probe all the likely ports. */
-		if (parport_pc_probe_port(0x3bc, 0x7bc, irq[0], dma[0]))
+		if (parport_pc_probe_port(0x3bc, 0x7bc, irq[0], dma[0], NULL))
 			count++;
-		if (parport_pc_probe_port(0x378, 0x778, irq[0], dma[0]))
+		if (parport_pc_probe_port(0x378, 0x778, irq[0], dma[0], NULL))
 			count++;
-		if (parport_pc_probe_port(0x278, 0x678, irq[0], dma[0]))
+		if (parport_pc_probe_port(0x278, 0x678, irq[0], dma[0], NULL))
 			count++;
 		count += parport_pc_init_pci (irq[0], dma[0]);
 	}

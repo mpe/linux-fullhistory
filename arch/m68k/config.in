@@ -23,6 +23,9 @@ if [ "$CONFIG_ATARI" = "y" ]; then
       define_bool CONFIG_PCI y
    fi  
 fi
+if [ "$CONFIG_HADES" != "y" ]; then
+  define_bool CONFIG_PCI n
+fi  
 bool 'Macintosh support' CONFIG_MAC
 if [ "$CONFIG_MAC" = "y" ]; then
    define_bool CONFIG_NUBUS y
@@ -127,7 +130,9 @@ if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
    fi
 fi
 
-source drivers/pci/Config.in
+if [ "$CONFIG_PCI" = "y" ]; then
+  source drivers/pci/Config.in
+fi
 
 endmenu
 
@@ -192,7 +197,7 @@ if [ "$CONFIG_SCSI" != "n" ]; then
 	 bool 'WarpEngine SCSI support (EXPERIMENTAL)' CONFIG_WARPENGINE_SCSI
 	 bool 'Blizzard PowerUP 603e+ SCSI (EXPERIMENTAL)' CONFIG_BLZ603EPLUS_SCSI
 	 dep_tristate 'BSC Oktagon SCSI support (EXPERIMENTAL)' CONFIG_OKTAGON_SCSI $CONFIG_SCSI
-	 bool 'Cyberstorm Mk III SCSI support (EXPERIMENTAL)' CONFIG_CYBERSTORMIII_SCSI
+#	 bool 'Cyberstorm Mk III SCSI support (EXPERIMENTAL)' CONFIG_CYBERSTORMIII_SCSI
 #	 bool 'GVP Turbo 040/060 SCSI support (EXPERIMENTAL)' CONFIG_GVP_TURBO_SCSI
       fi
    fi
@@ -201,8 +206,8 @@ if [ "$CONFIG_SCSI" != "n" ]; then
       if [ "$CONFIG_ATARI_SCSI" != "n" ]; then
 	 bool '  Long delays for Toshiba CD-ROMs' CONFIG_ATARI_SCSI_TOSHIBA_DELAY
 	 bool '  Reset SCSI-devices at boottime' CONFIG_ATARI_SCSI_RESET_BOOT
-	 if [ "$CONFIG_EXPERIMENTAL" = "y" -a "$CONFIG_HADES" = "y" ]; then
-	    bool '  Hades SCSI DMA emulator (EXPERIMENTAL)' CONFIG_TT_DMA_EMUL
+	 if [ "$CONFIG_HADES" = "y" ]; then
+	    bool '  Hades SCSI DMA emulator' CONFIG_TT_DMA_EMUL
 	 fi
       fi
    fi
@@ -469,5 +474,4 @@ comment 'Kernel hacking'
 
 #bool 'Debug kmalloc/kfree' CONFIG_DEBUG_MALLOC
 bool 'Magic SysRq key' CONFIG_MAGIC_SYSRQ
-bool 'Remote debugging support' CONFIG_KGDB
 endmenu

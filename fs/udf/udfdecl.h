@@ -1,7 +1,7 @@
 #ifndef __UDF_DECL_H
 #define __UDF_DECL_H
 
-#define UDF_VERSION_NOTICE "v0.8.9.4"
+#define UDF_VERSION_NOTICE "v0.9.0"
 
 #include <linux/udf_167.h>
 #include <linux/udf_udf.h>
@@ -38,6 +38,12 @@
 	((UDF_I_EXTENDED_FE(inode) ?\
 		sizeof(struct ExtendedFileEntry) :\
 		sizeof(struct FileEntry)) + UDF_I_LENEATTR(inode))
+
+#define udf_ext0_offset(inode)\
+	(UDF_I_ALLOCTYPE(inode) == ICB_FLAG_AD_IN_ICB ?\
+		udf_file_entry_alloc_offset(inode) : 0)
+
+#define udf_get_lb_pblock(sb,loc,offset) udf_get_pblock((sb), (loc).logicalBlockNum, (loc).partitionReferenceNum, (offset))
 
 #else
 
@@ -128,9 +134,12 @@ extern int udf_ioctl(struct inode *, struct file *, unsigned int, unsigned long)
 /* inode.c */
 extern struct inode *udf_iget(struct super_block *, lb_addr);
 extern int udf_sync_inode(struct inode *);
-extern struct buffer_head * udf_expand_adinicb(struct inode *, int *, int, int *);
+extern void udf_expand_file_adinicb(struct file *, int, int *);
+extern struct buffer_head * udf_expand_dir_adinicb(struct inode *, int *, int *);
 extern struct buffer_head * udf_getblk(struct inode *, long, int, int *);
 extern int udf_get_block(struct inode *, long, struct buffer_head *, int);
+extern int udf_readpage_adinicb (struct dentry *, struct page *);
+extern int udf_writepage_adinicb (struct dentry *, struct page *);
 extern struct buffer_head * udf_bread(struct inode *, int, int, int *);
 extern void udf_read_inode(struct inode *);
 extern void udf_put_inode(struct inode *);
@@ -163,7 +172,10 @@ extern unsigned int udf_get_last_block(struct super_block *, int *);
 
 /* partition.c */
 extern Uint32 udf_get_pblock(struct super_block *, Uint32, Uint16, Uint32);
-extern Uint32 udf_get_lb_pblock(struct super_block *, lb_addr, Uint32);
+extern Uint32 udf_get_pblock_virt15(struct super_block *, Uint32, Uint16, Uint32);
+extern Uint32 udf_get_pblock_virt20(struct super_block *, Uint32, Uint16, Uint32);
+extern Uint32 udf_get_pblock_spar15(struct super_block *, Uint32, Uint16, Uint32);
+extern void udf_fill_spartable(struct super_block *, struct udf_sparing_data *, int);
 
 /* unicode.c */
 extern int udf_get_filename(Uint8 *, Uint8 *, int);
@@ -173,6 +185,7 @@ extern void udf_free_inode(struct inode *);
 extern struct inode * udf_new_inode (const struct inode *, int, int *);
 
 /* truncate.c */
+extern void udf_trunc(struct inode *);
 extern void udf_truncate(struct inode *);
 extern void udf_truncate_adinicb(struct inode *);
 
@@ -181,6 +194,7 @@ extern void udf_free_blocks(const struct inode *, lb_addr, Uint32, Uint32);
 extern int udf_alloc_blocks(const struct inode *, Uint16, Uint32, Uint32);
 extern int udf_new_block(const struct inode *, Uint16, Uint32, int *);
 extern int udf_sync_file(struct file *, struct dentry *);
+extern int udf_sync_file_adinicb(struct file *, struct dentry *);
 
 /* directory.c */
 extern Uint8 * udf_filead_read(struct inode *, Uint8 *, Uint8, lb_addr, int *, int *, struct buffer_head **, int *);
@@ -207,8 +221,6 @@ extern int udf_UTF8toCS0(dstring *, struct ustr *, int);
 extern Uint16 udf_crc(Uint8 *, Uint32, Uint16);
 
 /* misc.c */
-extern uid_t  udf_convert_uid(int);
-extern gid_t  udf_convert_gid(int);
 extern Uint32 udf64_low32(Uint64);
 extern Uint32 udf64_high32(Uint64);
 extern void udf_update_tag(char *, int);

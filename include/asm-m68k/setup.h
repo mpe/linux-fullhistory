@@ -246,6 +246,9 @@ extern unsigned long m68k_machtype;
 extern unsigned long m68k_cputype;
 extern unsigned long m68k_fputype;
 extern unsigned long m68k_mmutype;		/* Not really used yet */
+#ifdef CONFIG_VME
+extern unsigned long vme_brdtype;
+#endif 
 
     /*
      *  m68k_is040or060 is != 0 for a '040 or higher;

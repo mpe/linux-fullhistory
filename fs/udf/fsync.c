@@ -15,18 +15,18 @@
  *      ftp://prep.ai.mit.edu/pub/gnu/GPL
  *  Each contributing author retains all rights to their own work.
  *
- *  (C) 1999 Ben Fennema
- *  (C) 1999 Stelias Computing Inc
+ *  (C) 1999-2000 Ben Fennema
+ *  (C) 1999-2000 Stelias Computing Inc
  *
  * HISTORY
  *
  *  05/22/99 blf  Created.
- *
  */
 
 #include "udfdecl.h"
 
 #include <linux/fs.h>
+#include <linux/locks.h>
 #include <linux/udf_fs.h>
 #include "udf_i.h"
 
@@ -40,10 +40,21 @@ static int sync_extent_block (struct inode * inode, Uint32 block, int wait)
 	if (!bh)
 		return 0;
 	if (wait && buffer_req(bh) && !buffer_uptodate(bh)) {
-		brelse (bh);
-		return -1;
+		/* There can be a parallell read(2) that started read-I/O
+		   on the buffer so we can't assume that there's been
+		   an I/O error without first waiting I/O completation. */
+		wait_on_buffer(bh);
+		if (!buffer_uptodate(bh))
+		{
+			brelse (bh);
+			return -1;
+		}
 	}
 	if (wait || !buffer_uptodate(bh) || !buffer_dirty(bh)) {
+		if (wait)
+			/* when we return from fsync all the blocks
+			   must be _just_ stored on disk */
+			wait_on_buffer(bh);
 		brelse (bh);
 		return 0;
 	}
@@ -89,8 +100,7 @@ int udf_sync_file(struct file * file, struct dentry *dentry)
 	int wait, err = 0;
 	struct inode *inode = dentry->d_inode;
 
-	if ((S_ISLNK(inode->i_mode) && !(inode->i_blocks)) ||
-		UDF_I_ALLOCTYPE(inode) == ICB_FLAG_AD_IN_ICB)
+	if (S_ISLNK(inode->i_mode) && !(inode->i_blocks)) 
 	{
 		/*
 		 * Don't sync fast links! or ICB_FLAG_AD_IN_ICB
@@ -107,4 +117,9 @@ int udf_sync_file(struct file * file, struct dentry *dentry)
 skip:
 	err |= udf_sync_inode (inode);
 	return err ? -EIO : 0;
+}
+
+int udf_sync_file_adinicb(struct file * file, struct dentry *dentry)
+{
+	return udf_sync_inode(dentry->d_inode) ? -EIO : 0;
 }

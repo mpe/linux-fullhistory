@@ -302,16 +302,22 @@ static struct proc_nfs_info {
 
 int get_filesystem_info( char *buf )
 {
-	struct vfsmount *tmp = vfsmntlist;
+	struct vfsmount *tmp;
 	struct proc_fs_info *fs_infop;
 	struct proc_nfs_info *nfs_infop;
 	struct nfs_server *nfss;
 	int len = 0;
+	char *path,*buffer = (char *) __get_free_page(GFP_KERNEL);
 
-	while ( tmp && len < PAGE_SIZE - 160)
-	{
+	if (!buffer) return 0;
+	for (tmp = vfsmntlist; tmp && len < PAGE_SIZE - 160;
+	    tmp = tmp->mnt_next) {
+		path = d_path(tmp->mnt_sb->s_root, buffer, PAGE_SIZE);
+		if (!path)
+			continue;
 		len += sprintf( buf + len, "%s %s %s %s",
-			tmp->mnt_devname, tmp->mnt_dirname, tmp->mnt_sb->s_type->name,
+			tmp->mnt_devname, path,
+			tmp->mnt_sb->s_type->name,
 			tmp->mnt_flags & MS_RDONLY ? "ro" : "rw" );
 		for (fs_infop = fs_info; fs_infop->flag; fs_infop++) {
 		  if (tmp->mnt_flags & fs_infop->flag) {
@@ -365,9 +371,9 @@ int get_filesystem_info( char *buf )
 				       nfss->hostname);
 		}
 		len += sprintf( buf + len, " 0 0\n" );
-		tmp = tmp->mnt_next;
 	}
 
+	free_page((unsigned long) buffer);
 	return len;
 }
 
@@ -681,7 +687,7 @@ static struct block_device *do_umount(kdev_t dev, int unmount_root, int flags)
 	shrink_dcache_sb(sb);
 	fsync_dev(dev);
 
-	if (dev==ROOT_DEV && !unmount_root) {
+	if (sb == current->fs->root->d_sb && !unmount_root) {
 		/*
 		 * Special case for "unmounting" root ...
 		 * we just try to remount it readonly.
@@ -1211,6 +1217,113 @@ void __init mount_root(void)
 	}
 	panic("VFS: Unable to mount root fs on %s",
 		kdevname(ROOT_DEV));
+}
+
+
+static void chroot_fs_refs(struct dentry *old_root,
+    struct dentry *new_root)
+{
+	struct task_struct *p;
+
+	read_lock(&tasklist_lock);
+	for_each_task(p) {
+		if (!p->fs) continue;
+		if (p->fs->root == old_root) {
+			dput(old_root);
+			p->fs->root = dget(new_root);
+			printk(KERN_DEBUG "chroot_fs_refs: changed root of "
+			    "process %d\n",p->pid);
+		}
+		if (p->fs->pwd == old_root) {
+			dput(old_root);
+			p->fs->pwd = dget(new_root);
+			printk(KERN_DEBUG "chroot_fs_refs: changed cwd of "
+			    "process %d\n",p->pid);
+		}
+	}
+	read_unlock(&tasklist_lock);
+}
+
+
+/*
+ * Moves the current root to put_root, and sets root/cwd of all processes
+ * which had them on the old root to new_root.
+ *
+ * Note:
+ *  - we don't move root/cwd if they are not at the root (reason: if something
+ *    cared enough to change them, it's probably wrong to force them elsewhere)
+ *  - it's okay to pick a root that isn't the root of a file system, e.g.
+ *    /nfs/my_root where /nfs is the mount point. Better avoid creating
+ *    unreachable mount points this way, though.
+ */
+
+asmlinkage long sys_pivot_root(const char *new_root, const char *put_old)
+{
+	struct dentry *root = current->fs->root;
+	struct dentry *d_new_root, *d_put_old, *covered;
+	struct dentry *root_dev_root, *new_root_dev_root;
+	struct dentry *walk, *next;
+	int error;
+
+	if (!capable(CAP_SYS_ADMIN))
+		return -EPERM;
+
+	lock_kernel();
+	d_new_root = namei(new_root);
+	if (IS_ERR(d_new_root)) {
+		error = PTR_ERR(d_new_root);
+		goto out0;
+	}
+	d_put_old = namei(put_old);
+	if (IS_ERR(d_put_old)) {
+		error = PTR_ERR(d_put_old);
+		goto out1;
+	}
+	down(&mount_sem);
+	if (!d_new_root->d_inode || !d_put_old->d_inode) {
+		error = -ENOENT;
+		goto out2;
+	}
+	if (!S_ISDIR(d_new_root->d_inode->i_mode) ||
+	    !S_ISDIR(d_put_old->d_inode->i_mode)) {
+		error = -ENOTDIR;
+		goto out2;
+	}
+	error = -EBUSY;
+	if (d_new_root->d_sb == root->d_sb || d_put_old->d_sb == root->d_sb)
+		goto out2; /* loop */
+	if (d_put_old != d_put_old->d_covers)
+		goto out2; /* mount point is busy */
+	error = -EINVAL;
+	walk = d_put_old; /* make sure we can reach put_old from new_root */
+	for (;;) {
+		next = walk->d_covers->d_parent;
+		if (next == walk)
+			goto out2;
+		if (next == d_new_root)
+			break;
+		walk = next;
+	}
+
+	new_root_dev_root = d_new_root->d_sb->s_root;
+	covered = new_root_dev_root->d_covers;
+	new_root_dev_root->d_covers = new_root_dev_root;
+	dput(covered);
+	covered->d_mounts = covered;
+
+	root_dev_root = root->d_sb->s_root;
+	root_dev_root->d_covers = dget(d_put_old);
+	d_put_old->d_mounts = root_dev_root;
+	chroot_fs_refs(root,d_new_root);
+	error = 0;
+out2:
+	up(&mount_sem);
+	dput(d_put_old);
+out1:
+	dput(d_new_root);
+out0:
+	unlock_kernel();
+	return error;
 }
 
 

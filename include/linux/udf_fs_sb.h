@@ -29,14 +29,22 @@
 
 struct udf_sparing_data
 {
-	__u32	  s_spar_loc;
-	__u16	  s_spar_plen;
+	__u32	s_spar_loc[4];
+	__u8	s_spar_pshift;
+	__u8	s_spar_indexsize;
+	__u32	*s_spar_map;
+	union
+	{
+		__u8	*s_spar_remap8;
+		__u16	*s_spar_remap16;
+		__u32	*s_spar_remap32;
+	} s_spar_remap;
 };
 
 struct udf_virtual_data
 {
-	__u32	  s_num_entries;
-	__u16	  s_start_offset;
+	__u32	s_num_entries;
+	__u16	s_start_offset;
 };
 
 struct udf_part_map
@@ -51,6 +59,7 @@ struct udf_part_map
 		struct udf_sparing_data s_sparing;
 		struct udf_virtual_data s_virtual;
 	} s_type_specific;
+	__u32	(*s_partition_func)(struct super_block *, __u32, __u16, __u32);
 	__u16	s_volumeseqnum;
 };
 
@@ -72,8 +81,6 @@ struct udf_sb_info
 
 	struct buffer_head *s_lvidbh;
 
-	lb_addr s_location;
-
 	__u16 s_loaded_block_bitmaps;
 	__u32 s_block_bitmap_number[UDF_MAX_BLOCK_LOADED];
 	struct buffer_head *s_block_bitmap[UDF_MAX_BLOCK_LOADED];
@@ -89,20 +96,11 @@ struct udf_sb_info
 	/* Fileset Info */
 	__u16 s_serialnum;
 
-	/* Character Mapping Info */
-	struct nls_table *s_nls_iocharset;
-	__u8 s_utf8;
-
 	/* Miscellaneous flags */
 	__u32 s_flags;
 
 	/* VAT inode */
 	struct inode    *s_vat;
-
-#if LINUX_VERSION_CODE < 0x020206
-	int s_rename_lock;
-	struct wait_queue * s_rename_wait;
-#endif
 };
 
 #endif /* !defined(_LINUX_UDF_FS_SB_H) */

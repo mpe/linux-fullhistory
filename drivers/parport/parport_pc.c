@@ -549,8 +549,24 @@ static size_t parport_pc_fifo_write_block_dma (struct parport *port,
 {
 	int ret = 0;
 	unsigned long dmaflag;
-	size_t left  = length;
+	size_t left = length;
 	const struct parport_pc_private *priv = port->physport->private_data;
+	unsigned long dma_addr;
+	size_t maxlen = 0x10000; /* max 64k per DMA transfer */
+	unsigned long start = (unsigned long) buf;
+	unsigned long end = (unsigned long) buf + length - 1;
+
+	/* above 16 MB we use a bounce buffer as ISA-DMA is not possible */
+	if (end <= MAX_DMA_ADDRESS) {
+                /* If it would cross a 64k boundary, cap it at the end. */
+                if ((start ^ end) & ~0xffff)
+                        maxlen = (0x10000 - start) & 0xffff;
+
+		dma_addr = virt_to_bus(buf);
+        } else {
+		dma_addr = priv->dma_handle;
+		maxlen   = PAGE_SIZE;          /* sizeof(priv->dma_buf) */
+	}
 
 	port = port->physport;
 
@@ -566,16 +582,17 @@ static size_t parport_pc_fifo_write_block_dma (struct parport *port,
 
 		size_t count = left;
 
-		if (count > PAGE_SIZE)
-			count = PAGE_SIZE;
+		if (count > maxlen)
+			count = maxlen;
 
-		memcpy(priv->dma_buf, buf, count);
+		if (maxlen == PAGE_SIZE)   /* bounce buffer ! */
+			memcpy(priv->dma_buf, buf, count);
 
 		dmaflag = claim_dma_lock();
 		disable_dma(port->dma);
 		clear_dma_ff(port->dma);
 		set_dma_mode(port->dma, DMA_MODE_WRITE);
-		set_dma_addr(port->dma, virt_to_bus((volatile char *) priv->dma_buf));
+		set_dma_addr(port->dma, dma_addr);
 		set_dma_count(port->dma, count);
 
 		/* Set DMA mode */
@@ -1499,7 +1516,8 @@ static int __maybe_init parport_dma_probe (struct parport *p)
 
 struct parport *__maybe_init parport_pc_probe_port (unsigned long int base,
 						    unsigned long int base_hi,
-						    int irq, int dma)
+						    int irq, int dma,
+						    struct pci_dev *dev)
 {
 	struct parport_pc_private *priv;
 	struct parport_operations *ops;
@@ -1525,6 +1543,8 @@ struct parport *__maybe_init parport_pc_probe_port (unsigned long int base,
 	priv->ecr = 0;
 	priv->fifo_depth = 0;
 	priv->dma_buf = 0;
+	priv->dma_handle = 0;
+	priv->dev = dev;
 	p->base = base;
 	p->base_hi = base_hi;
 	p->irq = irq;
@@ -1649,7 +1669,9 @@ struct parport *__maybe_init parport_pc_probe_port (unsigned long int base,
 				p->dma = PARPORT_DMA_NONE;
 			} else {
 				priv->dma_buf =
-					(char *)__get_dma_pages(GFP_KERNEL, 0);
+				  pci_alloc_consistent(priv->dev,
+						       PAGE_SIZE,
+						       &priv->dma_handle);
 				if (! priv->dma_buf) {
 					printk (KERN_WARNING "%s: "
 						"cannot get buffer for DMA, "
@@ -1805,10 +1827,12 @@ static int __init parport_pc_init_pci (int irq, int dma)
 					if (parport_pc_probe_port (io_lo,
 								   io_hi,
 								   pcidev->irq,
-								   dma))
+								   dma,
+								   pcidev))
 						count++;
 				} else if (parport_pc_probe_port (io_lo, io_hi,
-								  irq, dma))
+								  irq, dma,
+								  pcidev))
 					count++;
 			}
 		}
@@ -1913,7 +1937,9 @@ void cleanup_module(void)
 				release_region(p->base_hi, 3);
 			parport_proc_unregister(p);
 			if (priv->dma_buf)
-				free_page((unsigned long) priv->dma_buf);
+				pci_free_consistent(priv->dev, PAGE_SIZE,
+						    priv->dma_buf,
+						    priv->dma_handle);
 			kfree (p->private_data);
 			parport_unregister_port(p);
 			kfree (ops); /* hope no-one cached it */

@@ -286,9 +286,9 @@ asmlinkage int sys_uname(struct old_utsname * name)
 
 	if(!name)
 		return -EFAULT;
-	down(&uts_sem);
+	down_read(&uts_sem);
 	err=copy_to_user (name, &system_utsname, sizeof (*name));
-	up(&uts_sem);
+	up_read(&uts_sem);
 	return err?-EFAULT:0;
 }
 
@@ -309,7 +309,7 @@ asmlinkage int sys_olduname(struct oldold_utsname * name)
 	if (!access_ok(VERIFY_WRITE,name,sizeof(struct oldold_utsname)))
 		return -EFAULT;
 
-	down(&uts_sem);
+	down_read(&uts_sem);
 	
 	error = __copy_to_user(&name->sysname,&system_utsname.sysname,__OLD_UTS_LEN);
 	error |= __put_user(0,name->sysname+__OLD_UTS_LEN);
@@ -322,7 +322,7 @@ asmlinkage int sys_olduname(struct oldold_utsname * name)
 	error |= __copy_to_user(&name->machine,&system_utsname.machine,__OLD_UTS_LEN);
 	error |= __put_user(0,name->machine+__OLD_UTS_LEN);
 	
-	up(&uts_sem);
+	up_read(&uts_sem);
 	
 	error = error ? -EFAULT : 0;
 

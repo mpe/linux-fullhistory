@@ -30,7 +30,6 @@
  * Vojtech Pavlik, Ucitelska 1576, Prague 8, 182 00 Czech Republic
  */
 
-#include <linux/config.h>
 #include <linux/types.h>
 #include <linux/malloc.h>
 #include <linux/list.h>

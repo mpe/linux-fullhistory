@@ -51,9 +51,7 @@ unsigned char pmeg_ctx[PMEGS_NUM];
    context. 0xffffffff is a marker for kernel context */
 struct mm_struct *ctx_alloc[CONTEXTS_NUM] = {0xffffffff, 0, 0, 0, 0, 0, 0, 0};
 /* has this context been mmdrop'd? */
-unsigned char ctx_live[CONTEXTS_NUM] = {1, 0, 0, 0, 0, 0, 0, 0};
 static unsigned char ctx_avail = CONTEXTS_NUM-1;
-unsigned char ctx_next_to_die = 1;
 
 /* array of pages to be marked off for the rom when we do mem_init later */
 /* 256 pages lets the rom take up to 2mb of physical ram..  I really
@@ -213,45 +211,29 @@ void clear_context(unsigned long context)
      unsigned char oldctx;
      unsigned long i;
     
-     if(!ctx_alloc[context])
-	     panic("clear_context: context not allocated\n");
+     if(context) {
+	     if(!ctx_alloc[context]) 
+		     panic("clear_context: context not allocated\n");
+
+	     ctx_alloc[context]->context = SUN3_INVALID_CONTEXT;
+	     ctx_alloc[context] = (struct mm_struct *)0;
+	     ctx_avail++;
+     }
 
      oldctx = sun3_get_context();
 
      sun3_put_context(context);
 
-     /* ctx_live denotes if we're clearing a context with an active
-	mm, in which case we can use the pgd for clues and also should
-	mark that mm as lacking a context.  if the context has been
-	mmdrop'd, then flush outright. */
-
-     if(!ctx_live[context]) {
-	     for(i = 0; i < TASK_SIZE ; i += SUN3_PMEG_SIZE) 
-		     sun3_put_segmap(i, SUN3_INVALID_PMEG);
-     } else {
-	     pgd_t *pgd;
-	     
-	     pgd = ctx_alloc[context]->pgd;
-	     ctx_alloc[context]->context = SUN3_INVALID_CONTEXT;
-	     for(i = 0; i < (TASK_SIZE>>PGDIR_SHIFT); i++, pgd++)
-	     {
-		     if(pgd_val(*pgd)) {
-			     sun3_put_segmap(i<<PGDIR_SHIFT,
-					     SUN3_INVALID_PMEG);
-		     }
-	     }
-     }
-     
      for(i = 0; i < SUN3_INVALID_PMEG; i++) {
-	     if((pmeg_ctx[i] == context) && (pmeg_alloc[i] != 2)) {
+	     if((pmeg_ctx[i] == context) && (pmeg_alloc[i] == 1)) {
+		     sun3_put_segmap(pmeg_vaddr[i], SUN3_INVALID_PMEG);
 		     pmeg_ctx[i] = 0;
 		     pmeg_alloc[i] = 0;
 		     pmeg_vaddr[i] = 0;
 	     }
      }
      
-     ctx_alloc[context] = (struct mm_struct *)0;
-     ctx_avail++;
+     sun3_put_context(oldctx);
 }
 
 /* gets an empty context.  if full, kills the next context listed to
@@ -263,14 +245,15 @@ void clear_context(unsigned long context)
 unsigned long get_free_context(struct mm_struct *mm) 
 {
 	unsigned long new = 1;
+	static unsigned char next_to_die = 1;
 
 	if(!ctx_avail) {
 		/* kill someone to get our context */
-		new = ctx_next_to_die;
+		new = next_to_die;
 		clear_context(new);
-		ctx_next_to_die = (ctx_next_to_die + 1) & 0x7;
-		if(!ctx_next_to_die)
-			ctx_next_to_die++;
+		next_to_die = (next_to_die + 1) & 0x7;
+		if(!next_to_die)
+			next_to_die++;
 	} else {
 		while(new < CONTEXTS_NUM) {
 			if(ctx_alloc[new])
@@ -284,7 +267,6 @@ unsigned long get_free_context(struct mm_struct *mm)
 	}
 
 	ctx_alloc[new] = mm;
-	ctx_live[new] = 1;
 	ctx_avail--;
 
 	return new;

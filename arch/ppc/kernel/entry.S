@@ -271,6 +271,7 @@ ret_from_smpfork:
 	bl	schedule_tail
 	b	ret_from_except
 #endif
+		
 	.globl	ret_from_intercept
 ret_from_intercept:
 	/*
@@ -278,7 +279,16 @@ ret_from_intercept:
 	 * -- Cort
 	 */
 	cmpi	0,r3,0
-	beq	10f
+	bne	ret_from_except
+	/*
+	 * If we're returning from user mode we do things differently
+	 * -- Cort
+	 */
+	lwz	r3,_MSR(r1)
+	andi.	r3,r3,MSR_PR
+	beq+	10f
+	b	8f
+
 	.globl	ret_from_except
 ret_from_except:
 0:	/* disable interrupts */	
@@ -315,7 +325,6 @@ do_bottom_half_ret:
 	lwz	r30,0(r30)
 	mtlr	r30
 	blrl
-	
 	lwz	r3,_MSR(r1)	/* Returning to user mode? */
 	andi.	r3,r3,MSR_PR
 	beq+	10f		/* if so, check need_resched and signals */
@@ -337,7 +346,13 @@ do_signal_ret:
 	stw	r4,THREAD+KSP(r2)	/* save kernel stack pointer */
 	tophys(r3,r1)
 	mtspr	SPRG2,r3	/* phys exception stack pointer */
-10:	lwz	r2,_CTR(r1)
+10:	/* make sure we hard disable here, even if rtl is active -- Cort */
+	mfmsr	r0		/* Get current interrupt state */
+	rlwinm	r0,r0,0,17,15	/* clear MSR_EE in r0 */
+	sync			/* Some chip revs have problems here... */
+	mtmsr	r0		/* Update machine state */
+	
+	lwz	r2,_CTR(r1)
 	lwz	r0,_LINK(r1)
 	mtctr	r2
 	mtlr	r0

@@ -183,7 +183,6 @@ EXPORT_SYMBOL(__bforget);
 EXPORT_SYMBOL(ll_rw_block);
 EXPORT_SYMBOL(__wait_on_buffer);
 EXPORT_SYMBOL(___wait_on_page);
-EXPORT_SYMBOL(add_blkdev_randomness);
 EXPORT_SYMBOL(block_read_full_page);
 EXPORT_SYMBOL(block_write_full_page);
 EXPORT_SYMBOL(block_write_partial_page);
@@ -270,7 +269,6 @@ EXPORT_SYMBOL(tq_disk);
 EXPORT_SYMBOL(init_buffer);
 EXPORT_SYMBOL(refile_buffer);
 EXPORT_SYMBOL(max_sectors);
-EXPORT_SYMBOL(max_segments);
 EXPORT_SYMBOL(max_readahead);
 EXPORT_SYMBOL(file_moveto);
 
@@ -432,11 +430,14 @@ EXPORT_SYMBOL(__down_trylock);
 EXPORT_SYMBOL(__up);
 EXPORT_SYMBOL(brw_page);
 
+#ifdef CONFIG_UID16
+EXPORT_SYMBOL(overflowuid);
+EXPORT_SYMBOL(overflowgid);
+#endif
 EXPORT_SYMBOL(fs_overflowuid);
 EXPORT_SYMBOL(fs_overflowgid);
 
 /* all busmice */
-EXPORT_SYMBOL(add_mouse_randomness);
 EXPORT_SYMBOL(fasync_helper);
 
 #ifdef CONFIG_BLK_DEV_MD

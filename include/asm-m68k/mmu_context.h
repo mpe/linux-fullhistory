@@ -7,6 +7,7 @@
 
 #include <asm/setup.h>
 #include <asm/page.h>
+#include <asm/pgalloc.h>
 
 extern inline void
 init_new_context(struct task_struct *tsk, struct mm_struct *mm)

@@ -177,7 +177,7 @@ static int clear_epp_timeout(struct parport *pp)
 /*
  * Access functions.
  */
-
+#if 0
 static int uss720_irq(int usbstatus, void *buffer, int len, void *dev_id)
 {
 	struct parport *pp = (struct parport *)dev_id;
@@ -191,6 +191,7 @@ static int uss720_irq(int usbstatus, void *buffer, int len, void *dev_id)
 		parport_generic_irq(0, pp, NULL);
 	return 1;
 }
+#endif
 
 static void parport_uss720_write_data(struct parport *pp, unsigned char d)
 {
@@ -356,7 +357,7 @@ static size_t parport_uss720_epp_write_data(struct parport *pp, const void *buf,
 #else
 	struct parport_uss720_private *priv = pp->private_data;
 	struct usb_device *usbdev = priv->usbdev;
-	unsigned long rlen;
+	int rlen;
 	int i;
 
 	if (!usbdev)
@@ -365,7 +366,7 @@ static size_t parport_uss720_epp_write_data(struct parport *pp, const void *buf,
 		return 0;
 	i = usb_bulk_msg(usbdev, usb_sndbulkpipe(usbdev, 1), (void *)buf, length, &rlen, HZ*20);
 	if (i)
-		printk(KERN_ERR "uss720: sendbulk ep 1 buf %p len %u rlen %lu\n", buf, length, rlen);
+		printk(KERN_ERR "uss720: sendbulk ep 1 buf %p len %u rlen %u\n", buf, length, rlen);
 	change_mode(pp, ECR_PS2);
 	return rlen;
 #endif
@@ -417,7 +418,7 @@ static size_t parport_uss720_ecp_write_data(struct parport *pp, const void *buff
 {
 	struct parport_uss720_private *priv = pp->private_data;
 	struct usb_device *usbdev = priv->usbdev;
-	unsigned long rlen;
+	int rlen;
 	int i;
 
 	if (!usbdev)
@@ -426,7 +427,7 @@ static size_t parport_uss720_ecp_write_data(struct parport *pp, const void *buff
 		return 0;
 	i = usb_bulk_msg(usbdev, usb_sndbulkpipe(usbdev, 1), (void *)buffer, len, &rlen, HZ*20);
 	if (i)
-		printk(KERN_ERR "uss720: sendbulk ep 1 buf %p len %u rlen %lu\n", buffer, len, rlen);
+		printk(KERN_ERR "uss720: sendbulk ep 1 buf %p len %u rlen %u\n", buffer, len, rlen);
 	change_mode(pp, ECR_PS2);
 	return rlen;
 }
@@ -435,7 +436,7 @@ static size_t parport_uss720_ecp_read_data(struct parport *pp, void *buffer, siz
 {
 	struct parport_uss720_private *priv = pp->private_data;
 	struct usb_device *usbdev = priv->usbdev;
-	unsigned long rlen;
+	int rlen;
 	int i;
 
 	if (!usbdev)
@@ -444,7 +445,7 @@ static size_t parport_uss720_ecp_read_data(struct parport *pp, void *buffer, siz
 		return 0;
 	i = usb_bulk_msg(usbdev, usb_rcvbulkpipe(usbdev, 2), buffer, len, &rlen, HZ*20);
 	if (i)
-		printk(KERN_ERR "uss720: recvbulk ep 2 buf %p len %u rlen %lu\n", buffer, len, rlen);
+		printk(KERN_ERR "uss720: recvbulk ep 2 buf %p len %u rlen %u\n", buffer, len, rlen);
 	change_mode(pp, ECR_PS2);
 	return rlen;
 }
@@ -468,7 +469,7 @@ static size_t parport_uss720_write_compat(struct parport *pp, const void *buffer
 {
 	struct parport_uss720_private *priv = pp->private_data;
 	struct usb_device *usbdev = priv->usbdev;
-	unsigned long rlen;
+	int rlen;
 	int i;
 
 	if (!usbdev)
@@ -477,7 +478,7 @@ static size_t parport_uss720_write_compat(struct parport *pp, const void *buffer
 		return 0;
 	i = usb_bulk_msg(usbdev, usb_sndbulkpipe(usbdev, 1), (void *)buffer, len, &rlen, HZ*20);
 	if (i)
-		printk(KERN_ERR "uss720: sendbulk ep 1 buf %p len %u rlen %lu\n", buffer, len, rlen);
+		printk(KERN_ERR "uss720: sendbulk ep 1 buf %p len %u rlen %u\n", buffer, len, rlen);
 	change_mode(pp, ECR_PS2);
 	return rlen;
 }
@@ -606,8 +607,10 @@ static void * uss720_probe(struct usb_device *usbdev, unsigned int ifnum)
 	MOD_INC_USE_COUNT;
 	return pp;
 
+#if 0
 probe_abort_port:
 	parport_unregister_port(pp);
+#endif
 probe_abort:
 	kfree(priv);
 	return NULL;

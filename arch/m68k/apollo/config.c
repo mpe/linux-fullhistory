@@ -7,19 +7,26 @@
 #include <linux/console.h>
 
 #include <asm/setup.h>
+#include <asm/bootinfo.h>
 #include <asm/system.h>
 #include <asm/pgtable.h>
 #include <asm/apollohw.h>
 #include <asm/irq.h>
 #include <asm/machdep.h>
 
+u_long sio01_physaddr;
+u_long sio23_physaddr;
+u_long rtc_physaddr;
+u_long pica_physaddr;
+u_long picb_physaddr;
+u_long cpuctrl_physaddr;
+u_long timer_physaddr;
+u_long apollo_model;
+
 extern void dn_sched_init(void (*handler)(int,void *,struct pt_regs *));
 extern int dn_keyb_init(void);
 extern int dn_dummy_kbdrate(struct kbd_repeat *);
 extern void dn_init_IRQ(void);
-#if 0
-extern void (*dn_default_handler[])(int,void *,struct pt_regs *);
-#endif
 extern int dn_request_irq(unsigned int irq, void (*handler)(int, void *, struct pt_regs *), unsigned long flags, const char *devname, void *dev_id);
 extern void dn_free_irq(unsigned int irq, void *dev_id);
 extern void dn_enable_irq(unsigned int);
@@ -37,20 +44,93 @@ extern void dn_dummy_debug_init(void);
 extern void (*kd_mksound)(unsigned int, unsigned int);
 extern void dn_dummy_video_setup(char *,int *);
 extern void dn_process_int(int irq, struct pt_regs *fp);
-
-static struct console dn_console_driver;
-static void dn_debug_init(void);
+#ifdef CONFIG_HEARTBEAT
+static void dn_heartbeat(int on);
+#endif
 static void dn_timer_int(int irq,void *, struct pt_regs *);
 static void (*sched_timer_handler)(int, void *, struct pt_regs *)=NULL;
+static void dn_get_model(char *model);
+static int dn_cpuctrl=0xff00;
+static const char *apollo_models[] = {
+	"DN3000 (Otter)",
+	"DN3010 (Otter)",
+	"DN3500 (Cougar II)",
+	"DN4000 (Mink)",
+	"DN4500 (Roadrunner)" };
 
-int dn_serial_console_wait_key(void) {
+int apollo_parse_bootinfo(const struct bi_record *record) {
+
+	int unknown = 0;
+	const unsigned long *data = record->data;
+
+	switch(record->tag) {
+		case BI_APOLLO_MODEL: 
+			apollo_model=*data;	
+			break;
+
+		default:
+			 unknown=1;
+	}
+	
+	return unknown;
+}
+
+void dn_setup_model(void) {
+	
+
+	printk("Apollo hardware found: ");
+	printk("[%s]\n", apollo_models[apollo_model - APOLLO_DN3000]);
+
+	switch(apollo_model) {
+		case APOLLO_UNKNOWN:
+			panic("Unknown apollo model");
+			break;
+		case APOLLO_DN3000:
+		case APOLLO_DN3010:
+			sio01_physaddr=SAU8_SIO01_PHYSADDR;	
+			rtc_physaddr=SAU8_RTC_PHYSADDR;	
+			pica_physaddr=SAU8_PICA;	
+			picb_physaddr=SAU8_PICB;	
+			cpuctrl_physaddr=SAU8_CPUCTRL;
+			timer_physaddr=SAU8_TIMER;
+			break;
+		case APOLLO_DN4000:
+			sio01_physaddr=SAU7_SIO01_PHYSADDR;	
+			sio23_physaddr=SAU7_SIO23_PHYSADDR;	
+			rtc_physaddr=SAU7_RTC_PHYSADDR;	
+			pica_physaddr=SAU7_PICA;	
+			picb_physaddr=SAU7_PICB;	
+			cpuctrl_physaddr=SAU7_CPUCTRL;
+			timer_physaddr=SAU7_TIMER;
+			break;
+		case APOLLO_DN4500:
+			panic("Apollo model not yet supported");
+			break;
+		case APOLLO_DN3500:
+			sio01_physaddr=SAU7_SIO01_PHYSADDR;	
+			sio23_physaddr=SAU7_SIO23_PHYSADDR;	
+			rtc_physaddr=SAU7_RTC_PHYSADDR;	
+			pica_physaddr=SAU7_PICA;	
+			picb_physaddr=SAU7_PICB;	
+			cpuctrl_physaddr=SAU7_CPUCTRL;
+			timer_physaddr=SAU7_TIMER;
+			break;
+		default:
+			panic("Undefined apollo model");
+			break;
+	}
+
+
+}
+
+int dn_serial_console_wait_key(struct console *co) {
 
 	while(!(sio01.srb_csrb & 1))
 		barrier();
 	return sio01.rhrb_thrb;
 }
 
-void dn_serial_console_write (const char *str,unsigned int count)
+void dn_serial_console_write (struct console *co, const char *str,unsigned int count)
 {
    while(count--) {
 	if (*str == '\n') { 
@@ -80,12 +160,9 @@ void dn_serial_print (const char *str)
 
 void config_apollo(void) {
 
-	dn_serial_print("Config apollo !\n");
-#if 0
-	dn_debug_init();	
-#endif
-	printk("Config apollo !\n");
+	int i;
 
+	dn_setup_model();	
 
 	mach_sched_init=dn_sched_init; /* */
 	mach_keyb_init=dn_keyb_init;
@@ -109,13 +186,19 @@ void config_apollo(void) {
 #endif
 	mach_reset	     = dn_dummy_reset;  /* */
 #ifdef CONFIG_DUMMY_CONSOLE
-	conswitchp	     = &dummy_con;
-#endif
-#if 0
-	mach_fb_init 	     = dn_fb_init; 
-	mach_video_setup     = dn_dummy_video_setup; 
+        conswitchp           = &dummy_con;
 #endif
 	kd_mksound	     = dn_mksound;
+#ifdef CONFIG_HEARTBEAT
+  	mach_heartbeat = dn_heartbeat;
+#endif
+	mach_get_model       = dn_get_model;
+
+	cpuctrl=0xaa00;
+
+	/* clear DMA translation table */
+	for(i=0;i<0x400;i++) 
+		addr_xlat_map[i]=0;
 
 }		
 
@@ -125,44 +208,30 @@ void dn_timer_int(int irq, void *dev_id, struct pt_regs *fp) {
 
 	sched_timer_handler(irq,dev_id,fp);
 	
-	x=*(volatile unsigned char *)(IO_BASE+0x10803);
-	x=*(volatile unsigned char *)(IO_BASE+0x10805);
+	x=*(volatile unsigned char *)(timer+3);
+	x=*(volatile unsigned char *)(timer+5);
 
 }
 
 void dn_sched_init(void (*timer_routine)(int, void *, struct pt_regs *)) {
 
-	dn_serial_print("dn sched_init\n");
-
-#if 0
-	/* program timer 2 */
-	*(volatile unsigned char *)(IO_BASE+0x10803)=0x00;
-	*(volatile unsigned char *)(IO_BASE+0x10809)=0;
-	*(volatile unsigned char *)(IO_BASE+0x1080b)=50;
-
-	/* program timer 3 */
-	*(volatile unsigned char *)(IO_BASE+0x10801)=0x00;
-	*(volatile unsigned char *)(IO_BASE+0x1080c)=0;
-	*(volatile unsigned char *)(IO_BASE+0x1080f)=50;	
-#endif
 	/* program timer 1 */       	
-	*(volatile unsigned char *)(IO_BASE+0x10803)=0x01;
-	*(volatile unsigned char *)(IO_BASE+0x10801)=0x40;
-	*(volatile unsigned char *)(IO_BASE+0x10805)=0x09;
-	*(volatile unsigned char *)(IO_BASE+0x10807)=0xc4;
+	*(volatile unsigned char *)(timer+3)=0x01;
+	*(volatile unsigned char *)(timer+1)=0x40;
+	*(volatile unsigned char *)(timer+5)=0x09;
+	*(volatile unsigned char *)(timer+7)=0xc4;
 
 	/* enable IRQ of PIC B */
-	*(volatile unsigned char *)(IO_BASE+PICA+1)&=(~8);
+	*(volatile unsigned char *)(pica+1)&=(~8);
 
-
-
-	printk("*(0x10803) %02x\n",*(volatile unsigned char *)(IO_BASE+0x10803));
-	printk("*(0x10803) %02x\n",*(volatile unsigned char *)(IO_BASE+0x10803));
+#if 0
+	printk("*(0x10803) %02x\n",*(volatile unsigned char *)(timer+0x3));
+	printk("*(0x10803) %02x\n",*(volatile unsigned char *)(timer+0x3));
+#endif
 
 	sched_timer_handler=timer_routine;
 	request_irq(0,dn_timer_int,0,NULL,NULL);
 
-	
 }
 
 unsigned long dn_gettimeoffset(void) {
@@ -187,7 +256,6 @@ printk("gettod: %d %d %d %d %d %d\n",*yearp,*monp,*dayp,*hourp,*minp,*secp);
 
 int dn_dummy_hwclk(int op, struct hwclk_time *t) {
 
-  dn_serial_print("hwclk !\n");
 
   if(!op) { /* read */
     t->sec=rtc->second;
@@ -208,7 +276,6 @@ int dn_dummy_hwclk(int op, struct hwclk_time *t) {
     rtc->year=t->year;
   }
 
-  dn_serial_print("hwclk end!\n");
   return 0;
 
 }
@@ -235,11 +302,25 @@ void dn_dummy_waitbut(void) {
 
 }
 
-#if 0
-void dn_debug_init(void) {
+static void dn_get_model(char *model)
+{
+    strcpy(model, "Apollo ");
+    if (apollo_model >= APOLLO_DN3000 && apollo_model <= APOLLO_DN4500)
+        strcat(model, apollo_models[apollo_model - APOLLO_DN3000]);
+}
 
-  dn_console_driver.write=dn_serial_console_write;
-  register_console(&dn_console_driver);
+#ifdef CONFIG_HEARTBEAT
+static void dn_heartbeat(int on) {
 
+	if(on) { 
+		dn_cpuctrl&=~0x100;
+		cpuctrl=dn_cpuctrl;
+	}
+	else {
+		dn_cpuctrl&=~0x100;
+		dn_cpuctrl|=0x100;
+		cpuctrl=dn_cpuctrl;
+	}
 }
 #endif
+

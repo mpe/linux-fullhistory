@@ -139,7 +139,7 @@ udf_time_to_stamp(timestamp *dest, time_t tv_sec, long tv_usec)
 
 	gettimeofday(&tv, &sys_tz);
 #endif
-	offset = (-sys_tz.tz_minuteswest + (sys_tz.tz_dsttime ? 60 : 0));
+	offset = (-sys_tz.tz_minuteswest);
 
     if (!dest)
         return NULL;

@@ -66,8 +66,7 @@
 #define WORDSWAP(a)	((((a)>>8)&0xff) | ((a)<<8))
 
 int ariadne2_probe(struct net_device *dev);
-static int ariadne2_init(struct net_device *dev, unsigned int key,
-			 unsigned long board);
+static int ariadne2_init(struct net_device *dev, unsigned long board);
 
 static int ariadne2_open(struct net_device *dev);
 static int ariadne2_close(struct net_device *dev);
@@ -83,25 +82,26 @@ static void ariadne2_block_output(struct net_device *dev, const int count,
 
 int __init ariadne2_probe(struct net_device *dev)
 {
-    unsigned int key;
-    const struct ConfigDev *cd;
-    u_long board;
+    struct zorro_dev *z = NULL;
+    unsigned long board, ioaddr;
     int err;
 
-    if ((key = zorro_find(ZORRO_PROD_VILLAGE_TRONIC_ARIADNE2, 0, 0))) {
-	cd = zorro_get_board(key);
-	if ((board = (u_long)cd->cd_BoardAddr)) {
-	    if ((err = ariadne2_init(dev, key, ZTWO_VADDR(board))))
-		return err;
-	    zorro_config_board(key, 0);
-	    return 0;
+    while ((z = zorro_find_device(ZORRO_PROD_VILLAGE_TRONIC_ARIADNE2, z))) {
+	board = z->resource.start;
+	ioaddr = board+ARIADNE2_BASE*2;
+	if (!request_mem_region(ioaddr, NE_IO_EXTENT*2, "RTL8019AS"))
+	    continue;
+	if ((err = ariadne2_init(dev, ZTWO_VADDR(board)))) {
+	    release_mem_region(ioaddr, NE_IO_EXTENT*2);
+	    return err;
 	}
+	strcpy(z->name, "AriadNE2 Ethernet");
+	return 0;
     }
     return -ENODEV;
 }
 
-static int __init ariadne2_init(struct net_device *dev, unsigned int key,
-				    unsigned long board)
+static int __init ariadne2_init(struct net_device *dev, unsigned long board)
 {
     int i;
     unsigned char SA_prom[32];
@@ -111,7 +111,7 @@ static int __init ariadne2_init(struct net_device *dev, unsigned int key,
 	0x00, 0x02, 0x04, 0x06, 0x08, 0x0a, 0x0c, 0x0e,
 	0x10, 0x12, 0x14, 0x16, 0x18, 0x1a, 0x1c, 0x1e,
     };
-    int ioaddr = board+ARIADNE2_BASE*2;
+    unsigned long ioaddr = board+ARIADNE2_BASE*2;
 
     if (load_8390_module("ariadne2.c"))
 	return -ENOSYS;
@@ -189,7 +189,6 @@ static int __init ariadne2_init(struct net_device *dev, unsigned int key,
 	printk("Unable to get memory for dev->priv.\n");
 	return -ENOMEM;
     }
-    ((struct ei_device *)dev->priv)->priv = key;
 
     for(i = 0; i < ETHER_ADDR_LEN; i++) {
 #ifdef DEBUG
@@ -417,10 +416,9 @@ int init_module(void)
 
 void cleanup_module(void)
 {
-    unsigned int key = ((struct ei_device *)ariadne2_dev.priv)->priv;
     free_irq(IRQ_AMIGA_PORTS, &ariadne2_dev);
+    release_mem_region(ZTWO_PADDR(ariadne2_dev.base_addr), NE_IO_EXTENT*2);
     unregister_netdev(&ariadne2_dev);
-    zorro_unconfig_board(key, 0);
     unlock_8390_module();
 }
 

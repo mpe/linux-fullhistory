@@ -197,6 +197,7 @@ CONFIG_NFS_FS=y
 # CONFIG_AFFS_FS is not set
 # CONFIG_ROMFS_FS is not set
 # CONFIG_UFS_FS is not set
+# CONFIG_CRAMFS is not set
 
 #
 # Frame buffer devices

@@ -94,18 +94,18 @@ extern struct sbus_bus *sbus_root;
 #define sbus_can_burst64(sdev)		(1)
 extern void sbus_set_sbus64(struct sbus_dev *, int);
 
-/* These yield IOMMU mappings in consistant mode. */
-extern void *sbus_alloc_consistant(struct sbus_dev *, long, u32 *dma_addrp);
-extern void sbus_free_consistant(struct sbus_dev *, long, void *, u32);
+/* These yield IOMMU mappings in consistent mode. */
+extern void *sbus_alloc_consistent(struct sbus_dev *, size_t, dma_addr_t *dma_addrp);
+extern void sbus_free_consistent(struct sbus_dev *, size_t, void *, dma_addr_t);
 
 /* All the rest use streaming mode mappings. */
-extern u32 sbus_map_single(struct sbus_dev *, void *, long);
-extern void sbus_unmap_single(struct sbus_dev *, u32, long);
+extern dma_addr_t sbus_map_single(struct sbus_dev *, void *, size_t);
+extern void sbus_unmap_single(struct sbus_dev *, dma_addr_t, size_t);
 extern int sbus_map_sg(struct sbus_dev *, struct scatterlist *, int);
 extern void sbus_unmap_sg(struct sbus_dev *, struct scatterlist *, int);
 
 /* Finally, allow explicit synchronization of streamable mappings. */
-extern void sbus_dma_sync_single(struct sbus_dev *, u32, long);
+extern void sbus_dma_sync_single(struct sbus_dev *, dma_addr_t, size_t);
 extern void sbus_dma_sync_sg(struct sbus_dev *, struct scatterlist *, int);
 
 #endif /* !(_SPARC64_SBUS_H) */

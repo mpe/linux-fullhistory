@@ -543,14 +543,14 @@ asmlinkage int sunos_uname(struct sunos_utsname *name)
 {
 	int ret;
 
-	down(&uts_sem);
+	down_read(&uts_sem);
 	ret = copy_to_user(&name->sname[0], &system_utsname.sysname[0], sizeof(name->sname) - 1);
 	ret |= copy_to_user(&name->nname[0], &system_utsname.nodename[0], sizeof(name->nname) - 1);
 	ret |= put_user('\0', &name->nname[8]);
 	ret |= copy_to_user(&name->rel[0], &system_utsname.release[0], sizeof(name->rel) - 1);
 	ret |= copy_to_user(&name->ver[0], &system_utsname.version[0], sizeof(name->ver) - 1);
 	ret |= copy_to_user(&name->mach[0], &system_utsname.machine[0], sizeof(name->mach) - 1);
-	up(&uts_sem);
+	up_read(&uts_sem);
 	return ret;
 }
 

@@ -398,20 +398,17 @@ void prune_icache(int goal)
 
 int shrink_icache_memory(int priority, int gfp_mask, zone_t *zone)
 {
-	if (gfp_mask & __GFP_IO)
-	{
-		int count = 0;
+	int count = 0;
 		
-		if (priority)
-			count = inodes_stat.nr_unused / priority;
-		prune_icache(count);
-		/* FIXME: kmem_cache_shrink here should tell us
-		   the number of pages freed, and it should
-		   work in a __GFP_DMA/__GFP_HIGHMEM behaviour
-		   to free only the interesting pages in
-		   function of the needs of the current allocation. */
-		kmem_cache_shrink(inode_cachep);
-	}
+	if (priority)
+		count = inodes_stat.nr_unused / priority;
+	prune_icache(count);
+	/* FIXME: kmem_cache_shrink here should tell us
+	   the number of pages freed, and it should
+	   work in a __GFP_DMA/__GFP_HIGHMEM behaviour
+	   to free only the interesting pages in
+	   function of the needs of the current allocation. */
+	kmem_cache_shrink(inode_cachep);
 
 	return 0;
 }

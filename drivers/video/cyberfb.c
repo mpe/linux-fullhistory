@@ -1104,76 +1104,75 @@ int __init cyberfb_setup(char *options)
 
 int __init cyberfb_init(void)
 {
+	unsigned long board_addr, board_size;
 	struct cyberfb_par par;
-	unsigned long board_addr;
-	unsigned long board_size;
-	const struct ConfigDev *cd;
-	unsigned int CyberKey = 0;
+	struct zorro_dev *z = NULL;
 	DPRINTK("ENTER\n");
 
-	if (!(CyberKey = zorro_find(ZORRO_PROD_PHASE5_CYBERVISION64, 0, 0))) {
-		DPRINTK("EXIT - zorro_find failed\n");
-		return -ENXIO;
-	}
+	while ((z = zorro_find_device(ZORRO_PROD_PHASE5_CYBERVISION64, z))) {
+	    board_addr = z->resource.start;
+	    board_size = z->resource.end-z->resource.start+1;
+	    CyberMem_phys = board_addr + 0x01400000;
+	    CyberRegs_phys = CyberMem_phys + 0x00c00000;
+	    if (!request_mem_region(CyberRegs_phys, 0x10000, "S3 Trio64"))
+		continue;
+	    if (!request_mem_region(CyberMem_phys, 0x4000000, "RAM")) {
+		release_mem_region(CyberRegs_phys, 0x10000);
+		continue;
+	    }
+	    strcpy(z->name, "CyberVision64 Graphics Board");
+	    DPRINTK("board_addr=%08lx\n", board_addr);
+	    DPRINTK("board_size=%08lx\n", board_size);
 
-	cd = zorro_get_board (CyberKey);
-	zorro_config_board (CyberKey, 0);
-	board_addr = (unsigned long)cd->cd_BoardAddr;
-	board_size = (unsigned long)cd->cd_BoardSize;
-	DPRINTK("board_addr=%08lx\n", board_addr);
-	DPRINTK("board_size=%08lx\n", board_size);
-
-	CyberBase = ioremap(board_addr, board_size);
-	CyberRegs = CyberBase + 0x02000000;
-	CyberMem = CyberBase + 0x01400000;
-	DPRINTK("CyberBase=%08lx CyberRegs=%08lx CyberMem=%08lx\n",
-		CyberBase, (long unsigned int)CyberRegs, CyberMem);
-
-	CyberMem_phys = board_addr + 0x01400000;
-	CyberRegs_phys = CyberMem_phys + 0x00c00000;
-	DPRINTK("CyberMem=%08lx CyberRegs=%08lx\n", CyberMem,
-		(long unsigned int)CyberRegs);
+	    CyberBase = ioremap(board_addr, board_size);
+	    CyberRegs = CyberBase + 0x02000000;
+	    CyberMem = CyberBase + 0x01400000;
+	    DPRINTK("CyberBase=%08lx CyberRegs=%08lx CyberMem=%08lx\n",
+		    CyberBase, (long unsigned int)CyberRegs, CyberMem);
 
 #ifdef CYBERFBDEBUG
-	DPRINTK("Register state just after mapping memory\n");
-	cv64_dump();
+	    DPRINTK("Register state just after mapping memory\n");
+	    cv64_dump();
 #endif
 
-	strcpy(fb_info.modename, cyberfb_name);
-	fb_info.changevar = NULL;
-	fb_info.node = -1;
-	fb_info.fbops = &cyberfb_ops;
-	fb_info.disp = &disp;
-	fb_info.switch_con = &Cyberfb_switch;
-	fb_info.updatevar = &Cyberfb_updatevar;
-	fb_info.blank = &Cyberfb_blank;
+	    strcpy(fb_info.modename, cyberfb_name);
+	    fb_info.changevar = NULL;
+	    fb_info.node = -1;
+	    fb_info.fbops = &cyberfb_ops;
+	    fb_info.disp = &disp;
+	    fb_info.switch_con = &Cyberfb_switch;
+	    fb_info.updatevar = &Cyberfb_updatevar;
+	    fb_info.blank = &Cyberfb_blank;
 
-	Cyber_init();
-	/* ++Andre: set cyberfb default mode */
-	if (!cyberfb_usermode) {
-		cyberfb_default = cyberfb_predefined[CYBER8_DEFMODE].var;
-		DPRINTK("Use default cyber8 mode\n");
+	    Cyber_init();
+	    /* ++Andre: set cyberfb default mode */
+	    if (!cyberfb_usermode) {
+		    cyberfb_default = cyberfb_predefined[CYBER8_DEFMODE].var;
+		    DPRINTK("Use default cyber8 mode\n");
+	    }
+	    Cyber_decode_var(&cyberfb_default, &par);
+	    Cyber_encode_var(&cyberfb_default, &par);
+
+	    do_fb_set_var(&cyberfb_default, 1);
+	    cyberfb_get_var(&fb_display[0].var, -1, &fb_info);
+	    cyberfb_set_disp(-1, &fb_info);
+	    do_install_cmap(0, &fb_info);
+
+	    if (register_framebuffer(&fb_info) < 0) {
+		    DPRINTK("EXIT - register_framebuffer failed\n");
+		    release_mem_region(board_addr, board_size);
+		    return -EINVAL;
+	    }
+
+	    printk("fb%d: %s frame buffer device, using %ldK of video memory\n",
+		   GET_FB_IDX(fb_info.node), fb_info.modename, CyberSize>>10);
+
+	    /* TODO: This driver cannot be unloaded yet */
+	    MOD_INC_USE_COUNT;
+	    DPRINTK("EXIT\n");
+	    return 0;
 	}
-	Cyber_decode_var(&cyberfb_default, &par);
-	Cyber_encode_var(&cyberfb_default, &par);
-
-	do_fb_set_var(&cyberfb_default, 1);
-	cyberfb_get_var(&fb_display[0].var, -1, &fb_info);
-	cyberfb_set_disp(-1, &fb_info);
-	do_install_cmap(0, &fb_info);
-
-	if (register_framebuffer(&fb_info) < 0) {
-		DPRINTK("EXIT - register_framebuffer failed\n");
-		return -EINVAL;
-	}
-
-	printk("fb%d: %s frame buffer device, using %ldK of video memory\n",
-	       GET_FB_IDX(fb_info.node), fb_info.modename, CyberSize>>10);
-
-	/* TODO: This driver cannot be unloaded yet */
-	MOD_INC_USE_COUNT;
-	DPRINTK("EXIT\n");
-	return 0;
+	return -ENXIO;
 }
 
 

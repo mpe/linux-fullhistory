@@ -998,6 +998,14 @@ S: Cambridge
 S: CB3 0DS
 S: United Kingdom
 
+N: Andreas Jaeger
+E: aj@suse.de
+D: Various smaller kernel fixes
+D: glibc developer
+S: Gottfried-Kinkel-Str. 18
+S: D 67659 Kaiserslautern
+S: Germany
+
 N: Mike Jagdis
 E: jaggy@purplet.demon.co.uk
 E: Mike.Jagdis@purplet.demon.co.uk

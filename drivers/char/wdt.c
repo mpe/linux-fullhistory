@@ -60,19 +60,31 @@ static int irq=11;
 
 #define WD_TIMO (100*60)		/* 1 minute */
 
+#ifndef MODULE
+
 /*
  *	Setup options
  */
  
-void __init wdt_setup(char *str, int *ints)
+static int __init wdt_setup(char *str)
 {
-	if(ints[0]>0)
+	int ints[4];
+
+	str = get_options (str, ARRAY_SIZE(ints), ints);
+
+	if (ints[0] > 0)
 	{
-		io=ints[1];
-		if(ints[0]>1)
-			irq=ints[2];
+		io = ints[1];
+		if(ints[0] > 1)
+			irq = ints[2];
 	}
+
+	return 1;
 }
+
+__setup("wdt=", wdt_setup);
+
+#endif /* !MODULE */
  
 /*
  *	Programming support
@@ -367,10 +379,10 @@ void cleanup_module(void)
 
 int __init wdt_init(void)
 {
-	printk("WDT500/501-P driver 0.07 at %X (Interrupt %d)\n", io,irq);
+	printk(KERN_INFO "WDT500/501-P driver 0.07 at %X (Interrupt %d)\n", io,irq);
 	if(request_irq(irq, wdt_interrupt, SA_INTERRUPT, "wdt501p", NULL))
 	{
-		printk("IRQ %d is not free.\n", irq);
+		printk(KERN_ERR "IRQ %d is not free.\n", irq);
 		return -EIO;
 	}
 	misc_register(&wdt_miscdev);

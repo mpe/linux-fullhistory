@@ -36,7 +36,7 @@ extern char _text, _end;
 static int kernel_start, kernel_end;
 char sun3_reserved_pmeg[SUN3_PMEGS_NUM];
 
-static unsigned long sun3_gettimeoffset(void);
+extern unsigned long sun3_gettimeoffset(void);
 extern int sun3_get_irq_list (char *);
 extern void sun3_sched_init(void (*handler)(int, void *, struct pt_regs *));
 extern void sun3_init_IRQ (void);
@@ -50,8 +50,9 @@ extern void sun3_enable_interrupts (void);
 extern void sun3_disable_interrupts (void);
 extern void sun3_get_model (unsigned char* model);
 extern void idprom_init (void);
-void sun3_gettod (int *yearp, int *monp, int *dayp,
+extern void sun3_gettod (int *yearp, int *monp, int *dayp,
                    int *hourp, int *minp, int *secp);
+extern int sun3_hwclk(int set, struct hwclk_time *t);
 
 extern unsigned long sun_serial_setup(unsigned long memory_start);
 volatile char* clock_va; 
@@ -106,6 +107,11 @@ static void sun3_reboot (void)
 	prom_reboot ("vmlinux");
 }
 
+static void sun3_halt (void)
+{
+	prom_halt ();
+}
+
 void __init config_sun3(unsigned long *start_mem_p, unsigned long *end_mem_p)
 {
 	printk("ARCH: SUN3\n");
@@ -126,6 +132,8 @@ void __init config_sun3(unsigned long *start_mem_p, unsigned long *end_mem_p)
         mach_reset           =  sun3_reboot;
 	mach_gettimeoffset   =  sun3_gettimeoffset;
 	mach_get_model	     =  sun3_get_model;
+	mach_hwclk           =  sun3_hwclk;
+	mach_halt	     =  sun3_halt;
 #ifndef CONFIG_SERIAL_CONSOLE
 	conswitchp 	     = &dummy_con;
 #endif
@@ -151,23 +159,5 @@ void __init sun3_sched_init(void (*timer_routine)(int, void *, struct pt_regs *)
         intersil_clock->cmd_reg=(INTERSIL_RUN|INTERSIL_INT_ENABLE|INTERSIL_24H_MODE);
         sun3_enable_interrupts();
         intersil_clear();
-}
-
-static unsigned long sun3_gettimeoffset(void)
-{ 
-  return 1;
-}
-
-void sun3_gettod (int *yearp, int *monp, int *dayp,
-                   int *hourp, int *minp, int *secp)
-{
-	struct intersil_dt* todintersil;
-        todintersil = (struct intersil_dt *) &intersil_clock->counter;
-        *secp  = todintersil->second; 
-        *minp  = todintersil->minute;
-        *hourp = todintersil->hour;
-        *dayp  = todintersil->day;
-        *monp  = todintersil->month;
-        *yearp = todintersil->year+68; /* The base year for sun3 is 1968 */
 }
 

@@ -799,32 +799,45 @@ strncpy_from_user(char *dst, const char *src, long count)
 /*
  * Return the size of a string (including the ending 0)
  *
- * Return 0 for error
+ * Return 0 on exception, a value greater than N if too long
  */
-static inline long strlen_user(const char * src)
+static inline long strnlen_user(const char *src, long n)
 {
-    long res = -(long) src;
-    __asm__ __volatile__
-	("1: movesb (%1)+,%%d0\n"
-	 "12:tstb %%d0\n"
-	 "   jne 1b\n"
-	 "   addl %1,%0\n"
-	 "2:\n"
-	 ".section .fixup,\"ax\"\n"
-	 "   .even\n"
-	 "3: moveq %2,%0\n"
-	 "   jra 2b\n"
-	 ".previous\n"
-	 ".section __ex_table,\"a\"\n"
-	 "   .align 4\n"
-	 "   .long 1b,3b\n"
-	 "   .long 12b,3b\n"
-	 ".previous"
-	 : "=d"(res), "=a"(src)
-	 : "i"(0), "0"(res), "1"(src)
-	 : "d0");
-    return res;
+	long res;
+
+	res = -(long)src;
+	__asm__ __volatile__
+		("1:\n"
+		 "   tstl %2\n"
+		 "   jeq 3f\n"
+		 "2: movesb (%1)+,%%d0\n"
+		 "22:\n"
+		 "   subql #1,%2\n"
+		 "   tstb %%d0\n"
+		 "   jne 1b\n"
+		 "   jra 4f\n"
+		 "3:\n"
+		 "   addql #1,%0\n"
+		 "4:\n"
+		 "   addl %1,%0\n"
+		 "5:\n"
+		 ".section .fixup,\"ax\"\n"
+		 "   .even\n"
+		 "6: moveq %3,%0\n"
+		 "   jra 5b\n"
+		 ".previous\n"
+		 ".section __ex_table,\"a\"\n"
+		 "   .align 4\n"
+		 "   .long 2b,6b\n"
+		 "   .long 22b,6b\n"
+		 ".previous"
+		 : "=d"(res), "=a"(src), "=d"(n)
+		 : "i"(0), "0"(res), "1"(src), "2"(n)
+		 : "d0");
+	return res;
 }
+
+#define strlen_user(str) strnlen_user(str, 32767)
 
 /*
  * Zero Userspace

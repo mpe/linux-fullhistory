@@ -26,6 +26,8 @@ static int dma[PARPORT_MAX] __initdata = { [0 ... PARPORT_MAX-1] = PARPORT_DMA_N
 
 extern int parport_pc_init(int *io, int *io_hi, int *irq, int *dma);
 extern int parport_sunbpp_init(void);
+extern int parport_amiga_init(void);
+extern int parport_mfc3_init(void);
 
 static int parport_setup_ptr __initdata = 0;
 

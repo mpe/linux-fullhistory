@@ -17,11 +17,10 @@
  *    JS        Jay Schulist <jschlst@turbolinux.com>
  *
  *  To do:
- *    1. MCA SMC TokenCard Support. (Some support is already done).
- *    4. Multicast support.
+ *    1. Multicast support.
  */
 
-static const char *version = "smctr.c: v1.0 1/1/00 by jschlst@turbolinux.com\n";
+static const char *version = "smctr.c: v1.1 1/1/00 by jschlst@turbolinux.com\n";
 static const char *cardname = "smctr";
 
 #ifdef MODULE
@@ -48,6 +47,7 @@ static const char *cardname = "smctr";
 #include <linux/errno.h>
 #include <linux/init.h>
 #include <linux/pci.h>
+#include <linux/mca.h>
 
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
@@ -65,6 +65,10 @@ static unsigned int smctr_portlist[] __initdata = {
         0x320, 0x340, 0x360, 0x380,
         0
 };
+
+#ifdef CONFIG_MCA
+static unsigned int smctr_posid = 0x6ec6;
+#endif
 
 static int ringspeed = 0;
 
@@ -91,6 +95,7 @@ static int smctr_bypass_state(struct net_device *dev);
 
 /* C */
 static int smctr_checksum_firmware(struct net_device *dev);
+static int __init smctr_chk_isa(struct net_device *dev);
 static int smctr_chg_rx_mask(struct net_device *dev);
 static int smctr_clear_int(struct net_device *dev);
 static int smctr_clear_trc_reset(int ioaddr);
@@ -109,11 +114,8 @@ static int smctr_enable_adapter_ctrl_store(struct net_device *dev);
 static int smctr_enable_adapter_ram(struct net_device *dev);
 static int smctr_enable_bic_int(struct net_device *dev);
 
-/* F */
-static int __init smctr_find_adapter(struct net_device *dev);
-
 /* G */
-static int __init smctr_get_boardid(struct net_device *dev);
+static int __init smctr_get_boardid(struct net_device *dev, int mca);
 static int smctr_get_group_address(struct net_device *dev);
 static int smctr_get_functional_address(struct net_device *dev);
 static unsigned int smctr_get_num_rx_bdbs(struct net_device *dev);
@@ -478,13 +480,171 @@ static int smctr_checksum_firmware(struct net_device *dev)
         return (0);
 }
 
+static int smctr_chk_mca(struct net_device *dev)
+{
+#ifdef CONFIG_MCA
+	struct net_local *tp = (struct net_local *)dev->priv;
+	int current_slot;
+	__u8 r1, r2, r3, r4, r5;
+
+	current_slot = mca_find_unused_adapter(smctr_posid, 0);
+	if(current_slot == MCA_NOTFOUND)
+		return (-ENODEV);
+
+	mca_set_adapter_name(current_slot, smctr_name);
+	mca_mark_as_used(current_slot);
+	tp->slot_num = current_slot;
+
+	r1 = mca_read_stored_pos(tp->slot_num, 2);
+	r2 = mca_read_stored_pos(tp->slot_num, 3);
+
+	if(tp->slot_num)
+		outb(CNFG_POS_CONTROL_REG, (__u8)((tp->slot_num - 1) | CNFG_SLOT_ENABLE_BIT));
+	else
+		outb(CNFG_POS_CONTROL_REG, (__u8)((tp->slot_num) | CNFG_SLOT_ENABLE_BIT));
+
+	r1 = inb(CNFG_POS_REG1);
+	r2 = inb(CNFG_POS_REG0);
+
+	tp->bic_type = BIC_594_CHIP;
+
+	/* IO */
+	r2 = mca_read_stored_pos(tp->slot_num, 2);
+	r2 &= 0xF0;
+	dev->base_addr = ((__u16)r2 << 8) + (__u16)0x800;
+	request_region(dev->base_addr, SMCTR_IO_EXTENT, smctr_name);
+
+	/* IRQ */
+	r5 = mca_read_stored_pos(tp->slot_num, 5);
+	r5 &= 0xC;
+        switch(r5)
+	{
+            	case 0:
+			dev->irq = 3;
+               		break;
+
+            	case 0x4:
+			dev->irq = 4;
+               		break;
+
+            	case 0x8:
+			dev->irq = 10;
+               		break;
+
+            	default:
+			dev->irq = 15;
+               		break;
+	}
+	if(request_irq(dev->irq, smctr_interrupt, SA_SHIRQ, smctr_name, dev))
+                return (-ENODEV);
+
+	/* Get RAM base */
+	r3 = mca_read_stored_pos(tp->slot_num, 3);
+	if(r3 & 0x8) 
+	{ 
+        	if(r3 & 0x80)
+               		tp->ram_base = ((__u32)(r3 & 0x7) << 13) + 0xFD0000;
+            	else
+			tp->ram_base = ((__u32)(r3 & 0x7) << 13) + 0x0D0000;
+        }
+	else 
+	{
+            	if(r3 & 0x80)
+               		tp->ram_base = ((__u32)(r3 & 0x7) << 13) + 0xFC0000;
+            	else
+			tp->ram_base = ((__u32)(r3 & 0x7) << 13) + 0x0C0000;
+        }
+
+	/* Get Ram Size */
+	r3 &= 0x30;
+	r3 >>= 4;
+
+	tp->ram_usable = (__u16)CNFG_SIZE_8KB << r3;
+	tp->ram_size = (__u16)CNFG_SIZE_64KB;
+	tp->board_id |= TOKEN_MEDIA;
+
+	r4 = mca_read_stored_pos(tp->slot_num, 4);
+	if(r4 & 0x8)
+		tp->rom_base = ((__u32)(r4 & 0x7) << 13) + 0xD0000;
+	else
+		tp->rom_base = ((__u32)(r4 & 0x7) << 13) + 0xC0000;
+
+	/* Get ROM size. */
+	r4 >>= 4;
+	if(r4 == 0)
+		tp->rom_size = CNFG_SIZE_8KB;
+	else
+	{
+		if(r4 == 1)
+			tp->rom_size = CNFG_SIZE_16KB;
+		else
+		{
+			if(r4 == 2)
+				tp->rom_size = CNFG_SIZE_32KB;
+			else
+				tp->rom_size = ROM_DISABLE;
+		}
+	}
+
+	/* Get Media Type. */
+	r5 = mca_read_stored_pos(tp->slot_num, 5);
+	r5 &= CNFG_MEDIA_TYPE_MASK;
+	switch(r5)
+	{
+		case (0):
+			tp->media_type = MEDIA_STP_4;
+			break;
+
+		case (1):
+			tp->media_type = MEDIA_STP_16;
+			break;
+
+		case (3):
+			tp->media_type = MEDIA_UTP_16;
+			break;
+
+		default:
+			tp->media_type = MEDIA_UTP_4;
+			break;
+	}
+	tp->media_menu = 14;
+
+	r2 = mca_read_stored_pos(tp->slot_num, 2);
+	if(!(r2 & 0x02))
+		tp->mode_bits |= EARLY_TOKEN_REL;
+
+	/* Disable slot */
+	outb(CNFG_POS_CONTROL_REG, 0);
+
+	tp->board_id = smctr_get_boardid(dev, 1);
+	switch(tp->board_id & 0xffff)
+        {
+                case WD8115TA:
+                        smctr_model = "8115T/A";
+                        break;
+
+                case WD8115T:
+                        smctr_model = "8115T";
+                        break;
+
+                default:
+                        smctr_model = "Unknown";
+                        break;
+        }
+
+	return (0);
+#else
+	return (-1);
+#endif /* CONFIG_MCA */
+}
+
 static int smctr_chg_rx_mask(struct net_device *dev)
 {
         struct net_local *tp = (struct net_local *)dev->priv;
         int err = 0;
 
         if(smctr_debug > 10)
-                printk("%s: smctr_chg_rx_mask\n", dev->name);
+		printk("%s: smctr_chg_rx_mask\n", dev->name);
 
         smctr_enable_16bit(dev);
         smctr_set_page(dev, (__u8 *)tp->ram_access);
@@ -804,7 +964,7 @@ static int smctr_enable_bic_int(struct net_device *dev)
         return (0);
 }
 
-static int __init smctr_find_adapter(struct net_device *dev)
+static int __init smctr_chk_isa(struct net_device *dev)
 {
         struct net_local *tp = (struct net_local *)dev->priv;
         int ioaddr = dev->base_addr;
@@ -813,7 +973,10 @@ static int __init smctr_find_adapter(struct net_device *dev)
 	int i;
 
         if(smctr_debug > 10)
-                printk("%s: smctr_find_adapter %#4x\n", dev->name, ioaddr);
+                printk("%s: smctr_chk_isa %#4x\n", dev->name, ioaddr);
+
+	if((ioaddr & 0x1F) != 0)
+                return (-ENODEV);
 
         /* Checksum SMC node address */
         for(i = 0; i < 8; i++)
@@ -823,7 +986,7 @@ static int __init smctr_find_adapter(struct net_device *dev)
         }
 
         if(chksum != NODE_ADDR_CKSUM)
-                return (-1);            /* Adapter Not Found */
+                return (-ENODEV);            /* Adapter Not Found */
 
         /* Grab the region so that no one else tries to probe our ioports. */
         request_region(ioaddr, SMCTR_IO_EXTENT, smctr_name);
@@ -843,7 +1006,7 @@ static int __init smctr_find_adapter(struct net_device *dev)
                 return (-1);
 
         /* Get adapter ID */
-        tp->board_id = smctr_get_boardid(dev);
+        tp->board_id = smctr_get_boardid(dev, 0);
         switch(tp->board_id & 0xffff)
         {
                 case WD8115TA:
@@ -1011,7 +1174,7 @@ static int __init smctr_find_adapter(struct net_device *dev)
         return (0);
 }
 
-static int __init smctr_get_boardid(struct net_device *dev)
+static int __init smctr_get_boardid(struct net_device *dev, int mca)
 {
         struct net_local *tp = (struct net_local *)dev->priv;
         int ioaddr = dev->base_addr;
@@ -1020,22 +1183,35 @@ static int __init smctr_get_boardid(struct net_device *dev)
 
         tp->board_id = BoardIdMask = 0;
 
-        BoardIdMask |= (INTERFACE_CHIP+TOKEN_MEDIA+PAGED_RAM+BOARD_16BIT);
-        tp->extra_info |= (INTERFACE_584_CHIP + RAM_SIZE_64K
-                + NIC_825_BIT + ALTERNATE_IRQ_BIT);
+	if(mca)
+	{
+		BoardIdMask |= (MICROCHANNEL+INTERFACE_CHIP+TOKEN_MEDIA+PAGED_RAM+BOARD_16BIT);
+		tp->extra_info |= (INTERFACE_594_CHIP+RAM_SIZE_64K+NIC_825_BIT+ALTERNATE_IRQ_BIT+SLOT_16BIT);
+	}
+	else
+	{
+        	BoardIdMask|=(INTERFACE_CHIP+TOKEN_MEDIA+PAGED_RAM+BOARD_16BIT);
+        	tp->extra_info |= (INTERFACE_584_CHIP + RAM_SIZE_64K
+        	        + NIC_825_BIT + ALTERNATE_IRQ_BIT);
+	}
 
-        r = inb(ioaddr + BID_REG_1);
-        r &= 0x0c;
-        outb(r, ioaddr + BID_REG_1);
-        r = inb(ioaddr + BID_REG_1);
+	if(!mca)
+	{
+        	r = inb(ioaddr + BID_REG_1);
+        	r &= 0x0c;
+       		outb(r, ioaddr + BID_REG_1);
+        	r = inb(ioaddr + BID_REG_1);
 
-        if(r & BID_SIXTEEN_BIT_BIT)
-        {
-                tp->extra_info |= SLOT_16BIT;
-                tp->adapter_bus = BUS_ISA16_TYPE;
-        }
-        else
-                tp->adapter_bus = BUS_ISA8_TYPE;
+        	if(r & BID_SIXTEEN_BIT_BIT)
+        	{
+        	        tp->extra_info |= SLOT_16BIT;
+        	        tp->adapter_bus = BUS_ISA16_TYPE;
+        	}
+        	else
+        	        tp->adapter_bus = BUS_ISA8_TYPE;
+	}
+	else
+		tp->adapter_bus = BUS_MCA_TYPE;
 
         /* Get Board Id Byte */
         IdByte = inb(ioaddr + BID_BOARD_ID_BYTE);
@@ -3536,10 +3712,6 @@ static int __init smctr_probe1(struct net_device *dev, int ioaddr)
                 return (-ENOMEM);
 #endif
 
-        /* See if we have a SMCTR card floating around. */
-        if((ioaddr & 0x1F) != 0)
-                return (-ENODEV);            /* No Adapter */
-
         /* Setup this devices private information structure */
         tp = (struct net_local *)kmalloc(sizeof(struct net_local),
                 GFP_KERNEL);
@@ -3549,11 +3721,16 @@ static int __init smctr_probe1(struct net_device *dev, int ioaddr)
         dev->priv = tp;
         dev->base_addr = ioaddr;
 
-        err = smctr_find_adapter(dev);
+	/* Actually detect an adapter now. */
+        err = smctr_chk_isa(dev);
         if(err < 0)
         {
-                kfree_s(tp, sizeof(struct net_local));
-                return (-ENODEV);
+		err = smctr_chk_mca(dev);
+		if(err < 0)
+		{
+                	kfree_s(tp, sizeof(struct net_local));
+                	return (-ENODEV);
+		}
         }
 
         tp = (struct net_local *)dev->priv;
@@ -5696,6 +5873,12 @@ void cleanup_module(void)
         {
                 if(dev_smctr[i])
                 {
+#ifdef CONFIG_MCA
+			struct net_local *tp 
+				= (struct net_local *)dev_smctr[i]->priv;
+			if(tp->slot_num)
+				mca_mark_as_unused(tp->slot_num);
+#endif
                         unregister_trdev(dev_smctr[i]);
                         release_region(dev_smctr[i]->base_addr,
                                 SMCTR_IO_EXTENT);

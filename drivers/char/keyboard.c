@@ -41,7 +41,7 @@
 #include <linux/vt_kern.h>
 #include <linux/kbd_ll.h>
 #include <linux/sysrq.h>
-#include <linux/acpi.h>
+#include <linux/pm.h>
 
 #define SIZE(x) (sizeof(x)/sizeof((x)[0]))
 
@@ -161,8 +161,7 @@ static int sysrq_pressed;
 int sysrq_enabled = 1;
 #endif
 
-static struct acpi_dev_info acpi_kbd_info = {ACPI_SYS_DEV, ACPI_KBC_HID, NULL};
-static struct acpi_dev *acpi_kbd = NULL;
+static struct pm_dev *pm_kbd = NULL;
 
 /*
  * Many other routines do put_queue, but I think either
@@ -206,7 +205,7 @@ void handle_scancode(unsigned char scancode, int down)
 	char up_flag = down ? 0 : 0200;
 	char raw_mode;
 
-	acpi_access(acpi_kbd);
+	pm_access(pm_kbd);
 
 	do_poke_blanked_console = 1;
 	mark_bh(CONSOLE_BH);
@@ -932,7 +931,7 @@ int __init kbd_init(void)
 	init_bh(KEYBOARD_BH, kbd_bh);
 	mark_bh(KEYBOARD_BH);
 	
-	acpi_kbd = acpi_register(&acpi_kbd_info, 0);
+	pm_kbd = pm_register(PM_SYS_DEV, PM_SYS_KBC, NULL);
 
 	return 0;
 }

@@ -41,9 +41,27 @@ endif
 
 ifeq ($(CONFIG_TMS380TR),y)
   L_OBJS += tms380tr.o
+  ifeq ($(CONFIG_ABYSS),y)
+    L_OBJS += abyss.o
+  endif
+ ifeq ($(CONFIG_MADGEMC),y)
+    L_OBJS += madgemc.o
+  endif
+  ifeq ($(CONFIG_TMSPCI),y)
+    L_OBJS += tmspci.o
+  endif
 else
   ifeq ($(CONFIG_TMS380TR),m)
     M_OBJS += tms380tr.o
+    ifeq ($(CONFIG_ABYSS),m)
+      M_OBJS += abyss.o
+    endif
+    ifeq ($(CONFIG_MADGEMC),m)
+      M_OBJS += madgemc.o
+    endif
+    ifeq ($(CONFIG_TMSPCI),m)
+      M_OBJS += tmspci.o
+    endif
   endif
 endif
 

@@ -19,10 +19,10 @@ L_TARGET := zorro.a
 ifeq ($(CONFIG_MODULES),y)
 O_TARGET = zorro_syms.o
 OX_OBJS  = zorrosyms.o
-O_OBJS   = zorro.o
+O_OBJS   = zorro.o names.o
 L_OBJS   := zorro_syms.o
 else
-L_OBJS   := zorro.o
+L_OBJS   := zorro.o names.o
 endif
 
 ifdef CONFIG_PROC_FS

@@ -808,6 +808,10 @@ static struct pci_dev * __init pci_scan_device(struct pci_dev *temp)
 	memcpy(dev, temp, sizeof(*dev));
 	dev->vendor = l & 0xffff;
 	dev->device = (l >> 16) & 0xffff;
+
+	/* Assume 32-bit PCI; let 64-bit PCI cards (which are far rarer)
+	   set this higher, assuming the system even supports it.  */
+	dev->dma_mask = 0xffffffff;
 	if (pci_setup_device(dev) < 0) {
 		kfree(dev);
 		dev = NULL;

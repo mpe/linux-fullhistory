@@ -241,9 +241,9 @@ pmac_ide_setup_dma(struct device_node *np, ide_hwif_t *hwif)
 	 * The +2 is +1 for the stop command and +1 to allow for
 	 * aligning the start address to a multiple of 16 bytes.
 	 */
-	hwif->dmatable = (unsigned long *)
+	hwif->dmatable_cpu = (unsigned long *)
 	       kmalloc((MAX_DCMDS + 2) * sizeof(struct dbdma_cmd), GFP_KERNEL);
-	if (hwif->dmatable == 0) {
+	if (hwif->dmatable_cpu == 0) {
 		printk(KERN_ERR "%s: unable to allocate DMA command list\n",
 		       hwif->name);
 		return;
@@ -271,7 +271,7 @@ pmac_ide_build_dmatable(ide_drive_t *drive, int wr)
 	volatile struct dbdma_regs *dma
 		= (volatile struct dbdma_regs *) hwif->dma_base;
 
-	table = tstart = (struct dbdma_cmd *) DBDMA_ALIGN(hwif->dmatable);
+	table = tstart = (struct dbdma_cmd *) DBDMA_ALIGN(hwif->dmatable_cpu);
 	out_le32(&dma->control, (RUN|PAUSE|FLUSH|WAKE|DEAD) << 16);
 
 	do {

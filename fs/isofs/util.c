@@ -126,8 +126,6 @@ int iso_date(char * p, int flag)
 		days += day - 1;
 		crtime = ((((days * 24) + hour) * 60 + minute) * 60)
 			+ second;
-		if (sys_tz.tz_dsttime)
-			crtime -= 3600;
 
 		/* sign extend */
 		if (tz & 0x80)
@@ -149,7 +147,7 @@ int iso_date(char * p, int flag)
 		 * NOTE: mkisofs in versions prior to mkisofs-1.10 had
 		 * the sign wrong on the timezone offset.  This has now
 		 * been corrected there too, but if you are getting screwy
-		 * results this may be the explaination.  If enough people
+		 * results this may be the explanation.  If enough people
 		 * complain, a user configuration option could be added
 		 * to add the timezone offset in with the wrong sign
 		 * for 'compatibility' with older discs, but I cannot see how

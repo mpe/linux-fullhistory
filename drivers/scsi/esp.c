@@ -791,7 +791,7 @@ static int __init esp_map_cmdarea(struct esp *esp)
 {
 	struct sbus_dev *sdev = esp->sdev;
 
-	esp->esp_command = sbus_alloc_consistant(sdev, 16,
+	esp->esp_command = sbus_alloc_consistent(sdev, 16,
 						 &esp->esp_command_dvma);
 	if (esp->esp_command == NULL ||
 	    esp->esp_command_dvma == 0)
@@ -1114,7 +1114,7 @@ static int __init detect_one_esp(Scsi_Host_Template *tpnt, struct sbus_dev *esp_
 	return 0;
 
 fail_unmap_cmdarea:
-	sbus_free_consistant(esp->sdev, 16,
+	sbus_free_consistent(esp->sdev, 16,
 			     (void *) esp->esp_command,
 			     esp->esp_command_dvma);
 
@@ -1420,8 +1420,8 @@ static void esp_get_dmabufs(struct esp *esp, Scsi_Cmnd *sp)
 		sp->SCp.buffers_residual = sbus_map_sg(esp->sdev,
 						       sp->SCp.buffer,
 						       sp->use_sg);
-		sp->SCp.this_residual = sp->SCp.buffer->dvma_length;
-		sp->SCp.ptr = (char *) ((unsigned long)sp->SCp.buffer->dvma_address);
+		sp->SCp.this_residual = sg_dma_len(sp->SCp.buffer);
+		sp->SCp.ptr = (char *) ((unsigned long)sg_dma_address(sp->SCp.buffer));
 	}
 }
 
@@ -2537,8 +2537,8 @@ static inline void advance_sg(Scsi_Cmnd *sp)
 {
 	++sp->SCp.buffer;
 	--sp->SCp.buffers_residual;
-	sp->SCp.this_residual = sp->SCp.buffer->dvma_length;
-	sp->SCp.ptr = (char *)((unsigned long)sp->SCp.buffer->dvma_address);
+	sp->SCp.this_residual = sg_dma_len(sp->SCp.buffer);
+	sp->SCp.ptr = (char *)((unsigned long)sg_dma_address(sp->SCp.buffer));
 }
 
 /* Please note that the way I've coded these routines is that I _always_

@@ -16,7 +16,7 @@
 #include <asm/setup.h>
 #include <asm/segment.h>
 #include <asm/page.h>
-#include <asm/pgtable.h>
+#include <asm/pgalloc.h>
 #include <asm/system.h>
 #include <asm/traps.h>
 #include <asm/io.h>
@@ -46,8 +46,8 @@ pte_t *get_pte_slow(pmd_t *pmd, unsigned long offset)
 	pte = (pte_t *) __get_free_page(GFP_KERNEL);
 	if (pmd_none(*pmd)) {
 		if (pte) {
-			clear_page((unsigned long)pte);
-			flush_page_to_ram((unsigned long)pte);
+			clear_page(pte);
+			__flush_page_to_ram((unsigned long)pte);
 			flush_tlb_kernel_page((unsigned long)pte);
 			nocache_page((unsigned long)pte);
 			pmd_set(pmd, pte);
@@ -61,7 +61,7 @@ pte_t *get_pte_slow(pmd_t *pmd, unsigned long offset)
 		__bad_pte(pmd);
 		return NULL;
 	}
-	return (pte_t *) pmd_page(*pmd) + offset;
+	return (pte_t *)__pmd_page(*pmd) + offset;
 }
 
 pmd_t *get_pmd_slow(pgd_t *pgd, unsigned long offset)
@@ -82,7 +82,7 @@ pmd_t *get_pmd_slow(pgd_t *pgd, unsigned long offset)
 		__bad_pmd(pgd);
 		return NULL;
 	}
-	return (pmd_t *) pgd_page(*pgd) + offset;
+	return (pmd_t *)__pgd_page(*pgd) + offset;
 }
 
 
@@ -90,11 +90,12 @@ pmd_t *get_pmd_slow(pgd_t *pgd, unsigned long offset)
    struct page instead of separately kmalloced struct.  Stolen from
    arch/sparc/mm/srmmu.c ... */
 
-typedef struct page ptable_desc;
-static ptable_desc ptable_list = { &ptable_list, &ptable_list };
+typedef struct list_head ptable_desc;
+static LIST_HEAD(ptable_list);
 
-#define PD_MARKBITS(dp) (*(unsigned char *)&(dp)->offset)
-#define PAGE_PD(page) ((ptable_desc *)&mem_map[MAP_NR(page)])
+#define PD_PTABLE(page) ((ptable_desc *)&mem_map[MAP_NR(page)])
+#define PD_PAGE(ptable) (list_entry(ptable, struct page, list))
+#define PD_MARKBITS(dp) (*(unsigned char *)&PD_PAGE(dp)->index)
 
 #define PTABLE_SIZE (PTRS_PER_PMD * sizeof(pmd_t))
 
@@ -104,11 +105,10 @@ void __init init_pointer_table(unsigned long ptable)
 	unsigned long page = ptable & PAGE_MASK;
 	unsigned char mask = 1 << ((ptable - page)/PTABLE_SIZE);
 
-	dp = PAGE_PD(page);
+	dp = PD_PTABLE(page);
 	if (!(PD_MARKBITS(dp) & mask)) {
 		PD_MARKBITS(dp) = 0xff;
-		(dp->prev = ptable_list.prev)->next = dp;
-		(dp->next = &ptable_list)->prev = dp;
+		list_add(dp, &ptable_list);
 	}
 
 	PD_MARKBITS(dp) &= ~mask;
@@ -117,8 +117,8 @@ void __init init_pointer_table(unsigned long ptable)
 #endif
 
 	/* unreserve the page so it's possible to free that page */
-	dp->flags &= ~(1 << PG_reserved);
-	atomic_set(&dp->count, 1);
+	PD_PAGE(dp)->flags &= ~(1 << PG_reserved);
+	atomic_set(&PD_PAGE(dp)->count, 1);
 
 	return;
 }
@@ -146,36 +146,31 @@ pmd_t *get_pointer_table (void)
 		flush_tlb_kernel_page(page);
 		nocache_page (page);
 
-		new = PAGE_PD(page);
+		new = PD_PTABLE(page);
 		PD_MARKBITS(new) = 0xfe;
-		(new->prev = dp->prev)->next = new;
-		(new->next = dp)->prev = new;
+		list_add_tail(new, dp);
+
 		return (pmd_t *)page;
 	}
 
-	for (tmp = 1, off = 0; (mask & tmp) == 0; tmp <<= 1, off += PTABLE_SIZE);
+	for (tmp = 1, off = 0; (mask & tmp) == 0; tmp <<= 1, off += PTABLE_SIZE)
+		;
 	PD_MARKBITS(dp) = mask & ~tmp;
 	if (!PD_MARKBITS(dp)) {
-		ptable_desc *last, *next;
-
 		/* move to end of list */
-		next = dp->next;
-		(next->prev = dp->prev)->next = next;
-
-		last = ptable_list.prev;
-		(dp->next = last->next)->prev = dp;
-		(dp->prev = last)->next = dp;
+		list_del(dp);
+		list_add_tail(dp, &ptable_list);
 	}
-	return (pmd_t *) (page_address(dp) + off);
+	return (pmd_t *) (page_address(PD_PAGE(dp)) + off);
 }
 
 int free_pointer_table (pmd_t *ptable)
 {
-	ptable_desc *dp, *first;
+	ptable_desc *dp;
 	unsigned long page = (unsigned long)ptable & PAGE_MASK;
 	unsigned char mask = 1 << (((unsigned long)ptable - page)/PTABLE_SIZE);
 
-	dp = PAGE_PD(page);
+	dp = PD_PTABLE(page);
 	if (PD_MARKBITS (dp) & mask)
 		panic ("table already free!");
 
@@ -183,21 +178,17 @@ int free_pointer_table (pmd_t *ptable)
 
 	if (PD_MARKBITS(dp) == 0xff) {
 		/* all tables in page are free, free page */
-		ptable_desc *next = dp->next;
-		(next->prev = dp->prev)->next = next;
+		list_del(dp);
 		cache_page (page);
 		free_page (page);
 		return 1;
-	} else if ((first = ptable_list.next) != dp) {
+	} else if (ptable_list.next != dp) {
 		/*
 		 * move this descriptor to the front of the list, since
 		 * it has one or more free tables.
 		 */
-		ptable_desc *next = dp->next;
-		(next->prev = dp->prev)->next = next;
-
-		(dp->prev = first->prev)->next = dp;
-		(dp->next = first)->prev = dp;
+		list_del(dp);
+		list_add(dp, &ptable_list);
 	}
 	return 0;
 }

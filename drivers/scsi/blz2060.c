@@ -16,6 +16,7 @@
 
 #include <linux/module.h>
 
+#include <linux/init.h>
 #include <linux/kernel.h>
 #include <linux/delay.h>
 #include <linux/types.h>
@@ -24,6 +25,7 @@
 #include <linux/blk.h>
 #include <linux/proc_fs.h>
 #include <linux/stat.h>
+#include <linux/init.h>
 
 #include "scsi.h"
 #include "hosts.h"
@@ -60,13 +62,16 @@ volatile unsigned char cmd_buffer[16];
 int __init blz2060_esp_detect(Scsi_Host_Template *tpnt)
 {
 	struct NCR_ESP *esp;
-	const struct ConfigDev *esp_dev;
-	unsigned int key;
+	struct zorro_dev *z = NULL;
 	unsigned long address;
 
-	if ((key = zorro_find(ZORRO_PROD_PHASE5_BLIZZARD_2060, 0, 0))){
-		esp_dev = zorro_get_board(key);
-		esp = esp_allocate(tpnt, (void *) esp_dev);
+	if ((z = zorro_find_device(ZORRO_PROD_PHASE5_BLIZZARD_2060, z))) {
+	    unsigned long board = z->resource.start;
+	    if (request_mem_region(board+BLZ2060_ESP_ADDR,
+				   sizeof(struct ESP_regs), "NCR53C9x")) {
+		strcpy(z->name, "Blizzard 2060 Accelerator");
+
+		esp = esp_allocate(tpnt, (void *)board+BLZ2060_ESP_ADDR);
 
 		/* Do command transfer with programmed I/O */
 		esp->do_pio_cmds = 1;
@@ -101,7 +106,7 @@ int __init blz2060_esp_detect(Scsi_Host_Template *tpnt)
 		 * relative to the device (i.e. in the same Zorro
 		 * I/O block).
 		 */
-		address = (unsigned long)ZTWO_VADDR(esp_dev->cd_BoardAddr);
+		address = (unsigned long)ZTWO_VADDR(board);
 		esp->dregs = (void *)(address + BLZ2060_DMA_ADDR);
 
 		/* ESP register base */
@@ -112,7 +117,6 @@ int __init blz2060_esp_detect(Scsi_Host_Template *tpnt)
 		esp->esp_command_dvma = virt_to_bus(cmd_buffer);
 
 		esp->irq = IRQ_AMIGA_PORTS;
-		esp->slot = key;
 		request_irq(IRQ_AMIGA_PORTS, esp_intr, SA_SHIRQ,
 			    "Blizzard 2060 SCSI", esp_intr);
 
@@ -124,11 +128,10 @@ int __init blz2060_esp_detect(Scsi_Host_Template *tpnt)
 
 		esp_initialize(esp);
 
-		zorro_config_board(key, 0);
-
 		printk("ESP: Total of %d ESP hosts found, %d actually in use.\n", nesps, esps_in_use);
 		esps_running = esps_in_use;
 		return esps_in_use;
+	    }
 	}
 	return 0;
 }
@@ -249,12 +252,11 @@ Scsi_Host_Template driver_template = SCSI_BLZ2060;
 int blz2060_esp_release(struct Scsi_Host *instance)
 {
 #ifdef MODULE
-	unsigned int key;
+	unsigned long address = (unsigned long)((struct NCR_ESP *)instance->hostdata)->edev;
 
-	key = ((struct NCR_ESP *)instance->hostdata)->slot;
 	esp_deallocate((struct NCR_ESP *)instance->hostdata);
 	esp_release();
-	zorro_unconfig_board(key, 0);
+	release_mem_region(address, sizeof(struct ESP_regs));
 	free_irq(IRQ_AMIGA_PORTS, esp_intr);
 #endif
 	return 1;

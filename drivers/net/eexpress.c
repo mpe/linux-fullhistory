@@ -9,6 +9,7 @@
  * Many modifications, and currently maintained, by
  *  Philip Blundell <Philip.Blundell@pobox.com>
  * Added the Compaq LTE  Alan Cox <alan@redhat.com>
+ * Added MCA support Adam Fritzler <mid@auk.cx>
  *
  * Note - this driver is experimental still - it has problems on faster
  * machines. Someone needs to sit down and go through it line by line with
@@ -120,6 +121,7 @@
 #include <linux/etherdevice.h>
 #include <linux/skbuff.h>
 #include <linux/malloc.h>
+#include <linux/mca.h>
 
 #include <linux/spinlock.h>
 
@@ -232,6 +234,16 @@ static unsigned short start_code[] = {
 /* maps irq number to EtherExpress magic value */
 static char irqrmap[] = { 0,0,1,2,3,4,0,0,0,1,5,6,0,0,0,0 };
 
+#ifdef CONFIG_MCA
+/* mapping of the first four bits of the second POS register */
+static unsigned short mca_iomap[] = {
+	0x270, 0x260, 0x250, 0x240, 0x230, 0x220, 0x210, 0x200,
+	0x370, 0x360, 0x350, 0x340, 0x330, 0x320, 0x310, 0x300
+};
+/* bits 5-7 of the second POS register */
+static char mca_irqmap[] = { 12, 9, 3, 4, 5, 10, 11, 15 };
+#endif 
+
 /*
  * Prototypes for Linux interface
  */
@@ -331,6 +343,55 @@ int __init express_probe(struct net_device *dev)
 	static unsigned short ports[] = { 0x300,0x310,0x270,0x320,0x340,0 };
 	unsigned short ioaddr = dev->base_addr;
 
+	dev->if_port = 0xff; /* not set */
+
+#ifdef CONFIG_MCA
+	if (MCA_bus) {
+		int slot = 0;
+
+		/*
+		 * Only find one card at a time.  Subsequent calls
+		 * will find others, however, proper multicard MCA
+		 * probing and setup can't be done with the
+		 * old-style Space.c init routines.  -- ASF
+		 */
+		while (slot != MCA_NOTFOUND) {
+			int pos0, pos1;
+			
+			slot = mca_find_unused_adapter(0x628B, slot);
+			if (slot == MCA_NOTFOUND)
+				break;
+
+			pos0 = mca_read_stored_pos(slot, 2);
+			pos1 = mca_read_stored_pos(slot, 3);
+			ioaddr = mca_iomap[pos1&0xf];
+
+			dev->irq = mca_irqmap[(pos1>>4)&0x7];
+			
+			/*
+			 * XXX: Transciever selection is done
+			 * differently on the MCA version.  
+			 * How to get it to select something
+			 * other than external/AUI is currently
+			 * unknown.  This code is just for looks. -- ASF
+			 */
+			if ((pos0 & 0x7) == 0x1)
+				dev->if_port = AUI;
+			else if ((pos0 & 0x7) == 0x5) {
+				if (pos1 & 0x80)
+					dev->if_port = BNC;
+				else
+					dev->if_port = TPE;
+			}
+
+			mca_set_adapter_name(slot, "Intel EtherExpress 16 MCA");
+			mca_set_adapter_procfn(slot, NULL, dev);
+			mca_mark_as_used(slot);
+
+			break;
+		}
+	}
+#endif
 	if (ioaddr&0xfe00)
 		return eexp_hw_probe(dev,ioaddr);
 	else if (ioaddr)
@@ -522,7 +583,9 @@ static void unstick_cu(struct net_device *dev)
 static int eexp_xmit(struct sk_buff *buf, struct net_device *dev)
 {
 	struct net_local *lp = (struct net_local *)dev->priv;
+#ifdef CONFIG_SMP
 	unsigned long flags;
+#endif
 
 #if NET_DEBUG > 6
 	printk(KERN_DEBUG "%s: eexp_xmit()\n", dev->name);
@@ -1010,8 +1073,10 @@ static int __init eexp_hw_probe(struct net_device *dev, unsigned short ioaddr)
 		if (!dev->irq)
 			dev->irq = irqmap[setupval>>13];
 
-		dev->if_port = !(setupval & 0x1000) ? AUI :
-			eexp_hw_readeeprom(ioaddr,5) & 0x1 ? TPE : BNC;
+		if (dev->if_port == 0xff) {
+			dev->if_port = !(setupval & 0x1000) ? AUI :
+				eexp_hw_readeeprom(ioaddr,5) & 0x1 ? TPE : BNC;
+		}
 
 		buswidth = !((setupval & 0x400) >> 10);
 	}

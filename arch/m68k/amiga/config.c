@@ -116,6 +116,23 @@ static char amiga_sysrq_xlate[128] =
 
 extern void (*kd_mksound)(unsigned int, unsigned int);
 
+
+    /*
+     *  Motherboard Resources present in all Amiga models
+     */
+
+static struct resource mb_resource[] = {
+    { "CIA B", 0x00bfd000, 0x00bfdfff },
+    { "CIA A", 0x00bfe000, 0x00bfefff },
+    { "Custom I/O", 0x00dff000, 0x00dfffff },
+    { "Kickstart ROM", 0x00f80000, 0x00ffffff }
+};
+
+static struct resource rtc_resource = {
+    NULL, 0x00dc0000, 0x00dcffff
+};
+
+
     /*
      *  Parse an Amiga-specific record in the bootinfo
      */
@@ -151,11 +168,15 @@ int amiga_parse_bootinfo(const struct bi_record *record)
 	    break;
 
 	case BI_AMIGA_AUTOCON:
-	    if (zorro_num_autocon < ZORRO_NUM_AUTO)
-		memcpy(&zorro_autocon[zorro_num_autocon++],
-		       (const struct ConfigDev *)data,
-		       sizeof(struct ConfigDev));
-	    else
+	    if (zorro_num_autocon < ZORRO_NUM_AUTO) {
+		const struct ConfigDev *cd = (struct ConfigDev *)data;
+		struct zorro_dev *dev = &zorro_autocon[zorro_num_autocon++];
+		dev->rom = cd->cd_Rom;
+		dev->slotaddr = cd->cd_SlotAddr;
+		dev->slotsize = cd->cd_SlotSize;
+		dev->resource.start = (unsigned long)cd->cd_BoardAddr;
+		dev->resource.end = dev->resource.start+cd->cd_BoardSize-1;
+	    } else
 		printk("amiga_parse_bootinfo: too many AutoConfig devices\n");
 	    break;
 
@@ -336,8 +357,15 @@ static void __init amiga_identify(void)
 
 void __init config_amiga(void)
 {
+  int i;
+
   amiga_debug_init();
   amiga_identify();
+
+  /* Yuk, we don't have PCI memory */
+  iomem_resource.name = "Memory";
+  for (i = 0; i < sizeof(mb_resource)/sizeof(mb_resource[0]); i++)
+      request_resource(&iomem_resource, &mb_resource[i]);
 
   mach_sched_init      = amiga_sched_init;
   mach_keyb_init       = amiga_keyb_init;
@@ -354,9 +382,13 @@ void __init config_amiga(void)
   mach_gettimeoffset   = amiga_gettimeoffset;
   if (AMIGAHW_PRESENT(A3000_CLK)){
     mach_gettod  = a3000_gettod;
+    rtc_resource.name = "A3000 RTC";
+    request_resource(&iomem_resource, &rtc_resource);
   }
   else{ /* if (AMIGAHW_PRESENT(A2000_CLK)) */
     mach_gettod  = a2000_gettod;
+    rtc_resource.name = "A2000 RTC";
+    request_resource(&iomem_resource, &rtc_resource);
   }
 
   mach_max_dma_address = 0xffffffff; /*
@@ -798,7 +830,7 @@ static void amiga_mem_console_write(struct console *co, const char *s,
 
 static void amiga_savekmsg_init(void)
 {
-    savekmsg = (struct savekmsg *)amiga_chip_alloc(SAVEKMSG_MAXMEM);
+    savekmsg = (struct savekmsg *)amiga_chip_alloc(SAVEKMSG_MAXMEM, "Debug");
     savekmsg->magic1 = SAVEKMSG_MAGIC1;
     savekmsg->magic2 = SAVEKMSG_MAGIC2;
     savekmsg->magicptr = virt_to_phys(savekmsg);
@@ -973,8 +1005,9 @@ static int amiga_get_hardware_list(char *buffer)
     AMIGAHW_ANNOUNCE(MAGIC_REKICK, "Magic Hard Rekick");
     AMIGAHW_ANNOUNCE(PCMCIA, "PCMCIA Slot");
     if (AMIGAHW_PRESENT(ZORRO))
-	len += sprintf(buffer+len, "\tZorro%s AutoConfig: %d Expansion Device%s\n",
-		       AMIGAHW_PRESENT(ZORRO3) ? " III" : "",
+	len += sprintf(buffer+len, "\tZorro II%s AutoConfig: %d Expansion "
+				   "Device%s\n",
+		       AMIGAHW_PRESENT(ZORRO3) ? "I" : "",
 		       zorro_num_autocon, zorro_num_autocon == 1 ? "" : "s");
 
 #undef AMIGAHW_ANNOUNCE

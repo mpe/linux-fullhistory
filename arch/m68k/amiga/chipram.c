@@ -8,6 +8,7 @@
 #include <linux/types.h>
 #include <linux/kernel.h>
 #include <linux/init.h>
+#include <linux/zorro.h>
 #include <asm/amigahw.h>
 
 struct chip_desc {
@@ -22,6 +23,8 @@ struct chip_desc {
 
 u_long amiga_chip_size;
 static unsigned long chipavail;
+
+static struct resource chipram = { "Chip RAM", 0 };
 
 unsigned long amiga_chip_avail( void )
 {
@@ -38,6 +41,9 @@ void __init amiga_chip_init (void)
 
   if (!AMIGAHW_PRESENT(CHIP_RAM))
     return;
+
+  chipram.end = amiga_chip_size;
+  request_resource(&iomem_resource, &chipram);
 
   /* initialize start boundary */
 
@@ -61,7 +67,7 @@ void __init amiga_chip_init (void)
 #endif
 }
 
-void *amiga_chip_alloc (long size)
+void *amiga_chip_alloc(long size, const char *name)
 {
 	/* last chunk */
 	struct chip_desc *dp;
@@ -71,7 +77,7 @@ void *amiga_chip_alloc (long size)
 	size = (size + 7) & ~7;
 
 #ifdef DEBUG
-   printk("chip_alloc: allocate %ld bytes\n", size);
+   printk("amiga_chip_alloc: allocate %ld bytes\n", size);
 #endif
 
 	/*
@@ -97,14 +103,14 @@ void *amiga_chip_alloc (long size)
 		dp = DP((unsigned long)ptr + dp->length);
 		dp->alloced = 1;
 #ifdef DEBUG
-		printk ("chip_alloc: no split\n");
+		printk ("amiga_chip_alloc: no split\n");
 #endif
 	} else {
 		/* split the extent; use the end part */
 		long newsize = dp->length - (2*sizeof(*dp) + size);
 
 #ifdef DEBUG
-		printk ("chip_alloc: splitting %d to %ld\n", dp->length,
+		printk ("amiga_chip_alloc: splitting %d to %ld\n", dp->length,
 			newsize);
 #endif
 		dp->length = newsize;
@@ -123,13 +129,17 @@ void *amiga_chip_alloc (long size)
 	}
 
 #ifdef DEBUG
-	printk ("chip_alloc: returning %p\n", ptr);
+	printk ("amiga_chip_alloc: returning %p\n", ptr);
 #endif
 
 	if ((unsigned long)ptr & 7)
-		panic("chip_alloc: alignment violation\n");
+		panic("amiga_chip_alloc: alignment violation\n");
 
     chipavail -= size + (2*sizeof(*dp)); /*MILAN*/
+
+    if (!request_mem_region(ZTWO_PADDR(ptr), size, name))
+	printk(KERN_WARNING "amiga_chip_alloc: region of size %ld at 0x%08lx "
+	       "is busy\n", size, ZTWO_PADDR(ptr));
 
     return ptr;
 }
@@ -145,6 +155,7 @@ void amiga_chip_free (void *ptr)
 #endif
 	/* deallocate the chunk */
 	sdp->alloced = edp->alloced = 0;
+	release_mem_region(ZTWO_PADDR(ptr), sdp->length);
 
 	/* check if we should merge with the previous chunk */
 	if (!sdp->first && !sdp[-1].alloced) {

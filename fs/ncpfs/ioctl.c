@@ -330,6 +330,7 @@ int ncp_ioctl(struct inode *inode, struct file *filp,
 				default:
 						return -EINVAL;
 			}
+			/* locking needs both read and write access */
 			if ((result = ncp_make_open(inode, O_RDWR)) != 0)
 			{
 				return result;

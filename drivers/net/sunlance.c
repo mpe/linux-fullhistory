@@ -1305,7 +1305,7 @@ static void lance_free_hwresources(struct lance_private *lp)
 			sbus_iounmap((unsigned long)lp->init_block,
 				     sizeof(struct lance_init_block));
 		} else {
-			sbus_free_consistant(lp->sdev,
+			sbus_free_consistent(lp->sdev,
 					     sizeof(struct lance_init_block),
 					     (void *)lp->init_block,
 					     lp->init_block_dvma);
@@ -1375,11 +1375,11 @@ static int __init sparc_lance_init(struct net_device *dev,
 		lp->tx = lance_tx_pio;
 	} else {
 		lp->init_block = (volatile struct lance_init_block *)
-			sbus_alloc_consistant(sdev, sizeof(struct lance_init_block),
+			sbus_alloc_consistent(sdev, sizeof(struct lance_init_block),
 					      &lp->init_block_dvma);
 		if (lp->init_block == NULL ||
 		    lp->init_block_dvma == 0) {
-			printk(KERN_ERR "%s: Cannot allocate consistant DMA memory.\n",
+			printk(KERN_ERR "%s: Cannot allocate consistent DMA memory.\n",
 			       dev->name);
 			goto fail;
 		}

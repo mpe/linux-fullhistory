@@ -292,7 +292,7 @@ int hpt34x_dmaproc (ide_dma_action_t func, ide_drive_t *drive)
 		case ide_dma_write:
 			if (!(count = ide_build_dmatable(drive, func)))
 				return 1;	/* try PIO instead of DMA */
-			outl(virt_to_bus(hwif->dmatable), dma_base + 4); /* PRD table */
+			outl(hwif->dmatable_dma, dma_base + 4); /* PRD table */
 			reading |= 0x01;
 			outb(reading, dma_base);		/* specify r/w */
 			outb(inb(dma_base+2)|6, dma_base+2);	/* clear INTR & ERROR flags */
@@ -307,6 +307,7 @@ int hpt34x_dmaproc (ide_dma_action_t func, ide_drive_t *drive)
 			outb(inb(dma_base)&~1, dma_base);	/* stop DMA */
 			dma_stat = inb(dma_base+2);		/* get DMA status */
 			outb(dma_stat|6, dma_base+2);		/* clear the INTR & ERROR bits */
+			ide_destroy_dmatable(drive);		/* purge DMA mappings */
 			return (dma_stat & 7) != 4;		/* verify good DMA status */
 		default:
 			break;

@@ -3,7 +3,7 @@
  *
  *	Procfs interface for the Zorro bus.
  *
- *	Copyright (C) 1998 Geert Uytterhoeven
+ *	Copyright (C) 1998-2000 Geert Uytterhoeven
  *
  *	Heavily based on the procfs interface for the PCI bus, which is
  *
@@ -46,7 +46,8 @@ proc_bus_zorro_read(struct file *file, char *buf, size_t nbytes, loff_t *ppos)
 {
 	struct inode *ino = file->f_dentry->d_inode;
 	struct proc_dir_entry *dp = ino->u.generic_ip;
-	struct ConfigDev *cd = dp->data;
+	struct zorro_dev *dev = dp->data;
+	struct ConfigDev cd;
 	int pos = *ppos;
 
 	if (pos >= sizeof(struct ConfigDev))
@@ -55,7 +56,16 @@ proc_bus_zorro_read(struct file *file, char *buf, size_t nbytes, loff_t *ppos)
 		nbytes = sizeof(struct ConfigDev);
 	if (pos + nbytes > sizeof(struct ConfigDev))
 		nbytes = sizeof(struct ConfigDev) - pos;
-	if (copy_to_user(buf, cd, nbytes))
+
+	/* Construct a ConfigDev */
+	memset(&cd, 0, sizeof(cd));
+	cd.cd_Rom = dev->rom;
+	cd.cd_SlotAddr = dev->slotaddr;
+	cd.cd_SlotSize = dev->slotsize;
+	cd.cd_BoardAddr = (void *)dev->resource.start;
+	cd.cd_BoardSize = dev->resource.end-dev->resource.start+1;
+
+	if (copy_to_user(buf, &cd, nbytes))
 		return -EFAULT;
 	*ppos += nbytes;
 
@@ -88,20 +98,11 @@ get_zorro_dev_info(char *buf, char **start, off_t pos, int count)
 	int len, cnt;
 
 	for (slot = cnt = 0; slot < zorro_num_autocon && count > cnt; slot++) {
-		struct ConfigDev *cd = &zorro_autocon[slot];
-		u16 manuf = cd->cd_Rom.er_Manufacturer;
-		u8 prod = cd->cd_Rom.er_Product;
-		u8 epc;
-		if (manuf == ZORRO_MANUF(ZORRO_PROD_GVP_EPC_BASE) &&
-		    prod == ZORRO_PROD(ZORRO_PROD_GVP_EPC_BASE)) {
-		    /* GVP quirk */
-		    u32 addr = (u32)cd->cd_BoardAddr;
-		    epc = (*(u16 *)ZTWO_VADDR(addr+0x8000)) & GVP_PRODMASK;
-		} else
-		    epc = 0;
-		len = sprintf(buf, "%02x\t%04x%02x%02x\t%08x\t%08x\t%02x\n",
-			      slot, manuf, prod, epc, (u32)cd->cd_BoardAddr,
-			      cd->cd_BoardSize, cd->cd_Rom.er_Type);
+		struct zorro_dev *dev = &zorro_autocon[slot];
+		len = sprintf(buf, "%02x\t%08x\t%08lx\t%08lx\t%02x\n", slot,
+			      dev->id, dev->resource.start,
+			      dev->resource.end-dev->resource.start+1,
+			      dev->rom.er_Type);
 		at += len;
 		if (at >= pos) {
 			if (!*start) {
@@ -128,7 +129,7 @@ static int __init zorro_proc_attach_device(u_int slot)
 		return -ENOMEM;
 	entry->ops = &proc_bus_zorro_inode_operations;
 	entry->data = &zorro_autocon[slot];
-	entry->size = sizeof(struct ConfigDev);
+	entry->size = sizeof(struct zorro_dev);
 	return 0;
 }
 

@@ -1,6 +1,6 @@
 /* Low-level parallel port routines for the Multiface 3 card
  *
- * Author: Joerg Dorchain <dorchain@wirbel.com>
+ * Author: Joerg Dorchain <joerg@dorchain.net>
  *
  * (C) The elitist m68k Users(TM)
  *
@@ -46,6 +46,10 @@
  * -------+-----+-----+---------------------------------------------------------
  * 
  * Should be enough to understand some of the driver.
+ *
+ * Per convention for normal use the port registers are visible.
+ * If you need the data direction registers, restore the value in the
+ * control register.
  */
 
 #include "multiface.h"
@@ -67,7 +71,7 @@
 #ifdef DEBUG
 #define DPRINTK printk
 #else
-static inline int DPRINTK() {return 0;}
+static inline int DPRINTK(void *nothing, ...) {return 0;}
 #endif
 
 static struct parport *this_port[MAX_MFC] = {NULL, };
@@ -95,10 +99,6 @@ static unsigned char control_pc_to_mfc3(unsigned char control)
 {
 	unsigned char ret = 32|64;
 
-	if (control & PARPORT_CONTROL_DIRECTION) /* XXX: What is this? */
-		;
-	if (control & PARPORT_CONTROL_INTEN) /* XXX: What is INTEN? */
-		;
 	if (control & PARPORT_CONTROL_SELECT) /* XXX: What is SELECP? */
 		ret &= ~32; /* /SELECT_IN */
 	if (control & PARPORT_CONTROL_INIT) /* INITP */
@@ -112,7 +112,7 @@ static unsigned char control_pc_to_mfc3(unsigned char control)
 
 static unsigned char control_mfc3_to_pc(unsigned char control)
 {
-	unsigned char ret = PARPORT_CONTROL_INTEN | PARPORT_CONTROL_STROBE 
+	unsigned char ret = PARPORT_CONTROL_STROBE 
 			  | PARPORT_CONTROL_AUTOFD | PARPORT_CONTROL_SELECT;
 
 	if (control & 128) /* /INITP */
@@ -146,7 +146,7 @@ DPRINTK("frob_control mask %02x, value %02x\n",mask,val);
 	return old;
 }
 
-
+#if 0 /* currently unused */
 static unsigned char status_pc_to_mfc3(unsigned char status)
 {
 	unsigned char ret = 1;
@@ -163,6 +163,7 @@ static unsigned char status_pc_to_mfc3(unsigned char status)
 		ret |= 16;
 	return ret;
 }
+#endif
 
 static unsigned char status_mfc3_to_pc(unsigned char status)
 {
@@ -182,11 +183,13 @@ static unsigned char status_mfc3_to_pc(unsigned char status)
 	return ret;
 }
 
+#if 0 /* currently unused */
 static void mfc3_write_status( struct parport *p, unsigned char status)
 {
 DPRINTK("write_status %02x\n",status);
 	pia(p)->ppra = (pia(p)->ppra & 0xe0) | status_pc_to_mfc3(status);
 }
+#endif
 
 static unsigned char mfc3_read_status(struct parport *p)
 {
@@ -197,11 +200,13 @@ DPRINTK("read_status %02x\n", status);
 	return status;
 }
 
+#if 0 /* currently unused */
 static void mfc3_change_mode( struct parport *p, int m)
 {
 	/* XXX: This port only has one mode, and I am
 	not sure about the corresponding PC-style mode*/
 }
+#endif
 
 static int use_cnt = 0;
 
@@ -217,12 +222,33 @@ static void mfc3_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 			}
 }
 
-static int mfc3_claim_resources(struct parport *p)
+static void mfc3_enable_irq(struct parport *p)
 {
-DPRINTK("claim_resources\n");
+	pia(p)->crb |= PIA_C1_ENABLE_IRQ;
 }
 
-static void mfc3_init_state(struct parport_state *s)
+static void mfc3_disable_irq(struct parport *p)
+{
+	pia(p)->crb &= ~PIA_C1_ENABLE_IRQ;
+}
+
+static void mfc3_data_forward(struct parport *p)
+{
+	DPRINTK("forward\n");
+	pia(p)->crb &= ~PIA_DDR; /* make data direction register visible */
+	pia(p)->pddrb = 255; /* all pins output */
+	pia(p)->crb |= PIA_DDR; /* make data register visible - default */
+}
+
+static void mfc3_data_reverse(struct parport *p)
+{
+	DPRINTK("reverse\n");
+	pia(p)->crb &= ~PIA_DDR; /* make data direction register visible */
+	pia(p)->pddrb = 0; /* all pins input */
+	pia(p)->crb |= PIA_DDR; /* make data register visible - default */
+}
+
+static void mfc3_init_state(struct pardevice *dev, struct parport_state *s)
 {
 	s->u.amiga.data = 0;
 	s->u.amiga.datadir = 255;
@@ -254,16 +280,6 @@ static void mfc3_restore_state(struct parport *p, struct parport_state *s)
 	pia(p)->cra |= PIA_DDR;
 }
 
-static void mfc3_enable_irq(struct parport *p)
-{
-	pia(p)->crb |= PIA_C1_ENABLE_IRQ;
-}
-
-static void mfc3_disable_irq(struct parport *p)
-{
-	pia(p)->crb &= ~PIA_C1_ENABLE_IRQ;
-}
-
 static void mfc3_inc_use_count(void)
 {
 	MOD_INC_USE_COUNT;
@@ -287,8 +303,8 @@ static struct parport_operations pp_mfc3_ops = {
 	mfc3_enable_irq,
 	mfc3_disable_irq,
 
-	NULL, /* data_forward - FIXME */
-	NULL, /* data_reverse - FIXME */
+	mfc3_data_forward, 
+	mfc3_data_reverse, 
 
 	mfc3_init_state,
 	mfc3_save_state,
@@ -318,43 +334,43 @@ int __init parport_mfc3_init(void)
 	struct parport *p;
 	int pias = 0;
 	struct pia *pp;
-	unsigned int key = 0;
-	const struct ConfigDev *cd;
+	struct zorro_dev *z = NULL;
 
-	if (MACH_IS_AMIGA) {
-		while ((key = zorro_find(ZORRO_PROD_BSC_MULTIFACE_III, 0, key))) {
-			cd = zorro_get_board(key);
-			pp = (struct pia *)ZTWO_VADDR((((u_char *)cd->cd_BoardAddr)+PIABASE));
-			if (pias < MAX_MFC) {
-				pp->crb = 0;
-				pp->pddrb = 255; /* all data pins output */
-				pp->crb = PIA_DDR|32|8;
-				dummy = pp->pddrb; /* reading clears interrupt */
-				pp->cra = 0;
-				pp->pddra = 0xe0; /* /RESET,  /DIR ,/AUTO-FEED output */
-				pp->cra = PIA_DDR;
-				pp->ppra = 0; /* reset printer */
-				udelay(10);
-				pp->ppra = 128;
-				if ((p = parport_register_port((unsigned long)pp,
-					IRQ_AMIGA_PORTS, PARPORT_DMA_NONE,
-					&pp_mfc3_ops))) {
-					this_port[pias++] = p;
-					printk(KERN_INFO "%s: Multiface III port using irq\n", p->name);
-					/* XXX: set operating mode */
-					parport_proc_register(p);
+	if (!MACH_IS_AMIGA)
+		return 0;
 
-					if (p->irq != PARPORT_IRQ_NONE)
-						if (use_cnt++ == 0)
-							if (request_irq(IRQ_AMIGA_PORTS, mfc3_interrupt, SA_SHIRQ, p->name, &pp_mfc3_ops))
-								use_cnt--;
+	while ((z = zorro_find_device(ZORRO_PROD_BSC_MULTIFACE_III, z))) {
+		unsigned long piabase = z->resource.start+PIABASE;
+		if (!request_mem_region(piabase, sizeof(struct pia), "PIA"))
+			continue;
+		strcpy(z->name, "MultiFace III MC6821 PIA");
+		pp = (struct pia *)ZTWO_VADDR(piabase);
+		if (pias < MAX_MFC) {
+			pp->crb = 0;
+			pp->pddrb = 255; /* all data pins output */
+			pp->crb = PIA_DDR|32|8;
+			dummy = pp->pddrb; /* reading clears interrupt */
+			pp->cra = 0;
+			pp->pddra = 0xe0; /* /RESET,  /DIR ,/AUTO-FEED output */
+			pp->cra = PIA_DDR;
+			pp->ppra = 0; /* reset printer */
+			udelay(10);
+			pp->ppra = 128;
+			if ((p = parport_register_port((unsigned long)pp,
+				IRQ_AMIGA_PORTS, PARPORT_DMA_NONE,
+				&pp_mfc3_ops))) {
+				this_port[pias++] = p;
+				printk(KERN_INFO "%s: Multiface III port using irq\n", p->name);
+				/* XXX: set operating mode */
+				parport_proc_register(p);
 
-					if (parport_probe_hook)
-						(*parport_probe_hook)(p);
-					zorro_config_board(key, 0);
-					p->private_data = (void *)key;
-					parport_announce_port (p);
-				}
+				if (p->irq != PARPORT_IRQ_NONE)
+					if (use_cnt++ == 0)
+						if (request_irq(IRQ_AMIGA_PORTS, mfc3_interrupt, SA_SHIRQ, p->name, &pp_mfc3_ops))
+							use_cnt--;
+
+				p->private_data = (void *)piabase;
+				parport_announce_port (p);
 			}
 		}
 	}
@@ -363,7 +379,7 @@ int __init parport_mfc3_init(void)
 
 #ifdef MODULE
 
-MODULE_AUTHOR("Joerg Dorchain");
+MODULE_AUTHOR("Joerg Dorchain <joerg@dorchain.net>");
 MODULE_DESCRIPTION("Parport Driver for Multiface 3 expansion cards Paralllel Port");
 MODULE_SUPPORTED_DEVICE("Multiface 3 Parallel Port");
 
@@ -383,7 +399,7 @@ void cleanup_module(void)
 			free_irq(IRQ_AMIGA_PORTS, &pp_mfc3_ops);
 			parport_proc_unregister(this_port[i]);
 			parport_unregister_port(this_port[i]);
-			zorro_unconfig_board((unsigned int)this_port[i]->private_data, 0);
+			release_mem_region(ZTWO_PADDR(this_port[i]->private_data), sizeof(struct pia));
 		}
 }
 #endif

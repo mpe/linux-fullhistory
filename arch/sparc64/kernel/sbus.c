@@ -212,8 +212,8 @@ static void free_streaming_cluster(struct sbus_iommu *iommu, u32 base, unsigned 
 		iommu->lowest_free[cnum] = ent;
 }
 
-/* We allocate consistant mappings from the end of cluster zero. */
-static iopte_t *alloc_consistant_cluster(struct sbus_iommu *iommu, unsigned long npages)
+/* We allocate consistent mappings from the end of cluster zero. */
+static iopte_t *alloc_consistent_cluster(struct sbus_iommu *iommu, unsigned long npages)
 {
 	iopte_t *iopte;
 
@@ -235,7 +235,7 @@ static iopte_t *alloc_consistant_cluster(struct sbus_iommu *iommu, unsigned long
 	return NULL;
 }
 
-static void free_consistant_cluster(struct sbus_iommu *iommu, u32 base, unsigned long npages)
+static void free_consistent_cluster(struct sbus_iommu *iommu, u32 base, unsigned long npages)
 {
 	iopte_t *iopte = iommu->page_table + ((base - MAP_BASE) >> PAGE_SHIFT);
 
@@ -243,7 +243,7 @@ static void free_consistant_cluster(struct sbus_iommu *iommu, u32 base, unsigned
 		*iopte++ = __iopte(0UL);
 }
 
-void *sbus_alloc_consistant(struct sbus_dev *sdev, long size, u32 *dvma_addr)
+void *sbus_alloc_consistent(struct sbus_dev *sdev, size_t size, dma_addr_t *dvma_addr)
 {
 	unsigned long order, first_page, flags;
 	struct sbus_iommu *iommu;
@@ -269,7 +269,7 @@ void *sbus_alloc_consistant(struct sbus_dev *sdev, long size, u32 *dvma_addr)
 	iommu = sdev->bus->iommu;
 
 	spin_lock_irqsave(&iommu->lock, flags);
-	iopte = alloc_consistant_cluster(iommu, size >> PAGE_SHIFT);
+	iopte = alloc_consistent_cluster(iommu, size >> PAGE_SHIFT);
 	if (iopte == NULL) {
 		spin_unlock_irqrestore(&iommu->lock, flags);
 		free_pages(first_page, order);
@@ -291,7 +291,7 @@ void *sbus_alloc_consistant(struct sbus_dev *sdev, long size, u32 *dvma_addr)
 	return ret;
 }
 
-void sbus_free_consistant(struct sbus_dev *sdev, long size, void *cpu, u32 dvma)
+void sbus_free_consistent(struct sbus_dev *sdev, size_t size, void *cpu, dma_addr_t dvma)
 {
 	unsigned long order, npages;
 	struct sbus_iommu *iommu;
@@ -303,7 +303,7 @@ void sbus_free_consistant(struct sbus_dev *sdev, long size, void *cpu, u32 dvma)
 	iommu = sdev->bus->iommu;
 
 	spin_lock_irq(&iommu->lock);
-	free_consistant_cluster(iommu, dvma, npages);
+	free_consistent_cluster(iommu, dvma, npages);
 	spin_unlock_irq(&iommu->lock);
 
 	for (order = 0; order < 10; order++) {
@@ -314,7 +314,7 @@ void sbus_free_consistant(struct sbus_dev *sdev, long size, void *cpu, u32 dvma)
 		free_pages((unsigned long)cpu, order);
 }
 
-u32 sbus_map_single(struct sbus_dev *sdev, void *ptr, long size)
+dma_addr_t sbus_map_single(struct sbus_dev *sdev, void *ptr, size_t size)
 {
 	struct sbus_iommu *iommu = sdev->bus->iommu;
 	unsigned long npages, phys_base, flags;
@@ -344,7 +344,7 @@ u32 sbus_map_single(struct sbus_dev *sdev, void *ptr, long size)
 	return (dma_base | offset);
 }
 
-void sbus_unmap_single(struct sbus_dev *sdev, u32 dma_addr, long size)
+void sbus_unmap_single(struct sbus_dev *sdev, dma_addr_t dma_addr, size_t size)
 {
 	struct sbus_iommu *iommu = sdev->bus->iommu;
 	u32 dma_base = dma_addr & PAGE_MASK;
@@ -358,11 +358,12 @@ void sbus_unmap_single(struct sbus_dev *sdev, u32 dma_addr, long size)
 	spin_unlock_irqrestore(&iommu->lock, flags);
 }
 
-static inline void fill_sg(iopte_t *iopte, struct scatterlist *sg, int nents)
+static inline void fill_sg(iopte_t *iopte, struct scatterlist *sg, int nused)
 {
 	struct scatterlist *dma_sg = sg;
+	int i;
 
-	do {
+	for (i = 0; i < nused; i++) {
 		unsigned long pteval = ~0UL;
 		u32 dma_npages;
 
@@ -426,7 +427,7 @@ static inline void fill_sg(iopte_t *iopte, struct scatterlist *sg, int nents)
 				pteval = ~0UL;
 		} while (dma_npages != 0);
 		dma_sg++;
-	} while (dma_sg->dvma_length != 0);
+	}
 }
 
 int sbus_map_sg(struct sbus_dev *sdev, struct scatterlist *sg, int nents)
@@ -436,7 +437,7 @@ int sbus_map_sg(struct sbus_dev *sdev, struct scatterlist *sg, int nents)
 	iopte_t *iopte;
 	u32 dma_base;
 	struct scatterlist *sgtmp;
-	int unused;
+	int used;
 
 	/* Fast path single entry scatterlists. */
 	if (nents == 1) {
@@ -453,22 +454,23 @@ int sbus_map_sg(struct sbus_dev *sdev, struct scatterlist *sg, int nents)
 
 	/* Normalize DVMA addresses. */
 	sgtmp = sg;
-	unused = nents;
+	used = nents;
 
-	while (unused && sgtmp->dvma_length) {
+	while (used && sgtmp->dvma_length) {
 		sgtmp->dvma_address += dma_base;
 		sgtmp++;
-		unused--;
+		used--;
 	}
+	used = nents - used;
 
-	fill_sg(iopte, sg, nents);
+	fill_sg(iopte, sg, used);
 #ifdef VERIFY_SG
 	verify_sglist(sg, nents, iopte, npages);
 #endif
 	iommu_flush(iommu, dma_base, npages);
 	spin_unlock_irqrestore(&iommu->lock, flags);
 
-	return nents - unused;
+	return used;
 }
 
 void sbus_unmap_sg(struct sbus_dev *sdev, struct scatterlist *sg, int nents)
@@ -499,7 +501,7 @@ void sbus_unmap_sg(struct sbus_dev *sdev, struct scatterlist *sg, int nents)
 	spin_unlock_irqrestore(&iommu->lock, flags);
 }
 
-void sbus_dma_sync_single(struct sbus_dev *sdev, u32 base, long size)
+void sbus_dma_sync_single(struct sbus_dev *sdev, dma_addr_t base, size_t size)
 {
 	struct sbus_iommu *iommu = sdev->bus->iommu;
 	unsigned long flags;
@@ -1053,6 +1055,10 @@ void __init sbus_iommu_init(int prom_node, struct sbus_bus *sbus)
 		 ~(SMP_CACHE_BYTES - 1UL));
 
 	memset(iommu, 0, sizeof(*iommu));
+
+	/* Make sure DMA address 0 is never returned just to allow catching
+	   of buggy drivers.  */
+	iommu->lowest_free[0] = 1;
 
 	/* Setup spinlock. */
 	spin_lock_init(&iommu->lock);

@@ -2315,7 +2315,7 @@ static int	four_ch = 0;
 #ifdef CONFIG_SOUND_CMPCI_REAR
 static int	rear_out = 1;
 #else
-static int	read_out = 0;
+static int	rear_out = 0;
 #endif
 
 int __init init_cmpci(void)
@@ -2377,6 +2377,7 @@ int __init init_cmpci(void)
 		s->iobase = pcidev->resource[0].start;
 		s->iosynth = 0x388;
 		s->iomidi = 0x330;
+		spin_lock_init(&s->lock);
 		if (s->iobase == 0)
 			continue;
 		s->irq = pcidev->irq;

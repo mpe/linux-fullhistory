@@ -127,9 +127,6 @@ struct lance_private {
 	int auto_select;	      /* cable-selection by carrier */
 	unsigned short busmaster_regval;
 
-#ifdef CONFIG_AMIGA
-	unsigned int key;
-#endif
 #ifdef CONFIG_SUNLANCE
 	struct Linux_SBus_DMA *ledma; /* if set this points to ledma and arch=4m */
 	int burst_sizes;	      /* ledma SBus burst sizes */
@@ -740,78 +737,92 @@ static void lance_set_multicast (struct net_device *dev)
 
 int __init a2065_probe(struct net_device *dev)
 {
-	unsigned int key, is_cbm;
-	const struct ConfigDev *cd;
-	u_long board;
-	u_long sn;
-	struct lance_private *priv;
-	struct A2065Board *a2065;
+	struct zorro_dev *z = NULL;
 
-	if ((key = is_cbm = zorro_find(ZORRO_PROD_CBM_A2065_1, 0, 0)) ||
-	    (key = is_cbm = zorro_find(ZORRO_PROD_CBM_A2065_2, 0, 0)) ||
-	    (key = zorro_find(ZORRO_PROD_AMERISTAR_A2065, 0, 0))) {
-		cd = zorro_get_board(key);
-		if ((board = (u_long)cd->cd_BoardAddr)) {
-			sn = cd->cd_Rom.er_SerialNumber;
-			if (is_cbm) {			/* Commodore */
-				dev->dev_addr[0] = 0x00;
-				dev->dev_addr[1] = 0x80;
-				dev->dev_addr[2] = 0x10;
-			} else {			/* Ameristar */
-				dev->dev_addr[0] = 0x00;
-				dev->dev_addr[1] = 0x00;
-				dev->dev_addr[2] = 0x9f;
-			}
-			dev->dev_addr[3] = (sn>>16) & 0xff;
-			dev->dev_addr[4] = (sn>>8) & 0xff;
-			dev->dev_addr[5] = sn & 0xff;
-			printk("%s: A2065 at 0x%08lx, Ethernet Address %02x:%02x:%02x:%02x:%02x:%02x\n",
-			       dev->name, board, dev->dev_addr[0],
-			       dev->dev_addr[1], dev->dev_addr[2],
-			       dev->dev_addr[3], dev->dev_addr[4],
-			       dev->dev_addr[5]);
+	while ((z = zorro_find_device(ZORRO_WILDCARD, z))) {
+		unsigned long board, base_addr, ram_start;
+		int is_cbm;
+		struct lance_private *priv;
 
-			init_etherdev(dev, 0);
+		if (z->id == ZORRO_PROD_CBM_A2065_1 ||
+		    z->id == ZORRO_PROD_CBM_A2065_2)
+			is_cbm = 1;
+		else if (z->id == ZORRO_PROD_AMERISTAR_A2065)
+			is_cbm = 0;
+		else
+			continue;
 
-			dev->priv = kmalloc(sizeof(struct
-						   lance_private),
-					    GFP_KERNEL);
-			if (dev->priv == NULL)  
-				return -ENOMEM;
-			priv = (struct lance_private *)dev->priv;
-			memset(priv, 0, sizeof(struct lance_private));
+		board = z->resource.start;
+		base_addr = board+A2065_LANCE;
+		ram_start = board+A2065_RAM;
 
-			a2065 = (struct A2065Board *)ZTWO_VADDR(board);
-			priv->ll = &a2065->Lance;
-			priv->init_block =
-					(struct lance_init_block *)&a2065->RAM;
-			priv->lance_init_block = (struct lance_init_block *)
-					      offsetof(struct A2065Board, RAM);
-			priv->auto_select = 0;
-			priv->key = key;
-			priv->busmaster_regval = LE_C3_BSWP;
-
-			priv->lance_log_rx_bufs = LANCE_LOG_RX_BUFFERS;
-			priv->lance_log_tx_bufs = LANCE_LOG_TX_BUFFERS;
-			priv->rx_ring_mod_mask = RX_RING_MOD_MASK;
-			priv->tx_ring_mod_mask = TX_RING_MOD_MASK;
-
-			dev->open = &lance_open;
-			dev->stop = &lance_close;
-			dev->hard_start_xmit = &lance_start_xmit;
-			dev->get_stats = &lance_get_stats;
-			dev->set_multicast_list = &lance_set_multicast;
-			dev->dma = 0;
-
-			ether_setup(dev);
-			init_timer(&priv->multicast_timer);
-			priv->multicast_timer.data = (unsigned long) dev;
-			priv->multicast_timer.function =
-				(void (*)(unsigned long)) &lance_set_multicast;
-
-			zorro_config_board(key, 0);
-			return(0);
+		if (!request_mem_region(base_addr, sizeof(struct lance_regs),
+					"Am7990"))
+			continue;
+		if (!request_mem_region(ram_start, A2065_RAM_SIZE, "RAM")) {
+			release_mem_region(base_addr,
+					   sizeof(struct lance_regs));
+			continue;
 		}
+		strcpy(z->name, "A2065 Ethernet Card");
+		if (is_cbm) {				/* Commodore */
+			dev->dev_addr[0] = 0x00;
+			dev->dev_addr[1] = 0x80;
+			dev->dev_addr[2] = 0x10;
+		} else {				/* Ameristar */
+			dev->dev_addr[0] = 0x00;
+			dev->dev_addr[1] = 0x00;
+			dev->dev_addr[2] = 0x9f;
+		}
+		dev->dev_addr[3] = (z->rom.er_SerialNumber>>16) & 0xff;
+		dev->dev_addr[4] = (z->rom.er_SerialNumber>>8) & 0xff;
+		dev->dev_addr[5] = z->rom.er_SerialNumber & 0xff;
+		printk("%s: A2065 at 0x%08lx, Ethernet Address "
+		       "%02x:%02x:%02x:%02x:%02x:%02x\n", dev->name, board,
+		       dev->dev_addr[0], dev->dev_addr[1], dev->dev_addr[2],
+		       dev->dev_addr[3], dev->dev_addr[4], dev->dev_addr[5]);
+
+		init_etherdev(dev, 0);
+
+		dev->priv = kmalloc(sizeof(struct lance_private), GFP_KERNEL);
+		if (dev->priv == NULL) {
+			release_mem_region(base_addr,
+					   sizeof(struct lance_regs));
+			release_mem_region(ram_start, A2065_RAM_SIZE);
+			return -ENOMEM;
+		}
+		priv = (struct lance_private *)dev->priv;
+		memset(priv, 0, sizeof(struct lance_private));
+
+		dev->base_addr = ZTWO_VADDR(base_addr);
+		dev->mem_start = ZTWO_VADDR(ram_start);
+		dev->mem_end = dev->mem_start+A2065_RAM_SIZE;
+
+		priv->ll = (volatile struct lance_regs *)dev->base_addr;
+		priv->init_block = (struct lance_init_block *)dev->mem_start;
+		priv->lance_init_block = (struct lance_init_block *)A2065_RAM;
+		priv->auto_select = 0;
+		priv->busmaster_regval = LE_C3_BSWP;
+
+		priv->lance_log_rx_bufs = LANCE_LOG_RX_BUFFERS;
+		priv->lance_log_tx_bufs = LANCE_LOG_TX_BUFFERS;
+		priv->rx_ring_mod_mask = RX_RING_MOD_MASK;
+		priv->tx_ring_mod_mask = TX_RING_MOD_MASK;
+
+		dev->open = &lance_open;
+		dev->stop = &lance_close;
+		dev->hard_start_xmit = &lance_start_xmit;
+		dev->get_stats = &lance_get_stats;
+		dev->set_multicast_list = &lance_set_multicast;
+		dev->dma = 0;
+
+		ether_setup(dev);
+		init_timer(&priv->multicast_timer);
+		priv->multicast_timer.data = (unsigned long) dev;
+		priv->multicast_timer.function =
+			(void (*)(unsigned long)) &lance_set_multicast;
+
+		return(0);
 	}
 	return(-ENODEV);
 }
@@ -845,7 +856,9 @@ void cleanup_module(void)
 	struct lance_private *priv = (struct lance_private *)a2065_dev.priv;
 
 	unregister_netdev(&a2065_dev);
-	zorro_unconfig_board(priv->key, 0);
+	release_mem_region(ZTWO_PADDR(a2065_dev.base_addr),
+			   sizeof(struct lance_regs));
+	release_mem_region(ZTWO_PADDR(a2065_dev.mem_start), A2065_RAM_SIZE);
 	kfree(priv);
 }
 

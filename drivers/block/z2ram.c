@@ -144,7 +144,7 @@ get_chipram( void )
     {
 	chip_count++;
 	z2ram_map[ z2ram_size ] =
-	    (u_long)amiga_chip_alloc( Z2RAM_CHUNKSIZE );
+	    (u_long)amiga_chip_alloc( Z2RAM_CHUNKSIZE, "z2ram" );
 
 	if ( z2ram_map[ z2ram_size ] == 0 )
 	{

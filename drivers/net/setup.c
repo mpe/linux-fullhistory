@@ -58,6 +58,10 @@ extern int tulip_probe(void);
 extern int via_rhine_probe(void); 
 extern int yellowfin_probe(void);
 
+extern int abyss_probe(void);
+extern int madgemc_probe(void);
+extern int tms_pci_probe(void);
+
 /* Pad device name to IFNAMSIZ=16. F.e. __PAD6 is tring of 9 zeros. */
 #define __PAD6 "\0\0\0\0\0\0\0\0\0"
 #define __PAD5 __PAD6 "\0"
@@ -250,7 +254,19 @@ struct net_probe pci_probes[] __initdata = {
 #ifdef CONFIG_YAM
 	{yam_init, 0},
 #endif	/* CONFIG_YAM */
-  
+
+/*
+ *	Token Ring Drivers
+ */  
+#ifdef CONFIG_ABYSS
+	{abyss_probe, 0},
+#endif
+#ifdef CONFIG_MADGEMC
+	{madgemc_probe, 0},
+#endif
+#ifdef CONFIG_TMSPCI
+	{tms_pci_probe, 0},
+#endif
  
 	{NULL, 0},
 };

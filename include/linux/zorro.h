@@ -1,7 +1,7 @@
 /*
  *  linux/zorro.h -- Amiga AutoConfig (Zorro) Bus Definitions
  *
- *  Copyright (C) 1995-1998 Geert Uytterhoeven
+ *  Copyright (C) 1995-2000 Geert Uytterhoeven
  *
  *  This file is subject to the terms and conditions of the GNU General Public
  *  License.  See the file COPYING in the main directory of this archive
@@ -37,6 +37,9 @@
     ((ZORRO_MANUF_##manuf << 16) | ((prod) << 8) | (epc))
 
 typedef __u32 zorro_id;
+
+
+#define ZORRO_WILDCARD		(0xffffffff)	/* not official */
 
 
 #define ZORRO_MANUF_PACIFIC_PERIPHERALS				0x00D3
@@ -694,8 +697,19 @@ CD_sizeof	= CD_Unused+(4*4)
 
 #ifdef __KERNEL__
 
+#include <linux/ioport.h>
+
+struct zorro_dev {
+    struct ExpansionRom rom;
+    zorro_id id;
+    u16 slotaddr;
+    u16 slotsize;
+    char name[48];
+    struct resource resource;
+};
+
 extern unsigned int zorro_num_autocon;	/* # of autoconfig devices found */
-extern struct ConfigDev zorro_autocon[ZORRO_NUM_AUTO];
+extern struct zorro_dev zorro_autocon[ZORRO_NUM_AUTO];
 
 
     /*
@@ -705,10 +719,18 @@ extern struct ConfigDev zorro_autocon[ZORRO_NUM_AUTO];
 extern void zorro_init(void);
 extern void zorro_proc_init(void);
 
-extern unsigned int zorro_find(zorro_id id, unsigned int part, unsigned int index);
-extern const struct ConfigDev *zorro_get_board(unsigned int key);
-extern void zorro_config_board(unsigned int key, unsigned int part);
-extern void zorro_unconfig_board(unsigned int key, unsigned int part);
+extern struct zorro_dev *zorro_find_device(zorro_id id,
+					   struct zorro_dev *from);
+
+#define zorro_request_device(z, name) \
+    request_mem_region((z)->resource.start, \
+		       (z)->resource.end-(z)->resource.start+1, (name))
+#define zorro_check_device(z) \
+    check_mem_region((z)->resource.start, \
+		     (z)->resource.end-(z)->resource.start+1)
+#define zorro_release_device(z) \
+    release_mem_region((z)->resource.start, \
+		       (z)->resource.end-(z)->resource.start+1)
 
 
     /*

@@ -259,7 +259,9 @@
 #include <linux/init.h>
 #include <asm/bootinfo.h>
 #include <asm/setup.h>
+#include <asm/entry.h>
 #include <asm/pgtable.h>
+#include <asm/page.h>
 #include "m68k_defs.h"
 
 #ifdef CONFIG_MAC
@@ -305,7 +307,7 @@
 .globl SYMBOL_NAME(m68k_pgtable_cachemode)
 .globl SYMBOL_NAME(m68k_supervisor_cachemode)
 #ifdef CONFIG_MVME16x
-.globl SYMBOL_NAME(mvme_bdid_ptr)
+.globl SYMBOL_NAME(mvme_bdid)
 #endif
 #ifdef CONFIG_Q40
 .globl SYMBOL_NAME(q40_mem_cptr)	
@@ -384,6 +386,12 @@ PAGE_INDEX_SHIFT = 12
 #else
 #define L(name) .L/**/name
 #endif
+#endif
+
+/* The __INITDATA stuff is a no-op when ftrace or kgdb are turned on */
+#ifndef __INITDATA
+#define __INITDATA	.data
+#define __FINIT		.previous
 #endif
 
 /* Several macros to make the writing of subroutines easier:
@@ -503,18 +511,10 @@ func_define	putn,1
 
 .macro	puts		string
 #if defined(CONSOLE) || defined(SERIAL_DEBUG)
-/* The __INITDATA stuff is a no-op when ftrace or kgdb are turned on */
-#if defined(CONFIG_FTRACE) || defined(CONFIG_KGDB)
-	bra 1f
-#endif
 	__INITDATA
 .Lstr\@:
 	.string	"\string"
 	__FINIT
-#if defined(CONFIG_FTRACE) || defined(CONFIG_KGDB)
-	.align 2
-1:
-#endif
 	pea	%pc@(.Lstr\@)
 	func_call	puts
 	addql	#4,%sp
@@ -533,9 +533,19 @@ func_define	putn,1
 #define is_not_mvme147(lab) cmpl &MACH_MVME147,%pc@(m68k_machtype); jne lab
 #define is_not_mvme16x(lab) cmpl &MACH_MVME16x,%pc@(m68k_machtype); jne lab
 #define is_not_bvme6000(lab) cmpl &MACH_BVME6000,%pc@(m68k_machtype); jne lab
+#define is_mvme147(lab) cmpl &MACH_MVME147,%pc@(m68k_machtype); jeq lab
+#define is_mvme16x(lab) cmpl &MACH_MVME16x,%pc@(m68k_machtype); jeq lab
+#define is_bvme6000(lab) cmpl &MACH_BVME6000,%pc@(m68k_machtype); jeq lab
 #define is_not_hp300(lab) cmpl &MACH_HP300,%pc@(m68k_machtype); jne lab
+#define is_not_apollo(lab) cmpl &MACH_APOLLO,%pc@(m68k_machtype); jne lab
 #define is_not_q40(lab) cmpl &MACH_Q40,%pc@(m68k_machtype); jne lab
 #define is_not_sun3x(lab) cmpl &MACH_SUN3X,%pc@(m68k_machtype); jne lab
+
+#define hasnt_leds(lab) cmpl &MACH_HP300,%pc@(m68k_machtype); \
+			jeq 42f; \
+			cmpl &MACH_APOLLO,%pc@(m68k_machtype); \
+			jne lab ;\
+		42:\
 
 #define is_040_or_060(lab)	btst &CPUTYPE_0460,%pc@(L(cputype)+3); jne lab
 #define is_not_040_or_060(lab)	btst &CPUTYPE_0460,%pc@(L(cputype)+3); jeq lab
@@ -549,8 +559,8 @@ func_define	putn,1
    the console is running.  Writing a 1 bit turns the corresponding LED
    _off_ - on the 340 bit 7 is towards the back panel of the machine.  */
 .macro	leds	mask
-#ifdef CONFIG_HP300
-	is_not_hp300(.Lled\@)
+#if defined(CONFIG_HP300) || defined(CONFIG_APOLLO)
+	hasnt_leds(.Lled\@)
 	pea	\mask
 	func_call	set_leds
 	addql	#4,%sp
@@ -809,6 +819,57 @@ L(save_cachetype):
 L(notypetest):
 #endif
 
+#ifdef CONFIG_VME
+	is_mvme147(L(getvmetype))
+	is_bvme6000(L(getvmetype))
+	is_not_mvme16x(L(gvtdone))
+
+	/* See if the loader has specified the BI_VME_TYPE tag.  Recent
+	 * versions of VMELILO and TFTPLILO do this.  We have to do this
+	 * early so we know how to handle console output.  If the tag
+	 * doesn't exist then we use the Bug for output on MVME16x.
+	 */
+L(getvmetype):
+	get_bi_record	BI_VME_TYPE
+	tstl	%d0
+	jbmi	1f
+	movel	%a0@,%d3
+	lea	%pc@(SYMBOL_NAME(vme_brdtype)),%a0
+	movel	%d3,%a0@
+1:
+#ifdef CONFIG_MVME16x
+	is_not_mvme16x(L(gvtdone))
+
+	/* Need to get the BRD_ID info to diferentiate between 162, 167,
+	 * etc.  This is available as a BI_VME_BRDINFO tag with later
+	 * versions of VMELILO and TFTPLILO, otherwise we call the Bug.
+	 */
+	get_bi_record	BI_VME_BRDINFO
+	tstl	%d0
+	jpl	1f
+
+	/* Get pointer to board ID data from Bug */
+	movel	%d2,%sp@-
+	trap	#15
+	.word	0x70		/* trap 0x70 - .BRD_ID */
+	movel	%sp@+,%a0
+1:
+	lea	%pc@(SYMBOL_NAME(mvme_bdid)),%a1
+	/* Structure is 32 bytes long */
+	movel	%a0@+,%a1@+
+	movel	%a0@+,%a1@+
+	movel	%a0@+,%a1@+
+	movel	%a0@+,%a1@+
+	movel	%a0@+,%a1@+
+	movel	%a0@+,%a1@+
+	movel	%a0@+,%a1@+
+	movel	%a0@+,%a1@+
+#endif
+
+L(gvtdone):
+
+#endif
+
 /*
  * Initialize serial port
  */
@@ -843,6 +904,7 @@ L(nocon):
 	lea	%pc@(L(phys_kernel_start)),%a0
 	lea	%pc@(SYMBOL_NAME(_stext)),%a1
 	subl	#SYMBOL_NAME(_stext),%a1
+	addl	#PAGE_OFFSET,%a1
 	movel	%a1,%a0@
 
 	putc	'B'
@@ -857,7 +919,7 @@ L(nocon):
  *	First map the first 4 MB of kernel code & data
  */
 
-	mmu_map	#0,%pc@(L(phys_kernel_start)),#4*1024*1024,\
+	mmu_map	#PAGE_OFFSET,%pc@(L(phys_kernel_start)),#4*1024*1024,\
 		%pc@(SYMBOL_NAME(m68k_supervisor_cachemode))
 
 	putc	'C'
@@ -1006,14 +1068,6 @@ L(not147):
 
 	is_not_mvme16x(L(not16x))
 
-	/* Get pointer to board ID data */
-	movel	%d2,%sp@-
-	trap	#15
-	.word	0x70		/* trap 0x70 - .BRD_ID */
-	movel	%sp@+,%d2
-	lea	%pc@(SYMBOL_NAME(mvme_bdid_ptr)),%a0
-	movel	%d2,%a0@
-
 	/*
 	 * On MVME16x we have already created kernel page tables for
 	 * 4MB of RAM at address 0, so now need to do a transparent
@@ -1126,8 +1180,18 @@ L(mmu_init_not_mac):
 
 	/* setup tt1 for I/O */
 	mmu_map_tt	#1,#0x40000000,#0x40000000,#_PAGE_NOCACHE_S
+	jbra	L(mmu_init_done)
 
 L(notsun3x):
+#endif
+
+#ifdef CONFIG_APOLLO
+	is_not_apollo(L(notapollo))
+
+	putc	'P'
+	mmu_map         #0x80000000,#0,#0x02000000,#_PAGE_NOCACHE030
+	
+L(notapollo):	
 	jbra	L(mmu_init_done)
 #endif
 
@@ -1161,6 +1225,7 @@ L(mmu_fixup):
          * contains also kernel_pg_dir.
 	 */
 	movel	%pc@(L(phys_kernel_start)),%d0
+	subl	#PAGE_OFFSET,%d0
 	lea	%pc@(SYMBOL_NAME(_stext)),%a0
 	subl	%d0,%a0
 	mmu_fixup_page_mmu_cache	%a0
@@ -1249,6 +1314,14 @@ L(mmu_fixup_done):
 
 	mmu_engage
 
+/*
+ * After this point no new memory is allocated and
+ * the start of available memory is stored in availmem.
+ * (The bootmem allocator requires now the physicall address.)
+ */
+
+	movel	L(memory_start),availmem
+
 #ifdef CONFIG_AMIGA
 	is_not_amiga(1f)
 	/* fixup the Amiga custom register location before printing */
@@ -1294,19 +1367,18 @@ L(mmu_fixup_done):
 1:
 #endif
 
-/*
- * Fixup the addresses for the kernel pointer table and availmem.
- * Convert them from physical addresses to virtual addresses.
- */
+#ifdef CONFIG_APOLLO
+	is_not_apollo(1f)
 
+        /*
+	 * Fix up the iobase before printing
+         */
+        movel   #0x80000000,L(iobase)
+1:
+#endif
+	
 	putc	'I'
 	leds	0x10
-
-	/* do the same conversion on the first available memory
-	 * address (in a6).
-	 */
-	movel	L(memory_start),%d0
-	movel	%d0,SYMBOL_NAME(availmem)
 
 /*
  * Enable caches
@@ -1352,14 +1424,23 @@ L(cache_done):
 /*
  * Setup initial stack pointer
  */
-	lea	SYMBOL_NAME(init_task_union),%a2
-	lea	0x2000(%a2),%sp
+	lea	SYMBOL_NAME(init_task_union),%curptr
+	lea	0x2000(%curptr),%sp
+
+	putc	'K'
+
+	subl	%a6,%a6		/* clear a6 for gdb */
+
+/*
+ * The new 64bit printf support requires an early exception initialization.
+ */
+	jbsr	SYMBOL_NAME(base_trap_init)
 
 /* jump to the kernel start */
+
 	putc	'\n'
 	leds	0x55
 
-	subl	%a6,%a6		/* clear a6 for gdb */
 	jbsr	SYMBOL_NAME(start_kernel)
 
 /*
@@ -2355,12 +2436,12 @@ L(mmu_engage_030):
 	.chip	68k
 
 L(mmu_engage_cleanup):
+	subl	#PAGE_OFFSET,%d2
 	subl	%d2,%a2
 	movel	%a2,L(kernel_pgdir_ptr)
 	subl	%d2,%fp
 	subl	%d2,%sp
 	subl	%d2,ARG0
-	subl	%d2,L(memory_start)
 
 func_return	mmu_engage
 
@@ -2810,6 +2891,10 @@ L(serial_init_not_mac):
 2:		
 #endif	
 	
+#ifdef CONFIG_APOLLO
+/* We count on the PROM initializing SIO1 */
+#endif
+
 L(serial_init_done):
 func_return	serial_init
 
@@ -2911,13 +2996,54 @@ func_start	serial_putc,%d0/%d1/%a0/%a1
 #ifdef CONFIG_MVME16x
 	is_not_mvme16x(2f)
 	/*
-	 * The VME 16x class has PROM support for serial output
-	 * of some kind;  the TRAP table is still valid.
+	 * If the loader gave us a board type then we can use that to
+	 * select an appropriate output routine; otherwise we just use
+	 * the Bug code.  If we haev to use the Bug that means the Bug
+	 * workspace has to be valid, which means the Bug has to use
+	 * the SRAM, which is non-standard.
 	 */
 	moveml	%d0-%d7/%a2-%a6,%sp@-
+	movel	SYMBOL_NAME(vme_brdtype),%d1
+	jeq	1f			| No tag - use the Bug
+	cmpi	#VME_TYPE_MVME162,%d1
+	jeq	6f
+	cmpi	#VME_TYPE_MVME172,%d1
+	jne	5f
+	/* 162/172; it's an SCC */
+6:	btst	#2,M162_SCC_CTRL_A
+	nop
+	nop
+	nop
+	jeq	6b
+	moveb	#8,M162_SCC_CTRL_A
+	nop
+	nop
+	nop
+	moveb	%d0,M162_SCC_CTRL_A
+	jra	3f
+5:
+	/* 166/167/177; its a CD2401 */
+	moveb	#0,M167_CYCAR
+	moveb	M167_CYIER,%d2
+	moveb	#0x02,M167_CYIER
+7:
+	btst	#5,M167_PCSCCTICR
+	jeq	7b
+	moveb	M167_PCTPIACKR,%d1
+	moveb	M167_CYLICR,%d1
+	jeq	8f
+	moveb	#0x08,M167_CYTEOIR
+	jra	7b
+8:
+	moveb	%d0,M167_CYTDR
+	moveb	#0,M167_CYTEOIR
+	moveb	%d2,M167_CYIER
+	jra	3f
+1:
 	moveb	%d0,%sp@-
 	trap	#15
 	.word	0x0020	/* TRAP 0x020 */
+3:
 	moveml	%sp@+,%d0-%d7/%a2-%a6
 	jbra	L(serial_putc_done)
 2:
@@ -2944,8 +3070,19 @@ func_start	serial_putc,%d0/%d1/%a0/%a1
 	move.b	%d0,%a0@
 	addq.l	#4,%a0
 	move.l	%a0,%a1@
+	jbra    L(serial_putc_done)
 2:		
 #endif	
+
+#ifdef CONFIG_APOLLO
+	is_not_apollo(2f)
+	movl    %pc@(L(iobase)),%a1
+        moveb   %d0,%a1@(LTHRB0)
+1:      moveb   %a1@(LSRB0),%d0
+        andb    #0x4,%d0
+        beq     1b
+2:
+#endif
 
 L(serial_putc_done):
 func_return	serial_putc
@@ -3029,11 +3166,23 @@ ENTRY(mac_serial_print)
 	rts
 #endif /* CONFIG_MAC */
 
-#ifdef CONFIG_HP300
+#if defined(CONFIG_HP300) || defined(CONFIG_APOLLO)
 func_start	set_leds,%d0/%a0
 	movel	ARG1,%d0
-	movel	%pc@(Lcustom),%a0
+#ifdef CONFIG_HP300
+	is_not_hp300(1f)
+	movel	%pc@(L(custom)),%a0
 	moveb	%d0,%a0@(0x1ffff)
+	jra	2f
+#endif
+1:	
+#ifdef CONFIG_APOLLO
+	movel   %pc@(L(iobase)),%a0
+	lsll    #8,%d0
+	eorw    #0xff00,%d0
+	moveb	%d0,%a0@(LCPUCTRL)
+#endif
+2:
 func_return	set_leds
 #endif
 
@@ -3605,6 +3754,17 @@ M147_SCC_CTRL_A = 0xfffe3002
 M147_SCC_DATA_A = 0xfffe3003
 #endif
 
+#if defined (CONFIG_MVME16x)
+M162_SCC_CTRL_A = 0xfff45005
+M167_CYCAR = 0xfff450ee
+M167_CYIER = 0xfff45011
+M167_CYLICR = 0xfff45026
+M167_CYTEOIR = 0xfff45085
+M167_CYTDR = 0xfff450f8
+M167_PCSCCTICR = 0xfff4201e
+M167_PCTPIACKR = 0xfff42025
+#endif
+
 #if defined (CONFIG_BVME6000)
 BVME_SCC_CTRL_A	= 0xffb0000b
 BVME_SCC_DATA_A	= 0xffb0000f
@@ -3627,6 +3787,14 @@ L(mac_sccbase):
 #endif /* MAC_SERIAL_DEBUG */
 #endif
 
+#if defined (CONFIG_APOLLO)
+LSRB0        = 0x10412
+LTHRB0       = 0x10416
+LCPUCTRL     = 0x10100
+L(iobase):
+        .long 0
+#endif
+
 __FINIT
 	.data
 	.align	4
@@ -3638,8 +3806,8 @@ SYMBOL_NAME_LABEL(m68k_pgtable_cachemode)
 SYMBOL_NAME_LABEL(m68k_supervisor_cachemode)
 	.long	0
 #if defined(CONFIG_MVME16x)
-SYMBOL_NAME_LABEL(mvme_bdid_ptr)
-	.long	0
+SYMBOL_NAME_LABEL(mvme_bdid)
+	.long	0,0,0,0,0,0,0,0
 #endif
 #if defined(CONFIG_Q40)
 SYMBOL_NAME_LABEL(q40_mem_cptr)

@@ -1165,11 +1165,11 @@ static int __init bigmac_ether_init(struct net_device *dev, struct sbus_dev *qec
 	bigmac_stop(bp);
 
 	/* Allocate transmit/receive descriptor DVMA block. */
-	bp->bmac_block = sbus_alloc_consistant(bp->bigmac_sdev,
+	bp->bmac_block = sbus_alloc_consistent(bp->bigmac_sdev,
 					       PAGE_SIZE,
 					       &bp->bblock_dvma);
 	if (bp->bmac_block == NULL || bp->bblock_dvma == 0) {
-		printk(KERN_ERR "BIGMAC: Cannot allocate consistant DMA.\n");
+		printk(KERN_ERR "BIGMAC: Cannot allocate consistent DMA.\n");
 		goto fail_and_cleanup;
 	}
 
@@ -1220,7 +1220,7 @@ fail_and_cleanup:
 			sbus_iounmap(bp->tregs, TCVR_REG_SIZE);
 
 		if (bp->bmac_block)
-			sbus_free_consistant(bp->bigmac_sdev,
+			sbus_free_consistent(bp->bigmac_sdev,
 					     PAGE_SIZE,
 					     bp->bmac_block,
 					     bp->bblock_dvma);
@@ -1301,7 +1301,7 @@ cleanup_module(void)
 		sbus_iounmap(bp->creg, CREG_REG_SIZE);
 		sbus_iounmap(bp->bregs, BMAC_REG_SIZE);
 		sbus_iounmap(bp->tregs, TCVR_REG_SIZE);
-		sbus_free_consistant(bp->bigmac_sdev,
+		sbus_free_consistent(bp->bigmac_sdev,
 				     PAGE_SIZE,
 				     bp->bmac_block,
 				     bp->bblock_dvma);

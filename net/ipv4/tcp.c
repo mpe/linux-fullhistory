@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp.c,v 1.158 2000/01/21 23:45:57 davem Exp $
+ * Version:	$Id: tcp.c,v 1.160 2000/01/24 18:40:32 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -1027,7 +1027,6 @@ out:
 	TCP_CHECK_TIMER(sk);
 out_unlock:
 	release_sock(sk);
-	tcp_push_pending_frames(sk, tp);
 	return err;
 }
 
@@ -1347,6 +1346,35 @@ int tcp_recvmsg(struct sock *sk, struct msghdr *msg,
 
 			BUG_TRAP(tp->copied_seq == tp->rcv_nxt);
 
+			/* Ugly... If prequeue is not empty, we have to
+			 * process it before releasing socket, otherwise
+			 * order will be broken at second iteration.
+			 * More elegant solution is required!!!
+			 *
+			 * Look: we have the following (pseudo)queues:
+			 *
+			 * 1. packets in flight
+			 * 2. backlog
+			 * 3. prequeue
+			 * 4. receive_queue
+			 *
+			 * Each queue can be processed only if the next ones
+			 * are empty. At this point we have empty receive_queue.
+			 * But prequeue _can_ be not empty after second iteration,
+			 * when we jumped to start of loop because backlog
+			 * processing added something to receive_queue.
+			 * We cannot release_sock(), because backlog contains
+			 * packets arrived _after_ prequeued ones.
+			 *
+			 * Shortly, algorithm is clear --- to process all
+			 * the queues in order. We could make it more directly,
+			 * requeueing packets from backlog to prequeue, if
+			 * is not empty. It is more elegant, but eats cycles,
+			 * unfortunately.
+			 */
+			if (skb_queue_len(&tp->ucopy.prequeue))
+				goto do_prequeue;
+
 			/* __ Set realtime policy in scheduler __ */
 		}
 
@@ -1371,6 +1399,7 @@ int tcp_recvmsg(struct sock *sk, struct msghdr *msg,
 
 			if (tp->rcv_nxt == tp->copied_seq &&
 			    skb_queue_len(&tp->ucopy.prequeue)) {
+do_prequeue:
 				tcp_prequeue_process(sk);
 
 				if ((chunk = len - tp->ucopy.len) != 0) {

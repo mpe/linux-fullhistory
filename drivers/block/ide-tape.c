@@ -2698,14 +2698,14 @@ static idetape_stage_t *__idetape_kmalloc_stage (idetape_tape_t *tape, int full,
 			goto abort;
 		if (clear)
 			memset(b_data, 0, PAGE_SIZE);
-		if (bh->b_data == b_data + PAGE_SIZE && virt_to_bus (bh->b_data) == virt_to_bus (b_data) + PAGE_SIZE) {
+		if (bh->b_data == b_data + PAGE_SIZE) {
 			bh->b_size += PAGE_SIZE;
 			bh->b_data -= PAGE_SIZE;
 			if (full)
 				atomic_add(PAGE_SIZE, &bh->b_count);
 			continue;
 		}
-		if (b_data == bh->b_data + bh->b_size && virt_to_bus (b_data) == virt_to_bus (bh->b_data) + bh->b_size) {
+		if (b_data == bh->b_data + bh->b_size) {
 			bh->b_size += PAGE_SIZE;
 			if (full)
 				atomic_add(PAGE_SIZE, &bh->b_count);

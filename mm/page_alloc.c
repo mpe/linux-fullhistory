@@ -6,6 +6,7 @@
  *  Support of BIGMEM added by Gerhard Wichert, Siemens AG, July 1999
  *  Reshaped it to be a zoned allocator, Ingo Molnar, Red Hat, 1999
  *  Discontiguous memory support, Kanoj Sarcar, SGI, Nov 1999
+ *  Zone balancing, Kanoj Sarcar, SGI, Jan 2000
  */
 
 #include <linux/config.h>
@@ -28,6 +29,7 @@ int nr_lru_pages;
 LIST_HEAD(lru_cache);
 
 static char *zone_names[MAX_NR_ZONES] = { "DMA", "Normal", "HighMem" };
+static int zone_balance_ratio[MAX_NR_ZONES] = { 128, 128, 128 };
 
 /*
  * Free_page() adds the page to the free lists. This is optimized for
@@ -197,18 +199,32 @@ static inline struct page * rmqueue (zone_t *zone, unsigned long order)
 #define ZONE_BALANCED(zone) \
 	(((zone)->free_pages > (zone)->pages_low) && (!(zone)->low_on_memory))
 
+static inline unsigned long classfree(zone_t *zone)
+{
+	unsigned long free = 0;
+	zone_t *z = zone->zone_pgdat->node_zones;
+
+	while (z != zone) {
+		free += z->free_pages;
+		z++;
+	}
+	free += zone->free_pages;
+	return(free);
+}
+
 static inline int zone_balance_memory (zone_t *zone, int gfp_mask)
 {
 	int freed;
+	unsigned long free = classfree(zone);
 
-	if (zone->free_pages >= zone->pages_low) {
+	if (free >= zone->pages_low) {
 		if (!zone->low_on_memory)
 			return 1;
 		/*
 		 * Simple hysteresis: exit 'low memory mode' if
 		 * the upper limit has been reached:
 		 */
-		if (zone->free_pages >= zone->pages_high) {
+		if (free >= zone->pages_high) {
 			zone->low_on_memory = 0;
 			return 1;
 		}
@@ -220,18 +236,14 @@ static inline int zone_balance_memory (zone_t *zone, int gfp_mask)
 	 * state machine, but do not try to free pages
 	 * ourselves.
 	 */
-	if (!(gfp_mask & __GFP_WAIT))
-		return 1;
-
-	current->flags |= PF_MEMALLOC;
 	freed = try_to_free_pages(gfp_mask, zone);
-	current->flags &= ~PF_MEMALLOC;
 
 	if (!freed && !(gfp_mask & __GFP_HIGH))
 		return 0;
 	return 1;
 }
 
+#if 0
 /*
  * We are still balancing memory in a global way:
  */
@@ -260,17 +272,13 @@ static inline int balance_memory (zone_t *zone, int gfp_mask)
 	 * state machine, but do not try to free pages
 	 * ourselves.
 	 */
-	if (!(gfp_mask & __GFP_WAIT))
-		return 1;
-
-	current->flags |= PF_MEMALLOC;
 	freed = try_to_free_pages(gfp_mask, zone);
-	current->flags &= ~PF_MEMALLOC;
 
 	if (!freed && !(gfp_mask & __GFP_HIGH))
 		return 0;
 	return 1;
 }
+#endif
 
 /*
  * This is the 'heart' of the zoned buddy allocator:
@@ -340,7 +348,7 @@ nopage:
  * The main chunk of the balancing code is in this offline branch:
  */
 balance:
-	if (!balance_memory(z, gfp_mask))
+	if (!zone_balance_memory(z, gfp_mask))
 		goto nopage;
 	goto ready;
 }
@@ -513,6 +521,7 @@ void __init free_area_init_core(int nid, pg_data_t *pgdat, struct page **gmap,
 	unsigned long i, j;
 	unsigned long map_size;
 	unsigned int totalpages, offset;
+	unsigned int cumulative = 0;
 
 	totalpages = 0;
 	for (i = 0; i < MAX_NR_ZONES; i++) {
@@ -565,7 +574,7 @@ void __init free_area_init_core(int nid, pg_data_t *pgdat, struct page **gmap,
 	offset = lmem_map - mem_map;	
 	for (j = 0; j < MAX_NR_ZONES; j++) {
 		zone_t *zone = pgdat->node_zones + j;
-		unsigned long mask = -1;
+		unsigned long mask;
 		unsigned long size;
 
 		size = zones_size[j];
@@ -579,13 +588,11 @@ void __init free_area_init_core(int nid, pg_data_t *pgdat, struct page **gmap,
 			continue;
 
 		zone->offset = offset;
-		/*
-		 * It's unnecessery to balance the high memory zone
-		 */
-		if (j != ZONE_HIGHMEM) {
-			zone->pages_low = freepages.low;
-			zone->pages_high = freepages.high;
-		}
+		cumulative += size;
+		mask = (cumulative / zone_balance_ratio[j]);
+		if (mask < 1) mask = 1;
+		zone->pages_low = mask*2;
+		zone->pages_high = mask*3;
 		zone->low_on_memory = 0;
 
 		for (i = 0; i < size; i++) {
@@ -598,6 +605,7 @@ void __init free_area_init_core(int nid, pg_data_t *pgdat, struct page **gmap,
 		}
 
 		offset += size;
+		mask = -1;
 		for (i = 0; i < MAX_ORDER; i++) {
 			unsigned long bitmap_size;
 
@@ -618,3 +626,16 @@ void __init free_area_init(unsigned int *zones_size)
 {
 	free_area_init_core(0, NODE_DATA(0), &mem_map, zones_size, 0);
 }
+
+static int __init setup_mem_frac(char *str)
+{
+	int j = 0;
+
+	while (get_option(&str, &zone_balance_ratio[j++]) == 2);
+	printk("setup_mem_frac: ");
+	for (j = 0; j < MAX_NR_ZONES; j++) printk("%d  ", zone_balance_ratio[j]);
+	printk("\n");
+	return 1;
+}
+
+__setup("memfrac=", setup_mem_frac);

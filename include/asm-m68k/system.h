@@ -4,6 +4,7 @@
 #include <linux/config.h> /* get configuration macros */
 #include <linux/linkage.h>
 #include <asm/segment.h>
+#include <asm/entry.h>
 
 #define prepare_to_switch()	do { } while(0)
 
@@ -44,35 +45,51 @@ asmlinkage void resume(void);
   (last) = _last; \
 }
 
+
+/* interrupt control.. */
+#if 0
+#define __sti() asm volatile ("andiw %0,%%sr": : "i" (ALLOWINT) : "memory")
+#else
+#include <asm/hardirq.h>
+#define __sti() ({								\
+	if (!local_irq_count[smp_processor_id()])				\
+		asm volatile ("andiw %0,%%sr": : "i" (ALLOWINT) : "memory");	\
+})
+#endif
+#define __cli() asm volatile ("oriw  #0x0700,%%sr": : : "memory")
+#define __save_flags(x) asm volatile ("movew %%sr,%0":"=d" (x) : : "memory")
+#define __restore_flags(x) asm volatile ("movew %0,%%sr": :"d" (x) : "memory")
+
+/* For spinlocks etc */
+#define local_irq_save(x)	({ __save_flags(x); __cli(); })
+#define local_irq_restore(x)	__restore_flags(x)
+#define local_irq_disable()	__cli()
+#define local_irq_enable()	__sti()
+
+#define cli()			__cli()
+#define sti()			__sti()
+#define save_flags(x)		__save_flags(x)
+#define restore_flags(x)	__restore_flags(x)
+
+
+/*
+ * Force strict CPU ordering.
+ * Not really required on m68k...
+ */
+#define nop()  asm volatile ("nop"::)
+#define mb()   asm volatile (""   : : :"memory")
+#define rmb()  asm volatile (""   : : :"memory")
+#define wmb()  asm volatile (""   : : :"memory")
+#define set_rmb(var, value)    do { xchg(&var, value); } while (0)
+#define set_mb(var, value)     set_rmb(var, value)
+#define set_wmb(var, value)    do { var = value; wmb(); } while (0)
+
+
 #define xchg(ptr,x) ((__typeof__(*(ptr)))__xchg((unsigned long)(x),(ptr),sizeof(*(ptr))))
 #define tas(ptr) (xchg((ptr),1))
 
 struct __xchg_dummy { unsigned long a[100]; };
 #define __xg(x) ((volatile struct __xchg_dummy *)(x))
-
-#if defined(MACH_ATARI_ONLY) && !defined(CONFIG_HADES)
-/* block out HSYNC on the atari */
-#define __sti() __asm__ __volatile__ ("andiw #0xfbff,%/sr": : : "memory")
-#else /* portable version */
-#define __sti() __asm__ __volatile__ ("andiw #0xf8ff,%/sr": : : "memory")
-#endif /* machine compilation types */ 
-#define __cli() __asm__ __volatile__ ("oriw  #0x0700,%/sr": : : "memory")
-#define nop() __asm__ __volatile__ ("nop"::)
-#define mb()  __asm__ __volatile__ (""   : : :"memory")
-#define rmb()  __asm__ __volatile__ (""   : : :"memory")
-#define wmb()  __asm__ __volatile__ (""   : : :"memory")
-
-#define __save_flags(x) \
-__asm__ __volatile__("movew %/sr,%0":"=d" (x) : /* no input */ :"memory")
-
-#define __restore_flags(x) \
-__asm__ __volatile__("movew %0,%/sr": /* no outputs */ :"d" (x) : "memory")
-
-#define cli() __cli()
-#define sti() __sti()
-#define save_flags(x) __save_flags(x)
-#define restore_flags(x) __restore_flags(x)
-#define save_and_cli(flags)   do { save_flags(flags); cli(); } while(0)
 
 #ifndef CONFIG_RMW_INSNS
 static inline unsigned long __xchg(unsigned long x, volatile void * ptr, int size)

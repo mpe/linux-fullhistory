@@ -250,10 +250,17 @@ struct rw_semaphore {
 #define __RWSEM_DEBUG_INIT	/* */
 #endif
 
-#define __RWSEM_INITIALIZER(name) \
-{ RW_LOCK_BIAS, 0, 0xff, 0xff, __WAIT_QUEUE_HEAD_INITIALIZER((name).wait), \
+#define __RWSEM_INITIALIZER(name,count) \
+{ (count), 0, 0xff, 0xff, __WAIT_QUEUE_HEAD_INITIALIZER((name).wait), \
   __WAIT_QUEUE_HEAD_INITIALIZER((name).write_bias_wait) \
   __SEM_DEBUG_INIT(name) __RWSEM_DEBUG_INIT }
+
+#define __DECLARE_RWSEM_GENERIC(name,count) \
+	struct rw_semaphore name = __RWSEM_INITIALIZER(name,count)
+
+#define DECLARE_RWSEM(name) __DECLARE_RWSEM_GENERIC(name,RW_LOCK_BIAS)
+#define DECLARE_RWSEM_READ_LOCKED(name) __DECLARE_RWSEM_GENERIC(name,RW_LOCK_BIAS-1)
+#define DECLARE_RWSEM_WRITE_LOCKED(name) __DECLARE_RWSEM_GENERIC(name,0)
 
 extern inline void init_rwsem(struct rw_semaphore *sem)
 {

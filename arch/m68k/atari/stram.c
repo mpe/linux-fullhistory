@@ -715,7 +715,7 @@ static inline void unswap_pte(struct vm_area_struct * vma, unsigned long
 	else {
 		DPRINTK( "unswap_pte: replacing entry %08lx by new page %08lx",
 				 entry, page );
-		set_pte(dir, pte_mkdirty(mk_pte(page,vma->vm_page_prot)));
+		set_pte(dir, pte_mkdirty(__mk_pte(page,vma->vm_page_prot)));
 		atomic_inc(&mem_map[MAP_NR(page)].count);
 		++vma->vm_mm->rss;
 	}

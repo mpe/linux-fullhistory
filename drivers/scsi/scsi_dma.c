@@ -246,7 +246,14 @@ void scsi_resize_dma_pool(void)
 			 */
 			if (SDpnt->type == TYPE_WORM || SDpnt->type == TYPE_ROM ||
 			    SDpnt->type == TYPE_DISK || SDpnt->type == TYPE_MOD) {
-				new_dma_sectors += ((host->sg_tablesize *
+				int nents = host->sg_tablesize;
+#ifdef DMA_CHUNK_SIZE
+				/* If the architecture does DMA sg merging, make sure
+				   we count with at least 64 entries even for HBAs
+				   which handle very few sg entries.  */
+				if (nents < 64) nents = 64;
+#endif
+				new_dma_sectors += ((nents *
 				sizeof(struct scatterlist) + 511) >> 9) *
 				 SDpnt->queue_depth;
 				if (SDpnt->type == TYPE_WORM || SDpnt->type == TYPE_ROM)

@@ -25,6 +25,7 @@
 #include <linux/init.h>
 #include <linux/major.h>
 
+#include <asm/bootinfo.h>
 #include <asm/system.h>
 #include <asm/pgtable.h>
 #include <asm/setup.h>
@@ -35,6 +36,7 @@
 
 int atari_SCC_reset_done = 1;		/* So SCC doesn't get reset */
 u_long atari_mch_cookie = 0;
+extern t_bdid mvme_bdid;
 
 static MK48T08ptr_t volatile rtc = (MK48T08ptr_t)MVME_RTC_BASE;
 
@@ -71,6 +73,14 @@ static void (*tick_handler)(int, void *, struct pt_regs *);
 unsigned short mvme16x_config;
 
 
+int mvme16x_parse_bootinfo(const struct bi_record *bi)
+{
+	if (bi->tag == BI_VME_TYPE || bi->tag == BI_VME_BRDINFO)
+		return 0;
+	else
+		return 1;
+}
+
 int mvme16x_kbdrate (struct kbd_repeat *k)
 {
 	return 0;
@@ -91,7 +101,7 @@ void mvme16x_reset()
 
 static void mvme16x_get_model(char *model)
 {
-    p_bdid p = (p_bdid)mvme_bdid_ptr;
+    p_bdid p = &mvme_bdid;
     char suf[4];
 
     suf[1] = p->brdsuffix[0];
@@ -105,7 +115,7 @@ static void mvme16x_get_model(char *model)
 
 static int mvme16x_get_hardware_list(char *buffer)
 {
-    p_bdid p = (p_bdid)mvme_bdid_ptr;
+    p_bdid p = &mvme_bdid;
     int len = 0;
 
     if (p->brdno == 0x0162 || p->brdno == 0x0172)
@@ -133,7 +143,7 @@ static int mvme16x_get_hardware_list(char *buffer)
 
 void __init config_mvme16x(void)
 {
-    p_bdid p = (p_bdid)mvme_bdid_ptr;
+    p_bdid p = &mvme_bdid;
     char id[40];
 
     mach_sched_init      = mvme16x_sched_init;
@@ -163,6 +173,10 @@ void __init config_mvme16x(void)
 	while (1)
 		;
     }
+    /* Board type is only set by newer versions of vmelilo/tftplilo */
+    if (vme_brdtype == 0)
+	vme_brdtype = p->brdno;
+
     mvme16x_get_model(id);
     printk ("\nBRD_ID: %s   BUG %x.%x %02x/%02x/%02x\n", id, p->rev>>4,
 					p->rev&0xf, p->yr, p->mth, p->day);
@@ -199,7 +213,7 @@ void __init config_mvme16x(void)
 
 static void mvme16x_abort_int (int irq, void *dev_id, struct pt_regs *fp)
 {
-	p_bdid p = (p_bdid)mvme_bdid_ptr;
+	p_bdid p = &mvme_bdid;
 	unsigned long *new = (unsigned long *)vectors;
 	unsigned long *old = (unsigned long *)0xffe00000;
 	volatile unsigned char uc, *ucp;
@@ -232,7 +246,7 @@ static void mvme16x_timer_int (int irq, void *dev_id, struct pt_regs *fp)
 
 void mvme16x_sched_init (void (*timer_routine)(int, void *, struct pt_regs *))
 {
-    p_bdid p = (p_bdid)mvme_bdid_ptr;
+    p_bdid p = &mvme_bdid;
     int irq;
 
     tick_handler = timer_routine;
@@ -294,80 +308,3 @@ int mvme16x_keyb_init (void)
 	return 0;
 }
 
-/*-------------------  Serial console stuff ------------------------*/
-
-extern void mvme167_serial_console_setup(int cflag);
-extern void serial167_write(struct console *co, const char *str, unsigned cnt);
-extern void vme_scc_write(struct console *co, const char *str, unsigned cnt);
-
-
-void mvme16x_init_console_port (struct console *co, int cflag)
-{
-	p_bdid p = (p_bdid)mvme_bdid_ptr;
-
-	switch (p->brdno)
-	{
-#ifdef CONFIG_MVME162_SCC
-	case 0x0162:
-	case 0x0172:
-		co->write = vme_scc_write;
-		return;
-#endif
-#ifdef CONFIG_SERIAL167
-	case 0x0166:
-	case 0x0167:
-	case 0x0176:
-	case 0x0177:
-		co->write = serial167_write;
-		mvme167_serial_console_setup (cflag);
-		return;
-#endif
-	default:
-		panic ("No console support for MVME%x\n", p->brdno);
-	}
-	return;
-}
-
-
-#ifdef CONFIG_MVME162_SCC
-
-static void scc_delay (void)
-{
-	int n;
-	volatile int trash;
-
-	for (n = 0; n < 20; n++)
-		trash = n;
-}
-
-static void scc_write (char ch)
-{
-	volatile char *p = (volatile char *)MVME_SCC_A_ADDR;
-
-	do {
-		scc_delay();
-	}
-	while (!(*p & 4));
-	scc_delay();
-	*p = 8;
-	scc_delay();
-	*p = ch;
-}
-
-
-void vme_scc_write (struct console *co, const char *str, unsigned count)
-{
-	unsigned long	flags;
-
-	save_flags(flags);
-	cli();
-
-	while (count--)
-	{
-		if (*str == '\n')
-			scc_write ('\r');
-		scc_write (*str++);
-	}
-	restore_flags(flags);
-}
-#endif

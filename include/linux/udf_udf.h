@@ -101,8 +101,7 @@ struct SparablePartitionMap
 	Uint8		numSparingTables;
 	Uint8		reserved2[1];		/* #00 */
 	Uint32		sizeSparingTable;
-	Uint32		locSparingTable[0];
-	Uint8		pad[0];
+	Uint32		locSparingTable[4];
 };
  
 /* DVD Copyright Management Info, see UDF 1.02 3.3.4.5.1.2 */

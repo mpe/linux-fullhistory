@@ -23,6 +23,7 @@
 #include <linux/init.h>
 #include <linux/major.h>
 
+#include <asm/bootinfo.h>
 #include <asm/system.h>
 #include <asm/pgtable.h>
 #include <asm/setup.h>
@@ -61,6 +62,14 @@ static int bcd2int (unsigned char b);
 
 void (*tick_handler)(int, void *, struct pt_regs *);
 
+
+int mvme147_parse_bootinfo(const struct bi_record *bi)
+{
+	if (bi->tag == BI_VME_TYPE || bi->tag == BI_VME_BRDINFO)
+		return 0;
+	else
+		return 1;
+}
 
 int mvme147_kbdrate (struct kbd_repeat *k)
 {
@@ -109,6 +118,10 @@ void __init config_mvme147(void)
 	disable_irq		= mvme147_disable_irq;
 	mach_get_model		= mvme147_get_model;
 	mach_get_hardware_list	= mvme147_get_hardware_list;
+
+	/* Board type is only set by newer versions of vmelilo/tftplilo */
+	if (!vme_brdtype)
+		vme_brdtype = VME_TYPE_MVME147;
 }
 
 

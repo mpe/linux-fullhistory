@@ -872,6 +872,10 @@ typedef struct {
 	__u32 last_rec_address;
 } track_information;
 
+extern int cdrom_get_disc_info(kdev_t dev, disc_information *di);
+extern int cdrom_get_track_info(kdev_t dev, __u16 track, __u8 type,
+				track_information *ti);
+
 /* The SCSI spec says there could be 256 slots. */
 #define CDROM_MAX_SLOTS	256
 

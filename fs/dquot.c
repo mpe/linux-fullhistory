@@ -797,17 +797,22 @@ static inline int need_print_warning(struct dquot *dquot, int flag)
 	return 0;
 }
 
-static void print_warning(struct dquot *dquot, int flag, char *fmtstr, ...)
+static void print_warning(struct dquot *dquot, int flag, const char *fmtstr)
 {
-	va_list args;
+	struct dentry *root;
+	char *path, *buffer;
 
 	if (!need_print_warning(dquot, flag))
 		return;
-	va_start(args, fmtstr);
-	vsprintf(quotamessage, fmtstr, args);
-	va_end(args);
+	root = dquot->dq_mnt->mnt_sb->s_root;
+	dget(root);
+	buffer = (char *) __get_free_page(GFP_KERNEL);
+	path = buffer ? d_path(root, buffer, PAGE_SIZE) : "?";
+	sprintf(quotamessage, fmtstr, path, quotatypes[dquot->dq_type]);
+	free_page((unsigned long) buffer);
 	tty_write_message(current->tty, quotamessage);
 	dquot->dq_flags |= flag;
+	dput(root);
 }
 
 static inline char ignore_hardlimit(struct dquot *dquot)
@@ -817,16 +822,13 @@ static inline char ignore_hardlimit(struct dquot *dquot)
 
 static int check_idq(struct dquot *dquot, u_long inodes)
 {
-	short type = dquot->dq_type;
-
 	if (inodes <= 0 || dquot->dq_flags & DQ_FAKE)
 		return QUOTA_OK;
 
 	if (dquot->dq_ihardlimit &&
 	   (dquot->dq_curinodes + inodes) > dquot->dq_ihardlimit &&
             !ignore_hardlimit(dquot)) {
-		print_warning(dquot, DQ_INODES, "%s: write failed, %s file limit reached\n",
-			      dquot->dq_mnt->mnt_dirname, quotatypes[type]);
+		print_warning(dquot, DQ_INODES, "%s: write failed, %s file limit reached\n");
 		return NO_QUOTA;
 	}
 
@@ -834,17 +836,15 @@ static int check_idq(struct dquot *dquot, u_long inodes)
 	   (dquot->dq_curinodes + inodes) > dquot->dq_isoftlimit &&
 	    dquot->dq_itime && CURRENT_TIME >= dquot->dq_itime &&
             !ignore_hardlimit(dquot)) {
-		print_warning(dquot, DQ_INODES, "%s: warning, %s file quota exceeded too long.\n",
-				dquot->dq_mnt->mnt_dirname, quotatypes[type]);
+		print_warning(dquot, DQ_INODES, "%s: warning, %s file quota exceeded too long.\n");
 		return NO_QUOTA;
 	}
 
 	if (dquot->dq_isoftlimit &&
 	   (dquot->dq_curinodes + inodes) > dquot->dq_isoftlimit &&
 	    dquot->dq_itime == 0) {
-		print_warning(dquot, 0, "%s: warning, %s file quota exceeded\n",
-				dquot->dq_mnt->mnt_dirname, quotatypes[type]);
-		dquot->dq_itime = CURRENT_TIME + dquot->dq_mnt->mnt_dquot.inode_expire[type];
+		print_warning(dquot, 0, "%s: warning, %s file quota exceeded\n");
+		dquot->dq_itime = CURRENT_TIME + dquot->dq_mnt->mnt_dquot.inode_expire[dquot->dq_type];
 	}
 
 	return QUOTA_OK;
@@ -852,8 +852,6 @@ static int check_idq(struct dquot *dquot, u_long inodes)
 
 static int check_bdq(struct dquot *dquot, u_long blocks, char prealloc)
 {
-	short type = dquot->dq_type;
-
 	if (blocks <= 0 || dquot->dq_flags & DQ_FAKE)
 		return QUOTA_OK;
 
@@ -861,8 +859,7 @@ static int check_bdq(struct dquot *dquot, u_long blocks, char prealloc)
 	   (dquot->dq_curblocks + blocks) > dquot->dq_bhardlimit &&
             !ignore_hardlimit(dquot)) {
 		if (!prealloc)
-			print_warning(dquot, DQ_BLKS, "%s: write failed, %s disk limit reached.\n",
-					dquot->dq_mnt->mnt_dirname, quotatypes[type]);
+			print_warning(dquot, DQ_BLKS, "%s: write failed, %s disk limit reached.\n");
 		return NO_QUOTA;
 	}
 
@@ -871,8 +868,7 @@ static int check_bdq(struct dquot *dquot, u_long blocks, char prealloc)
 	    dquot->dq_btime && CURRENT_TIME >= dquot->dq_btime &&
             !ignore_hardlimit(dquot)) {
 		if (!prealloc)
-			print_warning(dquot, DQ_BLKS, "%s: write failed, %s disk quota exceeded too long.\n",
-					dquot->dq_mnt->mnt_dirname, quotatypes[type]);
+			print_warning(dquot, DQ_BLKS, "%s: write failed, %s disk quota exceeded too long.\n");
 		return NO_QUOTA;
 	}
 
@@ -880,9 +876,8 @@ static int check_bdq(struct dquot *dquot, u_long blocks, char prealloc)
 	   (dquot->dq_curblocks + blocks) > dquot->dq_bsoftlimit &&
 	    dquot->dq_btime == 0) {
 		if (!prealloc) {
-			print_warning(dquot, 0, "%s: warning, %s disk quota exceeded\n",
-					dquot->dq_mnt->mnt_dirname, quotatypes[type]);
-			dquot->dq_btime = CURRENT_TIME + dquot->dq_mnt->mnt_dquot.block_expire[type];
+			print_warning(dquot, 0, "%s: warning, %s disk quota exceeded\n");
+			dquot->dq_btime = CURRENT_TIME + dquot->dq_mnt->mnt_dquot.block_expire[dquot->dq_type];
 		}
 		else
 			/*

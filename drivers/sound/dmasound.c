@@ -2891,10 +2891,13 @@ static void ata_sq_interrupt(int irq, void *dummy, struct pt_regs *fp)
  * Amiga
  */
 
+#define StopDMA() custom.aud[0].audvol = custom.aud[1].audvol = 0; \
+		custom.aud[2].audvol = custom.aud[3].audvol = 0; \
+		custom.dmacon = AMI_AUDIO_OFF;
 
 static void *AmiAlloc(unsigned int size, int flags)
 {
-	return(amiga_chip_alloc((long)size));
+	return amiga_chip_alloc((long)size, "dmasound");
 }
 
 static void AmiFree(void *obj, unsigned int size)
@@ -2905,7 +2908,7 @@ static void AmiFree(void *obj, unsigned int size)
 static int __init AmiIrqInit(void)
 {
 	/* turn off DMA for audio channels */
-	custom.dmacon = AMI_AUDIO_OFF;
+	StopDMA();
 
 	/* Register interrupt handler. */
 	if (request_irq(IRQ_AMIGA_AUD0, ami_sq_interrupt, 0,
@@ -2918,7 +2921,7 @@ static int __init AmiIrqInit(void)
 static void AmiIrqCleanUp(void)
 {
 	/* turn off DMA for audio channels */
-	custom.dmacon = AMI_AUDIO_OFF;
+	StopDMA();
 	/* release the interrupt */
 	free_irq(IRQ_AMIGA_AUD0, ami_sq_interrupt);
 }
@@ -2927,7 +2930,7 @@ static void AmiIrqCleanUp(void)
 static void AmiSilence(void)
 {
 	/* turn off DMA for audio channels */
-	custom.dmacon = AMI_AUDIO_OFF;
+	StopDMA();
 }
 
 
@@ -3008,6 +3011,15 @@ static int AmiSetVolume(int volume)
 	custom.aud[0].audvol = sound.volume_left;
 	sound.volume_right = VOLUME_VOXWARE_TO_AMI((volume & 0xff00) >> 8);
 	custom.aud[1].audvol = sound.volume_right;
+	if (sound.hard.size == 16) {
+		if (sound.volume_left == 64 && sound.volume_right == 64) {
+			custom.aud[2].audvol = 1;
+			custom.aud[3].audvol = 1;
+		} else {
+			custom.aud[2].audvol = 0;
+			custom.aud[3].audvol = 0;
+		}
+	}
 	return(VOLUME_AMI_TO_VOXWARE(sound.volume_left) |
 	       (VOLUME_AMI_TO_VOXWARE(sound.volume_right) << 8));
 }
@@ -3047,6 +3059,9 @@ static void ami_sq_play_next_frame(int index)
 		ch0 = start;
 		ch1 = start;
 	}
+
+	custom.aud[0].audvol = sound.volume_left;
+	custom.aud[1].audvol = sound.volume_right;
 	if (sound.hard.size == 8) {
 		custom.aud[0].audlc = (u_short *)ZTWO_PADDR(ch0);
 		custom.aud[0].audlen = size;
@@ -3070,8 +3085,11 @@ static void ami_sq_play_next_frame(int index)
 			custom.aud[3].audlc = (u_short *)ZTWO_PADDR(ch3);
 			custom.aud[3].audlen = size;
 			custom.dmacon = AMI_AUDIO_14;
-		} else
+		} else {
+			custom.aud[2].audvol = 0;
+			custom.aud[3].audvol = 0;
 			custom.dmacon = AMI_AUDIO_8;
+		}
 	}
 	sq.front = (sq.front+1) % sq.max_count;
 	sq.active |= AMI_PLAY_LOADED;
@@ -3118,6 +3136,8 @@ static void ami_sq_interrupt(int irq, void *dummy, struct pt_regs *fp)
 {
 	int minframes = 1;
 
+	custom.intena = IF_AUD0;
+
 	if (!sq.active) {
 		/* Playing was interrupted and sq_reset() has already cleared
 		 * the sq variables, so better don't do anything here.
@@ -3141,7 +3161,9 @@ static void ami_sq_interrupt(int irq, void *dummy, struct pt_regs *fp)
 
 	if (!sq.active)
 		/* No frame is playing, disable audio DMA */
-		custom.dmacon = AMI_AUDIO_OFF;
+		StopDMA();
+
+	custom.intena = IF_SETCLR | IF_AUD0;
 
 	if (sq.count >= minframes)
 		/* Try to play the next frame */

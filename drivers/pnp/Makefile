@@ -25,7 +25,7 @@ ifeq ($(CONFIG_ISAPNP),m)
 endif
 
 ifeq ($(CONFIG_ISAPNP),y)
-	O_TARGET := isa-pnp.o
+	O_TARGET := pnp.o
 	OX_OBJS  := isapnp.o
 	O_OBJS   := quirks.o $(PROC_OBJS)
 endif
@@ -33,5 +33,5 @@ endif
 
 include $(TOPDIR)/Rules.make
 
-isa-pnp.o: isapnp.o quirks.o $(PROC_OBJS)
-	$(LD) $(LD_RFLAG) -r -o $@ isapnp.o quirks.o $(PROC_OBJS)
+isa-pnp.o: $(MIX_OBJS) $(MI_OBJS)
+	$(LD) $(LD_RFLAG) -r -o $@ $(MIX_OBJS) $(MI_OBJS)

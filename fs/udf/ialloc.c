@@ -15,7 +15,7 @@
  *		ftp://prep.ai.mit.edu/pub/gnu/GPL
  *	Each contributing author retains all rights to their own work.
  *
- *  (C) 1998-1999 Ben Fennema
+ *  (C) 1998-2000 Ben Fennema
  *
  * HISTORY
  *
@@ -148,16 +148,7 @@ struct inode * udf_new_inode (const struct inode *dir, int mode, int * err)
 	inode->i_size = 0;
 	UDF_I_LENEATTR(inode) = 0;
 	UDF_I_LENALLOC(inode) = 0;
-	UDF_I_EXT0LOC(inode) = UDF_I_LOCATION(inode);
-	UDF_I_EXT0LEN(inode) = 0;
-#if 1
-	UDF_I_EXT0OFFS(inode) = sizeof(struct FileEntry);
 	UDF_I_ALLOCTYPE(inode) = ICB_FLAG_AD_IN_ICB;
-#else
-	UDF_I_EXT0OFFS(inode) = 0;
-	UDF_I_ALLOCTYPE(inode) = ICB_FLAG_AD_LONG;
-#endif
-
 	inode->i_mtime = inode->i_atime = inode->i_ctime = CURRENT_TIME;
 	UDF_I_UMTIME(inode) = UDF_I_UATIME(inode) = UDF_I_UCTIME(inode) = CURRENT_UTIME;
 	inode->i_op = NULL;

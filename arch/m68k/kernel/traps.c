@@ -68,18 +68,37 @@ asm(".text\n"
     __ALIGN_STR "\n"
     SYMBOL_NAME_STR(nmihandler) ": rte");
 
+/*
+ * this must be called very early as the kernel might
+ * use some instruction that are emulated on the 060
+ */
 void __init base_trap_init(void)
 {
-#ifdef CONFIG_SUN3
-	/* Keep the keyboard interrupt working with PROM for debugging. --m */
-	e_vector *old_vbr;
-	__asm__ volatile ("movec %%vbr,%1\n\t"
-			  "movec %0,%%vbr"
-			  : "=&r" (old_vbr) : "r" ((void*)vectors));
-	vectors[0x1E] = old_vbr[0x1E];	/* Copy int6 vector. */
-#else
 	/* setup the exception vector table */
 	__asm__ volatile ("movec %0,%%vbr" : : "r" ((void*)vectors));
+
+	if (CPU_IS_060) {
+		/* set up ISP entry points */
+		asmlinkage void unimp_vec(void) asm ("_060_isp_unimp");
+
+		vectors[VEC_UNIMPII] = unimp_vec;
+	}
+}
+
+void __init trap_init (void)
+{
+	int i;
+
+	for (i = 48; i < 64; i++)
+		if (!vectors[i])
+			vectors[i] = trap;
+
+	for (i = 64; i < 256; i++)
+		vectors[i] = inthandler;
+
+#ifdef CONFIG_M68KFPU_EMU
+	if (FPU_IS_EMU)
+		vectors[VEC_LINE11] = fpu_emu;
 #endif
 
 	if (CPU_IS_040 && !FPU_IS_EMU) {
@@ -104,12 +123,7 @@ void __init base_trap_init(void)
 		vectors[VEC_LINE11] = fline_vec;
 		vectors[VEC_FPUNSUP] = unsupp_vec;
 	}
-	if (CPU_IS_060) {
-		/* set up ISP entry points */
-		asmlinkage void unimp_vec(void) asm ("_060_isp_unimp");
 
-		vectors[VEC_UNIMPII] = unimp_vec;
-	}
 	if (CPU_IS_060 && !FPU_IS_EMU) {
 		/* set up IFPSP entry points */
 		asmlinkage void snan_vec(void) asm ("_060_fpsp_snan");
@@ -132,32 +146,11 @@ void __init base_trap_init(void)
 		vectors[VEC_FPUNSUP] = unsupp_vec;
 		vectors[VEC_UNIMPEA] = effadd_vec;
 	}
-}
-
-void __init trap_init (void)
-{
-	int i;
-
-	for (i = 48; i < 64; i++)
-		if (!vectors[i])
-			vectors[i] = trap;
-
-	for (i = 64; i < 256; i++)
-		vectors[i] = inthandler;
-
-#ifdef CONFIG_M68KFPU_EMU
-	if (FPU_IS_EMU)
-		vectors[VEC_LINE11] = fpu_emu;
-#endif
 
         /* if running on an amiga, make the NMI interrupt do nothing */
 	if (MACH_IS_AMIGA) {
 		vectors[VEC_INT7] = nmihandler;
 	}
-#ifdef CONFIG_SUN3
-	/* Moved from setup_arch() */
-	base_trap_init();
-#endif
 }
 
 

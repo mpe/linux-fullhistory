@@ -43,94 +43,6 @@
 #include "udf_i.h"
 #include "udf_sb.h"
 
-static loff_t udf_file_llseek(struct file *, loff_t, int);
-static ssize_t udf_file_read_adinicb (struct file *, char *, size_t, loff_t *);
-static ssize_t udf_file_write (struct file *, const char *, size_t, loff_t *);
-static int udf_open_file(struct inode *, struct file *);
-static int udf_release_file(struct inode *, struct file *);
-
-static struct file_operations udf_file_operations = {
-	udf_file_llseek,	/* llseek */
-	generic_file_read,	/* read */
-	udf_file_write,		/* write */
-	NULL,			/* readdir */
-	NULL,			/* poll */
-	udf_ioctl,		/* ioctl */
-	generic_file_mmap,	/* mmap */
-	udf_open_file,		/* open */
-	NULL,			/* flush */
-	udf_release_file,	/* release */
-	udf_sync_file,		/* fsync */
-	NULL,			/* fasync */
-	NULL			/* lock */
-};
-
-struct inode_operations udf_file_inode_operations = {
-	&udf_file_operations,
-	NULL,					/* create */
-	NULL,					/* lookup */
-	NULL,					/* link */
-	NULL,					/* unlink */
-	NULL,					/* symlink */
-	NULL,					/* mkdir */
-	NULL,					/* rmdir */
-	NULL,					/* mknod */
-	NULL,					/* rename */
-	NULL,					/* readlink */
-	NULL,					/* follow_link */
-	udf_get_block,			/* get_block */
-	block_read_full_page,	/* readpage */
-	block_write_full_page,	/* writepage */
-#ifdef CONFIG_UDF_RW
-	udf_truncate,			/* truncate */
-#else
-	NULL,					/* truncate */
-#endif
-	NULL,					/* permission */
-	NULL					/* revalidate */
-};
-
-static struct file_operations udf_file_operations_adinicb = {
-	udf_file_llseek,	/* llseek */
-	udf_file_read_adinicb,/* read */
-	udf_file_write,		/* write */
-	NULL,				/* readdir */
-	NULL,				/* poll */
-	udf_ioctl,			/* ioctl */
-	NULL,				/* mmap */
-	NULL, 				/* open */
-	NULL,				/* flush */
-	udf_release_file,	/* release */
-	udf_sync_file,		/* fsync */
-	NULL,				/* fasync */
-	NULL				/* lock */
-};
-
-struct inode_operations udf_file_inode_operations_adinicb = {
-	&udf_file_operations_adinicb,
-	NULL,					/* create */
-	NULL,					/* lookup */
-	NULL,					/* link */
-	NULL,					/* unlink */
-	NULL,					/* symlink */
-	NULL,					/* mkdir */
-	NULL,					/* rmdir */
-	NULL,					/* mknod */
-	NULL,					/* rename */
-	NULL,					/* readlink */
-	NULL,					/* follow_link */
-	udf_get_block,			/* get_block */
-	block_read_full_page,	/* readpage */
-	block_write_full_page,	/* writepage */
-#ifdef CONFIG_UDF_RW
-	udf_truncate,			/* truncate */
-#else
-	NULL,					/* truncate */
-#endif
-	NULL,					/* permission */
-	NULL					/* revalidate */
-};
-
 /*
  * Make sure the offset never goes beyond the 32-bit mark..
  */
@@ -181,104 +93,93 @@ static ssize_t udf_file_write(struct file * file, const char * buf,
 {
 	ssize_t retval;
 	struct inode *inode = file->f_dentry->d_inode;
-	remove_suid(inode);
-
-	if (UDF_I_ALLOCTYPE(inode) == ICB_FLAG_AD_IN_ICB)
-	{
-		int i, err;
-		struct buffer_head *bh;
-
-		if ((bh = udf_expand_adinicb(inode, &i, 0, &err)))
-			udf_release_data(bh);
-		else if (UDF_I_ALLOCTYPE(inode) == ICB_FLAG_AD_IN_ICB)
-			return err;
-	}
 
 	retval = generic_file_write(file, buf, count, ppos, block_write_partial_page);
 
 	if (retval > 0)
 	{
+		remove_suid(inode);
 		inode->i_ctime = inode->i_mtime = CURRENT_TIME;
 		UDF_I_UCTIME(inode) = UDF_I_UMTIME(inode) = CURRENT_UTIME;
+		mark_inode_dirty(inode);
 	}
-	mark_inode_dirty(inode);
 	return retval;
 }
 
-/*
- * udf_file_read
- *
- * PURPOSE
- *	Read from an open file.
- *
- * DESCRIPTION
- *	Optional - sys_read() will return -EINVAL if this routine is not
- *	available.
- *
- *	Refer to sys_read() in fs/read_write.c
- *	sys_read() -> .
- *
- *	Note that you can use generic_file_read() instead, which requires that
- *	udf_readpage() be available, but you can use generic_readpage(), which
- *	requires that udf_block_map() be available. Reading will then be done by
- *	memory-mapping the file a page at a time. This is not suitable for
- *	devices that don't handle read-ahead [example: CD-R/RW that may have
- *	blank sectors that shouldn't be read].
- *
- *	Refer to generic_file_read() in mm/filemap.c and to generic_readpage()
- *	in fs/buffer.c
- *
- *	Block devices can use block_read() instead. Refer to fs/block_dev.c
- *
- * PRE-CONDITIONS
- *	inode			Pointer to inode to read from (never NULL).
- *	filp			Pointer to file to read from (never NULL).
- *	buf			Point to read buffer (validated).
- *	bufsize			Size of read buffer.
- *
- * POST-CONDITIONS
- *	<return>		Bytes read (>=0) or an error code (<0) that
- *				sys_read() will return.
- *
- * HISTORY
- *	July 1, 1997 - Andrew E. Mileski
- *	Written, tested, and released.
- */
-static ssize_t udf_file_read_adinicb(struct file * filp, char * buf,
-	size_t bufsize, loff_t * loff)
+int udf_write_partial_page_adinicb(struct file *file, struct page *page, unsigned long offset, unsigned long bytes, const char * buf)
 {
-	struct inode *inode = filp->f_dentry->d_inode;
-	loff_t size, left, pos;
-	Uint32 block;
-	struct buffer_head *bh = NULL;
+	struct inode *inode = file->f_dentry->d_inode;
+	int err = 0, block;
+	struct buffer_head *bh;
+	unsigned long kaddr = 0;
 
-	size = inode->i_size;
-	if (*loff > size)
-		left = 0;
-	else
-		left = size - *loff;
-	if (left > bufsize)
-		left = bufsize;
+	if (!PageLocked(page))
+		BUG();
+	if (offset < 0 || offset >= (inode->i_sb->s_blocksize - udf_file_entry_alloc_offset(inode)))
+		BUG();
+	if (bytes+offset < 0 || bytes+offset > (inode->i_sb->s_blocksize - udf_file_entry_alloc_offset(inode)))
+		BUG();
 
-	if (left <= 0)
-		return 0;
-
-	pos = *loff + UDF_I_EXT0OFFS(inode);
-	block = udf_block_map(inode, 0);
-	if (!(bh = udf_tread(inode->i_sb,
-		udf_get_lb_pblock(inode->i_sb, UDF_I_LOCATION(inode), 0),
-		inode->i_sb->s_blocksize)))
+	kaddr = kmap(page);
+	block = udf_get_lb_pblock(inode->i_sb, UDF_I_LOCATION(inode), 0);
+	bh = getblk (inode->i_dev, block, inode->i_sb->s_blocksize);
+	if (!buffer_uptodate(bh))
 	{
-		return 0;
+		ll_rw_block (READ, 1, &bh);
+		wait_on_buffer(bh);
 	}
-	if (!copy_to_user(buf, bh->b_data + pos, left))
-		*loff += left;
+	err = copy_from_user((char *)kaddr + offset, buf, bytes);
+	memcpy(bh->b_data + udf_file_entry_alloc_offset(inode) + offset,
+		(char *)kaddr + offset, bytes);
+	mark_buffer_dirty(bh, 0);
+	brelse(bh);
+	kunmap(page);
+	SetPageUptodate(page);
+	return bytes;
+}
+
+static ssize_t udf_file_write_adinicb(struct file * file, const char * buf,
+	size_t count, loff_t *ppos)
+{
+	ssize_t retval;
+	struct inode *inode = file->f_dentry->d_inode;
+	int err, pos;
+
+	if (file->f_flags & O_APPEND)
+		pos = inode->i_size;
 	else
-		left = -EFAULT;
+		pos = *ppos;
 
-	udf_release_data(bh);
+	if (inode->i_sb->s_blocksize < (udf_file_entry_alloc_offset(inode) +
+		pos + count))
+	{
+		udf_expand_file_adinicb(file, pos + count, &err);
+		if (UDF_I_ALLOCTYPE(inode) == ICB_FLAG_AD_IN_ICB)
+		{
+			udf_debug("udf_expand_adinicb: err=%d\n", err);
+			return err;
+		}
+		else
+			return udf_file_write(file, buf, count, ppos);
+	}
+	else
+	{
+		if (pos + count > inode->i_size)
+			UDF_I_LENALLOC(inode) = pos + count;
+		else
+			UDF_I_LENALLOC(inode) = inode->i_size;
+	}
 
-	return left;
+	retval = generic_file_write(file, buf, count, ppos, udf_write_partial_page_adinicb);
+
+	if (retval > 0)
+	{
+		remove_suid(inode);
+		inode->i_ctime = inode->i_mtime = CURRENT_TIME;
+		UDF_I_UCTIME(inode) = UDF_I_UMTIME(inode) = CURRENT_UTIME;
+		mark_inode_dirty(inode);
+	}
+	return retval;
 }
 
 /*
@@ -435,3 +336,85 @@ static int udf_open_file(struct inode * inode, struct file * filp)
 		return -EFBIG;
 	return 0;
 }
+
+static struct file_operations udf_file_operations = {
+	udf_file_llseek,		/* llseek */
+	generic_file_read,		/* read */
+	udf_file_write,			/* write */
+	NULL,					/* readdir */
+	NULL,					/* poll */
+	udf_ioctl,				/* ioctl */
+	generic_file_mmap,		/* mmap */
+	udf_open_file,			/* open */
+	NULL,					/* flush */
+	udf_release_file,		/* release */
+	udf_sync_file,			/* fsync */
+	NULL,					/* fasync */
+	NULL					/* lock */
+};
+
+struct inode_operations udf_file_inode_operations = {
+	&udf_file_operations,
+	NULL,					/* create */
+	NULL,					/* lookup */
+	NULL,					/* link */
+	NULL,					/* unlink */
+	NULL,					/* symlink */
+	NULL,					/* mkdir */
+	NULL,					/* rmdir */
+	NULL,					/* mknod */
+	NULL,					/* rename */
+	NULL,					/* readlink */
+	NULL,					/* follow_link */
+	udf_get_block,			/* get_block */
+	block_read_full_page,	/* readpage */
+	block_write_full_page,	/* writepage */
+#if CONFIG_UDF_RW == 1
+	udf_truncate,			/* truncate */
+#else
+	NULL,					/* truncate */
+#endif
+	NULL,					/* permission */
+	NULL					/* revalidate */
+};
+
+static struct file_operations udf_file_operations_adinicb = {
+	udf_file_llseek,		/* llseek */
+	generic_file_read,		/* read */
+	udf_file_write_adinicb,	/* write */
+	NULL,					/* readdir */
+	NULL,					/* poll */
+	udf_ioctl,				/* ioctl */
+	NULL,					/* mmap */
+	NULL, 					/* open */
+	NULL,					/* flush */
+	udf_release_file,		/* release */
+	udf_sync_file_adinicb,	/* fsync */
+	NULL,					/* fasync */
+	NULL					/* lock */
+};
+
+struct inode_operations udf_file_inode_operations_adinicb = {
+	&udf_file_operations_adinicb,
+	NULL,					/* create */
+	NULL,					/* lookup */
+	NULL,					/* link */
+	NULL,					/* unlink */
+	NULL,					/* symlink */
+	NULL,					/* mkdir */
+	NULL,					/* rmdir */
+	NULL,					/* mknod */
+	NULL,					/* rename */
+	NULL,					/* readlink */
+	NULL,					/* follow_link */
+	udf_get_block,			/* get_block */
+	udf_readpage_adinicb,	/* readpage */
+	udf_writepage_adinicb,	/* writepage */
+#if CONFIG_UDF_RW == 1
+	udf_truncate_adinicb,	/* truncate */
+#else
+	NULL,					/* truncate */
+#endif
+	NULL,					/* permission */
+	NULL					/* revalidate */
+};

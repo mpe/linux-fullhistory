@@ -16,6 +16,7 @@
 #include <asm/dma.h>
 #include <asm/system.h>
 
+ 
 
 /* A note on resource allocation:
  *
@@ -34,6 +35,12 @@
 
 
 spinlock_t dma_spin_lock = SPIN_LOCK_UNLOCKED;
+
+/*
+ *	If our port doesn't define this it has no PC like DMA
+ */
+
+#ifdef MAX_DMA_CHANNELS
 
 
 /* Channel n is busy iff dma_chan_busy[n].lock != 0.
@@ -100,3 +107,22 @@ void free_dma(unsigned int dmanr)
 	}	
 
 } /* free_dma */
+
+#else
+
+int request_dma(unsigned int dmanr, const char *device_id)
+{
+	return -EINVAL;
+}
+
+int free_dma(unsigned int dmanr)
+{
+	return -EINVAL;
+}
+
+int get_dma_list(char *buf)
+{	
+	strcpy(buf, "No DMA\n");
+	return 7;
+}
+#endif

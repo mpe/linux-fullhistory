@@ -16,8 +16,8 @@
  *	Each contributing author retains all rights to their own work.
  *
  *  (C) 1998 Dave Boynton
- *  (C) 1998-1999 Ben Fennema
- *  (C) 1999 Stelias Computing Inc
+ *  (C) 1998-2000 Ben Fennema
+ *  (C) 1999-2000 Stelias Computing Inc
  *
  * HISTORY
  *
@@ -62,20 +62,6 @@ Uint32
 udf64_high32(Uint64 indat)
 {
 	return indat >> 32;
-}
-
-uid_t udf_convert_uid(int uidin)
-{
-	if ( uidin == -1 )
-		return 0;
-	return uidin;
-}
-
-gid_t udf_convert_gid(int gidin)
-{
-	if ( gidin == -1 )
-		return 0;
-	return gidin;
 }
 
 #if defined(__linux__) && defined(__KERNEL__)
@@ -138,7 +124,6 @@ udf_add_extendedattr(struct inode * inode, Uint32 size, Uint32 type,
 		if (UDF_I_LENALLOC(inode))
 		{
 			memmove(&ad[size], ad, UDF_I_LENALLOC(inode));
-			UDF_I_EXT0OFFS(inode) += size;
 		}
 
 		if (UDF_I_LENEATTR(inode))

@@ -18,7 +18,8 @@ O_OBJS    = open.o read_write.o devices.o file_table.o buffer.o \
 MOD_LIST_NAME := FS_MODULES
 ALL_SUB_DIRS = coda minix ext2 fat msdos vfat proc isofs nfs umsdos ntfs \
 		hpfs sysv smbfs ncpfs ufs efs affs romfs autofs hfs lockd \
-		nfsd nls devpts adfs partitions qnx4 udf bfs cramfs openpromfs
+		nfsd nls devpts adfs partitions qnx4 udf bfs cramfs openpromfs \
+		autofs4
 
 SUB_DIRS := partitions
 
@@ -250,6 +251,14 @@ SUB_DIRS += autofs
 else
   ifeq ($(CONFIG_AUTOFS_FS),m)
   MOD_SUB_DIRS += autofs
+  endif
+endif
+
+ifeq ($(CONFIG_AUTOFS4_FS),y)
+SUB_DIRS += autofs4
+else
+  ifeq ($(CONFIG_AUTOFS4_FS),m)
+  MOD_SUB_DIRS += autofs4
   endif
 endif
 

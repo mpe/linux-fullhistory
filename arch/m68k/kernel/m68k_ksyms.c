@@ -11,7 +11,7 @@
 
 #include <asm/setup.h>
 #include <asm/machdep.h>
-#include <asm/pgtable.h>
+#include <asm/pgalloc.h>
 #include <asm/irq.h>
 #include <asm/io.h>
 #include <asm/semaphore.h>
@@ -21,6 +21,7 @@
 #include <asm/m68kserial.h>
 
 asmlinkage long long __ashrdi3 (long long, int);
+asmlinkage long long __lshrdi3 (long long, int);
 extern char m68k_debug_device[];
 
 extern void dump_thread(struct pt_regs *, struct user *);
@@ -57,6 +58,9 @@ EXPORT_SYMBOL(local_bh_count);
 EXPORT_SYMBOL(enable_irq);
 EXPORT_SYMBOL(disable_irq);
 EXPORT_SYMBOL(kernel_thread);
+#ifdef CONFIG_VME
+EXPORT_SYMBOL(vme_brdtype);
+#endif
 
 /* Networking helper routines. */
 EXPORT_SYMBOL(csum_partial_copy);
@@ -66,6 +70,7 @@ EXPORT_SYMBOL(csum_partial_copy);
    their interface isn't gonna change any time soon now, so
    it's OK to leave it out of version control.  */
 EXPORT_SYMBOL_NOVERS(__ashrdi3);
+EXPORT_SYMBOL_NOVERS(__lshrdi3);
 EXPORT_SYMBOL_NOVERS(memcpy);
 EXPORT_SYMBOL_NOVERS(memset);
 EXPORT_SYMBOL_NOVERS(memcmp);

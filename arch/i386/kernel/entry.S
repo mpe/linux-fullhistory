@@ -617,6 +617,7 @@ ENTRY(sys_call_table)
 	.long SYMBOL_NAME(sys_setgid)
 	.long SYMBOL_NAME(sys_setfsuid)		/* 215 */
 	.long SYMBOL_NAME(sys_setfsgid)
+	.long SYMBOL_NAME(sys_pivot_root)
 
 
 	/*
@@ -625,6 +626,6 @@ ENTRY(sys_call_table)
 	 * entries. Don't panic if you notice that this hasn't
 	 * been shrunk every time we add a new system call.
 	 */
-	.rept NR_syscalls-216
+	.rept NR_syscalls-217
 		.long SYMBOL_NAME(sys_ni_syscall)
 	.endr

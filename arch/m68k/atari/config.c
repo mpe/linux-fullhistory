@@ -30,6 +30,7 @@
 #include <linux/console.h>
 #include <linux/init.h>
 #include <linux/delay.h>
+#include <linux/ioport.h>
 
 #include <asm/bootinfo.h>
 #include <asm/setup.h>
@@ -245,6 +246,9 @@ void __init config_atari(void)
     memset(&atari_hw_present, 0, sizeof(atari_hw_present));
 
     atari_debug_init();
+
+    ioport_resource.end  = 0xFFFFFFFF;  /* Change size of I/O space from 64KB
+                                           to 4GB. */
 
     mach_sched_init      = atari_sched_init;
     mach_keyb_init       = atari_keyb_init;
@@ -506,24 +510,6 @@ void __init config_atari(void)
                                          * serialized, writable */
               : "d0" );
 
-    }
-
-    /*
-     * On the Hades map the PCI memory, I/O and configuration areas
-     * (0x80000000 - 0xbfffffff).
-     *
-     * Settings: supervisor only, non-cacheable, serialized, read and write.
-     */
-
-    if (MACH_IS_HADES) {
-        __asm__ __volatile__ ("movel %0,%/d0\n\t"
-                              ".chip 68040\n\t"
-                              "movec %%d0,%%itt0\n\t"
-                              "movec %%d0,%%dtt0\n\t"
-                              ".chip 68k\n\t"
-                              : /* no outputs */
-                              : "g" (0x803fa040)
-                              : "d0");
     }
 
     /* Fetch tos version at Physical 2 */

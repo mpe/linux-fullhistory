@@ -30,7 +30,6 @@
 #ifndef _LINUX_RICOH_H
 #define _LINUX_RICOH_H
 
-#include <linux/config.h>
 
 #define RF5C_MODE_CTL		0x1f	/* Mode control */
 #define RF5C_PWR_CTL		0x2f	/* Mixed voltage control */

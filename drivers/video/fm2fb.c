@@ -376,95 +376,99 @@ static int fm2fb_ioctl(struct inode *inode, struct file *file, u_int cmd,
 
 int __init fm2fb_init(void)
 {
-    int key, is_fm;
-    const struct ConfigDev *cd  = NULL;
-    unsigned long board, *ptr;
+    int is_fm;
+    struct zorro_dev *z = NULL;
+    unsigned long *ptr;
     int x, y;
 
-    if (!(key = is_fm = zorro_find(ZORRO_PROD_BSC_FRAMEMASTER_II, 0, 0)) &&
-	!(key = zorro_find(ZORRO_PROD_HELFRICH_RAINBOW_II, 0, 0)))
-	return -ENXIO;
-    cd = zorro_get_board(key);
-    if (!(board = (u_long)cd->cd_BoardAddr))
-	return -ENXIO;
-    zorro_config_board(key, 0);
+    while ((z = zorro_find_device(ZORRO_WILDCARD, z))) {
+	if (z->id == ZORRO_PROD_BSC_FRAMEMASTER_II)
+	    is_fm = 1;
+	else if (z->id == ZORRO_PROD_HELFRICH_RAINBOW_II)
+	    is_fm = 0;
+	else
+	    continue;
+	if (!request_mem_region(z->resource.start, FRAMEMASTER_SIZE, "fm2fb"))
+	    continue;
 
-    /* assigning memory to kernel space */
-    fm2fb_mem_phys = board;
-    fm2fb_mem  = ioremap(board, FRAMEMASTER_SIZE);
-    fm2fb_reg_phys = fm2fb_mem_phys+FRAMEMASTER_REG;
-    fm2fb_reg  = (unsigned char *)(fm2fb_mem+FRAMEMASTER_REG);
+	/* assigning memory to kernel space */
+	fm2fb_mem_phys = z->resource.start;
+	fm2fb_mem  = ioremap(fm2fb_mem_phys, FRAMEMASTER_SIZE);
+	fm2fb_reg_phys = fm2fb_mem_phys+FRAMEMASTER_REG;
+	fm2fb_reg  = (unsigned char *)(fm2fb_mem+FRAMEMASTER_REG);
 
-    /* make EBU color bars on display */
-    ptr = (unsigned long *)fm2fb_mem;
-    for (y = 0; y < 576; y++) {
-	for (x = 0; x < 96; x++) *ptr++ = 0xffffff;	/* white */
-	for (x = 0; x < 96; x++) *ptr++ = 0xffff00;	/* yellow */
-	for (x = 0; x < 96; x++) *ptr++ = 0x00ffff;	/* cyan */
-	for (x = 0; x < 96; x++) *ptr++ = 0x00ff00;	/* green */
-	for (x = 0; x < 96; x++) *ptr++ = 0xff00ff;	/* magenta */
-	for (x = 0; x < 96; x++) *ptr++ = 0xff0000;	/* red */
-	for (x = 0; x < 96; x++) *ptr++ = 0x0000ff;	/* blue */
-	for (x = 0; x < 96; x++) *ptr++ = 0x000000;	/* black */
+	/* make EBU color bars on display */
+	ptr = (unsigned long *)fm2fb_mem;
+	for (y = 0; y < 576; y++) {
+	    for (x = 0; x < 96; x++) *ptr++ = 0xffffff;	/* white */
+	    for (x = 0; x < 96; x++) *ptr++ = 0xffff00;	/* yellow */
+	    for (x = 0; x < 96; x++) *ptr++ = 0x00ffff;	/* cyan */
+	    for (x = 0; x < 96; x++) *ptr++ = 0x00ff00;	/* green */
+	    for (x = 0; x < 96; x++) *ptr++ = 0xff00ff;	/* magenta */
+	    for (x = 0; x < 96; x++) *ptr++ = 0xff0000;	/* red */
+	    for (x = 0; x < 96; x++) *ptr++ = 0x0000ff;	/* blue */
+	    for (x = 0; x < 96; x++) *ptr++ = 0x000000;	/* black */
+	}
+	fm2fbcon_blank(0, NULL);
+
+	if (fm2fb_mode == -1)
+	    fm2fb_mode = FM2FB_MODE_PAL;
+
+	fb_var = fb_var_modes[fm2fb_mode];
+
+	strcpy(fb_fix.id, is_fm ? "FrameMaster II" : "Rainbow II");
+	fb_fix.smem_start = fm2fb_mem_phys;
+	fb_fix.smem_len = FRAMEMASTER_REG;
+	fb_fix.type = FB_TYPE_PACKED_PIXELS;
+	fb_fix.type_aux = 0;
+	fb_fix.visual = FB_VISUAL_TRUECOLOR;
+	fb_fix.line_length = 768<<2;
+	fb_fix.mmio_start = fm2fb_reg_phys;
+	fb_fix.mmio_len = 8;
+	fb_fix.accel = FB_ACCEL_NONE;
+
+	disp.var = fb_var;
+	disp.cmap.start = 0;
+	disp.cmap.len = 0;
+	disp.cmap.red = disp.cmap.green = disp.cmap.blue = disp.cmap.transp = NULL;
+	disp.screen_base = (char *)fm2fb_mem;
+	disp.visual = fb_fix.visual;
+	disp.type = fb_fix.type;
+	disp.type_aux = fb_fix.type_aux;
+	disp.ypanstep = 0;
+	disp.ywrapstep = 0;
+	disp.line_length = fb_fix.line_length;
+	disp.can_soft_blank = 1;
+	disp.inverse = 0;
+    #ifdef FBCON_HAS_CFB32
+	disp.dispsw = &fbcon_cfb32;
+	disp.dispsw_data = &fbcon_cfb32_cmap;
+    #else
+	disp.dispsw = &fbcon_dummy;
+    #endif
+	disp.scrollmode = SCROLL_YREDRAW;
+
+	strcpy(fb_info.modename, fb_fix.id);
+	fb_info.node = -1;
+	fb_info.fbops = &fm2fb_ops;
+	fb_info.disp = &disp;
+	fb_info.fontname[0] = '\0';
+	fb_info.changevar = NULL;
+	fb_info.switch_con = &fm2fbcon_switch;
+	fb_info.updatevar = &fm2fbcon_updatevar;
+	fb_info.blank = &fm2fbcon_blank;
+	fb_info.flags = FBINFO_FLAG_DEFAULT;
+
+	fm2fb_set_var(&fb_var, -1, &fb_info);
+
+	if (register_framebuffer(&fb_info) < 0)
+	    return -EINVAL;
+
+	printk("fb%d: %s frame buffer device\n", GET_FB_IDX(fb_info.node),
+	       fb_fix.id);
+	return 0;
     }
-    fm2fbcon_blank(0, NULL);
-
-    if (fm2fb_mode == -1)
-	fm2fb_mode = FM2FB_MODE_PAL;
-
-    fb_var = fb_var_modes[fm2fb_mode];
-
-    strcpy(fb_fix.id, is_fm ? "FrameMaster II" : "Rainbow II");
-    fb_fix.smem_start = fm2fb_mem_phys;
-    fb_fix.smem_len = FRAMEMASTER_REG;
-    fb_fix.type = FB_TYPE_PACKED_PIXELS;
-    fb_fix.type_aux = 0;
-    fb_fix.visual = FB_VISUAL_TRUECOLOR;
-    fb_fix.line_length = 768<<2;
-    fb_fix.mmio_start = fm2fb_reg_phys;
-    fb_fix.mmio_len = 8;
-    fb_fix.accel = FB_ACCEL_NONE;
-
-    disp.var = fb_var;
-    disp.cmap.start = 0;
-    disp.cmap.len = 0;
-    disp.cmap.red = disp.cmap.green = disp.cmap.blue = disp.cmap.transp = NULL;
-    disp.screen_base = (char *)fm2fb_mem;
-    disp.visual = fb_fix.visual;
-    disp.type = fb_fix.type;
-    disp.type_aux = fb_fix.type_aux;
-    disp.ypanstep = 0;
-    disp.ywrapstep = 0;
-    disp.line_length = fb_fix.line_length;
-    disp.can_soft_blank = 1;
-    disp.inverse = 0;
-#ifdef FBCON_HAS_CFB32
-    disp.dispsw = &fbcon_cfb32;
-    disp.dispsw_data = &fbcon_cfb32_cmap;
-#else
-    disp.dispsw = &fbcon_dummy;
-#endif
-    disp.scrollmode = SCROLL_YREDRAW;
-
-    strcpy(fb_info.modename, fb_fix.id);
-    fb_info.node = -1;
-    fb_info.fbops = &fm2fb_ops;
-    fb_info.disp = &disp;
-    fb_info.fontname[0] = '\0';
-    fb_info.changevar = NULL;
-    fb_info.switch_con = &fm2fbcon_switch;
-    fb_info.updatevar = &fm2fbcon_updatevar;
-    fb_info.blank = &fm2fbcon_blank;
-    fb_info.flags = FBINFO_FLAG_DEFAULT;
-
-    fm2fb_set_var(&fb_var, -1, &fb_info);
-
-    if (register_framebuffer(&fb_info) < 0)
-	return -EINVAL;
-
-    printk("fb%d: %s frame buffer device\n", GET_FB_IDX(fb_info.node),
-	   fb_fix.id);
-    return 0;
+    return -ENXIO;
 }
 
 int __init fm2fb_setup(char *options)

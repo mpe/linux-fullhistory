@@ -20,8 +20,8 @@ FONTMAPFILE = cp437.uni
 
 O_TARGET := char.o
 M_OBJS   :=
-O_OBJS   := tty_io.o n_tty.o tty_ioctl.o mem.o random.o raw.o
-OX_OBJS  := pty.o misc.o
+O_OBJS   := tty_io.o n_tty.o tty_ioctl.o mem.o raw.o
+OX_OBJS  := pty.o misc.o random.o
 
 KEYMAP   =defkeymap.o
 KEYBD    =pc_keyb.o
@@ -29,8 +29,8 @@ CONSOLE  =console.o
 SERIAL   =serial.o
 
 ifeq ($(ARCH),m68k)
-  KEYMAP   =
   KEYBD    =
+  SERIAL   =
 endif
 
 ifeq ($(ARCH),arm)

@@ -4350,15 +4350,6 @@ CONFIG_SCSI_IPS
   does not work correctly without modification please contact the
   author by email at ipslinux@us.ibm.com.
 
-IBM ServeRAID Support
-CONFIG_SCSI_IPS
-  This is support for the IBM ServeRAID hardware RAID controllers.
-  Consult the SCSI-HOWTO, available via anonymous FTP from
-  ftp://metalab.unc.edu/pub/Linux/docs/HOWTO, and the file
-  README.ips in drivers/scsi for more information.  If this driver
-  does not work correctly without modification please contact the
-  author by email at ipslinux@us.ibm.com.
-
 BusLogic SCSI support
 CONFIG_SCSI_BUSLOGIC
   This is support for BusLogic MultiMaster and FlashPoint SCSI Host
@@ -8113,6 +8104,12 @@ CONFIG_USB_CPIA
   Say Y here if you want to connect this type of camera to your
   computer's USB port.
 
+  This driver uses the Video For Linux API.  You must enable
+  (Y or M in config) Video For Linux (under Character Devices)
+  to use this driver.  Information on this API and pointers to
+  "v4l" programs may be found on the WWW at
+  http://roadrunner.swansea.uk.linux.org/v4l.shtml .
+
   This code is also available as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want).
   The module will be called cpia.o. If you want to compile it as a
@@ -8122,6 +8119,12 @@ USB IBM (Xirlink) C-It Camera support
 CONFIG_USB_IBMCAM
   Say Y here if you want to connect this type of camera to your
   computer's USB port.
+
+  This driver uses the Video For Linux API.  You must enable
+  (Y or M in config) Video For Linux (under Character Devices)
+  to use this driver.  Information on this API and pointers to
+  "v4l" programs may be found on the WWW at
+  http://roadrunner.swansea.uk.linux.org/v4l.shtml .
 
   This code is also available as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want).
@@ -8136,6 +8139,12 @@ CONFIG_USB_OV511
   computer's USB port. See Documentation/usb/ov511.txt for more
   information and for a list of supported cameras.
   
+  This driver uses the Video For Linux API.  You must enable
+  (Y or M in config) Video For Linux (under Character Devices)
+  to use this driver.  Information on this API and pointers to
+  "v4l" programs may be found on the WWW at
+  http://roadrunner.swansea.uk.linux.org/v4l.shtml .
+
   This code is also available as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want).
   The module will be called ov511.o. If you want to compile it as a
@@ -8153,20 +8162,20 @@ CONFIG_USB_DC2XX
   The module will be called dc2xx.o. If you want to compile it as a
   module, say M here and read Documentation/modules.txt.
 
-USB SCSI (mass storage) support
-CONFIG_USB_SCSI
+USB Mass Storage support
+CONFIG_USB_STORAGE
   Say Y here if you want to connect USB mass storage devices to your
   computer's USB port.
 
   This code is also available as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want).
-  The module will be called usb-scsi.o. If you want to compile it as a
-  module, say M here and read Documentation/modules.txt.
+  The module will be called usb-storage.o. If you want to compile it
+  as a module, say M here and read Documentation/modules.txt.
 
-USB SCSI verbose debug
-CONFIG_USB_SCSI_DEBUG
-  Say Y here in order to have the USB SCSI code generate verbose
-  debugging messages.
+USB Mass Storage verbose debug
+CONFIG_USB_STORAGE_DEBUG
+  Say Y here in order to have the USB Mass Storage code generate
+  verbose debugging messages.
 
 USS720 parport driver
 CONFIG_USB_USS720
@@ -10540,9 +10549,10 @@ CONFIG_RTC
   major number 10 and minor number 135 using mknod ("man mknod"), you
   will get access to the real time clock built into your computer.
   Every PC has such a clock built in. It can be used to generate
-  signals from as low as 1Hz up to 8192Hz, and can also be used as a
-  24 hour alarm. It reports status information via the file /proc/rtc
-  and its behaviour is set by various ioctls on /dev/rtc.
+  signals from as low as 1Hz up to 8192Hz, and can also be used
+  as a 24 hour alarm. It reports status information via the file
+  /proc/driver/rtc and its behaviour is set by various ioctls on
+  /dev/rtc.
 
   If you run Linux on a multiprocessor machine and said Y to
   "Symmetric Multi Processing" above, you should say Y here to read
@@ -12226,13 +12236,11 @@ CONFIG_ATARI_SCSI_TOSHIBA_DELAY
   use a Toshiba CD-ROM drive; otherwise, the option is not needed and
   would impact performance a bit, so say N.
 
-Hades SCSI DMA emulator (EXPERIMENTAL)
+Hades SCSI DMA emulator
 CONFIG_TT_DMA_EMUL
   This option enables code which emulates the TT SCSI DMA chip on the
   Hades. This increases the SCSI transfer rates at least ten times
-  compared to PIO transfers. Note that this code is experimental and
-  has only been tested on a Hades with a 68060 processor. Before you
-  use this, make backups of your entire hard disk.
+  compared to PIO transfers.
 
 Ariadne support
 CONFIG_ARIADNE

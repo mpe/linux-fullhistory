@@ -270,7 +270,10 @@ static int sun_fd_eject(int drive)
 #include <asm/ns87303.h>
 
 static struct linux_ebus_dma *sun_pci_fd_ebus_dma;
+static struct pci_dev *sun_pci_ebus_dev;
 static int sun_pci_broken_drive = -1;
+static unsigned int sun_pci_dma_addr = -1U;
+static int sun_pci_dma_len;
 
 extern void floppy_interrupt(int irq, void *dev_id, struct pt_regs *regs);
 
@@ -363,6 +366,11 @@ static void sun_pci_fd_disable_dma(void)
 			writel(dcsr, &sun_pci_fd_ebus_dma->dcsr);
 		}
 	}
+	if (sun_pci_dma_addr != -1U)
+		pci_unmap_single(sun_pci_ebus_dev,
+				 sun_pci_dma_addr,
+				 sun_pci_dma_len);
+	sun_pci_dma_addr = -1U;
 }
 
 static void sun_pci_fd_set_dma_mode(int mode)
@@ -389,12 +397,17 @@ static void sun_pci_fd_set_dma_mode(int mode)
 
 static void sun_pci_fd_set_dma_count(int length)
 {
+	sun_pci_dma_len = length;
 	writel(length, &sun_pci_fd_ebus_dma->dbcr);
 }
 
 static void sun_pci_fd_set_dma_addr(char *buffer)
 {
-	unsigned int addr = virt_to_bus(buffer);
+	unsigned int addr;
+
+	addr = sun_pci_dma_addr = pci_map_single(sun_pci_ebus_dev,
+						 buffer,
+						 sun_pci_dma_len);
 	writel(addr, &sun_pci_fd_ebus_dma->dacr);
 }
 
@@ -598,6 +611,8 @@ static unsigned long __init sun_floppy_init(void)
 		 */
 		auxio_reg = edev->resource[2].start;
 		writel(readl(auxio_reg)|0x2, auxio_reg);
+
+		sun_pci_ebus_dev = ebus->self;
 
 		sun_pci_fd_ebus_dma = (struct linux_ebus_dma *)
 			edev->resource[1].start;

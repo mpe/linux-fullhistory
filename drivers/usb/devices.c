@@ -309,7 +309,7 @@ static char *usb_dump_device_strings (char *start, char *end, struct usb_device 
 	return start;
 }
 
-static char *usb_dump_desc(char *start, char *end, const struct usb_device *dev)
+static char *usb_dump_desc(char *start, char *end, struct usb_device *dev)
 {
 	int i;
 
@@ -365,7 +365,7 @@ static char *usb_dump_string(char *start, char *end, const struct usb_device *de
 
 /*****************************************************************/
 
-static char *usb_device_dump(char *start, char *end, const struct usb_device *usbdev,
+static char *usb_device_dump(char *start, char *end, struct usb_device *usbdev,
 			     int bus, int level, int index, int count)
 {
 	int chix;

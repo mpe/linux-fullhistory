@@ -116,24 +116,25 @@ volatile unsigned char cmd_buffer[16];
 int oktagon_esp_detect(Scsi_Host_Template *tpnt)
 {
 	struct NCR_ESP *esp;
-	const struct ConfigDev *esp_dev;
-	int key;
+	struct zorro_dev *z = NULL;
 	unsigned long address;
 	struct ESP_regs *eregs;
 
-	if((key = zorro_find(ZORRO_PROD_BSC_OKTAGON_2008, 0, 0))){
-		esp_dev = zorro_get_board(key);
-
+	while ((z = zorro_find_device(ZORRO_PROD_BSC_OKTAGON_2008, z))) {
+	    unsigned long board = z->resource.start;
+	    if (request_mem_region(board+OKTAGON_ESP_ADDR,
+				   sizeof(struct ESP_regs), "NCR53C9x")) {
+		strcpy(z->name, "Oktagon 2008 SCSI Host Adapter");
 		/*
 		 * It is a SCSI controller.
 		 * Hardwire Host adapter to SCSI ID 7
 		 */
 		
-		address = (unsigned long)ZTWO_VADDR(esp_dev->cd_BoardAddr);
+		address = (unsigned long)ZTWO_VADDR(board);
 		eregs = (struct ESP_regs *)(address + OKTAGON_ESP_ADDR);
 
 		/* This line was 5 lines lower */
-		esp = esp_allocate(tpnt, (void *) esp_dev);
+		esp = esp_allocate(tpnt, (void *)board+OKTAGON_ESP_ADDR);
 
 		/* we have to shift the registers only one bit for oktagon */
 		esp->shift = 1;
@@ -197,7 +198,6 @@ int oktagon_esp_detect(Scsi_Host_Template *tpnt)
 		esp->esp_command_dvma = (__u32) cmd_buffer;
 
 		esp->irq = IRQ_AMIGA_PORTS;
-		esp->slot = key;
 		request_irq(IRQ_AMIGA_PORTS, esp_intr, SA_SHIRQ,
 			    "BSC Oktagon SCSI", esp_intr);
 
@@ -209,7 +209,6 @@ int oktagon_esp_detect(Scsi_Host_Template *tpnt)
 
 		esp_initialize(esp);
 
-		zorro_config_board(key, 0);
 		printk("ESP_Oktagon Driver 1.1"
 #ifdef USE_BOTTOM_HALF
 		       " [BOTTOM_HALF]"
@@ -222,6 +221,7 @@ int oktagon_esp_detect(Scsi_Host_Template *tpnt)
 		current_esp = esp;
 		register_reboot_notifier(&oktagon_notifier);
 		return esps_in_use;
+	    }
 	}
 	return 0;
 }
@@ -585,11 +585,9 @@ Scsi_Host_Template driver_template = SCSI_OKTAGON_ESP;
 int oktagon_esp_release(struct Scsi_Host *instance)
 {
 #ifdef MODULE
-	unsigned int key;
-
-	key = ((struct NCR_ESP *)instance->hostdata)->slot;
+	unsigned long address = (unsigned long)((struct NCR_ESP *)instance->hostdata)->edev;
 	esp_release();
-	zorro_unconfig_board(key, 0);
+	release_mem_region(address, sizeof(struct ESP_regs));
 	free_irq(IRQ_AMIGA_PORTS, esp_intr);
 	unregister_reboot_notifier(&oktagon_notifier);
 #endif

@@ -436,6 +436,7 @@ static struct pci_dev * __init isapnp_parse_device(struct pci_bus *card, int siz
 	dev = isapnp_alloc(sizeof(struct pci_dev));
 	if (!dev)
 		return NULL;
+	dev->dma_mask = 0x00ffffff;
 	dev->devfn = number;
 	dev->vendor = (tmp[1] << 8) | tmp[0];
 	dev->device = (tmp[3] << 8) | tmp[2];

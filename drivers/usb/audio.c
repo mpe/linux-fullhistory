@@ -3129,10 +3129,12 @@ static void usb_audio_processingunit(struct consmixstate *state, unsigned char *
 
 static void usb_audio_featureunit(struct consmixstate *state, unsigned char *ftr)
 {
-	struct usb_device *dev = state->s->usbdev;
 	struct mixerchannel *ch;
 	unsigned short chftr, mchftr;
+#if 0
+	struct usb_device *dev = state->s->usbdev;
 	unsigned char data[1];
+#endif
 
 	usb_audio_recurseunit(state, ftr[4]);
 	if (state->nrchannels == 0) {

@@ -34,10 +34,7 @@ struct udf_inode_info
 	long i_umtime;
 	long i_uctime;
 	/* Physical address of inode */
-	lb_addr i_ext0Location;	/* partition relative */
 	lb_addr i_location;
-	__u32 i_ext0Length;  	/* in blocks */
-	__u32 i_ext0Offset;	/* for short directories */
 	__u64 i_unique;
 	__u32 i_lenEAttr;
 	__u32 i_lenAlloc;

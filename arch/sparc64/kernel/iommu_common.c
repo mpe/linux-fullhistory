@@ -59,7 +59,6 @@ int verify_one_map(struct scatterlist *dma_sg, struct scatterlist **__sg, int ne
 {
 	struct scatterlist *sg = *__sg;
 	iopte_t *iopte = *__iopte;
-	int retval = 0;
 	u32 dlen = dma_sg->dvma_length;
 	u32 daddr = dma_sg->dvma_address;
 	unsigned int sglen;
@@ -75,7 +74,7 @@ int verify_one_map(struct scatterlist *dma_sg, struct scatterlist **__sg, int ne
 			printk("verify_one_map: Wrong start offset "
 			       "sg[%08lx] dma[%08x]\n",
 			       sgaddr, daddr);
-			retval = -nents;
+			nents = -1;
 			goto out;
 		}
 
@@ -85,7 +84,7 @@ int verify_one_map(struct scatterlist *dma_sg, struct scatterlist **__sg, int ne
 			printk("verify_one_map: IOPTE[%08lx] maps the "
 			       "wrong page, should be [%08lx]\n",
 			       iopte_val(*iopte), (sgaddr & PAGE_MASK) - PAGE_OFFSET);
-			retval = -nents;
+			nents = -1;
 			goto out;
 		}
 
@@ -114,6 +113,8 @@ int verify_one_map(struct scatterlist *dma_sg, struct scatterlist **__sg, int ne
 			iopte++;
 
 		sg++;
+		if (--nents <= 0)
+			break;
 		sgaddr = (unsigned long) sg->address;
 		sglen = sg->length;
 	}
@@ -121,7 +122,7 @@ int verify_one_map(struct scatterlist *dma_sg, struct scatterlist **__sg, int ne
 		/* Transfer overrun, big problems. */
 		printk("verify_one_map: Transfer overrun by %d bytes.\n",
 		       -dlen);
-		retval = -nents;
+		nents = -1;
 	} else {
 		/* Advance to next dma_sg implies that the next iopte will
 		 * begin it.
@@ -132,7 +133,7 @@ int verify_one_map(struct scatterlist *dma_sg, struct scatterlist **__sg, int ne
 out:
 	*__sg = sg;
 	*__iopte = iopte;
-	return retval;
+	return nents;
 }
 
 int verify_maps(struct scatterlist *sg, int nents, iopte_t *iopte)

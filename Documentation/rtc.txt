@@ -22,8 +22,8 @@ character device) in the form of an unsigned long. The low byte contains
 the type of interrupt (update-done, alarm-rang, or periodic) that was
 raised, and the remaining bytes contain the number of interrupts since
 the last read.  Status information is reported through the pseudo-file
-/proc/rtc if the /proc filesystem was enabled. The driver has built in
-locking so that only one process is allowed to have the /dev/rtc
+/proc/driver/rtc if the /proc filesystem was enabled.  The driver has
+built in locking so that only one process is allowed to have the /dev/rtc
 interface open at a time.
 
 A user process can monitor these interrupts by doing a read(2) or a

@@ -175,7 +175,7 @@ int __init a3000_detect(Scsi_Host_Template *tpnt)
     tpnt->proc_info = &wd33c93_proc_info;
 
     a3000_host = scsi_register (tpnt, sizeof(struct WD33C93_hostdata));
-    a3000_host->base = (unsigned char *)ZTWO_VADDR(0xDD0000);
+    a3000_host->base = ZTWO_VADDR(0xDD0000);
     a3000_host->irq = IRQ_AMIGA_PORTS;
     DMA(a3000_host)->DAWR = DAWR_A3000;
     wd33c93_init(a3000_host, (wd33c93_regs *)&(DMA(a3000_host)->SASR),

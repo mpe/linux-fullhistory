@@ -111,7 +111,6 @@ struct usbdevfs_urb {
 
 #ifdef __KERNEL__
 
-#include <linux/config.h>
 #include <linux/list.h>
 #include <asm/semaphore.h>
 

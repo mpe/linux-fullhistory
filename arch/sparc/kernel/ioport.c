@@ -289,7 +289,7 @@ void sbus_set_sbus64(struct sbus_dev *sdev, int x) {
  *
  * XXX Some clever people know that sdev is not used and supply NULL. Watch.
  */
-void *sbus_alloc_consistant(struct sbus_dev *sdev, long len, u32 *dma_addrp)
+void *sbus_alloc_consistent(struct sbus_dev *sdev, long len, u32 *dma_addrp)
 {
 	unsigned long len_total = (len + PAGE_SIZE-1) & PAGE_MASK;
 	unsigned long va;
@@ -313,20 +313,20 @@ void *sbus_alloc_consistant(struct sbus_dev *sdev, long len, u32 *dma_addrp)
 		/*
 		 * printk here may be flooding... Consider removal XXX.
 		 */
-		printk("sbus_alloc_consistant: no %ld pages\n", len_total>>PAGE_SHIFT);
+		printk("sbus_alloc_consistent: no %ld pages\n", len_total>>PAGE_SHIFT);
 		return NULL;
 	}
 
 	if ((res = kmalloc(sizeof(struct resource), GFP_KERNEL)) == NULL) {
 		free_pages(va, order);
-		printk("sbus_alloc_consistant: no core\n");
+		printk("sbus_alloc_consistent: no core\n");
 		return NULL;
 	}
 	memset((char*)res, 0, sizeof(struct resource));
 
 	if (allocate_resource(&sparc_dvma, res, len_total,
 	    sparc_dvma.start, sparc_dvma.end, PAGE_SIZE, NULL, NULL) != 0) {
-		printk("sbus_alloc_consistant: cannot occupy 0x%lx", len_total);
+		printk("sbus_alloc_consistent: cannot occupy 0x%lx", len_total);
 		free_pages(va, order);
 		kfree(res);
 		return NULL;
@@ -346,7 +346,7 @@ void *sbus_alloc_consistant(struct sbus_dev *sdev, long len, u32 *dma_addrp)
 	return (void *)res->start;
 }
 
-void sbus_free_consistant(struct sbus_dev *sdev, long n, void *p, u32 ba)
+void sbus_free_consistent(struct sbus_dev *sdev, long n, void *p, u32 ba)
 {
 	struct resource *res;
 	unsigned long pgp;
@@ -354,18 +354,18 @@ void sbus_free_consistant(struct sbus_dev *sdev, long n, void *p, u32 ba)
 
 	if ((res = sparc_find_resource_bystart(&sparc_dvma,
 	    (unsigned long)p)) == NULL) {
-		printk("sbus_free_consistant: cannot free %p\n", p);
+		printk("sbus_free_consistent: cannot free %p\n", p);
 		return;
 	}
 
 	if (((unsigned long)p & (PAGE_MASK-1)) != 0) {
-		printk("sbus_free_consistant: unaligned va %p\n", p);
+		printk("sbus_free_consistent: unaligned va %p\n", p);
 		return;
 	}
 
 	n = (n + PAGE_SIZE-1) & PAGE_MASK;
 	if ((res->end-res->start)+1 != n) {
-		printk("sbus_free_consistant: region 0x%lx asked 0x%lx\n",
+		printk("sbus_free_consistent: region 0x%lx asked 0x%lx\n",
 		    (long)((res->end-res->start)+1), n);
 		return;
 	}
@@ -390,7 +390,7 @@ void sbus_free_consistant(struct sbus_dev *sdev, long n, void *p, u32 ba)
  */
 u32 sbus_map_single(struct sbus_dev *sdev, void *va, long len)
 {
-#if 0 /* This is the version that abuses consistant space */
+#if 0 /* This is the version that abuses consistent space */
 	unsigned long len_total = (len + PAGE_SIZE-1) & PAGE_MASK;
 	struct resource *res;
 
@@ -438,7 +438,7 @@ u32 sbus_map_single(struct sbus_dev *sdev, void *va, long len)
 
 void sbus_unmap_single(struct sbus_dev *sdev, u32 ba, long n)
 {
-#if 0 /* This is the version that abuses consistant space */
+#if 0 /* This is the version that abuses consistent space */
 	struct resource *res;
 	unsigned long va;
 

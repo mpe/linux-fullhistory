@@ -11,6 +11,7 @@
 	$(CC) -D__ASSEMBLY__ $(AFLAGS) -traditional -Wa,-m68020 -c $< -o $*.o
 
 O_TARGET := sun3.o 
-O_OBJS   := config.o idprom.o mmu_emu.o sun3ints.o leds.o dvma.o sbus.o
+O_OBJS   := config.o idprom.o mmu_emu.o sun3ints.o leds.o dvma.o sbus.o intersil.o
+OX_OBJS  := sun3_ksyms.o
 
 include $(TOPDIR)/Rules.make

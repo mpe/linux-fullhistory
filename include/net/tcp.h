@@ -975,7 +975,7 @@ static __inline__ __u32 tcp_init_cwnd(struct tcp_opt *tp)
 {
 	__u32 cwnd;
 
-	if (!tp->srtt || tp->srtt > (HZ/50) || tp->mss_cache > 1460)
+	if (!tp->srtt || tp->srtt > ((HZ/50)<<3) || tp->mss_cache > 1460)
 		cwnd = 2;
 	else if (tp->mss_cache > 1095)
 		cwnd = 3;

@@ -781,7 +781,7 @@ static int __init qpti_map_queues(struct qlogicpti *qpti)
 	struct sbus_dev *sdev = qpti->sdev;
 
 #define QSIZE(entries)	(((entries) + 1) * QUEUE_ENTRY_LEN)
-	qpti->res_cpu = sbus_alloc_consistant(sdev,
+	qpti->res_cpu = sbus_alloc_consistent(sdev,
 					      QSIZE(RES_QUEUE_LEN),
 					      &qpti->res_dvma);
 	if (qpti->res_cpu == NULL ||
@@ -790,12 +790,12 @@ static int __init qpti_map_queues(struct qlogicpti *qpti)
 		return -1;
 	}
 
-	qpti->req_cpu = sbus_alloc_consistant(sdev,
+	qpti->req_cpu = sbus_alloc_consistent(sdev,
 					      QSIZE(QLOGICPTI_REQ_QUEUE_LEN),
 					      &qpti->req_dvma);
 	if (qpti->req_cpu == NULL ||
 	    qpti->req_dvma == 0) {
-		sbus_free_consistant(sdev, QSIZE(RES_QUEUE_LEN),
+		sbus_free_consistent(sdev, QSIZE(RES_QUEUE_LEN),
 				     qpti->res_cpu, qpti->res_dvma);
 		printk("QPTI: Cannot map request queue.\n");
 		return -1;
@@ -917,10 +917,10 @@ int __init qlogicpti_detect(Scsi_Host_Template *tpnt)
 
 		fail_unmap_queues:
 #define QSIZE(entries)	(((entries) + 1) * QUEUE_ENTRY_LEN)
-			sbus_free_consistant(qpti->sdev,
+			sbus_free_consistent(qpti->sdev,
 					     QSIZE(RES_QUEUE_LEN),
 					     qpti->res_cpu, qpti->res_dvma);
-			sbus_free_consistant(qpti->sdev,
+			sbus_free_consistent(qpti->sdev,
 					     QSIZE(QLOGICPTI_REQ_QUEUE_LEN),
 					     qpti->req_cpu, qpti->req_dvma);
 #undef QSIZE
@@ -958,10 +958,10 @@ int qlogicpti_release(struct Scsi_Host *host)
 	free_irq(qpti->irq, qpti);
 
 #define QSIZE(entries)	(((entries) + 1) * QUEUE_ENTRY_LEN)
-	sbus_free_consistant(qpti->sdev,
+	sbus_free_consistent(qpti->sdev,
 			     QSIZE(RES_QUEUE_LEN),
 			     qpti->res_cpu, qpti->res_dvma);
-	sbus_free_consistant(qpti->sdev,
+	sbus_free_consistent(qpti->sdev,
 			     QSIZE(QLOGICPTI_REQ_QUEUE_LEN),
 			     qpti->req_cpu, qpti->req_dvma);
 #undef QSIZE
@@ -1046,8 +1046,8 @@ static inline int load_cmd(Scsi_Cmnd *Cmnd, struct Command_Entry *cmd,
 		if (n > 4)
 			n = 4;
 		for (i = 0; i < n; i++, sg++) {
-			ds[i].d_base = sg->dvma_address;
-			ds[i].d_count = sg->dvma_length;
+			ds[i].d_base = sg_dma_address(sg);
+			ds[i].d_count = sg_dma_len(sg);
 		}
 		sg_count -= 4;
 		while (sg_count > 0) {
@@ -1069,8 +1069,8 @@ static inline int load_cmd(Scsi_Cmnd *Cmnd, struct Command_Entry *cmd,
 			if (n > 7)
 				n = 7;
 			for (i = 0; i < n; i++, sg++) {
-				ds[i].d_base = sg->dvma_address;
-				ds[i].d_count = sg->dvma_length;
+				ds[i].d_base = sg_dma_address(sg);
+				ds[i].d_count = sg_dma_len(sg);
 			}
 			sg_count -= n;
 		}

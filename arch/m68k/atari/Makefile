@@ -12,4 +12,10 @@ O_OBJS	 := config.o time.o debug.o atakeyb.o ataints.o stdma.o atasound.o \
             joystick.o stram.o
 OX_OBJS  := atari_ksyms.o
 
+ifdef CONFIG_PCI
+ifdef CONFIG_HADES
+O_OBJS += hades-pci.o
+endif
+endif
+
 include $(TOPDIR)/Rules.make

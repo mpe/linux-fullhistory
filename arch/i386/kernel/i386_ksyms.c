@@ -9,6 +9,7 @@
 #include <linux/interrupt.h>
 #include <linux/smp_lock.h>
 #include <linux/acpi.h>
+#include <linux/pci.h>
 
 #include <asm/semaphore.h>
 #include <asm/processor.h>
@@ -85,6 +86,9 @@ EXPORT_SYMBOL(__clear_user);
 EXPORT_SYMBOL(__generic_copy_from_user);
 EXPORT_SYMBOL(__generic_copy_to_user);
 EXPORT_SYMBOL(strnlen_user);
+
+EXPORT_SYMBOL(pci_alloc_consistent);
+EXPORT_SYMBOL(pci_free_consistent);
 
 #ifdef CONFIG_X86_USE_3DNOW
 EXPORT_SYMBOL(_mmx_memcpy);

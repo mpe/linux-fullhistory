@@ -101,9 +101,9 @@ sbus_is_slave(struct sbus_dev *dev)
 #define sbus_can_burst64(sdev)		(1)
 extern void sbus_set_sbus64(struct sbus_dev *, int);
 
-/* These yield IOMMU mappings in consistant mode. */
-extern void *sbus_alloc_consistant(struct sbus_dev *, long, u32 *dma_addrp);
-extern void sbus_free_consistant(struct sbus_dev *, long, void *, u32);
+/* These yield IOMMU mappings in consistent mode. */
+extern void *sbus_alloc_consistent(struct sbus_dev *, long, u32 *dma_addrp);
+extern void sbus_free_consistent(struct sbus_dev *, long, void *, u32);
 
 /* All the rest use streaming mode mappings. */
 extern u32 sbus_map_single(struct sbus_dev *, void *, long);

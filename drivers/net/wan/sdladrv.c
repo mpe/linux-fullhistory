@@ -4,17 +4,18 @@
 *		This module is a library of common hardware-specific functions
 *		used by all Sangoma drivers.
 *
-* Author:	Gene Kozin	<genek@compuserve.com>
-* Fixes:	Arnaldo Carvalho de Melo <acme@conectiva.com.br>
+* Author:	Gideon Hack	
 *
-* Copyright:	(c) 1995-1996 Sangoma Technologies Inc.
+* Copyright:	(c) 1995-1999 Sangoma Technologies Inc.
 *
 *		This program is free software; you can redistribute it and/or
 *		modify it under the terms of the GNU General Public License
 *		as published by the Free Software Foundation; either version
 *		2 of the License, or (at your option) any later version.
 * ============================================================================
-* May 19, 1999	Arnaldo Melo	wanpipe_init belongs to sdlamain.c
+* Jun 02, 1999  Gideon Hack     Added support for the S514 adapter.
+*				Updates for Linux 2.2.X kernels.	
+* Sep 17, 1998	Jaspreet Singh	Updates for linux 2.2.X kernels
 * Dec 20, 1996	Gene Kozin	Version 3.0.0. Complete overhaul.
 * Jul 12, 1996	Gene Kozin	Changes for Linux 2.0 compatibility.
 * Jun 12, 1996	Gene Kozin 	Added support for S503 card.
@@ -83,6 +84,7 @@
 
 #if	defined(_LINUX_)	/****** Linux *******************************/
 
+#include <linux/version.h>
 #include <linux/kernel.h>	/* printk(), and other useful stuff */
 #include <linux/stddef.h>	/* offsetof(), etc. */
 #include <linux/errno.h>	/* return codes */
@@ -91,12 +93,18 @@
 #include <linux/sched.h>	/* for jiffies, HZ, etc. */
 #include <linux/sdladrv.h>	/* API definitions */
 #include <linux/sdlasfm.h>	/* SDLA firmware module definitions */
+#include <linux/sdlapci.h>	/* SDLA PCI hardware definitions */
+#include <linux/pci.h>		/* PCI defines and function prototypes */
 #include <asm/io.h>		/* for inb(), outb(), etc. */
+
 #define _INB(port)		(inb(port))
 #define _OUTB(port, byte)	(outb((byte),(port)))
 #define	SYSTEM_TICK		jiffies
 
+#include <linux/init.h>
+
 #elif	defined(_SCO_UNIX_)	/****** SCO Unix ****************************/
+
 #if	!defined(INKERNEL)
 #error	This code MUST be compiled in kernel mode!
 #endif
@@ -136,6 +144,11 @@
 #define S503_MINMEM	0x8000L
 #define S507_MINMEM	0x20000L
 #define S508_MINMEM	0x20000L
+#define NO_PORT         -1
+
+
+
+
 
 /****** Function Prototypes *************************************************/
 
@@ -159,14 +172,18 @@ static int init_s502e	(sdlahw_t* hw);
 static int init_s503	(sdlahw_t* hw);
 static int init_s507	(sdlahw_t* hw);
 static int init_s508	(sdlahw_t* hw);
-
+            
 static int detect_s502a	(int port);
 static int detect_s502e	(int port);
 static int detect_s503	(int port);
 static int detect_s507	(int port);
 static int detect_s508	(int port);
+static int detect_s514  (sdlahw_t* hw);
+static int find_s514_adapter(sdlahw_t* hw, char find_first_S514_card);
 
 /* Miscellaneous functions */
+static void peek_by_4 (unsigned long src, void* buf, unsigned len);
+static void poke_by_4 (unsigned long dest, void* buf, unsigned len);
 static int calibrate_delay (int mks);
 static int get_option_index (unsigned* optlist, unsigned optval);
 static unsigned check_memregion (void* ptr, unsigned len);
@@ -180,7 +197,7 @@ static unsigned short checksum (unsigned char* buf, unsigned len);
 /* private data */
 static char modname[]	= "sdladrv";
 static char fullname[]	= "SDLA Support Module";
-static char copyright[]	= "(c) 1995-1996 Sangoma Technologies Inc.";
+static char copyright[]	= "(c) 1995-1999 Sangoma Technologies Inc.";
 static unsigned	exec_idle;
 
 /* Hardware configuration options.
@@ -289,6 +306,9 @@ static unsigned char s507_irqmask[] =
 
 #ifdef MODULE
 int init_module (void)
+#else
+__initfunc(int wanpipe_init(void))
+#endif
 {
 	printk(KERN_INFO "%s v%u.%u %s\n",
 		fullname, MOD_VERSION, MOD_RELEASE, copyright);
@@ -299,6 +319,7 @@ int init_module (void)
 	return 0;
 }
 
+#ifdef MODULE
 /*============================================================================
  * Module 'remove' entry point.
  * o release all remaining system resources
@@ -321,7 +342,7 @@ void cleanup_module (void)
  * Return:	0	ok.
  *		< 0	error
  */
- 
+
 EXPORT_SYMBOL(sdla_setup);
 
 int sdla_setup (sdlahw_t* hw, void* sfm, unsigned len)
@@ -329,118 +350,123 @@ int sdla_setup (sdlahw_t* hw, void* sfm, unsigned len)
 	unsigned* irq_opt	= NULL;	/* IRQ options */
 	unsigned* dpmbase_opt	= NULL;	/* DPM window base options */
 	unsigned* pclk_opt	= NULL;	/* CPU clock rate options */
-	int err;
+	int err=0;
 
-	if (sdla_detect(hw))
-	{
-		printk(KERN_ERR "%s: adapter S%04u not found at port 0x%X!\n",
-			modname, hw->type, hw->port)
-		;
+	if (sdla_detect(hw)) {
+                if(hw->type != SDLA_S514)
+                        printk(KERN_ERR "%s: no SDLA card found at port 0x%X\n",
+                        modname, hw->port);
 		return -EINVAL;
 	}
-	printk(KERN_INFO "%s: found S%04u card at port 0x%X.\n",
-		modname, hw->type, hw->port)
-	;
 
-	hw->dpmsize = SDLA_WINDOWSIZE;
-	switch (hw->type)
-	{
-	case SDLA_S502A:
-		hw->io_range	= S502A_IORANGE;
-		irq_opt		= s502a_irq_options;
-		dpmbase_opt	= s502a_dpmbase_options;
-		pclk_opt	= s502a_pclk_options;
-		break;
+	if(hw->type != SDLA_S514) {
+                printk(KERN_INFO "%s: found S%04u card at port 0x%X.\n",
+                modname, hw->type, hw->port);
 
-	case SDLA_S502E:
-		hw->io_range	= S502E_IORANGE;
-		irq_opt		= s502e_irq_options;
-		dpmbase_opt	= s508_dpmbase_options;
-		pclk_opt	= s502e_pclk_options;
-		break;
+                hw->dpmsize = SDLA_WINDOWSIZE;
+                switch (hw->type) {
+                case SDLA_S502A:
+                        hw->io_range    = S502A_IORANGE;
+                        irq_opt         = s502a_irq_options;
+                        dpmbase_opt     = s502a_dpmbase_options;
+                        pclk_opt        = s502a_pclk_options;
+                        break;
 
-	case SDLA_S503:
-		hw->io_range	= S503_IORANGE;
-		irq_opt		= s503_irq_options;
-		dpmbase_opt	= s508_dpmbase_options;
-		pclk_opt	= s503_pclk_options;
-		break;
+                case SDLA_S502E:
+                        hw->io_range    = S502E_IORANGE;
+                        irq_opt         = s502e_irq_options;
+                        dpmbase_opt     = s508_dpmbase_options;
+                        pclk_opt        = s502e_pclk_options;
+                        break;
 
-	case SDLA_S507:
-		hw->io_range	= S507_IORANGE;
-		irq_opt		= s508_irq_options;
-		dpmbase_opt	= s507_dpmbase_options;
-		pclk_opt	= s507_pclk_options;
-		break;
+                case SDLA_S503:
+                        hw->io_range    = S503_IORANGE;
+                        irq_opt         = s503_irq_options;
+                        dpmbase_opt     = s508_dpmbase_options;
+                        pclk_opt        = s503_pclk_options;
+                        break;
 
-	case SDLA_S508:
-		hw->io_range	= S508_IORANGE;
-		irq_opt		= s508_irq_options;
-		dpmbase_opt	= s508_dpmbase_options;
-		pclk_opt	= s508_pclk_options;
-		break;
-	}
+                case SDLA_S507:
+                        hw->io_range    = S507_IORANGE;
+                        irq_opt         = s508_irq_options;
+                        dpmbase_opt     = s507_dpmbase_options;
+                        pclk_opt        = s507_pclk_options;
+                        break;
 
-	/* Verify IRQ configuration options */
-	if (!get_option_index(irq_opt, hw->irq))
-	{
-		printk(KERN_ERR "%s: IRQ %d is illegal!\n",
-			modname, hw->irq)
-		;
-		return -EINVAL;
-	} 
+                case SDLA_S508:
+                        hw->io_range    = S508_IORANGE;
+                        irq_opt         = s508_irq_options;
+                        dpmbase_opt     = s508_dpmbase_options;
+                        pclk_opt        = s508_pclk_options;
+                        break;
+                }
 
-	/* Verify CPU clock rate configuration options */
-	if (hw->pclk == 0)
-		hw->pclk = pclk_opt[1]	/* use default */
-	;
-	else if (!get_option_index(pclk_opt, hw->pclk))
-	{
-		printk(KERN_ERR "%s: CPU clock %u is illegal!\n",
-			modname, hw->pclk)
-		;
-		return -EINVAL;
-	} 
-	printk(KERN_INFO "%s: assuming CPU clock rate of %u kHz.\n",
-		modname, hw->pclk)
-	;
+                /* Verify IRQ configuration options */
+                if (!get_option_index(irq_opt, hw->irq)) {
+                        printk(KERN_ERR "%s: IRQ %d is illegal!\n",
+                        	modname, hw->irq);
+                      return -EINVAL;
+                } 
 
-	/* Setup adapter dual-port memory window and test memory */
-	if (hw->dpmbase == 0)
-	{
-		err = sdla_autodpm(hw);
-		if (err)
-		{
-			printk(KERN_ERR
+                /* Verify CPU clock rate configuration options */
+                if (hw->pclk == 0)
+                        hw->pclk = pclk_opt[1];  /* use default */
+        
+                else if (!get_option_index(pclk_opt, hw->pclk)) {
+                        printk(KERN_ERR "%s: CPU clock %u is illegal!\n",
+				modname, hw->pclk);
+                        return -EINVAL;
+                } 
+                printk(KERN_INFO "%s: assuming CPU clock rate of %u kHz.\n",
+			modname, hw->pclk);
+
+                /* Setup adapter dual-port memory window and test memory */
+                if (hw->dpmbase == 0) {
+                        err = sdla_autodpm(hw);
+                        if (err) {
+                                printk(KERN_ERR
 				"%s: can't find available memory region!\n",
-				modname)
-			;
- 			return err;
+					modname);
+                                return err;
+                        }
+                }
+                else if (!get_option_index(dpmbase_opt,
+			virt_to_phys(hw->dpmbase))) {
+                        printk(KERN_ERR
+				"%s: memory address 0x%lX is illegal!\n",
+				modname, virt_to_phys(hw->dpmbase));
+                        return -EINVAL;
+                }               
+                else if (sdla_setdpm(hw)) {
+                        printk(KERN_ERR
+			"%s: 8K memory region at 0x%lX is not available!\n",
+				modname, virt_to_phys(hw->dpmbase));
+                        return -EINVAL;
+                } 
+                printk(KERN_INFO
+			"%s: dual-port memory window is set at 0x%lX.\n",
+				modname, virt_to_phys(hw->dpmbase));
+        }
+
+	else {
+		hw->memory = test_memregion((void*)hw->dpmbase, 
+			MAX_SIZEOF_S514_MEMORY);
+		if(hw->memory < (256 * 1024)) {
+			printk(KERN_ERR
+				"%s: error in testing S514 memory (0x%lX)\n",
+				modname, hw->memory);
+			sdla_down(hw);
+			return -EINVAL;
 		}
 	}
-	else if (!get_option_index(dpmbase_opt, virt_to_phys(hw->dpmbase)))
-	{
-		printk(KERN_ERR "%s: memory address 0x%lX is illegal!\n",
-			modname, virt_to_phys(hw->dpmbase))
-		;
-		return -EINVAL;
-	} 
-	else if (sdla_setdpm(hw))
-	{
-		printk(KERN_ERR
-			"%s: 8K memory region at 0x%lX is not available!\n",
-			modname, virt_to_phys(hw->dpmbase));
-		return -EINVAL;
-	} 
-	printk(KERN_INFO "%s: dual-port memory window is set at 0x%lX.\n",
-		modname, virt_to_phys(hw->dpmbase));
-
-	printk(KERN_INFO "%s: found %luK bytes of on-board memory.\n",
+    
+	printk(KERN_INFO "%s: found %luK bytes of on-board memory\n",
 		modname, hw->memory / 1024);
 
 	/* Load firmware. If loader fails then shut down adapter */
 	err = sdla_load(hw, sfm, len);
 	if (err) sdla_down(hw);		/* shutdown adapter */
+
 	return err;
 } 
 
@@ -454,11 +480,13 @@ int sdla_down (sdlahw_t* hw)
 {
 	unsigned port = hw->port;
 	int i;
+        unsigned char CPU_no;
+        u32 int_config, int_status;
 
-	if (!port) return -EFAULT;
+        if(!port && (hw->type != SDLA_S514))
+                return -EFAULT;
 
-	switch (hw->type)
-	{
+	switch (hw->type) {
 	case SDLA_S502A:
 		_OUTB(port, 0x08);		/* halt CPU */
 		_OUTB(port, 0x08);
@@ -483,6 +511,30 @@ int sdla_down (sdlahw_t* hw)
 		hw->regs[0] = 0;
 		break;
 
+	case SDLA_S514:
+		/* halt the adapter */
+                *(char *)hw->vector = S514_CPU_HALT;
+        	CPU_no = hw->S514_cpu_no[0];
+
+		/* disable the PCI IRQ and disable memory access */
+                pci_read_config_dword(hw->pci_dev, PCI_INT_CONFIG, &int_config);
+	        int_config &= (CPU_no == S514_CPU_A) ? ~PCI_DISABLE_IRQ_CPU_A : 			~PCI_DISABLE_IRQ_CPU_B;
+                pci_write_config_dword(hw->pci_dev, PCI_INT_CONFIG, int_config);
+		read_S514_int_stat(hw, &int_status);
+		S514_intack(hw, int_status);
+		if(CPU_no == S514_CPU_A)
+                        pci_write_config_dword(hw->pci_dev, PCI_MAP0_DWORD,
+				PCI_CPU_A_MEM_DISABLE);
+		else
+                        pci_write_config_dword(hw->pci_dev, PCI_MAP1_DWORD,
+				PCI_CPU_B_MEM_DISABLE);
+
+		/* free up the allocated virtual memory */
+ 		iounmap((void *)hw->dpmbase);
+        	iounmap((void *)hw->vector);
+ 		break;
+
+
 	default:
 		return -EINVAL;
 	}
@@ -500,12 +552,10 @@ int sdla_mapmem (sdlahw_t* hw, unsigned long addr)
 	unsigned port = hw->port;
 	register int tmp;
 
-	switch (hw->type)
-	{
+	switch (hw->type) {
 	case SDLA_S502A:
 	case SDLA_S502E:
-		if (addr < S502_MAXMEM)	/* verify parameter */
-		{
+		if (addr < S502_MAXMEM)	{ /* verify parameter */
 			tmp = addr >> 13;	/* convert to register mask */
 			_OUTB(port + 2, tmp);
 			hw->regs[2] = tmp;
@@ -514,8 +564,7 @@ int sdla_mapmem (sdlahw_t* hw, unsigned long addr)
 		break;
 
 	case SDLA_S503:
-		if (addr < S503_MAXMEM)	/* verify parameter */
-		{
+		if (addr < S503_MAXMEM)	{ /* verify parameter */
 			tmp = (hw->regs[0] & 0x8F) | ((addr >> 9) & 0x70);
 			_OUTB(port, tmp);
 			hw->regs[0] = tmp;
@@ -524,11 +573,9 @@ int sdla_mapmem (sdlahw_t* hw, unsigned long addr)
 		break;
 
 	case SDLA_S507:
-		if (addr < S507_MAXMEM)
-		{
+		if (addr < S507_MAXMEM) {
 			if (!(_INB(port) & 0x02))
-				return -EIO
-			;
+				return -EIO;
 			tmp = addr >> 13;	/* convert to register mask */
 			_OUTB(port + 2, tmp);
 			hw->regs[2] = tmp;
@@ -537,8 +584,7 @@ int sdla_mapmem (sdlahw_t* hw, unsigned long addr)
 		break;
 
 	case SDLA_S508:
-		if (addr < S508_MAXMEM)
-		{
+		if (addr < S508_MAXMEM) {
 			tmp = addr >> 13;	/* convert to register mask */
 			_OUTB(port + 2, tmp);
 			hw->regs[2] = tmp;
@@ -546,7 +592,10 @@ int sdla_mapmem (sdlahw_t* hw, unsigned long addr)
 		else return -EINVAL;
 		break;
 
-	default:
+	case SDLA_S514:
+		return 0;
+
+ 	default:
 		return -EINVAL;
 	}
 	hw->vector = addr & 0xFFFFE000L;
@@ -556,7 +605,7 @@ int sdla_mapmem (sdlahw_t* hw, unsigned long addr)
 /*============================================================================
  * Enable interrupt generation.
  */
- 
+
 EXPORT_SYMBOL(sdla_inten);
 
 int sdla_inten (sdlahw_t* hw)
@@ -564,14 +613,12 @@ int sdla_inten (sdlahw_t* hw)
 	unsigned port = hw->port;
 	int tmp, i;
 
-	switch (hw->type)
-	{
+	switch (hw->type) {
 	case SDLA_S502E:
 		/* Note thar interrupt control operations on S502E are allowed
 		 * only if CPU is enabled (bit 0 of status register is set).
 		 */
-		if (_INB(port) & 0x01)
-		{
+		if (_INB(port) & 0x01) {
 			_OUTB(port, 0x02);	/* bit1 = 1, bit2 = 0 */
 			_OUTB(port, 0x06);	/* bit1 = 1, bit2 = 1 */
 			hw->regs[0] = 0x06;
@@ -585,8 +632,7 @@ int sdla_inten (sdlahw_t* hw)
 		hw->regs[0] = tmp;		/* update mirror */
 		for (i = 0; i < SDLA_IODELAY; ++i);	/* delay */
 		if (!(_INB(port) & 0x02))		/* verify */
-			return -EIO
-		;
+			return -EIO;
 		break;
 
 	case SDLA_S508:
@@ -595,13 +641,15 @@ int sdla_inten (sdlahw_t* hw)
 		hw->regs[0] = tmp;		/* update mirror */
 		for (i = 0; i < SDLA_IODELAY; ++i);	/* delay */
 		if (!(_INB(port + 1) & 0x10))		/* verify */
-			return -EIO
-		;
+			return -EIO;
 		break;
 
 	case SDLA_S502A:
 	case SDLA_S507:
 		break;
+
+        case SDLA_S514:
+                break;
 
 	default:
 		return -EINVAL;
@@ -621,8 +669,7 @@ int sdla_intde (sdlahw_t* hw)
 	unsigned port = hw->port;
 	int tmp, i;
 
-	switch (hw->type)
-	{
+	switch (hw->type) {
 	case SDLA_S502E:
 		/* Notes:
 		 *  1) interrupt control operations are allowed only if CPU is
@@ -631,8 +678,7 @@ int sdla_intde (sdlahw_t* hw)
 		 *     causes IRQ line go high, therefore we are going to use
 		 *     0x04 instead: lower it to inhibit interrupts to PC.
 		 */
-		if (_INB(port) & 0x01)
-		{
+		if (_INB(port) & 0x01) {
 			_OUTB(port, hw->regs[0] & ~0x04);
 			hw->regs[0] &= ~0x04;
 		}
@@ -645,8 +691,7 @@ int sdla_intde (sdlahw_t* hw)
 		hw->regs[0] = tmp;			/* update mirror */
 		for (i = 0; i < SDLA_IODELAY; ++i);	/* delay */
 		if (_INB(port) & 0x02)			/* verify */
-			return -EIO
-		;
+			return -EIO;
 		break;
 
 	case SDLA_S508:
@@ -655,8 +700,7 @@ int sdla_intde (sdlahw_t* hw)
 		hw->regs[0] = tmp;			/* update mirror */
 		for (i = 0; i < SDLA_IODELAY; ++i);	/* delay */
 		if (_INB(port) & 0x10)			/* verify */
-			return -EIO
-		;
+			return -EIO;
 		break;
 
 	case SDLA_S502A:
@@ -680,16 +724,14 @@ int sdla_intack (sdlahw_t* hw)
 	unsigned port = hw->port;
 	int tmp;
 
-	switch (hw->type)
-	{
+	switch (hw->type) {
 	case SDLA_S502E:
 		/* To acknoledge hardware interrupt we have to toggle bit 3 of
 		 * control register: \_/
 		 * Note that interrupt control operations on S502E are allowed
 		 * only if CPU is enabled (bit 1 of status register is set).
 		 */
-		if (_INB(port) & 0x01)
-		{
+		if (_INB(port) & 0x01) {
 			tmp = hw->regs[0] & ~0x04;
 			_OUTB(port, tmp);
 			tmp |= 0x04;
@@ -700,8 +742,7 @@ int sdla_intack (sdlahw_t* hw)
 		break;
 
 	case SDLA_S503:
-		if (_INB(port) & 0x04)
-		{
+		if (_INB(port) & 0x04) {
 			tmp = hw->regs[0] & ~0x08;
 			_OUTB(port, tmp);
 			tmp |= 0x08;
@@ -721,6 +762,31 @@ int sdla_intack (sdlahw_t* hw)
 	return 0;
 }
 
+
+/*============================================================================
+ * Acknowledge S514 hardware interrupt.
+ */
+
+EXPORT_SYMBOL(S514_intack);
+
+void S514_intack (sdlahw_t* hw, u32 int_status)
+{
+        pci_write_config_dword(hw->pci_dev, PCI_INT_STATUS, int_status);
+}
+
+
+/*============================================================================
+ * Read the S514 hardware interrupt status.
+ */
+
+EXPORT_SYMBOL(read_S514_int_stat);
+
+void read_S514_int_stat (sdlahw_t* hw, u32* int_status)
+{
+	pci_read_config_dword(hw->pci_dev, PCI_INT_STATUS, int_status);
+}
+
+
 /*============================================================================
  * Generate an interrupt to adapter's CPU.
  */
@@ -731,11 +797,9 @@ int sdla_intr (sdlahw_t* hw)
 {
 	unsigned port = hw->port;
 
-	switch (hw->type)
-	{
+	switch (hw->type) {
 	case SDLA_S502A:
-		if (!(_INB(port) & 0x40))
-		{
+		if (!(_INB(port) & 0x40)) {
 			_OUTB(port, 0x10);		/* issue NMI to CPU */
 			hw->regs[0] = 0x10;
 		}
@@ -743,16 +807,14 @@ int sdla_intr (sdlahw_t* hw)
 		break;
 
 	case SDLA_S507:
-		if ((_INB(port) & 0x06) == 0x06)
-		{
+		if ((_INB(port) & 0x06) == 0x06) {
 			_OUTB(port + 3, 0);
 		}
 		else return -EIO;
 		break;
 
 	case SDLA_S508:
-		if (_INB(port + 1) & 0x02)
-		{
+		if (_INB(port + 1) & 0x02) {
 			_OUTB(port, 0x08);
 		}
 		else return -EIO;
@@ -781,14 +843,19 @@ int sdla_exec (void* opflag)
 	unsigned long tstop;
 	int nloops;
 
-	if (*flag) return 0;	/* ???? */
+	if(readb(flag) != 0x00) {
+		printk(KERN_INFO
+			"WANPIPE: opp flag set on entry to sdla_exec\n");
+		return 0;
+	}
+	
+	writeb(0x01, flag);
 
-	*flag = 1;
 	tstop = SYSTEM_TICK + EXEC_TIMEOUT;
-	for (nloops = 1; *flag; ++nloops)
-	{
+
+	for (nloops = 1; (readb(flag) == 0x01); ++ nloops) {
 		unsigned delay = exec_idle;
-		while (--delay);			/* delay */
+		while (-- delay);			/* delay */
 		if (SYSTEM_TICK > tstop) return 0;	/* time is up! */
 	}
 	return nloops;
@@ -803,38 +870,78 @@ int sdla_exec (void* opflag)
  * This function is not atomic, so caller must disable interrupt if
  * interrupt routines are accessing adapter shared memory.
  */
- 
+
 EXPORT_SYMBOL(sdla_peek);
 
 int sdla_peek (sdlahw_t* hw, unsigned long addr, void* buf, unsigned len)
 {
-	unsigned long oldvec = hw->vector;
-	unsigned winsize = hw->dpmsize;
-	unsigned curpos, curlen;	/* current offset and block size */
-	unsigned long curvec;		/* current DPM window vector */
-	int err = 0;
 
 	if (addr + len > hw->memory)	/* verify arguments */
-		return -EINVAL
-	;
-	while (len && !err)
-	{
-		curpos = addr % winsize;	/* current window offset */
-		curvec = addr - curpos;		/* current window vector */
-		curlen = (len > (winsize - curpos)) ? (winsize - curpos) : len;
+		return -EINVAL;
 
-		/* Relocate window and copy block of data */
-		err = sdla_mapmem(hw, curvec);
-		memcpy(buf, (void *)((u8 *)hw->dpmbase + curpos), curlen);
-		addr       += curlen;
-		(char*)buf += curlen;
-		len        -= curlen;
+        if(hw->type == SDLA_S514) {	/* copy data for the S514 adapter */
+                peek_by_4 ((unsigned long)hw->dpmbase + addr, buf, len);
+                return 0;
 	}
 
-	/* Restore DPM window position */
-	sdla_mapmem(hw, oldvec);
-	return err;
+        else {				/* copy data for the S508 adapter */
+	        unsigned long oldvec = hw->vector;
+        	unsigned winsize = hw->dpmsize;
+	        unsigned curpos, curlen;   /* current offset and block size */
+        	unsigned long curvec;      /* current DPM window vector */
+	        int err = 0;
+
+                while (len && !err) {
+                        curpos = addr % winsize;  /* current window offset */
+                        curvec = addr - curpos;   /* current window vector */
+                        curlen = (len > (winsize - curpos)) ?
+				(winsize - curpos) : len;
+                        /* Relocate window and copy block of data */
+                        err = sdla_mapmem(hw, curvec);
+                        peek_by_4 ((unsigned long)hw->dpmbase + curpos, buf,
+				curlen);
+                        addr       += curlen;
+                        (char*)buf += curlen;
+                        len        -= curlen;
+                }
+
+                /* Restore DPM window position */
+                sdla_mapmem(hw, oldvec);
+                return err;
+        }
 }
+
+
+/*============================================================================
+ * Read data from adapter's memory to a data buffer in 4-byte chunks.
+ * Note that we ensure that the SDLA memory address is on a 4-byte boundary
+ * before we begin moving the data in 4-byte chunks.
+*/
+
+static void peek_by_4 (unsigned long src, void* buf, unsigned len)
+{
+
+        /* byte copy data until we get to a 4-byte boundary */
+        while (len && (src & 0x03)) {
+                *(char *)buf ++ = readb(src ++);
+                len --;
+        }
+
+        /* copy data in 4-byte chunks */
+        while (len >= 4) {
+                *(unsigned long *)buf = readl(src);
+                buf += 4;
+                src += 4;
+                len -= 4;
+        }
+
+        /* byte copy any remaining data */
+        while (len) {
+                *(char *)buf ++ = readb(src ++);
+                len --;
+        }
+}
+
 
 /*============================================================================
  * Write Absolute Adapter Memory.
@@ -845,38 +952,78 @@ int sdla_peek (sdlahw_t* hw, unsigned long addr, void* buf, unsigned len)
  * This function is not atomic, so caller must disable interrupt if
  * interrupt routines are accessing adapter shared memory.
  */
- 
+
 EXPORT_SYMBOL(sdla_poke);
  
 int sdla_poke (sdlahw_t* hw, unsigned long addr, void* buf, unsigned len)
 {
-	unsigned long oldvec = hw->vector;
-	unsigned winsize = hw->dpmsize;
-	unsigned curpos, curlen;	/* current offset and block size */
-	unsigned long curvec;		/* current DPM window vector */
-	int err = 0;
 
 	if (addr + len > hw->memory)	/* verify arguments */
-		return -EINVAL
-	;
-	while (len && !err)
-	{
-		curpos = addr % winsize;	/* current window offset */
-		curvec = addr - curpos;		/* current window vector */
-		curlen = (len > (winsize - curpos)) ? (winsize - curpos) : len;
-
-		/* Relocate window and copy block of data */
-		sdla_mapmem(hw, curvec);
-		memcpy((void*)((u8 *)hw->dpmbase + curpos), buf, curlen);
-		addr       += curlen;
-		(char*)buf += curlen;
-		len        -= curlen;
+		return -EINVAL;
+   
+        if(hw->type == SDLA_S514) {	/* copy data for the S514 adapter */
+                poke_by_4 ((unsigned long)hw->dpmbase + addr, buf, len);
+                return 0;
 	}
+	
+	else {				/* copy data for the S508 adapter */
+    		unsigned long oldvec = hw->vector;
+	        unsigned winsize = hw->dpmsize;
+        	unsigned curpos, curlen;     /* current offset and block size */
+        	unsigned long curvec;        /* current DPM window vector */
+        	int err = 0;
 
-	/* Restore DPM window position */
-	sdla_mapmem(hw, oldvec);
-	return err;
+		while (len && !err) {
+                        curpos = addr % winsize;    /* current window offset */
+                        curvec = addr - curpos;     /* current window vector */
+                        curlen = (len > (winsize - curpos)) ?
+				(winsize - curpos) : len;
+                        /* Relocate window and copy block of data */
+                        sdla_mapmem(hw, curvec);
+                        poke_by_4 ((unsigned long)hw->dpmbase + curpos, buf,
+				curlen);
+	                addr       += curlen;
+                        (char*)buf += curlen;
+                        len        -= curlen;
+                }
+
+                /* Restore DPM window position */
+                sdla_mapmem(hw, oldvec);
+                return err;
+        }
 }
+
+
+/*============================================================================
+ * Write from a data buffer to adapter's memory in 4-byte chunks.
+ * Note that we ensure that the SDLA memory address is on a 4-byte boundary
+ * before we begin moving the data in 4-byte chunks.
+*/
+
+static void poke_by_4 (unsigned long dest, void* buf, unsigned len)
+{
+
+        /* byte copy data until we get to a 4-byte boundary */
+        while (len && (dest & 0x03)) {
+                writeb (*(char *)buf ++, dest ++);
+                len --;
+        }
+
+        /* copy data in 4-byte chunks */
+        while (len >= 4) {
+                writel (*(unsigned long *)buf, dest);
+                dest += 4;
+                buf += 4;
+                len -= 4;
+        }
+
+        /* byte copy any remaining data */
+        while (len) {
+                writeb (*(char *)buf ++ , dest ++);
+                len --;
+        }
+}
+
 
 #ifdef	DONT_COMPIPLE_THIS
 #endif	/* DONT_COMPIPLE_THIS */
@@ -898,11 +1045,10 @@ static int sdla_detect (sdlahw_t* hw)
 	unsigned port = hw->port;
 	int err = 0;
 
-	if (!port)
-		return -EFAULT
-	;
-	switch (hw->type)
-	{
+	if (!port && (hw->type != SDLA_S514))
+		return -EFAULT;
+
+    	switch (hw->type) {
 	case SDLA_S502A:
 		if (!detect_s502a(port)) err = -ENODEV;
 		break;
@@ -923,22 +1069,21 @@ static int sdla_detect (sdlahw_t* hw)
 		if (!detect_s508(port)) err = -ENODEV;
 		break;
 
+	case SDLA_S514:
+                if (!detect_s514(hw)) err = -ENODEV;
+		break;
+
 	default:
 		if (detect_s502a(port))
-			hw->type = SDLA_S502A
-		;
+			hw->type = SDLA_S502A;
 		else if (detect_s502e(port))
-			hw->type = SDLA_S502E
-		;
+			hw->type = SDLA_S502E;
 		else if (detect_s503(port))
-			hw->type = SDLA_S503
-		;
+			hw->type = SDLA_S503;
 		else if (detect_s507(port))
-			hw->type = SDLA_S507
-		;
+			hw->type = SDLA_S507;
 		else if (detect_s508(port))
-			hw->type = SDLA_S508
-		;
+			hw->type = SDLA_S508;
 		else err = -ENODEV;
 	}
 	return err;
@@ -953,8 +1098,7 @@ static int sdla_autodpm (sdlahw_t* hw)
 	int i, err = -EINVAL;
 	unsigned* opt;
 
-	switch (hw->type)
-	{
+	switch (hw->type) {
 	case SDLA_S502A:
 		opt = s502a_dpmbase_options;
 		break;
@@ -973,8 +1117,7 @@ static int sdla_autodpm (sdlahw_t* hw)
 		return -EINVAL;
 	}
 
-	for (i = opt[0]; i && err; --i)
-	{
+	for (i = opt[0]; i && err; --i) {
 		hw->dpmbase = phys_to_virt(opt[i]);
 		err = sdla_setdpm(hw);
 	}
@@ -997,8 +1140,7 @@ static int sdla_setdpm (sdlahw_t* hw)
 	/* Shut down card and verify memory region */
 	sdla_down(hw);
 	if (check_memregion(hw->dpmbase, hw->dpmsize))
-		return -EINVAL
-	;
+		return -EINVAL;
 
 	/* Initialize adapter and test on-board memory segment by segment.
 	 * If memory size appears to be less than shared memory window size,
@@ -1007,8 +1149,7 @@ static int sdla_setdpm (sdlahw_t* hw)
 	err = sdla_init(hw);
 	if (err) return err;
 
-	if (sdla_memtest(hw) < hw->dpmsize)	/* less than window size */
-	{
+	if (sdla_memtest(hw) < hw->dpmsize) {	/* less than window size */
 		sdla_down(hw);
 		return -EIO;
 	}
@@ -1023,32 +1164,28 @@ static int sdla_setdpm (sdlahw_t* hw)
  */
 static int sdla_load (sdlahw_t* hw, sfm_t* sfm, unsigned len)
 {
+
 	int i;
 
 	/* Verify firmware signature */
-	if (strcmp(sfm->signature, SFM_SIGNATURE))
-	{
+	if (strcmp(sfm->signature, SFM_SIGNATURE)) {
 		printk(KERN_ERR "%s: not SDLA firmware!\n",
-			modname)
-		;
+			modname);
 		return -EINVAL;
 	}
 
 	/* Verify firmware module format version */
-	if (sfm->version != SFM_VERSION)
-	{
+	if (sfm->version != SFM_VERSION) {
 		printk(KERN_ERR
 			"%s: firmware format %u rejected! Expecting %u.\n",
-			modname, sfm->version, SFM_VERSION)
-		;
+			modname, sfm->version, SFM_VERSION);
 		return -EINVAL;
 	}
 
 	/* Verify firmware module length and checksum */
 	if ((len - offsetof(sfm_t, image) != sfm->info.codesize) ||
 		(checksum((void*)&sfm->info,
-		sizeof(sfm_info_t) + sfm->info.codesize) != sfm->checksum))
-	{
+		sizeof(sfm_info_t) + sfm->info.codesize) != sfm->checksum)) {
 		printk(KERN_ERR "%s: firmware corrupted!\n", modname);
 		return -EINVAL;
 	}
@@ -1056,8 +1193,11 @@ static int sdla_load (sdlahw_t* hw, sfm_t* sfm, unsigned len)
 	/* Announce */
 	printk(KERN_INFO "%s: loading %s (ID=%u)...\n", modname,
 		(sfm->descr[0] != '\0') ? sfm->descr : "unknown firmware",
-		sfm->info.codeid)
-	;
+		sfm->info.codeid);
+
+	if(hw->type == SDLA_S514)
+		printk(KERN_INFO "%s: loading S514 adapter, CPU %c\n",
+			modname, hw->S514_cpu_no[0]);
 
 	/* Scan through the list of compatible adapters and make sure our
 	 * adapter type is listed.
@@ -1066,49 +1206,41 @@ static int sdla_load (sdlahw_t* hw, sfm_t* sfm, unsigned len)
 	     (i < SFM_MAX_SDLA) && (sfm->info.adapter[i] != hw->type);
 	     ++i)
 	;
-	if (i == SFM_MAX_SDLA)
-	{
+	if (i == SFM_MAX_SDLA) {
 		printk(KERN_ERR "%s: firmware is not compatible with S%u!\n",
-			modname, hw->type)
+			modname, hw->type);
 		;
 		return -EINVAL;
 	}
 
+
 	/* Make sure there is enough on-board memory */
-	if (hw->memory < sfm->info.memsize)
-	{
+	if (hw->memory < sfm->info.memsize) {
 		printk(KERN_ERR
 			"%s: firmware needs %lu bytes of on-board memory!\n",
-			modname, sfm->info.memsize)
-		;
+			modname, sfm->info.memsize);
 		return -EINVAL;
 	}
 
 	/* Move code onto adapter */
-	if (sdla_poke(hw, sfm->info.codeoffs, sfm->image, sfm->info.codesize))
-	{
+	if (sdla_poke(hw, sfm->info.codeoffs, sfm->image, sfm->info.codesize)) {
 		printk(KERN_ERR "%s: failed to load code segment!\n",
-			modname)
-		;
+			modname);
 		return -EIO;
 	}
 
 	/* Prepare boot-time configuration data and kick-off CPU */
 	sdla_bootcfg(hw, &sfm->info);
-	if (sdla_start(hw, sfm->info.startoffs))
-	{
+	if (sdla_start(hw, sfm->info.startoffs)) {
 		printk(KERN_ERR "%s: Damn... Adapter won't start!\n",
-			modname)
-		;
+			modname);
 		return -EIO;
 	}
 
 	/* position DPM window over the mailbox and enable interrupts */
-        if (sdla_mapmem(hw, sfm->info.winoffs) || sdla_inten(hw))
-	{
+        if (sdla_mapmem(hw, sfm->info.winoffs) || sdla_inten(hw)) {
 		printk(KERN_ERR "%s: adapter hardware failure!\n",
-			modname)
-		;
+			modname);
 		return -EIO;
 	}
 	hw->fwid = sfm->info.codeid;		/* set firmware ID */
@@ -1123,10 +1255,9 @@ static int sdla_init (sdlahw_t* hw)
 	int i;
 
 	for (i = 0; i < SDLA_MAXIORANGE; ++i)
-		hw->regs[i] = 0
-	;
-	switch (hw->type)
-	{
+		hw->regs[i] = 0;
+
+	switch (hw->type) {
 	case SDLA_S502A: return init_s502a(hw);
 	case SDLA_S502E: return init_s502e(hw);
 	case SDLA_S503:  return init_s503(hw);
@@ -1169,23 +1300,28 @@ static int sdla_bootcfg (sdlahw_t* hw, sfm_info_t* sfminfo)
 	if (!sfminfo->datasize) return 0;	/* nothing to do */
 
 	if (sdla_mapmem(hw, sfminfo->dataoffs) != 0)
-		return -EIO
-	;
-	data = (void*)((u8 *)hw->dpmbase + (sfminfo->dataoffs - hw->vector));
-	memset(data, 0, sfminfo->datasize);
+		return -EIO;
 
-	data[0x00] = make_config_byte(hw);
-	switch (sfminfo->codeid)
-	{
+	if(hw->type == SDLA_S514)
+                data = (void*)(hw->dpmbase + sfminfo->dataoffs);
+        else
+                data = (void*)((u8 *)hw->dpmbase +
+                        (sfminfo->dataoffs - hw->vector));
+
+	memset_io (data, 0, sfminfo->datasize);
+
+	writeb (make_config_byte(hw), &data[0x00]);
+
+	switch (sfminfo->codeid) {
 	case SFID_X25_502:
 	case SFID_X25_508:
-		data[0x01] = 3;			/* T1 timer */
-		data[0x03] = 10;		/* N2 */
-		data[0x06] = 7;			/* HDLC window size */
-		data[0x0B] = 1;			/* DTE */
-		data[0x0C] = 2;			/* X.25 packet window size */
-		*(short*)&data[0x0D] = 128;	/* default X.25 data size */
-		*(short*)&data[0x0F] = 128;	/* maximum X.25 data size */
+                writeb (3, &data[0x01]);        /* T1 timer */
+                writeb (10, &data[0x03]);       /* N2 */
+                writeb (7, &data[0x06]);        /* HDLC window size */
+                writeb (1, &data[0x0B]);        /* DTE */
+                writeb (2, &data[0x0C]);        /* X.25 packet window size */
+                writew (128, &data[0x0D]);	/* default X.25 data size */
+                writew (128, &data[0x0F]);	/* maximum X.25 data size */
 		break;
 	}
 	return 0;
@@ -1198,16 +1334,15 @@ static unsigned char make_config_byte (sdlahw_t* hw)
 {
 	unsigned char byte = 0;
 
-	switch (hw->pclk)
-	{
+	switch (hw->pclk) {
 		case 5000:  byte = 0x01; break;
 		case 7200:  byte = 0x02; break;
 		case 8000:  byte = 0x03; break;
 		case 10000: byte = 0x04; break;
 		case 16000: byte = 0x05; break;
 	}
-	switch (hw->type)
-	{
+
+	switch (hw->type) {
 		case SDLA_S502E: byte |= 0x80; break;
 		case SDLA_S503:  byte |= 0x40; break;
 	}
@@ -1227,10 +1362,9 @@ static int sdla_start (sdlahw_t* hw, unsigned addr)
 	unsigned char *bootp;
 	int err, tmp, i;
 
-	if (!port) return -EFAULT;
+	if (!port && (hw->type != SDLA_S514)) return -EFAULT;
 
-	switch (hw->type)
-	{
+ 	switch (hw->type) {
 	case SDLA_S502A:
 		bootp = hw->dpmbase;
 		bootp += 0x66;
@@ -1240,6 +1374,7 @@ static int sdla_start (sdlahw_t* hw, unsigned addr)
 	case SDLA_S503:
 	case SDLA_S507:
 	case SDLA_S508:
+	case SDLA_S514:
 		bootp = hw->dpmbase;
 		break;
 
@@ -1250,12 +1385,11 @@ static int sdla_start (sdlahw_t* hw, unsigned addr)
 	err = sdla_mapmem(hw, 0);
 	if (err) return err;
 
-	*bootp = 0xC3;	 /* Z80: 'jp' opcode */
-	bootp++;
-	*((unsigned short*)(bootp)) = addr;
+      	writeb (0xC3, bootp);   /* Z80: 'jp' opcode */
+	bootp ++;
+	writew (addr, bootp);
 
-	switch (hw->type)
-	{
+	switch (hw->type) {
 	case SDLA_S502A:
 		_OUTB(port, 0x10);		/* issue NMI to CPU */
 		hw->regs[0] = 0x10;
@@ -1265,8 +1399,7 @@ static int sdla_start (sdlahw_t* hw, unsigned addr)
 		_OUTB(port + 3, 0x01);		/* start CPU */
 		hw->regs[3] = 0x01;
 		for (i = 0; i < SDLA_IODELAY; ++i);
-		if (_INB(port) & 0x01)		/* verify */
-		{
+		if (_INB(port) & 0x01) {	/* verify */
 			/*
 			 * Enabling CPU changes functionality of the
 			 * control register, so we have to reset its
@@ -1284,8 +1417,7 @@ static int sdla_start (sdlahw_t* hw, unsigned addr)
 		hw->regs[0] = tmp;		/* update mirror */
 		for (i = 0; i < SDLA_IODELAY; ++i);
 		if (!(_INB(port) & 0x01))	/* verify */
-			return -EIO
-		;
+			return -EIO;
 		break;
 
 	case SDLA_S507:
@@ -1294,8 +1426,7 @@ static int sdla_start (sdlahw_t* hw, unsigned addr)
 		hw->regs[0] = tmp;		/* update mirror */
 		for (i = 0; i < SDLA_IODELAY; ++i);
 		if (!(_INB(port) & 0x04))	/* verify */
-			return -EIO
-		;
+			return -EIO;
 		break;
 
 	case SDLA_S508:
@@ -1304,8 +1435,11 @@ static int sdla_start (sdlahw_t* hw, unsigned addr)
 		hw->regs[0] = tmp;	/* update mirror */
 		for (i = 0; i < SDLA_IODELAY; ++i);
 		if (!(_INB(port + 1) & 0x02))	/* verify */
-			return -EIO
-		;
+			return -EIO;
+		break;
+
+	case SDLA_S514:
+		writeb (S514_CPU_START, hw->vector);
 		break;
 
 	default:
@@ -1323,20 +1457,18 @@ static int init_s502a (sdlahw_t* hw)
 	int tmp, i;
 
 	if (!detect_s502a(port))
-		return -ENODEV
-	;
+		return -ENODEV;
+
 	hw->regs[0] = 0x08;
 	hw->regs[1] = 0xFF;
 
 	/* Verify configuration options */
 	i = get_option_index(s502a_dpmbase_options, virt_to_phys(hw->dpmbase));
 	if (i == 0)
-		return -EINVAL
-	;
+		return -EINVAL;
 
 	tmp = s502a_hmcr[i - 1];
-	switch (hw->dpmsize)
-	{
+	switch (hw->dpmsize) {
 	case 0x2000:
 		tmp |= 0x01;
 		break;
@@ -1364,18 +1496,15 @@ static int init_s502e (sdlahw_t* hw)
 	int tmp, i;
 
 	if (!detect_s502e(port))
-		return -ENODEV
-	;
+		return -ENODEV;
 
 	/* Verify configuration options */
 	i = get_option_index(s508_dpmbase_options, virt_to_phys(hw->dpmbase));
 	if (i == 0)
-		return -EINVAL
-	;
+		return -EINVAL;
 
 	tmp = s502e_hmcr[i - 1];
-	switch (hw->dpmsize)
-	{
+	switch (hw->dpmsize) {
 	case 0x2000:
 		tmp |= 0x01;
 		break;
@@ -1408,18 +1537,15 @@ static int init_s503 (sdlahw_t* hw)
 	int tmp, i;
 
 	if (!detect_s503(port))
-		return -ENODEV
-	;
+		return -ENODEV;
 
 	/* Verify configuration options */
 	i = get_option_index(s508_dpmbase_options, virt_to_phys(hw->dpmbase));
 	if (i == 0)
-		return -EINVAL
-	;
+		return -EINVAL;
 
 	tmp = s502e_hmcr[i - 1];
-	switch (hw->dpmsize)
-	{
+	switch (hw->dpmsize) {
 	case 0x2000:
 		tmp |= 0x01;
 		break;
@@ -1450,18 +1576,15 @@ static int init_s507 (sdlahw_t* hw)
 	int tmp, i;
 
 	if (!detect_s507(port))
-		return -ENODEV
-	;
+		return -ENODEV;
 
 	/* Verify configuration options */
 	i = get_option_index(s507_dpmbase_options, virt_to_phys(hw->dpmbase));
 	if (i == 0)
-		return -EINVAL
-	;
+		return -EINVAL;
 
 	tmp = s507_hmcr[i - 1];
-	switch (hw->dpmsize)
-	{
+	switch (hw->dpmsize) {
 	case 0x2000:
 		tmp |= 0x01;
 		break;
@@ -1478,8 +1601,7 @@ static int init_s507 (sdlahw_t* hw)
 	hw->regs[0] = 0x01;
 	for (i = 0; i < SDLA_IODELAY; ++i);	/* delay */
 	if (!(_INB(port) & 0x20))
-		return -EIO
-	;
+		return -EIO;
 
 	/* Setup dual-port memory window */
 	_OUTB(port + 1, tmp);
@@ -1487,8 +1609,7 @@ static int init_s507 (sdlahw_t* hw)
 
 	/* Enable memory access */
 	tmp = hw->regs[0] | 0x04;
-	if (hw->irq)
-	{
+	if (hw->irq) {
 		i = get_option_index(s508_irq_options, hw->irq);
 		if (i) tmp |= s507_irqmask[i - 1];
 	}
@@ -1507,14 +1628,12 @@ static int init_s508 (sdlahw_t* hw)
 	int tmp, i;
 
 	if (!detect_s508(port))
-		return -ENODEV
-	;
+		return -ENODEV;
 
 	/* Verify configuration options */
 	i = get_option_index(s508_dpmbase_options, virt_to_phys(hw->dpmbase));
 	if (i == 0)
-		return -EINVAL
-	;
+		return -EINVAL;
 
 	/* Setup memory configuration */
 	tmp = s508_hmcr[i - 1];
@@ -1547,13 +1666,11 @@ static int detect_s502a (int port)
 	int i, j;
 
 	if (!get_option_index(s502_port_options, port))
-		return 0
-	;
-	for (j = 1; j < SDLA_MAXIORANGE; ++j)
-	{
+		return 0;
+	
+	for (j = 1; j < SDLA_MAXIORANGE; ++j) {
 		if (_INB(port + j) != 0xFF)
-			return 0
-		;
+			return 0;
 		for (i = 0; i < SDLA_IODELAY; ++i);	/* delay */
 	}
 
@@ -1562,18 +1679,15 @@ static int detect_s502a (int port)
 	_OUTB(port, 0x08);
 	for (i = 0; i < SDLA_IODELAY; ++i);	/* delay */
 	if (_INB(port) != 0x40)
-		return 0
-	;
+		return 0;
 	_OUTB(port, 0x00);
 	for (i = 0; i < SDLA_IODELAY; ++i);	/* delay */
 	if (_INB(port) != 0x40)
-		return 0
-	;
+		return 0;
 	_OUTB(port, 0x04);
 	for (i = 0; i < SDLA_IODELAY; ++i);	/* delay */
 	if (_INB(port) != 0x44)
-		return 0
-	;
+		return 0;
 
 	/* Reset adapter */
 	_OUTB(port, 0x08);
@@ -1600,26 +1714,21 @@ static int detect_s502e (int port)
 	int i, j;
 
 	if (!get_option_index(s502_port_options, port))
-		return 0
-	;
-	for (j = 1; j < SDLA_MAXIORANGE; ++j)
-	{
+		return 0;
+	for (j = 1; j < SDLA_MAXIORANGE; ++j) {
 		if (_INB(port + j) != 0xFF)
-			return 0
-		;
+			return 0;
 		for (i = 0; i < SDLA_IODELAY; ++i);	/* delay */
 	}
 
 	_OUTB(port + 3, 0);			/* CPU control reg. */
 	for (i = 0; i < SDLA_IODELAY; ++i);	/* delay */
 	if (_INB(port) != 0xF8)			/* read status */
-		return 0
-	;
+		return 0;
 	_OUTB(port, 0x04);			/* set bit 2 */
 	for (i = 0; i < SDLA_IODELAY; ++i);	/* delay */
 	if (_INB(port) != 0xFC)			/* verify */
-		return 0
-	;
+		return 0;
 
 	/* Reset adapter */
 	_OUTB(port, 0);
@@ -1643,26 +1752,21 @@ static int detect_s503 (int port)
 	int i, j;
 
 	if (!get_option_index(s503_port_options, port))
-		return 0
-	;
-	for (j = 1; j < SDLA_MAXIORANGE; ++j)
-	{
+		return 0;
+	for (j = 1; j < SDLA_MAXIORANGE; ++j) {
 		if (_INB(port + j) != 0xFF)
-			return 0
-		;
+			return 0;
 		for (i = 0; i < SDLA_IODELAY; ++i);	/* delay */
 	}
 
 	_OUTB(port, 0);				/* reset control reg.*/
 	for (i = 0; i < SDLA_IODELAY; ++i);	/* delay */
 	if (_INB(port) != 0xF0)			/* read status */
-		return 0
-	;
+		return 0;
 	_OUTB(port, 0x04);			/* set bit 2 */
 	for (i = 0; i < SDLA_IODELAY; ++i);	/* delay */
 	if (_INB(port) != 0xF2)			/* verify */
-		return 0
-	;
+		return 0;
 
 	/* Reset adapter */
 	_OUTB(port, 0);
@@ -1686,27 +1790,22 @@ static int detect_s507 (int port)
 	int tmp, i, j;
 
 	if (!get_option_index(s508_port_options, port))
-		return 0
-	;
+		return 0;
 	tmp = _INB(port);
-	for (j = 1; j < S507_IORANGE; ++j)
-	{
+	for (j = 1; j < S507_IORANGE; ++j) {
 		if (_INB(port + j) != tmp)
-			return 0
-		;
+			return 0;
 		for (i = 0; i < SDLA_IODELAY; ++i);	/* delay */
 	}
 
 	_OUTB(port, 0x00);
 	for (i = 0; i < SDLA_IODELAY; ++i);	/* delay */
 	if ((_INB(port) & 0x7E) != 0x30)
-		return 0
-	;
+		return 0;
 	_OUTB(port, 0x01);
 	for (i = 0; i < SDLA_IODELAY; ++i);	/* delay */
 	if ((_INB(port) & 0x7E) != 0x32)
-		return 0
-	;
+		return 0;
 
 	/* Reset adapter */
 	_OUTB(port, 0x00);
@@ -1729,23 +1828,204 @@ static int detect_s508 (int port)
 	int i;
 
 	if (!get_option_index(s508_port_options, port))
-		return 0
-	;
+		return 0;
 	_OUTB(port, 0x00);
 	for (i = 0; i < SDLA_IODELAY; ++i);	/* delay */
 	if ((_INB(port + 1) & 0x3F) != 0x00)
-		return 0
-	;
+		return 0;
 	_OUTB(port, 0x10);
 	for (i = 0; i < SDLA_IODELAY; ++i);	/* delay */
 	if ((_INB(port + 1) & 0x3F) != 0x10)
-		return 0
-	;
+		return 0;
 
 	/* Reset adapter */
 	_OUTB(port, 0x00);
 	return 1;
 }
+
+/*============================================================================
+ * Detect s514 PCI adapter.
+ *      Return 1 if detected o.k. or 0 if failed.
+ *      Note:   This test is destructive! Adapter will be left in shutdown
+ *              state after the test.
+ */
+static int detect_s514 (sdlahw_t* hw)
+{
+	unsigned char CPU_no, slot_no;
+	int number_S514_cards = 0;
+	u32 S514_mem_base_addr = 0;
+	u32 ut_u32;
+
+	struct pci_dev *pci_dev;
+
+
+#ifdef CONFIG_PCI
+        if(!pci_present())
+        {
+                printk(KERN_ERR "%s: PCI BIOS not present!\n", modname);
+                return 0;
+        }
+#else
+        printk(KERN_ERR "%s: Linux not compiled for PCI usage!\n", modname);
+        return 0;
+#endif
+
+	/*
+	The 'setup()' procedure in 'sdlamain.c' passes the CPU number and the
+	slot number defined in 'router.conf' via the 'port' definition.
+	*/
+	CPU_no = hw->S514_cpu_no[0];
+	slot_no = hw->S514_slot_no;
+	
+	printk(KERN_INFO "%s: detecting S514 card, CPU %c, slot #%d\n",
+		modname, CPU_no, slot_no);
+
+	/* check to see that CPU A or B has been selected in 'router.conf' */
+	switch(CPU_no) {
+		case S514_CPU_A:
+		case S514_CPU_B:
+			break;
+	
+		default:
+			printk(KERN_ERR "%s: S514 CPU definition invalid.\n", 
+				modname);
+			printk(KERN_ERR "Must be 'A' or 'B'\n");
+			return 0;
+	}
+
+	number_S514_cards = find_s514_adapter(hw, 0);
+	if(!number_S514_cards)
+		return 0;
+
+	/* we are using a single S514 adapter with a slot of 0 so re-read the */	/* location of this adapter */
+	if((number_S514_cards == 1) && !slot_no) {	
+        	number_S514_cards = find_s514_adapter(hw, 1);
+		if(!number_S514_cards) {
+			printk(KERN_ERR "%s: Error finding PCI card\n",
+				modname);
+			return 0;
+		}
+	}
+
+	pci_dev = hw->pci_dev;
+	/* read the physical memory base address */
+	S514_mem_base_addr = (CPU_no == S514_CPU_A) ? 
+		(pci_dev->resource[1].start) :
+		(pci_dev->resource[2].start);
+
+	printk(KERN_INFO "%s: S514 PCI memory at 0x%X\n",
+		modname, S514_mem_base_addr);
+	if(!S514_mem_base_addr) {
+		if(CPU_no == S514_CPU_B)
+			printk(KERN_ERR "%s: CPU #B not present on the card\n", 				modname);
+		else
+			printk(KERN_ERR "%s: No PCI memory allocated to card\n",				modname);
+		return 0;
+	}
+
+	/* enable the PCI memory */
+	pci_read_config_dword(pci_dev, 
+		(CPU_no == S514_CPU_A) ? PCI_MAP0_DWORD : PCI_MAP1_DWORD,
+		&ut_u32);
+	pci_write_config_dword(pci_dev,
+		(CPU_no == S514_CPU_A) ? PCI_MAP0_DWORD : PCI_MAP1_DWORD,
+		(ut_u32 | PCI_MEMORY_ENABLE));
+
+	/* check the IRQ allocated and enable IRQ usage */
+	if(!(hw->irq = pci_dev->irq)) {
+		printk(KERN_ERR "%s: IRQ not allocated to S514 adapter\n",
+			modname);
+                return 0;
+	}
+        pci_read_config_dword(pci_dev, PCI_INT_CONFIG, &ut_u32);
+        ut_u32 |= (CPU_no == S514_CPU_A) ?
+                PCI_ENABLE_IRQ_CPU_A : PCI_ENABLE_IRQ_CPU_B;
+        pci_write_config_dword(pci_dev, PCI_INT_CONFIG, ut_u32);
+
+	printk(KERN_INFO "%s: IRQ %d allocated to the S514 card\n",
+		modname, hw->irq);
+
+	/* map the physical PCI memory to virtual memory */
+	(void *)hw->dpmbase = ioremap((unsigned long)S514_mem_base_addr,
+		(unsigned long)MAX_SIZEOF_S514_MEMORY);
+    	/* map the physical control register memory to virtual memory */
+	(void *)hw->vector = ioremap(
+		(unsigned long)(S514_mem_base_addr + S514_CTRL_REG_BYTE),
+		(unsigned long)16);
+     
+        if(!hw->dpmbase || !hw->vector) {
+		printk(KERN_ERR "%s: PCI virtual memory allocation failed\n",
+			modname);
+                return 0;
+	}
+
+	/* halt the adapter */
+	writeb (S514_CPU_HALT, hw->vector);	
+
+	return 1;
+}
+
+/*============================================================================
+ * Find the S514 PCI adapter in the PCI bus.
+ *      Return the number of S514 adapters found (0 if no adapter found).
+ */
+static int find_s514_adapter(sdlahw_t* hw, char find_first_S514_card)
+{
+        unsigned char slot_no;
+        int number_S514_cards = 0;
+	char S514_found_in_slot = 0;
+        u16 PCI_subsys_vendor;
+
+        struct pci_dev *pci_dev = NULL;
+ 
+       slot_no = hw->S514_slot_no;
+  
+	while ((pci_dev = pci_find_device(V3_VENDOR_ID, V3_DEVICE_ID, pci_dev))
+        	!= NULL) {
+                pci_read_config_word(pci_dev, PCI_SUBSYS_VENDOR_WORD,
+                        &PCI_subsys_vendor);
+                if(PCI_subsys_vendor != SANGOMA_SUBSYS_VENDOR)
+                	continue;
+        	hw->pci_dev = pci_dev;
+		if(find_first_S514_card)
+			return(1);
+                number_S514_cards ++;
+                printk(KERN_INFO
+			"%s: S514 card found, slot #%d (devfn 0x%X)\n",
+                        modname, ((pci_dev->devfn >> 3) & PCI_DEV_SLOT_MASK),
+			pci_dev->devfn);
+                if(slot_no && (((pci_dev->devfn >> 3) & PCI_DEV_SLOT_MASK) ==
+                        slot_no)) {
+                        S514_found_in_slot = 1;
+                        break;
+                }
+        }
+
+	/* if no S514 adapter has been found, then exit */
+        if(!number_S514_cards) {
+                printk(KERN_ERR "%s: no S514 adapters found\n", modname);
+                return 0;
+        }
+        /* if more than one S514 card has been found, then the user must have */        /* defined a slot number so that the correct adapter is used */
+        else if((number_S514_cards > 1) && !slot_no) {
+                printk(KERN_ERR "%s: More than one S514 adapter found\n",
+                        modname);
+                printk(KERN_ERR "Define a PCI slot number for this adapter\n");
+                return 0;
+        }
+        /* if the user has specified a slot number and the S514 adapter has */
+        /* not been found in that slot, then exit */
+        else if (slot_no && !S514_found_in_slot) {
+                printk(KERN_ERR
+			"%s: S514 card not found in specified slot #%d\n",
+                        modname, slot_no);
+                return 0;
+        }
+
+	return (number_S514_cards);
+}
+
+
 
 /******* Miscellaneous ******************************************************/
 
@@ -1772,8 +2052,8 @@ static int get_option_index (unsigned* optlist, unsigned optval)
 	int i;
 
 	for (i = 1; i <= optlist[0]; ++i)
-		if ( optlist[i] == optval) return i
-	;
+		if ( optlist[i] == optval)
+			return i;
 	return 0;
 }
 
@@ -1785,15 +2065,14 @@ static unsigned check_memregion (void* ptr, unsigned len)
 {
 	volatile unsigned char* p = ptr;
 
-	for (; len && (*p == 0xFF); --len, ++p)
-	{
-		*p = 0;			/* attempt to write 0 */
-		if (*p != 0xFF)		/* still has to read 0xFF */
-		{
-			*p = 0xFF;	/* restore original value */
-			break;		/* not good */
-		}
-	}
+        for (; len && (readb (p) == 0xFF); --len, ++p) {
+                writeb (0, p);          /* attempt to write 0 */
+                if (readb(p) != 0xFF) { /* still has to read 0xFF */
+                        writeb (0xFF, p);/* restore original value */
+                        break;          /* not good */
+                }
+        }
+
 	return len;
 }
 
@@ -1808,28 +2087,28 @@ static unsigned test_memregion (void* ptr, unsigned len)
 	unsigned len_w = len >> 1;	/* region len in words */
 	unsigned i;
 
+        for (i = 0, w_ptr = ptr; i < len_w; ++i, ++w_ptr)
+                writew (0xAA55, w_ptr);
+        
 	for (i = 0, w_ptr = ptr; i < len_w; ++i, ++w_ptr)
-		*w_ptr = 0xAA55
-	;
-	for (i = 0, w_ptr = ptr; i < len_w; ++i, ++w_ptr)
-		if (*w_ptr != 0xAA55)
-		{
-			len_w = i;
-			break;
-		}
-	;
-	for (i = 0, w_ptr = ptr; i < len_w; ++i, ++w_ptr)
-		*w_ptr = 0x55AA
-	;
-	for (i = 0, w_ptr = ptr; i < len_w; ++i, ++w_ptr)
-		if (*w_ptr != 0x55AA)
-		{
-			len_w = i;
-			break;
-		}
-	;
-	for (i = 0, w_ptr = ptr; i < len_w; ++i, ++w_ptr) *w_ptr = 0;
-	return len_w << 1;
+                if (readw (w_ptr) != 0xAA55) {
+                        len_w = i;
+                        break;
+                }
+
+        for (i = 0, w_ptr = ptr; i < len_w; ++i, ++w_ptr)
+                writew (0x55AA, w_ptr);
+        
+        for (i = 0, w_ptr = ptr; i < len_w; ++i, ++w_ptr)
+                if (readw(w_ptr) != 0x55AA) {
+                        len_w = i;
+                        break;
+                }
+        
+        for (i = 0, w_ptr = ptr; i < len_w; ++i, ++w_ptr)
+		writew (0, w_ptr);
+
+        return len_w << 1;
 }
 
 /*============================================================================
@@ -1840,10 +2119,8 @@ static unsigned short checksum (unsigned char* buf, unsigned len)
 	unsigned short crc = 0;
 	unsigned mask, flag;
 
-	for (; len; --len, ++buf)
-	{
-		for (mask = 0x80; mask; mask >>= 1)
-		{
+	for (; len; --len, ++buf) {
+		for (mask = 0x80; mask; mask >>= 1) {
 			flag = (crc & 0x8000);
 			crc <<= 1;
 			crc |= ((*buf & mask) ? 1 : 0);

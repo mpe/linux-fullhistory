@@ -15,7 +15,7 @@
  *		ftp://prep.ai.mit.edu/pub/gnu/GPL
  *	Each contributing author retains all rights to their own work.
  *
- *  (C) 1999 Ben Fennema
+ *  (C) 1999-2000 Ben Fennema
  *
  * HISTORY
  *
@@ -47,16 +47,21 @@ udf_get_last_session(struct super_block *sb)
 
 	vol_desc_start=0;
 	ms_info.addr_format=CDROM_LBA;
-	i=ioctl_by_bdev(bdev, CDROMMULTISESSION, (unsigned long) &ms_info);
+	i = ioctl_by_bdev(bdev, CDROMMULTISESSION, (unsigned long) &ms_info);
+
 #define WE_OBEY_THE_WRITTEN_STANDARDS 1
-	if (i == 0) {
+
+	if (i == 0)
+	{
 		udf_debug("XA disk: %s, vol_desc_start=%d\n",
 			(ms_info.xa_flag ? "yes" : "no"), ms_info.addr.lba);
 #if WE_OBEY_THE_WRITTEN_STANDARDS
 		if (ms_info.xa_flag) /* necessary for a valid ms_info.addr */
 #endif
 			vol_desc_start = ms_info.addr.lba;
-	} else {
+	}
+	else
+	{
 		udf_debug("CDROMMULTISESSION not supported: rc=%d\n", i);
 	}
 	return vol_desc_start;
@@ -86,17 +91,20 @@ udf_get_last_block(struct super_block *sb, int *flags)
 	lblock = 0;
 	ret = ioctl_by_bdev(bdev, BLKGETSIZE, (unsigned long) &lblock);
 
-	if (!ret && lblock != 0x7FFFFFFF) {
-		/* Hard Disk */
+	if (!ret && lblock != 0x7FFFFFFF) /* Hard Disk */
+	{
 		if (mult)
 			lblock *= mult;
 		else if (div)
 			lblock /= div;
-	} else {
-		/* CDROM */
+	}
+	else /* CDROM */
+	{
 		ret = ioctl_by_bdev(bdev, CDROM_LAST_WRITTEN, (unsigned long) &lblock);
 	}
+
 	if (!ret && lblock)
 		return lblock - 1;
-	return 0;
+	else
+		return 0;
 }

@@ -10,6 +10,8 @@ unsigned char cached_8259[2] = { 0xff, 0xff };
 #define cached_A1 (cached_8259[0])
 #define cached_21 (cached_8259[1])
 
+int i8259_pic_irq_offset;
+
 int i8259_irq(int cpu)
 {
 	int irq;
@@ -46,8 +48,8 @@ int i8259_irq(int cpu)
 
 static void i8259_mask_and_ack_irq(unsigned int irq_nr)
 {
-        if ( irq_nr >= i8259_pic.irq_offset )
-                irq_nr -= i8259_pic.irq_offset;
+        if ( irq_nr >= i8259_pic_irq_offset )
+                irq_nr -= i8259_pic_irq_offset;
 
         if (irq_nr > 7) {                                                   
                 cached_A1 |= 1 << (irq_nr-8);                                   
@@ -71,8 +73,8 @@ static void i8259_set_irq_mask(int irq_nr)
 
 static void i8259_mask_irq(unsigned int irq_nr)
 {
-        if ( irq_nr >= i8259_pic.irq_offset )
-                irq_nr -= i8259_pic.irq_offset;
+        if ( irq_nr >= i8259_pic_irq_offset )
+                irq_nr -= i8259_pic_irq_offset;
         if ( irq_nr < 8 )
                 cached_21 |= 1 << irq_nr;
         else
@@ -83,8 +85,8 @@ static void i8259_mask_irq(unsigned int irq_nr)
 static void i8259_unmask_irq(unsigned int irq_nr)
 {
 
-        if ( irq_nr >= i8259_pic.irq_offset )
-                irq_nr -= i8259_pic.irq_offset;
+        if ( irq_nr >= i8259_pic_irq_offset )
+                irq_nr -= i8259_pic_irq_offset;
         if ( irq_nr < 8 )
                 cached_21 &= ~(1 << irq_nr);
         else
@@ -123,7 +125,7 @@ void __init i8259_init(void)
         outb(0xFF, 0xA1); /* Mask all */
         outb(cached_A1, 0xA1);
         outb(cached_21, 0x21);
-        request_irq( i8259_pic.irq_offset + 2, no_action, SA_INTERRUPT,
+        request_irq( i8259_pic_irq_offset + 2, no_action, SA_INTERRUPT,
                      "82c59 secondary cascade", NULL );
-        enable_irq(i8259_pic.irq_offset + 2);  /* Enable cascade interrupt */
+        enable_irq(i8259_pic_irq_offset + 2);  /* Enable cascade interrupt */
 }

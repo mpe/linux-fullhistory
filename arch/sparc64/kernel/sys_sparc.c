@@ -248,7 +248,7 @@ asmlinkage int sys_getdomainname(char *name, int len)
         int nlen;
 	int err = -EFAULT;
 
- 	down(&uts_sem);
+ 	down_read(&uts_sem);
  	
 	nlen = strlen(system_utsname.domainname) + 1;
 
@@ -260,7 +260,7 @@ asmlinkage int sys_getdomainname(char *name, int len)
 		goto done;
 	err = 0;
 done:
-	up(&uts_sem);
+	up_read(&uts_sem);
 	return err;
 }
 

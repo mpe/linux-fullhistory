@@ -373,7 +373,10 @@ typedef struct hwif_s {
 	ide_selectproc_t *selectproc;	/* tweaks hardware to select drive */
 	ide_resetproc_t	*resetproc;	/* routine to reset controller after a disk reset */
 	ide_dmaproc_t	*dmaproc;	/* dma read/write/abort routine */
-	unsigned long	*dmatable;	/* dma physical region descriptor table */
+	unsigned int	*dmatable_cpu;	/* dma physical region descriptor table (cpu view) */
+	u32		dmatable_dma;	/* dma physical region descriptor table (dma view) */
+	struct scatterlist *sg_table;	/* Scatter-gather list used to build the above */
+	int sg_nents;			/* Current number of entries in it */
 	struct hwif_s	*mate;		/* other hwif from same PCI chip */
 	unsigned long	dma_base;	/* base addr for dma ports */
 	unsigned	dma_extra;	/* extra addr for dma ports */
@@ -836,6 +839,7 @@ void ide_scan_pcibus (int scan_direction) __init;
 #define BAD_DMA_DRIVE		0
 #define GOOD_DMA_DRIVE		1
 int ide_build_dmatable (ide_drive_t *drive, ide_dma_action_t func);
+void ide_destroy_dmatable (ide_drive_t *drive);
 ide_startstop_t ide_dma_intr (ide_drive_t *drive);
 int check_drive_lists (ide_drive_t *drive, int good_bad);
 int ide_dmaproc (ide_dma_action_t func, ide_drive_t *drive);

@@ -83,18 +83,22 @@ ENTRY(ret_from_fork)
 	jra	SYMBOL_NAME(ret_from_exception)
 
 badsys:
-	movel	#-ENOSYS,PT_D0(%sp)
+	movel	#-ENOSYS,%sp@(PT_D0)
 	jra	SYMBOL_NAME(ret_from_exception)
 
 do_trace:
-	movel	#-ENOSYS,PT_D0(%sp)	| needed for strace
+	movel	#-ENOSYS,%sp@(PT_D0)	| needed for strace
 	subql	#4,%sp
 	SAVE_SWITCH_STACK
 	jbsr	SYMBOL_NAME(syscall_trace)
 	RESTORE_SWITCH_STACK
 	addql	#4,%sp
-	jbsr	@(SYMBOL_NAME(sys_call_table),%d2:l:4)@(0)
-	movel	%d0,%sp@(PT_D0)		| save the return value
+	movel	%sp@(PT_ORIG_D0),%d1
+	movel	#-ENOSYS,%d0
+	cmpl	#NR_syscalls,%d1
+	jcc	1f
+	jbsr	@(SYMBOL_NAME(sys_call_table),%d1:l:4)@(0)
+1:	movel	%d0,%sp@(PT_D0)		| save the return value
 	subql	#4,%sp			| dummy return address
 	SAVE_SWITCH_STACK
 	jbsr	SYMBOL_NAME(syscall_trace)
@@ -106,17 +110,16 @@ SYMBOL_NAME_LABEL(ret_from_signal)
 
 ENTRY(system_call)
 	SAVE_ALL_SYS
-	movel	%d0,%d2
 
-	GET_CURRENT(%d0)
+	GET_CURRENT(%d1)
 	| save top of frame
 	movel	%sp,%curptr@(TASK_THREAD+THREAD_ESP0)
 
-	cmpl	#NR_syscalls,%d2
-	jcc	badsys
 	btst	#PF_TRACESYS_BIT,%curptr@(TASK_FLAGS+PF_TRACESYS_OFF)
 	jne	do_trace
-	jbsr	@(SYMBOL_NAME(sys_call_table),%d2:l:4)@(0)
+	cmpl	#NR_syscalls,%d0
+	jcc	badsys
+	jbsr	@(SYMBOL_NAME(sys_call_table),%d0:l:4)@(0)
 	movel	%d0,%sp@(PT_D0)		| save the return value
 
 SYMBOL_NAME_LABEL(ret_from_exception)
@@ -604,24 +607,27 @@ SYMBOL_NAME_LABEL(sys_call_table)
 	.long SYMBOL_NAME(sys_mmap2)
 	.long SYMBOL_NAME(sys_truncate64)
 	.long SYMBOL_NAME(sys_ftruncate64)
-	.long SYMBOL_NAME(sys_chown)		/* 195 */
+	.long SYMBOL_NAME(sys_stat64)		/* 195 */
+	.long SYMBOL_NAME(sys_lstat64)
+	.long SYMBOL_NAME(sys_fstat64)
+	.long SYMBOL_NAME(sys_chown)
 	.long SYMBOL_NAME(sys_getuid)
-	.long SYMBOL_NAME(sys_getgid)
+	.long SYMBOL_NAME(sys_getgid)		/* 200 */
 	.long SYMBOL_NAME(sys_geteuid)
 	.long SYMBOL_NAME(sys_getegid)
-	.long SYMBOL_NAME(sys_setreuid)		/* 200 */
+	.long SYMBOL_NAME(sys_setreuid)
 	.long SYMBOL_NAME(sys_setregid)
-	.long SYMBOL_NAME(sys_getgroups)
+	.long SYMBOL_NAME(sys_getgroups)	/* 205 */
 	.long SYMBOL_NAME(sys_setgroups)
 	.long SYMBOL_NAME(sys_fchown)
-	.long SYMBOL_NAME(sys_setresuid)	/* 205 */
+	.long SYMBOL_NAME(sys_setresuid)
 	.long SYMBOL_NAME(sys_getresuid)
-	.long SYMBOL_NAME(sys_setresgid)
+	.long SYMBOL_NAME(sys_setresgid)	/* 210 */
 	.long SYMBOL_NAME(sys_getresgid)
 	.long SYMBOL_NAME(sys_lchown)
-	.long SYMBOL_NAME(sys_setuid)		/* 210 */
+	.long SYMBOL_NAME(sys_setuid)
 	.long SYMBOL_NAME(sys_setgid)
-	.long SYMBOL_NAME(sys_setfsuid)
+	.long SYMBOL_NAME(sys_setfsuid)		/* 215 */
 	.long SYMBOL_NAME(sys_setfsgid)
 
 	.rept NR_syscalls-(.-SYMBOL_NAME(sys_call_table))/4

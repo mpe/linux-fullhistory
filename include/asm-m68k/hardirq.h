@@ -10,8 +10,8 @@ extern unsigned int local_irq_count[NR_CPUS];
 #define hardirq_trylock(cpu)	(local_irq_count[cpu] == 0)
 #define hardirq_endlock(cpu)	do { } while (0)
 
-#define hardirq_enter(cpu)	(local_irq_count[cpu]++)
-#define hardirq_exit(cpu)	(local_irq_count[cpu]--)
+#define irq_enter(cpu)		(local_irq_count[cpu]++)
+#define irq_exit(cpu)		(local_irq_count[cpu]--)
 
 #define synchronize_irq()	barrier()
 

@@ -1,13 +1,22 @@
-/* tms380tr.h: TI TMS380 Token Ring driver for Linux
+/* 
+ * tms380tr.h: TI TMS380 Token Ring driver for Linux
  *
  * Authors:
  * - Christoph Goos <cgoos@syskonnect.de>
+ * - Adam Fritzler <mid@auk.cx>
  */
 
 #ifndef __LINUX_TMS380TR_H
 #define __LINUX_TMS380TR_H
 
 #ifdef __KERNEL__
+
+/* module prototypes */
+int tms380tr_open(struct net_device *dev);
+int tms380tr_close(struct net_device *dev);
+void tms380tr_interrupt(int irq, void *dev_id, struct pt_regs *regs);
+int tmsdev_init(struct net_device *dev);
+void tms380tr_wait(unsigned long time);
 
 #define TMS380TR_MAX_ADAPTERS 7
 
@@ -30,9 +39,6 @@
 /*  --------------------------------------------------------------  */
 /*------------------------------------------------------------------*/
 
-/* Swap bytes of a word.                        */
-#define SWAPB(x) (((unsigned short)((x) << 8)) | ((unsigned short)((x) >> 8)))
-
 /* Swap words of a long.                        */
 #define SWAPW(x) (((x) << 16) | ((x) >> 16))
 
@@ -51,23 +57,33 @@
 
 
 /* Token ring adapter I/O addresses for normal mode. */
-#define SIFDAT      		0L	/* SIF/DMA data. */
-#define SIFINC      		2L  	/* IO Word data with auto increment. */
-#define SIFINH      		3L  	/* IO Byte data with auto increment. */
-#define SIFADR      		4L  	/* SIF/DMA Address. */
-#define SIFCMD      		6L  	/* SIF Command. */
-#define SIFSTS      		6L  	/* SIF Status. */
-#define SIFACL      		8L  	/* SIF Adapter Control Register. */
-#define SIFADD      		10L 	/* SIF/DMA Address. */
-#define SIFADX      		12L
-#define DMALEN      		14L 	/* SIF DMA length. */
-#define POSREG      		16L 	/* Adapter Program Option Select (POS)
+
+/*
+ * The SIF registers.  Common to all adapters.
+ */
+/* Basic SIF (SRSX = 0) */
+#define SIFDAT      		0x00	/* SIF/DMA data. */
+#define SIFINC      		0x02  	/* IO Word data with auto increment. */
+#define SIFINH      		0x03  	/* IO Byte data with auto increment. */
+#define SIFADR      		0x04  	/* SIF/DMA Address. */
+#define SIFCMD      		0x06  	/* SIF Command. */
+#define SIFSTS      		0x06  	/* SIF Status. */
+
+/* "Extended" SIF (SRSX = 1) */
+#define SIFACL      		0x08  	/* SIF Adapter Control Register. */
+#define SIFADD      		0x0a 	/* SIF/DMA Address. -- 0x0a */
+#define SIFADX      		0x0c     /* 0x0c */
+#define DMALEN      		0x0e 	/* SIF DMA length. -- 0x0e */
+
+/*
+ * POS Registers.  Only for ISA Adapters.
+ */
+#define POSREG      		0x10 	/* Adapter Program Option Select (POS)
 			 		 * Register: base IO address + 16 byte.
 			 		 */
 #define POSREG_2    		24L 	/* only for TR4/16+ adapter
-			 		 * base IO address + 24 byte.
+			 		 * base IO address + 24 byte. -- 0x18
 			 		 */
-
 
 /* SIFCMD command codes (high-low) */
 #define CMD_INTERRUPT_ADAPTER   0x8000  /* Cause internal adapter interrupt */
@@ -118,8 +134,13 @@
 					 * (1/0): can be written if ACL_ARESET
 					 * is zero.
 					 */
-#define ACL_SPEED4		0x0003
-#define ACL_SPEED16		0x0001
+#define ACL_PEN                 0x0004
+
+#define ACL_NSELOUT0            0x0002 
+#define ACL_NSELOUT1            0x0001	/* NSELOUTx have a card-specific
+					 * meaning for setting ring speed.
+					 */
+
 #define PS_DMA_MASK		(ACL_SWHRQ | ACL_PSDMAEN)
 
 
@@ -145,69 +166,72 @@
 
 
 /* Interrupt Codes (only MAC IRQs) */
-#define STS_IRQ_ADAPTER_CHECK   0x0000  /* unrecoverable hardware or
+#define STS_IRQ_ADAPTER_CHECK	0x0000	/* unrecoverable hardware or
 					 * software error.
 					 */ 
-#define STS_IRQ_RING_STATUS     0x0004  /* SSB is updated with ring status. */
-#define STS_IRQ_SCB_CLEAR       0x0006  /* SCB clear, following an
+#define STS_IRQ_RING_STATUS	0x0004  /* SSB is updated with ring status. */
+#define STS_IRQ_LLC_STATUS	0x0005	/* Not used in MAC-only microcode */
+#define STS_IRQ_SCB_CLEAR	0x0006	/* SCB clear, following an
 					 * SCB_REQUEST IRQ.
 					 */
-#define STS_IRQ_COMMAND_STATUS  0x0008  /* SSB is updated with command 
+#define STS_IRQ_TIMER		0x0007	/* Not normally used in MAC ucode */
+#define STS_IRQ_COMMAND_STATUS	0x0008	/* SSB is updated with command 
 					 * status.
 					 */ 
-#define STS_IRQ_RECEIVE_STATUS  0x000A  /* SSB is updated with receive
+#define STS_IRQ_RECEIVE_STATUS	0x000A	/* SSB is updated with receive
 					 * status.
 					 */
-#define STS_IRQ_TRANSMIT_STATUS 0x000C  /* SSB is updated with transmit
+#define STS_IRQ_TRANSMIT_STATUS	0x000C	/* SSB is updated with transmit
                                          * status
 					 */
-#define STS_IRQ_MASK            0x000F  /* = STS_ERROR_MASK. */
+#define STS_IRQ_RECEIVE_PENDING	0x000E	/* Not used in MAC-only microcode */
+#define STS_IRQ_MASK		0x000F	/* = STS_ERROR_MASK. */
 
 
 /* TRANSMIT_STATUS completion code: (SSB.Parm[0]) */
-#define COMMAND_COMPLETE        0x0080  /* TRANSMIT command completed
+#define COMMAND_COMPLETE	0x0080	/* TRANSMIT command completed
                                          * (avoid this!) issue another transmit
 					 * to send additional frames.
 					 */
-#define FRAME_COMPLETE          0x0040  /* Frame has been transmitted;
+#define FRAME_COMPLETE		0x0040	/* Frame has been transmitted;
 					 * INTERRUPT_FRAME bit was set in the
 					 * CSTAT request; indication of possibly
 					 * more than one frame transmissions!
 					 * SSB.Parm[0-1]: 32 bit pointer to
 					 * TPL of last frame.
 					 */
-#define LIST_ERROR              0x0020  /* Error in one of the TPLs that
+#define LIST_ERROR		0x0020	/* Error in one of the TPLs that
 					 * compose the frame; TRANSMIT
-					 * terminated; Parm[1-2]: 32 bit pointer
+					 * terminated; Parm[1-2]: 32bit pointer
 					 * to TPL which starts the error
 					 * frame; error details in bits 8-13.
 					 * (14?)
 					 */
-#define FRAME_SIZE_ERROR        0x8000  /* FRAME_SIZE does not equal the sum of
+#define FRAME_SIZE_ERROR	0x8000	/* FRAME_SIZE does not equal the sum of
 					 * the valid DATA_COUNT fields;
 					 * FRAME_SIZE less than header plus
 					 * information field. (15 bytes +
 					 * routing field) Or if FRAME_SIZE
 					 * was specified as zero in one list.
 					 */
-#define TX_THRESHOLD            0x4000  /* FRAME_SIZE greater than (BUFFER_SIZE
+#define TX_THRESHOLD		0x4000	/* FRAME_SIZE greater than (BUFFER_SIZE
 					 * - 9) * TX_BUF_MAX.
 					 */
-#define ODD_ADDRESS             0x2000  /* Odd forward pointer value is
+#define ODD_ADDRESS		0x2000	/* Odd forward pointer value is
 					 * read on a list without END_FRAME
 					 * indication.
 					 */
-#define FRAME_ERROR             0x1000  /* START_FRAME bit is (not) anticipated,
+#define FRAME_ERROR		0x1000	/* START_FRAME bit (not) anticipated,
 					 * but (not) set.
 					 */
-#define ACCESS_PRIORITY_ERROR   0x0800  /* Access priority requested has not
+#define ACCESS_PRIORITY_ERROR	0x0800	/* Access priority requested has not
 					 * been allowed.
 					 */
-#define UNENABLED_MAC_FRAME     0x0400  /* MAC frame has source class of zero
+#define UNENABLED_MAC_FRAME	0x0400	/* MAC frame has source class of zero
 					 * or MAC frame PCF ATTN field is
 					 * greater than one.
 					 */
-#define ILLEGAL_FRAME_FORMAT    0x0200  /* Bit 0 or FC field was set to one. */
+#define ILLEGAL_FRAME_FORMAT	0x0200	/* Bit 0 or FC field was set to one. */
 
 
 /*
@@ -222,98 +246,98 @@
  *
  * The following defines the command code bits and the command queue:
  */
-#define OC_OPEN                 0x0001	/* OPEN command */
-#define OC_TRANSMIT             0x0002  /* TRANSMIT command */
-#define OC_TRANSMIT_HALT        0x0004  /* TRANSMIT_HALT command */
-#define OC_RECEIVE              0x0008  /* RECEIVE command */
-#define OC_CLOSE                0x0010  /* CLOSE command */
-#define OC_SET_GROUP_ADDR       0x0020  /* SET_GROUP_ADDR command */
-#define OC_SET_FUNCT_ADDR       0x0040  /* SET_FUNCT_ADDR command */
-#define OC_READ_ERROR_LOG       0x0080  /* READ_ERROR_LOG command */
-#define OC_READ_ADAPTER         0x0100  /* READ_ADAPTER command */
-#define OC_MODIFY_OPEN_PARMS    0x0400  /* MODIFY_OPEN_PARMS command */
-#define OC_RESTORE_OPEN_PARMS   0x0800  /* RESTORE_OPEN_PARMS command */
-#define OC_SET_FIRST_16_GROUP   0x1000  /* SET_FIRST_16_GROUP command */
-#define OC_SET_BRIDGE_PARMS     0x2000  /* SET_BRIDGE_PARMS command */
-#define OC_CONFIG_BRIDGE_PARMS  0x4000  /* CONFIG_BRIDGE_PARMS command */
+#define OC_OPEN			0x0001	/* OPEN command */
+#define OC_TRANSMIT		0x0002	/* TRANSMIT command */
+#define OC_TRANSMIT_HALT	0x0004	/* TRANSMIT_HALT command */
+#define OC_RECEIVE		0x0008	/* RECEIVE command */
+#define OC_CLOSE		0x0010	/* CLOSE command */
+#define OC_SET_GROUP_ADDR	0x0020	/* SET_GROUP_ADDR command */
+#define OC_SET_FUNCT_ADDR	0x0040	/* SET_FUNCT_ADDR command */
+#define OC_READ_ERROR_LOG	0x0080	/* READ_ERROR_LOG command */
+#define OC_READ_ADAPTER		0x0100	/* READ_ADAPTER command */
+#define OC_MODIFY_OPEN_PARMS	0x0400	/* MODIFY_OPEN_PARMS command */
+#define OC_RESTORE_OPEN_PARMS	0x0800	/* RESTORE_OPEN_PARMS command */
+#define OC_SET_FIRST_16_GROUP	0x1000	/* SET_FIRST_16_GROUP command */
+#define OC_SET_BRIDGE_PARMS	0x2000	/* SET_BRIDGE_PARMS command */
+#define OC_CONFIG_BRIDGE_PARMS	0x4000	/* CONFIG_BRIDGE_PARMS command */
 
-#define OPEN			0x0300  /* C: open command. S: completion. */
-#define TRANSMIT		0x0400  /* C: transmit command. S: completion
+#define OPEN			0x0300	/* C: open command. S: completion. */
+#define TRANSMIT		0x0400	/* C: transmit command. S: completion
 					 * status. (reject: COMMAND_REJECT if
 					 * adapter not opened, TRANSMIT already
 					 * issued or address passed in the SCB
 					 * not word aligned)
 					 */
-#define TRANSMIT_HALT		0x0500  /* C: interrupt TX TPL chain; if no
+#define TRANSMIT_HALT		0x0500	/* C: interrupt TX TPL chain; if no
 					 * TRANSMIT command issued, the command
-					 * is ignored. (completion with TRANSMIT
+					 * is ignored (completion with TRANSMIT
 					 * status (0x0400)!)
 					 */
-#define RECEIVE			0x0600  /* C: receive command. S: completion
+#define RECEIVE			0x0600	/* C: receive command. S: completion
 					 * status. (reject: COMMAND_REJECT if
 					 * adapter not opened, RECEIVE already
 					 * issued or address passed in the SCB 
 					 * not word aligned)
 					 */
-#define CLOSE			0x0700  /* C: close adapter. S: completion.
+#define CLOSE			0x0700	/* C: close adapter. S: completion.
 					 * (COMMAND_REJECT if adapter not open)
 					 */
-#define SET_GROUP_ADDR		0x0800  /* C: alter adapter group address after
-					 * OPEN.  S: completion. (COMMAND_REJECT
+#define SET_GROUP_ADDR		0x0800	/* C: alter adapter group address after
+					 * OPEN. S: completion. (COMMAND_REJECT
 					 * if adapter not open)
 					 */
-#define SET_FUNCT_ADDR		0x0900  /* C: alter adapter functional address
+#define SET_FUNCT_ADDR		0x0900	/* C: alter adapter functional address
 					 * after OPEN. S: completion.
 					 * (COMMAND_REJECT if adapter not open)
 					 */
-#define READ_ERROR_LOG		0x0A00  /* C: read adapter error counters.
+#define READ_ERROR_LOG		0x0A00	/* C: read adapter error counters.
 					 * S: completion. (command ignored
 					 * if adapter not open!)
 					 */
-#define READ_ADAPTER		0x0B00  /* C: read data from adapter memory.
+#define READ_ADAPTER		0x0B00	/* C: read data from adapter memory.
 					 * (important: after init and before
 					 * open!) S: completion. (ADAPTER_CHECK
 					 * interrupt if undefined storage area
 					 * read)
 					 */
-#define MODIFY_OPEN_PARMS	0x0D00  /* C: modify some adapter operational
+#define MODIFY_OPEN_PARMS	0x0D00	/* C: modify some adapter operational
 					 * parameters. (bit correspondend to
 					 * WRAP_INTERFACE is ignored)
 					 * S: completion. (reject: 
 					 * COMMAND_REJECT)
 					 */
-#define RESTORE_OPEN_PARMS	0x0E00  /* C: modify some adapter operational
+#define RESTORE_OPEN_PARMS	0x0E00	/* C: modify some adapter operational
 					 * parameters. (bit correspondend
 					 * to WRAP_INTERFACE is ignored)
 					 * S: completion. (reject:
 					 * COMMAND_REJECT)
 					 */
-#define SET_FIRST_16_GROUP	0x0F00  /* C: alter the first two bytes in
+#define SET_FIRST_16_GROUP	0x0F00	/* C: alter the first two bytes in
 					 * adapter group address.
 					 * S: completion. (reject:
 					 * COMMAND_REJECT)
 					 */
-#define SET_BRIDGE_PARMS	0x1000  /* C: values and conditions for the
+#define SET_BRIDGE_PARMS	0x1000	/* C: values and conditions for the
 					 * adapter hardware to use when frames
 					 * are copied for forwarding.
 					 * S: completion. (reject:
 					 * COMMAND_REJECT)
 					 */
-#define CONFIG_BRIDGE_PARMS 0x1100	/* C: ..
+#define CONFIG_BRIDGE_PARMS	0x1100	/* C: ..
 					 * S: completion. (reject:
 					 * COMMAND_REJECT)
 					 */
 
-#define SPEED_4         4
-#define SPEED_16        16	/* Default transmission speed  */
+#define SPEED_4			4
+#define SPEED_16		16	/* Default transmission speed  */
 
 
 /* Initialization Parameter Block (IPB); word alignment necessary! */
-#define BURST_SIZE      0x0018  /* Default burst size */
-#define BURST_MODE      0x9F00  /* Burst mode enable */
-#define DMA_RETRIES     0x0505  /* Magic DMA retry number... */
+#define BURST_SIZE	0x0018	/* Default burst size */
+#define BURST_MODE	0x9F00	/* Burst mode enable */
+#define DMA_RETRIES	0x0505	/* Magic DMA retry number... */
 
-#define CYCLE_TIME      3	/* Default AT-bus cycle time: 500 ns
+#define CYCLE_TIME	3	/* Default AT-bus cycle time: 500 ns
 				 * (later adapter version: fix  cycle time!)
 				 */
 #define LINE_SPEED_BIT	0x80
@@ -327,7 +351,7 @@
 #define FOUR_SECONDS		(ONE_SECOND_TICKS * 4)
 #define FIVE_SECONDS		(ONE_SECOND_TICKS * 5)
 
-#define BUFFER_SIZE 2048	/* Buffers on Adapter */
+#define BUFFER_SIZE 		2048	/* Buffers on Adapter */
 
 #pragma pack(1)
 typedef struct {
@@ -337,18 +361,18 @@ typedef struct {
 
 	/* Interrupt vectors the adapter places on attached system bus. */
 	unsigned char CMD_Status_IV;	/* Interrupt vector: command status. */
-	unsigned char TX_IV;     	/* Interrupt vector: transmit. */
-	unsigned char RX_IV;     	/* Interrupt vector: receive. */
+	unsigned char TX_IV;		/* Interrupt vector: transmit. */
+	unsigned char RX_IV;		/* Interrupt vector: receive. */
 	unsigned char Ring_Status_IV;	/* Interrupt vector: ring status. */
-	unsigned char SCB_Clear_IV;  	/* Interrupt vector: SCB clear. */
+	unsigned char SCB_Clear_IV;	/* Interrupt vector: SCB clear. */
 	unsigned char Adapter_CHK_IV;	/* Interrupt vector: adapter check. */
 
 	unsigned short RX_Burst_Size;	/* Max. number of transfer cycles. */
 	unsigned short TX_Burst_Size;	/* During DMA burst; even value! */
-	unsigned short DMA_Abort_Thrhld; /* Number of DMA retries. */
+	unsigned short DMA_Abort_Thrhld;/* Number of DMA retries. */
 
-	unsigned long SCB_Addr;	/* SCB address: even, word aligned, high-low. */
-	unsigned long SSB_Addr;	/* SSB address: even, word aligned, high-low. */
+	unsigned long SCB_Addr;	/* SCB address: even, word aligned, high-low */
+	unsigned long SSB_Addr;	/* SSB address: even, word aligned, high-low */
 } IPB, *IPB_Ptr;
 #pragma pack()
 
@@ -361,10 +385,10 @@ typedef struct {
 #define RPL_SIZE	14		/* (with TI firmware v2.26 handling
 					 * up to nine fragments possible)
 					 */
-#define TX_BUF_MIN      20		/* ??? (Stephan: calculation with */
-#define TX_BUF_MAX      40		/* BUFFER_SIZE and MAX_FRAME_SIZE) ??? 
+#define TX_BUF_MIN	20		/* ??? (Stephan: calculation with */
+#define TX_BUF_MAX	40		/* BUFFER_SIZE and MAX_FRAME_SIZE) ??? 
 					 */
-#define DISABLE_EARLY_TOKEN_RELEASE 0x1000
+#define DISABLE_EARLY_TOKEN_RELEASE 	0x1000
 
 /* OPEN Options (high-low) */
 #define WRAP_INTERFACE		0x0080	/* Inserting omitted for test
@@ -372,51 +396,52 @@ typedef struct {
 					 * as receive data. (usefull for
 					 * testing; change: CLOSE necessary)
 					 */
-#define DISABLE_HARD_ERROR	0x0040  /* On HARD_ERROR & TRANSMIT_BEACON
+#define DISABLE_HARD_ERROR	0x0040	/* On HARD_ERROR & TRANSMIT_BEACON
 					 * no RING.STATUS interrupt.
 					 */
-#define DISABLE_SOFT_ERROR	0x0020  /* On SOFT_ERROR, no RING.STATUS
+#define DISABLE_SOFT_ERROR	0x0020	/* On SOFT_ERROR, no RING.STATUS
 					 * interrupt.
 					 */
-#define PASS_ADAPTER_MAC_FRAMES 0x0010  /* Passing unsupported MAC frames
+#define PASS_ADAPTER_MAC_FRAMES	0x0010	/* Passing unsupported MAC frames
 					 * to system.
 					 */
-#define PASS_ATTENTION_FRAMES   0x0008  /* All changed attention MAC frames are
+#define PASS_ATTENTION_FRAMES	0x0008	/* All changed attention MAC frames are
 					 * passed to the system.
 					 */
-#define PAD_ROUTING_FIELD	0x0004  /* Routing field is padded to 18
+#define PAD_ROUTING_FIELD	0x0004	/* Routing field is padded to 18
 					 * bytes.
 					 */
-#define FRAME_HOLD		0x0002  /* Adapter waits for entire frame before
+#define FRAME_HOLD		0x0002	/*Adapter waits for entire frame before
 					 * initiating DMA transfer; otherwise:
 					 * DMA transfer initiation if internal
 					 * buffer filled.
 					 */
-#define CONTENDER		0x0001  /* Adapter participates in the monitor
+#define CONTENDER		0x0001	/* Adapter participates in the monitor
 					 * contention process.
 					 */
-#define PASS_BEACON_MAC_FRAMES  0x8000  /* Adapter passes beacon MAC frames
+#define PASS_BEACON_MAC_FRAMES	0x8000	/* Adapter passes beacon MAC frames
 					 * to the system.
 					 */
-#define EARLY_TOKEN_RELEASE 	0x1000  /* Only valid in 16 Mbps operation;
+#define EARLY_TOKEN_RELEASE 	0x1000	/* Only valid in 16 Mbps operation;
 					 * 0 = ETR. (no effect in 4 Mbps
 					 * operation)
 					 */
-#define COPY_ALL_MAC_FRAMES	0x0400  /* All MAC frames are copied to
+#define COPY_ALL_MAC_FRAMES	0x0400	/* All MAC frames are copied to
 					 * the system. (after OPEN: duplicate
 					 * address test (DAT) MAC frame is 
 					 * first received frame copied to the
 					 * system)
 					 */
-#define COPY_ALL_NON_MAC_FRAMES	0x0200  /* All non MAC frames are copied to
+#define COPY_ALL_NON_MAC_FRAMES	0x0200	/* All non MAC frames are copied to
 					 * the system.
 					 */
-#define PASS_FIRST_BUF_ONLY	0x0100  /* Passes only first internal buffer
+#define PASS_FIRST_BUF_ONLY	0x0100	/* Passes only first internal buffer
 					 * of each received frame; FrameSize
 					 * of RPLs must contain internal
 					 * BUFFER_SIZE bits for promiscous mode.
 					 */
-#define ENABLE_FULL_DUPLEX_SELECTION 0x2000 /* Enable the use of full-duplex
+#define ENABLE_FULL_DUPLEX_SELECTION	0x2000 
+ 					/* Enable the use of full-duplex
 					 * settings with bits in byte 22 in
 					 * ocpl. (new feature in firmware
 					 * version 3.09)
@@ -434,7 +459,7 @@ typedef struct {
 				  * fragments following.
 				  */
 
-#define ISA_MAX_ADDRESS 0x00ffffff
+#define ISA_MAX_ADDRESS 	0x00ffffff
 
 #pragma pack(1)
 typedef struct {
@@ -1031,15 +1056,6 @@ struct s_RPL {	/* Receive Parameter List */
 	int RPLIndex;
 };
 
-#define TMS_ISA 1
-#define TMS_PCI 2
-struct cardinfo_table {
-	int type; /* 1 = ISA, 2 = PCI */
-	int vendor_id;
-	int device_id;
-	char *name;
-};
-
 /* Information that need to be kept for each board. */
 typedef struct net_local {
 #pragma pack(1)
@@ -1094,7 +1110,7 @@ typedef struct net_local {
 
 	struct tr_statistics MacStat;	/* MAC statistics structure */
 
-	struct cardinfo_table *CardType;
+	unsigned long dmalimit; /* the max DMA address (ie, ISA) */
 
 	struct timer_list timer;
 
@@ -1103,6 +1119,13 @@ typedef struct net_local {
 	INTPTRS intptrs;	/* Internal adapter pointer. Must be read
 				 * before OPEN command.
 				 */
+	unsigned short (*setnselout)(struct net_device *);
+	unsigned short (*sifreadb)(struct net_device *, unsigned short);
+	void (*sifwriteb)(struct net_device *, unsigned short, unsigned short);
+	unsigned short (*sifreadw)(struct net_device *, unsigned short);
+	void (*sifwritew)(struct net_device *, unsigned short, unsigned short);
+
+	void *tmspriv;
 } NET_LOCAL;
 
 #endif	/* __KERNEL__ */

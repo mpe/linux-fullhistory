@@ -1,5 +1,5 @@
 
-/* Driver for USB scsi like devices
+/* Driver for USB mass storage (scsi-like) devices
  * 
  * (C) Michael Gee (michael@linuxspecific.com) 1999
  *
@@ -22,7 +22,7 @@
 #include "../scsi/sd.h"
 
 #include "usb.h"
-#include "usb_scsi.h"
+#include "usb_storage.h"
 
 void us_show_command(Scsi_Cmnd *srb)
 {

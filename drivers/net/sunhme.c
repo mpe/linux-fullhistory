@@ -207,42 +207,6 @@ static u32 pci_hme_read_desc32(u32 *p)
 	return cpu_to_le32(*p);
 }
 
-/* XXX Convert these to direct function hookup once new
- * XXX PCI dvma interfaces are propagated and in use everywhere.
- */
-static u32 pci_hme_dma_map(void *device, void *ptr, long size)
-{
-#if 1
-	return virt_to_bus(ptr);
-#else
-	struct pci_dev *pdev = device;
-
-	return pci_map_single(pdev, ptr, size);
-#endif
-}
-
-static void pci_hme_dma_unmap(void *device, u32 dma_addr, long size)
-{
-#if 1
-	return;
-#else
-	struct pci_dev *pdev = device;
-
-	pci_unmap_single(pdev, dma_addr, size);
-#endif
-}
-
-static void pci_hme_dma_sync(void *device, u32 dma_addr, long size)
-{
-#if 1
-	return;
-#else
-	struct pci_dev *pdev = device;
-
-	pci_dma_sync_single(pdev, dma_addr, size);
-#endif
-}
-
 #define hme_write32(__hp, __reg, __val) \
 	((__hp)->write32((__reg), (__val)))
 #define hme_read32(__hp, __reg) \
@@ -296,21 +260,12 @@ do {	(__txd)->tx_addr = cpu_to_le32(__addr); \
 	(__txd)->tx_flags = cpu_to_le32(__flags); \
 } while(0)
 #define hme_read_desc32(__hp, __p)	cpu_to_le32(*(__p))
-#if 0 /* XXX Once new PCI interfaces are in place... XXX */
 #define hme_dma_map(__hp, __ptr, __size) \
 	pci_map_single((__hp)->happy_dev, (__ptr), (__size))
 #define hme_dma_unmap(__hp, __addr, __size) \
 	pci_unmap_single((__hp)->happy_dev, (__addr), (__size))
 #define hme_dma_sync(__hp, __addr, __size) \
 	pci_dma_sync_single((__hp)->happy_dev, (__addr), (__size))
-#else
-#define hme_dma_map(__hp, __ptr, __size) \
-	(virt_to_bus(__ptr))
-#define hme_dma_unmap(__hp, __addr, __size) \
-	do { } while(0)
-#define hme_dma_sync(__hp, __addr, __size) \
-	do { } while(0)
-#endif
 #endif
 #endif
 
@@ -2663,7 +2618,7 @@ static int __init happy_meal_sbus_init(struct net_device *dev,
 	hp->happy_bursts = prom_getintdefault(sdev->bus->prom_node,
 					      "burst-sizes", 0x00);
 
-	hp->happy_block = sbus_alloc_consistant(hp->happy_dev,
+	hp->happy_block = sbus_alloc_consistent(hp->happy_dev,
 						PAGE_SIZE,
 						&hp->hblock_dvma);
 
@@ -2835,19 +2790,13 @@ static int __init happy_meal_pci_init(struct net_device *dev, struct pci_dev *pd
 	/* Assume PCI happy meals can handle all burst sizes. */
 	hp->happy_bursts = DMA_BURSTBITS;
 
-	hp->happy_block = (struct hmeal_init_block *) get_free_page(GFP_ATOMIC);
+	hp->happy_block = (struct hmeal_init_block *)
+		pci_alloc_consistent(pdev, PAGE_SIZE, &hp->hblock_dvma);
+
 	if (!hp->happy_block) {
 		printk(KERN_ERR "happymeal(PCI): Cannot get hme init block.\n");
 		return ENODEV;
 	}
-
-	hp->hblock_dvma = (u32) virt_to_bus(hp->happy_block);
-#ifndef __sparc_v9__
-	/*
-	 * P3: Dirty trick to get uncacheable memory as we have no dma_sync.
-	 */
-	hp->happy_block = ioremap(virt_to_phys(hp->happy_block), PAGE_SIZE);
-#endif
 
 	hp->linkcheck = 0;
 	hp->timer_state = asleep;
@@ -2870,9 +2819,9 @@ static int __init happy_meal_pci_init(struct net_device *dev, struct pci_dev *pd
 	hp->read_desc32 = pci_hme_read_desc32;
 	hp->write_txd = pci_hme_write_txd;
 	hp->write_rxd = pci_hme_write_rxd;
-	hp->dma_map = pci_hme_dma_map;
-	hp->dma_unmap = pci_hme_dma_unmap;
-	hp->dma_sync = pci_hme_dma_sync;
+	hp->dma_map = (u32 (*)(void *, void *, long))pci_map_single;
+	hp->dma_unmap = (void (*)(void *, u32, long))pci_unmap_single;
+	hp->dma_sync = (void (*)(void *, u32, long))pci_dma_sync_single;
 	hp->read32 = pci_hme_read32;
 	hp->write32 = pci_hme_write32;
 #endif
@@ -3011,10 +2960,18 @@ cleanup_module(void)
 			sbus_iounmap(hp->erxregs, ERX_REG_SIZE);
 			sbus_iounmap(hp->bigmacregs, BMAC_REG_SIZE);
 			sbus_iounmap(hp->tcvregs, TCVR_REG_SIZE);
-			sbus_free_consistant(hp->happy_dev,
+			sbus_free_consistent(hp->happy_dev,
 					     PAGE_SIZE,
 					     hp->happy_block,
 					     hp->hblock_dvma);
+		}
+#endif
+#ifdef CONFIG_PCI
+		if ((hp->happy_flags & HFLAG_PCI)) {
+			pci_free_consistent(hp->happy_dev,
+					    PAGE_SIZE,
+					    hp->happy_block,
+					    hp->hblock_dvma);
 		}
 #endif
 		unregister_netdev(hp->dev);

@@ -2240,6 +2240,11 @@ int init_module(void)
 	int has_space = 0;
 	struct proc_dir_entry *generic;
 
+        if( scsi_init_minimal_dma_pool() != 0 )
+        {
+                return 1;
+        }
+
 	/*
 	 * This makes /proc/scsi and /proc/scsi/scsi visible.
 	 */
@@ -2259,11 +2264,6 @@ int init_module(void)
 #endif
 
 	scsi_loadable_module_flag = 1;
-
-        if( scsi_init_minimal_dma_pool() == 0 )
-        {
-                return 1;
-        }
 
 	/*
 	 * This is where the processing takes place for most everything

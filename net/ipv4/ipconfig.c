@@ -534,7 +534,14 @@ static void __init ic_bootp_send_if(struct ic_device *d, u32 jiffies)
 
 	/* Construct BOOTP header */
 	b->op = BOOTP_REQUEST;
-	b->htype = dev->type;
+	if (dev->type < 256) /* check for false types */
+		b->htype = dev->type;
+	else if (dev->type == ARPHRD_IEEE802_TR) /* fix for token ring */
+		b->htype = ARPHRD_IEEE802;
+	else {
+		printk("Unknown ARP type 0x%04x for device %s\n", dev->type, dev->name);
+		b->htype = dev->type; /* can cause undefined behavior */
+	}
 	b->hlen = dev->addr_len;
 	memcpy(b->hw_addr, dev->dev_addr, dev->addr_len);
 	b->secs = htons(jiffies / HZ);

@@ -237,7 +237,6 @@ static void mega_Convert8ldTo40ld(  mega_RAIDINQ  *inquiry,
                                     megaRaidProductInfo *productInfo );
 
 
-#include <linux/spinlock.h>
 #include <linux/smp.h>
 
 

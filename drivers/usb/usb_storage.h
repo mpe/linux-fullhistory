@@ -1,4 +1,4 @@
-/* Driver for USB SCSI - include file
+/* Driver for USB mass storage - include file
  *
  * (c) 1999 Michael Gee (michael@linuxspecific.com)
  * (c) 1999, 2000 Matthew Dharm (mdharm-usb@one-eyed-alien.net)
@@ -11,7 +11,7 @@
 
 extern int usb_stor_debug;
 
-#ifdef CONFIG_USB_SCSI_DEBUG
+#ifdef CONFIG_USB_STORAGE_DEBUG
 void us_show_command(Scsi_Cmnd *srb);
 #define US_DEBUGP(x...) { if(usb_stor_debug) printk( KERN_DEBUG USB_STORAGE ## x ); }
 #define US_DEBUGPX(x...) { if(usb_stor_debug) printk( ## x ); }

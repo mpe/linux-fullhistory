@@ -225,7 +225,7 @@ static void dbri_detach(struct dbri *dbri)
 	dbri_reset(dbri);
         free_irq(dbri->irq, dbri);
         sbus_iounmap(dbri->regs, dbri->regs_size);
-        sbus_free_consistant(dbri->sdev, sizeof(struct dbri_dma),
+        sbus_free_consistent(dbri->sdev, sizeof(struct dbri_dma),
                              dbri->dma, dbri->dma_dvma);
         kfree(dbri);
 }
@@ -2232,7 +2232,7 @@ static int dbri_attach(struct sparcaudio_driver *drv,
 	dbri = (struct dbri *) drv->private;
         memset(dbri, 0, sizeof(*dbri));
 
-        dbri->dma = sbus_alloc_consistant(sdev,
+        dbri->dma = sbus_alloc_consistent(sdev,
                                           sizeof(struct dbri_dma),
                                           &dbri->dma_dvma);
 
@@ -2251,7 +2251,7 @@ static int dbri_attach(struct sparcaudio_driver *drv,
                                   "DBRI Registers");
 	if (!dbri->regs) {
 		printk(KERN_ERR "DBRI: could not allocate registers\n");
-                sbus_free_consistant(sdev, sizeof(struct dbri_dma),
+                sbus_free_consistent(sdev, sizeof(struct dbri_dma),
                                      dbri->dma, dbri->dma_dvma);
 		kfree(drv->private);
 		return -EIO;
@@ -2265,7 +2265,7 @@ static int dbri_attach(struct sparcaudio_driver *drv,
 	if (err) {
 		printk(KERN_ERR "DBRI: Can't get irq %d\n", dbri->irq);
                 sbus_iounmap(dbri->regs, dbri->regs_size);
-                sbus_free_consistant(sdev, sizeof(struct dbri_dma),
+                sbus_free_consistent(sdev, sizeof(struct dbri_dma),
                                      dbri->dma, dbri->dma_dvma);
 		kfree(drv->private);
 		return err;

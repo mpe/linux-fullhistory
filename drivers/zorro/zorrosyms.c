@@ -3,7 +3,7 @@
  *
  *	Zorro Bus Services -- Exported Symbols
  *
- *	Copyright (C) 1998 Geert Uytterhoeven
+ *	Copyright (C) 1998-2000 Geert Uytterhoeven
  */
 
 #include <linux/module.h>
@@ -12,10 +12,7 @@
 
     /* Board configuration */
 
-EXPORT_SYMBOL(zorro_find);
-EXPORT_SYMBOL(zorro_get_board);
-EXPORT_SYMBOL(zorro_config_board);
-EXPORT_SYMBOL(zorro_unconfig_board);
+EXPORT_SYMBOL(zorro_find_device);
 
     /* Z2 memory */
 

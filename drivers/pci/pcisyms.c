@@ -28,6 +28,7 @@ EXPORT_SYMBOL(pci_set_power_state);
 EXPORT_SYMBOL(pci_assign_resource);
 EXPORT_SYMBOL(pci_register_driver);
 EXPORT_SYMBOL(pci_unregister_driver);
+EXPORT_SYMBOL(pci_match_device);
 
 #ifdef CONFIG_HOTPLUG
 EXPORT_SYMBOL(pci_setup_device);

@@ -2,7 +2,7 @@
  * pci_iommu.c: UltraSparc PCI controller IOM/STC support.
  *
  * Copyright (C) 1999 David S. Miller (davem@redhat.com)
- * Copyright (C) 1999 Jakub Jelinek (jakub@redhat.com)
+ * Copyright (C) 1999, 2000 Jakub Jelinek (jakub@redhat.com)
  */
 
 #include <linux/kernel.h>
@@ -63,7 +63,7 @@ static iopte_t *alloc_streaming_cluster(struct pci_iommu *iommu, unsigned long n
 	return iopte;
 }
 
-static inline void free_streaming_cluster(struct pci_iommu *iommu, u32 base, unsigned long npages)
+static inline void free_streaming_cluster(struct pci_iommu *iommu, dma_addr_t base, unsigned long npages)
 {
 	unsigned long cnum, ent;
 
@@ -76,8 +76,8 @@ static inline void free_streaming_cluster(struct pci_iommu *iommu, u32 base, uns
 		iommu->lowest_free[cnum] = ent;
 }
 
-/* We allocate consistant mappings from the end of cluster zero. */
-static iopte_t *alloc_consistant_cluster(struct pci_iommu *iommu, unsigned long npages)
+/* We allocate consistent mappings from the end of cluster zero. */
+static iopte_t *alloc_consistent_cluster(struct pci_iommu *iommu, unsigned long npages)
 {
 	iopte_t *iopte;
 
@@ -109,11 +109,11 @@ static iopte_t *alloc_consistant_cluster(struct pci_iommu *iommu, unsigned long 
 
 #define IOPTE_INVALID	0UL
 
-/* Allocate and map kernel buffer of size SIZE using consistant mode
+/* Allocate and map kernel buffer of size SIZE using consistent mode
  * DMA for PCI device PDEV.  Return non-NULL cpu-side address if
  * successful and set *DMA_ADDRP to the PCI side dma address.
  */
-void *pci_alloc_consistant(struct pci_dev *pdev, long size, u32 *dma_addrp)
+void *pci_alloc_consistent(struct pci_dev *pdev, size_t size, dma_addr_t *dma_addrp)
 {
 	struct pcidev_cookie *pcp;
 	struct pci_iommu *iommu;
@@ -122,10 +122,6 @@ void *pci_alloc_consistant(struct pci_dev *pdev, long size, u32 *dma_addrp)
 	void *ret;
 	int npages;
 
-	if (size <= 0 || pdev == NULL ||
-	    pdev->sysdata == NULL || dma_addrp == NULL)
-		return NULL;
-
 	size = PAGE_ALIGN(size);
 	for (order = 0; order < 10; order++) {
 		if ((PAGE_SIZE << order) >= size)
@@ -133,6 +129,11 @@ void *pci_alloc_consistant(struct pci_dev *pdev, long size, u32 *dma_addrp)
 	}
 	if (order == 10)
 		return NULL;
+
+	/* We still don't support devices which don't recognize at least 30 bits
+	   of bus address. Bug me to code it (is pretty easy actually). -jj */
+	if ((pdev->dma_mask & 0x3fffffff) != 0x3fffffff)
+		BUG();
 
 	first_page = __get_free_pages(GFP_ATOMIC, order);
 	if (first_page == 0UL)
@@ -143,7 +144,7 @@ void *pci_alloc_consistant(struct pci_dev *pdev, long size, u32 *dma_addrp)
 	iommu = &pcp->pbm->parent->iommu;
 
 	spin_lock_irqsave(&iommu->lock, flags);
-	iopte = alloc_consistant_cluster(iommu, size >> PAGE_SHIFT);
+	iopte = alloc_consistent_cluster(iommu, size >> PAGE_SHIFT);
 	if (iopte == NULL) {
 		spin_unlock_irqrestore(&iommu->lock, flags);
 		free_pages(first_page, order);
@@ -182,17 +183,13 @@ void *pci_alloc_consistant(struct pci_dev *pdev, long size, u32 *dma_addrp)
 	return ret;
 }
 
-/* Free and unmap a consistant DMA translation. */
-void pci_free_consistant(struct pci_dev *pdev, long size, void *cpu, u32 dvma)
+/* Free and unmap a consistent DMA translation. */
+void pci_free_consistent(struct pci_dev *pdev, size_t size, void *cpu, dma_addr_t dvma)
 {
 	struct pcidev_cookie *pcp;
 	struct pci_iommu *iommu;
 	iopte_t *iopte;
 	unsigned long flags, order, npages, i;
-
-	if (size <= 0 || pdev == NULL ||
-	    pdev->sysdata == NULL || cpu == NULL)
-		return;
 
 	npages = PAGE_ALIGN(size) >> PAGE_SHIFT;
 	pcp = pdev->sysdata;
@@ -202,7 +199,7 @@ void pci_free_consistant(struct pci_dev *pdev, long size, void *cpu, u32 dvma)
 
 	spin_lock_irqsave(&iommu->lock, flags);
 
-	/* Data for consistant mappings cannot enter the streaming
+	/* Data for consistent mappings cannot enter the streaming
 	 * buffers, so we only need to update the TSB.  Flush of the
 	 * IOTLB is done later when these ioptes are used for a new
 	 * allocation.
@@ -224,15 +221,24 @@ void pci_free_consistant(struct pci_dev *pdev, long size, void *cpu, u32 dvma)
 /* Map a single buffer at PTR of SZ bytes for PCI DMA
  * in streaming mode.
  */
-u32 pci_map_single(struct pci_dev *pdev, void *ptr, long sz)
+dma_addr_t pci_map_single(struct pci_dev *pdev, void *ptr, size_t sz)
 {
-	struct pcidev_cookie *pcp = pdev->sysdata;
-	struct pci_iommu *iommu = &pcp->pbm->parent->iommu;
-	struct pci_strbuf *strbuf = &pcp->pbm->stc;
+	struct pcidev_cookie *pcp;
+	struct pci_iommu *iommu;
+	struct pci_strbuf *strbuf;
 	iopte_t *base;
 	unsigned long flags, npages, oaddr;
 	unsigned long i, base_paddr, ctx;
 	u32 bus_addr, ret;
+
+	pcp = pdev->sysdata;
+	iommu = &pcp->pbm->parent->iommu;
+	strbuf = &pcp->pbm->stc;
+
+	/* We still don't support devices which don't recognize at least 30 bits
+	   of bus address. Bug me to code it (is pretty easy actually). -jj */
+	if ((pdev->dma_mask & 0x3fffffff) != 0x3fffffff)
+		BUG();
 
 	oaddr = (unsigned long)ptr;
 	npages = PAGE_ALIGN(oaddr + sz) - (oaddr & PAGE_MASK);
@@ -270,18 +276,26 @@ u32 pci_map_single(struct pci_dev *pdev, void *ptr, long sz)
 }
 
 /* Unmap a single streaming mode DMA translation. */
-void pci_unmap_single(struct pci_dev *pdev, u32 bus_addr, long sz)
+void pci_unmap_single(struct pci_dev *pdev, dma_addr_t bus_addr, size_t sz)
 {
-	struct pcidev_cookie *pcp = pdev->sysdata;
-	struct pci_iommu *iommu = &pcp->pbm->parent->iommu;
-	struct pci_strbuf *strbuf = &pcp->pbm->stc;
+	struct pcidev_cookie *pcp;
+	struct pci_iommu *iommu;
+	struct pci_strbuf *strbuf;
 	iopte_t *base;
 	unsigned long flags, npages, i, ctx;
+
+	pcp = pdev->sysdata;
+	iommu = &pcp->pbm->parent->iommu;
+	strbuf = &pcp->pbm->stc;
 
 	npages = PAGE_ALIGN(bus_addr + sz) - (bus_addr & PAGE_MASK);
 	npages >>= PAGE_SHIFT;
 	base = iommu->page_table +
 		((bus_addr - iommu->page_table_map_base) >> PAGE_SHIFT);
+#ifdef DEBUG_PCI_IOMMU
+	if (iopte_val(*base) == IOPTE_INVALID)
+		printk("pci_unmap_single called on non-mapped region %08x,%08x from %016lx\n", bus_addr, sz, __builtin_return_address(0));
+#endif
 	bus_addr &= PAGE_MASK;
 
 	spin_lock_irqsave(&iommu->lock, flags);
@@ -327,11 +341,12 @@ void pci_unmap_single(struct pci_dev *pdev, u32 bus_addr, long sz)
 	spin_unlock_irqrestore(&iommu->lock, flags);
 }
 
-static inline struct scatterlist *fill_sg(iopte_t *iopte, struct scatterlist *sg, int nents, unsigned long ctx, int streaming)
+static inline void fill_sg(iopte_t *iopte, struct scatterlist *sg, int nused, unsigned long ctx, int streaming)
 {
 	struct scatterlist *dma_sg = sg;
+	int i;
 
-	do {
+	for (i = 0; i < nused; i++) {
 		unsigned long pteval = ~0UL;
 		u32 dma_npages;
 
@@ -396,8 +411,7 @@ static inline struct scatterlist *fill_sg(iopte_t *iopte, struct scatterlist *sg
 				pteval = ~0UL;
 		} while (dma_npages != 0);
 		dma_sg++;
-	} while (dma_sg->dvma_length != 0);
-	return dma_sg;
+	}
 }
 
 /* Map a set of buffers described by SGLIST with NELEMS array
@@ -414,7 +428,7 @@ int pci_map_sg(struct pci_dev *pdev, struct scatterlist *sglist, int nelems)
 	iopte_t *base;
 	u32 dma_base;
 	struct scatterlist *sgtmp;
-	int tmp;
+	int used;
 
 	/* Fast path single entry scatterlists. */
 	if (nelems == 1) {
@@ -422,11 +436,16 @@ int pci_map_sg(struct pci_dev *pdev, struct scatterlist *sglist, int nelems)
 		sglist->dvma_length = sglist->length;
 		return 1;
 	}
-                                                                        
+
 	pcp = pdev->sysdata;
 	iommu = &pcp->pbm->parent->iommu;
 	strbuf = &pcp->pbm->stc;
 	
+	/* We still don't support devices which don't recognize at least 30 bits
+	   of bus address. Bug me to code it (is pretty easy actually). -jj */
+	if ((pdev->dma_mask & 0x3fffffff) != 0x3fffffff)
+		BUG();
+
 	/* Step 1: Prepare scatter list. */
 
 	npages = prepare_sg(sglist, nelems);
@@ -439,13 +458,15 @@ int pci_map_sg(struct pci_dev *pdev, struct scatterlist *sglist, int nelems)
 	dma_base = iommu->page_table_map_base + ((base - iommu->page_table) << PAGE_SHIFT);
 
 	/* Step 3: Normalize DMA addresses. */
-	tmp = nelems;
+	used = nelems;
 
 	sgtmp = sglist;
-	while (tmp-- && sgtmp->dvma_length) {
+	while (used && sgtmp->dvma_length) {
 		sgtmp->dvma_address += dma_base;
 		sgtmp++;
+		used--;
 	}
+	used = nelems - used;
 
 	/* Step 4: Choose a context if necessary. */
 	ctx = 0;
@@ -453,7 +474,7 @@ int pci_map_sg(struct pci_dev *pdev, struct scatterlist *sglist, int nelems)
 		ctx = iommu->iommu_cur_ctx++;
 
 	/* Step 5: Create the mappings. */
-	sgtmp = fill_sg (base, sglist, nelems, ctx, strbuf->strbuf_enabled);
+	fill_sg (base, sglist, used, ctx, strbuf->strbuf_enabled);
 #ifdef VERIFY_SG
 	verify_sglist(sglist, nelems, base, npages);
 #endif
@@ -468,32 +489,38 @@ int pci_map_sg(struct pci_dev *pdev, struct scatterlist *sglist, int nelems)
 
 	spin_unlock_irqrestore(&iommu->lock, flags);
 
-	return sgtmp - sglist;
+	return used;
 }
 
 /* Unmap a set of streaming mode DMA translations. */
 void pci_unmap_sg(struct pci_dev *pdev, struct scatterlist *sglist, int nelems)
 {
-	struct pcidev_cookie *pcp = pdev->sysdata;
-	struct pci_iommu *iommu = &pcp->pbm->parent->iommu;
-	struct pci_strbuf *strbuf = &pcp->pbm->stc;
+	struct pcidev_cookie *pcp;
+	struct pci_iommu *iommu;
+	struct pci_strbuf *strbuf;
 	iopte_t *base;
 	unsigned long flags, ctx, i, npages;
 	u32 bus_addr;
+
+	pcp = pdev->sysdata;
+	iommu = &pcp->pbm->parent->iommu;
+	strbuf = &pcp->pbm->stc;
 	
 	bus_addr = sglist->dvma_address & PAGE_MASK;
 
-	i = 0;
-	if (nelems > 1) {
-		for (; i < nelems; i++)
-			if (sglist[i].dvma_length == 0)
-				break;
-		i--;
-	}
+	for (i = 1; i < nelems; i++)
+		if (sglist[i].dvma_length == 0)
+			break;
+	i--;
 	npages = (PAGE_ALIGN(sglist[i].dvma_address + sglist[i].dvma_length) - bus_addr) >> PAGE_SHIFT;
 
 	base = iommu->page_table +
 		((bus_addr - iommu->page_table_map_base) >> PAGE_SHIFT);
+
+#ifdef DEBUG_PCI_IOMMU
+	if (iopte_val(*base) == IOPTE_INVALID)
+		printk("pci_unmap_sg called on non-mapped region %08x,%d from %016lx\n", sglist->dvma_address, nelems, __builtin_return_address(0));
+#endif
 
 	spin_lock_irqsave(&iommu->lock, flags);
 
@@ -538,15 +565,19 @@ void pci_unmap_sg(struct pci_dev *pdev, struct scatterlist *sglist, int nelems)
 	spin_unlock_irqrestore(&iommu->lock, flags);
 }
 
-/* Make physical memory consistant for a single
+/* Make physical memory consistent for a single
  * streaming mode DMA translation after a transfer.
  */
-void pci_dma_sync_single(struct pci_dev *pdev, u32 bus_addr, long sz)
+void pci_dma_sync_single(struct pci_dev *pdev, dma_addr_t bus_addr, size_t sz)
 {
-	struct pcidev_cookie *pcp = pdev->sysdata;
-	struct pci_iommu *iommu = &pcp->pbm->parent->iommu;
-	struct pci_strbuf *strbuf = &pcp->pbm->stc;
+	struct pcidev_cookie *pcp;
+	struct pci_iommu *iommu;
+	struct pci_strbuf *strbuf;
 	unsigned long flags, ctx, npages;
+
+	pcp = pdev->sysdata;
+	iommu = &pcp->pbm->parent->iommu;
+	strbuf = &pcp->pbm->stc;
 
 	if (!strbuf->strbuf_enabled)
 		return;
@@ -595,15 +626,19 @@ void pci_dma_sync_single(struct pci_dev *pdev, u32 bus_addr, long sz)
 	spin_unlock_irqrestore(&iommu->lock, flags);
 }
 
-/* Make physical memory consistant for a set of streaming
+/* Make physical memory consistent for a set of streaming
  * mode DMA translations after a transfer.
  */
 void pci_dma_sync_sg(struct pci_dev *pdev, struct scatterlist *sglist, int nelems)
 {
-	struct pcidev_cookie *pcp = pdev->sysdata;
-	struct pci_iommu *iommu = &pcp->pbm->parent->iommu;
-	struct pci_strbuf *strbuf = &pcp->pbm->stc;
+	struct pcidev_cookie *pcp;
+	struct pci_iommu *iommu;
+	struct pci_strbuf *strbuf;
 	unsigned long flags, ctx;
+
+	pcp = pdev->sysdata;
+	iommu = &pcp->pbm->parent->iommu;
+	strbuf = &pcp->pbm->stc;
 
 	if (!strbuf->strbuf_enabled)
 		return;
@@ -636,15 +671,12 @@ void pci_dma_sync_sg(struct pci_dev *pdev, struct scatterlist *sglist, int nelem
 		unsigned long i, npages;
 		u32 bus_addr;
 
-		i = 0;
 		bus_addr = sglist[0].dvma_address & PAGE_MASK;
 
-		if (nelems > 1) {
-			for(; i < nelems; i++)
-				if (!sglist[i].dvma_length)
-					break;
-			i--;
-		}
+		for(i = 1; i < nelems; i++)
+			if (!sglist[i].dvma_length)
+				break;
+		i--;
 		npages = (PAGE_ALIGN(sglist[i].dvma_address + sglist[i].dvma_length) - bus_addr) >> PAGE_SHIFT;
 		for (i = 0; i < npages; i++, bus_addr += PAGE_SIZE)
 			pci_iommu_write(strbuf->strbuf_pflush, bus_addr);

@@ -982,6 +982,9 @@ typedef struct net_local {
 
 	__u8		join_state;
 
+	__u8		slot_num;
+	__u16		pos_id;
+
 	__u32		*ptr_una;
 	__u32		*ptr_bcn_type;
 	__u32		*ptr_tx_fifo_underruns;
@@ -1420,11 +1423,9 @@ routine */
  * adapter_type The adapter_type field describes the adapter/bus
  *              configuration.
  */
-#define BUS_UNK_TYPE            0x0000  /*  */
 #define BUS_ISA16_TYPE          0x0001  /* 16 bit adap in 16 bit (E)ISA slot  */
 #define BUS_ISA8_TYPE           0x0002  /* 8/16b adap in 8 bit XT/(E)ISA slot */
-#define BUS_MCA_TYPE            0x0003  /* Micro Channel adapter              */#define BUS_EISA32M_TYPE        0x0004  /* EISA 32 bit bus master adapter     */#define BUS_EISA32S_TYPE        0x0005  /* EISA 32 bit bus slave adapter      */#define BUS_PCMCIA_TYPE         0x0006  /* PCMCIA adapter */
-#define BUS_PCI_TYPE            0x0007  /* PCI bus */
+#define BUS_MCA_TYPE            0x0003  /* Micro Channel adapter              */
 
 /*
  * Receive Mask definitions

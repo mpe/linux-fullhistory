@@ -16,38 +16,25 @@ extern void write_keyb_cmd(u_short length, u_char *cmd);
 static char BellOnCommand[] =  { 0xFF, 0x21, 0x81 },
 		    BellOffCommand[] = { 0xFF, 0x21, 0x82 };
 
+extern void dn_serial_print (const char *str);
 void dn_process_int(int irq, struct pt_regs *fp) {
 
-#if 0
-  unsigned char x;
-#endif 
-
-#if 0
-  printk("Aha DN interrupt ! : %d\n",irq);
-#endif
 
   if(dn_irqs[irq-160].handler) {
     dn_irqs[irq-160].handler(irq,dn_irqs[irq-160].dev_id,fp);
   }
   else {
-    printk("spurious irq %d occurred\n",irq);
+    printk("spurious irq %d occured\n",irq);
   }
 
-#if 0  
-  printk("*(0x10803) %02x\n",*(volatile unsigned char *)(IO_BASE+0x10803));
-  x=*(volatile unsigned char *)(IO_BASE+0x10805);
-#endif
-
-  *(volatile unsigned char *)(IO_BASE+0x11000)=0x20;
-  *(volatile unsigned char *)(IO_BASE+0x11100)=0x20;
+  *(volatile unsigned char *)(pica)=0x20;
+  *(volatile unsigned char *)(picb)=0x20;
 
 }
 
 void dn_init_IRQ(void) {
 
   int i;
-
-  printk("Init IRQ\n");
 
   for(i=0;i<16;i++) {
     dn_irqs[i].handler=NULL;
@@ -60,8 +47,6 @@ void dn_init_IRQ(void) {
 
 int dn_request_irq(unsigned int irq, void (*handler)(int, void *, struct pt_regs *), unsigned long flags, const char *devname, void *dev_id) {
 
-  printk("dn request IRQ\n");
-
   if((irq<0) || (irq>15)) {
     printk("Trying to request illegal IRQ\n");
     return -ENXIO;
@@ -73,9 +58,10 @@ int dn_request_irq(unsigned int irq, void (*handler)(int, void *, struct pt_regs
     dn_irqs[irq].dev_id=dev_id;
     dn_irqs[irq].devname=devname;
     if(irq<8)
-      *(volatile unsigned char *)(IO_BASE+PICA+1)&=~(1<<irq);
+      *(volatile unsigned char *)(pica+1)&=~(1<<irq);
     else
-      *(volatile unsigned char *)(IO_BASE+PICB+1)&=~(1<<(irq-8));
+      *(volatile unsigned char *)(picb+1)&=~(1<<(irq-8));
+
     return 0;
   }
   else {
@@ -87,17 +73,15 @@ int dn_request_irq(unsigned int irq, void (*handler)(int, void *, struct pt_regs
 
 void dn_free_irq(unsigned int irq, void *dev_id) {
 
-  printk("dn free irq\n");
-
   if((irq<0) || (irq>15)) {
     printk("Trying to free illegal IRQ\n");
     return ;
   }
 
   if(irq<8)
-    *(volatile unsigned char *)(IO_BASE+PICA+1)|=(1<<irq);
+    *(volatile unsigned char *)(pica+1)|=(1<<irq);
   else
-    *(volatile unsigned char *)(IO_BASE+PICB+1)|=(1<<(irq-8));  
+    *(volatile unsigned char *)(picb+1)|=(1<<(irq-8));  
 
   dn_irqs[irq].handler=NULL;
   dn_irqs[irq].flags=IRQ_FLG_STD;

@@ -240,7 +240,7 @@ static int setup (wan_device_t *wandev, wandev_conf_t *conf)
 	/* Initialize WAN device data space */
 	wandev->irq       = irq;
 	wandev->dma       = wandev->ioport = 0;
-	wandev->maddr     = (unsigned long*)card->hw.dpmbase;
+	wandev->maddr     = card->hw.dpmbase;
 	wandev->msize     = card->hw.dpmsize;
 	wandev->hw_opt[2] = 0;
 	wandev->hw_opt[3] = card->hw.fwid;

@@ -149,7 +149,7 @@ parport_pc_init(int *io, int *io_hi, int *irq, int *dma)
 
 				if (parport_pc_probe_port(base, base + 0x400,
 							  edev->irqs[0],
-							  count))
+							  count, ebus->self))
 					count++;
 			}
 		}

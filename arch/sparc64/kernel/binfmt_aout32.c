@@ -30,16 +30,16 @@
 
 #include <asm/system.h>
 #include <asm/uaccess.h>
-#include <asm/pgtable.h>
+#include <asm/pgalloc.h>
 
 static int load_aout32_binary(struct linux_binprm *, struct pt_regs * regs);
 static int load_aout32_library(int fd);
-static int aout32_core_dump(long signr, struct pt_regs * regs);
+static int aout32_core_dump(long signr, struct pt_regs * regs, struct file *file);
 
 extern void dump_thread(struct pt_regs *, struct user *);
 
 static struct linux_binfmt aout32_format = {
-	NULL, NULL, load_aout32_binary, load_aout32_library, aout32_core_dump,
+	NULL, THIS_MODULE, load_aout32_binary, load_aout32_library, aout32_core_dump,
 	PAGE_SIZE
 };
 
@@ -214,7 +214,6 @@ static inline int do_load_aout32_binary(struct linux_binprm * bprm,
 	struct file * file;
 	int fd;
 	unsigned long error;
-	unsigned long p = bprm->p;
 	unsigned long fd_offset;
 	unsigned long rlim;
 	int retval;
@@ -275,9 +274,13 @@ static inline int do_load_aout32_binary(struct linux_binprm * bprm,
 		read_exec(bprm->dentry, fd_offset, (char *) N_TXTADDR(ex),
 			  ex.a_text+ex.a_data, 0);
 	} else {
+		static unsigned long error_time;
 		if ((ex.a_text & 0xfff || ex.a_data & 0xfff) &&
-		    (N_MAGIC(ex) != NMAGIC))
+		    (N_MAGIC(ex) != NMAGIC) && (jiffies-error_time) > 5*HZ)
+		{
 			printk(KERN_NOTICE "executable not page aligned\n");
+			error_time = jiffies;
+		}
 
 		fd = open_dentry(bprm->dentry, O_RDONLY);
 		if (fd < 0)
@@ -285,7 +288,7 @@ static inline int do_load_aout32_binary(struct linux_binprm * bprm,
 		file = fget(fd);
 
 		if (!file->f_op || !file->f_op->mmap) {
-			fput(fd);
+			fput(file);
 			sys_close(fd);
 			do_brk(0, ex.a_text+ex.a_data);
 			read_exec(bprm->dentry, fd_offset,
@@ -452,8 +455,17 @@ load_aout32_library(int fd)
 	return retval;
 }
 
-
-int __init init_aout32_binfmt(void)
+static int __init init_aout32_binfmt(void)
 {
 	return register_binfmt(&aout32_format);
 }
+
+static void __exit exit_aout32_binfmt(void)
+{
+	unregister_binfmt(&aout32_format);
+}
+
+EXPORT_NO_SYMBOLS;
+
+module_init(init_aout32_binfmt);
+module_exit(exit_aout32_binfmt);

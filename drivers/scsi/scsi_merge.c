@@ -5,6 +5,7 @@
  *      Initial versions: Eric Youngdale (eric@andante.org).
  *                        Based upon conversations with large numbers
  *                        of people at Linux Expo.
+ *	Support for dynamic DMA mapping: Jakub Jelinek (jakub@redhat.com).
  */
 
 /*
@@ -55,6 +56,7 @@
 #include <asm/system.h>
 #include <asm/irq.h>
 #include <asm/dma.h>
+#include <asm/io.h>
 
 #include "scsi.h"
 #include "hosts.h"
@@ -303,6 +305,10 @@ recount_segments(Scsi_Cmnd * SCpnt)
 					    SHpnt->unchecked_isa_dma, NULL);
 }
 
+#define MERGEABLE_BUFFERS(X,Y) \
+(((((long)(X)->b_data+(X)->b_size)|((long)(Y)->b_data)) & \
+  (DMA_CHUNK_SIZE - 1)) == 0)
+
 /*
  * Function:    __scsi_merge_fn()
  *
@@ -369,7 +375,7 @@ __inline static int __scsi_merge_fn(request_queue_t * q,
 			 */
 			if (dma_host &&
 			    virt_to_phys(req->bhtail->b_data) - 1 == ISA_DMA_THRESHOLD) {
-				goto new_segment;
+				goto new_end_segment;
 			}
 			if (CONTIGUOUS_BUFFERS(req->bhtail, bh)) {
 #ifdef DMA_SEGMENT_SIZE_LIMITED
@@ -377,9 +383,8 @@ __inline static int __scsi_merge_fn(request_queue_t * q,
 				    && virt_to_phys(bh->b_data) - 1 >= ISA_DMA_THRESHOLD ) {
 					segment_size = 0;
 					count = __count_segments(req, use_clustering, dma_host, &segment_size);
-					if( segment_size + bh->b_size > PAGE_SIZE )
-					{
-						goto new_segment;
+					if( segment_size + bh->b_size > PAGE_SIZE ) {
+						goto new_end_segment;
 					}
 				}
 #endif
@@ -389,8 +394,17 @@ __inline static int __scsi_merge_fn(request_queue_t * q,
 				return 1;
 			}
 		}
+	      new_end_segment:
+#ifdef DMA_CHUNK_SIZE
+		if (MERGEABLE_BUFFERS(req->bhtail, bh))
+			goto new_mergeable;
+#endif
 		goto new_segment;
-	} else if (req->sector - count == sector) {
+	} else {
+		if (req->sector - count != sector) {
+			/* Attempt to merge sector that doesn't belong */
+			BUG();
+		}
 		if (use_clustering) {
 			/* 
 			 * See if we can do this without creating another
@@ -400,7 +414,7 @@ __inline static int __scsi_merge_fn(request_queue_t * q,
 			 */
 			if (dma_host &&
 			    virt_to_phys(bh->b_data) - 1 == ISA_DMA_THRESHOLD) {
-				goto new_segment;
+				goto new_start_segment;
 			}
 			if (CONTIGUOUS_BUFFERS(bh, req->bh)) {
 #ifdef DMA_SEGMENT_SIZE_LIMITED
@@ -409,7 +423,7 @@ __inline static int __scsi_merge_fn(request_queue_t * q,
 					segment_size = bh->b_size;
 					count = __count_segments(req, use_clustering, dma_host, &segment_size);
 					if( count != req->nr_segments ) {
-						goto new_segment;
+						goto new_start_segment;
 					}
 				}
 #endif
@@ -419,10 +433,41 @@ __inline static int __scsi_merge_fn(request_queue_t * q,
 				return 1;
 			}
 		}
+	      new_start_segment:
+#ifdef DMA_CHUNK_SIZE
+		if (MERGEABLE_BUFFERS(bh, req->bh))
+			goto new_mergeable;
+#endif
 		goto new_segment;
-	} else {
-		panic("Attempt to merge sector that doesn't belong");
 	}
+#ifdef DMA_CHUNK_SIZE
+      new_mergeable:
+	/*
+	 * pci_map_sg will be able to merge these two
+	 * into a single hardware sg entry, check if
+	 * we'll have enough memory for the sg list.
+	 * scsi.c allocates for this purpose
+	 * min(64,sg_tablesize) entries.
+	 */
+	if (req->nr_segments >= 64 &&
+	    req->nr_segments >= SHpnt->sg_tablesize)
+		return 0;
+	req->nr_segments++;
+	return 1;
+      new_segment:
+	/*
+	 * pci_map_sg won't be able to map these two
+	 * into a single hardware sg entry, so we have to
+	 * check if things fit into sg_tablesize.
+	 */
+	if (req->nr_hw_segments >= SHpnt->sg_tablesize ||
+	    (req->nr_segments >= 64 &&
+	     req->nr_segments >= SHpnt->sg_tablesize))
+		return 0;
+	req->nr_hw_segments++;
+	req->nr_segments++;
+	return 1;
+#else
       new_segment:
 	if (req->nr_segments < SHpnt->sg_tablesize) {
 		/*
@@ -434,6 +479,7 @@ __inline static int __scsi_merge_fn(request_queue_t * q,
 	} else {
 		return 0;
 	}
+#endif
 }
 
 /*
@@ -464,8 +510,10 @@ static int _FUNCTION(request_queue_t * q,		\
     return ret;						\
 }
 
+/* Version with use_clustering 0 and dma_host 1 is not necessary,
+ * since the only use of dma_host above is protected by use_clustering.
+ */
 MERGEFCT(scsi_merge_fn_, 0, 0)
-MERGEFCT(scsi_merge_fn_d, 0, 1)
 MERGEFCT(scsi_merge_fn_c, 1, 0)
 MERGEFCT(scsi_merge_fn_dc, 1, 1)
 /*
@@ -513,6 +561,18 @@ __inline static int __scsi_merge_requests_fn(request_queue_t * q,
 	SDpnt = (Scsi_Device *) q->queuedata;
 	SHpnt = SDpnt->host;
 
+#ifdef DMA_CHUNK_SIZE
+	/* If it would not fit into prepared memory space for sg chain,
+	 * then don't allow the merge.
+	 */
+	if (req->nr_segments + next->nr_segments - 1 > 64 &&
+	    req->nr_segments + next->nr_segments - 1 > SHpnt->sg_tablesize) {
+		return 0;
+	}
+	if (req->nr_hw_segments + next->nr_hw_segments - 1 > SHpnt->sg_tablesize) {
+		return 0;
+	}
+#else
 	/*
 	 * If the two requests together are too large (even assuming that we
 	 * can merge the boundary requests into one segment, then don't
@@ -521,6 +581,7 @@ __inline static int __scsi_merge_requests_fn(request_queue_t * q,
 	if (req->nr_segments + next->nr_segments - 1 > SHpnt->sg_tablesize) {
 		return 0;
 	}
+#endif
 	/*
 	 * The main question is whether the two segments at the boundaries
 	 * would be considered one or two.
@@ -560,10 +621,32 @@ __inline static int __scsi_merge_requests_fn(request_queue_t * q,
 			 * This one is OK.  Let it go.
 			 */
 			req->nr_segments += next->nr_segments - 1;
+#ifdef DMA_CHUNK_SIZE
+			req->nr_hw_segments += next->nr_hw_segments - 1;
+#endif
 			return 1;
 		}
 	}
       dont_combine:
+#ifdef DMA_CHUNK_SIZE
+	if (req->nr_segments + next->nr_segments > 64 &&
+	    req->nr_segments + next->nr_segments > SHpnt->sg_tablesize) {
+		return 0;
+	}
+	/* If dynamic DMA mapping can merge last segment in req with
+	 * first segment in next, then the check for hw segments was
+	 * done above already, so we can always merge.
+	 */
+	if (MERGEABLE_BUFFERS (req->bhtail, next->bh)) {
+		req->nr_hw_segments += next->nr_hw_segments - 1;
+	} else if (req->nr_hw_segments + next->nr_hw_segments > SHpnt->sg_tablesize) {
+		return 0;
+	} else {
+		req->nr_hw_segments += next->nr_hw_segments;
+	}
+	req->nr_segments += next->nr_segments;
+	return 1;
+#else
 	/*
 	 * We know that the two requests at the boundary should not be combined.
 	 * Make sure we can fix something that is the sum of the two.
@@ -579,6 +662,7 @@ __inline static int __scsi_merge_requests_fn(request_queue_t * q,
 		req->nr_segments += next->nr_segments;
 		return 1;
 	}
+#endif
 }
 
 /*
@@ -609,8 +693,10 @@ static int _FUNCTION(request_queue_t * q,		\
     return ret;						\
 }
 
+/* Version with use_clustering 0 and dma_host 1 is not necessary,
+ * since the only use of dma_host above is protected by use_clustering.
+ */
 MERGEREQFCT(scsi_merge_requests_fn_, 0, 0)
-MERGEREQFCT(scsi_merge_requests_fn_d, 0, 1)
 MERGEREQFCT(scsi_merge_requests_fn_c, 1, 0)
 MERGEREQFCT(scsi_merge_requests_fn_dc, 1, 1)
 /*
@@ -737,7 +823,7 @@ __inline static int __init_io(Scsi_Cmnd * SCpnt,
 	 * Next, walk the list, and fill in the addresses and sizes of
 	 * each segment.
 	 */
-	memset(sgpnt, 0, SCpnt->sglist_len);
+	memset(sgpnt, 0, SCpnt->use_sg * sizeof(struct scatterlist));
 	SCpnt->request_buffer = (char *) sgpnt;
 	SCpnt->request_bufflen = 0;
 	bhprev = NULL;
@@ -983,9 +1069,10 @@ void initialize_merge_fn(Scsi_Device * SDpnt)
 	 * If the host has already selected a merge manager, then don't
 	 * pick a new one.
 	 */
-	if (q->merge_fn != NULL) {
+#if 0
+	if (q->merge_fn != NULL)
 		return;
-	}
+#endif
 	/*
 	 * If this host has an unlimited tablesize, then don't bother with a
 	 * merge manager.  The whole point of the operation is to make sure
@@ -1002,8 +1089,8 @@ void initialize_merge_fn(Scsi_Device * SDpnt)
 		q->merge_requests_fn = scsi_merge_requests_fn_;
 		SDpnt->scsi_init_io_fn = scsi_init_io_v;
 	} else if (!CLUSTERABLE_DEVICE(SHpnt, SDpnt) && SHpnt->unchecked_isa_dma != 0) {
-		q->merge_fn = scsi_merge_fn_d;
-		q->merge_requests_fn = scsi_merge_requests_fn_d;
+		q->merge_fn = scsi_merge_fn_;
+		q->merge_requests_fn = scsi_merge_requests_fn_;
 		SDpnt->scsi_init_io_fn = scsi_init_io_vd;
 	} else if (CLUSTERABLE_DEVICE(SHpnt, SDpnt) && SHpnt->unchecked_isa_dma == 0) {
 		q->merge_fn = scsi_merge_fn_c;

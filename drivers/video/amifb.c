@@ -1939,7 +1939,7 @@ static u_long __init chipalloc(u_long size)
 	u_long ptr;
 
 	size += PAGE_SIZE-1;
-	if (!(ptr = (u_long)amiga_chip_alloc(size)))
+	if (!(ptr = (u_long)amiga_chip_alloc(size, "amifb")))
 		panic("No Chip RAM for frame buffer");
 	memset((void *)ptr, 0, size);
 	ptr = PAGE_ALIGN(ptr);

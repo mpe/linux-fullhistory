@@ -45,6 +45,10 @@ typedef unsigned long u64;
 
 #define BITS_PER_LONG 64
 
+/* Dma addresses are 32-bits wide for now.  */
+
+typedef u32 dma_addr_t;
+
 #endif /* __KERNEL__ */
 
 #endif /* defined(_SPARC64_TYPES_H) */

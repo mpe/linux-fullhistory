@@ -119,7 +119,6 @@
 
 #include <linux/config.h>
 #include <linux/list.h>
-#include <linux/sched.h>
 
 #define USB_MAJOR 180
 

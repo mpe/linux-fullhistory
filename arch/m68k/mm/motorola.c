@@ -17,6 +17,7 @@
 #include <linux/string.h>
 #include <linux/types.h>
 #include <linux/init.h>
+#include <linux/bootmem.h>
 #ifdef CONFIG_BLK_DEV_RAM
 #include <linux/blk.h>
 #endif
@@ -24,10 +25,11 @@
 #include <asm/setup.h>
 #include <asm/uaccess.h>
 #include <asm/page.h>
-#include <asm/pgtable.h>
+#include <asm/pgalloc.h>
 #include <asm/system.h>
 #include <asm/machdep.h>
 #include <asm/io.h>
+#include <asm/dma.h>
 #ifdef CONFIG_ATARI
 #include <asm/atari_stram.h>
 #endif
@@ -43,15 +45,14 @@
 unsigned long mm_cachebits = 0;
 #endif
 
-static pte_t * __init kernel_page_table(unsigned long *memavailp)
+static pte_t * __init kernel_page_table(void)
 {
 	pte_t *ptablep;
 
-	ptablep = (pte_t *)*memavailp;
-	*memavailp += PAGE_SIZE;
+	ptablep = (pte_t *)alloc_bootmem_low_pages(PAGE_SIZE);
 
-	clear_page((unsigned long)ptablep);
-	flush_page_to_ram((unsigned long) ptablep);
+	clear_page(ptablep);
+	__flush_page_to_ram((unsigned long) ptablep);
 	flush_tlb_kernel_page((unsigned long) ptablep);
 	nocache_page ((unsigned long)ptablep);
 
@@ -61,7 +62,7 @@ static pte_t * __init kernel_page_table(unsigned long *memavailp)
 static pmd_t *last_pgtable __initdata = NULL;
 pmd_t *zero_pgtable __initdata = NULL;
 
-static pmd_t * __init kernel_ptr_table(unsigned long *memavailp)
+static pmd_t * __init kernel_ptr_table(void)
 {
 	if (!last_pgtable) {
 		unsigned long pmd, last;
@@ -75,7 +76,7 @@ static pmd_t * __init kernel_ptr_table(unsigned long *memavailp)
 		for (i = 0; i < PTRS_PER_PGD; i++) {
 			if (!pgd_present(kernel_pg_dir[i]))
 				continue;
-			pmd = pgd_page(kernel_pg_dir[i]);
+			pmd = __pgd_page(kernel_pg_dir[i]);
 			if (pmd > last)
 				last = pmd;
 		}
@@ -87,11 +88,10 @@ static pmd_t * __init kernel_ptr_table(unsigned long *memavailp)
 	}
 
 	if (((unsigned long)(last_pgtable + PTRS_PER_PMD) & ~PAGE_MASK) == 0) {
-		last_pgtable = (pmd_t *)*memavailp;
-		*memavailp += PAGE_SIZE;
+		last_pgtable = (pmd_t *)alloc_bootmem_low_pages(PAGE_SIZE);
 
-		clear_page((unsigned long)last_pgtable);
-		flush_page_to_ram((unsigned long)last_pgtable);
+		clear_page(last_pgtable);
+		__flush_page_to_ram((unsigned long)last_pgtable);
 		flush_tlb_kernel_page((unsigned long)last_pgtable);
 		nocache_page((unsigned long)last_pgtable);
 	} else
@@ -101,7 +101,7 @@ static pmd_t * __init kernel_ptr_table(unsigned long *memavailp)
 }
 
 static unsigned long __init 
-map_chunk (unsigned long addr, long size, unsigned long *memavailp)
+map_chunk (unsigned long addr, long size)
 {
 #define PTRTREESIZE (256*1024)
 #define ROOTTREESIZE (32*1024*1024)
@@ -137,7 +137,7 @@ map_chunk (unsigned long addr, long size, unsigned long *memavailp)
 			}
 		}
 		if (!pgd_present(*pgd_dir)) {
-			pmd_dir = kernel_ptr_table(memavailp);
+			pmd_dir = kernel_ptr_table();
 #ifdef DEBUG
 			printk ("[new pointer %p]", pmd_dir);
 #endif
@@ -157,7 +157,7 @@ map_chunk (unsigned long addr, long size, unsigned long *memavailp)
 #ifdef DEBUG
 				printk ("[zero map]");
 #endif
-				zero_pgtable = kernel_ptr_table(memavailp);
+				zero_pgtable = kernel_ptr_table();
 				pte_dir = (pte_t *)zero_pgtable;
 				pmd_dir->pmd[0] = virt_to_phys(pte_dir) |
 					_PAGE_TABLE | _PAGE_ACCESSED;
@@ -173,7 +173,7 @@ map_chunk (unsigned long addr, long size, unsigned long *memavailp)
 #ifdef DEBUG
 				printk ("[new table]");
 #endif
-				pte_dir = kernel_page_table(memavailp);
+				pte_dir = kernel_page_table();
 				pmd_set(pmd_dir, pte_dir);
 			}
 			pte_dir = pte_offset(pmd_dir, virtaddr);
@@ -196,7 +196,6 @@ map_chunk (unsigned long addr, long size, unsigned long *memavailp)
 	return virtaddr;
 }
 
-extern unsigned long free_area_init(unsigned long, unsigned long);
 extern unsigned long empty_bad_page_table;
 extern unsigned long empty_bad_page;
 
@@ -204,11 +203,11 @@ extern unsigned long empty_bad_page;
  * paging_init() continues the virtual memory environment setup which
  * was begun by the code in arch/head.S.
  */
-unsigned long __init paging_init(unsigned long start_mem,
-				 unsigned long end_mem)
+void __init paging_init(void)
 {
 	int chunk;
 	unsigned long mem_avail = 0;
+	unsigned int zones_size[3] = { 0, };
 
 #ifdef DEBUG
 	{
@@ -248,7 +247,7 @@ unsigned long __init paging_init(unsigned long start_mem,
 
 	for (chunk = 0; chunk < m68k_num_memory; chunk++) {
 		mem_avail = map_chunk (m68k_memory[chunk].addr,
-				       m68k_memory[chunk].size, &start_mem);
+				       m68k_memory[chunk].size);
 
 	}
 
@@ -263,12 +262,9 @@ unsigned long __init paging_init(unsigned long start_mem,
 	 * initialize the bad page table and bad page to point
 	 * to a couple of allocated pages
 	 */
-	empty_bad_page_table = start_mem;
-	start_mem += PAGE_SIZE;
-	empty_bad_page = start_mem;
-	start_mem += PAGE_SIZE;
-	empty_zero_page = start_mem;
-	start_mem += PAGE_SIZE;
+	empty_bad_page_table = (unsigned long)alloc_bootmem_pages(PAGE_SIZE);
+	empty_bad_page = (unsigned long)alloc_bootmem_pages(PAGE_SIZE);
+	empty_zero_page = (unsigned long)alloc_bootmem_pages(PAGE_SIZE);
 	memset((void *)empty_zero_page, 0, PAGE_SIZE);
 
 	/*
@@ -279,7 +275,14 @@ unsigned long __init paging_init(unsigned long start_mem,
 #ifdef DEBUG
 	printk ("before free_area_init\n");
 #endif
-	return PAGE_ALIGN(free_area_init(start_mem, end_mem));
+	zones_size[0] = (mach_max_dma_address < (unsigned long)high_memory ?
+			 mach_max_dma_address : (unsigned long)high_memory);
+	zones_size[1] = (unsigned long)high_memory - zones_size[0];
+
+	zones_size[0] = (zones_size[0] - PAGE_OFFSET) >> PAGE_SHIFT;
+	zones_size[1] >>= PAGE_SHIFT;
+
+	free_area_init(zones_size);
 }
 
 extern char __init_begin, __init_end;

@@ -185,8 +185,8 @@ EXPORT_SYMBOL(request_fast_irq);
 EXPORT_SYMBOL(sbus_root);
 EXPORT_SYMBOL(dma_chain);
 EXPORT_SYMBOL(sbus_set_sbus64);
-EXPORT_SYMBOL(sbus_alloc_consistant);
-EXPORT_SYMBOL(sbus_free_consistant);
+EXPORT_SYMBOL(sbus_alloc_consistent);
+EXPORT_SYMBOL(sbus_free_consistent);
 EXPORT_SYMBOL(sbus_map_single);
 EXPORT_SYMBOL(sbus_unmap_single);
 EXPORT_SYMBOL(sbus_map_sg);
@@ -208,6 +208,16 @@ EXPORT_SYMBOL(outsl);
 EXPORT_SYMBOL(insb);
 EXPORT_SYMBOL(insw);
 EXPORT_SYMBOL(insl);
+#endif
+#ifdef NEW_PCI_DMA_MAP
+EXPORT_SYMBOL(pci_alloc_consistent);
+EXPORT_SYMBOL(pci_free_consistent);
+EXPORT_SYMBOL(pci_map_single);
+EXPORT_SYMBOL(pci_unmap_single);
+EXPORT_SYMBOL(pci_map_sg);
+EXPORT_SYMBOL(pci_unmap_sg);
+EXPORT_SYMBOL(pci_dma_sync_single);
+EXPORT_SYMBOL(pci_dma_sync_sg);
 #endif
 
 /* Solaris/SunOS binary compatibility */

@@ -1,6 +1,6 @@
 /* Low-level parallel port routines for the Amiga buildin port
  *
- * Author: Joerg Dorchain <dorchain@wirbel.com>
+ * Author: Joerg Dorchain <joerg@dorchain.net>
  *
  * This is a complete rewrite of the code, but based heaviy upon the old
  * lp_intern. code.
@@ -25,7 +25,7 @@
 #ifdef DEBUG
 #define DPRINTK printk
 #else
-#define DPRINTK(format, args...)
+static inline void DPRINTK(void *nothing, ...) {}
 #endif
 
 static struct parport *this_port = NULL;
@@ -90,7 +90,7 @@ DPRINTK("frob_control mask %02x, value %02x\n",mask,val);
 	return old;
 }
 
-
+#if 0 /* currently unused */
 static unsigned char status_pc_to_amiga(unsigned char status)
 {
 	unsigned char ret = 1;
@@ -107,6 +107,7 @@ static unsigned char status_pc_to_amiga(unsigned char status)
 		/* not connected */;
 	return ret;
 }
+#endif
 
 static unsigned char status_amiga_to_pc(unsigned char status)
 {
@@ -138,6 +139,28 @@ static void amiga_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	parport_generic_irq(irq, (struct parport *) dev_id, regs);
 }
 
+static void amiga_enable_irq(struct parport *p)
+{
+	enable_irq(IRQ_AMIGA_CIAA_FLG);
+}
+
+static void amiga_disable_irq(struct parport *p)
+{
+	disable_irq(IRQ_AMIGA_CIAA_FLG);
+}
+
+static void amiga_data_forward(struct parport *p)
+{
+	DPRINTK("forward\n");
+	ciaa.ddrb = 0xff; /* all pins output */
+}
+
+static void amiga_data_reverse(struct parport *p)
+{
+	DPRINTK("reverse\n");
+	ciaa.ddrb = 0; /* all pins input */
+}
+
 static void amiga_init_state(struct pardevice *dev, struct parport_state *s)
 {
 	s->u.amiga.data = 0;
@@ -160,16 +183,6 @@ static void amiga_restore_state(struct parport *p, struct parport_state *s)
 	ciaa.ddrb = s->u.amiga.datadir;
 	ciab.pra |= (ciab.pra & 0xf8) | s->u.amiga.status;
 	ciab.ddra |= (ciab.ddra & 0xf8) | s->u.amiga.statusdir;
-}
-
-static void amiga_enable_irq(struct parport *p)
-{
-	enable_irq(IRQ_AMIGA_CIAA_FLG);
-}
-
-static void amiga_disable_irq(struct parport *p)
-{
-	disable_irq(IRQ_AMIGA_CIAA_FLG);
 }
 
 static void amiga_inc_use_count(void)
@@ -195,8 +208,8 @@ static struct parport_operations pp_amiga_ops = {
 	amiga_enable_irq,
 	amiga_disable_irq,
 
-	NULL, /* data_forward */
-	NULL, /* data_reverse */
+	amiga_data_forward,
+	amiga_data_reverse,
 
 	amiga_init_state,
 	amiga_save_state,
@@ -205,18 +218,18 @@ static struct parport_operations pp_amiga_ops = {
 	amiga_inc_use_count,
 	amiga_dec_use_count,
 
-	NULL, /* epp_write_data */
-	NULL, /* epp_read_data */
-	NULL, /* epp_write_addr */
-	NULL, /* epp_read_addr */
+	parport_ieee1284_epp_write_data,
+	parport_ieee1284_epp_read_data,
+	parport_ieee1284_epp_write_addr,
+	parport_ieee1284_epp_read_addr,
 
-	NULL, /* ecp_write_data */
-	NULL, /* ecp_read_data */
-	NULL, /* ecp_write_addr */
+	parport_ieee1284_ecp_write_data,
+	parport_ieee1284_ecp_read_data,
+	parport_ieee1284_ecp_write_addr,
 
-	NULL, /* compat_write_data */
-	NULL, /* nibble_read_data */
-	NULL, /* byte_read_data */
+	parport_ieee1284_write_compat,
+	parport_ieee1284_read_nibble,
+	parport_ieee1284_read_byte,
 };
 
 /* ----------- Initialisation code --------------------------------- */
@@ -252,7 +265,7 @@ int __init parport_amiga_init(void)
 
 #ifdef MODULE
 
-MODULE_AUTHOR("Joerg Dorchain");
+MODULE_AUTHOR("Joerg Dorchain <joerg@dorchain.net>");
 MODULE_DESCRIPTION("Parport Driver for Amiga builtin Port");
 MODULE_SUPPORTED_DEVICE("Amiga builtin Parallel Port");
 

@@ -16,6 +16,7 @@
 #include <linux/string.h>
 #include <linux/types.h>
 #include <linux/init.h>
+#include <linux/bootmem.h>
 #ifdef CONFIG_BLK_DEV_RAM
 #include <linux/blk.h>
 #endif
@@ -23,13 +24,15 @@
 #include <asm/setup.h>
 #include <asm/uaccess.h>
 #include <asm/page.h>
-#include <asm/pgtable.h>
+#include <asm/pgalloc.h>
 #include <asm/system.h>
 #include <asm/machdep.h>
 #include <asm/io.h>
 #ifdef CONFIG_ATARI
 #include <asm/atari_stram.h>
 #endif
+
+static unsigned long totalram_pages = 0;
 
 #ifdef CONFIG_SUN3
 void mmu_emu_reserve_pages(unsigned long max_page);
@@ -77,7 +80,7 @@ unsigned long empty_bad_page;
 pte_t __bad_page(void)
 {
     memset ((void *)empty_bad_page, 0, PAGE_SIZE);
-    return pte_mkdirty(mk_pte(empty_bad_page, PAGE_SHARED));
+    return pte_mkdirty(__mk_pte(empty_bad_page, PAGE_SHARED));
 }
 
 unsigned long empty_zero_page;
@@ -127,7 +130,7 @@ extern char __init_begin, __init_end;
 
 extern pmd_t *zero_pgtable;
 
-void __init mem_init(unsigned long start_mem, unsigned long end_mem)
+void __init mem_init(void)
 {
 	int codepages = 0;
 	int datapages = 0;
@@ -135,15 +138,7 @@ void __init mem_init(unsigned long start_mem, unsigned long end_mem)
 	unsigned long tmp;
 	int i;
 
-	end_mem &= PAGE_MASK;
-	high_memory = (void *) end_mem;
-	max_mapnr = num_physpages = MAP_NR(end_mem);
-
-	tmp = start_mem = PAGE_ALIGN(start_mem);
-	while (tmp < end_mem) {
-		clear_bit(PG_reserved, &mem_map[MAP_NR(tmp)].flags);
-		tmp += PAGE_SIZE;
-	}
+	max_mapnr = num_physpages = MAP_NR(high_memory);
 
 #ifdef CONFIG_ATARI
 	if (MACH_IS_ATARI)
@@ -155,10 +150,16 @@ void __init mem_init(unsigned long start_mem, unsigned long end_mem)
 	mmu_emu_reserve_pages(max_mapnr);
 #endif
 
-	for (tmp = PAGE_OFFSET ; tmp < end_mem ; tmp += PAGE_SIZE) {
+	/* this will put all memory onto the freelists */
+	totalram_pages = free_all_bootmem();
+	printk("tp:%ld\n", totalram_pages);
+
+	for (tmp = PAGE_OFFSET ; tmp < (unsigned long)high_memory; tmp += PAGE_SIZE) {
+#if 0
 #ifndef CONFIG_SUN3
 		if (virt_to_phys ((void *)tmp) >= mach_max_dma_address)
 			clear_bit(PG_DMA, &mem_map[MAP_NR(tmp)].flags);
+#endif
 #endif
 		if (PageReserved(mem_map+MAP_NR(tmp))) {
 			if (tmp >= (unsigned long)&_text
@@ -171,12 +172,14 @@ void __init mem_init(unsigned long start_mem, unsigned long end_mem)
 				datapages++;
 			continue;
 		}
+#if 0
 		set_page_count(mem_map+MAP_NR(tmp), 1);
 #ifdef CONFIG_BLK_DEV_INITRD
 		if (!initrd_start ||
 		    (tmp < (initrd_start & PAGE_MASK) || tmp >= initrd_end))
 #endif
 			free_page(tmp);
+#endif
 	}
 	
 #ifndef CONFIG_SUN3
@@ -184,7 +187,7 @@ void __init mem_init(unsigned long start_mem, unsigned long end_mem)
 	init_pointer_table((unsigned long)kernel_pg_dir);
 	for (i = 0; i < PTRS_PER_PGD; i++) {
 		if (pgd_present(kernel_pg_dir[i]))
-			init_pointer_table(pgd_page(kernel_pg_dir[i]));
+			init_pointer_table(__pgd_page(kernel_pg_dir[i]));
 	}
 
 	/* insert also pointer table that we used to unmap the zero page */
@@ -193,22 +196,35 @@ void __init mem_init(unsigned long start_mem, unsigned long end_mem)
 #endif
 
 	printk("Memory: %luk/%luk available (%dk kernel code, %dk data, %dk init)\n",
-	       (unsigned long) nr_free_pages << (PAGE_SHIFT-10),
+	       (unsigned long)nr_free_pages() << (PAGE_SHIFT-10),
 	       max_mapnr << (PAGE_SHIFT-10),
 	       codepages << (PAGE_SHIFT-10),
 	       datapages << (PAGE_SHIFT-10),
 	       initpages << (PAGE_SHIFT-10));
 }
 
+#ifdef CONFIG_BLK_DEV_INITRD
+void free_initrd_mem(unsigned long start, unsigned long end)
+{
+	for (; start < end; start += PAGE_SIZE) {
+		ClearPageReserved(mem_map + MAP_NR(start));
+		set_page_count(mem_map+MAP_NR(start), 1);
+		free_page(start);
+		totalram_pages++;
+	}
+	printk ("Freeing initrd memory: %ldk freed\n", (end - start) >> 10);
+}
+#endif
+
 void si_meminfo(struct sysinfo *val)
 {
     unsigned long i;
 
     i = max_mapnr;
-    val->totalram = 0;
+    val->totalram = totalram_pages;
     val->sharedram = 0;
-    val->freeram = nr_free_pages << PAGE_SHIFT;
-    val->bufferram = atomic_read(&buffermem);
+    val->freeram = nr_free_pages();
+    val->bufferram = atomic_read(&buffermem_pages);
     while (i-- > 0) {
 	if (PageReserved(mem_map+i))
 	    continue;
@@ -217,7 +233,7 @@ void si_meminfo(struct sysinfo *val)
 	    continue;
 	val->sharedram += page_count(mem_map+i) - 1;
     }
-    val->totalram <<= PAGE_SHIFT;
-    val->sharedram <<= PAGE_SHIFT;
+    val->totalhigh = 0;
+    val->freehigh = 0;
     return;
 }

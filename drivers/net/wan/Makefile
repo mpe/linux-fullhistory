@@ -102,6 +102,9 @@ ifeq ($(CONFIG_VENDOR_SANGOMA),y)
   ifeq ($(CONFIG_WANPIPE_X25),y)
     L_OBJS += sdla_x25.o
   endif
+  ifeq ($(CONFIG_WANPIPE_CHDLC),y)
+    L_OBJS += sdla_chdlc.o
+  endif
   ifeq ($(CONFIG_WANPIPE_FR),y)
     L_OBJS += sdla_fr.o
   endif
@@ -121,6 +124,9 @@ ifeq ($(CONFIG_VENDOR_SANGOMA),m)
   endif
   ifeq ($(CONFIG_WANPIPE_FR),y)
     WANPIPE_OBJS += sdla_fr.o
+  endif
+  ifeq ($(CONFIG_WANPIPE_CHDLC),y)
+    WANPIPE_OBJS += sdla_chdlc.o
   endif
   ifeq ($(CONFIG_WANPIPE_PPP),y)
     WANPIPE_OBJS += sdla_ppp.o

@@ -1,6 +1,8 @@
 #ifndef _M68K_SEMAPHORE_H
 #define _M68K_SEMAPHORE_H
 
+#ifndef __ASSEMBLY__
+
 #include <linux/linkage.h>
 #include <linux/wait.h>
 #include <linux/spinlock.h>
@@ -9,12 +11,13 @@
 #include <asm/atomic.h>
 
 /*
- * SMP- and interrupt-safe semaphores..
+ * Interrupt-safe semaphores..
  *
  * (C) Copyright 1996 Linus Torvalds
  *
  * m68k version by Andreas Schwab
  */
+
 
 struct semaphore {
 	atomic_t count;
@@ -179,5 +182,175 @@ extern inline void up(struct semaphore * sem)
 		: "a" (sem1)
 		: "memory");
 }
+
+
+/* rw mutexes (should that be mutices? =) -- throw rw
+ * spinlocks and semaphores together, and this is what we
+ * end up with...
+ *
+ * m68k version by Roman Zippel
+ */
+
+struct rw_semaphore {
+	atomic_t		count;
+	volatile unsigned char	write_bias_granted;
+	volatile unsigned char	read_bias_granted;
+	volatile unsigned char	pad1;
+	volatile unsigned char	pad2;
+	wait_queue_head_t	wait;
+	wait_queue_head_t	write_bias_wait;
+#if WAITQUEUE_DEBUG
+	long			__magic;
+	atomic_t		readers;
+	atomic_t		writers;
+#endif
+};
+#endif /* __ASSEMBLY__ */
+
+#define RW_LOCK_BIAS		 0x01000000
+
+#ifndef __ASSEMBLY__
+
+extern inline void down_read(struct rw_semaphore *sem)
+{
+	register struct rw_semaphore *__sem __asm__ ("%a1") = sem;
+
+#if WAITQUEUE_DEBUG
+	if (sem->__magic != (long)&sem->__magic)
+		BUG();
+#endif
+	__asm__ __volatile__(
+		"| atomic down_read operation\n\t"
+		"subql #1,%0@\n\t"
+		"jmi 2f\n"
+		"1:\n"
+		".section .text.lock,\"ax\"\n"
+		".even\n"
+		"2:\n\t"
+		"pea 1b\n\t"
+		"jbra __down_read_failed\n"
+		".previous"
+		: /* no outputs */
+		: "a" (__sem)
+		: "memory");
+#if WAITQUEUE_DEBUG
+	if (sem->write_bias_granted)
+		BUG();
+	if (atomic_read(&sem->writers))
+		BUG();
+	atomic_inc(&sem->readers);
+#endif
+}
+
+extern inline void down_write(struct rw_semaphore *sem)
+{
+	register struct rw_semaphore *__sem __asm__ ("%a1") = sem;
+
+#if WAITQUEUE_DEBUG
+	if (sem->__magic != (long)&sem->__magic)
+		BUG();
+#endif
+	__asm__ __volatile__(
+		"| atomic down_write operation\n\t"
+		"subl %1,%0@\n\t"
+		"jne 2f\n"
+		"1:\n"
+		".section .text.lock,\"ax\"\n"
+		".even\n"
+		"2:\n\t"
+		"pea 1b\n\t"
+		"jbra __down_write_failed\n"
+		".previous"
+		: /* no outputs */
+		: "a" (__sem), "id" (RW_LOCK_BIAS)
+		: "memory");
+#if WAITQUEUE_DEBUG
+	if (atomic_read(&sem->writers))
+		BUG();
+	if (atomic_read(&sem->readers))
+		BUG();
+	if (sem->read_bias_granted)
+		BUG();
+	if (sem->write_bias_granted)
+		BUG();
+	atomic_inc(&sem->writers);
+#endif
+}
+
+/* When a reader does a release, the only significant
+ * case is when there was a writer waiting, and we've
+ * bumped the count to 0: we must wake the writer up.
+ */
+extern inline void __up_read(struct rw_semaphore *sem)
+{
+	register struct rw_semaphore *__sem __asm__ ("%a1") = sem;
+
+	__asm__ __volatile__(
+		"| atomic up_read operation\n\t"
+		"addql #1,%0@\n\t"
+		"jeq 2f\n"
+		"1:\n"
+		".section .text.lock,\"ax\"\n"
+		".even\n"
+		"2:\n\t"
+		"pea 1b\n\t"
+		"jbra __rwsem_wake\n"
+		".previous"
+		: /* no outputs */
+		: "a" (__sem)
+		: "memory");
+}
+
+extern inline void up_read(struct rw_semaphore *sem)
+{
+#if WAITQUEUE_DEBUG
+	if (sem->write_bias_granted)
+		BUG();
+	if (atomic_read(&sem->writers))
+		BUG();
+	atomic_dec(&sem->readers);
+#endif
+	__up_read(sem);
+}
+
+/* releasing the writer is easy -- just release it and
+ * wake up any sleepers.
+ */
+extern inline void __up_write(struct rw_semaphore *sem)
+{
+	register struct rw_semaphore *__sem __asm__ ("%a1") = sem;
+
+	__asm__ __volatile__(
+		"| atomic up_write operation\n\t"
+		"addl %1,%0@\n\t"
+		"jcs 2f\n"
+		"1:\n"
+		".section .text.lock,\"ax\"\n"
+		".even\n"
+		"2:\n\t"
+		"pea 1b\n\t"
+		"jbra __rwsem_wake\n"
+		".previous"
+		: /* no outputs */
+		: "a" (__sem), "id" (RW_LOCK_BIAS)
+		: "memory");
+}
+
+extern inline void up_write(struct rw_semaphore *sem)
+{
+#if WAITQUEUE_DEBUG
+	if (sem->read_bias_granted)
+		BUG();
+	if (sem->write_bias_granted)
+		BUG();
+	if (atomic_read(&sem->readers))
+		BUG();
+	if (atomic_read(&sem->writers) != 1)
+		BUG();
+	atomic_dec(&sem->writers);
+#endif
+	__up_write(sem);
+}
+#endif /* __ASSEMBLY__ */
 
 #endif

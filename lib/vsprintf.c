@@ -152,6 +152,7 @@ int vsprintf(char *buf, const char *fmt, va_list args)
 				   number of chars for from string */
 	int qualifier;		/* 'h', 'l', or 'L' for integer fields */
 	                        /* 'z' support added 23/7/1999 S.H.    */
+				/* 'z' changed to 'Z' --davidm 1/25/99 */
 
 	
 	for (str=buf ; *fmt ; ++fmt) {
@@ -203,7 +204,7 @@ int vsprintf(char *buf, const char *fmt, va_list args)
 
 		/* get the conversion qualifier */
 		qualifier = -1;
-		if (*fmt == 'h' || *fmt == 'l' || *fmt == 'L' || *fmt =='z') {
+		if (*fmt == 'h' || *fmt == 'l' || *fmt == 'L' || *fmt =='Z') {
 			qualifier = *fmt;
 			++fmt;
 		}
@@ -252,7 +253,7 @@ int vsprintf(char *buf, const char *fmt, va_list args)
 			if (qualifier == 'l') {
 				long * ip = va_arg(args, long *);
 				*ip = (str - buf);
-			} else if (qualifier == 'z') {
+			} else if (qualifier == 'Z') {
 				size_t * ip = va_arg(args, size_t *);
 				*ip = (str - buf);
 			} else {
@@ -296,7 +297,7 @@ int vsprintf(char *buf, const char *fmt, va_list args)
 			num = va_arg(args, unsigned long);
 			if (flags & SIGN)
 				num = (signed long) num;
-		} else if (qualifier == 'z') {
+		} else if (qualifier == 'Z') {
 			num = va_arg(args, size_t);
 		} else if (qualifier == 'h') {
 			num = (unsigned short) va_arg(args, int);

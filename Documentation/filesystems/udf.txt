@@ -1,7 +1,7 @@
 *
 * ./Documentation/filesystems/udf.txt
 *
-UDF Filesystem version 0.8.9
+UDF Filesystem version 0.9.0
 
 If you encounter problems with reading UDF discs using this driver,
 please report them to linux_udf@hootie.lvld.hp.com, which is the
@@ -19,8 +19,6 @@ The following mount options are supported:
 	unhide		Show otherwise hidden files.
 	undelete	Show deleted files in lists.
 	strict		Set strict conformance (unused)
-	utf8		(unused)
-	iocharset	(unused)
 
 The remaining are for debugging and disaster recovery:
 

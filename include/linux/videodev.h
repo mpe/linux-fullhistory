@@ -370,6 +370,7 @@ struct video_code
 #define VID_HARDWARE_CPIA	24
 #define VID_HARDWARE_ZR36120	25	/* Zoran ZR36120/ZR36125 */
 #define VID_HARDWARE_ZR36067	26	/* Zoran ZR36067/36060 */
+#define VID_HARDWARE_OV511	27	
 
 /*
  *	Initialiser list

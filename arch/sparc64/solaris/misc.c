@@ -242,8 +242,10 @@ asmlinkage int solaris_utssys(u32 buf, u32 flags, int which, u32 buf2)
 		/* Let's cheat */
 		set_utsfield(((struct sol_uname *)A(buf))->sysname, 
 			"SunOS", 1, 0);
+		down_read(&uts_sem);
 		set_utsfield(((struct sol_uname *)A(buf))->nodename, 
 			system_utsname.nodename, 1, 1);
+		up_read(&uts_sem);
 		set_utsfield(((struct sol_uname *)A(buf))->release, 
 			"2.6", 0, 0);
 		set_utsfield(((struct sol_uname *)A(buf))->version, 
@@ -263,7 +265,7 @@ asmlinkage int solaris_utssys(u32 buf, u32 flags, int which, u32 buf2)
 asmlinkage int solaris_utsname(u32 buf)
 {
 	/* Why should we not lie a bit? */
-	down(&uts_sem);
+	down_read(&uts_sem);
 	set_utsfield(((struct sol_utsname *)A(buf))->sysname, 
 			"SunOS", 0, 0);
 	set_utsfield(((struct sol_utsname *)A(buf))->nodename, 
@@ -274,7 +276,7 @@ asmlinkage int solaris_utsname(u32 buf)
 			"Generic", 0, 0);
 	set_utsfield(((struct sol_utsname *)A(buf))->machine, 
 			machine(), 0, 0);
-	up(&uts_sem);
+	up_read(&uts_sem);
 	return 0;
 }
 
@@ -300,8 +302,10 @@ asmlinkage int solaris_sysinfo(int cmd, u32 buf, s32 count)
 	case SI_SYSNAME: r = "SunOS"; break;
 	case SI_HOSTNAME:
 		r = buffer + 256;
+		down_read(&uts_sem);
 		for (p = system_utsname.nodename, q = buffer; 
 		     q < r && *p && *p != '.'; *q++ = *p++);
+		up_read(&uts_sem);
 		*q = 0;
 		r = buffer;
 		break;

@@ -378,6 +378,10 @@ void sock_release(struct socket *sock)
 		printk(KERN_ERR "sock_release: fasync list not empty!\n");
 
 	sockets_in_use[smp_processor_id()].counter--;
+	if (!sock->file) {
+		iput(sock->inode);
+		return;
+	}
 	sock->file=NULL;
 }
 

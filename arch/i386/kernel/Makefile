@@ -14,7 +14,8 @@ all: kernel.o head.o init_task.o
 
 O_TARGET := kernel.o
 O_OBJS   := process.o semaphore.o signal.o entry.o traps.o irq.o vm86.o \
-	    ptrace.o i8259.o ioport.o ldt.o setup.o time.o sys_i386.o
+	    ptrace.o i8259.o ioport.o ldt.o setup.o time.o sys_i386.o \
+	    pci-dma.o
 OX_OBJS  := i386_ksyms.o
 MX_OBJS  :=
 
@@ -39,8 +40,16 @@ else
   endif
 endif
 
+ifdef CONFIG_ACPI
+OX_OBJS += pm.o
+else
+ifdef CONFIG_APM
+OX_OBJS += pm.o
+endif
+endif
+
 ifeq ($(CONFIG_ACPI),y)
-  OX_OBJS += acpi.o
+  O_OBJS += acpi.o
 endif
 
 ifeq ($(CONFIG_APM),y)

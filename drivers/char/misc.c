@@ -67,9 +67,6 @@ extern void gfx_register(void);
 #endif
 extern void streamable_init(void);
 extern void watchdog_init(void);
-extern void wdt_init(void);
-extern void acq_init(void);
-extern void dtlk_init(void);
 extern void pcwatchdog_init(void);
 extern int rtc_sun_init(void);		/* Combines MK48T02 and MK48T08 */
 extern int rtc_DP8570A_init(void);
@@ -196,20 +193,8 @@ int __init misc_init(void)
 #ifdef CONFIG_PCWATCHDOG
 	pcwatchdog_init();
 #endif
-#ifdef CONFIG_WDT
-	wdt_init();
-#endif
-#ifdef CONFIG_ACQUIRE_WDT
-	acq_init();
-#endif
 #ifdef CONFIG_SOFT_WATCHDOG
 	watchdog_init();
-#endif
-#ifdef CONFIG_DTLK
-	dtlk_init();
-#endif
-#ifdef CONFIG_H8
-	h8_init();
 #endif
 #ifdef CONFIG_MVME16x
 	rtc_MK48T08_init();

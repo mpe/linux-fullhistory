@@ -1150,6 +1150,10 @@ static void __init sabre_iommu_init(struct pci_controller_info *p,
 	p->iommu.page_table_map_base = dvma_offset;
 	memset((char *)tsbbase, 0, PAGE_SIZE << order);
 
+	/* Make sure DMA address 0 is never returned just to allow catching
+	   of buggy drivers.  */
+	p->iommu.lowest_free[0] = 1;
+
 #ifndef NEW_PCI_DMA_MAP
 	iopte = (iopte_t *)tsbbase;
 

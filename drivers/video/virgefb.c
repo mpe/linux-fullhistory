@@ -167,7 +167,6 @@ static char virgefb_name[16] = "Cybervision/3D";
 #define VIRGE16_PIXCLOCK 25000   /* ++Geert: Just a guess */
 
 
-static unsigned int CyberKey = 0;
 static unsigned char Cyber_colour_table [256][3];
 static unsigned long CyberMem;
 static unsigned long CyberSize;
@@ -1166,28 +1165,39 @@ int __init virgefb_setup(char *options)
 int __init virgefb_init(void)
 {
 	struct virgefb_par par;
-	unsigned long board_addr;
-	const struct ConfigDev *cd;
+	unsigned long board_addr, ramsize;
+	struct zorro_dev *z = NULL;
 
-	if (!(CyberKey = zorro_find(ZORRO_PROD_PHASE5_CYBERVISION64_3D, 0, 0)))
-		return -ENXIO;
+	while ((z = zorro_find_device(ZORRO_PROD_PHASE5_CYBERVISION64_3D, z))) {
+	    board_addr = z->resource.start;
+	    if (board_addr < 0x01000000) {
+		/*
+		 * Ok we got the board running in Z2 space.
+		 */
+		 CyberRegs_phys = (unsigned long)(board_addr + 0x003e0000);
+		 CyberMem_phys = board_addr;
+		 ramsize = 0x00380000;
+	    } else {
+		CyberRegs_phys = board_addr + 0x05000000;
+		CyberMem_phys  = board_addr + 0x04000000;	/* was 0x04800000 */
+		ramsize = 0x00400000;
+	    }
+	    if (!request_mem_region(CyberRegs_phys, 0x10000, "S3 ViRGE"))
+		continue;
+	    if (!request_mem_region(CyberMem_phys, ramsize, "RAM")) {
+		release_mem_region(CyberRegs_phys, 0x10000);
+		continue;
+	    }
+	    strcpy(z->name, "CyberVision64-3D Graphics Board");
 
-	cd = zorro_get_board (CyberKey);
-	zorro_config_board (CyberKey, 0);
-	board_addr = (unsigned long)cd->cd_BoardAddr;
-
-	/* This includes the video memory as well as the S3 register set */
-	if ((unsigned long)cd->cd_BoardAddr < 0x01000000)
-	{
+	    if (board_addr < 0x01000000) {
 		/*
 		 * Ok we got the board running in Z2 space.
 		 */
 
-		CyberMem_phys = board_addr;
 		CyberMem = ZTWO_VADDR(CyberMem_phys);
 		CyberVGARegs = (unsigned long) \
 			ZTWO_VADDR(board_addr + 0x003c0000);
-		CyberRegs_phys = (unsigned long)(board_addr + 0x003e0000);
 		CyberRegs = (unsigned char *)ZTWO_VADDR(CyberRegs_phys);
 		Cyber_register_base = (unsigned long) \
 			ZTWO_VADDR(board_addr + 0x003c8000);
@@ -1195,50 +1205,49 @@ int __init virgefb_init(void)
 			ZTWO_VADDR(board_addr + 0x003a0000);
 		cv3d_on_zorro2 = 1;
 		printk(KERN_INFO "CV3D detected running in Z2 mode.\n");
-	}
-	else
-	{
-		CyberVGARegs = (unsigned long)ioremap(board_addr +0x0c000000, 0x00010000);
-		CyberRegs_phys = board_addr + 0x05000000;
-		CyberMem_phys  = board_addr + 0x04000000;	/* was 0x04800000 */
+	    } else {
+		CyberVGARegs = (unsigned long)ioremap(board_addr+0x0c000000, 0x00010000);
 		CyberRegs = ioremap(CyberRegs_phys, 0x00010000);
 		CyberMem = (unsigned long)ioremap(CyberMem_phys, 0x01000000);	/* was 0x00400000 */
 		cv3d_on_zorro2 = 0;
 		printk(KERN_INFO "CV3D detected running in Z3 mode.\n");
-	}
+	    }
 
-	fbhw = &Cyber_switch;
+	    fbhw = &Cyber_switch;
 
-	strcpy(fb_info.modename, virgefb_name);
-	fb_info.changevar = NULL;
-	fb_info.node = -1;
-	fb_info.fbops = &virgefb_ops;
-	fb_info.disp = &disp;
-	fb_info.switch_con = &Cyberfb_switch;
-	fb_info.updatevar = &Cyberfb_updatevar;
-	fb_info.blank = &Cyberfb_blank;
-	fb_info.flags = FBINFO_FLAG_DEFAULT;
+	    strcpy(fb_info.modename, virgefb_name);
+	    fb_info.changevar = NULL;
+	    fb_info.node = -1;
+	    fb_info.fbops = &virgefb_ops;
+	    fb_info.disp = &disp;
+	    fb_info.switch_con = &Cyberfb_switch;
+	    fb_info.updatevar = &Cyberfb_updatevar;
+	    fb_info.blank = &Cyberfb_blank;
+	    fb_info.flags = FBINFO_FLAG_DEFAULT;
 
-	fbhw->init();
-	fbhw->decode_var(&virgefb_default, &par);
-	fbhw->encode_var(&virgefb_default, &par);
+	    fbhw->init();
+	    fbhw->decode_var(&virgefb_default, &par);
+	    fbhw->encode_var(&virgefb_default, &par);
 
-	do_fb_set_var(&virgefb_default, 1);
-	virgefb_get_var(&fb_display[0].var, -1, &fb_info);
-	virgefb_set_disp(-1, &fb_info);
-	do_install_cmap(0, &fb_info);
+	    do_fb_set_var(&virgefb_default, 1);
+	    virgefb_get_var(&fb_display[0].var, -1, &fb_info);
+	    virgefb_set_disp(-1, &fb_info);
+	    do_install_cmap(0, &fb_info);
 
-	if (register_framebuffer(&fb_info) < 0) {
+	    if (register_framebuffer(&fb_info) < 0) {
 		printk(KERN_ERR "virgefb.c: register_framebuffer failed\n");
 		return -EINVAL;
+	    }
+
+	    printk(KERN_INFO "fb%d: %s frame buffer device, using %ldK of "
+		   "video memory\n", GET_FB_IDX(fb_info.node),
+		   fb_info.modename, CyberSize>>10);
+
+	    /* TODO: This driver cannot be unloaded yet */
+	    MOD_INC_USE_COUNT;
+	    return 0;
 	}
-
-	printk(KERN_INFO "fb%d: %s frame buffer device, using %ldK of video memory\n",
-	       GET_FB_IDX(fb_info.node), fb_info.modename, CyberSize>>10);
-
-	/* TODO: This driver cannot be unloaded yet */
-	MOD_INC_USE_COUNT;
-	return 0;
+	return -ENODEV;
 }
 
 

@@ -9,6 +9,7 @@
 
 #include <linux/config.h>
 #include <asm/setup.h>
+#include <asm/page.h>
 
 #ifdef CONFIG_AMIGA
 #include <asm/amigahw.h>
@@ -34,22 +35,22 @@ extern inline unsigned long mm_ptov(unsigned long paddr)
 #endif 
 
 #ifdef CONFIG_SINGLE_MEMORY_CHUNK
-extern inline unsigned long virt_to_phys(volatile void * address)
+extern inline unsigned long virt_to_phys(volatile void *vaddr)
 {
-	unsigned long voff = (unsigned long) address;
+	unsigned long voff = (unsigned long)vaddr - PAGE_OFFSET;
 
 	if (voff < m68k_memory[0].size)
-		return m68k_memory[0].addr + voff;
-	else
-		return mm_vtop_fallback(voff);
+		return voff + m68k_memory[0].addr;
+	return mm_vtop_fallback((unsigned long)vaddr);
 }
 
 extern inline void * phys_to_virt(unsigned long paddr)
 {
-	unsigned long base = m68k_memory[0].addr;
+	unsigned long poff = paddr - m68k_memory[0].addr;
 
-	if ((paddr >=  base) && (paddr < (base + m68k_memory[0].size)))
-		return (void *)(paddr - base);
+	if (poff < m68k_memory[0].size)
+		return (void *)(poff + PAGE_OFFSET);
+
 #ifdef CONFIG_AMIGA
 	/*
 	 * if on an amiga and address is in first 16M, move it 

@@ -34,10 +34,6 @@
  *		     the whole kernel.
  */
 
-#ifdef __ASSEMBLY__
-
-#define curptr a2
-
 /* the following macro is used when enabling interrupts */
 #if defined(MACH_ATARI_ONLY) && !defined(CONFIG_HADES)
 	/* block out HSYNC on the atari */
@@ -48,6 +44,10 @@
 #define ALLOWINT 0xf8ff
 #define	MAX_NOINT_IPL	0
 #endif /* machine compilation types */ 
+
+#ifdef __ASSEMBLY__
+
+#define curptr a2
 
 LFLUSH_I_AND_D = 0x00000808
 LSIGTRAP = 5
@@ -162,7 +162,7 @@ PF_DTRACE_BIT = 5
 #endif
 #define GET_CURRENT(tmp) \
 	"movel	%%sp,"#tmp"\n\t" \
-	"andw	#-KTHREAD_SIZE,"#tmp"\n\t" \
+	"andw	#-"STR(KTHREAD_SIZE)","#tmp"\n\t" \
 	"movel	"#tmp",%%a2"
 
 #endif

@@ -432,8 +432,7 @@ fb_mmap(struct file *file, struct vm_area_struct * vma)
 
 	/* frame buffer memory */
 	start = fix.smem_start;
-	len = (start & ~PAGE_MASK)+fix.smem_len;
-	len = (len+~PAGE_MASK) & PAGE_MASK;		/* someone's on crack. */
+	len = PAGE_ALIGN((start & ~PAGE_MASK)+fix.smem_len);
 	if (off >= len) {
 		/* memory mapped io */
 		off -= len;
@@ -441,8 +440,7 @@ fb_mmap(struct file *file, struct vm_area_struct * vma)
 		if (var.accel_flags)
 			return -EINVAL;
 		start = fix.mmio_start;
-		len = (start & ~PAGE_MASK)+fix.mmio_len;
-		len = (len+~PAGE_MASK) & PAGE_MASK;
+		len = PAGE_ALIGN((start & ~PAGE_MASK)+fix.mmio_len);
 	}
 	start &= PAGE_MASK;
 	if ((vma->vm_end - vma->vm_start + off) > len)

@@ -14,7 +14,7 @@
 #include <asm/traps.h>
 #include <asm/system.h>
 #include <asm/uaccess.h>
-#include <asm/pgtable.h>
+#include <asm/pgalloc.h>
 
 extern void die_if_kernel(char *, struct pt_regs *, long);
 extern const int frame_extra_sizes[]; /* in m68k/kernel/signal.c */

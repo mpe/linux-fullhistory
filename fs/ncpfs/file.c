@@ -36,9 +36,8 @@ static int ncp_fsync(struct file *file, struct dentry *dentry)
  */
 int ncp_make_open(struct inode *inode, int right)
 {
-	int error, result;
+	int error;
 	int access;
-	struct ncp_entry_info finfo;
 
 	error = -EINVAL;
 	if (!inode) {
@@ -53,6 +52,9 @@ int ncp_make_open(struct inode *inode, int right)
 	error = -EACCES;
 	lock_super(inode->i_sb);
 	if (!NCP_FINFO(inode)->opened) {
+		struct ncp_entry_info finfo;
+		int result;
+
 		finfo.i.dirEntNum = NCP_FINFO(inode)->dirEntNum;
 		finfo.i.volNumber = NCP_FINFO(inode)->volNumber;
 		/* tries max. rights */
@@ -62,10 +64,21 @@ int ncp_make_open(struct inode *inode, int right)
 					0, AR_READ | AR_WRITE, &finfo);
 		if (!result)
 			goto update;
-		finfo.access = O_RDONLY;
-		result = ncp_open_create_file_or_subdir(NCP_SERVER(inode),
+		/* RDWR did not succeeded, try readonly or writeonly as requested */
+		switch (right) {
+			case O_RDONLY:
+				finfo.access = O_RDONLY;
+				result = ncp_open_create_file_or_subdir(NCP_SERVER(inode),
 					NULL, NULL, OC_MODE_OPEN,
 					0, AR_READ, &finfo);
+				break;
+			case O_WRONLY:
+				finfo.access = O_WRONLY;
+				result = ncp_open_create_file_or_subdir(NCP_SERVER(inode),
+					NULL, NULL, OC_MODE_OPEN,
+					0, AR_WRITE, &finfo);
+				break;
+		}
 		if (result) {
 			PPRINTK("ncp_make_open: failed, result=%d\n", result);
 			goto out_unlock;
@@ -130,7 +143,7 @@ ncp_file_read(struct file *file, char *buf, size_t count, loff_t *ppos)
 
 	error = ncp_make_open(inode, O_RDONLY);
 	if (error) {
-		printk(KERN_ERR "ncp_file_read: open failed, error=%d\n", error);
+		DPRINTK(KERN_ERR "ncp_file_read: open failed, error=%d\n", error);
 		goto out;
 	}
 
@@ -208,9 +221,9 @@ ncp_file_write(struct file *file, const char *buf, size_t count, loff_t *ppos)
 	errno = 0;
 	if (!count)
 		goto out;
-	errno = ncp_make_open(inode, O_RDWR);
+	errno = ncp_make_open(inode, O_WRONLY);
 	if (errno) {
-		printk(KERN_ERR "ncp_file_write: open failed, error=%d\n", errno);
+		DPRINTK(KERN_ERR "ncp_file_write: open failed, error=%d\n", errno);
 		return errno;
 	}
 	pos = *ppos;

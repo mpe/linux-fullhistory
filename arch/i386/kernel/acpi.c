@@ -39,23 +39,8 @@
 #include <asm/io.h>
 #include <linux/sysctl.h>
 #include <linux/delay.h>
+#include <linux/pm.h>
 #include <linux/acpi.h>
-
-/*
- * Defines for 2.2.x
- */
-#ifndef __exit
-#define __exit
-#endif
-#ifndef module_init
-#define module_init(x) int init_module(void) {return x();}
-#endif
-#ifndef module_exit
-#define module_exit(x) void cleanup_module(void) {x();}
-#endif
-#ifndef DECLARE_WAIT_QUEUE_HEAD
-#define DECLARE_WAIT_QUEUE_HEAD(x) struct wait_queue * x = NULL
-#endif
 
 /*
  * Yes, it's unfortunate that we are relying on get_cmos_time
@@ -107,9 +92,6 @@ static volatile u32 acpi_gpe_status = 0;
 static volatile u32 acpi_gpe_level = 0;
 static volatile acpi_sstate_t acpi_event_state = ACPI_S0;
 static DECLARE_WAIT_QUEUE_HEAD(acpi_event_wait);
-
-static spinlock_t acpi_devs_lock = SPIN_LOCK_UNLOCKED;
-static LIST_HEAD(acpi_devs);
 
 /* Make it impossible to enter C2/C3 until after we've initialized */
 static unsigned long acpi_enter_lvl2_lat = ACPI_INFINITE_LAT;
@@ -520,21 +502,14 @@ static void acpi_destroy_tables(void)
 }
 
 /*
- * Locate PIIX4 device and create a fake FACP
+ * Init PIIX4 device, create a fake FACP
  */
-static int __init acpi_find_piix4(void)
+static int __init acpi_init_piix4(struct pci_dev *dev)
 {
-	struct pci_dev *dev;
 	u32 base;
 	u16 cmd;
 	u8 pmregmisc;
 
-	dev = pci_find_device(PCI_VENDOR_ID_INTEL,
-			      PCI_DEVICE_ID_INTEL_82371AB_3,
-			      NULL);
-	if (!dev)
-		return -ENODEV;
-	
 	pci_read_config_word(dev, PCI_COMMAND, &cmd);
 	if (!(cmd & PCI_COMMAND_IO))
 		return -ENODEV;
@@ -582,6 +557,124 @@ static int __init acpi_find_piix4(void)
 	acpi_dsdt_addr = 0;
 
 	acpi_p_blk = base + ACPI_PIIX4_P_BLK;
+
+	return 0;
+}
+
+/*
+ * Init VIA ACPI device and create a fake FACP
+ */
+static int __init acpi_init_via686a(struct pci_dev *dev)
+{
+	u32 base;
+	u8 tmp, irq;
+
+	pci_read_config_byte(dev, 0x41, &tmp);
+	if (!(tmp & 0x80))
+		return -ENODEV;
+
+	pci_read_config_byte(dev, PCI_CLASS_REVISION, &tmp);
+	tmp = (tmp & 0x10 ? 0x48 : 0x20);
+
+	pci_read_config_dword(dev, tmp, &base);
+	if (!(base & PCI_BASE_ADDRESS_SPACE_IO))
+		return -ENODEV;
+
+	base &= PCI_BASE_ADDRESS_IO_MASK;
+	if (!base)
+		return -ENODEV;
+
+	pci_read_config_byte(dev, 0x42, &irq);
+
+	printk(KERN_INFO "ACPI: found %s at 0x%04x\n", dev->name, base);
+
+	acpi_facp = kmalloc(sizeof(struct acpi_facp), GFP_KERNEL);
+	if (!acpi_facp)
+		return -ENOMEM;
+
+	acpi_fake_facp = 1;
+	memset(acpi_facp, 0, sizeof(struct acpi_facp));
+
+	acpi_facp->int_model = ACPI_VIA_INT_MODEL;
+	acpi_facp->sci_int = irq;
+	acpi_facp->smi_cmd = base + ACPI_VIA_SMI_CMD;
+	acpi_facp->acpi_enable = ACPI_VIA_ACPI_ENABLE;
+	acpi_facp->acpi_disable = ACPI_VIA_ACPI_DISABLE;
+	acpi_facp->pm1a_evt = base + ACPI_VIA_PM1_EVT;
+	acpi_facp->pm1a_cnt = base + ACPI_VIA_PM1_CNT;
+	acpi_facp->pm_tmr = base + ACPI_VIA_PM_TMR;
+	acpi_facp->gpe0 = base + ACPI_VIA_GPE0;
+
+	acpi_facp->pm1_evt_len = ACPI_VIA_PM1_EVT_LEN;
+	acpi_facp->pm1_cnt_len = ACPI_VIA_PM1_CNT_LEN;
+	acpi_facp->pm_tm_len = ACPI_VIA_PM_TM_LEN;
+	acpi_facp->gpe0_len = ACPI_VIA_GPE0_LEN;
+	acpi_facp->p_lvl2_lat = (__u16) ACPI_INFINITE_LAT;
+	acpi_facp->p_lvl3_lat = (__u16) ACPI_INFINITE_LAT;
+
+	acpi_facp->duty_offset = ACPI_VIA_DUTY_OFFSET;
+	acpi_facp->duty_width = ACPI_VIA_DUTY_WIDTH;
+
+	acpi_facp->day_alarm = ACPI_VIA_DAY_ALARM;
+	acpi_facp->mon_alarm = ACPI_VIA_MON_ALARM;
+	acpi_facp->century = ACPI_VIA_CENTURY;
+
+	acpi_facp_addr = virt_to_phys(acpi_facp);
+	acpi_dsdt_addr = 0;
+
+	acpi_p_blk = base + ACPI_VIA_P_BLK;
+
+	return 0;
+}
+
+typedef enum
+{
+	CH_UNKNOWN = 0,
+	CH_INTEL_PIIX4,
+	CH_VIA_686A,
+} acpi_chip_t;
+
+/* indexed by value of each enum in acpi_chip_t */
+const static struct
+{
+	int (*chip_init)(struct pci_dev *dev);
+} acpi_chip_info[] =
+{
+	{NULL,},
+	{acpi_init_piix4},
+	{acpi_init_via686a},
+};
+	
+const static struct pci_device_id acpi_pci_tbl[] =
+{
+	{0x8086, 0x7113, PCI_ANY_ID, PCI_ANY_ID, 0, 0, CH_INTEL_PIIX4},
+	{0x1106, 0x3057, PCI_ANY_ID, PCI_ANY_ID, 0, 0, CH_VIA_686A},
+	{0,}, /* terminate list */
+};
+
+static int __init acpi_probe(struct pci_dev *dev,
+			     const struct pci_device_id *id)
+{
+	return acpi_chip_info[id->driver_data].chip_init(dev);
+}
+
+static struct pci_driver acpi_driver =
+{
+	name:		"acpi",
+	id_table:	acpi_pci_tbl,
+	probe:		acpi_probe,
+};
+static int pci_driver_registered = 0;
+
+/*
+ * Locate a known ACPI chipset
+ */
+static int __init acpi_find_chipset(void)
+{
+	if (pci_register_driver(&acpi_driver) < 1)
+		return -ENODEV;
+
+	pci_driver_registered = 1;
 
 	return 0;
 }
@@ -693,7 +786,7 @@ static void wake_on_busmaster(struct acpi_facp *facp)
 
 /* The ACPI timer is just the low 24 bits */
 #define TIME_BEGIN(tmr)			inl(tmr)
-#define TIME_END(tmr, begin) 		((inl(tmr) - (begin)) & 0x00ffffff)
+#define TIME_END(tmr, begin)		((inl(tmr) - (begin)) & 0x00ffffff)
 
 
 /*
@@ -836,24 +929,11 @@ out:
 static int acpi_enter_dx(acpi_dstate_t state)
 {
 	int status = 0;
-	struct list_head *i = acpi_devs.next;
-
-	while (i != &acpi_devs)	{
-		struct acpi_dev *dev = list_entry(i, struct acpi_dev, entry);
-		if (dev->state != state) {
-			int dev_status = 0;
-			if (dev->info.transition)
-				dev_status = dev->info.transition(dev, state);
-			if (!dev_status) {
-				// put hardware into D-state
-				dev->state = state;
-			}
-			if (dev_status)
-				status = dev_status;
-		}
-
-		i = i->next;
-	}
+	
+	if (state == ACPI_D0)
+		status = pm_send_request(PM_RESUME, (void*) state);
+	else
+		status = pm_send_request(PM_SUSPEND, (void*) state);
 
 	return status;
 }
@@ -1208,6 +1288,7 @@ static int acpi_do_sleep(ctl_table *ctl,
 	return 0;
 }
 
+
 /*
  * Initialize and enable ACPI
  */
@@ -1218,17 +1299,17 @@ static int __init acpi_init(void)
 	if (acpi_disabled)
 		return -ENODEV;
 
-	if (acpi_find_tables() && acpi_find_piix4()) {
-		// no ACPI tables and not PIIX4
+	if (acpi_find_tables() && acpi_find_chipset()) {
+		// no ACPI tables and not recognized chipset
 		return -ENODEV;
 	}
 
-    	/*
-    	 * Internally we always keep latencies in timer
-    	 * ticks, which is simpler and more consistent (what is
-    	 * an uS to us?). Besides, that gives people more
-    	 * control in the /proc interfaces.
-    	 */
+	/*
+	 * Internally we always keep latencies in timer
+	 * ticks, which is simpler and more consistent (what is
+	 * an uS to us?). Besides, that gives people more
+	 * control in the /proc interfaces.
+	 */
 	if (acpi_facp->p_lvl2_lat
 	    && acpi_facp->p_lvl2_lat <= ACPI_MAX_P_LVL2_LAT) {
 		acpi_p_lvl2_lat = ACPI_uS_TO_TMR_TICKS(acpi_facp->p_lvl2_lat);
@@ -1249,7 +1330,11 @@ static int __init acpi_init(void)
 			   acpi_facp)) {
 		printk(KERN_ERR "ACPI: SCI (IRQ%d) allocation failed\n",
 		       acpi_facp->sci_int);
+
+		if (pci_driver_registered)
+			pci_unregister_driver(&acpi_driver);
 		acpi_destroy_tables();
+
 		return -ENODEV;
 	}
 
@@ -1296,8 +1381,14 @@ static void __exit acpi_exit(void)
 		free_irq(acpi_facp->sci_int, acpi_facp);
 
 	acpi_destroy_tables();
+
+	if (pci_driver_registered)
+		pci_unregister_driver(&acpi_driver);
 }
 
+/*
+ * Parse kernel command line options
+ */
 static int __init acpi_setup(char *str)
 {
 	while (str && *str) {
@@ -1313,53 +1404,6 @@ static int __init acpi_setup(char *str)
 }
 
 __setup("acpi=", acpi_setup);
-
-/*
- * Register a device with the ACPI subsystem
- */
-struct acpi_dev* acpi_register(struct acpi_dev_info *info, unsigned long adr)
-{
-	struct acpi_dev *dev = NULL;
-	if (info) {
-		dev = kmalloc(sizeof(struct acpi_dev), GFP_KERNEL);
-		if (dev) {
-			unsigned long flags;
-			
-			memset(dev, 0, sizeof(*dev));
-			memcpy(&dev->info, info, sizeof(dev->info));
-			dev->adr = adr;
-			
-			spin_lock_irqsave(&acpi_devs_lock, flags);
-			list_add(&dev->entry, &acpi_devs);
-			spin_unlock_irqrestore(&acpi_devs_lock, flags);
-		}
-	}
-	return dev;
-}
-
-/*
- * Unregister a device with ACPI
- */
-void acpi_unregister(struct acpi_dev *dev)
-{
-	if (dev) {
-		unsigned long flags;
-
-		spin_lock_irqsave(&acpi_devs_lock, flags);
-		list_del(&dev->entry);
-		spin_unlock_irqrestore(&acpi_devs_lock, flags);
-
-		kfree(dev);
-	}
-}
-
-/*
- * Wake up a device
- */
-void acpi_wakeup(struct acpi_dev *dev)
-{
-	// run _PS0 or tell parent bus to wake device up
-}
 
 /*
  * Manage idle devices
@@ -1382,11 +1426,3 @@ static int acpi_control_thread(void *context)
 }
 
 __initcall(acpi_init);
-
-/*
- * Module visible symbols
- */
-EXPORT_SYMBOL(acpi_control_wait);
-EXPORT_SYMBOL(acpi_register);
-EXPORT_SYMBOL(acpi_unregister);
-EXPORT_SYMBOL(acpi_wakeup);

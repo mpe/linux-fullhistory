@@ -92,7 +92,7 @@
 #include <linux/version.h>
 #include <linux/tqueue.h>
 #include <linux/bootmem.h>
-#include <linux/acpi.h>
+#include <linux/pm.h>
 
 #include <asm/io.h>
 #include <asm/system.h>
@@ -205,10 +205,8 @@ int (*console_blank_hook)(int) = NULL;
 #define DO_UPDATE IS_VISIBLE
 #endif
 
-static int acpi_con_transition(struct acpi_dev *dev, acpi_dstate_t state);
-static struct acpi_dev_info acpi_con_info
-	= {ACPI_SYS_DEV, ACPI_VGA_HID, acpi_con_transition};
-static struct acpi_dev *acpi_con = NULL;
+static int pm_con_request(struct pm_dev *dev, pm_request_t rqst, void *data);
+static struct pm_dev *pm_con = NULL;
 
 static inline unsigned short *screenpos(int currcons, int offset, int viewed)
 {
@@ -664,8 +662,11 @@ int vc_allocate(unsigned int currcons)	/* return 0 on success */
 	    kmalloced = 1;
 	    vc_init(currcons, video_num_lines, video_num_columns, 1);
 
-	    if (!acpi_con)
-		    acpi_con = acpi_register(&acpi_con_info, 0);
+	    if (!pm_con) {
+		    pm_con = pm_register(PM_SYS_DEV,
+					 PM_SYS_VGA,
+					 pm_con_request);
+	    }
 	}
 	return 0;
 }
@@ -2003,7 +2004,7 @@ void vt_console_print(struct console *co, const char * b, unsigned count)
 	if (!printable || test_and_set_bit(0, &printing))
 		return;
 
-	acpi_access(acpi_con);
+	pm_access(pm_con);
 
 	if (kmsg_redirect && vc_cons_allocated(kmsg_redirect - 1))
 		currcons = kmsg_redirect - 1;
@@ -2162,7 +2163,7 @@ static int con_write(struct tty_struct * tty, int from_user,
 {
 	int	retval;
 
-	acpi_access(acpi_con);
+	pm_access(pm_con);
 	retval = do_con_write(tty, from_user, buf, count);
 	con_flush_chars(tty);
 
@@ -2171,7 +2172,7 @@ static int con_write(struct tty_struct * tty, int from_user,
 
 static void con_put_char(struct tty_struct *tty, unsigned char ch)
 {
-	acpi_access(acpi_con);
+	pm_access(pm_con);
 	do_con_write(tty, 0, &ch, 1);
 }
 
@@ -2237,7 +2238,7 @@ static void con_flush_chars(struct tty_struct *tty)
 {
 	struct vt_struct *vt = (struct vt_struct *)tty->driver_data;
 
-	acpi_access(acpi_con);
+	pm_access(pm_con);
 	set_cursor(vt->vc_num);
 }
 
@@ -2820,16 +2821,14 @@ void vcs_scr_writew(int currcons, u16 val, u16 *org)
 	}
 }
 
-static int acpi_con_transition(struct acpi_dev *dev, acpi_dstate_t state)
+static int pm_con_request(struct pm_dev *dev, pm_request_t rqst, void *data)
 {
-	switch (state)
+	switch (rqst)
 	{
-	case ACPI_D0:
+	case PM_RESUME:
 		unblank_screen();
 		break;
-	case ACPI_D1:
-	case ACPI_D2:
-	case ACPI_D3:
+	case PM_SUSPEND:
 		do_blank_screen(0);
 		break;
 	}

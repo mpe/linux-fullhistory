@@ -1170,25 +1170,28 @@ static int cs4231_open(struct inode * inode, struct file * file, struct sparcaud
 
 static void cs4231_release(struct inode * inode, struct file * file, struct sparcaudio_driver *drv)
 {
-        struct cs4231_chip *cs4231_chip = (struct cs4231_chip *)drv->private;
+	struct cs4231_chip *cs4231_chip = (struct cs4231_chip *)drv->private;
+	void (*dma_unmap_single)(struct sbus_dev *, dma_addr_t, size_t) = sbus_unmap_single;
 
+#ifdef EB4231_SUPPORT
+	if (cs4231_chip->status & CS_STATUS_IS_EBUS)
+		dma_unmap_single = (void (*)(struct sbus_dev *, dma_addr_t, size_t)) pci_unmap_single;
+#endif
         /* zero out any info about what data we have as well */
         if (file->f_mode & FMODE_READ) {
                 /* stop capture here or midlevel? */
                 cs4231_chip->perchip_info.record.open = 0;
                 if (cs4231_chip->input_dma_handle) {
-                        if(!(cs4231_chip->status & CS_STATUS_IS_EBUS))
-                                sbus_unmap_single(drv->dev,
-                                                  cs4231_chip->input_dma_handle,
-                                                  cs4231_chip->input_dma_size);
+			dma_unmap_single(drv->dev,
+					 cs4231_chip->input_dma_handle,
+					 cs4231_chip->input_dma_size);
                         cs4231_chip->input_dma_handle = 0;
                         cs4231_chip->input_dma_size = 0;
                 }
                 if (cs4231_chip->input_next_dma_handle) {
-                        if(!(cs4231_chip->status & CS_STATUS_IS_EBUS))
-                                sbus_unmap_single(drv->dev,
-                                                  cs4231_chip->input_next_dma_handle,
-                                                  cs4231_chip->input_next_dma_size);
+			dma_unmap_single(drv->dev,
+					 cs4231_chip->input_next_dma_handle,
+					 cs4231_chip->input_next_dma_size);
                         cs4231_chip->input_next_dma_handle = 0;
                         cs4231_chip->input_next_dma_size = 0;
                 }
@@ -1198,18 +1201,16 @@ static void cs4231_release(struct inode * inode, struct file * file, struct spar
                 cs4231_chip->perchip_info.play.active =
                         cs4231_chip->perchip_info.play.open = 0;
                 if (cs4231_chip->output_dma_handle) {
-                        if(!(cs4231_chip->status & CS_STATUS_IS_EBUS))
-                                sbus_unmap_single(drv->dev,
-                                                  cs4231_chip->output_dma_handle,
-                                                  cs4231_chip->output_dma_size);
+			dma_unmap_single(drv->dev,
+					 cs4231_chip->output_dma_handle,
+					 cs4231_chip->output_dma_size);
                         cs4231_chip->output_dma_handle = 0;
                         cs4231_chip->output_dma_size = 0;
                 }
                 if (cs4231_chip->output_next_dma_handle) {
-                        if(!(cs4231_chip->status & CS_STATUS_IS_EBUS))
-                                sbus_unmap_single(drv->dev,
-                                                  cs4231_chip->output_next_dma_handle,
-                                                  cs4231_chip->output_next_dma_size);
+			dma_unmap_single(drv->dev,
+					 cs4231_chip->output_next_dma_handle,
+					 cs4231_chip->output_next_dma_size);
                         cs4231_chip->output_next_dma_handle = 0;
                         cs4231_chip->output_next_dma_size = 0;
                 }
@@ -1294,6 +1295,9 @@ static void eb4231_playintr(struct sparcaudio_driver *drv)
                 cs4231_chip->playlen = cs4231_chip->output_size;
 
         if (cs4231_chip->output_dma_handle) {
+		pci_unmap_single((struct pci_dev *)drv->dev,
+				 cs4231_chip->output_dma_handle,
+				 cs4231_chip->output_dma_size);
                 cs4231_chip->output_dma_handle = 0;
                 cs4231_chip->output_dma_size = 0;
                 cs4231_chip->playing_count--;
@@ -1310,7 +1314,9 @@ static void eb4231_playintr(struct sparcaudio_driver *drv)
         if ((cs4231_chip->output_ptr && cs4231_chip->output_size > 0) && 
             !(cs4231_chip->perchip_info.play.pause)) {
                 cs4231_chip->output_next_dma_handle =
-                        virt_to_bus(cs4231_chip->output_ptr);
+			pci_map_single((struct pci_dev *)drv->dev,
+				       (char *)cs4231_chip->output_ptr,
+				       cs4231_chip->output_size);
                 cs4231_chip->output_next_dma_size = cs4231_chip->output_size;
 
                 writel(cs4231_chip->output_next_dma_size,
@@ -1410,6 +1416,9 @@ static int eb4231_recintr(struct sparcaudio_driver *drv)
         } 
 
         if (cs4231_chip->input_dma_handle) {
+		pci_unmap_single((struct pci_dev *)drv->dev,
+				 cs4231_chip->input_dma_handle,
+				 cs4231_chip->input_dma_size);
                 cs4231_chip->input_dma_handle = 0;
                 cs4231_chip->input_dma_size = 0;
                 cs4231_chip->recording_count--;
@@ -1430,7 +1439,9 @@ static int eb4231_recintr(struct sparcaudio_driver *drv)
                                 cs4231_chip->input_size);
 
                 cs4231_chip->input_next_dma_handle =
-                        virt_to_bus(cs4231_chip->input_ptr);
+			pci_map_single((struct pci_dev *)drv->dev,
+				       (char *)cs4231_chip->input_ptr,
+				       cs4231_chip->input_size);
                 cs4231_chip->input_next_dma_size = cs4231_chip->input_size;
 
                 writel(cs4231_chip->input_next_dma_size,
@@ -1543,11 +1554,17 @@ static void eb4231_stop_output(struct sparcaudio_driver *drv)
         cs4231_chip->output_size = 0;
 
         if (cs4231_chip->output_dma_handle) {
+		pci_unmap_single((struct pci_dev *)drv->dev,
+				 cs4231_chip->output_dma_handle,
+				 cs4231_chip->output_dma_size);
                 cs4231_chip->output_dma_handle = 0;
                 cs4231_chip->output_dma_size = 0;
         }
 
         if (cs4231_chip->output_next_dma_handle) {
+		pci_unmap_single((struct pci_dev *)drv->dev,
+				 cs4231_chip->output_next_dma_handle,
+				 cs4231_chip->output_next_dma_size);
                 cs4231_chip->output_next_dma_handle = 0;
                 cs4231_chip->output_next_dma_size = 0;
         }
@@ -1746,11 +1763,17 @@ static void eb4231_stop_input(struct sparcaudio_driver *drv)
         cs4231_chip->input_size = 0;
 
         if (cs4231_chip->input_dma_handle) {
+		pci_unmap_single((struct pci_dev *)drv->dev,
+				 cs4231_chip->input_dma_handle,
+				 cs4231_chip->input_dma_size);
                 cs4231_chip->input_dma_handle = 0;
                 cs4231_chip->input_dma_size = 0;
         }
 
         if (cs4231_chip->input_next_dma_handle) {
+		pci_unmap_single((struct pci_dev *)drv->dev,
+				 cs4231_chip->input_next_dma_handle,
+				 cs4231_chip->input_next_dma_size);
                 cs4231_chip->input_next_dma_handle = 0;
                 cs4231_chip->input_next_dma_size = 0;
         }
@@ -2235,6 +2258,8 @@ static int eb4231_attach(struct sparcaudio_driver *drv,
         cs4231_chip->input_ptr = cs4231_chip->output_ptr = NULL;
         cs4231_chip->input_size = cs4231_chip->output_size = 0;
         cs4231_chip->status = 0;
+
+        drv->dev = (struct sbus_dev *)edev->bus->self;
 
         len = prom_getproperty(edev->prom_node, "reg", (void *)regs, sizeof(regs));
         if ((len % sizeof(regs[0])) != 0) {

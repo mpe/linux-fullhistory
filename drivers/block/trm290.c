@@ -187,7 +187,7 @@ static int trm290_dmaproc (ide_dma_action_t func, ide_drive_t *drive)
 			if (!(count = ide_build_dmatable(drive, func)))
 				break;		/* try PIO instead of DMA */
 			trm290_prepare_drive(drive, 1);	/* select DMA xfer */
-			outl(virt_to_bus(hwif->dmatable)|reading|writing, hwif->dma_base);
+			outl(hwif->dmatable_dma|reading|writing, hwif->dma_base);
 			drive->waiting_for_dma = 1;
 			outw((count * 2) - 1, hwif->dma_base+2); /* start DMA */
 			if (drive->media != ide_disk)
@@ -199,6 +199,7 @@ static int trm290_dmaproc (ide_dma_action_t func, ide_drive_t *drive)
 			return 0;
 		case ide_dma_end:
 			drive->waiting_for_dma = 0;
+			ide_destroy_dmatable(drive);		/* purge DMA mappings */
 			return (inw(hwif->dma_base+2) != 0x00ff);
 		case ide_dma_test_irq:
 			return (inw(hwif->dma_base+2) == 0x00ff);

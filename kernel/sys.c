@@ -821,21 +821,16 @@ out:
 	return 1;
 }
 
-/*
- * This should really be a blocking read-write lock
- * rather than a semaphore. Anybody want to implement
- * one?
- */
-DECLARE_MUTEX(uts_sem);
+DECLARE_RWSEM(uts_sem);
 
 asmlinkage long sys_newuname(struct new_utsname * name)
 {
 	int errno = 0;
 
-	down(&uts_sem);
+	down_read(&uts_sem);
 	if (copy_to_user(name,&system_utsname,sizeof *name))
 		errno = -EFAULT;
-	up(&uts_sem);
+	up_read(&uts_sem);
 	return errno;
 }
 
@@ -847,13 +842,13 @@ asmlinkage long sys_sethostname(char *name, int len)
 		return -EPERM;
 	if (len < 0 || len > __NEW_UTS_LEN)
 		return -EINVAL;
-	down(&uts_sem);
+	down_write(&uts_sem);
 	errno = -EFAULT;
 	if (!copy_from_user(system_utsname.nodename, name, len)) {
 		system_utsname.nodename[len] = 0;
 		errno = 0;
 	}
-	up(&uts_sem);
+	up_write(&uts_sem);
 	return errno;
 }
 
@@ -863,14 +858,14 @@ asmlinkage long sys_gethostname(char *name, int len)
 
 	if (len < 0)
 		return -EINVAL;
-	down(&uts_sem);
+	down_read(&uts_sem);
 	i = 1 + strlen(system_utsname.nodename);
 	if (i > len)
 		i = len;
 	errno = 0;
 	if (copy_to_user(name, system_utsname.nodename, i))
 		errno = -EFAULT;
-	up(&uts_sem);
+	up_read(&uts_sem);
 	return errno;
 }
 
@@ -887,13 +882,13 @@ asmlinkage long sys_setdomainname(char *name, int len)
 	if (len < 0 || len > __NEW_UTS_LEN)
 		return -EINVAL;
 
-	down(&uts_sem);
+	down_write(&uts_sem);
 	errno = -EFAULT;
 	if (!copy_from_user(system_utsname.domainname, name, len)) {
 		errno = 0;
 		system_utsname.domainname[len] = 0;
 	}
-	up(&uts_sem);
+	up_write(&uts_sem);
 	return errno;
 }
 

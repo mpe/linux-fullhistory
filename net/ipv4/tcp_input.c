@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_input.c,v 1.182 2000/01/21 23:45:59 davem Exp $
+ * Version:	$Id: tcp_input.c,v 1.183 2000/01/24 18:40:33 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -1323,7 +1323,11 @@ tcp_timewait_state_process(struct tcp_tw_bucket *tw, struct sk_buff *skb,
 	if (th->doff > (sizeof(struct tcphdr)>>2) && tw->ts_recent_stamp) {
 		tcp_parse_options(NULL, th, &tp, 0);
 
-		paws_reject = tp.saw_tstamp && tcp_paws_check(&tp, th->rst);
+		if (tp.saw_tstamp) {
+			tp.ts_recent = tw->ts_recent;
+			tp.ts_recent_stamp = tw->ts_recent_stamp;
+			paws_reject = tcp_paws_check(&tp, th->rst);
+		}
 	}
 
 	if (tw->substate == TCP_FIN_WAIT2) {
@@ -2832,7 +2836,15 @@ struct sock *tcp_check_req(struct sock *sk,struct sk_buff *skb,
 	if (th->doff > (sizeof(struct tcphdr)>>2)) {
 		tcp_parse_options(NULL, th, &ttp, 0);
 
-		paws_reject = ttp.saw_tstamp && tcp_paws_check(&ttp, th->rst);
+		if (ttp.saw_tstamp) {
+			ttp.ts_recent = req->ts_recent;
+			/* We do not store true stamp, but it is not required,
+			 * it can be estimated (approximately)
+			 * from another data.
+			 */
+			ttp.ts_recent_stamp = xtime.tv_sec - ((TCP_TIMEOUT_INIT/HZ)<<req->retrans);
+			paws_reject = tcp_paws_check(&ttp, th->rst);
+		}
 	}
 
 	/* Check for pure retransmited SYN. */
@@ -3019,12 +3031,26 @@ static int tcp_rcv_synsent_state_process(struct sock *sk, struct sk_buff *skb,
 		 * checked in SYN-SENT unlike another states, hence
 		 * echoed tstamp must be checked too.
 		 */
-		if (tp->saw_tstamp &&
-		    ((__s32)(tp->rcv_tsecr - tcp_time_stamp) > 0 ||
-		     (__s32)(tp->rcv_tsecr - tp->syn_stamp) < 0)) {
-			NETDEBUG(if (net_ratelimit()) printk(KERN_DEBUG "TCP: synsent reject.\n"));
-			NET_INC_STATS_BH(PAWSActiveRejected);
-			return 1;
+		if (tp->saw_tstamp) {
+			if (tp->rcv_tsecr == 0) {
+				/* Workaround for bug in linux-2.1 and early
+				 * 2.2 kernels. Let's pretend that we did not
+				 * see such timestamp to avoid bogus rtt value,
+				 * calculated by tcp_ack().
+				 */
+				tp->saw_tstamp = 0;
+
+				/* But do not forget to store peer's timestamp! */
+				if (th->syn) {
+					tp->ts_recent = tp->rcv_tsval;
+					tp->ts_recent_stamp = xtime.tv_sec;
+				}
+			} else if ((__s32)(tp->rcv_tsecr - tcp_time_stamp) > 0 ||
+				   (__s32)(tp->rcv_tsecr - tp->syn_stamp) < 0) {
+				NETDEBUG(if (net_ratelimit()) printk(KERN_DEBUG "TCP: synsent reject.\n"));
+				NET_INC_STATS_BH(PAWSActiveRejected);
+				return 1;
+			}
 		}
 
 		/* Now ACK is acceptable.
@@ -3449,6 +3475,14 @@ int tcp_rcv_state_process(struct sock *sk, struct sk_buff *skb,
 					tmo = tcp_fin_time(tp);
 					if (tmo > TCP_TIMEWAIT_LEN) {
 						tcp_reset_keepalive_timer(sk, tmo - TCP_TIMEWAIT_LEN);
+					} else if (th->fin || sk->lock.users) {
+						/* Bad case. We could lose such FIN otherwise.
+						 * It is not a big problem, but it looks confusing
+						 * and not so rare event. We still can lose it now,
+						 * if it spins in bh_lock_sock(), but it is really
+						 * marginal case.
+						 */
+						tcp_reset_keepalive_timer(sk, tmo);
 					} else {
 						tcp_time_wait(sk, TCP_FIN_WAIT2, tmo);
 						goto discard;

@@ -62,6 +62,7 @@ typedef struct {
 
 #define MVME_SCC_A_ADDR	0xfff45005
 #define MVME_SCC_B_ADDR	0xfff45001
+#define MVME_SCC_PCLK	10000000
 
 #define MVME162_IRQ_TYPE_PRIO	0
                 

@@ -159,7 +159,7 @@ typedef struct siginfo {
 #define CLD_TRAPPED	4	/* traced child has trapped */
 #define CLD_STOPPED	5	/* child has stopped */
 #define CLD_CONTINUED	6	/* stopped child has continued */
-#define NSIGCHLD
+#define NSIGCHLD	6
 
 /*
  * SIGPOLL si_codes
