@@ -50,8 +50,8 @@
 #include <linux/vmalloc.h>
 #include <linux/wait.h>
 #include <linux/major.h>
+#include <linux/smp_lock.h>
 
-#include <asm/smp_lock.h>
 #include <asm/shmiq.h>
 #include <asm/mman.h>
 #include <asm/uaccess.h>

@@ -43,6 +43,7 @@ typedef struct siginfo {
 		/* SIGCHLD */
 		struct {
 			pid_t _pid;		/* which child */
+			uid_t _uid;		/* sender's uid */
 			int _status;		/* exit code */
 			clock_t _utime;
 			clock_t _stime;

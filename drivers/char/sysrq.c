@@ -20,8 +20,9 @@
 #include <linux/sysrq.h>
 #include <linux/kbd_kern.h>
 #include <linux/quotaops.h>
+#include <linux/smp_lock.h>
+
 #include <asm/ptrace.h>
-#include <asm/smp_lock.h>
 
 #ifdef CONFIG_APM
 #include <linux/apm_bios.h>

@@ -20,7 +20,6 @@
 
 extern void dump_thread(struct pt_regs *, struct user *);
 extern int dump_fpu(elf_fpregset_t *);
-extern void __lock_kernel(void);
 
 #if defined(CONFIG_BLK_DEV_IDE) || defined(CONFIG_BLK_DEV_HD) || defined(CONFIG_BLK_DEV_IDE_MODULE) || defined(CONFIG_BLK_DEV_HD_MODULE)
 extern struct drive_info_struct drive_info;
@@ -68,11 +67,8 @@ EXPORT_SYMBOL(strlen_user);
 
 #ifdef __SMP__
 EXPORT_SYMBOL(cpu_data);
-EXPORT_SYMBOL_NOVERS(kernel_flag);
-EXPORT_SYMBOL_NOVERS(active_kernel_processor);
+EXPORT_SYMBOL(kernel_flag);
 EXPORT_SYMBOL(smp_invalidate_needed);
-EXPORT_SYMBOL_NOVERS(__lock_kernel);
-EXPORT_SYMBOL(lk_lockmsg);
 EXPORT_SYMBOL(__cpu_logical_map);
 EXPORT_SYMBOL(smp_num_cpus);
 

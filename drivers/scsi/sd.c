@@ -37,7 +37,6 @@
 #include <linux/interrupt.h>
 
 #include <linux/smp.h>
-#include <asm/smp_lock.h>
 
 #include <asm/system.h>
 #include <asm/io.h>

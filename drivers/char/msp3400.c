@@ -37,7 +37,6 @@
 #include <linux/delay.h>
 #include <linux/errno.h>
 #include <linux/malloc.h>
-/* #include <asm/smp_lock.h> */
 
 /* kernel_thread */
 #define __KERNEL_SYSCALLS__

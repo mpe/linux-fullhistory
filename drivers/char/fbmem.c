@@ -500,7 +500,7 @@ register_framebuffer(struct fb_info *fb_info)
 
 	if (first) {
 		first = 0;
-		take_over_console(&fb_con, 12, MAX_NR_CONSOLES-1, 1);
+		take_over_console(&fb_con, 0, MAX_NR_CONSOLES-1, 1);
 	}
 
 	return 0;

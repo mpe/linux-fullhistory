@@ -109,7 +109,6 @@
 
 #include	<asm/system.h>
 #include	<asm/atomic.h>
-#include	<asm/smp_lock.h>
 #include	<asm/spinlock.h>
 
 /* If there is a different PAGE_SIZE around, and it works with this allocator,

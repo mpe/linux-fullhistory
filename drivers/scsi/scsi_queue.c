@@ -23,7 +23,7 @@
 #include <linux/blk.h>
 #include <linux/interrupt.h>
 #include <linux/delay.h>
-#include <asm/smp_lock.h>
+#include <linux/smp_lock.h>
 
 #define __KERNEL_SYSCALLS__
 

@@ -7,6 +7,7 @@
  */
 
 #ifdef __SMP__
+
 #include <asm/smp.h>
 
 /*

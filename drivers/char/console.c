@@ -2694,7 +2694,7 @@ void putconsxy(int currcons, char *p)
 
 u16 vcs_scr_readw(int currcons, u16 *org)
 {
-	if (org == pos && softcursor_original != -1)
+	if (org == (u16 *)pos && softcursor_original != -1)
 		return softcursor_original;
 	return scr_readw(org);
 }
@@ -2702,7 +2702,7 @@ u16 vcs_scr_readw(int currcons, u16 *org)
 void vcs_scr_writew(int currcons, u16 val, u16 *org)
 {
 	scr_writew(val, org);
-	if (org == pos) {
+	if (org == (u16 *)pos) {
 		softcursor_original = -1;
 		add_softcursor(currcons);
 	}

@@ -46,12 +46,10 @@ static void release(struct task_struct * p)
 		nr_tasks--;
 		add_free_taskslot(p->tarray_ptr);
 		{
-			unsigned long flags;
-
-			write_lock_irqsave(&tasklist_lock, flags);
+			write_lock_irq(&tasklist_lock);
 			unhash_pid(p);
 			REMOVE_LINKS(p);
-			write_unlock_irqrestore(&tasklist_lock, flags);
+			write_unlock_irq(&tasklist_lock);
 		}
 		release_thread(p);
 		current->cmin_flt += p->min_flt + p->cmin_flt;
@@ -456,12 +454,11 @@ repeat:
 					__put_user(p->exit_code, stat_addr);
 				retval = p->pid;
 				if (p->p_opptr != p->p_pptr) {
-					/* Note this grabs tasklist_lock
-					 * as a writer... (twice!)
-					 */
+					write_lock_irq(&tasklist_lock);
 					REMOVE_LINKS(p);
 					p->p_pptr = p->p_opptr;
 					SET_LINKS(p);
+					write_unlock_irq(&tasklist_lock);
 					notify_parent(p, SIGCHLD);
 				} else
 					release(p);

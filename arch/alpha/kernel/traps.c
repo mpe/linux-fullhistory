@@ -13,12 +13,12 @@
 #include <linux/sched.h>
 #include <linux/tty.h>
 #include <linux/delay.h>
+#include <linux/smp_lock.h>
 
 #include <asm/gentrap.h>
 #include <asm/uaccess.h>
 #include <asm/unaligned.h>
 #include <asm/sysinfo.h>
-#include <asm/smp_lock.h>
 
 
 static void dik_show_regs(struct pt_regs *regs, unsigned long *r9_15)

@@ -14,7 +14,8 @@
 #include <linux/sched.h>
 #include <linux/types.h>
 #include <linux/unistd.h>
-#include <asm/smp_lock.h>
+#include <linux/smp_lock.h>
+
 #include <asm/uaccess.h>
 
 /*

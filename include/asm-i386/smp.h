@@ -7,6 +7,7 @@
 #include <asm/i82489.h>
 #include <asm/bitops.h>
 #include <asm/fixmap.h>
+
 #include <linux/tasks.h>
 #include <linux/ptrace.h>
 
@@ -161,9 +162,8 @@ extern unsigned long cpu_present_map;
 extern volatile int cpu_number_map[NR_CPUS];
 extern volatile unsigned long smp_invalidate_needed;
 extern void smp_flush_tlb(void);
-extern volatile unsigned long kernel_flag, kernel_counter;
+
 extern volatile unsigned long cpu_callin_map[NR_CPUS];
-extern volatile unsigned char active_kernel_processor;
 extern void smp_message_irq(int cpl, void *dev_id, struct pt_regs *regs);
 extern void smp_send_reschedule(int cpu);
 extern unsigned long ipi_count;

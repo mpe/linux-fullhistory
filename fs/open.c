@@ -674,6 +674,7 @@ cleanup_all:
 	if (f->f_mode & FMODE_WRITE)
 		put_write_access(inode);
 cleanup_dentry:
+	f->f_dentry = NULL;
 	dput(dentry);
 cleanup_file:
 	put_filp(f);

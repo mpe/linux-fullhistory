@@ -100,8 +100,15 @@ extern void update_one_process( struct task_struct *p,
  */
 
 
+/* Kernel spinlock */
+spinlock_t kernel_flag = SPIN_LOCK_UNLOCKED;
+
 /*
  *	Why isn't this somewhere standard ??
+ *
+ * Maybe because this procedure is horribly buggy, and does
+ * not deserve to live.  Think about signedness issues for five
+ * seconds to see why.		- Linus
  */
 
 extern __inline int max(int a,int b)
@@ -135,8 +142,6 @@ unsigned long apic_retval;				/* Just debugging the assembler.. 			*/
 
 static volatile unsigned char smp_cpu_in_msg[NR_CPUS];	/* True if this processor is sending an IPI		*/
 
-volatile unsigned long kernel_flag=0;			/* Kernel spinlock 					*/
-volatile unsigned char active_kernel_processor = NO_PROC_ID;	/* Processor holding kernel spinlock		*/
 volatile unsigned long kernel_counter=0;		/* Number of times the processor holds the lock		*/
 volatile unsigned long syscall_count=0;			/* Number of times the processor holds the syscall lock	*/
 
@@ -990,7 +995,6 @@ __initfunc(void smp_boot_cpus(void))
 
 	cpu_present_map |= (1 << hard_smp_processor_id());
 	cpu_number_map[boot_cpu_id] = 0;
-	active_kernel_processor=boot_cpu_id;
 
 	/*
 	 *	If we don't conform to the Intel MPS standard, get out
@@ -1364,12 +1368,6 @@ void smp_flush_tlb(void)
 {
 	unsigned long flags;
 
-#if 0
-	if(smp_activated && smp_processor_id()!=active_kernel_processor) {
-		printk("CPU #%d:Attempted flush tlb IPI when not AKP(=%d)\n",smp_processor_id(),active_kernel_processor);
-		*(char *)0=0;
-	}
-#endif
 /*	printk("SMI-");*/
 
 	/*
@@ -1412,7 +1410,7 @@ void smp_send_reschedule(int cpu)
 
 	__save_flags(flags);
 	__cli();
-	smp_message_pass(cpu, MSG_RESCHEDULE, 0L, 2);
+	smp_message_pass(cpu, MSG_RESCHEDULE, 0L, 0);
 	__restore_flags(flags);
 }
 

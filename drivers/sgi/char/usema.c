@@ -31,8 +31,8 @@
 #include <linux/dcache.h>
 #include <linux/mm.h>
 #include <linux/slab.h>
+#include <linux/smp_lock.h>
 
-#include <asm/smp_lock.h>
 #include <asm/usioctl.h>
 #include <asm/mman.h>
 #include <asm/uaccess.h>

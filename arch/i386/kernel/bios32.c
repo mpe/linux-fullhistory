@@ -1,7 +1,7 @@
 /*
  * bios32.c - Low-Level PCI Access
  *
- * $Id: bios32.c,v 1.40 1998/07/16 21:16:03 mj Exp $
+ * $Id: bios32.c,v 1.42 1998/07/26 09:33:07 mj Exp $
  *
  * Copyright 1993, 1994 Drew Eckhardt
  *      Visionary Computing
@@ -86,7 +86,6 @@
 #include "irq.h"
 
 #undef DEBUG
-#define DEBUG
 
 #ifdef DEBUG
 #define DBG(x...) printk(x)
@@ -914,29 +913,31 @@ __initfunc(void pcibios_fixup_ghosts(struct pci_bus *b))
  * Although several sources claim that the host bridges should have
  * header type 1 and be assigned a bus number as for PCI2PCI bridges,
  * the reality doesn't pass this test and the bus number is usually
- * hard-wired to 1.
+ * set by BIOS to the first free value.
  */
 __initfunc(void pcibios_fixup_peer_bridges(void))
 {
-	struct pci_dev *dev;
-	int cnt = 0;
+	struct pci_bus *b = &pci_root;
+	int i;
 
-	for(dev=pci_root.devices; dev; dev=dev->sibling)
-		if ((dev->class >> 8) == PCI_CLASS_BRIDGE_HOST) {
-			DBG("PCI: Host bridge at %02x\n", dev->devfn);
-			if (cnt) {
-				struct pci_bus *b = kmalloc(sizeof(struct pci_bus), GFP_KERNEL);
+	do {
+		int n = b->subordinate+1;
+		u16 l;
+		for(i=0; i<256; i += 8)
+			if (!pcibios_read_config_word(n, i, PCI_VENDOR_ID, &l) &&
+			    l != 0x0000 && l != 0xffff) {
+				DBG("Found device at %02x:%02x\n", n, i);
+				printk("PCI: Discovered primary peer bus %02x\n", n);
+				b = kmalloc(sizeof(*b), GFP_KERNEL);
 				memset(b, 0, sizeof(*b));
-				b->parent = &pci_root;
 				b->next = pci_root.next;
 				pci_root.next = b;
-				b->self = dev;
-				b->number = b->secondary = cnt;
+				b->number = b->secondary = n;
 				b->subordinate = 0xff;
 				b->subordinate = pci_scan_bus(b);
+				break;
 			}
-			cnt++;
-		}
+	} while (i < 256);
 }
 
 /*

@@ -1,5 +1,5 @@
 /*
- *	$Id: oldproc.c,v 1.13 1998/05/07 20:49:50 davem Exp $
+ *	$Id: oldproc.c,v 1.16 1998/07/19 17:50:18 davem Exp $
  *
  *	Backward-compatible procfs interface for PCI.
  *
@@ -255,6 +255,7 @@ struct pci_dev_info dev_info[] = {
 	DEVICE( DATABOOK,      	DATABOOK_87144,	"DB87144"),
 	DEVICE( PLX,		PLX_9080,	"PCI9080 I2O"),
 	DEVICE( MADGE,		MADGE_MK2,	"Smart 16/4 BM Mk2 Ringnode"),
+	DEVICE( MADGE,		MADGE_C155S,	"Collage 155 Server"),
 	DEVICE( 3COM,		3COM_3C339,	"3C339 TokenRing"),
 	DEVICE( 3COM,		3COM_3C590,	"3C590 10bT"),
 	DEVICE( 3COM,		3COM_3C595TX,	"3C595 100bTX"),
@@ -433,6 +434,7 @@ struct pci_dev_info dev_info[] = {
 	DEVICE( SATSAGEM,	SATSAGEM_TELSATTURBO,"Telsat Turbo DVB"),
 	DEVICE( HUGHES,		HUGHES_DIRECPC,	"DirecPC"),
 	DEVICE( ENSONIQ,	ENSONIQ_AUDIOPCI,"AudioPCI"),
+	DEVICE( ALTEON,		ALTEON_ACENIC,"AceNIC"),
 	DEVICE( PICTUREL,	PICTUREL_PCIVST,"PCIVST"),
 	DEVICE( NVIDIA_SGS,	NVIDIA_SGS_RIVA128,	"Riva 128"),
 	DEVICE( CBOARDS,	CBOARDS_DAS1602_16,"DAS1602/16"),
@@ -746,6 +748,7 @@ static const char *pci_strvendor(unsigned int vendor)
 	      case PCI_VENDOR_ID_COMPEX:	return "Compex";
 	      case PCI_VENDOR_ID_RP:		return "Comtrol";
 	      case PCI_VENDOR_ID_CYCLADES:	return "Cyclades";
+	      case PCI_VENDOR_ID_ESSENTIAL:	return "Essential Communications";
 	      case PCI_VENDOR_ID_O2:		return "O2 Micro";
 	      case PCI_VENDOR_ID_3DFX:		return "3Dfx";
 	      case PCI_VENDOR_ID_SIGMADES:	return "Sigma Designs";
@@ -756,6 +759,7 @@ static const char *pci_strvendor(unsigned int vendor)
 	      case PCI_VENDOR_ID_SATSAGEM:	return "SatSagem";
 	      case PCI_VENDOR_ID_HUGHES:	return "Hughes";
 	      case PCI_VENDOR_ID_ENSONIQ:	return "Ensoniq";
+	      case PCI_VENDOR_ID_ALTEON:	return "Alteon";
 	      case PCI_VENDOR_ID_PICTUREL:	return "Picture Elements";
 	      case PCI_VENDOR_ID_NVIDIA_SGS:	return "NVidia/SGS Thomson";
 	      case PCI_VENDOR_ID_CBOARDS:	return "ComputerBoards";

@@ -447,16 +447,15 @@ int del_timer(struct timer_list * timer)
  */
 asmlinkage void schedule(void)
 {
-	int lock_depth;
 	struct task_struct * prev, * next;
 	unsigned long timeout;
 	int this_cpu;
 
 	prev = current;
-	this_cpu = smp_processor_id();
+	this_cpu = prev->processor;
 	if (in_interrupt())
 		goto scheduling_in_interrupt;
-	release_kernel_lock(prev, this_cpu, lock_depth);
+	release_kernel_lock(prev, this_cpu);
 	if (bh_active & bh_mask)
 		do_bottom_half();
 
@@ -464,6 +463,7 @@ asmlinkage void schedule(void)
 	spin_lock_irq(&runqueue_lock);
 
 	/* move an exhausted RR process to be last.. */
+	prev->need_resched = 0;
 	if (!prev->counter && prev->policy == SCHED_RR) {
 		prev->counter = prev->priority;
 		move_last_runqueue(prev);
@@ -561,8 +561,7 @@ asmlinkage void schedule(void)
 	 * switched into it (from an even more "previous"
 	 * prev)
 	 */
-	prev->need_resched = 0;
-	reacquire_kernel_lock(prev, smp_processor_id(), lock_depth);
+	reacquire_kernel_lock(prev);
 	return;
 
 scheduling_in_interrupt:

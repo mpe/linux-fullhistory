@@ -138,6 +138,7 @@
 #define MTRR_NEED_STRINGS
 #include <asm/mtrr.h>
 #include <linux/init.h>
+#include <linux/smp.h>
 
 #include <asm/uaccess.h>
 #include <asm/io.h>
@@ -146,9 +147,7 @@
 #include <asm/pgtable.h>
 #include <asm/segment.h>
 #include <asm/bitops.h>
-#include <asm/smp_lock.h>
 #include <asm/atomic.h>
-#include <linux/smp.h>
 
 #define MTRR_VERSION            "1.22 (19980611)"
 
