@@ -7,7 +7,7 @@ EXTRA_CFLAGS := -Werror
 
 lib-y := PeeCeeI.o copy_page.o clear_page.o strlen.o strncmp.o \
 	 memscan.o strncpy_from_user.o strlen_user.o memcmp.o checksum.o \
-	 bzero.o VIScsum.o VIScsumcopy.o \
+	 bzero.o VIScsumcopy.o \
 	 VIScsumcopyusr.o VISsave.o atomic.o bitops.o \
 	 U1memcpy.o U1copy_from_user.o U1copy_to_user.o \
 	 U3memcpy.o U3copy_from_user.o U3copy_to_user.o U3patch.o \
