@@ -117,18 +117,18 @@ hash_dst(const struct ipt_hashlimit_htable *ht, const struct dsthash_dst *dst)
 static inline struct dsthash_ent *
 __dsthash_find(const struct ipt_hashlimit_htable *ht, struct dsthash_dst *dst)
 {
-	struct dsthash_ent *ent = NULL;
+	struct dsthash_ent *ent;
 	struct hlist_node *pos;
 	u_int32_t hash = hash_dst(ht, dst);
 
 	if (!hlist_empty(&ht->hash[hash]))
 		hlist_for_each_entry(ent, pos, &ht->hash[hash], node) {
 			if (dst_cmp(ent, dst)) {
-				break;
+				return ent;
 			}
 		}
 	
-	return ent;
+	return NULL;
 }
 
 /* allocate dsthash_ent, initialize dst, put in htable and lock it */
