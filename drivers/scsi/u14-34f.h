@@ -1,5 +1,5 @@
 /*
- *   u14-34f.h - used by low-level scsi driver for UltraStor 14F/34F
+ *   u14-34f.h - used by the low-level driver for UltraStor 14F/34F
  */
 #ifndef _U14_34F_H
 #define _U14_34F_H
@@ -10,7 +10,7 @@ int u14_34f_abort(Scsi_Cmnd *);
 int u14_34f_reset(Scsi_Cmnd *);
 int u14_34f_biosparam(Disk *, int, int *);
 
-#define U14_34F_VERSION "1.11.01"
+#define U14_34F_VERSION "1.12.04"
 
 #define ULTRASTOR_14_34F {                                            \
                 NULL,                                                 \

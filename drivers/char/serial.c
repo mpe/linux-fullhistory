@@ -1533,8 +1533,13 @@ static int get_modem_info(struct async_struct * info, unsigned int *value)
 static int set_modem_info(struct async_struct * info, unsigned int cmd,
 			  unsigned int *value)
 {
-	unsigned int arg = get_fs_long((unsigned long *) value);
+	int error;
+	unsigned int arg;
 
+	error = verify_area(VERIFY_READ, value, sizeof(int));
+	if (error)
+		return error;
+	arg = get_fs_long((unsigned long *) value);
 	switch (cmd) {
 	case TIOCMBIS: 
 		if (arg & TIOCM_RTS) {

@@ -228,8 +228,6 @@ typedef struct  SHT
 	be two Scsi_Host entries, but only 1 Scsi_Host_Template entries.
 */
 
-#define SCSI_HOST_BLOCK 0x80
-
 struct Scsi_Host
 	{
 		struct Scsi_Host * next;

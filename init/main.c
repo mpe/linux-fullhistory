@@ -542,10 +542,12 @@ asmlinkage void start_kernel(void)
 	memory_start = console_init(memory_start,memory_end);
 	memory_start = bios32_init(memory_start,memory_end);
 	memory_start = kmalloc_init(memory_start,memory_end);
+	sti();
+	calibrate_delay();
+	cli();
 	memory_start = chr_dev_init(memory_start,memory_end);
 	memory_start = blk_dev_init(memory_start,memory_end);
 	sti();
-	calibrate_delay();
 #ifdef CONFIG_SCSI
 	memory_start = scsi_dev_init(memory_start,memory_end);
 #endif

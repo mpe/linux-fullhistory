@@ -1,5 +1,6 @@
-This README belongs to release 2.8 or newer of the SoundBlaster Pro
-(Matsushita, Kotobuki, Panasonic, CreativeLabs) CD-ROM driver for Linux.
+This README belongs to release 2.9 or newer of the SoundBlaster Pro
+(Matsushita, Kotobuki, Panasonic, CreativeLabs, Longshine and soon TEAC, too)
+CD-ROM driver for Linux.
 
 The driver is able to drive the whole family of "traditional" IDE-style (that
 has nothing to do with the new "Enhanced IDE" drive standard) Matsushita,
@@ -7,26 +8,36 @@ Kotobuki, Panasonic drives, sometimes labelled as "CreativeLabs". The
 well-known drives are CR-521, CR-522, CR-523, CR-562, CR-563.
 
 The Longshine LCS-7260 is a double-speed drive which uses the "old"
-Matsushita command set. It should be fully supported soon, too.
+Matsushita command set. It is supported now - with help by Serge Robyns.
 
-There exists an "IBM External ISA CD-ROM Drive" which in fact is a CR-562
+There exists an "IBM External ISA CD-ROM Drive" which in fact is a CR-563
 with a special controller board. This drive is supported (the interface is
 of the "LaserMate" type), and it is possibly the best buy today (cheaper than
 an internal drive, and you can use it as an internal, too - f.e. plug it into
-a soundcard). If you own such a drive, please mail me the DOS driver (gzipped
-and uuencoded) and the specifications (exact name, address range etc.) I still
-have to confirm my opinion. ;-)
+a soundcard).
+
+The quad-speed TEAC CD-55A drive uses the same interface types, but has a
+totally different command and flow control scheme. It is not supported yet,
+but I plan to add it.
+
+CreativeLabs has a new drive "CD-200". This drive is not supported yet, but
+I plan to add it.
 
 This driver is NOT for Mitsumi or Sony or Aztech or Philips or XXX drives.
-The matter that some other brand's drives work with newer sound card
-interfaces does NOT make the drives compatible. :-)
+For Aztech CDA-268 drives (and for some Wearnes, Okano and Orchid drives),
+Werner Zimmermann has done a driver which currently resides at ftp.gwdg.de
+under /pub/linux/cdrom/drivers/aztech/.
 
-It will work with the soundcard interfaces (SB Pro, SB 16, Galaxy, SoundFX,
-...) and/or with the "no-sound" cards (Panasonic CI-101P, LaserMate,
+This driver will work with the soundcard interfaces (SB Pro, SB 16, Galaxy,
+SoundFX, ...) and/or with the "no-sound" cards (Panasonic CI-101P, LaserMate,
 WDH-7001C, Longshine LCS-6853, older Aztech cards, ...).
+
 It should work too now with the "configurable" interface "Sequoia S-1000",
 which is found on the Spea Media FX sound card. I still need feedback about
-this.
+this, or such a card. Anyways, the procedure "boot DOS and wait until 
+CONFIG.SYS is done, then use CTL-ALT-DEL to boot Linux" should make it
+work.
+
 The interface type has to get configured in /usr/include/linux/sbpcd.h, 
 because the behavior of some sound card interfaces is different.
 
@@ -252,6 +263,70 @@ main(int argc, char *argv[])
 }
 /*===================== end program ========================================*/
 
+There is a new ioctl CDROMMULTISESSION to obtain with a user program if
+the CD is an XA disk and - if it is - where the last session starts. The
+following example illustrates how to call it:
+
+/*=================== begin program ========================================*/
+/*
+ * ask for multisession redirection info
+ *
+ * (c) 1994 Eberhard Moenkeberg <emoenke@gwdg.de>
+ *          may be used & enhanced freely
+ *
+ */
+#include <stdio.h>
+#include <sys/ioctl.h>
+#include <linux/cdrom.h>
+
+static struct cdrom_multisession ms_info;
+static int drive;
+static int err;
+
+main(int argc, char *argv[])
+{
+/*
+ * open /dev/cdrom
+ */
+  drive=open("/dev/cdrom", 0);
+  if (drive<0)
+    {
+      fprintf(stderr, "can't open drive /dev/cdrom.\n");
+      exit (-1);
+    }
+/*
+ * 
+ */
+  ms_info.addr_format=CDROM_LBA;
+  err=ioctl(drive, CDROMMULTISESSION, &ms_info);
+  if (err!=0)
+    {
+      fprintf(stderr, "CDROMMULTISESSION(lba) returns error %d.\n", err);
+      exit (-1);
+    }
+  else
+	if (ms_info.xa_flag)
+	    fprintf(stdout, "lba: %d\n", ms_info.addr.lba);
+	else
+	    fprintf(stdout, "not an XA disk.\n");
+
+  ms_info.addr_format=CDROM_MSF;
+  err=ioctl(drive, CDROMMULTISESSION, &ms_info);
+  if (err!=0)
+    {
+      fprintf(stderr, "CDROMMULTISESSION(msf) returns error %d.\n", err);
+      exit (-1);
+    }
+  else
+	if (ms_info.xa_flag)
+	    fprintf(stdout, "msf: %02d:%02d:%02d\n",
+				 ms_info.addr.msf.minute,
+				 ms_info.addr.msf.second,
+				 ms_info.addr.msf.frame);
+	else
+	    fprintf(stdout, "not an XA disk.\n");
+}
+/*===================== end program ========================================*/
 
 
 Auto-probing at boot time:

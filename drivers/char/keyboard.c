@@ -82,8 +82,8 @@ unsigned char kbd_read_mask = 0x01;	/* modified by psaux.c */
 
 /*
  * global state includes the following, and various static variables
- * in this module: prev_scancode, shift_state, diacr, npadch,
- *   dead_key_next, last_console
+ * in this module: prev_scancode, shift_state, diacr, npadch, dead_key_next.
+ * (last_console is now a global variable)
  */
 
 /* shift state counters.. */
@@ -91,8 +91,8 @@ static unsigned char k_down[NR_SHIFT] = {0, };
 /* keyboard key bitmap */
 static unsigned long key_down[8] = { 0, };
 
+extern int last_console;
 static int want_console = -1;
-static int last_console = 0;		/* last used VC */
 static int dead_key_next = 0;
 /* 
  * In order to retrieve the shift_state (for the mouse server), either
@@ -190,7 +190,7 @@ void to_utf8(ushort c) {
 	put_queue(0x80 | ((c >> 6) & 0x3f));
 	put_queue(0x80 | (c & 0x3f));
     }
-    /* utf-8 is defined for words of up to 36 bits,
+    /* UTF-8 is defined for words of up to 31 bits,
        but we need only 16 bits here */
 }
 
@@ -1131,7 +1131,6 @@ static void kbd_bh(void * unused)
 	}
 	if (want_console >= 0) {
 		if (want_console != fg_console) {
-			last_console = fg_console;
 			change_console(want_console);
 			/* we only changed when the console had already
 			   been allocated - a new console is not created

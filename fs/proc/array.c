@@ -247,9 +247,9 @@ static int get_cpuinfo(char * buffer)
 	   advance */
 	char *yes="yes";
 	char *no="no";
-	char *model[2][9]={{"DX","SX","DX/2","4","5","6",
+	char *model[2][9]={{"DX","SX","DX/2","4","SX/2","6",
 				"7","DX/4"},
-			{"Pentium 60/66","Pentium 90","3",
+			{"Pentium 60/66","Pentium 90/100","3",
 				"4","5","6","7","8"}};
 	return sprintf(buffer,"cpu\t\t: %c86\n"
 			      "model\t\t: %s\n"

@@ -13,7 +13,7 @@
 #include "scsi_ioctl.h"
 
 #define MAX_RETRIES 5	
-#define MAX_TIMEOUT 200
+#define MAX_TIMEOUT 900
 #define MAX_BUF 4096
 
 #define max(a,b) (((a) > (b)) ? (a) : (b))

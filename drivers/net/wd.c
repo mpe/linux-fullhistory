@@ -262,6 +262,13 @@ int wd_probe1(struct device *dev, int ioaddr)
 	dev->stop = &wd_close_card;
 	NS8390_init(dev, 0);
 
+#if 1
+	/* Enable interrupt generation on softconfig cards -- M.U */
+	/* .. but possibly potentially unsafe - Donald */
+	if (inb(ioaddr+14) & 0x20)
+		outb(inb(ioaddr+4)|0x80, ioaddr+4);
+#endif
+
 	return 0;
 }
 

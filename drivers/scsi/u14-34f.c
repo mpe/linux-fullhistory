@@ -1,7 +1,10 @@
 /*
- *      u14-34f.c - Low-level SCSI driver for UltraStor 14F/34F
+ *      u14-34f.c - Low-level driver for UltraStor 14F/34F SCSI host adapters.
  *
- *      30 Nov 1994 rev. 1.09 for linux 1.1.68
+ *      15 Dec 1994 rev. 1.12 for linux 1.1.74
+ *          The host->block flag is set for all the detected ISA boards.
+ *
+ *      30 Nov 1994 rev. 1.11 for linux 1.1.68
  *          Redo i/o on target status CONDITION_GOOD for TYPE_DISK only.
  *          Added optional support for using a single board at a time.
  *
@@ -20,12 +23,11 @@
  *
  *      Released by Dario Ballabio (Dario_Ballabio@milano.europe.dg.com)
  *
- *      WARNING: if your 14F board has old firmware revision (see below)
- *               keep the following statement, otherwise comment it.
+ *      WARNING: if your 14F board has an old firmware revision (see below)
+ *               you must change "#undef" into "#define" in the following
+ *               statement.
  */
-#if 0
-#define HAVE_OLD_U14F_FIRMWARE
-#endif
+#undef HAVE_OLD_U14F_FIRMWARE
 /*
  *  The UltraStor 14F, 24F, and 34F are a family of intelligent, high
  *  performance SCSI-2 host adapters.
@@ -33,7 +35,7 @@
  *
  *  14F - ISA first-party DMA HA with floppy support and WD1003 emulation.
  *  24F - EISA Bus Master HA with floppy support and WD1003 emulation.
- *  34F - VL-Bus Bus Master HA (no WD1003 emulation).
+ *  34F - VESA Local-Bus Bus Master HA (no WD1003 emulation).
  *
  *  This code has been tested with up to two U14F boards, using both 
  *  firmware 28004-005/38004-004 (BIOS rev. 2.00) and the latest firmware
@@ -54,7 +56,7 @@
  *  The boot controller must have its BIOS enabled, while other boards can
  *  have their BIOS disabled, or enabled to an higher address.
  *  Boards are named Ux4F0, Ux4F1..., according to the port address order in
- *  the isa_io_port[] array.
+ *  the io_port[] array.
  *  
  *  The following facts are based on real testing results (not on
  *  documentation) on the above U14F board.
@@ -93,6 +95,8 @@
  *    The new firmware has fixed all the above problems and has been tested 
  *    with up to 33 scatter/gather lists.
  *
+ *  In order to support multiple ISA boards in a reliable way,
+ *  the driver sets host->block = TRUE for all ISA boards.
  */
 
 #include <linux/string.h>
@@ -109,13 +113,13 @@
 #include <asm/irq.h>
 #include "u14-34f.h"
 
-/* Values for the PRODUCT_ID ports for the 14F */
-#define U14F_PRODUCT_ID1  0x56
-#define U14F_PRODUCT_ID2  0x40        /* NOTE: Only upper nibble is used */
+/* Values for the PRODUCT_ID ports for the 14/34F */
+#define PRODUCT_ID1  0x56
+#define PRODUCT_ID2  0x40        /* NOTE: Only upper nibble is used */
 
 /* Subversion values */
-#define U14F 0
-#define U34F 1
+#define ISA  0
+#define ESA 1
 
 #define OP_HOST_ADAPTER   0x1
 #define OP_SCSI           0x2
@@ -140,11 +144,9 @@
 #define U34F_MAX_SGLIST 33
 #define U34F_CLUSTERING ENABLE_CLUSTERING
 
-#define DO_BUS_RESET          /* Reset SCSI bus on error */
-#define NO_DEBUG_DETECT
-#define NO_DEBUG_INTERRUPT
-#define NO_DEBUG_STATISTICS
-#define SINGLE_HOST_OPERATIONS
+#undef  DEBUG_DETECT
+#undef  DEBUG_INTERRUPT
+#undef  DEBUG_STATISTICS
 
 #define MAX_TARGET 8
 #define MAX_IRQ 16
@@ -230,7 +232,7 @@ struct hostdata {
    unsigned char bios_drive_number: 1;
    unsigned char heads;
    unsigned char sectors;
-   unsigned char subversion: 4;
+   unsigned char subversion: 4;         /* Bus type, either ISA or ESA */
 
    /* slot != 0 for the U24F, slot == 0 for both the U14F and U34F */
    unsigned char slot;
@@ -257,7 +259,8 @@ static inline unchar wait_on_busy(ushort iobase) {
 
 static inline int port_detect(ushort *port_base, unsigned int j, 
                               Scsi_Host_Template * tpnt) {
-   unsigned char irq, dma_channel, in_byte, subversion, sys_mask, lcl_mask;
+   unsigned char irq, dma_channel, subversion;
+   unsigned char in_byte;
 
    /* Allowed BIOS base addresses (NULL indicates reserved) */
    void *bios_segment_table[8] = { 
@@ -267,10 +270,10 @@ static inline int port_detect(ushort *port_base, unsigned int j,
       };
    
    /* Allowed IRQs */
-   unsigned char interrupt_table_14f[4] = { 15, 14, 11, 10 };
+   unsigned char interrupt_table[4] = { 15, 14, 11, 10 };
    
-   /* Allowed DMA channels for 14f (0 indicates reserved) */
-   unsigned char dma_channel_table_14f[4] = { 5, 6, 7, 0 };
+   /* Allowed DMA channels for ISA (0 indicates reserved) */
+   unsigned char dma_channel_table[4] = { 5, 6, 7, 0 };
    
    /* Head/sector mappings */
    struct {
@@ -300,26 +303,27 @@ static inline int port_detect(ushort *port_base, unsigned int j,
 
    if(check_region(*port_base, REG_REGION)) return FALSE;
 
-   if (inb(*port_base + REG_PRODUCT_ID1) != U14F_PRODUCT_ID1) return FALSE;
+   if (inb(*port_base + REG_PRODUCT_ID1) != PRODUCT_ID1) return FALSE;
 
    in_byte = inb(*port_base + REG_PRODUCT_ID2);
 
-   if ((in_byte & 0xf0) != U14F_PRODUCT_ID2) return FALSE;
+   if ((in_byte & 0xf0) != PRODUCT_ID2) return FALSE;
 
    *(char *)&config_1 = inb(*port_base + REG_CONFIG1);
    *(char *)&config_2 = inb(*port_base + REG_CONFIG2);
 
-   irq = interrupt_table_14f[config_1.interrupt];
-   dma_channel = dma_channel_table_14f[config_1.dma_channel];
+   irq = interrupt_table[config_1.interrupt];
+   dma_channel = dma_channel_table[config_1.dma_channel];
    subversion = (in_byte & 0x0f);
 
+   /* Board detected, allocate its IRQ if not already done */
    if ((irq >= MAX_IRQ) || ((irqlist[irq] == NO_IRQ) && request_irq
        (irq, u14_34f_interrupt_handler, SA_INTERRUPT, driver_name))) {
       printk("%s: unable to allocate IRQ %u, detaching.\n", name, irq);
       return FALSE;
       }
 
-   if (subversion == U14F && request_dma(dma_channel, driver_name)) {
+   if (subversion == ISA && request_dma(dma_channel, driver_name)) {
       printk("%s: unable to allocate DMA channel %u, detaching.\n",
              name, dma_channel);
       free_irq(irq);
@@ -333,23 +337,19 @@ static inline int port_detect(ushort *port_base, unsigned int j,
    sh[j]->this_id = config_2.ha_scsi_id;
    sh[j]->can_queue = MAX_MAILBOXES;
    sh[j]->cmd_per_lun = MAX_CMD_PER_LUN;
-   sys_mask = inb(sh[j]->io_port + REG_SYS_MASK);
-   lcl_mask = inb(sh[j]->io_port + REG_LCL_MASK);
 
 #if defined(DEBUG_DETECT)
+   {
+   unsigned char sys_mask, lcl_mask;
+
+   sys_mask = inb(sh[j]->io_port + REG_SYS_MASK);
+   lcl_mask = inb(sh[j]->io_port + REG_LCL_MASK);
    printk("SYS_MASK 0x%x, LCL_MASK 0x%x.\n", sys_mask, lcl_mask);
+   }
 #endif
 
    /* If BIOS is disabled, force enable interrupts */
    if (sh[j]->base == 0) outb(CMD_ENA_INTR, sh[j]->io_port + REG_SYS_MASK);
-
-#if defined (DO_BUS_RESET)
-   lcl_mask = 0xc2;
-#else
-   lcl_mask = 0x82;
-#endif
-
-   outb(lcl_mask, sh[j]->io_port + REG_LCL_MASK);
 
    /* Register the I/O space that we use */
    snarf_region(sh[j]->io_port, REG_REGION);
@@ -362,7 +362,7 @@ static inline int port_detect(ushort *port_base, unsigned int j,
    HD(j)->board_number = j;
    irqlist[irq] = j;
 
-   if (HD(j)->subversion == U34F) {
+   if (HD(j)->subversion == ESA) {
       sh[j]->dma_channel = 0;
       sh[j]->unchecked_isa_dma = FALSE;
       sh[j]->sg_tablesize = U34F_MAX_SGLIST;
@@ -371,9 +371,9 @@ static inline int port_detect(ushort *port_base, unsigned int j,
       }
    else {
       sh[j]->dma_channel = dma_channel;
+      sh[j]->block = sh[j];
       sh[j]->unchecked_isa_dma = TRUE;
       sh[j]->sg_tablesize = U14F_MAX_SGLIST;
-      /*if (j > 0) sh[j]->sg_tablesize = 0;*/
       sh[j]->hostt->use_clustering = U14F_CLUSTERING;
       sprintf(BN(j), "U14F%d", j);
       disable_dma(dma_channel);
@@ -394,11 +394,11 @@ static inline int port_detect(ushort *port_base, unsigned int j,
 int u14_34f_detect (Scsi_Host_Template * tpnt) {
    unsigned int j = 0, k, flags;
 
-   ushort isa_io_port[] = {
+   ushort io_port[] = {
       0x330, 0x340, 0x230, 0x240, 0x210, 0x130, 0x140, 0x0
       };
 
-   ushort *port_base = isa_io_port;
+   ushort *port_base = io_port;
 
    save_flags(flags);
    cli();
@@ -412,20 +412,10 @@ int u14_34f_detect (Scsi_Host_Template * tpnt) {
 
    while (*port_base) {
 
-      if(j < MAX_BOARDS && port_detect(port_base, j, tpnt)) j++;
+      if (j < MAX_BOARDS && port_detect(port_base, j, tpnt)) j++;
 
       port_base++;
       }
-
-#if defined (SINGLE_HOST_OPERATIONS)
-   /* Create a circular linked list among the detected boards. */
-   if (j > 1) {
-
-      for (k = 0; k < (j - 1); k++) sh[k]->block = sh[k + 1];
-
-      sh[j - 1]->block = sh[0];
-      }
-#endif
 
    restore_flags(flags);
    return j;
@@ -437,7 +427,7 @@ static inline void build_sg_list(struct mscp *cpp, Scsi_Cmnd *SCpnt) {
 
    sgpnt = (struct scatterlist *) SCpnt->request_buffer;
 
-   for(k = 0; k < SCpnt->use_sg; k++) {
+   for (k = 0; k < SCpnt->use_sg; k++) {
       cpp->sglist[k].address = (unsigned int) sgpnt[k].address;
       cpp->sglist[k].num_bytes = sgpnt[k].length;
       data_len += sgpnt[k].length;
@@ -463,7 +453,7 @@ int u14_34f_queuecommand(Scsi_Cmnd *SCpnt, void (*done)(Scsi_Cmnd *)) {
       starting from last_cp_used */
    i = HD(j)->last_cp_used + 1;
 
-   for(k = 0; k < sh[j]->can_queue; k++, i++) {
+   for (k = 0; k < sh[j]->can_queue; k++, i++) {
 
       if (i >= sh[j]->can_queue) i = 0;
 

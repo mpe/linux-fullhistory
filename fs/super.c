@@ -286,6 +286,7 @@ static struct super_block * read_super(dev_t dev,char *name,int flags,
 	s->s_covered = NULL;
 	s->s_rd_only = 0;
 	s->s_dirt = 0;
+	s->s_type = type;
 	return s;
 }
 

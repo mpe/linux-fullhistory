@@ -42,8 +42,8 @@
  * then I can include better information with the next release.
  */
 #if !(SBPCD_ISSUE-1) /* first (or if you have only one) interface board: */
-#define CDROM_PORT 0x0230
-#define SBPRO     1
+#define CDROM_PORT 0x0340
+#define SBPRO     0
 #endif
 
 /*
@@ -54,7 +54,7 @@
  * Example: #define SOUND_BASE 0x220 enables the sound card's CD channels
  *          #define SOUND_BASE 0     leaves the soundcard untouched
  */
-#define SOUND_BASE 0
+#define SOUND_BASE 0x220
 
 /* ignore the rest if you have only one interface board & driver */
 
@@ -67,8 +67,8 @@
 #define SBPRO     0
 #endif
 #if !(SBPCD_ISSUE-4) /* fourth interface board: */
-#define CDROM_PORT 0x0340
-#define SBPRO     0
+#define CDROM_PORT 0x0230
+#define SBPRO     1
 #endif
 
 /*==========================================================================*/
@@ -81,6 +81,14 @@
 #define _LINUX_SBPCD_H
 
 /*==========================================================================*/
+/*==========================================================================*/
+/*
+ * DDI interface definitions
+ * "invented" by Fred N. van Kempen..
+ */
+#define DDIOCSDBG	0x9000
+#define DPRINTF(x)	sbpcd_dprintf x
+
 /*==========================================================================*/
 /*
  * Debug output levels
@@ -111,7 +119,9 @@
 #define DBG_SQ 		24	/* dump SubQ frame */
 #define DBG_AUD		25      /* "read audio" debugging */
 #define DBG_SEQ		26      /* Sequoia interface configuration trace */
-#define DBG_000		27      /* unnecessary information */
+#define DBG_LCS		27      /* Longshine LCS-7260 debugging trace */
+#define DBG_TEA		28      /* TEAC CD-55A debugging trace */
+#define DBG_000		29      /* unnecessary information */
 
 /*==========================================================================*/
 /*==========================================================================*/
@@ -159,8 +169,10 @@
 #define p_check 0x10
 #define p_busy_new 0x08
 #define p_door_locked 0x04
-#define p_bit_1 0x02
+#define p_bit_1 0x02 /* hopefully unused now */
+#define p_lcs_door_locked 0x02 /* new use of old bit */
 #define p_disk_ok 0x01
+#define p_lcs_door_closed 0x01 /* new use of old bit */
 /*
  * "old" drives status result bits:
  */

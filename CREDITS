@@ -721,6 +721,16 @@ S: Kalevankatu 55 B 37
 S: 00180 Helsinki
 S: Finland
 
+N: Jeff Tranter
+E: Jeff_Tranter@Mitel.COM
+D: Enhancements to Joystick driver
+D: Author of Sound HOWTO and CD-ROM HOWTO
+D: Author of several small utilities
+D: (bogomips, scope, eject, statserial)
+S: 1 Laurie Court
+S: Kanata, Ontario
+S: CANADA K2L 1S2
+
 N: Theodore Ts'o
 E: tytso@mit.edu
 D: Random Linux hacker

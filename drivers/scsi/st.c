@@ -5,13 +5,13 @@
   History:
   Rewritten from Dwayne Forsyth's SCSI tape driver by Kai Makisara.
   Contribution and ideas from several people including (in alphabetical
-  order) Klaus Ehrenfried, Wolfgang Denk, J"org Weule, and
-  Eric Youngdale.
+  order) Klaus Ehrenfried, Wolfgang Denk, Andreas Koppenh"ofer, J"org Weule,
+  and Eric Youngdale.
 
   Copyright 1992, 1993, 1994 Kai Makisara
 		 email makisara@vtinsx.ins.vtt.fi or Kai.Makisara@vtt.fi
 
-  Last modified: Wed Nov 30 21:09:53 1994 by root@kai.home
+  Last modified: Sun Dec 18 10:15:33 1994 by root@kai.home
 */
 
 #include <linux/fs.h>
@@ -74,7 +74,7 @@ static int debugging = 1;
 #define MAX_READY_RETRIES 5
 #define NO_TAPE  NOT_READY
 
-#define ST_TIMEOUT 27000
+#define ST_TIMEOUT 90000
 #define ST_LONG_TIMEOUT 200000
 
 static int st_nbr_buffers;
@@ -249,7 +249,8 @@ back_over_eof(int dev)
   SCpnt->request.dev = -1;
   if ((STp->buffer)->last_result != 0) {
     printk("st%d: Backing over filemark failed.\n", dev);
-    (STp->mt_status)->mt_fileno += 1;
+    if ((STp->mt_status)->mt_fileno >= 0)
+      (STp->mt_status)->mt_fileno += 1;
     (STp->mt_status)->mt_blkno = 0;
   }
 
@@ -363,6 +364,7 @@ flush_buffer(struct inode * inode, struct file * filp, int seek_next)
 	STp->block_size;
   (STp->buffer)->buffer_bytes = 0;
   (STp->buffer)->read_pointer = 0;
+  STp->drv_block -= backspace;
   result = 0;
   if (!seek_next) {
     if ((STp->eof == ST_FM) && !STp->eof_hit) {
@@ -637,7 +639,8 @@ scsi_tape_close(struct inode * inode, struct file * filp)
 	}
 	else {
 	  SCpnt->request.dev = -1;  /* Mark as not busy */
-          (STp->mt_status)->mt_fileno++ ;
+	  if ((STp->mt_status)->mt_fileno >= 0)
+	      (STp->mt_status)->mt_fileno++ ;
 	  STp->drv_block = 0;
 	  if (STp->two_fm)
 	    back_over_eof(dev);
@@ -677,6 +680,7 @@ st_write(struct inode * inode, struct file * filp, char * buf, int count)
     int dev;
     int total, do_count, blks, retval, transfer;
     int write_threshold;
+    int doing_write = 0;
     static unsigned char cmd[10];
     char *b_point;
     Scsi_Cmnd * SCpnt;
@@ -757,6 +761,7 @@ st_write(struct inode * inode, struct file * filp, char * buf, int count)
 	  (STp->block_size != 0 &&
 	   (STp->buffer)->buffer_bytes + count > write_threshold))
     {
+      doing_write = 1;
       if (STp->block_size == 0)
 	do_count = count;
       else {
@@ -864,7 +869,7 @@ st_write(struct inode * inode, struct file * filp, char * buf, int count)
       count = 0;
     }
 
-    if ((STp->buffer)->last_result_fatal != 0) {
+    if (doing_write && (STp->buffer)->last_result_fatal != 0) {
       SCpnt->request.dev = -1;
       return (STp->buffer)->last_result_fatal;
     }
@@ -1123,7 +1128,8 @@ st_read(struct inode * inode, struct file * filp, char * buf, int count)
 	  STp->drv_block = 0;
 	  if (STp->moves_after_eof > 1)
 	    STp->moves_after_eof = 0;
-	  (STp->mt_status)->mt_fileno++;
+	  if ((STp->mt_status)->mt_fileno >= 0)
+	    (STp->mt_status)->mt_fileno++;
 	}
 	if (total == 0 && STp->eof == ST_EOM_OK)
 	  return (-EIO);  /* ST_EOM_ERROR not used in read */
@@ -1223,7 +1229,8 @@ st_int_ioctl(struct inode * inode,struct file * file,
 	 printk("st%d: Spacing tape forward over %d filemarks.\n", dev,
 		cmd[2] * 65536 + cmd[3] * 256 + cmd[4]);
 #endif
-       fileno += arg;
+       if (fileno >= 0)
+	 fileno += arg;
        blkno = 0;
        at_sm &= (arg != 0);
        break; 
@@ -1243,11 +1250,12 @@ st_int_ioctl(struct inode * inode,struct file * file,
 	 printk("st%d: Spacing tape backward over %ld filemarks.\n", dev, (-ltmp));
        }
 #endif
-       fileno -= arg;
+       if (fileno >= 0)
+	 fileno -= arg;
        blkno = (-1);  /* We can't know the block number */
        at_sm &= (arg != 0);
        break; 
-      case MTFSR:
+     case MTFSR:
        cmd[0] = SPACE;
        cmd[1] = 0x00; /* Space Blocks */
        cmd[2] = (arg >> 16);
@@ -1281,7 +1289,7 @@ st_int_ioctl(struct inode * inode,struct file * file,
 	 blkno -= arg;
        at_sm &= (arg != 0);
        break; 
-      case MTFSS:
+     case MTFSS:
        cmd[0] = SPACE;
        cmd[1] = 0x04; /* Space Setmarks */
        cmd[2] = (arg >> 16);
@@ -1338,7 +1346,8 @@ st_int_ioctl(struct inode * inode,struct file * file,
 		  cmd[2] * 65536 + cmd[3] * 256 + cmd[4]);
        }
 #endif
-       fileno += arg;
+       if (fileno >= 0)
+	 fileno += arg;
        blkno = 0;
        at_sm = (cmd_in == MTWSM);
        break; 
@@ -1390,6 +1399,8 @@ st_int_ioctl(struct inode * inode,struct file * file,
        /* space to the end of tape */
        ioctl_result = st_int_ioctl(inode, file, MTFSF, 0x3fff);
        fileno = (STp->mt_status)->mt_fileno ;
+       if (STp->eof == ST_EOD || STp->eof == ST_EOM_OK)
+	 return 0;
        /* The next lines would hide the number of spaced FileMarks
           That's why I inserted the previous lines. I had no luck
 	  with detecting EOM with FSF, so we go now to EOM.
@@ -1400,7 +1411,7 @@ st_int_ioctl(struct inode * inode,struct file * file,
        if (debugging)
 	 printk("st%d: Spacing to end of recorded medium.\n", dev);
 #endif
-       blkno = (-1);
+       blkno = 0;
        at_sm = 0;
        break; 
      case MTERASE:
@@ -1408,6 +1419,12 @@ st_int_ioctl(struct inode * inode,struct file * file,
 	 return (-EACCES);
        cmd[0] = ERASE;
        cmd[1] = 1;  /* To the end of tape */
+#ifdef ST_NOWAIT
+       cmd[1] |= 2;  /* Don't wait for completion */
+       timeout = ST_TIMEOUT;
+#else
+       timeout = ST_LONG_TIMEOUT * 8;
+#endif
 #ifdef DEBUG
        if (debugging)
 	 printk("st%d: Erasing tape.\n", dev);
@@ -1509,6 +1526,10 @@ st_int_ioctl(struct inode * inode,struct file * file,
 
    SCpnt->request.dev = -1;  /* Mark as not busy */
 
+   if (cmd_in == MTFSF)
+     STp->moves_after_eof = 0;
+   else
+     STp->moves_after_eof = 1;
    if (!ioctl_result) {
      if (cmd_in != MTSEEK) {
        STp->drv_block = blkno;
@@ -1519,10 +1540,6 @@ st_int_ioctl(struct inode * inode,struct file * file,
        STp->drv_block = (STp->mt_status)->mt_fileno = (-1);
        STp->at_sm = 0;
      }
-     if (cmd_in == MTFSF)
-       STp->moves_after_eof = 0;
-     else
-       STp->moves_after_eof = 1;
      if (cmd_in == MTBSFM)
        ioctl_result = st_int_ioctl(inode, file, MTFSF, 1);
      else if (cmd_in == MTFSFM)
@@ -1565,17 +1582,24 @@ st_int_ioctl(struct inode * inode,struct file * file,
           (SCpnt->sense_buffer[4] << 16) +
           (SCpnt->sense_buffer[5] << 8) +
           SCpnt->sense_buffer[6] );
-     if ( (cmd_in == MTFSF) || (cmd_in == MTFSFM) )
-       (STp->mt_status)->mt_fileno = fileno - undone ;
-     else if ( (cmd_in == MTBSF) || (cmd_in == MTBSFM) )
+     if ( (cmd_in == MTFSF) || (cmd_in == MTFSFM) ) {
+       if (fileno >= 0)
+	 (STp->mt_status)->mt_fileno = fileno - undone ;
+       else
+	 (STp->mt_status)->mt_fileno = fileno;
+       STp->drv_block = 0;
+     }
+     else if ( (cmd_in == MTBSF) || (cmd_in == MTBSFM) ) {
        (STp->mt_status)->mt_fileno = fileno + undone ;
+       STp->drv_block = 0;
+     }
      else if (cmd_in == MTFSR) {
        if (blkno >= undone)
 	 STp->drv_block = blkno - undone;
        else
 	 STp->drv_block = (-1);
      }
-     else if (cmd_in == MTBSR && blkno >= 0) {
+     else if (cmd_in == MTBSR) {
        if (blkno >= 0)
 	 STp->drv_block = blkno + undone;
        else
@@ -1625,11 +1649,15 @@ st_ioctl(struct inode * inode,struct file * file,
 
      memcpy_fromfs((char *) &mtc, (char *)arg, sizeof(struct mtop));
 
-     i = flush_buffer(inode, file, mtc.mt_op == MTNOP || mtc.mt_op == MTSEEK ||
+     i = flush_buffer(inode, file, mtc.mt_op == MTSEEK ||
 		      mtc.mt_op == MTREW || mtc.mt_op == MTOFFL ||
 		      mtc.mt_op == MTRETEN || mtc.mt_op == MTEOM);
      if (i < 0)
        return i;
+     if (mtc.mt_op != MTNOP && mtc.mt_op != MTSETBLK &&
+	 mtc.mt_op != MTSETDENSITY && mtc.mt_op != MTWSM &&
+	 mtc.mt_op != MTSETDRVBUFFER)
+       STp->rw = ST_IDLE;  /* Prevent automatic WEOF */
 
      if (mtc.mt_op == MTSETDRVBUFFER &&
 	 (mtc.mt_count & MT_ST_OPTIONS) != 0)
@@ -1669,7 +1697,7 @@ st_ioctl(struct inode * inode,struct file * file,
      }
      if (STp->eof == ST_EOM_OK || STp->eof == ST_EOM_ERROR)
        (STp->mt_status)->mt_gstat |= GMT_EOT(0xffffffff);
-     else if (STp->eof == ST_EOD)
+     else if (STp->eof == ST_EOD || STp->eof == ST_EOM_OK)
        (STp->mt_status)->mt_gstat |= GMT_EOD(0xffffffff);
      if (STp->density == 1)
        (STp->mt_status)->mt_gstat |= GMT_D_800(0xffffffff);

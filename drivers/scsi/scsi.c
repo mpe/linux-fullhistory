@@ -46,6 +46,9 @@ static void scsi_times_out (Scsi_Cmnd * SCpnt, int pid);
 static int time_start;
 static int time_elapsed;
 static int scsi_maybe_deadlocked = 0;
+static int max_active = 0;
+static struct Scsi_Host * host_active = NULL;
+static struct Scsi_Host * host_next = NULL;
 
 #define MAX_SCSI_DEVICE_CODE 10
 const char *const scsi_device_types[MAX_SCSI_DEVICE_CODE] =
@@ -160,6 +163,8 @@ static struct blist blacklist[] =
    {"QUANTUM","LPS525S","3110"},/* Locks sometimes if polled for lun != 0 */
    {"QUANTUM","PD1225S","3110"},/* Locks sometimes if polled for lun != 0 */
    {"MEDIAVIS","CDR-H93MV","1.31"},  /* Locks up if polled for lun != 0 */
+   {"SANKYO", "CP525","6.64"},  /* causes failed REQ SENSE, extra reset */
+   {"HP", "C1750A", "3226"},    /* scanjet iic */
    {NULL, NULL, NULL}};	
 
 static int blacklisted(unsigned char * response_data){
@@ -190,6 +195,21 @@ static int blacklisted(unsigned char * response_data){
 
 volatile int in_scan_scsis = 0;
 static int the_result;
+
+static void restart_all(void) {
+ /*
+  * If we might have deadlocked, get things started again. Only
+  * for block devices. Character devices should never deadlock.
+  */
+  struct Scsi_Device_Template * sdtpnt;
+
+  for (sdtpnt = scsi_devicelist; sdtpnt; sdtpnt = sdtpnt->next)
+
+     if (sdtpnt->blk && blk_dev[sdtpnt->major].request_fn)
+        (*blk_dev[sdtpnt->major].request_fn)();
+
+  }
+
 static void scan_scsis_done (Scsi_Cmnd * SCpnt)
 	{
 	
@@ -375,6 +395,8 @@ static void scan_scsis (struct Scsi_Host * shpnt)
 		case TYPE_TAPE :
 		case TYPE_DISK :
 		case TYPE_MOD :
+		case TYPE_PROCESSOR :
+		case TYPE_SCANNER :
 		  SDpnt->writeable = 1;
 		  break;
 		case TYPE_WORM :
@@ -589,8 +611,17 @@ Scsi_Cmnd * request_queueable (struct request * req, Scsi_Device * device)
 
   if (!SCpnt) return NULL;
 
-  if (device->host->can_queue
-      && device->host->host_busy >= device->host->can_queue) return NULL;
+  if (device->host->can_queue &&
+       ((device->host->block && host_active && device->host != host_active) || 
+        (device->host->block && host_next && device->host != host_next) ||
+        device->host->host_busy >= device->host->can_queue)) {
+
+     if (device->host->block && !host_next && host_active 
+                             && device->host != host_active) 
+        host_next = device->host;
+
+     return NULL;
+     }
 
   if (req) {
     memcpy(&SCpnt->request, req, sizeof(struct request));
@@ -665,11 +696,18 @@ Scsi_Cmnd * allocate_device (struct request ** reqp, Scsi_Device * device,
   
   host = device->host;
   
-  if (intr_count && device->host->can_queue
-      && device->host->host_busy >= device->host->can_queue) {
-    scsi_maybe_deadlocked = 1;
-    return NULL;
-  }
+  if (intr_count && host->can_queue &&
+                      ((host->block && host_active && host != host_active) ||
+                       (host->block && host_next && host != host_next) ||
+                       host->host_busy >= host->can_queue)) {
+
+     scsi_maybe_deadlocked = 1;
+
+     if (host->block && !host_next && host_active && host != host_active) 
+        host_next = host;
+
+     return NULL;
+     }
 
   while (1==1){
     SCpnt = host->host_queue;
@@ -891,25 +929,49 @@ void scsi_do_cmd (Scsi_Cmnd * SCpnt, const void *cmnd ,
 
 	SCpnt->pid = scsi_pid++; 
 
-	while (1==1){
-	  cli();
-	  if (host->can_queue
-	      && host->host_busy >= host->can_queue)
-	    {
-	      sti();
-	      SCSI_SLEEP(&host->host_wait, 
-			 (host->host_busy >= host->can_queue));
-	    } else {
-	      host->host_busy++;
-	      if (host->block) {
-		struct Scsi_Host * block;
-		for(block = host->block; block != host; block = block->block)
-		  block->host_busy |= SCSI_HOST_BLOCK;
-	      }
-	      sti();
-	      break;
-	    };
-      };
+        for(;;) {
+
+          cli();
+
+	  if (host->can_queue &&
+                ((host->block && host_active && host != host_active) ||
+	         (host->block && host_next && host != host_next) ||
+	         host->host_busy >= host->can_queue)) {
+
+             if (intr_count) 
+                panic("scsi: queueing to inactive host while in interrupt.\n");
+
+             if (host->block && !host_next && host_active 
+                                           && host != host_active) 
+                host_next = host;
+
+	     sti();
+	     SCSI_SLEEP(&host->host_wait, 
+                       ((host->block && host_active && host != host_active) ||
+                        (host->block && host_next && host != host_next) ||
+	                host->host_busy >= host->can_queue));
+	     } 
+
+          else {
+	     host->host_busy++;
+
+	     if (host->block) {
+
+	        if (!host_active) {
+                   max_active = 0;
+                   host_active = host;
+                   host_next = NULL;
+                   }
+                else if (max_active > 7 && !host_next) 
+                   host_next = host->block;
+
+                max_active++;
+                }
+
+	     sti();
+	     break;
+	     }
+          }
 /*
 	Our own function scsi_done (which marks the host as not busy, disables 
 	the timeout counter, etc) will be called by us or by the 
@@ -1344,6 +1406,9 @@ static void scsi_done (Scsi_Cmnd * SCpnt)
 			/* fall through to REDO */
 
 		case REDO:
+
+                        if (host->block) scsi_maybe_deadlocked = 1;
+
 			if (SCpnt->flags & WAS_SENSE)			
 				scsi_request_sense(SCpnt); 	
 			else	
@@ -1362,44 +1427,39 @@ static void scsi_done (Scsi_Cmnd * SCpnt)
 			INTERNAL_ERROR;
 		}
 
-	if (status == FINISHED) 
-	  {
-#ifdef DEBUG
-	    	printk("Calling done function - at address %08x\n", SCpnt->done);
-#endif
-		host->host_busy--; /* Indicate that we are free */
-		if (host->host_busy == 0 && host->block) {
-		  struct Scsi_Host * block;
-		  /*
-		   * Now remove the locks for all of the related hosts.
-		   */
-		  for(block = host->block; block != host; block = block->block)
-		      block->host_busy &= ~SCSI_HOST_BLOCK;
-		  /*
-		   * Now wake them up.  We do this in two separate stages to prevent
-		   * race conditions.
-		   */
-		  for(block = host->block; block != host; block = block->block)
-		      wake_up(&block->host_wait);
-		  /*
-		   * If we might have deadlocked, get things started again.  Only
-		   * for block devices - character devices should never deadlock.
-		   */
-		  if (scsi_maybe_deadlocked) {
-		    struct Scsi_Device_Template * sdtpnt;
-		    scsi_maybe_deadlocked = 0;
-		    for(sdtpnt = scsi_devicelist; sdtpnt; sdtpnt = sdtpnt->next)
-		      if (sdtpnt->blk && blk_dev[sdtpnt->major].request_fn)
-			(*blk_dev[sdtpnt->major].request_fn)();
-		  }
-		}
-		wake_up(&host->host_wait);
-		SCpnt->result = result | ((exit & 0xff) << 24);
-		SCpnt->use_sg = SCpnt->old_use_sg;
-		SCpnt->cmd_len = SCpnt->old_cmd_len;
-		SCpnt->done (SCpnt);
-		}
 
+	if (status == FINISHED) {
+#ifdef DEBUG
+	   printk("Calling done function - at address %08x\n", SCpnt->done);
+#endif
+	   host->host_busy--; /* Indicate that we are free */
+
+	   if (host->block && host->host_busy == 0) {
+              struct Scsi_Host * block;
+
+              block = host_next;
+              host_active = NULL;
+
+              if (block) wake_up(&block->host_wait);
+
+              for (block = host->block; block != host; block = block->block)
+                 wake_up(&block->host_wait);
+
+              host_next = NULL;
+
+              if (scsi_maybe_deadlocked) {
+                 scsi_maybe_deadlocked = 0;
+                 restart_all();
+                 }
+
+              }
+
+           wake_up(&host->host_wait);
+	   SCpnt->result = result | ((exit & 0xff) << 24);
+	   SCpnt->use_sg = SCpnt->old_use_sg;
+	   SCpnt->cmd_len = SCpnt->old_cmd_len;
+   	   SCpnt->done (SCpnt);
+	   }
 
 #undef FINISHED
 #undef REDO
@@ -1561,12 +1621,25 @@ int scsi_reset (Scsi_Cmnd * SCpnt)
 			else
 				{
 				host->host_busy++;
+
+                                if (host->block) {
+                                   host_active = host;
+                                   host_next = NULL;
+                                   }
 	
 				sti();
 				temp = host->hostt->reset(SCpnt);
 				host->last_reset = jiffies;
 				host->host_busy--;
+
 				}
+
+                        if (host->block && host->host_busy == 0) {
+                           host_active = NULL;
+                           host_next = NULL;
+                           restart_all();
+                           }
+
 
 #ifdef DEBUG
 			printk("scsi reset function returned %d\n", temp);
@@ -2283,7 +2356,7 @@ scsi_dump_status(void)
     for(SCpnt=shpnt->host_queue; SCpnt; SCpnt = SCpnt->next)
       {
 	/*  (0) 0:0:0 (802 123434 8 8 0) (3 3 2) (%d %d %d) %d %x      */
-	printk("(%d) %d:%d:%d (%4.4x %d %d %d %d) (%d %d %x) (%d %d %d) %x %x %x\n",
+	printk("(%d) %d:%d:%d (%4.4x %ld %ld %ld %ld) (%d %d %x) (%d %d %d) %x %x %x\n",
 	       i++, SCpnt->host->host_no,
 	       SCpnt->target,
 	       SCpnt->lun,
@@ -2302,7 +2375,7 @@ scsi_dump_status(void)
 	       SCpnt->sense_buffer[2],
 	       SCpnt->result);
       };
-  printk("wait_for_request = %x\n", wait_for_request);
+  printk("wait_for_request = %p\n", wait_for_request);
   /* Now dump the request lists for each block device */
   printk("Dump of pending block device requests\n");
   for(i=0; i<MAX_BLKDEV; i++)
@@ -2312,7 +2385,7 @@ scsi_dump_status(void)
 	printk("%d: ", i);
 	req = blk_dev[i].current_request;
 	while(req) {
-	  printk("(%x %d %d %d %d) ",
+	  printk("(%x %d %ld %ld %ld) ",
 		 req->dev,
 		 req->cmd,
 		 req->sector,

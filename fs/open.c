@@ -147,6 +147,11 @@ asmlinkage int sys_utime(char * filename, struct utimbuf * times)
 	}
 	/* Don't worry, the checks are done in inode_change_ok() */
 	if (times) {
+		error = verify_area(VERIFY_READ, times, sizeof(*times));
+		if (error) {
+			iput(inode);
+			return error;
+		}
 		actime = get_fs_long((unsigned long *) &times->actime);
 		modtime = get_fs_long((unsigned long *) &times->modtime);
 		newattrs.ia_ctime = CURRENT_TIME;

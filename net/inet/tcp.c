@@ -3291,10 +3291,15 @@ static int tcp_fin(struct sk_buff *skb, struct sock *sk, struct tcphdr *th)
 			 * happens, we must ack the received FIN and
 			 * enter the CLOSING state.
 			 *
-			 * XXX timeout not set properly
+			 * This causes a WRITE timeout, which will either
+			 * move on to TIME_WAIT when we timeout, or resend
+			 * the FIN properly (maybe we get rid of that annoying
+			 * FIN lost hang). The TIME_WRITE code is already correct
+			 * for handling this timeout.
 			 */
 
-			reset_timer(sk, TIME_CLOSE, TCP_TIMEWAIT_LEN);
+			if(sk->timeout != TIME_WRITE)
+				reset_timer(sk, TIME_WRITE, sk->rto);
 			tcp_set_state(sk,TCP_CLOSING);
 			break;
 		case TCP_FIN_WAIT2:
@@ -4008,9 +4013,11 @@ ignore_it:
 
 static int tcp_std_reset(struct sock *sk, struct sk_buff *skb)
 {
-	sk->zapped=1;
+	sk->zapped = 1;
 	sk->err = ECONNRESET;
-	if(sk->state==TCP_CLOSE_WAIT)
+	if (sk->state == TCP_SYN_SENT)
+		sk->err = ECONNREFUSED;
+	if (sk->state == TCP_CLOSE_WAIT)
 		sk->err = EPIPE;
 #ifdef TCP_DO_RFC1337		
 	/*
@@ -4320,14 +4327,18 @@ int tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 		if(sk->debug)
 			printk("Doing a BSD time wait\n");
 		tcp_statistics.TcpEstabResets++;	   
+		sk->rmem_alloc -= skb->mem_len;
+		skb->sk = NULL;
 		sk->err=ECONNRESET;
 		tcp_set_state(sk, TCP_CLOSE);
 		sk->shutdown = SHUTDOWN_MASK;
 		release_sock(sk);
-		sk=get_sock(&tcp_prot, th->source, daddr, th->dest, saddr);
+		sk=get_sock(&tcp_prot, th->dest, saddr, th->source, daddr);
 		if(sk && sk->state==TCP_LISTEN)
 		{
 			sk->inuse=1;
+			skb->sk = sk;
+			sk->rmem_alloc += skb->mem_len;
 			tcp_conn_request(sk, skb, daddr, saddr,opt, dev,seq+128000);
 			release_sock(sk);
 			return 0;

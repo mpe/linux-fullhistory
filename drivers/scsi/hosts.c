@@ -313,6 +313,30 @@ unsigned int scsi_init()
 	}
 	printk ("scsi : %d hosts.\n", count);
 
+      {
+      int block_count = 0, index;
+      struct Scsi_Host * sh[128], * shpnt;
+
+         for(shpnt=scsi_hostlist; shpnt; shpnt = shpnt->next)
+            if (shpnt->block) sh[block_count++] = shpnt;
+      
+         if (block_count == 1) sh[0]->block = NULL;
+
+         else if (block_count > 1) {
+
+            for(index = 0; index < block_count - 1; index++) {
+               sh[index]->block = sh[index + 1];
+               printk("scsi%d : added to blocked host list.\n", 
+                      sh[index]->host_no);
+               }
+           
+            sh[block_count - 1]->block = sh[0];
+            printk("scsi%d : added to blocked host list.\n", 
+                   sh[index]->host_no);
+            }
+
+      }
+
 	/* Now attach the high level drivers */
 #ifdef CONFIG_BLK_DEV_SD
 	scsi_register_device(&sd_template);

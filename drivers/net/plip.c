@@ -1,3 +1,4 @@
+/* $Id: plip.c,v 1.7 1994/12/16 06:20:02 gniibe Exp $ */
 /* plip.c: A parallel port "network" driver for linux. */
 /* This driver is for parallel port with 5-bit cable (LapLink (R) cable). */
 /*
@@ -31,7 +32,7 @@ static char *version =
 #ifdef MODULE
     "MODULAR "    
 #endif    
-    "PLIP.014 gniibe@mri.co.jp\n";
+    "PLIP $Revision: 1.7 $ gniibe@mri.co.jp\n";
 
 #include <linux/config.h>
 
@@ -110,9 +111,9 @@ static unsigned int net_debug = NET_DEBUG;
 /* Nibble time out = PLIP_NIBBLE_WAIT * PLIP_DELAY_UNIT usec */
 #define PLIP_NIBBLE_WAIT        5000
 
-#define PAR_DATA(dev)		(dev->base_addr+0)
-#define PAR_STATUS(dev)		(dev->base_addr+1)
-#define PAR_CONTROL(dev)	(dev->base_addr+2)
+#define PAR_DATA(dev)		((dev)->base_addr+0)
+#define PAR_STATUS(dev)		((dev)->base_addr+1)
+#define PAR_CONTROL(dev)	((dev)->base_addr+2)
 
 /* Index to functions, as function prototypes. */
 static int plip_tx_packet(struct sk_buff *skb, struct device *dev);
@@ -226,6 +227,8 @@ plip_init(struct device *dev)
 	}
     }
 
+    snarf_region(PAR_DATA(dev), 3);
+
     /* Fill in the generic fields of the device structure. */
     ether_setup(dev);
 
@@ -297,6 +300,8 @@ plip_bh(struct device *dev)
 	case PLIP_CN_RECEIVE:
 	    sti();
 	    disable_irq(dev->irq);
+	    outb(LP_PINITP|LP_PSELECP, PAR_CONTROL(dev));
+	    outb(0x01, PAR_DATA(dev));   /* send ACK */
 	    dev->interrupt = 0;
 	    result = plip_receive_packet(dev);
 	    if (result == 0) { /* success */
@@ -307,9 +312,11 @@ plip_bh(struct device *dev)
 		netif_rx(skb);
 		if (snd->state != PLIP_PK_DONE) {
 		    nl->connection = PLIP_CN_SEND;
+		    outb(LP_PINITP|LP_PSELECP|LP_PINTEN, PAR_CONTROL(dev));
 		    enable_irq(dev->irq);
 		} else {
 		    nl->connection = PLIP_CN_NONE;
+		    outb(LP_PINITP|LP_PSELECP|LP_PINTEN, PAR_CONTROL(dev));
 		    enable_irq(dev->irq);
 		    return;
 		}
@@ -340,6 +347,7 @@ plip_bh(struct device *dev)
 		snd->skb = NULL;
 		nl->connection = PLIP_CN_CLOSING;
 		queue_task(&nl->deferred, &tq_timer);
+		outb(LP_PINITP|LP_PSELECP|LP_PINTEN, PAR_CONTROL(dev));
 		enable_irq(dev->irq);
 		return;
 	    } else
@@ -359,6 +367,7 @@ plip_bh(struct device *dev)
 	    if (result == 0) {
 		nl->connection = PLIP_CN_NONE;
 		dev->tbusy = 0;
+		outb(LP_PINITP|LP_PSELECP|LP_PINTEN, PAR_CONTROL(dev));
 		enable_irq(dev->irq);
 		return;
 	    } else {
@@ -392,6 +401,7 @@ plip_bh(struct device *dev)
 		dev_kfree_skb(rcv->skb, FREE_WRITE);
 	}
 	disable_irq(dev->irq);
+	outb(LP_PINITP|LP_PSELECP, PAR_CONTROL(dev));
 	dev->tbusy = 1;
 	nl->connection = PLIP_CN_ERROR;
 	outb(0x00, PAR_DATA(dev));
@@ -542,6 +552,7 @@ plip_device_clear(struct device *dev)
     cli();
     dev->tbusy = 0;
     sti();
+    outb(LP_PINITP|LP_PSELECP|LP_PINTEN, PAR_CONTROL(dev));
     enable_irq(dev->irq);
 }
 
@@ -702,7 +713,6 @@ plip_interrupt(int reg_ptr)
 	    printk("plip: spurious interrupt\n");
 	return;
     }
-    outb(0x01, PAR_DATA(dev));   /* send ACK */
     dev->interrupt = 1;
     if (net_debug > 3)
 	printk("%s: interrupt.\n", dev->name);
@@ -809,6 +819,7 @@ plip_send_packet(struct device *dev)
 	    c0 = inb(PAR_STATUS(dev));
 	    if (c0 & 0x08) {
 		disable_irq(dev->irq);
+		outb(LP_PINITP|LP_PSELECP, PAR_CONTROL(dev));
 		if (net_debug > 3)
 		    printk("+");
 		/* OK, connection established! */
@@ -952,16 +963,19 @@ cleanup_module(void)
     else {
 	if (dev_plip0.priv) {
 	    unregister_netdev(&dev_plip0);
+	    release_region(PAR_DATA(&dev_plip0), 3);
 	    kfree_s(dev_plip0.priv, sizeof(struct net_local));
 	    dev_plip0.priv = NULL;
 	}
 	if (dev_plip1.priv) {
 	    unregister_netdev(&dev_plip1);
+	    release_region(PAR_DATA(&dev_plip1), 3);
 	    kfree_s(dev_plip1.priv, sizeof(struct net_local));
 	    dev_plip1.priv = NULL;
 	}
 	if (dev_plip2.priv) {
 	    unregister_netdev(&dev_plip2);
+	    release_region(PAR_DATA(&dev_plip2), 3);
 	    kfree_s(dev_plip2.priv, sizeof(struct net_local));
 	    dev_plip2.priv = NULL;
 	}

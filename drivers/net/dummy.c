@@ -75,6 +75,7 @@ dummy_init(struct device *dev)
 
 	/* Fill in the fields of the device structure with ethernet-generic values. */
 	ether_setup(dev);
+	dev->flags |= IFF_NOARP;
 
 	return 0;
 }

@@ -25,6 +25,11 @@ SRCS  = tty_io.c n_tty.c console.c keyboard.c serial.c \
 	defkeymap.c uni_to_437.c
 
 
+ifdef CONFIG_CYCLADES
+OBJS := $(OBJS) cyclades.o
+SRCS := $(SRCS) cyclades.c
+endif
+
 ifdef CONFIG_ATIXL_BUSMOUSE
 M = y
 OBJS := $(OBJS) atixlmouse.o

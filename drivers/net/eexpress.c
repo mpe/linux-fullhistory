@@ -686,6 +686,8 @@ eexp_get_stats(struct device *dev)
 static void
 set_multicast_list(struct device *dev, int num_addrs, void *addrs)
 {
+/* This doesn't work yet */
+#if 0
 	short ioaddr = dev->base_addr;
 	if (num_addrs < 0) {
 		/* Not written yet, this requires expanding the init_words config
@@ -702,6 +704,7 @@ set_multicast_list(struct device *dev, int num_addrs, void *addrs)
 		   cmd. */
 		outw(99, ioaddr);		/* Disable promiscuous mode, use normal mode */
 	}
+#endif
 }
 
 /* The horrible routine to read a word from the serial EEPROM. */

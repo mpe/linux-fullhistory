@@ -82,10 +82,12 @@ struct tty_ldisc ldiscs[NR_LDISCS];	/* line disc dispatch table	*/
 
 /*
  * fg_console is the current virtual console,
+ * last_console is the last used one
  * redirect is the pseudo-tty that console output
  * is redirected to if asked by TIOCCONS.
  */
 int fg_console = 0;
+int last_console = 0;
 struct tty_struct * redirect = NULL;
 struct wait_queue * keypress_wait = NULL;
 
@@ -364,6 +366,7 @@ void do_tty_hangup(struct tty_struct * tty, struct file_operations *fops)
 	tty->flags = 0;
 	tty->session = 0;
 	tty->pgrp = -1;
+	tty->ctrl_status = 0;
  	for_each_task(p) {
 		if (p->tty == tty)
 			p->tty = NULL;
@@ -412,11 +415,11 @@ void disassociate_ctty(int priv)
 
 	if (!tty)
 		return;
-
 	if (tty->pgrp > 0) {
 		kill_pg(tty->pgrp, SIGHUP, priv);
 		kill_pg(tty->pgrp, SIGCONT, priv);
 	}
+
 	tty->session = 0;
 	tty->pgrp = -1;
 
@@ -470,6 +473,7 @@ void complete_change_console(unsigned int new_console)
                 return;
         if (!vc_cons_allocated(new_console))
                 return;
+	last_console = fg_console;
 
 	/*
 	 * If we're switching, we could be going from KD_GRAPHICS to
@@ -1685,6 +1689,9 @@ long tty_init(long kmem_start)
 
 	kmem_start = kbd_init(kmem_start);
 	kmem_start = rs_init(kmem_start);
+#ifdef CONFIG_CYCLADES
+	kmem_start = cy_init(kmem_start);
+#endif
 	kmem_start = pty_init(kmem_start);
 	return kmem_start;
 }

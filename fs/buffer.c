@@ -777,12 +777,7 @@ void brelse(struct buffer_head * buf)
 {
 	if (!buf)
 		return;
-/*
- * Hmm.. Leaving this in for now, as I'm a bit nervous about it..
- */
-#if 0
 	wait_on_buffer(buf);
-#endif
 
 	/* If dirty, mark the time this buffer should be written back */
 	set_writetime(buf, 0);

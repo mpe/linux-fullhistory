@@ -1,5 +1,5 @@
 This file contains brief information about the SCSI tape driver.
-Last modified: Wed Nov 30 20:34:03 1994 by root@kai.home
+Last modified: Sat Dec 17 13:38:43 1994 by root@kai.home
 
 BASICS
 
@@ -11,8 +11,9 @@ variable block size (within buffer limits). Both the auto-rewind
 device number) are implemented.
 
 By default the driver writes one filemark when the device is closed after
-writing. Two filemarks can be optionally written. In both cases end
-of data is signified by returning zero bytes for two consecutive reads.
+writing and the last operation has been a write. Two filemarks can be
+optionally written. In both cases end of data is signified by
+returning zero bytes for two consecutive reads.
 
 BUFFERING
 
@@ -129,7 +130,8 @@ MTIOCGET Returns some status information.
         mt_dsreg (shifts for the subfields are MT_ST_BLKSIZE_SHIFT and
         MT_ST_DENSITY_SHIFT).
 	The GMT_xxx status bits reflect the drive status. GMT_DR_OPEN
-	is set if there is no tape in the drive.
+	is set if there is no tape in the drive. GMT_EOD means either
+	end of recorded data or end of tape. GMT_EOT means end of tape.
 
 
 MISCELLANEOUS COMPILE OPTIONS

@@ -1,5 +1,16 @@
 /*
- *      eata.c - Low-level SCSI driver for EISA EATA SCSI controllers.
+ *      eata.c - Low-level driver for EATA/DMA SCSI host adapters.
+ *
+ *      17 Dec 1994 rev. 1.11 for linux 1.1.74
+ *          Use the scsicam_bios_param routine. This allows an easy
+ *          migration path from disk partition tables created using 
+ *          different SCSI drivers and non optimal disk geometry.
+ *
+ *      15 Dec 1994 rev. 1.10 for linux 1.1.74
+ *          Added support for ISA EATA boards (DPT PM2011, DPT PM2021).
+ *          The host->block flag is set for all the detected ISA boards.
+ *          The detect routine no longer enforces LEVEL triggering
+ *          for EISA boards, it just prints a warning message.
  *
  *      30 Nov 1994 rev. 1.09 for linux 1.1.68
  *          Redo i/o on target status CONDITION_GOOD for TYPE_DISK only.
@@ -14,13 +25,28 @@
  *
  *
  *          This driver is based on the CAM (Common Access Method Committee)
- *          EATA (Enhanced AT Bus Attachment) rev. 2.0A.
+ *          EATA (Enhanced AT Bus Attachment) rev. 2.0A, using DMA protocol.
  *
  *      Released by Dario Ballabio (Dario_Ballabio@milano.europe.dg.com)
  *
  */
 
 /*
+ *
+ *  Here is a brief description of the DPT SCSI host adapters.
+ *  All these boards provide an EATA/DMA compatible programming interface
+ *  and are fully supported by this driver:
+ *
+ *  PM2011B/9X -  Entry Level ISA
+ *  PM2021A/9X -  High Performance ISA
+ *  PM2012A       Old EISA
+ *  PM2012B       Old EISA
+ *  PM2022A/9X -  Entry Level EISA
+ *  PM2122A/9X -  High Performance EISA
+ *  PM2322A/9X -  Extra High Performance EISA
+ *
+ *  The DPT PM2001 provides only the EATA/PIO interface and hence is not
+ *  supported by this driver.
  *
  *  This code has been tested with up to 3 Distributed Processing Technology 
  *  PM2122A/9X (DPT SCSI BIOS v002.D1, firmware v05E.0) eisa controllers,
@@ -31,9 +57,11 @@
  *  All boards should be configured at the same IRQ level.
  *  Multiple IRQ configurations are supported too.
  *  Boards can be located in any eisa slot (1-15) and are named EATA0, 
- *  EATA1,... in increasing eisa slot number.
- *  In order to detect the boards, the IRQ must be _level_ triggered 
- *  (not _edge_ triggered).
+ *  EATA1,... in increasing eisa slot number. ISA boards are detected
+ *  after the eisa slot probes.
+ *
+ *  The IRQ for EISA boards should be _level_ triggered (not _edge_ triggered).
+ *  This is a requirement in order to support multiple boards on the same IRQ.
  *
  *  Other eisa configuration parameters are:
  *
@@ -41,6 +69,8 @@
  *  COMMAND TIMEOUT   : ENABLED
  *  CACHE             : DISABLED
  *
+ *  In order to support multiple ISA boards in a reliable way,
+ *  the driver sets host->block = TRUE for all ISA boards.
  */
 
 #include <linux/string.h>
@@ -53,18 +83,22 @@
 #include "scsi.h"
 #include "hosts.h"
 #include "sd.h"
+#include <asm/dma.h>
 #include <asm/irq.h>
 #include "linux/in.h"
 #include "eata.h"
 
-#define NO_DEBUG_DETECT
-#define NO_DEBUG_INTERRUPT
-#define NO_DEBUG_STATISTICS
-#define NO_SINGLE_HOST_OPERATIONS
+/* Subversion values */
+#define ISA  0
+#define ESA 1
+
+#undef  DEBUG_DETECT
+#undef  DEBUG_INTERRUPT
+#undef  DEBUG_STATISTICS
 
 #define MAX_TARGET 8
 #define MAX_IRQ 16
-#define MAX_BOARDS 15
+#define MAX_BOARDS 18
 #define MAX_MAILBOXES 64
 #define MAX_SGLIST 64
 #define MAX_CMD_PER_LUN 2
@@ -88,6 +122,8 @@
 #define REG_LM          3
 #define REG_MID         4
 #define REG_MSB         5
+#define REG_REGION      9
+#define EISA_RANGE      0xf000
 #define BSY_ASSERTED      0x80
 #define DRQ_ASSERTED      0x08
 #define ABSY_ASSERTED     0x01
@@ -130,7 +166,7 @@ struct eata_info {
    unchar     irq:4,    /* Interrupt Request assigned to this controller */
            irq_tr:1,    /* 0 for edge triggered, 1 for level triggered */
            second:1,    /* 1 if this is a secondary (not primary) controller */
-             drqx:2;    /* DRQ Index (0=DRQ0, 1=DRQ7, 2=DRQ6, 3=DRQ5) */
+             drqx:2;    /* DRQ Index (0=DMA0, 1=DMA7, 2=DMA6, 3=DMA5) */
    unchar  sync;        /* 1 if scsi target id 7...0 is running sync scsi */
    ushort ipad[250];
    };
@@ -157,7 +193,7 @@ struct mssp {
    char mess[12];
    };
 
-/* Command packet structure */
+/* MailBox SCSI Command Packet */
 struct mscp {
    unchar  sreset:1,     /* SCSI Bus Reset Signal should be asserted */
            interp:1,     /* The controller interprets cp, not the target */ 
@@ -204,6 +240,7 @@ struct hostdata {
    int in_reset;                        /* True if board is doing a reset */
    int target_time_out[MAX_TARGET];     /* N. of timeout errors on target */
    int target_reset[MAX_TARGET];        /* If TRUE redo operation on target */
+   unsigned char subversion;            /* Bus type, either ISA or ESA */
    struct mssp sp[MAX_MAILBOXES];       /* Returned status for this board */
    };
 
@@ -257,13 +294,21 @@ static inline unchar read_pio (ushort iobase, ushort *start, ushort *end) {
    return FALSE;
 }
 
-static inline int port_detect (ushort *port_base, unsigned int j, 
-                               Scsi_Host_Template * tpnt) {
+static inline int port_detect(ushort *port_base, unsigned int j, 
+                              Scsi_Host_Template * tpnt) {
+   unsigned char irq, dma_channel, subversion;
    struct eata_info info;
    struct eata_config config;
+   char *board_status;
+
+   /* Allowed DMA channels for ISA (0 indicates reserved) */
+   unsigned char dma_channel_table[4] = { 5, 6, 7, 0 };
+
    char name[16];
 
    sprintf(name, "%s%d", driver_name, j);
+
+   if(check_region(*port_base, REG_REGION)) return FALSE;
 
    if (do_dma(*port_base, 0, READ_CONFIG_PIO)) return FALSE;
 
@@ -274,20 +319,49 @@ static inline int port_detect (ushort *port_base, unsigned int j,
    /* check the controller "EATA" signature */
    if (info.sign != EATA_SIGNATURE) return FALSE;
 
-   if (!info.haaval || info.ata || info.drqvld || !info.dmasup) {
-      printk("%s: unusable board found, detaching.\n", name);
+   irq = info.irq;
+
+   if (*port_base & EISA_RANGE) {
+
+      if (!info.haaval || info.ata || info.drqvld || !info.dmasup) {
+         printk("%s: unusable EISA board found, detaching.\n", name);
+         return FALSE;
+         }
+
+      subversion = ESA;
+      dma_channel = 0;
+      }
+   else {
+
+      if (!info.haaval || info.ata || !info.drqvld || !info.dmasup) {
+         printk("%s: unusable ISA board found, detaching.\n", name);
+         return FALSE;
+         }
+
+      subversion = ISA;
+      dma_channel = dma_channel_table[3 - info.drqx];
+      }
+
+   if (subversion == ESA && !info.irq_tr)
+      printk("%s: warning, LEVEL triggering is suggested for IRQ %u.\n",
+             name, irq);
+
+   if (info.second)
+      board_status = "Sec.";
+   else
+      board_status = "Prim.";
+
+   /* Board detected, allocate its IRQ if not already done */
+   if ((irq >= MAX_IRQ) || ((irqlist[irq] == NO_IRQ) && request_irq
+       (irq, eata_interrupt_handler, SA_INTERRUPT, driver_name))) {
+      printk("%s: unable to allocate IRQ %u, detaching.\n", name, irq);
       return FALSE;
       }
 
-   if (!info.irq_tr) {
-      printk("%s: IRQ must be level triggered, detaching.\n", name);
-      return FALSE;
-      }
-
-   /* EATA board detected, allocate its IRQ if not already done */
-   if ((info.irq >= MAX_IRQ) || ((irqlist[info.irq] == NO_IRQ) && request_irq
-       (info.irq, eata_interrupt_handler, SA_INTERRUPT, driver_name))) {
-      printk("%s: unable to allocate IRQ %u, detaching.\n", name, info.irq);
+   if (subversion == ISA && request_dma(dma_channel, driver_name)) {
+      printk("%s: unable to allocate DMA channel %u, detaching.\n",
+             name, dma_channel);
+      free_irq(irq);
       return FALSE;
       }
 
@@ -303,21 +377,38 @@ static inline int port_detect (ushort *port_base, unsigned int j,
 
    sh[j] = scsi_register(tpnt, sizeof(struct hostdata));
    sh[j]->io_port = *port_base;
-   sh[j]->dma_channel = 0;
-   sh[j]->irq = info.irq;
+   sh[j]->dma_channel = dma_channel;
+   sh[j]->irq = irq;
    sh[j]->sg_tablesize = (ushort) ntohs(info.scatt_size);
    sh[j]->this_id = (ushort) ntohl(info.host_addr);
    sh[j]->can_queue = (ushort) ntohs(info.queue_size);
    sh[j]->cmd_per_lun = MAX_CMD_PER_LUN;
-   sh[j]->unchecked_isa_dma = FALSE;
+
+   /* Register the I/O space that we use */
+   snarf_region(sh[j]->io_port, REG_REGION);
+
    memset(HD(j), 0, sizeof(struct hostdata));
+   HD(j)->subversion = subversion;
    HD(j)->board_number = j;
-   irqlist[info.irq] = j;
+   irqlist[irq] = j;
+
+   if (HD(j)->subversion == ESA)
+      sh[j]->unchecked_isa_dma = FALSE;
+   else {
+      sh[j]->block = sh[j];
+      sh[j]->unchecked_isa_dma = TRUE;
+      disable_dma(dma_channel);
+      clear_dma_ff(dma_channel);
+      set_dma_mode(dma_channel, DMA_MODE_CASCADE);
+      enable_dma(dma_channel);
+      }
+
    strcpy(BN(j), name);
 
-   printk("%s: SCSI ID %d, PORT 0x%03x, IRQ %u, SG %d, "\
-          "Mbox %d, CmdLun %d.\n", BN(j), sh[j]->this_id, 
-           sh[j]->io_port, sh[j]->irq, sh[j]->sg_tablesize, 
+   printk("%s: %s, ID %d, PORT 0x%03x, IRQ %u, DMA %u, SG %d, "\
+          "Mbox %d, CmdLun %d.\n", BN(j), board_status, sh[j]->this_id, 
+           sh[j]->io_port, sh[j]->irq, 
+           sh[j]->dma_channel, sh[j]->sg_tablesize, 
            sh[j]->can_queue, sh[j]->cmd_per_lun);
 
    /* DPT PM2012 does not allow to detect sg_tablesize correctly */
@@ -344,12 +435,13 @@ static inline int port_detect (ushort *port_base, unsigned int j,
 int eata_detect (Scsi_Host_Template * tpnt) {
    unsigned int j = 0, k, flags;
 
-   ushort eisa_io_port[] = { 
+   ushort io_port[] = { 
       0x1c88, 0x2c88, 0x3c88, 0x4c88, 0x5c88, 0x6c88, 0x7c88, 0x8c88,
-      0x9c88, 0xac88, 0xbc88, 0xcc88, 0xdc88, 0xec88, 0xfc88, 0x0
+      0x9c88, 0xac88, 0xbc88, 0xcc88, 0xdc88, 0xec88, 0xfc88, 
+      0x330,  0x230,  0x1f0,  0x170,  0x0
       };
 
-   ushort *port_base = eisa_io_port;
+   ushort *port_base = io_port;
 
    save_flags(flags);
    cli();
@@ -363,20 +455,10 @@ int eata_detect (Scsi_Host_Template * tpnt) {
 
    while (*port_base) {
 
-      if(j < MAX_BOARDS && port_detect(port_base, j, tpnt)) j++;
+      if (j < MAX_BOARDS && port_detect(port_base, j, tpnt)) j++;
 
       port_base++;
       }
-
-#if defined (SINGLE_HOST_OPERATIONS)
-   /* Create a circular linked list among the detected boards. */
-   if (j > 1) {
-
-      for (k = 0; k < (j - 1); k++) sh[k]->block = sh[k + 1];
-
-      sh[j - 1]->block = sh[0];
-      }
-#endif
 
    restore_flags(flags);
    return j;
@@ -388,7 +470,7 @@ static inline void build_sg_list(struct mscp *cpp, Scsi_Cmnd *SCpnt) {
 
    sgpnt = (struct scatterlist *) SCpnt->request_buffer;
 
-   for(k = 0; k < SCpnt->use_sg; k++) {
+   for (k = 0; k < SCpnt->use_sg; k++) {
       cpp->sglist[k].address = htonl((unsigned int) sgpnt[k].address);
       cpp->sglist[k].num_bytes = htonl((unsigned int) sgpnt[k].length);
       }
@@ -413,7 +495,7 @@ int eata_queuecommand (Scsi_Cmnd *SCpnt, void (*done)(Scsi_Cmnd *)) {
       starting from last_cp_used */
    i = HD(j)->last_cp_used + 1;
 
-   for(k = 0; k < sh[j]->can_queue; k++, i++) {
+   for (k = 0; k < sh[j]->can_queue; k++, i++) {
 
       if (i >= sh[j]->can_queue) i = 0;
 
@@ -664,30 +746,6 @@ int eata_reset (Scsi_Cmnd *SCarg) {
       }
 }
 
-int eata_bios_param (Disk * disk, int dev, int *ip) {
-   int size = disk->capacity;
-
-   if(size < 0x200000) {           /* < 1Gbyte */
-      ip[0]=64;
-      ip[1]=32;
-      }
-   else if (size < 0x400000) {     /* < 2Gbyte */
-      ip[0]=65;
-      ip[1]=63;
-      }
-   else if(size < 0x800000) {      /* < 4Gbyte */
-      ip[0]=128;
-      ip[1]=63;
-      }
-   else {                          /* ok up to 8Gbyte */
-      ip[0]=255;
-      ip[1]=63;
-      }    
-
-   ip[2] = size / (ip[0] * ip[1]);
-   return 0;
-}
-
 static void eata_interrupt_handler(int irq) {
    Scsi_Cmnd *SCpnt;
    unsigned int i, j, k, flags, status, loops, total_loops = 0;
@@ -725,7 +783,7 @@ static void eata_interrupt_handler(int irq) {
          inb(sh[j]->io_port + REG_STATUS);
    
          /* Service all mailboxes of this board */
-         for(i = 0; i < sh[j]->can_queue; i++) {
+         for (i = 0; i < sh[j]->can_queue; i++) {
             spp = &HD(j)->sp[i];
    
             /* Check if this mailbox has completed the operation */

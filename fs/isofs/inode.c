@@ -17,6 +17,11 @@
 #include <linux/malloc.h>
 #include <linux/errno.h>
 
+#define MULTISESSION /* emoenke@gwdg.de */
+#ifdef MULTISESSION
+#include <linux/cdrom.h>
+#endif MULTISESSION
+
 #include <asm/system.h>
 #include <asm/segment.h>
 
@@ -145,6 +150,14 @@ struct super_block *isofs_read_super(struct super_block *s,void *data,
 	unsigned int blocksize_bits;
 	int high_sierra;
 	int dev=s->s_dev;
+#ifdef MULTISESSION
+	int i;
+	unsigned int vol_desc_start;
+	unsigned int *p_vol_desc_start=&vol_desc_start;
+	struct inode inode_fake;
+	struct file file_fake;
+	extern struct file_operations * get_blkfops(unsigned int);
+#endif MULTISESSION
 	struct iso_volume_descriptor *vdp;
 	struct hs_volume_descriptor *hdp;
 
@@ -184,7 +197,27 @@ struct super_block *isofs_read_super(struct super_block *s,void *data,
 
 	s->u.isofs_sb.s_high_sierra = high_sierra = 0; /* default is iso9660 */
 
+#ifdef MULTISESSION
+	/*
+	 * look if the driver can tell the multi session redirection
+         * value; this allows to do the redirection if we are looking
+         * for the volume descriptor, and to avoid it during "raw" access.
+         */
+	vol_desc_start=0;
+	inode_fake.i_rdev=dev;
+	i=get_blkfops(MAJOR(dev))->ioctl(&inode_fake,
+					 &file_fake,
+					 CDROMMULTISESSION_SYS,
+					 (unsigned long) p_vol_desc_start);
+	if (i!=0) vol_desc_start=0;
+#if 0
+	printk("isofs.inode: CDROMMULTISESSION_SYS rc=%d\n",i);
+	printk("isofs.inode: vol_desc_start = %d\n", vol_desc_start);
+#endif
+	for (iso_blknum = vol_desc_start+16; iso_blknum < vol_desc_start+100; iso_blknum++) {
+#else
 	for (iso_blknum = 16; iso_blknum < 100; iso_blknum++) {
+#endif MULTISESSION
 		if (!(bh = bread(dev, iso_blknum << (ISOFS_BLOCK_BITS-blocksize_bits), opt.blocksize))) {
 			s->s_dev=0;
 			printk("isofs_read_super: bread failed, dev 0x%x iso_blknum %d\n",

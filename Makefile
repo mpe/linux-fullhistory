@@ -1,6 +1,6 @@
 VERSION = 1
 PATCHLEVEL = 1
-SUBLEVEL = 73
+SUBLEVEL = 74
 
 ARCH = i386
 
@@ -148,7 +148,7 @@ include/linux/version.h: $(CONFIGURE) Makefile
 	@echo \#define LINUX_COMPILER \"`$(HOSTCC) -v 2>&1 | tail -1`\" >> include/linux/version.h
 
 tools/build: tools/build.c $(CONFIGURE)
-	$(HOSTCC) $(CFLAGS) -o $@ $<
+	$(HOSTCC) $(CFLAGS) -o $@ $< -I$(TOPDIR)/include
 
 boot/head.o: $(CONFIGURE) boot/head.s
 

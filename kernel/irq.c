@@ -108,7 +108,7 @@ asmlinkage void do_bottom_half(void)
 	}
 	return;
 bad_bh:
-	printk ("irq.c:bad bottom half entry\n");
+	printk ("irq.c:bad bottom half entry %08lx\n", mask);
 }
 
 /*

@@ -21,17 +21,17 @@ typedef int ptrdiff_t;
  * header files exported to user space
  */
 
-typedef signed char __s8;
+typedef __signed__ char __s8;
 typedef unsigned char __u8;
 
-typedef signed short __s16;
+typedef __signed__ short __s16;
 typedef unsigned short __u16;
 
-typedef signed long __s32;
+typedef __signed__ long __s32;
 typedef unsigned long __u32;
 
 #ifndef __STRICT_ANSI__
-typedef signed long long __s64;
+typedef __signed__ long long __s64;
 typedef unsigned long long __u64;
 #endif
 

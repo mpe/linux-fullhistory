@@ -190,6 +190,8 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 		 * doesn't do a whole lot. i'm not sure if it should do any
 		 * restoration of modes or what...
 		 */
+		if (!suser())
+			return -EPERM;
 		switch (arg) {
 		case KD_GRAPHICS:
 			break;
@@ -230,6 +232,8 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 		return -EINVAL;
 
 	case KDSKBMODE:
+		if (!suser())
+			return -EPERM;
 		switch(arg) {
 		  case K_RAW:
 			kbd->kbdmode = VC_RAW;
@@ -309,6 +313,8 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 		struct kbkeycode * const a = (struct kbkeycode *)arg;
 		unsigned int sc, kc;
 
+		if (!suser())
+			return -EPERM;
 		i = verify_area(VERIFY_READ, (void *)a, sizeof(struct kbkeycode));
 		if (i)
 			return i;
@@ -348,6 +354,8 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 		u_char s;
 		u_short v;
 
+		if (!suser())
+			return -EPERM;
 		i = verify_area(VERIFY_READ, (void *)a, sizeof(struct kbentry));
 		if (i)
 			return i;
@@ -437,6 +445,8 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 		u_char *p;
 		char *q;
 
+		if (!suser())
+			return -EPERM;
 		i = verify_area(VERIFY_READ, (void *)a, sizeof(struct kbsentry));
 		if (i)
 			return i;
@@ -520,6 +530,8 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 		struct kbdiacrs *a = (struct kbdiacrs *)arg;
 		unsigned int ct;
 
+		if (!suser())
+			return -EPERM;
 		i = verify_area(VERIFY_READ, (void *) a, sizeof(struct kbdiacrs));
 		if (i)
 			return i;
@@ -542,6 +554,8 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 		return 0;
 
 	case KDSKBLED:
+		if (!suser())
+			return -EPERM;
 		if (arg & ~0x77)
 			return -EINVAL;
 		kbd->ledflagstate = (arg & 7);
@@ -559,6 +573,7 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 		return 0;
 
 	case KDSETLED:
+		/* OK, I'll let ordinary users run blinkenlights - zblaxell */
 		setledstate(kbd, arg);
 		return 0;
 
@@ -567,6 +582,8 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 		struct vt_mode *vtmode = (struct vt_mode *)arg;
 		char mode;
 
+		if (!suser())
+			return -EPERM;
 		i = verify_area(VERIFY_WRITE, (void *)vtmode, sizeof(struct vt_mode));
 		if (i)
 			return i;
@@ -642,6 +659,8 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 	 * to preserve sanity).
 	 */
 	case VT_ACTIVATE:
+		if (!suser())
+			return -EPERM;
 		if (arg == 0 || arg > MAX_NR_CONSOLES)
 			return -ENXIO;
 		arg--;
@@ -655,6 +674,8 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 	 * wait until the specified VT has been activated
 	 */
 	case VT_WAITACTIVE:
+		if (!suser())
+			return -EPERM;
 		if (arg == 0 || arg > MAX_NR_CONSOLES)
 			return -ENXIO;
 		arg--;
@@ -676,6 +697,8 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 	 *	2:	completed switch-to OK
 	 */
 	case VT_RELDISP:
+		if (!suser())
+			return -EPERM;
 		if (vt_cons[console]->vt_mode.mode != VT_PROCESS)
 			return -EINVAL;
 
@@ -724,6 +747,8 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 	  * Disallocate memory associated to VT (but leave VT1)
 	  */
 	 case VT_DISALLOCATE:
+		if (!suser())
+			return -EPERM;
 		if (arg > MAX_NR_CONSOLES)
 			return -ENXIO;
 		if (arg == 0) {
@@ -751,6 +776,8 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 	{
 		struct vt_sizes *vtsizes = (struct vt_sizes *) arg;
 		ushort ll,cc;
+		if (!suser())
+			return -EPERM;
 		i = verify_area(VERIFY_READ, (void *)vtsizes, sizeof(struct vt_sizes));
 		if (i)
 			return i;
@@ -760,6 +787,8 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 	}
 
 	case PIO_FONT:
+		if (!suser())
+			return -EPERM;
 		return con_set_font((char *)arg);
 		/* con_set_font() defined in console.c */
 
@@ -768,6 +797,8 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 		/* con_get_font() defined in console.c */
 
 	case PIO_SCRNMAP:
+		if (!suser())
+			return -EPERM;
 		return con_set_trans((char *)arg);
 		/* con_set_trans() defined in console.c */
 

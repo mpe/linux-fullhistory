@@ -234,8 +234,10 @@ extern const unsigned char scsi_command_size[8];
 
 #define TYPE_DISK	0x00
 #define TYPE_TAPE	0x01
+#define TYPE_PROCESSOR	0x03	/* HP scanners use this */
 #define TYPE_WORM	0x04	/* Treated as ROM by our system */
 #define TYPE_ROM	0x05
+#define TYPE_SCANNER	0x06
 #define TYPE_MOD	0x07  /* Magneto-optical disk - treated as TYPE_DISK */
 #define TYPE_NO_LUN	0x7f
 
