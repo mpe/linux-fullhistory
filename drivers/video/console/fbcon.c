@@ -204,8 +204,10 @@ static irqreturn_t fb_vbl_detect(int irq, void *dummy, struct pt_regs *fp)
 
 static inline int fbcon_is_inactive(struct vc_data *vc, struct fb_info *info)
 {
+	struct fbcon_ops *ops = info->fbcon_par;
+
 	return (info->state != FBINFO_STATE_RUNNING ||
-		vc->vc_mode != KD_TEXT);
+		vc->vc_mode != KD_TEXT || ops->graphics);
 }
 
 static inline int get_color(struct vc_data *vc, struct fb_info *info,
@@ -596,6 +598,8 @@ static void con2fb_init_display(struct vc_data *vc, struct fb_info *info,
 	if (info->fbops->fb_set_par)
 		info->fbops->fb_set_par(info);
 
+	ops->graphics = 0;
+
 	if (vc)
 		fbcon_set_disp(info, &info->var, vc);
 	else
@@ -763,6 +767,7 @@ static const char *fbcon_startup(void)
 
 	memset(ops, 0, sizeof(struct fbcon_ops));
 	ops->currcon = -1;
+	ops->graphics = 1;
 	info->fbcon_par = ops;
 	set_blitting_type(vc, info, NULL);
 
@@ -949,6 +954,7 @@ static void fbcon_init(struct vc_data *vc, int init)
 	if (CON_IS_VISIBLE(vc) && info->fbops->fb_set_par)
 		info->fbops->fb_set_par(info);
 
+	((struct fbcon_ops *) info->fbcon_par)->graphics = 0;
 
 	if ((cap & FBINFO_HWACCEL_COPYAREA) &&
 	    !(cap & FBINFO_HWACCEL_DISABLED))
@@ -1871,7 +1877,6 @@ static int fbcon_resize(struct vc_data *vc, unsigned int width,
 			var.activate = FB_ACTIVATE_NOW |
 				FB_ACTIVATE_FORCE;
 			fb_set_var(info, &var);
-			info->flags &= ~FBINFO_MISC_MODESWITCH;
 		}
 		var_to_display(p, &info->var, info);
 	}
@@ -1884,7 +1889,7 @@ static int fbcon_switch(struct vc_data *vc)
 	struct fb_info *info;
 	struct display *p = &fb_display[vc->vc_num];
 	struct fb_var_screeninfo var;
-	int i, prev_console, do_set_par = 0;
+	int i, prev_console;
 
 	info = registered_fb[con2fb_map[vc->vc_num]];
 
@@ -1943,14 +1948,9 @@ static int fbcon_switch(struct vc_data *vc)
 	fb_set_var(info, &var);
 
 	if (prev_console != -1 &&
-	    registered_fb[con2fb_map[prev_console]] != info)
-		do_set_par = 1;
-
-	if (do_set_par || info->flags & FBINFO_MISC_MODESWITCH) {
-		if (info->fbops->fb_set_par)
-			info->fbops->fb_set_par(info);
-		info->flags &= ~FBINFO_MISC_MODESWITCH;
-	}
+	    registered_fb[con2fb_map[prev_console]] != info &&
+	    info->fbops->fb_set_par)
+		info->fbops->fb_set_par(info);
 
 	set_blitting_type(vc, info, p);
 	((struct fbcon_ops *)info->fbcon_par)->cursor_reset = 1;
@@ -2013,29 +2013,20 @@ static int fbcon_blank(struct vc_data *vc, int blank, int mode_switch)
 {
 	struct fb_info *info = registered_fb[con2fb_map[vc->vc_num]];
 	struct fbcon_ops *ops = info->fbcon_par;
-	int active = !fbcon_is_inactive(vc, info);
 
 	if (mode_switch) {
 		struct fb_var_screeninfo var = info->var;
-/*
- * HACK ALERT: Some hardware will require reinitializion at this stage,
- *             others will require it to be done as late as possible.
- *             For now, we differentiate this with the
- *             FBINFO_MISC_MODESWITCHLATE bitflag.  Worst case will be
- *             hardware that requires it here and another one later.
- *             A definitive solution may require fixing X or the VT
- *             system.
- */
-		if (info->flags & FBINFO_MISC_MODESWITCHLATE)
-			info->flags |= FBINFO_MISC_MODESWITCH;
 
-		if (!blank && !(info->flags & FBINFO_MISC_MODESWITCHLATE)) {
+		ops->graphics = 1;
+
+		if (!blank) {
 			var.activate = FB_ACTIVATE_NOW | FB_ACTIVATE_FORCE;
 			fb_set_var(info, &var);
+			ops->graphics = 0;
 		}
 	}
 
- 	if (active) {
+ 	if (!fbcon_is_inactive(vc, info)) {
 		if (ops->blank_state != blank) {
 			ops->blank_state = blank;
 			fbcon_cursor(vc, blank ? CM_ERASE : CM_DRAW);

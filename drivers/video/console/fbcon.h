@@ -67,6 +67,7 @@ struct fbcon_ops {
 	int    cursor_flash;
 	int    cursor_reset;
 	int    blank_state;
+	int    graphics;
 	char  *cursor_data;
 };
     /*

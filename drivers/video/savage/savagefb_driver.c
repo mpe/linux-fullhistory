@@ -1883,8 +1883,7 @@ static int __devinit savage_init_fb_info (struct fb_info *info,
 	info->fbops          = &savagefb_ops;
 	info->flags          = FBINFO_DEFAULT |
 		               FBINFO_HWACCEL_YPAN |
-		               FBINFO_HWACCEL_XPAN |
-	                       FBINFO_MISC_MODESWITCHLATE;
+		               FBINFO_HWACCEL_XPAN;
 
 	info->pseudo_palette = par->pseudo_palette;
 

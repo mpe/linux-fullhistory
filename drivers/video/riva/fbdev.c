@@ -1708,8 +1708,7 @@ static int __devinit riva_set_fbinfo(struct fb_info *info)
 		    | FBINFO_HWACCEL_YPAN
 		    | FBINFO_HWACCEL_COPYAREA
 		    | FBINFO_HWACCEL_FILLRECT
-		    | FBINFO_HWACCEL_IMAGEBLIT
-	            | FBINFO_MISC_MODESWITCHLATE;
+	            | FBINFO_HWACCEL_IMAGEBLIT;
 
 	/* Accel seems to not work properly on NV30 yet...*/
 	if ((par->riva.Architecture == NV_ARCH_30) || noaccel) {

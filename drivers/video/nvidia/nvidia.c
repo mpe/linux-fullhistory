@@ -1191,6 +1191,7 @@ static int nvidiafb_check_var(struct fb_var_screeninfo *var,
 			var->yres_virtual = var->yres;
 			var->xres_virtual = vramlen / var->yres_virtual;
 			var->xres_virtual /= var->bits_per_pixel / 8;
+			var->xres_virtual &= ~63;
 			pitch = (var->xres_virtual *
 				 var->bits_per_pixel + 7) / 8;
 			memlen = pitch * var->yres;
@@ -1301,7 +1302,7 @@ static int __devinit nvidia_set_fbinfo(struct fb_info *info)
 	    | FBINFO_HWACCEL_IMAGEBLIT
 	    | FBINFO_HWACCEL_FILLRECT
 	    | FBINFO_HWACCEL_COPYAREA
-	    | FBINFO_HWACCEL_YPAN | FBINFO_MISC_MODESWITCHLATE;
+	    | FBINFO_HWACCEL_YPAN;
 
 	fb_videomode_to_modelist(info->monspecs.modedb,
 				 info->monspecs.modedb_len, &info->modelist);
