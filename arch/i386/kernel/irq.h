@@ -23,10 +23,7 @@ void init_pic_mode (void);
 
 extern unsigned int io_apic_irqs;
 
-extern inline int IO_APIC_VECTOR (int irq)
-{
-	return (0x51+(irq<<3));
-}
+#define IO_APIC_VECTOR(irq)	(0x51+((irq)<<3))
 
 #define MAX_IRQ_SOURCES 128
 #define MAX_MP_BUSSES 32

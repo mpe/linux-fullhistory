@@ -1118,13 +1118,14 @@ static int x25_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 			struct x25_facilities facilities;
 			if (copy_from_user(&facilities, (void *)arg, sizeof(facilities)))
 				return -EFAULT;
-			if (sk->state != TCP_LISTEN)
+			if (sk->state != TCP_LISTEN && sk->state != TCP_CLOSE)
 				return -EINVAL;
 			if (facilities.pacsize_in < X25_PS16 || facilities.pacsize_in > X25_PS4096)
 				return -EINVAL;
 			if (facilities.pacsize_out < X25_PS16 || facilities.pacsize_out > X25_PS4096)
 				return -EINVAL;
-			if (sk->protinfo.x25->neighbour->extended) {
+			if (sk->state == TCP_CLOSE || sk->protinfo.x25->neighbour->extended) 
+			{
 				if (facilities.winsize_in < 1 || facilities.winsize_in > 127)
 					return -EINVAL;
 				if (facilities.winsize_out < 1 || facilities.winsize_out > 127)

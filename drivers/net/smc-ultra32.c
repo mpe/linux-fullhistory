@@ -239,8 +239,9 @@ __initfunc(int ultra32_probe1(struct device *dev, int ioaddr))
 static int ultra32_open(struct device *dev)
 {
 	int ioaddr = dev->base_addr - ULTRA32_NIC_OFFSET; /* ASIC addr */
+	int irq_flags = (inb(ioaddr + ULTRA32_CFG5) & 0x08) ? 0 : SA_SHIRQ;
 
-	if (request_irq(dev->irq, ei_interrupt, 0, ei_status.name, dev))
+	if (request_irq(dev->irq, ei_interrupt, irq_flags, ei_status.name, dev))
 		return -EAGAIN;
 
 	outb(ULTRA32_MEMENB, ioaddr); /* Enable Shared Memory. */

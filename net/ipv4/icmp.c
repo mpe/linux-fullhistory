@@ -3,7 +3,7 @@
  *	
  *		Alan Cox, <alan@cymru.net>
  *
- *	Version: $Id: icmp.c,v 1.40 1998/04/11 09:38:24 freitag Exp $
+ *	Version: $Id: icmp.c,v 1.41 1998/04/29 22:12:10 alan Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *	modify it under the terms of the GNU General Public License
@@ -680,7 +680,7 @@ static void icmp_unreach(struct icmphdr *icmph, struct sk_buff *skb, int len)
 	if (inet_addr_type(iph->daddr) == RTN_BROADCAST)
 	{
 		if (net_ratelimit())
-			printk("%s sent an invalid ICMP error to a broadcast.\n",
+			printk(KERN_WARNING "%s sent an invalid ICMP error to a broadcast.\n",
 			       in_ntoa(skb->nh.iph->saddr));
 		return; 
 	}
@@ -856,6 +856,9 @@ static void icmp_timestamp(struct icmphdr *icmph, struct sk_buff *skb, int len)
  * All these rules are so bizarre, that I removed kernel addrmask
  * support at all. It is wrong, it is obsolete, nobody uses it in
  * any case. --ANK
+ *
+ * Furthermore you can do it with a usermode address agent program
+ * anyway...
  */
 
 static void icmp_address(struct icmphdr *icmph, struct sk_buff *skb, int len)

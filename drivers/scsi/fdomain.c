@@ -4,7 +4,7 @@
  * Author: Rickard E. Faith, faith@cs.unc.edu
  * Copyright 1992, 1993, 1994, 1995, 1996 Rickard E. Faith
  *
- * $Id: fdomain.c,v 5.45 1996/10/02 15:13:06 root Exp $
+ * Version 5.46 (23-04-1998)
 
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -19,8 +19,6 @@
  * You should have received a copy of the GNU General Public License along
  * with this program; if not, write to the Free Software Foundation, Inc.,
  * 675 Mass Ave, Cambridge, MA 02139, USA.
-
- * PCI detection rewritten by Martin Mares <mj@atrey.karlin.mff.cuni.cz>
 
  **************************************************************************
 
@@ -108,6 +106,7 @@
  1.3.85      5.41         4 Apr 1996
  2.0.12      5.44         8 Aug 1996  Use ID 7 for all PCI cards
  2.1.1       5.45         2 Oct 1996  Update ROM accesses for 2.1.x
+ 2.1.97      5.46	 23 Apr 1998  Rewritten PCI detection routines [mj]
 
  
 
@@ -205,6 +204,8 @@
 
  Thanks to Tom Cavin (tec@usa1.com) for preliminary command-line option
  patches.
+
+ New PCI detection code written by Martin Mares <mj@atrey.karlin.mff.cuni.cz>
  
  All of the alpha testers deserve much thanks.
 
@@ -886,7 +887,6 @@ int fdomain_16x0_detect( Scsi_Host_Template *tpnt )
 #endif
 #ifdef CONFIG_PCI
 	 printk( "\nTMC-3260 36C70 PCI scsi chip detection failed.\n" );
-	 printk( "Send mail to mckinley@msupa.pa.msu.edu.\n" );
 #endif
 	 return 0;		/* Cannot find valid set of ports */
       }

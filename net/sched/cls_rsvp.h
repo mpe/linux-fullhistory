@@ -66,6 +66,8 @@
    powerful clsssification engine.
  */
 
+#include <linux/config.h>
+
 struct rsvp_head
 {
 	u32			tmap[256/32];

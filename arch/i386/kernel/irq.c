@@ -68,9 +68,6 @@ static unsigned int cached_irq_mask = (1<<NR_IRQS)-1;
 
 spinlock_t irq_controller_lock;
 
-static unsigned int irq_events [NR_IRQS] = { -1, };
-static int disabled_irq [NR_IRQS] = { 0, };
-
 /*
  * Not all IRQs can be routed through the IO-APIC, eg. on certain (older)
  * boards the timer interrupt and sometimes the keyboard interrupt is
@@ -123,11 +120,34 @@ static struct hw_interrupt_type ioapic_irq_type = {
 };
 #endif
 
-struct hw_interrupt_type *irq_handles[NR_IRQS] =
-{
-	[0 ... 15] = &i8259A_irq_type			/* standard ISA IRQs */
+/*
+ * Status: reason for being disabled: somebody has
+ * done a "disable_irq()" or we must not re-enter the
+ * already executing irq..
+ */
+#define IRQ_INPROGRESS	1
+#define IRQ_DISABLED	2
+
+/*
+ * This is the "IRQ descriptor", which contains various information
+ * about the irq, including what kind of hardware handling it has,
+ * whether it is disabled etc etc.
+ *
+ * Pad this out to 32 bytes for cache and indexing reasons.
+ */
+typedef struct {
+	unsigned int status;			/* IRQ status - IRQ_INPROGRESS, IRQ_DISABLED */
+	unsigned int events;			/* Do we have any pending events? */
+	unsigned int ipi;			/* Have we sent off the pending IPI? */
+	struct hw_interrupt_type *handler;	/* handle/enable/disable functions */
+	struct irqaction *action;		/* IRQ action list */
+	unsigned int unused[3];
+} irq_desc_t;
+
+irq_desc_t irq_desc[NR_IRQS] = {
+	[0 ... 15] = { 0, 0, 0, &i8259A_irq_type, },	/* standard ISA IRQs */
 #ifdef __SMP__
-	, [16 ... NR_IRQS-1] = &ioapic_irq_type		/* 'high' PCI IRQs */
+	[16 ... 23] = { 0, 0, 0, &ioapic_irq_type, },	/* 'high' PCI IRQs */
 #endif
 };
 
@@ -174,6 +194,7 @@ void set_8259A_irq_mask(unsigned int irq)
 
 void unmask_generic_irq(unsigned int irq)
 {
+	irq_desc[irq].status = 0;
 	if (IO_APIC_IRQ(irq))
 		enable_IO_APIC_irq(irq);
 	else {
@@ -297,17 +318,6 @@ static struct irqaction irq13 = { math_error_irq, 0, 0, "fpu", NULL, NULL };
  */
 static struct irqaction irq2  = { no_action, 0, 0, "cascade", NULL, NULL};
 
-static struct irqaction *irq_action[NR_IRQS] = {
-	NULL, NULL, NULL, NULL,
-	NULL, NULL, NULL, NULL,
-	NULL, NULL, NULL, NULL,
-	NULL, NULL, NULL, NULL
-#ifdef __SMP__
-	,NULL, NULL, NULL, NULL,
-	NULL, NULL, NULL, NULL
-#endif
-};
-
 int get_irq_list(char *buf)
 {
 	int i, j;
@@ -320,7 +330,7 @@ int get_irq_list(char *buf)
 	*p++ = '\n';
 
 	for (i = 0 ; i < NR_IRQS ; i++) {
-		action = irq_action[i];
+		action = irq_desc[i].action;
 		if (!action) 
 			continue;
 		p += sprintf(p, "%3d: ",i);
@@ -628,7 +638,7 @@ static int handle_IRQ_event(unsigned int irq, struct pt_regs * regs)
 	int status;
 
 	status = 0;
-	action = *(irq + irq_action);
+	action = irq_desc[irq].action;
 
 	if (action) {
 		status |= 1;
@@ -668,7 +678,7 @@ void enable_8259A_irq (unsigned int irq)
 void make_8259A_irq (unsigned int irq)
 {
 	io_apic_irqs &= ~(1<<irq);
-	irq_handles[irq] = &i8259A_irq_type;
+	irq_desc[irq].handler = &i8259A_irq_type;
 	disable_irq(irq);
 	enable_irq(irq);
 }
@@ -682,6 +692,7 @@ void make_8259A_irq (unsigned int irq)
 static inline void mask_and_ack_8259A(unsigned int irq)
 {
 	spin_lock(&irq_controller_lock);
+	irq_desc[irq].status |= IRQ_INPROGRESS;
 	cached_irq_mask |= 1 << irq;
 	if (irq & 8) {
 		inb(0xA1);	/* DUMMY */
@@ -704,7 +715,8 @@ static void do_8259A_IRQ(unsigned int irq, int cpu, struct pt_regs * regs)
 
 	if (handle_IRQ_event(irq, regs)) {
 		spin_lock(&irq_controller_lock);
-		unmask_8259A(irq);
+		if (!(irq_desc[irq].status &= IRQ_DISABLED))
+			unmask_8259A(irq);
 		spin_unlock(&irq_controller_lock);
 	}
 
@@ -713,8 +725,6 @@ static void do_8259A_IRQ(unsigned int irq, int cpu, struct pt_regs * regs)
 
 #ifdef __SMP__
 
-static int ipi_pending [NR_IRQS] = { 0, };
-
 /*
  * In the SMP+IOAPIC case it might happen that there are an unspecified
  * number of pending IRQ events unhandled. These cases are very rare,
@@ -722,18 +732,13 @@ static int ipi_pending [NR_IRQS] = { 0, };
  * better to do it this way as thus we dont have to be aware of
  * 'pending' interrupts in the IRQ path, except at this point.
  */
-static inline void trigger_pending_irqs(unsigned int irq)
+static void enable_ioapic_irq(unsigned int irq)
 {
-	if (irq_events[irq] && !ipi_pending[irq]) {
-		ipi_pending[irq] = 1;
+	irq_desc_t *desc = irq_desc + irq;
+	if (desc->events && !desc->ipi) {
+		desc->ipi = 1;
 		send_IPI(APIC_DEST_SELF, IO_APIC_VECTOR(irq));
 	}
-}
-
-void enable_ioapic_irq (unsigned int irq)
-{
-	disabled_irq[irq] = 0;
-	trigger_pending_irqs(irq);
 }
 
 /*
@@ -741,26 +746,27 @@ void enable_ioapic_irq (unsigned int irq)
  */
 static void disable_ioapic_irq(unsigned int irq)
 {
-	disabled_irq[irq] = 1;
 }
 
 static void do_ioapic_IRQ(unsigned int irq, int cpu, struct pt_regs * regs)
 {
+	irq_desc_t *desc = irq_desc + irq;
+
 	spin_lock(&irq_controller_lock);
 
 	/* Ack the irq inside the lock! */
 	ack_APIC_irq();
-	ipi_pending[irq] = 0;
+	desc->ipi = 0;
 
-	/* If the irq is disabled, just set a flag and return */
-	if (disabled_irq[irq]) {
-		irq_events[irq] = 1;
+	/* If the irq is disabled for whatever reason, just set a flag and return */
+	if (desc->status & (IRQ_DISABLED | IRQ_INPROGRESS)) {
+		desc->events = 1;
 		spin_unlock(&irq_controller_lock);
 		return;
 	}
 
-	disabled_irq[irq] = 1;
-	irq_events[irq] = 0;
+	desc->status = IRQ_INPROGRESS;
+	desc->events = 0;
 	hardirq_enter(cpu);
 	spin_unlock(&irq_controller_lock);
 
@@ -769,18 +775,21 @@ static void do_ioapic_IRQ(unsigned int irq, int cpu, struct pt_regs * regs)
 	for (;;) {
 		int pending;
 
-		handle_IRQ_event(irq, regs);
+		/* If there is no IRQ handler, exit early, leaving the irq "in progress" */
+		if (!handle_IRQ_event(irq, regs))
+			goto no_handler;
 
 		spin_lock(&irq_controller_lock);
-		pending = irq_events[irq];
-		irq_events[irq] = 0;
-		disabled_irq[irq] = pending;
-		spin_unlock(&irq_controller_lock);
-
+		pending = desc->events;
+		desc->events = 0;
 		if (!pending)
 			break;
+		spin_unlock(&irq_controller_lock);
 	}
+	desc->status &= IRQ_DISABLED;
+	spin_unlock(&irq_controller_lock);
 
+no_handler:
 	hardirq_exit(cpu);
 	release_irqlock(cpu);
 }
@@ -790,15 +799,21 @@ static void do_ioapic_IRQ(unsigned int irq, int cpu, struct pt_regs * regs)
 
 /*
  * Generic enable/disable code: this just calls
- * down into the PIC-specific version after having
- * gotten the irq controller lock.
+ * down into the PIC-specific version for the actual
+ * hardware disable after having gotten the irq
+ * controller lock. 
  */
 void disable_irq(unsigned int irq)
 {
 	unsigned long flags;
 
 	spin_lock_irqsave(&irq_controller_lock, flags);
-	irq_handles[irq]->disable(irq);
+	/*
+	 * At this point we may actually have a pending interrupt being active
+	 * on another CPU. So don't touch the IRQ_INPROGRESS bit..
+	 */
+	irq_desc[irq].status |= IRQ_DISABLED;
+	irq_desc[irq].handler->disable(irq);
 	spin_unlock_irqrestore(&irq_controller_lock, flags);
 
 	synchronize_irq();
@@ -809,7 +824,16 @@ void enable_irq(unsigned int irq)
 	unsigned long flags;
 
 	spin_lock_irqsave(&irq_controller_lock, flags);
-	irq_handles[irq]->enable(irq);
+	/*
+	 * In contrast to the above, we should _not_ have any concurrent
+	 * interrupt activity here, so we just clear both disabled bits.
+	 *
+	 * This allows us to have IRQ_INPROGRESS set until we actually
+	 * install a handler for this interrupt (make irq autodetection
+	 * work by just looking at the status field for the irq)
+	 */
+	irq_desc[irq].status = 0;
+	irq_desc[irq].handler->enable(irq);
 	spin_unlock_irqrestore(&irq_controller_lock, flags);
 }
 
@@ -843,7 +867,7 @@ asmlinkage void do_IRQ(struct pt_regs regs)
 	int cpu = smp_processor_id();
 
 	kstat.irqs[cpu][irq]++;
-	irq_handles[irq]->handle(irq, cpu, &regs);
+	irq_desc[irq].handler->handle(irq, cpu, &regs);
 
 	/*
 	 * This should be conditional: we should really get
@@ -863,7 +887,7 @@ int setup_x86_irq(unsigned int irq, struct irqaction * new)
 	struct irqaction *old, **p;
 	unsigned long flags;
 
-	p = irq_action + irq;
+	p = &irq_desc[irq].action;
 	if ((old = *p) != NULL) {
 		/* Can't share interrupts unless both agree to */
 		if (!(old->flags & new->flags & SA_SHIRQ))
@@ -888,7 +912,7 @@ int setup_x86_irq(unsigned int irq, struct irqaction * new)
 		spin_lock(&irq_controller_lock);
 #ifdef __SMP__
 		if (IO_APIC_IRQ(irq)) {
-			irq_handles[irq] = &ioapic_irq_type;
+			irq_desc[irq].handler = &ioapic_irq_type;
 			/*
 			 * First disable it in the 8259A:
 			 */
@@ -946,7 +970,7 @@ void free_irq(unsigned int irq, void *dev_id)
 		printk("Trying to free IRQ%d\n",irq);
 		return;
 	}
-	for (p = irq + irq_action; (action = *p) != NULL; p = &action->next) {
+	for (p = &irq_desc[irq].action; (action = *p) != NULL; p = &action->next) {
 		if (action->dev_id != dev_id)
 			continue;
 
@@ -962,32 +986,29 @@ void free_irq(unsigned int irq, void *dev_id)
 }
 
 /*
- * probing is always single threaded [FIXME: is this true?]
+ * IRQ autodetection code..
+ *
+ * This depends on the fact that any interrupt that
+ * comes in on to an unassigned handler will get stuck
+ * with "IRQ_INPROGRESS" asserted and the interrupt
+ * disabled.
  */
-static unsigned int probe_irqs[NR_CPUS][NR_IRQS];
-
 unsigned long probe_irq_on (void)
 {
-	unsigned int i, j, irqs = 0;
+	unsigned int i, irqs = 0;
 	unsigned long delay;
-
-	/*
-	 * save current irq counts
-	 */
-	memcpy(probe_irqs,kstat.irqs,NR_CPUS*NR_IRQS*sizeof(int));
 
 	/*
 	 * first, enable any unassigned irqs
 	 */
+	spin_lock_irq(&irq_controller_lock);
 	for (i = NR_IRQS-1; i > 0; i--) {
-		if (!irq_action[i]) {
-			unsigned long flags;
-			spin_lock_irqsave(&irq_controller_lock, flags);
+		if (!irq_desc[i].action) {
 			unmask_generic_irq(i);
 			irqs |= (1 << i);
-			spin_unlock_irqrestore(&irq_controller_lock, flags);
 		}
 	}
+	spin_unlock_irq(&irq_controller_lock);
 
 	/*
 	 * wait for spurious interrupts to increase counters
@@ -998,35 +1019,35 @@ unsigned long probe_irq_on (void)
 	/*
 	 * now filter out any obviously spurious interrupts
 	 */
-	for (i=0; i<NR_IRQS; i++)
-		for (j=0; j<NR_CPUS; j++)
-			if (kstat.irqs[j][i] != probe_irqs[j][i])
-				irqs &= ~(1UL << i);
+	spin_lock_irq(&irq_controller_lock);
+	for (i=0; i<NR_IRQS; i++) {
+		if (irq_desc[i].status & IRQ_INPROGRESS)
+			irqs &= ~(1UL << i);
+	}
+	spin_unlock_irq(&irq_controller_lock);
 
 	return irqs;
 }
 
 int probe_irq_off (unsigned long irqs)
 {
-	int i,j, irq_found = -1;
+	int i, irq_found = -1;
 
+	spin_lock_irq(&irq_controller_lock);
 	for (i=0; i<NR_IRQS; i++) {
-		int sum = 0;
-		for (j=0; j<NR_CPUS; j++) {
-			sum += kstat.irqs[j][i];
-			sum -= probe_irqs[j][i];
-		}
-		if (sum && (irqs & (1UL << i))) {
+		if ((irqs & 1) && (irq_desc[i].status & IRQ_INPROGRESS)) {
 			if (irq_found != -1) {
 				irq_found = -irq_found;
 				goto out;
-			} else
-				irq_found = i;
+			}
+			irq_found = i;
 		}
+		irqs >>= 1;
 	}
 	if (irq_found == -1)
 		irq_found = 0;
 out:
+	spin_unlock_irq(&irq_controller_lock);
 	return irq_found;
 }
 
@@ -1048,7 +1069,7 @@ void init_IO_APIC_traps(void)
 	for (i = 0; i < NR_IRQS ; i++)
 		if (IO_APIC_VECTOR(i) <= 0xfe)  /* HACK */ {
 			if (IO_APIC_IRQ(i)) {
-				irq_handles[i] = &ioapic_irq_type;
+				irq_desc[i].handler = &ioapic_irq_type;
 				/*
 				 * First disable it in the 8259A:
 				 */
@@ -1070,8 +1091,8 @@ __initfunc(void init_IRQ(void))
 	outb(LATCH >> 8 , 0x40);	/* MSB */
 
 	for (i=0; i<NR_IRQS; i++) {
-		irq_events[i] = 0;
-		disabled_irq[i] = 0;
+		irq_desc[i].events = 0;
+		irq_desc[i].status = 0;
 	}
 	/*
 	 * 16 old-style INTA-cycle interrupt gates:

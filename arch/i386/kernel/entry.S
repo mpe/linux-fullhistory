@@ -155,7 +155,7 @@ ENTRY(system_call)
 	jae badsys
 	testb $0x20,flags(%ebx)		# PF_TRACESYS
 	jne tracesys
-	call SYMBOL_NAME(sys_call_table)(,%eax,4)
+	call *SYMBOL_NAME(sys_call_table)(,%eax,4)
 	movl %eax,EAX(%esp)		# save the return value
 	ALIGN
 	.globl ret_from_sys_call
@@ -193,7 +193,7 @@ tracesys:
 	movl $-ENOSYS,EAX(%esp)
 	call SYMBOL_NAME(syscall_trace)
 	movl ORIG_EAX(%esp),%eax
-	call SYMBOL_NAME(sys_call_table)(,%eax,4)
+	call *SYMBOL_NAME(sys_call_table)(,%eax,4)
 	movl %eax,EAX(%esp)		# save the return value
 	call SYMBOL_NAME(syscall_trace)
 	jmp ret_from_sys_call

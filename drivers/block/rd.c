@@ -328,7 +328,7 @@ void cleanup_module(void)
 
 #ifdef RD_LOADER 
 /*
- * This routine tries to a ramdisk image to load, and returns the
+ * This routine tries to find a ramdisk image to load, and returns the
  * number of blocks to read for a non-compressed image, 0 if the image
  * is a compressed image, and -1 if an image with the right magic
  * numbers could not be found.
@@ -503,15 +503,21 @@ __initfunc(static void rd_load_image(kdev_t device,int offset))
 	if (blk_size[MAJOR(device)])
 		devblocks = blk_size[MAJOR(device)][MINOR(device)];
 
+#ifdef CONFIG_BLK_DEV_INITRD
+	if (MAJOR(device) == MAJOR_NR && MINOR(device) == INITRD_MINOR)
+		devblocks = nblocks;
+#endif
+
 	if (devblocks == 0) {
 		printk(KERN_ERR "RAMDISK: could not determine device size\n");
 		goto done;
 	}
 
-	printk(KERN_NOTICE "RAMDISK: Loading %d blocks [%d disk(s)] into ram disk... ", nblocks, nblocks/devblocks+1);
+	printk(KERN_NOTICE "RAMDISK: Loading %d blocks [%d disk%s] into ram disk... ", 
+		nblocks, ((nblocks-1)/devblocks)+1, nblocks>devblocks ? "s" : "");
 	for (i=0; i < nblocks; i++) {
 		if (i && (i % devblocks == 0)) {
-			printk("done.\n");
+			printk("done disk #%d.\n", i/devblocks);
 			rotate = 0;
 			invalidate_buffers(device);
 			if (infile.f_op->release)

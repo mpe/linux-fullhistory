@@ -1441,9 +1441,8 @@ ncr_pci_init (Scsi_Host_Template *tpnt, int board, int chip,
 	    &command)) ||
 	(error = pcibios_read_config_byte (bus, device_fn, PCI_CLASS_REVISION,
 	    &revision))) {
-	printk ("scsi-ncr53c7,8xx : error %s not initializing due to error reading configuration space\n"
-		"	 perhaps you specified an incorrect PCI bus, device, or function.\n"
-		, pcibios_strerror(error));
+	printk ("scsi-ncr53c7,8xx : error %d not initializing due to error reading configuration space\n"
+		"	 perhaps you specified an incorrect PCI bus, device, or function.\n", error);
 	return -1;
     }
     io_port = pdev->base_address[0];

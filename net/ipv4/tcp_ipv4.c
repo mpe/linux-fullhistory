@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_ipv4.c,v 1.141 1998/04/24 19:38:19 freitag Exp $
+ * Version:	$Id: tcp_ipv4.c,v 1.142 1998/04/30 12:00:45 davem Exp $
  *
  *		IPv4 specific functions
  *
@@ -48,6 +48,7 @@
 
 #include <linux/config.h>
 #include <linux/types.h>
+#include <linux/stddef.h>
 #include <linux/fcntl.h>
 #include <linux/random.h>
 #include <linux/init.h>
@@ -60,9 +61,6 @@
 #include <asm/segment.h>
 
 #include <linux/inet.h>
-
-/* That should be really in a standard kernel include file. */
-#define offsetof(t,m) ((unsigned int) (&((t *)0)->m))
 
 extern int sysctl_tcp_timestamps;
 extern int sysctl_tcp_window_scaling;

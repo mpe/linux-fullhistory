@@ -11,6 +11,7 @@
  * the bridge optimization, but others might appear later.
  */
 
+#include <linux/config.h>
 #include <linux/types.h>
 #include <linux/kernel.h>
 #include <linux/pci.h>
