@@ -415,6 +415,8 @@ config UNORDERED_IO
 	 from i386. Requires that the driver writer used memory barriers
 	 properly.
 
+source "drivers/pci/pcie/Kconfig"
+
 source "drivers/pci/Kconfig"
 
 source "drivers/pcmcia/Kconfig"
