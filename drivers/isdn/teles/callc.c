@@ -47,6 +47,7 @@
  */
 #define __NO_VERSION__
 #include "teles.h"
+#include <asm/uaccess.h>
 
 extern struct IsdnCard cards[];
 extern int      nrcards;

@@ -106,6 +106,7 @@
  *
  */
 
+#include <asm/uaccess.h>
 #include <linux/config.h>
 #define __NO_VERSION__
 #include <linux/module.h>

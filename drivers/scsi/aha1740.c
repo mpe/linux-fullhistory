@@ -336,11 +336,11 @@ int aha1740_queuecommand(Scsi_Cmnd * SCpnt, void (*done)(Scsi_Cmnd *))
 	if (cptr == NULL) panic("aha1740.c: unable to allocate DMA memory\n");
 	for(i=0; i<SCpnt->use_sg; i++)
 	{
-	    cptr[i].dataptr = (long) sgpnt[i].address;
 	    cptr[i].datalen = sgpnt[i].length;
+	    cptr[i].dataptr = virt_to_bus(sgpnt[i].address);
 	}
 	ecb[ecbno].datalen = SCpnt->use_sg * sizeof(struct aha1740_chain);
-	ecb[ecbno].dataptr = (long) cptr;
+	ecb[ecbno].dataptr = virt_to_bus(cptr);
 #ifdef DEBUG
 	printk("cptr %x: ",cptr);
 	ptr = (unsigned char *) cptr;
@@ -351,15 +351,15 @@ int aha1740_queuecommand(Scsi_Cmnd * SCpnt, void (*done)(Scsi_Cmnd *))
     {
 	SCpnt->host_scribble = NULL;
 	ecb[ecbno].datalen = bufflen;
-	ecb[ecbno].dataptr = (long) buff;
+	ecb[ecbno].dataptr = virt_to_bus(buff);
     }
     ecb[ecbno].lun = SCpnt->lun;
     ecb[ecbno].ses = 1;	/* Suppress underrun errors */
     ecb[ecbno].dir= direction;
     ecb[ecbno].ars=1;  /* Yes, get the sense on an error */
     ecb[ecbno].senselen = 12;
-    ecb[ecbno].senseptr = (long) ecb[ecbno].sense;
-    ecb[ecbno].statusptr = (long) ecb[ecbno].status;
+    ecb[ecbno].senseptr = virt_to_bus(ecb[ecbno].sense);
+    ecb[ecbno].statusptr = virt_to_bus(ecb[ecbno].status);
     ecb[ecbno].done = done;
     ecb[ecbno].SCpnt = SCpnt;
 #ifdef DEBUG

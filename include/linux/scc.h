@@ -1,9 +1,7 @@
-/* $Id: scc.h,v 1.26 1996/10/09 16:35:56 jreuter Exp jreuter $ */
+/* $Id: scc.h,v 1.28 1996/10/30 20:01:15 jreuter Exp jreuter $ */
 
 #ifndef	_SCC_H
 #define	_SCC_H
-
-#include <linux/if_ether.h>
 
 /* selection of hardware types */
 
@@ -13,10 +11,6 @@
 #define PRIMUS		0x04	/* hardware type for PRIMUS-PC (DG9BL) card */
 #define DRSI		0x08	/* hardware type for DRSI PC*Packet card */
 #define BAYCOM		0x10	/* hardware type for BayCom (U)SCC */
-
-/* Paranoia check... */
-
-#define SCC_PARANOIA_CHECK	/* tell the user if something is going wrong */
 
 /* DEV ioctl() commands */
 
@@ -103,48 +97,7 @@
 #define TXS_WAIT	5	/* Waiting for Mintime to expire */
 #define TXS_TIMEOUT	6	/* We had a transmission timeout */
 
-#define TX_ON		1	/* command for scc_key_trx() */
-#define TX_OFF		0	/* dto */
-
-/* Vector masks in RR2B */
-
-#define VECTOR_MASK	0x06
-#define TXINT		0x00
-#define EXINT		0x02
-#define RXINT		0x04
-#define SPINT		0x06
-
 typedef unsigned long io_port;	/* type definition for an 'io port address' */
-
-#ifdef SCC_DELAY
-#define Inb(port)	inb_p(port)
-#define Outb(port, val)	outb_p(val, port)
-#else
-#define Inb(port)	inb(port)
-#define Outb(port, val)	outb(val, port)
-#endif
-
-#define TIMER_OFF 65535U
-
-/* SCC channel control structure for KISS */
-
-struct scc_kiss {
-	unsigned char txdelay;		/* Transmit Delay 10 ms/cnt */
-	unsigned char persist;		/* Persistence (0-255) as a % */
-	unsigned char slottime;		/* Delay to wait on persistence hit */
-	unsigned char tailtime;		/* Delay after last byte written */
-	unsigned char fulldup;		/* Full Duplex mode 0=CSMA 1=DUP 2=ALWAYS KEYED */
-	unsigned char waittime;		/* Waittime before any transmit attempt */
-	unsigned int  maxkeyup;		/* Maximum time to transmit (seconds) */
-	unsigned char mintime;		/* Minimal offtime after MAXKEYUP timeout (seconds) */
-	unsigned int  idletime;		/* Maximum idle time in ALWAYS KEYED mode (seconds) */
-	unsigned int  maxdefer;		/* Timer for CSMA channel busy limit */
-	unsigned char tx_inhibit;	/* Transmit is not allowed when set */	
-	unsigned char group;		/* Group ID for AX.25 TX interlocking */
-	unsigned char mode;		/* 'normal' or 'hwctrl' mode (unused) */
-	unsigned char softdcd;		/* Use DPLL instead of DCD pin for carrier detect */
-};
-
 
 /* SCC statistical information */
 
@@ -207,6 +160,48 @@ struct scc_mem_config {
 };
 
 
+#ifdef __KERNEL__
+
+#define TX_ON		1	/* command for scc_key_trx() */
+#define TX_OFF		0	/* dto */
+
+/* Vector masks in RR2B */
+
+#define VECTOR_MASK	0x06
+#define TXINT		0x00
+#define EXINT		0x02
+#define RXINT		0x04
+#define SPINT		0x06
+
+
+#ifdef SCC_DELAY
+#define Inb(port)	inb_p(port)
+#define Outb(port, val)	outb_p(val, port)
+#else
+#define Inb(port)	inb(port)
+#define Outb(port, val)	outb(val, port)
+#endif
+
+/* SCC channel control structure for KISS */
+
+struct scc_kiss {
+	unsigned char txdelay;		/* Transmit Delay 10 ms/cnt */
+	unsigned char persist;		/* Persistence (0-255) as a % */
+	unsigned char slottime;		/* Delay to wait on persistence hit */
+	unsigned char tailtime;		/* Delay after last byte written */
+	unsigned char fulldup;		/* Full Duplex mode 0=CSMA 1=DUP 2=ALWAYS KEYED */
+	unsigned char waittime;		/* Waittime before any transmit attempt */
+	unsigned int  maxkeyup;		/* Maximum time to transmit (seconds) */
+	unsigned char mintime;		/* Minimal offtime after MAXKEYUP timeout (seconds) */
+	unsigned int  idletime;		/* Maximum idle time in ALWAYS KEYED mode (seconds) */
+	unsigned int  maxdefer;		/* Timer for CSMA channel busy limit */
+	unsigned char tx_inhibit;	/* Transmit is not allowed when set */	
+	unsigned char group;		/* Group ID for AX.25 TX interlocking */
+	unsigned char mode;		/* 'normal' or 'hwctrl' mode (unused) */
+	unsigned char softdcd;		/* Use DPLL instead of DCD pin for carrier detect */
+};
+
+
 /* SCC channel structure */
 
 struct scc_channel {
@@ -235,7 +230,7 @@ struct scc_channel {
         struct scc_stat stat;		/* statistical information */
         struct scc_modem modem; 	/* modem information */
         
-        struct sk_buff *tx_next_buff;	/* next tx buffer */
+        struct sk_buff_head tx_queue;	/* next tx buffer */
         struct sk_buff *rx_buff;	/* pointer to frame currently received */
         struct sk_buff *tx_buff;	/* pointer to frame currently transmitted */
 
@@ -246,4 +241,5 @@ struct scc_channel {
 };
 
 int scc_init(void);
-#endif
+#endif /* defined(__KERNEL__) */
+#endif /* defined(_SCC_H) */

@@ -73,6 +73,7 @@
 
 /* TODO: right tbusy handling when using MP */
 
+#include <asm/uaccess.h>
 #include <linux/config.h>
 #define __NO_VERSION__
 #include <linux/module.h>
@@ -391,7 +392,7 @@ int isdn_ppp_ioctl(int min, struct file *file, unsigned int cmd, unsigned long a
 	switch (cmd) {
 	case PPPIOCBUNDLE:
 #ifdef CONFIG_ISDN_MPP
-		if ((r = get_user(val, arg)))
+		if ((r = get_user(val, argp)))
 			return r;
 		printk(KERN_DEBUG "iPPP-bundle: minor: %d, slave unit: %d, master unit: %d\n",
                         (int) min, (int) is->unit, (int) val);
@@ -588,7 +589,6 @@ int isdn_ppp_read(int min, struct file *file, char *buf, int count)
 {
 	struct ippp_struct *is;
 	struct ippp_buf_queue *b;
-	int r;
 	unsigned long flags;
 
 	is = file->private_data;
@@ -1445,7 +1445,6 @@ static int isdn_ppp_dev_ioctl_stats(int slot,struct ifreq *ifr,struct device *de
 {
 	struct ppp_stats *res, t;
 	isdn_net_local *lp = (isdn_net_local *) dev->priv;
-	int err;
 
 	res = (struct ppp_stats *) ifr->ifr_ifru.ifru_data;
 
@@ -1476,7 +1475,7 @@ static int isdn_ppp_dev_ioctl_stats(int slot,struct ifreq *ifr,struct device *de
 
 int isdn_ppp_dev_ioctl(struct device *dev, struct ifreq *ifr, int cmd)
 {
-	int error;
+	int error = 0;
 	char *r;
 	int len;
 	isdn_net_local *lp = (isdn_net_local *) dev->priv;

@@ -33,7 +33,7 @@
 #include <linux/errno.h>
 #include <linux/mm.h>
 #include <linux/ftape.h>
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 
 #include "tracing.h"
 #include "ftape-write.h"

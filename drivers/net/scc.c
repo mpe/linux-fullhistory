@@ -1,4 +1,4 @@
-#define RCS_ID "$Id: scc.c,v 1.63 1996/10/09 16:45:47 jreuter Exp jreuter $"
+#define RCS_ID "$Id: scc.c,v 1.64 1996/10/30 18:58:26 jreuter Exp jreuter $"
 
 #define VERSION "3.0"
 #define BANNER  "Z8530 SCC driver version "VERSION".dl1bke (experimental) by DL1BKE\n"
@@ -78,13 +78,12 @@
    		  * Source moved to drivers/net/
    		  * Includes Z8530 defines from drivers/net/z8530.h
    		  * Uses sk_buffer memory management
-   		  * Doesn't have own queues anymore
    		  * Reduced overhead of /proc/net/z8530drv output
    		  * Streamlined quite a lot things
    		  * Invents brand new bugs... ;-)
 
    		  The move to version number 3.0 reflects theses changes.
-   		  You can use version 2.4 if you need a KISS TNC emulator.
+   		  You can use version 2.4a if you need a KISS TNC emulator.
 
    Thanks to all who contributed to this driver with ideas and bug
    reports!
@@ -120,6 +119,7 @@
 
 #define MAXSCC          4       /* number of max. supported chips */
 #define BUFSIZE         384     /* must not exceed 4096 */
+#define MAXQUEUE	8	/* number of buffers we queue ourself */
 #undef  DISABLE_ALL_INTS	/* use cli()/sti() in ISR instead of */
 				/* enable_irq()/disable_irq()        */
 #undef	SCC_DEBUG
@@ -129,8 +129,6 @@
 /* ----------------------------------------------------------------------- */
 
 #include <linux/module.h>
-#include <linux/config.h>
-
 #include <linux/errno.h>
 #include <linux/signal.h>
 #include <linux/sched.h>
@@ -149,6 +147,8 @@
 #include <linux/if_ether.h>
 #include <linux/if_arp.h>
 #include <linux/socket.h>
+
+#include <linux/config.h> /* for CONFIG_PROC_FS */
 
 #include <linux/scc.h>
 #include "z8530.h"
@@ -309,7 +309,6 @@ scc_lock_dev(struct scc_channel *scc)
 static __inline__ void
 scc_unlock_dev(struct scc_channel *scc)
 {
-	scc->tx_next_buff = NULL;
 	scc->dev->tbusy = 0;
 }
 
@@ -327,12 +326,9 @@ scc_discard_buffers(struct scc_channel *scc)
 		scc->tx_buff = NULL;
 	}
 	
-	if (scc->tx_next_buff != NULL)
-	{
-		dev_kfree_skb(scc->tx_next_buff, FREE_WRITE);
-		scc->tx_next_buff = NULL;
-	}
-	
+	while (skb_queue_len(&scc->tx_queue))
+		dev_kfree_skb(skb_dequeue(&scc->tx_queue), FREE_WRITE);
+
 	restore_flags(flags);
 }
 
@@ -399,8 +395,9 @@ scc_txint(struct scc_channel *scc)
 	
 	if (skb == NULL)
 	{
-		skb = scc->tx_next_buff;
+		skb = skb_dequeue(&scc->tx_queue);
 		scc->tx_buff = skb;
+		scc_unlock_dev(scc);
 
 		if (skb == NULL)
 		{
@@ -417,8 +414,6 @@ scc_txint(struct scc_channel *scc)
 			Outb(scc->ctrl, RES_Tx_P);
 			return;
 		}
-		
-		scc_unlock_dev(scc);
 
 		scc->stat.tx_state = TXS_ACTIVE;
 
@@ -1150,7 +1145,7 @@ t_dwait(unsigned long channel)
 	
 	if (scc->stat.tx_state == TXS_WAIT)	/* maxkeyup or idle timeout */
 	{
-		if (scc->tx_next_buff == NULL)	/* nothing to send */
+		if (skb_queue_len(&scc->tx_queue) == 0)	/* nothing to send */
 		{
 			scc->stat.tx_state = TXS_IDLE;
 			scc_unlock_dev(scc);	/* t_maxkeyup locked it. */
@@ -1620,7 +1615,8 @@ scc_net_open(struct device *dev)
 
 	MOD_INC_USE_COUNT;
 	
-	scc->tx_buff = scc->tx_next_buff = NULL;
+	scc->tx_buff = NULL;
+	skb_queue_head_init(&scc->tx_queue);
  
 	init_channel(scc);
 
@@ -1746,19 +1742,12 @@ scc_net_tx(struct sk_buff *skb, struct device *dev)
 	save_flags(flags);
 	cli();
 	
-	scc_lock_dev(scc);
+	__skb_queue_tail(&scc->tx_queue, skb);
 	
-	if (scc->tx_next_buff != NULL)
-	{
-		printk(KERN_ERR "z8530drv: race condition, discarding frame\n");
-		dev_kfree_skb(skb, FREE_WRITE);
+	if (skb_queue_len(&scc->tx_queue) == MAXQUEUE)
 		scc_lock_dev(scc);
-		restore_flags(flags);
-		return 0;
-	}
-	
+
 	dev->trans_start = jiffies;
-	scc->tx_next_buff = skb;
 
 	/*
 	 * Start transmission if the trx state is idle or
@@ -1798,10 +1787,10 @@ scc_net_ioctl(struct device *dev, struct ifreq *ifr, int cmd)
 	struct scc_kiss_cmd kiss_cmd;
 	struct scc_mem_config memcfg;
 	struct scc_hw_config hwcfg;
-	unsigned char device_name[10];
-	struct scc_channel *scc;
 	int chan;
+	unsigned char device_name[10];
 	void *arg;
+	struct scc_channel *scc;
 	
 	scc = (struct scc_channel *) dev->priv;
 	if (scc == NULL || scc->magic != SCC_MAGIC)
@@ -1964,7 +1953,8 @@ scc_net_ioctl(struct device *dev, struct ifreq *ifr, int cmd)
 				scc->kiss.softdcd = 0;		/* hardware dcd */
 			}
 			
-			scc->tx_buff = scc->tx_next_buff = NULL;
+			scc->tx_buff = NULL;
+			skb_queue_head_init(&scc->tx_queue);
 			scc->init = 1;
 			
 			return 0;

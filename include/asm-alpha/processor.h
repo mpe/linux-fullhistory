@@ -20,15 +20,6 @@
 #define MCA_bus 0
 #define MCA_bus__is_a_macro /* for versions in ksyms.c */
 
-/*
- * The VM exception save area. We need to save only the
- * exception count, so that the exception handling can know
- * whether the system is set up to handle exceptions..
- */
-struct exception_struct {
-	unsigned long count;
-};
-
 struct thread_struct {
 	/* the fields below are used by PALcode and must match struct pcb: */
 	unsigned long ksp;
@@ -45,12 +36,10 @@ struct thread_struct {
 	unsigned long res1, res2;
 
 	/* the fields below are Linux-specific: */
-	/*
-	 * bit 0:    perform syscall argument validation (get/set_fs)
-	 * bit 1..5: IEEE_TRAP_ENABLE bits (see fpu.h)
-	 */
+	/* bit 1..5: IEEE_TRAP_ENABLE bits (see fpu.h) */
 	unsigned long flags;
-	struct exception_struct ex;
+	/* perform syscall argument validation (get/set_fs) */
+	unsigned long fs;
 };
 
 #define INIT_MMAP { &init_mm, 0xfffffc0000000000,  0xfffffc0010000000, \
@@ -61,7 +50,7 @@ struct thread_struct {
 	0, 0, 0, \
 	0, 0, 0, \
 	0, \
-	{ 0 } \
+	0 \
 }
 
 #define alloc_kernel_stack()    __get_free_page(GFP_KERNEL)

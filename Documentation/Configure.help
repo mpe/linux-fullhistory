@@ -1875,17 +1875,29 @@ CONFIG_SCC
   running kernel whenever you want), say M here and read
   Documentation/modules.txt.
 
-BAYCOM ser12 and par96 kiss emulation driver for AX.25
+BAYCOM ser12 and par96 driver for AX.25
 CONFIG_BAYCOM
   This is an experimental driver for Baycom style simple amateur radio
   modems that connect to either a serial interface or a parallel
   interface. The driver supports the ser12 and par96 designs. To
-  configure the driver, use the setbaycom utility available from
-  http://www.ife.ee.ethz.ch/~sailer/ham/ham.html#lnxbay. For
-  information on the modems, see http://www.baycom.de and
-  drivers/char/README.baycom.  If you want to compile this as a module
-  ( = code which can be inserted in and removed from the running
-  kernel whenever you want), say M here and read
+  configure the driver, use the sethdlc utility available
+  in the standard ax25 utilities package. For information on the modems,
+  see http://www.baycom.de and drivers/net/README.baycom.
+  If you want to compile this as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want),
+  say M here and read Documentation/modules.txt. This is recommended.
+
+Soundcard modem driver for AX.25
+CONFIG_SOUNDMODEM
+  This experimental driver allows a standard SoundBlaster or 
+  WindowsSoundSystem compatible soundcard to be used as a packet radio
+  modem. To configure the driver, use the sethdlc, smdiag and smmixer
+  utilities available in the standard ax25 utilities package. For
+  informations on how to key the transmitter, see
+  http://www.ife.ee.ethz.ch/~sailer/pcf/ptt_circ/ptt.html and
+  drivers/net/README.soundmodem. If you want to compile this as a
+  module ( = code which can be inserted in and removed from the
+  running kernel whenever you want), say M here and read
   Documentation/modules.txt. This is recommended.
 
 PLIP (parallel port) support

@@ -1369,6 +1369,9 @@ extern int pi_init(void);
 extern int scc_init(void);
 extern void sdla_setup(void);
 extern void dlci_setup(void);
+extern int pt_init(void);
+extern int sm_init(void);
+extern int baycom_init(void);
 
 #ifdef CONFIG_PROC_FS
 static struct proc_dir_entry proc_net_dev = {
@@ -1419,6 +1422,12 @@ int net_dev_init(void)
 #endif
 #if defined(CONFIG_SDLA)
 	sdla_setup();
+#endif
+#if defined(CONFIG_BAYCOM)
+	baycom_init();
+#endif
+#if defined(CONFIG_SOUNDMODEM)
+	sm_init();
 #endif
 	/*
 	 *	SLHC if present needs attaching so other people see it

@@ -52,14 +52,24 @@ extern void die_if_kernel(char *,struct pt_regs *,long);
  *	-1 = instruction fetch
  *	0 = load
  *	1 = store
+ *
+ * Registers $9 through $15 are saved in a block just prior to `regs' and
+ * are saved and restored around the call to allow exception code to
+ * modify them.
  */
-asmlinkage void do_page_fault(unsigned long address, unsigned long mmcsr, long cause,
-	unsigned long a3, unsigned long a4, unsigned long a5,
-	struct pt_regs regs)
+
+/* Macro for exception fixup code to access integer registers.  */
+#define dpf_reg(r) \
+	(((unsigned long *)regs)[(r) <= 8 ? (r) : (r) <= 15 ? (r)-16 : \
+				 (r) <= 18 ? (r)+8 : (r)-10])
+
+asmlinkage void do_page_fault(unsigned long address, unsigned long mmcsr,
+			      long cause, struct pt_regs *regs)
 {
 	struct vm_area_struct * vma;
 	struct task_struct *tsk = current;
 	struct mm_struct *mm = tsk->mm;
+	unsigned fixup;
 
 	down(&mm->mmap_sem);
 	vma = find_vma(mm, address);
@@ -97,18 +107,21 @@ good_area:
  */
 bad_area:
 	up(&mm->mmap_sem);
-	/* Did we have an exception handler installed? */
-	if (current->tss.ex.count == 1) {
-		printk("Taking exception at %lx (%lx)\n", regs.pc, regs.r28);
-		current->tss.ex.count = 0;
-		/* return to the address in r28 */
-		(&regs)->pc = regs.r28;
+
+	/* Are we prepared to handle this fault as an exception?  */
+	if ((fixup = search_exception_table(regs->pc)) != 0) {
+		unsigned long newpc;
+		newpc = fixup_exception(dpf_reg, fixup, regs->pc);
+		printk("Taking exception at %lx (%lx)\n", regs->pc, newpc);
+		regs->pc = newpc;
 		return;
 	}
-	if (user_mode(&regs)) {
-		printk("%s: memory violation at pc=%08lx rp=%08lx (bad address = %08lx)\n",
-			tsk->comm, regs.pc, regs.r26, address);
-		die_if_kernel("oops", &regs, cause);
+
+	if (user_mode(regs)) {
+		printk("%s: memory violation at pc=%08lx ra=%08lx "
+		       "(bad address = %08lx)\n",
+			tsk->comm, regs->pc, regs->r26, address);
+		die_if_kernel("oops", regs, cause);
 		force_sig(SIGSEGV, tsk);
 		return;
 	}
@@ -116,8 +129,8 @@ bad_area:
  * Oops. The kernel tried to access some bad page. We'll have to
  * terminate things with extreme prejudice.
  */
-	printk(KERN_ALERT 
-	       "Unable to handle kernel paging request at virtual address %016lx\n", address);
-	die_if_kernel("Oops", &regs, cause);
+	printk(KERN_ALERT "Unable to handle kernel paging request at "
+	       "virtual address %016lx\n", address);
+	die_if_kernel("Oops", regs, cause);
 	do_exit(SIGKILL);
 }

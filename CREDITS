@@ -668,7 +668,7 @@ S: Chapel Hill, North Carolina 27514-4818
 S: USA
 
 N: Bernhard Kaindl
-E: bartelt@computerhaus.at
+E: edv@bartelt.via.at
 D: Author of a menu based configuration tool, kmenu, which 
 D: is the predecessor of 'make menuconfig' and 'make xconfig'.
 S: Tallak 95
@@ -1161,7 +1161,8 @@ D: the gpm mouse server and kernel support for it
 
 N: Thomas Sailer
 E: sailer@ife.ee.ethz.ch
-D: Baycom radio modem driver
+E: HB9JNX@HB9W.CHE.EU (packet radio)
+D: Baycom and Soundcard radio modem driver
 S: Weinbergstrasse 76
 S: 8408 Winterthur
 S: Switzerland

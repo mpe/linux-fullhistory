@@ -14,7 +14,7 @@
 #define osf_vfork sys_fork
 
 /*
- * These offsets must match with "struct hae" in io.h:	
+ * These offsets must match with "struct hae" in io.h:
  */
 #define HAE_CACHE	0
 #define HAE_REG		8
@@ -142,9 +142,29 @@ entInt:
 .ent	entMM
 entMM:
 	SAVE_ALL
-	lda	$27,do_page_fault
-	lda	$26,ret_from_sys_call
-	jsr	$31,($27),do_page_fault
+/* save $9 - $15 so the inline exception code can manipulate them.  */
+	subq	$30,56,$30
+	stq	$9,0($30)
+	stq	$10,8($30)
+	stq	$11,16($30)
+	stq	$12,24($30)
+	stq	$13,32($30)
+	stq	$14,40($30)
+	stq	$15,48($30)
+	addq	$30,56,$19
+/* handle the fault */
+	jsr	$26,do_page_fault
+/* reload the registers after the exception code played.  */
+	ldq	$9,0($30)
+	ldq	$10,8($30)
+	ldq	$11,16($30)
+	ldq	$12,24($30)
+	ldq	$13,32($30)
+	ldq	$14,40($30)
+	ldq	$15,48($30)
+	addq	$30,56,$30
+/* finish up the syscall as normal.  */
+	br	ret_from_sys_call
 .end entMM
 
 .align 3
@@ -190,7 +210,7 @@ kernel_clone:
 	SAVE_ALL
 	lda $27,sys_clone
 	jsr $26,($27),sys_clone
-	stq $0,0($30)	
+	stq $0,0($30)
 	br $31,ret_from_sys_call
 .end	kernel_clone
 
@@ -424,7 +444,7 @@ entUnaUser:
 
 /*
  * A fork is the same as clone(SIGCHLD, 0);
-*/
+ */
 .align 3
 .globl	sys_fork
 .ent	sys_fork
@@ -508,7 +528,7 @@ ret_from_sys_call:
 	ldq	$4,0($2)
 	addq	$1,1,$1
 	and	$3,$4,$2
-	bne	$2,handle_bottom_half	
+	bne	$2,handle_bottom_half
 ret_from_handle_bh:
 	ldq	$0,SP_OFF($30)
 	and	$0,8,$0
@@ -529,9 +549,9 @@ ret_from_reschedule:
 restore_all:
 	RESTORE_ALL
 	rti
-	
-	
-/* PTRACE syscall handler */	
+
+
+/* PTRACE syscall handler */
 .align 3
 strace:
 	/* set up signal stack, call syscall_trace */
@@ -588,7 +608,7 @@ strace_error:
 	lda     $27,syscall_trace
 	jsr     $26,($27),syscall_trace
 	bis	$9,$9,$19
-	bis	$10,$10,$20	
+	bis	$10,$10,$20
 	bsr	$1,undo_switch_stack
 
 	bis	$31,$31,$26	/* tell "ret_from_sys_call" that we can restart */

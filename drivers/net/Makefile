@@ -18,6 +18,8 @@ CONFIG_8390_BUILTIN :=
 CONFIG_8390_MODULE  :=
 CONFIG_SLHC_BUILTIN :=
 CONFIG_SLHC_MODULE  :=
+CONFIG_HDLCDRV_BUILTIN :=
+CONFIG_HDLCDRV_MODULE  :=
 
 ifeq ($(CONFIG_ISDN),y)
   ifeq ($(CONFIG_ISDN_PPP),y)
@@ -517,6 +519,37 @@ else
   M_OBJS += dgrs.o
   endif
 endif
+
+ifeq ($(CONFIG_BAYCOM),y)
+L_OBJS += baycom.o
+CONFIG_HDLCDRV_BUILTIN = y
+else
+  ifeq ($(CONFIG_BAYCOM),m)
+  CONFIG_HDLCDRV_MODULE = y
+  M_OBJS += baycom.o
+  endif
+endif
+
+ifeq ($(CONFIG_SOUNDMODEM),y)
+L_OBJS += soundmodem.o
+CONFIG_HDLCDRV_BUILTIN = y
+else
+  ifeq ($(CONFIG_SOUNDMODEM),m)
+  CONFIG_HDLCDRV_MODULE = y
+  M_OBJS += soundmodem.o
+  endif
+endif
+
+# If anything built-in uses the hdlcdrv, then build it into the kernel also.
+# If not, but a module uses it, build as a module.
+ifdef CONFIG_HDLCDRV_BUILTIN
+LX_OBJS += hdlcdrv.o
+else
+  ifdef CONFIG_HDLCDRV_MODULE
+  MX_OBJS += hdlcdrv.o
+  endif
+endif
+
 
 include $(TOPDIR)/Rules.make
 

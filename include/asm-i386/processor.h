@@ -41,16 +41,6 @@ extern int EISA_bus;
 #define TASK_SIZE	(0xC0000000UL)
 
 /*
- * VM exception register save area..
- *
- * When no exceptions are active, count = -1.
- */
-struct exception_struct {
-	unsigned long count;
-	unsigned long eip;
-};
-
-/*
  * Size of io_bitmap in longwords: 32 is ports 0-0x3ff.
  */
 #define IO_BITMAP_SIZE	32
@@ -120,7 +110,6 @@ struct thread_struct {
 	struct vm86_struct * vm86_info;
 	unsigned long screen_bitmap;
 	unsigned long v86flags, v86mask, v86mode;
-	struct exception_struct ex;
 };
 
 #define INIT_MMAP { &init_mm, 0xC0000000, 0xFFFFF000, PAGE_SHARED, VM_READ | VM_WRITE | VM_EXEC }
@@ -139,7 +128,6 @@ struct thread_struct {
 	_TSS(0), 0, 0, 0, KERNEL_DS, \
 	{ { 0, }, },  /* 387 state */ \
 	NULL, 0, 0, 0, 0 /* vm86_info */, \
-	{ -1, } \
 }
 
 #define alloc_kernel_stack()    __get_free_page(GFP_KERNEL)

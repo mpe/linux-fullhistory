@@ -1,5 +1,9 @@
-#ifndef _ASM_SEGMENT_H
-#define _ASM_SEGMENT_H
+#ifndef __ALPHA_UACCESS_H
+#define __ALPHA_UACCESS_H
+
+#include <linux/errno.h>
+#include <linux/sched.h>
+
 
 /*
  * The fs value determines whether argument validity checking should be
@@ -9,19 +13,15 @@
  * For historical reasons, these macros are grossly misnamed.
  */
 
-#define KERNEL_DS	0
-#define USER_DS		1
+#define KERNEL_DS	(0UL)
+#define USER_DS		(-0x40000000000UL)
 
 #define VERIFY_READ	0
 #define VERIFY_WRITE	1
 
-#define get_fs()  (current->tss.flags & 0x1)
-#define set_fs(x) (current->tss.flags = (current->tss.flags & ~0x1) | ((x) & 0x1))
-
-static inline unsigned long get_ds(void)
-{
-	return 0;
-}
+#define get_fs()  (current->tss.fs)
+#define set_fs(x) (current->tss.fs = (x))
+#define get_ds()  (KERNEL_DS)
 
 /*
  * Is a address valid? This does a straighforward calculation rather
@@ -34,11 +34,16 @@ static inline unsigned long get_ds(void)
  *  - OR we are in kernel mode.
  */
 #define __access_ok(addr,size,mask) \
-	(((mask)&((addr | size | (addr+size)) >> 42))==0)
-#define __access_mask (-(long)get_fs())
+	(((mask) & (addr | size | (addr+size))) == 0)
+#define __access_mask get_fs()
 
 #define access_ok(type,addr,size) \
 	__access_ok(((unsigned long)(addr)),(size),__access_mask)
+
+extern inline int verify_area(int type, const void * addr, unsigned long size)
+{
+	return access_ok(type,addr,size) ? 0 : -EFAULT;
+}
 
 /*
  * These are the main single-value transfer routines.  They automatically
@@ -52,56 +57,39 @@ static inline unsigned long get_ds(void)
  * (a) re-use the arguments for side effects (sizeof/typeof is ok)
  * (b) require any knowledge of processes at this stage
  */
-#define put_user(x,ptr)	__put_user_check((x),(ptr),sizeof(*(ptr)),__access_mask)
-#define get_user(x,ptr) __get_user_check((x),(ptr),sizeof(*(ptr)),__access_mask)
+#define put_user(x,ptr) \
+  __put_user_check((__typeof__(*(ptr)))(x),(ptr),sizeof(*(ptr)),__access_mask)
+#define get_user(x,ptr) \
+  __get_user_check((x),(ptr),sizeof(*(ptr)),__access_mask)
 
 /*
  * The "__xxx" versions do not do address space checking, useful when
- * doing multiple accesses to the same area (the user has to do the
+ * doing multiple accesses to the same area (the programmer has to do the
  * checks by hand with "access_ok()")
  */
-#define __put_user(x,ptr) __put_user_nocheck((x),(ptr),sizeof(*(ptr)))
-#define __get_user(x,ptr) __get_user_nocheck((x),(ptr),sizeof(*(ptr)))
-
-#define copy_to_user(to,from,n)   __copy_tofrom_user((to),(from),(n),__cu_to)
-#define copy_from_user(to,from,n) __copy_tofrom_user((to),(from),(n),__cu_from)
+#define __put_user(x,ptr) \
+  __put_user_nocheck((__typeof__(*(ptr)))(x),(ptr),sizeof(*(ptr)))
+#define __get_user(x,ptr) \
+  __get_user_nocheck((x),(ptr),sizeof(*(ptr)))
 
 /*
- * Not pretty? What do you mean not "not pretty"?
+ * The "lda %1, 2b-1b(%0)" bits are magic to get the assembler to
+ * encode the bits we need for resolving the exception.  See the
+ * more extensive comments with fixup_inline_exception below for
+ * more information.
  */
-extern void __copy_user(void);
-
-#define __copy_tofrom_user(to,from,n,v)					    \
-({									    \
-	register void * __cu_to __asm__("$6") = (to);			    \
-	register const void * __cu_from __asm__("$7") = (from);		    \
-	register long __cu_len __asm__("$0") = (n);			    \
-	if (__access_ok(((long)(v)),__cu_len,__access_mask)) {		    \
-		register void * __cu_ex __asm__("$8");			    \
-		__cu_ex = &current->tss.ex;				    \
-		__asm__ __volatile__(					    \
-			"jsr $28,(%7),__copy_user"			    \
-			: "=r" (__cu_len), "=r" (__cu_from), "=r" (__cu_to) \
-			: "0" (__cu_len), "1" (__cu_from), "2" (__cu_to),   \
-			  "r" (__cu_ex), "r" (__copy_user)		    \
-			: "$1","$2","$3","$4","$5","$28","memory");	    \
-	}								    \
-	__cu_len;							    \
-})
 
 extern void __get_user_unknown(void);
 
 #define __get_user_nocheck(x,ptr,size)				\
 ({								\
-	long __gu_err = -EFAULT, __gu_val = 0;			\
-	const __typeof__(*(ptr)) *__gu_addr = (ptr);		\
-	long __gu_ex_count = current->tss.ex.count;		\
+	long __gu_err = 0, __gu_val;				\
 	switch (size) {						\
-	case 1: __get_user_8; break;				\
-	case 2: __get_user_16; break;				\
-	case 4: __get_user_32; break;				\
-	case 8: __get_user_64; break;				\
-	default: __get_user_unknown(); break;			\
+	  case 1: __get_user_8(ptr); break;			\
+	  case 2: __get_user_16(ptr); break;			\
+	  case 4: __get_user_32(ptr); break;			\
+	  case 8: __get_user_64(ptr); break;			\
+	  default: __get_user_unknown(); break;			\
 	}							\
 	(x) = (__typeof__(*(ptr))) __gu_val;			\
 	__gu_err;						\
@@ -112,99 +100,110 @@ extern void __get_user_unknown(void);
 	long __gu_err = -EFAULT, __gu_val = 0;			\
 	const __typeof__(*(ptr)) *__gu_addr = (ptr);		\
 	if (__access_ok((long)__gu_addr,size,mask)) {		\
-		long __gu_ex_count = current->tss.ex.count;	\
+		__gu_err = 0;					\
 		switch (size) {					\
-		case 1: __get_user_8; break;			\
-		case 2: __get_user_16; break;			\
-		case 4: __get_user_32; break;			\
-		case 8: __get_user_64; break;			\
-		default: __get_user_unknown(); break;		\
+		  case 1: __get_user_8(__gu_addr); break;	\
+		  case 2: __get_user_16(__gu_addr); break;	\
+		  case 4: __get_user_32(__gu_addr); break;	\
+		  case 8: __get_user_64(__gu_addr); break;	\
+		  default: __get_user_unknown(); break;		\
 		}						\
 	}							\
 	(x) = (__typeof__(*(ptr))) __gu_val;			\
 	__gu_err;						\
 })
 
-#define __get_user_64							   \
-	__asm__("/* Inline __get_user_64 */\n\t"			   \
-		"br $28,1f\n\t"		/* set up exception address */	   \
-		"br 2f\n"		/* exception! */		   \
-		"1:\t"							   \
-		"stq %5,%3\n\t"		/* store inc'ed exception count */ \
-		"ldq %1,%2\n\t"		/* actual data load */		   \
-		"stq %4,%3\n\t"		/* restore exception count */	   \
-		"clr %0\n"		/* no exception: error = 0 */	   \
-		"2:\t/* End __get_user_64 */"				   \
-		: "=r"(__gu_err), "=r"(__gu_val)			   \
-		: "m"(*__gu_addr), "m"(current->tss.ex.count),		   \
-		  "r"(__gu_ex_count), "r"(__gu_ex_count+1),		   \
-		  "0"(__gu_err), "1"(__gu_val)				   \
-		: "$28")
+struct __large_struct { unsigned long buf[100]; };
+#define __m(x) (*(struct __large_struct *)(x))
 
-#define __get_user_32							   \
-	__asm__("/* Inline __get_user_32 */\n\t"			   \
-		"br $28,1f\n\t"		/* set up exception address */	   \
-		"br 2f\n"		/* exception! */		   \
-		"1:\t"							   \
-		"stq %5,%3\n\t"		/* store inc'ed exception count */ \
-		"ldl %1,%2\n\t"		/* actual data load */		   \
-		"stq %4,%3\n\t"		/* restore exception count */	   \
-		"clr %0\n"		/* no exception: error = 0 */	   \
-		"2:\t/* End __get_user_32 */"				   \
-		: "=r"(__gu_err), "=r"(__gu_val)			   \
-		: "m"(*__gu_addr), "m"(current->tss.ex.count),		   \
-		  "r"(__gu_ex_count), "r"(__gu_ex_count+1),		   \
-		  "0"(__gu_err), "1"(__gu_val)				   \
-		: "$28")
+#define __get_user_64(addr)				\
+	__asm__("1: ldq %0,%2\n"			\
+	"2:\n"						\
+	".section __ex_table,\"a\"\n"			\
+	"	.gprel32 1b\n"				\
+	"	lda %0, 2b-1b(%1)\n"			\
+	".text"						\
+		: "=r"(__gu_val), "=r"(__gu_err)	\
+		: "m"(__m(addr)), "1"(__gu_err))
 
-#define __get_user_16							   \
-	__asm__("/* Inline __get_user_16 */\n\t"			   \
-		"br $28,1f\n\t"		/* set up exception address */	   \
-		"br 2f\n"		/* exception! */		   \
-		"1:\t"							   \
-		"stq %6,%4\n\t"		/* store inc'ed exception count */ \
-		"ldq_u %1,%2\n\t"	/* actual data load */		   \
-		"stq %5,%4\n\t"		/* restore exception count */	   \
-		"clr %0\n\t"		/* no exception: error = 0 */	   \
-		"extwl %1,%3,%1\n"	/* extract the short */		   \
-		"2:\t/* End __get_user_16 */"				   \
-		: "=r"(__gu_err), "=r"(__gu_val)			   \
-		: "m"(*__gu_addr), "r"(__gu_addr),			   \
-		  "m"(current->tss.ex.count), "r"(__gu_ex_count),	   \
-		  "r"(__gu_ex_count+1), "0"(__gu_err), "1"(__gu_val)	   \
-		: "$28")
+#define __get_user_32(addr)				\
+	__asm__("1: ldl %0,%2\n"			\
+	"2:\n"						\
+	".section __ex_table,\"a\"\n"			\
+	"	.gprel32 1b\n"				\
+	"	lda %0, 2b-1b(%1)\n"			\
+	".text"						\
+		: "=r"(__gu_val), "=r"(__gu_err)	\
+		: "m"(__m(addr)), "1"(__gu_err))
 
-#define __get_user_8							   \
-	__asm__("/* Inline __get_user_8 */\n\t"				   \
-		"br $28,1f\n\t"		/* set up exception address */	   \
-		"br 2f\n"		/* exception! */		   \
-		"1:\t"							   \
-		"stq %6,%4\n\t"		/* store inc'ed exception count */ \
-		"ldq_u %1,%2\n\t"	/* actual data load */		   \
-		"stq %5,%4\n\t"		/* restore exception count */	   \
-		"clr %0\n\t"		/* no exception: error = 0 */	   \
-		"extbl %1,%3,%1\n"	/* extract the byte */		   \
-		"2:\t/* End __get_user_8 */"				   \
-		: "=r"(__gu_err), "=r"(__gu_val)			   \
-		: "m"(*__gu_addr), "r"(__gu_addr),			   \
-		  "m"(current->tss.ex.count), "r"(__gu_ex_count),	   \
-		  "r"(__gu_ex_count+1), "0"(__gu_err), "1"(__gu_val)	   \
-		: "$28")
+#ifdef __HAVE_CPU_BWX
+/* Those lucky bastards with ev56 and later cpus can do byte/word moves.  */
+
+#define __get_user_16(addr)				\
+	__asm__("1: ldwu %0,%2\n"			\
+	"2:\n"						\
+	".section __ex_table,\"a\"\n"			\
+	"	.gprel32 1b\n"				\
+	"	lda %0, 2b-1b(%1)\n"			\
+	".text"						\
+		: "=r"(__gu_val), "=r"(__gu_err)	\
+		: "m"(__m(addr)), "1"(__gu_err))
+
+#define __get_user_8(addr)				\
+	__asm__("1: ldbu %0,%2\n"			\
+	"2:\n"						\
+	".section __ex_table,\"a\"\n"			\
+	"	.gprel32 1b\n"				\
+	"	lda %0, 2b-1b(%1)\n"			\
+	".text"						\
+		: "=r"(__gu_val), "=r"(__gu_err)	\
+		: "m"(__m(addr)), "1"(__gu_err))
+#else
+/* Unfortunately, we can't get an unaligned access trap for the sub-word
+   load, so we have to do a general unaligned operation.  */
+
+#define __get_user_16(addr)						\
+{									\
+	long __gu_tmp;							\
+	__asm__("1: ldq_u %0,0(%3)\n"					\
+	"2:	ldq_u %1,1(%3)\n"					\
+	"	extwl %0,%3,%0\n"					\
+	"	extwh %1,%3,%1\n"					\
+	"	or %0,%1,%0\n"						\
+	"3:\n"								\
+	".section __ex_table,\"a\"\n"					\
+	"	.gprel32 1b\n"						\
+	"	lda %0, 3b-1b(%2)\n"					\
+	"	.gprel32 2b\n"						\
+	"	lda %0, 2b-1b(%2)\n"					\
+	".text"								\
+		: "=&r"(__gu_val), "=&r"(__gu_tmp), "=r"(__gu_err)	\
+		: "r"(addr), "2"(__gu_err));				\
+}
+
+#define __get_user_8(addr)						\
+	__asm__("1: ldq_u %0,0(%2)\n"					\
+	"	extbl %0,%2,%0\n"					\
+	"2:\n"								\
+	".section __ex_table,\"a\"\n"					\
+	"	.gprel32 1b\n"						\
+	"	lda %0, 2b-1b(%1)\n"					\
+	".text"								\
+		: "=&r"(__gu_val), "=r"(__gu_err)			\
+		: "r"(addr), "1"(__gu_err))
+#endif
 
 extern void __put_user_unknown(void);
 
 #define __put_user_nocheck(x,ptr,size)				\
 ({								\
-	long __pu_err = -EFAULT;				\
-	__typeof__(*(ptr)) *__pu_addr = (ptr);			\
-        __typeof__(*(ptr)) __pu_val = (x);			\
-	long __pu_ex_count = current->tss.ex.count;		\
+	long __pu_err = 0;					\
 	switch (size) {						\
-	case 1: __put_user_8; break;				\
-	case 2: __put_user_16; break;				\
-	case 4: __put_user_32; break;				\
-	case 8: __put_user_64; break;				\
-	default: __put_user_unknown(); break;			\
+	  case 1: __put_user_8(x,ptr); break;			\
+	  case 2: __put_user_16(x,ptr); break;			\
+	  case 4: __put_user_32(x,ptr); break;			\
+	  case 8: __put_user_64(x,ptr); break;			\
+	  default: __put_user_unknown(); break;			\
 	}							\
 	__pu_err;						\
 })
@@ -213,94 +212,148 @@ extern void __put_user_unknown(void);
 ({								\
 	long __pu_err = -EFAULT;				\
 	__typeof__(*(ptr)) *__pu_addr = (ptr);			\
-        __typeof__(*(ptr)) __pu_val = (x);			\
 	if (__access_ok((long)__pu_addr,size,mask)) {		\
-		long __pu_ex_count = current->tss.ex.count;	\
+		__pu_err = 0;					\
 		switch (size) {					\
-		case 1: __put_user_8; break;			\
-		case 2: __put_user_16; break;			\
-		case 4: __put_user_32; break;			\
-		case 8: __put_user_64; break;			\
-		default: __put_user_unknown(); break;		\
+		  case 1: __put_user_8(x,__pu_addr); break;	\
+		  case 2: __put_user_16(x,__pu_addr); break;	\
+		  case 4: __put_user_32(x,__pu_addr); break;	\
+		  case 8: __put_user_64(x,__pu_addr); break;	\
+		  default: __put_user_unknown(); break;		\
 		}						\
 	}							\
 	__pu_err;						\
 })
 
-#define __put_user_64							   \
-	__asm__("/* Inline __put_user_64 */\n\t"			   \
-		"br $28,1f\n\t"		/* set up exception address */	   \
-		"br 2f\n"		/* exception! */		   \
-		"1:\t"							   \
-		"stq %5,%3\n\t"		/* store inc'ed exception count */ \
-		"stq %2,%1\n\t"		/* actual data store */		   \
-		"stq %4,%3\n\t"		/* restore exception count */	   \
-		"clr %0\n"		/* no exception: error = 0 */	   \
-		"2:\t/* End __put_user_64 */"				   \
-		: "=r"(__pu_err), "=m"(*__pu_addr)			   \
-		: "r"(__pu_val), "m"(current->tss.ex.count),		   \
-		  "r"(__pu_ex_count), "r"(__pu_ex_count+1),		   \
-		  "0"(__pu_err)						   \
-		: "$28")
+/*
+ * The "__put_user_xx()" macros tell gcc they read from memory
+ * instead of writing: this is because they do not write to
+ * any memory gcc knows about, so there are no aliasing issues
+ */
+#define __put_user_64(x,addr)					\
+__asm__ __volatile__("1: stq %r2,%1\n"				\
+	"2:\n"							\
+	".section __ex_table,\"a\"\n"				\
+	"	.gprel32 1b\n"					\
+	"	lda $31,2b-1b(%0)\n"				\
+	".text"							\
+		: "=r"(__pu_err)				\
+		: "m" (__m(addr)), "rJ" (x), "0"(__pu_err))
 
-#define __put_user_32							   \
-	__asm__("/* Inline __put_user_32 */\n\t"			   \
-		"br $28,1f\n\t"		/* set up exception address */	   \
-		"br 2f\n"		/* exception! */		   \
-		"1:\t"							   \
-		"stq %5,%3\n\t"		/* store inc'ed exception count */ \
-		"stl %2,%1\n\t"		/* actual data store */		   \
-		"stq %4,%3\n\t"		/* restore exception count */	   \
-		"clr %0\n"		/* no exception: error = 0 */	   \
-		"2:\t/* End __put_user_32 */"				   \
-		: "=r"(__pu_err), "=m"(*__pu_addr)			   \
-		: "r"(__pu_val), "m"(current->tss.ex.count),		   \
-		  "r"(__pu_ex_count), "r"(__pu_ex_count+1),		   \
-		  "0"(__pu_err)						   \
-		: "$28")
+#define __put_user_32(x,addr)					\
+__asm__ __volatile__("1: stl %r2,%1\n"				\
+	"2:\n"							\
+	".section __ex_table,\"a\"\n"				\
+	"	.gprel32 1b\n"					\
+	"	lda $31,2b-1b(%0)\n"				\
+	".text"							\
+		: "=r"(__pu_err)				\
+		: "m"(__m(addr)), "rJ"(x), "0"(__pu_err))
 
-#define __put_user_16							   \
-	__asm__("/* Inline __put_user_16 */\n\t"			   \
-		"br $28,1f\n\t"		/* set up exception address */	   \
-		"lda %0,%7\n\t"		/* exception! error = -EFAULT */   \
-		"br 2f\n"						   \
-		"1:\t"							   \
-		"stq %6,%4\n\t"		/* store inc'ed exception count */ \
-		"ldq_u %0,%1\n\t"	/* masked data store */		   \
-		"inswl %2,%3,%2\n\t"					   \
-		"mskwl %0,%3,%0\n\t"					   \
-		"or %0,%2,%2\n\t"					   \
-		"stq_u %2,%1\n\t"					   \
-		"stq %5,%4\n\t"		/* restore exception count */	   \
-		"clr %0\n"		/* no exception: error = 0 */	   \
-		"2:\t/* End __put_user_16 */"				   \
-		: "=r"(__pu_err), "=m"(*__pu_addr), "=r"(__pu_val)	   \
-		: "r"(__pu_addr), "m"(current->tss.ex.count),		   \
-		  "r"(__pu_ex_count), "r"(__pu_ex_count+1), "i"(-EFAULT),  \
-		  "2"(__pu_val)						   \
-		: "$28")
+#ifdef __HAVE_CPU_BWX
+/* Those lucky bastards with ev56 and later cpus can do byte/word moves.  */
 
-#define __put_user_8							   \
-	__asm__("/* Inline __put_user_8 */\n\t"				   \
-		"br $28,1f\n\t"		/* set up exception address */	   \
-		"lda %0,%7\n\t"		/* exception! error = -EFAULT */   \
-		"br 2f\n"						   \
-		"1:\t"							   \
-		"stq %6,%4\n\t"		/* store inc'ed exception count */ \
-		"ldq_u %0,%1\n\t"	/* masked data store */		   \
-		"insbl %2,%3,%2\n\t"					   \
-		"mskbl %0,%3,%0\n\t"					   \
-		"or %0,%2,%2\n\t"					   \
-		"stq_u %2,%1\n\t"					   \
-		"stq %5,%4\n\t"		/* restore exception count */	   \
-		"clr %0\n"		/* no exception: error = 0 */	   \
-		"2:\t/* End __put_user_8 */"				   \
-		: "=r"(__pu_err), "=m"(*__pu_addr), "=r"(__pu_val)	   \
-		: "r"(__pu_addr), "m"(current->tss.ex.count),		   \
-		  "r"(__pu_ex_count), "r"(__pu_ex_count+1), "i"(-EFAULT),  \
-		  "2"(__pu_val)						   \
-		: "$28")
+#define __put_user_16(x,addr)					\
+__asm__ __volatile__("1: stw %r2,%1\n"				\
+	"2:\n"							\
+	".section __ex_table,\"a\"\n"				\
+	"	.gprel32 1b\n"					\
+	"	lda $31,2b-1b(%0)\n"				\
+	".text"							\
+		: "=r"(__pu_err)				\
+		: "m"(__m(addr)), "rJ"(x), "0"(__pu_err))
 
+#define __put_user_8(x,addr)					\
+__asm__ __volatile__("1: stb %r2,%1\n"				\
+	"2:\n"							\
+	".section __ex_table,\"a\"\n"				\
+	"	.gprel32 1b\n"					\
+	"	lda $31,2b-1b(%0)\n"				\
+	".text"							\
+		: "=r"(__pu_err)				\
+		: "m"(__m(addr)), "rJ"(x), "0"(__pu_err))
+#else
+/* Unfortunately, we can't get an unaligned access trap for the sub-word
+   write, so we have to do a general unaligned operation.  */
+
+#define __put_user_16(x,addr)					\
+{								\
+	long __pu_tmp1, __pu_tmp2, __pu_tmp3, __pu_tmp4;	\
+	__asm__ __volatile__(					\
+	"1:	ldq_u %2,1(%5)\n"				\
+	"2:	ldq_u %1,0(%5)\n"				\
+	"	inswh %6,%5,%4\n"				\
+	"	inswl %6,%5,%3\n"				\
+	"	mskwh %2,%5,%2\n"				\
+	"	mskwl %1,%5,%1\n"				\
+	"	or %2,%4,%2\n"					\
+	"	or %1,%3,%1\n"					\
+	"3:	stq_u %2,1(%5)\n"				\
+	"4:	stq_u %1,0(%5)\n"				\
+	"5:\n"							\
+	".section __ex_table,\"a\"\n"				\
+	"	.gprel32 1b\n"					\
+	"	lda $31, 5b-1b(%0)\n"				\
+	"	.gprel32 2b\n"					\
+	"	lda $31, 5b-2b(%0)\n"				\
+	"	.gprel32 3b\n"					\
+	"	lda $31, 5b-3b(%0)\n"				\
+	"	.gprel32 4b\n"					\
+	"	lda $31, 5b-4b(%0)\n"				\
+	".text"							\
+		: "=r"(__pu_err), "=&r"(__pu_tmp1),		\
+		  "=&r"(__pu_tmp2), "=&r"(__pu_tmp3),		\
+		  "=&r"(__pu_tmp4)				\
+		: "r"(addr), "r"((unsigned long)(x)), "0"(__pu_err)); \
+}
+
+#define __put_user_8(x,addr)					\
+{								\
+	long __pu_tmp1, __pu_tmp2;				\
+	__asm__ __volatile__(					\
+	"1:	ldq_u %1,0(%4)\n"				\
+	"	insbl %3,%4,%2\n"				\
+	"	mskbl %1,%4,%1\n"				\
+	"	or %1,%2,%1\n"					\
+	"2:	stq_u %1,0(%4)\n"				\
+	"3:\n"							\
+	".section __ex_table,\"a\"\n"				\
+	"	.gprel32 1b\n"					\
+	"	lda $31, 3b-1b(%0)\n"				\
+	"	.gprel32 2b\n"					\
+	"	lda $31, 3b-2b(%0)\n"				\
+	".text"							\
+		: "=r"(__pu_err),				\
+	  	  "=&r"(__pu_tmp1), "=&r"(__pu_tmp2)		\
+		: "r"((unsigned long)(x)), "r"(addr), "0"(__pu_err)); \
+}
+#endif
+
+
+/*
+ * Complex access routines
+ */
+
+#define copy_to_user(to,from,n)   __copy_tofrom_user((to),(from),(n),__cu_to)
+#define copy_from_user(to,from,n) __copy_tofrom_user((to),(from),(n),__cu_from)
+
+extern void __copy_user(void);
+
+#define __copy_tofrom_user(to,from,n,v)					    \
+({									    \
+	register void * __cu_to __asm__("$6") = (to);			    \
+	register const void * __cu_from __asm__("$7") = (from);		    \
+	register long __cu_len __asm__("$0") = (n);			    \
+	if (__access_ok(((long)(v)),__cu_len,__access_mask)) {		    \
+		__asm__ __volatile__(					    \
+			"jsr $28,(%3),__copy_user"			    \
+			: "=r" (__cu_len), "=r" (__cu_from), "=r" (__cu_to) \
+			: "r" (__copy_user), "0" (__cu_len),		    \
+			  "1" (__cu_from), "2" (__cu_to)   		    \
+			: "$1","$2","$3","$4","$5","$28","memory");	    \
+	}								    \
+	__cu_len;							    \
+})
 
 extern void __clear_user(void);
 
@@ -309,13 +362,10 @@ extern void __clear_user(void);
 	register void * __cl_to __asm__("$6") = (to);			\
 	register long __cl_len __asm__("$0") = (n);			\
 	if (__access_ok(((long)__cl_to),__cl_len,__access_mask)) {	\
-		register void * __cl_ex __asm__("$7");			\
-		__cl_ex = &current->tss.ex;				\
 		__asm__ __volatile__(					\
 			"jsr $28,(%2),__clear_user"			\
 			: "=r"(__cl_len), "=r"(__cl_to)			\
-			: "r"(__clear_user), "r"(__cl_ex),		\
-			  "0"(__cl_len), "1"(__cl_to)			\
+			: "r"(__clear_user), "0"(__cl_len), "1"(__cl_to)\
 			: "$1","$2","$3","$4","$5","$28","memory");	\
 	}								\
 	__cl_len;							\
@@ -325,24 +375,66 @@ extern void __clear_user(void);
 /* Returns: -EFAULT if exception before terminator, N if the entire
    buffer filled, else strlen.  */
 
-struct exception_struct;
-extern long __strncpy_from_user(char *__to, const char *__from,
-				long __to_len, struct exception_struct *);
+extern long __strncpy_from_user(char *__to, const char *__from, long __to_len);
 
 #define strncpy_from_user(to,from,n)					      \
 ({									      \
 	char * __sfu_to = (to);						      \
 	const char * __sfu_from = (from);				      \
 	long __sfu_len = (n), __sfu_ret = -EFAULT;			      \
-	if (__access_ok(((long)__sfu_from),__sfu_len,__access_mask)) {	      \
-		__sfu_ret = __strncpy_from_user(__sfu_to,__sfu_from,	      \
-						__sfu_len, &current->tss.ex); \
+	if (__access_ok(((long)__sfu_from),__sfu_len,__access_mask))	      \
+		__sfu_ret=__strncpy_from_user(__sfu_to,__sfu_from,__sfu_len); \
 	__sfu_ret;							      \
 })
 
-extern inline int verify_area(int type, const void * addr, unsigned long size)
-{
-	return access_ok(type,addr,size)?0:-EFAULT;
-}
 
-#endif /* _ASM_SEGMENT_H */
+/*
+ * About the exception table:
+ *
+ * - insn is a 32-bit offset off of the kernel's or module's gp.
+ * - nextinsn is a 16-bit offset off of the faulting instruction
+ *   (not off of the *next* instruction as branches are).
+ * - errreg is the register in which to place -EFAULT.
+ * - valreg is the final target register for the load sequence
+ *   and will be zeroed.
+ *
+ * Either errreg or valreg may be $31, in which case nothing happens.
+ *
+ * The exception fixup information "just so happens" to be arranged
+ * as in a MEM format instruction.  This lets us emit our three
+ * values like so:
+ *
+ *      lda valreg, nextinsn(errreg)
+ *
+ */
+
+struct exception_table_entry
+{
+	signed int insn;
+	union exception_fixup {
+		unsigned unit;
+		struct {
+			signed int nextinsn : 16;
+			unsigned int errreg : 5;
+			unsigned int valreg : 5;
+		} bits;
+	} fixup;
+};
+
+/* Returns 0 if exception not found and fixup.unit otherwise.  */
+extern unsigned search_exception_table(unsigned long);
+
+/* Returns the new pc */
+#define fixup_exception(map_reg, fixup_unit, pc)		\
+({								\
+	union exception_fixup __fie_fixup;			\
+	__fie_fixup.unit = fixup_unit;				\
+	if (__fie_fixup.bits.valreg != 31)			\
+		map_reg(__fie_fixup.bits.valreg) = 0;		\
+	if (__fie_fixup.bits.errreg != 31)			\
+		map_reg(__fie_fixup.bits.errreg) = -EFAULT;	\
+	(pc) + __fie_fixup.bits.nextinsn;			\
+})
+
+
+#endif /* __ALPHA_UACCESS_H */

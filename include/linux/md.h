@@ -18,7 +18,6 @@
 #ifndef _MD_H
 #define _MD_H
 
-#include <asm/segment.h>
 #include <linux/major.h>
 #include <linux/mm.h>
 #include <linux/ioctl.h>

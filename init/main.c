@@ -172,6 +172,9 @@ extern void riscom8_setup(char *str, int *ints);
 #ifdef CONFIG_BAYCOM
 extern void baycom_setup(char *str, int *ints);
 #endif
+#ifdef CONFIG_SOUNDMODEM
+extern void sm_setup(char *str, int *ints);
+#endif
 
 
 #if defined(CONFIG_SYSVIPC) || defined(CONFIG_KERNELD)
@@ -414,6 +417,9 @@ struct {
 #endif
 #ifdef CONFIG_BAYCOM
 	{ "baycom=", baycom_setup },
+#endif
+#ifdef CONFIG_SOUNDMODEM
+	{ "soundmodem=", sm_setup },
 #endif
 	{ 0, 0 }
 };

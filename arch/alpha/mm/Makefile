@@ -7,7 +7,7 @@
 #
 # Note 2! The CFLAGS definition is now in the main makefile...
 
-OBJS	= init.o fault.o
+OBJS	= init.o fault.o extable.o
 
 mm.o: $(OBJS)
 	$(LD) -r -o mm.o $(OBJS)

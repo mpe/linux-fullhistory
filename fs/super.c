@@ -146,6 +146,8 @@ void remove_vfsmnt(kdev_t dev)
 		if (vfsmnttail->mnt_dev == dev)
 			vfsmnttail = lptr;
 	}
+	if (tofree == mru_vfsmnt)
+		mru_vfsmnt = NULL;
 	kfree(tofree->mnt_devname);
 	kfree(tofree->mnt_dirname);
 	kfree_s(tofree, sizeof(struct vfsmount));

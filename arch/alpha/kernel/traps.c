@@ -178,63 +178,217 @@ struct unaligned_stat {
 	unsigned long count, va, pc;
 } unaligned[2];
 
+
+/* Macro for exception fixup code to access integer registers.  */
+#define una_reg(r)  (regs.regs[(r) >= 16 && (r) <= 18 ? (r)+19 : (r)])
+
+
 asmlinkage void do_entUna(void * va, unsigned long opcode, unsigned long reg,
 	unsigned long a3, unsigned long a4, unsigned long a5,
 	struct allregs regs)
 {
 	static int cnt = 0;
 	static long last_time = 0;
+	long error, tmp1, tmp2, tmp3, tmp4;
+	unsigned long pc = regs.pc - 4;
+	unsigned fixup;
 
 	if (cnt >= 5 && jiffies - last_time > 5*HZ) {
 		cnt = 0;
 	}
 	if (++cnt < 5) {
 		printk("kernel: unaligned trap at %016lx: %p %lx %ld\n",
-		       regs.pc - 4, va, opcode, reg);
+		       pc, va, opcode, reg);
 	}
 	last_time = jiffies;
 
-	++unaligned[0].count;
-	unaligned[0].va = (unsigned long) va - 4;
-	unaligned[0].pc = regs.pc;
+	unaligned[0].count++;
+	unaligned[0].va = (unsigned long) va;
+	unaligned[0].pc = pc;
 
-	/* $16-$18 are PAL-saved, and are offset by 19 entries */
-	if (reg >= 16 && reg <= 18)
-		reg += 19;
+	/* We don't want to use the generic get/put unaligned macros as
+	   we want to trap exceptions.  Only if we actually get an
+	   exception will we decide whether we should have caught it.  */
 
-	{
-		/* Set up an exception handler address just in case we are
-		   handling an unaligned fixup within get_user().  Notice
-		   that we do *not* change the exception count because we
-		   only want to bounce possible exceptions on through.  */
+	switch (opcode) {
+#ifdef __HAVE_CPU_BWX
+	case 0x0c: /* ldwu */
+		__asm__ __volatile__(
+		"1:	ldq_u %1,0(%3)\n"
+		"2:	ldq_u %2,1(%3)\n"
+		"	extwl %1,%3,%1\n"
+		"	extwh %2,%3,%2\n"
+		"3:\n"
+		".section __ex_table,\"a\"\n"
+		"	.gprel32 1b\n"
+		"	lda %1,3b-1b(%0)\n"
+		"	.gprel32 2b\n"
+		"	lda %2,3b-2b(%0)\n"
+		".text"
+			: "=r"(error), "=&r"(tmp1), "=&r"(tmp2)
+			: "r"(va), "0"(0));
+		if (error)
+			goto got_exception;
+		una_reg(reg) = tmp1|tmp2;
+		return;
+#endif
 
-		__label__ handle_ex;
-		register void *ex_vector __asm__("$28");
-		__asm__ __volatile__ ("" : "=r"(ex_vector) : "0"(&&handle_ex));
+	case 0x28: /* ldl */
+		__asm__ __volatile__(
+		"1:	ldq_u %1,0(%3)\n"
+		"2:	ldq_u %2,3(%3)\n"
+		"	extll %1,%3,%1\n"
+		"	extlh %2,%3,%2\n"
+		"3:\n"
+		".section __ex_table,\"a\"\n"
+		"	.gprel32 1b\n"
+		"	lda %1,3b-1b(%0)\n"
+		"	.gprel32 2b\n"
+		"	lda %2,3b-2b(%0)\n"
+		".text"
+			: "=r"(error), "=&r"(tmp1), "=&r"(tmp2)
+			: "r"(va), "0"(0));
+		if (error)
+			goto got_exception;
+		una_reg(reg) = (int)(tmp1|tmp2);
+		return;
 
-		switch (opcode) {
-		case 0x28: /* ldl */
-			*(reg+regs.regs) = get_unaligned((int *)va);
-			return;
-		case 0x29: /* ldq */
-			*(reg+regs.regs) = get_unaligned((long *)va);
-			return;
-		case 0x2c: /* stl */
-			put_unaligned(*(reg+regs.regs), (int *)va);
-			return;
-		case 0x2d: /* stq */
-			put_unaligned(*(reg+regs.regs), (long *)va);
-			return;
+	case 0x29: /* ldq */
+		__asm__ __volatile__(
+		"1:	ldq_u %1,0(%3)\n"
+		"2:	ldq_u %2,7(%3)\n"
+		"	extql %1,%3,%1\n"
+		"	extqh %2,%3,%2\n"
+		"3:\n"
+		".section __ex_table,\"a\"\n"
+		"	.gprel32 1b\n"
+		"	lda %1,3b-1b(%0)\n"
+		"	.gprel32 2b\n"
+		"	lda %2,3b-2b(%0)\n"
+		".text"
+			: "=r"(error), "=&r"(tmp1), "=&r"(tmp2)
+			: "r"(va), "0"(0));
+		if (error)
+			goto got_exception;
+		una_reg(reg) = tmp1|tmp2;
+		return;
 
-		/* We'll only get back here if we are handling a
-		   valid exception.  */
-		handle_ex:
-			(&regs)->pc = *(28+regs.regs);
-			return;
-		}
+	/* Note that the store sequences do not indicate that they change
+	   memory because it _should_ be affecting nothing in this context.
+	   (Otherwise we have other, much larger, problems.)  */
+#ifdef __HAVE_CPU_BWX
+	case 0x0d: /* stw */
+		__asm__ __volatile__(
+		"1:	ldq_u %2,1(%5)\n"
+		"2:	ldq_u %1,0(%5)\n"
+		"	inswh %6,%5,%4\n"
+		"	inswl %6,%5,%3\n"
+		"	mskwh %2,%5,%2\n"
+		"	mskwl %1,%5,%1\n"
+		"	or %2,%4,%2\n"
+		"	or %1,%3,%1\n"
+		"3:	stq_u %2,1(%5)\n"
+		"4:	stq_u %1,0(%5)\n"
+		"5:\n"
+		".section __ex_table,\"a\"\n"
+		"	.gprel32 1b\n"
+		"	lda %2,5b-1b(%0)\n"
+		"	.gprel32 2b\n"
+		"	lda %1,5b-2b(%0)\n"
+		"	.gprel32 3b\n"
+		"	lda $31,5b-3b(%0)\n"
+		"	.gprel32 4b\n"
+		"	lda $31,5b-4b(%0)\n"
+		".text"
+			: "=r"(error), "=&r"(tmp1), "=&r"(tmp2),
+			  "=&r"(tmp3), "=&r"(tmp4)
+			: "r"(va), "r"(una_reg(reg)), "0"(0));
+		if (error)
+			goto got_exception;
+		return;
+#endif
+
+	case 0x2c: /* stl */
+		__asm__ __volatile__(
+		"1:	ldq_u %2,3(%5)\n"
+		"2:	ldq_u %1,0(%5)\n"
+		"	inslh %6,%5,%4\n"
+		"	insll %6,%5,%3\n"
+		"	msklh %2,%5,%2\n"
+		"	mskll %1,%5,%1\n"
+		"	or %2,%4,%2\n"
+		"	or %1,%3,%1\n"
+		"3:	stq_u %2,3(%5)\n"
+		"4:	stq_u %1,0(%5)\n"
+		"5:\n"
+		".section __ex_table,\"a\"\n"
+		"	.gprel32 1b\n"
+		"	lda %2,5b-1b(%0)\n"
+		"	.gprel32 2b\n"
+		"	lda %1,5b-2b(%0)\n"
+		"	.gprel32 3b\n"
+		"	lda $31,5b-3b(%0)\n"
+		"	.gprel32 4b\n"
+		"	lda $31,5b-4b(%0)\n"
+		".text"
+			: "=r"(error), "=&r"(tmp1), "=&r"(tmp2),
+			  "=&r"(tmp3), "=&r"(tmp4)
+			: "r"(va), "r"(una_reg(reg)), "0"(0));
+		if (error)
+			goto got_exception;
+		return;
+
+	case 0x2d: /* stq */
+		__asm__ __volatile__(
+		"1:	ldq_u %2,7(%5)\n"
+		"2:	ldq_u %1,0(%5)\n"
+		"	insqh %6,%5,%4\n"
+		"	insql %6,%5,%3\n"
+		"	mskqh %2,%5,%2\n"
+		"	mskql %1,%5,%1\n"
+		"	or %2,%4,%2\n"
+		"	or %1,%3,%1\n"
+		"3:	stq_u %2,7(%5)\n"
+		"4:	stq_u %1,0(%5)\n"
+		"5:\n"
+		".section __ex_table,\"a\"\n\t"
+		"	.gprel32 1b\n"
+		"	lda %2,5b-1b(%0)\n"
+		"	.gprel32 2b\n"
+		"	lda %1,5b-2b(%0)\n"
+		"	.gprel32 3b\n"
+		"	lda $31,5b-3b(%0)\n"
+		"	.gprel32 4b\n"
+		"	lda $31,5b-4b(%0)\n"
+		".text"
+			: "=r"(error), "=&r"(tmp1), "=&r"(tmp2),
+			  "=&r"(tmp3), "=&r"(tmp4)
+			: "r"(va), "r"(una_reg(reg)), "0"(0));
+		if (error)
+			goto got_exception;
+		return;
 	}
 	printk("Bad unaligned kernel access at %016lx: %p %lx %ld\n",
-		regs.pc, va, opcode, reg);
+		pc, va, opcode, reg);
+	do_exit(SIGSEGV);
+	return;
+
+got_exception:
+	/* Ok, we caught the exception, but we don't want it.  Is there
+	   someone to pass it along to?  */
+	if ((fixup = search_exception_table(pc)) != 0) {
+		unsigned long newpc;
+		newpc = fixup_exception(una_reg, fixup, pc);
+		printk("Forwarding unaligned exception at %lx (%lx)\n",
+		       pc, newpc);
+		(&regs)->pc = newpc;
+		return;
+	}
+
+	/* Yikes!  No one to forward the exception to.  */
+	printk("%s: unhandled unaligned exception at pc=%lx ra=%lx"
+	       " (bad address = %p)\n", current->comm,
+	       pc, una_reg(26), va);
 	do_exit(SIGSEGV);
 }
 

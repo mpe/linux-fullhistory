@@ -117,6 +117,7 @@
  *
  */
 
+#include <asm/uaccess.h>
 #include <linux/config.h>
 #include <linux/module.h>
 #include <linux/version.h>
@@ -915,7 +916,7 @@ void isdn_info_update(void)
 	wake_up_interruptible(&(dev->info_waitq));
 }
 
-static int isdn_read(struct inode *inode, struct file *file, char *buf, int count)
+static long isdn_read(struct inode *inode, struct file *file, char *buf, unsigned long count)
 {
 	uint minor = MINOR(inode->i_rdev);
 	int len = 0;
@@ -988,12 +989,13 @@ static int isdn_read(struct inode *inode, struct file *file, char *buf, int coun
 	return -ENODEV;
 }
 
-static int isdn_lseek(struct inode *inode, struct file *file, off_t offset, int orig)
+static long long isdn_lseek(struct inode *inode, struct file *file, long long offset, int orig)
 {
 	return -ESPIPE;
 }
 
-static int isdn_write(struct inode *inode, struct file *file, const char *buf, int count)
+static long isdn_write(struct inode *inode, struct file *file,
+	const char *buf, unsigned long count)
 {
 	uint minor = MINOR(inode->i_rdev);
 	int drvidx;

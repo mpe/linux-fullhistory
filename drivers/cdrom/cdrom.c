@@ -15,6 +15,7 @@
 #include <linux/kernel.h>
 #include <linux/mm.h>
 #include <asm/fcntl.h>
+#include <asm/uaccess.h>
 
 #include <linux/cdrom.h>
 #include <linux/ucdrom.h>

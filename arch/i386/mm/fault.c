@@ -93,6 +93,7 @@ asmlinkage void do_page_fault(struct pt_regs *regs, unsigned long error_code)
 	struct vm_area_struct * vma;
 	unsigned long address;
 	unsigned long page;
+	unsigned long fixup;
 	int write;
 
 	/* get the address */
@@ -161,14 +162,14 @@ good_area:
  */
 bad_area:
 	up(&mm->mmap_sem);
-	/* is there valid exception data? Return to indicated handler if so */
-	if (tsk->tss.ex.count == 0) {
-		printk("Exception at %lx (%lx)\n", regs->eip, regs->edx);
-		tsk->tss.ex.count--;
-		regs->eip = regs->edx;
-		regs->edx = -EFAULT;
+
+	/* Are we prepared to handle this fault?  */
+	if ((fixup = search_exception_table(regs->eip)) != 0) {
+		printk("Exception at %lx (%lx)\n", regs->eip, fixup);
+		regs->eip = fixup;
 		return;
 	}
+
 	if (error_code & 4) {
 		tsk->tss.cr2 = address;
 		tsk->tss.error_code = error_code;

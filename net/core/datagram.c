@@ -68,9 +68,7 @@ static inline void wait_for_packet(struct sock * sk)
  
 static inline int connection_based(struct sock *sk)
 {
-	if(sk->type==SOCK_SEQPACKET || sk->type==SOCK_STREAM)
-		return 1;
-	return 0;
+	return (sk->type==SOCK_SEQPACKET || sk->type==SOCK_STREAM);
 }
 
 /*
@@ -190,29 +188,26 @@ void skb_copy_datagram_iovec(struct sk_buff *skb, int offset, struct iovec *to, 
 
 int datagram_select(struct sock *sk, int sel_type, select_table *wait)
 {
-	select_wait(sk->sleep, wait);
+	if (sk->err)
+		return 1;
 	switch(sel_type)
 	{
 		case SEL_IN:
-			if (sk->err)
-				return 1;
 			if (sk->shutdown & RCV_SHUTDOWN)
 				return 1;
 			if (connection_based(sk) && sk->state==TCP_CLOSE)
 			{
 				/* Connection closed: Wake up */
-				return(1);
+				return 1;
 			}
-			if (skb_peek(&sk->receive_queue) != NULL)
+			if (!skb_queue_empty(&sk->receive_queue))
 			{	/* This appears to be consistent
 				   with other stacks */
-				return(1);
+				return 1;
 			}
-			return(0);
+			break;
 
 		case SEL_OUT:
-			if (sk->err)
-				return 1;
 			if (sk->shutdown & SEND_SHUTDOWN)
 				return 1;
 			if (connection_based(sk) && sk->state==TCP_SYN_SENT)
@@ -222,18 +217,19 @@ int datagram_select(struct sock *sk, int sel_type, select_table *wait)
 			}
 			if (sk->prot && sock_wspace(sk) >= MIN_WRITE_SPACE)
 			{
-				return(1);
+				return 1;
 			}
 			if (sk->prot==NULL && sk->sndbuf-sk->wmem_alloc >= MIN_WRITE_SPACE)
 			{
-				return(1);
+				return 1;
 			}
-			return(0);
+			break;
 
 		case SEL_EX:
-			if (sk->err)
-				return(1); /* Socket has gone into error state (eg icmp error) */
-			return(0);
+			break;
 	}
-	return(0);
+
+	/* select failed.. */
+	select_wait(sk->sleep, wait);
+	return 0;
 }

@@ -17,7 +17,7 @@
 #include <linux/malloc.h>
 #include <linux/stat.h>
 #include <linux/fcntl.h>
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 #include <asm/string.h>
 
 #include <linux/ncp.h>

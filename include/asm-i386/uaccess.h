@@ -5,7 +5,6 @@
  * User space memory access functions
  */
 #include <linux/sched.h>
-
 #include <asm/segment.h>
 
 #define VERIFY_READ 0
@@ -15,37 +14,65 @@
  * The fs value determines whether argument validity checking should be
  * performed or not.  If get_fs() == USER_DS, checking is performed, with
  * get_fs() == KERNEL_DS, checking is bypassed.
- * 
+ *
  * For historical reasons, these macros are grossly misnamed.
  */
-      
+
 #define get_fs()	(current->tss.segment)
 #define set_fs(x)	(current->tss.segment = (x))
 #define get_ds()	(KERNEL_DS)
 
 #define __user_ok(addr,size) \
-((size <= 0xC0000000UL) && (addr <= 0xC0000000UL - size))
+	((size <= 0xC0000000UL) && (addr <= 0xC0000000UL - size))
 #define __kernel_ok \
-(get_fs() == KERNEL_DS)
+	(get_fs() == KERNEL_DS)
 
 extern int __verify_write(const void *, unsigned long);
 
 #if CPU > 386
 #define __access_ok(type,addr,size) \
-(__kernel_ok || __user_ok(addr,size))
+	(__kernel_ok || __user_ok(addr,size))
 #else
 #define __access_ok(type,addr,size) \
-(__kernel_ok || (__user_ok(addr,size) && \
-  ((type) == VERIFY_READ || wp_works_ok || __verify_write((void *)(addr),(size)))))
+	(__kernel_ok || (__user_ok(addr,size) && \
+			 ((type) == VERIFY_READ || wp_works_ok || \
+			  __verify_write((void *)(addr),(size)))))
 #endif /* CPU */
 
 #define access_ok(type,addr,size) \
-__access_ok((type),(unsigned long)(addr),(size))
+	__access_ok((type),(unsigned long)(addr),(size))
+
+extern inline int verify_area(int type, const void * addr, unsigned long size)
+{
+	return access_ok(type,addr,size) ? 0 : -EFAULT;
+}
+
 
 /*
- * Uh, these should become the main single-value transfer routines..
- * They automatically use the right size if we just have the right
- * pointer type..
+ * The exception table consists of pairs of addresses: the first is the
+ * address of an instruction that is allowed to fault, and the second is
+ * the address at which the program should continue.  No registers are
+ * modified, so it is entirely up to the continuation code to figure out
+ * what to do.
+ *
+ * All the routines below use bits of fixup code that are out of line
+ * with the main instruction path.  This means when everything is well,
+ * we don't even have to jump over them.  Further, they do not intrude
+ * on our cache or tlb entries.
+ */
+
+struct exception_table_entry
+{
+	unsigned long insn, fixup;
+};
+
+/* Returns 0 if exception not found and fixup otherwise.  */
+extern unsigned long search_exception_table(unsigned long);
+
+
+/*
+ * These are the main single-value transfer routines.  They automatically
+ * use the right size if we just have the right pointer type.
  *
  * This gets kind of ugly. We want to return _two_ values in "get_user()"
  * and yet we don't want to do any pointers, because that is too much
@@ -57,280 +84,328 @@ __access_ok((type),(unsigned long)(addr),(size))
  * with a separate "access_ok()" call (this is used when we do multiple
  * accesses to the same area of user memory).
  */
+#define get_user(x,ptr) \
+  __get_user_check((x),(ptr),sizeof(*(ptr)))
 #define put_user(x,ptr) \
-__do_put_user((unsigned long)((__typeof__(*(ptr)))(x)),(ptr),(sizeof(*(ptr))))
+  __put_user_check((__typeof__(*(ptr)))(x),(ptr),sizeof(*(ptr)))
+
+#define __get_user(x,ptr) \
+  __get_user_nocheck((x),(ptr),sizeof(*(ptr)))
 #define __put_user(x,ptr) \
-__do_put_user_nocheck((unsigned long)((__typeof__(*(ptr)))(x)),(ptr),(sizeof(*(ptr))))
+  __put_user_nocheck((__typeof__(*(ptr)))(x),(ptr),sizeof(*(ptr)))
+
+
+extern long __put_user_bad(void);
+
+#define __put_user_nocheck(x,ptr,size)			\
+({							\
+	long __pu_err;					\
+	__put_user_size((x),(ptr),(size),__pu_err);	\
+	__pu_err;					\
+})
+
+#define __put_user_check(x,ptr,size)				\
+({								\
+	long __pu_err = -EFAULT;				\
+	__typeof__(*(ptr)) *__pu_addr = (ptr);			\
+	if (access_ok(VERIFY_WRITE,__pu_addr,size))		\
+		__put_user_size((x),__pu_addr,(size),__pu_err);	\
+	__pu_err;						\
+})
+
+#define __put_user_size(x,ptr,size,retval)				\
+do {									\
+	retval = 0;							\
+	switch (size) {							\
+	  case 1: __put_user_asm(x,ptr,retval,"b","b","iq"); break;	\
+	  case 2: __put_user_asm(x,ptr,retval,"w","w","ir"); break;	\
+	  case 4: __put_user_asm(x,ptr,retval,"l","","ir"); break;	\
+	  default: __put_user_bad();					\
+	}								\
+} while (0)
 
 struct __large_struct { unsigned long buf[100]; };
 #define __m(x) (*(struct __large_struct *)(x))
 
-#define __put_user_asm(x,addr,ret,bwl,reg,rtype) \
-__asm__ __volatile__( \
-	"movl $1f,%0\n\t" \
-	"incl %3\n\t" \
-	"mov" #bwl " %" reg "1,%2\n\t" \
-	"xorl %0,%0\n\t" \
-	"decl %3\n1:" \
-:"=&d" (ret) \
-:#rtype (x), "m" (__m(addr)),"m" (current->tss.ex.count))
+/*
+ * Tell gcc we read from memory instead of writing: this is because
+ * we do not write to any memory gcc knows about, so there are no
+ * aliasing issues.
+ */
+#define __put_user_asm(x, addr, err, itype, rtype, ltype)	\
+	__asm__ __volatile__(					\
+		"1:	mov"itype" %"rtype"1,%2\n"		\
+		"2:\n"						\
+		".section .fixup,\"ax\"\n"			\
+		"3:	movl %3,%0\n"				\
+		"	jmp 2b\n"				\
+		".section __ex_table,\"a\"\n"			\
+		"	.align 4\n"				\
+		"	.long 1b,3b\n"				\
+		".text"						\
+		: "=r"(err)					\
+		: ltype (x), "m"(__m(addr)), "i"(-EFAULT), "0"(err))
 
-extern int __put_user_bad(void);
 
-#define __put_user_size(x,ptr,size,retval) \
-switch (size) { \
-case 1: __put_user_asm(x,ptr,retval,b,"b","iq"); break; \
-case 2: __put_user_asm(x,ptr,retval,w,"w","ir"); break; \
-case 4: __put_user_asm(x,ptr,retval,l,"","ir"); break; \
-default: retval = __put_user_bad(); }
+#define __get_user_nocheck(x,ptr,size)				\
+({								\
+	long __gu_err, __gu_val;				\
+	__get_user_size(__gu_val,(ptr),(size),__gu_err);	\
+	(x) = (__typeof__(*(ptr)))__gu_val;			\
+	__gu_err;						\
+})
 
-static inline int __do_put_user(unsigned long x, void * ptr, int size)
-{
-	int retval = -EFAULT;
-	if (access_ok(VERIFY_WRITE, ptr, size))
-		__put_user_size(x,ptr,size,retval);
-	return retval;
-}
+#define __get_user_check(x,ptr,size)					\
+({									\
+	long __gu_err = -EFAULT, __gu_val = 0;				\
+	const __typeof__(*(ptr)) *__gu_addr = (ptr);			\
+	if (access_ok(VERIFY_READ,__gu_addr,size))			\
+		__get_user_size(__gu_val,__gu_addr,(size),__gu_err);	\
+	(x) = (__typeof__(*(ptr)))__gu_val;				\
+	__gu_err;							\
+})
 
-#define __do_put_user_nocheck(x, ptr, size) \
-({ int retval; __put_user_size(x,ptr,size,retval); retval; })
+extern long __get_user_bad(void);
 
-#define get_user(x,ptr) \
-__do_get_user((x),(unsigned long)(ptr),sizeof(*(ptr)),__typeof__(*(ptr)))
+#define __get_user_size(x,ptr,size,retval)				\
+do {									\
+	retval = 0;							\
+	switch (size) {							\
+	  case 1: __get_user_asm(x,ptr,retval,"b","b","=q"); break;	\
+	  case 2: __get_user_asm(x,ptr,retval,"w","w","=r"); break;	\
+	  case 4: __get_user_asm(x,ptr,retval,"l","","=r"); break;	\
+	  default: (x) = __get_user_bad();				\
+	}								\
+} while (0)
 
-#define __get_user(x,ptr) \
-__do_get_user_nocheck((x),(unsigned long)(ptr),sizeof(*(ptr)),__typeof__(*(ptr)))
+#define __get_user_asm(x, addr, err, itype, rtype, ltype)	\
+	__asm__ __volatile__(					\
+		"1:	mov"itype" %2,%"rtype"1\n"		\
+		"2:\n"						\
+		".section .fixup,\"ax\"\n"			\
+		"3:	movl %3,%0\n"				\
+		"	xor"itype" %"rtype"1,%"rtype"1\n"	\
+		"	jmp 2b\n"				\
+		".section __ex_table,\"a\"\n"			\
+		"	.align 4\n"				\
+		"	.long 1b,3b\n"				\
+		".text"						\
+		: "=r"(err), ltype (x)				\
+		: "m"(__m(addr)), "i"(-EFAULT), "0"(err))
 
-#define __do_get_user(x,ptr,size,type) ({ \
-unsigned long __gu_addr = ptr; \
-int __gu_ret = -EFAULT; \
-unsigned long __gu_val = 0; \
-if (access_ok(VERIFY_READ,__gu_addr,size)) { \
-switch (size) { \
-case 1: __do_get_user_8(__gu_val,__gu_addr,__gu_ret); break; \
-case 2: __do_get_user_16(__gu_val,__gu_addr,__gu_ret); break; \
-case 4: __do_get_user_32(__gu_val,__gu_addr,__gu_ret); break; \
-default: __gu_ret = __do_get_user_bad(); break; \
-} } x = (type) __gu_val; __gu_ret; })
 
-#define __do_get_user_nocheck(x,ptr,size,type) ({ \
-int __gu_ret; \
-unsigned long __gu_val; \
-switch (size) { \
-case 1: __do_get_user_8(__gu_val,ptr,__gu_ret); break; \
-case 2: __do_get_user_16(__gu_val,ptr,__gu_ret); break; \
-case 4: __do_get_user_32(__gu_val,ptr,__gu_ret); break; \
-default: __gu_ret = __do_get_user_bad(); __gu_val = 0; break; \
-} x = (type) __gu_val; __gu_ret; })
+/*
+ * Copy To/From Userspace
+ */
 
-#define __do_get_user_asm(x,addr,ret,bwl,reg,rtype) \
-__asm__ __volatile__( \
-	"movl $1f,%0\n\t" \
-	"incl %3\n\t" \
-	"mov" #bwl " %2,%" reg "1\n\t" \
-	"xorl %0,%0\n\t" \
-	"decl %3\n1:" \
-:"=&d" (ret), #rtype (x) \
-:"m" (__m(addr)),"m" (current->tss.ex.count))
+/* Generic arbitrary sized copy.  */
+#define __copy_user(to,from,size)					\
+	__asm__ __volatile__(						\
+		"0:	rep; movsl\n"					\
+		"	movl %1,%0\n"					\
+		"1:	rep; movsb\n"					\
+		"2:\n"							\
+		".section .fixup,\"ax\"\n"				\
+		"3:	lea 0(%1,%0,4),%0\n"				\
+		"	jmp 2b\n"					\
+		".section __ex_table,\"a\"\n"				\
+		"	.align 4\n"					\
+		"	.long 0b,3b\n"					\
+		"	.long 1b,2b\n"					\
+		".text"							\
+		: "=c"(size)						\
+		: "r"(size & 3), "0"(size / 4), "D"(to), "S"(from)	\
+		: "di", "si", "memory")
 
-#define __do_get_user_8(x,addr,ret) \
-__do_get_user_asm(x,addr,ret,b,"b","=&q")
-#define __do_get_user_16(x,addr,ret) \
-__do_get_user_asm(x,addr,ret,w,"w","=&r")
-#define __do_get_user_32(x,addr,ret) \
-__do_get_user_asm(x,addr,ret,l,"","=&r")
+/* Optimize just a little bit when we know the size of the move. */
+#define __constant_copy_user(to, from, size)			\
+do {								\
+	switch (size & 3) {					\
+	default:						\
+		__asm__ __volatile__(				\
+			"0:	rep; movsl\n"			\
+			"1:\n"					\
+			".section .fixup,\"ax\"\n"		\
+			"2:	shl $2,%0\n"			\
+			"	jmp 1b\n"			\
+			".section __ex_table,\"a\"\n"		\
+			"	.align 4\n"			\
+			"	.long 0b,2b\n"			\
+			".text"					\
+			: "=c"(size)				\
+			: "S"(from), "D"(to), "0"(size/4)	\
+			: "di", "si", "memory");		\
+		break;						\
+	case 1:							\
+		__asm__ __volatile__(				\
+			"0:	rep; movsl\n"			\
+			"1:	movsb\n"			\
+			"2:\n"					\
+			".section .fixup,\"ax\"\n"		\
+			"3:	shl $2,%0\n"			\
+			"4:	incl %0\n"			\
+			"	jmp 2b\n"			\
+			".section __ex_table,\"a\"\n"		\
+			"	.align 4\n"			\
+			"	.long 0b,3b\n"			\
+			"	.long 1b,4b\n"			\
+			".text"					\
+			: "=c"(size)				\
+			: "S"(from), "D"(to), "0"(size/4)	\
+			: "di", "si", "memory");		\
+		break;						\
+	case 2:							\
+		__asm__ __volatile__(				\
+			"0:	rep; movsl\n"			\
+			"1:	movsw\n"			\
+			"2:\n"					\
+			".section .fixup,\"ax\"\n"		\
+			"3:	shl $2,%0\n"			\
+			"4:	addl $2,%0\n"			\
+			"	jmp 2b\n"			\
+			".section __ex_table,\"a\"\n"		\
+			"	.align 4\n"			\
+			"	.long 0b,3b\n"			\
+			"	.long 1b,4b\n"			\
+			".text"					\
+			: "=c"(size)				\
+			: "S"(from), "D"(to), "0"(size/4)	\
+			: "di", "si", "memory");		\
+		break;						\
+	case 3:							\
+		__asm__ __volatile__(				\
+			"0:	rep; movsl\n"			\
+			"1:	movsw\n"			\
+			"2:	movsb\n"			\
+			"3:\n"					\
+			".section .fixup,\"ax\"\n"		\
+			"4:	shl $2,%0\n"			\
+			"5:	addl $2,%0\n"			\
+			"6:	incl %0\n"			\
+			"	jmp 3b\n"			\
+			".section __ex_table,\"a\"\n"		\
+			"	.align 4\n"			\
+			"	.long 0b,4b\n"			\
+			"	.long 1b,5b\n"			\
+			"	.long 2b,6b\n"			\
+			".text"					\
+			: "=c"(size)				\
+			: "S"(from), "D"(to), "0"(size/4)	\
+			: "di", "si", "memory");		\
+		break;						\
+	}							\
+} while (0)
 
-extern int __do_get_user_bad(void);
-
-#define __copy_user(to,from,size) \
-__asm__ __volatile__( \
-	"shrl $2,%1\n\t" \
-	"movl $3f,%0\n\t" \
-	"incl %3\n\t" \
-	"rep; movsl\n\t" \
-	"testl $2,%2\n\t" \
-	"je 1f\n\t" \
-	"movsw\n\t" \
-	"subl $2,%2\n" \
-	"1:\t" \
-	"testl $1,%2\n\t" \
-	"je 2f\n\t" \
-	"movsb\n\t" \
-	"decl %2\n" \
-	"2:\t" \
-	"decl %3\n" \
-	"3:\tlea 0(%2,%1,4),%0" \
-	:"=&d" (size) \
-	:"c" (size), "r" (size & 3), "m" (current->tss.ex), \
-	 "D" (to), "S" (from) \
-	:"cx","di","si","memory");
-
-static inline unsigned long __constant_copy_user(void * to, const void * from, unsigned long size)
-{
-	unsigned long result;
-
-	switch (size & 3) {
-	default:
-		__asm__ __volatile__(
-			"movl $1f,%0\n\t"
-			"incl %1\n\t"
-			"rep ; movsl\n\t"
-			"decl %1\n"
-			"1:\tlea 0(,%%ecx,4),%0"
-			:"=&d" (result)
-			:"m" (current->tss.ex),
-			 "S" (from),"D" (to),"c" (size/4)
-			:"cx","di","si","memory");
-		break;
-	case 1:
-		__asm__ __volatile__(
-			"movl $1f,%0\n\t"
-			"incl %3\n\t"
-			"rep ; movsl\n\t"
-			"movsb\n\t"
-			"decl %1\n\t"
-			"decl %3\n"
-			"1:\tlea 0(%1,%%ecx,4),%0"
-			:"=&d" (result)
-			:"ab" (1),"m" (current->tss.ex),
-			 "S" (from),"D" (to), "c" (size/4)
-			:"cx","di","si","memory");
-		break;
-	case 2:
-		__asm__ __volatile__(
-			"movl $1f,%0\n\t"
-			"incl %2\n\t"
-			"rep ; movsl\n\t"
-			"movsw\n\t"
-			"subl $2,%1\n\t"
-			"decl %2\n"
-			"1:\tlea 0(%1,%%ecx,4),%0"
-			:"=&d" (result)
-			:"ab" (2),"m" (current->tss.ex),
-			 "S" (from),"D" (to),"c" (size/4)
-			:"cx","di","si","memory");
-		break;
-	case 3:
-		__asm__ __volatile__(
-			"movl $1f,%0\n\t"
-			"incl %2\n\t"
-			"rep ; movsl\n\t"
-			"movsw\n\t"
-			"subl $2,%1\n\t"
-			"movsb\n\t"
-			"decl %1\n\t"
-			"decl %2\n"
-			"1:\tlea 0(%1,%%ecx,4),%0"
-			:"=&d" (result)
-			:"ab" (3),"m" (current->tss.ex),
-			 "S" (from),"D" (to),"c" (size/4)
-			:"cx","di","si","memory");
-		break;
-	}
-	return result;
-}
-
-static inline unsigned long __generic_copy_to_user(void *to, const void *from, unsigned long n)
+static inline unsigned long
+__generic_copy_to_user(void *to, const void *from, unsigned long n)
 {
 	if (access_ok(VERIFY_WRITE, to, n))
 		__copy_user(to,from,n);
 	return n;
 }
 
-static inline unsigned long __constant_copy_to_user(void *to, const void *from, unsigned long n)
+static inline unsigned long
+__constant_copy_to_user(void *to, const void *from, unsigned long n)
 {
 	if (access_ok(VERIFY_WRITE, to, n))
-		n = __constant_copy_user(to,from,n);
+		__constant_copy_user(to,from,n);
 	return n;
 }
 
-static inline unsigned long __generic_copy_from_user(void *to, const void *from, unsigned long n)
+static inline unsigned long
+__generic_copy_from_user(void *to, const void *from, unsigned long n)
 {
 	if (access_ok(VERIFY_READ, from, n))
 		__copy_user(to,from,n);
 	return n;
 }
 
-static inline unsigned long __constant_copy_from_user(void *to, const void *from, unsigned long n)
+static inline unsigned long
+__constant_copy_from_user(void *to, const void *from, unsigned long n)
 {
 	if (access_ok(VERIFY_READ, from, n))
-		n = __constant_copy_user(to,from,n);
+		__constant_copy_user(to,from,n);
 	return n;
 }
 
-#define copy_to_user(to,from,n) \
-(__builtin_constant_p(n) ? \
- __constant_copy_to_user((to),(from),(n)) : \
- __generic_copy_to_user((to),(from),(n)))
 
-#define copy_from_user(to,from,n) \
-(__builtin_constant_p(n) ? \
- __constant_copy_from_user((to),(from),(n)) : \
- __generic_copy_from_user((to),(from),(n)))
+#define copy_to_user(to,from,n)				\
+	(__builtin_constant_p(n) ?			\
+	 __constant_copy_to_user((to),(from),(n)) :	\
+	 __generic_copy_to_user((to),(from),(n)))
 
-#define __clear_user(addr,size) \
-__asm__ __volatile__( \
-	"movl $3f,%0\n\t" \
-	"incl %2\n\t" \
-	"rep; stosl\n\t" \
-	"testl $2,%3\n\t" \
-	"je 1f\n\t" \
-	"stosw\n\t" \
-	"subl $2,%3\n" \
-	"1:\t" \
-	"testl $1,%3\n\t" \
-	"je 2f\n\t" \
-	"stosb\n\t" \
-	"decl %3\n" \
-	"2:\t" \
-	"decl %2\n" \
-	"3:\tlea 0(%3,%1,4),%0" \
-	:"=&d" (size) \
-	:"c" (size >> 2), "m" (current->tss.ex), "r" (size & 3), \
-	 "D" (addr), "a" (0) \
-	:"cx","di","memory");
-
-#define clear_user(addr,n) ({ \
-void * __cl_addr = (addr); \
-unsigned long __cl_size = (n); \
-if (__cl_size && __access_ok(VERIFY_WRITE, ((unsigned long)(__cl_addr)), __cl_size)) \
-__clear_user(__cl_addr, __cl_size); \
-__cl_size; })
-
-#define __strncpy_from_user(dst,src,count,res) \
-__asm__ __volatile__( \
-	"cld\n\t" \
-	"movl $3f,%0\n\t" \
-	"incl %2\n" \
-	"1:\tdecl %1\n\t" \
-	"js 2f\n\t" \
-	"lodsb\n\t" \
-	"stosb\n\t" \
-	"testb %%al,%%al\n\t" \
-	"jne 1b\n" \
-	"2:\t" \
-	"incl %1\n\t" \
-	"xorl %0,%0\n\t" \
-	"decl %2\n" \
-	"3:" \
-	:"=&d" (res), "=r" (count) \
-	:"m" (current->tss.ex), "1" (count), "S" (src),"D" (dst) \
-	:"si","di","ax","memory")
-
-#define strncpy_from_user(dest,src,count) ({ \
-const void * __sc_src = (src); \
-unsigned long __sc_count = (count); \
-long __sc_res = -EFAULT; \
-if (__access_ok(VERIFY_READ, ((unsigned long)(__sc_src)), __sc_count)) { \
-	unsigned long __sc_residue = __sc_count; \
-	__strncpy_from_user(dest,__sc_src,__sc_count,__sc_res); \
-	if (!__sc_res) __sc_res = __sc_residue - __sc_count; \
-} __sc_res; })
+#define copy_from_user(to,from,n)			\
+	(__builtin_constant_p(n) ?			\
+	 __constant_copy_from_user((to),(from),(n)) :	\
+	 __generic_copy_from_user((to),(from),(n)))
 
 
-extern inline int verify_area(int type, const void * addr, unsigned long size)
+/*
+ * Zero Userspace
+ */
+
+#define __clear_user(addr,size)						\
+	__asm__ __volatile__(						\
+		"0:	rep; stosl\n"					\
+		"	movl %1,%0\n"					\
+		"1:	rep; stosb\n"					\
+		"2:\n"							\
+		".section .fixup,\"ax\"\n"				\
+		"3:	lea 0(%1,%0,4),%0\n"				\
+		"	jmp 2b\n"					\
+		".section __ex_table,\"a\"\n"				\
+		"	.align 4\n"					\
+		"	.long 0b,3b\n"					\
+		"	.long 1b,2b\n"					\
+		".text"							\
+		: "=c"(size)						\
+		: "r"(size & 3), "0"(size / 4), "D"(addr), "a"(0)	\
+		: "di")
+
+static inline unsigned long
+clear_user(void *to, unsigned long n)
 {
-	return access_ok(type,addr,size)?0:-EFAULT;
+	if (access_ok(VERIFY_WRITE, to, n))
+		__clear_user(to, n);
+	return n;
 }
+
+
+/*
+ * Copy a null terminated string from userspace.
+ */
+
+#define __strncpy_from_user(dst,src,count,res)				   \
+	__asm__ __volatile__(						   \
+		"	testl %1,%1\n"					   \
+		"	jz 2f\n"					   \
+		"0:	lodsb\n"					   \
+		"	stosb\n"					   \
+		"	testb %%al,%%al\n"				   \
+		"	jz 1f\n"					   \
+		"	decl %1\n"					   \
+		"	jnz 0b\n"					   \
+		"1:	subl %1,%0\n"					   \
+		"2:\n"							   \
+		".section .fixup,\"ax\"\n"				   \
+		"3:	movl %2,%0\n"					   \
+		"	jmp 2b\n"					   \
+		".section __ex_table,\"a\"\n"				   \
+		"	.align 4\n"					   \
+		"	.long 0b,3b\n"					   \
+		".text"							   \
+		: "=r"(res), "=r"(count)				   \
+		: "i"(-EFAULT), "0"(count), "1"(count), "S"(src), "D"(dst) \
+		: "si", "di", "ax", "memory")
+
+static inline long
+strncpy_from_user(char *dst, const char *src, long count)
+{
+	long res = -EFAULT;
+	if (access_ok(VERIFY_READ, src, 1))
+		__strncpy_from_user(dst, src, count, res);
+	return res;
+}
+
 
 #endif /* __i386_UACCESS_H */

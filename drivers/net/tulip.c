@@ -1133,6 +1133,25 @@ static void set_multicast_list(struct device *dev)
 		} while (++i < 15);
 
 		/* Now add this frame to the Tx list. */
+		{
+			unsigned long flags;
+			unsigned int entry;
+			
+			save_flags(flags); cli();
+			entry = tp->cur_tx++ % TX_RING_SIZE;
+			tp->dirty_tx++;
+			restore_flags(flags);
+
+			tp->tx_skbuff[entry] = 0;
+			/* Put the setup frame on the Tx list. */
+			tp->tx_ring[entry].length = 192 |
+			      (entry == TX_RING_SIZE-1 ? 0x0a000000 : 0x08000000);
+			tp->tx_ring[entry].buffer1 = virt_to_bus((char *)tp->setup_frame);
+			tp->tx_ring[entry].buffer2 = 0;
+			tp->tx_ring[entry].status = TRING_OWN;
+			/* Trigger an immediate transmit demand. */
+			tio_write(TPOLL_TRIGGER, CSR1);
+		}
 	}
 }
 

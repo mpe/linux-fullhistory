@@ -30,7 +30,7 @@
 #include <linux/sched.h>
 #include <linux/mm.h>
 #include <linux/ftape.h>
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 #include <asm/system.h>
 #include <linux/ioctl.h>
 #include <linux/mtio.h>

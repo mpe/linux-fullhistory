@@ -40,6 +40,7 @@
 #define MD_DRIVER
 
 #include <linux/blk.h>
+#include <asm/uaccess.h>
 
 static struct hd_struct md_hd_struct[MAX_MD_DEV];
 static int md_blocksizes[MAX_MD_DEV];
@@ -296,10 +297,9 @@ static int md_ioctl (struct inode *inode, struct file *file,
       
     case BLKGETSIZE:   /* Return device size */
     if  (!arg)  return -EINVAL;
-    err=verify_area (VERIFY_WRITE, (long *) arg, sizeof(long));
+    err = put_user (md_hd_struct[MINOR(inode->i_rdev)].nr_sects, (long *) arg);
     if (err)
       return err;
-    put_user (md_hd_struct[MINOR(inode->i_rdev)].nr_sects, (long *) arg);
     break;
 
     case BLKFLSBUF:
@@ -315,10 +315,9 @@ static int md_ioctl (struct inode *inode, struct file *file,
     
     case BLKRAGET:
     if  (!arg)  return -EINVAL;
-    err=verify_area (VERIFY_WRITE, (long *) arg, sizeof(long));
+    err = put_user (read_ahead[MAJOR(inode->i_rdev)], (long *) arg);
     if (err)
       return err;
-    put_user (read_ahead[MAJOR(inode->i_rdev)], (long *) arg);
     break;
 
     /* We have a problem here : there is no easy way to give a CHS
@@ -328,14 +327,19 @@ static int md_ioctl (struct inode *inode, struct file *file,
     
     case HDIO_GETGEO:
     if (!loc)  return -EINVAL;
-    err = verify_area(VERIFY_WRITE, loc, sizeof(*loc));
+    err = put_user (2, (char *) &loc->heads);
     if (err)
       return err;
-    put_user (2, (char *) &loc->heads);
-    put_user (4, (char *) &loc->sectors);
-    put_user (md_hd_struct[minor].nr_sects/8, (short *) &loc->cylinders);
-    put_user (md_hd_struct[MINOR(inode->i_rdev)].start_sect,
+    err = put_user (4, (char *) &loc->sectors);
+    if (err)
+      return err;
+    err = put_user (md_hd_struct[minor].nr_sects/8, (short *) &loc->cylinders);
+    if (err)
+      return err;
+    err = put_user (md_hd_struct[MINOR(inode->i_rdev)].start_sect,
 		(long *) &loc->start);
+    if (err)
+      return err;
     break;
     
     RO_IOCTLS(inode->i_rdev,arg);
@@ -367,7 +371,7 @@ static void md_release (struct inode *inode, struct file *file)
 }
 
 
-static int md_read (struct inode *inode, struct file *file,
+static long md_read (struct inode *inode, struct file *file,
 		    char *buf, int count)
 {
   int minor=MINOR(inode->i_rdev);
@@ -378,7 +382,7 @@ static int md_read (struct inode *inode, struct file *file,
   return block_read (inode, file, buf, count);
 }
 
-static int md_write (struct inode *inode, struct file *file,
+static long md_write (struct inode *inode, struct file *file,
 		     const char *buf, int count)
 {
   int minor=MINOR(inode->i_rdev);

@@ -184,12 +184,14 @@ static struct symbol_table misc_syms = {
 #include <linux/symtab_end.h>
 };
 
+#if defined(CONFIG_PROC_FS) && !defined(MODULE)
 static struct proc_dir_entry proc_misc = {
 	0, 4, "misc",
 	S_IFREG | S_IRUGO, 1, 0, 0,
 	0, NULL /* ops -- default to array */,
 	&proc_misc_read /* get_info */,
 };
+#endif
 
 int misc_init(void)
 {

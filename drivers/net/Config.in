@@ -25,7 +25,8 @@ fi
 bool 'Radio network interfaces' CONFIG_NET_RADIO
 if [ "$CONFIG_NET_RADIO" != "n" ]; then
   if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
-    tristate 'BAYCOM ser12 and par96 kiss emulation driver for AX.25' CONFIG_BAYCOM
+    tristate 'BAYCOM ser12 and par96 driver for AX.25' CONFIG_BAYCOM
+    tristate 'Soundcard modem driver for AX.25' CONFIG_SOUNDMODEM
   fi
   if [ "$CONFIG_AX25" = "y" ]; then
     bool 'Gracilis PackeTwin support' CONFIG_PT
