@@ -307,6 +307,7 @@ static int vram;
 static int pll;
 static int mclk;
 static int xclk;
+static int comp_sync __initdata = -1;
 static char *mode;
 
 #ifdef CONFIG_PPC
@@ -2527,6 +2528,13 @@ static int __init aty_init(struct fb_info *info, const char *name)
 	else
 		var.accel_flags |= FB_ACCELF_TEXT;
 
+	if (comp_sync != -1) {
+		if (!comp_sync)
+			var.sync &= ~FB_SYNC_COMP_HIGH_ACT;
+		else
+			var.sync |= FB_SYNC_COMP_HIGH_ACT;
+	}
+
 	if (var.yres == var.yres_virtual) {
 		u32 videoram = (info->fix.smem_len - (PAGE_SIZE << 2));
 		var.yres_virtual = ((videoram * 8) / var.bits_per_pixel) / var.xres_virtual;
@@ -3612,6 +3620,8 @@ static int __init atyfb_setup(char *options)
 			mclk = simple_strtoul(this_opt + 5, NULL, 0);
 		else if (!strncmp(this_opt, "xclk:", 5))
 			xclk = simple_strtoul(this_opt+5, NULL, 0);
+		else if (!strncmp(this_opt, "comp_sync:", 10))
+			comp_sync = simple_strtoul(this_opt+10, NULL, 0);
 #ifdef CONFIG_PPC
 		else if (!strncmp(this_opt, "vmode:", 6)) {
 			unsigned int vmode =
@@ -3701,6 +3711,9 @@ module_param(mclk, int, 0);
 MODULE_PARM_DESC(mclk, "int: override memory clock");
 module_param(xclk, int, 0);
 MODULE_PARM_DESC(xclk, "int: override accelerated engine clock");
+module_param(comp_sync, int, 0);
+MODULE_PARM_DESC(comp_sync,
+		 "Set composite sync signal to low (0) or high (1)");
 module_param(mode, charp, 0);
 MODULE_PARM_DESC(mode, "Specify resolution as \"<xres>x<yres>[-<bpp>][@<refresh>]\" ");
 #ifdef CONFIG_MTRR
