@@ -22,10 +22,6 @@ BZIMAGE_OFFSET = 0x100000
 ZLINKFLAGS = -Ttext $(ZIMAGE_OFFSET) $(ZLDFLAGS)
 BZLINKFLAGS = -Ttext $(BZIMAGE_OFFSET) $(ZLDFLAGS)
 
-ifdef SMP
-CFLAGS := $(CFLAGS) -D__SMP__
-endif
-
 all: vmlinux
 
 vmlinux: piggy.o $(OBJECTS)
@@ -34,18 +30,8 @@ vmlinux: piggy.o $(OBJECTS)
 bvmlinux: piggy.o $(OBJECTS)
 	$(LD) $(BZLINKFLAGS) -o bvmlinux $(OBJECTS) piggy.o
 
-ifdef SMP
-
 head.o: head.S $(TOPDIR)/include/linux/tasks.h
-	$(CC) -D__SMP__ -traditional -c head.S
-
-else
-
-head.o: head.S $(TOPDIR)/include/linux/tasks.h
-	$(CC) -traditional -c head.S
-
-endif
-
+	$(CC) $(AFLAGS) -traditional -c head.S
 
 piggy.o:	$(SYSTEM)
 	tmppiggy=_tmp_$$$$piggy; \

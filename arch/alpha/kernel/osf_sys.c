@@ -761,7 +761,7 @@ asmlinkage int osf_sigstack(struct sigstack *uss, struct sigstack *uoss)
 	}
 
 	if (uss) {
-		unsigned long ss_sp;
+		void *ss_sp;
 
 		error = -EFAULT;
 		if (get_user(ss_sp, &uss->ss_sp))
@@ -776,7 +776,7 @@ asmlinkage int osf_sigstack(struct sigstack *uss, struct sigstack *uoss)
 		/* Since we don't know the extent of the stack, and we don't
 		   track onstack-ness, but rather calculate it, we must 
 		   presume a size.  Ho hum this interface is lossy.  */
-		current->sas_ss_sp = ss_sp - SIGSTKSZ;
+		current->sas_ss_sp = (unsigned long)ss_sp - SIGSTKSZ;
 		current->sas_ss_size = SIGSTKSZ;
 	}
 

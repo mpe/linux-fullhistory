@@ -76,6 +76,7 @@ void cleanup_module(void)
 	alpha_fp_emul_imprecise = save_emul;
 }
 
+#undef alpha_fp_emul_imprecise
 #define alpha_fp_emul_imprecise  do_alpha_fp_emul_imprecise
 
 #endif /* MODULE */

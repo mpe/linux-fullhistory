@@ -25,7 +25,7 @@ all:		all_targets
 .PHONY:		all
 
 gentbl:		gentbl.c
-		$(HOSTCC) -Wall $< -o $@ -lm
+		$(HOSTCC) $(HOSTCFLAGS) $< -o $@ -lm
 
 TBLHDR		:= tables.h
 

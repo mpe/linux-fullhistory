@@ -967,18 +967,24 @@ __initfunc(void pcibios_fixup_devices(void))
 			} else if (a & PCI_BASE_ADDRESS_MEM_MASK)
 				has_mem = 1;
 		}
-		pci_read_config_word(dev, PCI_COMMAND, &cmd);
-		if (has_io && !(cmd & PCI_COMMAND_IO)) {
-			printk("PCI: Enabling I/O for device %02x:%02x\n",
-				dev->bus->number, dev->devfn);
-			cmd |= PCI_COMMAND_IO;
-			pci_write_config_word(dev, PCI_COMMAND, cmd);
-		}
-		if (has_mem && !(cmd & PCI_COMMAND_MEMORY)) {
-			printk("PCI: Enabling memory for device %02x:%02x\n",
-				dev->bus->number, dev->devfn);
-			cmd |= PCI_COMMAND_MEMORY;
-			pci_write_config_word(dev, PCI_COMMAND, cmd);
+		/*
+		 * Don't enable VGA-compatible cards since they have
+		 * fixed I/O and memory space.
+		 */
+		if ((dev->class >> 8) != PCI_CLASS_DISPLAY_VGA) {
+			pci_read_config_word(dev, PCI_COMMAND, &cmd);
+			if (has_io && !(cmd & PCI_COMMAND_IO)) {
+				printk("PCI: Enabling I/O for device %02x:%02x\n",
+					dev->bus->number, dev->devfn);
+				cmd |= PCI_COMMAND_IO;
+				pci_write_config_word(dev, PCI_COMMAND, cmd);
+			}
+			if (has_mem && !(cmd & PCI_COMMAND_MEMORY)) {
+				printk("PCI: Enabling memory for device %02x:%02x\n",
+					dev->bus->number, dev->devfn);
+				cmd |= PCI_COMMAND_MEMORY;
+				pci_write_config_word(dev, PCI_COMMAND, cmd);
+			}
 		}
 #ifdef __SMP__
 		/*

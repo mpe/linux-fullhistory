@@ -39,6 +39,8 @@
 #include <linux/coda_cache.h>
 #include <linux/coda_proc.h> 
 
+extern void coda_purge_dentries(struct inode *inode);
+extern void coda_purge_children(struct inode *inode);
 
 static int  coda_upcall(struct coda_sb_info *mntinfo, int inSize, int *outSize, 
 		       union inputArgs *buffer);

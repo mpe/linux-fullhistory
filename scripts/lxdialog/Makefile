@@ -1,8 +1,7 @@
-CC = gcc
-CPP = gcc -E
-OPTIM = -O2 -Wall -fomit-frame-pointer
+CC = $(HOSTCC)
+CPP = $(HOSTCC) -E
 
-CFLAGS = $(OPTIM) -DLOCALE 
+CFLAGS = $(HOSTCFLAGS) -DLOCALE 
 LDFLAGS = -s -L .
 LDLIBS = -lncurses
 

@@ -1,6 +1,8 @@
 #ifndef _ASMARM_INIT_H
 #define _ASMARM_INIT_H
 
+#include <linux/config.h>
+
 /* C routines */
 
 #ifdef CONFIG_BINUTILS_NEW

@@ -7,23 +7,11 @@
 #
 # Note 2! The CFLAGS definitions are now in the main makefile...
 
-ifdef SMP
-
 .S.s:
 	$(CPP) -D__ASSEMBLY__ $(AFLAGS) -ansi $< -o $*.s
 
 .S.o:
 	$(CC) -D__ASSEMBLY__ $(AFLAGS) -ansi -c $< -o $*.o
-
-else
-
-.S.s:
-	$(CPP) -D__ASSEMBLY__ -ansi $< -o $*.s
-
-.S.o:
-	$(CC) -D__ASSEMBLY__ -ansi -c $< -o $*.o
-
-endif
 
 all: kernel.o head.o init_task.o
 
@@ -46,17 +34,8 @@ ifdef CONFIG_SUN_AUXIO
 O_OBJS += auxio.o
 endif
 
-ifdef SMP
-
 head.o: head.S
 	$(CC) -D__ASSEMBLY__ $(AFLAGS) -ansi -c $*.S -o $*.o
-
-else
-
-head.o: head.S
-	$(CC) -D__ASSEMBLY__ -ansi -c $*.S -o $*.o
-
-endif
 
 check_asm: dummy
 	@echo "/* Automatically generated. Do not edit. */" > asm_offsets.h

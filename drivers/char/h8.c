@@ -1,6 +1,4 @@
 /*
- */
-/*
  * Hitachi H8/337 Microcontroller driver
  *
  * The H8 is used to deal with the power and thermal environment
@@ -27,6 +25,7 @@
 #include <linux/miscdevice.h>
 #include <linux/lists.h>
 #include <linux/ioport.h>
+#include <linux/poll.h>
 
 #define __KERNEL_SYSCALLS__
 #include <asm/unistd.h>
@@ -54,12 +53,6 @@
 int          h8_init(void);
 int          h8_display_blank(void);
 int          h8_display_unblank(void);
-
-static int   h8_open(struct inode *, struct file *);
-static void  h8_release(struct inode *, struct file *);
-static long  h8_read(struct inode *, struct file *, char *, u_long);
-static int   h8_select(struct inode *, struct file *, int, select_table *);
-static int   h8_ioctl(struct inode *, struct file *, u_int, u_long);
 
 static void  h8_intr(int irq, void *dev_id, struct pt_regs *regs);
 
@@ -113,14 +106,14 @@ static char  driver_version[] = "X0.0";/* no spaces */
 
 static struct file_operations h8_fops = {
         NULL,           /* lseek */
-        h8_read,
+        NULL,
         NULL,           /* write */
         NULL,           /* readdir */
-        h8_select,
-        h8_ioctl,
+        NULL,
+        NULL,
         NULL,           /* mmap */
-        h8_open,
-        h8_release,
+        NULL,
+        NULL,
         NULL,           /* fsync */
         NULL            /* fasync */
 };
@@ -328,7 +321,7 @@ int init_module(void)
         request_region(h8_base, 8, "h8");
 
 #ifdef CONFIG_PROC_FS
-        proc_register_dynamic(&proc_root, &h8_proc_entry);
+        proc_register(&proc_root, &h8_proc_entry);
 #endif
 
 	QUEUE_INIT(&h8_actq, link, h8_cmd_q_t *);
@@ -362,7 +355,7 @@ int h8_init(void)
         printk("H8 at 0x%x IRQ %d\n", h8_base, h8_irq);
 
 #ifdef CONFIG_PROC_FS
-        proc_register_dynamic(&proc_root, &h8_proc_entry);
+        proc_register(&proc_root, &h8_proc_entry);
 #endif
 
         misc_register(&h8_device);
@@ -438,38 +431,6 @@ int h8_get_info(char *buf, char **start, off_t fpos, int length, int dummy)
         return p - buf;
 }
 #endif
-
-static long h8_read(struct inode *inode, struct file *fp, char *buf,
-		    u_long count)
-{
-	printk("h8_read: IMPDEL\n");
-	return 0;
-}
-
-static int h8_select(struct inode *inode, struct file *fp, int sel_type,
-                     select_table * wait)
-{
-	printk("h8_select: IMPDEL\n");
-	return 0;
-}
-
-static int h8_ioctl(struct inode * inode, struct file *filp,
-                    u_int cmd, u_long arg)
-{
-	printk("h8_ioctl: IMPDEL\n");
-	return 0;
-}
-
-static void h8_release(struct inode * inode, struct file * filp)
-{
-	printk("h8_release: IMPDEL\n");
-}
-
-static int h8_open(struct inode * inode, struct file * filp)
-{
-	printk("h8_open: IMPDEL\n");
-	return 0;
-}
 
 /* Called from console driver -- must make sure h8_enabled. */
 int h8_display_blank(void)

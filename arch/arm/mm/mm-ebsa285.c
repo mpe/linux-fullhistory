@@ -5,6 +5,7 @@
  *
  * Copyright (C) 1998 Russell King, Dave Gilbert.
  */
+#include <linux/config.h>
 #include <linux/sched.h>
 #include <linux/mm.h>
 #include <linux/init.h>

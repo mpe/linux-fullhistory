@@ -37,6 +37,7 @@
 #define PARPORT_DEFAULT_TIMESLICE	(HZ/5)
 
 static struct parport *portlist = NULL, *portlist_tail = NULL;
+spinlock_t parportlist_lock = SPIN_LOCK_UNLOCKED;
 
 void (*parport_probe_hook)(struct parport *port) = NULL;
 
@@ -45,9 +46,7 @@ struct parport *parport_enumerate(void)
 {
 #ifdef CONFIG_KMOD
 	if (portlist == NULL) {
-#if defined(CONFIG_PARPORT_PC_MODULE) || defined(CONFIG_PARPORT_AX_MODULE) || defined(CONFIG_PARPORT_ARC_MODULE)
 		request_module("parport_lowlevel");
-#endif /* CONFIG_PARPORT_LOWLEVEL_MODULE */
 #ifdef CONFIG_PNP_PARPORT_MODULE
 		request_module("parport_probe");
 #endif /* CONFIG_PNP_PARPORT_MODULE */
@@ -67,6 +66,8 @@ struct parport *parport_register_port(unsigned long base, int irq, int dma,
 {
 	struct parport *tmp;
 	int portnum;
+	char *name;
+	unsigned long flags;
 
 	/* Check for a previously registered port.
 	   NOTE: we will ignore irq and dma if we find a previously
@@ -109,22 +110,26 @@ struct parport *parport_register_port(unsigned long base, int irq, int dma,
 	tmp->flags = 0;
 	tmp->ops = ops;
 	tmp->number = portnum;
+	memset (&tmp->probe_info, 0, sizeof (struct parport_device_info));
 	spin_lock_init (&tmp->lock);
 
-	tmp->name = kmalloc(15, GFP_KERNEL);
-	if (!tmp->name) {
+	name = kmalloc(15, GFP_KERNEL);
+	if (!name) {
 		printk(KERN_ERR "parport: memory squeeze\n");
 		kfree(tmp);
 		return NULL;
 	}
-	sprintf(tmp->name, "parport%d", portnum);
+	sprintf(name, "parport%d", portnum);
+	tmp->name = name;
 
 	/* Chain the entry to our list. */
+	spin_lock_irqsave (&parportlist_lock, flags);
 	if (portlist_tail)
 		portlist_tail->next = tmp;
 	portlist_tail = tmp;
 	if (!portlist)
 		portlist = tmp;
+	spin_unlock_irqrestore (&parportlist_lock, flags);
 
 	tmp->probe_info.class = PARPORT_CLASS_LEGACY;  /* assume the worst */
 	tmp->waithead = tmp->waittail = NULL;
@@ -135,7 +140,8 @@ struct parport *parport_register_port(unsigned long base, int irq, int dma,
 void parport_unregister_port(struct parport *port)
 {
 	struct parport *p;
-	kfree(port->name);
+	unsigned long flags;
+	spin_lock_irqsave (&parportlist_lock, flags);
 	if (portlist == port) {
 		if ((portlist = port->next) == NULL)
 			portlist_tail = NULL;
@@ -146,19 +152,35 @@ void parport_unregister_port(struct parport *port)
 			if ((p->next = port->next) == NULL)
 				portlist_tail = p;
 		}
+		else printk (KERN_WARNING
+			     "%s not found in port list!\n", port->name);
 	}
+	spin_unlock_irqrestore (&parportlist_lock, flags);
+	if (p->probe_info.class_name)
+		kfree (p->probe_info.class_name);
+	if (p->probe_info.mfr)
+		kfree (p->probe_info.mfr);
+	if (p->probe_info.model)
+		kfree (p->probe_info.model);
+	if (p->probe_info.cmdset)
+		kfree (p->probe_info.cmdset);
+	if (p->probe_info.description)
+		kfree (p->probe_info.description);
+	kfree(port->name);
 	kfree(port);
 }
 
 void parport_quiesce(struct parport *port)
 {
 	if (port->devices) {
-		printk(KERN_WARNING "%s: attempt to quiesce active port.\n", port->name);
+		printk(KERN_WARNING "%s: attempt to quiesce active port.\n",
+		       port->name);
 		return;
 	}
 
 	if (port->flags & PARPORT_FLAG_COMA) {
-		printk(KERN_WARNING "%s: attempt to quiesce comatose port.\n", port->name);
+		printk(KERN_WARNING "%s: attempt to quiesce comatose port.\n",
+		       port->name);
 		return;
 	}
 
@@ -173,21 +195,13 @@ struct pardevice *parport_register_device(struct parport *port, const char *name
 			  int flags, void *handle)
 {
 	struct pardevice *tmp;
+	unsigned long flgs;
 
 	if (flags & PARPORT_DEV_LURK) {
 		if (!pf || !kf) {
 			printk(KERN_INFO "%s: refused to register lurking device (%s) without callbacks\n", port->name, name);
 			return NULL;
 		}
-	}
-
-	/* We may need to claw back the port hardware. */
-	if (port->flags & PARPORT_FLAG_COMA) {
-		if (port->ops->claim_resources(port)) {
-			printk(KERN_WARNING "%s: unable to get hardware to register %s.\n", port->name, name);
-			return NULL;
-		}
-		port->flags &= ~PARPORT_FLAG_COMA;
 	}
 
 	tmp = kmalloc(sizeof(struct pardevice), GFP_KERNEL);
@@ -203,7 +217,20 @@ struct pardevice *parport_register_device(struct parport *port, const char *name
 		return NULL;
 	}
 
-	tmp->name = (char *) name;
+	/* We may need to claw back the port hardware. */
+	if (port->flags & PARPORT_FLAG_COMA) {
+		if (port->ops->claim_resources(port)) {
+			printk(KERN_WARNING
+			       "%s: unable to get hardware to register %s.\n",
+			       port->name, name);
+			kfree (tmp->state);
+			kfree (tmp);
+			return NULL;
+		}
+		port->flags &= ~PARPORT_FLAG_COMA;
+	}
+
+	tmp->name = name;
 	tmp->port = port;
 	tmp->preempt = pf;
 	tmp->wakeup = kf;
@@ -215,10 +242,12 @@ struct pardevice *parport_register_device(struct parport *port, const char *name
 
 	/* Chain this onto the list */
 	tmp->prev = NULL;
+	spin_lock_irqsave (&port->lock, flgs);
 	tmp->next = port->devices;
 	if (port->devices)
 		port->devices->prev = tmp;
 	port->devices = tmp;
+	spin_unlock_irqrestore (&port->lock, flgs);
 
 	inc_parport_count();
 	port->ops->inc_use_count();
@@ -286,7 +315,7 @@ int parport_claim(struct pardevice *dev)
 
 try_again:
 	/* Preempt any current device */
-	if ((oldcad = port->cad)) {
+	if ((oldcad = port->cad) != NULL) {
 		if (oldcad->preempt) {
 			if (oldcad->preempt(oldcad->private))
 				goto blocked;
@@ -439,7 +468,7 @@ void parport_release(struct pardevice *dev)
 	/* If anybody is waiting, find out who's been there longest and
 	   then wake them up. (Note: no locking required) */
 	for (pd = port->waithead; pd; pd = pd->waitnext) {
-		if (pd->waiting & 2) {
+		if (pd->waiting & 2) { /* sleeping in claim_or_block */
 			parport_claim(pd);
 			if (waitqueue_active(&pd->wait_q))
 				wake_up(&pd->wait_q);

@@ -238,7 +238,7 @@ static int ei_start_xmit(struct sk_buff *skb, struct device *dev)
 	else
 	{	/* We should never get here. */
 		if (ei_debug)
-			printk(KERN_DEBUG "%s: No Tx buffers free! irq=%d tx1=%d tx2=%d last=%d\n",
+			printk(KERN_DEBUG "%s: No Tx buffers free! irq=%ld tx1=%d tx2=%d last=%d\n",
 				dev->name, dev->interrupt, ei_local->tx1, ei_local->tx2, ei_local->lasttx);
 		ei_local->irqlock = 0;
 		dev->tbusy = 1;

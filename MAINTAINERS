@@ -589,9 +589,9 @@ S:	Maintained
 
 TLAN NETWORK DRIVER
 P:	James Banks
-M:	james.banks@caldera.com
-L:	linux-net@vger.rutgers.edu
-S:	Supported
+M:	james@sovereign.org
+L:	tlan@vuser.vu.union.edu
+S:	Maintained
 
 TOKEN-RING NETWORK DRIVER
 P:	Paul Norton

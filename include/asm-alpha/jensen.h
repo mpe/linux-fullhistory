@@ -230,6 +230,17 @@ extern inline unsigned long __readl(unsigned long addr)
 	return *(volatile unsigned int *) ((addr << 7) + EISA_MEM + 0x60);
 }
 
+extern inline unsigned long __readq(unsigned long addr)
+{
+	unsigned long r0, r1;
+	__set_hae(addr);
+	addr &= __HAE_MASK;
+	addr = (addr << 7) + EISA_MEM + 0x60;
+	r0 = *(volatile unsigned int *) (addr);
+	r1 = *(volatile unsigned int *) (addr + (4 << 7));
+	return r1 << 32 | r0;
+}
+
 extern inline void __writeb(unsigned short b, unsigned long addr)
 {
 	__set_hae(addr);
@@ -249,6 +260,15 @@ extern inline void __writel(unsigned int b, unsigned long addr)
 	__set_hae(addr);
 	addr &= __HAE_MASK;
 	*(volatile unsigned int *) ((addr << 7) + EISA_MEM + 0x60) = b;
+}
+
+extern inline void __writeq(unsigned long b, unsigned long addr)
+{
+	__set_hae(addr);
+	addr &= __HAE_MASK;
+	addr = (addr << 7) + EISA_MEM + 0x60;
+	*(volatile unsigned int *) (addr) = b;
+	*(volatile unsigned int *) (addr + (4 << 7)) = b >> 32;
 }
 
 /*

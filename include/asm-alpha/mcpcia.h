@@ -167,6 +167,8 @@ extern unsigned int MCPCIA_DMA_WIN_SIZE;
 #define MCPCIA_DENSE(h)		(IDENT_ADDR + 0xf900000000UL + HOSE(h))
 #define MCPCIA_IACK_SC(h)	(IDENT_ADDR + 0xf9f0003f00UL + HOSE(h))
 
+#define DENSE_MEM(addr)		MCPCIA_DENSE(((unsigned long)(addr) >> 32) & 3)
+
 #define HAE_ADDRESS		MCPCIA_HAE_MEM(0)
 
 #ifdef __KERNEL__
@@ -197,6 +199,7 @@ extern inline void * bus_to_virt(unsigned long address)
  */
 
 #define vuip	volatile unsigned int *
+#define vulp	volatile unsigned long *
 
 #ifdef DISABLE_BWIO_ENABLED
 
@@ -375,7 +378,7 @@ extern inline unsigned long __readb(unsigned long addr)
 	__asm__ __volatile__ (
 		 "ldbu %0,%1"
 		 : "=r" (result)
-		 : "m"  (*(unsigned char *)(addr+MCPCIA_BW_MEM)));
+		 : "m"  (*(volatile unsigned char *)(addr+MCPCIA_BW_MEM)));
 
 	return result;
 }
@@ -387,21 +390,19 @@ extern inline unsigned long __readw(unsigned long addr)
 	__asm__ __volatile__ (
 		 "ldwu %0,%1"
 		 : "=r" (result)
-		 : "m"  (*(unsigned short *)(addr+MCPCIA_BW_MEM)));
+		 : "m"  (*(volatile unsigned short *)(addr+MCPCIA_BW_MEM)));
 
 	return result;
 }
 
 extern inline unsigned long __readl(unsigned long addr)
 {
-	register unsigned long result;
+	return *(vuip)(addr + MCPCIA_BW_MEM);
+}
 
-	__asm__ __volatile__ (
-		 "ldl %0,%1"
-		 : "=r" (result)
-		 : "m"  (*(unsigned int *)(addr+MCPCIA_BW_MEM)));
-
-	return result;
+extern inline unsigned long __readq(unsigned long addr)
+{
+	return *(vulp)(addr + MCPCIA_BW_MEM);
 }
 
 extern inline void __writeb(unsigned char b, unsigned long addr)
@@ -409,7 +410,8 @@ extern inline void __writeb(unsigned char b, unsigned long addr)
 	__asm__ __volatile__ (
 		 "stb %1,%0\n\t"
 		 "mb"
-		 : : "m" (*(unsigned char *)(addr+MCPCIA_BW_MEM)), "r" (b));
+		 : "m" (*(volatile unsigned char *)(addr+MCPCIA_BW_MEM))
+		 : "r" (b));
 }
 
 extern inline void __writew(unsigned short b, unsigned long addr)
@@ -417,15 +419,20 @@ extern inline void __writew(unsigned short b, unsigned long addr)
 	__asm__ __volatile__ (
 		 "stw %1,%0\n\t"
 		 "mb"
-		 : : "m" (*(unsigned short *)(addr+MCPCIA_BW_MEM)), "r" (b));
+		 : "m" (*(volatile unsigned short *)(addr+MCPCIA_BW_MEM))
+		 : "r" (b));
 }
 
 extern inline void __writel(unsigned int b, unsigned long addr)
 {
-	__asm__ __volatile__ (
-		 "stl %1,%0\n\t"
-		 "mb"
-		 : : "m" (*(unsigned int *)(addr+MCPCIA_BW_MEM)), "r" (b));
+	*(vuip)(addr+MCPCIA_BW_MEM) = b;
+	mb();
+}
+
+extern inline void __writeq(unsigned long b, unsigned long addr)
+{
+	*(vulp)(addr+MCPCIA_BW_MEM) = b;
+	mb();
 }
 
 #define readb(addr) __readb((addr))
@@ -620,6 +627,13 @@ extern inline unsigned long __readl(unsigned long in_addr)
 	return *(vuip) (addr + MCPCIA_DENSE(hose));
 }
 
+extern inline unsigned long __readq(unsigned long in_addr)
+{
+	unsigned long addr = in_addr & 0xffffffffUL;
+	unsigned long hose = (in_addr >> 32) & 3;
+	return *(vulp) (addr + MCPCIA_DENSE(hose));
+}
+
 extern inline void __writel(unsigned int b, unsigned long in_addr)
 {
 	unsigned long addr = in_addr & 0xffffffffUL;
@@ -627,12 +641,22 @@ extern inline void __writel(unsigned int b, unsigned long in_addr)
 	*(vuip) (addr + MCPCIA_DENSE(hose)) = b;
 }
 
+extern inline void __writeq(unsigned long b, unsigned long in_addr)
+{
+	unsigned long addr = in_addr & 0xffffffffUL;
+	unsigned long hose = (in_addr >> 32) & 3;
+	*(vulp) (addr + MCPCIA_DENSE(hose)) = b;
+}
+
 #endif /* BWIO_ENABLED */
 
 #define readl(a)	__readl((unsigned long)(a))
+#define readq(a)	__readq((unsigned long)(a))
 #define writel(v,a)	__writel((v),(unsigned long)(a))
+#define writeq(v,a)	__writeq((v),(unsigned long)(a))
 
 #undef vuip
+#undef vulp
 
 struct linux_hose_info {
         struct pci_bus                  pci_bus;
@@ -646,10 +670,8 @@ struct linux_hose_info {
 	unsigned int                    pci_hose_index;
 };
 
-extern unsigned long mcpcia_init (unsigned long mem_start,
-				 unsigned long mem_end);
-extern unsigned long mcpcia_fixup (unsigned long mem_start,
-				 unsigned long mem_end);
+extern unsigned long mcpcia_init (unsigned long, unsigned long);
+extern void mcpcia_fixup (void);
 
 #endif /* __KERNEL__ */
 

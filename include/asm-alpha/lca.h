@@ -125,6 +125,7 @@ extern unsigned int LCA_DMA_WIN_SIZE;
 #define LCA_IO			(IDENT_ADDR + 0x1c0000000UL)
 #define LCA_SPARSE_MEM		(IDENT_ADDR + 0x200000000UL)
 #define LCA_DENSE_MEM		(IDENT_ADDR + 0x300000000UL)
+#define DENSE_MEM(addr)		LCA_DENSE_MEM
 
 /*
  * Bit definitions for I/O Controller status register 0:
@@ -208,6 +209,7 @@ extern inline void * bus_to_virt(unsigned long address)
  */
 
 #define vuip	volatile unsigned int *
+#define vulp	volatile unsigned long *
 
 extern inline unsigned int __inb(unsigned long addr)
 {
@@ -296,6 +298,11 @@ extern inline unsigned long __readl(unsigned long addr)
 	return *(vuip) (addr + LCA_DENSE_MEM);
 }
 
+extern inline unsigned long __readq(unsigned long addr)
+{
+	return *(vulp) (addr + LCA_DENSE_MEM);
+}
+
 extern inline void __writeb(unsigned char b, unsigned long addr)
 {
 	unsigned long msb;
@@ -333,6 +340,11 @@ extern inline void __writel(unsigned int b, unsigned long addr)
 	*(vuip) (addr + LCA_DENSE_MEM) = b;
 }
 
+extern inline void __writeq(unsigned long b, unsigned long addr)
+{
+	*(vulp) (addr + LCA_DENSE_MEM) = b;
+}
+
 /*
  * Most of the above have so much overhead that it probably doesn't
  * make sense to have them inlined (better icache behavior).
@@ -345,9 +357,12 @@ extern inline void __writel(unsigned int b, unsigned long addr)
 (__builtin_constant_p((port))?__outb((x),(port)):_outb((x),(port)))
 
 #define readl(a)	__readl((unsigned long)(a))
+#define readq(a)	__readq((unsigned long)(a))
 #define writel(v,a)	__writel((v),(unsigned long)(a))
+#define writeq(v,a)	__writeq((v),(unsigned long)(a))
 
 #undef vuip
+#undef vulp
 
 extern unsigned long lca_init (unsigned long mem_start, unsigned long mem_end);
 

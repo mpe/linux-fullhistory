@@ -2002,7 +2002,7 @@ void SK_print_dev(struct device *dev, char *text)
 	printk("## Device Name: %s Base Address: %#06lx IRQ: %d\n", 
                dev->name, dev->base_addr, dev->irq);
 	       
-	printk("##   FLAGS: start: %d tbusy: %ld int: %d\n", 
+	printk("##   FLAGS: start: %d tbusy: %ld int: %ld\n", 
                dev->start, dev->tbusy, dev->interrupt);
 
 	printk("## next device: %#08x init function: %#08x\n", 

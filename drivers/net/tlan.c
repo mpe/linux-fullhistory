@@ -3,20 +3,23 @@
  *  Linux ThunderLAN Driver
  *
  *  tlan.c
- *  by James Banks, james.banks@caldera.com
+ *  by James Banks
  *
- *  (C) 1997 Caldera, Inc.
+ *  (C) 1997-1998 Caldera, Inc.
+ *  (C) 1998 James Banks
  *
  *  This software may be used and distributed according to the terms
  *  of the GNU Public License, incorporated herein by reference.
  *
- ** This file is best viewed/edited with tabstop=4 and colums>=132.
+ ** This file is best viewed/edited with columns>=132.
  *
  ** Useful (if not required) reading:
  *
  *		Texas Instruments, ThunderLAN Programmer's Guide,
  *			TI Literature Number SPWU013A
  *			available in PDF format from www.ti.com
+ *		Level One, LXT901 and LXT970 Data Sheets
+ *			available in PDF format from www.level1.com
  *		National Semiconductor, DP83840A Data Sheet
  *			available in PDF format from www.national.com
  *		Microchip Technology, 24C01A/02A/04A Data Sheet
@@ -29,6 +32,7 @@
 
 #include "tlan.h"
 
+#include <linux/bios32.h>
 #include <linux/ioport.h>
 #include <linux/pci.h>
 #include <linux/etherdevice.h>
@@ -49,53 +53,105 @@ static	int		TLanDevicesInstalled = 0;
 
 static  int		debug = 0;
 static	int		aui = 0;
+static	int		sa_int = 0;
+static	int		bbuf = 0;
+static	int		duplex = 0;
+static	int		speed = 0;
 static	u8		*TLanPadBuffer;
 static	char		TLanSignature[] = "TLAN";
-static	int		TLanVersionMajor = 0;
-static	int		TLanVersionMinor = 38;
+static	int		TLanVersionMajor = 1;
+static	int		TLanVersionMinor = 0;
 
 
-static	TLanPciId TLanDeviceList[] = {
+static	TLanAdapterEntry TLanAdapterList[] = {
 	{ PCI_VENDOR_ID_COMPAQ, 
 	  PCI_DEVICE_ID_NETELLIGENT_10,
-	  "Compaq Netelligent 10"
+	  "Compaq Netelligent 10 T PCI UTP",
+	  TLAN_ADAPTER_ACTIVITY_LED,
+	  0x83
 	},
 	{ PCI_VENDOR_ID_COMPAQ,
 	  PCI_DEVICE_ID_NETELLIGENT_10_100,
-	  "Compaq Netelligent 10/100"
+	  "Compaq Netelligent 10/100 TX PCI UTP",
+	  TLAN_ADAPTER_ACTIVITY_LED,
+	  0x83
 	}, 
 	{ PCI_VENDOR_ID_COMPAQ,
 	  PCI_DEVICE_ID_NETFLEX_3P_INTEGRATED,
-	  "Compaq Integrated NetFlex-3/P"
+	  "Compaq Integrated NetFlex-3/P",
+	  TLAN_ADAPTER_NONE,
+	  0x83
 	}, 
 	{ PCI_VENDOR_ID_COMPAQ,
 	  PCI_DEVICE_ID_NETFLEX_3P,
-	  "Compaq NetFlex-3/P"
+	  "Compaq NetFlex-3/P",
+	  TLAN_ADAPTER_UNMANAGED_PHY | TLAN_ADAPTER_BIT_RATE_PHY,
+	  0x83
 	},
 	{ PCI_VENDOR_ID_COMPAQ,
 	  PCI_DEVICE_ID_NETFLEX_3P_BNC,
-	  "Compaq NetFlex-3/P"
+	  "Compaq NetFlex-3/P",
+	  TLAN_ADAPTER_NONE,
+	  0x83
 	},
 	{ PCI_VENDOR_ID_COMPAQ,
 	  PCI_DEVICE_ID_NETELLIGENT_10_100_PROLIANT,
-	  "Compaq ProLiant Netelligent 10/100"
+	  "Compaq Netelligent Integrated 10/100 TX UTP",
+	  TLAN_ADAPTER_NONE,
+	  0x83
 	},
 	{ PCI_VENDOR_ID_COMPAQ,
 	  PCI_DEVICE_ID_NETELLIGENT_10_100_DUAL,
-	  "Compaq Dual Port Netelligent 10/100"
+	  "Compaq Netelligent Dual 10/100 TX PCI UTP",
+	  TLAN_ADAPTER_NONE,
+	  0x83
 	},
 	{ PCI_VENDOR_ID_COMPAQ,
 	  PCI_DEVICE_ID_DESKPRO_4000_5233MMX,
-	  "Compaq Deskpro 4000 5233MMX"
+	  "Compaq Netelligent 10/100 TX Embedded UTP",
+	  TLAN_ADAPTER_NONE,
+	  0x83
+	},
+	{ PCI_VENDOR_ID_OLICOM,
+	  PCI_DEVICE_ID_OLICOM_OC2183,
+	  "Olicom OC-2183/2185",
+	  TLAN_ADAPTER_USE_INTERN_10,
+	  0xF8
+	},
+	{ PCI_VENDOR_ID_OLICOM,
+	  PCI_DEVICE_ID_OLICOM_OC2325,
+	  "Olicom OC-2325",
+	  TLAN_ADAPTER_UNMANAGED_PHY,
+	  0xF8
+	},
+	{ PCI_VENDOR_ID_OLICOM,
+	  PCI_DEVICE_ID_OLICOM_OC2326,
+	  "Olicom OC-2326",
+	  TLAN_ADAPTER_USE_INTERN_10,
+	  0xF8
+	},
+	{ PCI_VENDOR_ID_COMPAQ,
+	  PCI_DEVICE_ID_NETELLIGENT_10_100_WS_5100,
+	  "Compaq Netelligent 10/100 TX UTP",
+	  TLAN_ADAPTER_ACTIVITY_LED,
+	  0x83
+	},
+	{ PCI_VENDOR_ID_COMPAQ,
+	  PCI_DEVICE_ID_NETELLIGENT_10_T2,
+	  "Compaq Netelligent 10 T/2 PCI UTP/Coax",
+	  TLAN_ADAPTER_NONE,
+	  0x83
 	},
 	{ 0,
 	  0,
-	  NULL
+	  NULL,
+	  0,
+	  0
 	} /* End of List */
 };
 
 
-static int	TLan_PciProbe( u8 *, u8 *, int *, u8 *, u32 *, u32 * );
+static int	TLan_PciProbe( u8 *, u8 *, u8 *, u8 *, u32 *, u32 * );
 static int	TLan_Init( struct device * );
 static int	TLan_Open(struct device *dev);
 static int	TLan_StartTx(struct sk_buff *, struct device *);
@@ -116,28 +172,37 @@ static u32	TLan_HandleRxEOC( struct device *, u16 );
 static void	TLan_Timer( unsigned long );
 
 static void	TLan_ResetLists( struct device * );
+static void	TLan_FreeLists( struct device * );
 static void	TLan_PrintDio( u16 );
 static void	TLan_PrintList( TLanList *, char *, int );
 static void	TLan_ReadAndClearStats( struct device *, int );
-static int	TLan_Reset( struct device * );
+static void	TLan_ResetAdapter( struct device * );
+static void	TLan_FinishReset( struct device * );
 static void	TLan_SetMac( struct device *, int areg, char *mac );
 
-static int	TLan_PhyNop( struct device * );
 static void	TLan_PhyPrint( struct device * );
-static void	TLan_PhySelect( struct device * );
+static void	TLan_PhyDetect( struct device * );
+static void	TLan_PhyPowerDown( struct device * );
+static void	TLan_PhyPowerUp( struct device * );
+static void	TLan_PhyReset( struct device * );
+static void	TLan_PhyStartLink( struct device * );
+static void	TLan_PhyFinishAutoNeg( struct device * );
+/*
+static int	TLan_PhyNop( struct device * );
 static int	TLan_PhyInternalCheck( struct device * );
 static int	TLan_PhyInternalService( struct device * );
 static int	TLan_PhyDp83840aCheck( struct device * );
+*/
 
-static int	TLan_MiiReadReg(u16, u16, u16, u16 *);
+static int	TLan_MiiReadReg( struct device *, u16, u16, u16 * );
 static void	TLan_MiiSendData( u16, u32, unsigned );
-static void	TLan_MiiSync(u16);
-static void	TLan_MiiWriteReg(u16, u16, u16, u16);
+static void	TLan_MiiSync( u16 );
+static void	TLan_MiiWriteReg( struct device *, u16, u16, u16 );
 
 static void	TLan_EeSendStart( u16 );
 static int	TLan_EeSendByte( u16, u8, int );
 static void	TLan_EeReceiveByte( u16, u8 *, int );
-static int	TLan_EeReadByte( u16, u8, u8 * );
+static int	TLan_EeReadByte( struct device *, u8, u8 * );
 
 
 static TLanIntVectorFunc *TLanIntVector[TLAN_INT_NUMBER_OF_INTS] = {
@@ -151,6 +216,25 @@ static TLanIntVectorFunc *TLanIntVector[TLAN_INT_NUMBER_OF_INTS] = {
 	TLan_HandleRxEOC
 };
 
+static inline void
+TLan_SetTimer( struct device *dev, u32 ticks, u32 type )
+{
+	TLanPrivateInfo *priv = (TLanPrivateInfo *) dev->priv;
+
+	cli();
+	if ( priv->timer.function != NULL ) {
+		return;
+	}
+	priv->timer.function = &TLan_Timer;
+	sti();
+
+	priv->timer.data = (unsigned long) dev;
+	priv->timer.expires = jiffies + ticks;
+	priv->timerSetAt = jiffies;
+	priv->timerType = type;
+	add_timer( &priv->timer );
+
+} /* TLan_SetTimer */
 
 
 /*****************************************************************************
@@ -176,7 +260,7 @@ static TLanIntVectorFunc *TLanIntVector[TLAN_INT_NUMBER_OF_INTS] = {
 	 *
 	 *	This function begins the setup of the driver creating a
 	 *	pad buffer, finding all TLAN devices (matching
-	 *	TLanDeviceList entries), and creating and initializing a
+	 *	TLanAdapterList entries), and creating and initializing a
 	 *	device structure for each adapter.
 	 *
 	 **************************************************************/
@@ -188,14 +272,14 @@ extern int init_module(void)
 	struct device	*dev;
 	size_t		dev_size;
 	u8		dfn;
-	u32		dl_ix;
+	u32		index;
 	int		failed;
 	int		found;
 	u32		io_base;
-	int		irq;
+	u8		irq;
 	u8		rev;
 
-	printk( "TLAN driver, v%d.%d, (C) 1997 Caldera, Inc.\n",
+	printk( "TLAN driver, v%d.%d, (C) 1997-8 Caldera, Inc.\n",
 		TLanVersionMajor,
 		TLanVersionMinor
 	      );
@@ -211,8 +295,7 @@ extern int init_module(void)
 
 	dev_size = sizeof(struct device) + sizeof(TLanPrivateInfo);
 
-	while ( ( found = TLan_PciProbe( &bus, &dfn, &irq, &rev, &io_base, &dl_ix ) ) )
- {
+	while ( ( found = TLan_PciProbe( &bus, &dfn, &irq, &rev, &io_base, &index ) ) ) {
 		dev = (struct device *) kmalloc( dev_size, GFP_KERNEL );
 		if ( dev == NULL ) {
 			printk( "TLAN:  Could not allocate memory for device.\n" );
@@ -227,23 +310,37 @@ extern int init_module(void)
 		dev->irq = irq;
 		dev->init = TLan_Init;
 
-		priv->pciBus = bus;
-		priv->pciDeviceFn = dfn;
-		priv->pciRevision = rev;
-		priv->pciEntry = dl_ix;
+		priv->adapter =    &TLanAdapterList[index];
+		priv->adapterRev = rev;
+		priv->aui =        aui;
+		if ( ( duplex != 1 ) && ( duplex != 2 ) ) {
+			duplex = 0;
+		}
+		priv->duplex =     duplex;
+		if ( ( speed != 10 ) && ( speed != 100 ) ) {
+			speed = 0;
+		}
+		priv->speed =      speed;
+		priv->sa_int =     sa_int;
+		priv->debug =      debug;
 
 		ether_setup( dev );
 
 		failed = register_netdev( dev );
 
 		if ( failed ) {
-			printk( "TLAN:  Could not register network device.  Freeing struct.\n" );
+			printk( "TLAN:  Could not register device.\n" );
 			kfree( dev );
 		} else {
 			priv->nextDevice = TLanDevices;
 			TLanDevices = dev;
 			TLanDevicesInstalled++;
-			printk("TLAN:  %s irq=%2d io=%04x, %s\n", dev->name, (int) irq, io_base, TLanDeviceList[dl_ix].deviceName );
+			printk("TLAN:  %s irq=%2d io=%04x, %s, Rev. %d\n",
+				dev->name,
+				(int) dev->irq,
+				(int) dev->base_addr,
+				priv->adapter->deviceLabel,
+				priv->adapterRev );
 		}
 	}
 	
@@ -276,11 +373,12 @@ extern void cleanup_module(void)
 	struct device	*dev;
 	TLanPrivateInfo	*priv;
 
-	while (TLanDevicesInstalled) {
+	while ( TLanDevicesInstalled ) {
 		dev = TLanDevices;
 		priv = (TLanPrivateInfo *) dev->priv;
-		if ( priv->dmaStorage )
+		if ( priv->dmaStorage ) {
 			kfree( priv->dmaStorage );
+		}
 		release_region( dev->base_addr, 0x10 );
 		unregister_netdev( dev );
 		TLanDevices = priv->nextDevice;
@@ -315,54 +413,79 @@ extern void cleanup_module(void)
 	 
 extern int tlan_probe( struct device *dev )
 {
+	TLanPrivateInfo	*priv;
 	static int	pad_allocated = 0;
 	int		found;
-	TLanPrivateInfo	*priv;
-	u8		bus, dfn, rev;
-	int		irq;
-	u32		io_base, dl_ix;
+	u8		bus, dfn, irq, rev;
+	u32		io_base, index;
 
-	found = TLan_PciProbe( &bus, &dfn, &irq, &rev, &io_base, &dl_ix );
-	if ( found ) {
-		dev->priv = kmalloc( sizeof(TLanPrivateInfo), GFP_KERNEL );
-		if ( dev->priv == NULL ) {
-			printk( "TLAN:  Could not allocate memory for device.\n" );
-		}
-		memset( dev->priv, 0, sizeof(TLanPrivateInfo) );
-		priv = (TLanPrivateInfo *) dev->priv;
+	found = TLan_PciProbe( &bus, &dfn, &irq, &rev, &io_base, &index );
 
-		dev->name = priv->devName;
-		strcpy( priv->devName, "    " );
-
-		dev = init_etherdev( dev, sizeof(TLanPrivateInfo) );
-
-		dev->base_addr = io_base;
-		dev->irq = irq;
-
-		priv->pciBus = bus;
-		priv->pciDeviceFn = dfn;
-		priv->pciRevision = rev;
-		priv->pciEntry = dl_ix;
-
-		if ( ! pad_allocated ) {
-			TLanPadBuffer = (u8 *) kmalloc( TLAN_MIN_FRAME_SIZE, GFP_KERNEL | GFP_DMA );
-			if ( TLanPadBuffer == NULL ) {
-				printk( "TLAN:  Could not allocate memory for pad buffer.\n" );
-			} else {
-				pad_allocated = 1;
-				memset( TLanPadBuffer, 0, TLAN_MIN_FRAME_SIZE );
-			}
-		}
-		printk("TLAN %d.%d:  %s irq=%2d io=%04x, %s\n",TLanVersionMajor,
-			TLanVersionMinor,
-			dev->name, 
-			(int) irq, 
-			io_base, 
-			TLanDeviceList[dl_ix].deviceName );
-		TLan_Init( dev );
+	if ( ! found ) {
+		return -ENODEV;
 	}
+
+	dev->priv = kmalloc( sizeof(TLanPrivateInfo), GFP_KERNEL );
+	
+	if ( dev->priv == NULL ) {
+		printk( "TLAN:  Could not allocate memory for device.\n" );
+		return  -ENOMEM;
+	}
+
+	memset( dev->priv, 0, sizeof(TLanPrivateInfo) );
+
+	if ( ! pad_allocated ) {
+		TLanPadBuffer = (u8 *) kmalloc( TLAN_MIN_FRAME_SIZE, 
+//						( GFP_KERNEL | GFP_DMA )
+						( GFP_KERNEL )
+					      );
+		if ( TLanPadBuffer == NULL ) {
+			printk( "TLAN:  Could not allocate memory for padding.\n" );
+			kfree( dev->priv );
+			return -ENOMEM;
+		} else {
+			pad_allocated = 1;
+			memset( TLanPadBuffer, 0, TLAN_MIN_FRAME_SIZE );
+		}
+	}
+
+	priv = (TLanPrivateInfo *) dev->priv;
+
+	dev->name = priv->devName;
+	strcpy( priv->devName, "    " );
+
+	dev = init_etherdev( dev, sizeof(TLanPrivateInfo) );
+
+	dev->base_addr = io_base;
+	dev->irq = irq;
+
+
+	priv->adapter =    &TLanAdapterList[index];
+	priv->adapterRev = rev;
+	priv->aui =        dev->mem_start & 0x01;
+	priv->duplex =     ( ( dev->mem_start & 0x0C ) == 0x0C ) ? 0 : ( dev->mem_start & 0x0C ) >> 2;
+	priv->speed =      ( ( dev->mem_start & 0x30 ) == 0x30 ) ? 0 : ( dev->mem_start & 0x30 ) >> 4;
+	if ( priv->speed == 0x1 ) {
+		priv->speed = TLAN_SPEED_10;
+	} else if ( priv->speed == 0x2 ) {
+		priv->speed = TLAN_SPEED_100;
+	}
+	priv->sa_int =     dev->mem_start & 0x02;
+	priv->debug =      dev->mem_end;
+
+
+	printk("TLAN %d.%d:  %s irq=%2d io=%04x, %s, Rev. %d\n",
+		TLanVersionMajor,
+		TLanVersionMinor,
+		dev->name, 
+		(int) irq, 
+		io_base,
+		priv->adapter->deviceLabel,
+		priv->adapterRev );
+
+	TLan_Init( dev );
 			
-   	return ( ( found ) ? 0 : -ENODEV );
+   	return 0;
 
 } /* tlan_probe */
 
@@ -390,7 +513,7 @@ extern int tlan_probe( struct device *dev )
 	 *				of the adapter.
 	 *
 	 *	This function searches for an adapter with PCI vendor
-	 *	and device IDs matching those in the TLanDeviceList.
+	 *	and device IDs matching those in the TLanAdapterList.
 	 *	The function 'remembers' the last device it found,
 	 *	and so finds a new device (if anymore are to be found)
 	 *	each time the function is called.  It then looks up
@@ -398,7 +521,7 @@ extern int tlan_probe( struct device *dev )
 	 *
 	 **************************************************************/
 
-int TLan_PciProbe( u8 *pci_bus, u8 *pci_dfn, int *pci_irq, u8 *pci_rev, u32 *pci_io_base, u32 *dl_ix )
+int TLan_PciProbe( u8 *pci_bus, u8 *pci_dfn, u8 *pci_irq, u8 *pci_rev, u32 *pci_io_base, u32 *dl_ix )
 {
 	static int dl_index = 0;
 	static int pci_index = 0;
@@ -409,43 +532,43 @@ int TLan_PciProbe( u8 *pci_bus, u8 *pci_dfn, int *pci_irq, u8 *pci_rev, u32 *pci
 	int	reg;
 
 
-	if ( ! pci_present() ) {
+	if ( ! pcibios_present() ) {
 		printk( "TLAN:   PCI Bios not present.\n" );
 		return 0;
 	}
 
-	for (; TLanDeviceList[dl_index].vendorId != 0; dl_index++) {
+	for (; TLanAdapterList[dl_index].vendorId != 0; dl_index++) {
 
 		not_found = pcibios_find_device(
-			TLanDeviceList[dl_index].vendorId,
-			TLanDeviceList[dl_index].deviceId,
+			TLanAdapterList[dl_index].vendorId,
+			TLanAdapterList[dl_index].deviceId,
 			pci_index,
 			pci_bus,
 			pci_dfn
 		);
 
 		if ( ! not_found ) {
-			struct pci_dev *pdev = pci_find_slot(*pci_bus, *pci_dfn);
 
 			TLAN_DBG(
 				TLAN_DEBUG_GNRL,
 				"TLAN:  found: Vendor Id = 0x%hx, Device Id = 0x%hx\n",
-				TLanDeviceList[dl_index].vendorId,
-				TLanDeviceList[dl_index].deviceId
+				TLanAdapterList[dl_index].vendorId,
+				TLanAdapterList[dl_index].deviceId
 			);
 
-			pci_read_config_byte ( pdev, PCI_REVISION_ID, pci_rev);
-			*pci_irq = pdev->irq;
-			pci_read_config_word ( pdev, PCI_COMMAND, &pci_command);
-			pci_read_config_byte ( pdev, PCI_LATENCY_TIMER, &pci_latency);
+			pcibios_read_config_byte ( *pci_bus,  *pci_dfn, PCI_REVISION_ID, pci_rev);
+			pcibios_read_config_byte ( *pci_bus,  *pci_dfn, PCI_INTERRUPT_LINE, pci_irq);
+			pcibios_read_config_word ( *pci_bus,  *pci_dfn, PCI_COMMAND, &pci_command);
+			pcibios_read_config_dword( *pci_bus,  *pci_dfn, PCI_BASE_ADDRESS_0, pci_io_base);
+			pcibios_read_config_byte ( *pci_bus,  *pci_dfn, PCI_LATENCY_TIMER, &pci_latency);
 
 			if (pci_latency < 0x10) {
-				pci_write_config_byte( pdev, PCI_LATENCY_TIMER, 0xff);
+				pcibios_write_config_byte( *pci_bus, *pci_dfn, PCI_LATENCY_TIMER, 0xff);
 				TLAN_DBG( TLAN_DEBUG_GNRL, "TLAN:    Setting latency timer to max.\n");
 			}
 
-			for ( reg = 0; reg <= 5; reg ++ ) {
-				*pci_io_base = pdev->base_address[reg];
+			for ( reg = PCI_BASE_ADDRESS_0; reg <= PCI_BASE_ADDRESS_5; reg +=4 ) {
+				pcibios_read_config_dword( *pci_bus, *pci_dfn, reg, pci_io_base);
 				if ((pci_command & PCI_COMMAND_IO) && (*pci_io_base & 0x3)) {
 					*pci_io_base &= PCI_BASE_ADDRESS_IO_MASK;
 					TLAN_DBG( TLAN_DEBUG_GNRL, "TLAN:    IO mapping is available at %x.\n", *pci_io_base);
@@ -458,8 +581,9 @@ int TLan_PciProbe( u8 *pci_bus, u8 *pci_dfn, int *pci_irq, u8 *pci_rev, u32 *pci
 			if ( *pci_io_base == 0 )
 				printk("TLAN:    IO mapping not available, ignoring device.\n");
 
-			if (pci_command & PCI_COMMAND_MASTER) {
-				TLAN_DBG( TLAN_DEBUG_GNRL, "TLAN:    Bus mastering is active.\n");
+			if ( ! ( pci_command & PCI_COMMAND_MASTER ) ) {
+				pcibios_write_config_word ( *pci_bus,  *pci_dfn, PCI_COMMAND, pci_command | PCI_COMMAND_MASTER );
+				printk( "TLAN:  Activating PCI bus mastering for this device.\n" );
 			}
 
 			pci_index++;
@@ -500,9 +624,9 @@ int TLan_PciProbe( u8 *pci_bus, u8 *pci_dfn, int *pci_irq, u8 *pci_rev, u32 *pci
 
 int TLan_Init( struct device *dev )
 {
-	int				dma_size;
-	int				err;
-	int				i;
+	int		dma_size;
+	int		err;
+	int		i;
 	TLanPrivateInfo	*priv;
 
 	priv = (TLanPrivateInfo *) dev->priv;
@@ -517,8 +641,14 @@ int TLan_Init( struct device *dev )
 	}
 	request_region( dev->base_addr, 0x10, TLanSignature );
 
-	dma_size = ( TLAN_NUM_RX_LISTS + TLAN_NUM_TX_LISTS )
+	if ( bbuf ) {
+		dma_size = ( TLAN_NUM_RX_LISTS + TLAN_NUM_TX_LISTS )
 	           * ( sizeof(TLanList) + TLAN_MAX_FRAME_SIZE );
+	} else {
+		dma_size = ( TLAN_NUM_RX_LISTS + TLAN_NUM_TX_LISTS )
+	           * ( sizeof(TLanList) );
+	}
+
 	priv->dmaStorage = kmalloc( dma_size, GFP_KERNEL | GFP_DMA );
 	if ( priv->dmaStorage == NULL ) {
 		printk( "TLAN:  Could not allocate lists and buffers for %s.\n",
@@ -529,19 +659,24 @@ int TLan_Init( struct device *dev )
 	priv->rxList = (TLanList *) 
 		       ( ( ( (u32) priv->dmaStorage ) + 7 ) & 0xFFFFFFF8 );
 	priv->txList = priv->rxList + TLAN_NUM_RX_LISTS;
-	priv->rxBuffer = (u8 *) ( priv->txList + TLAN_NUM_TX_LISTS );
-	priv->txBuffer = priv->rxBuffer
-			 + ( TLAN_NUM_RX_LISTS * TLAN_MAX_FRAME_SIZE );
+
+	if ( bbuf ) {
+		priv->rxBuffer = (u8 *) ( priv->txList + TLAN_NUM_TX_LISTS );
+		priv->txBuffer = priv->rxBuffer
+				 + ( TLAN_NUM_RX_LISTS * TLAN_MAX_FRAME_SIZE );
+	}
 
 	err = 0;
 	for ( i = 0;  i < 6 ; i++ )
-		err |= TLan_EeReadByte( dev->base_addr,
-					(u8) 0x83 + i,
+		err |= TLan_EeReadByte( dev,
+					(u8) priv->adapter->addrOfs + i,
 					(u8 *) &dev->dev_addr[i] );
-	if ( err )
+	if ( err ) {
 		printk( "TLAN:  %s: Error reading MAC from eeprom: %d\n",
 			dev->name,
 			err );
+	}
+
 	dev->addr_len = 6;
 
 	dev->open = &TLan_Open;
@@ -550,12 +685,6 @@ int TLan_Init( struct device *dev )
 	dev->get_stats = &TLan_GetStats;
 	dev->set_multicast_list = &TLan_SetMulticastList;
 
-#ifndef MODULE
-
-	aui = dev->mem_start & 0x01;
-	debug = dev->mem_end;
-
-#endif /* MODULE */
 
 	return 0;
 
@@ -583,16 +712,21 @@ int TLan_Init( struct device *dev )
 
 int TLan_Open( struct device *dev )
 {
-	int				err;
 	TLanPrivateInfo	*priv = (TLanPrivateInfo *) dev->priv;
+	int		err;
 
 	priv->tlanRev = TLan_DioRead8( dev->base_addr, TLAN_DEF_REVISION );
-	err = request_irq( dev->irq, TLan_HandleInterrupt, SA_SHIRQ, TLanSignature, dev);
+	if ( priv->sa_int ) {
+		TLAN_DBG( TLAN_DEBUG_GNRL, "TLAN:   Using SA_INTERRUPT\n" ); 
+		err = request_irq( dev->irq, TLan_HandleInterrupt, SA_SHIRQ | SA_INTERRUPT, TLanSignature, dev );
+	} else {
+		err = request_irq( dev->irq, TLan_HandleInterrupt, SA_SHIRQ, TLanSignature, dev );
+	}
 	if ( err ) {
-		printk( "TLAN:  Cannot open %s because IRQ %d is already in use.\n", dev->name , dev->irq );
+		printk( "TLAN:  Cannot open %s because IRQ %d is already in use.\n", dev->name, dev->irq );
 		return -EAGAIN;
 	}
-
+	
 	MOD_INC_USE_COUNT;
 
 	dev->tbusy = 0;
@@ -604,27 +738,9 @@ int TLan_Open( struct device *dev )
 	*/
 	TLan_ResetLists( dev );
 	TLan_ReadAndClearStats( dev, TLAN_IGNORE );
-	TLan_Reset( dev );
-	TLan_Reset( dev );
-	TLan_SetMac( dev, 0, dev->dev_addr );
-	outb( ( TLAN_HC_INT_ON >> 8 ), dev->base_addr + TLAN_HOST_CMD + 1 );
-	if ( debug >= 1 )
-		outb( ( TLAN_HC_REQ_INT >> 8 ), dev->base_addr + TLAN_HOST_CMD + 1 );
+	TLan_ResetAdapter( dev );
 
-	init_timer( &priv->timer );
-	priv->timer.data = (unsigned long) dev;
-	priv->timer.function = &TLan_Timer;
-	if ( priv->phyFlags & TLAN_PHY_AUTONEG ) {
-		priv->timer.expires = jiffies + TLAN_TIMER_LINK_DELAY;
-		priv->timerSetAt = jiffies;
-		priv->timerType = TLAN_TIMER_LINK;
-		add_timer( &priv->timer );
-	} else {
-		outl( virt_to_bus( priv->rxList ), dev->base_addr + TLAN_CH_PARM );
-		outl( TLAN_HC_GO | TLAN_HC_RT, dev->base_addr + TLAN_HOST_CMD );
-	}
-
-	TLAN_DBG( TLAN_DEBUG_GNRL, "TLAN:  Device %s opened.  Revision = %x\n", dev->name, priv->tlanRev );
+	TLAN_DBG( TLAN_DEBUG_GNRL, "TLAN:  %s: Opened.  TLAN Chip Rev: %x\n", dev->name, priv->tlanRev );
 
 	return 0;
 
@@ -657,27 +773,37 @@ int TLan_Open( struct device *dev )
 int TLan_StartTx( struct sk_buff *skb, struct device *dev )
 {
 	TLanPrivateInfo *priv = (TLanPrivateInfo *) dev->priv;
-	TLanList		*tail_list;
-	u8				*tail_buffer;
-	int				pad;
+	TLanList	*tail_list;
+	u8		*tail_buffer;
+	int		pad;
 
 	if ( ! priv->phyOnline ) {
 		TLAN_DBG( TLAN_DEBUG_TX, "TLAN TRANSMIT:  %s PHY is not ready\n", dev->name );
-		dev_kfree_skb( skb );
+		dev_kfree_skb( skb, FREE_WRITE );
 		return 0;
 	}
 
 	tail_list = priv->txList + priv->txTail;
+
 	if ( tail_list->cStat != TLAN_CSTAT_UNUSED ) {
 		TLAN_DBG( TLAN_DEBUG_TX, "TLAN TRANSMIT:  %s is busy (Head=%d Tail=%d)\n", dev->name, priv->txHead, priv->txTail );
 		dev->tbusy = 1;
 		priv->txBusyCount++;
 		return 1;
 	}
+
 	tail_list->forward = 0;
-	tail_buffer = priv->txBuffer + ( priv->txTail * TLAN_MAX_FRAME_SIZE );
-	memcpy( tail_buffer, skb->data, skb->len );
+
+	if ( bbuf ) {
+		tail_buffer = priv->txBuffer + ( priv->txTail * TLAN_MAX_FRAME_SIZE );
+		memcpy( tail_buffer, skb->data, skb->len );
+	} else {
+		tail_list->buffer[0].address = virt_to_bus( skb->data );
+		tail_list->buffer[9].address = (u32) skb;
+	}
+
 	pad = TLAN_MIN_FRAME_SIZE - skb->len;
+
 	if ( pad > 0 ) {
 		tail_list->frameSize = (u16) skb->len + pad;
 		tail_list->buffer[0].count = (u32) skb->len;
@@ -689,7 +815,7 @@ int TLan_StartTx( struct sk_buff *skb, struct device *dev )
 		tail_list->buffer[1].count = 0;
 		tail_list->buffer[1].address = 0;
 	}
-	/* are we transferring? */
+
 	cli();
 	tail_list->cStat = TLAN_CSTAT_READY;
 	if ( ! priv->txInProgress ) {
@@ -700,17 +826,19 @@ int TLan_StartTx( struct sk_buff *skb, struct device *dev )
 		outl( TLAN_HC_GO | TLAN_HC_ACK, dev->base_addr + TLAN_HOST_CMD );
 	} else {
 		TLAN_DBG( TLAN_DEBUG_TX, "TLAN TRANSMIT:  Adding buffer %d to TX channel\n", priv->txTail );
-		if ( priv->txTail == 0 )
+		if ( priv->txTail == 0 ) {
 			( priv->txList + ( TLAN_NUM_TX_LISTS - 1 ) )->forward = virt_to_bus( tail_list );
-		else
+		} else {
 			( priv->txList + ( priv->txTail - 1 ) )->forward = virt_to_bus( tail_list );
+		}
 	}
 	sti();
-	priv->txTail++;
-	if ( priv->txTail >= TLAN_NUM_TX_LISTS )
-		priv->txTail = 0;
 
-	dev_kfree_skb( skb );
+	CIRC_INC( priv->txTail, TLAN_NUM_TX_LISTS );
+
+	if ( bbuf ) {
+		dev_kfree_skb( skb, FREE_WRITE );
+	}
 		
 	dev->trans_start = jiffies;
 	return 0;
@@ -743,28 +871,26 @@ int TLan_StartTx( struct sk_buff *skb, struct device *dev )
 
 void TLan_HandleInterrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
-	u32				ack;
+	u32		ack;
 	struct device	*dev;
-	u32				host_cmd;
-	u16				host_int;
-	int				type;
+	u32		host_cmd;
+	u16		host_int;
+	int		type;
 
 	dev = (struct device *) dev_id;
 
-	if ( dev->interrupt )
-		printk( "TLAN:   Re-entering interrupt handler for %s: %d.\n" , dev->name, dev->interrupt );
+	cli();
+	if ( dev->interrupt ) {
+		printk( "TLAN:   Re-entering interrupt handler for %s: %ld.\n" , dev->name, dev->interrupt );
+	}
 	dev->interrupt++;
 
-	cli();
-
 	host_int = inw( dev->base_addr + TLAN_HOST_INT );
-	outw( host_int, dev->base_addr + TLAN_HOST_INT ); /* Deactivate Ints */
+	outw( host_int, dev->base_addr + TLAN_HOST_INT );
 
 	type = ( host_int & TLAN_HI_IT_MASK ) >> 2;
 
 	ack = TLanIntVector[type]( dev, host_int );
-
-	sti();
 
 	if ( ack ) {
 		host_cmd = TLAN_HC_ACK | ack | ( type << 18 );
@@ -772,6 +898,7 @@ void TLan_HandleInterrupt(int irq, void *dev_id, struct pt_regs *regs)
 	}
 
 	dev->interrupt--;
+	sti();
 
 } /* TLan_HandleInterrupts */
 
@@ -802,10 +929,11 @@ int TLan_Close(struct device *dev)
 
 	TLan_ReadAndClearStats( dev, TLAN_RECORD );
 	outl( TLAN_HC_AD_RST, dev->base_addr + TLAN_HOST_CMD );
-	if ( priv->timerSetAt != 0 )
+	if ( priv->timer.function != NULL )
 		del_timer( &priv->timer );
 	free_irq( dev->irq, dev );
-	TLAN_DBG( TLAN_DEBUG_GNRL, "TLAN:   Device %s closed.\n", dev->name );
+	TLan_FreeLists( dev );
+	TLAN_DBG( TLAN_DEBUG_GNRL, "TLAN:  Device %s closed.\n", dev->name );
 
 	MOD_DEC_USE_COUNT;
 
@@ -882,11 +1010,11 @@ struct net_device_stats *TLan_GetStats( struct device *dev )
 void TLan_SetMulticastList( struct device *dev )
 {	
 	struct dev_mc_list	*dmi = dev->mc_list;
-	u32					hash1 = 0;
-	u32					hash2 = 0;
-	int					i;
-	u32					offset;
-	u8					tmp;
+	u32			hash1 = 0;
+	u32			hash2 = 0;
+	int			i;
+	u32			offset;
+	u8			tmp;
 
 	if ( dev->flags & IFF_PROMISC ) {
 		tmp = TLan_DioRead8( dev->base_addr, TLAN_NET_CMD );
@@ -989,19 +1117,24 @@ u32 TLan_HandleInvalid( struct device *dev, u16 host_int )
 u32 TLan_HandleTxEOF( struct device *dev, u16 host_int )
 {
 	TLanPrivateInfo	*priv = (TLanPrivateInfo *) dev->priv;
-	int				eoc = 0;
-	TLanList		*head_list;
-	u32				ack = 1;
+	int		eoc = 0;
+	TLanList	*head_list;
+	u32		ack = 1;
 
 	TLAN_DBG( TLAN_DEBUG_TX, "TLAN TRANSMIT:  Handling TX EOF (Head=%d Tail=%d)\n", priv->txHead, priv->txTail );
 	host_int = 0;
 	head_list = priv->txList + priv->txHead;
+
+	if ( ! bbuf ) {
+		dev_kfree_skb( (struct sk_buff *) head_list->buffer[9].address, FREE_WRITE );
+		head_list->buffer[9].address = 0;
+	}
+
 	if ( head_list->cStat & TLAN_CSTAT_EOC )
 		eoc = 1;
 	if ( ! head_list->cStat & TLAN_CSTAT_FRM_CMP ) {
 		printk( "TLAN:  Received interrupt for uncompleted TX frame.\n" );
 	}
-	/* printk( "Ack %d CSTAT=%hx\n", priv->txHead, head_list->cStat ); */
 
 #if LINUX_KERNEL_VERSION > 0x20100
 	priv->stats->tx_bytes += head_list->frameSize;
@@ -1009,9 +1142,7 @@ u32 TLan_HandleTxEOF( struct device *dev, u16 host_int )
 
 	head_list->cStat = TLAN_CSTAT_UNUSED;
 	dev->tbusy = 0;
-	priv->txHead++;
-	if ( priv->txHead >= TLAN_NUM_TX_LISTS )
-		priv->txHead = 0;
+	CIRC_INC( priv->txHead, TLAN_NUM_TX_LISTS );
 	if ( eoc ) {
 		TLAN_DBG( TLAN_DEBUG_TX, "TLAN TRANSMIT:  Handling TX EOC (Head=%d Tail=%d)\n", priv->txHead, priv->txTail );
 		head_list = priv->txList + priv->txHead;
@@ -1022,17 +1153,13 @@ u32 TLan_HandleTxEOF( struct device *dev, u16 host_int )
 			priv->txInProgress = 0;
 		}
 	}
-	TLan_DioWrite8( dev->base_addr, TLAN_LED_REG, TLAN_LED_LINK | TLAN_LED_ACT );
-	if ( priv->phyFlags & TLAN_PHY_ACTIVITY ) {
-		if ( priv->timerSetAt == 0 ) {
-			/* printk("TxEOF Starting timer...\n"); */
+
+	if ( priv->adapter->flags & TLAN_ADAPTER_ACTIVITY_LED ) {
+		TLan_DioWrite8( dev->base_addr, TLAN_LED_REG, TLAN_LED_LINK | TLAN_LED_ACT );
+		if ( priv->timer.function == NULL ) {
+			TLan_SetTimer( dev, TLAN_TIMER_ACT_DELAY, TLAN_TIMER_ACTIVITY );
+		} else if ( priv->timerType == TLAN_TIMER_ACTIVITY ) {
 			priv->timerSetAt = jiffies;
-			priv->timer.expires = jiffies + TLAN_TIMER_ACT_DELAY;
-			priv->timerType = TLAN_TIMER_ACT;
-			add_timer( &priv->timer );
-		} else if ( priv->timerType == TLAN_TIMER_ACT ) {
-			priv->timerSetAt = jiffies;
-			/* printk("TxEOF continuing timer...\n"); */
 		}
 	}
 
@@ -1093,7 +1220,7 @@ u32 TLan_HandleStatOverflow( struct device *dev, u16 host_int )
 	 *	of the list.  If the frame was the last in the Rx
 	 *	channel (EOC), the function restarts the receive channel
 	 *	by sending an Rx Go command to the adapter.  Then it
-	 *	activates/continues the activity LED.
+	 *	activates/continues the the activity LED.
 	 *
 	 **************************************************************/
 
@@ -1112,11 +1239,14 @@ u32 TLan_HandleRxEOF( struct device *dev, u16 host_int )
 	host_int = 0;
 	head_list = priv->rxList + priv->rxHead;
 	tail_list = priv->rxList + priv->rxTail;
-	if ( head_list->cStat & TLAN_CSTAT_EOC )
+
+	if ( head_list->cStat & TLAN_CSTAT_EOC ) {
 		eoc = 1;
+	}
+
 	if ( ! head_list->cStat & TLAN_CSTAT_FRM_CMP ) {
 		printk( "TLAN:  Received interrupt for uncompleted RX frame.\n" );
-	} else {
+	} else if ( bbuf ) {
 		skb = dev_alloc_skb( head_list->frameSize + 7 );
 		if ( skb == NULL ) { 
 			printk( "TLAN:  Couldn't allocate memory for received data.\n" );
@@ -1125,7 +1255,6 @@ u32 TLan_HandleRxEOF( struct device *dev, u16 host_int )
 			skb->dev = dev;
 			skb_reserve( skb, 2 );
 			t = (void *) skb_put( skb, head_list->frameSize );
-			/* printk( " %hd %p %p\n", head_list->frameSize, skb->data, t ); */
 
 #if LINUX_KERNEL_VERSION > 0x20100
 			priv->stats->rx_bytes += head_list->frameSize;
@@ -1135,17 +1264,39 @@ u32 TLan_HandleRxEOF( struct device *dev, u16 host_int )
 			skb->protocol = eth_type_trans( skb, dev );
 			netif_rx( skb );
 		}
+	} else {
+		skb = (struct sk_buff *) head_list->buffer[9].address;
+		head_list->buffer[9].address = 0;
+		skb_trim( skb, head_list->frameSize );
+
+#if LINUX_KERNEL_VERSION > 0x20100
+			priv->stats->rx_bytes += head_list->frameSize;
+#endif
+
+		skb->protocol = eth_type_trans( skb, dev );
+		netif_rx( skb );
+
+		skb = dev_alloc_skb( TLAN_MAX_FRAME_SIZE + 7 );
+		if ( skb == NULL ) {
+			printk( "TLAN:  Couldn't allocate memory for received data.\n" );
+			/* If this ever happened it would be a problem */
+		} else {
+			skb->dev = dev;
+			skb_reserve( skb, 2 );
+			t = (void *) skb_put( skb, TLAN_MAX_FRAME_SIZE );
+			head_list->buffer[0].address = virt_to_bus( t );
+			head_list->buffer[9].address = (u32) skb;
+		}
 	}
+
 	head_list->forward = 0;
 	head_list->frameSize = TLAN_MAX_FRAME_SIZE;
 	head_list->buffer[0].count = TLAN_MAX_FRAME_SIZE | TLAN_LAST_BUFFER;
 	tail_list->forward = virt_to_bus( head_list );
-	priv->rxHead++;
-	if ( priv->rxHead >= TLAN_NUM_RX_LISTS )
-		priv->rxHead = 0;
-	priv->rxTail++;
-	if ( priv->rxTail >= TLAN_NUM_RX_LISTS )
-		priv->rxTail = 0;
+
+	CIRC_INC( priv->rxHead, TLAN_NUM_RX_LISTS );
+	CIRC_INC( priv->rxTail, TLAN_NUM_RX_LISTS );
+
 	if ( eoc ) { 
 		TLAN_DBG( TLAN_DEBUG_RX, "TLAN RECEIVE:  Handling RX EOC (Head=%d Tail=%d)\n", priv->rxHead, priv->rxTail );
 		head_list = priv->rxList + priv->rxHead;
@@ -1153,19 +1304,16 @@ u32 TLan_HandleRxEOF( struct device *dev, u16 host_int )
 		ack |= TLAN_HC_GO | TLAN_HC_RT;
 		priv->rxEocCount++;
 	}
-	TLan_DioWrite8( dev->base_addr, TLAN_LED_REG, TLAN_LED_LINK | TLAN_LED_ACT );
-	if ( priv->phyFlags & TLAN_PHY_ACTIVITY ) {
-		if ( priv->timerSetAt == 0 )  {
-			/* printk("RxEOF Starting timer...\n"); */
-			priv->timerSetAt = jiffies;
-			priv->timer.expires = jiffies + TLAN_TIMER_ACT_DELAY;
-			priv->timerType = TLAN_TIMER_ACT;
-			add_timer( &priv->timer );
-		} else if ( priv->timerType == TLAN_TIMER_ACT ) {
-			/* printk("RxEOF tarting continuing timer...\n"); */
+
+	if ( priv->adapter->flags & TLAN_ADAPTER_ACTIVITY_LED ) {
+		TLan_DioWrite8( dev->base_addr, TLAN_LED_REG, TLAN_LED_LINK | TLAN_LED_ACT );
+		if ( priv->timer.function == NULL )  {
+			TLan_SetTimer( dev, TLAN_TIMER_ACT_DELAY, TLAN_TIMER_ACTIVITY );
+		} else if ( priv->timerType == TLAN_TIMER_ACTIVITY ) {
 			priv->timerSetAt = jiffies;
 		}
 	}
+
 	dev->last_rx = jiffies;
 
 	return ack;
@@ -1195,7 +1343,7 @@ u32 TLan_HandleRxEOF( struct device *dev, u16 host_int )
 u32 TLan_HandleDummy( struct device *dev, u16 host_int )
 {
 	host_int = 0;
-	printk( "TLAN:  Dummy interrupt on %s.\n", dev->name );
+	printk( "TLAN:  Test interrupt on %s.\n", dev->name );
 	return 1;
 
 } /* TLan_HandleDummy */
@@ -1270,45 +1418,49 @@ u32 TLan_HandleTxEOC( struct device *dev, u16 host_int )
 
 u32 TLan_HandleStatusCheck( struct device *dev, u16 host_int )
 {	
-	u32				ack;
-	u32				error;
-	u8				net_sts;
 	TLanPrivateInfo	*priv = (TLanPrivateInfo *) dev->priv;
+	u32		ack;
+	u32		error;
+	u8		net_sts;
+	u32		phy;
+	u16		tlphy_ctl;
+	u16		tlphy_sts;
 	
 	ack = 1;
 	if ( host_int & TLAN_HI_IV_MASK ) {
 		error = inl( dev->base_addr + TLAN_CH_PARM );
-		printk( "TLAN:   Adaptor Check on device %s err = 0x%x\n", dev->name, error );
+		printk( "TLAN:  %s: Adaptor Error = 0x%x\n", dev->name, error );
 		TLan_ReadAndClearStats( dev, TLAN_RECORD );
 		outl( TLAN_HC_AD_RST, dev->base_addr + TLAN_HOST_CMD );
+		TLan_FreeLists( dev );
 		TLan_ResetLists( dev );
-		TLan_Reset( dev );
+		TLan_ResetAdapter( dev );
 		dev->tbusy = 0;
-		TLan_SetMac( dev, 0, dev->dev_addr );
-		if ( priv->timerType == 0 ) {
-			if ( priv->phyFlags & TLAN_PHY_AUTONEG ) {
-				priv->timer.expires = jiffies + TLAN_TIMER_LINK_DELAY;
-				priv->timerSetAt = jiffies;
-				priv->timerType = TLAN_TIMER_LINK;
-				add_timer( &priv->timer );
-			} else {
-				/*printk( " RX GO---->\n" ); */
-				outl( virt_to_bus( priv->rxList ), dev->base_addr + TLAN_CH_PARM );
-				outl( TLAN_HC_GO | TLAN_HC_RT, dev->base_addr + TLAN_HOST_CMD );
-			}
-		}
 		ack = 0;
 	} else {
+		TLAN_DBG( TLAN_DEBUG_GNRL, "TLAN:  %s: Status Check\n", dev->name );
+		phy = priv->phy[priv->phyNum];
+
 		net_sts = TLan_DioRead8( dev->base_addr, TLAN_NET_STS );
-		if ( net_sts )
+		if ( net_sts ) {
 			TLan_DioWrite8( dev->base_addr, TLAN_NET_STS, net_sts );
-		if ( net_sts & TLAN_NET_STS_MIRQ ) {
-			(*priv->phyService)( dev );
+			TLAN_DBG( TLAN_DEBUG_GNRL, "TLAN:  %s:    Net_Sts = %x\n", dev->name, (unsigned) net_sts );
+		}
+		if ( ( net_sts & TLAN_NET_STS_MIRQ ) &&  ( priv->phyNum == 0 ) ) {
+			TLan_MiiReadReg( dev, phy, TLAN_TLPHY_STS, &tlphy_sts );
+			TLan_MiiReadReg( dev, phy, TLAN_TLPHY_CTL, &tlphy_ctl );
+        		if ( ! ( tlphy_sts & TLAN_TS_POLOK ) && ! ( tlphy_ctl & TLAN_TC_SWAPOL ) ) {
+                		tlphy_ctl |= TLAN_TC_SWAPOL;
+                		TLan_MiiWriteReg( dev, phy, TLAN_TLPHY_CTL, tlphy_ctl);
+        		} else if ( ( tlphy_sts & TLAN_TS_POLOK ) && ( tlphy_ctl & TLAN_TC_SWAPOL ) ) {
+                		tlphy_ctl &= ~TLAN_TC_SWAPOL;
+                		TLan_MiiWriteReg( dev, phy, TLAN_TLPHY_CTL, tlphy_ctl);
+        		}
+
 			if (debug) {
 				TLan_PhyPrint( dev );
 			}
 		}
-		TLAN_DBG( TLAN_DEBUG_GNRL, "TLAN:  Status Check! %s Net_Sts=%x\n", dev->name, (unsigned) net_sts );
 	}
 
 	return ack;
@@ -1341,8 +1493,8 @@ u32 TLan_HandleStatusCheck( struct device *dev, u16 host_int )
 u32 TLan_HandleRxEOC( struct device *dev, u16 host_int )
 {
 	TLanPrivateInfo	*priv = (TLanPrivateInfo *) dev->priv;
-	TLanList		*head_list;
-	u32				ack = 1;
+	TLanList	*head_list;
+	u32		ack = 1;
 
 	host_int = 0;
 	if (  priv->tlanRev < 0x30 ) {
@@ -1402,34 +1554,44 @@ u32 TLan_HandleRxEOC( struct device *dev, u16 host_int )
 void TLan_Timer( unsigned long data )
 {
 	struct device	*dev = (struct device *) data;
-	u16		gen_sts;
 	TLanPrivateInfo	*priv = (TLanPrivateInfo *) dev->priv;
+	u32		elapsed;
 
-	/* printk( "TLAN:  %s Entered Timer, type = %d\n", dev->name, priv->timerType ); */
+	priv->timer.function = NULL;
 
 	switch ( priv->timerType ) {
-		case TLAN_TIMER_LINK:
-			TLan_MiiReadReg( dev->base_addr, priv->phyAddr, MII_GEN_STS, &gen_sts );
-			if ( gen_sts & MII_GS_LINK ) {
-				priv->phyOnline = 1;
-				outl( virt_to_bus( priv->rxList ), dev->base_addr + TLAN_CH_PARM );
-				outl( TLAN_HC_GO | TLAN_HC_RT, dev->base_addr + TLAN_HOST_CMD );
-				priv->timerSetAt = 0;
-				priv->timerType = 0;
-			} else {
-				priv->timer.expires = jiffies + ( TLAN_TIMER_LINK_DELAY * 2 );
-				add_timer( &priv->timer );
-			}
+		case TLAN_TIMER_PHY_PDOWN:
+			TLan_PhyPowerDown( dev );
 			break;
-		case TLAN_TIMER_ACT:
-			if ( jiffies - priv->timerSetAt >= TLAN_TIMER_ACT_DELAY ) {
-				TLan_DioWrite8( dev->base_addr, TLAN_LED_REG, TLAN_LED_LINK );
-				priv->timerSetAt = 0;
-				priv->timerType = 0;
-			} else {
-				priv->timer.expires = priv->timerSetAt + TLAN_TIMER_ACT_DELAY;
-				add_timer( &priv->timer );
+		case TLAN_TIMER_PHY_PUP:
+			TLan_PhyPowerUp( dev );
+			break;
+		case TLAN_TIMER_PHY_RESET:
+			TLan_PhyReset( dev );
+			break;
+		case TLAN_TIMER_PHY_START_LINK:
+			TLan_PhyStartLink( dev );
+			break;
+		case TLAN_TIMER_PHY_FINISH_AN:
+			TLan_PhyFinishAutoNeg( dev );
+			break;
+		case TLAN_TIMER_FINISH_RESET:
+			TLan_FinishReset( dev );
+			break;
+		case TLAN_TIMER_ACTIVITY:
+			cli();
+			if ( priv->timer.function == NULL ) {
+				elapsed = jiffies - priv->timerSetAt;
+				if ( elapsed >= TLAN_TIMER_ACT_DELAY ) {
+					TLan_DioWrite8( dev->base_addr, TLAN_LED_REG, TLAN_LED_LINK );
+				} else  {
+					priv->timer.function = &TLan_Timer;
+					priv->timer.expires = priv->timerSetAt + TLAN_TIMER_ACT_DELAY;
+					sti();
+					add_timer( &priv->timer );
+				}
 			}
+			sti();
 			break;
 		default:
 			break;
@@ -1468,13 +1630,19 @@ void TLan_ResetLists( struct device *dev )
 	TLanPrivateInfo *priv = (TLanPrivateInfo *) dev->priv;
 	int		i;
 	TLanList	*list;
+	struct sk_buff	*skb;
+	void		*t = NULL;
 
 	priv->txHead = 0;
 	priv->txTail = 0;
 	for ( i = 0; i < TLAN_NUM_TX_LISTS; i++ ) {
 		list = priv->txList + i;
 		list->cStat = TLAN_CSTAT_UNUSED;
-		list->buffer[0].address = virt_to_bus( priv->txBuffer + ( i * TLAN_MAX_FRAME_SIZE ) );
+		if ( bbuf ) {
+			list->buffer[0].address = virt_to_bus( priv->txBuffer + ( i * TLAN_MAX_FRAME_SIZE ) );
+		} else {
+			list->buffer[0].address = 0;
+		}
 		list->buffer[2].count = 0;
 		list->buffer[2].address = 0;
 	}
@@ -1486,7 +1654,21 @@ void TLan_ResetLists( struct device *dev )
 		list->cStat = TLAN_CSTAT_READY;
 		list->frameSize = TLAN_MAX_FRAME_SIZE;
 		list->buffer[0].count = TLAN_MAX_FRAME_SIZE | TLAN_LAST_BUFFER;
-		list->buffer[0].address = virt_to_bus( priv->rxBuffer + ( i * TLAN_MAX_FRAME_SIZE ) );
+		if ( bbuf ) {
+			list->buffer[0].address = virt_to_bus( priv->rxBuffer + ( i * TLAN_MAX_FRAME_SIZE ) );
+		} else {
+			skb = dev_alloc_skb( TLAN_MAX_FRAME_SIZE + 7 );
+			if ( skb == NULL ) {
+				printk( "TLAN:  Couldn't allocate memory for received data.\n" );
+				/* If this ever happened it would be a problem */
+			} else {
+				skb->dev = dev;
+				skb_reserve( skb, 2 );
+				t = (void *) skb_put( skb, TLAN_MAX_FRAME_SIZE );
+			}
+			list->buffer[0].address = virt_to_bus( t );
+			list->buffer[9].address = (u32) skb;
+		}
 		list->buffer[1].count = 0;
 		list->buffer[1].address = 0;
 		if ( i < TLAN_NUM_RX_LISTS - 1 )
@@ -1496,6 +1678,36 @@ void TLan_ResetLists( struct device *dev )
 	}
 
 } /* TLan_ResetLists */
+
+
+void TLan_FreeLists( struct device *dev )
+{
+	TLanPrivateInfo *priv = (TLanPrivateInfo *) dev->priv;
+	int		i;
+	TLanList	*list;
+	struct sk_buff	*skb;
+
+	if ( ! bbuf ) {
+		for ( i = 0; i < TLAN_NUM_TX_LISTS; i++ ) {
+			list = priv->txList + i;
+			skb = (struct sk_buff *) list->buffer[9].address;
+			if ( skb ) {
+				dev_kfree_skb( skb, FREE_WRITE );
+				list->buffer[9].address = 0;
+			}
+		}
+
+		for ( i = 0; i < TLAN_NUM_RX_LISTS; i++ ) {
+			list = priv->rxList + i;
+			skb = (struct sk_buff *) list->buffer[9].address;
+			if ( skb ) {
+				dev_kfree_skb( skb, FREE_READ );
+				list->buffer[9].address = 0;
+			}
+		}
+	}
+
+} /* TLan_FreeLists */
 
 
 
@@ -1509,7 +1721,7 @@ void TLan_ResetLists( struct device *dev )
 	 *		io_base		Base IO port of the device of
 	 *				which to print DIO registers.
 	 *
-	 *	This function prints out all the internal (DIO)
+	 *	This function prints out all the the internal (DIO)
 	 *	registers of a TLAN chip.
 	 *
 	 **************************************************************/
@@ -1588,11 +1800,11 @@ void TLan_PrintList( TLanList *list, char *type, int num)
 void TLan_ReadAndClearStats( struct device *dev, int record )
 {
 	TLanPrivateInfo	*priv = (TLanPrivateInfo *) dev->priv;
-	u32				tx_good, tx_under;
-	u32				rx_good, rx_over;
-	u32				def_tx, crc, code;
-	u32				multi_col, single_col;
-	u32				excess_col, late_col, loss;
+	u32		tx_good, tx_under;
+	u32		rx_good, rx_over;
+	u32		def_tx, crc, code;
+	u32		multi_col, single_col;
+	u32		excess_col, late_col, loss;
 
 	outw( TLAN_GOOD_TX_FRMS, dev->base_addr + TLAN_DIO_ADR );
 	tx_good  = inb( dev->base_addr + TLAN_DIO_DATA );
@@ -1660,7 +1872,8 @@ void TLan_ReadAndClearStats( struct device *dev, int record )
 	 *
 	 **************************************************************/
 
-int TLan_Reset( struct device *dev )
+void
+TLan_ResetAdapter( struct device *dev )
 {
 	TLanPrivateInfo	*priv = (TLanPrivateInfo *) dev->priv;
 	int		i;
@@ -1668,11 +1881,14 @@ int TLan_Reset( struct device *dev )
 	u32		data;
 	u8		data8;
 
+	priv->tlanFullDuplex = FALSE;
 /*  1.	Assert reset bit. */
 
 	data = inl(dev->base_addr + TLAN_HOST_CMD);
 	data |= TLAN_HC_AD_RST;
 	outl(data, dev->base_addr + TLAN_HOST_CMD);
+	
+	udelay(1000);
 
 /*  2.	Turn off interrupts. ( Probably isn't necessary ) */
 
@@ -1708,37 +1924,97 @@ int TLan_Reset( struct device *dev )
 		data8 = TLAN_ID_TX_EOC | TLAN_ID_RX_EOC;
 		TLan_DioWrite8( dev->base_addr, TLAN_INT_DIS, data8 );
 	}
-	TLan_PhySelect( dev );
+	TLan_PhyDetect( dev );
 	data = TLAN_NET_CFG_1FRAG | TLAN_NET_CFG_1CHAN;
-	if ( priv->phyFlags & TLAN_PHY_BIT_RATE ) {
+	if ( priv->adapter->flags & TLAN_ADAPTER_BIT_RATE_PHY ) {
 		data |= TLAN_NET_CFG_BIT;
-		if ( aui == 1 ) {
+		if ( priv->aui == 1 ) {
 			TLan_DioWrite8( dev->base_addr, TLAN_ACOMMIT, 0x0a );
+		} else if ( priv->duplex == TLAN_DUPLEX_FULL ) {
+			TLan_DioWrite8( dev->base_addr, TLAN_ACOMMIT, 0x00 );
+			priv->tlanFullDuplex = TRUE;
 		} else {
 			TLan_DioWrite8( dev->base_addr, TLAN_ACOMMIT, 0x08 );
 		}
 	}
-	if ( priv->phyFlags & TLAN_PHY_INTERNAL ) {
+	if ( priv->phyNum == 0 ) {
 		data |= TLAN_NET_CFG_PHY_EN;
 	}
 	TLan_DioWrite16( dev->base_addr, TLAN_NET_CONFIG, (u16) data );
-	(*priv->phyCheck)( dev ); 
-	data8 = TLAN_NET_CMD_NRESET | TLAN_NET_CMD_NWRAP;
-	TLan_DioWrite8( dev->base_addr, TLAN_NET_CMD, data8 );
-	data8 = TLAN_NET_MASK_MASK4 | TLAN_NET_MASK_MASK5; 
-	if ( priv->phyFlags & TLAN_PHY_INTS ) {
-		data8 |= TLAN_NET_MASK_MASK7; 
+
+	if ( priv->adapter->flags & TLAN_ADAPTER_UNMANAGED_PHY ) {
+		TLan_FinishReset( dev );
+	} else {
+		TLan_PhyPowerDown( dev );
 	}
-	TLan_DioWrite8( dev->base_addr, TLAN_NET_MASK, data8 );
+
+} /* TLan_ResetAdapter */
+
+
+
+
+void
+TLan_FinishReset( struct device *dev )
+{
+	TLanPrivateInfo	*priv = (TLanPrivateInfo *) dev->priv;
+	u8		data;
+	u32		phy;
+	u8		sio;
+	u16		status;
+	u16		tlphy_ctl;
+
+	phy = priv->phy[priv->phyNum];
+
+	data = TLAN_NET_CMD_NRESET | TLAN_NET_CMD_NWRAP;
+	if ( priv->tlanFullDuplex ) {
+		data |= TLAN_NET_CMD_DUPLEX;
+	}
+	TLan_DioWrite8( dev->base_addr, TLAN_NET_CMD, data );
+	data = TLAN_NET_MASK_MASK4 | TLAN_NET_MASK_MASK5; 
+	if ( priv->phyNum == 0 ) {
+		data |= TLAN_NET_MASK_MASK7; 
+	}
+	TLan_DioWrite8( dev->base_addr, TLAN_NET_MASK, data );
 	TLan_DioWrite16( dev->base_addr, TLAN_MAX_RX, TLAN_MAX_FRAME_SIZE );
 
-	if ( priv->phyFlags & TLAN_PHY_UNMANAGED ) {
-		priv->phyOnline = 1;
+	if ( ( priv->adapter->flags & TLAN_ADAPTER_UNMANAGED_PHY ) || ( priv->aui ) ) {
+		status = MII_GS_LINK;
+		printk( "TLAN:  %s: Link forced.\n", dev->name );
+	} else {
+		TLan_MiiReadReg( dev, phy, MII_GEN_STS, &status );
+		udelay( 1000 );
+		TLan_MiiReadReg( dev, phy, MII_GEN_STS, &status );
+		if ( status & MII_GS_LINK ) {
+			printk( "TLAN:  %s: Link active.\n", dev->name );
+			TLan_DioWrite8( dev->base_addr, TLAN_LED_REG, TLAN_LED_LINK );
+		}
 	}
 
-	return 0;
+	if ( priv->phyNum == 0 ) {
+        	TLan_MiiReadReg( dev, phy, TLAN_TLPHY_CTL, &tlphy_ctl );
+        	tlphy_ctl |= TLAN_TC_INTEN;
+        	TLan_MiiWriteReg( dev, phy, TLAN_TLPHY_CTL, tlphy_ctl );
+        	sio = TLan_DioRead8( dev->base_addr, TLAN_NET_SIO );
+        	sio |= TLAN_NET_SIO_MINTEN;
+        	TLan_DioWrite8( dev->base_addr, TLAN_NET_SIO, sio );
+	}
 
-} /* TLan_Reset */
+	if ( status & MII_GS_LINK ) {
+		TLan_SetMac( dev, 0, dev->dev_addr );
+		priv->phyOnline = 1;
+		outb( ( TLAN_HC_INT_ON >> 8 ), dev->base_addr + TLAN_HOST_CMD + 1 );
+		if ( debug >= 1 ) {
+			outb( ( TLAN_HC_REQ_INT >> 8 ), dev->base_addr + TLAN_HOST_CMD + 1 );
+		}
+		outl( virt_to_bus( priv->rxList ), dev->base_addr + TLAN_CH_PARM );
+		outl( TLAN_HC_GO | TLAN_HC_RT, dev->base_addr + TLAN_HOST_CMD );
+	} else {
+		printk( "TLAN:  %s: Link inactive, will retry in 10 secs...\n", dev->name );
+		TLan_SetTimer( dev, 1000, TLAN_TIMER_FINISH_RESET );
+		return;
+	}
+
+} /* TLan_FinishReset */
 
 
 
@@ -1754,7 +2030,7 @@ int TLan_Reset( struct device *dev )
 	 *		areg	The AREG to set the address in (0 - 3).
 	 *		mac	A pointer to an array of chars.  Each
 	 *			element stores one byte of the address.
-	 *			That is, it isn't in ASCII.
+	 *			IE, it isn't in ascii.
 	 *
 	 *	This function transfers a MAC address to one of the
 	 *	TLAN AREGs (address registers).  The TLAN chip locks
@@ -1788,55 +2064,9 @@ void TLan_SetMac( struct device *dev, int areg, char *mac )
 
 	ThunderLAN Driver PHY Layer Routines
 
-	The TLAN chip can drive any number of PHYs (physical devices).  Rather
-	than having lots of 'if' or '#ifdef' statements, I have created a
-	second driver layer for the PHYs.  Each PHY can be identified from its
-	id in registers 2 and 3, and can be given a Check and Service routine
-	that will be called when the adapter is reset and when the adapter
-	receives a Network Status interrupt, respectively.
-	
 ******************************************************************************
 *****************************************************************************/
 
-
-static TLanPhyIdEntry	TLanPhyIdTable[] = {
-	  { 0x4000,
-	    0x5014,
-	    &TLan_PhyInternalCheck,
-	    &TLan_PhyInternalService,
-	    TLAN_PHY_ACTIVITY | TLAN_PHY_INTS | TLAN_PHY_INTERNAL },
-	  { 0x4000,
-	    0x5015,
-	    &TLan_PhyInternalCheck,
-	    &TLan_PhyInternalService,
-	    TLAN_PHY_ACTIVITY | TLAN_PHY_INTS | TLAN_PHY_INTERNAL },
-	  { 0x4000,
-	    0x5016,
-	    &TLan_PhyInternalCheck,
-	    &TLan_PhyInternalService,
-	    TLAN_PHY_ACTIVITY | TLAN_PHY_INTS | TLAN_PHY_INTERNAL },
-	  { 0x2000,
-	    0x5C00,
-	    &TLan_PhyDp83840aCheck,
-	    &TLan_PhyNop,
-	    TLAN_PHY_ACTIVITY | TLAN_PHY_AUTONEG },
-	  { 0x2000,
-	    0x5C01,
-	    &TLan_PhyDp83840aCheck,
-	    &TLan_PhyNop,
-	    TLAN_PHY_ACTIVITY | TLAN_PHY_AUTONEG },
-	  { 0x7810,
-	    0x0000,
-	    &TLan_PhyDp83840aCheck,
-	    &TLan_PhyNop,
-	    TLAN_PHY_AUTONEG },
-	  { 0x0000,
-	    0x0000,
-	    NULL,
-	    NULL,
-	    0
-	  }
-	};
 
 
 	/*********************************************************************
@@ -1845,10 +2075,10 @@ static TLanPhyIdEntry	TLanPhyIdTable[] = {
 	 *	Returns:
 	 *		Nothing
 	 *	Parms:
-	 *		dev	A pointer to the device structure of the adapter
-	 *			which the desired PHY is located.
+	 *		dev	A pointer to the device structure of the
+	 *			TLAN device having the PHYs to be detailed.
 	 *				
-	 *	This function prints the registers a PHY.
+	 *	This function prints the registers a PHY (aka tranceiver).
 	 *
 	 ********************************************************************/
 
@@ -1856,30 +2086,27 @@ void TLan_PhyPrint( struct device *dev )
 {
 	TLanPrivateInfo *priv = (TLanPrivateInfo *) dev->priv;
 	u16 i, data0, data1, data2, data3, phy;
-	u32 io;
 
-	phy = priv->phyAddr;
-	io = dev->base_addr;
+	phy = priv->phy[priv->phyNum];
 
-	if ( ( phy > 0 ) && ( phy <= TLAN_PHY_MAX_ADDR ) ) {
+	if ( priv->adapter->flags & TLAN_ADAPTER_UNMANAGED_PHY ) {
+		printk( "TLAN:   Device %s, Unmanaged PHY.\n", dev->name );
+	} else if ( phy <= TLAN_PHY_MAX_ADDR ) {
 		printk( "TLAN:   Device %s, PHY 0x%02x.\n", dev->name, phy );
 		printk( "TLAN:      Off.  +0     +1     +2     +3 \n" );
                 for ( i = 0; i < 0x20; i+= 4 ) {
 			printk( "TLAN:      0x%02x", i );
-			TLan_MiiReadReg( io, phy, i, &data0 );
+			TLan_MiiReadReg( dev, phy, i, &data0 );
 			printk( " 0x%04hx", data0 );
-			TLan_MiiReadReg( io, phy, i + 1, &data1 );
+			TLan_MiiReadReg( dev, phy, i + 1, &data1 );
 			printk( " 0x%04hx", data1 );
-			TLan_MiiReadReg( io, phy, i + 2, &data2 );
+			TLan_MiiReadReg( dev, phy, i + 2, &data2 );
 			printk( " 0x%04hx", data2 );
-			TLan_MiiReadReg( io, phy, i + 3, &data3 );
+			TLan_MiiReadReg( dev, phy, i + 3, &data3 );
 			printk( " 0x%04hx\n", data3 );
 		}
 	} else {
-		printk( "TLAN:   Device %s, PHY 0x%02x (Unmanaged/Unknown).\n",
-			dev->name,
-			phy
-		      );
+		printk( "TLAN:   Device %s, Invalid PHY.\n", dev->name );
 	}
 
 } /* TLan_PhyPrint */
@@ -1888,7 +2115,7 @@ void TLan_PhyPrint( struct device *dev )
 
 
 	/*********************************************************************
-	 *	TLan_PhySelect
+	 *	TLan_PhyDetect
 	 *
 	 *	Returns:
 	 *		Nothing
@@ -1896,352 +2123,271 @@ void TLan_PhyPrint( struct device *dev )
 	 *		dev	A pointer to the device structure of the adapter
 	 *			for which the PHY needs determined.
 	 *
-	 *	This function decides which PHY amoung those attached to the
-	 *	TLAN chip is to be used.  The TLAN chip can be attached to
-	 *	multiple PHYs, and the driver needs to decide which one to
-	 *	talk to.  Currently this routine picks the PHY with the lowest
-	 *	address as the internal PHY address is 0x1F, the highest
-	 *	possible.  This strategy assumes that there can be only one
-	 *	other PHY, and, if it exists, it is the one to be used.  If
-	 *	token ring PHYs are ever supported, this routine will become
-	 *	a little more interesting...
+	 *	So far I've found that adapters which have external PHYs
+	 *	may also use the internal PHY for part of the functionality.
+	 *	(eg, AUI/Thinnet).  This function finds out if this TLAN
+	 *	chip has an internal PHY, and then finds the first external
+	 *	PHY (starting from address 0) if it exists).
 	 *
 	 ********************************************************************/
 
-void TLan_PhySelect( struct device *dev )
+void TLan_PhyDetect( struct device *dev )
 {
 	TLanPrivateInfo *priv = (TLanPrivateInfo *) dev->priv;
-	int		 	phy;
-	int			entry;
-	u16			id_hi[TLAN_PHY_MAX_ADDR + 1];
-	u16			id_lo[TLAN_PHY_MAX_ADDR + 1];
-	u16			hi;
-	u16			lo;
-	u16			vendor;
-	u16			device;
+	u16		control;
+	u16		hi;
+	u16		lo;
+	u32		phy;
 
-	priv->phyCheck = &TLan_PhyNop;	/* Make sure these aren't ever NULL */
-	priv->phyService = &TLan_PhyNop;
-	
-	vendor = TLanDeviceList[priv->pciEntry].vendorId;
-	device = TLanDeviceList[priv->pciEntry].deviceId;
+	if ( priv->adapter->flags & TLAN_ADAPTER_UNMANAGED_PHY ) {
+		priv->phyNum = 0xFFFF;
+		return;
+	}
 
-	/*
-	 * This is a bit uglier than I'd like, but the 0xF130 device must
-	 * NOT be assigned a valid PHY as it uses an unmanaged, bit-rate
-	 * PHY.  It is simplest just to use another goto, rather than
-	 * nesting the two for loops in the if statement.
+	TLan_MiiReadReg( dev, TLAN_PHY_MAX_ADDR, MII_GEN_ID_HI, &hi );
+
+	if ( hi != 0xFFFF ) {
+		priv->phy[0] = TLAN_PHY_MAX_ADDR;
+	} else {
+		priv->phy[0] = TLAN_PHY_NONE;
+	}
+
+	priv->phy[1] = TLAN_PHY_NONE;
+	for ( phy = 0; phy <= TLAN_PHY_MAX_ADDR; phy++ ) {
+		TLan_MiiReadReg( dev, phy, MII_GEN_CTL, &control );
+		TLan_MiiReadReg( dev, phy, MII_GEN_ID_HI, &hi );
+		TLan_MiiReadReg( dev, phy, MII_GEN_ID_LO, &lo );
+		if ( ( control != 0xFFFF ) || ( hi != 0xFFFF ) || ( lo != 0xFFFF ) ) {
+			TLAN_DBG( TLAN_DEBUG_GNRL, "TLAN: PHY found at %02x %04x %04x %04x\n", phy, control, hi, lo );
+			if ( ( priv->phy[1] == TLAN_PHY_NONE ) && ( phy != TLAN_PHY_MAX_ADDR ) ) {
+				priv->phy[1] = phy;
+			}
+		}
+	}
+
+	if ( priv->phy[1] != TLAN_PHY_NONE ) {
+		priv->phyNum = 1;
+	} else if ( priv->phy[0] != TLAN_PHY_NONE ) {
+		priv->phyNum = 0;
+	} else {
+		printk( "TLAN:  Cannot initialize device, no PHY was found!\n" );
+	}
+
+} /* TLan_PhyDetect */
+
+
+
+
+void TLan_PhyPowerDown( struct device *dev )
+{
+	TLanPrivateInfo	*priv = (TLanPrivateInfo *) dev->priv;
+	u16		value;
+
+	TLAN_DBG( TLAN_DEBUG_GNRL, "TLAN:  %s: Powering down PHY(s).\n", dev->name );
+	value = MII_GC_PDOWN | MII_GC_LOOPBK | MII_GC_ISOLATE;
+	TLan_MiiSync( dev->base_addr );
+	TLan_MiiWriteReg( dev, priv->phy[priv->phyNum], MII_GEN_CTL, value );
+	if ( ( priv->phyNum == 0 ) && ( priv->phy[1] != TLAN_PHY_NONE ) && ( ! ( priv->adapter->flags & TLAN_ADAPTER_USE_INTERN_10 ) ) ) {
+		TLan_MiiSync( dev->base_addr );
+		TLan_MiiWriteReg( dev, priv->phy[1], MII_GEN_CTL, value );
+	}
+
+	/* Wait for 5 jiffies (50 ms) and powerup
+	 * This is abitrary.  It is intended to make sure the
+	 * tranceiver settles.
 	 */
-	if ( ( vendor == PCI_VENDOR_ID_COMPAQ ) &&
-	     ( device == PCI_DEVICE_ID_NETFLEX_3P ) ) {
-		entry = 0;
-		phy = 0;
-		goto FINISH;
+	TLan_SetTimer( dev, 5, TLAN_TIMER_PHY_PUP );
+
+} /* TLan_PhyPowerDown */
+
+
+
+
+void TLan_PhyPowerUp( struct device *dev )
+{
+	TLanPrivateInfo	*priv = (TLanPrivateInfo *) dev->priv;
+	u16		value;
+
+	TLAN_DBG( TLAN_DEBUG_GNRL, "TLAN:  %s: Powering up PHY.\n", dev->name );
+	TLan_MiiSync( dev->base_addr );
+	value = MII_GC_LOOPBK;
+	TLan_MiiWriteReg( dev, priv->phy[priv->phyNum], MII_GEN_CTL, value );
+
+	/* Wait for 50 jiffies (500 ms) and reset the
+	 * tranceiver.  The TLAN docs say both 50 ms and
+	 * 500 ms, so do the longer, just in case
+	 */
+	TLan_SetTimer( dev, 50, TLAN_TIMER_PHY_RESET );
+
+} /* TLan_PhyPowerUp */
+
+
+
+
+void TLan_PhyReset( struct device *dev )
+{
+	TLanPrivateInfo	*priv = (TLanPrivateInfo *) dev->priv;
+	u16		phy;
+	u16		value;
+
+	phy = priv->phy[priv->phyNum];
+
+	TLAN_DBG( TLAN_DEBUG_GNRL, "TLAN:  %s: Reseting PHY.\n", dev->name );
+	TLan_MiiSync( dev->base_addr );
+	value = MII_GC_LOOPBK | MII_GC_RESET;
+	TLan_MiiWriteReg( dev, phy, MII_GEN_CTL, value );
+	TLan_MiiReadReg( dev, phy, MII_GEN_CTL, &value );
+	while ( value & MII_GC_RESET ) {
+		TLan_MiiReadReg( dev, phy, MII_GEN_CTL, &value );
 	}
+	TLan_MiiWriteReg( dev, phy, MII_GEN_CTL, 0 );
 
-	for ( phy = 0; phy <= TLAN_PHY_MAX_ADDR; phy++ ) {
-		hi = lo = 0;
-		TLan_MiiReadReg( dev->base_addr, phy, MII_GEN_ID_HI, &hi );
-		TLan_MiiReadReg( dev->base_addr, phy, MII_GEN_ID_LO, &lo );
-		id_hi[phy] = hi;
-		id_lo[phy] = lo;
-		TLAN_DBG( TLAN_DEBUG_GNRL,
-			  "TLAN: Phy %2x, hi = %hx, lo = %hx\n",
-			  phy,
-			  hi,
-			  lo
-			);
-	}
+	/* Wait for 50 jiffies (500 ms) and initialize.
+	 * I don't remember why I wait this long.
+	 */
+	TLan_SetTimer( dev, 50, TLAN_TIMER_PHY_START_LINK );
 
-	for ( phy = 0; phy <= TLAN_PHY_MAX_ADDR; phy++ ) {
-		if ( ( aui == 1 ) && ( phy != TLAN_PHY_MAX_ADDR ) ) {
-			if ( id_hi[phy] != 0xFFFF ) {
-				TLan_MiiSync(dev->base_addr);
-				TLan_MiiWriteReg(dev->base_addr,
-						 phy,
-						 MII_GEN_CTL,
-						 MII_GC_PDOWN | 
-						 MII_GC_LOOPBK | 
-						 MII_GC_ISOLATE );
+} /* TLan_PhyReset */
 
-			}
-			continue;
+
+
+
+void TLan_PhyStartLink( struct device *dev )
+{
+	TLanPrivateInfo	*priv = (TLanPrivateInfo *) dev->priv;
+	u16		ability;
+	u16		control;
+	u16		data;
+	u16		phy;
+	u16		status;
+	u16		tctl;
+
+	phy = priv->phy[priv->phyNum];
+
+	TLAN_DBG( TLAN_DEBUG_GNRL, "TLAN:  %s: Trying to activate link.\n", dev->name );
+	TLan_MiiReadReg( dev, phy, MII_GEN_STS, &status );
+	if ( ( status & MII_GS_AUTONEG ) && 
+	     ( priv->duplex == TLAN_DUPLEX_DEFAULT ) && 
+	     ( priv->speed == TLAN_SPEED_DEFAULT ) &&
+	     ( ! priv->aui ) ) {
+		ability = status >> 11;
+
+		if ( priv->speed == TLAN_SPEED_10 ) {
+			ability &= 0x0003;
+		} else if ( priv->speed == TLAN_SPEED_100 ) {
+			ability &= 0x001C;
 		}
-		for ( entry = 0; TLanPhyIdTable[entry].check; entry++) {
-			if ( ( id_hi[phy] == TLanPhyIdTable[entry].idHi ) &&
-			     ( id_lo[phy] == TLanPhyIdTable[entry].idLo ) ) {
-				TLAN_DBG( TLAN_DEBUG_GNRL,
-					  "TLAN: Selected Phy %hx\n",
-					  phy
-					);
-				goto FINISH;
-			}
+
+		if ( priv->duplex == TLAN_DUPLEX_FULL ) {
+			ability &= 0x000A;
+		} else if ( priv->duplex == TLAN_DUPLEX_HALF ) {
+			ability &= 0x0005;
 		}
+
+		TLan_MiiWriteReg( dev, phy, MII_AN_ADV, ( ability << 5 ) | 1 );
+       		TLan_MiiWriteReg( dev, phy, MII_GEN_CTL, 0x1000 );
+		TLan_MiiWriteReg( dev, phy, MII_GEN_CTL, 0x1200 );
+
+		/* Wait for 400 jiffies (4 sec) for autonegotiation
+		 * to complete.  The max spec time is less than this
+		 * but the card need additional time to start AN.
+		 * .5 sec should be plenty extra.
+		 */
+		printk( "TLAN:  %s: Starting autonegotiation.\n", dev->name );
+		TLan_SetTimer( dev, 400, TLAN_TIMER_PHY_FINISH_AN );
+		return;
 	}
 
-	entry = 0;
-	phy = 0;
+	if ( ( priv->aui ) && ( priv->phyNum != 0 ) ) {
+		priv->phyNum = 0;
+		data = TLAN_NET_CFG_1FRAG | TLAN_NET_CFG_1CHAN | TLAN_NET_CFG_PHY_EN;
+		TLan_DioWrite16( dev->base_addr, TLAN_NET_CONFIG, data );
+		TLan_SetTimer( dev, 4, TLAN_TIMER_PHY_PDOWN );
+		return;
+	} else if ( priv->phyNum == 0 ) {
+        	TLan_MiiReadReg( dev, phy, TLAN_TLPHY_CTL, &tctl );
+		if ( priv->aui ) {
+                	tctl |= TLAN_TC_AUISEL;
+		} else {
+                	tctl &= ~TLAN_TC_AUISEL;
+			control = 0;
+			if ( priv->duplex == TLAN_DUPLEX_FULL ) {
+				control |= MII_GC_DUPLEX;
+				priv->tlanFullDuplex = TRUE;
+			}
+			if ( priv->speed == TLAN_SPEED_100 ) {
+				control |= MII_GC_SPEEDSEL;
+			}
+       			TLan_MiiWriteReg( dev, phy, MII_GEN_CTL, control );
+		}
+        	TLan_MiiWriteReg( dev, phy, TLAN_TLPHY_CTL, tctl );
+	}
 
-FINISH:
+	/* Wait for 100 jiffies (1 sec) to give the tranceiver time
+	 * to establish link.
+	 */
+	TLan_SetTimer( dev, 100, TLAN_TIMER_FINISH_RESET );
+
+} /* TLan_PhyStartLink */
+
+
+
+
+void TLan_PhyFinishAutoNeg( struct device *dev )
+{
+	TLanPrivateInfo	*priv = (TLanPrivateInfo *) dev->priv;
+	u16		an_adv;
+	u16		an_lpa;
+	u16		data;
+	u16		mode;
+	u16		phy;
+	u16		status;
 	
-	if ( ( entry == 0 ) && ( phy == 0 ) ) {
-		priv->phyAddr = phy;
-		priv->phyEntry = entry;
-		priv->phyCheck = TLan_PhyNop;
-		priv->phyService = TLan_PhyNop;
-		priv->phyFlags = TLAN_PHY_BIT_RATE | 
-                                 TLAN_PHY_UNMANAGED |
-				 TLAN_PHY_ACTIVITY;
-	} else {
-		priv->phyAddr = phy;
-		priv->phyEntry = entry;
-		priv->phyCheck = TLanPhyIdTable[entry].check;
-		priv->phyService = TLanPhyIdTable[entry].service;
-		priv->phyFlags = TLanPhyIdTable[entry].flags;
+	phy = priv->phy[priv->phyNum];
+
+	TLan_MiiReadReg( dev, phy, MII_GEN_STS, &status );
+	if ( ! ( status & MII_GS_AUTOCMPLT ) ) {
+		/* Wait for 800 jiffies (8 sec) to give the process
+		 * more time.  Perhaps we should fail after a while.
+		 */
+		printk( "TLAN:  Giving autonegotiation more time.\n" );
+		TLan_SetTimer( dev, 800, TLAN_TIMER_PHY_FINISH_AN );
+		return;
 	}
 
-} /* TLan_PhySelect */
-
-
-
-
-	/***************************************************************
-	 *	TLan_PhyNop
-	 *
-	 *	Returns:
-	 *		Nothing
-	 *	Parms:
-	 *		dev	A pointer to a device structure.
-	 *
-	 *	This function does nothing and is meant as a stand-in
-	 *	for when a Check or Service function would be
-	 *	meaningless.
-	 *
-	 **************************************************************/
-
-int TLan_PhyNop( struct device *dev )
-{
-	dev = NULL;
-	return 0;
-
-} /* TLan_PhyNop */
-
-
-
-
-	/***************************************************************
-	 *  TLan_PhyInternalCheck
-	 *
-	 *	Returns:
-	 *		Nothing
-	 *	Parms:
-	 *		dev	A pointer to a device structure of the
-	 *			adapter	holding the PHY to be checked.
-	 *
-	 *	This function resets the internal PHY on a TLAN chip.
-	 *	See Chap. 7, "Physical Interface (PHY)" of "ThunderLAN
-	 *	Programmer's Guide"
-	 *
-	 **************************************************************/
-
-int TLan_PhyInternalCheck( struct device *dev )
-{
-	TLanPrivateInfo	*priv = (TLanPrivateInfo *) dev->priv;
-	u16				gen_ctl;
-	u32				io;
-	u16				phy;
-	u16				value;
-	u8				sio;
-
-	io = dev->base_addr;
-	phy = priv->phyAddr;
-
-	TLan_MiiReadReg( io, phy, MII_GEN_CTL, &gen_ctl );
-	if ( gen_ctl & MII_GC_PDOWN ) {
-		TLan_MiiSync( io );
-		TLan_MiiWriteReg( io, phy, MII_GEN_CTL, MII_GC_PDOWN | MII_GC_LOOPBK | MII_GC_ISOLATE );
-		TLan_MiiWriteReg( io, phy, MII_GEN_CTL, MII_GC_LOOPBK );
-		mdelay(50);
-		TLan_MiiWriteReg( io, phy, MII_GEN_CTL, MII_GC_RESET | MII_GC_LOOPBK );
-		TLan_MiiSync( io );
+	printk( "TLAN:  %s: Autonegotiation complete.\n", dev->name );
+	TLan_MiiReadReg( dev, phy, MII_AN_ADV, &an_adv );
+	TLan_MiiReadReg( dev, phy, MII_AN_LPA, &an_lpa );
+	mode = an_adv & an_lpa & 0x03E0;
+	if ( mode & 0x0100 ) {
+		priv->tlanFullDuplex = TRUE;
+	} else if ( ! ( mode & 0x0080 ) && ( mode & 0x0040 ) ) {
+		priv->tlanFullDuplex = TRUE;
 	}
 
-	TLan_MiiReadReg( io, phy, MII_GEN_CTL, &value );
-	while ( value & MII_GC_RESET )
-		TLan_MiiReadReg( io, phy, MII_GEN_CTL, &value );
-
-	/* TLan_MiiWriteReg( io, phy, MII_GEN_CTL, MII_GC_LOOPBK | MII_GC_DUPLEX ); */
-	/* TLan_MiiWriteReg( io, phy, MII_GEN_CTL, MII_GC_DUPLEX ); */
-	TLan_MiiWriteReg( io, phy, MII_GEN_CTL, 0 );
-
-	mdelay(500);
-
-	TLan_MiiReadReg( io, phy, TLAN_TLPHY_CTL, &value );
-	if ( aui ) 
-		value |= TLAN_TC_AUISEL;
-	else
-		value &= ~TLAN_TC_AUISEL;
-	TLan_MiiWriteReg( io, phy, TLAN_TLPHY_CTL, value );
-
-	/* Read Possible Latched Link Status */
-	TLan_MiiReadReg( io, phy, MII_GEN_STS, &value ); 
-	/* Read Real Link Status */
-       	TLan_MiiReadReg( io, phy, MII_GEN_STS, &value ); 
-	if ( ( value & MII_GS_LINK ) || aui ) {
-		priv->phyOnline = 1;
-		TLan_DioWrite8( io, TLAN_LED_REG, TLAN_LED_LINK );
-	} else {
-		priv->phyOnline = 0;
-		TLan_DioWrite8( io, TLAN_LED_REG, 0 );
+	if ( ( ! ( mode & 0x0180 ) ) && ( priv->adapter->flags & TLAN_ADAPTER_USE_INTERN_10 ) && ( priv->phyNum != 0 ) ) {
+		priv->phyNum = 0;
+		data = TLAN_NET_CFG_1FRAG | TLAN_NET_CFG_1CHAN | TLAN_NET_CFG_PHY_EN;
+		TLan_DioWrite16( dev->base_addr, TLAN_NET_CONFIG, data );
+		TLan_SetTimer( dev, 40, TLAN_TIMER_PHY_PDOWN );
+		return;
 	}
 
-	/* Enable Interrupts */
-       	TLan_MiiReadReg( io, phy, TLAN_TLPHY_CTL, &value );
-	value |= TLAN_TC_INTEN;
-	TLan_MiiWriteReg( io, phy, TLAN_TLPHY_CTL, value );
-
-	sio = TLan_DioRead8( io, TLAN_NET_SIO );
-	sio |= TLAN_NET_SIO_MINTEN;
-	TLan_DioWrite8( io, TLAN_NET_SIO, sio );
-			
-	return 0;
-
-} /* TLanPhyInternalCheck */
-
-
-
-
-	/***************************************************************
-	 *	TLan_PhyInternalService
-	 *
-	 *	Returns:
-	 *		Nothing
-	 *	Parms:
-	 *		dev	A pointer to a device structure of the
-	 *			adapter	holding the PHY to be serviced.
-	 *
-	 *	This function services an interrupt generated by the
-	 *	internal PHY.  It can turn on/off the link LED.  See
-	 *	Chap. 7, "Physical Interface (PHY)" of "ThunderLAN
-	 *	Programmer's Guide".
-	 *
-	 **************************************************************/
-
-int TLan_PhyInternalService( struct device *dev )
-{
-	TLanPrivateInfo	*priv = (TLanPrivateInfo *) dev->priv;
-	u16			tlphy_sts;
-	u16			gen_sts;
-	u16			an_exp;
-	u32			io;
-	u16			phy;
-
-	io = dev->base_addr;
-	phy = priv->phyAddr;
-
-	TLan_MiiReadReg( io, phy, TLAN_TLPHY_STS, &tlphy_sts );
-	TLan_MiiReadReg( io, phy, MII_GEN_STS, &gen_sts ); 
-	TLan_MiiReadReg( io, phy, MII_AN_EXP, &an_exp ); 
-	if ( ( gen_sts & MII_GS_LINK ) || aui ) {
-		priv->phyOnline = 1;
-		TLan_DioWrite8( io, TLAN_LED_REG, TLAN_LED_LINK );
-	} else {
-		priv->phyOnline = 0;
-		TLan_DioWrite8( io, TLAN_LED_REG, 0 );
+	if ( priv->phyNum == 0 ) {
+		if ( ( priv->duplex == TLAN_DUPLEX_FULL ) || ( an_adv & an_lpa & 0x0040 ) ) {
+			TLan_MiiWriteReg( dev, phy, MII_GEN_CTL, MII_GC_AUTOENB | MII_GC_DUPLEX );
+			printk( "TLAN:  Starting internal PHY with DUPLEX\n" );
+		} else {
+			TLan_MiiWriteReg( dev, phy, MII_GEN_CTL, MII_GC_AUTOENB );
+			printk( "TLAN:  Starting internal PHY with HALF-DUPLEX\n" );
+		}
 	}
 
-        if ( ( tlphy_sts & TLAN_TS_POLOK ) == 0) {
-                u16     value;
-                TLan_MiiReadReg( io, phy, TLAN_TLPHY_CTL, &value);
-                value |= TLAN_TC_SWAPOL;
-                TLan_MiiWriteReg( io, phy, TLAN_TLPHY_CTL, value);
-        }
-
-	return 0;
-
-} /* TLan_PhyInternalService */
-
-
-
-
-	/***************************************************************
-	 *	TLan_PhyDp83840aCheck
-	 *
-	 *	Returns:
-	 *		Nothing
-	 *	Parms:
-	 *		dev	A pointer to a device structure of the
-	 *			adapter holding the PHY to be reset.
-	 *
-	 *	This function resets a National Semiconductor DP83840A
-	 *	10/100 Mb/s PHY device.  See National Semiconductor's
-	 *	data sheet for more info.  This PHY is used on Compaq
-	 *	Netelligent 10/100 cards.
-	 *
-	 **************************************************************/
-
-static int TLan_PhyDp83840aCheck( struct device *dev )
-{
-	TLanPrivateInfo	*priv = (TLanPrivateInfo *) dev->priv;
-	u16			gen_ctl;
-	u32			io;
-	u16			phy;
-	u16			value;
-	u8			sio;
-
-	io = dev->base_addr;
-	phy = priv->phyAddr;
-
-	TLan_MiiReadReg( io, phy, MII_GEN_CTL, &gen_ctl );
-	if ( gen_ctl & MII_GC_PDOWN ) {
-		TLan_MiiSync( io );
-		TLan_MiiWriteReg( io, phy, MII_GEN_CTL, MII_GC_PDOWN | MII_GC_LOOPBK | MII_GC_ISOLATE );
-		TLan_MiiWriteReg( io, phy, MII_GEN_CTL, MII_GC_LOOPBK );
-		mdelay(500);
-		TLan_MiiWriteReg( io, phy, MII_GEN_CTL, MII_GC_RESET | MII_GC_LOOPBK );
-		TLan_MiiSync( io );
-	}
-
-	TLan_MiiReadReg( io, phy, MII_GEN_CTL, &value );
-	while ( value & MII_GC_RESET )
-		TLan_MiiReadReg( io, phy, MII_GEN_CTL, &value );
-
-	/* TLan_MiiWriteReg( io, phy, MII_GEN_CTL, MII_GC_LOOPBK | MII_GC_DUPLEX ); */
-	/* TLan_MiiWriteReg( io, phy, MII_GEN_CTL, MII_GC_DUPLEX ); */
-	TLan_MiiWriteReg( io, phy, MII_GEN_CTL, 0 );
-	TLan_MiiReadReg( io, phy, MII_AN_ADV, &value );
-	value &= ~0x0140;
-	TLan_MiiWriteReg( io, phy, MII_AN_ADV, value );
-       	TLan_MiiWriteReg( io, phy, MII_GEN_CTL, 0x1000 );
-	TLan_MiiWriteReg( io, phy, MII_GEN_CTL, 0x1200 );
-
-	mdelay(50);
-#if 0
-	/* Read Possible Latched Link Status */
-	TLan_MiiReadReg( io, phy, MII_GEN_STS, &value ); 
-	/* Read Real Link Status */
-	TLan_MiiReadReg( io, phy, MII_GEN_STS, &value ); 
-	if ( value & MII_GS_LINK ) {
-		priv->phyOnline = 1;
-		TLan_DioWrite8( io, TLAN_LED_REG, TLAN_LED_LINK );
-	} else {
-		priv->phyOnline = 0;
-		TLan_DioWrite8( io, TLAN_LED_REG, 0 );
-	}
-
-	/* Enable Interrupts */
-	TLan_MiiReadReg( io, phy, TLAN_TLPHY_CTL, &value );
-	value |= TLAN_TC_INTEN;
-	TLan_MiiWriteReg( io, phy, TLAN_TLPHY_CTL, value );
-#endif
-	sio = TLan_DioRead8( dev->base_addr, TLAN_NET_SIO );
-	sio &= ~TLAN_NET_SIO_MINTEN;
-	TLan_DioWrite8( dev->base_addr, TLAN_NET_SIO, sio );
-/*	priv->phyOnline = 1; */
-			
-	return 0;
-
-} /* TLan_PhyDp83840aCheck */
+	/* Wait for 10 jiffies (100 ms).  No reason in partiticular.
+	 */
+	TLan_SetTimer( dev, 10, TLAN_TIMER_FINISH_RESET );
+		
+} /* TLan_PhyFinishAutoNeg */
 
 
 
@@ -2266,9 +2412,10 @@ static int TLan_PhyDp83840aCheck( struct device *dev )
 	 *		1	otherwise.
 	 *
 	 *	Parms:
-	 *		base_port	The base IO port of the adapter in
-	 *				question.
-	 *		dev		The address of the PHY to be queried.
+	 *		dev		The device structure containing
+	 *				The io address and interrupt count
+	 *				for this device.
+	 *		phy		The address of the PHY to be queried.
 	 *		reg		The register whose contents are to be
 	 *				retreived.
 	 *		val		A pointer to a variable to store the
@@ -2281,30 +2428,32 @@ static int TLan_PhyDp83840aCheck( struct device *dev )
 	 *
 	 **************************************************************/
 
-int TLan_MiiReadReg(u16 base_port, u16 dev, u16 reg, u16 *val)
+int TLan_MiiReadReg( struct device *dev, u16 phy, u16 reg, u16 *val )
 {
 	u8	nack;
-	u16 sio, tmp;
-	u32 i;
+	u16	sio, tmp;
+	u32	i;
 	int	err;
-	int minten;
+	int	minten;
 
 	err = FALSE;
-	outw(TLAN_NET_SIO, base_port + TLAN_DIO_ADR);
-	sio = base_port + TLAN_DIO_DATA + TLAN_NET_SIO;
+	outw(TLAN_NET_SIO, dev->base_addr + TLAN_DIO_ADR);
+	sio = dev->base_addr + TLAN_DIO_DATA + TLAN_NET_SIO;
 
-	cli();
+	if ( dev->interrupt == 0 )
+		cli();
+	dev->interrupt++;
 
-	TLan_MiiSync(base_port);
+	TLan_MiiSync(dev->base_addr);
 
 	minten = TLan_GetBit( TLAN_NET_SIO_MINTEN, sio );
 	if ( minten )
 		TLan_ClearBit(TLAN_NET_SIO_MINTEN, sio);
 
-	TLan_MiiSendData( base_port, 0x1, 2 );		/* Start ( 01b ) */
-	TLan_MiiSendData( base_port, 0x2, 2 );		/* Read  ( 10b ) */
-	TLan_MiiSendData( base_port, dev, 5 );		/* Device #      */
-	TLan_MiiSendData( base_port, reg, 5 );		/* Register #    */
+	TLan_MiiSendData( dev->base_addr, 0x1, 2 );	/* Start ( 01b ) */
+	TLan_MiiSendData( dev->base_addr, 0x2, 2 );	/* Read  ( 10b ) */
+	TLan_MiiSendData( dev->base_addr, phy, 5 );	/* Device #      */
+	TLan_MiiSendData( dev->base_addr, reg, 5 );	/* Register #    */
 
 
 	TLan_ClearBit(TLAN_NET_SIO_MTXEN, sio);		/* Change direction */
@@ -2340,7 +2489,9 @@ int TLan_MiiReadReg(u16 base_port, u16 dev, u16 reg, u16 *val)
 
 	*val = tmp;
 
-	sti();
+	dev->interrupt--;
+	if ( dev->interrupt == 0 )
+		sti();
 
 	return err;
 
@@ -2434,9 +2585,9 @@ void TLan_MiiSync( u16 base_port )
 	 *	Returns:
 	 *		Nothing
 	 *	Parms:
-	 *		base_port	The base IO port of the adapter in
-	 *				question.
-	 *		dev		The address of the PHY to be written to.
+	 *		dev		The device structure for the device
+	 *				to write to.
+	 *		phy		The address of the PHY to be written to.
 	 *		reg		The register whose contents are to be
 	 *				written.
 	 *		val		The value to be written to the register.
@@ -2448,29 +2599,31 @@ void TLan_MiiSync( u16 base_port )
 	 *
 	 **************************************************************/
 
-void TLan_MiiWriteReg(u16 base_port, u16 dev, u16 reg, u16 val)
+void TLan_MiiWriteReg( struct device *dev, u16 phy, u16 reg, u16 val )
 {
-	u16 sio;
+	u16	sio;
 	int	minten;
 
-	outw(TLAN_NET_SIO, base_port + TLAN_DIO_ADR);
-	sio = base_port + TLAN_DIO_DATA + TLAN_NET_SIO;
+	outw(TLAN_NET_SIO, dev->base_addr + TLAN_DIO_ADR);
+	sio = dev->base_addr + TLAN_DIO_DATA + TLAN_NET_SIO;
 
-	cli();
+	if ( dev->interrupt == 0 )
+		cli();
+	dev->interrupt++;
 
-	TLan_MiiSync( base_port );
+	TLan_MiiSync( dev->base_addr );
 
 	minten = TLan_GetBit( TLAN_NET_SIO_MINTEN, sio );
 	if ( minten )
 		TLan_ClearBit( TLAN_NET_SIO_MINTEN, sio );
 
-	TLan_MiiSendData( base_port, 0x1, 2 );		/* Start ( 01b ) */
-	TLan_MiiSendData( base_port, 0x1, 2 );		/* Write ( 01b ) */
-	TLan_MiiSendData( base_port, dev, 5 );		/* Device #      */
-	TLan_MiiSendData( base_port, reg, 5 );		/* Register #    */
+	TLan_MiiSendData( dev->base_addr, 0x1, 2 );	/* Start ( 01b ) */
+	TLan_MiiSendData( dev->base_addr, 0x1, 2 );	/* Write ( 01b ) */
+	TLan_MiiSendData( dev->base_addr, phy, 5 );	/* Device #      */
+	TLan_MiiSendData( dev->base_addr, reg, 5 );	/* Register #    */
 
-	TLan_MiiSendData( base_port, 0x2, 2 );		/* Send ACK */
-	TLan_MiiSendData( base_port, val, 16 );		/* Send Data */
+	TLan_MiiSendData( dev->base_addr, 0x2, 2 );	/* Send ACK */
+	TLan_MiiSendData( dev->base_addr, val, 16 );	/* Send Data */
 
 	TLan_ClearBit( TLAN_NET_SIO_MCLK, sio );	/* Idle cycle */
 	TLan_SetBit( TLAN_NET_SIO_MCLK, sio );
@@ -2478,9 +2631,14 @@ void TLan_MiiWriteReg(u16 base_port, u16 dev, u16 reg, u16 val)
 	if ( minten )
 		TLan_SetBit( TLAN_NET_SIO_MINTEN, sio );
 
-	sti();
+	dev->interrupt--;
+	if ( dev->interrupt == 0 )
+		sti();
 
 } /* TLan_MiiWriteReg */
+
+
+
 
 /*****************************************************************************
 ******************************************************************************
@@ -2654,7 +2812,7 @@ void TLan_EeReceiveByte( u16 io_base, u8 *data, int stop )
 	 *
 	 *	Returns:
 	 *		No error = 0, else, the stage at which the error
-	 *		occurred.
+	 *		occured.
 	 *	Parms:
 	 *		io_base		The IO port base address for the
 	 *				TLAN device with the EEPROM to
@@ -2670,26 +2828,30 @@ void TLan_EeReceiveByte( u16 io_base, u8 *data, int stop )
 	 *
 	 **************************************************************/
 
-int TLan_EeReadByte( u16 io_base, u8 ee_addr, u8 *data )
+int TLan_EeReadByte( struct device *dev, u8 ee_addr, u8 *data )
 {
 	int err;
 
-	cli();
+	if ( dev->interrupt == 0 )
+		cli();
+	dev->interrupt++;
 
-	TLan_EeSendStart( io_base );
-	err = TLan_EeSendByte( io_base, 0xA0, TLAN_EEPROM_ACK );
+	TLan_EeSendStart( dev->base_addr );
+	err = TLan_EeSendByte( dev->base_addr, 0xA0, TLAN_EEPROM_ACK );
 	if (err)
 		return 1;
-	err = TLan_EeSendByte( io_base, ee_addr, TLAN_EEPROM_ACK );
+	err = TLan_EeSendByte( dev->base_addr, ee_addr, TLAN_EEPROM_ACK );
 	if (err)
 		return 2;
-	TLan_EeSendStart( io_base );
-	err = TLan_EeSendByte( io_base, 0xA1, TLAN_EEPROM_ACK );
+	TLan_EeSendStart( dev->base_addr );
+	err = TLan_EeSendByte( dev->base_addr, 0xA1, TLAN_EEPROM_ACK );
 	if (err)
 		return 3;
-	TLan_EeReceiveByte( io_base, data, TLAN_EEPROM_STOP );
+	TLan_EeReceiveByte( dev->base_addr, data, TLAN_EEPROM_STOP );
 
-	sti();
+	dev->interrupt--;
+	if ( dev->interrupt == 0 )
+		sti();
 
 	return 0;
 

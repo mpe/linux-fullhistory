@@ -175,6 +175,33 @@ static int hardware_read_proc(char *page, char **start, off_t off,
 	return len;
 }
 
+static int autoprobe_read_proc (char *page, char **start, off_t off,
+				int count, int *eof, void *data)
+{
+	struct parport *pp = (struct parport *) data;
+	int len = 0;
+	const char *str;
+
+	if ((str = pp->probe_info.class_name) != NULL)
+		len += sprintf (page+len, "CLASS:%s;\n", str);
+
+	if ((str = pp->probe_info.model) != NULL)
+		len += sprintf (page+len, "MODEL:%s;\n", str);
+
+	if ((str = pp->probe_info.mfr) != NULL)
+		len += sprintf (page+len, "MANUFACTURER:%s;\n", str);
+
+	if ((str = pp->probe_info.description) != NULL)
+		len += sprintf (page+len, "DESCRIPTION:%s;\n", str);
+
+	if ((str = pp->probe_info.cmdset) != NULL)
+		len += sprintf (page+len, "COMMAND SET:%s;\n", str);
+
+	*start = 0;
+	*eof   = 1;
+	return strlen (page);
+}
+
 static inline void destroy_proc_entry(struct proc_dir_entry *root, 
 				      struct proc_dir_entry **d)
 {
@@ -313,6 +340,13 @@ int parport_proc_register(struct parport *pp)
 
 	pp->pdir.hardware->read_proc = hardware_read_proc;
 	pp->pdir.hardware->data = pp;
+
+	pp->pdir.probe = new_proc_entry("autoprobe", 0, pp->pdir.entry, 0, pp);
+	if (pp->pdir.probe == NULL)
+		goto out_fail;
+
+	pp->pdir.probe->read_proc = autoprobe_read_proc;
+	pp->pdir.probe->data = pp;
 
 	return 0;
 

@@ -1,3 +1,21 @@
+Sar Jul 18 13:00 1998 Gerard Roudier (groudier@club-internet.fr)
+	* revision 3.0g
+	- Preliminary fixes for Big Endian (sent by Eddie C. Dost).
+	  Big Endian architectures should work again with the driver.
+	  Eddie's patch has been partially applied since current 2.1.109 
+	  does not have all the Sparc changes of the vger tree.
+	- Use of BITS_PER_LONG instead of (~0UL == 0xffffffffUL) has fixed
+	  the problem observed when the driver was compiled using EGCS or 
+	  PGCC.
+
+Mon Jul 13 20:00 1998 Gerard Roudier (groudier@club-internet.fr)
+	* revision 3.0f
+	- Some spelling fixes.
+	- linux/config.h misplaced in ncr53c8xx.h
+	- MODULE_PARM stuff added for linux 2.1.
+	- check INQUIRY response data format is exactly 2. 
+	- use BITS_PER_LONG if defined. 
+
 Sun Jun 28 12:00 1998 Gerard Roudier (groudier@club-internet.fr)
 	* revision 3.0e
 	- Some cleanup, spelling fixes, version checks, documentations 

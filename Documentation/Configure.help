@@ -3226,7 +3226,6 @@ CONFIG_SCSI_NCR53C8XX
   The NCR53C860 and NCR53C875 support FAST-20 transfers. The NCR53C895 
   supports FAST-40 transfers with Ultra2 LVD devices.
   Please read drivers/scsi/README.ncr53c8xx for more information.
-  Linux/i386 and Linux/Alpha are supported by this driver.
 
 synchronous data transfers frequency
 CONFIG_SCSI_NCR53C8XX_SYNC
@@ -3261,17 +3260,17 @@ CONFIG_SCSI_NCR53C8XX_IOMAPPED
 
 not allow targets to disconnect
 CONFIG_SCSI_NCR53C8XX_NO_DISCONNECT
-  This option is only provided for safety if you suspect some scsi
+  This option is only provided for safety if you suspect some SCSI 
   device of yours to not support properly the target-disconnect
   feature. In that case, you would say Y here. In general however, to
   not allow targets to disconnect is not reasonable if there is more
-  than 1 device on a scsi bus.  The normal answer therefore is N.
+  than 1 device on a SCSI bus.  The normal answer therefore is N.
 
 default tagged command queue depth
 CONFIG_SCSI_NCR53C8XX_DEFAULT_TAGS
   This option allows you to enable tagged command queuing support at
   linux start-up and to define the default value for the number of 
-  tags per device. If you donnot want tagged command queuing to be 
+  tags per device. If you do not want tagged command queuing to be 
   used by the driver you must enter either 0 or 1 for this option.
   The default value is 8 and should be supported by most hard disks.
   This option has no effect for adapters with NVRAM, since the driver 
@@ -3283,17 +3282,17 @@ CONFIG_SCSI_NCR53C8XX_DEFAULT_TAGS
   The normal answer therefore is to go with the default 8 and to use 
   a boot command line option for devices that need to use a different 
   command queue depth.
-  There is no safe option other than using good scsi devices.
+  There is no safe option other than using good SCSI devices.
 
 maximum number of queued commands
 CONFIG_SCSI_NCR53C8XX_MAX_TAGS
   This option allows you to specify the maximum number of commands
   that can be queued to any device, when tagged command queuing is
   possible.  The default value is 32. Minimum is 2, maximum is 64.
-  For value less than 32, this option only spares a fiew memory 
-  (8*7*(32-MAXTAGS) bytes), so using less than 32 is'nt worth it.
+  For value less than 32, this option only spares a few memory 
+  (8*7*(32-MAXTAGS) bytes), so using less than 32 isn't worth it.
   For value greater than 32, latency on reselection will be increased 
-  of 1 or 2 micro-seconds. So, the normal answer here is to go with the 
+  by 1 or 2 micro-seconds. So, the normal answer here is to go with the 
   default value 32 unless you are using very large hard disks with 
   large cache (>= 1MB) that are able to get advantage of more than 
   32 tagged commands.
@@ -3312,8 +3311,8 @@ CONFIG_SCSI_NCR53C8XX_SYMBIOS_COMPAT
 
 enable profiling statistics gathering
 CONFIG_SCSI_NCR53C8XX_PROFILE
-  This option allows you to enable profiling informations gathering.
-  This statististics are not very accurate due to the low frequency 
+  This option allows you to enable profiling information gathering.
+  These statistics are not very accurate due to the low frequency 
   of the kernel clock (100 Hz on i386) and have performance impact 
   on systems that use very fast devices.
   The normal answer therefore is N.

@@ -30,10 +30,11 @@
 static inline void reload_context(struct task_struct *task)
 {
 	__asm__ __volatile__(
-		"bis %0,%0,$16\n\t"
 #ifdef CONFIG_ALPHA_DP264
-		"zap $16,0xe0,$16\n\t"
-#endif /* DP264 */
+		"zap %0,0xe0,$16\n\t"
+#else
+		"bis %0,%0,$16\n\t"
+#endif
 		"call_pal %1"
 		: /* no outputs */
 		: "r" (&task->tss), "i" (PAL_swpctx)

@@ -42,20 +42,10 @@
 #ifndef NCR53C8XX_H
 #define NCR53C8XX_H
 
-#include <linux/config.h>
-
-#if 0
-#define CONFIG_SCSI_NCR53C8XX_PROFILE
-#endif
-
-#ifndef CONFIG_SCSI_NCR53C8XX_NVRAM_DETECT
-#define CONFIG_SCSI_NCR53C8XX_NVRAM_DETECT
-#endif
-
 /*
 **	Name and revision of the driver
 */
-#define SCSI_NCR_DRIVER_NAME		"ncr53c8xx - revision 3.0e"
+#define SCSI_NCR_DRIVER_NAME		"ncr53c8xx - revision 3.0g"
 
 /*
 **	Check supported Linux versions
@@ -64,11 +54,19 @@
 #if !defined(LINUX_VERSION_CODE)
 #include <linux/version.h>
 #endif
+#include <linux/config.h>
 
 #define LinuxVersionCode(v, p, s) (((v)<<16)+((p)<<8)+(s))
 
 /*
-**	These options are'nt tunable from 'make config'
+ *	No more an option, enabled by default.
+ */
+#ifndef CONFIG_SCSI_NCR53C8XX_NVRAM_DETECT
+#define CONFIG_SCSI_NCR53C8XX_NVRAM_DETECT
+#endif
+
+/*
+**	These options are not tunable from 'make config'
 */
 #define	SCSI_NCR_PROC_INFO_SUPPORT
 #define SCSI_NCR_SHARE_IRQ

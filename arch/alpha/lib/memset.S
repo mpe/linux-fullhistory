@@ -18,6 +18,7 @@
 	.set noreorder
 .text
 	.globl __memset
+	.globl __memsetw
 	.globl __constant_c_memset
 	.ent __memset
 .align 5
@@ -25,8 +26,8 @@ __memset:
 	.frame $30,0,$26,0
 	.prologue 0
 
-	zapnot $17,1,$17	/* E0 */
-	sll $17,8,$1		/* E1 (p-c latency, next cycle) */
+	and $17,255,$1		/* E1 */
+	insbl $17,1,$17		/* .. E0 */
 	bis $17,$1,$17		/* E0 (p-c latency, next cycle) */
 	sll $17,16,$1		/* E1 (p-c latency, next cycle) */
 
@@ -52,9 +53,9 @@ __constant_c_memset:
 	insql $17,$16,$2	/* E0 */
 	subq $3,8,$3		/* .. E1 */
 
-	addq $18,$3,$18		/* E0		$18 is new count ($3 is negative) */
+	addq $18,$3,$18		/* E0	$18 is new count ($3 is negative) */
 	mskql $4,$16,$4		/* .. E1 (and possible load stall) */
-	subq $16,$3,$16		/* E0 		$16 is new aligned destination */
+	subq $16,$3,$16		/* E0 	$16 is new aligned destination */
 	bis $2,$4,$1		/* .. E1 */
 
 	bis $31,$31,$31		/* E0 */
@@ -102,6 +103,22 @@ within_one_quad:
 end:
 	ret $31,($26),1		/* E1 */
 	.end __memset
+
+	.align 5
+	.ent __memsetw
+__memsetw:
+	.prologue 0
+
+	inswl $17,0,$1		/* E0 */
+	inswl $17,2,$2		/* E0 */
+	inswl $17,4,$3		/* E0 */
+	or $1,$2,$1		/* .. E1 */
+	inswl $17,6,$4		/* E0 */
+	or $1,$3,$1		/* .. E1 */
+	or $1,$4,$17		/* E0 */
+	br __constant_c_memset	/* .. E1 */
+
+	.end __memsetw
 
 #ifdef __ELF__
  .weak memset; memset = __memset

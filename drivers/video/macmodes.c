@@ -9,7 +9,6 @@
  */
 
 
-#include <linux/config.h>
 #include <linux/tty.h>
 #include <linux/fb.h>
 #include <linux/string.h>

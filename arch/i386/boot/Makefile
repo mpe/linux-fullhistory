@@ -8,9 +8,8 @@
 # Copyright (C) 1994 by Linus Torvalds
 #
 
-ifdef SMP
-HOSTCFLAGS := $(HOSTCFLAGS) -D__SMP__
-endif
+AS86	=$(CROSS_COMPILE)as86 -0 -a
+LD86	=$(CROSS_COMPILE)ld86 -0
 
 BOOT_INCL =	$(TOPDIR)/include/linux/config.h \
 		$(TOPDIR)/include/linux/autoconf.h \

@@ -173,11 +173,18 @@ static void parse_data(struct parport *port, char *str)
 				u++;
 			}
 			if (!strcmp(p, "MFG") || !strcmp(p, "MANUFACTURER")) {
+				if (port->probe_info.mfr)
+					kfree (port->probe_info.mfr);
 				port->probe_info.mfr = strdup(sep);
 			} else if (!strcmp(p, "MDL") || !strcmp(p, "MODEL")) {
+				if (port->probe_info.model)
+					kfree (port->probe_info.model);
 				port->probe_info.model = strdup(sep);
 			} else if (!strcmp(p, "CLS") || !strcmp(p, "CLASS")) {
 				int i;
+				if (port->probe_info.class_name)
+					kfree (port->probe_info.class_name);
+				port->probe_info.class_name = strdup(sep);
 				for (u = sep; *u; u++)
 					*u = toupper(*u);
 				for (i = 0; classes[i].token; i++) {
@@ -189,11 +196,16 @@ static void parse_data(struct parport *port, char *str)
 				printk(KERN_WARNING "%s probe: warning, class '%s' not understood.\n", port->name, sep);
 				port->probe_info.class = PARPORT_CLASS_OTHER;
 			} else if (!strcmp(p, "CMD") || !strcmp(p, "COMMAND SET")) {
+				if (port->probe_info.cmdset)
+					kfree (port->probe_info.cmdset);
+				port->probe_info.cmdset = strdup(sep);
 				/* if it speaks printer language, it's
 				   probably a printer */
 				if (strstr(sep, "PJL") || strstr(sep, "PCL"))
 					guessed_class = PARPORT_CLASS_PRINTER;
 			} else if (!strcmp(p, "DES") || !strcmp(p, "DESCRIPTION")) {
+				if (port->probe_info.description)
+					kfree (port->probe_info.description);
 				port->probe_info.description = strdup(sep);
 			}
 		}
@@ -226,10 +238,11 @@ void parport_probe_one(struct parport *port)
 	int r;
 
 	MOD_INC_USE_COUNT;
-	port->probe_info.model = "Unknown device";
-	port->probe_info.mfr = "Unknown vendor";
-	port->probe_info.description = NULL;
+	port->probe_info.model = strdup ("Unknown device");
+	port->probe_info.mfr = strdup ("Unknown vendor");
+	port->probe_info.description = port->probe_info.cmdset = NULL;
 	port->probe_info.class = PARPORT_CLASS_UNSPEC;
+	port->probe_info.class_name = NULL;
 
 	if (!buffer) {
 		printk(KERN_ERR "%s probe: Memory squeeze.\n", port->name);

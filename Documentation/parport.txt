@@ -62,6 +62,8 @@ message similar to:
 (If you are using kmod and have configured parport_probe as a module,
 this will just happen.)
 
+The probe information is available in /proc/parport/?/autoprobe.
+
 
 Parport linked into the kernel statically
 =========================================
@@ -102,6 +104,9 @@ File:				Contents:
 				port.  This is in a separate file to
                                 allow you to alter it by writing a new
 				value in (IRQ number or "none").
+
+/proc/parport/0/autoprobe	Any IEEE-1284 device ID information
+				that has been acquired.
 
 
 Device drivers

@@ -29,6 +29,8 @@
 #include <linux/smp.h>
 #include <linux/smp_lock.h>
 #include <linux/init.h>
+#include <linux/errno.h>
+#include <linux/pci.h>
 #include <asm/dma.h>
 
 #if 0
@@ -39,24 +41,11 @@
 
 #ifndef CONFIG_PCI
 
-int pcibios_present(void)
-{
-	return 0;
-}
-
-asmlinkage int sys_pciconfig_read()
-{
-	return -ENOSYS;
-}
-
-asmlinkage int sys_pciconfig_write()
-{
-	return -ENOSYS;
-}
+asmlinkage int sys_pciconfig_read() { return -ENOSYS; }
+asmlinkage int sys_pciconfig_write() { return -ENOSYS; }
 
 #else /* CONFIG_PCI */
 
-#include <linux/pci.h>
 #include <linux/malloc.h>
 #include <linux/mm.h>
 
@@ -82,17 +71,19 @@ asmlinkage int sys_pciconfig_write()
 #define ALIGN(val,align)	(((val) + ((align) - 1)) & ~((align) - 1))
 
 
-#if defined(CONFIG_ALPHA_MCPCIA) || defined(CONFIG_ALPHA_TSUNAMI)
-/* multiple PCI bus machines */
-/* make handle from bus number */
+/*
+ * On multiple PCI bus machines, create a handle from the bus number.
+ */
+#if defined(CONFIG_ALPHA_MCPCIA) /* || defined(CONFIG_ALPHA_TSUNAMI) */
 extern struct linux_hose_info *bus2hose[256];
 #define HANDLE(b) (((unsigned long)(bus2hose[(b)]->pci_hose_index)&3)<<32)
 #define DEV_IS_ON_PRIMARY(dev) \
 	(bus2hose[(dev)->bus->number]->pci_first_busno == (dev)->bus->number)
-#else /* MCPCIA || TSUNAMI */
+#else
 #define HANDLE(b) (0)
 #define DEV_IS_ON_PRIMARY(dev) ((dev)->bus->number == 0)
-#endif /* MCPCIA || TSUNAMI */
+#endif
+
 /*
  * PCI_MODIFY
  *
@@ -2199,7 +2190,6 @@ __initfunc(char *pcibios_setup(char *str))
 #ifdef CONFIG_ALPHA_SRM_SETUP
 void reset_for_srm(void)
 {
-	extern void scrreset(void);
 	struct pci_dev *dev;
 	int i;
 
@@ -2230,9 +2220,7 @@ void reset_for_srm(void)
 		   io_to_reset[i]);
 #endif
 }
-
-	/* reset the visible screen to the top of display memory */
-	scrreset();
+	/* FIXME: reset the video origin.  */
 }
 #endif /* CONFIG_ALPHA_SRM_SETUP */
 

@@ -46,7 +46,7 @@ all:		all_targets
 .PHONY:		all
 
 gentbl:		gentbl.c
-		$(HOSTCC) -Wall $< -o $@ -lm
+		$(HOSTCC) $(HOSTCFLAGS) $< -o $@ -lm
 
 TBLHDR		:= sm_tbl_afsk1200.h sm_tbl_afsk2400_8.h 
 TBLHDR		+= sm_tbl_afsk2666.h sm_tbl_psk4800.h

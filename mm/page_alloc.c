@@ -312,22 +312,23 @@ __initfunc(unsigned long free_area_init(unsigned long start_mem, unsigned long e
 {
 	mem_map_t * p;
 	unsigned long mask = PAGE_MASK;
-	int i;
+	unsigned long i;
 
 	/*
 	 * Select nr of pages we try to keep free for important stuff
-	 * with a minimum of 48 pages and a maximum of 256 pages, so
+	 * with a minimum of 10 pages and a maximum of 256 pages, so
 	 * that we don't waste too much memory on large systems.
-	 * This is totally arbitrary.
+	 * This is fairly arbitrary, but based on some behaviour
+	 * analysis.
 	 */
 	i = (end_mem - PAGE_OFFSET) >> (PAGE_SHIFT+7);
-	if (i < 48)
-		i = 48;
+	if (i < 10)
+		i = 10;
 	if (i > 256)
 		i = 256;
 	freepages.min = i;
-	freepages.low = i << 1;
-	freepages.high = freepages.low + i;
+	freepages.low = i * 2;
+	freepages.high = i * 3;
 	mem_map = (mem_map_t *) LONG_ALIGN(start_mem);
 	p = mem_map + MAP_NR(end_mem);
 	start_mem = LONG_ALIGN((unsigned long) p);

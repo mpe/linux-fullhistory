@@ -7,13 +7,8 @@
 #
 # Note 2! The CFLAGS definitions are now in the main makefile...
 
-ifdef SMP
 .S.o:
 	$(CC) -D__ASSEMBLY__ $(AFLAGS) -traditional -c $< -o $*.o
-else
-.S.o:
-	$(CC) -D__ASSEMBLY__ -traditional -c $< -o $*.o
-endif
 
 all: kernel.o head.o init_task.o
 
@@ -39,19 +34,11 @@ else
   endif
 endif
 
-
 ifdef SMP
-
 O_OBJS += io_apic.o smp.o trampoline.o
-
-head.o: head.S $(TOPDIR)/include/linux/tasks.h
-	$(CC) -D__ASSEMBLY__ -D__SMP__ -traditional -c $*.S -o $*.o
-
-else
-
-head.o: head.S $(TOPDIR)/include/linux/tasks.h
-	$(CC) -D__ASSEMBLY__ -traditional -c $*.S -o $*.o
-
 endif
+
+head.o: head.S $(TOPDIR)/include/linux/tasks.h
+	$(CC) -D__ASSEMBLY__ $(AFLAGS) -traditional -c $*.S -o $*.o
 
 include $(TOPDIR)/Rules.make

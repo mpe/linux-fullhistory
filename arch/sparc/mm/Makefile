@@ -22,8 +22,6 @@ endif
 
 include $(TOPDIR)/Rules.make
 
-ifdef SMP
-
 hypersparc.o: hypersparc.S
 	$(CC) -D__ASSEMBLY__ $(AFLAGS) -ansi -c -o hypersparc.o hypersparc.S
 
@@ -35,19 +33,3 @@ viking.o: viking.S
 
 tsunami.o: tsunami.S
 	$(CC) -D__ASSEMBLY__ $(AFLAGS) -ansi -c -o tsunami.o tsunami.S
-
-else
-
-hypersparc.o: hypersparc.S
-	$(CC) -D__ASSEMBLY__ -ansi -c -o hypersparc.o hypersparc.S
-
-turbosparc.o: turbosparc.S
-	$(CC) -D__ASSEMBLY__ -ansi -c -o turbosparc.o turbosparc.S
-
-viking.o: viking.S
-	$(CC) -D__ASSEMBLY__ -ansi -c -o viking.o viking.S
-
-tsunami.o: tsunami.S
-	$(CC) -D__ASSEMBLY__ -ansi -c -o tsunami.o tsunami.S
-
-endif

@@ -9,13 +9,13 @@
 #include <linux/types.h>
 #include <linux/pci.h>
 #include <linux/sched.h>
+#include <linux/delay.h>
 
 #include <asm/system.h>
 #include <asm/io.h>
 #include <asm/hwrpb.h>
 #include <asm/ptrace.h>
 #include <asm/mmu_context.h>
-#include <asm/delay.h>
 
 /*
  * NOTE: Herein lie back-to-back mb instructions.  They are magic. 
@@ -921,8 +921,7 @@ DBG_PCI(("mcpcia_fixup_busno: hose %d startbus %d nbus %d\n",
 	} while (nbus-- > 0);
 }
 
-static void mcpcia_probe(struct linux_hose_info *hose,
-			 unsigned long *mem_start)
+static void mcpcia_probe(struct linux_hose_info *hose)
 {
 	static struct pci_bus *pchain = NULL;
 	struct pci_bus *pbus = &hose->pci_bus;
@@ -939,7 +938,7 @@ static void mcpcia_probe(struct linux_hose_info *hose,
 
 	mcpcia_fixup_busno(hose, busno);
 
-	pbus->subordinate = pci_scan_bus(pbus, mem_start); /* the original! */
+	pbus->subordinate = pci_scan_bus(pbus); /* the original! */
 
 	/*
 	 * Set the maximum subordinate bus of this hose.
@@ -970,8 +969,7 @@ void mcpcia_fixup(void)
 	pci_probe_enabled = 1;
 
 	/* for each hose, probe and setup the devices on the hose */
-	for (hose = mcpcia_root; hose; hose = hose->next) {
-		mcpcia_probe(hose, &memory_start);
-	}
+	for (hose = mcpcia_root; hose; hose = hose->next)
+		mcpcia_probe(hose);
 }
 #endif /* CONFIG_ALPHA_MCPCIA */

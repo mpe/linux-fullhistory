@@ -47,10 +47,11 @@ CONFIG_ALPHA_EV5=y
 CONFIG_ALPHA_CIA=y
 CONFIG_ALPHA_SRM=y
 CONFIG_ALPHA_EISA=y
-CONFIG_TGA_CONSOLE=y
+# CONFIG_PCI_QUIRKS is not set
 CONFIG_PCI_OLD_PROC=y
 CONFIG_NET=y
 CONFIG_SYSVIPC=y
+# CONFIG_BSD_PROCESS_ACCT is not set
 CONFIG_SYSCTL=y
 CONFIG_BINFMT_AOUT=y
 CONFIG_BINFMT_ELF=y
@@ -64,7 +65,7 @@ CONFIG_BINFMT_EM86=y
 # CONFIG_PNP is not set
 
 #
-# Floppy, IDE, and other block devices
+# Block devices
 #
 CONFIG_BLK_DEV_FD=y
 # CONFIG_BLK_DEV_IDE is not set
@@ -78,6 +79,7 @@ CONFIG_BLK_DEV_FD=y
 # Additional Block Devices
 #
 # CONFIG_BLK_DEV_LOOP is not set
+# CONFIG_BLK_DEV_NBD is not set
 # CONFIG_BLK_DEV_MD is not set
 # CONFIG_BLK_DEV_RAM is not set
 # CONFIG_BLK_DEV_XD is not set
@@ -98,8 +100,6 @@ CONFIG_INET=y
 # CONFIG_IP_MULTICAST is not set
 # CONFIG_IP_ADVANCED_ROUTER is not set
 # CONFIG_IP_PNP is not set
-# CONFIG_IP_ACCT is not set
-# CONFIG_IP_MASQUERADE is not set
 # CONFIG_IP_ROUTER is not set
 # CONFIG_NET_IPIP is not set
 # CONFIG_NET_IPGRE is not set
@@ -195,6 +195,7 @@ CONFIG_DE4X5=y
 # CONFIG_DEC_ELCP is not set
 # CONFIG_DGRS is not set
 # CONFIG_EEXPRESS_PRO100 is not set
+# CONFIG_NE2K_PCI is not set
 # CONFIG_NET_POCKET is not set
 # CONFIG_FDDI is not set
 # CONFIG_DLCI is not set
@@ -281,6 +282,12 @@ CONFIG_PSMOUSE=y
 # Ftape, the floppy tape device driver
 #
 # CONFIG_FTAPE is not set
+
+#
+# Console drivers
+#
+CONFIG_VGA_CONSOLE=y
+# CONFIG_FB is not set
 
 #
 # Sound

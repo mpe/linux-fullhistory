@@ -199,10 +199,10 @@ wavefront.o: $(wavefront-objs)
 # First make the utilities.
 
 bin2hex: bin2hex.c
-	$(HOSTCC) -o bin2hex bin2hex.c
+	$(HOSTCC) $(HOSTCFLAGS) -o bin2hex bin2hex.c
 
 hex2hex: hex2hex.c
-	$(HOSTCC) -o hex2hex hex2hex.c
+	$(HOSTCC) $(HOSTCFLAGS) -o hex2hex hex2hex.c
 
 
 

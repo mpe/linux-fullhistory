@@ -178,6 +178,7 @@ extern unsigned int CIA_DMA_WIN_SIZE;
 #define CIA_SPARSE_MEM_R2		(IDENT_ADDR + 0x8400000000UL)
 #define CIA_SPARSE_MEM_R3		(IDENT_ADDR + 0x8500000000UL)
 #define CIA_DENSE_MEM		        (IDENT_ADDR + 0x8600000000UL)
+#define DENSE_MEM(addr)			CIA_DENSE_MEM
 
 /*
  * ALCOR's GRU ASIC registers
@@ -241,6 +242,7 @@ extern inline void * bus_to_virt(unsigned long address)
  */
 
 #define vuip	volatile unsigned int *
+#define vulp	volatile unsigned long *
 
 extern inline unsigned int __inb(unsigned long addr)
 {
@@ -491,9 +493,19 @@ extern inline unsigned long __readl(unsigned long addr)
 	return *(vuip) (addr + CIA_DENSE_MEM);
 }
 
+extern inline unsigned long __readq(unsigned long addr)
+{
+	return *(vulp) (addr + CIA_DENSE_MEM);
+}
+
 extern inline void __writel(unsigned int b, unsigned long addr)
 {
 	*(vuip) (addr + CIA_DENSE_MEM) = b;
+}
+
+extern inline void __writeq(unsigned long b, unsigned long addr)
+{
+	*(vulp) (addr + CIA_DENSE_MEM) = b;
 }
 
 #define inb(port) \
@@ -503,9 +515,12 @@ extern inline void __writel(unsigned int b, unsigned long addr)
 (__builtin_constant_p((port))?__outb((x),(port)):_outb((x),(port)))
 
 #define readl(a)	__readl((unsigned long)(a))
+#define readq(a)	__readq((unsigned long)(a))
 #define writel(v,a)	__writel((v),(unsigned long)(a))
+#define writeq(v,a)	__writeq((v),(unsigned long)(a))
 
 #undef vuip
+#undef vulp
 
 extern unsigned long cia_init (unsigned long mem_start,
 				 unsigned long mem_end);

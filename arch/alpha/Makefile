@@ -29,11 +29,16 @@ CFLAGS := $(CFLAGS) -mno-fp-regs -ffixed-8
 # determine if we can use the BWX instructions with GAS
 OLD_GAS := $(shell if $(AS) --version 2>&1 | grep 'version 2.7' > /dev/null; then echo y; else echo n; fi)
 
-# if PYXIS, then enable use of BWIO space
+# If PYXIS, then enable use of BWIO space
 ifneq ($(OLD_GAS),y)
  ifeq ($(CONFIG_ALPHA_PYXIS),y)
   CFLAGS := $(CFLAGS) -Wa,-m21164a -DBWX_USABLE -DBWIO_ENABLED
  endif
+endif
+
+# If EV6, turn on the proper optimizations.
+ifeq ($(CONFIG_ALPHA_EV6),y)
+ CFLAGS := -mcpu=ev6 $(CFLAGS)
 endif
 
 HEAD := arch/alpha/kernel/head.o

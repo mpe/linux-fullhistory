@@ -133,9 +133,11 @@ extern void		_outl (unsigned int l,unsigned long port);
 extern unsigned long	_readb(unsigned long addr);
 extern unsigned long	_readw(unsigned long addr);
 extern unsigned long	_readl(unsigned long addr);
+extern unsigned long	_readq(unsigned long addr);
 extern void		_writeb(unsigned char b, unsigned long addr);
 extern void		_writew(unsigned short b, unsigned long addr);
 extern void		_writel(unsigned int b, unsigned long addr);
+extern void		_writeq(unsigned long b, unsigned long addr);
 
 /*
  * The platform header files may define some of these macros to use
@@ -206,6 +208,9 @@ extern inline void iounmap(void *addr)
 #ifndef readl
 # define readl(a)	_readl((unsigned long)(a))
 #endif
+#ifndef readq
+# define readq(a)	_readq((unsigned long)(a))
+#endif
 #ifndef writeb
 # define writeb(v,a)	_writeb((v),(unsigned long)(a))
 #endif
@@ -215,19 +220,29 @@ extern inline void iounmap(void *addr)
 #ifndef writel
 # define writel(v,a)	_writel((v),(unsigned long)(a))
 #endif
+#ifndef writeq
+# define writeq(v,a)	_writeq((v),(unsigned long)(a))
+#endif
 
 #ifdef __KERNEL__
 
 /*
  * String version of IO memory access ops:
  */
-extern void _memcpy_fromio(void *, unsigned long, unsigned long);
-extern void _memcpy_toio(unsigned long, void *, unsigned long);
-extern void _memset_io(unsigned long, int, unsigned long);
+extern void _memcpy_fromio(void *, unsigned long, long);
+extern void _memcpy_toio(unsigned long, void *, long);
+extern void _memset_c_io(unsigned long, unsigned long, long);
 
-#define memcpy_fromio(to,from,len)	_memcpy_fromio((to),(unsigned long)(from),(len))
-#define memcpy_toio(to,from,len)	_memcpy_toio((unsigned long)(to),(from),(len))
-#define memset_io(addr,c,len)		_memset_io((unsigned long)(addr),(c),(len))
+#define memcpy_fromio(to,from,len) \
+  _memcpy_fromio((to),(unsigned long)(from),(len))
+#define memcpy_toio(to,from,len) \
+  _memcpy_toio((unsigned long)(to),(from),(len))
+#define memset_io(addr,c,len) \
+  _memset_c_io((unsigned long)(addr),0x0101010101010101UL*(u8)(c),(len))
+
+#define __HAVE_ARCH_MEMSETW_IO
+#define memsetw_io(addr,c,len) \
+  _memset_c_io((unsigned long)(addr),0x0001000100010001UL*(u16)(c),(len))
 
 /*
  * String versions of in/out ops:
@@ -245,7 +260,8 @@ extern void outsl (unsigned long port, const void *src, unsigned long count);
  * only used by some shared memory 8390 Ethernet cards anyway.
  */
 
-#define eth_io_copy_and_sum(skb,src,len,unused)	memcpy_fromio((skb)->data,(src),(len))
+#define eth_io_copy_and_sum(skb,src,len,unused) \
+  memcpy_fromio((skb)->data,(src),(len))
 
 static inline int check_signature(unsigned long io_addr,
 	const unsigned char *signature, int length)

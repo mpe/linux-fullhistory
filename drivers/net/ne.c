@@ -530,7 +530,7 @@ ne_get_8390_hdr(struct device *dev, struct e8390_pkt_hdr *hdr, int ring_page)
     /* This *shouldn't* happen. If it does, it's the last thing you'll see */
     if (ei_status.dmaing) {
 	printk("%s: DMAing conflict in ne_get_8390_hdr "
-	   "[DMAstat:%d][irqlock:%d][intr:%d].\n",
+	   "[DMAstat:%d][irqlock:%d][intr:%ld].\n",
 	   dev->name, ei_status.dmaing, ei_status.irqlock,
 	   dev->interrupt);
 	return;
@@ -570,7 +570,7 @@ ne_block_input(struct device *dev, int count, struct sk_buff *skb, int ring_offs
     /* This *shouldn't* happen. If it does, it's the last thing you'll see */
     if (ei_status.dmaing) {
 	printk("%s: DMAing conflict in ne_block_input "
-	   "[DMAstat:%d][irqlock:%d][intr:%d].\n",
+	   "[DMAstat:%d][irqlock:%d][intr:%ld].\n",
 	   dev->name, ei_status.dmaing, ei_status.irqlock,
 	   dev->interrupt);
 	return;
@@ -639,7 +639,7 @@ ne_block_output(struct device *dev, int count,
     /* This *shouldn't* happen. If it does, it's the last thing you'll see */
     if (ei_status.dmaing) {
 	printk("%s: DMAing conflict in ne_block_output."
-	   "[DMAstat:%d][irqlock:%d][intr:%d]\n",
+	   "[DMAstat:%d][irqlock:%d][intr:%ld]\n",
 	   dev->name, ei_status.dmaing, ei_status.irqlock,
 	   dev->interrupt);
 	return;

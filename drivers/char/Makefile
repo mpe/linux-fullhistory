@@ -451,7 +451,7 @@ include $(TOPDIR)/Rules.make
 fastdep:
 
 conmakehash: conmakehash.c
-	$(HOSTCC) -o conmakehash conmakehash.c
+	$(HOSTCC) $(HOSTCFLAGS) -o conmakehash conmakehash.c
 
 consolemap_deftbl.c: $(FONTMAPFILE) conmakehash
 	./conmakehash $(FONTMAPFILE) > consolemap_deftbl.c

@@ -73,7 +73,7 @@
 */
 
 /*
-**	28 June 1998, version 3.0e
+**	16 July 1998, version 3.0g
 **
 **	Supported SCSI-II features:
 **	    Synchronous negotiation
@@ -156,6 +156,17 @@
 #include "sd.h"
 
 #include <linux/types.h>
+
+/*
+**	Define BITS_PER_LONG for earlier linux versions.
+*/
+#ifndef	BITS_PER_LONG
+#if (~0UL) == 0xffffffffUL
+#define	BITS_PER_LONG	32
+#else
+#define	BITS_PER_LONG	64
+#endif
+#endif
 
 /*
 **	Define the BSD style u_int32 type
@@ -278,7 +289,7 @@ static inline struct xpt_quehead *xpt_remque_tail(struct xpt_quehead *head)
 #define CCB_DONE_EMPTY 0xffffffffUL
 
 /* All 32 bit architectures */
-#if (~0UL) == 0xffffffffUL
+#if BITS_PER_LONG == 32
 #define CCB_DONE_VALID(cp)  (((u_long) cp) != CCB_DONE_EMPTY)
 
 /* All > 32 bit (64 bit) architectures regardless endian-ness */
@@ -760,9 +771,12 @@ static struct ncr_driver_setup
 #ifdef	SCSI_NCR_BOOT_COMMAND_LINE_SUPPORT
 static struct ncr_driver_setup
 	driver_safe_setup __initdata	= SCSI_NCR_DRIVER_SAFE_SETUP;
-#ifdef	MODULE
+# ifdef	MODULE
 char *ncr53c8xx = 0;	/* command line passed by insmod */
-#endif
+#  if LINUX_VERSION_CODE >= LinuxVersionCode(2,1,30)
+MODULE_PARM(ncr53c8xx, "s");
+#  endif
+# endif
 #endif
 
 /*
@@ -5276,7 +5290,7 @@ static void ncr_start_next_ccb(ncb_p np, lcb_p lp, int maxn)
 		cp = xpt_que_entry(qp, struct ccb, link_ccbq);
 		xpt_insque_tail(qp, &lp->busy_ccbq);
 		lp->jump_ccb[cp->tag == NO_TAG ? 0 : cp->tag].l_paddr =
-			cpu_to_scr(cp->p_ccb + offsetof(struct ccb, restart));
+			cpu_to_scr(CCB_PHYS (cp, restart));
 		ncr_put_start_queue(np, cp);
 	}
 }
@@ -6855,7 +6869,7 @@ static void ncr_log_hard_error(ncb_p np, u_short sist, u_char dstat)
 	if (((script_ofs & 3) == 0) &&
 	    (unsigned)script_ofs < script_size) {
 		printk ("%s: script cmd = %08x\n", ncr_name(np),
-			(int) *(ncrcmd *)(script_base + script_ofs));
+			scr_to_cpu((int) *(ncrcmd *)(script_base + script_ofs)));
 	}
 
         printk ("%s: regdump:", ncr_name(np));
@@ -7732,7 +7746,7 @@ void ncr_int_sir (ncb_p np)
 		**	We just assume lun=0, 1 CCB, no tag.
 		*/
 		if (tp->lp[0]) { 
-			OUTL (nc_dsp, tp->lp[0]->jump_ccb[0].l_paddr);
+			OUTL (nc_dsp, scr_to_cpu(tp->lp[0]->jump_ccb[0].l_paddr));
 			return;
 		}
 	case SIR_RESEL_BAD_TARGET:	/* Will send a TARGET RESET message */
@@ -8398,7 +8412,7 @@ static void ncr_init_ccb(ncb_p np, ccb_p cp)
 	cp->start.setup_dsa[1]	 = cpu_to_scr(vtophys(&cp->start.p_phys));
 	cp->start.setup_dsa[2]	 = cpu_to_scr(ncr_reg_bus_addr(nc_dsa));
 	cp->start.schedule.l_cmd = cpu_to_scr(SCR_JUMP);
-	cp->start.p_phys	 = vtophys(&cp->phys);
+	cp->start.p_phys	 = cpu_to_scr(vtophys(&cp->phys));
 
 	bcopy(&cp->start, &cp->restart, sizeof(cp->restart));
 
@@ -8543,7 +8557,7 @@ static void ncr_setup_jump_ccb(ncb_p np, lcb_p lp)
 {
 	int i;
 
-	lp->p_jump_ccb = vtophys(lp->jump_ccb);
+	lp->p_jump_ccb = cpu_to_scr(vtophys(lp->jump_ccb));
 	for (i = 0 ; i < lp->maxnxs ; i++) {
 #if SCSI_NCR_MAX_TAGS <= 32
 		lp->jump_ccb[i].l_cmd   = cpu_to_scr(SCR_JUMP);
@@ -8680,10 +8694,10 @@ static lcb_p ncr_setup_lcb (ncb_p np, u_char tn, u_char ln, u_char *inq_data)
 	/*
 	**	Evaluate trustable target/unit capabilities.
 	**	We only believe device version >= SCSI-2 that 
-	**	use appropriate response data format.
+	**	use appropriate response data format (2).
 	*/
 	inq_byte7 = 0;
-	if ((inq_data[2] & 0x7) >= 2 && (inq_data[3] & 0x7) >= 2)
+	if ((inq_data[2] & 0x7) >= 2 && (inq_data[3] & 0xf) == 2)
 		inq_byte7 = inq_data[7];
 
 	/*

@@ -438,9 +438,13 @@ void shrink_dcache_parent(struct dentry * parent)
  */
 void shrink_dcache_memory(int priority, unsigned int gfp_mask)
 {
+#if 0
 	int count = select_dcache(32, 8);
 	if (count)
 		prune_dcache((count << 6) >> priority);
+#else
+	prune_dcache(0);
+#endif
 }
 
 #define NAME_ALLOC_LEN(len)	((len+16) & ~15)

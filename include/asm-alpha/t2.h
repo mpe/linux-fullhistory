@@ -48,6 +48,7 @@ extern unsigned int T2_DMA_WIN_SIZE;
 #define T2_IO			(IDENT_ADDR + GAMMA_BIAS + 0x3a0000000UL)
 #define T2_SPARSE_MEM		(IDENT_ADDR + GAMMA_BIAS + 0x200000000UL)
 #define T2_DENSE_MEM	        (IDENT_ADDR + GAMMA_BIAS + 0x3c0000000UL)
+#define DENSE_MEM(addr)		T2_DENSE_MEM
 
 #define T2_IOCSR		(IDENT_ADDR + GAMMA_BIAS + 0x38e000000UL)
 #define T2_CERR1		(IDENT_ADDR + GAMMA_BIAS + 0x38e000020UL)
@@ -219,87 +220,79 @@ extern inline void __outl(unsigned int b, unsigned long addr)
 
 extern unsigned long t2_sm_base;
 
+extern int __t2_ioaddr_check(unsigned long addr)
+{
+	if ((addr >= t2_sm_base && addr <= t2_sm_base + MEM_R1_MASK)
+	    || (addr >= 512*1024 && addr < 1024*1024))
+		return 1;
+#if 0
+	  printk("T2: address 0x%lx not covered by HAE\n", addr);
+#endif
+	return 0;
+}
+
+
 extern inline unsigned long __readb(unsigned long addr)
 {
 	unsigned long result, shift, work;
 
-	if ((addr >= t2_sm_base) && (addr <= (t2_sm_base + MEM_R1_MASK)))
-	  work = (((addr & MEM_R1_MASK) << 5) + T2_SPARSE_MEM + 0x00);
-	else
-	if ((addr >= 512*1024) && (addr < 1024*1024)) /* check HOLE */
-	  work = (((addr & MEM_R1_MASK) << 5) + T2_SPARSE_MEM + 0x00);
-	else
-	{
-#if 0
-	  printk("__readb: address 0x%lx not covered by HAE\n", addr);
-#endif
-	  return 0x0ffUL;
-	}
-	shift = (addr & 0x3) << 3;
+	if (!__t2_addr_check(addr))
+		return 0xFF;
+
+	work = (((addr & MEM_R1_MASK) << 5) + T2_SPARSE_MEM + 0x00);
 	result = *(vuip) work;
-	result >>= shift;
-	return 0x0ffUL & result;
+	shift = (addr & 0x3) << 3;
+	return (result >> shift) & 0xFF;
 }
 
 extern inline unsigned long __readw(unsigned long addr)
 {
 	unsigned long result, shift, work;
 
-	if ((addr >= t2_sm_base) && (addr <= (t2_sm_base + MEM_R1_MASK)))
-	  work = (((addr & MEM_R1_MASK) << 5) + T2_SPARSE_MEM + 0x08);
-	else
-	if ((addr >= 512*1024) && (addr < 1024*1024)) /* check HOLE */
-	  work = (((addr & MEM_R1_MASK) << 5) + T2_SPARSE_MEM + 0x08);
-	else
-	{
-#if 0
-	  printk("__readw: address 0x%lx not covered by HAE\n", addr);
-#endif
-	  return 0x0ffffUL;
-	}
-	shift = (addr & 0x3) << 3;
+	if (!__t2_addr_check(addr))
+		return 0xFFFF;
+
+	work = (((addr & MEM_R1_MASK) << 5) + T2_SPARSE_MEM + 0x08);
 	result = *(vuip) work;
-	result >>= shift;
-	return 0x0ffffUL & result;
+	shift = (addr & 0x3) << 3;
+	return (result >> shift) & 0xFF;
 }
 
-/* on SABLE with T2, we must use SPARSE memory even for 32-bit access */
+/* On SABLE with T2, we must use SPARSE memory even for 32-bit access ... */
 extern inline unsigned long __readl(unsigned long addr)
 {
-	unsigned long result, work;
+	unsigned long work;
 
-	if ((addr >= t2_sm_base) && (addr <= (t2_sm_base + MEM_R1_MASK)))
-	  work = (((addr & MEM_R1_MASK) << 5) + T2_SPARSE_MEM + 0x18);
-	else
-	if ((addr >= 512*1024) && (addr < 1024*1024)) /* check HOLE */
-	  work = (((addr & MEM_R1_MASK) << 5) + T2_SPARSE_MEM + 0x18);
-	else
-	{
-#if 0
-	  printk("__readl: address 0x%lx not covered by HAE\n", addr);
-#endif
-	  return 0x0ffffffffUL;
-	}
-	result = *(vuip) work;
-	return 0xffffffffUL & result;
+	if (!__t2_addr_check(addr))
+		return 0xFFFFFFFF;
+
+	work = (((addr & MEM_R1_MASK) << 5) + T2_SPARSE_MEM + 0x18);
+	return *(vuip) work;
+}
+
+/* ... which makes me wonder why we advertise we have DENSE memory at all.
+   Anyway, guess that means we should emulate 64-bit access as two cycles.  */
+extern inline unsigned long __readq(unsigned long addr)
+{
+	unsigned long work, r0, r1;
+
+	if (!__t2_addr_check(addr))
+		return ~0UL;
+
+	work = (((addr & MEM_R1_MASK) << 5) + T2_SPARSE_MEM + 0x18);
+	r0 = *(vuip) work0;
+	r1 = *(vuip) (work0 + (4 << 5));
+	return r1 << 32 | r0;
 }
 
 extern inline void __writeb(unsigned char b, unsigned long addr)
 {
 	unsigned long work;
 
-	if ((addr >= t2_sm_base) && (addr <= (t2_sm_base + MEM_R1_MASK)))
-	  work = (((addr & MEM_R1_MASK) << 5) + T2_SPARSE_MEM + 0x00);
-	else
-	if ((addr >= 512*1024) && (addr < 1024*1024)) /* check HOLE */
-	  work = (((addr & MEM_R1_MASK) << 5) + T2_SPARSE_MEM + 0x00);
-	else
-	{
-#if 0
-	  printk("__writeb: address 0x%lx not covered by HAE\n", addr);
-#endif
-	  return;
-	}
+	if (!__t2_addr_check(addr))
+		return;
+
+	work = (((addr & MEM_R1_MASK) << 5) + T2_SPARSE_MEM + 0x00);
 	*(vuip) work = b * 0x01010101;
 }
 
@@ -307,38 +300,37 @@ extern inline void __writew(unsigned short b, unsigned long addr)
 {
 	unsigned long work;
 
-	if ((addr >= t2_sm_base) && (addr <= (t2_sm_base + MEM_R1_MASK)))
-	  work = (((addr & MEM_R1_MASK) << 5) + T2_SPARSE_MEM + 0x08);
-	else
-	if ((addr >= 512*1024) && (addr < 1024*1024)) /* check HOLE */
-	  work = (((addr & MEM_R1_MASK) << 5) + T2_SPARSE_MEM + 0x08);
-	else
-	{
-#if 0
-	  printk("__writew: address 0x%lx not covered by HAE\n", addr);
-#endif
-	  return;
-	}
+	if (!__t2_addr_check(addr))
+		return;
+
+	work = (((addr & MEM_R1_MASK) << 5) + T2_SPARSE_MEM + 0x08);
 	*(vuip) work = b * 0x00010001;
 }
 
-/* on SABLE with T2, we must use SPARSE memory even for 32-bit access */
+/* On SABLE with T2, we must use SPARSE memory even for 32-bit access ... */
 extern inline void __writel(unsigned int b, unsigned long addr)
 {
 	unsigned long work;
 
-	if ((addr >= t2_sm_base) && (addr <= (t2_sm_base + MEM_R1_MASK)))
-	  work = (((addr & MEM_R1_MASK) << 5) + T2_SPARSE_MEM + 0x18);
-	else
-	if ((addr >= 512*1024) && (addr < 1024*1024)) /* check HOLE */
-	  work = (((addr & MEM_R1_MASK) << 5) + T2_SPARSE_MEM + 0x18);
-	{
-#if 0
-	  printk("__writel: address 0x%lx not covered by HAE\n", addr);
-#endif
-	  return;
-	}
+	if (!__t2_addr_check(addr))
+		return;
+
+	work = (((addr & MEM_R1_MASK) << 5) + T2_SPARSE_MEM + 0x18);
 	*(vuip) work = b;
+}
+
+/* ... which makes me wonder why we advertise we have DENSE memory at all.
+   Anyway, guess that means we should emulate 64-bit access as two cycles.  */
+extern inline void __writeq(unsigned long b, unsigned long addr)
+{
+	unsigned long work;
+
+	if (!__t2_addr_check(addr))
+		return;
+
+	work = (((addr & MEM_R1_MASK) << 5) + T2_SPARSE_MEM + 0x18);
+	*(vuip) work0 = b;
+	*(vuip) (work0 + (4 << 5)) = (b >> 32);
 }
 
 #else /* SRM_SETUP */
@@ -387,6 +379,20 @@ extern inline unsigned long __readl(unsigned long addr)
 	return 0xffffffffUL & result;
 }
 
+extern inline unsigned long __readq(unsigned long addr)
+{
+	unsigned long r0, r1, work, msb;
+
+	msb = addr & 0xE0000000 ;
+	addr &= MEM_R1_MASK ;
+	if (msb != hae.cache) {
+	  set_hae(msb);
+	}
+	work = (addr << 5) + T2_SPARSE_MEM + 0x18;
+	r0 = *(vuip)(work);
+	r1 = *(vuip)(work + (4 << 5));
+	return r1 << 32 | r0;
+}
 extern inline void __writeb(unsigned char b, unsigned long addr)
 {
         unsigned long msb ; 
@@ -424,6 +430,20 @@ extern inline void __writel(unsigned int b, unsigned long addr)
 	*(vuip) ((addr << 5) + T2_SPARSE_MEM + 0x18) = b;
 }
 
+extern inline void __writeq(unsigned long b, unsigned long addr)
+{
+        unsigned long msb, work;
+
+	msb = addr & 0xE0000000 ;
+	addr &= MEM_R1_MASK ;
+	if (msb != hae.cache) {
+	  set_hae(msb);
+	}
+	work = (addr << 5) + T2_SPARSE_MEM + 0x18;
+	*(vuip)work = b;
+	*(vuip)(work + (4 << 5)) = b >> 32;
+}
+
 #endif /* SRM_SETUP */
 
 #define inb(port) \
@@ -431,9 +451,6 @@ extern inline void __writel(unsigned int b, unsigned long addr)
 
 #define outb(x, port) \
 (__builtin_constant_p((port))?__outb((x),(port)):_outb((x),(port)))
-
-#define readl(a)	__readl((unsigned long)(a))
-#define writel(v,a)	__writel((v),(unsigned long)(a))
 
 #undef vuip
 

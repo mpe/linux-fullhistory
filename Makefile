@@ -24,7 +24,7 @@ HPATH   	= $(TOPDIR)/include
 FINDHPATH	= $(HPATH)/asm $(HPATH)/linux $(HPATH)/scsi $(HPATH)/net
 
 HOSTCC  	=gcc
-HOSTCFLAGS	=-O2 -fomit-frame-pointer
+HOSTCFLAGS	=-Wall -Wstrict-prototypes -O2 -fomit-frame-pointer
 
 CROSS_COMPILE 	=
 
@@ -159,21 +159,10 @@ endif
 
 include arch/$(ARCH)/Makefile
 
-ifdef SMP
-
 .S.s:
 	$(CC) -D__ASSEMBLY__ $(AFLAGS) -traditional -E -o $*.s $<
 .S.o:
 	$(CC) -D__ASSEMBLY__ $(AFLAGS) -traditional -c -o $*.o $<
-
-else
-
-.S.s:
-	$(CC) -D__ASSEMBLY__ -traditional -E -o $*.s $<
-.S.o:
-	$(CC) -D__ASSEMBLY__ -traditional -c -o $*.o $<
-
-endif
 
 Version: dummy
 	@rm -f include/linux/compile.h

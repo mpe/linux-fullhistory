@@ -13,10 +13,6 @@
 # Copyright (C) 1994 by Linus Torvalds
 #
 
-AS86    =$(CROSS_COMPILE)as86 -0 -a
-AS386   =$(CROSS_COMPILE)as86 -3
-LD86    =$(CROSS_COMPILE)ld86 -0
-
 LD=$(CROSS_COMPILE)ld -m elf_i386
 CPP=$(CC) -E
 OBJCOPY=$(CROSS_COMPILE)objcopy -O binary -R .note -R .comment -S
@@ -41,10 +37,6 @@ endif
 
 ifdef CONFIG_M686
 CFLAGS := $(CFLAGS) -m486 -malign-loops=2 -malign-jumps=2 -malign-functions=2 -DCPU=686
-endif
-
-ifdef SMP
-CFLAGS := $(CFLAGS) -D__SMP__
 endif
 
 HEAD := arch/i386/kernel/head.o arch/i386/kernel/init_task.o

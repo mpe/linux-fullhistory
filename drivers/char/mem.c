@@ -266,12 +266,15 @@ static inline size_t read_zero_pagealigned(char * buf, size_t size)
 	struct vm_area_struct * vma;
 	unsigned long addr=(unsigned long)buf;
 
+	/* Oops, this was forgotten before. -ben */
+	down(&current->mm->mmap_sem);
+
 	/* For private mappings, just map in zero pages. */
 	for (vma = find_vma(current->mm, addr); vma; vma = vma->vm_next) {
 		unsigned long count;
 
 		if (vma->vm_start > addr || (vma->vm_flags & VM_WRITE) == 0)
-			return size;
+			goto out_up;
 		if (vma->vm_flags & VM_SHARED)
 			break;
 		count = vma->vm_end - addr;
@@ -279,16 +282,18 @@ static inline size_t read_zero_pagealigned(char * buf, size_t size)
 			count = size;
 
 		flush_cache_range(current->mm, addr, addr + count);
-		zap_page_range(current->mm, addr, count);
-        	zeromap_page_range(addr, count, PAGE_COPY);
+		zap_page_range(vma, addr, count);
+        	zeromap_page_range(vma, addr, count, PAGE_COPY);
         	flush_tlb_range(current->mm, addr, addr + count);
 
 		size -= count;
 		buf += count;
 		addr += count;
 		if (size == 0)
-			return 0;
+			goto out_up;
 	}
+
+	up(&current->mm->mmap_sem);
 	
 	/* The shared case is hard. Let's do the conventional zeroing. */ 
 	do {
@@ -301,6 +306,9 @@ static inline size_t read_zero_pagealigned(char * buf, size_t size)
 		size -= PAGE_SIZE;
 	} while (size);
 
+	return size;
+out_up:
+	up(&current->mm->mmap_sem);
 	return size;
 }
 

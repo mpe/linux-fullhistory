@@ -51,7 +51,7 @@ extern __inline__ void DQUOT_DROP(struct inode *inode)
 	}
 }
 
-extern __inline__ int DQUOT_PREALLOC_BLOCK(struct super_block *sb, struct inode *inode, int nr)
+extern __inline__ int DQUOT_PREALLOC_BLOCK(struct super_block *sb, const struct inode *inode, int nr)
 {
 	if (sb->dq_op) {
 		if (sb->dq_op->alloc_block(inode, fs_to_dq_blocks(nr, sb->s_blocksize),
@@ -61,7 +61,7 @@ extern __inline__ int DQUOT_PREALLOC_BLOCK(struct super_block *sb, struct inode 
 	return 0;
 }
 
-extern __inline__ int DQUOT_ALLOC_BLOCK(struct super_block *sb, struct inode *inode, int nr)
+extern __inline__ int DQUOT_ALLOC_BLOCK(struct super_block *sb, const struct inode *inode, int nr)
 {
 	if (sb->dq_op) {
 		if (sb->dq_op->alloc_block(inode, fs_to_dq_blocks(nr, sb->s_blocksize),
@@ -82,7 +82,7 @@ extern __inline__ int DQUOT_ALLOC_INODE(struct super_block *sb, struct inode *in
 	return 0;
 }
 
-extern __inline__ void DQUOT_FREE_BLOCK(struct super_block *sb, struct inode *inode, int nr)
+extern __inline__ void DQUOT_FREE_BLOCK(struct super_block *sb, const struct inode *inode, int nr)
 {
 	if (sb->dq_op)
 		sb->dq_op->free_block(inode, fs_to_dq_blocks(nr, sb->s_blocksize));

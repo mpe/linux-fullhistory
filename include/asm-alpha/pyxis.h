@@ -165,6 +165,7 @@ extern unsigned int PYXIS_DMA_WIN_SIZE;
 #define PYXIS_SPARSE_MEM_R2		(IDENT_ADDR + 0x8400000000UL)
 #define PYXIS_SPARSE_MEM_R3		(IDENT_ADDR + 0x8500000000UL)
 #define PYXIS_DENSE_MEM		        (IDENT_ADDR + 0x8600000000UL)
+#define DENSE_MEM(addr)			PYXIS_DENSE_MEM
 
 /*
  * Byte/Word PCI Memory Spaces:
@@ -242,6 +243,7 @@ extern inline void * bus_to_virt(unsigned long address)
  */
 
 #define vuip	volatile unsigned int *
+#define vulp	volatile unsigned long *
 
 #ifdef BWIO_ENABLED
 
@@ -252,7 +254,7 @@ extern inline unsigned int __inb(unsigned long addr)
 	__asm__ __volatile__ (
 		 "ldbu %0,%1"
 		 : "=r" (result)
-		 : "m"  (*(unsigned char *)(addr+PYXIS_BW_IO)));
+		 : "m"  (*(volatile unsigned char *)(addr+PYXIS_BW_IO)));
 
 	return result;
 }
@@ -262,7 +264,8 @@ extern inline void __outb(unsigned char b, unsigned long addr)
 	__asm__ __volatile__ (
 		 "stb %1,%0\n\t"
 		 "mb"
-		 : : "m" (*(unsigned char *)(addr+PYXIS_BW_IO)), "r" (b));
+		 : "=m" (*(volatile unsigned char *)(addr+PYXIS_BW_IO))
+		 : "r" (b));
 }
 
 extern inline unsigned int __inw(unsigned long addr)
@@ -272,7 +275,7 @@ extern inline unsigned int __inw(unsigned long addr)
 	__asm__ __volatile__ (
 		 "ldwu %0,%1"
 		 : "=r" (result)
-		 : "m"  (*(unsigned short *)(addr+PYXIS_BW_IO)));
+		 : "m"  (*(volatile unsigned short *)(addr+PYXIS_BW_IO)));
 
 	return result;
 }
@@ -282,27 +285,19 @@ extern inline void __outw(unsigned short b, unsigned long addr)
 	__asm__ __volatile__ (
 		 "stw %1,%0\n\t"
 		 "mb"
-		 : : "m" (*(unsigned short *)(addr+PYXIS_BW_IO)), "r" (b));
+		 : "=m" (*(volatile unsigned short *)(addr+PYXIS_BW_IO))
+		 : "r" (b));
 }
 
 extern inline unsigned int __inl(unsigned long addr)
 {
-	register unsigned long result;
-
-	__asm__ __volatile__ (
-		 "ldl %0,%1"
-		 : "=r" (result)
-		 : "m"  (*(unsigned int *)(addr+PYXIS_BW_IO)));
-
-	return result;
+	return *(vuip)(addr+PYXIS_BW_IO);
 }
 
 extern inline void __outl(unsigned int b, unsigned long addr)
 {
-	__asm__ __volatile__ (
-		 "stl %1,%0\n\t"
-		 "mb"
-		 : : "m" (*(unsigned int *)(addr+PYXIS_BW_IO)), "r" (b));
+	*(vuip)(addr+PYXIS_BW_IO) = b;
+	mb();
 }
 
 #define inb(port) __inb((port))
@@ -408,7 +403,7 @@ extern inline unsigned long __readb(unsigned long addr)
 	__asm__ __volatile__ (
 		 "ldbu %0,%1"
 		 : "=r" (result)
-		 : "m"  (*(unsigned char *)(addr+PYXIS_BW_MEM)));
+		 : "m"  (*(volatile unsigned char *)(addr+PYXIS_BW_MEM)));
 
 	return result;
 }
@@ -420,21 +415,19 @@ extern inline unsigned long __readw(unsigned long addr)
 	__asm__ __volatile__ (
 		 "ldwu %0,%1"
 		 : "=r" (result)
-		 : "m"  (*(unsigned short *)(addr+PYXIS_BW_MEM)));
+		 : "m"  (*(volatile unsigned short *)(addr+PYXIS_BW_MEM)));
 
 	return result;
 }
 
 extern inline unsigned long __readl(unsigned long addr)
 {
-	register unsigned long result;
+	return *(vuip)(addr+PYXIS_BW_MEM);
+}
 
-	__asm__ __volatile__ (
-		 "ldl %0,%1"
-		 : "=r" (result)
-		 : "m"  (*(unsigned int *)(addr+PYXIS_BW_MEM)));
-
-	return result;
+extern inline unsigned long __readq(unsigned long addr)
+{
+	return *(vulp)(addr+PYXIS_BW_MEM);
 }
 
 extern inline void __writeb(unsigned char b, unsigned long addr)
@@ -442,7 +435,8 @@ extern inline void __writeb(unsigned char b, unsigned long addr)
 	__asm__ __volatile__ (
 		 "stb %1,%0\n\t"
 		 "mb"
-		 : : "m" (*(unsigned char *)(addr+PYXIS_BW_MEM)), "r" (b));
+		 : "=m" (*(volatile unsigned char *)(addr+PYXIS_BW_MEM))
+		 : "r" (b));
 }
 
 extern inline void __writew(unsigned short b, unsigned long addr)
@@ -450,15 +444,18 @@ extern inline void __writew(unsigned short b, unsigned long addr)
 	__asm__ __volatile__ (
 		 "stw %1,%0\n\t"
 		 "mb"
-		 : : "m" (*(unsigned short *)(addr+PYXIS_BW_MEM)), "r" (b));
+		 : "=m" (*(volatile unsigned short *)(addr+PYXIS_BW_MEM))
+		 : "r" (b));
 }
 
 extern inline void __writel(unsigned int b, unsigned long addr)
 {
-	__asm__ __volatile__ (
-		 "stl %1,%0\n\t"
-		 "mb"
-		 : : "m" (*(unsigned int *)(addr+PYXIS_BW_MEM)), "r" (b));
+	*(vuip)(addr+PYXIS_BW_MEM) = b;
+}
+
+extern inline void __writeq(unsigned long b, unsigned long addr)
+{
+	*(vulp)(addr+PYXIS_BW_MEM) = b;
 }
 
 #define readb(addr) __readb((addr))
@@ -643,17 +640,30 @@ extern inline unsigned long __readl(unsigned long addr)
 	return *(vuip) (addr + PYXIS_DENSE_MEM);
 }
 
+extern inline unsigned long __readq(unsigned long addr)
+{
+	return *(vulp) (addr + PYXIS_DENSE_MEM);
+}
+
 extern inline void __writel(unsigned int b, unsigned long addr)
 {
 	*(vuip) (addr + PYXIS_DENSE_MEM) = b;
 }
 
+extern inline void __writeq(unsigned long b, unsigned long addr)
+{
+	*(vulp) (addr + PYXIS_DENSE_MEM) = b;
+}
+
 #endif /* BWIO_ENABLED */
 
 #define readl(a)	__readl((unsigned long)(a))
+#define readq(a)	__readq((unsigned long)(a))
 #define writel(v,a)	__writel((v),(unsigned long)(a))
+#define writeq(v,a)	__writeq((v),(unsigned long)(a))
 
 #undef vuip
+#undef vulp
 
 extern unsigned long pyxis_init (unsigned long mem_start,
 				 unsigned long mem_end);

@@ -317,70 +317,50 @@ extern inline void * bus_to_virt(unsigned long address)
 
 /* only using PCI bus 0 for now in all routines */
 
+#define DENSE_MEM(addr)			TSUNAMI_PCI0_MEM
+
 /* HACK ALERT! HACK ALERT! */
 /* HACK ALERT! HACK ALERT! */
 
+/* Also assume we are optimizing for EV6, and so the compiler knows about
+   byte/word instructions.  */
 
+#define vucp	volatile unsigned char *
+#define vusp	volatile unsigned short *
 #define vuip	volatile unsigned int *
+#define vulp	volatile unsigned long *
 
 extern inline unsigned int __inb(unsigned long addr)
 {
-	register unsigned long result;
-
-	__asm__ __volatile__ (
-		 "ldbu %0,%1"
-		 : "=r" (result)
-		 : "m"  (*(unsigned char *)(addr+TSUNAMI_PCI0_IO)));
-
-	return result;
+	return *(vucp)(addr + TSUNAMI_PCI0_IO);
 }
 
 extern inline void __outb(unsigned char b, unsigned long addr)
 {
-	__asm__ __volatile__ (
-		 "stb %1,%0\n\t"
-		 "mb"
-		 : : "m" (*(unsigned char *)(addr+TSUNAMI_PCI0_IO)), "r" (b));
+	*(vucp)(addr + TSUNAMI_PCI0_IO) = b;
+	mb();
 }
 
 extern inline unsigned int __inw(unsigned long addr)
 {
-	register unsigned long result;
-
-	__asm__ __volatile__ (
-		 "ldwu %0,%1"
-		 : "=r" (result)
-		 : "m"  (*(unsigned short *)(addr+TSUNAMI_PCI0_IO)));
-
-	return result;
+	return *(vusp)(addr+TSUNAMI_PCI0_IO);
 }
 
 extern inline void __outw(unsigned short b, unsigned long addr)
 {
-	__asm__ __volatile__ (
-		 "stw %1,%0\n\t"
-		 "mb"
-		 : : "m" (*(unsigned short *)(addr+TSUNAMI_PCI0_IO)), "r" (b));
+	*(vusp)(addr+TSUNAMI_PCI0_IO) = b;
+	mb();
 }
 
 extern inline unsigned int __inl(unsigned long addr)
 {
-	register unsigned long result;
-
-	__asm__ __volatile__ (
-		 "ldl %0,%1"
-		 : "=r" (result)
-		 : "m"  (*(unsigned int *)(addr+TSUNAMI_PCI0_IO)));
-
-	return result;
+	return *(vuip)(addr+TSUNAMI_PCI0_IO);
 }
 
 extern inline void __outl(unsigned int b, unsigned long addr)
 {
-	__asm__ __volatile__ (
-		 "stl %1,%0\n\t"
-		 "mb"
-		 : : "m" (*(unsigned int *)(addr+TSUNAMI_PCI0_IO)), "r" (b));
+	*(vuip)(addr+TSUNAMI_PCI0_IO) = b;
+	mb();
 }
 
 /*
@@ -389,62 +369,46 @@ extern inline void __outl(unsigned int b, unsigned long addr)
 
 extern inline unsigned long __readb(unsigned long addr)
 {
-	register unsigned long result;
-
-	__asm__ __volatile__ (
-		 "ldbu %0,%1"
-		 : "=r" (result)
-		 : "m"  (*(unsigned char *)(addr+TSUNAMI_PCI0_MEM)));
-
-	return result;
+	return *(vucp)(addr+TSUNAMI_PCI0_MEM);
 }
 
 extern inline unsigned long __readw(unsigned long addr)
 {
-	register unsigned long result;
-
-	__asm__ __volatile__ (
-		 "ldwu %0,%1"
-		 : "=r" (result)
-		 : "m"  (*(unsigned short *)(addr+TSUNAMI_PCI0_MEM)));
-
-	return result;
+	return *(vusp)(addr+TSUNAMI_PCI0_MEM);
 }
 
 extern inline unsigned long __readl(unsigned long addr)
 {
-	register unsigned long result;
+	return *(vuip)(addr+TSUNAMI_PCI0_MEM);
+}
 
-	__asm__ __volatile__ (
-		 "ldl %0,%1"
-		 : "=r" (result)
-		 : "m"  (*(unsigned int *)(addr+TSUNAMI_PCI0_MEM)));
-
-	return result;
+extern inline unsigned long __readq(unsigned long addr)
+{
+	return *(vulp)(addr+TSUNAMI_PCI0_MEM);
 }
 
 extern inline void __writeb(unsigned char b, unsigned long addr)
 {
-	__asm__ __volatile__ (
-		 "stb %1,%0\n\t"
-		 "mb"
-		 : : "m" (*(unsigned char *)(addr+TSUNAMI_PCI0_MEM)), "r" (b));
+	*(vucp)(addr+TSUNAMI_PCI0_MEM) = b;
+	mb();
 }
 
 extern inline void __writew(unsigned short b, unsigned long addr)
 {
-	__asm__ __volatile__ (
-		 "stw %1,%0\n\t"
-		 "mb"
-		 : : "m" (*(unsigned short *)(addr+TSUNAMI_PCI0_MEM)), "r" (b));
+	*(vusp)(addr+TSUNAMI_PCI0_MEM) = b;
+	mb();
 }
 
 extern inline void __writel(unsigned int b, unsigned long addr)
 {
-	__asm__ __volatile__ (
-		 "stl %1,%0\n\t"
-		 "mb"
-		 : : "m" (*(unsigned int *)(addr+TSUNAMI_PCI0_MEM)), "r" (b));
+	*(vuip)(addr+TSUNAMI_PCI0_MEM) = b;
+	mb();
+}
+
+extern inline void __writeq(unsigned long b, unsigned long addr)
+{
+	*(vulp)(addr+TSUNAMI_PCI0_MEM) = b;
+	mb();
 }
 
 #define inb(port) __inb((port))
@@ -458,15 +422,19 @@ extern inline void __writel(unsigned int b, unsigned long addr)
 #define readb(a)	__readb((unsigned long)(a))
 #define readw(a)	__readw((unsigned long)(a))
 #define readl(a)	__readl((unsigned long)(a))
+#define readq(a)	__readq((unsigned long)(a))
 
 #define writeb(v,a)	__writeb((v),(unsigned long)(a))
 #define writew(v,a)	__writew((v),(unsigned long)(a))
 #define writel(v,a)	__writel((v),(unsigned long)(a))
+#define writeq(v,a)	__writeq((v),(unsigned long)(a))
 
+#undef vucp
+#undef vusp
 #undef vuip
+#undef vulp
 
-extern unsigned long tsunami_init (unsigned long mem_start,
-				 unsigned long mem_end);
+extern unsigned long tsunami_init (unsigned long, unsigned long);
 
 #endif /* __KERNEL__ */
 
