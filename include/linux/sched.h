@@ -17,7 +17,9 @@ extern unsigned long event;
 #include <linux/personality.h>
 #include <linux/tasks.h>
 #include <linux/kernel.h>
+
 #include <asm/system.h>
+#include <asm/semaphore.h>
 #include <asm/page.h>
 
 #include <linux/smp.h>
@@ -146,6 +148,7 @@ struct mm_struct {
 	unsigned long def_flags;
 	struct vm_area_struct * mmap;
 	struct vm_area_struct * mmap_avl;
+	struct semaphore mmap_sem;
 };
 
 #define INIT_MM { \
@@ -157,7 +160,7 @@ struct mm_struct {
 		0, 0, 0, 0, \
 		0, 0, 0, \
 		0, \
-		&init_mmap, &init_mmap }
+		&init_mmap, &init_mmap, MUTEX }
 
 struct signal_struct {
 	int count;
@@ -458,24 +461,6 @@ extern inline void select_wait(struct wait_queue ** wait_address, select_table *
 	add_wait_queue(wait_address,&entry->wait);
 	p->nr++;
 }
-
-extern void __down(struct semaphore * sem);
-
-/*
- * These are not yet interrupt-safe
- */
-extern inline void down(struct semaphore * sem)
-{
-	if (sem->count <= 0)
-		__down(sem);
-	sem->count--;
-}
-
-extern inline void up(struct semaphore * sem)
-{
-	sem->count++;
-	wake_up(&sem->wait);
-}	
 
 #define REMOVE_LINKS(p) do { unsigned long flags; \
 	save_flags(flags) ; cli(); \

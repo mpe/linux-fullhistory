@@ -545,6 +545,13 @@ smb_proc_open(struct smb_server *server, const char *pathname, int len,
 
         smb_lock_server(server);
 
+	if (entry->opened != 0)
+	{
+		/* Somebody else opened the file while we slept */
+		smb_unlock_server(server);
+		return 0;
+	}
+
  retry:
         p = smb_setup_header(server, SMBopen, 2, 2 + len);
         WSET(buf, smb_vwv0, 0x42); /* read/write */
@@ -585,9 +592,11 @@ smb_proc_open(struct smb_server *server, const char *pathname, int len,
         entry->size   = DVAL(buf, smb_vwv4);
         entry->access = WVAL(buf, smb_vwv6);
 
+	entry->opened = 1;
+	entry->access &= 3;
+
         smb_unlock_server(server);
 
-	entry->access &= 3;
         DPRINTK("smb_proc_open: entry->access = %d\n", entry->access);
 	return 0;
 }
@@ -595,13 +604,14 @@ smb_proc_open(struct smb_server *server, const char *pathname, int len,
 /* smb_proc_close: in finfo->mtime we can send a modification time to
    the server */
 int
-smb_proc_close(struct smb_server *server, struct smb_dirent *finfo)
+smb_proc_close(struct smb_server *server,
+	       __u16 fileid, __u32 mtime)
 {
         char *buf = server->packet;
 
 	smb_setup_header_exclusive(server, SMBclose, 3, 0);
-        WSET(buf, smb_vwv0, finfo->fileid);
-        DSET(buf, smb_vwv1, utc2local(finfo->mtime));
+        WSET(buf, smb_vwv0, fileid);
+        DSET(buf, smb_vwv1, utc2local(mtime));
 
         return smb_request_ok_unlock(server, SMBclose, 0, 0);
 }
@@ -756,24 +766,25 @@ smb_proc_write_raw(struct smb_server *server, struct smb_dirent *finfo,
 }
 
 
-/* smb_proc_do_create: We expect entry->attry & entry->ctime to be set. */
+/* smb_proc_create: We expect entry->attr & entry->ctime to be set. */
 
-static int
-smb_proc_do_create(struct smb_server *server, const char *path, int len, 
-                   struct smb_dirent *entry, word command)
+int
+smb_proc_create(struct smb_server *server, const char *path, int len, 
+		struct smb_dirent *entry)
 {
 	int error;
 	char *p;
         char *buf = server->packet;
+	__u16 fileid;
 
 	smb_lock_server(server);
  retry:
-	p = smb_setup_header(server, command, 3, len + 2);
+	p = smb_setup_header(server, SMBcreate, 3, len + 2);
         WSET(buf, smb_vwv0, entry->attr);
         DSET(buf, smb_vwv1, utc2local(entry->ctime));
 	smb_encode_ascii(p, path, len);
 
-	if ((error = smb_request_ok(server, command, 1, 0)) < 0) {
+	if ((error = smb_request_ok(server, SMBcreate, 1, 0)) < 0) {
                 if (smb_retry(server)) {
                         goto retry;
                 }
@@ -781,27 +792,13 @@ smb_proc_do_create(struct smb_server *server, const char *path, int len,
 		return error;
         }
 
-        entry->opened = 1;
-        entry->fileid = WVAL(buf, smb_vwv0);
+        entry->opened = 0;
+        fileid = WVAL(buf, smb_vwv0);
         smb_unlock_server(server);
 
-        smb_proc_close(server, entry);
+        smb_proc_close(server, fileid, 0);
 
 	return 0;
-}
-	
-int
-smb_proc_create(struct smb_server *server, const char *path, int len,
-                struct smb_dirent *entry)
-{
-	return smb_proc_do_create(server, path, len, entry, SMBcreate);
-}
-
-int
-smb_proc_mknew(struct smb_server *server, const char *path, int len,
-               struct smb_dirent *entry)
-{
-	return smb_proc_do_create(server, path, len, entry, SMBmknew);
 }
 
 int
@@ -1154,6 +1151,7 @@ smb_proc_readdir_long(struct smb_server *server, struct inode *dir, int fpos,
 
 	char *p;
 	char *lastname;
+	int   lastname_len;
 	int i;
 	int first, total_count;
         struct smb_dirent *current_entry;
@@ -1286,16 +1284,16 @@ smb_proc_readdir_long(struct smb_server *server, struct inode *dir, int fpos,
                 p = resp_param;
                 if (first != 0)
                 {
-                        ff_dir_handle = WVAL(p,0);
+                        ff_dir_handle  = WVAL(p,0);
                         ff_searchcount = WVAL(p,2);
-                        ff_eos = WVAL(p,4);
-                        ff_lastname = WVAL(p,8);
+                        ff_eos         = WVAL(p,4);
+                        ff_lastname    = WVAL(p,8);
                 }
                 else
                 {
                         ff_searchcount = WVAL(p,0);
-                        ff_eos = WVAL(p,2);
-                        ff_lastname = WVAL(p,6);
+                        ff_eos         = WVAL(p,2);
+                        ff_lastname    = WVAL(p,6);
                 }
 
                 if (ff_searchcount == 0) 
@@ -1306,16 +1304,19 @@ smb_proc_readdir_long(struct smb_server *server, struct inode *dir, int fpos,
 
                 /* we might need the lastname for continuations */
 		lastname = "";
+		lastname_len = 0;
                 if (ff_lastname > 0)
                 {
                         switch(info_level)
                         {
                         case 260:
-				lastname = p + ff_lastname + 94;
+				lastname = p + ff_lastname;
+				lastname_len = resp_data_len - ff_lastname;
 				ff_resume_key = 0;
                                 break;
                         case 1:
 				lastname = p + ff_lastname + 1;
+				lastname_len = strlen(lastname);
                                 ff_resume_key = 0;
                                 break;
                         }
@@ -1330,12 +1331,14 @@ smb_proc_readdir_long(struct smb_server *server, struct inode *dir, int fpos,
 			mask = smb_kmalloc(dirlen, GFP_KERNEL);
 			if (mask == NULL)
 			{
-				printk("smb_proc_readdir_long: Memory allocation failed\n");
+				printk("smb_proc_readdir_long: "
+				       "Memory allocation failed\n");
 				result = -ENOMEM;
 				break;
 			}
-			strcpy(mask, lastname);
 		}
+		strncpy(mask, lastname, lastname_len);
+		mask[lastname_len] = '\0';
   
 		/* Now we are ready to parse smb directory entries. */
 		
@@ -1475,6 +1478,8 @@ smb_proc_getattr(struct smb_server *server, const char *path, int len,
                 int result = 0;
                 struct smb_dirent temp_entry;
 
+		memset(&temp_entry, 0, sizeof(temp_entry));
+
                 if ((result=smb_proc_open(server,path,len,
                                           &temp_entry)) < 0) {
                         /* We cannot open directories, so we try to use the
@@ -1489,8 +1494,8 @@ smb_proc_getattr(struct smb_server *server, const char *path, int len,
                         entry->ctime = temp_entry.ctime;
                         entry->size  = temp_entry.size;
                 }
-                
-                smb_proc_close(server, &temp_entry);
+
+                smb_proc_close(server, temp_entry.fileid, temp_entry.mtime);
                 return result;
 
         } else {
@@ -1824,7 +1829,6 @@ smb_proc_reconnect(struct smb_server *server)
                 smb_decode_word(server->packet+32, &(server->server_uid));
         }
         else
-
         {
                 server->maxxmt = 0;
                 server->maxmux = 0;
@@ -1838,6 +1842,7 @@ smb_proc_reconnect(struct smb_server *server)
 	smb_setup_header(server, SMBtcon, 0,
                          6 + strlen(server->m.service) +
                          strlen(server->m.password) + strlen(dev));
+
 	p = SMB_BUF(server->packet);
 	p = smb_encode_ascii(p, server->m.service, strlen(server->m.service));
 	p = smb_encode_ascii(p,server->m.password, strlen(server->m.password));
@@ -1891,11 +1896,14 @@ smb_proc_connect(struct smb_server *server)
 {
         int result;
         smb_lock_server(server);
+
         result = smb_proc_reconnect(server);
+
         if ((result < 0) && (server->packet != NULL)) {
                 smb_kfree_s(server->packet, server->max_xmit);
                 server->packet = NULL;
         }
+
         smb_unlock_server(server);
         return result;
 }

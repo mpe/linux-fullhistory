@@ -32,7 +32,7 @@ static inline int get_max_filename(unsigned long address)
 
 	if (get_fs() == KERNEL_DS)
 		return 0;
-	vma = find_vma(current, address);
+	vma = find_vma(current->mm, address);
 	if (!vma || vma->vm_start > address || !(vma->vm_flags & VM_READ))
 		return -EFAULT;
 	address = vma->vm_end - address;

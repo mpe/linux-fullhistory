@@ -252,7 +252,7 @@ ncp_readdir(struct inode *inode, struct file *filp,
 	if (c_entry == NULL) 
 	{
 		i = sizeof (struct ncp_dirent) * NCP_READDIR_CACHE_SIZE;
-		c_entry = (struct ncp_dirent *) ncp_kmalloc(i, GFP_KERNEL);
+		c_entry = (struct ncp_dirent *) vmalloc(i);
 		if (c_entry == NULL)
 		{
 			printk("ncp_readdir: no MEMORY for cache\n");
@@ -560,9 +560,8 @@ ncp_free_dir_cache(void)
                 return;
 	}
 
-        ncp_kfree_s(c_entry,
-                    sizeof(struct ncp_dirent) * NCP_READDIR_CACHE_SIZE);
-        c_entry = NULL;
+	vfree(c_entry);
+	c_entry = NULL;
 
         DPRINTK("ncp_free_dir_cache: exit\n");
 }

@@ -24,8 +24,9 @@
 
 #define _S(nr) (1<<((nr)-1))
 
-static int _recvfrom(struct socket *sock, unsigned char *ubuf, int size, int noblock, unsigned flags,
-                struct sockaddr_in *sa, int *addr_len)
+static int
+_recvfrom(struct socket *sock, unsigned char *ubuf, int size,
+	  int noblock, unsigned flags, struct sockaddr_in *sa, int *addr_len)
 {
         struct iovec iov;
         struct msghdr msg;
@@ -44,7 +45,10 @@ static int _recvfrom(struct socket *sock, unsigned char *ubuf, int size, int nob
         return sock->ops->recvmsg(sock, &msg, size, noblock, flags, addr_len);
 }
 
-static int _send(struct socket *sock, const void *buff, int len, int nonblock, unsigned flags) {
+static int
+_send(struct socket *sock, const void *buff, int len,
+      int nonblock, unsigned flags)
+{
         struct iovec iov;
         struct msghdr msg;
 

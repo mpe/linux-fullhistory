@@ -121,28 +121,37 @@ smb_read_inode(struct inode *inode)
 static void
 smb_put_inode(struct inode *inode)
 {
-        struct smb_dirent *finfo = SMB_FINFO(inode);
+        struct smb_dirent *finfo  = SMB_FINFO(inode);
+	struct smb_server *server = SMB_SERVER(inode);
+	struct smb_inode_info *info = SMB_INOP(inode);
 
-        if (finfo->opened != 0) {
+	int opened        = finfo->opened;
+	int mtime         = finfo->mtime;
+	int file_id       = finfo->fileid;
+	int isdir         = S_ISDIR(inode->i_mode);
+	unsigned long ino = inode->i_ino;
 
-                /* smb_proc_close wants mtime in finfo */
-                finfo->mtime = inode->i_mtime;
-                
-                if (smb_proc_close(SMB_SERVER(inode), finfo)) {
-                        /* We can't do anything but complain. */
-                        printk("smb_put_inode: could not close\n");
-                }
-        }
-        
-        smb_free_inode_info(SMB_INOP(inode));
-
-        if (S_ISDIR(inode->i_mode)) {
-                DDPRINTK("smb_put_inode: put directory %ld\n",
-                         inode->i_ino);
-                smb_invalid_dir_cache(inode->i_ino);
-        }                
+	/* Remove the inode before closing the file, because the close
+           will sleep. This hopefully removes a race condition. */
 
 	clear_inode(inode);
+        smb_free_inode_info(info);
+
+        if (isdir)
+	{
+                DDPRINTK("smb_put_inode: put directory %ld\n",
+                         inode->i_ino);
+                smb_invalid_dir_cache(ino);
+        }                
+
+        if (opened != 0)
+	{
+                if (smb_proc_close(server, file_id, mtime))
+		{
+                        /* We can't do anything but complain. */
+                        DPRINTK("smb_put_inode: could not close\n");
+                }
+        }
 }
 
 static void
@@ -151,6 +160,7 @@ smb_put_super(struct super_block *sb)
         struct smb_server *server = &(SMB_SBP(sb)->s_server);
 
         smb_proc_disconnect(server);
+	smb_dont_catch_keepalive(server);
 	close_fp(server->sock_file);
 
 	lock_super(sb);
@@ -299,6 +309,7 @@ smb_read_super(struct super_block *sb, void *raw_data, int silent)
 
  fail:
 	filp->f_count -= 1; 
+	smb_dont_catch_keepalive(server);
         smb_kfree_s(SMB_SBP(sb), sizeof(struct smb_sb_info));
         return NULL;
 }

@@ -124,7 +124,8 @@ dword smb_len(unsigned char *packet);
 byte *smb_encode_smb_length(byte *p, dword len);
 int smb_proc_open(struct smb_server *server, const char *pathname,
                   int len, struct smb_dirent *entry);
-int smb_proc_close(struct smb_server *server, struct smb_dirent *finfo);
+int smb_proc_close(struct smb_server *server, 
+		   __u16 fileid, __u32 mtime);
 int smb_proc_read(struct smb_server *server, struct smb_dirent *finfo, 
 		  off_t offset, long count, char *data, int fs);
 int smb_proc_read_raw(struct smb_server *server, struct smb_dirent *finfo, 
@@ -135,8 +136,6 @@ int smb_proc_write_raw(struct smb_server *server, struct smb_dirent *finfo,
                        off_t offset, long count, const char *data);
 int smb_proc_create(struct smb_server *server, const char *path,
                     int len, struct smb_dirent *entry);
-int smb_proc_mknew(struct smb_server *server, const char *path, int len,
-                   struct smb_dirent *entry);
 int smb_proc_mv(struct smb_server *server, const char *opath, const int olen, 
 		const char *npath, const int nlen);
 int smb_proc_mkdir(struct smb_server *server, const char *path, const int len);

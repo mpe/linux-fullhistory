@@ -23,12 +23,12 @@
  */
 #define mem_write NULL
 
-static int check_range(struct task_struct * tsk, unsigned long addr, int count)
+static int check_range(struct mm_struct * mm, unsigned long addr, int count)
 {
 	struct vm_area_struct *vma;
 	int retval;
 
-	vma = find_vma(tsk, addr);
+	vma = find_vma(mm, addr);
 	if (!vma)
 		return -EACCES;
 	if (vma->vm_start > addr)
@@ -93,7 +93,7 @@ static int mem_read(struct inode * inode, struct file * file,char * buf, int cou
 	if (!tsk)
 		return -ESRCH;
 	addr = file->f_pos;
-	count = check_range(tsk, addr, count);
+	count = check_range(tsk->mm, addr, count);
 	if (count < 0)
 		return count;
 	tmp = buf;

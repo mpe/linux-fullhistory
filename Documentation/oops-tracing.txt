@@ -126,7 +126,7 @@ The following is an example of a protection fault in a loadable module
 processed by klogd:
 ---------------------------------------------------------------------------
 Aug 29 09:51:01 blizard kernel: Unable to handle kernel paging request at virtual address f15e97cc
-Aug 29 09:51:01 blizard kernel: current->tss.cr3 = 0062d000, ^Pr3 = 0062d000
+Aug 29 09:51:01 blizard kernel: current->tss.cr3 = 0062d000, %cr3 = 0062d000
 Aug 29 09:51:01 blizard kernel: *pde = 00000000
 Aug 29 09:51:01 blizard kernel: Oops: 0002
 Aug 29 09:51:01 blizard kernel: CPU:    0

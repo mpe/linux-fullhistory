@@ -16,6 +16,8 @@
 #include <linux/kdev_t.h>
 #include <linux/ioctl.h>
 
+#include <asm/semaphore.h>
+
 /*
  * It's silly to have NR_OPEN bigger than NR_FILE, but I'll fix
  * that later. Anyway, now the file code is no longer dependent

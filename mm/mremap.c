@@ -143,8 +143,8 @@ static inline unsigned long move_vma(struct vm_area_struct * vma,
 				new_vma->vm_inode->i_count++;
 			if (new_vma->vm_ops && new_vma->vm_ops->open)
 				new_vma->vm_ops->open(new_vma);
-			insert_vm_struct(current, new_vma);
-			merge_segments(current, new_vma->vm_start, new_vma->vm_end);
+			insert_vm_struct(current->mm, new_vma);
+			merge_segments(current->mm, new_vma->vm_start, new_vma->vm_end);
 			do_munmap(addr, old_len);
 			return new_addr;
 		}
@@ -180,7 +180,7 @@ asmlinkage unsigned long sys_mremap(unsigned long addr,
 	/*
 	 * Ok, we need to grow..
 	 */
-	vma = find_vma(current, addr);
+	vma = find_vma(current->mm, addr);
 	if (!vma || vma->vm_start > addr)
 		return -EFAULT;
 	/* We can't remap across vm area boundaries */

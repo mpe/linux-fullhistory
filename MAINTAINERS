@@ -178,9 +178,8 @@ L:	linux-scsi@vger.rutgers.edu
 S:	Maintained
 
 FTAPE/QIC-117:
-P:	Kai Harrekilde-Petersen
-M:	khp@dolphinics.no
-W:	http://www.dolphinics.no/~khp/ftape.html
+P:	Claus-Justus Heine
+M:	claus@momo.math.rwth-aachen.de
 L:	linux-tape@vger.rutgers.edu
 S:	Maintained
 

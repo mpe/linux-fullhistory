@@ -34,7 +34,7 @@ http://www.datanet.hu/generations/linux/Changes.html (English).
 bunshou no nihongo ban wa
 http://jf.gee.kyoto-u.ac.jp/JF/v2.0/Changes-2.0.html ni arimasu.
 
-Last updated: September 02, 1996.
+Last updated: September 10, 1996.
 Current Author: Chris Ricker (gt1355b@prism.gatech.edu).
 
 Current Releases
@@ -73,6 +73,14 @@ add -net 127.0.0.0'.
 distributions like Caldera).  If you're running one of these, edit
 /etc/sysconfig/network-scripts/ifup-lo, changing the line `route add
 -net $(IPADDR)' to `route add -net 127.0.0.0' and you should be fine.
+
+   People have also reported problems due to the naming of the dummy
+network interface driver.  If the dummy driver is compiled into the
+kernel, its name is "dummy."  If the dummy driver is compiled as a
+module, its name is "dummy0."  Furthermore, more than one dummy driver
+can be loaded if compiled as a module.  Each subsequent loading of the
+driver adds a new dummy interface whose name is incremented by one
+("dummy1," "dummy2," etc.).
 
 Booting Changes
 ===============
@@ -194,6 +202,15 @@ have to mount at startup have to have their necessary file system and
 device drivers compiled into the kernel, so don't get grandiose ideas
 about going completely modular and then forget to compile ext2fs
 support and ide/SCSI drive support into your kernel ;-).
+
+Kernel messages
+===============
+
+   Kernel messages without a specific log level use the kernel's
+default log level.  In 1.2 kernels, the default log level was 6
+(information), while in 2.0.x kernels it is 4 (warning).  Adjust your
+configuration of syslogd appropriately (or edit printk.c in the kernel
+source ;-).
 
 PPP driver
 ==========

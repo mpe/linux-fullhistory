@@ -26,14 +26,6 @@ static inline int waitqueue_active(struct wait_queue **q)
 	return head && head != WAIT_QUEUE_HEAD(q);
 }
 
-struct semaphore {
-	int count;
-	struct wait_queue * wait;
-};
-
-#define MUTEX ((struct semaphore) { 1, NULL })
-#define MUTEX_LOCKED ((struct semaphore) { 0, NULL })
-
 struct select_table_entry {
 	struct wait_queue wait;
 	struct wait_queue ** wait_address;

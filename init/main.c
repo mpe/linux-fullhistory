@@ -799,6 +799,7 @@ asmlinkage void start_kernel(void)
 		prof_len = (unsigned long) &_etext - (unsigned long) &_stext;
 		prof_len >>= prof_shift;
 		memory_start += prof_len * sizeof(unsigned int);
+		memset(prof_buffer, 0, prof_len * sizeof(unsigned int));
 	}
 	memory_start = console_init(memory_start,memory_end);
 #ifdef CONFIG_PCI
@@ -968,7 +969,7 @@ static int init(void * unused)
 
 	if ((open("/dev/tty1",O_RDWR,0) < 0) &&
 	    (open("/dev/ttyS0",O_RDWR,0) < 0))
-		printk("Unable to open a initial console.\n");
+		printk("Unable to open an initial console.\n");
 			
 	(void) dup(0);
 	(void) dup(0);

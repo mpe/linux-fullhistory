@@ -285,8 +285,8 @@ extern int vread(char *buf, char *addr, int count);
 /* mmap.c */
 extern unsigned long do_mmap(struct file * file, unsigned long addr, unsigned long len,
 	unsigned long prot, unsigned long flags, unsigned long off);
-extern void merge_segments(struct task_struct *, unsigned long, unsigned long);
-extern void insert_vm_struct(struct task_struct *, struct vm_area_struct *);
+extern void merge_segments(struct mm_struct *, unsigned long, unsigned long);
+extern void insert_vm_struct(struct mm_struct *, struct vm_area_struct *);
 extern void remove_shared_vm_struct(struct vm_area_struct *);
 extern void build_mmap_avl(struct mm_struct *);
 extern void exit_mmap(struct mm_struct *);
@@ -334,12 +334,12 @@ static inline int expand_stack(struct vm_area_struct * vma, unsigned long addres
 #define avl_empty	(struct vm_area_struct *) NULL
 
 /* Look up the first VMA which satisfies  addr < vm_end,  NULL if none. */
-static inline struct vm_area_struct * find_vma (struct task_struct * task, unsigned long addr)
+static inline struct vm_area_struct * find_vma(struct mm_struct * mm, unsigned long addr)
 {
 	struct vm_area_struct * result = NULL;
 
-	if (task->mm) {
-		struct vm_area_struct * tree = task->mm->mmap_avl;
+	if (mm) {
+		struct vm_area_struct * tree = mm->mmap_avl;
 		for (;;) {
 			if (tree == avl_empty)
 				break;
@@ -357,13 +357,13 @@ static inline struct vm_area_struct * find_vma (struct task_struct * task, unsig
 
 /* Look up the first VMA which intersects the interval start_addr..end_addr-1,
    NULL if none.  Assume start_addr < end_addr. */
-static inline struct vm_area_struct * find_vma_intersection (struct task_struct * task, unsigned long start_addr, unsigned long end_addr)
+static inline struct vm_area_struct * find_vma_intersection(struct mm_struct * mm, unsigned long start_addr, unsigned long end_addr)
 {
 	struct vm_area_struct * vma;
 
-	vma = find_vma(task,start_addr);
-	if (!vma || end_addr <= vma->vm_start)
-		return NULL;
+	vma = find_vma(mm,start_addr);
+	if (vma && end_addr <= vma->vm_start)
+		vma = NULL;
 	return vma;
 }
 

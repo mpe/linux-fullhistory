@@ -1,6 +1,6 @@
 /* aha152x.c -- Adaptec AHA-152x driver
- * Author: Juergen E. Fischer, fischer@et-inf.fho-emden.de
- * Copyright 1993, 1994, 1995, 1996 Juergen E. Fischer
+ * Author: Jürgen E. Fischer, fischer@et-inf.fho-emden.de
+ * Copyright 1993, 1994, 1995, 1996 Jürgen E. Fischer
  *
  *
  * This driver is based on
@@ -20,9 +20,12 @@
  * General Public License for more details.
  *
  *
- * $Id: aha152x.c,v 1.17 1996/08/17 16:05:14 fischer Exp fischer $
+ * $Id: aha152x.c,v 1.18 1996/09/07 20:10:40 fischer Exp $
  *
  * $Log: aha152x.c,v $
+ * Revision 1.18  1996/09/07 20:10:40  fischer
+ * - fixed can_queue handling (multiple outstanding commands working again)
+ *
  * Revision 1.17  1996/08/17 16:05:14  fischer
  * - biosparam improved
  * - interrupt verification
@@ -975,7 +978,7 @@ int aha152x_detect(Scsi_Host_Template * tpnt)
     shpnt->this_id=setup[i].scsiid;
   
     if(setup[i].reconnect)
-      shpnt->hostt->can_queue=AHA152X_MAXQUEUE;
+      shpnt->can_queue=AHA152X_MAXQUEUE;
 
     /* RESET OUT */
     SETBITS(SCSISEQ, SCSIRSTO);

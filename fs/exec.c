@@ -299,7 +299,7 @@ unsigned long setup_arg_pages(unsigned long p, struct linux_binprm * bprm)
 		mpnt->vm_offset = 0;
 		mpnt->vm_inode = NULL;
 		mpnt->vm_pte = 0;
-		insert_vm_struct(current, mpnt);
+		insert_vm_struct(current->mm, mpnt);
 		current->mm->total_vm = (mpnt->vm_end - mpnt->vm_start) >> PAGE_SHIFT;
 	}
 

@@ -674,9 +674,6 @@ sb_dsp_init (struct address_info *hw_config)
   devc->dev = num_audiodevs;
   devc->caps = hw_config->driver_use_1;
 
-  irq2devc[hw_config->irq] = devc;
-  devc->irq_ok = 0;
-
   if (snd_set_irq_handler (hw_config->irq,
 			   sbintr, "sound blaster", devc->osp) < 0)
     {
@@ -684,6 +681,9 @@ sb_dsp_init (struct address_info *hw_config)
       irq2devc[hw_config->irq] = NULL;
       return;
     }
+
+  irq2devc[hw_config->irq] = devc;
+  devc->irq_ok = 0;
 
   if (devc->major == 4)
     if (!sb16_set_irq_hw (devc, devc->irq))	/* Unsupported IRQ */
@@ -705,7 +705,9 @@ sb_dsp_init (struct address_info *hw_config)
     }
 
 #ifndef NO_SB_IRQ_TEST
-  for (n = 0; n < 3 && devc->irq_ok == 0; n++)
+  if (devc->major != 4 || devc->minor > 11) /* Not Sb16 v4.5 or v4.11 */
+  {
+    for (n = 0; n < 3 && devc->irq_ok == 0; n++)
     if (sb_dsp_command (devc, 0xf2))	/* Cause interrupt immediately */
       {
 	int             i;
@@ -723,6 +725,7 @@ sb_dsp_init (struct address_info *hw_config)
     {
       DDB (printk ("IRQ test OK (IRQ%d)\n", devc->irq));
     }
+  }
 #endif
 
   request_region (hw_config->io_base, 16, "sound blaster");

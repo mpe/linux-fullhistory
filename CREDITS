@@ -388,10 +388,10 @@ D: Author: Future Domain TMC-16x0 SCSI driver
 D: Debugging: SCSI code; Cyclades serial driver; APM driver
 D: Debugging: XFree86 Mach 32 server, accelerated server code
 
-N: Juergen Fischer
-E: fischer@server.et-inf.fho-emden.de
+N: Jürgen Fischer
+E: fischer@et-inf.fho-emden.de (=?iso-8859-1?q?J=FCrgen?= Fischer)
 D: Author of Adaptec AHA-152x scsi driver
-S: Schulstrasse 18
+S: Schulstraße 18
 S: 26506 Norden
 S: Germany
 
@@ -532,9 +532,7 @@ S: United Kingdom
 
 N: Kai Harrekilde-Petersen
 E: khp@dolphinics.no
-W: http://www.dolphinics.no/~khp
-P: 1024/D2CDF895 F6 33 E0 4E 01 17 85 8C  4F 7F 1F F8 14 E7 86 1D
-D: ftape-HOWTO, i82078 fdc detection code, ftape maintainer.
+D: Original author of the ftape-HOWTO, i82078 fdc detection code.
 S: Peder Holters vei 13
 S: 1168 Oslo
 S: Norway

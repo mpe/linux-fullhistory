@@ -794,7 +794,7 @@ static int copy_mount_options (const void * data, unsigned long *where)
 	if (!data)
 		return 0;
 
-	vma = find_vma(current, (unsigned long) data);
+	vma = find_vma(current->mm, (unsigned long) data);
 	if (!vma || (unsigned long) data < vma->vm_start)
 		return -EFAULT;
 	if (!(vma->vm_flags & VM_READ))

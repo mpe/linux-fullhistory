@@ -1230,7 +1230,7 @@ asmlinkage int sys_msync(unsigned long start, size_t len, int flags)
 	 * If the interval [start,end) covers some unmapped address ranges,
 	 * just ignore them, but return -EFAULT at the end.
 	 */
-	vma = find_vma(current, start);
+	vma = find_vma(current->mm, start);
 	unmapped_error = 0;
 	for (;;) {
 		/* Still start < end. */

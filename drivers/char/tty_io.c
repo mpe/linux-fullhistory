@@ -777,8 +777,9 @@ static inline int do_tty_write(
 		ret = write(tty, file, buf, size);
 		if (ret <= 0)
 			break;
-		count -= ret;
 		written += ret;
+		buf += ret;
+		count -= ret;
 		if (!count)
 			break;
 		ret = -ERESTARTSYS;

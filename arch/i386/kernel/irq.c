@@ -232,7 +232,7 @@ int get_irq_list(char *buf)
 		action = irq_action[i];
 		if (!action) 
 			continue;
-		len += sprintf(buf+len, "%2d: %8d %c %s",
+		len += sprintf(buf+len, "%2d: %10u %c %s",
 			i, kstat.interrupts[i],
 			(action->flags & SA_INTERRUPT) ? '+' : ' ',
 			action->name);

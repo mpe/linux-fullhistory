@@ -11,7 +11,6 @@
 #	$(CPP) -D__ASSEMBLY__ -traditional $< -o $*.s
 
 ifdef SMP
-
 .S.o:
 	$(CC) -D__ASSEMBLY__ $(AFLAGS) -traditional -c $< -o $*.o
 else

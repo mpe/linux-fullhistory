@@ -266,7 +266,7 @@ static struct vm_area_struct * find_extend_vma(struct task_struct * tsk,
 	struct vm_area_struct * vma;
 
 	addr &= PAGE_MASK;
-	vma = find_vma(tsk,addr);
+	vma = find_vma(tsk->mm,addr);
 	if (!vma)
 		return NULL;
 	if (vma->vm_start <= addr)

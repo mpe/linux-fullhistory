@@ -210,11 +210,13 @@
       0.44   13-Aug-96    Fix RX overflow bug in 2114[023] chips.
                           Fix EISA probe bugs reported by <os2@kpi.kharkov.ua>
 			  and <michael@compurex.com>
+      0.441   9-Sep-96    Change dc21041_autoconf() to probe quiet BNC media
+                           with a loopback packet.
 
     =========================================================================
 */
 
-static const char *version = "de4x5.c:v0.44 96/8/13 davies@wanton.lkg.dec.com\n";
+static const char *version = "de4x5.c:v0.441 96/9/9 davies@wanton.lkg.dec.com\n";
 
 #include <linux/module.h>
 
@@ -2227,12 +2229,8 @@ dc21041_autoconf(struct device *dev)
 	    if (sts < 0) {
 		next_tick = sts & ~TIMER_CB;
 	    } else {
-		if (!(inl(DE4X5_SISR) & SISR_SRA) && (lp->autosense == AUTO)) {
-		    lp->media = NC;
-		} else {
-		    lp->local_state++;         /* Ensure media connected */
-		    next_tick = dc21041_autoconf(dev);
-		}
+		lp->local_state++;             /* Ensure media connected */
+		next_tick = dc21041_autoconf(dev);
 	    }
 	    break;
 	    

@@ -109,7 +109,7 @@ static inline int try_to_swap_out(struct task_struct * tsk, struct vm_area_struc
 			if (page_map->count != 1)
 				return 0;
 			if (!(entry = get_swap_page()))
-				return -1;	/* Aieee!!! Out of swap space! */
+				return 0;	/* Aieee!!! Out of swap space! */
 			vma->vm_mm->rss--;
 			flush_cache_page(vma, address);
 			set_pte(page_table, __pte(entry));
@@ -253,7 +253,7 @@ static int swap_out_process(struct task_struct * p, int dma, int wait)
 	/*
 	 * Find the proper vm-area
 	 */
-	vma = find_vma(p, address);
+	vma = find_vma(p->mm, address);
 	if (!vma)
 		return 0;
 	if (address < vma->vm_start)
@@ -312,8 +312,6 @@ static int swap_out(unsigned int priority, int dma, int wait)
 		if (!--p->swap_cnt)
 			swap_task++;
 		switch (swap_out_process(p, dma, wait)) {
-			case -1:
-				return 0;
 			case 0:
 				if (p->swap_cnt)
 					swap_task++;

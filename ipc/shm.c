@@ -425,8 +425,8 @@ static int shm_map (struct vm_area_struct *shmd)
 
 	/* add new mapping */
 	current->mm->total_vm += (shmd->vm_end - shmd->vm_start) >> PAGE_SHIFT;
-	insert_vm_struct(current, shmd);
-	merge_segments(current, shmd->vm_start, shmd->vm_end);
+	insert_vm_struct(current->mm, shmd);
+	merge_segments(current->mm, shmd->vm_start, shmd->vm_end);
 
 	/* map page range */
 	error = 0;
@@ -505,7 +505,7 @@ asmlinkage int sys_shmat (int shmid, char *shmaddr, int shmflg, ulong *raddr)
 		return -EINVAL;
 	}
 	if (!(shmflg & SHM_REMAP))
-		if ((shmd = find_vma_intersection(current, addr, addr + shp->shm_segsz))) {
+		if ((shmd = find_vma_intersection(current->mm, addr, addr + shp->shm_segsz))) {
 			/* printk("shmat() -> EINVAL because the interval [0x%lx,0x%lx) intersects an already mapped interval [0x%lx,0x%lx).\n",
 				addr, addr + shp->shm_segsz, shmd->vm_start, shmd->vm_end); */
 			return -EINVAL;

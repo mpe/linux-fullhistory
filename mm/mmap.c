@@ -66,19 +66,20 @@ asmlinkage unsigned long sys_brk(unsigned long brk)
 {
 	unsigned long rlim;
 	unsigned long newbrk, oldbrk;
+	struct mm_struct *mm = current->mm;
 
-	if (brk < current->mm->end_code)
-		return current->mm->brk;
+	if (brk < mm->end_code)
+		return mm->brk;
 	newbrk = PAGE_ALIGN(brk);
-	oldbrk = PAGE_ALIGN(current->mm->brk);
+	oldbrk = PAGE_ALIGN(mm->brk);
 	if (oldbrk == newbrk)
-		return current->mm->brk = brk;
+		return mm->brk = brk;
 
 	/*
 	 * Always allow shrinking brk
 	 */
-	if (brk <= current->mm->brk) {
-		current->mm->brk = brk;
+	if (brk <= mm->brk) {
+		mm->brk = brk;
 		do_munmap(newbrk, oldbrk-newbrk);
 		return brk;
 	}
@@ -88,25 +89,25 @@ asmlinkage unsigned long sys_brk(unsigned long brk)
 	rlim = current->rlim[RLIMIT_DATA].rlim_cur;
 	if (rlim >= RLIM_INFINITY)
 		rlim = ~0;
-	if (brk - current->mm->end_code > rlim)
-		return current->mm->brk;
+	if (brk - mm->end_code > rlim)
+		return mm->brk;
 
 	/*
 	 * Check against existing mmap mappings.
 	 */
-	if (find_vma_intersection(current, oldbrk, newbrk+PAGE_SIZE))
-		return current->mm->brk;
+	if (find_vma_intersection(mm, oldbrk, newbrk+PAGE_SIZE))
+		return mm->brk;
 
 	/*
 	 * Check if we have enough memory..
 	 */
 	if (!vm_enough_memory((newbrk-oldbrk) >> PAGE_SHIFT))
-		return current->mm->brk;
+		return mm->brk;
 
 	/*
 	 * Ok, looks good - let it rip.
 	 */
-	current->mm->brk = brk;
+	mm->brk = brk;
 	do_mmap(NULL, oldbrk, newbrk-oldbrk,
 		PROT_READ|PROT_WRITE|PROT_EXEC,
 		MAP_FIXED|MAP_PRIVATE, 0);
@@ -139,6 +140,7 @@ static inline unsigned long vm_flags(unsigned long prot, unsigned long flags)
 unsigned long do_mmap(struct file * file, unsigned long addr, unsigned long len,
 	unsigned long prot, unsigned long flags, unsigned long off)
 {
+	struct mm_struct * mm = current->mm;
 	struct vm_area_struct * vma;
 
 	if ((len = PAGE_ALIGN(len)) == 0)
@@ -152,8 +154,8 @@ unsigned long do_mmap(struct file * file, unsigned long addr, unsigned long len,
 		return -EINVAL;
 
 	/* mlock MCL_FUTURE? */
-	if (current->mm->def_flags & VM_LOCKED) {
-		unsigned long locked = current->mm->locked_vm << PAGE_SHIFT;
+	if (mm->def_flags & VM_LOCKED) {
+		unsigned long locked = mm->locked_vm << PAGE_SHIFT;
 		locked += len;
 		if (locked > current->rlim[RLIMIT_MEMLOCK].rlim_cur)
 			return -EAGAIN;
@@ -218,10 +220,10 @@ unsigned long do_mmap(struct file * file, unsigned long addr, unsigned long len,
 	if (!vma)
 		return -ENOMEM;
 
-	vma->vm_mm = current->mm;
+	vma->vm_mm = mm;
 	vma->vm_start = addr;
 	vma->vm_end = addr + len;
-	vma->vm_flags = vm_flags(prot,flags) | current->mm->def_flags;
+	vma->vm_flags = vm_flags(prot,flags) | mm->def_flags;
 
 	if (file) {
 		if (file->f_mode & 1)
@@ -269,14 +271,14 @@ unsigned long do_mmap(struct file * file, unsigned long addr, unsigned long len,
 	}
 
 	flags = vma->vm_flags;
-	insert_vm_struct(current, vma);
-	merge_segments(current, vma->vm_start, vma->vm_end);
+	insert_vm_struct(mm, vma);
+	merge_segments(mm, vma->vm_start, vma->vm_end);
 
 	/* merge_segments might have merged our vma, so we can't use it any more */
-	current->mm->total_vm += len >> PAGE_SHIFT;
+	mm->total_vm += len >> PAGE_SHIFT;
 	if (flags & VM_LOCKED) {
 		unsigned long start = addr;
-		current->mm->locked_vm += len >> PAGE_SHIFT;
+		mm->locked_vm += len >> PAGE_SHIFT;
 		do {
 			char c = get_user((char *) start);
 			len -= PAGE_SIZE;
@@ -302,7 +304,7 @@ unsigned long get_unmapped_area(unsigned long addr, unsigned long len)
 		addr = TASK_SIZE / 3;
 	addr = PAGE_ALIGN(addr);
 
-	for (vmm = find_vma(current, addr); ; vmm = vmm->vm_next) {
+	for (vmm = find_vma(current->mm, addr); ; vmm = vmm->vm_next) {
 		/* At this point:  (!vmm || addr < vmm->vm_end). */
 		if (TASK_SIZE - len < addr)
 			return 0;
@@ -752,7 +754,7 @@ static void unmap_fixup(struct vm_area_struct *area,
 		if (mpnt->vm_ops && mpnt->vm_ops->open)
 			mpnt->vm_ops->open(mpnt);
 		area->vm_end = addr;	/* Truncate area */
-		insert_vm_struct(current, mpnt);
+		insert_vm_struct(current->mm, mpnt);
 	}
 
 	/* construct whatever mapping is needed */
@@ -766,7 +768,7 @@ static void unmap_fixup(struct vm_area_struct *area,
 		area->vm_end = area->vm_start;
 		area->vm_ops->close(area);
 	}
-	insert_vm_struct(current, mpnt);
+	insert_vm_struct(current->mm, mpnt);
 }
 
 asmlinkage int sys_munmap(unsigned long addr, size_t len)
@@ -796,7 +798,7 @@ int do_munmap(unsigned long addr, size_t len)
 	 * every area affected in some way (by any overlap) is put
 	 * on the list.  If nothing is put on, nothing is affected.
 	 */
-	mpnt = find_vma(current, addr);
+	mpnt = find_vma(current->mm, addr);
 	if (!mpnt)
 		return 0;
 	avl_neighbours(mpnt, current->mm->mmap_avl, &prev, &next);
@@ -887,7 +889,7 @@ void exit_mmap(struct mm_struct * mm)
  * Insert vm structure into process list sorted by address
  * and into the inode's i_mmap ring.
  */
-void insert_vm_struct(struct task_struct *t, struct vm_area_struct *vmp)
+void insert_vm_struct(struct mm_struct *mm, struct vm_area_struct *vmp)
 {
 	struct vm_area_struct *share;
 	struct inode * inode;
@@ -895,7 +897,7 @@ void insert_vm_struct(struct task_struct *t, struct vm_area_struct *vmp)
 #if 0 /* equivalent, but slow */
 	struct vm_area_struct **p, *mpnt;
 
-	p = &t->mm->mmap;
+	p = &mm->mmap;
 	while ((mpnt = *p) != NULL) {
 		if (mpnt->vm_start > vmp->vm_start)
 			break;
@@ -908,13 +910,13 @@ void insert_vm_struct(struct task_struct *t, struct vm_area_struct *vmp)
 #else
 	struct vm_area_struct * prev, * next;
 
-	avl_insert_neighbours(vmp, &t->mm->mmap_avl, &prev, &next);
-	if ((prev ? prev->vm_next : t->mm->mmap) != next)
+	avl_insert_neighbours(vmp, &mm->mmap_avl, &prev, &next);
+	if ((prev ? prev->vm_next : mm->mmap) != next)
 		printk("insert_vm_struct: tree inconsistent with list\n");
 	if (prev)
 		prev->vm_next = vmp;
 	else
-		t->mm->mmap = vmp;
+		mm->mmap = vmp;
 	vmp->vm_next = next;
 #endif
 
@@ -963,14 +965,16 @@ void remove_shared_vm_struct(struct vm_area_struct *mpnt)
  * We don't need to traverse the entire list, only those segments
  * which intersect or are adjacent to a given interval.
  */
-void merge_segments (struct task_struct * task, unsigned long start_addr, unsigned long end_addr)
+void merge_segments (struct mm_struct * mm, unsigned long start_addr, unsigned long end_addr)
 {
 	struct vm_area_struct *prev, *mpnt, *next;
 
-	mpnt = find_vma(task, start_addr);
+	down(&mm->mmap_sem);
+	mpnt = find_vma(mm, start_addr);
 	if (!mpnt)
-		return;
-	avl_neighbours(mpnt, task->mm->mmap_avl, &prev, &next);
+		goto no_vma;
+
+	avl_neighbours(mpnt, mm->mmap_avl, &prev, &next);
 	/* we have  prev->vm_next == mpnt && mpnt->vm_next = next */
 
 	if (!prev) {
@@ -1014,7 +1018,7 @@ void merge_segments (struct task_struct * task, unsigned long start_addr, unsign
 		 * big segment can possibly merge with the next one.
 		 * The old unused mpnt is freed.
 		 */
-		avl_remove(mpnt, &task->mm->mmap_avl);
+		avl_remove(mpnt, &mm->mmap_avl);
 		prev->vm_end = mpnt->vm_end;
 		prev->vm_next = mpnt->vm_next;
 		if (mpnt->vm_ops && mpnt->vm_ops->close) {
@@ -1028,4 +1032,6 @@ void merge_segments (struct task_struct * task, unsigned long start_addr, unsign
 		kfree_s(mpnt, sizeof(*mpnt));
 		mpnt = prev;
 	}
+no_vma:
+	up(&mm->mmap_sem);
 }

@@ -1,5 +1,5 @@
 /*
- * linux/drivers/block/ide-tape.c	Version 1.6 - ALPHA	Aug  16, 1996
+ * linux/drivers/block/ide-tape.c	Version 1.7 - ALPHA	Sep  10, 1996
  *
  * Copyright (C) 1995, 1996 Gadi Oxman <gadio@netvision.net.il>
  *
@@ -32,7 +32,7 @@
  * ht0		major=37,minor=0	first IDE tape, rewind on close.
  * nht0		major=37,minor=128	first IDE tape, no rewind on close.
  *
- * Run /usr/src/linux/drivers/block/MAKEDEV.ide to create the above entries.
+ * Run /usr/src/linux/scripts/MAKEDEV.ide to create the above entries.
  * We currently support only one ide tape drive.
  *
  * The general magnetic tape commands compatible interface, as defined by
@@ -186,6 +186,7 @@
  *                       Fixed nasty null dereferencing bug.
  * Ver 1.6   Aug 16 96   Fixed FPU usage in the driver.
  *                       Fixed end of media bug.
+ * Ver 1.7   Sep 10 96   Minor changes for the CONNER CTT8000-A model.
  *
  * We are currently in an *alpha* stage. The driver is not complete and not
  * much tested. I would strongly suggest to:
@@ -1079,6 +1080,7 @@ int idetape_identify_device (ide_drive_t *drive,struct hd_driveid *id)
 	printk ("LBA: %s",id->capability & 0x02 ? "Yes\n":"No\n");
 	printk ("IORDY can be disabled: %s",id->capability & 0x04 ? "Yes\n":"No\n");
 	printk ("IORDY supported: %s",id->capability & 0x08 ? "Yes\n":"Unknown\n");
+	printk ("ATAPI overlap supported: %s",id->capability & 0x20 ? "Yes\n":"No\n");
 	printk ("PIO Cycle Timing Category: %d\n",id->tPIO);
 	printk ("DMA Cycle Timing Category: %d\n",id->tDMA);
 	printk ("Single Word DMA supported modes: ");
@@ -1487,7 +1489,9 @@ void idetape_issue_packet_command  (ide_drive_t *drive,idetape_packet_command_t 
 		if (!pc->abort) {
 			printk ("ide-tape: %s: I/O error, ",drive->name);
 			printk ("pc = %x, key = %x, asc = %x, ascq = %x\n",pc->c[0],tape->sense_key,tape->asc,tape->ascq);
+#if IDETAPE_DEBUG_LOG
 			printk ("ide-tape: Maximum retries reached - Giving up\n");
+#endif /* IDETAPE_DEBUG_LOG */
 			pc->error=1;					/* Giving up */
 		}
 		tape->failed_pc=NULL;
@@ -1678,15 +1682,15 @@ void idetape_pc_intr (ide_drive_t *drive)
 	if (!pc->writing) {					/* Reading - Check that we have enough space */
 		temp=(unsigned long) pc->actually_transferred + bcount.all;
 		if ( temp > pc->request_transfer) {
-			printk ("ide-tape: The tape wants to send us more data than requested - ");
 			if (temp > pc->buffer_size) {
-				printk ("Discarding data\n");
+				printk ("ide-tape: The tape wants to send us more data than requested - discarding data\n");
 				idetape_discard_data (drive,bcount.all);
 				ide_set_handler (drive,&idetape_pc_intr,WAIT_CMD);
 				return;
 			}
-			else
-				printk ("Allowing transfer\n");
+#if IDETAPE_DEBUG_LOG
+			printk ("ide-tape: The tape wants to send us more data than requested - allowing transfer\n");
+#endif /* IDETAPE_DEBUG_LOG */
 		}
 	}
 #if IDETAPE_DEBUG_BUGS	
@@ -2925,7 +2929,7 @@ void idetape_do_request (ide_drive_t *drive, struct request *rq, unsigned long b
 		printk ("ide-tape: The block device interface should not be used for data transfers.\n");
 		printk ("ide-tape: Use the character device interfaces\n");
 		printk ("ide-tape: /dev/ht0 and /dev/nht0 instead.\n");
-		printk ("ide-tape: (Run linux/drivers/block/MAKEDEV.ide to create them)\n");
+		printk ("ide-tape: (Run linux/scripts/MAKEDEV.ide to create them)\n");
 		printk ("ide-tape: Aborting request.\n");
 
 		ide_end_request (0,HWGROUP (drive));			/* Let the common code handle it */

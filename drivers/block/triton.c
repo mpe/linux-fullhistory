@@ -127,7 +127,8 @@
  * known to work fine with this interface under Linux.
  */
 const char *good_dma_drives[] = {"Micropolis 2112A",
-				 "CONNER CTMA 4000"};
+				 "CONNER CTMA 4000",
+				 "CONNER CTT8000-A"};
 
 /*
  * Our Physical Region Descriptor (PRD) table should be large enough

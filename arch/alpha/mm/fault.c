@@ -58,8 +58,11 @@ asmlinkage void do_page_fault(unsigned long address, unsigned long mmcsr, long c
 	struct pt_regs regs)
 {
 	struct vm_area_struct * vma;
+	struct task_struct *tsk = current;
+	struct mm_struct *mm = tsk->mm;
 
-	vma = find_vma(current, address);
+	down(&mm->mmap_sem);
+	vma = find_vma(mm, address);
 	if (!vma)
 		goto bad_area;
 	if (vma->vm_start <= address)
@@ -85,6 +88,7 @@ good_area:
 			goto bad_area;
 	}
 	handle_mm_fault(vma, address, cause > 0);
+	up(&mm->mmap_sem);
 	return;
 
 /*
@@ -92,11 +96,12 @@ good_area:
  * Fix it, but check if it's kernel or user first..
  */
 bad_area:
+	up(&mm->mmap_sem);
 	if (user_mode(&regs)) {
 		printk("%s: memory violation at pc=%08lx rp=%08lx (bad address = %08lx)\n",
-			current->comm, regs.pc, regs.r26, address);
+			tsk->comm, regs.pc, regs.r26, address);
 		die_if_kernel("oops", &regs, cause);
-		force_sig(SIGSEGV, current);
+		force_sig(SIGSEGV, tsk);
 		return;
 	}
 /*

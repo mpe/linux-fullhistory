@@ -71,16 +71,21 @@ static inline struct page *find_page(struct inode * inode, unsigned long offset)
 
 static inline void remove_page_from_hash_queue(struct page * page)
 {
-	struct page **p = page_hash(page->inode,page->offset);
+	struct page **p;
+	struct page *next_hash, *prev_hash;
 
-	page_cache_size--;
-	if (page->next_hash)
-		page->next_hash->prev_hash = page->prev_hash;
-	if (page->prev_hash)
-		page->prev_hash->next_hash = page->next_hash;
+	next_hash = page->next_hash;
+	prev_hash = page->prev_hash;
+	page->next_hash = NULL;
+	page->prev_hash = NULL;
+	if (next_hash)
+		next_hash->prev_hash = prev_hash;
+	if (prev_hash)
+		prev_hash->next_hash = next_hash;
+	p = page_hash(page->inode,page->offset);
 	if (*p == page)
-		*p = page->next_hash;
-	page->next_hash = page->prev_hash = NULL;
+		*p = next_hash;
+	page_cache_size--;
 }
 
 static inline void __add_page_to_hash_queue(struct page * page, struct page **p)
