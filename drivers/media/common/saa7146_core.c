@@ -46,21 +46,15 @@ static void dump_registers(struct saa7146_dev* dev)
  * gpio and debi helper functions
  ****************************************************************************/
 
-/* write "data" to the gpio-pin "pin" -- unused */
-void saa7146_set_gpio(struct saa7146_dev *dev, u8 pin, u8 data)
+void saa7146_setgpio(struct saa7146_dev *dev, int port, u32 data)
 {
 	u32 value = 0;
 
-	/* sanity check */
-	if(pin > 3)
-		return;
+	BUG_ON(port > 3);
 
-	/* read old register contents */
-	value = saa7146_read(dev, GPIO_CTRL );
-
-	value &= ~(0xff << (8*pin));
-	value |= (data << (8*pin));
-
+	value = saa7146_read(dev, GPIO_CTRL);
+	value &= ~(0xff << (8*port));
+	value |= (data << (8*port));
 	saa7146_write(dev, GPIO_CTRL, value);
 }
 
@@ -233,19 +227,6 @@ int saa7146_pgtable_build_single(struct pci_dev *pci, struct saa7146_pgtable *pt
 	}
 */
 	return 0;
-}
-
-/********************************************************************************/
-/* gpio functions */
-
-void saa7146_setgpio(struct saa7146_dev *dev, int port, u32 data)
-{
-	u32 val = 0;
-
-        val=saa7146_read(dev,GPIO_CTRL);
-        val&=~(0xff << (8*(port)));
-        val|=(data)<<(8*(port));
-        saa7146_write(dev, GPIO_CTRL, val);
 }
 
 /********************************************************************************/
