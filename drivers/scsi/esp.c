@@ -1705,7 +1705,7 @@ int esp_abort(Scsi_Cmnd *SCptr)
 	 * the nexus and tell the device to abort.  However, we really
 	 * cannot 'reconnect' per se, therefore we tell the upper layer
 	 * the safest thing we can.  This is, wait a bit, if nothing
-	 * happens, we are really hung so reset the bug.
+	 * happens, we are really hung so reset the bus.
 	 */
 
 	return SCSI_ABORT_SNOOZE;
@@ -1743,11 +1743,10 @@ static void esp_done(struct Sparc_ESP *esp, int error)
 					     done_SC->request_bufflen,
 					     esp->edev->my_bus);
 		} else {
-			struct scatterlist *scl = (struct scatterlist *)done_SC->buffer;
 #ifdef DEBUG_ESP_SG
 			printk("esp%d: unmapping sg ", esp->esp_id);
 #endif
-			mmu_release_scsi_sgl((struct mmu_sglist *) scl,
+			mmu_release_scsi_sgl((struct mmu_sglist *) done_SC->buffer,
 					     done_SC->use_sg - 1,
 					     esp->edev->my_bus);
 #ifdef DEBUG_ESP_SG
@@ -2010,7 +2009,7 @@ static inline int dma_can_transfer(Scsi_Cmnd *sp, enum dvma_rev drev)
 		if(sz > 0x1000000)
 			sz = 0x1000000;
 	} else {
-		base = ((__u32)sp->SCp.ptr);
+		base = ((__u32)((unsigned long)sp->SCp.ptr));
 		base &= (0x1000000 - 1);
 		end = (base + sp->SCp.this_residual);
 		if(end > 0x1000000)
@@ -2280,11 +2279,12 @@ static inline int esp_do_data(struct Sparc_ESP *esp, struct Sparc_ESP_regs *ereg
 			tmp |= DMA_ST_WRITE;
 		else
 			tmp &= ~(DMA_ST_WRITE);
-		dregs->st_addr = ((__u32)SCptr->SCp.ptr);
+		dregs->st_addr = ((__u32)((unsigned long)SCptr->SCp.ptr));
 		dregs->cond_reg = tmp;
 	} else {
 		esp_setcount(eregs, hmuch, 0);
-		dma_setup(dregs, esp->dma->revision, ((__u32)SCptr->SCp.ptr),
+		dma_setup(dregs, esp->dma->revision,
+			  ((__u32)((unsigned long)SCptr->SCp.ptr)),
 			  hmuch, (thisphase == in_datain));
 		ESPDATA(("DMA|TI --> do_intr_end\n"));
 		esp_cmd(esp, eregs, ESP_CMD_DMA | ESP_CMD_TI);
@@ -4059,8 +4059,12 @@ repeat:
 }
 #else
 
+/* XXX Gross hack for sun4u SMP, fix it right later... -DaveM */
 #ifdef __sparc_v9__
-#error Dave you need to fix some things first...
+extern unsigned char ino_to_pil[];
+#define INO_TO_PIL(esp)		(ino_to_pil[(esp)->irq])
+#else
+#define INO_TO_PIL(esp)		((esp)->irq & 0xf)
 #endif
 
 /* For SMP we only service one ESP on the list list at our IRQ level! */
@@ -4070,7 +4074,7 @@ static void esp_intr(int irq, void *dev_id, struct pt_regs *pregs)
 
 	/* Handle all ESP interrupts showing at this IRQ level. */
 	for_each_esp(esp) {
-		if((esp->irq & 0xf) == irq) {
+		if(INO_TO_PIL(esp) == irq) {
 			if(DMA_IRQ_P(esp->dregs)) {
 				DMA_INTSOFF(esp->dregs);
 

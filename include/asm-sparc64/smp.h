@@ -19,7 +19,7 @@ struct prom_cpuinfo {
 };
 
 extern int linux_num_cpus;	/* number of CPUs probed  */
-extern struct prom_cpuinfo linux_cpus[NCPUS];
+extern struct prom_cpuinfo linux_cpus[NR_CPUS];
 
 #endif /* !(__ASSEMBLY__) */
 
@@ -35,8 +35,12 @@ struct cpuinfo_sparc {
 
 extern struct cpuinfo_sparc cpu_data[NR_CPUS];
 
-typedef __volatile__ unsigned char klock_t;
-extern klock_t kernel_flag;
+struct klock_info {
+	unsigned char kernel_flag;
+	unsigned char akp;
+};
+
+extern struct klock_info klock_info;
 
 #define KLOCK_HELD       0xff
 #define KLOCK_CLEAR      0x00
@@ -47,7 +51,7 @@ extern klock_t kernel_flag;
  
 extern int smp_found_cpus;
 extern unsigned char boot_cpu_id;
-extern unsigned int cpu_present_map;
+extern unsigned long cpu_present_map;
 extern __volatile__ unsigned long smp_invalidate_needed[NR_CPUS];
 extern __volatile__ unsigned long kernel_counter;
 extern __volatile__ unsigned char active_kernel_processor;
@@ -68,42 +72,21 @@ typedef void (*smpfunc_t)(unsigned long, unsigned long, unsigned long,
 extern void smp_callin(void);
 extern void smp_boot_cpus(void);
 extern void smp_store_cpu_info(int id);
-extern void smp_cross_call(smpfunc_t func, unsigned long arg1, unsigned long arg2,
-			   unsigned long arg3, unsigned long arg4, unsigned long arg5);
-
-extern __inline__ void xc0(smpfunc_t func) { smp_cross_call(func, 0, 0, 0, 0, 0); }
-extern __inline__ void xc1(smpfunc_t func, unsigned long arg1)
-{ smp_cross_call(func, arg1, 0, 0, 0, 0); }
-extern __inline__ void xc2(smpfunc_t func, unsigned long arg1, unsigned long arg2)
-{ smp_cross_call(func, arg1, arg2, 0, 0, 0); }
-extern __inline__ void xc3(smpfunc_t func, unsigned long arg1, unsigned long arg2,
-			   unsigned long arg3)
-{ smp_cross_call(func, arg1, arg2, arg3, 0, 0); }
-extern __inline__ void xc4(smpfunc_t func, unsigned long arg1, unsigned long arg2,
-			   unsigned long arg3, unsigned long arg4)
-{ smp_cross_call(func, arg1, arg2, arg3, arg4, 0); }
-extern __inline__ void xc5(smpfunc_t func, unsigned long arg1, unsigned long arg2,
-			   unsigned long arg3, unsigned long arg4, unsigned long arg5)
-{ smp_cross_call(func, arg1, arg2, arg3, arg4, arg5); }
 
 extern __volatile__ int cpu_number_map[NR_CPUS];
 extern __volatile__ int cpu_logical_map[NR_CPUS];
 
-extern __inline__ int smp_processor_id(void)
+extern __inline__ int hard_smp_processor_id(void)
 {
-	int cpuid;
+	unsigned long upaconfig;
 
-	/* Get MID from UPA Config register, and use that. */
-	__asm__ __volatile__("
-		ldxa	[%g0] %1, %0
-		srlx	%0, 17, %0
-		and	%0, 0x1f, %0
-	" : "=r" cpuid
-	  : "i" (ASI_UPA_CONFIG));
-
-	return cpuid;
+	__asm__ __volatile__("ldxa	[%%g0] %1, %0"
+			     : "=r" (upaconfig)
+			     : "i" (ASI_UPA_CONFIG));
+	return ((upaconfig >> 17) & 0x1f);
 }
 
+#define smp_processor_id() (current->processor)
 
 extern __volatile__ unsigned long smp_proc_in_lock[NR_CPUS]; /* for computing process time */
 #endif /* !(__ASSEMBLY__) */
@@ -122,14 +105,13 @@ extern __volatile__ unsigned long smp_proc_in_lock[NR_CPUS]; /* for computing pr
 #define MBOX_IDLECPU2         0xFD
 #define MBOX_STOPCPU2         0xFE
 
-
-#define NO_PROC_ID            0xFF
-
 #define PROC_CHANGE_PENALTY     20
 
 #define SMP_FROM_INT		1
 #define SMP_FROM_SYSCALL	2
 
 #endif /* !(__SMP__) */
+
+#define NO_PROC_ID            0xFF
 
 #endif /* !(_SPARC64_SMP_H) */

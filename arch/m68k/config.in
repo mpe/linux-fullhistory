@@ -218,6 +218,10 @@ define_bool CONFIG_VT y
 define_bool CONFIG_VT_CONSOLE y
 define_bool CONFIG_FB_CONSOLE y
 
+if [ "$CONFIG_ATARI" = "y" ]; then
+  define_bool CONFIG_NVRAM y
+fi
+
 tristate 'Parallel printer support' CONFIG_PRINTER
 if [ "$CONFIG_AMIGA" = "y" ]; then
   dep_tristate 'Multiface Card III parallel support' CONFIG_MULTIFACE_III_LP $CONFIG_PRINTER
@@ -243,6 +247,7 @@ if [ "$CONFIG_AMIGA" = "y" ]; then
   dep_tristate 'GVP IO-Extender parallel printer support' CONFIG_GVPIOEXT_LP $CONFIG_GVPIOEXT
   dep_tristate 'GVP IO-Extender PLIP support' CONFIG_GVPIOEXT_PLIP $CONFIG_GVPIOEXT
   tristate 'Multiface Card III serial support' CONFIG_MULTIFACE_III_TTY
+  bool 'Hisoft Whippet PCMCIA serial support' CONFIG_WHIPPET
 fi
 if [ "$CONFIG_ATARI_MFPSER" = "y" -o "$CONFIG_ATARI_SCC" = "y" -o \
      "$CONFIG_ATARI_MIDI" = "y" -o "$CONFIG_AMIGA_BUILTIN_SERIAL" = "y" -o \

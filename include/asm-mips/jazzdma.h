@@ -28,7 +28,7 @@ int vdma_get_residue(int channel);
 #define VDMA_PAGESIZE		4096
 #define VDMA_PGTBL_ENTRIES	4096
 #define VDMA_PGTBL_SIZE		(sizeof(VDMA_PGTBL_ENTRY) * VDMA_PGTBL_ENTRIES)
-#define VDMA_PAGE_EMPTY		0
+#define VDMA_PAGE_EMPTY		0xff000000
 
 /*
  * Macros to get page no. and offset of a given address

@@ -402,6 +402,7 @@ static void wss_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	sti();
 	if (sm->dma.ptt_cnt <= 0) {
 		dma_receive(sm, curfrag);
+		hdlcdrv_arbitrate(dev, &sm->hdrv);
 		if (hdlcdrv_ptt(&sm->hdrv)) {
 			/* starting to transmit */
 			disable_dma(dev->dma);
@@ -415,10 +416,8 @@ static void wss_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 		sti();
 		dma_init_receive(sm);
 		setup_dma_wss(dev, sm, 0);
-        } else {
+        } else
 		dma_transmit(sm);
-		hdlcdrv_arbitrate(dev, &sm->hdrv);
-        }
 	sm_output_status(sm);
 	hdlcdrv_transmitter(dev, &sm->hdrv);
 	hdlcdrv_receiver(dev, &sm->hdrv);

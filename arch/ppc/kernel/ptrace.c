@@ -1,12 +1,14 @@
 /*
  *  linux/arch/ppc/kernel/ptrace.c
  *
+ *  PowerPC version 
+ *    Copyright (C) 1995-1996 Gary Thomas (gdt@linuxppc.org)
+ *
+ *  Derived from "arch/m68k/kernel/ptrace.c"
  *  Copyright (C) 1994 by Hamish Macdonald
  *  Taken from linux/kernel/ptrace.c and modified for M680x0.
  *  linux/kernel/ptrace.c is by Ross Biro 1/23/92, edited by Linus Torvalds
  *
- * Adapted from 'linux/arch/m68k/kernel/ptrace.c'
- * PowerPC version by Gary Thomas (gdt@linuxppc.org)
  * Modified by Cort Dougan (cort@cs.nmt.edu) 
  *
  * This file is subject to the terms and conditions of the GNU General
@@ -34,52 +36,13 @@
  * in exit.c or in signal.c.
  */
 
-/* Find the stack offset for a register, relative to tss.ksp. */
-#define PT_REG(reg)	((long)&((struct pt_regs *)0)->reg)
-/* Mapping from PT_xxx to the stack offset at which the register is
-   saved.  Notice that usp has no stack-slot and needs to be treated
-   specially (see get_reg/put_reg below). */
-static int regoff[] = {
-};
-
 /*
  * Get contents of register REGNO in task TASK.
  */
 static inline long get_reg(struct task_struct *task, int regno)
 {
-	struct pt_regs *regs = task->tss.regs;
-	if (regno <= PT_R31)
-	{
-		return (regs->gpr[regno]);
-	} else
-	if (regno == PT_NIP)
-	{
-		return (regs->nip);
-	} else
-	if (regno == PT_MSR)
-	{
-		return (regs->msr);
-	} else
-	if (regno == PT_ORIG_R3)
-	{
-		return (regs->orig_gpr3);
-	} else
-	if (regno == PT_CTR)
-	{
-		return (regs->ctr);
-	} else
-	if (regno == PT_LNK)
-	{
-		return (regs->link);
-	} else
-	if (regno == PT_XER)
-	{
-		return (regs->xer);
-	} else
-	if (regno == PT_CCR)
-	{
-		return (regs->ccr);
-	}
+	if (regno <= PT_CCR)
+		return ((unsigned long *)task->tss.regs)[regno];
 	return (0);
 }
 
@@ -89,52 +52,21 @@ static inline long get_reg(struct task_struct *task, int regno)
 static inline int put_reg(struct task_struct *task, int regno,
 			  unsigned long data)
 {
-	struct pt_regs *regs = task->tss.regs;
-	if (regno <= PT_R31)
-	{
-		regs->gpr[regno] = data;
-	} else
-	if (regno == PT_NIP)
-	{
-		regs->nip = data;
-	} else
-	if (regno == PT_MSR)
-	{
-		regs->msr = data;
-	} else
-	if (regno == PT_CTR)
-	{
-		regs->ctr = data;
-	} else
-	if (regno == PT_LNK)
-	{
-		regs->link = data;
-	} else
-	if (regno == PT_XER)
-	{
-		regs->xer = data;
-	} else
-	if (regno == PT_CCR)
-	{
-		regs->ccr = data;
-	} else
-	{ /* Invalid register */
-		return (-1);
+	if (regno <= PT_CCR) {
+		((unsigned long *)task->tss.regs)[regno] = data;
+		return 0;
 	}
-	return (0);
+	return -1;
 }
 
-static inline
+static inline void
 set_single_step(struct task_struct *task)
 {
 	struct pt_regs *regs = task->tss.regs;
-printk("Set single step - Task: %x, Regs: %x", task, regs);
-printk(", MSR: %x/", regs->msr);	
 	regs->msr |= MSR_SE;
-printk("%x\n", regs->msr);	
 }
 
-static inline
+static inline void
 clear_single_step(struct task_struct *task)
 {
 	struct pt_regs *regs = task->tss.regs;
@@ -159,33 +91,32 @@ static unsigned long get_long(struct task_struct * tsk,
 repeat:
 	pgdir = pgd_offset(vma->vm_mm, addr);
 	if (pgd_none(*pgdir)) {
-		do_no_page(tsk, vma, addr, 0);
+		handle_mm_fault(tsk, vma, addr, 0);
 		goto repeat;
 	}
 	if (pgd_bad(*pgdir)) {
-		printk("ptrace: bad page directory %08lx\n", pgd_val(*pgdir));
+		printk("ptrace[1]: bad page directory %lx\n", pgd_val(*pgdir));
 		pgd_clear(pgdir);
 		return 0;
 	}
 	pgmiddle = pmd_offset(pgdir,addr);
 	if (pmd_none(*pgmiddle)) {
-		do_no_page(tsk, vma, addr, 0);
+		handle_mm_fault(tsk, vma, addr, 0);
 		goto repeat;
 	}
 	if (pmd_bad(*pgmiddle)) {
-		printk("ptrace: bad page directory %08lx\n",
-		       pmd_val(*pgmiddle));
+		printk("ptrace[3]: bad pmd %lx\n", pmd_val(*pgmiddle));
 		pmd_clear(pgmiddle);
 		return 0;
 	}
 	pgtable = pte_offset(pgmiddle, addr);
 	if (!pte_present(*pgtable)) {
-		do_no_page(tsk, vma, addr, 0);
+		handle_mm_fault(tsk, vma, addr, 0);
 		goto repeat;
 	}
 	page = pte_page(*pgtable);
 /* this is a hack for non-kernel-mapped video buffers and similar */
-	if (page >= high_memory)
+	if (MAP_NR(page) >= max_mapnr)
 		return 0;
 	page += addr & ~PAGE_MASK;
 	return *(unsigned long *) page;
@@ -200,8 +131,8 @@ repeat:
  * Now keeps R/W state of page so that a text page stays readonly
  * even if a debugger scribbles breakpoints into it.  -M.U-
  */
-static void put_long(struct task_struct * tsk, struct vm_area_struct * vma, unsigned long addr,
-	unsigned long data)
+static void put_long(struct task_struct * tsk, struct vm_area_struct * vma,
+		     unsigned long addr, unsigned long data)
 {
 	pgd_t *pgdir;
 	pmd_t *pgmiddle;
@@ -211,42 +142,40 @@ static void put_long(struct task_struct * tsk, struct vm_area_struct * vma, unsi
 repeat:
 	pgdir = pgd_offset(vma->vm_mm, addr);
 	if (!pgd_present(*pgdir)) {
-		do_no_page(tsk, vma, addr, 1);
+		handle_mm_fault(tsk, vma, addr, 1);
 		goto repeat;
 	}
 	if (pgd_bad(*pgdir)) {
-		printk("ptrace: bad page directory %08lx\n", pgd_val(*pgdir));
+		printk("ptrace[2]: bad page directory %lx\n", pgd_val(*pgdir));
 		pgd_clear(pgdir);
 		return;
 	}
 	pgmiddle = pmd_offset(pgdir,addr);
 	if (pmd_none(*pgmiddle)) {
-		do_no_page(tsk, vma, addr, 1);
+		handle_mm_fault(tsk, vma, addr, 1);
 		goto repeat;
 	}
 	if (pmd_bad(*pgmiddle)) {
-		printk("ptrace: bad page directory %08lx\n",
-		       pmd_val(*pgmiddle));
+		printk("ptrace[4]: bad pmd %lx\n", pmd_val(*pgmiddle));
 		pmd_clear(pgmiddle);
 		return;
 	}
 	pgtable = pte_offset(pgmiddle, addr);
 	if (!pte_present(*pgtable)) {
-		do_no_page(tsk, vma, addr, 1);
+		handle_mm_fault(tsk, vma, addr, 1);
 		goto repeat;
 	}
 	page = pte_page(*pgtable);
 	if (!pte_write(*pgtable)) {
-		do_wp_page(tsk, vma, addr, 2);
+		handle_mm_fault(tsk, vma, addr, 1);
 		goto repeat;
 	}
 /* this is a hack for non-kernel-mapped video buffers and similar */
-	if (page < high_memory) {
+	if (MAP_NR(page) < max_mapnr)
 		*(unsigned long *) (page + (addr & ~PAGE_MASK)) = data;
-	}
 /* we're bypassing pagetables, so we have to set the dirty bit ourselves */
 /* this should also re-instate whatever read-only mode there was before */
-	*pgtable = pte_mkdirty(mk_pte(page, vma->vm_page_prot));
+	set_pte(pgtable, pte_mkdirty(mk_pte(page, vma->vm_page_prot)));
 	flush_tlb_all();
 }
 
@@ -366,7 +295,6 @@ static int write_long(struct task_struct * tsk, unsigned long addr,
 asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 {
 	struct task_struct *child;
-	struct user * dummy = NULL;
 	int ret = -EPERM;
 
 	lock_kernel();
@@ -436,8 +364,10 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 		case PTRACE_PEEKUSR: {
 			unsigned long tmp;
 			
-			if ((addr & 3) || addr < 0 || addr >= sizeof(struct user))
-				return -EIO;
+			if ((addr & 3) || addr < 0 || addr >= sizeof(struct user)) {
+				ret = -EIO;
+				goto out;
+			}
 			
 			ret = verify_area(VERIFY_WRITE, (void *) data,
 					  sizeof(long));
@@ -445,15 +375,19 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 				goto out;
 			tmp = 0;  /* Default return condition */
 			addr = addr >> 2; /* temporary hack. */
-			if (addr < PT_FPR0)
+			if (addr < PT_FPR0) {
 				tmp = get_reg(child, addr);
-#if 0			
-			else if (addr >= PT_FPR0 && addr < PT_FPR31)
-				tmp = child->tss.fpr[addr - PT_FPR0];
-#endif				
+			}
+#if 1
+			else if (addr >= PT_FPR0 && addr < PT_FPR0 + 64) {
+				if (last_task_used_math == child)
+					giveup_fpu();
+				tmp = ((long *)child->tss.fpr)[addr - PT_FPR0];
+			}
+#endif
 			else
 				ret = -EIO;
-			if(!ret)
+			if (!ret)
 				put_user(tmp,(unsigned long *) data);
 			goto out;
 		}
@@ -486,13 +420,13 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 				ret = 0;
 				goto out;
 			}
-#if 0			
-			if (addr >= 21 && addr < 48) {
-				child->tss.fp[addr - 21] = data;
+			if (addr >= PT_FPR0 && addr < PT_FPR0 + 64) {
+				if (last_task_used_math == child)
+					giveup_fpu();
+				((long *)child->tss.fpr)[addr - PT_FPR0] = data;
 				ret = 0;
 				goto out;
 			}
-#endif			
 			goto out;
 
 		case PTRACE_SYSCALL: /* continue and stop at next (return from) syscall */

@@ -206,12 +206,11 @@ void clear_inode(struct inode *inode)
 	inode->i_state = 0;
 }
 
-#define CAN_UNUSE(inode) \
-	(((inode)->i_count == 0) && \
-	 ((inode)->i_nrpages == 0) && \
-	 (!(inode)->i_state))
-
-static void invalidate_list(struct list_head *head, kdev_t dev)
+/*
+ * Dispose-list gets a local list, so it doesn't need to
+ * worry about list corruption.
+ */
+static void dispose_list(struct list_head * head)
 {
 	struct list_head *next;
 
@@ -224,23 +223,64 @@ static void invalidate_list(struct list_head *head, kdev_t dev)
 		if (tmp == head)
 			break;
 		inode = list_entry(tmp, struct inode, i_list);
-		if (inode->i_dev != dev)
-			continue;		
-		if (!CAN_UNUSE(inode))
-			continue;
-		list_del(&inode->i_hash);
-		INIT_LIST_HEAD(&inode->i_hash);
+		truncate_inode_pages(inode, 0);
 		list_del(&inode->i_list);
-		list_add(&inode->i_list, &inode_unused);
 	}
+
+	/* Add them all to the unused list in one fell swoop */
+	spin_lock(&inode_lock);
+	list_splice(head, &inode_unused);
+	spin_unlock(&inode_lock);
 }
 
-void invalidate_inodes(kdev_t dev)
+static int invalidate_list(struct list_head *head, kdev_t dev, struct list_head * dispose)
 {
+	struct list_head *next;
+	int busy = 0;
+
+	next = head->next;
+	for (;;) {
+		struct list_head * tmp = next;
+		struct inode * inode;
+
+		next = next->next;
+		if (tmp == head)
+			break;
+		inode = list_entry(tmp, struct inode, i_list);
+		if (inode->i_dev != dev)
+			continue;
+		if (!inode->i_count && !inode->i_state) {
+			list_del(&inode->i_hash);
+			INIT_LIST_HEAD(&inode->i_hash);
+			list_del(&inode->i_list);
+			list_add(&inode->i_list, dispose);
+			continue;
+		}
+		busy = 1;
+	}
+	return busy;
+}
+
+/*
+ * This is a two-stage process. First we collect all
+ * offending inodes onto the throw-away list, and in
+ * the second stage we actually dispose of them. This
+ * is because we don't want to sleep while messing
+ * with the global lists..
+ */
+int invalidate_inodes(kdev_t dev)
+{
+	int busy;
+	LIST_HEAD(throw_away);
+
 	spin_lock(&inode_lock);
-	invalidate_list(&inode_in_use, dev);
-	invalidate_list(&inode_dirty, dev);
+	busy = invalidate_list(&inode_in_use, dev, &throw_away);
+	busy |= invalidate_list(&inode_dirty, dev, &throw_away);
 	spin_unlock(&inode_lock);
+
+	dispose_list(&throw_away);
+
+	return busy;
 }
 
 /*
@@ -251,6 +291,11 @@ void invalidate_inodes(kdev_t dev)
  * Otherwise we just move the inode to be the first inode and expect to
  * get back to the problem later..
  */
+#define CAN_UNUSE(inode) \
+	(((inode)->i_count == 0) && \
+	 ((inode)->i_nrpages == 0) && \
+	 (!(inode)->i_state))
+
 static void try_to_free_inodes(void)
 {
 	struct list_head * tmp;

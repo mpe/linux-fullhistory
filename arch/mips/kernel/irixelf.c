@@ -228,7 +228,7 @@ unsigned long * create_irix_tables(char * p, int argc, int envc,
  * an ELF header.
  */
 static unsigned int load_irix_interp(struct elfhdr * interp_elf_ex,
-				     struct inode * interpreter_inode,
+				     struct dentry * interpreter_dentry,
 				     unsigned int *interp_load_addr)
 {
 	struct file * file;
@@ -256,8 +256,8 @@ static unsigned int load_irix_interp(struct elfhdr * interp_elf_ex,
 	if((interp_elf_ex->e_type != ET_EXEC &&
 	    interp_elf_ex->e_type != ET_DYN) ||
 	    !elf_check_arch(interp_elf_ex->e_machine) ||
-	   (!interpreter_inode->i_op ||
-	    !interpreter_inode->i_op->default_file_ops->mmap)){
+	   (!interpreter_dentry->d_inode->i_op ||
+	    !interpreter_dentry->d_inode->i_op->default_file_ops->mmap)) {
 		printk("IRIX interp has bad e_type %d\n", interp_elf_ex->e_type);
 		return 0xffffffff;
 	}
@@ -288,7 +288,7 @@ static unsigned int load_irix_interp(struct elfhdr * interp_elf_ex,
 		return 0xffffffff;
 	}
 
-	retval = read_exec(interpreter_inode, interp_elf_ex->e_phoff,
+	retval = read_exec(interpreter_dentry, interp_elf_ex->e_phoff,
 			   (char *) elf_phdata,
 			   sizeof(struct elf_phdr) * interp_elf_ex->e_phnum, 1);
 
@@ -296,7 +296,7 @@ static unsigned int load_irix_interp(struct elfhdr * interp_elf_ex,
 	dump_phdrs(elf_phdata, interp_elf_ex->e_phnum);
 #endif
 
-	elf_exec_fileno = open_inode(interpreter_inode, O_RDONLY);
+	elf_exec_fileno = open_dentry(interpreter_dentry, O_RDONLY);
 	if (elf_exec_fileno < 0) {
 		printk("Could not open IRIX interp inode.\n");
 		kfree(elf_phdata);
@@ -408,8 +408,9 @@ static int verify_binary(struct elfhdr *ehp, struct linux_binprm *bprm)
 	/* First of all, some simple consistency checks */
 	if((ehp->e_type != ET_EXEC && ehp->e_type != ET_DYN) || 
 	    !elf_check_arch(ehp->e_machine) ||
-	   (!bprm->inode->i_op || !bprm->inode->i_op->default_file_ops ||
-	    !bprm->inode->i_op->default_file_ops->mmap)) {
+	   (!bprm->dentry->d_inode->i_op ||
+	    !bprm->dentry->d_inode->i_op->default_file_ops ||
+	    !bprm->dentry->d_inode->i_op->default_file_ops->mmap)) {
 		return -ENOEXEC;
 	}
 
@@ -435,13 +436,14 @@ static int verify_binary(struct elfhdr *ehp, struct linux_binprm *bprm)
 
 /* Look for an IRIX ELF interpreter. */
 static inline int look_for_irix_interpreter(char **name,
-					    struct inode **interpreter_inode,
+					    struct dentry **interpreter_dentry,
 					    struct elfhdr *interp_elf_ex,
 					    struct elf_phdr *epp,
 					    struct linux_binprm *bprm, int pnum)
 {
 	int i, old_fs;
 	int retval = -EINVAL;
+	struct dentry *dentry = NULL;
 
 	*name = NULL;
 	for(i = 0; i < pnum; i++, epp++) {
@@ -450,7 +452,7 @@ static inline int look_for_irix_interpreter(char **name,
 
 		/* It is illegal to have two interpreters for one executable. */
 		if(*name != NULL)
-			goto losing;
+			goto out;
 
 		*name = (char *) kmalloc((epp->p_filesz +
 					  strlen(IRIX_INTERP_PREFIX)),
@@ -459,26 +461,31 @@ static inline int look_for_irix_interpreter(char **name,
 			return -ENOMEM;
 
 		strcpy(*name, IRIX_INTERP_PREFIX);
-		retval = read_exec(bprm->inode, epp->p_offset, (*name + 16),
+		retval = read_exec(bprm->dentry, epp->p_offset, (*name + 16),
 				   epp->p_filesz, 1);
 		if(retval < 0)
-			goto losing;
+			goto out;
 
 		old_fs = get_fs(); set_fs(get_ds());
-		retval = namei(NAM_FOLLOW_LINK, *name, interpreter_inode);
+		dentry = namei(*name);
 		set_fs(old_fs);
-		if(retval < 0)
-			goto losing;
+		if(IS_ERR(dentry)) {
+			retval = PTR_ERR(dentry);
+			goto out;
+		}
 
-		retval = read_exec(*interpreter_inode, 0, bprm->buf, 128, 1);
-		if(retval < 0)
-			goto losing;
+		retval = read_exec(dentry, 0, bprm->buf, 128, 1);
+		if(retval)
+			goto dput_and_out;
 
 		*interp_elf_ex = *((struct elfhdr *) bprm->buf);
 	}
+	*interpreter_dentry = dentry;
 	return 0;
 
-losing:
+dput_and_out:
+	dput(dentry);
+out:
 	kfree(*name);
 	return retval;
 }
@@ -538,7 +545,7 @@ static inline void map_executable(struct file *fp, struct elf_phdr *epp, int pnu
 }
 
 static inline int map_interpreter(struct elf_phdr *epp, struct elfhdr *ihp,
-				  struct inode *iino, unsigned int *iladdr,
+				  struct dentry *identry, unsigned int *iladdr,
 				  int pnum, int old_fs,
 				  unsigned int *eentry)
 {
@@ -554,11 +561,11 @@ static inline int map_interpreter(struct elf_phdr *epp, struct elfhdr *ihp,
 			return -1;
 
 		set_fs(old_fs);
-		*eentry = load_irix_interp(ihp, iino, iladdr);
+		*eentry = load_irix_interp(ihp, identry, iladdr);
 		old_fs = get_fs();
 		set_fs(get_ds());
 
-		iput(iino);
+		dput(identry);
 
 		if(*eentry == 0xffffffff)
 			return -1;
@@ -573,7 +580,7 @@ static inline int do_load_irix_binary(struct linux_binprm * bprm,
 				      struct pt_regs * regs)
 {
 	struct elfhdr elf_ex, interp_elf_ex;
-	struct inode *interpreter_inode;
+	struct dentry *interpreter_dentry;
 	struct elf_phdr *elf_phdata, *elf_ihdr, *elf_ephdr;
 	unsigned int load_addr, elf_bss, elf_brk;
 	unsigned int elf_entry, interp_load_addr = 0;
@@ -599,7 +606,7 @@ static inline int do_load_irix_binary(struct linux_binprm * bprm,
 	if (elf_phdata == NULL)
 		return -ENOMEM;
 	
-	retval = read_exec(bprm->inode, elf_ex.e_phoff, (char *) elf_phdata,
+	retval = read_exec(bprm->dentry, elf_ex.e_phoff, (char *) elf_phdata,
 			   elf_ex.e_phentsize * elf_ex.e_phnum, 1);
 	if (retval < 0) {
 		kfree (elf_phdata);
@@ -629,7 +636,7 @@ static inline int do_load_irix_binary(struct linux_binprm * bprm,
 
 	elf_bss = 0;
 	elf_brk = 0;
-	elf_exec_fileno = open_inode(bprm->inode, O_RDONLY);
+	elf_exec_fileno = open_dentry(bprm->dentry, O_RDONLY);
 
 	if (elf_exec_fileno < 0) {
 		kfree (elf_phdata);
@@ -642,7 +649,8 @@ static inline int do_load_irix_binary(struct linux_binprm * bprm,
 	end_code = 0;
 	end_data = 0;
 	
-	retval = look_for_irix_interpreter(&elf_interpreter, &interpreter_inode,
+	retval = look_for_irix_interpreter(&elf_interpreter,
+	                                   &interpreter_dentry,
 					   &interp_elf_ex, elf_phdata, bprm,
 					   elf_ex.e_phnum);
 	if(retval) {
@@ -703,7 +711,7 @@ static inline int do_load_irix_binary(struct linux_binprm * bprm,
 
 	if(elf_interpreter) {
 		retval = map_interpreter(elf_phdata, &interp_elf_ex,
-					 interpreter_inode, &interp_load_addr,
+					 interpreter_dentry, &interp_load_addr,
 					 elf_ex.e_phnum, old_fs, &elf_entry);
 		kfree(elf_interpreter);
 		if(retval) {
@@ -795,7 +803,8 @@ static inline int do_load_irix_library(int fd)
 	struct file * file;
 	struct elfhdr elf_ex;
 	struct elf_phdr *elf_phdata  =  NULL;
-	struct  inode * inode;
+	struct dentry *dentry;
+	struct inode *inode;
 	unsigned int len;
 	int elf_bss;
 	int retval;
@@ -805,7 +814,8 @@ static inline int do_load_irix_library(int fd)
 
 	len = 0;
 	file = current->files->fd[fd];
-	inode = file->f_inode;
+	dentry = file->f_dentry;
+	inode = dentry->d_inode;
 	elf_bss = 0;
 	
 	if (!file || !file->f_op)
@@ -831,7 +841,8 @@ static inline int do_load_irix_library(int fd)
 	/* First of all, some simple consistency checks. */
 	if(elf_ex.e_type != ET_EXEC || elf_ex.e_phnum > 2 ||
 	   !elf_check_arch(elf_ex.e_machine) ||
-	   (!inode->i_op || !inode->i_op->default_file_ops->mmap))
+	   (!dentry->d_inode->i_op ||
+	    !dentry->d_inode->i_op->default_file_ops->mmap))
 		return -ENOEXEC;
 	
 	/* Now read in all of the header information. */
@@ -843,7 +854,7 @@ static inline int do_load_irix_library(int fd)
 	if (elf_phdata == NULL)
 		return -ENOMEM;
 	
-	retval = read_exec(inode, elf_ex.e_phoff, (char *) elf_phdata,
+	retval = read_exec(dentry, elf_ex.e_phoff, (char *) elf_phdata,
 			   sizeof(struct elf_phdr) * elf_ex.e_phnum, 1);
 	
 	j = 0;
@@ -973,14 +984,13 @@ unsigned long irix_mapelf(int fd, struct elf_phdr *user_phdrp, int cnt)
  */
 static int dump_write(struct file *file, const void *addr, int nr)
 {
-	file->f_inode->i_status |= ST_MODIFIED;
-	return file->f_op->write(file->f_inode, file, addr, nr) == nr;
+	return file->f_op->write(file->f_dentry->d_inode, file, addr, nr) == nr;
 }
 
 static int dump_seek(struct file *file, off_t off)
 {
 	if (file->f_op->llseek) {
-		if (file->f_op->llseek(file->f_inode, file, off, 0) != off)
+		if (file->f_op->llseek(file->f_dentry->d_inode, file, off, 0) != off)
 			return 0;
 	} else
 		file->f_pos = off;
@@ -1071,6 +1081,7 @@ static int irix_core_dump(long signr, struct pt_regs * regs)
 {
 	int has_dumped = 0;
 	struct file file;
+	struct dentry *dentry;
 	struct inode *inode;
 	unsigned short fs;
 	char corefile[6+sizeof(current->comm)];
@@ -1138,30 +1149,24 @@ static int irix_core_dump(long signr, struct pt_regs * regs)
 	
 	fs = get_fs();
 	set_fs(KERNEL_DS);
-	memcpy(corefile,"core.",5);
+	memcpy(corefile,"core.", 5);
 #if 0
 	memcpy(corefile+5,current->comm,sizeof(current->comm));
 #else
 	corefile[4] = '\0';
 #endif
-	if (open_namei(corefile,O_CREAT | 2 | O_TRUNC,0600,&inode,NULL)) {
+	dentry = open_namei(corefile, O_CREAT | 2 | O_TRUNC, 0600);
+	if (IS_ERR(dentry)) {
 		inode = NULL;
 		goto end_coredump;
 	}
+	inode = dentry->d_inode;
 	if (!S_ISREG(inode->i_mode))
 		goto end_coredump;
 	if (!inode->i_op || !inode->i_op->default_file_ops)
 		goto end_coredump;
-	file.f_mode = 3;
-	file.f_flags = 0;
-	file.f_count = 1;
-	file.f_inode = inode;
-	file.f_pos = 0;
-	file.f_reada = 0;
-	file.f_op = inode->i_op->default_file_ops;
-	if (file.f_op->open)
-		if (file.f_op->open(inode,&file))
-			goto end_coredump;
+	if (init_private_file(&file, dentry, 3))
+		goto end_coredump;
 	if (!file.f_op->write)
 		goto close_coredump;
 	has_dumped = 1;
@@ -1330,11 +1335,11 @@ static int irix_core_dump(long signr, struct pt_regs * regs)
 
  close_coredump:
 	if (file.f_op->release)
-		file.f_op->release(inode,&file);
+		file.f_op->release(inode, &file);
 
  end_coredump:
 	set_fs(fs);
-	iput(inode);
+	dput(dentry);
 #ifndef CONFIG_BINFMT_ELF
 	MOD_DEC_USE_COUNT;
 #endif

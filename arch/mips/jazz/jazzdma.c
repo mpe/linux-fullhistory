@@ -375,6 +375,7 @@ void vdma_enable(int channel)
      * Clear all interrupt flags
      */
     r4030_write_reg32(JAZZ_R4030_CHNL_ENABLE+(channel<<5),
+		      r4030_read_reg32(JAZZ_R4030_CHNL_ENABLE+(channel<<5)) |
                       R4030_TC_INTR | R4030_MEM_INTR | R4030_ADDR_INTR);
 
     /*

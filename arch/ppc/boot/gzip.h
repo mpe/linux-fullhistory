@@ -271,7 +271,7 @@ extern int  fill_inbuf    OF((void));
 extern void flush_outbuf  OF((void));
 extern void flush_window  OF((void));
 extern char *strlwr       OF((char *s));
-extern char *basename     OF((char *fname));
+/*extern char *basename     OF((char *fname));*/
 extern char *add_envopt   OF((int *argcp, char ***argvp, char *env));
 extern void error         OF((char *m));
 extern void warn          OF((char *a, char *b));

@@ -99,5 +99,6 @@ if [ "$CONFIG_WATCHDOG" != "n" ]; then
   tristate '   Berkshire Products PC Watchdog' CONFIG_PCWATCHDOG
 fi
 bool 'Enhanced Real Time Clock Support' CONFIG_RTC
+tristate '/dev/nvram support' CONFIG_NVRAM
 tristate 'PC joystick support' CONFIG_JOYSTICK
 endmenu

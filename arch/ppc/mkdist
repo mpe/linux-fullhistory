@@ -1,0 +1,9 @@
+#!/bin/bash
+
+N=`basename $PWD`
+V=`echo $N | sed 's/linux-//'`
+date=`date +'%y%m%d'`
+mkdir -p ../dist
+mv zImage ../dist/zImage-$V-$date
+mv System.map ../dist/System.map-$V-$date
+

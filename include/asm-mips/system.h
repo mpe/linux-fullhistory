@@ -108,13 +108,13 @@ __restore_flags(int flags)
 #define save_and_cli(x) __save_and_cli(x)
 #define restore_flags(x) __restore_flags(x)
 
-#define sync_mem()                       \
-__asm__ __volatile__(                    \
-	".set\tnoreorder\n\t"            \
-	"sync\n\t"                       \
-	".set\treorder"                  \
-        : /* no output */                \
-	: /* no input */                 \
+#define mb()						\
+__asm__ __volatile__(					\
+	"# prevent instructions being moved around\n\t"	\
+	".set\tnoreorder\n\t"				\
+	".set\treorder"					\
+        : /* no output */				\
+	: /* no input */				\
 	: "memory")
 
 #if !defined (__LANGUAGE_ASSEMBLY__)

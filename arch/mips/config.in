@@ -80,7 +80,7 @@ bool 'System V IPC' CONFIG_SYSVIPC
 bool 'Sysctl support' CONFIG_SYSCTL
 
 if [ "$CONFIG_SGI" != "y" ]; then
-  tristate 'Parallel port support' CONFIG_PARPORT
+  tristate 'Parallel port support' CONFIG_PNP_PARPORT
 fi
 
 endmenu

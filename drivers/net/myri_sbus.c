@@ -275,7 +275,7 @@ static void myri_init_rings(struct myri_eth *mp, int from_irq)
 		mp->rx_skbs[i] = skb;
 		skb->dev = dev;
 		skb_put(skb, RX_ALLOC_SIZE);
-		rxd[i].myri_scatters[0].addr = (unsigned int) skb->data;
+		rxd[i].myri_scatters[0].addr = (unsigned long) skb->data;
 		rxd[i].myri_scatters[0].len = RX_ALLOC_SIZE;
 		rxd[i].ctx = i;
 		rxd[i].num_sg = 1;
@@ -429,7 +429,7 @@ static inline void myri_rx(struct myri_eth *mp, struct device *dev)
 			drops++;
 			DRX(("DROP "));
 			mp->enet_stats.rx_dropped++;
-			rxd->myri_scatters[0].addr = (unsigned int) skb->data;
+			rxd->myri_scatters[0].addr = (unsigned long) skb->data;
 			rxd->myri_scatters[0].len = RX_ALLOC_SIZE;
 			rxd->ctx = index;
 			rxd->num_sg = 1;
@@ -450,7 +450,7 @@ static inline void myri_rx(struct myri_eth *mp, struct device *dev)
 			mp->rx_skbs[index] = new_skb;
 			new_skb->dev = dev;
 			skb_put(new_skb, RX_ALLOC_SIZE);
-			rxd->myri_scatters[0].addr = (unsigned int) new_skb->data;
+			rxd->myri_scatters[0].addr = (unsigned long) new_skb->data;
 			rxd->myri_scatters[0].len = RX_ALLOC_SIZE;
 			rxd->ctx = index;
 			rxd->num_sg = 1;
@@ -474,7 +474,7 @@ static inline void myri_rx(struct myri_eth *mp, struct device *dev)
 
 			/* Reuse original ring buffer. */
 			DRX(("reuse "));
-			rxd->myri_scatters[0].addr = (unsigned int) skb->data;
+			rxd->myri_scatters[0].addr = (unsigned long) skb->data;
 			rxd->myri_scatters[0].len = RX_ALLOC_SIZE;
 			rxd->ctx = index;
 			rxd->num_sg = 1;
@@ -618,7 +618,7 @@ static int myri_start_xmit(struct sk_buff *skb, struct device *dev)
 	txd = &sq->myri_txd[entry];
 	mp->tx_skbs[entry] = skb;
 
-	txd->myri_gathers[0].addr = (unsigned int) skb->data;
+	txd->myri_gathers[0].addr = (unsigned long) skb->data;
 	txd->myri_gathers[0].len = len;
 	txd->num_sg = 1;
 	txd->chan = KERNEL_CHANNEL;

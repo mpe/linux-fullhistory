@@ -273,6 +273,9 @@ Ltest_berr:
 	movel	%d2,%a0@
 	lea	%pc@(SYMBOL_NAME(is_medusa)),%a0
 	movel	%d3,%a0@
+	lea     %pc@(Liobase),%a0
+	movel   %d2,%a0@		/* On a Hades the iobase must be set
+					   before opening the serial port. */
 Lnotypetest:
 #endif
 

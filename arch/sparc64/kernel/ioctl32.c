@@ -1,4 +1,4 @@
-/* $Id: ioctl32.c,v 1.13 1997/07/17 02:20:38 davem Exp $
+/* $Id: ioctl32.c,v 1.14 1997/07/17 06:21:12 davem Exp $
  * ioctl32.c: Conversion between 32bit and 64bit native ioctls.
  *
  * Copyright (C) 1997 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -30,6 +30,7 @@
 #include <asm/kbio.h>
 #include <asm/vuid_event.h>
 #include <asm/rtc.h>
+#include <asm/openpromio.h>
 
 /* As gcc will warn about casting u32 to some ptr, we have to cast it to
  * unsigned long first, and that's what is A() for.
@@ -696,6 +697,22 @@ asmlinkage int sys32_ioctl(unsigned int fd, unsigned int cmd, u32 arg)
 	/* Little p (/dev/rtc etc.) */
 	case RTCGET:
 	case RTCSET:
+
+	/* OPENPROMIO, SunOS/Solaris only, the NetBSD one's have
+	 * embedded pointers in the arg which we'd need to clean up...
+	 */
+	case OPROMGETOPT:
+	case OPROMSETOPT:
+	case OPROMNXTOPT:
+	case OPROMSETOPT2:
+	case OPROMNEXT:
+	case OPROMCHILD:
+	case OPROMGETPROP:
+	case OPROMNXTPROP:
+	case OPROMU2P:
+	case OPROMGETCONS:
+	case OPROMGETFBNAME:
+	case OPROMGETBOOTARGS:
 
 	/* Socket level stuff */
 	case FIOSETOWN:

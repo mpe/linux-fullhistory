@@ -1,0 +1,7 @@
+#!/bin/bash
+
+N=`basename $PWD`
+date=`date +'%y%m%d'`
+cd ../
+mkdir -p dist
+tar -zcf dist/ppc$N-$date.tar.gz -X $N/arch/ppc/ignore $N

@@ -1,4 +1,4 @@
-/* $Id: suncons.c,v 1.66 1997/07/15 09:48:47 jj Exp $
+/* $Id: suncons.c,v 1.67 1997/07/20 05:59:42 davem Exp $
  *
  * suncons.c: Sun SparcStation console support.
  *
@@ -931,7 +931,7 @@ __initfunc(static void
 		leo_setup (&fbinfo [n], n, base, io);
 		break;
 #endif
-#ifdef SUN_FB_CREATOR
+#if defined(SUN_FB_CREATOR) && defined(__sparc_v9__)
 	case FBTYPE_CREATOR:
 		creator_setup (&fbinfo [n], n, con_node, base, io);
 		break;

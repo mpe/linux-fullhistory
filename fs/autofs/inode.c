@@ -172,27 +172,27 @@ struct super_block *autofs_read_super(struct super_block *s, void *data,
 	unlock_super(s);
 	s->s_root = d_alloc_root(iget(s, AUTOFS_ROOT_INO), NULL);
 	if (!s->s_root) {
-		s->s_dev = 0;
-		kfree(sbi);
 		printk("autofs: get root inode failed\n");
+		kfree(sbi);
+		s->s_dev = 0;
 		MOD_DEC_USE_COUNT;
 		return NULL;
 	}
 
 	if ( parse_options(data,&pipefd,&s->s_root->d_inode->i_uid,&s->s_root->d_inode->i_gid,&sbi->oz_pgrp,&minproto,&maxproto) ) {
-		dput(s->s_root);
-		s->s_dev = 0;
-		kfree(sbi);
 		printk("autofs: called with bogus options\n");
+		dput(s->s_root);
+		kfree(sbi);
+		s->s_dev = 0;
 		MOD_DEC_USE_COUNT;
 		return NULL;
 	}
 
 	if ( minproto > AUTOFS_PROTO_VERSION || maxproto < AUTOFS_PROTO_VERSION ) {
-		dput(s->s_root);
-		s->s_dev = 0;
-		kfree(sbi);
 		printk("autofs: kernel does not match daemon version\n");
+		dput(s->s_root);
+		kfree(sbi);
+		s->s_dev = 0;
 		MOD_DEC_USE_COUNT;
 		return NULL;
 	}
@@ -207,8 +207,8 @@ struct super_block *autofs_read_super(struct super_block *s, void *data,
 			printk("autofs: could not open pipe file descriptor\n");
 		}
 		dput(s->s_root);
-		s->s_dev = 0;
 		kfree(sbi);
+		s->s_dev = 0;
 		MOD_DEC_USE_COUNT;
 		return NULL;
 	}

@@ -1,6 +1,8 @@
 #ifndef _PPC_BYTEORDER_H
 #define _PPC_BYTEORDER_H
 
+#include <asm/types.h>
+
 #ifndef __BIG_ENDIAN
 #define __BIG_ENDIAN
 #endif
@@ -16,21 +18,50 @@
 
 #define __htonl(x) ntohl(x)
 #define __htons(x) ntohs(x)
+
+#define __constant_ntohs(x) ntohs(x)
+#define __constant_ntohl(x) ntohl(x)
 #define __constant_htonl(x) ntohl(x)
 #define __constant_htons(x) ntohs(x)
 
 #ifdef __KERNEL__
-
-/* Convert from CPU byte order, to specified byte order. */
-extern __inline__ __u16 cpu_to_le16(__u16 value)
+/*
+ * 16 and 32 bit little-endian loads and stores.
+ */
+extern inline unsigned ld_le16(volatile unsigned short *addr)
 {
-	return (value >> 8) | (value << 8);
+	unsigned val;
+
+	asm volatile("lhbrx %0,0,%1" : "=r" (val) : "r" (addr));
+	return val;
 }
 
+extern inline void st_le16(volatile unsigned short *addr, unsigned val)
+{
+	asm volatile("sthbrx %0,0,%1" : : "r" (val), "r" (addr) : "memory");
+}
+
+extern inline unsigned ld_le32(volatile unsigned *addr)
+{
+	unsigned val;
+
+	asm volatile("lwbrx %0,0,%1" : "=r" (val) : "r" (addr));
+	return val;
+}
+
+extern inline void st_le32(volatile unsigned *addr, unsigned val)
+{
+	asm volatile("stwbrx %0,0,%1" : : "r" (val), "r" (addr) : "memory");
+}
+
+
+extern __inline__ __u16 cpu_to_le16(__u16 value)
+{
+	return ld_le16(&value);
+}
 extern __inline__ __u32 cpu_to_le32(__u32 value)
 {
-	return((value>>24) | ((value>>8)&0xff00) |
-	       ((value<<8)&0xff0000) | (value<<24));
+	return ld_le32(&value);
 }
 #define cpu_to_be16(x)  (x)
 #define cpu_to_be32(x)  (x)
@@ -38,33 +69,33 @@ extern __inline__ __u32 cpu_to_le32(__u32 value)
 /* The same, but returns converted value from the location pointer by addr. */
 extern __inline__ __u16 cpu_to_le16p(__u16 *addr)
 {
-	return cpu_to_le16(*addr);
+	return ld_le16(addr);
 }
 
 extern __inline__ __u32 cpu_to_le32p(__u32 *addr)
 {
-	return cpu_to_le32(*addr);
+	return ld_le32(addr);
 }
 
 extern __inline__ __u16 cpu_to_be16p(__u16 *addr)
 {
-	return cpu_to_be16(*addr);
+	return *addr;
 }
 
 extern __inline__ __u32 cpu_to_be32p(__u32 *addr)
 {
-	return cpu_to_be32(*addr);
+	return *addr;
 }
 
 /* The same, but do the conversion in situ, ie. put the value back to addr. */
 extern __inline__ void cpu_to_le16s(__u16 *addr)
 {
-	*addr = cpu_to_le16(*addr);
+	st_le16(addr,*addr);
 }
 
 extern __inline__ void cpu_to_le32s(__u32 *addr)
 {
-	*addr = cpu_to_le32(*addr);
+	st_le32(addr,*addr);
 }
 
 #define cpu_to_be16s(x) do { } while (0)
@@ -86,5 +117,12 @@ extern __inline__ void cpu_to_le32s(__u32 *addr)
 #define be16_to_cpus(x) cpu_to_be16s(x)
 #define be32_to_cpus(x) cpu_to_be32s(x)
 
+
 #endif /* __KERNEL__ */
 #endif /* !(_PPC_BYTEORDER_H) */
+
+
+
+
+
+

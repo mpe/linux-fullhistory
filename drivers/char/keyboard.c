@@ -37,6 +37,7 @@
 #include <linux/kbd_diacr.h>
 #include <linux/vt_kern.h>
 #include <linux/kbd_ll.h>
+#include <linux/sysrq.h>
 
 #define SIZE(x) (sizeof(x)/sizeof((x)[0]))
 
@@ -148,8 +149,6 @@ static unsigned char handle_diacr(unsigned char);
 struct pt_regs * kbd_pt_regs;
 
 #ifdef CONFIG_MAGIC_SYSRQ
-#define SYSRQ_KEY 0x54
-extern void handle_sysrq(int, struct pt_regs *, struct kbd_struct *, struct tty_struct *);
 static int sysrq_pressed;
 #endif
 
@@ -239,7 +238,7 @@ void handle_scancode(unsigned char scancode)
 		return;
 	} else if (sysrq_pressed) {
 		if (!up_flag)
-			handle_sysrq(keycode, kbd_pt_regs, kbd, tty);
+			handle_sysrq(kbd_sysrq_xlate[keycode], kbd_pt_regs, kbd, tty);
 		return;
 	}
 #endif

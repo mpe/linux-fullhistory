@@ -1,10 +1,11 @@
-/* $Id: ultra.S,v 1.8 1997/07/15 05:35:50 davem Exp $
+/* $Id: ultra.S,v 1.9 1997/07/24 12:15:08 davem Exp $
  * ultra.S: Don't expand these all over the place...
  *
  * Copyright (C) 1997 David S. Miller (davem@caip.rutgers.edu)
  */
 
 #include <asm/asi.h>
+#include <asm/pgtable.h>
 #include <asm/spitfire.h>
 
 	/* All callers check mm->context != NO_CONTEXT for us. */

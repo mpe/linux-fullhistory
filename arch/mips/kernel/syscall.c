@@ -131,20 +131,21 @@ asmlinkage int sys_clone(struct pt_regs *regs)
  */
 asmlinkage int sys_execve(struct pt_regs *regs)
 {
-	int res;
+	int error;
 	char * filename;
 
 	lock_kernel();
-	res = getname((char *) (long)regs->regs[4], &filename);
-	if (res)
+	filename = getname((char *) (long)regs->regs[4]);
+	error = PTR_ERR(filename);
+	if (IS_ERR(filename))
 		goto out;
-	res = do_execve(filename, (char **) (long)regs->regs[5],
-	                (char **) (long)regs->regs[6], regs);
+	error = do_execve(filename, (char **) (long)regs->regs[5],
+	                  (char **) (long)regs->regs[6], regs);
 	putname(filename);
 
 out:
 	unlock_kernel();
-	return res;
+	return error;
 }
 
 /*

@@ -210,7 +210,7 @@ typedef struct {
 #define JAZZ_SERIAL2_IRQ        4
 #define JAZZ_PARALLEL_IRQ       5
 #define JAZZ_FLOPPY_IRQ         6 /* needs to be consistent with floppy driver! */
-
+#define JAZZ_SCSI_INTERRUPT     12
 
 /*
  * JAZZ DMA Channels

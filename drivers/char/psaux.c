@@ -53,6 +53,7 @@
 #include <asm/io.h>
 #include <asm/uaccess.h>
 #include <asm/system.h>
+#include <asm/semaphore.h>
 
 #include <linux/config.h>
 
@@ -141,19 +142,7 @@ static int poll_aux_status(void)
 		schedule();
 		retries++;
 	}
-	return !(retries==MAX_RETRIES);
-}
-
-static int poll_aux_status_nosleep(void)
-{
-	int retries = 0;
-
-	while ((inb(KBD_STATUS_REG) & (KBD_STAT_IBF | KBD_STAT_OBF)) && retries < 1000000) {
- 		if ((inb_p(KBD_STATUS_REG) & AUX_STAT_OBF) == AUX_STAT_OBF)
-			inb_p(KBD_DATA_REG);
-		retries++;
-	}
-	return !(retries == 1000000);
+	return (retries < MAX_RETRIES);
 }
 
 /*
@@ -173,18 +162,10 @@ static void aux_write_dev(int val)
  */
 
 #ifdef INITIALIZE_DEVICE
-__initfunc(static void aux_write_dev_nosleep(int val))
-{
-	poll_aux_status_nosleep();
-	outb_p(KBD_CCMD_WRITE_MOUSE, KBD_CNTL_REG);
-	poll_aux_status_nosleep();
-	outb_p(val, KBD_DATA_REG);
-}
-
 __initfunc(static int aux_write_ack(int val))
 {
-	aux_write_dev_nosleep(val);
-	poll_aux_status_nosleep();
+	aux_write_dev(val);
+	poll_aux_status();
 
 	if ((inb(KBD_STATUS_REG) & AUX_STAT_OBF) == AUX_STAT_OBF)
 	{
@@ -204,6 +185,31 @@ static void aux_write_cmd(int val)
 	outb_p(KBD_CCMD_WRITE_MODE, KBD_CNTL_REG);
 	poll_aux_status();
 	outb_p(val, KBD_DATA_REG);
+}
+
+/*
+ * AUX handler critical section start and end.
+ * 
+ * Only one process can be in the critical section and all keyboard sends are
+ * deferred as long as we're inside. This is necessary as we may sleep when
+ * waiting for the keyboard controller and other processes / BH's can
+ * preempt us. Please note that the input buffer must be flushed when
+ * aux_end_atomic() is called and the interrupt is no longer enabled as not
+ * doing so might cause the keyboard driver to ignore all incoming keystrokes.
+ */
+
+static struct semaphore aux_sema4 = MUTEX;
+
+static inline void aux_start_atomic(void)
+{
+	down(&aux_sema4);
+	disable_bh(KEYBOARD_BH);
+}
+
+static inline void aux_end_atomic(void)
+{
+	enable_bh(KEYBOARD_BH);
+	up(&aux_sema4);
 }
 
 /*
@@ -236,14 +242,12 @@ static int release_aux(struct inode * inode, struct file * file)
 	fasync_aux(inode, file, 0);
 	if (--aux_count)
 		return 0;
-	/* disable kbd bh to avoid mixing of cmd bytes */
-	disable_bh(KEYBOARD_BH);
+	aux_start_atomic();
 	aux_write_cmd(AUX_INTS_OFF);			    /* Disable controller ints */
 	poll_aux_status();
 	outb_p(KBD_CCMD_MOUSE_DISABLE, KBD_CNTL_REG);	    /* Disable Aux device */
 	poll_aux_status();
-	/* reenable kbd bh */
-	enable_bh(KEYBOARD_BH);
+	aux_end_atomic();
 #ifdef CONFIG_MCA
 	free_irq(AUX_IRQ, inode);
 #else
@@ -262,10 +266,14 @@ static int open_aux(struct inode * inode, struct file * file)
 {
 	if (!aux_present)
 		return -ENODEV;
-	if (aux_count++)
+	aux_start_atomic();
+	if (aux_count++) {
+		aux_end_atomic();
 		return 0;
-	if (!poll_aux_status()) {
+	}
+	if (!poll_aux_status()) {		/* FIXME: Race condition */
 		aux_count--;
+		aux_end_atomic();
 		return -EBUSY;
 	}
 	queue->head = queue->tail = 0;		/* Flush input queue */
@@ -275,18 +283,16 @@ static int open_aux(struct inode * inode, struct file * file)
 	if (request_irq(AUX_IRQ, aux_interrupt, 0, "PS/2 Mouse", NULL)) {
 #endif
 		aux_count--;
+		aux_end_atomic();
 		return -EBUSY;
 	}
 	MOD_INC_USE_COUNT;
-	/* disable kbd bh to avoid mixing of cmd bytes */
-	disable_bh(KEYBOARD_BH);
 	poll_aux_status();
 	outb_p(KBD_CCMD_MOUSE_ENABLE, KBD_CNTL_REG);	    /* Enable Aux */
 	aux_write_dev(AUX_ENABLE_DEV);			    /* Enable aux device */
 	aux_write_cmd(AUX_INTS_ON);			    /* Enable controller ints */
 	poll_aux_status();
-	/* reenable kbd bh */
-	enable_bh(KEYBOARD_BH);
+	aux_end_atomic();
 
 	aux_ready = 0;
 	return 0;
@@ -304,9 +310,7 @@ static long write_aux(struct inode * inode, struct file * file,
 	if (count) {
 		int written = 0;
 
-		/* disable kbd bh to avoid mixing of cmd bytes */
-		disable_bh(KEYBOARD_BH);
-
+		aux_start_atomic();
 		do {
 			char c;
 			if (!poll_aux_status())
@@ -318,8 +322,7 @@ static long write_aux(struct inode * inode, struct file * file,
 			outb_p(c, KBD_DATA_REG);
 			written++;
 		} while (--count);
-		/* reenable kbd bh */
-		enable_bh(KEYBOARD_BH);
+		aux_end_atomic();
 		retval = -EIO;
 		if (written) {
 			retval = written;
@@ -618,6 +621,7 @@ __initfunc(int psaux_init(void))
 	queue->head = queue->tail = 0;
 	queue->proc_list = NULL;
 	if (!qp_found) {
+		aux_start_atomic();
 #ifdef INITIALIZE_DEVICE
 		outb_p(KBD_CCMD_MOUSE_ENABLE, KBD_CNTL_REG); /* Enable Aux */
 		aux_write_ack(AUX_SET_SAMPLE);
@@ -625,13 +629,15 @@ __initfunc(int psaux_init(void))
 		aux_write_ack(AUX_SET_RES);
 		aux_write_ack(3);			/* 8 counts per mm */
 		aux_write_ack(AUX_SET_SCALE21);		/* 2:1 scaling */
-		poll_aux_status_nosleep();
+		poll_aux_status();
 #endif /* INITIALIZE_DEVICE */
 		outb_p(KBD_CCMD_MOUSE_DISABLE, KBD_CNTL_REG); /* Disable Aux device */
-		poll_aux_status_nosleep();
-		outb_p(KBD_CCMD_WRITE_MODE, KBD_CNTL_REG);
-		poll_aux_status_nosleep();
-		outb_p(AUX_INTS_OFF, KBD_DATA_REG);                
+		poll_aux_status();
+		outb_p(KBD_CCMD_WRITE_MODE, KBD_CNTL_REG);    /* Disable controller interrupts */
+		poll_aux_status();
+		outb_p(AUX_INTS_OFF, KBD_DATA_REG);
+		poll_aux_status();
+		aux_end_atomic();
 	}
 	return 0;
 }

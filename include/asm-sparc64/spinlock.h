@@ -56,6 +56,14 @@ typedef struct { } rwlock_t;
 /* All of these locking primitives are expected to work properly
  * even in an RMO memory model, which currently is what the kernel
  * runs in.
+ *
+ * There is another issue.  Because we play games to save cycles
+ * in the non-contention case, we need to be extra careful about
+ * branch targets into the "spinning" code.  They live in their
+ * own section, but the newer V9 branches have a shorter range
+ * than the traditional 32-bit sparc branch variants.  The rule
+ * is that the branches that go into and out of the spinner sections
+ * must be pre-V9 branches.
  */
 
 typedef unsigned char spinlock_t;
@@ -67,13 +75,15 @@ extern __inline__ void spin_lock(spinlock_t *lock)
 {
 	__asm__ __volatile__("
 1:	ldstub		[%0], %%g2
-	brnz,a,pn	%%g2, 2f
-	 ldub		[%0], %%g2
-	membar		#LoadLoad | #LoadStore
+	brz,pt		%%g2, 2f
+	 membar		#LoadLoad | #LoadStore
+	b,a		%%xcc, 3f
+2:
 	.text		2
-2:	brnz,a,pt	2b
+3:	ldub		[%0], %%g2
+4:	brnz,a,pt	%%g2, 4b
 	 ldub		[%0], %%g2
-	b,a,pt		%%xcc, 1b
+	b,a		1b
 	.previous
 "	: /* no outputs */
 	: "r" (lock)
@@ -104,14 +114,16 @@ extern __inline__ void spin_lock_irq(spinlock_t *lock)
 {
 	__asm__ __volatile__("
 	wrpr		%%g0, 15, %%pil
-	ldstub		[%0], %%g2
-	brnz,a,pn	%%g2, 2f
-	 ldub		[%0], %%g2
-	membar		#LoadLoad | #LoadStore
+1:	ldstub		[%0], %%g2
+	brz,pt		%%g2, 2f
+	 membar		#LoadLoad | #LoadStore
+	b,a		3f
+2:
 	.text		2
-2:	brnz,a,pt	2b
+3:	ldub		[%0], %%g2
+4:	brnz,a,pt	%%g2, 4b
 	 ldub		[%0], %%g2
-	b,a,pt		%%xcc, 1b
+	b,a		1b
 	.previous
 "	: /* no outputs */
 	: "r" (lock)
@@ -133,18 +145,20 @@ extern __inline__ void spin_unlock_irq(spinlock_t *lock)
 do {	register spinlock_t *lp asm("g1");			\
 	lp = lock;						\
 	__asm__ __volatile__(					\
-	"	rdpr		%%pil, %0\n\t"			\
-	"	wrpr		%%g0, 15, %%pil\n\t"		\
-	"1:	ldstub		[%1], %%g2\n\t"			\
-	"	brnz,a,pnt	%%g2, 2f\n\t"			\
-	"	 ldub		[%1], %%g2\n\t"			\
-	"	membar		#LoadLoad | #LoadStore\n\t"	\
-	"	.text		2\n\t"				\
-	"2:	brnz,a,pt	%%g2, 2b\n\t"			\
-	"	 ldub		[%1], %%g2\n\t"			\
-	"	b,a,pt		%%xcc, 1b\n\t"			\
+	"\n	rdpr		%%pil, %0\n"			\
+	"	wrpr		%%g0, 15, %%pil\n"		\
+	"1:	ldstub		[%1], %%g2\n"			\
+	"	brz,pt		%%g2, 2f\n"			\
+	"	 membar		#LoadLoad | #LoadStore\n"	\
+	"	b,a		3f\n"				\
+	"2:\n"							\
+	"	.text		2\n"				\
+	"3:	ldub		[%1], %%g2\n"			\
+	"4:	brnz,a,pt	%%g2, 4b\n"			\
+	"	 ldub		[%1], %%g2\n"			\
+	"	b,a		1b\n"				\
 	"	.previous\n"					\
-	: "=r" (flags)						\
+	: "=&r" (flags)						\
 	: "r" (lp)						\
 	: "g2", "memory");					\
 } while(0)
@@ -169,19 +183,20 @@ extern __inline__ void read_lock(rwlock_t *rw)
 {
 	__asm__ __volatile__("
 	ldx		[%0], %%g2
-1:
-	brlz,pn		%%g2, 2f
-4:	 add		%%g2, 1, %%g3
-	casx		[%0], %%g2, %%g3
+1:	brgez,pt	%%g2, 4f
+	 add		%%g2, 1, %%g3
+	b,a		2f
+4:	casx		[%0], %%g2, %%g3
 	cmp		%%g2, %%g3
 	bne,a,pn	%%xcc, 1b
-	 ldx		[%0],%%g2
+	 ldx		[%0], %%g2
 	membar		#LoadLoad | #LoadStore
 	.text		2
 2:	ldx		[%0], %%g2
-3:	brlz,pt		%%g2, 3b
+3:	brlz,a,pt	%%g2, 3b
 	 ldx		[%0], %%g2
-	b,a,pt		%%xcc, 4b
+	b		4b
+	 add		%%g2, 1, %%g3
 	.previous
 "	: /* no outputs */
 	: "r" (rw)
@@ -193,8 +208,7 @@ extern __inline__ void read_unlock(rwlock_t *rw)
 	__asm__ __volatile__("
 	membar		#StoreStore | #LoadStore
 	ldx		[%0], %%g2
-1:
-	sub		%%g2, 1, %%g3
+1:	sub		%%g2, 1, %%g3
 	casx		[%0], %%g2, %%g3
 	cmp		%%g2, %%g3
 	bne,a,pn	%%xcc, 1b
@@ -208,31 +222,34 @@ extern __inline__ void write_lock(rwlock_t *rw)
 {
 	__asm__ __volatile__("
 	sethi		%%uhi(0x8000000000000000), %%g5
-	ldx		[%0] %%g2
+	ldx		[%0], %%g2
 	sllx		%%g5, 32, %%g5
-1:
-	brlz,pn		%%g2, 5f
-4:	 or		%%g2, %%g5, %%g3
-	casx		[%0], %%g2, %%g3
+1:	brgez,pt	%%g2, 4f
+	 or		%%g2, %%g5, %%g3
+	b,a		5f
+4:	casx		[%0], %%g2, %%g3
 	cmp		%%g2, %%g3
 	bne,a,pn	%%xcc, 1b
 	 ldx		[%0], %%g2
 	andncc		%%g3, %%g5, %%g0
-	bne,a,pn	%%xcc, 3f
-	 ldx		[%0], %%g2
-	membar		#LoadLoad | #LoadStore
+	be,pt		%%xcc, 2f
+	 membar		#LoadLoad | #LoadStore
+	b,a		7f
+2:
 	.text		2
-3:
-	andn		%%g2, %%g5, %%g3
+7:	ldx		[%0], %%g2
+3:	andn		%%g2, %%g5, %%g3
 	casx		[%0], %%g2, %%g3
 	cmp		%%g2, %%g3
 	bne,a,pn	%%xcc, 3b
 	 ldx		[%0], %%g2
 	membar		#LoadLoad | #LoadStore
 5:	ldx		[%0], %%g2
-6:	brlz,pt		%%g2, 6b
+6:	brlz,a,pt	%%g2, 6b
 	 ldx		[%0], %%g2
-	b,a,pt		%%xcc, 4b
+	b		4b
+	 or		%%g2, %%g5, %%g3
+	.previous
 "	: /* no outputs */
 	: "r" (rw)
 	: "g2", "g3", "g5", "memory", "cc");
@@ -245,8 +262,7 @@ extern __inline__ void write_unlock(rwlock_t *rw)
 	sethi		%%uhi(0x8000000000000000), %%g5
 	ldx		[%0], %%g2
 	sllx		%%g5, 32, %%g5
-1:
-	andn		%%g2, %%g5, %%g3
+1:	andn		%%g2, %%g5, %%g3
 	casx		[%0], %%g2, %%g3
 	cmp		%%g2, %%g3
 	bne,a,pn	%%xcc, 1b

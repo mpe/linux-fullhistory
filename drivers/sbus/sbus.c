@@ -385,5 +385,12 @@ sbus_init(unsigned long memory_start, unsigned long memory_end))
 	if (sparc_cpu_model == sun4u)
 		auxio_probe ();
 #endif
+#ifdef __sparc_v9__
+	if (sparc_cpu_model == sun4u) {
+		extern void sun4u_start_timers(void);
+
+		sun4u_start_timers();
+	}
+#endif
 	return memory_start;
 }

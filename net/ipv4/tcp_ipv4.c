@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_ipv4.c,v 1.51 1997/07/04 23:35:02 freitag Exp $
+ * Version:	$Id: tcp_ipv4.c,v 1.52 1997/07/23 15:19:10 freitag Exp $
  *
  *		IPv4 specific functions
  *
@@ -1205,7 +1205,7 @@ static inline struct sock *tcp_v4_check_req(struct sock *sk, struct sk_buff *skb
 
 			/* Check for syn retransmission */
 			flg = *(((u32 *)skb->h.th) + 3);
-			flg &= __constant_htonl(0x002f0000);
+			flg &= __constant_htonl(0x001f0000);
 			if ((flg == __constant_htonl(0x00020000)) &&
 			    (!after(skb->seq, req->rcv_isn))) {
 				/*	retransmited syn

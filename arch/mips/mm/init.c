@@ -156,7 +156,6 @@ static inline void
 zeropage(unsigned long page)
 {
 	flush_page_to_ram(page);
-	sync_mem();
 	__zeropage(page);
 }
 

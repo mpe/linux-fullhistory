@@ -1,4 +1,4 @@
-/*  $Id: setup.c,v 1.10 1997/07/08 11:07:47 jj Exp $
+/*  $Id: setup.c,v 1.11 1997/07/24 12:15:05 davem Exp $
  *  linux/arch/sparc64/kernel/setup.c
  *
  *  Copyright (C) 1995,1996  David S. Miller (davem@caip.rutgers.edu)
@@ -405,11 +405,7 @@ extern char *mmu_info(void);
 
 int get_cpuinfo(char *buffer)
 {
-#ifndef __SMP__
-	int cpuid=0;
-#else
-#error SMP not supported on sparc64 yet
-#endif
+	int cpuid=smp_processor_id();
 
 	return sprintf(buffer, "cpu\t\t: %s\n"
             "fpu\t\t: %s\n"

@@ -413,18 +413,20 @@ the frame following the ack. (The assumption being that the acks are
 because a single frame in the data stream has been lost). Given a 
 mathematician with some queue theory you can show this allows you to 
 lose one frame per window full of data without measurable speed loss.
+[done]
 
 4.	RFC1323. These are the extensions for very fast nets.
 RFC1323 will be useful for Linux talking to systems over 100Mb/sec
 ethernet and over ATM as it allows large windows and protects from some
 potential high speed TCP problems.
+[In progress]
 
 6.	Delayed ack. This is mostly supported but not actually set up and
 used yet. Basically ack frames are held back 1/10th of a second in the hope
 that two acks can be merged into one or for interactive use the ack can
 piggyback on the next character typed (great improvement on 2400 baud
 modems). Johannes Stille did some work on this about 0.99.13 but it never
-got merged in. [Pedro Roque]
+got merged in. [Pedro Roque] [Done, but needs fixing]
 
 7.	One on my tempting project list. Add an extra (unofficial - but so
 is SLIP6) SLIP mode that does packet data compression [maybe use the code
@@ -439,7 +441,7 @@ driver but that's for an internal project and its general release is still
 a maybe (so is finishing it ;))][Jim Freeman is working on Frame Relay as is
 Mike McLagan][Fritz Elfert is doing the isdn4linux kit].
  
-11.	IP over SCSI.
+11.	IP over SCSI. [worked on]
 
 14.	Bidirectional PLIP. Also PLIP for the newer style parallel ports.
 

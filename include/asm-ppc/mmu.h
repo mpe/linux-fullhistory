@@ -32,42 +32,68 @@ typedef struct _PTE
 
 /* Segment Register */
 typedef struct _SEGREG
-   {
-      unsigned long t:1;	/* Normal or I/O  type */
-      unsigned long ks:1;	/* Supervisor 'key' (normally 0) */
-      unsigned long kp:1;	/* User 'key' (normally 1) */
-      unsigned long n:1;	/* No-execute */
-      unsigned long :4;		/* Unused */
-      unsigned long vsid:24;	/* Virtual Segment Identifier */
-   } SEGREG;
+{
+  unsigned long t:1;	/* Normal or I/O  type */
+  unsigned long ks:1;	/* Supervisor 'key' (normally 0) */
+  unsigned long kp:1;	/* User 'key' (normally 1) */
+  unsigned long n:1;	/* No-execute */
+  unsigned long :4;		/* Unused */
+  unsigned long vsid:24;	/* Virtual Segment Identifier */
+} SEGREG;
 
 /* Block Address Translation (BAT) Registers */
+typedef struct _P601_BATU
+{
+  unsigned long bepi:15;	/* Effective page index (virtual address) */
+  unsigned long :8;		/* unused */
+  unsigned long w:1;
+  unsigned long i:1;		/* Cache inhibit */
+  unsigned long m:1;		/* Memory coherence */
+  unsigned long vs:1;	/* Supervisor valid */
+  unsigned long vp:1;	/* User valid */
+  unsigned long pp:2;	/* Page access protections */
+} P601_BATU;
+
 typedef struct _BATU		/* Upper part of BAT */
-   {
-      unsigned long bepi:15;	/* Effective page index (virtual address) */
-      unsigned long :4;		/* Unused */
-      unsigned long bl:11;	/* Block size mask */
-      unsigned long vs:1;	/* Supervisor valid */
-      unsigned long vp:1;	/* User valid */
-   } BATU;   
+{
+  unsigned long bepi:15;	/* Effective page index (virtual address) */
+  unsigned long :4;		/* Unused */
+  unsigned long bl:11;	/* Block size mask */
+  unsigned long vs:1;	/* Supervisor valid */
+  unsigned long vp:1;	/* User valid */
+} BATU;   
+
+typedef struct _P601_BATL
+{
+  unsigned long brpn:15;	/* Real page index (physical address) */
+  unsigned long :10;		/* Unused */
+  unsigned long v:1;		/* valid/invalid */
+  unsigned long bl:6;		/* Block size mask */
+} P601_BATL;
 
 typedef struct _BATL		/* Lower part of BAT */
-   {
-      unsigned long brpn:15;	/* Real page index (physical address) */
-      unsigned long :10;	/* Unused */
-      unsigned long w:1;	/* Write-thru cache */
-      unsigned long i:1;	/* Cache inhibit */
-      unsigned long m:1;	/* Memory coherence */
-      unsigned long g:1;	/* Guarded (MBZ) */
-      unsigned long :1;		/* Unused */
-      unsigned long pp:2;	/* Page access protections */
-   } BATL;
+{
+  unsigned long brpn:15;	/* Real page index (physical address) */
+  unsigned long :10;		/* Unused */
+  unsigned long w:1;	/* Write-thru cache */
+  unsigned long i:1;	/* Cache inhibit */
+  unsigned long m:1;	/* Memory coherence */
+  unsigned long g:1;	/* Guarded (MBZ) */
+  unsigned long :1;		/* Unused */
+  unsigned long pp:2;	/* Page access protections */
+} BATL;
 
 typedef struct _BAT
-   {
-      BATU batu;		/* Upper register */
-      BATL batl;		/* Lower register */
-   } BAT;
+{
+  BATU batu;		/* Upper register */
+  BATL batl;		/* Lower register */
+} BAT;
+
+typedef struct _P601_BAT
+{
+  P601_BATU batu;		/* Upper register */
+  P601_BATL batl;		/* Lower register */
+} P601_BAT;
 
 /* Block size masks */
 #define BL_128K	0x000
@@ -118,15 +144,6 @@ typedef struct _MMU_context
       pte	**pmap;		/* Two-level page-map structure */
    } MMU_context;
 
-#if 0
-BAT	ibat[4];	/* Instruction BAT images */
-BAT	dbat[4];	/* Data BAT images */
-PTE	*hash_table;	/* Hardware hashed page table */
-int	hash_table_size;
-int	hash_table_mask;
-unsigned long sdr;	/* Hardware image of SDR */
-#endif   
-
 /* Used to set up SDR register */
 #define HASH_TABLE_SIZE_64K	0x00010000
 #define HASH_TABLE_SIZE_128K	0x00020000
@@ -142,7 +159,5 @@ unsigned long sdr;	/* Hardware image of SDR */
 #define HASH_TABLE_MASK_1M	0x00F   
 #define HASH_TABLE_MASK_2M	0x01F   
 #define HASH_TABLE_MASK_4M	0x03F   
-
-extern inline int MMU_hash_page(struct thread_struct *tss, unsigned long va, pte *pg);
 
 #endif

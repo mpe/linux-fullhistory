@@ -26,6 +26,6 @@ struct pc110pad_params {
 #define PC110PAD_IOCTL_TYPE		0x9a
 
 #define PC110PADIOCGETP _IOR(PC110PAD_IOCTL_TYPE, 0, struct pc110pad_params)
-#define PC110PADIOCSETP _IOR(PC110PAD_IOCTL_TYPE, 1, struct pc110pad_params)
+#define PC110PADIOCSETP _IOW(PC110PAD_IOCTL_TYPE, 1, struct pc110pad_params)
  
 #endif /* _PC110PAD_H */

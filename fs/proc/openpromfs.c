@@ -1,4 +1,4 @@
-/* $Id: openpromfs.c,v 1.18 1997/07/17 02:24:01 davem Exp $
+/* $Id: openpromfs.c,v 1.20 1997/07/22 06:40:07 davem Exp $
  * openpromfs.c: /proc/openprom handling routines
  *
  * Copyright (C) 1996,1997 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -54,12 +54,10 @@ static struct openpromfs_dev **devices;
 #define NODE2INO(node) (node + PROC_OPENPROM_FIRST)
 #define NODEP2INO(no) (no + PROC_OPENPROM_FIRST + last_node)
 
-static int openpromfs_create (struct inode *, const char *, int, int,
-			      struct inode **);
+static int openpromfs_create (struct inode *, struct dentry *, int);
 static int openpromfs_readdir(struct inode *, struct file *, void *, filldir_t);
-static int openpromfs_lookup(struct inode *, const char *, int,
-			     struct inode **);
-static int openpromfs_unlink (struct inode *, const char *, int);
+static int openpromfs_lookup(struct inode *, struct dentry *dentry);
+static int openpromfs_unlink (struct inode *, struct dentry *dentry);
 
 static long nodenum_read(struct inode *inode, struct file *file,
 			 char *buf, unsigned long count)
@@ -602,8 +600,7 @@ static int lookup_children(u16 n, const char * name, int len)
 	return 0;
 }
 
-static int openpromfs_lookup(struct inode * dir, const char * name, int len,
-	struct inode ** result)
+static int openpromfs_lookup(struct inode * dir, struct dentry *dentry)
 {
 	int ino = 0;
 #define OPFSL_DIR	0
@@ -613,40 +610,21 @@ static int openpromfs_lookup(struct inode * dir, const char * name, int len,
 	int type = 0;
 	char buffer[128];
 	char *p;
+	const char *name;
 	u32 n;
 	u16 dirnode;
+	unsigned int len;
 	int i;
 	struct inode *inode;
 	struct openpromfs_dev *d = NULL;
 	char buffer2[64];
 	
-	*result = NULL;
-	if (!dir || !S_ISDIR(dir->i_mode)) {
-		iput(dir);
-		return -ENOTDIR;
-	}
-	*result = dir;
-	if (!len) return 0;
-	if (name [0] == '.') {
-		if (len == 1)
-			return 0;
-		if (name [1] == '.' && len == 2) {
-			if (dir->i_ino == PROC_OPENPROM) {
-				inode = proc_get_inode (dir->i_sb,
-							PROC_ROOT_INO,
-							&proc_root);
-				iput(dir);
-				if (!inode)
-					return -EINVAL;
-				*result = inode;
-				return 0;
-			}
-			ino = NODE2INO(NODE(dir->i_ino).parent);
-			type = OPFSL_DIR;
-		} else if (len == 5 && !strncmp (name + 1, "node", 4)) {
-			ino = NODEP2INO(NODE(dir->i_ino).first_prop);
-			type = OPFSL_NODENUM;
-		}
+	inode = NULL;
+	name = dentry->d_name.name;
+	len = dentry->d_name.len;
+	if (name [0] == '.' && len == 5 && !strncmp (name + 1, "node", 4)) {
+		ino = NODEP2INO(NODE(dir->i_ino).first_prop);
+		type = OPFSL_NODENUM;
 	}
 	if (!ino) {
 		u16 node = NODE(dir->i_ino).child;
@@ -712,13 +690,10 @@ static int openpromfs_lookup(struct inode * dir, const char * name, int len,
 		ino = lookup_children (NODE(dir->i_ino).child, name, len);
 		if (ino)
 			type = OPFSL_DIR;
-		else {
-			iput(dir);
+		else
 			return -ENOENT;
-		}
 	}
 	inode = proc_get_inode (dir->i_sb, ino, 0);
-	iput(dir);
 	if (!inode)
 		return -EINVAL;
 	switch (type) {
@@ -762,7 +737,7 @@ static int openpromfs_lookup(struct inode * dir, const char * name, int len,
 		inode->i_rdev = d->rdev;
 		break;
 	}		
-	*result = inode;
+	d_add(dentry, inode);
 	return 0;
 }
 
@@ -858,16 +833,14 @@ static int openpromfs_readdir(struct inode * inode, struct file * filp,
 	return 0;
 }
 
-static int openpromfs_create (struct inode *dir, const char *name, int len, 
-			      int mode, struct inode **result)
+static int openpromfs_create (struct inode *dir, struct dentry *dentry, int mode)
 {
 	char *p;
 	struct inode *inode;
 	
-	*result = NULL;
 	if (!dir)
 		return -ENOENT;
-	if (len > 256) {
+	if (dentry->d_name.len > 256) {
 		iput (dir);
 		return -EINVAL;
 	}
@@ -875,13 +848,13 @@ static int openpromfs_create (struct inode *dir, const char *name, int len,
 		iput (dir);
 		return -EIO;
 	}
-	p = kmalloc (len + 1, GFP_KERNEL);
+	p = kmalloc (dentry->d_name.len + 1, GFP_KERNEL);
 	if (!p) {
 		iput (dir);
 		return -ENOMEM;
 	}
-	strncpy (p, name, len);
-	p [len] = 0;
+	strncpy (p, dentry->d_name.name, dentry->d_name.len);
+	p [dentry->d_name.len] = 0;
 	alias_names [aliases_nodes++] = p;
 	inode = proc_get_inode (dir->i_sb,
 				NODEP2INO(NODE(dir->i_ino).first_prop)
@@ -895,17 +868,19 @@ static int openpromfs_create (struct inode *dir, const char *name, int len,
 	if (inode->i_size < 0) inode->i_size = 0;
 	inode->u.generic_ip = (void *)(long)(((u16)aliases) | 
 			(((u16)(aliases_nodes - 1)) << 16));
-	*result = inode;
+	d_instantiate(dentry, inode);
 	return 0;
 }
 
-static int openpromfs_unlink (struct inode *dir, const char *name, int len)
+static int openpromfs_unlink (struct inode *dir, struct dentry *dentry)
 {
+	unsigned int len;
 	char *p;
+	const char *name;
 	int i;
 	
-	if (!dir)
-		return -ENOENT;
+	name = dentry->d_name.name;
+	len = dentry->d_name.len;
 	for (i = 0; i < aliases_nodes; i++)
 		if ((strlen (alias_names [i]) == len)
 		    && !strncmp (name, alias_names[i], len)) {
@@ -919,7 +894,7 @@ static int openpromfs_unlink (struct inode *dir, const char *name, int len)
 			buffer [10 + len] = 0;
 			prom_feval (buffer);
 		}
-	iput (dir);
+	d_delete(dentry);
 	return 0;
 }
 

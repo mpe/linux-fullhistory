@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp.c,v 1.66 1997/05/31 12:36:39 freitag Exp $
+ * Version:	$Id: tcp.c,v 1.67 1997/07/20 12:46:07 freitag Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -201,26 +201,6 @@
  *		Eric Schenk	:	Fix fast close down bug with
  *					shutdown() followed by close().
  *					
- * To Fix:
- *		Fast path the code. Two things here - fix the window calculation
- *		so it doesn't iterate over the queue, also spot packets with no funny
- *		options arriving in order and process directly.
- *
- *		Rewrite output state machine to use a single queue.
- *		Speed up input assembly algorithm.
- *		RFC1323 - PAWS and window scaling.[Required for IPv6]
- *		User settable/learned rtt/max window/mtu
- *
- *		Change the fundamental structure to a single send queue maintained
- *		by TCP (removing the bogus ip stuff [thus fixing mtu drops on
- *		active routes too]). Cut the queue off in tcp_retransmit/
- *		tcp_transmit.
- *		Change the receive queue to assemble as it goes. This lets us
- *		dispose of most of tcp_sequence, half of tcp_ack and chunks of
- *		tcp_data/tcp_read as well as the window shrink crud.
- *		Separate out duplicated code - tcp_alloc_skb, tcp_build_ack
- *		tcp_queue_skb seem obvious routines to extract.
- *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
  *		as published by the Free Software Foundation; either version
@@ -267,6 +247,9 @@
  * for violations and the like.  tcp.c is just too big... If I say something
  * "does?" or "doesn't?", it means I'm not sure, and will have to hash it out
  * with Alan. -- MS 950903
+ * [Note: Most of the TCP code has been rewriten/redesigned since this 
+ *  RFC1122 check. It is probably not correct anymore. It should be redone 
+ *  before 2.2. -AK]
  *
  * Use of PSH (4.2.2.2)
  *   MAY aggregate data sent without the PSH flag. (does)

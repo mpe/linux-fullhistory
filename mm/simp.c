@@ -6,6 +6,7 @@
  */
 
 #include <linux/simp.h>
+#include <linux/tasks.h>
 #include <linux/smp.h>
 #include <linux/mm.h>
 #include <asm/spinlock.h>
@@ -206,7 +207,6 @@ static void alloc_header(struct simp * simp)
 	hdr->next = simp->usable_list;
 	simp->usable_list = hdr;
 }
-
 
 /* current x86 memcpy() is horribly moving around registers for nothing,
  * is doing unnecessary work if the size is dividable by a power-of-two,

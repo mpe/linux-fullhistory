@@ -13,7 +13,7 @@
 #include <asm/system.h>
 #include <asm/smp.h>
 
-struct prom_cpuinfo linux_cpus[NCPUS];
+struct prom_cpuinfo linux_cpus[NR_CPUS];
 int linux_num_cpus = 0;
 
 extern void cpu_probe(void);

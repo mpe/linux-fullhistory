@@ -1,4 +1,4 @@
-/* $Id: time.c,v 1.3 1997/06/17 13:25:29 jj Exp $
+/* $Id: time.c,v 1.5 1997/07/23 11:32:06 davem Exp $
  * time.c: UltraSparc timer and TOD clock support.
  *
  * Copyright (C) 1997 David S. Miller (davem@caip.rutgers.edu)
@@ -20,6 +20,7 @@
 
 #include <asm/oplib.h>
 #include <asm/mostek.h>
+#include <asm/timer.h>
 #include <asm/irq.h>
 #include <asm/io.h>
 
@@ -35,10 +36,16 @@ static int set_rtc_mmss(unsigned long);
  * NOTE: On SUN5 systems the ticker interrupt comes in using 2
  *       interrupts, one at level14 and one with softint bit 0.
  */
-void timer_interrupt(int irq, void *dev_id, struct pt_regs * regs)
+extern struct sun5_timer *linux_timers;
+
+static void timer_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 {
 	/* last time the cmos clock got updated */
 	static long last_rtc_update=0;
+
+	__asm__ __volatile__("ldx	[%0], %%g0"
+			     : /* no outputs */
+			     : "r" (&((linux_timers)->limit0)));
 
 	do_timer(regs);
 
@@ -239,14 +246,12 @@ __initfunc(static void clock_probe(void))
 
 __initfunc(void time_init(void))
 {
-	extern void init_timers(void (*func)(int, void *, struct pt_regs *));
 	unsigned int year, mon, day, hour, min, sec;
 	struct mostek48t02 *mregs;
 
 	do_get_fast_time = do_gettimeofday;
 
 	clock_probe();
-	init_timers(timer_interrupt);
 
 	mregs = mstk48t02_regs;
 	if(!mregs) {
@@ -264,6 +269,13 @@ __initfunc(void time_init(void))
 	xtime.tv_sec = mktime(year, mon, day, hour, min, sec);
 	xtime.tv_usec = 0;
 	mregs->creg &= ~MSTK_CREG_READ;
+}
+
+extern void init_timers(void (*func)(int, void *, struct pt_regs *));
+
+__initfunc(void sun4u_start_timers(void))
+{
+	init_timers(timer_interrupt);
 }
 
 static __inline__ unsigned long do_gettimeoffset(void)
@@ -286,16 +298,39 @@ static __inline__ unsigned long do_gettimeoffset(void)
 
 void do_gettimeofday(struct timeval *tv)
 {
-	unsigned long flags;
-
-	save_and_cli(flags);
-	*tv = xtime;
-	tv->tv_usec += do_gettimeoffset();
-	if(tv->tv_usec >= 1000000) {
-		tv->tv_usec -= 1000000;
-		tv->tv_sec++;
-	}
-	restore_flags(flags);
+	/* Load doubles must be used on xtime so that what we get
+	 * is guarenteed to be atomic, this is why we can run this
+	 * with interrupts on full blast.  Don't touch this... -DaveM
+	 */
+	__asm__ __volatile__("
+	sethi	%hi(linux_timers), %o1
+	sethi	%hi(xtime), %g2
+	ldx	[%o1 + %lo(linux_timers)], %g3
+1:	ldd	[%g2 + %lo(xtime)], %o4
+	ldx	[%g3], %o1
+	ldd	[%g2 + %lo(xtime)], %o2
+	xor	%o4, %o2, %o2
+	xor	%o5, %o3, %o3
+	orcc	%o2, %o3, %g0
+	bne,pn	%icc, 1b
+	 cmp	%o1, 0
+	bge,pt	%icc, 1f
+	 sethi	%hi(tick), %o3
+	ld	[%o3 + %lo(tick)], %o3
+	sethi	%hi(0x1fffff), %o2
+	or	%o2, %lo(0x1fffff), %o2
+	add	%o5, %o3, %o5
+	and	%o1, %o2, %o1
+1:	add	%o5, %o1, %o5
+	sethi	%hi(1000000), %o2
+	or	%o2, %lo(1000000), %o2
+	cmp	%o5, %o2
+	bl,a,pn	%icc, 1f
+	 st	%o4, [%o0 + 0x0]
+	add	%o4, 0x1, %o4
+	sub	%o5, %o2, %o5
+	st	%o4, [%o0 + 0x0]
+1:	st	%o5, [%o0 + 0x4]");
 }
 
 void do_settimeofday(struct timeval *tv)

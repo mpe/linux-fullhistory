@@ -68,6 +68,8 @@ extern atomic_t __sparc64_bh_counter;
 
 #include <asm/spinlock.h>
 
+extern spinlock_t global_bh_lock;
+
 #define init_bh(nr, routine)				\
 do {	unsigned long flags;				\
 	int ent = nr;					\
@@ -115,13 +117,13 @@ do {	unsigned long flags;				\
 #define softirq_trylock()					\
 ({								\
 	int ret = 1;						\
-	if(atomic_add_return(1, &__sparc_bh_counter) != 1) {	\
-		atomic_dec(&__sparc_bh_counter);		\
+	if(atomic_add_return(1, &__sparc64_bh_counter) != 1) {	\
+		atomic_dec(&__sparc64_bh_counter);		\
 		ret = 0;					\
 	}							\
 	ret;							\
 })
-#define softirq_endlock()	atomic_dec(&__sparc_bh_counter)
+#define softirq_endlock()	atomic_dec(&__sparc64_bh_counter)
 #define clear_active_bhs(mask)				\
 do {	unsigned long flags;				\
 	spin_lock_irqsave(&global_bh_lock, flags);	\

@@ -1,4 +1,4 @@
-/* $Id: creator.c,v 1.7 1997/07/17 02:21:47 davem Exp $
+/* $Id: creator.c,v 1.8 1997/07/22 06:14:12 davem Exp $
  * creator.c: Creator/Creator3D frame buffer driver
  *
  * Copyright (C) 1997 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -235,7 +235,6 @@ ffb_wid_get (fbinfo_t *fb, struct fb_wid_list *wl)
 	struct fb_wid_item wit[30];
 	char *km = NULL;
 	int i, j;
-	u32 l;
 	int err;
 	
 #ifdef CONFIG_SPARC32_COMPAT
@@ -287,7 +286,6 @@ ffb_wid_put (fbinfo_t *fb, struct fb_wid_list *wl)
 	struct fb_wid_item wit[30];
 	char *km = NULL;
 	int i, j;
-	u32 l;
 	
 #ifdef CONFIG_SPARC32_COMPAT
 	if (current->tss.flags & SPARC_FLAG_32BIT) {
@@ -464,8 +462,6 @@ ffb_loadcmap (fbinfo_t *fb, int index, int count)
 static int
 ffb_ioctl (struct inode *inode, struct file *file, unsigned cmd, unsigned long arg, fbinfo_t *fb)
 {
-	int i;
-	
 	switch (cmd) {
 	case FBIO_WID_GET:
 		return ffb_wid_get (fb, (struct fb_wid_list *)arg);

@@ -327,7 +327,7 @@ decompress_kernel(unsigned long load_addr, int num_words, unsigned long cksum, R
   _put_MSR(_get_MSR() & ~0x0030);
 
   vga_init(0xC0000000);
-  clear_screen();
+  /*clear_screen();*/
 
   output_ptr = 0;
 
@@ -371,93 +371,6 @@ show_residual_data(RESIDUAL *res)
   dump_buf(&hold_residual, 32);
   dump_buf(res, 32);
 #endif
-}
-
-#if 0
-verify_ram()
-{
-  unsigned long loc;
-  puts("Clearing memory:");
-  for (loc = 0;  loc <= 0x400000;  loc += 4);
-  {
-    *(unsigned long *)loc = 0x0;
-  }
-  for (loc = 0;  loc <= 0x400000;  loc += 4);
-  {
-    if (*(unsigned long *)loc != 0x0)
-      {
-	puts(" - failed at ");
-	puthex(loc);
-	puts(": ");
-	puthex(*(unsigned long *)loc);
-	while (1);
-      }
-  }
-  puts("0");
-  for (loc = 0;  loc <= 0x400000;  loc += 4);
-  {
-    *(unsigned long *)loc = 0xFFFFFFFF;
-  }
-  for (loc = 0;  loc <= 0x400000;  loc += 4);
-  {
-    if (*(unsigned long *)loc != 0xFFFFFFFF)
-      {
-	puts(" - failed at ");
-	puthex(loc);
-	puts(": ");
-	puthex(*(unsigned long *)loc);
-	while (1);
-      }
-  }
-  puts("1");
-  for (loc = 0;  loc <= 0x400000;  loc += 4);
-  {
-    *(unsigned long *)loc = loc;
-  }
-  for (loc = 0;  loc <= 0x400000;  loc += 4);
-  {
-    if (*(unsigned long *)loc != loc)
-      {
-	puts(" - failed at ");
-	puthex(loc);
-	puts(": ");
-	puthex(*(unsigned long *)loc);
-	while (1);
-      }
-  }
-  puts("?");
-  for (loc = 0;  loc <= 0x400000;  loc += 4);
-  {
-    *(unsigned long *)loc = 0xDEADB00B;
-  }
-  for (loc = 0;  loc <= 0x400000;  loc += 4);
-  {
-    if (*(unsigned long *)loc != 0xDEADB00B)
-      {
-	puts(" - failed at ");
-	puthex(loc);
-	puts(": ");
-	puthex(*(unsigned long *)loc);
-	while (1);
-      }
-  }
-  puts(">");
-  for (loc = 0;  loc <= 0x400000;  loc += 4);
-  {
-    *(unsigned long *)loc = 0x0;
-  }
-  for (loc = 0;  loc <= 0x400000;  loc += 4);
-  {
-    if (*(unsigned long *)loc != 0x0)
-      {
-	puts(" - failed at ");
-	puthex(loc);
-	puts(": ");
-	puthex(*(unsigned long *)loc);
-	while (1);
-      }
-  }
-  puts("\n");
 }
 
 do_cksum(unsigned long loc)
@@ -582,7 +495,6 @@ test_data(unsigned long load_addr)
   }
   return (errors == 0);
 }
-#endif
 
 void puthex(unsigned long val)
 {

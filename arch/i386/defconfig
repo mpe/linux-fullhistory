@@ -236,6 +236,7 @@ CONFIG_82C710_MOUSE=y
 # CONFIG_APM is not set
 # CONFIG_WATCHDOG is not set
 # CONFIG_RTC is not set
+# CONFIG_NVRAM is not set
 # CONFIG_JOYSTICK is not set
 
 #

@@ -7,7 +7,7 @@
  *
  * Copyright (C) 1995, 1996, 1997 by Ralf Baechle
  *
- * $Id: byteorder.h,v 1.5 1997/06/25 19:10:18 ralf Exp $
+ * $Id: byteorder.h,v 1.6 1997/07/20 15:15:01 ralf Exp $
  */
 #ifndef __ASM_MIPS_BYTEORDER_H
 #define __ASM_MIPS_BYTEORDER_H
@@ -24,7 +24,7 @@
 #if defined (__MIPSEB__)
 
 #ifndef __BIG_ENDIAN
-#define __BIG_ENDIAN
+#define __BIG_ENDIAN 4321
 #endif
 
 #ifndef __BIG_ENDIAN_BITFIELD
@@ -36,7 +36,26 @@
 #define __constant_htonl(x) (x)
 #define __constant_htons(x) (x)
 
+#elif defined (__MIPSEL__)
+
+#ifndef __LITTLE_ENDIAN
+#define __LITTLE_ENDIAN 1234
+#endif
+
+#ifndef __LITTLE_ENDIAN_BITFIELD
+#define __LITTLE_ENDIAN_BITFIELD
+#endif
+
+#define __constant_ntohl(x) __swap32(x)
+#define __constant_ntohs(x) __swap16(x)
+#define __constant_htonl(x) __swap32(x)
+#define __constant_htons(x) __swap16(x)
+
+#endif /* defined(__MIPSEL_) */
+
 #ifdef __KERNEL__
+
+#if defined (__MIPSEB__)
 
 /*
  * In-kernel byte order macros to handle stuff like
@@ -52,24 +71,7 @@
 #define cpu_to_be16(x) (x)
 #define be16_to_cpu(x) (x)
 
-#endif /* __KERNEL__ */
-
 #elif defined (__MIPSEL__)
-
-#ifndef __LITTLE_ENDIAN
-#define __LITTLE_ENDIAN
-#endif
-
-#ifndef __LITTLE_ENDIAN_BITFIELD
-#define __LITTLE_ENDIAN_BITFIELD
-#endif
-
-#define __constant_ntohl(x) __swap32(x)
-#define __constant_ntohs(x) __swap16(x)
-#define __constant_htonl(x) __swap32(x)
-#define __constant_htons(x) __swap16(x)
-
-#ifdef __KERNEL__
 
 /*
  * In-kernel byte order macros to handle stuff like
@@ -84,8 +86,6 @@
 #define be32_to_cpu(x) __swap32((x))
 #define cpu_to_be16(x) __swap16((x))
 #define be16_to_cpu(x) __swap16((x))
-
-#endif /* __KERNEL__ */
 
 #else
 #error "MIPS but neither __MIPSEL__ nor __MIPSEB__?"
@@ -144,7 +144,8 @@ extern __inline__ void cpu_to_be32s(__u32 *addr)
 #define be16_to_cpus(x) cpu_to_be16s(x)
 #define be32_to_cpus(x) cpu_to_be32s(x)
 
-#ifdef __KERNEL__
+#endif /* __KERNEL__ */
+
 extern unsigned long int ntohl(unsigned long int __x);
 extern unsigned short int ntohs(unsigned short int __x);
 extern unsigned short int htons(unsigned short int __x);
@@ -170,6 +171,5 @@ extern __inline__ unsigned short int htons(unsigned short int __x)
 {
 	return __constant_htons(__x);
 }
-#endif /* __KERNEL__ */
 
 #endif /* __ASM_MIPS_BYTEORDER_H */

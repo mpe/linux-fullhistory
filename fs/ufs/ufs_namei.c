@@ -6,7 +6,7 @@
  * Laboratory for Computer Science Research Computing Facility
  * Rutgers, The State University of New Jersey
  *
- * $Id: ufs_namei.c,v 1.8 1997/07/17 02:24:14 davem Exp $
+ * $Id: ufs_namei.c,v 1.9 1997/07/22 06:40:12 davem Exp $
  *
  */
 
@@ -131,8 +131,11 @@ int ufs_lookup (struct inode * dir, struct qstr *qname,
 	                        break;
 	                }
 	                if (dir->i_sb->u.ufs_sb.s_flags & UFS_DEBUG) {
-	                        printk("lfragno 0x%lx  direct d 0x%x  d_ino %u  d_reclen %u  d_namlen %u  d_name `%s'\n",
-	                               lfragno, (unsigned int)d, ufs_swab32(d->d_ino), ufs_swab16(d->d_reclen), ufs_swab16(d->d_namlen), d->d_name);
+	                        printk("lfragno 0x%lx  direct d 0x%x  d_ino %u  "
+				       "d_reclen %u  d_namlen %u  d_name `%s'\n",
+	                               lfragno, (unsigned int)((unsigned long)d),
+				       ufs_swab32(d->d_ino), ufs_swab16(d->d_reclen),
+				       ufs_swab16(d->d_namlen), d->d_name);
 	                }
 	                if ((ufs_swab16(d->d_namlen) == len) &&
 	                    /* XXX - don't use strncmp() - see ext2fs */

@@ -1,4 +1,4 @@
-/* $Id: system.h,v 1.26 1997/06/28 10:04:03 davem Exp $ */
+/* $Id: system.h,v 1.29 1997/07/24 16:48:32 davem Exp $ */
 #ifndef __SPARC64_SYSTEM_H
 #define __SPARC64_SYSTEM_H
 
@@ -74,7 +74,27 @@ extern unsigned long empty_zero_page;
 #define restore_flags(x) __restore_flags(x)
 #define save_and_cli(x) __save_and_cli(x)
 #else
-#error SMP not supported on sparc64
+
+#ifndef __ASSEMBLY__
+extern unsigned char global_irq_holder;
+#endif
+
+#define save_flags(x) \
+do {	((x) = ((global_irq_holder == (unsigned char) smp_processor_id()) ? 1 : \
+		((getipl() != 0) ? 2 : 0))); } while(0)
+
+#define save_and_cli(flags)   do { save_flags(flags); cli(); } while(0)
+
+#ifndef __ASSEMBLY__
+extern void __global_cli(void);
+extern void __global_sti(void);
+extern void __global_restore_flags(unsigned long flags);
+#endif
+
+#define cli()			__global_cli()
+#define sti()			__global_sti()
+#define restore_flags(flags)	__global_restore_flags(flags)
+
 #endif
 
 #define mb()  		__asm__ __volatile__ ("stbar" : : : "memory")
@@ -112,48 +132,48 @@ extern __inline__ void flushw_user(void)
 	 * when modifying this code inspect output of sched.s very
 	 * carefully to make sure things still work.  -DaveM
 	 */
-#define switch_to(prev, next)								\
-do {											\
-	__label__ switch_continue;							\
-	register unsigned long task_pc asm("o7");					\
-	(prev)->tss.kregs->fprs = 0;							\
-	task_pc = ((unsigned long) &&switch_continue) - 0x8;				\
-	__asm__ __volatile__(								\
-	"rdpr	%%pstate, %%g2\n\t"							\
-	"wrpr	%%g2, 0x3, %%pstate\n\t"						\
-	"flushw\n\t"									\
-/*XXX*/	"wr	%%g0, 0, %%fprs\n\t"							\
-	"stx	%%i6, [%%sp + 2047 + 0x70]\n\t"						\
-	"stx	%%i7, [%%sp + 2047 + 0x78]\n\t"						\
-	"rdpr	%%wstate, %%o5\n\t"							\
-	"stx	%%o6, [%%g6 + %3]\n\t"							\
-	"stx	%%o5, [%%g6 + %2]\n\t"							\
-	"rdpr	%%cwp, %%o5\n\t"							\
-	"stx	%%o7, [%%g6 + %4]\n\t"							\
-	"st	%%o5, [%%g6 + %5]\n\t"							\
-	"mov	%0, %%g6\n\t"								\
-	"ld	[%0 + %5], %%g1\n\t"							\
-	"wrpr	%%g1, %%cwp\n\t"							\
-	"ldx	[%%g6 + %2], %%o5\n\t"							\
-	"ldx	[%%g6 + %3], %%o6\n\t"							\
-	"ldx	[%%g6 + %4], %%o7\n\t"							\
-	"mov	%%g6, %0\n\t"								\
-	"wrpr	%%o5, 0x0, %%wstate\n\t"						\
-	"ldx	[%%sp + 2047 + 0x70], %%i6\n\t"						\
-	"ldx	[%%sp + 2047 + 0x78], %%i7\n\t"						\
-	"wrpr	%%g0, 0x96, %%pstate\n\t"						\
-	"jmpl	%%o7 + 0x8, %%g0\n\t"							\
-	" mov	%0, %%g6\n\t"								\
-	: /* No outputs */								\
-	: "r" (next), "r" (task_pc),							\
-	  "i" ((const unsigned long)(&((struct task_struct *)0)->tss.wstate)),		\
-	  "i" ((const unsigned long)(&((struct task_struct *)0)->tss.ksp)),		\
-	  "i" ((const unsigned long)(&((struct task_struct *)0)->tss.kpc)),		\
-	  "i" ((const unsigned long)(&((struct task_struct *)0)->tss.cwp))		\
-	: "cc", "g1", "g2", "g3", "g5", "g7",						\
-	  "l1", "l2", "l3", "l4", "l5", "l6", "l7",					\
-	  "i0", "i1", "i2", "i3", "i4", "i5",						\
-	  "o0", "o1", "o2", "o3", "o4", "o5");						\
+#define switch_to(prev, next)							\
+do {	__label__ switch_continue;						\
+	register unsigned long task_pc asm("o7");				\
+	(prev)->tss.kregs->fprs = 0;						\
+	task_pc = ((unsigned long) &&switch_continue) - 0x8;			\
+	(next)->mm->cpu_vm_mask |= (1UL << smp_processor_id());			\
+	__asm__ __volatile__(							\
+	"rdpr	%%pstate, %%g2\n\t"						\
+	"wrpr	%%g2, 0x3, %%pstate\n\t"					\
+	"flushw\n\t"								\
+/*XXX*/	"wr	%%g0, 0, %%fprs\n\t"						\
+	"stx	%%i6, [%%sp + 2047 + 0x70]\n\t"					\
+	"stx	%%i7, [%%sp + 2047 + 0x78]\n\t"					\
+	"rdpr	%%wstate, %%o5\n\t"						\
+	"stx	%%o6, [%%g6 + %3]\n\t"						\
+	"stx	%%o5, [%%g6 + %2]\n\t"						\
+	"rdpr	%%cwp, %%o5\n\t"						\
+	"stx	%%o7, [%%g6 + %4]\n\t"						\
+	"st	%%o5, [%%g6 + %5]\n\t"						\
+	"mov	%0, %%g6\n\t"							\
+	"ld	[%0 + %5], %%g1\n\t"						\
+	"wrpr	%%g1, %%cwp\n\t"						\
+	"ldx	[%%g6 + %2], %%o5\n\t"						\
+	"ldx	[%%g6 + %3], %%o6\n\t"						\
+	"ldx	[%%g6 + %4], %%o7\n\t"						\
+	"mov	%%g6, %0\n\t"							\
+	"wrpr	%%o5, 0x0, %%wstate\n\t"					\
+	"ldx	[%%sp + 2047 + 0x70], %%i6\n\t"					\
+	"ldx	[%%sp + 2047 + 0x78], %%i7\n\t"					\
+	"wrpr	%%g0, 0x96, %%pstate\n\t"					\
+	"jmpl	%%o7 + 0x8, %%g0\n\t"						\
+	" mov	%0, %%g6\n\t"							\
+	: /* No outputs */							\
+	: "r" (next), "r" (task_pc),						\
+	  "i" ((const unsigned long)(&((struct task_struct *)0)->tss.wstate)),	\
+	  "i" ((const unsigned long)(&((struct task_struct *)0)->tss.ksp)),	\
+	  "i" ((const unsigned long)(&((struct task_struct *)0)->tss.kpc)),	\
+	  "i" ((const unsigned long)(&((struct task_struct *)0)->tss.cwp))	\
+	: "cc", "g1", "g2", "g3", "g5", "g7",					\
+	  "l1", "l2", "l3", "l4", "l5", "l6", "l7",				\
+	  "i0", "i1", "i2", "i3", "i4", "i5",					\
+	  "o0", "o1", "o2", "o3", "o4", "o5");					\
 switch_continue: } while(0)
 
 /* Unlike the hybrid v7/v8 kernel, we can assume swap exists under V9. */

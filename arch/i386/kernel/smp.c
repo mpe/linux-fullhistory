@@ -156,6 +156,9 @@ volatile unsigned long smp_idle_map=0;			/* Map for idle processors 				*/
 volatile unsigned long  smp_proc_in_lock[NR_CPUS] = {0,};/* for computing process time */
 volatile int smp_process_available=0;
 
+const char lk_lockmsg[] = "lock from interrupt context at %p\n"; 
+
+
 /*#define SMP_DEBUG*/
 
 #ifdef SMP_DEBUG

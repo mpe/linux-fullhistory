@@ -283,8 +283,9 @@ asmlinkage int sys_execve(char *name, char **argv, char **envp)
 	struct pt_regs *regs = (struct pt_regs *) &name;
 
 	lock_kernel();
-	error = getname(name, &filename);
-	if (error)
+	filename = getname(name);
+	error = PTR_ERR(filename);
+	if (IS_ERR(filename))
 		goto out;
 	error = do_execve(filename, argv, envp, regs);
 	putname(filename);

@@ -90,6 +90,7 @@
 #include <linux/sched.h>
 #include <linux/interrupt.h>
 #include <linux/init.h>
+#include <linux/nvram.h>
 
 #include <asm/setup.h>
 #include <asm/atarihw.h>
@@ -596,20 +597,6 @@ int atari_queue_command (Scsi_Cmnd *cmd, void (*done)(Scsi_Cmnd *))
 #endif
 
 
-#define	RTC_READ(reg)				\
-    ({	unsigned char	__val;			\
-		outb(reg,&tt_rtc.regsel);	\
-		__val = tt_rtc.data;		\
-		__val;				\
-	})
-
-#define	RTC_WRITE(reg,val)			\
-    do {					\
-		outb(reg,&tt_rtc.regsel);	\
-		tt_rtc.data = (val);		\
-	} while(0)
-    
-				   
 int atari_scsi_detect (Scsi_Host_Template *host)
 {
 	static int called = 0;
@@ -645,20 +632,11 @@ int atari_scsi_detect (Scsi_Host_Template *host)
 		/* use 7 as default */
 		host->this_id = 7;
 		/* Test if a host id is set in the NVRam */
-		if (ATARIHW_PRESENT(TT_CLK)) {
-			unsigned char sum = 0, b;
-			int i;
-			
-			/* Make checksum */
-			for( i = 14; i < 62; ++i )
-				sum += RTC_READ(i);
-			
-			if (/* NV-Ram checksum valid? */
-				RTC_READ(62) == sum && RTC_READ(63) == ~sum &&
-				/* Arbitration enabled? (for TOS) */
-				(b = RTC_READ( 30 )) & 0x80) {
+		if (ATARIHW_PRESENT(TT_CLK) && nvram_check_checksum()) {
+			unsigned char b = nvram_read_byte( 14 );
+			/* Arbitration enabled? (for TOS) If yes, use configured host ID */
+			if (b & 0x80)
 				host->this_id = b & 7;
-			}
 		}
 	}
 

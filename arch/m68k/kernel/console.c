@@ -420,7 +420,10 @@ int vc_resize(unsigned long lines, unsigned long columns)
 	set_scrmem(fg_console, 0);
 	set_origin(fg_console);
 #endif /* XXX */
-	update_screen(fg_console);
+	/* don't update in graphics mode */
+	if (currcons == fg_console && vt_cons[fg_console]->vc_mode == KD_TEXT)
+	    update_screen(fg_console);
+
 	set_cursor(fg_console);
 
 	return 0;
@@ -512,8 +515,9 @@ void vc_resize_con(unsigned long lines, unsigned long columns,
 	    console_table[currcons]->winsize = ws;
 	}
 
-   if (currcons == fg_console)
-      update_screen(fg_console);
+	/* don't update in graphics mode */
+	if (currcons == fg_console && vt_cons[fg_console]->vc_mode == KD_TEXT)
+	    update_screen(fg_console);
 }
 
 void vc_disallocate(unsigned int currcons)

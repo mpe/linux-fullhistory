@@ -19,14 +19,24 @@
  *					Changed for 2.1.19 modules
  *	Jan 1997			Initial release
  *	Jun 1997			2.1.43+ changes
- *	Jul 1997			proper page locking in readpage
+ *					Proper page locking in readpage
  *					Changed to work with 2.1.45+ fs
- *					Fixed follow_link
+ *	Jul 1997			Fixed follow_link
+ *			2.1.47
+ *					lookup shouldn't return -ENOENT
+ *					from Horst von Brand:
+ *					  fail on wrong checksum
+ *					  double unlock_super was possible
+ *					  correct namelen for statfs
+ *					spotted by Bill Hawes:
+ *					  readlink shouldn't iput()
  */
 
 /* todo:
  *	- see Documentation/filesystems/romfs.txt
  *	- use malloced memory for file names?
+ *	- quicklist routines from fs/namei.c, get_page is possibly not
+ *	  intended to be used now
  *	- considering write access...
  *	- network (tftp) files?
  *	- in the ancient times something leaked to made umounts
@@ -106,6 +116,7 @@ romfs_read_super(struct super_block *s, void *data, int silent)
 	if (romfs_checksum(rsb, min(sz,512))) {
 		printk ("romfs: bad initial checksum on dev "
 			"%s.\n", kdevname(dev));
+		goto out;
 	}
 
 	s->s_magic = ROMFS_MAGIC;
@@ -123,10 +134,10 @@ romfs_read_super(struct super_block *s, void *data, int silent)
 	s->s_op	= &romfs_ops;
 	s->s_root = d_alloc_root(iget(s, sz), NULL);
 
-	unlock_super(s);
-
 	if (!s->s_root)
 		goto outnobh;
+
+	unlock_super(s);
 
 	/* Ehrhm; sorry.. :)  And thanks to Hans-Joachim Widmaier  :) */
 	if (0) {
@@ -165,7 +176,7 @@ romfs_statfs(struct super_block *sb, struct statfs *buf, int bufsize)
 	tmp.f_type = ROMFS_MAGIC;
 	tmp.f_bsize = ROMBSIZE;
 	tmp.f_blocks = (sb->u.romfs_sb.s_maxsize+ROMBSIZE-1)>>ROMBSBITS;
-	/* XXX tmp.f_namelen = relevant? */
+	tmp.f_namelen = ROMFS_MAXFN;
 	return copy_to_user(buf, &tmp, bufsize) ? -EFAULT : 0;
 }
 
@@ -314,16 +325,14 @@ romfs_lookup(struct inode *dir, struct dentry *dentry)
 	const char *name;		/* got from dentry */
 	int len;
 
-	if (!dir || !S_ISDIR(dir->i_mode)) {
-		res = -EBADF;
+	res = -EBADF;
+	if (!dir || !S_ISDIR(dir->i_mode))
 		goto out;
-	}
 
+	res = 0;			/* instead of ENOENT */
 	offset = dir->i_ino & ROMFH_MASK;
-	if (romfs_copyfrom(dir, &ri, offset, ROMFH_SIZE) <= 0) {
-		res = -ENOENT;
+	if (romfs_copyfrom(dir, &ri, offset, ROMFH_SIZE) <= 0)
 		goto out;
-	}
 
 	maxoff = dir->i_sb->u.romfs_sb.s_maxsize;
 	offset = ntohl(ri.spec) & ROMFH_MASK;
@@ -336,10 +345,8 @@ romfs_lookup(struct inode *dir, struct dentry *dentry)
 
 	for(;;) {
 		if (!offset || offset >= maxoff
-		    || romfs_copyfrom(dir, &ri, offset, ROMFH_SIZE) <= 0) {
-			res = -ENOENT;
+		    || romfs_copyfrom(dir, &ri, offset, ROMFH_SIZE) <= 0)
 			goto out;
-		}
 
 		/* try to match the first 16 bytes of name */
 		fslen = romfs_strnlen(dir, offset+ROMFH_SIZE, ROMFH_SIZE);
@@ -367,9 +374,9 @@ romfs_lookup(struct inode *dir, struct dentry *dentry)
 	if ((ntohl(ri.next) & ROMFH_TYPE) == ROMFH_HRD)
 		offset = ntohl(ri.spec) & ROMFH_MASK;
 
-	res = -EACCES;
-	if ((inode = iget(dir->i_sb, offset))!=NULL) {
-		res = 0;
+	if ((inode = iget(dir->i_sb, offset))==NULL) {
+		res = -EACCES;
+	} else {
 		d_add(dentry, inode);
 	}
 
@@ -439,7 +446,6 @@ romfs_readlink(struct inode *inode, char *buffer, int len)
 	copy_to_user(buffer, buf, mylen);
 
 out:
-	iput(inode);
 	return mylen;
 }
 
@@ -597,6 +603,8 @@ romfs_read_inode(struct inode *i)
 			printk("romfs: read error for inode 0x%x\n", ino);
 			return;
 		}
+		/* XXX: do romfs_checksum here too (with name) */
+
 		nextfh = ntohl(ri.next);
 		if ((nextfh & ROMFH_TYPE) != ROMFH_HRD)
 			break;

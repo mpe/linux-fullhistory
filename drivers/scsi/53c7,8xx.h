@@ -1574,7 +1574,7 @@ struct NCR53c7x0_hostdata {
 	if (hostdata->options & OPTION_DEBUG_DSA)			\
 	    printk("scsi : dsa %s symbol %s(%d) word %d now 0x%x\n",	\
 		#dsa, #symbol, hostdata->##symbol, 			\
-		(word), (u32) (value));					\
+		(word), (u32) le32_to_cpu(value));			\
 	}
 
 /* Paranoid people could use panic() here. */

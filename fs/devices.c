@@ -210,7 +210,9 @@ int check_disk_change(kdev_t dev)
 	printk(KERN_DEBUG "VFS: Disk change detected on device %s\n",
 		kdevname(dev));
 
-	invalidate_inodes(dev);
+	if (invalidate_inodes(dev))
+		printk("VFS: busy inodes on changed media..\n");
+
 	invalidate_buffers(dev);
 
 	if (fops->revalidate)

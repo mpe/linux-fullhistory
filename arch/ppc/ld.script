@@ -31,12 +31,16 @@ SECTIONS
   .text      :
   {
     *(.text)
-    *(.rodata)
-    *(.rodata1)
+    *(.fixup)
     *(.got1)
   }
   _etext = .;
   PROVIDE (etext = .);
+  .rodata    :
+  {
+    *(.rodata)
+    *(.rodata1)
+  }
   .fini      : { *(.fini)    } =0
   .ctors     : { *(.ctors)   }
   .dtors     : { *(.dtors)   }
@@ -45,31 +49,33 @@ SECTIONS
   .data    :
   {
     *(.data)
+    *(.data1)
+    *(.sdata)
+    *(.sdata2)
+    *(.got.plt) *(.got)
+    *(.dynamic)
     CONSTRUCTORS
   }
-  .data1   : { *(.data1) }
-  .got           : { *(.got.plt) *(.got) }
-  .dynamic       : { *(.dynamic) }
-  /* We want the small data sections together, so single-instruction offsets
-     can access them all, and initialized data all before uninitialized, so
-     we can shorten the on-disk segment size.  */
-  .sdata     : { *(.sdata) }
   _edata  =  .;
+/*
+  . = ALIGN(4096);
+  __init_begin = .;
+  .text.init : { *(.text.init) }
+  .data.init : { *(.data.init) }
+  . = ALIGN(4096);
+  __init_end = .;
+*/
+  __bss_start = .;		/* BSS */
   PROVIDE (edata = .);
   __bss_start = .;
-  .sbss      : { *(.sbss) *(.scommon) }
   .bss       :
   {
+   *(.sbss) *(.scommon)
    *(.dynbss)
    *(.bss)
    *(COMMON)
   }
   _end = . ;
   PROVIDE (end = .);
-  /* These are needed for ELF backends which have not yet been
-     converted to the new style linker.  */
-  .stab 0 : { *(.stab) }
-  .stabstr 0 : { *(.stabstr) }
-  /* These must appear regardless of  .  */
 }
 

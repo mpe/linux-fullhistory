@@ -79,8 +79,6 @@ CORE_FILES := $(CORE_FILES) arch/m68k/ifpsp060/ifpsp.o
 SUBDIRS := $(SUBDIRS) arch/m68k/ifpsp060
 endif
 
-MAKEBOOT = $(MAKE) -C arch/$(ARCH)/boot
-
 lilo:	vmlinux
 	if [ -f $(INSTALL_PATH)/vmlinux ]; then mv -f $(INSTALL_PATH)/vmlinux $(INSTALL_PATH)/vmlinux.old; fi
 	if [ -f $(INSTALL_PATH)/System.map ]; then mv -f $(INSTALL_PATH)/System.map $(INSTALL_PATH)/System.old; fi
@@ -106,7 +104,5 @@ bootstrap: dummy
 
 archclean:
 	rm -f vmlinux.gz
-	@$(MAKEBOOT) clean
 
 archdep:
-	$(MAKEBOOT) dep

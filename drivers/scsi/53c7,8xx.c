@@ -560,7 +560,7 @@ issue_to_cmd (struct Scsi_Host *host, struct NCR53c7x0_hostdata *hostdata,
      * sure what the relationship between the NCR structures
      * and host structures were going to be.
      */
-	(struct NCR53c7x0_cmd *) ((char *) bus_to_virt (issue[1]) - 
+	(struct NCR53c7x0_cmd *) ((char *) bus_to_virt (le32_to_cpu(issue[1])) - 
 	    (hostdata->E_dsa_code_begin - hostdata->E_dsa_code_template) -
 	    offsetof(struct NCR53c7x0_cmd, dsa)) 
     /* If the IF TRUE bit is not set, it's a NOP */
@@ -795,18 +795,18 @@ NCR53c7x0_driver_init (struct Scsi_Host *host) {
     for (i = 0, curr = (u32 *) hostdata->schedule; 
 	i < host->can_queue; ++i, curr += 2) {
 	curr[0] = hostdata->NOP_insn;
-	curr[1] = 0xdeadbeef;
+	curr[1] = le32_to_cpu(0xdeadbeef);
     }
-    curr[0] = ((DCMD_TYPE_TCI|DCMD_TCI_OP_JUMP) << 24) | DBC_TCI_TRUE;
-    curr[1] = (u32) virt_to_bus (hostdata->script) +
-	hostdata->E_wait_reselect;
+    curr[0] = le32_to_cpu(((DCMD_TYPE_TCI|DCMD_TCI_OP_JUMP) << 24) | DBC_TCI_TRUE);
+    curr[1] = (u32) le32_to_cpu(virt_to_bus (hostdata->script) +
+	hostdata->E_wait_reselect);
     hostdata->reconnect_dsa_head = 0;
     hostdata->addr_reconnect_dsa_head = (u32) 
-	virt_to_bus((void *) &(hostdata->reconnect_dsa_head));
+	le32_to_cpu(virt_to_bus((void *) &(hostdata->reconnect_dsa_head)));
     hostdata->expecting_iid = 0;
     hostdata->expecting_sto = 0;
     if (hostdata->options & OPTION_ALWAYS_SYNCHRONOUS) 
-	hostdata->initiate_sdtr = 0xffff; 
+	hostdata->initiate_sdtr = le32_to_cpu(0xffff); 
     else
     	hostdata->initiate_sdtr = 0;
     hostdata->talked_to = 0;
@@ -877,7 +877,7 @@ clock_to_ccf (int clock) {
  * Returns : 0 on success, -1 on failure.
  */
 
-static inline int 
+static int 
 NCR53c7x0_init (struct Scsi_Host *host) {
     NCR53c7x0_local_declare();
     int i, ccf, expected_ccf;
@@ -899,6 +899,7 @@ NCR53c7x0_init (struct Scsi_Host *host) {
      * will differ.
      */
     int expected_mapping = OPTION_IO_MAPPED;
+
     NCR53c7x0_local_setup(host);
 
     switch (hostdata->chip) {
@@ -929,10 +930,10 @@ NCR53c7x0_init (struct Scsi_Host *host) {
 
     /* Assign constants accessed by NCR */
     hostdata->NCR53c7xx_zero = 0;			
-    hostdata->NCR53c7xx_msg_reject = MESSAGE_REJECT;
-    hostdata->NCR53c7xx_msg_abort = ABORT;
-    hostdata->NCR53c7xx_msg_nop = NOP;
-    hostdata->NOP_insn = (DCMD_TYPE_TCI|DCMD_TCI_OP_JUMP) << 24;
+    hostdata->NCR53c7xx_msg_reject = le32_to_cpu(MESSAGE_REJECT);
+    hostdata->NCR53c7xx_msg_abort = le32_to_cpu(ABORT);
+    hostdata->NCR53c7xx_msg_nop = le32_to_cpu(NOP);
+    hostdata->NOP_insn = le32_to_cpu((DCMD_TYPE_TCI|DCMD_TCI_OP_JUMP) << 24);
 
     if (expected_mapping == -1 || 
 	(hostdata->options & (OPTION_MEMORY_MAPPED)) != 
@@ -1131,7 +1132,14 @@ NCR53c7x0_init (struct Scsi_Host *host) {
 	search->irq == host->irq && search != host); search=search->next);
 
     if (!search) {
-	if (request_irq(host->irq, NCR53c7x0_intr, SA_INTERRUPT, "53c7,8xx", NULL)) {
+#ifdef __powerpc__
+	if (request_irq(host->irq, NCR53c7x0_intr, SA_SHIRQ, "53c7,8xx", NULL)) 
+#else
+	if (request_irq(host->irq, NCR53c7x0_intr, SA_INTERRUPT, "53c7,8xx", NULL))
+#endif
+	  {
+	  
+	  
 	    printk("scsi%d : IRQ%d not free, detaching\n"
 	           "         You have either a configuration problem, or a\n"
                    "         broken BIOS.  You may wish to manually assign\n"
@@ -1453,6 +1461,21 @@ ncr_pci_init (Scsi_Host_Template *tpnt, int board, int chip,
 	return -1;
     }
 
+#ifdef __powerpc__
+    if ( ! (command & PCI_COMMAND_MASTER)) {
+      printk("SCSI: PCI Master Bit has not been set. Setting...\n");
+      command |= PCI_COMMAND_MASTER|PCI_COMMAND_IO;
+      pcibios_write_config_word(bus, device_fn, PCI_COMMAND, command);
+      if (io_port >= 0x10000000) {
+	      /* Mapping on PowerPC can't handle this! */
+	      unsigned long new_io_port;
+	      new_io_port = (io_port & 0x00FFFFFF) | 0x01000000;
+	      printk("SCSI: I/O moved from %08X to %08x\n", io_port, new_io_port);
+	      io_port = new_io_port;
+	      pcibios_write_config_dword(bus, device_fn, PCI_BASE_ADDRESS_0, io_port);
+      }
+    }
+#endif
 
     /* 
      * Bit 0 is the address space indicator and must be one for I/O
@@ -1613,6 +1636,9 @@ NCR53c8x0_init_fixup (struct Scsi_Host *host) {
     unsigned char tmp;
     int i, ncr_to_memory, memory_to_ncr;
     u32 base;
+#ifdef __powerpc__
+    unsigned long *script_ptr;
+#endif    
     NCR53c7x0_local_setup(host);
 
 
@@ -1801,6 +1827,14 @@ NCR53c8x0_init_fixup (struct Scsi_Host *host) {
     	printk("scsi%d : NCR dsa_fields start is %d not %d\n",
     	    host->host_no, A_dsa_fields_start, Ent_dsa_code_template_end - 
     	    Ent_dsa_zero);
+#ifdef __powerpc__
+/* The PowerPC is Big Endian - adjust script appropriately */
+    script_ptr = hostdata->script;
+    for (i = 0;  i < sizeof(SCRIPT);  i += sizeof(long))
+    {
+        *script_ptr++ = le32_to_cpu(*script_ptr);
+    }
+#endif    	    
 
     printk("scsi%d : NCR code relocated to 0x%lx (virt 0x%p)\n", host->host_no,
 	virt_to_bus(hostdata->script), hostdata->script);
@@ -1884,7 +1918,7 @@ NCR53c8xx_run_tests (struct Scsi_Host *host) {
 		    "         also verify that the board is jumpered to use PCI INTA, since\n"
 		    "         most PCI motherboards lack support for INTB, INTC, and INTD.\n"
 		    : "");
-	else if (hostdata->test_completed != 1) 
+      else if (hostdata->test_completed != 1) 
 	    printk ("scsi%d : test 1 bad interrupt value (%d)\n", 
 		host->host_no, hostdata->test_completed);
 	else 
@@ -1922,16 +1956,17 @@ NCR53c8xx_run_tests (struct Scsi_Host *host) {
     	cmd[1] = cmd[2] = cmd[3] = cmd[5] = 0;
     	cmd[4] = sizeof(data); 
 
-    	dsa[2] = 1;
-    	dsa[3] = virt_to_bus(&identify);
-    	dsa[4] = 6;
-    	dsa[5] = virt_to_bus(&cmd);
-    	dsa[6] = sizeof(data);
-    	dsa[7] = virt_to_bus(&data);
-    	dsa[8] = 1;
-    	dsa[9] = virt_to_bus(&status);
-    	dsa[10] = 1;
-    	dsa[11] = virt_to_bus(&msg);
+/* Need to adjust for endian-ness */    	
+    	dsa[2] = le32_to_cpu(1);
+    	dsa[3] = le32_to_cpu(virt_to_bus(&identify));
+    	dsa[4] = le32_to_cpu(6);
+    	dsa[5] = le32_to_cpu(virt_to_bus(&cmd));
+    	dsa[6] = le32_to_cpu(sizeof(data));
+    	dsa[7] = le32_to_cpu(virt_to_bus(&data));
+    	dsa[8] = le32_to_cpu(1);
+    	dsa[9] = le32_to_cpu(virt_to_bus(&status));
+    	dsa[10] = le32_to_cpu(1);
+    	dsa[11] = le32_to_cpu(virt_to_bus(&msg));
 
 	for (i = 0; i < 3; ++i) {
 	    cli();
@@ -1942,7 +1977,7 @@ NCR53c8xx_run_tests (struct Scsi_Host *host) {
 	    }
 
 	    /*	     SCNTL3         SDID	*/
-	    dsa[0] = (0x33 << 24) | (i << 16)  ;
+	    dsa[0] = le32_to_cpu((0x33 << 24) | (i << 16))  ;
 	    hostdata->idle = 0;
 	    hostdata->test_running = 2;
 	    hostdata->test_completed = -1;
@@ -2004,9 +2039,22 @@ NCR53c8xx_dsa_fixup (struct NCR53c7x0_cmd *cmd) {
     struct NCR53c7x0_hostdata *hostdata = (struct NCR53c7x0_hostdata *)
     	host->hostdata;
     int i;
+#ifdef __powerpc__
+    int len;
+    unsigned long *dsa_ptr;
+#endif    
 
     memcpy (cmd->dsa, hostdata->script + (hostdata->E_dsa_code_template / 4),
     	hostdata->E_dsa_code_template_end - hostdata->E_dsa_code_template);
+#ifdef __powerpc__
+    /* Note: the script has already been 'endianized' */
+    dsa_ptr = cmd->dsa;
+    len = hostdata->E_dsa_code_template_end - hostdata->E_dsa_code_template;
+    for (i = 0;  i < len;  i += sizeof(long))
+    {
+       *dsa_ptr++ = le32_to_cpu(*dsa_ptr);
+    }
+#endif    	
 
     /* 
      * Note : within the NCR 'C' code, dsa points to the _start_
@@ -2046,6 +2094,14 @@ NCR53c8xx_dsa_fixup (struct NCR53c7x0_cmd *cmd) {
     /*  XXX - new start stuff */
     patch_abs_32 (cmd->dsa, Ent_dsa_code_template / sizeof(u32),
 	dsa_temp_addr_dsa_value, virt_to_bus(&cmd->dsa_addr));
+#ifdef __powerpc__
+    dsa_ptr = cmd->dsa;    
+    len = hostdata->E_dsa_code_template_end - hostdata->E_dsa_code_template;
+    for (i = 0;  i < len;  i += sizeof(long))
+    {
+       *dsa_ptr++ = le32_to_cpu(*dsa_ptr);
+    }
+#endif    	
 
 }
 
@@ -2125,7 +2181,7 @@ abnormal_finished (struct NCR53c7x0_cmd *cmd, int result) {
 	if (issue_to_cmd (host, hostdata, (u32 *) curr) == cmd) 
 	{
 	    curr[0] = hostdata->NOP_insn;
-	    curr[1] = 0xdeadbeef;
+	    curr[1] = le32_to_cpu(0xdeadbeef);
 	    ++found;
 	    break;
 	}
@@ -2140,13 +2196,13 @@ abnormal_finished (struct NCR53c7x0_cmd *cmd, int result) {
      */
 
     for (left = host->can_queue,
-	    ncr_search = hostdata->reconnect_dsa_head, 
+	    ncr_search = le32_to_cpu(hostdata->reconnect_dsa_head), 
 	    ncr_prev = &hostdata->reconnect_dsa_head;
 	left >= 0 && ncr_search && 
 	    ((char*)bus_to_virt(ncr_search) + hostdata->dsa_start) 
 		!= (char *) cmd->dsa;
 	ncr_prev = (u32*) ((char*)bus_to_virt(ncr_search) + 
-	    hostdata->dsa_next), ncr_search = *ncr_prev, --left);
+	    hostdata->dsa_next), ncr_search = le32_to_cpu(*ncr_prev), --left);
 
     if (left < 0) 
 	printk("scsi%d: loop detected in ncr reconnect list\n",
@@ -2491,7 +2547,7 @@ NCR53c8x0_dstat_sir_intr (struct Scsi_Host *host, struct
     dsps = NCR53c7x0_read32(DSPS_REG);
     dsp = (u32 *) bus_to_virt(NCR53c7x0_read32(DSP_REG));
 
-    if (hostdata->options & OPTION_DEBUG_INTR) 
+    if (hostdata->options & OPTION_DEBUG_INTR)
 	printk ("scsi%d : DSPS = 0x%x\n", host->host_no, dsps);
 
     switch (dsps) {
@@ -2584,9 +2640,9 @@ NCR53c8x0_dstat_sir_intr (struct Scsi_Host *host, struct
 		    hostdata->msg_buf[4] = 0;		/* 0 offset = async */
 		    asynchronous (host, c->target);
 		}
-		patch_dsa_32 (cmd->dsa, dsa_msgout_other, 0, 5);
+		patch_dsa_32 (cmd->dsa, dsa_msgout_other, 0, le32_to_cpu(5));
 		patch_dsa_32 (cmd->dsa, dsa_msgout_other, 1, (u32) 
-		    virt_to_bus ((void *)&hostdata->msg_buf));
+		    le32_to_cpu(virt_to_bus ((void *)&hostdata->msg_buf)));
 		hostdata->dsp = hostdata->script + 
 		    hostdata->E_respond_message / sizeof(u32);
 		hostdata->dsp_changed = 1;
@@ -2649,14 +2705,14 @@ NCR53c8x0_dstat_sir_intr (struct Scsi_Host *host, struct
 	 *	agrees with this being an untagged queue'd command.
 	 */
 
-    	patch_dsa_32 (cmd->dsa, dsa_msgout, 0, 1);
+    	patch_dsa_32 (cmd->dsa, dsa_msgout, 0, le32_to_cpu(1));
 
     	/* 
     	 * Modify the table indirect for COMMAND OUT phase, since 
     	 * Request Sense is a six byte command.
     	 */
 
-    	patch_dsa_32 (cmd->dsa, dsa_cmdout, 0, 6);
+    	patch_dsa_32 (cmd->dsa, dsa_cmdout, 0, le32_to_cpu(6));
 
 	c->cmnd[0] = REQUEST_SENSE;
 	c->cmnd[1] &= 0xe0;	/* Zero all but LUN */
@@ -2672,17 +2728,17 @@ NCR53c8x0_dstat_sir_intr (struct Scsi_Host *host, struct
 	 */
 
     	patch_dsa_32 (cmd->dsa, dsa_dataout, 0, 
-	    virt_to_bus(hostdata->script) + hostdata->E_other_transfer);
+	    le32_to_cpu(virt_to_bus(hostdata->script) + hostdata->E_other_transfer));
     	patch_dsa_32 (cmd->dsa, dsa_datain, 0, 
-	    virt_to_bus(cmd->data_transfer_start));
-    	cmd->data_transfer_start[0] = (((DCMD_TYPE_BMI | DCMD_BMI_OP_MOVE_I | 
-    	    DCMD_BMI_IO)) << 24) | sizeof(c->sense_buffer);
-    	cmd->data_transfer_start[1] = (u32) virt_to_bus(c->sense_buffer);
+	    le32_to_cpu(virt_to_bus(cmd->data_transfer_start)));
+    	cmd->data_transfer_start[0] = le32_to_cpu((((DCMD_TYPE_BMI | DCMD_BMI_OP_MOVE_I | 
+    	    DCMD_BMI_IO)) << 24) | sizeof(c->sense_buffer));
+    	cmd->data_transfer_start[1] = (u32) le32_to_cpu(virt_to_bus(c->sense_buffer));
 
-	cmd->data_transfer_start[2] = ((DCMD_TYPE_TCI | DCMD_TCI_OP_JUMP) 
-    	    << 24) | DBC_TCI_TRUE;
-	cmd->data_transfer_start[3] = (u32) virt_to_bus(hostdata->script) + 
-	    hostdata->E_other_transfer;
+	cmd->data_transfer_start[2] = le32_to_cpu(((DCMD_TYPE_TCI | DCMD_TCI_OP_JUMP) 
+    	    << 24) | DBC_TCI_TRUE);
+	cmd->data_transfer_start[3] = (u32) le32_to_cpu(virt_to_bus(hostdata->script) + 
+	    hostdata->E_other_transfer);
 
     	/*
     	 * Currently, this command is flagged as completed, ie 
@@ -2691,7 +2747,7 @@ NCR53c8x0_dstat_sir_intr (struct Scsi_Host *host, struct
 	 * status, etc are used.
     	 */
 
-	cmd->cmd->result = 0xffff;		
+	cmd->cmd->result = le32_to_cpu(0xffff);		
 
 	/* 
 	 * Restart command as a REQUEST SENSE.
@@ -2732,7 +2788,7 @@ NCR53c8x0_dstat_sir_intr (struct Scsi_Host *host, struct
 		host->host_no, NCR53c7x0_read32(DSA_REG), dsa);
 	    printk("scsi%d : resume address is 0x%x (virt 0x%p)\n",
 		    host->host_no, cmd->saved_data_pointer,
-		    bus_to_virt(cmd->saved_data_pointer));
+		    bus_to_virt(le32_to_cpu(cmd->saved_data_pointer)));
 	    print_insn (host, hostdata->script + Ent_reselected_ok / 
     	    	    sizeof(u32), "", 1);
     	    printk ("scsi%d : sxfer=0x%x, scntl3=0x%x\n",
@@ -2765,7 +2821,7 @@ NCR53c8x0_dstat_sir_intr (struct Scsi_Host *host, struct
 	    if (dsa) {
 		printk("scsi%d : resume address is 0x%x (virt 0x%p)\n",
 		    host->host_no, cmd->saved_data_pointer,
-		    bus_to_virt (cmd->saved_data_pointer));
+		    bus_to_virt (le32_to_cpu(cmd->saved_data_pointer)));
 #if 0
 		printk("scsi%d : template code :\n", host->host_no);
 		for (code = dsa + (Ent_dsa_code_check_reselect - Ent_dsa_zero) 
@@ -2794,7 +2850,7 @@ NCR53c8x0_dstat_sir_intr (struct Scsi_Host *host, struct
 		printk("scsi%d : resume address is 0x%x (virt 0x%p)\n"
 		       "         (temp was 0x%x (virt 0x%p))\n",
 		    host->host_no, cmd->saved_data_pointer,
-		    bus_to_virt (cmd->saved_data_pointer),
+		    bus_to_virt (le32_to_cpu(cmd->saved_data_pointer)),
 		    NCR53c7x0_read32 (TEMP_REG),
 		    bus_to_virt (NCR53c7x0_read32(TEMP_REG)));
 	}
@@ -2888,7 +2944,7 @@ NCR53c8x0_dstat_sir_intr (struct Scsi_Host *host, struct
     	    OPTION_DEBUG_DISCONNECT)) {
     	    printk ("scsi%d : saved data pointer 0x%x (virt 0x%p)\n",
     	    	host->host_no, cmd->saved_data_pointer,
-		bus_to_virt (cmd->saved_data_pointer));
+		bus_to_virt (le32_to_cpu(cmd->saved_data_pointer)));
     	    print_progress (c);
     	}
     	return SPECIFIC_INT_RESTART;
@@ -2901,11 +2957,11 @@ NCR53c8x0_dstat_sir_intr (struct Scsi_Host *host, struct
 		int size;
     	    	printk ("scsi%d : restored data pointer 0x%x (virt 0x%p)\n",
     	    	    host->host_no, cmd->saved_data_pointer, bus_to_virt (
-		    cmd->saved_data_pointer));
+		    le32_to_cpu(cmd->saved_data_pointer)));
 		size = print_insn (host, (u32 *) 
-		    bus_to_virt(cmd->saved_data_pointer), "", 1);
+		    bus_to_virt(le32_to_cpu(cmd->saved_data_pointer)), "", 1);
 		size = print_insn (host, (u32 *) 
-		    bus_to_virt(cmd->saved_data_pointer) + size, "", 1);
+		    bus_to_virt(le32_to_cpu(cmd->saved_data_pointer)) + size, "", 1);
     	    	print_progress (c);
 	    }
 #if 0
@@ -2947,8 +3003,8 @@ NCR53c8x0_dstat_sir_intr (struct Scsi_Host *host, struct
 		    (int) NCR53c7x0_read8(SCNTL3_REG_800),
 		    datapath_residual (host)) ;
 		print_insn (host, dsp, "", 1);
-		size = print_insn (host, (u32 *) bus_to_virt(dsp[1]), "", 1);
-		print_insn (host, (u32 *) bus_to_virt(dsp[1]) + size, "", 1);
+		size = print_insn (host, (u32 *) bus_to_virt(le32_to_cpu(dsp[1])), "", 1);
+		print_insn (host, (u32 *) bus_to_virt(le32_to_cpu(dsp[1])) + size, "", 1);
 	   } 
 	return SPECIFIC_INT_RESTART;
 #endif
@@ -3543,7 +3599,6 @@ create_cmd (Scsi_Cmnd *cmd) {
     case MODE_SELECT: 
     case WRITE_6:
     case WRITE_10:
-    case START_STOP: /* also SCAN, which may do DATA OUT */
 #if 0
 	printk("scsi%d : command is ", host->host_no);
 	print_command(cmd->cmnd);
@@ -3562,6 +3617,7 @@ create_cmd (Scsi_Cmnd *cmd) {
      * These commands do no data transfer, we should force an
      * interrupt if a data phase is attempted on them.
      */
+    case START_STOP: /* also SCAN, which may do DATA OUT */
     case TEST_UNIT_READY:
     	datain = dataout = 0;
 	break;
@@ -3612,8 +3668,8 @@ create_cmd (Scsi_Cmnd *cmd) {
      * will start the data transfer over at the beginning.
      */
 
-    tmp->saved_data_pointer = virt_to_bus (hostdata->script) + 
-	hostdata->E_data_transfer;
+    tmp->saved_data_pointer = le32_to_cpu(virt_to_bus (hostdata->script) + 
+	hostdata->E_data_transfer);
 
     /*
      * Initialize Linux specific fields.
@@ -3622,9 +3678,9 @@ create_cmd (Scsi_Cmnd *cmd) {
     tmp->cmd = cmd;
     tmp->next = NULL;
     tmp->flags = 0;
-    tmp->dsa_next_addr = virt_to_bus(tmp->dsa) + hostdata->dsa_next - 
-	hostdata->dsa_start;
-    tmp->dsa_addr = virt_to_bus(tmp->dsa) - hostdata->dsa_start;
+    tmp->dsa_next_addr = le32_to_cpu(virt_to_bus(tmp->dsa) + hostdata->dsa_next - 
+	hostdata->dsa_start);
+    tmp->dsa_addr = le32_to_cpu(virt_to_bus(tmp->dsa) - hostdata->dsa_start);
 
     /* 
      * Calculate addresses of dynamic code to fill in DSA
@@ -3650,8 +3706,8 @@ create_cmd (Scsi_Cmnd *cmd) {
     if (hostdata->dsa_fixup)
     	hostdata->dsa_fixup(tmp);
 
-    patch_dsa_32(tmp->dsa, dsa_next, 0, 0);
-    patch_dsa_32(tmp->dsa, dsa_cmnd, 0, virt_to_bus(cmd));
+    patch_dsa_32(tmp->dsa, dsa_next, 0, le32_to_cpu(0));
+    patch_dsa_32(tmp->dsa, dsa_cmnd, 0, le32_to_cpu(virt_to_bus(cmd)));
 
     if (hostdata->options & OPTION_DEBUG_SYNCHRONOUS) 
 	if (hostdata->sync[cmd->target].select_indirect != 
@@ -3664,8 +3720,8 @@ create_cmd (Scsi_Cmnd *cmd) {
 
 	}
 
-    patch_dsa_32(tmp->dsa, dsa_select, 0, hostdata->sync[cmd->target].
-    	select_indirect);
+    patch_dsa_32(tmp->dsa, dsa_select, 0, le32_to_cpu(hostdata->sync[cmd->target].
+    	select_indirect));
     /*
      * Right now, we'll do the WIDE and SYNCHRONOUS negotiations on
      * different commands; although it should be trivial to do them
@@ -3674,7 +3730,7 @@ create_cmd (Scsi_Cmnd *cmd) {
     if (hostdata->initiate_wdtr & (1 << cmd->target)) {
 	memcpy ((void *) (tmp->select + 1), (void *) wdtr_message,
 	    sizeof(wdtr_message));
-    	patch_dsa_32(tmp->dsa, dsa_msgout, 0, 1 + sizeof(wdtr_message));
+    	patch_dsa_32(tmp->dsa, dsa_msgout, 0, le32_to_cpu(1 + sizeof(wdtr_message)));
 	save_flags(flags);
 	cli();
 	hostdata->initiate_wdtr &= ~(1 << cmd->target);
@@ -3682,7 +3738,7 @@ create_cmd (Scsi_Cmnd *cmd) {
     } else if (hostdata->initiate_sdtr & (1 << cmd->target)) {
 	memcpy ((void *) (tmp->select + 1), (void *) sdtr_message, 
 	    sizeof(sdtr_message));
-    	patch_dsa_32(tmp->dsa, dsa_msgout, 0, 1 + sizeof(sdtr_message));
+    	patch_dsa_32(tmp->dsa, dsa_msgout, 0, le32_to_cpu(1 + sizeof(sdtr_message)));
 	tmp->flags |= CMD_FLAG_SDTR;
 	save_flags(flags);
 	cli();
@@ -3695,40 +3751,40 @@ create_cmd (Scsi_Cmnd *cmd) {
 		!(hostdata->options & OPTION_NO_ASYNC)) {
 	memcpy ((void *) (tmp->select + 1), (void *) async_message, 
 	    sizeof(async_message));
-    	patch_dsa_32(tmp->dsa, dsa_msgout, 0, 1 + sizeof(async_message));
+    	patch_dsa_32(tmp->dsa, dsa_msgout, 0, le32_to_cpu(1 + sizeof(async_message)));
 	tmp->flags |= CMD_FLAG_SDTR;
     } 
 #endif
     else 
-    	patch_dsa_32(tmp->dsa, dsa_msgout, 0, 1);
+    	patch_dsa_32(tmp->dsa, dsa_msgout, 0, le32_to_cpu(1));
     hostdata->talked_to |= (1 << cmd->target);
     tmp->select[0] = (hostdata->options & OPTION_DISCONNECT) ? 
 	IDENTIFY (1, cmd->lun) : IDENTIFY (0, cmd->lun);
-    patch_dsa_32(tmp->dsa, dsa_msgout, 1, virt_to_bus(tmp->select));
-    patch_dsa_32(tmp->dsa, dsa_cmdout, 0, cmd->cmd_len);
-    patch_dsa_32(tmp->dsa, dsa_cmdout, 1, virt_to_bus(cmd->cmnd));
-    patch_dsa_32(tmp->dsa, dsa_dataout, 0, cmd_dataout ? 
+    patch_dsa_32(tmp->dsa, dsa_msgout, 1, le32_to_cpu(virt_to_bus(tmp->select)));
+    patch_dsa_32(tmp->dsa, dsa_cmdout, 0, le32_to_cpu(cmd->cmd_len));
+    patch_dsa_32(tmp->dsa, dsa_cmdout, 1, le32_to_cpu(virt_to_bus(cmd->cmnd)));
+    patch_dsa_32(tmp->dsa, dsa_dataout, 0, le32_to_cpu(cmd_dataout ? 
     	    virt_to_bus (cmd_dataout)
-	: virt_to_bus (hostdata->script) + hostdata->E_other_transfer);
-    patch_dsa_32(tmp->dsa, dsa_datain, 0, cmd_datain ? 
+	: virt_to_bus (hostdata->script) + hostdata->E_other_transfer));
+    patch_dsa_32(tmp->dsa, dsa_datain, 0, le32_to_cpu(cmd_datain ? 
     	    virt_to_bus (cmd_datain) 
-	: virt_to_bus (hostdata->script) + hostdata->E_other_transfer);
+	: virt_to_bus (hostdata->script) + hostdata->E_other_transfer));
     /* 
      * XXX - need to make endian aware, should use separate variables
      * for both status and message bytes.
      */
-    patch_dsa_32(tmp->dsa, dsa_msgin, 0, 1);
+    patch_dsa_32(tmp->dsa, dsa_msgin, 0, le32_to_cpu(1));
 /* 
  * FIXME : these only works for little endian.  We probably want to 
  * 	provide message and status fields in the NCR53c7x0_cmd 
  *	structure, and assign them to cmd->result when we're done.
  */
-    patch_dsa_32(tmp->dsa, dsa_msgin, 1, virt_to_bus(&cmd->result) + 1);
-    patch_dsa_32(tmp->dsa, dsa_status, 0, 1);
-    patch_dsa_32(tmp->dsa, dsa_status, 1, virt_to_bus(&cmd->result));
-    patch_dsa_32(tmp->dsa, dsa_msgout_other, 0, 1);
+    patch_dsa_32(tmp->dsa, dsa_msgin, 1, le32_to_cpu(virt_to_bus(&cmd->result) + 1));
+    patch_dsa_32(tmp->dsa, dsa_status, 0, le32_to_cpu(1));
+    patch_dsa_32(tmp->dsa, dsa_status, 1, le32_to_cpu(virt_to_bus(&cmd->result)));
+    patch_dsa_32(tmp->dsa, dsa_msgout_other, 0, le32_to_cpu(1));
     patch_dsa_32(tmp->dsa, dsa_msgout_other, 1, 
-	virt_to_bus(&(hostdata->NCR53c7xx_msg_nop)));
+	le32_to_cpu(virt_to_bus(&(hostdata->NCR53c7xx_msg_nop))));
     
     /*
      * Generate code for zero or more of the DATA IN, DATA OUT phases 
@@ -3779,15 +3835,15 @@ create_cmd (Scsi_Cmnd *cmd) {
 
 	if (datain) {
 	    /* CALL other_in, WHEN NOT DATA_IN */  
-	    cmd_datain[0] = ((DCMD_TYPE_TCI | DCMD_TCI_OP_CALL | 
+	    cmd_datain[0] = le32_to_cpu(((DCMD_TYPE_TCI | DCMD_TCI_OP_CALL | 
 		DCMD_TCI_IO) << 24) | 
-		DBC_TCI_WAIT_FOR_VALID | DBC_TCI_COMPARE_PHASE;
-	    cmd_datain[1] = virt_to_bus (hostdata->script) + 
-		hostdata->E_other_in;
+		DBC_TCI_WAIT_FOR_VALID | DBC_TCI_COMPARE_PHASE);
+	    cmd_datain[1] = le32_to_cpu(virt_to_bus (hostdata->script) + 
+		hostdata->E_other_in);
 	    /* MOVE count, buf, WHEN DATA_IN */
-	    cmd_datain[2] = ((DCMD_TYPE_BMI | DCMD_BMI_OP_MOVE_I | DCMD_BMI_IO) 
-    	    	<< 24) | count;
-	    cmd_datain[3] = buf;
+	    cmd_datain[2] = le32_to_cpu(((DCMD_TYPE_BMI | DCMD_BMI_OP_MOVE_I | DCMD_BMI_IO) 
+    	    	<< 24) | count);
+	    cmd_datain[3] = le32_to_cpu(buf);
 #if 0
 	    print_insn (host, cmd_datain, "dynamic ", 1);
 	    print_insn (host, cmd_datain + 2, "dynamic ", 1);
@@ -3795,14 +3851,14 @@ create_cmd (Scsi_Cmnd *cmd) {
 	}
 	if (dataout) {
 	    /* CALL other_out, WHEN NOT DATA_OUT */
-	    cmd_dataout[0] = ((DCMD_TYPE_TCI | DCMD_TCI_OP_CALL) << 24) | 
-		DBC_TCI_WAIT_FOR_VALID | DBC_TCI_COMPARE_PHASE;
-	    cmd_dataout[1] = virt_to_bus(hostdata->script) + 
-    	    	hostdata->E_other_out;
+	    cmd_dataout[0] = le32_to_cpu(((DCMD_TYPE_TCI | DCMD_TCI_OP_CALL) << 24) | 
+		DBC_TCI_WAIT_FOR_VALID | DBC_TCI_COMPARE_PHASE);
+	    cmd_dataout[1] = le32_to_cpu(virt_to_bus(hostdata->script) + 
+    	    	hostdata->E_other_out);
 	    /* MOVE count, buf, WHEN DATA+OUT */
-	    cmd_dataout[2] = ((DCMD_TYPE_BMI | DCMD_BMI_OP_MOVE_I) << 24) 
-		| count;
-	    cmd_dataout[3] = buf;
+	    cmd_dataout[2] = le32_to_cpu(((DCMD_TYPE_BMI | DCMD_BMI_OP_MOVE_I) << 24) 
+		| count);
+	    cmd_dataout[3] = le32_to_cpu(buf);
 #if 0
 	    print_insn (host, cmd_dataout, "dynamic ", 1);
 	    print_insn (host, cmd_dataout + 2, "dynamic ", 1);
@@ -3817,10 +3873,10 @@ create_cmd (Scsi_Cmnd *cmd) {
   
     
     if (datain) {
-	cmd_datain[0] = ((DCMD_TYPE_TCI | DCMD_TCI_OP_JUMP) << 24) |
-    	    DBC_TCI_TRUE;
-	cmd_datain[1] = virt_to_bus(hostdata->script) + 
-    	    hostdata->E_other_transfer;
+	cmd_datain[0] = le32_to_cpu(((DCMD_TYPE_TCI | DCMD_TCI_OP_JUMP) << 24) |
+    	    DBC_TCI_TRUE);
+	cmd_datain[1] = le32_to_cpu(virt_to_bus(hostdata->script) + 
+    	    hostdata->E_other_transfer);
 #if 0
 	print_insn (host, cmd_datain, "dynamic jump ", 1);
 #endif
@@ -3834,10 +3890,10 @@ create_cmd (Scsi_Cmnd *cmd) {
     }
 #endif
     if (dataout) {
-	cmd_dataout[0] = ((DCMD_TYPE_TCI | DCMD_TCI_OP_JUMP) << 24) |
-    	    DBC_TCI_TRUE;
-	cmd_dataout[1] = virt_to_bus(hostdata->script) + 
-    	    hostdata->E_other_transfer;
+	cmd_dataout[0] = le32_to_cpu(((DCMD_TYPE_TCI | DCMD_TCI_OP_JUMP) << 24) |
+    	    DBC_TCI_TRUE);
+	cmd_dataout[1] = le32_to_cpu(virt_to_bus(hostdata->script) + 
+    	    hostdata->E_other_transfer);
 #if 0
 	print_insn (host, cmd_dataout, "dynamic jump ", 1);
 #endif
@@ -3894,26 +3950,25 @@ NCR53c7xx_queue_command (Scsi_Cmnd *cmd, void (* done)(Scsi_Cmnd *)) {
 	|| hostdata->state == STATE_DISABLED) {
 	printk("scsi%d : disabled or bad target %d lun %d\n", host->host_no,
 	    cmd->target, cmd->lun);
-	cmd->result = (DID_BAD_TARGET << 16);
+	cmd->result = DID_BAD_TARGET << 16;
     } else if ((hostdata->options & OPTION_DEBUG_NCOMMANDS_LIMIT) &&
 	(hostdata->debug_count_limit == 0)) {
 	printk("scsi%d : maximum commands exceeded\n", host->host_no);
-	cmd->result = (DID_BAD_TARGET << 16);
-	cmd->result = (DID_BAD_TARGET << 16);
+	cmd->result = DID_BAD_TARGET << 16;
     } else if (hostdata->options & OPTION_DEBUG_READ_ONLY) {
 	switch (cmd->cmnd[0]) {
 	case WRITE_6:
 	case WRITE_10:
 	    printk("scsi%d : WRITE attempted with NO_WRITE debugging flag set\n",
 		host->host_no);
-	    cmd->result = (DID_BAD_TARGET << 16);
+	    cmd->result = DID_BAD_TARGET << 16;
 	}
     } else {
     	if ((hostdata->options & OPTION_DEBUG_TARGET_LIMIT) &&
 	    hostdata->debug_count_limit != -1) 
 	    --hostdata->debug_count_limit;
 	restore_flags (flags);
-	cmd->result = 0xffff;	/* The NCR will overwrite message
+	cmd->result = le32_to_cpu(0xffff);	/* The NCR will overwrite message
 				       and status with valid data */
 	cmd->host_scribble = (unsigned char *) tmp = create_cmd (cmd);
     }
@@ -3967,7 +4022,7 @@ to_schedule_list (struct Scsi_Host *host, struct NCR53c7x0_hostdata *hostdata,
 
     int i;
     NCR53c7x0_local_setup(host);
-#if 0	
+#if 0
     printk("scsi%d : new dsa is 0x%lx (virt 0x%p)\n", host->host_no, 
 	virt_to_bus(dsa), dsa);
 #endif
@@ -3982,7 +4037,7 @@ to_schedule_list (struct Scsi_Host *host, struct NCR53c7x0_hostdata *hostdata,
 
     if (hostdata->state == STATE_DISABLED) {
 	printk("scsi%d : driver disabled\n", host->host_no);
-	tmp->result = (DID_BAD_TARGET << 16);
+	tmp->result = DID_BAD_TARGET << 16;
 	cmd->next = (struct NCR53c7x0_cmd *) hostdata->free;
 	hostdata->free = cmd;
 	tmp->scsi_done(tmp);
@@ -4001,18 +4056,18 @@ to_schedule_list (struct Scsi_Host *host, struct NCR53c7x0_hostdata *hostdata,
 
 	/* Restore this instruction to a NOP once the command starts */
 	cmd->dsa [(hostdata->dsa_jump_dest - hostdata->dsa_start) / 
-	    sizeof(u32)] = (u32) virt_to_bus ((void *)curr);
+	    sizeof(u32)] = (u32) le32_to_cpu(virt_to_bus ((void *)curr));
 	/* Replace the current jump operand.  */
 	curr[1] =
-	    virt_to_bus ((void *) cmd->dsa) + hostdata->E_dsa_code_begin -
-	    hostdata->E_dsa_code_template;
+	    le32_to_cpu(virt_to_bus ((void *) cmd->dsa) + hostdata->E_dsa_code_begin -
+	    hostdata->E_dsa_code_template);
 	/* Replace the NOP instruction with a JUMP */
-	curr[0] = ((DCMD_TYPE_TCI|DCMD_TCI_OP_JUMP) << 24) |
-	    DBC_TCI_TRUE;
+	curr[0] = le32_to_cpu(((DCMD_TYPE_TCI|DCMD_TCI_OP_JUMP) << 24) |
+	    DBC_TCI_TRUE);
     }  else {
 	printk ("scsi%d: no free slot\n", host->host_no);
 	disable(host);
-	tmp->result = (DID_ERROR << 16);
+	tmp->result = DID_ERROR << 16;
 	cmd->next = (struct NCR53c7x0_cmd *) hostdata->free;
 	hostdata->free = cmd;
 	tmp->scsi_done(tmp);
@@ -4101,7 +4156,7 @@ process_issue_queue (unsigned long flags) {
 	    	if (hostdata->state == STATE_DISABLED) {
 		    tmp = (Scsi_Cmnd *) hostdata->issue_queue;
 		    hostdata->issue_queue = (Scsi_Cmnd *) tmp->SCp.ptr;
-		    tmp->result = (DID_BAD_TARGET << 16);
+		    tmp->result = DID_BAD_TARGET << 16;
 		    if (tmp->host_scribble) {
 			((struct NCR53c7x0_cmd *)tmp->host_scribble)->next = 
 			    hostdata->free;
@@ -4133,6 +4188,7 @@ process_issue_queue (unsigned long flags) {
 				    (struct NCR53c7x0_cmd *)
 				    tmp->host_scribble);
 			    } else {
+			    	tmp->result = le32_to_cpu(tmp->result);
 				if (((tmp->result & 0xff) == 0xff) ||
 			    	    ((tmp->result & 0xff00) == 0xff00)) {
 				    printk ("scsi%d : danger Will Robinson!\n",
@@ -4370,7 +4426,6 @@ NCR53c7x0_intr (int irq, void *dev_id, struct pt_regs * regs) {
     char buf[80];				/* Debugging sprintf buffer */
     size_t buflen;				/* Length of same */
 #endif
-
     do {
 	done = 1;
 	for (host = first_host; host; host = host->next) 
@@ -4449,10 +4504,16 @@ restart:
 			printk ("scsi%d : looking at result of 0x%x\n",
 			    host->host_no, cmd->cmd->result);
 #endif
-		
+
+#ifdef __powerpc__
+			if (tmp->result == le32_to_cpu(0xffff))
+			    continue;
+			tmp->result = le32_to_cpu(tmp->result);
+#else			
 			if (((tmp->result & 0xff) == 0xff) ||
 			    ((tmp->result & 0xff00) == 0xff00))
 			    continue;
+#endif			    
 
 			search_found = 1;
 
@@ -4537,7 +4598,6 @@ restart:
 			    printk("scsi%d : no active command\n", host->host_no);
 			}
 		    }
-
 		    if (istat & ISTAT_SIP) {
 			if (hostdata->options & OPTION_DEBUG_INTR) 
 			    printk ("scsi%d : ISTAT_SIP\n", host->host_no);
@@ -4872,12 +4932,12 @@ intr_phase_mismatch (struct Scsi_Host *host, struct NCR53c7x0_cmd *cmd) {
 	     * from normal dynamic code.
 	     */
 	    if (dsp != cmd->residual + 2) {
-		cmd->residual[0] = ((DCMD_TYPE_TCI | DCMD_TCI_OP_CALL |
+		cmd->residual[0] = le32_to_cpu(((DCMD_TYPE_TCI | DCMD_TCI_OP_CALL |
 			((dcmd & DCMD_BMI_IO) ? DCMD_TCI_IO : 0)) << 24) | 
-		    DBC_TCI_WAIT_FOR_VALID | DBC_TCI_COMPARE_PHASE;
-		cmd->residual[1] = virt_to_bus(hostdata->script)
+		    DBC_TCI_WAIT_FOR_VALID | DBC_TCI_COMPARE_PHASE);
+		cmd->residual[1] = le32_to_cpu(virt_to_bus(hostdata->script)
 		    + ((dcmd & DCMD_BMI_IO)
-		       ? hostdata->E_other_in : hostdata->E_other_out);
+		       ? hostdata->E_other_in : hostdata->E_other_out));
 	    }
 
 	    /*
@@ -4885,17 +4945,17 @@ intr_phase_mismatch (struct Scsi_Host *host, struct NCR53c7x0_cmd *cmd) {
 	     * move instruction, reflecting the pointer and count at the 
 	     * time of the phase mismatch.
 	     */
-	    cmd->residual[2] = dbc_dcmd + residual;
-	    cmd->residual[3] = NCR53c7x0_read32(DNAD_REG) - residual;
+	    cmd->residual[2] = le32_to_cpu(dbc_dcmd + residual);
+	    cmd->residual[3] = le32_to_cpu(NCR53c7x0_read32(DNAD_REG) - residual);
 
 	    /*
 	     * The third and final instruction is a jump to the instruction
 	     * which follows the instruction which had to be 'split'
 	     */
 	    if (dsp != cmd->residual + 2) {
-		cmd->residual[4] = ((DCMD_TYPE_TCI|DCMD_TCI_OP_JUMP) 
-		    << 24) | DBC_TCI_TRUE;
-		cmd->residual[5] = virt_to_bus(dsp_next);
+		cmd->residual[4] = le32_to_cpu(((DCMD_TYPE_TCI|DCMD_TCI_OP_JUMP) 
+		    << 24) | DBC_TCI_TRUE);
+		cmd->residual[5] = le32_to_cpu(virt_to_bus(dsp_next));
 	    }
 
 	    /*
@@ -5375,11 +5435,11 @@ print_insn (struct Scsi_Host *host, const u32 *insn,
  */
 	sprintf(buf, "%s0x%lx (virt 0x%p) : 0x%08x 0x%08x (virt 0x%p)", 
 	    (prefix ? prefix : ""), virt_to_bus((void *) insn), insn,  
-	    insn[0], insn[1], bus_to_virt (insn[1]));
+	    insn[0], insn[1], bus_to_virt (le32_to_cpu(insn[1])));
 	tmp = buf + strlen(buf);
 	if ((dcmd & DCMD_TYPE_MASK) == DCMD_TYPE_MMI)  {
 	    sprintf (tmp, " 0x%08x (virt 0x%p)\n", insn[2], 
-		bus_to_virt(insn[2]));
+		bus_to_virt(le32_to_cpu(insn[2])));
 	    size = 3;
 	} else {
 	    sprintf (tmp, "\n");
@@ -5439,6 +5499,7 @@ NCR53c7xx_abort (Scsi_Cmnd *cmd) {
     struct NCR53c7x0_hostdata *hostdata = host ? (struct NCR53c7x0_hostdata *) 
 	host->hostdata : NULL;
     unsigned long flags;
+    unsigned long result;
     struct NCR53c7x0_cmd *curr, **prev;
     Scsi_Cmnd *me, **last;
 #if 0
@@ -5530,7 +5591,8 @@ NCR53c7xx_abort (Scsi_Cmnd *cmd) {
          &(curr->next), curr = (struct NCR53c7x0_cmd *) curr->next);
 
     if (curr) {
-	if ((cmd->result & 0xff) != 0xff && (cmd->result & 0xff00) != 0xff00) {
+	result = le32_to_cpu(cmd->result);
+	if ((result & 0xff) != 0xff && (result & 0xff00) != 0xff00) {
 	    if (prev)
 		*prev = (struct NCR53c7x0_cmd *) curr->next;
 	    curr->next = (struct NCR53c7x0_cmd *) hostdata->free;
@@ -5561,8 +5623,9 @@ NCR53c7xx_abort (Scsi_Cmnd *cmd) {
 	cmd->host_scribble = NULL;
     }
 
-    if (((cmd->result & 0xff00) == 0xff00) ||
-	((cmd->result & 0xff) == 0xff)) {
+    result = le32_to_cpu(cmd->result);
+    if (((result & 0xff00) == 0xff00) ||
+	((result & 0xff) == 0xff)) {
 	printk ("scsi%d : did this command ever run?\n", host->host_no);
 	cmd->result = DID_ABORT << 16;
     } else {
@@ -5709,7 +5772,7 @@ insn_to_offset (Scsi_Cmnd *cmd, u32 *insn) {
     	(insn >= ncmd->residual &&
     	    insn < (ncmd->residual + 
     	    	sizeof(ncmd->residual))))) {
-	    ptr = bus_to_virt(insn[3]);
+	    ptr = bus_to_virt(le32_to_cpu(insn[3]));
 
 	    if ((buffers = cmd->use_sg)) {
     	    	for (offset = 0, 
@@ -5764,7 +5827,7 @@ print_progress (Scsi_Cmnd *cmd) {
 	    continue;
 	if (!i) {
 	    where = "saved";
-	    ptr = bus_to_virt(ncmd->saved_data_pointer);
+	    ptr = bus_to_virt(le32_to_cpu(ncmd->saved_data_pointer));
 	} else {
 	    where = "active";
 	    ptr = bus_to_virt (NCR53c7x0_read32 (DSP_REG) -
@@ -5782,9 +5845,9 @@ print_progress (Scsi_Cmnd *cmd) {
 		cmd->host->host_no, where);
 	    if (ncmd) {
 		size = print_insn (cmd->host, 
-		    bus_to_virt(ncmd->saved_data_pointer), "", 1);
+		    bus_to_virt(le32_to_cpu(ncmd->saved_data_pointer)), "", 1);
 		print_insn (cmd->host, 
-		    bus_to_virt(ncmd->saved_data_pointer) + size * sizeof(u32),
+		    bus_to_virt(le32_to_cpu(ncmd->saved_data_pointer)) + size * sizeof(u32),
 		    "", 1);
 	    }
 	}
@@ -5809,9 +5872,9 @@ print_dsa (struct Scsi_Host *host, u32 *dsa, const char *prefix) {
 	    "        + %d : dsa_msgout length = %u, data = 0x%x (virt 0x%p)\n" ,
     	    prefix ? prefix : "",
     	    host->host_no,  virt_to_bus (dsa), dsa, hostdata->dsa_msgout,
-    	    dsa[hostdata->dsa_msgout / sizeof(u32)],
-	    dsa[hostdata->dsa_msgout / sizeof(u32) + 1],
-	    bus_to_virt (dsa[hostdata->dsa_msgout / sizeof(u32) + 1]));
+    	    le32_to_cpu(dsa[hostdata->dsa_msgout / sizeof(u32)]),
+	    le32_to_cpu(dsa[hostdata->dsa_msgout / sizeof(u32) + 1]),
+	    bus_to_virt (le32_to_cpu(dsa[hostdata->dsa_msgout / sizeof(u32) + 1])));
 
     /* 
      * Only print messages if they're sane in length so we don't
@@ -5819,10 +5882,10 @@ print_dsa (struct Scsi_Host *host, u32 *dsa, const char *prefix) {
      * anything.
      */
 
-    if (dsa[hostdata->dsa_msgout / sizeof(u32)] < 
+    if (le32_to_cpu(dsa[hostdata->dsa_msgout / sizeof(u32)]) < 
 	    sizeof (hostdata->free->select)) 
-	for (i = dsa[hostdata->dsa_msgout / sizeof(u32)],
-	    ptr = bus_to_virt (dsa[hostdata->dsa_msgout / sizeof(u32) + 1]); 
+	for (i = le32_to_cpu(dsa[hostdata->dsa_msgout / sizeof(u32)]),
+	    ptr = bus_to_virt (le32_to_cpu(dsa[hostdata->dsa_msgout / sizeof(u32) + 1])); 
 	    i > 0 && !check_address ((unsigned long) ptr, 1);
 	    ptr += len, i -= len) {
 	    printk("               ");
@@ -5833,8 +5896,8 @@ print_dsa (struct Scsi_Host *host, u32 *dsa, const char *prefix) {
 	}
 
     printk("        + %d : select_indirect = 0x%x\n",
-	hostdata->dsa_select, dsa[hostdata->dsa_select / sizeof(u32)]);
-    cmd = (Scsi_Cmnd *) bus_to_virt(dsa[hostdata->dsa_cmnd / sizeof(u32)]);
+	hostdata->dsa_select, le32_to_cpu(dsa[hostdata->dsa_select / sizeof(u32)]));
+    cmd = (Scsi_Cmnd *) bus_to_virt(le32_to_cpu(dsa[hostdata->dsa_cmnd / sizeof(u32)]));
     printk("        + %d : dsa_cmnd = 0x%x ", hostdata->dsa_cmnd,
 	   (u32) virt_to_bus(cmd));
     if (cmd) {
@@ -5844,7 +5907,7 @@ print_dsa (struct Scsi_Host *host, u32 *dsa, const char *prefix) {
     } else
 	printk("\n");
     printk("        + %d : dsa_next = 0x%x\n", hostdata->dsa_next,
-	dsa[hostdata->dsa_next / sizeof(u32)]);
+	le32_to_cpu(dsa[hostdata->dsa_next / sizeof(u32)]));
     if (cmd) { 
 	printk("scsi%d target %d : sxfer_sanity = 0x%x, scntl3_sanity = 0x%x\n"
 	       "                   script : ",
@@ -5891,8 +5954,7 @@ print_queues (struct Scsi_Host *host) {
 		    host->host_no, cmd->pid);
 	    /* print_dsa does sanity check on address, no need to check */
 	    else
-	    	print_dsa (host, ((struct NCR53c7x0_cmd *) cmd->host_scribble)
-		    -> dsa, "");
+	    	print_dsa (host, le32_to_cpu(((struct NCR53c7x0_cmd *) cmd->host_scribble)-> dsa), "");
 	} else 
 	    printk ("scsi%d : scsi pid %ld for target %d lun %d has no NCR53c7x0_cmd\n",
 		host->host_no, cmd->pid, cmd->target, cmd->lun);
@@ -5917,7 +5979,7 @@ print_queues (struct Scsi_Host *host) {
 	    left > 0; curr += 2, --left)
 	if (curr[0] != hostdata->NOP_insn) 
 /* FIXME : convert pointer to dsa_begin to pointer to dsa. */
-	    print_dsa (host, bus_to_virt (curr[1] - 
+	    print_dsa (host, bus_to_virt (le32_to_cpu(curr[1]) - 
 		(hostdata->E_dsa_code_begin - 
 		hostdata->E_dsa_code_template)), "");
     printk ("scsi%d : end schedule dsa array\n", host->host_no);
@@ -5925,7 +5987,7 @@ print_queues (struct Scsi_Host *host) {
     printk ("scsi%d : reconnect_dsa_head :\n", host->host_no);
 	    
     for (left = host->can_queue, 
-	dsa = bus_to_virt (hostdata->reconnect_dsa_head);
+	dsa = bus_to_virt (le32_to_cpu(hostdata->reconnect_dsa_head));
 	left >= 0 && dsa; 
 	dsa = next_dsa) {
 	save_flags (flags);
@@ -5937,7 +5999,7 @@ print_queues (struct Scsi_Host *host) {
 	}
 	else 
 	{
-	    next_dsa = bus_to_virt(dsa[hostdata->dsa_next / sizeof(u32)]);
+	    next_dsa = bus_to_virt(le32_to_cpu(dsa[hostdata->dsa_next / sizeof(u32)]));
 	    print_dsa (host, dsa, "");
 	}
 	restore_flags(flags);
@@ -6131,7 +6193,7 @@ return_outstanding_commands (struct Scsi_Host *host, int free, int issue) {
 	for (i = 0, curr = (u32 *) hostdata->schedule; 
 	    i < host->can_queue; ++i, curr += 2) {
 	    curr[0] = hostdata->NOP_insn;
-	    curr[1] = 0xdeadbeef;
+	    curr[1] = le32_to_cpu(0xdeadbeef);
 	}
 	hostdata->curr = NULL;
     }

@@ -1,4 +1,4 @@
-/* $Id: sys_sunos.c,v 1.80 1997/07/17 02:20:22 davem Exp $
+/* $Id: sys_sunos.c,v 1.81 1997/07/20 05:59:31 davem Exp $
  * sys_sunos.c: SunOS specific syscall compatibility support.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -842,8 +842,9 @@ asmlinkage int sunos_nfs_mount(char *dir_name, int linux_flags, void *data)
 	linux_nfs_mount.acdirmin = sunos_mount->acdirmin;
 	linux_nfs_mount.acdirmax = sunos_mount->acdirmax;
 
-	if (getname (sunos_mount->hostname, &the_name))
-		return -EFAULT;
+	the_name = getname(sunos_mount->hostname);
+	if(IS_ERR(the_name))
+		return PTR_ERR(the_name);
 
 	strncpy (linux_nfs_mount.hostname, the_name, 254);
 	linux_nfs_mount.hostname [255] = 0;

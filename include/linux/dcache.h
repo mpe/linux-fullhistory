@@ -53,6 +53,9 @@ struct dentry {
 	int (*d_revalidate)(struct dentry *);
 };
 
+/* d_flags entries */
+#define DCACHE_AUTOFS_PENDING 0x0001    /* autofs: "under construction" */
+
 /*
  * d_drop() unhashes the entry from the parent
  * dentry hashes, so that it won't be found through

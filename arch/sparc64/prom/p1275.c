@@ -1,4 +1,4 @@
-/* $Id: p1275.c,v 1.10 1997/06/27 04:18:30 davem Exp $
+/* $Id: p1275.c,v 1.11 1997/07/24 12:15:11 davem Exp $
  * p1275.c: Sun IEEE 1275 PROM low level interface routines
  *
  * Copyright (C) 1996,1997 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -6,6 +6,8 @@
 
 #include <linux/kernel.h>
 #include <linux/init.h>
+#include <linux/sched.h>
+#include <linux/smp.h>
 #include <linux/string.h>
 
 #include <asm/openprom.h>

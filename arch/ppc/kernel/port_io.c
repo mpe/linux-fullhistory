@@ -1,149 +1,146 @@
 /*
  * I/O 'port' access routines
  */
+#include <asm/byteorder.h>
+#include <asm/io.h>
 
-/* This is really only correct for the MVME16xx (PreP)? */
+#define inb_asm(port) {( \
+  unsigned char ret; \
+  asm ( "lbz %0,0(%1)\nnop\nnop\nnop\nnop\nnop\nnop\nnop\nnop\n" : "=r" (ret) : "r" (port+_IO_BASE)); \
+  return ret; \
+})
 
-#define _IO_BASE ((unsigned long)0x80000000)
-
-unsigned char
+inline unsigned char
 inb(int port)
 {
-	return (*((unsigned  char *)(_IO_BASE+port)));
+  unsigned char ret;
+  asm("/*inb*/\n");
+  asm ( "lbz %0,0(%1)" : "=r" (ret) : "r" (port+_IO_BASE));
+  return ret;
 }
 
-unsigned short
+inline unsigned short
 inw(int port)
 {
-	return (_LE_to_BE_short(*((unsigned short *)(_IO_BASE+port))));
+  unsigned short ret;
+  asm("/*inw*/\n");
+  asm ( "lhbrx %0,%1,%2" : "=r" (ret) : "r" (port+_IO_BASE), "r" (0));
+  return ret;
 }
 
-unsigned long
+inline unsigned long
 inl(int port)
 {
-	return (_LE_to_BE_long(*((unsigned  long *)(_IO_BASE+port))));
+  unsigned long ret;
+  asm("/*inl*/\n");
+  asm ( "lwbrx %0,%1,%2" : "=r" (ret) : "r" (port+_IO_BASE), "r" (0));
+  return ret;
+}
+
+inline unsigned char
+outb(unsigned char val,int port)
+{
+  asm("/*outb*/\n");
+  asm ( "stb %0,0(%1)" :: "r" (val), "r" (port+_IO_BASE));
+  return (val);
+}
+
+inline unsigned short
+outw(unsigned short val,int port)
+{
+  asm("/*outw*/\n");
+  asm ( "sthbrx %0,%1,%2" :: "r" (val), "r" (port+_IO_BASE), "r" (0));
+  return (val);
+}
+
+inline unsigned long
+outl(unsigned long val,int port)
+{
+  asm("/*outl*/\n");
+  asm ( "stwbrx %0,%1,%2" :: "r" (val), "r" (port+_IO_BASE), "r" (0));
+  return (val);
 }
 
 void insb(int port, char *ptr, int len)
 {
-	unsigned char *io_ptr = (unsigned char *)(_IO_BASE+port);
-	while (len-- > 0)
-	{
-		*ptr++ = *io_ptr;
-	}
+  memcpy( (void *)ptr, (void *)(port+_IO_BASE), len);
 }
 
-#if 0
 void insw(int port, short *ptr, int len)
 {
-	unsigned short *io_ptr = (unsigned short *)(_IO_BASE+port);
-	while (len-- > 0)
-	{
-		*ptr++ = _LE_to_BE_short(*io_ptr);
-	}
+  asm ("mtctr	%2 \n\t"
+       "subi	%1,%1,2 \n\t"
+       "00:\n\t"
+       "lhbrx	%2,0,%0 \n\t"
+       "sthu	%2,2(%1) \n\t"
+       "bdnz 00b \n\t"
+       :: "r" (port+_IO_BASE), "r" (ptr), "r" (len));
 }
-#else
-void insw(int port, short *ptr, int len)
-{
-	unsigned short *io_ptr = (unsigned short *)(_IO_BASE+port);
-	_insw(io_ptr, ptr, len);
-}
-#endif
 
 void insw_unswapped(int port, short *ptr, int len)
 {
-	unsigned short *io_ptr = (unsigned short *)(_IO_BASE+port);
-	while (len-- > 0)
-	{
-		*ptr++ = *io_ptr;
-	}
+  memcpy( (void *)ptr, (void *)(port+_IO_BASE), (len*sizeof(short)) );
 }
 
 void insl(int port, long *ptr, int len)
 {
-	unsigned long *io_ptr = (unsigned long *)(_IO_BASE+port);
-	while (len-- > 0)
-	{
-		*ptr++ = _LE_to_BE_long(*io_ptr);
-	}
-}
-
-unsigned char  inb_p(int port) {return (inb(port)); }
-unsigned short inw_p(int port) {return (inw(port)); }
-unsigned long  inl_p(int port) {return (inl(port)); }
-
-unsigned char
-outb(unsigned char val,int port)
-{
-	*((unsigned  char *)(_IO_BASE+port)) = (val);
-	return (val);
-}
-
-unsigned short
-outw(unsigned short val,int port)
-{
-	*((unsigned  short *)(_IO_BASE+port)) = _LE_to_BE_short(val);
-	return (val);
-}
-
-unsigned long
-outl(unsigned long val,int port)
-{
-	*((unsigned  long *)(_IO_BASE+port)) = _LE_to_BE_long(val);
-	return (val);
+  asm ("mtctr	%2 \n\t"
+       "subi	%1,%1,4 \n\t"
+       "00:\n\t"
+       "lhbrx	%2,0,%0 \n\t"
+       "sthu	%2,4(%1) \n\t"
+       "bdnz 00b \n\t"
+       :: "r" (port+_IO_BASE), "r" (ptr), "r" (len));
 }
 
 void outsb(int port, char *ptr, int len)
 {
-	unsigned char *io_ptr = (unsigned char *)(_IO_BASE+port);
-	while (len-- > 0)
-	{
-		*io_ptr = *ptr++;
-	}
+  memcpy( (void *)ptr, (void *)(port+_IO_BASE), len );
 }
 
-#if 0
 void outsw(int port, short *ptr, int len)
 {
-	unsigned short *io_ptr = (unsigned short *)(_IO_BASE+port);
-	while (len-- > 0)
-	{
-		*io_ptr = _LE_to_BE_short(*ptr++);
-	}
+  asm ("mtctr	%2\n\t"
+       "subi	%1,%1,2\n\t"
+       "00:lhzu	%2,2(%1)\n\t"
+       "sthbrx	%2,0,%0\n\t"
+       "bdnz	00b\n\t"
+       :: "r" (port+_IO_BASE), "r" (ptr), "r" (len));
 }
-#else
-void outsw(int port, short *ptr, int len)
-{
-	unsigned short *io_ptr = (unsigned short *)(_IO_BASE+port);
-	_outsw(io_ptr, ptr, len);
-}
-#endif
 
 void outsw_unswapped(int port, short *ptr, int len)
 {
-	unsigned short *io_ptr = (unsigned short *)(_IO_BASE+port);
-	while (len-- > 0)
-	{
-		*io_ptr = *ptr++;
-	}
+  memcpy( (void *)ptr, (void *)(port+_IO_BASE), len*sizeof(short) );  
 }
 
 void outsl(int port, long *ptr, int len)
 {
-	unsigned long *io_ptr = (unsigned long *)(_IO_BASE+port);
-	while (len-- > 0)
-	{
-		*io_ptr = _LE_to_BE_long(*ptr++);
-	}
+  asm ("mtctr	%2\n\t"
+       "subi	%1,%1,4\n\t"
+       "00:lwzu	%2,4(%1)\n\t"
+       "sthbrx	%2,0,%0\n\t"
+       "bdnz	00b\n\t"
+       :: "r" (port+_IO_BASE), "r" (ptr), "r" (len));
 }
 
-unsigned char  outb_p(unsigned char val,int port) { return (outb(val,port)); }
-unsigned short outw_p(unsigned short val,int port) { return (outw(val,port)); }
-unsigned long  outl_p(unsigned long val,int port) { return (outl(val,port)); }
-
-
-/* makes writing to the ibm acorn power management stuff easier -- Cort */
-/* args in forn of PA.B as in tech spec for ibm carolina */
-void ibm_write(unsigned char val,unsigned int port)
+void insl_unswapped(int port, long *ptr, int len)
 {
+        unsigned long *io_ptr = (unsigned long *)(_IO_BASE+port);
+        /* Ensure I/O operations complete */
+        __asm__ volatile("eieio");
+        while (len-- > 0)
+        {
+                *ptr++ = (*io_ptr);
+        }
+}
+
+void outsl_unswapped(int port, long *ptr, int len)
+{
+        unsigned long *io_ptr = (unsigned long *)(_IO_BASE+port);
+        /* Ensure I/O operations complete */
+        __asm__ volatile("eieio");
+        while (len-- > 0)
+        {
+                *io_ptr = (*ptr++);
+        }
 }

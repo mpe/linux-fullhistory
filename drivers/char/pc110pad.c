@@ -492,7 +492,7 @@ static int close_pad(struct inode * inode, struct file * file)
 {
 	fasync_pad(inode, file, 0);
 	if (--active)
-		return;
+		return 0;
 	outb(0x30, current_params.io+2);	/* switch off digitiser */
 	MOD_DEC_USE_COUNT;
 	return 0;
@@ -640,7 +640,7 @@ static struct miscdevice pc110_pad = {
 };
 
 
-static int pc110pad_init(void)
+int pc110pad_init(void)
 {
 	current_params = default_params;
 

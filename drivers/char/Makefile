@@ -261,6 +261,16 @@ M = y
 L_OBJS += rtc.o
 endif
 
+ifeq ($(CONFIG_NVRAM),y)
+M = y
+L_OBJS += nvram.o
+else
+  ifeq ($(CONFIG_NVRAM),m)
+    MM = m
+    M_OBJS += nvram.o
+  endif
+endif
+
 ifeq ($(CONFIG_QIC02_TAPE),y)
 L_OBJS += tpqic02.o
 else

@@ -165,6 +165,8 @@ int ax25_rebuild_header(struct sk_buff *skb)
   	bp[14] |= AX25_EBIT;
   	bp[14] |= AX25_SSSID_SPARE;
 
+	skb_pull(skb, AX25_KISS_HEADER_LEN);
+
 	if (route->digipeat != NULL) {
 		if ((ourskb = ax25_rt_build_path(skb, src, dst, route->digipeat)) == NULL) {
 			kfree_skb(skb, FREE_WRITE);

@@ -40,13 +40,13 @@
 	aic7xxx_info,						\
 	NULL,							\
 	aic7xxx_queue,						\
-	aic7xxx_abort,						\
+	NULL,							\
 	aic7xxx_reset,						\
 	NULL,							\
 	aic7xxx_biosparam,					\
 	-1,			/* max simultaneous cmds      */\
 	-1,			/* scsi id of host adapter    */\
-	SG_ALL,			/* max scatter-gather cmds    */\
+	0,			/* max scatter-gather cmds    */\
 	2,			/* cmds per lun (linked cmds) */\
 	0,			/* number of 7xxx's present   */\
 	0,			/* no memory DMA restrictions */\
@@ -57,7 +57,6 @@ extern int aic7xxx_queue(Scsi_Cmnd *, void (*)(Scsi_Cmnd *));
 extern int aic7xxx_biosparam(Disk *, kdev_t, int[]);
 extern int aic7xxx_detect(Scsi_Host_Template *);
 extern int aic7xxx_command(Scsi_Cmnd *);
-extern int aic7xxx_abort(Scsi_Cmnd *);
 extern int aic7xxx_reset(Scsi_Cmnd *, unsigned int);
 
 extern const char *aic7xxx_info(struct Scsi_Host *);

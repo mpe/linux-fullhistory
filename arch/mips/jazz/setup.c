@@ -11,6 +11,7 @@
 #include <linux/ioport.h>
 #include <linux/sched.h>
 #include <linux/interrupt.h>
+#include <asm/bootinfo.h>
 #include <asm/irq.h>
 #include <asm/jazz.h>
 #include <asm/ptrace.h>
@@ -36,11 +37,21 @@ extern void jazz_machine_restart(char *command);
 extern void jazz_machine_halt(void);
 extern void jazz_machine_power_off(void);
 
+void (*board_time_init)(struct irqaction *irq);
+
+__initfunc(static void jazz_time_init(struct irqaction *irq))
+{
+        /* set the clock to 100 Hz */
+        r4030_write_reg32(JAZZ_TIMER_INTERVAL, 9);
+        setup_x86_irq(0, irq);
+}
+
 __initfunc(static void jazz_irq_setup(void))
 {
         set_except_vector(0, jazz_handle_int);
 	r4030_write_reg16(JAZZ_IO_IRQ_ENABLE,
 			  JAZZ_IE_ETHERNET |
+			  JAZZ_IE_SCSI     |
 			  JAZZ_IE_SERIAL1  |
 			  JAZZ_IE_SERIAL2  |
  			  JAZZ_IE_PARALLEL |
@@ -57,14 +68,42 @@ __initfunc(static void jazz_irq_setup(void))
 
 __initfunc(void jazz_setup(void))
 {
+    tag *atag;
+
+    /*
+     * we just check if a tag_screen_info can be gathered
+     * in setup_arch(), if yes we don't proceed futher...
+     */
+    atag = bi_TagFind(tag_screen_info);
+    if (!atag) {
+	/*
+	 * If no, we try to find the tag_arc_displayinfo which is
+	 * always created by Milo for an ARC box (for now Milo only
+	 * works on ARC boxes :) -Stoned.
+	 */
+	atag = bi_TagFind(tag_arcdisplayinfo);
+	if (atag) {
+	    screen_info.orig_x = 
+		((mips_arc_DisplayInfo*)TAGVALPTR(atag))->cursor_x;
+	    screen_info.orig_y = 
+		((mips_arc_DisplayInfo*)TAGVALPTR(atag))->cursor_y;
+	    screen_info.orig_video_cols  = 
+		((mips_arc_DisplayInfo*)TAGVALPTR(atag))->columns;
+	    screen_info.orig_video_lines  = 
+		((mips_arc_DisplayInfo*)TAGVALPTR(atag))->lines;
+	}
+    }
+
 	irq_setup = jazz_irq_setup;
 	fd_cacheflush = jazz_fd_cacheflush;
 	feature = &jazz_feature;			// Will go away
+	port_base = JAZZ_PORT_BASE;
 	isa_slot_offset = 0xe3000000;
 	request_region(0x00,0x20,"dma1");
 	request_region(0x40,0x20,"timer");
 	request_region(0x80,0x10,"dma page reg");
 	request_region(0xc0,0x20,"dma2");
+        board_time_init = jazz_time_init;
 	/* The RTC is outside the port address space */
 
 	_machine_restart = jazz_machine_restart;

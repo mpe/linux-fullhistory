@@ -195,7 +195,7 @@ static void amikeyb_rep(unsigned long ignore)
 
 static void keyboard_interrupt(int irq, void *dummy, struct pt_regs *fp)
 {
-    unsigned char scancode, break_flag;
+    unsigned char scancode, break_flag, keycode;
     static int reset_warning = 0;
 
     /* save frame for register dump */
@@ -207,6 +207,7 @@ static void keyboard_interrupt(int irq, void *dummy, struct pt_regs *fp)
     /* switch SP pin to output for handshake */
     ciaa.cra |= 0x40;
 
+#if 0 // No longer used
     /*
      *  On receipt of the second RESET_WARNING, we must not pull KDAT high
      *  again to delay the hard reset as long as possible.
@@ -222,6 +223,7 @@ static void keyboard_interrupt(int irq, void *dummy, struct pt_regs *fp)
 	} else
 	    /* Probably a mistake, cancel the alert */
 	    reset_warning = 0;
+#endif
 
     /* wait until 85 us have expired */
     udelay(85);
@@ -237,27 +239,27 @@ static void keyboard_interrupt(int irq, void *dummy, struct pt_regs *fp)
      * Check make/break first
      */
     break_flag = scancode & BREAK_MASK;
-    scancode &= (unsigned char )~BREAK_MASK;
+    keycode = scancode & (unsigned char)~BREAK_MASK;
 
-    if (scancode == AMIKEY_CAPS) {
+    if (keycode == AMIKEY_CAPS) {
 	/* if the key is CAPS, fake a press/release. */
 	handle_scancode(AMIKEY_CAPS);
 	handle_scancode(BREAK_MASK | AMIKEY_CAPS);
-    } else if (scancode < 0x78) {
+    } else if (keycode < 0x78) {
 	/* handle repeat */
 	if (break_flag) {
 	    del_timer(&amikeyb_rep_timer);
 	    rep_scancode = 0;
 	} else {
 	    del_timer(&amikeyb_rep_timer);
-	    rep_scancode = scancode;
+	    rep_scancode = keycode;
 	    amikeyb_rep_timer.expires = jiffies + key_repeat_delay;
 	    amikeyb_rep_timer.prev = amikeyb_rep_timer.next = NULL;
 	    add_timer(&amikeyb_rep_timer);
 	}
-	handle_scancode(break_flag | scancode);
+	handle_scancode(scancode);
     } else
-	switch (scancode) {
+	switch (keycode) {
 	    case 0x78:
 		reset_warning = 1;
 		break;
@@ -288,7 +290,7 @@ static void keyboard_interrupt(int irq, void *dummy, struct pt_regs *fp)
 #endif
 	    default:
 		printk(KERN_WARNING "amikeyb: unknown keyboard communication code 0x%02x\n",
-		       break_flag | scancode);
+		       scancode);
 		break;
 	}
 }

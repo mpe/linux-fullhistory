@@ -12,8 +12,12 @@
 
 #define KBD_REPORT_ERR			/* Report keyboard errors */
 #define KBD_REPORT_UNKN			/* Report unknown scan codes */
+#define KBD_REPORT_TIMEOUTS		/* Report keyboard timeouts */
 #undef KBD_IS_FOCUS_9000		/* We have the brain-damaged FOCUS-9000 keyboard */
-#define KBD_TIMEOUT 0x100000		/* Timeout for sending of commands */
+
+#define KBD_INIT_TIMEOUT HZ		/* Timeout for initializing the keyboard */
+#define KBC_TIMEOUT (HZ/4)		/* Timeout for sending to keyboard controller */
+#define KBD_TIMEOUT (HZ/4)		/* Timeout for keyboard command acknowledge */
 
 /*
  *	Internal variables of the driver

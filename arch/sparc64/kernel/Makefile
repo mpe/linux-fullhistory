@@ -1,4 +1,4 @@
-# $Id: Makefile,v 1.28 1997/07/05 09:52:20 davem Exp $
+# $Id: Makefile,v 1.30 1997/07/24 14:48:04 davem Exp $
 # Makefile for the linux kernel.
 #
 # Note! Dependencies are done automagically by 'make dep', which also
@@ -7,11 +7,23 @@
 #
 # Note 2! The CFLAGS definitions are now in the main makefile...
 
+ifdef SMP
+
+.S.s:
+	$(CPP) -D__ASSEMBLY__ $(AFLAGS) -ansi $< -o $*.s
+
+.S.o:
+	$(CC) -D__ASSEMBLY__ $(AFLAGS) -ansi -c $< -o $*.o
+
+else
+
 .S.s:
 	$(CPP) -D__ASSEMBLY__ -ansi $< -o $*.s
 
 .S.o:
 	$(CC) -D__ASSEMBLY__ -ansi -c $< -o $*.o
+
+endif
 
 all: kernel.o head.o init_task.o
 
@@ -21,6 +33,10 @@ O_OBJS   := process.o setup.o cpu.o idprom.o \
 	    irq.o ptrace.o time.o sys_sparc.o signal.o \
 	    unaligned.o sys_sunos32.o sunos_ioctl32.o
 OX_OBJS  := sparc64_ksyms.o
+
+ifdef SMP
+O_OBJS += smp.o trampoline.o
+endif
 
 ifdef CONFIG_SPARC32_COMPAT
   O_OBJS += sys32.o sys_sparc32.o signal32.o ioctl32.o
@@ -36,7 +52,7 @@ endif
 
 head.o: head.S ttable.S itlb_miss.S dtlb_miss.S dtlb_prot.S etrap.S rtrap.S \
 	winfixup.S entry.S
-	$(CC) -D__ASSEMBLY__ -ansi -c $*.S -o $*.o
+	$(CC) -D__ASSEMBLY__ $(AFLAGS) -ansi -c $*.S -o $*.o
 
 #
 # This is just to get the dependencies...

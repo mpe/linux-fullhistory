@@ -1,4 +1,4 @@
-/* $Id: weitek.c,v 1.14 1997/07/17 02:21:53 davem Exp $
+/* $Id: weitek.c,v 1.15 1997/07/22 06:14:11 davem Exp $
  * weitek.c: Tadpole P9100/P9000 console driver
  *
  * Copyright (C) 1996 David Redman (djhr@tadpole.co.uk)
@@ -99,8 +99,6 @@ weitek_loadcmap (void *fbinfo, int index, int count)
 
 __initfunc(void weitek_setup(fbinfo_t *fb, int slot, u32 addr, int io))
 {
-	extern struct screen_info screen_info;
-	
 	printk ("weitek%d at 0x%8.8x\n", slot, addr);
 	
 	/* Fill in parameters we left out */

@@ -6,6 +6,8 @@
 
 #include <linux/kernel.h>
 #include <linux/init.h>
+#include <linux/sched.h>
+#include <linux/smp.h>
 #include <asm/asi.h>
 #include <asm/system.h>
 #include <asm/fpumacro.h>
@@ -56,12 +58,7 @@ __initfunc(void cpu_probe(void))
 	long ver, fpu_vers;
 	long fprs;
 	
-#ifndef __SMP__
-	cpuid = 0;
-#else
-#error SMP not supported on sparc64 yet
-	/* cpuid = get_cpuid(); */
-#endif
+	cpuid = smp_processor_id();
 
 	fprs = fprs_read ();
 	fprs_write (FPRS_FEF);

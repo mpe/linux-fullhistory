@@ -7,7 +7,7 @@
  *
  * Copyright (C) 1995, 1996, 1997 by Ralf Baechle
  *
- * $Id: sysmips.c,v 1.4 1997/06/30 15:52:37 ralf Exp $
+ * $Id: sysmips.c,v 1.5 1997/07/20 15:32:27 ralf Exp $
  */
 #include <linux/errno.h>
 #include <linux/linkage.h>
@@ -57,18 +57,21 @@ sys_sysmips(int cmd, int arg1, int arg2, int arg3)
 	switch(cmd)
 	{
 	case SETNAME:
-		if (!suser()) {
-			retval = -EPERM;
+		retval = -EPERM;
+		if (!suser())
 			goto out;
-		}
+
 		name = (char *) arg1;
 		len = strlen_user(name);
+
+		retval = len;
 		if (len < 0)
-			retval = len;
 			goto out;
+
+		retval = -EINVAL;
 		if (len == 0 || len > __NEW_UTS_LEN)
-			retval = -EINVAL;
 			goto out;
+
 		copy_from_user(system_utsname.nodename, name, len);
 		system_utsname.nodename[len] = '\0';
 		retval = 0;

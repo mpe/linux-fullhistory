@@ -19,7 +19,7 @@ struct cpuinfo_PPC {
 };
 
 extern struct cpuinfo_PPC cpu_data[NR_CPUS];
-
+#endif /* __ASSEMBLY__ */
 
 #endif /* !(__SMP__) */
 

@@ -370,7 +370,7 @@ static void redo_acsi_request( void );
 static int acsi_ioctl( struct inode *inode, struct file *file, unsigned int
                        cmd, unsigned long arg );
 static int acsi_open( struct inode * inode, struct file * filp );
-static void acsi_release( struct inode * inode, struct file * file );
+static int acsi_release( struct inode * inode, struct file * file );
 static void acsi_prevent_removal( int target, int flag );
 static int acsi_change_blk_size( int target, int lun);
 static int acsi_mode_sense( int target, int lun, SENSE_DATA *sd );
@@ -1200,7 +1200,7 @@ static int acsi_open( struct inode * inode, struct file * filp )
  * be forgotten about...
  */
 
-static void acsi_release( struct inode * inode, struct file * file )
+static int acsi_release( struct inode * inode, struct file * file )
 {
 	int device;
 
@@ -1210,6 +1210,7 @@ static void acsi_release( struct inode * inode, struct file * file )
 	if (--access_count[device] == 0 && acsi_info[device].removable)
 		acsi_prevent_removal(device, 0);
 	MOD_DEC_USE_COUNT;
+	return( 0 );
 }
 
 /*
@@ -1821,7 +1822,7 @@ void cleanup_module(void)
 {
 	del_timer( &acsi_timer );
 	blk_dev[MAJOR_NR].request_fn = 0;
-	free_pages( acsi_buffer, ACSI_BUFFER_ORDER );
+	free_pages( (unsigned long)acsi_buffer, ACSI_BUFFER_ORDER );
 
 	if (unregister_blkdev( MAJOR_NR, "ad" ) != 0)
 		printk( KERN_ERR "acsi: cleanup_module failed\n");

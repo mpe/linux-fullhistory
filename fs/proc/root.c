@@ -151,14 +151,14 @@ struct proc_dir_entry proc_sys_root = {
 #if defined(CONFIG_SUN_OPENPROMFS) || defined(CONFIG_SUN_OPENPROMFS_MODULE)
 
 static int (*proc_openprom_defreaddir_ptr)(struct inode *, struct file *, void *, filldir_t);
-static int (*proc_openprom_deflookup_ptr)(struct inode *, struct qstr *, struct inode **);
+static int (*proc_openprom_deflookup_ptr)(struct inode *, struct dentry *);
 void (*proc_openprom_use)(struct inode *, int) = 0;
 static struct openpromfs_dev *proc_openprom_devices = NULL;
 static ino_t proc_openpromdev_ino = PROC_OPENPROMD_FIRST;
 
 struct inode_operations *
 proc_openprom_register(int (*readdir)(struct inode *, struct file *, void *, filldir_t),
-		       int (*lookup)(struct inode *, struct qstr *, struct inode **),
+		       int (*lookup)(struct inode *, struct dentry *),
 		       void (*use)(struct inode *, int),
 		       struct openpromfs_dev ***devices)
 {
@@ -220,13 +220,13 @@ proc_openprom_defreaddir(struct inode * inode, struct file * filp,
 }
 
 static int 
-proc_openprom_deflookup(struct inode * dir, struct qstr *str, struct inode ** result)
+proc_openprom_deflookup(struct inode * dir, struct dentry *dentry)
 {
 	request_module("openpromfs");
 	if (proc_openprom_inode_operations.lookup !=
 	    proc_openprom_deflookup)
 		return proc_openprom_inode_operations.lookup 
-				(dir, str, result);
+				(dir, dentry);
 	return -ENOENT;
 }
 #endif

@@ -1,4 +1,4 @@
-/* $Id: tcx.c,v 1.17 1997/07/17 02:21:50 davem Exp $
+/* $Id: tcx.c,v 1.18 1997/07/22 06:14:09 davem Exp $
  * tcx.c: SUNW,tcx 24/8bit frame buffer driver
  *
  * Copyright (C) 1996 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -309,9 +309,9 @@ __initfunc(void tcx_setup (fbinfo_t *fb, int slot, int node, u32 tcx, struct lin
 	tcxinfo->tec = sparc_alloc_io((u32)tcxinfo->tcx_offsets [TCX_TEC_OFFSET], 0,
 		 sizeof (struct tcx_tec), "tcx_tec", fb->space, 0);
 	if (!fb->base){
-		fb->base = (uint)
-			sparc_alloc_io((u32)tcxinfo->tcx_offsets [TCX_RAM8BIT_OFFSET], 0,
-				       fb->type.fb_size, "tcx_ram", fb->space, 0);
+		fb->base = (unsigned long)
+			sparc_alloc_io((u32)tcxinfo->tcx_offsets [TCX_RAM8BIT_OFFSET],
+				       0, fb->type.fb_size, "tcx_ram", fb->space, 0);
 	}
 	
 	if (prom_getbool (node, "hw-cursor")) {

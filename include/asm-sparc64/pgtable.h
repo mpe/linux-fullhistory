@@ -1,4 +1,4 @@
-/* $Id: pgtable.h,v 1.49 1997/06/30 09:24:12 jj Exp $
+/* $Id: pgtable.h,v 1.50 1997/07/24 16:48:31 davem Exp $
  * pgtable.h: SpitFire page table operations.
  *
  * Copyright 1996,1997 David S. Miller (davem@caip.rutgers.edu)
@@ -158,33 +158,33 @@ extern void *sparc_init_alloc(unsigned long *kbrk, unsigned long size);
 
 /* Cache and TLB flush operations. */
 
-#define flush_cache_all()	\
-do {	unsigned long va;	\
-	flushw_all();		\
-	for(va = 0;		\
-	    va<(PAGE_SIZE<<1);	\
-	    va += 32)		\
-spitfire_put_icache_tag(va,0x0);\
-} while(0)
-
+/* These are the same regardless of whether this is an SMP kernel or not. */
 #define flush_cache_mm(mm)			do { } while(0)
 #define flush_cache_range(mm, start, end)	do { } while(0)
 #define flush_cache_page(vma, page)		do { } while(0)
 
 /* This operation in unnecessary on the SpitFire since D-CACHE is write-through. */
-#define flush_page_to_ram(page)		do { } while (0)
+#define flush_page_to_ram(page)			do { } while (0)
 
-extern void flush_tlb_all(void);
+extern void __flush_cache_all(void);
 
+extern void __flush_tlb_all(void);
 extern void __flush_tlb_mm(unsigned long context);
+extern void __flush_tlb_range(unsigned long context, unsigned long start,
+			      unsigned long end);
+extern void __flush_tlb_page(unsigned long context, unsigned long page);
+
+#ifndef __SMP__
+
+#define flush_cache_all()	__flush_cache_all()
+#define flush_tlb_all()		__flush_tlb_all()
+
 extern __inline__ void flush_tlb_mm(struct mm_struct *mm)
 {
 	if(mm->context != NO_CONTEXT)
 		__flush_tlb_mm(mm->context & 0x1fff);
 }
 
-extern void __flush_tlb_range(unsigned long context, unsigned long start,
-			      unsigned long end);
 extern __inline__ void flush_tlb_range(struct mm_struct *mm, unsigned long start,
 				       unsigned long end)
 {
@@ -192,7 +192,6 @@ extern __inline__ void flush_tlb_range(struct mm_struct *mm, unsigned long start
 		__flush_tlb_range(mm->context & 0x1fff, start, end);
 }
 
-extern void __flush_tlb_page(unsigned long context, unsigned long page);
 extern __inline__ void flush_tlb_page(struct vm_area_struct *vma, unsigned long page)
 {
 	struct mm_struct *mm = vma->vm_mm;
@@ -200,6 +199,41 @@ extern __inline__ void flush_tlb_page(struct vm_area_struct *vma, unsigned long 
 	if(mm->context != NO_CONTEXT)
 		__flush_tlb_page(mm->context & 0x1fff, page & PAGE_MASK);
 }
+
+#else /* __SMP__ */
+
+extern void smp_flush_cache_all(void);
+extern void smp_flush_tlb_all(void);
+extern void smp_flush_tlb_mm(struct mm_struct *mm);
+extern void smp_flush_tlb_range(struct mm_struct *mm, unsigned long start,
+				unsigned long end);
+extern void smp_flush_tlb_page(struct vm_area_struct *vma, unsigned long page);
+
+#define flush_cache_all()	smp_flush_cache_all()
+#define flush_tlb_all()		smp_flush_tlb_all()
+
+extern __inline__ void flush_tlb_mm(struct mm_struct *mm)
+{
+	if(mm->context != NO_CONTEXT)
+		smp_flush_tlb_mm(mm);
+}
+
+extern __inline__ void flush_tlb_range(struct mm_struct *mm, unsigned long start,
+				       unsigned long end)
+{
+	if(mm->context != NO_CONTEXT)
+		smp_flush_tlb_range(mm, start, end);
+}
+
+extern __inline__ void flush_tlb_page(struct vm_area_struct *vma, unsigned long page)
+{
+	struct mm_struct *mm = vma->vm_mm;
+
+	if(mm->context != NO_CONTEXT)
+		smp_flush_tlb_page(vma, page);
+}
+
+#endif
 
 extern inline pte_t mk_pte(unsigned long page, pgprot_t pgprot)
 { return __pte(__pa(page) | pgprot_val(pgprot)); }

@@ -561,6 +561,7 @@ struct buffer_head * get_hash_table(kdev_t dev, int block, int size)
 		if (!bh)
 			return NULL;
 		bh->b_count++;
+		bh->b_lru_time = jiffies;
 		wait_on_buffer(bh);
 		if (bh->b_dev == dev		&&
 		    bh->b_blocknr == block	&&
@@ -643,34 +644,20 @@ void set_blocksize(kdev_t dev, int size)
 	}
 }
 
-/* Check if a buffer is OK to be reclaimed. */
-static inline int can_reclaim(struct buffer_head *bh, int size)
-{
-	if (bh->b_count			|| 
-	    buffer_protected(bh)	||
-	    buffer_locked(bh))
-		return 0;
-			 
-	if (buffer_dirty(bh)) {
-		refile_buffer(bh);
-		return 0;
-	}
-
-	if (bh->b_size != size)
-		return 0;
-
-	return 1;
-}
-
-/* Find a candidate buffer to be reclaimed. */
-static struct buffer_head *find_candidate(struct buffer_head *list,
+/*
+ * Find a candidate buffer to be reclaimed. 
+ * N.B. Must search the entire BUF_LOCKED list rather than terminating
+ * when the first locked buffer is found.  Buffers are unlocked at 
+ * completion of IO, and under some conditions there may be (many)
+ * unlocked buffers after the first locked one.
+ */
+static struct buffer_head *find_candidate(struct buffer_head *bh,
 					  int *list_len, int size)
 {
-	struct buffer_head *bh;
-	
-	for (bh = list; 
-	     bh && (*list_len) > 0; 
-	     bh = bh->b_next_free, (*list_len)--) {
+	if (!bh)
+		goto no_candidate;
+
+	for (; (*list_len) > 0; bh = bh->b_next_free, (*list_len)--) {
 		if (size != bh->b_size) {
 			/* This provides a mechanism for freeing blocks
 			 * of other sizes, this is necessary now that we
@@ -681,110 +668,144 @@ static struct buffer_head *find_candidate(struct buffer_head *list,
 				break;
 			continue;
 		}
-
-		if (buffer_locked(bh) && bh->b_list == BUF_LOCKED) {
-			/* Buffers are written in the order they are placed 
-			 * on the locked list. If we encounter a locked
-			 * buffer here, this means that the rest of them
-			 * are also locked.
-			 */
-			(*list_len) = 0;
-			return NULL;
-		}
-
-		if (can_reclaim(bh,size))
-		    return bh;
+		else if (!bh->b_count		&& 
+			 !buffer_locked(bh)	&& 
+			 !buffer_protected(bh)	&&
+			 !buffer_dirty(bh)) 
+			return bh;
 	}
 
+no_candidate:
 	return NULL;
 }
 
 static void refill_freelist(int size)
 {
-	struct buffer_head * bh;
+	struct buffer_head * bh, * next;
 	struct buffer_head * candidate[BUF_DIRTY];
-	unsigned int best_time, winner;
 	int buffers[BUF_DIRTY];
 	int i;
-	int needed;
+	int needed, obtained=0;
 
 	refilled = 1;
-	/* If there are too many dirty buffers, we wake up the update process
-	 * now so as to ensure that there are still clean buffers available
-	 * for user processes to use (and dirty).
-	 */
 	
 	/* We are going to try to locate this much memory. */
 	needed = bdf_prm.b_un.nrefill * size;  
 
-	while ((nr_free_pages > min_free_pages*2)	&&
-	       (needed > 0)				&&
-	       grow_buffers(GFP_BUFFER, size))
-		needed -= PAGE_SIZE;
+	while ((nr_free_pages > min_free_pages*2) && 
+		grow_buffers(GFP_BUFFER, size)) {
+		obtained += PAGE_SIZE;
+		if (obtained >= needed)
+			return;
+	}
 
+	/*
+	 * Update the needed amount based on the number of potentially
+	 * freeable buffers. We don't want to free more than one quarter
+	 * of the available buffers.
+	 */
+	i = (nr_buffers_type[BUF_CLEAN] + nr_buffers_type[BUF_LOCKED]) >> 2;
+	if (i < bdf_prm.b_un.nrefill) {
+		needed = i * size;
+		if (needed < PAGE_SIZE)
+			needed = PAGE_SIZE;
+	}
+
+	/* 
+	 * OK, we cannot grow the buffer cache, now try to get some
+	 * from the lru list.
+	 */
 repeat:
-	if(needed <= 0)
+	if (obtained >= needed)
 		return;
 
-	/* OK, we cannot grow the buffer cache, now try to get some
-	 * from the lru list.
-	 *
+	/*
 	 * First set the candidate pointers to usable buffers.  This
-	 * should be quick nearly all of the time.
+	 * should be quick nearly all of the time.  N.B. There must be 
+	 * no blocking calls after setting up the candidate[] array!
 	 */
-
-	for(i=0; i<BUF_DIRTY; i++) {
+	for (i = BUF_CLEAN; i<BUF_DIRTY; i++) {
 		buffers[i] = nr_buffers_type[i];
 		candidate[i] = find_candidate(lru_list[i], &buffers[i], size);
 	}
 	
-	/* Now see which candidate wins the election. */
-	
-	winner = best_time = UINT_MAX;	
-	for(i=0; i<BUF_DIRTY; i++) {
-		if(!candidate[i])
-			continue;
-		if(candidate[i]->b_lru_time < best_time) {
-			best_time = candidate[i]->b_lru_time;
-			winner = i;
+	/*
+	 * Select the older of the available buffers until we reach our goal.
+	 */
+	for (;;) {
+		i = BUF_CLEAN;
+		if (!candidate[BUF_CLEAN]) {
+			if (!candidate[BUF_LOCKED])
+				break;
+			i = BUF_LOCKED;
 		}
-	}
-	
-	/* If we have a winner, use it, and then get a new candidate from that list. */
-	if(winner != UINT_MAX) {
-		i = winner;
-		while (needed>0 && (bh=candidate[i])) {
-			candidate[i] = bh->b_next_free;
-			if(candidate[i] == bh)
-				candidate[i] = NULL;  /* Got last one */		
-			remove_from_queues(bh);
-			bh->b_dev = B_FREE;
-			put_last_free(bh);
-			needed -= bh->b_size;
-			buffers[i]--;
-			if(buffers[i] == 0)
-				candidate[i] = NULL;
-		
-			if (candidate[i] && !can_reclaim(candidate[i],size))
-				candidate[i] = find_candidate(candidate[i],
-							      &buffers[i], size);
-		}
-		goto repeat;
-	}
+		else if (candidate[BUF_LOCKED] &&
+				(candidate[BUF_LOCKED]->b_lru_time < 
+				 candidate[BUF_CLEAN ]->b_lru_time))
+			i = BUF_LOCKED;
+		/*
+		 * Free the selected buffer and get the next candidate.
+		 */
+		bh = candidate[i];
+		next = bh->b_next_free;
+
+		obtained += bh->b_size;
+		remove_from_queues(bh);
+		put_last_free(bh);
+		if (obtained >= needed)
+			return;
+
+		if (--buffers[i] && bh != next)
+			candidate[i] = find_candidate(next, &buffers[i], size);
+		else
+			candidate[i] = NULL;
+	}	
+
+	/*
+	 * If we achieved at least half of our goal, return now.
+	 */
+	if (obtained >= (needed >> 1))
+		return;
 	
 	/* Too bad, that was not enough. Try a little harder to grow some. */
 	if (nr_free_pages > min_free_pages + 5) {
 		if (grow_buffers(GFP_BUFFER, size)) {
-			needed -= PAGE_SIZE;
+			obtained += PAGE_SIZE;
 			goto repeat;
 		}
 	}
-	
-	/* And repeat until we find something good. */
+
+	/*
+	 * Make one more attempt to allocate some buffers.
+	 */
 	if (grow_buffers(GFP_ATOMIC, size))
-		needed -= PAGE_SIZE;
-	else
-		wakeup_bdflush(1);
+		obtained += PAGE_SIZE;
+
+	/*
+	 * If we got any buffers, or another task freed some, 
+	 * return now to let this task proceed.
+	 */
+	if (obtained || free_list[BUFSIZE_INDEX(size)]) {
+#ifdef BUFFER_DEBUG
+printk("refill_freelist: obtained %d of %d, free list=%d\n", 
+obtained, needed, free_list[BUFSIZE_INDEX(size)] != NULL);
+#endif
+		return;
+	}
+
+	/*
+	 * System is _very_ low on memory ... wake up bdflush and wait.
+	 */
+#ifdef BUFFER_DEBUG
+printk("refill_freelist: waking bdflush\n");
+#endif
+	wakeup_bdflush(1);
+	/*
+	 * While we slept, other tasks may have needed buffers and entered
+	 * refill_freelist.  This could be a big problem ... reset the 
+	 * needed amount to the absolute minimum.
+	 */
+	needed = size;
 	goto repeat;
 }
 
@@ -832,6 +853,8 @@ repeat:
 	 * and that it's unused (b_count=0), unlocked (buffer_locked=0), and clean.
 	 */
 	bh->b_count=1;
+	bh->b_list	= BUF_CLEAN;
+	bh->b_lru_time	= jiffies;
 	bh->b_flushtime=0;
 	bh->b_state=(1<<BH_Touched);
 	bh->b_dev=dev;
@@ -857,6 +880,16 @@ void set_writetime(struct buffer_head * buf, int flag)
 
 
 /*
+ * Put a buffer into the appropriate list, without side-effects.
+ */
+static inline void file_buffer(struct buffer_head *bh, int list)
+{
+	remove_from_queues(bh);
+	bh->b_list = list;
+	insert_into_queues(bh);
+}
+
+/*
  * A buffer may need to be moved from one buffer list to another
  * (e.g. in case it is not shared any more). Handle this.
  */
@@ -874,15 +907,9 @@ void refile_buffer(struct buffer_head * buf)
 		dispose = BUF_LOCKED;
 	else
 		dispose = BUF_CLEAN;
-	if(dispose == BUF_CLEAN)
-		buf->b_lru_time = jiffies;
 	if(dispose != buf->b_list) {
-		if(dispose == BUF_DIRTY)
-			 buf->b_lru_time = jiffies;
-		remove_from_queues(buf);
-		buf->b_list = dispose;
-		insert_into_queues(buf);
-		if (dispose == BUF_DIRTY) {
+		file_buffer(buf, dispose);
+		if(dispose == BUF_DIRTY) {
 			int too_many = (nr_buffers * bdf_prm.b_un.nfract/100);
 
 			/* This buffer is dirty, maybe we need to start flushing.

@@ -1082,8 +1082,9 @@ int dev_get_info(char *buffer, char **start, off_t offset, int length, int dummy
 	struct device *dev;
 
 
-	size = sprintf(buffer, "Inter-|   Receive                  |  Transmit\n"
-			    " face |bytes    packets errs drop fifo frame|bytes    packets errs drop fifo colls carrier\n");
+	size = sprintf(buffer, 
+		"Inter-|   Receive                           |  Transmit\n"
+		" face |bytes    packets errs drop fifo frame|bytes    packets errs drop fifo colls carrier\n");
 	
 	pos+=size;
 	len+=size;

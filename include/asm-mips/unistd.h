@@ -1177,11 +1177,13 @@
 #define __NR_query_module		(__NR_Linux + 187)
 #define __NR_poll			(__NR_Linux + 188)
 #define __NR_nfsservctl			(__NR_Linux + 189)
+#define __NR_setresgid			(__NR_Linux + 190)
+#define __NR_getresgid			(__NR_Linux + 191)
 
 /*
  * Offset of the last Linux flavoured syscall
  */
-#define __NR_Linux_syscalls		189
+#define __NR_Linux_syscalls		191
 
 #ifndef __LANGUAGE_ASSEMBLY__
 

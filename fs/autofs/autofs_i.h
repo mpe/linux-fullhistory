@@ -58,12 +58,14 @@ static inline int copy_from_user(void *dst, void *src, unsigned long len)
 #endif
 
 #ifdef DEBUG
-#define DPRINTK(D) printk D;
+#define DPRINTK(D) (printk D)
 #else
-#define DPRINTK(D)
+#define DPRINTK(D) ((void)0)
 #endif
 
 #define AUTOFS_SUPER_MAGIC 0x0187
+
+#define AUTOFS_NEGATIVE_TIMEOUT (60*HZ)	/* Time before asking the daemon again */
 
 /* Structures associated with the root directory hash */
 

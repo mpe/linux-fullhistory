@@ -3,6 +3,26 @@
  * Copyright (C) 1997 David S. Miller (davem@caip.rutgers.edu)
  */
 
+#include <linux/kernel.h>
+#include <linux/sched.h>
+#include <linux/tasks.h>
+#include <linux/smp.h>
+#include <linux/smp_lock.h>
+#include <linux/interrupt.h>
+#include <linux/kernel_stat.h>
+
+#include <asm/ptrace.h>
+#include <asm/atomic.h>
+
+#include <asm/delay.h>
+#include <asm/irq.h>
+#include <asm/page.h>
+#include <asm/pgtable.h>
+#include <asm/oplib.h>
+#include <asm/spinlock.h>
+#include <asm/hardirq.h>
+#include <asm/softirq.h>
+
 #define __KERNEL_SYSCALLS__
 #include <linux/unistd.h>
 
@@ -13,8 +33,9 @@ volatile int smp_processors_ready = 0;
 unsigned long cpu_present_map = 0;
 int smp_num_cpus = 1;
 int smp_threads_ready = 0;
+volatile unsigned long cpu_callin_map[NR_CPUS] = {0,};
 
-struct cpuinfo_sparc64 cpu_data[NR_CPUS];
+struct cpuinfo_sparc cpu_data[NR_CPUS];
 static unsigned char boot_cpu_id = 0;
 static int smp_activated = 0;
 
@@ -52,11 +73,11 @@ void smp_store_cpu_info(int id)
 
 void smp_commence(void)
 {
-	local_flush_cache_all();
-	local_flush_tlb_all();
+	flush_cache_all();
+	flush_tlb_all();
 	smp_commenced = 1;
-	local_flush_cache_all();
-	local_flush_tlb_all();
+	flush_cache_all();
+	flush_tlb_all();
 }
 
 static void smp_setup_percpu_timer(void);
@@ -67,8 +88,8 @@ void smp_callin(void)
 {
 	int cpuid = hard_smp_processor_id();
 
-	local_flush_cache_all();
-	local_flush_tlb_all();
+	flush_cache_all();
+	flush_tlb_all();
 
 	smp_setup_percpu_timer();
 
@@ -76,7 +97,7 @@ void smp_callin(void)
 	smp_store_cpu_info(cpuid);
 	callin_flag = 1;
 	__asm__ __volatile__("membar #Sync\n\t"
-			     "flush  %g6" : : : "memory");
+			     "flush  %%g6" : : : "memory");
 
 	while(!task[cpuid])
 		barrier();
@@ -103,11 +124,18 @@ int start_secondary(void *unused)
 	return cpu_idle(NULL);
 }
 
+void cpu_panic(void)
+{
+	printk("CPU[%d]: Returns from cpu_idle!\n", smp_processor_id());
+	panic("SMP bolixed\n");
+}
+
 extern struct prom_cpuinfo linux_cpus[NR_CPUS];
+extern unsigned long sparc64_cpu_startup;
 
 void smp_boot_cpus(void)
 {
-	int cpucount = 0, i, first, prev;
+	int cpucount = 0, i;
 
 	printk("Entering UltraSMPenguin Mode...\n");
 	__sti();
@@ -133,15 +161,15 @@ void smp_boot_cpus(void)
 			continue;
 
 		if(cpu_present_map & (1 << i)) {
-			extern unsigned long sparc64_cpu_startup;
-			unsigned long entry = (unsigned long)&sparc_cpu_startup;
 			struct task_struct *p;
 			int timeout;
 
 			kernel_thread(start_secondary, NULL, CLONE_PID);
 			p = task[++cpucount];
 			p->processor = i;
-			prom_startcpu(linux_cpus[i].prom_node, entry, i);
+			prom_startcpu(linux_cpus[i].prom_node,
+				      ((unsigned long)&sparc64_cpu_startup),
+				      ((unsigned long)p));
 			for(timeout = 0; timeout < 5000000; timeout++) {
 				if(cpu_callin_map[i])
 					break;
@@ -190,49 +218,46 @@ void smp_message_pass(int target, int msg, unsigned long data, int wait)
 		barrier();
 }
 
-/* XXX Make it fast later. */
+static inline void xcall_deliver(u64 data0, u64 data1, u64 data2, u64 pstate, int cpu)
+{
+	u64 result, target = (cpu_number_map[cpu] << 14) | 0x70;
+
+	__asm__ __volatile__("
+	wrpr	%0, %1, %%pstate
+	wr	%%g0, %2, %%asi
+	stxa	%3, [0x40] %%asi
+	stxa	%4, [0x50] %%asi
+	stxa	%5, [0x60] %%asi
+	stxa	%%g0, [%6] %%asi
+	membar	#Sync"
+	: /* No outputs */
+	: "r" (pstate), "i" (PSTATE_IE), "i" (ASI_UDB_INTR_W),
+	  "r" (data0), "r" (data1), "r" (data2), "r" (target));
+
+	/* NOTE: PSTATE_IE is still clear. */
+	do {
+		__asm__ __volatile__("ldxa [%%g0] %1, %0"
+			: "=r" (result)
+			: "i" (ASI_INTR_DISPATCH_STAT));
+	} while(result & 0x1);
+	__asm__ __volatile__("wrpr %0, 0x0, %%pstate"
+			     : : "r" (pstate));
+	if(result & 0x2)
+		panic("Penguin NACK's master!");
+}
+
 void smp_cross_call(unsigned long *func, u32 ctx, u64 data1, u64 data2)
 {
 	if(smp_processors_ready) {
-		unsigned long mask;
-		u64 data0 = (((unsigned long)ctx)<<32 |
-			     (((unsigned long)func) & 0xffffffff));
-		u64 pstate;
+		unsigned long mask = (cpu_present_map & ~(1<<smp_processor_id()));
+		u64 pstate, data0 = (((u64)ctx)<<32 | (((u64)func) & 0xffffffff));
 		int i, ncpus = smp_num_cpus;
 
 		__asm__ __volatile__("rdpr %%pstate, %0" : "=r" (pstate));
-		mask = (cpu_present_map & ~(1 << smp_processor_id()));
 		for(i = 0; i < ncpus; i++) {
-			if(mask & (1 << i)) {
-				u64 target = mid<<14 | 0x70;
-				u64 result;
-
-				__asm__ __volatile__("
-				wrpr	%0, %1, %%pstate
-				wrpr	%%g0, %2, %%asi
-				stxa	%3, [0x40] %%asi
-				stxa	%4, [0x50] %%asi
-				stxa	%5, [0x60] %%asi
-				stxa	%%g0, [%6] %7
-				membar	#Sync"
-				: /* No outputs */
-				: "r" (pstate), "i" (PSTATE_IE), "i" (ASI_UDB_INTR_W),
-				  "r" (data0), "r" (data1), "r" (data2),
-				  "r" (target), "i" (ASI_UDB_INTR_W));
-
-				/* NOTE: PSTATE_IE is still clear. */
-				do {
-					__asm__ __volatile__("ldxa [%%g0] %1, %0",
-						: "=r" (result)
-						: "i" (ASI_INTR_DISPATCH_STAT));
-				} while(result & 0x1);
-				__asm__ __volatile__("wrpr %0, 0x0, %%pstate"
-						     : : "r" (pstate));
-				if(result & 0x2)
-					panic("Penguin NACK's master!");
-			}
+			if(mask & (1 << i))
+				xcall_deliver(data0, data1, data2, pstate, i);
 		}
-
 		/* NOTE: Caller runs local copy on master. */
 	}
 }
@@ -246,17 +271,19 @@ extern unsigned long xcall_flush_cache_all;
 void smp_flush_cache_all(void)
 {
 	smp_cross_call(&xcall_flush_cache_all, 0, 0, 0);
+	__flush_cache_all();
 }
 
 void smp_flush_tlb_all(void)
 {
 	smp_cross_call(&xcall_flush_tlb_all, 0, 0, 0);
+	__flush_tlb_all();
 }
 
 void smp_flush_tlb_mm(struct mm_struct *mm)
 {
 	u32 ctx = mm->context & 0x1fff;
-	if(mm->cpu_vm_mask != (1 << smp_processor_id()))
+	if(mm->cpu_vm_mask != (1UL << smp_processor_id()))
 		smp_cross_call(&xcall_flush_tlb_mm, ctx, 0, 0);
 	__flush_tlb_mm(ctx);
 }
@@ -265,7 +292,7 @@ void smp_flush_tlb_range(struct mm_struct *mm, unsigned long start,
 			 unsigned long end)
 {
 	u32 ctx = mm->context & 0x1fff;
-	if(mm->cpu_vm_mask != (1 << smp_processor_id()))
+	if(mm->cpu_vm_mask != (1UL << smp_processor_id()))
 		smp_cross_call(&xcall_flush_tlb_range, ctx, start, end);
 	__flush_tlb_range(ctx, start, end);
 }
@@ -275,7 +302,7 @@ void smp_flush_tlb_page(struct vm_area_struct *vma, unsigned long page)
 	struct mm_struct *mm = vma->vm_mm;
 	u32 ctx = mm->context & 0x1fff;
 
-	if(mm->cpu_vm_mask != (1 << smp_processor_id()))
+	if(mm->cpu_vm_mask != (1UL << smp_processor_id()))
 		smp_cross_call(&xcall_flush_tlb_page, ctx, page, 0);
 	__flush_tlb_page(ctx, page);
 }
@@ -308,12 +335,12 @@ extern void update_one_process(struct task_struct *p, unsigned long ticks,
 void smp_percpu_timer_interrupt(struct pt_regs *regs)
 {
 	int cpu = smp_processor_id();
+	int user = user_mode(regs);
 
-	clear_profile_irq(cpu);
-	if(!user_mode(regs))
-		sparc_do_profile(regs->pc);
+	/* XXX clear_profile_irq(cpu); */
+	if(!user)
+		sparc64_do_profile(regs->tpc);
 	if(!--prof_counter[cpu]) {
-		int user = user_mode(regs);
 		if(current->pid) {
 			update_one_process(current, 1, user, !user);
 			if(--current->counter < 0) {
@@ -344,4 +371,5 @@ static void smp_setup_percpu_timer(void)
 int setup_profiling_timer(unsigned int multiplier)
 {
 	/* XXX implement me */
+	return 0;
 }

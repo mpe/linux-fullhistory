@@ -24,16 +24,20 @@ static int autofs_root_mkdir(struct inode *,struct dentry *,int);
 static int autofs_root_ioctl(struct inode *, struct file *,unsigned int,unsigned long);
 
 static struct file_operations autofs_root_operations = {
-        NULL,                   /* lseek */
+        NULL,                   /* llseek */
         NULL,                   /* read */
         NULL,                   /* write */
         autofs_root_readdir,    /* readdir */
-        NULL,                   /* select */
+        NULL,                   /* poll */
         autofs_root_ioctl,	/* ioctl */
         NULL,                   /* mmap */
         NULL,                   /* open */
         NULL,                   /* release */
-        NULL                    /* fsync */
+        NULL,			/* fsync */
+	NULL,			/* fasync */
+	NULL,			/* check_media_change */
+	NULL,			/* revalidate */
+	NULL			/* lock */
 };
 
 struct inode_operations autofs_root_inode_operations = {
@@ -53,7 +57,10 @@ struct inode_operations autofs_root_inode_operations = {
         NULL,                   /* writepage */
         NULL,                   /* bmap */
         NULL,                   /* truncate */
-        NULL                    /* permission */
+        NULL,			/* permission */
+	NULL,			/* smap */
+	NULL,			/* updatepage */
+	NULL			/* revalidate */
 };
 
 static int autofs_root_readdir(struct inode *inode, struct file *filp,
@@ -97,24 +104,31 @@ static int try_to_fill_dentry(struct dentry * dentry, struct super_block * sb, s
 {
 	struct inode * inode;
 	struct autofs_dir_ent *ent;
-	
+
 	while (!(ent = autofs_hash_lookup(&sbi->dirhash, &dentry->d_name))) {
 		int status = autofs_wait(sbi, &dentry->d_name);
 
 		/* Turn this into a real negative dentry? */
 		if (status == -ENOENT) {
-			dentry->d_flags = 0;
-			return 0;
+			dentry->d_time = jiffies + AUTOFS_NEGATIVE_TIMEOUT;
+			dentry->d_flags &= ~DCACHE_AUTOFS_PENDING;
+			return 1;
+		} else if (status) {
+			/* Return a negative dentry, but leave it "pending" */
+			return 1;
 		}
-		if (status)
-			return status;
 	}
 
+	/* Abuse this field as a pointer to the directory entry, used to
+	   find the expire list pointers */
+	dentry->d_time = (unsigned long) ent;
+	
 	if (!dentry->d_inode) {
 		inode = iget(sb, ent->ino);
-		if (!inode)
-			return -EACCES;
-
+		if (!inode) {
+			/* Failed, but leave pending for next time */
+			return 1;
+		}
 		dentry->d_inode = inode;
 	}
 
@@ -122,8 +136,11 @@ static int try_to_fill_dentry(struct dentry * dentry, struct super_block * sb, s
 		while (dentry == dentry->d_mounts)
 			schedule();
 	}
-	dentry->d_flags = 0;
-	return 0;
+
+	autofs_update_usage(&sbi->dirhash,ent);
+
+	dentry->d_flags &= ~DCACHE_AUTOFS_PENDING;
+	return 1;
 }
 
 
@@ -137,23 +154,25 @@ static int autofs_revalidate(struct dentry * dentry)
 {
 	struct autofs_sb_info *sbi;
 	struct inode * dir = dentry->d_parent->d_inode;
+	struct autofs_dir_ent *ent;
 
 	sbi = (struct autofs_sb_info *) dir->i_sb->u.generic_sbp;
 
-	/* Incomplete dentry? */
-	if (dentry->d_flags) {
+	/* Pending dentry */
+	if (dentry->d_flags & DCACHE_AUTOFS_PENDING) {
 		if (autofs_oz_mode(sbi))
 			return 1;
 
-		try_to_fill_dentry(dentry, dir->i_sb, sbi);
-		return 1;
+		return try_to_fill_dentry(dentry, dir->i_sb, sbi);
 	}
 
-	/* Negative dentry.. Should we time these out? */
+	/* Negative dentry.. invalidate if "old" */
 	if (!dentry->d_inode)
-		return 1;
+		return (dentry->d_time - jiffies <= AUTOFS_NEGATIVE_TIMEOUT);
 
-	/* We should update the usage stuff here.. */
+	/* Update the usage list */
+	ent = (struct autofs_dir_ent *) dentry->d_time;
+	autofs_update_usage(&sbi->dirhash,ent);
 	return 1;
 }
 
@@ -186,12 +205,13 @@ static int autofs_root_lookup(struct inode *dir, struct dentry * dentry)
 	 * We need to do this before we release the directory semaphore.
 	 */
 	dentry->d_revalidate = autofs_revalidate;
-	dentry->d_flags = 1;
+	dentry->d_flags |= DCACHE_AUTOFS_PENDING;
 	d_add(dentry, NULL);
 
 	up(&dir->i_sem);
 	autofs_revalidate(dentry);
 	down(&dir->i_sem);
+	
 	return 0;
 }
 

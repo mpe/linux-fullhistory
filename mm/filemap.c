@@ -64,7 +64,6 @@ void invalidate_inode_pages(struct inode * inode)
 		inode->i_nrpages--;
 		if ((*p = page->next) != NULL)
 			(*p)->prev = page->prev;
-		page->dirty = 0;
 		page->next = NULL;
 		page->prev = NULL;
 		remove_page_from_hash_queue(page);
@@ -97,7 +96,6 @@ repeat:
 			inode->i_nrpages--;
 			if ((*p = page->next) != NULL)
 				(*p)->prev = page->prev;
-			page->dirty = 0;
 			page->next = NULL;
 			page->prev = NULL;
 			remove_page_from_hash_queue(page);

@@ -24,20 +24,17 @@ extern void __up(struct semaphore * sem);
 
 #define wake_one_more(sem)      atomic_inc(&sem->waking);
 
-extern __inline__ int waking_non_zero(struct semaphore *sem)
-{
-        unsigned long flags;
-        int ret = 0;
-
-        save_flags(flags);
-        cli();
-        if (atomic_read(&sem->waking) > 0) {
-                atomic_dec(&sem->waking);
-                ret = 1;
-        }
-        restore_flags(flags);
-        return ret;
-}
+#define waking_non_zero(sem) \
+({	unsigned long flags; \
+	int ret = 0; \
+	save_and_cli(flags); \
+	if (atomic_read(&sem->waking) > 0) { \
+		atomic_dec(&sem->waking); \
+		ret = 1; \
+	} \
+	restore_flags(flags); \
+	ret; \
+})
 
 extern __inline__ void down(struct semaphore * sem)
 {

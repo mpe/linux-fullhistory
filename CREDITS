@@ -335,6 +335,15 @@ S: Rue de la Chapelle 51
 S: 4850 Moresnet
 S: Belgium
 
+N: Cort Dougan
+E: cort@cs.nmt.edu
+W: http://www.cs.nmt.edu/~cort/
+D: PowerPC PReP port
+S: Computer Science Department
+S: New Mexico Tech
+S: Socorro NM 87801
+S: USA
+
 N: Thomas Dunbar
 E: tdunbar@vtaix.cc.vt.edu
 D: TeX & METAFONT hacking/maintenance
@@ -911,6 +920,14 @@ S: Canada K2H-9E1
 N: Peter MacDonald
 D: SLS distribution
 D: Initial implementation of VC's, pty's and select()
+
+N: Paul Mackerras
+E: paulus@cs.anu.edu.au
+D: Linux port for PCI Power Macintosh
+S: Dept. of Computer Science
+S: Australian National University
+S: Canberra  ACT  0200
+S: AUSTRALIA
 
 N: James B. MacLean
 E: macleajb@ednet.ns.ca

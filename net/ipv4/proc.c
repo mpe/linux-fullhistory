@@ -77,7 +77,7 @@ get__netinfo(struct proto *pro, char *buffer, int format, char **start, off_t of
  *	This was very pretty but didn't work when a socket is destroyed
  *	at the wrong moment (eg a syn recv socket getting a reset), or
  *	a memory timer destroy. Instead of playing with timers we just
- *	concede defeat and cli().
+ *	concede defeat and do a start_bh_atomic().
  */
 	SOCKHASH_LOCK();
 	sp = pro->sklist_next;

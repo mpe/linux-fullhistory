@@ -276,8 +276,7 @@ int fat_free(struct inode *inode,int skip)
 		}
 	}
 	if (last)
-		fat_access(inode->i_sb,last,MSDOS_SB(inode->i_sb)->fat_bits ==
-		    12 ? EOF_FAT12 : EOF_FAT16);
+		fat_access(inode->i_sb,last,EOF_FAT(inode->i_sb));
 	else {
 		MSDOS_I(inode)->i_start = 0;
 		mark_inode_dirty(inode);

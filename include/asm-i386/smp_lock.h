@@ -39,6 +39,8 @@ do { if (depth) __asm__ __volatile__( \
 } while (0)
 	
 
+extern const char lk_lockmsg[]; 
+
 /* Locking the kernel */
 extern __inline__ void lock_kernel(void)
 {
@@ -46,7 +48,7 @@ extern __inline__ void lock_kernel(void)
 
 	if (local_irq_count[cpu]) {
 		__label__ l1;
-l1:		printk("lock from interrupt context at %p\n", &&l1);
+l1:		printk(lk_lockmsg, &&l1);
 	}
 	if (cpu == global_irq_holder) {
 		__label__ l2;

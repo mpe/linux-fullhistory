@@ -1,4 +1,4 @@
-/*  $Id: init.c,v 1.39 1997/07/07 02:50:57 davem Exp $
+/*  $Id: init.c,v 1.40 1997/07/24 16:48:27 davem Exp $
  *  arch/sparc64/mm/init.c
  *
  *  Copyright (C) 1996,1997 David S. Miller (davem@caip.rutgers.edu)
@@ -431,8 +431,17 @@ void prom_reload_locked(void)
 	membar("#Sync");
 }
 
+void __flush_cache_all(void)
+{
+	unsigned long va;
+
+	flushw_all();
+	for(va =  0; va < (PAGE_SIZE << 1); va += 32)
+		spitfire_put_icache_tag(va, 0x0);
+}
+
 /* If not locked, zap it. */
-void flush_tlb_all(void)
+void __flush_tlb_all(void)
 {
 	unsigned long flags;
 	int i;

@@ -1,4 +1,4 @@
-/* $Id: entry.S,v 1.50 1997/07/15 16:53:00 davem Exp $
+/* $Id: entry.S,v 1.51 1997/07/24 12:15:04 davem Exp $
  * arch/sparc64/kernel/entry.S:  Sparc64 trap low-level entry points.
  *
  * Copyright (C) 1995,1997 David S. Miller (davem@caip.rutgers.edu)
@@ -206,7 +206,7 @@ fpdis_exit:
 	 * flushing very quickly.
 	 */
 	.align	32
-	.globl	do_ivec
+	.globl	do_ivec, do_ivec_return
 do_ivec:
 	ldxa		[%g0] ASI_INTR_RECEIVE, %g1
 	andcc		%g1, 0x20, %g0

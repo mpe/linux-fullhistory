@@ -190,7 +190,7 @@ SYMBOL_NAME_LABEL(ret_from_interrupt)
 	andw	#ALLOWINT,%sr
 
 	/* check if we need to do software interrupts */
-	
+
 	movel	SYMBOL_NAME(bh_active),%d0
 	andl	SYMBOL_NAME(bh_mask),%d0
 	jeq	SYMBOL_NAME(ret_from_exception)

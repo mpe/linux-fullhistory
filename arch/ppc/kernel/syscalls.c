@@ -9,6 +9,7 @@
  * platform.
  */
 
+#include <linux/config.h>
 #include <linux/errno.h>
 #include <linux/sched.h>
 #include <linux/mm.h>
@@ -19,105 +20,45 @@
 #include <linux/shm.h>
 #include <linux/stat.h>
 #include <linux/mman.h>
+#include <linux/ipc.h>
 #include <asm/uaccess.h>
+#include <asm/ipc.h>
 
-/*
- * sys_pipe() is the normal C calling standard for creating
- * a pipe. It's not the way unix traditionally does this, though.
- */
-asmlinkage int sys_pipe(unsigned long * fildes)
+
+void
+check_bugs(void)
 {
-	int error;
-
-	lock_kernel();
-	error = verify_area(VERIFY_WRITE,fildes,8);
-	if (error)
-		goto out;
-	error = do_pipe(fildes);
-out:
-	unlock_kernel();
-	return error;
 }
 
-asmlinkage unsigned long sys_mmap(unsigned long addr, size_t len, int prot,
-                                  int flags, int fd, off_t offset)
+asmlinkage int sys_ioperm(unsigned long from, unsigned long num, int on)
 {
-	struct file * file = NULL;
-	int ret = -EBADF;
-
-	lock_kernel();
-	if (!(flags & MAP_ANONYMOUS)) {
-		if (fd >= NR_OPEN || !(file = current->files->fd[fd]))
-			goto out;
-	}
-	flags &= ~(MAP_EXECUTABLE | MAP_DENYWRITE);
-	ret = do_mmap(file, addr, len, prot, flags, offset);
-out:
-	unlock_kernel();
-	return ret;
+	printk("sys_ioperm()\n");
+	return -EIO;
 }
 
-/*
- * Perform the select(nd, in, out, ex, tv) and mmap() system
- * calls. Linux/i386 didn't use to be able to handle more than
- * 4 system call parameters, so these system calls used a memory
- * block for parameter passing..
- */
-asmlinkage int old_mmap(unsigned long *buffer)
+int sys_iopl(int a1, int a2, int a3, int a4)
 {
-	int error;
-	unsigned long flags;
-	long a,b,c,d,e;
-	struct file * file = NULL;
-
 	lock_kernel();
-	error = verify_area(VERIFY_READ, buffer, 6*sizeof(long));
-	if (error)
-		goto out;
-	get_user(flags,buffer+3);
-	if (!(flags & MAP_ANONYMOUS)) {
-		unsigned long fd;
-		get_user(fd,buffer+4);
-		error = -EBADF;
-		if (fd >= NR_OPEN || !(file = current->files->fd[fd]))
-			goto out;
-	}
-	flags &= ~(MAP_EXECUTABLE | MAP_DENYWRITE);
-	error = -EFAULT;
-	if ( get_user(a,buffer) || get_user(b,buffer+1) ||
-	     get_user(c,buffer+2)||get_user(d,buffer+5)	)
-		goto out;
-	error = do_mmap(file,a,b,c, flags, d);
-out:
+	printk( "sys_iopl(%x, %x, %x, %x)!\n", a1, a2, a3, a4);
 	unlock_kernel();
-	return error;
+	return (ENOSYS);
 }
 
-extern asmlinkage int sys_select(int, fd_set *, fd_set *, fd_set *, struct timeval *);
-
-asmlinkage int old_select(unsigned long *buffer)
+int sys_vm86(int a1, int a2, int a3, int a4)
 {
-	int n;
-	fd_set *inp;
-	fd_set *outp;
-	fd_set *exp;
-	struct timeval *tvp;
-
 	lock_kernel();
-	n = verify_area(VERIFY_READ, buffer, 5*sizeof(unsigned long));
-	if (n)
-		goto out;
-	get_user(n,buffer);
-	get_user(inp,buffer+1);
-	get_user(outp,buffer+2);
-	get_user(exp,buffer+3);
-	get_user(tvp,buffer+4);
-	n = sys_select(n, inp, outp, exp, tvp);
-out:
+	printk( "sys_vm86(%x, %x, %x, %x)!\n", a1, a2, a3, a4);
 	unlock_kernel();
-	return n;
+	return (ENOSYS);
 }
-#if 0
+
+int sys_modify_ldt(int a1, int a2, int a3, int a4)
+{
+	lock_kernel();
+	printk( "sys_modify_ldt(%x, %x, %x, %x)!\n", a1, a2, a3, a4);
+	unlock_kernel();
+	return (ENOSYS);
+}
 
 /*
  * sys_ipc() is the de-multiplexer for the SysV IPC calls..
@@ -145,12 +86,12 @@ asmlinkage int sys_ipc (uint call, int first, int second, int third, void *ptr, 
 			ret = -EINVAL;
 			if (!ptr)
 				goto out;
-			if ((ret = verify_area (VERIFY_READ, ptr, sizeof(long))))
-				goto out;
-			fourth.__pad = (void *) get_fs_long(ptr);
+			ret = -EFAULT;
+			if (get_user(fourth.__pad, (void **) ptr))
+				goto out;	
 			ret = sys_semctl (first, second, third, fourth);
 			goto out;
-			}
+		}
 		default:
 			ret = -EINVAL;
 			goto out;
@@ -168,13 +109,13 @@ asmlinkage int sys_ipc (uint call, int first, int second, int third, void *ptr, 
 				ret = -EINVAL;
 				if (!ptr)
 					goto out;
-				if ((ret = verify_area (VERIFY_READ, ptr, sizeof(tmp))))
-					goto out;
-				memcpy_fromfs (&tmp,(struct ipc_kludge *) ptr,
-					       sizeof (tmp));
+				ret = -EFAULT;
+				if (copy_from_user(&tmp,(struct ipc_kludge *) ptr, 
+						   sizeof (tmp)))
+					goto out; 	
 				ret = sys_msgrcv (first, tmp.msgp, second, tmp.msgtyp, third);
 				goto out;
-				}
+			}
 			case 1: default:
 				ret = sys_msgrcv (first, (struct msgbuf *) ptr, second, fifth, third);
 				goto out;
@@ -195,15 +136,12 @@ asmlinkage int sys_ipc (uint call, int first, int second, int third, void *ptr, 
 			switch (version) {
 			case 0: default: {
 				ulong raddr;
-				if ((ret = verify_area(VERIFY_WRITE, (ulong*) third, sizeof(ulong))))
-					goto out;
 				ret = sys_shmat (first, (char *) ptr, second, &raddr);
 				if (ret)
 					goto out;
-				put_fs_long (raddr, (ulong *) third);
-				ret = 0;
+				ret = put_user (raddr, (ulong *) third);
 				goto out;
-				}
+			}
 			case 1:	/* iBCS2 emulator entry point */
 				ret = -EINVAL;
 				if (get_fs() != get_ds())
@@ -230,4 +168,81 @@ out:
 	unlock_kernel();
 	return ret;
 }
+
+
+#ifndef CONFIG_MODULES
+void
+scsi_register_module(void)
+{
+	lock_kernel();
+	panic("scsi_register_module");
+	unlock_kernel();
+}
+
+void
+scsi_unregister_module(void)
+{
+	lock_kernel();
+	panic("scsi_unregister_module");
+	unlock_kernel();
+}
 #endif
+
+/*
+ * sys_pipe() is the normal C calling standard for creating
+ * a pipe. It's not the way unix traditionally does this, though.
+ */
+asmlinkage int sys_pipe(unsigned long * fildes)
+{
+	int fd[2];
+	int error;
+
+	error = verify_area(VERIFY_WRITE,fildes,8);
+	if (error)
+		return error;
+	error = do_pipe(fd);
+	if (error)
+		return error;
+	put_user(fd[0],0+fildes);
+	put_user(fd[1],1+fildes);
+	return 0;
+}
+
+asmlinkage unsigned long sys_mmap(unsigned long addr, size_t len,
+				  unsigned long prot, unsigned long flags,
+				  unsigned long fd, off_t offset)
+{
+	struct file * file = NULL;
+	if (!(flags & MAP_ANONYMOUS)) {
+		if (fd >= NR_OPEN || !(file = current->files->fd[fd]))
+			return -EBADF;
+	}
+	flags &= ~(MAP_EXECUTABLE | MAP_DENYWRITE);
+
+	return do_mmap(file, addr, len, prot, flags, offset);
+}
+
+extern asmlinkage int sys_select(int, fd_set *, fd_set *, fd_set *, struct timeval *);
+
+/*
+ * Due to some executables calling the wrong select we sometimes
+ * get wrong args.  This determines how the args are being passed
+ * (a single ptr to them all args passed) then calls
+ * sys_select() with the appropriate args. -- Cort
+ */
+asmlinkage int 
+ppc_select(int n, fd_set *inp, fd_set *outp, fd_set *exp, struct timeval *tvp)
+{
+	int err;
+	if ( (unsigned long)n >= 4096 )
+	{
+		unsigned long *buffer = (unsigned long *)n;
+		if ( get_user(n, buffer) ||
+		     get_user(inp,buffer+1) ||
+		     get_user(outp,buffer+2) ||
+		     get_user(exp,buffer+3) ||
+		     get_user(tvp,buffer+4) )
+			return -EFAULT;
+	}
+	return sys_select(n, inp, outp, exp, tvp);
+}

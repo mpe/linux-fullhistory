@@ -1,4 +1,4 @@
-/*  $Id: process.c,v 1.29 1997/07/17 02:20:40 davem Exp $
+/*  $Id: process.c,v 1.31 1997/07/24 12:15:05 davem Exp $
  *  arch/sparc64/kernel/process.c
  *
  *  Copyright (C) 1995, 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -50,9 +50,12 @@ asmlinkage int sys_idle(void)
 		return -EPERM;
 
 	/* endless idle loop with no priority at all */
+	current->priority = -100;
 	current->counter = -100;
-	for (;;)
+	for (;;) {
+		run_task_queue(&tq_scheduler);
 		schedule();
+	}
 	return 0;
 }
 
@@ -61,42 +64,27 @@ asmlinkage int sys_idle(void)
 /*
  * the idle loop on a UltraMultiPenguin...
  */
-asmlinkage int sys_idle(void)
+asmlinkage int cpu_idle(void)
 {
-	if (current->pid != 0)
-		return -EPERM;
-
-	/* endless idle loop with no priority at all */
-	current->counter = -100;
-	schedule();
-	return 0;
+	current->priority = -100;
+	while(1) {
+		if(tq_scheduler) {
+			lock_kernel();
+			run_task_queue(&tq_scheduler);
+			unlock_kernel();
+		}
+		current->counter = -100;
+		schedule();
+	}
 }
 
-/* This is being executed in task 0 'user space'. */
-int cpu_idle(void *unused)
+asmlinkage int sys_idle(void)
 {
-	volatile int *spap = &smp_process_available;
-	volatile int cval;
+	if(current->pid != 0)
+		return -EPERM;
 
-	while(1) {
-		if(0==*spap)
-			continue;
-		cli();
-		/* Acquire exclusive access. */
-		while((cval = smp_swap(spap, -1)) == -1)
-			while(*spap == -1)
-				;
-                if (0==cval) {
-			/* ho hum, release it. */
-			*spap = 0;
-			sti();
-                        continue;
-                }
-		/* Something interesting happened, whee... */
-		*spap = (cval - 1);
-		sti();
-		idle();
-	}
+	cpu_idle();
+	return 0;
 }
 
 #endif
@@ -467,7 +455,11 @@ void fault_in_user_windows(struct pt_regs *regs)
  *       allocate the task_struct and kernel stack in
  *       do_fork().
  */
+#ifdef __SMP__
+extern void ret_from_smpfork(void);
+#else
 extern void ret_from_syscall(void);
+#endif
 
 int copy_thread(int nr, unsigned long clone_flags, unsigned long sp,
 		struct task_struct *p, struct pt_regs *regs)
@@ -485,7 +477,11 @@ int copy_thread(int nr, unsigned long clone_flags, unsigned long sp,
 	child_trap_frame = ((char *)p) + stack_offset;
 	memcpy(child_trap_frame, (((struct reg_window *)regs)-1), tframe_size);
 	p->tss.ksp = ((unsigned long) child_trap_frame) - STACK_BIAS;
+#ifdef __SMP__
+	p->tss.kpc = ((unsigned long) ret_from_smpfork) - 0x8;
+#else
 	p->tss.kpc = ((unsigned long) ret_from_syscall) - 0x8;
+#endif
 	p->tss.kregs = (struct pt_regs *)(child_trap_frame+sizeof(struct reg_window));
 	p->tss.cwp = regs->u_regs[UREG_G0];
 	if(regs->tstate & TSTATE_PRIV) {
@@ -495,6 +491,10 @@ int copy_thread(int nr, unsigned long clone_flags, unsigned long sp,
 		p->tss.ctx = 0;
 		p->tss.kregs->u_regs[UREG_G6] = (unsigned long) p;
 	} else {
+		if(current->tss.flags & SPARC_FLAG_32BIT) {
+			sp &= 0x00000000ffffffff;
+			regs->u_regs[UREG_FP] &= 0x00000000ffffffff;
+		}
 		p->tss.kregs->u_regs[UREG_FP] = sp;
 		p->tss.flags &= ~SPARC_FLAG_KTHREAD;
 		p->tss.current_ds = USER_DS;

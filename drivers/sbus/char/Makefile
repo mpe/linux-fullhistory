@@ -32,7 +32,9 @@ ifdef TADPOLE_FB_WEITEK
  FB_OBJS +=	weitek.o
 endif
 ifdef SUN_FB_CREATOR
+ ifeq ($(ARCH),sparc64)
  FB_OBJS += creator.o
+ endif
 endif
 #ifdef SUN_FB_FAST_ONE
 # FB_OBJS +=	sun_8bit_fast1.o

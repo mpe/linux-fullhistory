@@ -730,7 +730,7 @@ int zorro_find(int manuf, int prod, int part, int index)
 {
    int key;
    struct ConfigDev *cd;
-  
+
    if (!MACH_IS_AMIGA || !AMIGAHW_PRESENT(ZORRO))
       return(0);
 

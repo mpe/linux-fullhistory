@@ -25,60 +25,61 @@ HOSTCC		= gcc
 CC		= gcc$(SUFFIX)
 CFLAGSINC	= -D__KERNEL__ -I$(TOPDIR)/include -D__powerpc__
 CFLAGS		= $(CFLAGSINC) \
-		-Wstrict-prototypes \
-		-fomit-frame-pointer \
+		-Wstrict-prototypes -fomit-frame-pointer \
 		-fno-builtin \
-		-finhibit-size-directive -fno-strength-reduce\
-		-O2 -fsigned-char -pipe -mstring -mmultiple
+		-finhibit-size-directive \
+		-O2 -fsigned-char -pipe -ffixed-r2 -mstring -mmultiple -msoft-float
+# -fverbose-asm 
 CPP		= $(CC) -E $(CFLAGS)
 AR		= ar$(SUFFIX)
 RANLIB		= ranlib$(SUFFIX)
 STRIP		= strip$(SUFFIX)
 NM		= nm$(SUFFIX)
 
-ifdef CONFIG_603
-CFLAGS := $(CFLAGS) -mcpu=603 -DCPU=603
+ifdef CONFIG_601
+CFLAGS := $(CFLAGS) -mcpu=601 -DCPU=601
 endif
 
-ifdef CONFIG_603e
-CFLAGS := $(CFLAGS) -mcpu=603e -DCPU=603e
+ifdef CONFIG_603
+CFLAGS := $(CFLAGS) -mcpu=603 -DCPU=603
 endif
 
 ifdef CONFIG_604
 CFLAGS := $(CFLAGS) -mcpu=604 -DCPU=604
 endif
 
-#
-# NFS_ROOT_NAME specifies the default name of the directory to mount
-# as root via NFS, if the kernel does not get the "root=" option from
-# the boot loader. The "%s" will be replaced by the IP-number of the
-# local system.
-#
-NFS_ROOT = -DNFS_ROOT="\"/joplin/ppc/root\""
-
 HEAD := arch/ppc/kernel/head.o
 
 ARCH_SUBDIRS = arch/ppc/kernel arch/ppc/mm arch/ppc/lib
 SUBDIRS := $(SUBDIRS) $(ARCH_SUBDIRS)
 ARCHIVES := arch/ppc/kernel/kernel.o arch/ppc/mm/mm.o arch/ppc/lib/lib.o $(ARCHIVES)
-
+CORE_FILES := arch/ppc/kernel/kernel.o arch/ppc/mm/mm.o arch/ppc/lib/lib.o $(CORE_FILES)
 
 MAKEBOOT = $(MAKE) -C arch/$(ARCH)/boot
 
-netboot: vmlinux
+checks:
+	@$(MAKE) -C arch/$(ARCH)/kernel checks
+
+netboot: checks vmlinux
 	@$(MAKEBOOT) netboot
 
-znetboot: vmlinux
+znetboot: checks vmlinux
 	@$(MAKEBOOT) znetboot
 
-zImage: vmlinux
+#rcpboot: checks vmlinux
+#	@$(MAKEBOOT) rcpboot
+
+zImage: checks vmlinux
 	@$(MAKEBOOT) zImage
 
-floppy: vmlinux
+floppy: checks vmlinux
 	@$(MAKEBOOT) floppy
 
-install: vmlinux
+install: checks vmlinux
 	@$(MAKEBOOT) install
+
+vmlinux.coff : checks vmlinux
+	$(MAKE) -C arch/ppc/coffboot/ vmlinux.coff
 
 arch/ppc/kernel: dummy
 	$(MAKE) linuxsubdirs SUBDIRS=arch/ppc/kernel
@@ -89,12 +90,24 @@ arch/ppc/mm: dummy
 arch/ppc/lib: dummy
 	$(MAKE) linuxsubdirs SUBDIRS=arch/ppc/lib
 
+diffs:
+	arch/ppc/mkdiff
+
+tar:
+	arch/ppc/mktar
 
 archclean:
-	rm -f arch/ppc/kernel/mk_defs arch/ppc/kernel/ppc_defs.h TAGS
+	rm -f arch/ppc/kernel/mk_defs arch/ppc/kernel/ppc_defs.h arch/ppc/kernel/checks TAGS
+	rm -f `find arch/ppc/ \( -name '*.[oas]' -o -name '*~' -o -name '#*#' \) -print`
+	rm -f `find include/asm-ppc/ \( -name '*.[oas]' -o -name '*~' -o -name '#*#' \) -print`
 	@$(MAKEBOOT) clean
 
 archdep:
+	$(MAKE) -C arch/ppc/boot fastdep
+	$(MAKE) -C arch/ppc/kernel fastdep
+	$(MAKE) -C arch/ppc/mm fastdep
+	$(MAKE) -C arch/ppc/lib fastdep
 
-corttags :
-	etags arch/ppc/*/*.c include/asm/* */*.c drivers/*/*.c net/*.c
+tags :
+	etags arch/ppc/*/*.c arch/ppc/*/*.S include/asm/* */*.c 
+

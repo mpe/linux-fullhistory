@@ -51,5 +51,8 @@ struct inode_operations autofs_symlink_inode_operations = {
 	NULL,			/* writepage */
 	NULL,			/* bmap */
 	NULL,			/* truncate */
-	NULL			/* permission */
+	NULL,			/* permission */
+	NULL,			/* smap */
+	NULL,			/* updatepage */
+	NULL			/* revalidate */
 };

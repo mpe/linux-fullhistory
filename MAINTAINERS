@@ -452,6 +452,18 @@ W:	http://www.cyberelk.demon.co.uk/parport.html
 W:	http://www.cage.curtin.edu.au/~campbell/parbus/
 S:	Maintained
 
+LINUX FOR POWERPC (PREP)
+P:	Cort Dougan
+M:	cort@cs.nmt.edu
+W:	http://www.cs.nmt.edu/~linuxppc/
+S:	Maintained
+
+LINUX FOR POWER MACINTOSH
+P:	Paul Mackerras
+M:	paulus@cs.anu.edu.au
+L:	linux-pmac@samba.anu.edu.au
+S:	Maintained
+
 FPU EMULATOR
 P:	Bill Metzenthen
 M:	billm@suburbia.net

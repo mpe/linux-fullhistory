@@ -1,4 +1,4 @@
-/* $Id: sysirix.c,v 1.2 1997/06/17 15:24:26 ralf Exp $
+/* $Id: sysirix.c,v 1.3 1997/07/20 15:32:25 ralf Exp $
  * sysirix.c: IRIX system call emulation.
  *
  * Copyright (C) 1996 David S. Miller
@@ -652,6 +652,7 @@ struct irix_statfs {
 asmlinkage int irix_statfs(const char *path, struct irix_statfs *buf,
 			   int len, int fs_type)
 {
+	struct dentry *dentry;
 	struct inode *inode;
 	struct statfs kbuf;
 	int error, old_fs, i;
@@ -664,20 +665,19 @@ asmlinkage int irix_statfs(const char *path, struct irix_statfs *buf,
 	error = verify_area(VERIFY_WRITE, buf, sizeof(struct irix_statfs));
 	if (error)
 		goto out;
-	error = namei(NAM_FOLLOW_LINK, path, &inode);
-	if (error)
+	dentry = namei(path);
+	error = PTR_ERR(dentry);
+	if (IS_ERR(dentry))
 		goto out;
-	if (!inode->i_sb->s_op->statfs) {
-		iput(inode);
-		error = -ENOSYS;
-		goto out;
-	}
 
+	inode = dentry->d_inode;
 	old_fs = get_fs(); set_fs(get_ds());
-	inode->i_sb->s_op->statfs(inode->i_sb, &kbuf, sizeof(struct statfs));
+	error = inode->i_sb->s_op->statfs(inode->i_sb, &kbuf,
+	                                  sizeof(struct statfs));
 	set_fs(old_fs);
+	if (error)
+		goto dput_and_out;
 
-	iput(inode);
 	__put_user(kbuf.f_type, &buf->f_type);
 	__put_user(kbuf.f_bsize, &buf->f_bsize);
 	__put_user(kbuf.f_frsize, &buf->f_frsize);
@@ -691,6 +691,8 @@ asmlinkage int irix_statfs(const char *path, struct irix_statfs *buf,
 	}
 	error = 0;
 
+dput_and_out:
+	dput(dentry);
 out:
 	unlock_kernel();
 	return error;
@@ -698,7 +700,8 @@ out:
 
 asmlinkage int irix_fstatfs(unsigned int fd, struct irix_statfs *buf)
 {
-	struct inode * inode;
+	struct dentry *dentry;
+	struct inode *inode;
 	struct statfs kbuf;
 	struct file *file;
 	int error, old_fs, i;
@@ -711,8 +714,16 @@ asmlinkage int irix_fstatfs(unsigned int fd, struct irix_statfs *buf)
 		error = -EBADF;
 		goto out;
 	}
-	if (!(inode = file->f_inode)) {
+	if (!(dentry = file->f_dentry)) {
 		error = -ENOENT;
+		goto out;
+	}
+	if (!(inode = dentry->d_inode)) {
+		error = -ENOENT;
+		goto out;
+	}
+	if (!inode->i_sb) {
+		error = -ENODEV;
 		goto out;
 	}
 	if (!inode->i_sb->s_op->statfs) {
@@ -721,8 +732,11 @@ asmlinkage int irix_fstatfs(unsigned int fd, struct irix_statfs *buf)
 	}
 
 	old_fs = get_fs(); set_fs(get_ds());
-	inode->i_sb->s_op->statfs(inode->i_sb, &kbuf, sizeof(struct statfs));
+	error = inode->i_sb->s_op->statfs(inode->i_sb, &kbuf,
+	                                  sizeof(struct statfs));
 	set_fs(old_fs);
+	if (error)
+		goto out;
 
 	__put_user(kbuf.f_type, &buf->f_type);
 	__put_user(kbuf.f_bsize, &buf->f_bsize);
@@ -789,13 +803,14 @@ out:
 asmlinkage int irix_exec(struct pt_regs *regs)
 {
 	int error, base = 0;
-	char * filename;
+	char *filename;
 
 	lock_kernel();
 	if(regs->regs[2] == 1000)
 		base = 1;
-	error = getname((char *) (long)regs->regs[base + 4], &filename);
-	if (error)
+	filename = getname((char *) (long)regs->regs[base + 4]);
+	error = PTR_ERR(filename);
+	if (IS_ERR(filename))
 		goto out;
 	error = do_execve(filename, (char **) (long)regs->regs[base + 5],
 	                  (char **) 0, regs);
@@ -809,13 +824,14 @@ out:
 asmlinkage int irix_exece(struct pt_regs *regs)
 {
 	int error, base = 0;
-	char * filename;
+	char *filename;
 
 	lock_kernel();
 	if(regs->regs[2] == 1000)
 		base = 1;
-	error = getname((char *) (long)regs->regs[base + 4], &filename);
-	if (error)
+	filename = getname((char *) (long)regs->regs[base + 4]);
+	error = PTR_ERR(filename);
+	if (IS_ERR(filename))
 		goto out;
 	error = do_execve(filename, (char **) (long)regs->regs[base + 5],
 	                  (char **) (long)regs->regs[base + 6], regs);
@@ -1380,6 +1396,7 @@ struct irix_statvfs {
 
 asmlinkage int irix_statvfs(char *fname, struct irix_statvfs *buf)
 {
+	struct dentry *dentry;
 	struct inode *inode;
 	struct statfs kbuf;
 	int error, old_fs, i;
@@ -1390,20 +1407,23 @@ asmlinkage int irix_statvfs(char *fname, struct irix_statvfs *buf)
 	error = verify_area(VERIFY_WRITE, buf, sizeof(struct irix_statvfs));
 	if(error)
 		goto out;
-	error = namei(NAM_FOLLOW_LINK, fname, &inode);
-	if(error)
+	dentry = namei(fname);
+	error = PTR_ERR(dentry);
+	if(!IS_ERR(dentry))
 		goto out;
-	if(!inode->i_sb->s_op->statfs) {
-		iput(inode);
-		error = -ENOSYS;
-		goto out;
-	}
+	inode = dentry->d_inode;
+
+	error = -ENOSYS;
+	if(!inode->i_sb->s_op->statfs)
+		goto dput_and_out;
 
 	old_fs = get_fs(); set_fs(get_ds());
-	inode->i_sb->s_op->statfs(inode->i_sb, &kbuf, sizeof(struct statfs));
+	error = inode->i_sb->s_op->statfs(inode->i_sb, &kbuf,
+	                                  sizeof(struct statfs));
 	set_fs(old_fs);
+	if (error)
+		goto dput_and_out;
 
-	iput(inode);
 	__put_user(kbuf.f_bsize, &buf->f_bsize);
 	__put_user(kbuf.f_frsize, &buf->f_frsize);
 	__put_user(kbuf.f_blocks, &buf->f_blocks);
@@ -1426,6 +1446,8 @@ asmlinkage int irix_statvfs(char *fname, struct irix_statvfs *buf)
 
 	error = 0;
 
+dput_and_out:
+	dput(dentry);
 out:
 	unlock_kernel();
 	return error;
@@ -1433,7 +1455,8 @@ out:
 
 asmlinkage int irix_fstatvfs(int fd, struct irix_statvfs *buf)
 {
-	struct inode * inode;
+	struct dentry *dentry;
+	struct inode *inode;
 	struct statfs kbuf;
 	struct file *file;
 	int error, old_fs, i;
@@ -1449,7 +1472,11 @@ asmlinkage int irix_fstatvfs(int fd, struct irix_statvfs *buf)
 		error = -EBADF;
 		goto out;
 	}
-	if (!(inode = file->f_inode)) {
+	if (!(dentry = file->f_dentry)) {
+		error = -ENOENT;
+		goto out;
+	}
+	if (!(inode = dentry->d_inode)) {
 		error = -ENOENT;
 		goto out;
 	}
@@ -1459,8 +1486,11 @@ asmlinkage int irix_fstatvfs(int fd, struct irix_statvfs *buf)
 	}
 
 	old_fs = get_fs(); set_fs(get_ds());
-	inode->i_sb->s_op->statfs(inode->i_sb, &kbuf, sizeof(struct statfs));
+	error = inode->i_sb->s_op->statfs(inode->i_sb, &kbuf,
+	                                  sizeof(struct statfs));
 	set_fs(old_fs);
+	if (error)
+		goto out;
 
 	__put_user(kbuf.f_bsize, &buf->f_bsize);
 	__put_user(kbuf.f_frsize, &buf->f_frsize);
@@ -1489,26 +1519,28 @@ out:
 	return error;
 }
 
-#define NOFOLLOW_LINKS  NAM_FOLLOW_TRAILSLASH
-#define FOLLOW_LINKS    NAM_FOLLOW_LINK
+#define NOFOLLOW_LINKS  0
+#define FOLLOW_LINKS    1
 
-static inline int chown_common(char *filename, uid_t user, gid_t group, int follow)
+static inline int chown_common(uid_t user, gid_t group, struct dentry *dentry)
 {
 	struct inode * inode;
 	int error;
 	struct iattr newattrs;
 
-	error = namei(follow, filename,&inode);
-	if (error)
-		return error;
-	if (IS_RDONLY(inode)) {
-		iput(inode);
-		return -EROFS;
-	}
-	if (IS_IMMUTABLE(inode) || IS_APPEND(inode)) {
-		iput(inode);
-		return -EPERM;
-	}
+	error = PTR_ERR(dentry);
+	if (IS_ERR(dentry))
+		goto out;
+	inode = dentry->d_inode;
+
+	error = -EROFS;
+	if (IS_RDONLY(inode))
+		goto dput_and_out;
+
+	error = -EPERM;
+	if (IS_IMMUTABLE(inode) || IS_APPEND(inode))
+		goto dput_and_out;
+
 	if (user == (uid_t) -1)
 		user = inode->i_uid;
 	if (group == (gid_t) -1)
@@ -1534,38 +1566,45 @@ static inline int chown_common(char *filename, uid_t user, gid_t group, int foll
 		newattrs.ia_mode &= ~S_ISGID;
 		newattrs.ia_valid |= ATTR_MODE;
 	}
-	inode->i_dirt = 1;
 	if (inode->i_sb->dq_op) {
 		inode->i_sb->dq_op->initialize(inode, -1);
+		error = -EDQUOT;
 		if (inode->i_sb->dq_op->transfer(inode, &newattrs, 0))
-			return -EDQUOT;
+			goto dput_and_out;
 		error = notify_change(inode, &newattrs);
 		if (error)
 			inode->i_sb->dq_op->transfer(inode, &newattrs, 1);
 	} else
 		error = notify_change(inode, &newattrs);
-	iput(inode);
-	return(error);
+
+dput_and_out:
+	dput(dentry);
+out:
+	return error;
 }
 
-asmlinkage int irix_chown(char *fname, int uid, int gid)
+asmlinkage int irix_chown(const char *filename, int uid, int gid)
 {
 	int retval;
+	struct dentry *dentry;
 
 	lock_kernel();
 	/* Do follow any and all links... */
-	retval = chown_common(fname, uid, gid, FOLLOW_LINKS);
+	dentry = namei(filename);
+	retval = chown_common(uid, gid, dentry);
 	unlock_kernel();
 	return retval;
 }
 
-asmlinkage int irix_lchown(char *fname, int uid, int gid)
+asmlinkage int irix_lchown(const char *filename, int uid, int gid)
 {
 	int retval;
+	struct dentry *dentry;
 
 	lock_kernel();
 	/* Do _not_ follow any links... */
-	retval = chown_common(fname, uid, gid, NOFOLLOW_LINKS);
+	dentry = lnamei(filename);
+	retval = chown_common(uid, gid, dentry);
 	unlock_kernel();
 	return retval;
 }
@@ -1722,6 +1761,7 @@ struct irix_statvfs64 {
 
 asmlinkage int irix_statvfs64(char *fname, struct irix_statvfs64 *buf)
 {
+	struct dentry *dentry;
 	struct inode *inode;
 	struct statfs kbuf;
 	int error, old_fs, i;
@@ -1731,20 +1771,22 @@ asmlinkage int irix_statvfs64(char *fname, struct irix_statvfs64 *buf)
 	error = verify_area(VERIFY_WRITE, buf, sizeof(struct irix_statvfs));
 	if(error)
 		goto out;
-	error = namei(NAM_FOLLOW_LINK, fname, &inode);
-	if(error)
+	dentry = namei(fname);
+	error = PTR_ERR(dentry);
+	if(IS_ERR(dentry))
 		goto out;
-	if(!inode->i_sb->s_op->statfs) {
-		iput(inode);
-		error = -ENOSYS;
-		goto out;
-	}
+	error = -ENOSYS;
+	inode = dentry->d_inode;
+	if(!inode->i_sb->s_op->statfs)
+		goto dput_and_out;
 
 	old_fs = get_fs(); set_fs(get_ds());
-	inode->i_sb->s_op->statfs(inode->i_sb, &kbuf, sizeof(struct statfs));
+	error = inode->i_sb->s_op->statfs(inode->i_sb, &kbuf,
+	                                  sizeof(struct statfs));
 	set_fs(old_fs);
+	if (error)
+		goto dput_and_out;
 
-	iput(inode);
 	__put_user(kbuf.f_bsize, &buf->f_bsize);
 	__put_user(kbuf.f_frsize, &buf->f_frsize);
 	__put_user(kbuf.f_blocks, &buf->f_blocks);
@@ -1767,6 +1809,8 @@ asmlinkage int irix_statvfs64(char *fname, struct irix_statvfs64 *buf)
 
 	error = 0;
 
+dput_and_out:
+	dput(dentry);
 out:
 	unlock_kernel();
 	return error;
@@ -1774,7 +1818,8 @@ out:
 
 asmlinkage int irix_fstatvfs64(int fd, struct irix_statvfs *buf)
 {
-	struct inode * inode;
+	struct dentry *dentry;
+	struct inode *inode;
 	struct statfs kbuf;
 	struct file *file;
 	int error, old_fs, i;
@@ -1790,7 +1835,11 @@ asmlinkage int irix_fstatvfs64(int fd, struct irix_statvfs *buf)
 		error = -EBADF;
 		goto out;
 	}
-	if (!(inode = file->f_inode)) {
+	if (!(dentry = file->f_dentry)) {
+		error = -ENOENT;
+		goto out;
+	}
+	if (!(inode = dentry->d_inode)) {
 		error = -ENOENT;
 		goto out;
 	}
@@ -1800,8 +1849,11 @@ asmlinkage int irix_fstatvfs64(int fd, struct irix_statvfs *buf)
 	}
 
 	old_fs = get_fs(); set_fs(get_ds());
-	inode->i_sb->s_op->statfs(inode->i_sb, &kbuf, sizeof(struct statfs));
+	error = inode->i_sb->s_op->statfs(inode->i_sb, &kbuf,
+	                                  sizeof(struct statfs));
 	set_fs(old_fs);
+	if (error)
+		goto out;
 
 	__put_user(kbuf.f_bsize, &buf->f_bsize);
 	__put_user(kbuf.f_frsize, &buf->f_frsize);
@@ -1927,6 +1979,8 @@ out:
 asmlinkage int irix_ngetdents(unsigned int fd, void * dirent, unsigned int count, int *eob)
 {
 	struct file *file;
+	struct dentry *dentry;
+	struct inode *inode;
 	struct irix_dirent32 *lastdirent;
 	struct irix_dirent32_callback buf;
 	int error;
@@ -1936,25 +1990,34 @@ asmlinkage int irix_ngetdents(unsigned int fd, void * dirent, unsigned int count
 	printk("[%s:%d] ngetdents(%d, %p, %d, %p) ", current->comm,
 	       current->pid, fd, dirent, count, eob);
 #endif
-	if (fd >= NR_OPEN || !(file = current->files->fd[fd])) {
-		error = -EBADF;
+	error = -EBADF;
+	if (fd >= NR_OPEN || !(file = current->files->fd[fd]))
 		goto out;
-	}
-	if (!file->f_op || !file->f_op->readdir) {
-		error = -ENOTDIR;
+
+	dentry = file->f_dentry;
+	if (!dentry)
 		goto out;
-	}
-	if(verify_area(VERIFY_WRITE, dirent, count) ||
-	   verify_area(VERIFY_WRITE, eob, sizeof(*eob))) {
-		error = -EFAULT;
+
+	inode = dentry->d_inode;
+	if (!inode)
 		goto out;
-	}
+
+	error = -ENOTDIR;
+	if (!file->f_op || !file->f_op->readdir)
+		goto out;
+
+	error = -EFAULT;
+	if(!access_ok(VERIFY_WRITE, dirent, count) ||
+	   !access_ok(VERIFY_WRITE, eob, sizeof(*eob)))
+		goto out;
+
 	__put_user(0, eob);
 	buf.current_dir = (struct irix_dirent32 *) dirent;
 	buf.previous = NULL;
 	buf.count = count;
 	buf.error = 0;
-	error = file->f_op->readdir(file->f_inode, file, &buf, irix_filldir32);
+
+	error = file->f_op->readdir(inode, file, &buf, irix_filldir32);
 	if (error < 0)
 		goto out;
 	lastdirent = buf.previous;
@@ -2027,6 +2090,8 @@ out:
 asmlinkage int irix_getdents64(int fd, void *dirent, int cnt)
 {
 	struct file *file;
+	struct dentry *dentry;
+	struct inode *inode;
 	struct irix_dirent64 *lastdirent;
 	struct irix_dirent64_callback buf;
 	int error;
@@ -2036,28 +2101,35 @@ asmlinkage int irix_getdents64(int fd, void *dirent, int cnt)
 	printk("[%s:%d] getdents64(%d, %p, %d) ", current->comm,
 	       current->pid, fd, dirent, cnt);
 #endif
-	if (fd >= NR_OPEN || !(file = current->files->fd[fd])) {
-		error = -EBADF;
+	error = -EBADF;
+	if (fd >= NR_OPEN || !(file = current->files->fd[fd]))
 		goto out;
-	}
-	if (!file->f_op || !file->f_op->readdir) {
-		error = -ENOTDIR;
+
+	dentry = file->f_dentry;
+	if (!dentry)
 		goto out;
-	}
-	if(verify_area(VERIFY_WRITE, dirent, cnt)) {
-		error = -EFAULT;
+
+	inode = dentry->d_inode;
+	if (!inode)
 		goto out;
-	}
-	if(cnt < (sizeof(struct irix_dirent64) + 255)) {
-		error = -EINVAL;
+
+	error = -ENOTDIR;
+	if (!file->f_op || !file->f_op->readdir)
 		goto out;
-	}
+
+	error = -EFAULT;
+	if(!access_ok(VERIFY_WRITE, dirent, cnt))
+		goto out;
+
+	error = -EINVAL;
+	if(cnt < (sizeof(struct irix_dirent64) + 255))
+		goto out;
 
 	buf.curr = (struct irix_dirent64 *) dirent;
 	buf.previous = NULL;
 	buf.count = cnt;
 	buf.error = 0;
-	error = file->f_op->readdir(file->f_inode, file, &buf, irix_filldir64);
+	error = file->f_op->readdir(inode, file, &buf, irix_filldir64);
 	if (error < 0)
 		goto out;
 	lastdirent = buf.previous;
@@ -2079,6 +2151,8 @@ out:
 asmlinkage int irix_ngetdents64(int fd, void *dirent, int cnt, int *eob)
 {
 	struct file *file;
+	struct dentry *dentry;
+	struct inode *inode;
 	struct irix_dirent64 *lastdirent;
 	struct irix_dirent64_callback buf;
 	int error;
@@ -2088,30 +2162,37 @@ asmlinkage int irix_ngetdents64(int fd, void *dirent, int cnt, int *eob)
 	printk("[%s:%d] ngetdents64(%d, %p, %d) ", current->comm,
 	       current->pid, fd, dirent, cnt);
 #endif
-	if (fd >= NR_OPEN || !(file = current->files->fd[fd])) {
-		error = -EBADF;
+	error = -EBADF;
+	if (fd >= NR_OPEN || !(file = current->files->fd[fd]))
 		goto out;
-	}
-	if (!file->f_op || !file->f_op->readdir) {
-		error = -ENOTDIR;
+
+	dentry = file->f_dentry;
+	if (!dentry)
 		goto out;
-	}
-	if(verify_area(VERIFY_WRITE, dirent, cnt) ||
-	   verify_area(VERIFY_WRITE, eob, sizeof(*eob))) {
-		error = -EFAULT;
+
+	inode = dentry->d_inode;
+	if (!inode)
 		goto out;
-	}
-	if(cnt < (sizeof(struct irix_dirent64) + 255)) {
-		error = -EINVAL;
+
+	error = -ENOTDIR;
+	if (!file->f_op || !file->f_op->readdir)
 		goto out;
-	}
+
+	error = -EFAULT;
+	if(!access_ok(VERIFY_WRITE, dirent, cnt) ||
+	   !access_ok(VERIFY_WRITE, eob, sizeof(*eob)))
+		goto out;
+
+	error = -EINVAL;
+	if(cnt < (sizeof(struct irix_dirent64) + 255))
+		goto out;
 
 	*eob = 0;
 	buf.curr = (struct irix_dirent64 *) dirent;
 	buf.previous = NULL;
 	buf.count = cnt;
 	buf.error = 0;
-	error = file->f_op->readdir(file->f_inode, file, &buf, irix_filldir64);
+	error = file->f_op->readdir(inode, file, &buf, irix_filldir64);
 	if (error < 0)
 		goto out;
 	lastdirent = buf.previous;

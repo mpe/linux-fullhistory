@@ -96,6 +96,8 @@
 
 #define TCSBRKP		0x5486	/* Needed for POSIX tcsendbreak() */
 #define TIOCTTYGSTRUCT	0x5487  /* For debugging only */
+#define TIOCSBRK	0x5427  /* BSD compatibility */
+#define TIOCCBRK	0x5428  /* BSD compatibility */
 
 #define TIOCSERCONFIG	0x5488
 #define TIOCSERGWILD	0x5489

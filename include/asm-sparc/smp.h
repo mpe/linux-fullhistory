@@ -6,6 +6,8 @@
 #ifndef _SPARC_SMP_H
 #define _SPARC_SMP_H
 
+#include <asm/head.h>
+
 #ifndef __ASSEMBLY__
 /* PROM provided per-processor information we need
  * to start them all up.

@@ -31,7 +31,7 @@
 #define	SER_AMIGA	105	/* Amiga built-in serial port */
 #define SER_IOEXT	106	/* Amiga GVP IO-Extender (16c552) */
 #define SER_MFC_III	107	/* Amiga BSC Multiface Card III (MC68681) */
-
+#define SER_WHIPPET	108	/* Amiga Hisoft Whippet PCMCIA (16c550B) */
 
 struct serial_struct {
 	int	type;

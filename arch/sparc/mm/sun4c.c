@@ -1,4 +1,4 @@
-/* $Id: sun4c.c,v 1.148 1997/05/18 21:11:19 davem Exp $
+/* $Id: sun4c.c,v 1.149 1997/07/20 05:59:38 davem Exp $
  * sun4c.c: Doing in software what should be done in hardware.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -2435,11 +2435,14 @@ static pgd_t *sun4c_pgd_alloc(void)
  */
 static void sun4c_vac_alias_fixup(struct vm_area_struct *vma, unsigned long address, pte_t pte)
 {
-	struct inode *inode;
+	struct dentry *dentry;
+	struct inode *inode = NULL;
 	pgd_t *pgdp;
 	pte_t *ptep;
 
-	inode = vma->vm_inode;
+	dentry = vma->vm_dentry;
+	if(dentry)
+		inode = dentry->d_inode;
 	if(inode) {
 		unsigned long offset = (address & PAGE_MASK) - vma->vm_start;
 		struct vm_area_struct *vmaring = inode->i_mmap; 

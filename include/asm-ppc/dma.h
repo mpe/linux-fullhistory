@@ -1,16 +1,21 @@
-/* $Id: dma.h,v 1.7 1992/12/14 00:29:34 root Exp root $
+/* $Id: dma.h,v 1.3 1997/03/16 06:20:39 cort Exp $
  * linux/include/asm/dma.h: Defines for using and allocating dma channels.
  * Written by Hennus Bergman, 1992.
  * High DMA channel support & info by Hannu Savolainen
  * and John Boyd, Nov. 1992.
  */
 
+#include <linux/config.h>
+
 /*
  * Note: Adapted for PowerPC by Gary Thomas
  * Modified by Cort Dougan <cort@cs.nmt.edu>
  *
+ * None of this really applies for Power Macintoshes.  There is
+ * basically just enough here to get kernel/dma.c to compile.
+ *
  * There may be some comments or restrictions made here which are
- * not valid for the PowerPC (PreP) platform.  Take what you read
+ * not valid for the PReP platform.  Take what you read
  * with a grain of salt.
  */
  
@@ -18,6 +23,7 @@
 #ifndef _ASM_DMA_H
 #define _ASM_DMA_H
 
+#ifdef CONFIG_PREP
 #include <asm/io.h>		/* need byte IO */
 
 
@@ -295,5 +301,6 @@ static __inline__ int get_dma_residue(unsigned int dmanr)
 /* These are in kernel/dma.c: */
 extern void free_dma(unsigned int dmanr);	/* release it again */
 
+#endif /* CONFIG_PREP */
 
 #endif /* _ASM_DMA_H */

@@ -23,11 +23,11 @@ extern unsigned long get_video_size_row(unsigned int console);
 #define get_video_num_columns(dummy) video_num_columns
 #define get_video_num_lines(dummy) video_num_lines
 #define get_video_size_row(dummy) video_size_row
+#endif
+
 extern unsigned long video_num_columns;
 extern unsigned long video_num_lines;
 extern unsigned long video_size_row;
-#endif
-
 extern unsigned char video_type;
 extern unsigned long video_mem_base;
 extern unsigned long video_mem_term;
@@ -72,8 +72,6 @@ extern void putconsxy(int currcons, char *p);
 
 
 /* how to access screen memory */
-
-#include <linux/config.h>
 
 #if defined(CONFIG_TGA_CONSOLE)
 
@@ -171,17 +169,25 @@ static inline unsigned char scr_readb(unsigned char * addr)
 
 static inline void scr_writew(unsigned short val, unsigned short * addr)
 {
+#ifdef __powerpc__
+	st_le16(addr, val);
+#else
 	if ((long) addr < 0)
 		*addr = val;
 	else
 		writew(val, (unsigned long) addr);
+#endif /* !__powerpc__ */
 }
 
 static inline unsigned short scr_readw(unsigned short * addr)
 {
+#ifdef __powerpc__
+	return ld_le16(addr);
+#else
 	if ((long) addr < 0)
 		return *addr;
 	return readw((unsigned long) addr);
+#endif /* !__powerpc__ */	
 }
 
 #endif /* CONFIG_TGA_CONSOLE */

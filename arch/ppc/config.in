@@ -2,62 +2,62 @@
 # For a description of the syntax of this configuration file,
 # see the Configure script.
 #
-mainmenu_name "Linux Kernel Configuration"
+mainmenu_name "Linux/PowerPC Kernel Configuration"
 
-mainmenu_option next_comment
-comment 'Code maturity level options'
+if [ "`uname`" != "Linux" ]; then
+  define_bool CONFIG_CROSSCOMPILE y
+else
+  define_bool CONFIG_NATIVE y
+fi
+
+bool 'Build PowerMac Kernel (not PReP)?' CONFIG_PMAC
+bool 'Build PReP Kernel (not PowerMac)?' CONFIG_PREP
 bool 'Prompt for development and/or incomplete code/drivers' CONFIG_EXPERIMENTAL
-endmenu
+bool 'Used Harddrive LED on IBM 83x workstations as heartbeat?' CONFIG_HEARTBEAT
+bool 'Used PowerPC specific powersaving?' CONFIG_POWERSAVING
+choice 'Processor type' \
+	"Common		CONFIG_MCOMMON \
+	 601		CONFIG_M601	\
+	 603		CONFIG_M603	\
+	 604		CONFIG_M604" Common
 
-mainmenu_option next_comment
-comment 'Loadable module support'
 bool 'Enable loadable module support' CONFIG_MODULES
 if [ "$CONFIG_MODULES" = "y" ]; then
   bool 'Set version information on all symbols for modules' CONFIG_MODVERSIONS
   bool 'Kernel daemon support (e.g. autoload of modules)' CONFIG_KERNELD
 fi
-endmenu
+
 
 mainmenu_option next_comment
-comment 'General setup'
-
-bool 'Kernel math emulation' CONFIG_MATH_EMULATION
+define_bool CONFIG_PCI y
+bool 'PCI bridge optimization (experimental)' CONFIG_PCI_OPTIMIZE
 bool 'Networking support' CONFIG_NET
-bool 'PCI bios support' CONFIG_PCI
-if [ "$CONFIG_PCI" = "y" ]; then
-  if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
-    bool '   PCI bridge optimization (experimental)' CONFIG_PCI_OPTIMIZE
-  fi
-fi
-bool 'System V IPC' CONFIG_SYSVIPC
 bool 'Sysctl support' CONFIG_SYSCTL
-tristate 'Kernel support for a.out binaries' CONFIG_BINFMT_AOUT
+bool 'System V IPC' CONFIG_SYSVIPC
+
+# only elf supported, a.out is not -- Cort
+define_bool CONFIG_BINFMT_ELF y
+define_bool CONFIG_KERNEL_ELF y
+tristate 'Kernel support for MISC binaries' CONFIG_BINFMT_MISC
 tristate 'Kernel support for JAVA binaries' CONFIG_BINFMT_JAVA
-tristate 'Kernel support for ELF binaries' CONFIG_BINFMT_ELF
-if [ "$CONFIG_BINFMT_ELF" = "y" ]; then
-  bool 'Compile kernel as ELF - if your GCC is ELF-GCC' CONFIG_KERNEL_ELF
-fi
 
+
+source drivers/pnp/Config.in
 source drivers/block/Config.in
-
-if [ "$CONFIG_NET" = "y" ]; then
-  source net/Config.in
-fi
 
 mainmenu_option next_comment
 comment 'SCSI support'
-
 tristate 'SCSI support' CONFIG_SCSI
-
 if [ "$CONFIG_SCSI" != "n" ]; then
   source drivers/scsi/Config.in
 fi
 endmenu
 
+
 if [ "$CONFIG_NET" = "y" ]; then
   mainmenu_option next_comment
   comment 'Network device support'
-
+  source net/Config.in
   bool 'Network device support' CONFIG_NETDEVICES
   if [ "$CONFIG_NETDEVICES" = "y" ]; then
     source drivers/net/Config.in
@@ -65,9 +65,9 @@ if [ "$CONFIG_NET" = "y" ]; then
   endmenu
 fi
 
+
 mainmenu_option next_comment
 comment 'ISDN subsystem'
-
 tristate 'ISDN support' CONFIG_ISDN
 if [ "$CONFIG_ISDN" != "n" ]; then
   source drivers/isdn/Config.in
@@ -76,7 +76,6 @@ endmenu
 
 mainmenu_option next_comment
 comment 'CD-ROM drivers (not for SCSI or IDE/ATAPI drives)'
-
 bool 'Support non-SCSI/IDE/ATAPI CDROM drives' CONFIG_CD_NO_IDESCSI
 if [ "$CONFIG_CD_NO_IDESCSI" != "n" ]; then
   source drivers/cdrom/Config.in
@@ -84,12 +83,10 @@ fi
 endmenu
 
 source fs/Config.in
-
 source drivers/char/Config.in
 
 mainmenu_option next_comment
 comment 'Sound'
-
 tristate 'Sound card support' CONFIG_SOUND
 if [ "$CONFIG_SOUND" != "n" ]; then
   source drivers/sound/Config.in
@@ -97,11 +94,11 @@ fi
 endmenu
 
 mainmenu_option next_comment
-comment 'Kernel hacking'
-
+#comment 'Kernel hacking'
 #bool 'Debug kmalloc/kfree' CONFIG_DEBUG_MALLOC
-bool 'Kernel profiling support' CONFIG_PROFILE
-if [ "$CONFIG_PROFILE" = "y" ]; then
-  int ' Profile shift count' CONFIG_PROFILE_SHIFT 2
-fi
+#bool 'Kernel profiling support' CONFIG_PROFILE
+#if [ "$CONFIG_PROFILE" = "y" ]; then
+#  int ' Profile shift count' CONFIG_PROFILE_SHIFT 2
+#fi
 endmenu
+

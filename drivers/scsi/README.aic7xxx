@@ -1,5 +1,5 @@
 			    AIC7xxx Driver for Linux
-				 April 15, 1996
+				 July 20, 1997
 
 Introduction
 ------------------------
@@ -31,6 +31,7 @@ linux-1.1.x and fairly stable since linux-1.2.x, and are also in FreeBSD
     -----------------------
     AIC-777x   
     AIC-785x
+    AIC-786x
     AIC-787x
     AIC-788x
 
@@ -58,6 +59,7 @@ linux-1.1.x and fairly stable since linux-1.2.x, and are also in FreeBSD
     Dan Eischen     deischen@iworks.InterWorks.org (Linux Driver Co-maintainer)
     Dean Gehnert    deang@teleport.com             (Linux FTP/patch maintainer)
     Jess Johnson    jester@frenzy.com              (AIC7xxx FAQ author)
+    Doug Ledford    dledford@dialnet.net           (Stress tester/bug squasher)
 
     Special thanks go to John Aycock (aycock@cpsc.ucalgary.ca), the original
     author of the driver. John has since retired from the project. Thanks
@@ -82,10 +84,17 @@ linux-1.1.x and fairly stable since linux-1.2.x, and are also in FreeBSD
 
     Send regular messages and replies to: AIC7xxx@FreeBSD.ORG
     
-  Command line options
-  ------------------------
+  Command line options ("aic7xxx=option[,option...]")
+  ---------------------------------------------------
     "aic7xxx=no_reset" -  Eliminate the SCSI reset delay during startup.
         Some SCSI devices need some extra time to reset.
+    "aic7xxx=extended" - Force extended translation.
+    "aic7xxx=ultra" - Force Ultra mode
+    "aic7xxx=irq_trigger:[0,1]" - Edge (0) or Level (1) triggered
+        interrupts.  AFAIK, the driver only works with level triggered
+        interrupts.  This only applies to EISA adapters.
+    "aic7xxx=verbose" - Enable more bootup messages.  PLEASE use this
+        if you have problems with the driver.
 
   /proc support
   ------------------------
@@ -106,10 +115,37 @@ linux-1.1.x and fairly stable since linux-1.2.x, and are also in FreeBSD
       - US Linux mirror of Teleport site
     ftp://ekf2.vsb.cz/pub/linux/kernel/aic7xxx/ftp.teleport.com/
       - European Linux mirror of Teleport site
+    ftp://ftp.pcnet.com/users/eischen/Linux/
+      - Daniel Eischens experimental/development ftp site that is
+        also home of the Linux aic7xxx sequencer assembler source.
+
+  Sequencer assembler
+  ------------------------
+    The sequencer assembler is no longer being distributed with the
+    Linux kernel.  The sequencer assembler (aic7xxx_asm) is now being
+    maintained by Justin Gibbs under a BSD copyright (which pretty
+    much lets you do anything you want with it).  I keep a Linux
+    version of the assembler at my ftp site should you wish to hack
+    the sequencer code (ftp://ftp.pcnet.com/users/eischen/Linux/).
+    Please note that you do NOT need the assembler to build a kernel
+    with aic7xxx support.  The assembler generates the code that is
+    downloaded to the aic7xxx controllers; this code IS part of the
+    Linux kernel (aic7xxx_seq.h and aic7xxx_reg.h).
+
+  Problems compiling the kernel with aic7xxx support
+  --------------------------------------------------
+    This is probably due to having modified the sequencer files in
+    some way.  If you are not modifying the sequencer source (in
+    drivers/scsi/aic7xxx/aic7xxx.seq), then you can just re-extract
+    the necessary files from your kernel tarball.  Otherwise, visit
+    my anonymous ftp site (ftp.pcnet.com) and grab the sequencer
+    assembler source.
 
 
 Dean W. Gehnert
 deang@teleport.com
 
-$Revision: 3.0 $
+(Modified by D. Eischen, 7/20/97)
+
+$Revision: 3.1a $
 

@@ -117,7 +117,9 @@ static char slmreqsense_cmd[6] = { 0x03, 0, 0, 0, 0, 0 };
 static char slmprint_cmd[6]    = { 0x0a, 0, 0, 0, 0, 0 };
 static char slminquiry_cmd[6]  = { 0x12, 0, 0, 0, 0, 0x80 };
 static char slmmsense_cmd[6]   = { 0x1a, 0, 0, 0, 255, 0 };
+#if 0
 static char slmmselect_cmd[6]  = { 0x15, 0, 0, 0, 0, 0 };
+#endif
 
 
 #define	MAX_SLM		2
@@ -262,11 +264,13 @@ static long slm_write( struct inode *node, struct file *file, const char *buf,
 static int slm_ioctl( struct inode *inode, struct file *file, unsigned int
                       cmd, unsigned long arg );
 static int slm_open( struct inode *inode, struct file *file );
-static void slm_release( struct inode *inode, struct file *file );
+static int slm_release( struct inode *inode, struct file *file );
 static int slm_req_sense( int device );
 static int slm_mode_sense( int device, char *buffer, int abs_flag );
+#if 0
 static int slm_mode_select( int device, char *buffer, int len, int
                             default_flag );
+#endif
 static int slm_get_pagesize( int device, int *w, int *h );
 
 /************************* End of Prototypes **************************/
@@ -794,7 +798,7 @@ static int slm_open( struct inode *inode, struct file *file )
 }
 
 
-static void slm_release( struct inode *inode, struct file *file )
+static int slm_release( struct inode *inode, struct file *file )
 
 {	int device;
 	struct slm *sip;
@@ -806,6 +810,8 @@ static void slm_release( struct inode *inode, struct file *file )
 		sip->wbusy = 0;
 	if (file->f_mode & 1)
 		sip->rbusy = 0;
+	
+	return( 0 );
 }
 
 
@@ -876,6 +882,8 @@ static int slm_mode_sense( int device, char *buffer, int abs_flag )
 }
 
 
+#if 0
+/* currently unused */
 static int slm_mode_select( int device, char *buffer, int len,
 							int default_flag )
 
@@ -911,6 +919,7 @@ static int slm_mode_select( int device, char *buffer, int len,
 	stdma_release();
 	return( rv );
 }
+#endif
 
 
 static int slm_get_pagesize( int device, int *w, int *h )

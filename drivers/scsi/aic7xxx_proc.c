@@ -24,7 +24,7 @@
  *
  *  Dean W. Gehnert, deang@teleport.com, 05/01/96
  *
- *  $Id: aic7xxx_proc.c,v 4.0 1996/10/13 08:23:42 deang Exp $
+ *  $Id: aic7xxx_proc.c,v 4.1 1997/06/97 08:23:42 deang Exp $
  *-M*************************************************************************/
 
 #define BLS buffer + len + size
@@ -77,16 +77,18 @@ aic7xxx_proc_info(char *buffer, char **start, off_t offset, int length,
   struct Scsi_Host *HBAptr;
   struct aic7xxx_host *p;
   static u8 buff[512];
-  int   i; 
+  int   i;
+  int   found = FALSE;
   int   size = 0;
   int   len = 0;
   off_t begin = 0;
   off_t pos = 0;
   static char *bus_names[] = { "Single", "Twin", "Wide" };
-  static char *chip_names[] = { "AIC-777x", "AIC-785x", "AIC-787x", "AIC-788x" };
+  static char *chip_names[] = { "AIC-777x", "AIC-785x", "AIC-786x",
+      "AIC-787x", "AIC-788x" };
 
   HBAptr = NULL;
-  for (i = 0; i < NUMBER(aic7xxx_boards); i++)
+  for (i=0; i < NUMBER(aic7xxx_boards); i++)
   {
     if ((HBAptr = aic7xxx_boards[i]) != NULL)
     {
@@ -95,16 +97,23 @@ aic7xxx_proc_info(char *buffer, char **start, off_t offset, int length,
         break;
       }
 
-      while ((HBAptr->hostdata != NULL) &&
+      while ((HBAptr->hostdata != NULL) && !found &&
           ((HBAptr = ((struct aic7xxx_host *) HBAptr->hostdata)->next) != NULL))
       {
         if (HBAptr->host_no == hostno)
         {
-          break; break;
+          found = TRUE;
         }
       }
 
-      HBAptr = NULL;
+      if (!found)
+      {
+        HBAptr = NULL;
+      }
+      else
+      {
+        break;
+      }
     }
   }
 
@@ -129,8 +138,10 @@ aic7xxx_proc_info(char *buffer, char **start, off_t offset, int length,
 
   size += sprintf(BLS, "Adaptec AIC7xxx driver version: ");
   size += sprintf(BLS, "%s/", rcs_version(AIC7XXX_C_VERSION));
-  size += sprintf(BLS, "%s/", rcs_version(AIC7XXX_H_VERSION));
+  size += sprintf(BLS, "%s", rcs_version(AIC7XXX_H_VERSION));
+#if 0
   size += sprintf(BLS, "%s\n", rcs_version(AIC7XXX_SEQ_VER));
+#endif
   len += size; pos = begin + len; size = 0;
 
   size += sprintf(BLS, "\n");
@@ -140,11 +151,6 @@ aic7xxx_proc_info(char *buffer, char **start, off_t offset, int length,
 #endif
 #ifdef AIC7XXX_CMDS_PER_LUN
   size += sprintf(BLS, "  AIC7XXX_CMDS_PER_LUN   : %d\n", AIC7XXX_CMDS_PER_LUN);
-#endif
-#ifdef AIC7XXX_TWIN_SUPPORT
-  size += sprintf(BLS, "  AIC7XXX_TWIN_SUPPORT   : Enabled\n");
-#else
-  size += sprintf(BLS, "  AIC7XXX_TWIN_SUPPORT   : Disabled\n");
 #endif
 #ifdef AIC7XXX_TAGGED_QUEUEING
   size += sprintf(BLS, "  AIC7XXX_TAGGED_QUEUEING: Enabled\n");
@@ -165,16 +171,18 @@ aic7xxx_proc_info(char *buffer, char **start, off_t offset, int length,
 
   size += sprintf(BLS, "\n");
   size += sprintf(BLS, "Adapter Configuration:\n");
-  size += sprintf(BLS, "          SCSI Adapter: %s\n", board_names[p->type]);
+  size += sprintf(BLS, "          SCSI Adapter: %s\n",
+      board_names[p->chip_type]);
   size += sprintf(BLS, "                        (%s chipset)\n",
-      chip_names[p->chip_type]);
+      chip_names[p->chip_class]);
   size += sprintf(BLS, "              Host Bus: %s\n", bus_names[p->bus_type]);
   size += sprintf(BLS, "               Base IO: %#.4x\n", p->base);
+  size += sprintf(BLS, "        Base IO Memory: 0x%x\n", p->mbase);
   size += sprintf(BLS, "                   IRQ: %d\n", HBAptr->irq);
   size += sprintf(BLS, "                  SCBs: Used %d, HW %d, Page %d\n",
-      p->scb_link->numscbs, p->maxhscbs, p->maxscbs);
+      p->scb_data->numscbs, p->scb_data->maxhscbs, p->scb_data->maxscbs);
   size += sprintf(BLS, "            Interrupts: %d", p->isr_count);
-  if (p->chip_type == AIC_777x)
+  if (p->chip_class == AIC_777x)
   {
     size += sprintf(BLS, " %s\n",
         (p->pause & IRQMS) ? "(Level Sensitive)" : "(Edge Triggered)");

@@ -25,21 +25,38 @@
 
 #include "pc_keyb.h"
 
+/* Simple translation table for the SysRq keys */
+
+#ifdef CONFIG_MAGIC_SYSRQ
+unsigned char pckbd_sysrq_xlate[128] =
+	"\000\0331234567890-=\177\t"			/* 0x00 - 0x0f */
+	"qwertyuiop[]\r\000as"				/* 0x10 - 0x1f */
+	"dfghjkl;'`\000\\zxcv"				/* 0x20 - 0x2f */
+	"bnm,./\000*\000 \000\201\202\203\204\205"	/* 0x30 - 0x3f */
+	"\206\207\210\211\212\000\000789-456+1"		/* 0x40 - 0x4f */
+	"230\177\000\000\213\214\000\000\000\000\000\000\000\000\000\000" /* 0x50 - 0x5f */
+	"\r\000/";					/* 0x60 - 0x6f */
+#endif
+
 /*
  * In case we run on a non-x86 hardware we need to initialize both the keyboard
  * controller and the keyboard. On a x86, the BIOS will already have initialized
  * them.
  */
 
+#ifndef __i386__
+#define INIT_KBD
+#endif
+
 #ifdef INIT_KBD
 
 __initfunc(static int kbd_wait_for_input(void))
 {
-        int     n;
-        int     status, data;
+	int     n;
+	int     status, data;
+	unsigned long start = jiffies;
 
-        n = KBD_TIMEOUT;
-        do {
+	do {
                 status = inb(KBD_STATUS_REG);
                 /*
                  * Wait for input data to become available.  This bit will
@@ -62,7 +79,7 @@ __initfunc(static int kbd_wait_for_input(void))
 			continue;
                 }
 		return (data & 0xff);
-        } while (--n);
+        } while (jiffies - start < KBD_INIT_TIMEOUT);
         return -1;	/* timed-out if fell through to here... */
 }
 
@@ -155,12 +172,11 @@ __initfunc(static char *initialize_kbd2(void))
 
 __initfunc(static void initialize_kbd(void))
 {
-	unsigned long flags;
 	char *msg;
 
-	save_flags(flags); cli();
+	disable_irq(KEYBOARD_IRQ);
 	msg = initialize_kbd2();
-	restore_flags(flags);
+	enable_irq(KEYBOARD_IRQ);
 
 	if (msg)
 		printk(KERN_WARNING "initialize_kbd: %s\n", msg);
@@ -181,12 +197,15 @@ static volatile unsigned char resend = 0;
 
 static inline void kb_wait(void)
 {
-	int i;
+	unsigned long start = jiffies;
 
-	for (i=0; i<KBD_TIMEOUT; i++)
+	do {
 		if (! (inb_p(KBD_STATUS_REG) & KBD_STAT_IBF))
 			return;
+	} while (jiffies - start < KBC_TIMEOUT);
+#ifdef KBD_REPORT_TIMEOUTS
 	printk(KERN_WARNING "Keyboard timed out\n");
+#endif
 }
 
 /*
@@ -364,7 +383,7 @@ static int do_acknowledge(unsigned char scancode)
 	}
 	if (scancode == 0) {
 #ifdef KBD_REPORT_ERR
-		printk(KERN_INFO "keyboard buffer overflow\n");
+		printk(KERN_INFO "Keyboard buffer overflow\n");
 #endif
 		prev_scancode = 0;
 		return 0;
@@ -380,7 +399,7 @@ int pckbd_pretranslate(unsigned char scancode, char raw_mode)
 #ifndef KBD_IS_FOCUS_9000
 #ifdef KBD_REPORT_ERR
 		if (!raw_mode)
-		  printk(KERN_DEBUG "keyboard error\n");
+		  printk(KERN_DEBUG "Keyboard error\n");
 #endif
 #endif
 		prev_scancode = 0;
@@ -503,7 +522,7 @@ static void keyboard_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 			handle_scancode(scancode);
 
 		status = inb(KBD_STATUS_REG);
-	} while (status & (KBD_STAT_OBF | KBD_STAT_MOUSE_OBF));
+	} while (status & KBD_STAT_OBF);
 
 	mark_bh(KEYBOARD_BH);
 	enable_keyboard();
@@ -517,7 +536,7 @@ static void keyboard_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 static int send_data(unsigned char data)
 {
 	int retries = 3;
-	int i;
+	unsigned long start;
 
 	do {
 		kb_wait();
@@ -525,16 +544,21 @@ static int send_data(unsigned char data)
 		resend = 0;
 		reply_expected = 1;
 		outb_p(data, KBD_DATA_REG);
-		for(i=0; i<0x200000; i++) {
-			inb_p(KBD_STATUS_REG); /* just as a delay */
+		start = jiffies;
+		do {
 			if (acknowledge)
 				return 1;
-			if (resend)
-				break;
-		}
-		if (!resend)
-			return 0;
+			if (jiffies - start >= KBD_TIMEOUT) {
+#ifdef KBD_REPORT_TIMEOUTS
+				printk(KERN_WARNING "Keyboard timeout\n");
+#endif
+				return 0;
+			}
+		} while (!resend);
 	} while (retries-- > 0);
+#ifdef KBD_REPORT_TIMEOUTS
+	printk(KERN_WARNING "keyboard: Too many NACKs -- noisy kbd cable?\n");
+#endif
 	return 0;
 }
 

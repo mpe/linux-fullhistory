@@ -494,6 +494,9 @@ extern void (*update_mmu_cache)(struct vm_area_struct *vma,
 #define SWP_OFFSET(entry) ((entry) >> 15)
 #define SWP_ENTRY(type,offset) (((type) << 8) | ((offset) << 15))
 
+#define module_map      vmalloc
+#define module_unmap    vfree
+
 /* TLB operations. */
 extern inline void tlb_probe(void)
 {

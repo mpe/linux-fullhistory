@@ -618,6 +618,9 @@ static int do_umount(kdev_t dev,int unmount_root)
 	d_umount(sb->s_root);
 	sb->s_root = NULL;
 
+	/* Forget any inodes */
+	invalidate_inodes(dev);
+
 	if (sb->s_op) {
 		if (sb->s_op->write_super && sb->s_dirt)
 			sb->s_op->write_super(sb);

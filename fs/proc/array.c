@@ -455,7 +455,7 @@ static unsigned long get_wchan(struct task_struct *p)
 		return ((unsigned long *)schedule_frame)[12];
 	    }
 	    return pc;
-	}
+	}	
 #elif defined(__mc68000__)
 	{
 	    unsigned long fp, pc;
@@ -480,6 +480,8 @@ static unsigned long get_wchan(struct task_struct *p)
 		    fp = *(unsigned long *) fp;
 	    } while (count++ < 16);
 	}
+#elif defined(__powerpc__)
+	return (p->tss.wchan);
 #endif
 	return 0;
 }
@@ -505,6 +507,9 @@ static unsigned long get_wchan(struct task_struct *p)
 	      eip = ((struct pt_regs *) (tsk)->tss.esp0)->pc;	 \
         eip; })
 #define	KSTK_ESP(tsk)	((tsk) == current ? rdusp() : (tsk)->tss.usp)
+#elif defined(__powerpc__)
+#define KSTK_EIP(tsk)	((tsk)->tss.regs->nip)
+#define KSTK_ESP(tsk)	((tsk)->tss.regs->gpr[1])
 #elif defined (__sparc_v9__)
 # define KSTK_EIP(tsk)  ((tsk)->tss.kregs->tpc)
 # define KSTK_ESP(tsk)  ((tsk)->tss.kregs->u_regs[UREG_FP])

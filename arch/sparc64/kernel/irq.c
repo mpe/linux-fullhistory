@@ -1,4 +1,4 @@
-/* $Id: irq.c,v 1.16 1997/07/11 03:03:08 davem Exp $
+/* $Id: irq.c,v 1.19 1997/07/24 12:15:04 davem Exp $
  * irq.c: UltraSparc IRQ handling/init/registry.
  *
  * Copyright (C) 1997 David S. Miller (davem@caip.rutgers.edu)
@@ -23,6 +23,7 @@
 #include <asm/iommu.h>
 #include <asm/upa.h>
 #include <asm/oplib.h>
+#include <asm/timer.h>
 #include <asm/smp.h>
 #include <asm/hardirq.h>
 #include <asm/softirq.h>
@@ -76,7 +77,7 @@ int get_irq_list(char *buf)
 }
 
 /* INO number to Sparc PIL level. */
-static unsigned char ino_to_pil[] = {
+unsigned char ino_to_pil[] = {
 	0, 1, 2, 3, 5, 7, 8, 9,		/* SBUS slot 0 */
 	0, 1, 2, 3, 5, 7, 8, 9,		/* SBUS slot 1 */
 	0, 1, 2, 3, 5, 7, 8, 9,		/* SBUS slot 2 */
@@ -391,7 +392,116 @@ int __sparc64_bh_counter = 0;
 #define irq_exit(cpu, irq)	(local_irq_count[cpu]--)
 
 #else
-#error SMP not supported on sparc64 just yet
+
+atomic_t __sparc64_bh_counter = ATOMIC_INIT(0);
+
+/* Who has global_irq_lock. */
+unsigned char global_irq_holder = NO_PROC_ID;
+
+/* This protects IRQ's. */
+spinlock_t global_irq_lock = SPIN_LOCK_UNLOCKED;
+
+/* This protects BH software state (masks, things like that). */
+spinlock_t global_bh_lock = SPIN_LOCK_UNLOCKED;
+
+/* Global IRQ locking depth. */
+atomic_t global_irq_count = ATOMIC_INIT(0);
+
+static inline void wait_on_irq(int cpu)
+{
+	int local_count = local_irq_count[cpu];
+
+	while(local_count != atomic_read(&global_irq_count)) {
+		atomic_sub(local_count, &global_irq_count);
+		spin_unlock(&global_irq_lock);
+		for(;;) {
+			if (atomic_read(&global_irq_count))
+				continue;
+			if (*((unsigned char *)&global_irq_lock))
+				continue;
+			if (spin_trylock(&global_irq_lock))
+				break;
+		}
+		atomic_add(local_count, &global_irq_count);
+	}
+}
+
+static inline void get_irqlock(int cpu)
+{
+	if (!spin_trylock(&global_irq_lock)) {
+		if ((unsigned char) cpu == global_irq_holder)
+			return;
+		do {
+			barrier();
+		} while (!spin_trylock(&global_irq_lock));
+	}
+	wait_on_irq(cpu);
+	global_irq_holder = cpu;
+}
+
+void __global_cli(void)
+{
+	int cpu = smp_processor_id();
+
+	__cli();
+	get_irqlock(cpu);
+}
+
+void __global_sti(void)
+{
+	release_irqlock(smp_processor_id());
+	__sti();
+}
+
+unsigned long __global_save_flags(void)
+{
+	return global_irq_holder == (unsigned char) smp_processor_id();
+}
+
+void __global_restore_flags(unsigned long flags)
+{
+	if (flags & 1) {
+		__global_cli();
+	} else {
+		if (global_irq_holder == (unsigned char) smp_processor_id()) {
+			global_irq_holder = NO_PROC_ID;
+			spin_unlock(&global_irq_lock);
+		}
+		if (!(flags & 2))
+			__sti();
+	}
+}
+
+void irq_enter(int cpu, int irq)
+{
+	hardirq_enter(cpu);
+	barrier();
+	while (*((unsigned char *)&global_irq_lock)) {
+		if ((unsigned char) cpu == global_irq_holder)
+			printk("irq_enter: Frosted Lucky Charms, "
+			       "they're magically delicious!\n");
+		barrier();
+	}
+}
+
+void irq_exit(int cpu, int irq)
+{
+	hardirq_exit(cpu);
+	release_irqlock(cpu);
+}
+
+void synchronize_irq(void)
+{
+	int cpu = smp_processor_id();
+	int local_count = local_irq_count[cpu];
+	unsigned long flags;
+
+	if (local_count != atomic_read(&global_irq_count)) {
+		save_and_cli(flags);
+		restore_flags(flags);
+	}
+}
+
 #endif /* __SMP__ */
 
 void report_spurious_ivec(struct pt_regs *regs)
@@ -432,9 +542,7 @@ void handler_irq(int irq, struct pt_regs *regs)
 	struct irqaction *action;
 	int cpu = smp_processor_id();
 
-	/* XXX */
-	if(irq != 14)
-		clear_softint(1 << irq);
+	clear_softint(1 << irq);
 
 	irq_enter(cpu, irq);
 	action = *(irq + irq_action);
@@ -575,53 +683,46 @@ int probe_irq_off(unsigned long mask)
   return 0;
 }
 
-/* XXX This is a hack, make it per-cpu so that SMP port will work correctly
- * XXX with mixed MHZ Ultras in the machine. -DaveM
+struct sun5_timer *linux_timers = NULL;
+
+/* This is called from sbus_init() to get the jiffies timer going.
+ * We need to call this after there exists a valid SBus_chain so
+ * that the IMAP/ICLR registers can be accessed.
+ *
+ * XXX That is because the whole startup sequence is broken.  I will
+ * XXX fix it all up very soon.  -DaveM
  */
-static unsigned long cpu_cfreq;
-static unsigned long tick_offset;
-
-/* XXX This doesn't belong here, just do this cruft in the timer.c handler code. */
-static void timer_handler(int irq, void *dev_id, struct pt_regs *regs)
-{
-	if (!(get_softint () & 1)) {
-		/* Just to be sure... */
-		clear_softint(1 << 14);
-		printk("Spurious level14 at %016lx\n", regs->tpc);
-		return;
-	} else {
-		unsigned long compare, tick;
-
-		do {
-			extern void timer_interrupt(int, void *, struct pt_regs *);
-
-			timer_interrupt(irq, dev_id, regs);
-
-			/* Acknowledge INT_TIMER */
-			clear_softint(1 << 0);
-
-			/* Set up for next timer tick. */
-			__asm__ __volatile__("rd	%%tick_cmpr, %0\n\t"
-					     "add	%0, %2, %0\n\t"
-					     "wr	%0, 0x0, %%tick_cmpr\n\t"
-					     "rd	%%tick, %1"
-					     : "=&r" (compare), "=r" (tick)
-					     : "r" (tick_offset));
-		} while(tick >= compare);
-	}
-}
-
-/* This is called from time_init() to get the jiffies timer going. */
 void init_timers(void (*cfunc)(int, void *, struct pt_regs *))
 {
+	struct linux_prom64_registers pregs[3];
+	u32 pirqs[2];
 	int node, err;
 
-	/* XXX FIX this for SMP -JJ */
-	node = linux_cpus [0].prom_node;
-	cpu_cfreq = prom_getint(node, "clock-frequency");
-	tick_offset = cpu_cfreq / HZ;
-	err = request_irq(14, timer_handler, (SA_INTERRUPT|SA_STATIC_ALLOC),
-			  "timer", NULL);
+	node = prom_finddevice("/counter-timer");
+	if(node == 0) {
+		prom_printf("init_timers: Cannot find counter-timer PROM node.\n");
+		prom_halt();
+	}
+	err = prom_getproperty(node, "reg", (char *)&pregs[0], sizeof(pregs));
+	if(err == -1) {
+		prom_printf("init_timers: Cannot obtain 'reg' for counter-timer.\n");
+		prom_halt();
+	}
+	err = prom_getproperty(node, "interrupts", (char *)&pirqs[0], sizeof(pirqs));
+	if(err == -1) {
+		prom_printf("init_timers: Cannot obtain 'interrupts' "
+			    "for counter-timer.\n");
+		prom_halt();
+	}
+	linux_timers = (struct sun5_timer *) __va(pregs[0].phys_addr);
+
+	/* Shut it up first. */
+	linux_timers->limit0 = 0;
+
+	/* Register IRQ handler. */
+	err = request_irq(pirqs[0] & 0x3f, /* XXX Fix this for big Enterprise XXX */
+			  cfunc, (SA_INTERRUPT | SA_STATIC_ALLOC), "timer", NULL);
+
 	if(err) {
 		prom_printf("Serious problem, cannot register timer interrupt\n");
 		prom_halt();
@@ -630,27 +731,33 @@ void init_timers(void (*cfunc)(int, void *, struct pt_regs *))
 
 		save_and_cli(flags);
 
-		__asm__ __volatile__("wr	%0, 0x0, %%tick_cmpr\n\t"
-				     "wrpr	%%g0, 0x0, %%tick"
-				     : /* No outputs */
-				     : "r" (tick_offset));
-				     
-		clear_softint (get_softint ());
+		/* Set things up so user can access tick register for profiling
+		 * purposes.
+		 */
+		__asm__ __volatile__("
+	sethi	%%hi(0x80000000), %%g1
+	sllx	%%g1, 32, %%g1
+	rd	%%tick, %%g2
+	add	%%g2, 6, %%g2
+	andn	%%g2, %%g1, %%g2
+	wrpr	%%g2, 0, %%tick
+"		: /* no outputs */
+		: /* no inputs */
+		: "g1", "g2");
+
+		linux_timers->limit0 =
+			(SUN5_LIMIT_ENABLE | SUN5_LIMIT_ZRESTART | SUN5_LIMIT_TOZERO |
+			 (SUN5_HZ_TO_LIMIT(HZ) & SUN5_LIMIT_CMASK));
 
 		restore_flags(flags);
 	}
+
 	sti();
 }
 
-/* We use this nowhere else, so only define it's layout here. */
-struct sun5_timer {
-	volatile u32 count0, _unused0;
-	volatile u32 limit0, _unused1;
-	volatile u32 count1, _unused2;
-	volatile u32 limit1, _unused3;
-} *prom_timers;
+struct sun5_timer *prom_timers;
 
-static u32 prom_limit0, prom_limit1;
+static u64 prom_limit0, prom_limit1;
 
 static void map_prom_timers(void)
 {

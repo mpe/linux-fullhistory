@@ -1,6 +1,6 @@
 /* -*- linux-c -*-
  *
- *	$Id: sysrq.c,v 1.3 1997/06/18 09:42:12 mj Exp $
+ *	$Id: sysrq.c,v 1.4 1997/07/17 11:54:15 mj Exp $
  *
  *	Linux Magic System Request Key Hacks
  *
@@ -63,72 +63,72 @@ void handle_sysrq(int key, struct pt_regs *pt_regs,
 	console_loglevel = 7;
 	printk(KERN_INFO "SysRq: ");
 	switch (key) {
-	case 19:					    /* R -- Reset raw mode */
-		kbd->kbdmode = VC_XLATE;
-		printk("Keyboard mode set to XLATE\n");
+	case 'r':					    /* R -- Reset raw mode */
+		if (kbd) {
+			kbd->kbdmode = VC_XLATE;
+			printk("Keyboard mode set to XLATE\n");
+		}
 		break;
-	case 30:					    /* A -- SAK */
+	case 'a':					    /* A -- SAK */
 		printk("SAK\n");
-		do_SAK(tty);
+		if (tty)
+			do_SAK(tty);
 		reset_vc(fg_console);
 		break;
-	case 48:					    /* B -- boot immediately */
+	case 'b':					    /* B -- boot immediately */
 		printk("Resetting\n");
 		machine_restart(NULL);
 		break;
 #ifdef __sparc__
-	case 35:					    /* H -- halt immediately */
+	case 'h':					    /* H -- halt immediately */
 		printk("Halting\n");
 		halt_now();
 		break;
 #endif
 #ifdef CONFIG_APM
-	case 24:					    /* O -- power off */
+	case 'o':					    /* O -- power off */
 		printk("Power off\n");
 		apm_set_power_state(APM_STATE_OFF);
 		break;
 #endif
-	case 31:					    /* S -- emergency sync */
+	case 's':					    /* S -- emergency sync */
 		printk("Emergency Sync\n");
 		emergency_sync_scheduled = EMERG_SYNC;
 		wakeup_bdflush(0);
 		break;
-	case 22:					    /* U -- emergency remount R/O */
+	case 'u':					    /* U -- emergency remount R/O */
 		printk("Emergency Remount R/O\n");
 		emergency_sync_scheduled = EMERG_REMOUNT;
 		wakeup_bdflush(0);
 		break;
-	case 25:					    /* P -- show PC */
+	case 'p':					    /* P -- show PC */
 		printk("Show Regs\n");
 		if (pt_regs)
 			show_regs(pt_regs);
 		break;
-	case 20:					    /* T -- show task info */
+	case 't':					    /* T -- show task info */
 		printk("Show State\n");
 		show_state();
 		break;
-	case 50:					    /* M -- show memory info */
+	case 'm':					    /* M -- show memory info */
 		printk("Show Memory\n");
 		show_mem();
 		break;
-	case 2 ... 11:					    /* 0-9 -- set console logging level */
-		key--;
-		if (key == 10)
-			key = 0;
-		orig_log_level = key;
-		printk("Log level set to %d\n", key);
+	case '0' ... '9':				    /* 0-9 -- set console logging level */
+		orig_log_level = key - '0';
+		printk("Log level set to %d\n", orig_log_level);
 		break;
-	case 18:					    /* E -- terminate all user processes */
+	case 'e':					    /* E -- terminate all user processes */
 		printk("Terminate All Tasks\n");
 		send_sig_all(SIGTERM, 0);
 		orig_log_level = 8;			    /* We probably have killed syslogd */
 		break;
-	case 37:					    /* K -- kill all user processes */
+	case 'k':					    /* K -- kill all user processes */
 		printk("Kill All Tasks\n");
 		send_sig_all(SIGKILL, 0);
 		orig_log_level = 8;
 		break;
-	case 38:					    /* L -- kill all processes including init */
+	case 'l':					    /* L -- kill all processes including init */
 		printk("Kill ALL Tasks (even init)\n");
 		send_sig_all(SIGKILL, 1);
 		orig_log_level = 8;
@@ -154,7 +154,7 @@ static void all_files_read_only(void)	    /* Kill write permissions of all files
 	struct file *file;
 
 	for (file = inuse_filps; file; file = file->f_next)
-		if (file->f_inode && file->f_count && S_ISREG(file->f_inode->i_mode))
+		if (file->f_dentry && file->f_count && S_ISREG(file->f_dentry->d_inode->i_mode))
 			file->f_mode &= ~2;
 }
 

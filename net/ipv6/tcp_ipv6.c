@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: tcp_ipv6.c,v 1.33 1997/06/06 20:38:10 freitag Exp $
+ *	$Id: tcp_ipv6.c,v 1.35 1997/07/23 15:18:04 freitag Exp $
  *
  *	Based on: 
  *	linux/net/ipv4/tcp.c
@@ -699,7 +699,6 @@ static int tcp_v6_conn_request(struct sock *sk, struct sk_buff *skb, void *ptr,
 {
 	struct tcp_opt tp;
 	struct open_request *req;
-	__u16 req_mss;
 	
 	/* If the socket is dead, don't accept the connection.	*/
 	if (sk->dead) {
@@ -1048,7 +1047,7 @@ struct sock *tcp_v6_check_req(struct sock *sk, struct sk_buff *skb)
 
 			/* Check for syn retransmission */
 			flg = *(((u32 *)skb->h.th) + 3);
-			flg &= __constant_htonl(0x002f0000);
+			flg &= __constant_htonl(0x001f0000);
 
 			if ((flg == __constant_htonl(0x00020000)) &&
 			    (!after(skb->seq, req->rcv_isn))) {

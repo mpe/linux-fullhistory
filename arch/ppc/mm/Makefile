@@ -14,7 +14,7 @@
 .c.s:
 	$(CC) $(CFLAGS) -S $<
 
-OBJS	= fault.o init.o
+OBJS	= fault.o init.o extable.o
 
 mm.o: $(OBJS)
 	$(LD) -r -o mm.o $(OBJS)
@@ -22,9 +22,9 @@ mm.o: $(OBJS)
 modules:
 
 dep:
-	$(CPP) -M *.c > .depend
-	
+
 fastdep:
+	$(TOPDIR)/scripts/mkdep *.[Sch] > .depend
 
 #
 # include a dependency file if one exists

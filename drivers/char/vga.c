@@ -72,6 +72,12 @@
 #define dac_reg (0x3c8)
 #define dac_val (0x3c9)
 
+#ifdef __powerpc__
+#define VGA_OFFSET 0xC0000000;
+#else
+#define VGA_OFFSET 0x0
+#endif
+
 /*
  * By replacing the four outb_p with two back to back outw, we can reduce
  * the window of opportunity to see text mislocated to the RHS of the
@@ -152,20 +158,20 @@ con_type_init(unsigned long kmem_start, const char **display_desc))
 {
 	if (ORIG_VIDEO_MODE == 7)	/* Is this a monochrome display? */
 	{
-		video_mem_base = 0xb0000;
+		video_mem_base = 0xb0000 + VGA_OFFSET;
 		video_port_reg = 0x3b4;
 		video_port_val = 0x3b5;
 		if ((ORIG_VIDEO_EGA_BX & 0xff) != 0x10)
 		{
 			video_type = VIDEO_TYPE_EGAM;
-			video_mem_term = 0xb8000;
+			video_mem_term = 0xb8000 + VGA_OFFSET;
 			*display_desc = "EGA+";
 			request_region(0x3b0,16,"ega");
 		}
 		else
 		{
 			video_type = VIDEO_TYPE_MDA;
-			video_mem_term = 0xb2000;
+			video_mem_term = 0xb2000 + VGA_OFFSET;
 			*display_desc = "*MDA";
 			request_region(0x3b0,12,"mda");
 			request_region(0x3bf, 1,"mda");
@@ -174,14 +180,14 @@ con_type_init(unsigned long kmem_start, const char **display_desc))
 	else				/* If not, it is color. */
 	{
 		can_do_color = 1;
-		video_mem_base = 0xb8000;
+		video_mem_base = 0xb8000  + VGA_OFFSET;
 		video_port_reg	= 0x3d4;
 		video_port_val	= 0x3d5;
 		if ((ORIG_VIDEO_EGA_BX & 0xff) != 0x10)
 		{
 			int i ;
 
-			video_mem_term = 0xc0000;
+			video_mem_term = 0xc0000 + VGA_OFFSET;
 
 			if (!ORIG_VIDEO_ISVGA) {
 				video_type = VIDEO_TYPE_EGAC;
@@ -199,8 +205,8 @@ con_type_init(unsigned long kmem_start, const char **display_desc))
 				 * controllers (it seems like setting MM=01
 				 * and COE=1 isn't necessarily a good idea)
 				 */
-				video_mem_base = 0xa0000 ;
-				video_mem_term = 0xb0000 ;
+				video_mem_base = 0xa0000  + VGA_OFFSET;
+				video_mem_term = 0xb0000  + VGA_OFFSET;
 				outb_p (6, 0x3ce) ;
 				outb_p (6, 0x3cf) ;
 #endif
@@ -232,7 +238,7 @@ con_type_init(unsigned long kmem_start, const char **display_desc))
 		else
 		{
 			video_type = VIDEO_TYPE_CGA;
-			video_mem_term = 0xba000;
+			video_mem_term = 0xba000 + VGA_OFFSET;
 			*display_desc = "*CGA";
 			request_region(0x3d4,2,"cga");
 		}

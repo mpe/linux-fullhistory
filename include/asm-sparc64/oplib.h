@@ -1,4 +1,4 @@
-/* $Id: oplib.h,v 1.7 1997/04/03 09:29:25 davem Exp $
+/* $Id: oplib.h,v 1.8 1997/07/24 12:15:15 davem Exp $
  * oplib.h:  Describes the interface and available routines in the
  *           Linux Prom library.
  *
@@ -179,8 +179,7 @@ extern enum prom_output_device prom_query_output_device(void);
 /* Start the CPU with the given device tree node, context table, and context
  * at the passed program counter.
  */
-extern int prom_startcpu(int cpunode, struct linux_prom_registers *context_table,
-			 int context, char *program_counter);
+extern void prom_startcpu(int cpunode, unsigned long pc, unsigned long o0);
 
 /* Stop the CPU with the passed device tree node. */
 extern int prom_stopcpu(int cpunode);

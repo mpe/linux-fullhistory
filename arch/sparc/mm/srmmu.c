@@ -1,4 +1,4 @@
-/* $Id: srmmu.c,v 1.148 1997/06/24 15:48:02 jj Exp $
+/* $Id: srmmu.c,v 1.149 1997/07/20 05:59:34 davem Exp $
  * srmmu.c:  SRMMU specific routines for memory management.
  *
  * Copyright (C) 1995 David S. Miller  (davem@caip.rutgers.edu)
@@ -2214,7 +2214,8 @@ static void srmmu_vac_update_mmu_cache(struct vm_area_struct * vma,
 {
 	if((vma->vm_flags & (VM_WRITE|VM_SHARED)) == (VM_WRITE|VM_SHARED)) {
 		struct vm_area_struct *vmaring;
-		struct inode *inode;
+		struct dentry *dentry;
+		struct inode *inode = NULL;
 		unsigned long flags, offset, vaddr, start;
 		int alias_found = 0;
 		pgd_t *pgdp;
@@ -2223,7 +2224,9 @@ static void srmmu_vac_update_mmu_cache(struct vm_area_struct * vma,
 
 		save_and_cli(flags);
 
-		inode = vma->vm_inode;
+		dentry = vma->vm_dentry;
+		if(dentry)
+			inode = dentry->d_inode;
 		if (!inode)
 			goto done;
 		offset = (address & PAGE_MASK) - vma->vm_start;

@@ -44,16 +44,20 @@ static int autofs_dir_lookup(struct inode *dir, struct dentry * dentry)
 }
 
 static struct file_operations autofs_dir_operations = {
-	NULL,			/* lseek */
+	NULL,			/* llseek */
 	NULL,			/* read */
 	NULL,			/* write */
 	autofs_dir_readdir,	/* readdir */
-	NULL,			/* select */
+	NULL,			/* poll */
 	NULL,			/* ioctl */
 	NULL,			/* mmap */
 	NULL,			/* open */
 	NULL,			/* release */
-	NULL			/* fsync */
+	NULL,			/* fsync */
+	NULL,			/* fasync */
+	NULL,			/* check_media_change */
+	NULL,			/* revalidate */
+	NULL			/* lock */
 };
 
 struct inode_operations autofs_dir_inode_operations = {
@@ -68,10 +72,14 @@ struct inode_operations autofs_dir_inode_operations = {
 	NULL,			/* mknod */
 	NULL,			/* rename */
 	NULL,			/* readlink */
-	NULL,			/* read_page */
+	NULL,			/* follow_link */
+	NULL,			/* readpage */
 	NULL,			/* writepage */
 	NULL,			/* bmap */
 	NULL,			/* truncate */
-	NULL			/* permission */
+	NULL,			/* permission */
+	NULL,			/* smap */
+	NULL,			/* updatepage */
+	NULL			/* revalidate */
 };
 

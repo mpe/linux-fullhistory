@@ -22,32 +22,49 @@
 
 HOST_CC = gcc
 
-OBJS  = misc.o setup.o port_io.o irq.o pci.o traps.o stubs.o process.o \
-	signal.o ksyms.o time.o syscalls.o usercpy.o\
-	support.o ptrace.o 
+OBJS  = misc.o port_io.o pci.o traps.o process.o \
+	signal.o syscalls.o ptrace.o ksyms.o irq.o bitops.o strcase.o ppc_htab.o
 
 all: head.o kernel.o
+head.o: head.S $(TOPDIR)/include/linux/tasks.h ppc_defs.h
 
-head.o: head.s
-head.s: head.S $(TOPDIR)/include/linux/tasks.h ppc_defs.h
+ifeq ($(CONFIG_PREP),y)
+OBJS += prep_setup.o prep_time.o
+endif
 
-ppc_defs.h: mk_defs
-	mk_defs $@
+ifeq ($(CONFIG_PMAC),y)
+OBJS += pmac_setup.o pmac_support.o align.o pmac_time.o
+endif
 
-mk_defs: mk_defs.c
-	$(HOSTCC) $(CFLAGSINC) -Wl,-static ${CFLAGS} -o mk_defs mk_defs.c
+ifeq ($(CONFIG_MODULES),y)
+OBJS = ksyms.o
+endif
 
+
+ppc_defs.h: mk_defs.c ppc_defs.head \
+		$(TOPDIR)/include/asm/mmu.h \
+		$(TOPDIR)/include/asm/processor.h \
+		$(TOPDIR)/include/asm/pgtable.h \
+		$(TOPDIR)/include/asm/ptrace.h
+	$(CC) ${CFLAGS} -S mk_defs.c
+	cp ppc_defs.head ppc_defs.h
+	grep '^#define' mk_defs.s >>ppc_defs.h
+	rm mk_defs.s
+
+checks: checks.c
+	$(HOSTCC) ${CFLAGS} -o checks checks.c
+	checks
 
 kernel.o: $(OBJS)
 	$(LD) -r -o kernel.o $(OBJS)
-	sync
-
-dep:
-	$(CPP) -M *.c > .depend
 
 fastdep:
+	$(TOPDIR)/scripts/mkdep *.[Sch] > .depend
 
-modules:
+dep:
+	$(CPP) -M *.S *.c > .depend
+
+modules: 
 
 dummy:
 

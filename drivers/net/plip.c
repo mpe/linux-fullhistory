@@ -204,7 +204,7 @@ struct net_local {
 	struct tq_struct deferred;
 	struct plip_local snd_data;
 	struct plip_local rcv_data;
-	struct ppd *pardev;
+	struct pardevice *pardev;
 	unsigned long  trigger;
 	unsigned long  nibble;
 	enum plip_connection_state connection;
@@ -228,7 +228,7 @@ __initfunc(int
 plip_init_dev(struct device *dev, struct parport *pb))
 {
 	struct net_local *nl;
-	struct ppd *pardev;
+	struct pardevice *pardev;
 
 	dev->irq = pb->irq;
 	dev->base_addr = pb->base;
@@ -239,8 +239,8 @@ plip_init_dev(struct device *dev, struct parport *pb))
 	}
 	
 	pardev = parport_register_device(pb, dev->name, plip_preempt,
-					plip_wakeup,
-					plip_interrupt, PARPORT_DEV_LURK, dev);
+					 plip_wakeup, plip_interrupt, 
+					 PARPORT_DEV_LURK, dev);
 
 	printk(version);
 	printk("%s: Parallel port at %#3lx, using IRQ %d\n", dev->name,

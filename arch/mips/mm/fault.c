@@ -81,17 +81,6 @@ good_area:
  */
 bad_area:
 	up(&mm->mmap_sem);
-	/* Did we have an exception handler installed? */
-
-	fixup = search_exception_table(regs->cp0_epc);
-	if (fixup) {
-		long new_epc;
-		new_epc = fixup_exception(dpf_reg, fixup, regs->cp0_epc);
-		printk(KERN_DEBUG "Exception at [<%lx>] (%lx)\n",
-		       regs->cp0_epc, new_epc);
-		regs->cp0_epc = new_epc;
-		goto out;
-	}
 
 	if (user_mode(regs)) {
 		tsk->tss.cp0_badvaddr = address;
@@ -111,6 +100,18 @@ bad_area:
 		force_sig(SIGSEGV, tsk);
 		goto out;
 	}
+
+	/* Did we have an exception handler installed? */
+	fixup = search_exception_table(regs->cp0_epc);
+	if (fixup) {
+		long new_epc;
+		new_epc = fixup_exception(dpf_reg, fixup, regs->cp0_epc);
+		printk(KERN_DEBUG "%s: Exception at [<%lx>] (%lx)\n",
+		       tsk->comm, regs->cp0_epc, new_epc);
+		regs->cp0_epc = new_epc;
+		goto out;
+	}
+
 	/*
 	 * Oops. The kernel tried to access some bad page. We'll have to
 	 * terminate things with extreme prejudice.

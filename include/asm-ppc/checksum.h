@@ -47,6 +47,20 @@ unsigned int csum_partial_copy( const char *src, char *dst, int len, int sum);
  */
 #define csum_partial_copy_fromuser csum_partial_copy
 
+/*
+ * this is a new version of the above that records errors it finds in *errp,
+ * but continues and zeros the rest of the buffer.
+ *
+ * right now - it just calls csum_partial_copy()
+ *   -- Cort
+ */
+extern __inline__
+unsigned int csum_partial_copy_from_user ( const char *src, char *dst,
+						int len, int sum, int *err_ptr)
+{
+	int *dst_err_ptr=NULL;
+	return csum_partial_copy( src, dst, len, sum);
+}
 
 /*
  * this routine is used for miscellaneous IP-like checksums, mainly

@@ -410,8 +410,6 @@ struct sk_buff *ax25_rt_build_path(struct sk_buff *skb, ax25_address *src, ax25_
 	unsigned char *bp;
 	int len;
 
-	skb_pull(skb, 1);	/* skip KISS command */
-
 	len = digi->ndigi * AX25_ADDR_LEN;
 
 	if (skb_headroom(skb) < len) {

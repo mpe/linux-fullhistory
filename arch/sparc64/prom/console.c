@@ -1,4 +1,4 @@
-/* $Id: console.c,v 1.6 1997/03/18 17:59:59 jj Exp $
+/* $Id: console.c,v 1.7 1997/07/19 08:28:29 ecd Exp $
  * console.c: Routines that deal with sending and receiving IO
  *            to/from the current console device using the PROM.
  *
@@ -88,6 +88,7 @@ prom_query_input_device()
 	if(strncmp(propb, "serial", sizeof("serial")))
 		return PROMDEV_I_UNK;
 	/* FIXME: Is there any better way how to find out? */	
+	memset(propb, 0, sizeof(propb));
 	st_p = prom_finddevice ("/options");
 	prom_getproperty(st_p, "input-device", propb, sizeof(propb));
 	if (strncmp (propb, "tty", 3) || !propb[3] || propb[4])
@@ -116,6 +117,7 @@ prom_query_output_device()
 	if(strncmp("serial", propb, sizeof("serial")))
 		return PROMDEV_O_UNK;
 	/* FIXME: Is there any better way how to find out? */	
+	memset(propb, 0, sizeof(propb));
 	st_p = prom_finddevice ("/options");
 	prom_getproperty(st_p, "output-device", propb, sizeof(propb));
 	if (strncmp (propb, "tty", 3) || !propb[3] || propb[4])

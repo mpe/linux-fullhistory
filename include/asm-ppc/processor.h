@@ -1,12 +1,8 @@
 #ifndef __ASM_PPC_PROCESSOR_H
 #define __ASM_PPC_PROCESSOR_H
 
-/*
- * PowerPC machine specifics
- */
+#include <linux/config.h>
 
-#define KERNEL_STACK_SIZE (4096) /* usable stack -- not buffers at either end */
-#define KERNEL_STACK_MASK (~(KERNEL_STACK_SIZE-1))
 
 /* Bit encodings for Machine State Register (MSR) */
 #define MSR_POW		(1<<18)		/* Enable Power Management */
@@ -26,7 +22,8 @@
 #define MSR_RI		(1<<1)		/* Recoverable Exception */
 #define MSR_LE		(1<<0)		/* Little-Endian enable */
 
-#define MSR_		MSR_FE0|MSR_FE1|MSR_ME|MSR_FP
+#define MSR_		MSR_FE0|MSR_FE1|MSR_ME
+#define MSR_KERNEL      MSR_|MSR_IR|MSR_DR
 #define MSR_USER	MSR_FE0|MSR_FE1|MSR_ME|MSR_PR|MSR_EE|MSR_IR|MSR_DR
 
 /* Bit encodings for Hardware Implementation Register (HID0) */
@@ -49,19 +46,15 @@
 #define HID0_DCI	(1<<10)		/* Data Cache Invalidate */
 #define HID0_SIED	(1<<7)		/* Serial Instruction Execution [Disable] */
 #define HID0_BHTE	(1<<2)		/* Branch History Table Enable */
-
 /* fpscr settings */
 #define FPSCR_FX        (1<<31)
 #define FPSCR_FEX       (1<<30)
-
-
 
 #ifndef __ASSEMBLY__
 /*
  * PowerPC machine specifics
  */
 extern inline void start_thread(struct pt_regs *, unsigned long, unsigned long );
-
 
 /*
  * Bus types
@@ -77,79 +70,83 @@ extern inline void start_thread(struct pt_regs *, unsigned long, unsigned long )
 #define wp_works_ok 1
 #define wp_works_ok__is_a_macro /* for versions in ksyms.c */
 
-/*
- * User space process size: 2GB. This is hardcoded into a few places,
- * so don't change it unless you know what you are doing.
- *
- * "this is gonna have to change to 1gig for the sparc" - David S. Miller
- */
 #define TASK_SIZE	(0x80000000UL)
-
 /* This decides where the kernel will search for a free chunk of vm
  * space during mmap's.
  */
 #define TASK_UNMAPPED_BASE	(TASK_SIZE / 3)
-
 struct thread_struct 
 {
-  unsigned long	ksp;		/* Kernel stack pointer */
-  unsigned long	*pg_tables;	/* MMU information */
-  unsigned long	segs[16];	/* MMU Segment registers */
-  unsigned long	last_pc;	/* PC when last entered system */
-  unsigned long	user_stack;	/* [User] Stack when entered kernel */
-  double       	fpr[32];	/* Complete floating point set */
-  unsigned long	wchan;		/* Event task is sleeping on */
-  unsigned long	*regs;		/* Pointer to saved register state */
-  unsigned long fp_used;	/* number of quantums fp was used */
-  unsigned long fs;		/* for get_fs() validation */
-  unsigned long expc;		/* exception handler addr (see fault.c) */
-  unsigned long excount;	/* exception handler count */
+	unsigned long	ksp;		/* Kernel stack pointer */
+	unsigned long	*pg_tables;	/* MMU information */
+#ifdef CONFIG_PMAC
+	unsigned long	last_pc;	/* PC when last entered system */
+	unsigned long	user_stack;	/* [User] Stack when entered kernel */
+#endif  
+	unsigned long	fpscr_pad;	/* (so we can save fpscr with stfd) */
+	unsigned long   fpscr;		/* fp status reg */
+	double       	fpr[32];	/* Complete floating point set */
+	unsigned long   fp_used;
+	unsigned long	wchan;		/* Event task is sleeping on */
+	struct pt_regs  *regs;		/* Pointer to saved register state */
+	unsigned long   fs;		/* for get_fs() validation */
+	signed long     last_syscall;
+	unsigned long   pad[2];	/* pad to 16-byte boundry */
 };
 
+/* Points to the thread_struct of the thread (if any) which
+   currently owns the FPU. */
+#define fpu_tss (&(last_task_used_math->tss))
+
+#ifdef CONFIG_PMAC
+#define LAZY_TSS_FPR_INIT 0,0,0,0,{0},
+#endif
+#ifdef CONFIG_PREP
+#define LAZY_TSS_FPR_INIT 0,0,{0},
+#endif
 
 #define INIT_TSS  { \
-	sizeof(init_kernel_stack) + (long) &init_kernel_stack,\
-	(long *)swapper_pg_dir, {0}, \
-	0, 0, {0}, \
-	0, 0, 0, \
-	KERNEL_DS, 0, 0 \
+	sizeof(init_stack) + (long) &init_stack, /* ksp */ \
+	(long *)swapper_pg_dir, /* pg_tables */ \
+	LAZY_TSS_FPR_INIT \
+	0, /*fp_used*/ 0, /*wchan*/ \
+	sizeof(init_stack) + (long)&init_stack - \
+		sizeof(struct pt_regs), /* regs */ \
+	KERNEL_DS /*fs*/, 0 /*last_syscall*/ \
 }
 
-#define INIT_MMAP { &init_mm, 0, 0x40000000, \
-		      PAGE_SHARED, VM_READ | VM_WRITE | VM_EXEC, NULL, &init_mm.mmap }
-
-/* Free all resources held by a thread. */
-extern void release_thread(struct task_struct *);
+#define INIT_MMAP { &init_mm, KERNELBASE/*0*/, 0xffffffff/*0x40000000*/, \
+		      PAGE_SHARED, VM_READ | VM_WRITE | VM_EXEC }
 
 /*
  * Return saved PC of a blocked thread. For now, this is the "user" PC
  */
 static inline unsigned long thread_saved_pc(struct thread_struct *t)
 {
-	return (t->last_pc);
+	return (t->regs) ? t->regs->nip : 0;
+	/*return (t->last_pc);*/
 }
 
-#define _PROC_Motorola 0
-#define _PROC_IBM      1
-#define _PROC_Be       2
+extern int _machine;
+#define _MACH_Motorola 0
+#define _MACH_IBM      1
+#define _MACH_Be       2
+#define _MACH_Pmac     3
 
-int _Processor;
+/*
+ * NOTE! The task struct and the stack go together
+ */
+#define alloc_task_struct() \
+	((struct task_struct *) __get_free_pages(GFP_KERNEL,1,0))
+#define free_task_struct(p)	free_pages((unsigned long)(p),1)
 
-/* Allocation and freeing of basic task resources. */
-#define alloc_task_struct()	kmalloc(sizeof(struct task_struct), GFP_KERNEL)
-#define free_task_struct(p)	kfree(p)
+/* in process.c - for early bootup debug -- Cort */
+int ll_printk(const char *, ...);
+void ll_puts(const char *);
 
-#ifdef KERNEL_STACK_BUFFER
-/* give a 1 page buffer below the stack - if change then change ppc_machine.h */
-#define alloc_kernel_stack()  \
-          (memset((void *)__get_free_pages(GFP_KERNEL,1,0),0,KERNEL_STACK_SIZE+PAGE_SIZE)+PAGE_SIZE)
-#define free_kernel_stack(page) free_pages((page)-PAGE_SIZE,1)
-#else
-#define alloc_kernel_stack()    get_free_page(GFP_KERNEL)
-#define free_kernel_stack(page) free_page((page))
-#endif
+#endif /* ndef ASSEMBLY*/
 
-#endif /* ASSEMBLY*/
-
-#endif
-
+#define init_task	(init_task_union.task)
+#define init_stack	(init_task_union.stack)
+  
+#endif /* __ASM_PPC_PROCESSOR_H */

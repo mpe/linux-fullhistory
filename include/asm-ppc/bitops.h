@@ -3,66 +3,154 @@
 
 #include <asm/system.h>
 #include <asm/byteorder.h>
+#include <linux/kernel.h> /* for printk */
 
 #define BIT(n) 1<<(n&0x1F)
 typedef unsigned long BITFIELD;
 
 
-/* Set bit 'nr' in 32-bit quantity at address 'addr' where bit '0'
- * is in the highest of the four bytes and bit '31' is the high bit
- * within the first byte. powerpc is BIG-Endian. Unless noted otherwise
- * all bit-ops return 0 if bit was previously clear and != 0 otherwise.
+/*
+ * These are ifdef'd out here because using : "cc" as a constraing
+ * results in errors from gcc. -- Cort
  */
-extern __inline__ int set_bit(int nr, void * add)
+#if 0
+extern __inline__ int set_bit(int nr, void * addr)
 {
-  BITFIELD *addr = add;
-	long	mask,oldbit;       
-#ifdef __KERNEL__
-	int s = _disable_interrupts();
-#endif
-	addr += nr >> 5;
-	mask = BIT(nr);
-	oldbit = (mask & *addr) != 0;
-	*addr |= mask;
-#ifdef __KERNEL__	
-	_enable_interrupts(s);
-#endif
-	return oldbit;
+	unsigned long old, t;
+	unsigned long mask = 1 << (nr & 0x1f);
+	unsigned long *p = ((unsigned long *)addr) + (nr >> 5);
+	
+	if ((unsigned long)addr & 3)
+		printk("set_bit(%lx, %p)\n", nr, addr);
+
+	__asm__ __volatile__(
+		"1:lwarx %0,0,%3 \n\t"
+		"or	%1,%0,%2 \n\t"
+		"stwcx.	%1,0,%3 \n\t"
+		"bne	1b \n\t"
+		: "=&r" (old), "=&r" (t)	/*, "=m" (*p)*/
+		: "r" (mask), "r" (p)
+		/*: "cc" */);
+
+n	return (old & mask) != 0;
 }
 
-extern __inline__ int change_bit(int nr, void *add)
+extern __inline__  unsigned long clear_bit(unsigned long nr, void *addr)
 {
-  	BITFIELD *addr = add;
-	int	mask, retval;
-#ifdef __KERNEL__
-	int s = _disable_interrupts();
-#endif
-	addr += nr >> 5;
-	mask = BIT(nr);
-	retval = (mask & *addr) != 0;
-	*addr ^= mask;
-#ifdef __KERNEL__
-	_enable_interrupts(s);
-#endif
-	return retval;
+	unsigned long old, t;
+	unsigned long mask = 1 << (nr & 0x1f);
+	unsigned long *p = ((unsigned long *)addr) + (nr >> 5);
+
+	if ((unsigned long)addr & 3)
+		printk("clear_bit(%lx, %p)\n", nr, addr);
+	__asm__ __volatile__("\n\
+1:	lwarx	%0,0,%3
+	andc	%1,%0,%2
+	stwcx.	%1,0,%3
+	bne	1b"
+	: "=&r" (old), "=&r" (t)	/*, "=m" (*p)*/
+	: "r" (mask), "r" (p)
+      /*: "cc"*/);
+
+	return (old & mask) != 0;
 }
 
-extern __inline__ int clear_bit(int nr, void *add)
+extern __inline__ unsigned long change_bit(unsigned long nr, void *addr)
 {
-        BITFIELD *addr = add;
-	int	mask, retval;
-#ifdef __KERNEL__
-	int s = _disable_interrupts();
-#endif
-	addr += nr >> 5;
-	mask = BIT(nr);
-	retval = (mask & *addr) != 0;
-	*addr &= ~mask;
-#ifdef __KERNEL__	
-	_enable_interrupts(s);
-#endif
-	return retval;
+	unsigned long old, t;
+	unsigned long mask = 1 << (nr & 0x1f);
+	unsigned long *p = ((unsigned long *)addr) + (nr >> 5);
+
+	if ((unsigned long)addr & 3)
+		printk("change_bit(%lx, %p)\n", nr, addr);
+	__asm__ __volatile__("\n\
+1:	lwarx	%0,0,%3
+	xor	%1,%0,%2
+	stwcx.	%1,0,%3
+	bne	1b"
+	: "=&r" (old), "=&r" (t)	/*, "=m" (*p)*/
+	: "r" (mask), "r" (p)
+      /*: "cc"*/);
+
+	return (old & mask) != 0;
 }
+#endif
+
+extern __inline__ int ffz(unsigned int x)
+{
+	int n;
+
+	x = ~x & (x+1);		/* set LS zero to 1, other bits to 0 */
+	__asm__ ("cntlzw %0,%1" : "=r" (n) : "r" (x));
+	return 31 - n;
+}
+
+/*
+ * This implementation of find_{first,next}_zero_bit was stolen from
+ * Linus' asm-alpha/bitops.h.
+ */
+
+extern __inline__ unsigned long find_first_zero_bit(void * addr, unsigned long size)
+{
+	unsigned int * p = ((unsigned int *) addr);
+	unsigned int result = 0;
+	unsigned int tmp;
+
+	if (size == 0)
+		return 0;
+	while (size & ~31UL) {
+		if (~(tmp = *(p++)))
+			goto found_middle;
+		result += 32;
+		size -= 32;
+	}
+	if (!size)
+		return result;
+	tmp = *p;
+	tmp |= ~0UL << size;
+found_middle:
+	return result + ffz(tmp);
+}
+
+/*
+ * Find next zero bit in a bitmap reasonably efficiently..
+ */
+extern __inline__ unsigned long find_next_zero_bit(void * addr, unsigned long size,
+				 unsigned long offset)
+{
+	unsigned int * p = ((unsigned int *) addr) + (offset >> 5);
+	unsigned int result = offset & ~31UL;
+	unsigned int tmp;
+
+	if (offset >= size)
+		return size;
+	size -= result;
+	offset &= 31UL;
+	if (offset) {
+		tmp = *(p++);
+		tmp |= ~0UL >> (32-offset);
+		if (size < 32)
+			goto found_first;
+		if (~tmp)
+			goto found_middle;
+		size -= 32;
+		result += 32;
+	}
+	while (size & ~31UL) {
+		if (~(tmp = *(p++)))
+			goto found_middle;
+		result += 32;
+		size -= 32;
+	}
+	if (!size)
+		return result;
+	tmp = *p;
+found_first:
+	tmp |= ~0UL << size;
+found_middle:
+	return result + ffz(tmp);
+}
+
 
 #define _EXT2_HAVE_ASM_BITOPS_
 #define ext2_find_first_zero_bit(addr, size) \

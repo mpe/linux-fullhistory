@@ -9,6 +9,7 @@
 #define NVRAM_AS1  0x75
 #define NVRAM_DATA 0x77
 
+
 /* RTC Offsets */
 
 #define RTC_SECONDS		0x1FF9
@@ -18,6 +19,8 @@
 #define RTC_DAY_OF_MONTH	0x1FFD
 #define RTC_MONTH		0x1FFE
 #define RTC_YEAR		0x1FFF
+#define RTC_CONTROLA            0x1FF8
+#define RTC_CONTROLB            0x1FF9
 
 #ifndef BCD_TO_BIN
 #define BCD_TO_BIN(val) ((val)=((val)&15) + ((val)>>4)*10)

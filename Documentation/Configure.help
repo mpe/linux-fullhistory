@@ -4646,6 +4646,18 @@ CONFIG_RTC
   have a use for such a device (such as periodic data sampling), then
   say Y here, and go read the file Documentation/rtc.txt for details.
 
+/dev/nvram support
+CONFIG_NVRAM
+  If you say Y here and create a character special file /dev/nvram
+  with major number 10 and minor number 144 using mknod ("man mknod"),
+  you get access to the non-volatile memory in the real time clock
+  (RTC). This is conventionally called "CMOS RAM" on PCs and "NVRAM"
+  on Ataris. /dev/nvram may be used to view settings there, or to
+  change them (with some utility). It could also be used to frequently
+  save a few bits of very important data, that may not be lost over
+  power-off and for which writing to disk is too insecure. On Atari
+  machines, /dev/nvram is always configured and needs not be selected.
+
 ARC console time
 CONFIG_RTC_ARC
   If you boot your Alpha using the ARC firmware, say Y here. This option

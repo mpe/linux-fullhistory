@@ -1,4 +1,4 @@
-/* $Id: ioport.c,v 1.10 1997/06/30 09:24:02 jj Exp $
+/* $Id: ioport.c,v 1.11 1997/07/22 06:14:04 davem Exp $
  * ioport.c:  Simple io mapping allocator.
  *
  * Copyright (C) 1995,1996 David S. Miller (davem@caip.rutgers.edu)
@@ -83,7 +83,7 @@ void sparc_free_io (void *virtual, int len)
 	unsigned long vaddr = (unsigned long) virtual & PAGE_MASK;
 	unsigned long plen = (((unsigned long)virtual & ~PAGE_MASK) + len + PAGE_SIZE-1) & PAGE_MASK;
 	
-	if (virtual >= PAGE_OFFSET + 0x10000000000UL)
+	if (((unsigned long)virtual) >= PAGE_OFFSET + 0x10000000000UL)
 		return;
 
 	release_region(vaddr, plen);
