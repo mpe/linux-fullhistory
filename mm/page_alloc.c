@@ -124,6 +124,9 @@ int __free_page(struct page *page)
 	if (!PageReserved(page) && put_page_testzero(page)) {
 		if (PageSwapCache(page))
 			PAGE_BUG(page);
+		if (PageLocked(page))
+			PAGE_BUG(page);
+
 		page->flags &= ~(1 << PG_referenced);
 		free_pages_ok(page - mem_map, 0);
 		return 1;
@@ -139,6 +142,8 @@ int free_pages(unsigned long addr, unsigned long order)
 		mem_map_t * map = mem_map + map_nr;
 		if (!PageReserved(map) && put_page_testzero(map)) {
 			if (PageSwapCache(map))
+				PAGE_BUG(map);
+			if (PageLocked(map))
 				PAGE_BUG(map);
 			map->flags &= ~(1 << PG_referenced);
 			free_pages_ok(map_nr, order);

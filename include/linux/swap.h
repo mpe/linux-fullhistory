@@ -85,7 +85,7 @@ extern void swap_setup (void);
 extern int try_to_free_pages(unsigned int gfp_mask);
 
 /* linux/mm/page_io.c */
-extern void rw_swap_page(int, unsigned long, char *, int);
+extern void rw_swap_page(int, struct page *, int);
 extern void rw_swap_page_nocache(int, unsigned long, char *);
 extern void rw_swap_page_nolock(int, unsigned long, char *, int);
 extern void swap_after_unlock_page (unsigned long entry);
@@ -145,13 +145,6 @@ extern unsigned long swap_cache_del_total;
 extern unsigned long swap_cache_find_total;
 extern unsigned long swap_cache_find_success;
 #endif
-
-extern inline unsigned long in_swap_cache(struct page *page)
-{
-	if (PageSwapCache(page))
-		return page->offset;
-	return 0;
-}
 
 /*
  * Work out if there are any other processes sharing this page, ignoring

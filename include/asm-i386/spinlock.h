@@ -50,7 +50,7 @@
 #endif
 
 #define spin_lock_init(lock)	do { } while(0)
-#define spin_lock(lock)		do { } while(0)
+#define spin_lock(lock)		(void)(lock) /* Not "unused variable". */
 #define spin_trylock(lock)	(1)
 #define spin_unlock_wait(lock)	do { } while(0)
 #define spin_unlock(lock)	do { } while(0)
@@ -109,9 +109,9 @@ typedef struct {
   #define RW_LOCK_UNLOCKED (rwlock_t) { 0 }
 #endif
 
-#define read_lock(lock)		do { } while(0)
+#define read_lock(lock)		(void)(lock) /* Not "unused variable". */
 #define read_unlock(lock)	do { } while(0)
-#define write_lock(lock)	do { } while(0)
+#define write_lock(lock)	(void)(lock) /* Not "unused variable". */
 #define write_unlock(lock)	do { } while(0)
 
 #else	/* __SMP__ */

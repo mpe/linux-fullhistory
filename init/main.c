@@ -69,7 +69,6 @@ extern int console_loglevel;
 static int init(void *);
 extern int bdflush(void *);
 extern int kswapd(void *);
-extern int kpiod(void *);
 extern void kswapd_setup(void);
 
 extern void init_IRQ(void);
@@ -1304,7 +1303,6 @@ static void __init do_basic_setup(void)
 	kernel_thread(bdflush, NULL, CLONE_FS | CLONE_FILES | CLONE_SIGHAND);
 	/* Start the background pageout daemon. */
 	kswapd_setup();
-	kernel_thread(kpiod, NULL, CLONE_FS | CLONE_FILES | CLONE_SIGHAND);
 	kernel_thread(kswapd, NULL, CLONE_FS | CLONE_FILES | CLONE_SIGHAND);
 
 #if CONFIG_AP1000

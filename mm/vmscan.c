@@ -36,31 +36,35 @@ static int try_to_swap_out(struct task_struct * tsk, struct vm_area_struct* vma,
 {
 	pte_t pte;
 	unsigned long entry;
-	unsigned long page;
-	struct page * page_map;
+	unsigned long page_addr;
+	struct page * page;
 
 	pte = *page_table;
 	if (!pte_present(pte))
-		return 0;
-	page = pte_page(pte);
-	if (MAP_NR(page) >= max_mapnr)
-		return 0;
-	page_map = mem_map + MAP_NR(page);
+		goto out_failed;
+	page_addr = pte_page(pte);
+	if (MAP_NR(page_addr) >= max_mapnr)
+		goto out_failed;
+	page = mem_map + MAP_NR(page_addr);
 
-	if (pte_young(pte)) {
+	/*
+	 * Dont be too eager to get aging right if
+	 * memory is dangerously low.
+	 */
+	if (!low_on_memory && pte_young(pte)) {
 		/*
 		 * Transfer the "accessed" bit from the page
 		 * tables to the global page map.
 		 */
 		set_pte(page_table, pte_mkold(pte));
-		set_bit(PG_referenced, &page_map->flags);
-		return 0;
+		set_bit(PG_referenced, &page->flags);
+		goto out_failed;
 	}
 
-	if (PageReserved(page_map)
-	    || PageLocked(page_map)
-	    || ((gfp_mask & __GFP_DMA) && !PageDMA(page_map)))
-		return 0;
+	if (PageReserved(page)
+	    || PageLocked(page)
+	    || ((gfp_mask & __GFP_DMA) && !PageDMA(page)))
+		goto out_failed;
 
 	/*
 	 * Is the page already in the swap cache? If so, then
@@ -70,15 +74,15 @@ static int try_to_swap_out(struct task_struct * tsk, struct vm_area_struct* vma,
 	 * Return 0, as we didn't actually free any real
 	 * memory, and we should just continue our scan.
 	 */
-	if (PageSwapCache(page_map)) {
-		entry = page_map->offset;
+	if (PageSwapCache(page)) {
+		entry = page->offset;
 		swap_duplicate(entry);
 		set_pte(page_table, __pte(entry));
 drop_pte:
 		vma->vm_mm->rss--;
 		flush_tlb_page(vma, address);
-		__free_page(page_map);
-		return 0;
+		__free_page(page);
+		goto out_failed;
 	}
 
 	/*
@@ -105,7 +109,7 @@ drop_pte:
 	 * locks etc.
 	 */
 	if (!(gfp_mask & __GFP_IO))
-		return 0;
+		goto out_failed;
 
 	/*
 	 * Ok, it's really dirty. That means that
@@ -120,7 +124,7 @@ drop_pte:
 	 * assume we free'd something.
 	 *
 	 * NOTE NOTE NOTE! This should just set a
-	 * dirty bit in page_map, and just drop the
+	 * dirty bit in 'page', and just drop the
 	 * pte. All the hard work would be done by
 	 * shrink_mmap().
 	 *
@@ -133,10 +137,9 @@ drop_pte:
 		flush_tlb_page(vma, address);
 		vma->vm_mm->rss--;
 		
-		if (vma->vm_ops->swapout(vma, page_map))
+		if (vma->vm_ops->swapout(vma, page))
 			kill_proc(pid, SIGBUS, 1);
-		__free_page(page_map);
-		return 1;
+		goto out_free_success;
 	}
 
 	/*
@@ -147,23 +150,26 @@ drop_pte:
 	 */
 	entry = get_swap_page();
 	if (!entry)
-		return 0; /* No swap space left */
+		goto out_failed; /* No swap space left */
 		
 	vma->vm_mm->rss--;
 	tsk->nswap++;
 	set_pte(page_table, __pte(entry));
 	flush_tlb_page(vma, address);
 	swap_duplicate(entry);	/* One for the process, one for the swap cache */
-	add_to_swap_cache(page_map, entry);
+	add_to_swap_cache(page, entry);
 	/* We checked we were unlocked way up above, and we
 	   have been careful not to stall until here */
-	LockPage(page_map);
+	LockPage(page);
 
 	/* OK, do a physical asynchronous write to swap.  */
-	rw_swap_page(WRITE, entry, (char *) page, 0);
+	rw_swap_page(WRITE, page, 0);
 
-	__free_page(page_map);
+out_free_success:
+	__free_page(page);
 	return 1;
+out_failed:
+	return 0;
 }
 
 /*
@@ -490,8 +496,8 @@ int kswapd(void *unused)
 
 			if (!do_try_to_free_pages(GFP_KSWAPD))
 				break;
+			run_task_queue(&tq_disk);
 		} while (!tsk->need_resched);
-		run_task_queue(&tq_disk);
 		tsk->state = TASK_INTERRUPTIBLE;
 		schedule_timeout(HZ);
 	}

@@ -103,10 +103,8 @@ union bdflush_param {
 		int nref_dirt; /* Dirty buffer threshold for activating bdflush
 				  when trying to refill buffers. */
 		int dummy1;    /* unused */
-		int age_buffer;  /* Time for normal buffer to age before 
-				    we flush it */
-		int age_super;  /* Time for superblock to age before we 
-				   flush it */
+		int age_buffer;  /* Time for normal buffer to age before we flush it */
+		int age_super;  /* Time for superblock to age before we flush it */
 		int dummy2;    /* unused */
 		int dummy3;    /* unused */
 	} b_un;
@@ -752,9 +750,8 @@ void set_writetime(struct buffer_head * buf, int flag)
 
 	if (buffer_dirty(buf)) {
 		/* Move buffer to dirty list if jiffies is clear. */
-		newtime = jiffies + (flag ? bdf_prm.b_un.age_super : 
-				     bdf_prm.b_un.age_buffer);
-		if(!buf->b_flushtime || buf->b_flushtime > newtime)
+		newtime = jiffies + (flag ? bdf_prm.b_un.age_super : bdf_prm.b_un.age_buffer);
+		if (!buf->b_flushtime || buf->b_flushtime > newtime)
 			 buf->b_flushtime = newtime;
 	} else {
 		buf->b_flushtime = 0;
@@ -778,27 +775,29 @@ static void file_buffer(struct buffer_head *bh, int list)
  * pressures on different devices - thus the (currently unused)
  * 'dev' parameter.
  */
+int too_many_dirty_buffers;
+
 void balance_dirty(kdev_t dev)
 {
 	int dirty = nr_buffers_type[BUF_DIRTY];
 	int ndirty = bdf_prm.b_un.ndirty;
 
 	if (dirty > ndirty) {
-		int wait = 0;
-		if (dirty > 2*ndirty)
-			wait = 1;
-		wakeup_bdflush(wait);
+		if (dirty > 2*ndirty) {
+			too_many_dirty_buffers = 1;
+			wakeup_bdflush(1);
+			return;
+		}
+		wakeup_bdflush(0);
 	}
+	too_many_dirty_buffers = 0;
+	return;
 }
-
-atomic_t too_many_dirty_buffers;
 
 static inline void __mark_dirty(struct buffer_head *bh, int flag)
 {
 	set_writetime(bh, flag);
 	refile_buffer(bh);
-	if (atomic_read(&too_many_dirty_buffers))
-		balance_dirty(bh->b_dev);
 }
 
 void __mark_buffer_dirty(struct buffer_head *bh, int flag)
@@ -1401,9 +1400,7 @@ int block_write_full_page (struct file *file, struct page *page, fs_getblock_t f
 
 		if (!bh->b_blocknr) {
 			err = -EIO;
-			down(&inode->i_sem);
 			phys = fs_get_block (inode, block, 1, &err, &created);
-			up(&inode->i_sem);
 			if (!phys)
 				goto out;
 
@@ -1491,9 +1488,7 @@ int block_write_partial_page (struct file *file, struct page *page, unsigned lon
 		}
 		if (!bh->b_blocknr) {
 			err = -EIO;
-			down(&inode->i_sem);
 			phys = fs_get_block (inode, block, 1, &err, &created);
-			up(&inode->i_sem);
 			if (!phys)
 				goto out;
 
@@ -1505,16 +1500,19 @@ int block_write_partial_page (struct file *file, struct page *page, unsigned lon
 			 * We also rely on the fact that filesystem holes
 			 * cannot be written.
 			 */
-			if (!created && (start_offset ||
-					(end_bytes && (i == end_block)))) {
-				bh->b_state = 0;
-				ll_rw_block(READ, 1, &bh);
-				lock_kernel();
-				wait_on_buffer(bh);
-				unlock_kernel();
-				err = -EIO;
-				if (!buffer_uptodate(bh))
-					goto out;
+			if (start_offset || (end_bytes && (i == end_block))) {
+				if (created) {
+					memset(bh->b_data, 0, bh->b_size);
+				} else {
+					bh->b_state = 0;
+					ll_rw_block(READ, 1, &bh);
+					lock_kernel();
+					wait_on_buffer(bh);
+					unlock_kernel();
+					err = -EIO;
+					if (!buffer_uptodate(bh))
+						goto out;
+				}
 			}
 
 			bh->b_state = (1<<BH_Uptodate);
@@ -1524,21 +1522,17 @@ int block_write_partial_page (struct file *file, struct page *page, unsigned lon
 			 */
 			bh->b_end_io = end_buffer_io_sync;
 			set_bit(BH_Uptodate, &bh->b_state);
+			created = 0;
 		}
 
 		err = -EFAULT;
+		len = blocksize;
 		if (start_offset) {
 			len = start_bytes;
 			start_offset = 0;
-		} else
-		if (end_bytes && (i == end_block)) {
+		} else if (end_bytes && (i == end_block)) {
 			len = end_bytes;
 			end_bytes = 0;
-		} else {
-			/*
-			 * Overwritten block.
-			 */
-			len = blocksize;
 		}
 		if (copy_from_user(target_buf, buf, len))
 			goto out;
@@ -1549,8 +1543,24 @@ int block_write_partial_page (struct file *file, struct page *page, unsigned lon
 		 * we dirty buffers only after copying the data into
 		 * the page - this way we can dirty the buffer even if
 		 * the bh is still doing IO.
+		 *
+		 * NOTE! This also does a direct dirty balace check,
+		 * rather than relying on bdflush just waking up every
+		 * once in a while. This is to catch (and slow down)
+		 * the processes that write tons of buffer..
+		 *
+		 * Note how we do NOT want to do this in the full block
+		 * case: full pages are flushed not by the people who
+		 * dirtied them, but by people who need memory. And we
+		 * should not penalize them for somebody else writing
+		 * lots of dirty pages.
 		 */
-		atomic_mark_buffer_dirty(bh,0);
+		if (!test_and_set_bit(BH_Dirty, &bh->b_state)) {
+			__atomic_mark_buffer_dirty(bh,0);
+			if (too_many_dirty_buffers)
+				balance_dirty(bh->b_dev);
+		}
+
 skip:
 		i++;
 		block++;
@@ -1827,6 +1837,9 @@ int try_to_free_buffers(struct page * page)
 		tmp = tmp->b_this_page;
 		if (!buffer_busy(p))
 			continue;
+
+		too_many_dirty_buffers = 1;
+		wakeup_bdflush(0);
 		return 0;
 	} while (tmp != bh);
 
@@ -2033,8 +2046,6 @@ static int sync_old_buffers(void)
 				 if (buffer_locked(bh) || !buffer_dirty(bh))
 					  continue;
 				 ndirty++;
-				 if(time_before(jiffies, bh->b_flushtime))
-					continue;
 				 nwritten++;
 				 next->b_count++;
 				 bh->b_count++;
@@ -2102,28 +2113,13 @@ out:
 	return error;
 }
 
-/* This is the actual bdflush daemon itself. It used to be started from
+/*
+ * This is the actual bdflush daemon itself. It used to be started from
  * the syscall above, but now we launch it ourselves internally with
- * kernel_thread(...)  directly after the first thread in init/main.c */
-
-/* To prevent deadlocks for a loop device:
- * 1) Do non-blocking writes to loop (avoids deadlock with running
- *	out of request blocks).
- * 2) But do a blocking write if the only dirty buffers are loop buffers
- *	(otherwise we go into an infinite busy-loop).
- * 3) Quit writing loop blocks if a freelist went low (avoids deadlock
- *	with running out of free buffers for loop's "real" device).
-*/
+ * kernel_thread(...)  directly after the first thread in init/main.c
+ */
 int bdflush(void * unused) 
 {
-	int i;
-	int ndirty;
-	int nlist;
-	int ncount;
-	struct buffer_head * bh, *next;
-	int major;
-	int wrta_cmd = WRITEA;	/* non-blocking write for LOOP */
-
 	/*
 	 *	We have a bare-bones task_struct, and really should fill
 	 *	in a few more things so "top" and /proc/2/{exe,root,cwd}
@@ -2143,99 +2139,91 @@ int bdflush(void * unused)
 	lock_kernel();
 		 
 	for (;;) {
-#ifdef DEBUG
-		printk("bdflush() activated...");
-#endif
+		int nlist;
 
 		CHECK_EMERGENCY_SYNC
 
-		ncount = 0;
-#ifdef DEBUG
-		for(nlist = 0; nlist < NR_LIST; nlist++)
-#else
 		for(nlist = BUF_LOCKED; nlist <= BUF_DIRTY; nlist++)
-#endif
-		 {
-			 ndirty = 0;
-		 repeat:
+		{
+			int nr;
+			int written = 0;
+			struct buffer_head *next;
+			int major;
 
-			 bh = lru_list[nlist];
-			 if(bh) 
-				  for (i = nr_buffers_type[nlist]; i-- > 0 && ndirty < bdf_prm.b_un.ndirty; 
-				       bh = next) {
-					  /* We may have stalled while waiting for I/O to complete. */
-					  if(bh->b_list != nlist) goto repeat;
-					  next = bh->b_next_free;
-					  if(!lru_list[nlist]) {
-						  printk("Dirty list empty %d\n", i);
-						  break;
-					  }
-					  
-					  /* Clean buffer on dirty list?  Refile it */
-					  if (nlist == BUF_DIRTY && !buffer_dirty(bh)) {
-						  refile_buffer(bh);
-						  continue;
-					  }
-					  
-					  /* Unlocked buffer on locked list?  Refile it */
-					  if (nlist == BUF_LOCKED && !buffer_locked(bh)) {
-						  refile_buffer(bh);
-						  continue;
-					  }
-					  
-					  if (buffer_locked(bh) || !buffer_dirty(bh))
-						   continue;
-					  major = MAJOR(bh->b_dev);
-					  /* Should we write back buffers that are shared or not??
-					     currently dirty buffers are not shared, so it does not matter */
-					  next->b_count++;
-					  bh->b_count++;
-					  ndirty++;
-					  bh->b_flushtime = 0;
-					  if (major == LOOP_MAJOR) {
-						  ll_rw_block(wrta_cmd,1, &bh);
-						  wrta_cmd = WRITEA;
-						  if (buffer_dirty(bh))
-							  --ndirty;
-					  }
-					  else
-					  ll_rw_block(WRITE, 1, &bh);
-#ifdef DEBUG
-					  if(nlist != BUF_DIRTY) ncount++;
-#endif
-					  bh->b_count--;
-					  next->b_count--;
-					  wake_up(&buffer_wait);
-				  }
-		 }
-#ifdef DEBUG
-		if (ncount) printk("sys_bdflush: %d dirty buffers not on dirty list\n", ncount);
-		printk("sleeping again.\n");
-#endif
-		/* If we didn't write anything, but there are still
-		 * dirty buffers, then make the next write to a
-		 * loop device to be a blocking write.
-		 * This lets us block--which we _must_ do! */
-		if (ndirty == 0 && nr_buffers_type[BUF_DIRTY] > 0 && wrta_cmd != WRITE) {
-			wrta_cmd = WRITE;
-			continue;
+		repeat:
+			next = lru_list[nlist];
+			nr = nr_buffers_type[nlist];
+
+			while (nr-- > 0) {
+				struct buffer_head *bh = next;
+				/* We may have stalled while waiting for I/O to complete. */
+				if (next->b_list != nlist)
+					goto repeat;
+				next = next->b_next_free;
+					
+				/* Clean buffer on dirty list?  Refile it */
+				if (nlist == BUF_DIRTY && !buffer_dirty(bh)) {
+					refile_buffer(bh);
+					continue;
+				}
+					
+				/* Unlocked buffer on locked list?  Refile it */
+				if (nlist == BUF_LOCKED && !buffer_locked(bh)) {
+					refile_buffer(bh);
+					continue;
+				}
+
+				/*
+				 * If we aren't in panic mode, don't write out too much
+				 * at a time. Also, don't write out buffers we don't really
+				 * have to write out yet..
+				 */
+				if (!too_many_dirty_buffers) {
+					if (written > bdf_prm.b_un.ndirty)
+						break;
+					if (time_before(jiffies, bh->b_flushtime))
+						continue;
+				}
+
+				if (buffer_locked(bh) || !buffer_dirty(bh))
+					 continue;
+
+				major = MAJOR(bh->b_dev);
+				if (next)
+					next->b_count++;
+				bh->b_count++;
+				written++;
+				bh->b_flushtime = 0;
+
+				/*
+				 * For the loop major we can try to do asynchronous writes,
+				 * but we have to guarantee that we're making some progress..
+				 */
+				if (major == LOOP_MAJOR && written > 1) {
+					ll_rw_block(WRITEA, 1, &bh);
+					if (buffer_dirty(bh))
+						--written;
+				} else
+					ll_rw_block(WRITE, 1, &bh);
+
+				bh->b_count--;
+				if (next)
+					next->b_count--;
+				wake_up(&buffer_wait);
+			}
 		}
 		run_task_queue(&tq_disk);
 		wake_up(&bdflush_done);
 		
 		/*
 		 * If there are still a lot of dirty buffers around,
-		 * skip the sleep and flush some more
+		 * skip the sleep and flush some more. Otherwise, we
+		 * sleep for a while and mark us as not being in panic
+		 * mode..
 		 */
-		if ((ndirty == 0) || (nr_buffers_type[BUF_DIRTY] <=
-				 nr_buffers * bdf_prm.b_un.nfract/100)) {
-
-			atomic_set(&too_many_dirty_buffers, 0);
-			spin_lock_irq(&current->sigmask_lock);
-			flush_signals(current);
-			spin_unlock_irq(&current->sigmask_lock);
-
-			interruptible_sleep_on(&bdflush_wait);
+		if (!too_many_dirty_buffers || nr_buffers_type[BUF_DIRTY] < bdf_prm.b_un.ndirty) {
+			too_many_dirty_buffers = 0;
+			sleep_on_timeout(&bdflush_wait, 5*HZ);
 		}
 	}
 }
