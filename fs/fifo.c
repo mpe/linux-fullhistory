@@ -24,7 +24,7 @@ static int fifo_open(struct inode * inode,struct file * filp)
 	 */
 		filp->f_op = &connecting_fifo_fops;
 		if (!PIPE_READERS(*inode)++)
-			wake_up(&PIPE_WRITE_WAIT(*inode));
+			wake_up(&PIPE_WAIT(*inode));
 		if (!(filp->f_flags & O_NONBLOCK) && !PIPE_WRITERS(*inode)) {
 			PIPE_RD_OPENERS(*inode)++;
 			while (!PIPE_WRITERS(*inode)) {
@@ -32,17 +32,17 @@ static int fifo_open(struct inode * inode,struct file * filp)
 					retval = -ERESTARTSYS;
 					break;
 				}
-				interruptible_sleep_on(&PIPE_READ_WAIT(*inode));
+				interruptible_sleep_on(&PIPE_WAIT(*inode));
 			}
 			if (!--PIPE_RD_OPENERS(*inode))
-				wake_up(&PIPE_WRITE_WAIT(*inode));
+				wake_up(&PIPE_WAIT(*inode));
 		}
 		while (PIPE_WR_OPENERS(*inode))
-			interruptible_sleep_on(&PIPE_READ_WAIT(*inode));
+			interruptible_sleep_on(&PIPE_WAIT(*inode));
 		if (PIPE_WRITERS(*inode))
 			filp->f_op = &read_fifo_fops;
 		if (retval && !--PIPE_READERS(*inode))
-			wake_up(&PIPE_WRITE_WAIT(*inode));
+			wake_up(&PIPE_WAIT(*inode));
 		break;
 	
 	case 2:
@@ -57,7 +57,7 @@ static int fifo_open(struct inode * inode,struct file * filp)
 		}
 		filp->f_op = &write_fifo_fops;
 		if (!PIPE_WRITERS(*inode)++)
-			wake_up(&PIPE_READ_WAIT(*inode));
+			wake_up(&PIPE_WAIT(*inode));
 		if (!PIPE_READERS(*inode)) {
 			PIPE_WR_OPENERS(*inode)++;
 			while (!PIPE_READERS(*inode)) {
@@ -65,15 +65,15 @@ static int fifo_open(struct inode * inode,struct file * filp)
 					retval = -ERESTARTSYS;
 					break;
 				}
-				interruptible_sleep_on(&PIPE_WRITE_WAIT(*inode));
+				interruptible_sleep_on(&PIPE_WAIT(*inode));
 			}
 			if (!--PIPE_WR_OPENERS(*inode))
-				wake_up(&PIPE_READ_WAIT(*inode));
+				wake_up(&PIPE_WAIT(*inode));
 		}
 		while (PIPE_RD_OPENERS(*inode))
-			interruptible_sleep_on(&PIPE_WRITE_WAIT(*inode));
+			interruptible_sleep_on(&PIPE_WAIT(*inode));
 		if (retval && !--PIPE_WRITERS(*inode))
-			wake_up(&PIPE_READ_WAIT(*inode));
+			wake_up(&PIPE_WAIT(*inode));
 		break;
 	
 	case 3:
@@ -85,13 +85,13 @@ static int fifo_open(struct inode * inode,struct file * filp)
 	 */
 		filp->f_op = &rdwr_fifo_fops;
 		if (!PIPE_READERS(*inode)++)
-			wake_up(&PIPE_WRITE_WAIT(*inode));
+			wake_up(&PIPE_WAIT(*inode));
 		while (PIPE_WR_OPENERS(*inode))
-			interruptible_sleep_on(&PIPE_READ_WAIT(*inode));
+			interruptible_sleep_on(&PIPE_WAIT(*inode));
 		if (!PIPE_WRITERS(*inode)++)
-			wake_up(&PIPE_READ_WAIT(*inode));
+			wake_up(&PIPE_WAIT(*inode));
 		while (PIPE_RD_OPENERS(*inode))
-			interruptible_sleep_on(&PIPE_WRITE_WAIT(*inode));
+			interruptible_sleep_on(&PIPE_WAIT(*inode));
 		break;
 
 	default:
@@ -106,7 +106,8 @@ static int fifo_open(struct inode * inode,struct file * filp)
 	}
 	if (!page)
 		return -ENOMEM;
-	PIPE_HEAD(*inode) = PIPE_TAIL(*inode) = 0;
+	PIPE_LOCK(*inode) = 0;
+	PIPE_START(*inode) = PIPE_LEN(*inode) = 0;
 	PIPE_BASE(*inode) = (char *) page;
 	return 0;
 }
@@ -151,9 +152,10 @@ void init_fifo(struct inode * inode)
 {
 	inode->i_op = &fifo_inode_operations;
 	inode->i_pipe = 1;
+	PIPE_LOCK(*inode) = 0;
 	PIPE_BASE(*inode) = NULL;
-	PIPE_HEAD(*inode) = PIPE_TAIL(*inode) = 0;
+	PIPE_START(*inode) = PIPE_LEN(*inode) = 0;
 	PIPE_RD_OPENERS(*inode) = PIPE_WR_OPENERS(*inode) = 0;
-	PIPE_READ_WAIT(*inode) = PIPE_WRITE_WAIT(*inode) = NULL;
+	PIPE_WAIT(*inode) = NULL;
 	PIPE_READERS(*inode) = PIPE_WRITERS(*inode) = 0;
 }

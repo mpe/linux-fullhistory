@@ -269,7 +269,7 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 	if (!(child->flags & PF_PTRACED))
 		return -ESRCH;
 	if (child->state != TASK_STOPPED) {
-		if (request != PTRACE_KILL && request != PTRACE_DETACH)
+		if (request != PTRACE_KILL)
 			return -ESRCH;
 	}
 	if (child->p_pptr != current)

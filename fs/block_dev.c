@@ -82,7 +82,7 @@ int block_read(struct inode * inode, struct file * filp, char * buf, int count)
 	int blocksize;
 	int blocksize_bits, i;
 	unsigned int left;
-	int blocks;
+	unsigned int blocks;
 	int bhrequest, uptodate;
 	struct buffer_head ** bhb, ** bhe;
 	struct buffer_head * buflist[NBUF];

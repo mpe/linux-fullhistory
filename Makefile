@@ -1,6 +1,6 @@
 VERSION = 0.99
 PATCHLEVEL = 14
-ALPHA = a
+ALPHA = b
 
 all:	Version zImage
 
@@ -149,12 +149,14 @@ init/main.o: $(CONFIGURE) init/main.c
 	$(CC) $(CFLAGS) $(PROFILING) -c -o $*.o $<
 
 tools/system:	boot/head.o init/main.o tools/version.o linuxsubdirs
-	$(LD) $(LDFLAGS) -T 1000 -M boot/head.o init/main.o tools/version.o \
+	$(LD) $(LDFLAGS) -T 1000 boot/head.o init/main.o tools/version.o \
 		$(ARCHIVES) \
 		$(FILESYSTEMS) \
 		$(DRIVERS) \
 		$(LIBS) \
-		-o tools/system > System.map
+		-o tools/system
+	nm tools/zSystem | grep -v '\(compiled\)\|\(\.o$$\)\|\( a \)' | \
+		sort > System.map
 
 boot/setup: boot/setup.s
 	$(AS86) -o boot/setup.o boot/setup.s
@@ -187,12 +189,14 @@ zlilo: $(CONFIGURE) zImage
 
 
 tools/zSystem:	boot/head.o init/main.o tools/version.o linuxsubdirs
-	$(LD) $(LDFLAGS) -T 100000 -M boot/head.o init/main.o tools/version.o \
+	$(LD) $(LDFLAGS) -T 100000 boot/head.o init/main.o tools/version.o \
 		$(ARCHIVES) \
 		$(FILESYSTEMS) \
 		$(DRIVERS) \
 		$(LIBS) \
-		-o tools/zSystem > zSystem.map
+		-o tools/zSystem
+	nm tools/zSystem | grep -v '\(compiled\)\|\(\.o$$\)\|\( a \)' | \
+		sort > zSystem.map
 
 fs: dummy
 	$(MAKE) linuxsubdirs SUBDIRS=fs

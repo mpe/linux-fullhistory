@@ -433,12 +433,14 @@ sb_dsp_prepare_for_output (int dev, int bsize, int bcount)
   dsp_cleanup ();
   dsp_speaker (ON);
 
+#ifndef EXCLUDE_SBPRO
   if (major == 3)	/* SB Pro */
   {
     sb_mixer_set_stereo(dsp_stereo);
     dsp_speed (dsp_current_speed);/* Speed must be recalculated if #channels
 				   * changes */
   }
+#endif
   return 0;
 }
 

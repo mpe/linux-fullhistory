@@ -20,6 +20,7 @@
 
 
 #include <linux/wait.h>
+#include <linux/socket.h>
 
 
 #define NSOCKETS	128		/* should be dynamic, later...	*/
@@ -75,13 +76,10 @@ struct socket {
   struct socket		*iconn;		/* incomplete client conn.s	*/
   struct socket		*next;
   struct wait_queue	**wait;		/* ptr to place to wait on	*/
-  void			*dummy;
+  struct inode		*inode;
 };
 
-#define SOCK_INODE(S)	((struct inode *)(S)->dummy)
-extern struct socket	sockets[NSOCKETS];
-#define last_socket	(sockets + NSOCKETS - 1)
-
+#define SOCK_INODE(S)	((S)->inode)
 
 struct proto_ops {
   int	family;

@@ -308,10 +308,8 @@ void iput(struct inode * inode)
 					inode->i_ino, inode->i_mode);
 		return;
 	}
-	if (inode->i_pipe) {
-		wake_up(&PIPE_READ_WAIT(*inode));
-		wake_up(&PIPE_WRITE_WAIT(*inode));
-	}
+	if (inode->i_pipe)
+		wake_up(&PIPE_WAIT(*inode));
 repeat:
 	if (inode->i_count>1) {
 		inode->i_count--;
@@ -403,10 +401,11 @@ struct inode * get_pipe_inode(void)
 	}
 	inode->i_op = &pipe_inode_operations;
 	inode->i_count = 2;	/* sum of readers/writers */
-	PIPE_READ_WAIT(*inode) = PIPE_WRITE_WAIT(*inode) = NULL;
-	PIPE_HEAD(*inode) = PIPE_TAIL(*inode) = 0;
+	PIPE_WAIT(*inode) = NULL;
+	PIPE_START(*inode) = PIPE_LEN(*inode) = 0;
 	PIPE_RD_OPENERS(*inode) = PIPE_WR_OPENERS(*inode) = 0;
 	PIPE_READERS(*inode) = PIPE_WRITERS(*inode) = 1;
+	PIPE_LOCK(*inode) = 0;
 	inode->i_pipe = 1;
 	inode->i_mode |= S_IFIFO | S_IRUSR | S_IWUSR;
 	inode->i_uid = current->euid;

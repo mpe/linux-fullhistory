@@ -124,41 +124,41 @@ extern unsigned short int	htons(unsigned short int);
 static __inline__ unsigned long int
 __ntohl(unsigned long int x)
 {
-  register unsigned long int tmp __asm__ ("ax") = x;
-  __asm__ __volatile__ ("xchgb %%al,%%ah\n\t"   /* swap lower bytes	*/
-		"rorl $16,%%eax\n\t"		/* swap words		*/
-		"xchgb %%al,%%ah\n\t"		/* swap higher bytes	*/
-		: "=a" (tmp) : "a" (tmp) );
-  return(tmp);
+	__asm__("xchgb %l0,%h0\n\t"	/* swap lower bytes	*/
+		"rorl $16,%0\n\t"	/* swap words		*/
+		"xchgb %l0,%h0"		/* swap higher bytes	*/
+		:"=q" (x)
+		: "0" (x));
+	return x;
 }
 
 static __inline__ unsigned short int
 __ntohs(unsigned short int x)
 {
-  register unsigned short int tmp __asm__ ("ax") = x;
-  __asm__ __volatile__ ("xchgb %%al,%%ah\n\t"	/* swap bytes		*/
-		: "=a" (tmp) : "a" (tmp));
-  return(tmp);
+	__asm__("xchgb %b0,%h0"		/* swap bytes		*/
+		: "=q" (x)
+		:  "0" (x));
+	return x;
 }
 
 static __inline__ unsigned long int
 __htonl(unsigned long int x)
 {
-  register unsigned long int tmp __asm__ ("ax") = x;
-  __asm__ __volatile__ ("xchgb %%al,%%ah\n\t"	/* swap lower bytes	*/
-		"rorl $16,%%eax\n\t"		/* swap words		*/
-		"xchgb %%al,%%ah\n\t"		/* swap higher bytes	*/
-		: "=a" (tmp) : "a" (tmp));
-  return(tmp);
+	__asm__("xchgb %l0,%h0\n\t"	/* swap lower bytes	*/
+		"rorl $16,%0\n\t"	/* swap words		*/
+		"xchgb %l0,%h0"		/* swap higher bytes	*/
+		:"=q" (x)
+		: "0" (x));
+	return x;
 }
 
 static __inline__ unsigned short int
 __htons(unsigned short int x)
 {
-  register unsigned short int tmp __asm__ ("ax") = x;
-  __asm__ __volatile__ ("xchgb %%al,%%ah\n\t"   /* swap bytes */
-		: "=a" (tmp) : "a" (tmp));
-  return(tmp);
+	__asm__("xchgb %b0,%h0"		/* swap bytes		*/
+		: "=q" (x)
+		:  "0" (x));
+	return x;
 }
 
 #ifdef  __OPTIMIZE__

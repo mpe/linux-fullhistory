@@ -1,29 +1,18 @@
 
-	Linux kernel release 0.99 patchlevel 13
+	Linux kernel release 0.99 patchlevel 14
 
-[ Just to show everybody that I have no personal integrity at all, this
-release is dedicated to Martin Mueller and Sebastian Hetze just because
-they wrote the German Linux Anwenderhandbuch.  The fact that they sent
-me some of the money they made on selling it has nothing at all to do
-with the dedication.  Oh, no.  That would be crass.  ]
-
-These are the release notes for linux version 0.99.13.  Read them
+These are the release notes for linux version 0.99.14.  Read them
 carefully, as they tell you what's new, explain how to install the
 kernel, and what to do if something goes wrong. 
 
-NOTE! There has been some indication that gcc versions older than 2.4.5
-result in bad kernels being built: 2.3.3 will fail even to build the
-kernel, and I have at least one report of trouble with a 2.4.3-built
-kernel that went away when the kernel was recompiled with 2.4.5. 
-
 INSTALLING the kernel:
 
- - if you install by patching, you need a *clean* 0.99.12 source tree,
+ - if you install by patching, you need a *clean* 0.99.13 source tree,
    which presumably exists in /usr/src/linux.  If so, to get the kernel
    patched, just do a
 
 		cd /usr/src
-		patch -p0 < linux-0.99.patch13
+		patch -p0 < linux-0.99.patch14
 
    and you should be ok.  You may want to remove the backup files (xxx~
    or xxx.orig), and make sure that there are no failed patches (xxx# or
@@ -32,7 +21,7 @@ INSTALLING the kernel:
  - If you install the full sources, do a
 
 		cd /usr/src
-		tar xvf linux-0.99.13.tar
+		tar xvf linux-0.99.14.tar
 
    to get it all put in place.
 

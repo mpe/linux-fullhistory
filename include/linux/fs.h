@@ -12,6 +12,7 @@
 #include <linux/types.h>
 #include <linux/dirent.h>
 #include <linux/vfs.h>
+#include <linux/net.h>
 
 /*
  * It's silly to have NR_OPEN bigger than NR_FILE, but I'll fix
@@ -177,6 +178,7 @@ struct inode {
 	struct inode * i_hash_next, * i_hash_prev;
 	struct inode * i_bound_to, * i_bound_by;
 	struct inode * i_mount;
+	struct socket * i_socket;
 	unsigned short i_count;
 	unsigned short i_flags;
 	unsigned char i_lock;

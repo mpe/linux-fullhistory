@@ -12,6 +12,6 @@
 #define MAX_INPUT        255	/* size of the type-ahead buffer */
 #define NAME_MAX         255	/* # chars in a file name */
 #define PATH_MAX        1024	/* # chars in a path name */
-#define PIPE_BUF        4095	/* # bytes in atomic write to a pipe */
+#define PIPE_BUF        4096	/* # bytes in atomic write to a pipe */
 
 #endif
