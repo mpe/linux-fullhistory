@@ -199,23 +199,23 @@ nfsd4_open(struct svc_rqst *rqstp, struct svc_fh *current_fh, struct nfsd4_open 
 		goto out;
 	switch (open->op_claim_type) {
 		case NFS4_OPEN_CLAIM_NULL:
-	/*
-	 * This block of code will (1) set CURRENT_FH to the file being opened,
-	 * creating it if necessary, (2) set open->op_cinfo,
-	 * (3) set open->op_truncate if the file is to be truncated
-	 * after opening, (4) do permission checking.
-	 */
+			/*
+			 * (1) set CURRENT_FH to the file being opened,
+			 * creating it if necessary, (2) set open->op_cinfo,
+			 * (3) set open->op_truncate if the file is to be
+			 * truncated after opening, (4) do permission checking.
+			 */
 			status = do_open_lookup(rqstp, current_fh, open);
 			if (status)
 				goto out;
 			break;
 		case NFS4_OPEN_CLAIM_PREVIOUS:
-	/*
-	* The CURRENT_FH is already set to the file being opened. This
-	* block of code will (1) set open->op_cinfo, (2) set
-	* open->op_truncate if the file is to be truncated after opening,
-	* (3) do permission checking.
-	*/
+			/*
+			 * The CURRENT_FH is already set to the file being
+			 * opened.  (1) set open->op_cinfo, (2) set
+			 * open->op_truncate if the file is to be truncated
+			 * after opening, (3) do permission checking.
+			*/
 			status = do_open_fhandle(rqstp, current_fh, open);
 			if (status)
 				goto out;
