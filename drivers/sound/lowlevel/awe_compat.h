@@ -92,7 +92,7 @@ static void *my_realloc(void *buf, int oldsize, int size)
 	get_user(target, (unsigned char*)&((addr)[offs]))
 #define GET_SHORT_FROM_USER(target,addr,offs) \
 	get_user(target, (unsigned short*)&((addr)[offs]))
-#ifdef AWE_OSS38
+#ifdef AWE_OSS38_AND_IM_A_BANANA
 #define IOCTL_TO_USER(target,offs,source,count) \
 	memcpy(target, (source)+(offs), count)
 #define IO_WRITE_CHECK(cmd)	(_SIOC_DIR(cmd) & _IOC_WRITE)

@@ -504,7 +504,7 @@ W:	http://www.ife.ee.ethz.ch/~sailer/linux/pciaudio.html
 S:	Maintained
 
 PCNET32 NETWORK DRIVER
-P:	Thomas Bogendoerfer
+P:	Thomas Bogendörfer
 M:	tsbogend@alpha.franken.de
 L:	linux-net@vger.rutgers.edu
 S:	Maintained
@@ -561,6 +561,12 @@ SMP: (except SPARC)
 P:	Linus Torvalds
 M:	torvalds@transmeta.com
 L:	linux-smp@vger.rutgers.edu
+S:	Maintained
+
+SONIC NETWORK DRIVER
+P:	Thomas Bogendoerfer
+M:	tsbogend@alpha.franken.de
+L:	linux-net@vger.rutgers.edu
 S:	Maintained
 
 SOUND

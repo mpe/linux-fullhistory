@@ -921,9 +921,10 @@ static int __init timer_irq_works(void)
 static inline void self_IPI(unsigned int irq)
 {
 	irq_desc_t *desc = irq_desc + irq;
+	unsigned int status = desc->status;
 
-	if (desc->events && !desc->ipi) {
-		desc->ipi = 1;
+	if ((status & (IRQ_PENDING | IRQ_REPLAY)) == IRQ_PENDING) {
+		desc->status = status | IRQ_REPLAY;
 		send_IPI(APIC_DEST_SELF, IO_APIC_VECTOR(irq));
 	}
 }
@@ -960,6 +961,7 @@ static void do_edge_ioapic_IRQ(unsigned int irq, int cpu, struct pt_regs * regs)
 {
 	irq_desc_t *desc = irq_desc + irq;
 	struct irqaction * action;
+	unsigned int status;
 
 	spin_lock(&irq_controller_lock);
 
@@ -968,19 +970,19 @@ static void do_edge_ioapic_IRQ(unsigned int irq, int cpu, struct pt_regs * regs)
 	 * and do not need to be masked.
 	 */
 	ack_APIC_irq();
-	desc->ipi = 0;
-	desc->events = 1;
+	status = desc->status & ~IRQ_REPLAY;
+	status |= IRQ_PENDING;
 
 	/*
 	 * If the IRQ is disabled for whatever reason, we cannot
 	 * use the action we have.
 	 */
 	action = NULL;
-	if (!(desc->status & (IRQ_DISABLED | IRQ_INPROGRESS))) {
+	if (!(status & (IRQ_DISABLED | IRQ_INPROGRESS))) {
 		action = desc->action;
-		desc->status = IRQ_INPROGRESS;
-		desc->events = 0;
+		status &= ~IRQ_PENDING;
 	}
+	desc->status = status | IRQ_INPROGRESS;
 	spin_unlock(&irq_controller_lock);
 
 	/*
@@ -996,18 +998,15 @@ static void do_edge_ioapic_IRQ(unsigned int irq, int cpu, struct pt_regs * regs)
 	 * pending events.
 	 */
 	for (;;) {
-		int pending;
-
 		handle_IRQ_event(irq, regs);
 
 		spin_lock(&irq_controller_lock);
-		pending = desc->events;
-		desc->events = 0;
-		if (!pending)
+		if (!(desc->status & IRQ_PENDING))
 			break;
+		desc->status &= ~IRQ_PENDING;
 		spin_unlock(&irq_controller_lock);
 	}
-	desc->status &= IRQ_DISABLED;
+	desc->status &= ~IRQ_INPROGRESS;
 	spin_unlock(&irq_controller_lock);
 
 	irq_exit(cpu, irq);
@@ -1018,6 +1017,7 @@ static void do_level_ioapic_IRQ(unsigned int irq, int cpu,
 {
 	irq_desc_t *desc = irq_desc + irq;
 	struct irqaction * action;
+	unsigned int status;
 
 	spin_lock(&irq_controller_lock);
 	/*
@@ -1029,18 +1029,17 @@ static void do_level_ioapic_IRQ(unsigned int irq, int cpu,
 	 * So this all has to be within the spinlock.
 	 */
 	mask_IO_APIC_irq(irq);
-
-	desc->ipi = 0;
+	status = desc->status & ~IRQ_REPLAY;
 
 	/*
 	 * If the IRQ is disabled for whatever reason, we must
 	 * not enter the IRQ action.
 	 */
 	action = NULL;
-	if (!(desc->status & (IRQ_DISABLED | IRQ_INPROGRESS))) {
+	if (!(status & (IRQ_DISABLED | IRQ_INPROGRESS))) {
 		action = desc->action;
-		desc->status = IRQ_INPROGRESS;
 	}
+	desc->status = status | IRQ_INPROGRESS;
 
 	ack_APIC_irq();
 	spin_unlock(&irq_controller_lock);
@@ -1055,7 +1054,7 @@ static void do_level_ioapic_IRQ(unsigned int irq, int cpu,
 
 	spin_lock(&irq_controller_lock);
 	desc->status &= ~IRQ_INPROGRESS;
-	if (!desc->status)
+	if (!(desc->status & IRQ_DISABLED))
 		unmask_IO_APIC_irq(irq);
 	spin_unlock(&irq_controller_lock);
 

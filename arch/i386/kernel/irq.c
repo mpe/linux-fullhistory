@@ -105,8 +105,8 @@ static struct hw_interrupt_type i8259A_irq_type = {
 };
 
 irq_desc_t irq_desc[NR_IRQS] = {
-	[0 ... 15] = { 0, 0, 0, &i8259A_irq_type, },	/* default to standard ISA IRQs */
-	[16 ... 63] = { 0, 0, 0, &no_irq_type, },	/* 'high' PCI IRQs filled in on demand */
+	[0 ... 15] = { 0, &i8259A_irq_type, },	/* default to standard ISA IRQs */
+	[16 ... 63] = { 0, &no_irq_type, },	/* 'high' PCI IRQs filled in on demand */
 };
 
 int irq_vector[NR_IRQS] = { IRQ0_TRAP_VECTOR , 0 };
@@ -663,7 +663,8 @@ static void do_8259A_IRQ(unsigned int irq, int cpu, struct pt_regs * regs)
 
 	if (handle_IRQ_event(irq, regs)) {
 		spin_lock(&irq_controller_lock);
-		if (!(irq_desc[irq].status &= IRQ_DISABLED))
+		irq_desc[irq].status &= ~IRQ_INPROGRESS;
+		if (!(irq_desc[irq].status & IRQ_DISABLED))
 			enable_8259A_irq(irq);
 		spin_unlock(&irq_controller_lock);
 	}
@@ -683,10 +684,6 @@ void disable_irq(unsigned int irq)
 	unsigned long flags;
 
 	spin_lock_irqsave(&irq_controller_lock, flags);
-	/*
-	 * At this point we may actually have a pending interrupt being active
-	 * on another CPU. So don't touch the IRQ_INPROGRESS bit..
-	 */
 	irq_desc[irq].status |= IRQ_DISABLED;
 	irq_desc[irq].handler->disable(irq);
 	spin_unlock_irqrestore(&irq_controller_lock, flags);
@@ -793,6 +790,7 @@ int setup_x86_irq(unsigned int irq, struct irqaction * new)
 	*p = new;
 
 	if (!shared) {
+		irq_desc[irq].status = 0;
 #ifdef __SMP__
 		if (IO_APIC_IRQ(irq)) {
 			/*
@@ -803,11 +801,10 @@ int setup_x86_irq(unsigned int irq, struct irqaction * new)
 			if (irq < 16) {
 				disable_8259A_irq(irq);
 				if (i8259A_irq_pending(irq))
-					irq_desc[irq].events = 1;
+					irq_desc[irq].status = IRQ_PENDING;
 			}
 		}
 #endif
-		irq_desc[irq].status = 0;
 		irq_desc[irq].handler->enable(irq);
 	}
 	spin_unlock_irqrestore(&irq_controller_lock,flags);
@@ -863,8 +860,10 @@ void free_irq(unsigned int irq, void *dev_id)
 		/* Found it - now free it */
 		*p = action->next;
 		kfree(action);
-		if (!irq_desc[irq].action)
+		if (!irq_desc[irq].action) {
+			irq_desc[irq].status |= IRQ_DISABLED;
 			irq_desc[irq].handler->disable(irq);
+		}
 		goto out;
 	}
 	printk("Trying to free free IRQ%d\n",irq);
@@ -891,7 +890,7 @@ unsigned long probe_irq_on (void)
 	spin_lock_irq(&irq_controller_lock);
 	for (i = NR_IRQS-1; i > 0; i--) {
 		if (!irq_desc[i].action) {
-			irq_desc[i].status = 0;
+			irq_desc[i].status &= ~IRQ_INPROGRESS;
 			irq_desc[i].handler->enable(i);
 			irqs |= (1 << i);
 		}
@@ -948,10 +947,9 @@ __initfunc(void init_IRQ(void))
 	outb_p(LATCH & 0xff , 0x40);	/* LSB */
 	outb(LATCH >> 8 , 0x40);	/* MSB */
 
-	for (i=0; i<NR_IRQS; i++) {
-		irq_desc[i].events = 0;
-		irq_desc[i].status = 0;
-	}
+	for (i=0; i<NR_IRQS; i++)
+		irq_desc[i].status = IRQ_DISABLED;
+
 	/*
 	 * 16 old-style INTA-cycle interrupt gates:
 	 */

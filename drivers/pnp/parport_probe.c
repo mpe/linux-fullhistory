@@ -6,9 +6,6 @@
  */
 
 #include <linux/tasks.h>
-#include <asm/io.h>
-#include <asm/dma.h>
-
 #include <linux/parport.h>
 #include <linux/delay.h>
 #include <linux/errno.h>
@@ -21,7 +18,10 @@
 
 #include <linux/lp.h>
 
+#include <asm/io.h>
+#include <asm/dma.h>
 #include <asm/uaccess.h>
+
 #undef DEBUG_PROBE
 
 static inline int read_nibble(struct parport *port) 

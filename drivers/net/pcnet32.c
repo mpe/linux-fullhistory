@@ -13,7 +13,7 @@
  * 	This driver is for PCnet32 and PCnetPCI based ethercards
  */
 
-static const char *version = "pcnet32.c:v1.00 30.5.98 tsbogend@alpha.franken.de\n";
+static const char *version = "pcnet32.c:v1.01 29.8.98 tsbogend@alpha.franken.de\n";
 
 #include <linux/config.h>
 #include <linux/module.h>
@@ -98,6 +98,9 @@ static const int rx_copybreak = 200;
  *         back port to 2.0.x
  * v1.00:  added some stuff from Donald Becker's 2.0.34 version
  *         added support for byte counters in net_dev_stats
+ * v1.01:  do ring dumps, only when debugging the driver
+ *         increased the transmit timeout
+ *         
  */
 
 
@@ -573,15 +576,14 @@ pcnet32_start_xmit(struct sk_buff *skb, struct device *dev)
 	/* Transmitter timeout, serious problems. */
 	if (dev->tbusy) {
 		int tickssofar = jiffies - dev->trans_start;
-		if (tickssofar < 20)
+		if (tickssofar < HZ/2)
 			return 1;
 		outw(0, ioaddr+PCNET32_ADDR);
 		printk("%s: transmit timed out, status %4.4x, resetting.\n",
 			   dev->name, inw(ioaddr+PCNET32_DATA));
 		outw(0x0004, ioaddr+PCNET32_DATA);
 		lp->stats.tx_errors++;
-#ifndef final_version
-		{
+		if (pcnet32_debug > 2) {
 			int i;
 			printk(" Ring data dump: dirty_tx %d cur_tx %d%s cur_rx %d.",
 				   lp->dirty_tx, lp->cur_tx, lp->tx_full ? " (full)" : "",
@@ -596,7 +598,6 @@ pcnet32_start_xmit(struct sk_buff *skb, struct device *dev)
 					   lp->tx_ring[i].misc, (unsigned)lp->tx_ring[i].status);
 			printk("\n");
 		}
-#endif
 		pcnet32_restart(dev, 0x0042);
 
 		dev->tbusy = 0;

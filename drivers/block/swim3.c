@@ -969,7 +969,7 @@ static struct file_operations floppy_fops = {
 	NULL,			/* mmap */
 	floppy_open,		/* open */
 	NULL,			/* flush */
-	floppy_release,		/* release *
+	floppy_release,		/* release */
 	block_fsync,		/* fsync */
 	NULL,			/* fasync */
 	floppy_check_change,	/* check_media_change */

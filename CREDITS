@@ -212,12 +212,14 @@ S: Nexus Electronics Ltd
 S: 10 St Barnabas Road, Cambridge CB1 2BY
 S: United Kingdom
 
-N: Thomas Bogendoerfer
+N: Thomas Bogendörfer
 E: tsbogend@alpha.franken.de
-D: PCnet32 driver
+D: PCnet32 driver, SONIC driver, JAZZ_ESP driver
+D: newport abscon driver, g364 framebuffer driver
 D: strace for Linux/Alpha
-S: Baumgartenweg 5
-S: 91452 Wilhermsdorf
+D: Linux/MIPS hacker
+S: Schafhofstr. 40
+S: 90556 Cadolzburg
 S: Germany
 
 N: Bill Bogstad
@@ -1445,14 +1447,11 @@ S: USA
 
 N: Eric S. Raymond
 E: esr@thyrsus.com
-W: http://www.ccil.org/~esr/home.html
-D: ncurses library co-maintainer
+W: http://www.tuxedo.org/~esr/
 D: terminfo master file maintainer
-D: Distributions HOWTO editor
-D: Instigator, FHS standard
-D: Keeper of the Jargon File and curator of the Retrocomputing Museum
-D: Author, Emacs VC and GUD modes
-S: 22 South Warren Avenue
+D: Editor: Installation HOWTO, Distributions HOWTO, XFree86 HOWTO
+D: Author: fetchmail, Emacs VC mode, Emacs GUD mode
+S: 6 Karen Drive
 S: Malvern, Pennsylvania 19355
 S: USA
 

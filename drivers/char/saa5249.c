@@ -172,6 +172,9 @@ static int saa5249_attach(struct i2c_device *device)
 		kfree(vd);
 		return -ENOMEM;
 	}
+	
+	memset(t, 0, sizeof(*t));
+	
 	for (pgbuf = 0; pgbuf < NUM_DAUS; pgbuf++) 
 	{
 		memset(t->vdau[pgbuf].pgbuf, ' ', sizeof(t->vdau[0].pgbuf));
@@ -680,6 +683,7 @@ static struct video_device saa_template=
 	saa5249_release,
 	saa5249_read,
 	saa5249_write,
+	NULL,	/* poll */
 	saa5249_ioctl,
 	NULL,
 	NULL,

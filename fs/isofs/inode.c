@@ -295,7 +295,7 @@ static int parse_options(char *options, struct iso9660_options * popt)
 {
 	char *this_char,*value;
 
-	popt->map = 'a';
+	popt->map = 'n';
 	popt->rock = 'y';
 	popt->joliet = 'y';
 	popt->cruft = 'n';

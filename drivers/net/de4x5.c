@@ -399,11 +399,21 @@
 			   from report & fix by <paubert@iram.es>.
 			  Fix probe bug with EISA & PCI cards present from
                            report by <eirik@netcom.com>.
+      0.541  24-Aug-98    Fix compiler problems associated with i386-string
+                           ops from multiple bug reports and temporary fix
+			   from <paubert@iram.es>.
+			  Fix pci_probe() to correctly emulate the old
+			   pcibios_find_class() function.
+			  Add an_exception() for old ZYNX346 and fix compile
+			   warning on PPC & SPARC, from <ecd@skynet.be>.
+			  Fix lastPCI to correctly work with compiled in
+			   kernels and modules from bug report by 
+			   <Zlatko.Calusic@CARNet.hr> et al.
 
     =========================================================================
 */
 
-static const char *version = "de4x5.c:V0.540 1998/7/5 davies@maniac.ultranet.com\n";
+static const char *version = "de4x5.c:V0.541 1998/8/24 davies@maniac.ultranet.com\n";
 
 #include <linux/config.h>
 #include <linux/module.h>
@@ -954,6 +964,7 @@ static void    SetMulticastFilter(struct device *dev);
 static int     get_hw_addr(struct device *dev);
 static void    srom_repair(struct device *dev, int card);
 static int     test_bad_enet(struct device *dev, int status);
+static int     an_exception(struct bus_type *lp);
 #if !defined(__sparc_v9__) && !defined(__powerpc__)
 static void    eisa_probe(struct device *dev, u_long iobase);
 #endif
@@ -1013,6 +1024,7 @@ static int num_de4x5s = 0;
 static int cfrv = 0, useSROM = 0;
 static int lastPCI = -1;
 static struct device *lastModule = NULL;
+static struct pci_dev *pdev = NULL;
 
 /*
 ** List the SROM infoleaf functions and chipsets
@@ -2103,7 +2115,6 @@ pci_probe(struct device *dev, u_long ioaddr))
     u_int irq = 0, device, class = DE4X5_CLASS_CODE;
     u_long iobase = 0;                     /* Clear upper 32 bits in Alphas */
     struct bus_type *lp = &bus;
-    struct pci_dev *pdev = NULL;
 
     if (lastPCI == NO_MORE_PCI) return;
 
@@ -2123,7 +2134,7 @@ pci_probe(struct device *dev, u_long ioaddr))
 	dnum = 0;
     }
 
-    for (index=lastPCI+1; (pdev=pci_find_class(class, pdev))!=NULL; index++) {
+    for (index=lastPCI+1;(pdev = pci_find_class(class, pdev))!=NULL;index++) {
 	dev_num = PCI_SLOT(pdev->devfn);
 	pb = pdev->bus->number;
 	if ((pbus || dnum) && ((pbus != pb) || (dnum != dev_num))) continue;
@@ -2185,10 +2196,8 @@ pci_probe(struct device *dev, u_long ioaddr))
 	    dev->irq = irq;
 	    if ((status = de4x5_hw_init(dev, iobase)) == 0) {
 		num_de4x5s++;
-		if (loading_module) {
-		    link_modules(lastModule, dev);
-		    lastPCI = index;
-		}
+		lastPCI = index;
+		if (loading_module) link_modules(lastModule, dev);
 		return;
 	    }
 	} else if (ioaddr != 0) {
@@ -2209,27 +2218,26 @@ pci_probe(struct device *dev, u_long ioaddr))
 ** For single port cards this is a time waster...
 */
 __initfunc(static void
-srom_search(struct pci_dev *pdev))
+srom_search(struct pci_dev *dev))
 {
     u_char pb;
     u_short vendor, status;
-    u_int irq = 0, device, class = DE4X5_CLASS_CODE;
+    u_int irq = 0, device;
     u_long iobase = 0;                     /* Clear upper 32 bits in Alphas */
     int i, j;
     struct bus_type *lp = &bus;
 
-    while ((pdev = pci_find_class(class, pdev))!= NULL) {
-	if (lp->bus_num != pdev->bus->number) return;
-	pb = pdev->bus->number;
-	vendor = pdev->vendor;
-	device = pdev->device << 8;
+    for (; (dev=dev->sibling)!= NULL;) {
+	pb = dev->bus->number;
+	vendor = dev->vendor;
+	device = dev->device << 8;
 	if (!(is_DC21040 || is_DC21041 || is_DC21140 || is_DC2114x)) continue;
 
 	/* Get the chip configuration revision register */
-	pcibios_read_config_dword(pb, pdev->devfn, PCI_REVISION_ID, &cfrv);
+	pcibios_read_config_dword(pb, dev->devfn, PCI_REVISION_ID, &cfrv);
 
 	/* Set the device number information */
-	lp->device = PCI_SLOT(pdev->devfn);
+	lp->device = PCI_SLOT(dev->devfn);
 	lp->bus_num = pb;
 	    
 	/* Set the chipset information */
@@ -2237,14 +2245,14 @@ srom_search(struct pci_dev *pdev))
 	lp->chipset = device;
 
 	/* Get the board I/O address (64 bits on sparc64) */
-	iobase = pdev->base_address[0] & CBIO_MASK;
+	iobase = dev->base_address[0] & CBIO_MASK;
 
 	/* Fetch the IRQ to be used */
-	irq = pdev->irq;
+	irq = dev->irq;
 	if ((irq == 0) || (irq == 0xff) || ((int)irq == -1)) continue;
 	    
 	/* Check if I/O accesses are enabled */
-	pcibios_read_config_word(pb, pdev->devfn, PCI_COMMAND, &status);
+	pcibios_read_config_word(pb, dev->devfn, PCI_COMMAND, &status);
 	if (!(status & PCI_COMMAND_IO)) continue;
 
 	/* Search for a valid SROM attached to this DECchip */
@@ -4204,7 +4212,9 @@ test_bad_enet(struct device *dev, int status)
 		if (dev->dev_addr[i] != 0) break;
 	    }
 	    for (i=0; i<ETH_ALEN; i++) last.addr[i] = dev->dev_addr[i];
-	    dev->irq = last.irq;
+	    if (!an_exception(lp)) {
+		dev->irq = last.irq;
+	    }
 
 	    status = 0;
 	}
@@ -4216,6 +4226,20 @@ test_bad_enet(struct device *dev, int status)
     }
 
     return status;
+}
+
+/*
+** List of board exceptions with correctly wired IRQs
+*/
+static int
+an_exception(struct bus_type *lp)
+{
+    if ((*(u_short *)lp->srom.sub_vendor_id == 0x00c0) && 
+	(*(u_short *)lp->srom.sub_system_id == 0x95e0)) {
+	return -1;
+    }
+
+    return 0;
 }
 
 /*
@@ -5788,14 +5812,12 @@ static int
 count_adapters(void)
 {
     int i, j=0;
-    char name[DE4X5_STRLEN];
-    u_char pb, dev_fn;
     u_short vendor;
     u_int class = DE4X5_CLASS_CODE;
     u_int device;
-    struct pci_dev *pdev;
 
 #if !defined(__sparc_v9__) && !defined(__powerpc__)
+    char name[DE4X5_STRLEN];
     u_long iobase = 0x1000;
 
     for (i=1; i<MAX_EISA_SLOTS; i++, iobase+=EISA_SLOT_INC) {
@@ -5804,13 +5826,7 @@ count_adapters(void)
 #endif
     if (!pcibios_present()) return j;
 
-    for (i=0; 
-	 (pcibios_find_class(class, i, &pb, &dev_fn)!= PCIBIOS_DEVICE_NOT_FOUND);
-	 i++) {
-	for (pdev = pci_devices; pdev; pdev = pdev->next) {
-	    if ((pdev->bus->number==pb) && (pdev->devfn==dev_fn)) break;
-	}
-
+    for (i=0; (pdev=pci_find_class(class, pdev))!= NULL; i++) {
 	vendor = pdev->vendor;
 	device = pdev->device << 8;
 	if (is_DC21040 || is_DC21041 || is_DC21140 || is_DC2114x) j++;

@@ -61,13 +61,20 @@ static int requests_out;
 static int nbd_open(struct inode *inode, struct file *file)
 {
 	int dev;
+	struct nbd_device *nbdev;
 
 	if (!inode)
 		return -EINVAL;
 	dev = MINOR(inode->i_rdev);
 	if (dev >= MAX_NBD)
 		return -ENODEV;
+
+	nbdev = &nbd_dev[dev];
 	nbd_dev[dev].refcnt++;
+	if (!(nbdev->flags & NBD_INITIALISED)) {
+		nbdev->queue_lock = MUTEX;
+		nbdev->flags |= NBD_INITIALISED;
+	}
 	MOD_INC_USE_COUNT;
 	return 0;
 }
@@ -82,6 +89,7 @@ static int nbd_xmit(int send, struct socket *sock, char *buf, int size)
 	struct msghdr msg;
 	struct iovec iov;
 	unsigned long flags;
+	sigset_t oldset;
 
 	oldfs = get_fs();
 	set_fs(get_ds());
@@ -94,8 +102,6 @@ static int nbd_xmit(int send, struct socket *sock, char *buf, int size)
 
 
 	do {
-		sigset_t oldset;
-
 		iov.iov_base = buf;
 		iov.iov_len = size;
 		msg.msg_name = NULL;
@@ -209,16 +215,18 @@ void nbd_do_it(struct nbd_device *lo)
 		req = nbd_read_stat(lo);
 		if (!req)
 			return;
+		down (&lo->queue_lock);
 #ifdef PARANOIA
 		if (req != lo->tail) {
 			printk(KERN_ALERT "NBD: I have problem...\n");
 		}
 		if (lo != &nbd_dev[MINOR(req->rq_dev)]) {
 			printk(KERN_ALERT "NBD: request corrupted!\n");
-			continue;
+			goto next;
 		}
 		if (lo->magic != LO_MAGIC) {
 			printk(KERN_ALERT "NBD: nbd_dev[] corrupted: Not enough magic\n");
+			up (&lo->queue_lock);
 			return;
 		}
 #endif
@@ -231,6 +239,8 @@ void nbd_do_it(struct nbd_device *lo)
 			lo->head = NULL;
 		}
 		lo->tail = lo->tail->next;
+	next:
+		up (&lo->queue_lock);
 	}
 }
 
@@ -291,7 +301,7 @@ static void do_nbd_request(void)
 		lo = &nbd_dev[dev];
 		if (!lo->file)
 			FAIL("Request when not-ready.");
-		if ((req->cmd == WRITE) && (lo->flags && NBD_READ_ONLY))
+		if ((req->cmd == WRITE) && (lo->flags & NBD_READ_ONLY))
 			FAIL("Write on read-only");
 #ifdef PARANOIA
 		if (lo->magic != LO_MAGIC)
@@ -301,6 +311,9 @@ static void do_nbd_request(void)
 		req->errors = 0;
 		CURRENT = CURRENT->next;
 		req->next = NULL;
+
+		spin_unlock_irq(&io_request_lock);
+		down (&lo->queue_lock);
 		if (lo->head == NULL) {
 			lo->head = req;
 			lo->tail = req;
@@ -309,8 +322,8 @@ static void do_nbd_request(void)
 			lo->head = req;
 		}
 
-		spin_unlock_irq(&io_request_lock);
 		nbd_send_req(lo->sock, req);	/* Why does this block?         */
+		up (&lo->queue_lock);
 		spin_lock_irq(&io_request_lock);
 		continue;
 

@@ -1657,7 +1657,7 @@ void ide_unregister (unsigned int index)
 	ide_drive_t *drive, *d;
 	ide_hwif_t *hwif, *g;
 	ide_hwgroup_t *hwgroup;
-	int irq_count = 0, unit;
+	int irq_count = 0, unit, i;
 	unsigned long flags;
 
 	if (index >= MAX_HWIFS)
@@ -1704,8 +1704,8 @@ void ide_unregister (unsigned int index)
 	 * the hwgroup if we were the only member
 	 */
 	d = hwgroup->drive;
-	for (index = 0; index < MAX_DRIVES; ++index) {
-		drive = &hwif->drives[index];
+	for (i = 0; i < MAX_DRIVES; ++i) {
+		drive = &hwif->drives[i];
 		if (!drive->present)
 			continue;
 		while (hwgroup->drive->next != drive)

@@ -85,7 +85,7 @@ static unsigned int remap[BTTV_MAX];    /* remap Bt848 */
 static unsigned int radio[BTTV_MAX];
 static unsigned int card[BTTV_MAX] = { 0, 0, 
                                        0, 0 };
-static unsigned int pll[BTTV_MAX] = { 0, 0, 0, 0 };
+static unsigned int pll[BTTV_MAX] = { 0, 0, 0, 0 };          
 
 static int bttv_num;			/* number of Bt848s in use */
 static struct bttv bttvs[BTTV_MAX];
@@ -545,30 +545,25 @@ static int set_pll(struct bttv *btv)
         int i;
         unsigned long tv;
 
-        if (!btv->pll)
+        if (!btv->pll.pll_crystal)
 		return 0;
-        if ((btread(BT848_IFORM)&BT848_IFORM_XT0))
+        if ((btread(BT848_IFORM)&btv->pll.pll_crystal))
         {
                 /* printk ("switching PLL off\n");*/
                 btwrite(0x00,BT848_TGCTRL);
                 btwrite(0x00,BT848_PLL_XCI);
-                btv->pll&=~2;
+                btv->pll.pll_crystal&=~2;
                 return 0;
         }
         
         /* do not set pll again if already active */
-        if (btv->pll&2)
+        if (btv->pll.pll_crystal&2)
                 return 1;
         
         /* printk ("setting PLL for PAL/SECAM\n");*/
 
-	set_pll_freq(btv, 28636363, 35468950);
-/*	
-        btwrite(0x00,BT848_TGCTRL);
-        btwrite(0xf9,BT848_PLL_F_LO);
-        btwrite(0xdc,BT848_PLL_F_HI);
-        btwrite(14|BT848_PLL_X,BT848_PLL_XCI);
-*/
+	set_pll_freq(btv, btv->pll.pll_ifreq, btv->pll.pll_ofreq);
+
 	/*
 	 *	Let other people run while the PLL stabilizes
 	 */
@@ -587,7 +582,7 @@ static int set_pll(struct bttv *btv)
                 else
                 {
                         btwrite(0x08,BT848_TGCTRL);
-                        btv->pll|=2;
+                        btv->pll.pll_crystal|=2;
                         return 1;            
                 }
                 udelay(10000);
@@ -1179,7 +1174,7 @@ static void set_freq(struct bttv *btv, unsigned short freq)
 	audio(btv, AUDIO_MUTE);
 	udelay(AUDIO_MUTE_DELAY);
 
-	if (radio[btv->nr]) 
+	if (btv->radio) 
 	{
 		if (btv->have_tuner)
 			i2c_control_device(&(btv->i2c), I2C_DRIVERID_TUNER,
@@ -1831,12 +1826,22 @@ static int bttv_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 				return -EFAULT;
 			break;
 
-		case BTTV_FIELDNR:
+                case BTTV_FIELDNR: 
 			if(copy_to_user((void *) arg, (void *) &btv->last_field, 
                                         sizeof(btv->last_field)))
 				return -EFAULT;
                         break;
+      
+                case BTTV_PLLSET: {
+                        struct bttv_pll_info p;
+                        if(copy_from_user(&p , (void *) arg, sizeof(btv->pll)))
+				return -EFAULT;
+                        btv->pll.pll_ifreq = p.pll_ifreq;
+                        btv->pll.pll_ofreq = p.pll_ofreq;
+                        btv->pll.pll_crystal = p.pll_crystal;
 
+			break;
+                }						
 	        case VIDIOCMCAPTURE:
 		{
                         struct video_mmap vm;
@@ -2902,12 +2907,16 @@ int configure_bt848(struct pci_dev *dev, int bttv_num)
         printk("irq: %d, ",btv->irq);
         printk("memory: 0x%08x.\n", btv->bt848_adr);
         
-        btv->pll=0;
+        btv->pll.pll_ifreq=0;
+        btv->pll.pll_ifreq=0;
+        btv->pll.pll_crystal=0;
         if(pll[btv->nr])
                 if (!(btv->id==848 && btv->revision==0x11))
                 {
                         printk(KERN_INFO "bttv%d: internal PLL, single crystal operation enabled\n",bttv_num);
-                        btv->pll=1;
+                        btv->pll.pll_ofreq=28636363;
+                        btv->pll.pll_ifreq=35468950;
+                        btv->pll.pll_crystal=BT848_IFORM_XT1;
                 }
         
         btv->bt848_mem=ioremap(btv->bt848_adr, 0x1000);
@@ -3088,3 +3097,4 @@ void cleanup_module(void)
  * tab-width: 8
  * End:
  */
+ 

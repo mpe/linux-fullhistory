@@ -159,6 +159,7 @@ static const struct file_operations hpfs_file_ops =
 	NULL,				/* ioctl - default */
 	generic_file_mmap,		/* mmap */
 	NULL,				/* no special open is needed */
+	NULL,				/* flush */
 	NULL,				/* release */
 	file_fsync,			/* fsync */
 };
@@ -203,6 +204,7 @@ static const struct file_operations hpfs_dir_ops =
 	NULL,				/* ioctl - default */
 	NULL,				/* mmap */
 	NULL,				/* no special open code */
+	NULL,				/* flush */
 	NULL,				/* no special release code */
 	file_fsync,			/* fsync */
 };

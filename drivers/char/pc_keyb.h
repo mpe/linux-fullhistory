@@ -15,7 +15,7 @@
 #define KBD_REPORT_TIMEOUTS		/* Report keyboard timeouts */
 #undef KBD_IS_FOCUS_9000		/* We have the brain-damaged FOCUS-9000 keyboard */
 
-#define KBD_INIT_TIMEOUT HZ		/* Timeout in jiffies for initializing the keyboard */
+#define KBD_INIT_TIMEOUT 1000		/* Timeout in ms for initializing the keyboard */
 #define KBC_TIMEOUT 250			/* Timeout in ms for sending to keyboard controller */
 #define KBD_TIMEOUT 1000		/* Timeout in ms for keyboard command acknowledge */
 

@@ -16,12 +16,12 @@ struct hw_interrupt_type {
 
 
 /*
- * Status: reason for being disabled: somebody has
- * done a "disable_irq()" or we must not re-enter the
- * already executing irq..
+ * IRQ line status.
  */
-#define IRQ_INPROGRESS	1
-#define IRQ_DISABLED	2
+#define IRQ_INPROGRESS	1	/* IRQ handler active - do not enter! */
+#define IRQ_DISABLED	2	/* IRQ disabled - do not enter! */
+#define IRQ_PENDING	4	/* IRQ pending - replay on enable */
+#define IRQ_REPLAY	8	/* IRQ has been replayed but not acked yet */
 
 /*
  * This is the "IRQ descriptor", which contains various information
@@ -32,8 +32,6 @@ struct hw_interrupt_type {
  */
 typedef struct {
 	unsigned int status;			/* IRQ status - IRQ_INPROGRESS, IRQ_DISABLED */
-	unsigned int events;			/* Do we have any pending events? */
-	unsigned int ipi;			/* Have we sent off the pending IPI? */
 	struct hw_interrupt_type *handler;	/* handle/enable/disable functions */
 	struct irqaction *action;		/* IRQ action list */
 	unsigned int unused[3];

@@ -255,20 +255,6 @@ static void pms_brightness(short brightness)
 	}
 }
 
-static void pms_hstart(short start)
-{
-	switch(decoder)
-	{
-		case PHILIPS1:
-			i2c_write(0x8A, 0x05, start);
-			i2c_write(0x8A, 0x18, start);
-			break;
-		case PHILIPS2:
-			i2c_write(0x42, 0x05, start);
-			i2c_write(0x42, 0x18, start);
-			break;
-	}
-}
 
 static void pms_format(short format)
 {
@@ -299,6 +285,29 @@ static void pms_format(short format)
 		case 3:	/* SECAM */
 			i2c_andor(target, 0x0D, 0xFE, 0x01);
 			i2c_andor(target, 0x0F, 0x3F, 0x00);
+			break;
+	}
+}
+
+#ifdef FOR_FUTURE_EXPANSION
+
+/*
+ *	These features of the PMS card are not currently exposes. They
+ *	could become a private v4l ioctl for PMSCONFIG or somesuch if 
+ *	people need it. We also don't yet use the PMS interrupt.
+ */
+
+static void pms_hstart(short start)
+{
+	switch(decoder)
+	{
+		case PHILIPS1:
+			i2c_write(0x8A, 0x05, start);
+			i2c_write(0x8A, 0x18, start);
+			break;
+		case PHILIPS2:
+			i2c_write(0x42, 0x05, start);
+			i2c_write(0x42, 0x18, start);
 			break;
 	}
 }
@@ -345,14 +354,6 @@ static void pms_vertnoise(short noise)
 		i2c_andor(0x8A, 0x10, 0xFC, noise&3);
 	else if(decoder==PHILIPS1)
 		i2c_andor(0x42, 0x10, 0xFC, noise&3);
-}
-
-static void pms_secamcross(short cross)
-{
-	if(decoder==PHILIPS2)
-		i2c_andor(0x8A, 0x0F, 0xDF, (cross&1)<<5);
-	else if(decoder==PHILIPS1)
-		i2c_andor(0x42, 0x0F, 0xDF, (cross&1)<<5);
 }
 
 static void pms_forcecolour(short colour)
@@ -409,20 +410,6 @@ static void pms_killcolour(short colour)
 	}
 }
 
-static void pms_swsense(short sense)
-{
-	if(decoder==PHILIPS2)
-	{
-		i2c_write(0x8A, 0x0A, sense);
-		i2c_write(0x8A, 0x0B, sense);
-	}
-	else if(decoder==PHILIPS1)
-	{
-		i2c_write(0x42, 0x0A, sense);
-		i2c_write(0x42, 0x0B, sense);
-	}
-}
-
 static void pms_chromagain(short chroma)
 {
 	if(decoder==PHILIPS2)
@@ -445,6 +432,38 @@ static void pms_spacialcomph(short data)
 {
 	mvv_write(0x3A, data);
 }
+
+static void pms_vstart(short start)
+{
+	mvv_write(0x16, start);
+	mvv_write(0x17, (start>>8)&0x01);
+}
+
+#endif
+
+static void pms_secamcross(short cross)
+{
+	if(decoder==PHILIPS2)
+		i2c_andor(0x8A, 0x0F, 0xDF, (cross&1)<<5);
+	else if(decoder==PHILIPS1)
+		i2c_andor(0x42, 0x0F, 0xDF, (cross&1)<<5);
+}
+
+
+static void pms_swsense(short sense)
+{
+	if(decoder==PHILIPS2)
+	{
+		i2c_write(0x8A, 0x0A, sense);
+		i2c_write(0x8A, 0x0B, sense);
+	}
+	else if(decoder==PHILIPS1)
+	{
+		i2c_write(0x42, 0x0A, sense);
+		i2c_write(0x42, 0x0B, sense);
+	}
+}
+
 
 static void pms_framerate(short frr)
 {
@@ -586,11 +605,6 @@ static void pms_resolution(short width, short height)
 	mvv_write(0x33, MVVMEMORYWIDTH);
 }
 
-static void pms_vstart(short start)
-{
-	mvv_write(0x16, start);
-	mvv_write(0x17, (start>>8)&0x01);
-}
 
 /*
  *	Set Input

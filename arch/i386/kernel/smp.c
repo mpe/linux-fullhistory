@@ -371,7 +371,7 @@ __initfunc(static int smp_read_mpc(struct mp_config_table *mpc))
 					/*
 					 * we use the first one only currently
 					 */
-					if (!ioapics)
+					if (ioapics == 1)
 						mp_ioapic_addr = m->mpc_apicaddr;
 				}
 				mpt+=sizeof(*m);

@@ -38,8 +38,12 @@ static int pmac_ide_dmaproc(ide_dma_action_t func, ide_drive_t *drive);
 static int pmac_ide_build_dmatable(ide_drive_t *drive, int wr);
 #endif /* CONFIG_BLK_DEV_IDEDMA_PMAC */
 
-__initfunc(void
-pmac_ide_init_hwif_ports(ide_ioreg_t *p, ide_ioreg_t base, int *irq))
+/*
+ * N.B. this can't be an initfunc, because the media-bay task can
+ * call ide_[un]register at any time.
+ */
+void
+pmac_ide_init_hwif_ports(ide_ioreg_t *p, ide_ioreg_t base, int *irq)
 {
 	int i;
 

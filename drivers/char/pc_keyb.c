@@ -62,34 +62,41 @@ unsigned char pckbd_sysrq_xlate[128] =
 
 __initfunc(static int kbd_wait_for_input(void))
 {
-	int     status, data;
-	unsigned long start = jiffies;
+	long timeout = KBD_INIT_TIMEOUT;
+	int retval = -1;
 
-	do {
-                status = inb(KBD_STATUS_REG);
+	goto in_loop;
+	for (;;) {
+		unsigned char status, data;
+		if (--timeout < 0)
+			break;
+		mdelay(1);
+in_loop:
+		status = inb(KBD_STATUS_REG);
 
-                /*
-                 * Wait for input data to become available.  This bit will
-                 * then be cleared by the following read of the DATA
-                 * register.
-                 */
-                if (!(status & KBD_STAT_OBF))
+		/*
+		 * Wait for input data to become available.  This bit will
+		 * then be cleared by the following read of the DATA
+		 * register.
+		 */
+		if (!(status & KBD_STAT_OBF))
 			continue;
 
 		data = inb(KBD_DATA_REG);
 
-                /*
-                 * Check to see if a timeout error has occurred.  This means
-                 * that transmission was started but did not complete in the
-                 * normal time cycle.  PERR is set when a parity error occurred
-                 * in the last transmission.
-                 */
-                if (status & (KBD_STAT_GTO | KBD_STAT_PERR)) {
+		/*
+		 * Check to see if a timeout error has occurred.  This means
+		 * that transmission was started but did not complete in the
+		 * normal time cycle.  PERR is set when a parity error occurred
+		 * in the last transmission.
+		 */
+		if (status & (KBD_STAT_GTO | KBD_STAT_PERR))
 			continue;
-                }
-		return (data & 0xff);
-        } while (jiffies - start < KBD_INIT_TIMEOUT);
-        return -1;	/* timed-out if fell through to here... */
+
+		retval = data;
+		break;
+	}
+	return retval;
 }
 
 __initfunc(static void kbd_write(int address, int data))
@@ -144,14 +151,14 @@ __initfunc(static char *initialize_kbd2(void))
 	 * Set up to try again if the keyboard asks for RESEND.
 	 */
 
-        do {
+	do {
 		kbd_write(KBD_DATA_REG, KBD_CMD_RESET);
-                status = kbd_wait_for_input();
-                if (status == KBD_REPLY_ACK)
+		status = kbd_wait_for_input();
+		if (status == KBD_REPLY_ACK)
 			break;
-                else if (status != KBD_REPLY_RESEND)
+		else if (status != KBD_REPLY_RESEND)
 			return "Keyboard reset failed, no ACK";
-        } while (1);
+	} while (1);
 
 	if (kbd_wait_for_input() != KBD_REPLY_POR)
 		return "Keyboard reset failed, no POR";
@@ -174,9 +181,9 @@ __initfunc(static char *initialize_kbd2(void))
 
 	kbd_write(KBD_CNTL_REG, KBD_CCMD_WRITE_MODE);
 	kbd_write(KBD_DATA_REG, KBD_MODE_KBD_INT
-		              | KBD_MODE_SYS
-		              | KBD_MODE_DISABLE_MOUSE
-		              | KBD_MODE_KCC);
+			      | KBD_MODE_SYS
+			      | KBD_MODE_DISABLE_MOUSE
+			      | KBD_MODE_KCC);
 
 	/* ibm powerpc portables need this to use scan-code set 1 -- Cort */
 	kbd_write(KBD_CNTL_REG, KBD_CCMD_READ_MODE);
@@ -439,7 +446,7 @@ static int do_acknowledge(unsigned char scancode)
 int pckbd_pretranslate(unsigned char scancode, char raw_mode)
 {
 	if (scancode == 0xff) {
-	        /* in scancode mode 1, my ESC key generates 0xff */
+		/* in scancode mode 1, my ESC key generates 0xff */
 		/* the calculator keys on a FOCUS 9000 generate 0xff */
 #ifndef KBD_IS_FOCUS_9000
 #ifdef KBD_REPORT_ERR

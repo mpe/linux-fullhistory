@@ -1,5 +1,8 @@
 Sun Jul  2 01:38:33 EST 1995
 
+See also: http://www-uk.hpl.hp.com/people/jt/Linux/Wavelan.html
+
+
 1. At present the driver autoprobes for a WaveLAN card only at I/O address 
    0x390. The version of the card that I use (NCR) supports four I/O addresses
    (selectable via a pair of DIP switches).  If you want the driver to

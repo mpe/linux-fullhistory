@@ -12,6 +12,7 @@
 #ifdef MAJOR_NR
 
 #include <linux/locks.h>
+#include <asm/semaphore.h>
 
 #define LOCAL_END_REQUEST
 
@@ -42,11 +43,13 @@ struct nbd_device {
 	int harderror;		/* Code of hard error			*/
 #define NBD_READ_ONLY 0x0001
 #define NBD_WRITE_NOCHK 0x0002
+#define NBD_INITIALISED 0x0004
 	struct socket * sock;
 	struct file * file; 		/* If == NULL, device is not ready, yet	*/
 	int magic;			/* FIXME: not if debugging is off	*/
 	struct request *head;	/* Requests are added here...			*/
 	struct request *tail;
+	struct semaphore queue_lock;
 };
 
 /* This now IS in some kind of include file...	*/

@@ -126,7 +126,7 @@ function readln () {
 	else
 		echo -n "$1"
 		[ -z "$3" ] && echo -n "(NEW) "
-		IFS='@' read ans </dev/tty || exit 1
+		IFS='@' read ans || exit 1
 		[ -z "$ans" ] && ans=$2
 	fi
 }

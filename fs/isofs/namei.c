@@ -160,7 +160,8 @@ isofs_find_entry(struct inode *dir, struct dentry *dentry, unsigned long *ino)
 		dpnt = de->name;
 
 		if (dir->i_sb->u.isofs_sb.s_rock ||
-		    dir->i_sb->u.isofs_sb.s_joliet_level) {
+		    dir->i_sb->u.isofs_sb.s_joliet_level || 
+		    dir->i_sb->u.isofs_sb.s_mapping == 'a') {
 			if (! page) {
 				page = (unsigned char *)
 					__get_free_page(GFP_KERNEL);
