@@ -23,39 +23,7 @@
 #include <linux/sched.h>
 #include <linux/string.h>
 #include <linux/wait.h>
-
-#define kver(a,b,c) (((a) << 16) + ((b) << 8) + (c)) 
-
-#if LINUX_VERSION_CODE < kver(2,1,0)
-
-/* Segmentation stuff for pre-2.1 kernels */
-#include <asm/segment.h>
-
-static inline int copy_to_user(void *dst, void *src, unsigned long len)
-{
-	int rv = verify_area(VERIFY_WRITE, dst, len);
-	if ( rv )
-		return -1;
-	memcpy_tofs(dst,src,len);
-	return 0;
-}
-
-static inline int copy_from_user(void *dst, void *src, unsigned long len)
-{
-	int rv = verify_area(VERIFY_READ, src, len);
-	if ( rv )
-		return -1;
-	memcpy_fromfs(dst,src,len);
-	return 0;
-}
-
-#else
-
-/* Segmentation stuff for post-2.1 kernels */
 #include <asm/uaccess.h>
-#define register_symtab(x)	((void)0)
-
-#endif
 
 #ifdef DEBUG
 #define DPRINTK(D) (printk D)
@@ -65,9 +33,15 @@ static inline int copy_from_user(void *dst, void *src, unsigned long len)
 
 #define AUTOFS_SUPER_MAGIC 0x0187
 
-#define AUTOFS_NEGATIVE_TIMEOUT (60*HZ)	/* Time before asking the daemon again */
+/*
+ * If the daemon returns a negative response (AUTOFS_IOC_FAIL) then the
+ * kernel will keep the negative response cached for up to the time given
+ * here, although the time can be shorter if the kernel throws the dcache
+ * entry away.  This probably should be settable from user space.
+ */
+#define AUTOFS_NEGATIVE_TIMEOUT (60*HZ)	/* 1 minute */
 
-/* Structures associated with the root directory hash */
+/* Structures associated with the root directory hash table */
 
 #define AUTOFS_HASH_SIZE 67
 
@@ -135,19 +109,13 @@ struct autofs_sb_info {
 	u32 symlink_bitmap[AUTOFS_SYMLINK_BITMAP_LEN];
 };
 
-/* autofs_oz_mode(): do we see the man behind the curtain? */
+/* autofs_oz_mode(): do we see the man behind the curtain?  (The
+   processes which do manipulations for us in user space sees the raw
+   filesystem without "magic".) */
+
 static inline int autofs_oz_mode(struct autofs_sb_info *sbi) {
 	return sbi->catatonic || current->pgrp == sbi->oz_pgrp;
 }
-
-/* Debug the mysteriously disappearing wait list */
-
-#ifdef DEBUG_WAITLIST
-#define CHECK_WAITLIST(S,O) autofs_check_waitlist_integrity(S,O)
-void autofs_check_waitlist_integrity(struct autofs_sb_info *,char *);
-#else
-#define CHECK_WAITLIST(S,O)
-#endif
 
 /* Hash operations */
 
@@ -182,5 +150,5 @@ void autofs_catatonic_mode(struct autofs_sb_info *);
 #ifdef DEBUG
 void autofs_say(const char *name, int len);
 #else
-#define autofs_say(n,l)
+#define autofs_say(n,l) ((void)0)
 #endif

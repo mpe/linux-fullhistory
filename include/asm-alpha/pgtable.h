@@ -18,6 +18,7 @@
 #define flush_cache_range(mm, start, end)	do { } while (0)
 #define flush_cache_page(vma, vmaddr)		do { } while (0)
 #define flush_page_to_ram(page)			do { } while (0)
+#define flush_icache_range(start, end)		do { } while (0)
 
 /*
  * Force a context reload. This is needed when we

@@ -727,6 +727,19 @@ asmlinkage int sys_umount(char * name)
 }
 
 /*
+ * Check whether we can mount the specified device.
+ */
+int fs_may_mount(kdev_t dev)
+{
+	struct super_block * sb = get_super(dev);
+	int busy;
+
+	busy = sb && sb->s_root &&
+	       (sb->s_root->d_count != 1 || sb->s_root->d_covers != sb->s_root);
+	return !busy;
+}
+
+/*
  * do_mount() does the actual mounting after sys_mount has done the ugly
  * parameter parsing. When enough time has gone by, and everything uses the
  * new mount() parameters, sys_mount() can then be cleaned up.
@@ -754,43 +767,56 @@ int do_mount(kdev_t dev, const char * dev_name, const char * dir_name, const cha
 	struct vfsmount *vfsmnt;
 	int error;
 
+	error = -EACCES;
 	if (!(flags & MS_RDONLY) && dev && is_read_only(dev))
-		return -EACCES;
+		goto out;
 		/*flags |= MS_RDONLY;*/
 
 	dir_d = namei(dir_name);
 	error = PTR_ERR(dir_d);
 	if (IS_ERR(dir_d))
-		return error;
+		goto out;
 
-	if (dir_d->d_covers != dir_d) {
-		dput(dir_d);
-		return -EBUSY;
+	error = -ENOTDIR;
+	if (!S_ISDIR(dir_d->d_inode->i_mode))
+		goto dput_and_out;
+
+	error = -EBUSY;
+	if (dir_d->d_covers != dir_d)
+		goto dput_and_out;
+
+	/*
+	 * Check whether to read the super block
+	 */
+	sb = get_super(dev);
+	if (!sb || !sb->s_root) {
+		error = -EINVAL;
+		sb = read_super(dev,type,flags,data,0);
+		if (!sb)
+			goto dput_and_out;
 	}
-	if (!S_ISDIR(dir_d->d_inode->i_mode)) {
-		dput(dir_d);
-		return -ENOTDIR;
-	}
-	if (!fs_may_mount(dev)) {
-		dput(dir_d);
-		return -EBUSY;
-	}
-	sb = read_super(dev,type,flags,data,0);
-	if (!sb) {
-		dput(dir_d);
-		return -EINVAL;
-	}
-	if (sb->s_root->d_covers != sb->s_root) {
-		dput(dir_d);
-		return -EBUSY;
-	}
+
+	/*
+	 * We may have slept while reading the super block, 
+	 * so we check afterwards whether it's safe to mount.
+	 */
+	error = -EBUSY;
+	if (!fs_may_mount(dev))
+		goto dput_and_out;
+
+	error = -ENOMEM;
 	vfsmnt = add_vfsmnt(dev, dev_name, dir_name);
 	if (vfsmnt) {
 		vfsmnt->mnt_sb = sb;
 		vfsmnt->mnt_flags = flags;
+		d_mount(dir_d, sb->s_root);
+		return 0;		/* we don't dput(dir) - see umount */
 	}
-	d_mount(dir_d, sb->s_root);
-	return 0;		/* we don't dput(dir) - see umount */
+
+dput_and_out:
+	dput(dir_d);
+out:
+	return error;	
 }
 
 

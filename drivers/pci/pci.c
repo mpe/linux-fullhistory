@@ -1,5 +1,5 @@
 /*
- * drivers/pci/pci.c
+ * $Id: pci.c,v 1.44 1997/09/03 05:08:22 richard Exp $
  *
  * PCI services that are built on top of the BIOS32 service.
  *
@@ -19,7 +19,6 @@
 
 struct pci_bus pci_root;
 struct pci_dev *pci_devices = 0;
-
 
 /*
  * The bridge_id field is an offset of an item into the array
@@ -68,6 +67,7 @@ struct pci_dev_info dev_info[] = {
 	DEVICE( VLSI,		VLSI_82C597,	"82C597-AFC2"),
 	DEVICE( VLSI,		VLSI_VAS96011,	"VAS96011 PowerPC"),
 	DEVICE( ADL,		ADL_2301,	"2301"),
+	DEVICE( NS,		NS_87415,	"87415"),
 	DEVICE( NS,		NS_87410,	"87410"),
 	DEVICE( TSENG,		TSENG_W32P_2,	"ET4000W32P"),
 	DEVICE( TSENG,		TSENG_W32P_b,	"ET4000W32P rev B"),
@@ -78,8 +78,9 @@ struct pci_dev_info dev_info[] = {
 	DEVICE( WEITEK,		WEITEK_P9100,	"P9100"),
 	BRIDGE( DEC,		DEC_BRD,	"DC21050", 		0x00),
 	DEVICE( DEC,		DEC_TULIP,	"DC21040"),
-	DEVICE( DEC,		DEC_TGA,	"DC21030"),
+	DEVICE( DEC,		DEC_TGA,	"TGA"),
 	DEVICE( DEC,		DEC_TULIP_FAST,	"DC21140"),
+	DEVICE( DEC,		DEC_TGA2,	"TGA2"),
 	DEVICE( DEC,		DEC_FDDI,	"DEFPA"),
 	DEVICE( DEC,		DEC_TULIP_PLUS,	"DC21041"),
 	DEVICE( DEC,		DEC_21142,	"DC21142"),
@@ -181,6 +182,9 @@ struct pci_dev_info dev_info[] = {
 	DEVICE( OLICOM,		OLICOM_OC2183,	"OC-2183/2185"),
 	DEVICE( OLICOM,		OLICOM_OC2326,	"OC-2326"),
 	DEVICE( OLICOM,		OLICOM_OC6151,	"OC-6151/6152"),
+	DEVICE( SUN,		SUN_EBUS,	"EBUS"),
+	DEVICE( SUN,		SUN_HAPPYMEAL,	"Happy Meal"),
+	BRIDGE( SUN,		SUN_PBM,	"PCI Bus Module",	0x02),
 	DEVICE( CMD,		CMD_640,	"640 (buggy)"),
 	DEVICE( CMD,		CMD_643,	"643"),
 	DEVICE( CMD,		CMD_646,	"646"),
@@ -596,6 +600,7 @@ const char *pci_strvendor(unsigned int vendor)
 	      case PCI_VENDOR_ID_CONTAQ:	return "Contaq";
 	      case PCI_VENDOR_ID_FOREX:		return "Forex";
 	      case PCI_VENDOR_ID_OLICOM:	return "Olicom";
+	      case PCI_VENDOR_ID_SUN:		return "Sun Microsystems";
 	      case PCI_VENDOR_ID_CMD:		return "CMD";
 	      case PCI_VENDOR_ID_VISION:	return "Vision";
 	      case PCI_VENDOR_ID_BROOKTREE:	return "Brooktree";
@@ -667,6 +672,36 @@ const char *pci_strdev(unsigned int vendor, unsigned int device)
 	return info ? info->name : "Unknown device";
 }
 
+
+const char *pcibios_strerror(int error)
+{
+	static char buf[32];
+
+	switch (error) {
+		case PCIBIOS_SUCCESSFUL:
+		case PCIBIOS_BAD_VENDOR_ID:
+			return "SUCCESSFUL";
+
+		case PCIBIOS_FUNC_NOT_SUPPORTED:
+			return "FUNC_NOT_SUPPORTED";
+
+		case PCIBIOS_DEVICE_NOT_FOUND:
+			return "DEVICE_NOT_FOUND";
+
+		case PCIBIOS_BAD_REGISTER_NUMBER:
+			return "BAD_REGISTER_NUMBER";
+
+                case PCIBIOS_SET_FAILED:          
+			return "SET_FAILED";
+
+                case PCIBIOS_BUFFER_TOO_SMALL:    
+			return "BUFFER_TOO_SMALL";
+
+		default:
+			sprintf (buf, "PCI ERROR 0x%x", error);
+			return buf;
+	}
+}
 
 
 /*
@@ -793,7 +828,7 @@ static int sprint_dev_config(struct pci_dev *dev, char *buf, int size)
 		if (len + 40 > size) {
 			return -1;
 		}
-		len += sprintf(buf + len, "IRQ %d.  ", dev->irq);
+		len += sprintf(buf + len, "IRQ %x.  ", dev->irq);
 	}
 
 	if (dev->master) {
@@ -811,20 +846,24 @@ static int sprint_dev_config(struct pci_dev *dev, char *buf, int size)
 		  len += sprintf(buf + len, "Max Lat=%d.", max_lat);
 	}
 
-	for (reg = PCI_BASE_ADDRESS_0; reg <= PCI_BASE_ADDRESS_5; reg += 4) {
+	for (reg = 0; reg < 6; reg++) {
 		if (len + 40 > size) {
 			return -1;
 		}
-		pcibios_read_config_dword(bus, devfn, reg, &l);
-		base = l;
-		if (!base) {
+		pcibios_read_config_dword(bus, devfn,
+				PCI_BASE_ADDRESS_0 + (reg << 2), &l);
+		if (l == 0xffffffff)
+			base = 0;
+		else
+			base = l;
+		if (!base)
 			continue;
-		}
 
 		if (base & PCI_BASE_ADDRESS_SPACE_IO) {
 			len += sprintf(buf + len,
-				       "\n      I/O at 0x%lx.",
-				       base & PCI_BASE_ADDRESS_IO_MASK);
+				       "\n      I/O at 0x%lx [0x%lx].",
+				       base & PCI_BASE_ADDRESS_IO_MASK,
+				       dev->base_address[reg]);
 		} else {
 			const char *pref, *type = "unknown";
 
@@ -848,8 +887,9 @@ static int sprint_dev_config(struct pci_dev *dev, char *buf, int size)
 			}
 			len += sprintf(buf + len,
 				       "\n      %srefetchable %s memory at "
-				       "0x%lx.", pref, type,
-				       base & PCI_BASE_ADDRESS_MEM_MASK);
+				       "0x%lx [0x%lx].", pref, type,
+				       base & PCI_BASE_ADDRESS_MEM_MASK,
+				       dev->base_address[reg]);
 		}
 	}
 
@@ -892,7 +932,7 @@ __initfunc(static void *pci_malloc(long size, unsigned long *mem_startp))
 	void *mem;
 
 #ifdef DEBUG
-	printk("...pci_malloc(size=%ld,mem=%p)", size, *mem_startp);
+	printk("...pci_malloc(size=%ld,mem=%p)", size, (void *)*mem_startp);
 #endif
 	mem = (void*) *mem_startp;
 	*mem_startp += (size + sizeof(void*) - 1) & ~(sizeof(void*) - 1);
@@ -901,16 +941,18 @@ __initfunc(static void *pci_malloc(long size, unsigned long *mem_startp))
 }
 
 
-__initfunc(static unsigned int scan_bus(struct pci_bus *bus, unsigned long *mem_startp))
+unsigned int pci_scan_bus(struct pci_bus *bus, unsigned long *mem_startp)
 {
 	unsigned int devfn, l, max;
-	unsigned char cmd, tmp, hdr_type = 0;
+	unsigned char cmd, tmp, irq, hdr_type = 0;
 	struct pci_dev_info *info;
 	struct pci_dev *dev;
 	struct pci_bus *child;
+	int reg;
 
 #ifdef DEBUG
-	printk("...scan_bus(busno=%d,mem=%p)\n", bus->number, *mem_startp);
+	printk("...pci_scan_bus(busno=%d,mem=%p)\n", bus->number,
+	       (void *)*mem_startp);
 #endif
 
 	max = bus->secondary;
@@ -952,7 +994,7 @@ __initfunc(static unsigned int scan_bus(struct pci_bus *bus, unsigned long *mem_
 		 */
 		info = pci_lookup_dev(dev->vendor, dev->device);
 		if (!info) {
-			printk("Warning : Unknown PCI device (%x:%x).  Please read include/linux/pci.h \n",
+			printk("PCI: Warning: Unknown PCI device (%x:%x).  Please read include/linux/pci.h\n",
 				dev->vendor, dev->device);
 		} else {
 			/* Some BIOS' are lazy. Let's do their job: */
@@ -975,7 +1017,20 @@ __initfunc(static unsigned int scan_bus(struct pci_bus *bus, unsigned long *mem_
 
 		/* read irq level (may be changed during pcibios_fixup()): */
 		pcibios_read_config_byte(bus->number, devfn,
-					 PCI_INTERRUPT_LINE, &dev->irq);
+					 PCI_INTERRUPT_LINE, &irq);
+		dev->irq = irq;
+
+		/* read base address registers, again pcibios_fixup() can
+		 * tweak these
+		 */
+		for (reg = 0; reg < 6; reg++) {
+			pcibios_read_config_dword(bus->number, devfn,
+					PCI_BASE_ADDRESS_0 + (reg << 2), &l);
+			if (l == 0xffffffff)
+				dev->base_address[reg] = 0;
+			else
+				dev->base_address[reg] = l;
+		}
 
 		/* check to see if this device is a PCI-PCI bridge: */
 		pcibios_read_config_dword(bus->number, devfn,
@@ -1033,7 +1088,7 @@ __initfunc(static unsigned int scan_bus(struct pci_bus *bus, unsigned long *mem_
 			    child->secondary = (buses >> 8) & 0xFF;
 			    child->subordinate = (buses >> 16) & 0xFF;
 			    child->number = child->secondary;
-			    max = scan_bus(child, mem_startp);
+			    max = pci_scan_bus(child, mem_startp);
 			  }
 			else
 			  {
@@ -1050,7 +1105,7 @@ __initfunc(static unsigned int scan_bus(struct pci_bus *bus, unsigned long *mem_
 			    /*
 			     * Now we can scan all subordinate buses:
 			     */
-			    max = scan_bus(child, mem_startp);
+			    max = pci_scan_bus(child, mem_startp);
 			    /*
 			     * Set the subordinate bus number to its real
 			     * value:
@@ -1081,14 +1136,14 @@ __initfunc(unsigned long pci_init (unsigned long mem_start, unsigned long mem_en
 	mem_start = pcibios_init(mem_start, mem_end);
 
 	if (!pcibios_present()) {
-		printk("pci_init: no PCI BIOS detected\n");
+		printk("PCI: No PCI bus detected\n");
 		return mem_start;
 	}
 
 	printk("Probing PCI hardware.\n");
 
 	memset(&pci_root, 0, sizeof(pci_root));
-	pci_root.subordinate = scan_bus(&pci_root, &mem_start);
+	pci_root.subordinate = pci_scan_bus(&pci_root, &mem_start);
 
 	/* give BIOS a chance to apply platform specific fixes: */
 	mem_start = pcibios_fixup(mem_start, mem_end);

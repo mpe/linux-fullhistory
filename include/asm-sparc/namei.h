@@ -1,4 +1,4 @@
-/* $Id: namei.h,v 1.7 1997/08/29 15:52:27 jj Exp $
+/* $Id: namei.h,v 1.8 1997/09/05 12:38:51 jj Exp $
  * linux/include/asm-sparc/namei.h
  *
  * Routines to handle famous /usr/gnemul/s*.
@@ -31,7 +31,16 @@ __sparc_lookup_dentry(const char *name, int follow_link)
 			
 	if (IS_ERR (base)) return base;
 	
-	return lookup_dentry (name, base, follow_link);
+	base = lookup_dentry (name, base, follow_link);
+
+	if (IS_ERR (base)) return base;
+
+	if (!base->d_inode) {
+		dput(base);
+		return ERR_PTR(-ENOENT);
+	}
+        
+        return base;
 }
 
 #define __prefix_lookup_dentry(name, follow_link)				\

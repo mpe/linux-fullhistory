@@ -161,11 +161,6 @@ static inline int __get_order(unsigned long size);
 #include <linux/blk.h>
 #include <linux/cdrom.h> /* for the compatibility eject ioctl */
 
-
-#ifndef FLOPPY_MOTOR_MASK
-#define FLOPPY_MOTOR_MASK 0xf0
-#endif
-
 #ifndef fd_get_dma_residue
 #define fd_get_dma_residue() get_dma_residue(FLOPPY_DMA)
 #endif

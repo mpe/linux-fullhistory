@@ -25,7 +25,16 @@ __mips_lookup_dentry(const char *name, int follow_link)
 			
 	if (IS_ERR (base)) return base;
 	
-	return lookup_dentry (name, base, follow_link);
+	base = lookup_dentry (name, base, follow_link);
+
+	if (IS_ERR (base)) return base;
+
+	if (!base->d_inode) {
+		dput(base);
+		return ERR_PTR(-ENOENT);
+	}
+        
+        return base;
 }
 
 #ifdef CONFIG_BINFMT_IRIX

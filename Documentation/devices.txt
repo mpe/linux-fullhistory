@@ -1,7 +1,7 @@
 		       LINUX ALLOCATED DEVICES
 	     Maintained by H. Peter Anvin <hpa@zytor.com>
 
-		     Last revised: July 28, 1997
+		   Last revised: September 5, 1997
 
 This list is the successor to Rick Miller's Linux Device List, which
 he stopped maintaining when he got busy with other things in 1993.  It
@@ -301,6 +301,7 @@ reply.
 		148 = /dev/gfx		Linux/SGI graphics effects device
 		149 = /dev/input/mouse	Linux/SGI Irix emulation mouse
 		150 = /dev/input/keyboard Linux/SGI Irix emulation keyboard
+		151 = /dev/led		Front panel LEDs
 
  11 char	Raw keyboard device
 		  0 = /dev/kbd		Raw keyboard device
@@ -1031,7 +1032,17 @@ reply.
 		  1 = /dev/controla1	Second device on chain
 		    ...
 
- 88-119		UNALLOCATED
+ 88 char	COMX synchronous serial card
+		  0 = /dev/comx0	COMX channel 0
+		  1 = /dev/comx1	COMX channel 1
+		    ...
+
+ 89 char	I2C bus interface
+		  0 = /dev/i2c0		First I2C adapter
+		  1 = /dev/i2c1		Second I2C adapter
+		    ...
+
+ 90-119		UNALLOCATED
 
 120-127		LOCAL/EXPERIMENTAL USE
 

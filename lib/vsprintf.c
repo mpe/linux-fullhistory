@@ -253,41 +253,6 @@ int vsprintf(char *buf, const char *fmt, va_list args)
 			}
 			continue;
 
-		case 'I': /* IPv4 / IPv6 printout */
-			{
-			  __u8 *ip4;
-			  char sbuf[6];
-			  if (qualifier == 'l') {
-			    __u16 *ip6 = va_arg(args, __u16 *);
-			    i = 6;
-			    for ( ; i > 0; --i, ++ip6)
-			      if (*ip6 != 0)
-				break;
-			    if (i < 6)
-			      *str++ = ':';
-			    for ( ; i > 0; --i, ++ip6) {
-			      sprintf(sbuf,":%04x",(int)(*ip6));
-			      s = sbuf;
-			      while (*s)
-				*str++ = *s++;
-			    }
-			    *str++ = ':';
-			    ip4 = (__u8*) ip6;
-			  } else {
-			    ip4 = va_arg(args, __u8 *);
-			  }
-			  for (i = 0; i < 4; ++i, ++ip4) {
-			    if (i == 3)
-			      sprintf(sbuf,"%d", 0xFF & (*ip4));
-			    else
-			      sprintf(sbuf,"%d.", 0xFF & (*ip4));
-			    s = sbuf;
-			    while (*s)
-			      *str++ = *s++;
-			  }
-			}
-			continue;
-
 		/* integer number formats - set up the flags and "break" */
 		case 'o':
 			base = 8;

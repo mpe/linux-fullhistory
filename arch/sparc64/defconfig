@@ -68,7 +68,7 @@ CONFIG_SOLARIS_EMUL=m
 #
 # Floppy, IDE, and other block devices
 #
-# CONFIG_BLK_DEV_FD is not set
+CONFIG_BLK_DEV_FD=y
 CONFIG_BLK_DEV_MD=y
 CONFIG_MD_LINEAR=m
 CONFIG_MD_STRIPED=m

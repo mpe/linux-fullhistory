@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_ipv4.c,v 1.61 1997/09/02 09:46:55 freitag Exp $
+ * Version:	$Id: tcp_ipv4.c,v 1.62 1997/09/04 22:34:59 davem Exp $
  *
  *		IPv4 specific functions
  *
@@ -1440,14 +1440,14 @@ int tcp_v4_rcv(struct sk_buff *skb, unsigned short len)
 	case CHECKSUM_HW:
 		if (tcp_v4_check(th,len,saddr,daddr,skb->csum)) {
 			struct iphdr * iph = skb->nh.iph;
-			printk(KERN_DEBUG "TCPv4 bad checksum from %I:%04x to %I:%04x, len=%d/%d/%d\n",
-			       &saddr, ntohs(th->source), &daddr,
+			printk(KERN_DEBUG "TCPv4 bad checksum from %d.%d.%d.%d:%04x to %d.%d.%d.%d:%04x, len=%d/%d/%d\n",
+			       NIPQUAD(saddr), ntohs(th->source), NIPQUAD(daddr),
 			       ntohs(th->dest), len, skb->len, ntohs(iph->tot_len));
 					goto discard_it;
 		}
 	default:
 		/* CHECKSUM_UNNECESSARY */
-	};
+	}
 
 	tcp_statistics.TcpInSegs++;
 

@@ -72,6 +72,7 @@ extern void uidcache_init(void);
 extern unsigned long pci_init(unsigned long, unsigned long);
 extern long mca_init(long, long);
 extern long sbus_init(long, long);
+extern long powermac_init(unsigned long, unsigned long);
 extern void sysctl_init(void);
 extern void filescache_init(void);
 
@@ -86,6 +87,18 @@ extern void msmouse_setup(char *str, int *ints);
 extern void lp_setup(char *str, int *ints);
 #endif
 extern void eth_setup(char *str, int *ints);
+#ifdef CONFIG_ARCNET_COM20020
+extern void com20020_setup(char *str, int *ints);
+#endif
+#ifdef CONFIG_ARCNET_RIM_I
+extern void arcrimi_setup(char *str, int *ints);
+#endif
+#ifdef CONFIG_ARCNET_COM90xxIO
+extern void com90io_setup(char *str, int *ints);
+#endif
+#ifdef CONFIG_ARCNET_COM90xx
+extern void com90xx_setup(char *str, int *ints);
+#endif
 #ifdef CONFIG_DECNET
 extern void decnet_setup(char *str, int *ints);
 #endif
@@ -212,6 +225,10 @@ extern void baycom_setup(char *str, int *ints);
 #ifdef CONFIG_SOUNDMODEM
 extern void sm_setup(char *str, int *ints);
 #endif
+#ifdef CONFIG_PMAC_CONSOLE
+extern void pmac_cons_setup(char *str, int *ints);
+extern void pmac_vmode_setup(char *str, int *ints);
+#endif
 #ifdef CONFIG_WDT
 extern void wdt_setup(char *str, int *ints);
 #endif
@@ -220,6 +237,9 @@ extern void parport_setup(char *str, int *ints);
 #endif
 #ifdef CONFIG_PLIP
 extern void plip_setup(char *str, int *ints);
+#endif
+#ifdef CONFIG_HFMODEM
+extern void hfmodem_setup(char *str, int *ints);
 #endif
 
 #if defined(CONFIG_SYSVIPC) || defined(CONFIG_KERNELD)
@@ -328,6 +348,18 @@ struct {
 #endif
 #ifdef CONFIG_INET
 	{ "ether=", eth_setup },
+#endif
+#ifdef CONFIG_ARCNET_COM20020
+	{ "com20020=", com20020_setup },
+#endif
+#ifdef CONFIG_ARCNET_RIM_I
+	{ "arcrimi=", arcrimi_setup },
+#endif
+#ifdef CONFIG_ARCNET_COM90xxIO
+	{ "com90io=", com90io_setup },
+#endif
+#ifdef CONFIG_ARCNET_COM90xx
+	{ "com90xx=", com90xx_setup },
 #endif
 #ifdef CONFIG_DECNET
 	{ "decnet=", decnet_setup },
@@ -516,6 +548,13 @@ struct {
 #endif
 #ifdef CONFIG_PLIP
 	{ "plip=", plip_setup },
+#endif
+#ifdef CONFIG_SOUNDMODEM
+	{ "hfmodem=", hfmodem_setup },
+#endif
+#ifdef CONFIG_PMAC_CONSOLE
+	{ "console=", pmac_cons_setup },
+	{ "vmode=", pmac_vmode_setup },
 #endif
 	{ 0, 0 }
 };
@@ -875,6 +914,9 @@ __initfunc(asmlinkage void start_kernel(void))
 	}
 #ifdef CONFIG_SBUS
 	memory_start = sbus_init(memory_start,memory_end);
+#endif
+#ifdef CONFIG_PMAC
+	memory_start = powermac_init(memory_start, memory_end);
 #endif
 	memory_start = console_init(memory_start,memory_end);
 #ifdef CONFIG_PCI

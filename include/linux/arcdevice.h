@@ -5,7 +5,7 @@
  *
  *		Definitions for the ARCnet handlers.
  *
- * Version:	@(#)arcdevice.h	1.0	31/07/97
+ * Version:	$Id: arcdevice.h,v 1.2 1997/09/05 08:57:56 mj Exp $
  *
  * Authors:	Avery Pennarun <apenwarr@bond.net>
  *              David Woodhouse <dwmw2@cam.ac.uk>
@@ -23,7 +23,6 @@
 #include <linux/if_arcnet.h>
 
 #ifdef __KERNEL__
-
 
 #define ARC_20020     1
 #define ARC_RIM_I     2
@@ -50,6 +49,7 @@
 #define DETECT_RECONFIGS
 #undef SHOW_RECONFIGS
 
+
 /* RECON_THRESHOLD is the maximum number of RECON messages to receive within
  * one minute before printing a "cabling problem" warning.  You must have
  * DETECT_RECONFIGS enabled if you want to use this.  The default value
@@ -62,6 +62,7 @@
  */
 #define RECON_THRESHOLD 30
 
+
 /* Define this to the minimum "timeout" value.  If a transmit takes longer
  * than TX_TIMEOUT jiffies, Linux will abort the TX and retry.  On a large
  * network, or one with heavy network traffic, this timeout may need to be
@@ -69,6 +70,11 @@
  * necessary transmits - don't set this too large.
  */
 #define TX_TIMEOUT 20
+
+
+/* Display warnings about the driver being an ALPHA version.
+ */
+#define ALPHA_WARNING
 
 
 /* New debugging bitflags: each option can be enabled individually.
@@ -195,7 +201,6 @@ union ArcPacket
 };
 
 
-
 	/* the "client data" header - RFC1201 information
 	 * notice that this screws up if it's not an even number of bytes
 	 * <sigh>
@@ -235,7 +240,6 @@ struct S_ClientData
 #define S_EXTRA_CLIENTDATA (sizeof(struct S_ClientData)-1)
 
 
-
 /* "Incoming" is information needed for each address that could be sending
  * to us.  Mostly for partially-received split packets.
  */
@@ -260,7 +264,6 @@ struct Outgoing
 };
 
 
-
 struct arcnet_local {
   struct net_device_stats stats;
   u_short sequence;	/* sequence number (incs with each packet) */
@@ -268,12 +271,12 @@ struct arcnet_local {
   u_char stationid,	/* our 8-bit station address */
     recbuf,		/* receive buffer # (0 or 1) */
     txbuf,		/* transmit buffer # (2 or 3) */
-    txready,	/* buffer where a packet is ready to send */
-    config,         /* current value of CONFIG register */
-    timeout,        /* Extended timeout for COM20020 */
-    backplane,      /* Backplane flag for COM20020 */     
-    setup,          /* Contents of setup register */
-    intmask;	/* current value of INTMASK register */
+    txready,		/* buffer where a packet is ready to send */
+    config,		/* current value of CONFIG register */
+    timeout,		/* Extended timeout for COM20020 */
+    backplane,		/* Backplane flag for COM20020 */     
+    setup,		/* Contents of setup register */
+    intmask;		/* current value of INTMASK register */
   short intx,		/* in TX routine? */
     in_txhandler,	/* in TX_IRQ handler? */
     sending,		/* transmit in progress? */
@@ -282,8 +285,8 @@ struct arcnet_local {
   
 #if defined(DETECT_RECONFIGS) && defined(RECON_THRESHOLD)
   time_t first_recon,	/* time of "first" RECON message to count */
-    last_recon;	/* time of most recent RECON */
-  int num_recons,		/* number of RECONs between first and last. */
+    last_recon;		/* time of most recent RECON */
+  int num_recons,	/* number of RECONs between first and last. */
     network_down;	/* do we think the network is down? */
 #endif
   
@@ -302,8 +305,7 @@ struct arcnet_local {
   void (*en_dis_able_TX) (struct device *dev, int enable); 
   void (*prepare_tx)(struct device *dev,u_char *hdr,int hdrlen,
 		     char *data,int length,int daddr,int exceptA, int offset);
-  void (*openclose_device)(int open);
-  
+  void (*openclose_device)(int open);  
   
   struct device *adev;	/* RFC1201 protocol device */
   
@@ -318,12 +320,34 @@ struct arcnet_local {
 #ifdef CONFIG_ARCNET_1051
   struct device *sdev;	/* RFC1051 protocol device */
 #endif
-
-
 };
+
+/* Functions exported by arcnet.c
+ */
+
+#if ARCNET_DEBUG_MAX & D_SKB
+extern void arcnet_dump_skb(struct device *dev,struct sk_buff *skb,
+			    char *desc);
+#else
+#define arcnet_dump_skb(dev,skb,desc) ;
+#endif
+
+#if (ARCNET_DEBUG_MAX & D_RX) || (ARCNET_DEBUG_MAX & D_TX)
+extern void arcnet_dump_packet(struct device *dev,u_char *buffer,int ext,
+			       char *desc);
+#else
+#define arcnet_dump_packet(dev,buffer,ext,desc) ;
+#endif
+
+extern void arcnet_tx_done(struct device *dev, struct arcnet_local *lp);
+extern void arcnet_makename(char *device);
+extern void arcnet_interrupt(int irq,void *dev_id,struct pt_regs *regs);
+extern void arcnet_setup(struct device *dev);
+extern int arcnet_go_tx(struct device *dev,int enable_irq);
+extern void arcnetA_continue_tx(struct device *dev);
+extern void arcnet_rx(struct arcnet_local *lp, u_char *arcsoft, short length, int saddr, int daddr);
+extern void arcnet_use_count(int open);
 
 
 #endif  /* __KERNEL__ */
 #endif	/* _LINUX_ARCDEVICE_H */
-
-

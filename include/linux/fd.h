@@ -248,7 +248,7 @@ struct floppy_fdc_state {
 	int dtr;
 	unsigned char version;	/* FDC version code */
 	unsigned char dor;
-	int address;		/* io address */
+	unsigned long address;	/* io address */
 	unsigned int rawcmd:2;
 	unsigned int reset:1;
 	unsigned int need_configure:1;

@@ -341,6 +341,8 @@ EXPORT_SYMBOL(kill_fasync);
 EXPORT_SYMBOL(ip_rcv);
 EXPORT_SYMBOL(arp_rcv);
 
+EXPORT_SYMBOL(if_port_text);
+
 #if defined(CONFIG_ATALK) || defined(CONFIG_ATALK_MODULE) 
 #include<linux/if_ltalk.h>
 EXPORT_SYMBOL(ltalk_setup);

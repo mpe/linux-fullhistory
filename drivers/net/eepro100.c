@@ -462,13 +462,16 @@ static void set_rx_mode(struct device *dev);
 /* 'options' is used to pass a transceiver override or full-duplex flag
    e.g. "options=16" for FD, "options=32" for 100mbps-only. */
 static int full_duplex[] = {-1, -1, -1, -1, -1, -1, -1, -1};
+
 #ifdef MODULE
+
 static int options[] = {-1, -1, -1, -1, -1, -1, -1, -1};
 static int debug = -1;			/* The debug level */
-#endif
 
 /* A list of all installed Speedo devices, for removing the driver module. */
 static struct device *root_speedo_dev = NULL;
+
+#endif
 
 int eepro100_init(struct device *dev)
 {

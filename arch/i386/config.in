@@ -23,8 +23,10 @@ comment 'General setup'
 
 bool 'Kernel math emulation' CONFIG_MATH_EMULATION
 bool 'Networking support' CONFIG_NET
-bool 'PCI bios support' CONFIG_PCI
+bool 'PCI support' CONFIG_PCI
 if [ "$CONFIG_PCI" = "y" ]; then
+  bool '   PCI BIOS support' CONFIG_PCI_BIOS
+  bool '   PCI direct access support' CONFIG_PCI_DIRECT
   if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
     bool '   PCI bridge optimization (experimental)' CONFIG_PCI_OPTIMIZE
   fi

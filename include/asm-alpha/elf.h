@@ -34,6 +34,13 @@ typedef elf_fpreg_t elf_fpregset_t[ELF_NFPREG];
 #define USE_ELF_CORE_DUMP
 #define ELF_EXEC_PAGESIZE	8192
 
+/* This is the location that an ET_DYN program is loaded if exec'ed.  Typical
+   use of this is to invoke "./ld.so someprog" to test out a new version of
+   the loader.  We need to make sure that it is out of the way of the program
+   that it will "exec", and that there is sufficient room for the brk.  */
+
+#define ELF_ET_DYN_BASE		(2 * TASK_SIZE / 3)
+
 /* $0 is set by ld.so to a pointer to a function which might be 
    registered using atexit.  This provides a mean for the dynamic
    linker to call DT_FINI functions for shared libraries that have

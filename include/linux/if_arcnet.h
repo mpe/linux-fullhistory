@@ -5,7 +5,7 @@
  *
  *		Global definitions for the ARCnet interface.
  *
- * Version:	@(#)if_arcnet.h	1.0	07/08/97
+ * Version:	$Id: if_arcnet.h,v 1.2 1997/09/05 08:57:54 mj Exp $
  *
  * Author:	David Woodhouse <dwmw2@cam.ac.uk>
  *		Avery Pennarun <apenwarr@bond.net>	
@@ -50,7 +50,7 @@
 /*
  *	This is an ARCnet frame header.
  */
- 
+
 struct archdr                       /* was struct HardHeader */
 {
 	u_char	source,		/* source ARCnet - filled in automagically */
@@ -61,4 +61,3 @@ struct archdr                       /* was struct HardHeader */
 };
 
 #endif	/* _LINUX_IF_ARCNET_H */
-

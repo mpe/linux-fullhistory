@@ -29,6 +29,7 @@
 #include <asm/uaccess.h>
 #include <asm/io.h>
 #include <asm/spinlock.h>
+#include <asm/atomic.h>
 
 asmlinkage int system_call(void);
 asmlinkage void lcall7(void);
@@ -271,7 +272,9 @@ static void unknown_nmi_error(unsigned char reason, struct pt_regs * regs)
 asmlinkage void do_nmi(struct pt_regs * regs, long error_code)
 {
 	unsigned char reason = inb(0x61);
+	extern atomic_t nmi_counter;
 
+	atomic_inc(&nmi_counter);
 	if (reason & 0x80)
 		mem_parity_error(reason, regs);
 	if (reason & 0x40)
@@ -348,7 +351,10 @@ asmlinkage void do_coprocessor_error(struct pt_regs * regs, long error_code)
 asmlinkage void do_spurious_interrupt_bug(struct pt_regs * regs,
 					  long error_code)
 {
+#if 0
+	/* No need to warn about this any longer. */
 	printk("Ignoring P6 Local APIC Spurious Interrupt Bug...\n");
+#endif
 }
 
 /*

@@ -186,6 +186,7 @@ static void layout_dev(struct pci_dev *dev)
 		pcibios_read_config_dword(bus->number, dev->devfn, reg, &base);
 		if (!base) {
 			/* this base-address register is unused */
+			dev->base_address[(reg - PCI_BASE_ADDRESS_0)>>2] = 0;
 			continue;
 		}
 

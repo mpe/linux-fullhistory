@@ -71,10 +71,12 @@ extern int atari_mouse_init(void);
 extern int sun_mouse_init(void);
 extern void watchdog_init(void);
 extern void wdt_init(void);
+extern void acq_init(void);
 extern void pcwatchdog_init(void);
 extern int rtc_init(void);
 extern int dsp56k_init(void);
 extern int nvram_init(void);
+extern void hfmodem_init(void);
 
 #ifdef CONFIG_PROC_FS
 static int misc_read_proc(char *buf, char **start, off_t offset,
@@ -231,17 +233,26 @@ __initfunc(int misc_init(void))
 #ifdef CONFIG_WDT
 	wdt_init();
 #endif
+#ifdef CONFIG_ACQUIRE_WDT
+	acq_init();
+#endif
 #ifdef CONFIG_SOFT_WATCHDOG
 	watchdog_init();
 #endif
 #ifdef CONFIG_APM
 	apm_bios_init();
 #endif
+#ifdef CONFIG_H8
+	h8_init();
+#endif
 #ifdef CONFIG_RTC
 	rtc_init();
 #endif
 #ifdef CONFIG_ATARI_DSP56K
 	dsp56k_init();
+#endif
+#ifdef CONFIG_HFMODEM
+	hfmodem_init();
 #endif
 #ifdef CONFIG_NVRAM
 	nvram_init();

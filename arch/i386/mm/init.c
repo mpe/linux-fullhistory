@@ -261,6 +261,43 @@ __initfunc(unsigned long paging_init(unsigned long start_mem, unsigned long end_
 	return free_area_init(start_mem, end_mem);
 }
 
+/*
+ * Test if the WP bit works in supervisor mode. It isn't supported on 386's
+ * and also on some strange 486's (NexGen etc.). All 586+'s are OK. The jumps
+ * before and after the test are here to work-around some nasty CPU bugs.
+ */
+
+__initfunc(void test_wp_bit(void))
+{
+	unsigned char tmp_reg;
+	unsigned long old = pg0[0];
+
+	printk("Checking if this processor honours the WP bit even in supervisor mode... ");
+	pg0[0] = pte_val(mk_pte(PAGE_OFFSET, PAGE_READONLY));
+	local_flush_tlb();
+	current->mm->mmap->vm_start += PAGE_SIZE;
+	__asm__ __volatile__(
+		"jmp 1f; 1:\n"
+		"movb %0,%1\n"
+		"movb %1,%0\n"
+		"jmp 1f; 1:\n"
+		:"=m" (*(char *) __va(0)),
+		 "=q" (tmp_reg)
+		:/* no inputs */
+		:"memory");
+	pg0[0] = old;
+	local_flush_tlb();
+	current->mm->mmap->vm_start -= PAGE_SIZE;
+	if (wp_works_ok < 0) {
+		wp_works_ok = 0;
+		printk("No.\n");
+#ifndef CONFIG_M386
+		panic("This kernel doesn't support CPU's with broken WP. Recompile it for a 386!");
+#endif
+	} else
+		printk("Ok.\n");
+}
+
 __initfunc(void mem_init(unsigned long start_mem, unsigned long end_mem))
 {
 	unsigned long start_low_mem = PAGE_SIZE;
@@ -339,30 +376,9 @@ __initfunc(void mem_init(unsigned long start_mem, unsigned long end_mem))
 		reservedpages << (PAGE_SHIFT-10),
 		datapages << (PAGE_SHIFT-10),
 		initpages << (PAGE_SHIFT-10));
-/* test if the WP bit is honoured in supervisor mode */
-	if (wp_works_ok < 0) {
-		unsigned char tmp_reg;
-		unsigned long old = pg0[0];
-		printk("Checking if this processor honours the WP bit even in supervisor mode... ");
-		pg0[0] = pte_val(mk_pte(PAGE_OFFSET, PAGE_READONLY));
-		local_flush_tlb();
-		current->mm->mmap->vm_start += PAGE_SIZE;
-		__asm__ __volatile__(
-			"movb %0,%1 ; movb %1,%0"
-			:"=m" (*(char *) __va(0)),
-			 "=q" (tmp_reg)
-			:/* no inputs */
-			:"memory");
-		pg0[0] = old;
-		local_flush_tlb();
-		current->mm->mmap->vm_start -= PAGE_SIZE;
-		if (wp_works_ok < 0) {
-			wp_works_ok = 0;
-			printk("No.\n");
-		} else
-			printk("Ok.\n");
-	}
-	return;
+
+	if (wp_works_ok < 0)
+		test_wp_bit();
 }
 
 void free_initmem(void)

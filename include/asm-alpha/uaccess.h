@@ -10,6 +10,10 @@
  * performed or not.  If get_fs() == USER_DS, checking is performed, with
  * get_fs() == KERNEL_DS, checking is bypassed.
  *
+ * Or at least it did once upon a time.  Nowadays it is a mask that
+ * defines which bits of the address space are off limits.  This is a
+ * wee bit faster than the above.
+ *
  * For historical reasons, these macros are grossly misnamed.
  */
 
@@ -20,8 +24,16 @@
 #define VERIFY_WRITE	1
 
 #define get_fs()  (current->tss.fs)
-#define set_fs(x) (current->tss.fs = (x))
 #define get_ds()  (KERNEL_DS)
+
+/* Our scheme relies on all bits being preserved.  Trap those evil 
+   Intellists in their plot to use unsigned short.  */
+
+extern unsigned long __bad_fs_size(void);
+
+#define set_fs(x) (current->tss.fs =				\
+		   sizeof(x) == sizeof(unsigned long) ? (x) 	\
+		   : __bad_fs_size())
 
 /*
  * Is a address valid? This does a straighforward calculation rather

@@ -72,5 +72,7 @@ EXPORT_SYMBOL(scsi_hostlist);
 EXPORT_SYMBOL(scsi_hosts);
 EXPORT_SYMBOL(scsi_devicelist);
 EXPORT_SYMBOL(scsi_devices);
+EXPORT_SYMBOL(scsi_device_types);
+
 
 #endif /* CONFIG_MODULES */

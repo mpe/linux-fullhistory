@@ -1,8 +1,6 @@
 #ifndef _INET_COMMON_H
 #define _INET_COMMON_H
 
-#include <linux/config.h>
-
 extern struct proto_ops		inet_stream_ops;
 extern struct proto_ops		inet_dgram_ops;
 

@@ -9,6 +9,7 @@
 #include <linux/vmalloc.h>
 #include <linux/smp.h>
 #include <linux/smp_lock.h>
+#include <asm/pgtable.h>
 
 /*
  * Originally by Anonymous (as far as I know...)
@@ -293,6 +294,10 @@ sys_init_module(const char *name_user, struct module *mod_user)
 		error = -EFAULT;
 		goto err3;
 	}
+
+	/* On some machines it is necessary to do something here
+	   to make the I and D caches consistent.  */
+	flush_icache_range((unsigned long)mod, (unsigned long)mod + mod->size);
 
 	/* Update module references.  */
 	mod->next = mod_tmp.next;

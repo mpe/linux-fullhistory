@@ -339,13 +339,6 @@ static int mmap_zero(struct inode * inode, struct file * file, struct vm_area_st
 	return 0;
 }
 
-static long read_full(struct inode * node, struct file * file,
-	char * buf, unsigned long count)
-{
-	file->f_pos += count;
-	return count;
-}
-
 static long write_full(struct inode * inode, struct file * file,
 	const char * buf, unsigned long count)
 {
@@ -390,7 +383,9 @@ static long long memory_lseek(struct inode * inode, struct file * file,
 
 #define mmap_kmem	mmap_mem
 #define zero_lseek	null_lseek
+#define full_lseek      null_lseek
 #define write_zero	write_null
+#define read_full       read_zero
 
 static struct file_operations mem_fops = {
 	memory_lseek,
@@ -457,7 +452,7 @@ static struct file_operations zero_fops = {
 };
 
 static struct file_operations full_fops = {
-	memory_lseek,
+	full_lseek,
 	read_full,
 	write_full,
 	NULL,		/* full_readdir */

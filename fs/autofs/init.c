@@ -11,17 +11,12 @@
  * ------------------------------------------------------------------------- */
 
 #include <linux/module.h>
-#include "autofs_i.h"
-
-#if LINUX_VERSION_CODE < kver(2,1,36)
-#define __initfunc(X) X
-#else
 #include <linux/init.h>
-#endif
+#include "autofs_i.h"
 
 static struct file_system_type autofs_fs_type = {
 	"autofs",
-	0 /* FS_NO_DCACHE doesn't work correctly */,
+	0,
 	autofs_read_super,
 	NULL
 };
@@ -29,11 +24,7 @@ static struct file_system_type autofs_fs_type = {
 #ifdef MODULE
 int init_module(void)
 {
-	int status;
-	
-	if ((status = register_filesystem(&autofs_fs_type)) == 0)
-		register_symtab(0);
-	return status;
+	return register_filesystem(&autofs_fs_type);
 }
 
 void cleanup_module(void)

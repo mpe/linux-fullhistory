@@ -47,7 +47,7 @@ foo \kill}%
 %
 \title{{\bf Linux Allocated Devices}}
 \author{Maintained by H. Peter Anvin $<$hpa@zytor.com$>$}
-\date{Last revised: July 28, 1997}
+\date{Last revised: September 5, 1997}
 \maketitle
 %
 \noindent
@@ -216,7 +216,9 @@ reply.
 \major{85}{}{char }{Linux/SGI shared memory input queue}
 \major{86}{}{char }{SCSI media changer}
 \major{87}{}{char }{Sony Control-A1 stereo control bus}
-\major{88}{--119}{}{Unallocated}
+\major{88}{}{char }{COMX synchronous serial card}
+\major{89}{}{char }{I$^2$C bus interface}
+\major{90}{--119}{}{Unallocated}
 \major{120}{--127}{}{Local/experimental use}
 \major{128}{--239}{}{Unallocated}
 \major{240}{--254}{}{Local/experimental use}
@@ -525,6 +527,7 @@ physical disks.
 	\minor{148}{/dev/gfx}{Linux/SGI graphics effects device}
 	\minor{149}{/dev/input/mouse}{Linux/SGI Irix emulation mouse}
 	\minor{150}{/dev/input/keyboard}{Linux/SGI Irix emulation keyboard}
+	\minor{151}{/dev/led}{Front panel LEDs}
 \end{devicelist}
 
 \begin{devicelist}
@@ -1417,8 +1420,8 @@ Currently for Dolphin Interconnect Solutions' PCI-SCI bridge.
 
 \begin{devicelist}
 \major{82}{}{char }{WiNRADiO communications receiver card}
-	\major{0}{/dev/winradio0}{First WiNRADiO card}
-	\major{1}{/dev/winradio1}{Second WiNRADiO card}
+	\minor{0}{/dev/winradio0}{First WiNRADiO card}
+	\minor{1}{/dev/winradio1}{Second WiNRADiO card}
 	\minordots
 \end{devicelist}
 
@@ -1465,7 +1468,21 @@ on {\url http://home.pages.de/~videotext/\/}.
 \end{devicelist}
 
 \begin{devicelist}
-\major{88}{--119}{}{Unallocated}
+\major{88}{}{char }{COMX synchronous serial card}
+	\minor{0}{/dev/comx0}{Channel 0}
+	\minor{1}{/dev/comx1}{Channel 1}
+	\minordots
+\end{devicelist}
+
+\begin{devicelist}
+\major{89}{}{char }{I$^2$C bus interface}
+	\minor{0}{/dev/i2c0}{First I$^2$C adapter}
+	\minor{1}{/dev/i2c1}{Second I$^2$C adapter}
+	\minordots
+\end{devicelist}
+
+\begin{devicelist}
+\major{90}{--119}{}{Unallocated}
 \end{devicelist}
 
 \begin{devicelist}

@@ -1,4 +1,4 @@
-/* $Id: ioctl32.c,v 1.17 1997/09/03 11:54:49 ecd Exp $
+/* $Id: ioctl32.c,v 1.18 1997/09/06 02:25:13 davem Exp $
  * ioctl32.c: Conversion between 32bit and 64bit native ioctls.
  *
  * Copyright (C) 1997 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -32,13 +32,6 @@
 #include <asm/vuid_event.h>
 #include <asm/rtc.h>
 #include <asm/openpromio.h>
-
-/*
- * XXX: for DaveM:
- * This is the kludge to know what size of buffer to
- * copy back to the user... (ecd)
- */
-int ifr_data_len;
 
 /* As gcc will warn about casting u32 to some ptr, we have to cast it to
  * unsigned long first, and that's what is A() for.
@@ -203,13 +196,17 @@ static inline int dev_ifsioc(unsigned int fd, unsigned int cmd, u32 arg)
 		case SIOCGPPPVER:
 		{
 			u32 data;
+			int len;
+
 			__get_user(data, &(((struct ifreq32 *)A(arg))->ifr_ifru.ifru_data));
-			/*
-			 * XXX: for DaveM:
-			 * Here we use 'ifr_data_len' to know what size of buffer to
-			 * copy back to the user... (ecd)
-			 */
-			if (copy_to_user((char *)A(data), ifr.ifr_data, ifr_data_len))
+			if(cmd == SIOCGPPPVER)
+				len = strlen(PPP_VERSION) + 1;
+			else if(cmd == SIOCGPPPCSTATS)
+				len = sizeof(struct ppp_comp_stats);
+			else
+				len = sizeof(struct ppp_stats);
+
+			if (copy_to_user((char *)A(data), ifr.ifr_data, len))
 				return -EFAULT;
 			break;
 		}

@@ -1,4 +1,5 @@
-/* arc-rimi.c:
+/*	$Id: arc-rimi.c,v 1.2 1997/09/05 08:57:51 mj Exp $
+
         Derived from the original arcnet.c,
         Written 1994-1996 by Avery Pennarun,
 	which was in turn derived from skeleton.c by Donald Becker.
@@ -75,41 +76,11 @@
 #undef SLOW_XMIT_COPY
 
 
-
-
-/* External functions from arcnet.c */
-
-
-
-#if ARCNET_DEBUG_MAX & D_SKB
-extern void arcnet_dump_skb(struct device *dev,struct sk_buff *skb,
-			    char *desc);
-#else
-#define arcnet_dump_skb(dev,skb,desc) ;
-#endif
-
-#if (ARCNET_DEBUG_MAX & D_RX) || (ARCNET_DEBUG_MAX & D_TX)
-extern void arcnet_dump_packet(struct device *dev,u_char *buffer,int ext,
-			       char *desc);
-#else
-#define arcnet_dump_packet(dev,buffer,ext,desc) ;
-#endif
-
-extern void arcnet_tx_done(struct device *dev, struct arcnet_local *lp);
-extern void arcnet_makename(char *device);
-extern void arcnet_interrupt(int irq,void *dev_id,struct pt_regs *regs);
-extern void arcnet_setup(struct device *dev);
-extern int arcnet_go_tx(struct device *dev,int enable_irq);
-extern void arcnetA_continue_tx(struct device *dev);
-extern void arcnet_rx(struct arcnet_local *lp, u_char *arcsoft, short length, int saddr, int daddr);
-extern void arcnet_use_count(int open);
-
-
-
 /* Internal function declarations */
+
 static int arcrimi_probe(struct device *dev);
 static void arcrimi_rx(struct device *dev,int recbuf);
-static int arcrimi_found(struct device *dev,int ioaddr,int airq,u_long shmem); 
+static int arcrimi_found(struct device *dev,int ioaddr,int airq,u_long shmem);
 static void arcrimi_inthandler (struct device *dev);
 static int arcrimi_reset (struct device *dev, int reset_delay);
 static void arcrimi_setmask (struct device *dev, u_char mask);
@@ -121,7 +92,6 @@ static  void arcrimi_openclose(int open);
 
 
 /* Module parameters */
-
 
 #ifdef MODULE
 static int shmem=0x0;	/* <--- EDIT THESE LINES FOR YOUR CONFIGURATION */
@@ -142,7 +112,6 @@ extern int arcnet_num_devs;
 
 /* Handy defines for ARCnet specific stuff */
 
-
 /* COM 9026 controller chip --> ARCnet register addresses */
 #define _INTMASK (ioaddr+0)	/* writable */
 #define _STATUS  (ioaddr+0)	/* readable */
@@ -155,20 +124,14 @@ extern int arcnet_num_devs;
 
 #define RDDATAflag      0x00     /* Next access is a read/~write */
 
-
-
-
 #define ARCSTATUS	readb(_STATUS)
 #define ACOMMAND(cmd) writeb((cmd),_COMMAND)
 #define ARCRESET	writeb(TESTvalue,ioaddr-0x800)	/* fake reset */
 #define AINTMASK(msk)	writeb((msk),_INTMASK)
 #define SETCONF	writeb(lp->config,_CONFIG)
 
-
 static const char *version =
-"arc-rimi.c: v2.91 97/08/19 Avery Pennarun <apenwarr@bond.net> et al.\n";
-
-
+"arc-rimi.c: v2.92 97/09/02 Avery Pennarun <apenwarr@bond.net> et al.\n";
 
 /****************************************************************************
  *                                                                          *
@@ -186,24 +149,23 @@ __initfunc(int arcrimi_probe(struct device *dev))
   BUGLVL(D_NORMAL) printk(version);
   BUGMSG(D_NORMAL,"Given: node %02Xh, shmem %lXh, irq %d\n",
 	 dev->dev_addr[0],dev->mem_start,dev->irq);
-  
+
   if (dev->mem_start<=0 || dev->irq<=0)
     {
       BUGMSG(D_NORMAL,"No autoprobe for RIM I; you "
 	     "must specify the shmem and irq!\n");
       return -ENODEV;
     }
-  
+
   if (dev->dev_addr[0]==0)
     {
       BUGMSG(D_NORMAL,"You need to specify your card's station "
 	     "ID!\n");
       return -ENODEV;
     }
-  
+
   return arcrimi_found(dev,dev->dev_addr[0],dev->irq,dev->mem_start);
 }
-
 
 
 /* Set up the struct device associated with this card.  Called after
@@ -214,7 +176,7 @@ __initfunc(int arcrimi_found(struct device *dev,int node,int airq, u_long shmem)
   struct arcnet_local *lp;
   u_long first_mirror,last_mirror;
   int mirror_size;
-  
+
   /* reserve the irq */
   if (request_irq(airq,&arcnet_interrupt,0,"arcnet (RIM I)",NULL))
     {
@@ -223,15 +185,15 @@ __initfunc(int arcrimi_found(struct device *dev,int node,int airq, u_long shmem)
     }
   irq2dev_map[airq]=dev;
   dev->irq=airq;
-  
+
   dev->base_addr=0;
   writeb(TESTvalue,shmem);
   writeb(node,shmem+1);	/* actually the node ID */
-  
+
   /* find the real shared memory start/end points, including mirrors */
 #define BUFFER_SIZE (512)
 #define MIRROR_SIZE (BUFFER_SIZE*4)
-  
+
   /* guess the actual size of one "memory mirror" - the number of
    * bytes between copies of the shared memory.  On most cards, it's
    * 2k (or there are no mirrors at all) but on some, it's 4k.
@@ -241,21 +203,21 @@ __initfunc(int arcrimi_found(struct device *dev,int node,int airq, u_long shmem)
       && readb(shmem-mirror_size)!=TESTvalue
       && readb(shmem-2*mirror_size)==TESTvalue)
     mirror_size*=2;
-  
+
   first_mirror=last_mirror=shmem;
   while (readb(first_mirror)==TESTvalue) first_mirror-=mirror_size;
   first_mirror+=mirror_size;
-  
+
   while (readb(last_mirror)==TESTvalue) last_mirror+=mirror_size;
   last_mirror-=mirror_size;
-  
+
   dev->mem_start=first_mirror;
   dev->mem_end=last_mirror+MIRROR_SIZE-1;
   dev->rmem_start=dev->mem_start+BUFFER_SIZE*0;
   dev->rmem_end=dev->mem_start+BUFFER_SIZE*2-1;
-  
+
   /* Initialize the rest of the device structure. */
-  
+
   dev->priv = kmalloc(sizeof(struct arcnet_local), GFP_KERNEL);
   if (dev->priv == NULL)
     {
@@ -274,26 +236,26 @@ __initfunc(int arcrimi_found(struct device *dev,int node,int airq, u_long shmem)
   lp->openclose_device=arcrimi_openclose;
   lp->prepare_tx=arcrimi_prepare_tx;
   lp->inthandler=arcrimi_inthandler;
-  
+
   /* Fill in the fields of the device structure with generic
    * values.
    */
   arcnet_setup(dev);
-  
+
   /* And now fill particular fields with arcnet values */
   dev->mtu=1500; /* completely arbitrary - agrees with ether, though */
   dev->hard_header_len=sizeof(struct ClientData);
   lp->sequence=1;
   lp->recbuf=0;
-  
+
   BUGMSG(D_DURING,"ClientData header size is %d.\n",
 	 sizeof(struct ClientData));
   BUGMSG(D_DURING,"HardHeader size is %d.\n",
 	 sizeof(struct archdr));
-  
+
   /* get and check the station ID from offset 1 in shmem */
   lp->stationid = readb(first_mirror+1);
-  
+
   if (lp->stationid==0)
     BUGMSG(D_NORMAL,"WARNING!  Station address 00 is reserved "
 	   "for broadcasts!\n");
@@ -301,13 +263,13 @@ __initfunc(int arcrimi_found(struct device *dev,int node,int airq, u_long shmem)
     BUGMSG(D_NORMAL,"WARNING!  Station address FF may confuse "
 	   "DOS networking programs!\n");
   dev->dev_addr[0]=lp->stationid;
-  
+
   BUGMSG(D_NORMAL,"ARCnet RIM I: station %02Xh found at IRQ %d, "
 	 "ShMem %lXh (%ld*%d bytes).\n",
 	 lp->stationid,
 	 dev->irq, dev->mem_start,
 	 (dev->mem_end-dev->mem_start+1)/mirror_size,mirror_size);
-  
+
   return 0;
 }
 
@@ -324,46 +286,46 @@ int arcrimi_reset(struct device *dev,int reset_delay)
   struct arcnet_local *lp=(struct arcnet_local *)dev->priv;
   short ioaddr=dev->mem_start + 0x800;
   int recbuf=lp->recbuf;
-  
+
   if (reset_delay==3)
     {
       ARCRESET;
       return 0;
     }
-  
+
   /* no IRQ's, please! */
   lp->intmask=0;
   SETMASK;
-  
+
   BUGMSG(D_INIT,"Resetting %s (status=%Xh)\n",
 	 dev->name,ARCSTATUS);
-  
+
   ACOMMAND(CFLAGScmd|RESETclear); /* clear flags & end reset */
   ACOMMAND(CFLAGScmd|CONFIGclear);
-  
+
   /* clear out status variables */
   recbuf=lp->recbuf=0;
   lp->txbuf=2;
-  
+
   /* enable extended (512-byte) packets */
   ACOMMAND(CONFIGcmd|EXTconf);
-  
+
 #ifndef SLOW_XMIT_COPY
   /* clean out all the memory to make debugging make more sense :) */
   BUGLVL(D_DURING)
     memset_io(dev->mem_start,0x42,2048);
 #endif
-  
+
   /* and enable receive of our first packet to the first buffer */
   EnableReceiver();
-  
+
   /* re-enable interrupts */
   lp->intmask|=NORXflag;
 #ifdef DETECT_RECONFIGS
   lp->intmask|=RECONflag;
 #endif
   SETMASK;
-  
+
   /* done!  return success. */
   return 0;
 }
@@ -380,26 +342,23 @@ static void arcrimi_openclose(int open)
 static void arcrimi_setmask(struct device *dev, u_char mask)
 {
   int ioaddr=dev->mem_start+0x800;
-  
+
   AINTMASK(mask);
 }
 
 static u_char arcrimi_status(struct device *dev)
 {
   int ioaddr=dev->mem_start+0x800;
-  
+
   return ARCSTATUS;
 }
 
 static void arcrimi_command(struct device *dev, u_char cmd)
 {
   int ioaddr=dev->mem_start+0x800;
-  
+
   ACOMMAND(cmd);
 }
-
-
-
 
 
 /* The actual interrupt handler routine - handle various IRQ's generated
@@ -410,18 +369,17 @@ arcrimi_inthandler(struct device *dev)
 {
   struct arcnet_local *lp=(struct arcnet_local *)dev->priv;
   int ioaddr=dev->mem_start+0x800, status, boguscount = 3, didsomething;
-  
+
   AINTMASK(0);
-  
+
   BUGMSG(D_DURING,"in arcrimi_inthandler (status=%Xh, intmask=%Xh)\n",
 	 ARCSTATUS,lp->intmask);
-  
+
   do
     {
       status = ARCSTATUS;
       didsomething=0;
-      
-      
+
       /* RESET flag was enabled - card is resetting and if RX
        * is disabled, it's NOT because we just got a packet.
        */
@@ -430,44 +388,43 @@ arcrimi_inthandler(struct device *dev)
 	  BUGMSG(D_NORMAL,"spurious reset (status=%Xh)\n",
 		 status);
 	  arcrimi_reset(dev,0);
-	  
+
 	  /* all other flag values are just garbage */
 	  break;
 	}
-      
-      
+
       /* RX is inhibited - we must have received something. */
       if (status & lp->intmask & NORXflag)
 	{
 	  int recbuf=lp->recbuf=!lp->recbuf;
-	  
+
 	  BUGMSG(D_DURING,"receive irq (status=%Xh)\n",
 		 status);
-	  
+
 	  /* enable receive of our next packet */
 	  EnableReceiver();
-	  
+
 	  /* Got a packet. */
 	  arcrimi_rx(dev,!recbuf);
-	  
+
 	  didsomething++;
 	}
-      
+
       /* it can only be an xmit-done irq if we're xmitting :) */
       /*if (status&TXFREEflag && !lp->in_txhandler && lp->sending)*/
       if (status & lp->intmask & TXFREEflag)
 	{
 	  struct Outgoing *out=&(lp->outgoing);
 	  int was_sending=lp->sending;
-	  
+
 	  lp->intmask &= ~TXFREEflag;
-	  
+
 	  lp->in_txhandler++;
 	  if (was_sending) lp->sending--;
-	  
+
 	  BUGMSG(D_DURING,"TX IRQ (stat=%Xh, numsegs=%d, segnum=%d, skb=%ph)\n",
 		 status,out->numsegs,out->segnum,out->skb);
-	  
+
 	  if (was_sending && !(status&TXACKflag))
 	    {
 	      if (lp->lasttrans_dest != 0)
@@ -484,11 +441,11 @@ arcrimi_inthandler(struct device *dev)
 			 lp->lasttrans_dest);
 		}
 	    }
-	  
+
 	  /* send packet if there is one */
 	  arcnet_go_tx(dev,0);
 	  didsomething++;
-	  
+
 	  if (lp->intx)
 	    {
 	      BUGMSG(D_DURING,"TXDONE while intx! (status=%Xh, intx=%d)\n",
@@ -496,24 +453,24 @@ arcrimi_inthandler(struct device *dev)
 	      lp->in_txhandler--;
 	      continue;
 	    }
-	  
+
 	  if (!lp->outgoing.skb)
 	    {
 	      BUGMSG(D_DURING,"TX IRQ done: no split to continue.\n");
-	      
+
 	      /* inform upper layers */
 	      if (!lp->txready) arcnet_tx_done(dev, lp);
 	      lp->in_txhandler--;
 	      continue;
 	    }
-	  
+
 	  /* if more than one segment, and not all segments
 	   * are done, then continue xmit.
 	   */
 	  if (out->segnum<out->numsegs)
 	    arcnetA_continue_tx(dev);
 	  arcnet_go_tx(dev,0);
-	  
+
 	  /* if segnum==numsegs, the transmission is finished;
 	   * free the skb.
 	   */
@@ -527,12 +484,12 @@ arcrimi_inthandler(struct device *dev)
 		  dev_kfree_skb(out->skb,FREE_WRITE);
 		}
 	      out->skb=NULL;
-	      
+
 	      /* inform upper layers */
 	      if (!lp->txready) arcnet_tx_done(dev, lp);
 	    }
 	  didsomething++;
-	  
+
 	  lp->in_txhandler--;
 	}
       else if (lp->txready && !lp->sending && !lp->intx)
@@ -542,20 +499,18 @@ arcrimi_inthandler(struct device *dev)
 	  arcnet_go_tx(dev,0);
 	  didsomething++;
 	}
-      
+
 #ifdef DETECT_RECONFIGS
       if (status & (lp->intmask) & RECONflag)
 	{
 	  ACOMMAND(CFLAGScmd|CONFIGclear);
 	  lp->stats.tx_carrier_errors++;
-	  
+
 #ifdef SHOW_RECONFIGS
 	  BUGMSG(D_NORMAL,"Network reconfiguration detected (status=%Xh)\n",
 		 status);
-	  
-	  
 #endif /* SHOW_RECONFIGS */
-	  
+
 #ifdef RECON_THRESHOLD
 	  /* is the RECON info empty or old? */
 	  if (!lp->first_recon || !lp->last_recon ||
@@ -565,19 +520,19 @@ arcrimi_inthandler(struct device *dev)
 		BUGMSG(D_NORMAL,"reconfiguration detected: cabling restored?\n");
 	      lp->first_recon=lp->last_recon=jiffies;
 	      lp->num_recons=lp->network_down=0;
-	      
+
 	      BUGMSG(D_DURING,"recon: clearing counters.\n");
 	    }
 	  else /* add to current RECON counter */
 	    {
 	      lp->last_recon=jiffies;
 	      lp->num_recons++;
-	      
+
 	      BUGMSG(D_DURING,"recon: counter=%d, time=%lds, net=%d\n",
 		     lp->num_recons,
 		     (lp->last_recon-lp->first_recon)/HZ,
 		     lp->network_down);
-	      
+
 	      /* if network is marked up;
 	       * and first_recon and last_recon are 60+ sec
 	       *   apart;
@@ -609,26 +564,24 @@ arcrimi_inthandler(struct device *dev)
 	    BUGMSG(D_NORMAL,"cabling restored?\n");
 	  lp->first_recon=lp->last_recon=0;
 	  lp->num_recons=lp->network_down=0;
-	  
+
 	  BUGMSG(D_DURING,"not recon: clearing counters anyway.\n");
 #endif
 	}
 #endif /* DETECT_RECONFIGS */
     } while (--boguscount && didsomething);
-  
+
   BUGMSG(D_DURING,"net_interrupt complete (status=%Xh, count=%d)\n",
 	 ARCSTATUS,boguscount);
   BUGMSG(D_DURING,"\n");
-  
-  SETMASK;	/* put back interrupt mask */
-  
-}
 
+  SETMASK;	/* put back interrupt mask */
+}
 
 
 /* A packet has arrived; grab it from the buffers and pass it to the generic
  * arcnet_rx routing to deal with it.
- */ 
+ */
 
 static void
 arcrimi_rx(struct device *dev,int recbuf)
@@ -640,11 +593,11 @@ arcrimi_rx(struct device *dev,int recbuf)
   u_char *arcsoft;
   short length,offset;
   u_char daddr,saddr;
-  
+
   lp->stats.rx_packets++;
-  
+
   saddr=arcpacket->hardheader.source;
-  
+
   /* if source is 0, it's a "used" packet! */
   if (saddr==0)
     {
@@ -654,11 +607,11 @@ arcrimi_rx(struct device *dev,int recbuf)
       return;
     }
   /* Set source address to zero to mark it as old */
-  
+
   arcpacket->hardheader.source=0;
-  
+
   daddr=arcpacket->hardheader.destination;
-  
+
   if (arcpacket->hardheader.offset1) /* Normal Packet */
     {
       offset=arcpacket->hardheader.offset1;
@@ -669,24 +622,20 @@ arcrimi_rx(struct device *dev,int recbuf)
     {
       offset=arcpacket->hardheader.offset2;
       arcsoft=&arcpacket->raw[offset];
-      
+
       length=512-offset;
     }
-  
-  
+
   arcnet_rx(lp, arcsoft, length, saddr, daddr);
-  
-  
+
   BUGLVL(D_RX) arcnet_dump_packet(lp->adev,arcpacket->raw,length>240,"rx");
-  
+
 #ifndef SLOW_XMIT_COPY
   /* clean out the page to make debugging make more sense :) */
   BUGLVL(D_DURING)
     memset((void *)arcpacket->raw,0x42,512);
 #endif
-  
 }
-
 
 
 /* Given an skb, copy a packet into the ARCnet buffers for later transmission
@@ -699,45 +648,45 @@ arcrimi_prepare_tx(struct device *dev,u_char *hdr,int hdrlen,
   struct arcnet_local *lp = (struct arcnet_local *)dev->priv;
   union ArcPacket *arcpacket =
     (union ArcPacket *)phys_to_virt(dev->mem_start+512*(lp->txbuf^1));
-  
+
 #ifdef SLOW_XMIT_COPY
   char *iptr,*iend,*optr;
 #endif
-  
+
   lp->txbuf=lp->txbuf^1;	/* XOR with 1 to alternate between 2 and 3 */
-  
+
   length+=hdrlen;
-  
+
   BUGMSG(D_TX,"arcnetAS_prep_tx: hdr:%ph, length:%d, data:%ph\n",
 	 hdr,length,data);
-  
+
 #ifndef SLOW_XMIT_COPY
   /* clean out the page to make debugging make more sense :) */
   BUGLVL(D_DURING)
     memset_io(dev->mem_start+lp->txbuf*512,0x42,512);
 #endif
-  
+
   arcpacket->hardheader.destination=daddr;
-  
+
   /* load packet into shared memory */
   if (length<=MTU)	/* Normal (256-byte) Packet */
     arcpacket->hardheader.offset1=offset=offset?offset:256-length;
-  
+
   else if (length>=MinTU || offset)	/* Extended (512-byte) Packet */
     {
       arcpacket->hardheader.offset1=0;
-      arcpacket->hardheader.offset2=offset=offset?offset:512-length;   
+      arcpacket->hardheader.offset2=offset=offset?offset:512-length;
     }
   else if (exceptA)		/* RFC1201 Exception Packet */
     {
       arcpacket->hardheader.offset1=0;
       arcpacket->hardheader.offset2=offset=512-length-4;
-      
+
       /* exception-specific stuff - these four bytes
        * make the packet long enough to fit in a 512-byte
        * frame.
        */
-      
+
       arcpacket->raw[offset+0]=hdr[0];
       arcpacket->raw[offset+1]=0xFF; /* FF flag */
       arcpacket->raw[offset+2]=0xFF; /* FF padding */
@@ -748,17 +697,17 @@ arcrimi_prepare_tx(struct device *dev,u_char *hdr,int hdrlen,
     {
       /* RFC1051 - set 4 trailing bytes to 0 */
       memset(&arcpacket->raw[508],0,4);
-      
+
       /* now round up to MinTU */
       arcpacket->hardheader.offset1=0;
       arcpacket->hardheader.offset2=offset=512-MinTU;
     }
-  
-  
+
+
   /* copy the packet into ARCnet shmem
    *  - the first bytes of ClientData header are skipped
    */
-  
+
   memcpy((u_char*)arcpacket+offset, (u_char*)hdr,hdrlen);
 #ifdef SLOW_XMIT_COPY
   for (iptr=data,iend=iptr+length-hdrlen,optr=(char *)arcpacket+offset+hdrlen;
@@ -770,16 +719,15 @@ arcrimi_prepare_tx(struct device *dev,u_char *hdr,int hdrlen,
 #else
   memcpy((u_char*)arcpacket+offset+hdrlen, data,length-hdrlen);
 #endif
-  
+
   BUGMSG(D_DURING,"transmitting packet to station %02Xh (%d bytes)\n",
 	 daddr,length);
-  
+
   BUGLVL(D_TX) arcnet_dump_packet(dev,arcpacket->raw,length>MTU,"tx");
-  
+
   lp->lastload_dest=daddr;
   lp->txready=lp->txbuf;	/* packet is ready for sending */
 }
-
 
 
 /****************************************************************************
@@ -806,13 +754,13 @@ int init_module(void)
   if (device)
     strcpy(dev->name,device);
   else arcnet_makename(dev->name);
-  
+
   if (node && node != 0xff)
     dev->dev_addr[0]=node;
-  
+
   dev->irq=irq;
   if (dev->irq==2) dev->irq=9;
-  
+
   if (shmem)
     {
       dev->mem_start=shmem;
@@ -820,7 +768,7 @@ int init_module(void)
       dev->rmem_start=thiscard.mem_start+512*0;
       dev->rmem_end=thiscard.mem_start+512*2-1;
     }
-  
+
   if (register_netdev(dev) != 0)
     return -EIO;
   arcnet_use_count(1);
@@ -831,9 +779,9 @@ void cleanup_module(void)
 {
   struct device *dev=&thiscard;
   int ioaddr=dev->mem_start;
-  
+
   if (dev->start) (*dev->stop)(dev);
-  
+
   /* Flush TX and disable RX */
   if (ioaddr)
     {
@@ -841,13 +789,13 @@ void cleanup_module(void)
       ACOMMAND(NOTXcmd);	/* stop transmit */
       ACOMMAND(NORXcmd);	/* disable receive */
     }
-  
+
   if (dev->irq)
     {
       irq2dev_map[dev->irq] = NULL;
       free_irq(dev->irq,NULL);
     }
-  
+
   unregister_netdev(dev);
   kfree(dev->priv);
   dev->priv = NULL;
@@ -855,7 +803,6 @@ void cleanup_module(void)
 }
 
 #else
-
 
 __initfunc(void arcrimi_setup (char *str, int *ints))
 {
@@ -867,9 +814,9 @@ __initfunc(void arcrimi_setup (char *str, int *ints))
 	     MAX_ARCNET_DEVS);
       return;
     }
-  
+
   dev=&arcnet_devs[arcnet_num_devs];
-  
+
   if (ints[0] < 3)
     {
       printk("ARCnet RIM I: You must give address, IRQ and node ID.\n");
@@ -888,20 +835,17 @@ __initfunc(void arcrimi_setup (char *str, int *ints))
 
     case 2: /* IRQ */
       dev->irq=ints[2];
-      
+
     case 1: /* Mem address */
       dev->mem_start=ints[1];
     }
 
   dev->name = (char *)&arcnet_dev_names[arcnet_num_devs];
-  
+
   if (str)
     strncpy(dev->name, str, 9);
-  
+
   arcnet_num_devs++;
 }
 
 #endif /* MODULE */
-
-
-

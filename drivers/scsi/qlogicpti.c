@@ -37,6 +37,7 @@
 #include <asm/oplib.h>
 #include <asm/vaddrs.h>
 #include <asm/io.h>
+#include <asm/irq.h>
 
 #include <linux/module.h>
 
@@ -351,7 +352,7 @@ __initfunc(static int qlogicpti_load_firmware(struct qlogicpti *qpti))
 	unsigned short csum = 0;
 	unsigned short param[6];
 	unsigned long flags;
-#ifndef MODULE
+#if !defined(MODULE) && !defined(__sparc_v9__)
 	unsigned long dvma_addr;
 #endif
 	int i, timeout;
@@ -419,8 +420,7 @@ __initfunc(static int qlogicpti_load_firmware(struct qlogicpti *qpti))
 	}		
 
 	/* Load the firmware. */
-#ifndef MODULE
-	/* XXX THIS SHIT DOES NOT WORK ON ULTRA... FIXME -DaveM */
+#if !defined(MODULE) && !defined(__sparc_v9__)
 	dvma_addr = (unsigned long) mmu_lockarea((char *)&risc_code01[0],
 						 (sizeof(u_short) * risc_code_length01));
 	param[0] = MBOX_LOAD_RAM;
@@ -435,9 +435,9 @@ __initfunc(static int qlogicpti_load_firmware(struct qlogicpti *qpti))
 		restore_flags(flags);
 		return 1;
 	}
-	/* XXX THIS SHIT DOES NOT WORK ON ULTRA... FIXME -DaveM */
 	mmu_unlockarea((char *)dvma_addr, (sizeof(u_short) * risc_code_length01));
 #else
+	/* We need to do it this slow way always on Ultra. */
 	for(i = 0; i < risc_code_length01; i++) {
 		param[0] = MBOX_WRITE_RAM_WORD;
 		param[1] = risc_code_addr01 + i;
@@ -566,6 +566,9 @@ static void qlogicpti_intr_handler(int irq, void *dev_id, struct pt_regs *regs);
 /* Detect all PTI Qlogic ISP's in the machine. */
 __initfunc(int qlogicpti_detect(Scsi_Host_Template *tpnt))
 {
+#ifdef __sparc_v9__
+	struct devid_cookie dcookie;
+#endif
 	struct qlogicpti *qpti, *qlink;
 	struct Scsi_Host *qpti_host;
 	struct linux_sbus *sbus;
@@ -643,7 +646,7 @@ __initfunc(int qlogicpti_detect(Scsi_Host_Template *tpnt))
 				/* Map this one read only. */
 				qpti->sreg = sreg = (volatile unsigned char *)
 					sparc_alloc_io((qpti->qdev->reg_addrs[0].phys_addr +
-						       (16 * PAGE_SIZE)), 0,
+						       (16 * 4096)), 0,
 						       sizeof(unsigned char),
 						       "PTI Qlogic/ISP Status Reg",
 						       qpti->qdev->reg_addrs[0].which_io, 1);
@@ -659,6 +662,7 @@ __initfunc(int qlogicpti_detect(Scsi_Host_Template *tpnt))
 
 			qpti_host->irq = qpti->irq = qpti->qdev->irqs[0].pri;
 
+#ifndef __sparc_v9__
 			/* Allocate the irq only if necessary. */
 			for_each_qlogicpti(qlink) {
 				if((qlink != qpti) && (qpti->irq == qlink->irq)) {
@@ -673,6 +677,25 @@ __initfunc(int qlogicpti_detect(Scsi_Host_Template *tpnt))
 			}
 qpti_irq_acquired:
 			printk("qpti%d: IRQ %d ", qpti->qpti_id, qpti->qhost->irq);
+#else
+			/* On Ultra we must always call request_irq for each
+			 * qpti, so that imap registers get setup etc.
+			 */
+			dcookie.real_dev_id = qpti;
+			dcookie.imap = dcookie.iclr = 0;
+			dcookie.pil = -1;
+			dcookie.bus_cookie = sbus;
+			if(request_irq(qpti->qhost->irq, qlogicpti_intr_handler,
+				       (SA_SHIRQ | SA_SBUS | SA_DCOOKIE),
+				       "PTI Qlogic/ISP SCSI", &dcookie)) {
+				printk("Cannot acquire PTI Qlogic/ISP irq line\n");
+				/* XXX Unmap regs, unregister scsi host, free things. */
+				continue;
+			}
+			qpti->qhost->irq = qpti->irq = dcookie.ret_ino;
+			printk("qpti%d: INO[%x] IRQ %d ",
+			       qpti->qpti_id, qpti->qhost->irq, dcookie.ret_pil);
+#endif
 
 			/* Figure out our scsi ID on the bus */
 			qpti->scsi_id = prom_getintdefault(qpti->prom_node,
@@ -805,7 +828,11 @@ static inline void cmd_frob(struct Command_Entry *cmd, Scsi_Cmnd *Cmnd,
 	memset(cmd, 0, sizeof(struct Command_Entry));
 	cmd->hdr.entry_cnt = 1;
 	cmd->hdr.entry_type = ENTRY_COMMAND;
-	cmd->handle = (u_int) ((unsigned long)Cmnd);          /* magic mushroom */
+#ifdef __sparc_v9__
+	cmd->handle = (u_int) (((unsigned long)Cmnd) - PAGE_OFFSET); /* magic mushroom */
+#else
+	cmd->handle = (u_int) ((unsigned long)Cmnd);                 /* magic mushroom */
+#endif
 	cmd->target_id = Cmnd->target;
 	cmd->target_lun = Cmnd->lun;
 	cmd->cdb_length = Cmnd->cmd_len;
@@ -1013,6 +1040,8 @@ static int qlogicpti_return_status(struct Status_Entry *sts)
 	return (sts->scsi_status & STATUS_MASK) | (host_status << 16);
 }
 
+#ifndef __sparc_v9__
+
 static void qlogicpti_intr_handler(int irq, void *dev_id, struct pt_regs *regs)
 {
 	static int running = 0;
@@ -1098,6 +1127,76 @@ repeat:
 		goto repeat;
 	running--;
 }
+
+#else /* __sparc_v9__ */
+
+static void qlogicpti_intr_handler(int irq, void *dev_id, struct pt_regs *regs)
+{
+	struct qlogicpti *qpti = dev_id;
+	Scsi_Cmnd *Cmnd;
+	struct Status_Entry *sts;
+	u_int in_ptr, out_ptr;
+
+	if(qpti->qregs->sbus_stat & SBUS_STAT_RINT) {
+		struct qlogicpti_regs *qregs = qpti->qregs;
+
+		in_ptr = qregs->mbox5;
+		qregs->hcctrl = HCCTRL_CRIRQ;
+		if(qregs->sbus_semaphore & SBUS_SEMAPHORE_LCK) {
+			switch(qregs->mbox0) {
+			case ASYNC_SCSI_BUS_RESET:
+			case EXECUTION_TIMEOUT_RESET:
+				qpti->send_marker = 1;
+				break;
+			case INVALID_COMMAND:
+			case HOST_INTERFACE_ERROR:
+			case COMMAND_ERROR:
+			case COMMAND_PARAM_ERROR:
+				break;
+			}
+			qregs->sbus_semaphore = 0;
+		}
+
+		/* This looks like a network driver! */
+		out_ptr = qpti->res_out_ptr;
+		while(out_ptr != in_ptr) {
+			sts = (struct Status_Entry *) &qpti->res_cpu[out_ptr];
+			out_ptr = NEXT_RES_PTR(out_ptr);
+			Cmnd = (Scsi_Cmnd *) (((unsigned long)sts->handle)+PAGE_OFFSET);
+
+			if(sts->completion_status == CS_RESET_OCCURRED ||
+			   sts->completion_status == CS_ABORTED ||
+			   (sts->status_flags & STF_BUS_RESET))
+				qpti->send_marker = 1;
+
+			if(sts->state_flags & SF_GOT_SENSE)
+				memcpy(Cmnd->sense_buffer, sts->req_sense_data,
+				       sizeof(Cmnd->sense_buffer));
+
+			if(sts->hdr.entry_type == ENTRY_STATUS)
+				Cmnd->result = qlogicpti_return_status(sts);
+			else
+				Cmnd->result = DID_ERROR << 16;
+
+			if(Cmnd->use_sg)
+				mmu_release_scsi_sgl((struct mmu_sglist *)
+						     Cmnd->buffer,
+						     Cmnd->use_sg - 1,
+						     qpti->qdev->my_bus);
+			else
+				mmu_release_scsi_one((__u32)((unsigned long)Cmnd->SCp.ptr),
+						     Cmnd->request_bufflen,
+						     qpti->qdev->my_bus);
+
+			qpti->cmd_count[Cmnd->target]--;
+			qregs->mbox5 = out_ptr;
+			Cmnd->scsi_done(Cmnd);
+		}
+		qpti->res_out_ptr = out_ptr;
+	}
+}
+
+#endif
 
 int qlogicpti_abort(Scsi_Cmnd *Cmnd)
 {

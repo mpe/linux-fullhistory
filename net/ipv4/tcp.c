@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp.c,v 1.70 1997/09/01 03:14:28 davem Exp $
+ * Version:	$Id: tcp.c,v 1.71 1997/09/06 05:11:45 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -1503,10 +1503,11 @@ void tcp_close(struct sock *sk, unsigned long timeout)
  *	Wait for an incoming connection, avoid race
  *	conditions. This must be called with the socket locked.
  */
-static struct open_request * wait_for_connect(struct sock * sk)
+static struct open_request * wait_for_connect(struct sock * sk,
+					      struct open_request **pprev)
 {
 	struct wait_queue wait = { current, NULL };
-	struct open_request *req = NULL, *dummy;
+	struct open_request *req = NULL;
 
 	add_wait_queue(sk->sleep, &wait);
 	for (;;) {
@@ -1514,7 +1515,7 @@ static struct open_request * wait_for_connect(struct sock * sk)
 		release_sock(sk);
 		schedule();
 		lock_sock(sk);
-		req = tcp_find_established(&(sk->tp_pinfo.af_tcp), &dummy);
+		req = tcp_find_established(&(sk->tp_pinfo.af_tcp), pprev);
 		if (req) 
 			break;
 		if (current->signal & ~current->blocked)
@@ -1569,7 +1570,7 @@ no_listen:
 	error = EAGAIN;
 	if (flags & O_NONBLOCK)
 		goto out;
-	req = wait_for_connect(sk);
+	req = wait_for_connect(sk, &prev);
 	if (req)
 		goto got_new_connect;
 	error = ERESTARTSYS;

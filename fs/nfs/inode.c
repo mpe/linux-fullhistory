@@ -81,6 +81,7 @@ static void
 nfs_delete_inode(struct inode * inode)
 {
 	dprintk("NFS: delete_inode(%x/%ld)\n", inode->i_dev, inode->i_ino);
+	clear_inode(inode);
 }
 
 void

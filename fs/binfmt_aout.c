@@ -82,7 +82,7 @@ do_aout_core_dump(long signr, struct pt_regs * regs)
 	struct dentry * dentry = NULL;
 	struct inode * inode = NULL;
 	struct file file;
-	unsigned short fs;
+	unsigned long fs;
 	int has_dumped = 0;
 	char corefile[6+sizeof(current->comm)];
 	unsigned long dump_start, dump_size;

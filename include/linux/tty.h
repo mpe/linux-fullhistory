@@ -73,6 +73,7 @@ extern struct screen_info screen_info;
 #define VIDEO_TYPE_TGAC		0x40	/* DEC TGA */
 
 #define VIDEO_TYPE_SUN          0x50    /* Sun frame buffer. */
+#define VIDEO_TYPE_SUNPCI       0x51    /* Sun PCI based frame buffer. */
 
 #define VIDEO_TYPE_PMAC		0x60	/* PowerMacintosh frame buffer. */
 

@@ -360,8 +360,6 @@ void d_add(struct dentry * entry, struct inode * inode)
  */
 void d_move(struct dentry * dentry, struct dentry * target)
 {
-	struct list_head * oldhead;
-
 	if (!dentry->d_inode)
 		printk("VFS: moving negative dcache entry\n");
 

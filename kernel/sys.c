@@ -366,7 +366,7 @@ static struct file acct_file;
 int acct_process(long exitcode)
 {
    struct acct ac;
-   unsigned short fs;
+   unsigned long fs;
 
    if (acct_active) {
       strncpy(ac.ac_comm, current->comm, ACCT_COMM);

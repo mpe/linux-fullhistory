@@ -394,16 +394,9 @@ static inline int autofs_get_set_timeout(struct autofs_sb_info *sbi,
 	int rv;
 	unsigned long ntimeout;
 
-#if LINUX_VERSION_CODE < kver(2,1,0)
-	if ( (rv = verify_area(VERIFY_WRITE, p, sizeof(unsigned long))) )
-		return rv;
-	ntimeout = get_user(p);
-	put_user(sbi->exp_timeout/HZ, p);
-#else
 	if ( (rv = get_user(ntimeout, p)) ||
 	     (rv = put_user(sbi->exp_timeout/HZ, p)) )
 		return rv;
-#endif
 
 	if ( ntimeout > ULONG_MAX/HZ )
 		sbi->exp_timeout = 0;
@@ -416,15 +409,7 @@ static inline int autofs_get_set_timeout(struct autofs_sb_info *sbi,
 /* Return protocol version */
 static inline int autofs_get_protover(int *p)
 {
-#if LINUX_VERSION_CODE < kver(2,1,0)
-	int rv;
-	if ( (rv = verify_area(VERIFY_WRITE, p, sizeof(int))) )
-		return rv;
-	put_user(AUTOFS_PROTO_VERSION, p);
-	return 0;
-#else
 	return put_user(AUTOFS_PROTO_VERSION, p);
-#endif
 }
 
 /* Perform an expiry operation */

@@ -204,6 +204,16 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_ACQUIRE_WDT),y)
+M = y
+L_OBJS += acquirewdt.o
+else
+  ifeq ($(CONFIG_ACQUIRE_WDT),m)
+  M_OBJS += acquirewdt.o
+  MM = m
+  endif
+endif
+
 ifeq ($(CONFIG_AMIGAMOUSE),y)
 M = y
 L_OBJS += amigamouse.o
@@ -290,6 +300,11 @@ endif
 
 ifdef CONFIG_APM
 LX_OBJS += apm_bios.o
+M = y
+endif
+
+ifdef CONFIG_H8
+LX_OBJS += h8.o
 M = y
 endif
 

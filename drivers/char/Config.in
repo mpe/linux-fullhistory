@@ -101,8 +101,10 @@ if [ "$CONFIG_WATCHDOG" != "n" ]; then
   fi
   tristate '   Software Watchdog' CONFIG_SOFT_WATCHDOG
   tristate '   Berkshire Products PC Watchdog' CONFIG_PCWATCHDOG
+  tristate '   Acquire SBC Watchdog Timer' CONFIG_ACQUIRE_WDT
 fi
 bool 'Enhanced Real Time Clock Support' CONFIG_RTC
+bool 'Tadpole ANA H8 Support'  CONFIG_H8
 tristate '/dev/nvram support' CONFIG_NVRAM
 tristate 'PC joystick support' CONFIG_JOYSTICK
 endmenu

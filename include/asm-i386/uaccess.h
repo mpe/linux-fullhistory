@@ -18,9 +18,19 @@
  * For historical reasons, these macros are grossly misnamed.
  */
 
+extern unsigned long __bad_fs_size(void);
+
 #define get_fs()	(current->tss.segment)
-#define set_fs(x)	(current->tss.segment = (x))
 #define get_ds()	(KERNEL_DS)
+
+/* Some architectures -- Alpha for one -- use "segment" schemes that 
+   require all bits to be preserved, thus the i386 traditional `ushort'
+   doesn't work.  To head off problems early, force the Intel folks
+   to do it Right as well.  */
+
+#define set_fs(x)	(current->tss.segment =				\
+			 sizeof(x) == sizeof(unsigned long) ? (x) 	\
+			 : __bad_fs_size())
 
 /*
  * Address Ok:

@@ -15,7 +15,7 @@
  * 1993-10-08    Torsten Duwe
  *      adjtime interface update and CMOS clock write code
  * 1995-08-13    Torsten Duwe
- *      kernel PLL updated to 1994-12-13 specs (rfc-1489)
+ *      kernel PLL updated to 1994-12-13 specs (rfc-1589)
  */
 
 #include <linux/errno.h>

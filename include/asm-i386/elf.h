@@ -27,17 +27,23 @@ typedef struct user_i387_struct elf_fpregset_t;
 #define ELF_DATA	ELFDATA2LSB;
 #define ELF_ARCH	EM_386
 
-	/* SVR4/i386 ABI (pages 3-31, 3-32) says that when the program
-	   starts %edx contains a pointer to a function which might be
-	   registered using `atexit'.  This provides a mean for the
-	   dynamic linker to call DT_FINI functions for shared libraries
-	   that have been loaded before the code runs.
+/* SVR4/i386 ABI (pages 3-31, 3-32) says that when the program starts %edx
+   contains a pointer to a function which might be registered using `atexit'.
+   This provides a mean for the dynamic linker to call DT_FINI functions for
+   shared libraries that have been loaded before the code runs.
 
-	   A value of 0 tells we have no such handler.  */
+   A value of 0 tells we have no such handler.  */
 #define ELF_PLAT_INIT(_r)	_r->edx = 0
 
 #define USE_ELF_CORE_DUMP
 #define ELF_EXEC_PAGESIZE	4096
+
+/* This is the location that an ET_DYN program is loaded if exec'ed.  Typical
+   use of this is to invoke "./ld.so someprog" to test out a new version of
+   the loader.  We need to make sure that it is out of the way of the program
+   that it will "exec", and that there is sufficient room for the brk.  */
+
+#define ELF_ET_DYN_BASE         (2 * TASK_SIZE / 3)
 
 /* Wow, the "main" arch needs arch dependent functions too.. :) */
 

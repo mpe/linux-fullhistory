@@ -20,6 +20,8 @@ CONFIG_MODULES=y
 # CONFIG_MATH_EMULATION is not set
 CONFIG_NET=y
 CONFIG_PCI=y
+CONFIG_PCI_BIOS=y
+# CONFIG_PCI_DIRECT is not set
 # CONFIG_MCA is not set
 CONFIG_SYSVIPC=y
 CONFIG_SYSCTL=y
@@ -139,7 +141,6 @@ CONFIG_SCSI_OMIT_FLASHPOINT=y
 # CONFIG_SCSI_NCR53C406A is not set
 # CONFIG_SCSI_NCR53C7xx is not set
 # CONFIG_SCSI_NCR53C8XX is not set
-# CONFIG_SCSI_PPA is not set
 # CONFIG_SCSI_PAS16 is not set
 # CONFIG_SCSI_QLOGIC_FAS is not set
 # CONFIG_SCSI_QLOGIC_ISP is not set
@@ -162,6 +163,7 @@ CONFIG_NET_ETHERNET=y
 # CONFIG_NET_VENDOR_3COM is not set
 # CONFIG_LANCE is not set
 # CONFIG_NET_VENDOR_SMC is not set
+# CONFIG_NET_VENDOR_RACAL is not set
 # CONFIG_NET_ISA is not set
 CONFIG_NET_EISA=y
 # CONFIG_PCNET32 is not set
@@ -174,7 +176,6 @@ CONFIG_EEXPRESS_PRO100=y
 # CONFIG_NET_POCKET is not set
 # CONFIG_FDDI is not set
 # CONFIG_DLCI is not set
-# CONFIG_PLIP is not set
 # CONFIG_PPP is not set
 # CONFIG_NET_RADIO is not set
 # CONFIG_SLIP is not set
@@ -239,6 +240,7 @@ CONFIG_82C710_MOUSE=y
 # CONFIG_APM is not set
 # CONFIG_WATCHDOG is not set
 # CONFIG_RTC is not set
+# CONFIG_H8 is not set
 # CONFIG_NVRAM is not set
 # CONFIG_JOYSTICK is not set
 

@@ -680,20 +680,37 @@ CONFIG_TGA_CONSOLE
   VGA driver is used.  Note that, at this time, there is no X server
   for these systems. If unsure, try N.
 
-PCI bios support
+PCI support
 CONFIG_PCI
   Find out whether you have a PCI motherboard. PCI is the name of a
   bus system, i.e. the way the CPU talks to the other stuff inside
   your box. Other bus systems are ISA, EISA, Microchannel (MCA) or
-  VESA. If you have PCI, say Y, otherwise N. Note: some old PCI
-  motherboards have BIOS bugs and may crash if "PCI bios support" is
-  enabled (but they run fine without this option). The PCI-HOWTO,
-  available via ftp (user: anonymous) in
-  sunsite.unc.edu:/pub/Linux/docs/HOWTO, contains valuable information
-  about which PCI hardware does work under Linux and which doesn't.
+  VESA. If you have PCI, say Y, otherwise N. The PCI-HOWTO, available
+  via ftp (user: anonymous) in sunsite.unc.edu:/pub/Linux/docs/HOWTO,
+  contains valuable information about which PCI hardware does work
+  under Linux and which doesn't.
   If some of your PCI devices don't work and you get a warning during
   boot time ("man dmesg"), please follow the instructions at the top
   of include/linux/pci.h.
+
+PCI BIOS support
+CONFIG_PCI_BIOS
+  If you have enabled PCI bus support above, you probably want to allow
+  Linux to use your PCI BIOS to detect the PCI devices and determine
+  their configuration. Note: some old PCI motherboards have BIOS bugs
+  and may crash if this switch is enabled -- for such motherboards,
+  you should disable PCI BIOS support and use direct PCI access instead.
+  Except for some special cases (embedded systems with no BIOS), you
+  probably should say Y here.
+
+PCI direct access support
+CONFIG_PCI_DIRECT
+  If you don't want to use the PCI BIOS (e.g., because you run some
+  embedded system with no BIOS at all) or Linux says it cannot use
+  your PCI BIOS, you can enable direct PCI hardware here. It might fail
+  if your machine is based on some unusual chipset, but it usually
+  works. If both PCI BIOS and direct PCI access are enabled, the use
+  of BIOS is preferred. If unsure, say Y.
 
 PCI bridge optimization (experimental)
 CONFIG_PCI_OPTIMIZE
@@ -2653,6 +2670,26 @@ CONFIG_SOUNDMODEM_FSK9600
   can only use one protocol at a time, depending on what the other end
   can understand).
 
+Shortwave radio modem driver
+CONFIG_HFMODEM
+  This experimental driver is used by a package (to be released)
+  that implements the shortwave radio protocols RTTY, Sitor (Amtor),
+  Pactor 1 and GTOR using a standard PC soundcard. If unsure,
+  say N.
+
+Shortwave radio modem driver support for SoundBlaster and compatible cards
+CONFIG_HFMODEM_SBC
+  This option enables the hfmodem driver to use SoundBlaster and
+  compatible cards. It requires a 16bit capable card, i.e.
+  SB16 or better, or ESS1688 or newer.
+
+Shortwave radio modem driver support for WSS and Crystal cards
+CONFIG_HFMODEM_WSS
+  This option enables the hfmodem driver to use WindowsSoundSystem
+  compatible cards. These cards feature a codec chip from either
+  Analog Devices (such as AD1848, AD1845, AD1812) or Crystal
+  Semiconductors (such as CS4248, CS423x).
+
 Serial port KISS driver for AX.25
 CONFIG_MKISS
   KISS is the protocol used to send IP traffic over AX.25 radio
@@ -3056,10 +3093,14 @@ CONFIG_NET_ISA
   linux, read the Multiple-Ethernet-mini-HOWTO, available from
   sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini.
 
-ARCnet support
+Generic ARCnet support
 CONFIG_ARCNET
   If you have a network card of this type, say Y and check out the
   (arguably) beautiful poetry in Documentation/networking/arcnet.txt.
+  You need both this driver, and the driver for the particular ARCnet
+  chipset of your card. If you don't know, then it's probably a 
+  COM90xx type card, so say Y (or M) to ARCnet COM90xx chipset support
+  below.
   You might also want to have a look at the Ethernet-HOWTO, available
   via ftp (user: anonymous) in sunsite.unc.edu:/pub/Linux/docs/HOWTO
   (even though ARCnet is not really ethernet). This driver is also
@@ -3096,6 +3137,31 @@ CONFIG_ARCNET_1051
   automatically as the arc0 device.  Please read the ARCnet
   documentation in Documentation/networking/arcnet.txt for more
   information about using arc0e and arc0s.
+
+ARCnet COM90xx chipset support
+CONFIG_ARCNET_COM90xx
+  This is the chipset driver for the standard COM90xx cards. If you always
+  used the old arcnet driver without knowing what type of card you had, 
+  this is probably the one for you.
+
+ARCnet COM90xx IO mapped mode chipset support
+CONFIG_ARCNET_COM90xxIO
+  This is the chipset driver for the COM90xx cards, using them in IO-mapped
+  mode instead of memory-mapped mode. This is slower than the normal driver.
+  Only use it if your card doesn't support shared memory.
+
+ARCnet RIM I chipset support
+CONFIG_ARCNET_RIM_I
+  This is yet another chipset driver for the COM90xx cards, but this time
+  only using memory-mapped mode, and no IO ports at all. This driver is
+  completely untested, so if you have one of these cards, please mail 
+  dwmw2@cam.ac.uk, especially if it works!
+
+ARCnet COM20020 chipset support
+CONFIG_ARCNET_COM20020
+  This is the driver for the new COM20020 chipset. It supports such things
+  as promiscuous mode, so packet sniffing is possible, and extra diagnostic
+  information.
 
 Cabletron E21xx support
 CONFIG_E2100
@@ -3221,6 +3287,16 @@ CONFIG_EEXPRESS
   eexpress.o. If you plan to use more than one network card under
   linux, read the Multiple-Ethernet-mini-HOWTO, available from
   sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini.
+
+NI5010 support
+CONFIG_NI5010
+  If you have a network (ethernet) card of this type, say Y and read
+  the Ethernet-HOWTO, available via ftp (user: anonymous) in
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO. If you plan to use more than
+  one network card under linux, read the Multiple-Ethernet-mini-HOWTO,
+  available from sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini.
+  Note that this is still experimental code. If you use this driver,
+  please contact the authors to join the development team.
 
 NI5210 support
 CONFIG_NI52
@@ -4445,6 +4521,12 @@ CONFIG_VT_CONSOLE
   other console device, in which case you probably want to say Y to
   "Console on serial port", below. If unsure, say N.
 
+Software generated cursor
+CONFIG_SOFTCURSOR
+  If you enable this option, you'll be able to do lots of nice things
+  with your cursor -- for example to turn it into a non-blinking one.
+  See Documentation/VGA-softcursor.txt for more information.
+
 Standard/generic serial support
 CONFIG_SERIAL
   This selects whether you want to include the driver for the standard
@@ -4938,6 +5020,18 @@ CONFIG_PCWATCHDOG
   module is called pcwd.o. If you want to compile it as a module, say
   M here and read Documentation/modules.txt.  Most people will say N.
 
+Acquire SBC Watchdog Timer
+CONFIG_ACQUIRE_WDT
+  This is the driver for the hardware watchdog on the PSC-6x86 Single
+  Board Computer produced by Acquire Inc (and others). This watchdog
+  simply watches your kernel to make sure it doesn't freeze, and if
+  it does, it resets your computer after a certain amount of time.
+  This driver is like the WDT501 driver but for different hardware.
+  This driver is also available as a module ( = code which can be 
+  inserted in and removed from the running kernel whenever you want).
+  The module is called pscwdt.o. If you want to compile it as a module,
+  say M here and read Documentation/modules.txt.  Most people will say N.
+  
 Enhanced Real Time Clock Support
 CONFIG_RTC
   If you say Y here and create a character special file /dev/rtc with
@@ -5853,6 +5947,76 @@ CONFIG_MSDOS_PARTITION
   sharing a hard disk between i386 and m68k Linux boxes, for example.
   Say Y if you need this feature; users who are only using their
   system-native partitioning scheme can say N here.
+
+Build PowerMac Kernel (not PReP)
+CONFIG_PMAC
+  There are currently two different kinds of PowerPC-based machines
+  available: Apple Power Macintoshes and clones (such as the Motorola
+  Starmax series, and PReP (PowerPC Reference Platform) machines such
+  as the Motorola PowerStack range.  Currently, a single kernel binary
+  only supports one type or the other.  Say Y here to compile a kernel
+  which will run on Power Macintoshes and clones.
+
+Build PReP Kernel (not PowerMac)
+CONFIG_PREP
+  Say Y here to compile a kernel which will run on PReP (PowerPC
+  Reference Platform) machines such as the Motorola PowerStack range.
+  For Power Macintosh clones, including the Motorola Starmaxes, you
+  should say N (and Y to the previous question).
+
+Processor type
+CONFIG_MCOMMON
+  If you are compiling a kernel to run on a specific machine, you can
+  indicate which type of PowerPC processor it has.  Currently this
+  option does very little.
+
+Support for Open Firmware device tree in /proc
+CONFIG_PROC_DEVICETREE
+  This option adds a device-tree directory under /proc which contains
+  an image of the device tree that the kernel copies from Open
+  Firmware.  If unsure, say Y here.
+
+Support for ATI Mach64 display cards
+CONFIG_ATY_VIDEO
+  Several of the newer Power Macintoshes and clones have a video
+  display interface based on the ATI Mach64 chipset.  Say N here if
+  you are sure you don't need this functionality, otherwise Y.
+
+Support for IMS Twin Turbo display card
+CONFIG_IMSTT_VIDEO
+  Some Power Macintosh clones have an IMS Twin Turbo video display
+  interface.  Say Y to include support for this.
+
+MESH (Power Mac internal SCSI) support
+CONFIG_SCSI_MESH
+  Many Power Macintoshes and clones have a MESH (Macintosh Enhanced
+  SCSI Hardware) SCSI bus adaptor (the 7200 doesn't, but all of the
+  other Power Macintoshes do).  Say Y to include support for this SCSI
+  adaptor.
+
+Maximum synchronous transfer rate
+CONFIG_SCSI_MESH_SYNC_RATE
+  On Power Macintoshes (and clones) where the MESH SCSI bus adaptor
+  drives a bus which is entirely internal to the machine (such as the
+  7500, 7600, 8500, etc.), the MESH is capable of synchronous
+  operation at up to 10MB/s.  On machines where the SCSI bus
+  controlled by the MESH can have external devices connected, it is
+  usually rated at 5MB/s.  5 is a safe value here unless you know the
+  MESH SCSI bus is internal only; in that case you can say 10.  Say 0
+  to disable synchronous operation.
+
+53C94 (Power Mac external SCSI) support
+CONFIG_SCSI_MAC53C94
+  On Power Macintoshes (and clones) with two SCSI buses, the external
+  SCSI bus is usually controlled by a 53C94 SCSI bus adaptor.  Older
+  machines which only have one SCSI bus, such as the 7200, also use
+  the 53C94.  Say Y to include support for the 53C94.
+
+MACE (Power Mac ethernet) support
+CONFIG_MACE
+  Power Macintoshes and clones with ethernet built-in on the
+  motherboard will usually use a MACE (Medium Access Control for
+  Ethernet) interface.  Say Y to include support for the MACE chip.
 
 # need an empty line after last entry, for sed script in Configure.
 

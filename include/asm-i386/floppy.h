@@ -283,6 +283,8 @@ static int FDC2 = -1;
 #define N_FDC 2
 #define N_DRIVE 8
 
+#define FLOPPY_MOTOR_MASK 0xf0
+
 /*
  * The DMA channel used by the floppy controller cannot access data at
  * addresses >= 16MB

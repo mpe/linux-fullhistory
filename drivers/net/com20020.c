@@ -1,4 +1,5 @@
-/* com20020.c:
+/*	$Id: com20020.c,v 1.2 1997/09/05 08:57:50 mj Exp $
+
         Written 1997 by David Woodhouse <dwmw2@cam.ac.uk>
 
 	Derived from the original arcnet.c,
@@ -59,36 +60,6 @@
 #include <net/arp.h>
 
 
-
-
-
-/* External functions from arcnet.c */
-
-
-
-#if ARCNET_DEBUG_MAX & D_SKB
-extern void arcnet_dump_skb(struct device *dev,struct sk_buff *skb,
-			    char *desc);
-#else
-#define arcnet_dump_skb(dev,skb,desc) ;
-#endif
-
-#if (ARCNET_DEBUG_MAX & D_RX) || (ARCNET_DEBUG_MAX & D_TX)
-extern void arcnet_dump_packet(struct device *dev,u_char *buffer,int ext,
-			       char *desc);
-#else
-#define arcnet_dump_packet(dev,buffer,ext,desc) ;
-#endif
-extern void arcnet_tx_done(struct device *dev, struct arcnet_local *lp);
-extern void arcnet_makename(char *device);
-extern void arcnet_interrupt(int irq,void *dev_id,struct pt_regs *regs);
-extern void arcnet_setup(struct device *dev);
-extern int arcnet_go_tx(struct device *dev,int enable_irq);
-extern void arcnetA_continue_tx(struct device *dev);
-extern void arcnet_rx(struct arcnet_local *lp, u_char *arcsoft, short length, int saddr, int daddr);
-extern void arcnet_use_count(int open);
-
-
 /* Internal function declarations */
 
 static int arc20020_probe(struct device *dev);
@@ -136,7 +107,6 @@ extern int arcnet_num_devs;
 #endif
 
 
-
 /* Handy defines for ARCnet specific stuff */
 
 static char *clockrates[]={"2.5 Mb/s","1.25Mb/s","625 Kb/s","312.5 Kb/s",
@@ -144,7 +114,7 @@ static char *clockrates[]={"2.5 Mb/s","1.25Mb/s","625 Kb/s","312.5 Kb/s",
 		    "Reserved"};
 
 
-/* The number of low I/O ports used by the ethercard. */
+/* The number of low I/O ports used by the card. */
 #define ARCNET_TOTAL_SIZE 9
 
 #define _INTMASK (ioaddr+0)	/* writable */
@@ -155,7 +125,6 @@ static char *clockrates[]={"2.5 Mb/s","1.25Mb/s","625 Kb/s","312.5 Kb/s",
 #define _MEMDATA  (ioaddr+4)     /* Data port for IO-mapped memory */
 #define _ADDR_HI  (ioaddr+2)     /* Control registers for said */
 #define _ADDR_LO  (ioaddr+3)
-
 
 #define RDDATAflag      0x80     /* Next access is a read/~write */
 #define NEWNXTIDflag    0x02     /* ID to which token is passed has changed */
@@ -177,7 +146,6 @@ static char *clockrates[]={"2.5 Mb/s","1.25Mb/s","625 Kb/s","312.5 Kb/s",
 		    udelay(5);                       \
 		    outb(0x18 , _CONFIG);            \
                   }
-
 
 #define ARCSTATUS	inb(_STATUS)
 #define ACOMMAND(cmd) outb((cmd),_COMMAND)
@@ -247,14 +215,13 @@ void put_whole_buffer (struct device *dev, unsigned offset, unsigned length, cha
 
 
 static const char *version =
- "com20020.c: v2.91 97/08/19 Avery Pennarun <apenwarr@bond.net> et al.\n";
+ "com20020.c: v2.92 97/09/02 Avery Pennarun <apenwarr@bond.net> et al.\n";
 
 /****************************************************************************
  *                                                                          *
  * Probe and initialization                                                 *
  *                                                                          *
  ****************************************************************************/
-
 
 
 /* We cannot probe for an IO mapped card either, although we can check that
@@ -300,14 +267,11 @@ __initfunc(int arc20020_probe(struct device *dev))
       return -ENODEV;
     }
   
-  
   BUGMSG(D_INIT_REASONS,"Status after reset: %X\n",status);
-  
   
   /* Enable TX */
   outb(0x39,_CONFIG);
   outb(inb(ioaddr+8),ioaddr+7);
-  
   
   ACOMMAND(CFLAGScmd|RESETclear|CONFIGclear);
   
@@ -364,7 +328,6 @@ __initfunc(int arc20020_probe(struct device *dev))
 }
 
 
-
 /* Set up the struct device associated with this card.  Called after
  * probing succeeds.
  */
@@ -385,12 +348,10 @@ __initfunc(int arc20020_found(struct device *dev,int ioaddr,int airq))
   request_region(ioaddr,ARCNET_TOTAL_SIZE,"arcnet (COM20020)");
   dev->base_addr=ioaddr;
   
-  
   dev->mem_start=dev->mem_end=dev->rmem_start=dev->rmem_end=(long)NULL;
-  
-  
+
   /* Initialize the rest of the device structure. */
-  
+
   dev->priv = kmalloc(sizeof(struct arcnet_local), GFP_KERNEL);
   if (dev->priv == NULL)
     {
@@ -404,7 +365,7 @@ __initfunc(int arc20020_found(struct device *dev,int ioaddr,int airq))
   lp=(struct arcnet_local *)(dev->priv);
   lp->card_type = ARC_20020;
   lp->card_type_str = "COM 20020";
-  
+
   lp->arcnet_reset=arc20020_reset;
   lp->asetmask=arc20020_setmask;
   lp->astatus=arc20020_status;
@@ -413,31 +374,30 @@ __initfunc(int arc20020_found(struct device *dev,int ioaddr,int airq))
   lp->openclose_device=arc20020_openclose;
   lp->prepare_tx=arc20020_prepare_tx;
   lp->inthandler=arc20020_inthandler;
-  
-  
+
   dev->set_multicast_list = arc20020_set_mc_list;
-  
+
   /* Fill in the fields of the device structure with generic
    * values.
    */
   arcnet_setup(dev);
-  
+
   /* And now fill particular fields with arcnet values */
   dev->mtu=1500; /* completely arbitrary - agrees with ether, though */
   dev->hard_header_len=sizeof(struct ClientData);
   lp->sequence=1;
   lp->recbuf=0;
-  
+
   BUGMSG(D_DURING,"ClientData header size is %d.\n",
 	 sizeof(struct ClientData));
   BUGMSG(D_DURING,"HardHeader size is %d.\n",
 	 sizeof(struct archdr));
-  
+
   /* get and check the station ID from offset 1 in shmem */
   lp->timeout = dev->dev_addr[3] & 3; dev->dev_addr[3]=0;
   lp->backplane =dev->dev_addr[1] & 1; dev->dev_addr[1]=0;
   lp->setup = (dev->dev_addr[2] & 7) << 1; dev->dev_addr[2]=0;
-  
+
   if (dev->dev_addr[0])
     lp->stationid=dev->dev_addr[0];
   else
@@ -447,11 +407,11 @@ __initfunc(int arc20020_found(struct device *dev,int ioaddr,int airq))
   /* Default 0x38 + register: Node ID */
   SETCONF;
   outb(lp->stationid, ioaddr+7);
-  
+
   REGSETUP;
   SETCONF;
   outb(lp->setup, ioaddr+7);
-  
+
   if (!lp->stationid)
     BUGMSG(D_NORMAL,"WARNING!  Station address 00 is reserved "
 	   "for broadcasts!\n");
@@ -459,19 +419,19 @@ __initfunc(int arc20020_found(struct device *dev,int ioaddr,int airq))
     BUGMSG(D_NORMAL,"WARNING!  Station address FF may confuse "
 	   "DOS networking programs!\n");
   dev->dev_addr[0]=lp->stationid;
-  
+
   BUGMSG(D_NORMAL,"ARCnet COM20020: station %02Xh found at %03lXh, IRQ %d.\n",
 	 lp->stationid, dev->base_addr,dev->irq);
-  
+
   if (lp->backplane)
     BUGMSG (D_NORMAL, "Using backplane mode.\n");
-  
+
   if (lp->timeout != 3)
     BUGMSG (D_NORMAL, "Using Extended Timeout value of %d.\n",lp->timeout);
   if (lp->setup)
     {
       BUGMSG (D_NORMAL, "Using CKP %d - Data rate %s.\n",
-	      lp->setup >>1,clockrates[lp->setup >> 1] );	
+	      lp->setup >>1,clockrates[lp->setup >> 1] );
     }
   return 0;
 }
@@ -479,7 +439,7 @@ __initfunc(int arc20020_found(struct device *dev,int ioaddr,int airq))
 
 /****************************************************************************
  *                                                                          *
- * Utility routines for arcnet.c                                            *
+ * Utility routines                                                         *
  *                                                                          *
  ****************************************************************************/
 
@@ -495,59 +455,59 @@ int arc20020_reset(struct device *dev,int reset_delay)
   struct arcnet_local *lp=(struct arcnet_local *)dev->priv;
   short ioaddr=dev->base_addr;
   int delayval,recbuf=lp->recbuf;
-  
+
   if (reset_delay==3)
     {
       ARCRESET;
       return 0;
     }
-  
+
   /* no IRQ's, please! */
   lp->intmask=0;
   SETMASK;
-  
+
   BUGMSG(D_INIT,"Resetting %s (status=%Xh)\n",
 	 dev->name,ARCSTATUS);
-  
-  lp->config = 0x20 | (lp->timeout<<3) | (lp->backplane<<2); 
+
+  lp->config = 0x20 | (lp->timeout<<3) | (lp->backplane<<2);
   /* power-up defaults */
   SETCONF;
-  
+
   if (reset_delay)
     {
       /* reset the card */
       ARCRESET;
       JIFFER(RESETtime);
     }
-  
+
   ACOMMAND(CFLAGScmd|RESETclear); /* clear flags & end reset */
   ACOMMAND(CFLAGScmd|CONFIGclear);
-  
+
   /* verify that the ARCnet signature byte is present */
-  
+
   if (get_buffer_byte(dev,0) != TESTvalue)
     {
       BUGMSG(D_NORMAL,"reset failed: TESTvalue not present.\n");
       return 1;
     }
-  
+
   /* clear out status variables */
   recbuf=lp->recbuf=0;
   lp->txbuf=2;
-  
+
   /* enable extended (512-byte) packets */
   ACOMMAND(CONFIGcmd|EXTconf);
-  
+
   /* and enable receive of our first packet to the first buffer */
   EnableReceiver();
-  
+
   /* re-enable interrupts */
   lp->intmask|=NORXflag;
 #ifdef DETECT_RECONFIGS
   lp->intmask|=RECONflag;
 #endif
   SETMASK;
-  
+
   /* done!  return success. */
   return 0;
 }
@@ -565,7 +525,7 @@ arc20020_set_mc_list(struct device *dev)
 {
   struct arcnet_local *lp=dev->priv;
   int ioaddr=dev->base_addr;
-  
+
   if ((dev->flags & IFF_PROMISC) && (dev->flags & IFF_UP))
     {	/* Enable promiscuous mode */
       if (!(lp->setup & PROMISCflag))
@@ -583,7 +543,7 @@ arc20020_set_mc_list(struct device *dev)
 	SETCONF;
 	lp->setup &= ~PROMISCflag;
 	outb(lp->setup,ioaddr+7);
-      } 
+      }
 }
 
 
@@ -595,11 +555,12 @@ static void arc20020_openclose(int open)
     MOD_DEC_USE_COUNT;
 }
 
+
 static void arc20020_en_dis_able_TX(struct device *dev, int enable)
 {
   struct arcnet_local *lp=(struct arcnet_local *)dev->priv;
   int ioaddr=dev->base_addr;
-  
+
   lp->config=enable?(lp->config | TXENflag):(lp->config & ~TXENflag);
   SETCONF;
 }
@@ -608,9 +569,10 @@ static void arc20020_en_dis_able_TX(struct device *dev, int enable)
 static void arc20020_setmask(struct device *dev, u_char mask)
 {
   short ioaddr=dev->base_addr;
-  
+
   AINTMASK(mask);
 }
+
 
 static u_char arc20020_status(struct device *dev)
 {
@@ -618,6 +580,7 @@ static u_char arc20020_status(struct device *dev)
 
   return ARCSTATUS;
 }
+
 
 static void arc20020_command(struct device *dev, u_char cmd)
 {
@@ -634,22 +597,20 @@ static void
 arc20020_inthandler(struct device *dev)
 {
   struct arcnet_local *lp=(struct arcnet_local *)dev->priv;
-  int ioaddr=dev->base_addr, status, boguscount = 3, didsomething, 
+  int ioaddr=dev->base_addr, status, boguscount = 3, didsomething,
     dstatus;
-  
-	
-    
+
   AINTMASK(0);
-  
+
   BUGMSG(D_DURING,"in arc20020_inthandler (status=%Xh, intmask=%Xh)\n",
 	 ARCSTATUS,lp->intmask);
-  
+
   do
     {
       status = ARCSTATUS;
       didsomething=0;
-      
-      
+
+
       /* RESET flag was enabled - card is resetting and if RX
        * is disabled, it's NOT because we just got a packet.
        */
@@ -658,56 +619,53 @@ arc20020_inthandler(struct device *dev)
 	  BUGMSG(D_NORMAL,"spurious reset (status=%Xh)\n",
 		 status);
 	  arc20020_reset(dev,0);
-	  
+
 	  /* all other flag values are just garbage */
 	  break;
 	}
-      
-      
+
       /* RX is inhibited - we must have received something. */
       if (status & lp->intmask & NORXflag)
 	{
 	  int recbuf=lp->recbuf=!lp->recbuf;
 	  int oldaddr=0;
-	  
+
 	  BUGMSG(D_DURING,"receive irq (status=%Xh)\n",
 		 status);
-	  
+
 	  /* enable receive of our next packet */
 	  EnableReceiver();
-	  
+
 	  if (lp->intx)
 	    oldaddr=(inb(_ADDR_HI)<<8) | inb(_ADDR_LO);
-	  
-	  
+
 	  /* Got a packet. */
 	  arc20020_rx(dev,!recbuf);
-	  
-	  
+
 	  if (lp->intx)
 	    {
 	      outb( (oldaddr >> 8),  _ADDR_HI);
 	      outb( oldaddr & 0xff, _ADDR_LO);
 	    }
-	  
+
 	  didsomething++;
 	}
-      
+
       /* it can only be an xmit-done irq if we're xmitting :) */
       /*if (status&TXFREEflag && !lp->in_txhandler && lp->sending)*/
       if (status & lp->intmask & TXFREEflag)
 	{
 	  struct Outgoing *out=&(lp->outgoing);
 	  int was_sending=lp->sending;
-	  
+
 	  lp->intmask &= ~TXFREEflag;
-	  
+
 	  lp->in_txhandler++;
 	  if (was_sending) lp->sending--;
-	  
+
 	  BUGMSG(D_DURING,"TX IRQ (stat=%Xh, numsegs=%d, segnum=%d, skb=%ph)\n",
 		 status,out->numsegs,out->segnum,out->skb);
-	  
+
 	  if (was_sending && !(status&TXACKflag))
 	    {
 	      if (lp->lasttrans_dest != 0)
@@ -724,11 +682,11 @@ arc20020_inthandler(struct device *dev)
 			 lp->lasttrans_dest);
 		}
 	    }
-	  
+
 	  /* send packet if there is one */
 	  arcnet_go_tx(dev,0);
 	  didsomething++;
-	  
+
 	  if (lp->intx)
 	    {
 	      BUGMSG(D_DURING,"TXDONE while intx! (status=%Xh, intx=%d)\n",
@@ -736,24 +694,24 @@ arc20020_inthandler(struct device *dev)
 	      lp->in_txhandler--;
 	      continue;
 	    }
-	  
+
 	  if (!lp->outgoing.skb)
 	    {
 	      BUGMSG(D_DURING,"TX IRQ done: no split to continue.\n");
-	      
+
 	      /* inform upper layers */
 	      if (!lp->txready) arcnet_tx_done(dev, lp);
 	      lp->in_txhandler--;
 	      continue;
 	    }
-	  
+
 	  /* if more than one segment, and not all segments
 	   * are done, then continue xmit.
 	   */
 	  if (out->segnum<out->numsegs)
 	    arcnetA_continue_tx(dev);
 	  arcnet_go_tx(dev,0);
-	  
+
 	  /* if segnum==numsegs, the transmission is finished;
 	   * free the skb.
 	   */
@@ -767,12 +725,12 @@ arc20020_inthandler(struct device *dev)
 		  dev_kfree_skb(out->skb,FREE_WRITE);
 		}
 	      out->skb=NULL;
-	      
+
 	      /* inform upper layers */
 	      if (!lp->txready) arcnet_tx_done(dev, lp);
 	    }
 	  didsomething++;
-	  
+
 	  lp->in_txhandler--;
 	}
       else if (lp->txready && !lp->sending && !lp->intx)
@@ -782,27 +740,26 @@ arc20020_inthandler(struct device *dev)
 	  arcnet_go_tx(dev,0);
 	  didsomething++;
 	}
-      
+
       if ((dstatus=inb(_DIAGSTAT)) & NEWNXTIDflag)
 	{
 	  REGNXTID;
 	  SETCONF;
 	  BUGMSG(D_EXTRA,"New NextID detected: %X\n",inb(ioaddr+7));
 	}
-      
-      
+
+
 #ifdef DETECT_RECONFIGS
       if (status & (lp->intmask) & RECONflag)
 	{
 	  ACOMMAND(CFLAGScmd|CONFIGclear);
 	  lp->stats.tx_carrier_errors++;
-	  
+
 #ifdef SHOW_RECONFIGS
-	  
 	  BUGMSG(D_NORMAL,"Network reconfiguration detected (status=%Xh, diag status=%Xh, config=%X)\n",
 		 status,dstatus,lp->config);
 #endif /* SHOW_RECONFIGS */
-	  
+
 #ifdef RECON_THRESHOLD
 	  /* is the RECON info empty or old? */
 	  if (!lp->first_recon || !lp->last_recon ||
@@ -812,19 +769,19 @@ arc20020_inthandler(struct device *dev)
 		BUGMSG(D_NORMAL,"reconfiguration detected: cabling restored?\n");
 	      lp->first_recon=lp->last_recon=jiffies;
 	      lp->num_recons=lp->network_down=0;
-	      
+
 	      BUGMSG(D_DURING,"recon: clearing counters.\n");
 	    }
 	  else /* add to current RECON counter */
 	    {
 	      lp->last_recon=jiffies;
 	      lp->num_recons++;
-	      
+
 	      BUGMSG(D_DURING,"recon: counter=%d, time=%lds, net=%d\n",
 		     lp->num_recons,
 		     (lp->last_recon-lp->first_recon)/HZ,
 		     lp->network_down);
-	      
+
 	      /* if network is marked up;
 	       * and first_recon and last_recon are 60+ sec
 	       *   apart;
@@ -856,26 +813,25 @@ arc20020_inthandler(struct device *dev)
 	    BUGMSG(D_NORMAL,"cabling restored?\n");
 	  lp->first_recon=lp->last_recon=0;
 	  lp->num_recons=lp->network_down=0;
-	  
+
 	  BUGMSG(D_DURING,"not recon: clearing counters anyway.\n");
 #endif
 	}
 #endif /* DETECT_RECONFIGS */
     } while (--boguscount && didsomething);
-  
+
   BUGMSG(D_DURING,"net_interrupt complete (status=%Xh, count=%d)\n",
 	 ARCSTATUS,boguscount);
   BUGMSG(D_DURING,"\n");
-  
-  SETMASK;	/* put back interrupt mask */
-  
-}
 
+  SETMASK;	/* put back interrupt mask */
+
+}
 
 
 /* A packet has arrived; grab it from the buffers and pass it to the generic
  * arcnet_rx routing to deal with it.
- */ 
+ */
 
 static void
 arc20020_rx(struct device *dev,int recbuf)
@@ -887,13 +843,13 @@ arc20020_rx(struct device *dev,int recbuf)
   u_char *arcsoft;
   short length,offset;
   u_char daddr,saddr;
-  
+
   lp->stats.rx_packets++;
-  
+
   get_whole_buffer(dev,recbuf*512,4,(char *)arcpacket);
-  
+
   saddr=arcpacket->hardheader.source;
-  
+
   /* if source is 0, it's a "used" packet! */
   if (saddr==0)
     {
@@ -903,13 +859,13 @@ arc20020_rx(struct device *dev,int recbuf)
       return;
     }
   /* Set source address to zero to mark it as old */
-  
+
   put_buffer_byte(dev,recbuf*512,0);
-  
+
   arcpacket->hardheader.source=0;
-  
+
   daddr=arcpacket->hardheader.destination;
-  
+
   if (arcpacket->hardheader.offset1) /* Normal Packet */
     {
       offset=arcpacket->hardheader.offset1;
@@ -922,14 +878,13 @@ arc20020_rx(struct device *dev,int recbuf)
       arcsoft=&arcpacket->raw[offset];
       length=512-offset;
     }
-  
+
   get_whole_buffer(dev,recbuf*512+offset,length,(char *)arcpacket+offset);
-  
+
   arcnet_rx(lp, arcsoft, length, saddr, daddr);
-  
+
   BUGLVL(D_RX) arcnet_dump_packet(lp->adev,arcpacket->raw,length>240,"rx");
 }
-
 
 
 /* Given an skb, copy a packet into the ARCnet buffers for later transmission
@@ -940,20 +895,20 @@ arc20020_prepare_tx(struct device *dev,u_char *hdr,int hdrlen,
 		    char *data,int length,int daddr,int exceptA, int offset)
 {
   struct arcnet_local *lp = (struct arcnet_local *)dev->priv;
-  
+
   lp->txbuf=lp->txbuf^1;	/* XOR with 1 to alternate between 2 and 3 */
-  
+
   length+=hdrlen;
-  
+
   BUGMSG(D_TX,"arcnetAS_prep_tx: hdr:%ph, length:%d, data:%ph\n",
 	 hdr,length,data);
-  
+
   put_buffer_byte(dev, lp->txbuf*512+1, daddr);
 
   /* load packet into shared memory */
   if (length<=MTU)	/* Normal (256-byte) Packet */
     put_buffer_byte(dev, lp->txbuf*512+2, offset=offset?offset:256-length);
-  
+
   else if (length>=MinTU || offset)	/* Extended (512-byte) Packet */
     {
       put_buffer_byte(dev, lp->txbuf*512+2, 0);
@@ -963,36 +918,36 @@ arc20020_prepare_tx(struct device *dev,u_char *hdr,int hdrlen,
     {
       put_buffer_byte(dev, lp->txbuf*512+2, 0);
       put_buffer_byte(dev, lp->txbuf*512+3, offset=512-length-4);
-      
+
       /* exception-specific stuff - these four bytes
        * make the packet long enough to fit in a 512-byte
        * frame.
        */
-      
+
       put_whole_buffer(dev, lp->txbuf*512+offset,4,"\0\0xff\0xff\0xff");
       offset+=4;
     }
   else				/* "other" Exception packet */
     {
       /* RFC1051 - set 4 trailing bytes to 0 */
-      
+
       put_whole_buffer(dev,lp->txbuf*512+508,4,"\0\0\0\0");
-      
+
       /* now round up to MinTU */
       put_buffer_byte(dev, lp->txbuf*512+2, 0);
       put_buffer_byte(dev, lp->txbuf*512+3, offset=512-MinTU);
     }
-  
+
   /* copy the packet into ARCnet shmem
    *  - the first bytes of ClientData header are skipped
    */
-  
+
   put_whole_buffer(dev, 512*lp->txbuf+offset, hdrlen,(u_char *)hdr);
   put_whole_buffer(dev, 512*lp->txbuf+offset+hdrlen,length-hdrlen,data);
-  
+
   BUGMSG(D_DURING,"transmitting packet to station %02Xh (%d bytes)\n",
 	 daddr,length);
-  
+
   lp->lastload_dest=daddr;
   lp->txready=lp->txbuf;	/* packet is ready for sending */
 }
@@ -1014,13 +969,13 @@ static struct device *cards[16]={NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,
 int init_module(void)
 {
   struct device *dev;
-  
+
   cards[0]=dev=(struct device *)kmalloc(sizeof(struct device), GFP_KERNEL);
   if (!dev)
     return -ENOMEM;
-  
+
   memset(dev, 0, sizeof(struct device));
-  
+
   dev->name=(char *)kmalloc(9, GFP_KERNEL);
   if (!dev->name)
     {
@@ -1035,19 +990,19 @@ int init_module(void)
 
   if (node && node != 0xff)
     dev->dev_addr[0]=node;
-  
+
   if (backplane) dev->dev_addr[1]=backplane?1:0;
   if (clock) dev->dev_addr[2]=clock&7;
   dev->dev_addr[3]=timeout&3;
 
   dev->base_addr=io;
   dev->irq=irq;
-  
+
   if (dev->irq==2) dev->irq=9;
 
   if (register_netdev(dev) != 0)
     return -EIO;
-  
+
   /* Increase use count of arcnet.o */
   arcnet_use_count(1);
 
@@ -1058,9 +1013,9 @@ void cleanup_module(void)
 {
   struct device *dev=cards[0];
   int ioaddr=dev->base_addr;
-  
+
   if (dev->start) (*dev->stop)(dev);
-  
+
   /* Flush TX and disable RX */
   if (ioaddr)
     {
@@ -1068,21 +1023,22 @@ void cleanup_module(void)
       ACOMMAND(NOTXcmd);	/* stop transmit */
       ACOMMAND(NORXcmd);	/* disable receive */
     }
-  
+
   if (dev->irq)
     {
       irq2dev_map[dev->irq] = NULL;
       free_irq(dev->irq,NULL);
     }
-  
+
   if (dev->base_addr) release_region(dev->base_addr,ARCNET_TOTAL_SIZE);
   unregister_netdev(dev);
   kfree(dev->priv);
   dev->priv = NULL;
-  
+
   /* Decrease use count of arcnet.o */
   arcnet_use_count(0);
 }
+
 #else
 
 __initfunc(void com20020_setup (char *str, int *ints))
@@ -1095,9 +1051,9 @@ __initfunc(void com20020_setup (char *str, int *ints))
 	     MAX_ARCNET_DEVS);
       return;
     }
-  
+
   dev=&arcnet_devs[arcnet_num_devs];
-  
+
   if (ints[0] < 1)
     {
       printk("com20020: You must give an IO address.\n");
@@ -1126,19 +1082,16 @@ __initfunc(void com20020_setup (char *str, int *ints))
 
     case 2: /* IRQ */
       dev->irq=ints[2];
-      
+
     case 1: /* IO address */
       dev->base_addr=ints[1];
     }
 
   dev->name = (char *)&arcnet_dev_names[arcnet_num_devs];
-  
+
   if (str)
     strncpy(dev->name, str, 9);
-  
+
   arcnet_num_devs++;
 }
 #endif /* MODULE */
-
-
-

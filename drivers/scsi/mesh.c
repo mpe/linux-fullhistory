@@ -7,9 +7,7 @@
  * Paul Mackerras, August 1996.
  * Copyright (C) 1996 Paul Mackerras.
  */
-
 #include <linux/config.h>
-
 #include <linux/kernel.h>
 #include <linux/delay.h>
 #include <linux/types.h>

@@ -584,7 +584,7 @@ static int hd_ioctl(struct inode * inode, struct file * file,
 	unsigned int cmd, unsigned long arg)
 {
 	struct hd_geometry *loc = (struct hd_geometry *) arg;
-	int dev, err;
+	int dev;
 
 	if ((!inode) || !(inode->i_rdev))
 		return -EINVAL;
@@ -593,19 +593,15 @@ static int hd_ioctl(struct inode * inode, struct file * file,
 		return -EINVAL;
 	switch (cmd) {
 		case HDIO_GETGEO:
+		{
+			struct hd_geometry g; 
 			if (!loc)  return -EINVAL;
-			err = verify_area(VERIFY_WRITE, loc, sizeof(*loc));
-			if (err)
-				return err;
-			put_user(hd_info[dev].head,
-				(char *) &loc->heads);
-			put_user(hd_info[dev].sect,
-				(char *) &loc->sectors);
-			put_user(hd_info[dev].cyl,
-				(short *) &loc->cylinders);
-			put_user(hd[MINOR(inode->i_rdev)].start_sect,
-				(long *) &loc->start);
-			return 0;
+			g.heads = hd_info[dev].head;
+			g.sectors = hd_info[dev].sect;
+			g.cylinders = hd_info[dev].cyl;
+			g.start = hd[MINOR(inode->i_rdev)].start_sect;
+			return copy_to_user(loc, &g, sizeof g) ? -EFAULT : 0; 
+		}
 		case BLKRASET:
 			if(!suser())  return -EACCES;
 			if(arg > 0xff) return -EINVAL;
@@ -613,18 +609,12 @@ static int hd_ioctl(struct inode * inode, struct file * file,
 			return 0;
 		case BLKRAGET:
 			if (!arg)  return -EINVAL;
-			err = verify_area(VERIFY_WRITE, (long *) arg, sizeof(long));
-			if (err)
-				return err;
-			put_user(read_ahead[MAJOR(inode->i_rdev)],(long *) arg);
-			return 0;
+			return put_user(read_ahead[MAJOR(inode->i_rdev)],
+					(long *) arg); 
          	case BLKGETSIZE:   /* Return device size */
 			if (!arg)  return -EINVAL;
-			err = verify_area(VERIFY_WRITE, (long *) arg, sizeof(long));
-			if (err)
-				return err;
-			put_user(hd[MINOR(inode->i_rdev)].nr_sects, (long *) arg);
-			return 0;
+			return put_user(hd[MINOR(inode->i_rdev)].nr_sects, 
+					(long *) arg);
 		case BLKFLSBUF:
 			if(!suser())  return -EACCES;
 			fsync_dev(inode->i_rdev);
@@ -817,7 +807,7 @@ __initfunc(int hd_init(void))
 
 /*
  * This routine is called to flush all partitions and partition tables
- * for a changed scsi disk, and then re-read the new partition table.
+ * for a changed disk, and then re-read the new partition table.
  * If we are revalidating a disk because of a media change, then we
  * enter with usage == 0.  If we are using an ioctl, we automatically have
  * usage == 1 (we need an open channel to use an ioctl :-), so this
@@ -850,8 +840,11 @@ static int revalidate_hddisk(kdev_t dev, int maxusage)
 	for (i=max_p - 1; i >=0 ; i--) {
 		int minor = start + i;
 		kdev_t devi = MKDEV(MAJOR_NR, minor);
+		struct super_block *sb = get_super(devi); 
+
 		sync_dev(devi);
-		invalidate_inodes(devi);
+		if (sb)
+			invalidate_inodes(sb);
 		invalidate_buffers(devi);
 		gdev->part[minor].start_sect = 0;
 		gdev->part[minor].nr_sects = 0;

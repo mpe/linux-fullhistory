@@ -1,4 +1,4 @@
-/* $Id: pcikbd.c,v 1.3 1997/09/04 05:50:35 ecd Exp $
+/* $Id: pcikbd.c,v 1.4 1997/09/05 22:59:53 ecd Exp $
  * pcikbd.c: Ultra/AX PC keyboard support.
  *
  * Copyright (C) 1997  Eddie C. Dost  (ecd@skynet.be)
@@ -404,50 +404,36 @@ __initfunc(int pcikbd_probe(void))
 {
 	struct linux_ebus *ebus;
 	struct linux_ebus_device *edev;
-	int node, index, irq;
+	struct linux_ebus_child *child;
 
 	for_all_ebusdev(edev, ebus) {
 		if(!strcmp(edev->prom_name, "8042")) {
-			node = prom_getchild(edev->prom_node);
-			node = prom_searchsiblings(node, "kb_ps2");
-			if (node == kbd_node)
-				goto found;
+			for_each_edevchild(edev, child) {
+				if (!strcmp(child->prom_name, "kb_ps2"))
+					goto found;
+			}
 		}
 	}
-	printk("pcikbd_init: no 8042 found\n");
+	printk("pcikbd_probe: no 8042 found\n");
 	return -ENODEV;
 
 found:
-	if (prom_getproperty(node, "reg", (char *)&index, sizeof(index)) !=
-							sizeof(index)) {
-		printk("8042: can't get property '%s' from '%s'\n",
-		       "reg", "kb_ps2");
-		return -ENODEV;
-	}
-
-	if (prom_getproperty(node, "interrupts", (char *)&irq, sizeof(irq)) !=
-							sizeof(irq)) {
-		printk("8042: can't get property '%s' from '%s'\n",
-		       "interrupts", "kb_ps2");
-		return -ENODEV;
-	}
-
-	pcikbd_iobase = edev->base_address[index];
+	pcikbd_iobase = child->base_address[0];
 	if (check_region(pcikbd_iobase, sizeof(unsigned long))) {
 		printk("8042: can't get region %lx, %d\n",
 		       pcikbd_iobase, (int)sizeof(unsigned long));
 		return -ENODEV;
 	}
-
 	request_region(pcikbd_iobase, sizeof(unsigned long), "8042 controller");
-	printk("8042(kbd): iobase[%016lx] irq[%x]\n", pcikbd_iobase, irq);
-	pcikbd_irq = irq;
 
+	pcikbd_irq = child->irqs[0];
 	if (request_irq(pcikbd_irq, &pcikbd_interrupt,
 			SA_SHIRQ, "keyboard", NULL)) {
 		printk("8042: cannot register IRQ %x\n", pcikbd_irq);
 		return -ENODEV;
 	}
+
+	printk("8042(kbd): iobase[%016lx] irq[%x]\n", pcikbd_iobase, pcikbd_irq);
 
 	/* pcikbd_init(); */
 	kbd_read_mask = KBD_STAT_OBF;
@@ -806,36 +792,21 @@ __initfunc(int pcimouse_init(void))
 {
 	struct linux_ebus *ebus;
 	struct linux_ebus_device *edev;
-	int node, index, irq;
+	struct linux_ebus_child *child;
 
 	for_all_ebusdev(edev, ebus) {
 		if(!strcmp(edev->prom_name, "8042")) {
-			node = prom_getchild(edev->prom_node);
-			node = prom_searchsiblings(node, "kdmouse");
-			if (node == ms_node)
-				goto found;
+			for_each_edevchild(edev, child) {
+				if (!strcmp(child->prom_name, "kdmouse"))
+					goto found;
+			}
 		}
 	}
 	printk("pcimouse_init: no 8042 found\n");
 	return -ENODEV;
 
 found:
-	if (prom_getproperty(node, "reg", (char *)&index, sizeof(index)) !=
-							sizeof(index)) {
-		printk("8042: can't get property '%s' from '%s'\n",
-		       "reg", "kdmouse");
-		return -ENODEV;
-	}
-
-	if (prom_getproperty(node, "interrupts", (char *)&irq, sizeof(irq)) !=
-							sizeof(irq)) {
-		printk("8042: can't get property '%s' from '%s'\n",
-		       "interrupts", "kdmouse");
-		return -ENODEV;
-	}
-
-	pcimouse_iobase = edev->base_address[index];
-
+	pcimouse_iobase = child->base_address[0];
 	/*
 	 * Just in case the iobases for kbd/mouse ever differ...
 	 */
@@ -843,14 +814,15 @@ found:
 		request_region(pcimouse_iobase, sizeof(unsigned long),
 			       "8042 controller");
 
-	printk("8042(mouse): iobase[%016lx] irq[%x]\n", pcimouse_iobase, irq);
-	pcimouse_irq = irq;
-
+	pcimouse_irq = child->irqs[0];
 	if (request_irq(pcimouse_irq, &pcimouse_interrupt,
 		        SA_SHIRQ, "mouse", NULL)) {
 		printk("8042: Cannot register IRQ %x\n", pcimouse_irq);
 		return -ENODEV;
 	}
+
+	printk("8042(mouse): iobase[%016lx] irq[%x]\n",
+	       pcimouse_iobase, pcimouse_irq);
 
 	printk("8042: PS/2 auxiliary pointing device detected.\n");
 	aux_present = 1;
@@ -873,7 +845,7 @@ found:
 	poll_aux_status();
 	outb(KBD_CCMD_WRITE_MODE, pcimouse_iobase + KBD_CNTL_REG);
 	poll_aux_status();
-	outb(AUX_INTS_OFF, KBD_DATA_REG);
+	outb(AUX_INTS_OFF, pcimouse_iobase + KBD_DATA_REG);
 	poll_aux_status();
 	aux_end_atomic();
 

@@ -37,6 +37,7 @@
 #endif
 
 #define MAX_SCSI_DEVICE_CODE 10
+extern const char *const scsi_device_types[MAX_SCSI_DEVICE_CODE];
 
 extern void scsi_make_blocked_list(void);
 extern volatile int in_scan_scsis;

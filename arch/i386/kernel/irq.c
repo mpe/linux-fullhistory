@@ -42,8 +42,6 @@
 extern volatile unsigned long smp_local_timer_ticks[1+NR_CPUS];
 #endif
 
-#define CR0_NE 32
-
 unsigned int local_irq_count[NR_CPUS];
 #ifdef __SMP__
 atomic_t __intel_bh_counter;
@@ -54,6 +52,8 @@ int __intel_bh_counter;
 #ifdef __SMP_PROF__
 static unsigned int int_count[NR_CPUS][NR_IRQS] = {{0},};
 #endif
+
+atomic_t nmi_counter;
 
 /*
  * This contains the irq mask for both irq controllers
@@ -199,7 +199,6 @@ static void no_action(int cpl, void *dev_id, struct pt_regs *regs) { }
  * be shot.
  */
  
-
 static void math_error_irq(int cpl, void *dev_id, struct pt_regs *regs)
 {
 	outb(0,0xF0);
@@ -224,28 +223,26 @@ static struct irqaction *irq_action[16] = {
 
 int get_irq_list(char *buf)
 {
-	int i, len = 0;
+	int i;
 	struct irqaction * action;
+	char *p = buf;
 
 	for (i = 0 ; i < NR_IRQS ; i++) {
 		action = irq_action[i];
 		if (!action) 
 			continue;
-		len += sprintf(buf+len, "%2d: %10u   %s",
+		p += sprintf(p, "%3d: %10u   %s",
 			i, kstat.interrupts[i], action->name);
 		for (action=action->next; action; action = action->next) {
-			len += sprintf(buf+len, ", %s", action->name);
+			p += sprintf(p, ", %s", action->name);
 		}
-		len += sprintf(buf+len, "\n");
+		*p++ = '\n';
 	}
-/*
- *	Linus - should you add NMI counts here ?????
- */
+	p += sprintf(p, "NMI: %10u\n", atomic_read(&nmi_counter));
 #ifdef __SMP_PROF__
-	len+=sprintf(buf+len, "IPI: %8lu received\n",
-		ipi_count);
+	p += sprintf(p, "IPI: %10lu\n", ipi_count);
 #endif		
-	return len;
+	return p - buf;
 }
 
 #ifdef __SMP_PROF__

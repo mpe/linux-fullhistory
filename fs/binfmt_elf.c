@@ -391,14 +391,14 @@ do_load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 	struct elfhdr interp_elf_ex;
 	struct file * file;
   	struct exec interp_ex;
-	struct dentry *interpreter_dentry;
-	unsigned long load_addr;
+	struct dentry *interpreter_dentry = NULL; /* to shut gcc up */
+ 	unsigned long load_addr, load_bias;
 	int load_addr_set = 0;
 	unsigned int interpreter_type = INTERPRETER_NONE;
 	unsigned char ibcs2_interpreter;
 	int i;
-	int old_fs;
-	int error;
+	unsigned long old_fs;
+	unsigned long error;
 	struct elf_phdr * elf_ppnt, *elf_phdata;
 	int elf_exec_fileno;
 	unsigned long elf_bss, k, elf_brk;
@@ -503,7 +503,16 @@ do_load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 			if (retval >= 0) {
 				old_fs = get_fs(); /* This could probably be optimized */
 				set_fs(get_ds());
-				interpreter_dentry = open_namei(elf_interpreter, 0, 0);
+#ifdef __sparc__
+				if (ibcs2_interpreter) {
+					unsigned long old_pers = current->personality;
+					
+					current->personality = PER_SVR4;
+					interpreter_dentry = open_namei(elf_interpreter, 0, 0);
+					current->personality = old_pers;
+				} else
+#endif					
+					interpreter_dentry = open_namei(elf_interpreter, 0, 0);
 				set_fs(old_fs);
 				if (IS_ERR(interpreter_dentry))
 					retval = PTR_ERR(interpreter_dentry);
@@ -593,6 +602,12 @@ do_load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 	bprm->p = setup_arg_pages(bprm->p, bprm);
 	current->mm->start_stack = bprm->p;
 
+	/* Try and get dynamic programs out of the way of the default mmap
+	   base, as well as whatever program they might try to exec.  This
+	   is because the brk will follow the loader, and is not movable.  */
+
+	load_bias = (elf_ex.e_type == ET_DYN ? ELF_ET_DYN_BASE : 0);
+
 	/* Now we do a little grungy work by mmaping the ELF image into
 	   the correct location in memory.  At this point, we assume that
 	   the image should be loaded at fixed address, not at a variable
@@ -602,39 +617,47 @@ do_load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 	set_fs(get_ds());
 	for(i = 0, elf_ppnt = elf_phdata; i < elf_ex.e_phnum; i++, elf_ppnt++) {
 		if (elf_ppnt->p_type == PT_LOAD) {
-			int elf_prot = 0;
+			int elf_prot = 0, elf_flags;
+			unsigned long vaddr = 0;
+
 			if (elf_ppnt->p_flags & PF_R) elf_prot |= PROT_READ;
 			if (elf_ppnt->p_flags & PF_W) elf_prot |= PROT_WRITE;
 			if (elf_ppnt->p_flags & PF_X) elf_prot |= PROT_EXEC;
 
+			elf_flags = MAP_PRIVATE|MAP_DENYWRITE|MAP_EXECUTABLE;
+
+			if (elf_ex.e_type == ET_EXEC || load_addr_set) {
+				vaddr = elf_ppnt->p_vaddr;
+				elf_flags |= MAP_FIXED;
+			}
+
 			error = do_mmap(file,
-					ELF_PAGESTART(elf_ppnt->p_vaddr),
+					ELF_PAGESTART(load_bias + vaddr),
 					(elf_ppnt->p_filesz +
 					 ELF_PAGEOFFSET(elf_ppnt->p_vaddr)),
-					elf_prot,
-					(MAP_FIXED | MAP_PRIVATE |
-					 MAP_DENYWRITE | MAP_EXECUTABLE),
+					elf_prot, elf_flags,
 					(elf_ppnt->p_offset -
 					 ELF_PAGEOFFSET(elf_ppnt->p_vaddr)));
 
 #ifdef LOW_ELF_STACK
-			if (ELF_PAGESTART(elf_ppnt->p_vaddr) < elf_stack)
-				elf_stack = ELF_PAGESTART(elf_ppnt->p_vaddr);
+			if (error < elf_stack)
+				elf_stack = error-1;
 #endif
 
 			if (!load_addr_set) {
-			  load_addr = elf_ppnt->p_vaddr - elf_ppnt->p_offset;
-			  load_addr_set = 1;
+				load_addr_set = 1;
+				load_addr = (elf_ppnt->p_vaddr -
+					     elf_ppnt->p_offset);
+				if (elf_ex.e_type == ET_DYN) {
+					load_bias = error;
+					load_addr += error;
+				}
 			}
 			k = elf_ppnt->p_vaddr;
 			if (k < start_code) start_code = k;
 			k = elf_ppnt->p_vaddr + elf_ppnt->p_filesz;
 			if (k > elf_bss) elf_bss = k;
-#if 1
 			if ((elf_ppnt->p_flags & PF_X) && end_code <  k)
-#else
-			if ( !(elf_ppnt->p_flags & PF_W) && end_code <  k)
-#endif
 				end_code = k;
 			if (end_data < k) end_data = k;
 			k = elf_ppnt->p_vaddr + elf_ppnt->p_memsz;
@@ -642,6 +665,13 @@ do_load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 		}
 	}
 	set_fs(old_fs);
+
+	elf_entry += load_bias;
+	elf_bss += load_bias;
+	elf_brk += load_bias;
+	start_code += load_bias;
+	end_code += load_bias;
+	end_data += load_bias;
 
 	if (elf_interpreter) {
 		if (interpreter_type & 1)
@@ -683,7 +713,7 @@ do_load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 	current->executable = dget(bprm->dentry);
 #endif
 #ifdef LOW_ELF_STACK
-	current->start_stack = bprm->p = elf_stack - 4;
+	current->start_stack = bprm->p = elf_stack;
 #endif
 	current->suid = current->euid = current->fsuid = bprm->e_uid;
 	current->sgid = current->egid = current->fsgid = bprm->e_gid;
@@ -1011,7 +1041,7 @@ static int elf_core_dump(long signr, struct pt_regs * regs)
 	struct file file;
 	struct dentry *dentry;
 	struct inode *inode;
-	unsigned short fs;
+	unsigned long fs;
 	char corefile[6+sizeof(current->comm)];
 	int segs;
 	int i;

@@ -498,8 +498,14 @@ asmlinkage int sys_shmat (int shmid, char *shmaddr, int shmflg, ulong *raddr)
 		if (shmflg & SHM_REMAP)
 			goto out;
 		err = -ENOMEM;
-		if (!(addr = get_unmapped_area(0, shp->shm_segsz)))
+		addr = 0;
+	again:
+		if (!(addr = get_unmapped_area(addr, shp->shm_segsz)))
 			goto out;
+		if(addr & (SHMLBA - 1)) {
+			addr = (addr + (SHMLBA - 1)) & ~(SHMLBA - 1);
+			goto again;
+		}
 	} else if (addr & (SHMLBA-1)) {
 		if (shmflg & SHM_RND)
 			addr &= ~(SHMLBA-1);       /* round down */

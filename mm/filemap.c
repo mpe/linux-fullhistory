@@ -892,8 +892,9 @@ no_page:
 static inline int do_write_page(struct inode * inode, struct file * file,
 	const char * page, unsigned long offset)
 {
-	int old_fs, retval;
+	int retval;
 	unsigned long size;
+	unsigned long old_fs;
 
 	size = offset + PAGE_SIZE;
 	/* refuse to extend file size.. */

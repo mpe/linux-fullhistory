@@ -521,7 +521,7 @@ ppp_free_buf (struct ppp_buffer *ptr)
 extern inline int
 lock_buffer (register struct ppp_buffer *buf)
 {
-	register int state;
+	register long state;
 	int flags;
 /*
  * Save the current state and if free then set it to the "busy" state
@@ -1071,6 +1071,7 @@ ppp_tty_receive (struct tty_struct *tty, const __u8 * data,
  */
 	if (ppp->flags & SC_LOG_RAWIN)
 		ppp_print_buffer ("receive buffer", data, count);
+
 /*
  * Collect the character and error condition for the character. Set the toss
  * flag for the first character error.
@@ -1083,6 +1084,7 @@ ppp_tty_receive (struct tty_struct *tty, const __u8 * data,
 				ppp->toss = *flags;
 			++flags;
 		}
+
 /*
  * Set the flags for 8 data bits and no parity.
  *
@@ -1467,6 +1469,7 @@ static void ppp_doframe_lower (struct ppp *ppp, __u8 *data, int count)
 {
 	__u16		proto = PPP_PROTOCOL (data);
 	ppp_proto_type	*proto_ptr;
+
 /*
  * Ignore empty frames
  */
@@ -1507,6 +1510,7 @@ ppp_doframe (struct ppp *ppp)
 	int	addr, ctrl, proto;
 	int	new_count;
 	__u8 *new_data;
+
 /*
  * If there is a pending error from the receiver then log it and discard
  * the damaged frame.

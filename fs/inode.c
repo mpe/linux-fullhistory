@@ -563,23 +563,6 @@ void inode_init(void)
 	} while (i);
 }
 
-/*
- * Check whether we can mount.
- */
-int fs_may_mount(kdev_t dev)
-{
-	return 1;
-}
-
-/*
- * Check whether we can unmount.
- */
-int fs_may_umount(struct super_block *sb, struct dentry * root)
-{
-	shrink_dcache();
-	return root->d_count == 1;
-}
-
 /* This belongs in file_table.c, not here... */
 int fs_may_remount_ro(struct super_block *sb)
 {

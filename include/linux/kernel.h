@@ -68,6 +68,16 @@ asmlinkage int printk(const char * fmt, ...)
  */
 #define fsuser() (current->fsuid == 0)
 
+/*
+ *      Display an IP address in readable format.
+ */
+
+#define NIPQUAD(addr) \
+	(((addr) >> 0)  & 0xff), \
+	(((addr) >> 8)  & 0xff), \
+	(((addr) >> 16) & 0xff), \
+	(((addr) >> 24) & 0xff)
+
 #endif /* __KERNEL__ */
 
 #define SI_LOAD_SHIFT	16

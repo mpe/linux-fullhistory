@@ -1,4 +1,4 @@
-/* $Id: namei.h,v 1.7 1997/09/04 15:46:31 jj Exp $
+/* $Id: namei.h,v 1.8 1997/09/06 02:25:27 davem Exp $
  * linux/include/asm-sparc64/namei.h
  *
  * Routines to handle famous /usr/gnemul/s*.
@@ -14,7 +14,6 @@
 static inline struct dentry *
 __sparc64_lookup_dentry(const char *name, int follow_link)
 {
-	int error;
 	struct dentry *base;
 
 	switch (current->personality) {

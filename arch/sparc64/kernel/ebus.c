@@ -1,4 +1,4 @@
-/* $Id: ebus.c,v 1.7 1997/08/28 02:23:17 ecd Exp $
+/* $Id: ebus.c,v 1.8 1997/09/05 22:59:39 ecd Exp $
  * ebus.c: PCI to EBus bridge device.
  *
  * Copyright (C) 1997  Eddie C. Dost  (ecd@skynet.be)
@@ -39,16 +39,72 @@ extern void auxio_probe(void);
 
 extern unsigned int psycho_irq_build(unsigned int full_ino);
 
-__initfunc(void fill_ebus_device(int node, struct linux_ebus_device *dev))
+static inline unsigned long
+ebus_alloc(unsigned long *memory_start, size_t size)
+{
+	unsigned long mem;
+
+	*memory_start = (*memory_start + 7) & ~(7);
+	mem = *memory_start;
+	*memory_start += size;
+	return mem;
+}
+
+__initfunc(void fill_ebus_child(int node, struct linux_ebus_child *dev))
+{
+	int regs[PROMREG_MAX];
+	int irqs[PROMREG_MAX];
+	char lbuf[128];
+	int i, len;
+
+	dev->prom_node = node;
+	prom_getstring(node, "name", lbuf, sizeof(lbuf));
+	strcpy(dev->prom_name, lbuf);
+
+	len = prom_getproperty(node, "reg", (void *)regs, sizeof(regs));
+	dev->num_addrs = len / sizeof(regs[0]);
+
+	for (i = 0; i < dev->num_addrs; i++) {
+		if (regs[i] >= dev->parent->num_addrs) {
+			prom_printf("UGH: property for %s was %d, need < %d\n",
+				    dev->prom_name, len, dev->parent->num_addrs);
+			panic(__FUNCTION__);
+		}
+		dev->base_address[i] = dev->parent->base_address[regs[i]];
+	}
+
+	len = prom_getproperty(node, "interrupts", (char *)&irqs, sizeof(irqs));
+	if ((len == -1) || (len == 0)) {
+		dev->num_irqs = 0;
+	} else {
+		dev->num_irqs = len / sizeof(irqs[0]);
+		for (i = 0; i < dev->num_irqs; i++)
+			dev->irqs[i] = psycho_irq_build(irqs[i]);
+	}
+
+#ifdef DEBUG_FILL_EBUS_DEV
+	printk("child '%s': address%s\n", dev->prom_name,
+	       dev->num_addrs > 1 ? "es" : "");
+	for (i = 0; i < dev->num_addrs; i++)
+		printk("        %016lx\n", dev->base_address[i]);
+	if (dev->num_irqs) {
+		printk("        IRQ%s", dev->num_irqs > 1 ? "s" : "");
+		for (i = 0; i < dev->num_irqs; i++)
+			printk(" %08x", dev->irqs[i]);
+		printk("\n");
+	}
+#endif
+}
+
+__initfunc(unsigned long fill_ebus_device(int node, struct linux_ebus_device *dev,
+					  unsigned long memory_start))
 {
 	struct linux_prom_registers regs[PROMREG_MAX];
+	struct linux_ebus_child *child;
 	int irqs[PROMINTR_MAX];
 	char lbuf[128];
 	int i, n, len;
 
-#ifndef CONFIG_PCI
-	return;
-#endif
 	dev->prom_node = node;
 	prom_getstring(node, "name", lbuf, sizeof(lbuf));
 	strcpy(dev->prom_name, lbuf);
@@ -90,6 +146,27 @@ __initfunc(void fill_ebus_device(int node, struct linux_ebus_device *dev))
 		printk("\n");
 	}
 #endif
+	if ((node = prom_getchild(node))) {
+		dev->children = (struct linux_ebus_child *)
+			ebus_alloc(&memory_start, sizeof(struct linux_ebus_child));
+
+		child = dev->children;
+		child->next = 0;
+		child->parent = dev;
+		fill_ebus_child(node, child);
+
+		while ((node = prom_getsibling(node))) {
+			child->next = (struct linux_ebus_child *)
+				ebus_alloc(&memory_start, sizeof(struct linux_ebus_child));
+
+			child = child->next;
+			child->next = 0;
+			child->parent = dev;
+			fill_ebus_child(node, child);
+		}
+	}
+
+	return memory_start;
 }
 
 __initfunc(unsigned long ebus_init(unsigned long memory_start,
@@ -100,31 +177,32 @@ __initfunc(unsigned long ebus_init(unsigned long memory_start,
 	struct linux_ebus_device *dev;
 	struct linux_ebus *ebus;
 	struct pci_dev *pdev;
+	struct pcidev_cookie *cookie;
 	char lbuf[128];
 	unsigned long addr, *base;
-	int nd, len, ebusnd, topnd;
+	unsigned short pci_command;
+	int nd, len, ebusnd;
 	int reg, rng, nreg;
-	int devfn;
 	int num_ebus = 0;
 
-#ifndef CONFIG_PCI
-	return memory_start;
-#endif
-
-	memory_start = ((memory_start + 7) & (~7));
-
-	topnd = psycho_root->pbm_B.prom_node;
-	if (!topnd)
+	if (!pcibios_present())
 		return memory_start;
 
-	ebusnd = prom_searchsiblings(prom_getchild(topnd), "ebus");
-	if (ebusnd == 0) {
-		printk("EBUS: No EBUS's found.\n");
+	for (pdev = pci_devices; pdev; pdev = pdev->next) {
+		if ((pdev->vendor == PCI_VENDOR_ID_SUN) &&
+		    (pdev->device == PCI_DEVICE_ID_SUN_EBUS))
+			break;
+	}
+	if (!pdev) {
+		printk("ebus: No EBus's found.\n");
 		return memory_start;
 	}
 
-	ebus_chain = ebus = (struct linux_ebus *)memory_start;
-	memory_start += sizeof(struct linux_ebus);
+	cookie = pdev->sysdata;
+	ebusnd = cookie->prom_node;
+
+	ebus_chain = ebus = (struct linux_ebus *)
+			ebus_alloc(&memory_start, sizeof(struct linux_ebus));
 	ebus->next = 0;
 
 	while (ebusnd) {
@@ -133,7 +211,16 @@ __initfunc(unsigned long ebus_init(unsigned long memory_start,
 		prom_getstring(ebusnd, "name", lbuf, sizeof(lbuf));
 		ebus->prom_node = ebusnd;
 		strcpy(ebus->prom_name, lbuf);
-		ebus->parent = pbm = &psycho_root->pbm_B;
+
+		ebus->self = pdev;
+		ebus->parent = pbm = cookie->pbm;
+
+		/* Enable BUS Master. */
+		pcibios_read_config_word(pdev->bus->number, pdev->devfn,
+					 PCI_COMMAND, &pci_command);
+		pci_command |= PCI_COMMAND_MASTER;
+		pcibios_write_config_word(pdev->bus->number, pdev->devfn,
+					  PCI_COMMAND, pci_command);
 
 		len = prom_getproperty(ebusnd, "reg", (void *)regs,
 				       sizeof(regs));
@@ -143,17 +230,6 @@ __initfunc(unsigned long ebus_init(unsigned long memory_start,
 			prom_halt();
 		}
 		nreg = len / sizeof(struct linux_prom_pci_registers);
-
-		devfn = (regs[0].phys_hi >> 8) & 0xff;
-		for (pdev = pbm->pci_bus.devices; pdev; pdev = pdev->sibling)
-			if (pdev->devfn == devfn)
-				break;
-		if (!pdev) {
-			prom_printf("%s: can't find PCI device\n",
-				    __FUNCTION__);
-			prom_halt();
-		}
-		ebus->self = pdev;
 
 		base = &ebus->self->base_address[0];
 		for (reg = 0; reg < nreg; reg++) {
@@ -181,25 +257,41 @@ __initfunc(unsigned long ebus_init(unsigned long memory_start,
 		prom_ebus_ranges_init(ebus);
 
 		nd = prom_getchild(ebusnd);
-		ebus->devices = (struct linux_ebus_device *)memory_start;
-		memory_start += sizeof(struct linux_ebus_device);
+		ebus->devices = (struct linux_ebus_device *)
+			ebus_alloc(&memory_start, sizeof(struct linux_ebus_device));
 
 		dev = ebus->devices;
 		dev->next = 0;
+		dev->children = 0;
 		dev->parent = ebus;
-		fill_ebus_device(nd, dev);
+		memory_start = fill_ebus_device(nd, dev, memory_start);
 
 		while ((nd = prom_getsibling(nd))) {
-			dev->next = (struct linux_ebus_device *)memory_start;
-			memory_start += sizeof(struct linux_ebus_device);
+			dev->next = (struct linux_ebus_device *)
+				ebus_alloc(&memory_start, sizeof(struct linux_ebus_device));
 
 			dev = dev->next;
 			dev->next = 0;
+			dev->children = 0;
 			dev->parent = ebus;
-			fill_ebus_device(nd, dev);
+			memory_start = fill_ebus_device(nd, dev, memory_start);
 		}
 
-		ebusnd = prom_searchsiblings(prom_getsibling(ebusnd), "ebus");
+		for (pdev = pdev->next; pdev; pdev = pdev->next) {
+			if ((pdev->vendor == PCI_VENDOR_ID_SUN) &&
+			    (pdev->device == PCI_DEVICE_ID_SUN_EBUS))
+				break;
+		}
+		if (!pdev)
+			break;
+
+		cookie = pdev->sysdata;
+		ebusnd = cookie->prom_node;
+
+		ebus->next = (struct linux_ebus *)
+			ebus_alloc(&memory_start, sizeof(struct linux_ebus));
+		ebus = ebus->next;
+		ebus->next = 0;
 		++num_ebus;
 	}
 

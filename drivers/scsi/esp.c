@@ -12,6 +12,7 @@
  * 3) Add tagged queueing.
  */
 
+#include <linux/config.h>
 #include <linux/kernel.h>
 #include <linux/delay.h>
 #include <linux/types.h>
@@ -34,6 +35,7 @@
 #include <asm/pgtable.h>
 #include <asm/oplib.h>
 #include <asm/io.h>
+#include <asm/irq.h>
 #include <asm/idprom.h>
 
 #define DEBUG_ESP
@@ -642,6 +644,9 @@ static inline void esp_bootup_reset(struct Sparc_ESP *esp, struct Sparc_ESP_regs
  */
 __initfunc(int esp_detect(Scsi_Host_Template *tpnt))
 {
+#ifdef __sparc_v9__
+	struct devid_cookie dcookie;
+#endif
 	struct Sparc_ESP *esp, *elink;
 	struct Scsi_Host *esp_host;
 	struct linux_sbus *sbus;
@@ -655,8 +660,13 @@ __initfunc(int esp_detect(Scsi_Host_Template *tpnt))
 	int esp_node, i;
 
 	espchain = 0;
-	if(!SBus_chain)
+	if(!SBus_chain) {
+#ifdef CONFIG_PCI
+		return 0;
+#else
 		panic("No SBUS in esp_detect()");
+#endif
+	}
 	for_each_sbus(sbus) {
 		for_each_sbusdev(sbdev_iter, sbus) {
 			struct linux_sbus_device *espdma = 0;
@@ -782,6 +792,7 @@ __initfunc(int esp_detect(Scsi_Host_Template *tpnt))
 				esp->edev->reg_addrs[0].reg_size;
 			esp->ehost->irq = esp->irq = esp->edev->irqs[0].pri;
 
+#ifndef __sparc_v9__
 			/* Allocate the irq only if necessary */
 			for_each_esp(elink) {
 				if((elink != esp) && (esp->irq == elink->irq)) {
@@ -793,6 +804,22 @@ __initfunc(int esp_detect(Scsi_Host_Template *tpnt))
 				panic("Cannot acquire ESP irq line");
 esp_irq_acquired:
 			printk("esp%d: IRQ %d ", esp->esp_id, esp->ehost->irq);
+#else
+			/* On Ultra we must always call request_irq for each
+			 * esp, so that imap registers get setup etc.
+			 */
+			dcookie.real_dev_id = esp;
+			dcookie.imap = dcookie.iclr = 0;
+			dcookie.pil = -1;
+			dcookie.bus_cookie = sbus;
+			if(request_irq(esp->ehost->irq, esp_intr,
+				       (SA_SHIRQ | SA_SBUS | SA_DCOOKIE),
+				       "Sparc ESP SCSI", &dcookie))
+				panic("Cannot acquire ESP irq line");
+			esp->ehost->irq = esp->irq = dcookie.ret_ino;
+			printk("esp%d: INO[%x] IRQ %d ",
+			       esp->esp_id, esp->ehost->irq, dcookie.ret_pil);
+#endif
 
 			/* Figure out our scsi ID on the bus */
 			esp->scsi_id = prom_getintdefault(esp->prom_node,
@@ -2323,11 +2350,6 @@ static inline int esp_do_data_finale(struct Sparc_ESP *esp,
 		/* Please go to msgout phase, please please please... */
 		ESPLOG(("esp%d: !BSERV after data, probably to msgout\n",
 			esp->esp_id));
-#ifdef __SMP__
-		ESPLOG(("esp%d: local_irq_count[%x:%x:%x:%x]\n", esp->esp_id,
-			local_irq_count[0], local_irq_count[1],
-			local_irq_count[2], local_irq_count[3]));
-#endif
 		return esp_do_phase_determine(esp, eregs, dregs);
 	}	
 
@@ -2410,11 +2432,6 @@ static inline int esp_do_data_finale(struct Sparc_ESP *esp,
 		ESPLOG(("esp%d: use_sg=%d ptr=%p this_residual=%d\n",
 			esp->esp_id,
 			SCptr->use_sg, SCptr->SCp.ptr, SCptr->SCp.this_residual));
-#ifdef __SMP__
-		ESPLOG(("esp%d: local_irq_count[%x:%x:%x:%x]\n", esp->esp_id,
-			local_irq_count[0], local_irq_count[1],
-			local_irq_count[2], local_irq_count[3]));
-#endif
 		bytes_sent = 0;
 	}
 
@@ -4021,6 +4038,8 @@ esp_handle_done:
 	return;
 }
 
+#ifndef __sparc_v9__
+
 #ifndef __SMP__
 static void esp_intr(int irq, void *dev_id, struct pt_regs *pregs)
 {
@@ -4031,14 +4050,7 @@ static void esp_intr(int irq, void *dev_id, struct pt_regs *pregs)
 repeat:
 	again = 0;
 	for_each_esp(esp) {
-		/* XXX Ultra: This is gross, what we really need
-		 * XXX is a sbusirq_to_sparc_pil() function, call
-		 * XXX that and stick the result in the esp soft
-		 * XXX state structure. -DaveM
-		 */
-#ifndef __sparc_v9__
 		if((esp->irq & 0xf) == irq) {
-#endif
 			if(DMA_IRQ_P(esp->dregs)) {
 				again = 1;
 
@@ -4050,23 +4062,12 @@ repeat:
 
 				DMA_INTSON(esp->dregs);
 			}
-#ifndef __sparc_v9__
 		}
-#endif
 	}
 	if(again)
 		goto repeat;
 }
 #else
-
-/* XXX Gross hack for sun4u SMP, fix it right later... -DaveM */
-#ifdef __sparc_v9__
-extern unsigned char ino_to_pil[];
-#define INO_TO_PIL(esp)		(ino_to_pil[(esp)->irq])
-#else
-#define INO_TO_PIL(esp)		((esp)->irq & 0xf)
-#endif
-
 /* For SMP we only service one ESP on the list list at our IRQ level! */
 static void esp_intr(int irq, void *dev_id, struct pt_regs *pregs)
 {
@@ -4074,7 +4075,7 @@ static void esp_intr(int irq, void *dev_id, struct pt_regs *pregs)
 
 	/* Handle all ESP interrupts showing at this IRQ level. */
 	for_each_esp(esp) {
-		if(INO_TO_PIL(esp) == irq) {
+		if(((esp)->irq & 0xf) == irq) {
 			if(DMA_IRQ_P(esp->dregs)) {
 				DMA_INTSOFF(esp->dregs);
 
@@ -4089,4 +4090,23 @@ static void esp_intr(int irq, void *dev_id, struct pt_regs *pregs)
 		}
 	}
 }
+#endif
+
+#else /* __sparc_v9__ */
+
+static void esp_intr(int irq, void *dev_id, struct pt_regs *pregs)
+{
+	struct Sparc_ESP *esp = dev_id;
+
+	if(DMA_IRQ_P(esp->dregs)) {
+		DMA_INTSOFF(esp->dregs);
+
+		ESPIRQ(("I[%d:%d](", smp_processor_id(), esp->esp_id));
+		esp_handle(esp);
+		ESPIRQ((")"));
+
+		DMA_INTSON(esp->dregs);
+	}
+}
+
 #endif

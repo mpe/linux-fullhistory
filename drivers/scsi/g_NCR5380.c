@@ -736,4 +736,11 @@ Scsi_Host_Template driver_template = GENERIC_NCR5380;
 
 #include <linux/module.h>
 #include "scsi_module.c"
+
+MODULE_PARM(ncr_irq, "i");
+MODULE_PARM(ncr_dma, "i");
+MODULE_PARM(ncr_addr, "i");
+MODULE_PARM(ncr_5380, "i");
+MODULE_PARM(ncr_53c400, "i");
+
 #endif

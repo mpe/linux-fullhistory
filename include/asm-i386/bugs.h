@@ -15,12 +15,12 @@
 
 #define CONFIG_BUGi386
 
-static void no_halt(char *s, int *ints)
+__initfunc(static void no_halt(char *s, int *ints))
 {
 	hlt_works_ok = 0;
 }
 
-static void no_387(char *s, int *ints)
+__initfunc(static void no_387(char *s, int *ints))
 {
 	hard_math = 0;
 	__asm__("movl %%cr0,%%eax\n\t"
@@ -28,9 +28,9 @@ static void no_387(char *s, int *ints)
 		"movl %%eax,%%cr0\n\t" : : : "ax");
 }
 
-static char fpu_error = 0;
+static char __initdata fpu_error = 0;
 
-static void copro_timeout(void)
+__initfunc(static void copro_timeout(void))
 {
 	fpu_error = 1;
 	timer_table[COPRO_TIMER].expires = jiffies+100;
@@ -41,7 +41,7 @@ static void copro_timeout(void)
 	outb_p(0,0xf0);
 }
 
-static void check_fpu(void)
+__initfunc(static void check_fpu(void))
 {
 	static double x = 4195835.0;
 	static double y = 3145727.0;
@@ -99,7 +99,7 @@ static void check_fpu(void)
 	printk("Hmm, FDIV bug i%c86 system\n", '0'+x86);
 }
 
-static void check_hlt(void)
+__initfunc(static void check_hlt(void))
 {
 	printk(KERN_INFO "Checking 'hlt' instruction... ");
 	if (!hlt_works_ok) {
@@ -110,7 +110,7 @@ static void check_hlt(void)
 	printk("Ok.\n");
 }
 
-static void check_tlb(void)
+__initfunc(static void check_tlb(void))
 {
 #ifndef CONFIG_M386
 	/*
@@ -125,7 +125,7 @@ static void check_tlb(void)
 #endif
 }
 
-static void check_bugs(void)
+__initfunc(static void check_bugs(void))
 {
 	check_tlb();
 	check_fpu();

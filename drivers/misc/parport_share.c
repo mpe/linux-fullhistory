@@ -18,6 +18,8 @@
 #include <linux/kernel.h>
 #include <linux/malloc.h>
 
+#include <linux/config.h>
+
 #ifdef CONFIG_KERNELD
 #include <linux/kerneld.h>
 #endif
