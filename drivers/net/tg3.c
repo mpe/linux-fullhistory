@@ -6544,10 +6544,6 @@ static int tg3_get_settings(struct net_device *dev, struct ethtool_cmd *cmd)
 {
   	struct tg3 *tp = netdev_priv(dev);
   
-	if (!(tp->tg3_flags & TG3_FLAG_INIT_COMPLETE) ||
-					tp->link_config.phy_is_low_power)
-		return -EAGAIN;
-
 	cmd->supported = (SUPPORTED_Autoneg);
 
 	if (!(tp->tg3_flags & TG3_FLAG_10_100_ONLY))
@@ -6564,8 +6560,10 @@ static int tg3_get_settings(struct net_device *dev, struct ethtool_cmd *cmd)
 		cmd->supported |= SUPPORTED_FIBRE;
   
 	cmd->advertising = tp->link_config.advertising;
-	cmd->speed = tp->link_config.active_speed;
-	cmd->duplex = tp->link_config.active_duplex;
+	if (netif_running(dev)) {
+		cmd->speed = tp->link_config.active_speed;
+		cmd->duplex = tp->link_config.active_duplex;
+	}
 	cmd->port = 0;
 	cmd->phy_address = PHY_ADDR;
 	cmd->transceiver = 0;
@@ -6579,10 +6577,6 @@ static int tg3_set_settings(struct net_device *dev, struct ethtool_cmd *cmd)
 {
 	struct tg3 *tp = netdev_priv(dev);
   
-	if (!(tp->tg3_flags & TG3_FLAG_INIT_COMPLETE) ||
-	    tp->link_config.phy_is_low_power)
-		return -EAGAIN;
-
 	if (tp->tg3_flags2 & TG3_FLG2_PHY_SERDES) {
 		/* These are the only valid advertisement bits allowed.  */
 		if (cmd->autoneg == AUTONEG_ENABLE &&
@@ -6607,7 +6601,9 @@ static int tg3_set_settings(struct net_device *dev, struct ethtool_cmd *cmd)
 		tp->link_config.duplex = cmd->duplex;
   	}
   
-	tg3_setup_phy(tp, 1);
+	if (netif_running(dev))
+		tg3_setup_phy(tp, 1);
+
 	spin_unlock(&tp->tx_lock);
 	spin_unlock_irq(&tp->lock);
   
@@ -6687,6 +6683,9 @@ static int tg3_nway_reset(struct net_device *dev)
 	u32 bmcr;
 	int r;
   
+	if (!netif_running(dev))
+		return -EAGAIN;
+
 	spin_lock_irq(&tp->lock);
 	r = -EINVAL;
 	tg3_readphy(tp, MII_BMCR, &bmcr);
@@ -6723,7 +6722,9 @@ static int tg3_set_ringparam(struct net_device *dev, struct ethtool_ringparam *e
 	    (ering->tx_pending > TG3_TX_RING_SIZE - 1))
 		return -EINVAL;
   
-	tg3_netif_stop(tp);
+	if (netif_running(dev))
+		tg3_netif_stop(tp);
+
 	spin_lock_irq(&tp->lock);
 	spin_lock(&tp->tx_lock);
   
@@ -6735,9 +6736,12 @@ static int tg3_set_ringparam(struct net_device *dev, struct ethtool_ringparam *e
 	tp->rx_jumbo_pending = ering->rx_jumbo_pending;
 	tp->tx_pending = ering->tx_pending;
 
-	tg3_halt(tp);
-	tg3_init_hw(tp);
-	tg3_netif_start(tp);
+	if (netif_running(dev)) {
+		tg3_halt(tp);
+		tg3_init_hw(tp);
+		tg3_netif_start(tp);
+	}
+
 	spin_unlock(&tp->tx_lock);
 	spin_unlock_irq(&tp->lock);
   
@@ -6757,7 +6761,9 @@ static int tg3_set_pauseparam(struct net_device *dev, struct ethtool_pauseparam 
 {
 	struct tg3 *tp = netdev_priv(dev);
   
-	tg3_netif_stop(tp);
+	if (netif_running(dev))
+		tg3_netif_stop(tp);
+
 	spin_lock_irq(&tp->lock);
 	spin_lock(&tp->tx_lock);
 	if (epause->autoneg)
@@ -6772,9 +6778,12 @@ static int tg3_set_pauseparam(struct net_device *dev, struct ethtool_pauseparam 
 		tp->tg3_flags |= TG3_FLAG_TX_PAUSE;
 	else
 		tp->tg3_flags &= ~TG3_FLAG_TX_PAUSE;
-	tg3_halt(tp);
-	tg3_init_hw(tp);
-	tg3_netif_start(tp);
+
+	if (netif_running(dev)) {
+		tg3_halt(tp);
+		tg3_init_hw(tp);
+		tg3_netif_start(tp);
+	}
 	spin_unlock(&tp->tx_lock);
 	spin_unlock_irq(&tp->lock);
   
