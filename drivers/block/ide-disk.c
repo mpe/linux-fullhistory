@@ -48,7 +48,6 @@
 #include <linux/types.h>
 #include <linux/string.h>
 #include <linux/kernel.h>
-#include <linux/delay.h>
 #include <linux/timer.h>
 #include <linux/mm.h>
 #include <linux/ioport.h>
@@ -59,6 +58,7 @@
 #include <linux/hdreg.h>
 #include <linux/genhd.h>
 #include <linux/malloc.h>
+#include <linux/delay.h>
 
 #include <asm/byteorder.h>
 #include <asm/irq.h>

@@ -58,69 +58,62 @@ pte_t __bad_page(void)
 
 void show_mem(void)
 {
-  unsigned long i,free = 0,total = 0,reserved = 0;
-  unsigned long shared = 0;
-  PTE *ptr;
-  unsigned long full = 0, overflow = 0;
-  unsigned int ti;
+	struct task_struct *p;
+	unsigned long i,free = 0,total = 0,reserved = 0;
+	unsigned long shared = 0;
+	PTE *ptr;
+	unsigned long full = 0, overflow = 0;
+	unsigned int ti;
 
-  printk("Mem-info:\n");
-  show_free_areas();
-  printk("Free swap:       %6dkB\n",nr_swap_pages<<(PAGE_SHIFT-10));
-  i = MAP_NR(high_memory);
-  while (i-- > 0) {
-    total++;
-    if (PageReserved(mem_map+i))
-      reserved++;
-    else if (!atomic_read(&mem_map[i].count))
-      free++;
-    else
-      shared += atomic_read(&mem_map[i].count) - 1;
-  }
-  printk("%lu pages of RAM\n",total);
-  printk("%lu free pages\n",free);
-  printk("%lu reserved pages\n",reserved);
-  printk("%lu pages shared\n",shared);
-  show_buffers();
+	printk("Mem-info:\n");
+	show_free_areas();
+	printk("Free swap:       %6dkB\n",nr_swap_pages<<(PAGE_SHIFT-10));
+	i = MAP_NR(high_memory);
+	while (i-- > 0) {
+		total++;
+		if (PageReserved(mem_map+i))
+			reserved++;
+		else if (!atomic_read(&mem_map[i].count))
+			free++;
+		else
+			shared += atomic_read(&mem_map[i].count) - 1;
+	}
+	printk("%lu pages of RAM\n",total);
+	printk("%lu free pages\n",free);
+	printk("%lu reserved pages\n",reserved);
+	printk("%lu pages shared\n",shared);
+	show_buffers();
 #ifdef CONFIG_NET
-  show_net_buffers();
+	show_net_buffers();
 #endif
 #ifdef HASHSTATS
-  printk("Hash Hits %u entries (buckets)\n",(Hash_size/sizeof(struct _PTE))/8);
-  for ( i = 0; i < (Hash_size/sizeof(struct _PTE))/8; i++ )
-  {
-    if ( hashhits[i] >= 20 )
-    {
-      printk("[%lu] \t %lu\n", i,hashhits[i]);
-    }
-  }
+	printk("Hash Hits %u entries (buckets)\n",(Hash_size/sizeof(struct _PTE))/8);
+	for ( i = 0; i < (Hash_size/sizeof(struct _PTE))/8; i++ ) {
+		if ( hashhits[i] >= 20 )
+			printk("[%lu] \t %lu\n", i,hashhits[i]);
+	}
 #endif
   
-  for ( ptr = Hash ; ptr <= Hash+Hash_size ; ptr++)
-  {
-    if (ptr->v)
-    {
-      full++;
-      if (ptr->h == 1)
-	overflow++;
-    }
-  }
-  printk("Hash Table: %dkB Buckets: %dk PTEs: %d/%d (%%%d full) %d overflowed\n",
-	 Hash_size>>10,	(Hash_size/(sizeof(PTE)*8)) >> 10,
-	 full,Hash_size/sizeof(PTE),
-	 (full*100)/(Hash_size/sizeof(PTE)),
-	 overflow);
-  printk(" Task  context    vsid0\n");
-  for ( ti = 0; ti < NR_TASKS ; ti++ );
-  {
-    if ( task[ti] )
-    {
-      printk("%5d %8x %8x\n",
-	     task[ti]->pid,task[ti]->mm->context,
-	     ((SEGREG *)task[ti]->tss.segs)[0].vsid);
-    }
-  }
-      
+	for ( ptr = Hash ; ptr <= Hash+Hash_size ; ptr++) {
+		if (ptr->v) {
+			full++;
+			if (ptr->h == 1)
+				overflow++;
+		}
+	}
+	printk("Hash Table: %dkB Buckets: %dk PTEs: %d/%d (%%%d full) %d overflowed\n",
+	       Hash_size>>10,	(Hash_size/(sizeof(PTE)*8)) >> 10,
+	       full,Hash_size/sizeof(PTE),
+	       (full*100)/(Hash_size/sizeof(PTE)),
+	       overflow);
+	printk(" Task  context    vsid0\n");
+	read_lock(&tasklist_lock);
+	for_each_task(p) {
+		printk("%5d %8x %8x\n",
+		       p->pid,p->mm->context,
+		       ((SEGREG *)p->tss.segs)[0].vsid);
+	}
+	read_unlock(&tasklist_lock);
 }
 
 extern unsigned long free_area_init(unsigned long, unsigned long);

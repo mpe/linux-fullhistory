@@ -17,6 +17,7 @@
 #include <linux/stat.h>
 #include <linux/errno.h>
 #include <linux/locks.h>
+#include <linux/file.h>
 #include <linux/fcntl.h>
 #include <linux/malloc.h>
 #include <linux/init.h>
@@ -242,7 +243,7 @@ smb_read_super(struct super_block *sb, void *raw_data, int silent)
 		printk("smb_read_super: could not alloc smb_sb_info\n");
 		return NULL;
 	}
-	filp->f_count += 1;
+	filp->f_count++;
 
 	lock_super(sb);
 
@@ -319,7 +320,7 @@ smb_read_super(struct super_block *sb, void *raw_data, int silent)
 		smb_vfree(server->packet);
 		server->packet = NULL;
 	}
-	filp->f_count -= 1;
+	put_filp(filp);
 	smb_dont_catch_keepalive(server);
 	smb_kfree_s(SMB_SBP(sb), sizeof(struct smb_sb_info));
 	return NULL;

@@ -39,15 +39,16 @@ startup_32:
 	jz 1f
 /*
  *	New page tables may be in 4Mbyte page mode and may
- *	be using the global pages.
+ *	be using the global pages. 
  */
+#define mmu_cr4_features $128+16
 #ifdef GAS_KNOWS_CR4
 	movl %cr4,%eax		# Turn on 4Mb pages
-	orl $16+128,%eax
+	orl mmu_cr4_features,%eax
 	movl %eax,%cr4
 #else
 	.byte 0x0f,0x20,0xe0
-	orl $16+128,%eax
+	orl mmu_cr4_features,%eax
 	.byte 0x0f,0x22,0xe0
 #endif
 	movl %eax,%cr3		/* flush TLB as per app note */
@@ -305,15 +306,53 @@ rp_sidt:
 	jne rp_sidt
 	ret
 
+stack_start:
+	.long SYMBOL_NAME(init_task_union)+8192
+	.long KERNEL_DS
+
+/* This is the default interrupt "handler" :-) */
+int_msg:
+	.asciz "Unknown interrupt\n"
+	ALIGN
+ignore_int:
+	cld
+	pushl %eax
+	pushl %ecx
+	pushl %edx
+	push %ds
+	movl $(KERNEL_DS),%eax
+	mov %ax,%ds
+	mov %ax,%es
+	mov %ax,%fs
+	pushl $int_msg
+	call SYMBOL_NAME(printk)
+	popl %eax
+	pop %ds
+	popl %edx
+	popl %ecx
+	popl %eax
+	iret
 
 /*
- * page 0 is made non-existent, so that kernel NULL pointer references get
- * caught. Thus the swapper page directory has been moved to 0x101000
- * with the introduction of the compressed boot code.  Theoretically,
- * the original design of overlaying the startup code with the swapper
- * page directory is still possible --- it would reduce the size of the kernel
- * by 2-3k.  This would be a good thing to do at some point.....
- *
+ * The interrupt descriptor table has room for 256 idt's
+ */
+	ALIGN
+.word 0
+idt_descr:
+	.word 256*8-1		# idt contains 256 entries
+	.long SYMBOL_NAME(idt)
+
+	ALIGN
+.word 0
+gdt_descr:
+#ifdef CONFIG_APM
+	.word (11+2*NR_TASKS)*8-1
+#else
+	.word (8+2*NR_TASKS)*8-1
+#endif
+	.long SYMBOL_NAME(gdt)
+
+/*
  * This is initialized to create a identity-mapping at 0-4M (for bootup
  * purposes) and another mapping of the 0-4M area at virtual address
  * 0xC0000000.
@@ -471,63 +510,29 @@ ENTRY(empty_bad_page_table)
 ENTRY(empty_zero_page)
 
 .org 0x6000
-
-stack_start:
-	.long SYMBOL_NAME(init_user_stack)+4096
-	.long KERNEL_DS
-
-/* This is the default interrupt "handler" :-) */
-int_msg:
-	.asciz "Unknown interrupt\n"
-	ALIGN
-ignore_int:
-	cld
-	pushl %eax
-	pushl %ecx
-	pushl %edx
-	push %ds
-	push %es
-	push %fs
-	movl $(KERNEL_DS),%eax
-	mov %ax,%ds
-	mov %ax,%es
-	mov %ax,%fs
-	pushl $int_msg
-	call SYMBOL_NAME(printk)
-	popl %eax
-	pop %fs
-	pop %es
-	pop %ds
-	popl %edx
-	popl %ecx
-	popl %eax
-	iret
+ENTRY(this_must_match_init_task)
 
 /*
- * The interrupt descriptor table has room for 256 idt's
+ * This starts the data section. Note that the above is all
+ * in the text section because it has alignment requirements
+ * that we cannot fulfill any other way.
  */
-	ALIGN
-.word 0
-idt_descr:
-	.word 256*8-1		# idt contains 256 entries
-	.long SYMBOL_NAME(idt)
+.data
 
+ALIGN
+/* 256 quadwords - 2048 bytes of idt */
 ENTRY(idt)
 	.fill 256,8,0		# idt is uninitialized
-
-	ALIGN
-.word 0
-gdt_descr:
-#ifdef CONFIG_APM
-	.word (11+2*NR_TASKS)*8-1
-#else
-	.word (8+2*NR_TASKS)*8-1
-#endif
-	.long SYMBOL_NAME(gdt)
 
 /*
  * This gdt setup gives the kernel a 1GB address space at virtual
  * address 0xC0000000 - space enough for expansion, I hope.
+ *
+ * This contains up to 8192 quadwords depending on NR_TASKS - 64kB of
+ * gdt entries.  Ugh. 
+ *
+ * NOTE! Make sure the gdt descriptor in head.S matches this if you
+ * change anything.
  */
 ENTRY(gdt)
 	.quad 0x0000000000000000	/* NULL descriptor */

@@ -49,26 +49,3 @@ typedef struct { } rwlock_t;
 #define write_unlock_irqrestore(lock, flags)	restore_flags(flags)
 
 #endif
-#ifndef __M68K_SPINLOCK_H
-#define __M68K_SPINLOCK_H
-
-/*
- * We don't do SMP on the m68k .... at least not yet.
- */
-
-typedef struct { } spinlock_t;
-#define SPIN_LOCK_UNLOCKED { }
-
-#define spin_lock_init(lock)	do { } while(0)
-#define spin_lock(lock)		do { } while(0)
-#define spin_trylock(lock)	do { } while(0)
-#define spin_unlock(lock)	do { } while(0)
-#define spin_lock_irq(lock)	cli()
-#define spin_unlock_irq(lock)	sti()
-
-#define spin_lock_irqsave(lock, flags) \
-	do { save_flags(flags); cli(); } while (0)
-#define spin_unlock_irqrestore(lock, flags) \
-	restore_flags(flags)
-
-#endif

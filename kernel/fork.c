@@ -33,9 +33,18 @@ int nr_running=1;
 unsigned long int total_forks=0;	/* Handle normal Linux uptimes. */
 int last_pid=0;
 
+/* SLAB cache for mm_struct's. */
+kmem_cache_t *mm_cachep;
+
+struct task_struct *pidhash[PIDHASH_SZ];
+spinlock_t pidhash_lock = SPIN_LOCK_UNLOCKED;
+
+struct task_struct **tarray_freelist = NULL;
+spinlock_t taskslot_lock = SPIN_LOCK_UNLOCKED;
+
 static inline int find_empty_process(void)
 {
-	int i;
+	struct task_struct **tslot;
 
 	if (nr_tasks >= NR_TASKS - MIN_TASKS_LEFT_FOR_ROOT) {
 		if (current->uid)
@@ -47,6 +56,7 @@ static inline int find_empty_process(void)
 		max_tasks--;	/* count the new process.. */
 		if (max_tasks < nr_tasks) {
 			struct task_struct *p;
+
 			read_lock(&tasklist_lock);
 			for_each_task (p) {
 				if (p->uid == current->uid)
@@ -58,10 +68,9 @@ static inline int find_empty_process(void)
 			read_unlock(&tasklist_lock);
 		}
 	}
-	for (i = 0 ; i < NR_TASKS ; i++) {
-		if (!task[i])
-			return i;
-	}
+	tslot = get_free_taskslot();
+	if(tslot)
+		return tslot - &task[0];
 	return -EAGAIN;
 }
 
@@ -89,12 +98,14 @@ repeat:
 
 static inline int dup_mmap(struct mm_struct * mm)
 {
-	struct vm_area_struct * mpnt, **p, *tmp;
+	struct vm_area_struct * mpnt, *tmp, **pprev;
 
-	mm->mmap = NULL;
-	p = &mm->mmap;
+	mm->mmap = mm->mmap_cache = NULL;
 	flush_cache_mm(current->mm);
+	pprev = &mm->mmap;
 	for (mpnt = current->mm->mmap ; mpnt ; mpnt = mpnt->vm_next) {
+		struct inode *inode;
+
 		tmp = kmem_cache_alloc(vm_area_cachep, SLAB_KERNEL);
 		if (!tmp) {
 			exit_mmap(mm);
@@ -105,12 +116,18 @@ static inline int dup_mmap(struct mm_struct * mm)
 		tmp->vm_flags &= ~VM_LOCKED;
 		tmp->vm_mm = mm;
 		tmp->vm_next = NULL;
-		if (tmp->vm_inode) {
-			tmp->vm_inode->i_count++;
+		inode = tmp->vm_inode;
+		if (inode) {
+			inode->i_count++;
+			if (tmp->vm_flags & VM_DENYWRITE)
+				inode->i_writecount--;
+      
 			/* insert tmp into the share list, just after mpnt */
-			tmp->vm_next_share->vm_prev_share = tmp;
+			if((tmp->vm_next_share = mpnt->vm_next_share) != NULL)
+				mpnt->vm_next_share->vm_pprev_share =
+					&tmp->vm_next_share;
 			mpnt->vm_next_share = tmp;
-			tmp->vm_prev_share = mpnt;
+			tmp->vm_pprev_share = &mpnt->vm_next_share;
 		}
 		if (copy_page_range(mm, current->mm, tmp)) {
 			exit_mmap(mm);
@@ -119,18 +136,23 @@ static inline int dup_mmap(struct mm_struct * mm)
 		}
 		if (tmp->vm_ops && tmp->vm_ops->open)
 			tmp->vm_ops->open(tmp);
-		*p = tmp;
-		p = &tmp->vm_next;
+
+		/* Ok, finally safe to link it in. */
+		if((tmp->vm_next = *pprev) != NULL)
+			(*pprev)->vm_pprev = &tmp->vm_next;
+		*pprev = tmp;
+		tmp->vm_pprev = pprev;
+
+		pprev = &tmp->vm_next;
 	}
 	flush_tlb_mm(current->mm);
-	build_mmap_avl(mm);
 	return 0;
 }
 
 static inline int copy_mm(unsigned long clone_flags, struct task_struct * tsk)
 {
 	if (!(clone_flags & CLONE_VM)) {
-		struct mm_struct * mm = kmalloc(sizeof(*tsk->mm), GFP_KERNEL);
+		struct mm_struct * mm = kmem_cache_alloc(mm_cachep, SLAB_KERNEL);
 		if (!mm)
 			return -1;
 		*mm = *current->mm;
@@ -146,7 +168,7 @@ static inline int copy_mm(unsigned long clone_flags, struct task_struct * tsk)
 		if (dup_mmap(mm)) {
 			free_page_tables(mm);
 free_mm:
-			kfree(mm);
+			kmem_cache_free(mm_cachep, mm);
 			return -1;
 		}
 		return 0;
@@ -232,20 +254,17 @@ int do_fork(unsigned long clone_flags, unsigned long usp, struct pt_regs *regs)
 {
 	int nr;
 	int error = -ENOMEM;
-	unsigned long new_stack;
 	struct task_struct *p;
 
 	lock_kernel();
 	p = alloc_task_struct();
 	if (!p)
 		goto bad_fork;
-	new_stack = alloc_kernel_stack(p);
-	if (!new_stack)
-		goto bad_fork_free_p;
+
 	error = -EAGAIN;
 	nr = find_empty_process();
 	if (nr < 0)
-		goto bad_fork_free_stack;
+		goto bad_fork_free;
 
 	*p = *current;
 
@@ -256,8 +275,6 @@ int do_fork(unsigned long clone_flags, unsigned long usp, struct pt_regs *regs)
 
 	p->did_exec = 0;
 	p->swappable = 0;
-	p->kernel_stack_page = new_stack;
-	*(unsigned long *) p->kernel_stack_page = STACK_MAGIC;
 	p->state = TASK_UNINTERRUPTIBLE;
 	p->flags &= ~(PF_PTRACED|PF_TRACESYS|PF_SUPERPRIV);
 	p->flags |= PF_FORKNOEXEC;
@@ -277,12 +294,15 @@ int do_fork(unsigned long clone_flags, unsigned long usp, struct pt_regs *regs)
 	p->utime = p->stime = 0;
 	p->cutime = p->cstime = 0;
 #ifdef __SMP__
+	p->has_cpu = 0;
 	p->processor = NO_PROC_ID;
 #endif
 	p->lock_depth = 0;
 	p->start_time = jiffies;
-	task[nr] = p;
+	p->tarray_ptr = &task[nr];
+	*p->tarray_ptr = p;
 	SET_LINKS(p);
+	hash_pid(p);
 	nr_tasks++;
 
 	error = -ENOMEM;
@@ -334,12 +354,11 @@ bad_fork_cleanup:
 		__MOD_DEC_USE_COUNT(p->exec_domain->module);
 	if (p->binfmt && p->binfmt->module)
 		__MOD_DEC_USE_COUNT(p->binfmt->module);
-	task[nr] = NULL;
+	add_free_taskslot(p->tarray_ptr);
+	unhash_pid(p);
 	REMOVE_LINKS(p);
 	nr_tasks--;
-bad_fork_free_stack:
-	free_kernel_stack(new_stack);
-bad_fork_free_p:
+bad_fork_free:
 	free_task_struct(p);
 bad_fork:
 fork_out:

@@ -124,24 +124,16 @@ int permission(struct inode * inode,int mask)
  * put_write_access() releases this write permission.
  * This is used for regular files.
  * We cannot support write (and maybe mmap read-write shared) accesses and
- * MAP_DENYWRITE mmappings simultaneously.
+ * MAP_DENYWRITE mmappings simultaneously. The i_writecount field of an inode
+ * can have the following values:
+ * 0: no writers, no VM_DENYWRITE mappings
+ * < 0: (-i_writecount) vm_area_structs with VM_DENYWRITE set exist
+ * > 0: (i_writecount) users are writing to the file.
  */
 int get_write_access(struct inode * inode)
 {
-	struct task_struct * p;
-
-	if ((inode->i_count > 1) && S_ISREG(inode->i_mode)) /* shortcut */
-		for_each_task(p) {
-		        struct vm_area_struct * mpnt;
-			if (!p->mm)
-				continue;
-			for(mpnt = p->mm->mmap; mpnt; mpnt = mpnt->vm_next) {
-				if (inode != mpnt->vm_inode)
-					continue;
-				if (mpnt->vm_flags & VM_DENYWRITE)
-					return -ETXTBSY;
-			}
-		}
+	if (inode->i_writecount < 0)
+		return -ETXTBSY;
 	inode->i_writecount++;
 	return 0;
 }

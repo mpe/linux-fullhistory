@@ -58,7 +58,6 @@ static int proc_lookupfd(struct inode * dir, const char * name, int len,
 	unsigned int ino, pid, fd, c;
 	struct task_struct * p;
 	struct super_block * sb;
-	int i;
 
 	*result = NULL;
 	ino = dir->i_ino;
@@ -100,10 +99,8 @@ static int proc_lookupfd(struct inode * dir, const char * name, int len,
 			break;
 		}
 	}
-	for (i = 0 ; i < NR_TASKS ; i++)
-		if ((p = task[i]) && p->pid == pid)
-			break;
-	if (!pid || i >= NR_TASKS)
+	p = find_task_by_pid(pid);
+	if (!pid || !p)
 		return -ENOENT;
 
 	/*
@@ -112,8 +109,11 @@ static int proc_lookupfd(struct inode * dir, const char * name, int len,
 	 *	is NULL
 	 */
 
- 	if (fd >= NR_OPEN || !p->files || !p->files->fd[fd] || !p->files->fd[fd]->f_inode)
-	  return -ENOENT;
+ 	if (fd >= NR_OPEN	||
+	    !p->files		||
+	    !p->files->fd[fd]	||
+	    !p->files->fd[fd]->f_inode)
+		return -ENOENT;
 
 	ino = (pid << 16) + (PROC_PID_FD_DIR << 8) + fd;
 
@@ -128,8 +128,7 @@ static int proc_readfd(struct inode * inode, struct file * filp,
 	void * dirent, filldir_t filldir)
 {
 	char buf[NUMBUF];
-	int task_nr;
-	struct task_struct * p;
+	struct task_struct * p, **tarrayp;
 	unsigned int fd, pid, ino;
 	unsigned long i,j;
 
@@ -149,13 +148,10 @@ static int proc_readfd(struct inode * inode, struct file * filp,
 			return 0;
 	}
 
-	task_nr = 1;
-	for (;;) {
-		if ((p = task[task_nr]) && p->pid == pid)
-			break;
-		if (++task_nr >= NR_TASKS)
-			return 0;
-	}
+	p = find_task_by_pid(pid);
+	if(!p)
+		return 0;
+	tarrayp = p->tarray_ptr;
 
 	for (fd -= 2 ; fd < NR_OPEN; fd++, filp->f_pos++) {
 		if (!p->files)
@@ -176,7 +172,7 @@ static int proc_readfd(struct inode * inode, struct file * filp,
 			break;
 
 		/* filldir() might have slept, so we must re-validate "p" */
-		if (p != task[task_nr] || p->pid != pid)
+		if (p != *tarrayp || p->pid != pid)
 			break;
 	}
 	return 0;

@@ -44,7 +44,7 @@ struct thread_struct {
 	unsigned char  fpstate[FPSTATESIZE];  /* floating point state */
 };
 
-#define INIT_MMAP { &init_mm, 0, 0x40000000, __pgprot(_PAGE_PRESENT|_PAGE_ACCESSED), VM_READ | VM_WRITE | VM_EXEC }
+#define INIT_MMAP { &init_mm, 0, 0x40000000, __pgprot(_PAGE_PRESENT|_PAGE_ACCESSED), VM_READ | VM_WRITE | VM_EXEC, NULL, &init_mm.mmap }
 
 #define INIT_TSS  { \
 	sizeof(init_kernel_stack) + (long) init_kernel_stack, 0, \

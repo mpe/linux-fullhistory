@@ -178,7 +178,6 @@ extern int smp_found_config;
 extern int smp_scan_config(unsigned long, unsigned long);
 extern unsigned long smp_alloc_memory(unsigned long mem_base);
 extern unsigned char *apic_reg;
-extern unsigned char *kernel_stacks[NR_CPUS];
 extern unsigned char boot_cpu_id;
 extern unsigned long cpu_present_map;
 extern volatile int cpu_number_map[NR_CPUS];
@@ -192,6 +191,9 @@ extern void smp_message_irq(int cpl, void *dev_id, struct pt_regs *regs);
 extern void smp_reschedule_irq(int cpl, struct pt_regs *regs);
 extern unsigned long ipi_count;
 extern void smp_invalidate_rcv(void);		/* Process an NMI */
+extern void smp_local_timer_interrupt(struct pt_regs * regs);
+extern void setup_APIC_clock (void);
+
 
 /*
  *	General functions that each host system must provide.
@@ -228,7 +230,9 @@ extern __inline unsigned long apic_read(unsigned long reg)
  *	the apic we get the right answer). Hopefully other processors are more sensible 8)
  */
 
-extern __inline int smp_processor_id(void)
+#define smp_processor_id() (current->processor)
+
+extern __inline int hard_smp_processor_id(void)
 {
 	/* we don't want to mark this access volatile - bad code generation */
 	return GET_APIC_ID(*(unsigned long *)(apic_reg+APIC_ID));

@@ -1,4 +1,4 @@
-/* $Id: processor.h,v 1.21 1997/04/14 17:05:18 jj Exp $
+/* $Id: processor.h,v 1.23 1997/04/26 22:52:34 davem Exp $
  * include/asm-sparc64/processor.h
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -71,7 +71,7 @@ struct thread_struct {
 #define SPARC_FLAG_32BIT        0x8    /* task is older 32-bit binary */
 
 #define INIT_MMAP { &init_mm, 0xfffff80000000000, 0xfffff80001000000, \
-		    PAGE_SHARED , VM_READ | VM_WRITE | VM_EXEC }
+		    PAGE_SHARED , VM_READ | VM_WRITE | VM_EXEC, NULL, &init_mm.mmap }
 
 #define INIT_TSS  {							\
 /* FPU regs */   { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,	\

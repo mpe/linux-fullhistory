@@ -93,6 +93,7 @@ void disable_irq(unsigned int irq_nr)
 	save_flags(flags);
 	cli();
 	mask_irq(irq_nr);
+	synchronize_irq();
 	restore_flags(flags);
 }
 
@@ -168,17 +169,6 @@ static void (*interrupt[17])(void) = {
 	IRQ12_interrupt, IRQ13_interrupt, IRQ14_interrupt, IRQ15_interrupt	
 };
 
-static void (*fast_interrupt[16])(void) = {
-	fast_IRQ0_interrupt, fast_IRQ1_interrupt,
-	fast_IRQ2_interrupt, fast_IRQ3_interrupt,
-	fast_IRQ4_interrupt, fast_IRQ5_interrupt,
-	fast_IRQ6_interrupt, fast_IRQ7_interrupt,
-	fast_IRQ8_interrupt, fast_IRQ9_interrupt,
-	fast_IRQ10_interrupt, fast_IRQ11_interrupt,
-	fast_IRQ12_interrupt, fast_IRQ13_interrupt,
-	fast_IRQ14_interrupt, fast_IRQ15_interrupt
-};
-
 static void (*bad_interrupt[16])(void) = {
 	bad_IRQ0_interrupt, bad_IRQ1_interrupt,
 	bad_IRQ2_interrupt, bad_IRQ3_interrupt,
@@ -240,14 +230,10 @@ int get_irq_list(char *buf)
 		action = irq_action[i];
 		if (!action) 
 			continue;
-		len += sprintf(buf+len, "%2d: %10u %c %s",
-			i, kstat.interrupts[i],
-			(action->flags & SA_INTERRUPT) ? '+' : ' ',
-			action->name);
+		len += sprintf(buf+len, "%2d: %10u   %s",
+			i, kstat.interrupts[i], action->name);
 		for (action=action->next; action; action = action->next) {
-			len += sprintf(buf+len, ",%s %s",
-				(action->flags & SA_INTERRUPT) ? " +" : "",
-				action->name);
+			len += sprintf(buf+len, ", %s", action->name);
 		}
 		len += sprintf(buf+len, "\n");
 	}
@@ -298,13 +284,9 @@ int get_smp_prof_list(char *buf) {
 		for (j=0;j<smp_num_cpus;j++)
 			len+=sprintf(buf+len, "%10d ",
 				int_count[cpu_logical_map[j]][i]);
-		len += sprintf(buf+len, "%c %s",
-			(action->flags & SA_INTERRUPT) ? '+' : ' ',
-			action->name);
+		len += sprintf(buf+len, "  %s", action->name);
 		for (action=action->next; action; action = action->next) {
-			len += sprintf(buf+len, ",%s %s",
-				(action->flags & SA_INTERRUPT) ? " +" : "",
-				action->name);
+			len += sprintf(buf+len, ", %s", action->name);
 		}
 		len += sprintf(buf+len, "\n");
 	}
@@ -519,7 +501,8 @@ void __global_restore_flags(unsigned long flags)
 {
 	switch (flags) {
 	case 0:
-		__global_sti();
+		release_irqlock(smp_processor_id());
+		__sti();
 		break;
 	case 1:
 		__global_cli();
@@ -533,11 +516,9 @@ void __global_restore_flags(unsigned long flags)
 #endif
 
 /*
- * do_IRQ handles IRQ's that have been installed without the
- * SA_INTERRUPT flag: it uses the full signal-handling return
- * and runs with other interrupts enabled. All relatively slow
- * IRQ's should use this format: notably the keyboard/timer
- * routines.
+ * do_IRQ handles all normal device IRQ's (the special
+ * SMP cross-CPU interrupts have their own specific
+ * handlers).
  */
 asmlinkage void do_IRQ(int irq, struct pt_regs * regs)
 {
@@ -547,8 +528,6 @@ asmlinkage void do_IRQ(int irq, struct pt_regs * regs)
 	irq_enter(cpu, irq);
 	kstat.interrupts[irq]++;
 
-	/* slow interrupts run with interrupts enabled */
-	__sti();
 	action = *(irq + irq_action);
 	do_random = 0;
 	while (action) {
@@ -559,30 +538,17 @@ asmlinkage void do_IRQ(int irq, struct pt_regs * regs)
 	if (do_random & SA_SAMPLE_RANDOM)
 		add_interrupt_randomness(irq);
 	irq_exit(cpu, irq);
-}
 
-/*
- * do_fast_IRQ handles IRQ's that don't need the fancy interrupt return
- * stuff - the handler is also running with interrupts disabled unless
- * it explicitly enables them later.
- */
-asmlinkage void do_fast_IRQ(int irq)
-{
-	struct irqaction * action;
-	int do_random, cpu = smp_processor_id();
-
-	irq_enter(cpu, irq);
-	kstat.interrupts[irq]++;
-	action = *(irq + irq_action);
-	do_random = 0;
-	while (action) {
-		do_random |= action->flags;
-		action->handler(irq, action->dev_id, NULL);
-		action = action->next;
+	/*
+	 * This should be conditional: we should really get
+	 * a return code from the irq handler to tell us
+	 * whether the handler wants us to do software bottom
+	 * half handling or not..
+	 */
+	if (1) {
+		if (bh_active & bh_mask)
+			do_bottom_half();
 	}
-	if (do_random & SA_SAMPLE_RANDOM)
-		add_interrupt_randomness(irq);
-	irq_exit(cpu, irq);
 }
 
 int setup_x86_irq(int irq, struct irqaction * new)
@@ -595,10 +561,6 @@ int setup_x86_irq(int irq, struct irqaction * new)
 	if ((old = *p) != NULL) {
 		/* Can't share interrupts unless both agree to */
 		if (!(old->flags & new->flags & SA_SHIRQ))
-			return -EBUSY;
-
-		/* Can't share interrupts unless both are same type */
-		if ((old->flags ^ new->flags) & SA_INTERRUPT)
 			return -EBUSY;
 
 		/* add new interrupt at end of irq queue */
@@ -617,10 +579,7 @@ int setup_x86_irq(int irq, struct irqaction * new)
 	*p = new;
 
 	if (!shared) {
-		if (new->flags & SA_INTERRUPT)
-			set_intr_gate(0x20+irq,fast_interrupt[irq]);
-		else
-			set_intr_gate(0x20+irq,interrupt[irq]);
+		set_intr_gate(0x20+irq,interrupt[irq]);
 		unmask_irq(irq);
 	}
 	restore_flags(flags);

@@ -45,6 +45,10 @@ int ext2_ioctl (struct inode * inode, struct file * filp, unsigned int cmd,
 		if (IS_RDONLY(inode))
 			return -EROFS;
 		inode->u.ext2_i.i_flags = flags;
+		if (flags & EXT2_SYNC_FL)
+			inode->i_flags |= MS_SYNCHRONOUS;
+		else
+			inode->i_flags &= ~MS_SYNCHRONOUS;
 		if (flags & EXT2_APPEND_FL)
 			inode->i_flags |= S_APPEND;
 		else
@@ -53,6 +57,10 @@ int ext2_ioctl (struct inode * inode, struct file * filp, unsigned int cmd,
 			inode->i_flags |= S_IMMUTABLE;
 		else
 			inode->i_flags &= ~S_IMMUTABLE;
+		if (flags & EXT2_NOATIME_FL)
+			inode->i_flags |= MS_NOATIME;
+		else
+			inode->i_flags &= ~MS_NOATIME;
 		inode->i_ctime = CURRENT_TIME;
 		inode->i_dirt = 1;
 		return 0;

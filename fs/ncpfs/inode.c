@@ -21,6 +21,7 @@
 #include <linux/stat.h>
 #include <linux/errno.h>
 #include <linux/locks.h>
+#include <linux/file.h>
 #include <linux/fcntl.h>
 #include <linux/malloc.h>
 #include <linux/init.h>
@@ -177,7 +178,7 @@ struct super_block *
 		printk("ncp_read_super: could not alloc ncp_server\n");
 		return NULL;
 	}
-	ncp_filp->f_count += 1;
+	ncp_filp->f_count++;
 
 	lock_super(sb);
 
@@ -256,7 +257,7 @@ struct super_block *
 	ncp_unlock_server(server);
 	ncp_kfree_s(server->packet, server->packet_size);
       fail:
-	ncp_filp->f_count -= 1;
+	put_filp(ncp_filp);
 	ncp_kfree_s(NCP_SBP(sb), sizeof(struct ncp_server));
 	return NULL;
 }

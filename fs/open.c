@@ -605,7 +605,7 @@ cleanup_all:
 cleanup_inode:
 	iput(inode);
 cleanup_file:
-	f->f_count--;
+	put_filp(f);
 	return error;
 }
 

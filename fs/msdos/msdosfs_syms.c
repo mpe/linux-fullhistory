@@ -30,7 +30,7 @@ EXPORT_SYMBOL(msdos_read_super);
 EXPORT_SYMBOL(msdos_put_super);
 
 
-static struct file_system_type msdos_fs_type = {
+struct file_system_type msdos_fs_type = {
 	msdos_read_super, "msdos", 1, NULL
 };
 

@@ -11,6 +11,7 @@
 #include <linux/fcntl.h>
 #include <linux/termios.h>
 #include <linux/mm.h>
+#include <linux/file.h>
 
 #include <asm/poll.h>
 #include <asm/uaccess.h>
@@ -74,7 +75,10 @@ static long pipe_read(struct inode * inode, struct file * filp,
 	PIPE_LOCK(*inode)--;
 	wake_up_interruptible(&PIPE_WAIT(*inode));
 	if (read) {
-	        inode->i_atime = CURRENT_TIME;
+		if (DO_UPDATE_ATIME(inode)) {
+			inode->i_atime = CURRENT_TIME;
+			inode->i_dirt = 1;
+		}
 		return read;
 	}
 	if (PIPE_WRITERS(*inode))
@@ -128,6 +132,7 @@ static long pipe_write(struct inode * inode, struct file * filp,
 		free = 1;
 	}
 	inode->i_ctime = inode->i_mtime = CURRENT_TIME;
+	inode->i_dirt = 1;
 	return written;
 }
 
@@ -440,9 +445,9 @@ close_f12_inode:
 	inode->i_count--;
 	iput(inode);
 close_f12:
-	f2->f_count--;
+	put_filp(f2);
 close_f1:
-	f1->f_count--;
+	put_filp(f1);
 no_files:
 	return error;	
 }

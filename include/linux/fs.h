@@ -95,7 +95,6 @@ extern int max_files, nr_files;
  * Exception: MS_RDONLY is always applied to the entire file system.
  */
 #define IS_RDONLY(inode) (((inode)->i_sb) && ((inode)->i_sb->s_flags & MS_RDONLY))
-#define DO_UPDATE_ATIME(inode) (!((inode)->i_flags & MS_NOATIME) && !IS_RDONLY(inode))
 #define IS_NOSUID(inode) ((inode)->i_flags & MS_NOSUID)
 #define IS_NODEV(inode) ((inode)->i_flags & MS_NODEV)
 #define IS_NOEXEC(inode) ((inode)->i_flags & MS_NOEXEC)
@@ -105,6 +104,8 @@ extern int max_files, nr_files;
 #define IS_WRITABLE(inode) ((inode)->i_flags & S_WRITE)
 #define IS_APPEND(inode) ((inode)->i_flags & S_APPEND)
 #define IS_IMMUTABLE(inode) ((inode)->i_flags & S_IMMUTABLE)
+#define IS_NOATIME(inode) ((inode)->i_flags & MS_NOATIME)
+#define DO_UPDATE_ATIME(inode) (!IS_NOATIME(inode) && !IS_RDONLY(inode))
 
 /* the read-only stuff doesn't really belong here, but any other place is
    probably as bad and I don't want to create yet another include file. */
@@ -129,7 +130,7 @@ extern int max_files, nr_files;
 
 extern void buffer_init(void);
 extern void inode_init(void);
-extern unsigned long file_table_init(unsigned long start, unsigned long end);
+extern void file_table_init(void);
 extern unsigned long name_cache_init(unsigned long start, unsigned long end);
 
 typedef char buffer_block[BLOCK_SIZE];
@@ -246,6 +247,7 @@ static inline int buffer_protected(struct buffer_head * bh)
 #define ATTR_ATIME_SET	128
 #define ATTR_MTIME_SET	256
 #define ATTR_FORCE	512	/* Not a change, but a change it */
+#define ATTR_ATTR_FLAG	1024
 
 /*
  * This is the Inode Attributes structure, used for notify_change().  It
@@ -265,7 +267,16 @@ struct iattr {
 	time_t		ia_atime;
 	time_t		ia_mtime;
 	time_t		ia_ctime;
+	unsigned int	ia_attr_flags;
 };
+
+/*
+ * This is the inode attributes flag definitions
+ */
+#define ATTR_FLAG_SYNCRONOUS	1 	/* Syncronous write */
+#define ATTR_FLAG_NOATIME	2 	/* Don't update atime */
+#define ATTR_FLAG_APPEND	4 	/* Append-only file */
+#define ATTR_FLAG_IMMUTABLE	8 	/* Immutable file */
 
 #include <linux/quota.h>
 
@@ -305,9 +316,8 @@ struct inode {
 	unsigned char i_dirt;
 	unsigned char i_pipe;
 	unsigned char i_sock;
-	unsigned char i_seek;
-	unsigned char i_update;
-	unsigned short i_writecount;
+	int i_writecount;
+	unsigned int i_attr_flags;
 	union {
 		struct pipe_inode_info pipe_i;
 		struct minix_inode_info minix_i;
@@ -327,17 +337,21 @@ struct inode {
 };
 
 struct file {
-	mode_t f_mode;
-	loff_t f_pos;
-	unsigned short f_flags;
-	unsigned short f_count;
-	unsigned long f_reada, f_ramax, f_raend, f_ralen, f_rawin;
-	struct file *f_next, *f_prev;
-	int f_owner;		/* pid or -pgrp where SIGIO should be sent */
-	struct inode * f_inode;
-	struct file_operations * f_op;
-	unsigned long f_version;
-	void *private_data;	/* needed for tty driver, and maybe others */
+	struct file		*f_next, **f_pprev;
+	struct inode		*f_inode;
+	struct file_operations	*f_op;
+	mode_t			f_mode;
+	loff_t			f_pos;
+	unsigned short 		f_count, f_flags;
+	unsigned long 		f_reada, f_ramax, f_raend, f_ralen, f_rawin;
+
+	/* pid or -pgrp where SIGIO should be sent */
+	int 			f_owner;
+
+	unsigned long		f_version;
+
+	/* needed for tty driver, and maybe others */
+	void			*private_data;
 };
 
 #define FL_POSIX	1
@@ -584,7 +598,7 @@ extern int fs_may_mount(kdev_t dev);
 extern int fs_may_umount(kdev_t dev, struct inode * mount_root);
 extern int fs_may_remount_ro(kdev_t dev);
 
-extern struct file *first_file;
+extern struct file *inuse_filps;
 extern struct super_block super_blocks[NR_SUPER];
 
 extern void refile_buffer(struct buffer_head * buf);

@@ -7,6 +7,15 @@
  * entire register is hard locked to contain the value of current.
  */
 extern struct task_struct *current_set[NR_CPUS];
-#define current (current_set[smp_processor_id()])	/* Current on this processor */
+
+static inline unsigned long get_esp(void)
+{
+	unsigned long esp;
+	__asm__("movl %%esp,%0":"=r" (esp));
+	return esp;
+}
+
+#define current ((struct task_struct *)(get_esp() & ~8191UL))
+
 
 #endif /* !(_I386_CURRENT_H) */

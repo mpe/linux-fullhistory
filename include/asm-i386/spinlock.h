@@ -77,45 +77,21 @@ typedef struct { unsigned long a[100]; } __dummy_lock_t;
 
 #define spin_lock(lock) \
 __asm__ __volatile__( \
-	"jmp 2f\n" \
-	"1:\t" \
-	"testb $1,%0\n\t" \
-	"jne 1b\n" \
-	"2:\t" \
+	"\n1:\t" \
 	"lock ; btsl $0,%0\n\t" \
-	"jc 1b" \
+	"jc 2f\n" \
+	".text 2\n" \
+	"2:\t" \
+	"testb $1,%0\n\t" \
+	"jne 2b\n\t" \
+	"jmp 1b\n" \
+	".text" \
 	:"=m" (__dummy_lock(lock)))
 
 #define spin_unlock(lock) \
 __asm__ __volatile__( \
 	"lock ; btrl $0,%0" \
 	:"=m" (__dummy_lock(lock)))
-
-#undef spin_lock
-static inline void spin_lock(spinlock_t * lock)
-{
-	__label__ l1;
-	int stuck = 10000000;
-l1:
-	__asm__ __volatile__(
-		"jmp 2f\n"
-		"1:\t"
-		"decl %1\n\t"
-		"je 3f\n\t"
-		"testb $1,%0\n\t"
-		"jne 1b\n"
-		"2:\t"
-		"lock ; btsl $0,%0\n\t"
-		"jc 1b\n"
-		"3:"
-		:"=m" (__dummy_lock(lock)),
-		 "=r" (stuck)
-		:"1" (stuck));
-	if (!stuck) {
-		printk("spinlock stuck at %p (%lx)\n",&&l1,lock->previous);
-	} else
-		lock->previous = (unsigned long) &&l1;
-}
 
 #define spin_trylock(lock) (!set_bit(0,(lock)))
 

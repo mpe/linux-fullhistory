@@ -1,7 +1,7 @@
 /*
  * random.c -- A strong random number generator
  *
- * Version 1.01, last modified 13-Feb-97
+ * Version 1.02, last modified 15-Apr-97
  * 
  * Copyright Theodore Ts'o, 1994, 1995, 1996, 1997.  All rights reserved.
  *
@@ -839,6 +839,18 @@ static void SHATransform(__u32 *digest, __u32 *data)
     digest[ 4 ] += E;
     }
 
+#undef ROTL
+#undef f1
+#undef f2
+#undef f3
+#undef f4
+#undef K1	
+#undef K2
+#undef K3	
+#undef K4	
+#undef expand
+#undef subRound
+	
 #else
 #define HASH_BUFFER_SIZE 4
 #define HASH_TRANSFORM MD5Transform
@@ -1324,22 +1336,90 @@ struct file_operations urandom_fops = {
  * attacks which rely on guessing the initial TCP sequence number.
  * This algorithm was suggested by Steve Bellovin.
  */
+
+/* F, G and H are basic MD4 functions: selection, majority, parity */
+#define F(x, y, z) (((x) & (y)) | ((~x) & (z)))
+#define G(x, y, z) (((x) & (y)) | ((x) & (z)) | ((y) & (z)))
+#define H(x, y, z) ((x) ^ (y) ^ (z))
+
+#define ROTL(n,X)  ( ( ( X ) << n ) | ( ( X ) >> ( 32 - n ) ) )
+
+/* FF, GG and HH are MD4 transformations for rounds 1, 2 and 3 */
+/* Rotation is separate from addition to prevent recomputation */
+#define FF(a, b, c, d, x, s) \
+  {(a) += F ((b), (c), (d)) + (x); \
+   (a) = ROTL ((s), (a));}
+#define GG(a, b, c, d, x, s) \
+  {(a) += G ((b), (c), (d)) + (x) + 013240474631UL; \
+   (a) = ROTL ((s), (a));}
+#define HH(a, b, c, d, x, s) \
+  {(a) += H ((b), (c), (d)) + (x) + 015666365641UL; \
+   (a) = ROTL ((s), (a));}
+
+/*
+ * Basic cut-down MD4 transform
+ */
+static void halfMD4Transform (__u32 buf[4], __u32 in[8])
+{
+	__u32	a = buf[0], b = buf[1], c = buf[2], d = buf[3];
+
+	/* Round 1 */
+	FF (a, b, c, d, in[ 0],  3);
+	FF (d, a, b, c, in[ 1],  7);
+	FF (c, d, a, b, in[ 2], 11);
+	FF (b, c, d, a, in[ 3], 19);
+	FF (a, b, c, d, in[ 4],  3);
+	FF (d, a, b, c, in[ 5],  7);
+	FF (c, d, a, b, in[ 6], 11);
+	FF (b, c, d, a, in[ 7], 19);
+
+	/* Round 2 */
+	GG (a, b, c, d, in[ 0],  3);
+	GG (d, a, b, c, in[ 4],  5);
+	GG (a, b, c, d, in[ 1],  9);
+	GG (d, a, b, c, in[ 5], 13);
+	GG (a, b, c, d, in[ 2],  3);
+	GG (d, a, b, c, in[ 6],  5);
+	GG (a, b, c, d, in[ 3],  9);
+	GG (d, a, b, c, in[ 7], 13);
+
+	/* Round 3 */
+	HH (a, b, c, d, in[ 0],  3);
+	HH (c, d, a, b, in[ 4],  9);
+	HH (a, b, c, d, in[ 2], 11);
+	HH (c, d, a, b, in[ 6], 15);
+	HH (a, b, c, d, in[ 1],  3);
+	HH (c, d, a, b, in[ 5],  9);
+	HH (a, b, c, d, in[ 3], 11);
+	HH (c, d, a, b, in[ 7], 15);
+
+	buf[0] += a;
+	buf[1] += b;
+	buf[2] += c;
+	buf[3] += d;
+}
+
+#define REKEY_INTERVAL	300
+
 __u32 secure_tcp_sequence_number(__u32 saddr, __u32 daddr,
 				 __u16 sport, __u16 dport)
 {
-	static int	is_init = 0;
-	static __u32	secret[16];
+	static __u32	rekey_time = 0;
+	static __u32	secret[12];
+	static char	count = 0;
 	struct timeval 	tv;
-	__u32 		tmp[16];
+	__u32 		tmp[12];
 	__u32		seq;
 
 	/*
-	 * Pick a random secret the first time we open a TCP
-	 * connection.
+	 * Pick a random secret every REKEY_INTERVAL seconds
 	 */
-	if (is_init == 0) {
+	do_gettimeofday(&tv);
+	if (!rekey_time ||
+	    (tv.tv_sec - rekey_time) > REKEY_INTERVAL) {
 		get_random_bytes(&secret, sizeof(secret));
-		is_init = 1;
+		rekey_time = tv.tv_sec;
+		count++;
 	}
 
 	memcpy(tmp, secret, sizeof(tmp));
@@ -1350,7 +1430,7 @@ __u32 secure_tcp_sequence_number(__u32 saddr, __u32 daddr,
 	tmp[8]=saddr;
 	tmp[9]=daddr;
 	tmp[10]=(sport << 16) + dport;
-	HASH_TRANSFORM(tmp, tmp);
+	halfMD4Transform(tmp, tmp+4);
 	
 	/*
 	 *	As close as possible to RFC 793, which
@@ -1359,8 +1439,8 @@ __u32 secure_tcp_sequence_number(__u32 saddr, __u32 daddr,
 	 *	For 10MB/s ethernet, a 1MHz clock is appropriate.
 	 *	That's funny, Linux has one built in!  Use it!
 	 */
-	do_gettimeofday(&tv);
-	seq = tmp[1] + tv.tv_usec+tv.tv_sec*1000000;
+	seq = (tmp[1]&0xFFFFFF) + (tv.tv_usec+tv.tv_sec*1000000) +
+		(count << 24);
 #if 0
 	printk("init_seq(%lx, %lx, %d, %d) = %d\n",
 	       saddr, daddr, sport, dport, seq);

@@ -81,8 +81,8 @@ asmlinkage struct pt_regs * save_v86_state(struct kernel_vm86_regs * regs)
 		printk("vm86: could not access userspace vm86_info\n");
 		do_exit(SIGSEGV);
 	}
-	current->tss.esp0 = current->saved_kernel_stack;
-	current->saved_kernel_stack = 0;
+	current->tss.esp0 = current->tss.saved_esp0;
+	current->tss.saved_esp0 = 0;
 	ret = KVM86->regs32;
 	unlock_kernel();
 	return ret;
@@ -137,7 +137,7 @@ asmlinkage int sys_vm86old(struct vm86_struct * v86)
 
 	lock_kernel();
 	tsk = current;
-	if (tsk->saved_kernel_stack)
+	if (tsk->tss.saved_esp0)
 		goto out;
 	tmp  = copy_from_user(&info, v86, VM86_REGS_SIZE1);
 	tmp += copy_from_user(&info.regs.VM86_REGS_PART2, &v86->regs.VM86_REGS_PART2,
@@ -187,7 +187,7 @@ asmlinkage int sys_vm86(unsigned long subfunction, struct vm86plus_struct * v86)
 
 	/* we come here only for functions VM86_ENTER, VM86_ENTER_NO_BYPASS */
 	ret = -EPERM;
-	if (tsk->saved_kernel_stack)
+	if (tsk->tss.saved_esp0)
 		goto out;
 	tmp  = copy_from_user(&info, v86, VM86_REGS_SIZE1);
 	tmp += copy_from_user(&info.regs.VM86_REGS_PART2, &v86->regs.VM86_REGS_PART2,
@@ -247,7 +247,7 @@ static void do_sys_vm86(struct kernel_vm86_struct *info, struct task_struct *tsk
  * Save old state, set default return value (%eax) to 0
  */
 	info->regs32->eax = 0;
-	tsk->saved_kernel_stack = tsk->tss.esp0;
+	tsk->tss.saved_esp0 = tsk->tss.esp0;
 	tsk->tss.esp0 = (unsigned long) &info->VM86_TSS_ESP0;
 
 	tsk->tss.screen_bitmap = info->screen_bitmap;
@@ -601,11 +601,17 @@ static inline void free_vm86_irq(int irqnumber)
 static inline int task_valid(struct task_struct *tsk)
 {
 	struct task_struct *p;
+	int ret = 0;
 
+	read_lock(&tasklist_lock);
 	for_each_task(p) {
-		if ((p == tsk) && (p->sig)) return 1;
+		if ((p == tsk) && (p->sig)) {
+			ret = 1;
+			break;
+		}
 	}
-	return 0;
+	read_unlock(&tasklist_lock);
+	return ret;
 }
 
 static inline void handle_irq_zombies(void)

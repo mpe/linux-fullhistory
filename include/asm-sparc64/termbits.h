@@ -148,7 +148,13 @@ struct termios {
 #define HUPCL	  0x00000400
 #define CLOCAL	  0x00000800
 #define CBAUDEX   0x00001000
+/* We'll never see these speeds with the Zilogs, but for completeness... */
 #define  B57600   0x00001001
+#define  B115200  0x00001002
+#define  B230400  0x00001003
+#define  B460800  0x00001004
+/* This is what we can do with the Zilogs. */
+#define  B76800   0x00001005
 #define CIBAUD	  0x100f0000  /* input baud rate (not used) */
 #define CMSPAR    0x40000000  /* mark or space (stick) parity */
 #define CRTSCTS	  0x80000000  /* flow control */

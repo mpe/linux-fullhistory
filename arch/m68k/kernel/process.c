@@ -30,6 +30,22 @@
 #include <asm/machdep.h>
 #include <asm/setup.h>
 
+/*
+ * Initial task structure. Make this a per-architecture thing,
+ * because different architectures tend to have different
+ * alignment requirements and potentially different initial
+ * setup.
+ */
+static unsigned long init_kernel_stack[1024] = { STACK_MAGIC, };
+unsigned long init_user_stack[1024] = { STACK_MAGIC, };
+static struct vm_area_struct init_mmap = INIT_MMAP;
+static struct fs_struct init_fs = INIT_FS;
+static struct files_struct init_files = INIT_FILES;
+static struct signal_struct init_signals = INIT_SIGNALS;
+
+struct mm_struct init_mm = INIT_MM;
+struct task_struct init_task = INIT_TASK;
+
 asmlinkage void ret_from_exception(void);
 
 /*

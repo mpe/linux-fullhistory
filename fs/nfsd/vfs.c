@@ -285,6 +285,10 @@ nfsd_open(struct svc_rqst *rqstp, struct svc_fh *fhp, int type,
 		if (err) {
 			if (wflag)
 				put_write_access(inode);
+
+			/* I nearly added put_filp() call here, but this filp
+			 * is really on callers stack frame. -DaveM
+			 */
 			filp->f_count--;
 			return nfserrno(-err);
 		}

@@ -116,7 +116,7 @@ struct thread_struct
 }
 
 #define INIT_MMAP { &init_mm, 0, 0x40000000, \
-		      PAGE_SHARED, VM_READ | VM_WRITE | VM_EXEC }
+		      PAGE_SHARED, VM_READ | VM_WRITE | VM_EXEC, NULL, &init_mm.mmap }
 
 /* Free all resources held by a thread. */
 extern void release_thread(struct task_struct *);

@@ -1,4 +1,4 @@
-/* $Id: processor.h,v 1.57 1997/03/04 16:27:22 jj Exp $
+/* $Id: processor.h,v 1.58 1997/04/25 03:13:16 davem Exp $
  * include/asm-sparc/processor.h
  *
  * Copyright (C) 1994 David S. Miller (davem@caip.rutgers.edu)
@@ -83,7 +83,7 @@ struct thread_struct {
 #define SPARC_FLAG_UNALIGNED    0x2    /* is allowed to do unaligned accesses */
 
 #define INIT_MMAP { &init_mm, (0), (0), \
-		    __pgprot(0x0) , VM_READ | VM_WRITE | VM_EXEC }
+		    __pgprot(0x0) , VM_READ | VM_WRITE | VM_EXEC, NULL, &init_mm.mmap }
 
 #define INIT_TSS  { \
 /* uwinmask, kregs, sig_address, sig_desc, ksp, kpc, kpsr, kwim */ \

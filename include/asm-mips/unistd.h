@@ -1149,7 +1149,7 @@
 /*
  * Offset of the last Linux flavoured syscall
  */
-#define __NR_Linux_syscalls		157
+#define __NR_Linux_syscalls		158
 
 #ifndef __LANGUAGE_ASSEMBLY__
 

@@ -298,24 +298,25 @@ static int unuse_process(struct mm_struct * mm, unsigned int type, unsigned long
  */
 static int try_to_unuse(unsigned int type)
 {
-	int nr;
 	unsigned long page = get_free_page(GFP_KERNEL);
+	struct task_struct *p;
 
 	if (!page)
 		return -ENOMEM;
-	nr = 0;
-	while (nr < NR_TASKS) {
-		struct task_struct * p = task[nr];
-		if (p) {
-			if (unuse_process(p->mm, type, page)) {
-				page = get_free_page(GFP_KERNEL);
-				if (!page)
-					return -ENOMEM;
-				continue;
-			}
+again:
+	read_lock(&tasklist_lock);
+	for_each_task(p) {
+		read_unlock(&tasklist_lock);
+		if(unuse_process(p->mm, type, page)) {
+			page = get_free_page(GFP_KERNEL);
+			if(!page)
+				return -ENOMEM;
+			goto again;
 		}
-		nr++;
+		read_lock(&tasklist_lock);
 	}
+	read_unlock(&tasklist_lock);
+
 	free_page(page);
 	return 0;
 }

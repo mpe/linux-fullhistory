@@ -88,16 +88,6 @@ unsigned long prof_shift = 0;
 
 extern void mem_use(void);
 
-static unsigned long init_kernel_stack[1024] = { STACK_MAGIC, };
-unsigned long init_user_stack[1024] = { STACK_MAGIC, };
-static struct vm_area_struct init_mmap = INIT_MMAP;
-static struct fs_struct init_fs = INIT_FS;
-static struct files_struct init_files = INIT_FILES;
-static struct signal_struct init_signals = INIT_SIGNALS;
-
-struct mm_struct init_mm = INIT_MM;
-struct task_struct init_task = INIT_TASK;
-
 unsigned long volatile jiffies=0;
 
 /*
@@ -250,7 +240,7 @@ static inline int goodness(struct task_struct * p, struct task_struct * prev, in
 #ifdef __SMP__
 		/* Give a largish advantage to the same processor...   */
 		/* (this is equivalent to penalizing other processors) */
-		if (p->last_processor == this_cpu)
+		if (p->processor == this_cpu)
 			weight += PROC_CHANGE_PENALTY;
 #endif
 
@@ -265,7 +255,7 @@ static inline int goodness(struct task_struct * p, struct task_struct * prev, in
 #ifdef __SMP__
 
 #define idle_task (task[cpu_number_map[this_cpu]])
-#define can_schedule(p)	((p)->processor == NO_PROC_ID)
+#define can_schedule(p)	(!(p)->has_cpu)
 
 #else
 
@@ -292,12 +282,12 @@ asmlinkage void schedule(void)
 	int this_cpu;
 
 	need_resched = 0;
+	prev = current;
 	this_cpu = smp_processor_id();
 	if (local_irq_count[this_cpu]) {
 		printk("Scheduling in interrupt\n");
 		*(char *)0 = 0;
 	}
-	prev = current;
 	release_kernel_lock(prev, this_cpu, lock_depth);
 	if (bh_active & bh_mask)
 		do_bottom_half();
@@ -348,9 +338,7 @@ asmlinkage void schedule(void)
 		 * the scheduler lock
 		 */
 		spin_unlock_irq(&runqueue_lock);
-#ifdef __SMP__
-		prev->processor = NO_PROC_ID;
-#endif
+		prev->has_cpu = 0;
 	
 /*
  * Note! there may appear new tasks on the run-queue during this, as
@@ -381,8 +369,8 @@ asmlinkage void schedule(void)
 		}
 	}
 
+	next->has_cpu = 1;
 	next->processor = this_cpu;
-	next->last_processor = this_cpu;
 
 	if (prev != next) {
 		struct timer_list timer;
@@ -421,19 +409,22 @@ asmlinkage int sys_pause(void)
 
 #endif
 
-spinlock_t waitqueue_lock;
+rwlock_t waitqueue_lock;
 
 /*
  * wake_up doesn't wake up stopped processes - they have to be awakened
  * with signals or similar.
+ *
+ * Note that we only need a read lock for the wait queue (and thus do not
+ * have to protect against interrupts), as the actual removal from the
+ * queue is handled by the process itself.
  */
 void wake_up(struct wait_queue **q)
 {
-	unsigned long flags;
 	struct wait_queue *next;
 	struct wait_queue *head;
 
-	spin_lock_irqsave(&waitqueue_lock, flags);
+	read_lock(&waitqueue_lock);
 	if (q && (next = *q)) {
 		head = WAIT_QUEUE_HEAD(q);
 		while (next != head) {
@@ -453,16 +444,15 @@ void wake_up(struct wait_queue **q)
 			break;
 		}
 	}
-	spin_unlock_irqrestore(&waitqueue_lock, flags);
+	read_unlock(&waitqueue_lock);
 }
 
 void wake_up_interruptible(struct wait_queue **q)
 {
-	unsigned long flags;
 	struct wait_queue *next;
 	struct wait_queue *head;
 
-	spin_lock_irqsave(&waitqueue_lock, flags);
+	read_lock(&waitqueue_lock);
 	if (q && (next = *q)) {
 		head = WAIT_QUEUE_HEAD(q);
 		while (next != head) {
@@ -481,7 +471,7 @@ void wake_up_interruptible(struct wait_queue **q)
 			break;
 		}
 	}
-	spin_unlock_irqrestore(&waitqueue_lock, flags);
+	read_unlock(&waitqueue_lock);
 }
 
 /*
@@ -603,14 +593,14 @@ static inline void __sleep_on(struct wait_queue **p, int state)
 	if (current == task[0])
 		panic("task[0] trying to sleep");
 	current->state = state;
-	spin_lock_irqsave(&waitqueue_lock, flags);
+	write_lock_irqsave(&waitqueue_lock, flags);
 	__add_wait_queue(p, &wait);
-	spin_unlock(&waitqueue_lock);
+	write_unlock(&waitqueue_lock);
 	sti();
 	schedule();
-	spin_lock_irq(&waitqueue_lock);
+	write_lock_irq(&waitqueue_lock);
 	__remove_wait_queue(p, &wait);
-	spin_unlock_irqrestore(&waitqueue_lock, flags);
+	write_unlock_irqrestore(&waitqueue_lock, flags);
 }
 
 void interruptible_sleep_on(struct wait_queue **p)
@@ -1338,22 +1328,12 @@ asmlinkage int sys_nice(int increment)
 
 #endif
 
-static struct task_struct *find_process_by_pid(pid_t pid)
+static inline struct task_struct *find_process_by_pid(pid_t pid)
 {
-	struct task_struct *p;
-
-	p = current;
-	if (pid) {
-		read_lock(&tasklist_lock);
-		for_each_task(p) {
-			if (p->pid == pid)
-				goto found;
-		}
-		p = NULL;
-found:
-		read_unlock(&tasklist_lock);
-	}
-	return p;
+	if (pid)
+		return find_task_by_pid(pid);
+	else
+		return current;
 }
 
 static int setscheduler(pid_t pid, int policy, 
@@ -1566,7 +1546,7 @@ asmlinkage int sys_nanosleep(struct timespec *rqtp, struct timespec *rmtp)
 
 static void show_task(int nr,struct task_struct * p)
 {
-	unsigned long free;
+	unsigned long free = 0;
 	static const char * stat_nam[] = { "R", "S", "D", "Z", "T", "W" };
 
 	printk("%-8s %3d ", p->comm, (p == current) ? -nr : nr);
@@ -1585,10 +1565,12 @@ static void show_task(int nr,struct task_struct * p)
 	else
 		printk(" %016lx ", thread_saved_pc(&p->tss));
 #endif
+#if 0
 	for (free = 1; free < PAGE_SIZE/sizeof(long) ; free++) {
 		if (((unsigned long *)p->kernel_stack_page)[free])
 			break;
 	}
+#endif
 	printk("%5lu %5d %6d ", free*sizeof(long), p->pid, p->p_pptr->pid);
 	if (p->p_cptr)
 		printk("%5d ", p->p_cptr->pid);
@@ -1606,7 +1588,7 @@ static void show_task(int nr,struct task_struct * p)
 
 void show_state(void)
 {
-	int i;
+	struct task_struct *p;
 
 #if ((~0UL) == 0xffffffff)
 	printk("\n"
@@ -1617,9 +1599,10 @@ void show_state(void)
 	       "                                 free                        sibling\n");
 	printk("  task                 PC        stack   pid father child younger older\n");
 #endif
-	for (i=0 ; i<NR_TASKS ; i++)
-		if (task[i])
-			show_task(i,task[i]);
+	read_lock(&tasklist_lock);
+	for_each_task(p)
+		show_task((p->tarray_ptr - &task[0]),p);
+	read_unlock(&tasklist_lock);
 }
 
 void sched_init(void)
@@ -1628,14 +1611,28 @@ void sched_init(void)
 	 *	We have to do a little magic to get the first
 	 *	process right in SMP mode.
 	 */
-	int cpu=smp_processor_id();
+	int cpu=hard_smp_processor_id();
+	int nr = NR_TASKS;
+
 #ifndef __SMP__
 	current_set[cpu]=&init_task;
 #else
 	init_task.processor=cpu;
+	/*
+	 * This looks strange, but we don't necessarily know which CPU
+	 * we're booting on yet, so do them all..
+	 */
 	for(cpu = 0; cpu < NR_CPUS; cpu++)
 		current_set[cpu] = &init_task;
 #endif
+
+	/* Init task array free list and pidhash table. */
+	while(--nr > 0)
+		add_free_taskslot(&task[nr]);
+
+	for(nr = 0; nr < PIDHASH_SZ; nr++)
+		pidhash[nr] = NULL;
+
 	init_bh(TIMER_BH, timer_bh);
 	init_bh(TQUEUE_BH, tqueue_bh);
 	init_bh(IMMEDIATE_BH, immediate_bh);

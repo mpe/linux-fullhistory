@@ -174,10 +174,12 @@ check_stack(const char *fname, int lineno)
 		printk("------- vfat kstack ok in %s line %d: SL=%d\n",
 		       fname, lineno, stack_level);
 #endif
+#if 0
 	if (*(unsigned long *) current->kernel_stack_page != STACK_MAGIC) {
 		printk("******* vfat stack corruption detected in %s at line %d\n",
 		       fname, lineno);
 	}
+#endif
 }
 
 static int debug = 0;

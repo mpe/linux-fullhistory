@@ -21,13 +21,9 @@
  *	and IP is zero.  Thus, data addresses need to be absolute
  *	(no relocation) and are taken with regard to r_base.
  *
- *	On the transition to protected mode, this page appears at
- *	address 8192, so protected mode addresses are with regard
- *	to p_base.
- *
  *	If you work on this file, check the object module with objdump
  *	--full-contents --reloc to make sure there are no relocation
- *	entries.
+ *	entries except for the gdt one..
  */
 
 #include <linux/linkage.h>
@@ -39,14 +35,13 @@
 
 ENTRY(trampoline_data)
 r_base = .
-p_base = . - 8192
 
 	mov	%cs, %ax	# Code and data in the same place
 	mov	%ax, %ds
 
 	mov	%ax, %cx	# Pass stack info to the 32bit boot
 	shl	$4, %cx		# Segment -> Offset
-	add	$4096, %cx	# End of page is wanted
+	add	$1024, %cx	# Don't overwrite end of page (filled in by kernel_thread)
 
 	mov	$1, %bx		# Flag an SMP trampoline
 	cli			# We should be safe anyway
@@ -71,37 +66,7 @@ idt_48:
 
 gdt_48:
 	.word	0x0800			# gdt limit = 2048, 256 GDT entries
-	.word	gdt - p_base, 0x0	# gdt base = gdt (first SMP CPU)
-					# we load the others with first table
-					# saves rewriting gdt_48 for each
-gdt:
-	.word	0, 0, 0, 0	# dummy
-
-	.word	0, 0, 0, 0	# unused
-
-# walken modif
-
-	.word	0xFFFF		# 4 Gb - (0x100000*0x1000 = 4Gb)
-	.word	0x0000		# base address = 0
-	.word	0x9A00		# code read / exec
-	.word	0x00CF		# granularity = 4096, 386 (+5th nibble of limit)
-
-	.word	0xFFFF		# 4 Gb - (0x100000*0x1000 = 4Gb)
-	.word	0x0000		# base address = 0
-	.word	0x9200		# data read / write
-	.word	0x00CF		# granularity = 4096, 386 (+5th nibble of limit)
-
-# walken modif
-
-#	.word	0x07FF		# 8 Mb - limit = 2047 (2048 * 4096 = 8 Mb)
-#	.word	0x0000		# base address = 0
-#	.word	0x9A00		# code read / exec
-#	.word	0x00C0		# granularity = 4096, 386
-
-#	.word	0x07FF		# 8 Mb - limit = 2047 (2048 * 4096 = 8 Mb)
-#	.word	0x0000		# base address = 0
-#	.word	0x9200		# data read / write
-#	.word	0x00C0		# granularity = 4096, 386
+	.long	gdt-0xc0000000		# gdt base = gdt (first SMP CPU)
 
 .globl SYMBOL_NAME(trampoline_end)
 SYMBOL_NAME_LABEL(trampoline_end)

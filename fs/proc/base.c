@@ -52,17 +52,14 @@ static struct inode_operations proc_base_inode_operations = {
 
 static void proc_pid_fill_inode(struct inode * inode)
 {
-	struct task_struct * p;
+	struct task_struct *p;
 	int pid = inode->i_ino >> 16;
 	int ino = inode->i_ino & 0xffff;
 
-	for_each_task(p) {
-		if (p->pid == pid) {
-			if (p->dumpable || ino == PROC_PID_INO) {
-				inode->i_uid = p->euid;
-				inode->i_gid = p->gid;
-			}
-			return;
+	if ((p = find_task_by_pid(pid)) != NULL) {
+		if (p->dumpable || ino == PROC_PID_INO) {
+			inode->i_uid = p->euid;
+			inode->i_gid = p->gid;
 		}
 	}
 }

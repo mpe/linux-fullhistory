@@ -163,6 +163,7 @@ asmlinkage long sys_fcntl(unsigned int fd, unsigned int cmd, unsigned long arg)
 			if (current->pgrp == -arg || current->pid == arg)
 				goto fasync_ok;
 			
+			read_lock(&tasklist_lock);
 			for_each_task(p) {
 				if ((p->pid == arg) || (p->pid == -arg) || 
 				    (p->pgrp == -arg)) {
@@ -171,11 +172,14 @@ asmlinkage long sys_fcntl(unsigned int fd, unsigned int cmd, unsigned long arg)
 					if ((p->session != current->session) &&
 					    (p->uid != current->uid) &&
 					    (p->euid != current->euid) &&
-					    !suser())
+					    !suser()) {
+						read_unlock(&tasklist_lock);
 						goto out;
+					}
 					break;
 				}
 			}
+			read_unlock(&tasklist_lock);
 			err = -EINVAL;
 			if ((task_found == 0) && !suser())
 				break;

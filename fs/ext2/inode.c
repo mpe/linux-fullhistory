@@ -503,12 +503,23 @@ void ext2_read_inode (struct inode * inode)
 		inode->i_op = &blkdev_inode_operations;
 	else if (S_ISFIFO(inode->i_mode))
 		init_fifo(inode);
-	if (inode->u.ext2_i.i_flags & EXT2_SYNC_FL)
+	inode->i_attr_flags = 0;
+	if (inode->u.ext2_i.i_flags & EXT2_SYNC_FL) {
+		inode->i_attr_flags |= ATTR_FLAG_SYNCRONOUS;
 		inode->i_flags |= MS_SYNCHRONOUS;
-	if (inode->u.ext2_i.i_flags & EXT2_APPEND_FL)
+	}
+	if (inode->u.ext2_i.i_flags & EXT2_APPEND_FL) {
+		inode->i_attr_flags |= ATTR_FLAG_APPEND;
 		inode->i_flags |= S_APPEND;
-	if (inode->u.ext2_i.i_flags & EXT2_IMMUTABLE_FL)
+	}
+	if (inode->u.ext2_i.i_flags & EXT2_IMMUTABLE_FL) {
+		inode->i_attr_flags |= ATTR_FLAG_IMMUTABLE;
 		inode->i_flags |= S_IMMUTABLE;
+	}
+	if (inode->u.ext2_i.i_flags & EXT2_NOATIME_FL) {
+		inode->i_attr_flags |= ATTR_FLAG_NOATIME;
+		inode->i_flags |= MS_NOATIME;
+	}
 }
 
 static int ext2_update_inode(struct inode * inode, int do_sync)
@@ -597,11 +608,71 @@ static int ext2_update_inode(struct inode * inode, int do_sync)
 
 void ext2_write_inode (struct inode * inode)
 {
+#if 0
+	printk("ext2_write(%04x:%06d)...", inode->i_dev, inode->i_ino);
+#endif
 	ext2_update_inode (inode, 0);
 }
 
 int ext2_sync_inode (struct inode *inode)
 {
+#if 0
+	printk("ext2_sync(%04x:%06d)...", inode->i_dev, inode->i_ino);
+#endif
 	return ext2_update_inode (inode, 1);
+}
+
+int ext2_notify_change(struct inode *inode, struct iattr *iattr)
+{
+	int		retval;
+	unsigned int	flags;
+	
+	if ((iattr->ia_attr_flags &
+	     (ATTR_FLAG_APPEND | ATTR_FLAG_IMMUTABLE)) ^
+	    (inode->u.ext2_i.i_flags &
+	     (EXT2_APPEND_FL | EXT2_IMMUTABLE_FL))) {
+		if (!fsuser() || securelevel > 0)
+			return -EPERM;
+	} else
+		if ((current->fsuid != inode->i_uid) && !fsuser())
+			return -EPERM;
+
+	if ((retval = inode_change_ok(inode, iattr)) != 0)
+		return retval;
+
+	inode_setattr(inode, iattr);
+	
+	flags = iattr->ia_attr_flags;
+	if (flags & ATTR_FLAG_SYNCRONOUS) {
+		inode->i_flags |= MS_SYNCHRONOUS;
+		inode->u.ext2_i.i_flags = EXT2_SYNC_FL;
+	} else {
+		inode->i_flags &= ~MS_SYNCHRONOUS;
+		inode->u.ext2_i.i_flags &= ~EXT2_SYNC_FL;
+	}
+	if (flags & ATTR_FLAG_NOATIME) {
+		inode->i_flags |= MS_NOATIME;
+		inode->u.ext2_i.i_flags = EXT2_NOATIME_FL;
+	} else {
+		inode->i_flags &= ~MS_NOATIME;
+		inode->u.ext2_i.i_flags &= ~EXT2_NOATIME_FL;
+	}
+	if (flags & ATTR_FLAG_APPEND) {
+		inode->i_flags |= S_APPEND;
+		inode->u.ext2_i.i_flags = EXT2_APPEND_FL;
+	} else {
+		inode->i_flags &= ~S_APPEND;
+		inode->u.ext2_i.i_flags &= ~EXT2_APPEND_FL;
+	}
+	if (flags & ATTR_FLAG_IMMUTABLE) {
+		inode->i_flags |= S_IMMUTABLE;
+		inode->u.ext2_i.i_flags = EXT2_IMMUTABLE_FL;
+	} else {
+		inode->i_flags &= ~S_IMMUTABLE;
+		inode->u.ext2_i.i_flags &= ~EXT2_IMMUTABLE_FL;
+	}
+	inode->i_dirt = 1;
+
+	return 0;
 }
 

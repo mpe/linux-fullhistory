@@ -178,6 +178,7 @@ while(1);
 
 void do_ades(struct pt_regs *regs)
 {
+	struct task_struct *p;
 	unsigned long	pc = regs->cp0_epc;
 	int	i;
 
@@ -187,12 +188,14 @@ void do_ades(struct pt_regs *regs)
 		return;
 	}
 while(1);
-	for(i=0; i<NR_TASKS;i++)
-		if(task[i] && task[i]->pid >= 2)
-		{
-			printk("Process %d\n", task[i]->pid);
-			dump_list_process(task[i], pc);
+	read_lock(&tasklist_lock);
+	for_each_task(p) {
+		if(p->pid >= 2) {
+			printk("Process %d\n", p->pid);
+			dump_list_process(p, pc);
 		}
+	}
+	read_unlock(&tasklist_lock);
 	show_regs(regs);
 	dump_tlb_nonwired();
 	send_sig(SIGSEGV, current, 1);
@@ -251,14 +254,16 @@ while(1);
 
 void do_ri(struct pt_regs *regs)
 {
+	struct task_struct *p;
 	int	i;
 
-	for(i=0; i<NR_TASKS;i++)
-		if(task[i] && task[i]->pid >= 2)
-		{
-			printk("Process %d\n", task[i]->pid);
-			dump_list_process(task[i], 0x7ffff000);
+	read_lock(&tasklist_lock);
+	for_each_task(p) {
+		if(p->pid >= 2) {
+			printk("Process %d\n", p->pid);
+			dump_list_process(p, 0x7ffff000);
 		}
+	}
 	show_regs(regs);
 while(1);
 	send_sig(SIGILL, current, 1);

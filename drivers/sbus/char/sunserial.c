@@ -1,4 +1,4 @@
-/* $Id: sunserial.c,v 1.38 1997/04/14 17:05:00 jj Exp $
+/* $Id: sunserial.c,v 1.39 1997/04/23 07:45:26 ecd Exp $
  * serial.c: Serial port driver for the Sparc.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -866,10 +866,10 @@ static void change_speed(struct sun_serial *info)
 	i = cflag & CBAUD;
 	if (cflag & CBAUDEX) {
 		i &= ~CBAUDEX;
-		if (i != 1)
+		if (i != 5)
 			info->tty->termios->c_cflag &= ~CBAUDEX;
 		else
-			i += 15;
+			i = 16;
 	}
 	if (i == 15) {
 		if ((info->flags & ZILOG_SPD_MASK) == ZILOG_SPD_HI)
@@ -1857,7 +1857,7 @@ int rs_open(struct tty_struct *tty, struct file * filp)
 
 static void show_serial_version(void)
 {
-	char *revision = "$Revision: 1.38 $";
+	char *revision = "$Revision: 1.39 $";
 	char *version, *p;
 
 	version = strchr(revision, ' ');

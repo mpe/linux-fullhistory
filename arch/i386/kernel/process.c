@@ -149,7 +149,8 @@ int cpu_idle(void *unused)
 	current->priority = -100;
 	while(1)
 	{
-		if(cpu_data[smp_processor_id()].hlt_works_ok && !hlt_counter && !need_resched)
+		if(cpu_data[hard_smp_processor_id()].hlt_works_ok &&
+		 		!hlt_counter && !need_resched)
 			__asm("hlt");
 		/*
 		 * tq_scheduler currently assumes we're running in a process
@@ -324,11 +325,14 @@ void machine_restart(char * __unused)
 
 	pg0 [0] = 7;
 
-	/* Use `swapper_pg_dir' as our page directory.  Don't bother with
-	   `SET_PAGE_DIR' because interrupts are disabled and we're rebooting.
-	   This instruction flushes the TLB. */
+	/*
+	 * Use `swapper_pg_dir' as our page directory.  We bother with
+	 * `SET_PAGE_DIR' because although might be rebooting, but if we change
+	 * the way we set root page dir in the future, then we wont break a
+	 * seldom used feature ;)
+	 */
 
-	__asm__ __volatile__ ("movl %0,%%cr3" : : "a" (swapper_pg_dir) : "memory");
+	SET_PAGE_DIR(current,swapper_pg_dir);
 
 	/* Write 0x1234 to absolute memory location 0x472.  The BIOS reads
 	   this on booting to tell it to "Bypass memory test (also warm
@@ -473,6 +477,8 @@ int copy_thread(int nr, unsigned long clone_flags, unsigned long esp,
 	int i;
 	struct pt_regs * childregs;
 
+	p->tss.tr = _TSS(nr);
+	p->tss.ldt = _LDT(nr);
 	p->tss.es = KERNEL_DS;
 	p->tss.cs = KERNEL_CS;
 	p->tss.ss = KERNEL_DS;
@@ -480,9 +486,8 @@ int copy_thread(int nr, unsigned long clone_flags, unsigned long esp,
 	p->tss.fs = USER_DS;
 	p->tss.gs = USER_DS;
 	p->tss.ss0 = KERNEL_DS;
-	p->tss.esp0 = p->kernel_stack_page + PAGE_SIZE;
-	p->tss.tr = _TSS(nr);
-	childregs = ((struct pt_regs *) (p->kernel_stack_page + PAGE_SIZE)) - 1;
+	p->tss.esp0 = 2*PAGE_SIZE + (unsigned long) p;
+	childregs = ((struct pt_regs *) (p->tss.esp0)) - 1;
 	p->tss.esp = (unsigned long) childregs;
 #ifdef __SMP__
 	p->tss.eip = (unsigned long) ret_from_smpfork;
@@ -496,7 +501,6 @@ int copy_thread(int nr, unsigned long clone_flags, unsigned long esp,
 	childregs->eax = 0;
 	childregs->esp = esp;
 	p->tss.back_link = 0;
-	p->tss.ldt = _LDT(nr);
 	if (p->ldt) {
 		p->ldt = (struct desc_struct*) vmalloc(LDT_ENTRIES*LDT_ENTRY_SIZE);
 		if (p->ldt != NULL)
@@ -512,6 +516,7 @@ int copy_thread(int nr, unsigned long clone_flags, unsigned long esp,
 		p->tss.io_bitmap[i] = ~0;
 	if (last_task_used_math == current)
 		__asm__("clts ; fnsave %0 ; frstor %0":"=m" (p->tss.i387));
+
 	return 0;
 }
 

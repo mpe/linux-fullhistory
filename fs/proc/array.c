@@ -154,9 +154,7 @@ static long read_profile(struct inode *inode, struct file *file,
 	return read;
 }
 
-#ifdef __SMP__
 
-extern int setup_profiling_timer (unsigned int multiplier);
 
 /*
  * Writing to /proc/profile resets the counters
@@ -168,6 +166,8 @@ static long write_profile(struct inode * inode, struct file * file,
 	const char * buf, unsigned long count)
 {
 	int i=prof_len;
+#ifdef __SMP__
+	extern int setup_profiling_timer (unsigned int multiplier);
 
 	if (count==sizeof(int)) {
 		unsigned int multiplier;
@@ -178,14 +178,12 @@ static long write_profile(struct inode * inode, struct file * file,
 		if (setup_profiling_timer(multiplier))
 			return -EINVAL;
 	}
+#endif
   
 	while (i--)
 		prof_buffer[i]=0UL;
 	return count;
 }
-#else
-#define write_profile NULL
-#endif
 
 static struct file_operations proc_profile_operations = {
 	NULL,           /* lseek */
@@ -344,18 +342,6 @@ static int get_cmdline(char * buffer)
 	return sprintf(buffer, "%s\n", saved_command_line);
 }
 
-static struct task_struct ** get_task(pid_t pid)
-{
-	struct task_struct ** p;
-
-	p = task;
-	while (++p < task+NR_TASKS) {
-		if (*p && (*p)->pid == pid)
-			return p;
-	}
-	return NULL;
-}
-
 static unsigned long get_phys_addr(struct task_struct * p, unsigned long ptr)
 {
 	pgd_t *page_dir;
@@ -386,7 +372,7 @@ static unsigned long get_phys_addr(struct task_struct * p, unsigned long ptr)
 	return pte_page(pte) + (ptr & ~PAGE_MASK);
 }
 
-static int get_array(struct task_struct ** p, unsigned long start, unsigned long end, char * buffer)
+static int get_array(struct task_struct *p, unsigned long start, unsigned long end, char * buffer)
 {
 	unsigned long addr;
 	int size = 0, result = 0;
@@ -395,7 +381,7 @@ static int get_array(struct task_struct ** p, unsigned long start, unsigned long
 	if (start >= end)
 		return result;
 	for (;;) {
-		addr = get_phys_addr(*p, start);
+		addr = get_phys_addr(p, start);
 		if (!addr)
 			return result;
 		do {
@@ -417,20 +403,20 @@ static int get_array(struct task_struct ** p, unsigned long start, unsigned long
 
 static int get_env(int pid, char * buffer)
 {
-	struct task_struct ** p = get_task(pid);
+	struct task_struct *p = find_task_by_pid(pid);
 
-	if (!p || !*p || !(*p)->mm)
+	if (!p || !p->mm)
 		return 0;
-	return get_array(p, (*p)->mm->env_start, (*p)->mm->env_end, buffer);
+	return get_array(p, p->mm->env_start, p->mm->env_end, buffer);
 }
 
 static int get_arg(int pid, char * buffer)
 {
-	struct task_struct ** p = get_task(pid);
+	struct task_struct *p = find_task_by_pid(pid);
 
-	if (!p || !*p || !(*p)->mm)
+	if (!p || !p->mm)
 		return 0;
-	return get_array(p, (*p)->mm->arg_start, (*p)->mm->arg_end, buffer);
+	return get_array(p, p->mm->arg_start, p->mm->arg_end, buffer);
 }
 
 static unsigned long get_wchan(struct task_struct *p)
@@ -443,7 +429,7 @@ static unsigned long get_wchan(struct task_struct *p)
 		unsigned long stack_page;
 		int count = 0;
 
-		stack_page = p->kernel_stack_page;
+		stack_page = 4096 + (unsigned long)p;
 		if (!stack_page)
 			return 0;
 		ebp = p->tss.ebp;
@@ -507,8 +493,8 @@ static unsigned long get_wchan(struct task_struct *p)
 }
 
 #if defined(__i386__)
-# define KSTK_EIP(tsk)	(((unsigned long *)tsk->kernel_stack_page)[1019])
-# define KSTK_ESP(tsk)	(((unsigned long *)tsk->kernel_stack_page)[1022])
+# define KSTK_EIP(tsk)	(((unsigned long *)(4096+(unsigned long)(tsk)))[1019])
+# define KSTK_ESP(tsk)	(((unsigned long *)(4096+(unsigned long)(tsk)))[1022])
 #elif defined(__alpha__)
   /*
    * See arch/alpha/kernel/ptrace.c for details.
@@ -681,9 +667,9 @@ static inline char * task_sig(struct task_struct *p, char *buffer)
 static int get_status(int pid, char * buffer)
 {
 	char * orig = buffer;
-	struct task_struct ** p = get_task(pid), *tsk;
+	struct task_struct *tsk = find_task_by_pid(pid);
 
-	if (!p || (tsk = *p) == NULL)
+	if (!tsk)
 		return 0;
 	buffer = task_name(tsk, buffer);
 	buffer = task_state(tsk, buffer);
@@ -694,14 +680,14 @@ static int get_status(int pid, char * buffer)
 
 static int get_stat(int pid, char * buffer)
 {
-	struct task_struct ** p = get_task(pid), *tsk;
+	struct task_struct *tsk = find_task_by_pid(pid);
 	unsigned long sigignore=0, sigcatch=0, wchan;
 	unsigned long vsize, eip, esp;
 	long priority, nice;
 	int i,tty_pgrp;
 	char state;
 
-	if (!p || (tsk = *p) == NULL)
+	if (!tsk)
 		return 0;
 	if (tsk->state < 0 || tsk->state > 5)
 		state = '.';
@@ -714,10 +700,8 @@ static int get_stat(int pid, char * buffer)
 			vsize += vma->vm_end - vma->vm_start;
 			vma = vma->vm_next;
 		}
-		if (tsk->kernel_stack_page) {
-			eip = KSTK_EIP(tsk);
-			esp = KSTK_ESP(tsk);
-		}
+		eip = KSTK_EIP(tsk);
+		esp = KSTK_ESP(tsk);
 	}
 	wchan = get_wchan(tsk);
 	if (tsk->sig) {
@@ -864,10 +848,10 @@ static void statm_pgd_range(pgd_t * pgd, unsigned long address, unsigned long en
 
 static int get_statm(int pid, char * buffer)
 {
-	struct task_struct ** p = get_task(pid), *tsk;
+	struct task_struct *tsk = find_task_by_pid(pid);
 	int size=0, resident=0, share=0, trs=0, lrs=0, drs=0, dt=0;
 
-	if (!p || (tsk = *p) == NULL)
+	if (!tsk)
 		return 0;
 	if (tsk->mm && tsk->mm != &init_mm) {
 		struct vm_area_struct * vma = tsk->mm->mmap;
@@ -932,17 +916,17 @@ static int get_statm(int pid, char * buffer)
 static long read_maps (int pid, struct file * file,
 	char * buf, unsigned long count)
 {
-	struct task_struct ** p = get_task(pid);
+	struct task_struct *p = find_task_by_pid(pid);
 	char * destptr;
 	loff_t lineno;
 	int column;
 	struct vm_area_struct * map;
 	int i;
 
-	if (!p || !*p)
+	if (!p)
 		return -EINVAL;
 
-	if (!(*p)->mm || (*p)->mm == &init_mm || count == 0)
+	if (!p->mm || p->mm == &init_mm || count == 0)
 		return 0;
 
 	/* decode f_pos */
@@ -950,7 +934,7 @@ static long read_maps (int pid, struct file * file,
 	column = file->f_pos & (MAPS_LINE_LENGTH-1);
 
 	/* quickly go to line lineno */
-	for (map = (*p)->mm->mmap, i = 0; map && (i < lineno); map = map->vm_next, i++)
+	for (map = p->mm->mmap, i = 0; map && (i < lineno); map = map->vm_next, i++)
 		continue;
 
 	destptr = buf;
@@ -1011,7 +995,7 @@ static long read_maps (int pid, struct file * file,
 		/* By writing to user space, we might have slept.
 		 * Stop the loop, to avoid a race condition.
 		 */
-		if (*p != current)
+		if (p != current)
 			break;
 	}
 

@@ -189,6 +189,7 @@ struct ext2_group_desc
 #define EXT2_IMMUTABLE_FL		0x00000010 /* Immutable file */
 #define EXT2_APPEND_FL			0x00000020 /* writes to file may only append */
 #define EXT2_NODUMP_FL			0x00000040 /* do not dump file */
+#define EXT2_NOATIME_FL			0x00000080 /* do not update atime */
 #define EXT2_RESERVED_FL		0x80000000 /* reserved for ext2 lib */
 	
 /*
@@ -363,7 +364,10 @@ struct ext2_super_block {
 	__u32	s_feature_compat; 	/* compatible feature set */
 	__u32	s_feature_incompat; 	/* incompatible feature set */
 	__u32	s_feature_ro_compat; 	/* readonly-compatible feature set */
-	__u32	s_reserved[230];	/* Padding to the end of the block */
+	__u8	s_uuid[16];		/* 128-bit uuid for volume */
+	char	s_volume_name[16]; 	/* volume name */
+	char	s_last_mounted[64]; 	/* directory where last mounted */
+	__u32	s_reserved[206];	/* Padding to the end of the block */
 };
 
 /*
@@ -385,6 +389,16 @@ struct ext2_super_block {
 #define EXT2_MAX_SUPP_REV	EXT2_DYNAMIC_REV
 
 #define EXT2_GOOD_OLD_INODE_SIZE 128
+
+/*
+ * Feature set definitions
+ */
+
+#define EXT2_FEATURE_RO_COMPAT_SPARSE_SUPER	0x0001
+
+#define EXT2_FEATURE_COMPAT_SUPP	0
+#define EXT2_FEATURE_INCOMPAT_SUPP	0
+#define EXT2_FEATURE_RO_COMPAT_SUPP	EXT2_FEATURE_RO_COMPAT_SPARSE_SUPER
 
 /*
  * Default values for user and/or group using reserved blocks
@@ -413,13 +427,6 @@ struct ext2_dir_entry {
 #define EXT2_DIR_ROUND 			(EXT2_DIR_PAD - 1)
 #define EXT2_DIR_REC_LEN(name_len)	(((name_len) + 8 + EXT2_DIR_ROUND) & \
 					 ~EXT2_DIR_ROUND)
-
-/*
- * Feature set definitions --- none are defined as of now
- */
-#define EXT2_FEATURE_COMPAT_SUPP	0
-#define EXT2_FEATURE_INCOMPAT_SUPP	0
-#define EXT2_FEATURE_RO_COMPAT_SUPP	0
 
 #ifdef __KERNEL__
 /*

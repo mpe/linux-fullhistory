@@ -855,5 +855,6 @@ sys_call_table:
 	.long sys_mremap
 	.long SYMBOL_NAME(sys_setresuid)
 	.long SYMBOL_NAME(sys_getresuid)
-	.space (NR_syscalls-165)*4
+	.long SYMBOL_NAME(sys_nfsservctl)
+	.space (NR_syscalls-166)*4
 

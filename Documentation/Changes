@@ -29,7 +29,7 @@ English-language HTML version.
    Also, don't forget http://www.linuxhq.com/ for all your Linux kernel
 needs.
 
-Last updated: April 17, 1997.
+Last updated: April 24, 1997.
 Current Author: Chris Ricker (gt1355b@prism.gatech.edu).
 
 Current Minimal Requirements
@@ -45,11 +45,11 @@ encountered a bug!
 - Dynamic Linker (ld.so) 1.8.5
 - Linux C++ Library	 2.7.2.1
 - Procps		 1.01
-- Mount                  2.6e
+- Mount                  2.6g
 - Net-tools              1.32-alpha
 - Loadlin                1.6a
 - Sh-utils               1.16
-- Autofs                 970409
+- Autofs                 0.2.2
 - NFS                    0.4.21
 
 Upgrade notes
@@ -295,14 +295,14 @@ ftp://prep.ai.mit.edu/pub/gnu/sh-utils-1.16.tar.gz
 Mount
 =====
 
-The 2.6e release:
-ftp://ftp.win.tue.nl/pub/linux/util/mount-2.6e.tar.gz
+The 2.6g release:
+ftp://ftp.win.tue.nl/pub/linux/util/mount-2.6g.tar.gz
 
 Autofs
 ======
 
-The 970409 release:
-ftp://ftp.kernel.org/pub/linux/daemons/autofs/autofs-970409.tar.gz
+The 0.2.2 release:
+ftp://ftp.kernel.org/pub/linux/daemons/autofs/autofs-0.2.2.tar.gz
 
 NFS
 ===

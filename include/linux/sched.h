@@ -1,14 +1,6 @@
 #ifndef _LINUX_SCHED_H
 #define _LINUX_SCHED_H
 
-/*
- * define DEBUG if you want the wait-queues to have some extra
- * debugging code. It's not normally used, but might catch some
- * wait-queue coding errors.
- *
- *  #define DEBUG
- */
-
 #include <asm/param.h>	/* for HZ */
 
 extern unsigned long event;
@@ -149,29 +141,27 @@ struct fs_struct {
 }
 
 struct mm_struct {
-	int count;
+	struct vm_area_struct *mmap, *mmap_cache;
 	pgd_t * pgd;
+	int count;
+	struct semaphore mmap_sem;
 	unsigned long context;
 	unsigned long start_code, end_code, start_data, end_data;
 	unsigned long start_brk, brk, start_stack, start_mmap;
 	unsigned long arg_start, arg_end, env_start, env_end;
 	unsigned long rss, total_vm, locked_vm;
 	unsigned long def_flags;
-	struct vm_area_struct * mmap;
-	struct vm_area_struct * mmap_avl;
-	struct semaphore mmap_sem;
 };
 
-#define INIT_MM { \
-		1, \
-		swapper_pg_dir, \
-		0, \
-		0, 0, 0, 0, \
-		0, 0, 0, 0, \
-		0, 0, 0, 0, \
-		0, 0, 0, \
-		0, \
-		&init_mmap, &init_mmap, MUTEX }
+#define INIT_MM {					\
+		&init_mmap, NULL, swapper_pg_dir, 1,	\
+		MUTEX,					\
+		0,					\
+		0, 0, 0, 0,				\
+		0, 0, 0, 0,				\
+		0, 0, 0, 0,				\
+		0, 0, 0,				\
+		0 }
 
 struct signal_struct {
 	atomic_t		count;
@@ -200,8 +190,6 @@ struct task_struct {
 	struct linux_binfmt *binfmt;
 	struct task_struct *next_task, *prev_task;
 	struct task_struct *next_run,  *prev_run;
-	unsigned long saved_kernel_stack;
-	unsigned long kernel_stack_page;
 	int exit_code, exit_signal;
 	/* ??? */
 	unsigned long personality;
@@ -222,6 +210,14 @@ struct task_struct {
 	 * p->p_pptr->pid)
 	 */
 	struct task_struct *p_opptr, *p_pptr, *p_cptr, *p_ysptr, *p_osptr;
+
+	/* PID hash table linkage. */
+	struct task_struct *pidhash_next;
+	struct task_struct **pidhash_pprev;
+
+	/* Pointer to task[] array linkage. */
+	struct task_struct **tarray_ptr;
+
 	struct wait_queue *wait_chldexit;	/* for wait4() */
 	unsigned short uid,euid,suid,fsuid;
 	unsigned short gid,egid,sgid,fsgid;
@@ -260,6 +256,7 @@ struct task_struct {
 /* signal handlers */
 	struct signal_struct *sig;
 /* SMP state */
+	int has_cpu;
 	int processor;
 	int last_processor;
 	int lock_depth;		/* Lock depth. We can context switch in and out of holding a syscall kernel lock... */	
@@ -304,11 +301,13 @@ struct task_struct {
 /* exec domain */&default_exec_domain, \
 /* binfmt */	NULL, \
 /* schedlink */	&init_task,&init_task, &init_task, &init_task, \
-/* stack */	0,(unsigned long) &init_kernel_stack, \
 /* ec,brk... */	0,0,0,0,0, \
 /* pid etc.. */	0,0,0,0,0, \
 /* suppl grps*/ 0, {0,}, \
-/* proc links*/ &init_task,&init_task,NULL,NULL,NULL,NULL, \
+/* proc links*/ &init_task,&init_task,NULL,NULL,NULL, \
+/* pidhash */	NULL, NULL, \
+/* tarray */	&task[0], \
+/* chld wait */	NULL, \
 /* uid etc */	0,0,0,0,0,0,0,0, \
 /* timeout */	0,SCHED_OTHER,0,0,0,0,0,0,0, \
 /* timer */	{ NULL, NULL, 0, 0, it_real_fn }, \
@@ -326,13 +325,84 @@ struct task_struct {
 /* files */	&init_files, \
 /* mm */	&init_mm, \
 /* signals */	&init_signals, \
-/* SMP */	0,0,0, \
+/* SMP */	0,0,0,0, \
+/* lock */	SPIN_LOCK_UNLOCKED \
 }
 
+union task_union {
+	struct task_struct task;
+	unsigned long stack[2048];
+};
+
+extern union task_union init_task_union;
+
 extern struct   mm_struct init_mm;
-extern struct task_struct init_task;
 extern struct task_struct *task[NR_TASKS];
 extern struct task_struct *last_task_used_math;
+
+extern struct task_struct **tarray_freelist;
+extern spinlock_t taskslot_lock;
+
+extern __inline__ void add_free_taskslot(struct task_struct **t)
+{
+	spin_lock(&taskslot_lock);
+	*t = (struct task_struct *) tarray_freelist;
+	tarray_freelist = t;
+	spin_unlock(&taskslot_lock);
+}
+
+extern __inline__ struct task_struct **get_free_taskslot(void)
+{
+	struct task_struct **tslot;
+
+	spin_lock(&taskslot_lock);
+	if((tslot = tarray_freelist) != NULL)
+		tarray_freelist = (struct task_struct **) *tslot;
+	spin_unlock(&taskslot_lock);
+
+	return tslot;
+}
+
+/* PID hashing. */
+#define PIDHASH_SZ (NR_TASKS >> 2)
+extern struct task_struct *pidhash[PIDHASH_SZ];
+extern spinlock_t pidhash_lock;
+
+#define pid_hashfn(x)	((((x) >> 8) ^ (x)) & (PIDHASH_SZ - 1))
+
+extern __inline__ void hash_pid(struct task_struct *p)
+{
+	struct task_struct **htable = &pidhash[pid_hashfn(p->pid)];
+
+	spin_lock(&pidhash_lock);
+	if((p->pidhash_next = *htable) != NULL)
+		(*htable)->pidhash_pprev = &p->pidhash_next;
+	*htable = p;
+	p->pidhash_pprev = htable;
+	spin_unlock(&pidhash_lock);
+}
+
+extern __inline__ void unhash_pid(struct task_struct *p)
+{
+	spin_lock(&pidhash_lock);
+	if(p->pidhash_next)
+		p->pidhash_next->pidhash_pprev = p->pidhash_pprev;
+	*p->pidhash_pprev = p->pidhash_next;
+	spin_unlock(&pidhash_lock);
+}
+
+extern __inline__ struct task_struct *find_task_by_pid(int pid)
+{
+	struct task_struct **htable = &pidhash[pid_hashfn(pid)];
+	struct task_struct *p;
+
+	spin_lock(&pidhash_lock);
+	for(p = *htable; p && p->pid != pid; p = p->pidhash_next)
+		;
+	spin_unlock(&pidhash_lock);
+
+	return p;
+}
 
 #include <asm/current.h>
 
@@ -425,15 +495,15 @@ extern inline void __add_wait_queue(struct wait_queue ** p, struct wait_queue * 
 	wait->next = next;
 }
 
-extern spinlock_t waitqueue_lock;
+extern rwlock_t waitqueue_lock;
 
 extern inline void add_wait_queue(struct wait_queue ** p, struct wait_queue * wait)
 {
 	unsigned long flags;
 
-	spin_lock_irqsave(&waitqueue_lock, flags);
+	write_lock_irqsave(&waitqueue_lock, flags);
 	__add_wait_queue(p, wait);
-	spin_unlock_irqrestore(&waitqueue_lock, flags);
+	write_unlock_irqrestore(&waitqueue_lock, flags);
 }
 
 extern inline void __remove_wait_queue(struct wait_queue ** p, struct wait_queue * wait)
@@ -454,9 +524,9 @@ extern inline void remove_wait_queue(struct wait_queue ** p, struct wait_queue *
 {
 	unsigned long flags;
 
-	spin_lock_irqsave(&waitqueue_lock, flags);
+	write_lock_irqsave(&waitqueue_lock, flags);
 	__remove_wait_queue(p, wait);
-	spin_unlock_irqrestore(&waitqueue_lock, flags); 
+	write_unlock_irqrestore(&waitqueue_lock, flags); 
 }
 
 extern inline void poll_wait(struct wait_queue ** wait_address, poll_table * p)

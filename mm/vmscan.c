@@ -271,54 +271,72 @@ static int swap_out_process(struct task_struct * p, int dma, int wait)
 
 static int swap_out(unsigned int priority, int dma, int wait)
 {
-	static int swap_task;
-	int loop, counter;
+	static int skip_factor = 0;
+	int limit = nr_tasks - 1;
+	int loop, counter, i;
 	struct task_struct *p;
 
 	counter = ((PAGEOUT_WEIGHT * nr_tasks) >> 10) >> priority;
+	if(skip_factor > nr_tasks)
+		skip_factor = 0;
+
+	read_lock(&tasklist_lock);
+	p = init_task.next_task;
+	i = skip_factor;
+	while(i--)
+		p = p->next_task;
 	for(; counter >= 0; counter--) {
-		/*
-		 * Check that swap_task is suitable for swapping.  If not, look for
-		 * the next suitable process.
-		 */
+		/* Check if task is suitable for swapping. */
 		loop = 0;
 		while(1) {
-			if (swap_task >= NR_TASKS) {
-				swap_task = 1;
+			if(!--limit) {
+				limit = nr_tasks - 1;
+				/* See if all processes are unswappable or
+				 * already swapped out.
+				 */
 				if (loop)
-					/* all processes are unswappable or already swapped out */
-					return 0;
+					goto out;
 				loop = 1;
 			}
-
-			p = task[swap_task];
-			if (p && p->swappable && p->mm->rss)
+			if (p->swappable && p->mm->rss)
 				break;
-
-			swap_task++;
+			if((p = p->next_task) == &init_task)
+				p = p->next_task;
 		}
+		skip_factor++;
 
-		/*
-		 * Determine the number of pages to swap from this process.
-		 */
+		/* Determine the number of pages to swap from this process. */
 		if (!p->swap_cnt) {
- 			/* Normalise the number of pages swapped by
+			/* Normalise the number of pages swapped by
 			   multiplying by (RSS / 1MB) */
 			p->swap_cnt = AGE_CLUSTER_SIZE(p->mm->rss);
 		}
 		if (!--p->swap_cnt)
-			swap_task++;
+			skip_factor++;
+		read_unlock(&tasklist_lock);
+
 		switch (swap_out_process(p, dma, wait)) {
-			case 0:
-				if (p->swap_cnt)
-					swap_task++;
-				break;
-			case 1:
-				return 1;
-			default:
-				break;
-		}
+		case 0:
+			if (p->swap_cnt)
+				skip_factor++;
+			break;
+		case 1:
+			return 1;
+		default:
+			break;
+		};
+
+		/* Whoever we swapped may not even exist now, in fact we cannot
+		 * assume anything about the list we were searching previously.
+		 */
+		read_lock(&tasklist_lock);
+		p = init_task.next_task;
+		i = skip_factor;
+		while(i--)
+			p = p->next_task;
 	}
+out:
+	read_unlock(&tasklist_lock);
 	return 0;
 }
 

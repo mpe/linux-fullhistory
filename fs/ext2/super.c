@@ -508,6 +508,9 @@ struct super_block * ext2_read_super (struct super_block * sb, void * data,
 			goto failed_mount;
 		}
 	}
+	sb->u.ext2_sb.s_feature_compat = es->s_feature_compat;
+	sb->u.ext2_sb.s_feature_incompat = es->s_feature_incompat;
+	sb->u.ext2_sb.s_feature_ro_compat = es->s_feature_ro_compat;
 	sb->u.ext2_sb.s_frag_size = EXT2_MIN_FRAG_SIZE <<
 				   (__s32) le32_to_cpu(es->s_log_frag_size);
 	if (sb->u.ext2_sb.s_frag_size)

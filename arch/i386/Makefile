@@ -45,7 +45,7 @@ ifdef SMP
 CFLAGS := $(CFLAGS) -D__SMP__
 endif
 
-HEAD := arch/i386/kernel/head.o
+HEAD := arch/i386/kernel/head.o arch/i386/kernel/init_task.o
 
 SUBDIRS := $(SUBDIRS) arch/i386/kernel arch/i386/mm arch/i386/lib
 CORE_FILES := arch/i386/kernel/kernel.o arch/i386/mm/mm.o $(CORE_FILES)

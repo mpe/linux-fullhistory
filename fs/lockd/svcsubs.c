@@ -228,12 +228,12 @@ nlm_release_file(struct nlm_file *file)
 	down(&nlm_file_sema);
 
 	/* If there are no more locks etc, delete the file */
-	if (--(file->f_count) == 0
-	 && !nlm_inspect_file(NULL, file, NLM_ACT_CHECK))
-		nlm_delete_file(file);
+	if(--file->f_count == 0) {
+		if(!nlm_inspect_file(NULL, file, NLM_ACT_CHECK))
+			nlm_delete_file(file);
+	}
 
 	up(&nlm_file_sema);
-	return;
 }
 
 /*

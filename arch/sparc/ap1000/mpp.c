@@ -66,6 +66,7 @@ int mpp_weight(struct task_struct *tsk)
 
 	if (block_parallel_tasks) return -1000;
 
+	/* XXX task[] fixme */
 	if (last_task && last_task != tsk->taskid && task[last_task] &&
 	    !msc_switch_ok()) return -1000;
 

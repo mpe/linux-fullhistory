@@ -21,8 +21,7 @@
 #include <asm/system.h>
 #include <asm/pgtable.h>
 
-/*
- * description of effects of mapping type and prot in current implementation.
+/* description of effects of mapping type and prot in current implementation.
  * this is due to the limited x86 page protection hardware.  The expected
  * behavior is in parens:
  *
@@ -37,7 +36,6 @@
  *		x: (no) no	x: (no) yes	x: (no) yes	x: (yes) yes
  *
  */
-
 pgprot_t protection_map[16] = {
 	__P000, __P001, __P010, __P011, __P100, __P101, __P110, __P111,
 	__S000, __S001, __S010, __S011, __S100, __S101, __S110, __S111
@@ -48,20 +46,18 @@ kmem_cache_t *vm_area_cachep;
 
 int sysctl_overcommit_memory;
 
-/*
- * Check that a process has enough memory to allocate a
+/* Check that a process has enough memory to allocate a
  * new virtual mapping.
  */
 static inline int vm_enough_memory(long pages)
 {
-	/*
-	 * stupid algorithm to decide if we have enough memory: while
+	/* Stupid algorithm to decide if we have enough memory: while
 	 * simple, it hopefully works in most obvious cases.. Easy to
 	 * fool it, but this should catch most mistakes.
 	 */
 	long freepages;
 	
-        /* sometimes we want to use more memory than we have. */
+        /* Sometimes we want to use more memory than we have. */
 	if (sysctl_overcommit_memory)
 	    return 1;
 
@@ -72,6 +68,20 @@ static inline int vm_enough_memory(long pages)
 	freepages += nr_swap_pages;
 	freepages -= num_physpages >> 4;
 	return freepages > pages;
+}
+
+/* Remove one vm structure from the inode's i_mmap ring. */
+static inline void remove_shared_vm_struct(struct vm_area_struct *vma)
+{
+	struct inode * inode = vma->vm_inode;
+
+	if (inode) {
+		if (vma->vm_flags & VM_DENYWRITE)
+			inode->i_writecount++;
+		if(vma->vm_next_share)
+			vma->vm_next_share->vm_pprev_share = vma->vm_pprev_share;
+		*vma->vm_pprev_share = vma->vm_next_share;
+	}
 }
 
 asmlinkage unsigned long sys_brk(unsigned long brk)
@@ -91,17 +101,14 @@ asmlinkage unsigned long sys_brk(unsigned long brk)
 		goto out;
 	}
 
-	/*
-	 * Always allow shrinking brk
-	 */
+	/* Always allow shrinking brk. */
 	if (brk <= mm->brk) {
 		retval = mm->brk = brk;
 		do_munmap(newbrk, oldbrk-newbrk);
 		goto out;
 	}
-	/*
-	 * Check against rlimit and stack..
-	 */
+
+	/* Check against rlimit and stack.. */
 	retval = mm->brk;
 	rlim = current->rlim[RLIMIT_DATA].rlim_cur;
 	if (rlim >= RLIM_INFINITY)
@@ -109,21 +116,15 @@ asmlinkage unsigned long sys_brk(unsigned long brk)
 	if (brk - mm->end_code > rlim)
 		goto out;
 
-	/*
-	 * Check against existing mmap mappings.
-	 */
+	/* Check against existing mmap mappings. */
 	if (find_vma_intersection(mm, oldbrk, newbrk+PAGE_SIZE))
 		goto out;
 
-	/*
-	 * Check if we have enough memory..
-	 */
+	/* Check if we have enough memory.. */
 	if (!vm_enough_memory((newbrk-oldbrk) >> PAGE_SHIFT))
 		goto out;
 
-	/*
-	 * Ok, looks good - let it rip.
-	 */
+	/* Ok, looks good - let it rip. */
 	if(do_mmap(NULL, oldbrk, newbrk-oldbrk,
 		   PROT_READ|PROT_WRITE|PROT_EXEC,
 		   MAP_FIXED|MAP_PRIVATE, 0) == oldbrk)
@@ -134,8 +135,7 @@ out:
 	return retval;
 }
 
-/*
- * Combine the mmap "prot" and "flags" argument into one "vm_flags" used
+/* Combine the mmap "prot" and "flags" argument into one "vm_flags" used
  * internally. Essentially, translate the "PROT_xxx" and "MAP_xxx" bits
  * into "VM_xxx".
  */
@@ -162,6 +162,7 @@ unsigned long do_mmap(struct file * file, unsigned long addr, unsigned long len,
 {
 	struct mm_struct * mm = current->mm;
 	struct vm_area_struct * vma;
+	int correct_wcount = 0;
 
 	if ((len = PAGE_ALIGN(len)) == 0)
 		return addr;
@@ -181,20 +182,17 @@ unsigned long do_mmap(struct file * file, unsigned long addr, unsigned long len,
 			return -EAGAIN;
 	}
 
-	/*
-	 * do simple checking here so the lower-level routines won't have
+	/* Do simple checking here so the lower-level routines won't have
 	 * to. we assume access permissions have been handled by the open
 	 * of the memory object, so we don't do any here.
 	 */
-
 	if (file != NULL) {
 		switch (flags & MAP_TYPE) {
 		case MAP_SHARED:
 			if ((prot & PROT_WRITE) && !(file->f_mode & 2))
 				return -EACCES;
-			/*
-			 * make sure there are no mandatory locks on the file.
-			 */
+
+			/* make sure there are no mandatory locks on the file. */
 			if (locks_verify_locked(file->f_inode))
 				return -EAGAIN;
 			/* fall through */
@@ -206,18 +204,12 @@ unsigned long do_mmap(struct file * file, unsigned long addr, unsigned long len,
 		default:
 			return -EINVAL;
 		}
-		if (flags & MAP_DENYWRITE) {
-			if (file->f_inode->i_writecount > 0)
-				return -ETXTBSY;
-		}
 	} else if ((flags & MAP_TYPE) != MAP_PRIVATE)
 		return -EINVAL;
 
-	/*
-	 * obtain the address to map to. we verify (or select) it and ensure
+	/* Obtain the address to map to. we verify (or select) it and ensure
 	 * that it represents a valid section of the address space.
 	 */
-
 	if (flags & MAP_FIXED) {
 		if (addr & ~PAGE_MASK)
 			return -EINVAL;
@@ -227,8 +219,7 @@ unsigned long do_mmap(struct file * file, unsigned long addr, unsigned long len,
 			return -ENOMEM;
 	}
 
-	/*
-	 * determine the object being mapped and call the appropriate
+	/* Determine the object being mapped and call the appropriate
 	 * specific mapper. the address has already been validated, but
 	 * not unmapped, but the maps are removed from the list.
 	 */
@@ -249,8 +240,8 @@ unsigned long do_mmap(struct file * file, unsigned long addr, unsigned long len,
 			vma->vm_flags |= VM_MAYREAD | VM_MAYWRITE | VM_MAYEXEC;
 		if (flags & MAP_SHARED) {
 			vma->vm_flags |= VM_SHARED | VM_MAYSHARE;
-			/*
-			 * This looks strange, but when we don't have the file open
+
+			/* This looks strange, but when we don't have the file open
 			 * for writing, we can demote the shared mapping to a simpler
 			 * private mapping. That also takes care of a security hole
 			 * with ptrace() writing to a shared mapping without write
@@ -289,9 +280,26 @@ unsigned long do_mmap(struct file * file, unsigned long addr, unsigned long len,
 	}
 
 	if (file) {
-		int error = file->f_op->mmap(file->f_inode, file, vma);
+		int error = 0;
+		if (vma->vm_flags & VM_DENYWRITE) {
+			if (file->f_inode->i_writecount > 0)
+				error = -ETXTBSY;
+			else {
+	        		/* f_op->mmap might possibly sleep
+				 * (generic_file_mmap doesn't, but other code
+				 * might). In any case, this takes care of any
+				 * race that this might cause.
+				 */
+				file->f_inode->i_writecount--;
+				correct_wcount = 1;
+			}
+		}
+		if (!error)
+			error = file->f_op->mmap(file->f_inode, file, vma);
 	
 		if (error) {
+			if (correct_wcount)
+				file->f_inode->i_writecount++;
 			kmem_cache_free(vm_area_cachep, vma);
 			return error;
 		}
@@ -299,6 +307,8 @@ unsigned long do_mmap(struct file * file, unsigned long addr, unsigned long len,
 
 	flags = vma->vm_flags;
 	insert_vm_struct(mm, vma);
+	if (correct_wcount)
+		file->f_inode->i_writecount++;
 	merge_segments(mm, vma->vm_start, vma->vm_end);
 
 	/* merge_segments might have merged our vma, so we can't use it any more */
@@ -317,8 +327,7 @@ unsigned long do_mmap(struct file * file, unsigned long addr, unsigned long len,
 	return addr;
 }
 
-/*
- * Get an address range which is currently unmapped.
+/* Get an address range which is currently unmapped.
  * For mmap() without MAP_FIXED and shmat() with addr=0.
  * Return value 0 means ENOMEM.
  */
@@ -342,376 +351,7 @@ unsigned long get_unmapped_area(unsigned long addr, unsigned long len)
 	}
 }
 
-/*
- * Searching a VMA in the linear list task->mm->mmap is horribly slow.
- * Use an AVL (Adelson-Velskii and Landis) tree to speed up this search
- * from O(n) to O(log n), where n is the number of VMAs of the task
- * (typically around 6, but may reach 3000 in some cases).
- * Written by Bruno Haible <haible@ma2s2.mathematik.uni-karlsruhe.de>.
- */
-
-/* We keep the list and tree sorted by address. */
-#define vm_avl_key	vm_end
-#define vm_avl_key_t	unsigned long	/* typeof(vma->avl_key) */
-
-/*
- * task->mm->mmap_avl is the AVL tree corresponding to task->mm->mmap
- * or, more exactly, its root.
- * A vm_area_struct has the following fields:
- *   vm_avl_left     left son of a tree node
- *   vm_avl_right    right son of a tree node
- *   vm_avl_height   1+max(heightof(left),heightof(right))
- * The empty tree is represented as NULL.
- */
-
-/* Since the trees are balanced, their height will never be large. */
-#define avl_maxheight	41	/* why this? a small exercise */
-#define heightof(tree)	((tree) == avl_empty ? 0 : (tree)->vm_avl_height)
-/*
- * Consistency and balancing rules:
- * 1. tree->vm_avl_height == 1+max(heightof(tree->vm_avl_left),heightof(tree->vm_avl_right))
- * 2. abs( heightof(tree->vm_avl_left) - heightof(tree->vm_avl_right) ) <= 1
- * 3. foreach node in tree->vm_avl_left: node->vm_avl_key <= tree->vm_avl_key,
- *    foreach node in tree->vm_avl_right: node->vm_avl_key >= tree->vm_avl_key.
- */
-
-/* Look up the nodes at the left and at the right of a given node. */
-static inline void avl_neighbours (struct vm_area_struct * node, struct vm_area_struct * tree, struct vm_area_struct ** to_the_left, struct vm_area_struct ** to_the_right)
-{
-	vm_avl_key_t key = node->vm_avl_key;
-
-	*to_the_left = *to_the_right = NULL;
-	for (;;) {
-		if (tree == avl_empty) {
-			printk("avl_neighbours: node not found in the tree\n");
-			return;
-		}
-		if (key == tree->vm_avl_key)
-			break;
-		if (key < tree->vm_avl_key) {
-			*to_the_right = tree;
-			tree = tree->vm_avl_left;
-		} else {
-			*to_the_left = tree;
-			tree = tree->vm_avl_right;
-		}
-	}
-	if (tree != node) {
-		printk("avl_neighbours: node not exactly found in the tree\n");
-		return;
-	}
-	if (tree->vm_avl_left != avl_empty) {
-		struct vm_area_struct * node;
-		for (node = tree->vm_avl_left; node->vm_avl_right != avl_empty; node = node->vm_avl_right)
-			continue;
-		*to_the_left = node;
-	}
-	if (tree->vm_avl_right != avl_empty) {
-		struct vm_area_struct * node;
-		for (node = tree->vm_avl_right; node->vm_avl_left != avl_empty; node = node->vm_avl_left)
-			continue;
-		*to_the_right = node;
-	}
-	if ((*to_the_left && ((*to_the_left)->vm_next != node)) || (node->vm_next != *to_the_right))
-		printk("avl_neighbours: tree inconsistent with list\n");
-}
-
-/*
- * Rebalance a tree.
- * After inserting or deleting a node of a tree we have a sequence of subtrees
- * nodes[0]..nodes[k-1] such that
- * nodes[0] is the root and nodes[i+1] = nodes[i]->{vm_avl_left|vm_avl_right}.
- */
-static inline void avl_rebalance (struct vm_area_struct *** nodeplaces_ptr, int count)
-{
-	for ( ; count > 0 ; count--) {
-		struct vm_area_struct ** nodeplace = *--nodeplaces_ptr;
-		struct vm_area_struct * node = *nodeplace;
-		struct vm_area_struct * nodeleft = node->vm_avl_left;
-		struct vm_area_struct * noderight = node->vm_avl_right;
-		int heightleft = heightof(nodeleft);
-		int heightright = heightof(noderight);
-		if (heightright + 1 < heightleft) {
-			/*                                                      */
-			/*                            *                         */
-			/*                          /   \                       */
-			/*                       n+2      n                     */
-			/*                                                      */
-			struct vm_area_struct * nodeleftleft = nodeleft->vm_avl_left;
-			struct vm_area_struct * nodeleftright = nodeleft->vm_avl_right;
-			int heightleftright = heightof(nodeleftright);
-			if (heightof(nodeleftleft) >= heightleftright) {
-				/*                                                        */
-				/*                *                    n+2|n+3            */
-				/*              /   \                  /    \             */
-				/*           n+2      n      -->      /   n+1|n+2         */
-				/*           / \                      |    /    \         */
-				/*         n+1 n|n+1                 n+1  n|n+1  n        */
-				/*                                                        */
-				node->vm_avl_left = nodeleftright; nodeleft->vm_avl_right = node;
-				nodeleft->vm_avl_height = 1 + (node->vm_avl_height = 1 + heightleftright);
-				*nodeplace = nodeleft;
-			} else {
-				/*                                                        */
-				/*                *                     n+2               */
-				/*              /   \                 /     \             */
-				/*           n+2      n      -->    n+1     n+1           */
-				/*           / \                    / \     / \           */
-				/*          n  n+1                 n   L   R   n          */
-				/*             / \                                        */
-				/*            L   R                                       */
-				/*                                                        */
-				nodeleft->vm_avl_right = nodeleftright->vm_avl_left;
-				node->vm_avl_left = nodeleftright->vm_avl_right;
-				nodeleftright->vm_avl_left = nodeleft;
-				nodeleftright->vm_avl_right = node;
-				nodeleft->vm_avl_height = node->vm_avl_height = heightleftright;
-				nodeleftright->vm_avl_height = heightleft;
-				*nodeplace = nodeleftright;
-			}
-		}
-		else if (heightleft + 1 < heightright) {
-			/* similar to the above, just interchange 'left' <--> 'right' */
-			struct vm_area_struct * noderightright = noderight->vm_avl_right;
-			struct vm_area_struct * noderightleft = noderight->vm_avl_left;
-			int heightrightleft = heightof(noderightleft);
-			if (heightof(noderightright) >= heightrightleft) {
-				node->vm_avl_right = noderightleft; noderight->vm_avl_left = node;
-				noderight->vm_avl_height = 1 + (node->vm_avl_height = 1 + heightrightleft);
-				*nodeplace = noderight;
-			} else {
-				noderight->vm_avl_left = noderightleft->vm_avl_right;
-				node->vm_avl_right = noderightleft->vm_avl_left;
-				noderightleft->vm_avl_right = noderight;
-				noderightleft->vm_avl_left = node;
-				noderight->vm_avl_height = node->vm_avl_height = heightrightleft;
-				noderightleft->vm_avl_height = heightright;
-				*nodeplace = noderightleft;
-			}
-		}
-		else {
-			int height = (heightleft<heightright ? heightright : heightleft) + 1;
-			if (height == node->vm_avl_height)
-				break;
-			node->vm_avl_height = height;
-		}
-	}
-}
-
-/* Insert a node into a tree. */
-static inline void avl_insert (struct vm_area_struct * new_node, struct vm_area_struct ** ptree)
-{
-	vm_avl_key_t key = new_node->vm_avl_key;
-	struct vm_area_struct ** nodeplace = ptree;
-	struct vm_area_struct ** stack[avl_maxheight];
-	int stack_count = 0;
-	struct vm_area_struct *** stack_ptr = &stack[0]; /* = &stack[stackcount] */
-	for (;;) {
-		struct vm_area_struct * node = *nodeplace;
-		if (node == avl_empty)
-			break;
-		*stack_ptr++ = nodeplace; stack_count++;
-		if (key < node->vm_avl_key)
-			nodeplace = &node->vm_avl_left;
-		else
-			nodeplace = &node->vm_avl_right;
-	}
-	new_node->vm_avl_left = avl_empty;
-	new_node->vm_avl_right = avl_empty;
-	new_node->vm_avl_height = 1;
-	*nodeplace = new_node;
-	avl_rebalance(stack_ptr,stack_count);
-}
-
-/* Insert a node into a tree, and
- * return the node to the left of it and the node to the right of it.
- */
-static inline void avl_insert_neighbours (struct vm_area_struct * new_node, struct vm_area_struct ** ptree,
-	struct vm_area_struct ** to_the_left, struct vm_area_struct ** to_the_right)
-{
-	vm_avl_key_t key = new_node->vm_avl_key;
-	struct vm_area_struct ** nodeplace = ptree;
-	struct vm_area_struct ** stack[avl_maxheight];
-	int stack_count = 0;
-	struct vm_area_struct *** stack_ptr = &stack[0]; /* = &stack[stackcount] */
-	*to_the_left = *to_the_right = NULL;
-	for (;;) {
-		struct vm_area_struct * node = *nodeplace;
-		if (node == avl_empty)
-			break;
-		*stack_ptr++ = nodeplace; stack_count++;
-		if (key < node->vm_avl_key) {
-			*to_the_right = node;
-			nodeplace = &node->vm_avl_left;
-		} else {
-			*to_the_left = node;
-			nodeplace = &node->vm_avl_right;
-		}
-	}
-	new_node->vm_avl_left = avl_empty;
-	new_node->vm_avl_right = avl_empty;
-	new_node->vm_avl_height = 1;
-	*nodeplace = new_node;
-	avl_rebalance(stack_ptr,stack_count);
-}
-
-/* Removes a node out of a tree. */
-static inline void avl_remove (struct vm_area_struct * node_to_delete, struct vm_area_struct ** ptree)
-{
-	vm_avl_key_t key = node_to_delete->vm_avl_key;
-	struct vm_area_struct ** nodeplace = ptree;
-	struct vm_area_struct ** stack[avl_maxheight];
-	int stack_count = 0;
-	struct vm_area_struct *** stack_ptr = &stack[0]; /* = &stack[stackcount] */
-	struct vm_area_struct ** nodeplace_to_delete;
-	for (;;) {
-		struct vm_area_struct * node = *nodeplace;
-		if (node == avl_empty) {
-			/* what? node_to_delete not found in tree? */
-			printk("avl_remove: node to delete not found in tree\n");
-			return;
-		}
-		*stack_ptr++ = nodeplace; stack_count++;
-		if (key == node->vm_avl_key)
-			break;
-		if (key < node->vm_avl_key)
-			nodeplace = &node->vm_avl_left;
-		else
-			nodeplace = &node->vm_avl_right;
-	}
-	nodeplace_to_delete = nodeplace;
-	/* Have to remove node_to_delete = *nodeplace_to_delete. */
-	if (node_to_delete->vm_avl_left == avl_empty) {
-		*nodeplace_to_delete = node_to_delete->vm_avl_right;
-		stack_ptr--; stack_count--;
-	} else {
-		struct vm_area_struct *** stack_ptr_to_delete = stack_ptr;
-		struct vm_area_struct ** nodeplace = &node_to_delete->vm_avl_left;
-		struct vm_area_struct * node;
-		for (;;) {
-			node = *nodeplace;
-			if (node->vm_avl_right == avl_empty)
-				break;
-			*stack_ptr++ = nodeplace; stack_count++;
-			nodeplace = &node->vm_avl_right;
-		}
-		*nodeplace = node->vm_avl_left;
-		/* node replaces node_to_delete */
-		node->vm_avl_left = node_to_delete->vm_avl_left;
-		node->vm_avl_right = node_to_delete->vm_avl_right;
-		node->vm_avl_height = node_to_delete->vm_avl_height;
-		*nodeplace_to_delete = node; /* replace node_to_delete */
-		*stack_ptr_to_delete = &node->vm_avl_left; /* replace &node_to_delete->vm_avl_left */
-	}
-	avl_rebalance(stack_ptr,stack_count);
-}
-
-#ifdef DEBUG_AVL
-
-/* print a list */
-static void printk_list (struct vm_area_struct * vma)
-{
-	printk("[");
-	while (vma) {
-		printk("%08lX-%08lX", vma->vm_start, vma->vm_end);
-		vma = vma->vm_next;
-		if (!vma)
-			break;
-		printk(" ");
-	}
-	printk("]");
-}
-
-/* print a tree */
-static void printk_avl (struct vm_area_struct * tree)
-{
-	if (tree != avl_empty) {
-		printk("(");
-		if (tree->vm_avl_left != avl_empty) {
-			printk_avl(tree->vm_avl_left);
-			printk("<");
-		}
-		printk("%08lX-%08lX", tree->vm_start, tree->vm_end);
-		if (tree->vm_avl_right != avl_empty) {
-			printk(">");
-			printk_avl(tree->vm_avl_right);
-		}
-		printk(")");
-	}
-}
-
-static char *avl_check_point = "somewhere";
-
-/* check a tree's consistency and balancing */
-static void avl_checkheights (struct vm_area_struct * tree)
-{
-	int h, hl, hr;
-
-	if (tree == avl_empty)
-		return;
-	avl_checkheights(tree->vm_avl_left);
-	avl_checkheights(tree->vm_avl_right);
-	h = tree->vm_avl_height;
-	hl = heightof(tree->vm_avl_left);
-	hr = heightof(tree->vm_avl_right);
-	if ((h == hl+1) && (hr <= hl) && (hl <= hr+1))
-		return;
-	if ((h == hr+1) && (hl <= hr) && (hr <= hl+1))
-		return;
-	printk("%s: avl_checkheights: heights inconsistent\n",avl_check_point);
-}
-
-/* check that all values stored in a tree are < key */
-static void avl_checkleft (struct vm_area_struct * tree, vm_avl_key_t key)
-{
-	if (tree == avl_empty)
-		return;
-	avl_checkleft(tree->vm_avl_left,key);
-	avl_checkleft(tree->vm_avl_right,key);
-	if (tree->vm_avl_key < key)
-		return;
-	printk("%s: avl_checkleft: left key %lu >= top key %lu\n",avl_check_point,tree->vm_avl_key,key);
-}
-
-/* check that all values stored in a tree are > key */
-static void avl_checkright (struct vm_area_struct * tree, vm_avl_key_t key)
-{
-	if (tree == avl_empty)
-		return;
-	avl_checkright(tree->vm_avl_left,key);
-	avl_checkright(tree->vm_avl_right,key);
-	if (tree->vm_avl_key > key)
-		return;
-	printk("%s: avl_checkright: right key %lu <= top key %lu\n",avl_check_point,tree->vm_avl_key,key);
-}
-
-/* check that all values are properly increasing */
-static void avl_checkorder (struct vm_area_struct * tree)
-{
-	if (tree == avl_empty)
-		return;
-	avl_checkorder(tree->vm_avl_left);
-	avl_checkorder(tree->vm_avl_right);
-	avl_checkleft(tree->vm_avl_left,tree->vm_avl_key);
-	avl_checkright(tree->vm_avl_right,tree->vm_avl_key);
-}
-
-/* all checks */
-static void avl_check (struct task_struct * task, char *caller)
-{
-	avl_check_point = caller;
-/*	printk("task \"%s\", %s\n",task->comm,caller); */
-/*	printk("task \"%s\" list: ",task->comm); printk_list(task->mm->mmap); printk("\n"); */
-/*	printk("task \"%s\" tree: ",task->comm); printk_avl(task->mm->mmap_avl); printk("\n"); */
-	avl_checkheights(task->mm->mmap_avl);
-	avl_checkorder(task->mm->mmap_avl);
-}
-
-#endif
-
-
-/*
- * Normal function to fix up a mapping
+/* Normal function to fix up a mapping
  * This function is the default for when an area has no specific
  * function.  This may be used as part of a more specific routine.
  * This function works out what part of an area is affected and
@@ -738,19 +378,11 @@ static void unmap_fixup(struct vm_area_struct *area,
 	struct vm_area_struct *mpnt;
 	unsigned long end = addr + len;
 
-	if (addr < area->vm_start || addr >= area->vm_end ||
-	    end <= area->vm_start || end > area->vm_end ||
-	    end < addr)
-	{
-		printk("unmap_fixup: area=%lx-%lx, unmap %lx-%lx!!\n",
-		       area->vm_start, area->vm_end, addr, end);
-		return;
-	}
 	area->vm_mm->total_vm -= len >> PAGE_SHIFT;
 	if (area->vm_flags & VM_LOCKED)
 		area->vm_mm->locked_vm -= len >> PAGE_SHIFT;
 
-	/* Unmapping the whole area */
+	/* Unmapping the whole area. */
 	if (addr == area->vm_start && end == area->vm_end) {
 		if (area->vm_ops && area->vm_ops->close)
 			area->vm_ops->close(area);
@@ -759,15 +391,13 @@ static void unmap_fixup(struct vm_area_struct *area,
 		return;
 	}
 
-	/* Work out to one of the ends */
+	/* Work out to one of the ends. */
 	if (end == area->vm_end)
 		area->vm_end = addr;
-	else
-	if (addr == area->vm_start) {
+	else if (addr == area->vm_start) {
 		area->vm_offset += (end - area->vm_start);
 		area->vm_start = end;
-	}
-	else {
+	} else {
 	/* Unmapping a hole: area->vm_start < addr <= end < area->vm_end */
 		/* Add end mapping -- leave beginning for below */
 		mpnt = kmem_cache_alloc(vm_area_cachep, SLAB_KERNEL);
@@ -785,7 +415,7 @@ static void unmap_fixup(struct vm_area_struct *area,
 		insert_vm_struct(current->mm, mpnt);
 	}
 
-	/* construct whatever mapping is needed */
+	/* Construct whatever mapping is needed. */
 	mpnt = kmem_cache_alloc(vm_area_cachep, SLAB_KERNEL);
 	if (!mpnt)
 		return;
@@ -809,15 +439,14 @@ asmlinkage int sys_munmap(unsigned long addr, size_t len)
 	return ret;
 }
 
-/*
- * Munmap is split into 2 main parts -- this part which finds
+/* Munmap is split into 2 main parts -- this part which finds
  * what needs doing, and the areas themselves, which do the
  * work.  This now handles partial unmappings.
  * Jeremy Fitzhardine <jeremy@sw.oz.au>
  */
 int do_munmap(unsigned long addr, size_t len)
 {
-	struct vm_area_struct *mpnt, *prev, *next, **npp, *free;
+	struct vm_area_struct *mpnt, *next, *free;
 
 	if ((addr & ~PAGE_MASK) || addr > TASK_SIZE || len > TASK_SIZE-addr)
 		return -EINVAL;
@@ -825,33 +454,36 @@ int do_munmap(unsigned long addr, size_t len)
 	if ((len = PAGE_ALIGN(len)) == 0)
 		return 0;
 
-	/*
-	 * Check if this memory area is ok - put it on the temporary
+	/* Check if this memory area is ok - put it on the temporary
 	 * list if so..  The checks here are pretty simple --
 	 * every area affected in some way (by any overlap) is put
 	 * on the list.  If nothing is put on, nothing is affected.
 	 */
-	mpnt = find_vma(current->mm, addr);
+	mpnt = current->mm->mmap;
+	while(mpnt && mpnt->vm_end <= addr)
+		mpnt = mpnt->vm_next;
 	if (!mpnt)
 		return 0;
-	avl_neighbours(mpnt, current->mm->mmap_avl, &prev, &next);
-	/* we have  prev->vm_next == mpnt && mpnt->vm_next = next */
-	/* and  addr < mpnt->vm_end  */
 
-	npp = (prev ? &prev->vm_next : &current->mm->mmap);
+	next = mpnt->vm_next;
+
+	/* we have mpnt->vm_next = next and addr < mpnt->vm_end */
 	free = NULL;
-	for ( ; mpnt && mpnt->vm_start < addr+len; mpnt = *npp) {
-		*npp = mpnt->vm_next;
+	for ( ; mpnt && mpnt->vm_start < addr+len; ) {
+		struct vm_area_struct *next = mpnt->vm_next;
+
+		if(mpnt->vm_next)
+			mpnt->vm_next->vm_pprev = mpnt->vm_pprev;
+		*mpnt->vm_pprev = mpnt->vm_next;
+
 		mpnt->vm_next = free;
 		free = mpnt;
-		avl_remove(mpnt, &current->mm->mmap_avl);
+		mpnt = next;
 	}
-
 	if (free == NULL)
 		return 0;
 
-	/*
-	 * Ok - we have the memory areas we should free on the 'free' list,
+	/* Ok - we have the memory areas we should free on the 'free' list,
 	 * so release them, and unmap the page range..
 	 * If the one of the segments is only being partially unmapped,
 	 * it will put new vm_area_struct(s) into the address space.
@@ -871,26 +503,18 @@ int do_munmap(unsigned long addr, size_t len)
 
 		if (mpnt->vm_ops && mpnt->vm_ops->unmap)
 			mpnt->vm_ops->unmap(mpnt, st, size);
+
 		flush_cache_range(current->mm, st, end);
 		zap_page_range(current->mm, st, size);
 		flush_tlb_range(current->mm, st, end);
+
 		unmap_fixup(mpnt, st, size);
+
 		kmem_cache_free(vm_area_cachep, mpnt);
 	} while (free);
 
-	/* we could zap the page tables here too.. */
-
+	current->mm->mmap_cache = NULL;		/* Kill the cache. */
 	return 0;
-}
-
-/* Build the AVL tree corresponding to the VMA list. */
-void build_mmap_avl(struct mm_struct * mm)
-{
-	struct vm_area_struct * vma;
-
-	mm->mmap_avl = NULL;
-	for (vma = mm->mmap; vma; vma = vma->vm_next)
-		avl_insert(vma, &mm->mmap_avl);
 }
 
 /* Release all mmaps. */
@@ -899,8 +523,7 @@ void exit_mmap(struct mm_struct * mm)
 	struct vm_area_struct * mpnt;
 
 	mpnt = mm->mmap;
-	mm->mmap = NULL;
-	mm->mmap_avl = NULL;
+	mm->mmap = mm->mmap_cache = NULL;
 	mm->rss = 0;
 	mm->total_vm = 0;
 	mm->locked_vm = 0;
@@ -925,81 +548,38 @@ void exit_mmap(struct mm_struct * mm)
 	}
 }
 
-/*
- * Insert vm structure into process list sorted by address
+/* Insert vm structure into process list sorted by address
  * and into the inode's i_mmap ring.
  */
 void insert_vm_struct(struct mm_struct *mm, struct vm_area_struct *vmp)
 {
-	struct vm_area_struct *share;
+	struct vm_area_struct **pprev = &mm->mmap;
 	struct inode * inode;
 
-#if 0 /* equivalent, but slow */
-	struct vm_area_struct **p, *mpnt;
+	/* Find where to link it in. */
+	while(*pprev && (*pprev)->vm_start <= vmp->vm_start)
+		pprev = &(*pprev)->vm_next;
 
-	p = &mm->mmap;
-	while ((mpnt = *p) != NULL) {
-		if (mpnt->vm_start > vmp->vm_start)
-			break;
-		if (mpnt->vm_end > vmp->vm_start)
-			printk("insert_vm_struct: overlapping memory areas\n");
-		p = &mpnt->vm_next;
-	}
-	vmp->vm_next = mpnt;
-	*p = vmp;
-#else
-	struct vm_area_struct * prev, * next;
-
-	avl_insert_neighbours(vmp, &mm->mmap_avl, &prev, &next);
-	if ((prev ? prev->vm_next : mm->mmap) != next)
-		printk("insert_vm_struct: tree inconsistent with list\n");
-	if (prev)
-		prev->vm_next = vmp;
-	else
-		mm->mmap = vmp;
-	vmp->vm_next = next;
-#endif
+	/* Insert it. */
+	if((vmp->vm_next = *pprev) != NULL)
+		(*pprev)->vm_pprev = &vmp->vm_next;
+	*pprev = vmp;
+	vmp->vm_pprev = pprev;
 
 	inode = vmp->vm_inode;
-	if (!inode)
-		return;
-
-	/* insert vmp into inode's circular share list */
-	if ((share = inode->i_mmap)) {
-		vmp->vm_next_share = share->vm_next_share;
-		vmp->vm_next_share->vm_prev_share = vmp;
-		share->vm_next_share = vmp;
-		vmp->vm_prev_share = share;
-	} else
-		inode->i_mmap = vmp->vm_next_share = vmp->vm_prev_share = vmp;
-}
-
-/*
- * Remove one vm structure from the inode's i_mmap ring.
- */
-void remove_shared_vm_struct(struct vm_area_struct *mpnt)
-{
-	struct inode * inode = mpnt->vm_inode;
-
-	if (!inode)
-		return;
-
-	if (mpnt->vm_next_share == mpnt) {
-		if (inode->i_mmap != mpnt)
-			printk("Inode i_mmap ring corrupted\n");
-		inode->i_mmap = NULL;
-		return;
+	if (inode) {
+		if (vmp->vm_flags & VM_DENYWRITE)
+			inode->i_writecount--;
+      
+		/* insert vmp into inode's share list */
+		if((vmp->vm_next_share = inode->i_mmap) != NULL)
+			inode->i_mmap->vm_pprev_share = &vmp->vm_next_share;
+		inode->i_mmap = vmp;
+		vmp->vm_pprev_share = &inode->i_mmap;
 	}
-
-	if (inode->i_mmap == mpnt)
-		inode->i_mmap = mpnt->vm_next_share;
-
-	mpnt->vm_prev_share->vm_next_share = mpnt->vm_next_share;
-	mpnt->vm_next_share->vm_prev_share = mpnt->vm_prev_share;
 }
 
-/*
- * Merge the list of memory segments if possible.
+/* Merge the list of memory segments if possible.
  * Redundant vm_area_structs are freed.
  * This assumes that the list is ordered by address.
  * We don't need to traverse the entire list, only those segments
@@ -1010,13 +590,19 @@ void merge_segments (struct mm_struct * mm, unsigned long start_addr, unsigned l
 	struct vm_area_struct *prev, *mpnt, *next;
 
 	down(&mm->mmap_sem);
-	mpnt = find_vma(mm, start_addr);
+
+	prev = NULL;
+	mpnt = mm->mmap;
+	while(mpnt && mpnt->vm_end <= start_addr) {
+		prev = mpnt;
+		mpnt = mpnt->vm_next;
+	}
 	if (!mpnt)
 		goto no_vma;
 
-	avl_neighbours(mpnt, mm->mmap_avl, &prev, &next);
-	/* we have  prev->vm_next == mpnt && mpnt->vm_next = next */
+	next = mpnt->vm_next;
 
+	/* we have prev->vm_next == mpnt && mpnt->vm_next = next */
 	if (!prev) {
 		prev = mpnt;
 		mpnt = next;
@@ -1026,41 +612,32 @@ void merge_segments (struct mm_struct * mm, unsigned long start_addr, unsigned l
 	 * start_addr < mpnt->vm_end && prev->vm_start < end_addr
 	 */
 	for ( ; mpnt && prev->vm_start < end_addr ; prev = mpnt, mpnt = next) {
-#if 0
-		printk("looping in merge_segments, mpnt=0x%lX\n", (unsigned long) mpnt);
-#endif
-
 		next = mpnt->vm_next;
 
-		/*
-		 * To share, we must have the same inode, operations.. 
-		 */
-		if (mpnt->vm_inode != prev->vm_inode)
+		/* To share, we must have the same inode, operations.. */
+		if ((mpnt->vm_inode != prev->vm_inode)	||
+		    (mpnt->vm_pte != prev->vm_pte)	||
+		    (mpnt->vm_ops != prev->vm_ops)	||
+		    (mpnt->vm_flags != prev->vm_flags)	||
+		    (prev->vm_end != mpnt->vm_start))
 			continue;
-		if (mpnt->vm_pte != prev->vm_pte)
-			continue;
-		if (mpnt->vm_ops != prev->vm_ops)
-			continue;
-		if (mpnt->vm_flags != prev->vm_flags)
-			continue;
-		if (prev->vm_end != mpnt->vm_start)
-			continue;
-		/*
-		 * and if we have an inode, the offsets must be contiguous..
-		 */
+
+		/* and if we have an inode, the offsets must be contiguous.. */
 		if ((mpnt->vm_inode != NULL) || (mpnt->vm_flags & VM_SHM)) {
-			if (prev->vm_offset + prev->vm_end - prev->vm_start != mpnt->vm_offset)
+			unsigned long off = prev->vm_offset+prev->vm_end-prev->vm_start;
+			if (off != mpnt->vm_offset)
 				continue;
 		}
 
-		/*
-		 * merge prev with mpnt and set up pointers so the new
+		/* merge prev with mpnt and set up pointers so the new
 		 * big segment can possibly merge with the next one.
 		 * The old unused mpnt is freed.
 		 */
-		avl_remove(mpnt, &mm->mmap_avl);
+		if(mpnt->vm_next)
+			mpnt->vm_next->vm_pprev = mpnt->vm_pprev;
+		*mpnt->vm_pprev = mpnt->vm_next;
+
 		prev->vm_end = mpnt->vm_end;
-		prev->vm_next = mpnt->vm_next;
 		if (mpnt->vm_ops && mpnt->vm_ops->close) {
 			mpnt->vm_offset += mpnt->vm_end - mpnt->vm_start;
 			mpnt->vm_start = mpnt->vm_end;
@@ -1072,6 +649,7 @@ void merge_segments (struct mm_struct * mm, unsigned long start_addr, unsigned l
 		kmem_cache_free(vm_area_cachep, mpnt);
 		mpnt = prev;
 	}
+	mm->mmap_cache = NULL;		/* Kill the cache. */
 no_vma:
 	up(&mm->mmap_sem);
 }
@@ -1084,4 +662,11 @@ void vma_init(void)
 					   NULL, NULL);
 	if(!vm_area_cachep)
 		panic("vma_init: Cannot alloc vm_area_struct cache.");
+
+	mm_cachep = kmem_cache_create("mm_struct",
+				      sizeof(struct mm_struct),
+				      sizeof(long) * 4, SLAB_HWCACHE_ALIGN,
+				      NULL, NULL);
+	if(!mm_cachep)
+		panic("vma_init: Cannot alloc mm_struct cache.");
 }

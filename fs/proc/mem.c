@@ -55,16 +55,10 @@ static struct task_struct * get_task(int pid)
 	struct task_struct * tsk = current;
 
 	if (pid != tsk->pid) {
-		int i;
-		tsk = NULL;
-		for (i = 1 ; i < NR_TASKS ; i++)
-			if (task[i] && task[i]->pid == pid) {
-				tsk = task[i];
-				break;
-			}
-		/*
-		 * allow accesses only under the same circumstances
-		 * that we would allow ptrace to work
+		tsk = find_task_by_pid(pid);
+
+		/* Allow accesses only under the same circumstances
+		 * that we would allow ptrace to work.
 		 */
 		if (tsk) {
 			if (!(tsk->flags & PF_PTRACED)

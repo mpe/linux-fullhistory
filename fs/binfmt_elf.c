@@ -210,14 +210,16 @@ static unsigned long load_elf_interp(struct elfhdr * interp_elf_ex,
 
 	/* Now read in all of the header information */
 
-	if (sizeof(struct elf_phdr) * interp_elf_ex->e_phnum > PAGE_SIZE)
+	if (sizeof(struct elf_phdr) * interp_elf_ex->e_phnum > PAGE_SIZE) {
 	    return ~0UL;
+	}
 
 	elf_phdata =  (struct elf_phdr *)
 		kmalloc(sizeof(struct elf_phdr) * interp_elf_ex->e_phnum,
 			GFP_KERNEL);
-	if (!elf_phdata)
+	if (!elf_phdata) {
 	  return ~0UL;
+	}
 
 	/*
 	 * If the size of this structure has changed, then punt, since
@@ -278,6 +280,7 @@ static unsigned long load_elf_interp(struct elfhdr * interp_elf_ex,
 	      /* Real error */
 	      sys_close(elf_exec_fileno);
 	      kfree(elf_phdata);
+printk("%d", error);
 	      return ~0UL;
 	    }
 
@@ -359,7 +362,9 @@ static unsigned long load_aout_interp(struct exec * interp_ex,
 	    interp_ex->a_bss,
 	    PROT_READ|PROT_WRITE|PROT_EXEC,
 	    MAP_FIXED|MAP_PRIVATE, 0);
-  if (retval < 0) return ~0UL;
+  if (retval < 0) {
+  	return ~0UL;
+  }
   return elf_entry;
 }
 

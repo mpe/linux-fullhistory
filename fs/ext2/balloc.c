@@ -177,6 +177,7 @@ void ext2_free_blocks (const struct inode * inode, unsigned long block,
 	unsigned long bit;
 	unsigned long i;
 	int bitmap_nr;
+	unsigned long overflow;
 	struct super_block * sb;
 	struct ext2_group_desc * gdp;
 	struct ext2_super_block * es;
@@ -199,14 +200,20 @@ void ext2_free_blocks (const struct inode * inode, unsigned long block,
 
 	ext2_debug ("freeing block %lu\n", block);
 
+do_more:
+	overflow = 0;
 	block_group = (block - le32_to_cpu(es->s_first_data_block)) /
 		      EXT2_BLOCKS_PER_GROUP(sb);
-	bit = (block - le32_to_cpu(es->s_first_data_block)) % EXT2_BLOCKS_PER_GROUP(sb);
-	if (bit + count > EXT2_BLOCKS_PER_GROUP(sb))
-		ext2_panic (sb, "ext2_free_blocks",
-			    "Freeing blocks across group boundary - "
-			    "Block = %lu, count = %lu",
-			    block, count);
+	bit = (block - le32_to_cpu(es->s_first_data_block)) %
+		      EXT2_BLOCKS_PER_GROUP(sb);
+	/*
+	 * Check to see if we are freeing blocks across a group
+	 * boundary.
+	 */
+	if (bit + count > EXT2_BLOCKS_PER_GROUP(sb)) {
+		overflow = bit + count - EXT2_BLOCKS_PER_GROUP(sb);
+		count -= overflow;
+	}
 	bitmap_nr = load_block_bitmap (sb, block_group);
 	bh = sb->u.ext2_sb.s_block_bitmap[bitmap_nr];
 	gdp = get_group_desc (sb, block_group, &bh2);
@@ -245,6 +252,11 @@ void ext2_free_blocks (const struct inode * inode, unsigned long block,
 	if (sb->s_flags & MS_SYNCHRONOUS) {
 		ll_rw_block (WRITE, 1, &bh);
 		wait_on_buffer (bh);
+	}
+	if (overflow) {
+		block += count;
+		count = overflow;
+		goto do_more;
 	}
 	sb->s_dirt = 1;
 	unlock_super (sb);
@@ -546,6 +558,19 @@ static inline int block_in_use (unsigned long block,
 			 EXT2_BLOCKS_PER_GROUP(sb), map);
 }
 
+static int test_root(int a, int b)
+{
+	if (a == 0)
+		return 1;
+	while (1) {
+		if (a == 1)
+			return 1;
+		if (a % b)
+			return 0;
+		a = a / b;
+	}
+}
+
 void ext2_check_blocks_bitmap (struct super_block * sb)
 {
 	struct buffer_head * bh;
@@ -569,15 +594,21 @@ void ext2_check_blocks_bitmap (struct super_block * sb)
 		bitmap_nr = load_block_bitmap (sb, i);
 		bh = sb->u.ext2_sb.s_block_bitmap[bitmap_nr];
 
-		if (!ext2_test_bit (0, bh->b_data))
-			ext2_error (sb, "ext2_check_blocks_bitmap",
-				    "Superblock in group %d is marked free", i);
-
-		for (j = 0; j < desc_blocks; j++)
-			if (!ext2_test_bit (j + 1, bh->b_data))
+		if (!(sb->u.ext2_sb.s_feature_ro_compat &
+		     EXT2_FEATURE_RO_COMPAT_SPARSE_SUPER) ||
+		    (test_root(i, 3) || test_root(i, 5) || test_root(i, 7))) {
+			if (!ext2_test_bit (0, bh->b_data))
 				ext2_error (sb, "ext2_check_blocks_bitmap",
+					    "Superblock in group %d "
+					    "is marked free", i);
+
+			for (j = 0; j < desc_blocks; j++)
+				if (!ext2_test_bit (j + 1, bh->b_data))
+					ext2_error (sb,
+					    "ext2_check_blocks_bitmap",
 					    "Descriptor block #%d in group "
 					    "%d is marked free", j, i);
+		}
 
 		if (!block_in_use (le32_to_cpu(gdp->bg_block_bitmap), sb, bh->b_data))
 			ext2_error (sb, "ext2_check_blocks_bitmap",

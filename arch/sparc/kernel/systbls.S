@@ -1,4 +1,4 @@
-/* $Id: systbls.S,v 1.60 1997/04/19 08:52:15 jj Exp $
+/* $Id: systbls.S,v 1.62 1997/04/23 23:01:08 ecd Exp $
  * systbls.S: System call entry point tables for OS compatibility.
  *            The native Linux system call table lives here also.
  *
@@ -106,15 +106,26 @@ C_LABEL(sys_call_table):
 	.long C_LABEL(sys_nis_syscall), C_LABEL(sys_stime), C_LABEL(sys_nis_syscall)
 	.long C_LABEL(sys_nis_syscall), C_LABEL(sys_llseek)
 	/* "We are the Knights of the Forest of Ni!!" */
-	.long C_LABEL(sys_mlock), C_LABEL(sys_munlock), C_LABEL(sys_mlockall)
-	.long C_LABEL(sys_munlockall), C_LABEL(sys_sched_setparam)
-	.long C_LABEL(sys_sched_getparam), C_LABEL(sys_nis_syscall), C_LABEL(sys_nis_syscall)
-	.long C_LABEL(sys_nis_syscall), C_LABEL(sys_sched_get_priority_max), C_LABEL(sys_sched_get_priority_min)
-	.long C_LABEL(sys_sched_rr_get_interval), C_LABEL(sys_nanosleep)
+	.long C_LABEL(sys_mlock)
+	.long C_LABEL(sys_munlock)
+	.long C_LABEL(sys_mlockall)
+/*240*/	.long C_LABEL(sys_munlockall)
+	.long C_LABEL(sys_sched_setparam)
+	.long C_LABEL(sys_sched_getparam)
+	.long C_LABEL(sys_sched_setscheduler)
+	.long C_LABEL(sys_sched_getscheduler)
+/*245*/	.long C_LABEL(sys_sched_yield)
+	.long C_LABEL(sys_sched_get_priority_max)
+	.long C_LABEL(sys_sched_get_priority_min)
+	.long C_LABEL(sys_sched_rr_get_interval)
+	.long C_LABEL(sys_nanosleep)
 /*250*/	.long C_LABEL(sys_mremap)
 	.long C_LABEL(sys_sysctl)
-	.long C_LABEL(sys_getsid), C_LABEL(sys_fdatasync), C_LABEL(sys_nfsservctl)
-	.long C_LABEL(sys_aplib), C_LABEL(sys_nis_syscall)
+	.long C_LABEL(sys_getsid)
+	.long C_LABEL(sys_fdatasync)
+	.long C_LABEL(sys_nfsservctl)
+/*255*/	.long C_LABEL(sys_aplib)
+	.long C_LABEL(sys_nis_syscall)
 
 	/* Now the SunOS syscall table. */
 
@@ -179,7 +190,7 @@ C_LABEL(sunos_sys_table):
 	.long C_LABEL(sunos_getdomainname), C_LABEL(sys_setdomainname)
 	.long C_LABEL(sunos_nosys), C_LABEL(sys_quotactl), C_LABEL(sunos_nosys)
 	.long C_LABEL(sunos_mount), C_LABEL(sys_ustat), C_LABEL(sunos_semsys)
-	.long C_LABEL(sunos_nosys), C_LABEL(sunos_shmsys), C_LABEL(sunos_audit)
+	.long C_LABEL(sunos_msgsys), C_LABEL(sunos_shmsys), C_LABEL(sunos_audit)
 	.long C_LABEL(sunos_nosys), C_LABEL(sunos_getdents), C_LABEL(sys_setsid)
 	.long C_LABEL(sys_fchdir), C_LABEL(sunos_nosys), C_LABEL(sunos_nosys)
 	.long C_LABEL(sunos_nosys), C_LABEL(sunos_nosys), C_LABEL(sunos_nosys)

@@ -33,6 +33,7 @@
 #include <linux/fcntl.h>
 #include <linux/stat.h>
 #include <linux/tty.h>
+#include <linux/file.h>
 #include <linux/malloc.h>
 #include <linux/mount.h>
 #include <linux/smp.h>
@@ -989,7 +990,7 @@ int quota_on(kdev_t dev, short type, char *path)
 			}
 		} else
 			error = -EIO;
-	  filp->f_count--;
+		put_filp(filp);
 	} else
 		error = -EMFILE;
 	iput(inode);

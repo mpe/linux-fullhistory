@@ -123,6 +123,7 @@ kd_size_changed(int row, int col)
 	}
     }
 
+  read_lock(&tasklist_lock);
   for_each_task(p)
     {
       if ( p->tty && MAJOR(p->tty->device) == TTY_MAJOR &&
@@ -131,6 +132,7 @@ kd_size_changed(int row, int col)
 	  send_sig(SIGWINCH, p, 1);
 	}
     }
+  read_unlock(&tasklist_lock);
 
   return 0;
 }

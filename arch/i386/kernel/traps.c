@@ -27,6 +27,7 @@
 #include <asm/system.h>
 #include <asm/uaccess.h>
 #include <asm/io.h>
+#include <asm/spinlock.h>
 
 asmlinkage int system_call(void);
 asmlinkage void lcall7(void);
@@ -138,10 +139,8 @@ static void show_registers(struct pt_regs *regs)
 	printk("ds: %04x   es: %04x   ss: %04x\n",
 		regs->xds & 0xffff, regs->xes & 0xffff, ss);
 	store_TR(i);
-	if (STACK_MAGIC != *(unsigned long *)current->kernel_stack_page)
-		printk("Corrupted stack page\n");
 	printk("Process %s (pid: %d, process nr: %d, stackpage=%08lx)\nStack: ",
-		current->comm, current->pid, 0xffff & i, current->kernel_stack_page);
+		current->comm, current->pid, 0xffff & i, 4096+(unsigned long)current);
 	stack = (unsigned long *) esp;
 	for(i=0; i < kstack_depth_to_print; i++) {
 		if (((long) stack & 4095) == 0)
@@ -181,13 +180,19 @@ static void show_registers(struct pt_regs *regs)
 	printk("\n");
 }	
 
+spinlock_t die_lock;
+
 /*static*/ void die_if_kernel(const char * str, struct pt_regs * regs, long err)
 {
 	if ((regs->eflags & VM_MASK) || (3 & regs->xcs) == 3)
 		return;
 	console_verbose();
+	spin_lock_irq(&die_lock);
 	printk("%s: %04lx\n", str, err & 0xffff);
 	show_registers(regs);
+do { int i=2000000000; while (i) i--; } while (0);
+do { int i=2000000000; while (i) i--; } while (0);
+	spin_unlock_irq(&die_lock);
 	do_exit(SIGSEGV);
 }
 
@@ -237,7 +242,6 @@ out:
 
 asmlinkage void do_nmi(struct pt_regs * regs, long error_code)
 {
-	printk("NMI\n"); show_registers(regs);
 #ifdef CONFIG_SMP_NMI_INVAL
 	smp_flush_tlb_rcv();
 #else

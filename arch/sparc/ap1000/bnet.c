@@ -872,12 +872,12 @@ static void reply_kill(struct cap_request *req)
   len = req->size - sizeof(*req);
   if (len == 0) {
     int pid = req->data[1];
-    for_each_task(p) 
-      if (p->pid == pid) {
-	send_sig(sig,p,1);
-	return;
-      }
-    printk("cell %d: no task with pid %d\n",mpp_cid(),pid);
+    p = find_task_by_pid(pid);
+
+    if(p)
+	    send_sig(sig, p, 1);
+    else
+	    printk("cell %d: no task with pid %d\n",mpp_cid(),pid);
     return;
   }
 
@@ -889,9 +889,11 @@ static void reply_kill(struct cap_request *req)
   read_bif(name,len);
   name[len] = 0;
 
+  read_lock(&tasklist_lock);
   for_each_task(p) 
     if (strcmp(name,p->comm) == 0)
       send_sig(sig,p,1);
+  read_unlock(&tasklist_lock);
 }
 
 

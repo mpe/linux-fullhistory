@@ -4,8 +4,6 @@
  *  Copyright (C) 1991, 1992  Linus Torvalds
  */
 
-#undef DEBUG_PROC_TREE
-
 #include <linux/config.h>
 #include <linux/wait.h>
 #include <linux/errno.h>
@@ -16,6 +14,7 @@
 #include <linux/mm.h>
 #include <linux/tty.h>
 #include <linux/malloc.h>
+#include <linux/slab.h>
 #include <linux/interrupt.h>
 #include <linux/smp.h>
 #include <linux/smp_lock.h>
@@ -124,132 +123,28 @@ void notify_parent(struct task_struct * tsk)
 	wake_up_interruptible(&tsk->p_pptr->wait_chldexit);
 }
 
-void release(struct task_struct * p)
+static void release(struct task_struct * p)
 {
-	int i;
-
-	if (!p)
-		return;
-	if (p == current) {
-		printk("task releasing itself\n");
-		return;
-	}
-	for (i=1 ; i<NR_TASKS ; i++)
-		if (task[i] == p) {
+	if (p != current) {
 #ifdef __SMP__
-			/* FIXME! Cheesy, but kills the window... -DaveM */
-			while(p->processor != NO_PROC_ID)
-				barrier();
-			spin_unlock_wait(&scheduler_lock);
+		/* FIXME! Cheesy, but kills the window... -DaveM */
+		while (p->has_cpu)
+			barrier();
+		spin_unlock_wait(&scheduler_lock);
 #endif
-			nr_tasks--;
-			task[i] = NULL;
-			REMOVE_LINKS(p);
-			release_thread(p);
-			if (STACK_MAGIC != *(unsigned long *)p->kernel_stack_page)
-				printk(KERN_ALERT "release: %s kernel stack corruption. Aiee\n", p->comm);
-			free_kernel_stack(p->kernel_stack_page);
-			current->cmin_flt += p->min_flt + p->cmin_flt;
-			current->cmaj_flt += p->maj_flt + p->cmaj_flt;
-			current->cnswap += p->nswap + p->cnswap;
-			free_task_struct(p);
-			return;
-		}
-	panic("trying to release non-existent task");
-}
-
-#ifdef DEBUG_PROC_TREE
-/*
- * Check to see if a task_struct pointer is present in the task[] array
- * Return 0 if found, and 1 if not found.
- */
-int bad_task_ptr(struct task_struct *p)
-{
-	int 	i;
-
-	if (!p)
-		return 0;
-	for (i=0 ; i<NR_TASKS ; i++)
-		if (task[i] == p)
-			return 0;
-	return 1;
-}
-
-/*
- * This routine scans the pid tree and makes sure the rep invariant still
- * holds.  Used for debugging only, since it's very slow....
- *
- * It looks a lot scarier than it really is.... we're doing nothing more
- * than verifying the doubly-linked list found in p_ysptr and p_osptr,
- * and checking it corresponds with the process tree defined by p_cptr and
- * p_pptr;
- */
-void audit_ptree(void)
-{
-	int	i;
-
-	for (i=1 ; i<NR_TASKS ; i++) {
-		if (!task[i])
-			continue;
-		if (bad_task_ptr(task[i]->p_pptr))
-			printk("Warning, pid %d's parent link is bad\n",
-				task[i]->pid);
-		if (bad_task_ptr(task[i]->p_cptr))
-			printk("Warning, pid %d's child link is bad\n",
-				task[i]->pid);
-		if (bad_task_ptr(task[i]->p_ysptr))
-			printk("Warning, pid %d's ys link is bad\n",
-				task[i]->pid);
-		if (bad_task_ptr(task[i]->p_osptr))
-			printk("Warning, pid %d's os link is bad\n",
-				task[i]->pid);
-		if (task[i]->p_pptr == task[i])
-			printk("Warning, pid %d parent link points to self\n",
-				task[i]->pid);
-		if (task[i]->p_cptr == task[i])
-			printk("Warning, pid %d child link points to self\n",
-				task[i]->pid);
-		if (task[i]->p_ysptr == task[i])
-			printk("Warning, pid %d ys link points to self\n",
-				task[i]->pid);
-		if (task[i]->p_osptr == task[i])
-			printk("Warning, pid %d os link points to self\n",
-				task[i]->pid);
-		if (task[i]->p_osptr) {
-			if (task[i]->p_pptr != task[i]->p_osptr->p_pptr)
-				printk(
-			"Warning, pid %d older sibling %d parent is %d\n",
-				task[i]->pid, task[i]->p_osptr->pid,
-				task[i]->p_osptr->p_pptr->pid);
-			if (task[i]->p_osptr->p_ysptr != task[i])
-				printk(
-		"Warning, pid %d older sibling %d has mismatched ys link\n",
-				task[i]->pid, task[i]->p_osptr->pid);
-		}
-		if (task[i]->p_ysptr) {
-			if (task[i]->p_pptr != task[i]->p_ysptr->p_pptr)
-				printk(
-			"Warning, pid %d younger sibling %d parent is %d\n",
-				task[i]->pid, task[i]->p_osptr->pid,
-				task[i]->p_osptr->p_pptr->pid);
-			if (task[i]->p_ysptr->p_osptr != task[i])
-				printk(
-		"Warning, pid %d younger sibling %d has mismatched os link\n",
-				task[i]->pid, task[i]->p_ysptr->pid);
-		}
-		if (task[i]->p_cptr) {
-			if (task[i]->p_cptr->p_pptr != task[i])
-				printk(
-			"Warning, pid %d youngest child %d has mismatched parent link\n",
-				task[i]->pid, task[i]->p_cptr->pid);
-			if (task[i]->p_cptr->p_ysptr)
-				printk(
-			"Warning, pid %d youngest child %d has non-NULL ys link\n",
-				task[i]->pid, task[i]->p_cptr->pid);
-		}
+		nr_tasks--;
+		add_free_taskslot(p->tarray_ptr);
+		unhash_pid(p);
+		REMOVE_LINKS(p);
+		release_thread(p);
+		current->cmin_flt += p->min_flt + p->cmin_flt;
+		current->cmaj_flt += p->maj_flt + p->cmaj_flt;
+		current->cnswap += p->nswap + p->cnswap;
+		free_task_struct(p);
+	} else {
+		printk("task releasing itself\n");
 	}
 }
-#endif /* DEBUG_PROC_TREE */
 
 /*
  * This checks not only the pgrp, but falls back on the pid if no
@@ -347,17 +242,12 @@ int kill_proc(int pid, int sig, int priv)
 
 	retval = -EINVAL;
 	if (sig >= 0 && sig <= 32) {
-		struct task_struct *p;
+		struct task_struct *p = find_task_by_pid(pid);
 		
-		retval = -ESRCH;
-		read_lock(&tasklist_lock);
-		for_each_task(p) {
-			if (p->pid != pid)
-				continue;
-			retval = send_sig(sig,p,priv);
-			break;
-		}
-		read_unlock(&tasklist_lock);
+		if(p)
+			retval = send_sig(sig, p, priv);
+		else
+			retval = -ESRCH;
 	}
 	return retval;
 }
@@ -550,7 +440,7 @@ static inline void __exit_mm(struct task_struct * tsk)
 		if (!--mm->count) {
 			exit_mmap(mm);
 			free_page_tables(mm);
-			kfree(mm);
+			kmem_cache_free(mm_cachep, mm);
 		}
 	}
 }
@@ -630,7 +520,7 @@ static void exit_notify(void)
 NORET_TYPE void do_exit(long code)
 {
 	if (in_interrupt()) {
-		local_irq_count[smp_processor_id()] = 0;	/* Not really correct */
+		local_irq_count[hard_smp_processor_id()] = 0;	/* Not really correct */
 		printk("Aiee, killing interrupt handler\n");
 	}
 fake_volatile:

@@ -709,22 +709,13 @@ asmlinkage int sys_setpgid(pid_t pid, pid_t pgid)
 	if (pgid < 0)
 		return -EINVAL;
 
-	read_lock(&tasklist_lock);
-	for_each_task(p) {
-		if (p->pid == pid) {
-			/* NOTE: I haven't dropped tasklist_lock, this is
-			 *       on purpose. -DaveM
-			 */
-			goto found_task;
-		}
-	}
-	read_unlock(&tasklist_lock);
-	return -ESRCH;
+	if((p = find_task_by_pid(pid)) == NULL)
+		return -ESRCH;
 
-found_task:
 	/* From this point forward we keep holding onto the tasklist lock
 	 * so that our parent does not change from under us. -DaveM
 	 */
+	read_lock(&tasklist_lock);
 	err = -ESRCH;
 	if (p->p_pptr == current || p->p_opptr == current) {
 		err = -EPERM;
@@ -762,18 +753,12 @@ asmlinkage int sys_getpgid(pid_t pid)
 	if (!pid) {
 		return current->pgrp;
 	} else {
-		struct task_struct *p;
-		int ret = -ESRCH;
+		struct task_struct *p = find_task_by_pid(pid);
 
-		read_lock(&tasklist_lock);
-		for_each_task(p) {
-			if (p->pid == pid) {
-				ret = p->pgrp;
-				break;
-			}
-		}
-		read_unlock(&tasklist_lock);
-		return ret;
+		if(p)
+			return p->pgrp;
+		else
+			return -ESRCH;
 	}
 }
 
@@ -785,25 +770,16 @@ asmlinkage int sys_getpgrp(void)
 
 asmlinkage int sys_getsid(pid_t pid)
 {
-	struct task_struct * p;
-	int ret;
-
-	/* SMP: The 'self' case requires no lock */
 	if (!pid) {
-		ret = current->session;
+		return current->session;
 	} else {
-		ret = -ESRCH;
+		struct task_struct *p = find_task_by_pid(pid);
 
-		read_lock(&tasklist_lock);
-		for_each_task(p) {
-			if (p->pid == pid) {
-				ret = p->session;
-				break;
-			}
-		}
-		read_unlock(&tasklist_lock);
+		if(p)
+			return p->session;
+		else
+			return -ESRCH;
 	}
-	return ret;
 }
 
 asmlinkage int sys_setsid(void)

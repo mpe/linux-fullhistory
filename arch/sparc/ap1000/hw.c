@@ -86,14 +86,21 @@ static void show_task(struct task_struct *t)
 static void show_ptasks(void)
 {
 	extern struct task_struct *task[];
+	struct task_struct *p;
 	int i;
 	int count=0;
 
-	for (i=MPP_TASK_BASE;i<NR_TASKS;i++)
-		if (task[i]) {
-			show_task(task[i]);
+	read_lock(&tasklist_lock);
+	for_each_task(p) {
+		struct task_struct **tp = p->tarray_ptr;
+
+		if(tp >= &task[MPP_TASK_BASE]) {
+			show_task(p);
 			count++;
 		}
+	}
+	read_unlock(&tasklist_lock);
+
 	if (count == 0)
 		printk("no parallel tasks on cell %d\n",mpp_cid());
 }
@@ -101,14 +108,18 @@ static void show_ptasks(void)
 static void show_utasks(void)
 {
 	extern struct task_struct *task[];
+	struct task_struct *p;
 	int i;
 	int count=0;
 
-	for (i=0;i<NR_TASKS;i++)
-		if (task[i] && task[i]->uid > 1)  {
+	read_lock(&tasklist_lock);
+	for_each_task(p) {
+		if(p->uid > 1) {
 			show_task(task[i]);
 			count++;
 		}
+	}
+	read_unlock(&tasklist_lock);
 
 	if (count == 0)
 		printk("no user tasks on cell %d\n",mpp_cid());
@@ -118,15 +129,19 @@ static void show_utasks(void)
 static void show_otasks(void)
 {
 	extern struct task_struct *task[];
+	struct task_struct *p;
 	int i;
 	int count=0;
 	extern int ap_current_uid;
 
-	for (i=0;i<NR_TASKS;i++)
-		if (task[i] && task[i]->uid == ap_current_uid)  {
+	read_lock(&tasklist_lock);
+	for_each_task(p) {
+		if(p->uid == ap_current_uid) {
 			show_task(task[i]);
 			count++;
 		}
+	}
+	read_unlock(&tasklist_lock);
 
 	if (count == 0)
 		printk("no tasks on cell %d\n",mpp_cid());

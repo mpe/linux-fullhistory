@@ -1259,7 +1259,7 @@ void cleanup_module(void)
 		if(debug&DEBUG_VERBOSE) printk("waiting\n");
 		/* if it's in process, wait a bit for it to finish */
 		timeout = jiffies+HZ; 
-		add_timer(&ltpc_timer)
+		add_timer(&ltpc_timer);
 		while(del_timer(&ltpc_timer) && (timeout > jiffies))
 		{
 			add_timer(&ltpc_timer);

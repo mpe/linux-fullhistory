@@ -683,16 +683,20 @@ static int proc_root_lookup(struct inode * dir,const char * name, int len,
 	struct inode ** result)
 {
 	unsigned int pid, c;
-	int i, ino, retval;
+	int ino, retval;
 	struct task_struct *p;
 
 	dir->i_count++;
 
 	if (dir->i_ino == PROC_ROOT_INO) { /* check for safety... */
 		dir->i_nlink = proc_root.nlink;
-		for_each_task(p)
-			if (p && p->pid)
+
+		read_lock(&tasklist_lock);
+		for_each_task(p) {
+			if (p->pid)
 				dir->i_nlink++;
+		}
+		read_unlock(&tasklist_lock);
 	}
 
 	retval = proc_lookup(dir, name, len, result);
@@ -716,10 +720,8 @@ static int proc_root_lookup(struct inode * dir,const char * name, int len,
 			break;
 		}
 	}
-	for (i = 0 ; i < NR_TASKS ; i++)
-		if (task[i] && task[i]->pid == pid)
-			break;
-	if (!pid || i >= NR_TASKS) {
+	p = find_task_by_pid(pid);
+	if (!pid || !p) {
 		iput(dir);
 		return -ENOENT;
 	}
@@ -796,34 +798,40 @@ int proc_readdir(struct inode * inode, struct file * filp,
 static int proc_root_readdir(struct inode * inode, struct file * filp,
 	void * dirent, filldir_t filldir)
 {
+	struct task_struct *p;
 	char buf[NUMBUF];
-	unsigned int nr,pid;
-	unsigned long i,j;
+	unsigned int nr = filp->f_pos;
 
-	nr = filp->f_pos;
 	if (nr < FIRST_PROCESS_ENTRY) {
 		int error = proc_readdir(inode, filp, dirent, filldir);
 		if (error <= 0)
 			return error;
-		filp->f_pos = nr = FIRST_PROCESS_ENTRY;
+		filp->f_pos = FIRST_PROCESS_ENTRY;
 	}
+	nr = FIRST_PROCESS_ENTRY;
 
-	for (nr -= FIRST_PROCESS_ENTRY; nr < NR_TASKS; nr++, filp->f_pos++) {
-		struct task_struct * p = task[nr];
+	read_lock(&tasklist_lock);
+	for_each_task(p) {
+		unsigned int pid;
 
-		if (!p || !(pid = p->pid))
+		if(nr++ < filp->f_pos)
 			continue;
 
-		j = NUMBUF;
-		i = pid;
-		do {
-			j--;
-			buf[j] = '0' + (i % 10);
-			i /= 10;
-		} while (i);
+		if((pid = p->pid) != 0) {
+			unsigned long j = NUMBUF, i = pid;
 
-		if (filldir(dirent, buf+j, NUMBUF-j, filp->f_pos, (pid << 16) + PROC_PID_INO) < 0)
-			break;
+			do {
+				j--;
+				buf[j] = '0' + (i % 10);
+				i /= 10;
+			} while (i);
+
+			if (filldir(dirent, buf+j, NUMBUF-j,
+				    filp->f_pos, (pid << 16) + PROC_PID_INO) < 0)
+				break;
+		}
+		filp->f_pos++;
 	}
+	read_unlock(&tasklist_lock);
 	return 0;
 }

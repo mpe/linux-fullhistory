@@ -39,10 +39,10 @@ typedef struct { } rwlock_t;
 #define write_lock_irq(lock)	cli()
 #define write_unlock_irq(lock)	sti()
 
-#define read_lock_irqsave(lock, flags)		save_and_cli(flags)
-#define read_unlock_irqrestore(lock, flags)	restore_flags(flags)
-#define write_lock_irqsave(lock, flags)		save_and_cli(flags)
-#define write_unlock_irqrestore(lock, flags)	restore_flags(flags)
+#define read_lock_irqsave(lock, flags)		swpipl(flags,7)
+#define read_unlock_irqrestore(lock, flags)	setipl(flags)
+#define write_lock_irqsave(lock, flags)		swpipl(flags,7)
+#define write_unlock_irqrestore(lock, flags)	setipl(flags)
 
 #else
 

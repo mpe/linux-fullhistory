@@ -153,17 +153,24 @@ static inline void add_hash(struct dir_cache_entry * de, struct dir_cache_entry 
 /*
  * Find a directory cache entry given all the necessary info.
  */
-static inline struct dir_cache_entry * find_entry(struct inode * dir, const char * name, int len, struct dir_cache_entry ** hash)
+static inline struct dir_cache_entry * find_entry(struct inode * dir, const char * name, unsigned char len, struct dir_cache_entry ** hash)
 {
 	struct dir_cache_entry *de;
 
-	for(de = *hash; de; de = de->next)
+	de = *hash;
+	goto inside;
+	for (;;) {
+		de = de->next;
+inside:
+		if (!de)
+			break;
 		if((de->name_len == (unsigned char) len)	&&
 		   (de->dc_dev == dir->i_dev)			&&
 		   (de->dir == dir->i_ino)			&&
 		   (de->version == dir->i_version)		&&
 		   (!memcmp(de->name, name, len)))
 			break;
+	}
 	return de;
 }
 
@@ -195,7 +202,7 @@ int dcache_lookup(struct inode * dir, const char * name, int len, unsigned long 
 		struct dir_cache_entry *de;
 
 		spin_lock(&dcache_lock);
-		de = find_entry(dir, name, len, hash);
+		de = find_entry(dir, name, (unsigned char) len, hash);
 		if(de) {
 			*ino = de->ino;
 			move_to_level2(de, hash);
@@ -213,7 +220,7 @@ void dcache_add(struct inode * dir, const char * name, int len, unsigned long in
 		struct dir_cache_entry *de;
 
 		spin_lock(&dcache_lock);
-		de = find_entry(dir, name, len, hash);
+		de = find_entry(dir, name, (unsigned char) len, hash);
 		if (de) {
 			de->ino = ino;
 			update_lru(de);

@@ -257,7 +257,7 @@ extern void dquot_init(void);
 static char * argv_init[MAX_INIT_ARGS+2] = { "init", NULL, };
 static char * envp_init[MAX_INIT_ENVS+2] = { "HOME=/", "TERM=linux", NULL, };
 
-__initfunc(char *get_options(char *str, int *ints))
+char *get_options(char *str, int *ints)
 {
 	char *cur = str;
 	int i=1;
@@ -779,43 +779,11 @@ int cpu_idle(void *unused)
  
 extern int cpu_idle(void * unused);
 
-/*
- *	Activate a secondary processor.
- */
- 
-__initfunc(asmlinkage void start_secondary(void))
-{
-	trap_init();
-	init_IRQ();
-	smp_callin();
-	cpu_idle(NULL);
-}
-
-
-
 /* Called by boot processor to activate the rest. */
 __initfunc(static void smp_init(void))
 {
-	int i, j;
-
 	/* Get other processors into their bootup holding patterns. */
 	smp_boot_cpus();
-
-	/* Create the slave init tasks as sharing pid 0.  This should only
-	 * happen if we have virtual CPU numbers higher than 0.
-	 */
-	for (i=1; i<smp_num_cpus; i++)
-	{
-		/* We use kernel_thread for the idlers which are
-		 * unlocked tasks running in kernel space.
-		 */
-		kernel_thread(cpu_idle, NULL, CLONE_PID);
-
-		/* Don't assume linear processor numbering */
-		j = cpu_logical_map[i];
-		current_set[j]=task[i];
-		current_set[j]->processor=j;
-	}
 }		
 
 /*
@@ -832,6 +800,8 @@ __initfunc(static void smp_begin(void))
 	
 #endif
 
+extern void initialize_secondary(void);
+
 /*
  *	Activate the first processor.
  */
@@ -840,18 +810,14 @@ __initfunc(asmlinkage void start_kernel(void))
 {
 	char * command_line;
 
-/*
- *	This little check will move.
- */
-
 #ifdef __SMP__
-	static int first_cpu=1;
-	
-	if(!first_cpu)
-		start_secondary();
-	first_cpu=0;
-	
-#endif	
+	static int boot_cpu = 1;
+	/* "current" has been set up, we need to load it now */
+	if (!boot_cpu)
+		initialize_secondary();
+	boot_cpu = 0;
+#endif
+
 /*
  * Interrupts are still disabled. Do necessary setups, then
  * enable them
@@ -896,7 +862,6 @@ __initfunc(asmlinkage void start_kernel(void))
 	memory_start = kmem_cache_init(memory_start, memory_end);
 	sti();
 	calibrate_delay();
-	memory_start = file_table_init(memory_start,memory_end);
 	memory_start = name_cache_init(memory_start,memory_end);
 #ifdef CONFIG_BLK_DEV_INITRD
 	if (initrd_start && !initrd_below_start_ok && initrd_start < memory_start) {
@@ -913,6 +878,7 @@ __initfunc(asmlinkage void start_kernel(void))
 	vma_init();
 	buffer_init();
 	inode_init();
+	file_table_init();
 	sock_init();
 #if defined(CONFIG_SYSVIPC) || defined(CONFIG_KERNELD)
 	ipc_init();

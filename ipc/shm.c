@@ -402,42 +402,21 @@ static struct vm_operations_struct shm_vm_ops = {
 	shm_swap_in		/* swapin */
 };
 
-/* Insert shmd into the circular list shp->attaches */
+/* Insert shmd into the list shp->attaches */
 static inline void insert_attach (struct shmid_ds * shp, struct vm_area_struct * shmd)
 {
-	struct vm_area_struct * attaches;
-
-	if ((attaches = shp->attaches)) {
-		shmd->vm_next_share = attaches;
-		shmd->vm_prev_share = attaches->vm_prev_share;
-		shmd->vm_prev_share->vm_next_share = shmd;
-		attaches->vm_prev_share = shmd;
-	} else
-		shp->attaches = shmd->vm_next_share = shmd->vm_prev_share = shmd;
+	if((shmd->vm_next_share = shp->attaches) != NULL)
+		shp->attaches->vm_pprev_share = &shmd->vm_next_share;
+	shp->attaches = shmd;
+	shmd->vm_pprev_share = &shp->attaches;
 }
 
-/* Remove shmd from circular list shp->attaches */
+/* Remove shmd from list shp->attaches */
 static inline void remove_attach (struct shmid_ds * shp, struct vm_area_struct * shmd)
 {
-	if (shmd->vm_next_share == shmd) {
-		if (shp->attaches != shmd) {
-			printk("shm_close: shm segment (id=%ld) attach list inconsistent\n",
-			       SWP_OFFSET(shmd->vm_pte) & SHM_ID_MASK);
-			printk("shm_close: %08lx-%08lx %c%c%c%c %08lx %08lx\n",
-				shmd->vm_start, shmd->vm_end,
-				shmd->vm_flags & VM_READ ? 'r' : '-',
-				shmd->vm_flags & VM_WRITE ? 'w' : '-',
-				shmd->vm_flags & VM_EXEC ? 'x' : '-',
-				shmd->vm_flags & VM_MAYSHARE ? 's' : 'p',
-				shmd->vm_offset, shmd->vm_pte);
-		}
-		shp->attaches = NULL;
-	} else {
-		if (shp->attaches == shmd)
-			shp->attaches = shmd->vm_next_share;
-		shmd->vm_prev_share->vm_next_share = shmd->vm_next_share;
-		shmd->vm_next_share->vm_prev_share = shmd->vm_prev_share;
-	}
+	if(shmd->vm_next_share)
+		shmd->vm_next_share->vm_pprev_share = shmd->vm_pprev_share;
+	*shmd->vm_pprev_share = shmd->vm_next_share;
 }
 
 /*
@@ -575,7 +554,6 @@ asmlinkage int sys_shmat (int shmid, char *shmaddr, int shmflg, ulong *raddr)
 	shmd->vm_flags = VM_SHM | VM_MAYSHARE | VM_SHARED
 			 | VM_MAYREAD | VM_MAYEXEC | VM_READ | VM_EXEC
 			 | ((shmflg & SHM_RDONLY) ? 0 : VM_MAYWRITE | VM_WRITE);
-	shmd->vm_next_share = shmd->vm_prev_share = NULL;
 	shmd->vm_inode = NULL;
 	shmd->vm_offset = 0;
 	shmd->vm_ops = &shm_vm_ops;

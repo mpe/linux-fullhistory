@@ -301,6 +301,9 @@ static void umsdos_ren_init(
 		,*(unsigned long *)current->kernel_stack_page \
 		,__LINE__); \
 	}
+
+#undef chkstk
+#define chkstk() do { } while (0)
 	
 /*
 	Rename a file (move) in the file system.

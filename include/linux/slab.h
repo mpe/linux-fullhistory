@@ -54,6 +54,7 @@ extern int get_slabinfo(char *);
 
 /* System wide slabs. */
 extern kmem_cache_t *vm_area_cachep;
+extern kmem_cache_t *mm_cachep;
 
 #endif	/* __KERNEL__ */
 

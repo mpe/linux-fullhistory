@@ -150,6 +150,7 @@ EXPORT_SYMBOL(lnamei);
 EXPORT_SYMBOL(open_namei);
 EXPORT_SYMBOL(sys_close);
 EXPORT_SYMBOL(close_fp);
+EXPORT_SYMBOL(insert_file_free);
 EXPORT_SYMBOL(check_disk_change);
 EXPORT_SYMBOL(invalidate_buffers);
 EXPORT_SYMBOL(invalidate_inodes);

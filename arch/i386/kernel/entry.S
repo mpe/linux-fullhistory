@@ -112,6 +112,7 @@ ENOSYS = 38
 
 #ifdef	__SMP__
 /* Get the processor ID multiplied by 4 */
+#if 0
 #define GET_PROCESSOR_OFFSET(reg) \
 	movl SYMBOL_NAME(apic_reg), reg; \
 	movl 32(reg), reg; \
@@ -121,7 +122,11 @@ ENOSYS = 38
 #define GET_CURRENT(reg) \
 	GET_PROCESSOR_OFFSET(reg) \
 	movl SYMBOL_NAME(current_set)(reg),reg
+#endif
 
+#define GET_CURRENT(reg) \
+	movl %esp, reg; \
+	andl $-8192, reg;
 #else
 
 #define GET_CURRENT(reg) \
@@ -149,6 +154,7 @@ ENTRY(lcall7)
 	popl %eax
 	jmp ret_from_sys_call
 
+
 #ifdef __SMP__
 	ALIGN
 	.globl	ret_from_smpfork
@@ -157,15 +163,12 @@ ret_from_smpfork:
 	jmp	ret_from_sys_call
 #endif /* __SMP__ */
 
-	ALIGN
-handle_bottom_half:
-	pushl $2f
-	jmp SYMBOL_NAME(do_bottom_half)
-
-	ALIGN
-reschedule:
-	pushl $ret_from_sys_call
-	jmp SYMBOL_NAME(schedule)    # test
+/*
+ * Return to user mode is not as complex as all this looks,
+ * but we want the default path for a system call return to
+ * go as quickly as possible which is why some of this is
+ * less clear than it otherwise should be.
+ */
 
 ENTRY(system_call)
 	pushl %eax			# save orig_eax
@@ -180,24 +183,19 @@ ENTRY(system_call)
 	ALIGN
 	.globl ret_from_sys_call
 	.globl ret_from_intr
-ret_from_intr:
 ret_from_sys_call:
-	GET_CURRENT(%ebx)
 	movl SYMBOL_NAME(bh_mask),%eax
 	andl SYMBOL_NAME(bh_active),%eax
 	jne handle_bottom_half
-2:	movl EFLAGS(%esp),%eax		# mix EFLAGS and CS
-	movb CS(%esp),%al
-	testl $(VM_MASK | 3),%eax	# return to VM86 mode or non-supervisor?
-	je 1f
+ret_with_reschedule:
 	cmpl $0,SYMBOL_NAME(need_resched)
 	jne reschedule
+	GET_CURRENT(%ebx)
 	movl blocked(%ebx),%eax
 	movl %eax,%esi			# save blocked in %esi for signal handling
 	notl %eax
 	andl signal(%ebx),%eax
 	jne signal_return
-1:	
 	RESTORE_ALL
 	ALIGN
 signal_return:
@@ -230,6 +228,29 @@ badsys:
 	movl $-ENOSYS,EAX(%esp)
 	jmp ret_from_sys_call
 
+	ALIGN
+ret_from_exception:
+	movl SYMBOL_NAME(bh_mask),%eax
+	andl SYMBOL_NAME(bh_active),%eax
+	jne handle_bottom_half
+	ALIGN
+ret_from_intr:
+	movl EFLAGS(%esp),%eax		# mix EFLAGS and CS
+	movb CS(%esp),%al
+	testl $(VM_MASK | 3),%eax	# return to VM86 mode or non-supervisor?
+	jne ret_with_reschedule
+	RESTORE_ALL
+
+	ALIGN
+handle_bottom_half:
+	pushl $ret_from_intr
+	jmp SYMBOL_NAME(do_bottom_half)
+
+	ALIGN
+reschedule:
+	pushl $ret_from_sys_call
+	jmp SYMBOL_NAME(schedule)    # test
+
 
 ENTRY(divide_error)
 	pushl $0		# no error code
@@ -260,7 +281,7 @@ error_code:
 	GET_CURRENT(%ebx)
 	call *%ecx
 	addl $8,%esp
-	jmp ret_from_sys_call
+	jmp ret_from_exception
 
 ENTRY(coprocessor_error)
 	pushl $0
@@ -271,7 +292,7 @@ ENTRY(device_not_available)
 	pushl $-1		# mark this as an int
 	SAVE_ALL
 	GET_CURRENT(%ebx)
-	pushl $ret_from_sys_call
+	pushl $ret_from_exception
 	movl %cr0,%eax
 	testl $0x4,%eax			# EM (math emulation bit)
 	je SYMBOL_NAME(math_state_restore)

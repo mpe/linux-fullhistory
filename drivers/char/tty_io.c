@@ -166,14 +166,11 @@ static int check_tty_count(struct tty_struct *tty, const char *routine)
 {
 #ifdef CHECK_TTY_COUNT
 	struct file *f;
-	int i, count = 0;
+	int count = 0;
 	
-	for (f = first_file, i=0; i<nr_files; i++, f = f->f_next) {
-		if (!f->f_count)
-			continue;
-		if (f->private_data == tty) {
+	for(f = inuse_filps; f; f = f->f_next) {
+		if(f->private_data == tty)
 			count++;
-		}
 	}
 	if (tty->driver.type == TTY_DRIVER_TYPE_PTY &&
 	    tty->driver.subtype == PTY_TYPE_SLAVE &&
@@ -363,16 +360,14 @@ static struct file_operations hung_up_tty_fops = {
 
 void do_tty_hangup(struct tty_struct * tty, struct file_operations *fops)
 {
-	int i;
+
 	struct file * filp;
 	struct task_struct *p;
 
 	if (!tty)
 		return;
 	check_tty_count(tty, "do_tty_hangup");
-	for (filp = first_file, i=0; i<nr_files; i++, filp = filp->f_next) {
-		if (!filp->f_count)
-			continue;
+	for (filp = inuse_filps; filp; filp = filp->f_next) {
 		if (filp->private_data != tty)
 			continue;
 		if (!filp->f_inode)
@@ -405,13 +400,14 @@ void do_tty_hangup(struct tty_struct * tty, struct file_operations *fops)
 		tty->ldisc = ldiscs[N_TTY];
 		tty->termios->c_line = N_TTY;
 		if (tty->ldisc.open) {
-			i = (tty->ldisc.open)(tty);
+			int i = (tty->ldisc.open)(tty);
 			if (i < 0)
 				printk("do_tty_hangup: N_TTY open: error %d\n",
 				       -i);
 		}
 	}
 	
+	read_lock(&tasklist_lock);
  	for_each_task(p) {
 		if ((tty->session > 0) && (p->session == tty->session) &&
 		    p->leader) {
@@ -423,6 +419,8 @@ void do_tty_hangup(struct tty_struct * tty, struct file_operations *fops)
 		if (p->tty == tty)
 			p->tty = NULL;
 	}
+	read_unlock(&tasklist_lock);
+
 	tty->flags = 0;
 	tty->session = 0;
 	tty->pgrp = -1;
@@ -494,9 +492,11 @@ void disassociate_ctty(int on_exit)
 	tty->session = 0;
 	tty->pgrp = -1;
 
+	read_lock(&tasklist_lock);
 	for_each_task(p)
 	  	if (p->session == current->session)
 			p->tty = NULL;
+	read_unlock(&tasklist_lock);
 }
 
 void wait_for_keypress(void)
@@ -1338,9 +1338,11 @@ static int tiocsctty(struct tty_struct *tty, int arg)
 			 */
 			struct task_struct *p;
 
+			read_lock(&tasklist_lock);
 			for_each_task(p)
 				if (p->tty == tty)
 					p->tty = NULL;
+			read_unlock(&tasklist_lock);
 		} else
 			return -EPERM;
 	}

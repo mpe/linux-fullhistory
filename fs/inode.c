@@ -232,12 +232,10 @@ repeat:
 int fs_may_remount_ro(kdev_t dev)
 {
 	struct file * file;
-	int i;
 
 	/* Check that no files are currently opened for writing. */
-	for (file = first_file, i=0; i<nr_files; i++, file=file->f_next) {
-		if (!file->f_count || !file->f_inode ||
-		    file->f_inode->i_dev != dev)
+	for (file = inuse_filps; file; file = file->f_next) {
+		if (!file->f_inode || file->f_inode->i_dev != dev)
 			continue;
 		if (S_ISREG(file->f_inode->i_mode) && (file->f_mode & 2))
 			return 0;
@@ -288,7 +286,7 @@ int inode_change_ok(struct inode *inode, struct iattr *attr)
 
 		   ((attr->ia_valid & ATTR_GID) &&
 		    (!in_group_p(attr->ia_gid) &&
-		     (attr->ia_gid != inode->i_gid)))		||
+		     (attr->ia_gid != inode->i_gid)) && not_fsuser)	||
 
 		   ((attr->ia_valid & (ATTR_ATIME_SET | ATTR_MTIME_SET)) &&
 		    (fsuid != iuid) && not_fsuser))
@@ -325,6 +323,8 @@ void inode_setattr(struct inode *inode, struct iattr *attr)
 		if (!fsuser() && !in_group_p(inode->i_gid))
 			inode->i_mode &= ~S_ISGID;
 	}
+	if (attr->ia_valid & ATTR_ATTR_FLAG)
+		inode->i_attr_flags = attr->ia_attr_flags;
 	inode->i_dirt = 1;
 }
 

@@ -68,7 +68,7 @@ static int proc_follow_link(struct inode * dir, struct inode * inode,
 	unsigned int pid, ino;
 	struct task_struct * p;
 	struct inode * new_inode;
-	int i, error;
+	int error;
 
 	*res_inode = NULL;
 	if (dir)
@@ -82,10 +82,9 @@ static int proc_follow_link(struct inode * dir, struct inode * inode,
 	ino = inode->i_ino;
 	pid = ino >> 16;
 	ino &= 0x0000ffff;
-	for (i = 0 ; i < NR_TASKS ; i++)
-		if ((p = task[i]) && p->pid == pid)
-			break;
-	if (i >= NR_TASKS) {
+
+	p = find_task_by_pid(pid);
+	if (!p) {
 		iput(inode);
 		return -ENOENT;
 	}

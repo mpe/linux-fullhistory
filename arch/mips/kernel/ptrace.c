@@ -33,18 +33,6 @@
  */
 #define MAGICNUMBER 68
 
-/* change a pid into a task struct. */
-static inline struct task_struct * get_task(int pid)
-{
-	int i;
-
-	for (i = 1; i < NR_TASKS; i++) {
-		if (task[i] != NULL && (task[i]->pid == pid))
-			return task[i];
-	}
-	return NULL;
-}
-
 /*
  * this routine will get a word off of the processes privileged stack. 
  * the offset is how far from the base addr as stored in the TSS.  
@@ -295,7 +283,7 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 	}
 	if (pid == 1)		/* you may not mess with init */
 		return -EPERM;
-	if (!(child = get_task(pid)))
+	if (!(child = find_task_by_pid(pid)))
 		return -ESRCH;
 	if (request == PTRACE_ATTACH) {
 		if (child == current)

@@ -36,7 +36,7 @@ extern __inline__ void udelay(unsigned long usecs)
 	__asm__("mull %0"
 		:"=d" (usecs)
 #ifdef __SMP__
-		:"a" (usecs),"0" (cpu_data[smp_processor_id()].udelay_val)
+		:"a" (usecs),"0" (cpu_data[hard_smp_processor_id()].udelay_val)
 #else
 		:"a" (usecs),"0" (loops_per_sec)
 #endif

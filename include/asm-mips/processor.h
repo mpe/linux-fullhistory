@@ -139,7 +139,7 @@ struct thread_struct {
 #if !defined (__LANGUAGE_ASSEMBLY__)
 
 #define INIT_MMAP { &init_mm, KSEG0, KSEG1, PAGE_SHARED, \
-                    VM_READ | VM_WRITE | VM_EXEC }
+                    VM_READ | VM_WRITE | VM_EXEC, NULL, &init_mm.mmap }
 
 #define INIT_TSS  { \
         /* \

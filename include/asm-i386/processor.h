@@ -119,14 +119,15 @@ struct thread_struct {
 /* virtual 86 mode info */
 	struct vm86_struct * vm86_info;
 	unsigned long screen_bitmap;
-	unsigned long v86flags, v86mask, v86mode;
+	unsigned long v86flags, v86mask, v86mode, saved_esp0;
 };
 
-#define INIT_MMAP { &init_mm, 0xC0000000, 0xFFFFF000, PAGE_SHARED, VM_READ | VM_WRITE | VM_EXEC }
+#define INIT_MMAP \
+{ &init_mm, 0, 0, PAGE_SHARED, VM_READ | VM_WRITE | VM_EXEC, NULL, &init_mm.mmap }
 
 #define INIT_TSS  { \
 	0,0, \
-	sizeof(init_kernel_stack) + (long) &init_kernel_stack, \
+	sizeof(init_stack) + (long) &init_stack, \
 	KERNEL_DS, 0, \
 	0,0,0,0,0,0, \
 	(long) &swapper_pg_dir - PAGE_OFFSET, \
@@ -137,7 +138,7 @@ struct thread_struct {
 	{~0, }, /* ioperm */ \
 	_TSS(0), 0, 0, 0, KERNEL_DS, \
 	{ { 0, }, },  /* 387 state */ \
-	NULL, 0, 0, 0, 0 /* vm86_info */, \
+	NULL, 0, 0, 0, 0, 0 /* vm86_info */, \
 }
 
 #define start_thread(regs, new_eip, new_esp) do {\
@@ -164,9 +165,14 @@ extern inline unsigned long thread_saved_pc(struct thread_struct *t)
 }
 
 /* Allocation and freeing of basic task resources. */
-#define alloc_task_struct()	kmalloc(sizeof(struct task_struct), GFP_KERNEL)
-#define alloc_kernel_stack(p)	__get_free_page(GFP_KERNEL)
-#define free_task_struct(p)	kfree(p)
-#define free_kernel_stack(page) free_page((page))
+/*
+ * NOTE! The task struct and the stack go together
+ */
+#define alloc_task_struct() \
+	((struct task_struct *) __get_free_pages(GFP_KERNEL,1,0))
+#define free_task_struct(p)	free_pages((unsigned long)(p),1)
+
+#define init_task	(init_task_union.task)
+#define init_stack	(init_task_union.stack)
 
 #endif /* __ASM_I386_PROCESSOR_H */

@@ -24,18 +24,6 @@
 
 #define MAGIC_CONSTANT 0x80000000
 
-/* change a pid into a task struct. */
-static inline struct task_struct * get_task(int pid)
-{
-	int i;
-
-	for (i = 1; i < NR_TASKS; i++) {
-		if (task[i] != NULL && (task[i]->pid == pid))
-			return task[i];
-	}
-	return NULL;
-}
-
 /*
  * This routine gets a long from any process space by following the page
  * tables. NOTE! You should check that the long isn't on a page boundary,
@@ -533,7 +521,7 @@ asmlinkage void do_ptrace(struct pt_regs *regs)
 		goto out;
 	}
 #endif
-	if(!(child = get_task(pid))) {
+	if(!(child = find_task_by_pid(pid))) {
 		pt_error_return(regs, ESRCH);
 		goto out;
 	}

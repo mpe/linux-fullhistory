@@ -318,6 +318,14 @@ asmlinkage int do_signal(unsigned long oldmask, struct pt_regs * regs)
 	unsigned long signr;
 	struct sigaction * sa;
 
+	/*
+	 *    We want the common case to go fast, which
+	 * is why we may in certain cases get here from
+	 * kernel mode. Just return without doing anything
+	 * if so.
+	 */
+	if ((regs->xcs & 3) != 3)
+		return 1;
 	mask = ~current->blocked;
 	while ((signr = current->signal & mask)) {
 		/*

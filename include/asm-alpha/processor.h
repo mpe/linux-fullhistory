@@ -49,7 +49,7 @@ struct thread_struct {
 };
 
 #define INIT_MMAP { &init_mm, 0xfffffc0000000000,  0xfffffc0010000000, \
-	PAGE_SHARED, VM_READ | VM_WRITE | VM_EXEC }
+	PAGE_SHARED, VM_READ | VM_WRITE | VM_EXEC, NULL, &init_mm.mmap }
 
 #define INIT_TSS  { \
 	0, 0, 0, \

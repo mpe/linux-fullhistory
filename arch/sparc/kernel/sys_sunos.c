@@ -1,4 +1,4 @@
-/* $Id: sys_sunos.c,v 1.78 1997/04/16 05:56:12 davem Exp $
+/* $Id: sys_sunos.c,v 1.79 1997/04/23 23:01:15 ecd Exp $
  * sys_sunos.c: SunOS specific syscall compatibility support.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -20,6 +20,7 @@
 #include <linux/resource.h>
 #include <linux/ipc.h>
 #include <linux/shm.h>
+#include <linux/msg.h>
 #include <linux/sem.h>
 #include <linux/signal.h>
 #include <linux/uio.h>
@@ -1031,7 +1032,48 @@ asmlinkage int sunos_semsys(int op, unsigned long arg1, unsigned long arg2,
 	unlock_kernel();
 	return ret;
 }
-    
+
+extern asmlinkage int sys_msgget (key_t key, int msgflg);
+extern asmlinkage int sys_msgrcv (int msqid, struct msgbuf *msgp,
+				  size_t msgsz, long msgtyp, int msgflg);
+extern asmlinkage int sys_msgsnd (int msqid, struct msgbuf *msgp,
+				  size_t msgsz, int msgflg);
+extern asmlinkage int sys_msgctl (int msqid, int cmd, struct msqid_ds *buf);
+
+asmlinkage int sunos_msgsys(int op, unsigned long arg1, unsigned long arg2,
+			    unsigned long arg3, unsigned long arg4)
+{
+	struct sparc_stackf *sp;
+	unsigned long arg5;
+	int rval;
+
+	lock_kernel();
+	switch(op) {
+	case 0:
+		rval = sys_msgget((key_t)arg1, (int)arg2);
+		break;
+	case 1:
+		rval = sys_msgctl((int)arg1, (int)arg2,
+				  (struct msqid_ds *)arg3);
+		break;
+	case 2:
+		sp = (struct sparc_stackf *)current->tss.kregs->u_regs[UREG_FP];
+		arg5 = sp->xxargs[0];
+		rval = sys_msgrcv((int)arg1, (struct msgbuf *)arg2,
+				  (size_t)arg3, (long)arg4, (int)arg5);
+		break;
+	case 3:
+		rval = sys_msgsnd((int)arg1, (struct msgbuf *)arg2,
+				  (size_t)arg3, (int)arg4);
+		break;
+	default:
+		rval = -EINVAL;
+		break;
+	}
+	unlock_kernel();
+	return rval;
+}
+
 extern asmlinkage int sys_shmat (int shmid, char *shmaddr, int shmflg, ulong *raddr);
 extern asmlinkage int sys_shmctl (int shmid, int cmd, struct shmid_ds *buf);
 extern asmlinkage int sys_shmdt (char *shmaddr);

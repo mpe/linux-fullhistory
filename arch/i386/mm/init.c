@@ -139,12 +139,23 @@ extern char __init_begin, __init_end;
 #define write_cr4	".byte 0x0f,0x22,0xe0"
 #endif
 
-#define set_in_cr4(x) \
-__asm__(read_cr4 "\n\t" \
-	"orl %0,%%eax\n\t" \
-	write_cr4 \
-	: : "i" (x) \
-	:"ax");
+/*
+ * Save the cr4 feature set we're using (ie
+ * Pentium 4MB enable and PPro Global page
+ * enable), so that any CPU's that boot up
+ * after us can get the correct flags.
+ */
+unsigned long mmu_cr4_features __initdata = 0;
+
+static inline void set_in_cr4(unsigned long mask)
+{
+	mmu_cr4_features |= mask;
+	__asm__(read_cr4 "\n\t"
+		"orl %0,%%eax\n\t"
+		write_cr4
+		: : "irg" (mask)
+		:"ax");
+}
 
 /*
  * paging_init() sets up the page tables - note that the first 4MB are

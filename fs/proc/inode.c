@@ -81,7 +81,6 @@ static int parse_options(char *options,uid_t *uid,gid_t *gid)
 struct inode * proc_get_inode(struct super_block * s, int ino, struct proc_dir_entry * de)
 {
 	struct inode * inode = iget(s, ino);
-	struct task_struct *p;
 	
 #ifdef CONFIG_SUN_OPENPROMFS_MODULE
 	if ((inode->i_ino >= PROC_OPENPROM_FIRST)
@@ -111,9 +110,14 @@ struct inode * proc_get_inode(struct super_block * s, int ino, struct proc_dir_e
 	 * Fixup the root inode's nlink value
 	 */
 	if (inode->i_ino == PROC_ROOT_INO) {
-		for_each_task(p)
-			if (p && p->pid)
+		struct task_struct *p;
+
+		read_lock(&tasklist_lock);
+		for_each_task(p) {
+			if (p->pid)
 				inode->i_nlink++;
+		}
+		read_unlock(&tasklist_lock);
 	}
 	return inode;
 }			
@@ -155,7 +159,6 @@ void proc_read_inode(struct inode * inode)
 {
 	unsigned long ino, pid;
 	struct task_struct * p;
-	int i;
 	
 	inode->i_mtime = inode->i_atime = inode->i_ctime = CURRENT_TIME;
 	inode->i_blocks = 0;
@@ -170,13 +173,8 @@ void proc_read_inode(struct inode * inode)
 	inode->i_nlink = 1;
 	inode->i_size = 0;
 	pid = ino >> 16;
-	if (!pid)
-		return;
-	p = task[0];
-	for (i = 0; i < NR_TASKS ; i++)
-		if ((p = task[i]) && (p->pid == pid))
-			break;
-	if (!p || i >= NR_TASKS)
+
+	if (!pid || ((p = find_task_by_pid(pid)) == NULL))
 		return;
 
 	ino &= 0x0000ffff;
@@ -198,7 +196,6 @@ void proc_read_inode(struct inode * inode)
 				inode->i_mode |= S_IWUSR | S_IXUSR;
 			return;
 	}
-	return;
 }
 
 void proc_write_inode(struct inode * inode)
