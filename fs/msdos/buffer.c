@@ -1,3 +1,7 @@
+#ifdef MODULE
+#include <linux/module.h>
+#endif
+
 #include <linux/mm.h>
 #include <linux/malloc.h>
 #include <linux/string.h>

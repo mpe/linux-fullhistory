@@ -7,6 +7,22 @@
 #ifndef _LINUX_MODULE_H
 #define _LINUX_MODULE_H
 
+#ifdef CONFIG_MODVERSIONS
+# ifndef __GENKSYMS__
+#  ifdef MODULE
+#   define _set_ver(sym,vers) sym ## _R ## vers
+#   include <linux/modversions.h>
+#  else /* MODULE */
+#   ifdef EXPORT_SYMTAB
+#    define _set_ver(sym,vers) sym
+#    include <linux/modversions.h>
+#   endif /* EXPORT_SYMTAB */
+#  endif /* MODULE */
+# else /* __GENKSYMS__ */
+#  define _set_ver(sym,vers) sym
+#  endif /* __GENKSYMS__ */
+#endif /* CONFIG_MODVERSIONS */
+
 /* values of module.state */
 #define MOD_UNINITIALIZED 0
 #define MOD_RUNNING 1
@@ -63,6 +79,8 @@ struct mod_routines {
 /* rename_module_symbol(old_name, new_name)  WOW! */
 extern int rename_module_symbol(char *, char *);
 
+/* insert new symbol table */
+extern int register_symtab(struct symbol_table *);
 
 /*
  * The first word of the module contains the use count.
@@ -73,6 +91,9 @@ extern int rename_module_symbol(char *, char *);
  */
 
 extern int mod_use_count_;
+#if defined(CONFIG_MODVERSIONS) && defined(MODULE) && !defined(__GENKSYMS__)
+int Using_Versions; /* gcc will handle this global (used as a flag) correctly */
+#endif
 
 #define MOD_INC_USE_COUNT      mod_use_count_++
 #define MOD_DEC_USE_COUNT      mod_use_count_--

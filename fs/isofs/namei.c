@@ -6,6 +6,10 @@
  *  (C) 1991  Linus Torvalds - minix filesystem
  */
 
+#ifdef MODULE
+#include <linux/module.h>
+#endif
+
 #include <linux/sched.h>
 #include <linux/iso_fs.h>
 #include <linux/kernel.h>

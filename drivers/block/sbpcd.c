@@ -226,6 +226,7 @@
 #include <linux/errno.h>
 
 #include <linux/sched.h>
+#include <linux/mm.h>
 /* #undef DS */
 #include <linux/timer.h>
 #include <linux/fs.h>

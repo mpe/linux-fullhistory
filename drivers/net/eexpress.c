@@ -38,6 +38,11 @@ static char *version =
 	info that the casual reader might think that it documents the i82586.
 */
 
+#ifdef MODULE
+#include <linux/module.h>
+#include <linux/version.h>
+#endif
+
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/types.h>
@@ -56,11 +61,6 @@ static char *version =
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
 #include <linux/skbuff.h>
-#ifdef MODULE
-#include <linux/module.h>
-#include <linux/version.h>
-#endif
-
 #include <linux/malloc.h>
 
 /* use 0 for production, 1 for verification, 2..7 for debug */

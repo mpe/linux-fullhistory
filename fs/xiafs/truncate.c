@@ -9,6 +9,10 @@
  *  This software may be redistributed per Linux Copyright.
  */
 
+#ifdef MODULE
+#include <linux/module.h>
+#endif
+
 #include <linux/errno.h>
 #include <linux/sched.h>
 #include <linux/xia_fs.h>

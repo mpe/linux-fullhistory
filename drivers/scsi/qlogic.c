@@ -83,6 +83,10 @@
 
 /*----------------------------------------------------------------*/
 
+#ifdef MODULE
+#include <linux/module.h>
+#endif
+
 #include "../block/blk.h"	/* to get disk capacity */
 #include <linux/kernel.h>
 #include <linux/string.h>

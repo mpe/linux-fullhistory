@@ -3,11 +3,14 @@
  * with dynamically loaded kernel modules.
  *			Jon.
  *
- * Stacked module support and unified symbol table added by
- * Bjorn Ekwall <bj0rn@blox.se>
+ * - Stacked module support and unified symbol table added (June 1994)
+ * - External symbol table support added (December 1994)
+ * - Versions on symbols added (December 1994)
+ * by Bjorn Ekwall <bj0rn@blox.se>
  */
 
 #include <linux/autoconf.h>
+#include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/fs.h>
 #include <linux/blkdev.h>
@@ -22,7 +25,6 @@
 #include <linux/timer.h>
 #include <linux/binfmts.h>
 #include <linux/personality.h>
-#include <linux/module.h>
 #include <linux/termios.h>
 #include <linux/tqueue.h>
 #include <linux/tty.h>
@@ -50,9 +52,6 @@ extern struct file_operations * get_blkfops(unsigned int);
   
 extern void *sys_call_table;
 
-/* must match struct internal_symbol !!! */
-#define X(name)	{ (void *) &name, "_" #name }
-
 #ifdef CONFIG_FTAPE
 extern char * ftape_big_buffer;
 extern void (*do_floppy)(void);
@@ -69,20 +68,24 @@ extern void free_dma(unsigned int dmanr);
 
 extern void (* iABI_hook)(struct pt_regs * regs);
 
-struct symbol_table symbol_table = { 0, 0, 0, /* for stacked module support */
-	{
+struct symbol_table symbol_table = {
+#include <linux/symtab_begin.h>
+#ifdef CONFIG_MODVERSIONS
+	{ (void *)1 /* Version version :-) */, "_Using_Versions" },
+#endif
 	/* stackable module support */
 	X(rename_module_symbol),
+	X(register_symtab),
 
 	/* system info variables */
 	/* These check that they aren't defines (0/1) */
-#ifndef EISA_bus
+#ifndef EISA_bus__is_a_macro
 	X(EISA_bus),
 #endif
-#ifndef MCA_bus
+#ifndef MCA_bus__is_a_macro
 	X(MCA_bus),
 #endif
-#ifndef wp_works_ok
+#ifndef wp_works_ok__is_a_macro
 	X(wp_works_ok),
 #endif
 
@@ -329,9 +332,7 @@ struct symbol_table symbol_table = { 0, 0, 0, /* for stacked module support */
 	 * Do not add anything below this line,
 	 * as the stacked modules depend on this!
 	 */
-	{ NULL, NULL } /* mark end of table */
-	},
-	{ { NULL, NULL } /* no module refs */ }
+#include <linux/symtab_end.h>
 };
 
 /*

@@ -23,6 +23,9 @@
 #define INIT_STACK	0x00013fe0
 #define START_ADDR	0x00004000
 #define START_SIZE	(32*1024)
+#define EMPTY_PGT	0x00001000
+#define EMPTY_PGE	0x00001000
+#define ZERO_PGE	0x00001000
 
 #ifndef __ASSEMBLY__
 
@@ -38,23 +41,22 @@ extern struct linux_romvec *romvec;
 #define stbar() __asm__ __volatile__("stbar": : :"memory")
 #endif
 
-/* Changing the PIL on the sparc is a bit hairy. I figure out some
- * more optimized way of doing this soon.
+/* Changing the PIL on the sparc is a bit hairy. I'll figure out some
+ * more optimized way of doing this soon. This is bletcherous code.
  */
 
 #define swpipl(__new_ipl) \
 ({ unsigned long __old_ipl, psr; \
 __asm__ __volatile__( \
-	"and %1, 15, %1\n\t" \
-	"sll %1, 8, %1\n\t" \
-	"rd %%psr, %2\n\t" \
-	"or %%g0, %2, %0\n\t" \
-	"or %2, %1, %2\n\t" \
-	"wr %2, 0x0, %%psr\n\t" \
-	"srl %0, 8, %0\n\t" \
-        "and %0, 15, %0\n\t" \
-	: "=r" (__old_ipl) \
-	: "r" (__new_ipl), "r" (psr=0)); \
+        "rd %%psr, %0\n\t" : "=&r" (__old_ipl)); \
+__asm__ __volatile__( \
+	"and %1, 15, %0\n\t" \
+	"sll %0, 8, %0\n\t" \
+	"or  %0, %2, %0\n\t" \
+	"wr  %0, 0x0, %%psr\n\t" \
+	: "=&r" (psr) \
+	: "r" (__new_ipl), "r" (__old_ipl)); \
+__old_ipl = ((__old_ipl>>8)&15); \
 __old_ipl; })
 
 #define cli()			swpipl(15)  /* 15 = no int's except nmi's */
@@ -63,7 +65,7 @@ __old_ipl; })
 #define restore_flags(flags)	swpipl(flags)
 
 #define iret() __asm__ __volatile__ ("jmp %%l1\n\t" \
-				     "rett %l2\n\t": : :"memory")
+				     "rett %%l2\n\t": : :"memory")
 
 #define _set_gate(gate_addr,type,dpl,addr) \
 __asm__ __volatile__ ("nop\n\t")

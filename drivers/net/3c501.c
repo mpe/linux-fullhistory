@@ -71,6 +71,12 @@ static char *version =
   The 3c501 board.
   */
 
+#include <linux/config.h>
+#ifdef MODULE
+#include <linux/module.h>
+#include <linux/version.h>
+#endif
+
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/ptrace.h>
@@ -81,7 +87,6 @@ static char *version =
 #include <linux/string.h>
 #include <linux/ioport.h>
 #include <linux/errno.h>
-#include <linux/config.h>
 
 #include <asm/bitops.h>
 #include <asm/io.h>
@@ -89,11 +94,6 @@ static char *version =
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
 #include <linux/skbuff.h>
-
-#ifdef MODULE
-#include <linux/module.h>
-#include <linux/version.h>
-#endif
 
 extern struct device *init_etherdev(struct device *dev, int sizeof_private,
 				    unsigned long *mem_startp);

@@ -1,7 +1,7 @@
 #include <linux/personality.h>
 #include <linux/ptrace.h>
 #include <linux/sched.h>
-
+#include <linux/mm.h>
 
 static asmlinkage void no_lcall7(struct pt_regs * regs);
 

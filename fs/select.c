@@ -20,6 +20,7 @@
 #include <linux/signal.h>
 #include <linux/errno.h>
 #include <linux/personality.h>
+#include <linux/mm.h>
 
 #include <asm/segment.h>
 #include <asm/system.h>

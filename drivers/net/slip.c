@@ -45,6 +45,10 @@
 
 #define SL_CHECK_TRANSMIT
 #include <linux/config.h>
+#ifdef MODULE
+#include <linux/module.h>
+#include <linux/version.h>
+#endif
 
 /* Undef this, if you don't need 6bit encapsulation code in the driver */
 #define CONFIG_SLIP_MODE_SLIP6
@@ -71,11 +75,6 @@
 #include "tcp.h"
 #include "slhc.h"
 #endif
-#ifdef MODULE
-#include <linux/module.h>
-#include <linux/version.h>
-#endif
-
 
 #ifdef MODULE
 #define SLIP_VERSION    "0.8.3-NET3.019-NEWTTY-MODULAR"

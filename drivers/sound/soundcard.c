@@ -32,6 +32,7 @@
 #ifdef CONFIGURE_SOUNDCARD
 
 #include <linux/major.h>
+#include <linux/mm.h>
 
 static int      soundcards_installed = 0;	/* Number of installed
 

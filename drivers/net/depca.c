@@ -176,6 +176,11 @@
 
 static char *version = "depca.c:v0.381 12/12/94 davies@wanton.lkg.dec.com\n";
 
+#ifdef MODULE
+#include <linux/module.h>
+#include <linux/version.h>
+#endif /* MODULE */
+
 #include <stdarg.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
@@ -192,11 +197,6 @@ static char *version = "depca.c:v0.381 12/12/94 davies@wanton.lkg.dec.com\n";
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
 #include <linux/skbuff.h>
-
-#ifdef MODULE
-#include <linux/module.h>
-#include <linux/version.h>
-#endif /* MODULE */
 
 #include "depca.h"
 

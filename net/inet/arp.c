@@ -49,6 +49,7 @@
 #include <linux/errno.h>
 #include <linux/if_arp.h>
 #include <linux/in.h>
+#include <linux/mm.h>
 #include <asm/system.h>
 #include <asm/segment.h>
 #include <stdarg.h>

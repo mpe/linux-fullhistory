@@ -4,6 +4,14 @@
  *  Written 1992,1993 by Werner Almesberger
  */
 
+#ifdef MODULE
+#include <linux/module.h>
+#include <linux/version.h>
+#else
+#define MOD_INC_USE_COUNT
+#define MOD_DEC_USE_COUNT
+#endif
+
 #include <linux/msdos_fs.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
@@ -17,14 +25,6 @@
 #include <linux/locks.h>
 
 #include "msbuffer.h"
-
-#ifdef MODULE
-#include <linux/module.h>
-#include <linux/version.h>
-#else
-#define MOD_INC_USE_COUNT
-#define MOD_DEC_USE_COUNT
-#endif
 
 #include <asm/segment.h>
 

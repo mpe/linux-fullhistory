@@ -1,6 +1,6 @@
 VERSION = 1
 PATCHLEVEL = 1
-SUBLEVEL = 84
+SUBLEVEL = 85
 
 ARCH = i386
 
@@ -194,9 +194,32 @@ drivers: dummy
 net: dummy
 	$(MAKE) linuxsubdirs SUBDIRS=net
 
+ifdef CONFIG_MODVERSIONS
+MODV = -DCONFIG_MODVERSIONS
+endif
+
 modules: dummy
-	@set -e; for i in $(SUBDIRS); do $(MAKE) -C $$i CFLAGS="$(CFLAGS) -DMODULE" modules; done
+	@set -e; for i in $(SUBDIRS); do $(MAKE) -C $$i CFLAGS="$(CFLAGS) -DMODULE $(MODV)" modules; done
 	
+modules_install:
+	@( \
+	MODLIB=/lib/modules/$(VERSION).$(PATCHLEVEL).$(SUBLEVEL); \
+	cd modules; \
+	MODULES=""; \
+	inst_mod() { These="`cat $$1`"; MODULES="$$MODULES $$These"; \
+		mkdir -p $$MODLIB/$$2; cp -p $$These $$MODLIB/$$2; \
+		echo Installing modules under $$MODLIB/$$2; \
+	}; \
+	\
+	if [ -f NET_MODULES  ]; then inst_mod NET_MODULES  net;  fi; \
+	if [ -f SCSI_MODULES ]; then inst_mod SCSI_MODULES scsi; fi; \
+	if [ -f FS_MODULES   ]; then inst_mod FS_MODULES   fs;   fi; \
+	\
+	ls *.o > .allmods; \
+	echo $$MODULES | tr ' ' '\n' | sort | comm -23 .allmods - > .misc; \
+	inst_mod .misc misc; \
+	rm -f .misc .allmods; \
+	)
 
 clean:	archclean
 	rm -f kernel/ksyms.lst
@@ -204,6 +227,11 @@ clean:	archclean
 	rm -f core `find . -name 'core' -print`
 	rm -f vmlinux System.map
 	rm -f .tmp* drivers/sound/configure
+	rm -fr modules/*
+ifdef CONFIG_MODVERSIONS
+	rm -f $(TOPDIR)/include/linux/modversions.h
+	rm -f $(TOPDIR)/include/linux/modules/*
+endif
 
 mrproper: clean
 	rm -f include/linux/autoconf.h include/linux/version.h
@@ -224,6 +252,12 @@ depend dep: archdep
 	set -e; for i in $(SUBDIRS); do $(MAKE) -C $$i dep; done
 	rm -f include/linux/version.h
 	mv .tmpdepend .depend
+ifdef CONFIG_MODVERSIONS
+	@echo updating $(TOPDIR)/include/linux/modversions.h
+	@(cd $(TOPDIR)/include/linux/modules; for f in *.ver;\
+	do echo "#include <linux/modules/$${f}>"; done) \
+	> $(TOPDIR)/include/linux/modversions.h
+endif
 
 ifdef CONFIGURATION
 ..$(CONFIGURATION):

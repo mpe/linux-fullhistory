@@ -22,6 +22,7 @@
 
 #include <linux/errno.h>
 #include <linux/sched.h>
+#include <linux/mm.h>
 #include <linux/fs.h>
 #include <linux/kernel.h>
 #include <linux/genhd.h>

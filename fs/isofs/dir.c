@@ -8,6 +8,10 @@
  *  isofs directory handling functions
  */
 
+#ifdef MODULE
+#include <linux/module.h>
+#endif
+
 #include <linux/errno.h>
 
 #include <asm/segment.h>

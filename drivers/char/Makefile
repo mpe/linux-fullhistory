@@ -45,6 +45,8 @@ endif
 ifdef CONFIG_PRINTER
 OBJS := $(OBJS) lp.o
 SRCS := $(SRCS) lp.c
+else
+MODULES := $(MODULES) lp.o
 endif
 
 ifdef CONFIG_MS_BUSMOUSE
@@ -73,8 +75,6 @@ OBJS := $(OBJS) mouse.o
 SRCS := $(SRCS) mouse.c
 endif
 
-MODULES := lp.o
-
 all: char.a
 
 char.a: $(OBJS)
@@ -94,6 +94,7 @@ endif
 
 dep:
 	$(CPP) -M $(SRCS) > .depend
+	$(CPP) -M -DMODULE $(MODULES:.o=.c) >> .depend
 
 dummy:
 

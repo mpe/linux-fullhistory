@@ -5,6 +5,10 @@
  *
  *  Extended MS-DOS directory handling functions
  */
+#ifdef MODULE
+#include <linux/module.h>
+#endif
+
 #include <linux/types.h>
 #include <linux/fcntl.h>
 #include <linux/kernel.h>

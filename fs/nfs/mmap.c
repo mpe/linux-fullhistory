@@ -9,6 +9,10 @@
  *	Copyright (C) 1993
  *
  */
+#ifdef MODULE
+#include <linux/module.h>
+#endif
+
 #include <linux/stat.h>
 #include <linux/sched.h>
 #include <linux/kernel.h>

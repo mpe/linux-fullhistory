@@ -9,6 +9,10 @@
  *  This software may be redistributed per Linux Copyright.
  */
 
+#ifdef MODULE
+#include <linux/module.h>
+#endif
+
 #include <asm/segment.h>
 #include <asm/system.h>
 

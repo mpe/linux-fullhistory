@@ -20,6 +20,14 @@
  *  the superblock.
  */
 
+#ifdef MODULE
+#include <linux/module.h>
+#include <linux/version.h>
+#else
+#define MOD_INC_USE_COUNT
+#define MOD_DEC_USE_COUNT
+#endif
+
 #include <linux/sched.h>
 #include <linux/kernel.h>
 #include <linux/fs.h>
@@ -29,14 +37,6 @@
 #include <linux/locks.h>
 
 #include <asm/segment.h>
-
-#ifdef MODULE
-#include <linux/module.h>
-#include <linux/version.h>
-#else
-#define MOD_INC_USE_COUNT
-#define MOD_DEC_USE_COUNT
-#endif
 
 void sysv_put_inode(struct inode *inode)
 {

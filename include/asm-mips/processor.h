@@ -68,11 +68,13 @@ __asm__ __volatile__(            \
  */
 extern int EISA_bus;
 #define MCA_bus 0
+#define MCA_bus__is_a_macro /* for versions in ksyms.c */
 
 /*
  * MIPS has no problems with write protection
  */
 #define wp_works_ok 1
+#define wp_works_ok__is_a_macro /* for versions in ksyms.c */
 
 /*
  * User space process size: 2GB. This is hardcoded into a few places,

@@ -21,6 +21,11 @@
 
 static char *version = "apricot.c:v0.2 05/12/94\n";
 
+#ifdef MODULE
+#include <linux/module.h>
+#include <linux/version.h>
+#endif
+
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/string.h>
@@ -36,11 +41,6 @@ static char *version = "apricot.c:v0.2 05/12/94\n";
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
 #include <linux/skbuff.h>
-
-#ifdef MODULE
-#include <linux/module.h>
-#include <linux/version.h>
-#endif
 
 #ifndef HAVE_PORTRESERVE
 #define check_region(addr, size)	0

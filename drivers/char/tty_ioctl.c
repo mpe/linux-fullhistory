@@ -17,6 +17,7 @@
 #include <linux/tty.h>
 #include <linux/fcntl.h>
 #include <linux/string.h>
+#include <linux/mm.h>
 
 #include <asm/io.h>
 #include <asm/bitops.h>

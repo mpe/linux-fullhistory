@@ -121,8 +121,18 @@ int do_mmap(struct file * file, unsigned long addr, unsigned long len,
 			vma->vm_flags |= VM_MAYREAD | VM_MAYWRITE | VM_MAYEXEC;
 		if (flags & MAP_SHARED) {
 			vma->vm_flags |= VM_SHARED | VM_MAYSHARE;
+			/*
+			 * This looks strange, but when we don't have the file open
+			 * for writing, we can demote the shared mapping to a simpler
+			 * private mapping. That also takes care of a security hole
+			 * with ptrace() writing to a shared mapping without write
+			 * permissions.
+			 *
+			 * We leave the VM_MAYSHARE bit on, just to get correct output
+			 * from /proc/xxx/maps..
+			 */
 			if (!(file->f_mode & 2))
-				vma->vm_flags &= ~VM_MAYWRITE;
+				vma->vm_flags &= ~(VM_MAYWRITE | VM_SHARED);
 		}
 	} else
 		vma->vm_flags |= VM_MAYREAD | VM_MAYWRITE | VM_MAYEXEC;

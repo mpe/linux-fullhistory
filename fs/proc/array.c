@@ -41,6 +41,7 @@
 #include <linux/ioport.h>
 #include <linux/config.h>
 #include <linux/delay.h>
+#include <linux/mm.h>
 
 #include <asm/segment.h>
 #include <asm/io.h>
@@ -627,7 +628,7 @@ static int read_maps (int pid, struct file * file, char * buf, int count)
 		*cp++ = flags & VM_READ ? 'r' : '-';
 		*cp++ = flags & VM_WRITE ? 'w' : '-';
 		*cp++ = flags & VM_EXEC ? 'x' : '-';
-		*cp++ = flags & VM_SHARED ? 's' : 'p';
+		*cp++ = flags & VM_MAYSHARE ? 's' : 'p';
 		*cp++ = 0;
 
 		if (map->vm_inode != NULL) {

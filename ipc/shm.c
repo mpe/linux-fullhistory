@@ -396,7 +396,7 @@ static inline void remove_attach (struct shmid_ds * shp, struct vm_area_struct *
 				shmd->vm_flags & VM_READ ? 'r' : '-',
 				shmd->vm_flags & VM_WRITE ? 'w' : '-',
 				shmd->vm_flags & VM_EXEC ? 'x' : '-',
-				shmd->vm_flags & VM_SHARED ? 's' : 'p',
+				shmd->vm_flags & VM_MAYSHARE ? 's' : 'p',
 				shmd->vm_offset, shmd->vm_pte);
 		}
 		shp->attaches = NULL;

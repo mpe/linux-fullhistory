@@ -1,6 +1,6 @@
 /* netdrv_init.c: Initialization for network devices. */
 /*
-	Written 1993,1994 by Donald Becker.
+	Written 1993,1994,1995 by Donald Becker.
 
 	The author may be reached as becker@cesdis.gsfc.nasa.gov or
 	C/O Center of Excellence in Space Data and Information Sciences
@@ -108,11 +108,13 @@ init_etherdev(struct device *dev, int sizeof_priv, unsigned long *mem_startp)
 					if (strcmp(pname, cur_dev->name) == 0) {
 						dev = cur_dev;
 						dev->init = NULL;
+						sizeof_priv = (sizeof_priv + 3) & ~3;
 						if (mem_startp && *mem_startp ) {
 							dev->priv = (void*) *mem_startp;
-							*mem_startp += sizeof_priv + 3;
+							*mem_startp += sizeof_priv;
 						} else
-							dev->priv = kmalloc(sizeof_priv + 3, GFP_KERNEL);
+							dev->priv = kmalloc(sizeof_priv, GFP_KERNEL);
+						memset(dev->priv, 0, sizeof_priv);
 						goto found;
 					}
 			}

@@ -2,6 +2,8 @@
 # Makefile for Sparc library files..
 #
 
+CFLAGS := $(CFLAGS) -ansi
+
 .c.s:
 	$(CC) $(CFLAGS) -S $<
 .s.o:

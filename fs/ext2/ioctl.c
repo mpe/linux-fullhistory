@@ -13,6 +13,7 @@
 #include <linux/ext2_fs.h>
 #include <linux/ioctl.h>
 #include <linux/sched.h>
+#include <linux/mm.h>
 
 int ext2_ioctl (struct inode * inode, struct file * filp, unsigned int cmd,
 		unsigned long arg)

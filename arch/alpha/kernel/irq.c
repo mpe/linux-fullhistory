@@ -103,6 +103,40 @@ int get_irq_list(char *buf)
 	return len;
 }
 
+static inline void ack_irq(int irq)
+{
+	/* ACK the interrupt making it the lowest priority */
+	/*  First the slave .. */
+	if (irq > 7) {
+		outb(0xE0 | (irq - 8), 0xa0);
+		irq = 2;
+	}
+	/* .. then the master */
+	outb(0xE0 | irq, 0x20);
+}
+
+static inline void mask_irq(int irq)
+{
+	if (irq < 8) {
+		cache_21 |= 1 << irq;
+		outb(cache_21, 0x21);
+	} else {
+		cache_A1 |= 1 << (irq - 8);
+		outb(cache_A1, 0xA1);
+	}
+}
+
+static inline void unmask_irq(unsigned long irq)
+{
+	if (irq < 8) {
+		cache_21 &= ~(1 << irq);
+		outb(cache_21, 0x21);
+	} else {
+		cache_A1 &= ~(1 << (irq - 8));
+		outb(cache_A1, 0xA1);
+	}
+}
+
 int request_irq(unsigned int irq, void (*handler)(int, struct pt_regs *),
 	unsigned long irqflags, const char * devname)
 {
@@ -122,7 +156,7 @@ int request_irq(unsigned int irq, void (*handler)(int, struct pt_regs *),
 	action->flags = irqflags;
 	action->mask = 0;
 	action->name = devname;
-	if (irq < 8) {
+	if (irq < 8 && irq) {
 		cache_21 &= ~(1<<irq);
 		outb(cache_21,0x21);
 	} else {
@@ -137,7 +171,25 @@ int request_irq(unsigned int irq, void (*handler)(int, struct pt_regs *),
 
 void free_irq(unsigned int irq)
 {
-	halt();
+	struct irqaction * action = irq + irq_action;
+	unsigned long flags;
+
+	if (irq > 15) {
+		printk("Trying to free IRQ%d\n", irq);
+		return;
+	}
+	if (!action->handler) {
+		printk("Trying to free free IRQ%d\n", irq);
+		return;
+	}
+	save_flags(flags);
+	cli();
+	mask_irq(irq);
+	action->handler = NULL;
+	action->flags = 0;
+	action->mask = 0;
+	action->name = NULL;
+	restore_flags(flags);
 }
 
 static void handle_nmi(struct pt_regs * regs)
@@ -229,6 +281,7 @@ static void local_device_interrupt(unsigned long vector, struct pt_regs * regs)
 static void device_interrupt(unsigned long vector, struct pt_regs * regs)
 {
 	int irq, ack;
+	struct irqaction * action;
 
 	if (vector == 0x660) {
 		handle_nmi(regs);
@@ -246,19 +299,73 @@ static void device_interrupt(unsigned long vector, struct pt_regs * regs)
 		irq = 7;
 #endif
 	printk("%d%d", irq, ack);
-	if (!irq)
-		printk(".");
-	else
-		handle_irq(irq, regs);
-
-	/* ACK the interrupt making it the lowest priority */
-	/*  First the slave .. */
-	if (ack > 7) {
-		outb(0xC0 | (ack - 8), 0xa0);
-		ack = 2;
+	kstat.interrupts[irq]++;
+	action = irq_action + irq;
+	/* quick interrupts get executed with no extra overhead */
+	if (action->flags & SA_INTERRUPT) {
+		action->handler(irq, regs);
+		ack_irq(ack);
+		return;
 	}
-	/* .. then the master */
-	outb(0xC0 | ack, 0x20);
+	/*
+	 * For normal interrupts, we mask it out, and then ACK it.
+	 * This way another (more timing-critical) interrupt can
+	 * come through while we're doing this one.
+	 *
+	 * Note! A irq without a handler gets masked and acked, but
+	 * never unmasked. The autoirq stuff depends on this (it looks
+	 * at the masks before and after doing the probing).
+	 */
+	mask_irq(ack);
+	ack_irq(ack);
+	if (!action->handler)
+		return;
+	action->handler(irq, regs);
+	unmask_irq(ack);
+}
+
+/*
+ * Start listening for interrupts..
+ */
+unsigned int probe_irq_on(void)
+{
+	unsigned int i, irqs = 0, irqmask;
+	unsigned long delay;
+
+	for (i = 15; i > 0; i--) {
+		if (!irq_action[i].handler) {
+			enable_irq(i);
+			irqs |= (1 << i);
+		}
+	}
+
+	/* wait for spurious interrupts to mask themselves out again */
+	for (delay = jiffies + HZ/10; delay > jiffies; )
+		/* about 100 ms delay */;
+	
+	/* now filter out any obviously spurious interrupts */
+	irqmask = (((unsigned int)cache_A1)<<8) | (unsigned int) cache_21;
+	irqs &= ~irqmask;
+	return irqs;
+}
+
+/*
+ * Get the result of the IRQ probe.. A negative result means that
+ * we have several candidates (but we return the lowest-numbered
+ * one).
+ */
+int probe_irq_off(unsigned int irqs)
+{
+	unsigned int i, irqmask;
+	
+	irqmask = (((unsigned int)cache_A1)<<8) | (unsigned int)cache_21;
+	irqs &= irqmask;
+	if (!irqs)
+		return 0;
+	i = ffz(~irqs);
+	if (irqs != (1 << i))
+		i = -i;
+	return i;
 }
 
 static void machine_check(unsigned long vector, unsigned long la_ptr, struct pt_regs * regs)

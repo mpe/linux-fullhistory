@@ -33,6 +33,7 @@
 #include <linux/ptrace.h>
 #include <linux/major.h>
 #include <linux/ioport.h>
+#include <linux/mm.h>
 
 #include <asm/system.h>
 #include <asm/io.h>

@@ -40,6 +40,8 @@
  *			Fixes for memory leaks.
  *      - Oct 1994      Dmitry Gorodchanin
  *                      Modularization.
+ *	- Jan 1995	Bjorn Ekwall
+ *			Use ip_fast_csum from ip.h
  *
  *
  *	This module is a difficult issue. Its clearly inet code but its also clearly
@@ -49,6 +51,11 @@
 #include <linux/config.h>
 #ifdef CONFIG_INET
 /* Entire module is for IP only */
+#ifdef MODULE
+#include <linux/module.h>
+#include <linux/version.h>
+#endif
+
 #include <linux/types.h>
 #include <linux/sched.h>
 #include <linux/mm.h>
@@ -73,20 +80,12 @@
 #include <linux/mm.h>
 #include "slhc.h"
 
-#ifdef MODULE
-#include <linux/module.h>
-#include <linux/version.h>
-#endif
-
 int last_retran;
 
 static unsigned char *encode(unsigned char *cp, unsigned short n);
 static long decode(unsigned char **cpp);
 static unsigned char * put16(unsigned char *cp, unsigned short x);
 static unsigned short pull16(unsigned char **cpp);
-
-extern int ip_csum(struct iphdr *iph);
-
 
 /* Initialize compression data structure
  *	slots must be in range 0 to 255 (zero meaning no compression)
@@ -619,7 +618,7 @@ slhc_uncompress(struct slcompress *comp, unsigned char *icp, int isize)
 	  cp += ((ip->ihl) - 5) * 4;
 	}
 
-	((struct iphdr *)icp)->check = ip_csum((struct iphdr*)icp);
+	((struct iphdr *)icp)->check = ip_fast_csum(icp, ((struct iphdr*)icp)->ihl);
 
 	memcpy(cp, thp, 20);
 	cp += 20;
@@ -662,7 +661,7 @@ slhc_remember(struct slcompress *comp, unsigned char *icp, int isize)
 	icp[9] = IPPROTO_TCP;
 	ip = (struct iphdr *) icp;
 
-	if (ip_csum(ip)) {
+	if (ip_fast_csum(icp, ip->ihl)) {
 		/* Bad IP header checksum; discard */
 		comp->sls_i_badcheck++;
 		return slhc_toss( comp );

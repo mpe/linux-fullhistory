@@ -6,6 +6,14 @@
  *
  */
 
+#ifdef MODULE
+#include <linux/module.h>
+#include <linux/version.h>
+#else
+#define MOD_INC_USE_COUNT
+#define MOD_DEC_USE_COUNT
+#endif
+
 #include <linux/fs.h>
 #include <linux/msdos_fs.h>
 #include <linux/kernel.h>
@@ -15,14 +23,6 @@
 #include <linux/string.h>
 #include <linux/stat.h>
 #include <linux/umsdos_fs.h>
-
-#ifdef MODULE
-#include <linux/module.h>
-#include <linux/version.h>
-#else
-#define MOD_INC_USE_COUNT
-#define MOD_DEC_USE_COUNT
-#endif
 
 struct inode *pseudo_root=NULL;		/* Useful to simulate the pseudo DOS */
 									/* directory. See UMSDOS_readdir_x() */

@@ -27,6 +27,11 @@
 static char *version = "3c509.c:1.03 10/8/94 becker@cesdis.gsfc.nasa.gov\n";
 
 #include <linux/config.h>
+#ifdef MODULE
+#include <linux/module.h>
+#include <linux/version.h>
+#endif
+
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/string.h>
@@ -42,11 +47,6 @@ static char *version = "3c509.c:1.03 10/8/94 becker@cesdis.gsfc.nasa.gov\n";
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
 #include <linux/skbuff.h>
-#ifdef MODULE
-#include <linux/module.h>
-#include <linux/version.h>
-#endif
-
 
 
 #ifdef EL3_DEBUG

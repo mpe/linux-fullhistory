@@ -1,3 +1,7 @@
+#ifdef MODULE
+#include <linux/module.h>
+#endif
+
 #include <asm/system.h>
 
 #include <linux/signal.h>

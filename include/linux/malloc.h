@@ -2,6 +2,7 @@
 #define _LINUX_MALLOC_H
 
 #include <linux/config.h>
+#include <linux/mm.h>
 
 #ifdef CONFIG_DEBUG_MALLOC
 #define kmalloc(a,b) deb_kmalloc(__FILE__,__LINE__,a,b)

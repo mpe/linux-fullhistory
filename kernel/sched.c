@@ -25,6 +25,7 @@
 #include <linux/interrupt.h>
 #include <linux/tqueue.h>
 #include <linux/resource.h>
+#include <linux/mm.h>
 
 #include <asm/system.h>
 #include <asm/io.h>

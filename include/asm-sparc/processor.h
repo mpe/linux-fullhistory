@@ -10,13 +10,16 @@
  * Bus types
  */
 #define EISA_bus 1
+#define EISA_bus__is_a_macro /* for versions in ksyms.c */
 #define MCA_bus 0
+#define MCA_bus__is_a_macro /* for versions in ksyms.c */
 
 /*
  * Write Protection works right in supervisor mode on the Sparc
  */
 
 #define wp_works_ok 1
+#define wp_works_ok__is_a_macro /* for versions in ksyms.c */
 
 /*
  * User space process size: 3GB. This is hardcoded into a few places,

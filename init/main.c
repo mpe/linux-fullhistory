@@ -24,6 +24,7 @@
 #include <linux/utsname.h>
 #include <linux/ioport.h>
 #include <linux/hdreg.h>
+#include <linux/mm.h>
 
 #include <asm/bugs.h>
 

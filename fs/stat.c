@@ -10,6 +10,8 @@
 #include <linux/fs.h>
 #include <linux/sched.h>
 #include <linux/kernel.h>
+#include <linux/mm.h>
+
 #include <asm/segment.h>
 
 static void cp_old_stat(struct inode * inode, struct old_stat * statbuf)

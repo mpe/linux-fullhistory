@@ -165,6 +165,7 @@
 #include <linux/bios32.h>
 #include <linux/pci.h>
 #include <linux/string.h>
+#include <linux/mm.h>
 #include "../block/blk.h"
 #include "scsi.h"
 #include "hosts.h"

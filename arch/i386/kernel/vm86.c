@@ -9,6 +9,7 @@
 #include <linux/signal.h>
 #include <linux/string.h>
 #include <linux/ptrace.h>
+#include <linux/mm.h>
 
 #include <asm/segment.h>
 #include <asm/io.h>

@@ -29,6 +29,11 @@ static char *version =
   The National Semiconductor LAN Databook, and the 3Com 3c503 databook.
   */
 
+#ifdef MODULE
+#include <linux/module.h>
+#include <linux/version.h>
+#endif
+
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/fs.h>
@@ -49,11 +54,6 @@ static char *version =
 #include <linux/skbuff.h>
 
 #include "8390.h"
-
-#ifdef MODULE
-#include <linux/module.h>
-#include <linux/version.h>
-#endif
 
 /* These are the operational function interfaces to board-specific
    routines.

@@ -9,6 +9,10 @@
  *  extensions to iso9660
  */
 
+#ifdef MODULE
+#include <linux/module.h>
+#endif
+
 #include <asm/segment.h>
 
 #include <linux/errno.h>

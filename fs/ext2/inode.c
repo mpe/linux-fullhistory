@@ -24,6 +24,7 @@
 #include <linux/stat.h>
 #include <linux/string.h>
 #include <linux/locks.h>
+#include <linux/mm.h>
 
 void ext2_put_inode (struct inode * inode)
 {

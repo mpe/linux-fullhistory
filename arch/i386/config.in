@@ -35,6 +35,9 @@ bool 'Kernel support for ELF binaries' CONFIG_BINFMT_ELF y
 bool 'Use -m486 flag for 486-specific optimizations' CONFIG_M486 y
 #fi
 
+comment 'Loadable module support'
+bool 'Set version information on all symbols for modules' CONFIG_MODVERSIONS n
+
 if [ "$CONFIG_NET" = "y" ]; then
 comment 'Networking options'
 bool 'TCP/IP networking' CONFIG_INET y

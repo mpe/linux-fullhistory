@@ -1,14 +1,14 @@
 #ifndef _LINUX_MM_H
 #define _LINUX_MM_H
 
-extern unsigned long high_memory;
-
-#include <asm/page.h>
-
 #include <linux/sched.h>
 #include <linux/errno.h>
 #include <linux/kernel.h>
 #include <linux/string.h>
+
+extern unsigned long high_memory;
+
+#include <asm/page.h>
 
 #define VERIFY_READ 0
 #define VERIFY_WRITE 1

@@ -17,6 +17,7 @@ extern unsigned long event;
 #include <linux/binfmts.h>
 #include <linux/personality.h>
 #include <linux/tasks.h>
+#include <linux/kernel.h>
 #include <asm/system.h>
 
 /*
@@ -51,7 +52,6 @@ extern unsigned long avenrun[];		/* Load averages */
 
 #include <linux/head.h>
 #include <linux/fs.h>
-#include <linux/mm.h>
 #include <linux/signal.h>
 #include <linux/time.h>
 #include <linux/param.h>

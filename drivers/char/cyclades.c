@@ -182,6 +182,7 @@ static char rcsid[] =
 #include <linux/cyclades.h>
 #include <linux/delay.h>
 #include <linux/major.h>
+#include <linux/mm.h>
 
 #include <asm/system.h>
 #include <asm/io.h>

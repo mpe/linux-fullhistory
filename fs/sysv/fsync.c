@@ -14,6 +14,10 @@
  *  SystemV/Coherent fsync primitive
  */
 
+#ifdef MODULE
+#include <linux/module.h>
+#endif
+
 #include <linux/errno.h>
 #include <linux/stat.h>
 

@@ -23,6 +23,7 @@
 #include <linux/kernel.h>
 #include <linux/param.h>
 #include <linux/string.h>
+#include <linux/mm.h>
 
 #include <asm/segment.h>
 #include <asm/io.h>

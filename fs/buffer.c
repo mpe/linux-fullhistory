@@ -33,6 +33,7 @@ static char buffersize_index[9] = {-1,  0,  1, -1,  2, -1, -1, -1, 3};
 static short int bufferindex_size[NR_SIZES] = {512, 1024, 2048, 4096};
 
 #define BUFSIZE_INDEX(X) ((int) buffersize_index[(X)>>9])
+#define MAX_BUF_PER_PAGE (PAGE_SIZE / 512)
 
 static int grow_buffers(int pri, int size);
 static int shrink_specific_buffers(unsigned int priority, int size);
@@ -258,14 +259,16 @@ void invalidate_buffers(dev_t dev)
 
 	for(nlist = 0; nlist < NR_LIST; nlist++) {
 		bh = lru_list[nlist];
-		for (i = nr_buffers_type[nlist]*2 ; --i > 0 ; 
-		     bh = bh->b_next_free) {
+		for (i = nr_buffers_type[nlist]*2 ; --i > 0 ; bh = bh->b_next_free) {
 			if (bh->b_dev != dev)
-				 continue;
+				continue;
 			wait_on_buffer(bh);
-			if (bh->b_dev == dev)
-				 bh->b_flushtime = bh->b_uptodate = 
-					  bh->b_dirt = bh->b_req = 0;
+			if (bh->b_dev != dev)
+				continue;
+			if (bh->b_count)
+				continue;
+			bh->b_flushtime = bh->b_uptodate = 
+				bh->b_dirt = bh->b_req = 0;
 		}
 	}
 }
@@ -962,7 +965,7 @@ static void read_buffers(struct buffer_head * bh[], int nrbuf)
 {
 	int i;
 	int bhnum = 0;
-	struct buffer_head * bhr[8];
+	struct buffer_head * bhr[MAX_BUF_PER_PAGE];
 
 	for (i = 0 ; i < nrbuf ; i++) {
 		if (bh[i] && !bh[i]->b_uptodate)
@@ -996,7 +999,7 @@ static unsigned long try_to_align(struct buffer_head ** bh, int nrbuf,
 static unsigned long check_aligned(struct buffer_head * first, unsigned long address,
 	dev_t dev, int *b, int size)
 {
-	struct buffer_head * bh[8];
+	struct buffer_head * bh[MAX_BUF_PER_PAGE];
 	unsigned long page;
 	unsigned long offset;
 	int block;
@@ -1037,7 +1040,7 @@ no_go:
 static unsigned long try_to_load_aligned(unsigned long address,
 	dev_t dev, int b[], int size)
 {
-	struct buffer_head * bh, * tmp, * arr[8];
+	struct buffer_head * bh, * tmp, * arr[MAX_BUF_PER_PAGE];
 	unsigned long offset;
         int isize = BUFSIZE_INDEX(size);
 	int * p;
@@ -1128,7 +1131,7 @@ static inline unsigned long try_to_share_buffers(unsigned long address,
  */
 unsigned long bread_page(unsigned long address, dev_t dev, int b[], int size, int no_share)
 {
-	struct buffer_head * bh[8];
+	struct buffer_head * bh[MAX_BUF_PER_PAGE];
 	unsigned long where;
 	int i, j;
 
@@ -1518,7 +1521,7 @@ static int reassign_cluster(dev_t dev,
  */
 static unsigned long try_to_generate_cluster(dev_t dev, int block, int size)
 {
-	struct buffer_head * bh, * tmp, * arr[8];
+	struct buffer_head * bh, * tmp, * arr[MAX_BUF_PER_PAGE];
         int isize = BUFSIZE_INDEX(size);
 	unsigned long offset;
 	unsigned long page;

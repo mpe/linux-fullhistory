@@ -6,6 +6,14 @@
  *  (C) 1991  Linus Torvalds - minix filesystem
  */
 
+#ifdef MODULE
+#include <linux/module.h>
+#include <linux/version.h>
+#else
+#define MOD_INC_USE_COUNT
+#define MOD_DEC_USE_COUNT
+#endif
+
 #include <linux/stat.h>
 #include <linux/sched.h>
 #include <linux/iso_fs.h>
@@ -20,14 +28,6 @@
 
 #include <asm/system.h>
 #include <asm/segment.h>
-
-#ifdef MODULE
-#include <linux/module.h>
-#include <linux/version.h>
-#else
-#define MOD_INC_USE_COUNT
-#define MOD_DEC_USE_COUNT
-#endif
 
 #ifdef LEAK_CHECK
 static int check_malloc = 0;

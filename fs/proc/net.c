@@ -31,6 +31,7 @@
 #include <linux/proc_fs.h>
 #include <linux/stat.h>
 #include <linux/config.h>
+#include <linux/mm.h>
 
 /* forward references */
 static int proc_readnet(struct inode * inode, struct file * file,

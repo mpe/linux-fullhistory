@@ -9,12 +9,15 @@
 #include <linux/kernel.h>
 #include <linux/locks.h>
 #include <linux/fcntl.h>
+#include <linux/mm.h>
+
 #include <asm/segment.h>
 #include <asm/system.h>
 
 extern int *blk_size[];
 extern int *blksize_size[];
 
+#define MAX_BUF_PER_PAGE (PAGE_SIZE / 512)
 #define NBUF 64
 
 int block_write(struct inode * inode, struct file * filp, char * buf, int count)
@@ -24,7 +27,7 @@ int block_write(struct inode * inode, struct file * filp, char * buf, int count)
 	loff_t offset;
 	int chars;
 	int written = 0;
-	int cluster_list[8];
+	int cluster_list[MAX_BUF_PER_PAGE];
 	struct buffer_head * bhlist[NBUF];
 	int blocks_per_cluster;
 	unsigned int size;
@@ -162,7 +165,7 @@ int block_read(struct inode * inode, struct file * filp, char * buf, int count)
 	int blocksize_bits, i;
 	unsigned int blocks, rblocks, left;
 	int bhrequest, uptodate;
-	int cluster_list[8];
+	int cluster_list[MAX_BUF_PER_PAGE];
 	int blocks_per_cluster;
 	struct buffer_head ** bhb, ** bhe;
 	struct buffer_head * buflist[NBUF];

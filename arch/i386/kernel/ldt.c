@@ -7,6 +7,7 @@
 #include <linux/errno.h>
 #include <linux/sched.h>
 #include <linux/string.h>
+#include <linux/mm.h>
 #include <asm/segment.h>
 #include <asm/system.h>
 #include <linux/ldt.h>

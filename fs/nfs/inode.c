@@ -9,9 +9,6 @@
  *  experimental NFS changes. Modularisation taken straight from SYS5 fs.
  */
 
-#include <asm/system.h>
-#include <asm/segment.h>
-
 #ifdef MODULE
 #include <linux/module.h>
 #include <linux/version.h>
@@ -19,6 +16,9 @@
 #define MOD_INC_USE_COUNT
 #define MOD_DEC_USE_COUNT
 #endif
+
+#include <asm/system.h>
+#include <asm/segment.h>
 
 #include <linux/sched.h>
 #include <linux/nfs_fs.h>

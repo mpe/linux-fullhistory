@@ -41,10 +41,8 @@ asmlinkage int sys_sigsuspend(int restart, unsigned long oldmask, unsigned long 
 
 asmlinkage int sys_sigreturn(unsigned long __unused)
 {
-  __unused=1;
-
-  do_exit(SIGSEGV);
-  return __unused;
+  halt();
+  return 0;
 }
 
 /*
@@ -54,7 +52,7 @@ asmlinkage int sys_sigreturn(unsigned long __unused)
 void setup_frame(struct sigaction * sa, unsigned long ** fp, unsigned long eip,
 	struct pt_regs * regs, int signr, unsigned long oldmask)
 {
-  return;
+  halt();
 }
 
 /*
@@ -68,5 +66,6 @@ void setup_frame(struct sigaction * sa, unsigned long ** fp, unsigned long eip,
  */
 asmlinkage int do_signal(unsigned long oldmask, struct pt_regs * regs)
 {
-	return 1;
+  halt();
+  return 1;
 }

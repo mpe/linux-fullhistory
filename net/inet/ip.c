@@ -63,6 +63,8 @@
  *		Alan Cox	:	Multicast loopback error for 224.0.0.1
  *		Alan Cox	:	IP_MULTICAST_LOOP option.
  *		Alan Cox	:	Use notifiers.
+ *		Bjorn Ekwall	:	Removed ip_csum (from slhc.c too)
+ *		Bjorn Ekwall	:	Moved ip_fast_csum to ip.h (inline!)
  *
  * To Fix:
  *		IP option processing is mostly not needed. ip_forward needs to know about routing rules
@@ -86,6 +88,7 @@
 #include <linux/types.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
+#include <linux/mm.h>
 #include <linux/string.h>
 #include <linux/errno.h>
 #include <linux/config.h>
@@ -488,35 +491,6 @@ do_options(struct iphdr *iph, struct options *opt)
 }
 
 /*
- *	This is a version of ip_compute_csum() optimized for IP headers, which
- *	always checksum on 4 octet boundaries.
- */
-
-static inline unsigned short ip_fast_csum(unsigned char * buff, int wlen)
-{
-	unsigned long sum = 0;
-
-	if (wlen)
-	{
-	unsigned long bogus;
-	 __asm__("clc\n"
-		"1:\t"
-		"lodsl\n\t"
-		"adcl %3, %0\n\t"
-		"decl %2\n\t"
-		"jne 1b\n\t"
-		"adcl $0, %0\n\t"
-		"movl %0, %3\n\t"
-		"shrl $16, %3\n\t"
-		"addw %w3, %w0\n\t"
-		"adcw $0, %w0"
-	    : "=r" (sum), "=S" (buff), "=r" (wlen), "=a" (bogus)
-	    : "0"  (sum),  "1" (buff),  "2" (wlen));
-	}
-	return (~sum) & 0xffff;
-}
-
-/*
  * This routine does all the checksum computations that don't
  * require anything special (like copying or special headers).
  */
@@ -563,15 +537,6 @@ unsigned short ip_compute_csum(unsigned char * buff, int len)
 	}
 	sum =~sum;
 	return(sum & 0xffff);
-}
-
-/*
- *	Check the header of an incoming IP datagram.  This version is still used in slhc.c.
- */
-
-int ip_csum(struct iphdr *iph)
-{
-	return ip_fast_csum((unsigned char *)iph, iph->ihl);
 }
 
 /*

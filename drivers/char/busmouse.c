@@ -28,6 +28,7 @@
 #include <linux/busmouse.h>
 #include <linux/signal.h>
 #include <linux/errno.h>
+#include <linux/mm.h>
 
 #include <asm/io.h>
 #include <asm/segment.h>

@@ -13,6 +13,10 @@
  *  SystemV/Coherent symlink handling code
  */
 
+#ifdef MODULE
+#include <linux/module.h>
+#endif
+
 #include <asm/segment.h>
 
 #include <linux/errno.h>

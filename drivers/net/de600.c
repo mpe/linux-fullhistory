@@ -90,6 +90,11 @@ static char *version =
 #endif
 unsigned int de600_debug = DE600_DEBUG;
 
+#ifdef MODULE
+#include <linux/module.h>
+#include <linux/version.h>
+#endif
+
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/types.h>
@@ -107,11 +112,6 @@ unsigned int de600_debug = DE600_DEBUG;
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
 #include <linux/skbuff.h>
-
-#ifdef MODULE
-#include <linux/module.h>
-#include <linux/version.h>
-#endif
 
 #ifdef FAKE_SMALL_MAX
 static unsigned long de600_rspace(struct sock *sk);

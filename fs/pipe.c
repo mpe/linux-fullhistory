@@ -12,6 +12,7 @@
 #include <linux/signal.h>
 #include <linux/fcntl.h>
 #include <linux/termios.h>
+#include <linux/mm.h>
 
 
 /* We don't use the head/tail construction any more. Now we use the start/len*/

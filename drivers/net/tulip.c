@@ -14,7 +14,7 @@
 	   Code 930.5, Goddard Space Flight Center, Greenbelt MD 20771
 */
 
-static char *version = "tulip.c:v0.03 1/18/95 becker@cesdis.gsfc.nasa.gov\n";
+static char *version = "tulip.c:v0.05 1/20/95 becker@cesdis.gsfc.nasa.gov\n";
 
 #include <linux/config.h>
 #include <linux/kernel.h>
@@ -48,7 +48,7 @@ struct netdev_entry tulip_drv =
 {"Tulip", tulip_pci_probe, TULIP_TOTAL_SIZE, NULL};
 #endif
 
-#define TULIP_DEBUG 3
+#define TULIP_DEBUG 1
 #ifdef TULIP_DEBUG
 int tulip_debug = TULIP_DEBUG;
 #else
@@ -177,7 +177,6 @@ unsigned long dec21040_init(unsigned long mem_start, unsigned long mem_end)
 
     if (pcibios_present()) {
 	    int pci_index;
-		printk("tulip.c: PCI bios is present, checking for devices...\n");
 		for (pci_index = 0; pci_index < 8; pci_index++) {
 			unsigned char pci_bus, pci_device_fn, pci_irq_line;
 			unsigned long pci_ioaddr;
@@ -217,6 +216,11 @@ unsigned long tulip_probe1(unsigned long mem_start, int ioaddr, int irq)
 
 	printk("%s: DEC 21040 Tulip at %#3x,", dev->name, ioaddr);
 
+	/* Stop the chip's Tx and Rx processes. */
+	outl(inl(ioaddr + CSR6) & ~0x2002, ioaddr + CSR6);
+	/* Clear the missed-packet counter. */
+	inl(ioaddr + CSR8) & 0xffff;
+
 	/* The station address ROM is read byte serially.  The register must
 	   be polled, waiting for the value to be read bit serially from the
 	   EEPROM.
@@ -229,6 +233,7 @@ unsigned long tulip_probe1(unsigned long mem_start, int ioaddr, int irq)
 		while (value < 0  && --boguscnt > 0);
 		printk(" %2.2x", dev->dev_addr[i] = value);
 	}
+	printk(", IRQ %d\n", irq);
 
 	/* We do a request_region() only to register /proc/ioports info. */
 	request_region(ioaddr, TULIP_TOTAL_SIZE, "DEC Tulip Ethernet");
@@ -240,8 +245,6 @@ unsigned long tulip_probe1(unsigned long mem_start, int ioaddr, int irq)
 	dev->priv = (void *)(((int)dev->priv + 7) & ~7);
 	tp = (struct tulip_private *)dev->priv;
 	tp->rx_buffs = (long)dev->priv + sizeof(struct tulip_private);
-
-	printk(", Rx buffers at %#x, IRQ %d\n", tp->rx_buffs, dev->irq);
 
 	/* The Tulip-specific entries in the device structure. */
 	dev->open = &tulip_open;
@@ -268,9 +271,15 @@ tulip_open(struct device *dev)
 	/* Reset the chip, holding bit 0 set at least 10 PCI cycles. */
 	outl(0xfff80001, ioaddr + CSR0);
 	SLOW_DOWN_IO;
-	/* Deassert reset.  Wait the specified 50 PCI cycles by initializing
+	/* Deassert reset.  Set 8 longword cache alignment, 8 longword burst.
+	   Cache alignment bits 15:14	     Burst length 13:8
+    	0000	No alignment  0x00000000 unlimited		0800 8 longwords
+		4000	8  longwords		0100 1 longword		1000 16 longwords
+		8000	16 longwords		0200 2 longwords	2000 32 longwords
+		C000	32  longwords		0400 4 longwords
+	   Wait the specified 50 PCI cycles after a reset by initializing
 	   Tx and Rx queues and the address filter list. */
-	outl(0xfff80000, ioaddr + CSR0);
+	outl(0xfff84800, ioaddr + CSR0);
 
 	if (irq2dev_map[dev->irq] != NULL
 		|| (irq2dev_map[dev->irq] = dev) == NULL
@@ -280,8 +289,7 @@ tulip_open(struct device *dev)
 	}
 
 	if (tulip_debug > 1)
-		printk("%s: tulip_open() irq %d.\n",
-			   dev->name, dev->irq);
+		printk("%s: tulip_open() irq %d.\n", dev->name, dev->irq);
 
 	tulip_init_ring(dev);
 
@@ -611,11 +619,6 @@ tulip_rx(struct device *dev)
 			skb->len = pkt_len;
 			skb->dev = dev;
 			memcpy(skb->data, lp->rx_ring[entry].buffer1, pkt_len);
-			printk("%s: New packet length %d status %#x %#x %#x %#x to %#x.\n",
-				   dev->name, pkt_len, lp->rx_ring[entry].status,
-				   lp->rx_ring[entry].length, lp->rx_ring[entry].buffer1,
-				   lp->rx_ring[entry].buffer2,
-				   lp->rx_ring[entry].buffer1);
 			netif_rx(skb);
 			lp->stats.rx_packets++;
 		}

@@ -291,10 +291,20 @@ struct pci_class_type {
 #define PCI_VENDOR_ID_TRIDENT		0x1023
 #define PCI_DEVICE_ID_TRIDENT_9420	0x9420
 
-#define PCI_VENDOR_ID_CONTAQ		0x1023
+#define PCI_VENDOR_ID_CONTAQ		0x1080
 #define PCI_DEVICE_ID_CONTAQ_82C599	0x0600
 
 #define PCI_VENDOR_ID_NS		0x100b
+
+#define PCI_VENDOR_ID_VIA		0x1106
+#define PCI_DEVICE_ID_VIA_82C505	0x0505
+
+#define PCI_VENDOR_ID_SI		0x1039
+#define PCI_DEVICE_ID_SI_MG1936		0x0406
+#define PCI_DEVICE_ID_SI_MG1938		0x0008
+
+#define PCI_VENDOR_ID_LEADTEK		0x107d
+#define PCI_DEVICE_ID_LEADTEK_805	0x0000
 
 struct pci_vendor_type {
 	unsigned short vendor_id;
@@ -302,7 +312,7 @@ struct pci_vendor_type {
 };
 
 
-#define PCI_VENDOR_NUM 27
+#define PCI_VENDOR_NUM 30
 #define PCI_VENDOR_TYPE { \
 	{PCI_VENDOR_ID_NCR,		"NCR"}, \
 	{PCI_VENDOR_ID_ADAPTEC,		"Adaptec"}, \
@@ -330,7 +340,10 @@ struct pci_vendor_type {
 	{PCI_VENDOR_ID_SYMPHONY,	"Symphony"}, \
 	{PCI_VENDOR_ID_TRIDENT,		"Trident"}, \
 	{PCI_VENDOR_ID_CONTAQ,		"Contaq"}, \
-	{PCI_VENDOR_ID_NS,		"NS"} \
+	{PCI_VENDOR_ID_NS,		"NS"}, \
+	{PCI_VENDOR_ID_VIA,		"VIA Technologies"}, \
+	{PCI_VENDOR_ID_SI,		"Silicon Integrated"}, \
+	{PCI_VENDOR_ID_LEADTEK,		"Leadtek Research"} \
 }
 
 
@@ -349,7 +362,7 @@ struct pci_device_type {
 	char *device_name;
 };
 
-#define PCI_DEVICE_NUM 50
+#define PCI_DEVICE_NUM 54
 #define PCI_DEVICE_TYPE { \
 	{0xff,	PCI_VENDOR_ID_NCR,	PCI_DEVICE_ID_NCR_53C810,	"53c810"}, \
 	{0xff,	PCI_VENDOR_ID_NCR,	PCI_DEVICE_ID_NCR_53C815,	"53c815"}, \
@@ -400,7 +413,11 @@ struct pci_device_type {
 	{0xff,	PCI_VENDOR_ID_ADL,	PCI_DEVICE_ID_ADL_2301,		"2301"}, \
 	{0xff,	PCI_VENDOR_ID_SYMPHONY,	PCI_DEVICE_ID_SYMPHONY_101,	"82C101"}, \
 	{0xff,	PCI_VENDOR_ID_TRIDENT,	PCI_DEVICE_ID_TRIDENT_9420,	"TG 9420"}, \
-	{0xff,	PCI_VENDOR_ID_CONTAQ,	PCI_DEVICE_ID_CONTAQ_82C599,	"82C599"} \
+	{0xff,	PCI_VENDOR_ID_CONTAQ,	PCI_DEVICE_ID_CONTAQ_82C599,	"82C599"}, \
+	{0xff,	PCI_VENDOR_ID_VIA,	PCI_DEVICE_ID_VIA_82C505,	"VT 82C505"}, \
+	{0xff,	PCI_VENDOR_ID_SI,	PCI_DEVICE_ID_SI_MG1936,	"MG1936 ??"}, \
+	{0xff,	PCI_VENDOR_ID_SI,	PCI_DEVICE_ID_SI_MG1938,	"MG1938 ??"}, \
+	{0xff,	PCI_VENDOR_ID_LEADTEK,	PCI_DEVICE_ID_LEADTEK_805,	"S3 805"} \
 }
 
 /* An item of this structure has the following meaning	*/

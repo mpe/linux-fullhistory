@@ -14,6 +14,8 @@
 #include <linux/fs.h>
 #include <linux/kernel.h>
 #include <linux/string.h>
+#include <linux/mm.h>
+
 #include <asm/system.h>
 #include <asm/segment.h>
 

@@ -7,6 +7,10 @@
  *  (For directory without EMD file).
  */
 
+#ifdef MODULE
+#include <linux/module.h>
+#endif
+
 #include <asm/segment.h>
 
 #include <linux/sched.h>

@@ -202,6 +202,9 @@ void proc_read_inode(struct inode * inode)
 			inode->i_nlink = 2;
 			return;
 		case PROC_PID_ENVIRON:
+			inode->i_mode = S_IFREG | S_IRUSR;
+			inode->i_op = &proc_array_inode_operations;
+			return;
 		case PROC_PID_CMDLINE:
 		case PROC_PID_STAT:
 		case PROC_PID_STATM:

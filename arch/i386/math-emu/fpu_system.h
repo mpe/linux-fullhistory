@@ -14,6 +14,7 @@
 
 #include <linux/sched.h>
 #include <linux/kernel.h>
+#include <linux/mm.h>
 
 /* This sets the pointer FPU_info to point to the argument part
    of the stack frame of math_emulate() */

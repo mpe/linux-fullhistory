@@ -7,9 +7,16 @@
    Copyright (C) 1994, David S. Miller (davem@caip.rutgers.edu)
 */
 
+extern unsigned int trapbase[];
+extern unsigned int end[], etext[], msgbuf[];
+
 extern void flush_vac_context(void);
 extern void flush_vac_segment(unsigned int foo_segment);
 extern void flush_vac_page(unsigned int foo_addr);
+
+extern int vac_do_hw_vac_flushes, vac_size, vac_linesize;
+extern int vac_entries_per_context, vac_entries_per_segment;
+extern int vac_entries_per_page;
 
 /* enable_vac() enables the virtual address cache. It returns 0 on
    success, 1 on failure.
@@ -69,12 +76,12 @@ extern __inline__ void sw_flush_vac_segment_entry(char* addr)
   __asm__ __volatile__("sta %%g0, [%0] 0xc" : : "r" (addr));
 }
 
-extern __inline__ void hw_flush_vac_page_entry(char* addr)
+extern __inline__ void hw_flush_vac_page_entry(unsigned long* addr)
 {
   __asm__ __volatile__("sta %%g0, [%0] 0x6" : : "r" (addr));
 }
 
-extern __inline__ void sw_flush_vac_page_entry(char* addr)
+extern __inline__ void sw_flush_vac_page_entry(unsigned long* addr)
 {
   __asm__ __volatile__("sta %%g0, [%0] 0xd" : : "r" (addr));
 }

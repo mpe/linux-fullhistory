@@ -19,6 +19,10 @@
  *  This file contains code for allocating/freeing inodes.
  */
 
+#ifdef MODULE
+#include <linux/module.h>
+#endif
+
 #include <linux/sched.h>
 #include <linux/kernel.h>
 #include <linux/fs.h>

@@ -19,6 +19,10 @@
  *  This file contains code for allocating/freeing blocks.
  */
 
+#ifdef MODULE
+#include <linux/module.h>
+#endif
+
 #include <linux/kernel.h>
 #include <linux/fs.h>
 #include <linux/sysv_fs.h>

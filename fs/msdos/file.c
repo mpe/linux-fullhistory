@@ -6,6 +6,10 @@
  *  MS-DOS regular file handling primitives
  */
 
+#ifdef MODULE
+#include <linux/module.h>
+#endif
+
 #include <asm/segment.h>
 #include <asm/system.h>
 

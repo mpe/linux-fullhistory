@@ -213,6 +213,7 @@
 #include <linux/delay.h>
 #include <linux/tpqic02.h>
 #include <linux/config.h>
+#include <linux/mm.h>
 
 #include <asm/dma.h>
 #include <asm/system.h>

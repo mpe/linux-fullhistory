@@ -8,6 +8,14 @@
  * LPCAREFUL, LPABORT, LPGETSTATUS added by Chris Metcalf, metcalf@lcs.mit.edu
  */
 
+#ifdef MODULE
+#include <linux/module.h>
+#include <linux/version.h>
+#else
+#define MOD_INC_USE_COUNT
+#define MOD_DEC_USE_COUNT
+#endif
+
 #include <linux/errno.h>
 #include <linux/kernel.h>
 #include <linux/major.h>
@@ -33,14 +41,6 @@ struct lp_struct lp_table[] = {
 	{ 0x278, 0, 0, LP_INIT_CHAR, LP_INIT_TIME, LP_INIT_WAIT, NULL, NULL, },
 }; 
 #define LP_NO 3
-
-#ifdef MODULE
-#include <linux/module.h>
-#include <linux/version.h>
-#else
-#define MOD_INC_USE_COUNT
-#define MOD_DEC_USE_COUNT
-#endif
 
 /* Test if printer is ready (and optionally has no error conditions) */
 #define LP_READY(minor, status) \

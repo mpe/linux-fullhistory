@@ -43,6 +43,7 @@
 #include <linux/types.h>
 #include <linux/ptrace.h>
 #include <linux/mman.h>
+#include <linux/mm.h>
 
 #include <asm/system.h>
 #include <asm/segment.h>
@@ -192,10 +193,10 @@ void free_page_tables(struct task_struct * tsk)
  */
 int clone_page_tables(struct task_struct * tsk)
 {
-	unsigned long pg_dir;
+	pgd_t * pg_dir;
 
-	pg_dir = (unsigned long) PAGE_DIR_OFFSET(current, 0);
-	mem_map[MAP_NR(pg_dir)]++;
+	pg_dir = PAGE_DIR_OFFSET(current, 0);
+	mem_map[MAP_NR((unsigned long) pg_dir)]++;
 	SET_PAGE_DIR(tsk, pg_dir);
 	return 0;
 }

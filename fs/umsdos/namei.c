@@ -6,6 +6,10 @@
  *
  * Maintain and access the --linux alternate directory file.
 */
+#ifdef MODULE
+#include <linux/module.h>
+#endif
+
 #include <linux/errno.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>

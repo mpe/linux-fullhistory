@@ -15,6 +15,7 @@
 #include <linux/types.h>
 #include <linux/ptrace.h>
 #include <linux/mman.h>
+#include <linux/mm.h>
 
 #include <asm/system.h>
 #include <asm/segment.h>

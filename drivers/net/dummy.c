@@ -31,6 +31,11 @@
 /* To have statistics (just packets sent) define this */
 #undef DUMMY_STATS
 
+#ifdef MODULE
+#include <linux/module.h>
+#include <linux/version.h>
+#endif
+
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/types.h>
@@ -50,11 +55,6 @@
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
 #include <linux/skbuff.h>
-
-#ifdef MODULE
-#include <linux/module.h>
-#include <linux/version.h>
-#endif
 
 static int dummy_xmit(struct sk_buff *skb, struct device *dev);
 #ifdef DUMMY_STATS

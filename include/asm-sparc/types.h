@@ -12,7 +12,11 @@
 
 #ifndef _SIZE_T
 #define _SIZE_T
-typedef long unsigned int size_t;
+#ifdef __svr4__
+typedef unsigned int size_t;      /* solaris sucks */
+#else
+typedef long unsigned int size_t; /* sunos is much better */
+#endif /* !(__svr4__) */
 #endif
 
 #ifndef _SSIZE_T

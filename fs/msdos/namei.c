@@ -4,6 +4,10 @@
  *  Written 1992,1993 by Werner Almesberger
  */
 
+#ifdef MODULE
+#include <linux/module.h>
+#endif
+
 #include <asm/segment.h>
 
 #include <linux/sched.h>

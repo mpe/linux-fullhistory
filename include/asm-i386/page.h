@@ -20,6 +20,17 @@ __asm__ __volatile__("movl %%cr3,%%eax\n\tmovl %%eax,%%cr3": : :"ax")
 
 typedef unsigned short mem_map_t;
 
+/* Just any arbitrary offset to the start of the vmalloc VM area: the
+ * current 8MB value just means that there will be a 8MB "hole" after the
+ * physical memory until the kernel virtual memory starts.  That means that
+ * any out-of-bounds memory accesses will hopefully be caught.
+ * The vmalloc() routines leaves a hole of 4kB between each vmalloced
+ * area for the same reason. ;)
+ */
+#define VMALLOC_OFFSET	(8*1024*1024)
+#define VMALLOC_START ((high_memory + VMALLOC_OFFSET) & ~(VMALLOC_OFFSET-1))
+#define VMALLOC_VMADDR(x) (TASK_SIZE + (unsigned long)(x))
+
 #ifdef CONFIG_STRICT_MM_TYPECHECKS
 /*
  * These are used to make use of C type-checking..

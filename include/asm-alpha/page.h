@@ -29,6 +29,9 @@ __asm__ __volatile__( \
 
 typedef unsigned int mem_map_t;
 
+#define VMALLOC_START		0xFFFFFE0000000000
+#define VMALLOC_VMADDR(x)	((unsigned long)(x))
+
 #ifdef CONFIG_STRICT_MM_TYPECHECKS
 /*
  * These are used to make use of C type-checking..
@@ -108,7 +111,7 @@ typedef unsigned long pgprot_t;
 #define PAGE_SHARED	__pgprot(_PAGE_VALID | __ACCESS_BITS)
 #define PAGE_COPY	__pgprot(_PAGE_VALID | __ACCESS_BITS | _PAGE_FOW | _PAGE_COW)
 #define PAGE_READONLY	__pgprot(_PAGE_VALID | __ACCESS_BITS | _PAGE_FOW)
-#define PAGE_KERNEL	__pgprot(_PAGE_VALID | _PAGE_ASM | __ACCESS_BITS | __DIRTY_BITS)
+#define PAGE_KERNEL	__pgprot(_PAGE_VALID | _PAGE_ASM | _PAGE_KRE | _PAGE_KWE)
 
 #define _PAGE_NORMAL(x) __pgprot(_PAGE_VALID | __ACCESS_BITS | (x))
 
@@ -164,14 +167,6 @@ extern unsigned long __zero_page(void);
 /* sizeof(void*)==1<<SIZEOF_PTR_LOG2 */
 #define SIZEOF_PTR_LOG2			3
 
-/* to find an entry in a page-table-directory */
-/*
- * XXXXX This isn't right: we shouldn't use the ptbr, but the L2 pointer.
- * This is just for getting it through the compiler right now
- */
-#define PAGE_DIR_OFFSET(tsk,address) \
-((pgd_t *) ((tsk)->tss.ptbr + ((((unsigned long)(address)) >> 21) & PTR_MASK & ~PAGE_MASK)))
-
 /* to find an entry in a page-table */
 #define PAGE_PTR(address)		\
   ((unsigned long)(address)>>(PAGE_SHIFT-SIZEOF_PTR_LOG2)&PTR_MASK&~PAGE_MASK)
@@ -180,16 +175,19 @@ extern unsigned long __zero_page(void);
 #define PTRS_PER_PAGE			(PAGE_SIZE/sizeof(void*))
 
 /* to set the page-dir */
-/*
- * XXXXX This isn't right: we shouldn't use the ptbr, but the L2 pointer.
- * This is just for getting it through the compiler right now
- */
-#define SET_PAGE_DIR(tsk,pgdir) \
-do { \
-	(tsk)->tss.ptbr = (unsigned long) (pgdir); \
-	if ((tsk) == current) \
-		invalidate(); \
-} while (0)
+extern inline void SET_PAGE_DIR(struct task_struct * tsk, pgd_t * pgdir)
+{
+	tsk->tss.ptbr = ((unsigned long) pgdir - PAGE_OFFSET) >> PAGE_SHIFT;
+	if (tsk == current)
+		invalidate();
+}
+
+/* to find an entry in a page-table-directory */
+extern inline pgd_t * PAGE_DIR_OFFSET(struct task_struct * tsk, unsigned long address)
+{
+	return (pgd_t *) ((tsk->tss.ptbr << PAGE_SHIFT) + PAGE_OFFSET) +
+		((address >> 33) & PTR_MASK);
+}
 
 extern unsigned long high_memory;
 

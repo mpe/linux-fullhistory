@@ -21,7 +21,7 @@ D: Linux-AFS Port, random kernel hacker,
 D: VFS fixes (new notify_change in particular)
 D: Moving all VFS access checks into the file systems
 S: MIT Room E15-341
-S: 20 Ames St.
+S: 20 Ames Street
 S: Cambridge, Massachusetts  02139
 S: USA
 
@@ -88,7 +88,7 @@ N: Randolph Bentson
 E: bentson@grieg.seaslug.org
 D: author of driver for Cyclades Cyclom-Y async mux
 S: 2500 Gilman Dr W, #404
-S: Seattle, WA 98119-2102
+S: Seattle, Washington 98119-2102
 S: USA
 
 N: Stephen R. van den Berg (AKA BuGless)
@@ -371,7 +371,7 @@ S: USA
 N: Rob W. W. Hooft
 E: hooft@EMBL-Heidelberg.DE
 D: Shared libs for graphics-tools and for the f2c compiler
-D: Some kernel programming on the floppy and sounddrivers in early days
+D: Some kernel programming on the floppy and sound drivers in early days
 D: Some other hacks to get different kinds of programs to work for linux
 S: Panoramastrasse 18
 S: D-69126 Heidelberg
@@ -530,7 +530,6 @@ S: Australia
 
 N: John A. Martin
 E: jam@acm.org
-E: j.a.martin@ieee.org
 D: FSSTND contributor
 D: Credit file compilator
 
@@ -662,6 +661,10 @@ S: 192 Nichsolson Road
 S: Subiaco, 6008
 S: Perth, Western Australia
 S: Australia
+
+N: Greg Page
+E: greg@caldera.com
+D: IPX development and support
 
 N: Kai Petzke
 E: wpp@marie.physik.tu-berlin.de

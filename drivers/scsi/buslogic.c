@@ -75,6 +75,10 @@
  *    unfinished, questionable, or wrong.
  */
 
+#ifdef MODULE
+#include <linux/module.h>
+#endif
+
 #include <linux/string.h>
 #include <linux/sched.h>
 #include <linux/kernel.h>

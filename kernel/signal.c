@@ -11,6 +11,7 @@
 #include <linux/wait.h>
 #include <linux/ptrace.h>
 #include <linux/unistd.h>
+#include <linux/mm.h>
 
 #include <asm/segment.h>
 

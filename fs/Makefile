@@ -98,12 +98,15 @@ filesystems.a: dummy
 modules: $(MODULE_OBJS)
 	for i in $(MODULE_FS_SUBDIRS); do $(MAKE) -C $$i modules; done
 	cd ../modules;for i in $(MODULE_OBJS); do ln -sf ../fs/$$i .; done
-	cd ../modules;for i in $(MODULE_FS_SUBDIRS); do ln -sf ../fs/$$i/$$i.o .; done
+	cd ../modules;for i in $(MODULE_FS_SUBDIRS); \
+	do echo $$i.o; ln -sf ../fs/$$i/$$i.o .; done > ../modules/FS_MODULES
 
 depend dep:
 	$(CPP) -M *.c > .depend
-	set -e; for i in $(SUBDIRS); do \
+	set -e; for i in $(FS_SUBDIRS); do \
 	  test ! -d $$i || $(MAKE) -C $$i dep; done
+	set -e; for i in $(MODULE_FS_SUBDIRS); do \
+	  test ! -d $$i || $(MAKE) -C $$i CFLAGS="$(CFLAGS) -DMODULE" dep; done
 
 dummy:
 

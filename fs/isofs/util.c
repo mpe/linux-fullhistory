@@ -9,6 +9,10 @@
  * the bsd386 iso9660 filesystem, by Pace Williamson.
  */
 
+#ifdef MODULE
+#include <linux/module.h>
+#endif
+
 
 int
 isonum_711 (char * p)

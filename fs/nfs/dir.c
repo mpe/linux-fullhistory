@@ -6,6 +6,10 @@
  *  nfs directory handling functions
  */
 
+#ifdef MODULE
+#include <linux/module.h>
+#endif
+
 #include <linux/sched.h>
 #include <linux/errno.h>
 #include <linux/stat.h>

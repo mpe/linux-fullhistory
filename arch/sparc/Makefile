@@ -7,6 +7,11 @@
 # Copyright (C) 1994 David S. Miller (davem@caip.rutgers.edu)
 #
 
+
+# If the solaris /bin/sh wasn't so broken, I wouldn't need the following
+# line...
+SHELL  =/bin/bash
+
 #
 # How to link, we send the linker the address at which the text section
 # is to start. The prom loads us at 0x0-kernel_size. There is also an
@@ -21,7 +26,7 @@ HEAD := arch/sparc/kernel/head.o
 
 SUBDIRS := $(SUBDIRS) arch/sparc/kernel arch/sparc/lib arch/sparc/mm
 ARCHIVES := arch/sparc/kernel/kernel.o arch/sparc/mm/mm.o $(ARCHIVES)
-LIBS := arch/sparc/lib/lib.a $(LIBS)
+LIBS := $(TOPDIR)/lib/lib.a $(LIBS) $(TOPDIR)/arch/sparc/lib/lib.a
 
 archclean:
 

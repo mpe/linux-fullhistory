@@ -13,6 +13,8 @@
 #include <linux/errno.h>
 #include <linux/types.h>
 #include <linux/malloc.h>
+#include <linux/mm.h>
+
 #include <asm/segment.h>
 
 struct vm_struct {
@@ -23,15 +25,6 @@ struct vm_struct {
 };
 
 static struct vm_struct * vmlist = NULL;
-
-/* Just any arbitrary offset to the start of the vmalloc VM area: the
- * current 8MB value just means that there will be a 8MB "hole" after the
- * physical memory until the kernel virtual memory starts.  That means that
- * any out-of-bounds memory accesses will hopefully be caught.
- * The vmalloc() routines leaves a hole of 4kB between each vmalloced
- * area for the same reason. ;)
- */
-#define VMALLOC_OFFSET	(8*1024*1024)
 
 static inline void set_pgdir(unsigned long dindex, pte_t * page_table)
 {
@@ -135,8 +128,9 @@ static int do_area(void * addr, unsigned long size,
 	unsigned long nr, dindex, index;
 
 	nr = size >> PAGE_SHIFT;
-	dindex = (TASK_SIZE + (unsigned long) addr) >> 22;
-	index = (((unsigned long) addr) >> PAGE_SHIFT) & (PTRS_PER_PAGE-1);
+	dindex = VMALLOC_VMADDR(addr);
+	index = (dindex >> PAGE_SHIFT) & (PTRS_PER_PAGE-1);
+	dindex = (dindex >> PGDIR_SHIFT) & (PTRS_PER_PAGE-1);
 	while (nr > 0) {
 		unsigned long i = PTRS_PER_PAGE - index;
 
@@ -183,7 +177,7 @@ void * vmalloc(unsigned long size)
 	area = (struct vm_struct *) kmalloc(sizeof(*area), GFP_KERNEL);
 	if (!area)
 		return NULL;
-	addr = (void *) ((high_memory + VMALLOC_OFFSET) & ~(VMALLOC_OFFSET-1));
+	addr = (void *) VMALLOC_START;
 	area->size = size + PAGE_SIZE;
 	area->next = NULL;
 	for (p = &vmlist; (tmp = *p) ; p = &tmp->next) {

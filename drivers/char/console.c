@@ -88,6 +88,7 @@
 #include <linux/kd.h>
 #include <linux/malloc.h>
 #include <linux/major.h>
+#include <linux/mm.h>
 
 #include <asm/io.h>
 #include <asm/system.h>

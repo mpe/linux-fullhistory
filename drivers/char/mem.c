@@ -15,6 +15,7 @@
 #include <linux/tpqic02.h>
 #include <linux/malloc.h>
 #include <linux/mman.h>
+#include <linux/mm.h>
 
 #include <asm/segment.h>
 #include <asm/io.h>

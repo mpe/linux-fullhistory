@@ -64,6 +64,11 @@ make one yourself.  The wiring is:
     extra grounds are 18,19,20,21,22,23,24
 */
 
+#ifdef MODULE
+#include <linux/module.h>
+#include <linux/version.h>
+#endif
+
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/types.h>
@@ -88,11 +93,6 @@ make one yourself.  The wiring is:
 #include <linux/ioport.h>
 #include <asm/bitops.h>
 #include <asm/irq.h>
-
-#ifdef MODULE
-#include <linux/module.h>
-#include <linux/version.h>
-#endif
 
 /* use 0 for production, 1 for verification, >2 for debug */
 #ifndef NET_DEBUG

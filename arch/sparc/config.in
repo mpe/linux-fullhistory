@@ -155,10 +155,10 @@ fi
 fi
 fi
 
-comment 'CD-ROM drivers'
+comment 'CD-ROM drivers (not for SCSI or IDE/ATAPI drives)'
 
 bool 'Sony CDU31A/CDU33A CDROM driver support' CONFIG_CDU31A n
-bool 'Mitsumi CDROM driver support' CONFIG_MCD n
+bool 'Mitsumi (not IDE/ATAPI) CDROM driver support' CONFIG_MCD n
 bool 'Matsushita/Panasonic CDROM driver support' CONFIG_SBPCD n
 if [ "$CONFIG_SBPCD" = "y" ]; then
   bool 'Matsushita/Panasonic second CDROM controller support' CONFIG_SBPCD2 n
@@ -169,6 +169,7 @@ if [ "$CONFIG_SBPCD" = "y" ]; then
     fi
   fi
 fi
+bool 'Aztech/Orchid/Okano/Wearnes (non IDE) CDROM support' CONFIG_AZTCD n
 
 comment 'Filesystems'
 

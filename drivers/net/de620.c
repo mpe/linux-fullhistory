@@ -108,6 +108,11 @@ static int bnc, utp;
  *	insmod de620.o utp=1
  */
 
+#ifdef MODULE
+#include <linux/module.h>
+#include <linux/version.h>
+#endif
+
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/types.h>
@@ -125,11 +130,6 @@ static int bnc, utp;
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
 #include <linux/skbuff.h>
-
-#ifdef MODULE
-#include <linux/module.h>
-#include <linux/version.h>
-#endif
 
 /* Constant definitions for the DE-620 registers, commands and bits */
 #include "de620.h"

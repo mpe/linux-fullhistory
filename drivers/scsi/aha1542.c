@@ -14,6 +14,10 @@
  *        Accept parameters from LILO cmd-line. -- 1-Oct-94
  */
 
+#ifdef MODULE
+#include <linux/module.h>
+#endif
+
 #include <linux/kernel.h>
 #include <linux/head.h>
 #include <linux/types.h>

@@ -20,6 +20,8 @@
 #include "../block/blk.h"
 #include <linux/kernel.h>
 #include <linux/string.h>
+#include <linux/mm.h>
+
 #include "scsi.h"
 
 #ifndef NULL

@@ -64,8 +64,8 @@ SCSI_OBJS := $(SCSI_OBJS) aha152x.o
 SCSI_SRCS := $(SCSI_SRCS) aha152x.c
 endif
 
-SCSI_SRCS := $(SCSI_SRCS) aha1542.c
 ifdef CONFIG_SCSI_AHA1542
+SCSI_SRCS := $(SCSI_SRCS) aha1542.c
 SCSI_OBJS := $(SCSI_OBJS) aha1542.o
 else
 SCSI_MODULE_OBJS := $(SCSI_MODULE_OBJS) aha1542.o
@@ -96,8 +96,8 @@ SCSI_OBJS := $(SCSI_OBJS) u14-34f.o
 SCSI_SRCS := $(SCSI_SRCS) u14-34f.c
 endif
 
-SCSI_SRCS := $(SCSI_SRCS) scsi_debug.c
 ifdef CONFIG_SCSI_DEBUG
+SCSI_SRCS := $(SCSI_SRCS) scsi_debug.c
 SCSI_OBJS := $(SCSI_OBJS) scsi_debug.o
 else
 SCSI_MODULE_OBJS := $(SCSI_MODULE_OBJS) scsi_debug.o
@@ -108,8 +108,8 @@ SCSI_OBJS := $(SCSI_OBJS) fdomain.o
 SCSI_SRCS := $(SCSI_SRCS) fdomain.c
 endif
 
-SCSI_SRCS := $(SCSI_SRCS) in2000.c
 ifdef CONFIG_SCSI_IN2000
+SCSI_SRCS := $(SCSI_SRCS) in2000.c
 SCSI_OBJS := $(SCSI_OBJS) in2000.o
 else
 SCSI_MODULE_OBJS := $(SCSI_MODULE_OBJS) in2000.o
@@ -195,6 +195,7 @@ modules: $(SCSI_MODULE_OBJS)
 
 dep:
 	$(CPP) -M $(AHA152X) $(SCSI_SRCS) > .depend
+	$(CPP) -M -DMODULE $(SCSI_MODULE_OBJS:.o=.c) >> .depend
 
 else
 

@@ -33,6 +33,10 @@
 #define NFS_PROC_DEBUG
 #endif
 
+#ifdef MODULE
+#include <linux/module.h>
+#endif
+
 #include <linux/param.h>
 #include <linux/sched.h>
 #include <linux/mm.h>
