@@ -107,7 +107,7 @@ long
 alpha_fp_emul (unsigned long pc)
 {
 	unsigned long op_fun, fa, fb, fc, func, mode;
-	unsigned long fpcw = current->tss.flags;
+	unsigned long fpcw = current->thread.flags;
 	unsigned long va, vb, vc, res, fpcr;
 	__u32 insn;
 
@@ -255,7 +255,7 @@ alpha_fp_emul (unsigned long pc)
 	 */
 	if (res) {
 		/* Record exceptions in software control word.  */
-		current->tss.flags = fpcw |= res >> 35;
+		current->thread.flags = fpcw |= res >> 35;
 
 		/* Update hardware control register */
 		fpcr &= (~FPCR_MASK | FPCR_DYN_MASK);

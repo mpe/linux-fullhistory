@@ -106,7 +106,7 @@ get_reg_addr(struct task_struct * task, unsigned long regno)
 	long *addr;
 
 	if (regno == 30) {
-		addr = &task->tss.usp;
+		addr = &task->thread.usp;
 	} else if (regno == 31 || regno > 64) {
 		zero = 0;
 		addr = &zero;
@@ -175,31 +175,31 @@ ptrace_set_bpt(struct task_struct * child)
 		 * branch (emulation can be tricky for fp branches).
 		 */
 		displ = ((s32)(insn << 11)) >> 9;
-		child->tss.bpt_addr[nsaved++] = pc + 4;
+		child->thread.bpt_addr[nsaved++] = pc + 4;
 		if (displ)		/* guard against unoptimized code */
-			child->tss.bpt_addr[nsaved++] = pc + 4 + displ;
+			child->thread.bpt_addr[nsaved++] = pc + 4 + displ;
 		DBG(DBG_BPT, ("execing branch\n"));
 	} else if (op_code == 0x1a) {
 		reg_b = (insn >> 16) & 0x1f;
-		child->tss.bpt_addr[nsaved++] = get_reg(child, reg_b);
+		child->thread.bpt_addr[nsaved++] = get_reg(child, reg_b);
 		DBG(DBG_BPT, ("execing jump\n"));
 	} else {
-		child->tss.bpt_addr[nsaved++] = pc + 4;
+		child->thread.bpt_addr[nsaved++] = pc + 4;
 		DBG(DBG_BPT, ("execing normal insn\n"));
 	}
 
 	/* install breakpoints: */
 	for (i = 0; i < nsaved; ++i) {
-		res = read_int(child, child->tss.bpt_addr[i], &insn);
+		res = read_int(child, child->thread.bpt_addr[i], &insn);
 		if (res < 0)
 			return res;
-		child->tss.bpt_insn[i] = insn;
-		DBG(DBG_BPT, ("    -> next_pc=%lx\n", child->tss.bpt_addr[i]));
-		res = write_int(child, child->tss.bpt_addr[i], BREAKINST);
+		child->thread.bpt_insn[i] = insn;
+		DBG(DBG_BPT, ("    -> next_pc=%lx\n", child->thread.bpt_addr[i]));
+		res = write_int(child, child->thread.bpt_addr[i], BREAKINST);
 		if (res < 0)
 			return res;
 	}
-	child->tss.bpt_nsaved = nsaved;
+	child->thread.bpt_nsaved = nsaved;
 	return 0;
 }
 
@@ -210,9 +210,9 @@ ptrace_set_bpt(struct task_struct * child)
 int
 ptrace_cancel_bpt(struct task_struct * child)
 {
-	int i, nsaved = child->tss.bpt_nsaved;
+	int i, nsaved = child->thread.bpt_nsaved;
 
-	child->tss.bpt_nsaved = 0;
+	child->thread.bpt_nsaved = 0;
 
 	if (nsaved > 2) {
 		printk("ptrace_cancel_bpt: bogus nsaved: %d!\n", nsaved);
@@ -220,8 +220,8 @@ ptrace_cancel_bpt(struct task_struct * child)
 	}
 
 	for (i = 0; i < nsaved; ++i) {
-		write_int(child, child->tss.bpt_addr[i],
-			  child->tss.bpt_insn[i]);
+		write_int(child, child->thread.bpt_addr[i],
+			  child->thread.bpt_insn[i]);
 	}
 	return (nsaved != 0);
 }
@@ -365,7 +365,7 @@ sys_ptrace(long request, long pid, long addr, long data,
 		ret = -EIO;
 		if ((unsigned long) data > _NSIG)
 			goto out;
-		child->tss.bpt_nsaved = -1;	/* mark single-stepping */
+		child->thread.bpt_nsaved = -1;	/* mark single-stepping */
 		child->flags &= ~PF_TRACESYS;
 		wake_up_process(child);
 		child->exit_code = data;

@@ -43,9 +43,6 @@
 #include <linux/proc_fs.h>
 #include <linux/stat.h>
 #include <linux/init.h>
-#ifdef CONFIG_APM
-#include <linux/apm_bios.h>
-#endif
 
 #include <linux/tty.h>
 #include <linux/selection.h>
@@ -239,9 +236,6 @@ int __init misc_init(void)
 #endif
 #ifdef CONFIG_DTLK
 	dtlk_init();
-#endif
-#ifdef CONFIG_APM
-	apm_bios_init();
 #endif
 #ifdef CONFIG_H8
 	h8_init();

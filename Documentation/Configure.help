@@ -5534,7 +5534,7 @@ CONFIG_NET_FASTROUTE
   section (except for CONFIG_IP_ROUTE_TOS and CONFIG_IP_ROUTE_FWMARK).
   At the moment, few devices support fast switching (tulip is one of
   them, modified 8390 can be found at
-  ftp://ftp.inr.ac.ru/ip-routing/fastroute-8390.tar.gz).
+  ftp://ftp.inr.ac.ru/ip-routing/fastroute/fastroute-8390.tar.gz).
 
   If unsure, say N.
 
@@ -5544,8 +5544,8 @@ CONFIG_NET_HW_FLOWCONTROL
   during periods of extremal congestion. At the moment only a couple
   of device drivers support it (really only one -- tulip, modified
   8390 can be found at
-  ftp://ftp.inr.ac.ru/ip-routing/fastroute-8390.tar.gz). Really, this
-  option is applicable to any machine attached to a fast enough
+  ftp://ftp.inr.ac.ru/ip-routing/fastroute/fastroute-8390.tar.gz).
+  Really, this option is applicable to any machine attached to a fast enough
   network, and even a 10 Mb NIC is able to kill a not very slow box,
   such as a 120MHz Pentium.
 

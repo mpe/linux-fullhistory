@@ -215,7 +215,7 @@ static int fbcon_show_logo(void);
 
 #ifdef CONFIG_MAC
 /*
- * On the Macintoy, there may or may not be a working VBL int. We need to prob
+ * On the Macintoy, there may or may not be a working VBL int. We need to probe
  */
 static int vbl_detected = 0;
 
@@ -1364,6 +1364,7 @@ static int fbcon_switch(struct vc_data *conp)
 	p->dispsw->clear_margins(conp, p, 0);
     if (logo_shown == -2) {
 	logo_shown = fg_console;
+	fbcon_clear(conp, 0, 0, LOGO_H, p->var.xres-LOGO_W);
 	fbcon_show_logo(); /* This is protected above by initmem_freed */
 	update_region(fg_console,
 		      conp->vc_origin + conp->vc_size_row * conp->vc_top,

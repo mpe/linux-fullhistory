@@ -939,8 +939,6 @@ static void __init do_boot_cpu(int i)
 	 * once we got the process:
 	 */
 	idle = init_task.prev_task;
-
-	init_tasks[cpucount] = idle;
 	if (!idle)
 		panic("No idle process for CPU %d", i);
 
@@ -952,6 +950,7 @@ static void __init do_boot_cpu(int i)
 
 	del_from_runqueue(idle);
 	unhash_process(idle);
+	init_tasks[cpucount] = idle;
 
 	/* start_eip had better be page-aligned! */
 	start_eip = setup_trampoline();
@@ -1639,11 +1638,10 @@ void flush_tlb_current_task(void)
 {
 	unsigned long vm_mask = 1 << current->processor;
 	struct mm_struct *mm = current->mm;
+	unsigned long cpu_mask = mm->cpu_vm_mask & ~vm_mask;
 
-	if (mm->cpu_vm_mask != vm_mask) {
-		flush_tlb_others(mm->cpu_vm_mask & ~vm_mask);
-		mm->cpu_vm_mask = vm_mask;
-	}
+	mm->cpu_vm_mask = vm_mask;
+	flush_tlb_others(cpu_mask);
 	local_flush_tlb();
 }
 

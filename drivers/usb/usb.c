@@ -345,11 +345,6 @@ static int usb_parse_config(struct usb_device *dev, struct usb_config_descriptor
 	parsed += *ptr;
 	le16_to_cpus(&config->wTotalLength);
 
-	if (config->MaxPower == 200) {
-		printk("bNumInterfaces kludge\n");
-		config->bNumInterfaces += 3;
-	}
-
 	if (config->bNumInterfaces > USB_MAXINTERFACES)
 	{
 		printk(KERN_WARNING "usb: too many interfaces.\n");
@@ -360,8 +355,8 @@ static int usb_parse_config(struct usb_device *dev, struct usb_config_descriptor
 	config->altsetting = (struct usb_alternate_setting *)
 	        kmalloc(USB_MAXALTSETTING * sizeof(struct usb_alternate_setting), GFP_KERNEL);
 	if (config->altsetting == NULL) {
-	  printk(KERN_WARNING "usb: out of memory.\n");
-	  return -1;
+		printk(KERN_WARNING "usb: out of memory.\n");
+		return -1;
 	}
 	config->act_altsetting = 0;
 	config->num_altsetting = 1;

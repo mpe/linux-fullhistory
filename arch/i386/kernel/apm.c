@@ -273,7 +273,6 @@ static void	standby(void);
 static void	set_time(void);
 
 static void	check_events(void);
-static void	do_apm_timer(unsigned long);
 
 static int	do_open(struct inode *, struct file *);
 static int	do_release(struct inode *, struct file *);
@@ -314,10 +313,8 @@ static int			got_clock_diff = 0;
 static int			debug = 0;
 static int			apm_disabled = 0;
 
-static DECLARE_WAIT_QUEUE_HEAD(process_list);
+static DECLARE_WAIT_QUEUE_HEAD(apm_waitqueue);
 static struct apm_bios_struct *	user_list = NULL;
-
-static struct timer_list	apm_timer;
 
 static char			driver_version[] = "1.9";	/* no spaces */
 
@@ -756,7 +753,7 @@ static int queue_event(apm_event_t event, struct apm_bios_struct *sender)
 			break;
 		}
 	}
-	wake_up_interruptible(&process_list);
+	wake_up_interruptible(&apm_waitqueue);
 	return 1;
 }
 
@@ -942,32 +939,39 @@ static void check_events(void)
 	}
 }
 
-static void do_apm_timer(unsigned long unused)
+/*
+ * This is the APM thread main loop.
+ */
+static void apm_mainloop(void)
 {
-	int	err;
+	DECLARE_WAITQUEUE(wait, current);
+	apm_enabled = 1;
 
-	static int	pending_count = 0;
+	add_wait_queue(&apm_waitqueue, &wait);
+	for (;;) {
+		static int pending_count = 0;
+		int err;
 
-	if (((standbys_pending > 0) || (suspends_pending > 0))
-	    && (apm_bios_info.version > 0x100)
-	    && (pending_count-- <= 0)) {
-		pending_count = 4;
+		current->state = TASK_INTERRUPTIBLE;
+		schedule_timeout(APM_CHECK_TIMEOUT);
 
-		err = apm_set_power_state(APM_STATE_BUSY);
-		if (err)
-			apm_error("busy", err);
+		if (((standbys_pending > 0) || (suspends_pending > 0))
+		    && (apm_bios_info.version > 0x100)
+		    && (pending_count-- <= 0)) {
+			pending_count = 4;
+
+			err = apm_set_power_state(APM_STATE_BUSY);
+			if (err)
+				apm_error("busy", err);
+		}
+
+		if (!(((standbys_pending > 0) || (suspends_pending > 0))
+		      && (apm_bios_info.version == 0x100)))
+			check_events();
 	}
-
-	if (!(((standbys_pending > 0) || (suspends_pending > 0))
-	      && (apm_bios_info.version == 0x100)))
-		check_events();
-
-	init_timer(&apm_timer);
-	apm_timer.expires = APM_CHECK_TIMEOUT + jiffies;
-	add_timer(&apm_timer);
 }
 
-/* Called from sys_idle, must make sure apm_enabled. */
+/* Called from cpu_idle, must make sure apm_enabled. */
 int apm_do_idle(void)
 {
 #ifdef CONFIG_APM_CPU_IDLE
@@ -986,7 +990,7 @@ int apm_do_idle(void)
 #endif
 }
 
-/* Called from sys_idle, must make sure apm_enabled. */
+/* Called from cpu_idle, must make sure apm_enabled. */
 void apm_do_busy(void)
 {
 #ifdef CONFIG_APM_CPU_IDLE
@@ -1027,7 +1031,7 @@ static ssize_t do_read(struct file *fp, char *buf, size_t count, loff_t *ppos)
 	if (queue_empty(as)) {
 		if (fp->f_flags & O_NONBLOCK)
 			return -EAGAIN;
-		add_wait_queue(&process_list, &wait);
+		add_wait_queue(&apm_waitqueue, &wait);
 repeat:
 		current->state = TASK_INTERRUPTIBLE;
 		if (queue_empty(as) && !signal_pending(current)) {
@@ -1035,7 +1039,7 @@ repeat:
 			goto repeat;
 		}
 		current->state = TASK_RUNNING;
-		remove_wait_queue(&process_list, &wait);
+		remove_wait_queue(&apm_waitqueue, &wait);
 	}
 	i = count;
 	while ((i >= sizeof(event)) && !queue_empty(as)) {
@@ -1069,7 +1073,7 @@ static unsigned int do_poll(struct file *fp, poll_table * wait)
 	as = fp->private_data;
 	if (check_apm_bios_struct(as, "select"))
 		return 0;
-	poll_wait(fp, &process_list, wait);
+	poll_wait(fp, &apm_waitqueue, wait);
 	if (!queue_empty(as))
 		return POLLIN | POLLRDNORM;
 	return 0;
@@ -1285,7 +1289,7 @@ void __init apm_setup(char *str, int *dummy)
 	}
 }
 
-void __init apm_bios_init(void)
+static int apm(void *unused)
 {
 	unsigned short	bx;
 	unsigned short	cx;
@@ -1293,99 +1297,10 @@ void __init apm_bios_init(void)
 	unsigned short	error;
 	char *		power_stat;
 	char *		bat_stat;
-	static struct proc_dir_entry *ent;
 
-	if (apm_bios_info.version == 0) {
-		printk(KERN_INFO "apm: BIOS not found.\n");
-		return;
-	}
-	printk(KERN_INFO
-		"apm: BIOS version %d.%d Flags 0x%02x (Driver version %s)\n",
-		((apm_bios_info.version >> 8) & 0xff),
-		(apm_bios_info.version & 0xff),
-		apm_bios_info.flags,
-		driver_version);
-	if ((apm_bios_info.flags & APM_32_BIT_SUPPORT) == 0) {
-		printk(KERN_INFO "apm: no 32 bit BIOS support\n");
-		return;
-	}
+	strcpy(current->comm, "kapmd");
+	sigfillset(&current->blocked);
 
-	/*
-	 * Fix for the Compaq Contura 3/25c which reports BIOS version 0.1
-	 * but is reportedly a 1.0 BIOS.
-	 */
-	if (apm_bios_info.version == 0x001)
-		apm_bios_info.version = 0x100;
-
-	/* BIOS < 1.2 doesn't set cseg_16_len */
-	if (apm_bios_info.version < 0x102)
-		apm_bios_info.cseg_16_len = 0; /* 64k */
-
-	if (debug) {
-		printk(KERN_INFO "apm: entry %x:%lx cseg16 %x dseg %x",
-			apm_bios_info.cseg, apm_bios_info.offset,
-			apm_bios_info.cseg_16, apm_bios_info.dseg);
-		if (apm_bios_info.version > 0x100)
-			printk(" cseg len %x, dseg len %x",
-				apm_bios_info.cseg_len,
-				apm_bios_info.dseg_len);
-		if (apm_bios_info.version > 0x101)
-			printk(" cseg16 len %x", apm_bios_info.cseg_16_len);
-		printk("\n");
-	}
-
-	if (apm_disabled) {
-		printk(KERN_NOTICE "apm: disabled on user request.\n");
-		return;
-	}
-
-	/*
-	 * Set up a segment that references the real mode segment 0x40
-	 * that extends up to the end of page zero (that we have reserved).
-	 * This is for buggy BIOS's that refer to (real mode) segment 0x40
-	 * even though they are called in protected mode.
-	 */
-	set_base(gdt[APM_40 >> 3],
-		 __va((unsigned long)0x40 << 4));
-	_set_limit((char *)&gdt[APM_40 >> 3], 4095 - (0x40 << 4));
-
-	apm_bios_entry.offset = apm_bios_info.offset;
-	apm_bios_entry.segment = APM_CS;
-	set_base(gdt[APM_CS >> 3],
-		 __va((unsigned long)apm_bios_info.cseg << 4));
-	set_base(gdt[APM_CS_16 >> 3],
-		 __va((unsigned long)apm_bios_info.cseg_16 << 4));
-	set_base(gdt[APM_DS >> 3],
-		 __va((unsigned long)apm_bios_info.dseg << 4));
-#ifndef APM_RELAX_SEGMENTS
-	if (apm_bios_info.version == 0x100)
-#endif
-	{
-		/* For ASUS motherboard, Award BIOS rev 110 (and others?) */
-		_set_limit((char *)&gdt[APM_CS >> 3], 64 * 1024 - 1);
-		/* For some unknown machine. */
-		_set_limit((char *)&gdt[APM_CS_16 >> 3], 64 * 1024 - 1);
-		/* For the DEC Hinote Ultra CT475 (and others?) */
-		_set_limit((char *)&gdt[APM_DS >> 3], 64 * 1024 - 1);
-	}
-#ifndef APM_RELAX_SEGMENTS
-	else {
-		_set_limit((char *)&gdt[APM_CS >> 3],
-			(apm_bios_info.cseg_len - 1) & 0xffff);
-		_set_limit((char *)&gdt[APM_CS_16 >> 3],
-			(apm_bios_info.cseg_16_len - 1) & 0xffff);
-		_set_limit((char *)&gdt[APM_DS >> 3],
-			(apm_bios_info.dseg_len - 1) & 0xffff);
-	}
-#endif
-#ifdef CONFIG_SMP
-	if (smp_num_cpus > 1) {
-		printk(KERN_NOTICE "apm: disabled - APM is not SMP safe.\n");
-		if (smp_hack)
-			smp_hack = 2;
-		return;
-	}
-#endif
 	if (apm_bios_info.version > 0x100) {
 		/*
 		 * We only support BIOSs up to version 1.2
@@ -1450,7 +1365,7 @@ void __init apm_bios_init(void)
 		error = apm_enable_power_management();
 		if (error) {
 			apm_error("enable power management", error);
-			return;
+			return -1;
 		}
 	}
 #endif
@@ -1460,10 +1375,116 @@ void __init apm_bios_init(void)
 			apm_bios_info.flags &= ~APM_BIOS_DISENGAGED;
 	}
 
-	init_timer(&apm_timer);
-	apm_timer.function = do_apm_timer;
-	apm_timer.expires = APM_CHECK_TIMEOUT + jiffies;
-	add_timer(&apm_timer);
+	apm_mainloop();
+	return 0;
+}
+
+/*
+ * Just start the APM thread. We do NOT want to do APM BIOS
+ * calls from anything but the APM thread, if for no other reason
+ * than the fact that we don't trust the APM BIOS. This way,
+ * most common APM BIOS problems that lead to protection errors
+ * etc will have at least some level of being contained...
+ *
+ * In short, if something bad happens, at least we have a choice
+ * of just killing the apm thread..
+ */
+void __init apm_init(void)
+{
+	static struct proc_dir_entry *ent;
+
+	if (apm_bios_info.version == 0) {
+		printk(KERN_INFO "apm: BIOS not found.\n");
+		return;
+	}
+	printk(KERN_INFO
+		"apm: BIOS version %d.%d Flags 0x%02x (Driver version %s)\n",
+		((apm_bios_info.version >> 8) & 0xff),
+		(apm_bios_info.version & 0xff),
+		apm_bios_info.flags,
+		driver_version);
+	if ((apm_bios_info.flags & APM_32_BIT_SUPPORT) == 0) {
+		printk(KERN_INFO "apm: no 32 bit BIOS support\n");
+		return;
+	}
+
+	/*
+	 * Fix for the Compaq Contura 3/25c which reports BIOS version 0.1
+	 * but is reportedly a 1.0 BIOS.
+	 */
+	if (apm_bios_info.version == 0x001)
+		apm_bios_info.version = 0x100;
+
+	/* BIOS < 1.2 doesn't set cseg_16_len */
+	if (apm_bios_info.version < 0x102)
+		apm_bios_info.cseg_16_len = 0; /* 64k */
+
+	if (debug) {
+		printk(KERN_INFO "apm: entry %x:%lx cseg16 %x dseg %x",
+			apm_bios_info.cseg, apm_bios_info.offset,
+			apm_bios_info.cseg_16, apm_bios_info.dseg);
+		if (apm_bios_info.version > 0x100)
+			printk(" cseg len %x, dseg len %x",
+				apm_bios_info.cseg_len,
+				apm_bios_info.dseg_len);
+		if (apm_bios_info.version > 0x101)
+			printk(" cseg16 len %x", apm_bios_info.cseg_16_len);
+		printk("\n");
+	}
+
+	if (apm_disabled) {
+		printk(KERN_NOTICE "apm: disabled on user request.\n");
+		return;
+	}
+
+#ifdef CONFIG_SMP
+	if (smp_num_cpus > 1) {
+		printk(KERN_NOTICE "apm: disabled - APM is not SMP safe.\n");
+		if (smp_hack)
+			smp_hack = 2;
+		return -1;
+	}
+#endif
+
+	/*
+	 * Set up a segment that references the real mode segment 0x40
+	 * that extends up to the end of page zero (that we have reserved).
+	 * This is for buggy BIOS's that refer to (real mode) segment 0x40
+	 * even though they are called in protected mode.
+	 */
+	set_base(gdt[APM_40 >> 3],
+		 __va((unsigned long)0x40 << 4));
+	_set_limit((char *)&gdt[APM_40 >> 3], 4095 - (0x40 << 4));
+
+	apm_bios_entry.offset = apm_bios_info.offset;
+	apm_bios_entry.segment = APM_CS;
+	set_base(gdt[APM_CS >> 3],
+		 __va((unsigned long)apm_bios_info.cseg << 4));
+	set_base(gdt[APM_CS_16 >> 3],
+		 __va((unsigned long)apm_bios_info.cseg_16 << 4));
+	set_base(gdt[APM_DS >> 3],
+		 __va((unsigned long)apm_bios_info.dseg << 4));
+#ifndef APM_RELAX_SEGMENTS
+	if (apm_bios_info.version == 0x100)
+#endif
+	{
+		/* For ASUS motherboard, Award BIOS rev 110 (and others?) */
+		_set_limit((char *)&gdt[APM_CS >> 3], 64 * 1024 - 1);
+		/* For some unknown machine. */
+		_set_limit((char *)&gdt[APM_CS_16 >> 3], 64 * 1024 - 1);
+		/* For the DEC Hinote Ultra CT475 (and others?) */
+		_set_limit((char *)&gdt[APM_DS >> 3], 64 * 1024 - 1);
+	}
+#ifndef APM_RELAX_SEGMENTS
+	else {
+		_set_limit((char *)&gdt[APM_CS >> 3],
+			(apm_bios_info.cseg_len - 1) & 0xffff);
+		_set_limit((char *)&gdt[APM_CS_16 >> 3],
+			(apm_bios_info.cseg_16_len - 1) & 0xffff);
+		_set_limit((char *)&gdt[APM_DS >> 3],
+			(apm_bios_info.dseg_len - 1) & 0xffff);
+	}
+#endif
 
 	ent = create_proc_entry("apm", 0, 0);
 	if (ent != NULL)
@@ -1471,5 +1492,5 @@ void __init apm_bios_init(void)
 
 	misc_register(&apm_device);
 
-	apm_enabled = 1;
+	kernel_thread(apm, NULL, CLONE_FS | CLONE_FILES | CLONE_SIGHAND | SIGCHLD);
 }

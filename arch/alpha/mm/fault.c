@@ -37,12 +37,9 @@ extern void die_if_kernel(char *,struct pt_regs *,long, unsigned long *);
 unsigned long last_asn = ASN_FIRST_VERSION;
 #endif
 
-void
-get_new_mmu_context(struct task_struct *p, struct mm_struct *mm)
+void ev5_flush_tlb_current(struct mm_struct *mm)
 {
-	unsigned long new = __get_new_mmu_context(p, mm);
-	mm->context = new;
-	p->tss.asn = new & HARDWARE_ASN_MASK;
+	ev5_activate_mm(NULL, mm, smp_processor_id());
 }
 
 

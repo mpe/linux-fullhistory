@@ -21,6 +21,8 @@
  *   CLAIM	(register device first time) parport_claim_or_block
  *   RELEASE	parport_release
  *   SETMODE	set the IEEE 1284 protocol to use for read/write
+ *   SETPHASE	set the IEEE 1284 phase of a particular mode.  Not to be
+ *              confused with ioctl(fd, SETPHASER, &stun). ;-)
  *   DATADIR	data_forward / data_reverse
  *   WDATA	write_data
  *   RDATA	read_data
@@ -56,7 +58,6 @@ struct pp_struct {
 	struct pardevice * pdev;
 	wait_queue_head_t irq_wait;
 	atomic_t irqc;
-	int mode;
 	unsigned int flags;
 	int irqresponse;
 	unsigned char irqctl;
@@ -84,105 +85,6 @@ static loff_t pp_lseek (struct file * file, long long offset, int origin)
 	return -ESPIPE;
 }
 
-/* This looks a bit like parport_read.  The difference is that we don't
- * determine the mode to use from the port data, but rather from the
- * mode the driver told us to use. */
-static ssize_t do_read (struct pp_struct *pp, void *buf, size_t len)
-{
-	size_t (*fn) (struct parport *, void *, size_t, int);
-	struct parport *port = pp->pdev->port;
-	int addr = pp->mode & IEEE1284_ADDR;
-	int mode = pp->mode & ~(IEEE1284_DEVICEID | IEEE1284_ADDR);
-
-	switch (mode) {
-	case IEEE1284_MODE_COMPAT:
-		/* This is a write-only mode. */
-		return -EIO;
-
-	case IEEE1284_MODE_NIBBLE:
-		fn = port->ops->nibble_read_data;
-		break;
-
-	case IEEE1284_MODE_BYTE:
-		fn = port->ops->byte_read_data;
-		break;
-
-	case IEEE1284_MODE_EPP:
-		if (addr)
-			fn = port->ops->epp_read_addr;
-		else
-			fn = port->ops->epp_read_data;
-		break;
-
-	case IEEE1284_MODE_ECP:
-	case IEEE1284_MODE_ECPRLE:
-		fn = port->ops->ecp_read_data;
-		break;
-
-	case IEEE1284_MODE_ECPSWE:
-		fn = parport_ieee1284_ecp_read_data;
-		break;
-
-	default:
-		printk (KERN_DEBUG "%s: unknown mode 0x%02x\n",
-			pp->pdev->name, pp->mode);
-		return -EINVAL;
-	}
-
-	return (*fn) (port, buf, len, 0);
-}
-
-/* This looks a bit like parport_write.  The difference is that we don't
- * determine the mode to use from the port data, but rather from the
- * mode the driver told us to use. */
-static ssize_t do_write (struct pp_struct *pp, const void *buf, size_t len)
-{
-	size_t (*fn) (struct parport *, const void *, size_t, int);
-	struct parport *port = pp->pdev->port;
-	int addr = pp->mode & IEEE1284_ADDR;
-	int mode = pp->mode & ~(IEEE1284_DEVICEID | IEEE1284_ADDR);
-
-	switch (mode) {
-	case IEEE1284_MODE_NIBBLE:
-	case IEEE1284_MODE_BYTE:
-		/* Read-only modes. */
-		return -EIO;
-
-	case IEEE1284_MODE_COMPAT:
-		fn = port->ops->compat_write_data;
-		break;
-
-	case IEEE1284_MODE_EPP:
-		if (addr)
-			fn = port->ops->epp_write_addr;
-		else
-			fn = port->ops->epp_write_data;
-		break;
-
-	case IEEE1284_MODE_ECP:
-	case IEEE1284_MODE_ECPRLE:
-		if (addr)
-			fn = port->ops->ecp_write_addr;
-		else
-			fn = port->ops->ecp_write_data;
-		break;
-
-	case IEEE1284_MODE_ECPSWE:
-		if (addr)
-			fn = parport_ieee1284_ecp_write_addr;
-		else
-			fn = parport_ieee1284_ecp_write_data;
-		break;
-
-	default:
-		printk (KERN_DEBUG "%s: unknown mode 0x%02x\n",
-			pp->pdev->name, pp->mode);
-		return -EINVAL;
-	}
-
-	return (*fn) (port, buf, len, 0);
-}
-
 static ssize_t pp_read (struct file * file, char * buf, size_t count,
 			loff_t * ppos)
 {
@@ -206,7 +108,7 @@ static ssize_t pp_read (struct file * file, char * buf, size_t count,
 	while (bytes_read < count) {
 		ssize_t need = min(count - bytes_read, PP_BUFFER_SIZE);
 
-		got = do_read (pp, kbuffer, need);
+		got = parport_read (pp->pdev->port, kbuffer, need);
 
 		if (got <= 0) {
 			if (!bytes_read)
@@ -265,7 +167,7 @@ static ssize_t pp_write (struct file * file, const char * buf, size_t count,
 			break;
 		}
 
-		wrote = do_write (pp, kbuffer, n);
+		wrote = parport_write (pp->pdev->port, kbuffer, n);
 
 		if (wrote < 0) {
 			if (!bytes_written)
@@ -341,6 +243,17 @@ static int register_device (int minor, struct pp_struct *pp)
 	return 0;
 }
 
+static enum ieee1284_phase init_phase (int mode)
+{
+	switch (mode & ~(IEEE1284_DEVICEID
+			 | IEEE1284_ADDR)) {
+	case IEEE1284_MODE_NIBBLE:
+	case IEEE1284_MODE_BYTE:
+		return IEEE1284_PH_REV_IDLE;
+	}
+	return IEEE1284_PH_FWD_IDLE;
+}
+
 static int pp_ioctl(struct inode *inode, struct file *file,
 		    unsigned int cmd, unsigned long arg)
 {
@@ -351,7 +264,6 @@ static int pp_ioctl(struct inode *inode, struct file *file,
 	/* First handle the cases that don't take arguments. */
 	if (cmd == PPCLAIM) {
 		struct ieee1284_info *info;
-		int first_claim = 0;
 
 		if (pp->flags & PP_CLAIMED) {
 			printk (KERN_DEBUG CHRDEV
@@ -364,8 +276,6 @@ static int pp_ioctl(struct inode *inode, struct file *file,
 			int err = register_device (minor, pp);
 			if (err)
 				return err;
-
-			first_claim = 1;
 		}
 
 		parport_claim_or_block (pp->pdev);
@@ -379,24 +289,8 @@ static int pp_ioctl(struct inode *inode, struct file *file,
 		info = &pp->pdev->port->ieee1284;
 		pp->saved_state.mode = info->mode;
 		pp->saved_state.phase = info->phase;
-		if (pp->mode != info->mode) {
-			int phase = IEEE1284_PH_FWD_IDLE;
-
-			if (first_claim) {
-				info->mode = pp->mode;
-				switch (pp->mode & ~(IEEE1284_DEVICEID
-						     | IEEE1284_ADDR)) {
-				case IEEE1284_MODE_NIBBLE:
-				case IEEE1284_MODE_BYTE:
-					phase = IEEE1284_PH_REV_IDLE;
-				}
-				info->phase = phase;
-			} else {
-				/* Just restore the state. */
-				info->mode = pp->state.mode;
-				info->phase = pp->state.phase;
-			}
-		}
+		info->mode = pp->state.mode;
+		info->phase = pp->state.phase;
 
 		return 0;
 	}
@@ -423,7 +317,27 @@ static int pp_ioctl(struct inode *inode, struct file *file,
 		if (copy_from_user (&mode, (int *) arg, sizeof (mode)))
 			return -EFAULT;
 		/* FIXME: validate mode */
-		pp->mode = mode;
+		pp->state.mode = mode;
+		pp->state.phase = init_phase (mode);
+
+		if (pp->flags & PP_CLAIMED) {
+			pp->pdev->port->ieee1284.mode = mode;
+			pp->pdev->port->ieee1284.phase = pp->state.phase;
+		}
+
+		return 0;
+	}
+
+	if (cmd == PPSETPHASE) {
+		int phase;
+		if (copy_from_user (&phase, (int *) arg, sizeof (phase)))
+			return -EFAULT;
+		/* FIXME: validate phase */
+		pp->state.phase = phase;
+
+		if (pp->flags & PP_CLAIMED)
+			pp->pdev->port->ieee1284.phase = phase;
+
 		return 0;
 	}
 
@@ -559,7 +473,8 @@ static int pp_open (struct inode * inode, struct file * file)
 	if (!pp)
 		return -ENOMEM;
 
-	pp->mode = IEEE1284_MODE_COMPAT;
+	pp->state.mode = IEEE1284_MODE_COMPAT;
+	pp->state.phase = init_phase (pp->state.mode);
 	pp->flags = 0;
 	atomic_set (&pp->irqc, 0);
 	init_waitqueue_head (&pp->irq_wait);

@@ -895,11 +895,12 @@ asmlinkage unsigned long osf_getsysinfo(unsigned long op, void *buffer,
 			w = ieee_fpcr_to_swcr(fpcr);
 			if (!(fpcr & FPCR_UNDZ)) {
 				w &= ~IEEE_TRAP_ENABLE_UNF;
-				w |= current->tss.flags & IEEE_TRAP_ENABLE_UNF;
+				w |= (current->thread.flags
+				      & IEEE_TRAP_ENABLE_UNF);
 			}
 		} else {
 			/* Otherwise we are forced to do everything in sw.  */
-			w = current->tss.flags & IEEE_SW_MASK;
+			w = current->thread.flags & IEEE_SW_MASK;
 		}
 
 		if (put_user(w, (unsigned long *) buffer))
@@ -917,7 +918,7 @@ asmlinkage unsigned long osf_getsysinfo(unsigned long op, void *buffer,
  	case GSI_UACPROC:
 		if (nbytes < sizeof(unsigned int))
 			return -EINVAL;
- 		w = (current->tss.flags >> UAC_SHIFT) & UAC_BITMASK;
+ 		w = (current->thread.flags >> UAC_SHIFT) & UAC_BITMASK;
  		if (put_user(w, (unsigned int *)buffer))
  			return -EFAULT;
  		return 1;
@@ -964,8 +965,8 @@ asmlinkage unsigned long osf_setsysinfo(unsigned long op, void *buffer,
 		/* Update softare trap enable bits.  */
 		if (get_user(swcr, (unsigned long *)buffer))
 			return -EFAULT;
-		current->tss.flags &= ~IEEE_SW_MASK;
-		current->tss.flags |= swcr & IEEE_SW_MASK;
+		current->thread.flags &= ~IEEE_SW_MASK;
+		current->thread.flags |= swcr & IEEE_SW_MASK;
 
 		/* Update the real fpcr.  Keep UNFD off if not UNDZ.  */
 		fpcr = rdfpcr();
@@ -997,9 +998,9 @@ asmlinkage unsigned long osf_setsysinfo(unsigned long op, void *buffer,
  				return -EFAULT;
  			switch (v) {
  			case SSIN_UACPROC:
- 				current->tss.flags &=
+ 				current->thread.flags &=
  					~(UAC_BITMASK << UAC_SHIFT);
- 				current->tss.flags |=
+ 				current->thread.flags |=
  					(w & UAC_BITMASK) << UAC_SHIFT;
  				break;
  

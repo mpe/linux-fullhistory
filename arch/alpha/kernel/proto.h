@@ -162,6 +162,7 @@ extern void timer_interrupt(int irq, void *dev, struct pt_regs * regs);
 extern void rtc_init_pit(void);
 extern void generic_init_pit(void);
 extern unsigned long est_cycle_freq;
+extern struct resource timer_resource;
 
 /* smc37c93x.c */
 extern void SMC93x_Init(void);

@@ -2187,16 +2187,19 @@ D: NE/2-driver maintainer
 D: Miscellaneous MCA-support
 
 N: Matt Welsh
-E: mdw@sunsite.unc.edu
-D: Linux Documentation Project coordinator
-D: Author, _Running_Linux_ and I&GS guide
-D: Linuxdoc-SGML formatting system
+E: mdw@metalab.unc.edu
+W: http://www.cs.berkeley.edu/~mdw
+D: Original Linux Documentation Project coordinator
+D: Author, "Running Linux" (O'Reilly)
+D: Author, "Linux Installation and Getting Started" (LDP) and several HOWTOs
+D: Linuxdoc-SGML formatting system (now SGML-Tools)
+D: Device drivers for various high-speed network interfaces (Myrinet, ATM)
 D: Keithley DAS1200 device driver
-D: Maintainer of sunsite WWW and FTP, moderator c.o.l.answers
-S: Cornell University Computer Science Department
-S: Robotics and Vision Laboratory
-S: 4130 Upson Hall
-S: Ithaca, New York 14850
+D: Original maintainer of sunsite WWW and FTP sites
+D: Original moderator of c.o.l.announce and c.o.l.answers
+S: Computer Science Division
+S: UC Berkeley
+S: Berkeley, CA 94720-1776
 S: USA
 
 N: Greg Wettstein

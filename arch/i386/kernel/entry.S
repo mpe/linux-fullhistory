@@ -481,7 +481,7 @@ ENTRY(sys_call_table)
 	.long SYMBOL_NAME(sys_uname)
 	.long SYMBOL_NAME(sys_iopl)		/* 110 */
 	.long SYMBOL_NAME(sys_vhangup)
-	.long SYMBOL_NAME(sys_idle)
+	.long SYMBOL_NAME(sys_ni_syscall)	/* old "idle" system call */
 	.long SYMBOL_NAME(sys_vm86old)
 	.long SYMBOL_NAME(sys_wait4)
 	.long SYMBOL_NAME(sys_swapoff)		/* 115 */

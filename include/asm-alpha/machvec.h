@@ -72,7 +72,10 @@ struct alpha_machine_vector
 	int (*hose_write_config_dword)(u8, u8, u8, u32 value,
 				       struct linux_hose_info *);
 	
-	void (*mv_get_mmu_context)(struct task_struct *);
+	void (*mv_switch_mm)(struct mm_struct *, struct mm_struct *,
+			     struct task_struct *, long);
+	void (*mv_activate_mm)(struct mm_struct *, struct mm_struct *, long);
+
 	void (*mv_flush_tlb_current)(struct mm_struct *);
 	void (*mv_flush_tlb_other)(struct mm_struct *);
 	void (*mv_flush_tlb_current_page)(struct mm_struct * mm,

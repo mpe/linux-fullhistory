@@ -103,12 +103,12 @@ die_if_kernel(char * str, struct pt_regs *regs, long err, unsigned long *r9_15)
 	dik_show_code((unsigned int *)regs->pc);
 	dik_show_trace((unsigned long *)(regs+1));
 
-	if (current->tss.flags & (1UL << 63)) {
+	if (current->thread.flags & (1UL << 63)) {
 		printk("die_if_kernel recursion detected.\n");
 		sti();
 		while (1);
 	}
-	current->tss.flags |= (1UL << 63);
+	current->thread.flags |= (1UL << 63);
 	do_exit(SIGSEGV);
 }
 
@@ -154,7 +154,9 @@ do_entIF(unsigned long type, unsigned long a1,
 	 unsigned long a2, unsigned long a3, unsigned long a4,
 	 unsigned long a5, struct pt_regs regs)
 {
-	die_if_kernel("Instruction fault", &regs, type, 0);
+	die_if_kernel((type == 1 ? "Kernel Bug" : "Instruction fault"),
+		      &regs, type, 0);
+
 	switch (type) {
 	      case 0: /* breakpoint */
 		if (ptrace_cancel_bpt(current)) {
@@ -494,12 +496,12 @@ got_exception:
 	dik_show_code((unsigned int *)pc);
 	dik_show_trace((unsigned long *)(&regs+1));
 
-	if (current->tss.flags & (1UL << 63)) {
+	if (current->thread.flags & (1UL << 63)) {
 		printk("die_if_kernel recursion detected.\n");
 		sti();
 		while (1);
 	}
-	current->tss.flags |= (1UL << 63);
+	current->thread.flags |= (1UL << 63);
 	do_exit(SIGSEGV);
 }
 
@@ -601,7 +603,7 @@ do_entUnaUser(void * va, unsigned long opcode,
 	/* Check the UAC bits to decide what the user wants us to do
 	   with the unaliged access.  */
 
-	uac_bits = (current->tss.flags >> UAC_SHIFT) & UAC_BITMASK;
+	uac_bits = (current->thread.flags >> UAC_SHIFT) & UAC_BITMASK;
 	if (!(uac_bits & UAC_NOPRINT)) {
 		if (cnt >= 5 && jiffies - last_time > 5*HZ) {
 			cnt = 0;

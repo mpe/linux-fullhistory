@@ -69,3 +69,6 @@ struct ppdev_frob_struct {
 
 /* Clear (and return) interrupt count. */
 #define PPCLRIRQ	_IOR(PP_IOCTL, 0x93, int)
+
+/* Set the IEEE 1284 phase that we're in (e.g. IEEE1284_PH_FWD_IDLE) */
+#define PPSETPHASE	_IOW(PP_IOCTL, 0x94, int)

@@ -479,7 +479,7 @@ static void pc_set_checksum( void )
 #ifdef CONFIG_PROC_FS
 
 static char *floppy_types[] = {
-	"none", "5.25'' 360k", "5.25'' 1.2M", "3.5'' 720k", "3.5'' 1.44M"
+	"none", "5.25'' 360k", "5.25'' 1.2M", "3.5'' 720k", "3.5'' 1.44M", "3.5'' 2.88M"
 };
 
 static char *gfx_types[] = {
@@ -521,14 +521,14 @@ static int pc_proc_infos( unsigned char *nvram, char *buffer, int *len,
 	PRINT_PROC( "HD 0 type      : " );
 	type = nvram[4] >> 4;
 	if (type)
-		PRINT_PROC( " %02x\n", type == 0x0f ? nvram[11] : type );
+		PRINT_PROC( "%02x\n", type == 0x0f ? nvram[11] : type );
 	else
 		PRINT_PROC( "none\n" );
 
 	PRINT_PROC( "HD 1 type      : " );
 	type = nvram[4] & 0x0f;
 	if (type)
-		PRINT_PROC( " %02x\n", type == 0x0f ? nvram[12] : type );
+		PRINT_PROC( "%02x\n", type == 0x0f ? nvram[12] : type );
 	else
 		PRINT_PROC( "none\n" );
 

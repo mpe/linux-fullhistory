@@ -10,7 +10,7 @@
 #define destroy_context(mm)		do { } while(0)
 #define init_new_context(tsk,mm)	do { } while (0)
 
-static inline void switch_mm(struct mm_struct *prev, struct mm_struct *next, unsigned cpu)
+static inline void switch_mm(struct mm_struct *prev, struct mm_struct *next, struct task_struct *tsk, unsigned cpu)
 {
 
 	if (prev != next) {
@@ -26,5 +26,8 @@ static inline void switch_mm(struct mm_struct *prev, struct mm_struct *next, uns
 	}
 	set_bit(cpu, &next->cpu_vm_mask);
 }
+
+#define activate_mm(prev, next) \
+	switch_mm((prev),(next),NULL,smp_processor_id())
 
 #endif

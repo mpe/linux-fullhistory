@@ -46,12 +46,7 @@ ev4_flush_tlb_other(struct mm_struct *mm)
 {
 }
 
-__EXTERN_INLINE void
-ev5_flush_tlb_current(struct mm_struct *mm)
-{
-	get_new_mmu_context(current, mm);
-	reload_context(current);
-}
+extern void ev5_flush_tlb_current(struct mm_struct *mm);
 
 __EXTERN_INLINE void
 ev5_flush_tlb_other(struct mm_struct *mm)
@@ -394,22 +389,6 @@ extern inline pte_t pte_mkexec(pte_t pte)	{ pte_val(pte) &= ~_PAGE_FOE; return p
 extern inline pte_t pte_mkdirty(pte_t pte)	{ pte_val(pte) |= __DIRTY_BITS; return pte; }
 extern inline pte_t pte_mkyoung(pte_t pte)	{ pte_val(pte) |= __ACCESS_BITS; return pte; }
 
-/* 
- * To set the page-dir. Note the self-mapping in the last entry
- *
- * Also note that if we update the current process ptbr, we need to
- * update the PAL-cached ptbr value as well.. There doesn't seem to
- * be any "wrptbr" PAL-insn, but we can do a dummy swpctx to ourself
- * instead.
- */
-extern inline void SET_PAGE_DIR(struct task_struct * tsk, pgd_t * pgdir)
-{
-	pgd_val(pgdir[PTRS_PER_PGD]) = pte_val(mk_pte((unsigned long) pgdir, PAGE_KERNEL));
-	tsk->tss.ptbr = ((unsigned long) pgdir - PAGE_OFFSET) >> PAGE_SHIFT;
-	if (tsk == current)
-		reload_context(tsk);
-}
-
 #define PAGE_DIR_OFFSET(tsk,address) pgd_offset((tsk),(address))
 
 /* to find an entry in a kernel page-table-directory */
@@ -462,6 +441,9 @@ extern __inline__ pgd_t *get_pgd_slow(void)
 		memset (ret, 0, USER_PTRS_PER_PGD * sizeof(pgd_t));
 		memcpy (ret + USER_PTRS_PER_PGD, init + USER_PTRS_PER_PGD,
 			(PTRS_PER_PGD - USER_PTRS_PER_PGD) * sizeof(pgd_t));
+
+		pgd_val(ret[PTRS_PER_PGD])
+		  = pte_val(mk_pte((unsigned long)ret, PAGE_KERNEL));
 	}
 	return ret;
 }

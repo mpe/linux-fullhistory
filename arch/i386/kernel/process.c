@@ -51,14 +51,16 @@ spinlock_t semaphore_wake_lock = SPIN_LOCK_UNLOCKED;
 
 asmlinkage void ret_from_fork(void) __asm__("ret_from_fork");
 
+/*
+ * We'll get there..
+ */
 #ifdef CONFIG_APM
-extern int  apm_do_idle(void);
-extern void apm_do_busy(void);
+#define powermanagement_idle()  do { } while (0)
+#else
+#define powermanagement_idle()	do { } while (0)
 #endif
 
 static int hlt_counter=0;
-
-#define HARD_IDLE_TIMEOUT (HZ / 3)
 
 void disable_hlt(void)
 {
@@ -70,101 +72,51 @@ void enable_hlt(void)
 	hlt_counter--;
 }
 
-#ifndef __SMP__
-
-static void hard_idle(void)
-{
-	while (!current->need_resched) {
-		if (boot_cpu_data.hlt_works_ok && !hlt_counter) {
-#ifdef CONFIG_APM
-				/* If the APM BIOS is not enabled, or there
-				 is an error calling the idle routine, we
-				 should hlt if possible.  We need to check
-				 need_resched again because an interrupt
-				 may have occurred in apm_do_idle(). */
-			start_bh_atomic();
-			if (!apm_do_idle() && !current->need_resched)
-				__asm__("hlt");
-			end_bh_atomic();
-#else
-			__asm__("hlt");
-#endif
-	        }
- 		if (current->need_resched) 
- 			break;
-		schedule();
-	}
-#ifdef CONFIG_APM
-	apm_do_busy();
-#endif
-}
-
 /*
- * The idle loop on a uniprocessor i386..
- */ 
-static int cpu_idle(void *unused)
-{
-	int work = 1;
-	unsigned long start_idle = 0;
-
-	/* endless idle loop with no priority at all */
-	current->priority = 0;
-	current->counter = -100;
-	init_idle();
-
-	for (;;) {
-		if (work)
-			start_idle = jiffies;
-
-		if (jiffies - start_idle > HARD_IDLE_TIMEOUT) 
-			hard_idle();
-		else  {
-			if (boot_cpu_data.hlt_works_ok && !hlt_counter && !current->need_resched)
-		        	__asm__("hlt");
-		}
-
-		work = current->need_resched;
-		schedule();
-		check_pgt_cache();
-	}
-}
-
-#else
-
-/*
- *	This is being executed in task 0 'user space'.
+ * If no process has been interested in this
+ * CPU for some time, we want to wake up the
+ * power management thread - we probably want
+ * to conserve power.
  */
+#define HARD_IDLE_TIMEOUT (HZ/3)
 
+/*
+ * The idle thread. There's no useful work to be
+ * done, so just try to conserve power and have a
+ * low exit latency (ie sit in a loop waiting for
+ * somebody to say that they'd like to reschedule)
+ */
 int cpu_idle(void *unused)
 {
+	unsigned int start_idle;
+
 	/* endless idle loop with no priority at all */
+	init_idle();
 	current->priority = 0;
 	current->counter = -100;
-	init_idle();
 
-	while(1) {
-		if (current_cpu_data.hlt_works_ok && !hlt_counter &&
-				 !current->need_resched)
-			__asm__("hlt");
-		/*
-		 * although we are an idle CPU, we do not want to
-		 * get into the scheduler unnecessarily.
-		 */
-		if (current->need_resched) {
-			schedule();
-			check_pgt_cache();
+	start_idle = jiffies;
+	while (1) {
+		if (!current->need_resched) {
+			if (jiffies - start_idle < HARD_IDLE_TIMEOUT) {
+				if (!current_cpu_data.hlt_works_ok)
+					continue;
+				if (hlt_counter)
+					continue;
+				asm volatile("sti ; hlt" : : : "memory");
+				continue;
+			}
+
+			/*
+			 * Ok, do some power management - we've been idle for too long
+			 */
+			powermanagement_idle();
 		}
+
+		schedule();
+		check_pgt_cache();
+		start_idle = jiffies;
 	}
-}
-
-#endif
-
-asmlinkage int sys_idle(void)
-{
-	if (current->pid != 0)
-		return -EPERM;
-	cpu_idle(NULL);
-	return 0;
 }
 
 /*

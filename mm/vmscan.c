@@ -155,7 +155,7 @@ drop_pte:
 	 */
 	entry = get_swap_page();
 	if (!entry)
-		goto out_failed; /* No swap space left */
+		goto out_failed_unlock; /* No swap space left */
 		
 	vma->vm_mm->rss--;
 	tsk->nswap++;

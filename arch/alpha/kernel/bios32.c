@@ -456,27 +456,23 @@ layout_dev(struct pci_dev *dev)
 	 * HACK: the PCI-to-EISA bridge does not seem to identify
 	 *       itself as a bridge... :-(
 	 */
-	if (dev->vendor == PCI_VENDOR_ID_INTEL &&
-	    dev->device == PCI_DEVICE_ID_INTEL_82375) {
+	if (dev->vendor == PCI_VENDOR_ID_INTEL
+	    && dev->device == PCI_DEVICE_ID_INTEL_82375) {
 		dev->class = PCI_CLASS_BRIDGE_EISA;
 		DBG_DEVS(("layout_dev: ignoring PCEB...\n"));
 		return;
 	}
 
-	if (dev->vendor == PCI_VENDOR_ID_INTEL &&
-	    dev->device == PCI_DEVICE_ID_INTEL_82378) {
+	if (dev->vendor == PCI_VENDOR_ID_INTEL
+	    && dev->device == PCI_DEVICE_ID_INTEL_82378) {
 		dev->class = PCI_CLASS_BRIDGE_ISA;
 		DBG_DEVS(("layout_dev: ignoring SIO...\n"));
 		return;
 	}
 
-	/*
-	 * We don't have code that will init the CYPRESS bridge correctly
-	 * so we do the next best thing, and depend on the previous
-	 * console code to do the right thing, and ignore it here... :-\
-	 */
-	if (dev->vendor == PCI_VENDOR_ID_CONTAQ &&
-	    dev->device == PCI_DEVICE_ID_CONTAQ_82C693) {
+	if (dev->vendor == PCI_VENDOR_ID_CONTAQ
+	    && dev->device == PCI_DEVICE_ID_CONTAQ_82C693
+	    && dev->class >> 8 == PCI_CLASS_BRIDGE_ISA) {
 		DBG_DEVS(("layout_dev: ignoring CYPRESS bridge...\n"));
 		return;
 	}
@@ -518,6 +514,17 @@ layout_dev(struct pci_dev *dev)
 			base &= PCI_BASE_ADDRESS_IO_MASK;
 			mask = (~base << 1) | 0x1;
 			size = (mask & base) & 0xffffffff;
+
+			/* We don't want to disturb normal IDE functions, so
+			   we don't touch the first two I/O ports on the
+			   Cypress.  */
+			if (dev->vendor == PCI_VENDOR_ID_CONTAQ
+			    && dev->device == PCI_DEVICE_ID_CONTAQ_82C693
+			    && dev->class >> 8 == PCI_CLASS_BRIDGE_ISA
+			    && idx < 2) {
+				continue;
+			}
+
 			/*
 			 * Aligning to 0x800 rather than the minimum base of
 			 * 0x400 is an attempt to avoid having devices in 
@@ -655,8 +662,7 @@ layout_dev(struct pci_dev *dev)
 	if (dev->class >> 8 == PCI_CLASS_NOT_DEFINED ||
 	    dev->class >> 8 == PCI_CLASS_NOT_DEFINED_VGA ||
 	    dev->class >> 8 == PCI_CLASS_STORAGE_IDE ||
-	    dev->class >> 16 == PCI_BASE_CLASS_DISPLAY)
-	{
+	    dev->class >> 16 == PCI_BASE_CLASS_DISPLAY) {
 		/*
 		 * All of these (may) have I/O scattered all around
 		 * and may not use i/o-base address registers at all.

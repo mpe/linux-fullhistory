@@ -1668,7 +1668,7 @@ static int __init probe_one_port(unsigned long int base,
 		/*
 		 * Put the ECP detected port in PS2 mode.
 		 */
-		outb (0x24, ECONTROL (p));
+		outb (0x34, ECONTROL (p));
 
 	parport_pc_write_data(p, 0);
 	parport_pc_data_forward (p);

@@ -220,19 +220,25 @@ ruffian_init_arch(unsigned long *mem_start, unsigned long *mem_end)
 {
 	/* FIXME: What do we do with ruffian_get_bank_size above?  */
 
+#if 1
+	pyxis_init_arch();
+#else
 	pyxis_enable_errors();
 	if (!pyxis_srm_window_setup()) {
 		printk("ruffian_init_arch: Skipping window register rewrites."
 		       "\n... Trust DeskStation firmware!\n");
 	}
 	pyxis_finish_init_arch();
+#endif
 }
 
 static void
 ruffian_init_pit (void)
 {
 	/* Ruffian depends on the system timer established in MILO! */
-	request_region(0x70, 0x10, "timer");
+        timer_resource.start = 0x70;
+        timer_resource.end = 0x70 + 0x10;
+        request_resource(&ioport_resource, &timer_resource);
 
 	outb(0xb6, 0x43);       /* pit counter 2: speaker */
 	outb(0x31, 0x42);

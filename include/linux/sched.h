@@ -250,7 +250,7 @@ struct task_struct {
 						0-0xFFFFFFFF for kernel-thread
 					 */
 	struct exec_domain *exec_domain;
-	long need_resched;
+	volatile long need_resched;
 
 /* various fields */
 	long counter;

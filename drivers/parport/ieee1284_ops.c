@@ -344,14 +344,14 @@ int ecp_forward_to_reverse (struct parport *port)
 	/* Event 38: Set nAutoFd low */
 	parport_frob_control (port,
 			      PARPORT_CONTROL_AUTOFD,
-			      PARPORT_CONTROL_AUTOFD);
+			      0);
 	parport_data_reverse (port);
 	udelay (5);
 
 	/* Event 39: Set nInit low to initiate bus reversal */
 	parport_frob_control (port,
 			      PARPORT_CONTROL_INIT,
-			      PARPORT_CONTROL_INIT);
+			      0);
 
 	/* Event 40: PError goes low */
 	retval = parport_wait_peripheral (port,
@@ -615,6 +615,7 @@ size_t parport_ieee1284_ecp_read_data (struct parport *port,
 	}
 
  out:
+	port->ieee1284.phase = IEEE1284_PH_REV_IDLE;
 	return count;
 #endif /* IEEE1284 support */
 }

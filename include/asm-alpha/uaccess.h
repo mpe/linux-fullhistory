@@ -23,9 +23,9 @@
 #define VERIFY_READ	0
 #define VERIFY_WRITE	1
 
-#define get_fs()  (current->tss.fs)
+#define get_fs()  (current->thread.fs)
 #define get_ds()  (KERNEL_DS)
-#define set_fs(x) (current->tss.fs = (x))
+#define set_fs(x) (current->thread.fs = (x))
 
 #define segment_eq(a,b)	((a).seg == (b).seg)
 

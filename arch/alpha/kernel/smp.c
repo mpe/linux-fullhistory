@@ -335,21 +335,21 @@ secondary_cpu_start(int cpuid, struct task_struct *idle)
 
 	/* Initialize the CPU's HWPCB to something just good enough for
 	   us to get started.  Immediately after starting, we'll swpctx
-	   to the target idle task's tss.  Reuse the stack in the mean
+	   to the target idle task's ptb.  Reuse the stack in the mean
 	   time.  Precalculate the target PCBB.  */
 	hwpcb->ksp = (unsigned long) idle + sizeof(union task_union) - 16;
 	hwpcb->usp = 0;
-	hwpcb->ptbr = idle->tss.ptbr;
+	hwpcb->ptbr = idle->thread.ptbr;
 	hwpcb->pcc = 0;
 	hwpcb->asn = 0;
-	hwpcb->unique = virt_to_phys(&idle->tss);
-	hwpcb->flags = idle->tss.pal_flags;
+	hwpcb->unique = virt_to_phys(&idle->thread);
+	hwpcb->flags = idle->thread.pal_flags;
 	hwpcb->res1 = hwpcb->res2 = 0;
 
 	DBGS(("KSP 0x%lx PTBR 0x%lx VPTBR 0x%lx UNIQUE 0x%lx\n",
 	      hwpcb->ksp, hwpcb->ptbr, hwrpb->vptb, hwcpb->unique));
 	DBGS(("Starting secondary cpu %d: state 0x%lx pal_flags 0x%lx\n",
-	      cpuid, idle->state, idle->tss.pal_flags));
+	      cpuid, idle->state, idle->thread.pal_flags));
 
 	/* Setup HWRPB fields that SRM uses to activate secondary CPU */
 	hwrpb->CPU_restart = __smp_callin;
@@ -399,10 +399,13 @@ smp_boot_one_cpu(int cpuid, int cpunum)
 	   HWRPB.CPU_restart says to start.  But this gets all the other
 	   task-y sort of data structures set up like we wish.  */
 	kernel_thread((void *)__smp_callin, NULL, CLONE_PID|CLONE_VM);
-	idle = task[cpunum];
-	if (!idle)
-		panic("No idle process for CPU %d", cpuid);
-	idle->processor = cpuid;
+
+        idle = init_task.prev_task;
+        if (!idle)
+                panic("No idle process for CPU %d", cpunum);
+        del_from_runqueue(idle);
+        init_tasks[cpunum] = idle;
+        idle->processor = cpuid;
 
 	/* Schedule the first task manually.  */
 	/* ??? Ingo, what is this?  */

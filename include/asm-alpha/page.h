@@ -106,13 +106,8 @@ typedef unsigned long pgprot_t;
 
 #endif /* STRICT_MM_TYPECHECKS */
 
-#define BUG()							\
-do {								\
-	printk("Kernel BUG at %s:%d!\n", __FILE__, __LINE__);	\
-	__asm__ __volatile__("call_pal 129 # bugchk");		\
-} while (1)
-
-#define PAGE_BUG(page) BUG()
+#define BUG()		__asm__ __volatile__("call_pal 129 # bugchk")
+#define PAGE_BUG(page)	BUG()
 
 #endif /* !ASSEMBLY */
 

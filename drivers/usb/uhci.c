@@ -468,9 +468,12 @@ int uhci_release_irq(void* handle)
 		return USB_ST_INTERNALERROR;
 
 	/* Remove it from the internal irq_list */
+	uhci_remove_irq_list(td);
+#if 0
 	spin_lock_irqsave(&irqlist_lock, flags);
 	list_del(&td->irq_list);
 	spin_unlock_irqrestore(&irqlist_lock, flags);
+#endif
 
 	/* Remove the interrupt TD and QH */
 	uhci_remove_td(td);
@@ -505,12 +508,10 @@ static int uhci_compress_isochronous(struct usb_device *usb_dev, void *_isodesc)
 		if ((cdata != data) && (n))
 			memmove(data, cdata, n);
 
-#if 0
-if (n && n != 960)
-	printk("underrun: %d %d\n", i, n);
-#endif
-if ((isodesc->td[i].status >> 16) & 0xFF)
-	printk("error: %d %X\n", i, (isodesc->td[i].status >> 16));
+		/* Debugging */
+		if ((isodesc->td[i].status >> 16) & 0xFF)
+			printk("error: %d %X\n", i,
+				(isodesc->td[i].status >> 16));
 
 		data += n;
 		totlen += n;
@@ -557,15 +558,12 @@ static int uhci_schedule_isochronous(struct usb_device *usb_dev, void *_isodesc,
 
 	/* Insert TD into list */
 	if (!pisodesc) {
+		/* It's not guaranteed to be 1-1024 */
 		frame = inw(uhci->io_addr + USBFRNUM) % 1024;
 		/* HACK: Start 2 frames from now */
 		frame = (frame + 2) % 1024;
 	} else
 		frame = (pisodesc->endframe + 1) % 1024;
-
-#if 0
-printk("scheduling first at frame %d\n", frame);
-#endif
 
 	for (i = 0; i < isodesc->num; i++) {
 		/* Active */
@@ -575,19 +573,12 @@ printk("scheduling first at frame %d\n", frame);
 		uhci->fl->frame[(frame + i) % 1024] = virt_to_bus(&isodesc->td[i]);
 	}
 
-#if 0
-printk("last at frame %d\n", (frame + i - 1) % 1024);
-#endif
-
-	/* Interrupt */
+	/* IOC on the last TD */
 	isodesc->td[i - 1].status |= (1 << 24);
 
 	isodesc->frame = frame;
 	isodesc->endframe = (frame + isodesc->num - 1) % 1024;
 
-#if 0
-	return uhci_td_result(dev, td[num - 1]);
-#endif
 	return 0;
 }
 
@@ -610,7 +601,7 @@ static void *uhci_allocate_isochronous(struct usb_device *usb_dev, unsigned int 
 	memset(isodesc, 0, sizeof(*isodesc));
 
 	/* Carefully work around the non contiguous pages */
-	isodesc->num = (len / PAGE_SIZE) * (PAGE_SIZE / maxsze);
+	isodesc->num = len / maxsze;
 	isodesc->td = kmalloc(sizeof(struct uhci_td) * isodesc->num, GFP_KERNEL);
 	isodesc->frame = isodesc->endframe = -1;
 	isodesc->data = data;
@@ -651,15 +642,14 @@ static void *uhci_allocate_isochronous(struct usb_device *usb_dev, unsigned int 
 		i++;
 
 		data += maxsze;
-
-		if (((int)data % PAGE_SIZE) + maxsze >= PAGE_SIZE)
-			data = (char *)(((int)data + maxsze) & ~(PAGE_SIZE - 1));
-		
 		len -= maxsze;
 	} while (i < isodesc->num);
 
+#if 0
 	/* IOC on the last TD */
 	td->status |= (1 << 24);
+#endif
+
 	uhci_add_irq_list(dev->uhci, td, completed, dev_id);
 
 	return isodesc;
@@ -861,7 +851,6 @@ static int uhci_control_msg(struct usb_device *usb_dev, unsigned int pipe, devre
 	td->first = first;
 	td->link = 1;					/* Terminate */
 
-
 	/* Start it up.. */
 	ret = uhci_run_control(dev, first, td);
 
@@ -917,7 +906,7 @@ static int uhci_run_bulk(struct uhci_device *dev, struct uhci_td *first, struct 
 	DECLARE_WAITQUEUE(wait, current);
 	struct uhci_qh *bulk_qh = uhci_qh_allocate(dev);
 	struct uhci_td *curtd;
-	struct uhci_device *root_hub=usb_to_uhci(dev->uhci->bus->root_hub);
+	struct uhci_device *root_hub = usb_to_uhci(dev->uhci->bus->root_hub);
 
 	current->state = TASK_UNINTERRUPTIBLE;
 	add_wait_queue(&bulk_wakeup, &wait);
@@ -1080,15 +1069,16 @@ static struct usb_device *uhci_usb_allocate(struct usb_device *parent)
 	struct uhci_device *dev;
 	int i;
 
+	/* Allocate the USB device */
 	usb_dev = kmalloc(sizeof(*usb_dev), GFP_KERNEL);
 	if (!usb_dev)
 		return NULL;
 
 	memset(usb_dev, 0, sizeof(*usb_dev));
 
+	/* Allocate the UHCI device private data */
 	dev = kmalloc(sizeof(*dev), GFP_KERNEL);
 	if (!dev) {
-		usb_destroy_configuration(usb_dev);
 		kfree(usb_dev);
 		return NULL;
 	}
@@ -1298,9 +1288,10 @@ static void uhci_interrupt_notify(struct uhci *uhci)
 		next = tmp->next;
 
 		if (!((status = td->status) & (1 << 23)) ||  /* No longer active? */
+		    (td->qh &&
 		    ((td->qh->element & ~15) && 
 		      !((status = uhci_link_to_td(td->qh->element)->status) & (1 <<23)) &&
-		      (status & 0x760000) /* is in error state (Stall, db, babble, timeout, bitstuff) */)) {	
+		      (status & 0x760000) /* is in error state (Stall, db, babble, timeout, bitstuff) */))) {	
 			/* remove from IRQ list */
 			__list_del(tmp->prev, next);
 			INIT_LIST_HEAD(tmp);

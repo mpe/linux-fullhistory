@@ -382,7 +382,7 @@ static int exec_mmap(void)
 
 		current->mm = mm;
 		current->active_mm = mm;
-		switch_mm(active_mm, mm, smp_processor_id());
+		activate_mm(active_mm, mm);
 		mm_release();
 		if (old_mm) {
 			if (active_mm != old_mm) BUG();

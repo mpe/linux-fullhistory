@@ -35,9 +35,7 @@
 #include <linux/delay.h>
 #include <linux/config.h>
 #include <linux/init.h>
-#ifdef CONFIG_APM
 #include <linux/apm_bios.h>
-#endif
 #ifdef CONFIG_BLK_DEV_RAM
 #include <linux/blk.h>
 #endif
@@ -77,9 +75,7 @@ unsigned int mca_pentium_flag = 0;
  */
 struct drive_info_struct { char dummy[32]; } drive_info;
 struct screen_info screen_info;
-#ifdef CONFIG_APM
 struct apm_bios_info apm_bios_info;
-#endif
 struct sys_desc_table_struct {
 	unsigned short length;
 	unsigned char table[0];
@@ -284,9 +280,7 @@ __initfunc(void setup_arch(char **cmdline_p,
  	ROOT_DEV = to_kdev_t(ORIG_ROOT_DEV);
  	drive_info = DRIVE_INFO;
  	screen_info = SCREEN_INFO;
-#ifdef CONFIG_APM
 	apm_bios_info = APM_BIOS_INFO;
-#endif
 	if( SYS_DESC_TABLE.length != 0 ) {
 		MCA_bus = SYS_DESC_TABLE.table[3] &0x2;
 		machine_id = SYS_DESC_TABLE.table[0];

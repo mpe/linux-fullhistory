@@ -178,7 +178,7 @@ load_PCB(struct thread_struct * pcb)
 {
 	register unsigned long sp __asm__("$30");
 	pcb->ksp = sp;
-	return __reload_tss(pcb);
+	return __reload_thread(pcb);
 }
 
 /*
@@ -233,10 +233,10 @@ paging_init(unsigned long start_mem, unsigned long end_mem)
 	}
 
 	/* Also set up the real kernel PCB while we're at it.  */
-	init_task.tss.ptbr = newptbr;
-	init_task.tss.pal_flags = 1;	/* set FEN, clear everything else */
-	init_task.tss.flags = 0;
-	original_pcb_ptr = load_PCB(&init_task.tss);
+	init_task.thread.ptbr = newptbr;
+	init_task.thread.pal_flags = 1;	/* set FEN, clear everything else */
+	init_task.thread.flags = 0;
+	original_pcb_ptr = load_PCB(&init_task.thread);
 	tbia();
 
 	/* Save off the contents of the original PCB so that we can

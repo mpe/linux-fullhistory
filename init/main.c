@@ -1089,28 +1089,13 @@ static void __init parse_options(char *line)
 
 
 extern void setup_arch(char **, unsigned long *, unsigned long *);
+extern int cpu_idle(void * unused);
 
 #ifndef __SMP__
-
-/*
- *	Uniprocessor idle thread
- */
- 
-int cpu_idle(void *unused)
-{
-	for(;;)
-		idle();
-}
 
 #define smp_init()	do { } while (0)
 
 #else
-
-/*
- *	Multiprocessor idle thread is in arch/...
- */
- 
-extern int cpu_idle(void * unused);
 
 /* Called by boot processor to activate the rest. */
 static void __init smp_init(void)
@@ -1303,6 +1288,9 @@ static void __init do_basic_setup(void)
 #endif
 #ifdef CONFIG_MAC
 	nubus_init();
+#endif
+#ifdef CONFIG_APM
+	apm_init();
 #endif
 
 	/* Networking initialization needs a process context */ 

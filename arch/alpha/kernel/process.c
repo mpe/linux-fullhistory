@@ -254,7 +254,7 @@ void flush_thread(void)
            that EV6 defines UNFD valid only with UNDZ, which we don't want
 	   for IEEE conformance -- so that disabled bit remains in software.  */
 
-	current->tss.flags &= ~IEEE_SW_MASK;
+	current->thread.flags &= ~IEEE_SW_MASK;
 	wrfpcr(FPCR_DYN_NORMAL | FPCR_INVD | FPCR_DZED | FPCR_OVFD | FPCR_INED);
 }
 
@@ -324,10 +324,10 @@ int copy_thread(int nr, unsigned long clone_flags, unsigned long usp,
 #else
 	childstack->r26 = (unsigned long) ret_from_sys_call;
 #endif
-	p->tss.usp = usp;
-	p->tss.ksp = (unsigned long) childstack;
-	p->tss.pal_flags = 1;	/* set FEN, clear everything else */
-	p->tss.flags = current->tss.flags;
+	p->thread.usp = usp;
+	p->thread.ksp = (unsigned long) childstack;
+	p->thread.pal_flags = 1;	/* set FEN, clear everything else */
+	p->thread.flags = current->thread.flags;
 
 	return 0;
 }

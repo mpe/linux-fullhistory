@@ -255,7 +255,7 @@ void end_lazy_tlb(struct mm_struct *mm)
 	current->mm = mm;
 	if (mm != active_mm) {
 		current->active_mm = mm;
-		switch_mm(active_mm, mm, current->processor);
+		activate_mm(active_mm, mm);
 	}
 	mmdrop(active_mm);
 }
