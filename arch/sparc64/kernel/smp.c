@@ -1214,9 +1214,23 @@ void __init setup_per_cpu_areas(void)
 	for (size = 1UL; size < goal; size <<= 1UL)
 		__per_cpu_shift++;
 
-	ptr = alloc_bootmem_pages(size * NR_CPUS);
+	/* Make sure the resulting __per_cpu_base value
+	 * will fit in the 43-bit sign extended IMMU
+	 * TSB register.
+	 */
+	ptr = __alloc_bootmem(size * NR_CPUS, PAGE_SIZE,
+			      (unsigned long) __per_cpu_start);
 
 	__per_cpu_base = ptr - __per_cpu_start;
+
+	if ((__per_cpu_shift < PAGE_SHIFT) ||
+	    (__per_cpu_base & ~PAGE_MASK) ||
+	    (__per_cpu_base != (((long) __per_cpu_base << 20) >> 20))) {
+		prom_printf("PER_CPU: Invalid layout, "
+			    "ptr[%p] shift[%lx] base[%lx]\n",
+			    ptr, __per_cpu_shift, __per_cpu_base);
+		prom_halt();
+	}
 
 	for (i = 0; i < NR_CPUS; i++, ptr += size)
 		memcpy(ptr, __per_cpu_start, __per_cpu_end - __per_cpu_start);
@@ -1226,7 +1240,5 @@ void __init setup_per_cpu_areas(void)
 	 * entry and exit loading of %g5.  That is why it
 	 * has to be page aligned.
 	 */
-	BUG_ON((__per_cpu_shift < PAGE_SHIFT) ||
-	       (__per_cpu_base & ~PAGE_MASK));
 	cpu_setup_percpu_base(hard_smp_processor_id());
 }
