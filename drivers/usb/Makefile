@@ -21,7 +21,7 @@ export-objs		:= usb.o
 # Multipart objects.
 
 list-multi		:= usbcore.o
-usbcore-objs		:= usb.o usb-debug.o usb-core.o hub.o
+usbcore-objs		:= usb.o usb-debug.o hub.o
 
 # Optional parts of multipart objects.
 

@@ -58,9 +58,7 @@ nm256_release_ports (struct nm256_info *card)
 
     for (x = 0; x < 2; x++) {
 	if (card->port[x].ptr != NULL) {
-	    u32 size = 
-		card->port[x].end_offset - card->port[x].start_offset;
-	    release_region ((unsigned long) card->port[x].ptr, size);
+	    iounmap (card->port[x].ptr);
 	    card->port[x].ptr = NULL;
 	}
     }
@@ -1025,7 +1023,7 @@ nm256_peek_for_sig (struct nm256_info *card)
 		pointer);
     }
 
-    release_region ((unsigned long) temp, 16);
+    iounmap (temp);
 }
 
 /* 

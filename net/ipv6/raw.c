@@ -7,7 +7,7 @@
  *
  *	Adapted from linux/net/ipv4/raw.c
  *
- *	$Id: raw.c,v 1.40 2000/08/09 11:59:04 davem Exp $
+ *	$Id: raw.c,v 1.41 2000/10/18 18:04:23 davem Exp $
  *
  *	Fixes:
  *	Hideaki YOSHIFUJI	:	sin6_scope_id support
@@ -793,7 +793,7 @@ int raw6_get_info(char *buffer, char **start, off_t offset, int length)
 			if (sk->family != PF_INET6)
 				continue;
 			pos += LINE_LEN+1;
-			if (pos < offset)
+			if (pos <= offset)
 				continue;
 			get_raw6_sock(sk, tmpbuf, i);
 			len += sprintf(buffer+len, LINE_FMT, tmpbuf);

@@ -24,6 +24,8 @@
 	Version 1.0.1:
 		- Spinlock fixes
 		- Bug fixes and better intr performance (Tjeerd)
+	Version 1.0.2:
+		- Now reads correct MAC address from eeprom
 
 */
 
@@ -33,7 +35,7 @@ static const char version1[] =
 static const char version2[] =
 "  http://www.scyld.com/network/natsemi.html\n";
 static const char version3[] =
-"  (unofficial 2.4.x kernel port, version 1.0.1, September 5, 2000 Jeff Garzik, Tjeerd Mulder)\n";
+"  (unofficial 2.4.x kernel port, version 1.0.2, October 6, 2000 Jeff Garzik, Tjeerd Mulder)\n";
 /* Updated to recommendations in pci-skeleton v2.03. */
 
 /* Automatically extracted configuration info:
@@ -405,8 +407,13 @@ static int __devinit natsemi_probe1 (struct pci_dev *pdev,
 	printk(KERN_INFO "%s: %s at 0x%lx, ",
 		   dev->name, natsemi_pci_info[chip_idx].name, ioaddr);
 
-	for (i = 0; i < ETH_ALEN/2; i++)
-		((u16 *)dev->dev_addr)[i] = be16_to_cpu(eeprom_read(ioaddr, i + 7));
+	for (i = 0; i < ETH_ALEN/2; i++) {
+		/* weird organization */
+		unsigned short a;
+		a = (le16_to_cpu(eeprom_read(ioaddr, i + 6)) >> 15) + 
+		    (le16_to_cpu(eeprom_read(ioaddr, i + 7)) << 1);
+		((u16 *)dev->dev_addr)[i] = a;
+	}
 	for (i = 0; i < ETH_ALEN-1; i++)
 			printk("%2.2x:", dev->dev_addr[i]);
 	printk("%2.2x, IRQ %d.\n", dev->dev_addr[i], irq);
@@ -513,7 +520,8 @@ static int eeprom_read(long addr, int location)
 	for (i = 16; i > 0; i--) {
 		writel(EE_ChipSelect | EE_ShiftClk, ee_addr);
 		eeprom_delay(ee_addr);
-		retval = (retval << 1) | ((readl(ee_addr) & EE_DataOut) ? 1 : 0);
+		/* data bits are LSB first */
+		retval = (retval >> 1) | ((readl(ee_addr) & EE_DataOut) ? 0x8000 : 0);
 		writel(EE_ChipSelect, ee_addr);
 		eeprom_delay(ee_addr);
 	}

@@ -741,11 +741,7 @@ asmlinkage void math_state_restore(struct pt_regs regs)
 	if (current->used_math) {
 		restore_fpu(current);
 	} else {
-		/*
-		 *	Our first FPU usage, clean the chip.
-		 */
-		__asm__("fninit");
-		current->used_math = 1;
+		init_fpu();
 	}
 	current->flags |= PF_USEDFPU;	/* So we fnsave on switch_to() */
 }

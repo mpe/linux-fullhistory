@@ -1549,7 +1549,7 @@ void __init identify_cpu(struct cpuinfo_x86 *c)
 			/* Pentium IV. */
 			if (c->x86 == 15) {
 				get_model_name(c);
-				goto name_decoded;
+				return;
 			}
 
 			/* Names for the Pentium II/Celeron processors 
@@ -1688,12 +1688,12 @@ int get_cpuinfo(char * buffer)
 #endif
 		p += sprintf(p,"processor\t: %d\n"
 			"vendor_id\t: %s\n"
-			"cpu family\t: %c\n"
+			"cpu family\t: %d\n"
 			"model\t\t: %d\n"
 			"model name\t: %s\n",
 			n,
 			c->x86_vendor_id[0] ? c->x86_vendor_id : "unknown",
-			c->x86 + '0',
+			c->x86,
 			c->x86_model,
 			c->x86_model_id[0] ? c->x86_model_id : "unknown");
 

@@ -223,6 +223,9 @@
       0.5     14-Nov-98   Re-spin for 2.1.x kernels.
       0.51    27-Jun-99   Correct received packet length for CRC from
                            report by <worm@dkik.dk>
+      0.52    16-Oct-00   Fixes for 2.3 io memory accesses
+                          Fix show-stopper (ints left masked) in depca_interrupt
+			   by <peterd@pnd-pc.demon.co.uk>
 
     =========================================================================
 */
@@ -378,14 +381,21 @@ struct depca_private {
     char devname[DEPCA_STRLEN];    /* Device Product String                  */
     char adapter_name[DEPCA_STRLEN];/* /proc/ioports string                  */
     char adapter;                  /* Adapter type                           */
-    char mca_slot;                 /* MCA slot, if MCA else -1               */    struct depca_rx_desc *rx_ring; /* Pointer to start of RX descriptor ring */
-    struct depca_tx_desc *tx_ring; /* Pointer to start of TX descriptor ring */
+    char mca_slot;                 /* MCA slot, if MCA else -1               */
     struct depca_init	init_block;/* Shadow Initialization block            */
-    char *rx_memcpy[NUM_RX_DESC];  /* CPU virt address of sh'd memory buffs  */
-    char *tx_memcpy[NUM_TX_DESC];  /* CPU virt address of sh'd memory buffs  */
-    u_long bus_offset;             /* (E)ISA bus address offset vs LANCE     */
-    u_long sh_mem;  		   /* Physical start addr of shared mem area */
-    u_long dma_buffs;		   /* LANCE Rx and Tx buffers start address. */
+/* CPU address space fields */
+    struct depca_rx_desc *rx_ring; /* Pointer to start of RX descriptor ring */
+    struct depca_tx_desc *tx_ring; /* Pointer to start of TX descriptor ring */
+    void *rx_buff[NUM_RX_DESC];    /* CPU virt address of sh'd memory buffs  */
+    void *tx_buff[NUM_TX_DESC];    /* CPU virt address of sh'd memory buffs  */
+    void *sh_mem;                  /* CPU mapped virt address of device RAM  */
+/* Device address space fields */
+    u_long device_ram_start;       /* Start of RAM in device addr space      */
+/* Offsets used in both address spaces */
+    u_long rx_ring_offset;         /* Offset from start of RAM to rx_ring    */
+    u_long tx_ring_offset;         /* Offset from start of RAM to tx_ring    */
+    u_long buffs_offset;	   /* LANCE Rx and Tx buffers start address. */
+/* Kernel-only (not device) fields */
     int	rx_new, tx_new;		   /* The next free ring entry               */
     int rx_old, tx_old;	           /* The ring entries to be free()ed.       */
     struct net_device_stats stats;
@@ -517,215 +527,228 @@ depca_probe(struct net_device *dev)
 static int __init 
 depca_hw_init(struct net_device *dev, u_long ioaddr, int mca_slot)
 {
-  struct depca_private *lp;
-  int i, j, offset, netRAM, mem_len, status=0;
-  s16 nicsr;
-  u_long mem_start=0, mem_base[] = DEPCA_RAM_BASE_ADDRESSES;
+	struct depca_private *lp;
+	int i, j, offset, netRAM, mem_len, status=0;
+	s16 nicsr;
+	u_long mem_start=0, mem_base[] = DEPCA_RAM_BASE_ADDRESSES;
 
-  STOP_DEPCA;
+	STOP_DEPCA;
 
-  nicsr = inb(DEPCA_NICSR);
-  nicsr = ((nicsr & ~SHE & ~RBE & ~IEN) | IM);
-  outb(nicsr, DEPCA_NICSR);
+	nicsr = inb(DEPCA_NICSR);
+	nicsr = ((nicsr & ~SHE & ~RBE & ~IEN) | IM);
+	outb(nicsr, DEPCA_NICSR);
 
-  if (inw(DEPCA_DATA) == STOP) {
-    do {
-      strcpy(name, (adapter_name ? adapter_name : ""));
-      mem_start = (mem ? mem & 0xf0000 : mem_base[mem_chkd++]);
-      DepcaSignature(name, mem_start);
-    } while (!mem && mem_base[mem_chkd] && (adapter == unknown));
+	if (inw(DEPCA_DATA) != STOP) {
+		return -ENXIO;
+	}
 
-    if ((adapter != unknown) && mem_start) {        /* found a DEPCA device */
-      dev->base_addr = ioaddr;
+	do {
+		strcpy(name, (adapter_name ? adapter_name : ""));
+		mem_start = (mem ? mem & 0xf0000 : mem_base[mem_chkd++]);
+		DepcaSignature(name, mem_start);
+	} while (!mem && mem_base[mem_chkd] && (adapter == unknown));
 
-      if (mca_slot != -1) {
-	printk("%s: %s at 0x%04lx (MCA slot %d)", dev->name, name, 
-	                                                   ioaddr, mca_slot);
-      } else if ((ioaddr & 0x0fff) == DEPCA_EISA_IO_PORTS) { /* EISA slot address */
-	printk("%s: %s at 0x%04lx (EISA slot %d)", 
-	                    dev->name, name, ioaddr, (int)((ioaddr>>12)&0x0f));
-      } else {                             /* ISA port address */
-	printk("%s: %s at 0x%04lx", dev->name, name, ioaddr);
-      }
+	if ((adapter == unknown) || !mem_start) { /* DEPCA device not found */
+		return -ENXIO;
+	}
 
-      printk(", h/w address ");
-      status = get_hw_addr(dev);
-      for (i=0; i<ETH_ALEN - 1; i++) { /* get the ethernet address */
-	printk("%2.2x:", dev->dev_addr[i]);
-      }
-      printk("%2.2x", dev->dev_addr[i]);
+	dev->base_addr = ioaddr;
 
-      if (status == 0) {
+	if (mca_slot != -1) {
+		printk("%s: %s at 0x%04lx (MCA slot %d)", dev->name, name, 
+		                                          ioaddr, mca_slot);
+	} else if ((ioaddr & 0x0fff) == DEPCA_EISA_IO_PORTS) { /* EISA slot address */
+		printk("%s: %s at 0x%04lx (EISA slot %d)", 
+		       dev->name, name, ioaddr, (int)((ioaddr>>12)&0x0f));
+	} else {                             /* ISA port address */
+		printk("%s: %s at 0x%04lx", dev->name, name, ioaddr);
+	}
+
+	printk(", h/w address ");
+	status = get_hw_addr(dev);
+	for (i=0; i<ETH_ALEN - 1; i++) { /* get the ethernet address */
+		printk("%2.2x:", dev->dev_addr[i]);
+	}
+	printk("%2.2x", dev->dev_addr[i]);
+
+	if (status != 0) {
+		printk("      which has an Ethernet PROM CRC error.\n");
+		return -ENXIO;
+	}
+
 	/* Set up the maximum amount of network RAM(kB) */
 	netRAM = ((adapter != DEPCA) ? 64 : 48);
-	if ((nicsr & _128KB) && (adapter == de422)) netRAM = 128;
+	if ((nicsr & _128KB) && (adapter == de422))
+		netRAM = 128;
 	offset = 0x0000;
 
 	/* Shared Memory Base Address */ 
 	if (nicsr & BUF) {
-	  offset = 0x8000;              /* 32kbyte RAM offset*/
-	  nicsr &= ~BS;                 /* DEPCA RAM in top 32k */
-	  netRAM -= 32;
+		offset = 0x8000;        /* 32kbyte RAM offset*/
+		nicsr &= ~BS;           /* DEPCA RAM in top 32k */
+		netRAM -= 32;
 	}
 	mem_start += offset;            /* (E)ISA start address */
 	if ((mem_len = (NUM_RX_DESC*(sizeof(struct depca_rx_desc)+RX_BUFF_SZ) +
 			NUM_TX_DESC*(sizeof(struct depca_tx_desc)+TX_BUFF_SZ) +
-			sizeof(struct depca_init))) <=
-	    (netRAM<<10)) {
-	  printk(",\n      has %dkB RAM at 0x%.5lx", netRAM, mem_start);
-
-	  /* Enable the shadow RAM. */
-	  if (adapter != DEPCA) {
-	    nicsr |= SHE;
-	    outb(nicsr, DEPCA_NICSR);
-	  }
- 
-	  /* Define the device private memory */
-	  dev->priv = (void *) kmalloc(sizeof(struct depca_private), GFP_KERNEL);
-	  if (dev->priv == NULL)
-	    return -ENOMEM;
-	  lp = (struct depca_private *)dev->priv;
-	  memset((char *)dev->priv, 0, sizeof(struct depca_private));
-	  lp->adapter = adapter;
-	  lp->mca_slot = mca_slot;
-	  lp->lock = SPIN_LOCK_UNLOCKED;
- 	  sprintf(lp->adapter_name,"%s (%s)", name, dev->name);
-	  request_region(ioaddr, DEPCA_TOTAL_SIZE, lp->adapter_name);
-
-	  /* Initialisation Block */
-	  lp->sh_mem = mem_start;
-	  mem_start += sizeof(struct depca_init);
-
-	  /* Tx & Rx descriptors (aligned to a quadword boundary) */
-	  mem_start = (mem_start + ALIGN) & ~ALIGN;
-	  lp->rx_ring = (struct depca_rx_desc *)mem_start;
-
-	  mem_start += (sizeof(struct depca_rx_desc) * NUM_RX_DESC);
-	  lp->tx_ring = (struct depca_tx_desc *)mem_start;
-
-	  mem_start += (sizeof(struct depca_tx_desc) * NUM_TX_DESC);
-	  lp->bus_offset = mem_start & 0x00ff0000;
-	  mem_start &= LA_MASK;           /* LANCE re-mapped start address */
-
-	  lp->dma_buffs = mem_start;
-
-	  /* Finish initialising the ring information. */
-	  lp->rxRingMask = NUM_RX_DESC - 1;
-	  lp->txRingMask = NUM_TX_DESC - 1;
-
-	  /* Calculate Tx/Rx RLEN size for the descriptors. */
-	  for (i=0, j = lp->rxRingMask; j>0; i++) {
-	    j >>= 1;
-	  }
-	  lp->rx_rlen = (s32)(i << 29);
-	  for (i=0, j = lp->txRingMask; j>0; i++) {
-	    j >>= 1;
-	  }
-	  lp->tx_rlen = (s32)(i << 29);
-
-	  /* Load the initialisation block */
-	  depca_init_ring(dev);
-
-	  /* Initialise the control and status registers */
-	  LoadCSRs(dev);
-
-	  /* Enable DEPCA board interrupts for autoprobing */
-	  nicsr = ((nicsr & ~IM)|IEN);
-	  outb(nicsr, DEPCA_NICSR);
-
-	  /* To auto-IRQ we enable the initialization-done and DMA err,
-	     interrupts. For now we will always get a DMA error. */
-	  if (dev->irq < 2) {
-#ifndef MODULE
-	    unsigned char irqnum;
-	    autoirq_setup(0);
-	    
-	    /* Assign the correct irq list */
-	    switch (lp->adapter) {
-	    case DEPCA:
-	    case de100:
-	    case de101:
-	      depca_irq = de1xx_irq;
-	      break;
-	    case de200:
-	    case de201:
-	    case de202:
-	    case de210:
-	    case de212:
-	      depca_irq = de2xx_irq;
-	      break;
-	    case de422:
-	      depca_irq = de422_irq;
-	      break;
-	    }
-
-	    /* Trigger an initialization just for the interrupt. */
-	    outw(INEA | INIT, DEPCA_DATA);
-	  
-	    irqnum = autoirq_report(1);
-	    if (!irqnum) {
-	      printk(" and failed to detect IRQ line.\n");
-	      status = -ENXIO;
-	    } else {
-	      for (dev->irq=0,i=0; (depca_irq[i]) && (!dev->irq); i++) {
-		if (irqnum == depca_irq[i]) {
-		  dev->irq = irqnum;
-		  printk(" and uses IRQ%d.\n", dev->irq);
-		}
-	      }
-	      
-	      if (!dev->irq) {
-		printk(" but incorrect IRQ line detected.\n");
-		status = -ENXIO;
-	      }
-	    }
-#endif /* MODULE */
-	  } else {
-	    printk(" and assigned IRQ%d.\n", dev->irq);
-	  }
-	  if (status) release_region(ioaddr, DEPCA_TOTAL_SIZE);
-	} else {
-	  printk(",\n      requests %dkB RAM: only %dkB is available!\n", 
-	         	                                (mem_len>>10), netRAM);
-	  status = -ENXIO;
+			sizeof(struct depca_init)))
+	    > (netRAM<<10)) {
+		printk(",\n       requests %dkB RAM: only %dkB is available!\n",
+		        (mem_len >> 10), netRAM);
+		return -ENXIO;
 	}
-      } else {
-	printk("      which has an Ethernet PROM CRC error.\n");
-	status = -ENXIO;
-      }
-    } else {
-      status = -ENXIO;
-    }
-    if (!status) {
-      if (depca_debug > 1) {
-	printk(version);
-      }
 
-      /* The DEPCA-specific entries in the device structure. */
-      dev->open = &depca_open;
-      dev->hard_start_xmit = &depca_start_xmit;
-      dev->stop = &depca_close;
-      dev->get_stats = &depca_get_stats;
-      dev->set_multicast_list = &set_multicast_list;
-      dev->do_ioctl = &depca_ioctl;
-      dev->tx_timeout = depca_tx_timeout;
-      dev->watchdog_timeo = TX_TIMEOUT;
+	printk(",\n      has %dkB RAM at 0x%.5lx", netRAM, mem_start);
 
-      dev->mem_start = 0;
+	/* Enable the shadow RAM. */
+	if (adapter != DEPCA) {
+		nicsr |= SHE;
+		outb(nicsr, DEPCA_NICSR);
+	}
+ 
+	/* Define the device private memory */
+	dev->priv = (void *) kmalloc(sizeof(struct depca_private), GFP_KERNEL);
+	if (dev->priv == NULL)
+		return -ENOMEM;
+	lp = (struct depca_private *)dev->priv;
+	memset((char *)dev->priv, 0, sizeof(struct depca_private));
+	lp->adapter = adapter;
+	lp->mca_slot = mca_slot;
+	lp->lock = SPIN_LOCK_UNLOCKED;
+ 	sprintf(lp->adapter_name,"%s (%s)", name, dev->name);
+	if (!request_region(ioaddr, DEPCA_TOTAL_SIZE, lp->adapter_name)) {
+		printk(KERN_ERR "depca: I/O resource 0x%x @ 0x%lx busy\n",
+		       DEPCA_TOTAL_SIZE, ioaddr);
+		return -EBUSY;
+	}
+
+	/* Initialisation Block */
+	lp->sh_mem = ioremap(mem_start, mem_len);
+	if (lp->sh_mem == NULL) {
+		printk(KERN_ERR "depca: cannot remap ISA memory, aborting\n");
+		return -EIO;
+	}
+	lp->device_ram_start = mem_start & LA_MASK;
 	
-      /* Fill in the generic field of the device structure. */
-      ether_setup(dev);
-    } else {                           /* Incorrectly initialised hardware */
-      if (dev->priv) {
-	kfree(dev->priv);
-	dev->priv = NULL;
-      }
-    }
-  } else {
-    status = -ENXIO;
-  }
+	offset = 0;
+	offset += sizeof(struct depca_init);
 
-  return status;
+	/* Tx & Rx descriptors (aligned to a quadword boundary) */
+	offset = (offset + ALIGN) & ~ALIGN;
+	lp->rx_ring = (struct depca_rx_desc *)(lp->sh_mem + offset);
+	lp->rx_ring_offset = offset;
+
+	offset += (sizeof(struct depca_rx_desc) * NUM_RX_DESC);
+	lp->tx_ring = (struct depca_tx_desc *)(lp->sh_mem + offset);
+	lp->tx_ring_offset = offset;
+
+	offset += (sizeof(struct depca_tx_desc) * NUM_TX_DESC);
+
+	lp->buffs_offset = offset;
+
+	/* Finish initialising the ring information. */
+	lp->rxRingMask = NUM_RX_DESC - 1;
+	lp->txRingMask = NUM_TX_DESC - 1;
+
+	/* Calculate Tx/Rx RLEN size for the descriptors. */
+	for (i=0, j = lp->rxRingMask; j>0; i++) {
+		j >>= 1;
+	}
+	lp->rx_rlen = (s32)(i << 29);
+	for (i=0, j = lp->txRingMask; j>0; i++) {
+		j >>= 1;
+	}
+	lp->tx_rlen = (s32)(i << 29);
+
+	/* Load the initialisation block */
+	depca_init_ring(dev);
+
+	/* Initialise the control and status registers */
+	LoadCSRs(dev);
+
+	/* Enable DEPCA board interrupts for autoprobing */
+	nicsr = ((nicsr & ~IM)|IEN);
+	outb(nicsr, DEPCA_NICSR);
+
+	/* To auto-IRQ we enable the initialization-done and DMA err,
+	   interrupts. For now we will always get a DMA error. */
+	if (dev->irq < 2) {
+#ifndef MODULE
+		unsigned char irqnum;
+		autoirq_setup(0);
+
+		/* Assign the correct irq list */
+		switch (lp->adapter) {
+		case DEPCA:
+		case de100:
+		case de101:
+			depca_irq = de1xx_irq;
+			break;
+		case de200:
+		case de201:
+		case de202:
+		case de210:
+		case de212:
+			depca_irq = de2xx_irq;
+			break;
+		case de422:
+			depca_irq = de422_irq;
+			break;
+		}
+
+		/* Trigger an initialization just for the interrupt. */
+		outw(INEA | INIT, DEPCA_DATA);
+	  
+		irqnum = autoirq_report(1);
+		if (!irqnum) {
+			printk(" and failed to detect IRQ line.\n");
+			status = -ENXIO;
+		} else {
+			for (dev->irq=0,i=0; (depca_irq[i]) && (!dev->irq); i++) {
+				if (irqnum == depca_irq[i]) {
+					dev->irq = irqnum;
+					printk(" and uses IRQ%d.\n", dev->irq);
+				}
+			}
+	      
+			if (!dev->irq) {
+				printk(" but incorrect IRQ line detected.\n");
+				status = -ENXIO;
+			}
+		}
+#endif /* MODULE */
+	} else {
+		printk(" and assigned IRQ%d.\n", dev->irq);
+	}
+
+	if (!status) {
+		if (depca_debug > 1) {
+			printk(version);
+		}
+
+		/* The DEPCA-specific entries in the device structure. */
+		dev->open = &depca_open;
+		dev->hard_start_xmit = &depca_start_xmit;
+		dev->stop = &depca_close;
+		dev->get_stats = &depca_get_stats;
+		dev->set_multicast_list = &set_multicast_list;
+		dev->do_ioctl = &depca_ioctl;
+		dev->tx_timeout = depca_tx_timeout;
+		dev->watchdog_timeo = TX_TIMEOUT;
+
+		dev->mem_start = 0;
+
+		/* Fill in the generic field of the device structure. */
+		ether_setup(dev);
+	} else {          /* Incorrectly initialised hardware */
+		release_region(ioaddr, DEPCA_TOTAL_SIZE);
+		if (dev->priv) {
+			kfree(dev->priv);
+			dev->priv = NULL;
+		}
+	}
+
+	return status;
 }
 
 
@@ -741,7 +764,7 @@ depca_open(struct net_device *dev)
   nicsr = inb(DEPCA_NICSR);
 
   /* Make sure the shadow RAM is enabled */
-  if (adapter != DEPCA) {
+  if (lp->adapter != DEPCA) {
     nicsr |= SHE;
     outb(nicsr, DEPCA_NICSR);
   }
@@ -781,39 +804,43 @@ depca_open(struct net_device *dev)
 static void
 depca_init_ring(struct net_device *dev)
 {
-  struct depca_private *lp = (struct depca_private *)dev->priv;
-  u_int i;
-  u_long p;
+	struct depca_private *lp = (struct depca_private *)dev->priv;
+	u_int i;
+	u_long offset;
 
-  /* Lock out other processes whilst setting up the hardware */
-  netif_stop_queue(dev);
+	/* Lock out other processes whilst setting up the hardware */
+	netif_stop_queue(dev);
 
-  lp->rx_new = lp->tx_new = 0;
-  lp->rx_old = lp->tx_old = 0;
+	lp->rx_new = lp->tx_new = 0;
+	lp->rx_old = lp->tx_old = 0;
 
-  /* Initialize the base addresses and length of each buffer in the ring */
-  for (i = 0; i <= lp->rxRingMask; i++) {
-    writel((p=lp->dma_buffs+i*RX_BUFF_SZ) | R_OWN, &lp->rx_ring[i].base);
-    writew(-RX_BUFF_SZ, &lp->rx_ring[i].buf_length);
-    lp->rx_memcpy[i]=(char *)(p+lp->bus_offset);
-  }
-  for (i = 0; i <= lp->txRingMask; i++) {
-    writel((p=lp->dma_buffs+(i+lp->txRingMask+1)*TX_BUFF_SZ) & 0x00ffffff,
-	                                                 &lp->tx_ring[i].base);
-    lp->tx_memcpy[i]=(char *)(p+lp->bus_offset);
-  }
+	/* Initialize the base address and length of each buffer in the ring */
+	for (i = 0; i <= lp->rxRingMask; i++) {
+		offset = lp->buffs_offset + i*RX_BUFF_SZ;
+		writel((lp->device_ram_start + offset) | R_OWN,
+		       &lp->rx_ring[i].base);
+		writew(-RX_BUFF_SZ, &lp->rx_ring[i].buf_length);
+		lp->rx_buff[i] = lp->sh_mem + offset;
+	}
 
-  /* Set up the initialization block */
-  lp->init_block.rx_ring = ((u32)((u_long)lp->rx_ring)&LA_MASK) | lp->rx_rlen;
-  lp->init_block.tx_ring = ((u32)((u_long)lp->tx_ring)&LA_MASK) | lp->tx_rlen;
+	for (i = 0; i <= lp->txRingMask; i++) {
+		offset = lp->buffs_offset + (i + lp->rxRingMask+1)*TX_BUFF_SZ;
+		writel((lp->device_ram_start + offset) & 0x00ffffff,
+	               &lp->tx_ring[i].base);
+		lp->tx_buff[i] = lp->sh_mem + offset;
+	}
 
-  SetMulticastFilter(dev);
+	/* Set up the initialization block */
+	lp->init_block.rx_ring = (lp->device_ram_start + lp->rx_ring_offset) | lp->rx_rlen;
+	lp->init_block.tx_ring = (lp->device_ram_start + lp->tx_ring_offset) | lp->tx_rlen;
 
-  for (i = 0; i < ETH_ALEN; i++) {
-    lp->init_block.phys_addr[i] = dev->dev_addr[i];
-  }
+	SetMulticastFilter(dev);
 
-  lp->init_block.mode = 0x0000;            /* Enable the Tx and Rx */
+	for (i = 0; i < ETH_ALEN; i++) {
+		lp->init_block.phys_addr[i] = dev->dev_addr[i];
+	}
+
+	lp->init_block.mode = 0x0000;            /* Enable the Tx and Rx */
 }
 
 
@@ -951,10 +978,10 @@ depca_rx(struct net_device *dev)
 	  skb->dev = dev;
 	  if (entry < lp->rx_old) {         /* Wrapped buffer */
 	    len = (lp->rxRingMask - lp->rx_old + 1) * RX_BUFF_SZ;
-	    memcpy_fromio(buf, lp->rx_memcpy[lp->rx_old], len);
-	    memcpy_fromio(buf + len, lp->rx_memcpy[0], pkt_len-len);
+	    memcpy_fromio(buf, lp->rx_buff[lp->rx_old], len);
+	    memcpy_fromio(buf + len, lp->rx_buff[0], pkt_len-len);
 	  } else {                          /* Linear buffer */
-	    memcpy_fromio(buf, lp->rx_memcpy[lp->rx_old], pkt_len);
+	    memcpy_fromio(buf, lp->rx_buff[lp->rx_old], pkt_len);
 	  }
 
 	  /* 
@@ -1103,9 +1130,9 @@ static void LoadCSRs(struct net_device *dev)
   u_long ioaddr = dev->base_addr;
 
   outw(CSR1, DEPCA_ADDR);                /* initialisation block address LSW */
-  outw((u16)(lp->sh_mem & LA_MASK), DEPCA_DATA);
+  outw((u16)lp->device_ram_start, DEPCA_DATA);
   outw(CSR2, DEPCA_ADDR);                /* initialisation block address MSW */
-  outw((u16)((lp->sh_mem & LA_MASK) >> 16), DEPCA_DATA);
+  outw((u16)(lp->device_ram_start >> 16), DEPCA_DATA);
   outw(CSR3, DEPCA_ADDR);                /* ALE control */
   outw(ACON, DEPCA_DATA);
 
@@ -1121,7 +1148,7 @@ static int InitRestartDepca(struct net_device *dev)
   int i, status=0;
 
   /* Copy the shadow init_block to shared memory */
-  memcpy_toio((char *)lp->sh_mem, &lp->init_block, sizeof(struct depca_init));
+  memcpy_toio(lp->sh_mem, &lp->init_block, sizeof(struct depca_init));
 
   outw(CSR0, DEPCA_ADDR);                /* point back to CSR0 */
   outw(INIT, DEPCA_DATA);                /* initialize DEPCA */
@@ -1134,11 +1161,11 @@ static int InitRestartDepca(struct net_device *dev)
     outw(IDON | INEA | STRT, DEPCA_DATA);
     if (depca_debug > 2) {
       printk("%s: DEPCA open after %d ticks, init block 0x%08lx csr0 %4.4x.\n",
-	     dev->name, i, lp->sh_mem, inw(DEPCA_DATA));
+	     dev->name, i, virt_to_phys(lp->sh_mem), inw(DEPCA_DATA));
     }
   } else {
     printk("%s: DEPCA unopen after %d ticks, init block 0x%08lx csr0 %4.4x.\n",
-	     dev->name, i, lp->sh_mem, inw(DEPCA_DATA));
+	     dev->name, i, virt_to_phys(lp->sh_mem), inw(DEPCA_DATA));
     status = -1;
   }
 
@@ -1569,12 +1596,20 @@ DepcaSignature(char *name, u_long paddr)
 {
   u_int i,j,k;
   const char *signatures[] = DEPCA_SIGNATURE;
+  void *ptr;
   char tmpstr[16];
 
   /* Copy the first 16 bytes of ROM */
-  for (i=0;i<16;i++) {
-    tmpstr[i] = readb(paddr+0xc000+i);
+  ptr = ioremap(paddr + 0xc000, 16);
+  if (ptr == NULL) {
+	  printk(KERN_ERR "depca: I/O remap failed at %lx\n", paddr+0xc000);
+	  adapter = unknown;
+	  return;
   }
+  for (i=0;i<16;i++) {
+    tmpstr[i] = readb(ptr + i);
+  }
+  iounmap(ptr);
 
   /* Check if PROM contains a valid string */
   for (i=0;*signatures[i]!='\0';i++) {
@@ -1716,10 +1751,10 @@ static int load_packet(struct net_device *dev, struct sk_buff *skb)
     */
     if (end < entry) {                         /* wrapped buffer */
       len = (lp->txRingMask - entry + 1) * TX_BUFF_SZ;
-      memcpy_toio(lp->tx_memcpy[entry], skb->data, len);
-      memcpy_toio(lp->tx_memcpy[0], skb->data + len, skb->len - len);
+      memcpy_toio(lp->tx_buff[entry], skb->data, len);
+      memcpy_toio(lp->tx_buff[0], skb->data + len, skb->len - len);
     } else {                                   /* linear buffer */
-      memcpy_toio(lp->tx_memcpy[entry], skb->data, skb->len);
+      memcpy_toio(lp->tx_buff[entry], skb->data, skb->len);
     }
 
     /* set up the buffer descriptors */
@@ -1795,17 +1830,17 @@ static void depca_dbg_open(struct net_device *dev)
 {
   struct depca_private *lp = (struct depca_private *)dev->priv;
   u_long ioaddr = dev->base_addr;
-  struct depca_init *p = (struct depca_init *)lp->sh_mem;
+  struct depca_init *p = &lp->init_block;
   int i; 
 
   if (depca_debug > 1){
-    /* Copy the shadow init_block to shared memory */
-    memcpy_toio((char *)lp->sh_mem,&lp->init_block,sizeof(struct depca_init));
-
+    /* Do not copy the shadow init block into shared memory */
+    /* Debugging should not affect normal operation! */
+    /* The shadow init block will get copied across during InitRestartDepca */
     printk("%s: depca open with irq %d\n",dev->name,dev->irq);
-    printk("Descriptor head addresses:\n");
-    printk("\t0x%lx  0x%lx\n",(u_long)lp->rx_ring, (u_long)lp->tx_ring);
-    printk("Descriptor addresses:\nRX: ");
+    printk("Descriptor head addresses (CPU):\n");
+    printk("        0x%lx  0x%lx\n",(u_long)lp->rx_ring, (u_long)lp->tx_ring);
+    printk("Descriptor addresses (CPU):\nRX: ");
     for (i=0;i<lp->rxRingMask;i++){
       if (i < 3) {
 	printk("0x%8.8lx ", (long) &lp->rx_ring[i].base);
@@ -1819,7 +1854,7 @@ static void depca_dbg_open(struct net_device *dev)
       }
     }
     printk("...0x%8.8lx\n", (long) &lp->tx_ring[i].base);
-    printk("\nDescriptor buffers:\nRX: ");
+    printk("\nDescriptor buffers (Device):\nRX: ");
     for (i=0;i<lp->rxRingMask;i++){
       if (i < 3) {
 	printk("0x%8.8x  ", readl(&lp->rx_ring[i].base));
@@ -1833,21 +1868,21 @@ static void depca_dbg_open(struct net_device *dev)
       }
     }
     printk("...0x%8.8x\n", readl(&lp->tx_ring[i].base));
-    printk("Initialisation block at 0x%8.8lx\n",lp->sh_mem);
-    printk("\tmode: 0x%4.4x\n",readw(&p->mode));
-    printk("\tphysical address: ");
+    printk("Initialisation block at 0x%8.8lx(Phys)\n",virt_to_phys(lp->sh_mem));
+    printk("        mode: 0x%4.4x\n",p->mode);
+    printk("        physical address: ");
     for (i=0;i<ETH_ALEN-1;i++){
-      printk("%2.2x:",(u_char)readb(&p->phys_addr[i]));
+      printk("%2.2x:", p->phys_addr[i]);
     }
-    printk("%2.2x\n",(u_char)readb(&p->phys_addr[i]));
-    printk("\tmulticast hash table: ");
+    printk("%2.2x\n", p->phys_addr[i]);
+    printk("        multicast hash table: ");
     for (i=0;i<(HASH_TABLE_LEN >> 3)-1;i++){
-      printk("%2.2x:",(u_char)readb(&p->mcast_table[i]));
+      printk("%2.2x:", p->mcast_table[i]);
     }
-    printk("%2.2x\n",(u_char)readb(&p->mcast_table[i]));
-    printk("\trx_ring at: 0x%8.8x\n",readl(&p->rx_ring));
-    printk("\ttx_ring at: 0x%8.8x\n",readl(&p->tx_ring));
-    printk("dma_buffs: 0x%8.8lx\n",lp->dma_buffs);
+    printk("%2.2x\n", p->mcast_table[i]);
+    printk("        rx_ring at: 0x%8.8x\n", p->rx_ring);
+    printk("        tx_ring at: 0x%8.8x\n", p->tx_ring);
+    printk("buffers (Phys): 0x%8.8lx\n",virt_to_phys(lp->sh_mem)+lp->buffs_offset);
     printk("Ring size:\nRX: %d  Log2(rxRingMask): 0x%8.8x\n", 
 	   (int)lp->rxRingMask + 1, 
 	   lp->rx_rlen);
@@ -2031,6 +2066,7 @@ cleanup_module(void)
 {
   struct depca_private *lp = thisDepca.priv;
   if (lp) {
+    iounmap(lp->sh_mem);
 #ifdef CONFIG_MCA      
     if(lp->mca_slot != -1)
       mca_mark_as_unused(lp->mca_slot);

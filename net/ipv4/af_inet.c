@@ -5,7 +5,7 @@
  *
  *		PF_INET protocol family socket handler.
  *
- * Version:	$Id: af_inet.c,v 1.116 2000/10/15 01:34:45 davem Exp $
+ * Version:	$Id: af_inet.c,v 1.118 2000/10/19 15:51:02 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -447,6 +447,9 @@ int inet_release(struct socket *sock)
 	return(0);
 }
 
+/* It is off by default, see below. */
+int sysctl_ip_nonlocal_bind;
+
 static int inet_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 {
 	struct sockaddr_in *addr=(struct sockaddr_in *)uaddr;
@@ -463,6 +466,20 @@ static int inet_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 		return -EINVAL;
 
 	chk_addr_ret = inet_addr_type(addr->sin_addr.s_addr);
+
+	/* Not specified by any standard per-se, however it breaks too
+	 * many applications when removed.  It is unfortunate since
+	 * allowing applications to make a non-local bind solves
+	 * several problems with systems using dynamic addressing.
+	 * (ie. your servers still start up even if your ISDN link
+	 *  is temporarily down)
+	 */
+	if (sysctl_ip_nonlocal_bind == 0 &&
+	    addr->sin_addr.s_addr != INADDR_ANY &&
+	    chk_addr_ret != RTN_LOCAL &&
+	    chk_addr_ret != RTN_MULTICAST &&
+	    chk_addr_ret != RTN_BROADCAST)
+		return -EADDRNOTAVAIL;
 
 	snum = ntohs(addr->sin_port);
 	if (snum && snum < PROT_SOCK && !capable(CAP_NET_BIND_SERVICE))
@@ -753,13 +770,14 @@ int inet_shutdown(struct socket *sock, int how)
 	}
 
 	switch (sk->state) {
-	default:	
+	case TCP_CLOSE:
+		err = -ENOTCONN;
+		/* Hack to wake up other listeners, who can poll for
+		   POLLHUP, even on eg. unconnected UDP sockets -- RR */
+	default:
 		sk->shutdown |= how;
 		if (sk->prot->shutdown)
 			sk->prot->shutdown(sk, how);
-		break;
-	case TCP_CLOSE:
-		err = -ENOTCONN;
 		break;
 
 	/* Remaining two branches are temporary solution for missing

@@ -5,7 +5,7 @@
  *
  *		The User Datagram Protocol (UDP).
  *
- * Version:	$Id: udp.c,v 1.89 2000/10/03 07:29:01 anton Exp $
+ * Version:	$Id: udp.c,v 1.90 2000/10/18 18:04:22 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -1028,7 +1028,7 @@ int udp_get_info(char *buffer, char **start, off_t offset, int length)
 			if (sk->family != PF_INET)
 				continue;
 			pos += 128;
-			if (pos < offset)
+			if (pos <= offset)
 				continue;
 			get_udp_sock(sk, tmpbuf, i);
 			len += sprintf(buffer+len, "%-127s\n", tmpbuf);

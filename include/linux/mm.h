@@ -95,6 +95,7 @@ struct vm_area_struct {
 
 #define VM_DONTCOPY	0x00020000      /* Do not copy this vma on fork */
 #define VM_DONTEXPAND	0x00040000	/* Cannot expand with mremap() */
+#define VM_RESERVED	0x00080000	/* Don't unmap it from swap_out */
 
 #define VM_STACK_FLAGS	0x00000177
 

@@ -7,7 +7,7 @@
  *
  *	Based on linux/ipv4/udp.c
  *
- *	$Id: udp.c,v 1.57 2000/09/18 05:59:48 davem Exp $
+ *	$Id: udp.c,v 1.58 2000/10/18 18:04:23 davem Exp $
  *
  *	Fixes:
  *	Hideaki YOSHIFUJI	:	sin6_scope_id support
@@ -956,7 +956,7 @@ int udp6_get_info(char *buffer, char **start, off_t offset, int length)
 			if (sk->family != PF_INET6)
 				continue;
 			pos += LINE_LEN+1;
-			if (pos < offset)
+			if (pos <= offset)
 				continue;
 			get_udp6_sock(sk, tmpbuf, i);
 			len += sprintf(buffer+len, LINE_FMT, tmpbuf);

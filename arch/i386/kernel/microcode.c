@@ -177,7 +177,7 @@ static void do_update_one(void *unused)
 
 	req->err = 1; /* assume the worst */
 
-	if (c->x86_vendor != X86_VENDOR_INTEL || c->x86 < 6){
+	if (c->x86_vendor != X86_VENDOR_INTEL || c->x86 != 6){
 		printk(KERN_ERR "microcode: CPU%d not an Intel P6\n", cpu_num);
 		return;
 	}

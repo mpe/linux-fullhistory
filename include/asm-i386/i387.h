@@ -16,6 +16,7 @@
 #include <asm/sigcontext.h>
 #include <asm/user.h>
 
+extern void init_fpu(void);
 /*
  * FPU lazy state save handling...
  */

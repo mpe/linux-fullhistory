@@ -93,7 +93,7 @@ typedef struct user_fxsr_struct elf_fpxregset_t;
    For the moment, we have only optimizations for the Intel generations,
    but that could change... */
 
-#define ELF_PLATFORM  ("i386\0i486\0i586\0i686"+((boot_cpu_data.x86-3)*5))
+#define ELF_PLATFORM  ("i386\0i486\0i586\0i686"+(((boot_cpu_data.x86>6?6:boot_cpu_data.x86)-3)*5))
 
 #ifdef __KERNEL__
 #define SET_PERSONALITY(ex, ibcs2) set_personality((ibcs2)?PER_SVR4:PER_LINUX)

@@ -5,7 +5,7 @@
  *
  *		RAW - implementation of IP "raw" sockets.
  *
- * Version:	$Id: raw.c,v 1.53 2000/08/09 11:59:04 davem Exp $
+ * Version:	$Id: raw.c,v 1.54 2000/10/18 18:04:23 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -653,7 +653,7 @@ int raw_get_info(char *buffer, char **start, off_t offset, int length)
 			if (sk->family != PF_INET)
 				continue;
 			pos += 128;
-			if (pos < offset)
+			if (pos <= offset)
 				continue;
 			get_raw_sock(sk, tmpbuf, i);
 			len += sprintf(buffer+len, "%-127s\n", tmpbuf);

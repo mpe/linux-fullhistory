@@ -1,7 +1,7 @@
 /*
  * sysctl_net_ipv4.c: sysctl interface to net IPV4 subsystem.
  *
- * $Id: sysctl_net_ipv4.c,v 1.46 2000/09/16 09:38:30 davem Exp $
+ * $Id: sysctl_net_ipv4.c,v 1.47 2000/10/19 15:51:02 davem Exp $
  *
  * Begun April 1, 1996, Mike Shaver.
  * Added /proc/sys/net/ipv4 directory entry (empty =) ). [MS]
@@ -14,6 +14,9 @@
 #include <net/ip.h>
 #include <net/route.h>
 #include <net/tcp.h>
+
+/* From af_inet.c */
+extern int sysctl_ip_nonlocal_bind;
 
 /* From icmp.c */
 extern int sysctl_icmp_echo_ignore_all;
@@ -110,6 +113,9 @@ ctl_table ipv4_table[] = {
         {NET_IPV4_NO_PMTU_DISC, "ip_no_pmtu_disc",
          &ipv4_config.no_pmtu_disc, sizeof(int), 0644, NULL,
          &proc_dointvec},
+	{NET_IPV4_NONLOCAL_BIND, "ip_nonlocal_bind",
+	 &sysctl_ip_nonlocal_bind, sizeof(int), 0644, NULL,
+	 &proc_dointvec},
 	{NET_IPV4_TCP_SYN_RETRIES, "tcp_syn_retries",
 	 &sysctl_tcp_syn_retries, sizeof(int), 0644, NULL, &proc_dointvec},
 	{NET_TCP_SYNACK_RETRIES, "tcp_synack_retries",

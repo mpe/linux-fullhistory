@@ -26,6 +26,7 @@
 #include <linux/malloc.h>
 #include <linux/interrupt.h>  /* for in_interrupt() */
 #include <linux/kmod.h>
+#include <linux/init.h>
 
 
 #ifdef CONFIG_USB_DEBUG
@@ -46,6 +47,9 @@ static const int usb_bandwidth_option =
 #else
 				0;
 #endif
+
+extern int  usb_hub_init(void);
+extern void usb_hub_cleanup(void);
 
 /*
  * Prototypes for the device driver probing/loading functions
@@ -2028,6 +2032,32 @@ struct list_head *usb_bus_get_list(void)
 	return &usb_bus_list;
 }
 #endif
+
+
+/*
+ * Init
+ */
+static int __init usb_init(void)
+{
+	usb_major_init();
+	usbdevfs_init();
+	usb_hub_init();
+
+	return 0;
+}
+
+/*
+ * Cleanup
+ */
+static void __exit usb_exit(void)
+{
+	usb_major_cleanup();
+	usbdevfs_cleanup();
+	usb_hub_cleanup();
+}
+
+module_init(usb_init);
+module_exit(usb_exit);
 
 /*
  * USB may be built into the kernel or be built as modules.

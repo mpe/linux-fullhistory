@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_ipv4.c,v 1.217 2000/10/15 13:15:19 davem Exp $
+ * Version:	$Id: tcp_ipv4.c,v 1.218 2000/10/18 18:04:22 davem Exp $
  *
  *		IPv4 specific functions
  *
@@ -2097,7 +2097,7 @@ skip_listen:
 							continue;
 
 						pos += TMPSZ;
-						if (pos < offset)
+						if (pos <= offset)
 							continue;
 						get_openreq(sk, req, tmpbuf, num, uid);
 						len += sprintf(buffer+len, "%-*s\n", TMPSZ-1, tmpbuf);
@@ -2129,7 +2129,7 @@ skip_listen:
 			if (!TCP_INET_FAMILY(sk->family))
 				continue;
 			pos += TMPSZ;
-			if (pos < offset)
+			if (pos <= offset)
 				continue;
 			get_tcp_sock(sk, tmpbuf, num);
 			len += sprintf(buffer+len, "%-*s\n", TMPSZ-1, tmpbuf);
@@ -2144,7 +2144,7 @@ skip_listen:
 			if (!TCP_INET_FAMILY(tw->family))
 				continue;
 			pos += TMPSZ;
-			if (pos < offset)
+			if (pos <= offset)
 				continue;
 			get_timewait_sock(tw, tmpbuf, num);
 			len += sprintf(buffer+len, "%-*s\n", TMPSZ-1, tmpbuf);

@@ -129,7 +129,6 @@ static void write_mda_w(unsigned int val, unsigned char reg)
 	outb_p(reg+1, mda_index_port); outb_p(val & 0xff, mda_value_port);
 
 	spin_unlock_irqrestore(&mda_lock, flags);
-	restore_flags(flags);
 }
 
 static int test_mda_b(unsigned char val, unsigned char reg)

@@ -65,7 +65,7 @@ static void aux_write_ack(int val);
 static void __aux_write_ack(int val);
 #endif
 
-spinlock_t kbd_controller_lock = SPIN_LOCK_UNLOCKED;
+static spinlock_t kbd_controller_lock = SPIN_LOCK_UNLOCKED;
 static unsigned char handle_kbd_event(void);
 
 /* used only by send_data - set by keyboard_interrupt */
@@ -448,7 +448,7 @@ static unsigned char handle_kbd_event(void)
 	unsigned char status = kbd_read_status();
 	unsigned int work = 10000;
 
-	while (status & KBD_STAT_OBF) {
+	while ((--work > 0) && (status & KBD_STAT_OBF)) {
 		unsigned char scancode;
 
 		scancode = kbd_read_input();
@@ -467,13 +467,10 @@ static unsigned char handle_kbd_event(void)
 		}
 
 		status = kbd_read_status();
-		
-		if (!--work) {
-			printk(KERN_ERR "pc_keyb: controller jammed (0x%02X).\n",
-				status);
-			break;
-		}
 	}
+		
+	if (!work)
+		printk(KERN_ERR "pc_keyb: controller jammed (0x%02X).\n", status);
 
 	return status;
 }
@@ -481,14 +478,13 @@ static unsigned char handle_kbd_event(void)
 
 static void keyboard_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
-	unsigned long flags;
-
 #ifdef CONFIG_VT
 	kbd_pt_regs = regs;
 #endif
-	spin_lock_irqsave(&kbd_controller_lock, flags);
+
+	spin_lock_irq(&kbd_controller_lock);
 	handle_kbd_event();
-	spin_unlock_irqrestore(&kbd_controller_lock, flags);
+	spin_unlock_irq(&kbd_controller_lock);
 }
 
 /*

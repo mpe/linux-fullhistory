@@ -495,28 +495,7 @@ void __init paging_init(void)
  * This function cannot be __init, since exceptions don't work in that
  * section.
  */
-static int do_test_wp_bit(unsigned long vaddr)
-{
-	char tmp_reg;
-	int flag;
-
-	__asm__ __volatile__(
-		"	movb %0,%1	\n"
-		"1:	movb %1,%0	\n"
-		"	xorl %2,%2	\n"
-		"2:			\n"
-		".section __ex_table,\"a\"\n"
-		"	.align 4	\n"
-		"	.long 1b,2b	\n"
-		".previous		\n"
-		:"=m" (*(char *) vaddr),
-		 "=q" (tmp_reg),
-		 "=r" (flag)
-		:"2" (1)
-		:"memory");
-	
-	return flag;
-}
+static int do_test_wp_bit(unsigned long vaddr);
 
 void __init test_wp_bit(void)
 {
@@ -650,6 +629,30 @@ void __init mem_init(void)
 	zap_low_mappings();
 #endif
 
+}
+
+/* Put this after the callers, so that it cannot be inlined */
+static int do_test_wp_bit(unsigned long vaddr)
+{
+	char tmp_reg;
+	int flag;
+
+	__asm__ __volatile__(
+		"	movb %0,%1	\n"
+		"1:	movb %1,%0	\n"
+		"	xorl %2,%2	\n"
+		"2:			\n"
+		".section __ex_table,\"a\"\n"
+		"	.align 4	\n"
+		"	.long 1b,2b	\n"
+		".previous		\n"
+		:"=m" (*(char *) vaddr),
+		 "=q" (tmp_reg),
+		 "=r" (flag)
+		:"2" (1)
+		:"memory");
+	
+	return flag;
 }
 
 void free_initmem(void)

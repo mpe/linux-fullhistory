@@ -33,6 +33,21 @@
 #endif
 
 /*
+ * The _current_ task is using the FPU for the first time
+ * so initialize it and set the mxcsr to its default
+ * value at reset if we support FXSR and then
+ * remeber the current task has used the FPU.
+ */
+void init_fpu(void)
+{
+	__asm__("fninit");
+	if ( HAVE_FXSR )
+		load_mxcsr(0x1f80);
+		
+	current->used_math = 1;
+}
+
+/*
  * FPU lazy state save handling.
  */
 
@@ -66,16 +81,16 @@ void restore_fpu( struct task_struct *tsk )
 
 static inline unsigned short twd_i387_to_fxsr( unsigned short twd )
 {
-	unsigned short ret = 0;
-	int i;
-
-	for ( i = 0 ; i < 8 ; i++ ) {
-		if ( (twd & 0x3) != 0x3 ) {
-			ret |= (1 << i);
-		}
-		twd = twd >> 2;
-	}
-	return ret;
+	unsigned int tmp; /* to avoid 16 bit prefixes in the code */
+ 
+	/* Transform each pair of bits into 01 (valid) or 00 (empty) */
+        tmp = ~twd;
+        tmp = (tmp | (tmp>>1)) & 0x5555; /* 0V0V0V0V0V0V0V0V */
+        /* and move the valid bits to the lower byte. */
+        tmp = (tmp | (tmp >> 1)) & 0x3333; /* 00VV00VV00VV00VV */
+        tmp = (tmp | (tmp >> 2)) & 0x0f0f; /* 0000VVVV0000VVVV */
+        tmp = (tmp | (tmp >> 4)) & 0x00ff; /* 00000000VVVVVVVV */
+        return tmp;
 }
 
 static inline unsigned long twd_fxsr_to_i387( struct i387_fxsave_struct *fxsave )
@@ -92,8 +107,8 @@ static inline unsigned long twd_fxsr_to_i387( struct i387_fxsave_struct *fxsave 
 		if ( twd & 0x1 ) {
 			st = (struct _fpxreg *) FPREG_ADDR( fxsave, i );
 
-			switch ( st->exponent ) {
-			case 0xffff:
+			switch ( st->exponent & 0x7fff ) {
+			case 0x7fff:
 				tag = 2;		/* Special */
 				break;
 			case 0x0000:

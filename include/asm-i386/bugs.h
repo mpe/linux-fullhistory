@@ -94,7 +94,6 @@ static void __init check_fpu(void)
 		printk(KERN_INFO "Enabling unmasked SIMD FPU exception support... ");
 		set_in_cr4(X86_CR4_OSXMMEXCPT);
 		printk("done.\n");
-		load_mxcsr(0x1f80);
 	}
 #endif
 
@@ -166,6 +165,7 @@ __asm__(".align 4\nvide: ret");
 static void __init check_amd_k6(void)
 {
 	if (boot_cpu_data.x86_vendor == X86_VENDOR_AMD &&
+	    boot_cpu_data.x86 == 5 &&
 	    boot_cpu_data.x86_model == 6 &&
 	    boot_cpu_data.x86_mask == 1)
 	{

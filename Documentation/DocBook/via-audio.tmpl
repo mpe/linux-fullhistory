@@ -56,15 +56,16 @@
   <chapter id="intro">
       <title>Introduction</title>
   <para>
-  	The Via VT82C686A and VT82C686A "super southbridge" chips contain
-	AC97-compatible audio logic which features dual full-duplex 16-bit stereo
-	PCM sound channels, plus a third PCM channel intended for use
+  	The Via VT82C686A "super southbridge" chips contain
+	AC97-compatible audio logic which features dual 16-bit stereo
+	PCM sound channels (full duplex), plus a third PCM channel intended for use
 	in hardware-assisted FM synthesis.
   </para>
   <para>
   	The current Linux kernel audio driver for this family of chips
-	supports audio playback, but recording and hardware-assisted
-	FM support features are not yet available.
+	supports audio playback and recording, but hardware-assisted
+	FM features, and hardware buffer direct-access (mmap)
+	support are not yet available.
   </para>
   <para>
   	This driver supports any Linux kernel version after 2.3.50.
@@ -148,13 +149,6 @@
      <title>Known Bugs And Assumptions</title>
   <para>
   <variablelist>
-    <varlistentry><term>Recording support</term>
-    <listitem>
-    <para>
-    	Recording support is currently missing.
-    </para>
-    </listitem></varlistentry>
-
     <varlistentry><term>MMAP support</term>
     <listitem>
     <para>
@@ -188,17 +182,6 @@
     </para>
     </listitem></varlistentry>
 
-    <varlistentry><term>Broken apps</term>
-    <listitem>
-    <para>
-	Applications which attempt to open the sound device in read/write
-	mode (O_RDWR) will fail.  This is incorrect OSS behavior, but since
-	this driver will eventually support recording as well as playback,
-	we will be able to (in the future) support even broken programs which
-	unconditionally use O_RDWR.
-    </para>
-    </listitem></varlistentry>
-
   </variablelist>
 	
   </para>
@@ -221,8 +204,8 @@
      <title>Random Notes</title>
   <para>
 	Two /proc pseudo-files provide diagnostic information.  This is generally
-	not useful to most users.  Power users can disable VIA_PROC_FS macro in the 
-	driver source code, and remove the /proc support code.  In any case, once
+	not useful to most users.  Power users can disable CONFIG_SOUND_VIA82CXXX_PROCFS,
+	and remove the /proc support code.  Once
 	version 2.0.0 is released, the /proc support code will be disabled by
 	default.  Available /proc pseudo-files:
   </para>
@@ -234,16 +217,6 @@
 	This driver by default supports all PCI audio devices which report
 	a vendor id of 0x1106, and a device id of 0x3058.  Subsystem vendor
 	and device ids are not examined.
-  </para>
-  <para>
-	Only supports a single sound chip, as this is a motherboard chipset.
-	Some architecture remains for multiple cards, feel free to submit
-	a patch to clean some of that up.
-  </para>
-  <para>
-	No consideration for SMP, this chipset is not known to be found on
-	any SMP motherboards.  However, spin_locks must be used anyway in order
-	to handle interrupts correctly.
   </para>
   <para>
 	GNU indent formatting options:  -kr -i8 -pcs
@@ -264,6 +237,147 @@
 
   <chapter id="changelog">
       <title>Driver ChangeLog</title>
+
+<sect1 id="version1112"><title>
+Version 1.1.12
+</title>
+  <itemizedlist spacing=compact>
+   <listitem>
+    <para>
+    mmap bug fixes from Linus.
+    </para>
+   </listitem>
+  </itemizedlist>
+</sect1>
+
+<sect1 id="version1111"><title>
+Version 1.1.11
+</title>
+  <itemizedlist spacing=compact>
+   <listitem>
+    <para>
+    Many more bug fixes.  mmap enabled by default, but may still be buggy.
+    </para>
+   </listitem>
+
+   <listitem>
+    <para>
+    Uses new and spiffy method of mmap'ing the DMA buffer, based
+    on a suggestion from Linus.
+    </para>
+   </listitem>
+  </itemizedlist>
+</sect1>
+
+<sect1 id="version1110"><title>
+Version 1.1.10
+</title>
+  <itemizedlist spacing=compact>
+   <listitem>
+    <para>
+    Many bug fixes.  mmap enabled by default, but may still be buggy.
+    </para>
+   </listitem>
+  </itemizedlist>
+</sect1>
+
+<sect1 id="version119"><title>
+Version 1.1.9
+</title>
+  <itemizedlist spacing=compact>
+   <listitem>
+    <para>
+    Redesign and rewrite audio playback implementation.  (faster and smaller, hopefully)
+    </para>
+   </listitem>
+
+   <listitem>
+    <para>
+    Implement recording and full duplex (DSP_CAP_DUPLEX) support.
+    </para>
+   </listitem>
+
+   <listitem>
+    <para>
+    Make procfs support optional.
+    </para>
+   </listitem>
+
+   <listitem>
+    <para>
+    Quick interrupt status check, to lessen overhead in interrupt
+    sharing situations.
+    </para>
+   </listitem>
+
+   <listitem>
+    <para>
+    Add mmap(2) support.  Disabled for now, it is still buggy and experimental.
+    </para>
+   </listitem>
+
+   <listitem>
+    <para>
+    Surround all syscalls with a semaphore for cheap and easy SMP protection.
+    </para>
+   </listitem>
+
+   <listitem>
+    <para>
+    Fix bug in channel shutdown (hardware channel reset) code.
+    </para>
+   </listitem>
+
+   <listitem>
+    <para>
+    Remove unnecessary spinlocks (better performance).
+    </para>
+   </listitem>
+
+   <listitem>
+    <para>
+    Eliminate "unknown AFMT" message by using a different method
+    of selecting the best AFMT_xxx sound sample format for use.
+    </para>
+   </listitem>
+
+   <listitem>
+    <para>
+    Support for realtime hardware pointer position reporting
+    (DSP_CAP_REALTIME, SNDCTL_DSP_GETxPTR ioctls)
+    </para>
+   </listitem>
+
+   <listitem>
+    <para>
+    Support for capture/playback triggering
+    (DSP_CAP_TRIGGER, SNDCTL_DSP_SETTRIGGER ioctls)
+    </para>
+   </listitem>
+
+   <listitem>
+    <para>
+    SNDCTL_DSP_SETDUPLEX and SNDCTL_DSP_POST ioctls now handled.
+    </para>
+   </listitem>
+
+   <listitem>
+    <para>
+    Rewrite open(2) and close(2) logic to allow only one user at
+    a time.  All other open(2) attempts will sleep until they succeed.
+    FIXME: open(O_RDONLY) and open(O_WRONLY) should be allowed to succeed.
+    </para>
+   </listitem>
+
+   <listitem>
+    <para>
+    Reviewed code to ensure that SMP and multiple audio devices
+    are fully supported.
+    </para>
+   </listitem>
+
+  </itemizedlist>
+</sect1>
 
 <sect1 id="version118"><title>
 Version 1.1.8

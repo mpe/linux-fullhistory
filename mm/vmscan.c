@@ -87,6 +87,13 @@ static int try_to_swap_out(struct mm_struct * mm, struct vm_area_struct* vma, un
 	if (TryLockPage(page))
 		goto out_failed;
 
+	/* From this point on, the odds are that we're going to
+	 * nuke this pte, so read and clear the pte.  This hook
+	 * is needed on CPUs which update the accessed and dirty
+	 * bits in hardware.
+	 */
+	pte = ptep_get_and_clear(page_table);
+
 	/*
 	 * Is the page already in the swap cache? If so, then
 	 * we can just drop our reference to it without doing
@@ -98,10 +105,6 @@ static int try_to_swap_out(struct mm_struct * mm, struct vm_area_struct* vma, un
 	if (PageSwapCache(page)) {
 		entry.val = page->index;
 		swap_duplicate(entry);
-		if (pte_dirty(pte))
-			BUG();
-		if (pte_write(pte))
-			BUG();
 		set_pte(page_table, swp_entry_to_pte(entry));
 drop_pte:
 		UnlockPage(page);
@@ -111,13 +114,6 @@ drop_pte:
 		page_cache_release(page);
 		goto out_failed;
 	}
-
-	/* From this point on, the odds are that we're going to
-	 * nuke this pte, so read and clear the pte.  This hook
-	 * is needed on CPUs which update the accessed and dirty
-	 * bits in hardware.
-	 */
-	pte = ptep_get_and_clear(page_table);
 
 	/*
 	 * Is it a clean page? Then it must be recoverable
@@ -318,7 +314,7 @@ static int swap_out_vma(struct mm_struct * mm, struct vm_area_struct * vma, unsi
 	unsigned long end;
 
 	/* Don't swap out areas which are locked down */
-	if (vma->vm_flags & VM_LOCKED)
+	if (vma->vm_flags & (VM_LOCKED|VM_RESERVED))
 		return 0;
 
 	pgdir = pgd_offset(mm, address);

@@ -38,4 +38,6 @@ static inline void ptep_mkdirty(pte_t *ptep)
 	set_pte(ptep, pte_mkdirty(old_pte));
 }
 
+#define pte_same(A,B)	(pte_val(A) == pte_val(B))
+
 #endif /* _ASM_GENERIC_PGTABLE_H */

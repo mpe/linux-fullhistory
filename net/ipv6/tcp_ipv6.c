@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: tcp_ipv6.c,v 1.125 2000/08/09 11:59:04 davem Exp $
+ *	$Id: tcp_ipv6.c,v 1.126 2000/10/18 18:04:23 davem Exp $
  *
  *	Based on: 
  *	linux/net/ipv4/tcp.c
@@ -2009,7 +2009,7 @@ int tcp6_get_info(char *buffer, char **start, off_t offset, int length)
 						if (req->class->family != PF_INET6)
 							continue;
 						pos += LINE_LEN+1;
-						if (pos < offset)
+						if (pos <= offset)
 							continue;
 						get_openreq6(sk, req, tmpbuf, num, uid);
 						len += sprintf(buffer+len, LINE_FMT, tmpbuf);
@@ -2041,7 +2041,7 @@ int tcp6_get_info(char *buffer, char **start, off_t offset, int length)
 			if (sk->family != PF_INET6)
 				continue;
 			pos += LINE_LEN+1;
-			if (pos < offset)
+			if (pos <= offset)
 				continue;
 			get_tcp6_sock(sk, tmpbuf, num);
 			len += sprintf(buffer+len, LINE_FMT, tmpbuf);
@@ -2056,7 +2056,7 @@ int tcp6_get_info(char *buffer, char **start, off_t offset, int length)
 			if (tw->family != PF_INET6)
 				continue;
 			pos += LINE_LEN+1;
-			if (pos < offset)
+			if (pos <= offset)
 				continue;
 			get_timewait6_sock(tw, tmpbuf, num);
 			len += sprintf(buffer+len, LINE_FMT, tmpbuf);

@@ -135,6 +135,12 @@ void invalidate_inode_pages(struct inode * inode)
 		if (TryLockPage(page))
 			continue;
 
+		/* Neither can we invalidate something in use.. */
+		if (page_count(page) != 1) {
+			UnlockPage(page);
+			continue;
+		}
+
 		__lru_cache_del(page);
 		__remove_inode_page(page);
 		UnlockPage(page);
@@ -156,6 +162,7 @@ static inline void truncate_partial_page(struct page *page, unsigned partial)
 
 static inline void truncate_complete_page(struct page *page)
 {
+	/* Leave it on the LRU if it gets converted into anonymous buffers */
 	if (!page->buffers || block_flushpage(page, 0))
 		lru_cache_del(page);
 
@@ -167,6 +174,7 @@ static inline void truncate_complete_page(struct page *page)
 	 * all sorts of fun problems ...  
 	 */
 	ClearPageDirty(page);
+	ClearPageUptodate(page);
 	remove_inode_page(page);
 	page_cache_release(page);
 }
