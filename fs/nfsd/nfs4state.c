@@ -1575,6 +1575,21 @@ nfs4_new_open(struct svc_rqst *rqstp, struct nfs4_stateid **stpp,
 	return 0;
 }
 
+static inline int
+nfsd4_truncate(struct svc_rqst *rqstp, struct svc_fh *fh,
+		struct nfsd4_open *open)
+{
+	struct iattr iattr = {
+		.ia_valid = ATTR_SIZE,
+		.ia_size = 0,
+	};
+	if (!open->op_truncate)
+		return 0;
+	if (!(open->op_share_access & NFS4_SHARE_ACCESS_WRITE))
+		return -EINVAL;
+	return nfsd_setattr(rqstp, fh, &iattr, 0, (time_t)0);
+}
+
 static int
 nfs4_upgrade_open(struct svc_rqst *rqstp, struct svc_fh *cur_fh, struct nfs4_stateid *stp, struct nfsd4_open *open)
 {
@@ -1592,19 +1607,11 @@ nfs4_upgrade_open(struct svc_rqst *rqstp, struct svc_fh *cur_fh, struct nfs4_sta
 		status = get_write_access(inode);
 		if (status)
 			return nfserrno(status);
-		if (open->op_truncate) {
-			struct iattr iattr = {
-				.ia_valid = ATTR_SIZE,
-				.ia_size = 0,
-			};
-			status = nfsd_setattr(rqstp, cur_fh, &iattr, 0,
-					(time_t)0);
-			if (status) {
-				put_write_access(inode);
-				return status;
-			}
+		status = nfsd4_truncate(rqstp, cur_fh, open);
+		if (status) {
+			put_write_access(inode);
+			return status;
 		}
-
 		/* remember the open */
 		filp->f_mode = (filp->f_mode | FMODE_WRITE) & ~FMODE_READ;
 		set_bit(open->op_share_access, &stp->st_access_bmap);
@@ -1737,17 +1744,10 @@ nfsd4_process_open2(struct svc_rqst *rqstp, struct svc_fh *current_fh, struct nf
 		if ((status = nfs4_new_open(rqstp, &stp, current_fh, flags)))
 			goto out;
 		init_stateid(stp, fp, open);
-		if (open->op_truncate) {
-			struct iattr iattr = {
-				.ia_valid = ATTR_SIZE,
-				.ia_size = 0,
-			};
-			status = nfsd_setattr(rqstp, current_fh, &iattr, 0,
-					(time_t)0);
-			if (status) {
-				release_stateid(stp, OPEN_STATE);
-				goto out;
-			}
+		status = nfsd4_truncate(rqstp, current_fh, open);
+		if (status) {
+			release_stateid(stp, OPEN_STATE);
+			goto out;
 		}
 	}
 	memcpy(&open->op_stateid, &stp->st_stateid, sizeof(stateid_t));
