@@ -70,6 +70,7 @@ extern struct page * __find_get_page (struct inode * inode,
 		__find_get_page(inode, offset, *page_hash(inode, offset))
 extern struct page * __find_lock_page (struct inode * inode,
 				unsigned long offset, struct page *page);
+extern void lock_page(struct page *page);
 #define find_lock_page(inode, offset) \
 		__find_lock_page(inode, offset, *page_hash(inode, offset))
 

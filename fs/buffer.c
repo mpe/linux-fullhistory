@@ -1231,7 +1231,9 @@ static void end_buffer_io_async(struct buffer_head * bh, int uptodate)
 	 */
 	if (!PageError(page))
 		SetPageUptodate(page);
-	page->owner = (int)current; // HACK, FIXME, will go away.
+	if (page->owner != -1)
+		PAGE_BUG(page);
+	page->owner = (int)current;
 	UnlockPage(page);
 
 	return;
@@ -1276,17 +1278,6 @@ static int create_page_buffers (int rw, struct page *page, kdev_t dev, int b[], 
 			unlock_kernel();
 			memset(bh->b_data, 0, size);
 			lock_kernel();
-		} else {
-			struct buffer_head *alias = find_buffer(dev, block, size);
-			/*
-			 * Tricky issue. It is legal to have an alias here,
-			 * because the buffer-cache layer can increase the
-			 * b_counter even if the buffer goes inactive
-			 * meanwhile.
-			 */
-			if (alias) {
-				printk(" buffer %p has nonzero alias %p which is locked!!! hoping that it will go away.\n", bh, alias);
-			}
 		}
 	}
 	tail->b_this_page = head;
@@ -1532,7 +1523,7 @@ int brw_page(int rw, struct page *page, kdev_t dev, int b[], int size, int bmap)
 	int nr, fresh, block;
 
 
-	if ((rw == READ) && !PageLocked(page))
+	if (!PageLocked(page))
 		panic("brw_page: page not locked for I/O");
 //	clear_bit(PG_error, &page->flags);
 	/*
@@ -1546,6 +1537,7 @@ int brw_page(int rw, struct page *page, kdev_t dev, int b[], int size, int bmap)
 	}
 	if (!page->buffers)
 		BUG();
+	page->owner = -1;
 
 	head = page->buffers;
 	bh = head;
@@ -1583,6 +1575,7 @@ int brw_page(int rw, struct page *page, kdev_t dev, int b[], int size, int bmap)
 				bh->b_list = BUF_DIRTY;
 				insert_into_dirty_queue(bh);
 			}
+			arr[nr++] = bh;
 		}
 		bh = bh->b_this_page;
 	} while (bh != head);
@@ -1597,7 +1590,13 @@ int brw_page(int rw, struct page *page, kdev_t dev, int b[], int size, int bmap)
 	} else {
 		if (!nr && rw == READ) {
 			SetPageUptodate(page);
+			page->owner = (int)current;
 			UnlockPage(page);
+		}
+		if (nr && (rw == WRITE)) {
+			unlock_kernel();
+			ll_rw_block(rw, nr, arr);
+			lock_kernel();
 		}
 	}
 	return 0;

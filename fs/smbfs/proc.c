@@ -39,6 +39,9 @@
 #define SMB_DIRINFO_SIZE 43
 #define SMB_STATUS_SIZE  21
 
+/* yes, this deliberately has two parts */
+#define DENTRY_PATH(dentry) (dentry)->d_parent->d_name.name,(dentry)->d_name.name
+
 static int smb_proc_setattr_ext(struct smb_sb_info *, struct inode *,
 				struct smb_fattr *);
 static inline int
@@ -174,24 +177,22 @@ static int day_n[] =
 		  /* JanFebMarApr May Jun Jul Aug Sep Oct Nov Dec */
 
 
-extern struct timezone sys_tz;
-
 static time_t
-utc2local(time_t time)
+utc2local(struct smb_sb_info *server, time_t time)
 {
-	return time - sys_tz.tz_minuteswest * 60 - (sys_tz.tz_dsttime ? 3600 :0);
+	return time - server->opt.serverzone*60;
 }
 
 static time_t
-local2utc(time_t time)
+local2utc(struct smb_sb_info *server, time_t time)
 {
-	return time + sys_tz.tz_minuteswest * 60 + (sys_tz.tz_dsttime ? 3600 : 0);
+	return time + server->opt.serverzone*60;
 }
 
 /* Convert a MS-DOS time/date pair to a UNIX date (seconds since 1 1 70). */
 
 static time_t
-date_dos2unix(__u16 date, __u16 time)
+date_dos2unix(struct smb_sb_info *server, __u16 date, __u16 time)
 {
 	int month, year;
 	time_t secs;
@@ -202,18 +203,19 @@ date_dos2unix(__u16 date, __u16 time)
 	    ((date & 31) - 1 + day_n[month] + (year / 4) + year * 365 - ((year & 3) == 0 &&
 						   month < 2 ? 1 : 0) + 3653);
 	/* days since 1.1.70 plus 80's leap day */
-	return local2utc(secs);
+	return local2utc(server, secs);
 }
 
 
 /* Convert linear UNIX date to a MS-DOS time/date pair. */
 
 static void
-date_unix2dos(int unix_date, __u16 *date, __u16 *time)
+date_unix2dos(struct smb_sb_info *server,
+	      int unix_date, __u16 *date, __u16 *time)
 {
 	int day, year, nl_day, month;
 
-	unix_date = utc2local(unix_date);
+	unix_date = utc2local(server, unix_date);
 	*time = (unix_date % 60) / 2 +
 		(((unix_date / 60) % 60) << 5) +
 		(((unix_date / 3600) % 24) << 11);
@@ -355,6 +357,11 @@ smb_errno(struct smb_sb_info *server)
 	int error  = server->err;
 	char *class = "Unknown";
 
+#ifdef SMBFS_DEBUG_VERBOSE
+	printk("smb_errno: errcls %d  code %d  from command 0x%x\n",
+		errcls, error, SMB_CMD(server->packet));
+#endif
+
 	if (errcls == ERRDOS)
 		switch (error)
 		{
@@ -456,7 +463,7 @@ smb_errno(struct smb_sb_info *server)
 		class = "ERRCMD";
 
 err_unknown:
-	printk("smb_errno: class %s, code %d from command %x\n",
+	printk("smb_errno: class %s, code %d from command 0x%x\n",
 		class, error, SMB_CMD(server->packet));
 	return EIO;
 }
@@ -646,9 +653,27 @@ printk("smb_newconn: fd=%d, pid=%d\n", opt->fd, current->pid);
 	server->generation += 1;
 	server->state = CONN_VALID;
 	error = 0;
+
+	/* check if we have an old smbmount that uses seconds for the 
+	   serverzone */
+	if (server->opt.serverzone > 12*60 || server->opt.serverzone < -12*60)
+		server->opt.serverzone /= 60;
+
+	/* now that we have an established connection we can detect the server
+	   type and enable bug workarounds */
+	if (server->opt.protocol == SMB_PROTOCOL_NT1 &&
+	    (server->opt.max_xmit < 0x1000) &&
+	    !(server->opt.capabilities & SMB_CAP_NT_SMBS)) {
+		server->mnt->version |= SMB_FIX_WIN95;
 #ifdef SMBFS_DEBUG_VERBOSE
-printk("smb_newconn: protocol=%d, max_xmit=%d, pid=%d\n",
-server->opt.protocol, server->opt.max_xmit, server->conn_pid);
+		printk("smb_newconn: detected WIN95 server\n");
+#endif
+	}
+
+#ifdef SMBFS_DEBUG_VERBOSE
+printk("smb_newconn: protocol=%d, max_xmit=%d, pid=%d capabilities=0x%x\n",
+       server->opt.protocol, server->opt.max_xmit, server->conn_pid,
+       server->opt.capabilities);
 #endif
 
 out:
@@ -755,7 +780,7 @@ smb_proc_open(struct smb_sb_info *server, struct dentry *dentry, int wish)
 		{
 #ifdef SMBFS_DEBUG_VERBOSE
 printk("smb_proc_open: %s/%s R/W failed, error=%d, retrying R/O\n",
-dentry->d_parent->d_name.name, dentry->d_name.name, error);
+       DENTRY_PATH(dentry), error);
 #endif
 			mode = read_only;
 			goto retry;
@@ -789,7 +814,7 @@ smb_open(struct dentry *dentry, int wish)
 	if (!inode)
 	{
 		printk("smb_open: no inode for dentry %s/%s\n",
-			dentry->d_parent->d_name.name, dentry->d_name.name);
+		       DENTRY_PATH(dentry));
 		goto out;
 	}
 
@@ -810,7 +835,7 @@ smb_open(struct dentry *dentry, int wish)
 		{
 #ifdef SMBFS_PARANOIA
 printk("smb_open: %s/%s open failed, result=%d\n",
-dentry->d_parent->d_name.name, dentry->d_name.name, result);
+       DENTRY_PATH(dentry), result);
 #endif
 			goto out;
 		}
@@ -829,8 +854,7 @@ dentry->d_parent->d_name.name, dentry->d_name.name, result);
 	{
 #ifdef SMBFS_PARANOIA
 printk("smb_open: %s/%s access denied, access=%x, wish=%x\n",
-dentry->d_parent->d_name.name, dentry->d_name.name,
-inode->u.smbfs_i.access, wish);
+       DENTRY_PATH(dentry), inode->u.smbfs_i.access, wish);
 #endif
 		result = -EACCES;
 	}
@@ -845,7 +869,7 @@ smb_proc_close(struct smb_sb_info *server, __u16 fileid, __u32 mtime)
 {
 	smb_setup_header(server, SMBclose, 3, 0);
 	WSET(server->packet, smb_vwv0, fileid);
-	DSET(server->packet, smb_vwv1, utc2local(mtime));
+	DSET(server->packet, smb_vwv1, utc2local(server, mtime));
 	return smb_request_ok(server, SMBclose, 0, 0);
 }
 
@@ -946,7 +970,7 @@ smb_close_dentry(struct dentry * dentry)
 			{
 #ifdef SMBFS_DEBUG_VERBOSE
 printk("smb_close_dentry: closing %s/%s, count=%d\n",
-dentry->d_parent->d_name.name, dentry->d_name.name, dentry->d_count);
+       DENTRY_PATH(dentry), dentry->d_count);
 #endif
 				smb_proc_close_inode(server, ino);
 			}
@@ -954,7 +978,7 @@ dentry->d_parent->d_name.name, dentry->d_name.name, dentry->d_count);
 		}
 #ifdef SMBFS_DEBUG_VERBOSE
 printk("smb_close_dentry: closed %s/%s, count=%d\n",
-dentry->d_parent->d_name.name, dentry->d_name.name, dentry->d_count);
+       DENTRY_PATH(dentry), dentry->d_count);
 #endif
 	}
 }
@@ -1014,7 +1038,7 @@ smb_proc_read(struct dentry *dentry, off_t offset, int count, char *data)
 out:
 #ifdef SMBFS_DEBUG_VERBOSE
 printk("smb_proc_read: file %s/%s, count=%d, result=%d\n",
-dentry->d_parent->d_name.name, dentry->d_name.name, count, result);
+       DENTRY_PATH(dentry), count, result);
 #endif
 	smb_unlock_server(server);
 	return result;
@@ -1029,8 +1053,7 @@ smb_proc_write(struct dentry *dentry, off_t offset, int count, const char *data)
 
 #if SMBFS_DEBUG_VERBOSE
 printk("smb_proc_write: file %s/%s, count=%d@%ld, packet_size=%d\n",
-dentry->d_parent->d_name.name, dentry->d_name.name, 
-count, offset, server->packet_size);
+       DENTRY_PATH(dentry), count, offset, server->packet_size);
 #endif
 	smb_lock_server(server);
 	p = smb_setup_header(server, SMBwrite, 5, count + 3);
@@ -1063,7 +1086,7 @@ smb_proc_create(struct dentry *dentry, __u16 attr, time_t ctime, __u16 *fileid)
       retry:
 	p = smb_setup_header(server, SMBcreate, 3, 0);
 	WSET(server->packet, smb_vwv0, attr);
-	DSET(server->packet, smb_vwv1, utc2local(ctime));
+	DSET(server->packet, smb_vwv1, utc2local(server, ctime));
 	*p++ = 4;
 	p = smb_encode_path(server, p, dentry, NULL);
 	smb_setup_bcc(server, p);
@@ -1323,7 +1346,7 @@ smb_proc_readdir_short(struct smb_sb_info *server, struct dentry *dir, int fpos,
 
 #ifdef SMBFS_DEBUG_VERBOSE
 printk("smb_proc_readdir_short: %s/%s, pos=%d\n",
-dir->d_parent->d_name.name, dir->d_name.name, fpos);
+       DENTRY_PATH(dir), fpos);
 #endif
 
 	smb_lock_server(server);
@@ -1804,15 +1827,15 @@ mask, resp_data_len, WVAL(resp_param, 2));
 	 */
 	date = WVAL(resp_data, 0);
 	time = WVAL(resp_data, 2);
-	fattr->f_ctime = date_dos2unix(date, time);
+	fattr->f_ctime = date_dos2unix(server, date, time);
 
 	date = WVAL(resp_data, 4);
 	time = WVAL(resp_data, 6);
-	fattr->f_atime = date_dos2unix(date, time);
+	fattr->f_atime = date_dos2unix(server, date, time);
 
 	date = WVAL(resp_data, 8);
 	time = WVAL(resp_data, 10);
-	fattr->f_mtime = date_dos2unix(date, time);
+	fattr->f_mtime = date_dos2unix(server, date, time);
 #ifdef SMBFS_DEBUG_VERBOSE
 printk("smb_proc_getattr_ff: name=%s, date=%x, time=%x, mtime=%ld\n",
 mask, date, time, fattr->f_mtime);
@@ -1831,7 +1854,7 @@ out:
  */
 static int
 smb_proc_getattr_core(struct smb_sb_info *server, struct dentry *dir,
-			struct smb_fattr *fattr)
+		      struct smb_fattr *fattr)
 {
 	int result;
 	char *p;
@@ -1849,13 +1872,13 @@ smb_proc_getattr_core(struct smb_sb_info *server, struct dentry *dir,
 		goto out;
 	}
 	fattr->attr    = WVAL(server->packet, smb_vwv0);
-	fattr->f_mtime = local2utc(DVAL(server->packet, smb_vwv1));
+	fattr->f_mtime = local2utc(server, DVAL(server->packet, smb_vwv1));
 	fattr->f_size  = DVAL(server->packet, smb_vwv3);
 	fattr->f_ctime = fattr->f_mtime; 
 	fattr->f_atime = fattr->f_mtime; 
 #ifdef SMBFS_DEBUG_TIMESTAMP
 printk("getattr_core: %s/%s, mtime=%ld\n",
-dir->d_name.name, name->name, fattr->f_mtime);
+       DENTRY_PATH(dir), fattr->f_mtime);
 #endif
 	result = 0;
 
@@ -1926,18 +1949,18 @@ printk("smb_proc_getattr_trans2: not enough data for %s, len=%d\n",
 	}
 	date = WVAL(resp_data, off_date);
 	time = WVAL(resp_data, off_time);
-	attr->f_ctime = date_dos2unix(date, time);
+	attr->f_ctime = date_dos2unix(server, date, time);
 
 	date = WVAL(resp_data, 4 + off_date);
 	time = WVAL(resp_data, 4 + off_time);
-	attr->f_atime = date_dos2unix(date, time);
+	attr->f_atime = date_dos2unix(server, date, time);
 
 	date = WVAL(resp_data, 8 + off_date);
 	time = WVAL(resp_data, 8 + off_time);
-	attr->f_mtime = date_dos2unix(date, time);
+	attr->f_mtime = date_dos2unix(server, date, time);
 #ifdef SMBFS_DEBUG_TIMESTAMP
 printk("getattr_trans2: %s/%s, date=%x, time=%x, mtime=%ld\n",
-dir->d_name.name, name->name, date, time, attr->f_mtime);
+       DENTRY_PATH(dir), date, time, attr->f_mtime);
 #endif
 	attr->f_size = DVAL(resp_data, 12);
 	attr->attr = WVAL(resp_data, 20);
@@ -1980,6 +2003,7 @@ smb_proc_getattr(struct dentry *dir, struct smb_fattr *fattr)
 	return result;
 }
 
+
 /*
  * Called with the server locked. Because of bugs in the
  * core protocol, we use this only to set attributes. See
@@ -1994,7 +2018,7 @@ smb_proc_getattr(struct dentry *dir, struct smb_fattr *fattr)
  */
 static int
 smb_proc_setattr_core(struct smb_sb_info *server, struct dentry *dentry,
-			__u16 attr)
+		      __u16 attr)
 {
 	char *p;
 	int result;
@@ -2009,11 +2033,6 @@ smb_proc_setattr_core(struct smb_sb_info *server, struct dentry *dentry,
 	WSET(server->packet, smb_vwv6, 0);
 	WSET(server->packet, smb_vwv7, 0);
 	*p++ = 4;
-	/*
-	 * Samba uses three leading '\', so we'll do it too.
-	 */
-	*p++ = '\\';
-	*p++ = '\\';
 	p = smb_encode_path(server, p, dentry, NULL);
 	*p++ = 4;
 	*p++ = 0;
@@ -2044,7 +2063,7 @@ smb_proc_setattr(struct dentry *dir, struct smb_fattr *fattr)
 
 #ifdef SMBFS_DEBUG_VERBOSE
 printk("smb_proc_setattr: setting %s/%s, open=%d\n", 
-dir->d_parent->d_name.name, dir->d_name.name, smb_is_open(dir->d_inode));
+       DENTRY_PATH(dir), smb_is_open(dir->d_inode));
 #endif
 	smb_lock_server(server);
 	result = smb_proc_setattr_core(server, dir, fattr->attr);
@@ -2069,10 +2088,10 @@ smb_proc_setattr_ext(struct smb_sb_info *server,
 	/* We don't change the creation time */
 	WSET(server->packet, smb_vwv1, 0);
 	WSET(server->packet, smb_vwv2, 0);
-	date_unix2dos(fattr->f_atime, &date, &time);
+	date_unix2dos(server, fattr->f_atime, &date, &time);
 	WSET(server->packet, smb_vwv3, date);
 	WSET(server->packet, smb_vwv4, time);
-	date_unix2dos(fattr->f_mtime, &date, &time);
+	date_unix2dos(server, fattr->f_mtime, &date, &time);
 	WSET(server->packet, smb_vwv5, date);
 	WSET(server->packet, smb_vwv6, time);
 #ifdef SMBFS_DEBUG_TIMESTAMP
@@ -2119,15 +2138,15 @@ smb_proc_setattr_trans2(struct smb_sb_info *server,
 
 	WSET(data, 0, 0); /* creation time */
 	WSET(data, 2, 0);
-	date_unix2dos(fattr->f_atime, &date, &time);
+	date_unix2dos(server, fattr->f_atime, &date, &time);
 	WSET(data, 4, date);
 	WSET(data, 6, time);
-	date_unix2dos(fattr->f_mtime, &date, &time);
+	date_unix2dos(server, fattr->f_mtime, &date, &time);
 	WSET(data, 8, date);
 	WSET(data, 10, time);
 #ifdef SMBFS_DEBUG_TIMESTAMP
 printk("setattr_trans2: %s/%s, date=%x, time=%x, mtime=%ld\n", 
-dir->d_parent->d_name.name, dir->d_name.name, date, time, fattr->f_mtime);
+       DENTRY_PATH(dir), date, time, fattr->f_mtime);
 #endif
 	DSET(data, 12, 0); /* size */
 	DSET(data, 16, 0); /* blksize */
@@ -2174,10 +2193,12 @@ smb_proc_settime(struct dentry *dentry, struct smb_fattr *fattr)
 
 #ifdef SMBFS_DEBUG_VERBOSE
 printk("smb_proc_settime: setting %s/%s, open=%d\n", 
-dentry->d_parent->d_name.name, dentry->d_name.name, smb_is_open(inode));
+       DENTRY_PATH(dentry), smb_is_open(inode));
 #endif
 	smb_lock_server(server);
-	if (server->opt.protocol >= SMB_PROTOCOL_LANMAN2)
+	/* setting the time on a Win95 server fails (tridge) */
+	if (server->opt.protocol >= SMB_PROTOCOL_LANMAN2 && 
+	    !(server->mnt->version & SMB_FIX_WIN95))
 	{
 		if (smb_is_open(inode) &&
 		    inode->u.smbfs_i.access != SMB_O_RDONLY)
@@ -2194,12 +2215,13 @@ dentry->d_parent->d_name.name, dentry->d_name.name, smb_is_open(inode));
 		{
 			/*
 			 * Set the mtime by opening and closing the file.
+			 * Note that the file is opened read-only, but this
+			 * still allows us to set the date (tridge)
 			 */
 			result = -EACCES;
 			if (!smb_is_open(inode))
-				smb_proc_open(server, dentry, SMB_O_WRONLY);
-			if (smb_is_open(inode) &&
-			    inode->u.smbfs_i.access != SMB_O_RDONLY)
+				smb_proc_open(server, dentry, SMB_O_RDONLY);
+			if (smb_is_open(inode))
 			{
 				inode->i_mtime = fattr->f_mtime;
 				result = smb_proc_close_inode(server, inode);

@@ -515,7 +515,7 @@ __initfunc(static int ibmtr_probe1(struct device *dev, int PIOaddr))
 	/* How much shared RAM is on adapter ? */
 #ifdef PCMCIA
 	ti->avail_shared_ram = pcmcia_reality_check(get_sram_size(ti));
-	ibmtr_mem_base = ti->sram_base ; 
+	ibmtr_mem_base = ti->sram_base << 12 ; 
 #else
 	ti->avail_shared_ram = get_sram_size(ti);
 #endif
@@ -835,6 +835,9 @@ static int tok_close(struct device *dev)
 			(int)readb(ti->srb + offsetof(struct srb_close_adapter, ret_code)));
 
         dev->start = 0;
+#ifdef PCMCIA
+	ti->sram = 0 ;
+#endif
 	DPRINTK("Adapter closed.\n");
 	MOD_DEC_USE_COUNT;
 

@@ -219,7 +219,6 @@ static inline void remove_from_swap_cache(struct page *page)
 #endif
 	PageClearSwapCache(page);
 	remove_inode_page(page);
-	page_cache_release(page);
 }
 
 
@@ -231,7 +230,7 @@ void delete_from_swap_cache(struct page *page)
 {
 	long entry = page->offset;
 
-	LockPage(page);
+	lock_page(page);
 
 #ifdef SWAP_CACHE_INFO
 	swap_cache_del_total++;
@@ -242,8 +241,9 @@ void delete_from_swap_cache(struct page *page)
 		   page_address(page), page_count(page), entry);
 #endif
 	remove_from_swap_cache (page);
-	swap_free (entry);
 	UnlockPage(page);
+	page_cache_release(page);
+	swap_free (entry);
 }
 
 /* 

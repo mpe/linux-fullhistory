@@ -655,11 +655,7 @@ int udp_sendmsg(struct sock *sk, struct msghdr *msg, int len)
 		if (msg->msg_namelen < sizeof(*usin))
 			return(-EINVAL);
 		if (usin->sin_family != AF_INET) {
-			static int complained;
-			if (!complained++)
-				printk(KERN_WARNING "%s forgot to set AF_INET in udp sendmsg. Fix it!\n", current->comm);
-			if (usin->sin_family)
-				return -EINVAL;
+			return -EINVAL;
 		}
 		ufh.daddr = usin->sin_addr.s_addr;
 		ufh.uh.dest = usin->sin_port;

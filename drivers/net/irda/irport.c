@@ -321,7 +321,7 @@ void irport_change_speed(struct irda_device *idev, int speed)
 	/* Turn on interrups */
 	outb(UART_IER_RLSI|UART_IER_RDI|UART_IER_THRI, iobase+UART_IER);
 
-	spin_unlock_irqrestore(&self->lock, flags);
+	spin_unlock_irqrestore(&idev->lock, flags);
 }
 
 /*

@@ -167,6 +167,7 @@ typedef struct page {
 #define LockPage(page)		\
 	do { int _ret = test_and_set_bit(PG_locked, &(page)->flags); \
 	if (_ret) PAGE_BUG(page); \
+	if (page->owner) PAGE_BUG(page); \
 	page->owner = (int)current; } while (0)
 #define TryLockPage(page)	({ int _ret = test_and_set_bit(PG_locked, &(page)->flags); \
 				if (!_ret) page->owner = (int)current; _ret; })
@@ -174,7 +175,7 @@ typedef struct page {
 					if (page->owner != (int)current) { \
 BUG(); } page->owner = 0; \
 if (!test_and_clear_bit(PG_locked, &(page)->flags)) { \
-				BUG(); } wake_up(&page->wait); } while (0)
+			PAGE_BUG(page); } wake_up(&page->wait); } while (0)
 #define PageError(page)		(test_bit(PG_error, &(page)->flags))
 #define SetPageError(page)	({ int _ret = test_and_set_bit(PG_error, &(page)->flags); _ret; })
 #define ClearPageError(page)	do { if (!test_and_clear_bit(PG_error, &(page)->flags)) BUG(); } while (0)

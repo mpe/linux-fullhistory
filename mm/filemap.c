@@ -80,7 +80,6 @@ static void remove_page_from_hash_queue(struct page * page)
 	atomic_dec(&page_cache_size);
 }
 
-
 void invalidate_inode_pages(struct inode * inode)
 {
 	struct page ** p;
@@ -468,7 +467,7 @@ repeat:
 /*
  * Get an exclusive lock on the page..
  */
-static void lock_page(struct page *page)
+void lock_page(struct page *page)
 {
 	if (TryLockPage(page)) {
 		struct task_struct *tsk = current;
@@ -479,6 +478,7 @@ static void lock_page(struct page *page)
 		tsk->state = TASK_UNINTERRUPTIBLE;
 
 		while (TryLockPage(page)) {
+			run_task_queue(&tq_disk);
 			schedule();
 			tsk->state = TASK_UNINTERRUPTIBLE;
 		}
@@ -1381,10 +1381,8 @@ static inline int do_write_page(struct inode * inode, struct file * file,
 	retval = -EIO;
 	writepage = inode->i_op->writepage;
 	page = mem_map + MAP_NR(page_addr);
-repeat:
-	wait_on_page(page);
-	if (TryLockPage(page))
-		goto repeat;
+	lock_page(page);
+
 	if (writepage) {
 		retval = writepage(file, page);
 	} else {

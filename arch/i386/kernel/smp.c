@@ -1164,6 +1164,7 @@ static void smp_tune_scheduling (void)
 }
 
 unsigned int prof_multiplier[NR_CPUS];
+unsigned int prof_old_multiplier[NR_CPUS];
 unsigned int prof_counter[NR_CPUS];
 
 /*
@@ -1187,6 +1188,7 @@ void __init smp_boot_cpus(void)
 	for (i = 0; i < NR_CPUS; i++) {
 		cpu_number_map[i] = -1;
 		prof_counter[i] = 1;
+		prof_old_multiplier[i] = 1;
 		prof_multiplier[i] = 1;
 	}
 
@@ -1733,6 +1735,10 @@ int smp_call_function (void (*func) (void *info), void *info, int retry,
 	return 0;
 }
 
+static unsigned int calibration_result;
+
+void setup_APIC_timer(unsigned int clocks);
+
 /*
  * Local timer interrupt handler. It does both profiling and
  * process statistics/rescheduling.
@@ -1745,6 +1751,7 @@ int smp_call_function (void (*func) (void *info), void *info, int retry,
 
 void smp_local_timer_interrupt(struct pt_regs * regs)
 {
+	int user = (user_mode(regs) != 0);
 	int cpu = smp_processor_id();
 
 	/*
@@ -1753,12 +1760,26 @@ void smp_local_timer_interrupt(struct pt_regs * regs)
 	 * updated with atomic operations). This is especially
 	 * useful with a profiling multiplier != 1
 	 */
-	if (!user_mode(regs))
+	if (!user)
 		x86_do_profile(regs->eip);
 
 	if (!--prof_counter[cpu]) {
-		int user=0,system=0;
+		int system = 1 - user;
 		struct task_struct * p = current;
+
+		/*
+		 * The multiplier may have changed since the last time we got
+		 * to this point as a result of the user writing to
+		 * /proc/profile.  In this case we need to adjust the APIC
+		 * timer accordingly.
+		 *
+		 * Interrupts are already masked off at this point.
+		 */
+               prof_counter[cpu] = prof_multiplier[cpu];
+               if (prof_counter[cpu] != prof_old_multiplier[cpu]) {
+                       setup_APIC_timer(calibration_result/prof_counter[cpu]);
+                       prof_old_multiplier[cpu] = prof_counter[cpu];
+               }
 
 		/*
 		 * After doing the above, we need to make like
@@ -1766,11 +1787,6 @@ void smp_local_timer_interrupt(struct pt_regs * regs)
 		 * ignore the global interrupt lock, which is the
 		 * WrongThing (tm) to do.
 		 */
-
-		if (user_mode(regs))
-			user=1;
-		else
-			system=1;
 
  		irq_enter(cpu, 0);
 		update_one_process(p, 1, user, system, cpu);
@@ -1791,7 +1807,6 @@ void smp_local_timer_interrupt(struct pt_regs * regs)
 			kstat.per_cpu_system[cpu] += system;
 
 		}
-		prof_counter[cpu]=prof_multiplier[cpu];
 		irq_exit(cpu, 0);
 	}
 
@@ -2064,8 +2079,6 @@ int __init calibrate_APIC_clock(void)
 	return calibration_result;
 }
 
-static unsigned int calibration_result;
-
 void __init setup_APIC_clock(void)
 {
 	unsigned long flags;
@@ -2117,13 +2130,10 @@ void __init setup_APIC_clock(void)
 /*
  * the frequency of the profiling timer can be changed
  * by writing a multiplier value into /proc/profile.
- *
- * usually you want to run this on all CPUs ;)
  */
 int setup_profiling_timer(unsigned int multiplier)
 {
-	int cpu = smp_processor_id();
-	unsigned long flags;
+	int i;
 
 	/*
 	 * Sanity check. [at least 500 APIC cycles should be
@@ -2133,11 +2143,14 @@ int setup_profiling_timer(unsigned int multiplier)
 	if ( (!multiplier) || (calibration_result/multiplier < 500))
 		return -EINVAL;
 
-	save_flags(flags);
-	cli();
-	setup_APIC_timer(calibration_result/multiplier);
-	prof_multiplier[cpu]=multiplier;
-	restore_flags(flags);
+	/* 
+	 * Set the new multiplier for each CPU.  CPUs don't start using the
+	 * new values until the next timer interrupt in which they do process
+	 * accounting.  At that time they also adjust their APIC timers
+	 * accordingly.
+	 */
+	for (i = 0; i < NR_CPUS; ++i)
+		prof_multiplier[i] = multiplier;
 
 	return 0;
 }

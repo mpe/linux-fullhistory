@@ -57,7 +57,7 @@ struct smb_conn_opt {
 	/* The following are NT LM 0.12 options */
 	__u32              maxraw;
 	__u32              capabilities;
-	__u16              serverzone;
+	__s16              serverzone;
 };
 
 #ifdef __KERNEL__
