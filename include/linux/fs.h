@@ -418,6 +418,9 @@ struct file {
 	void			*private_data;
 };
 
+#define get_file(x)	atomic_inc(&(x)->f_count)
+#define file_count(x)	atomic_read(&(x)->f_count)
+
 extern int init_private_file(struct file *, struct dentry *, int);
 
 #define FL_POSIX	1
@@ -664,29 +667,27 @@ extern int unregister_filesystem(struct file_system_type *);
 extern int locks_mandatory_locked(struct inode *);
 extern int locks_mandatory_area(int, struct inode *, struct file *, loff_t, size_t);
 
-extern inline int locks_verify_locked(struct inode *inode)
+/*
+ * Candidates for mandatory locking have the setgid bit set
+ * but no group execute bit -  an otherwise meaningless combination.
+ */
+#define MANDATORY_LOCK(inode) \
+	(IS_MANDLOCK(inode) && ((inode)->i_mode & (S_ISGID | S_IXGRP)) == S_ISGID)
+
+static inline int locks_verify_locked(struct inode *inode)
 {
-	/* Candidates for mandatory locking have the setgid bit set
-	 * but no group execute bit -  an otherwise meaningless combination.
-	 */
-	if (IS_MANDLOCK(inode) &&
-	    (inode->i_mode & (S_ISGID | S_IXGRP)) == S_ISGID)
-		return (locks_mandatory_locked(inode));
-	return (0);
+	if (MANDATORY_LOCK(inode))
+		return locks_mandatory_locked(inode);
+	return 0;
 }
 
 extern inline int locks_verify_area(int read_write, struct inode *inode,
 				    struct file *filp, loff_t offset,
 				    size_t count)
 {
-	/* Candidates for mandatory locking have the setgid bit set
-	 * but no group execute bit -  an otherwise meaningless combination.
-	 */
-	if (IS_MANDLOCK(inode) &&
-	    (inode->i_mode & (S_ISGID | S_IXGRP)) == S_ISGID)
-		return (locks_mandatory_area(read_write, inode, filp, offset,
-					     count));
-	return (0);
+	if (inode->i_flock && MANDATORY_LOCK(inode))
+		return locks_mandatory_area(read_write, inode, filp, offset, count);
+	return 0;
 }
 
 

@@ -603,7 +603,7 @@ smp_percpu_timer_interrupt(struct pt_regs *regs)
 
 		update_one_process(current, 1, user, !user, cpu);
 	        if (current->pid) {
-	                if (--current->counter < 0) {
+	                if (--current->counter <= 0) {
 				current->counter = 0;
 	                        current->need_resched = 1;
 	                }

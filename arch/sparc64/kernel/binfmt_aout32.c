@@ -311,9 +311,10 @@ static inline int do_load_aout32_binary(struct linux_binprm * bprm,
 		fd = open_dentry(bprm->dentry, O_RDONLY);
 		if (fd < 0)
 			return fd;
-		file = fcheck(fd);
+		file = fget(fd);
 
 		if (!file->f_op || !file->f_op->mmap) {
+			fput(fd);
 			sys_close(fd);
 			do_brk(0, ex.a_text+ex.a_data);
 			read_exec(bprm->dentry, fd_offset,
@@ -327,6 +328,7 @@ static inline int do_load_aout32_binary(struct linux_binprm * bprm,
 			fd_offset);
 
 		if (error != N_TXTADDR(ex)) {
+			fput(file);
 			sys_close(fd);
 			send_sig(SIGKILL, current, 0);
 			return error;
@@ -336,6 +338,7 @@ static inline int do_load_aout32_binary(struct linux_binprm * bprm,
 				PROT_READ | PROT_WRITE | PROT_EXEC,
 				MAP_FIXED | MAP_PRIVATE | MAP_DENYWRITE | MAP_EXECUTABLE,
 				fd_offset + ex.a_text);
+		fput(file);
 		sys_close(fd);
 		if (error != N_DATADDR(ex)) {
 			send_sig(SIGKILL, current, 0);

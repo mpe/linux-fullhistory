@@ -9,9 +9,9 @@ public use.  Different releases may have various and sometimes severe
 bugs.  It is *strongly* recommended that you back up the previous kernel
 before installing any new 2.3.xx release.
 
-If you need to use a proven and stable Linux kernel, please use 1.2.13,
-2.0.36 or 2.2.xx.  All features which will be in the 2.3.xx releases will
-be contained in 2.4.xx when the code base has stabilized again.
+If you need to use a proven and stable Linux kernel, please use 2.0.37
+or 2.2.xx.  All features which will be in the 2.3.xx releases will be
+contained in 2.4.xx when the code base has stabilized again. 
 
 If you decide to use 2.3, it is recommended that you join the kernel mailing
 list.  To do this, e-mail majordomo@vger.rutgers.edu, and put in the body
@@ -105,7 +105,7 @@ INSTALLING the kernel:
 
 SOFTWARE REQUIREMENTS
 
-   Compiling and running the 2.3.x kernels requires up-to-date
+   Compiling and running the 2.3.xx kernels requires up-to-date
    versions of various software packages.  Consult
    ./Documentation/Changes for the minimum version numbers required
    and how to get updates for these packages.  Beware that using

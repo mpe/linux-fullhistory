@@ -2640,7 +2640,6 @@ static void cy_wait_until_sent(struct tty_struct *tty, int timeout)
 	    printk("Not clean (jiff=%lu)...", jiffies);
 #endif
 	    current->state = TASK_INTERRUPTIBLE;
-	    current->counter = 0;	/* make us low-priority */
 	    schedule_timeout(char_time);
 	    if (signal_pending(current))
 		break;
@@ -2653,7 +2652,6 @@ static void cy_wait_until_sent(struct tty_struct *tty, int timeout)
     }
     /* Run one more char cycle */
     current->state = TASK_INTERRUPTIBLE;
-    current->counter = 0;	/* make us low-priority */
     schedule_timeout(char_time * 5);
     current->state = TASK_RUNNING;
 #ifdef CY_DEBUG_WAIT_UNTIL_SENT

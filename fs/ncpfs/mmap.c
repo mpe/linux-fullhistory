@@ -98,8 +98,7 @@ struct vm_operations_struct ncp_file_mmap =
 	NULL,			/* advise */
 	ncp_file_mmap_nopage,	/* nopage */
 	NULL,			/* wppage */
-	NULL,			/* swapout */
-	NULL,			/* swapin */
+	NULL			/* swapout */
 };
 
 

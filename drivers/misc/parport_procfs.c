@@ -62,7 +62,7 @@ static int do_active_device(ctl_table *table, int write, struct file *filp,
 	return copy_to_user(result, buffer, len) ? -EFAULT : 0;
 }
 
-#if 0 && defined (CONFIG_PARPORT_1284)
+#ifdef CONFIG_PARPORT_1284
 static int do_autoprobe(ctl_table *table, int write, struct file *filp,
 			void *result, size_t *lenp)
 {
@@ -146,9 +146,11 @@ static int do_hardware(ctl_table *table, int write, struct file *filp,
 #define printmode(x) {if(port->modes&PARPORT_MODE_##x){len+=sprintf(buffer+len,"%s%s",f?",":"",#x);f++;}}
 		int f = 0;
 		printmode(PCSPP);
-		printmode(PCPS2);
-		printmode(PCEPP);
-		printmode(PCECP);
+		printmode(TRISTATE);
+		printmode(COMPAT);
+		printmode(EPP);
+		printmode(ECP);
+		printmode(DMA);
 #undef printmode
 	}
 	buffer[len++] = '\n';
@@ -190,7 +192,7 @@ static const struct parport_sysctl_table parport_sysctl_template = {
 		  NULL, 0, 0444, NULL,
 		  &do_hardware },
 		PARPORT_DEVICES_ROOT_DIR,
-#if 0 && defined(CONFIG_PARPORT_1284)
+#ifdef CONFIG_PARPORT_1284
 		{ DEV_PARPORT_AUTOPROBE, "autoprobe",
 		  NULL, 0, 0444, NULL,
 		  &do_autoprobe },
@@ -292,17 +294,11 @@ int parport_proc_register(struct parport *port)
 	for (i = 0; i < 8; i++)
 		t->vars[i].extra1 = port;
 
-#if 0 /* Wait for IEEE 1284 support */
 	t->vars[0].data = &port->spintime;
-#endif
 	t->vars[2].child = t->device_dir;
 	
 	for (i = 0; i < 5; i++)
-#if 0
 		t->vars[3 + i].extra2 = &port->probe_info[i];
-#else
-		t->vars[3 + i].extra2 = &port->probe_info;
-#endif
 
 	t->port_dir[0].procname = port->name;
 	t->port_dir[0].ctl_name = port->number + 1; /* nb 0 isn't legal here */
@@ -348,7 +344,7 @@ int parport_device_proc_register(struct pardevice *device)
 	t->port_dir[0].child = t->devices_root_dir;
 	t->devices_root_dir[0].child = t->device_dir;
 
-#if 0 && defined(CONFIG_PARPORT_1284)
+#ifdef CONFIG_PARPORT_1284
 
 	t->device_dir[0].ctl_name =
 		parport_device_num(port->number, port->muxport,

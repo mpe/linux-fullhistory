@@ -7,10 +7,6 @@
 #
 # Note 2! The CFLAGS definitions are now inherited from the
 # parent makes..
-#
-# Note 3! Plug and Play is the Borg.  We have assimilated some other
-# drivers in the `char', `net' and `scsi' directories, but left them
-# there to allay suspicion.
 
 SUB_DIRS     := 
 MOD_SUB_DIRS := $(SUB_DIRS)
@@ -21,13 +17,5 @@ MX_OBJS  :=
 LX_OBJS  := 
 MI_OBJS  :=
 MIX_OBJS :=
-
-ifeq ($(CONFIG_PNP_PARPORT),y)
-  LX_OBJS += parport_probe.o
-else
-  ifeq ($(CONFIG_PNP_PARPORT),m)
-    MX_OBJS += parport_probe.o
-  endif
-endif
 
 include $(TOPDIR)/Rules.make

@@ -21,7 +21,12 @@
 #define LP_ABORT 0x0040
 #define LP_CAREFUL 0x0080 /* obsoleted -arca */
 #define LP_ABORTOPEN 0x0100
-#define	LP_TRUST_IRQ 0x0200
+
+#define LP_TRUST_IRQ_  0x0200 /* obsolete */
+#define LP_NO_REVERSE  0x0400 /* No reverse mode available. */
+#define LP_DATA_AVAIL  0x0800 /* Data is available. */
+#define LP_HAVE_PORT_BIT   12 /* (0x1000) Port is claimed. */
+#define LP_PORT_BUSY   (1<<13) /* Reading or writing. */
 
 /* timeout for each character.  This is relative to bus cycles -- it
  * is the count in a busy loop.  THIS IS THE VALUE TO CHANGE if you
@@ -72,7 +77,6 @@
 #define LPGETSTATS  0x060d  /* get statistics (struct lp_stats) */
 #endif
 #define LPGETFLAGS  0x060e  /* get status flags */
-#define LPTRUSTIRQ  0x060f  /* set/unset the LP_TRUST_IRQ flag */
 
 /* timeout for printk'ing a timeout, in jiffies (100ths of a second).
    This is also used for re-checking error conditions if LP_ABORT is
@@ -98,7 +102,7 @@
 #ifdef LP_STATS
 #define LP_STAT(minor)	lp_table[(minor)].stats		/* statistics area */
 #endif
-#define LP_BUFFER_SIZE 256
+#define LP_BUFFER_SIZE PAGE_SIZE
 
 #define LP_BASE(x)	lp_table[(x)].dev->port->base
 
@@ -125,10 +129,10 @@ struct lp_struct {
 	unsigned int runchars;
 	struct lp_stats stats;
 #endif
-	wait_queue_head_t wait_q;
+	wait_queue_head_t waitq;
 	unsigned int last_error;
-	volatile unsigned int irq_detected:1;
-	volatile unsigned int irq_missed:1;
+	struct semaphore port_mutex;
+	wait_queue_head_t dataq;
 };
 
 /*
@@ -173,9 +177,6 @@ struct lp_struct {
  * It is used only in the lp_init() and lp_reset() routine.
  */
 #define LP_DELAY 	50
-
-#define LP_POLLED(minor) (lp_table[(minor)].dev->port->irq == PARPORT_IRQ_NONE)
-#define LP_PREEMPTED(minor) (lp_table[(minor)].dev->port->waithead != NULL)
 
 /*
  * function prototypes

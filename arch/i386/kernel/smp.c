@@ -1792,7 +1792,7 @@ void smp_local_timer_interrupt(struct pt_regs * regs)
 		update_one_process(p, 1, user, system, cpu);
 		if (p->pid) {
 			p->counter -= 1;
-			if (p->counter < 0) {
+			if (p->counter <= 0) {
 				p->counter = 0;
 				p->need_resched = 1;
 			}

@@ -299,6 +299,9 @@ icside_config_drive(ide_drive_t *drive, int mode)
 		drive->drive_data = 250;
 	}
 
+#if 1
+	err = ide_config_drive_speed(drive, (byte) speed);
+#else
 	/*
 	 * Don't use ide_wait_cmd here - it will
 	 * attempt to set_geometry and recalibrate,
@@ -313,6 +316,7 @@ icside_config_drive(ide_drive_t *drive, int mode)
 
 	err = ide_wait_stat(drive, DRIVE_READY,
 			    BUSY_STAT|DRQ_STAT|ERR_STAT, WAIT_CMD);
+#endif
 
 	if (err == 0) {
 		drive->id->dma_mword &= 0x00ff;

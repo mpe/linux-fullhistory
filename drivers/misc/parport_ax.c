@@ -164,6 +164,7 @@ parport_ax_frob_econtrol(struct parport *p, unsigned char mask, unsigned char va
 void
 parport_ax_change_mode(struct parport *p, int m)
 {
+	/* FIXME */
 	parport_ax_frob_econtrol(p, 0xe0, m << 5);
 }
 
@@ -201,58 +202,40 @@ parport_ax_enable_irq(struct parport *p)
 	writel(dcsr, (unsigned long)&dma->dcsr);
 }
 
-int
-parport_ax_claim_resources(struct parport *p)
-{
-}
-
 void
-parport_ax_init_state(struct parport_state *s)
+parport_ax_init_state(struct pardevice *dev, struct parport_state *s)
 {
-	s->u.pc.ctr = 0xc;
-	s->u.pc.ecr = 0x0;
+	struct linux_ebus_dma *dma = dev->port->private_data;
+
+	s->u.ax.ctr = 0xc | (dev->irq_func ? 0x10 : 0x0);
+	s->u.ax.ecr = 0x0;
+
+	if (dev->irq_func)
+		s->u.ax.dcsr = (readl((unsigned long)&dma->dcsr)
+				| EBUS_DCSR_INT_EN);
+	else
+		s->u.ax.dcsr = (readl((unsigned long)&dma->dcsr)
+				& ~EBUS_DCSR_INT_EN);
 }
 
 void
 parport_ax_save_state(struct parport *p, struct parport_state *s)
 {
-	s->u.pc.ctr = parport_ax_read_control(p);
-	s->u.pc.ecr = parport_ax_read_econtrol(p);
+	struct linux_ebus_dma *dma = p->private_data;
+
+	s->u.ax.ctr = parport_ax_read_control(p);
+	s->u.ax.ecr = parport_ax_read_econtrol(p);
+	s->u.ax.dcsr = readl((unsigned long)&dma->dcsr);
 }
 
 void
 parport_ax_restore_state(struct parport *p, struct parport_state *s)
 {
-	parport_ax_write_control(p, s->u.pc.ctr);
-	parport_ax_write_econtrol(p, s->u.pc.ecr);
-}
+	struct linux_ebus_dma *dma = p->private_data;
 
-size_t
-parport_ax_epp_read_block(struct parport *p, void *buf, size_t length)
-{
-	return 0; /* FIXME */
-}
-
-size_t
-parport_ax_epp_write_block(struct parport *p, void *buf, size_t length)
-{
-	return 0; /* FIXME */
-}
-
-int
-parport_ax_ecp_read_block(struct parport *p, void *buf, size_t length,
-			  void (*fn)(struct parport *, void *, size_t),
-			  void *handle)
-{
-	return 0; /* FIXME */
-}
-
-int
-parport_ax_ecp_write_block(struct parport *p, void *buf, size_t length,
-			   void (*fn)(struct parport *, void *, size_t),
-			   void *handle)
-{
-	return 0; /* FIXME */
+	parport_ax_write_control(p, s->u.ax.ctr);
+	parport_ax_write_econtrol(p, s->u.ax.ecr);
+	writel(s->u.ax.dcsr, (unsigned long)&dma->dcsr);
 }
 
 void
@@ -290,41 +273,36 @@ static struct parport_operations parport_ax_ops =
 	parport_ax_read_control,
 	parport_ax_frob_control,
 
-	parport_ax_write_econtrol,
-	parport_ax_read_econtrol,
-	parport_ax_frob_econtrol,
-
-	parport_ax_write_status,
 	parport_ax_read_status,
 
-	parport_ax_write_fifo,
-	parport_ax_read_fifo,
-	
-	parport_ax_change_mode,
-	
-	parport_ax_write_epp,
-	parport_ax_read_epp,
-	parport_ax_write_epp_addr,
-	parport_ax_read_epp_addr,
-	parport_ax_check_epp_timeout,
+	parport_ax_enable_irq,
+	parport_ax_disable_irq,
 
-	parport_ax_epp_write_block,
-	parport_ax_epp_read_block,
+	parport_ax_data_forward,
+	parport_ax_data_reverse,
 
-	parport_ax_ecp_write_block,
-	parport_ax_ecp_read_block,
-	
+	parport_ax_interrupt,
+
 	parport_ax_init_state,
 	parport_ax_save_state,
 	parport_ax_restore_state,
 
-	parport_ax_enable_irq,
-	parport_ax_disable_irq,
-	parport_ax_interrupt,
-
 	parport_ax_inc_use_count,
 	parport_ax_dec_use_count,
-	parport_ax_fill_inode
+	parport_ax_fill_inode,
+
+	parport_ieee1284_epp_write_data,
+	parport_ieee1284_epp_read_data,
+	parport_ieee1284_epp_write_addr,
+	parport_ieee1284_epp_read_addr,
+
+	parport_ieee1284_ecp_write_data,
+	parport_ieee1284_ecp_read_data,
+	parport_ieee1284_ecp_write_addr,
+
+	parport_ieee1284_write_compat,
+	parport_ieee1284_read_nibble,
+	parport_ieee1284_read_byte,
 };
 
 
@@ -539,20 +517,6 @@ init_one_port(struct linux_ebus_device *dev)
 	if (p->dma == PARPORT_DMA_AUTO)
 		p->dma = (p->modes & PARPORT_MODE_PCECP) ? 0 : PARPORT_DMA_NONE;
 
-	if (p->irq != PARPORT_IRQ_NONE) {
-		int err;
-		if ((err = request_irq(p->irq, parport_ax_interrupt,
-				       0, p->name, p)) != 0)
-			return err;
-		else
-			parport_ax_enable_irq(p);
-	}
-	request_region(p->base, p->size, p->name);
-	if (p->modes & PARPORT_MODE_PCECR)
-		request_region(p->base+0x400, 3, p->name);
-	request_region((unsigned long)p->private_data,
-		       sizeof(struct linux_ebus_dma), p->name);
-
 	printk(KERN_INFO "%s: PC-style at 0x%lx", p->name, p->base);
 	if (p->irq != PARPORT_IRQ_NONE)
 		printk(", irq %s", __irq_itoa(p->irq));
@@ -569,12 +533,21 @@ init_one_port(struct linux_ebus_device *dev)
 	printk("]\n");
 	parport_proc_register(p);
 
+	if (p->irq != PARPORT_IRQ_NONE)
+		if ((err = request_irq(p->irq, parport_ax_interrupt,
+				       0, p->name, p)) != 0)
+			return 0;		/* @@@ FIXME */
+
+	request_region(p->base, p->size, p->name);
+	if (p->modes & PARPORT_MODE_PCECR)
+		request_region(p->base+0x400, 3, p->name);
+	request_region((unsigned long)p->private_data,
+		       sizeof(struct linux_ebus_dma), p->name);
+
 	p->ops->write_control(p, 0x0c);
 	p->ops->write_data(p, 0);
 
-	if (parport_probe_hook)
-		(*parport_probe_hook)(p);
-
+	/* Tell the high-level drivers about the port. */
 	parport_announce_port (p);
 
 	return 1;

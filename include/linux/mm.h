@@ -106,7 +106,6 @@ struct vm_operations_struct {
 	unsigned long (*wppage)(struct vm_area_struct * area, unsigned long address,
 		unsigned long page);
 	int (*swapout)(struct vm_area_struct *, struct page *);
-	pte_t (*swapin)(struct vm_area_struct *, unsigned long, unsigned long);
 };
 
 /*
@@ -315,7 +314,7 @@ extern int remap_page_range(unsigned long from, unsigned long to, unsigned long 
 extern int zeromap_page_range(unsigned long from, unsigned long size, pgprot_t prot);
 
 extern void vmtruncate(struct inode * inode, unsigned long offset);
-extern int handle_mm_fault(struct task_struct *tsk,struct vm_area_struct *vma, unsigned long address, int write_access);
+extern int handle_mm_fault(struct mm_struct *mm,struct vm_area_struct *vma, unsigned long address, int write_access);
 extern void make_pages_present(unsigned long addr, unsigned long end);
 
 extern int pgt_cache_water[2];
@@ -407,7 +406,7 @@ static inline struct vm_area_struct * find_vma_intersection(struct mm_struct * m
 	return vma;
 }
 
-extern struct vm_area_struct *find_extend_vma(struct task_struct *tsk, unsigned long addr);
+extern struct vm_area_struct *find_extend_vma(struct mm_struct *mm, unsigned long addr);
 
 #define buffer_under_min()	((atomic_read(&buffermem) >> PAGE_SHIFT) * 100 < \
 				buffer_mem.min_percent * num_physpages)

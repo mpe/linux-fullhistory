@@ -461,7 +461,8 @@ beyond_if:
 		return retval;
 	}
 
-	current->mm->start_stack = create_aout_tables(bprm->p, bprm);
+	current->mm->start_stack =
+		(unsigned long) create_aout_tables((char *) bprm->p, bprm);
 #ifdef __alpha__
 	regs->gp = ex.a_gpvalue;
 #endif

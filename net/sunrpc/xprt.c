@@ -42,6 +42,7 @@
 #define __KERNEL_SYSCALLS__
 
 #include <linux/version.h>
+#include <linux/config.h>
 #include <linux/types.h>
 #include <linux/malloc.h>
 #include <linux/sched.h>
@@ -362,10 +363,7 @@ xprt_close(struct rpc_xprt *xprt)
 	sk->state_change = xprt->old_state_change;
 	sk->write_space  = xprt->old_write_space;
 
-	if (xprt->file)
-		fput(xprt->file);
-	else
-		sock_release(xprt->sock);
+	sock_release(xprt->sock);
 	/*
 	 *	TCP doesnt require the rpciod now - other things may
 	 *	but rpciod handles that not us.
@@ -1428,39 +1426,6 @@ xprt_setup(struct socket *sock, int proto,
 		rpciod_up();
 	return xprt;
 }
-
-/*
- * Create and initialize an RPC client given an open file.
- * This is obsolete now.
- */
-#if 0
-struct rpc_xprt *
-xprt_create(struct file *file, struct sockaddr_in *ap, struct rpc_timeout *to)
-{
-	struct rpc_xprt	*xprt;
-	struct socket	*sock;
-	int		proto;
-
-	if (!file) {
-		printk("RPC: file == NULL in xprt_create!\n");
-		return NULL;
-	}
-
-	sock = &file->f_inode->u.socket_i;
-	if (sock->ops->family != PF_INET) {
-		printk(KERN_WARNING "RPC: only INET sockets supported\n");
-		return NULL;
-	}
-
-	proto = (sock->type == SOCK_DGRAM)? IPPROTO_UDP : IPPROTO_TCP;
-	if ((xprt = xprt_setup(sock, proto, ap, to)) != NULL) {
-		xprt->file = file;
-		atomic_inc(&file->f_count);
-	}
-
-	return xprt;
-}
-#endif
 
 /*
  * Bind to a reserved port

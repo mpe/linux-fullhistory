@@ -238,7 +238,7 @@ SYMBOL_NAME_STR(IRQ) #nr "_interrupt:\n\t" \
  */
 static inline void x86_do_profile (unsigned long eip)
 {
-	if (prof_buffer && current->pid) {
+	if (prof_buffer) {
 		eip -= (unsigned long) &_stext;
 		eip >>= prof_shift;
 		/*

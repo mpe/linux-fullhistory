@@ -31,7 +31,6 @@
 #include <linux/malloc.h>
 #include <linux/user.h>
 #include <linux/elf.h>
-#include <linux/elf.h>
 #include <linux/init.h>
 
 #include <asm/pgtable.h>

@@ -1,5 +1,5 @@
 /*
- * linux/drivers/block/alim15x3.c	Version 0.04	Feb. 8, 1999
+ * linux/drivers/block/alim15x3.c	Version 0.05	Jun. 29, 1999
  *
  *  Copyright (C) 1998-99 Michel Aubry, Maintainer
  *  Copyright (C) 1998-99 Andrzej Krzysztofowicz, Maintainer
@@ -19,6 +19,8 @@
 #include <linux/ide.h>
 
 #include <asm/io.h>
+
+#include "ide_modes.h"
 
 #define DISPLAY_ALI_TIMINGS
 
@@ -58,6 +60,55 @@ char *channel_status[8] = {
 	"error DRQ busy"
 };
 #endif  /* defined(DISPLAY_ALI_TIMINGS) && defined(CONFIG_PROC_FS) */
+
+static void ali15x3_tune_drive (ide_drive_t *drive, byte pio)
+{
+	ide_pio_data_t d;
+	ide_hwif_t *hwif = HWIF(drive);
+	struct pci_dev *dev = hwif->pci_dev;
+	int s_time, a_time, c_time;
+	byte s_clc, a_clc, r_clc;
+	unsigned long flags;
+	int bus_speed = ide_system_bus_speed();
+	int port = hwif->index ? 0x5c : 0x58;
+
+	pio = ide_get_best_pio_mode(drive, pio, 5, &d);
+	s_time = ide_pio_timings[pio].setup_time;
+	a_time = ide_pio_timings[pio].active_time;
+	if ((s_clc = (s_time * bus_speed + 999) / 1000) >= 8)
+		s_clc = 0;
+	if ((a_clc = (a_time * bus_speed + 999) / 1000) >= 8)
+		a_clc = 0;
+	c_time = ide_pio_timings[pio].cycle_time;
+
+#if 0
+	if ((r_clc = ((c_time - s_time - a_time) * bus_speed + 999) / 1000) >= 16)
+		r_clc = 0;
+#endif
+
+	if (!(r_clc = (c_time * bus_speed + 999) / 1000 - a_clc - s_clc)) {
+		r_clc = 1;
+	} else {
+		if (r_clc >= 16)
+		r_clc = 0;
+	}
+	save_flags(flags);
+	cli();
+	pci_write_config_byte(dev, port, s_clc);
+	pci_write_config_byte(dev, port+drive->select.b.unit+2, (a_clc << 4) | r_clc);
+	restore_flags(flags);
+
+	/*
+	 * setup   active  rec
+	 * { 70,   165,    365 },   PIO Mode 0
+	 * { 50,   125,    208 },   PIO Mode 1
+	 * { 30,   100,    110 },   PIO Mode 2
+	 * { 30,   80,     70  },   PIO Mode 3 with IORDY
+	 * { 25,   70,     25  },   PIO Mode 4 with IORDY  ns
+	 * { 20,   50,     30  }    PIO Mode 5 with IORDY (nonstandard)
+	 */
+
+}
 
 __initfunc(unsigned int pci_init_ali15x3 (struct pci_dev *dev, const char *name))
 {
@@ -146,19 +197,22 @@ int ali15x3_dmaproc (ide_dma_action_t func, ide_drive_t *drive)
 __initfunc(void ide_init_ali15x3 (ide_hwif_t *hwif))
 {
 	struct pci_dev *dev;
-	byte ideic, inmir;
+	byte ideic, inmir, iderev;
 	byte irq_routing_table[] = { -1,  9, 3, 10, 4,  5, 7,  6,
 				      1, 11, 0, 12, 0, 14, 0, 15 };
+
+	pci_read_config_byte(hwif->pci_dev, PCI_REVISION_ID, &iderev);
+
 	hwif->irq = hwif->channel ? 15 : 14;
 	for (dev = pci_devices; dev; dev=dev->next) /* look for ISA bridge */
 		if (dev->vendor==PCI_VENDOR_ID_AL &&
-		   dev->device==PCI_DEVICE_ID_AL_M1533)
+		    dev->device==PCI_DEVICE_ID_AL_M1533)
 			break;
 	if (dev) {			
 		pci_read_config_byte(dev, 0x58, &ideic);
 		ideic = ideic & 0x03;
 		if ((hwif->channel && ideic == 0x03) ||
-		   (!hwif->channel && !ideic)) {
+		    (!hwif->channel && !ideic)) {
 			pci_read_config_byte(dev, 0x44, &inmir);
 			inmir = inmir & 0x0f;
 			hwif->irq = irq_routing_table[inmir];
@@ -174,8 +228,15 @@ __initfunc(void ide_init_ali15x3 (ide_hwif_t *hwif))
 	ali_display_info = &ali_get_info;
 #endif  /* defined(DISPLAY_ALI_TIMINGS) && defined(CONFIG_PROC_FS) */
 
-	if (hwif->dma_base)
+	hwif->tuneproc = &ali15x3_tune_drive;
+	if ((hwif->dma_base) && (iderev >= 0xC1)) {
+		/* M1543C or newer for DMAing */
 		hwif->dmaproc = &ali15x3_dmaproc;
+	} else {
+		hwif->autodma = 0;
+		hwif->drives[0].autotune = 1;
+		hwif->drives[1].autotune = 1;
+	}
 	return;
 }
 

@@ -188,13 +188,7 @@ tristate 'Kernel support for a.out (ECOFF) binaries' CONFIG_BINFMT_AOUT
 tristate 'Kernel support for ELF binaries' CONFIG_BINFMT_ELF
 tristate 'Kernel support for MISC binaries' CONFIG_BINFMT_MISC
 tristate 'Kernel support for Linux/Intel ELF binaries' CONFIG_BINFMT_EM86
-tristate 'Parallel port support' CONFIG_PARPORT
-if [ "$CONFIG_PARPORT" != "n" ]; then
-  dep_tristate '  PC-style hardware' CONFIG_PARPORT_PC $CONFIG_PARPORT
-  if [ "$CONFIG_PARPORT_PC" != "n" ]; then
-    bool '   Support foreign hardware' CONFIG_PARPORT_OTHER
-  fi
-fi
+source drivers/misc/Config.in
 endmenu
 
 source drivers/pnp/Config.in

@@ -1672,7 +1672,6 @@ static void sab82532_wait_until_sent(struct tty_struct *tty, int timeout)
 #endif
 	while (info->xmit_cnt || !info->all_sent) {
 		current->state = TASK_INTERRUPTIBLE;
-		current->counter = 0;
 		schedule_timeout(char_time);
 		if (signal_pending(current))
 			break;

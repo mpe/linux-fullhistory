@@ -52,7 +52,7 @@ fi
 if [ "$CONFIG_PARPORT" != "n" ]; then
   dep_tristate 'Parallel printer support' CONFIG_PRINTER $CONFIG_PARPORT
   if [ "$CONFIG_PRINTER" != "n" ]; then
-    bool '  Support IEEE1284 status readback' CONFIG_PRINTER_READBACK
+    bool '  Support for console on line printer' CONFIG_LP_CONSOLE
   fi
 fi
 

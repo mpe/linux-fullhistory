@@ -22,7 +22,7 @@
 static int io[PARPORT_MAX+1] __initdata = { [0 ... PARPORT_MAX] = 0 };
 static int io_hi[PARPORT_MAX+1] __initdata = { [0 ... PARPORT_MAX] = 0 };
 static int irq[PARPORT_MAX] __initdata = { [0 ... PARPORT_MAX-1] = PARPORT_IRQ_PROBEONLY };
-static int dma[PARPORT_MAX] __initdata = { [0 ... PARPORT_MAX-1] = PARPORT_DMA_AUTO };
+static int dma[PARPORT_MAX] __initdata = { [0 ... PARPORT_MAX-1] = PARPORT_DMA_NONE };
 
 extern int parport_pc_init(int *io, int *io_hi, int *irq, int *dma);
 extern int parport_ax_init(void);
@@ -119,10 +119,7 @@ __initfunc(int parport_init(void))
 	if (io[0] == PARPORT_DISABLE) 
 		return 1;
 
-#ifdef CONFIG_PNP_PARPORT
-	parport_probe_hook = &parport_probe_one;
-#endif
-#ifdef	CONFIG_SYSCTL
+#ifdef CONFIG_SYSCTL
 	parport_default_proc_register ();
 #endif
 
@@ -161,13 +158,42 @@ EXPORT_SYMBOL(parport_unregister_driver);
 EXPORT_SYMBOL(parport_register_device);
 EXPORT_SYMBOL(parport_unregister_device);
 EXPORT_SYMBOL(parport_enumerate);
-EXPORT_SYMBOL(parport_ieee1284_nibble_mode_ok);
+EXPORT_SYMBOL(parport_negotiate);
+EXPORT_SYMBOL(parport_write);
+EXPORT_SYMBOL(parport_read);
+EXPORT_SYMBOL(parport_ieee1284_wakeup);
 EXPORT_SYMBOL(parport_wait_peripheral);
+EXPORT_SYMBOL(parport_wait_event);
+EXPORT_SYMBOL(parport_set_timeout);
+EXPORT_SYMBOL(parport_ieee1284_interrupt);
+EXPORT_SYMBOL(parport_ieee1284_ecp_write_data);
+EXPORT_SYMBOL(parport_ieee1284_ecp_read_data);
+EXPORT_SYMBOL(parport_ieee1284_ecp_write_addr);
+EXPORT_SYMBOL(parport_ieee1284_write_compat);
+EXPORT_SYMBOL(parport_ieee1284_read_nibble);
+EXPORT_SYMBOL(parport_ieee1284_read_byte);
+EXPORT_SYMBOL(parport_ieee1284_epp_write_data);
+EXPORT_SYMBOL(parport_ieee1284_epp_read_data);
+EXPORT_SYMBOL(parport_ieee1284_epp_write_addr);
+EXPORT_SYMBOL(parport_ieee1284_epp_read_addr);
 EXPORT_SYMBOL(parport_proc_register);
 EXPORT_SYMBOL(parport_proc_unregister);
-EXPORT_SYMBOL(parport_probe_hook);
+EXPORT_SYMBOL(parport_device_proc_register);
+EXPORT_SYMBOL(parport_device_proc_unregister);
+EXPORT_SYMBOL(parport_default_proc_register);
+EXPORT_SYMBOL(parport_default_proc_unregister);
 EXPORT_SYMBOL(parport_parse_irqs);
 EXPORT_SYMBOL(parport_parse_dmas);
+#ifdef CONFIG_PARPORT_12843
+EXPORT_SYMBOL(parport_open);
+EXPORT_SYMBOL(parport_close);
+EXPORT_SYMBOL(parport_device_id);
+EXPORT_SYMBOL(parport_device_num);
+EXPORT_SYMBOL(parport_device_coords);
+EXPORT_SYMBOL(parport_daisy_deselect_all);
+EXPORT_SYMBOL(parport_daisy_select);
+EXPORT_SYMBOL(parport_daisy_init);
+#endif
 
 void inc_parport_count(void)
 {

@@ -90,8 +90,6 @@
 
 #define PDC202XX_DEBUG_DRIVE_INFO		0
 #define PDC202XX_DECODE_REGISTER_INFO		0
-#define PDC202XX_FORCE_BURST_BIT		0
-#define PDC202XX_FORCE_MASTER_MODE		0
 
 extern char *ide_xfer_verbose (byte xfer_rate);
 
@@ -225,16 +223,12 @@ static int config_chipset_for_dma (ide_drive_t *drive, byte ultra)
 	switch(drive_number) {
 		case 0:	drive_pci = 0x60;
 			pci_read_config_dword(dev, drive_pci, &drive_conf);
-			if ((drive_conf != 0x004ff304) && (drive_conf != 0x004ff3c4))
-				goto chipset_is_set;
 			pci_read_config_byte(dev, (drive_pci), &test1);
 			if (!(test1 & SYNC_ERRDY_EN))
 				pci_write_config_byte(dev, (drive_pci), test1|SYNC_ERRDY_EN);
 			break;
 		case 1:	drive_pci = 0x64;
 			pci_read_config_dword(dev, drive_pci, &drive_conf);
-			if ((drive_conf != 0x004ff304) && (drive_conf != 0x004ff3c4))
-				goto chipset_is_set;
 			pci_read_config_byte(dev, 0x60, &test1);
 			pci_read_config_byte(dev, (drive_pci), &test2);
 			if ((test1 & SYNC_ERRDY_EN) && !(test2 & SYNC_ERRDY_EN))
@@ -242,16 +236,12 @@ static int config_chipset_for_dma (ide_drive_t *drive, byte ultra)
 			break;
 		case 2:	drive_pci = 0x68;
 			pci_read_config_dword(dev, drive_pci, &drive_conf);
-			if ((drive_conf != 0x004ff304) && (drive_conf != 0x004ff3c4))
-				goto chipset_is_set;
 			pci_read_config_byte(dev, (drive_pci), &test1);
 			if (!(test1 & SYNC_ERRDY_EN))
 				pci_write_config_byte(dev, (drive_pci), test1|SYNC_ERRDY_EN);
 			break;
 		case 3:	drive_pci = 0x6c;
 			pci_read_config_dword(dev, drive_pci, &drive_conf);
-			if ((drive_conf != 0x004ff304) && (drive_conf != 0x004ff3c4))
-				goto chipset_is_set;
 			pci_read_config_byte(dev, 0x68, &test1);
 			pci_read_config_byte(dev, (drive_pci), &test2);
 			if ((test1 & SYNC_ERRDY_EN) && !(test2 & SYNC_ERRDY_EN))
@@ -415,7 +405,7 @@ static int config_chipset_for_dma (ide_drive_t *drive, byte ultra)
 		return ide_dma_off_quietly;
 	}
 
-	err = ide_wait_cmd(drive, WIN_SETFEATURES, speed, SETFEATURES_XFER, 0, NULL);
+	err = ide_config_drive_speed(drive, speed);
 
 #if PDC202XX_DECODE_REGISTER_INFO
 	pci_read_config_byte(dev, (drive_pci), &AP);
@@ -435,8 +425,6 @@ static int config_chipset_for_dma (ide_drive_t *drive, byte ultra)
 	pci_read_config_dword(dev, drive_pci, &drive_conf);
 	printk("0x%08x\n", drive_conf);
 #endif /* PDC202XX_DEBUG_DRIVE_INFO */
-
-chipset_is_set:
 
 	return ((int)	((id->dma_ultra >> 11) & 3) ? ide_dma_on :
 			((id->dma_ultra >> 8) & 7) ? ide_dma_on :
@@ -533,7 +521,7 @@ __initfunc(unsigned int pci_init_pdc202xx (struct pci_dev *dev, const char *name
 		(primary_mode & 1) ? "MASTER" : "PCI",
 		(secondary_mode & 1) ? "MASTER" : "PCI" );
 
-#if PDC202XX_FORCE_BURST_BIT
+#ifdef PDC202XX_FORCE_BURST_BIT
 	if (!(udma_speed_flag & 1)) {
 		printk("%s: FORCING BURST BIT 0x%02x -> 0x%02x ", name, udma_speed_flag, (udma_speed_flag|1));
 		outb(udma_speed_flag|1, high_16 + 0x001f);
@@ -541,7 +529,7 @@ __initfunc(unsigned int pci_init_pdc202xx (struct pci_dev *dev, const char *name
 	}
 #endif /* PDC202XX_FORCE_BURST_BIT */
 
-#if PDC202XX_FORCE_MASTER_MODE
+#ifdef PDC202XX_FORCE_MASTER_MODE
 	if (!(primary_mode & 1)) {
 		printk("%s: FORCING PRIMARY MODE BIT 0x%02x -> 0x%02x ",
 			name, primary_mode, (primary_mode|1));

@@ -696,6 +696,7 @@ void ide_end_drive_cmd (ide_drive_t *drive, byte stat, byte err);
 int ide_wait_cmd (ide_drive_t *drive, int cmd, int nsect, int feature, int sectors, byte *buf);
 
 void ide_delay_50ms (void);
+int ide_config_drive_speed (ide_drive_t *drive, byte speed);
 
 /*
  * ide_system_bus_speed() returns what we think is the system VESA/PCI

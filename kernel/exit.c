@@ -52,9 +52,11 @@ static void release(struct task_struct * p)
 		write_unlock_irq(&tasklist_lock);
 
 		release_thread(p);
+#if 0 /* FIXME! How do we do this right for threads? */
 		current->cmin_flt += p->min_flt + p->cmin_flt;
 		current->cmaj_flt += p->maj_flt + p->cmaj_flt;
 		current->cnswap += p->nswap + p->cnswap;
+#endif
 		free_task_struct(p);
 	} else {
 		printk("task releasing itself\n");
@@ -256,7 +258,6 @@ static inline void __exit_mm(struct task_struct * tsk)
 		flush_tlb_mm(mm);
 		destroy_context(mm);
 		tsk->mm = &init_mm;
-		tsk->swappable = 0;
 		SET_PAGE_DIR(tsk, swapper_pg_dir);
 		mm_release();
 		mmput(mm);

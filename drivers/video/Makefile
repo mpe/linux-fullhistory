@@ -192,9 +192,11 @@ endif
 
 ifeq ($(CONFIG_FB_TGA),y)
 L_OBJS += tgafb.o
+CONFIG_FBGEN_BUILTIN = y
 else
   ifeq ($(CONFIG_FB_TGA),m)
   M_OBJS += tgafb.o
+  CONFIG_FBGEN_MODULE = y
   endif
 endif
 

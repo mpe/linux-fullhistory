@@ -191,12 +191,6 @@ Either use binutils-2.8.1.0.23 or binutils-2.9.1.0.7 or later.  Glibc2
 users should especially try to use the 2.9.1.0.x releases, as they
 resolve known issues with glibc2 and binutils-2.8.x releases.
 
-   libbfd, libiberty, and /usr/include/bfd.h, which are part of recent
-binutils packages, are also required to compile ksymoops.  Depending
-upon your distribution, this may require you to install both binutils
-and binutils-development packages (Debian puts bfd.h in binutils-dev,
-for example).
-
 Gnu C
 =====
 

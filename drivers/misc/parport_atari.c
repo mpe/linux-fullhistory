@@ -221,9 +221,6 @@ parport_atari_init(void)
 		printk(KERN_INFO "%s: Atari built-in port using irq\n", p->name);
 		parport_proc_register(p);
 
-		if (parport_probe_hook)
-			(*parport_probe_hook)(p);
-
 		parport_announce_port (p);
 
 		return 1;

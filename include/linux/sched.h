@@ -172,7 +172,10 @@ struct mm_struct {
 	atomic_t count;
 	int map_count;				/* number of VMAs */
 	struct semaphore mmap_sem;
+	rwlock_t page_table_lock;
 	unsigned long context;
+	unsigned long min_flt, maj_flt, nswap, cmin_flt, cmaj_flt, cnswap;
+	int swappable:1;
 	unsigned long start_code, end_code, start_data, end_data;
 	unsigned long start_brk, brk, start_stack;
 	unsigned long arg_start, arg_end, env_start, env_end;
@@ -193,6 +196,9 @@ struct mm_struct {
 		swapper_pg_dir, 			\
 		ATOMIC_INIT(1), 1,			\
 		__MUTEX_INITIALIZER(name.mmap_sem),	\
+		RW_LOCK_UNLOCKED,			\
+		0,					\
+		0, 0, 0, 0, 0, 0,			\
 		0,					\
 		0, 0, 0, 0,				\
 		0, 0, 0, 				\
@@ -280,9 +286,6 @@ struct task_struct {
 	struct tms times;
 	unsigned long start_time;
 	long per_cpu_utime[NR_CPUS], per_cpu_stime[NR_CPUS];
-/* mm fault and swap info: this can arguably be seen as either mm-specific or thread-specific */
-	unsigned long min_flt, maj_flt, nswap, cmin_flt, cmaj_flt, cnswap;
-	int swappable:1;
 /* process credentials */
 	uid_t uid,euid,suid,fsuid;
 	gid_t gid,egid,sgid,fsgid;
@@ -343,7 +346,7 @@ struct task_struct {
  */
 #define _STK_LIM	(8*1024*1024)
 
-#define DEF_PRIORITY	(20*HZ/100)	/* 210 ms time slices */
+#define DEF_PRIORITY	(20*HZ/100)	/* 200 ms time slices */
 
 /*
  *  INIT_TASK is used to set up the first task table, touch at
@@ -365,8 +368,6 @@ struct task_struct {
 /* timer */	{ NULL, NULL, 0, 0, it_real_fn }, \
 /* utime */	{0,0,0,0},0, \
 /* per CPU times */ {0, }, {0, }, \
-/* flt */	0,0,0,0,0,0, \
-/* swp */	0, \
 /* process credentials */					\
 /* uid etc */	0,0,0,0,0,0,0,0,				\
 /* suppl grps*/ 0, {0,},					\

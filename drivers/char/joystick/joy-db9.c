@@ -337,7 +337,7 @@ static struct js_port __init *js_db9_probe(int *config, struct js_port *port)
 			return port;
 		}
 
-		if (!(pp->modes & (PARPORT_MODE_PCPS2 | PARPORT_MODE_PCECPPS2))) {
+		if (!(pp->modes & PARPORT_MODE_TRISTATE)) {
 			printk(KERN_ERR "js-db9: specified parport is not bidirectional\n");
 			return port;
 		}

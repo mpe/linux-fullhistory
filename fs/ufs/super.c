@@ -467,7 +467,8 @@ struct super_block * ufs_read_super (struct super_block * sb, void * data,
 	}
 	if (!(sb->u.ufs_sb.s_mount_opt & UFS_MOUNT_UFSTYPE)) {
 		printk("You didn't specify the type of your ufs filesystem\n\n"
-		"       mount -t ufs -o ufstype=sun|sunx86|44bsd|old|nextstep|netxstep-cd|openstep ...\n\n"
+		"mount -t ufs -o ufstype="
+		"sun|sunx86|44bsd|old|nextstep|netxstep-cd|openstep ...\n\n"
 		">>>WARNING<<< Wrong ufstype may corrupt your filesystem, "
 		"default is ufstype=old\n");
 		ufs_set_opt (sb->u.ufs_sb.s_mount_opt, UFSTYPE_OLD);

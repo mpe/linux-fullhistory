@@ -262,8 +262,7 @@ static struct vm_operations_struct graphics_mmap = {
 	NULL,			/* no special mmap-advise */
 	sgi_graphics_nopage,	/* our magic no-page fault handler */
 	NULL,			/* no special mmap-wppage */
-	NULL,			/* no special mmap-swapout */
-	NULL			/* no special mmap-swapin */
+	NULL			/* no special mmap-swapout */
 };
 	
 int

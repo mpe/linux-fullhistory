@@ -87,8 +87,7 @@ struct vm_operations_struct fat_file_mmap = {
 	NULL,			/* advise */
 	fat_file_mmap_nopage,	/* nopage */
 	NULL,			/* wppage */
-	NULL,			/* swapout */
-	NULL,			/* swapin */
+	NULL			/* swapout */
 };
 
 /*

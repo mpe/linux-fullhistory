@@ -36,9 +36,7 @@ struct parport_i2c_bus
 
 static struct parport_i2c_bus *bus_list;
 
-#ifdef __SMP__
 static spinlock_t bus_list_lock = SPIN_LOCK_UNLOCKED;
-#endif
 
 /* software I2C functions */
 

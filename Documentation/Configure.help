@@ -530,7 +530,7 @@ CONFIG_BLK_DEV_IDEPCI
   People with SCSI-only systems should say N here; if unsure say Y.
 
 Generic PCI bus-master DMA support
-CONFIG_BLK_DEV_IDEDMA
+CONFIG_BLK_DEV_IDEDMA_PCI
   If your PCI system uses IDE drive(s) (as opposed to SCSI, say) and
   is capable of bus-master DMA operation (most Pentium PCI systems),
   you will want to say Y here to reduce CPU overhead. You can then use
@@ -545,6 +545,26 @@ CONFIG_BLK_DEV_IDEDMA
   file Documentation/ide.txt for more information. 
 
   It is safe to say Y to this question.
+
+Good-Bad DMA Model-Firmware (EXPERIMENTAL)
+IDEDMA_NEW_DRIVE_LISTINGS
+  This test compares both the model and firmware revision for buggy drives
+  that claim to (U)DMA capable.  This is a blanket on/off test with no speed
+  limit options.  Straight GNU GCC 2.7.3/2.8.X compilers are known to be safe;
+  whereas, many versions of EGCS have a problem and miscompile.
+
+  If in doubt, say N.
+
+Generic ATA-66 support (DANGEROUS)
+CONFIG_IDEDMA_ULTRA_66
+  This allows for your Generic IDE control to attempt support for
+  using ATA-66 or UDMA-66 transfer modes 3/4.  If you are not sure what you
+  are attempting, "DO NOT" even think about this option, unless your
+  mainboard's chipset is verified.  Do not complain to anyone if you
+  do not know what you are doing and are just playing around.
+  This option has no known success cases to date.
+
+  Say N, or beware.........
 
 Winbond SL82c105 support
 CONFIG_BLK_DEV_SL82C105
@@ -562,13 +582,16 @@ CONFIG_BLK_DEV_OFFBOARD
   improve the usability of some boot managers such as LILO when
   booting from a drive on an off-board controller.
 
+  Requires that all onboard ide controllers be disabled or calling
+  "pci=reverse" to invert the device scan order.
+
   Note that, if you say Y here, the order of the hd* devices will be
   rearranged which may require modification of fstab and other files.
 
   If in doubt, say N.
 
 Use DMA by default when available
-CONFIG_IDEDMA_AUTO
+CONFIG_IDEDMA_PCI_AUTO
   Prior to kernel version 2.1.112, Linux used to automatically use
   DMA for IDE drives and chipsets which support it. Due to concerns
   about a couple of cases where buggy hardware may have caused damage,
@@ -664,7 +687,7 @@ CONFIG_BLK_DEV_CY82C693
   This driver adds detection and support for the CY82C693 chipset
   used on Digital's PC-Alpha 164SX boards.
 
-  This requires CONFIG_IDEDMA_AUTO to be enabled.
+  This requires CONFIG_IDEDMA_PCI_AUTO to be enabled.
 
   Please read the comments at the top of drivers/block/cy82c693.c
 
@@ -679,7 +702,7 @@ CONFIG_BLK_DEV_VIA82C586
   (while running a "cat") provided you enabled "proc" support and
   set DISPLAY_APOLLO_TIMINGS in via82c586.c
 
-  This requires CONFIG_IDEDMA_AUTO to be enabled.
+  This requires CONFIG_IDEDMA_PCI_AUTO to be enabled.
 
   If unsure, say N.
 
@@ -693,14 +716,15 @@ CONFIG_BLK_DEV_ALI15X3
   onboard chipsets.  It also tests for Simplex mode and enables
   normal dual channel support.
 
-  This requires CONFIG_IDEDMA_AUTO to be enabled.
+  This requires CONFIG_IDEDMA_PCI_AUTO to be enabled.
 
   Please read the comments at the top of drivers/block/alim15x3.c
 
   If unsure, say N.
 
-PROMISE PDC20246 support (EXPERIMENTAL)
-CONFIG_BLK_DEV_PDC20246
+PROMISE PDC20246/PDC20262 support
+CONFIG_BLK_DEV_PDC202XX
+  Promise Ultra33 or PDC20246.
   This driver adds up to 4 more eide devices sharing a single interrupt.
   This add-on card is a bootable PCI UDMA controller.
   Since multiple cards can be installed and there are BIOS ROM problems
@@ -708,26 +732,37 @@ CONFIG_BLK_DEV_PDC20246
   do not match.  Should you be unable to make new BIOS chips with a burner,
   the driver attempts to dynamic tuning of the chipset at boot-time
   for max-speed.  Ultra33 BIOS 1.25 or new required for more than one card.
+  This card may require "PDC202XX Special UDMA Feature (EXPERIMENTAL)".
 
-  This requires CONFIG_IDEDMA_AUTO to be enabled.
-
-  Please read the comments at the top of drivers/block/pdc202xx.c
-
-  If unsure, say N.
-
-PROMISE PDC20262 support (EXPERIMENTAL)
-CONFIG_BLK_DEV_PDC20262
+  Promise Ultra66 or PDC20262.
   This driver adds up to 4 more eide devices sharing a single interrupt.
   This add-on card is a bootable PCI UDMA ATA-66 controller.
   The driver attempts to dynamic tuning of the chipset at boot-time
   for max-speed.  Note tested limits are UDMA-2.
   Ultra66 BIOS 1.11 or newer required.
 
-  This requires CONFIG_IDEDMA_AUTO to be enabled.
+  This requires CONFIG_IDEDMA_PCI_AUTO to be enabled.
 
   Please read the comments at the top of drivers/block/pdc202xx.c
 
   If unsure, say N.
+
+Special UDMA Feature (EXPERIMENTAL)
+PDC202XX_FORCE_BURST_BIT
+  For PDC20246 and PDC20262 Ultra DMA chipsets.
+  Designed originally for PDC20246/Ultra33 that has BIOS setup failures
+  when using 3 or more cards.
+
+  Please read the comments at the top of drivers/block/pdc202xx.c
+
+  If unsure, say N.
+
+Special Mode Feature (DANGEROUS)
+PDC202XX_FORCE_MASTER_MODE
+  For PDC20246 and PDC20262 Ultra DMA chipsets.
+  This is reserved for possible Hardware RAID 0,1 for the FastTrak Series.
+
+  Say N. 
 
 AEC6210 chipset support
 CONFIG_BLK_DEV_AEC6210
@@ -735,11 +770,11 @@ CONFIG_BLK_DEV_AEC6210
   This add-on card is a bootable PCI UDMA controller.  In order to get this
   card to initialize correctly in some cases, you should include this driver.
 
-  This prefers CONFIG_IDEDMA_AUTO to be enabled, regardless.
+  This prefers CONFIG_IDEDMA_PCI_AUTO to be enabled, regardless.
 
   Please read the comments at the top of drivers/block/aec6210.c
 
-Intel PIIXn chipsets support (EXPERIMENTAL)
+Intel PIIXn chipsets support
 CONFIG_BLK_DEV_PIIX
   This driver adds PIO mode setting and tuning for all PIIX IDE
   controllers by Intel.  Since the BIOS can sometimes improperly tune
@@ -750,15 +785,31 @@ CONFIG_BLK_DEV_PIIX
 
   If unsure, say N.
 
-HPT343 chipset support (EXPERIMENTAL)
-CONFIG_BLK_DEV_HPT343
-  This driver adds up to 4 more EIDE devices sharing a single
-  interrupt. The HPT343 chipset in its current form is a non-bootable
-  PCI UDMA controller. This driver requires dynamic tuning of the
-  chipset during the ide-probe at boot. It is reported to support DVD
-  II drives, by the manufacturer.
+PIIXn Tuning support (EXPERIMENTAL)
+CONFIG_BLK_DEV_PIIX_TUNING
+  This driver extension adds DMA mode setting and tuning for all PIIX IDE
+  controllers by Intel.  Since the BIOS can sometimes improperly setup
+  the device/adapter combination and speed limits, It has become a necessity
+  to back/forward speed devices as needed.
 
-  This requires CONFIG_IDEDMA_AUTO to be enabled.
+  Case 430HX/440FX PIIX3 need speed limits to reduce UDMA to DMA mode 2
+  if the BIOS can to perform this task at INIT.
+
+  If unsure, say N.
+
+HPT34X chipset support
+CONFIG_BLK_DEV_HPT34X
+  This driver adds up to 4 more EIDE devices sharing a single
+  interrupt. The HPT343 chipset in its current form is a non-bootable or
+  HPT345/HPT363 chipset is bootable (needs BIOS FIX) PCI UDMA controllers.
+  This driver requires dynamic tuning of the chipset during the ide-probe
+  at boot. It is reported to support DVD II drives, by the manufacturer.
+
+  Please read the comments at the top of drivers/block/hpt343.c
+
+HPT34X DMA support (DANGEROUS)
+CONFIG_BLK_DEV_HPT34X_DMA
+  This requires CONFIG_IDEDMA_PCI_AUTO to be enabled.
 
   Please read the comments at the top of drivers/block/hpt343.c
 
@@ -821,17 +872,17 @@ CONFIG_BLK_DEV_IDEDOUBLER
   Say Y if you have an IDE doubler.  The driver is enabled at kernel
   runtime using the "ide=doubler" kernel boot parameter.
 
- Support for PowerMac IDE devices (must also enable IDE)
- CONFIG_BLK_DEV_IDE_PMAC
-   No help for CONFIG_BLK_DEV_IDE_PMAC
+Support for PowerMac IDE devices (must also enable IDE)
+CONFIG_BLK_DEV_IDE_PMAC
+  No help for CONFIG_BLK_DEV_IDE_PMAC
 
- PowerMac IDE DMA support
- CONFIG_BLK_DEV_IDEDMA_PMAC
-   No help for CONFIG_BLK_DEV_IDEDMA_PMAC
+PowerMac IDE DMA support
+CONFIG_BLK_DEV_IDEDMA_PMAC
+  No help for CONFIG_BLK_DEV_IDEDMA_PMAC
 
- Use DMA by default
- CONFIG_PMAC_IDEDMA_AUTO
-   No help for CONFIG_PMAC_IDEDMA_AUTO
+Use DMA by default
+CONFIG_IDEDMA_PMAC_AUTO
+  No help for CONFIG_IDEDMA_PMAC_AUTO
 
 Macintosh Quadra/Powerbook IDE interface support
 CONFIG_BLK_DEV_MAC_IDE
@@ -843,9 +894,21 @@ CONFIG_BLK_DEV_MAC_IDE
   (hard disks, CD-ROM drives, etc.) that are connected to the builtin
   IDE interface.
 
- RapIDE interface support
- CONFIG_BLK_DEV_IDE_RAPIDE
-   No help for CONFIG_BLK_DEV_IDE_RAPIDE
+ICS IDE interface support
+CONFIG_BLK_DEV_IDE_ICSIDE
+  No help for CONFIG_BLK_DEV_IDE_ICSIDE
+
+ICS DMA support
+CONFIG_BLK_DEV_IDEDMA_ICS
+  No help for CONFIG_BLK_DEV_IDEDMA_ICS
+
+Use ICS DMA by default
+CONFIG_IDEDMA_ICS_AUTO
+  No help for CONFIG_IDEDMA_ICS_AUTO
+
+RapIDE interface support
+CONFIG_BLK_DEV_IDE_RAPIDE
+  No help for CONFIG_BLK_DEV_IDE_RAPIDE
 
 XT hard disk support
 CONFIG_BLK_DEV_XD
@@ -2218,12 +2281,12 @@ CONFIG_PARPORT
   whenever you want), say M here and read Documentation/modules.txt.
   The module will be called parport.o. If you have more than one
   parallel port and want to specify which port and IRQ to be used by
-  this driver at module load time, read
-  Documentation/networking/net-modules.txt.
+  this driver at module load time, take a look at
+  Documentation/networking/parport.txt.
 
   If unsure, say Y.
 
-PC-style hardware 
+PC-style hardware
 CONFIG_PARPORT_PC
   You should say Y here if you have a PC-style parallel port. All IBM
   PC compatible computers and some Alphas have PC-style parallel
@@ -2236,28 +2299,36 @@ CONFIG_PARPORT_PC
   
   If unsure, say Y.
 
+Use FIFO/DMA if available
+CONFIG_PARPORT_PC_FIFO
+  Many parallel port chipsets provide hardware that can speed up
+  printing. Say Y here if you want to take advantage of that.
+
+  As well as actually having a FIFO, or DMA capability, the kernel
+  will need to know which IRQ the parallel port has. By default,
+  parallel port interrupts will not be used, and so neither will the
+  FIFO. See Documentation/parport.txt to find out how to specify
+  which IRQ/DMA to use.
+
 Support foreign hardware
 CONFIG_PARPORT_OTHER
   Say Y here if you want to be able to load driver modules to support
   other non-standard types of parallel ports. This causes a
   performance loss, so most people say N.
 
-Sun Ultra/AX-style hardware 
+Sun Ultra/AX-style hardware
 CONFIG_PARPORT_AX
   Say Y here if you need support for the parallel port hardware on Sun
   Ultra/AX machines. This code is also available as a module (say M),
   called parport_ax.o. If in doubt, saying N is the safe plan.
 
-Plug and Play support
-CONFIG_PNP
-  Plug and Play support allows the kernel to automatically configure
-  some peripheral devices. Say Y to enable PnP.
-
-Auto-probe for parallel devices
-CONFIG_PNP_PARPORT
-  Some IEEE-1284 conforming parallel-port devices can identify
-  themselves when requested. Say Y to enable this feature, or M to
-  compile it as a module (parport_probe.o). If in doubt, say N.
+IEEE1284 transfer modes
+CONFIG_PARPORT_1284
+  If you have a printer that supports status readback or device ID, or
+  want to use a device that uses enhanced parallel port transfer modes
+  such as EPP and ECP, say Y here to enable advanced IEEE 1284
+  transfer modes. Also say Y if you want device ID information to
+  appear in /proc/parport/*/autoprobe*. It is safe to say N.
 
 Enable loadable module support
 CONFIG_MODULES
@@ -8440,7 +8511,8 @@ CONFIG_PRINTER
   corresponding drivers into the kernel. If you want to compile this
   driver as a module however ( = code which can be inserted in and
   removed from the running kernel whenever you want), say M here and
-  read Documentation/modules.txt. The module will be called lp.o. 
+  read Documentation/modules.txt and Documentation/parport.txt. The
+  module will be called lp.o. 
 
   If you have several parallel ports, you can specify which ports to
   use with the "lp" kernel command line option. (Try "man bootparam"
@@ -8454,11 +8526,18 @@ CONFIG_PRINTER
   If you have more than 3 printers, you need to increase the LP_NO
   variable in lp.c.
 
-Support IEEE1284 status readback
-CONFIG_PRINTER_READBACK
-  If your printer conforms to IEEE 1284, it may be able to provide a
-  status indication when you read from it (for example, with `cat
-  /dev/lp1'). To use this feature, say Y here.
+Support for console on line printer
+CONFIG_LP_CONSOLE
+  If you want kernel messages to be printed out as they occur, you
+  can have a console on the printer. This option adds support for
+  doing that; to actually get it to happen you need to pass the
+  option "console=lp" to the kernel at boot time.
+
+  Note that kernel messages can get lost if the printer is out of
+  paper (or off, or unplugged, or too busy..), but this behaviour
+  can be changed. See drivers/char/lp.c (do this at your own risk).
+
+  If unsure, say N.
 
 Mouse Support (not serial mice)
 CONFIG_MOUSE

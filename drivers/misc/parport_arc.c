@@ -98,41 +98,36 @@ static struct parport_operations parport_arc_ops =
 	arc_read_control,
 	arc_frob_control,
 
-	NULL, /* write_econtrol */
-	NULL, /* read_econtrol */
-	NULL, /* frob_econtrol */
-
-	arc_write_status,
 	arc_read_status,
 
-	NULL, /* write_fifo */
-	NULL, /* read_fifo */
-	
-	NULL, /* change_mode */
-	
-	NULL, /* epp_write_data */
-	NULL, /* epp_read_data */
-	NULL, /* epp_write_addr */
-	NULL, /* epp_read_addr */
-	NULL, /* epp_check_timeout */
+	arc_enable_irq,
+	arc_disable_irq,
 
-	NULL, /* epp_write_block */
-	NULL, /* epp_read_block */
+	arc_data_forward,
+	arc_data_reverse,
 
-	NULL, /* ecp_write_block */
-	NULL, /* epp_write_block */
-	
+	arc_interrupt,
+
 	arc_init_state,
 	arc_save_state,
 	arc_restore_state,
 
-	arc_enable_irq,
-	arc_disable_irq,
-	arc_interrupt,
-
 	arc_inc_use_count,
 	arc_dec_use_count,
-	arc_fill_inode
+	arc_fill_inode,
+
+	parport_ieee1284_epp_write_data,
+	parport_ieee1284_epp_read_data,
+	parport_ieee1284_epp_write_addr,
+	parport_ieee1284_epp_read_addr,
+
+	parport_ieee1284_ecp_write_data,
+	parport_ieee1284_ecp_read_data,
+	parport_ieee1284_ecp_write_addr,
+	
+	parport_ieee1284_write_compat,
+	parport_ieee1284_read_nibble,
+	parport_ieee1284_read_byte,
 };
 
 /* --- Initialisation code -------------------------------- */
@@ -142,11 +137,11 @@ int parport_arc_init(void)
 	/* Archimedes hardware provides only one port, at a fixed address */
 	struct parport *p;
 
-	if (check_region(PORT_BASE, 4))
+	if (check_region(PORT_BASE, 1))
 		return 0;
-	
-	p = parport_register_port(base, IRQ_PRINTERACK, 
-				  PARPORT_DMA_NONE, &parport_arc_ops);
+
+	p = parport_register_port (PORT_BASE, IRQ_PRINTERACK,
+				   PARPORT_DMA_NONE, &parport_arc_ops);
 
 	if (!p)
 		return 0;
@@ -157,9 +152,6 @@ int parport_arc_init(void)
 	printk(KERN_INFO "%s: Archimedes on-board port, using irq %d\n",
 	       p->irq);
 	parport_proc_register(p);
-
-	if (parport_probe_hook)
-		(*parport_probe_hook)(p);
 
 	/* Tell the high-level drivers about the port. */
 	parport_announce_port (p);

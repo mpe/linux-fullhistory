@@ -68,20 +68,8 @@ if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
 fi
 
 if [ "$CONFIG_PCI" = "y" ]; then
-  tristate 'Parallel port support' CONFIG_PARPORT
-  if [ "$CONFIG_PARPORT" != "n" ]; then
-    dep_tristate '  Ultra/AX-style hardware' CONFIG_PARPORT_AX $CONFIG_PARPORT
-    if [ "$CONFIG_PARPORT_AX" = "m" ]; then
-      define_bool CONFIG_PARPORT_LOWLEVEL_MODULE y
-    fi
-    if [ "$CONFIG_PARPORT_AX" != "n" ]; then
-      bool '  Support foreign hardware' CONFIG_PARPORT_OTHER
-    fi
-    dep_tristate '  Parallel printer support' CONFIG_PRINTER $CONFIG_PARPORT
-    if [ "$CONFIG_PRINTER" != "n" ]; then
-      bool '    Support IEEE1284 status readback' CONFIG_PRINTER_READBACK
-    fi
-  fi
+  source drivers/misc/Config.in
+  dep_tristate '  Parallel printer support' CONFIG_PRINTER $CONFIG_PARPORT
   tristate 'SUNW,envctrl support' CONFIG_ENVCTRL
 fi
 endmenu

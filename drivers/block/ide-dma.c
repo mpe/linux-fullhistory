@@ -91,9 +91,8 @@
 #include <asm/io.h>
 #include <asm/irq.h>
 
-#define IDE_DMA_NEW_LISTINGS		0
+#ifdef IDEDMA_NEW_DRIVE_LISTINGS
 
-#if IDE_DMA_NEW_LISTINGS
 struct drive_list_entry {
 	char * id_model;
 	char * id_firmware;
@@ -130,7 +129,8 @@ int in_drive_list(struct hd_driveid *id, struct drive_list_entry * drive_table)
 			return 1;
 	return 0;
 }
-#else /* !IDE_DMA_NEW_LISTINGS */
+
+#else /* !IDEDMA_NEW_DRIVE_LISTINGS */
 
 /*
  * good_dma_drives() lists the model names (from "hdparm -i")
@@ -162,7 +162,7 @@ const char *bad_dma_drives[] = {"WDC AC11000H",
 				"WDC AC31600H",
  				NULL};
 
-#endif /* IDE_DMA_NEW_LISTINGS */
+#endif /* IDEDMA_NEW_DRIVE_LISTINGS */
 
 /*
  * Our Physical Region Descriptor (PRD) table should be large enough
@@ -314,8 +314,7 @@ int check_drive_lists (ide_drive_t *drive, int good_bad)
 {
 	struct hd_driveid *id = drive->id;
 
-#if IDE_DMA_NEW_LISTINGS
-
+#ifdef IDEDMA_NEW_DRIVE_LISTINGS
 	if (good_bad) {
 		return in_drive_list(id, drive_whitelist);
 	} else {
@@ -324,8 +323,7 @@ int check_drive_lists (ide_drive_t *drive, int good_bad)
 			printk("%s: Disabling (U)DMA for %s\n", drive->name, id->model);
 		return(blacklist);
 	}
-#else /* !IDE_DMA_NEW_LISTINGS */
-
+#else /* !IDEDMA_NEW_DRIVE_LISTINGS */
 	const char **list;
 
 	if (good_bad) {
@@ -346,7 +344,7 @@ int check_drive_lists (ide_drive_t *drive, int good_bad)
 			}
 		}
 	}
-#endif /* IDE_DMA_NEW_LISTINGS */
+#endif /* IDEDMA_NEW_DRIVE_LISTINGS */
 	return 0;
 }
 
@@ -359,12 +357,12 @@ static int config_drive_for_dma (ide_drive_t *drive)
 		/* Consult the list of known "bad" drives */
 		if (ide_dmaproc(ide_dma_bad_drive, drive))
 			return hwif->dmaproc(ide_dma_off, drive);
-#if 0
+#ifdef CONFIG_IDEDMA_ULTRA_66
 		/* Enable DMA on any drive that has UltraDMA (mode 3/4) enabled */
 		if ((id->field_valid & 4) && (id->word93 & 0x2000))
 			if ((id->dma_ultra & (id->dma_ultra >> 11) & 3))
 				return hwif->dmaproc(ide_dma_on, drive);
-#endif
+#endif /* CONFIG_IDEDMA_ULTRA_66 */
 		/* Enable DMA on any drive that has UltraDMA (mode 0/1/2) enabled */
 		if (id->field_valid & 4)	/* UltraDMA */
 			if ((id->dma_ultra & (id->dma_ultra >> 8) & 7))
@@ -527,7 +525,7 @@ __initfunc(unsigned long ide_get_or_set_dma_base (ide_hwif_t *hwif, int extra, c
 		}
 	}
 	if (dma_base) {
-		if (extra) /* PDC20246 & HPT343 */
+		if (extra) /* PDC20246, PDC20262, & HPT343 */
 			request_region(dma_base+16, extra, name);
 		dma_base += hwif->channel ? 8 : 0;
 		hwif->dma_extra = extra;
@@ -538,13 +536,15 @@ __initfunc(unsigned long ide_get_or_set_dma_base (ide_hwif_t *hwif, int extra, c
 				 * Lets attempt to use the same Ali tricks
 				 * to fix CMD643.....
 				 */
+#ifdef CONFIG_BLK_DEV_ALI15X3
 			case PCI_DEVICE_ID_AL_M5219:
 			case PCI_DEVICE_ID_AL_M5229:
-				outb(inb(dma_base+2) & 0x60, dma_base+2);
 				/*
 				 * Ali 15x3 chipsets know as ALI IV and V report
 				 * this as simplex, skip this test for them.
 				 */
+#endif /* CONFIG_BLK_DEV_ALI15X3 */
+				outb(inb(dma_base+2) & 0x60, dma_base+2);
 				if (inb(dma_base+2) & 0x80) {
 					printk("%s: simplex device: DMA forced\n", name);
 				}

@@ -158,14 +158,14 @@ int ppa_detect(Scsi_Host_Template * host)
 	 */
 	ppa_hosts[i].mode = PPA_NIBBLE;
 
-	if (modes & PARPORT_MODE_PCPS2)
+	if (modes & PARPORT_MODE_TRISTATE)
 	    ppa_hosts[i].mode = PPA_PS2;
 
-	if (modes & PARPORT_MODE_PCECPPS2) {
+	if (modes & PARPORT_MODE_ECP) {
 	    w_ecr(ppb, 0x20);
 	    ppa_hosts[i].mode = PPA_PS2;
 	}
-	if (modes & PARPORT_MODE_PCECPEPP)
+	if ((modes & PARPORT_MODE_EPP) && (modes & PARPORT_MODE_ECP))
 	    w_ecr(ppb, 0x80);
 
 	/* Done configuration */

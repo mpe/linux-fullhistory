@@ -1465,7 +1465,7 @@ static void update_process_times(unsigned long ticks, unsigned long system)
 	unsigned long user = ticks - system;
 	if (p->pid) {
 		p->counter -= ticks;
-		if (p->counter < 0) {
+		if (p->counter <= 0) {
 			p->counter = 0;
 			p->need_resched = 1;
 		}
@@ -1668,7 +1668,7 @@ asmlinkage int sys_nice(int increment)
 	 * do a "normalization" of the priority (traditionally
 	 * Unix nice values are -20 to 20; Linux doesn't really
 	 * use that kind of thing, but uses the length of the
-	 * timeslice instead (default 210 ms). The rounding is
+	 * timeslice instead (default 200 ms). The rounding is
 	 * why we want to avoid negative values.
 	 */
 	newprio = (newprio * DEF_PRIORITY + 10) / 20;

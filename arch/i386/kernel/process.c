@@ -28,7 +28,6 @@
 #include <linux/config.h>
 #include <linux/unistd.h>
 #include <linux/delay.h>
-#include <linux/smp.h>
 #include <linux/reboot.h>
 #include <linux/init.h>
 #if defined(CONFIG_APM) && defined(CONFIG_APM_POWER_OFF)

@@ -70,11 +70,6 @@ CONFIG_BINFMT_MISC=y
 # CONFIG_I2O_PROC is not set
 
 #
-# Plug and Play support
-#
-# CONFIG_PNP is not set
-
-#
 # Block devices
 #
 CONFIG_BLK_DEV_FD=y
@@ -98,6 +93,8 @@ CONFIG_BLK_DEV_IDEPCI=y
 # CONFIG_BLK_DEV_IDEDMA_PCI is not set
 # CONFIG_BLK_DEV_OFFBOARD is not set
 # CONFIG_BLK_DEV_AEC6210 is not set
+# CONFIG_BLK_DEV_HPT34X is not set
+CONFIG_BLK_DEV_PIIX=y
 # CONFIG_IDE_CHIPSETS is not set
 
 #

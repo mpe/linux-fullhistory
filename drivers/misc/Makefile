@@ -23,7 +23,13 @@ MI_OBJS  :=
 MIX_OBJS :=
 
 ifeq ($(CONFIG_PARPORT),y)
-  L_OBJS += parport_share.o parport_ieee1284.o parport_procfs.o
+  L_OBJS += parport_share.o parport_ieee1284.o parport_ieee1284_ops.o \
+            parport_procfs.o
+
+  ifeq ($(CONFIG_PARPORT_1284),y)
+    L_OBJS += parport_daisy.o parport_probe.o
+  endif
+
   ifeq ($(CONFIG_PARPORT_PC),y)
     LX_OBJS += parport_pc.o
   else
@@ -62,7 +68,10 @@ ifeq ($(CONFIG_PARPORT),y)
   LX_OBJS += parport_init.o
 else
   ifeq ($(CONFIG_PARPORT),m)
-    MI_OBJS += parport_share.o parport_ieee1284.o
+    MI_OBJS += parport_share.o parport_ieee1284.o parport_ieee1284_ops.o
+    ifeq ($(CONFIG_PARPORT_1284),y)
+      MI_OBJS += parport_daisy.o parport_probe.o
+    endif
     ifneq ($(CONFIG_PROC_FS),n) 
       MI_OBJS += parport_procfs.o
     endif

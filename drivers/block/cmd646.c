@@ -94,6 +94,9 @@ static __inline__ int wait_for_ready(ide_drive_t *drive)
 
 static void cmd646_do_setfeature(ide_drive_t *drive, byte command)
 {
+#if 0
+	(void) ide_config_drive_speed(drive, command);
+#else
 	unsigned long flags;
 	byte old_select;
 
@@ -116,6 +119,7 @@ static void cmd646_do_setfeature(ide_drive_t *drive, byte command)
 out:
 	OUT_BYTE(old_select, IDE_SELECT_REG);
 	restore_flags(flags);
+#endif
 }
 
 static void cmd646_dma2_enable(ide_drive_t *drive, unsigned long dma_base)

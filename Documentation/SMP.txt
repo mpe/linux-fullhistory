@@ -1,7 +1,7 @@
 SMP on x86/Linux is now an official feature and is not experimental.
 Experimental SMP support for other architectures is underway.
 
-Please view linux/Documentation/smp for more information about enabling SMP.
+Please view linux/Documentation/smp.txt for more information about enabling SMP.
 
 SMP support for Linux with up to 16 processors using the Intel MP
 specification. 

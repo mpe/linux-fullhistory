@@ -1,6 +1,6 @@
 /*
  *	Video4Linux Colour QuickCam driver
- *	Copyright 1997-1998 Philip Blundell <philb@gnu.org>
+ *	Copyright 1997-1999 Philip Blundell <philb@gnu.org>
  *
  */
 
@@ -294,7 +294,7 @@ static long qc_capture(struct qcam_device *q, char *buf, unsigned long len)
 	if (is_bi_dir)
 	{
 		/* Turn the port around */
-		parport_frob_control(q->pport, 0x20, 0x20);
+		parport_data_reverse(q->pport);
 		mdelay(3);
 		qcam_set_ack(q, 0);
 		if (qcam_await_ready1(q, 1)) {
@@ -336,7 +336,7 @@ static long qc_capture(struct qcam_device *q, char *buf, unsigned long len)
 	{
 		printk("qcam: short read.\n");
 		if (is_bi_dir)
-			parport_frob_control(q->pport, 0x20, 0);
+			parport_data_forward(q->pport);
 		qc_setup(q);
 		return len;
 	}
@@ -355,11 +355,11 @@ static long qc_capture(struct qcam_device *q, char *buf, unsigned long len)
 		if (qcam_await_ready1(q, 1))
 		{
 			printk("qcam: no ack after EOF\n");
-			parport_frob_control(q->pport, 0x20, 0);
+			parport_data_forward(q->pport);
 			qc_setup(q);
 			return len;
 		}
-		parport_frob_control(q->pport, 0x20, 0);
+		parport_data_forward(q->pport);
 		mdelay(3);
 		qcam_set_ack(q, 1);
 		if (qcam_await_ready1(q, 0))
@@ -646,7 +646,7 @@ static struct qcam_device *qcam_init(struct parport *port)
 	q->pdev = parport_register_device(port, "c-qcam", NULL, NULL,
 					  NULL, 0, NULL);
 
-	q->bidirectional = (q->pport->modes & PARPORT_MODE_PCPS2)?1:0;
+	q->bidirectional = (q->pport->modes & PARPORT_MODE_TRISTATE)?1:0;
 
 	if (q->pdev == NULL) 
 	{
@@ -678,10 +678,7 @@ int init_cqcam(struct parport *port)
 	struct qcam_device *qcam;
 
 	if (num_cams == MAX_CAMS)
-	{
-		printk(KERN_ERR "Too many Quickcams (max %d)\n", MAX_CAMS);
 		return -ENOSPC;
-	}
 
 	qcam = qcam_init(port);
 	if (qcam==NULL)
@@ -725,19 +722,40 @@ void close_cqcam(struct qcam_device *qcam)
 	kfree(qcam);
 }
 
-#define BANNER "Connectix Colour Quickcam driver v0.02\n"
+#define BANNER "Connectix Colour Quickcam driver v0.03"
+
+static void cq_attach(struct parport *port)
+{
+	init_cqcam(port);
+}
+
+static void cq_detach(struct parport *port)
+{
+	/* Write this some day. */
+}
+
+static struct parport_driver cqcam_driver = {
+	"cqcam",
+	cq_attach,
+	cq_detach,
+	NULL
+};
+
+static void cqcam_init(void)
+{
+	printk(BANNER "\n");
+	parport_register_driver(&cqcam_driver);
+}
 
 #ifdef MODULE
+
+MODULE_AUTHOR("Philip Blundell <philb@gnu.org>");
+MODULE_DESCRIPTION(BANNER);
+
 int init_module(void)
 {
-	struct parport *port;
-
-	printk(BANNER);
-
-	for (port = parport_enumerate(); port; port=port->next)
-		init_cqcam(port);
-
-	return (num_cams)?0:-ENODEV;
+	cqcam_init();
+	return 0;
 }
 
 void cleanup_module(void)
@@ -749,12 +767,7 @@ void cleanup_module(void)
 #else
 __initfunc(int init_colour_qcams(struct video_init *unused))
 {
-	struct parport *port;
-
-	printk(BANNER);
-
-	for (port = parport_enumerate(); port; port=port->next)
-		init_cqcam(port);
+	cqcam_init();
 	return 0;
 }
 #endif

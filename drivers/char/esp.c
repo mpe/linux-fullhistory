@@ -2180,7 +2180,6 @@ static void rs_wait_until_sent(struct tty_struct *tty, int timeout)
 	while ((serial_in(info, UART_ESI_STAT1) != 0x03) ||
 		(serial_in(info, UART_ESI_STAT2) != 0xff)) {
 		current->state = TASK_INTERRUPTIBLE;
-		current->counter = 0;
 		schedule_timeout(char_time);
 
 		if (signal_pending(current))

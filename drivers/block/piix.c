@@ -1,5 +1,5 @@
 /*
- * linux/drivers/block/piix.c	Version 0.23	May 29, 1999
+ * linux/drivers/block/piix.c	Version 0.24	June 28, 1999
  *
  *  Copyright (C) 1998-1999 Andrzej Krzysztofowicz, Author and Maintainer
  *  Copyright (C) 1998-1999 Andre Hedrick, Author and Maintainer
@@ -44,6 +44,12 @@
  * pci_read_config_word(HWIF(drive)->pci_dev, 0x48, &reg48);
  * pci_read_config_word(HWIF(drive)->pci_dev, 0x4a, &reg4a);
  *
+ * #if 0
+ * int err;
+ * err = ide_config_drive_speed(drive, speed);
+ * (void) ide_config_drive_speed(drive, speed);
+ * #else
+ * #endif
  */
 
 #include <linux/types.h>
@@ -62,6 +68,7 @@
 
 extern char *ide_xfer_verbose (byte xfer_rate);
 
+#ifdef CONFIG_BLK_DEV_PIIX_TUNING
 /*
  *
  */
@@ -91,6 +98,7 @@ static byte piix_dma_2_pio (byte xfer_rate) {
 			return 0;
 	}
 }
+#endif /* CONFIG_BLK_DEV_PIIX_TUNING */
 
 /*
  *  Based on settings done by AMI BIOS
@@ -111,11 +119,7 @@ static void piix_tune_drive (ide_drive_t *drive, byte pio)
 				    { 2, 1 },
 				    { 2, 3 }, };
 
-#if 1
 	pio = ide_get_best_pio_mode(drive, pio, 5, NULL);
-#else
-	pio = ide_get_best_pio_mode(drive, pio, 4, NULL);
-#endif
 	pci_read_config_word(HWIF(drive)->pci_dev, master_port, &master_data);
 	if (is_slave) {
 		master_data = master_data | 0x4000;
@@ -141,6 +145,8 @@ static void piix_tune_drive (ide_drive_t *drive, byte pio)
 		pci_write_config_byte(HWIF(drive)->pci_dev, slave_port, slave_data);
 	restore_flags(flags);
 }
+
+#ifdef CONFIG_BLK_DEV_PIIX_TUNING
 
 static int piix_config_drive_for_dma(ide_drive_t *drive, int ultra)
 {
@@ -246,17 +252,13 @@ static int piix_config_drive_for_dma(ide_drive_t *drive, int ultra)
 		}
 		speed = XFER_SW_DMA_2;
         } else {
-#if 0
-		speed = XFER_PIO_0;
-#else
 		speed = XFER_PIO_0 + ide_get_best_pio_mode(drive, 255, 5, NULL);
-#endif
 	}
 
 	restore_flags(flags);
 	piix_tune_drive(drive, piix_dma_2_pio(speed));
 
-	(void) ide_wait_cmd(drive, WIN_SETFEATURES, speed, SETFEATURES_XFER, 0, NULL);
+	(void) ide_config_drive_speed(drive, speed);
 
 #if PIIX_DEBUG_DRIVE_INFO
 	printk("%s: %s drive%d ",
@@ -284,11 +286,19 @@ static int piix_dmaproc(ide_dma_action_t func, ide_drive_t *drive)
 	/* Other cases are done by generic IDE-DMA code. */
 	return ide_dmaproc(func, drive);
 }
+#endif /* CONFIG_BLK_DEV_PIIX_TUNING */
 
 void ide_init_piix (ide_hwif_t *hwif)
 {
 	hwif->tuneproc = &piix_tune_drive;
+#ifdef CONFIG_BLK_DEV_PIIX_TUNING
 	if (hwif->dma_base) {
 		hwif->dmaproc = &piix_dmaproc;
+	} else
+#endif /* CONFIG_BLK_DEV_PIIX_TUNING */
+	{
+		hwif->drives[0].autotune = 1;
+		hwif->drives[1].autotune = 1;
 	}
+
 }

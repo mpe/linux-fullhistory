@@ -987,6 +987,8 @@ int atif_ioctl(int cmd, void *arg)
                                 return (-EPERM);
                         if(sa->sat_family != AF_APPLETALK)
                                 return (-EINVAL);
+                        if (atif == NULL)
+                                return (-EADDRNOTAVAIL);
 
                         /*
                          * give to aarp module to remove proxy entry

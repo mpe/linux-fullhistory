@@ -1,0 +1,51 @@
+[Also cloned from vesafb.txt, thanks to Gerd]
+
+What is tgafb?
+===============
+
+This is a driver for DECChip 21030 based graphics framebuffers, a.k.a. TGA
+cards, specifically the following models
+
+ZLxP-E1 (8bpp, 4 MB VRAM)
+ZLxP-E2 (32bpp, 8 MB VRAM)
+ZLxP-E3 (32bpp, 16 MB VRAM, Zbuffer)
+
+This version, tgafb-1.12, is almost a complete rewrite of the code written
+by Geert Uytterhoeven, which was based on the original TGA console code
+written by Jay Estabrook.
+
+Major new features:
+
+ * Support for multiple resolutions, including setting the resolution at
+   boot time, allowing the use of a fixed-frequency monitor.
+ * Complete code rewrite to follow Geert's skeletonfb spec which will allow
+   future implementation of hardware acceleration and other features.
+
+
+Configuration
+=============
+
+You can pass kernel command line options to tgafb with
+`video=tga:option1,option2:value2,option3' (multiple options should be
+separated by comma, values are separated from options by `:').
+Accepted options:
+
+font:X    - default font to use. All fonts are supported, including the
+            SUN12x22 font which is very nice at high resolutions.
+mode:X    - default video mode. See drivers/video/tgafb.c for a list.
+            
+X11
+===
+
+XF68_FBDev should work just fine, but I haven't tested it.  Running
+the XF86_TGA server (reasonably recent versions of which support all TGA
+cards) works fine for me.
+
+One minor problem with XF86_TGA is when running tgafb in resolutions higher
+than 640x480, on switching VCs from tgafb to X, the entire screen is not
+re-drawn and must be manually refreshed. This is an X server problem, not a
+tgafb problem.
+
+Enjoy!
+
+Martin Lucina <mato@kotelna.sk>

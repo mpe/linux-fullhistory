@@ -90,9 +90,6 @@ extern void rw_swap_page_nolock(int, unsigned long, char *, int);
 extern void swap_after_unlock_page (unsigned long entry);
 
 /* linux/mm/page_alloc.c */
-extern void swap_in(struct task_struct *, struct vm_area_struct *,
-		    pte_t *, unsigned long, int);
-
 
 /* linux/mm/swap_state.c */
 extern void show_swap_cache_info(void);

@@ -398,9 +398,6 @@ typedef struct {
 
 #ifdef __KERNEL__
 
-#ifndef STANDALONE
-#include <linux/config.h>
-#endif
 #include <linux/errno.h>
 #include <linux/fs.h>
 #include <linux/major.h>

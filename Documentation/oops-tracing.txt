@@ -1,15 +1,16 @@
 Quick Summary
 -------------
 
-cd /usr/src/linux/scripts/ksymoops
-make ksymoops
-./ksymoops < the_oops.txt
+Install ksymoops from ftp://ftp.ocs.com.au/pub/ksymoops
+Read the ksymoops man page.
+ksymoops < the_oops.txt
 
 and send the output the maintainer of the kernel area that seems to be
-involved with the problem. Don't worry too much about getting the wrong
-person. If you are unsure send it to the person responsible for the code
-relevant to what you were doing. If it occurs repeatably try and describe
-how to recreate it. Thats worth even more than the oops
+involved with the problem, not to the ksymoops maintainer. Don't worry
+too much about getting the wrong person. If you are unsure send it to
+the person responsible for the code relevant to what you were doing.
+If it occurs repeatably try and describe how to recreate it. Thats
+worth even more than the oops
 
 If you are totally stumped as to whom to send the report, send it to 
 linux-kernel@vger.rutgers.edu. Thanks for your help in making Linux as
@@ -41,9 +42,8 @@ Oh, it helps if the report happens on a kernel that is compiled with the
 same compiler and similar setups.
 
 The other thing to do is disassemble the "Code:" part of the bug report: 
-ksymoops will do this too with the correct tools (and new version of 
-ksymoops), but if you don't have the tools you can just do a silly 
-program:
+ksymoops will do this too with the correct tools, but if you don't have
+the tools you can just do a silly program:
 
 	char str[] = "\xXX\xXX\xXX...";
 	main(){}

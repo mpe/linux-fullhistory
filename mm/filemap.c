@@ -1194,8 +1194,6 @@ asmlinkage ssize_t sys_sendfile(int out_fd, int in_fd, off_t *offset, size_t cou
 	struct file * in_file, * out_file;
 	struct inode * in_inode, * out_inode;
 
-	lock_kernel();
-
 	/*
 	 * Get input file, and verify that it is ok..
 	 */
@@ -1234,7 +1232,6 @@ asmlinkage ssize_t sys_sendfile(int out_fd, int in_fd, off_t *offset, size_t cou
 	if (retval)
 		goto fput_out;
 
-	unlock_kernel();
 	retval = 0;
 	if (count) {
 		read_descriptor_t desc;
@@ -1244,7 +1241,7 @@ asmlinkage ssize_t sys_sendfile(int out_fd, int in_fd, off_t *offset, size_t cou
 		ppos = &in_file->f_pos;
 		if (offset) {
 			if (get_user(pos, offset))
-				goto fput_out_lock;
+				goto fput_out;
 			ppos = &pos;
 		}
 
@@ -1261,14 +1258,11 @@ asmlinkage ssize_t sys_sendfile(int out_fd, int in_fd, off_t *offset, size_t cou
 			put_user(pos, offset);
 	}
 
-fput_out_lock:
-	lock_kernel();
 fput_out:
 	fput(out_file);
 fput_in:
 	fput(in_file);
 out:
-	unlock_kernel();
 	return retval;
 }
 
@@ -1297,9 +1291,7 @@ static unsigned long filemap_nopage(struct vm_area_struct * area, unsigned long 
 	new_page = 0;
 	offset = (address & PAGE_MASK) - area->vm_start + area->vm_offset;
 	if (offset >= inode->i_size && (area->vm_flags & VM_SHARED) && area->vm_mm == current->mm)
-		goto no_page_nolock;
-
-	unlock_kernel();
+		goto no_page;
 
 	/*
 	 * Do we have something in the page cache already?
@@ -1344,7 +1336,6 @@ success:
 			page_cache_free(new_page);
 
 		flush_page_to_ram(old_page);
-		lock_kernel();
 		return old_page;
 	}
 
@@ -1354,7 +1345,6 @@ success:
 	copy_page(new_page, old_page);
 	flush_page_to_ram(new_page);
 	page_cache_release(page);
-	lock_kernel();
 	return new_page;
 
 no_cached_page:
@@ -1431,8 +1421,6 @@ failure:
 	if (new_page)
 		page_cache_free(new_page);
 no_page:
-	lock_kernel();
-no_page_nolock:
 	return 0;
 }
 
@@ -1648,8 +1636,7 @@ static struct vm_operations_struct file_shared_mmap = {
 	NULL,			/* advise */
 	filemap_nopage,		/* nopage */
 	NULL,			/* wppage */
-	filemap_swapout,	/* swapout */
-	NULL,			/* swapin */
+	filemap_swapout		/* swapout */
 };
 
 /*
@@ -1667,8 +1654,7 @@ static struct vm_operations_struct file_private_mmap = {
 	NULL,			/* advise */
 	filemap_nopage,		/* nopage */
 	NULL,			/* wppage */
-	NULL,			/* swapout */
-	NULL,			/* swapin */
+	NULL			/* swapout */
 };
 
 /* This is used for a general mmap of a disk file */

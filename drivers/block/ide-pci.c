@@ -51,7 +51,7 @@
 #define DEVID_W82C105	((ide_pci_devid_t){PCI_VENDOR_ID_WINBOND, PCI_DEVICE_ID_WINBOND_82C105})
 #define DEVID_UM8886A	((ide_pci_devid_t){PCI_VENDOR_ID_UMC,     PCI_DEVICE_ID_UMC_UM8886A})
 #define DEVID_UM8886BF	((ide_pci_devid_t){PCI_VENDOR_ID_UMC,     PCI_DEVICE_ID_UMC_UM8886BF})
-#define DEVID_HPT343	((ide_pci_devid_t){PCI_VENDOR_ID_TTI,     PCI_DEVICE_ID_TTI_HPT343})
+#define DEVID_HPT34X	((ide_pci_devid_t){PCI_VENDOR_ID_TTI,     PCI_DEVICE_ID_TTI_HPT343})
 #define DEVID_ALI15X3	((ide_pci_devid_t){PCI_VENDOR_ID_AL,      PCI_DEVICE_ID_AL_M5229})
 #define DEVID_CY82C693	((ide_pci_devid_t){PCI_VENDOR_ID_CONTAQ,  PCI_DEVICE_ID_CONTAQ_82C693})
 #define DEVID_HINT	((ide_pci_devid_t){0x3388,                0x8013})
@@ -156,14 +156,14 @@ extern unsigned int pci_init_aec6210(struct pci_dev *, const char *);
 #define PCI_AEC6210	NULL
 #endif
 
-#ifdef CONFIG_BLK_DEV_HPT343
-extern unsigned int pci_init_hpt343(struct pci_dev *, const char *);
-extern void ide_init_hpt343(ide_hwif_t *);
-#define PCI_HPT343	&pci_init_hpt343
-#define	INIT_HPT343	&ide_init_hpt343
+#ifdef CONFIG_BLK_DEV_HPT34X
+extern unsigned int pci_init_hpt34x(struct pci_dev *, const char *);
+extern void ide_init_hpt34x(ide_hwif_t *);
+#define PCI_HPT34X	&pci_init_hpt34x
+#define	INIT_HPT34X	&ide_init_hpt34x
 #else
-#define PCI_HPT343	NULL
-#define	INIT_HPT343	NULL
+#define PCI_HPT34X	NULL
+#define	INIT_HPT34X	NULL
 #endif
 
 #define INIT_SAMURAI	NULL
@@ -212,7 +212,7 @@ static ide_pci_device_t ide_pci_chipsets[] __initdata = {
 	{DEVID_W82C105,	"W82C105",	NULL,		INIT_W82C105,	NULL,		{{0x40,0x01,0x01}, {0x40,0x10,0x10}}, 	ON_BOARD,	0 },
 	{DEVID_UM8886A,	"UM8886A",	NULL,		NULL,		NULL,		{{0x00,0x00,0x00}, {0x00,0x00,0x00}},	ON_BOARD,	0 },
 	{DEVID_UM8886BF,"UM8886BF",	NULL,		NULL,		NULL,		{{0x00,0x00,0x00}, {0x00,0x00,0x00}}, 	ON_BOARD,	0 },
-	{DEVID_HPT343,	"HPT343",	PCI_HPT343,	INIT_HPT343,	NULL,		{{0x00,0x00,0x00}, {0x00,0x00,0x00}},	NEVER_BOARD,	16 },
+	{DEVID_HPT34X,	"HPT34X",	PCI_HPT34X,	INIT_HPT34X,	NULL,		{{0x00,0x00,0x00}, {0x00,0x00,0x00}},	NEVER_BOARD,	16 },
 	{DEVID_ALI15X3,	"ALI15X3",	PCI_ALI15X3,	INIT_ALI15X3,	NULL,		{{0x09,0x20,0x20}, {0x09,0x10,0x10}},	ON_BOARD,	0 },
 	{DEVID_CY82C693,"CY82C693",	NULL,		INIT_CY82C693,	NULL,		{{0x00,0x00,0x00}, {0x00,0x00,0x00}},	ON_BOARD,	0 },
 	{DEVID_HINT,	"HINT_IDE",	NULL,		NULL,		NULL,		{{0x00,0x00,0x00}, {0x00,0x00,0x00}},	ON_BOARD,	0 },
@@ -231,13 +231,13 @@ __initfunc(static unsigned int ide_special_settings (struct pci_dev *dev, const 
 			{
 				int i;
 				unsigned short pcicmd = 0;
-				unsigned long hpt343IoBase = dev->base_address[4] & PCI_BASE_ADDRESS_IO_MASK;
+				unsigned long hpt34xIoBase = dev->base_address[4] & PCI_BASE_ADDRESS_IO_MASK;
 
 				pci_write_config_byte(dev, 0x80, 0x00);
-				dev->base_address[0] = (hpt343IoBase + 0x20);
-				dev->base_address[1] = (hpt343IoBase + 0x34);
-				dev->base_address[2] = (hpt343IoBase + 0x28);
-				dev->base_address[3] = (hpt343IoBase + 0x3c);
+				dev->base_address[0] = (hpt34xIoBase + 0x20);
+				dev->base_address[1] = (hpt34xIoBase + 0x34);
+				dev->base_address[2] = (hpt34xIoBase + 0x28);
+				dev->base_address[3] = (hpt34xIoBase + 0x3c);
 				for(i=0; i<4; i++)
 					dev->base_address[i] |= PCI_BASE_ADDRESS_SPACE_IO;
 
@@ -422,7 +422,7 @@ check_if_enabled:
 		printk("%s: 100%% native mode on irq %d\n", d->name, pciirq);
 #endif
 	}
-	if (IDE_PCI_DEVID_EQ(d->devid, DEVID_HPT343)) {
+	if (IDE_PCI_DEVID_EQ(d->devid, DEVID_HPT34X)) {
 		/*
 		 * Since there are two cards that report almost identically,
 		 * the only discernable difference is the values
@@ -490,9 +490,9 @@ check_if_enabled:
 		if (IDE_PCI_DEVID_EQ(d->devid, DEVID_PDC20246) ||
 		    IDE_PCI_DEVID_EQ(d->devid, DEVID_PDC20262) ||
 		    IDE_PCI_DEVID_EQ(d->devid, DEVID_AEC6210) ||
-#ifdef CONFIG_BLK_DEV_HPT343
-		    IDE_PCI_DEVID_EQ(d->devid, DEVID_HPT343) ||
-#endif
+#ifdef CONFIG_BLK_DEV_HPT34X
+		    IDE_PCI_DEVID_EQ(d->devid, DEVID_HPT34X) ||
+#endif /* CONFIG_BLK_DEV_HPT34X */
 		    IDE_PCI_DEVID_EQ(d->devid, DEVID_CY82C693) ||
 		    ((dev->class >> 8) == PCI_CLASS_STORAGE_IDE && (dev->class & 0x80))) {
 			unsigned long dma_base = ide_get_or_set_dma_base(hwif, (!mate && d->extra) ? d->extra : 0, d->name);

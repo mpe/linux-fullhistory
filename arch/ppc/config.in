@@ -66,13 +66,7 @@ define_bool CONFIG_BINFMT_ELF y
 define_bool CONFIG_KERNEL_ELF y
 tristate 'Kernel support for MISC binaries' CONFIG_BINFMT_MISC
 
-tristate 'Parallel port support' CONFIG_PARPORT
-if [ "$CONFIG_PARPORT" != "n" ]; then
-  dep_tristate '   PC-style hardware' CONFIG_PARPORT_PC $CONFIG_PARPORT
-  if [ "$CONFIG_PARPORT_PC" != "n" ]; then
-    bool '   Support foreign hardware' CONFIG_PARPORT_OTHER
-  fi
-fi
+source drivers/misc/Config.in
 
 bool 'Support for VGA Console' CONFIG_VGA_CONSOLE
 bool 'Support for frame buffer devices' CONFIG_FB

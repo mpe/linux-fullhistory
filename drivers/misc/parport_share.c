@@ -40,9 +40,7 @@
 #define PARPORT_DEFAULT_TIMESLICE	(HZ/5)
 
 unsigned long parport_default_timeslice = PARPORT_DEFAULT_TIMESLICE;
-
-/* This doesn't do anything yet. */
-int parport_default_spintime;
+int parport_default_spintime =  DEFAULT_SPIN_TIME;
 
 static struct parport *portlist = NULL, *portlist_tail = NULL;
 spinlock_t parportlist_lock = SPIN_LOCK_UNLOCKED;
@@ -50,7 +48,7 @@ spinlock_t parportlist_lock = SPIN_LOCK_UNLOCKED;
 static struct parport_driver *driver_chain = NULL;
 spinlock_t driverlist_lock = SPIN_LOCK_UNLOCKED;
 
-static void call_driver_chain (int attach, struct parport *port)
+static void call_driver_chain(int attach, struct parport *port)
 {
 	struct parport_driver *drv;
 
@@ -96,17 +94,12 @@ void parport_unregister_driver (struct parport_driver *arg)
 	}
 }
 
-void (*parport_probe_hook)(struct parport *port) = NULL;
-
 /* Return a list of all the ports we know about. */
 struct parport *parport_enumerate(void)
 {
 #ifdef CONFIG_KMOD
 	if (portlist == NULL) {
 		request_module("parport_lowlevel");
-#ifdef CONFIG_PNP_PARPORT_MODULE
-		request_module("parport_probe");
-#endif /* CONFIG_PNP_PARPORT_MODULE */
 	}
 #endif /* CONFIG_KMOD */
 	return portlist;
@@ -117,15 +110,8 @@ struct parport *parport_register_port(unsigned long base, int irq, int dma,
 {
 	struct parport *tmp;
 	int portnum;
+	int device;
 	char *name;
-
-	/* Check for a previously registered port.
-	   NOTE: we will ignore irq and dma if we find a previously
-	   registered device.  */
-	for (tmp = portlist; tmp; tmp = tmp->next) {
-		if (tmp->base == base)
-			return tmp;
-	}
 
 	tmp = kmalloc(sizeof(struct parport), GFP_KERNEL);
 	if (!tmp) {
@@ -154,16 +140,22 @@ struct parport *parport_register_port(unsigned long base, int irq, int dma,
 	tmp->base = base;
 	tmp->irq = irq;
 	tmp->dma = dma;
+	tmp->muxport = tmp->daisy = tmp->muxsel = -1;
 	tmp->modes = 0;
  	tmp->next = NULL;
 	tmp->devices = tmp->cad = NULL;
 	tmp->flags = 0;
 	tmp->ops = ops;
-	tmp->number = portnum;
-	memset (&tmp->probe_info, 0, sizeof (struct parport_device_info));
+	tmp->portnum = tmp->number = portnum;
+	tmp->physport = tmp;
+	memset (tmp->probe_info, 0, 5 * sizeof (struct parport_device_info));
 	tmp->cad_lock = RW_LOCK_UNLOCKED;
 	spin_lock_init(&tmp->waitlist_lock);
 	spin_lock_init(&tmp->pardevice_lock);
+	tmp->ieee1284.mode = IEEE1284_MODE_COMPAT;
+	tmp->ieee1284.phase = IEEE1284_PH_FWD_IDLE;
+	init_MUTEX_LOCKED (&tmp->ieee1284.irq); /* actually a semaphore at 0 */
+	tmp->spintime = parport_default_spintime;
 
 	name = kmalloc(15, GFP_KERNEL);
 	if (!name) {
@@ -188,7 +180,10 @@ struct parport *parport_register_port(unsigned long base, int irq, int dma,
 		portlist = tmp;
 	spin_unlock(&parportlist_lock);
 
-	tmp->probe_info.class = PARPORT_CLASS_LEGACY;  /* assume the worst */
+	for (device = 0; device < 5; device++)
+		/* assume the worst */
+		tmp->probe_info[device].class = PARPORT_CLASS_LEGACY;
+
 	tmp->waithead = tmp->waittail = NULL;
 
 	return tmp;
@@ -196,6 +191,11 @@ struct parport *parport_register_port(unsigned long base, int irq, int dma,
 
 void parport_announce_port (struct parport *port)
 {
+#ifdef CONFIG_PARPORT_1284
+	/* Analyse the IEEE1284.3 topology of the port. */
+	parport_daisy_init (port);
+#endif
+
 	/* Let drivers know that a new port has arrived. */
 	call_driver_chain (1, port);
 }
@@ -203,9 +203,15 @@ void parport_announce_port (struct parport *port)
 void parport_unregister_port(struct parport *port)
 {
 	struct parport *p;
+	int d;
 
 	/* Spread the word. */
 	call_driver_chain (0, port);
+
+#ifdef CONFIG_PARPORT_1284
+	/* Forget the IEEE1284.3 topology of the port. */
+	parport_daisy_fini (port);
+#endif
 
 	spin_lock(&parportlist_lock);
 	if (portlist == port) {
@@ -222,16 +228,20 @@ void parport_unregister_port(struct parport *port)
 			     "%s not found in port list!\n", port->name);
 	}
 	spin_unlock(&parportlist_lock);
-	if (port->probe_info.class_name)
-		kfree (port->probe_info.class_name);
-	if (port->probe_info.mfr)
-		kfree (port->probe_info.mfr);
-	if (port->probe_info.model)
-		kfree (port->probe_info.model);
-	if (port->probe_info.cmdset)
-		kfree (port->probe_info.cmdset);
-	if (port->probe_info.description)
-		kfree (port->probe_info.description);
+
+	for (d = 0; d < 5; d++) {
+		if (port->probe_info[d].class_name)
+			kfree (port->probe_info[d].class_name);
+		if (port->probe_info[d].mfr)
+			kfree (port->probe_info[d].mfr);
+		if (port->probe_info[d].model)
+			kfree (port->probe_info[d].model);
+		if (port->probe_info[d].cmdset)
+			kfree (port->probe_info[d].cmdset);
+		if (port->probe_info[d].description)
+			kfree (port->probe_info[d].description);
+	}
+
 	kfree(port->name);
 	kfree(port);
 }
@@ -243,7 +253,7 @@ struct pardevice *parport_register_device(struct parport *port, const char *name
 {
 	struct pardevice *tmp;
 
-	if (port->flags & PARPORT_FLAG_EXCL) {
+	if (port->physport->flags & PARPORT_FLAG_EXCL) {
 		/* An exclusive device is registered. */
 		printk (KERN_DEBUG "%s: no more devices allowed\n",
 			port->name);
@@ -272,13 +282,14 @@ struct pardevice *parport_register_device(struct parport *port, const char *name
 
 	tmp->name = name;
 	tmp->port = port;
+	tmp->daisy = -1;
 	tmp->preempt = pf;
 	tmp->wakeup = kf;
 	tmp->private = handle;
 	tmp->flags = flags;
 	tmp->irq_func = irq_func;
-	port->ops->init_state(tmp->state);
 	tmp->waiting = 0;
+	tmp->timeout = 5 * HZ;
 
 	/* Chain this onto the list */
 	tmp->prev = NULL;
@@ -286,11 +297,11 @@ struct pardevice *parport_register_device(struct parport *port, const char *name
 	 * This function must not run from an irq handler so we don' t need
 	 * to clear irq on the local CPU. -arca
 	 */
-	spin_lock(&port->pardevice_lock);
+	spin_lock(&port->physport->pardevice_lock);
 
 	if (flags & PARPORT_DEV_EXCL) {
-		if (port->devices) {
-			spin_unlock (&port->pardevice_lock);
+		if (port->physport->devices) {
+			spin_unlock (&port->physport->pardevice_lock);
 			kfree (tmp->state);
 			kfree (tmp);
 			printk (KERN_DEBUG
@@ -301,11 +312,11 @@ struct pardevice *parport_register_device(struct parport *port, const char *name
 		port->flags |= PARPORT_FLAG_EXCL;
 	}
 
-	tmp->next = port->devices;
-	if (port->devices)
-		port->devices->prev = tmp;
-	port->devices = tmp;
-	spin_unlock(&port->pardevice_lock);
+	tmp->next = port->physport->devices;
+	if (port->physport->devices)
+		port->physport->devices->prev = tmp;
+	port->physport->devices = tmp;
+	spin_unlock(&port->physport->pardevice_lock);
 
 	inc_parport_count();
 	port->ops->inc_use_count();
@@ -314,6 +325,12 @@ struct pardevice *parport_register_device(struct parport *port, const char *name
 	tmp->timeslice = parport_default_timeslice;
 	tmp->waitnext = tmp->waitprev = NULL;
 
+	/*
+	 * This has to be run as last thing since init_state may need other
+	 * pardevice fields. -arca
+	 */
+	port->ops->init_state(tmp, tmp->state);
+	parport_device_proc_register(tmp);
 	return tmp;
 }
 
@@ -328,7 +345,9 @@ void parport_unregister_device(struct pardevice *dev)
 	}
 #endif
 
-	port = dev->port;
+	parport_device_proc_unregister(dev);
+
+	port = dev->port->physport;
 
 	if (port->cad == dev) {
 		printk(KERN_DEBUG "%s: %s forgot to release port\n",
@@ -354,19 +373,17 @@ void parport_unregister_device(struct pardevice *dev)
 
 	dec_parport_count();
 	port->ops->dec_use_count();
-
-	return;
 }
 
 int parport_claim(struct pardevice *dev)
 {
 	struct pardevice *oldcad;
-	struct parport *port = dev->port;
+	struct parport *port = dev->port->physport;
 	unsigned long flags;
 
 	if (port->cad == dev) {
 		printk(KERN_INFO "%s: %s already owner\n",
-			   dev->port->name,dev->name);
+		       dev->port->name,dev->name);
 		return 0;
 	}
 
@@ -407,23 +424,26 @@ try_again:
 		dev->waitprev = dev->waitnext = NULL;
 	}
 
-	if (oldcad && port->irq != PARPORT_IRQ_NONE && !oldcad->irq_func)
-		/*
-		 * If there was an irq pending it should hopefully happen
-		 * before return from enable_irq(). -arca
-		 */
-		enable_irq(port->irq);
-
-	/*
-	 * Avoid running irq handlers if the pardevice doesn' t use it. -arca
-	 */
-	if (port->irq != PARPORT_IRQ_NONE && !dev->irq_func)
-		disable_irq(port->irq);
-
 	/* Now we do the change of devices */
 	write_lock_irqsave(&port->cad_lock, flags);
 	port->cad = dev;
 	write_unlock_irqrestore(&port->cad_lock, flags);
+
+#ifdef CONFIG_PARPORT_1284
+	/* If it's a mux port, select it. */
+	if (dev->port->muxport >= 0) {
+		/* FIXME */
+		port->muxsel = dev->port->muxport;
+	}
+
+	/* If it's a daisy chain device, select it. */
+	if (dev->daisy >= 0) {
+		/* This could be lazier. */
+		if (!parport_daisy_select (port, dev->daisy,
+					   IEEE1284_MODE_COMPAT))
+			port->daisy = dev->daisy;
+	}
+#endif /* IEEE1284.3 support */
 
 	/* Restore control registers */
 	port->ops->restore_state(port, dev->state);
@@ -487,8 +507,11 @@ int parport_claim_or_block(struct pardevice *dev)
 		}
 		restore_flags(flags);
 #ifdef PARPORT_DEBUG_SHARING
-		if (dev->port->cad != dev)
-			printk(KERN_DEBUG "%s: exiting parport_claim_or_block but %s owns port!\n", dev->name, dev->port->cad?dev->port->cad->name:"nobody");
+		if (dev->port->physport->cad != dev)
+			printk(KERN_DEBUG "%s: exiting parport_claim_or_block "
+			       "but %s owns port!\n", dev->name,
+			       dev->port->physport->cad ?
+			       dev->port->physport->cad->name:"nobody");
 #endif
 	}
 	dev->waiting = 0;
@@ -497,7 +520,7 @@ int parport_claim_or_block(struct pardevice *dev)
 
 void parport_release(struct pardevice *dev)
 {
-	struct parport *port = dev->port;
+	struct parport *port = dev->port->physport;
 	struct pardevice *pd;
 	unsigned long flags;
 
@@ -507,16 +530,24 @@ void parport_release(struct pardevice *dev)
 		       "when not owner\n", port->name, dev->name);
 		return;
 	}
+
+#ifdef CONFIG_PARPORT_1284
+	/* If this is on a mux port, deselect it. */
+	if (dev->port->muxport >= 0) {
+		/* FIXME */
+		port->muxsel = -1;
+	}
+
+	/* If this is a daisy device, deselect it. */
+	if (dev->daisy >= 0) {
+		parport_daisy_deselect_all (port);
+		port->daisy = -1;
+	}
+#endif
+
 	write_lock_irqsave(&port->cad_lock, flags);
 	port->cad = NULL;
 	write_unlock_irqrestore(&port->cad_lock, flags);
-
-	/*
-	 * Reenable irq and so discard the eventually pending irq while
-	 * cad is NULL. -arca
-	 */
-	if (port->irq != PARPORT_IRQ_NONE && !dev->irq_func)
-		enable_irq(port->irq);
 
 	/* Save control registers */
 	port->ops->save_state(port, dev->state);

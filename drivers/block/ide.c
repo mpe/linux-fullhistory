@@ -2235,6 +2235,27 @@ void ide_delay_50ms (void)
 	while (0 < (signed long)(timeout - jiffies));
 }
 
+int ide_config_drive_speed (ide_drive_t *drive, byte speed)
+{
+	int err;
+
+	/*
+	 * Don't use ide_wait_cmd here - it will
+	 * attempt to set_geometry and recalibrate,
+	 * but for some reason these don't work at
+	 * this point (lost interrupt).
+	 */
+	SELECT_DRIVE(HWIF(drive), drive);
+	OUT_BYTE(drive->ctl | 2, IDE_CONTROL_REG);
+	OUT_BYTE(speed, IDE_NSECTOR_REG);
+	OUT_BYTE(SETFEATURES_XFER, IDE_FEATURE_REG);
+	OUT_BYTE(WIN_SETFEATURES, IDE_COMMAND_REG);
+
+	err = ide_wait_stat(drive, DRIVE_READY, BUSY_STAT|DRQ_STAT|ERR_STAT, WAIT_CMD);
+
+	return(err);
+}
+
 static int ide_ioctl (struct inode *inode, struct file *file,
 			unsigned int cmd, unsigned long arg)
 {
@@ -3416,6 +3437,7 @@ EXPORT_SYMBOL(ide_revalidate_disk);
 EXPORT_SYMBOL(ide_cmd);
 EXPORT_SYMBOL(ide_wait_cmd);
 EXPORT_SYMBOL(ide_delay_50ms);
+EXPORT_SYMBOL(ide_config_drive_speed);
 EXPORT_SYMBOL(ide_stall_queue);
 #ifdef CONFIG_PROC_FS
 EXPORT_SYMBOL(ide_add_proc_entries);

@@ -2380,7 +2380,6 @@ static void rs_wait_until_sent(struct tty_struct *tty, int timeout)
 		printk("lsr = %d (jiff=%lu)...", lsr, jiffies);
 #endif
 		current->state = TASK_INTERRUPTIBLE;
-		current->counter = 0;	/* make us low-priority */
 		schedule_timeout(char_time);
 		if (signal_pending(current))
 			break;

@@ -302,8 +302,7 @@ static struct vm_operations_struct qcntl_mmap = {
 	NULL,			/* no special mmap-advise */
 	shmiq_nopage,		/* our magic no-page fault handler */
 	NULL,			/* no special mmap-wppage */
-	NULL,			/* no special mmap-swapout */
-	NULL			/* no special mmap-swapin */
+	NULL			/* no special mmap-swapout */
 };
 
 static int

@@ -50,7 +50,7 @@ good_area:
 	start &= PAGE_MASK;
 
 	for (;;) {
-		handle_mm_fault(current,vma, start, 1);
+		handle_mm_fault(current->mm, vma, start, 1);
 		if (!size)
 			break;
 		size--;
@@ -162,7 +162,7 @@ good_area:
 	 * make sure we exit gracefully rather than endlessly redo
 	 * the fault.
 	 */
-	if (!handle_mm_fault(tsk, vma, address, write))
+	if (!handle_mm_fault(mm, vma, address, write))
 		goto do_sigbus;
 
 	/*

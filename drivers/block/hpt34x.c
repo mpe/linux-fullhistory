@@ -49,7 +49,7 @@
 
 extern char *ide_xfer_verbose (byte xfer_rate);
 
-static void hpt343_clear_chipset (ide_drive_t *drive)
+static void hpt34x_clear_chipset (ide_drive_t *drive)
 {
 	int drive_number	= ((HWIF(drive)->channel ? 2 : 0) + (drive->select.b.unit & 0x01));
 	unsigned int reg1	= 0, tmp1 = 0;
@@ -63,7 +63,7 @@ static void hpt343_clear_chipset (ide_drive_t *drive)
 	pci_write_config_dword(HWIF(drive)->pci_dev, 0x48, tmp2);
 }
 
-static int hpt343_tune_chipset (ide_drive_t *drive, byte speed)
+static int hpt34x_tune_chipset (ide_drive_t *drive, byte speed)
 {
 	int			err;
 	byte			hi_speed, lo_speed;
@@ -84,7 +84,7 @@ static int hpt343_tune_chipset (ide_drive_t *drive, byte speed)
 	pci_read_config_dword(HWIF(drive)->pci_dev, 0x48, &reg2);
 	tmp1 = ((lo_speed << (3*drive_number)) | (reg1 & ~(7 << (3*drive_number))));
 	tmp2 = ((hi_speed << drive_number) | reg2);
-	err = ide_wait_cmd(drive, WIN_SETFEATURES, speed, SETFEATURES_XFER, 0, NULL);
+	err = ide_config_drive_speed(drive, speed);
 	pci_write_config_dword(HWIF(drive)->pci_dev, 0x44, tmp1);
 	pci_write_config_dword(HWIF(drive)->pci_dev, 0x48, tmp2);
 
@@ -187,7 +187,7 @@ static int config_chipset_for_dma (ide_drive_t *drive)
 		return ((int) ide_dma_off_quietly);
 	}
 
-	(void) hpt343_tune_chipset(drive, speed);
+	(void) hpt34x_tune_chipset(drive, speed);
 
 	return ((int)	((id->dma_ultra >> 8) & 7) ? ide_dma_on :
 			((id->dma_mword >> 8) & 7) ? ide_dma_on :
@@ -229,15 +229,23 @@ static void config_chipset_for_pio (ide_drive_t *drive)
 			speed = (!drive->id->tPIO) ? XFER_PIO_0 : XFER_PIO_SLOW;
 			break;
 	}
-
-	(void) hpt343_tune_chipset(drive, speed);
+	(void) hpt34x_tune_chipset(drive, speed);
 }
 
-#if 0
-static void hpt343_tune_drive (ide_drive_t *drive, byte pio)
+static void hpt34x_tune_drive (ide_drive_t *drive, byte pio)
 {
+	byte speed;
+
+	hpt34x_clear_chipset(drive);
+	switch(pio) {
+		case 4:		speed = XFER_PIO_4;break;
+		case 3:		speed = XFER_PIO_3;break;
+		case 2:		speed = XFER_PIO_2;break;
+		case 1:		speed = XFER_PIO_1;break;
+		default:	speed = XFER_PIO_0;break;
+	}
+	(void) hpt34x_tune_chipset(drive, speed);
 }
-#endif
 
 static int config_drive_xfer_rate (ide_drive_t *drive)
 {
@@ -290,18 +298,18 @@ no_dma_set:
 }
 
 /*
- * hpt343_dmaproc() initiates/aborts (U)DMA read/write operations on a drive.
+ * hpt34x_dmaproc() initiates/aborts (U)DMA read/write operations on a drive.
  *
  * This is specific to the HPT343 UDMA bios-less chipset
  * and HPT345 UDMA bios chipset (stamped HPT363)
  * by HighPoint|Triones Technologies, Inc.
  */
 
-int hpt343_dmaproc (ide_dma_action_t func, ide_drive_t *drive)
+int hpt34x_dmaproc (ide_dma_action_t func, ide_drive_t *drive)
 {
 	switch (func) {
 		case ide_dma_check:
-			hpt343_clear_chipset(drive);
+			hpt34x_clear_chipset(drive);
 			return config_drive_xfer_rate(drive);
 #if 0
 		case ide_dma_off:
@@ -324,26 +332,26 @@ int hpt343_dmaproc (ide_dma_action_t func, ide_drive_t *drive)
 /*
  * If the BIOS does not set the IO base addaress to XX00, 343 will fail.
  */
-#define	HPT343_PCI_INIT_REG		0x80
+#define	HPT34X_PCI_INIT_REG		0x80
 
-__initfunc(unsigned int pci_init_hpt343 (struct pci_dev *dev, const char *name))
+__initfunc(unsigned int pci_init_hpt34x (struct pci_dev *dev, const char *name))
 {
 	int i;
 	unsigned short cmd;
-	unsigned long hpt343IoBase = dev->base_address[4] & PCI_BASE_ADDRESS_IO_MASK;
+	unsigned long hpt34xIoBase = dev->base_address[4] & PCI_BASE_ADDRESS_IO_MASK;
 #if 0
-	unsigned char misc10 = inb(hpt343IoBase + 0x0010);
-	unsigned char misc11 = inb(hpt343IoBase + 0x0011);
+	unsigned char misc10 = inb(hpt34xIoBase + 0x0010);
+	unsigned char misc11 = inb(hpt34xIoBase + 0x0011);
 #endif
 
-	pci_write_config_byte(dev, HPT343_PCI_INIT_REG, 0x00);
+	pci_write_config_byte(dev, HPT34X_PCI_INIT_REG, 0x00);
 	pci_read_config_word(dev, PCI_COMMAND, &cmd);
 	pci_write_config_word(dev, PCI_COMMAND, cmd & ~PCI_COMMAND_IO);
 
-	dev->base_address[0] = (hpt343IoBase + 0x20);
-	dev->base_address[1] = (hpt343IoBase + 0x34);
-	dev->base_address[2] = (hpt343IoBase + 0x28);
-	dev->base_address[3] = (hpt343IoBase + 0x3c);
+	dev->base_address[0] = (hpt34xIoBase + 0x20);
+	dev->base_address[1] = (hpt34xIoBase + 0x34);
+	dev->base_address[2] = (hpt34xIoBase + 0x28);
+	dev->base_address[3] = (hpt34xIoBase + 0x3c);
 
 	for(i=0; i<4; i++)
 		dev->base_address[i] |= PCI_BASE_ADDRESS_SPACE_IO;
@@ -358,15 +366,15 @@ __initfunc(unsigned int pci_init_hpt343 (struct pci_dev *dev, const char *name))
 	pci_write_config_word(dev, PCI_COMMAND, cmd);
 
 #if 0
-	outb(misc10|0x78, (hpt343IoBase + 0x0010));
-	outb(misc11, (hpt343IoBase + 0x0011));
+	outb(misc10|0x78, (hpt34xIoBase + 0x0010));
+	outb(misc11, (hpt34xIoBase + 0x0011));
 #endif
 
 #ifdef DEBUG
 	printk("%s: 0x%02x 0x%02x\n",
 		(pcicmd & PCI_COMMAND_MEMORY) ? "HPT345" : name,
-		inb(hpt343IoBase + 0x0010),
-		inb(hpt343IoBase + 0x0011));
+		inb(hpt34xIoBase + 0x0010),
+		inb(hpt34xIoBase + 0x0011));
 #endif
 
 	if (cmd & PCI_COMMAND_MEMORY) {
@@ -380,13 +388,19 @@ __initfunc(unsigned int pci_init_hpt343 (struct pci_dev *dev, const char *name))
 	return dev->irq;
 }
 
-__initfunc(void ide_init_hpt343 (ide_hwif_t *hwif))
+__initfunc(void ide_init_hpt34x (ide_hwif_t *hwif))
 {
+	hwif->tuneproc = &hpt34x_tune_drive;
 	if (hwif->dma_base) {
 		unsigned short pcicmd = 0;
 
 		pci_read_config_word(hwif->pci_dev, PCI_COMMAND, &pcicmd);
+#ifdef CONFIG_BLK_DEV_HPT34X_DMA
 		hwif->autodma = (pcicmd & PCI_COMMAND_MEMORY) ? 1 : 0;
-		hwif->dmaproc = &hpt343_dmaproc;
+#endif /* CONFIG_BLK_DEV_HPT34X_DMA */
+		hwif->dmaproc = &hpt34x_dmaproc;
+	} else {
+		hwif->drives[0].autotune = 1;
+		hwif->drives[1].autotune = 1;
 	}
 }
