@@ -45,6 +45,7 @@
  * 		Pavel Krauz	:	Limited broadcast fixed
  *	Alexey Kuznetsov	:	End of old history. Splitted to fib.c and
  *					route.c and rewritten from scratch.
+ *		Andi Kleen	:	Load-limit warning messages.
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -568,7 +569,7 @@ void ip_rt_redirect(u32 old_gw, u32 daddr, u32 new_gw,
 	return;
 
 reject_redirect:
-	if (ipv4_config.log_martians)
+	if (ipv4_config.log_martians && net_ratelimit())
 		printk(KERN_INFO "Redirect from %lX/%s to %lX ignored."
 		       "Path = %lX -> %lX, tos %02x\n",
 		       ntohl(old_gw), dev->name, ntohl(new_gw),
@@ -636,7 +637,7 @@ void ip_rt_send_redirect(struct sk_buff *skb)
 	if (jiffies - rt->last_error > (RT_REDIRECT_LOAD<<rt->errors)) {
 		icmp_send(skb, ICMP_REDIRECT, ICMP_REDIR_HOST, rt->rt_gateway);
 		rt->last_error = jiffies;
-		if (ipv4_config.log_martians && ++rt->errors == RT_REDIRECT_NUMBER)
+		if (ipv4_config.log_martians && ++rt->errors == RT_REDIRECT_NUMBER && net_ratelimit())
 			printk(KERN_WARNING "host %08x/%s ignores redirects for %08x to %08x.\n",
 			       rt->rt_src, rt->rt_src_dev->name, rt->rt_dst, rt->rt_gateway);
 	}
@@ -1083,12 +1084,12 @@ no_route:
 	 *	Do not cache martian addresses: they should be logged (RFC1812)
 	 */
 martian_destination:
-	if (ipv4_config.log_martians)
+	if (ipv4_config.log_martians && net_ratelimit())
 		printk(KERN_WARNING "martian destination %08x from %08x, dev %s\n", daddr, saddr, dev->name);
 	return -EINVAL;
 
 martian_source:
-	if (ipv4_config.log_martians) {
+	if (ipv4_config.log_martians && net_ratelimit()) {
 		/*
 		 *	RFC1812 recommenadtion, if source is martian,
 		 *	the only hint is MAC header.

@@ -35,24 +35,7 @@
 |
 
 #include <linux/linkage.h>
-
-/*
- * This has to match entry.S
- */
-LOFF_ORIG_D0	= 0x24
-
-#define curptr a2
-
-#define SAVE_ALL				\
-	clrl	%sp@-;     /* stk_adj */	\
-	movel	%d0,%sp@-; /* orig d0 */	\
-	movel	%d0,%sp@-; /* d0 */		\
-	moveml	%d1-%d5/%a0-%a1/%curptr,%sp@-;
-
-#define GET_CURRENT(tmp) \
-	movel	%sp,tmp; \
-	andw	&-8192,tmp; \
-	movel	tmp,%curptr;
+#include <asm/entry.h>
 
 |################################
 | (1) EXAMPLE CALL-OUTS 	#
@@ -92,9 +75,8 @@ Lnotkern:
 	bne	Lmustsched
 	rte
 Lmustsched:
-	SAVE_ALL
-	moveq	#-1,%d0
-	movel	%d0,%sp@(LOFF_ORIG_D0)    | indicate stack frame not for syscall
+	SAVE_ALL_INT
+
 	GET_CURRENT(%d0)
 	bral	SYMBOL_NAME(ret_from_exception)	| deliver signals, reschedule etc..
 

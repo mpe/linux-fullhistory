@@ -1,4 +1,4 @@
-/* $Id: pgtable.h,v 1.34 1997/06/02 06:33:41 davem Exp $
+/* $Id: pgtable.h,v 1.37 1997/06/13 14:03:06 davem Exp $
  * pgtable.h: SpitFire page table operations.
  *
  * Copyright 1996,1997 David S. Miller (davem@caip.rutgers.edu)
@@ -83,13 +83,12 @@
 #define _PAGE_ACCESSED	0x0000000000000400	/* Accessed Page (ie. referenced)     */
 #define _PAGE_READ	0x0000000000000200	/* Readable SW Bit                    */
 #define _PAGE_WRITE	0x0000000000000100	/* Writable SW Bit                    */
-#define _PAGE_PRIV	0x0000000000000080	/* Software privilege bit	      */
 
 #define _PAGE_CACHE	(_PAGE_CP | _PAGE_CV)
 
 #define __DIRTY_BITS	(_PAGE_MODIFIED | _PAGE_WRITE | _PAGE_W)
 #define __ACCESS_BITS	(_PAGE_ACCESSED | _PAGE_READ | _PAGE_R)
-#define __PRIV_BITS	(_PAGE_P | _PAGE_PRIV)
+#define __PRIV_BITS	_PAGE_P
 
 #define PAGE_NONE	__pgprot (_PAGE_PRESENT | _PAGE_VALID | _PAGE_CACHE | \
 				  __PRIV_BITS | __ACCESS_BITS)
@@ -112,7 +111,7 @@
 
 #define _PAGE_CHG_MASK	(_PFN_MASK | _PAGE_MODIFIED | _PAGE_ACCESSED | _PAGE_PRESENT)
 
-#define pg_iobits (_PAGE_VALID | __PRIV_BITS | __ACCESS_BITS | _PAGE_E)
+#define pg_iobits (_PAGE_VALID | _PAGE_PRESENT | __DIRTY_BITS | __ACCESS_BITS | _PAGE_E)
 
 #define __P000	PAGE_NONE
 #define __P001	PAGE_READONLY
@@ -244,7 +243,7 @@ extern __inline__ void flush_tlb_mm(struct mm_struct *mm)
 1:
 	stxa		%%g0, [%%g3] %3
 	stxa		%%g0, [%%g3] %4
-	be,a,pt		%%icc, 1f
+	be,pt		%%icc, 1f
 	 nop
 	stxa		%%g2, [%%g7] %2
 1:
@@ -268,7 +267,7 @@ extern __inline__ void flush_tlb_range(struct mm_struct *mm, unsigned long start
 		start &= PAGE_MASK;
 		save_and_cli(flags);
 		if(new_ctx != old_ctx)
-			spitfire_set_secondary_context(mm->context);
+			spitfire_set_secondary_context(new_ctx);
 		while(start < end) {
 			spitfire_flush_dtlb_secondary_page(start);
 			spitfire_flush_itlb_secondary_page(start);
@@ -299,7 +298,7 @@ extern __inline__ void flush_tlb_page(struct vm_area_struct *vma, unsigned long 
 1:
 	stxa		%%g0, [%%g3] %3
 	stxa		%%g0, [%%g3] %4
-	be,a,pt		%%icc, 1f
+	be,pt		%%icc, 1f
 	 nop
 	stxa		%%g2, [%%g7] %2
 1:
@@ -638,7 +637,7 @@ extern inline pte_t mk_swap_pte(unsigned long type, unsigned long offset)
 { pte_t pte; pte_val(pte) = (type<<PAGE_SHIFT)|(offset<<(PAGE_SHIFT+8)); return pte; }
 
 extern inline pte_t mk_pte_io(unsigned long page, pgprot_t prot, int space)
-{ pte_t pte; pte_val(pte) = (page) | pgprot_val(prot); return pte; }
+{ pte_t pte; pte_val(pte) = ((page) | pgprot_val(prot) | _PAGE_E) & ~(unsigned long)_PAGE_CACHE; return pte; }
 
 #define SWP_TYPE(entry)		(((entry>>PAGE_SHIFT) & 0xff))
 #define SWP_OFFSET(entry)	((entry) >> (PAGE_SHIFT+8))
@@ -651,16 +650,16 @@ sun4u_get_pte (unsigned long addr)
 	pmd_t *pmdp;
 	pte_t *ptep;
 	
-	pgdp = pgd_offset (current->mm, addr);
+	pgdp = pgd_offset_k (addr);
 	pmdp = pmd_offset (pgdp, addr);
 	ptep = pte_offset (pmdp, addr);
 	return pte_val (*ptep) & _PAGE_PADDR;
 }
 
-extern __inline__ unsigned int
+extern __inline__ unsigned long
 __get_phys (unsigned long addr)
 {
-	return (sun4u_get_pte (addr) & 0x0fffffff);
+	return sun4u_get_pte (addr);
 }
 
 extern __inline__ int

@@ -1,5 +1,5 @@
-#ifndef _MIPS_INIT_H
-#define _MIPS_INIT_H
+#ifndef __ASM_MIPS_INIT_H
+#define __ASM_MIPS_INIT_H
 
 /* Throwing the initialization code and data out is not supported yet... */
 
@@ -11,4 +11,4 @@
 #define __FINIT
 #define __INITDATA
 
-#endif
+#endif /* __ASM_MIPS_INIT_H */

@@ -60,8 +60,8 @@ extern int sysctl_tcp_retries2;
 extern int sysctl_tcp_max_delay_acks;
 extern int sysctl_tcp_fin_timeout;
 extern int sysctl_tcp_syncookies;
-extern int sysctl_tcp_always_syncookie;
 extern int sysctl_tcp_syn_retries;
+extern int sysctl_tcp_stdurg; 
 
 extern int tcp_sysctl_congavoid(ctl_table *ctl, int write, struct file * filp,
 				void *buffer, size_t *lenp);
@@ -203,10 +203,12 @@ ctl_table ipv4_table[] = {
 	{NET_IPV4_IGMP_AGE_THRESHOLD, "igmp_age_threshold",
 	 &sysctl_igmp_age_threshold, sizeof(int), 0644, NULL, &proc_dointvec},
 #endif
+#ifdef CONFIG_SYN_COOKIES
 	{NET_TCP_SYNCOOKIES, "tcp_syncookies",
 	 &sysctl_tcp_syncookies, sizeof(int), 0644, NULL, &proc_dointvec},
-	{NET_TCP_ALWAYS_SYNCOOKIE, "tcp_always_syncookie",
-	 &sysctl_tcp_always_syncookie, sizeof(int), 0644, NULL, &proc_dointvec},
+#endif
+	{NET_TCP_STDURG, "tcp_stdurg", &sysctl_tcp_stdurg,
+	 sizeof(int), 0644, NULL, &proc_dointvec},
 	{0}
 };
 

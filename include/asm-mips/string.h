@@ -5,16 +5,15 @@
  * License.  See the file "COPYING" in the main directory of this archive
  * for more details.
  *
- * Copyright (c) 1994, 1995  Waldorf Electronics
- * written by Ralf Baechle
+ * Copyright (c) 1994, 1995, 1996 by Ralf Baechle
  */
 #ifndef __ASM_MIPS_STRING_H
 #define __ASM_MIPS_STRING_H
 
 #define __HAVE_ARCH_STRCPY
-extern __inline__ char * strcpy(char * dest, const char *src)
+extern __inline__ char *strcpy(char *__dest, __const__ char *__src)
 {
-  char *xdest = dest;
+  char *__xdest = __dest;
 
   __asm__ __volatile__(
 	".set\tnoreorder\n\t"
@@ -26,43 +25,43 @@ extern __inline__ char * strcpy(char * dest, const char *src)
 	"addiu\t%0,1\n\t"
 	".set\tat\n\t"
 	".set\treorder"
-	: "=r" (dest), "=r" (src)
-        : "0" (dest), "1" (src)
+	: "=r" (__dest), "=r" (__src)
+        : "0" (__dest), "1" (__src)
 	: "$1","memory");
 
-  return xdest;
+  return __xdest;
 }
 
 #define __HAVE_ARCH_STRNCPY
-extern __inline__ char * strncpy(char *dest, const char *src, size_t n)
+extern __inline__ char *strncpy(char *__dest, __const__ char *__src, size_t __n)
 {
-  char *xdest = dest;
+  char *__xdest = __dest;
 
-  if (n == 0)
-    return xdest;
+  if (__n == 0)
+    return __xdest;
 
   __asm__ __volatile__(
 	".set\tnoreorder\n\t"
 	".set\tnoat\n"
 	"1:\tlbu\t$1,(%1)\n\t"
-	"subu\t%2,%2,1\n\t"
+	"subu\t%2,1\n\t"
 	"sb\t$1,(%0)\n\t"
 	"beqz\t$1,2f\n\t"
-	"addiu\t%0,%0,1\n\t"
+	"addiu\t%0,1\n\t"
 	"bnez\t%2,1b\n\t"
-	"addiu\t%1,%1,1\n"
+	"addiu\t%1,1\n"
 	"2:\n\t"
 	".set\tat\n\t"
-	".set\treorder\n\t"
-        : "=r" (dest), "=r" (src), "=r" (n)
-        : "0" (dest), "1" (src), "2" (n)
+	".set\treorder"
+        : "=r" (__dest), "=r" (__src), "=r" (__n)
+        : "0" (__dest), "1" (__src), "2" (__n)
         : "$1","memory");
 
-  return dest;
+  return __dest;
 }
 
 #define __HAVE_ARCH_STRCMP
-extern __inline__ int strcmp(const char * cs, const char * ct)
+extern __inline__ int strcmp(__const__ char *__cs, __const__ char *__ct)
 {
   int __res;
 
@@ -76,22 +75,22 @@ extern __inline__ int strcmp(const char * cs, const char * ct)
 	"addiu\t%1,1\n\t"
 	"bnez\t%2,1b\n\t"
 	"lbu\t%2,(%0)\n\t"
-#ifndef __R4000__
+#if _MIPS_ISA == _MIPS_ISA_MIPS1
 	"nop\n\t"
 #endif
 	"move\t%2,$1\n"
 	"2:\tsubu\t%2,$1\n"
 	"3:\t.set\tat\n\t"
 	".set\treorder"
-	: "=d" (cs), "=d" (ct), "=d" (__res)
-	: "0" (cs), "1" (ct)
+	: "=r" (__cs), "=r" (__ct), "=r" (__res)
+	: "0" (__cs), "1" (__ct)
 	: "$1");
 
   return __res;
 }
 
 #define __HAVE_ARCH_STRNCMP
-extern __inline__ int strncmp(const char * cs, const char * ct, size_t count)
+extern __inline__ int strncmp(__const__ char *__cs, __const__ char *__ct, size_t __count)
 {
   char __res;
 
@@ -110,118 +109,50 @@ extern __inline__ int strncmp(const char * cs, const char * ct, size_t count)
 	"3:\tsubu\t%3,$1\n\t"
 	".set\tat\n\t"
 	".set\treorder"
-        : "=d" (cs), "=d" (ct), "=d" (count), "=d" (__res)
-        : "0" (cs), "1" (ct), "2" (count)
+        : "=r" (__cs), "=r" (__ct), "=r" (__count), "=r" (__res)
+        : "0" (__cs), "1" (__ct), "2" (__count)
 	: "$1");
 
   return __res;
 }
 
 #define __HAVE_ARCH_MEMSET
-extern __inline__ void * memset(void * s, int c, size_t count)
-{
-  void *xs = s;
-
-  if (!count)
-    return xs;
-  __asm__ __volatile__(
-	".set\tnoreorder\n"
-	"1:\tsb\t%3,(%0)\n\t"
-	"bne\t%0,%1,1b\n\t"
-	"addiu\t%0,%0,1\n\t"
-	".set\treorder"
-	: "=r" (s), "=r" (count)
-        : "0" (s), "r" (c), "1" (s + count - 1)
-	: "memory");
-
-  return xs;
-}
+extern void *memset(void *__s, char __c, size_t __count);
 
 #define __HAVE_ARCH_MEMCPY
-extern __inline__ void * memcpy(void * to, const void * from, size_t n)
-{
-  void *xto = to;
-
-  if (!n)
-    return xto;
-  __asm__ __volatile__(
-	".set\tnoreorder\n\t"
-	".set\tnoat\n"
-	"1:\tlbu\t$1,(%1)\n\t"
-	"addiu\t%1,1\n\t"
-	"sb\t$1,(%0)\n\t"
-	"subu\t%2,1\n\t"
-	"bnez\t%2,1b\n\t"
-	"addiu\t%0,1\n\t"
-	".set\tat\n\t"
-	".set\treorder"
-        : "=r" (to), "=r" (from), "=r" (n)
-        : "0" (to), "1" (from), "2" (n)
-        : "$1","memory" );
-  return xto;
-}
+extern void *memcpy(void *__to, __const__ void *__from, size_t __n);
 
 #define __HAVE_ARCH_MEMMOVE
-extern __inline__ void * memmove(void * dest,const void * src, size_t n)
-{
-  void *xdest = dest;
+extern void *memmove(void *__dest, __const__ void *__src, size_t __n);
 
-  if (!n)
-    return xdest;
-
-  if (dest < src)
-    __asm__ __volatile__(
-	".set\tnoreorder\n\t"
-	".set\tnoat\n"
-	"1:\tlbu\t$1,(%1)\n\t"
-	"addiu\t%1,1\n\t"
-	"sb\t$1,(%0)\n\t"
-	"subu\t%2,1\n\t"
-	"bnez\t%2,1b\n\t"
-	"addiu\t%0,1\n\t"
-	".set\tat\n\t"
-	".set\treorder"
-        : "=r" (dest), "=r" (src), "=r" (n)
-        : "0" (dest), "1" (src), "2" (n)
-        : "$1","memory" );
-  else
-    __asm__ __volatile__(
-	".set\tnoreorder\n\t"
-	".set\tnoat\n"
-	"1:\tlbu\t$1,-1(%1)\n\t"
-	"subu\t%1,1\n\t"
-	"sb\t$1,-1(%0)\n\t"
-	"subu\t%2,1\n\t"
-	"bnez\t%2,1b\n\t"
-	"subu\t%0,1\n\t"
-	".set\tat\n\t"
-	".set\treorder"
-        : "=r" (dest), "=r" (src), "=r" (n)
-        : "0" (dest+n), "1" (src+n), "2" (n)
-        : "$1","memory" );
-  return xdest;
-}
+#define __HAVE_ARCH_BCOPY
+extern char * bcopy(const char * src, char * dest, int count);
 
 #define __HAVE_ARCH_MEMSCAN
-extern __inline__ void * memscan(void * addr, int c, size_t size)
+extern __inline__ void *memscan(void *__addr, int __c, size_t __size)
 {
-	if (!size)
-		return addr;
+	char *__end = (char *)__addr + __size;
+
+	if (!__size)
+		return __addr;
 	__asm__(".set\tnoreorder\n\t"
 		".set\tnoat\n"
-		"1:\tbeqz\t%1,2f\n\t"
-		"lbu\t$1,(%0)\n\t"
-		"subu\t%1,1\n\t"
-		"bnez\t%1,1b\n\t"
+		"1:\tlbu\t$1,(%0)\n\t"
+#if _MIPS_ISA == _MIPS_ISA_MIPS1
+		"nop\n\t"
+#endif
+		"beq\t$1,%3,2f\n\t"
 		"addiu\t%0,1\n\t"
+		"bne\t%0,%2,1b\n\t"
+		"nop\n\t"
 		".set\tat\n\t"
 		".set\treorder\n"
 		"2:"
-		: "=r" (addr), "=r" (size)
-		: "0" (addr), "1" (size), "r" (c)
+		: "=r" (__addr)
+		: "0" (__addr), "1" (__end), "r" (__c)
 		: "$1");
 
-	return addr;
+	return __addr;
 }
 
 #endif /* __ASM_MIPS_STRING_H */

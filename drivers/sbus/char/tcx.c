@@ -1,4 +1,4 @@
-/* $Id: tcx.c,v 1.15 1997/06/04 08:27:32 davem Exp $
+/* $Id: tcx.c,v 1.16 1997/06/06 10:56:31 jj Exp $
  * tcx.c: SUNW,tcx 24/8bit frame buffer driver
  *
  * Copyright (C) 1996 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -110,7 +110,8 @@ tcx_mmap (struct inode *inode, struct file *file, struct vm_area_struct *vma,
 	  long base, fbinfo_t *fb)
 {
 	uint size, page, r, map_size;
-	uint map_offset = 0, i;
+	unsigned long map_offset = 0;
+	uint i;
 	long offsets[13] = { -1, TCX_RAM24BIT, TCX_UNK3, TCX_UNK4,
 			     -1, TCX_UNK6, TCX_UNK7,
 			     -1, -1, -1, TCX_UNK2, TCX_DHC, TCX_ALT };

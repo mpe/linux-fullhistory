@@ -5,7 +5,7 @@
  * License.  See the file "COPYING" in the main directory of this archive
  * for more details.
  *
- * Copyright (C) 1995 by Ralf Baechle
+ * Copyright (C) 1995, 1996 by Ralf Baechle
  */
 
 /*
@@ -16,7 +16,7 @@
  *
  * The binary compatibility calls are still missing in this list.
  */
-SYS(sys_syscall, 7)				/* 4000 */
+SYS(sys_syscall, 0)				/* 4000 */
 SYS(sys_exit, 1)
 SYS(sys_fork, 0)
 SYS(sys_read, 3)
@@ -88,7 +88,7 @@ SYS(sys_sgetmask, 0)
 SYS(sys_ssetmask, 1)
 SYS(sys_setreuid, 2)				/* 4070 */
 SYS(sys_setregid, 2)
-SYS(sys_sigsuspend, 3)
+SYS(sys_sigsuspend, 0)
 SYS(sys_sigpending, 1)
 SYS(sys_sethostname, 2)
 SYS(sys_setrlimit, 2)				/* 4075 */
@@ -166,12 +166,44 @@ SYS(sys_writev, 3)
 SYS(sys_cacheflush, 3)
 SYS(sys_cachectl, 3)
 SYS(sys_sysmips, 4)
-SYS(sys_setup, 0)				/* 4150 */
+SYS(sys_setup, 1)				/* 4150 */
 SYS(sys_getsid, 1)
-SYS(sys_ni_syscall, 0)
-SYS(sys_ni_syscall, 0)
+SYS(sys_fdatasync, 0)
+SYS(sys_sysctl, 1)
 SYS(sys_mlock, 2)
 SYS(sys_munlock, 2)				/* 4155 */
 SYS(sys_mlockall, 1)
 SYS(sys_munlockall, 0)
+SYS(sys_nfsservctl, 3)
+SYS(sys_sched_setparam,2)
+SYS(sys_sched_getparam,2)
+SYS(sys_sched_setscheduler,3)			/* 4160 */
+SYS(sys_sched_getscheduler,1)
+SYS(sys_sched_yield,0)
+SYS(sys_sched_get_priority_max,1)
+SYS(sys_sched_get_priority_min,1)
+SYS(sys_sched_rr_get_interval,2)		/* 4165 */
+SYS(sys_nanosleep,2)
+SYS(sys_mremap,4)
+SYS(sys_accept, 3)
+SYS(sys_bind, 3)
+SYS(sys_connect, 3)				/* 4170 */
+SYS(sys_getpeername, 3)
+SYS(sys_getsockname, 3)
+SYS(sys_getsockopt, 5)
+SYS(sys_listen, 2)
+SYS(sys_recv, 4)				/* 4175 */
+SYS(sys_recvfrom, 6)
+SYS(sys_recvmsg, 3)
+SYS(sys_send, 4)
+SYS(sys_sendmsg, 3)
+SYS(sys_sendto, 6)				/* 4180 */
+SYS(sys_setsockopt, 5)
+SYS(sys_shutdown, 2)
+SYS(sys_socket, 3)
+SYS(sys_socketpair, 4)
+SYS(sys_setresuid, 3)				/* 4185 */
+SYS(sys_getresuid, 3)
+SYS(sys_query_module, 5)
+SYS(sys_poll, 3)
 SYS(sys_nfsservctl, 3)

@@ -1328,6 +1328,9 @@ static void shutdown(struct async_struct * info)
 	info->MCR |= UART_MCR_OUT1 | UART_MCR_OUT2;
 #endif
 	
+	/* disable break condition */
+	serial_out(info, UART_LCR, serial_inp(info, UART_LCR) & ~UART_LCR_SBC);
+	
 	if (!info->tty || (info->tty->termios->c_cflag & HUPCL))
 		info->MCR &= ~(UART_MCR_DTR|UART_MCR_RTS);
 	serial_outp(info, UART_MCR, info->MCR);
@@ -1996,6 +1999,30 @@ static void send_break(	struct async_struct * info, int duration)
 }
 
 /*
+ * This routine sets the break condition on the serial port.
+ */
+static void begin_break(struct async_struct * info)
+{
+	if (!info->port)
+		return;
+	cli();
+	serial_out(info, UART_LCR, serial_inp(info, UART_LCR) | UART_LCR_SBC);
+	sti();
+}
+
+/*
+ * This routine clears the break condition on the serial port.
+ */
+static void end_break(struct async_struct * info)
+{
+	if (!info->port)
+		return;
+	cli();
+	serial_out(info, UART_LCR, serial_inp(info, UART_LCR) & ~UART_LCR_SBC);
+	sti();
+}
+
+/*
  * This routine returns a bitfield of "wild interrupts".  Basically,
  * any unclaimed interrupts which is flapping around.
  */
@@ -2198,6 +2225,19 @@ static int rs_ioctl(struct tty_struct *tty, struct file * file,
 			send_break(info, arg ? arg*(HZ/10) : HZ/4);
 			if (current->signal & ~current->blocked)
 				return -EINTR;
+			return 0;
+		case TIOCSBRK:
+			retval = tty_check_change(tty);
+			if (retval)
+				return retval;
+			tty_wait_until_sent(tty, 0);
+			begin_break(info);
+			return 0;
+		case TIOCCBRK:
+			retval = tty_check_change(tty);
+			if (retval)
+				return retval;
+			end_break(info);
 			return 0;
 		case TIOCGSOFTCAR:
 			return put_user(C_CLOCAL(tty) ? 1 : 0, (int *) arg);

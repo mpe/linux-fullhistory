@@ -536,6 +536,19 @@ CONFIG_FIREWALL
   proxy server). Chances are that you should use this on every machine
   being run as a router and not on any regular host. If unsure, say N.
 
+SYN flood protection
+CONFIG_SYN_COOKIES
+  Normal TCP/IP networking is open to an attack known as SYN flooding.
+  This attack prevents legitimate users from being able to connect to
+  your computer and requires very little work for the attacker.
+  SYN cookies provide protection against this type of attack. With
+  this option turned on the TCP/IP stack will use a cryptographic
+  challenge protocol known as SYN cookies to enable legitimate users
+  to continue to connect, even when your machine is under attack.
+  Note that SYN cookies aren't enabled per default, you need to add
+  echo 1 >/proc/sys/net/ipv4/tcp_syncookies to one of your startup scripts
+  (e.g. /etc/rc.local or /etc/rc.d/rc.local).	
+
 Socket Security API Support (EXPERIMENTAL)
 CONFIG_NET_SECURITY
   Enable use of the socket security API. Note that Linux does not include
@@ -1326,7 +1339,7 @@ CONFIG_IPDDP
   networking available.  This feature is experimental. Please see
   http://www.maths.unm.edu/~bradford/ltpc.html for support software.
 
-LocalTalk PC card support
+Apple/Farallon LocalTalk PC card support
 CONFIG_LTPC
   This allows you to use the AppleTalk PC card to connect to LocalTalk
   networks.  The card is also known as the Farallon PhoneNet PC card.
@@ -1337,6 +1350,26 @@ CONFIG_LTPC
   kernels, so choose Y or N, but not M for now.
   See README.ltpc in the drivers/net directory, and the web site
   http://www.math.unm.edu/~bradford/ltpc.html
+
+COPS LocalTalk PC card support
+CONFIG_COPS
+  This allows you to use the COPS AppleTalk card to connect to LocalTalk
+  networks. You also need version 1.3.3 or later of the netatalk package.
+  This driver is experimental, which means that it may not work.
+  In particular the module support is not yet working for the 2.1.xx
+  kernels, so choose Y or N, but not M for now.
+  See the web site http://www.math.unm.edu/~bradford/ltpc.html for localtalk
+  IP tools.
+
+Dayna firmware support
+CONFIG_COPS_DAYNA
+  Support COPS compatible cards with Dayna style firmware (Dayna DL2000/
+  Daynatalk/PC (half length), COPS LT-95, Farallon PhoneNET PC III)
+
+Tangent firmware support
+CONFIG_COPS_TANGENT
+  Support COPS compatible cards with Tangent style firmware (Tangent ATB_II,
+  Novell NL-1000, Daystar Digital LT-200
 
 Amateur Radio AX.25 Level 2
 CONFIG_AX25

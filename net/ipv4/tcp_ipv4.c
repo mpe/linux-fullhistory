@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_ipv4.c,v 1.43 1997/05/06 09:31:44 davem Exp $
+ * Version:	$Id: tcp_ipv4.c,v 1.49 1997/06/09 13:27:35 freitag Exp $
  *
  *		IPv4 specific functions
  *
@@ -30,6 +30,9 @@
  *		David S. Miller :	Change semantics of established hash,
  *					half is devoted to TIME_WAIT sockets
  *					and the rest go in the other half.
+ *		Andi Kleen :		Add support for syncookies and fixed
+ *					some bugs: ip options weren't passed to
+ *					the TCP layer, missed a check for an ACK bit.
  */
 
 #include <linux/config.h>
@@ -48,6 +51,7 @@ extern int sysctl_tcp_sack;
 extern int sysctl_tcp_tsack;
 extern int sysctl_tcp_timestamps;
 extern int sysctl_tcp_window_scaling;
+extern int sysctl_tcp_syncookies;
 
 static void tcp_v4_send_reset(struct sk_buff *skb);
 
@@ -403,7 +407,7 @@ struct sock *tcp_v4_proxy_lookup(unsigned short num, unsigned long raddr,
 
 #endif
 
-static __u32 tcp_v4_init_sequence(struct sock *sk, struct sk_buff *skb)
+static inline __u32 tcp_v4_init_sequence(struct sock *sk, struct sk_buff *skb)
 {
 	return secure_tcp_sequence_number(sk->saddr, sk->daddr,
 					  skb->h.th->dest,
@@ -835,6 +839,8 @@ static void tcp_v4_send_synack(struct sock *sk, struct open_request *req)
 
 	/* Don't offer more than they did.
 	 * This way we don't have to memorize who said what.
+	 * FIXME: maybe this should be changed for better performance
+	 * with syncookies.
 	 */
 	req->mss = min(mss, req->mss);
 
@@ -891,17 +897,13 @@ static void tcp_v4_or_free(struct open_request *req)
 			sizeof(struct ip_options) + req->af.v4_req.opt->optlen);
 }
 
-static struct or_calltable or_ipv4 = {
+struct or_calltable or_ipv4 = {
 	tcp_v4_send_synack,
 	tcp_v4_or_free
 };
 
-static int tcp_v4_syn_filter(struct sock *sk, struct sk_buff *skb, __u32 saddr)
-{
-	return 0;
-}
-
-int tcp_v4_conn_request(struct sock *sk, struct sk_buff *skb, void *ptr, __u32 isn)
+int tcp_v4_conn_request(struct sock *sk, struct sk_buff *skb, void *ptr, 
+						__u32 isn)
 {
 	struct ip_options *opt = (struct ip_options *) ptr;
 	struct tcp_opt tp;
@@ -909,23 +911,39 @@ int tcp_v4_conn_request(struct sock *sk, struct sk_buff *skb, void *ptr, __u32 i
 	struct tcphdr *th = skb->h.th;
 	__u32 saddr = skb->nh.iph->saddr;
 	__u32 daddr = skb->nh.iph->daddr;
+#ifdef CONFIG_SYN_COOKIES
+	int want_cookie = 0;
+#else
+#define want_cookie 0 /* Argh, why doesn't gcc optimize this :( */
+#endif
 
 	/* If the socket is dead, don't accept the connection.	*/
-	if (sk->dead) {
-		SOCK_DEBUG(sk, "Reset on %p: Connect on dead socket.\n",sk);
-		tcp_statistics.TcpAttemptFails++;
-		return -ENOTCONN;
-	}
+	if (sk->dead) 
+		goto dead; 
 
-	if (sk->ack_backlog >= sk->max_ack_backlog ||
-	    tcp_v4_syn_filter(sk, skb, saddr)) {
-		SOCK_DEBUG(sk, "dropping syn ack:%d max:%d\n", sk->ack_backlog,
-			   sk->max_ack_backlog);
-#ifdef CONFIG_IP_TCPSF
-		tcp_v4_random_drop(sk);
+	if (sk->ack_backlog >= sk->max_ack_backlog) {
+#ifdef CONFIG_SYN_COOKIES
+		if (sysctl_tcp_syncookies) {
+			static unsigned long warntime;
+
+			if (jiffies - warntime > HZ*60) {
+				warntime = jiffies;
+				printk(KERN_INFO 
+				       "possible SYN flooding on port %d. Sending cookies.\n", ntohs(skb->h.th->dest));
+			}
+			want_cookie = 1; 
+		} else 
 #endif
-		tcp_statistics.TcpAttemptFails++;
-		goto exit;
+		{
+			SOCK_DEBUG(sk, "dropping syn ack:%d max:%d\n", sk->ack_backlog,
+				   sk->max_ack_backlog);
+			tcp_statistics.TcpAttemptFails++;
+			goto exit;
+		}
+	} else { 
+		if (isn == 0)
+			isn = tcp_v4_init_sequence(sk, skb);
+		sk->ack_backlog++;
 	}
 
 	req = tcp_openreq_alloc();
@@ -934,15 +952,12 @@ int tcp_v4_conn_request(struct sock *sk, struct sk_buff *skb, void *ptr, __u32 i
 		goto exit;
 	}
 
-	sk->ack_backlog++;
-
 	req->rcv_wnd = 0;		/* So that tcp_send_synack() knows! */
 
 	req->rcv_isn = skb->seq;
-	req->snt_isn = isn;
-	tp.tstamp_ok = tp.sack_ok = tp.wscale_ok = tp.snd_wscale = 0;
+ 	tp.tstamp_ok = tp.sack_ok = tp.wscale_ok = tp.snd_wscale = 0;
 	tp.in_mss = 536;
-	tcp_parse_options(th,&tp);
+	tcp_parse_options(th,&tp, want_cookie);
 	if (tp.saw_tstamp)
 		req->ts_recent = tp.rcv_tsval;
 	req->mss = tp.in_mss;
@@ -954,8 +969,17 @@ int tcp_v4_conn_request(struct sock *sk, struct sk_buff *skb, void *ptr, __u32 i
 	req->af.v4_req.loc_addr = daddr;
 	req->af.v4_req.rmt_addr = saddr;
 
+	/* Note that we ignore the isn passed from the TIME_WAIT
+	 * state here. That's the price we pay for cookies.
+	 */
+	if (want_cookie)
+		isn = cookie_v4_init_sequence(sk, skb, &req->mss);
+
+	req->snt_isn = isn;
+
 	/* IPv4 options */
 	req->af.v4_req.opt = NULL;
+
 	if (opt && opt->optlen) {
 		int opt_size = sizeof(struct ip_options) + opt->optlen;
 
@@ -973,36 +997,50 @@ int tcp_v4_conn_request(struct sock *sk, struct sk_buff *skb, void *ptr, __u32 i
 
 	tcp_v4_send_synack(sk, req);
 
-	req->expires = jiffies + TCP_TIMEOUT_INIT;
-	tcp_inc_slow_timer(TCP_SLT_SYNACK);
-	tcp_synq_queue(&sk->tp_pinfo.af_tcp, req);
+	if (want_cookie) {
+		if (req->af.v4_req.opt) 
+			kfree(req->af.v4_req.opt); 
+	   	tcp_openreq_free(req); 
+	} else 	{
+		req->expires = jiffies + TCP_TIMEOUT_INIT;
+		tcp_inc_slow_timer(TCP_SLT_SYNACK);
+		tcp_synq_queue(&sk->tp_pinfo.af_tcp, req);
+	}
 
 	sk->data_ready(sk, 0);
 
 exit:
 	kfree_skb(skb, FREE_READ);
 	return 0;
+
+dead:
+	SOCK_DEBUG(sk, "Reset on %p: Connect on dead socket.\n",sk);
+	tcp_statistics.TcpAttemptFails++;
+	return -ENOTCONN;
 }
 
 struct sock * tcp_v4_syn_recv_sock(struct sock *sk, struct sk_buff *skb,
-				   struct open_request *req)
+				   struct open_request *req,
+				   struct dst_entry *dst)
 {
 	struct tcp_opt *newtp;
 	struct sock *newsk;
-	struct rtable *rt;
 	int snd_mss;
 
 	newsk = sk_alloc(GFP_ATOMIC);
-	if (newsk == NULL)
+	if (newsk == NULL) {
+		if (dst) 
+			dst_release(dst);
 		return NULL;
+	}
 
 	memcpy(newsk, sk, sizeof(*newsk));
 
 	/* Or else we die! -DaveM */
 	newsk->sklist_next = NULL;
 
-	newsk->opt = NULL;
-	newsk->dst_cache  = NULL;
+	newsk->opt = req->af.v4_req.opt;
+
 	skb_queue_head_init(&newsk->write_queue);
 	skb_queue_head_init(&newsk->receive_queue);
 	skb_queue_head_init(&newsk->out_of_order_queue);
@@ -1072,17 +1110,21 @@ struct sock * tcp_v4_syn_recv_sock(struct sock *sk, struct sk_buff *skb,
 	newsk->rcv_saddr = req->af.v4_req.loc_addr;
 
 	/* options / mss / route_cache */
-	newsk->opt = req->af.v4_req.opt;
-	if (ip_route_output(&rt,
-			    newsk->opt && newsk->opt->srr ? newsk->opt->faddr : newsk->daddr,
-			    newsk->saddr, newsk->ip_tos, NULL)) {
-		kfree(newsk);
-		return NULL;
-	}
-
-	newsk->dst_cache = &rt->u.dst;
-
-	snd_mss = rt->u.dst.pmtu;
+	if (dst == NULL) { 
+		struct rtable *rt;
+		
+		if (ip_route_output(&rt,
+				    newsk->opt && newsk->opt->srr ? 
+				    newsk->opt->faddr : newsk->daddr,
+				    newsk->saddr, newsk->ip_tos, NULL)) {
+			kfree(newsk);
+			return NULL;
+		}
+	        dst = &rt->u.dst;
+	} 
+	newsk->dst_cache = dst;
+	
+	snd_mss = dst->pmtu;
 
 	/* FIXME: is mtu really the same as snd_mss? */
 	newsk->mtu = snd_mss;
@@ -1124,7 +1166,7 @@ struct sock * tcp_v4_syn_recv_sock(struct sock *sk, struct sk_buff *skb,
 	return newsk;
 }
 
-struct sock *tcp_v4_check_req(struct sock *sk, struct sk_buff *skb)
+static inline struct sock *tcp_v4_check_req(struct sock *sk, struct sk_buff *skb, struct ip_options *opt)
 {
 	struct tcp_opt *tp = &(sk->tp_pinfo.af_tcp);
 	struct open_request *req = tp->syn_wait_queue;
@@ -1133,8 +1175,13 @@ struct sock *tcp_v4_check_req(struct sock *sk, struct sk_buff *skb)
 	 *	as we checked the user count on tcp_rcv and we're
 	 *	running from a soft interrupt.
 	 */
-	if(!req)
+	if(!req) {
+#ifdef CONFIG_SYN_COOKIES
+		goto checkcookie; 
+#else
 		return sk;
+#endif
+	}
 
 	while(req) {
 		if (req->af.v4_req.rmt_addr == skb->nh.iph->saddr &&
@@ -1147,7 +1194,7 @@ struct sock *tcp_v4_check_req(struct sock *sk, struct sk_buff *skb)
 				 *	yet accepted()...
 				 */
 				sk = req->sk;
-				break;
+				goto ende;
 			}
 
 			/* Check for syn retransmission */
@@ -1161,20 +1208,28 @@ struct sock *tcp_v4_check_req(struct sock *sk, struct sk_buff *skb)
 				return NULL;
 			}
 
-			sk = tp->af_specific->syn_recv_sock(sk, skb, req);
+			if (!skb->h.th->ack)
+				return sk; 
+
+			sk = tp->af_specific->syn_recv_sock(sk, skb, req, NULL);
 			tcp_dec_slow_timer(TCP_SLT_SYNACK);
 			if (sk == NULL)
 				return NULL;
 
 			req->expires = 0UL;
 			req->sk = sk;
-			break;
+			goto ende;
 		}
 		req = req->dl_next;
 	}
 
-	skb_orphan(skb);
-	skb_set_owner_r(skb, sk);
+#ifdef CONFIG_SYN_COOKIES
+checkcookie:       
+	sk = cookie_v4_check(sk, skb, opt);
+#endif
+ende:	skb_orphan(skb);
+	if (sk)
+		skb_set_owner_r(skb, sk);
 	return sk;
 }
 
@@ -1195,20 +1250,28 @@ int tcp_v4_do_rcv(struct sock *sk, struct sk_buff *skb)
 		goto ok;
 	}
 
-	if (sk->state == TCP_LISTEN) {
-		struct sock *nsk;
+	/*
+	 * We check packets with only the SYN bit set against the
+	 * open_request queue too: This increases connection latency a bit,
+	 * but is required to detect retransmitted SYNs.
+	 *
+	 * The ACK/SYN bit check is probably not needed here because
+	 * it is checked later again (we play save now).
+	 */
+	if (sk->state == TCP_LISTEN && (skb->h.th->ack || skb->h.th->syn)) {
+	   	struct sock *nsk;
 
-		/* Find possible connection requests. */
-		nsk = tcp_v4_check_req(sk, skb);
-		if (nsk == NULL)
+	   	/* Find possible connection requests. */
+	   	nsk = tcp_v4_check_req(sk, skb, &(IPCB(skb)->opt));
+	  	if (nsk == NULL)
 			goto discard_it;
-
-		release_sock(sk);
-		lock_sock(nsk);
+	    
+	   	release_sock(sk);
+	 	lock_sock(nsk);
 		sk = nsk;
 	}
 
-	if (tcp_rcv_state_process(sk, skb, skb->h.th, NULL, skb->len) == 0)
+	if (tcp_rcv_state_process(sk, skb, skb->h.th, &(IPCB(skb)->opt), skb->len) == 0)
 		goto ok;
 
 reset:
@@ -1352,7 +1415,6 @@ struct tcp_func ipv4_specific = {
 	tcp_v4_rebuild_header,
 	tcp_v4_conn_request,
 	tcp_v4_syn_recv_sock,
-	tcp_v4_init_sequence,
 	tcp_v4_get_sock,
 	ip_setsockopt,
 	ip_getsockopt,

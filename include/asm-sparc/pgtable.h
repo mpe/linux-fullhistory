@@ -1,4 +1,4 @@
-/* $Id: pgtable.h,v 1.60 1997/04/14 17:05:16 jj Exp $ */
+/* $Id: pgtable.h,v 1.61 1997/06/06 10:56:34 jj Exp $ */
 #ifndef _SPARC_PGTABLE_H
 #define _SPARC_PGTABLE_H
 
@@ -368,7 +368,7 @@ extern __inline__ void add_to_ctx_list(struct ctx_list *head, struct ctx_list *e
 #define add_to_free_ctxlist(entry) add_to_ctx_list(&ctx_free, entry)
 #define add_to_used_ctxlist(entry) add_to_ctx_list(&ctx_used, entry)
 
-extern __inline__ unsigned int
+extern __inline__ unsigned long
 __get_phys (unsigned long addr)
 {
 	switch (sparc_cpu_model){

@@ -1,4 +1,4 @@
-/* $Id: page.h,v 1.8 1997/03/26 12:24:21 davem Exp $ */
+/* $Id: page.h,v 1.9 1997/06/14 21:28:09 davem Exp $ */
 
 #ifndef _SPARC64_PAGE_H
 #define _SPARC64_PAGE_H
@@ -18,7 +18,14 @@
 
 #ifndef __ASSEMBLY__
 
-#define clear_page(page)	memset((void *)(page), 0, PAGE_SIZE)
+#define clear_page(page)					\
+	__asm__ __volatile__(	"mov	%%o7, %%g3\n\t"		\
+				"call	__bzero_1page\n\t"	\
+				" mov	%0, %%g2\n\t"		\
+				: /* No outputs */		\
+				: "r" (page)			\
+				: "g1", "g2", "g3")
+
 #define copy_page(to,from)	memcpy((void *)(to), (void *)(from), PAGE_SIZE)
 
 #define STRICT_MM_TYPECHECKS

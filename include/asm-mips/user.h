@@ -9,8 +9,8 @@
 /*
  * Core file format: The core file is written in such a way that gdb
  * can understand it and provide useful information to the user (under
- * linux we use the `trad-core' bfd, NOT the osf-core).  The file contents
- * are as follows:
+ * linux we use the `trad-core' bfd, NOT the irix-core).  The file
+ * contents are as follows:
  *
  *  upage: 1 page consisting of a user struct that tells gdb
  *	what is present in the file.  Directly after this is a
@@ -30,7 +30,7 @@
  *	to write an integer number of pages.
  */
 struct user {
-	unsigned long	regs[EF_SIZE/8+32];	/* integer and fp regs */
+	unsigned long	regs[EF_SIZE/4+64];	/* integer and fp regs */
 	size_t		u_tsize;		/* text size (pages) */
 	size_t		u_dsize;		/* data size (pages) */
 	size_t		u_ssize;		/* stack size (pages) */

@@ -13,10 +13,10 @@
 
 #ifdef __KERNEL__
 
-#define FUNC(x) 											\
-	.globl	x;											\
-	.type	x,@function;										\
-	.align	4;											\
+#define FUNC(x) 		\
+	.globl	x;		\
+	.type	x,@function;	\
+	.align	4;		\
 x:
 
 #define FASTER_ALIGNED
@@ -36,10 +36,10 @@ x:
 #define FASTER_ALIGNED
 
 #ifdef DEBUG
-#define FUNC(x) 											\
-	.globl	jj##x##1;										\
-	.type	jj##x##1,@function;									\
-	.align	4;											\
+#define FUNC(x) 			\
+	.globl	jj##x##1;		\
+	.type	jj##x##1,@function;	\
+	.align	4;			\
 jj##x##1:
 #else
 #include "DEFS.h"
@@ -51,56 +51,56 @@ jj##x##1:
 
 #endif
 
-#define MOVE_BIGCHUNK(src, dst, offset, t0, t1, t2, t3, t4, t5, t6, t7) 				\
-	ldd	[%src + offset + 0x00], %t0; 								\
-	ldd	[%src + offset + 0x08], %t2; 								\
-	ldd	[%src + offset + 0x10], %t4; 								\
-	ldd	[%src + offset + 0x18], %t6; 								\
-	stw	%t0, [%dst + offset + 0x00]; 								\
-	stw	%t1, [%dst + offset + 0x04]; 								\
-	stw	%t2, [%dst + offset + 0x08]; 								\
-	stw	%t3, [%dst + offset + 0x0c]; 								\
-	stw	%t4, [%dst + offset + 0x10]; 								\
-	stw	%t5, [%dst + offset + 0x14]; 								\
-	stw	%t6, [%dst + offset + 0x18]; 								\
+#define MOVE_BIGCHUNK(src, dst, offset, t0, t1, t2, t3, t4, t5, t6, t7) 	\
+	ldd	[%src + offset + 0x00], %t0; 					\
+	ldd	[%src + offset + 0x08], %t2; 					\
+	ldd	[%src + offset + 0x10], %t4; 					\
+	ldd	[%src + offset + 0x18], %t6; 					\
+	stw	%t0, [%dst + offset + 0x00]; 					\
+	stw	%t1, [%dst + offset + 0x04]; 					\
+	stw	%t2, [%dst + offset + 0x08]; 					\
+	stw	%t3, [%dst + offset + 0x0c]; 					\
+	stw	%t4, [%dst + offset + 0x10]; 					\
+	stw	%t5, [%dst + offset + 0x14]; 					\
+	stw	%t6, [%dst + offset + 0x18]; 					\
 	stw	%t7, [%dst + offset + 0x1c];
 
-#define MOVE_BIGALIGNCHUNK(src, dst, offset, t0, t1, t2, t3, t4, t5, t6, t7) 				\
-	ldx	[%src + offset + 0x00], %t0; 								\
-	ldx	[%src + offset + 0x08], %t1; 								\
-	ldx	[%src + offset + 0x10], %t2; 								\
-	ldx	[%src + offset + 0x18], %t3; 								\
-	ldx	[%src + offset + 0x20], %t4; 								\
-	ldx	[%src + offset + 0x28], %t5; 								\
-	ldx	[%src + offset + 0x30], %t6; 								\
-	ldx	[%src + offset + 0x38], %t7; 								\
-	stx	%t0, [%dst + offset + 0x00]; 								\
-	stx	%t1, [%dst + offset + 0x08]; 								\
-	stx	%t2, [%dst + offset + 0x10]; 								\
-	stx	%t3, [%dst + offset + 0x18]; 								\
-	stx	%t4, [%dst + offset + 0x20]; 								\
-	stx	%t5, [%dst + offset + 0x28]; 								\
-	stx	%t6, [%dst + offset + 0x30]; 								\
+#define MOVE_BIGALIGNCHUNK(src, dst, offset, t0, t1, t2, t3, t4, t5, t6, t7)	\
+	ldx	[%src + offset + 0x00], %t0; 					\
+	ldx	[%src + offset + 0x08], %t1; 					\
+	ldx	[%src + offset + 0x10], %t2; 					\
+	ldx	[%src + offset + 0x18], %t3; 					\
+	ldx	[%src + offset + 0x20], %t4; 					\
+	ldx	[%src + offset + 0x28], %t5; 					\
+	ldx	[%src + offset + 0x30], %t6; 					\
+	ldx	[%src + offset + 0x38], %t7; 					\
+	stx	%t0, [%dst + offset + 0x00]; 					\
+	stx	%t1, [%dst + offset + 0x08]; 					\
+	stx	%t2, [%dst + offset + 0x10]; 					\
+	stx	%t3, [%dst + offset + 0x18]; 					\
+	stx	%t4, [%dst + offset + 0x20]; 					\
+	stx	%t5, [%dst + offset + 0x28]; 					\
+	stx	%t6, [%dst + offset + 0x30]; 					\
 	stx	%t7, [%dst + offset + 0x38];
 
-#define MOVE_LASTCHUNK(src, dst, offset, t0, t1, t2, t3) 						\
-	ldd	[%src - offset - 0x10], %t0; 								\
-	ldd	[%src - offset - 0x08], %t2; 								\
-	stw	%t0, [%dst - offset - 0x10]; 								\
-	stw	%t1, [%dst - offset - 0x0c]; 								\
-	stw	%t2, [%dst - offset - 0x08]; 								\
+#define MOVE_LASTCHUNK(src, dst, offset, t0, t1, t2, t3)	\
+	ldd	[%src - offset - 0x10], %t0;			\
+	ldd	[%src - offset - 0x08], %t2; 			\
+	stw	%t0, [%dst - offset - 0x10]; 			\
+	stw	%t1, [%dst - offset - 0x0c]; 			\
+	stw	%t2, [%dst - offset - 0x08]; 			\
 	stw	%t3, [%dst - offset - 0x04];
 
-#define MOVE_LASTALIGNCHUNK(src, dst, offset, t0, t1) 							\
-	ldx	[%src - offset - 0x10], %t0; 								\
-	ldx	[%src - offset - 0x08], %t1; 								\
-	stx	%t0, [%dst - offset - 0x10]; 								\
+#define MOVE_LASTALIGNCHUNK(src, dst, offset, t0, t1) 		\
+	ldx	[%src - offset - 0x10], %t0; 			\
+	ldx	[%src - offset - 0x08], %t1; 			\
+	stx	%t0, [%dst - offset - 0x10]; 			\
 	stx	%t1, [%dst - offset - 0x08];
 
-#define MOVE_SHORTCHUNK(src, dst, offset, t0, t1) 							\
-	ldub	[%src - offset - 0x02], %t0; 								\
-	ldub	[%src - offset - 0x01], %t1; 								\
-	stb	%t0, [%dst - offset - 0x02]; 								\
+#define MOVE_SHORTCHUNK(src, dst, offset, t0, t1) 		\
+	ldub	[%src - offset - 0x02], %t0; 			\
+	ldub	[%src - offset - 0x01], %t1; 			\
+	stb	%t0, [%dst - offset - 0x02]; 			\
 	stb	%t1, [%dst - offset - 0x01];
 
 	.text

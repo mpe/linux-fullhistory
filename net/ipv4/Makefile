@@ -52,6 +52,11 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_SYN_COOKIES),y)
+IPV4_OBJS += syncookies.o
+# module not supported, because it would be too messy.
+endif
+
 ifdef CONFIG_INET
 O_OBJS := $(IPV4_OBJS)
 OX_OBJS := $(IPV4X_OBJS)

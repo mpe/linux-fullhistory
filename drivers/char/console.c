@@ -497,13 +497,15 @@ static void set_origin(int currcons)
 	__set_origin(__real_origin);
 }
 
-static void scrup(int currcons, unsigned int t, unsigned int b)
+static void scrup(int currcons, unsigned int t, unsigned int b, unsigned int nr)
 {
 	int hardscroll = hardscroll_enabled;
 
-	if (b > video_num_lines || t >= b)
+	if (t+nr >= b)
+		nr = b - t - 1;
+	if (b > video_num_lines || t >= b || nr < 1)
 		return;
-	if (t || b != video_num_lines)
+	if (t || b != video_num_lines || nr > 1)
 		hardscroll = 0;
 	if (hardscroll) {
 		origin += video_size_row;
@@ -544,31 +546,35 @@ static void scrup(int currcons, unsigned int t, unsigned int b)
 		set_origin(currcons);
 	} else {
 		unsigned short * d = (unsigned short *) (origin+video_size_row*t);
-		unsigned short * s = (unsigned short *) (origin+video_size_row*(t+1));
+		unsigned short * s = (unsigned short *) (origin+video_size_row*(t+nr));
 
-		memcpyw(d, s, (b-t-1) * video_size_row);
-		memsetw(d + (b-t-1) * video_num_columns, video_erase_char, video_size_row);
+		memcpyw(d, s, (b-t-nr) * video_size_row);
+		memsetw(d + (b-t-nr) * video_num_columns, video_erase_char, video_size_row*nr);
 	}
 }
 
 static void
-scrdown(int currcons, unsigned int t, unsigned int b)
+scrdown(int currcons, unsigned int t, unsigned int b, unsigned int nr)
 {
 	unsigned short *s;
 	unsigned int count;
+	unsigned int step;
 
-	if (b > video_num_lines || t >= b)
+	if (t+nr >= b)
+		nr = b - t - 1;
+	if (b > video_num_lines || t >= b || nr < 1)
 		return;
-	s = (unsigned short *) (origin+video_size_row*(b-2));
-	if (b >= t + 1) {
-		count = b - t - 1;
-		while (count) {
-			count--;
-			memcpyw(s + video_num_columns, s, video_size_row);
-			s -= video_num_columns;
-		}
+	s = (unsigned short *) (origin+video_size_row*(b-nr-1));
+	step = video_num_columns * nr;
+	count = b - t - nr;
+	while (count--) {
+		memcpyw(s + step, s, video_size_row);
+		s -= video_num_columns;
 	}
-	memsetw(s + video_num_columns, video_erase_char, video_size_row);
+	while (nr--) {
+		s += video_num_columns;
+		memsetw(s, video_erase_char, video_size_row);
+	}
 	has_scrolled = 1;
 }
 
@@ -578,7 +584,7 @@ static void lf(int currcons)
 	 * if below scrolling region
 	 */
     	if (y+1 == bottom)
-		scrup(currcons,top,bottom);
+		scrup(currcons,top,bottom, 1);
 	else if (y < video_num_lines-1) {
 	    	y++;
 		pos += video_size_row;
@@ -592,7 +598,7 @@ static void ri(int currcons)
 	 * if above scrolling region
 	 */
 	if (y == top)
-		scrdown(currcons,top,bottom);
+		scrdown(currcons,top,bottom,1);
 	else if (y > 0) {
 		y--;
 		pos -= video_size_row;
@@ -1117,9 +1123,9 @@ static void insert_char(int currcons)
 	need_wrap = 0;
 }
 
-static void insert_line(int currcons)
+static void insert_line(int currcons, unsigned int nr)
 {
-	scrdown(currcons,y,bottom);
+	scrdown(currcons,y,bottom,nr);
 	need_wrap = 0;
 }
 
@@ -1136,9 +1142,9 @@ static void delete_char(int currcons)
 	need_wrap = 0;
 }
 
-static void delete_line(int currcons)
+static void delete_line(int currcons, unsigned int nr)
 {
-	scrup(currcons,y,bottom);
+	scrup(currcons,y,bottom,nr);
 	need_wrap = 0;
 }
 
@@ -1158,8 +1164,7 @@ static void csi_L(int currcons, unsigned int nr)
 		nr = video_num_lines;
 	else if (!nr)
 		nr = 1;
-	while (nr--)
-		insert_line(currcons);
+	insert_line(currcons, nr);
 }
 
 static void csi_P(int currcons, unsigned int nr)
@@ -1178,8 +1183,7 @@ static void csi_M(int currcons, unsigned int nr)
 		nr = video_num_lines;
 	else if (!nr)
 		nr=1;
-	while (nr--)
-		delete_line(currcons);
+	delete_line(currcons, nr);
 }
 
 static void save_cur(int currcons)

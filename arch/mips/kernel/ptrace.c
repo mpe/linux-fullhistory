@@ -1,6 +1,7 @@
 /* ptrace.c */
 /* By Ross Biro 1/23/92 */
 /* edited by Linus Torvalds */
+/* further hacked for MIPS by David S. Miller (dm@engr.sgi.com) */
 
 #include <linux/head.h>
 #include <linux/kernel.h>
@@ -8,62 +9,14 @@
 #include <linux/mm.h>
 #include <linux/errno.h>
 #include <linux/ptrace.h>
+#include <linux/smp.h>
+#include <linux/smp_lock.h>
 #include <linux/user.h>
 
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 #include <asm/pgtable.h>
+#include <asm/page.h>
 #include <asm/system.h>
-
-#if 0
-/*
- * does not yet catch signals sent when the child dies.
- * in exit.c or in signal.c.
- */
-
-/* determines which flags the user has access to. */
-/* 1 = access 0 = no access */
-#define FLAG_MASK 0x00044dd5
-
-/* set's the trap flag. */
-#define TRAP_FLAG 0x100
-
-/*
- * this is the number to subtract from the top of the stack. To find
- * the local frame.
- */
-#define MAGICNUMBER 68
-
-/*
- * this routine will get a word off of the processes privileged stack. 
- * the offset is how far from the base addr as stored in the TSS.  
- * this routine assumes that all the privileged stacks are in our
- * data space.
- */   
-static inline int get_stack_long(struct task_struct *task, int offset)
-{
-	unsigned char *stack;
-
-	stack = (unsigned char *)task->tss.esp0;
-	stack += offset;
-	return (*((int *)stack));
-}
-
-/*
- * this routine will put a word on the processes privileged stack. 
- * the offset is how far from the base addr as stored in the TSS.  
- * this routine assumes that all the privileged stacks are in our
- * data space.
- */
-static inline int put_stack_long(struct task_struct *task, int offset,
-	unsigned long data)
-{
-	unsigned char * stack;
-
-	stack = (unsigned char *) task->tss.esp0;
-	stack += offset;
-	*(unsigned long *) stack = data;
-	return 0;
-}
 
 /*
  * This routine gets a long from any process space by following the page
@@ -71,16 +24,18 @@ static inline int put_stack_long(struct task_struct *task, int offset,
  * and that it is in the task area before calling this: this routine does
  * no checking.
  */
-static unsigned long get_long(struct vm_area_struct * vma, unsigned long addr)
+static unsigned long get_long(struct task_struct * tsk,
+			      struct vm_area_struct * vma, unsigned long addr)
 {
-	pgd_t * pgdir;
-	pte_t * pgtable;
-	unsigned long page;
+	pgd_t *pgdir;
+	pmd_t *pgmiddle;
+	pte_t *pgtable;
+	unsigned long page, retval;
 
 repeat:
-	pgdir = PAGE_DIR_OFFSET(vma->vm_mm, addr);
+	pgdir = pgd_offset(vma->vm_mm, addr);
 	if (pgd_none(*pgdir)) {
-		do_no_page(vma, addr, 0);
+		handle_mm_fault(tsk, vma, addr, 0);
 		goto repeat;
 	}
 	if (pgd_bad(*pgdir)) {
@@ -88,17 +43,29 @@ repeat:
 		pgd_clear(pgdir);
 		return 0;
 	}
-	pgtable = (pte_t *) (PAGE_PTR(addr) + pgd_page(*pgdir));
+	pgmiddle = pmd_offset(pgdir, addr);
+	if (pmd_none(*pgmiddle)) {
+		handle_mm_fault(tsk, vma, addr, 0);
+		goto repeat;
+	}
+	if (pmd_bad(*pgmiddle)) {
+		printk("ptrace: bad page middle %08lx\n", pmd_val(*pgmiddle));
+		pmd_clear(pgmiddle);
+		return 0;
+	}
+	pgtable = pte_offset(pgmiddle, addr);
 	if (!pte_present(*pgtable)) {
-		do_no_page(vma, addr, 0);
+		handle_mm_fault(tsk, vma, addr, 0);
 		goto repeat;
 	}
 	page = pte_page(*pgtable);
 /* this is a hack for non-kernel-mapped video buffers and similar */
-	if (page >= high_memory)
+	if (MAP_NR(page) >= MAP_NR(high_memory))
 		return 0;
 	page += addr & ~PAGE_MASK;
-	return *(unsigned long *) page;
+	retval = *(unsigned long *) page;
+	flush_page_to_ram(page);
+	return retval;
 }
 
 /*
@@ -110,17 +77,19 @@ repeat:
  * Now keeps R/W state of page so that a text page stays readonly
  * even if a debugger scribbles breakpoints into it.  -M.U-
  */
-static void put_long(struct vm_area_struct * vma, unsigned long addr,
+static void put_long(struct task_struct *tsk,
+		     struct vm_area_struct * vma, unsigned long addr,
 	unsigned long data)
 {
 	pgd_t *pgdir;
+	pmd_t *pgmiddle;
 	pte_t *pgtable;
 	unsigned long page;
 
 repeat:
-	pgdir = PAGE_DIR_OFFSET(vma->vm_mm, addr);
+	pgdir = pgd_offset(vma->vm_mm, addr);
 	if (!pgd_present(*pgdir)) {
-		do_no_page(vma, addr, 1);
+		handle_mm_fault(tsk, vma, addr, 1);
 		goto repeat;
 	}
 	if (pgd_bad(*pgdir)) {
@@ -128,23 +97,36 @@ repeat:
 		pgd_clear(pgdir);
 		return;
 	}
-	pgtable = (pte_t *) (PAGE_PTR(addr) + pgd_page(*pgdir));
+	pgmiddle = pmd_offset(pgdir, addr);
+	if (pmd_none(*pgmiddle)) {
+		handle_mm_fault(tsk, vma, addr, 1);
+		goto repeat;
+	}
+	if (pmd_bad(*pgmiddle)) {
+		printk("ptrace: bad page middle %08lx\n", pmd_val(*pgmiddle));
+		pmd_clear(pgmiddle);
+		return;
+	}
+	pgtable = pte_offset(pgmiddle, addr);
 	if (!pte_present(*pgtable)) {
-		do_no_page(vma, addr, 1);
+		handle_mm_fault(tsk, vma, addr, 1);
 		goto repeat;
 	}
 	page = pte_page(*pgtable);
 	if (!pte_write(*pgtable)) {
-		do_wp_page(vma, addr, 1);
+		handle_mm_fault(tsk, vma, addr, 1);
 		goto repeat;
 	}
 /* this is a hack for non-kernel-mapped video buffers and similar */
-	if (page < high_memory)
+	flush_cache_page(vma, addr);
+	if (MAP_NR(page) < MAP_NR(high_memory)) {
 		*(unsigned long *) (page + (addr & ~PAGE_MASK)) = data;
+		flush_page_to_ram(page);
+	}
 /* we're bypassing pagetables, so we have to set the dirty bit ourselves */
 /* this should also re-instate whatever read-only mode there was before */
 	set_pte(pgtable, pte_mkdirty(mk_pte(page, vma->vm_page_prot)));
-	invalidate();
+	flush_tlb_page(vma, addr);
 }
 
 static struct vm_area_struct * find_extend_vma(struct task_struct * tsk, unsigned long addr)
@@ -152,7 +134,7 @@ static struct vm_area_struct * find_extend_vma(struct task_struct * tsk, unsigne
 	struct vm_area_struct * vma;
 
 	addr &= PAGE_MASK;
-	vma = find_vma(tsk, addr);
+	vma = find_vma(tsk->mm, addr);
 	if (!vma)
 		return NULL;
 	if (vma->vm_start <= addr)
@@ -186,8 +168,8 @@ static int read_long(struct task_struct * tsk, unsigned long addr,
 			if (!vma_high || vma_high->vm_start != vma->vm_end)
 				return -EIO;
 		}
-		low = get_long(vma, addr & ~(sizeof(long)-1));
-		high = get_long(vma_high, (addr+sizeof(long)) & ~(sizeof(long)-1));
+		low = get_long(tsk, vma, addr & ~(sizeof(long)-1));
+		high = get_long(tsk, vma_high, (addr+sizeof(long)) & ~(sizeof(long)-1));
 		switch (addr & (sizeof(long)-1)) {
 			case 1:
 				low >>= 8;
@@ -204,7 +186,7 @@ static int read_long(struct task_struct * tsk, unsigned long addr,
 		}
 		*result = low;
 	} else
-		*result = get_long(vma, addr);
+		*result = get_long(tsk, vma, addr);
 	return 0;
 }
 
@@ -228,8 +210,8 @@ static int write_long(struct task_struct * tsk, unsigned long addr,
 			if (!vma_high || vma_high->vm_start != vma->vm_end)
 				return -EIO;
 		}
-		low = get_long(vma, addr & ~(sizeof(long)-1));
-		high = get_long(vma_high, (addr+sizeof(long)) & ~(sizeof(long)-1));
+		low = get_long(tsk, vma, addr & ~(sizeof(long)-1));
+		high = get_long(tsk, vma_high, (addr+sizeof(long)) & ~(sizeof(long)-1));
 		switch (addr & (sizeof(long)-1)) {
 			case 0: /* shouldn't happen, but safety first */
 				low = data;
@@ -253,50 +235,63 @@ static int write_long(struct task_struct * tsk, unsigned long addr,
 				high |= data >> 8;
 				break;
 		}
-		put_long(vma, addr & ~(sizeof(long)-1),low);
-		put_long(vma_high, (addr+sizeof(long)) & ~(sizeof(long)-1),high);
+		put_long(tsk, vma, addr & ~(sizeof(long)-1),low);
+		put_long(tsk, vma_high, (addr+sizeof(long)) & ~(sizeof(long)-1),high);
 	} else
-		put_long(vma, addr, data);
+		put_long(tsk, vma, addr, data);
 	return 0;
 }
-#endif
 
 asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 {
-#if 1
-	return -ENOSYS;
-#else
 	struct task_struct *child;
-	struct user * dummy;
-	int i;
+	int res;
 
-
-	dummy = NULL;
-
+	lock_kernel();
+#if 0
+	printk("ptrace(r=%d,pid=%d,addr=%08lx,data=%08lx)\n",
+	       (int) request, (int) pid, (unsigned long) addr,
+	       (unsigned long) data);
+#endif
 	if (request == PTRACE_TRACEME) {
 		/* are we already being traced? */
-		if (current->flags & PF_PTRACED)
-			return -EPERM;
+		if (current->flags & PF_PTRACED) {
+			res = -EPERM;
+			goto out;
+		}
 		/* set the ptrace bit in the process flags. */
 		current->flags |= PF_PTRACED;
-		return 0;
+		res = 0;
+		goto out;
 	}
-	if (pid == 1)		/* you may not mess with init */
-		return -EPERM;
-	if (!(child = find_task_by_pid(pid)))
-		return -ESRCH;
+	if (pid == 1) {		/* you may not mess with init */
+		res = -EPERM;
+		goto out;
+	}
+	if (!(child = find_task_by_pid(pid))) {
+		res = -ESRCH;
+		goto out;
+	}
 	if (request == PTRACE_ATTACH) {
-		if (child == current)
-			return -EPERM;
+		if (child == current) {
+			res = -EPERM;
+			goto out;
+		}
 		if ((!child->dumpable ||
 		    (current->uid != child->euid) ||
+		    (current->uid != child->suid) ||
 		    (current->uid != child->uid) ||
 	 	    (current->gid != child->egid) ||
-	 	    (current->gid != child->gid)) && !suser())
-			return -EPERM;
+		    (current->gid != child->sgid) ||
+	 	    (current->gid != child->gid)) && !suser()) {
+			res = -EPERM;
+			goto out;
+		}
 		/* the same process cannot be attached many times */
-		if (child->flags & PF_PTRACED)
-			return -EPERM;
+		if (child->flags & PF_PTRACED) {
+			res = -EPERM;
+			goto out;
+		}
 		child->flags |= PF_PTRACED;
 		if (child->p_pptr != current) {
 			REMOVE_LINKS(child);
@@ -304,142 +299,148 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 			SET_LINKS(child);
 		}
 		send_sig(SIGSTOP, child, 1);
-		return 0;
+		res = 0;
+		goto out;
 	}
-	if (!(child->flags & PF_PTRACED))
-		return -ESRCH;
+	if (!(child->flags & PF_PTRACED)) {
+		res = -ESRCH;
+		goto out;
+	}
 	if (child->state != TASK_STOPPED) {
-		if (request != PTRACE_KILL)
-			return -ESRCH;
+		if (request != PTRACE_KILL) {
+			res = -ESRCH;
+			goto out;
+		}
 	}
-	if (child->p_pptr != current)
-		return -ESRCH;
+	if (child->p_pptr != current) {
+		res = -ESRCH;
+		goto out;
+	}
 
 	switch (request) {
 	/* when I and D space are separate, these will need to be fixed. */
 		case PTRACE_PEEKTEXT: /* read word at location addr. */ 
 		case PTRACE_PEEKDATA: {
 			unsigned long tmp;
-			int res;
 
 			res = read_long(child, addr, &tmp);
 			if (res < 0)
-				return res;
-			res = verify_area(VERIFY_WRITE, (void *) data, sizeof(long));
-			if (!res)
-				put_fs_long(tmp,(unsigned long *) data);
-			return res;
+				goto out;
+			res = put_user(tmp,(unsigned long *) data);
+			goto out;
 		}
 
 	/* read the word at location addr in the USER area. */
+/* #define DEBUG_PEEKUSR */
 		case PTRACE_PEEKUSR: {
+			struct pt_regs *regs;
 			unsigned long tmp;
-			int res;
 
-			if ((addr & 3) || addr < 0 || 
-			    addr > sizeof(struct user) - 3)
-				return -EIO;
+			regs = (struct pt_regs *)
+				(child->tss.ksp - sizeof(struct pt_regs));
+			tmp = 0;  /* Default return value. */
+			if(addr < 32 && addr >= 0) {
+				tmp = regs->regs[addr];
+			} else if(addr >= 32 && addr < 64) {
+				unsigned long long *fregs;
 
-			res = verify_area(VERIFY_WRITE, (void *) data, sizeof(long));
-			if (res)
-				return res;
-			tmp = 0;  /* Default return condition */
-			if(addr < 17*sizeof(long)) {
-			  addr = addr >> 2; /* temporary hack. */
-
-			  tmp = get_stack_long(child, sizeof(long)*addr - MAGICNUMBER);
-			  if (addr == DS || addr == ES ||
-			      addr == FS || addr == GS ||
-			      addr == CS || addr == SS)
-			    tmp &= 0xffff;
-			};
-			if(addr >= (long) &dummy->u_debugreg[0] &&
-			   addr <= (long) &dummy->u_debugreg[7]){
-				addr -= (long) &dummy->u_debugreg[0];
-				addr = addr >> 2;
-				tmp = child->debugreg[addr];
-			};
-			put_fs_long(tmp,(unsigned long *) data);
-			return 0;
+				/* We don't want to do a FPU operation here. */
+				fregs = (unsigned long long *)
+					&child->tss.fpu.hard.fp_regs[0];
+				tmp = (unsigned long) fregs[(addr - 32)];
+			} else {
+				addr -= 64;
+				switch(addr) {
+				case 0:
+					tmp = regs->cp0_epc;
+					break;
+				case 1:
+					tmp = regs->cp0_cause;
+					break;
+				case 2:
+					tmp = regs->cp0_badvaddr;
+					break;
+				case 3:
+					tmp = regs->lo;
+					break;
+				case 4:
+					tmp = regs->hi;
+					break;
+				case 5:
+					tmp = child->tss.fpu.hard.control;
+					break;
+				case 6:
+					tmp = 0;
+					break;
+				default:
+					tmp = 0;
+					res = -EIO;
+					goto out;
+				};
+			}
+			res = put_user(tmp, (unsigned long *) data);
+			goto out;
 		}
 
       /* when I and D space are separate, this will have to be fixed. */
 		case PTRACE_POKETEXT: /* write the word at location addr. */
 		case PTRACE_POKEDATA:
-			return write_long(child,addr,data);
+			res = write_long(child,addr,data);
+			goto out;
 
-		case PTRACE_POKEUSR: /* write the word at location addr in the USER area */
-			if ((addr & 3) || addr < 0 || 
-			    addr > sizeof(struct user) - 3)
-				return -EIO;
+		case PTRACE_POKEUSR: {
+			struct pt_regs *regs;
+			int res = 0;
 
-			addr = addr >> 2; /* temporary hack. */
+			regs = (struct pt_regs *)
+				(child->tss.ksp - sizeof(struct pt_regs));
+			if(addr < 32 && addr >= 0) {
+				regs->regs[addr] = data;
+			} else if(addr >= 32 && addr < 64) {
+				unsigned long long *fregs;
 
-			if (addr == ORIG_EAX)
-				return -EIO;
-			if (addr == DS || addr == ES ||
-			    addr == FS || addr == GS ||
-			    addr == CS || addr == SS) {
-			    	data &= 0xffff;
-			    	if (data && (data & 3) != 3)
-					return -EIO;
+				/* We don't want to do a FPU operation here. */
+				fregs = (unsigned long long *)
+					&child->tss.fpu.hard.fp_regs[0];
+				fregs[(addr - 32)] = (unsigned long long) data;
+			} else {
+				addr -= 64;
+				switch(addr) {
+				case 0:
+					regs->cp0_epc = data;
+					break;
+				case 3:
+					regs->lo = data;
+					break;
+				case 4:
+					regs->hi = data;
+					break;
+				case 5:
+					child->tss.fpu.hard.control = data;
+					break;
+				default:
+					/* The rest are not allowed. */
+					res = -EIO;
+					break;
+				};
 			}
-			if (addr == EFL) {   /* flags. */
-				data &= FLAG_MASK;
-				data |= get_stack_long(child, EFL*sizeof(long)-MAGICNUMBER)  & ~FLAG_MASK;
-			}
-		  /* Do not allow the user to set the debug register for kernel
-		     address space */
-		  if(addr < 17){
-			  if (put_stack_long(child, sizeof(long)*addr-MAGICNUMBER, data))
-				return -EIO;
-			return 0;
-			};
-
-		  /* We need to be very careful here.  We implicitly
-		     want to modify a portion of the task_struct, and we
-		     have to be selective about what portions we allow someone
-		     to modify. */
-
-		  addr = addr << 2;  /* Convert back again */
-		  if(addr >= (long) &dummy->u_debugreg[0] &&
-		     addr <= (long) &dummy->u_debugreg[7]){
-
-			  if(addr == (long) &dummy->u_debugreg[4]) return -EIO;
-			  if(addr == (long) &dummy->u_debugreg[5]) return -EIO;
-			  if(addr < (long) &dummy->u_debugreg[4] &&
-			     ((unsigned long) data) >= 0xbffffffd) return -EIO;
-			  
-			  if(addr == (long) &dummy->u_debugreg[7]) {
-				  data &= ~DR_CONTROL_RESERVED;
-				  for(i=0; i<4; i++)
-					  if ((0x5f54 >> ((data >> (16 + 4*i)) & 0xf)) & 1)
-						  return -EIO;
-			  };
-
-			  addr -= (long) &dummy->u_debugreg;
-			  addr = addr >> 2;
-			  child->debugreg[addr] = data;
-			  return 0;
-		  };
-		  return -EIO;
+			goto out;
+		}
 
 		case PTRACE_SYSCALL: /* continue and stop at next (return from) syscall */
 		case PTRACE_CONT: { /* restart after signal. */
-			long tmp;
-
-			if ((unsigned long) data > NSIG)
-				return -EIO;
+			if ((unsigned long) data > NSIG) {
+				res = -EIO;
+				goto out;
+			}
 			if (request == PTRACE_SYSCALL)
 				child->flags |= PF_TRACESYS;
 			else
 				child->flags &= ~PF_TRACESYS;
 			child->exit_code = data;
 			wake_up_process(child);
-	/* make sure the single step bit is not set. */
-			tmp = get_stack_long(child, sizeof(long)*EFL-MAGICNUMBER) & ~TRAP_FLAG;
-			put_stack_long(child, sizeof(long)*EFL-MAGICNUMBER,tmp);
-			return 0;
+			res = data;
+			goto out;
 		}
 
 /*
@@ -448,53 +449,36 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
  * exit.
  */
 		case PTRACE_KILL: {
-			long tmp;
-
-			if (child->state == TASK_ZOMBIE)	/* already dead */
-				return 0;
-			wake_up_process(child);
-			child->exit_code = SIGKILL;
-	/* make sure the single step bit is not set. */
-			tmp = get_stack_long(child, sizeof(long)*EFL-MAGICNUMBER) & ~TRAP_FLAG;
-			put_stack_long(child, sizeof(long)*EFL-MAGICNUMBER,tmp);
-			return 0;
-		}
-
-		case PTRACE_SINGLESTEP: {  /* set the trap flag. */
-			long tmp;
-
-			if ((unsigned long) data > NSIG)
-				return -EIO;
-			child->flags &= ~PF_TRACESYS;
-			tmp = get_stack_long(child, sizeof(long)*EFL-MAGICNUMBER) | TRAP_FLAG;
-			put_stack_long(child, sizeof(long)*EFL-MAGICNUMBER,tmp);
-			wake_up_process(child);
-			child->exit_code = data;
-	/* give it a chance to run. */
-			return 0;
+			if (child->state != TASK_ZOMBIE) {
+				wake_up_process(child);
+				child->exit_code = SIGKILL;
+			}
+			res = 0;
+			goto out;
 		}
 
 		case PTRACE_DETACH: { /* detach a process that was attached. */
-			long tmp;
-
-			if ((unsigned long) data > NSIG)
-				return -EIO;
+			if ((unsigned long) data > NSIG) {
+				res = -EIO;
+				goto out;
+			}
 			child->flags &= ~(PF_PTRACED|PF_TRACESYS);
 			wake_up_process(child);
 			child->exit_code = data;
 			REMOVE_LINKS(child);
 			child->p_pptr = child->p_opptr;
 			SET_LINKS(child);
-			/* make sure the single step bit is not set. */
-			tmp = get_stack_long(child, sizeof(long)*EFL-MAGICNUMBER) & ~TRAP_FLAG;
-			put_stack_long(child, sizeof(long)*EFL-MAGICNUMBER,tmp);
-			return 0;
+			res = 0;
+			goto out;
 		}
 
 		default:
-			return -EIO;
+			res = -EIO;
+			goto out;
 	}
-#endif
+out:
+	unlock_kernel();
+	return res;
 }
 
 asmlinkage void syscall_trace(void)
@@ -511,7 +495,10 @@ asmlinkage void syscall_trace(void)
 	 * for normal use.  strace only continues with a signal if the
 	 * stopping signal is not SIGTRAP.  -brl
 	 */
-	if (current->exit_code)
+	if (current->exit_code) {
+		spin_lock_irq(&current->sigmask_lock);
 		current->signal |= (1 << (current->exit_code - 1));
+		spin_unlock_irq(&current->sigmask_lock);
+	}
 	current->exit_code = 0;
 }

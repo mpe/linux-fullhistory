@@ -1,7 +1,7 @@
 /*
  * random.c -- A strong random number generator
  *
- * Version 1.02, last modified 15-Apr-97
+ * Version 1.03, last modified 26-Apr-97
  * 
  * Copyright Theodore Ts'o, 1994, 1995, 1996, 1997.  All rights reserved.
  *
@@ -1335,11 +1335,15 @@ struct file_operations urandom_fops = {
  * starting point for each pair of TCP endpoints.  This defeats
  * attacks which rely on guessing the initial TCP sequence number.
  * This algorithm was suggested by Steve Bellovin.
+ *
+ * Using a very strong hash was taking an appreciable amount of the total
+ * TCP connection establishment time, so this is a weaker hash,
+ * compensated for by changing the secret periodically.
  */
 
 /* F, G and H are basic MD4 functions: selection, majority, parity */
-#define F(x, y, z) (((x) & (y)) | ((~x) & (z)))
-#define G(x, y, z) (((x) & (y)) | ((x) & (z)) | ((y) & (z)))
+#define F(x, y, z) ((z) ^ ((x) & ((y) ^ (z))))
+#define G(x, y, z) (((x) & (y)) + (((x) ^ (y)) & (z)))
 #define H(x, y, z) ((x) ^ (y) ^ (z))
 
 #define ROTL(n,X)  ( ( ( X ) << n ) | ( ( X ) >> ( 32 - n ) ) )
@@ -1357,9 +1361,9 @@ struct file_operations urandom_fops = {
    (a) = ROTL ((s), (a));}
 
 /*
- * Basic cut-down MD4 transform
+ * Basic cut-down MD4 transform.  Returns only 32 bits of result.
  */
-static void halfMD4Transform (__u32 buf[4], __u32 in[8])
+static __u32 halfMD4Transform (__u32 const buf[4], __u32 const in[8])
 {
 	__u32	a = buf[0], b = buf[1], c = buf[2], d = buf[3];
 
@@ -1376,77 +1380,141 @@ static void halfMD4Transform (__u32 buf[4], __u32 in[8])
 	/* Round 2 */
 	GG (a, b, c, d, in[ 0],  3);
 	GG (d, a, b, c, in[ 4],  5);
-	GG (a, b, c, d, in[ 1],  9);
-	GG (d, a, b, c, in[ 5], 13);
+	GG (c, d, a, b, in[ 1],  9);
+	GG (b, c, d, a, in[ 5], 13);
 	GG (a, b, c, d, in[ 2],  3);
 	GG (d, a, b, c, in[ 6],  5);
-	GG (a, b, c, d, in[ 3],  9);
-	GG (d, a, b, c, in[ 7], 13);
+	GG (c, d, a, b, in[ 3],  9);
+	GG (b, c, d, a, in[ 7], 13);
 
 	/* Round 3 */
 	HH (a, b, c, d, in[ 0],  3);
-	HH (c, d, a, b, in[ 4],  9);
-	HH (a, b, c, d, in[ 2], 11);
-	HH (c, d, a, b, in[ 6], 15);
+	HH (d, a, b, c, in[ 4],  9);
+	HH (c, d, a, b, in[ 2], 11);
+	HH (b, c, d, a, in[ 6], 15);
 	HH (a, b, c, d, in[ 1],  3);
-	HH (c, d, a, b, in[ 5],  9);
-	HH (a, b, c, d, in[ 3], 11);
-	HH (c, d, a, b, in[ 7], 15);
+	HH (d, a, b, c, in[ 5],  9);
+	HH (c, d, a, b, in[ 3], 11);
+	HH (b, c, d, a, in[ 7], 15);
 
-	buf[0] += a;
-	buf[1] += b;
-	buf[2] += c;
-	buf[3] += d;
+	return buf[1] + b;	/* "most hashed" word */
+	/* Alternative: return sum of all words? */
 }
 
+/* This should not be decreased so low that ISNs wrap too fast. */
 #define REKEY_INTERVAL	300
+#define HASH_BITS 24
 
 __u32 secure_tcp_sequence_number(__u32 saddr, __u32 daddr,
 				 __u16 sport, __u16 dport)
 {
 	static __u32	rekey_time = 0;
+	static __u32	count = 0;
 	static __u32	secret[12];
-	static char	count = 0;
 	struct timeval 	tv;
-	__u32 		tmp[12];
 	__u32		seq;
 
 	/*
-	 * Pick a random secret every REKEY_INTERVAL seconds
+	 * Pick a random secret every REKEY_INTERVAL seconds.
 	 */
-	do_gettimeofday(&tv);
+	do_gettimeofday(&tv);	/* We need the usecs below... */
+
 	if (!rekey_time ||
 	    (tv.tv_sec - rekey_time) > REKEY_INTERVAL) {
-		get_random_bytes(&secret, sizeof(secret));
 		rekey_time = tv.tv_sec;
-		count++;
+		/* First three words are overwritten below. */
+		get_random_bytes(&secret+3, sizeof(secret)-12);
+		count = (tv.tv_sec/REKEY_INTERVAL) << HASH_BITS;
 	}
 
-	memcpy(tmp, secret, sizeof(tmp));
 	/*
-	 * Pick a unique starting offset for each
-	 * TCP connection endpoints (saddr, daddr, sport, dport)
+	 *  Pick a unique starting offset for each TCP connection endpoints
+	 *  (saddr, daddr, sport, dport).
+	 *  Note that the words are placed into the first words to be
+	 *  mixed in with the halfMD4.  This is because the starting
+	 *  vector is also a random secret (at secret+8), and further
+	 *  hashing fixed data into it isn't going to improve anything,
+	 *  so we should get started with the variable data.
 	 */
-	tmp[8]=saddr;
-	tmp[9]=daddr;
-	tmp[10]=(sport << 16) + dport;
-	halfMD4Transform(tmp, tmp+4);
-	
+	secret[0]=saddr;
+	secret[1]=daddr;
+	secret[2]=(sport << 16) + dport;
+
+	seq = (halfMD4Transform(secret+8, secret) &
+	       ((1<<HASH_BITS)-1)) + (count << HASH_BITS);
+
 	/*
 	 *	As close as possible to RFC 793, which
 	 *	suggests using a 250kHz clock.
-	 *	Further reading shows this assumes 2MB/s networks.
-	 *	For 10MB/s ethernet, a 1MHz clock is appropriate.
+	 *	Further reading shows this assumes 2Mb/s networks.
+	 *	For 10Mb/s ethernet, a 1MHz clock is appropriate.
 	 *	That's funny, Linux has one built in!  Use it!
+	 *	(Networks are faster now - should this be increased?)
 	 */
-	seq = (tmp[1]&0xFFFFFF) + (tv.tv_usec+tv.tv_sec*1000000) +
-		(count << 24);
+	seq += tv.tv_usec + tv.tv_sec*1000000;
 #if 0
 	printk("init_seq(%lx, %lx, %d, %d) = %d\n",
 	       saddr, daddr, sport, dport, seq);
 #endif
-	return (seq);
+	return seq;
 }
+
+#ifdef CONFIG_SYN_COOKIES
+/*
+ * Secure SYN cookie computation. This is the algorithm worked out by
+ * Dan Bernstein and Eric Schenk.
+ *
+ * For linux I implement the 1 minute counter by looking at the jiffies clock.
+ * The count is passed in as a parameter;
+ *
+ */
+__u32 secure_tcp_syn_cookie(__u32 saddr, __u32 daddr,
+		 __u16 sport, __u16 dport, __u32 sseq, __u32 count)
+{
+	static int	is_init = 0;
+	static __u32	secret[2][16];
+	__u32 		tmp[16];
+	__u32		seq;
+
+	/*
+	 * Pick two random secret the first time we open a TCP connection.
+	 */
+	if (is_init == 0) {
+		get_random_bytes(&secret[0], sizeof(secret[0]));
+		get_random_bytes(&secret[1], sizeof(secret[1]));
+		is_init = 1;
+	}
+
+	/*
+	 * Compute the secure sequence number.
+	 * The output should be:
+   	 *   MD5(sec1,saddr,sport,daddr,dport,sec1) + their sequence number
+         *      + (count * 2^24)
+	 *      + (MD5(sec2,saddr,sport,daddr,dport,count,sec2) % 2^24).
+	 * Where count increases every minute by 1.
+	 */
+
+	memcpy(tmp, secret[0], sizeof(tmp));
+	tmp[8]=saddr;
+	tmp[9]=daddr;
+	tmp[10]=(sport << 16) + dport;
+	HASH_TRANSFORM(tmp, tmp);
+	seq = tmp[1];
+
+	memcpy(tmp, secret[1], sizeof(tmp));
+	tmp[8]=saddr;
+	tmp[9]=daddr;
+	tmp[10]=(sport << 16) + dport;
+	tmp[11]=count;	/* minute counter */
+	HASH_TRANSFORM(tmp, tmp);
+
+	seq += sseq + (count << 24) + (tmp[1] & 0x00ffffff);
+
+	/* Zap lower 3 bits to leave room for the MSS representation */
+	return (seq & 0xfffff8);
+}
+#endif
+
 
 #ifdef RANDOM_BENCHMARK
 /*

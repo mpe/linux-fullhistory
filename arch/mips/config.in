@@ -3,62 +3,102 @@
 # see the Configure script.
 #
 mainmenu_name "Linux Kernel Configuration"
-  
-mainmenu_option next_comment
-comment 'Machine setup'
 
+mainmenu_option next_comment
+comment 'Code maturity level options'
+bool 'Prompt for development and/or incomplete code/drivers' CONFIG_EXPERIMENTAL
+endmenu
+
+mainmenu_option next_comment
+comment 'Machine selection'
 bool 'Support for Acer PICA 1 chipset' CONFIG_ACER_PICA_61
-bool 'Support for DECstation' CONFIG_DECSTATION
-bool 'Support for Deskstation RPC44' CONFIG_DESKSTATION_RPC44
-bool 'Support for Deskstation Tyne' CONFIG_DESKSTATION_TYNE
-bool 'Support for Mips Magnum 3000' CONFIG_MIPS_MAGNUM_3000
+if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+  bool 'Support for Algorithmics P4032' CONFIG_ALGOR_P4032
+  bool 'Support for DECstation' CONFIG_DECSTATION
+  bool 'Support for Deskstation RPC44' CONFIG_DESKSTATION_RPC44
+  bool 'Support for Deskstation Tyne' CONFIG_DESKSTATION_TYNE
+  bool 'Support for Mips Magnum 3000' CONFIG_MIPS_MAGNUM_3000
+fi
 bool 'Support for Mips Magnum 4000' CONFIG_MIPS_MAGNUM_4000
-bool 'Support for Olivetti M700' CONFIG_OLIVETTI_M700
-if [ "$CONFIG_ACER_PICA_61" = "y" -o \
-     "$CONFIG_MIPS_MAGNUM_4000" = "y" -o \
+bool 'Support for Olivetti M700-10' CONFIG_OLIVETTI_M700
+if [ "$CONFIG_MIPS_MAGNUM_4000" = "y" -o \
      "$CONFIG_OLIVETTI_M700" = "y" ]; then
+       define_bool CONFIG_VIDEO_G364 y
+fi
+if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+  bool 'Support for SGI workstations' CONFIG_SGI
+fi
+bool 'Support for SNI RM200 PCI' CONFIG_SNI_RM200_PCI
+if [ "$CONFIG_DESKSTATION_RPC44" = "y" -o \
+     "$CONFIG_DESKSTATION_TYNE" = "y" ]; then
+	define_bool CONFIG_MIPS_ARC y
+fi
+if [ "$CONFIG_ACER_PICA_61" = "y" -o \
+     "$CONFIG_OLIVETTI_M700" = "y" -o \
+     "$CONFIG_MIPS_MAGNUM_4000" = "y" ]; then
 	define_bool CONFIG_MIPS_JAZZ y
 fi
+unset CONFIG_PCI
+if [ "$CONFIG_SNI_RM200_PCI" = "y" -o \
+     "$CONFIG_ALGOR_P4032" = "y" ]; then
+	define_bool CONFIG_PCI y
+fi
+endmenu
+
+mainmenu_option next_comment
+comment 'CPU selection'
 
 choice 'CPU type' \
 	"R3000 CONFIG_CPU_R3000	\
 	 R6000 CONFIG_CPU_R6000	\
+	 R4300 CONFIG_CPU_R4300	\
 	 R4x00 CONFIG_CPU_R4X00	\
-	 R4600 CONFIG_CPU_R4600	\
+	 R5000 CONFIG_CPU_R5000	\
 	 R8000 CONFIG_CPU_R8000	\
 	 R10000 CONFIG_CPU_R10000" R4x00
-if [ "$CONFIG_CPU_R3000" = "y" -o \
-     "$CONFIG_CPU_R6000" = "y" -o \
-     "$CONFIG_CPU_R4X00" = "y" -o \
-     "$CONFIG_CPU_R4600" = "y" -o \
-     "$CONFIG_CPU_R8000" = "y" ]; then
-	define_bool CONFIG_TLB_SHUTDOWN y
-fi
+endmenu
 
-define_bool CONFIG_BINFMT_ELF y
-define_bool CONFIG_BINFMT_AOUT y
-bool 'Compile the kernel into the ELF object format' CONFIG_ELF_KERNEL
-if [ "$CONFIG_ELF_KERNEL" = "y" ]; then
-  bool 'Is your ELF compiler an extra compiler' CONFIG_EXTRA_ELF_COMPILER
+mainmenu_option next_comment
+comment 'General setup'
+if [ "$CONFIG_DECSTATION" = "y" ]; then
+  bool 'Compile the kernel into the ECOFF object format' CONFIG_ECOFF_KERNEL
+  define_bool CONFIG_CPU_LITTLE_ENDIAN y
+else
+  define_bool CONFIG_ELF_KERNEL y
+  bool 'Generate little endian code' CONFIG_CPU_LITTLE_ENDIAN
 fi
-bool 'Generate little endian code' CONFIG_CPU_LITTLE_ENDIAN
+if [ "$CONFIG_CPU_LITTLE_ENDIAN" = "n" ]; then
+  define_bool CONFIG_BINFMT_IRIX y
+fi
+define_bool CONFIG_BINFMT_ELF y
+define_bool CONFIG_BINFMT_AOUT n
+if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+  tristate 'Kernel support for JAVA binaries' CONFIG_BINFMT_JAVA
+fi
 bool 'Networking support' CONFIG_NET
-#bool 'PCI bios support' CONFIG_PCI
-#if [ "$CONFIG_PCI" = "y" ]; then
-#  if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
-#    bool '   PCI bridge optimization (experimental)' CONFIG_PCI_OPTIMIZE
-#  fi
-#fi
 bool 'System V IPC' CONFIG_SYSVIPC
 bool 'Sysctl support' CONFIG_SYSCTL
+
+if [ "$CONFIG_SGI" != "y" ]; then
+  tristate 'Parallel port support' CONFIG_PNP_PARPORT
+fi
+
 endmenu
 
 mainmenu_option next_comment
 comment 'Loadable module support'
-bool 'Set version information on all symbols for modules' CONFIG_MODVERSIONS
-endmenu
+bool 'Enable loadable module support' CONFIG_MODULES
+if [ "$CONFIG_MODULES" = "y" ]; then
+  bool 'Set version information on all symbols for modules' CONFIG_MODVERSIONS
+  bool 'Kernel daemon support (e.g. autoload of modules)' CONFIG_KERNELD
+fi
 
-source drivers/block/Config.in
+#
+# All SGI block devices are SCSI based AFAIK. -davem
+#
+if [ "$CONFIG_SGI" != "y" ]; then
+  source drivers/block/Config.in
+fi
 
 if [ "$CONFIG_NET" = "y" ]; then
   source net/Config.in
@@ -70,7 +110,27 @@ comment 'SCSI support'
 tristate 'SCSI support' CONFIG_SCSI
 
 if [ "$CONFIG_SCSI" != "n" ]; then
-  source drivers/scsi/Config.in
+	if [ "$CONFIG_SGI" = "y" ]; then
+		comment 'SCSI support type (disk, tape, CDrom)'
+
+		dep_tristate 'SCSI disk support' CONFIG_BLK_DEV_SD $CONFIG_SCSI
+		dep_tristate 'SCSI tape support' CONFIG_CHR_DEV_ST $CONFIG_SCSI
+		dep_tristate 'SCSI CDROM support' CONFIG_BLK_DEV_SR $CONFIG_SCSI
+		dep_tristate 'SCSI generic support' CONFIG_CHR_DEV_SG $CONFIG_SCSI
+
+		comment 'Some SCSI devices (e.g. CD jukebox) support multiple LUNs'
+
+		bool 'Probe all LUNs on each SCSI device' CONFIG_SCSI_MULTI_LUN
+
+		bool 'Verbose SCSI error reporting' CONFIG_SCSI_CONSTANTS
+
+		#mainmenu_option next_comment
+		comment 'SCSI low-level drivers'
+
+		dep_tristate 'SGI wd93 Scsi Driver' CONFIG_SCSI_SGIWD93 $CONFIG_SCSI
+	else
+		source drivers/scsi/Config.in
+	fi
 fi
 endmenu
 
@@ -80,38 +140,76 @@ if [ "$CONFIG_NET" = "y" ]; then
 
   bool 'Network device support' CONFIG_NETDEVICES
   if [ "$CONFIG_NETDEVICES" = "y" ]; then
-    source drivers/net/Config.in
+    if [ "$CONFIG_SGI" != "y" ]; then
+	source drivers/net/Config.in
+    else
+	tristate 'Dummy net driver support' CONFIG_DUMMY
+	tristate 'SLIP (serial line) support' CONFIG_SLIP
+	if [ "$CONFIG_SLIP" != "n" ]; then
+	  bool ' CSLIP compressed headers' CONFIG_SLIP_COMPRESSED
+	  bool ' Keepalive and linefill' CONFIG_SLIP_SMART
+	fi
+	tristate 'PPP (point-to-point) support' CONFIG_PPP
+	if [ ! "$CONFIG_PPP" = "n" ]; then
+	  comment 'CCP compressors for PPP are only built as modules.'
+	fi
+	bool 'SGI Seeq ethernet controller support' CONFIG_SGISEEQ
+    fi
   fi
   endmenu
 fi
 
-mainmenu_option next_comment
-comment 'CD-ROM drivers (not for SCSI or IDE/ATAPI drives)'
+if [ "$CONFIG_SGI" != "y" ]; then
+	mainmenu_option next_comment
+	comment 'ISDN subsystem'
 
-bool 'Support non-SCSI/IDE/ATAPI drives' CONFIG_CD_NO_IDESCSI
-if [ "$CONFIG_CD_NO_IDESCSI" != "n" ]; then
-  source drivers/cdrom/Config.in
+	tristate 'ISDN support' CONFIG_ISDN
+	if [ "$CONFIG_ISDN" != "n" ]; then
+	  source drivers/isdn/Config.in
+	fi
+	endmenu
+
+	mainmenu_option next_comment
+	comment 'CD-ROM drivers (not for SCSI or IDE/ATAPI drives)'
+
+	bool 'Support non-SCSI/IDE/ATAPI drives' CONFIG_CD_NO_IDESCSI
+	if [ "$CONFIG_CD_NO_IDESCSI" != "n" ]; then
+	  source drivers/cdrom/Config.in
+	fi
+	endmenu
 fi
-endmenu
 
 source fs/Config.in
 
-source drivers/char/Config.in
-bool 'Standard serial device support' CONFIG_SERIAL n
+if [ "$CONFIG_SGI" != "y" ]; then
+  source drivers/char/Config.in
 
-mainmenu_option next_comment
-comment 'Sound'
+  mainmenu_option next_comment
+  comment 'Sound'
 
-tristate 'Sound card support' CONFIG_SOUND
-if [ "$CONFIG_SOUND" != "n" ]; then
-  source drivers/sound/Config.in
+  tristate 'Sound card support' CONFIG_SOUND
+  if [ "$CONFIG_SOUND" != "n" ]; then
+    source drivers/sound/Config.in
+  fi
+  endmenu
+else
+  comment 'SGI Character Devices'
+  bool 'Virtual terminal' CONFIG_VT
+  if [ "$CONFIG_VT" = "y" ]; then
+    bool 'Console on virtual terminal' CONFIG_VT_CONSOLE
+  fi
+  tristate 'PS/2 mouse (aka "auxiliary device") support' CONFIG_PSMOUSE
+  bool 'SGI Zilog85C30 serial support' CONFIG_SGI_SERIAL
+  if [ "$CONFIG_SGI_SERIAL" != "n" ]; then
+    define_bool CONFIG_SERIAL y
+  fi
 fi
-endmenu
 
 mainmenu_option next_comment
 comment 'Kernel hacking'
 
 #bool 'Debug kmalloc/kfree' CONFIG_DEBUG_MALLOC
+bool 'Remote GDB kernel debugging' CONFIG_REMOTE_DEBUG
 bool 'Kernel profiling support' CONFIG_PROFILE
 if [ "$CONFIG_PROFILE" = "y" ]; then
   int ' Profile shift count' CONFIG_PROFILE_SHIFT 2

@@ -10,6 +10,7 @@
 #ifndef __ASM_MIPS_FLOPPY_H
 #define __ASM_MIPS_FLOPPY_H
 
+#include <linux/config.h>
 #include <asm/bootinfo.h>
 #include <asm/jazz.h>
 #include <asm/jazzdma.h>
@@ -30,7 +31,6 @@
 #define fd_get_dma_residue()		feature->fd_get_dma_residue()
 #define fd_enable_irq()			feature->fd_enable_irq()
 #define fd_disable_irq()		feature->fd_disable_irq()
-#define fd_cacheflush(addr, size)	feature->fd_cacheflush((void *)addr, size)
 #define fd_request_irq()        request_irq(FLOPPY_IRQ, floppy_interrupt, \
 					    SA_INTERRUPT|SA_SAMPLE_RANDOM, \
 				            "floppy", NULL)
@@ -38,7 +38,21 @@
 
 #define MAX_BUFFER_SECTORS 24
 
-static unsigned long mips_dma_mem_alloc(unsigned long size)
+/* Pure 2^n version of get_order */
+extern __inline__ int __get_order(unsigned long size)
+{
+	int order;
+
+	size = (size-1) >> (PAGE_SHIFT-1);
+	order = -1;
+	do {
+		size >>= 1;
+		order++;
+	} while (size);
+	return order;
+}
+
+extern __inline__ unsigned long mips_dma_mem_alloc(unsigned long size)
 {
 	int order = __get_order(size);
 	unsigned long mem;
@@ -46,38 +60,36 @@ static unsigned long mips_dma_mem_alloc(unsigned long size)
 	mem = __get_dma_pages(GFP_KERNEL,order);
 	if(!mem)
 		return 0;
-        if (boot_info.machtype == MACH_ACER_PICA_61 ||
-            boot_info.machtype == MACH_MIPS_MAGNUM_4000 ||
-            boot_info.machtype == MACH_OLIVETTI_M700)
+#ifdef CONFIG_MIPS_JAZZ
+        if (mips_machgroup == MACH_GROUP_JAZZ)
 		vdma_alloc(PHYSADDR(mem), size);
+#endif
 	return mem;
 }
 
-static void mips_dma_mem_free(unsigned long addr, unsigned long size)
+extern __inline__ void mips_dma_mem_free(unsigned long addr, unsigned long size)
 {       
-        if (boot_info.machtype == MACH_ACER_PICA_61 ||
-            boot_info.machtype == MACH_MIPS_MAGNUM_4000 ||
-            boot_info.machtype == MACH_OLIVETTI_M700)
+#ifdef CONFIG_MIPS_JAZZ
+        if (mips_machgroup == MACH_GROUP_JAZZ)
 		vdma_free(PHYSADDR(addr));
+#endif
 	free_pages(addr, __get_order(size));	
 }
 
-#define fd_dma_mem_alloc(mem,size) mips_dma_mem_alloc(mem,size)
-#define fd_dma_mem_free(mem) mips_dma_mem_free(mem)
+#define fd_dma_mem_alloc(size) mips_dma_mem_alloc(size)
+#define fd_dma_mem_free(mem,size) mips_dma_mem_free(mem,size)
 
 /*
  * And on Mips's the CMOS info fails also ...
  *
  * FIXME: This information should come from the ARC configuration tree
- *        or wherever a particular machine has stored this ...
+ *        or whereever a particular machine has stored this ...
  */
 #define FLOPPY0_TYPE 4		/* this is wrong for the Olli M700, but who cares... */
 #define FLOPPY1_TYPE 0
 
-#define FDC1			((boot_info.machtype == MACH_ACER_PICA_61 || \
-				boot_info.machtype == MACH_MIPS_MAGNUM_4000 || \
-				boot_info.machtype == MACH_OLIVETTI_M700) ? \
-				0xe0003000 : 0x3f0)
+#define FDC1			((mips_machgroup == MACH_GROUP_JAZZ) ? \
+				JAZZ_FDC_BASE : 0x3f0)
 static int FDC2=-1;
 
 #define N_FDC 1			/* do you *really* want a second controller? */

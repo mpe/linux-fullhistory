@@ -1,4 +1,4 @@
-/*  $Id: init.c,v 1.29 1997/05/27 06:28:13 davem Exp $
+/*  $Id: init.c,v 1.30 1997/06/06 10:56:21 jj Exp $
  *  arch/sparc64/mm/init.c
  *
  *  Copyright (C) 1996,1997 David S. Miller (davem@caip.rutgers.edu)
@@ -440,9 +440,9 @@ void sparc_ultra_mapioaddr(unsigned long physaddr, unsigned long virt_addr,
 	physaddr &= PAGE_MASK;
 
 	if(rdonly)
-		pte = mk_pte_phys(physaddr, __pgprot(pg_iobits));
+		pte = mk_pte_phys(physaddr, __pgprot(pg_iobits | __PRIV_BITS));
 	else
-		pte = mk_pte_phys(physaddr, __pgprot(pg_iobits | __DIRTY_BITS));
+		pte = mk_pte_phys(physaddr, __pgprot(pg_iobits | __DIRTY_BITS | __PRIV_BITS));
 
 	set_pte(ptep, pte);
 }

@@ -1,4 +1,4 @@
-/* $Id: bwtwo.c,v 1.16 1997/06/04 08:27:26 davem Exp $
+/* $Id: bwtwo.c,v 1.17 1997/06/06 10:56:28 jj Exp $
  * bwtwo.c: bwtwo console driver
  *
  * Copyright (C) 1996 Miguel de Icaza (miguel@nuclecu.unam.mx)
@@ -74,7 +74,8 @@ static int
 bwtwo_mmap (struct inode *inode, struct file *file, struct vm_area_struct *vma,
 	    long base, fbinfo_t *fb)
 {
-	uint size, map_offset, r;
+	uint size, r;
+	unsigned long map_offset;
 	int map_size;
 	
 	map_size = size = vma->vm_end - vma->vm_start;

@@ -408,7 +408,7 @@ int ncp_current_malloced;
 
 static struct file_system_type ncp_fs_type = {
 	"ncpfs",
-	FS_NO_DCACHE,
+	0 /* FS_NO_DCACHE doesn't work correctly */,
         ncp_read_super,
 	NULL
 };

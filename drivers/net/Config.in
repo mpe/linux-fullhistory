@@ -15,6 +15,9 @@ tristate 'EQL (serial line load balancing) support' CONFIG_EQUALIZER
 #
 bool 'Ethernet (10 or 100Mbit)' CONFIG_NET_ETHERNET
 if [ "$CONFIG_NET_ETHERNET" = "y" ]; then
+  if [ "$CONFIG_MIPS_JAZZ" = "y" ]; then
+    bool 'MIPS JAZZ onboard SONIC ethernet support' CONFIG_MIPS_JAZZ_SONIC
+  fi
   bool '3COM cards' CONFIG_NET_VENDOR_3COM
   if [ "$CONFIG_NET_VENDOR_3COM" = "y" ]; then
     tristate '3c501 support' CONFIG_EL1
@@ -110,7 +113,12 @@ fi
 #
 if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
   if [ "$CONFIG_ATALK" != "n" ]; then
-    tristate 'LocalTalk PC support' CONFIG_LTPC
+    tristate 'Apple/Farallon LocalTalk PC support' CONFIG_LTPC
+    tristate 'COPS LocalTalk PC support' CONFIG_COPS
+    if [ "$CONFIG_COPS" != "n" ]; then
+	bool 'Dayna firmware support' CONFIG_COPS_DAYNA
+	bool 'Tangent firmware support' CONFIG_COPS_TANGENT
+    fi
   fi
 fi
 

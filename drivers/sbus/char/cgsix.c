@@ -1,4 +1,4 @@
-/* $Id: cgsix.c,v 1.30 1997/06/04 08:27:28 davem Exp $
+/* $Id: cgsix.c,v 1.32 1997/06/14 15:26:08 davem Exp $
  * cgsix.c: cgsix frame buffer driver
  *
  * Copyright (C) 1996 Miguel de Icaza (miguel@nuclecu.unam.mx)
@@ -233,7 +233,7 @@ cg6_mmap (struct inode *inode, struct file *file, struct vm_area_struct *vma,
 	  long base, fbinfo_t *fb)
 {
 	uint size, page, r, map_size;
-	uint map_offset = 0;
+	unsigned long map_offset = 0;
 	
 	size = vma->vm_end - vma->vm_start;
         if (vma->vm_offset & ~PAGE_MASK)
@@ -247,7 +247,7 @@ cg6_mmap (struct inode *inode, struct file *file, struct vm_area_struct *vma,
 		switch (vma->vm_offset+page){
 		case CG6_TEC:
 			map_size = PAGE_SIZE;
-			map_offset = get_phys ((unsigned long)fb->info.cg6.tec);
+			map_offset = get_phys ((unsigned long)fb->info.cg6.tec) & PAGE_MASK;
 			break;
 		case CG6_FBC:
 			map_size = PAGE_SIZE;
@@ -259,18 +259,25 @@ cg6_mmap (struct inode *inode, struct file *file, struct vm_area_struct *vma,
 			break;
 		case CG6_THC:
 			map_size = PAGE_SIZE;
-			map_offset = get_phys ((unsigned long)fb->info.cg6.thc);
+			map_offset = get_phys ((unsigned long)fb->info.cg6.thc) & PAGE_MASK;
 			break;
 		case CG6_BTREGS:
 			map_size = PAGE_SIZE;
 			map_offset = get_phys ((unsigned long)fb->info.cg6.bt);
 			break;
+
+		/* For Ultra, make sure the following two are right.
+		 * The above two happen to work out (for example FBC and
+		 * TEC will get mapped by one I/O page mapping because
+		 * of the 8192 byte page size, same for FHC/THC.  -DaveM
+		 */
+
 		case CG6_DHC:
-			map_size = PAGE_SIZE * 40;
+			map_size = /* PAGE_SIZE * 40 */ (4096 * 40);
 			map_offset = get_phys ((unsigned long)fb->info.cg6.dhc);
 			break;
 		case CG6_ROM:
-			map_size = PAGE_SIZE * 16;
+			map_size = /* PAGE_SIZE * 16 */ (4096 * 16);
 			map_offset = get_phys ((unsigned long)fb->info.cg6.rom);
 			break;
 		case CG6_RAM:
@@ -449,14 +456,22 @@ __initfunc(void cg6_setup (fbinfo_t *fb, int slot, u32 cg6, int cg6_io))
 		 sizeof (struct bt_regs), "cgsix_dac", cg6_io, 0);
 	cg6info->fhc = sparc_alloc_io (cg6+CG6_FHC_OFFSET, 0,
 		 sizeof (int), "cgsix_fhc", cg6_io, 0);
+#if PAGE_SHIFT <= 12		 
 	cg6info->thc = sparc_alloc_io (cg6+CG6_THC_OFFSET, 0,
 		 sizeof (struct cg6_thc), "cgsix_thc", cg6_io, 0);
-	cg6info->tec = sparc_alloc_io (cg6+CG6_TEC_OFFSET, 0,
-		 sizeof (struct cg6_tec), "cgsix_tec", cg6_io, 0);
-	cg6info->dhc = sparc_alloc_io (cg6+CG6_DHC_OFFSET, 0,
-		 0x40000, "cgsix_dhc", cg6_io, 0);
+#else
+	cg6info->thc = (struct cg6_thc *)(((char *)cg6info->fhc)+0x1000);
+#endif
 	cg6info->fbc = sparc_alloc_io (cg6+CG6_FBC_OFFSET, 0,
 		 0x1000, "cgsix_fbc", cg6_io, 0);
+#if PAGE_SHIFT <= 12		 
+	cg6info->tec = sparc_alloc_io (cg6+CG6_TEC_OFFSET, 0,
+		 sizeof (struct cg6_tec), "cgsix_tec", cg6_io, 0);
+#else
+	cg6info->tec = (struct cg6_tec *)(((char *)cg6info->fbc)+0x1000);
+#endif
+	cg6info->dhc = sparc_alloc_io (cg6+CG6_DHC_OFFSET, 0,
+		 0x40000, "cgsix_dhc", cg6_io, 0);
 	cg6info->rom = sparc_alloc_io (cg6+CG6_ROM_OFFSET, 0,
 		 0x10000, "cgsix_rom", cg6_io, 0);
 	if (!fb->base) {

@@ -1,4 +1,4 @@
-/* $Id: system.h,v 1.22 1997/06/01 10:27:28 davem Exp $ */
+/* $Id: system.h,v 1.23 1997/06/16 06:17:06 davem Exp $ */
 #ifndef __SPARC64_SYSTEM_H
 #define __SPARC64_SYSTEM_H
 
@@ -200,15 +200,15 @@ extern __inline__ unsigned long xchg_u64(__volatile__ unsigned long *m,
 {
 	unsigned long temp;
 	__asm__ __volatile__("
-	ldx		[%3], %1
-1:
+	mov		%0, %%g1
+1:	ldx		[%3], %1
 	casx		[%3], %1, %0
 	cmp		%1, %0
 	bne,a,pn	%%xcc, 1b
-	 ldx		[%3], %1
+	 mov		%%g1, %0
 "	: "=&r" (val), "=&r" (temp)
 	: "0" (val), "r" (m)
-	: "cc");
+	: "g1", "cc");
 	return val;
 }
 

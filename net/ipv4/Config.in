@@ -31,6 +31,7 @@ if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
     bool 'IP: ARP daemon support (EXPERIMENTAL)' CONFIG_ARPD
   fi
 fi
+bool 'IP: TCP syncookie support (not enabled per default) ' CONFIG_SYN_COOKIES
 comment '(it is safe to leave these untouched)'
 bool 'IP: PC/TCP compatibility mode' CONFIG_INET_PCTCP
 tristate 'IP: Reverse ARP' CONFIG_INET_RARP

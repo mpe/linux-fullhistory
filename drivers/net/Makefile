@@ -275,6 +275,10 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_SGISEEQ), y)
+L_OBJS += sgiseeq.o
+endif
+
 ifeq ($(CONFIG_HAPPYMEAL),y)
 L_OBJS += sunhme.o
 else
@@ -563,6 +567,14 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_MIPS_JAZZ_SONIC),y)
+L_OBJS += sonic.o
+else
+  ifeq ($(CONFIG_MIPS_JAZZ_SONIC),m)
+    M_OBJS += sonic.o
+  endif
+endif
+
 ifeq ($(CONFIG_ATARILANCE),y)
 L_OBJS += atarilance.o
 else
@@ -648,6 +660,14 @@ L_OBJS += ltpc.o
 else
   ifeq ($(CONFIG_LTPC),m)
   M_OBJS += ltpc.o
+  endif
+endif
+
+ifeq ($(CONFIG_COPS),y)
+L_OBJS += cops.o
+else
+  ifeq ($(CONFIG_COPS),m)
+  M_OBJS += cops.o
   endif
 endif
 

@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_input.c,v 1.52 1997/05/31 12:36:42 freitag Exp $
+ * Version:	$Id: tcp_input.c,v 1.53 1997/06/06 20:38:00 freitag Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -65,6 +65,7 @@ int sysctl_tcp_window_scaling;
 int sysctl_tcp_syncookies; 
 int sysctl_tcp_always_syncookie;
 int sysctl_tcp_max_delay_acks = MAX_DELAY_ACK;
+int sysctl_tcp_stdurg;
 
 static tcp_sys_cong_ctl_t tcp_sys_cong_ctl_f = &tcp_cong_avoid_vanj;
 
@@ -288,7 +289,7 @@ static int tcp_reset(struct sock *sk, struct sk_buff *skb)
  *	FIXME: surely this can be more efficient. -- erics
  */
  
-void tcp_parse_options(struct tcphdr *th, struct tcp_opt *tp)
+void tcp_parse_options(struct tcphdr *th, struct tcp_opt *tp, int no_fancy)
 {
 	unsigned char *ptr;
 	int length=(th->doff*4)-sizeof(struct tcphdr);
@@ -323,21 +324,21 @@ void tcp_parse_options(struct tcphdr *th, struct tcp_opt *tp)
 	  					break;
 					case TCPOPT_WINDOW:
 	  					if(opsize==TCPOLEN_WINDOW && th->syn)
-							if (sysctl_tcp_window_scaling) {
+							if (!no_fancy && sysctl_tcp_window_scaling) {
 								tp->wscale_ok = 1;
 								tp->snd_wscale = *(__u8 *)ptr;
 							}
 						break;
 					case TCPOPT_SACK_PERM:
 	  					if(opsize==TCPOLEN_SACK_PERM && th->syn)
-							if (sysctl_tcp_sack)
+							if (sysctl_tcp_sack && !no_fancy)
 								tp->sack_ok = 1;
 					case TCPOPT_TIMESTAMP:
 	  					if(opsize==TCPOLEN_TIMESTAMP) {
 							/* Cheaper to set again then to
 							 * test syn. Optimize this?
 							 */
-							if (sysctl_tcp_timestamps)
+							if (sysctl_tcp_timestamps && !no_fancy)
 								tp->tstamp_ok = 1;
 							tp->saw_tstamp = 1;
 							tp->rcv_tsval = ntohl(*(__u32 *)ptr);
@@ -345,6 +346,8 @@ void tcp_parse_options(struct tcphdr *th, struct tcp_opt *tp)
 						}
 						break;
 					case TCPOPT_SACK:
+						if (no_fancy) 
+							break; 
 						tp->sacks = (opsize-2)>>3;
 						if (tp->sacks<<3 == opsize-2) {
 							int i;
@@ -385,7 +388,7 @@ static __inline__ int tcp_fast_parse_options(struct tcphdr *th, struct tcp_opt *
 			return 1;
 		}
 	}
-	tcp_parse_options(th,tp);
+	tcp_parse_options(th,tp,0);
 	return 1;
 }
 
@@ -1233,7 +1236,7 @@ static __inline__ void tcp_ack_snd_check(struct sock *sk)
  *	place. We handle URGent data wrong. We have to - as
  *	BSD still doesn't use the correction from RFC961.
  *	For 1003.1g we should support a new option TCP_STDURG to permit
- *	either form.
+ *	either form (or just set the sysctl tcp_stdurg).
  */
  
 static void tcp_check_urg(struct sock * sk, struct tcphdr * th)
@@ -1241,7 +1244,7 @@ static void tcp_check_urg(struct sock * sk, struct tcphdr * th)
 	struct tcp_opt *tp = &(sk->tp_pinfo.af_tcp);
 	u32 ptr = ntohs(th->urg_ptr);
 
-	if (ptr)
+	if (ptr && !sysctl_tcp_stdurg)
 		ptr--;
 	ptr += ntohl(th->seq);
 
@@ -1459,13 +1462,11 @@ int tcp_rcv_state_process(struct sock *sk, struct sk_buff *skb,
 		/* These use the socket TOS.. 
 		 * might want to be the received TOS 
 		 */
-		if(th->ack)
+		if(th->ack)  
 			return 1; /* send reset */
 		
 		if(th->syn) {
-			__u32 isn = tp->af_specific->init_sequence(sk, skb);
-
-			if(tp->af_specific->conn_request(sk, skb, opt, isn) < 0)
+			if(tp->af_specific->conn_request(sk, skb, opt, 0) < 0)
 				return 1;
 
 			/* Now we have several options: In theory there is 
@@ -1531,7 +1532,7 @@ int tcp_rcv_state_process(struct sock *sk, struct sk_buff *skb,
 			tp->fin_seq = skb->seq;
 
 			tcp_set_state(sk, TCP_ESTABLISHED);
-			tcp_parse_options(th,tp);
+			tcp_parse_options(th,tp,0);
 			/* FIXME: need to make room for SACK still */
         		if (tp->wscale_ok == 0) {
                 		tp->snd_wscale = tp->rcv_wscale = 0;
@@ -1574,7 +1575,7 @@ int tcp_rcv_state_process(struct sock *sk, struct sk_buff *skb,
 				 * tcp_connect.
 				 */
 				tcp_set_state(sk, TCP_SYN_RECV);
-				tcp_parse_options(th,tp);
+				tcp_parse_options(th,tp,0);
 				if (tp->saw_tstamp) {
 					tp->ts_recent = tp->rcv_tsval;
 					tp->ts_recent_stamp = jiffies;
@@ -1616,6 +1617,8 @@ int tcp_rcv_state_process(struct sock *sk, struct sk_buff *skb,
                         sk->shutdown = SHUTDOWN_MASK;
 
 			isn = tp->rcv_nxt + 128000;
+			if (isn == 0)  
+				isn++; 
 
 			sk = tp->af_specific->get_sock(skb, th);
 
@@ -1710,8 +1713,10 @@ int tcp_rcv_state_process(struct sock *sk, struct sk_buff *skb,
 				tp->snd_wl1 = skb->seq;
 				tp->snd_wl2 = skb->ack_seq;
 
-			} else
+			} else {
+				SOCK_DEBUG(sk, "bad ack\n");
 				return 1;
+			}
 			break;
 
 		case TCP_FIN_WAIT1:

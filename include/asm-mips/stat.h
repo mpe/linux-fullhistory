@@ -3,7 +3,7 @@
 
 #include <linux/types.h>
 
-struct old_stat {
+struct __old_kernel_stat {
 	unsigned int	st_dev;
 	unsigned int	st_ino;
 	unsigned int	st_mode;
@@ -21,7 +21,7 @@ struct old_stat {
 	unsigned int	st_gen;
 };
 
-struct new_stat {
+struct stat {
 	dev_t		st_dev;
 	long		st_pad1[3];		/* Reserved for network id */
 	ino_t		st_ino;

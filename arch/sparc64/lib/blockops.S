@@ -1,4 +1,4 @@
-/* $Id: blockops.S,v 1.6 1997/05/18 04:16:49 davem Exp $
+/* $Id: blockops.S,v 1.7 1997/06/14 21:27:55 davem Exp $
  * arch/sparc64/lib/blockops.S: UltraSparc block zero optimized routines.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -6,6 +6,8 @@
  */
 
 #include <asm/asi.h>
+
+#undef VIS_BLOCKOPS
 
 	/* Zero out 256 bytes of memory at (buf + offset). */
 #define BLAST_BLOCK(buf, offset)				\
@@ -31,9 +33,9 @@
 	.text
 	.align	4
 
-#if 0
-	.globl		bzero_1page
-bzero_1page:
+#ifdef VIS_BLOCKOPS
+	.globl		__bzero_1page
+__bzero_1page:
 	/* %o0 = buf */
 	mov		%o0, %o1
 	wr		%g0, ASI_BLK_P, %asi
@@ -60,6 +62,36 @@ bzero_1page:
 
 	retl
 	 mov		%o1, %o0
+#else
+#define BZERO_256BYTES(base)						\
+	stx	%g0, [base + 0x00];	stx	%g0, [base + 0x08];	\
+	stx	%g0, [base + 0x10];	stx	%g0, [base + 0x18];	\
+	stx	%g0, [base + 0x20];	stx	%g0, [base + 0x28];	\
+	stx	%g0, [base + 0x30];	stx	%g0, [base + 0x38];	\
+	stx	%g0, [base + 0x40];	stx	%g0, [base + 0x48];	\
+	stx	%g0, [base + 0x50];	stx	%g0, [base + 0x58];	\
+	stx	%g0, [base + 0x60];	stx	%g0, [base + 0x68];	\
+	stx	%g0, [base + 0x70];	stx	%g0, [base + 0x78];	\
+	stx	%g0, [base + 0x80];	stx	%g0, [base + 0x88];	\
+	stx	%g0, [base + 0x90];	stx	%g0, [base + 0x98];	\
+	stx	%g0, [base + 0xa0];	stx	%g0, [base + 0xa8];	\
+	stx	%g0, [base + 0xb0];	stx	%g0, [base + 0xb8];	\
+	stx	%g0, [base + 0xc0];	stx	%g0, [base + 0xc8];	\
+	stx	%g0, [base + 0xd0];	stx	%g0, [base + 0xd8];	\
+	stx	%g0, [base + 0xe0];	stx	%g0, [base + 0xe8];	\
+	stx	%g0, [base + 0xf0];	stx	%g0, [base + 0xf8];
+
+	.align		32
+	.globl		__bzero_1page
+__bzero_1page:
+	mov		32, %g1
+1:
+	BZERO_256BYTES(%g2)
+	subcc		%g1, 1, %g1
+	bne,pt		%icc, 1b
+	 add		%g2, 0x100, %g2
+	jmpl		%o7 + 0x8, %g0
+	 mov		%g3, %o7
 #endif
 
 	.globl		__bfill64

@@ -1,4 +1,4 @@
-/* $Id: fb.h,v 1.26 1997/04/17 02:29:33 miguel Exp $
+/* $Id: fb.h,v 1.27 1997/06/06 10:56:28 jj Exp $
  * fb.h: contains the definitions of the structures that various sun
  *       frame buffer can use to do console driver stuff.
  *
@@ -183,7 +183,7 @@ extern int con_height, con_linebytes;
 extern int ints_per_line;
 
 /* used in the mmap routines */
-extern unsigned int get_phys (unsigned long addr);
+extern unsigned long get_phys (unsigned long addr);
 extern int get_iospace (unsigned long addr);
 extern void render_screen(void);
 

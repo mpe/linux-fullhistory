@@ -281,15 +281,17 @@ struct tcp_func {
 
 	int			(*conn_request)		(struct sock *sk,
 							 struct sk_buff *skb,
-							 void *opt,
-							 __u32 isn);
+							 void *opt, __u32 isn);
 
 	struct sock *		(*syn_recv_sock)	(struct sock *sk,
 							 struct sk_buff *skb,
-							 struct open_request *req);
+							 struct open_request *req,
+							 struct dst_entry *dst);
 	
+#if 0
 	__u32			(*init_sequence)	(struct sock *sk,
 							 struct sk_buff *skb);
+#endif
 
 	struct sock *		(*get_sock)		(struct sk_buff *skb,
 							 struct tcphdr *th);
@@ -385,7 +387,8 @@ extern int			tcp_recvmsg(struct sock *sk,
 					    int len, int nonblock, 
 					    int flags, int *addr_len);
 
-extern void			tcp_parse_options(struct tcphdr *th, struct tcp_opt *tp);
+extern void			tcp_parse_options(struct tcphdr *th, struct tcp_opt *tp, 
+									  int no_fancy);
 
 /*
  *	TCP v4 functions exported for the inet6 API
@@ -407,7 +410,8 @@ extern int			tcp_v4_conn_request(struct sock *sk,
 
 extern struct sock *		tcp_v4_syn_recv_sock(struct sock *sk,
 						     struct sk_buff *skb,
-						     struct open_request *req);
+						     struct open_request *req,
+							struct dst_entry *dst);
 
 extern int			tcp_v4_do_rcv(struct sock *sk,
 					      struct sk_buff *skb);
@@ -416,6 +420,12 @@ extern int			tcp_v4_connect(struct sock *sk,
 					       struct sockaddr *uaddr,
 					       int addr_len);
 
+
+/* From syncookies.c */
+extern struct sock *cookie_v4_check(struct sock *sk, struct sk_buff *skb, 
+				    struct ip_options *opt);
+extern __u32 cookie_v4_init_sequence(struct sock *sk, struct sk_buff *skb, 
+				     __u16 *mss);
 
 extern void tcp_read_wakeup(struct sock *);
 extern void tcp_write_xmit(struct sock *);
@@ -521,7 +531,6 @@ static __inline__ u16 tcp_v4_check(struct tcphdr *th, int len,
 {
 	return csum_tcpudp_magic(saddr,daddr,len,IPPROTO_TCP,base);
 }
-
 
 #undef STATE_TRACE
 

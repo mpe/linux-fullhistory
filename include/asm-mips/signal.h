@@ -1,26 +1,41 @@
+/*
+ * Linux/MIPS specific definitions for signals.
+ *
+ * This file is subject to the terms and conditions of the GNU General Public
+ * License.  See the file "COPYING" in the main directory of this archive
+ * for more details.
+ *
+ * Copyright (C) 1995, 1996 by Ralf Baechle
+ */
 #ifndef __ASM_MIPS_SIGNAL_H
+
+#include <asm/sgidefs.h>
+
+/* Any one of these symbols __need_* means that GNU libc
+   wants us just to define one data type.  So don't define
+   the symbols that indicate this file's entire job has been done.  */
+#if !defined(__need_signums) && !defined(__need_fake_sigfuns) && \
+    !defined(__need__nsig)
 #define __ASM_MIPS_SIGNAL_H
-
-/*
- * For now ...
- */
-#include <linux/types.h>
-typedef __u64	sigset_t;
-
-#if 0
-/*
- * This is what we should really use but the kernel can't handle
- * a non-scalar type yet.  Since we use 64 signals only anyway we
- * just use __u64 and pad another 64 bits in the kernel for now ...
- */
-typedef struct {
-	unsigned int	sigbits[4];
-} sigset_t;
 #endif
 
-#define _NSIG		65
-#define NSIG		_NSIG
+#ifdef __ASM_MIPS_SIGNAL_H
+typedef unsigned long sigset_t;
+#endif /* __ASM_MIPS_SIGNAL_H */
 
+#if !defined (___nsig_defined) && \
+    (defined (__ASM_MIPS_SIGNAL_H) || defined (__need__nsig))
+#define ___nsig_defined
+#define _NSIG		65
+#endif
+#undef __need__nsig
+#ifdef __KERNEL__
+#define NSIG		_NSIG
+#endif
+
+#if !defined (__signums_defined) && \
+    (defined (__ASM_MIPS_SIGNAL_H) || defined (__need_signums))
+#define __signums_defined
 /*
  * For 1.3.0 Linux/MIPS changed the signal numbers to be compatible the ABI.
  */
@@ -58,7 +73,10 @@ typedef struct {
 #define SIGPROF		29	/* Profiling alarm clock (4.2 BSD).  */
 #define SIGXCPU		30	/* CPU limit exceeded (4.2 BSD).  */
 #define SIGXFSZ		31	/* File size limit exceeded (4.2 BSD).  */
+#endif /* need signums */
+#undef __need_signums
 
+#ifdef __ASM_MIPS_SIGNAL_H
 /*
  * sa_flags values: SA_STACK is not currently supported, but will allow the
  * usage of signal stacks by using the (now obsolete) sa_restorer field in
@@ -87,37 +105,46 @@ typedef struct {
  */
 #define SA_PROBE SA_ONESHOT
 #define SA_SAMPLE_RANDOM SA_RESTART
-#endif
+#endif /* __KERNEL__ */
 
-#define SIG_BLOCK          1	/* for blocking signals */
-#define SIG_UNBLOCK        2	/* for unblocking signals */
-#define SIG_SETMASK        3	/* for setting the signal mask */
+#define SIG_BLOCK	1	/* for blocking signals */
+#define SIG_UNBLOCK	2	/* for unblocking signals */
+#define SIG_SETMASK	3	/* for setting the signal mask */
+#define SIG_SETMASK32	256	/* Goodie from SGI for BSD compatibility:
+				   set only the low 32 bit of the sigset.  */
 
+#ifndef __sighandler_t_defined
+#define __sighandler_t_defined
 /* Type of a signal handler.  */
 typedef void (*__sighandler_t)(int);
+#endif
+#endif
 
+#if !defined (__fake_sigfuns_defined) && \
+    (defined (__ASM_MIPS_SIGNAL_H) || defined (__need_fake_sigfuns))
+#define __fake_sigfuns_defined
 /* Fake signal functions */
 #define SIG_DFL	((__sighandler_t)0)	/* default signal handling */
 #define SIG_IGN	((__sighandler_t)1)	/* ignore signal */
 #define SIG_ERR	((__sighandler_t)-1)	/* error return from signal */
+#endif
+#undef __need_fake_sigfuns
 
+#ifdef __ASM_MIPS_SIGNAL_H
 struct sigaction {
 	unsigned int	sa_flags;
 	__sighandler_t	sa_handler;
 	sigset_t	sa_mask;
-	/*
-	 * To keep the ABI structure size we have to fill a little gap ...
-	 */
-	unsigned int	sa_mask_pad[2];
+	unsigned int	__pad0[3];	/* reserved, keep size constant */
 
 	/* Abi says here follows reserved int[2] */
 	void		(*sa_restorer)(void);
-#if __mips < 3
+#if (_MIPS_ISA == _MIPS_ISA_MIPS1) || (_MIPS_ISA == _MIPS_ISA_MIPS2)
 	/*
 	 * For 32 bit code we have to pad struct sigaction to get
 	 * constant size for the ABI
 	 */
-	int		pad0[1];	/* reserved */
+	int		__pad1[1];	/* reserved */
 #endif
 };
 
@@ -125,4 +152,27 @@ struct sigaction {
 #include <asm/sigcontext.h>
 #endif
 
-#endif /* __ASM_MIPS_SIGNAL_H */
+#if defined (__KERNEL__) || defined (__USE_MISC)
+/*
+ * The following break codes are or were in use for specific purposes in
+ * other MIPS operating systems.  Linux/MIPS doesn't use all of them.  The
+ * unused ones are here as placeholders; we might encounter them in
+ * non-Linux/MIPS object files or make use of them in the future.
+ */
+#define BRK_USERBP	0	/* User bp (used by debuggers) */
+#define BRK_KERNELBP	1	/* Break in the kernel */
+#define BRK_ABORT	2	/* Sometimes used by abort(3) to SIGIOT */
+#define BRK_BD_TAKEN	3	/* For bd slot emulation - not implemented */
+#define BRK_BD_NOTTAKEN	4	/* For bd slot emulation - not implemented */
+#define BRK_SSTEPBP	5	/* User bp (used by debuggers) */
+#define BRK_OVERFLOW	6	/* Overflow check */
+#define BRK_DIVZERO	7	/* Divide by zero check */
+#define BRK_RANGE	8	/* Range error check */
+#define BRK_STACKOVERFLOW 9	/* For Ada stackchecking */
+#define BRK_NORLD	10	/* No rld found - not used by Linux/MIPS */
+#define _BRK_THREADBP	11	/* For threads, user bp (used by debuggers) */
+#define BRK_MULOVF	1023	/* Multiply overflow */
+#endif /* defined (__KERNEL__) || defined (__USE_MISC) */
+#endif /* defined (__ASM_MIPS_SIGNAL_H) */
+
+#endif /* !defined (__ASM_MIPS_SIGNAL_H) */

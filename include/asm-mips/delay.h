@@ -4,11 +4,9 @@
 extern __inline__ void __delay(int loops)
 {
 	__asm__ __volatile__ (
-		".set\tnoreorder\n\t"
-		".set\tnoat\n\t"
-		"1:\tbne\t$0,%0,1b\n\t"
-		"subu\t%0,%0,1\n\t"
-		".set\tat\n\t"
+		".set\tnoreorder\n"
+		"1:\tbnez\t%0,1b\n\t"
+		"subu\t%0,1\n\t"
 		".set\treorder"
 		:"=r" (loops)
 		:"0" (loops));
@@ -24,15 +22,23 @@ extern __inline__ void __delay(int loops)
  * first constant multiplications gets optimized away if the delay is
  * a constant)
  */
-extern __inline__ void udelay(unsigned long usecs)
+extern __inline__ void __udelay(unsigned long usecs, unsigned long lps)
 {
 	usecs *= 0x000010c6;		/* 2**32 / 1000000 */
 	__asm__("multu\t%0,%1\n\t"
 		"mfhi\t%0"
 		:"=r" (usecs)
-		:"0" (usecs),"r" (loops_per_sec));
+		:"0" (usecs),"r" (lps));
 	__delay(usecs);
 }
+
+#ifdef __SMP__
+#define __udelay_val cpu_data[smp_processor_id()].udelay_val
+#else
+#define __udelay_val loops_per_sec
+#endif
+
+#define udelay(usecs) __udelay((usecs),__udelay_val)
 
 /*
  * The different variants for 32/64 bit are pure paranoia. The typical

@@ -1,4 +1,4 @@
-/* $Id: cgthree.c,v 1.21 1997/06/04 08:27:29 davem Exp $
+/* $Id: cgthree.c,v 1.22 1997/06/06 10:56:30 jj Exp $
  * cgtree.c: cg3 frame buffer driver
  *
  * Copyright (C) 1996 Miguel de Icaza (miguel@nuclecu.unam.mx)
@@ -96,7 +96,7 @@ cg3_mmap (struct inode *inode, struct file *file, struct vm_area_struct *vma,
 	  long base, fbinfo_t *fb)
 {
 	uint  size, page, r, map_size;
-	uint map_offset = 0;
+	unsigned long map_offset = 0;
 	
 	size = vma->vm_end - vma->vm_start;
         if (vma->vm_offset & ~PAGE_MASK)

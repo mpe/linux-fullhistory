@@ -185,18 +185,16 @@ typedef char buffer_block[BLOCK_SIZE];
  */
 struct buffer_head {
 	/* First cache line: */
+	struct buffer_head * b_next;	/* Hash queue list */
 	unsigned long b_blocknr;	/* block number */
+	unsigned long b_size;		/* block size */
 	kdev_t b_dev;			/* device (B_FREE = free) */
 	kdev_t b_rdev;			/* Real device */
 	unsigned long b_rsector;	/* Real buffer location on disk */
-	struct buffer_head * b_next;	/* Hash queue list */
 	struct buffer_head * b_this_page;	/* circular list of buffers in one page */
-
-	/* Second cache line: */
 	unsigned long b_state;		/* buffer state bitmap (see above) */
 	struct buffer_head * b_next_free;
 	unsigned int b_count;		/* users using this block */
-	unsigned long b_size;		/* block size */
 
 	/* Non-performance-critical data follows. */
 	char * b_data;			/* pointer to data block (1024 bytes) */
@@ -797,9 +795,9 @@ extern inline blocking struct inode * get_empty_inode(void)
  */
 blocking struct inode * get_empty_inode_hashed(dev_t i_dev, unsigned long i_ino);
 
+extern blocking int _free_ibasket(struct super_block * sb);
 extern inline blocking int free_ibasket(struct super_block * sb)
 {
-	extern blocking int _free_ibasket(struct super_block * sb);
 	int res;
 	vfs_lock();
 	res = _free_ibasket(sb);

@@ -1,4 +1,4 @@
-/* $Id: head.h,v 1.22 1997/06/02 06:33:40 davem Exp $ */
+/* $Id: head.h,v 1.23 1997/06/14 13:25:50 davem Exp $ */
 #ifndef _SPARC64_HEAD_H
 #define _SPARC64_HEAD_H
 
@@ -207,16 +207,23 @@
 #define SPILL_2_GENERIC(xxx)				\
 	wr	%g0, xxx, %asi;				\
 	srl	%sp, 0, %sp;				\
-	stda	%l0, [%sp + 0x00] %asi;			\
-	stda	%l2, [%sp + 0x08] %asi;			\
-	stda	%l4, [%sp + 0x10] %asi;			\
-	stda	%l6, [%sp + 0x18] %asi;			\
-	stda	%i0, [%sp + 0x20] %asi;			\
-	stda	%i2, [%sp + 0x28] %asi;			\
-	stda	%i4, [%sp + 0x30] %asi;			\
-	stda	%i6, [%sp + 0x38] %asi;			\
+	stwa	%l0, [%sp + 0x00] %asi;			\
+	stwa	%l1, [%sp + 0x04] %asi;			\
+	stwa	%l2, [%sp + 0x08] %asi;			\
+	stwa	%l3, [%sp + 0x0c] %asi;			\
+	stwa	%l4, [%sp + 0x10] %asi;			\
+	stwa	%l5, [%sp + 0x14] %asi;			\
+	stwa	%l6, [%sp + 0x18] %asi;			\
+	stwa	%l7, [%sp + 0x1c] %asi;			\
+	stwa	%i0, [%sp + 0x20] %asi;			\
+	stwa	%i1, [%sp + 0x24] %asi;			\
+	stwa	%i2, [%sp + 0x28] %asi;			\
+	stwa	%i3, [%sp + 0x2c] %asi;			\
+	stwa	%i4, [%sp + 0x30] %asi;			\
+	stwa	%i5, [%sp + 0x34] %asi;			\
+	stwa	%i6, [%sp + 0x38] %asi;			\
+	stwa	%i7, [%sp + 0x3c] %asi;			\
 	saved; retry; nop; nop; nop; nop;		\
-	nop; nop; nop; nop; nop; nop; nop; nop;		\
 	nop; nop; nop; nop; nop; nop;			\
 	b,a,pt	%xcc, spill_fixup_mna;			\
 	b,a,pt	%xcc, spill_fixup;
@@ -287,16 +294,23 @@
 #define FILL_2_GENERIC(xxx)				\
 	wr	%g0, xxx, %asi;				\
 	srl	%sp, 0, %sp;				\
-	ldda	[%sp + 0x00] %asi, %l0;			\
-	ldda	[%sp + 0x08] %asi, %l2;			\
-	ldda	[%sp + 0x10] %asi, %l4;			\
-	ldda	[%sp + 0x18] %asi, %l6;			\
-	ldda	[%sp + 0x20] %asi, %i0;			\
-	ldda	[%sp + 0x28] %asi, %i2;			\
-	ldda	[%sp + 0x30] %asi, %i4;			\
-	ldda	[%sp + 0x38] %asi, %i6;			\
+	lduwa	[%sp + 0x00] %asi, %l0;			\
+	lduwa	[%sp + 0x04] %asi, %l1;			\
+	lduwa	[%sp + 0x08] %asi, %l2;			\
+	lduwa	[%sp + 0x0c] %asi, %l3;			\
+	lduwa	[%sp + 0x10] %asi, %l4;			\
+	lduwa	[%sp + 0x14] %asi, %l5;			\
+	lduwa	[%sp + 0x18] %asi, %l6;			\
+	lduwa	[%sp + 0x1c] %asi, %l7;			\
+	lduwa	[%sp + 0x20] %asi, %i0;			\
+	lduwa	[%sp + 0x24] %asi, %i1;			\
+	lduwa	[%sp + 0x28] %asi, %i2;			\
+	lduwa	[%sp + 0x2c] %asi, %i3;			\
+	lduwa	[%sp + 0x30] %asi, %i4;			\
+	lduwa	[%sp + 0x34] %asi, %i5;			\
+	lduwa	[%sp + 0x38] %asi, %i6;			\
+	lduwa	[%sp + 0x3c] %asi, %i7;			\
 	restored; retry; nop; nop; nop; nop;		\
-	nop; nop; nop; nop; nop; nop; nop; nop;		\
 	nop; nop; nop; nop; nop; nop;			\
 	b,a,pt	%xcc, fill_fixup_mna;			\
 	b,a,pt	%xcc, fill_fixup;

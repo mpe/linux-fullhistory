@@ -88,9 +88,17 @@ void n_tty_flush_buffer(struct tty_struct * tty)
 
 /*
  * Return number of characters buffered to be delivered to user
+ * 
  */
 int n_tty_chars_in_buffer(struct tty_struct *tty)
 {
+	if (tty->icanon) {
+		if (!tty->canon_data) return 0;
+
+		return (tty->canon_head > tty->read_tail) ?
+			tty->canon_head - tty->read_tail :
+			tty->canon_head + (N_TTY_BUF_SIZE - tty->read_tail);
+	}
 	return tty->read_cnt;
 }
 
@@ -156,6 +164,72 @@ static int opost(unsigned char c, struct tty_struct *tty)
 	tty->driver.put_char(tty, c);
 	return 0;
 }
+
+/*
+ * opost_block --- to speed up block console writes, among other
+ * things.
+ */
+static int opost_block(struct tty_struct * tty,
+		       const unsigned char * inbuf, unsigned int nr)
+{
+	char	buf[80];
+	int	space;
+	int 	i;
+	char	*cp;
+
+	space = tty->driver.write_room(tty);
+	if (!space)
+		return 0;
+	if (nr > space)
+		nr = space;
+	if (nr > sizeof(buf))
+	    nr = sizeof(buf);
+	nr -= copy_from_user(buf, inbuf, nr);
+	if (!nr)
+		return 0;
+	
+	for (i = 0, cp = buf; i < nr; i++, cp++) {
+		switch (*cp) {
+		case '\n':
+			if (O_ONLRET(tty))
+				tty->column = 0;
+			if (O_ONLCR(tty))
+				goto break_out;
+			tty->canon_column = tty->column;
+			break;
+		case '\r':
+			if (O_ONOCR(tty) && tty->column == 0)
+				goto break_out;
+			if (O_OCRNL(tty)) {
+				*cp = '\n';
+				if (O_ONLRET(tty))
+					tty->canon_column = tty->column = 0;
+				break;
+			}
+			tty->canon_column = tty->column = 0;
+			break;
+		case '\t':
+			goto break_out;
+		case '\b':
+			if (tty->column > 0)
+				tty->column--;
+			break;
+		default:
+			if (O_OLCUC(tty))
+				*cp = toupper(*cp);
+			if (!iscntrl(*cp))
+				tty->column++;
+			break;
+		}
+	}
+break_out:
+	if (tty->driver.flush_chars)
+		tty->driver.flush_chars(tty);
+	i = tty->driver.write(tty, 0, buf, i);	
+	return i;
+}
+
+
 
 static inline void put_char(unsigned char c, struct tty_struct *tty)
 {
@@ -934,7 +1008,7 @@ static int write_chan(struct tty_struct * tty, struct file * file,
 		      const unsigned char * buf, unsigned int nr)
 {
 	struct wait_queue wait = { current, NULL };
-	int c;
+	int c, num;
 	const unsigned char *b = buf;
 	int retval = 0;
 
@@ -958,6 +1032,11 @@ static int write_chan(struct tty_struct * tty, struct file * file,
 		}
 		if (O_OPOST(tty) && !(tty->flags & (1<<TTY_HW_COOK_OUT))) {
 			while (nr > 0) {
+				num = opost_block(tty, b, nr);
+				b += num;
+				nr -= num;
+				if (nr == 0)
+					break;
 				get_user(c, b);
 				if (opost(c, tty) < 0)
 					break;

@@ -1,14 +1,21 @@
 #ifndef __ASM_MIPS_IO_H
 #define __ASM_MIPS_IO_H
 
+/*
+ * Slowdown I/O port space accesses for antique hardware.
+ */
+#undef CONF_SLOWDOWN_IO
+
 #include <asm/mipsconfig.h>
-#include <asm/segment.h>
+#include <asm/addrspace.h>
 
 /*
  * This file contains the definitions for the MIPS counterpart of the
  * x86 in/out instructions. This heap of macros and C results in much
- * better code than the approach of doing it in plain C, though that's
- * probably not needed.
+ * better code than the approach of doing it in plain C.  The macros
+ * result in code that is to fast for certain hardware.  On the other
+ * side the performance of the string functions should be improved for
+ * sake of certain devices like EIDE disks that do highspeed polled I/O.
  *
  *   Ralf
  *
@@ -33,6 +40,7 @@
  * I feel a bit unsafe about using 0x80 (should be safe, though)
  *
  *		Linus
+ *
  */
 
 #define __SLOW_DOWN_IO \
@@ -40,10 +48,14 @@
 		"sb\t$0,0x80(%0)" \
 		: : "r" (PORT_BASE));
 
+#ifdef CONF_SLOWDOWN_IO
 #ifdef REALLY_SLOW_IO
 #define SLOW_DOWN_IO { __SLOW_DOWN_IO; __SLOW_DOWN_IO; __SLOW_DOWN_IO; __SLOW_DOWN_IO; }
 #else
 #define SLOW_DOWN_IO __SLOW_DOWN_IO
+#endif
+#else
+#define SLOW_DOWN_IO
 #endif
 
 /*
@@ -52,44 +64,106 @@
  */
 extern inline unsigned long virt_to_phys(volatile void * address)
 {
-	return (unsigned long) address - KSEG0;
+	return PHYSADDR(address);
 }
 
 extern inline void * phys_to_virt(unsigned long address)
 {
-	return (void *) address + KSEG0;
+	return (void *)KSEG0ADDR(address);
 }
+
+extern void * ioremap(unsigned long phys_addr, unsigned long size);
+extern void iounmap(void *addr);
 
 /*
  * IO bus memory addresses are also 1:1 with the physical address
- * FIXME: This assumption is wrong for the Deskstation Tyne
  */
-#define virt_to_bus virt_to_phys
-#define bus_to_virt phys_to_virt
+extern inline unsigned long virt_to_bus(volatile void * address)
+{
+	return PHYSADDR(address);
+}
+
+extern inline void * bus_to_virt(unsigned long address)
+{
+	return (void *)KSEG0ADDR(address);
+}
+
+/*
+ * isa_slot_offset is the address where E(ISA) busaddress 0 is is mapped
+ * for the processor.
+ */
+extern unsigned long isa_slot_offset;
 
 /*
  * readX/writeX() are used to access memory mapped devices. On some
  * architectures the memory mapped IO stuff needs to be accessed
  * differently. On the x86 architecture, we just read/write the
  * memory location directly.
+ *
+ * On MIPS, we have the whole physical address space mapped at all
+ * times, so "ioremap()" and "iounmap()" do not need to do anything.
+ * (This isn't true for all machines but we still handle these cases
+ * with wired TLB entries anyway ...)
+ *
+ * We cheat a bit and always return uncachable areas until we've fixed
+ * the drivers to handle caching properly.
  */
-#define readb(addr) (*(volatile unsigned char *) (addr))
-#define readw(addr) (*(volatile unsigned short *) (addr))
-#define readl(addr) (*(volatile unsigned int *) (addr))
-
-#define writeb(b,addr) ((*(volatile unsigned char *) (addr)) = (b))
-#define writew(b,addr) ((*(volatile unsigned short *) (addr)) = (b))
-#define writel(b,addr) ((*(volatile unsigned int *) (addr)) = (b))
-
-#define memset_io(a,b,c)	memset((void *)(a),(b),(c))
-#define memcpy_fromio(a,b,c)	memcpy((a),(void *)(b),(c))
-#define memcpy_toio(a,b,c)	memcpy((void *)(a),(b),(c))
+extern inline void * ioremap(unsigned long offset, unsigned long size)
+{
+	return (void *) KSEG1ADDR(offset);
+}
 
 /*
- * Again, MIPS does not require mem IO specific function.
+ * This one maps high address device memory and turns off caching for that area.
+ * it's useful if some control registers are in such an area and write combining
+ * or read caching is not desirable:
  */
+extern inline void * ioremap_nocache (unsigned long offset, unsigned long size)
+{
+	return (void *) KSEG1ADDR(offset);
+}
 
-#define eth_io_copy_and_sum(a,b,c,d)	eth_copy_and_sum((a),(void *)(b),(c),(d))
+extern inline void iounmap(void *addr)
+{
+}
+
+/*
+ * XXX We need system specific versions of these to handle EISA address bits
+ * 24-31 on SNI.
+ */
+#define readb(addr) (*(volatile unsigned char *) (isa_slot_offset + (unsigned long)(addr)))
+#define readw(addr) (*(volatile unsigned short *) (isa_slot_offset + (unsigned long)(addr)))
+#define readl(addr) (*(volatile unsigned int *) (isa_slot_offset + (unsigned long)(addr)))
+
+#define writeb(b,addr) (*(volatile unsigned char *) (isa_slot_offset + (unsigned long)(addr)) = (b))
+#define writew(b,addr) (*(volatile unsigned short *) (isa_slot_offset + (unsigned long)(addr)) = (b))
+#define writel(b,addr) (*(volatile unsigned int *) (isa_slot_offset + (unsigned long)(addr)) = (b))
+
+#define memset_io(a,b,c)	memset((void *)(isa_slot_offset + (unsigned long)a),(b),(c))
+#define memcpy_fromio(a,b,c)	memcpy((a),(void *)(isa_slot_offset + (unsigned long)(b)),(c))
+#define memcpy_toio(a,b,c)	memcpy((void *)(isa_slot_offset + (unsigned long)(a)),(b),(c))
+
+/*
+ * We don't have csum_partial_copy_fromio() yet, so we cheat here and
+ * just copy it. The net code will then do the checksum later.
+ */
+#define eth_io_copy_and_sum(skb,src,len,unused)	memcpy_fromio((skb)->data,(src),(len))
+
+static inline int check_signature(unsigned long io_addr,
+                                  const unsigned char *signature, int length)
+{
+	int retval = 0;
+	do {
+		if (readb(io_addr) != *signature)
+			goto out;
+		io_addr++;
+		signature++;
+		length--;
+	} while (length);
+	retval = 1;
+out:
+	return retval;
+}
 
 /*
  * Talk about misusing macros..
@@ -113,10 +187,10 @@ __OUT1(s##c_p) __OUT2(m) : : "r" (value), "ir" (port), "r" (PORT_BASE)); \
 extern __inline__ t __in##s(unsigned int port) { t _v;
 
 /*
- * Useless nops will be removed by the assembler
+ * Required nops will be inserted by the assembler
  */
 #define __IN2(m) \
-__asm__ __volatile__ ("l" #m "u\t%0,%1(%2)\n\tnop"
+__asm__ __volatile__ ("l" #m "\t%0,%1(%2)"
 
 #define __IN(t,m,s) \
 __IN1(t,s) __IN2(m) : "=r" (_v) : "i" (0), "r" (PORT_BASE+port)); return _v; } \
@@ -128,10 +202,11 @@ __IN1(t,s##c_p) __IN2(m) : "=r" (_v) : "ir" (port), "r" (PORT_BASE)); SLOW_DOWN_
 extern inline void __ins##s(unsigned int port, void * addr, unsigned long count) {
 
 #define __INS2(m) \
+if (count) \
 __asm__ __volatile__ ( \
 	".set\tnoreorder\n\t" \
 	".set\tnoat\n" \
-	"1:\tl" #m "u\t$1,%4(%5)\n\t" \
+	"1:\tl" #m "\t$1,%4(%5)\n\t" \
 	"subu\t%1,1\n\t" \
 	"s" #m "\t$1,(%0)\n\t" \
 	"bne\t$0,%1,1b\n\t" \
@@ -153,14 +228,15 @@ __INS1(s##c) __INS2(m) \
 extern inline void __outs##s(unsigned int port, const void * addr, unsigned long count) {
 
 #define __OUTS2(m) \
+if (count) \
 __asm__ __volatile__ ( \
         ".set\tnoreorder\n\t" \
         ".set\tnoat\n" \
-        "1:\tl" #m "u\t$1,(%0)\n\t" \
-        "subu\t%1,%1,1\n\t" \
+        "1:\tl" #m "\t$1,(%0)\n\t" \
+        "subu\t%1,1\n\t" \
         "s" #m "\t$1,%4(%5)\n\t" \
         "bne\t$0,%1,1b\n\t" \
-        "addiu\t%0,%0,%6\n\t" \
+        "addiu\t%0,%6\n\t" \
         ".set\tat\n\t" \
         ".set\treorder"
 

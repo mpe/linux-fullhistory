@@ -584,7 +584,7 @@ static struct super_operations romfs_ops = {
 
 static struct file_system_type romfs_fs_type = {
 	"romfs",
-	(FS_REQUIRES_DEV | FS_NO_DCACHE),	/* Can dcache be used? */
+	FS_REQUIRES_DEV,
 	romfs_read_super,
 	NULL
 };

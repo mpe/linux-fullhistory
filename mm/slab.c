@@ -123,7 +123,7 @@
  *			  0 if you wish to reduce memory usage.
  *
  * SLAB_DEBUG_SUPPORT	- 1 for kmem_cache_create() to honour; SLAB_DEBUG_FREE,
- *			  SLAB_DEBUG_INITIAL, SLAB_RED_ZONE & SLAB_POISION.
+ *			  SLAB_DEBUG_INITIAL, SLAB_RED_ZONE & SLAB_POISON.
  *			  0 for faster, smaller, code (espically in the critical paths).
  *
  * SLAB_STATS		- 1 to collect stats for /proc/slabinfo.
@@ -143,11 +143,11 @@
 #if	SLAB_DEBUG_SUPPORT
 #if	0
 #define	SLAB_C_MASK		(SLAB_DEBUG_FREE|SLAB_DEBUG_INITIAL|SLAB_RED_ZONE| \
-				 SLAB_POISION|SLAB_HWCACHE_ALIGN|SLAB_NO_REAP| \
+				 SLAB_POISON|SLAB_HWCACHE_ALIGN|SLAB_NO_REAP| \
 				 SLAB_HIGH_PACK)
 #endif
 #define	SLAB_C_MASK		(SLAB_DEBUG_FREE|SLAB_DEBUG_INITIAL|SLAB_RED_ZONE| \
-				 SLAB_POISION|SLAB_HWCACHE_ALIGN|SLAB_NO_REAP)
+				 SLAB_POISON|SLAB_HWCACHE_ALIGN|SLAB_NO_REAP)
 #else
 #if	0
 #define	SLAB_C_MASK		(SLAB_HWCACHE_ALIGN|SLAB_NO_REAP|SLAB_HIGH_PACK)
@@ -215,9 +215,9 @@ typedef struct kmem_bufctl_s {
 #define	SLAB_RED_MAGIC1		0x5A2CF071UL	/* when obj is active */
 #define	SLAB_RED_MAGIC2		0x170FC2A5UL	/* when obj is inactive */
 
-/* ...and for poisioning */
-#define	SLAB_POISION_BYTE	0x5a		/* byte value for poisioning */
-#define	SLAB_POISION_END	0xa5		/* end-byte of poisioning */
+/* ...and for poisoning */
+#define	SLAB_POISON_BYTE	0x5a		/* byte value for poisoning */
+#define	SLAB_POISON_END	0xa5		/* end-byte of poisoning */
 
 #endif	/* SLAB_DEBUG_SUPPORT */
 
@@ -546,17 +546,17 @@ kmem_freepages(kmem_cache_t *cachep, void *addr)
 
 #if	SLAB_DEBUG_SUPPORT
 static inline void
-kmem_poision_obj(kmem_cache_t *cachep, void *addr)
+kmem_poison_obj(kmem_cache_t *cachep, void *addr)
 {
-	memset(addr, SLAB_POISION_BYTE, cachep->c_org_size);
-	*(unsigned char *)(addr+cachep->c_org_size-1) = SLAB_POISION_END;
+	memset(addr, SLAB_POISON_BYTE, cachep->c_org_size);
+	*(unsigned char *)(addr+cachep->c_org_size-1) = SLAB_POISON_END;
 }
 
 static inline int
-kmem_check_poision_obj(kmem_cache_t *cachep, void *addr)
+kmem_check_poison_obj(kmem_cache_t *cachep, void *addr)
 {
 	void *end;
-	end = memchr(addr, SLAB_POISION_END, cachep->c_org_size);
+	end = memchr(addr, SLAB_POISON_END, cachep->c_org_size);
 	if (end != (addr+cachep->c_org_size-1))
 		return 1;
 	return 0;
@@ -605,7 +605,7 @@ kmem_slab_destroy(kmem_cache_t *cachep, kmem_slab_t *slabp)
 {
 	if (cachep->c_dtor
 #if	SLAB_DEBUG_SUPPORT
-		|| cachep->c_flags & (SLAB_POISION || SLAB_RED_ZONE)
+		|| cachep->c_flags & (SLAB_POISON || SLAB_RED_ZONE)
 #endif	/*SLAB_DEBUG_SUPPORT*/
 	) {
 		/* Doesn't use the bufctl ptrs to find objs. */
@@ -629,10 +629,10 @@ kmem_slab_destroy(kmem_cache_t *cachep, kmem_slab_t *slabp)
 #endif	/*SLAB_DEBUG_SUPPORT*/
 				(cachep->c_dtor)(objp, cachep, 0);
 #if	SLAB_DEBUG_SUPPORT
-			else if (cachep->c_flags & SLAB_POISION) {
-				if (kmem_check_poision_obj(cachep, objp))
+			else if (cachep->c_flags & SLAB_POISON) {
+				if (kmem_check_poison_obj(cachep, objp))
 					printk(KERN_ERR "kmem_slab_destory: "
-					       "Bad poision - %s\n", cachep->c_name);
+					       "Bad poison - %s\n", cachep->c_name);
 			}
 			if (cachep->c_flags & SLAB_RED_ZONE)
 				objp -= BYTES_PER_WORD;
@@ -726,18 +726,18 @@ kmem_cache_create(const char *name, size_t size, size_t offset,
 		flags &= ~SLAB_DEBUG_INITIAL;
 	}
 
-	if ((flags & SLAB_POISION) && ctor) {
-		/* request for poisioning, but we can't do that with a constructor */
-		printk("%sPoisioning requested, but con given - %s\n", func_nm, name);
-		flags &= ~SLAB_POISION;
+	if ((flags & SLAB_POISON) && ctor) {
+		/* request for poisoning, but we can't do that with a constructor */
+		printk("%sPoisoning requested, but con given - %s\n", func_nm, name);
+		flags &= ~SLAB_POISON;
 	}
 #if	0
 	if ((flags & SLAB_HIGH_PACK) && ctor) {
 		printk("%sHigh pack requested, but con given - %s\n", func_nm, name);
 		flags &= ~SLAB_HIGH_PACK;
 	}
-	if ((flags & SLAB_HIGH_PACK) && (flags & (SLAB_POISION|SLAB_RED_ZONE))) {
-		printk("%sHigh pack requested, but with poisioning/red-zoning - %s\n",
+	if ((flags & SLAB_HIGH_PACK) && (flags & (SLAB_POISON|SLAB_RED_ZONE))) {
+		printk("%sHigh pack requested, but with poisoning/red-zoning - %s\n",
 		       func_nm, name);
 		flags &= ~SLAB_HIGH_PACK;
 	}
@@ -1094,9 +1094,9 @@ kmem_cache_init_objs(kmem_cache_t * cachep, kmem_slab_t * slabp, void *objp,
 		if (cachep->c_ctor)
 			cachep->c_ctor(objp, cachep, ctor_flags);
 #if	SLAB_DEBUG_SUPPORT
-		else if (cachep->c_flags & SLAB_POISION) {
-			/* need to poision the objs */
-			kmem_poision_obj(cachep, objp);
+		else if (cachep->c_flags & SLAB_POISON) {
+			/* need to poison the objs */
+			kmem_poison_obj(cachep, objp);
 		}
 
 		if (cachep->c_flags & SLAB_RED_ZONE) {
@@ -1386,7 +1386,7 @@ ret_obj:
 			bufp->buf_slabp = slabp;
 			objp = ((void*)bufp) - cachep->c_offset;
 finished:
-			/* The lock is not needed by the red-zone or poision ops, and the
+			/* The lock is not needed by the red-zone or poison ops, and the
 			 * obj has been removed from the slab.  Should be safe to drop
 			 * the lock here.
 			 */
@@ -1395,8 +1395,8 @@ finished:
 			if (cachep->c_flags & SLAB_RED_ZONE)
 				goto red_zone;
 ret_red:
-			if ((cachep->c_flags & SLAB_POISION) && kmem_check_poision_obj(cachep, objp))
-				kmem_report_alloc_err("Bad poision", cachep);
+			if ((cachep->c_flags & SLAB_POISON) && kmem_check_poison_obj(cachep, objp))
+				kmem_report_alloc_err("Bad poison", cachep);
 #endif	/* SLAB_DEBUG_SUPPORT */
 			return objp;
 		}
@@ -1514,10 +1514,10 @@ passed_extra:
 				/* (hopefully) The most common case. */
 finished:
 #if	SLAB_DEBUG_SUPPORT
-				if (cachep->c_flags & SLAB_POISION) {
+				if (cachep->c_flags & SLAB_POISON) {
 					if (cachep->c_flags & SLAB_RED_ZONE)
 						objp += BYTES_PER_WORD;
-					kmem_poision_obj(cachep, objp);
+					kmem_poison_obj(cachep, objp);
 				}
 #endif	/* SLAB_DEBUG_SUPPORT */
 				spin_unlock_irqrestore(&cachep->c_spinlock, save_flags);
@@ -1860,7 +1860,7 @@ kmem_self_test(void)
 	kmem_cache_t	*test_cachep;
 
 	printk(KERN_INFO "kmem_test() - start\n");
-	test_cachep = kmem_cache_create("test-cachep", 16, 0, SLAB_RED_ZONE|SLAB_POISION, NULL, NULL);
+	test_cachep = kmem_cache_create("test-cachep", 16, 0, SLAB_RED_ZONE|SLAB_POISON, NULL, NULL);
 	if (test_cachep) {
 		char *objp = kmem_cache_alloc(test_cachep, SLAB_KERNEL);
 		if (objp) {
@@ -1869,12 +1869,12 @@ kmem_self_test(void)
 			*(objp+16) = 1;
 			kmem_cache_free(test_cachep, objp);
 
-			/* Mess up poisioning. */
+			/* Mess up poisoning. */
 			*objp = 10;
 			objp = kmem_cache_alloc(test_cachep, SLAB_KERNEL);
 			kmem_cache_free(test_cachep, objp);
 
-			/* Mess up poisioning (again). */
+			/* Mess up poisoning (again). */
 			*objp = 10;
 			kmem_cache_shrink(test_cachep);
 		}

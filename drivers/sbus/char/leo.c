@@ -1,4 +1,4 @@
-/* $Id: leo.c,v 1.18 1997/06/04 08:27:30 davem Exp $
+/* $Id: leo.c,v 1.19 1997/06/06 10:56:30 jj Exp $
  * leo.c: SUNW,leo 24/8bit frame buffer driver
  *
  * Copyright (C) 1996 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -143,7 +143,7 @@ leo_mmap (struct inode *inode, struct file *file, struct vm_area_struct *vma,
 	  long base, fbinfo_t *fb)
 {
 	uint size, page, r, map_size = 0;
-	uint map_offset = 0;
+	unsigned long map_offset = 0;
 			     
 	size = vma->vm_end - vma->vm_start;
         if (vma->vm_offset & ~PAGE_MASK)

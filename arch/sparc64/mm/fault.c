@@ -1,4 +1,4 @@
-/* $Id: fault.c,v 1.11 1997/06/01 05:46:15 davem Exp $
+/* $Id: fault.c,v 1.12 1997/06/13 14:02:52 davem Exp $
  * arch/sparc64/mm/fault.c: Page fault handlers for the 64-bit Sparc.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -137,6 +137,13 @@ asmlinkage int lookup_fault(unsigned long pc, unsigned long ret_pc,
 /* #define FAULT_TRACER */
 /* #define FAULT_TRACER_VERBOSE */
 
+#ifdef FAULT_TRACER
+/* Set and clear this elsewhere at critical moment, for oodles of debugging fun. */
+int fault_trace_enable = 0;
+#endif
+
+#include <asm/hardirq.h>
+
 asmlinkage void do_sparc64_fault(struct pt_regs *regs, int text_fault, int write,
 				 unsigned long address, unsigned long tag,
 				 unsigned long sfsr)
@@ -151,26 +158,36 @@ asmlinkage void do_sparc64_fault(struct pt_regs *regs, int text_fault, int write
 	static unsigned long last_addr = 0;
 	static int rcnt = 0;
 
+	if(fault_trace_enable) {
 #ifdef FAULT_TRACER_VERBOSE
-	printk("FAULT(PC[%016lx],t[%d],w[%d],addr[%016lx])...",
-	       regs->tpc, text_fault, write, address);
+		printk("FAULT(PC[%016lx],t[%d],w[%d],addr[%016lx])...",
+		       regs->tpc, text_fault, write, address);
 #else
-	printk("F[%016lx:%016lx:w(%d)", regs->tpc, address, write);
+		printk("F[%016lx:%016lx:w(%d)", regs->tpc, address, write);
 #endif
-	if(address == last_addr) {
-		if(rcnt++ > 15) {
-			printk("Wheee lotsa bogus faults, something wrong, spinning\n");
-			__asm__ __volatile__("flushw");
-			printk("o7[%016lx] i7[%016lx]\n",
-			       regs->u_regs[UREG_I7],
-		    ((struct reg_window *)(regs->u_regs[UREG_FP]+STACK_BIAS))->ins[7]);
-			sti();
-			while(1)
-				barrier();
-		}
-	} else rcnt = 0;
-	last_addr = address;
+		if(address == last_addr) {
+			if(rcnt++ > 15) {
+				printk("Wheee lotsa bogus faults, something wrong, "
+				       "spinning\n");
+				printk("pctx[%016lx]sctx[%016lx]mmctx[%016lx]DS(%x)"
+				       "tctx[%016lx] flgs[%016lx]\n",
+				       spitfire_get_primary_context(),
+				       spitfire_get_secondary_context(),
+				       mm->context, (unsigned)current->tss.current_ds,
+				       current->tss.ctx, current->tss.flags);
+				__asm__ __volatile__("flushw");
+				printk("o7[%016lx] i7[%016lx]\n",
+				       regs->u_regs[UREG_I7],
+		      ((struct reg_window *)(regs->u_regs[UREG_FP]+STACK_BIAS))->ins[7]);
+				sti();
+				while(1)
+					barrier();
+			}
+		} else rcnt = 0;
+		last_addr = address;
+	}
 #endif
+
 	lock_kernel ();
 	down(&mm->mmap_sem);
 	vma = find_vma(mm, address);
@@ -233,11 +250,13 @@ bad_area:
 out:
 	unlock_kernel();
 #ifdef FAULT_TRACER
+	if(fault_trace_enable) {
 #ifdef FAULT_TRACER_VERBOSE
-	printk(" done\n");
+		printk(" done\n");
 #else
-	printk("]");
+		printk("]");
 #endif
+	}
 #endif
 }
 

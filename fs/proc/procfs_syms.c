@@ -38,7 +38,7 @@ EXPORT_SYMBOL(proc_openprom_deregister);
 
 static struct file_system_type proc_fs_type = {
 	"proc", 
-	FS_NO_DCACHE,
+	0 /* FS_NO_DCACHE doesn't work correctly */,
 	proc_read_super, 
 	NULL
 };

@@ -31,7 +31,8 @@
 
 /* Please don't change these macros, unless you change the logic
  * in the .fixup section below as well.
- * Store 64 bytes at (BASE + OFFSET) using value SOURCE. */
+ * Store 64 bytes at (BASE + OFFSET) using value SOURCE.
+ */
 #define ZERO_BIG_BLOCK(base, offset, source)    \
 	stxa	source, [base + offset + 0x00] %asi; \
 	stxa	source, [base + offset + 0x08] %asi; \

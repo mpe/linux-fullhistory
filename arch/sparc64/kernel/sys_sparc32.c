@@ -1,4 +1,4 @@
-/* $Id: sys_sparc32.c,v 1.26 1997/06/04 13:05:21 jj Exp $
+/* $Id: sys_sparc32.c,v 1.32 1997/06/17 05:36:40 davem Exp $
  * sys_sparc32.c: Conversion between 32bit and 64bit native syscalls.
  *
  * Copyright (C) 1997 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -1327,13 +1327,162 @@ asmlinkage int sys32_umount(u32 name)
 	return sys_umount((char *)A(name));
 }
 
+struct ncp_mount_data32 {
+        int version;
+        unsigned int ncp_fd;
+        __kernel_uid_t32 mounted_uid;
+        __kernel_pid_t32 wdog_pid;
+        unsigned char mounted_vol[NCP_VOLNAME_LEN + 1];
+        unsigned int time_out;
+        unsigned int retry_count;
+        unsigned int flags;
+        __kernel_uid_t32 uid;
+        __kernel_gid_t32 gid;
+        __kernel_mode_t32 file_mode;
+        __kernel_mode_t32 dir_mode;
+};
+
+static void *do_ncp_super_data_conv(void *raw_data)
+{
+	struct ncp_mount_data *n = (struct ncp_mount_data *)raw_data;
+	struct ncp_mount_data32 *n32 = (struct ncp_mount_data32 *)raw_data;
+
+	n->dir_mode = n32->dir_mode;
+	n->file_mode = n32->file_mode;
+	n->gid = n32->gid;
+	n->uid = n32->uid;
+	memmove (n->mounted_vol, n32->mounted_vol, (sizeof (n32->mounted_vol) + 3 * sizeof (unsigned int)));
+	n->wdog_pid = n32->wdog_pid;
+	n->mounted_uid = n32->mounted_uid;
+	return raw_data;
+}
+
+struct smb_mount_data32 {
+        int version;
+        unsigned int fd;
+        __kernel_uid_t32 mounted_uid;
+        struct sockaddr_in addr;
+        char server_name[17];
+        char client_name[17];
+        char service[64];
+        char root_path[64];
+        char username[64];
+        char password[64];
+        char domain[64];
+        unsigned short max_xmit;
+        __kernel_uid_t32 uid;
+        __kernel_gid_t32 gid;
+        __kernel_mode_t32 file_mode;
+        __kernel_mode_t32 dir_mode;
+};
+
+static void *do_smb_super_data_conv(void *raw_data)
+{
+	struct smb_mount_data *s = (struct smb_mount_data *)raw_data;
+	struct smb_mount_data32 *s32 = (struct smb_mount_data32 *)raw_data;
+
+	s->dir_mode = s32->dir_mode;
+	s->file_mode = s32->file_mode;
+	s->gid = s32->gid;
+	s->uid = s32->uid;
+	memmove (&s->addr, &s32->addr, (((long)&s->uid) - ((long)&s->addr)));
+	s->mounted_uid = s32->mounted_uid;
+	return raw_data;
+}
+
+static int copy_mount_stuff_to_kernel(const void *user, unsigned long *kernel)
+{
+	int i;
+	unsigned long page;
+	struct vm_area_struct *vma;
+
+	*kernel = 0;
+	if(!user)
+		return 0;
+	vma = find_vma(current->mm, (unsigned long)user);
+	if(!vma || (unsigned long)user < vma->vm_start)
+		return -EFAULT;
+	if(!(vma->vm_flags & VM_READ))
+		return -EFAULT;
+	i = vma->vm_end - (unsigned long) user;
+	if(PAGE_SIZE <= (unsigned long) i)
+		i = PAGE_SIZE - 1;
+	if(!(page = __get_free_page(GFP_KERNEL)))
+		return -ENOMEM;
+	if(copy_from_user((void *) page, user, i)) {
+		free_page(page);
+		return -EFAULT;
+	}
+	*kernel = page;
+	return 0;
+}
+
 extern asmlinkage int sys_mount(char * dev_name, char * dir_name, char * type,
 				unsigned long new_flags, void *data);
 
+#define SMBFS_NAME	"smbfs"
+#define NCPFS_NAME	"ncpfs"
+
 asmlinkage int sys32_mount(u32 dev_name, u32 dir_name, u32 type, u32 new_flags, u32 data)
 {
-	return sys_mount((char *)A(dev_name), (char *)A(dir_name), (char *)A(type), 
-			 (unsigned long)new_flags, (void *)A(data));
+	unsigned long type_page;
+	int err, is_smb, is_ncp;
+
+	if(!suser())
+		return -EPERM;
+	is_smb = is_ncp = 0;
+	err = copy_mount_stuff_to_kernel((const void *)A(type), &type_page);
+	if(err)
+		return err;
+	if(type_page) {
+		is_smb = !strcmp((char *)type_page, SMBFS_NAME);
+		is_ncp = !strcmp((char *)type_page, NCPFS_NAME);
+	}
+	if(!is_smb && !is_ncp) {
+		if(type_page)
+			free_page(type_page);
+		return sys_mount((char *)A(dev_name), (char *)A(dir_name),
+				 (char *)A(type), (unsigned long)new_flags,
+				 (void *)A(data));
+	} else {
+		unsigned long dev_page, dir_page, data_page;
+		int old_fs;
+
+		err = copy_mount_stuff_to_kernel((const void *)A(dev_name), &dev_page);
+		if(err)
+			goto out;
+		err = copy_mount_stuff_to_kernel((const void *)A(dir_name), &dir_page);
+		if(err)
+			goto dev_out;
+		err = copy_mount_stuff_to_kernel((const void *)A(data), &data_page);
+		if(err)
+			goto dir_out;
+		if(is_ncp)
+			do_ncp_super_data_conv((void *)data_page);
+		else if(is_smb)
+			do_smb_super_data_conv((void *)data_page);
+		else
+			panic("Tell DaveM he fucked up...");
+		old_fs = get_fs();
+		set_fs(KERNEL_DS);
+		err = sys_mount((char *)dev_page, (char *)dir_page,
+				(char *)type_page, (unsigned long)new_flags,
+				(void *)data_page);
+		set_fs(old_fs);
+
+		if(data_page)
+			free_page(data_page);
+	dir_out:
+		if(dir_page)
+			free_page(dir_page);
+	dev_out:
+		if(dev_page)
+			free_page(dev_page);
+	out:
+		if(type_page)
+			free_page(type_page);
+		return err;
+	}
 }
 
 extern asmlinkage int sys_syslog(int type, char * bug, int count);
@@ -1598,6 +1747,31 @@ asmlinkage int sys32_acct(u32 name)
 	return sys_acct((const char *)A(name));
 }
 
+extern asmlinkage int sys_setreuid(uid_t ruid, uid_t euid);
+
+asmlinkage int sys32_setreuid(__kernel_uid_t32 ruid, __kernel_uid_t32 euid)
+{
+	uid_t sruid, seuid;
+
+	sruid = (ruid == (__kernel_uid_t32)-1) ? ((uid_t)-1) : ((uid_t)ruid);
+	seuid = (euid == (__kernel_uid_t32)-1) ? ((uid_t)-1) : ((uid_t)euid);
+	return sys_setreuid(sruid, seuid);
+}
+
+extern asmlinkage int sys_setresuid(uid_t ruid, uid_t euid, uid_t suid);
+
+asmlinkage int sys32_setresuid(__kernel_uid_t32 ruid,
+			       __kernel_uid_t32 euid,
+			       __kernel_uid_t32 suid)
+{
+	uid_t sruid, seuid, ssuid;
+
+	sruid = (ruid == (__kernel_uid_t32)-1) ? ((uid_t)-1) : ((uid_t)ruid);
+	seuid = (euid == (__kernel_uid_t32)-1) ? ((uid_t)-1) : ((uid_t)euid);
+	ssuid = (suid == (__kernel_uid_t32)-1) ? ((uid_t)-1) : ((uid_t)suid);
+	return sys_setresuid(sruid, seuid, ssuid);
+}
+
 extern asmlinkage int sys_getresuid(uid_t *ruid, uid_t *euid, uid_t *suid);
 
 asmlinkage int sys32_getresuid(u32 ruid, u32 euid, u32 suid)
@@ -1654,7 +1828,7 @@ asmlinkage int sys32_getgroups(int gidsetsize, u32 grouplist)
 	set_fs (KERNEL_DS);
 	ret = sys_getgroups(gidsetsize, gl);
 	set_fs (old_fs);
-	if (ret > 0 && ret <= NGROUPS)
+	if (gidsetsize && ret > 0 && ret <= NGROUPS)
 		for (i = 0; i < ret; i++, grouplist += sizeof(__kernel_gid_t32))
 			if (__put_user (gl[i], (__kernel_gid_t32 *)A(grouplist)))
 				return -EFAULT;
@@ -1716,6 +1890,9 @@ asmlinkage int sys32_setdomainname(u32 name, int len)
 	return sys_setdomainname((char *)A(name), len);
 }
 
+#define RLIM_INFINITY32	0x7fffffff
+#define RESOURCE32(x) ((x > RLIM_INFINITY32) ? RLIM_INFINITY32 : x)
+
 struct rlimit32 {
 	s32	rlim_cur;
 	s32	rlim_max;
@@ -1733,8 +1910,8 @@ asmlinkage int sys32_getrlimit(unsigned int resource, u32 rlim)
 	ret = sys_getrlimit(resource, &r);
 	set_fs (old_fs);
 	if (!ret && (
-	    put_user (r.rlim_cur, &(((struct rlimit32 *)A(rlim))->rlim_cur)) ||
-	    __put_user (r.rlim_max, &(((struct rlimit32 *)A(rlim))->rlim_max))))
+	    put_user (RESOURCE32(r.rlim_cur), &(((struct rlimit32 *)A(rlim))->rlim_cur)) ||
+	    __put_user (RESOURCE32(r.rlim_max), &(((struct rlimit32 *)A(rlim))->rlim_max))))
 		return -EFAULT;
 	return ret;
 }
@@ -1751,6 +1928,10 @@ asmlinkage int sys32_setrlimit(unsigned int resource, u32 rlim)
 	if (get_user (r.rlim_cur, &(((struct rlimit32 *)A(rlim))->rlim_cur)) ||
 	    __get_user (r.rlim_max, &(((struct rlimit32 *)A(rlim))->rlim_max)))
 		return -EFAULT;
+	if (r.rlim_cur == RLIM_INFINITY32)
+		r.rlim_cur = RLIM_INFINITY;
+	if (r.rlim_max == RLIM_INFINITY32)
+		r.rlim_max = RLIM_INFINITY;
 	set_fs (KERNEL_DS);
 	ret = sys_setrlimit(resource, &r);
 	set_fs (old_fs);
@@ -2557,67 +2738,4 @@ asmlinkage int sparc32_execve(struct pt_regs *regs)
 asmlinkage int sys32_no_modules(void)
 {
 	return -ENOSYS;
-}
-
-struct ncp_mount_data32 {
-        int version;
-        unsigned int ncp_fd;
-        __kernel_uid_t32 mounted_uid;
-        __kernel_pid_t32 wdog_pid;
-        unsigned char mounted_vol[NCP_VOLNAME_LEN + 1];
-        unsigned int time_out;
-        unsigned int retry_count;
-        unsigned int flags;
-        __kernel_uid_t32 uid;
-        __kernel_gid_t32 gid;
-        __kernel_mode_t32 file_mode;
-        __kernel_mode_t32 dir_mode;
-};
-
-void *do_ncp_super_data_conv(void *raw_data)
-{
-	struct ncp_mount_data *n = (struct ncp_mount_data *)raw_data;
-	struct ncp_mount_data32 *n32 = (struct ncp_mount_data32 *)raw_data;
-
-	n->dir_mode = n32->dir_mode;
-	n->file_mode = n32->file_mode;
-	n->gid = n32->gid;
-	n->uid = n32->uid;
-	memmove (n->mounted_vol, n32->mounted_vol, (sizeof (n32->mounted_vol) + 3 * sizeof (unsigned int)));
-	n->wdog_pid = n32->wdog_pid;
-	n->mounted_uid = n32->mounted_uid;
-	return raw_data;
-}
-
-struct smb_mount_data32 {
-        int version;
-        unsigned int fd;
-        __kernel_uid_t32 mounted_uid;
-        struct sockaddr_in addr;
-        char server_name[17];
-        char client_name[17];
-        char service[64];
-        char root_path[64];
-        char username[64];
-        char password[64];
-        char domain[64];
-        unsigned short max_xmit;
-        __kernel_uid_t32 uid;
-        __kernel_gid_t32 gid;
-        __kernel_mode_t32 file_mode;
-        __kernel_mode_t32 dir_mode;
-};
-
-void *do_smb_super_data_conv(void *raw_data)
-{
-	struct smb_mount_data *s = (struct smb_mount_data *)raw_data;
-	struct smb_mount_data32 *s32 = (struct smb_mount_data32 *)raw_data;
-
-	s->dir_mode = s32->dir_mode;
-	s->file_mode = s32->file_mode;
-	s->gid = s32->gid;
-	s->uid = s32->uid;
-	memmove (&s->addr, &s32->addr, (((long)&s->uid) - ((long)&s->addr)));
-	s->mounted_uid = s32->mounted_uid;
-	return raw_data;
 }

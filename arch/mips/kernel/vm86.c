@@ -6,9 +6,8 @@
  */
 #include <linux/linkage.h>
 #include <linux/errno.h>
-#include <linux/vm86.h>
 
-asmlinkage int sys_vm86(struct vm86_struct * v86)
+asmlinkage int sys_vm86(void *v86)
 {
 	return -ENOSYS;
 }

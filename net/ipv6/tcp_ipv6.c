@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: tcp_ipv6.c,v 1.32 1997/06/04 08:28:58 davem Exp $
+ *	$Id: tcp_ipv6.c,v 1.33 1997/06/06 20:38:10 freitag Exp $
  *
  *	Based on: 
  *	linux/net/ipv4/tcp.c
@@ -695,7 +695,7 @@ static struct or_calltable or_ipv6 = {
  * Can some kind of merge be done? -- erics
  */
 static int tcp_v6_conn_request(struct sock *sk, struct sk_buff *skb, void *ptr,
-			       __u32 isn)
+							   __u32 isn)
 {
 	struct tcp_opt tp;
 	struct open_request *req;
@@ -710,6 +710,9 @@ static int tcp_v6_conn_request(struct sock *sk, struct sk_buff *skb, void *ptr,
 
 	if (skb->protocol == __constant_htons(ETH_P_IP))
 		return tcp_v4_conn_request(sk, skb, ptr, isn);
+
+	if (isn == 0) 
+		isn = tcp_v6_init_sequence(sk,skb);
 
 	/*
 	 *	There are no SYN attacks on IPv6, yet...
@@ -735,7 +738,7 @@ static int tcp_v6_conn_request(struct sock *sk, struct sk_buff *skb, void *ptr,
 	req->snt_isn = isn;
 	tp.tstamp_ok = tp.sack_ok = tp.wscale_ok = tp.snd_wscale = 0;
 	tp.in_mss = 536;
-	tcp_parse_options(skb->h.th,&tp);
+	tcp_parse_options(skb->h.th,&tp,0);
 	if (tp.saw_tstamp)
                 req->ts_recent = tp.rcv_tsval;
         req->mss = tp.in_mss;
@@ -778,10 +781,10 @@ static void tcp_v6_send_check(struct sock *sk, struct tcphdr *th, int len,
 }
 
 static struct sock * tcp_v6_syn_recv_sock(struct sock *sk, struct sk_buff *skb,
-					  struct open_request *req)
+					  struct open_request *req,
+					  struct dst_entry *dst)
 {
 	struct ipv6_pinfo *np;
-	struct dst_entry *dst;
 	struct flowi fl;
 	struct tcp_opt *newtp;
 	struct sock *newsk;
@@ -791,11 +794,11 @@ static struct sock * tcp_v6_syn_recv_sock(struct sock *sk, struct sk_buff *skb,
 		 *	v6 mapped
 		 */
 
-		newsk = tcp_v4_syn_recv_sock(sk, skb, req);
+		newsk = tcp_v4_syn_recv_sock(sk, skb, req, dst);
 
-		if (newsk == NULL)
+		if (newsk == NULL) 
 			return NULL;
-
+	
 		np = &newsk->net_pinfo.af_inet6;
 
 		ipv6_addr_set(&np->daddr, 0, 0, __constant_htonl(0x0000FFFF),
@@ -813,8 +816,11 @@ static struct sock * tcp_v6_syn_recv_sock(struct sock *sk, struct sk_buff *skb,
 	}
 
 	newsk = sk_alloc(GFP_ATOMIC);
-	if (newsk == NULL)
+	if (newsk == NULL) {
+	        if (dst)
+		    dst_release(dst);
 		return NULL;
+	}
 
 	memcpy(newsk, sk, sizeof(*newsk));
 
@@ -902,18 +908,20 @@ static struct sock * tcp_v6_syn_recv_sock(struct sock *sk, struct sk_buff *skb,
 	ipv6_addr_copy(&np->rcv_saddr, &req->af.v6_req.loc_addr);
 	np->oif = req->af.v6_req.dev;
 
-	/*
-	 *	options / mss / route cache
-	 */
-
-	fl.proto = IPPROTO_TCP;
-	fl.nl_u.ip6_u.daddr = &np->daddr;
-	fl.nl_u.ip6_u.saddr = &np->saddr;
-	fl.dev = np->oif;
-	fl.uli_u.ports.dport = newsk->dummy_th.dest;
-	fl.uli_u.ports.sport = newsk->dummy_th.source;
-
-	dst = ip6_route_output(newsk, &fl);
+	if (dst == NULL) {
+	    /*
+	     *	options / mss / route cache
+	     */
+	    
+	    fl.proto = IPPROTO_TCP;
+	    fl.nl_u.ip6_u.daddr = &np->daddr;
+	    fl.nl_u.ip6_u.saddr = &np->saddr;
+	    fl.dev = np->oif;
+	    fl.uli_u.ports.dport = newsk->dummy_th.dest;
+	    fl.uli_u.ports.sport = newsk->dummy_th.source;
+	    
+	    dst = ip6_route_output(newsk, &fl);
+	}
 
 	ip6_dst_store(newsk, dst);
 
@@ -1051,7 +1059,7 @@ struct sock *tcp_v6_check_req(struct sock *sk, struct sk_buff *skb)
 			}
 
 			skb_orphan(skb);
-			sk = tp->af_specific->syn_recv_sock(sk, skb, req);
+			sk = tp->af_specific->syn_recv_sock(sk, skb, req, NULL);
 
 			tcp_dec_slow_timer(TCP_SLT_SYNACK);
 
@@ -1308,7 +1316,6 @@ static struct tcp_func ipv6_specific = {
 	tcp_v6_rebuild_header,
 	tcp_v6_conn_request,
 	tcp_v6_syn_recv_sock,
-	tcp_v6_init_sequence,
 	tcp_v6_get_sock,
 	ipv6_setsockopt,
 	ipv6_getsockopt,
@@ -1328,7 +1335,6 @@ static struct tcp_func ipv6_mapped = {
 	tcp_v4_rebuild_header,
 	tcp_v6_conn_request,
 	tcp_v6_syn_recv_sock,
-	tcp_v6_init_sequence,
 	tcp_v6_get_sock,
 	ipv6_setsockopt,
 	ipv6_getsockopt,

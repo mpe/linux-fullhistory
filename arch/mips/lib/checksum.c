@@ -16,126 +16,85 @@
  */
 #include <net/checksum.h>
 #include <asm/string.h>
+#include <asm/uaccess.h>
+
+static inline unsigned short from32to16(unsigned long x)
+{
+	/* 32 bits --> 16 bits + carry */
+	x = (x & 0xffff) + (x >> 16);
+	/* 16 bits + carry --> 16 bits including carry */
+	x = (x & 0xffff) + (x >> 16);
+	return x;
+}
+
+static inline unsigned long do_csum(const unsigned char * buff, int len)
+{
+	int odd, count;
+	unsigned long result = 0;
+
+	if (len <= 0)
+		goto out;
+	odd = 1 & (unsigned long) buff;
+	if (odd) {
+		result = *buff;
+		len--;
+		buff++;
+	}
+	count = len >> 1;		/* nr of 16-bit words.. */
+	if (count) {
+		if (2 & (unsigned long) buff) {
+			result += *(unsigned short *) buff;
+			count--;
+			len -= 2;
+			buff += 2;
+		}
+		count >>= 1;		/* nr of 32-bit words.. */
+		if (count) {
+		        unsigned long carry = 0;
+			do {
+				unsigned long w = *(unsigned long *) buff;
+				count--;
+				buff += 4;
+				result += carry;
+				result += w;
+				carry = (w > result);
+			} while (count);
+			result += carry;
+			result = (result & 0xffff) + (result >> 16);
+		}
+		if (len & 2) {
+			result += *(unsigned short *) buff;
+			buff += 2;
+		}
+	}
+	if (len & 1)
+		result += (*buff << 8);
+	result = from32to16(result);
+	if (odd)
+		result = ((result >> 8) & 0xff) | ((result & 0xff) << 8);
+out:
+	return result;
+}
 
 /*
  * computes a partial checksum, e.g. for TCP/UDP fragments
  */
-
 unsigned int csum_partial(const unsigned char *buff, int len, unsigned int sum)
 {
-	unsigned long	scratch1;
-	unsigned long	scratch2;
+	unsigned long result = do_csum(buff, len);
 
-	/*
-	 * The GCC generated code for handling carry bits makes
-	 * it strongly desirable to do this in assembler!
-	 */
-    __asm__("
-	.set	noreorder
-	.set	noat
-	andi	$1,%5,2		# Check alignment
-	beqz	$1,2f		# Branch if ok
-	subu	$1,%4,2		# delay slot, Alignment uses up two bytes
-	bgez	$1,1f		# Jump if we had at least two bytes
-	move	%4,$1		# delay slot
-	j	4f
-	addiu	%4,2		# delay slot; len was < 2.  Deal with it
-
-1:	lw	%2,(%5)
-	addiu	%4,2
-	addu	%0,%2
-	sltu	$1,%0,%2
-	addu	%0,$1
-
-2:	move	%1,%4
-	srl	%1,%1,5
-	beqz	%1,2f
-	sll	%1,%1,5		# delay slot
-
-	addu	%1,%5
-1:	lw	%2,0(%5)
-	addu	%5,32
-	addu	%0,%2
-	sltu	$1,%0,%2
-
-	lw	%2,-28(%5)
-	addu	%0,$1
-	addu	%0,%2
-	sltu	$1,%0,%2
-
-	lw	%2,-24(%5)
-	addu	%0,$1
-	addu	%0,%2
-	sltu	$1,%0,%2
-
-	lw	%2,-20(%5)
-	addu	%0,$1
-	addu	%0,%2
-	sltu	$1,%0,%2
-
-	lw	%2,-16(%5)
-	addu	%0,$1
-	addu	%0,%2
-	sltu	$1,%0,%2
-
-	lw	%2,-12(%5)
-	addu	%0,$1
-	addu	%0,%2
-	sltu	$1,%0,%2
-
-	lw	%2,-8(%5)
-	addu	%0,$1
-	addu	%0,%2
-	sltu	$1,%0,%2
-
-	lw	%2,-4(%5)
-	addu	%0,$1
-	addu	%0,%2
-	sltu	$1,%0,%2
-
-	bne	%5,%1,1b
-	addu	%0,$1		# delay slot
-
-2:	andi	%1,%4,0x1c
-	srl	%1,%1,2
-	beqz	%1,4f
-	addu	%1,%5		# delay slot
-3:	lw	%2,0(%5)
-	addu	%5,4
-	addu	%0,%2
-	sltu	$1,%0,%2
-	bne	%5,%1,3b
-	addu	%0,$1		# delay slot
-
-4:	andi	$1,%3,2
-	beqz	$1,5f
-	move	%2,$0		# delay slot
-	lhu	%2,(%5)
-	addiu	%5,2
-
-5:	andi	$1,%3,1
-	beqz	$1,6f
-	sll	%1,16		# delay slot
-	lbu	%1,(%5)
-	nop			# NOP ALERT (spit, gasp)
-6:	or	%2,%1
-	addu	%0,%2
-	sltu	$1,%0,%2
-	addu	%0,$1
-7:	.set	at
-	.set	reorder"
-	: "=r"(sum), "=r" (scratch1), "=r" (scratch2)
-	: "0"(sum), "r"(len), "r"(buff)
-	: "$1");
-
-	return sum;
+	/* add in old sum, and carry.. */
+	result += sum;
+	if(sum > result)
+		result += 1;
+	return result;
 }
 
 /*
- * copy from fs while checksumming, otherwise like csum_partial
+ * copy while checksumming, otherwise like csum_partial
  */
 unsigned int csum_partial_copy(const char *src, char *dst, 
-				  int len, int sum)
+                               int len, unsigned int sum)
 {
 	/*
 	 * It's 2:30 am and I don't feel like doing it real ...
@@ -145,4 +104,24 @@ unsigned int csum_partial_copy(const char *src, char *dst,
 	memcpy(dst, src, len);
 
 	return sum;
+}
+
+/*
+ * Copy from userspace and compute checksum.  If we catch an exception
+ * then zero the rest of the buffer.
+ */
+unsigned int csum_partial_copy_from_user (const char *src, char *dst,
+                                          int len, unsigned int sum,
+                                          int *err_ptr)
+{
+        int *dst_err_ptr=NULL;
+	int missing;
+
+	missing = copy_from_user(dst, src, len);
+	if (missing) {
+		memset(dst + len - missing, 0, missing);
+		*err_ptr = -EFAULT;
+	}
+		
+	return csum_partial(dst, len, sum);
 }

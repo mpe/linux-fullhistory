@@ -450,7 +450,7 @@ retry:
 static unix_socket *unix_find_other(struct sockaddr_un *sunname, int len,
 				    int type, unsigned hash, int *error)
 {
-	int old_fs;
+	unsigned long old_fs;
 	int err;
 	struct inode *inode;
 	unix_socket *u;

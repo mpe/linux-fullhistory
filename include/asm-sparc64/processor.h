@@ -1,4 +1,4 @@
-/* $Id: processor.h,v 1.27 1997/05/23 09:35:52 jj Exp $
+/* $Id: processor.h,v 1.29 1997/06/16 04:45:05 davem Exp $
  * include/asm-sparc64/processor.h
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -56,7 +56,8 @@ struct thread_struct {
 	unsigned long sig_desc;
 
 	struct sigstack sstk_info;
-	int current_ds, new_signal;
+	unsigned long current_ds;
+	unsigned long new_signal;
 	
 	struct pt_regs *kregs;
 	
@@ -135,7 +136,7 @@ do { \
 	"stx		%%g0, [%0 + %2 + 0x78]\n\t" \
 	"wrpr		%%g0, (1 << 3), %%wstate\n\t" \
 	: \
-	: "r" (regs), "r" (sp - REGWIN_SZ), \
+	: "r" (regs), "r" (sp - REGWIN_SZ - STACK_BIAS), \
 	  "i" ((const unsigned long)(&((struct pt_regs *)0)->u_regs[0]))); \
 } while(0)
 

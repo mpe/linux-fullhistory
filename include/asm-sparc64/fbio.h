@@ -48,10 +48,6 @@ struct  fbtype {
 };
 #define FBIOGTYPE _IOR('F', 0, struct fbtype)
 
-/* Used by FBIOPUTCMAP
- *
- * XXX 32-bit binary compatability item... -DaveM
- */
 struct  fbcmap {
         int             index;          /* first element (0 origin) */
         int             count;
@@ -104,7 +100,6 @@ struct fbcurpos {
 #define FB_CUR_SETSHAPE 0x10	/* set shape */
 #define FB_CUR_SETALL   0x1F	/* all of the above */
 
-/* XXX 32-bit binary compatability item... -DaveM */
 struct fbcursor {
         short set;              /* what to set, choose from the list above */
         short enable;           /* cursor on/off */

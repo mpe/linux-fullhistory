@@ -431,7 +431,7 @@ int smb_current_vmalloced;
 
 static struct file_system_type smb_fs_type = {
 	"smbfs",
-	FS_NO_DCACHE,
+	0 /* FS_NO_DCACHE doesn't work correctly */,
 	smb_read_super,
 	NULL
 };

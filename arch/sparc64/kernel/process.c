@@ -1,4 +1,4 @@
-/*  $Id: process.c,v 1.17 1997/06/02 06:33:32 davem Exp $
+/*  $Id: process.c,v 1.18 1997/06/13 14:02:42 davem Exp $
  *  arch/sparc64/kernel/process.c
  *
  *  Copyright (C) 1995, 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -360,6 +360,7 @@ void flush_thread(void)
 	}
 	
 	/* Now, this task is no longer a kernel thread. */
+	current->tss.current_ds = USER_DS;
 	if(current->tss.flags & SPARC_FLAG_KTHREAD) {
 		current->tss.flags &= ~SPARC_FLAG_KTHREAD;
 
@@ -368,8 +369,8 @@ void flush_thread(void)
 		 */
 		get_mmu_context(current);
 	}
-	current->tss.current_ds = USER_DS;
-	spitfire_set_secondary_context (current->mm->context);
+	current->tss.ctx = current->mm->context & 0x1fff;
+	spitfire_set_secondary_context (current->tss.ctx);
 }
 
 static __inline__ void copy_regs(struct pt_regs *dst, struct pt_regs *src)
@@ -571,12 +572,13 @@ int copy_thread(int nr, unsigned long clone_flags, unsigned long sp,
 		childregs->u_regs[UREG_FP] = p->tss.ksp;
 		p->tss.flags |= SPARC_FLAG_KTHREAD;
 		p->tss.current_ds = KERNEL_DS;
+		p->tss.ctx = 0;
 		childregs->u_regs[UREG_G6] = (unsigned long) p;
 	} else {
 		childregs->u_regs[UREG_FP] = sp;
 		p->tss.flags &= ~SPARC_FLAG_KTHREAD;
 		p->tss.current_ds = USER_DS;
-
+		p->tss.ctx = (p->mm->context & 0x1fff);
 #if 0
 		if (sp != regs->u_regs[UREG_FP]) {
 			struct sparc_stackf *childstack;

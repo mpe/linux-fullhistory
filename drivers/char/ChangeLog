@@ -1,3 +1,27 @@
+Thu Jun 19 20:05:58 1997  Theodore Ts'o  <tytso@rsts-11.mit.edu>
+
+	* serial.c (begin_break, end_break, rs_ioctl): Applied patch
+		to support BSD ioctls to set and clear the break
+		condition explicitly.
+
+	* console.c (scrup, scrdown, insert_line, delete_line): Applied
+		fix suggested by Aaron Tiensivu to speed up block scrolls
+		up and down.
+
+	* n_tty.c (opost_block, write_chan): Added a modified "fast
+ 		console" patch which processes a block of text via
+		"cooking" efficiently.
+
+Wed Jun 18 15:25:50 1997  Theodore Ts'o  <tytso@rsts-11.mit.edu>
+
+	* tty_io.c (init_dev, release_dev): Applied fix suggested by Bill
+		Hawes to prevent race conditions in the tty code.
+
+	* n_tty.c (n_tty_chars_in_buffer): Applied fix suggested by Bill
+		Hawes so that n_tty_chars_in_buffer returns the correct
+		value in the case when the tty is in cannonical mode.  (To
+		avoid a pty deadlock with telnetd.)
+
 Thu Feb 27 01:53:08 1997  Theodore Ts'o  <tytso@rsts-11.mit.edu>
 
 	* serial.c (change_speed): Add support for the termios flag

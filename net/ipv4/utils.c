@@ -13,7 +13,7 @@
  * Fixes:
  *		Alan Cox	:	verify_area check.
  *		Alan Cox	:	removed old debugging.
- *
+ *		Andi Kleen	:	add net_ratelimit()  
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -89,3 +89,24 @@ __u32 in_aton(const char *str)
 	return(htonl(l));
 }
 
+/* 
+ * This enforces a rate limit: not more than one kernel message
+ * every 5secs to make a denial-of-service attack impossible.
+ *
+ * All warning printk()s should be guarded by this function. 
+ */ 
+int net_ratelimit(void)
+{
+	static unsigned long last_msg; 
+	static int missed; 
+	
+	if ((jiffies - last_msg) >= 5*HZ) {
+		if (missed)	
+			printk(KERN_WARNING "ipv4: (%d messages suppressed. Flood?)\n", missed);
+		missed = 0; 
+		last_msg = jiffies;
+		return 1;
+	}
+	missed++; 
+	return 0; 
+}

@@ -19,13 +19,14 @@
 
 /* Well-known binary file extensions - of course there are many more */
 
-static char bin_extensions[] =
-  "EXE" "COM" "BIN" "APP" "SYS" "DRV" "OVL" "OVR" "OBJ" "LIB" "DLL" "PIF" /* program code */
-  "ARC" "ZIP" "LHA" "LZH" "ZOO" "TAR" "Z  " "ARJ"	/* common archivers */
-  "TZ " "TAZ" "TZP" "TPZ"		/* abbreviations of tar.Z and tar.zip */
-  "GZ " "TGZ" "DEB"			/* .gz, .tar.gz and Debian packages   */
-  "GIF" "BMP" "TIF" "GL " "JPG" "PCX"	/* graphics */
-  "TFM" "VF " "GF " "PK " "PXL" "DVI";	/* TeX */
+static char ascii_extensions[] =
+  "TXT" "ME " "HTM" "1ST" "LOG" "   " 	/* text files */
+  "C  " "H  " "CPP" "LIS" "PAS" "FOR"  /* programming languages */
+  "F  " "MAK" "INC" "BAS" 		/* programming languages */
+  "BAT" "SH"				/* program code :) */
+  "INI "				/* config files */
+  "PBM" "PGM" "DXF"			/* graphics */
+  "TEX";				/* TeX */
 
 
 /*
@@ -62,9 +63,9 @@ int is_binary(char conversion,char *extension)
 		case 't':
 			return 0;
 		case 'a':
-			for (walk = bin_extensions; *walk; walk += 3)
-				if (!strncmp(extension,walk,3)) return 1;
-			return 0;
+			for (walk = ascii_extensions; *walk; walk += 3)
+				if (!strncmp(extension,walk,3)) return 0;
+			return 1;	/* default binary conversion */
 		default:
 			printk("Invalid conversion mode - defaulting to "
 			    "binary.\n");

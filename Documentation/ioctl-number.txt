@@ -91,6 +91,7 @@ Code	Seq#	Include File		Comments
 					<mailto:natalia@nikhefk.nikhef.nl>
 'c'	all	linux/comstats.h
 'f'	all	linux/ext2_fs.h
+'k'	all	asm-sparc/kbio.h, asm-sparc64/kbio.h
 'l'	00-3F	linux/tcfs_fs.h		in development:
 					<http://mikonos.dia.unisa.it/tcfs>
 'm'	all	linux/mtio.h		conflict!

@@ -1,13 +1,8 @@
-/* $Id: ioctls.h,v 1.2 1997/04/04 00:50:18 davem Exp $ */
+/* $Id: ioctls.h,v 1.3 1997/06/14 17:35:08 davem Exp $ */
 #ifndef _ASM_SPARC64_IOCTLS_H
 #define _ASM_SPARC64_IOCTLS_H
 
 #include <asm/ioctl.h>
-
-/* XXX 32-bit binary compatability issues, I am sure that
- * XXX only IOCTL's which reference structures will be of
- * XXX concern and these are easily fabricated using wrappers.
- */
 
 /* Big T */
 #define TCGETA		_IOR('T', 1, struct termio)
@@ -24,7 +19,7 @@
 
 /* Note that all the ioctls that are not available in Linux have a 
  * double underscore on the front to: a) avoid some programs to
- * thing we support some ioctls under Linux (autoconfiguration stuff)
+ * think we support some ioctls under Linux (autoconfiguration stuff)
  */
 /* Little t */
 #define TIOCGETD	_IOR('t', 0, int)

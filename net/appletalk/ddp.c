@@ -1540,11 +1540,33 @@ static int atalk_rcv(struct sk_buff *skb, struct device *dev, struct packet_type
 			ddp_dl->header_length + ddp->deh_len));
 
 		*((__u16 *)ddp)=ntohs(*((__u16 *)ddp));		/* Mend the byte order */
+
 		/*
 		 *	Send the buffer onwards
 		 */
 
-		skb=skb_unshare(skb, GFP_ATOMIC, FREE_READ);
+		/*
+		 *	Now we must always be careful. If it's come from 
+		 *	localtalk to ethertalk it might not fit
+		 *
+		 *	Order matters here: If a packet has to be copied
+		 *	to make a new headroom (rare hopefully) then it
+		 *	won't need unsharing.
+		 *
+		 *	Note. ddp-> becomes invalid at the realloc.
+		 */
+		
+		if(skb_headroom(skb)<22)
+			/* 22 bytes - 12 ether, 2 len, 3 802.2 5 snap */
+			skb=skb_realloc_headroom(skb, 32);
+		else
+			skb=skb_unshare(skb, GFP_ATOMIC, FREE_READ);
+		
+		/*
+		 *	If the buffer didnt vanish into the lack of
+		 *	space bitbucket we can send it.
+		 */
+		 
 		if(skb)
 		{
 			skb->arp = 1;	/* Resolved */
@@ -1702,10 +1724,14 @@ static int atalk_sendmsg(struct socket *sock, struct msghdr *msg, int len,
 			return(-EINVAL);
 		if(usat->sat_family != AF_APPLETALK)
 			return -EINVAL;
-#if 0         /* netatalk doesn't implement this check */
+		/* netatalk doesn't implement this check */
 		if(usat->sat_addr.s_node==ATADDR_BCAST && !sk->broadcast)
+		{
+			printk(KERN_INFO "SO_BROADCAST: Fix your netatalk as it will break before 2.2\n");
+#if 0
 			return -EPERM;
 #endif
+		}
 	}
 	else
 	{

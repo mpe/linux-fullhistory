@@ -1,4 +1,4 @@
-/* $Id: weitek.c,v 1.12 1997/06/04 08:27:34 davem Exp $
+/* $Id: weitek.c,v 1.13 1997/06/06 10:56:31 jj Exp $
  * weitek.c: Tadpole P9100/P9000 console driver
  *
  * Copyright (C) 1996 David Redman (djhr@tadpole.co.uk)
@@ -41,7 +41,7 @@ weitek_mmap(struct inode *inode, struct file *file, struct vm_area_struct *vma,
 	    long base, fbinfo_t *fb)
 {
 	unsigned int size, page, r, map_size;
-	unsigned int map_offset = 0;
+	unsigned long map_offset = 0;
 	
 	size = vma->vm_end - vma->vm_start;
 	if (vma->vm_offset & ~PAGE_MASK)

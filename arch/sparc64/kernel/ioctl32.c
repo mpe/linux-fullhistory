@@ -1,4 +1,4 @@
-/* $Id: ioctl32.c,v 1.8 1997/06/04 13:05:15 jj Exp $
+/* $Id: ioctl32.c,v 1.11 1997/06/16 11:05:00 jj Exp $
  * ioctl32.c: Conversion between 32bit and 64bit native ioctls.
  *
  * Copyright (C) 1997 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -20,9 +20,15 @@
 #include <linux/kd.h>
 #include <linux/route.h>
 #include <linux/netlink.h>
+#include <linux/vt.h>
+#include <linux/fs.h>
 
 #include <asm/types.h>
 #include <asm/uaccess.h>
+#include <asm/fbio.h>
+#include <asm/kbio.h>
+#include <asm/vuid_event.h>
+#include <asm/rtc.h>
 
 /* As gcc will warn about casting u32 to some ptr, we have to cast it to
  * unsigned long first, and that's what is A() for.
@@ -370,6 +376,109 @@ static inline int hdio_getgeo(unsigned int fd, u32 arg)
 	return err;
 }
 
+struct  fbcmap32 {
+	int             index;          /* first element (0 origin) */
+	int             count;
+	u32		red;
+	u32		green;
+	u32		blue;
+};
+
+#define FBIOPUTCMAP32	_IOW('F', 3, struct fbcmap32)
+#define FBIOGETCMAP32	_IOW('F', 4, struct fbcmap32)
+
+static inline int fbiogetputcmap(unsigned int fd, unsigned int cmd, u32 arg)
+{
+	struct fbcmap f;
+	int ret;
+	char red[256], green[256], blue[256];
+	u32 r, g, b;
+	unsigned long old_fs = get_fs();
+	
+	if (get_user(f.index, &(((struct fbcmap32 *)A(arg))->index)) ||
+	    __get_user(f.count, &(((struct fbcmap32 *)A(arg))->count)) ||
+	    __get_user(r, &(((struct fbcmap32 *)A(arg))->red)) ||
+	    __get_user(g, &(((struct fbcmap32 *)A(arg))->green)) ||
+	    __get_user(b, &(((struct fbcmap32 *)A(arg))->blue)))
+		return -EFAULT;
+	if ((f.index < 0) || (f.index > 255)) return -EINVAL;
+	if (f.index + f.count > 256)
+		f.count = 256 - f.index;
+	if (cmd == FBIOPUTCMAP32) {
+		if (copy_from_user (red, (char *)A(r), f.count) ||
+		    copy_from_user (green, (char *)A(g), f.count) ||
+		    copy_from_user (blue, (char *)A(b), f.count))
+			return -EFAULT;
+	}
+	f.red = red; f.green = green; f.blue = blue;
+	set_fs (KERNEL_DS);
+	ret = sys_ioctl (fd, (cmd == FBIOPUTCMAP32) ? FBIOPUTCMAP : FBIOGETCMAP, (long)&f);
+	set_fs (old_fs);
+	if (!ret && cmd == FBIOGETCMAP32) {
+		if (copy_to_user ((char *)A(r), red, f.count) ||
+		    copy_to_user ((char *)A(g), green, f.count) ||
+		    copy_to_user ((char *)A(b), blue, f.count))
+			return -EFAULT;
+	}
+	return ret;
+}
+
+struct fbcursor32 {
+	short set;		/* what to set, choose from the list above */
+	short enable;		/* cursor on/off */
+	struct fbcurpos pos;	/* cursor position */
+	struct fbcurpos hot;	/* cursor hot spot */
+	struct fbcmap32 cmap;	/* color map info */
+	struct fbcurpos size;	/* cursor bit map size */
+	u32	image;		/* cursor image bits */
+	u32	mask;		/* cursor mask bits */
+};
+	
+#define FBIOSCURSOR32	_IOW('F', 24, struct fbcursor32)
+#define FBIOGCURSOR32	_IOW('F', 25, struct fbcursor32)
+
+static inline int fbiogscursor(unsigned int fd, unsigned int cmd, u32 arg)
+{
+	struct fbcursor f;
+	int ret;
+	char red[2], green[2], blue[2];
+	char image[128], mask[128];
+	u32 r, g, b;
+	u32 m, i;
+	unsigned long old_fs = get_fs();
+	
+	if (copy_from_user (&f, (struct fbcursor32 *)A(arg), 2 * sizeof (short) + 2 * sizeof(struct fbcurpos)) ||
+	    __get_user(f.size.fbx, &(((struct fbcursor32 *)A(arg))->size.fbx)) ||
+	    __get_user(f.size.fby, &(((struct fbcursor32 *)A(arg))->size.fby)) ||
+	    __get_user(f.cmap.index, &(((struct fbcursor32 *)A(arg))->cmap.index)) ||
+	    __get_user(f.cmap.count, &(((struct fbcursor32 *)A(arg))->cmap.count)) ||
+	    __get_user(r, &(((struct fbcursor32 *)A(arg))->cmap.red)) ||
+	    __get_user(g, &(((struct fbcursor32 *)A(arg))->cmap.green)) ||
+	    __get_user(b, &(((struct fbcursor32 *)A(arg))->cmap.blue)) ||
+	    __get_user(m, &(((struct fbcursor32 *)A(arg))->mask)) ||
+	    __get_user(i, &(((struct fbcursor32 *)A(arg))->image)))
+		return -EFAULT;
+	if (f.set & FB_CUR_SETCMAP) {
+		if ((uint) f.size.fby > 32)
+			return -EINVAL;
+		if (copy_from_user (mask, (char *)A(m), f.size.fby * 4) ||
+		    copy_from_user (image, (char *)A(i), f.size.fby * 4))
+			return -EFAULT;
+		f.image = image; f.mask = mask;
+	}
+	if (f.set & FB_CUR_SETCMAP) {
+		if (copy_from_user (red, (char *)A(r), 2) ||
+		    copy_from_user (green, (char *)A(g), 2) ||
+		    copy_from_user (blue, (char *)A(b), 2))
+			return -EFAULT;
+		f.cmap.red = red; f.cmap.green = green; f.cmap.blue = blue;
+	}
+	set_fs (KERNEL_DS);
+	ret = sys_ioctl (fd, FBIOSCURSOR, (long)&f);
+	set_fs (old_fs);
+	return ret;
+}
+	
 asmlinkage int sys32_ioctl(unsigned int fd, unsigned int cmd, u32 arg)
 {
 	struct file * filp;
@@ -431,6 +540,15 @@ asmlinkage int sys32_ioctl(unsigned int fd, unsigned int cmd, u32 arg)
 	case BLKGETSIZE:
 		error = w_long(fd, cmd, arg);
 		goto out;
+		
+	case FBIOPUTCMAP32:
+	case FBIOGETCMAP32:
+		error = fbiogetputcmap(fd, cmd, arg);
+		goto out;
+		
+	case FBIOSCURSOR32:
+		error = fbiogscursor(fd, cmd, arg);
+		goto out;
 
 	/* List here exlicitly which ioctl's are known to have
 	 * compatable types passed or none at all...
@@ -471,6 +589,17 @@ asmlinkage int sys32_ioctl(unsigned int fd, unsigned int cmd, u32 arg)
 	case TIOCSPGRP:
 	case TIOCGPGRP:
 	case TIOCSCTTY:
+	
+	/* Big F */
+	case FBIOGTYPE:
+	case FBIOSATTR:
+	case FBIOGATTR:
+	case FBIOSVIDEO:
+	case FBIOGVIDEO:
+	case FBIOGCURSOR32: /* This is not implemented yet. Later it should be converted... */
+	case FBIOSCURPOS:
+	case FBIOGCURPOS:
+	case FBIOGCURMAX:
 
 	/* Little f */
 	case FIOCLEX:
@@ -478,6 +607,10 @@ asmlinkage int sys32_ioctl(unsigned int fd, unsigned int cmd, u32 arg)
 	case FIOASYNC:
 	case FIONBIO:
 	case FIONREAD: /* This is also TIOCINQ */
+	
+	/* 0x00 */
+	case FIBMAP:
+	case FIGETBSZ:
 	
 	/* 0x12 */
 	case BLKRRPART:
@@ -495,6 +628,59 @@ asmlinkage int sys32_ioctl(unsigned int fd, unsigned int cmd, u32 arg)
 	case KDSIGACCEPT:
 	case KDGETKEYCODE:
 	case KDSETKEYCODE:
+	case KIOCSOUND:
+	case KDMKTONE:
+	case KDGKBTYPE:
+	case KDSETMODE:
+	case KDGETMODE:
+	case KDSKBMODE:
+	case KDGKBMODE:
+	case KDSKBMETA:
+	case KDGKBMETA:
+	case KDGKBENT:
+	case KDSKBENT:
+	case KDGKBSENT:
+	case KDSKBSENT:
+	case KDGKBDIACR:
+	case KDSKBDIACR:
+	case KDGKBLED:
+	case KDSKBLED:
+	case KDGETLED:
+	case KDSETLED:
+	
+	/* Little k */
+	case KIOCTYPE:
+	case KIOCLAYOUT:
+	case KIOCGTRANS:
+	case KIOCTRANS:
+	case KIOCCMD:
+	case KIOCSDIRECT:
+	case KIOCSLED:
+	case KIOCGLED:
+	case KIOCSRATE:
+	case KIOCGRATE:
+	
+	/* Big V */
+	case VT_SETMODE:
+	case VT_GETMODE:
+	case VT_GETSTATE:
+	case VT_OPENQRY:
+	case VT_ACTIVATE:
+	case VT_WAITACTIVE:
+	case VT_RELDISP:
+	case VT_DISALLOCATE:
+	case VT_RESIZE:
+	case VT_RESIZEX:
+	case VT_LOCKSWITCH:
+	case VT_UNLOCKSWITCH:
+	
+	/* Little v */
+	case VUIDSFORMAT:
+	case VUIDGFORMAT:
+
+	/* Little p (/dev/rtc etc.) */
+	case RTCGET:
+	case RTCSET:
 
 	/* Socket level stuff */
 	case FIOSETOWN:

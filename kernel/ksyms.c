@@ -341,6 +341,7 @@ EXPORT_SYMBOL(set_writetime);
 EXPORT_SYMBOL(sys_tz);
 EXPORT_SYMBOL(__wait_on_super);
 EXPORT_SYMBOL(file_fsync);
+EXPORT_SYMBOL(_free_ibasket);
 EXPORT_SYMBOL(_clear_inode);
 EXPORT_SYMBOL(refile_buffer);
 EXPORT_SYMBOL(nr_async_pages);

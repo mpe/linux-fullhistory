@@ -260,6 +260,13 @@ M:	layes@loran.com
 L:	linux-net@vger.rutgers.edu
 S:	Maintained
 
+MIPS:
+P:	Ralf Baechle
+M:	ralf@gnu.ai.mit.edu
+W:	http://lena.fnet.fr/
+L:	linux-mips@fnet.fr
+S:	Maintained
+
 NCP FILESYSTEM:
 P:	Volker Lendecke
 M:	lendecke@Math.Uni-Goettingen.de

@@ -1,4 +1,4 @@
-/* $Id: rtrap.S,v 1.21 1997/06/02 07:26:54 davem Exp $
+/* $Id: rtrap.S,v 1.23 1997/06/16 07:38:41 davem Exp $
  * rtrap.S: Preparing for return from trap on Sparc V9.
  *
  * Copyright (C) 1997 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -25,10 +25,10 @@ rtrap:	sethi		%hi(bh_active), %l2
 	or		%l2, %lo(bh_active), %l2
 	sethi		%hi(bh_mask), %l1
 	or		%l1, %lo(bh_mask), %l1
-	ldx		[%l2 + %g4], %l3
-	ldx		[%l1 + %g4], %l4
+	ldx		[%l2 + %g4], %l4
+	ldx		[%l1 + %g4], %l7
 
-	andcc		%l3, %l4, %g0
+	andcc		%l4, %l7, %g0
 	be,pt		%xcc, 2f
 	 nop
 	call		do_bottom_half

@@ -602,10 +602,7 @@ static int do_umount(kdev_t dev,int unmount_root)
 	if (!sb->s_covered->i_mount)
 		printk("VFS: umount(%s): mounted inode has i_mount=NULL\n",
 		       kdevname(dev));
-	while(sb->s_ibasket)
-		free_ibasket(sb);
-	if(sb->s_mounted->i_dentry)
-		d_del(sb->s_mounted->i_dentry, D_NO_CLEAR_INODE);
+
 	/*
 	 * Before checking if the filesystem is still busy make sure the kernel
 	 * doesn't hold any quotafiles open on that device. If the umount fails
@@ -614,6 +611,13 @@ static int do_umount(kdev_t dev,int unmount_root)
 	quota_off(dev, -1);
 	if (!fs_may_umount(dev, sb->s_mounted))
 		return -EBUSY;
+
+	/* Clear up the dcache tree. This should be cleaner.. */
+	while (sb->s_ibasket)
+		free_ibasket(sb);
+	if (sb->s_mounted->i_dentry)
+		d_del(sb->s_mounted->i_dentry, D_NO_CLEAR_INODE);
+
 	sb->s_covered->i_mount = NULL;
 	iput(sb->s_covered);
 	sb->s_covered = NULL;

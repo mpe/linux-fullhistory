@@ -136,5 +136,8 @@ extern int   	sock_sendmsg(struct socket *, struct msghdr *m, int len);
 extern int	sock_recvmsg(struct socket *, struct msghdr *m, int len, int flags);
 extern int	sock_readv_writev(int type, struct inode * inode, struct file * file,
 				  const struct iovec * iov, long count, long size);
+
+int net_ratelimit(void);
+
 #endif /* __KERNEL__ */
 #endif	/* _LINUX_NET_H */

@@ -1,4 +1,4 @@
-/* $Id: sunfb.c,v 1.23 1997/05/31 18:33:26 mj Exp $
+/* $Id: sunfb.c,v 1.24 1997/06/06 10:56:24 jj Exp $
  * sunfb.c: Sun generic frame buffer support.
  *
  * Copyright (C) 1995, 1996 Miguel de Icaza (miguel@nuclecu.unam.mx)
@@ -132,7 +132,7 @@ fb_ioctl (struct inode *inode, struct file *file, uint cmd, unsigned long arg)
 		if ((index < 0) || (index > 255))
 			return -EINVAL;
 		if (index + count > 256)
-			count = 256 - cmap->index;
+			count = 256 - index;
 		__get_user_ret(rp, &cmap->red, -EFAULT);
 		__get_user_ret(gp, &cmap->green, -EFAULT);
 		__get_user_ret(bp, &cmap->blue, -EFAULT);
@@ -146,7 +146,7 @@ fb_ioctl (struct inode *inode, struct file *file, uint cmd, unsigned long arg)
 			__put_user_ret(fb->color_map CM(i,2), bp, -EFAULT);
 			rp++; gp++; bp++;
 		}
-		(*fb->loadcmap)(fb, cmap->index, count);
+		(*fb->loadcmap)(fb, index, count);
                 break;			
 
 	}
@@ -164,13 +164,13 @@ fb_ioctl (struct inode *inode, struct file *file, uint cmd, unsigned long arg)
 		if ((index < 0) || (index > 255))
 			return -EINVAL;
 		if (index + count > 256)
-			count = 256 - cmap->index;
+			count = 256 - index;
 		__get_user_ret(rp, &cmap->red, -EFAULT);
 		__get_user_ret(gp, &cmap->green, -EFAULT);
 		__get_user_ret(bp, &cmap->blue, -EFAULT);
-		if(verify_area (VERIFY_READ, rp, cmap->count)) return -EFAULT;
-		if(verify_area (VERIFY_READ, gp, cmap->count)) return -EFAULT;
-		if(verify_area (VERIFY_READ, bp, cmap->count)) return -EFAULT;
+		if(verify_area (VERIFY_READ, rp, count)) return -EFAULT;
+		if(verify_area (VERIFY_READ, gp, count)) return -EFAULT;
+		if(verify_area (VERIFY_READ, bp, count)) return -EFAULT;
 
 		end = index + count;
 		for (i = index; i < end; i++){
@@ -179,7 +179,7 @@ fb_ioctl (struct inode *inode, struct file *file, uint cmd, unsigned long arg)
 			__get_user_ret(fb->color_map CM(i,2), bp, -EFAULT);
 			rp++; gp++; bp++;
 		}
-		(*fb->loadcmap)(fb, cmap->index, count);
+		(*fb->loadcmap)(fb, index, count);
                 break;			
 	}
 

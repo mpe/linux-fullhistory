@@ -5,16 +5,18 @@
  * License.  See the file "COPYING" in the main directory of this archive
  * for more details.
  *
- * Copyright (C) 1995 by Ralf Baechle
+ * Copyright (C) 1995, 1996, 1997 by Ralf Baechle
+ *
+ * Changed system calls macros _syscall5 - _syscall7 to push args 5 to 7 onto
+ * the stack. Robin Farine for ACN S.A, Copyright (C) 1996 by ACN S.A
  */
 #ifndef __ASM_MIPS_UNISTD_H
 #define __ASM_MIPS_UNISTD_H
 
 /*
  * The syscalls 0 - 3999 are reserved for a down to the root syscall
- * compatibility with Risc/OS and IRIX.  None of these syscalls has yet been
- * implemented.  We'll see how to deal with the various "real" BSD variants
- * like Ultrix, NetBSD ...
+ * compatibility with RISC/os and IRIX.  We'll see how to deal with the
+ * various "real" BSD variants like Ultrix, NetBSD ...
  */
 
 /*
@@ -1067,7 +1069,7 @@
 #define __NR_settimeofday		(__NR_Linux +  79)
 #define __NR_getgroups			(__NR_Linux +  80)
 #define __NR_setgroups			(__NR_Linux +  81)
-#define __NR_select			(__NR_Linux +  82)
+#define __NR_reserved82			(__NR_Linux +  82)
 #define __NR_symlink			(__NR_Linux +  83)
 #define __NR_oldlstat			(__NR_Linux +  84)
 #define __NR_readlink			(__NR_Linux +  85)
@@ -1137,19 +1139,49 @@
 #define __NR_sysmips			(__NR_Linux + 149)
 #define __NR_setup			(__NR_Linux + 150)	/* used only by init, to get system going */
 #define __NR_getsid			(__NR_Linux + 151)
-#define __NR_reserved1			(__NR_Linux + 152)
-#define __NR_reserved2			(__NR_Linux + 153)
+#define __NR_fdatasync			(__NR_Linux + 152)
+#define __NR__sysctl			(__NR_Linux + 153)
 #define __NR_mlock			(__NR_Linux + 154)
 #define __NR_munlock			(__NR_Linux + 155)
 #define __NR_mlockall			(__NR_Linux + 156)
 #define __NR_munlockall			(__NR_Linux + 157)
-#define __NR_nfsservctl			(__NR_Linux + 158)
-
+#define __NR_sched_setparam		(__NR_Linux + 158)
+#define __NR_sched_getparam		(__NR_Linux + 159)
+#define __NR_sched_setscheduler		(__NR_Linux + 160)
+#define __NR_sched_getscheduler		(__NR_Linux + 161)
+#define __NR_sched_yield		(__NR_Linux + 162)
+#define __NR_sched_get_priority_max	(__NR_Linux + 163)
+#define __NR_sched_get_priority_min	(__NR_Linux + 164)
+#define __NR_sched_rr_get_interval	(__NR_Linux + 165)
+#define __NR_nanosleep			(__NR_Linux + 166)
+#define __NR_mremap			(__NR_Linux + 167)
+#define __NR_accept			(__NR_Linux + 168)
+#define __NR_bind			(__NR_Linux + 169)
+#define __NR_connect			(__NR_Linux + 170)
+#define __NR_getpeername		(__NR_Linux + 171)
+#define __NR_getsockname		(__NR_Linux + 172)
+#define __NR_getsockopt			(__NR_Linux + 173)
+#define __NR_listen			(__NR_Linux + 174)
+#define __NR_recv			(__NR_Linux + 175)
+#define __NR_recvfrom			(__NR_Linux + 176)
+#define __NR_recvmsg			(__NR_Linux + 177)
+#define __NR_send			(__NR_Linux + 178)
+#define __NR_sendmsg			(__NR_Linux + 179)
+#define __NR_sendto			(__NR_Linux + 180)
+#define __NR_setsockopt			(__NR_Linux + 181)
+#define __NR_shutdown			(__NR_Linux + 182)
+#define __NR_socket			(__NR_Linux + 183)
+#define __NR_socketpair			(__NR_Linux + 184)
+#define __NR_setresuid			(__NR_Linux + 185)
+#define __NR_getresuid			(__NR_Linux + 186)
+#define __NR_query_module		(__NR_Linux + 187)
+#define __NR_poll			(__NR_Linux + 188)
+#define __NR_nfsservctl			(__NR_Linux + 189)
 
 /*
  * Offset of the last Linux flavoured syscall
  */
-#define __NR_Linux_syscalls		158
+#define __NR_Linux_syscalls		189
 
 #ifndef __LANGUAGE_ASSEMBLY__
 
@@ -1261,17 +1293,85 @@ register long __err __asm__ ("$7"); \
 __asm__ volatile ("move\t$4,%3\n\t" \
                   "move\t$5,%4\n\t" \
                   "move\t$6,%5\n\t" \
+		  "lw\t$2,%7\n\t" \
                   "move\t$7,%6\n\t" \
-                  "move\t$3,%7\n\t" \
+		  "subu\t$29,24\n\t" \
+		  "sw\t$2,16($29)\n\t" \
 		  "li\t$2,%2\n\t" \
-                  "syscall" \
+                  "syscall\n\t" \
+		  "addiu\t$29,24" \
                   : "=r" (__res), "=r" (__err) \
                   : "i" (__NR_##name),"r" ((long)(a)), \
                                       "r" ((long)(b)), \
                                       "r" ((long)(c)), \
                                       "r" ((long)(d)), \
-                                      "r" ((long)(e)) \
-                  : "$3","$4","$5","$6"); \
+                                      "m" ((long)(e)) \
+                  : "$2","$4","$5","$6","$7"); \
+if (__err == 0) \
+	return (type) __res; \
+errno = __res; \
+return -1; \
+}
+
+#define _syscall6(type,name,atype,a,btype,b,ctype,c,dtype,d,etype,e,ftype,f) \
+type name (atype a,btype b,ctype c,dtype d,etype e,ftype f) \
+{ \
+register long __res __asm__ ("$2"); \
+register long __err __asm__ ("$7"); \
+__asm__ volatile ("move\t$4,%3\n\t" \
+                  "move\t$5,%4\n\t" \
+                  "move\t$6,%5\n\t" \
+		  "lw\t$2,%7\n\t" \
+		  "lw\t$3,%8\n\t" \
+                  "move\t$7,%6\n\t" \
+		  "subu\t$29,24\n\t" \
+		  "sw\t$2,16($29)\n\t" \
+		  "sw\t$3,20($29)\n\t" \
+		  "li\t$2,%2\n\t" \
+                  "syscall\n\t" \
+		  "addiu\t$29,24" \
+                  : "=r" (__res), "=r" (__err) \
+                  : "i" (__NR_##name),"r" ((long)(a)), \
+                                      "r" ((long)(b)), \
+                                      "r" ((long)(c)), \
+                                      "r" ((long)(d)), \
+                                      "m" ((long)(e)), \
+                                      "m" ((long)(f)) \
+                  : "$2","$3","$4","$5","$6","$7"); \
+if (__err == 0) \
+	return (type) __res; \
+errno = __res; \
+return -1; \
+}
+
+#define _syscall7(type,name,atype,a,btype,b,ctype,c,dtype,d,etype,e,ftype,f,gtype,g) \
+type name (atype a,btype b,ctype c,dtype d,etype e,ftype f,gtype g) \
+{ \
+register long __res __asm__ ("$2"); \
+register long __err __asm__ ("$7"); \
+__asm__ volatile ("move\t$4,%3\n\t" \
+                  "move\t$5,%4\n\t" \
+                  "move\t$6,%5\n\t" \
+		  "lw\t$2,%7\n\t" \
+		  "lw\t$3,%8\n\t" \
+                  "move\t$7,%6\n\t" \
+		  "subu\t$29,32\n\t" \
+		  "sw\t$2,16($29)\n\t" \
+		  "lw\t$2,%9\n\t" \
+		  "sw\t$3,20($29)\n\t" \
+		  "sw\t$2,24($29)\n\t" \
+		  "li\t$2,%2\n\t" \
+                  "syscall\n\t" \
+		  "addiu\t$29,32" \
+                  : "=r" (__res), "=r" (__err) \
+                  : "i" (__NR_##name),"r" ((long)(a)), \
+                                      "r" ((long)(b)), \
+                                      "r" ((long)(c)), \
+                                      "r" ((long)(d)), \
+                                      "m" ((long)(e)), \
+                                      "m" ((long)(f)), \
+                                      "m" ((long)(g)) \
+                  : "$2","$3","$4","$5","$6","$7"); \
 if (__err == 0) \
 	return (type) __res; \
 errno = __res; \
@@ -1332,13 +1432,13 @@ static inline pid_t kernel_thread(int (*fn)(void *), void * arg, unsigned long f
 		"li\t$2,%1\n\t"
 		"syscall\n\t"
 		"beq\t$8,$sp,1f\n\t"
-		"subu\t$sp,16\n\t"	/* delay slot */
+		"subu\t$sp,32\n\t"	/* delay slot */
 		"jalr\t%4\n\t"
 		"move\t$4,%3\n\t"	/* delay slot */
 		"move\t$4,$2\n\t"
 		"li\t$2,%2\n\t"
 		"syscall\n"
-		"1:\taddiu\t$sp,16\n\t"
+		"1:\taddiu\t$sp,32\n\t"
 		"move\t%0,$2\n\t"
 		".set\treorder"
 		:"=r" (retval)

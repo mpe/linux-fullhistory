@@ -70,7 +70,6 @@
 
 #include <asm/asm.h>
 #include <asm/mipsregs.h>
-#include <asm/segment.h>
 #include <asm/cachectl.h>
 #include <asm/system.h>
 #include <asm/gdb-stub.h>
@@ -326,7 +325,10 @@ static struct hard_trap_info
 void set_debug_traps(void)
 {
 	struct hard_trap_info *ht;
+	unsigned long flags;
+	unsigned char c;
 
+	save_flags(flags); cli();
 	for (ht = hard_trap_info; ht->tt && ht->signo; ht++)
 		set_except_vector(ht->tt, trap_low);
   
@@ -334,9 +336,14 @@ void set_debug_traps(void)
 	 * In case GDB is started before us, ack any packets
 	 * (presumably "$?#xx") sitting there.
 	 */
+	while((c = getDebugChar()) != '$');
+	while((c = getDebugChar()) != '#');
+	c = getDebugChar(); /* eat first csum byte */
+	c = getDebugChar(); /* eat second csum byte */
+	putDebugChar('+'); /* ack it */
 
-	putDebugChar ('+');
 	initialized = 1;
+	restore_flags(flags);
 
 	breakpoint();
 }
@@ -605,7 +612,7 @@ void handle_exception (struct gdb_regs *regs)
 			 * NB: We flush both caches, just to be sure...
 			 */
 
-			sys_cacheflush((void *)KSEG0,KSEG1-KSEG0,BCACHE);
+			flush_cache_all();
 			return;
 			/* NOTREACHED */
 			break;

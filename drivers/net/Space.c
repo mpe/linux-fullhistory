@@ -74,6 +74,7 @@ extern int es_probe(struct device *);
 extern int e2100_probe(struct device *);
 extern int ni52_probe(struct device *);
 extern int ni65_probe(struct device *);
+extern int sonic_probe(struct device *);
 extern int SK_init(struct device *);
 extern int seeq8005_probe(struct device *);
 extern int tc59x_probe(struct device *);
@@ -83,6 +84,7 @@ extern int sparc_lance_probe(struct device *);
 extern int happy_meal_probe(struct device *);
 extern int qec_probe(struct device *);
 extern int myri_sbus_probe(struct device *);
+extern int sgiseeq_probe(struct device *);
 extern int atarilance_probe(struct device *);
 extern int a2065_probe(struct device *);
 extern int ariadne_probe(struct device *);
@@ -241,7 +243,7 @@ __initfunc(static int ethif_probe(struct device *dev))
 	&& sparc_lance_probe(dev)
 #endif
 #ifdef CONFIG_HAPPYMEAL
-        && happy_meal_probe(dev)
+	&& happy_meal_probe(dev)
 #endif
 #ifdef CONFIG_SUNQE
 	&& qec_probe(dev)
@@ -249,6 +251,12 @@ __initfunc(static int ethif_probe(struct device *dev))
 #ifdef CONFIG_MYRI_SBUS
 	&& myri_sbus_probe(dev)
 #endif
+#ifdef CONFIG_SGISEEQ
+	&& sgiseeq_probe(dev)
+#endif
+#ifdef CONFIG_MIPS_JAZZ_SONIC
+	&& sonic_probe(dev)
+#endif	
 	&& 1 ) {
 	return 1;	/* -ENODEV or -EAGAIN would be more accurate. */
     }
@@ -292,6 +300,17 @@ static struct device atp_dev = {
 #   undef NEXT_DEV
 #   define NEXT_DEV	(&dev_ltpc)
 #endif  /* LTPC */
+
+#if defined(CONFIG_COPS)
+    extern int cops_probe(struct device *);
+    static struct device dev_cops = {
+        "lt0",
+        0, 0, 0, 0,
+        0x0, 0,
+        0, 0, 0, NEXT_DEV, cops_probe };
+#   undef NEXT_DEV
+#   define NEXT_DEV     (&dev_cops)
+#endif  /* COPS */
 
 /* The first device defaults to I/O base '0', which means autoprobe. */
 #ifndef ETH0_ADDR

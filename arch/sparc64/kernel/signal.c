@@ -1,4 +1,4 @@
-/*  $Id: signal.c,v 1.6 1997/05/29 12:44:48 jj Exp $
+/*  $Id: signal.c,v 1.7 1997/06/16 06:49:59 davem Exp $
  *  arch/sparc64/kernel/signal.c
  *
  *  Copyright (C) 1991, 1992  Linus Torvalds
@@ -144,19 +144,21 @@ void do_sigreturn(struct pt_regs *regs)
 	}
 #endif	
 	synchronize_user_stack ();
-	sf = (struct new_signal_frame *) regs->u_regs [UREG_FP];
+	sf = (struct new_signal_frame *)
+		(regs->u_regs [UREG_FP] + STACK_BIAS);
+
 	/* 1. Make sure we are not getting garbage from the user */
-	if (verify_area (VERIFY_READ, sf, sizeof (*sf))){
+	if (verify_area (VERIFY_READ, sf, sizeof (*sf)))
 		goto segv;
-	}
-	if (((unsigned long) sf) & 3){
+
+	if (((unsigned long) sf) & 3)
 		goto segv;
-	}
+
 	get_user(tpc, &sf->info.si_regs.tpc);
 	__get_user(tnpc, &sf->info.si_regs.tnpc);
-	if ((tpc | tnpc) & 3){
+	if ((tpc | tnpc) & 3)
 		goto segv;
-	}
+
 	regs->tpc = tpc;
 	regs->tnpc = tnpc;
 
@@ -229,14 +231,15 @@ new_setup_frame(struct sigaction *sa, struct pt_regs *regs,
 	if (!current->used_math)
 		sigframe_size -= sizeof(__siginfo_fpu_t);
 
-	sf = (struct new_signal_frame *)(regs->u_regs[UREG_FP] - sigframe_size);
+	sf = (struct new_signal_frame *)
+		(regs->u_regs[UREG_FP] + STACK_BIAS - sigframe_size);
 	
-	if (invalid_frame_pointer (sf, sigframe_size)){
+	if (invalid_frame_pointer (sf, sigframe_size)) {
 		lock_kernel ();
 		do_exit(SIGILL);
 	}
 
-	if (current->tss.w_saved != 0){
+	if (current->tss.w_saved != 0) {
 		printk ("%s[%d]: Invalid user stack frame for "
 			"signal delivery.\n", current->comm, current->pid);
 		lock_kernel ();
@@ -254,8 +257,8 @@ new_setup_frame(struct sigaction *sa, struct pt_regs *regs,
 	}
 
 	__put_user(oldmask, &sf->info.si_mask);
-	for (i = 0; i < sizeof(struct reg_window)/8; i++) {
-		__get_user(tmp, (((u64 *)regs->u_regs[UREG_FP])+i));
+	for (i = 0; i < sizeof(struct reg_window)/sizeof(u64); i++) {
+		__get_user(tmp, (((u64 *)(regs->u_regs[UREG_FP]+STACK_BIAS))+i));
 		__put_user(tmp, (((u64 *)sf)+i));
 	}
 	
@@ -264,7 +267,7 @@ new_setup_frame(struct sigaction *sa, struct pt_regs *regs,
 	__put_user(0x91d02011, &sf->insns[1]); /* t 0x11 */
 
 	/* 4. signal handler back-trampoline and parameters */
-	regs->u_regs[UREG_FP] = (unsigned long) sf;
+	regs->u_regs[UREG_FP] = ((unsigned long) sf) - STACK_BIAS;
 	regs->u_regs[UREG_I0] = signo;
 	regs->u_regs[UREG_I1] = (unsigned long) &sf->info;
 	regs->u_regs[UREG_I7] = (unsigned long) (&(sf->insns[0]) - 2);

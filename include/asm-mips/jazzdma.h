@@ -1,14 +1,12 @@
 /*
  * Helpfile for jazzdma.c -- Mips Jazz R4030 DMA controller support
  */
-
-#ifndef __ASM_JAZZDMA_H
-#define __ASM_JAZZDMA_H
+#ifndef __ASM_MIPS_JAZZDMA_H
+#define __ASM_MIPS_JAZZDMA_H
 
 /*
  * Prototypes and macros
  */
-
 unsigned long vdma_init(unsigned long memory_start, unsigned long memory_end);
 unsigned long vdma_alloc(unsigned long paddr, unsigned long size);
 int vdma_free(unsigned long laddr);
@@ -76,8 +74,9 @@ typedef volatile struct VDMA_PGTBL_ENTRY
 #define R4030_MEM_INTR           (1<<9)
 #define R4030_ADDR_INTR          (1<<10)
 
-/* channel mode register bits */
-
+/*
+ * Channel mode register bits
+ */
 #define R4030_MODE_ATIME_40      (0) /* device access time on remote bus */
 #define R4030_MODE_ATIME_80      (1)
 #define R4030_MODE_ATIME_120     (2)
@@ -93,4 +92,4 @@ typedef volatile struct VDMA_PGTBL_ENTRY
 #define R4030_MODE_BURST         (1<<6)	/* Rev. 2 only */
 #define R4030_MODE_FAST_ACK      (1<<7)	/* Rev. 2 only */
 
-#endif /* __ASM_JAZZDMA_H */
+#endif /* __ASM_MIPS_JAZZDMA_H */

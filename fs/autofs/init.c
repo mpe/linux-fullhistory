@@ -21,7 +21,7 @@
 
 static struct file_system_type autofs_fs_type = {
 	"autofs",
-	FS_NO_DCACHE,
+	0 /* FS_NO_DCACHE doesn't work correctly */,
 	autofs_read_super,
 	NULL
 };

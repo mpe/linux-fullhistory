@@ -13,14 +13,15 @@
  *	void check_bugs(void);
  */
 
-extern struct bootinfo boot_info;
 
 static void check_wait(void)
 {
 	printk("Checking for 'wait' instruction... ");
-	switch(boot_info.cputype) {
+	switch(mips_cputype) {
 		case CPU_R4200: 
+		case CPU_R4300: 
 		case CPU_R4600: 
+		case CPU_R5000: 
 			wait_available = 1;
 			printk(" available.\n");
 			break;

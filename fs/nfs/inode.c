@@ -435,7 +435,7 @@ done:
  */
 static struct file_system_type nfs_fs_type = {
 	"nfs",
-	FS_NO_DCACHE,
+	0 /* FS_NO_DCACHE - this doesn't work right now*/,
 	nfs_read_super,
 	NULL
 };

@@ -1,0 +1,148 @@
+/* $Id: r4k_fpu.S,v 1.1 1997/06/06 09:33:04 ralf Exp $
+ * r4k_fpu.S: Save/restore floating point context for signal handlers.
+ *
+ * This file is subject to the terms and conditions of the GNU General Public
+ * License.  See the file "COPYING" in the main directory of this archive
+ * for more details.
+ *
+ * Copyright (C) 1996 by Ralf Baechle
+ *
+ * Multi-arch abstraction and asm macros for easier reading:
+ * Copyright (C) 1996 David S. Miller (dm@engr.sgi.com)
+ */
+#include <asm/asm.h>
+#include <asm/fpregdef.h>
+#include <asm/mipsregs.h>
+#include <asm/regdef.h>
+#include <asm/sigcontext.h>
+
+	.set	noreorder
+	.set	mips3
+	/* Save floating point context */
+	LEAF(r4k_save_fp_context)
+	mfc0	t1,CP0_STATUS
+	sll	t2,t1,2
+	bgez	t2,2f
+	 sll	t2,t1,5
+
+	cfc1	t1,fcr31
+	bgez	t2,1f
+	 nop
+	/* Store the 16 odd double precision registers */
+	swc1	$f1,(SC_FPREGS+8)(a0)
+	swc1	$f3,(SC_FPREGS+24)(a0)
+	swc1	$f5,(SC_FPREGS+40)(a0)
+	swc1	$f7,(SC_FPREGS+56)(a0)
+	swc1	$f9,(SC_FPREGS+72)(a0)
+	swc1	$f11,(SC_FPREGS+88)(a0)
+	swc1	$f13,(SC_FPREGS+104)(a0)
+	swc1	$f15,(SC_FPREGS+120)(a0)
+	swc1	$f17,(SC_FPREGS+136)(a0)
+	swc1	$f19,(SC_FPREGS+152)(a0)
+	swc1	$f21,(SC_FPREGS+168)(a0)
+	swc1	$f23,(SC_FPREGS+184)(a0)
+	swc1	$f25,(SC_FPREGS+200)(a0)
+	swc1	$f27,(SC_FPREGS+216)(a0)
+	swc1	$f29,(SC_FPREGS+232)(a0)
+	swc1	$f31,(SC_FPREGS+248)(a0)
+
+	/* Store the 16 even double precision registers */
+1:
+	swc1	$f0,(SC_FPREGS+0)(a0)
+	swc1	$f2,(SC_FPREGS+16)(a0)
+	swc1	$f4,(SC_FPREGS+32)(a0)
+	swc1	$f6,(SC_FPREGS+48)(a0)
+	swc1	$f8,(SC_FPREGS+64)(a0)
+	swc1	$f10,(SC_FPREGS+80)(a0)
+	swc1	$f12,(SC_FPREGS+96)(a0)
+	swc1	$f14,(SC_FPREGS+112)(a0)
+	swc1	$f16,(SC_FPREGS+128)(a0)
+	swc1	$f18,(SC_FPREGS+144)(a0)
+	swc1	$f20,(SC_FPREGS+160)(a0)
+	swc1	$f22,(SC_FPREGS+176)(a0)
+	swc1	$f24,(SC_FPREGS+192)(a0)
+	swc1	$f26,(SC_FPREGS+208)(a0)
+	swc1	$f28,(SC_FPREGS+224)(a0)
+	swc1	$f30,(SC_FPREGS+240)(a0)
+	sw	t1,SC_FPC_CSR(a0)
+	cfc1	t0,$0				# implementation/version
+
+	jr	ra
+	.set	nomacro
+	 sw	t0,SC_FPC_EIR(a0)
+	.set	macro
+2:
+	jr	ra
+	.set	nomacro
+	 nop
+	.set	macro
+	END(r4k_save_fp_context)
+
+/* Restore fpu state:
+ *  - fp gp registers
+ *  - cp1 status/control register
+ *
+ * We base the decission which registers to restore from the signal stack
+ * frame on the current content of c0_status, not on the content of the
+ * stack frame which might have been changed by the user.
+ */
+	LEAF(r4k_restore_fp_context)
+	mfc0	t1,CP0_STATUS
+	sll	t0,t1,2
+	bgez	t0,2f
+	 sll	t0,t1,5
+
+	bgez	t0,1f
+	 lw	t0,SC_FPC_CSR(a0)
+	/* Restore the 16 odd double precision registers only
+	 * when enabled in the cp0 status register.
+	 */
+	lwc1	$f1,(SC_FPREGS+8)(a0)
+	lwc1	$f3,(SC_FPREGS+24)(a0)
+	lwc1	$f5,(SC_FPREGS+40)(a0)
+	lwc1	$f7,(SC_FPREGS+56)(a0)
+	lwc1	$f9,(SC_FPREGS+72)(a0)
+	lwc1	$f11,(SC_FPREGS+88)(a0)
+	lwc1	$f13,(SC_FPREGS+104)(a0)
+	lwc1	$f15,(SC_FPREGS+120)(a0)
+	lwc1	$f17,(SC_FPREGS+136)(a0)
+	lwc1	$f19,(SC_FPREGS+152)(a0)
+	lwc1	$f21,(SC_FPREGS+168)(a0)
+	lwc1	$f23,(SC_FPREGS+184)(a0)
+	lwc1	$f25,(SC_FPREGS+200)(a0)
+	lwc1	$f27,(SC_FPREGS+216)(a0)
+	lwc1	$f29,(SC_FPREGS+232)(a0)
+	lwc1	$f31,(SC_FPREGS+248)(a0)
+
+	/* Restore the 16 even double precision registers
+	 * when cp1 was enabled in the cp0 status register.
+	 */
+1:
+	lwc1	$f0,(SC_FPREGS+0)(a0)
+	lwc1	$f2,(SC_FPREGS+16)(a0)
+	lwc1	$f4,(SC_FPREGS+32)(a0)
+	lwc1	$f6,(SC_FPREGS+48)(a0)
+	lwc1	$f8,(SC_FPREGS+64)(a0)
+	lwc1	$f10,(SC_FPREGS+80)(a0)
+	lwc1	$f12,(SC_FPREGS+96)(a0)
+	lwc1	$f14,(SC_FPREGS+112)(a0)
+	lwc1	$f16,(SC_FPREGS+128)(a0)
+	lwc1	$f18,(SC_FPREGS+144)(a0)
+	lwc1	$f20,(SC_FPREGS+160)(a0)
+	lwc1	$f22,(SC_FPREGS+176)(a0)
+	lwc1	$f24,(SC_FPREGS+192)(a0)
+	lwc1	$f26,(SC_FPREGS+208)(a0)
+	lwc1	$f28,(SC_FPREGS+224)(a0)
+	lwc1	$f30,(SC_FPREGS+240)(a0)
+	ctc1	t0,fcr31
+
+	jr	ra
+	.set	nomacro
+	 nop
+	.set	macro
+2:
+	jr	ra
+	.set	nomacro
+	 nop
+	.set	macro
+	END(r4k_restore_fp_context)

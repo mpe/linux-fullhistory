@@ -612,21 +612,17 @@ asmlinkage int sys_setuid(uid_t uid)
  */
 asmlinkage int sys_setresuid(uid_t ruid, uid_t euid, uid_t suid)
 {
-	uid_t old_ruid, old_euid, old_suid;
-
-	old_ruid = current->uid;
-	old_euid = current->euid;
-	old_suid = current->suid;
-
-	if ((ruid != (uid_t) -1) && (ruid != current->uid) &&
-	    (ruid != current->euid) && (ruid != current->suid))
-		return -EPERM;
-	if ((euid != (uid_t) -1) && (euid != current->uid) &&
-	    (euid != current->euid) && (euid != current->suid))
-		return -EPERM;
-	if ((suid != (uid_t) -1) && (suid != current->uid) &&
-	    (suid != current->euid) && (suid != current->suid))
-		return -EPERM;
+	if (current->uid != 0 && current->euid != 0 && current->suid != 0) {
+		if ((ruid != (uid_t) -1) && (ruid != current->uid) &&
+		    (ruid != current->euid) && (ruid != current->suid))
+			return -EPERM;
+		if ((euid != (uid_t) -1) && (euid != current->uid) &&
+		    (euid != current->euid) && (euid != current->suid))
+			return -EPERM;
+		if ((suid != (uid_t) -1) && (suid != current->uid) &&
+		    (suid != current->euid) && (suid != current->suid))
+			return -EPERM;
+	}
 	if (ruid != (uid_t) -1) {
 		/* See above commentary about NPROC rlimit issues here. */
 		charge_uid(current, -1);
@@ -634,8 +630,12 @@ asmlinkage int sys_setresuid(uid_t ruid, uid_t euid, uid_t suid)
 		if(ruid)
 			charge_uid(current, 1);
 	}
-	if (euid != (uid_t) -1)
+	if (euid != (uid_t) -1) {
+		if (euid != current->euid)
+			current->dumpable = 0;
 		current->euid = euid;
+		current->fsuid = euid;
+	}
 	if (suid != (uid_t) -1)
 		current->suid = suid;
 	return 0;
@@ -648,6 +648,46 @@ asmlinkage int sys_getresuid(uid_t *ruid, uid_t *euid, uid_t *suid)
 	if (!(retval = put_user(current->uid, ruid)) &&
 	    !(retval = put_user(current->euid, euid)))
 		retval = put_user(current->suid, suid);
+
+	return retval;
+}
+
+/*
+ * Same as above, but for rgid, egid, sgid.
+ */
+asmlinkage int sys_setresgid(gid_t rgid, gid_t egid, gid_t sgid)
+{
+	if (current->uid != 0 && current->euid != 0 && current->suid != 0) {
+		if ((rgid != (gid_t) -1) && (rgid != current->gid) &&
+		    (rgid != current->egid) && (rgid != current->sgid))
+			return -EPERM;
+		if ((egid != (gid_t) -1) && (egid != current->gid) &&
+		    (egid != current->egid) && (egid != current->sgid))
+			return -EPERM;
+		if ((sgid != (gid_t) -1) && (sgid != current->gid) &&
+		    (sgid != current->egid) && (sgid != current->sgid))
+			return -EPERM;
+	}
+	if (rgid != (gid_t) -1)
+		current->gid = rgid;
+	if (egid != (gid_t) -1) {
+		if (egid != current->egid)
+			current->dumpable = 0;
+		current->egid = egid;
+		current->fsgid = egid;
+	}
+	if (sgid != (gid_t) -1)
+		current->sgid = sgid;
+	return 0;
+}
+
+asmlinkage int sys_getresgid(gid_t *rgid, gid_t *egid, gid_t *sgid)
+{
+	int retval;
+
+	if (!(retval = put_user(current->gid, rgid)) &&
+	    !(retval = put_user(current->egid, egid)))
+		retval = put_user(current->sgid, sgid);
 
 	return retval;
 }

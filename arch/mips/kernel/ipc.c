@@ -2,11 +2,9 @@
  * linux/arch/mips/kernel/ipc.c
  *
  * This file contains various random system calls that
- * have a non-standard calling sequence on the Linux/i386
+ * have a non-standard calling sequence on the Linux/MIPS
  * platform.
  */
-
-#include <linux/config.h>
 #include <linux/errno.h>
 #include <linux/sched.h>
 #include <linux/mm.h>
@@ -16,17 +14,16 @@
 #include <linux/msg.h>
 #include <linux/shm.h>
 
-#include <asm/segment.h>
+#include <asm/ipc.h>
+#include <asm/uaccess.h>
 
 /*
  * sys_ipc() is the de-multiplexer for the SysV IPC calls..
  *
- * This is really horribly ugly;  removing this will need some minor
- * changes in libc.
+ * This is really horribly ugly.  FIXME: Get rid of this wrapper.
  */
 asmlinkage int sys_ipc (uint call, int first, int second, int third, void *ptr, long fifth)
 {
-#ifdef CONFIG_SYSVIPC
 	int version, ret;
 
 	lock_kernel();
@@ -46,9 +43,9 @@ asmlinkage int sys_ipc (uint call, int first, int second, int third, void *ptr, 
 			ret = -EINVAL;
 			if (!ptr)
 				goto out;
-			if ((ret = verify_area (VERIFY_READ, ptr, sizeof(long))))
-				goto out;
-			fourth.__pad = (void *) get_fs_long(ptr);
+			ret = -EFAULT;
+			if (get_user(fourth.__pad, (void **) ptr))
+				goto out;	
 			ret = sys_semctl (first, second, third, fourth);
 			goto out;
 			}
@@ -66,12 +63,13 @@ asmlinkage int sys_ipc (uint call, int first, int second, int third, void *ptr, 
 			switch (version) {
 			case 0: {
 				struct ipc_kludge tmp;
+				ret = -EINVAL;
 				if (!ptr)
-					return -EINVAL;
-				if ((ret = verify_area (VERIFY_READ, ptr, sizeof(tmp))))
 					goto out;
-				memcpy_fromfs (&tmp,(struct ipc_kludge *) ptr,
-					       sizeof (tmp));
+				ret = -EFAULT;
+				if (copy_from_user(&tmp,(struct ipc_kludge *) ptr, 
+								   sizeof (tmp)))
+					goto out; 	
 				ret = sys_msgrcv (first, tmp.msgp, second, tmp.msgtyp, third);
 				goto out;
 				}
@@ -95,15 +93,12 @@ asmlinkage int sys_ipc (uint call, int first, int second, int third, void *ptr, 
 			switch (version) {
 			case 0: default: {
 				ulong raddr;
-				if ((ret = verify_area(VERIFY_WRITE, (ulong*) third, sizeof(ulong))))
-					goto out;
 				ret = sys_shmat (first, (char *) ptr, second, &raddr);
 				if (ret)
 					goto out;
-				put_fs_long (raddr, (ulong *) third);
-				ret = 0;
+				ret = put_user (raddr, (ulong *) third);
 				goto out;
-				}
+			}
 			case 1:	/* iBCS2 emulator entry point */
 				ret = -EINVAL;
 				if (get_fs() != get_ds())
@@ -129,7 +124,4 @@ asmlinkage int sys_ipc (uint call, int first, int second, int third, void *ptr, 
 out:
 	unlock_kernel();
 	return ret;
-#else /* CONFIG_SYSVIPC */
-	return -ENOSYS;
-#endif /* CONFIG_SYSVIPC */
 }

@@ -388,7 +388,7 @@ static int raw_sendmsg(struct sock *sk, struct msghdr *msg, int len)
 		err = memcpy_fromiovec(buf, msg->msg_iov, len);
 		if (!err)
 		{
-			unsigned short fs;
+			unsigned long fs;
 			fs=get_fs();
 			set_fs(get_ds());
 			err=raw_sendto(sk,buf,len, msg);

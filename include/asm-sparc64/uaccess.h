@@ -1,4 +1,4 @@
-/* $Id: uaccess.h,v 1.13 1997/05/29 12:45:04 jj Exp $ */
+/* $Id: uaccess.h,v 1.14 1997/06/13 14:03:11 davem Exp $ */
 #ifndef _ASM_UACCESS_H
 #define _ASM_UACCESS_H
 
@@ -22,26 +22,26 @@
  *
  * "For historical reasons, these macros are grossly misnamed." -Linus
  */
-#define KERNEL_DS   0
-#define USER_DS     -1
+#define KERNEL_DS   0x00
+#define USER_DS     0x2B /* har har har */
 
 #define VERIFY_READ	0
 #define VERIFY_WRITE	1
 
 #define get_fs() (current->tss.current_ds)
 #define get_ds() (KERNEL_DS)
-extern __inline__ void set_fs(int val)
-{
-	if (val != current->tss.current_ds) {
-		if (val == KERNEL_DS) {
-			flushw_user ();
-			spitfire_set_secondary_context (0);
-		} else {
-			spitfire_set_secondary_context (current->mm->context);
-		}
-		current->tss.current_ds = val;
-	}
-}
+#define set_fs(val)				\
+do {						\
+	current->tss.current_ds = (val);	\
+	if ((val) == KERNEL_DS) {		\
+		flushw_user ();			\
+		current->tss.ctx = 0;		\
+	} else {				\
+		current->tss.ctx = (current->mm->context & 0x1fff); \
+	}					\
+	spitfire_set_secondary_context(current->tss.ctx); \
+	__asm__ __volatile__("flush %g4");	\
+} while(0)
 
 #define __user_ok(addr,size) 1
 #define __kernel_ok (get_fs() == KERNEL_DS)

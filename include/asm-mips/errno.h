@@ -137,6 +137,22 @@
 #define	EINPROGRESS	150	/* Operation now in progress */
 #define	ESTALE		151	/* Stale NFS file handle */
 #define ECANCELED	158	/* AIO operation canceled */
+
+/*
+ * These error are Linux extensions.
+ */
+#define ENOMEDIUM	159	/* No medium found */
+#define EMEDIUMTYPE	160	/* Wrong medium type */
+
+/*
+ * IRIX 5 error number start from 1000.
+ * Stupid enough; ECANCELED gets redefined with a different value ...
+#define ECANCELED       1000
+ */
+
+/*
+ * IRIX 4 compatibility error numbers.
+ */
 #define	EDQUOT		1133	/* Quota exceeded */
 #define ENFSREMOTE	1134	/* ??? */
 

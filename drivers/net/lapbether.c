@@ -407,7 +407,7 @@ static int lapbeth_close(struct device *dev)
 	return 0;
 }
 
-__initfunc(static int lapbeth_dev_init(struct device *dev))
+static int lapbeth_dev_init(struct device *dev)
 {
 	return 0;
 }

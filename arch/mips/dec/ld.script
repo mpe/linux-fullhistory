@@ -1,0 +1,47 @@
+OUTPUT_FORMAT("ecoff-littlemips")
+OUTPUT_ARCH(mips)
+ENTRY(dec_entry)
+SECTIONS
+{
+  /* This is probably a little simplistic, and is based on work by
+   * Chris Fraser of Softway Pty Ltd as used in his port of Vsta to
+   * the DECStation - Paul M. Antoine 21/1/96.
+   */
+  . = 0x80030000;
+  .text :
+  {
+    *(.text)
+    . = ALIGN(0x10);
+    _etext = .;
+    __etext = .;
+  }
+  .lit8 : {
+ 	  *(.lit8)
+  }
+  .lit4 : {
+       	  *(.lit4)
+  }
+  . = ALIGN(0x1000);
+  .data :
+  {
+    *(.data .rdata .rodata)
+    _edata  =  .;
+    __edata  =  .;
+  }
+  __bss_start = ALIGN(16) + 0x8000;
+  .sbss :
+  {
+    *(.sbss)
+    *(.scommon)
+  }
+  .bss :
+  {
+   *(.bss)
+   *(COMMON)
+   _end = ALIGN(4) ;
+   __end = ALIGN(4) ;
+  }
+  .reginfo : {
+    *(.reginfo)
+  }
+}

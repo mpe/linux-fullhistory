@@ -104,14 +104,8 @@
 #define ASIZ_task_it_virt_incr	0x00000008
 #define AOFF_task_real_timer	0x000001f8
 #define ASIZ_task_real_timer	0x00000028
-#define AOFF_task_utime	0x00000220
-#define ASIZ_task_utime	0x00000008
-#define AOFF_task_stime	0x00000228
-#define ASIZ_task_stime	0x00000008
-#define AOFF_task_cutime	0x00000230
-#define ASIZ_task_cutime	0x00000008
-#define AOFF_task_cstime	0x00000238
-#define ASIZ_task_cstime	0x00000008
+#define AOFF_task_times	0x00000220
+#define ASIZ_task_times	0x00000020
 #define AOFF_task_start_time	0x00000240
 #define ASIZ_task_start_time	0x00000008
 #define AOFF_task_min_flt	0x00000248
@@ -245,12 +239,12 @@
 #define AOFF_thread_sstk_info	0x00000590
 #define ASIZ_thread_sstk_info	0x00000010
 #define AOFF_thread_current_ds	0x000005a0
-#define ASIZ_thread_current_ds	0x00000004
-#define AOFF_thread_new_signal	0x000005a4
-#define ASIZ_thread_new_signal	0x00000004
-#define AOFF_thread_kregs	0x000005a8
+#define ASIZ_thread_current_ds	0x00000008
+#define AOFF_thread_new_signal	0x000005a8
+#define ASIZ_thread_new_signal	0x00000008
+#define AOFF_thread_kregs	0x000005b0
 #define ASIZ_thread_kregs	0x00000008
-#define AOFF_thread_core_exec	0x000005b0
+#define AOFF_thread_core_exec	0x000005b8
 #define ASIZ_thread_core_exec	0x00000020
 
 #endif /* __ASM_OFFSETS_H__ */

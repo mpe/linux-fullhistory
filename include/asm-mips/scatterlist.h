@@ -1,5 +1,5 @@
-#ifndef _MIPS_SCATTERLIST_H
-#define _MIPS_SCATTERLIST_H
+#ifndef __ASM_MIPS_SCATTERLIST_H
+#define __ASM_MIPS_SCATTERLIST_H
 
 struct scatterlist {
     char *  address;    /* Location data is to be transferred to */
@@ -10,4 +10,4 @@ struct scatterlist {
 
 #define ISA_DMA_THRESHOLD (0x00ffffff)
 
-#endif /* !(_MIPS_SCATTERLIST_H) */
+#endif /* __ASM_MIPS_SCATTERLIST_H */

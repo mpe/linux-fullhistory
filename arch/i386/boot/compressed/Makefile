@@ -48,7 +48,7 @@ endif
 
 
 piggy.o:	$(SYSTEM)
-	tmppiggy=/tmp/$$$$piggy; \
+	tmppiggy=_tmp_$$$$piggy; \
 	rm -f $$tmppiggy $$tmppiggy.gz $$tmppiggy.lnk; \
 	$(OBJCOPY) $(SYSTEM) $$tmppiggy; \
 	gzip -f -9 < $$tmppiggy > $$tmppiggy.gz; \

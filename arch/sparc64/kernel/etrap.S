@@ -1,4 +1,4 @@
-/* $Id: etrap.S,v 1.21 1997/06/02 06:33:28 davem Exp $
+/* $Id: etrap.S,v 1.22 1997/06/13 14:02:40 davem Exp $
  * etrap.S: Preparing for entry into the kernel on Sparc V9.
  *
  * Copyright (C) 1996, 1997 David S. Miller (davem@caip.rutgers.edu)
@@ -59,7 +59,10 @@ etrap_irq:
 	sethi		%uhi(KERNBASE), %g3
 	sllx		%g3, 32, %g3
 	mov		PRIMARY_CONTEXT, %g2
-	stxa		%g0, [%g2] ASI_DMMU
+	ldxa		[%g2] ASI_DMMU, %g6
+	stxa		%g0, [%g2] ASI_DMMU	! XXX fixup cache if this stays...
+	mov		SECONDARY_CONTEXT, %g2
+	stxa		%g6, [%g2] ASI_DMMU
 
 	flush		%g3
 2:	wrpr		%g0, 0x0, %tl

@@ -1,4 +1,4 @@
-/* $Id: byteorder.h,v 1.5 1997/05/28 11:35:41 jj Exp $ */
+/* $Id: byteorder.h,v 1.6 1997/06/14 17:35:07 davem Exp $ */
 #ifndef _SPARC64_BYTEORDER_H
 #define _SPARC64_BYTEORDER_H
 
@@ -56,21 +56,27 @@ extern __inline__ __u64 cpu_to_le64(__u64 value)
 extern __inline__ __u16 cpu_to_le16p(__u16 *addr)
 {
 	__u16 ret;
-	__asm__ __volatile__ ("lduha [%1] %2, %0" : "=r" (ret) : "r" (addr), "i" (ASI_PL));
+	__asm__ __volatile__ ("lduha [%1] %2, %0"
+			      : "=r" (ret)
+			      : "r" (addr), "i" (ASI_PL));
 	return ret;
 }
 
 extern __inline__ __u32 cpu_to_le32p(__u32 *addr)
 {
 	__u32 ret;
-	__asm__ __volatile__ ("lduwa [%1] %2, %0" : "=r" (ret) : "r" (addr), "i" (ASI_PL));
+	__asm__ __volatile__ ("lduwa [%1] %2, %0"
+			      : "=r" (ret)
+			      : "r" (addr), "i" (ASI_PL));
 	return ret;
 }
 
 extern __inline__ __u64 cpu_to_le64p(__u64 *addr)
 {
 	__u64 ret;
-	__asm__ __volatile__ ("ldxa [%1] %2, %0" : "=r" (ret) : "r" (addr), "i" (ASI_PL));
+	__asm__ __volatile__ ("ldxa [%1] %2, %0"
+			      : "=r" (ret)
+			      : "r" (addr), "i" (ASI_PL));
 	return ret;
 }
 extern __inline__ __u16 cpu_to_be16p(__u16 *addr) { return *addr; }

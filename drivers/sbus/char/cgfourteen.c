@@ -1,4 +1,4 @@
-/* $Id: cgfourteen.c,v 1.22 1997/06/04 08:27:27 davem Exp $
+/* $Id: cgfourteen.c,v 1.23 1997/06/06 10:56:29 jj Exp $
  * cgfourteen.c: Sun SparcStation console support.
  *
  * Copyright (C) 1995 Miguel de Icaza (miguel@nuclecu.unam.mx)
@@ -166,7 +166,7 @@ cg14_mmap (struct inode *inode, struct file *file,
 	   struct vm_area_struct *vma, long base, fbinfo_t *fb)
 {
 	uint size, page, r, map_size;
-	uint map_offset = 0;
+	unsigned long map_offset = 0;
 	uint ram_size = fb->info.cg14.ramsize;
 
 	printk ("RAMSIZE=%d\n", ram_size);

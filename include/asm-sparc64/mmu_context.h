@@ -1,4 +1,4 @@
-/* $Id: mmu_context.h,v 1.10 1997/05/23 09:35:55 jj Exp $ */
+/* $Id: mmu_context.h,v 1.11 1997/06/13 14:03:04 davem Exp $ */
 #ifndef __SPARC64_MMU_CONTEXT_H
 #define __SPARC64_MMU_CONTEXT_H
 
@@ -42,11 +42,11 @@ extern __inline__ void get_new_mmu_context(struct mm_struct *mm,
 			spitfire_put_itlb_data(entry, 0x0UL);
 		}
 		membar("#Sync");
-		flushi(PAGE_OFFSET);
+		__asm__ __volatile__("flush %g4");
 		restore_flags(flags);
 
 		ctx = (ctx & CTX_VERSION_MASK) + CTX_FIRST_VERSION;
-		if(!ctx)
+		if(ctx == 1) /* _not_ zero! */
 			ctx = CTX_FIRST_VERSION;
 	}
 	tlb_context_cache = ctx + 1;
@@ -55,30 +55,32 @@ extern __inline__ void get_new_mmu_context(struct mm_struct *mm,
 
 extern __inline__ void get_mmu_context(struct task_struct *tsk)
 {
+	register unsigned long paddr asm("o5");
 	struct mm_struct *mm = tsk->mm;
 
-	if(mm						&&
-	   !(tsk->tss.flags & SPARC_FLAG_KTHREAD)	&&
+	flushw_user();
+	if(!(tsk->tss.flags & SPARC_FLAG_KTHREAD)	&&
 	   !(tsk->flags & PF_EXITING)) {
 		unsigned long ctx = tlb_context_cache;
-		register unsigned long paddr asm("o5");
-
-		flushw_user();
 		if((mm->context ^ ctx) & CTX_VERSION_MASK)
 			get_new_mmu_context(mm, ctx);
-		tsk->tss.ctx = (mm->context & 0x1fff);
-		spitfire_set_secondary_context(tsk->tss.current_ds ?
-			mm->context : 0);
-		paddr = __pa(mm->pgd);
-		__asm__ __volatile__("
-			rdpr		%%pstate, %%o4
-			wrpr		%%o4, %1, %%pstate
-			mov		%0, %%g7
-			wrpr		%%o4, 0x0, %%pstate
-		" : /* no outputs */
-		  : "r" (paddr), "i" (PSTATE_MG|PSTATE_IE)
-		  : "o4");
-	}
+
+		/* Don't worry, set_fs() will restore it... */
+		tsk->tss.ctx = (tsk->tss.current_ds ?
+				(mm->context & 0x1fff) : 0);
+	} else
+		tsk->tss.ctx = 0;
+	spitfire_set_secondary_context(tsk->tss.ctx);
+	__asm__ __volatile__("flush %g4");
+	paddr = __pa(mm->pgd);
+	__asm__ __volatile__("
+		rdpr		%%pstate, %%o4
+		wrpr		%%o4, %1, %%pstate
+		mov		%0, %%g7
+		wrpr		%%o4, 0x0, %%pstate
+	" : /* no outputs */
+	  : "r" (paddr), "i" (PSTATE_MG|PSTATE_IE)
+	  : "o4");
 }
 
 #endif /* !(__ASSEMBLY__) */

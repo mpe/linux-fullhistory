@@ -6,6 +6,8 @@
 #define ELF_CLASS		ELFCLASS32
 #define ELF_DATA		ELFDATA2MSB;
 
+#define elf_check_arch(x)	(((x) == EM_SPARC) || ((x) == EM_SPARC32PLUS))
+
 #include <asm/processor.h>
 #include <linux/module.h>
 #include <linux/config.h>

@@ -1,4 +1,4 @@
-/* $Id: elf.h,v 1.6 1997/05/17 11:51:27 davem Exp $ */
+/* $Id: elf.h,v 1.7 1997/06/14 21:28:07 davem Exp $ */
 #ifndef __ASM_SPARC64_ELF_H
 #define __ASM_SPARC64_ELF_H
 
@@ -32,7 +32,9 @@ typedef unsigned long elf_fpregset_t;
 /*
  * This is used to ensure we don't load something for the wrong architecture.
  */
+#ifndef elf_check_arch
 #define elf_check_arch(x) ((x) == ELF_ARCH)	/* Might be EM_SPARC64 or EM_SPARC */
+#endif
 
 #define USE_ELF_CORE_DUMP
 #define ELF_EXEC_PAGESIZE	8192
