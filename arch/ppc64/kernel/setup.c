@@ -605,12 +605,12 @@ void __init setup_system(void)
 	 */
 	initialize_cache_info();
 
-#ifdef CONFIG_PPC_PSERIES
+#ifdef CONFIG_PPC_RTAS
 	/*
 	 * Initialize RTAS if available
 	 */
 	rtas_initialize();
-#endif /* CONFIG_PPC_PSERIES */
+#endif /* CONFIG_PPC_RTAS */
 
 	/*
 	 * Check if we have an initrd provided via the device-tree
