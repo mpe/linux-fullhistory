@@ -769,10 +769,14 @@ void set_writetime(struct buffer_head * buf, int flag)
 }
 
 
-void refile_buffer(struct buffer_head * buf){
+void refile_buffer(struct buffer_head * buf)
+{
 	int dispose;
-	if(buf->b_dev == B_FREE)
-		panic("Attempt to refile free buffer\n");
+
+	if(buf->b_dev == B_FREE) {
+		printk("Attempt to refile free buffer\n");
+		return;
+	}
 	if (buf->b_dirt)
 		dispose = BUF_DIRTY;
 	else if (mem_map[MAP_NR((unsigned long) buf->b_data)].count > 1)
@@ -800,6 +804,9 @@ void refile_buffer(struct buffer_head * buf){
 	}
 }
 
+/*
+ * Release a buffer head
+ */
 void brelse(struct buffer_head * buf)
 {
 	if (!buf)
@@ -811,23 +818,35 @@ void brelse(struct buffer_head * buf)
 	refile_buffer(buf);
 
 	if (buf->b_count) {
-		if (--buf->b_count)
-			return;
-		wake_up(&buffer_wait);
-		if (buf->b_reuse) {
-			buf->b_reuse = 0;
-			if (!buf->b_lock && !buf->b_dirt && 
-			    !buf->b_wait && buf->b_uptodate) {
-				if(buf->b_dev == B_FREE)
-					panic("brelse: Wrong list");
-				remove_from_queues(buf);
-				buf->b_dev = B_FREE;
-				put_last_free(buf);
-			}
-		}
+		if (!--buf->b_count)
+			wake_up(&buffer_wait);
 		return;
 	}
 	printk("VFS: brelse: Trying to free free buffer\n");
+}
+
+/*
+ * bforget() is like brelse(), except is throws the buffer away
+ */
+void bforget(struct buffer_head * buf)
+{
+	if (!buf)
+		return;
+	wait_on_buffer(buf);
+	if (buf->b_count != 1) {
+		printk("Aieee... bforget(): count = %d\n", buf->b_count);
+		return;
+	}
+	if (mem_map[MAP_NR(buf->b_data)].count != 1) {
+		printk("Aieee... bforget(): shared buffer\n");
+		return;
+	}
+	mark_buffer_clean(buf);
+	buf->b_count = 0;
+	remove_from_queues(buf);
+	buf->b_dev = B_FREE;
+	put_last_free(buf);
+	wake_up(&buffer_wait);
 }
 
 /*

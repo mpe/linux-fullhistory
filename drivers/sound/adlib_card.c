@@ -35,11 +35,9 @@ long
 attach_adlib_card (long mem_start, struct address_info *hw_config)
 {
 
-  if (opl3_detect (hw_config->io_base, hw_config->osp))
-    {
-      mem_start = opl3_init (mem_start, hw_config->io_base, hw_config->osp);
-      request_region (hw_config->io_base, 4, "OPL3/OPL2");
-    }
+  mem_start = opl3_init (mem_start, hw_config->io_base, hw_config->osp);
+  request_region (hw_config->io_base, 4, "OPL3/OPL2");
+
   return mem_start;
 }
 

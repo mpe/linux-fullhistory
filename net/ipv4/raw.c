@@ -266,13 +266,13 @@ static int raw_init(struct sock *sk)
  *	we return it, otherwise we block.
  */
 
-int raw_recvfrom(struct sock *sk, unsigned char *to, int len,
-     int noblock, unsigned flags, struct sockaddr_in *sin,
-	     int *addr_len)
+int raw_recvmsg(struct sock *sk, struct msghdr *msg, int len,
+     int noblock, int flags,int *addr_len)
 {
 	int copied=0;
 	struct sk_buff *skb;
 	int err;
+	struct sockaddr_in *sin=(struct sockaddr_in *)msg->msg_name;
 
 	if (flags & MSG_OOB)
 		return -EOPNOTSUPP;
@@ -289,7 +289,7 @@ int raw_recvfrom(struct sock *sk, unsigned char *to, int len,
 
 	copied = min(len, skb->len);
 	
-	skb_copy_datagram(skb, 0, to, copied);
+	skb_copy_datagram_iovec(skb, 0, msg->msg_iov, copied);
 	sk->stamp=skb->stamp;
 
 	/* Copy the address. */
@@ -304,19 +304,33 @@ int raw_recvfrom(struct sock *sk, unsigned char *to, int len,
 }
 
 
-int raw_read (struct sock *sk, unsigned char *buff, int len, int noblock,unsigned flags)
+static int raw_recvfrom(struct sock *sk, unsigned char *ubuf, int size, int noblock, unsigned flags,
+		struct sockaddr_in *sa, int *addr_len)
+{
+	struct iovec iov;
+	struct msghdr msg;
+
+	iov.iov_base = ubuf;
+	iov.iov_len  = size;
+
+	msg.msg_name      = (void *)sa;
+	msg.msg_namelen   = 0;
+	if (addr_len)
+		msg.msg_namelen = *addr_len;
+	msg.msg_accrights = NULL;
+	msg.msg_iov       = &iov;
+	msg.msg_iovlen    = 1;
+
+	return raw_recvmsg(sk, &msg, size, noblock, flags, addr_len);
+}
+
+int raw_read (struct sock *sk, unsigned char *buff, int len, int noblock, unsigned flags)
 {
 	return(raw_recvfrom(sk, buff, len, noblock, flags, NULL, NULL));
 }
 
 
 struct proto raw_prot = {
-	sock_wmalloc,
-	sock_rmalloc,
-	sock_wfree,
-	sock_rfree,
-	sock_rspace,
-	sock_wspace,
 	raw_close,
 	raw_read,
 	raw_write,
@@ -340,6 +354,8 @@ struct proto raw_prot = {
 	NULL,
 	ip_setsockopt,
 	ip_getsockopt,
+	NULL,
+	raw_recvmsg,
 	128,
 	0,
 	"RAW",

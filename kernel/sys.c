@@ -58,13 +58,24 @@ asmlinkage int sys_setpriority(int which, int who, int niceval)
 {
 	struct task_struct *p;
 	int error = ESRCH;
-	int priority;
+	unsigned int priority;
 
 	if (which > 2 || which < 0)
 		return -EINVAL;
 
-	if ((priority = PZERO - niceval) <= 0)
-		priority = 1;
+	/* normalize: avoid signed division (rounding problems) */
+	priority = niceval;
+	if (niceval < 0)
+		priority = -niceval;
+	if (priority > 20)
+		priority = 20;
+	priority = (priority * DEF_PRIORITY + 10) / 20 + DEF_PRIORITY;
+
+	if (niceval >= 0) {
+		priority = 2*DEF_PRIORITY - priority;
+		if (!priority)
+			priority = 1;
+	}
 
 	for_each_task(p) {
 		if (!proc_sel(p, which, who))
@@ -84,10 +95,15 @@ asmlinkage int sys_setpriority(int which, int who, int niceval)
 	return -error;
 }
 
+/*
+ * Ugh. To avoid negative return values, "getpriority()" will
+ * not return the normal nice-value, but a value that has been
+ * offset by 20 (ie it returns 0..40 instead of -20..20)
+ */
 asmlinkage int sys_getpriority(int which, int who)
 {
 	struct task_struct *p;
-	int max_prio = -ESRCH;
+	long max_prio = -ESRCH;
 
 	if (which > 2 || which < 0)
 		return -EINVAL;
@@ -98,6 +114,10 @@ asmlinkage int sys_getpriority(int which, int who)
 		if (p->priority > max_prio)
 			max_prio = p->priority;
 	}
+
+	/* scale the priority from timeslice to 0..40 */
+	if (max_prio > 0)
+		max_prio = (max_prio * 20 + DEF_PRIORITY/2) / DEF_PRIORITY;
 	return max_prio;
 }
 
@@ -694,7 +714,7 @@ asmlinkage int sys_setdomainname(char *name, int len)
 	
 	if (!suser())
 		return -EPERM;
-	if (len > __NEW_UTS_LEN)
+	if (len < 0 || len > __NEW_UTS_LEN)
 		return -EINVAL;
 	error = verify_area(VERIFY_READ, name, len);
 	if (error)

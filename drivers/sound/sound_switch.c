@@ -314,7 +314,7 @@ read_status (snd_rw_buf * buf, int count)
   if (l <= 0)
     return 0;
 
-  memcpy_tofs (&((buf)[0]), (&status_buf[status_ptr]), (l));
+  memcpy_tofs (&((buf)[0]), &status_buf[status_ptr], l);
   status_ptr += l;
 
   return l;
@@ -405,11 +405,7 @@ sound_open_sw (int dev, struct fileinfo *file)
       if (status_busy)
 	return -EBUSY;
       status_busy = 1;
-      if ((status_buf = (char *) (
-				   {
-			       caddr_t x; x = kmalloc (4000, GFP_KERNEL); x;
-				   }
-	   )) == NULL)
+      if ((status_buf = (char *) kmalloc (4000, GFP_KERNEL)) == NULL)
 	return -EIO;
       status_len = status_ptr = 0;
       init_status ();

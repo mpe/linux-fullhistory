@@ -22,7 +22,7 @@
 #include <linux/mm.h>
 #include <linux/string.h>
 
-#include "../block/blk.h"
+#include <linux/blk.h>
 #include "scsi.h"
 #include "hosts.h"
 #include "scsi_ioctl.h"

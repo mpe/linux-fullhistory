@@ -246,14 +246,7 @@ MIDIbuf_open (int dev, struct fileinfo *file)
     input_sleep_flag[dev].mode = WK_NONE;
   };
 
-  midi_in_buf[dev] = (struct midi_buf *) (
-					   {
-					   caddr_t x;
-			 x = kmalloc (sizeof (struct midi_buf), GFP_KERNEL);
-
-					   x;
-					   }
-  );
+  midi_in_buf[dev] = (struct midi_buf *) kmalloc (sizeof (struct midi_buf), GFP_KERNEL);
 
   if (midi_in_buf[dev] == NULL)
     {
@@ -264,14 +257,7 @@ MIDIbuf_open (int dev, struct fileinfo *file)
     }
   midi_in_buf[dev]->len = midi_in_buf[dev]->head = midi_in_buf[dev]->tail = 0;
 
-  midi_out_buf[dev] = (struct midi_buf *) (
-					    {
-					    caddr_t x;
-			 x = kmalloc (sizeof (struct midi_buf), GFP_KERNEL);
-
-					    x;
-					    }
-  );
+  midi_out_buf[dev] = (struct midi_buf *) kmalloc (sizeof (struct midi_buf), GFP_KERNEL);
 
   if (midi_out_buf[dev] == NULL)
     {
@@ -417,7 +403,7 @@ MIDIbuf_write (int dev, struct fileinfo *file, const snd_rw_buf * buf, int count
 
       for (i = 0; i < n; i++)
 	{
-	  memcpy_fromfs ((&tmp_data), &((buf)[c]), (1));
+	  memcpy_fromfs (&tmp_data, &((buf)[c]), 1);
 	  QUEUE_BYTE (midi_out_buf[dev], tmp_data);
 	  c++;
 	}
@@ -482,7 +468,7 @@ MIDIbuf_read (int dev, struct fileinfo *file, snd_rw_buf * buf, int count)
       while (c < n)
 	{
 	  REMOVE_BYTE (midi_in_buf[dev], tmp_data);
-	  memcpy_tofs (&((buf)[c]), (&tmp_data), (1));
+	  memcpy_tofs (&((buf)[c]), &tmp_data, 1);
 	  c++;
 	}
     }

@@ -119,7 +119,7 @@
 #undef MODULE
 #endif 
 
-#include "../block/blk.h"	/* to get disk capacity */
+#include <linux/blk.h>	/* to get disk capacity */
 #include <linux/kernel.h>
 #include <linux/string.h>
 #include <linux/ioport.h>

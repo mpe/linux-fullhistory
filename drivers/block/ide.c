@@ -1,5 +1,5 @@
 /*
- *  linux/drivers/block/ide.c	Version 5.15  Oct 13, 1995
+ *  linux/drivers/block/ide.c	Version 5.16  Oct 19, 1995
  *
  *  Copyright (C) 1994, 1995  Linus Torvalds & authors (see below)
  */
@@ -163,11 +163,16 @@
  *			don't enable 2nd CMD640 PCI port during init - conflict
  *  Version 5.15	bug fix in init_cmd640_vlb()
  *			bug fix in interrupt sharing code
+ *  Version 5.16	ugh.. fix "serialize" support, broken in 5.15
+ *			remove "Huh?" from cmd640 code
+ *			added qd6580 interface speed select from Colten Edwards
  *
  *  Driver compile-time options are in ide.h
  *
  *  To do, in likely order of completion:
- *	- add ioctls to get/set interface timings on cmd640, ht6560b, triton
+ *	- add ALI M1443/1445 chipset support from derekn@vw.ece.cmu.edu
+ *	- add Promise Caching controller support from peterd@pnd-pc.demon.co.uk
+ *	- add ioctls to get/set interface timings on various interfaces
  *	- modify kernel to obtain BIOS geometry for drives on 2nd/3rd/4th i/f
  *	- improved CMD support:  handed this off to someone else
  *	- find someone to work on IDE *tape drive* support
@@ -209,7 +214,7 @@ static const byte	ide_hwif_to_major[MAX_HWIFS]   = {IDE0_MAJOR, IDE1_MAJOR, IDE2
 
 static const unsigned short default_io_base[MAX_HWIFS] = {0x1f0, 0x170, 0x1e8, 0x168};
 static const byte	default_irqs[MAX_HWIFS]     = {14, 15, 11, 10};
-static int		single_threaded = 0;	/* "serialize" option */
+static int		serialized = 0;		/* "serialize" option */
 static int		disallow_unmask = 0;	/* for buggy hardware */
 
 #if (DISK_RECOVERY_TIME > 0)
@@ -2360,6 +2365,9 @@ static void sub22 (char b, char c)
 
 static void init_dtc2278 (void)
 {
+	unsigned long flags;
+
+	save_flags(flags);
 	cli();
 #if SET_DTC2278_MODE4
 	/*
@@ -2375,10 +2383,38 @@ static void init_dtc2278 (void)
 	inb(0x3f6);
 	outb_p(0x20,0xb4);
 	inb(0x3f6);
-
-	sti();
+	restore_flags(flags);
 }
 #endif /* SUPPORT_DTC2278 */
+
+#ifdef SUPPORT_QD6580
+/*
+ * QDI QD6580 EIDE controller fast support by Colten Edwards.
+ * no net access but I can be reached at pje120@cs.usask.ca
+ *
+ * I suppose that a IOCTL could be used for this and other
+ * cards like it to modify the speed using hdparm.  Someday..
+ */
+static void init_qd6580 (void)
+{
+	unsigned long flags;
+
+	/* looks like   0x4f is fast
+	 *              0x3f is medium
+	 *              0x2f is slower
+	 *              0x1f is slower yet
+	 *              ports are 0xb0 0xb2 and 0xb3
+	 */
+
+	save_flags(flags);
+	cli();
+	outb_p(0x8d,0xb0);
+	outb_p(0x0 ,0xb2);
+	outb_p(0x4f,0xb3);	/* select "fast" 0x4f */
+	inb(0x3f6);
+	restore_flags(flags);
+}
+#endif /* SUPPORT_QD6580 */
 
 #if SUPPORT_CMD640
 /*
@@ -2412,7 +2448,7 @@ void init_cmd640_vlb (void)
 	byte reg;
 	unsigned short port = 0x178;
 
-	single_threaded = 1;
+	serialized = 1;
  	printk("ide: buggy CMD640 interface: serialized, ");
 	reg = read_cmd640_vlb(port, 0x50);
 	if (reg == 0xff || (reg & 0x90) != 0x90) {
@@ -2523,7 +2559,12 @@ static int match_parm (char *s, const char *keywords[], int vals[], int max_vals
  * "idex=dtc2278"	: enables use of DTC2278 secondary i/f
  * "idex=ht6560b"	: enables use of HT6560B secondary i/f
  * "idex=cmd640_vlb"	: required for VLB cards with the CMD640 chip
- *			  (PCI version will be automatically detected)
+ *			  (not for PCI -- automatically detected)
+ *
+ * This option is valid ONLY on ide0, and the defaults for the base,ctl ports
+ * must not be altered.
+ *
+ * "ide0=qd6580"	: select "fast" interface speed on a qd6580 interface
  */
 void ide_setup (char *s)
 {
@@ -2561,7 +2602,7 @@ void ide_setup (char *s)
 				hwif->noprobe = 0;
 				goto done;
 			case -4: /* "serialize" */
-				printk(" -- USE ""ide%c=serialize"" INSTEAD", '0'+hw);
+				printk(" -- USE \"ide%c=serialize\" INSTEAD", '0'+hw);
 				goto do_serialize;
 			case 3: /* cyl,head,sect */
 				drive->media	= disk;
@@ -2579,11 +2620,17 @@ void ide_setup (char *s)
 	 * Look for interface options:  "idex="
 	 */
 	if (s[0] == 'i' && s[1] == 'd' && s[2] == 'e' && s[3] >= '0' && s[3] <= max_hwif) {
-		const char *ide_words[] = {"noprobe", "serialize", "dtc2278", "ht6560b", "cmd640_vlb", NULL};
+		const char *ide_words[] = {"noprobe", "serialize", "dtc2278", "ht6560b", "cmd640_vlb", "qd6580", NULL};
 		hw = s[3] - '0';
 		hwif = &ide_hwifs[hw];
 
 		switch (match_parm(&s[4], ide_words, vals, 3)) {
+#if SUPPORT_QD6580
+			case -6: /* "qd6580" */
+				if (hw != 0) goto bad_hwif;
+				init_qd6580();
+				goto done;
+#endif /* SUPPORT_QD6580 */
 #if SUPPORT_CMD640
 			case -5: /* "cmd640_vlb" */
 				if (hw > 1) goto bad_hwif;
@@ -2618,7 +2665,7 @@ void ide_setup (char *s)
 			case -2: /* "serialize" */
 			do_serialize:
 				if (hw > 1) goto bad_hwif;
-				single_threaded = 1;
+				serialized = 1;
 				goto done;
 			case -1: /* "noprobe" */
 				hwif->noprobe = 1;
@@ -2747,26 +2794,34 @@ static void probe_cmos_for_drives (ide_hwif_t *hwif)
 static int init_irq (ide_hwif_t *hwif)
 {
 	unsigned long flags;
-	ide_hwgroup_t *hwgroup;
+	int irq = hwif->irq;
+	ide_hwgroup_t *hwgroup = irq_to_hwgroup[irq];
 
-	/*
-	 * First, we try to grab the irq
-	 */
 	save_flags(flags);
 	cli();
-	if ((hwgroup = irq_to_hwgroup[hwif->irq]) == NULL) {
-		if (request_irq(hwif->irq, ide_intr,
-				SA_INTERRUPT|SA_SAMPLE_RANDOM, hwif->name)) {
+
+	/*
+	 * Grab the irq if we don't already have it from a previous hwif
+	 */
+	if (hwgroup == NULL)  {
+		if (request_irq(irq, ide_intr, SA_INTERRUPT|SA_SAMPLE_RANDOM, hwif->name)) {
 			restore_flags(flags);
 			printk(" -- FAILED!");
 			return 1;
 		}
-
-		/*
-		 * Got the irq,  now set everything else up
-		 */
+	}
+	/*
+	 * Check for serialization with ide1.
+	 * This code depends on us having already taken care of ide1.
+	 */
+	if (serialized && hwif->name[3] == '0' && ide_hwifs[1].present)
+		hwgroup = ide_hwifs[1].hwgroup;
+	/*
+	 * If this is the first interface in a group,
+	 * then we need to create the hwgroup structure
+	 */
+	if (hwgroup == NULL) {
 		hwgroup = kmalloc (sizeof(ide_hwgroup_t), GFP_KERNEL);
-		irq_to_hwgroup[hwif->irq] = hwgroup;
 		hwgroup->hwif 	 = hwif->next = hwif;
 		hwgroup->rq      = NULL;
 		hwgroup->handler = NULL;
@@ -2783,18 +2838,14 @@ static int init_irq (ide_hwif_t *hwif)
 		hwgroup->hwif->next = hwif;
 	}
 	hwif->hwgroup = hwgroup;
+	irq_to_hwgroup[irq] = hwgroup;
 
 	restore_flags(flags);	/* safe now that hwif->hwgroup is set up */
 
 	printk("%s at 0x%03x-0x%03x,0x%03x on irq %d", hwif->name,
-		hwif->io_base, hwif->io_base+7, hwif->ctl_port, hwif->irq);
-	if (hwgroup->hwif != hwif) {
-		char *name = hwgroup->hwif->name;
-		if (hwgroup->hwif->irq == hwif->irq)
-			printk(" (shared with %s)", name);
-		else
-			printk(" (serialized with %s)", name);
-	}
+		hwif->io_base, hwif->io_base+7, hwif->ctl_port, irq);
+	if (hwgroup->hwif != hwif)
+		printk(" (serialized with %s)", hwgroup->hwif->name);
 	printk("\n");
 	return 0;
 }
@@ -2826,7 +2877,7 @@ void ide_pci_access_error (int rc)
 void buggy_interface_fallback (int rc)
 {
 	ide_pci_access_error (rc);
-	single_threaded = 1;
+	serialized = 1;
 	disallow_unmask = 1;
 	printk("serialized, disabled unmasking\n");
 }
@@ -2859,7 +2910,7 @@ void init_cmd640 (byte bus, byte fn)
 	int rc;
 	unsigned char reg;
 
-	single_threaded = 1;
+	serialized = 1;
 	printk("ide: buggy CMD640 interface: ");
 
 #if 0	/* funny.. the cmd640b I tried this on claimed to not be enabled.. */
@@ -2869,7 +2920,6 @@ void init_cmd640 (byte bus, byte fn)
 	} else if (!(sreg & 1)) {
 		printk("not enabled\n");
 	} else {
-#endif /* 0 */
 
 	/*
 	 * The first part is undocumented magic from the DOS driver.
@@ -2879,6 +2929,7 @@ void init_cmd640 (byte bus, byte fn)
 	if (pcibios_write_config_byte(bus, fn, 0x5b, 0xbd) != 0xbd)
 		printk("init_cmd640: huh? 0x5b read back wrong\n");
 	(void) pcibios_write_config_byte(bus, fn, 0x5b, 0);
+#endif /* 0 */
 	/*
 	 * The rest is from the cmd640b datasheet.
 	 */
@@ -2988,15 +3039,6 @@ int ide_init (void)
 		if (!hwif->present)
 			continue;
 		hwif->present = 0; /* we set it back to 1 if all is ok below */
-		if (h == 0 && single_threaded) {
-			if (ide_hwifs[1].present) {
-				if (irq_to_hwgroup[hwif->irq] != NULL) {
-					printk("%s: SERIALIZE BUG!\n", hwif->name);
-					continue;
-				}
-				irq_to_hwgroup[hwif->irq] = irq_to_hwgroup[ide_hwifs[1].irq];
-			}
-		}
 		switch (hwif->major) {
 			case IDE0_MAJOR: rfn = &do_ide0_request; break;
 			case IDE1_MAJOR: rfn = &do_ide1_request; break;

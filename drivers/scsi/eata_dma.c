@@ -71,7 +71,7 @@
 #include <asm/types.h>
 #include <asm/io.h>
 #include <asm/dma.h>
-#include "../block/blk.h"
+#include <linux/blk.h>
 #include "scsi.h"
 #include "sd.h"
 #include "hosts.h"

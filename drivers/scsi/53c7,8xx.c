@@ -172,7 +172,7 @@
 #include <linux/proc_fs.h>
 #include <linux/string.h>
 #include <linux/mm.h>
-#include "../block/blk.h"
+#include <linux/blk.h>
 #include "scsi.h"
 #include "hosts.h"
 #include "53c7,8xx.h"

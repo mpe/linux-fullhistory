@@ -164,10 +164,6 @@ extern void ip_acct_cnt(struct iphdr *, struct device *, struct ip_fw *);
 extern int ip_acct_ctl(int, void *, int);
 #endif
 
-#define FW_BLOCK	0
-#define FW_ACCEPT	1
-#define FW_REJECT	(-1)
-#define FW_MASQUERADE	2
 
 extern int ip_fw_chk(struct iphdr *, struct device *rif,struct ip_fw *, int, int);
 extern void ip_fw_init(void);

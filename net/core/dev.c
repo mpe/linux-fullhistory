@@ -1370,4 +1370,3 @@ int net_dev_init(void)
 	enable_bh(NET_BH);
 	return 0;
 }
-

@@ -9,14 +9,20 @@ VERSION		= `cat .version`
 TARGET_OS	= linux
 USRINCDIR	= /usr/include
 MODULEDIR	= /lib/modules/misc
+FIXEDOBJS	= soundcard.o dev_table.o sound_switch.o
 
-OBJS   = soundcard.o audio.o dmabuf.o sb_dsp.o dev_table.o \
+ifeq (.defines,$(wildcard .defines))
+include .defines
+include .objects
+else
+OBJS   = audio.o dmabuf.o sb_dsp.o \
 	 opl3.o sequencer.o midibuf.o sb_card.o pas2_card.o adlib_card.o \
 	 pas2_pcm.o pas2_mixer.o pas2_midi.o gus_card.o gus_wave.o mpu401.o \
 	 gus_midi.o gus_vol.o patmgr.o sb_mixer.o sb16_dsp.o sb_midi.o \
-	 sb16_midi.o sound_switch.o midi_synth.o uart6850.o sound_timer.o \
+	 sb16_midi.o midi_synth.o uart6850.o sound_timer.o \
 	 sys_timer.o ics2101.o ad1848.o pss.o sscape.o trix.o aedsp16.o \
-	 mad16.o mad16_sb_midi.o cs4232.o maui.o sound_pnp.o
+	 mad16.o mad16_sb_midi.o cs4232.o maui.o
+endif
 
 ifndef HOSTCC
 #
@@ -38,7 +44,14 @@ install:	sound.o
 	$(CC) $(CFLAGS) -c $<
 endif
 
+ifeq ($(CONFIG_SOUND),y)
+OBJS += $(FIXEDOBJS)
+
 all:	local.h sound.a
+
+else
+all:
+endif
 
 include $(TOPDIR)/Rules.make
 
@@ -57,8 +70,10 @@ indent:
 local.h: 
 	$(MAKE) clean
 	$(MAKE) setup-$(TARGET_OS)
-	$(MAKE) config
+	$(MAKE) oldconfig
 	$(MAKE) dep
+	@echo You have to restart make. This ensures that options are read corrrectly.
+	exit -1
 
 config: configure
 	@$(MAKE) setup-$(TARGET_OS)
@@ -69,8 +84,16 @@ config: configure
 #	@echo \#define SOUND_CONFIG_DOMAIN \"`hostname -d`\" >> local.h 2>/dev/null
 	@echo \#define SOUND_UNAME_A \"`uname -a`\" >> local.h
 
+oldconfig: setup-$(TARGET_OS) configure
+	@./configure /etc/soundconf > local.h
+	@echo \#define SOUND_CONFIG_DATE \"`date`\" >> local.h
+	@echo \#define SOUND_CONFIG_BY \"`whoami`\" >> local.h
+#	@echo \#define SOUND_CONFIG_HOST \"`hostname`\" >> local.h 2>/dev/null
+#	@echo \#define SOUND_CONFIG_DOMAIN \"`hostname -d`\" >> local.h 2>/dev/null
+	@echo \#define SOUND_UNAME_A \"`uname -a`\" >> local.h
+
 clrconf:
-	rm -f local.h .depend synth-ld.h trix_boot.h smw-midi0001.h
+	rm -f local.h .depend synth-ld.h trix_boot.h smw-midi0001.h .defines
 
 configure: configure.c
 	$(HOSTCC) -o configure configure.c
@@ -82,9 +105,9 @@ dep:
 setup-linux:
 	@echo Compiling Sound Driver v $(VERSION) for Linux
 
-sound.o: $(OBJS) 
+sound.o: local.h $(FIXEDOBJS) sound.a
 	-rm -f sound.o
-	$(LD) -r -o sound.o $(OBJS)
+	$(LD) -r -o sound.o $(FIXEDOBJS) sound.a
 
 modules: local.h sound.o
 	ln -fs `pwd`/sound.o /usr/src/linux/modules/sound.o

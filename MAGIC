@@ -36,39 +36,62 @@ major device number as the ioctl magic value (e.g. hd, lp).
 					Theodore Ts'o
 					31-Mar-94
 
+The magic table is current to Linux 1.3.35.
+The ioctl table is current to Linux 1.3.35.
+For a complete list of kernel ioctl's, look for 'ioctl-list.X.Y.ZZ' on
+an ftp site, where 'X.Y.ZZ' is the kernel version for the ioctl list.
+
+					Michael Chastain
+					<mec@duracef.shout.net>
+					17-Oct-95
+
+
+
+
 Magic Name          Number  Structure            File
 ===========================================================================
+CYCLADES_MAGIC      0x4359  struct cyclades_port include/linux/cyclades.h
 FASYNC_MAGIC        0x4601  struct fasync_struct include/linux/fs.h
 PTY_MAGIC           0x5001  struct pty_struct    drivers/char/pty.c
-PPP_MAGIC           0x5002  struct ppp_struct    include/linux/ppp.h
+PPP_MAGIC           0x5002  struct ppp_struct    include/linux/if_ppp.h
 TTY_MAGIC           0x5401  struct tty_struct    include/linux/tty.h
 TTY_DRIVER_MAGIC    0x5402  struct tty_driver    include/linux/tty_driver.h
 TTY_LDISC_MAGIC     0x5403  struct tty_ldisc     include/linux/tty_ldisc.h
 SERIAL_MAGIC        0x5301  struct async_struct  include/linux/serial.h
 SLIP_MAGIC          0x5302  struct slip          drivers/net/slip.h
+SCC_MAGIC           0x8530  struct scc_channel   include/linux/scc.h
 
-Ioctl	Include File	Comments
+
+
+Ioctl	Include File		Comments
 ========================================================
-0x00	fd.h
-0x01	random.h	subcodes starting at 0x080000
-0x03	hdreg.h
-0x06	lp.h
-0x12	fs.h
-'C'	soundcard.h
-'K'	kd.h
-'M'	soundcard.h
-'P'	soundcard.h
-'Q'	soundcard.h
-'S'	cdrom.h
-'S'	fs.h		subcodes from 0x80, no conflict
-'T'	soundcard.h	conflicts with termios.h
-'T'	termios.h	conflicts with soundcard.h
-'T'	ppp.h		subcodes from 0x90, no conflict
-'V'	vt.h
-'f'	ext2_fs.h
-'m'	mtio.h		conflicts with soundcard.h
-'m'	soundcard.h	conflicts with mtio.h
-'s'	pcsp.h
-'v'	ext2_fs.h
-0x89	sockios.h
-
+0x00	linux/fs.h		only FIBMAP, FIGETBSZ
+0x00	linux/random.h		codes in 0x010800NN
+0x02	linux/fd.h
+0x03	linux/hdreg.h
+0x04	linux/umsdos_fs.h
+0x06	linux/lp.h
+0x12	linux/fs.h
+0x20	linux/cm206.h
+'C'	linux/soundcard.h
+'K'	linux/kd.h
+'M'	linux/soundcard.h
+'P'	linux/soundcard.h
+'Q'	linux/soundcard.h
+'S'	linux/cdrom.h		conflict!
+'S'	linux/scsi.h		conflict!
+'T'	linux/soundcard.h	conflict!
+'T'	linux/scc.h		conflict!
+'T'	asm/termios.h		conflict!
+'V'	linux/vt.h
+'Y'	linux/cyclades.h	codes in 0x004359NN
+'f'	linux/ext2_fs.h
+'m'	linux/mtio.h		conflict!
+'m'	linux/soundcard.h	conflict!
+'s'	linux/cdk.h
+'t'	linux/if_ppp.h
+'u'	linux/smb_fs.h
+'u'	linux/smb_fs.h
+'v'	linux/ext2_fs.h
+0x89	asm/socket.h		no conflict
+0x89	linux/sockios.h		no conflict

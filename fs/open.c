@@ -61,11 +61,25 @@ asmlinkage int sys_fstatfs(unsigned int fd, struct statfs * buf)
 	return 0;
 }
 
-asmlinkage int sys_truncate(const char * path, unsigned int length)
+static int do_truncate(struct inode *inode, unsigned long length)
+{
+	struct iattr newattrs;
+
+	/* truncate virtual mappings of this file */
+	vmtruncate(inode, length);
+	inode->i_size = newattrs.ia_size = length;
+	if (inode->i_op && inode->i_op->truncate)
+		inode->i_op->truncate(inode);
+	newattrs.ia_ctime = newattrs.ia_mtime = CURRENT_TIME;
+	newattrs.ia_valid = ATTR_SIZE | ATTR_CTIME | ATTR_MTIME;
+	inode->i_dirt = 1;
+	return notify_change(inode, &newattrs);
+}
+
+asmlinkage int sys_truncate(const char * path, unsigned long length)
 {
 	struct inode * inode;
 	int error;
-	struct iattr newattrs;
 
 	error = namei(path,&inode);
 	if (error)
@@ -91,23 +105,16 @@ asmlinkage int sys_truncate(const char * path, unsigned int length)
 		iput(inode);
 		return error;
 	}
-	inode->i_size = newattrs.ia_size = length;
-	if (inode->i_op && inode->i_op->truncate)
-		inode->i_op->truncate(inode);
-	newattrs.ia_ctime = newattrs.ia_mtime = CURRENT_TIME;
-	newattrs.ia_valid = ATTR_SIZE | ATTR_CTIME | ATTR_MTIME;
-	inode->i_dirt = 1;
-	error = notify_change(inode, &newattrs);
+	error = do_truncate(inode, length);
 	put_write_access(inode);
 	iput(inode);
 	return error;
 }
 
-asmlinkage int sys_ftruncate(unsigned int fd, unsigned int length)
+asmlinkage int sys_ftruncate(unsigned int fd, unsigned long length)
 {
 	struct inode * inode;
 	struct file * file;
-	struct iattr newattrs;
 
 	if (fd >= NR_OPEN || !(file = current->files->fd[fd]))
 		return -EBADF;
@@ -117,13 +124,7 @@ asmlinkage int sys_ftruncate(unsigned int fd, unsigned int length)
 		return -EACCES;
 	if (IS_IMMUTABLE(inode) || IS_APPEND(inode))
 		return -EPERM;
-	inode->i_size = newattrs.ia_size = length;
-	if (inode->i_op && inode->i_op->truncate)
-		inode->i_op->truncate(inode);
-	newattrs.ia_ctime = newattrs.ia_mtime = CURRENT_TIME;
-	newattrs.ia_valid = ATTR_SIZE | ATTR_CTIME | ATTR_MTIME;
-	inode->i_dirt = 1;
-	return notify_change(inode, &newattrs);
+	return do_truncate(inode, length);
 }
 
 /* If times==NULL, set access and modification to current time,

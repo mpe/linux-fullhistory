@@ -28,7 +28,8 @@
  *					dubious gcc output. Can you read
  *					compiler: it said _VOLATILE_
  *	Richard Kooijman	:	Timestamp fixes.
- *		Alan Cox	:	New buffers. Use sk->mac.raw
+ *		Alan Cox	:	New buffers. Use sk->mac.raw.
+ *		Alan Cox	:	sendmsg/recvmsg support.
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -73,7 +74,6 @@ static unsigned long min(unsigned long a, unsigned long b)
 int packet_rcv(struct sk_buff *skb, struct device *dev,  struct packet_type *pt)
 {
 	struct sock *sk;
-	unsigned long flags;
 	
 	/*
 	 *	When we registered the protocol we saved the socket in the data
@@ -83,7 +83,8 @@ int packet_rcv(struct sk_buff *skb, struct device *dev,  struct packet_type *pt)
 	sk = (struct sock *) pt->data;	
 	
 	/*
-	 *	Yank back the headers
+	 *	Yank back the headers [hope the device set this
+	 *	right or kerboom...]
 	 */
 	 
 	skb_push(skb,skb->data-skb->mac.raw);
@@ -99,35 +100,13 @@ int packet_rcv(struct sk_buff *skb, struct device *dev,  struct packet_type *pt)
 	 *	to prevent sockets using all the memory up.
 	 */
 	 
-	if (sk->rmem_alloc & 0xFF000000) {
-		printk("packet_rcv: sk->rmem_alloc = %ld\n", sk->rmem_alloc);
-		sk->rmem_alloc = 0;
-	}
-
-	if (sk->rmem_alloc + skb->truesize >= sk->rcvbuf) 
+	if(sock_queue_rcv_skb(sk,skb)<0)
 	{
-/*	        printk("packet_rcv: drop, %d+%d>%d\n", sk->rmem_alloc, skb->truesize, sk->rcvbuf); */
 		skb->sk = NULL;
 		kfree_skb(skb, FREE_READ);
-		return(0);
+		release_sock(sk);		
+		return 0;
 	}
-
-	save_flags(flags);
-	cli();
-
-	skb->sk = sk;
-	sk->rmem_alloc += skb->truesize;	
-
-	/*
-	 *	Queue the packet up, and wake anyone waiting for it.
-	 */
-
-	skb_queue_tail(&sk->receive_queue,skb);
-	if(!sk->dead)
-		sk->data_ready(sk,skb->len);
-		
-	restore_flags(flags);
-
 	/*
 	 *	Processing complete.
 	 */
@@ -141,13 +120,12 @@ int packet_rcv(struct sk_buff *skb, struct device *dev,  struct packet_type *pt)
  *	protocol layers and you must therefore supply it with a complete frame
  */
  
-static int packet_sendto(struct sock *sk, const unsigned char *from, int len,
-	      int noblock, unsigned flags, struct sockaddr_in *usin,
-	      int addr_len)
+static int packet_sendmsg(struct sock *sk, struct msghdr *msg, int len,
+	      int noblock, int flags)
 {
 	struct sk_buff *skb;
 	struct device *dev;
-	struct sockaddr *saddr=(struct sockaddr *)usin;
+	struct sockaddr *saddr=(struct sockaddr *)msg->msg_name;
 
 	/*
 	 *	Check the flags. 
@@ -160,13 +138,13 @@ static int packet_sendto(struct sock *sk, const unsigned char *from, int len,
 	 *	Get and verify the address. 
 	 */
 	 
-	if (usin) 
+	if (saddr) 
 	{
-		if (addr_len < sizeof(*saddr)) 
+		if (msg->msg_namelen < sizeof(*saddr)) 
 			return(-EINVAL);
 	} 
 	else
-		return(-EINVAL);	/* SOCK_PACKET must be sent giving an address */
+		return(-ENOTCONN);	/* SOCK_PACKET must be sent giving an address */
 	
 	/*
 	 *	Find the device first to size check it 
@@ -176,7 +154,7 @@ static int packet_sendto(struct sock *sk, const unsigned char *from, int len,
 	dev = dev_get(saddr->sa_data);
 	if (dev == NULL) 
 	{
-		return(-ENXIO);
+		return(-ENODEV);
   	}
 	
 	/*
@@ -187,11 +165,12 @@ static int packet_sendto(struct sock *sk, const unsigned char *from, int len,
 	if(len>dev->mtu+dev->hard_header_len)
   		return -EMSGSIZE;
 
-	skb = sk->prot->wmalloc(sk, len, 0, GFP_KERNEL);
+	skb = sock_wmalloc(sk, len, 0, GFP_KERNEL);
 
 	/*
 	 *	If the write buffer is full, then tough. At this level the user gets to
-	 *	deal with the problem - do your own algorithmic backoffs.
+	 *	deal with the problem - do your own algorithmic backoffs. Thats far
+	 *	more flexible.
 	 */
 	 
 	if (skb == NULL) 
@@ -205,7 +184,7 @@ static int packet_sendto(struct sock *sk, const unsigned char *from, int len,
 	 
 	skb->sk = sk;
 	skb->free = 1;
-	memcpy_fromfs(skb_put(skb,len), from, len);
+	memcpy_fromiovec(skb_put(skb,len), msg->msg_iov, len);
 	skb->arp = 1;		/* No ARP needs doing on this (complete) frame */
 
 	/*
@@ -218,6 +197,26 @@ static int packet_sendto(struct sock *sk, const unsigned char *from, int len,
 		kfree_skb(skb, FREE_WRITE);
 	return(len);
 }
+
+static int packet_sendto(struct sock *sk, const unsigned char *from, int len,
+	      int noblock, unsigned flags, struct sockaddr_in *usin,
+	      int addr_len)
+{
+	struct iovec iov;
+	struct msghdr msg;
+
+	iov.iov_base = (void *)from;
+	iov.iov_len  = len;
+
+	msg.msg_name      = (void *)usin;
+	msg.msg_namelen   = addr_len;
+	msg.msg_accrights = NULL;
+	msg.msg_iov       = &iov;
+	msg.msg_iovlen    = 1;
+
+	return packet_sendmsg(sk, &msg, len, noblock, flags);
+}
+
 
 /*
  *	A write to a SOCK_PACKET can't actually do anything useful and will
@@ -284,16 +283,13 @@ static int packet_init(struct sock *sk)
  *	If necessary we block.
  */
  
-int packet_recvfrom(struct sock *sk, unsigned char *to, int len,
-	        int noblock, unsigned flags, struct sockaddr_in *sin,
-	        int *addr_len)
+int packet_recvmsg(struct sock *sk, struct msghdr *msg, int len,
+	        int noblock, int flags,int *addr_len)
 {
 	int copied=0;
 	struct sk_buff *skb;
-	struct sockaddr *saddr;
+	struct sockaddr *saddr=(struct sockaddr *)msg->msg_name;
 	int err;
-
-	saddr = (struct sockaddr *)sin;
 
 	if (sk->shutdown & RCV_SHUTDOWN) 
 		return(0);
@@ -330,7 +326,7 @@ int packet_recvfrom(struct sock *sk, unsigned char *to, int len,
 	 
 	copied = min(len, skb->len);
 
-	memcpy_tofs(to, skb->data, copied);	/* We can't use skb_copy_datagram here */
+	memcpy_toiovec(msg->msg_iov, skb->data, copied);	/* We can't use skb_copy_datagram here */
 	sk->stamp=skb->stamp;
 
 	/*
@@ -358,6 +354,27 @@ int packet_recvfrom(struct sock *sk, unsigned char *to, int len,
 	return(copied);
 }
 
+static int packet_recvfrom(struct sock *sk, unsigned char *ubuf, int size, int noblock, unsigned flags,
+		struct sockaddr_in *sa, int *addr_len)
+{
+	struct iovec iov;
+	struct msghdr msg;
+
+	iov.iov_base = ubuf;
+	iov.iov_len  = size;
+
+	msg.msg_name      = (void *)sa;
+	msg.msg_namelen   = 0;
+	if (addr_len)
+		msg.msg_namelen = *addr_len;
+	msg.msg_accrights = NULL;
+	msg.msg_iov       = &iov;
+	msg.msg_iovlen    = 1;
+
+	return packet_recvmsg(sk, &msg, size, noblock, flags, addr_len);
+}
+
+
 
 /*
  *	A packet read can succeed and is just the same as a recvfrom but without the
@@ -379,12 +396,6 @@ int packet_read(struct sock *sk, unsigned char *buff,
  
 struct proto packet_prot = 
 {
-	sock_wmalloc,
-	sock_rmalloc,
-	sock_wfree,
-	sock_rfree,
-	sock_rspace,
-	sock_wspace,
 	packet_close,
 	packet_read,
 	packet_write,
@@ -399,11 +410,13 @@ struct proto packet_prot =
 	NULL,
 	NULL, 
 	datagram_select,
-	NULL,
+	NULL,			/* No ioctl */
 	packet_init,
 	NULL,
 	NULL,			/* No set/get socket options */
 	NULL,
+	packet_sendmsg,		/* Sendmsg */
+	packet_recvmsg,		/* Recvmsg */
 	128,
 	0,
 	"PACKET",

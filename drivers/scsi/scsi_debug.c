@@ -30,7 +30,7 @@
 #include <linux/module.h>
 #endif
 
-#include "../block/blk.h"
+#include <linux/blk.h>
 #include "scsi.h"
 #include "hosts.h"
 

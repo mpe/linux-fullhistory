@@ -32,7 +32,7 @@
 #include <linux/udp.h>
 #include <net/protocol.h>
 #include <net/ipip.h>
-#include <linux/ip_fw.h>
+#include <linux/firewall.h>
 
 /*
  * NB. we must include the kernel idenfication string in to install the module.
@@ -84,17 +84,18 @@ int ipip_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 	skb->h.iph=(struct iphdr *)skb->data;
 	skb->ip_hdr=(struct iphdr *)skb->data;
 	memset(skb->proto_priv, 0, sizeof(struct options));
-	if (skb->ip_hdr->ihl > 5) {
-	  if (ip_options_compile(NULL, skb))
-	    return 0;
+	if (skb->ip_hdr->ihl > 5) 
+	{
+		if (ip_options_compile(NULL, skb))
+			return 0;
 	}
 	
-#ifdef CONFIG_IP_FIREWALL
+#ifdef CONFIG_FIREWALL
 	/*
 	 *	Check the firewall [well spotted Olaf]
 	 */
 	 
-	if((err=ip_fw_chk(skb->ip_hdr,dev,ip_fw_blk_chain, ip_fw_blk_policy,0))<FW_ACCEPT)
+	if((err=call_in_firewall(PF_INET, skb, skb->ip_hdr))<FW_ACCEPT)
 	{
 		if(err==FW_REJECT)
 			icmp_send(skb,ICMP_DEST_UNREACH, ICMP_PORT_UNREACH, 0 , dev);

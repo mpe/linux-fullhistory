@@ -18,12 +18,12 @@
  * along with this program; see the file COPYING.  If not, write to
  * the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.
  * 
- * $Id: aic7xxx.h,v 2.0 1995/08/02 05:28:42 deang Exp $
+ * $Id: aic7xxx.h,v 2.2 1995/09/20 05:18:18 deang Exp $
  *-M*************************************************************************/
 #ifndef _aic7xxx_h
 #define _aic7xxx_h
 
-#define AIC7XXX_H_VERSION  "$Revision: 2.0 $"
+#define AIC7XXX_H_VERSION  "$Revision: 2.2 $"
 
 /*
  * Scsi_Host_Template (see hosts.h) for AIC-7770/AIC-7870 - some fields
@@ -33,7 +33,7 @@
 	NULL,							\
 	NULL,							\
 	NULL,							\
-	NULL,							\
+	aic7xxx_proc_info,					\
 	NULL,							\
 	aic7xxx_detect,						\
 	NULL,							\
@@ -61,5 +61,7 @@ extern int aic7xxx_abort(Scsi_Cmnd *);
 extern int aic7xxx_reset(Scsi_Cmnd *);
 
 extern const char *aic7xxx_info(struct Scsi_Host *);
+
+extern int aic7xxx_proc_info(char *, char **, off_t, int, int, int);
 
 #endif /* _aic7xxx_h */

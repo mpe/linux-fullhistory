@@ -26,6 +26,7 @@ struct kconfig * config = NULL;
 struct kconfig * clast = NULL;
 struct kconfig * koption = NULL;
 static int lineno = 0;
+static int menus_seen = 0;
 /*
  * Simple function just to skip over spaces and tabs in config.in.
  */
@@ -243,6 +244,7 @@ int parse(char * pnt) {
     }
   else if (strncmp(pnt, "mainmenu_option", 15) == 0) 
     {
+      menus_seen++;
       tok = tok_menuoption;
       pnt += 15;
     }
@@ -441,6 +443,12 @@ main(int argc, char * argv[])
     }
 
 
+  if( menus_seen == 0 )
+    {
+      fprintf(stderr,"The config.in file for this platform does not support\n");
+      fprintf(stderr,"menus.\n");
+      exit(1);
+    }
   /*
    * Input file is now parsed.  Next we need to go through and attach
    * the correct conditions to each of the actual menu items and kill

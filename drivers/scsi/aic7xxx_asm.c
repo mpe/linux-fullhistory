@@ -27,7 +27,7 @@
  * A <label> is an <undef-sym> ending in a colon.  Spaces, tabs, and commas
  * are token separators.
  *-M*************************************************************************/
-static char id[] = "$Id: aic7xxx_asm.c,v 2.0 1995/08/02 05:28:42 deang Exp $";
+static char id[] = "$Id: aic7xxx_asm.c,v 2.1 1995/08/23 04:31:40 deang Exp $";
 #include <ctype.h>
 #include <stdio.h>
 #include <string.h>

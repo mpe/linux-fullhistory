@@ -34,7 +34,7 @@
 #include <asm/dma.h>
 
 #define MAJOR_NR XT_DISK_MAJOR
-#include "blk.h"
+#include <linux/blk.h>
 
 XD_INFO xd_info[XD_MAXDRIVES];
 

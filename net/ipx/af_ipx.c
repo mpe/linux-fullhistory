@@ -37,8 +37,8 @@
  *			Don't set address length on recvfrom that errors.
  *			Incorrect verify_area.
  *	Revision 0.31:	New sk_buffs. This still needs a lot of testing. <Alan Cox>
- *
- *	TODO:	use sock_alloc_send_skb to allocate sending buffers. Check with Caldera first
+ *	Revision 0.32:  Using sock_alloc_send_skb, firewall hooks. <Alan Cox>
+ *			Supports sendmsg/recvmsg
  *
  * 	Portions Copyright (c) 1995 Caldera, Inc. <greg@caldera.com>
  *	Neither Greg Page nor Caldera, Inc. admit liability nor provide 
@@ -73,12 +73,13 @@
 #include <net/psnap.h>
 #include <linux/proc_fs.h>
 #include <linux/stat.h>
+#include <linux/firewall.h>
 
 #ifdef CONFIG_IPX
 /* Configuration Variables */
 static unsigned char	ipxcfg_max_hops = 16;
-static char	ipxcfg_auto_select_primary = 0;
-static char	ipxcfg_auto_create_interfaces = 0;
+static char		ipxcfg_auto_select_primary = 0;
+static char		ipxcfg_auto_create_interfaces = 0;
 
 /* Global Variables */
 static struct datalink_proto	*p8022_datalink = NULL;
@@ -560,24 +561,40 @@ static const char * ipx_frame_name(unsigned short);
 static const char * ipx_device_name(ipx_interface *);
 static int ipxrtr_route_skb(struct sk_buff *);
 
-static int 
-ipxitf_rcv(ipx_interface *intrfc, struct sk_buff *skb)
+static int ipxitf_rcv(ipx_interface *intrfc, struct sk_buff *skb)
 {
 	ipx_packet	*ipx = (ipx_packet *) (skb->h.raw);
 	ipx_interface	*i;
 
+#ifdef CONFIG_FIREWALL	
+	/*
+	 *	We firewall first, ask questions later.
+	 */
+	 
+	if (call_in_firewall(PF_IPX, skb, ipx)!=FW_ACCEPT)
+	{
+		kfree_skb(skb, FREE_READ);
+		return 0;
+	}
+	
+#endif	
+
 	/* See if we should update our network number */
 	if ((intrfc->if_netnum == 0L) && 
 		(ipx->ipx_source.net == ipx->ipx_dest.net) &&
-		(ipx->ipx_source.net != 0L)) {
+		(ipx->ipx_source.net != 0L)) 
+	{
 		/* NB: NetWare servers lie about their hop count so we
 		 * dropped the test based on it.  This is the best way
 		 * to determine this is a 0 hop count packet.
 		 */
-		if ((i=ipxitf_find_using_net(ipx->ipx_source.net))==NULL) {
+		if ((i=ipxitf_find_using_net(ipx->ipx_source.net))==NULL) 
+		{
 			intrfc->if_netnum = ipx->ipx_source.net;
 			(void) ipxitf_add_local_route(intrfc);
-		} else {
+		} 
+		else 
+		{
 			printk("IPX: Network number collision %lx\n\t%s %s and %s %s\n",
 				htonl(ipx->ipx_source.net), 
 				ipx_device_name(i),
@@ -592,7 +609,18 @@ ipxitf_rcv(ipx_interface *intrfc, struct sk_buff *skb)
 	if (ipx->ipx_source.net == 0L)
 		ipx->ipx_source.net = intrfc->if_netnum;
 
-	if (intrfc->if_netnum != ipx->ipx_dest.net) {
+	if (intrfc->if_netnum != ipx->ipx_dest.net) 
+	{
+#ifdef CONFIG_FIREWALL	
+		/*
+		 *	See if we are allowed to firewall forward
+		 */
+		if (call_fw_firewall(PF_IPX, skb, ipx)!=FW_ACCEPT)
+		{
+			kfree_skb(skb, FREE_READ);
+			return 0;
+		}
+#endif		
 		/* We only route point-to-point packets. */
 		if ((skb->pkt_type != PACKET_BROADCAST) &&
 			(skb->pkt_type != PACKET_MULTICAST))
@@ -604,7 +632,8 @@ ipxitf_rcv(ipx_interface *intrfc, struct sk_buff *skb)
 
 	/* see if we should keep it */
 	if ((memcmp(ipx_broadcast_node, ipx->ipx_dest.node, IPX_NODE_LEN) == 0) 
-		|| (memcmp(intrfc->if_node, ipx->ipx_dest.node, IPX_NODE_LEN) == 0)) {
+		|| (memcmp(intrfc->if_node, ipx->ipx_dest.node, IPX_NODE_LEN) == 0)) 
+	{
 		return ipxitf_demux_socket(intrfc, skb, 0);
 	}
 
@@ -988,8 +1017,11 @@ ipxrtr_delete(long net)
 	return -ENOENT;
 }
 
-static int
-ipxrtr_route_packet(ipx_socket *sk, struct sockaddr_ipx *usipx, const void *ubuf, int len)
+/*
+ *	Route an outgoing frame from a socket.
+ */
+ 
+static int ipxrtr_route_packet(ipx_socket *sk, struct sockaddr_ipx *usipx, struct iovec *iov, int len)
 {
 	struct sk_buff *skb;
 	ipx_interface *intrfc;
@@ -997,12 +1029,16 @@ ipxrtr_route_packet(ipx_socket *sk, struct sockaddr_ipx *usipx, const void *ubuf
 	int size;
 	int ipx_offset;
 	ipx_route *rt = NULL;
-
+	int err;
+	
 	/* Find the appropriate interface on which to send packet */
-	if ((usipx->sipx_network == 0L) && (ipx_primary_net != NULL)) {
+	if ((usipx->sipx_network == 0L) && (ipx_primary_net != NULL)) 
+	{
 		usipx->sipx_network = ipx_primary_net->if_netnum;
 		intrfc = ipx_primary_net;
-	} else {
+	} 
+	else 
+	{
 		rt = ipxrtr_lookup(usipx->sipx_network);
 		if (rt==NULL) {
 			return -ENETUNREACH;
@@ -1014,12 +1050,10 @@ ipxrtr_route_packet(ipx_socket *sk, struct sockaddr_ipx *usipx, const void *ubuf
 	size=sizeof(ipx_packet)+len;
 	size += ipx_offset;
 
-	if(size+sk->wmem_alloc>sk->sndbuf) return -EAGAIN;
+	skb=sock_alloc_send_skb(sk, size, 0, 0, &err);
+	if(skb==NULL)
+		return err;
 		
-	skb=alloc_skb(size,GFP_KERNEL);
-	if(skb==NULL) return -ENOMEM;
-		
-	skb->sk=sk;
 	skb_reserve(skb,ipx_offset);
 	skb->free=1;
 	skb->arp=1;
@@ -1039,7 +1073,16 @@ ipxrtr_route_packet(ipx_socket *sk, struct sockaddr_ipx *usipx, const void *ubuf
 	memcpy(ipx->ipx_dest.node,usipx->sipx_node,IPX_NODE_LEN);
 	ipx->ipx_dest.sock=usipx->sipx_port;
 
-	memcpy_fromfs(skb_put(skb,len),ubuf,len);
+	memcpy_fromiovec(skb_put(skb,len),iov,len);
+
+#ifdef CONFIG_FIREWALL	
+	if(call_out_firewall(PF_IPX, skb, ipx)!=FW_ACCEPT)
+	{
+		kfree_skb(skb, FREE_WRITE);
+		return -EPERM;
+	}
+#endif
+	
 	return ipxitf_send(intrfc, skb, (rt && rt->ir_routed) ? 
 				rt->ir_router_node : ipx->ipx_dest.node);
 }
@@ -1691,11 +1734,11 @@ int ipx_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	return ipxitf_rcv(intrfc, skb);
 }
 
-static int ipx_sendto(struct socket *sock, const void *ubuf, int len, int noblock,
-	unsigned flags, struct sockaddr *usip, int addr_len)
+static int ipx_sendmsg(struct socket *sock, struct msghdr *msg, int len, int noblock,
+	int flags)
 {
 	ipx_socket *sk=(ipx_socket *)sock->data;
-	struct sockaddr_ipx *usipx=(struct sockaddr_ipx *)usip;
+	struct sockaddr_ipx *usipx=(struct sockaddr_ipx *)msg->msg_name;
 	struct sockaddr_ipx local_sipx;
 	int retval;
 
@@ -1713,7 +1756,7 @@ static int ipx_sendto(struct socket *sock, const void *ubuf, int len, int nobloc
 			if (ret != 0) return ret;
 		}
 
-		if(addr_len <sizeof(*usipx))
+		if(msg->msg_namelen <sizeof(*usipx))
 			return -EINVAL;
 		if(usipx->sipx_family != AF_IPX)
 			return -EINVAL;
@@ -1728,10 +1771,28 @@ static int ipx_sendto(struct socket *sock, const void *ubuf, int len, int nobloc
 		memcpy(usipx->sipx_node,sk->ipx_dest_addr.node,IPX_NODE_LEN);
 	}
 	
-	retval = ipxrtr_route_packet(sk, usipx, ubuf, len);
+	retval = ipxrtr_route_packet(sk, usipx, msg->msg_iov, len);
 	if (retval < 0) return retval;
 
 	return len;
+}
+
+static int ipx_sendto(struct socket *sock, const void *ubuf, int size, int noblock, unsigned flags,
+		struct sockaddr *sa, int addr_len)
+{
+	struct iovec iov;
+	struct msghdr msg;
+
+	iov.iov_base = (void *)ubuf;
+	iov.iov_len  = size;
+
+	msg.msg_name      = (void *)sa;
+	msg.msg_namelen   = addr_len;
+	msg.msg_accrights = NULL;
+	msg.msg_iov       = &iov;
+	msg.msg_iovlen    = 1;
+
+	return ipx_sendmsg(sock, &msg, size, noblock, flags);
 }
 
 static int ipx_send(struct socket *sock, const void *ubuf, int size, int noblock, unsigned flags)
@@ -1739,11 +1800,11 @@ static int ipx_send(struct socket *sock, const void *ubuf, int size, int noblock
 	return ipx_sendto(sock,ubuf,size,noblock,flags,NULL,0);
 }
 
-static int ipx_recvfrom(struct socket *sock, void *ubuf, int size, int noblock,
-		   unsigned flags, struct sockaddr *sip, int *addr_len)
+static int ipx_recvmsg(struct socket *sock, struct msghdr *msg, int size, int noblock,
+		 int flags, int *addr_len)
 {
 	ipx_socket *sk=(ipx_socket *)sock->data;
-	struct sockaddr_ipx *sipx=(struct sockaddr_ipx *)sip;
+	struct sockaddr_ipx *sipx=(struct sockaddr_ipx *)msg->msg_name;
 	struct ipx_packet *ipx = NULL;
 	int copied = 0;
 	int truesize;
@@ -1764,13 +1825,14 @@ static int ipx_recvfrom(struct socket *sock, void *ubuf, int size, int noblock,
 	skb=skb_recv_datagram(sk,flags,noblock,&er);
 	if(skb==NULL)
 		return er;
+	
 	if(addr_len)
 		*addr_len=sizeof(*sipx);
 
 	ipx = (ipx_packet *)(skb->h.raw);
 	truesize=ntohs(ipx->ipx_pktsize) - sizeof(ipx_packet);
 	copied = (truesize > size) ? size : truesize;
-	skb_copy_datagram(skb,sizeof(struct ipx_packet),ubuf,copied);
+	skb_copy_datagram_iovec(skb,sizeof(struct ipx_packet),msg->msg_iov,copied);
 	
 	if(sipx)
 	{
@@ -1789,6 +1851,25 @@ static int ipx_write(struct socket *sock, const char *ubuf, int size, int nobloc
 	return ipx_send(sock,ubuf,size,noblock,0);
 }
 
+static int ipx_recvfrom(struct socket *sock, void *ubuf, int size, int noblock, unsigned flags,
+		struct sockaddr *sa, int *addr_len)
+{
+	struct iovec iov;
+	struct msghdr msg;
+
+	iov.iov_base = ubuf;
+	iov.iov_len  = size;
+
+	msg.msg_name      = (void *)sa;
+	msg.msg_namelen   = 0;
+	if (addr_len)
+		msg.msg_namelen = *addr_len;
+	msg.msg_accrights = NULL;
+	msg.msg_iov       = &iov;
+	msg.msg_iovlen    = 1;
+
+	return ipx_recvmsg(sock, &msg, size, noblock, flags, addr_len);
+}
 
 static int ipx_recv(struct socket *sock, void *ubuf, int size , int noblock,
 	unsigned flags)
@@ -1915,6 +1996,8 @@ static struct proto_ops ipx_proto_ops = {
 	ipx_setsockopt,
 	ipx_getsockopt,
 	ipx_fcntl,
+	ipx_sendmsg,
+	ipx_recvmsg
 };
 
 /* Called by ddi.c on kernel start up */
@@ -1990,7 +2073,7 @@ void ipx_proto_init(struct net_proto *pro)
 		ipx_rt_get_info
 	});
 		
-	printk("Swansea University Computer Society IPX 0.31 for NET3.031\n");
+	printk("Swansea University Computer Society IPX 0.33 for NET3.032\n");
 	printk("IPX Portions Copyright (c) 1995 Caldera, Inc.\n");
 }
 #endif

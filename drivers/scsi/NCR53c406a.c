@@ -51,7 +51,7 @@
 #include <asm/bitops.h>
 #include <asm/irq.h>
 
-#include "../block/blk.h"
+#include <linux/blk.h>
 #include "scsi.h"
 #include "hosts.h"
 #include "sd.h"

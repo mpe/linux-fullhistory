@@ -9,7 +9,7 @@
 #ifndef _EATA_PIO_H
 #define _EATA_PIO_H
 
-#include "../block/blk.h"
+#include <linux/blk.h>
 #include "scsi.h"
 #include "hosts.h"
 #include <linux/scsicam.h>

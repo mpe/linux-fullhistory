@@ -69,7 +69,7 @@ char kernel_version[] = UTS_RELEASE;
 #include <asm/segment.h>
 
 #define MAJOR_NR GOLDSTAR_CDROM_MAJOR
-#include "blk.h"
+#include <linux/blk.h>
 #define gscd_port gscd /* for compatible parameter passing with "insmod" */
 #include <linux/gscd.h>
 

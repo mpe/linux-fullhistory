@@ -16,6 +16,7 @@
  *	NET/ROM 001	Jonathan(G4KLX)	First attempt.
  *	NET/ROM	003	Jonathan(G4KLX)	Use SIOCADDRT/SIOCDELRT ioctl values
  *					for NET/ROM routes.
+ *			Alan Cox(GW4PTS) Added the firewall hooks.
  *
  *	TO DO
  *	Sort out the which pointer when shuffling entries in the routes
@@ -50,6 +51,7 @@
 #include <linux/mm.h>
 #include <linux/interrupt.h>
 #include <linux/notifier.h>
+#include <linux/firewall.h>
 #include <net/netrom.h>
 
 static int nr_neigh_no = 1;
@@ -644,6 +646,7 @@ void nr_link_failed(ax25_address *callsign, struct device *dev)
  *	Route a frame to an appropriate AX.25 connection. A NULL ax25_cb
  *	indicates an internally generated frame.
  */
+
 int nr_route_frame(struct sk_buff *skb, ax25_cb *ax25)
 {
 	ax25_address *nr_src, *nr_dest;
@@ -651,7 +654,14 @@ int nr_route_frame(struct sk_buff *skb, ax25_cb *ax25)
 	struct nr_node  *nr_node;
 	struct device *dev;
 	unsigned char *dptr;
+	
+#ifdef CONFIG_FIREWALL
 
+	if(ax25 && call_in_firewall(PF_NETROM, skb, skb->data)!=FW_ACCEPT)
+		return 0;
+	if(!ax25 && call_out_firewall(PF_NETROM, skb, skb->data)!=FW_ACCEPT)
+		return 0;
+#endif
 	nr_src  = (ax25_address *)(skb->data + 0);
 	nr_dest = (ax25_address *)(skb->data + 7);
 
@@ -684,6 +694,11 @@ int nr_route_frame(struct sk_buff *skb, ax25_cb *ax25)
 
 	if ((dev = nr_dev_first()) == NULL)
 		return 0;
+
+#ifdef CONFIG_FIREWALL
+	if(ax25 && call_fw_firewall(PF_NETROM, skb, skb->data)!=FW_ACCEPT)
+		return 0;
+#endif
 
 	dptr  = skb_push(skb, 1);
 	*dptr = AX25_P_NETROM;

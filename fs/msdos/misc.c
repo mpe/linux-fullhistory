@@ -120,7 +120,7 @@ void unlock_fat(struct super_block *sb)
 int msdos_add_cluster(struct inode *inode)
 {
 	struct super_block *sb = inode->i_sb;
-	int count,nr,limit,last,current,sector,last_sector,file_cluster;
+	int count,nr,limit,last,curr,sector,last_sector,file_cluster;
 	struct buffer_head *bh;
 	int cluster_size = MSDOS_SB(inode->i_sb)->cluster_size;
 
@@ -164,14 +164,14 @@ printk("set to %x\n",fat_access(inode->i_sb,nr,-1));
 	   update the cache.
 	*/
 	file_cluster = 0;
-	if ((current = MSDOS_I(inode)->i_start) != 0) {
-		cache_lookup(inode,INT_MAX,&last,&current);
+	if ((curr = MSDOS_I(inode)->i_start) != 0) {
+		cache_lookup(inode,INT_MAX,&last,&curr);
 		file_cluster = last;
-		while (current && current != -1){
+		while (curr && curr != -1){
 			PRINTK (("."));
 			file_cluster++;
-			if (!(current = fat_access(inode->i_sb,
-			    last = current,-1))) {
+			if (!(curr = fat_access(inode->i_sb,
+			    last = curr,-1))) {
 				fs_panic(inode->i_sb,"File without EOF");
 				return -ENOSPC;
 			}
@@ -480,24 +480,24 @@ static int raw_scan(struct super_block *sb,int start,const char *name,int *numbe
 int msdos_parent_ino(struct inode *dir,int locked)
 {
 	static int zero = 0;
-	int error,current,prev,nr;
+	int error,curr,prev,nr;
 
 	if (!S_ISDIR(dir->i_mode)) panic("Non-directory fed to m_p_i");
 	if (dir->i_ino == MSDOS_ROOT_INO) return dir->i_ino;
 	if (!locked) lock_creation(); /* prevent renames */
-	if ((current = raw_scan(dir->i_sb,MSDOS_I(dir)->i_start,MSDOS_DOTDOT,
+	if ((curr = raw_scan(dir->i_sb,MSDOS_I(dir)->i_start,MSDOS_DOTDOT,
 	    &zero,NULL,NULL,NULL)) < 0) {
 		if (!locked) unlock_creation();
-		return current;
+		return curr;
 	}
-	if (!current) nr = MSDOS_ROOT_INO;
+	if (!curr) nr = MSDOS_ROOT_INO;
 	else {
-		if ((prev = raw_scan(dir->i_sb,current,MSDOS_DOTDOT,&zero,NULL,
+		if ((prev = raw_scan(dir->i_sb,curr,MSDOS_DOTDOT,&zero,NULL,
 		    NULL,NULL)) < 0) {
 			if (!locked) unlock_creation();
 			return prev;
 		}
-		if ((error = raw_scan(dir->i_sb,prev,NULL,&current,&nr,NULL,
+		if ((error = raw_scan(dir->i_sb,prev,NULL,&curr,&nr,NULL,
 		    NULL)) < 0) {
 			if (!locked) unlock_creation();
 			return error;

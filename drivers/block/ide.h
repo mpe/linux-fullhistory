@@ -41,6 +41,9 @@
 #ifndef SUPPORT_HT6560B			/* 1 to support HT6560B chipset */
 #define SUPPORT_HT6560B		1	/* 0 to reduce kernel size */
 #endif
+#ifndef SUPPORT_QD6580			/* 1 to support QD6580 chipset */
+#define SUPPORT_QD6580		1	/* 0 to reduce kernel size */
+#endif
 #ifndef SUPPORT_DTC2278			/* 1 to support DTC2278 chipset */
 #define SUPPORT_DTC2278		1	/* 0 to reduce kernel size */
 #ifndef SET_DTC2278_MODE4
@@ -350,7 +353,7 @@ typedef struct hwgroup_s {
  * One final include file, which references some of the data/defns from above
  */
 #define IDE_DRIVER	/* "parameter" for blk.h */
-#include "blk.h"
+#include <linux/blk.h>
 
 #if (DISK_RECOVERY_TIME > 0)
 void ide_set_recovery_timer (ide_hwif_t *);

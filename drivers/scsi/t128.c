@@ -109,7 +109,7 @@
 #include <asm/system.h>
 #include <linux/signal.h>
 #include <linux/sched.h>
-#include "../block/blk.h"
+#include <linux/blk.h>
 #include "scsi.h"
 #include "hosts.h"
 #include "t128.h"

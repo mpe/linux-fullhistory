@@ -102,9 +102,9 @@
 #define BLKRASET 4706 /* Set read ahead for block device */
 #define BLKRAGET 4707 /* get current read ahead setting */
 
-#define BMAP_IOCTL 1	/* obsolete - kept for compatibility */
-#define FIBMAP	   1	/* bmap access */
-#define FIGETBSZ   2	/* get the block size used for bmap */
+#define BMAP_IOCTL 1		/* obsolete - kept for compatibility */
+#define FIBMAP	   0x0001	/* bmap access */
+#define FIGETBSZ   0x0002	/* get the block size used for bmap */
 
 #ifdef __KERNEL__
 extern void buffer_init(void);
@@ -497,6 +497,7 @@ extern void ll_rw_page(int rw, kdev_t dev, unsigned long nr, char * buffer);
 extern void ll_rw_swap_file(int rw, kdev_t dev, unsigned int *b, int nb, char *buffer);
 extern int is_read_only(kdev_t dev);
 extern void brelse(struct buffer_head * buf);
+extern void bforget(struct buffer_head * buf);
 extern void set_blocksize(kdev_t dev, int size);
 extern struct buffer_head * bread(kdev_t dev, int block, int size);
 extern unsigned long bread_page(unsigned long addr,kdev_t dev,int b[],int size,int no_share);

@@ -510,17 +510,11 @@ pss_coproc_ioctl (void *dev_info, unsigned int cmd, ioctl_arg arg, int local)
 	copr_buffer    *buf;
 	int             err;
 
-	buf = (copr_buffer *) (
-				{
-				caddr_t x;
-			     x = kmalloc (sizeof (copr_buffer), GFP_KERNEL);
-				x;
-				}
-	);
+	buf = (copr_buffer *) kmalloc (sizeof (copr_buffer), GFP_KERNEL);
 	if (buf == NULL)
 	  return -ENOSPC;
 
-	memcpy_fromfs (((char *) buf), &(((char *) arg)[0]), (sizeof (*buf)));
+	memcpy_fromfs ((char *) buf, &(((char *) arg)[0]), sizeof (*buf));
 	err = download_boot_block (dev_info, buf);
 	kfree (buf);
 	return err;
@@ -533,7 +527,7 @@ pss_coproc_ioctl (void *dev_info, unsigned int cmd, ioctl_arg arg, int local)
 	unsigned long   flags;
 	unsigned short  tmp;
 
-	memcpy_fromfs (((char *) &buf), &(((char *) arg)[0]), (sizeof (buf)));
+	memcpy_fromfs ((char *) &buf, &(((char *) arg)[0]), sizeof (buf));
 
 	save_flags (flags);
 	cli ();
@@ -558,7 +552,7 @@ pss_coproc_ioctl (void *dev_info, unsigned int cmd, ioctl_arg arg, int local)
 	buf.parm1 = tmp;
 	restore_flags (flags);
 
-	memcpy_tofs (&(((char *) arg)[0]), (&buf), (sizeof (buf)));
+	memcpy_tofs ((&((char *) arg)[0]), &buf, sizeof (buf));
 	return 0;
       }
       break;
@@ -569,7 +563,7 @@ pss_coproc_ioctl (void *dev_info, unsigned int cmd, ioctl_arg arg, int local)
 	unsigned long   flags;
 	unsigned short  tmp;
 
-	memcpy_fromfs (((char *) &buf), &(((char *) arg)[0]), (sizeof (buf)));
+	memcpy_fromfs ((char *) &buf, &(((char *) arg)[0]), sizeof (buf));
 
 	save_flags (flags);
 	cli ();
@@ -603,7 +597,7 @@ pss_coproc_ioctl (void *dev_info, unsigned int cmd, ioctl_arg arg, int local)
 	unsigned long   flags;
 	unsigned short  tmp;
 
-	memcpy_fromfs (((char *) &buf), &(((char *) arg)[0]), (sizeof (buf)));
+	memcpy_fromfs ((char *) &buf, &(((char *) arg)[0]), sizeof (buf));
 
 	save_flags (flags);
 	cli ();
@@ -644,7 +638,7 @@ pss_coproc_ioctl (void *dev_info, unsigned int cmd, ioctl_arg arg, int local)
 	unsigned long   flags;
 	unsigned short  tmp;
 
-	memcpy_fromfs (((char *) &buf), &(((char *) arg)[0]), (sizeof (buf)));
+	memcpy_fromfs ((char *) &buf, &(((char *) arg)[0]), sizeof (buf));
 
 	save_flags (flags);
 	cli ();
@@ -678,7 +672,7 @@ pss_coproc_ioctl (void *dev_info, unsigned int cmd, ioctl_arg arg, int local)
 
 	restore_flags (flags);
 
-	memcpy_tofs (&(((char *) arg)[0]), (&buf), (sizeof (buf)));
+	memcpy_tofs ((&((char *) arg)[0]), &buf, sizeof (buf));
 	return 0;
       }
       break;

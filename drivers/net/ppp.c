@@ -6,7 +6,7 @@
  *  Dynamic PPP devices by Jim Freeman <jfree@caldera.com>.
  *  ppp_tty_receive ``noisy-raise-bug'' fixed by Ove Ewerlid <ewerlid@syscon.uu.se>
  *
- *  ==FILEVERSION 4==
+ *  ==FILEVERSION 6==
  *
  *  NOTE TO MAINTAINERS:
  *     If you modify this file at all, increment the number above.
@@ -70,9 +70,9 @@
 #include <linux/module.h>
 #ifdef MODULE
 #include <linux/version.h>
-#define STATIC
+#define  STATIC
 #else
-#define STATIC static
+#define  STATIC static
 #endif /* def MODULE */
 
 #include <endian.h>
@@ -554,9 +554,11 @@ ppp_init (struct device *dev)
 	if (first_time) {
 		static struct symbol_table ppp_syms = {
 #include <linux/symtab_begin.h>
-			X(ppp_register_compressor),
-			X(ppp_unregister_compressor),
-			X(ppp_crc16_table),
+#define Y(sym) { (void *) &sym, SYMBOL_NAME_STR (sym) }
+			Y(ppp_register_compressor),
+			Y(ppp_unregister_compressor),
+			Y(ppp_crc16_table),
+#undef Y
 #include <linux/symtab_end.h>
 		};
 

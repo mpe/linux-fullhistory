@@ -1,6 +1,8 @@
 
 #define ALLOW_SELECT
 #define ALLOW_BUFFER_MAPPING
+#undef NO_INLINE_ASM
+#undef SHORT_BANNERS
 
 #ifdef MODULE
 #include <linux/config.h>

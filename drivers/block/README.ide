@@ -36,6 +36,8 @@ NEW!	- support for reliable operation of buggy CMD-640 interfaces
 		- this support also enables the secondary i/f on most cards
 NEW!	- support for secondary interface on the FGI/Holtek HT-6560B VLB i/f
 		- use kernel command line option:   ide1=ht6560
+NEW!	- experimental "fast" speed support for QD6580 interfaces
+		- use kernel command line option:   ide0=qd6580
 NEW!	- experimental support for DTC-2278D interfaces
 		- use kernel command line option:   ide1=dtc2278
 NEW!	- support for drives with a stuck WRERR_STAT bit
@@ -52,6 +54,10 @@ NEW!    - ide-cd.c now supports door locking and auto-loading.
 		  and direct reads of audio data.
 
 For work in progress, see the comments in ide.c, ide-cd.c, and triton.c.
+
+Note that there is now a group actively working on support for the Promise
+caching IDE cards, such as the DC4030VL, and early results are encouraging.
+Look for this support to be added to the kernel soon.
 
 
 ***  IMPORTANT NOTICES (for kernel versions prior to 1.3.22)
@@ -212,28 +218,33 @@ Summary of ide driver parameters for kernel "command line":
 
   "hdx="  is recognized for all "x" from "a" to "h", such as "hdc".
   "idex=" is recognized for all "x" from "0" to "3", such as "ide1".
-
-  "hdx=noprobe"		: drive may be present, but do not probe for it
-  "hdx=nowerr"		: ignore the WRERR_STAT bit on this drive
-  "hdx=cdrom"		: drive is present, and is a cdrom drive
-  "hdx=cyl,head,sect"	: disk drive is present, with specified geometry
-
-  "idex=noprobe"	: do not attempt to access/use this interface
-  "idex=base"		: probe for an interface at the addr specified,
-                                where "base" is usually 0x1f0 or 0x170
-                                and "ctl" is assumed to be "base"+0x206
-				and "irq" will be probed for
-  "idex=base,ctl"	: specify both base and ctl
-  "idex=base,ctl,irq"	: specify base, ctl, and irq number
-
-The following two are valid ONLY on ide0 or ide1:
-
-  "idex=dtc2278"	: look for and try to initialize a dtc2278
-  "idex=serialize"	: do not overlap operations on ide0 and ide1.
-  "idex=ht6560b"        : enables use of HT6560B secondary i/f
-  "idex=cmd640_vlb"     : required for VLB cards with the CMD640 chip
-                           (not for PCI versions)
-
+ 
+  "hdx=noprobe"        : drive may be present, but do not probe for it
+  "hdx=nowerr"         : ignore the WRERR_STAT bit on this drive
+  "hdx=cdrom"          : drive is present, and is a cdrom drive
+  "hdx=cyl,head,sect"  : disk drive is present, with specified geometry
+ 
+  "idex=noprobe"       : do not attempt to access/use this interface
+  "idex=base"          : probe for an interface at the addr specified,
+                               where "base" is usually 0x1f0 or 0x170
+                               and "ctl" is assumed to be "base"+0x206
+  "idex=base,ctl"      : specify both base and ctl
+  "idex=base,ctl,irq"  : specify base, ctl, and irq number
+ 
+  The following two are valid ONLY on ide0 or ide1,
+  and the defaults for the base,ctl ports must not be altered.
+ 
+  "idex=serialize"     : do not overlap operations on ide0 and ide1.
+  "idex=dtc2278"       : enables use of DTC2278 secondary i/f
+  "idex=ht6560b"       : enables use of HT6560B secondary i/f
+  "idex=cmd640_vlb"    : required for VLB cards with the CMD640 chip
+                         (not for PCI -- automatically detected)
+ 
+  This option is valid ONLY on ide0, and the defaults for the base,ctl ports 
+  must not be altered.
+  
+  "ide0=qd6580"        : select "fast" interface speed on a qd6580 interface
+ 
 Everything else is rejected with a "BAD OPTION" message.
 
 ================================================================================

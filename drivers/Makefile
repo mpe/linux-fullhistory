@@ -34,4 +34,9 @@ else
   endif
 endif
 
+ifdef CONFIG_CD_NO_IDESCSI
+SUB_DIRS += cdrom
+MOD_SUB_DIRS += cdrom
+endif
+
 include $(TOPDIR)/Rules.make

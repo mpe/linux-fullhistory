@@ -164,8 +164,7 @@
 #include <asm/segment.h>
 
 #define MAJOR_NR AZTECH_CDROM_MAJOR 
-
-#include "blk.h"
+#include <linux/blk.h>
 
 #ifdef MODULE
 #else

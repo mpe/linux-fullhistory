@@ -156,7 +156,7 @@ sequencer_read (int dev, struct fileinfo *file, snd_rw_buf * buf, int count)
   while (iqlen && c >= ev_len)
     {
 
-      memcpy_tofs (&((buf)[p]), (&iqueue[iqhead * IEV_SZ]), (ev_len));
+      memcpy_tofs (&((buf)[p]), &iqueue[iqhead * IEV_SZ], ev_len);
       p += ev_len;
       c -= ev_len;
 
@@ -286,7 +286,7 @@ sequencer_write (int dev, struct fileinfo *file, const snd_rw_buf * buf, int cou
 
   while (c >= 4)
     {
-      memcpy_fromfs ((event), &((buf)[p]), (4));
+      memcpy_fromfs (event, &((buf)[p]), 4);
       ev_code = event[0];
 
       if (ev_code == SEQ_FULLSIZE)
@@ -324,7 +324,7 @@ sequencer_write (int dev, struct fileinfo *file, const snd_rw_buf * buf, int cou
 	      return count - c;
 	    }
 
-	  memcpy_fromfs ((&event[4]), &((buf)[p + 4]), (4));
+	  memcpy_fromfs (&event[4], &((buf)[p + 4]), 4);
 
 	}
       else
@@ -1763,7 +1763,7 @@ sequencer_ioctl (int dev, struct fileinfo *file,
 	struct synth_info inf;
 	int             dev;
 
-	memcpy_fromfs (((char *) &inf), &(((char *) arg)[0]), (sizeof (inf)));
+	memcpy_fromfs ((char *) &inf, &(((char *) arg)[0]), sizeof (inf));
 	dev = inf.device;
 
 	if (dev < 0 || dev >= max_synthdev)
@@ -1781,7 +1781,7 @@ sequencer_ioctl (int dev, struct fileinfo *file,
 	struct seq_event_rec event;
 	unsigned long   flags;
 
-	memcpy_fromfs (((char *) &event), &(((char *) arg)[0]), (sizeof (event)));
+	memcpy_fromfs ((char *) &event, &(((char *) arg)[0]), sizeof (event));
 
 	save_flags (flags);
 	cli ();
@@ -1797,13 +1797,13 @@ sequencer_ioctl (int dev, struct fileinfo *file,
 	struct midi_info inf;
 	int             dev;
 
-	memcpy_fromfs (((char *) &inf), &(((char *) arg)[0]), (sizeof (inf)));
+	memcpy_fromfs ((char *) &inf, &(((char *) arg)[0]), sizeof (inf));
 	dev = inf.device;
 
 	if (dev < 0 || dev >= max_mididev)
 	  return -ENXIO;
 
-	memcpy_tofs (&(((char *) arg)[0]), ((char *) &(midi_devs[dev]->info)), (sizeof (inf)));
+	memcpy_tofs ((&((char *) arg)[0]), (char *) &(midi_devs[dev]->info), sizeof (inf));
 	return 0;
       }
       break;
@@ -1813,17 +1813,13 @@ sequencer_ioctl (int dev, struct fileinfo *file,
 	struct patmgr_info *inf;
 	int             dev, err;
 
-	if ((inf = (struct patmgr_info *) (
-					    {
-		      caddr_t x; x = kmalloc (sizeof (*inf), GFP_KERNEL); x;
-					    }
-	     )) == NULL)
+	if ((inf = (struct patmgr_info *) kmalloc (sizeof (*inf), GFP_KERNEL)) == NULL)
 	  {
 	    printk ("patmgr: Can't allocate memory for a message\n");
 	    return -EIO;
 	  }
 
-	memcpy_fromfs (((char *) inf), &(((char *) arg)[0]), (sizeof (*inf)));
+	memcpy_fromfs ((char *) inf, &(((char *) arg)[0]), sizeof (*inf));
 	dev = inf->device;
 
 	if (dev < 0 || dev >= num_synths)
@@ -1844,7 +1840,7 @@ sequencer_ioctl (int dev, struct fileinfo *file,
 	    return err;
 	  }
 
-	memcpy_tofs (&(((char *) arg)[0]), ((char *) inf), (sizeof (*inf)));
+	memcpy_tofs ((&((char *) arg)[0]), (char *) inf, sizeof (*inf));
 	kfree (inf);
 	return 0;
       }
@@ -1855,17 +1851,13 @@ sequencer_ioctl (int dev, struct fileinfo *file,
 	struct patmgr_info *inf;
 	int             dev, err;
 
-	if ((inf = (struct patmgr_info *) (
-					    {
-		      caddr_t x; x = kmalloc (sizeof (*inf), GFP_KERNEL); x;
-					    }
-	     )) == NULL)
+	if ((inf = (struct patmgr_info *) kmalloc (sizeof (*inf), GFP_KERNEL)) == NULL)
 	  {
 	    printk ("patmgr: Can't allocate memory for a message\n");
 	    return -EIO;
 	  }
 
-	memcpy_fromfs (((char *) inf), &(((char *) arg)[0]), (sizeof (*inf)));
+	memcpy_fromfs ((char *) inf, &(((char *) arg)[0]), sizeof (*inf));
 	dev = inf->device;
 
 	if (dev < 0 || dev >= num_synths)
@@ -1886,7 +1878,7 @@ sequencer_ioctl (int dev, struct fileinfo *file,
 	    return err;
 	  }
 
-	memcpy_tofs (&(((char *) arg)[0]), ((char *) inf), (sizeof (*inf)));
+	memcpy_tofs ((&((char *) arg)[0]), (char *) inf, sizeof (*inf));
 	kfree (inf);
 	return 0;
       }
@@ -1991,7 +1983,7 @@ sequencer_select (int dev, struct fileinfo *file, int sel_type, select_table * w
 
 
 void
-sequencer_timer (void)
+sequencer_timer (unsigned long dummy)
 {
   seq_startplay ();
 }
@@ -2087,23 +2079,13 @@ sequencer_init (long mem_start)
 
   sequencer_ok = 1;
 
-  {
-    caddr_t         ptr;
+  queue = (unsigned char *) (sound_mem_blocks[sound_num_blocks] = kmalloc (SEQ_MAX_QUEUE * EV_SZ, GFP_KERNEL));
+  if (sound_num_blocks < 1024)
+    sound_num_blocks++;;
 
-    ptr = sound_mem_blocks[sound_num_blocks] = kmalloc (SEQ_MAX_QUEUE * EV_SZ, GFP_KERNEL);
-    if (sound_num_blocks < 1024)
-      sound_num_blocks++;
-    queue = (unsigned char *) ptr;
-  };
-
-  {
-    caddr_t         ptr;
-
-    ptr = sound_mem_blocks[sound_num_blocks] = kmalloc (SEQ_MAX_QUEUE * IEV_SZ, GFP_KERNEL);
-    if (sound_num_blocks < 1024)
-      sound_num_blocks++;
-    iqueue = (unsigned char *) ptr;
-  };
+  iqueue = (unsigned char *) (sound_mem_blocks[sound_num_blocks] = kmalloc (SEQ_MAX_QUEUE * IEV_SZ, GFP_KERNEL));
+  if (sound_num_blocks < 1024)
+    sound_num_blocks++;;
 
   return mem_start;
 }

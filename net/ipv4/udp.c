@@ -425,7 +425,7 @@ int udp_ioctl(struct sock *sk, int cmd, unsigned long arg)
 			unsigned long amount;
 
 			if (sk->state == TCP_LISTEN) return(-EINVAL);
-			amount = sk->prot->wspace(sk)/*/2*/;
+			amount = sock_wspace(sk);
 			err=verify_area(VERIFY_WRITE,(void *)arg,
 					sizeof(unsigned long));
 			if(err)
@@ -470,14 +470,14 @@ int udp_ioctl(struct sock *sk, int cmd, unsigned long arg)
  * 	return it, otherwise we block.
  */
 
-int udp_recvfrom(struct sock *sk, unsigned char *to, int len,
-	     int noblock, unsigned flags, struct sockaddr_in *sin,
-	     int *addr_len)
+int udp_recvmsg(struct sock *sk, struct msghdr *msg, int len,
+	     int noblock, int flags,int *addr_len)
 {
   	int copied = 0;
   	int truesize;
   	struct sk_buff *skb;
   	int er;
+  	struct sockaddr_in *sin=(struct sockaddr_in *)msg->msg_name;
 
 	/*
 	 *	Check any passed addresses
@@ -502,7 +502,7 @@ int udp_recvfrom(struct sock *sk, unsigned char *to, int len,
   	 *	FIXME : should use udp header size info value 
   	 */
   	 
-	skb_copy_datagram(skb,sizeof(struct udphdr),to,copied);
+	skb_copy_datagram_iovec(skb,sizeof(struct udphdr),msg->msg_iov,copied);
 	sk->stamp=skb->stamp;
 
 	/* Copy the address. */
@@ -517,6 +517,27 @@ int udp_recvfrom(struct sock *sk, unsigned char *to, int len,
   	release_sock(sk);
   	return(copied);
 }
+
+int udp_recvfrom(struct sock *sk, unsigned char *ubuf, int size, int noblock, unsigned flags,
+		struct sockaddr_in *sa, int *addr_len)
+{
+	struct iovec iov;
+	struct msghdr msg;
+
+	iov.iov_base = ubuf;
+	iov.iov_len  = size;
+
+	msg.msg_name      = (void *)sa;
+	msg.msg_namelen   = 0;
+	if (addr_len)
+		msg.msg_namelen = *addr_len;
+	msg.msg_accrights = NULL;
+	msg.msg_iov       = &iov;
+	msg.msg_iovlen    = 1;
+
+	return udp_recvmsg(sk, &msg, size, noblock, flags, addr_len);
+}
+
 
 /*
  *	Read has the same semantics as recv in SOCK_DGRAM
@@ -739,12 +760,6 @@ static int udp_deliver(struct sock *sk, struct udphdr *uh, struct sk_buff *skb, 
 
 
 struct proto udp_prot = {
-	sock_wmalloc,
-	sock_rmalloc,
-	sock_wfree,
-	sock_rfree,
-	sock_rspace,
-	sock_wspace,
 	udp_close,
 	udp_read,
 	udp_write,
@@ -764,6 +779,8 @@ struct proto udp_prot = {
 	NULL,
 	ip_setsockopt,
 	ip_getsockopt,
+	NULL,
+	udp_recvmsg,
 	128,
 	0,
 	"UDP",

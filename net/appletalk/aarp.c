@@ -3,7 +3,7 @@
  *			ethernet 'ELAP'.
  *
  *		Alan Cox  <Alan.Cox@linux.org>
- *			  <iialan@www.linux.org.uk>
+ *			  <alan@cymru.net>
  *
  *	This doesn't fit cleanly with the IP arp. This isn't a problem as
  *	the IP arp wants extracting from the device layer in 1.3.x anyway.
@@ -151,7 +151,6 @@ static void aarp_send_query(struct aarp_entry *a)
 	/*
 	 *	Send it.
 	 */	
-	 
 	 
 	dev_queue_xmit(skb, dev, SOPRI_NORMAL);
 	
@@ -435,6 +434,7 @@ int aarp_send_ddp(struct device *dev,struct sk_buff *skb, struct at_addr *sa, vo
 	/*
 	 *	Non ELAP we cannot do.
 	 */
+
 	if(dev->type!=ARPHRD_ETHER)
 	{
 		return -1;
@@ -466,6 +466,7 @@ int aarp_send_ddp(struct device *dev,struct sk_buff *skb, struct at_addr *sa, vo
 		/*
 		 *	Return 1 and fill in the address
 		 */
+
 		a->expires_at=jiffies+AARP_EXPIRY_TIME*10;
 		ddp_dl->datalink_header(ddp_dl, skb, a->hwaddr);
 		if(skb->sk==NULL)
@@ -475,22 +476,27 @@ int aarp_send_ddp(struct device *dev,struct sk_buff *skb, struct at_addr *sa, vo
 		restore_flags(flags);
 		return 1;
 	}
+
 	/*
 	 *	Do we have an unresolved entry: This is the less common path
 	 */
+
 	a=aarp_find_entry(unresolved[hash],dev,sa);
 	if(a!=NULL)
 	{
 		/*
 		 *	Queue onto the unresolved queue
 		 */
+
 		skb_queue_tail(&a->packet_queue, skb);
 		restore_flags(flags);
 		return 0;
 	}
+
 	/*
 	 *	Allocate a new entry
 	 */
+
 	a=aarp_alloc();
 	if(a==NULL)
 	{
@@ -501,9 +507,11 @@ int aarp_send_ddp(struct device *dev,struct sk_buff *skb, struct at_addr *sa, vo
 		restore_flags(flags);
 		return -1;
 	}
+
 	/*
 	 *	Set up the queue
 	 */
+
 	skb_queue_tail(&a->packet_queue, skb);
 	a->expires_at=jiffies+AARP_RESOLVE_TIME;
 	a->dev=dev;
@@ -513,26 +521,37 @@ int aarp_send_ddp(struct device *dev,struct sk_buff *skb, struct at_addr *sa, vo
 	unresolved[hash]=a;
 	unresolved_count++;
 	restore_flags(flags);
+
 	/*
 	 *	Send an initial request for the address
 	 */
+
 	aarp_send_query(a);
+
 	/*
 	 *	Switch to fast timer if needed (That is if this is the
 	 *	first unresolved entry to get added)
 	 */
+
 	if(unresolved_count==1)
 	{
 		del_timer(&aarp_timer);
 		aarp_timer.expires=jiffies+AARP_TICK_TIME;
 		add_timer(&aarp_timer);
 	}
+
 	/*
 	 *	Tell the ddp layer we have taken over for this frame.
 	 */
+
 	return 0;
 }
 
+/*
+ *	An entry in the aarp unresolved queue has become resolved. Send
+ *	all the frames queued under it.
+ */
+ 
 static void aarp_resolved(struct aarp_entry **list, struct aarp_entry *a, int hash)
 {
 	struct sk_buff *skb;
@@ -542,10 +561,18 @@ static void aarp_resolved(struct aarp_entry **list, struct aarp_entry *a, int ha
 		{
 			unresolved_count--;
 			*list=a->next;
-			/* Move into the resolved list */
+			
+			/* 
+			 *	Move into the resolved list 
+			 */
+			 
 			a->next=resolved[hash];
 			resolved[hash]=a;
-			/* Kick frames off */
+			
+			/*
+			 *	Kick frames off 
+			 */
+			 
 			while((skb=skb_dequeue(&a->packet_queue))!=NULL)
 			{
 				a->expires_at=jiffies+AARP_EXPIRY_TIME*10;
@@ -561,6 +588,11 @@ static void aarp_resolved(struct aarp_entry **list, struct aarp_entry *a, int ha
 	}
 }
 
+/*
+ *	This is called by the SNAP driver whenever we see an AARP SNAP
+ *	frame. We currently only support ethernet.
+ */
+ 
 static int aarp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 {
 	struct elapaarp *ea=(struct elapaarp *)skb->h.raw;
@@ -641,6 +673,7 @@ static int aarp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type 
 			/*
 			 *	Fail the probe (in use)
 			 */
+			 
 			ifa->status|=ATIF_PROBE_FAIL;
 			restore_flags(flags);
 			kfree_skb(skb, FREE_READ);
@@ -663,6 +696,7 @@ static int aarp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type 
 			/*
 			 *	We can fill one in - this is good
 			 */
+			 
 			memcpy(a->hwaddr,ea->hw_src,ETH_ALEN);
 			aarp_resolved(&unresolved[hash],a,hash);
 			if(unresolved_count==0)
@@ -696,6 +730,7 @@ static int aarp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type 
 			/*
 			 *	aarp_my_address has found the address to use for us.
 			 */
+			 
 			aarp_send_reply(dev,ma,&sa,ea->hw_src);
 			break;
 	}

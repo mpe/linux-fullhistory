@@ -166,9 +166,7 @@
 #ifdef MODULE
 # include <linux/module.h>
 # include <linux/version.h>
-# ifndef CONFIG_MODVERSIONS
-    char kernel_version[]= UTS_RELEASE;
-# endif
+char kernel_version[]= UTS_RELEASE;
 #endif
 
 #include <linux/errno.h>
@@ -192,7 +190,7 @@
 #include <linux/cdu31a.h>
 
 #define MAJOR_NR CDU31A_CDROM_MAJOR
-#include "blk.h"
+#include <linux/blk.h>
 
 #define DEBUG 0
 
@@ -248,7 +246,7 @@ static unsigned int sony_blocks_left = 0; /* Number of 512 byte blocks left
 
 /* The base I/O address of the Sony Interface.  This is a variable (not a
    #define) so it can be easily changed via some future ioctl() */
-static unsigned short cdu31a_port = 0;
+static unsigned int cdu31a_port = 0;
 
 /*
  * The following are I/O addresses of the various registers for the drive.  The
@@ -2771,6 +2769,7 @@ drive_spinning:
    }
 
    sony_usage++;
+   MOD_INC_USE_COUNT;
 
    return 0;
 }
@@ -2791,6 +2790,7 @@ scd_release(struct inode *inode,
    if (sony_usage > 0)
    {
       sony_usage--;
+      MOD_DEC_USE_COUNT;
    }
    if (sony_usage == 0)
    {
@@ -2885,6 +2885,7 @@ get_drive_configuration(unsigned short base_io,
    res_reg[0] = 0x20;
 }
 
+#ifndef MODULE
 /*
  * Set up base I/O and interrupts, called from main.c.
  */
@@ -2912,6 +2913,7 @@ cdu31a_setup(char *strings,
       }
    }
 }
+#endif
 
 static int cdu31a_block_size;
 
@@ -3087,12 +3089,6 @@ cdu31a_init(void)
 void
 cleanup_module(void)
 {
-   if (sony_usage != 0)
-   {
-      printk("cdu31a module in use - can't remove it.\n");
-      return;
-   }
-
    if ((unregister_blkdev(MAJOR_NR, "cdu31a") == -EINVAL))    
    {
       printk("Can't unregister cdu31a\n");

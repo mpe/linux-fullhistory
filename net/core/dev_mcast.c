@@ -194,4 +194,3 @@ void dev_mc_discard(struct device *dev)
 	}
 	dev->mc_count=0;
 }
-

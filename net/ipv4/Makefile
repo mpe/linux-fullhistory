@@ -9,8 +9,9 @@
 
 O_TARGET := ipv4.o
 IPV4_OBJS	:= utils.o route.o proc.o timer.o protocol.o packet.o \
-		   arp.o ip.o raw.o icmp.o tcp.o udp.o devinet.o af_inet.o \
-		   igmp.o ip_fw.o ipmr.o
+		   arp.o ip_input.o ip_fragment.o ip_forward.o ip_options.o \
+		   ip_output.o ip_sockglue.o raw.o icmp.o tcp.o udp.o \
+		   devinet.o af_inet.o igmp.o ip_fw.o ipmr.o
 
 MOD_LIST_NAME := IPV4_MODULES
 M_OBJS :=

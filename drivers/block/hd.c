@@ -42,7 +42,7 @@
 #include <asm/segment.h>
 
 #define MAJOR_NR HD_MAJOR
-#include "blk.h"
+#include <linux/blk.h>
 
 static int revalidate_hddisk(kdev_t, int);
 

@@ -353,13 +353,22 @@ probe_trix_mpu (struct address_info *hw_config)
   {-1, -1, -1, 1, 2, 3, -1, 4, -1, 5};
 
   if (!kilroy_was_here)
-    return 0;			/* AudioTriX Pro has not been detected earlier */
+    {
+      DDB (printk ("Trix: WSS and SB modes must be initialized before MPU\n"));
+      return 0;			/* AudioTriX Pro has not been detected earlier */
+    }
 
   if (!sb_initialized)
-    return 0;
+    {
+      DDB (printk ("Trix: SB mode must be initialized before MPU\n"));
+      return 0;
+    }
 
   if (mpu_initialized)
-    return 0;
+    {
+      DDB (printk ("Trix: MPU mode already initialized\n"));
+      return 0;
+    }
 
   if (check_region (hw_config->io_base, 4))
     {
@@ -368,10 +377,16 @@ probe_trix_mpu (struct address_info *hw_config)
     }
 
   if (hw_config->irq > 9)
-    return 0;
+    {
+      printk ("AudioTriX: Bad MPU IRQ %d\n", hw_config->irq);
+      return 0;
+    }
 
   if (irq_bits[hw_config->irq] == -1)
-    return 0;
+    {
+      printk ("AudioTriX: Bad MPU IRQ %d\n", hw_config->irq);
+      return 0;
+    }
 
   switch (hw_config->io_base)
     {

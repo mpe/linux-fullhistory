@@ -42,36 +42,15 @@
 #include "os.h"
 #include "soundvers.h"
 
-#if !defined(PSS_MPU_BASE) && defined(EXCLUDE_SSCAPE) && \
-      defined(EXCLUDE_TRIX) && !defined(MAD16_MPU_BASE) && \
-      defined(EXCLUDE_CS4232) && defined(EXCLUDE_MAUI)
-#define EXCLUDE_MPU_EMU
-#endif
-
 #if defined(ISC) || defined(SCO) || defined(SVR42)
 #define GENERIC_SYSV
 #endif
 
-/*
- * Disable the AD1848 driver if there are no other drivers requiring it.
- */
 
-#if defined(EXCLUDE_GUS16) && defined(EXCLUDE_MSS) && \
-    defined(EXCLUDE_PSS) && defined(EXCLUDE_GUSMAX) && \
-    defined(EXCLUDE_SSCAPE) && defined(EXCLUDE_TRIX) && defined(EXCLUDE_MAD16) && \
-    defined(EXCLUDE_CS4232) && defined(EXCLUDE_PNP)
-#define EXCLUDE_AD1848
-#endif
 
-#ifdef PSS_MSS_BASE
-#undef EXCLUDE_AD1848
-#endif
 
-#ifdef EXCLUDE_SEQUENCER
-#define EXCLUDE_MIDI
-#define EXCLUDE_YM3812
-#define EXCLUDE_OPL3
-#endif
+
+
 
 #ifndef SND_DEFAULT_ENABLE
 #define SND_DEFAULT_ENABLE	1

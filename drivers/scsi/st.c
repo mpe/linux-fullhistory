@@ -11,7 +11,7 @@
   Copyright 1992, 1993, 1994, 1995 Kai Makisara
 		 email Kai.Makisara@metla.fi
 
-  Last modified: Sat Sep 30 15:54:57 1995 by root@kai.makisara.fi
+  Last modified: Tue Oct 17 21:46:26 1995 by root@kai.makisara.fi
   Some small formal changes - aeb, 950809
 */
 #ifdef MODULE
@@ -38,7 +38,7 @@
 #define DEBUG 0
 
 #define MAJOR_NR SCSI_TAPE_MAJOR
-#include "../block/blk.h"
+#include <linux/blk.h>
 #include "scsi.h"
 #include "hosts.h"
 #include "scsi_ioctl.h"
@@ -123,6 +123,8 @@ st_chk_result(Scsi_Cmnd * SCpnt)
 	   SCpnt->request_bufflen);
     if (driver_byte(result) & DRIVER_SENSE)
       print_sense("st", SCpnt);
+    else
+      printk("\n");
   }
 #endif
   scode = sense[2] & 0x0f;
@@ -132,12 +134,15 @@ st_chk_result(Scsi_Cmnd * SCpnt)
        scode != RECOVERED_ERROR &&
        scode != UNIT_ATTENTION &&
        scode != BLANK_CHECK &&
-       scode != VOLUME_OVERFLOW)) {  /* Abnormal conditions for tape */
+       scode != VOLUME_OVERFLOW &&
+       SCpnt->data_cmnd[0] != MODE_SENSE)) {  /* Abnormal conditions for tape */
     printk("st%d: Error %x. ", dev, result);
+#if !DEBUG
     if (driver_byte(result) & DRIVER_SENSE)
       print_sense("st", SCpnt);
     else
       printk("\n");
+#endif
   }
 
   if ((sense[0] & 0x70) == 0x70 &&
@@ -202,9 +207,12 @@ st_sleep_done (Scsi_Cmnd * SCpnt)
     }
     else
       SCpnt->request.rq_status = RQ_SCSI_DONE;
-    if (!(STp->buffer)->writing || STp->write_pending)
-      wake_up( &(STp->waiting) );
+
+#if DEBUG
     STp->write_pending = 0;
+#endif
+    up(SCpnt->request.sem);
+    SCpnt->request.sem = NULL;
   }
 #if DEBUG
   else if (debugging)
@@ -218,8 +226,6 @@ st_sleep_done (Scsi_Cmnd * SCpnt)
 st_do_scsi(Scsi_Cmnd *SCpnt, Scsi_Tape *STp, unsigned char *cmd, int bytes,
 	   int timeout, int retries)
 {
-  unsigned int flags;
-
   if (SCpnt == NULL)
     if ((SCpnt = allocate_device(NULL, STp->device, 1)) == NULL) {
       printk("st%d: Can't get SCSI request.\n", TAPE_NR(STp->devt));
@@ -227,18 +233,15 @@ st_do_scsi(Scsi_Cmnd *SCpnt, Scsi_Tape *STp, unsigned char *cmd, int bytes,
     }
 
   cmd[1] |= (SCpnt->lun << 5) & 0xe0;
+  STp->sem = MUTEX_LOCKED;
+  SCpnt->request.sem = &(STp->sem);
   SCpnt->request.rq_status = RQ_SCSI_BUSY;
   SCpnt->request.rq_dev = STp->devt;
 
   scsi_do_cmd(SCpnt, (void *)cmd, (STp->buffer)->b_data, bytes,
 	      st_sleep_done, timeout, retries);
 
-  /* this must be done with interrupts off */
-  save_flags (flags);
-  cli();
-  if (SCpnt->request.rq_status != RQ_SCSI_DONE)
-    sleep_on( &(STp->waiting) );
-  restore_flags(flags);
+  down(SCpnt->request.sem);
 
   (STp->buffer)->last_result_fatal = st_chk_result(SCpnt);
 
@@ -251,24 +254,17 @@ st_do_scsi(Scsi_Cmnd *SCpnt, Scsi_Tape *STp, unsigned char *cmd, int bytes,
 write_behind_check(Scsi_Tape *STp)
 {
   ST_buffer * STbuffer;
-  unsigned long flags;
 
   STbuffer = STp->buffer;
 
-  save_flags(flags);
-  cli();
-  if (STp->write_pending) {
 #if DEBUG
+  if (STp->write_pending)
     STp->nbr_waits++;
-#endif
-    sleep_on( &(STp->waiting) );
-    STp->write_pending = 0;
-  }
-#if DEBUG
   else
     STp->nbr_finished++;
 #endif
-  restore_flags(flags);
+
+  down(&(STp->sem));
 
   if (STbuffer->writing < STbuffer->buffer_bytes)
     memcpy(STbuffer->b_data,
@@ -483,7 +479,6 @@ scsi_tape_open(struct inode * inode, struct file * filp)
     STp->write_prot = ((flags & O_ACCMODE) == O_RDONLY);
 
     STp->dirty = 0;
-    STp->write_pending = 0;
     STp->rw = ST_IDLE;
     STp->ready = ST_READY;
     if (STp->eof != ST_EOD)  /* Save EOD across opens */
@@ -574,6 +569,7 @@ scsi_tape_open(struct inode * inode, struct file * filp)
 #endif
       STp->block_size = ST_DEFAULT_BLOCK;  /* Educated guess (?) */
       (STp->buffer)->last_result_fatal = 0;  /* Prevent error propagation */
+      STp->drv_write_prot = 0;
     }
     else {
 
@@ -606,6 +602,7 @@ scsi_tape_open(struct inode * inode, struct file * filp)
 	STp->in_use = 0;
 	return (-EIO);
       }
+      STp->drv_write_prot = ((STp->buffer)->b_data[2] & 0x80) != 0;
     }
     SCpnt->request.rq_status = RQ_INACTIVE;  /* Mark as not busy */
 
@@ -622,7 +619,6 @@ scsi_tape_open(struct inode * inode, struct file * filp)
 	     (STp->buffer)->buffer_blocks);
 #endif
 
-    STp->drv_write_prot = ((STp->buffer)->b_data[2] & 0x80) != 0;
     if (STp->drv_write_prot) {
       STp->write_prot = 1;
 #if DEBUG
@@ -965,9 +961,14 @@ st_write(struct inode * inode, struct file * filp, const char * buf, int count)
       cmd[2] = blks >> 16;
       cmd[3] = blks >> 8;
       cmd[4] = blks;
+      STp->sem = MUTEX_LOCKED;
+      SCpnt->request.sem = &(STp->sem);
       SCpnt->request.rq_status = RQ_SCSI_BUSY;
       SCpnt->request.rq_dev = STp->devt;
+#if DEBUG
       STp->write_pending = 1;
+#endif
+
       scsi_do_cmd (SCpnt,
 		   (void *) cmd, (STp->buffer)->b_data,
 		   (STp->buffer)->writing,

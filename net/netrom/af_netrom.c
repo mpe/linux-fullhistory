@@ -913,6 +913,7 @@ int nr_rx_frame(struct sk_buff *skb, struct device *dev)
 	ax25_address *src, *dest, *user;
 	unsigned short circuit_index, circuit_id;
 	unsigned short frametype, window, timeout;
+	
 
 	skb->sk = NULL;		/* Initially we don't know who its for */
 
@@ -1442,7 +1443,7 @@ void nr_proto_init(struct net_proto *pro)
 {
 	sock_register(nr_proto_ops.family, &nr_proto_ops);
 	register_netdevice_notifier(&nr_dev_notifier);
-	printk("G4KLX NET/ROM for Linux. Version 0.3 ALPHA for AX25.030 Linux 1.3.25\n");
+	printk("G4KLX NET/ROM for Linux. Version 0.3 ALPHA for AX25.030 Linux 1.3.35\n");
 
 	nr_default.quality    = NR_DEFAULT_QUAL;
 	nr_default.obs_count  = NR_DEFAULT_OBS;

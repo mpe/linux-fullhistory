@@ -1,0 +1,39 @@
+comment 'SCSI support type (disk, tape, CDrom)'
+
+dep_tristate 'SCSI disk support' CONFIG_BLK_DEV_SD $CONFIG_SCSI
+dep_tristate 'SCSI tape support' CONFIG_CHR_DEV_ST $CONFIG_SCSI
+dep_tristate 'SCSI CDROM support' CONFIG_BLK_DEV_SR $CONFIG_SCSI
+dep_tristate 'SCSI generic support' CONFIG_CHR_DEV_SG $CONFIG_SCSI
+
+comment 'Some SCSI devices (e.g. CD jukebox) support multiple LUNs'
+
+bool 'Probe all LUNs on each SCSI device' CONFIG_SCSI_MULTI_LUN
+
+bool 'Verbose SCSI error reporting (kernel size +=12K)' CONFIG_SCSI_CONSTANTS
+
+mainmenu_option next_comment
+comment 'SCSI low-level drivers'
+
+dep_tristate 'Adaptec AHA152X support' CONFIG_SCSI_AHA152X $CONFIG_SCSI
+dep_tristate 'Adaptec AHA1542 support' CONFIG_SCSI_AHA1542 $CONFIG_SCSI
+dep_tristate 'Adaptec AHA1740 support' CONFIG_SCSI_AHA1740 $CONFIG_SCSI
+dep_tristate 'Adaptec AHA274X/284X/294X support' CONFIG_SCSI_AIC7XXX $CONFIG_SCSI
+dep_tristate 'BusLogic SCSI support' CONFIG_SCSI_BUSLOGIC $CONFIG_SCSI
+dep_tristate 'EATA-DMA (DPT, NEC, ATT, Olivetti) support' CONFIG_SCSI_EATA_DMA $CONFIG_SCSI
+dep_tristate 'EATA-PIO (old DPT PM2001, PM2012A) support' CONFIG_SCSI_EATA_PIO $CONFIG_SCSI
+dep_tristate 'UltraStor 14F/34F support' CONFIG_SCSI_U14_34F $CONFIG_SCSI
+dep_tristate 'Future Domain 16xx SCSI support' CONFIG_SCSI_FUTURE_DOMAIN $CONFIG_SCSI
+bool 'Generic NCR5380 SCSI support' CONFIG_SCSI_GENERIC_NCR5380
+if [ "$CONFIG_PCI" = "y" ]; then
+  dep_tristate 'NCR53c7,8xx SCSI support'  CONFIG_SCSI_NCR53C7xx $CONFIG_SCSI
+fi
+dep_tristate 'Always IN2000 SCSI support (test release)' CONFIG_SCSI_IN2000 $CONFIG_SCSI
+bool 'PAS16 SCSI support' CONFIG_SCSI_PAS16
+dep_tristate 'QLOGIC SCSI support' CONFIG_SCSI_QLOGIC $CONFIG_SCSI
+dep_tristate 'Seagate ST-02 and Future Domain TMC-8xx SCSI support' CONFIG_SCSI_SEAGATE $CONFIG_SCSI
+bool 'Trantor T128/T128F/T228 SCSI support' CONFIG_SCSI_T128
+dep_tristate 'UltraStor SCSI support' CONFIG_SCSI_ULTRASTOR $CONFIG_SCSI
+dep_tristate '7000FASST SCSI support' CONFIG_SCSI_7000FASST $CONFIG_SCSI
+dep_tristate 'EATA ISA/EISA (DPT PM2011/021/012/022/122/322) support' CONFIG_SCSI_EATA $CONFIG_SCSI
+dep_tristate 'NCR53c406a SCSI support' CONFIG_SCSI_NCR53C406A $CONFIG_SCSI
+#dep_tristate 'SCSI debugging host adapter' CONFIG_SCSI_DEBUG $CONFIG_SCSI

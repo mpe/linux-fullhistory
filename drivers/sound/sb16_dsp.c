@@ -49,6 +49,7 @@ static int      dsp_stereo = 0;
 static int      dsp_current_speed = 8000;
 static int      dsp_busy = 0;
 static int      dma16, dma8;
+static int      trigger_bits = 0x7fffffff;
 static unsigned long dsp_count = 0;
 
 static int      irq_mode = IMODE_NONE;
@@ -232,6 +233,7 @@ sb16_dsp_open (int dev, int mode)
 
   irq_mode = IMODE_NONE;
   dsp_busy = 1;
+  trigger_bits = irq_mode;
 
   return 0;
 }
@@ -398,6 +400,11 @@ sb16_dsp_prepare_for_output (int dev, int bsize, int bcount)
 static void
 sb16_dsp_trigger (int dev, int bits)
 {
+  if (bits == trigger_bits)	/* No change */
+    return;
+
+  trigger_bits = bits;
+
   if (!bits)
     sb_dsp_command (0xd0);	/* Halt DMA */
   else if (bits & irq_mode)
@@ -572,12 +579,10 @@ sb16_dsp_interrupt (int unused)
     switch (irq_mode)
       {
       case IMODE_OUTPUT:
-	intr_active = 0;
 	DMAbuf_outputintr (my_dev, 1);
 	break;
 
       case IMODE_INPUT:
-	intr_active = 0;
 	DMAbuf_inputintr (my_dev);
 	break;
 

@@ -41,6 +41,10 @@
 #include <linux/in.h>
 #include <linux/net.h>
 #include <linux/netdevice.h>
+#include <linux/firewall.h>
+#ifdef CONFIG_AX25
+#include <net/ax25.h>
+#endif
 #ifdef CONFIG_INET
 #include <linux/ip.h>
 #include <linux/etherdevice.h>
@@ -307,11 +311,16 @@ struct symbol_table symbol_table = {
 	/* Miscellaneous access points */
 	X(si_meminfo),
 #ifdef CONFIG_NET
-	/* socket layer registration */
+	/* Socket layer registration */
 	X(sock_register),
 	X(sock_unregister),
-	/* Internet layer registration */
+#ifdef CONFIG_FIREWALL
+	/* Firewall registration */
+	X(register_firewall),
+	X(unregister_firewall),
+#endif
 #ifdef CONFIG_INET	
+	/* Internet layer registration */
 	X(inet_add_protocol),
 	X(inet_del_protocol),
 	X(rarp_ioctl_hook),
@@ -336,8 +345,12 @@ struct symbol_table symbol_table = {
 	X(unregister_netdevice_notifier),
 #endif
 
-#ifdef CONFIG_INET
 	/* support for loadable net drivers */
+#ifdef CONFIG_AX25
+	X(ax25_encapsulate),
+	X(ax25_rebuild_header),	
+#endif	
+#ifdef CONFIG_INET
 	X(register_netdev),
 	X(unregister_netdev),
 	X(ether_setup),

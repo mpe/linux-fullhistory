@@ -55,7 +55,7 @@ extern void wrmces (unsigned long);
 extern void alpha_switch_to(unsigned long pctxp);
 
 #define switch_to(p) do { \
-	current = p; \
+	current_set[0] = p; \
 	alpha_switch_to((unsigned long) &(p)->tss - 0xfffffc0000000000); \
 } while (0)
 

@@ -222,7 +222,8 @@ struct task_struct {
 	struct signal_struct *sig;
 #ifdef CONFIG_SMP
 	int processor;
-	int lock_depth;		/* Lock depth. We can context swithc in and out of holding a syscall kernel lock... */	
+	int last_processor;
+	int lock_depth;		/* Lock depth. We can context switch in and out of holding a syscall kernel lock... */	
 #endif	
 };
 
@@ -245,12 +246,14 @@ struct task_struct {
  */
 #define _STK_LIM	(8*1024*1024)
 
+#define DEF_PRIORITY	(15*HZ/100)	/* 150 ms time slices */
+
 /*
  *  INIT_TASK is used to set up the first task table, touch at
  * your own risk!. Base=0, limit=0x1fffff (=2MB)
  */
 #define INIT_TASK \
-/* state etc */	{ 0,15*HZ/100,15*HZ/100,0,0,0,0, \
+/* state etc */	{ 0,DEF_PRIORITY,DEF_PRIORITY,0,0,0,0, \
 /* debugregs */ { 0, },            \
 /* exec domain */&default_exec_domain, \
 /* binfmt */	NULL, \
@@ -291,7 +294,7 @@ extern struct task_struct *current_set[NR_CPUS];
  *	On a single processor system this comes out as current_set[0] when cpp
  *	has finished with it, which gcc will optimise away.
  */
-#define current (current_set[smp_processor_id()])	/* Current on this processor */
+#define current (0+current_set[smp_processor_id()])	/* Current on this processor */
 extern unsigned long volatile jiffies;
 extern unsigned long itimer_ticks;
 extern unsigned long itimer_next;

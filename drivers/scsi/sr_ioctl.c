@@ -11,7 +11,7 @@
 #include <asm/segment.h>
 #include <linux/errno.h>
 
-#include "../block/blk.h"
+#include <linux/blk.h>
 #include "scsi.h"
 #include "hosts.h"
 #include "sr.h"

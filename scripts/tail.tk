@@ -65,7 +65,3 @@ if { [file exists include/linux/autoconf.h] == 1 } then {
 			.f0r_bot.save configure -state disabled
 		}
 	}
-
-if { [file writable .config] == 0 || [file writable include/linux/autoconf.h ] == 0 } then {
-	.f0r_bot.save configure -state disabled
-	}

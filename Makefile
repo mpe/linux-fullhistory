@@ -1,6 +1,6 @@
 VERSION = 1
 PATCHLEVEL = 3
-SUBLEVEL = 35
+SUBLEVEL = 36
 
 ARCH = i386
 
@@ -94,7 +94,11 @@ DRIVERS		=drivers/block/block.a \
 LIBS		=$(TOPDIR)/lib/lib.a
 SUBDIRS		=kernel drivers mm fs net ipc lib
 
-ifdef CONFIG_SCSI
+ifdef CONFIG_CD_NO_IDESCSI
+DRIVERS := $(DRIVERS) drivers/cdrom/cdrom.a
+endif
+
+ifeq ($(CONFIG_SCSI),y)
 DRIVERS := $(DRIVERS) drivers/scsi/scsi.a
 endif
 

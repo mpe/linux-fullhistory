@@ -35,7 +35,7 @@
 #include <asm/system.h>
 
 #define MAJOR_NR SCSI_CDROM_MAJOR
-#include "../block/blk.h"
+#include <linux/blk.h>
 #include "scsi.h"
 #include "hosts.h"
 #include "sr.h"

@@ -20,7 +20,7 @@
 #include <asm/segment.h>
 
 #define MAJOR_NR  MEM_MAJOR
-#include "blk.h"
+#include <linux/blk.h>
 
 #define RAMDISK_MINOR	1
 

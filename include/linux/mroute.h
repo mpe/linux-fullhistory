@@ -1,6 +1,9 @@
 #ifndef __LINUX_MROUTE_H
 #define __LINUX_MROUTE_H
 
+#include <linux/sockios.h>
+#include <linux/in.h>
+
 /*
  *	Based on the MROUTING 3.5 defines primarily to keep
  *	source compatibility with BSD.

@@ -303,7 +303,7 @@ char kernel_version[]=UTS_RELEASE;
 #define MAJOR_NR MATSUSHITA_CDROM4_MAJOR /* fourth driver issue */
 #endif
 
-#include "blk.h"
+#include <linux/blk.h>
 
 #define VERSION "v3.9 Eberhard Moenkeberg <emoenke@gwdg.de>"
 

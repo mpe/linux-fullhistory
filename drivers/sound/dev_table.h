@@ -280,12 +280,8 @@ struct sound_timer_operations {
 	struct driver_info sound_drivers[] = {
 #ifndef EXCLUDE_PSS
 	  {"PSSECHO", SNDCARD_PSS, "Echo Personal Sound System PSS (ESC614)", attach_pss, probe_pss, unload_pss},
-#	ifdef PSS_MPU_BASE
 	  {"PSSMPU", SNDCARD_PSS_MPU, "PSS-MPU", attach_pss_mpu, probe_pss_mpu, unload_pss_mpu},
-#	endif
-#	ifdef PSS_MSS_BASE
 	  {"PSSMSS", SNDCARD_PSS_MSS, "PSS-MSS", attach_pss_mss, probe_pss_mss, unload_pss_mss},
-#	endif
 #endif
 #ifndef EXCLUDE_MSS
 		{"MSS", SNDCARD_MSS,	"MS Sound System",	attach_ms_sound, probe_ms_sound, unload_ms_sound},
@@ -356,7 +352,7 @@ struct sound_timer_operations {
 
 	struct card_info snd_installed_cards[] = {
 #ifndef EXCLUDE_PSS
-	     {SNDCARD_PSS, {PSS_BASE, PSS_IRQ, PSS_DMA, -1}, SND_DEFAULT_ENABLE},
+	     {SNDCARD_PSS, {PSS_BASE, 0, -1, -1}, SND_DEFAULT_ENABLE},
 #	ifdef PSS_MPU_BASE
 	     {SNDCARD_PSS_MPU, {PSS_MPU_BASE, PSS_MPU_IRQ, 0, -1}, SND_DEFAULT_ENABLE},
 #	endif

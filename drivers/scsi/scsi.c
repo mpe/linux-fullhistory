@@ -45,7 +45,7 @@
 #include <linux/kernel.h>
 #include<linux/stat.h>
 
-#include "../block/blk.h"
+#include <linux/blk.h>
 #include "scsi.h"
 #include "hosts.h"
 #include "constants.h"

@@ -460,9 +460,9 @@ void kfree_skb(struct sk_buff *skb, int rw)
 	        if(skb->sk->prot!=NULL)
 		{
 			if (rw)
-		     		skb->sk->prot->rfree(skb->sk, skb);
+		     		sock_rfree(skb->sk, skb);
 		     	else
-		     		skb->sk->prot->wfree(skb->sk, skb);
+		     		sock_wfree(skb->sk, skb);
 
 		}
 		else
@@ -689,4 +689,3 @@ int skb_device_locked(struct sk_buff *skb)
 {
 	return skb->lock? 1 : 0;
 }
-

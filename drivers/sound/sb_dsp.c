@@ -1171,8 +1171,8 @@ sb_dsp_init (long mem_start, struct address_info *hw_config)
 		ess_minor & 0x0f);
     }
 
-   if (snd_set_irq_handler (sbc_irq, sbintr, "SoundBlaster", sb_osp) < 0)
-	  printk ("sb_dsp: Can't allocate IRQ\n");;
+  if (snd_set_irq_handler (sbc_irq, sbintr, "SoundBlaster", sb_osp) < 0)
+    printk ("sb_dsp: Can't allocate IRQ\n");;
 
 #ifndef EXCLUDE_SBPRO
   if (sbc_major >= 3)

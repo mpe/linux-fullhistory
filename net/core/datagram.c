@@ -221,7 +221,7 @@ int datagram_select(struct sock *sk, int sel_type, select_table *wait)
 				/* Connection still in progress */
 				break;
 			}
-			if (sk->prot && sk->prot->wspace(sk) >= MIN_WRITE_SPACE)
+			if (sk->prot && sock_wspace(sk) >= MIN_WRITE_SPACE)
 			{
 				return(1);
 			}

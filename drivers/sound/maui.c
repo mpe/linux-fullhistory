@@ -85,7 +85,7 @@ maui_write (unsigned char data)
 	}
     }
 
-  printk ("Maui: Transmit timeout\n");
+  printk ("Maui: Write timeout\n");
 
   return 0;
 }
@@ -128,7 +128,7 @@ maui_load_patch (int dev, int format, const snd_rw_buf * addr,
    * been transferred already.
    */
 
-  memcpy_fromfs ((&((char *) &header)[offs]), &((addr)[offs]), (hdr_size - offs));
+  memcpy_fromfs (&((char *) &header)[offs], &((addr)[offs]), hdr_size - offs);
 
   if (count < header.len)
     {

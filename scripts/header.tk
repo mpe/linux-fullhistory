@@ -8,6 +8,11 @@
 set modbutton_width 0
 set modbutton_height 0
 
+#
+# Set to be the x and y position of subwindows.
+#
+set winx 100
+set winy 200
 
 #
 # Define some macros we will need to parse the kmenu-config.dat file.
@@ -111,7 +116,8 @@ proc read_config_file { w } {
 
 proc write_config_file  { w } {
 	global loadfile
-	if { [string length $loadfile] != 0 && [file writable $loadfile] == 1 } then {
+	if { [string length $loadfile] != 0 
+    		&& ([file writable $loadfile] == 1 || ([file exists $loadfile] == 0 && [file writable [file dirname $loadfile]] == 1)) } then {
 		writeconfig $loadfile /dev/null
 	} else {
 		catch {destroy $w}
@@ -162,13 +168,16 @@ proc write_comment { file1 file2 text } {
 proc write_variable { file1 file2 varname variable dep } {
 	if { $variable == 0 } \
 		then { puts $file1 "# $varname is not set"; \
-		       puts $file2 "#undef $varname"}
-	if { $variable == 2 || ($dep == 2 && $variable == 1) } \
+		       puts $file2 "#undef $varname"} \
+	elseif { $variable == 2 || ($dep == 2 && $variable == 1) } \
 		then { puts $file1 "$varname=m"; \
-		       puts $file2 "#undef $varname"  }
-	if { $variable == 1 && $dep != 2 } \
+		       puts $file2 "#undef $varname"  } \
+	elseif { $variable == 1 && $dep != 2 } \
 		then { puts $file1 "$varname=y"; \
-		       puts $file2 "#define $varname 1" }
+		       puts $file2 "#define $varname 1" } \
+	else { \
+	    error "Attempting to write value for variable that is not configured ($varname)." \
+	}
 }
 
 proc bool {w mnum line text variable default} {

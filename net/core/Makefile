@@ -9,10 +9,16 @@
 
 O_TARGET := core.o
 
-O_OBJS	:= sock.o skbuff.o iovec.o datagram.o
+O_OBJS	:= sock.o skbuff.o iovec.o datagram.o 
 
 ifdef CONFIG_NET
+
 O_OBJS	+= dev.o dev_mcast.o
+
+ifdef CONFIG_FIREWALL
+O_OBJS += firewall.o
+endif
+
 endif
 
 include $(TOPDIR)/Rules.make

@@ -1,0 +1,24 @@
+#
+# IP configuration
+#
+bool 'IP: forwarding/gatewaying' CONFIG_IP_FORWARD
+bool 'IP: multicasting' CONFIG_IP_MULTICAST
+if [ "$CONFIG_FIREWALL" = "y" ]; then
+  bool 'IP: firewalling' CONFIG_IP_FIREWALL
+fi
+bool 'IP: accounting' CONFIG_IP_ACCT
+tristate 'IP: tunneling' CONFIG_NET_IPIP
+if [ "$CONFIG_IP_FORWARD" = "y" -a "$CONFIG_IP_FIREWALL" = "y" ]; then
+  bool 'IP: firewall packet logging' CONFIG_IP_FIREWALL_VERBOSE
+  bool 'IP: masquerading (ALPHA)' CONFIG_IP_MASQUERADE
+fi
+if [ "$CONFIG_IP_FORWARD" = "y" -a "$CONFIG_IP_MULTICAST" = "y" ]; then
+  bool 'IP: multicast routing(in progress)' CONFIG_IP_MROUTE
+fi
+comment '(it is safe to leave these untouched)'
+bool 'IP: PC/TCP compatibility mode' CONFIG_INET_PCTCP
+tristate 'IP: Reverse ARP' CONFIG_INET_RARP
+bool 'IP: Assume subnets are local' CONFIG_INET_SNARL
+bool 'IP: Disable NAGLE algorithm (normally enabled)' CONFIG_TCP_NAGLE_OFF
+bool 'IP: Drop source routed frames' CONFIG_IP_NOSR
+bool 'IP: Allow large windows (not recommended if <16Mb of memory)' CONFIG_SKB_LARGE

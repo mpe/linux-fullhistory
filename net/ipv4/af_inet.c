@@ -31,7 +31,7 @@
  *		Alan Cox	:	bind() shouldn't abort existing but dead
  *					sockets. Stops FTP netin:.. I hope.
  *		Alan Cox	:	bind() works correctly for RAW sockets. Note
- *					that FreeBSD at least is broken in this respect
+ *					that FreeBSD at least was broken in this respect
  *					so be careful with compatibility tests...
  *		Alan Cox	:	routing cache support
  *		Alan Cox	:	memzero the socket structure for compactness.
@@ -44,6 +44,7 @@
  *		Alan Cox	:	BSD rather than common sense interpretation of
  *					listen.
  *		Germano Caronni	:	Assorted small races.
+ *		Alan Cox	:	sendmsg/recvmsg basic support.
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -141,7 +142,10 @@ unsigned short get_new_socknum(struct proto *prot, unsigned short base)
 		base += PROT_SOCK+(start % 1024);
 	}
 
-	/* Now look through the entire array and try to find an empty ptr. */
+	/*
+	 *	Now look through the entire array and try to find an empty ptr. 
+	 */
+	 
 	for(i=0; i < SOCK_ARRAY_SIZE; i++) 
 	{
 		j = 0;
@@ -178,8 +182,7 @@ unsigned short get_new_socknum(struct proto *prot, unsigned short base)
 
 void put_sock(unsigned short num, struct sock *sk)
 {
-	struct sock *sk1;
-	struct sock *sk2;
+	struct sock **skp, *tmp;
 	int mask;
 	unsigned long flags;
 	
@@ -190,7 +193,10 @@ void put_sock(unsigned short num, struct sock *sk)
 	sk->next = NULL;
 	num = num &(SOCK_ARRAY_SIZE -1);
 
-	/* We can't have an interrupt re-enter here. */
+	/* 
+	 *	We can't have an interrupt re-enter here. 
+	 */
+	 
 	save_flags(flags);
 	cli();
 
@@ -204,40 +210,29 @@ void put_sock(unsigned short num, struct sock *sk)
 		restore_flags(flags);
 		return;
 	}
+	
 	restore_flags(flags);
 	for(mask = 0xff000000; mask != 0xffffffff; mask = (mask >> 8) | mask) 
 	{
-		if ((mask & sk->saddr) &&
-		    (mask & sk->saddr) != (mask & 0xffffffff)) 
+		if ((mask & sk->rcv_saddr) &&
+		    (mask & sk->rcv_saddr) != (mask & 0xffffffff)) 
 		{
 			mask = mask << 8;
 			break;
 		}
 	}
-	cli();
-	sk1 = sk->prot->sock_array[num];
-	for(sk2 = sk1; sk2 != NULL; sk2=sk2->next) 
-	{
-		if (!(sk2->saddr & mask)) 
-		{
-			if (sk2 == sk1) 
-			{
-				sk->next = sk->prot->sock_array[num];
-				sk->prot->sock_array[num] = sk;
-				sti();
-				return;
-			}
-			sk->next = sk2;
-			sk1->next= sk;
-			sti();
-			return;
-		}
-		sk1 = sk2;
-	}
 
-	/* Goes at the end. */
-	sk->next = NULL;
-	sk1->next = sk;
+	/*
+	 * add the socket to the sock_array[]..
+	 */
+	skp = sk->prot->sock_array + num;
+	cli();
+	while ((tmp = *skp) != NULL) {
+		if (!(tmp->rcv_saddr & mask))
+			break;
+	}
+	sk->next = tmp;
+	*skp = sk;
 	sti();
 }
 
@@ -288,23 +283,37 @@ void destroy_sock(struct sock *sk)
 
   	sk->inuse = 1;			/* just to be safe. */
 
-  	/* In case it's sleeping somewhere. */
+  	/* 
+  	 *	In case it's sleeping somewhere. 
+  	 */
+  	 
   	if (!sk->dead) 
   		sk->write_space(sk);
 
   	remove_sock(sk);
   
-  	/* Now we can no longer get new packets. */
+  	/*
+  	 *	Now we can no longer get new packets or once the
+  	 *	timers are killed, send them.
+  	 */
+  	 
   	delete_timer(sk);
-  	/* Nor send them */
 	del_timer(&sk->retransmit_timer);
 	
-	while ((skb = tcp_dequeue_partial(sk)) != NULL) {
+	/*
+	 *	Drain any partial frames
+	 */
+	 
+	while ((skb = tcp_dequeue_partial(sk)) != NULL) 
+	{
 		IS_SKB(skb);
 		kfree_skb(skb, FREE_WRITE);
 	}
 
-	/* Cleanup up the write buffer. */
+	/*
+	 *	Cleanup up the write buffer. 
+	 */
+	 
   	while((skb = skb_dequeue(&sk->write_queue)) != NULL) {
 		IS_SKB(skb);
 		kfree_skb(skb, FREE_WRITE);
@@ -334,7 +343,10 @@ void destroy_sock(struct sock *sk)
 		}
 	}	
 
-	/* Now we need to clean up the send head. */
+	/*
+	 *	Now we need to clean up the send head. 
+	 */
+	 
 	cli();
 	for(skb = sk->send_head; skb != NULL; )
 	{
@@ -344,8 +356,8 @@ void destroy_sock(struct sock *sk)
 		 * We need to remove skb from the transmit queue,
 		 * or maybe the arp queue.
 		 */
-		if (skb->next  && skb->prev) {
-/*			printk("destroy_sock: unlinked skb\n");*/
+		if (skb->next  && skb->prev) 
+		{
 			IS_SKB(skb);
 			skb_unlink(skb);
 		}
@@ -357,15 +369,20 @@ void destroy_sock(struct sock *sk)
 	sk->send_head = NULL;
 	sti();
 
-  	/* And now the backlog. */
+  	/*
+  	 *	Now the backlog. 
+  	 */
+  	 
   	while((skb=skb_dequeue(&sk->back_log))!=NULL) 
   	{
 		/* this should [almost] never happen. */
-/*		printk("cleaning back_log\n");*/
 		kfree_skb(skb, FREE_READ);
 	}
 
-	/* Now if it has a half accepted/ closed socket. */
+	/*
+	 *	Now if it has a half accepted/ closed socket. 
+	 */
+	 
 	if (sk->pair) 
 	{
 		sk->pair->dead = 1;
@@ -681,7 +698,8 @@ static int inet_create(struct socket *sock, int protocol)
 	sk->inuse = 0;
 	sk->delay_acks = 0;
 	sk->daddr = 0;
-	sk->saddr = 0 /* ip_my_addr() */;
+	sk->saddr = 0;
+	sk->rcv_saddr = 0;
 	sk->err = 0;
 	sk->next = NULL;
 	sk->pair = NULL;
@@ -778,7 +796,7 @@ static int inet_dup(struct socket *newsock, struct socket *oldsock)
 }
 
 /*
- * Return 1 if we still have things to send in our buffers.
+ *	Return 1 if we still have things to send in our buffers.
  */
  
 static inline int closing(struct sock * sk)
@@ -903,12 +921,25 @@ static int inet_bind(struct socket *sock, struct sockaddr *uaddr,
 	}
 	
 	chk_addr_ret = ip_chk_addr(addr->sin_addr.s_addr);
-	if (addr->sin_addr.s_addr != 0 && chk_addr_ret != IS_MYADDR && chk_addr_ret != IS_MULTICAST)
+	if (addr->sin_addr.s_addr != 0 && chk_addr_ret != IS_MYADDR && chk_addr_ret != IS_MULTICAST && chk_addr_ret != IS_BROADCAST)
 		return(-EADDRNOTAVAIL);	/* Source address MUST be ours! */
-	  	
+
 	if (chk_addr_ret || addr->sin_addr.s_addr == 0)
-		sk->saddr = addr->sin_addr.s_addr;
-	
+	{
+		/*
+		 *      We keep a pair of addresses. rcv_saddr is the one
+		 *      used by get_sock_*(), and saddr is used for transmit.
+		 *
+		 *      In the BSD API these are the same except where it
+		 *      would be illegal to use (multicast/broadcast) in
+		 *      which case the sending device address is used.
+		 */
+		sk->rcv_saddr = addr->sin_addr.s_addr;
+		if(chk_addr_ret==IS_MULTICAST||chk_addr_ret==IS_BROADCAST)
+			sk->saddr = 0;  /* Use device */
+		else
+			sk->saddr = addr->sin_addr.s_addr;
+	}
 	if(sock->type != SOCK_RAW)
 	{
 		/* Make sure we are allowed to bind here. */
@@ -927,7 +958,7 @@ static int inet_bind(struct socket *sock, struct sockaddr *uaddr,
 			
 			if (sk2->num != snum) 
 				continue;		/* more than one */
-			if (sk2->saddr != sk->saddr) 
+			if (sk2->rcv_saddr != sk->rcv_saddr) 
 				continue;	/* socket per slot ! -FB */
 			if (!sk2->reuse || sk2->state==TCP_LISTEN) 
 			{
@@ -1148,11 +1179,14 @@ static int inet_getname(struct socket *sock, struct sockaddr *uaddr,
 	} 
 	else 
 	{
+		__u32 addr = sk->rcv_saddr;
+		if (!addr) {
+			addr = sk->saddr;
+			if (!addr)
+				addr = ip_my_addr();
+		}
 		sin->sin_port = sk->dummy_th.source;
-		if (sk->saddr == 0) 
-			sin->sin_addr.s_addr = ip_my_addr();
-		else 
-			sin->sin_addr.s_addr = sk->saddr;
+		sin->sin_addr.s_addr = addr;
 	}
 	*uaddr_len = sizeof(*sin);
 	return(0);
@@ -1177,6 +1211,21 @@ static int inet_recvfrom(struct socket *sock, void *ubuf, int size, int noblock,
 		return(-EAGAIN);
 	return(sk->prot->recvfrom(sk, (unsigned char *) ubuf, size, noblock, flags,
 			     (struct sockaddr_in*)sin, addr_len));
+}
+
+static int inet_recvmsg(struct socket *sock, struct msghdr *ubuf, int size, int noblock, 
+		   int flags, int *addr_len )
+{
+	struct sock *sk = (struct sock *) sock->data;
+	
+	if (sk->prot->recvmsg == NULL) 
+		return(-EOPNOTSUPP);
+	if(sk->err)
+		return inet_error(sk);
+	/* We may need to bind the socket. */
+	if(inet_autobind(sk)!=0)
+		return(-EAGAIN);
+	return(sk->prot->recvmsg(sk, ubuf, size, noblock, flags,addr_len));
 }
 
 
@@ -1239,6 +1288,26 @@ static int inet_sendto(struct socket *sock, const void *ubuf, int size, int nobl
 		return -EAGAIN;
 	return(sk->prot->sendto(sk, (const unsigned char *) ubuf, size, noblock, flags, 
 			   (struct sockaddr_in *)sin, addr_len));
+}
+
+static int inet_sendmsg(struct socket *sock, struct msghdr *msg, int size, int noblock, 
+	   int flags)
+{
+	struct sock *sk = (struct sock *) sock->data;
+	if (sk->shutdown & SEND_SHUTDOWN) 
+	{
+		send_sig(SIGPIPE, current, 1);
+		return(-EPIPE);
+	}
+	if (sk->prot->sendmsg == NULL) 
+		return(-EOPNOTSUPP);
+	if(sk->err)
+		return inet_error(sk);
+	/* We may need to bind the socket. */
+	if(inet_autobind(sk)!=0)
+		return -EAGAIN;
+	return(sk->prot->sendmsg(sk, msg, size, noblock, flags));
+			   
 }
 
 
@@ -1414,8 +1483,8 @@ struct sock *get_sock(struct proto *prot, unsigned short num,
 		if(s->dead && (s->state == TCP_CLOSE))
 			continue;
 		/* local address matches? */
-		if (s->saddr) {
-			if (s->saddr != laddr)
+		if (s->rcv_saddr) {
+			if (s->rcv_saddr != laddr)
 				continue;
 			score++;
 		}
@@ -1464,7 +1533,7 @@ struct sock *get_sock_raw(struct sock *sk,
 			continue;
 		if(s->daddr && s->daddr!=raddr)
 			continue;
- 		if(s->saddr  && s->saddr!=laddr)
+ 		if(s->rcv_saddr && s->rcv_saddr != laddr)
 			continue;
 		return(s);
   	}
@@ -1507,7 +1576,7 @@ struct sock *get_sock_mcast(struct sock *sk,
 			continue;
 		if (s->dummy_th.dest != rnum && s->dummy_th.dest != 0) 
 			continue;
- 		if(s->saddr  && s->saddr!=laddr)
+ 		if(s->rcv_saddr  && s->rcv_saddr != laddr)
 			continue;
 		return(s);
   	}
@@ -1540,6 +1609,8 @@ static struct proto_ops inet_proto_ops = {
 	inet_setsockopt,
 	inet_getsockopt,
 	inet_fcntl,
+	inet_sendmsg,
+	inet_recvmsg
 };
 
 extern unsigned long seq_offset;
@@ -1554,7 +1625,7 @@ void inet_proto_init(struct net_proto *pro)
 	int i;
 
 
-	printk("Swansea University Computer Society TCP/IP for NET3.031 (Snapshot #4)\n");
+	printk("Swansea University Computer Society TCP/IP for NET3.032\n");
 
 	/*
 	 *	Tell SOCKET that we are alive... 

@@ -154,20 +154,6 @@ audio_release (int dev, struct fileinfo *file)
   DMAbuf_release (dev, mode);
 }
 
-#ifdef NO_INLINE_ASM
-static void
-translate_bytes (const unsigned char *table, unsigned char *buff, int n)
-{
-  unsigned long   i;
-
-  if (n <= 0)
-    return;
-
-  for (i = 0; i < n; ++i)
-    buff[i] = table[buff[i]];
-}
-
-#else
 extern inline void
 translate_bytes (const void *table, void *buff, int n)
 {
@@ -183,7 +169,6 @@ translate_bytes (const void *table, void *buff, int n)
     }
 }
 
-#endif
 
 int
 audio_write (int dev, struct fileinfo *file, const snd_rw_buf * buf, int count)
@@ -247,7 +232,7 @@ audio_write (int dev, struct fileinfo *file, const snd_rw_buf * buf, int count)
 	{			/*
 				 * No device specific copy routine
 				 */
-	  memcpy_fromfs ((&wr_dma_buf[dev][wr_buff_ptr[dev]]), &((buf)[p]), (l));
+	  memcpy_fromfs (&wr_dma_buf[dev][wr_buff_ptr[dev]], &((buf)[p]), l);
 	}
       else
 	audio_devs[dev]->copy_from_user (dev,
@@ -343,7 +328,7 @@ audio_read (int dev, struct fileinfo *file, snd_rw_buf * buf, int count)
 	  translate_bytes (dsp_ulaw, (unsigned char *) dmabuf, l);
 	}
 
-      memcpy_tofs (&((buf)[p]), (dmabuf), (l));
+      memcpy_tofs (&((buf)[p]), dmabuf, l);
 
       DMAbuf_rmchars (dev, buff_no, l);
 
@@ -418,7 +403,7 @@ audio_ioctl (int dev, struct fileinfo *file,
 	  if (err < 0)
 	    return err;
 
-	  memcpy_tofs (&(((char *) arg)[0]), ((char *) &info), (sizeof (info)));
+	  memcpy_tofs ((&((char *) arg)[0]), (char *) &info, sizeof (info));
 	  return 0;
 	}
 
@@ -437,7 +422,7 @@ audio_ioctl (int dev, struct fileinfo *file,
 	  if (wr_buff_no[dev] != -1)
 	    info.bytes += wr_buff_size[dev] - wr_buff_ptr[dev];
 
-	  memcpy_tofs (&(((char *) arg)[0]), ((char *) &info), (sizeof (info)));
+	  memcpy_tofs ((&((char *) arg)[0]), (char *) &info, sizeof (info));
 	  return 0;
 	}
 
@@ -462,7 +447,7 @@ audio_ioctl (int dev, struct fileinfo *file,
 	  if (audio_devs[dev]->trigger)		/* Supports SETTRIGGER */
 	    info |= DSP_CAP_TRIGGER;
 
-	  memcpy_tofs (&(((char *) arg)[0]), ((char *) &info), (sizeof (info)));
+	  memcpy_tofs ((&((char *) arg)[0]), (char *) &info, sizeof (info));
 	  return 0;
 	}
 	break;

@@ -770,7 +770,7 @@ mpu401_ioctl (int dev, unsigned cmd, ioctl_arg arg)
   switch (cmd)
     {
     case 1:
-      memcpy_fromfs (((char *) init_sequence), &(((char *) arg)[0]), (sizeof (init_sequence)));
+      memcpy_fromfs ((char *) init_sequence, &(((char *) arg)[0]), sizeof (init_sequence));
       return 0;
       break;
 
@@ -789,12 +789,12 @@ mpu401_ioctl (int dev, unsigned cmd, ioctl_arg arg)
 	int             ret;
 	mpu_command_rec rec;
 
-	memcpy_fromfs (((char *) &rec), &(((char *) arg)[0]), (sizeof (rec)));
+	memcpy_fromfs ((char *) &rec, &(((char *) arg)[0]), sizeof (rec));
 
 	if ((ret = mpu401_command (dev, &rec)) < 0)
 	  return ret;
 
-	memcpy_tofs (&(((char *) arg)[0]), ((char *) &rec), (sizeof (rec)));
+	memcpy_tofs ((&((char *) arg)[0]), (char *) &rec, sizeof (rec));
 	return 0;
       }
       break;
@@ -835,7 +835,7 @@ mpu_synth_ioctl (int dev,
     {
 
     case SNDCTL_SYNTH_INFO:
-      memcpy_tofs (&(((char *) arg)[0]), (&mpu_synth_info[midi_dev]), (sizeof (struct synth_info)));
+      memcpy_tofs ((&((char *) arg)[0]), &mpu_synth_info[midi_dev], sizeof (struct synth_info));
 
       return 0;
       break;
@@ -964,7 +964,7 @@ static struct synth_operations mpu401_synth_proto =
   midi_synth_send_sysex
 };
 
-static struct synth_operations mpu401_synth_operations[MAX_MIDI_DEV];
+static struct synth_operations *mpu401_synth_operations[MAX_MIDI_DEV];
 
 static struct midi_operations mpu401_midi_proto =
 {
@@ -1073,15 +1073,27 @@ attach_mpu401 (long mem_start, struct address_info *hw_config)
       if (mpu_cmd (num_midis, 0xE0, 120) >= 0)	/* Set tempo OK */
 	devc->capabilities |= MPU_CAP_INTLG;	/* Supports intelligent mode */
 
+
+  mpu401_synth_operations[num_midis] = (struct synth_operations *) (sound_mem_blocks[sound_num_blocks] = kmalloc (sizeof (struct synth_operations), GFP_KERNEL));
+
+  if (sound_num_blocks < 1024)
+    sound_num_blocks++;;
+
+  if (mpu401_synth_operations[num_midis] == NULL)
+    {
+      printk ("mpu401: Can't allocate memory\n");
+      return mem_start;
+    }
+
   if (!(devc->capabilities & MPU_CAP_INTLG))	/* No intelligent mode */
     {
-      memcpy ((char *) &mpu401_synth_operations[num_midis],
+      memcpy ((char *) mpu401_synth_operations[num_midis],
 	      (char *) &std_midi_synth,
 	      sizeof (struct synth_operations));
     }
   else
     {
-      memcpy ((char *) &mpu401_synth_operations[num_midis],
+      memcpy ((char *) mpu401_synth_operations[num_midis],
 	      (char *) &mpu401_synth_proto,
 	      sizeof (struct synth_operations));
     }
@@ -1091,7 +1103,7 @@ attach_mpu401 (long mem_start, struct address_info *hw_config)
 	  sizeof (struct midi_operations));
 
   mpu401_midi_operations[num_midis].converter =
-    &mpu401_synth_operations[num_midis];
+    mpu401_synth_operations[num_midis];
 
   memcpy ((char *) &mpu_synth_info[num_midis],
 	  (char *) &mpu_synth_info_proto,
@@ -1140,8 +1152,8 @@ attach_mpu401 (long mem_start, struct address_info *hw_config)
   strcpy (mpu401_midi_operations[num_midis].info.name,
 	  mpu_synth_info[num_midis].name);
 
-  mpu401_synth_operations[num_midis].midi_dev = devc->devno = num_midis;
-  mpu401_synth_operations[devc->devno].info =
+  mpu401_synth_operations[num_midis]->midi_dev = devc->devno = num_midis;
+  mpu401_synth_operations[devc->devno]->info =
     &mpu_synth_info[devc->devno];
 
   if (devc->capabilities & MPU_CAP_INTLG)	/* Intelligent mode */
@@ -1262,9 +1274,17 @@ probe_mpu401 (struct address_info *hw_config)
     return 1;
 
   if (inb (hw_config->io_base + 1) == 0xff)
-    return 0;			/* Just bus float? */
+    {
+      DDB (printk ("MPU401: Port %x looks dead.\n", hw_config->io_base));
+      return 0;			/* Just bus float? */
+    }
 
   ok = reset_mpu401 (&tmp_devc);
+
+  if (!ok)
+    {
+      DDB (printk ("MPU401: Reset failed on port %x\n", hw_config->io_base));
+    }
 
   return ok;
 }
@@ -1685,7 +1705,7 @@ mpu_timer_interrupt (void)
   if (curr_ticks >= next_event_time)
     {
       next_event_time = 0xffffffff;
-      sequencer_timer ();
+      sequencer_timer (0);
     }
 }
 

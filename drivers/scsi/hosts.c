@@ -31,7 +31,7 @@
 #endif
 
 #include <linux/config.h>
-#include "../block/blk.h"
+#include <linux/blk.h>
 #include <linux/kernel.h>
 #include <linux/string.h>
 #include <linux/mm.h>

@@ -250,9 +250,21 @@ o	Assorted driver/multicast fixes			[IN]
 o	IP routing change errors resemble BSD more	[IN]
 o	IP port masquerading fixes			[IN]
 
+-------->>>>> 1.3.35 <<<<<<--------
+
+o	Appletalk data now in the protinfo union	[IN]
+o	BSD style bind to broadcast address supported	[IN]
+o	Standard loadable firewall chains		[IN]
+o	IPFW uses the firewall chains for firewall but
+		not yet acct/masquerade			[IN]
+o	Firewall chain hooks in all other protocols	[IN]
+o	Sendmsg/recvmsg for IPX. 			[IN]
+o	IPX uses sock_alloc_send_skb			[IN]
+o	Recvmsg for all IP, sendmsg for TCP		[IN]
+	(nearly ready to go all *msg())
+
 ---------- Things I thought Linus had for a while and not merged ----------------
 
-o	Paul Gortmakers 8390 Copy and checksum		[Pending]
 
 ---------- Things pending from other people to chase -------------
 
@@ -268,7 +280,6 @@ o	Tom May's insw_and_checksum()
 
 o	inet_error for other layers
 o	Finish merging the bridge code
-o	SIOCSLEEPRT patch
 o	Fast checksum/copy on outgoing TCP
 o	Fast dev_grab_next() transmit reload function
 	and dev_push_failed() ??
@@ -306,7 +317,6 @@ o	Zebedee
 o	802.2 Class 2 services (eg netbios).
 o	Multidrop KISS					[NOW AVAILABLE IN USER MODE]
 o	Multicast routing				[STARTED BITS]
-o	IPX/Atalk/Netrom firewalling
 
 Possible projects for victim^H^H^H^H^Holunteers
 
@@ -374,7 +384,6 @@ a maybe (so is finishing it ;))][Jim Freeman is working on Frame Relay].
 15.	802.2LLC and thus Netbeui sockets. Becoming less important since the
 rumour is microsoft are phasing out netbeui for netbios/IP. Microsoft have
 gone for netbios/funny-ipx-variant it seems in Win95, but TCP is selectable.
-	[Tentatively in progress]
 
 16.	X.25. This is one for a real head case with far too much time on 
 their hands. [Provisionally taken]
@@ -389,6 +398,8 @@ their hands. [Provisionally taken]
 
 20.	SKIP IP security using ENskip-0.10 - started
 [Me]
+
+21.	T/TCP support.
 
 BTW: Don't let the magic words 'kernel programming' worry you. Its like DOS
 - you make a mistake you have to reboot. You do at least get dumps and a

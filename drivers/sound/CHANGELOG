@@ -1,5 +1,17 @@
-Changelog for version 3.5
--------------------------
+Changelog for version 3.5-alpha3
+--------------------------------
+
+Since 3.5-alpha2
+- Modifications to makefile and configure.c. Unnecessary sources
+  are no longer compiled. Newly created local.h is also copied to
+  /etc/soundconf. "make oldconfig" reads /etc/soundconf and produces
+  new local.h which is compatible with current version of the driver.
+- Some fixes to the SB16 support.
+- Fixed random protection fault in gus_wave.c
+
+Since 3.5-alpha1
+- Modified to work with Linux-1.3.33 and leater
+- Some minor changes
 
 Since 3.0.2
 - Support for CS4232 based PnP cards (AcerMagic S23 etc).

@@ -16,6 +16,18 @@
 #endif
 
 /*
+ * This prevents the Prev/Next buttons from going through the entire sequence
+ * of submenus.  I need to fix the window titles before it would really be
+ * appropriate to enable this.
+ */
+/* #define PREVLAST_LIMITED_RANGE */
+
+/*
+ * This is the total number of submenus that we have.
+ */
+static int tot_menu_num =0;
+
+/*
  * Generate portion of wish script for the beginning of a submenu.
  * The guts get filled in with the various options.
  */
@@ -27,9 +39,9 @@ static start_proc(char * label, int menu_num, int flag)
   printf("\tcatch {destroy $w}\n");
   printf("\ttoplevel $w -class Dialog\n");
   printf("\tmessage $w.m -width 400 -aspect 300 -background grey -text \\\n");
-  printf("\t\t\"$title\"  -relief raised -bg grey\n");
+  printf("\t\t\"%s\"  -relief raised -bg grey\n",label);
   printf("\tpack $w.m -pady 10 -side top -padx 10\n");
-  printf("\twm title $w \"$title\" \n\n\n");
+  printf("\twm title $w \"%s\" \n\n\n", label);
 }
 
 /*
@@ -76,6 +88,14 @@ generate_if(struct kconfig * item,
 	break;
       }
       cond = cond->next;
+    }
+
+  /*
+   * Now write this option.
+   */
+  if( (item->flags & GLOBAL_WRITTEN) == 0)
+    {
+	printf("\tglobal %s\n", item->optionname);
     }
 
   /*
@@ -164,10 +184,12 @@ generate_if(struct kconfig * item,
       printf(".menu%d.x%d.y configure -state normal;",menu_num, line_num);
       printf(".menu%d.x%d.n configure -state normal;",menu_num, line_num);
       printf(".menu%d.x%d.l configure -state normal;",menu_num, line_num);
+      printf("set %s [expr $%s&15];", item->optionname, item->optionname);
       printf("} else { ");
       printf(".menu%d.x%d.y configure -state disabled;",menu_num, line_num);
       printf(".menu%d.x%d.n configure -state disabled;",menu_num, line_num);
       printf(".menu%d.x%d.l configure -state disabled;",menu_num, line_num);
+      printf("set %s [expr $%s|16];", item->optionname, item->optionname);
       printf("}\n");
 #endif
       break;
@@ -190,11 +212,21 @@ generate_if(struct kconfig * item,
       printf(".menu%d.x%d.n configure -state normal;",menu_num, line_num);
       printf(".menu%d.x%d.m configure -state normal;",menu_num, line_num);
       printf(".menu%d.x%d.l configure -state normal;",menu_num, line_num);
+      /*
+       * Or in a bit to the variable - this causes all of the radiobuttons
+       * to be deselected (i.e. not be red).
+       */
+      printf("set %s [expr $%s&15];", item->optionname, item->optionname);
       printf("} else { ");
       printf(".menu%d.x%d.y configure -state disabled;",menu_num, line_num);
       printf(".menu%d.x%d.n configure -state disabled;",menu_num, line_num);
       printf(".menu%d.x%d.m configure -state disabled;",menu_num, line_num);
       printf(".menu%d.x%d.l configure -state disabled;",menu_num, line_num);
+      /*
+       * Clear the disable bit - this causes the correct radiobutton
+       * to appear selected (i.e. turn red).
+       */
+      printf("set %s [expr $%s|16];", item->optionname, item->optionname);
       printf("}\n");
       break;
     default:
@@ -325,11 +357,19 @@ static end_proc(int menu_num, int first, int last)
    */
   printf("\tbutton $w.f.prev -text \"Prev\" -activebackground green \\\n");
       printf("\t\t-width 15 -command \" destroy $w; focus $oldFocus; menu%d .menu%d \\\"$title\\\"\"\n", menu_num-1, menu_num-1);
+#ifdef PREVLAST_LIMITED_RANGE
   if(first == menu_num ) printf("\t$w.f.prev configure -state disabled\n");
+#else
+  if( 1 == menu_num ) printf("\t$w.f.prev configure -state disabled\n");
+#endif
 
   printf("\tbutton $w.f.next -text \"Next\" -activebackground green \\\n");
   printf("\t\t-width 15 -command \" destroy $w; focus $oldFocus;  menu%d .menu%d \\\"$title\\\"\"\n", menu_num+1, menu_num+1);
+#ifdef PREVLAST_LIMITED_RANGE
   if(last == menu_num ) printf("\t$w.f.next configure -state disabled\n");
+#else
+  if(last == tot_menu_num ) printf("\t$w.f.next configure -state disabled\n");
+#endif
 
   printf("\tbutton $w.f.back -text \"Main Menu\" -activebackground green \\\n");
   printf("\t\t-width 15 -command \"destroy $w; focus $oldFocus; update_mainmenu $w\"\n");
@@ -338,7 +378,9 @@ static end_proc(int menu_num, int first, int last)
   printf("\tpack $w.f -pady 10 -side top -padx 10 -anchor w\n");
   printf("\tfocus $w\n");
   printf("\tupdate_menu%d $w\n", menu_num);
-  printf("\twm geometry $w +30+35\n");
+  printf("\tglobal winx; global winy\n");
+  printf("\tset winx [expr [winfo x .]+30]; set winy [expr [winfo y .]+30]\n");
+  printf("\twm geometry $w +$winx+$winy\n");
   printf("}\n\n\n");
 
   /*
@@ -438,6 +480,7 @@ dump_tk_script(struct kconfig *scfg)
   int menu_line = 0;
   int menu_maxlines = 0;
   struct kconfig * cfg;
+  char * menulabel;
 
   /*
    * Start by assigning menu numbers, and submenu numbers.
@@ -486,6 +529,13 @@ dump_tk_script(struct kconfig *scfg)
     }
 
   /*
+   * Record this so we can set up the prev/next buttons correctly.
+   * We will be adding one more menu for sound configuration, so
+   * take this into account.
+   */
+  tot_menu_num = menu_num+1;
+
+  /*
    * Now start generating the actual wish script that we will use.
    * We need to keep track of the menu numbers of the min/max menu
    * for a range of submenus so that we can correctly limit the
@@ -509,6 +559,7 @@ dump_tk_script(struct kconfig *scfg)
 	    {
 	      end_proc(menu_num, menu_min, menu_max);
 	    }
+	  menulabel = cfg->label;
 	  start_proc(cfg->label, cfg->menu_number, TRUE);
 	  menu_num = cfg->menu_number;
 	  menu_max = cfg->submenu_end;
@@ -523,7 +574,7 @@ dump_tk_script(struct kconfig *scfg)
 	  if( cfg->menu_number != menu_num )
 	    {
 	      end_proc(menu_num, menu_min, menu_max);
-	      start_proc(cfg->label, cfg->menu_number, FALSE);
+	      start_proc(menulabel, cfg->menu_number, FALSE);
 	      menu_num = cfg->menu_number;
 	    }
 	  printf("\tbool $w %d %d \"%s\" %s %s\n",
@@ -538,7 +589,7 @@ dump_tk_script(struct kconfig *scfg)
 	  if( cfg->menu_number != menu_num )
 	    {
 	      end_proc(menu_num, menu_min, menu_max);
-	      start_proc(cfg->label, cfg->menu_number, FALSE);
+	      start_proc(menulabel, cfg->menu_number, FALSE);
 	      menu_num = cfg->menu_number;
 	    }
 	  printf("\ttristate $w %d %d \"%s\" %s %s\n",
@@ -552,7 +603,7 @@ dump_tk_script(struct kconfig *scfg)
 	  if( cfg->menu_number != menu_num )
 	    {
 	      end_proc(menu_num, menu_min, menu_max);
-	      start_proc(cfg->label, cfg->menu_number, FALSE);
+	      start_proc(menulabel, cfg->menu_number, FALSE);
 	      menu_num = cfg->menu_number;
 	    }
 	  printf("\tdep_tristate $w %d %d \"%s\" %s %s\n",
@@ -564,6 +615,12 @@ dump_tk_script(struct kconfig *scfg)
 		 cfg->depend);
 	  break;
 	case tok_int:
+	  if( cfg->menu_number != menu_num )
+	    {
+	      end_proc(menu_num, menu_min, menu_max);
+	      start_proc(menulabel, cfg->menu_number, FALSE);
+	      menu_num = cfg->menu_number;
+	    }
 	  printf("\tint $w %d %d \"%s\" %s %s\n",
 		 cfg->menu_number,
 		 cfg->menu_line,

@@ -48,14 +48,21 @@ static inline void multi_bmap(struct inode * inode, unsigned long block, unsigne
 	} while (i > 0);
 }
 
+/*
+ * Semantics for shared and private memory areas are different past the end
+ * of the file. A shared mapping past the last page of the file is an error
+ * and results in a SIBGUS, while a private mapping just maps in a zero page.
+ */
 static unsigned long filemap_nopage(struct vm_area_struct * area, unsigned long address,
 	unsigned long page, int no_share)
 {
 	struct inode * inode = area->vm_inode;
 	int nr[PAGE_SIZE/512];
 
-	multi_bmap(inode, (address & PAGE_MASK) - area->vm_start + area->vm_offset, nr,
-		inode->i_sb->s_blocksize_bits);
+	address = (address & PAGE_MASK) - area->vm_start + area->vm_offset;
+	if (address >= inode->i_size && (area->vm_flags & VM_SHARED) && area->vm_mm == current->mm)
+		send_sig(SIGBUS, current, 1);
+	multi_bmap(inode, address, nr, inode->i_sb->s_blocksize_bits);
 	return bread_page(page, inode->i_dev, nr, inode->i_sb->s_blocksize, no_share);
 }
 

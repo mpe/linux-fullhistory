@@ -72,13 +72,10 @@ sndtable_init (long mem_start)
 						 */
 	else if (sound_drivers[drv].probe (&snd_installed_cards[i].config))
 	  {
-#ifndef SHORT_BANNERS
 	    printk ("snd%d",
 		    snd_installed_cards[i].card_type);
-#endif
 
 	    mem_start = sound_drivers[drv].attach (mem_start, &snd_installed_cards[i].config);
-#ifndef SHORT_BANNERS
 	    printk (" at 0x%x irq %d drq %d",
 		    snd_installed_cards[i].config.io_base,
 		    snd_installed_cards[i].config.irq,
@@ -88,7 +85,6 @@ sndtable_init (long mem_start)
 		      snd_installed_cards[i].config.dma2);
 	    else
 	      printk ("\n");
-#endif
 	  }
 	else
 	  snd_installed_cards[i].enabled = 0;	/*

@@ -130,7 +130,7 @@ opl3_ioctl (int dev,
       {
 	struct sbi_instrument ins;
 
-	memcpy_fromfs (((char *) &ins), &(((char *) arg)[0]), (sizeof (ins)));
+	memcpy_fromfs ((char *) &ins, &(((char *) arg)[0]), sizeof (ins));
 
 	if (ins.channel < 0 || ins.channel >= SBFM_MAXINSTR)
 	  {
@@ -146,7 +146,7 @@ opl3_ioctl (int dev,
     case SNDCTL_SYNTH_INFO:
       devc->fm_info.nr_voices = (devc->nr_voice == 12) ? 6 : devc->nr_voice;
 
-      memcpy_tofs (&(((char *) arg)[0]), (&devc->fm_info), (sizeof (devc->fm_info)));
+      memcpy_tofs ((&((char *) arg)[0]), &devc->fm_info, sizeof (devc->fm_info));
       return 0;
       break;
 
@@ -185,6 +185,17 @@ opl3_detect (int ioaddr, sound_os_info * osp)
 
   if (devc != NULL)
     return 0;
+
+
+  devc = (struct opl_devinfo *) (sound_mem_blocks[sound_num_blocks] = kmalloc (sizeof (*devc), GFP_KERNEL));
+  if (sound_num_blocks < 1024)
+    sound_num_blocks++;;
+
+  if (devc == NULL)
+    {
+      printk ("OPL3: Can't allocate memory for the device control structure\n");
+      return 0;
+    }
 
   devc->osp = osp;
 
@@ -876,7 +887,7 @@ opl3_load_patch (int dev, int format, const snd_rw_buf * addr,
       return -EINVAL;
     }
 
-  memcpy_fromfs ((&((char *) &ins)[offs]), &(((char *) addr)[offs]), (sizeof (ins) - offs));
+  memcpy_fromfs (&((char *) &ins)[offs], &(((char *) addr)[offs]), sizeof (ins) - offs);
 
   if (ins.channel < 0 || ins.channel >= SBFM_MAXINSTR)
     {
@@ -1170,19 +1181,9 @@ opl3_init (long mem_start, int ioaddr, sound_os_info * osp)
       return mem_start;
     }
 
-
-  {
-    caddr_t         ptr;
-
-    ptr = sound_mem_blocks[sound_num_blocks] = kmalloc (sizeof (*devc), GFP_KERNEL);
-    if (sound_num_blocks < 1024)
-      sound_num_blocks++;
-    devc = (struct opl_devinfo *) ptr;
-  };
-
   if (devc == NULL)
     {
-      printk ("OPL3: Can't allocate memory for the device control structure\n");
+      printk ("OPL3: Device control structure not initialized.\n");
       return mem_start;
     }
 

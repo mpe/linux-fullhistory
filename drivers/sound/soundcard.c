@@ -36,11 +36,8 @@
 
 #include <linux/major.h>
 
-#ifndef EXCLUDE_PNP
-#include <linux/pnp.h>
-#endif
-
 static int      soundcards_installed = 0;	/* Number of installed cards */
+static int      chrdev_registered = 0;
 
 /*
  * Table for permanently allocated memory (used when unloading the module)
@@ -348,16 +345,13 @@ soundcard_init (void)
 {
 #ifndef MODULE
   register_chrdev (SOUND_MAJOR, "sound", &sound_fops);
+  chrdev_registered = 1;
 #endif
 
   soundcard_configured = 1;
 
   sndtable_init (0);		/* Initialize call tables and
 				   * detect cards */
-#ifndef EXCLUDE_PNP
-  sound_pnp_init ();
-#endif
-
   if (!(soundcards_installed = sndtable_get_cardcount ()))
     return;			/* No cards detected */
 
@@ -432,6 +426,7 @@ init_module (void)
       return err;
     }
 
+  chrdev_registered = 1;
   soundcard_init ();
 
   if (sound_num_blocks >= 1024)
@@ -450,7 +445,8 @@ cleanup_module (void)
     {
       int             i;
 
-      unregister_chrdev (SOUND_MAJOR, "sound");
+      if (chrdev_registered)
+	unregister_chrdev (SOUND_MAJOR, "sound");
 
       sound_stop_timer ();
       sound_unload_drivers ();
@@ -466,10 +462,6 @@ cleanup_module (void)
 	    printk ("Sound: Hmm, DMA%d was left allocated\n", i);
 	    sound_free_dma (i);
 	  }
-
-#ifndef EXCLUDE_PNP
-      sound_pnp_disconnect ();
-#endif
 
     }
 }
@@ -571,6 +563,11 @@ sound_close_dma (int chn)
 }
 
 #ifndef EXCLUDE_SEQUENCER
+
+
+static struct timer_list seq_timer =
+{NULL, NULL, 0, 0, sequencer_timer};
+
 void
 request_sound_timer (int count)
 {
@@ -580,9 +577,12 @@ request_sound_timer (int count)
     count = jiffies + (-count);
   else
     count += seq_time;
-  timer_table[SOUND_TIMER].fn = sequencer_timer;
-  timer_table[SOUND_TIMER].expires = count;
-  timer_active |= 1 << SOUND_TIMER;
+
+
+  {
+    seq_timer.expires = ((count - jiffies)) + jiffies;
+    add_timer (&seq_timer);
+  };
 }
 
 #endif
@@ -590,8 +590,7 @@ request_sound_timer (int count)
 void
 sound_stop_timer (void)
 {
-  timer_table[SOUND_TIMER].expires = 0;
-  timer_active &= ~(1 << SOUND_TIMER);
+  del_timer (&seq_timer);;
 }
 
 #ifndef EXCLUDE_AUDIO

@@ -81,6 +81,7 @@
  *     of thing. (OK)
  */
 
+#include <linux/config.h>
 #include <linux/types.h>
 #include <linux/sched.h>
 #include <linux/kernel.h>
@@ -512,7 +513,7 @@ static void icmp_echo(struct icmphdr *icmph, struct sk_buff *skb, struct device 
 	icmp_param.data_ptr=(icmph+1);
 	icmp_param.data_len=len;
 	if (ip_options_echo(&icmp_param.replyopts, NULL, daddr, saddr, skb)==0)
-	  icmp_build_xmit(&icmp_param, daddr, saddr);
+		icmp_build_xmit(&icmp_param, daddr, saddr);
 	kfree_skb(skb, FREE_READ);
 }
 
@@ -545,9 +546,9 @@ static void icmp_timestamp(struct icmphdr *icmph, struct sk_buff *skb, struct de
 	 */
 	 
 	{
-	  struct timeval tv;
-	  do_gettimeofday(&tv);
-	  times[1] = htonl((tv.tv_sec % 86400) * 1000 + tv.tv_usec / 1000);
+		struct timeval tv;
+		do_gettimeofday(&tv);
+		times[1] = htonl((tv.tv_sec % 86400) * 1000 + tv.tv_usec / 1000);
 	}
 	times[2] = times[1];
 	memcpy((void *)&times[0], icmph+1, 4);		/* Incoming stamp */
@@ -557,7 +558,7 @@ static void icmp_timestamp(struct icmphdr *icmph, struct sk_buff *skb, struct de
 	icmp_param.data_ptr=&times;
 	icmp_param.data_len=12;
 	if (ip_options_echo(&icmp_param.replyopts, NULL, daddr, saddr, skb)==0)
-	  icmp_build_xmit(&icmp_param, daddr, saddr);
+		icmp_build_xmit(&icmp_param, daddr, saddr);
 	kfree_skb(skb,FREE_READ);
 }
 
@@ -586,7 +587,7 @@ static void icmp_address(struct icmphdr *icmph, struct sk_buff *skb, struct devi
 	icmp_param.data_ptr=&dev->pa_mask;
 	icmp_param.data_len=4;
 	if (ip_options_echo(&icmp_param.replyopts, NULL, daddr, saddr, skb)==0)
-	  icmp_build_xmit(&icmp_param, daddr, saddr);
+		icmp_build_xmit(&icmp_param, daddr, saddr);
 #endif	
 	kfree_skb(skb, FREE_READ);	
 }
@@ -711,8 +712,7 @@ void icmp_init(struct proto_ops *ops)
 	icmp_socket.type=SOCK_RAW;
 	icmp_socket.ops=ops;
 	if((err=ops->create(&icmp_socket, IPPROTO_ICMP))<0)
-		panic("Failed to create the ICMP control socket (%d,%d,%p,%p).\n", -err,
-			current->euid, current, &init_task);
+		panic("Failed to create the ICMP control socket.\n");
 	sk=icmp_socket.data;
 	sk->allocation=GFP_ATOMIC;
 	sk->num = 256;			/* Don't receive any data */

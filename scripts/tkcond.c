@@ -236,6 +236,7 @@ int fix_conditionals(struct kconfig * scfg)
   int depth = 0;
   int i;
   struct kconfig * cfg;
+  struct kconfig * cfg1;
   struct condition * conditions[25];
   struct condition * cnd;
   struct condition * cnd1;
@@ -303,6 +304,43 @@ int fix_conditionals(struct kconfig * scfg)
 	}
     }
   /*
+   * Walk through and see if there are multiple options that control the
+   * same kvariable.  If there are we need to treat them a little bit
+   * special.
+   */
+  for(cfg=scfg;cfg != NULL; cfg = cfg->next)
+    {
+      switch(cfg->tok)
+	{
+	case tok_bool:
+	case tok_tristate:
+	case tok_dep_tristate:
+	case tok_int:
+	  for(cfg1=cfg;cfg1 != NULL; cfg1 = cfg1->next)
+	    {
+	      switch(cfg1->tok)
+		{
+		case tok_bool:
+		case tok_tristate:
+		case tok_dep_tristate:
+		case tok_int:
+		  if( strcmp(cfg->optionname, cfg1->optionname) == 0)
+		    {
+		      cfg->flags |= CFG_DUP;
+		      cfg1->flags |= CFG_DUP;
+		    }
+		  break;
+		default:
+		  break;
+		}
+	    }
+	  break;
+	default:
+	  break;
+	}
+    }
+
+  /*
    * Now go through the list, and every time we see a kvariable, check
    * to see whether it also has some dependencies.  If so, then
    * append it to our list.  The reason we do this is that we might have
@@ -328,6 +366,7 @@ int fix_conditionals(struct kconfig * scfg)
 	  if(cnd->op != op_kvariable) continue;
 	  if(cnd->variable.cfg->cond == NULL) continue;
 
+	  if(cnd->variable.cfg->flags & CFG_DUP) continue; 
 	  /*
 	   * OK, we have some conditions to append to cfg.  Make  a clone
 	   * of the conditions,

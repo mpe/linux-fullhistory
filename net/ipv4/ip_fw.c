@@ -87,6 +87,7 @@
 #include <linux/skbuff.h>
 #include <net/sock.h>
 #include <net/icmp.h>
+#include <linux/firewall.h>
 #include <linux/ip_fw.h>
 #include <net/checksum.h>
 #include <linux/proc_fs.h>
@@ -1668,6 +1669,33 @@ static int ip_msqhst_procinfo(char *buffer, char **start, off_t offset,
   
 #endif
 
+#ifdef CONFIG_IP_FIREWALL
+/*
+ *	Interface to the generic firewall chains.
+ */
+ 
+int ipfw_input_check(struct firewall_ops *this, int pf, struct sk_buff *skb, void *phdr)
+{
+	return ip_fw_chk(phdr, skb->dev, ip_fw_blk_chain, ip_fw_blk_policy, 0);
+}
+
+int ipfw_forward_check(struct firewall_ops *this, int pf, struct sk_buff *skb, void *phdr)
+{
+	return ip_fw_chk(phdr, skb->dev, ip_fw_fwd_chain, ip_fw_fwd_policy, 0);
+}
+ 
+struct firewall_ops ipfw_ops=
+{
+	NULL,
+	ipfw_forward_check,
+	ipfw_input_check,
+	ipfw_input_check,
+	PF_INET,
+	0	/* We don't even allow a fall through so we are last */
+};
+
+#endif
+
 void ip_fw_init(void)
 {
 #ifdef CONFIG_IP_ACCT
@@ -1679,6 +1707,10 @@ void ip_fw_init(void)
 	});
 #endif
 #ifdef CONFIG_IP_FIREWALL
+
+	if(register_firewall(PF_INET,&ipfw_ops)<0)
+		panic("Unable to register IP firewall.\n");
+		
 	proc_net_register(&(struct proc_dir_entry) {
 		PROC_NET_IPFWBLK, 8, "ip_block",
 		S_IFREG | S_IRUGO | S_IWUSR, 1, 0, 0,

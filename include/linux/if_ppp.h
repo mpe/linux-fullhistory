@@ -21,7 +21,7 @@
  */
 
 /*
- *  ==FILEVERSION 3==
+ *  ==FILEVERSION 4==
  *
  *  NOTE TO MAINTAINERS:
  *     If you modify this file at all, increment the number above.
@@ -34,6 +34,12 @@
 
 #ifndef _IF_PPP_H_
 #define _IF_PPP_H_
+
+#if defined(__linux__)
+#include <linux/if.h>
+#include <linux/ioctl.h>
+#include <linux/ppp_defs.h>
+#endif
 
 /*
  * Packet sizes

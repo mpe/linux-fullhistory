@@ -1,4 +1,4 @@
-#define DISABLED_OPTIONS 	0
+#define DISABLED_OPTIONS 	(B(OPT_PNP))
 /*
  * sound/configure.c  - Configuration program for the Linux Sound Driver
  *
@@ -53,18 +53,20 @@
 #define OPT_MAD16	12
 #define OPT_CS4232	13
 #define OPT_MAUI	14
+#define OPT_PNP		15
 
-#define OPT_HIGHLEVEL   15	/* This must be same than the next one */
-#define OPT_SBPRO	15
-#define OPT_SB16	16
-#define OPT_AEDSP16     17
-#define OPT_AUDIO	18
-#define OPT_MIDI_AUTO	19
-#define OPT_MIDI	20
-#define OPT_YM3812_AUTO	21
-#define OPT_YM3812	22
-#define OPT_SEQUENCER	23
-#define OPT_LAST	23	/* Last defined OPT number */
+#define OPT_HIGHLEVEL   16	/* This must be same than the next one */
+#define OPT_SBPRO	16
+#define OPT_SB16	17
+#define OPT_AEDSP16     18
+#define OPT_AUDIO	19
+#define OPT_MIDI_AUTO	20
+#define OPT_MIDI	21
+#define OPT_YM3812_AUTO	22
+#define OPT_YM3812	23
+#define OPT_SEQUENCER	24
+#define OPT_LAST	24	/* Last defined OPT number */
+
 
 #define ANY_DEVS (B(OPT_AUDIO)|B(OPT_MIDI)|B(OPT_SEQUENCER)|B(OPT_GUS)| \
 		  B(OPT_MPU401)|B(OPT_PSS)|B(OPT_GUS16)|B(OPT_GUSMAX)| \
@@ -76,6 +78,11 @@
 #define MIDI_CARDS (B (OPT_PSS) | B (OPT_SB) | B (OPT_PAS) | B (OPT_MPU401) | \
 		    B (OPT_GUS) | B (OPT_TRIX) | B (OPT_SSCAPE)|B(OPT_MAD16) | \
 		    B (OPT_CS4232)|B(OPT_MAUI))
+#define MPU_DEVS (B(OPT_PSS)|B(OPT_SSCAPE)|B(OPT_TRIX)|B(OPT_MAD16)|\
+		  B(OPT_CS4232)|B(OPT_PNP)|B(OPT_MAUI))
+#define AD1848_DEVS (B(OPT_GUS16)|B(OPT_MSS)|B(OPT_PSS)|B(OPT_GUSMAX)|\
+		     B(OPT_SSCAPE)|B(OPT_TRIX)|B(OPT_MAD16)|B(OPT_CS4232)|\
+		     B(OPT_PNP))
 /*
  * Options that have been disabled for some reason (incompletely implemented
  * and/or tested). Don't remove from this list before looking at file
@@ -130,6 +137,7 @@ hw_entry        hw_table[] =
   {0, 0, "MAD16", 1, 0, 0},
   {0, 0, "CS4232", 1, 0, 0},
   {0, 0, "MAUI", 1, 0, 0},
+  {0, 0, "PNP", 1, 0, 0},
 
   {B (OPT_SB), B (OPT_PAS), "SBPRO", 1, 0, 1},
   {B (OPT_SB) | B (OPT_SBPRO), B (OPT_PAS), "SB16", 1, 0, 1},
@@ -159,6 +167,7 @@ char           *questions[] =
   "Support for MAD16 and/or Mozart based cards",
   "Support for Crystal CS4232 based (PnP) cards",
   "Support for Turtle Beach Wave Front (Maui, Tropez) synthesizers",
+  "Support for PnP soundcards (_EXPERIMENTAL_)",
 
   "SoundBlaster Pro support",
   "SoundBlaster 16 support",
@@ -172,8 +181,32 @@ char           *questions[] =
   "Is the sky really falling"
 };
 
+struct kludge
+  {
+    char           *name;
+    int             mask;
+  }
+extra_options[] =
+{
+  {
+    "MPU_EMU", MPU_DEVS
+  }
+  ,
+  {
+    "AD1848", AD1848_DEVS
+  }
+  ,
+  {
+    NULL, 0
+  }
+};
+
+int             old_config_used = 0;
+
 unsigned long   selected_options = 0;
 int             sb_dma = 0;
+
+void            build_defines (void);
 
 #include "hex2hex.h"
 int             bin2hex (char *path, char *target, char *varname);
@@ -259,6 +292,214 @@ play_it_again_Sam:
   return num;
 }
 
+void
+rebuild_file (char *line)
+{
+  char           *method, *new, *old, *var, *p;
+
+  method = p = line;
+
+  while (*p && *p != ' ')
+    p++;
+  *p++ = 0;
+
+  old = p;
+  while (*p && *p != ' ')
+    p++;
+  *p++ = 0;
+
+  new = p;
+  while (*p && *p != ' ')
+    p++;
+  *p++ = 0;
+
+  var = p;
+  while (*p && *p != ' ')
+    p++;
+  *p++ = 0;
+
+  fprintf (stderr, "Rebuilding file %s (%s %s)\n", new, method, old);
+
+  if (strcmp (method, "bin2hex") == 0)
+    {
+      if (!bin2hex (old, new, var))
+	{
+	  fprintf (stderr, "Rebuild failed\n");
+	  exit (-1);
+	}
+    }
+  else if (strcmp (method, "hex2hex") == 0)
+    {
+      if (!hex2hex (old, new, var))
+	{
+	  fprintf (stderr, "Rebuild failed\n");
+	  exit (-1);
+	}
+    }
+  else
+    {
+      fprintf (stderr, "Failed to build '%s' - unknown method %s\n",
+	       new, method);
+      exit (-1);
+    }
+}
+
+int
+use_old_config (char *filename)
+{
+  char            buf[1024];
+  int             i = 0;
+
+  FILE           *oldf;
+
+  fprintf (stderr, "Copying old configuration from %s\n", filename);
+
+  if ((oldf = fopen (filename, "r")) == NULL)
+    {
+      fprintf (stderr, "Couldn't open previous configuration file\n");
+      perror (filename);
+      return 0;
+    }
+
+  while (fgets (buf, 1024, oldf) != NULL)
+    {
+      char            tmp[100];
+
+      if (buf[0] != '#')
+	{
+	  printf ("%s", buf);
+
+	  strncpy (tmp, buf, 8);
+	  tmp[8] = 0;
+
+	  if (strcmp (tmp, "/*build ") == 0)
+	    rebuild_file (&buf[8]);
+
+	  continue;
+	}
+
+      strncpy (tmp, buf, 8);
+      tmp[8] = 0;
+
+      if (strcmp (tmp, "#define ") == 0)
+	{
+	  char           *id = &buf[8];
+
+	  i = 0;
+	  while (id[i] && id[i] != ' ' &&
+		 id[i] != '\t' && id[i] != '\n')
+	    i++;
+
+	  strncpy (tmp, id, i);
+	  tmp[i] = 0;
+
+	  if (strcmp (tmp, "SELECTED_SOUND_OPTIONS") == 0)
+	    continue;
+
+	  tmp[8] = 0;		/* Truncate the string */
+	  if (strcmp (tmp, "EXCLUDE_") == 0)
+	    continue;		/* Skip excludes */
+
+	  printf ("%s", buf);
+	  continue;
+	}
+
+      if (strcmp (tmp, "#undef  ") == 0)
+	{
+	  char           *id = &buf[8];
+
+	  i = 0;
+	  while (id[i] && id[i] != ' ' &&
+		 id[i] != '\t' && id[i] != '\n')
+	    i++;
+
+	  strncpy (tmp, id, i);
+	  tmp[i] = 0;
+
+	  tmp[8] = 0;		/* Truncate the string */
+	  if (strcmp (tmp, "EXCLUDE_") != 0)
+	    continue;		/* Not a #undef  EXCLUDE_ line */
+	  strncpy (tmp, &id[8], i - 8);
+	  tmp[i - 8] = 0;
+
+	  for (i = 0; i <= OPT_LAST; i++)
+	    if (strcmp (hw_table[i].macro, tmp) == 0)
+	      {
+		selected_options |= (1 << i);
+		break;
+	      }
+	  continue;
+	}
+
+      printf ("%s", buf);
+    }
+  fclose (oldf);
+
+  for (i = 0; i <= OPT_LAST; i++)
+    if (!hw_table[i].alias)
+      if (selected_options & B (i))
+	printf ("#undef  EXCLUDE_%s\n", hw_table[i].macro);
+      else
+	printf ("#define EXCLUDE_%s\n", hw_table[i].macro);
+
+
+  printf ("\n");
+
+  i = 0;
+
+  while (extra_options[i].name != NULL)
+    {
+      if (selected_options & extra_options[i].mask)
+	printf ("#undef  EXCLUDE_%s\n", extra_options[i].name);
+      else
+	printf ("#define EXCLUDE_%s\n", extra_options[i].name);
+      i++;
+    }
+
+  printf ("\n");
+
+  printf ("#define SELECTED_SOUND_OPTIONS\t0x%08x\n", selected_options);
+  fprintf (stderr, "Old configuration copied.\n");
+
+  build_defines ();
+  old_config_used = 1;
+  return 1;
+}
+
+void
+build_defines (void)
+{
+  FILE           *optf;
+  int             i;
+
+  if ((optf = fopen (".defines", "w")) == NULL)
+    {
+      perror (".defines");
+      exit (-1);
+    }
+
+
+  for (i = 0; i <= OPT_LAST; i++)
+    if (!hw_table[i].alias)
+      if (selected_options & B (i))
+	fprintf (optf, "CONFIG_%s=y\n", hw_table[i].macro);
+
+
+  fprintf (optf, "\n");
+
+  i = 0;
+
+  while (extra_options[i].name != NULL)
+    {
+      if (selected_options & extra_options[i].mask)
+	fprintf (optf, "CONFIG_%s=y\n", extra_options[i].name);
+      i++;
+    }
+
+  fprintf (optf, "\n");
+  fclose (optf);
+}
+
 int
 main (int argc, char *argv[])
 {
@@ -266,9 +507,24 @@ main (int argc, char *argv[])
   char            answ[10];
   int             sb_base = 0;
 
+  fprintf (stderr, "\nConfiguring the sound support\n\n");
+
+  if (argc > 1)
+    {
+      if (use_old_config (argv[1]))
+	exit (0);
+    }
+  else if (access ("/etc/soundconf", R_OK) == 0)
+    {
+      fprintf (stderr, "Old configuration exists in /etc/soundconf. Use it (y/n) ? ");
+      if (think_positively (0))
+	if (use_old_config ("/etc/soundconf"))
+	  exit (0);
+
+    }
+
   printf ("/*\tGenerated by configure. Don't edit!!!!\t*/\n\n");
 
-  fprintf (stderr, "\nConfiguring the sound support\n\n");
   {
     /*
      * Partial driver
@@ -360,7 +616,10 @@ main (int argc, char *argv[])
 			goto midi0001_again;
 		    }
 		  else
-		    printf ("#define SMW_MIDI0001_INCLUDED\n");
+		    {
+		      printf ("#define SMW_MIDI0001_INCLUDED\n");
+		      printf ("/*build bin2hex %s smw-midi0001.h smw_ucode */\n", path);
+		    }
 		}
 	    }
 	}
@@ -446,7 +705,10 @@ main (int argc, char *argv[])
 		goto genld_again;
 	    }
 	  else
-	    printf ("#define PSS_HAVE_LD\n");
+	    {
+	      printf ("#define PSS_HAVE_LD\n");
+	      printf ("/*build bin2hex %s synth-ld.h pss_synth */\n", path);
+	    }
 	}
       else
 	{
@@ -481,8 +743,9 @@ main (int argc, char *argv[])
 	  scanf ("%s", path);
 	  fprintf (stderr, "including HEX file %s\n", path);
 
-	  if (!hex2hex (path, "trix_boot.h", "static unsigned char trix_boot"))
+	  if (!hex2hex (path, "trix_boot.h", "trix_boot"))
 	    goto hex2hex_again;
+	  printf ("/*build hex2hex %s trix_boot.h trix_boot */\n", path);
 	  printf ("#define INCLUDE_TRIX_BOOT\n");
 	}
     }
@@ -497,8 +760,6 @@ main (int argc, char *argv[])
   else
     printf ("#define KERNEL_SOUNDCARD\n");
 
-  printf ("#define EXCLUDE_PNP\n");
-
   for (i = 0; i <= OPT_LAST; i++)
     if (!hw_table[i].alias)
       if (selected_options & B (i))
@@ -507,10 +768,27 @@ main (int argc, char *argv[])
 	printf ("#define EXCLUDE_%s\n", hw_table[i].macro);
 
 
+  printf ("\n");
+
+  i = 0;
+
+  while (extra_options[i].name != NULL)
+    {
+      if (selected_options & extra_options[i].mask)
+	printf ("#undef  EXCLUDE_%s\n", extra_options[i].name);
+      else
+	printf ("#define EXCLUDE_%s\n", extra_options[i].name);
+      i++;
+    }
+
+  printf ("\n");
+
+
+
+  build_defines ();
   /*
    * IRQ and DMA settings
    */
-  printf ("\n");
 
   if (selected_options & B (OPT_AEDSP16))
     {
@@ -796,6 +1074,33 @@ main (int argc, char *argv[])
 	}
       fprintf (stderr, "MPU-401 IRQ set to %d\n", num);
       printf ("#define MPU_IRQ %d\n", num);
+    }
+
+  if (selected_options & B (OPT_MAUI))
+    {
+      fprintf (stderr, "\nI/O base for TB Maui (MIDI I/O of TB Tropez)?\n"
+	       "The factory default is 330\n"
+	"Valid alternatives are 210, 230, 260, 290, 300, 320, 338 and 330\n"
+	       "Enter the Maui/Tropez MIDI I/O base: ");
+
+      num = ask_value ("%x", 0x330);
+      fprintf (stderr, "Maui I/O base set to %03x\n", num);
+      printf ("#define MAUI_BASE 0x%03x\n", num);
+
+      fprintf (stderr, "\nIRQ number for TB Maui (TB Tropez MIDI)?\n"
+	       "Valid numbers are: 5, 9, 12 and 15.\n"
+	       "The default value is 9.\n"
+	       "Enter the value: ");
+
+      num = ask_value ("%d", 9);
+      if (num == 6 || num < 3 || num > 15)
+	{
+
+	  fprintf (stderr, "*** Illegal input! ***\n");
+	  num = 5;
+	}
+      fprintf (stderr, "Maui/Tropez MIDI IRQ set to %d\n", num);
+      printf ("#define MAUI_IRQ %d\n", num);
     }
 
   if (selected_options & B (OPT_UART6850))
@@ -1394,6 +1699,16 @@ main (int argc, char *argv[])
   fprintf (stderr, "Remember to update the System file\n");
 #endif
 
+  if (!old_config_used)
+    {
+      fprintf (stderr, "Save this configuration to /etc/soundconf (y/n)");
+      if (think_positively (1))
+	{
+	  fclose (stdout);
+	  if (system ("cp local.h /etc/soundconf") != 0)
+	    perror ("'cp local.h /etc/soundconf'");
+	}
+    }
   exit (0);
 }
 

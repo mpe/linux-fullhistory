@@ -405,6 +405,7 @@ static int get_stat(int pid, char * buffer)
 	struct task_struct ** p = get_task(pid), *tsk;
 	unsigned long sigignore=0, sigcatch=0, wchan;
 	unsigned long vsize, eip, esp;
+	long priority, nice;
 	int i,tty_pgrp;
 	char state;
 
@@ -445,6 +446,12 @@ static int get_stat(int pid, char * buffer)
 		tty_pgrp = tsk->tty->pgrp;
 	else
 		tty_pgrp = -1;
+
+	/* scale priority and nice values from timeslices to 0..40 */
+	priority = tsk->counter;
+	priority = (priority * 10 + 5) / DEF_PRIORITY;
+	nice = tsk->priority;
+	nice = (nice * 20 + 10) / DEF_PRIORITY;
 	return sprintf(buffer,"%d (%s) %c %d %d %d %d %d %lu %lu \
 %lu %lu %lu %ld %ld %ld %ld %ld %ld %lu %lu %ld %lu %lu %lu %lu %lu %lu %lu %lu %lu \
 %lu %lu %lu %lu\n",
@@ -465,10 +472,10 @@ static int get_stat(int pid, char * buffer)
 		tsk->stime,
 		tsk->cutime,
 		tsk->cstime,
-		tsk->counter,  /* this is the kernel priority ---
-				   subtract 30 in your user-level program. */
-		tsk->priority, /* this is the nice value ---
-				   subtract 15 in your user-level program. */
+		priority,  /* this is the kernel priority ---
+				   subtract 20 in your user-level program. */
+		nice,	   /* this is the nice value ---
+				   subtract 20 in your user-level program. */
 		tsk->timeout,
 		tsk->it_real_value,
 		tsk->start_time,

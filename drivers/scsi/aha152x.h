@@ -7,7 +7,7 @@
 
 #if defined(__KERNEL__)
 
-#include "../block/blk.h"
+#include <linux/blk.h>
 #include "scsi.h"
 #include <asm/io.h>
 

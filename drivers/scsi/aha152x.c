@@ -215,7 +215,7 @@
 
 #include <linux/sched.h>
 #include <asm/io.h>
-#include "../block/blk.h"
+#include <linux/blk.h>
 #include "scsi.h"
 #include "sd.h"
 #include "hosts.h"

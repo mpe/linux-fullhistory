@@ -18,7 +18,7 @@
 #endif
 
 #include <linux/config.h>
-#include "../block/blk.h"
+#include <linux/blk.h>
 #include <linux/kernel.h>
 #include "scsi.h"
 #include "hosts.h"

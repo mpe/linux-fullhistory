@@ -61,7 +61,7 @@
 #include <asm/io.h>
 #include <linux/signal.h>
 #include <linux/sched.h>
-#include "../block/blk.h"
+#include <linux/blk.h>
 #include "scsi.h"
 #include "hosts.h"
 #include "g_NCR5380.h"

@@ -9,6 +9,7 @@
 #include <linux/stat.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
+#include <linux/fcntl.h>
 #include <linux/mm.h>
 #include <linux/uio.h>
 
@@ -151,46 +152,93 @@ asmlinkage int sys_write(unsigned int fd,char * buf,unsigned int count)
 	return written;
 }
 
-/*
- * OSF/1 (and SunOS) readv/writev emulation.
- *
- * NOTE! This is not really the way it should be done,
- * but it should be good enough for TCP connections,
- * notably X11 ;-)
- */
-asmlinkage int sys_readv(unsigned long fd, const struct iovec * vector, long count)
+static int sock_readv_writev(int type, struct inode * inode, struct file * file,
+	const struct iovec * iov, long count, long size)
 {
-	int retval;
-	struct file * file;
-	struct inode * inode;
+	struct msghdr msg;
+	struct socket *sock;
 
-	if (fd >= NR_OPEN || !(file = current->files->fd[fd]) || !(inode = file->f_inode))
-		return -EBADF;
-	if (!(file->f_mode & 1))
-		return -EBADF;
-	if (!file->f_op || !file->f_op->read)
-		return -EINVAL;
+	sock = &inode->u.socket_i;
+	if (!sock->ops)
+		return -EOPNOTSUPP;
+	msg.msg_name = NULL;
+	msg.msg_namelen = 0;
+	msg.msg_accrights = NULL;
+	msg.msg_iov = (struct iovec *) iov;
+	msg.msg_iovlen = count;
+
+	/* read() does a VERIFY_WRITE */
+	if (type == VERIFY_WRITE) {
+		if (!sock->ops->recvmsg)
+			return -EOPNOTSUPP;
+		return sock->ops->recvmsg(sock, &msg, size,
+			(file->f_flags & O_NONBLOCK), 0, NULL);
+	}
+	if (!sock->ops->sendmsg)
+		return -EOPNOTSUPP;
+	return sock->ops->sendmsg(sock, &msg, size,
+		(file->f_flags & O_NONBLOCK), 0);
+}
+
+typedef int (*IO_fn_t)(struct inode *, struct file *, char *, int);
+
+static int do_readv_writev(int type, struct inode * inode, struct file * file,
+	const struct iovec * vector, unsigned long count)
+{
+	size_t tot_len;
+	struct iovec iov[MAX_IOVEC];
+	int retval, i;
+	IO_fn_t fn;
+
+	/*
+	 * First get the "struct iovec" from user memory and
+	 * verify all the pointers
+	 */
 	if (!count)
 		return 0;
+	if (count > MAX_IOVEC)
+		return -EINVAL;
 	retval = verify_area(VERIFY_READ, vector, count*sizeof(*vector));
 	if (retval)
 		return retval;
+	memcpy_fromfs(iov, vector, count*sizeof(*vector));
+	tot_len = 0;
+	for (i = 0 ; i < count ; i++) {
+		tot_len += iov[i].iov_len;
+		retval = verify_area(type, iov[i].iov_base, iov[i].iov_len);
+		if (retval)
+			return retval;
+	}
 
+	/*
+	 * Then do the actual IO.  Note that sockets need to be handled
+	 * specially as they have atomicity guarantees and can handle
+	 * iovec's natively
+	 */
+	if (inode->i_sock)
+		return sock_readv_writev(type, inode, file, iov, count, tot_len);
+
+	if (!file->f_op)
+		return -EINVAL;
+	/* VERIFY_WRITE actually means a read, as we write to user space */
+	fn = file->f_op->read;
+	if (type == VERIFY_READ)
+		fn = (IO_fn_t) file->f_op->write;		
+	vector = iov;
 	while (count > 0) {
 		void * base;
 		int len, nr;
 
-		base = get_user(&vector->iov_base);
-		len = get_user(&vector->iov_len);
+		base = vector->iov_base;
+		len = vector->iov_len;
 		vector++;
 		count--;
-		nr = verify_area(VERIFY_WRITE, base, len);
-		if (!nr)
-			nr = file->f_op->read(inode, file, base, len);
+		nr = fn(inode, file, base, len);
 		if (nr < 0) {
 			if (retval)
-				return retval;
-			return nr;
+				break;
+			retval = nr;
+			break;
 		}
 		retval += nr;
 		if (nr != len)
@@ -199,9 +247,20 @@ asmlinkage int sys_readv(unsigned long fd, const struct iovec * vector, long cou
 	return retval;
 }
 
+asmlinkage int sys_readv(unsigned long fd, const struct iovec * vector, long count)
+{
+	struct file * file;
+	struct inode * inode;
+
+	if (fd >= NR_OPEN || !(file = current->files->fd[fd]) || !(inode = file->f_inode))
+		return -EBADF;
+	if (!(file->f_mode & 1))
+		return -EBADF;
+	return do_readv_writev(VERIFY_WRITE, inode, file, vector, count);
+}
+
 asmlinkage int sys_writev(unsigned long fd, const struct iovec * vector, long count)
 {
-	int retval;
 	struct file * file;
 	struct inode * inode;
 
@@ -209,33 +268,5 @@ asmlinkage int sys_writev(unsigned long fd, const struct iovec * vector, long co
 		return -EBADF;
 	if (!(file->f_mode & 2))
 		return -EBADF;
-	if (!file->f_op || !file->f_op->write)
-		return -EINVAL;
-	if (!count)
-		return 0;
-	retval = verify_area(VERIFY_READ, vector, count*sizeof(*vector));
-	if (retval)
-		return retval;
-
-	while (count > 0) {
-		void * base;
-		int len, nr;
-
-		base = get_user(&vector->iov_base);
-		len = get_user(&vector->iov_len);
-		vector++;
-		count--;
-		nr = verify_area(VERIFY_READ, base, len);
-		if (!nr)
-			nr = file->f_op->write(inode, file, base, len);
-		if (nr < 0) {
-			if (retval)
-				return retval;
-			return nr;
-		}
-		retval += nr;
-		if (nr != len)
-			break;
-	}
-	return retval;
+	return do_readv_writev(VERIFY_READ, inode, file, vector, count);
 }

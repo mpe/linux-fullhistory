@@ -1,0 +1,31 @@
+#
+# Character device configuration
+#
+mainmenu_option next_comment
+comment 'character devices'
+
+bool 'Cyclades async mux support' CONFIG_CYCLADES
+bool 'Stallion multiport serial support' CONFIG_STALDRV
+if [ "$CONFIG_STALDRV" = "y" ]; then
+  tristate '  Stallion EasyIO or EC8/32 support' CONFIG_STALLION
+  tristate '  Stallion EC8/64, ONboard, Brumby support' CONFIG_ISTALLION
+fi
+tristate 'Parallel printer support' CONFIG_PRINTER
+tristate 'Logitech busmouse support' CONFIG_BUSMOUSE
+tristate 'PS/2 mouse (aka "auxiliary device") support' CONFIG_PSMOUSE
+if [ "$CONFIG_PSMOUSE" = "y" ]; then
+  bool 'C&T 82C710 mouse port support (as on TI Travelmate)' CONFIG_82C710_MOUSE
+fi
+tristate 'Microsoft busmouse support' CONFIG_MS_BUSMOUSE
+tristate 'ATIXL busmouse support' CONFIG_ATIXL_BUSMOUSE
+
+bool 'QIC-02 tape support' CONFIG_QIC02_TAPE
+if [ "$CONFIG_QIC02_TAPE" = "y" ]; then
+  bool 'Do you want runtime configuration for QIC-02' CONFIG_QIC02_DYNCONF
+  if [ "$CONFIG_QIC02_DYNCONF" != "y" ]; then
+    comment '>>> Edit configuration parameters in ./include/linux/tpqic02.h!'
+  else
+    comment '>>> Setting runtime QIC-02 configuration is done with qic02conf'
+    comment '>>> Which is available from ftp://ftp.funet.fi/pub/OS/Linux/BETA/QIC-02/'
+fi
+fi

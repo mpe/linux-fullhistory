@@ -19,7 +19,7 @@
 
 #include <asm/system.h>
 #include <asm/io.h>
-#include "blk.h"
+#include <linux/blk.h>
 
 /*
  * The request-struct contains all necessary data

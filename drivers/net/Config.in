@@ -1,0 +1,85 @@
+#
+# Network device configuration
+#
+tristate 'Dummy net driver support' CONFIG_DUMMY
+tristate 'SLIP (serial line) support' CONFIG_SLIP
+if [ "$CONFIG_SLIP" != "n" ]; then
+  bool ' CSLIP compressed headers' CONFIG_SLIP_COMPRESSED
+fi
+tristate 'PPP (point-to-point) support' CONFIG_PPP
+if [ ! "$CONFIG_PPP" = "n" ]; then
+  comment 'CCP compressors for PPP are only built as modules.'
+fi
+if [ "$CONFIG_AX25" = "y" ]; then
+  bool 'Z8530 SCC kiss emulation driver for AX.25' CONFIG_SCC
+else
+  bool 'Z8530 SCC kiss emulation driver for AX.25' CONFIG_SCC
+fi
+tristate 'PLIP (parallel port) support' CONFIG_PLIP
+tristate 'EQL (serial line load balancing) support' CONFIG_EQUALIZER
+bool 'Do you want to be offered ALPHA test drivers' CONFIG_NET_ALPHA
+bool 'Western Digital/SMC cards' CONFIG_NET_VENDOR_SMC
+if [ "$CONFIG_NET_VENDOR_SMC" = "y" ]; then
+  tristate 'WD80*3 support' CONFIG_WD80x3
+  tristate 'SMC Ultra support' CONFIG_ULTRA
+fi
+bool 'AMD LANCE and PCnet (AT1500 and NE2100) support' CONFIG_LANCE
+bool '3COM cards' CONFIG_NET_VENDOR_3COM
+if [ "$CONFIG_NET_VENDOR_3COM" = "y" ]; then
+  tristate '3c501 support' CONFIG_EL1
+  tristate '3c503 support' CONFIG_EL2
+  if [ "$CONFIG_NET_ALPHA" = "y" ]; then
+    tristate '3c505 support' CONFIG_ELPLUS
+    tristate '3c507 support' CONFIG_EL16
+  fi
+  tristate '3c509/3c579 support' CONFIG_EL3
+fi
+bool 'Other ISA cards' CONFIG_NET_ISA
+if [ "$CONFIG_NET_ISA" = "y" ]; then
+  tristate 'Cabletron E21xx support' CONFIG_E2100
+  tristate 'DEPCA support' CONFIG_DEPCA
+  tristate 'EtherWorks 3 support' CONFIG_EWRK3
+  if [ "$CONFIG_NET_ALPHA" = "y" ]; then
+    bool 'SEEQ8005 support' CONFIG_SEEQ8005
+    tristate 'AT1700 support' CONFIG_AT1700
+    tristate 'EtherExpressPro support' CONFIG_EEXPRESS_PRO
+    tristate 'EtherExpress support' CONFIG_EEXPRESS
+    bool 'NI5210 support' CONFIG_NI52
+    bool 'NI6510 support' CONFIG_NI65
+    tristate 'WaveLAN support' CONFIG_WAVELAN
+  fi
+  tristate 'HP PCLAN+ (27247B and 27252A) support' CONFIG_HPLAN_PLUS
+  tristate 'HP PCLAN (27245 and other 27xxx series) support' CONFIG_HPLAN
+  tristate 'HP 10/100VG PCLAN (ISA, EISA, PCI) support' CONFIG_HP100
+  tristate 'NE2000/NE1000 support' CONFIG_NE2000
+  if [ "$CONFIG_AX25" = "y" ]; then
+    bool 'Ottawa PI and PI/2 support' CONFIG_PI
+  fi
+  bool 'SK_G16 support' CONFIG_SK_G16
+fi
+bool 'EISA, VLB, PCI and on board controllers' CONFIG_NET_EISA
+if [ "$CONFIG_NET_EISA" = "y" ]; then
+  if [ "$CONFIG_NET_ALPHA" = "y" ]; then
+    tristate 'Ansel Communications EISA 3200 support' CONFIG_AC3200
+  fi
+  tristate 'Apricot Xen-II on board ethernet' CONFIG_APRICOT
+  tristate 'DE425, DE434, DE435, DE500 support' CONFIG_DE4X5
+# tristate 'DEC 21040 PCI support' CONFIG_DEC_ELCP
+# bool 'LPL T100V 100Mbs support' CONFIG_LPL_T100
+# bool 'PCnet32 (32 bit VLB and PCI LANCE) support' CONFIG_PCNET32
+  bool 'Zenith Z-Note support' CONFIG_ZNET
+fi
+bool 'Pocket and portable adaptors' CONFIG_NET_POCKET
+if [ "$CONFIG_NET_POCKET" = "y" ]; then
+  bool 'AT-LAN-TEC/RealTek pocket adaptor support' CONFIG_ATP
+  tristate 'D-Link DE600 pocket adaptor support' CONFIG_DE600
+  tristate 'D-Link DE620 pocket adaptor support' CONFIG_DE620
+# bool 'Silicom pocket adaptor support' CONFIG_SILICOM_PEA
+# bool 'WaveLAN PCMCIA support' CONFIG_WaveLAN
+# bool '3 Com 3c589 PCMCIA support' CONFIG_3C589
+fi
+bool 'Token Ring driver support' CONFIG_TR
+if [ "$CONFIG_TR" = "y" ]; then
+  tristate 'IBM Tropic chipset based adaptor support' CONFIG_IBMTR
+fi
+tristate 'Arcnet support' CONFIG_ARCNET

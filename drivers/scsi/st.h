@@ -29,7 +29,6 @@ typedef struct {
   struct wait_queue * waiting;
   Scsi_Device* device;
   unsigned char dirty;
-  unsigned char write_pending;
   unsigned char rw;
   unsigned char ready;
   unsigned char eof;
@@ -47,6 +46,7 @@ typedef struct {
   unsigned char density;
   unsigned char door_locked;
   ST_buffer * buffer;
+  struct semaphore sem;
   int block_size;
   int min_block;
   int max_block;
@@ -58,6 +58,7 @@ typedef struct {
   struct mtget * mt_status;
   Scsi_Cmnd SCpnt;
 #if DEBUG
+  unsigned char write_pending;
   int nbr_finished;
   int nbr_waits;
 #endif

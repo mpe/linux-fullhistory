@@ -63,6 +63,7 @@
 #include <linux/interrupt.h>
 #include <linux/netdevice.h>
 #include <linux/proc_fs.h>
+#include <linux/firewall.h>
 
 #include <net/netlink.h>
 
@@ -1287,7 +1288,7 @@ void sock_init(void)
 {
 	int i;
 
-	printk("Swansea University Computer Society NET3.031 Snap #3 for Linux 1.3.30\n");
+	printk("Swansea University Computer Society NET3.032 for Linux 1.3.35\n");
 
 	/*
 	 *	Initialize all address (protocol) families. 
@@ -1308,6 +1309,14 @@ void sock_init(void)
 
 #if defined(CONFIG_RTNETLINK)
 	netlink_attach(NETLINK_ROUTE, netlink_donothing);
+#endif
+
+	/*
+	 *	Attach the firewall module if configured
+	 */
+	 
+#ifdef CONFIG_FIREWALL	 
+	fwchain_init();
 #endif
 
 	/*

@@ -896,7 +896,7 @@ guswave_ioctl (int dev,
     {
     case SNDCTL_SYNTH_INFO:
       gus_info.nr_voices = nr_voices;
-      memcpy_tofs (&(((char *) arg)[0]), (&gus_info), (sizeof (gus_info)));
+      memcpy_tofs ((&((char *) arg)[0]), &gus_info, sizeof (gus_info));
       return 0;
       break;
 
@@ -1029,7 +1029,7 @@ compute_volume (int voice, int volume)
 static void
 compute_and_set_volume (int voice, int volume, int ramp_time)
 {
-  int             current, target, rate;
+  int             curr, target, rate;
   unsigned long   flags;
 
   compute_volume (voice, volume);
@@ -1043,7 +1043,7 @@ compute_and_set_volume (int voice, int volume, int ramp_time)
 
   gus_select_voice (voice);
 
-  current = gus_read16 (0x09) >> 4;
+  curr = gus_read16 (0x09) >> 4;
   target = voices[voice].initial_volume;
 
   if (ramp_time == INSTANT_RAMP)
@@ -1060,7 +1060,7 @@ compute_and_set_volume (int voice, int volume, int ramp_time)
     rate = 16;
   gus_ramp_rate (0, rate);
 
-  if ((target - current) / 64 == 0)	/* Close enough to target. */
+  if ((target - curr) / 64 == 0)	/* Close enough to target. */
     {
       gus_rampoff ();
       gus_voice_volume (target);
@@ -1068,11 +1068,11 @@ compute_and_set_volume (int voice, int volume, int ramp_time)
       return;
     }
 
-  if (target > current)
+  if (target > curr)
     {
       if (target > (4095 - 65))
 	target = 4095 - 65;
-      gus_ramp_range (current, target);
+      gus_ramp_range (curr, target);
       gus_rampon (0x00);	/* Ramp up, once, no IRQ */
     }
   else
@@ -1080,7 +1080,7 @@ compute_and_set_volume (int voice, int volume, int ramp_time)
       if (target < 65)
 	target = 65;
 
-      gus_ramp_range (target, current);
+      gus_ramp_range (target, curr);
       gus_rampon (0x40);	/* Ramp down, once, no irq */
     }
   restore_flags (flags);
@@ -1330,7 +1330,9 @@ guswave_start_note2 (int dev, int voice, int note_num, int volume)
       init_envelope (voice);
     }
   else
-    compute_and_set_volume (voice, volume, 0);
+    {
+      compute_and_set_volume (voice, volume, 0);
+    }
 
   save_flags (flags);
   cli ();
@@ -1399,7 +1401,9 @@ guswave_start_note (int dev, int voice, int note_num, int volume)
   if (note_num == 255)
     {
       if (voices[voice].volume_irq_mode == VMODE_START_NOTE)
-	voices[voice].volume_pending = volume;
+	{
+	  voices[voice].volume_pending = volume;
+	}
       else
 	{
 	  ret_val = guswave_start_note2 (dev, voice, note_num, volume);
@@ -1540,7 +1544,7 @@ guswave_load_patch (int dev, int format, const snd_rw_buf * addr,
    * been transferred already.
    */
 
-  memcpy_fromfs ((&((char *) &patch)[offs]), &((addr)[offs]), (sizeof_patch - offs));
+  memcpy_fromfs (&((char *) &patch)[offs], &((addr)[offs]), sizeof_patch - offs);
 
   instr = patch.instr_no;
 
@@ -1683,7 +1687,7 @@ guswave_load_patch (int dev, int format, const snd_rw_buf * addr,
 	   * OK, move now. First in and then out.
 	   */
 
-	  memcpy_fromfs ((audio_devs[gus_devnum]->dmap_out->raw_buf), &((addr)[sizeof_patch + src_offs]), (blk_size));
+	  memcpy_fromfs (audio_devs[gus_devnum]->dmap_out->raw_buf, &((addr)[sizeof_patch + src_offs]), blk_size);
 
 	  save_flags (flags);
 	  cli ();
@@ -2430,7 +2434,7 @@ gus_copy_from_user (int dev, char *localbuf, int localoffs,
 {
   if (gus_sampling_channels == 1)
     {
-      memcpy_fromfs ((&localbuf[localoffs]), &((userbuf)[useroffs]), (len));
+      memcpy_fromfs (&localbuf[localoffs], &((userbuf)[useroffs]), len);
     }
   else if (gus_sampling_bits == 8)
     {
@@ -3116,14 +3120,9 @@ gus_wave_init (long mem_start, struct address_info *hw_config)
     }
 
 
-  {
-    caddr_t         ptr;
-
-    ptr = sound_mem_blocks[sound_num_blocks] = kmalloc ((MAX_SAMPLE + 1) * sizeof (*samples), GFP_KERNEL);
-    if (sound_num_blocks < 1024)
-      sound_num_blocks++;
-    samples = (struct patch_info *) ptr;
-  };
+  samples = (struct patch_info *) (sound_mem_blocks[sound_num_blocks] = kmalloc ((MAX_SAMPLE + 1) * sizeof (*samples), GFP_KERNEL));
+  if (sound_num_blocks < 1024)
+    sound_num_blocks++;;
 
   reset_sample_memory ();
 

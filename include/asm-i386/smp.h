@@ -228,5 +228,18 @@ extern __inline int smp_processor_id(void)
 #endif /* !ASSEMBLY */
 
 #define NO_PROC_ID		0xFF		/* No processor magic marker */
+
+/*
+ *	This magic constant controls our willingness to transfer
+ *	a process across CPUs. Such a transfer incurs misses on the L1
+ *	cache, and on a P6 or P5 with multiple L2 caches L2 hits. My
+ *	gut feeling is this will vary by board in value. For a board
+ *	with seperate L2 cache it probably depends also on the RSS, and
+ *	for a board with shared L2 cache it ought to decay fast as other
+ *	processes are run.
+ */
+ 
+#define PROC_CHANGE_PENALTY	5		/* Schedule penalty */
+
 #endif
 #endif

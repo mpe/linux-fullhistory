@@ -37,7 +37,7 @@
 #include <linux/rpcsock.h>
 
 #define msleep(sec)	{ current->timeout = sec * HZ / 1000; \
-			  current->state = TAKS_INTERRUPTIBLE; \
+			  current->state = TASK_INTERRUPTIBLE; \
 			  schedule(); \
 			}
 #define dprintk		if (0) printk
@@ -181,7 +181,6 @@ rpc_call_one(struct rpc_sock *rsock, struct rpc_wait *slot,
 	do {
 		/* We are not the receiver. Wait on the side lines. */
 		if (rsock->head != slot) {
-			slot->wait = NULL;
 			interruptible_sleep_on(&slot->wait);
 			if (slot->gotit)
 				break;
@@ -328,7 +327,7 @@ timedout:
 		rsock->free = slot;
 
 		/* wake up tasks that haven't sent anything yet. (Waking
-		 * up the first one the wait queue would be enough) */
+		 * up the first one on the wait queue would be enough) */
 		if (rsock->backlog)
 			wake_up(&rsock->backlog);
 	}
@@ -349,6 +348,7 @@ rpc_makesock(struct file *file)
 	dprintk("RPC: make RPC socket...\n");
 	if ((rsock = kmalloc(sizeof(struct rpc_sock), GFP_KERNEL)) == NULL)
 		return NULL;
+	memset(rsock, 0, sizeof(*rsock)); /* Nnnngh! */
 
 	rsock->sock = &file->f_inode->u.socket_i;
 	rsock->file = file;
@@ -358,11 +358,13 @@ rpc_makesock(struct file *file)
 		slot->next = slot + 1;
 	slot->next = NULL;
 
+	/* --- taken care of by memset above ---
 	rsock->backlog = NULL;
 	rsock->head = rsock->tail = NULL;
 
 	rsock->shutwait = NULL;
 	rsock->shutdown = 0;
+	 */
 
 	dprintk("RPC: made socket %08lx", (long) rsock);
 	return rsock;
@@ -374,7 +376,7 @@ rpc_closesock(struct rpc_sock *rsock)
 	unsigned long	t0 = jiffies;
 
 	rsock->shutdown = 1;
-	while (rsock->head) {
+	while (rsock->head || rsock->backlog) {
 		interruptible_sleep_on(&rsock->shutwait);
 		if (current->signal & ~current->blocked)
 			return -EINTR;

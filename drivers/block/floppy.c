@@ -81,10 +81,19 @@
  * errors to allow safe writing by specialized programs.
  */
 
+/*
+ * 1995/8/26 -- Andreas Busse -- added Mips support.
+ */
+
 /* 1995/4/24 -- Dan Fandrich -- added support for Commodore 1581 3.5" disks
  * by defining bit 1 of the "stretch" parameter to mean put sectors on the
  * opposite side of the disk, leaving the sector IDs alone (i.e. Commodore's
  * drives are "upside-down").
+ */
+
+/*
+ * 1995/18/10 -- Ralf Baechle -- Portability cleanup; move machine dependend
+ * features to asm/floppy.h.
  */
 
 #define CONFIG_FLOPPY_SANITY
@@ -113,8 +122,6 @@ char kernel_version[] = UTS_RELEASE;
 int FLOPPY_IRQ=6;
 int FLOPPY_DMA=2;
 int ALLOWED_DRIVE_MASK = 0x33;
-int FDC1 = 0x3f0;
-int FDC2 = -1;
 
 #endif
 
@@ -128,8 +135,6 @@ static int ALLOWED_DRIVE_MASK=0x33;
 
 #define FLOPPY_IRQ 6
 #define FLOPPY_DMA 2
-#define FDC1 0x3f0
-static int FDC2=-1;
 #endif
 
 #define MODULE_AWARE_DRIVER
@@ -223,17 +228,19 @@ struct old_floppy_fdc_state {
 #include <linux/ioport.h>
 
 #include <asm/dma.h>
+#include <asm/floppy.h>
 #include <asm/irq.h>
 #include <asm/system.h>
 #include <asm/io.h>
 #include <asm/segment.h>
 
 #define MAJOR_NR FLOPPY_MAJOR
-#include "blk.h"
+#include <linux/blk.h>
 
 
-/* Dma Memory related stuff */
-
+/*
+ * Dma Memory related stuff
+ */
 /* Pure 2^n version of get_order */
 static inline int __get_order (int size)
 {
@@ -260,24 +267,8 @@ static unsigned long dma_mem_alloc(int size)
 	return __get_dma_pages(GFP_KERNEL,order);
 }
 
-/* End dma memory related stuff */
-
 static unsigned int fake_change = 0;
 static int initialising=1;
-
-/*
- * Again, the CMOS information doesn't work on the alpha..
- */
-#ifdef __alpha__
-#define FLOPPY0_TYPE 6
-#define FLOPPY1_TYPE 0
-#else
-#define FLOPPY0_TYPE	((CMOS_READ(0x10) >> 4) & 15)
-#define FLOPPY1_TYPE	(CMOS_READ(0x10) & 15)
-#endif
-
-#define N_FDC 2
-#define N_DRIVE 8
 
 static inline int TYPE(kdev_t x) {
 	return  (MINOR(x)>>2) & 0x1f;
@@ -343,22 +334,7 @@ static inline int DRIVE(kdev_t x) {
  */
 #define MAX_DISK_SIZE 2 /* 3984*/
 
-
 #define K_64	0x10000		/* 64KB */
-
-/*
- * The DMA channel used by the floppy controller cannot access data at
- * addresses >= 16MB
- *
- * Went back to the 1MB limit, as some people had problems with the floppy
- * driver otherwise. It doesn't matter much for performance anyway, as most
- * floppy accesses go through the track buffer.
- */
-#ifdef __alpha__
-# define CROSS_64KB(a,s)	(0)
-#else
-# define CROSS_64KB(a,s) ((unsigned long)(a)/K_64 != ((unsigned long)(a) + (s) - 1) / K_64)
-#endif
 
 /*
  * globals used by 'result()'
@@ -737,13 +713,13 @@ static int disk_change(int drive)
 	if (UDP->flags & FD_DEBUG){
 		DPRINT1("checking disk change line for drive %d\n",drive);
 		DPRINT1("jiffies=%ld\n", jiffies);
-		DPRINT1("disk change line=%x\n",inb_p(FD_DIR)&0x80);
+		DPRINT1("disk change line=%x\n",fd_inb(FD_DIR)&0x80);
 		DPRINT1("flags=%x\n",UDRS->flags);
 	}
 #endif
 	if (UDP->flags & FD_BROKEN_DCL)
 		return UTESTF(FD_DISK_CHANGED);
-	if( (inb_p(FD_DIR) ^ UDP->flags) & 0x80){
+	if( (fd_inb(FD_DIR) ^ UDP->flags) & 0x80){
 		USETF(FD_VERIFY); /* verify write protection */
 		if(UDRS->maxblock){
 			/* mark it changed */
@@ -794,7 +770,7 @@ static int set_dor(int fdc, char mask, char data)
 			disk_change(drive);
 		}
 		FDCS->dor = newdor;
-		outb_p(newdor, FD_DOR);
+		fd_outb(newdor, FD_DOR);
 
 		unit = newdor & 0x3;
 		if(!is_selected(olddor, unit) && is_selected(newdor,unit)){
@@ -813,8 +789,8 @@ static void twaddle(void)
 {
 	if (DP->select_delay)
 		return;
-	outb_p(FDCS->dor & ~(0x10<<UNIT(current_drive)),FD_DOR);
-	outb_p(FDCS->dor, FD_DOR);
+	fd_outb(FDCS->dor & ~(0x10<<UNIT(current_drive)),FD_DOR);
+	fd_outb(FDCS->dor, FD_DOR);
 	DRS->select_date = jiffies;
 }
 
@@ -845,7 +821,7 @@ static void set_fdc(int drive)
 	set_dor(1-fdc, ~8, 0);
 	if ( FDCS->rawcmd == 2 )
 		reset_fdc_info(1);
-	if( inb_p(FD_STATUS) != STATUS_READY )
+	if ( fd_inb(FD_STATUS) != STATUS_READY )
 		FDCS->reset = 1;
 }
 
@@ -1092,14 +1068,13 @@ static void setup_DMA(void)
 	}
 #endif
 	cli();
-	disable_dma(FLOPPY_DMA);
-	clear_dma_ff(FLOPPY_DMA);
-	set_dma_mode(FLOPPY_DMA,
-		     (raw_cmd->flags & FD_RAW_READ)?
-		     DMA_MODE_READ : DMA_MODE_WRITE);
-	set_dma_addr(FLOPPY_DMA, virt_to_bus(raw_cmd->kernel_data));
-	set_dma_count(FLOPPY_DMA, raw_cmd->length);
-	enable_dma(FLOPPY_DMA);
+	fd_disable_dma();
+	fd_clear_dma_ff();
+	fd_set_dma_mode((raw_cmd->flags & FD_RAW_READ)?
+	                 DMA_MODE_READ : DMA_MODE_WRITE);
+	fd_set_dma_addr(virt_to_bus(raw_cmd->kernel_data));
+	fd_set_dma_count(raw_cmd->length);
+	fd_enable_dma();
 	sti();
 	floppy_disable_hlt();
 }
@@ -1114,12 +1089,12 @@ static int output_byte(char byte)
 	if (FDCS->reset)
 		return -1;
 	for(counter = 0 ; counter < 10000 && !FDCS->reset ; counter++) {
-		rstatus = inb_p(FD_STATUS);
+		rstatus = fd_inb(FD_STATUS);
 		status =  rstatus &(STATUS_READY|STATUS_DIR|STATUS_DMA);
 		if (!(status & STATUS_READY))
 			continue;
 		if (status == STATUS_READY){
-			outb_p(byte,FD_DATA);
+			fd_outb(byte,FD_DATA);
 
 #ifdef CONFIG_FLOPPY_SANITY
 			output_log[output_log_pos].data = byte;
@@ -1147,7 +1122,7 @@ static int result(void)
 	if (FDCS->reset)
 		return -1;
 	for (counter = 0 ; counter < 10000 && !FDCS->reset ; counter++) {
-		status = inb_p(FD_STATUS)&
+		status = fd_inb(FD_STATUS)&
 			(STATUS_DIR|STATUS_READY|STATUS_BUSY|STATUS_DMA);
 		if (!(status & STATUS_READY))
 			continue;
@@ -1165,7 +1140,7 @@ static int result(void)
 				DPRINT("floppy_stat reply overrun\n");
 				break;
 			}
-			reply_buffer[i++] = inb_p(FD_DATA);
+			reply_buffer[i++] = fd_inb(FD_DATA);
 		}
 	}
 	FDCS->reset = 1;
@@ -1321,7 +1296,7 @@ static int fdc_dtr(void)
 		return 0;
 
 	/* Set dtr */
-	outb_p(raw_cmd->rate, FD_DCR);
+	fd_outb(raw_cmd->rate, FD_DCR);
 
 	/* TODO: some FDC/drive combinations (C&T 82C711 with TEAC 1.2MB)
 	 * need a stabilization period of several milliseconds to be
@@ -1751,11 +1726,11 @@ static void reset_fdc(void)
 	FDCS->reset = 0;
 	reset_fdc_info(0);
 	if ( FDCS->version >= FDC_82077 )
-		outb_p(0x80 | ( FDCS->dtr &3), FD_STATUS);
+		fd_outb(0x80 | ( FDCS->dtr &3), FD_STATUS);
 	else {
-		outb_p(FDCS->dor & ~0x04, FD_DOR);
+		fd_outb(FDCS->dor & ~0x04, FD_DOR);
 		udelay(FD_RESET_DELAY);
-		outb(FDCS->dor, FD_DOR);
+		fd_outb(FDCS->dor, FD_DOR);
 	}
 }
 
@@ -1794,12 +1769,12 @@ void show_floppy(void)
 	for(i=0; i<N_FDC; i++){
 		if(FDCS->address != -1){
 			printk("dor %d = %x\n", i, fdc_state[i].dor );
-			outb_p(fdc_state[i].address+2, fdc_state[i].dor);
+			fd_outb(fdc_state[i].address+2, fdc_state[i].dor);
 			udelay(1000); /* maybe we'll catch an interrupt... */
 		}
 	}
 #endif
-	printk("status=%x\n", inb_p(FD_STATUS));
+	printk("status=%x\n", fd_inb(FD_STATUS));
 	printk("fdc_busy=%d\n", fdc_busy);
 	if( DEVICE_INTR)
 		printk("DEVICE_INTR=%p\n", DEVICE_INTR);
@@ -1828,7 +1803,7 @@ static void floppy_shutdown(void)
 	sti();
 
 	floppy_enable_hlt();
-	disable_dma(FLOPPY_DMA);
+	fd_disable_dma();
 	/* avoid dma going to a random drive after shutdown */
 
 	if(!initialising)
@@ -2411,10 +2386,14 @@ static void copy_buffer(int ssize, int max_sector, int max_sector_2)
 		if ( ((unsigned long)buffer) % 512 )
 			DPRINT1("%p buffer not aligned\n", buffer);
 #endif
-		if ( CT(COMMAND) == FD_READ )
+		if ( CT(COMMAND) == FD_READ ) {
+			fd_cacheflush(dma_buffer, size);
 			memcpy( buffer, dma_buffer, size);
-		else
+		}	
+		else {
 			memcpy( dma_buffer, buffer, size);
+			fd_cacheflush(dma_buffer, size);
+		}	
 		remaining -= size;
 		if ( !remaining)
 			break;
@@ -2862,6 +2841,9 @@ static int fd_copyout(void *param, volatile void *address, int size)
 	i = verify_area(VERIFY_WRITE,param,size);
 	if (i)
 		return i;
+	fd_cacheflush(address, size);		/* is this necessary ??? */
+			/* Ralf: Yes; only the l2 cache is completly chipset
+			   controlled */
 	memcpy_tofs(param,(void *) address, size);
 	return 0;
 }
@@ -3920,6 +3902,8 @@ int floppy_init(void)
 	initialising=0;
 	if(have_no_fdc)
 		unregister_blkdev(MAJOR_NR,"fd");
+	else
+		virtual_dma_init();
 	return have_no_fdc;
 }
 
@@ -3939,28 +3923,27 @@ static int floppy_grab_irq_and_dma(void)
 		if(FDCS->address != -1){
 			fdc = i;
 			reset_fdc_info(1);
-			outb_p(FDCS->dor, FD_DOR);
+			fd_outb(FDCS->dor, FD_DOR);
 		}
 	}
 	set_dor(0, ~0, 8);  /* avoid immediate interrupt */
 
-	if (request_irq(FLOPPY_IRQ, floppy_interrupt,
-			SA_INTERRUPT|SA_SAMPLE_RANDOM, "floppy")) {
+	if (fd_request_irq()) {
 		DPRINT1("Unable to grab IRQ%d for the floppy driver\n",
 			FLOPPY_IRQ);
 		return -1;
 	}
-	if (request_dma(FLOPPY_DMA,"floppy")) {
+	if (fd_request_dma()) {
 		DPRINT1("Unable to grab DMA%d for the floppy driver\n",
 			FLOPPY_DMA);
-		free_irq(FLOPPY_IRQ);
+		fd_free_irq();
 		return -1;
 	}
 	for(fdc = 0; fdc < N_FDC ; fdc++)
 		if(FDCS->address != -1)
-			outb_p(FDCS->dor, FD_DOR);
+			fd_outb(FDCS->dor, FD_DOR);
 	fdc = 0;
-	enable_irq(FLOPPY_IRQ);
+	fd_enable_irq();
 	return 0;
 }
 
@@ -3981,10 +3964,10 @@ static void floppy_release_irq_and_dma(void)
 #ifdef FD_MODULE
 	MOD_DEC_USE_COUNT;
 #endif
-	disable_dma(FLOPPY_DMA);
-	free_dma(FLOPPY_DMA);
-	disable_irq(FLOPPY_IRQ);
-	free_irq(FLOPPY_IRQ);
+	fd_disable_dma();
+	fd_free_dma();
+	fd_disable_irq();
+	fd_free_irq();
 
 	set_dor(0, ~0, 8);
 #if N_FDC > 1

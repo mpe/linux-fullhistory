@@ -621,7 +621,11 @@ load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 			if(k > start_code) start_code = k;
 			k = elf_ppnt->p_vaddr + elf_ppnt->p_filesz;
 			if(k > elf_bss) elf_bss = k;
+#if 1
 			if((elf_ppnt->p_flags | PF_W) && end_code <  k)
+#else
+			if( !(elf_ppnt->p_flags & PF_W) && end_code <  k)
+#endif
 				end_code = k; 
 			if(end_data < k) end_data = k; 
 			k = elf_ppnt->p_vaddr + elf_ppnt->p_memsz;

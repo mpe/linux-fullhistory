@@ -100,6 +100,7 @@
 #include <linux/notifier.h>
 #include <linux/proc_fs.h>
 #include <linux/stat.h>
+#include <linux/firewall.h>
 
 #include <net/ip.h>
 #include <net/arp.h>
@@ -1367,11 +1368,22 @@ static int ax25_rcv(struct sk_buff *skb, struct device *dev, ax25_address *dev_a
 	/*
 	 *	Process the AX.25/LAPB frame.
 	 */
+	 
 	skb->h.raw = skb->data;
+	
+#ifdef CONFIG_FIREWALL
+	
+	if(call_in_firewall(PF_AX25, skb, skb->h.raw)!=FW_ACCEPT)
+	{
+		kfree_skb(skb, FREE_READ);
+		return 0;
+	}
+#endif	
 
 	/*
 	 *	Parse the address header.
 	 */
+	 
 	if (ax25_parse_addr(skb->data, skb->len, &src, &dest, &dp, &type) == NULL) {
 		kfree_skb(skb, FREE_READ);
 		return 0;
@@ -1386,7 +1398,8 @@ static int ax25_rcv(struct sk_buff *skb, struct device *dev, ax25_address *dev_a
 	 *	Ours perhaps ?
 	 */
 	if (dp.lastrepeat + 1 < dp.ndigi) {		/* Not yet digipeated completely */
-		if (ax25cmp(&dp.calls[dp.lastrepeat + 1], dev_addr) == 0) {
+		if (ax25cmp(&dp.calls[dp.lastrepeat + 1], dev_addr) == 0) 
+		{
 			struct device *dev_out = dev;
 
 			/* We are the digipeater. Mark ourselves as repeated
@@ -1394,8 +1407,10 @@ static int ax25_rcv(struct sk_buff *skb, struct device *dev, ax25_address *dev_a
 			dp.lastrepeat++;
 			dp.repeated[(int)dp.lastrepeat] = 1;
 
-			if (ax25_dev_get_value(dev, AX25_VALUES_DIGI) & AX25_DIGI_XBAND) {
-				while (dp.lastrepeat + 1 < dp.ndigi) {
+			if (ax25_dev_get_value(dev, AX25_VALUES_DIGI) & AX25_DIGI_XBAND) 
+			{
+				while (dp.lastrepeat + 1 < dp.ndigi) 
+				{
 					struct device *dev_scan;
 					if ((dev_scan = ax25rtr_get_dev(&dp.calls[dp.lastrepeat + 1])) == NULL)
 						break;
@@ -1411,6 +1426,13 @@ static int ax25_rcv(struct sk_buff *skb, struct device *dev, ax25_address *dev_a
 				kfree_skb(skb, FREE_READ);
 
 			build_ax25_addr(skb->data, &src, &dest, &dp, type, MODULUS);
+#ifdef CONFIG_FIREWALL
+			if(call_fw_firewall(PF_AX25, skb,skb->data)!=FW_ACCEPT)
+			{
+				kfree_skb(skb, FREE_READ);
+				return 0;
+			}
+#endif						
 			skb->arp = 1;
 			ax25_queue_xmit(skb, dev_out, SOPRI_NORMAL);
 		} else {
@@ -2191,21 +2213,34 @@ void ax25_proto_init(struct net_proto *pro)
 		ax25_cs_get_info
 	});
 
-	printk("G4KLX/GW4PTS AX.25 for Linux. Version 0.30 ALPHA for Linux NET3.031 (Linux 1.3.25)\n");
+	printk("G4KLX/GW4PTS AX.25 for Linux. Version 0.30 BETA for Linux NET3.032 (Linux 1.3.35)\n");
 }
 
 /*
  *	A small shim to dev_queue_xmit to handle the difference between
  *	KISS AX.25 and BPQ AX.25.
  */
+
 void ax25_queue_xmit(struct sk_buff *skb, struct device *dev, int pri)
 {
 	static char bcast_addr[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 	unsigned char *ptr;
 	int size;
+	
+#ifdef CONFIG_FIREWALL
 
-	if (dev->type == ARPHRD_ETHER) {
-		if (skb_headroom(skb) < AX25_BPQ_HEADER_LEN) {
+	if(call_out_firewall(PF_AX25, skb, skb->data)!=FW_ACCEPT)
+	{
+		kfree_skb(skb, FREE_WRITE);
+		return;
+	}	
+	
+#endif	
+
+	if (dev->type == ARPHRD_ETHER) 
+	{
+		if (skb_headroom(skb) < AX25_BPQ_HEADER_LEN) 
+		{
 			printk("ax25_queue_xmit: not enough space to add BPQ Ether header\n");
 			skb->free = 1;
 			kfree_skb(skb, FREE_WRITE);
@@ -2220,9 +2255,10 @@ void ax25_queue_xmit(struct sk_buff *skb, struct device *dev, int pri)
 		*ptr++ = (size + 5) / 256;
 
 		dev->hard_header(skb, dev, ETH_P_BPQ, bcast_addr, NULL, 0);
-	} else {
+	} 
+	else 
+	{
 		ptr = skb_push(skb, 1);
-		
 		*ptr++ = 0;			/* KISS */
 	}
 
@@ -2297,9 +2333,11 @@ int ax25_rebuild_header(unsigned char *bp, struct device *dev, unsigned long des
   	if (arp_find(bp + 1, dest, dev, dev->pa_addr, skb))
   		return 1;
 
-	if (bp[16] == AX25_P_IP) {
+	if (bp[16] == AX25_P_IP) 
+	{
 		mode = ax25_ip_mode_get((ax25_address *)(bp + 1), dev);
-		if (mode == 'V' || mode == 'v' || (mode == ' ' && ax25_dev_get_value(dev, AX25_VALUES_IPDEFMODE) == 'V')) {
+		if (mode == 'V' || mode == 'v' || (mode == ' ' && ax25_dev_get_value(dev, AX25_VALUES_IPDEFMODE) == 'V')) 
+		{
 			skb_device_unlock(skb);
 			skb_pull(skb, AX25_HEADER_LEN - 1);	/* Keep PID */
 			ax25_send_frame(skb, (ax25_address *)(bp + 8), (ax25_address *)(bp + 1), NULL, dev);

@@ -25,7 +25,7 @@
 #include <asm/segment.h>
 #include <asm/system.h>
 
-#include "../block/blk.h"
+#include <linux/blk.h>
 #include "scsi.h"
 #include "hosts.h"
 #include "scsi_ioctl.h"

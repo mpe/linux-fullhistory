@@ -104,4 +104,3 @@ void memcpy_fromiovec(unsigned char *kdata, struct iovec *iov, int len)
 		iov++;
 	}
 }
-

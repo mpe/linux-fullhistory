@@ -41,7 +41,9 @@ struct condition
   union var variable;
 };
 
-#define GLOBAL_WRITTEN 1
+#define GLOBAL_WRITTEN  1
+#define CFG_DUP 	2
+
 struct kconfig
 {
   struct kconfig * next;

@@ -80,7 +80,7 @@ poll_def_tmr (unsigned long dummy)
 	  if (curr_ticks >= next_event_time)
 	    {
 	      next_event_time = 0xffffffff;
-	      sequencer_timer ();
+	      sequencer_timer (0);
 	    }
 	}
     }

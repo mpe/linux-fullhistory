@@ -13,7 +13,7 @@
 
 #include <asm/segment.h>
 
-#include "../block/blk.h"
+#include <linux/blk.h>
 #include "scsi.h"
 #include "scsi_ioctl.h"
 #include "hosts.h"

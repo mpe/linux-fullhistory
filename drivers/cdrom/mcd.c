@@ -94,7 +94,7 @@
 #include <asm/segment.h>
 
 #define MAJOR_NR MITSUMI_CDROM_MAJOR
-#include "blk.h"
+#include <linux/blk.h>
 #define mcd_port mcd    /* for compatible parameter passing with "insmod" */
 #include <linux/mcd.h>
 

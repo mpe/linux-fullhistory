@@ -854,26 +854,26 @@ slave_t *
 eql_remove_slave(slave_queue_t *queue, slave_t *slave)
 {
   slave_t *prev;
-  slave_t *current;
+  slave_t *curr;
 
   cli ();
 
   prev = queue->head;
-  current = queue->head->next;
-  while (current != slave && 
-	 current->dev != 0 )
+  curr = queue->head->next;
+  while (curr != slave && 
+	 curr->dev != 0 )
     {
 /* printk ("%s: remove_slave; searching...\n", queue->master_dev->name); */
-      prev = current;
-      current = current->next;
+      prev = curr;
+      curr = curr->next;
     }
 
-  if (current == slave)
+  if (curr == slave)
     {
-      prev->next = current->next;
+      prev->next = curr->next;
       queue->num_slaves--;
       sti();
-      return current;
+      return curr;
     }
 
   sti ();
@@ -914,7 +914,7 @@ int
 eql_remove_slave_dev(slave_queue_t *queue, struct device *dev)
 {
   slave_t *prev;
-  slave_t *current;
+  slave_t *curr;
   slave_t *target;
 
   target = eql_find_slave_dev (queue, dev);
@@ -924,18 +924,18 @@ eql_remove_slave_dev(slave_queue_t *queue, struct device *dev)
       cli ();
 
       prev = queue->head;
-      current = prev->next;
-      while (current != target)
+      curr = prev->next;
+      while (curr != target)
 	{
-	  prev = current;
-	  current = current->next;
+	  prev = curr;
+	  curr = curr->next;
 	}
-      prev->next = current->next;
+      prev->next = curr->next;
       queue->num_slaves--;
 
       sti ();
 
-      eql_delete_slave (current);
+      eql_delete_slave (curr);
       return 0;
     }
   return 1;

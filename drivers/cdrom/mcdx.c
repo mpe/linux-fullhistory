@@ -78,7 +78,7 @@ char kernel_version[] = UTS_RELEASE;
 #endif
 
 #define MAJOR_NR MITSUMI_X_CDROM_MAJOR
-#include "blk.h"
+#include <linux/blk.h>
 #define	mcdx_drive_map mcdx     /* for compatible parameter passing with "insmod" */
 #include <linux/mcdx.h>
 

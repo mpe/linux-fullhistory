@@ -116,7 +116,7 @@
 #include <asm/io.h>
 #include <linux/ioport.h>
 #include <linux/proc_fs.h>
-#include "../block/blk.h"
+#include <linux/blk.h>
 #include "scsi.h"
 #include "hosts.h"
 #include "sd.h"

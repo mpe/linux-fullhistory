@@ -75,7 +75,7 @@
 
 #define MAJOR_NR OPTICS_CDROM_MAJOR
 
-# include "blk.h"
+# include <linux/blk.h>
 #define optcd_port optcd	/* Needed for the modutils. */
 # include <linux/optcd.h>
 

@@ -33,7 +33,7 @@
 #include <linux/proc_fs.h>
 #include <linux/errno.h>
 #include <linux/stat.h>
-#include "../block/blk.h"
+#include <linux/blk.h>
 #include "scsi.h"
 #include "hosts.h"
 

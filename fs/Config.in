@@ -1,0 +1,22 @@
+#
+# Filesystem configuration
+#
+mainmenu_option next_comment
+comment 'Filesystems'
+
+tristate 'Standard (minix) fs support' CONFIG_MINIX_FS
+tristate 'Extended fs support' CONFIG_EXT_FS
+tristate 'Second extended fs support' CONFIG_EXT2_FS
+tristate 'xiafs filesystem support' CONFIG_XIA_FS
+tristate 'msdos fs support' CONFIG_MSDOS_FS
+if [ "$CONFIG_MSDOS_FS" != "n" ]; then
+  tristate 'umsdos: Unix like fs on top of std MSDOS FAT fs' CONFIG_UMSDOS_FS
+fi
+bool '/proc filesystem support' CONFIG_PROC_FS
+if [ "$CONFIG_INET" = "y" ]; then
+  tristate 'NFS filesystem support' CONFIG_NFS_FS
+fi
+tristate 'ISO9660 cdrom filesystem support' CONFIG_ISO9660_FS
+tristate 'OS/2 HPFS filesystem support (read only)' CONFIG_HPFS_FS
+tristate 'System V and Coherent filesystem support' CONFIG_SYSV_FS
+tristate 'SMB filesystem (to mount WfW shares etc..) support' CONFIG_SMB_FS

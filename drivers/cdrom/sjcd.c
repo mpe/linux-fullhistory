@@ -78,7 +78,7 @@ char kernel_version[]= UTS_RELEASE;
 #include <asm/segment.h>
 
 #define MAJOR_NR SANYO_CDROM_MAJOR
-#include "blk.h"
+#include <linux/blk.h>
 #include <linux/sjcd.h>
 
 /* Some (Media)Magic */

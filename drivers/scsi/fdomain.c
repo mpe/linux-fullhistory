@@ -198,7 +198,7 @@
 
 #include <linux/sched.h>
 #include <asm/io.h>
-#include "../block/blk.h"
+#include <linux/blk.h>
 #include "scsi.h"
 #include "hosts.h"
 #include "fdomain.h"

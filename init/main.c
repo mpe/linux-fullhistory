@@ -460,9 +460,19 @@ static void smp_init(void)
 		current_set[i]=task[i];
 		current_set[i]->processor=i;
 	}
+}		
+
+/*
+ *	The autoprobe routines assume CPU#0 on the i386
+ *	so we don't actually set the game in motion until
+ *	they are finished.
+ */
+ 
+static void smp_begin(void)
+{
 	smp_threads_ready=1;
 	smp_commence();
-}		
+}
 	
 #endif
 
@@ -587,6 +597,15 @@ static int init(void * unused)
 	int pid,i;
 
 	setup();
+
+#ifdef CONFIG_SMP	
+	/*
+	 *	With the devices probed and setup we can
+	 *	now enter SMP mode.
+	 */
+	
+	smp_begin();
+#endif	
 
 	#ifdef CONFIG_UMSDOS_FS
 	{

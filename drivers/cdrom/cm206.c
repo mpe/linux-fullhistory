@@ -106,7 +106,7 @@ char kernel_version[]=UTS_RELEASE;
 #include <asm/io.h>
 
 #define MAJOR_NR CM206_CDROM_MAJOR
-#include "blk.h"
+#include <linux/blk.h>
 #include <linux/cm206.h>
 
 /* This variable defines whether or not to probe for adapter base port 

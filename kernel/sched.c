@@ -167,6 +167,54 @@ static void process_timeout(unsigned long __data)
 }
 
 /*
+ * This is the function that decides how desireable a process is..
+ * You can weigh different processes against each other depending
+ * on what CPU they've run on lately etc to try to handle cache
+ * and TLB miss penalties.
+ *
+ * Return values:
+ *	 -1000: never select this
+ *	     0: out of time, recalculate counters (but it might still be
+ *		selected)
+ *	   +ve: "goodness" value (the larger, the better)
+ *	 +1000: realtime process, select this.
+ */
+static inline int goodness(struct task_struct * p, int this_cpu)
+{
+	int weight;
+
+#ifdef CONFIG_SMP	
+	/* We are not permitted to run a task someone else is running */
+	if (p->processor != NO_PROC_ID)
+		return -1000;
+#endif
+
+	/*
+	 * Give the process a first-approximation goodness value
+	 * according to the number of clock-ticks it has left.
+	 *
+	 * Don't do any other calculations if the time slice is
+	 * over..
+	 */
+	weight = p->counter;
+	if (weight) {
+
+#ifdef CONFIG_SMP
+		/* Give a largish advantage to the same processor...   */
+		/* (this is equivalent to penalizing other processors) */
+		if (p->last_processor == this_cpu)
+			weight += PROC_CHANGE_PENALTY;
+#endif
+
+		/* .. and a slight advantage to the current process */
+		if (p == current)
+			weight += 1;
+	}
+
+	return weight;
+}
+
+/*
  *  'schedule()' is the scheduler function. It's a very simple and nice
  * scheduler: it's not perfect, but certainly works for most things.
  *
@@ -182,12 +230,7 @@ asmlinkage void schedule(void)
 	struct task_struct * p;
 	struct task_struct * next;
 	unsigned long timeout = 0;
-	
-#ifdef CONFIG_SMP_DEBUG
-	int proc=smp_processor_id();
-	if(active_kernel_processor!=proc)
-		panic("active kernel processor set wrongly! %d not %d\n", active_kernel_processor,proc);
-#endif
+	int this_cpu=smp_processor_id();
 
 /* check alarm, wake up any interruptible tasks that have got a signal */
 
@@ -234,15 +277,9 @@ asmlinkage void schedule(void)
 	c = -1000;
 	next = &init_task;
 	while (p != &init_task) {
-#ifdef CONFIG_SMP	
-		/* We are not permitted to run a task someone else is running */
-		if (p->processor != NO_PROC_ID) {
-			p = p->next_run;
-			continue;
-		}
-#endif		
-		if (p->counter > c)
-			c = p->counter, next = p;
+		int weight = goodness(p, this_cpu);
+		if (weight > c)
+			c = weight, next = p;
 		p = p->next_run;
 	}
 
@@ -262,7 +299,8 @@ asmlinkage void schedule(void)
 	 *	Allocate process to CPU
 	 */
 	 
-	 next->processor = smp_processor_id();
+	 next->processor = this_cpu;
+	 next->last_processor = this_cpu;
 	 
 #endif	 
 	if (current != next) {
@@ -554,6 +592,7 @@ static void second_overflow(void)
 	break;
 
     case TIME_OOP:
+
 	time_state = TIME_WAIT;
 	break;
 
@@ -723,7 +762,7 @@ void do_timer(struct pt_regs * regs)
 	if (user_mode(regs)) {
 		current->utime++;
 		if (current->pid) {
-			if (current->priority < 15)
+			if (current->priority < DEF_PRIORITY)
 				kstat.cpu_nice++;
 			else
 				kstat.cpu_user++;
@@ -837,17 +876,36 @@ asmlinkage int sys_getegid(void)
 	return current->egid;
 }
 
-asmlinkage int sys_nice(long increment)
+asmlinkage int sys_nice(int increment)
 {
-	int newprio;
+	unsigned long newprio;
+	int increase = 0;
 
-	if (increment < 0 && !suser())
-		return -EPERM;
+	newprio = increment;
+	if (increment < 0) {
+		if (!suser())
+			return -EPERM;
+		newprio = -increment;
+		increase = 1;
+	}
+	if (newprio > 40)
+		newprio = 40;
+	/*
+	 * do a "normalization" of the priority (traditionally
+	 * unix nice values are -20..20, linux doesn't really
+	 * use that kind of thing, but uses the length of the
+	 * timeslice instead (default 150 msec). The rounding is
+	 * why we want to avoid negative values.
+	 */
+	newprio = (newprio * DEF_PRIORITY + 10) / 20;
+	increment = newprio;
+	if (increase)
+		increment = -increment;
 	newprio = current->priority - increment;
 	if (newprio < 1)
 		newprio = 1;
-	if (newprio > 35)
-		newprio = 35;
+	if (newprio > DEF_PRIORITY*2)
+		newprio = DEF_PRIORITY*2;
 	current->priority = newprio;
 	return 0;
 }

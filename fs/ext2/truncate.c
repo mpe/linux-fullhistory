@@ -27,9 +27,21 @@
 #include <linux/locks.h>
 #include <linux/string.h>
 
+#if 0
+
+/*
+ * Secure deletion currently doesn't work. It interacts very badly
+ * with buffers shared with memory mappings, and for that reason
+ * can't be done in the truncate() routines. It should instead be
+ * done separately in "release()" before calling the truncate routines
+ * that will release the actual file blocks.
+ *
+ *		Linus
+ */
 static int ext2_secrm_seed = 152;	/* Random generator base */
 
 #define RANDOM_INT (ext2_secrm_seed = ext2_secrm_seed * 69069l +1)
+#endif
 
 /*
  * Truncate has the most races in the whole filesystem: coding it is
@@ -63,12 +75,8 @@ repeat:
 		tmp = *p;
 		if (!tmp)
 			continue;
-		if (inode->u.ext2_i.i_flags & EXT2_SECRM_FL)
-			bh = getblk (inode->i_dev, tmp,
+		bh = get_hash_table (inode->i_dev, tmp,
 				     inode->i_sb->s_blocksize);
-		else
-			bh = get_hash_table (inode->i_dev, tmp,
-					     inode->i_sb->s_blocksize);
 		if (i < direct_block) {
 			brelse (bh);
 			goto repeat;
@@ -81,15 +89,7 @@ repeat:
 		*p = 0;
 		inode->i_blocks -= blocks;
 		inode->i_dirt = 1;
-		if (inode->u.ext2_i.i_flags & EXT2_SECRM_FL) {
-			memset(bh->b_data, RANDOM_INT, inode->i_sb->s_blocksize);
-			mark_buffer_dirty(bh, 1);
-		}
-		else if (bh) {
-			mark_buffer_clean(bh);
-			bh->b_reuse = 1;
-		}
-		brelse (bh);
+		bforget(bh);
 		if (free_count == 0) {
 			block_to_free = tmp;
 			free_count++;
@@ -143,12 +143,8 @@ repeat:
 		tmp = *ind;
 		if (!tmp)
 			continue;
-		if (inode->u.ext2_i.i_flags & EXT2_SECRM_FL)
-			bh = getblk (inode->i_dev, tmp,
+		bh = get_hash_table (inode->i_dev, tmp,
 				     inode->i_sb->s_blocksize);
-		else
-			bh = get_hash_table (inode->i_dev, tmp,
-					     inode->i_sb->s_blocksize);
 		if (i < indirect_block) {
 			brelse (bh);
 			goto repeat;
@@ -160,15 +156,7 @@ repeat:
 		}
 		*ind = 0;
 		mark_buffer_dirty(ind_bh, 1);
-		if (inode->u.ext2_i.i_flags & EXT2_SECRM_FL) {
-			memset(bh->b_data, RANDOM_INT, inode->i_sb->s_blocksize);
-			mark_buffer_dirty(bh, 1);
-		}
-		else if (bh) {
-			mark_buffer_clean(bh);
-			bh->b_reuse = 1;
-		}
-		brelse (bh);
+		bforget(bh);
 		if (free_count == 0) {
 			block_to_free = tmp;
 			free_count++;

@@ -47,6 +47,9 @@ struct cyclades_monitor {
  * For definitions of the flags field, see tty.h
  */
 
+#include <linux/termios.h>
+#include <linux/tqueue.h>
+
 struct cyclades_port {
 	int                     magic;
 	int                     type;

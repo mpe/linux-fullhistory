@@ -1,0 +1,170 @@
+#
+# Automatically generated make config: don't edit
+#
+
+#
+# General setup
+#
+CONFIG_NATIVE=y
+CONFIG_ALPHA_CABRIOLET=y
+# CONFIG_ALPHA_SRM is not set
+CONFIG_PCI=y
+CONFIG_ALPHA_APECS=y
+CONFIG_PCI_OPTIMIZE=y
+CONFIG_NET=y
+CONFIG_SYSVIPC=y
+CONFIG_BINFMT_ELF=y
+
+#
+# Loadable module support
+#
+# CONFIG_MODVERSIONS is not set
+
+#
+# block devices
+#
+CONFIG_BLK_DEV_FD=y
+CONFIG_ST506=y
+
+#
+# Please see drivers/block/README.ide for help/info on IDE drives
+#
+# CONFIG_BLK_DEV_HD is not set
+CONFIG_BLK_DEV_IDE=y
+# CONFIG_BLK_DEV_TRITON is not set
+# CONFIG_BLK_DEV_IDECD is not set
+# CONFIG_BLK_DEV_XD is not set
+
+#
+# Networking options
+#
+# CONFIG_FIREWALL is not set
+CONFIG_INET=y
+# CONFIG_IP_FORWARD is not set
+# CONFIG_IP_MULTICAST is not set
+# CONFIG_IP_ACCT is not set
+# CONFIG_NET_IPIP is not set
+
+#
+# (it is safe to leave these untouched)
+#
+# CONFIG_INET_PCTCP is not set
+# CONFIG_INET_RARP is not set
+CONFIG_INET_SNARL=y
+# CONFIG_TCP_NAGLE_OFF is not set
+CONFIG_IP_NOSR=y
+CONFIG_SKB_LARGE=y
+# CONFIG_IPX is not set
+# CONFIG_ATALK is not set
+# CONFIG_AX25 is not set
+# CONFIG_NETLINK is not set
+
+#
+# SCSI support
+#
+CONFIG_SCSI=y
+
+#
+# SCSI support type (disk, tape, CDrom)
+#
+CONFIG_BLK_DEV_SD=y
+# CONFIG_CHR_DEV_ST is not set
+CONFIG_BLK_DEV_SR=y
+# CONFIG_CHR_DEV_SG is not set
+
+#
+# Some SCSI devices (e.g. CD jukebox) support multiple LUNs
+#
+# CONFIG_SCSI_MULTI_LUN is not set
+CONFIG_SCSI_CONSTANTS=y
+
+#
+# SCSI low-level drivers
+#
+# CONFIG_SCSI_AHA152X is not set
+# CONFIG_SCSI_AHA1542 is not set
+# CONFIG_SCSI_AHA1740 is not set
+# CONFIG_SCSI_AIC7XXX is not set
+# CONFIG_SCSI_BUSLOGIC is not set
+# CONFIG_SCSI_EATA_DMA is not set
+# CONFIG_SCSI_EATA_PIO is not set
+# CONFIG_SCSI_U14_34F is not set
+# CONFIG_SCSI_FUTURE_DOMAIN is not set
+# CONFIG_SCSI_GENERIC_NCR5380 is not set
+CONFIG_SCSI_NCR53C7xx=y
+# CONFIG_SCSI_IN2000 is not set
+# CONFIG_SCSI_PAS16 is not set
+# CONFIG_SCSI_QLOGIC is not set
+# CONFIG_SCSI_SEAGATE is not set
+# CONFIG_SCSI_T128 is not set
+# CONFIG_SCSI_ULTRASTOR is not set
+# CONFIG_SCSI_7000FASST is not set
+# CONFIG_SCSI_EATA is not set
+# CONFIG_SCSI_NCR53C406A is not set
+
+#
+# Network device support
+#
+CONFIG_NETDEVICES=y
+CONFIG_DUMMY=m
+# CONFIG_SLIP is not set
+# CONFIG_PPP is not set
+# CONFIG_SCC is not set
+# CONFIG_PLIP is not set
+# CONFIG_EQUALIZER is not set
+# CONFIG_NET_ALPHA is not set
+# CONFIG_NET_VENDOR_SMC is not set
+# CONFIG_LANCE is not set
+# CONFIG_NET_VENDOR_3COM is not set
+# CONFIG_NET_ISA is not set
+CONFIG_NET_EISA=y
+# CONFIG_APRICOT is not set
+CONFIG_DE4X5=y
+# CONFIG_ZNET is not set
+# CONFIG_NET_POCKET is not set
+# CONFIG_TR is not set
+# CONFIG_ARCNET is not set
+
+#
+# CD-ROM drivers (not for SCSI or IDE/ATAPI drives)
+#
+# CONFIG_CD_NO_IDESCSI is not set
+
+#
+# Filesystems
+#
+# CONFIG_MINIX_FS is not set
+# CONFIG_EXT_FS is not set
+CONFIG_EXT2_FS=y
+# CONFIG_XIA_FS is not set
+CONFIG_MSDOS_FS=y
+# CONFIG_UMSDOS_FS is not set
+CONFIG_PROC_FS=y
+# CONFIG_NFS_FS is not set
+CONFIG_ISO9660_FS=y
+# CONFIG_HPFS_FS is not set
+# CONFIG_SYSV_FS is not set
+# CONFIG_SMB_FS is not set
+
+#
+# character devices
+#
+# CONFIG_CYCLADES is not set
+# CONFIG_STALDRV is not set
+# CONFIG_PRINTER is not set
+# CONFIG_BUSMOUSE is not set
+CONFIG_PSMOUSE=y
+# CONFIG_82C710_MOUSE is not set
+# CONFIG_MS_BUSMOUSE is not set
+# CONFIG_ATIXL_BUSMOUSE is not set
+# CONFIG_QIC02_TAPE is not set
+
+#
+# Sound
+#
+# CONFIG_SOUND is not set
+
+#
+# Kernel hacking
+#
+# CONFIG_PROFILE is not set
