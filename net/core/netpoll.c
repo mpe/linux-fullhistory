@@ -247,8 +247,9 @@ repeat:
 		return;
 	}
 
-	/* avoid ->poll recursion */
-	if(np->poll_owner == __smp_processor_id()) {
+	/* avoid recursion */
+	if(np->poll_owner == __smp_processor_id() ||
+	   np->dev->xmit_lock_owner == __smp_processor_id()) {
 		if (np->drop)
 			np->drop(skb);
 		else
