@@ -28,18 +28,6 @@
 #include <linux/i2c-sensor.h>
 
 
-/* Registers */
-#define ADM1021_SYSCTL_TEMP		1200
-#define ADM1021_SYSCTL_REMOTE_TEMP	1201
-#define ADM1021_SYSCTL_DIE_CODE		1202
-#define ADM1021_SYSCTL_ALARMS		1203
-
-#define ADM1021_ALARM_TEMP_HIGH		0x40
-#define ADM1021_ALARM_TEMP_LOW		0x20
-#define ADM1021_ALARM_RTEMP_HIGH	0x10
-#define ADM1021_ALARM_RTEMP_LOW		0x08
-#define ADM1021_ALARM_RTEMP_NA		0x04
-
 /* Addresses to scan */
 static unsigned short normal_i2c[] = { 0x18, 0x19, 0x1a,
 					0x29, 0x2a, 0x2b,
@@ -380,7 +368,7 @@ static struct adm1021_data *adm1021_update_device(struct device *dev)
 		data->remote_temp_input = adm1021_read_value(client, ADM1021_REG_REMOTE_TEMP);
 		data->remote_temp_max = adm1021_read_value(client, ADM1021_REG_REMOTE_TOS_R);
 		data->remote_temp_hyst = adm1021_read_value(client, ADM1021_REG_REMOTE_THYST_R);
-		data->alarms = adm1021_read_value(client, ADM1021_REG_STATUS) & 0xec;
+		data->alarms = adm1021_read_value(client, ADM1021_REG_STATUS) & 0x7c;
 		if (data->type == adm1021)
 			data->die_code = adm1021_read_value(client, ADM1021_REG_DIE_CODE);
 		if (data->type == adm1023) {

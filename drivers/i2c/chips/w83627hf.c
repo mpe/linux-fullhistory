@@ -304,7 +304,6 @@ struct w83627hf_data {
 	u32 beep_mask;		/* Register encoding, combined */
 	u8 beep_enable;		/* Boolean */
 	u8 pwm[3];		/* Register value */
-	u8 pwmenable[3];	/* bool */
 	u16 sens[3];		/* 782D/783S only.
 				   1 = pentium diode; 2 = 3904 diode;
 				   3000-5000 = thermistor beta.
@@ -1316,10 +1315,6 @@ static void w83627hf_init_client(struct i2c_client *client)
 		if ((type == w83697hf) && (i == 2))
 			break;
 	}
-
-	data->pwmenable[0] = 1;
-	data->pwmenable[1] = 1;
-	data->pwmenable[2] = 1;
 
 	if(init) {
 		/* Enable temp2 */

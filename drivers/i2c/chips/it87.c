@@ -734,10 +734,9 @@ int it87_detect(struct i2c_adapter *adapter, int address, int kind)
 			goto ERROR0;
 
 	/* Probe whether there is anything available on this address. Already
-	   done for SMBus clients */
+	   done for SMBus and Super-I/O clients */
 	if (kind < 0) {
-		if (is_isa) {
-
+		if (is_isa && !chip_type) {
 #define REALLY_SLOW_IO
 			/* We need the timeouts for at least some IT87-like chips. But only
 			   if we read 'undefined' registers. */
@@ -890,9 +889,9 @@ int it87_detect(struct i2c_adapter *adapter, int address, int kind)
 	}
 
 	if (data->type == it8712) {
+		data->vrm = i2c_which_vrm();
 		device_create_file_vrm(new_client);
 		device_create_file_vid(new_client);
-		data->vrm = i2c_which_vrm();
 	}
 
 	return 0;
@@ -1122,9 +1121,6 @@ static struct it87_data *it87_update_device(struct device *dev)
 			data->temp_low[i] =
 			    it87_read_value(client, IT87_REG_TEMP_LOW(i));
 		}
-
-		/* The 8705 does not have VID capability */
-		data->vid = 0x1f;
 
 		i = it87_read_value(client, IT87_REG_FAN_DIV);
 		data->fan_div[0] = i & 0x07;

@@ -1,8 +1,6 @@
-==================
-i2c-parport driver
-==================
+Kernel driver i2c-parport
 
-2004-07-06, Jean Delvare
+Author: Jean Delvare <khali@linux-fr.org> 
 
 This is a unified driver for several i2c-over-parallel-port adapters,
 such as the ones made by Philips, Velleman or ELV. This driver is
@@ -126,14 +124,14 @@ adapters do, so you won't even have to change the code.
 Similar (but different) drivers
 -------------------------------
 
-This driver is NOT the same as the i2c-pport driver found in the i2c package.
-The i2c-pport driver makes use of modern parallel port features so that
-you don't need additional electronics. It has other restrictions however, and
-was not ported to Linux 2.6 (yet).
+This driver is NOT the same as the i2c-pport driver found in the i2c
+package. The i2c-pport driver makes use of modern parallel port features so
+that you don't need additional electronics. It has other restrictions
+however, and was not ported to Linux 2.6 (yet).
 
 This driver is also NOT the same as the i2c-pcf-epp driver found in the
-lm_sensors package. The i2c-pcf-epp driver doesn't use the parallel port
-as an I2C bus directly. Instead, it uses it to control an external I2C bus
+lm_sensors package. The i2c-pcf-epp driver doesn't use the parallel port as
+an I2C bus directly. Instead, it uses it to control an external I2C bus
 master. That driver was not ported to Linux 2.6 (yet) either.
 
 

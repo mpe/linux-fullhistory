@@ -306,9 +306,6 @@ struct i2c_client_address_data {
 #define ANY_I2C_BUS		0xffff
 #define ANY_I2C_ISA_BUS		9191
 
-/* The length of the option lists */
-#define I2C_CLIENT_MAX_OPTS 48
-
 
 /* ----- functions exported by i2c.o */
 
@@ -526,6 +523,9 @@ union i2c_smbus_data {
 #define I2C_MAJOR	89		/* Device major number		*/
 
 /* These defines are used for probing i2c client addresses */
+/* The length of the option lists */
+#define I2C_CLIENT_MAX_OPTS 48
+
 /* Default fill of many variables */
 #define I2C_CLIENT_DEFAULTS {I2C_CLIENT_END, I2C_CLIENT_END, I2C_CLIENT_END, \
                           I2C_CLIENT_END, I2C_CLIENT_END, I2C_CLIENT_END, \
@@ -544,19 +544,12 @@ union i2c_smbus_data {
                           I2C_CLIENT_END, I2C_CLIENT_END, I2C_CLIENT_END, \
                           I2C_CLIENT_END, I2C_CLIENT_END, I2C_CLIENT_END}
 
-/* This is ugly. We need to evaluate I2C_CLIENT_MAX_OPTS before it is 
-   stringified */
-#define I2C_CLIENT_MODPARM_AUX1(x) "1-" #x "h"
-#define I2C_CLIENT_MODPARM_AUX(x) I2C_CLIENT_MODPARM_AUX1(x)
-#define I2C_CLIENT_MODPARM I2C_CLIENT_MODPARM_AUX(I2C_CLIENT_MAX_OPTS)
-
 /* I2C_CLIENT_MODULE_PARM creates a module parameter, and puts it in the
    module header */
 
 #define I2C_CLIENT_MODULE_PARM(var,desc) \
   static unsigned short var[I2C_CLIENT_MAX_OPTS] = I2C_CLIENT_DEFAULTS; \
   static unsigned int var##_num; \
-  /*MODULE_PARM(var,I2C_CLIENT_MODPARM);*/ \
   module_param_array(var, short, &var##_num, 0); \
   MODULE_PARM_DESC(var,desc)
 
