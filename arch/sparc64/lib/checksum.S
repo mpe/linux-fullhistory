@@ -266,7 +266,7 @@ cpc_end:
 	.globl	cpc_handler
 cpc_handler:
 	ldx	[%sp + 0x7ff + 128], %g1
-	ldub	[%g6 + AOFF_task_tss + AOFF_thread_current_ds], %g3
+	ldub	[%g6 + AOFF_task_thread + AOFF_thread_current_ds], %g3
 	sub	%g0, EFAULT, %g2
 	brnz,a,pt %g1, 1f
 	 st	%g2, [%g1]

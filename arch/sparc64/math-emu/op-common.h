@@ -207,7 +207,7 @@ do {								\
  * Main addition routine.  The input values should be cooked.
  */
 
-#define _FP_ADD(fs, wc, R, X, Y)					     \
+#define _FP_ADD_INTERNAL(fs, wc, R, X, Y, OP)				     \
 do {									     \
   switch (_FP_CLS_COMBINE(X##_c, Y##_c))				     \
   {									     \
@@ -284,7 +284,7 @@ do {									     \
     }									     \
 									     \
   case _FP_CLS_COMBINE(FP_CLS_NAN,FP_CLS_NAN):				     \
-    _FP_CHOOSENAN(fs, wc, R, X, Y);					     \
+    _FP_CHOOSENAN(fs, wc, R, X, Y, OP);					     \
     break;								     \
 									     \
   case _FP_CLS_COMBINE(FP_CLS_NORMAL,FP_CLS_ZERO):			     \
@@ -345,6 +345,13 @@ do {									     \
   }									     \
 } while (0)
 
+#define _FP_ADD(fs, wc, R, X, Y) _FP_ADD_INTERNAL(fs, wc, R, X, Y, '+')
+#define _FP_SUB(fs, wc, R, X, Y)					     \
+  do {									     \
+    if (Y##_c != FP_CLS_NAN) Y##_s ^= 1;				     \
+    _FP_ADD_INTERNAL(fs, wc, R, X, Y, '-');				     \
+  } while (0)
+
 
 /*
  * Main negation routine.  FIXME -- when we care about setting exception
@@ -382,7 +389,7 @@ do {							\
     break;						\
 							\
   case _FP_CLS_COMBINE(FP_CLS_NAN,FP_CLS_NAN):		\
-    _FP_CHOOSENAN(fs, wc, R, X, Y);			\
+    _FP_CHOOSENAN(fs, wc, R, X, Y, '*');		\
     break;						\
 							\
   case _FP_CLS_COMBINE(FP_CLS_NAN,FP_CLS_NORMAL):	\
@@ -440,7 +447,7 @@ do {							\
     break;						\
 							\
   case _FP_CLS_COMBINE(FP_CLS_NAN,FP_CLS_NAN):		\
-    _FP_CHOOSENAN(fs, wc, R, X, Y);			\
+    _FP_CHOOSENAN(fs, wc, R, X, Y, '/');		\
     break;						\
 							\
   case _FP_CLS_COMBINE(FP_CLS_NAN,FP_CLS_NORMAL):	\

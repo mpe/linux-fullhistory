@@ -386,7 +386,7 @@ sun_mouse_read(struct file *file, char *buffer,
 		
 		while (p < end && !queue_empty ()){
 #ifdef CONFIG_SPARC32_COMPAT
-			if (current->tss.flags & SPARC_FLAG_32BIT) {
+			if (current->thread.flags & SPARC_FLAG_32BIT) {
 				Firm_event *q = get_from_queue();
 				
 				copy_to_user_ret((Firm_event *)p, q, 

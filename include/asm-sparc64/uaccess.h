@@ -1,4 +1,4 @@
-/* $Id: uaccess.h,v 1.30 1999/05/25 16:53:32 jj Exp $ */
+/* $Id: uaccess.h,v 1.31 1999/07/30 09:31:24 davem Exp $ */
 #ifndef _ASM_UACCESS_H
 #define _ASM_UACCESS_H
 
@@ -36,14 +36,14 @@
 #define VERIFY_READ	0
 #define VERIFY_WRITE	1
 
-#define get_fs() (current->tss.current_ds)
+#define get_fs() (current->thread.current_ds)
 #define get_ds() (KERNEL_DS)
 
 #define segment_eq(a,b)  ((a).seg == (b).seg)
 
 #define set_fs(val)								\
 do {										\
-	current->tss.current_ds = (val);					\
+	current->thread.current_ds = (val);					\
 	__asm__ __volatile__ ("wr %%g0, %0, %%asi" : : "r" ((val).seg));	\
 } while(0)
 

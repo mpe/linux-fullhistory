@@ -1,4 +1,4 @@
-/* $Id: zs.c,v 1.42 1999/05/12 11:15:26 davem Exp $
+/* $Id: zs.c,v 1.43 1999/07/17 06:03:58 zaitcev Exp $
  * zs.c: Zilog serial port driver for the Sparc.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -1844,7 +1844,7 @@ int zs_open(struct tty_struct *tty, struct file * filp)
 
 static void show_serial_version(void)
 {
-	char *revision = "$Revision: 1.42 $";
+	char *revision = "$Revision: 1.43 $";
 	char *version, *p;
 
 	version = strchr(revision, ' ');
@@ -2012,9 +2012,8 @@ get_zs(int chip))
 		/* Can use the prom for other machine types */
 		zsnode = prom_getchild(prom_root_node);
 		if (sparc_cpu_model == sun4d) {
-			int node;
 			int no = 0;
-			
+
 			tmpnode = zsnode;
 			zsnode = 0;
 			bbnode = 0;

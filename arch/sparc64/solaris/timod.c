@@ -1,4 +1,4 @@
-/* $Id: timod.c,v 1.2 1999/05/12 11:11:55 davem Exp $
+/* $Id: timod.c,v 1.3 1999/08/02 12:06:01 jj Exp $
  * timod.c: timod emulation.
  *
  * Copyright (C) 1998 Patrik Rak (prak3264@ss1000.ms.mff.cuni.cz)
@@ -33,9 +33,7 @@ extern asmlinkage int sys32_ioctl(unsigned int fd, unsigned int cmd,
 	u32 arg);
 asmlinkage int solaris_ioctl(unsigned int fd, unsigned int cmd, u32 arg);
 
-#ifdef __SMP__
 spinlock_t timod_pagelock = SPIN_LOCK_UNLOCKED;
-#endif
 static char * page = NULL ;
 
 #ifndef DEBUG_SOLARIS_KMALLOC
@@ -866,7 +864,7 @@ asmlinkage int solaris_getmsg(unsigned int fd, u32 arg1, u32 arg2, u32 arg3)
 
 	SOLD("entry");
 	lock_kernel();
-	if(fd >= current->files->max_fds) goto out;
+	if(fd >= NR_OPEN) goto out;
 
 	filp = current->files->fd[fd];
 	if(!filp) goto out;
@@ -933,7 +931,7 @@ asmlinkage int solaris_putmsg(unsigned int fd, u32 arg1, u32 arg2, u32 arg3)
 
 	SOLD("entry");
 	lock_kernel();
-	if(fd >= current->files->max_fds) goto out;
+	if(fd >= NR_OPEN) goto out;
 
 	filp = current->files->fd[fd];
 	if(!filp) goto out;

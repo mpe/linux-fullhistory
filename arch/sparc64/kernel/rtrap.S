@@ -1,4 +1,4 @@
-/* $Id: rtrap.S,v 1.46 1999/05/25 16:53:20 jj Exp $
+/* $Id: rtrap.S,v 1.47 1999/07/30 09:35:23 davem Exp $
  * rtrap.S: Preparing for return from trap on Sparc V9.
  *
  * Copyright (C) 1997,1998 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -11,6 +11,7 @@
 #include <asm/spitfire.h>
 #include <asm/head.h>
 #include <asm/visasm.h>
+#include <asm/processor.h>
 
 #define		PTREGS_OFF		(STACK_BIAS + REGWIN_SZ)
 
@@ -39,13 +40,13 @@ rtrap:		sethi			%hi(bh_active), %l2
 		be,pt			%icc, to_user
 		 andn			%l7, PSTATE_IE, %l7
 
-		ldub			[%g6 + AOFF_task_tss + AOFF_thread_fpdepth], %l5
+		ldub			[%g6 + AOFF_task_thread + AOFF_thread_fpdepth], %l5
 		brz,pt			%l5, rt_continue
 		 srl			%l5, 1, %o0
-		add			%g6, AOFF_task_tss + AOFF_thread_fpsaved, %l6
+		add			%g6, AOFF_task_thread + AOFF_thread_fpsaved, %l6
 		ldub			[%l6 + %o0], %l2
 		sub			%l5, 2, %l5
-		add			%g6, AOFF_task_tss + AOFF_thread_gsr, %o1
+		add			%g6, AOFF_task_thread + AOFF_thread_gsr, %o1
 		andcc			%l2, (FPRS_FEF|FPRS_DU), %g0
 		be,pt			%icc, 2f
 		 and			%l2, FPRS_DL, %l6
@@ -55,7 +56,7 @@ rtrap:		sethi			%hi(bh_active), %l2
 		rd			%fprs, %g5
 		wr			%g5, FPRS_FEF, %fprs
 		ldub			[%o1 + %o0], %g5
-		add			%g6, AOFF_task_tss + AOFF_thread_xfsr, %o1
+		add			%g6, AOFF_task_thread + AOFF_thread_xfsr, %o1
 		membar			#StoreLoad | #LoadLoad
 		sll			%o0, 8, %o2
 		add			%g6, AOFF_task_fpregs, %o3
@@ -71,9 +72,8 @@ rtrap:		sethi			%hi(bh_active), %l2
 		ldda			[%o4 + %o2] ASI_BLK_P, %f48
 1:		membar			#Sync
 		ldx			[%o1 + %o5], %fsr
-2:		stb			%l5, [%g6 + AOFF_task_tss + AOFF_thread_fpdepth]
-rt_continue:	lduh			[%g6 + AOFF_task_tss + AOFF_thread_ctx], %l0
-		ldx			[%sp + PTREGS_OFF + PT_V9_G1], %g1
+2:		stb			%l5, [%g6 + AOFF_task_thread + AOFF_thread_fpdepth]
+rt_continue:	ldx			[%sp + PTREGS_OFF + PT_V9_G1], %g1
 		ldx			[%sp + PTREGS_OFF + PT_V9_G2], %g2
 		ldx			[%sp + PTREGS_OFF + PT_V9_G3], %g3
 		mov			%g6, %o5
@@ -105,10 +105,11 @@ rt_continue:	lduh			[%g6 + AOFF_task_tss + AOFF_thread_ctx], %l0
 		wrpr			%o2, %g0, %tnpc
 		brnz,pn			%l3, kern_rtt
 		 mov			PRIMARY_CONTEXT, %l7
+		ldxa			[%l7 + %l7] ASI_DMMU, %l0
 		stxa			%l0, [%l7] ASI_DMMU
 		flush			%o5
-		rdpr			%wstate, %l1
 
+		rdpr			%wstate, %l1
 		rdpr			%otherwin, %l2
 		srl			%l1, 3, %l1
 		wrpr			%l2, %g0, %canrestore
@@ -116,8 +117,8 @@ rt_continue:	lduh			[%g6 + AOFF_task_tss + AOFF_thread_ctx], %l0
 		wrpr			%g0, %g0, %otherwin
 		restore
 		rdpr			%canrestore, %g1
-		wrpr			%g1, 0x0, %cleanwin
 
+		wrpr			%g1, 0x0, %cleanwin
 		retry
 kern_rtt:	restore
 		retry
@@ -125,8 +126,8 @@ to_user:	ldx			[%g6 + AOFF_task_need_resched], %l0
 		wrpr			%l7, PSTATE_IE, %pstate
 		orcc			%g0, %l0, %g0
 		be,a,pt			%xcc, check_signal
-		 lduw			[%g6 + AOFF_task_sigpending], %l0
 
+		 lduw			[%g6 + AOFF_task_sigpending], %l0
 		call			schedule
 		 nop
 		lduw			[%g6 + AOFF_task_sigpending], %l0
@@ -146,7 +147,7 @@ check_signal:	brz,a,pt		%l0, check_user_wins
 		 */
 check_user_wins:
 		wrpr			%l7, 0x0, %pstate
-		lduh			[%g6 + AOFF_task_tss + AOFF_thread_w_saved], %o2
+		ldub			[%g6 + AOFF_task_thread + AOFF_thread_w_saved], %o2
 		brz,pt			%o2, 1f
 		 sethi			%hi(TSTATE_PEF), %l6
 
@@ -162,8 +163,8 @@ check_user_wins:
 		call			rtrap_check
 		 add			%sp, STACK_BIAS + REGWIN_SZ, %o0
 #endif
-		lduh			[%g6 + AOFF_task_tss + AOFF_thread_flags], %l5
-		andcc			%l5, 0x200, %g0
+		ldub			[%g6 + AOFF_task_thread + AOFF_thread_flags], %l5
+		andcc			%l5, SPARC_FLAG_PERFCTR, %g0
 		be,pt			%xcc, 1f
 		 nop
 
@@ -172,7 +173,7 @@ check_user_wins:
 		call			update_perfctrs
 		 nop
 		wrpr			%l7, 0x0, %pstate
-		lduh			[%g6 + AOFF_task_tss + AOFF_thread_w_saved], %o2
+		ldub			[%g6 + AOFF_task_thread + AOFF_thread_w_saved], %o2
 		brz,pt			%o2, 1f
 		 sethi			%hi(TSTATE_PEF), %l6
 		wrpr			%l7, PSTATE_IE, %pstate
@@ -182,14 +183,14 @@ check_user_wins:
 1:
 		andcc			%l1, %l6, %g0
 		be,pt			%xcc, rt_continue
-		 stb			%g0, [%g6 + AOFF_task_tss + AOFF_thread_fpdepth] ! This is neccessary for non-syscall rtraps only
+		 stb			%g0, [%g6 + AOFF_task_thread + AOFF_thread_fpdepth] ! This is neccessary for non-syscall rtraps only
 
 		rd			%fprs, %l5
 		andcc			%l5, FPRS_FEF, %g0
 		be,a,pn			%icc, rt_continue
 		 andn			%l1, %l6, %l1
-		ba,pt			%xcc, rt_continue+4
-		 lduh			[%g6 + AOFF_task_tss + AOFF_thread_ctx], %l0
+		ba,pt			%xcc, rt_continue
+		 nop
 
 5:		wr			%g0, FPRS_FEF, %fprs
 		membar			#StoreLoad | #LoadLoad
@@ -201,6 +202,6 @@ check_user_wins:
 1:		membar			#Sync
 		wr			%g0, FPRS_DU, %fprs
 		ba,pt			%xcc, rt_continue
-		 stb			%l5, [%g6 + AOFF_task_tss + AOFF_thread_fpdepth]
+		 stb			%l5, [%g6 + AOFF_task_thread + AOFF_thread_fpdepth]
 
 #undef PTREGS_OFF

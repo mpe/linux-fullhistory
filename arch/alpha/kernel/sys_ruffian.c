@@ -221,7 +221,7 @@ ruffian_init_arch(unsigned long *mem_start, unsigned long *mem_end)
 	/* FIXME: What do we do with ruffian_get_bank_size above?  */
 
 #if 1
-	pyxis_init_arch();
+	pyxis_init_arch(mem_start, mem_end);
 #else
 	pyxis_enable_errors();
 	if (!pyxis_srm_window_setup()) {

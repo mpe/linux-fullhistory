@@ -57,7 +57,7 @@ typedef struct siginfo {
 			clock_t _stime;
 		} _sigchld;
 
-		/* SIGILL, SIGFPE, SIGSEGV, SIGBUS */
+		/* SIGILL, SIGFPE, SIGSEGV, SIGBUS, SIGEMT */
 		struct {
 			void *_addr; /* faulting insn/memory ref. */
 			int  _trapno; /* TRAP # which caused the signal */
@@ -84,7 +84,7 @@ typedef struct siginfo32 {
 		/* kill() */
 		struct {
 			__kernel_pid_t32 _pid;		/* sender's pid */
-			__kernel_uid_t32 _uid;		/* sender's uid */
+			unsigned int _uid;		/* sender's uid */
 		} _kill;
 
 		/* POSIX.1b timers */
@@ -96,19 +96,20 @@ typedef struct siginfo32 {
 		/* POSIX.1b signals */
 		struct {
 			__kernel_pid_t32 _pid;		/* sender's pid */
-			__kernel_uid_t32 _uid;		/* sender's uid */
+			unsigned int _uid;		/* sender's uid */
 			sigval_t32 _sigval;
 		} _rt;
 
 		/* SIGCHLD */
 		struct {
 			__kernel_pid_t32 _pid;		/* which child */
-			int _status;		/* exit code */
+			unsigned int _uid;		/* sender's uid */
+			int _status;			/* exit code */
 			__kernel_clock_t32 _utime;
 			__kernel_clock_t32 _stime;
 		} _sigchld;
 
-		/* SIGILL, SIGFPE, SIGSEGV, SIGBUS */
+		/* SIGILL, SIGFPE, SIGSEGV, SIGBUS, SIGEMT */
 		struct {
 			u32 _addr; /* faulting insn/memory ref. */
 			int _trapno;
@@ -144,6 +145,7 @@ typedef struct siginfo32 {
  * si_code values
  * Digital reserves positive values for kernel-generated signals.
  */
+#define SI_NOINFO	32767	/* no information in siginfo_t */
 #define SI_USER		0	/* sent by kill, sigsend, raise */
 #define SI_KERNEL	0x80	/* sent by the kernel from somewhere */
 #define SI_QUEUE	-1	/* sent by sigqueue */
@@ -224,6 +226,12 @@ typedef struct siginfo32 {
 #define POLL_PRI	5	/* high priority input available */
 #define POLL_HUP	6	/* device disconnected */
 #define NSIGPOLL	6
+
+/*
+ * SIGEMT si_codes
+ */
+#define EMT_TAGOVF	1	/* tag overflow */
+#define NSIGEMT		1
 
 /*
  * sigevent definitions

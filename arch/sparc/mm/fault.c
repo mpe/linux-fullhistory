@@ -1,4 +1,4 @@
-/* $Id: fault.c,v 1.103 1999/07/04 04:35:51 davem Exp $
+/* $Id: fault.c,v 1.106 1999/07/30 09:35:07 davem Exp $
  * fault.c:  Page fault handlers for the Sparc.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -382,12 +382,13 @@ inline void force_user_fault(unsigned long address, int write)
 	if(expand_stack(vma, address))
 		goto bad_area;
 good_area:
-	if(write)
+	if(write) {
 		if(!(vma->vm_flags & VM_WRITE))
 			goto bad_area;
-	else
+	} else {
 		if(!(vma->vm_flags & (VM_READ | VM_EXEC)))
 			goto bad_area;
+	}
 	if (!handle_mm_fault(current, vma, address, write))
 		goto do_sigbus;
 	up(&mm->mmap_sem);

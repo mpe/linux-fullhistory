@@ -6,7 +6,7 @@
 #ifndef _SPARC64_SMP_H
 #define _SPARC64_SMP_H
 
-#include <linux/tasks.h>
+#include <linux/threads.h>
 #include <asm/asi.h>
 
 #ifndef __ASSEMBLY__

@@ -1,4 +1,4 @@
-/*  $Id: setup.c,v 1.107 1999/06/03 15:02:20 davem Exp $
+/*  $Id: setup.c,v 1.108 1999/07/30 09:35:03 davem Exp $
  *  linux/arch/sparc/kernel/setup.c
  *
  *  Copyright (C) 1995  David S. Miller (davem@caip.rutgers.edu)

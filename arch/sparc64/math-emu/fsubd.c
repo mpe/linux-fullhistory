@@ -1,4 +1,4 @@
-/* $Id: fsubd.c,v 1.4 1999/05/28 13:45:04 jj Exp $
+/* $Id: fsubd.c,v 1.5 1999/08/02 14:08:04 jj Exp $
  * arch/sparc64/math-emu/fsubd.c
  *
  * Copyright (C) 1997, 1999 Jakub Jelinek (jj@ultra.linux.cz)
@@ -17,9 +17,7 @@ int FSUBD(void *rd, void *rs2, void *rs1)
 
 	FP_UNPACK_DP(A, rs1);
 	FP_UNPACK_DP(B, rs2);
-	if (B_c != FP_CLS_NAN)
-		B_s ^= 1;
-	FP_ADD_D(R, A, B);
+	FP_SUB_D(R, A, B);
 	FP_PACK_DP(rd, R);
 	FP_HANDLE_EXCEPTIONS;
 }

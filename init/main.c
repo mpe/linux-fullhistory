@@ -111,6 +111,10 @@ static unsigned long memory_end = 0;
 
 int rows, cols;
 
+#ifdef CONFIG_BLK_DEV_INITRD
+kdev_t real_root_dev;
+#endif
+
 int root_mountflags = MS_RDONLY;
 char *execute_command = NULL;
 
@@ -387,7 +391,7 @@ static void __init parse_options(char *line)
 
 
 extern void setup_arch(char **, unsigned long *, unsigned long *);
-extern int cpu_idle(void);
+extern void cpu_idle(void);
 
 #ifndef __SMP__
 
@@ -515,10 +519,14 @@ static int do_linuxrc(void * shell)
 	return execve(shell, argv, envp_init);
 }
 
-static void __init no_initrd(char *s,int *ints)
+static int __init no_initrd(char *s)
 {
 	mount_initrd = 0;
+	return 1;
 }
+
+__setup("noinitrd", no_initrd);
+
 #endif
 
 struct task_struct *child_reaper = &init_task;

@@ -2,11 +2,11 @@ OUTPUT_FORMAT("elf64-alpha")
 ENTRY(__start)
 SECTIONS
 {
-   . = 0xfffffc0000310000;
-   _text = .;
-   .text : { *(.text) }
-   .text2 : { *(.text2) }
-   _etext = .;
+  . = 0xfffffc0000310000;
+  _text = .;
+  .text : { *(.text) }
+  .text2 : { *(.text2) }
+  _etext = .;
 
   /* Exception table */
   . = ALIGN(16);
@@ -26,6 +26,17 @@ SECTIONS
   __init_begin = .;
   .text.init : { *(.text.init) }
   .data.init : { *(.data.init) }
+
+  . = ALIGN(16);
+  __setup_start = .;
+  .setup.init : { *(.setup.init) }
+  __setup_end = .;
+
+  . = ALIGN(8);
+  __initcall_start = .;
+  .initcall.init : { *(.initcall.init) }
+  __initcall_end = .;
+
   . = ALIGN(2*8192);	/* Align double page for init_task_union */
   __init_end = .;
 

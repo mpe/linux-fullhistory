@@ -1,4 +1,4 @@
-/* $Id: checksum.h,v 1.12 1999/05/25 16:53:36 jj Exp $ */
+/* $Id: checksum.h,v 1.13 1999/07/30 09:31:13 davem Exp $ */
 #ifndef __SPARC64_CHECKSUM_H
 #define __SPARC64_CHECKSUM_H
 
@@ -50,7 +50,7 @@ csum_partial_copy_nocheck (const char *src, char *dst, int len,
 			   unsigned int sum)
 {
 	int ret;
-	unsigned char cur_ds = current->tss.current_ds.seg;
+	unsigned char cur_ds = current->thread.current_ds.seg;
 	__asm__ __volatile__ ("wr %%g0, %0, %%asi" : : "i" (ASI_P));
 	ret = csum_partial_copy_sparc64(src, dst, len, sum);
 	__asm__ __volatile__ ("wr %%g0, %0, %%asi" : : "r" (cur_ds));

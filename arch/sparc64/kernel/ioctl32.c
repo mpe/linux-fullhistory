@@ -1,4 +1,4 @@
-/* $Id: ioctl32.c,v 1.63 1999/06/09 04:56:14 davem Exp $
+/* $Id: ioctl32.c,v 1.65 1999/07/30 09:35:19 davem Exp $
  * ioctl32.c: Conversion between 32bit and 64bit native ioctls.
  *
  * Copyright (C) 1997  Jakub Jelinek  (jj@sunsite.mff.cuni.cz)
@@ -38,6 +38,7 @@
 #include <linux/ext2_fs.h>
 #include <linux/videodev.h>
 #include <linux/netdevice.h>
+#include <linux/raw.h>
 
 #include <scsi/scsi.h>
 /* Ugly hack. */
@@ -2366,6 +2367,10 @@ asmlinkage int sys32_ioctl(unsigned int fd, unsigned int cmd, unsigned long arg)
 	case AUTOFS_IOC_PROTOVER:
 	case AUTOFS_IOC_EXPIRE:
 	
+	/* Raw devices */
+	case RAW_SETBIND:
+	case RAW_GETBIND:
+
 		error = sys_ioctl (fd, cmd, arg);
 		goto out;
 

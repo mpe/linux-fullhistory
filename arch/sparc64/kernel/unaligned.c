@@ -1,4 +1,4 @@
-/* $Id: unaligned.c,v 1.16 1999/05/25 16:53:15 jj Exp $
+/* $Id: unaligned.c,v 1.18 1999/08/02 08:39:44 davem Exp $
  * unaligned.c: Unaligned load/store trap handling with special
  *              cases for the kernel to do them more quickly.
  *
@@ -70,7 +70,7 @@ static inline int decode_access_size(unsigned int insn)
 		return 2;
 	else {
 		printk("Impossible unaligned trap. insn=%08x\n", insn);
-		die_if_kernel("Byte sized unaligned access?!?!", current->tss.kregs);
+		die_if_kernel("Byte sized unaligned access?!?!", current->thread.kregs);
 	}
 }
 
@@ -117,7 +117,7 @@ static unsigned long fetch_reg(unsigned int reg, struct pt_regs *regs)
 		struct reg_window *win;
 		win = (struct reg_window *)(regs->u_regs[UREG_FP] + STACK_BIAS);
 		value = win->locals[reg - 16];
-	} else if (current->tss.flags & SPARC_FLAG_32BIT) {
+	} else if (current->thread.flags & SPARC_FLAG_32BIT) {
 		struct reg_window32 *win32;
 		win32 = (struct reg_window32 *)((unsigned long)((u32)regs->u_regs[UREG_FP]));
 		get_user(value, &win32->locals[reg - 16]);
@@ -137,7 +137,7 @@ static unsigned long *fetch_reg_addr(unsigned int reg, struct pt_regs *regs)
 		struct reg_window *win;
 		win = (struct reg_window *)(regs->u_regs[UREG_FP] + STACK_BIAS);
 		return &win->locals[reg - 16];
-	} else if (current->tss.flags & SPARC_FLAG_32BIT) {
+	} else if (current->thread.flags & SPARC_FLAG_32BIT) {
 		struct reg_window32 *win32;
 		win32 = (struct reg_window32 *)((unsigned long)((u32)regs->u_regs[UREG_FP]));
 		return (unsigned long *)&win32->locals[reg - 16];
@@ -164,10 +164,10 @@ static inline unsigned long compute_effective_address(struct pt_regs *regs,
 	}
 }
 
-/* This is just to make gcc think panic does return... */
-static void unaligned_panic(char *str)
+/* This is just to make gcc think die_if_kernel does return... */
+static void unaligned_panic(char *str, struct pt_regs *regs)
 {
-	panic(str);
+	die_if_kernel(str, regs);
 }
 
 #define do_integer_load(dest_reg, size, saddr, is_signed, asi, errh) ({		\
@@ -380,7 +380,7 @@ asmlinkage void kernel_unaligned_trap(struct pt_regs *regs, unsigned int insn, u
 	if(!ok_for_kernel(insn) || dir == both) {
 		printk("Unsupported unaligned load/store trap for kernel at <%016lx>.\n",
 		       regs->tpc);
-		unaligned_panic("Wheee. Kernel does fpu/atomic unaligned load/store.");
+		unaligned_panic("Kernel does fpu/atomic unaligned load/store.", regs);
 
 		__asm__ __volatile__ ("\n"
 "kernel_unaligned_trap_fault:\n\t"
@@ -453,7 +453,7 @@ int handle_popc(u32 insn, struct pt_regs *regs)
 		if (rd)
 			regs->u_regs[rd] = ret;
 	} else {
-		if (current->tss.flags & SPARC_FLAG_32BIT) {
+		if (current->thread.flags & SPARC_FLAG_32BIT) {
 			struct reg_window32 *win32;
 			win32 = (struct reg_window32 *)((unsigned long)((u32)regs->u_regs[UREG_FP]));
 			put_user(ret, &win32->locals[rd - 16]);
@@ -480,9 +480,9 @@ int handle_ldf_stq(u32 insn, struct pt_regs *regs)
 	int flag = (freg < 32) ? FPRS_DL : FPRS_DU;
 
 	save_and_clear_fpu();
-	current->tss.xfsr[0] &= ~0x1c000;
+	current->thread.xfsr[0] &= ~0x1c000;
 	if (freg & 3) {
-		current->tss.xfsr[0] |= (6 << 14) /* invalid_fp_register */;
+		current->thread.xfsr[0] |= (6 << 14) /* invalid_fp_register */;
 		do_fpother(regs);
 		return 0;
 	}
@@ -490,7 +490,7 @@ int handle_ldf_stq(u32 insn, struct pt_regs *regs)
 		/* STQ */
 		u64 first = 0, second = 0;
 		
-		if (current->tss.fpsaved[0] & flag) {
+		if (current->thread.fpsaved[0] & flag) {
 			first = *(u64 *)&f->regs[freg];
 			second = *(u64 *)&f->regs[freg+2];
 		}
@@ -565,18 +565,18 @@ int handle_ldf_stq(u32 insn, struct pt_regs *regs)
 				break;
 			}
 		}
-		if (!(current->tss.fpsaved[0] & FPRS_FEF)) {
-			current->tss.fpsaved[0] = FPRS_FEF;
-			current->tss.gsr[0] = 0;
+		if (!(current->thread.fpsaved[0] & FPRS_FEF)) {
+			current->thread.fpsaved[0] = FPRS_FEF;
+			current->thread.gsr[0] = 0;
 		}
-		if (!(current->tss.fpsaved[0] & flag)) {
+		if (!(current->thread.fpsaved[0] & flag)) {
 			if (freg < 32)
 				memset(f->regs, 0, 32*sizeof(u32));
 			else
 				memset(f->regs+32, 0, 32*sizeof(u32));
 		}
 		memcpy(f->regs + freg, data, size * 4);
-		current->tss.fpsaved[0] |= flag;
+		current->thread.fpsaved[0] |= flag;
 	}
 	advance(regs);
 	return 1;
@@ -609,7 +609,7 @@ void handle_lddfmna(struct pt_regs *regs, unsigned long sfar, unsigned long sfsr
 
 	if(tstate & TSTATE_PRIV)
 		die_if_kernel("lddfmna from kernel", regs);
-	if(current->tss.flags & SPARC_FLAG_32BIT)
+	if(current->thread.flags & SPARC_FLAG_32BIT)
 		pc = (u32)pc;
 	if (get_user(insn, (u32 *)pc) != -EFAULT) {
 		asi = sfsr >> 16;
@@ -629,18 +629,18 @@ void handle_lddfmna(struct pt_regs *regs, unsigned long sfar, unsigned long sfsr
 		if (asi & 0x8) /* Little */
 			value = __swab64p(&value);
 		flag = (freg < 32) ? FPRS_DL : FPRS_DU;
-		if (!(current->tss.fpsaved[0] & FPRS_FEF)) {
-			current->tss.fpsaved[0] = FPRS_FEF;
-			current->tss.gsr[0] = 0;
+		if (!(current->thread.fpsaved[0] & FPRS_FEF)) {
+			current->thread.fpsaved[0] = FPRS_FEF;
+			current->thread.gsr[0] = 0;
 		}
-		if (!(current->tss.fpsaved[0] & flag)) {
+		if (!(current->thread.fpsaved[0] & flag)) {
 			if (freg < 32)
 				memset(f->regs, 0, 32*sizeof(u32));
 			else
 				memset(f->regs+32, 0, 32*sizeof(u32));
 		}
 		*(u64 *)(f->regs + freg) = value;
-		current->tss.fpsaved[0] |= flag;
+		current->thread.fpsaved[0] |= flag;
 	} else {
 daex:		data_access_exception(regs);
 		return;
@@ -661,7 +661,7 @@ void handle_stdfmna(struct pt_regs *regs, unsigned long sfar, unsigned long sfsr
 
 	if(tstate & TSTATE_PRIV)
 		die_if_kernel("stdfmna from kernel", regs);
-	if(current->tss.flags & SPARC_FLAG_32BIT)
+	if(current->thread.flags & SPARC_FLAG_32BIT)
 		pc = (u32)pc;
 	if (get_user(insn, (u32 *)pc) != -EFAULT) {
 		freg = ((insn >> 25) & 0x1e) | ((insn >> 20) & 0x20);
@@ -672,7 +672,7 @@ void handle_stdfmna(struct pt_regs *regs, unsigned long sfar, unsigned long sfsr
 		    (asi < ASI_P))
 			goto daex;
 		save_and_clear_fpu();
-		if (current->tss.fpsaved[0] & flag)
+		if (current->thread.fpsaved[0] & flag)
 			value = *(u64 *)&f->regs[freg];
 		switch (asi) {
 		case ASI_P:

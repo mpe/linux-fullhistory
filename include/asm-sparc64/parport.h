@@ -1,4 +1,4 @@
-/* $Id$
+/* $Id: parport.h,v 1.2 1999/07/31 04:48:13 ecd Exp $
  * parport.h: sparc64 specific parport initialization and dma.
  *
  * Copyright (C) 1999  Eddie C. Dost  (ecd@skynet.be)
@@ -20,7 +20,9 @@
 
 #undef HAVE_SLOW_DEVICES
 
-static struct linux_ebus_dma *sparc_ebus_dmas[PARPORT_MAX];
+#define PARPORT_PC_MAX_PORTS	PARPORT_MAX
+
+static struct linux_ebus_dma *sparc_ebus_dmas[PARPORT_PC_MAX_PORTS];
 
 static __inline__ void
 reset_dma(unsigned int dmanr)
@@ -115,6 +117,8 @@ get_dma_residue(unsigned int dmanr)
 }
 
 static int __maybe_init parport_pc_init_pci(int irq, int dma);
+
+static int user_specified __initdata = 0;
 
 int __init
 parport_pc_init(int *io, int *io_hi, int *irq, int *dma)

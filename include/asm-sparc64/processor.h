@@ -1,4 +1,4 @@
-/* $Id: processor.h,v 1.55 1999/05/27 04:52:54 davem Exp $
+/* $Id: processor.h,v 1.56 1999/07/30 09:31:20 davem Exp $
  * include/asm-sparc64/processor.h
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -47,66 +47,61 @@ typedef struct {
 
 /* The Sparc processor specific thread struct. */
 struct thread_struct {
-/*DC1*/	unsigned long ksp __attribute__ ((aligned(16)));
-	unsigned short wstate;
-	unsigned short cwp;
-	unsigned short flags;
+	/* D$ line 1 */
+	unsigned long ksp __attribute__ ((aligned(16)));
+	unsigned char wstate, cwp, flags;
 	mm_segment_t current_ds;
-
-/*DC2*/	unsigned short w_saved;
-	unsigned short new_signal;
-	unsigned short ctx;
-	struct pt_regs *kregs;
-
-/*DC3*/ unsigned long *utraps;
-	unsigned char fpdepth;
+	unsigned char w_saved, fpdepth;
 	unsigned char fpsaved[7];
+	unsigned char __pad1[3];
+	struct pt_regs *kregs;
 	
-/*DC4*/	unsigned char gsr[7];
-	unsigned long xfsr[7];
-
-	struct reg_window reg_window[NSWINS] __attribute__ ((aligned (16)));
-	unsigned long rwbuf_stkptrs[NSWINS] __attribute__ ((aligned (8)));
-	
-	unsigned long sig_address __attribute__ ((aligned (8)));
+	/* D$ line 2 */
+	unsigned long *utraps;
+	unsigned char gsr[7];
+	unsigned char __pad2;
+	unsigned long sig_address;
 	unsigned long sig_desc;
+	
+	/* D$ lines 3 and 4 */
+	unsigned long xfsr[7];
+	unsigned long __pad3;
+
+	struct reg_window reg_window[NSWINS];
+	unsigned long rwbuf_stkptrs[NSWINS];
 	
 	/* Performance counter state */
 	u64 *user_cntd0, *user_cntd1;
 	u64 kernel_cntd0, kernel_cntd1;
 	u64 pcr_reg;
-
 };
 
 #endif /* !(__ASSEMBLY__) */
 
-#define SPARC_FLAG_KTHREAD      0x010    /* task is a kernel thread */
-#define SPARC_FLAG_UNALIGNED    0x020    /* is allowed to do unaligned accesses */
-#define SPARC_FLAG_NEWSIGNALS   0x040    /* task wants new-style signals */
-#define SPARC_FLAG_32BIT        0x080    /* task is older 32-bit binary */
-#define SPARC_FLAG_NEWCHILD     0x100    /* task is just-spawned child process */
-#define SPARC_FLAG_PERFCTR	0x200    /* task has performance counters active */
+#define SPARC_FLAG_UNALIGNED    0x01    /* is allowed to do unaligned accesses */
+#define SPARC_FLAG_NEWSIGNALS   0x02    /* task wants new-style signals */
+#define SPARC_FLAG_32BIT        0x04    /* task is older 32-bit binary */
+#define SPARC_FLAG_NEWCHILD     0x08    /* task is just-spawned child process */
+#define SPARC_FLAG_PERFCTR	0x10    /* task has performance counters active */
 
 #define INIT_MMAP { &init_mm, 0xfffff80000000000, 0xfffff80001000000, \
 		    NULL, PAGE_SHARED , VM_READ | VM_WRITE | VM_EXEC, 1, NULL, NULL }
 
-#define INIT_TSS  {						\
-/* ksp, wstate, cwp, flags,              current_ds, */ 	\
-   0,   0,      0,   SPARC_FLAG_KTHREAD, KERNEL_DS,		\
-/* w_saved, new_signal, ctx,		 kregs, */		\
-   0,       0,          0,		 0,			\
-/* utraps, */							\
-   0,								\
-/* fpdepth, fpsaved, gsr,   xfsr */				\
-   0,       { 0 },   { 0 }, { 0 },				\
-/* reg_window */						\
-   { { { 0, }, { 0, } }, }, 					\
-/* rwbuf_stkptrs */						\
-   { 0, 0, 0, 0, 0, 0, 0, },					\
-/* sig_address, sig_desc */					\
-   0,           0,						\
+#define INIT_THREAD  {					\
+/* ksp, wstate, cwp, flags, current_ds, */ 		\
+   0,   0,      0,   0,     KERNEL_DS,			\
+/* w_saved, fpdepth, fpsaved, pad1,  kregs, */		\
+   0,       0,       { 0 },   { 0 }, 0,			\
+/* utraps, gsr,   pad2,  sig_address, sig_desc, */	\
+   0,	   { 0 }, 0,     0,	      0,		\
+/* xfsr,  pad3, */					\
+   { 0 }, 0,						\
+/* reg_window */					\
+   { { { 0, }, { 0, } }, }, 				\
+/* rwbuf_stkptrs */					\
+   { 0, 0, 0, 0, 0, 0, 0, },				\
 /* user_cntd0, user_cndd1, kernel_cntd0, kernel_cntd0, pcr_reg */ \
-   0,          0,          0,		 0,            0,	\
+   0,          0,          0,		 0,            0, \
 }
 
 #ifndef __ASSEMBLY__
@@ -134,14 +129,13 @@ do { \
 	regs->tpc = ((pc & (~3)) - 4); \
 	regs->tnpc = regs->tpc + 4; \
 	regs->y = 0; \
-	current->tss.flags &= ~SPARC_FLAG_32BIT; \
-	current->tss.wstate = (1 << 3); \
-	if (current->tss.utraps) { \
-		if (*(current->tss.utraps) < 2) \
-			kfree (current->tss.utraps); \
+	current->thread.wstate = (1 << 3); \
+	if (current->thread.utraps) { \
+		if (*(current->thread.utraps) < 2) \
+			kfree (current->thread.utraps); \
 		else \
-			(*(current->tss.utraps))--; \
-		current->tss.utraps = NULL; \
+			(*(current->thread.utraps))--; \
+		current->thread.utraps = NULL; \
 	} \
 	__asm__ __volatile__( \
 	"stx		%%g0, [%0 + %2 + 0x00]\n\t" \
@@ -175,17 +169,15 @@ do { \
 	regs->tpc = ((pc & (~3)) - 4); \
 	regs->tnpc = regs->tpc + 4; \
 	regs->y = 0; \
-	current->tss.flags |= SPARC_FLAG_32BIT; \
-	current->tss.wstate = (2 << 3); \
-	if (current->tss.utraps) { \
-		if (*(current->tss.utraps) < 2) \
-			kfree (current->tss.utraps); \
+	current->thread.wstate = (2 << 3); \
+	if (current->thread.utraps) { \
+		if (*(current->thread.utraps) < 2) \
+			kfree (current->thread.utraps); \
 		else \
-			(*(current->tss.utraps))--; \
-		current->tss.utraps = NULL; \
+			(*(current->thread.utraps))--; \
+		current->thread.utraps = NULL; \
 	} \
 	__asm__ __volatile__( \
-	"stxa		%3, [%4] %5\n\t" \
 	"stx		%%g0, [%0 + %2 + 0x00]\n\t" \
 	"stx		%%g0, [%0 + %2 + 0x08]\n\t" \
 	"stx		%%g0, [%0 + %2 + 0x10]\n\t" \
@@ -205,19 +197,18 @@ do { \
 	"wrpr		%%g0, (2 << 3), %%wstate\n\t" \
 	: \
 	: "r" (regs), "r" (sp - REGWIN32_SZ), \
-	  "i" ((const unsigned long)(&((struct pt_regs *)0)->u_regs[0])), \
-	  "r" (((unsigned long)current->mm->pgd[0])<<11UL), \
-	  "r" (TSB_REG), "i" (ASI_DMMU)); \
+	  "i" ((const unsigned long)(&((struct pt_regs *)0)->u_regs[0]))); \
 } while(0)
 
 /* Free all resources held by a thread. */
 #define release_thread(tsk)		do { } while(0)
 
-#define copy_segments(nr, tsk, mm)	do { } while (0)
+#define copy_segments(tsk, mm)		do { } while (0)
 #define release_segments(mm)		do { } while (0)
 #define forget_segments()		do { } while (0)
 
 #ifdef __KERNEL__
+#define THREAD_SIZE (2*PAGE_SIZE)
 /* Allocation and freeing of task_struct and kernel stack. */
 #define alloc_task_struct()   ((struct task_struct *)__get_free_pages(GFP_KERNEL, 1))
 #define free_task_struct(tsk) free_pages((unsigned long)(tsk),1)

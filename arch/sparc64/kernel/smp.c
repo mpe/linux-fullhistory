@@ -53,7 +53,7 @@ unsigned long cpu_present_map = 0;
 int smp_num_cpus = 1;
 int smp_threads_ready = 0;
 
-__initfunc(void smp_setup(char *str, int *ints))
+void __init smp_setup(char *str, int *ints)
 {
 	/* XXX implement me XXX */
 }
@@ -151,13 +151,17 @@ __initfunc(void smp_callin(void))
 	/* Clear this or we will die instantly when we
 	 * schedule back to this idler...
 	 */
-	current->tss.flags &= ~(SPARC_FLAG_NEWCHILD);
+	current->thread.flags &= ~(SPARC_FLAG_NEWCHILD);
+
+	/* Attach to the address space of init_task. */
+	atomic_inc(&init_mm.mm_count);
+	current->active_mm = &init_mm;
 
 	while(!smp_processors_ready)
 		membar("#LoadLoad");
 }
 
-extern int cpu_idle(void *unused);
+extern int cpu_idle(void);
 extern void init_IRQ(void);
 
 void initialize_secondary(void)
@@ -169,7 +173,7 @@ int start_secondary(void *unused)
 	trap_init();
 	init_IRQ();
 	smp_callin();
-	return cpu_idle(NULL);
+	return cpu_idle();
 }
 
 void cpu_panic(void)
@@ -216,9 +220,17 @@ __initfunc(void smp_boot_cpus(void))
 			entry += phys_base - KERNBASE;
 			cookie += phys_base - KERNBASE;
 			kernel_thread(start_secondary, NULL, CLONE_PID);
-			p = task[++cpucount];
+			cpucount++;
+
+			p = init_task.prev_task;
+			init_tasks[cpucount] = p;
+
 			p->processor = i;
 			p->has_cpu = 1; /* we schedule the first task manually */
+
+			del_from_runqueue(p);
+			unhash_process(p);
+
 			callin_flag = 0;
 			for (no = 0; no < linux_num_cpus; no++)
 				if (linux_cpus[no].mid == i)
@@ -384,6 +396,9 @@ void smp_flush_tlb_all(void)
  * are flush_tlb_*() routines, and these run after flush_cache_*()
  * which performs the flushw.
  *
+ * XXX I diked out the fancy flush avoidance code for the
+ * XXX swapping cases for now until the new MM code stabilizes. -DaveM
+ *
  * The SMP TLB coherency scheme we use works as follows:
  *
  * 1) mm->cpu_vm_mask is a bit mask of which cpus an address
@@ -395,16 +410,16 @@ void smp_flush_tlb_all(void)
  *    cross calls.
  *
  *    One invariant is that when a cpu switches to a process, and
- *    that processes tsk->mm->cpu_vm_mask does not have the current
- *    cpu's bit set, that tlb context is flushed locally.
+ *    that processes tsk->active_mm->cpu_vm_mask does not have the
+ *    current cpu's bit set, that tlb context is flushed locally.
  *
  *    If the address space is non-shared (ie. mm->count == 1) we avoid
  *    cross calls when we want to flush the currently running process's
  *    tlb state.  This is done by clearing all cpu bits except the current
- *    processor's in current->mm->cpu_vm_mask and performing the flush
- *    locally only.  This will force any subsequent cpus which run this
- *    task to flush the context from the local tlb if the process migrates
- *    to another cpu (again).
+ *    processor's in current->active_mm->cpu_vm_mask and performing the
+ *    flush locally only.  This will force any subsequent cpus which run
+ *    this task to flush the context from the local tlb if the process
+ *    migrates to another cpu (again).
  *
  * 3) For shared address spaces (threads) and swapping we bite the
  *    bullet for most cases and perform the cross call.
@@ -422,13 +437,13 @@ void smp_flush_tlb_all(void)
  */
 void smp_flush_tlb_mm(struct mm_struct *mm)
 {
-	u32 ctx = mm->context & 0x3ff;
+	u32 ctx = CTX_HWBITS(mm->context);
 
-	if(mm == current->mm && atomic_read(&mm->count) == 1) {
-		if(mm->cpu_vm_mask != (1UL << smp_processor_id()))
-			mm->cpu_vm_mask = (1UL << smp_processor_id());
+	if (mm == current->active_mm &&
+	    atomic_read(&mm->mm_users) == 1 &&
+	    (mm->cpu_vm_mask == (1UL << smp_processor_id())))
 		goto local_flush_and_out;
-	}
+
 	smp_cross_call(&xcall_flush_tlb_mm, ctx, 0, 0);
 
 local_flush_and_out:
@@ -438,15 +453,15 @@ local_flush_and_out:
 void smp_flush_tlb_range(struct mm_struct *mm, unsigned long start,
 			 unsigned long end)
 {
-	u32 ctx = mm->context & 0x3ff;
+	u32 ctx = CTX_HWBITS(mm->context);
 
 	start &= PAGE_MASK;
 	end   &= PAGE_MASK;
-	if(mm == current->mm && atomic_read(&mm->count) == 1) {
-		if(mm->cpu_vm_mask != (1UL << smp_processor_id()))
-			mm->cpu_vm_mask = (1UL << smp_processor_id());
+	if(mm == current->active_mm &&
+	   atomic_read(&mm->mm_users) == 1 &&
+	   (mm->cpu_vm_mask == (1UL << smp_processor_id())))
 		goto local_flush_and_out;
-	}
+
 	smp_cross_call(&xcall_flush_tlb_range, ctx, start, end);
 
 local_flush_and_out:
@@ -455,30 +470,15 @@ local_flush_and_out:
 
 void smp_flush_tlb_page(struct mm_struct *mm, unsigned long page)
 {
-	u32 ctx = mm->context & 0x3ff;
+	u32 ctx = CTX_HWBITS(mm->context);
 
 	page &= PAGE_MASK;
-	if(mm == current->mm && atomic_read(&mm->count) == 1) {
-		if(mm->cpu_vm_mask != (1UL << smp_processor_id()))
-			mm->cpu_vm_mask = (1UL << smp_processor_id());
+	if(mm == current->active_mm &&
+	   atomic_read(&mm->mm_users) == 1 &&
+	   (mm->cpu_vm_mask == (1UL << smp_processor_id()))) {
 		goto local_flush_and_out;
-	} else {
-		/* Try to handle two special cases to avoid cross calls
-		 * in common scenerios where we are swapping process
-		 * pages out.
-		 */
-		if(((mm->context ^ tlb_context_cache) & CTX_VERSION_MASK) ||
-		   (mm->cpu_vm_mask == 0)) {
-			/* A dead context cannot ever become "alive" until
-			 * a task switch is done to it.
-			 */
-			return; /* It's dead, nothing to do. */
-		}
-		if(mm->cpu_vm_mask == (1UL << smp_processor_id())) {
-			__flush_tlb_page(ctx, page, SECONDARY_CONTEXT);
-			return; /* Only local flush is necessary. */
-		}
 	}
+
 	smp_cross_call(&xcall_flush_tlb_page, ctx, page, 0);
 
 local_flush_and_out:

@@ -74,9 +74,8 @@ sys_sethae(unsigned long hae, unsigned long a1, unsigned long a2,
 	return 0;
 }
 
-#ifdef __SMP__
-int
-cpu_idle(void *unused)
+void
+cpu_idle(void)
 {
 	/* An endless idle loop with no priority at all.  */
 	current->priority = 0;
@@ -92,27 +91,6 @@ cpu_idle(void *unused)
 			schedule();
 			check_pgt_cache();
 		}
-	}
-}
-#endif
-
-asmlinkage int
-sys_idle(void)
-{
-	if (current->pid != 0)
-		return -EPERM;
-
-	/* An endless idle loop with no priority at all.  */
-	current->priority = 0;
-	current->counter = -100;
-	init_idle();
-
-	while (1) {
-		/* FIXME -- EV6 and LCA45 know how to power down
-		   the CPU.  */
-
-		schedule();
-		check_pgt_cache();
 	}
 }
 

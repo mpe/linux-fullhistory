@@ -1,4 +1,4 @@
-/* $Id: page.h,v 1.25 1999/06/23 03:53:15 davem Exp $ */
+/* $Id: page.h,v 1.27 1999/07/31 00:07:25 davem Exp $ */
 
 #ifndef _SPARC64_PAGE_H
 #define _SPARC64_PAGE_H
@@ -18,9 +18,8 @@
 
 #ifndef __ASSEMBLY__
 
-#define BUG() do { printk("kernel BUG at %s:%d!\n", __FILE__, __LINE__); *(int *)0=0; } while (0)
-#define PAGE_BUG(page) do { \
-				BUG(); } while (0)
+#define BUG()		__builtin_trap()
+#define PAGE_BUG(page)	BUG()
 
 extern void clear_page(unsigned long page);
 extern void copy_page(unsigned long to, unsigned long from);
@@ -85,7 +84,7 @@ typedef unsigned long iopgprot_t;
 
 #endif /* (STRICT_MM_TYPECHECKS) */
 
-#define TASK_UNMAPPED_BASE	((current->tss.flags & SPARC_FLAG_32BIT) ? \
+#define TASK_UNMAPPED_BASE	((current->thread.flags & SPARC_FLAG_32BIT) ? \
 				 (0x0000000070000000UL) : (PAGE_OFFSET))
 
 #endif /* !(__ASSEMBLY__) */

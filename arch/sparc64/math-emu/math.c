@@ -1,4 +1,4 @@
-/* $Id: math.c,v 1.8 1999/05/28 13:43:11 jj Exp $
+/* $Id: math.c,v 1.9 1999/07/30 09:35:41 davem Exp $
  * arch/sparc64/math-emu/math.c
  *
  * Copyright (C) 1997,1999 Jakub Jelinek (jj@ultra.linux.cz)
@@ -75,7 +75,7 @@ FLOATFUNC(FDTOI)
  */
 static int record_exception(struct pt_regs *regs, int eflag)
 {
-	u64 fsr = current->tss.xfsr[0];
+	u64 fsr = current->thread.xfsr[0];
 	int would_trap;
 
 	/* Determine if this exception would have generated a trap. */
@@ -120,7 +120,7 @@ static int record_exception(struct pt_regs *regs, int eflag)
 	if(would_trap != 0)
 		fsr |= (1UL << 14);
 
-	current->tss.xfsr[0] = fsr;
+	current->thread.xfsr[0] = fsr;
 
 	/* If we will not trap, advance the program counter over
 	 * the instruction being handled.
@@ -148,7 +148,7 @@ int do_mathemu(struct pt_regs *regs, struct fpustate *f)
 
 	if(tstate & TSTATE_PRIV)
 		die_if_kernel("FPQuad from kernel", regs);
-	if(current->tss.flags & SPARC_FLAG_32BIT)
+	if(current->thread.flags & SPARC_FLAG_32BIT)
 		pc = (u32)pc;
 	if (get_user(insn, (u32 *)pc) != -EFAULT) {
 		if ((insn & 0xc1f80000) == 0x81a00000) /* FPOP1 */ {
@@ -201,33 +201,33 @@ int do_mathemu(struct pt_regs *regs, struct fpustate *f)
 	if (type) {
 		void *rs1 = NULL, *rs2 = NULL, *rd = NULL;
 		
-		freg = (current->tss.xfsr[0] >> 14) & 0xf;
+		freg = (current->thread.xfsr[0] >> 14) & 0xf;
 		if (freg != (type >> 8))
 			goto err;
-		current->tss.xfsr[0] &= ~0x1c000;
+		current->thread.xfsr[0] &= ~0x1c000;
 		freg = ((insn >> 14) & 0x1f);
 		switch (type & 0x3) {
 		case 3: if (freg & 2) {
-				current->tss.xfsr[0] |= (6 << 14) /* invalid_fp_register */;
+				current->thread.xfsr[0] |= (6 << 14) /* invalid_fp_register */;
 				goto err;
 			}
 		case 2: freg = ((freg & 1) << 5) | (freg & 0x1e);
 		case 1: rs1 = (void *)&f->regs[freg]; 
 			flags = (freg < 32) ? FPRS_DL : FPRS_DU; 
-			if (!(current->tss.fpsaved[0] & flags))
+			if (!(current->thread.fpsaved[0] & flags))
 				rs1 = (void *)&zero;
 			break;
 		}
 		freg = (insn & 0x1f);
 		switch ((type >> 2) & 0x3) {
 		case 3: if (freg & 2) {
-				current->tss.xfsr[0] |= (6 << 14) /* invalid_fp_register */;
+				current->thread.xfsr[0] |= (6 << 14) /* invalid_fp_register */;
 				goto err;
 			}
 		case 2: freg = ((freg & 1) << 5) | (freg & 0x1e);
 		case 1: rs2 = (void *)&f->regs[freg];
 			flags = (freg < 32) ? FPRS_DL : FPRS_DU; 
-			if (!(current->tss.fpsaved[0] & flags))
+			if (!(current->thread.fpsaved[0] & flags))
 				rs2 = (void *)&zero;
 			break;
 		}
@@ -235,23 +235,23 @@ int do_mathemu(struct pt_regs *regs, struct fpustate *f)
 		switch ((type >> 4) & 0x3) {
 		case 0: rd = (void *)(long)(freg & 3); break;
 		case 3: if (freg & 2) {
-				current->tss.xfsr[0] |= (6 << 14) /* invalid_fp_register */;
+				current->thread.xfsr[0] |= (6 << 14) /* invalid_fp_register */;
 				goto err;
 			}
 		case 2: freg = ((freg & 1) << 5) | (freg & 0x1e);
 		case 1: rd = (void *)&f->regs[freg];
 			flags = (freg < 32) ? FPRS_DL : FPRS_DU; 
-			if (!(current->tss.fpsaved[0] & FPRS_FEF)) {
-				current->tss.fpsaved[0] = FPRS_FEF;
-				current->tss.gsr[0] = 0;
+			if (!(current->thread.fpsaved[0] & FPRS_FEF)) {
+				current->thread.fpsaved[0] = FPRS_FEF;
+				current->thread.gsr[0] = 0;
 			}
-			if (!(current->tss.fpsaved[0] & flags)) {
+			if (!(current->thread.fpsaved[0] & flags)) {
 				if (freg < 32)
 					memset(f->regs, 0, 32*sizeof(u32));
 				else
 					memset(f->regs+32, 0, 32*sizeof(u32));
 			}
-			current->tss.fpsaved[0] |= flags;
+			current->thread.fpsaved[0] |= flags;
 			break;
 		}
 		flags = func(rd, rs2, rs1);
@@ -259,7 +259,7 @@ int do_mathemu(struct pt_regs *regs, struct fpustate *f)
 			return record_exception(regs, flags);
 
 		/* Success and no exceptions detected. */
-		current->tss.xfsr[0] &= ~(FSR_CEXC_MASK);
+		current->thread.xfsr[0] &= ~(FSR_CEXC_MASK);
 		regs->tpc = regs->tnpc;
 		regs->tnpc += 4;
 		return 1;

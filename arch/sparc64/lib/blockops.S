@@ -1,4 +1,4 @@
-/* $Id: blockops.S,v 1.17 1999/05/25 16:52:52 jj Exp $
+/* $Id: blockops.S,v 1.18 1999/07/30 09:35:37 davem Exp $
  * blockops.S: UltraSparc block zero optimized routines.
  *
  * Copyright (C) 1996,1998 David S. Miller (davem@caip.rutgers.edu)
@@ -29,7 +29,7 @@
 	.type		copy_page,@function
 copy_page: /* %o0=dest, %o1=src */
 	VISEntry
-	ldx		[%g6 + AOFF_task_mm], %o2
+	ldx		[%g6 + AOFF_task_active_mm], %o2
 	sub		%o0, %g4, %g1
 	sethi		%uhi(_PAGE_VALID), %g3
 	sub		%o1, %g4, %g2
@@ -107,7 +107,7 @@ copy_page: /* %o0=dest, %o1=src */
 	.type		clear_page,@function
 clear_page:		/* %o0=dest */
 	VISEntryHalf
-	ldx		[%g6 + AOFF_task_mm], %o2
+	ldx		[%g6 + AOFF_task_active_mm], %o2
 	sub		%o0, %g4, %g1
 	sethi		%uhi(_PAGE_VALID), %g3
 	sllx		%g3, 32, %g3

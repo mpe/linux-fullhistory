@@ -1,4 +1,4 @@
-/* $Id: unistd.h,v 1.28 1999/04/07 17:14:19 davem Exp $ */
+/* $Id: unistd.h,v 1.30 1999/07/31 04:05:24 ecd Exp $ */
 #ifndef _SPARC64_UNISTD_H
 #define _SPARC64_UNISTD_H
 
@@ -225,7 +225,7 @@
 #define __NR_syslog             207 /* Linux Specific                              */
 /* #define __NR_olduname        208    Linux Specific                              */
 /* #define __NR_iopl            209    Linux Specific - i386 specific, unused      */
-#define __NR_idle               210 /* Linux Specific                              */
+/* #define __NR_idle            210    Linux Specific - was sys_idle, now unused   */
 /* #define __NR_vm86            211    Linux Specific - i386 specific, unused      */
 #define __NR_waitpid            212 /* Linux Specific                              */
 #define __NR_swapoff            213 /* Linux Specific                              */
@@ -411,7 +411,6 @@ return -1; \
  * some others too.
  */
 #define __NR__exit __NR_exit
-static __inline__ _syscall0(int,idle)
 static __inline__ _syscall0(int,pause)
 static __inline__ _syscall0(int,sync)
 static __inline__ _syscall0(pid_t,setsid)

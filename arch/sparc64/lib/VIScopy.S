@@ -1,4 +1,4 @@
-/* $Id: VIScopy.S,v 1.20 1999/05/25 16:52:57 jj Exp $
+/* $Id: VIScopy.S,v 1.21 1999/07/30 09:35:35 davem Exp $
  * VIScopy.S: High speed copy operations utilizing the UltraSparc
  *            Visual Instruction Set.
  *
@@ -29,19 +29,19 @@
 #include <asm/asm_offsets.h>
 
 #define FPU_CLEAN_RETL								\
-	ldub		[%g6 + AOFF_task_tss + AOFF_thread_current_ds], %o1;	\
+	ldub		[%g6 + AOFF_task_thread + AOFF_thread_current_ds], %o1;	\
 	VISExit									\
 	clr		%o0;							\
 	retl;									\
 	 wr		%o1, %g0, %asi;
 #define FPU_RETL								\
-	ldub		[%g6 + AOFF_task_tss + AOFF_thread_current_ds], %o1;	\
+	ldub		[%g6 + AOFF_task_thread + AOFF_thread_current_ds], %o1;	\
 	VISExit									\
 	clr		%o0;							\
 	retl;									\
 	 wr		%o1, %g0, %asi;
 #define NORMAL_RETL								\
-	ldub		[%g6 + AOFF_task_tss + AOFF_thread_current_ds], %o1;	\
+	ldub		[%g6 + AOFF_task_thread + AOFF_thread_current_ds], %o1;	\
 	clr		%o0;							\
 	retl;									\
 	 wr		%o1, %g0, %asi;
@@ -1009,7 +1009,7 @@ VIScopyfixup_ret:
 		/* If this is copy_from_user(), zero out the rest of the
 		 * kernel buffer.
 		 */
-		ldub		[%g6 + AOFF_task_tss + AOFF_thread_current_ds], %o4
+		ldub		[%g6 + AOFF_task_thread + AOFF_thread_current_ds], %o4
 		andcc		asi_src, 0x1, %g0
 		be,pt		%icc, 1f
 		 VISExit

@@ -1,4 +1,4 @@
-/*  $Id: signal.c,v 1.92 1999/06/14 05:23:53 davem Exp $
+/*  $Id: signal.c,v 1.94 1999/07/30 09:35:04 davem Exp $
  *  linux/arch/sparc/kernel/signal.c
  *
  *  Copyright (C) 1991, 1992  Linus Torvalds
@@ -659,6 +659,9 @@ new_setup_rt_frame(struct k_sigaction *ka, struct pt_regs *regs,
 	
 	err |= __copy_to_user(sf, (char *) regs->u_regs [UREG_FP],
 			      sizeof (struct reg_window));	
+
+	err |= __copy_to_user(&sf->info, info, sizeof(siginfo_t));
+
 	if (err)
 		goto sigsegv;
 

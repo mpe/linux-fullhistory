@@ -1,4 +1,4 @@
-/* $Id: etrap.S,v 1.41 1999/05/25 16:53:09 jj Exp $
+/* $Id: etrap.S,v 1.42 1999/07/30 09:35:18 davem Exp $
  * etrap.S: Preparing for entry into the kernel on Sparc V9.
  *
  * Copyright (C) 1996, 1997 David S. Miller (davem@caip.rutgers.edu)
@@ -56,7 +56,7 @@ etrap_irq:	rdpr			%tstate, %g1						! Single 	Group
 		wrpr			%g0, 0, %canrestore					! Single	Group+4bubbles
 		sll			%g2, 3, %g2						! IEU0		Group
 		mov			1, %l5							! IEU1
-		stb			%l5, [%l6 + AOFF_task_tss + AOFF_thread_fpdepth]	! Store
+		stb			%l5, [%l6 + AOFF_task_thread + AOFF_thread_fpdepth]	! Store
 		wrpr			%g3, 0, %otherwin					! Single	Group+4bubbles
 		wrpr			%g2, 0, %wstate						! Single	Group+4bubbles
 		stxa			%g0, [%l4] ASI_DMMU					! Store		Group
@@ -89,11 +89,11 @@ etrap_irq:	rdpr			%tstate, %g1						! Single 	Group
 		jmpl			%l2 + 0x4, %g0						! CTI		Group
 		 mov			%l6, %g6						! IEU0
 
-3:		ldub			[%l6 + AOFF_task_tss + AOFF_thread_fpdepth], %l5	! Load		Group
-		add			%l6, AOFF_task_tss + AOFF_thread_fpsaved + 1, %l4	! IEU0
+3:		ldub			[%l6 + AOFF_task_thread + AOFF_thread_fpdepth], %l5	! Load		Group
+		add			%l6, AOFF_task_thread + AOFF_thread_fpsaved + 1, %l4	! IEU0
 		srl			%l5, 1, %l3						! IEU0		Group
 		add			%l5, 2, %l5						! IEU1
-		stb			%l5, [%l6 + AOFF_task_tss + AOFF_thread_fpdepth]	! Store
+		stb			%l5, [%l6 + AOFF_task_thread + AOFF_thread_fpdepth]	! Store
 		ba,pt			%xcc, 2b						! CTI
 		 stb			%g0, [%l4 + %l3]					! Store		Group
 

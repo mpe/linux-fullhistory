@@ -1,4 +1,4 @@
-/* $Id: fault.c,v 1.36 1999/07/04 04:35:56 davem Exp $
+/* $Id: fault.c,v 1.38 1999/08/02 08:39:50 davem Exp $
  * arch/sparc64/mm/fault.c: Page fault handlers for the 64-bit Sparc.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -84,10 +84,11 @@ void unhandled_fault(unsigned long address, struct task_struct *tsk,
 		printk(KERN_ALERT "Unable to handle kernel paging request "
 		       "at virtual address %016lx\n", (unsigned long)address);
 	}
-	printk(KERN_ALERT "tsk->mm->context = %016lx\n",
-	       (unsigned long) tsk->mm->context);
-	printk(KERN_ALERT "tsk->mm->pgd = %016lx\n",
-	       (unsigned long) tsk->mm->pgd);
+	printk(KERN_ALERT "tsk->{mm,active_mm}->context = %016lx\n",
+	       (tsk->mm ? tsk->mm->context : tsk->active_mm->context));
+	printk(KERN_ALERT "tsk->{mm,active_mm}->pgd = %016lx\n",
+	       (tsk->mm ? (unsigned long) tsk->mm->pgd :
+		          (unsigned long) tsk->active_mm->pgd));
 	die_if_kernel("Oops", regs);
 }
 
@@ -159,11 +160,40 @@ asmlinkage void do_sparc64_fault(struct pt_regs *regs, unsigned long address, in
 
 	down(&mm->mmap_sem);
 #ifdef DEBUG_LOCKUPS
-	if (regs->tpc == lastpc && address == lastaddr && write == lastwrite) {
+	if (regs->tpc == lastpc &&
+	    address == lastaddr &&
+	    write == lastwrite) {
 		lockcnt++;
 		if (lockcnt == 100000) {
-			printk("do_sparc64_fault: possible fault loop for %016lx %s\n", address, write ? "write" : "read");
+			unsigned char tmp;
+			register unsigned long tmp1 asm("o5");
+			register unsigned long tmp2 asm("o4");
+
+			printk("do_sparc64_fault[%s:%d]: possible fault loop for %016lx %s\n",
+			       current->comm, current->pid,
+			       address, write ? "write" : "read");
+			printk("do_sparc64_fault: CHECK[papgd[%016lx],pcac[%016lx]]\n",
+			       __pa(mm->pgd), pgd_val(mm->pgd[0])<<11UL);
+			__asm__ __volatile__(
+				"wrpr	%%g0, 0x494, %%pstate\n\t"
+				"mov	%3, %%g4\n\t"
+				"mov	%%g7, %0\n\t"
+				"ldxa	[%%g4] %2, %1\n\t"
+				"wrpr	%%g0, 0x096, %%pstate"
+				: "=r" (tmp1), "=r" (tmp2)
+				: "i" (ASI_DMMU), "i" (TSB_REG));
+			printk("do_sparc64_fault:    IS[papgd[%016lx],pcac[%016lx]]\n",
+			       tmp1, tmp2);
+			printk("do_sparc64_fault: CHECK[ctx(%016lx)] IS[ctx(%016lx)]\n",
+			       mm->context, spitfire_get_secondary_context());
+			__asm__ __volatile__("rd	%%asi, %0"
+					     : "=r" (tmp));
+			printk("do_sparc64_fault: CHECK[seg(%02x)] IS[seg(%02x)]\n",
+			       current->thread.current_ds.seg, tmp);
 			show_regs(regs);
+			__sti();
+			while(1)
+				barrier();
 		}
 	} else {
 		lastpc = regs->tpc;
@@ -282,8 +312,8 @@ do_kernel_fault:
 				return;
 			}
 		} else {
-			current->tss.sig_address = address;
-			current->tss.sig_desc = SUBSIG_NOMAPPING;
+			current->thread.sig_address = address;
+			current->thread.sig_desc = SUBSIG_NOMAPPING;
 			force_sig(SIGSEGV, current);
 			return;
 		}
@@ -293,8 +323,8 @@ do_kernel_fault:
 
 do_sigbus:
 	up(&mm->mmap_sem);
-	current->tss.sig_address = address;
-	current->tss.sig_desc = SUBSIG_MISCERROR;
+	current->thread.sig_address = address;
+	current->thread.sig_desc = SUBSIG_MISCERROR;
 	force_sig(SIGBUS, current);
 	if (regs->tstate & TSTATE_PRIV)
 		goto do_kernel_fault;

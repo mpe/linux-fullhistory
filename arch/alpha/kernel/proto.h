@@ -194,7 +194,7 @@ extern void entDbg(void);
 
 /* process.c */
 extern void generic_kill_arch (int mode, char *reboot_cmd);
-extern int cpu_idle(void *) __attribute__((noreturn));
+extern void cpu_idle(void) __attribute__((noreturn));
 
 /* ptrace.c */
 extern int ptrace_set_bpt (struct task_struct *child);

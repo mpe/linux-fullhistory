@@ -1,4 +1,4 @@
-/* $Id: generic.c,v 1.8 1999/03/12 06:51:50 davem Exp $
+/* $Id: generic.c,v 1.9 1999/07/23 22:32:01 davem Exp $
  * generic.c: Generic Sparc mm routines that are not dependent upon
  *            MMU type but are Sparc specific.
  *
@@ -95,7 +95,8 @@ static inline void io_remap_pte_range(pte_t * pte, unsigned long address, unsign
 						  space);
 				curend = address + 0x10000;
 				offset += 0x10000;
-			}
+			} else
+				offset += PAGE_SIZE;
 		} else
 			offset += PAGE_SIZE;
 

@@ -232,7 +232,7 @@
 
 /* Given a 1W * 1W => 2W primitive, do the extended multiplication.  */
 
-#define _FP_MUL_MEAT_4_wide(fs, R, X, Y, doit)				    \
+#define _FP_MUL_MEAT_4_wide(wfracbits, R, X, Y, doit)			    \
   do {									    \
     _FP_FRAC_DECL_8(_z); _FP_FRAC_DECL_2(_b); _FP_FRAC_DECL_2(_c);	    \
     _FP_FRAC_DECL_2(_d); _FP_FRAC_DECL_2(_e); _FP_FRAC_DECL_2(_f);	    \
@@ -311,12 +311,12 @@
     /* Normalize since we know where the msb of the multiplicands	    \
        were (bit B), we know that the msb of the of the product is	    \
        at either 2B or 2B-1.  */					    \
-    _FP_FRAC_SRS_8(_z, _FP_WFRACBITS_##fs-1, 2*_FP_WFRACBITS_##fs);	    \
+    _FP_FRAC_SRS_8(_z, wfracbits-1, 2*wfracbits);			    \
     __FP_FRAC_SET_4(R, _FP_FRAC_WORD_8(_z,3), _FP_FRAC_WORD_8(_z,2),	    \
 		    _FP_FRAC_WORD_8(_z,1), _FP_FRAC_WORD_8(_z,0));	    \
   } while (0)
 
-#define _FP_MUL_MEAT_4_gmp(fs, R, X, Y)					    \
+#define _FP_MUL_MEAT_4_gmp(wfracbits, R, X, Y)				    \
   do {									    \
     _FP_FRAC_DECL_8(_z);						    \
 									    \
@@ -325,7 +325,7 @@
     /* Normalize since we know where the msb of the multiplicands	    \
        were (bit B), we know that the msb of the of the product is	    \
        at either 2B or 2B-1.  */					    \
-    _FP_FRAC_SRS_8(_z, _FP_WFRACBITS_##fs-1, 2*_FP_WFRACBITS_##fs);	    \
+    _FP_FRAC_SRS_8(_z, wfracbits-1, 2*wfracbits);	 		    \
     __FP_FRAC_SET_4(R, _FP_FRAC_WORD_8(_z,3), _FP_FRAC_WORD_8(_z,2),	    \
 		    _FP_FRAC_WORD_8(_z,1), _FP_FRAC_WORD_8(_z,0));	    \
   } while (0)

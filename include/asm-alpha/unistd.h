@@ -257,7 +257,7 @@
 #define __NR_munlockall		317
 #define __NR_sysinfo		318
 #define __NR__sysctl		319
-#define __NR_idle		320
+/* 320 was sys_idle.  */
 #define __NR_oldumount		321
 #define __NR_swapon		322
 #define __NR_times		323

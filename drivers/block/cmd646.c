@@ -1,4 +1,4 @@
-/* $Id: cmd646.c,v 1.14 1999/07/03 08:56:09 davem Exp $
+/* $Id: cmd646.c,v 1.15 1999/07/23 01:48:37 davem Exp $
  * cmd646.c: Enable interrupts at initialization time on Ultra/PCI machines.
  *           Note, this driver is not used at all on other systems because
  *           there the "BIOS" has done all of the following already.

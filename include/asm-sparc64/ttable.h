@@ -1,4 +1,4 @@
-/* $Id: ttable.h,v 1.11 1999/03/29 12:38:12 jj Exp $ */
+/* $Id: ttable.h,v 1.12 1999/07/30 09:31:24 davem Exp $ */
 #ifndef _SPARC64_TTABLE_H
 #define _SPARC64_TTABLE_H
 
@@ -91,7 +91,7 @@
 	nop;nop;nop;
 	
 #define TRAP_UTRAP(handler,lvl)						\
-	ldx	[%g6 + AOFF_task_tss + AOFF_thread_utraps], %g1;	\
+	ldx	[%g6 + AOFF_task_thread + AOFF_thread_utraps], %g1;	\
 	sethi	%hi(109f), %g7;						\
 	brz,pn	%g1, utrap;						\
 	 or	%g7, %lo(109f), %g7;					\

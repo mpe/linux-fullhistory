@@ -143,6 +143,7 @@ __asm__ __volatile__(					\
 extern asmlinkage void *(*resume)(void *last, void *next);
 #endif /* !defined (_LANGUAGE_ASSEMBLY) */
 
+#define prepare_to_switch()	do { } while(0)
 #define switch_to(prev,next,last) \
 do { \
 	(last) = resume(prev, next); \

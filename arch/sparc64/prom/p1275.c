@@ -1,4 +1,4 @@
-/* $Id: p1275.c,v 1.15 1998/10/13 14:03:47 davem Exp $
+/* $Id: p1275.c,v 1.16 1999/08/02 12:05:57 jj Exp $
  * p1275.c: Sun IEEE 1275 PROM low level interface routines
  *
  * Copyright (C) 1996,1997 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -252,8 +252,8 @@ void prom_cif_callback(void)
  * the counter is needed.  -DaveM
  */
 static int prom_entry_depth = 0;
-#ifdef __SMP__
 static spinlock_t prom_entry_lock = SPIN_LOCK_UNLOCKED;
+#ifdef __SMP__
 extern void smp_capture(void);
 extern void smp_release(void);
 #endif

@@ -339,6 +339,16 @@ beyond_if:
 
 	current->mm->start_stack =
 		(unsigned long) create_aout32_tables((char *)bprm->p, bprm);
+	if (!(current->thread.flags & SPARC_FLAG_32BIT)) {
+		unsigned long pgd_cache;
+
+		pgd_cache = ((unsigned long)current->mm->pgd[0])<<11UL;
+		__asm__ __volatile__("stxa\t%0, [%1] %2"
+				     : /* no outputs */
+				     : "r" (pgd_cache),
+				       "r" (TSB_REG), "i" (ASI_DMMU));
+		current->thread.flags |= SPARC_FLAG_32BIT;
+	}
 	start_thread32(regs, ex.a_entry, current->mm->start_stack);
 	if (current->flags & PF_PTRACED)
 		send_sig(SIGTRAP, current, 0);

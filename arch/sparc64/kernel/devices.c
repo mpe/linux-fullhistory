@@ -7,6 +7,7 @@
 #include <linux/kernel.h>
 #include <linux/tasks.h>
 #include <linux/init.h>
+#include <linux/ioport.h>
 
 #include <asm/page.h>
 #include <asm/oplib.h>
@@ -27,6 +28,10 @@ device_scan(unsigned long mem_start))
 	int nd, prom_node_cpu, thismid;
 	int cpu_nds[64];  /* One node for each cpu */
 	int cpu_ctr = 0;
+
+	/* FIX ME FAST... -DaveM */
+	ioport_resource.end = 0xffffffffffffffffUL;
+	iomem_resource.end = 0xffffffffffffffffUL;
 
 	prom_getstring(prom_root_node, "device_type", node_str, sizeof(node_str));
 

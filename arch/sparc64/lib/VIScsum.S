@@ -1,4 +1,4 @@
-/* $Id: VIScsum.S,v 1.4 1999/05/25 16:53:00 jj Exp $
+/* $Id: VIScsum.S,v 1.5 1999/07/30 09:35:36 davem Exp $
  * VIScsum.S: High bandwidth IP checksumming utilizing the UltraSparc
  *            Visual Instruction Set.
  *
@@ -341,7 +341,7 @@ csum_partial:
 	DO_THE_TRICK(f44,f46,f48,f50,f52,f54,f56,f58,f60,f62,f0,f2,f4,f6,f8,f10,f12,f14)
 	END_THE_TRICK(f60,f62,f0,f2,f4,f6,f8,f10,f12,f14,f16,f18,f20,f22,f24,f26,f28,f30)
 #ifdef __KERNEL__
-	ldub		[%g6 + AOFF_task_tss + AOFF_thread_current_ds], %g7
+	ldub		[%g6 + AOFF_task_thread + AOFF_thread_current_ds], %g7
 #endif
 	and		%o1, 0x3f, %o1		/*  IEU0	Group			*/
 #ifdef __KERNEL__

@@ -1,4 +1,4 @@
-/* $Id: pgtable.h,v 1.106 1999/06/27 00:38:33 davem Exp $
+/* $Id: pgtable.h,v 1.109 1999/08/02 08:57:46 jj Exp $
  * pgtable.h: SpitFire page table operations.
  *
  * Copyright 1996,1997 David S. Miller (davem@caip.rutgers.edu)
@@ -47,14 +47,14 @@
  * is different so we can optimize correctly for 32-bit tasks.
  */
 #define REAL_PTRS_PER_PMD	(1UL << (PAGE_SHIFT-2))
-#define PTRS_PER_PMD		((const int)((current->tss.flags & SPARC_FLAG_32BIT) ? \
+#define PTRS_PER_PMD		((const int)((current->thread.flags & SPARC_FLAG_32BIT) ? \
 				 (REAL_PTRS_PER_PMD >> 2) : (REAL_PTRS_PER_PMD)))
 
 /* We cannot use the top 16G because VPTE table lives there. */
 #define PTRS_PER_PGD		((1UL << (PAGE_SHIFT-3))-1)
 
 /* Kernel has a separate 44bit address space. */
-#define USER_PTRS_PER_PGD	((const int)((current->tss.flags & SPARC_FLAG_32BIT) ? \
+#define USER_PTRS_PER_PGD	((const int)((current->thread.flags & SPARC_FLAG_32BIT) ? \
 				 (1) : (PTRS_PER_PGD)))
 
 #define PTE_TABLE_SIZE	0x2000	/* 1024 entries 8 bytes each */
@@ -167,9 +167,12 @@ extern void *sparc_init_alloc(unsigned long *kbrk, unsigned long size);
 /* Cache and TLB flush operations. */
 
 /* These are the same regardless of whether this is an SMP kernel or not. */
-#define flush_cache_mm(mm)			flushw_user()
-#define flush_cache_range(mm, start, end)	flushw_user()
-#define flush_cache_page(vma, page)		flushw_user()
+#define flush_cache_mm(__mm) \
+	do { if ((__mm) == current->mm) flushw_user(); } while(0)
+#define flush_cache_range(mm, start, end) \
+	flush_cache_mm(mm)
+#define flush_cache_page(vma, page) \
+	flush_cache_mm((vma)->vm_mm)
 
 /* These operations are unnecessary on the SpitFire since D-CACHE is write-through. */
 #define flush_icache_range(start, end)		do { } while (0)
@@ -191,16 +194,16 @@ extern void __flush_tlb_page(unsigned long context, unsigned long page, unsigned
 #define flush_cache_all()	__flush_cache_all()
 #define flush_tlb_all()		__flush_tlb_all()
 
-#define flush_tlb_mm(mm) \
-do { if((mm)->context != NO_CONTEXT) \
-	__flush_tlb_mm((mm)->context & 0x3ff, SECONDARY_CONTEXT); \
+#define flush_tlb_mm(__mm) \
+do { if(CTX_VALID((__mm)->context)) \
+	__flush_tlb_mm(CTX_HWBITS((__mm)->context), SECONDARY_CONTEXT); \
 } while(0)
 
-#define flush_tlb_range(mm, start, end) \
-do { if((mm)->context != NO_CONTEXT) { \
+#define flush_tlb_range(__mm, start, end) \
+do { if(CTX_VALID((__mm)->context)) { \
 	unsigned long __start = (start)&PAGE_MASK; \
 	unsigned long __end = (end)&PAGE_MASK; \
-	__flush_tlb_range((mm)->context & 0x3ff, __start, \
+	__flush_tlb_range(CTX_HWBITS((__mm)->context), __start, \
 			  SECONDARY_CONTEXT, __end, PAGE_SIZE, \
 			  (__end - __start)); \
      } \
@@ -208,8 +211,8 @@ do { if((mm)->context != NO_CONTEXT) { \
 
 #define flush_tlb_page(vma, page) \
 do { struct mm_struct *__mm = (vma)->vm_mm; \
-     if(__mm->context != NO_CONTEXT) \
-	__flush_tlb_page(__mm->context & 0x3ff, (page)&PAGE_MASK, \
+     if(CTX_VALID(__mm->context)) \
+	__flush_tlb_page(CTX_HWBITS(__mm->context), (page)&PAGE_MASK, \
 			 SECONDARY_CONTEXT); \
 } while(0)
 
@@ -227,14 +230,14 @@ extern void smp_flush_tlb_page(struct mm_struct *mm, unsigned long page);
 
 extern __inline__ void flush_tlb_mm(struct mm_struct *mm)
 {
-	if(mm->context != NO_CONTEXT)
+	if (CTX_VALID(mm->context))
 		smp_flush_tlb_mm(mm);
 }
 
 extern __inline__ void flush_tlb_range(struct mm_struct *mm, unsigned long start,
 				       unsigned long end)
 {
-	if(mm->context != NO_CONTEXT)
+	if (CTX_VALID(mm->context))
 		smp_flush_tlb_range(mm, start, end);
 }
 
@@ -242,7 +245,7 @@ extern __inline__ void flush_tlb_page(struct vm_area_struct *vma, unsigned long 
 {
 	struct mm_struct *mm = vma->vm_mm;
 
-	if(mm->context != NO_CONTEXT)
+	if (CTX_VALID(mm->context))
 		smp_flush_tlb_page(mm, page);
 }
 
@@ -520,28 +523,6 @@ extern int do_check_pgt_cache(int, int);
 #define set_pgdir(address, entry)	do { } while(0)
 
 extern pgd_t swapper_pg_dir[1];
-
-extern inline void SET_PAGE_DIR(struct task_struct *tsk, pgd_t *pgdir)
-{
-	if(pgdir != swapper_pg_dir && tsk == current) {
-		register unsigned long paddr asm("o5");
-
-		paddr = __pa(pgdir);
-		__asm__ __volatile__ ("
-			rdpr		%%pstate, %%o4
-			wrpr		%%o4, %1, %%pstate
-			mov		%3, %%g4
-			mov		%0, %%g7
-			stxa		%%g0, [%%g4] %2
-			wrpr		%%o4, 0x0, %%pstate
-		" : /* No outputs */
-		  : "r" (paddr), "i" (PSTATE_MG|PSTATE_IE),
-		    "i" (ASI_DMMU), "i" (TSB_REG)
-		  : "o4");
-		flush_tlb_mm(current->mm);
-	}
-}
-
 /* Routines for getting a dvma scsi buffer. */
 struct mmu_sglist {
 	char *addr;

@@ -1,4 +1,4 @@
-/*  $Id: setup.c,v 1.44 1999/05/28 02:17:29 davem Exp $
+/*  $Id: setup.c,v 1.46 1999/08/02 08:39:36 davem Exp $
  *  linux/arch/sparc64/kernel/setup.c
  *
  *  Copyright (C) 1995,1996  David S. Miller (davem@caip.rutgers.edu)
@@ -135,17 +135,21 @@ int prom_callback(long *args)
 			 * Find process owning ctx, lookup mapping.
 			 */
 			struct task_struct *p;
+			struct mm_struct *mm = NULL;
 			pgd_t *pgdp;
 			pmd_t *pmdp;
 			pte_t *ptep;
 
-			for_each_task(p)
-				if (p->tss.ctx == ctx)
+			for_each_task(p) {
+				mm = p->mm;
+				if (CTX_HWBITS(mm->context) == ctx)
 					break;
-			if (p->tss.ctx != ctx)
+			}
+			if (!mm ||
+			    CTX_HWBITS(mm->context) != ctx)
 				goto done;
 
-			pgdp = pgd_offset(p->mm, va);
+			pgdp = pgd_offset(mm, va);
 			if (pgd_none(*pgdp))
 				goto done;
 			pmdp = pmd_offset(pgdp, va);
@@ -534,8 +538,7 @@ __initfunc(void setup_arch(char **cmdline_p,
 	init_mm.mmap->vm_page_prot = PAGE_SHARED;
 	init_mm.mmap->vm_start = PAGE_OFFSET;
 	init_mm.mmap->vm_end = *memory_end_p;
-	init_mm.context = (unsigned long) NO_CONTEXT;
-	init_task.tss.kregs = &fake_swapper_regs;
+	init_task.thread.kregs = &fake_swapper_regs;
 
 #ifdef CONFIG_IP_PNP
 	if (!ic_set_manually) {

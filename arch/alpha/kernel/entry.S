@@ -1092,7 +1092,7 @@ sys_call_table:
 	.quad sys_munlockall
 	.quad sys_sysinfo
 	.quad sys_sysctl
-	.quad sys_idle				/* 320 */
+	.quad sys_ni_syscall			/* 320 */
 	.quad sys_oldumount
 	.quad sys_swapon
 	.quad sys_times

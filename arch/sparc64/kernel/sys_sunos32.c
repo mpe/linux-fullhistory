@@ -1,4 +1,4 @@
-/* $Id: sys_sunos32.c,v 1.28 1999/06/29 12:34:04 davem Exp $
+/* $Id: sys_sunos32.c,v 1.30 1999/07/30 09:35:31 davem Exp $
  * sys_sunos32.c: SunOS binary compatability layer on sparc64.
  *
  * Copyright (C) 1995, 1996, 1997 David S. Miller (davem@caip.rutgers.edu)
@@ -557,9 +557,9 @@ asmlinkage int sunos_nosys(void)
 	struct pt_regs *regs;
 
 	lock_kernel();
-	regs = current->tss.kregs;
-	current->tss.sig_address = regs->tpc;
-	current->tss.sig_desc = regs->u_regs[UREG_G1];
+	regs = current->thread.kregs;
+	current->thread.sig_address = regs->tpc;
+	current->thread.sig_desc = regs->u_regs[UREG_G1];
 	send_sig(SIGSYS, current, 1);
 	printk("Process makes ni_syscall number %d, register dump:\n",
 	       (int) regs->u_regs[UREG_G1]);
@@ -1159,7 +1159,7 @@ asmlinkage int sunos_msgsys(int op, u32 arg1, u32 arg2, u32 arg3, u32 arg4)
 		if(!kmbuf)
 			break;
 		sp = (struct sparc_stackf32 *)
-			(current->tss.kregs->u_regs[UREG_FP] & 0xffffffffUL);
+			(current->thread.kregs->u_regs[UREG_FP] & 0xffffffffUL);
 		if(get_user(arg5, &sp->xxargs[0])) {
 			rval = -EFAULT;
 			break;

@@ -234,7 +234,7 @@
 
 /* Given a 1W * 1W => 2W primitive, do the extended multiplication.  */
 
-#define _FP_MUL_MEAT_2_wide(fs, R, X, Y, doit)				\
+#define _FP_MUL_MEAT_2_wide(wfracbits, R, X, Y, doit)			\
   do {									\
     _FP_FRAC_DECL_4(_z); _FP_FRAC_DECL_2(_b); _FP_FRAC_DECL_2(_c);	\
 									\
@@ -255,7 +255,7 @@
     /* Normalize since we know where the msb of the multiplicands	\
        were (bit B), we know that the msb of the of the product is	\
        at either 2B or 2B-1.  */					\
-    _FP_FRAC_SRS_4(_z, _FP_WFRACBITS_##fs-1, 2*_FP_WFRACBITS_##fs);	\
+    _FP_FRAC_SRS_4(_z, wfracbits-1, 2*wfracbits);			\
     R##_f0 = _FP_FRAC_WORD_4(_z,0);					\
     R##_f1 = _FP_FRAC_WORD_4(_z,1);					\
   } while (0)
@@ -264,7 +264,7 @@
    Do only 3 multiplications instead of four. This one is for machines
    where multiplication is much more expensive than subtraction.  */
 
-#define _FP_MUL_MEAT_2_wide_3mul(fs, R, X, Y, doit)			\
+#define _FP_MUL_MEAT_2_wide_3mul(wfracbits, R, X, Y, doit)		\
   do {									\
     _FP_FRAC_DECL_4(_z); _FP_FRAC_DECL_2(_b); _FP_FRAC_DECL_2(_c);	\
     _FP_W_TYPE _d;							\
@@ -299,12 +299,12 @@
     /* Normalize since we know where the msb of the multiplicands	\
        were (bit B), we know that the msb of the of the product is	\
        at either 2B or 2B-1.  */					\
-    _FP_FRAC_SRS_4(_z, _FP_WFRACBITS_##fs-1, 2*_FP_WFRACBITS_##fs);	\
+    _FP_FRAC_SRS_4(_z, wfracbits-1, 2*wfracbits);			\
     R##_f0 = _FP_FRAC_WORD_4(_z,0);					\
     R##_f1 = _FP_FRAC_WORD_4(_z,1);					\
   } while (0)
 
-#define _FP_MUL_MEAT_2_gmp(fs, R, X, Y)					\
+#define _FP_MUL_MEAT_2_gmp(wfracbits, R, X, Y)				\
   do {									\
     _FP_FRAC_DECL_4(_z);						\
     _FP_W_TYPE _x[2], _y[2];						\
@@ -316,11 +316,106 @@
     /* Normalize since we know where the msb of the multiplicands	\
        were (bit B), we know that the msb of the of the product is	\
        at either 2B or 2B-1.  */					\
-    _FP_FRAC_SRS_4(_z, _FP_WFRACBITS##_fs-1, 2*_FP_WFRACBITS_##fs);	\
+    _FP_FRAC_SRS_4(_z, wfracbits-1, 2*wfracbits);			\
     R##_f0 = _z_f[0];							\
     R##_f1 = _z_f[1];							\
   } while (0)
 
+/* Do at most 120x120=240 bits multiplication using double floating
+   point multiplication.  This is useful if floating point
+   multiplication has much bigger throughput than integer multiply.
+   It is supposed to work for _FP_W_TYPE_SIZE 64 and wfracbits
+   between 106 and 120 only.  
+   Caller guarantees that X and Y has (1LLL << (wfracbits - 1)) set.
+   SETFETZ is a macro which will disable all FPU exceptions and set rounding
+   towards zero,  RESETFE should optionally reset it back.  */
+
+#define _FP_MUL_MEAT_2_120_240_double(wfracbits, R, X, Y, setfetz, resetfe)	\
+  do {										\
+    static const double _const[] = {						\
+      /* 2^-24 */ 5.9604644775390625e-08,					\
+      /* 2^-48 */ 3.5527136788005009e-15,					\
+      /* 2^-72 */ 2.1175823681357508e-22,					\
+      /* 2^-96 */ 1.2621774483536189e-29,					\
+      /* 2^28 */ 2.68435456e+08,						\
+      /* 2^4 */ 1.600000e+01,							\
+      /* 2^-20 */ 9.5367431640625e-07,						\
+      /* 2^-44 */ 5.6843418860808015e-14,					\
+      /* 2^-68 */ 3.3881317890172014e-21,					\
+      /* 2^-92 */ 2.0194839173657902e-28,					\
+      /* 2^-116 */ 1.2037062152420224e-35};					\
+    double _a240, _b240, _c240, _d240, _e240, _f240, 				\
+	   _g240, _h240, _i240, _j240, _k240;					\
+    union { double d; UDItype i; } _l240, _m240, _n240, _o240,			\
+				   _p240, _q240, _r240, _s240;			\
+    UDItype _t240, _u240, _v240, _w240, _x240, _y240 = 0;			\
+										\
+    if (wfracbits < 106 || wfracbits > 120)					\
+      abort();									\
+										\
+    setfetz;									\
+										\
+    _e240 = (double)(long)(X##_f0 & 0xffffff);					\
+    _j240 = (double)(long)(Y##_f0 & 0xffffff);					\
+    _d240 = (double)(long)((X##_f0 >> 24) & 0xffffff);				\
+    _i240 = (double)(long)((Y##_f0 >> 24) & 0xffffff);				\
+    _c240 = (double)(long)(((X##_f1 << 16) & 0xffffff) | (X##_f0 >> 48));	\
+    _h240 = (double)(long)(((Y##_f1 << 16) & 0xffffff) | (Y##_f0 >> 48));	\
+    _b240 = (double)(long)((X##_f1 >> 8) & 0xffffff);				\
+    _g240 = (double)(long)((Y##_f1 >> 8) & 0xffffff);				\
+    _a240 = (double)(long)(X##_f1 >> 32);					\
+    _f240 = (double)(long)(Y##_f1 >> 32);					\
+    _e240 *= _const[3];								\
+    _j240 *= _const[3];								\
+    _d240 *= _const[2];								\
+    _i240 *= _const[2];								\
+    _c240 *= _const[1];								\
+    _h240 *= _const[1];								\
+    _b240 *= _const[0];								\
+    _g240 *= _const[0];								\
+    _s240.d =							      _e240*_j240;\
+    _r240.d =						_d240*_j240 + _e240*_i240;\
+    _q240.d =				  _c240*_j240 + _d240*_i240 + _e240*_h240;\
+    _p240.d =		    _b240*_j240 + _c240*_i240 + _d240*_h240 + _e240*_g240;\
+    _o240.d = _a240*_j240 + _b240*_i240 + _c240*_h240 + _d240*_g240 + _e240*_f240;\
+    _n240.d = _a240*_i240 + _b240*_h240 + _c240*_g240 + _d240*_f240;		\
+    _m240.d = _a240*_h240 + _b240*_g240 + _c240*_f240;				\
+    _l240.d = _a240*_g240 + _b240*_f240;					\
+    _k240 =   _a240*_f240;							\
+    _r240.d += _s240.d;								\
+    _q240.d += _r240.d;								\
+    _p240.d += _q240.d;								\
+    _o240.d += _p240.d;								\
+    _n240.d += _o240.d;								\
+    _m240.d += _n240.d;								\
+    _l240.d += _m240.d;								\
+    _k240 += _l240.d;								\
+    _s240.d -= ((_const[10]+_s240.d)-_const[10]);				\
+    _r240.d -= ((_const[9]+_r240.d)-_const[9]);					\
+    _q240.d -= ((_const[8]+_q240.d)-_const[8]);					\
+    _p240.d -= ((_const[7]+_p240.d)-_const[7]);					\
+    _o240.d += _const[7];							\
+    _n240.d += _const[6];							\
+    _m240.d += _const[5];							\
+    _l240.d += _const[4];							\
+    if (_s240.d != 0.0) _y240 = 1;						\
+    if (_r240.d != 0.0) _y240 = 1;						\
+    if (_q240.d != 0.0) _y240 = 1;						\
+    if (_p240.d != 0.0) _y240 = 1;						\
+    _t240 = (DItype)_k240;							\
+    _u240 = _l240.i;								\
+    _v240 = _m240.i;								\
+    _w240 = _n240.i;								\
+    _x240 = _o240.i;								\
+    R##_f1 = (_t240 << (128 - (wfracbits - 1)))					\
+	     | ((_u240 & 0xffffff) >> ((wfracbits - 1) - 104));			\
+    R##_f0 = ((_u240 & 0xffffff) << (168 - (wfracbits - 1)))			\
+    	     | ((_v240 & 0xffffff) << (144 - (wfracbits - 1)))			\
+    	     | ((_w240 & 0xffffff) << (120 - (wfracbits - 1)))			\
+    	     | ((_x240 & 0xffffff) >> ((wfracbits - 1) - 96))			\
+    	     | _y240;								\
+    resetfe;									\
+  } while (0)
 
 /*
  * Division algorithms:

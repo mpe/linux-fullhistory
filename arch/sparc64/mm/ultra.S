@@ -1,4 +1,4 @@
-/* $Id: ultra.S,v 1.32 1999/03/28 08:39:34 davem Exp $
+/* $Id: ultra.S,v 1.33 1999/08/02 08:39:49 davem Exp $
  * ultra.S: Don't expand these all over the place...
  *
  * Copyright (C) 1997 David S. Miller (davem@caip.rutgers.edu)
@@ -136,36 +136,37 @@ __flush_tlb_range_pbp_slow:
 flush_icache_page:	/* %o0 = phys_page */
 	sethi		%hi(1 << 13), %o2	! IC_set bit
 	mov		1, %g1
-	srlx		%o0, 5, %o0		! phys-addr comparitor
+	srlx		%o0, 5, %o0
 	clr		%o1			! IC_addr
 	sllx		%g1, 36, %g1
 	sub		%g1, 1, %g2
-	andn		%g2, 0xff, %g2		! IC_tag mask
-	nop
+	or		%o0, %g1, %o0		! VALID+phys-addr comparitor
+	sllx		%g2, 1, %g2
 
+	andn		%g2, 0xfe, %g2		! IC_tag mask
 1:	ldda		[%o1] ASI_IC_TAG, %o4
 	and		%o5, %g2, %o5
 	cmp		%o5, %o0
 	be,pn		%xcc, iflush1
-	 nop
+	 add		%o1, 0x20, %g3
 2:	ldda		[%o1 + %o2] ASI_IC_TAG, %o4
 	and		%o5, %g2, %o5
-	cmp		%o5, %o0
 
+	cmp		%o5, %o0
 	be,pn		%xcc, iflush2
 	 nop
-3:	add		%o1, 0x20, %o1
-	cmp		%o1, %o2
+3:	cmp		%g3, %o2
 	bne,pt		%xcc, 1b
-	 nop
+	 mov		%g3, %o1
 	retl
 	 nop
+
 iflush1:stxa		%g0, [%o1] ASI_IC_TAG
-	ba,pt		%xcc, 2b
-	 flush		%g6
+	flush		%g6
+	ba,a,pt		%xcc, 2b
 iflush2:stxa		%g0, [%o1 + %o2] ASI_IC_TAG
-	ba,pt		%xcc, 3b
-	 flush		%g6
+	flush		%g6
+	ba,a,pt		%xcc, 3b
 
 #ifdef __SMP__
 	/* These are all called by the slaves of a cross call, at

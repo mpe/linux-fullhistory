@@ -1,4 +1,4 @@
-/* $Id: system.h,v 1.50 1999/05/08 03:03:22 davem Exp $ */
+/* $Id: system.h,v 1.52 1999/08/02 08:39:59 davem Exp $ */
 #ifndef __SPARC64_SYSTEM_H
 #define __SPARC64_SYSTEM_H
 
@@ -124,6 +124,7 @@ extern __inline__ void flushw_user(void)
 }
 
 #define flush_user_windows flushw_user
+#define flush_register_windows flushw_all
 
 	/* See what happens when you design the chip correctly?
 	 *
@@ -135,20 +136,19 @@ extern __inline__ void flushw_user(void)
 	 * and 2 stores in this critical code path.  -DaveM
 	 */
 #define switch_to(prev, next, last)						\
-do {	if (current->tss.flags & SPARC_FLAG_PERFCTR) {				\
+do {	if (current->thread.flags & SPARC_FLAG_PERFCTR) {			\
 		unsigned long __tmp;						\
 		read_pcr(__tmp);						\
-		current->tss.pcr_reg = __tmp;					\
+		current->thread.pcr_reg = __tmp;				\
 		read_pic(__tmp);						\
-		current->tss.kernel_cntd0 += (unsigned int)(__tmp);		\
-		current->tss.kernel_cntd1 += ((__tmp) >> 32);			\
+		current->thread.kernel_cntd0 += (unsigned int)(__tmp);		\
+		current->thread.kernel_cntd1 += ((__tmp) >> 32);		\
 	}									\
 	save_and_clear_fpu();							\
-	__asm__ __volatile__(							\
-	"flushw\n\t"								\
-	"wrpr	%g0, 0x94, %pstate\n\t");					\
-	__get_mmu_context(next);						\
-	(next)->mm->cpu_vm_mask |= (1UL << smp_processor_id());			\
+	/* If you are tempted to conditionalize the following */		\
+	/* so that ASI is only written if it changes, think again. */		\
+	__asm__ __volatile__("wr %%g0, %0, %%asi"				\
+			     : : "r" (next->thread.current_ds.seg));		\
 	__asm__ __volatile__(							\
 	"mov	%%g6, %%g5\n\t"							\
 	"wrpr	%%g0, 0x95, %%pstate\n\t"					\
@@ -156,15 +156,15 @@ do {	if (current->tss.flags & SPARC_FLAG_PERFCTR) {				\
 	"stx	%%i7, [%%sp + 2047 + 0x78]\n\t"					\
 	"rdpr	%%wstate, %%o5\n\t"						\
 	"stx	%%o6, [%%g6 + %3]\n\t"						\
-	"sth	%%o5, [%%g6 + %2]\n\t"						\
+	"stb	%%o5, [%%g6 + %2]\n\t"						\
 	"rdpr	%%cwp, %%o5\n\t"						\
-	"sth	%%o5, [%%g6 + %5]\n\t"						\
+	"stb	%%o5, [%%g6 + %5]\n\t"						\
 	"mov	%1, %%g6\n\t"							\
-	"lduh	[%1 + %5], %%g1\n\t"						\
+	"ldub	[%1 + %5], %%g1\n\t"						\
 	"wrpr	%%g1, %%cwp\n\t"						\
 	"ldx	[%%g6 + %3], %%o6\n\t"						\
-	"lduh	[%%g6 + %2], %%o5\n\t"						\
-	"lduh	[%%g6 + %4], %%o7\n\t"						\
+	"ldub	[%%g6 + %2], %%o5\n\t"						\
+	"ldub	[%%g6 + %4], %%o7\n\t"						\
 	"mov	%%g6, %%l2\n\t"							\
 	"wrpr	%%o5, 0x0, %%wstate\n\t"					\
 	"ldx	[%%sp + 2047 + 0x70], %%i6\n\t"					\
@@ -172,22 +172,23 @@ do {	if (current->tss.flags & SPARC_FLAG_PERFCTR) {				\
 	"wrpr	%%g0, 0x94, %%pstate\n\t"					\
 	"mov	%%l2, %%g6\n\t"							\
 	"wrpr	%%g0, 0x96, %%pstate\n\t"					\
-	"andcc	%%o7, 0x100, %%g0\n\t"						\
+	"andcc	%%o7, %6, %%g0\n\t"						\
 	"bne,pn	%%icc, ret_from_syscall\n\t"					\
 	" mov	%%g5, %0\n\t"							\
 	: "=&r" (last)								\
 	: "r" (next),								\
-	  "i" ((const unsigned long)(&((struct task_struct *)0)->tss.wstate)),	\
-	  "i" ((const unsigned long)(&((struct task_struct *)0)->tss.ksp)),	\
-	  "i" ((const unsigned long)(&((struct task_struct *)0)->tss.flags)),	\
-	  "i" ((const unsigned long)(&((struct task_struct *)0)->tss.cwp))	\
+	  "i" ((const unsigned long)(&((struct task_struct *)0)->thread.wstate)),\
+	  "i" ((const unsigned long)(&((struct task_struct *)0)->thread.ksp)),	\
+	  "i" ((const unsigned long)(&((struct task_struct *)0)->thread.flags)),\
+	  "i" ((const unsigned long)(&((struct task_struct *)0)->thread.cwp)),	\
+	  "i" (SPARC_FLAG_NEWCHILD)						\
 	: "cc", "g1", "g2", "g3", "g5", "g7",					\
 	  "l2", "l3", "l4", "l5", "l6", "l7",					\
 	  "i0", "i1", "i2", "i3", "i4", "i5",					\
 	  "o0", "o1", "o2", "o3", "o4", "o5", "o7");				\
 	/* If you fuck with this, update ret_from_syscall code too. */		\
-	if (current->tss.flags & SPARC_FLAG_PERFCTR) {				\
-		write_pcr(current->tss.pcr_reg);				\
+	if (current->thread.flags & SPARC_FLAG_PERFCTR) {			\
+		write_pcr(current->thread.pcr_reg);				\
 		reset_pic();							\
 	}									\
 } while(0)

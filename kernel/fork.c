@@ -321,6 +321,7 @@ inline void __mmdrop(struct mm_struct *mm)
 {
 	if (mm == &init_mm) BUG();
 	pgd_free(mm->pgd);
+	destroy_context(mm);
 	kmem_cache_free(mm_cachep, mm);
 }
 

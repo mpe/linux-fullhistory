@@ -29,9 +29,12 @@
 #define _FP_WS_TYPE		signed long
 #define _FP_I_TYPE		long
 
-#define _FP_MUL_MEAT_S(R,X,Y)	_FP_MUL_MEAT_1_imm(S,R,X,Y)
-#define _FP_MUL_MEAT_D(R,X,Y)	_FP_MUL_MEAT_1_wide(D,R,X,Y,umul_ppmm)
-#define _FP_MUL_MEAT_Q(R,X,Y)	_FP_MUL_MEAT_2_wide_3mul(Q,R,X,Y,umul_ppmm)
+#define _FP_MUL_MEAT_S(R,X,Y)					\
+  _FP_MUL_MEAT_1_imm(_FP_WFRACBITS_S,R,X,Y)
+#define _FP_MUL_MEAT_D(R,X,Y)					\
+  _FP_MUL_MEAT_1_wide(_FP_WFRACBITS_D,R,X,Y,umul_ppmm)
+#define _FP_MUL_MEAT_Q(R,X,Y)					\
+  _FP_MUL_MEAT_2_wide_3mul(_FP_WFRACBITS_Q,R,X,Y,umul_ppmm)
 
 #define _FP_DIV_MEAT_S(R,X,Y)	_FP_DIV_MEAT_1_imm(S,R,X,Y,_FP_DIV_HELP_imm)
 #define _FP_DIV_MEAT_D(R,X,Y)	_FP_DIV_MEAT_1_udiv(D,R,X,Y)
@@ -53,7 +56,7 @@
  * CPU instruction emulation this should prefer Y.
  * (see SPAMv9 B.2.2 section).
  */
-#define _FP_CHOOSENAN(fs, wc, R, X, Y)				\
+#define _FP_CHOOSENAN(fs, wc, R, X, Y, OP)			\
   do {								\
     if ((_FP_FRAC_HIGH_RAW_##fs(Y) & _FP_QNANBIT_##fs)		\
 	&& !(_FP_FRAC_HIGH_RAW_##fs(X) & _FP_QNANBIT_##fs))	\
@@ -71,7 +74,7 @@
 
 /* Obtain the current rounding mode. */
 #ifndef FP_ROUNDMODE
-#define FP_ROUNDMODE	((current->tss.xfsr[0] >> 30) & 0x3)
+#define FP_ROUNDMODE	((current->thread.xfsr[0] >> 30) & 0x3)
 #endif
 
 /* Exception flags. */
@@ -83,6 +86,6 @@
 
 #define FP_HANDLE_EXCEPTIONS return _fex
 
-#define FP_INHIBIT_RESULTS ((current->tss.xfsr[0] >> 23) & _fex)
+#define FP_INHIBIT_RESULTS ((current->thread.xfsr[0] >> 23) & _fex)
 
 #endif

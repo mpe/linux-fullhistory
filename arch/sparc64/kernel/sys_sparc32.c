@@ -1,4 +1,4 @@
-/* $Id: sys_sparc32.c,v 1.112 1999/06/29 12:34:02 davem Exp $
+/* $Id: sys_sparc32.c,v 1.117 1999/08/02 08:39:40 davem Exp $
  * sys_sparc32.c: Conversion between 32bit and 64bit native syscalls.
  *
  * Copyright (C) 1997,1998 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -1663,85 +1663,6 @@ asmlinkage int sys32_rt_sigpending(sigset_t32 *set, __kernel_size_t32 sigsetsize
 	return ret;
 }
 
-siginfo_t32 *
-siginfo64to32(siginfo_t32 *d, siginfo_t *s)
-{
-	memset (&d, 0, sizeof(siginfo_t32));
-	d->si_signo = s->si_signo;
-	d->si_errno = s->si_errno;
-	d->si_code = s->si_code;
-	if (s->si_signo >= SIGRTMIN) {
-		d->si_pid = s->si_pid;
-		d->si_uid = s->si_uid;
-		/* XXX: Ouch, how to find this out??? */
-		d->si_int = s->si_int;
-	} else switch (s->si_signo) {
-	/* XXX: What about POSIX1.b timers */
-	case SIGCHLD:
-		d->si_pid = s->si_pid;
-		d->si_status = s->si_status;
-		d->si_utime = s->si_utime;
-		d->si_stime = s->si_stime;
-		break;
-	case SIGSEGV:
-	case SIGBUS:
-	case SIGFPE:
-	case SIGILL:
-		d->si_addr = (long)(s->si_addr);
-		/* XXX: Do we need to translate this from sparc64 to sparc32 traps? */
-		d->si_trapno = s->si_trapno;
-		break;
-	case SIGPOLL:
-		d->si_band = s->si_band;
-		d->si_fd = s->si_fd;
-		break;
-	default:
-		d->si_pid = s->si_pid;
-		d->si_uid = s->si_uid;
-		break;
-	}
-	return d;
-}
-
-siginfo_t *
-siginfo32to64(siginfo_t *d, siginfo_t32 *s)
-{
-	d->si_signo = s->si_signo;
-	d->si_errno = s->si_errno;
-	d->si_code = s->si_code;
-	if (s->si_signo >= SIGRTMIN) {
-		d->si_pid = s->si_pid;
-		d->si_uid = s->si_uid;
-		/* XXX: Ouch, how to find this out??? */
-		d->si_int = s->si_int;
-	} else switch (s->si_signo) {
-	/* XXX: What about POSIX1.b timers */
-	case SIGCHLD:
-		d->si_pid = s->si_pid;
-		d->si_status = s->si_status;
-		d->si_utime = s->si_utime;
-		d->si_stime = s->si_stime;
-		break;
-	case SIGSEGV:
-	case SIGBUS:
-	case SIGFPE:
-	case SIGILL:
-		d->si_addr = (void *)A(s->si_addr);
-		/* XXX: Do we need to translate this from sparc32 to sparc64 traps? */
-		d->si_trapno = s->si_trapno;
-		break;
-	case SIGPOLL:
-		d->si_band = s->si_band;
-		d->si_fd = s->si_fd;
-		break;
-	default:
-		d->si_pid = s->si_pid;
-		d->si_uid = s->si_uid;
-		break;
-	}
-	return d;
-}
-
 extern asmlinkage int
 sys_rt_sigtimedwait(const sigset_t *uthese, siginfo_t *uinfo,
 		    const struct timespec *uts, size_t sigsetsize);
@@ -1753,10 +1674,9 @@ sys32_rt_sigtimedwait(sigset_t32 *uthese, siginfo_t32 *uinfo,
 	sigset_t s;
 	sigset_t32 s32;
 	struct timespec t;
-	int ret;
+	int ret, err, i;
 	mm_segment_t old_fs = get_fs();
 	siginfo_t info;
-	siginfo_t32 info32;
 		
 	if (copy_from_user (&s32, uthese, sizeof(sigset_t32)))
 		return -EFAULT;
@@ -1776,8 +1696,43 @@ sys32_rt_sigtimedwait(sigset_t32 *uthese, siginfo_t32 *uinfo,
 	ret = sys_rt_sigtimedwait(&s, &info, &t, sigsetsize);
 	set_fs (old_fs);
 	if (ret >= 0 && uinfo) {
-		if (copy_to_user (uinfo, siginfo64to32(&info32, &info), sizeof(siginfo_t32)))
-			return -EFAULT;
+		err = put_user (info.si_signo, &uinfo->si_signo);
+		err |= __put_user (info.si_errno, &uinfo->si_errno);
+		err |= __put_user (info.si_code, &uinfo->si_code);
+		if (info.si_code < 0)
+			err |= __copy_to_user (uinfo->_sifields._pad, info._sifields._pad, SI_PAD_SIZE);
+		else {
+			i = info.si_signo;
+			if (info.si_code == SI_USER)
+				i = SIGRTMIN;
+			switch (i) {
+			case SIGPOLL:
+				err |= __put_user (info.si_band, &uinfo->si_band);
+				err |= __put_user (info.si_fd, &uinfo->si_fd);
+				break;
+			case SIGCHLD:
+				err |= __put_user (info.si_pid, &uinfo->si_pid);
+				err |= __put_user (info.si_uid, &uinfo->si_uid);
+				err |= __put_user (info.si_status, &uinfo->si_status);
+				err |= __put_user (info.si_utime, &uinfo->si_utime);
+				err |= __put_user (info.si_stime, &uinfo->si_stime);
+				break;
+			case SIGSEGV:
+			case SIGILL:
+			case SIGFPE:
+			case SIGBUS:
+			case SIGEMT:
+				err |= __put_user ((long)info.si_addr, &uinfo->si_addr);
+				err |= __put_user (info.si_trapno, &uinfo->si_trapno);
+				break;
+			default:
+				err |= __put_user (info.si_pid, &uinfo->si_pid);
+				err |= __put_user (info.si_uid, &uinfo->si_uid);
+				break;
+			}
+		}
+		if (err)
+			ret = -EFAULT;
 	}
 	return ret;
 }
@@ -1789,14 +1744,12 @@ asmlinkage int
 sys32_rt_sigqueueinfo(int pid, int sig, siginfo_t32 *uinfo)
 {
 	siginfo_t info;
-	siginfo_t32 info32;
 	int ret;
 	mm_segment_t old_fs = get_fs();
 	
-	if (copy_from_user (&info32, uinfo, sizeof(siginfo_t32)))
+	if (copy_from_user (&info, uinfo, 3*sizeof(int)) ||
+	    copy_from_user (info._sifields._pad, uinfo->_sifields._pad, SI_PAD_SIZE))
 		return -EFAULT;
-	/* XXX: Is this correct? */
-	siginfo32to64(&info, &info32);
 	set_fs (KERNEL_DS);
 	ret = sys_rt_sigqueueinfo(pid, sig, &info);
 	set_fs (old_fs);
@@ -2659,7 +2612,7 @@ asmlinkage int sys32_sigaction (int sig, struct old_sigaction32 *act, struct old
         int ret;
 
 	if(sig < 0) {
-		current->tss.new_signal = 1;
+		current->thread.flags |= SPARC_FLAG_NEWSIGNALS;
 		sig = -sig;
 	}
 
@@ -2703,7 +2656,7 @@ sys32_rt_sigaction(int sig, struct sigaction32 *act, struct sigaction32 *oact,
 	/* All tasks which use RT signals (effectively) use
 	 * new style signals.
 	 */
-	current->tss.new_signal = 1;
+	current->thread.flags |= SPARC_FLAG_NEWSIGNALS;
 
         if (act) {
 		new_ka.ka_restorer = restorer;
@@ -2883,6 +2836,8 @@ asmlinkage int sparc32_execve(struct pt_regs *regs)
         int error, base = 0;
         char *filename;
 
+	/* User register window flush is done by entry.S */
+
         /* Check for indirect call. */
         if((u32)regs->u_regs[UREG_G1] == 0)
                 base = 1;
@@ -2899,8 +2854,8 @@ asmlinkage int sparc32_execve(struct pt_regs *regs)
 
 	if(!error) {
 		fprs_write(0);
-		current->tss.xfsr[0] = 0;
-		current->tss.fpsaved[0] = 0;
+		current->thread.xfsr[0] = 0;
+		current->thread.fpsaved[0] = 0;
 		regs->tstate &= ~TSTATE_PEF;
 	}
 out:

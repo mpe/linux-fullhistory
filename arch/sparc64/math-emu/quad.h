@@ -108,13 +108,9 @@ union _FP_UNION_Q
       _FP_PACK_RAW_4_P(Q,val,X);	\
   } while (0)
 
-#define FP_ISSIGNAN_Q(X)	_FP_ISSIGNAN(Q,4,X)
-#define FP_NEG_Q(R,X)		_FP_NEG(Q,4,R,X)
-#define FP_ADD_Q(R,X,Y)		_FP_ADD(Q,4,R,X,Y)
-/* single.h and double.h define FP_SUB_t this way too. However, _FP_SUB is
- * never defined in op-common.h! Fortunately nobody seems to use the FP_SUB_t 
- * macros: I suggest a combination of FP_NEG and FP_ADD :-> -- PMM 02/1998
- */
+#define FP_ISSIGNAN_Q(X)		_FP_ISSIGNAN(Q,4,X)
+#define FP_NEG_Q(R,X)			_FP_NEG(Q,4,R,X)
+#define FP_ADD_Q(R,X,Y)			_FP_ADD(Q,4,R,X,Y)
 #define FP_SUB_Q(R,X,Y)			_FP_SUB(Q,4,R,X,Y)
 #define FP_MUL_Q(R,X,Y)			_FP_MUL(Q,4,R,X,Y)
 #define FP_DIV_Q(R,X,Y)			_FP_DIV(Q,4,R,X,Y)

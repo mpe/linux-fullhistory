@@ -1,4 +1,4 @@
-/* $Id: ioctl.c,v 1.11 1999/05/27 00:36:25 davem Exp $
+/* $Id: ioctl.c,v 1.12 1999/07/23 01:57:03 davem Exp $
  * ioctl.c: Solaris ioctl emulation.
  *
  * Copyright (C) 1997 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -367,7 +367,6 @@ static inline int solaris_sockmod(unsigned int fd, unsigned int cmd, u32 arg)
 static inline int solaris_timod(unsigned int fd, unsigned int cmd, u32 arg,
                                     int len, int *len_p)
 {
-        struct inode *ino;
 	int ret;
 		
 	switch (cmd & 0xff) {
@@ -459,7 +458,6 @@ static inline int solaris_S(struct file *filp, unsigned int fd, unsigned int cmd
 	mm_segment_t old_fs;
 	struct strioctl si;
 	struct inode *ino;
-        struct file *filp;
         struct sol_socket_struct *sock;
         struct module_info *mi;
 

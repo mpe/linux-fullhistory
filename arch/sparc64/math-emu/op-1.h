@@ -120,31 +120,31 @@
 /* Basic.  Assuming the host word size is >= 2*FRACBITS, we can do the
    multiplication immediately.  */
 
-#define _FP_MUL_MEAT_1_imm(fs, R, X, Y)					\
+#define _FP_MUL_MEAT_1_imm(wfracbits, R, X, Y)				\
   do {									\
     R##_f = X##_f * Y##_f;						\
     /* Normalize since we know where the msb of the multiplicands	\
        were (bit B), we know that the msb of the of the product is	\
        at either 2B or 2B-1.  */					\
-    _FP_FRAC_SRS_1(R, _FP_WFRACBITS_##fs-1, 2*_FP_WFRACBITS_##fs);	\
+    _FP_FRAC_SRS_1(R, wfracbits-1, 2*wfracbits);			\
   } while (0)
 
 /* Given a 1W * 1W => 2W primitive, do the extended multiplication.  */
 
-#define _FP_MUL_MEAT_1_wide(fs, R, X, Y, doit)				\
+#define _FP_MUL_MEAT_1_wide(wfracbits, R, X, Y, doit)			\
   do {									\
     _FP_W_TYPE _Z_f0, _Z_f1;						\
     doit(_Z_f1, _Z_f0, X##_f, Y##_f);					\
     /* Normalize since we know where the msb of the multiplicands	\
        were (bit B), we know that the msb of the of the product is	\
        at either 2B or 2B-1.  */					\
-    _FP_FRAC_SRS_2(_Z, _FP_WFRACBITS_##fs-1, 2*_FP_WFRACBITS_##fs);	\
+    _FP_FRAC_SRS_2(_Z, wfracbits-1, 2*wfracbits);			\
     R##_f = _Z_f0;							\
   } while (0)
 
 /* Finally, a simple widening multiply algorithm.  What fun!  */
 
-#define _FP_MUL_MEAT_1_hard(fs, R, X, Y)				\
+#define _FP_MUL_MEAT_1_hard(wfracbits, R, X, Y)				\
   do {									\
     _FP_W_TYPE _xh, _xl, _yh, _yl, _z_f0, _z_f1, _a_f0, _a_f1;		\
 									\
@@ -168,7 +168,7 @@
     _FP_FRAC_ADD_2(_z, _z, _a);						\
 									\
     /* normalize */							\
-    _FP_FRAC_SRS_2(_z, _FP_WFRACBITS_##fs - 1, 2*_FP_WFRACBITS_##fs);	\
+    _FP_FRAC_SRS_2(_z, wfracbits - 1, 2*wfracbits);			\
     R##_f = _z_f0;							\
   } while (0)
 

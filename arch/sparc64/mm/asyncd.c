@@ -1,4 +1,4 @@
-/*  $Id: asyncd.c,v 1.8 1999/07/04 04:35:55 davem Exp $
+/*  $Id: asyncd.c,v 1.9 1999/07/30 09:35:43 davem Exp $
  *  The asyncd kernel daemon. This handles paging on behalf of 
  *  processes that receive page faults due to remote (async) memory
  *  accesses. 
@@ -91,7 +91,8 @@ static void add_to_async_queue(int taskid,
 void async_fault(unsigned long address, int write, int taskid,
 		 void (*callback)(int,unsigned long,int,int))
 {
-	struct task_struct *tsk = task[taskid];
+#warning Need some fixing here... -DaveM
+	struct task_struct *tsk = current /* XXX task[taskid] */;
 	struct mm_struct *mm = tsk->mm;
 
 	stats.faults++;
@@ -111,7 +112,8 @@ static int fault_in_page(int taskid,
 {
 	static unsigned last_address;
 	static int last_task, loop_counter;
-	struct task_struct *tsk = task[taskid];
+#warning Need some fixing here... -DaveM
+	struct task_struct *tsk = current /* XXX task[taskid] */;
 	pgd_t *pgd;
 	pmd_t *pmd;
 	pte_t *pte;
@@ -178,8 +180,8 @@ no_memory:
 	
 bad_area:	  
 	stats.failure++;
-	tsk->tss.sig_address = address;
-	tsk->tss.sig_desc = SUBSIG_NOMAPPING;
+	tsk->thread.sig_address = address;
+	tsk->thread.sig_desc = SUBSIG_NOMAPPING;
 	send_sig(SIGSEGV, tsk, 1);
 	return 1;
 }

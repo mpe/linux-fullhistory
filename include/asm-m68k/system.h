@@ -16,6 +16,8 @@ extern inline void wrusp(unsigned long usp) {
 	__asm__ __volatile__("move %0,%/usp" : : "a" (usp));
 }
 
+#define prepare_to_switch()	do { } while(0)
+
 /*
  * switch_to(n) should switch tasks to task ptr, first checking that
  * ptr isn't the current task, in which case it does nothing.  This

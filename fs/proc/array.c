@@ -603,7 +603,7 @@ static unsigned long get_wchan(struct task_struct *p)
 #ifdef __sparc_v9__
 		bias = STACK_BIAS;
 #endif
-		fp = p->tss.ksp + bias;
+		fp = p->thread.ksp + bias;
 		do {
 			/* Bogus frame pointer? */
 			if (fp < (task_base + sizeof(struct task_struct)) ||
@@ -648,11 +648,11 @@ static unsigned long get_wchan(struct task_struct *p)
 #define KSTK_EIP(tsk)	((tsk)->tss.regs->nip)
 #define KSTK_ESP(tsk)	((tsk)->tss.regs->gpr[1])
 #elif defined (__sparc_v9__)
-# define KSTK_EIP(tsk)  ((tsk)->tss.kregs->tpc)
-# define KSTK_ESP(tsk)  ((tsk)->tss.kregs->u_regs[UREG_FP])
+# define KSTK_EIP(tsk)  ((tsk)->thread.kregs->tpc)
+# define KSTK_ESP(tsk)  ((tsk)->thread.kregs->u_regs[UREG_FP])
 #elif defined(__sparc__)
-# define KSTK_EIP(tsk)  ((tsk)->tss.kregs->pc)
-# define KSTK_ESP(tsk)  ((tsk)->tss.kregs->u_regs[UREG_FP])
+# define KSTK_EIP(tsk)  ((tsk)->thread.kregs->pc)
+# define KSTK_ESP(tsk)  ((tsk)->thread.kregs->u_regs[UREG_FP])
 #endif
 
 /* Gcc optimizes away "strlen(x)" for constant x */

@@ -1,4 +1,4 @@
-/* $Id: mmu_context.h,v 1.36 1999/05/25 16:53:34 jj Exp $ */
+/* $Id: mmu_context.h,v 1.39 1999/08/02 08:39:57 davem Exp $ */
 #ifndef __SPARC64_MMU_CONTEXT_H
 #define __SPARC64_MMU_CONTEXT_H
 
@@ -8,122 +8,140 @@
 #include <asm/spitfire.h>
 #include <asm/spinlock.h>
 
-#define NO_CONTEXT     0
-
 #ifndef __ASSEMBLY__
 
+extern spinlock_t ctx_alloc_lock;
 extern unsigned long tlb_context_cache;
 extern unsigned long mmu_context_bmap[];
 
 #define CTX_VERSION_SHIFT	(PAGE_SHIFT - 3)
 #define CTX_VERSION_MASK	((~0UL) << CTX_VERSION_SHIFT)
 #define CTX_FIRST_VERSION	((1UL << CTX_VERSION_SHIFT) + 1UL)
+#define CTX_VALID(__ctx)	\
+	 (!(((__ctx) ^ tlb_context_cache) & CTX_VERSION_MASK))
+#define CTX_HWBITS(__ctx)	((__ctx) & ~CTX_VERSION_MASK)
 
 extern void get_new_mmu_context(struct mm_struct *mm);
 
-/* Initialize/destroy the context related info for a new mm_struct
- * instance.
+/* Initialize a new mmu context.  This is invoked when a new
+ * address space instance (unique or shared) is instantiated.
+ * A fresh mm_struct is cleared out to zeros, so this need not
+ * do anything on Sparc64 since the only thing we care about
+ * is that mm->context is an invalid context (ie. zero).
  */
-#define init_new_context(__mm)	((__mm)->context = NO_CONTEXT)
+#define init_new_context(__tsk, __mm)	do { } while(0)
 
-/* Kernel threads like rpciod and nfsd drop their mm, and then use
- * init_mm, when this happens we must make sure the secondary context is
- * updated as well.  Otherwise we have disasters relating to
- * set_fs/get_fs usage later on.
- *
- * Also we can only clear the mmu_context_bmap bit when this is
- * the final reference to the address space.
+/* Destroy a dead context.  This occurs when mmput drops the
+ * mm_users count to zero, the mmaps have been released, and
+ * all the page tables have been flushed.  Our job is to destroy
+ * any remaining processor-specific state, and in the sparc64
+ * case this just means freeing up the mmu context ID held by
+ * this task if valid.
  */
-#define destroy_context(__mm)	do { 						\
-	if ((__mm)->context != NO_CONTEXT &&					\
-	    atomic_read(&(__mm)->count) == 1) { 				\
-		if (!(((__mm)->context ^ tlb_context_cache) & CTX_VERSION_MASK))\
-			clear_bit((__mm)->context & ~(CTX_VERSION_MASK),	\
-				  mmu_context_bmap);				\
-		(__mm)->context = NO_CONTEXT; 					\
-		if(current->mm == (__mm)) {					\
-			current->tss.ctx = 0;					\
-			spitfire_set_secondary_context(0);			\
-			__asm__ __volatile__("flush %g6");			\
-		}								\
-	} 									\
-} while (0)
+#define destroy_context(__mm)					\
+do {	spin_lock(&ctx_alloc_lock);				\
+	if (CTX_VALID((__mm)->context)) {			\
+		unsigned long nr = CTX_HWBITS((__mm)->context);	\
+		mmu_context_bmap[nr>>6] &= ~(1UL << (nr & 63));	\
+	}							\
+	spin_unlock(&ctx_alloc_lock);				\
+} while(0)
 
-/* The caller must flush the current set of user windows
- * to the stack (if necessary) before we get here.
+/* Reload the two core values used by TLB miss handler
+ * processing on sparc64.  They are:
+ * 1) The physical address of mm->pgd, when full page
+ *    table walks are necessary, this is where the
+ *    search begins.
+ * 2) A "PGD cache".  For 32-bit tasks only pgd[0] is
+ *    ever used since that maps the entire low 4GB
+ *    completely.  To speed up TLB miss processing we
+ *    make this value available to the handlers.  This
+ *    decreases the amount of memory traffic incurred.
  */
-extern __inline__ void __get_mmu_context(struct task_struct *tsk)
+#define reload_tlbmiss_state(__tsk, __mm) \
+do { \
+	register unsigned long paddr asm("o5"); \
+	register unsigned long pgd_cache asm("o4"); \
+	paddr = __pa((__mm)->pgd); \
+	pgd_cache = 0UL; \
+	if ((__tsk)->thread.flags & SPARC_FLAG_32BIT) \
+		pgd_cache = pgd_val((__mm)->pgd[0]) << 11UL; \
+	__asm__ __volatile__("wrpr	%%g0, 0x494, %%pstate\n\t" \
+			     "mov	%3, %%g4\n\t" \
+			     "mov	%0, %%g7\n\t" \
+			     "stxa	%1, [%%g4] %2\n\t" \
+			     "wrpr	%%g0, 0x096, %%pstate" \
+			     : /* no outputs */ \
+			     : "r" (paddr), "r" (pgd_cache),\
+			       "i" (ASI_DMMU), "i" (TSB_REG)); \
+} while(0)
+
+/* Set MMU context in the actual hardware. */
+#define load_secondary_context(__mm) \
+	__asm__ __volatile__("stxa	%0, [%1] %2\n\t" \
+			     "flush	%%g6" \
+			     : /* No outputs */ \
+			     : "r" (CTX_HWBITS((__mm)->context)), \
+			       "r" (0x10), "i" (0x58))
+
+/* Clean out potential stale TLB entries due to previous
+ * users of this TLB context.  We flush TLB contexts
+ * lazily on sparc64.
+ */
+#define clean_secondary_context() \
+	__asm__ __volatile__("stxa	%%g0, [%0] %1\n\t" \
+			     "stxa	%%g0, [%0] %2\n\t" \
+			     "flush	%%g6" \
+			     : /* No outputs */ \
+			     : "r" (0x50), "i" (0x5f), "i" (0x57))
+
+/* Switch the current MM context. */
+static inline void switch_mm(struct mm_struct *old_mm, struct mm_struct *mm, struct task_struct *tsk, int cpu)
 {
-	register unsigned long paddr asm("o5");
-	register unsigned long pgd_cache asm("o4");
-	struct mm_struct *mm = tsk->mm;
-	unsigned long asi;
+	long dirty;
 
-	if(!(tsk->tss.flags & SPARC_FLAG_KTHREAD)	&&
-	   !(tsk->flags & PF_EXITING)) {
-		unsigned long ctx = tlb_context_cache;
-		if((mm->context ^ ctx) & CTX_VERSION_MASK)
-			get_new_mmu_context(mm);
-		tsk->tss.ctx = mm->context & 0x3ff;
-		spitfire_set_secondary_context(mm->context & 0x3ff);
-		__asm__ __volatile__("flush %g6");
-		if(!(mm->cpu_vm_mask & (1UL<<smp_processor_id()))) {
-			spitfire_flush_dtlb_secondary_context();
-			spitfire_flush_itlb_secondary_context();
-			__asm__ __volatile__("flush %g6");
-		}
-		asi = tsk->tss.current_ds.seg;
-	} else {
-		tsk->tss.ctx = 0;
-		spitfire_set_secondary_context(0);
-		__asm__ __volatile__("flush %g6");
-		asi = ASI_P;
-	}
-	/* Sigh, damned include loops... just poke seg directly.  */
-	__asm__ __volatile__ ("wr %%g0, %0, %%asi" : : "r" (asi));
-	paddr = __pa(mm->pgd);
-	if((tsk->tss.flags & (SPARC_FLAG_32BIT|SPARC_FLAG_KTHREAD)) ==
-	   (SPARC_FLAG_32BIT))
-		pgd_cache = ((unsigned long) mm->pgd[0]) << 11UL;
+	spin_lock(&mm->page_table_lock);
+	if (CTX_VALID(mm->context))
+		dirty = 0;
 	else
-		pgd_cache = 0;
-	__asm__ __volatile__("
-		rdpr		%%pstate, %%o2
-		andn		%%o2, %2, %%o3
-		wrpr		%%o3, %5, %%pstate
-		mov		%4, %%g4
-		mov		%0, %%g7
-		stxa		%1, [%%g4] %3
-		wrpr		%%o2, 0x0, %%pstate
-	" : /* no outputs */
-	  : "r" (paddr), "r" (pgd_cache), "i" (PSTATE_IE),
-	    "i" (ASI_DMMU), "i" (TSB_REG), "i" (PSTATE_MG)
-	  : "o2", "o3");
+		dirty = 1;
+	if (dirty || (old_mm != mm)) {
+		unsigned long vm_mask;
+
+		if (dirty)
+			get_new_mmu_context(mm);
+
+		vm_mask = (1UL << cpu);
+		if (!(mm->cpu_vm_mask & vm_mask)) {
+			mm->cpu_vm_mask |= vm_mask;
+			dirty = 1;
+		}
+
+		load_secondary_context(mm);
+		if (dirty != 0)
+			clean_secondary_context();
+		reload_tlbmiss_state(tsk, mm);
+	}
+	spin_unlock(&mm->page_table_lock);
 }
 
-/* Now we define this as a do nothing macro, because the only
- * generic user right now is the scheduler, and we handle all
- * the atomicity issues by having switch_to() call the above
- * function itself.
- */
-#define get_mmu_context(x)	do { } while(0)
+/* Activate a new MM instance for the current task. */
+static inline void activate_mm(struct mm_struct *active_mm, struct mm_struct *mm)
+{
+	unsigned long vm_mask;
 
-/*
- * After we have set current->mm to a new value, this activates
- * the context for the new mm so we see the new mappings.  Currently,
- * this is always called for 'current', if that changes put appropriate
- * checks here.
- *
- * We set the cpu_vm_mask first to zero to enforce a tlb flush for
- * the new context above, then we set it to the current cpu so the
- * smp tlb flush routines do not get confused.
- */
-#define activate_context(__tsk)		\
-do {	flushw_user();			\
-	(__tsk)->mm->cpu_vm_mask = 0;	\
-	__get_mmu_context(__tsk);	\
-	(__tsk)->mm->cpu_vm_mask = (1UL<<smp_processor_id()); \
-} while(0)
+	spin_lock(&mm->page_table_lock);
+	if (!CTX_VALID(mm->context))
+		get_new_mmu_context(mm);
+	vm_mask = (1UL << smp_processor_id());
+	if (!(mm->cpu_vm_mask & vm_mask))
+		mm->cpu_vm_mask |= vm_mask;
+	spin_unlock(&mm->page_table_lock);
+
+	load_secondary_context(mm);
+	clean_secondary_context();
+	reload_tlbmiss_state(current, mm);
+}
 
 #endif /* !(__ASSEMBLY__) */
 

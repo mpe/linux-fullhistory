@@ -159,12 +159,16 @@ static int __init ramdisk_size(char *str)
 	return 1;
 }
 
+static int __init ramdisk_size2(char *str)
+{
+	return ramdisk_size(str);
+}
 
 __setup("ramdisk_start=", ramdisk_start_setup);
 __setup("load_ramdisk=", load_ramdisk);
 __setup("prompt_ramdisk=", prompt_ramdisk);
 __setup("ramdisk=", ramdisk_size);
-__setup("ramdisk_size=", ramdisk_size);
+__setup("ramdisk_size=", ramdisk_size2);
 
 #endif
 

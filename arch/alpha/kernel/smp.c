@@ -153,7 +153,7 @@ smp_callin(void)
 	      cpuid, current));
 
 	/* Do nothing.  */
-	cpu_idle(NULL);
+	cpu_idle();
 }
 
 
