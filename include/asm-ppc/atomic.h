@@ -6,7 +6,7 @@
 #define _ASM_PPC_ATOMIC_H_
 
 typedef struct { int counter; } atomic_t;
-#define ATOMIC_INIT	{ 0 }
+#define ATOMIC_INIT(i)	{ (i) }
 
 /*
  * Make sure gcc doesn't try to be clever and move things around

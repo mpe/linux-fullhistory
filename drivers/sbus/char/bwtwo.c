@@ -1,4 +1,4 @@
-/* $Id: bwtwo.c,v 1.12 1997/04/10 03:02:40 davem Exp $
+/* $Id: bwtwo.c,v 1.13 1997/04/14 17:04:55 jj Exp $
  * bwtwo.c: bwtwo console driver
  *
  * Copyright (C) 1996 Miguel de Icaza (miguel@nuclecu.unam.mx)
@@ -86,7 +86,7 @@ bwtwo_mmap (struct inode *inode, struct file *file, struct vm_area_struct *vma,
 	/* This routine should also map the register if asked for,
 	 * but we don't do that yet.
 	 */
-	map_offset = get_phys ((uint) fb->base);
+	map_offset = get_phys ((unsigned long) fb->base);
 	r = io_remap_page_range (vma->vm_start, map_offset, map_size,
 				 vma->vm_page_prot, fb->space);
 	if (r) return -EAGAIN;
@@ -143,10 +143,10 @@ static u8 bw2regs_66hz[] __initdata = {
 	0x10, 0x20,	0
 };
 
-__initfunc(void bwtwo_setup (fbinfo_t *fb, int slot, unsigned long bwtwo, int bw2_io,
+__initfunc(void bwtwo_setup (fbinfo_t *fb, int slot, u32 bwtwo, int bw2_io,
 			     struct linux_sbus_device *sbdp))
 {
-	printk ("bwtwo%d at 0x%8.8x\n", slot, (uint)bwtwo);
+	printk ("bwtwo%d at 0x%8.8x\n", slot, bwtwo);
 	fb->type.fb_cmsize = 0;
 	fb->mmap = bwtwo_mmap;
 	fb->loadcmap = 0;
@@ -156,7 +156,7 @@ __initfunc(void bwtwo_setup (fbinfo_t *fb, int slot, unsigned long bwtwo, int bw
 	fb->unblank = bwtwo_unblank;
 
 	fb->info.bwtwo.regs =
-		sparc_alloc_io ((u32)(bwtwo + BWTWO_REGISTER_OFFSET),
+		sparc_alloc_io (bwtwo + BWTWO_REGISTER_OFFSET,
 				0, sizeof (struct bwtwo_regs),
 		"bwtwo_regs", bw2_io, 0);
 
@@ -201,7 +201,7 @@ __initfunc(void bwtwo_setup (fbinfo_t *fb, int slot, unsigned long bwtwo, int bw
 	}
 
 	if(!fb->base)
-		fb->base = (unsigned long) sparc_alloc_io((u32)bwtwo, 0,
+		fb->base = (unsigned long) sparc_alloc_io(bwtwo, 0,
 		  ((fb->type.fb_depth*fb->type.fb_height*fb->type.fb_width)/8),
 		  "bwtwo_fbase", bw2_io, 0);
 

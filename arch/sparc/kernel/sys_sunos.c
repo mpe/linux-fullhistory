@@ -1,4 +1,4 @@
-/* $Id: sys_sunos.c,v 1.77 1997/02/15 01:17:04 davem Exp $
+/* $Id: sys_sunos.c,v 1.78 1997/04/16 05:56:12 davem Exp $
  * sys_sunos.c: SunOS specific syscall compatibility support.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -1184,39 +1184,39 @@ asmlinkage int sunos_sigaction(int signum, const struct sigaction *action,
 	struct sigaction *oldaction)
 {
 	struct sigaction new_sa, *p;
-	const  int sigaction_size = sizeof (struct sigaction) - sizeof (void *);
-	int err = -EINVAL;
+	const int sigaction_size = sizeof (struct sigaction) - sizeof (void *);
 
-	lock_kernel();
 	current->personality |= PER_BSD;
-
-	if (signum<1 || signum>32)
-		goto out;
+	if(signum < 1 || signum > 32)
+		return -EINVAL;
 
 	p = signum - 1 + current->sig->action;
-	if (action) {
-		err = -EFAULT;
+
+	if(action) {
 		if(copy_from_user(&new_sa, action, sigaction_size))
-			goto out;
-		err = -EINVAL;
+			return -EFAULT;
 		if (signum==SIGKILL || signum==SIGSTOP)
-			goto out;
+			return -EINVAL;
 		memset(&new_sa, 0, sizeof(struct sigaction));
-		err = -EFAULT;
 		if(copy_from_user(&new_sa, action, sigaction_size))
-			goto out;
+			return -EFAULT;
 		if (new_sa.sa_handler != SIG_DFL && new_sa.sa_handler != SIG_IGN) {
-			err = verify_area(VERIFY_READ, new_sa.sa_handler, 1);
-			if (err)
-				goto out;
+			if(verify_area(VERIFY_READ, new_sa.sa_handler, 1))
+				return -EFAULT;
 		}
 		new_sa.sa_flags ^= SUNOS_SV_INTERRUPT;
 	}
 
 	if (oldaction) {
-		err = -EFAULT;
+		/* In the clone() case we could copy half consistant
+		 * state to the user, however this could sleep and
+		 * deadlock us if we held the signal lock on SMP.  So for
+		 * now I take the easy way out and do no locking.
+		 * But then again we don't support SunOS lwp's anyways ;-)
+		 */
 		if (copy_to_user(oldaction, p, sigaction_size))
-			goto out;	
+			 return -EFAULT;
+
 		if (oldaction->sa_flags & SA_RESTART)
 			oldaction->sa_flags &= ~SA_RESTART;
 		else
@@ -1224,13 +1224,12 @@ asmlinkage int sunos_sigaction(int signum, const struct sigaction *action,
 	}
 
 	if (action) {
+		spin_lock_irq(&current->sig->siglock);
 		*p = new_sa;
 		check_pending(signum);
+		spin_unlock_irq(&current->sig->siglock);
 	}
-	err = 0;
-out:
-	unlock_kernel();
-	return err;
+	return 0;
 }
 
 

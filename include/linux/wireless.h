@@ -63,20 +63,25 @@
  * (there is some stuff that will be added in the future...)
  * I just plan to increment with each new version.
  */
-#define WIRELESS_EXT	4
+#define WIRELESS_EXT	5
 
 /*
  * Changes :
  *
  * V2 to V3
  * --------
- *	Alan Cox start some imcompatibles changes. I've integrated a bit more.
+ *	Alan Cox start some incompatibles changes. I've integrated a bit more.
  *	- Encryption renamed to Encode to avoid US regulation problems
  *	- Frequency changed from float to struct to avoid problems on old 386
  *
  * V3 to V4
  * --------
  *	- Add sensitivity
+ *
+ * V4 to V5
+ * --------
+ *	- Missing encoding definitions in range
+ *	- Access points stuff
  */
 
 /* -------------------------- IOCTL LIST -------------------------- */
@@ -103,11 +108,16 @@
 #define SIOCSIWSPY	0x8B10		/* set spy addresses */
 #define SIOCGIWSPY	0x8B11		/* get spy info (quality of link) */
 
+/* Access Point manipulation */
+#define SIOCSIWAP	0x8B14		/* set access point hardware addresses */
+#define SIOCGIWAP	0x8B15		/* get access point hardware addresses */
+#define SIOCGIWAPLIST	0x8B17		/* get list of access point in range */
+
 /* ------------------------- IOCTL STUFF ------------------------- */
 
 /* The first and the last (range) */
 #define SIOCIWFIRST	0x8B00
-#define SIOCIWLAST	0x8B13
+#define SIOCIWLAST	0x8B17
 
 /* Even : get (world access), odd : set (root access) */
 #define IW_IS_SET(cmd)	(!((cmd) & 0x1))
@@ -185,6 +195,17 @@ struct	iw_discarded
 	__u32		misc;		/* Others cases */
 };
 
+/*
+ *	Encoding information (setting and so on)
+ *	Encoding might be hardware encryption, scrambing or others
+ */
+struct	iw_encoding
+{
+  __u8	method;			/* Algorithm number / key used */
+  __u64	code;			/* Data/key used for algorithm */
+};
+
+
 /* ------------------------ WIRELESS STATS ------------------------ */
 /*
  * Wireless statistics (used for /proc/net/wireless)
@@ -234,13 +255,11 @@ struct	iwreq
 					 * 0-1000 = channel
 					 * > 1000 = frequency in Hz */
 
-		struct		/* Encoding stuff */
-		{
-			__u8	method;		/* Algorithm number / off */
-			__u64	code;		/* Data used for algorithm */
-		}	encoding;
+		struct iw_encoding	encoding;	/* Encoding stuff */
 
-		__u32	sensitivity;	/* signal level threshold */
+		__u32	sensitivity;		/* signal level threshold */
+
+		struct sockaddr	ap_addr;	/* Access point address */
 
 		struct		/* For all data bigger than 16 octets */
 		{
@@ -275,16 +294,16 @@ struct	iw_range
 	__u16		num_channels;	/* Number of channels [0; num - 1] */
 	__u8		num_frequency;	/* Number of entry in the list */
 	struct iw_freq	freq[IW_MAX_FREQUENCIES];	/* list */
-
 	/* Note : this frequency list doesn't need to fit channel numbers */
-
-	/* Encoder stuff */
 
 	/* signal level threshold range */
 	__u32	sensitivity;
 
 	/* Quality of link & SNR stuff */
 	struct iw_quality	max_qual;	/* Quality of the link */
+
+	/* Encoder stuff */
+	struct iw_encoding	max_encoding;	/* Encoding max range */
 };
 
 /*

@@ -10,6 +10,7 @@
 
 #include <linux/mm.h>
 #include <linux/msdos_fs.h>
+#include <linux/init.h>
 
 /*
  * Support for umsdos fs
@@ -33,7 +34,7 @@ static struct file_system_type msdos_fs_type = {
 	msdos_read_super, "msdos", 1, NULL
 };
 
-int init_msdos_fs(void)
+__initfunc(int init_msdos_fs(void))
 {
 	return register_filesystem(&msdos_fs_type);
 }

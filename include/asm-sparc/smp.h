@@ -96,48 +96,6 @@ extern __inline__ int smp_processor_id(void)
 	return cpuid;
 }
 
-extern __volatile__ int smp_process_available;
-
-extern __inline__ int smp_swap(volatile int *addr, int value)
-{
-	__asm__ __volatile__("swap [%2], %0\n\t" :
-			     "=&r" (value) :
-			     "0" (value), "r" (addr));
-	return value;
-}
-
-extern __inline__ __volatile__ void inc_smp_counter(volatile int *ctr)
-{
-	int tmp;
-
-	while((tmp = smp_swap(ctr, -1)) == -1)
-		while(*ctr == -1)
-			;
-
-	*ctr = (tmp + 1);
-}
-
-extern __inline__ __volatile__ void dec_smp_counter(volatile int *ctr)
-{
-	int tmp;
-
-	while((tmp = smp_swap(ctr, -1)) == -1)
-		while(*ctr == -1)
-			;
-
-	*ctr = (tmp - 1);
-}
-
-extern __inline__ __volatile__ int read_smp_counter(volatile int *ctr)
-{
-	int value;
-
-	while((value = *ctr) == -1)
-		;
-
-	return value;
-}
-
 #endif /* !(__ASSEMBLY__) */
 
 /* Sparc specific messages. */
@@ -154,13 +112,13 @@ extern __inline__ __volatile__ int read_smp_counter(volatile int *ctr)
 #define MBOX_IDLECPU2         0xFD
 #define MBOX_STOPCPU2         0xFE
 
-#define NO_PROC_ID            0xFF
-
 #define PROC_CHANGE_PENALTY     20
 
 #define SMP_FROM_INT		1
 #define SMP_FROM_SYSCALL	2
 
 #endif /* !(__SMP__) */
+
+#define NO_PROC_ID            0xFF
 
 #endif /* !(_SPARC_SMP_H) */

@@ -10,7 +10,6 @@
 #endif
 
 #ifdef __KERNEL__
-#include <linux/config.h>
 #include <asm/types.h>
 
 /*

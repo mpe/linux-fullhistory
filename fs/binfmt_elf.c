@@ -27,6 +27,7 @@
 #include <linux/shm.h>
 #include <linux/personality.h>
 #include <linux/elfcore.h>
+#include <linux/init.h>
 
 #include <asm/uaccess.h>
 #include <asm/pgtable.h>
@@ -1124,7 +1125,7 @@ static int elf_core_dump(long signr, struct pt_regs * regs)
 #else
 	if (sizeof(elf_gregset_t) != sizeof(struct pt_regs))
 	{
-		printk("sizeof(elf_gregset_t) (%d) != sizeof(struct pt_regs) (%d)\n",
+		printk("sizeof(elf_gregset_t) (%ld) != sizeof(struct pt_regs) (%ld)\n",
 			sizeof(elf_gregset_t), sizeof(struct pt_regs));
 	}
 	else
@@ -1276,7 +1277,7 @@ static int elf_core_dump(long signr, struct pt_regs * regs)
 }
 #endif		/* USE_ELF_CORE_DUMP */
 
-int init_elf_binfmt(void)
+__initfunc(int init_elf_binfmt(void))
 {
 	return register_binfmt(&elf_format);
 }

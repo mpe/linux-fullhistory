@@ -63,11 +63,12 @@ pmd_t *get_pointer_table (void)
 			return 0;
 		}
 
-		if (!(dp->page = __get_free_page (GFP_KERNEL))) {
+		if (!(dp->page = get_free_page (GFP_KERNEL))) {
 			kfree (dp);
 			return 0;
 		}
 
+		flush_tlb_kernel_page((unsigned long) dp->page);
 		nocache_page (dp->page);
 
 		dp->alloced = 0;
@@ -210,10 +211,11 @@ pmd_t *get_kpointer_table (void)
 		return NULL;
 	}
 	if (!(page = kptr_pages.page[i])) {
-		if (!(page = (pmd_tablepage *)__get_free_page(GFP_KERNEL))) {
+		if (!(page = (pmd_tablepage *)get_free_page(GFP_KERNEL))) {
 			printk("No space for kernel pointer table!\n");
 			return NULL;
 		}
+		flush_tlb_kernel_page((unsigned long) page);
 		nocache_page((u_long)(kptr_pages.page[i] = page));
 	}
 	asm volatile("bfset %0@{%1,#1}"
@@ -306,21 +308,31 @@ unsigned long mm_vtop (unsigned long vaddr)
 	if (CPU_IS_030) {
 	    unsigned long ttreg;
 	    
-	    asm volatile( "pmove %/tt0,%0@" : : "a" (&ttreg) );
+	    asm volatile( ".chip 68030\n\t"
+			  "pmove %/tt0,%0@\n\t"
+			  ".chip 68k"
+			  : : "a" (&ttreg) );
 	    if (transp_transl_matches( ttreg, vaddr ))
 		return vaddr;
-	    asm volatile( "pmove %/tt1,%0@" : : "a" (&ttreg) );
+	    asm volatile( ".chip 68030\n\t"
+			  "pmove %/tt1,%0@\n\t"
+			  ".chip 68k"
+			  : : "a" (&ttreg) );
 	    if (transp_transl_matches( ttreg, vaddr ))
 		return vaddr;
 	}
-	else {
-	    register unsigned long ttreg __asm__( "d0" );
+	else if (CPU_IS_040_OR_060) {
+	    unsigned long ttreg;
 	    
-	    asm volatile( ".long 0x4e7a0006" /* movec %dtt0,%d0 */
+	    asm volatile( ".chip 68040\n\t"
+			  "movec %%dtt0,%0\n\t"
+			  ".chip 68k"
 			  : "=d" (ttreg) );
 	    if (transp_transl_matches( ttreg, vaddr ))
 		return vaddr;
-	    asm volatile( ".long 0x4e7a0007" /* movec %dtt1,%d0 */
+	    asm volatile( ".chip 68040\n\t"
+			  "movec %%dtt1,%0\n\t"
+			  ".chip 68k"
 			  : "=d" (ttreg) );
 	    if (transp_transl_matches( ttreg, vaddr ))
 		return vaddr;

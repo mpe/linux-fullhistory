@@ -753,10 +753,6 @@ static void NCR5380_print_status (struct Scsi_Host *instance)
 	 pos += sprintf(pos, fmt , ## args); } while(0)
 static
 char *lprint_Scsi_Cmnd (Scsi_Cmnd *cmd, char *pos, char *buffer, int length);
-static
-char *lprint_command (unsigned char *cmd, char *pos, char *buffer, int len);
-static
-char *lprint_opcode(int opcode, char *pos, char *buffer, int length);
 
 #ifndef NCR5380_proc_info
 static
@@ -769,6 +765,14 @@ int NCR5380_proc_info (char *buffer, char **start, off_t offset,
     struct NCR5380_hostdata *hostdata;
     Scsi_Cmnd *ptr;
     unsigned long flags;
+    off_t begin = 0;
+#define check_offset()				\
+    do {					\
+	if (pos - buffer < offset - begin) {	\
+	    begin += pos - buffer;		\
+	    pos = buffer;			\
+	}					\
+    } while (0)
 
     for (instance = first_instance; instance && HOSTNO != hostno;
 	 instance = instance->next)
@@ -781,58 +785,54 @@ int NCR5380_proc_info (char *buffer, char **start, off_t offset,
 	return(-ENOSYS);  /* Currently this is a no-op */
     }
     SPRINTF("NCR5380 core release=%d.\n", NCR5380_PUBLIC_RELEASE);
+    check_offset();
     save_flags(flags);
     cli();
     SPRINTF("NCR5380: coroutine is%s running.\n", main_running ? "" : "n't");
+    check_offset();
     if (!hostdata->connected)
 	SPRINTF("scsi%d: no currently connected command\n", HOSTNO);
     else
 	pos = lprint_Scsi_Cmnd ((Scsi_Cmnd *) hostdata->connected,
 				pos, buffer, length);
     SPRINTF("scsi%d: issue_queue\n", HOSTNO);
-    for (ptr = (Scsi_Cmnd *) hostdata->issue_queue; ptr; ptr = NEXT(ptr))
+    check_offset();
+    for (ptr = (Scsi_Cmnd *) hostdata->issue_queue; ptr; ptr = NEXT(ptr)) {
 	pos = lprint_Scsi_Cmnd (ptr, pos, buffer, length);
+	check_offset();
+    }
 
     SPRINTF("scsi%d: disconnected_queue\n", HOSTNO);
+    check_offset();
     for (ptr = (Scsi_Cmnd *) hostdata->disconnected_queue; ptr;
-	 ptr = NEXT(ptr))
+	 ptr = NEXT(ptr)) {
 	pos = lprint_Scsi_Cmnd (ptr, pos, buffer, length);
+	check_offset();
+    }
 
     restore_flags(flags);
-    *start = buffer;
-    if (pos - buffer < offset)
+    *start = buffer + (offset - begin);
+    if (pos - buffer < offset - begin)
 	return 0;
-    else if (pos - buffer - offset < length)
-	return pos - buffer - offset;
+    else if (pos - buffer - (offset - begin) < length)
+	return pos - buffer - (offset - begin);
     return length;
 }
 
 static char *
 lprint_Scsi_Cmnd (Scsi_Cmnd *cmd, char *pos, char *buffer, int length)
 {
+    int i, s;
+    unsigned char *command;
     SPRINTF("scsi%d: destination target %d, lun %d\n",
 	    H_NO(cmd), cmd->target, cmd->lun);
     SPRINTF("        command = ");
-    pos = lprint_command (cmd->cmnd, pos, buffer, length);
-    return (pos);
-}
-
-static char *
-lprint_command (unsigned char *command, char *pos, char *buffer, int length)
-{
-    int i, s;
-    pos = lprint_opcode(command[0], pos, buffer, length);
+    command = cmd->cmnd;
+    SPRINTF("%2d (0x%02x)", command[0], command[0]);
     for (i = 1, s = COMMAND_SIZE(command[0]); i < s; ++i)
-	SPRINTF("%02x ", command[i]);
+	SPRINTF(" %02x", command[i]);
     SPRINTF("\n");
-    return(pos);
-}
-
-static 
-char *lprint_opcode(int opcode, char *pos, char *buffer, int length)
-{
-    SPRINTF("%2d (0x%02x)", opcode, opcode);
-    return(pos);
+    return pos;
 }
 
 

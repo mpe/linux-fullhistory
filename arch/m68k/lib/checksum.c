@@ -19,8 +19,8 @@
  *		(%1). Thanks to Roman Hodek for pointing this out.
  *		B: GCC seems to mess up if one uses too many
  *		data-registers to hold input values and one tries to
- *		specify d0 and d1 as scratch registers. Letting gcc choose these
- *      registers itself solves the problem.
+ *		specify d0 and d1 as scratch registers. Letting gcc
+ *		choose these registers itself solves the problem.
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -124,13 +124,20 @@ csum_partial (const unsigned char *buff, int len, unsigned int sum)
 
 
 /*
- * copy from user space while checksumming, otherwise like csum_partial
+ * copy from user space while checksumming, with exception handling.
  */
 
 unsigned int
-csum_partial_copy_fromuser(const char *src, char *dst, int len, int sum)
+csum_partial_copy_from_user(const char *src, char *dst, int len,
+			    int sum, int *csum_err)
 {
+	/*
+	 * GCC doesn't like more than 10 operands for the asm
+	 * statements so we have to use tmp2 for the error
+	 * code.
+	 */
 	unsigned long tmp1, tmp2;
+
 	__asm__("movel %2,%4\n\t"
 		"btst #1,%4\n\t"	/* Check alignment */
 		"jeq 2f\n\t"
@@ -226,27 +233,49 @@ csum_partial_copy_fromuser(const char *src, char *dst, int len, int sum)
 	     "6:\t"
 		"addl %5,%0\n\t"	/* now add rest long to sum */
 		"clrl %5\n\t"
-		"addxl %5,%0\n"		/* add X bit */
-	     "7:\n"
+		"addxl %5,%0\n\t"	/* add X bit */
+	     "7:\t"
+		"clrl %5\n"		/* no error - clear return value */
+	     "8:\n"
+		".section .fixup,\"ax\"\n"
+		".even\n"
+	     "9:\t"
+		"moveq #-14,%5\n\t"	/* -EFAULT, out of inputs to asm ;( */
+		"jra 8b\n"
+		".previous\n"
 		".section __ex_table,\"a\"\n"
-		".long 10b,7b\n"
-		".long 11b,7b\n"
-		".long 12b,7b\n"
-		".long 13b,7b\n"
-		".long 14b,7b\n"
-		".long 15b,7b\n"
-		".long 16b,7b\n"
-		".long 17b,7b\n"
-		".long 18b,7b\n"
-		".long 19b,7b\n"
-		".long 20b,7b\n"
-		".long 21b,7b\n"
+		".long 10b,9b\n"
+		".long 11b,9b\n"
+		".long 12b,9b\n"
+		".long 13b,9b\n"
+		".long 14b,9b\n"
+		".long 15b,9b\n"
+		".long 16b,9b\n"
+		".long 17b,9b\n"
+		".long 18b,9b\n"
+		".long 19b,9b\n"
+		".long 20b,9b\n"
+		".long 21b,9b\n"
 		".previous"
 		: "=d" (sum), "=d" (len), "=a" (src), "=a" (dst),
-		  "=&d" (tmp1), "=&d" (tmp2)
+		  "=&d" (tmp1), "=d" (tmp2)
 		: "0" (sum), "1" (len), "2" (src), "3" (dst)
 	    );
+
+	*csum_err = tmp2;
+
 	return(sum);
+}
+
+/*
+ * This one will go away soon.
+ */
+unsigned int
+csum_partial_copy_fromuser(const char *src, char *dst, int len, int sum)
+{
+	int dummy;
+
+	return csum_partial_copy_from_user(src, dst, len, sum, &dummy);
 }
 /*
  * copy from kernel space while checksumming, otherwise like csum_partial

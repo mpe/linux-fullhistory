@@ -234,52 +234,6 @@ extern __inline int smp_processor_id(void)
 	return GET_APIC_ID(*(unsigned long *)(apic_reg+APIC_ID));
 }
 
-/* These read/change the "processes available" counter in the scheduler. */
-extern __inline__ __volatile__ void inc_smp_counter(volatile int *ctr)
-{
-	int cpu = smp_processor_id();
-	while(set_bit(31, ctr))
-	{
-		while(test_bit(31,ctr))
-		{
-			if(clear_bit(cpu,&smp_invalidate_needed))
-			{
-				unsigned long tmpreg;
-				__asm__ __volatile__("movl %%cr3,%0\n\tmovl %0,%%cr3"
-						     : "=r" (tmpreg) : : "memory");
-				set_bit(cpu,&cpu_callin_map[0]);
-			}
-		}
-	}
-	*ctr = (*ctr + 1);
-	clear_bit(31, ctr);
-}
-
-extern __inline__ __volatile__ void dec_smp_counter(volatile int *ctr)
-{
-	int cpu = smp_processor_id();
-	while(set_bit(31, ctr))
-	{
-		while(test_bit(31,ctr))
-		{
-			if(clear_bit(cpu,&smp_invalidate_needed))
-			{
-				unsigned long tmpreg;
-				__asm__ __volatile__("movl %%cr3,%0\n\tmovl %0,%%cr3"
-						     : "=r" (tmpreg) : : "memory");
-				set_bit(cpu,&cpu_callin_map[0]);
-			}
-		}
-	}
-	*ctr = (*ctr - 1);
-	clear_bit(31, ctr);
-}
-
-extern __inline__ __volatile__ int read_smp_counter(volatile int *ctr)
-{
-	return (*ctr & 0x7fffffff);
-}
-
 #endif /* !ASSEMBLY */
 
 #define NO_PROC_ID		0xFF		/* No processor magic marker */

@@ -98,6 +98,12 @@ static struct buffer_head * isofs_find_entry(struct inode * dir,
 			offset = 0;
 			f_pos = ((f_pos & ~(ISOFS_BLOCK_SIZE - 1))
 				 + ISOFS_BLOCK_SIZE);
+
+			if( f_pos >= dir->i_size )
+			  {
+			    return 0;
+			  }
+
 			block = isofs_bmap(dir,f_pos>>bufbits);
 			if (!block || !(bh = bread(dir->i_dev,block,bufsize)))
 				return 0;

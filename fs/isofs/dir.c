@@ -155,6 +155,11 @@ static int do_isofs_readdir(struct inode *inode, struct file *filp,
 			filp->f_pos = ((filp->f_pos & ~(ISOFS_BLOCK_SIZE - 1))
 				       + ISOFS_BLOCK_SIZE);
 			offset = 0;
+			if( filp->f_pos >= inode->i_size )
+			  {
+			    return 0;
+			  }
+
 			block = isofs_bmap(inode, (filp->f_pos) >> bufbits);
 			if (!block)
 				return 0;

@@ -73,6 +73,7 @@
 
 .globl SYMBOL_NAME(kernel_pg_dir), SYMBOL_NAME(kpt)
 .globl SYMBOL_NAME(availmem), SYMBOL_NAME(is_medusa)
+.globl SYMBOL_NAME(is_hades)
 .globl SYMBOL_NAME(m68k_pgtable_cachemode)
 .globl SYMBOL_NAME(kernel_pmd_table), SYMBOL_NAME(swapper_pg_dir)
 
@@ -235,8 +236,58 @@ ENTRY(_start)
 #endif
 
 /*
+   If running on an Atari, determine the I/O base of the
+   serial port and test if we are running on a Medusa or Hades.
+   This test is necessary here, because on the Hades the serial
+   port is only accessible in the high I/O memory area.
+
+   The test whether it is a Medusa is done by writing to the byte at
+   phys. 0x0. This should result in a bus error on all other machines.
+
+   ...should, but doesn't. The Afterburner040 for the Falcon has the
+   same behaviour (0x0..0x7 are no ROM shadow). So we have to do
+   another test to distinguish Medusa and AB040. This is a
+   read attempt for 0x00ff82fe phys. that should bus error on a Falcon
+   (+AB040), but is in the range where the Medusa always asserts DTACK.
+
+   The test for the Hades is done by reading address 0xb0000000. This
+   should give a bus error on the Medusa.
+ */
+
+#ifdef CONFIG_ATARI
+	is_not_atari(Lnotypetest)
+
+	moveq	#0,%d3			/* base addr for others: 0x00000000 */
+	moveq	#0,%d2			/* no Hades */
+	movec	%d3,%vbr
+	lea	%pc@(Ltest_berr),%a0
+	movel	%a0,0x8
+	movel	%sp,%a0
+	moveb	0x0,%d1
+	clrb	0x0
+	nop
+	moveb	%d1,0x0
+	nop
+	tstb	0x00ff82fe
+	nop
+	movel	#0xff000000,%d3		/* Medusa base addr: 0xff000000 */
+	tstb	0xb0000000
+	nop
+	movel	#0xff000000,%d2		/* Computer is a Hades */
+	moveq	#0,%d3
+Ltest_berr:
+	movel	%a0,%sp
+	lea	%pc@(SYMBOL_NAME(is_hades)),%a0
+	movel	%d2,%a0@
+	lea	%pc@(SYMBOL_NAME(is_medusa)),%a0
+	movel	%d3,%a0@
+Lnotypetest:
+#endif
+
+/*
  * Initialize serial port
  */
+
 	jbsr Lserial_init
 
 	putr()
@@ -491,35 +542,16 @@ Lnotami:
 
    For the Medusa it is better to map the I/O region transparently
    (i.e. 0xffxxxxxx -> 0xffxxxxxx), because some I/O registers are
-   accessible only in the high area. The test whether it is a Medusa
-   is done by writing to the byte at phys. 0x0. This should result
-   in a bus error on all other machines.
+   accessible only in the high area.
 
-   ...should, but doesn't. The Afterburner040 for the Falcon has the
-   same behaviour (0x0..0x7 are no ROM shadow). So we have to do
-   another test to distinguish Medusa and AB040. This is a
-   read attempt for 0x00ff82fe phys. that should bus error on a Falcon
-   (+AB040), but is in the range where the Medusa always asserts DTACK.
+   On the Hades all I/O registers are only accessible in the high
+   area.
 */
 
-	moveq	#0,%d3			/* base addr for others: 0x00000000 */
-	movec	%d3,%vbr
-	lea	%pc@(Ltest_berr),%a0
-	movel	%a0,0x8
-	movel	%sp,%a0
-	moveb	0x0,%d1
-	clrb	0x0
-	nop
-	moveb	%d1,0x0
-	nop
-	tstb	0x00ff82fe
-	nop
-	movel	#0xff000000,%d3		/* Medusa base addr: 0xff000000 */
-Ltest_berr:
-	movel	%a0,%sp
-	lea     %pc@(SYMBOL_NAME(is_medusa)),%a0
-	movel	%d3,%a0@
-
+	movel   %pc@(is_medusa),%d3
+	bne     1f
+	movel   %pc@(is_hades),%d3
+1:
 	/* Let the root table point to the new pointer table */
 	lea	%a4@(PTR_TABLE_SIZE<<2),%a4
 	movel	%a4,%a0
@@ -979,19 +1011,20 @@ Lserial_init:
 #ifdef CONFIG_ATARI
 	cmpil   #MACH_ATARI,%d4
 	jne	4f
+	movel	%pc@(Liobase),%a1
 #ifdef USE_PRINTER
-	bclr	#0,LSTMFP_IERB
-	bclr	#0,LSTMFP_DDR
-	moveb	#LPSG_CONTROL,LPSG_SELECT
-	moveb	#0xff,LPSG_WRITE
-	moveb	#LPSG_IO_B,LPSG_SELECT
-	clrb	LPSG_WRITE
-	moveb	#LPSG_IO_A,LPSG_SELECT
-	moveb	LPSG_READ,%d0
+	bclr	#0,%a1@(LSTMFP_IERB)
+	bclr	#0,%a1@(LSTMFP_DDR)
+	moveb	#LPSG_CONTROL,%a1@(LPSG_SELECT)
+	moveb	#0xff,%a1@(LPSG_WRITE)
+	moveb	#LPSG_IO_B,%a1@(LPSG_SELECT)
+	clrb	%a1@(LPSG_WRITE)
+	moveb	#LPSG_IO_A,%a1@(LPSG_SELECT)
+	moveb	%a1@(LPSG_READ),%d0
 	bset	#5,%d0
-	moveb	%d0,LPSG_WRITE
+	moveb	%d0,%a1@(LPSG_WRITE)
 #elif defined(USE_SCC)
-	lea	LSCC_CTRL_B,%a0
+	lea	%a1@(LSCC_CTRL_B),%a0
 	lea	%pc@(scc_initable:w),%a1
 2:	moveb	%a1@+,%d0
 	jmi	3f
@@ -1000,12 +1033,12 @@ Lserial_init:
 	jra	2b
 3:	clrb	%a0@
 #elif defined(USE_MFP)
-	bclr	#1,LMFP_TSR
-	moveb   #0x88,LMFP_UCR
-	andb	#0x70,LMFP_TDCDR
-	moveb   #2,LMFP_TDDR
-	orb	#1,LMFP_TDCDR
-	bset	#1,LMFP_TSR
+	bclr	#1,%a1@(LMFP_TSR)
+	moveb   #0x88,%a1@(LMFP_UCR)
+	andb	#0x70,%a1@(LMFP_TDCDR)
+	moveb   #2,%a1@(LMFP_TDDR)
+	orb	#1,%a1@(LMFP_TDCDR)
+	bset	#1,%a1@(LMFP_TSR)
 #endif
 4:
 #endif
@@ -1140,6 +1173,8 @@ SYMBOL_NAME_LABEL(kpt)
 SYMBOL_NAME_LABEL(availmem)
 	.long 0
 SYMBOL_NAME_LABEL(is_medusa)
+	.long 0
+SYMBOL_NAME_LABEL(is_hades)
 	.long 0
 SYMBOL_NAME_LABEL(m68k_pgtable_cachemode)
 	.long 0

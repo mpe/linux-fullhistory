@@ -31,6 +31,9 @@
  * We don't need to get the kernel lock - this is all local to this
  * particular thread.. (and that's good, because this is _heavily_
  * used by various programs)
+ *
+ * No SMP locking would prevent the inherent races present in this
+ * routine, thus we do not perform any locking at all.
  */
 asmlinkage int sys_sigprocmask(int how, sigset_t *set, sigset_t *oset)
 {
@@ -38,9 +41,10 @@ asmlinkage int sys_sigprocmask(int how, sigset_t *set, sigset_t *oset)
 
 	if (set) {
 		sigset_t new_set;
-		int error = get_user(new_set, set);
-		if (error)
-			return error;
+
+		if(get_user(new_set, set))
+			return -EFAULT;
+
 		new_set &= _BLOCKABLE;
 		switch (how) {
 		default:
@@ -57,9 +61,8 @@ asmlinkage int sys_sigprocmask(int how, sigset_t *set, sigset_t *oset)
 		current->blocked = new_set;
 	}
 	if (oset) {
-		int error = put_user(old_set, oset);
-		if (error)
-			return error;
+		if(put_user(old_set, oset))
+			return -EFAULT;
 	}
 	return 0;
 }
@@ -69,21 +72,19 @@ asmlinkage int sys_sigprocmask(int how, sigset_t *set, sigset_t *oset)
  */
 asmlinkage int sys_sgetmask(void)
 {
-	int ret;
-
 	/* SMP safe */
-	ret = current->blocked;
-	return ret;
+	return current->blocked;
 }
 
 asmlinkage int sys_ssetmask(int newmask)
 {
 	int old;
 
-	lock_kernel();
+	spin_lock_irq(&current->sigmask_lock);
 	old = current->blocked;
 	current->blocked = newmask & _BLOCKABLE;
-	unlock_kernel();
+	spin_unlock_irq(&current->sigmask_lock);
+
 	return old;
 }
 
@@ -114,22 +115,24 @@ asmlinkage int sys_sigpending(sigset_t *set)
  * Note the silly behaviour of SIGCHLD: SIG_IGN means that the signal
  * isn't actually ignored, but does automatic child reaping, while
  * SIG_DFL is explicitly said by POSIX to force the signal to be ignored..
+ *
+ * All callers of check_pending must be holding current->sig->siglock.
  */
 inline void check_pending(int signum)
 {
 	struct sigaction *p;
 
 	p = signum - 1 + current->sig->action;
+	spin_lock(&current->sigmask_lock);
 	if (p->sa_handler == SIG_IGN) {
 		current->signal &= ~_S(signum);
-		return;
-	}
-	if (p->sa_handler == SIG_DFL) {
-		if (signum != SIGCONT && signum != SIGCHLD && signum != SIGWINCH)
-			return;
-		current->signal &= ~_S(signum);
-		return;
+	} else if (p->sa_handler == SIG_DFL) {
+		if (signum == SIGCONT ||
+		    signum == SIGCHLD ||
+		    signum != SIGWINCH)
+			current->signal &= ~_S(signum);
 	}	
+	spin_unlock(&current->sigmask_lock);
 }
 
 #ifndef __alpha__
@@ -138,30 +141,28 @@ inline void check_pending(int signum)
  */
 asmlinkage unsigned long sys_signal(int signum, __sighandler_t handler)
 {
-	unsigned long err;
 	struct sigaction tmp;
 
-	lock_kernel();
-	err = -EINVAL;
 	if (signum<1 || signum>32)
-		goto out;
+		return -EINVAL;
 	if (signum==SIGKILL || signum==SIGSTOP)
-		goto out;
+		return -EINVAL;
 	if (handler != SIG_DFL && handler != SIG_IGN) {
-		err = verify_area(VERIFY_READ, handler, 1);
-		if (err)
-			goto out;
+		if(verify_area(VERIFY_READ, handler, 1))
+			return -EFAULT;
 	}
+
 	memset(&tmp, 0, sizeof(tmp));
 	tmp.sa_handler = handler;
 	tmp.sa_flags = SA_ONESHOT | SA_NOMASK;
+
+	spin_lock_irq(&current->sig->siglock);
 	handler = current->sig->action[signum-1].sa_handler;
 	current->sig->action[signum-1] = tmp;
 	check_pending(signum);
-	err = (unsigned long) handler;
-out:
-	unlock_kernel();
-	return err;
+	spin_unlock_irq(&current->sig->siglock);
+
+	return (unsigned long) handler;
 }
 #endif
 
@@ -171,22 +172,33 @@ asmlinkage int sys_sigaction(int signum, const struct sigaction * action,
 {
 	struct sigaction new_sa, *p;
 
-	if (signum<1 || signum>32)
+	if (signum < 1 || signum > 32)
 		return -EINVAL;
+
 	p = signum - 1 + current->sig->action;
+
 	if (action) {
 		if (copy_from_user(&new_sa, action, sizeof(struct sigaction)))
 			return -EFAULT;
 		if (signum==SIGKILL || signum==SIGSTOP)
 			return -EINVAL;
 	}
+
 	if (oldaction) {
+		/* In the clone() case we could copy half consistant
+		 * state to the user, however this could sleep and
+		 * deadlock us if we held the signal lock on SMP.  So for
+		 * now I take the easy way out and do no locking.
+		 */
 		if (copy_to_user(oldaction, p, sizeof(struct sigaction)))
 			return -EFAULT;
 	}
+
 	if (action) {
+		spin_lock_irq(&current->sig->siglock);
 		*p = new_sa;
 		check_pending(signum);
+		spin_unlock_irq(&current->sig->siglock);
 	}
 	return 0;
 }

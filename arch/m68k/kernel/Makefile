@@ -19,6 +19,10 @@ O_OBJS += console.o
 endif
 OX_OBJS := m68k_ksyms.o
 
+ifdef CONFIG_KGDB
+O_OBJS += kgdb.o
+endif
+
 head.o: head.S
 
 include $(TOPDIR)/Rules.make

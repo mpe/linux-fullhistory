@@ -55,7 +55,7 @@
 
 #include <asm/amigaints.h>
 #include <asm/amigahw.h>
-#include <asm/zorro.h>
+#include <linux/zorro.h>
 
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
@@ -302,14 +302,16 @@ static int lance_rx (struct device *dev)
 			lp->stats.rx_errors++;
 			continue;
 		} else if (bits & LE_R1_ERR) {
-			/* Count only the end frame as a tx error, not the beginning */
+			/* Count only the end frame as a rx error,
+			 * not the beginning
+			 */
 			if (bits & LE_R1_BUF) lp->stats.rx_fifo_errors++;
 			if (bits & LE_R1_CRC) lp->stats.rx_crc_errors++;
 			if (bits & LE_R1_OFL) lp->stats.rx_over_errors++;
 			if (bits & LE_R1_FRA) lp->stats.rx_frame_errors++;
 			if (bits & LE_R1_EOP) lp->stats.rx_errors++;
 		} else {
-			len = rd->mblength;
+			len = (rd->mblength & 0xfff) - 4;
 			skb = dev_alloc_skb (len+2);
 
 			if (skb == 0) {
@@ -582,6 +584,16 @@ static int lance_start_xmit (struct sk_buff *skb, struct device *dev)
 		return status;
 	}
 
+	if (skb == NULL) {
+		dev_tint (dev);
+		printk ("skb is NULL\n");
+		return 0;
+	}
+
+	if (skb->len <= 0) {
+		printk ("skb len is %d\n", skb->len);
+		return 0;
+	}
 	/* Block a timer-based transmit from overlapping. */
 #ifdef OLD_METHOD
 	dev->tbusy = 1;
@@ -698,18 +710,13 @@ static void lance_set_multicast (struct device *dev)
 	struct lance_private *lp = (struct lance_private *) dev->priv;
 	volatile struct lance_init_block *ib = lp->init_block;
 	volatile struct lance_regs *ll = lp->ll;
-	char shown;
 
-	shown = 0;
 	while (dev->tbusy)
-		if (!shown++)
-			printk ("Waiting for tbusy to go down\n");
+		schedule();
 	set_bit (0, (void *) &dev->tbusy);
 
-	shown = 0;
 	while (lp->tx_old != lp->tx_new)
-		if (!shown)
-			printk ("Waiting for buffer to empty\n");
+		schedule();
 
 	ll->rap = LE_CSR0;
 	ll->rdp = LE_C0_STOP;

@@ -311,7 +311,7 @@ do_kdgkb_ioctl(int cmd, struct kbsentry *user_kdgkb, int perm)
 	int sz;
 	int delta;
 	char *first_free, *fj, *fnw;
-	int j, k, i = 0;
+	int i, j, k;
 
 	/* we mostly copy too much here (512bytes), but who cares ;) */
 	if (copy_from_user(&tmp, user_kdgkb, sizeof(struct kbsentry)))
@@ -319,6 +319,7 @@ do_kdgkb_ioctl(int cmd, struct kbsentry *user_kdgkb, int perm)
 	tmp.kb_string[sizeof(tmp.kb_string)-1] = '\0';
 	if (tmp.kb_func >= MAX_NR_FUNC)
 		return -EINVAL;
+	i = tmp.kb_func;
 
 	switch (cmd) {
 	case KDGKBSENT:

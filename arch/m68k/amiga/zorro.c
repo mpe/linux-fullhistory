@@ -16,7 +16,7 @@
 #include <asm/setup.h>
 #include <asm/bitops.h>
 #include <asm/amigahw.h>
-#include <asm/zorro.h>
+#include <linux/zorro.h>
 
 
 #ifdef CONFIG_ZORRO
@@ -82,6 +82,10 @@ BEGIN_PROD(MEMPHIS)
    PROD("Stormbringer", STORMBRINGER)
 END
 
+BEGIN_PROD(3_STATE)
+   PROD("Megamix 2000 RAM", MEGAMIX_2000)
+END
+
 BEGIN_PROD(COMMODORE2)
    PROD("A2088 XT Bridgeboard", A2088)
    PROD("A2286 AT Bridgeboard", A2286)
@@ -141,8 +145,12 @@ BEGIN_PROD(MICROBOTICS)
    PROD("StarDrive", STARDRIVE)
    PROD("8-Up (Rev A)", 8_UP_A)
    PROD("8-Up (Rev Z)", 8_UP_Z)
+   PROD("Delta Card RAM", DELTA_RAM)
+   PROD("8-Star RAM", 8_STAR_RAM)
+   PROD("8-Star", 8_STAR)
    PROD("VXL RAM", VXL_RAM)
    PROD("VXL-30 Turbo Board", VXL_30)
+   PROD("Delta Card", DELTA)
    PROD("MBX 1200", MBX_1200)
    PROD("Hardframe 2000", HARDFRAME_2000)
    PROD("MBX 1200", MBX_1200_2)
@@ -180,8 +188,8 @@ BEGIN_PROD(SUPRA)
    PROD("SupraDrive 4x4 SCSI Controller", SUPRADRIVE_4x4)
    PROD("2000 DMA HD", SUPRA_2000)
    PROD("500 HD/RAM", SUPRA_500)
+   PROD("500XP/2000 RAM", SUPRA_500XP)
    PROD("500RX/2000 RAM", SUPRA_500RX)
-   PROD("500RX/2000 RAM", SUPRA_500RX_2)
    PROD("2400zi Modem", SUPRA_2400ZI)
    PROD("Wordsync SCSI Controller", WORDSYNC)
    PROD("Wordsync II SCSI Controller", WORDSYNC_II)
@@ -191,6 +199,10 @@ END
 BEGIN_PROD(CSA)
    PROD("Magnum 40 SCSI Controller", MAGNUM)
    PROD("12 Gauge SCSI Controller", 12GAUGE)
+END
+
+BEGIN_PROD(MTEC2)
+   PROD("AT500 RAM", AT500_2)
 END
 
 BEGIN_PROD(GVP3)
@@ -203,7 +215,11 @@ END
 
 BEGIN_PROD(POWER_COMPUTING)
    PROD("DKB 3128 RAM", DKB_3128)
+   PROD("Rapid Fire SCSI Controller", RAPID_FIRE)
+   PROD("DKB 1202 RAM", DKB_1202)
    PROD("DKB Cobra / Viper II Turbo Board", VIPER_II_COBRA)
+   PROD("WildFire 060 Turbo Board", WILDFIRE_060)
+   PROD("WildFire 060 Turbo Board", WILDFIRE_060_2)
 END
 
 BEGIN_PROD(GVP)
@@ -257,6 +273,9 @@ BEGIN_PROD(PPI)
    PROD("PP&S A500 68040 Turbo Board", PPS_A500_040)
 END
 
+BEGIN_PROD(XEBEC)
+END
+
 BEGIN_PROD(SPIRIT)
    PROD("HDA 506 Harddisk", HDA_506)
    PROD("OctaByte RAM", OCTABYTE_RAM)
@@ -268,6 +287,7 @@ END
 
 BEGIN_PROD(BSC3)
    PROD("ALF 2 SCSI Controller", ALF_2_SCSI)
+   PROD("ALF 2 SCSI Controller", ALF_2_SCSI_2)
    PROD("ALF 3 SCSI Controller", ALF_3_SCSI_2)
 END
 
@@ -291,7 +311,15 @@ END
 BEGIN_PROD(KUPKE2)
    PROD("Golem SCSI-II Controller", KUPKE_SCSI_II)
    PROD("Golem Box", GOLEM_BOX)
+   PROD("030/882 Turbo Board", KUPKE_TURBO)
    PROD("Golem SCSI/AT Controller", KUPKE_SCSI_AT)
+END
+
+BEGIN_PROD(GVP4)
+   PROD("A2000-RAM8/2", A2000_RAM8)
+END
+
+BEGIN_PROD(INTERWORKS_NET)
 END
 
 BEGIN_PROD(HARDITAL)
@@ -301,10 +329,14 @@ END
 BEGIN_PROD(BSC2)
    PROD("Oktagon 2008 SCSI Controller", OKTAGON_SCSI)
    PROD("Tandem AT-2008/508 IDE Controller", TANDEM)
+   PROD("Alpha RAM 1200", ALPHA_RAM_1200)
    PROD("Oktagon 2008 RAM", OKTAGON_RAM)
    PROD("Alfa Data MultiFace I", MULTIFACE_I)
    PROD("Alfa Data MultiFace II", MULTIFACE_II)
    PROD("Alfa Data MultiFace III", MULTIFACE_III)
+   PROD("Framebuffer", BSC_FRAEMBUFFER)
+   PROD("Graffiti Graphics Board (RAM)", GRAFFITI_RAM)
+   PROD("Graffiti Graphics Board (REG)", GRAFFITI_REG)
    PROD("ISDN MasterCard", ISDN_MASTERCARD)
    PROD("ISDN MasterCard II", ISDN_MASTERCARD_2)
 END
@@ -319,12 +351,15 @@ BEGIN_PROD(IMPULSE)
 END
 
 BEGIN_PROD(IVS)
-   PROD("GrandSlam RAM", GRANDSLAM)
+   PROD("GrandSlam PIC 2 RAM", GRANDSLAM_PIC_2)
+   PROD("GrandSlam PIC 1 RAM", GRANDSLAM_PIC_1)
    PROD("OverDrive HD", IVS_OVERDRIVE)
    PROD("Trumpcard Classic SCSI Controller", TRUMPCARD_CLASSIC)
    PROD("Trumpcard Pro SCSI Controller", TRUMPCARD_PRO)
    PROD("Meta-4 RAM", META_4)
+   PROD("Wavetools Sound Board", WAVETOOLS)
    PROD("Vector SCSI Controller", VECTOR)
+   PROD("Vector SCSI Controller", VECTOR_2)
 END
 
 BEGIN_PROD(VECTOR)
@@ -336,6 +371,7 @@ BEGIN_PROD(XPERT_PRODEV)
    PROD("Visiona Graphics Board (REG)", VISIONA_REG)
    PROD("Merlin Graphics Board (RAM)", MERLIN_RAM)
    PROD("Merlin Graphics Board (REG)", MERLIN_REG)
+   PROD("Merlin Graphics Board (REG)", MERLIN_REG_2)
 END
 
 BEGIN_PROD(HYDRA_SYSTEMS)
@@ -388,7 +424,11 @@ BEGIN_PROD(VILLAGE_TRONIC)
    PROD("Domino Graphics Board (REG)", DOMINO_REG)
    PROD("Picasso II Graphics Board (RAM)", PICASSO_II_RAM)
    PROD("Picasso II Graphics Board (REG)", PICASSO_II_REG)
-   PROD("Picasso II Graphics Board (REG)", PICASSO_II_REG_2)
+   PROD("Picasso II/II+ Graphics Board (Segmented Mode)", PICASSO_II_SEGM)
+   PROD("Picassio IV Graphics Board", PICASSO_IV)
+   PROD("Picassio IV Graphics Board", PICASSO_IV_2)
+   PROD("Picassio IV Graphics Board", PICASSO_IV_3)
+   PROD("Picassio IV Graphics Board", PICASSO_IV_4)
    PROD("Ariadne Ethernet Card", ARIADNE)
 END
 
@@ -402,8 +442,18 @@ BEGIN_PROD(AMITRIX)
    PROD("CD-RAM Memory", AMITRIX_CD_RAM)
 END
 
+BEGIN_PROD(ARMAX)
+   PROD("OmniBus Graphics Board", OMNIBUS)
+END
+
+BEGIN_PROD(NEWTEK)
+   PROD("VideoToaster", VIDEOTOASTER)
+END
+
 BEGIN_PROD(MTEC)
+   PROD("AT500 IDE Controller", AT500)
    PROD("68030 Turbo Board", MTEC_68030)
+   PROD("68020i Turbo Board", MTEC_68020I)
    PROD("A1200 T68030/42 RTC Turbo Board", MTEC_T1230)
    PROD("8MB RAM", MTEC_RAM)
 END
@@ -439,6 +489,11 @@ BEGIN_PROD(MICRONIK)
    PROD("RCA 120 RAM", RCA_120)
 END
 
+BEGIN_PROD(MEGA_MICRO)
+   PROD("SCRAM 500 SCSI Controller", SCRAM_500_SCSI)
+   PROD("SCRAM 500 RAM", SCRAM_500_RAM)
+END
+
 BEGIN_PROD(IMTRONICS2)
    PROD("Hurricane 2800 68030", HURRICANE_2800_3)
    PROD("Hurricane 2800 68030", HURRICANE_2800_4)
@@ -446,6 +501,15 @@ END
 
 BEGIN_PROD(KUPKE3)
    PROD("Golem HD 3000", GOLEM_3000)
+END
+
+BEGIN_PROD(ITH)
+   PROD("ISDN-Master II", ISDN_MASTER_II)
+END
+
+BEGIN_PROD(VMC)
+   PROD("ISDN Blaster Z2", ISDN_BLASTER_Z2)
+   PROD("HyperCom 4", HYPERCOM_4)
 END
 
 BEGIN_PROD(INFORMATION)
@@ -479,6 +543,8 @@ BEGIN_PROD(PHASE5)
    PROD("Blizzard 2060 SCSI Controller", BLIZZARD_2060SCSI)
    PROD("CyberStorm Mk II", CYBERSTORM_II)
    PROD("CyberVision64 Graphics Board", CYBERVISION)
+   PROD("CyberVision64-3D Graphics Board Prototype)", CYBERVISION3D_PRT)
+   PROD("CyberVision64-3D Graphics Board", CYBERVISION3D)
 END
 
 BEGIN_PROD(DPS)
@@ -487,11 +553,16 @@ END
 
 BEGIN_PROD(APOLLO2)
    PROD("A620 68020 Accelerator", A620)
+   PROD("A620 68020 Accelerator", A620_2)
 END
 
 BEGIN_PROD(APOLLO)
    PROD("AT-Apollo", AT_APOLLO)
    PROD("Turbo Board", APOLLO_TURBO)
+END
+
+BEGIN_PROD(PETSOFF)
+   PROD("Delfina DSP", DELFINA)
 END
 
 BEGIN_PROD(UWE_GERLACH)
@@ -507,6 +578,7 @@ BEGIN_PROD(MACROSYSTEMS2)
    PROD("Toccata Sound Board", TOCCATA)
    PROD("Retina Z3 Graphics Board", RETINA_Z3)
    PROD("VLab Motion", VLAB_MOTION)
+   PROD("Altais Graphics Board", ALTAIS)
    PROD("Falcon '040 Turbo Board", FALCON_040)
 END
 
@@ -514,11 +586,12 @@ BEGIN_PROD(COMBITEC)
 END
 
 BEGIN_PROD(SKI)
+   PROD("MAST Fireball SCSI Controller", MAST_FIREBALL)
    PROD("SCSI / Dual Serial", SKI_SCSI_SERIAL)
 END
 
 BEGIN_PROD(CAMERON)
-   PROD("Scanner Interface", CAMERON_SCANNER)
+   PROD("Personal A4", PERSONAL_A4)
 END
 
 BEGIN_PROD(REIS_WARE)
@@ -530,6 +603,7 @@ BEGIN_MANUF
    MANUF("Pacific Peripherals", PACIFIC)
    MANUF("Kupke", KUPKE)
    MANUF("Memphis", MEMPHIS)
+   MANUF("3-State", 3_STATE)
    MANUF("Commodore", COMMODORE2)
    MANUF("Commodore", COMMODORE)
    MANUF("Commodore", COMMODORE3)
@@ -546,7 +620,8 @@ BEGIN_MANUF
    MANUF("University of Lowell", UNIV_OF_LOWELL)
    MANUF("Ameristar", AMERISTAR)
    MANUF("Supra", SUPRA)
-   MANUF("CSA", CSA)
+   MANUF("Computer Systems Ass.", CSA)
+   MANUF("M-Tech", MTEC2)
    MANUF("Great Valley Products", GVP3)
    MANUF("ByteBox", BYTEBOX)
    MANUF("Power Computing", POWER_COMPUTING)
@@ -554,6 +629,7 @@ BEGIN_MANUF
    MANUF("Synergy", SYNERGY)
    MANUF("Xetec", XETEC)
    MANUF("Progressive Peripherals", PPI)
+   MANUF("Xebec", XEBEC)
    MANUF("Spirit", SPIRIT)
    MANUF("BSC", BSC)
    MANUF("BSC", BSC3)
@@ -562,6 +638,8 @@ BEGIN_MANUF
    MANUF("Checkpoint Technologies", CHECKPOINT)
    MANUF("ICD", ICD)
    MANUF("Kupke", KUPKE2)
+   MANUF("Great Valley Products", GVP4)
+   MANUF("Interworks Network", INTERWORKS_NET)
    MANUF("Hardital Synthesis", HARDITAL)
    MANUF("BSC", BSC2)
    MANUF("Advanced Systems & Software", ADV_SYS_SOFT)
@@ -582,15 +660,20 @@ BEGIN_MANUF
    MANUF("Village Tronic", VILLAGE_TRONIC)
    MANUF("Utilities Unlimited", UTILITIES_ULTD)
    MANUF("Amitrix", AMITRIX)
-   MANUF("MTEC", MTEC)
+   MANUF("ArMax", ARMAX)
+   MANUF("NewTek", NEWTEK)
+   MANUF("M-Tech", MTEC)
    MANUF("Great Valley Products", GVP2)
    MANUF("Helfrich", HELFRICH2)
    MANUF("MacroSystems", MACROSYSTEMS)
    MANUF("ElBox Computer", ELBOX)
    MANUF("Harms Professional", HARMS_PROF)
    MANUF("Micronik", MICRONIK)
+   MANUF("MegaMicro", MEGA_MICRO)
    MANUF("Imtronics", IMTRONICS2)
    MANUF("Kupke", KUPKE3)
+   MANUF("ITH", ITH)
+   MANUF("VMC", VMC)
    MANUF("Information", INFORMATION)
    MANUF("Vortex", VORTEX)
    MANUF("DataFlyer", DATAFLYER)
@@ -599,6 +682,7 @@ BEGIN_MANUF
    MANUF("DPS", DPS)
    MANUF("Apollo", APOLLO2)
    MANUF("Apollo", APOLLO)
+   MANUF("Petsoff LP", PETSOFF)
    MANUF("Uwe Gerlach", UWE_GERLACH)
    MANUF("MacroSystems", MACROSYSTEMS2)
    MANUF("Combitec", COMBITEC)
@@ -758,7 +842,11 @@ static int identify(int devnum, char *buf)
                   identified = 1;
                   break;
                } else {
-                  epc = *(enum GVP_ident *)ZTWO_VADDR(addr+0x8000) &
+		       /*
+			* The epc must be read as a short from the
+			* hardware.
+			*/
+                  epc = *(unsigned short *)ZTWO_VADDR(addr+0x8000) &
                         GVP_PRODMASK;
                   for (k = 0; k < NUM_GVP_PROD; k++)
                      if (Ext_Prod_GVP[k].ID == epc) {

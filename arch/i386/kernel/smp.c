@@ -49,6 +49,9 @@
 #include "irq.h"
 
 extern unsigned long start_kernel, _etext;
+extern void update_one_process( struct task_struct *p,
+                                unsigned long ticks, unsigned long user,
+                                unsigned long system);
 void setup_APIC_clock (void);
 
 /*
@@ -1307,37 +1310,6 @@ void smp_flush_tlb(void)
 }
 
 /*
- * Platform specific profiling function.
- * it builds a 'prof_shift' resolution EIP distribution histogram
- *
- * it's SMP safe.
- */
-
-static inline void x86_do_profile (unsigned long eip)
-{
-	if (prof_buffer && current->pid) {
-		extern int _stext;
-		eip -= (unsigned long) &_stext;
-		eip >>= prof_shift;
-		if (eip < prof_len)
-			atomic_inc(&prof_buffer[eip]);
-		else
-		/*
-		 * Dont ignore out-of-bounds EIP values silently,
-		 * put them into the last histogram slot, so if
-		 * present, they will show up as a sharp peak.
-		 */
-			atomic_inc(&prof_buffer[prof_len-1]);
-	}
-}
-
-unsigned int prof_multiplier[NR_CPUS];
-unsigned int prof_counter[NR_CPUS];
-
-extern void update_one_process(	struct task_struct *p,
-				unsigned long ticks, unsigned long user,
-				unsigned long system);
-/*
  * Local timer interrupt handler. It does both profiling and
  * process statistics/rescheduling.
  *
@@ -1346,14 +1318,19 @@ extern void update_one_process(	struct task_struct *p,
  * multiplier is 1 and it can be changed by writing a 4 bytes multiplier
  * value into /proc/profile.
  */
+
+unsigned int prof_multiplier[NR_CPUS];
+unsigned int prof_counter[NR_CPUS];
+
 static inline void smp_local_timer_interrupt(struct pt_regs * regs)
 {
 	int cpu = smp_processor_id();
+
 	/*
-	 * Both the profiling function and the statistics
-	 * counters are SMP safe. We leave the APIC irq
-	 * unacked while updating the profiling info, thus
-	 * we cannot be interrupted by the same APIC interrupt.
+	 * The profiling function is SMP safe. (nothing can mess
+	 * around with "current", and the profiling counters are
+	 * updated with atomic operations). This is especially
+	 * useful with a profiling multiplier != 1
 	 */
 	if (!user_mode(regs))
 		x86_do_profile (regs->eip);
@@ -1363,13 +1340,10 @@ static inline void smp_local_timer_interrupt(struct pt_regs * regs)
 		struct task_struct * p = current;
 
 		/*
-		 * We mess around with thread statistics, but
-		 * since we are the CPU running it, we dont
-		 * have to lock it. We assume that switch_to()
-		 * protects 'current' against local irqs via __cli.
-		 *
-		 * kernel statistics counters are updated via atomic
-		 * operations.
+		 * After doing the above, we need to make like
+		 * a normal interrupt - otherwise timer interrupts
+		 * ignore the global interrupt lock, which is the
+		 * WrongThing (tm) to do.
 		 */
 
 		if (user_mode(regs))
@@ -1377,7 +1351,9 @@ static inline void smp_local_timer_interrupt(struct pt_regs * regs)
 		else
 			system=1;
 
+		irq_enter(cpu, 0);
 		if (p->pid) {
+
 			update_one_process(p, 1, user, system);
 
 			p->counter -= 1;
@@ -1386,25 +1362,21 @@ static inline void smp_local_timer_interrupt(struct pt_regs * regs)
 				need_resched = 1;
 			}
 			if (p->priority < DEF_PRIORITY)
-				atomic_add (user, &kstat.cpu_nice);
+				kstat.cpu_nice += user;
 			else
-				atomic_add (user, &kstat.cpu_user);
+				kstat.cpu_user += user;
 
-			atomic_add (system, &kstat.cpu_system);
+			kstat.cpu_system += system;
 		
 		} else {
 #ifdef __SMP_PROF__
 			if (test_bit(cpu,&smp_idle_map))
 				smp_idle_count[cpu]++;
 #endif
-			/*
-			 * This is a hack until we have need_resched[]
-			 */
-			if (read_smp_counter(&smp_process_available))
-				need_resched=1;
 		}
-
 		prof_counter[cpu]=prof_multiplier[cpu];
+
+		irq_exit(cpu, 0);
 	}
 
 #ifdef __SMP_PROF__
@@ -1432,8 +1404,6 @@ static inline void smp_local_timer_interrupt(struct pt_regs * regs)
  */
 void smp_apic_timer_interrupt(struct pt_regs * regs)
 {
-	int cpu = smp_processor_id();
-
 	/*
 	 * NOTE! We'd better ACK the irq immediately,
 	 * because timer handling can be slow, and we
@@ -1442,15 +1412,7 @@ void smp_apic_timer_interrupt(struct pt_regs * regs)
 	 */
 	ack_APIC_irq ();
 
-	/*
-	 * After doing the above, we need to make like
-	 * a normal interrupt - otherwise timer interrupts
-	 * ignore the global interrupt lock, which is the
-	 * WrongThing (tm) to do.
-	 */
-	irq_enter(cpu, 0);
 	smp_local_timer_interrupt(regs);
-	irq_exit(cpu, 0);
 }
 
 /*	

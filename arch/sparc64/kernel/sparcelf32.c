@@ -38,6 +38,7 @@
 #include <linux/shm.h>
 #include <linux/personality.h>
 #include <linux/elfcore.h>
+#include <linux/init.h>
 
 #include <asm/uaccess.h>
 #include <asm/pgtable.h>
@@ -156,20 +157,20 @@ __u32 *create_elf32_tables(char *p, int argc, int envc,
 	sp -= argc+1;
 	argv = (__u32 *) sp;
 	if (!ibcs) {
-		__put_user(((__u32) envp),--sp);
-		__put_user(((__u32) argv),--sp);
+		__put_user(((__u32)(long) envp),--sp);
+		__put_user(((__u32)(long) argv),--sp);
 	}
 
 	__put_user((__u32)argc,--sp);
 	current->mm->arg_start = (unsigned long) p;
 	while (argc-->0) {
-		__put_user(((__u32)p),argv++);
+		__put_user(((__u32)(long)p),argv++);
 		p += strlen_user(p);
 	}
 	__put_user(NULL, argv);
 	current->mm->arg_end = current->mm->env_start = (unsigned long) p;
 	while (envc-->0) {
-		__put_user(((__u32)p),envp++);
+		__put_user(((__u32)(long)p),envp++);
 		p += strlen_user(p);
 	}
 	__put_user(NULL, envp);
@@ -1108,7 +1109,7 @@ static int elf32_core_dump(long signr, struct pt_regs * regs)
 #else
 	if (sizeof(elf_gregset_t) != sizeof(struct pt_regs))
 	{
-		printk("sizeof(elf_gregset_t) (%d) != sizeof(struct pt_regs) (%d)\n",
+		printk("sizeof(elf_gregset_t) (%ld) != sizeof(struct pt_regs) (%ld)\n",
 			sizeof(elf_gregset_t), sizeof(struct pt_regs));
 	}
 	else
@@ -1255,7 +1256,7 @@ static int elf32_core_dump(long signr, struct pt_regs * regs)
 }
 #endif		/* USE_ELF_CORE_DUMP */
 
-int init_elf32_binfmt(void)
+__initfunc(int init_elf32_binfmt(void))
 {
 	return register_binfmt(&elf32_format);
 }

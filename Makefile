@@ -1,6 +1,6 @@
 VERSION = 2
 PATCHLEVEL = 1
-SUBLEVEL = 35
+SUBLEVEL = 36
 
 ARCH := $(shell uname -m | sed s/i.86/i386/)
 
@@ -118,7 +118,8 @@ CORE_FILES	=kernel/kernel.o mm/mm.o fs/fs.o ipc/ipc.o
 FILESYSTEMS	=fs/filesystems.a
 NETWORKS	=net/network.a
 DRIVERS		=drivers/block/block.a \
-		 drivers/char/char.a
+		 drivers/char/char.a \
+	         drivers/pnp/pnp.a
 LIBS		=$(TOPDIR)/lib/lib.a
 SUBDIRS		=kernel drivers mm fs net ipc lib
 
@@ -142,10 +143,6 @@ endif
 
 ifdef CONFIG_PCI
 DRIVERS := $(DRIVERS) drivers/pci/pci.a
-endif
-
-ifdef CONFIG_PNP
-DRIVERS := $(DRIVERS) drivers/pnp/pnp.a
 endif
 
 ifdef CONFIG_SBUS

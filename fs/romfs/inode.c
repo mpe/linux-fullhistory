@@ -39,6 +39,7 @@
 #include <linux/romfs_fs.h>
 #include <linux/fs.h>
 #include <linux/locks.h>
+#include <linux/init.h>
 
 #include <asm/uaccess.h>
 
@@ -640,8 +641,7 @@ static struct file_system_type romfs_fs_type = {
 	romfs_read_super, "romfs", 1, NULL
 };
 
-int
-init_romfs_fs(void)
+__initfunc(int init_romfs_fs(void))
 {
 	return register_filesystem(&romfs_fs_type);
 }

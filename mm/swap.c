@@ -44,7 +44,7 @@ int free_pages_high = 40;
 
 /* We track the number of pages currently being asynchronously swapped
    out, so that we don't try to swap TOO many pages out at once */
-atomic_t nr_async_pages = ATOMIC_INIT;
+atomic_t nr_async_pages = ATOMIC_INIT(0);
 
 /*
  * Constants for the page aging mechanism: the maximum age (actually,

@@ -322,6 +322,7 @@ void free_initmem(void)
 		atomic_set(&mem_map[MAP_NR(addr)].count, 1);
 		free_page(addr);
 	}
+	printk ("Freeing unused kernel memory: %dk freed\n", (&__init_end - &__init_begin) >> 10);
 }
 
 void si_meminfo(struct sysinfo *val)

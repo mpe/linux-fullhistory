@@ -2905,6 +2905,12 @@ atafb_blank(int blank)
 		do_install_cmap(currcon);
 }
 
+static int
+atafb_setcmap(struct fb_cmap *cmap, int con)
+{
+	return(atari_fb_set_cmap(cmap, 1, con));
+}
+
 struct fb_info *
 atari_fb_init(long *mem_start)
 {
@@ -2999,6 +3005,7 @@ atari_fb_init(long *mem_start)
 	fb_info.switch_con=&atafb_switch;
 	fb_info.updatevar=&fb_update_var;
 	fb_info.blank=&atafb_blank;
+	fb_info.setcmap=&atafb_setcmap;
 	var=atari_fb_predefined+default_par-1;
 	do_fb_set_var(var,1);
 	strcat(fb_info.modename,fb_var_names[default_par-1][0]);

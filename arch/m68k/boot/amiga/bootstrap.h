@@ -59,30 +59,6 @@ struct Library;
 struct IORequest;
 
 
-static __inline void CloseLibrary(struct Library *library)
-{
-    register const struct ExecBase *a6 __asm("a6") = SysBase;
-    register struct Library *a1 __asm("a1") = library;
-    __asm __volatile ("jsr a6@(-0x19e)"
-		      : /* no output */
-		      : "r" (a6), "r" (a1)
-		      : "a0","a1","d0","d1", "memory");
-}
-
-static __inline struct Library *OpenLibrary(char *libName,
-					    unsigned long version)
-{
-    register struct Library * _res  __asm("d0");
-    register const struct ExecBase *a6 __asm("a6") = SysBase;
-    register u_char *a1 __asm("a1") = libName;
-    register unsigned long d0 __asm("d0") = version;
-    __asm __volatile ("jsr a6@(-0x228)"
-		      : "=r" (_res)
-		      : "r" (a6), "r" (a1), "r" (d0)
-		      : "a0","a1","d0","d1", "memory");
-    return _res;
-}
-
 static __inline char OpenDevice(u_char *devName, u_long unit,
 				struct IORequest *ioRequest, u_long flags)
 {

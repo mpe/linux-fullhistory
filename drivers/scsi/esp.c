@@ -20,6 +20,7 @@
 #include <linux/blk.h>
 #include <linux/proc_fs.h>
 #include <linux/stat.h>
+#include <linux/init.h>
 
 #include "scsi.h"
 #include "hosts.h"
@@ -639,7 +640,7 @@ static inline void esp_bootup_reset(struct Sparc_ESP *esp, struct Sparc_ESP_regs
 /* Detecting ESP chips on the machine.  This is the simple and easy
  * version.
  */
-int esp_detect(Scsi_Host_Template *tpnt)
+__initfunc(int esp_detect(Scsi_Host_Template *tpnt))
 {
 	struct Sparc_ESP *esp, *elink;
 	struct Scsi_Host *esp_host;

@@ -1,4 +1,4 @@
-/* $Id: leo.c,v 1.14 1997/04/10 17:06:09 jj Exp $
+/* $Id: leo.c,v 1.15 1997/04/14 17:04:54 jj Exp $
  * leo.c: SUNW,leo 24/8bit frame buffer driver
  *
  * Copyright (C) 1996 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -156,19 +156,19 @@ leo_mmap (struct inode *inode, struct file *file, struct vm_area_struct *vma,
 		switch (vma->vm_offset+page){
 		case LEO_SS0_MAP:
 			map_size = 0x800000;
-			map_offset = get_phys ((uint)fb->base);
+			map_offset = get_phys ((unsigned long)fb->base);
 			break;
 		case LEO_LC_SS0_USR_MAP:
 			map_size = PAGE_SIZE;
-			map_offset = get_phys ((uint)fb->info.leo.lc_ss0_usr);
+			map_offset = get_phys ((unsigned long)fb->info.leo.lc_ss0_usr);
 			break;
 		case LEO_LD_SS0_MAP:
 			map_size = PAGE_SIZE;
-			map_offset = get_phys ((uint)fb->info.leo.ld_ss0);
+			map_offset = get_phys ((unsigned long)fb->info.leo.ld_ss0);
 			break;
 		case LEO_LX_CURSOR_MAP:
 			map_size = PAGE_SIZE;
-			map_offset = get_phys ((uint)fb->info.leo.cursor);
+			map_offset = get_phys ((unsigned long)fb->info.leo.cursor);
 			break;
 		case LEO_SS1_MAP:	
 			map_size = 0x800000;
@@ -176,11 +176,11 @@ leo_mmap (struct inode *inode, struct file *file, struct vm_area_struct *vma,
 			break;
 		case LEO_LC_SS1_USR_MAP:
 			map_size = PAGE_SIZE;
-			map_offset = get_phys ((uint)fb->info.leo.lc_ss1_usr);
+			map_offset = get_phys ((unsigned long)fb->info.leo.lc_ss1_usr);
 			break;
 		case LEO_LD_SS1_MAP:
 			map_size = PAGE_SIZE;
-			map_offset = get_phys ((uint)fb->info.leo.ld_ss1);
+			map_offset = get_phys ((unsigned long)fb->info.leo.ld_ss1);
 			break;
 		case LEO_UNK_MAP:	
 			map_size = PAGE_SIZE;
@@ -188,19 +188,19 @@ leo_mmap (struct inode *inode, struct file *file, struct vm_area_struct *vma,
 			break;
 		case LEO_LX_KRN_MAP:
 			map_size = PAGE_SIZE;
-			map_offset = get_phys ((uint)fb->info.leo.lx_krn);
+			map_offset = get_phys ((unsigned long)fb->info.leo.lx_krn);
 			break;
 		case LEO_LC_SS0_KRN_MAP:
 			map_size = PAGE_SIZE;
-			map_offset = get_phys ((uint)fb->info.leo.lc_ss0_krn);
+			map_offset = get_phys ((unsigned long)fb->info.leo.lc_ss0_krn);
 			break;
 		case LEO_LC_SS1_KRN_MAP:
 			map_size = PAGE_SIZE;
-			map_offset = get_phys ((uint)fb->info.leo.lc_ss1_krn);
+			map_offset = get_phys ((unsigned long)fb->info.leo.lc_ss1_krn);
 			break;
 		case LEO_LD_GBL_MAP:
 			map_size = PAGE_SIZE;
-			map_offset = get_phys ((uint)fb->info.leo.ld_gbl);
+			map_offset = get_phys ((unsigned long)fb->info.leo.ld_gbl);
 			break;
 		case LEO_UNK2_MAP:
 			map_size = 0x100000;
@@ -509,14 +509,14 @@ __initfunc(static unsigned long leo_postsetup (fbinfo_t *fb, unsigned long memor
 	return memory_start + (256*4*3) + 256 + 256*3;
 }
 
-__initfunc(void leo_setup (fbinfo_t *fb, int slot, unsigned long leo, int leo_io))
+__initfunc(void leo_setup (fbinfo_t *fb, int slot, u32 leo, int leo_io))
 {
 	struct leo_info *leoinfo;
 	int i;
 	struct fb_wid_item wi;
 	struct fb_wid_list wl;
 	
-	printk ("leo%d at 0x%8.8x ", slot, (uint) leo);
+	printk ("leo%d at 0x%8.8x ", slot, leo);
 	
 	/* Fill in parameters we left out */
 	fb->type.fb_size = 0x800000; /* 8MB */
@@ -543,25 +543,25 @@ __initfunc(void leo_setup (fbinfo_t *fb, int slot, unsigned long leo, int leo_io
 
 	leoinfo->offset = leo;
 	/* Map the hardware registers */
-	leoinfo->lc_ss0_krn = sparc_alloc_io((u32)(leo + LEO_OFF_LC_SS0_KRN), 0,
+	leoinfo->lc_ss0_krn = sparc_alloc_io(leo + LEO_OFF_LC_SS0_KRN, 0,
 		 PAGE_SIZE,"leo_lc_ss0_krn", fb->space, 0);
-	leoinfo->lc_ss0_usr = sparc_alloc_io((u32)(leo + LEO_OFF_LC_SS0_USR), 0,
+	leoinfo->lc_ss0_usr = sparc_alloc_io(leo + LEO_OFF_LC_SS0_USR, 0,
 		 PAGE_SIZE,"leo_lc_ss0_usr", fb->space, 0);
-	leoinfo->lc_ss1_krn = sparc_alloc_io((u32)(leo + LEO_OFF_LC_SS1_KRN), 0,
+	leoinfo->lc_ss1_krn = sparc_alloc_io(leo + LEO_OFF_LC_SS1_KRN, 0,
 		 PAGE_SIZE,"leo_lc_ss1_krn", fb->space, 0);
-	leoinfo->lc_ss1_usr = sparc_alloc_io((u32)(leo + LEO_OFF_LC_SS1_USR), 0,
+	leoinfo->lc_ss1_usr = sparc_alloc_io(leo + LEO_OFF_LC_SS1_USR, 0,
 		 PAGE_SIZE,"leo_lc_ss1_usr", fb->space, 0);
-	leoinfo->ld_ss0 = sparc_alloc_io((u32)(leo + LEO_OFF_LD_SS0), 0,
+	leoinfo->ld_ss0 = sparc_alloc_io(leo + LEO_OFF_LD_SS0, 0,
 		 PAGE_SIZE,"leo_ld_ss0", fb->space, 0);
-	leoinfo->ld_ss1 = sparc_alloc_io((u32)(leo + LEO_OFF_LD_SS1), 0,
+	leoinfo->ld_ss1 = sparc_alloc_io(leo + LEO_OFF_LD_SS1, 0,
 		 PAGE_SIZE,"leo_ld_ss1", fb->space, 0);
-	leoinfo->ld_gbl = sparc_alloc_io((u32)(leo + LEO_OFF_LD_GBL), 0,
+	leoinfo->ld_gbl = sparc_alloc_io(leo + LEO_OFF_LD_GBL, 0,
 		 PAGE_SIZE,"leo_ld_gbl", fb->space, 0);
-	leoinfo->lx_krn = sparc_alloc_io((u32)(leo + LEO_OFF_LX_KRN), 0,
+	leoinfo->lx_krn = sparc_alloc_io(leo + LEO_OFF_LX_KRN, 0,
 		 PAGE_SIZE,"leo_lx_krn", fb->space, 0);
-	leoinfo->cursor = sparc_alloc_io((u32)(leo + LEO_OFF_LX_CURSOR), 0,
+	leoinfo->cursor = sparc_alloc_io(leo + LEO_OFF_LX_CURSOR, 0,
 		 sizeof(struct leo_cursor),"leo_lx_crsr", fb->space, 0);
-	fb->base = (long)sparc_alloc_io((u32)(leo + LEO_OFF_SS0), 0,
+	fb->base = (long)sparc_alloc_io(leo + LEO_OFF_SS0, 0,
 		 0x800000,"leo_ss0", fb->space, 0);
 	
 	leoinfo->ld_ss0->unk = 0xffff;

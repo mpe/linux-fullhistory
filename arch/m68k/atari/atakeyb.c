@@ -14,6 +14,7 @@
  */
 
 #include <linux/sched.h>
+#include <linux/kernel.h>
 #include <linux/interrupt.h>
 #include <linux/errno.h>
 #include <linux/keyboard.h>
@@ -39,6 +40,15 @@ extern unsigned int keymap_count;
 void (*atari_MIDI_interrupt_hook) (void);
 /* Hook for mouse driver */
 void (*atari_mouse_interrupt_hook) (char *);
+
+/* variables for IKBD self test: */
+
+/* state: 0: off; >0: in progress; >1: 0xf1 received */
+static volatile int ikbd_self_test;
+/* timestamp when last received a char */
+static volatile unsigned long self_test_last_rcv;
+/* bitmap of keys reported as broken */
+static unsigned long broken_keys[128/(sizeof(unsigned long)*8)] = { 0, };
 
 #define BREAK_MASK	(0x80)
 
@@ -331,12 +341,15 @@ static void keyboard_interrupt(int irq, void *dummy, struct pt_regs *fp)
     {
 	/* a very fast typist or a slow system, give a warning */
 	/* ...happens often if interrupts were disabled for too long */
-	printk( "Keyboard overrun\n" );
+	printk( KERN_DEBUG "Keyboard overrun\n" );
 	scancode = acia.key_data;
 	/* Turn off autorepeating in case a break code has been lost */
 	del_timer( &atakeyb_rep_timer );
 	rep_scancode = 0;
-	if (IS_SYNC_CODE(scancode)) {
+	if (ikbd_self_test)
+	    /* During self test, don't do resyncing, just process the code */
+	    goto interpret_scancode;
+	else if (IS_SYNC_CODE(scancode)) {
 	    /* This code seem already to be the start of a new packet or a
 	     * single scancode */
 	    kb_state.state = KEYBOARD;
@@ -386,10 +399,47 @@ static void keyboard_interrupt(int irq, void *dummy, struct pt_regs *fp)
 		kb_state.buf[0] = scancode;
 		break;
 
+	      case 0xF1:
+		/* during self-test, note that 0xf1 received */
+		if (ikbd_self_test) {
+		    ++ikbd_self_test;
+		    self_test_last_rcv = jiffies;
+		    break;
+		}
+		/* FALL THROUGH */
+		
 	      default:
 		break_flag = scancode & BREAK_MASK;
 		scancode &= ~BREAK_MASK;
 
+		if (ikbd_self_test) {
+		    /* Scancodes sent during the self-test stand for broken
+		     * keys (keys being down). The code *should* be a break
+		     * code, but nevertheless some AT keyboard interfaces send
+		     * make codes instead. Therefore, simply ignore
+		     * break_flag...
+		     * */
+		    int keyval = ataplain_map[scancode], keytyp;
+		    
+		    set_bit( scancode, broken_keys );
+		    self_test_last_rcv = jiffies;
+		    keyval = ataplain_map[scancode];
+		    keytyp = KTYP(keyval) - 0xf0;
+		    keyval = KVAL(keyval);
+		    
+		    printk( KERN_WARNING "Key with scancode %d ", scancode );
+		    if (keytyp == KT_LATIN || keytyp == KT_LETTER) {
+			if (keyval < ' ')
+			    printk( "('^%c') ", keyval + '@' );
+			else
+			    printk( "('%c') ", keyval );
+		    }
+		    printk( "is broken -- will be ignored.\n" );
+		    break;
+		}
+		else if (test_bit( scancode, broken_keys ))
+		    break;
+		
 		if (break_flag) {
 		    del_timer( &atakeyb_rep_timer );
 		    rep_scancode = 0;
@@ -815,7 +865,18 @@ int atari_keyb_init(void)
     mfp.active_edge &= ~0x10;
     atari_turnon_irq(IRQ_MFP_ACIA);
 
+    ikbd_self_test = 1;
     ikbd_reset();
+    /* wait for a period of inactivity (here: 0.25s), then assume the IKBD's
+     * self-test is finished */
+    self_test_last_rcv = jiffies;
+    while( jiffies < self_test_last_rcv + HZ/4 )
+	barrier();
+    /* if not incremented: no 0xf1 received */
+    if (ikbd_self_test == 1)
+	printk( KERN_ERR "WARNING: keyboard self test failed!\n" );
+    ikbd_self_test = 0;
+    
     ikbd_mouse_disable();
     ikbd_joystick_disable();
 

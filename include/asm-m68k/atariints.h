@@ -26,11 +26,11 @@
 **
 */
 
-#define STMFP_SOURCE_BASE   8
-#define TTMFP_SOURCE_BASE   24
-#define SCC_SOURCE_BASE	    40
-#define VME_SOURCE_BASE		56
-#define VME_MAX_SOURCES		16
+#define STMFP_SOURCE_BASE  8
+#define TTMFP_SOURCE_BASE  24
+#define SCC_SOURCE_BASE    40
+#define VME_SOURCE_BASE    56
+#define VME_MAX_SOURCES    16
 
 #define NUM_ATARI_SOURCES   (VME_SOURCE_BASE+VME_MAX_SOURCES-STMFP_SOURCE_BASE)
 
@@ -45,65 +45,65 @@
 #define IRQ_TYPE_FAST     1
 #define IRQ_TYPE_PRIO     2
 
-#define	IRQ_SPURIOUS      (IRQ_MACHSPEC | 0)
+#define	IRQ_SPURIOUS      (0)
 
 /* auto-vector interrupts */
-#define IRQ_AUTO_1        (IRQ_MACHSPEC | 1)
-#define IRQ_AUTO_2        (IRQ_MACHSPEC | 2)
-#define IRQ_AUTO_3        (IRQ_MACHSPEC | 3)
-#define IRQ_AUTO_4        (IRQ_MACHSPEC | 4)
-#define IRQ_AUTO_5        (IRQ_MACHSPEC | 5)
-#define IRQ_AUTO_6        (IRQ_MACHSPEC | 6)
-#define IRQ_AUTO_7        (IRQ_MACHSPEC | 7)
+#define IRQ_AUTO_1        (1)
+#define IRQ_AUTO_2        (2)
+#define IRQ_AUTO_3        (3)
+#define IRQ_AUTO_4        (4)
+#define IRQ_AUTO_5        (5)
+#define IRQ_AUTO_6        (6)
+#define IRQ_AUTO_7        (7)
 
 /* ST-MFP interrupts */
-#define IRQ_MFP_BUSY      (IRQ_MACHSPEC | 8)
-#define IRQ_MFP_DCD       (IRQ_MACHSPEC | 9)
-#define IRQ_MFP_CTS  	  (IRQ_MACHSPEC | 10)
-#define IRQ_MFP_GPU 	  (IRQ_MACHSPEC | 11)
-#define IRQ_MFP_TIMD      (IRQ_MACHSPEC | 12)
-#define IRQ_MFP_TIMC	  (IRQ_MACHSPEC | 13)
-#define IRQ_MFP_ACIA	  (IRQ_MACHSPEC | 14)
-#define IRQ_MFP_FDC       (IRQ_MACHSPEC | 15)
+#define IRQ_MFP_BUSY      (8)
+#define IRQ_MFP_DCD       (9)
+#define IRQ_MFP_CTS  	  (10)
+#define IRQ_MFP_GPU 	  (11)
+#define IRQ_MFP_TIMD      (12)
+#define IRQ_MFP_TIMC	  (13)
+#define IRQ_MFP_ACIA	  (14)
+#define IRQ_MFP_FDC       (15)
 #define IRQ_MFP_ACSI      IRQ_MFP_FDC
 #define IRQ_MFP_FSCSI     IRQ_MFP_FDC
 #define IRQ_MFP_IDE       IRQ_MFP_FDC
-#define IRQ_MFP_TIMB      (IRQ_MACHSPEC | 16)
-#define IRQ_MFP_SERERR    (IRQ_MACHSPEC | 17)
-#define IRQ_MFP_SEREMPT   (IRQ_MACHSPEC | 18)
-#define IRQ_MFP_RECERR    (IRQ_MACHSPEC | 19)
-#define IRQ_MFP_RECFULL   (IRQ_MACHSPEC | 20)
-#define IRQ_MFP_TIMA      (IRQ_MACHSPEC | 21)
-#define IRQ_MFP_RI        (IRQ_MACHSPEC | 22)
-#define IRQ_MFP_MMD       (IRQ_MACHSPEC | 23)
+#define IRQ_MFP_TIMB      (16)
+#define IRQ_MFP_SERERR    (17)
+#define IRQ_MFP_SEREMPT   (18)
+#define IRQ_MFP_RECERR    (19)
+#define IRQ_MFP_RECFULL   (20)
+#define IRQ_MFP_TIMA      (21)
+#define IRQ_MFP_RI        (22)
+#define IRQ_MFP_MMD       (23)
 
 /* TT-MFP interrupts */
-#define IRQ_TT_MFP_IO0       (IRQ_MACHSPEC | 24)
-#define IRQ_TT_MFP_IO1       (IRQ_MACHSPEC | 25)
-#define IRQ_TT_MFP_SCC	     (IRQ_MACHSPEC | 26)
-#define IRQ_TT_MFP_RI 	     (IRQ_MACHSPEC | 27)
-#define IRQ_TT_MFP_TIMD      (IRQ_MACHSPEC | 28)
-#define IRQ_TT_MFP_TIMC	     (IRQ_MACHSPEC | 29)
-#define IRQ_TT_MFP_DRVRDY    (IRQ_MACHSPEC | 30)
-#define IRQ_TT_MFP_SCSIDMA   (IRQ_MACHSPEC | 31)
-#define IRQ_TT_MFP_TIMB      (IRQ_MACHSPEC | 32)
-#define IRQ_TT_MFP_SERERR    (IRQ_MACHSPEC | 33)
-#define IRQ_TT_MFP_SEREMPT   (IRQ_MACHSPEC | 34)
-#define IRQ_TT_MFP_RECERR    (IRQ_MACHSPEC | 35)
-#define IRQ_TT_MFP_RECFULL   (IRQ_MACHSPEC | 36)
-#define IRQ_TT_MFP_TIMA      (IRQ_MACHSPEC | 37)
-#define IRQ_TT_MFP_RTC       (IRQ_MACHSPEC | 38)
-#define IRQ_TT_MFP_SCSI      (IRQ_MACHSPEC | 39)
+#define IRQ_TT_MFP_IO0       (24)
+#define IRQ_TT_MFP_IO1       (25)
+#define IRQ_TT_MFP_SCC	     (26)
+#define IRQ_TT_MFP_RI 	     (27)
+#define IRQ_TT_MFP_TIMD      (28)
+#define IRQ_TT_MFP_TIMC	     (29)
+#define IRQ_TT_MFP_DRVRDY    (30)
+#define IRQ_TT_MFP_SCSIDMA   (31)
+#define IRQ_TT_MFP_TIMB      (32)
+#define IRQ_TT_MFP_SERERR    (33)
+#define IRQ_TT_MFP_SEREMPT   (34)
+#define IRQ_TT_MFP_RECERR    (35)
+#define IRQ_TT_MFP_RECFULL   (36)
+#define IRQ_TT_MFP_TIMA      (37)
+#define IRQ_TT_MFP_RTC       (38)
+#define IRQ_TT_MFP_SCSI      (39)
 
 /* SCC interrupts */
-#define IRQ_SCCB_TX	     (IRQ_MACHSPEC | 40)
-#define IRQ_SCCB_STAT	     (IRQ_MACHSPEC | 42)
-#define IRQ_SCCB_RX	     (IRQ_MACHSPEC | 44)
-#define IRQ_SCCB_SPCOND	     (IRQ_MACHSPEC | 46)
-#define IRQ_SCCA_TX	     (IRQ_MACHSPEC | 48)
-#define IRQ_SCCA_STAT	     (IRQ_MACHSPEC | 50)
-#define IRQ_SCCA_RX	     (IRQ_MACHSPEC | 52)
-#define IRQ_SCCA_SPCOND	     (IRQ_MACHSPEC | 54)
+#define IRQ_SCCB_TX	     (40)
+#define IRQ_SCCB_STAT	     (42)
+#define IRQ_SCCB_RX	     (44)
+#define IRQ_SCCB_SPCOND	     (46)
+#define IRQ_SCCA_TX	     (48)
+#define IRQ_SCCA_STAT	     (50)
+#define IRQ_SCCA_RX	     (52)
+#define IRQ_SCCA_SPCOND	     (54)
 
 
 #define INT_CLK   24576	    /* CLK while int_clk =2.456MHz and divide = 100 */
@@ -164,7 +164,6 @@ static inline void clear_mfp_bit( unsigned irq, int type )
 static inline void atari_enable_irq( unsigned irq )
 
 {
-	irq &= ~IRQ_MACHSPEC;
 	if (irq < STMFP_SOURCE_BASE || irq >= SCC_SOURCE_BASE) return;
 	set_mfp_bit( irq, MFP_MASK );
 }
@@ -172,7 +171,6 @@ static inline void atari_enable_irq( unsigned irq )
 static inline void atari_disable_irq( unsigned irq )
 
 {
-	irq &= ~IRQ_MACHSPEC;
 	if (irq < STMFP_SOURCE_BASE || irq >= SCC_SOURCE_BASE) return;
 	clear_mfp_bit( irq, MFP_MASK );
 }
@@ -185,7 +183,6 @@ static inline void atari_disable_irq( unsigned irq )
 extern inline void atari_turnon_irq( unsigned irq )
 
 {
-	irq &= ~IRQ_MACHSPEC;
 	if (irq < STMFP_SOURCE_BASE || irq >= SCC_SOURCE_BASE) return;
 	set_mfp_bit( irq, MFP_ENABLE );
 }
@@ -193,7 +190,6 @@ extern inline void atari_turnon_irq( unsigned irq )
 extern inline void atari_turnoff_irq( unsigned irq )
 
 {
-	irq &= ~IRQ_MACHSPEC;
 	if (irq < STMFP_SOURCE_BASE || irq >= SCC_SOURCE_BASE) return;
 	clear_mfp_bit( irq, MFP_ENABLE );
 	clear_mfp_bit( irq, MFP_PENDING );
@@ -202,7 +198,6 @@ extern inline void atari_turnoff_irq( unsigned irq )
 extern inline void atari_clear_pending_irq( unsigned irq )
 
 {
-	irq &= ~IRQ_MACHSPEC;
 	if (irq < STMFP_SOURCE_BASE || irq >= SCC_SOURCE_BASE) return;
 	clear_mfp_bit( irq, MFP_PENDING );
 }
@@ -210,7 +205,6 @@ extern inline void atari_clear_pending_irq( unsigned irq )
 extern inline int atari_irq_pending( unsigned irq )
 
 {
-	irq &= ~IRQ_MACHSPEC;
 	if (irq < STMFP_SOURCE_BASE || irq >= SCC_SOURCE_BASE) return( 0 );
 	return( get_mfp_bit( irq, MFP_PENDING ) );
 }

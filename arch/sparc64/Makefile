@@ -1,4 +1,4 @@
-# $Id: Makefile,v 1.14 1997/04/10 23:32:33 davem Exp $
+# $Id: Makefile,v 1.15 1997/04/14 17:04:49 jj Exp $
 # sparc64/Makefile
 #
 # Makefile for the architecture dependent flags and dependencies on the
@@ -24,7 +24,7 @@ ELF2AOUT64	= elf2aout64
 # debugging of the kernel to get the proper debugging information.
 
 #CFLAGS := $(CFLAGS) -g -pipe -fcall-used-g5 -fcall-used-g7 
-CFLAGS := $(CFLAGS) -pipe -fno-sibling-call \
+CFLAGS := $(CFLAGS) -pipe \
           -fcall-used-g5 -fcall-used-g7 -Wno-sign-compare
 
 LINKFLAGS = -T arch/sparc64/vmlinux.lds

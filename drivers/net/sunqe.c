@@ -21,6 +21,7 @@ static char *version =
 #include <linux/in.h>
 #include <linux/malloc.h>
 #include <linux/string.h>
+#include <linux/init.h>
 #include <asm/system.h>
 #include <asm/bitops.h>
 #include <asm/io.h>
@@ -902,7 +903,7 @@ static inline void qec_init_once(struct sunqec *qecp, struct linux_sbus_device *
 }
 
 /* Four QE's per QEC card. */
-static int qec_ether_init(struct device *dev, struct linux_sbus_device *sdev)
+static inline int qec_ether_init(struct device *dev, struct linux_sbus_device *sdev)
 {
 	static unsigned version_printed = 0;
 	struct device *qe_devs[4];
@@ -1149,7 +1150,7 @@ qec_free_devs:
 	return res;
 }
 
-int qec_probe(struct device *dev)
+__initfunc(int qec_probe(struct device *dev))
 {
 	struct linux_sbus *bus;
 	struct linux_sbus_device *sdev = 0;

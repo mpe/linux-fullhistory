@@ -34,15 +34,11 @@ asmlinkage int sys_pipe(unsigned long * fildes)
 	int error;
 
 	lock_kernel();
-	error = verify_area(VERIFY_WRITE,fildes,8);
-	if (error)
-		goto out;
 	error = do_pipe(fd);
-	if (error)
-		goto out;
-	put_user(fd[0],0+fildes);
-	put_user(fd[1],1+fildes);
-out:
+	if (!error) {
+		if (copy_to_user(fildes, fd, 2*sizeof(int)))
+			error = -EFAULT;
+	}
 	unlock_kernel();
 	return error;
 }
@@ -70,10 +66,10 @@ asmlinkage int old_mmap(struct mmap_arg_struct *arg)
 	struct mmap_arg_struct a;
 
 	lock_kernel();
-	error = verify_area(VERIFY_READ, arg, sizeof(*arg));
-	if (error)
+	error = -EFAULT;
+	if (copy_from_user(&a, arg, sizeof(a)))
 		goto out;
-	copy_from_user(&a, arg, sizeof(a));
+
 	if (!(a.flags & MAP_ANONYMOUS)) {
 		error = -EBADF;
 		if (a.fd >= NR_OPEN || !(file = current->files->fd[a.fd]))
@@ -98,15 +94,11 @@ struct sel_arg_struct {
 asmlinkage int old_select(struct sel_arg_struct *arg)
 {
 	struct sel_arg_struct a;
-	int ret = -EFAULT;
 
-	lock_kernel();
 	if (copy_from_user(&a, arg, sizeof(a)))
-		goto out;
-	ret = sys_select(a.n, a.inp, a.outp, a.exp, a.tvp);
-out:
-	unlock_kernel();
-	return ret;
+		return -EFAULT;
+       /* sys_select() does the appropriate kernel locking */
+	return sys_select(a.n, a.inp, a.outp, a.exp, a.tvp);
 }
 
 /*
@@ -134,9 +126,8 @@ asmlinkage int sys_ipc (uint call, int first, int second, int third, void *ptr, 
 			ret = -EINVAL;
 			if (!ptr)
 				goto out;
-			if ((ret = verify_area (VERIFY_READ, ptr, sizeof(long))))
+			if ((ret = get_user(fourth.__pad, (void **) ptr)))
 				goto out;
-			get_user(fourth.__pad, (void **)ptr);
 			ret = sys_semctl (first, second, third, fourth);
 			goto out;
 			}
@@ -183,21 +174,12 @@ asmlinkage int sys_ipc (uint call, int first, int second, int third, void *ptr, 
 			switch (version) {
 			case 0: default: {
 				ulong raddr;
-				if ((ret = verify_area(VERIFY_WRITE, (ulong*) third, sizeof(ulong))))
-					goto out;
 				ret = sys_shmat (first, (char *) ptr, second, &raddr);
 				if (ret)
 					goto out;
-				put_user (raddr, (ulong *) third);
-				ret = 0;
+				ret = put_user (raddr, (ulong *) third);
 				goto out;
-				}
-			case 1:	/* iBCS2 emulator entry point */
-				ret = -EINVAL;
-				if (get_fs() != get_ds())
-					goto out;
-				ret = sys_shmat (first, (char *) ptr, second, (ulong *) third);
-				goto out;
+			}
 			}
 		case SHMDT: 
 			ret = sys_shmdt ((char *)ptr);
@@ -212,8 +194,7 @@ asmlinkage int sys_ipc (uint call, int first, int second, int third, void *ptr, 
 			ret = -EINVAL;
 			goto out;
 		}
-	else
-		ret = -EINVAL;
+	ret = -EINVAL;
 out:
 	unlock_kernel();
 	return ret;

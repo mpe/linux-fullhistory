@@ -8,7 +8,7 @@
 #define lock_kernel()				do { } while(0)
 #define unlock_kernel()				do { } while(0)
 #define release_kernel_lock(task, cpu, depth)	((depth) = 1)
-#define reaquire_kernel_lock(task, cpu, depth)	do { } while(0)
+#define reacquire_kernel_lock(task, cpu, depth)	do { } while(0)
 
 #else
 
@@ -27,8 +27,8 @@ do { \
 	__sti(); \
 } while (0)
 
-/* Re-aquire the kernel lock */
-#define reaquire_kernel_lock(task, cpu, depth) \
+/* Re-acquire the kernel lock */
+#define reacquire_kernel_lock(task, cpu, depth) \
 do { if (depth) __asm__ __volatile__( \
 	"cli\n\t" \
 	"movl $0f,%%eax\n\t" \

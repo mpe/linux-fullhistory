@@ -25,6 +25,7 @@
 #include <linux/major.h>
 #include <linux/string.h>
 #include <linux/blk.h>
+#include <linux/init.h>
 
 #include <asm/system.h>
 
@@ -739,7 +740,7 @@ void resetup_one_dev(struct gendisk *dev, int drive)
 	}
 }
 
-static void setup_dev(struct gendisk *dev)
+static inline void setup_dev(struct gendisk *dev)
 {
 	int i, drive;
 	int end_minor	= dev->max_nr * dev->max_p;
@@ -762,7 +763,7 @@ static void setup_dev(struct gendisk *dev)
 	}
 }
 
-void device_setup(void)
+__initfunc(void device_setup(void))
 {
 	extern void console_map_init(void);
 #ifdef CONFIG_PNP_PARPORT

@@ -46,7 +46,7 @@ search_exception_table(unsigned long addr)
 		if (mp->ex_table_start == NULL)
 			continue;
 		ret = search_one_table(mp->ex_table_start,
-				       mp->ex_table_stop-1, addr);
+				       mp->ex_table_end-1, addr);
 		if (ret) return ret;
 	}
 #endif

@@ -1,4 +1,4 @@
-/* $Id: sunserial.c,v 1.37 1997/04/12 23:33:14 ecd Exp $
+/* $Id: sunserial.c,v 1.38 1997/04/14 17:05:00 jj Exp $
  * serial.c: Serial port driver for the Sparc.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -1857,7 +1857,7 @@ int rs_open(struct tty_struct *tty, struct file * filp)
 
 static void show_serial_version(void)
 {
-	char *revision = "$Revision: 1.37 $";
+	char *revision = "$Revision: 1.38 $";
 	char *version, *p;
 
 	version = strchr(revision, ' ');
@@ -1991,7 +1991,7 @@ static struct sun_zslayout *get_zs(int chip)
 	if(!vaddr[0])
 		panic("get_zs whee no serial chip mappable");
 
-	return (struct sun_zslayout *) vaddr[0];
+	return (struct sun_zslayout *)(unsigned long) vaddr[0];
 }
 
 static inline void
@@ -2541,7 +2541,7 @@ __initfunc(int rs_init(void))
 
 	for (info = zs_chain, i=0; info; info = info->zs_next, i++) {
 		info->magic = SERIAL_MAGIC;
-		info->port = (int) info->zs_channel;
+		info->port = (long) info->zs_channel;
 		info->line = i;
 		info->tty = 0;
 		info->irq = zilog_irq;

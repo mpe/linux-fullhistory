@@ -10,7 +10,6 @@
  *
  * ------------------------------------------------------------------------- */
 
-#include <linux/modversions.h>
 #include <linux/module.h>
 #include <linux/auto_fs.h>
 

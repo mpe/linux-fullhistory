@@ -109,6 +109,8 @@ pte_t *kernel_page_table (unsigned long *memavailp)
 	else
 		ptablep = (pte_t *)__get_free_page(GFP_KERNEL);
 
+	flush_page_to_ram((unsigned long) ptablep);
+	flush_tlb_kernel_page((unsigned long) ptablep);
 	nocache_page ((unsigned long)ptablep);
 
 	return ptablep;
@@ -293,8 +295,6 @@ unsigned long paging_init(unsigned long start_mem, unsigned long end_mem)
 {
 	int chunk;
 	unsigned long mem_avail = 0;
-	/* pointer to page table for kernel stacks */
-	extern unsigned long availmem;
 
 #ifdef DEBUG
 	{
@@ -324,21 +324,12 @@ unsigned long paging_init(unsigned long start_mem, unsigned long end_mem)
 
 	for (chunk = 0; chunk < m68k_num_memory; chunk++) {
 		mem_avail = map_chunk (m68k_memory[chunk].addr,
-				       m68k_memory[chunk].size, &availmem);
+				       m68k_memory[chunk].size, &start_mem);
 
 	}
 	flush_tlb_all();
 #ifdef DEBUG
 	printk ("memory available is %ldKB\n", mem_avail >> 10);
-#endif
-
-	/*
-	 * virtual address after end of kernel
-	 * "availmem" is setup by the code in head.S.
-	 */
-	start_mem = availmem;
-
-#ifdef DEBUG
 	printk ("start_mem is %#lx\nvirtual_end is %#lx\n",
 		start_mem, end_mem);
 #endif
@@ -401,7 +392,7 @@ unsigned long paging_init(unsigned long start_mem, unsigned long end_mem)
 	printk ("before free_area_init\n");
 #endif
 
-	return free_area_init (start_mem, end_mem);
+	return PAGE_ALIGN(free_area_init (start_mem, end_mem));
 }
 
 void mem_init(unsigned long start_mem, unsigned long end_mem)

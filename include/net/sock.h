@@ -389,7 +389,7 @@ struct sock
 
 	unsigned short		cong_window;
 	unsigned short		cong_count;
-	atomic_t		packets_out;
+	int			packets_out;
 	unsigned short		shutdown;
 
 #if defined(CONFIG_IPV6) || defined (CONFIG_IPV6_MODULE)

@@ -22,7 +22,7 @@
     *    Interface used by the world
     */
 
-static u_long txtcon_startup(u_long kmem_start, char **display_desc);
+static u_long txtcon_startup(u_long kmem_start, const char **display_desc);
 static void txtcon_init(struct vc_data *conp);
 static int txtcon_deinit(struct vc_data *conp);
 static int txtcon_clear(struct vc_data *conp, int sy, int sx, int height,
@@ -36,10 +36,12 @@ static int txtcon_bmove(struct vc_data *conp, int sy, int sx, int dy, int dx,
                         int height, int width);
 static int txtcon_switch(struct vc_data *conp);
 static int txtcon_blank(int blank);
+static int txtcon_get_font(struct vc_data *conp, int *w, int *h, char *data);
+static int txtcon_set_font(struct vc_data *conp, int w, int h, char *data);
+static int txtcon_set_palette(struct vc_data *conp, unsigned char *table);
 
 
-
-static u_long txtcon_startup(u_long kmem_start, char **display_desc)
+static u_long txtcon_startup(u_long kmem_start, const char **display_desc)
 {
    *display_desc = "Not yet implemented";
    return(kmem_start);
@@ -113,6 +115,24 @@ static int txtcon_blank(int blank)
 }
 
 
+static int txtcon_get_font(struct vc_data *conp, int *w, int *h, char *data)
+{
+   return(0);
+}
+
+
+static int txtcon_set_font(struct vc_data *conp, int w, int h, char *data)
+{
+   return(0);
+}
+
+
+static int txtcon_set_palette(struct vc_data *conp, unsigned char *table)
+{
+   return(0);
+}
+
+
 /* ====================================================================== */
 
    /*
@@ -122,6 +142,6 @@ static int txtcon_blank(int blank)
 struct consw txt_con = {
    txtcon_startup, txtcon_init, txtcon_deinit, txtcon_clear, txtcon_putc,
    txtcon_putcs, txtcon_cursor, txtcon_scroll, txtcon_bmove, txtcon_switch,
-   txtcon_blank
+   txtcon_blank, txtcon_get_font, txtcon_set_font, txtcon_set_palette
 };
 

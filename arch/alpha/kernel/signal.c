@@ -41,7 +41,7 @@ extern int ptrace_cancel_bpt (struct task_struct *child);
  * We change the range to -1 .. 1 in order to let gcc easily
  * use the conditional move instructions.
  *
- * Note that we don't need to aquire the kernel lock for SMP
+ * Note that we don't need to acquire the kernel lock for SMP
  * operation, as all of this is local to this thread.
  */
 asmlinkage unsigned long osf_sigprocmask(int how, unsigned long newmask,

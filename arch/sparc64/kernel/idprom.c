@@ -1,4 +1,4 @@
-/* $Id: idprom.c,v 1.1 1996/12/28 18:39:38 davem Exp $
+/* $Id: idprom.c,v 1.2 1997/04/17 02:28:10 miguel Exp $
  * idprom.c: Routines to load the idprom into kernel addresses and
  *           interpret the data contained within.
  *
@@ -34,14 +34,12 @@ __initfunc(void idprom_init(void))
 	idprom = &idprom_buffer;
 
 	if (idprom->id_format != 0x01)  {
-		prom_printf("IDPROM: Unknown format type!\n");
-		prom_halt();
+		prom_printf("IDPROM: Warning, unknown format type!\n");
 	}
 
 	if (idprom->id_cksum != calc_idprom_cksum(idprom)) {
-		prom_printf("IDPROM: Checksum failure (nvram=%x, calc=%x)!\n",
+		prom_printf("IDPROM: Warning, checksum failure (nvram=%x, calc=%x)!\n",
 			    idprom->id_cksum, calc_idprom_cksum(idprom));
-		prom_halt();
 	}
 
 	printk("Ethernet address: %02x:%02x:%02x:%02x:%02x:%02x\n",

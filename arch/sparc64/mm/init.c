@@ -1,4 +1,4 @@
-/*  $Id: init.c,v 1.22 1997/04/12 04:28:48 davem Exp $
+/*  $Id: init.c,v 1.23 1997/04/16 10:27:18 jj Exp $
  *  arch/sparc64/mm/init.c
  *
  *  Copyright (C) 1996,1997 David S. Miller (davem@caip.rutgers.edu)
@@ -31,6 +31,9 @@ extern unsigned long empty_null_pmd_table;
 extern unsigned long empty_null_pte_table;
 
 unsigned long tlb_context_cache = CTX_FIRST_VERSION;
+
+/* References to section boundaries */
+extern char __init_begin, __init_end, etext, __p1275_loc, __bss_start;
 
 /*
  * BAD_PAGE is the page that is used for page faults when linux
@@ -268,6 +271,7 @@ void mmu_get_scsi_sgl(struct mmu_sglist *sg, int sz, struct linux_sbus *sbus)
 
 char *mmu_info(void)
 {
+	/* XXX */
 	return "MMU Type: Spitfire\n\tFIXME: Write this\n";
 }
 
@@ -436,15 +440,6 @@ void sparc_ultra_mapioaddr(unsigned long physaddr, unsigned long virt_addr,
 	else
 		pte = mk_pte_phys(physaddr, __pgprot(pg_iobits | __DIRTY_BITS));
 
-#if 0
-	prom_printf("IOMAP: vaddr[%016lx]paddr[%016lx]ptep[%016lx]pte[%016lx])\n",
-		    virt_addr, physaddr, (unsigned long) ptep, pte_val(pte));
-	prom_printf("IOMAP: pgd[%016lx,%016lx]\n",
-		    (unsigned long) pgdp, pgd_val(*pgdp));
-	prom_printf("IOMAP: pmd[%016lx,%016lx]\n",
-		    (unsigned long) pmdp, pmd_val(*pmdp));
-#endif
-
 	set_pte(ptep, pte);
 }
 
@@ -462,6 +457,7 @@ void sparc_ultra_unmapioaddr(unsigned long virt_addr)
 	pte_clear(ptep);
 }
 
+#ifdef DEBUG_MMU
 void sparc_ultra_dump_itlb(void)
 {
         int slot;
@@ -485,6 +481,7 @@ void sparc_ultra_dump_dtlb(void)
         		slot+1, spitfire_get_dtlb_tag(slot+1), spitfire_get_dtlb_data(slot+1));
         }
 }
+#endif
 
 /* paging_init() sets up the page tables */
 
@@ -493,7 +490,6 @@ extern unsigned long free_area_init(unsigned long, unsigned long);
 __initfunc(unsigned long 
 paging_init(unsigned long start_mem, unsigned long end_mem))
 {
-	extern unsigned long __p1275_loc;
 	extern unsigned long phys_base;
 	extern void setup_tba(unsigned long kpgdir);
 	extern void __bfill64(void *, unsigned long);
@@ -637,9 +633,10 @@ __initfunc(void mem_init(unsigned long start_mem, unsigned long end_mem))
 {
 	int codepages = 0;
 	int datapages = 0;
+	int initpages = 0;
+	int prompages = 0;
 	unsigned long tmp2, addr;
 	unsigned long data_end;
-	extern char etext;
 
 	end_mem &= PAGE_MASK;
 	max_mapnr = MAP_NR(end_mem);
@@ -665,6 +662,10 @@ __initfunc(void mem_init(unsigned long start_mem, unsigned long end_mem))
 		if(PageReserved(mem_map + MAP_NR(addr))) {
 			if ((addr < (unsigned long) &etext) && (addr >= PAGE_OFFSET))
 				codepages++;
+			else if((addr >= (unsigned long)&__init_begin && addr < (unsigned long)&__init_end))
+				initpages++;
+			else if((addr >= (unsigned long)&__p1275_loc && addr < (unsigned long)&__bss_start))
+				prompages++;
 			else if((addr < data_end) && (addr >= PAGE_OFFSET))
 				datapages++;
 			continue;
@@ -680,26 +681,23 @@ __initfunc(void mem_init(unsigned long start_mem, unsigned long end_mem))
 
 	tmp2 = nr_free_pages << PAGE_SHIFT;
 
-	printk("Memory: %luk available (%dk kernel code, %dk data) [%016lx,%016lx]\n",
+	printk("Memory: %luk available (%dk kernel code, %dk data, %dk init, %dk prom) [%016lx,%016lx]\n",
 	       tmp2 >> 10,
 	       codepages << (PAGE_SHIFT-10),
-	       datapages << (PAGE_SHIFT-10), PAGE_OFFSET, end_mem);
+	       datapages << (PAGE_SHIFT-10), 
+	       initpages << (PAGE_SHIFT-10), 
+	       prompages << (PAGE_SHIFT-10), 
+	       PAGE_OFFSET, end_mem);
 
 	min_free_pages = nr_free_pages >> 7;
 	if(min_free_pages < 16)
 		min_free_pages = 16;
 	free_pages_low = min_free_pages + (min_free_pages >> 1);
 	free_pages_high = min_free_pages + min_free_pages;
-
-#if 0
-	printk("Done in mem_init() halting\n");
-	prom_cmdline();
-#endif
 }
 
 void free_initmem (void)
 {
-	extern char __init_begin, __init_end;
 	unsigned long addr;
 	
 	addr = (unsigned long)(&__init_begin);

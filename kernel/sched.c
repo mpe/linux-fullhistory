@@ -126,22 +126,6 @@ static inline void add_to_runqueue(struct task_struct * p)
 	(p->prev_run = init_task.prev_run)->next_run = p;
 	p->next_run = &init_task;
 	init_task.prev_run = p;
-#if 0 /* def __SMP__ */
-	/* this is safe only if called with cli()*/
-	inc_smp_counter(&smp_process_available);
-	if ((0!=p->pid) && smp_threads_ready)
-	{
-		int i;
-		for (i=0;i<smp_num_cpus;i++)
-		{
-			if (0==current_set[cpu_logical_map[i]]->pid) 
-			{
-				smp_message_pass(cpu_logical_map[i], MSG_RESCHEDULE, 0L, 0);
-				break;
-			}
-		}
-	}
-#endif
 }
 
 static inline void del_from_runqueue(struct task_struct * p)
@@ -187,9 +171,7 @@ static inline void move_last_runqueue(struct task_struct * p)
 }
 
 /*
- * The tasklist_lock protects the linked list of processes
- * and doesn't need to be interrupt-safe as interrupts never
- * use the task-list.
+ * The tasklist_lock protects the linked list of processes.
  *
  * The scheduler lock is protecting against multiple entry
  * into the scheduling code, and doesn't need to worry
@@ -199,7 +181,7 @@ static inline void move_last_runqueue(struct task_struct * p)
  * The run-queue lock locks the parts that actually access
  * and change the run-queues, and have to be interrupt-safe.
  */
-spinlock_t tasklist_lock = SPIN_LOCK_UNLOCKED;
+rwlock_t tasklist_lock = RW_LOCK_UNLOCKED;
 spinlock_t scheduler_lock = SPIN_LOCK_UNLOCKED;
 static spinlock_t runqueue_lock = SPIN_LOCK_UNLOCKED;
 
@@ -391,10 +373,10 @@ asmlinkage void schedule(void)
 			/* Do we need to re-calculate counters? */
 			if (!c) {
 				struct task_struct *p;
-				spin_lock(&tasklist_lock);
+				read_lock(&tasklist_lock);
 				for_each_task(p)
 					p->counter = (p->counter >> 1) + p->priority;
-				spin_unlock(&tasklist_lock);
+				read_unlock(&tasklist_lock);
 			}
 		}
 	}
@@ -421,7 +403,7 @@ asmlinkage void schedule(void)
 	}
 	spin_unlock(&scheduler_lock);
 
-	reaquire_kernel_lock(prev, smp_processor_id(), lock_depth);
+	reacquire_kernel_lock(prev, smp_processor_id(), lock_depth);
 }
 
 #ifndef __alpha__

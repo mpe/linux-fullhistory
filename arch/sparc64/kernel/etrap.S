@@ -1,4 +1,4 @@
-/* $Id: etrap.S,v 1.10 1997/04/03 13:03:49 davem Exp $
+/* $Id: etrap.S,v 1.11 1997/04/14 17:04:45 jj Exp $
  * etrap.S: Preparing for entry into the kernel on Sparc V9.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -19,9 +19,8 @@
 etrap:
 	rdpr		%pil, %g4
 etrap_irq:
-	rdpr		%wstate, %g5
-	sllx		%g4, 20, %g4
 	rdpr		%tstate, %g1
+	sllx		%g4, 20, %g4
 	rdpr		%tpc, %g2
 	or		%g1, %g4, %g1
 	rdpr		%tnpc, %g3
@@ -39,6 +38,7 @@ etrap_irq:
 	 * trap level until PRIMARY_CONTEXT is set to zero, else
 	 * we fall out of NUCLEUS too soon and crash hard.
 	 */
+	rdpr		%wstate, %g5
 	mov		PRIMARY_CONTEXT, %g7
 	ldxa		[%g7] ASI_DMMU, %g4
 	mov		SECONDARY_CONTEXT, %g6

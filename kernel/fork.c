@@ -203,13 +203,14 @@ static inline int copy_files(unsigned long clone_flags, struct task_struct * tsk
 static inline int copy_sighand(unsigned long clone_flags, struct task_struct * tsk)
 {
 	if (clone_flags & CLONE_SIGHAND) {
-		current->sig->count++;
+		atomic_inc(&current->sig->count);
 		return 0;
 	}
 	tsk->sig = kmalloc(sizeof(*tsk->sig), GFP_KERNEL);
 	if (!tsk->sig)
 		return -1;
-	tsk->sig->count = 1;
+	spin_lock_init(&tsk->sig->siglock);
+	atomic_set(&tsk->sig->count, 1);
 	memcpy(tsk->sig->action, current->sig->action, sizeof(tsk->sig->action));
 	return 0;
 }

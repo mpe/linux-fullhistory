@@ -16,6 +16,7 @@
 #include <linux/config.h>
 #include <linux/locks.h>
 #include <linux/mm.h>
+#include <linux/init.h>
 
 #include <asm/system.h>
 #include <asm/io.h>
@@ -631,7 +632,7 @@ extern void ez_init( void );
 extern void bpcd_init( void );
 #endif
 
-int blk_dev_init(void)
+__initfunc(int blk_dev_init(void))
 {
 	struct request * req;
 	struct blk_dev_struct *dev;

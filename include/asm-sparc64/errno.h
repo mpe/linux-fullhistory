@@ -1,4 +1,4 @@
-/* $Id: errno.h,v 1.1 1996/11/20 15:27:39 davem Exp $ */
+/* $Id: errno.h,v 1.2 1997/04/15 12:46:11 jj Exp $ */
 #ifndef _SPARC64_ERRNO_H
 #define _SPARC64_ERRNO_H
 
@@ -129,5 +129,8 @@
 #define	EILSEQ		122	/* Illegal byte sequence */
 #define	ELIBMAX		123	/* Atmpt to link in too many shared libs */
 #define	ELIBSCN		124	/* .lib section in a.out corrupted */
+
+#define ENOMEDIUM       125     /* No medium found */
+#define EMEDIUMTYPE     126     /* Wrong medium type */
 
 #endif /* !(_SPARC64_ERRNO_H) */

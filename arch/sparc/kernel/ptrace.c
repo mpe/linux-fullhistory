@@ -889,13 +889,12 @@ out:
 
 asmlinkage void syscall_trace(void)
 {
-	lock_kernel();
 #ifdef DEBUG_PTRACE
 	printk("%s [%d]: syscall_trace\n", current->comm, current->pid);
 #endif
 	if ((current->flags & (PF_PTRACED|PF_TRACESYS))
 			!= (PF_PTRACED|PF_TRACESYS))
-		goto out;
+		return;
 	current->exit_code = SIGTRAP;
 	current->state = TASK_STOPPED;
 	current->tss.flags ^= MAGIC_CONSTANT;
@@ -911,9 +910,9 @@ asmlinkage void syscall_trace(void)
 		current->pid, current->exit_code);
 #endif
 	if (current->exit_code) {
+		spin_lock_irq(&current->sigmask_lock);
 		current->signal |= (1 << (current->exit_code - 1));
+		spin_unlock_irq(&current->sigmask_lock);
 	}
 	current->exit_code = 0;
-out:
-	unlock_kernel();
 }

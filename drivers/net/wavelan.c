@@ -112,7 +112,7 @@ wv_struct_check(void)
  * Read from card's Host Adaptor Status Register.
  */
 static inline u_short
-hasr_read(u_short	ioaddr)
+hasr_read(u_long	ioaddr)
 {
   return(inw(HASR(ioaddr)));
 } /* hasr_read */
@@ -122,7 +122,7 @@ hasr_read(u_short	ioaddr)
  * Write to card's Host Adapter Command Register.
  */
 static inline void
-hacr_write(u_short	ioaddr,
+hacr_write(u_long	ioaddr,
 	   u_short	hacr)
 {
   outw(hacr, HACR(ioaddr));
@@ -134,7 +134,7 @@ hacr_write(u_short	ioaddr,
  * those times when it is needed.
  */
 static inline void
-hacr_write_slow(u_short	ioaddr,
+hacr_write_slow(u_long	ioaddr,
 		u_short	hacr)
 {
   hacr_write(ioaddr, hacr);
@@ -147,7 +147,7 @@ hacr_write_slow(u_short	ioaddr,
  * Set the channel attention bit.
  */
 static inline void
-set_chan_attn(u_short	ioaddr,
+set_chan_attn(u_long	ioaddr,
 	      u_short	hacr)
 {
   hacr_write(ioaddr, hacr | HACR_CA);
@@ -158,7 +158,7 @@ set_chan_attn(u_short	ioaddr,
  * Reset, and then set host adaptor into default mode.
  */
 static inline void
-wv_hacr_reset(u_short	ioaddr)
+wv_hacr_reset(u_long	ioaddr)
 {
   hacr_write_slow(ioaddr, HACR_RESET);
   hacr_write(ioaddr, HACR_DEFAULT);
@@ -169,7 +169,7 @@ wv_hacr_reset(u_short	ioaddr)
  * Set the i/o transfer over the ISA bus to 8 bits mode
  */
 static inline void
-wv_16_off(u_short	ioaddr,
+wv_16_off(u_long	ioaddr,
 	  u_short	hacr)
 {
   hacr &= ~HACR_16BITS;
@@ -181,7 +181,7 @@ wv_16_off(u_short	ioaddr,
  * Set the i/o transfer over the ISA bus to 8 bits mode
  */
 static inline void
-wv_16_on(u_short	ioaddr,
+wv_16_on(u_long		ioaddr,
 	 u_short	hacr)
 {
   hacr |= HACR_16BITS;
@@ -196,7 +196,7 @@ static inline void
 wv_ints_off(device *	dev)
 {
   net_local *	lp = (net_local *)dev->priv;
-  u_short	ioaddr = dev->base_addr;
+  u_long	ioaddr = dev->base_addr;
   u_long	x;
 
   x = wv_splhi();
@@ -215,7 +215,7 @@ static inline void
 wv_ints_on(device *	dev)
 {
   net_local *	lp = (net_local *)dev->priv;
-  u_short	ioaddr = dev->base_addr;
+  u_long	ioaddr = dev->base_addr;
   u_long	x;
 
   x = wv_splhi();
@@ -239,7 +239,7 @@ wv_ints_on(device *	dev)
  * Read bytes from the PSA.
  */
 static void
-psa_read(u_short	ioaddr,
+psa_read(u_long		ioaddr,
 	 u_short	hacr,
 	 int		o,	/* offset in PSA */
 	 u_char *	b,	/* buffer to fill */
@@ -262,7 +262,7 @@ psa_read(u_short	ioaddr,
  * Write the Paramter Storage Area to the WaveLAN card's memory
  */
 static void
-psa_write(u_short	ioaddr,
+psa_write(u_long	ioaddr,
 	  u_short	hacr,
 	  int		o,	/* Offset in psa */
 	  u_char *	b,	/* Buffer in memory */
@@ -329,7 +329,7 @@ psa_crc(u_short *	psa,	/* The PSA */
  * Write 1 byte to the MMC.
  */
 static inline void
-mmc_out(u_short		ioaddr,
+mmc_out(u_long		ioaddr,
 	u_short		o,
 	u_char		d)
 {
@@ -347,7 +347,7 @@ mmc_out(u_short		ioaddr,
  * We start by the end because it is the way it should be !
  */
 static inline void
-mmc_write(u_short	ioaddr,
+mmc_write(u_long	ioaddr,
 	  u_char	o,
 	  u_char *	b,
 	  int		n)
@@ -365,7 +365,7 @@ mmc_write(u_short	ioaddr,
  * Optimised version for 1 byte, avoid using memory...
  */
 static inline u_char
-mmc_in(u_short	ioaddr,
+mmc_in(u_long	ioaddr,
        u_short	o)
 {
   while(inw(HASR(ioaddr)) & HASR_MMC_BUSY)
@@ -386,7 +386,7 @@ mmc_in(u_short	ioaddr,
  * We start by the end because it is the way it should be !
  */
 static inline void
-mmc_read(u_short	ioaddr,
+mmc_read(u_long		ioaddr,
 	 u_char		o,
 	 u_char *	b,
 	 int		n)
@@ -400,11 +400,27 @@ mmc_read(u_short	ioaddr,
 
 /*------------------------------------------------------------------*/
 /*
+ * Get the type of encryption available...
+ */
+static inline int
+mmc_encr(u_long		ioaddr)	/* i/o port of the card */
+{
+  int	temp;
+
+  temp = mmc_in(ioaddr, mmroff(0, mmr_des_avail));
+  if((temp != MMR_DES_AVAIL_DES) && (temp != MMR_DES_AVAIL_AES))
+    return 0;
+  else
+    return temp;
+}
+
+/*------------------------------------------------------------------*/
+/*
  * Wait for the frequency EEprom to complete a command...
  * I hope this one will be optimally inlined...
  */
 static inline void
-fee_wait(u_short	ioaddr,	/* i/o port of the card */
+fee_wait(u_long		ioaddr,	/* i/o port of the card */
 	 int		delay,	/* Base delay to wait for */
 	 int		number)	/* Number of time to wait */
 {
@@ -420,7 +436,7 @@ fee_wait(u_short	ioaddr,	/* i/o port of the card */
  * Read bytes from the Frequency EEprom (frequency select cards).
  */
 static void
-fee_read(u_short	ioaddr,	/* i/o port of the card */
+fee_read(u_long		ioaddr,	/* i/o port of the card */
 	 u_short	o,	/* destination offset */
 	 u_short *	b,	/* data buffer */
 	 int		n)	/* number of registers */
@@ -445,6 +461,8 @@ fee_read(u_short	ioaddr,	/* i/o port of the card */
     }
 }
 
+#ifdef WIRELESS_EXT	/* If wireless extension exist in the kernel */
+
 /*------------------------------------------------------------------*/
 /*
  * Write bytes from the Frequency EEprom (frequency select cards).
@@ -453,7 +471,7 @@ fee_read(u_short	ioaddr,	/* i/o port of the card */
  * Jean II
  */
 static void
-fee_write(u_short	ioaddr,	/* i/o port of the card */
+fee_write(u_long	ioaddr,	/* i/o port of the card */
 	  u_short	o,	/* destination offset */
 	  u_short *	b,	/* data buffer */
 	  int		n)	/* number of registers */
@@ -528,6 +546,7 @@ fee_write(u_short	ioaddr,	/* i/o port of the card */
   fee_wait(ioaddr, 10, 100);
 #endif	/* EEPROM_IS_PROTECTED */
 }
+#endif	/* WIRELESS_EXT */
 
 /************************ I82586 SUBROUTINES *************************/
 /*
@@ -540,7 +559,7 @@ fee_write(u_short	ioaddr,	/* i/o port of the card */
  * Why inlining this function make it fail ???
  */
 static /*inline*/ void
-obram_read(u_short	ioaddr,
+obram_read(u_long	ioaddr,
 	   u_short	o,
 	   u_char *	b,
 	   int		n)
@@ -554,7 +573,7 @@ obram_read(u_short	ioaddr,
  * Write bytes to the on-board RAM.
  */
 static inline void
-obram_write(u_short	ioaddr,
+obram_write(u_long	ioaddr,
 	    u_short	o,
 	    u_char *	b,
 	    int		n)
@@ -571,7 +590,7 @@ static void
 wv_ack(device *		dev)
 {
   net_local *	lp = (net_local *)dev->priv;
-  u_short	ioaddr = dev->base_addr;
+  u_long	ioaddr = dev->base_addr;
   u_short	scb_cs;
   int		i;
 
@@ -614,7 +633,7 @@ wv_synchronous_cmd(device *	dev,
 		   const char *	str)
 {
   net_local *	lp = (net_local *)dev->priv;
-  u_short	ioaddr = dev->base_addr;
+  u_long	ioaddr = dev->base_addr;
   u_short	scb_cmd;
   ach_t		cb;
   int		i;
@@ -660,7 +679,7 @@ wv_synchronous_cmd(device *	dev,
  */
 static inline int
 wv_config_complete(device *	dev,
-		   u_short	ioaddr,
+		   u_long	ioaddr,
 		   net_local *	lp)
 {
   unsigned short	mcs_addr;
@@ -722,7 +741,7 @@ wv_config_complete(device *	dev,
  */
 static int
 wv_complete(device *	dev,
-	    u_short	ioaddr,
+	    u_long	ioaddr,
 	    net_local *	lp)
 {
   int	nreaped = 0;
@@ -992,7 +1011,7 @@ wv_psa_show(psa_t *	p)
 static void
 wv_mmc_show(device *	dev)
 {
-  u_short	ioaddr = dev->base_addr;
+  u_long	ioaddr = dev->base_addr;
   net_local *	lp = (net_local *)dev->priv;
   mmr_t		m;
 
@@ -1077,7 +1096,7 @@ wv_mmc_show(device *	dev)
  * Print the last block of the i82586 memory
  */
 static void
-wv_scb_show(unsigned short	ioaddr)
+wv_scb_show(u_long	ioaddr)
 {
   scb_t		scb;
 
@@ -1162,7 +1181,7 @@ wv_cu_show_one(device *		dev,
 	       int		i,
 	       u_short		p)
 {
-  unsigned short	ioaddr;
+  u_long		ioaddr;
   ac_tx_t		actx;
 
   ioaddr = dev->base_addr;
@@ -1529,7 +1548,7 @@ wavelan_set_mac_address(device *	dev,
  * (called in wavelan_ioctl)
  */
 static inline int
-wv_set_frequency(u_short	ioaddr,	/* i/o port of the card */
+wv_set_frequency(u_long		ioaddr,	/* i/o port of the card */
 		 iw_freq *	frequency)
 {
   const int	BAND_NUM = 10;	/* Number of bands */
@@ -1550,7 +1569,7 @@ wv_set_frequency(u_short	ioaddr,	/* i/o port of the card */
     }
 
   /* Setting by channel (same as wfreqsel) */
-  /* Warning : each channel is 11MHz wide, so some of the channels
+  /* Warning : each channel is 22MHz wide, so some of the channels
    * will interfere... */
   if((frequency->e == 0) &&
      (frequency->m >= 0) && (frequency->m < BAND_NUM))
@@ -1729,7 +1748,7 @@ wv_set_frequency(u_short	ioaddr,	/* i/o port of the card */
  * Give the list of available frequencies
  */
 static inline int
-wv_frequency_list(u_short	ioaddr,	/* i/o port of the card */
+wv_frequency_list(u_long	ioaddr,	/* i/o port of the card */
 		  iw_freq *	list,	/* List of frequency to fill */
 		  int		max)	/* Maximum number of frequencies */
 {
@@ -1826,7 +1845,7 @@ wavelan_ioctl(struct device *	dev,	/* Device on wich the ioctl apply */
 	      struct ifreq *	rq,	/* Data passed */
 	      int		cmd)	/* Ioctl number */
 {
-  unsigned short	ioaddr = dev->base_addr;
+  u_long		ioaddr = dev->base_addr;
   net_local *		lp = (net_local *)dev->priv;	/* lp is not unused */
   struct iwreq *	wrq = (struct iwreq *) rq;
   psa_t			psa;
@@ -1866,9 +1885,7 @@ wavelan_ioctl(struct device *	dev,	/* Device on wich the ioctl apply */
 	  m.w.mmw_netw_id_h = (wrq->u.nwid.nwid & 0xFF00) >> 8;
 	  mmc_write(ioaddr, (char *)&m.w.mmw_netw_id_l - (char *)&m,
 		    (unsigned char *)&m.w.mmw_netw_id_l, 2);
-	  m.w.mmw_loopt_sel = 0x00;
-	  mmc_write(ioaddr, (char *)&m.w.mmw_loopt_sel - (char *)&m,
-		    (unsigned char *)&m.w.mmw_loopt_sel, 1);
+	  mmc_out(ioaddr, mmwoff(0, mmw_loopt_sel), 0x00);
 	}
       else
 	{
@@ -1878,10 +1895,8 @@ wavelan_ioctl(struct device *	dev,	/* Device on wich the ioctl apply */
 		    (char *)&psa.psa_nwid_select - (char *)&psa,
 		    (unsigned char *)&psa.psa_nwid_select, 1);
 
-	  /* Disable nwid in the mmc (no check) */
-	  m.w.mmw_loopt_sel = MMW_LOOPT_SEL_DIS_NWID;
-	  mmc_write(ioaddr, (char *)&m.w.mmw_loopt_sel - (char *)&m,
-		    (unsigned char *)&m.w.mmw_loopt_sel, 1);
+	  /* Disable nwid in the mmc (no filtering) */
+	  mmc_out(ioaddr, mmwoff(0, mmw_loopt_sel), MMW_LOOPT_SEL_DIS_NWID);
 	}
       break;
 
@@ -1949,6 +1964,82 @@ wavelan_ioctl(struct device *	dev,	/* Device on wich the ioctl apply */
 	       (unsigned char *) &psa.psa_thr_pre_set, 1);
       wrq->u.sensitivity = psa.psa_thr_pre_set & 0x3F;
       break;
+
+     case SIOCSIWENCODE:
+       /* Set encryption key */
+       if(!mmc_encr(ioaddr))
+	 {
+	   ret = -EOPNOTSUPP;
+	   break;
+	 }
+
+       if(wrq->u.encoding.method)
+	 {	/* enable encryption */
+	   int		i;
+	   long long	key = wrq->u.encoding.code;
+
+	   for(i = 7; i >= 0; i--)
+	     {
+	       psa.psa_encryption_key[i] = key & 0xFF;
+	       key >>= 8;
+	     }
+           psa.psa_encryption_select = 1;
+	   psa_write(ioaddr, lp->hacr,
+		     (char *) &psa.psa_encryption_select - (char *) &psa,
+		     (unsigned char *) &psa.psa_encryption_select, 8+1);
+
+           mmc_out(ioaddr, mmwoff(0, mmw_encr_enable),
+		   MMW_ENCR_ENABLE_EN | MMW_ENCR_ENABLE_MODE);
+           mmc_write(ioaddr, mmwoff(0, mmw_encr_key),
+		     (unsigned char *) &psa.psa_encryption_key, 8);
+	 }
+       else
+	 {	/* disable encryption */
+	   psa.psa_encryption_select = 0;
+	   psa_write(ioaddr, lp->hacr,
+		     (char *) &psa.psa_encryption_select - (char *) &psa,
+		     (unsigned char *) &psa.psa_encryption_select, 1);
+
+	   mmc_out(ioaddr, mmwoff(0, mmw_encr_enable), 0);
+	 }
+       break;
+
+     case SIOCGIWENCODE:
+       /* Read the encryption key */
+       if(!mmc_encr(ioaddr))
+	 {
+	   ret = -EOPNOTSUPP;
+	   break;
+	 }
+
+       /* only super-user can see encryption key */
+       if(!suser())
+	 {
+	   ret = -EPERM;
+	   break;
+	 }
+       else
+	 {
+	   int		i;
+	   long long	key = 0;
+
+	   psa_read(ioaddr, lp->hacr,
+		    (char *) &psa.psa_encryption_select - (char *) &psa,
+		    (unsigned char *) &psa.psa_encryption_select, 1+8);
+	   for(i = 0; i < 8; i++)
+	     {
+	       key <<= 8;
+	       key += psa.psa_encryption_key[i];
+	     }
+	   wrq->u.encoding.code = key;
+
+	   /* encryption is enabled */
+	   if(psa.psa_encryption_select)
+	     wrq->u.encoding.method = mmc_encr(ioaddr);
+	   else
+	     wrq->u.encoding.method = 0;
+	 }
+       break;
 
     case SIOCGIWRANGE:
       /* Basic checking... */
@@ -2207,7 +2298,7 @@ wavelan_ioctl(struct device *	dev,	/* Device on wich the ioctl apply */
 static iw_stats *
 wavelan_get_wireless_stats(device *	dev)
 {
-  unsigned short	ioaddr = dev->base_addr;
+  u_long		ioaddr = dev->base_addr;
   net_local *		lp = (net_local *) dev->priv;
   mmr_t			m;
   iw_stats *		wstats;
@@ -2281,7 +2372,7 @@ wv_packet_read(device *		dev,
 	       int		sksize)
 {
   net_local *		lp = (net_local *) dev->priv;
-  u_short		ioaddr = dev->base_addr;
+  u_long		ioaddr = dev->base_addr;
   struct sk_buff *	skb;
 
 #ifdef DEBUG_RX_TRACE
@@ -2353,8 +2444,9 @@ wv_packet_read(device *		dev,
    */
   netif_rx(skb);
 
+  /* Keep stats up to date */
   lp->stats.rx_packets++;
-  lp->stats.rx_bytes+=sksize;
+  lp->stats.rx_bytes += skb->len;
 
 #ifdef DEBUG_RX_TRACE
   printk(KERN_DEBUG "%s: <-wv_packet_read()\n", dev->name);
@@ -2370,7 +2462,7 @@ wv_packet_read(device *		dev,
 static inline void
 wv_receive(device *	dev)
 {
-  u_short	ioaddr = dev->base_addr;
+  u_long	ioaddr = dev->base_addr;
   net_local *	lp = (net_local *)dev->priv;
   int		nreaped = 0;
 
@@ -2556,7 +2648,7 @@ wv_packet_write(device *	dev,
 		short	length)
 {
   net_local *		lp = (net_local *) dev->priv;
-  u_short		ioaddr = dev->base_addr;
+  u_long		ioaddr = dev->base_addr;
   unsigned short	txblock;
   unsigned short	txpred;
   unsigned short	tx_addr;
@@ -2649,6 +2741,9 @@ if (lp->tx_n_in_use > 0)
 	      (unsigned char *) &nop.nop_h.ac_link,
 	      sizeof(nop.nop_h.ac_link));
 
+  /* Keep stats up to date */
+  lp->stats.tx_bytes += length;
+
   /* If watchdog not already active, activate it... */
   if(lp->watchdog.prev == (timer_list *) NULL)
     {
@@ -2701,20 +2796,6 @@ wavelan_packet_xmit(struct sk_buff *	skb,
     return 1;
 
   /*
-   * If some higher layer thinks we've missed
-   * a tx-done interrupt we are passed NULL.
-   * Caution: dev_tint() handles the cli()/sti() itself.
-   */
-  if(skb == (struct sk_buff *)0)
-    {
-#ifdef DEBUG_TX_ERROR
-      printk(KERN_INFO "%s: wavelan_packet_xmit(): skb == NULL\n", dev->name);
-#endif
-      dev_tint(dev);
-      return 0;
-    }
-
-  /*
    * Block a timer-based transmit from overlapping.
    * In other words, prevent reentering this routine.
    */
@@ -2761,7 +2842,7 @@ wavelan_packet_xmit(struct sk_buff *	skb,
 static inline int
 wv_mmc_init(device *	dev)
 {
-  u_short	ioaddr = dev->base_addr;
+  u_long	ioaddr = dev->base_addr;
   net_local *	lp = (net_local *)dev->priv;
   psa_t		psa;
   mmw_t		m;
@@ -2790,6 +2871,9 @@ wv_mmc_init(device *	dev)
       /* As NWID is not set : no NWID checking */
       psa.psa_nwid_select = 0;
 
+      /* Disable encryption */
+      psa.psa_encryption_select = 0;
+
       /* Set to standard values
        * 0x04 for AT,
        * 0x01 for MCA,
@@ -2807,7 +2891,7 @@ wv_mmc_init(device *	dev)
 #ifdef USE_PSA_CONFIG
       /* Write the psa */
       psa_write(ioaddr, lp->hacr, (char *)psa.psa_nwid - (char *)&psa,
-		(unsigned char *)psa.psa_nwid, 3);
+		(unsigned char *)psa.psa_nwid, 4);
       psa_write(ioaddr, lp->hacr, (char *)&psa.psa_thr_pre_set - (char *)&psa,
 		(unsigned char *)&psa.psa_thr_pre_set, 1);
       psa_write(ioaddr, lp->hacr, (char *)&psa.psa_quality_thr - (char *)&psa,
@@ -2828,6 +2912,14 @@ wv_mmc_init(device *	dev)
     m.mmw_loopt_sel = 0x00;
   else
     m.mmw_loopt_sel = MMW_LOOPT_SEL_DIS_NWID;
+
+  memcpy(&m.mmw_encr_key, &psa.psa_encryption_key, 
+	 sizeof(m.mmw_encr_key));
+
+  if(psa.psa_encryption_select)
+    m.mmw_encr_enable = MMW_ENCR_ENABLE_EN | MMW_ENCR_ENABLE_MODE;
+  else
+    m.mmw_encr_enable = 0;
 
   m.mmw_thr_pre_set = psa.psa_thr_pre_set & 0x3F;
   m.mmw_quality_thr = psa.psa_quality_thr & 0x0F;
@@ -2920,7 +3012,7 @@ static inline int
 wv_ru_start(device *	dev)
 {
   net_local *	lp = (net_local *) dev->priv;
-  u_short	ioaddr = dev->base_addr;
+  u_long	ioaddr = dev->base_addr;
   u_short	scb_cs;
   fd_t		fd;
   rbd_t		rbd;
@@ -3014,7 +3106,7 @@ static inline int
 wv_cu_start(device *	dev)
 {
   net_local *	lp = (net_local *) dev->priv;
-  u_short	ioaddr = dev->base_addr;
+  u_long	ioaddr = dev->base_addr;
   int		i;
   u_short	txblock;
   u_short	first_nop;
@@ -3115,7 +3207,7 @@ static inline int
 wv_82586_start(device *	dev)
 {
   net_local *	lp = (net_local *) dev->priv;
-  u_short	ioaddr = dev->base_addr;
+  u_long	ioaddr = dev->base_addr;
   scp_t		scp;		/* system configuration pointer */
   iscp_t	iscp;		/* intermediate scp */
   scb_t		scb;		/* system control block */
@@ -3245,7 +3337,7 @@ static void
 wv_82586_config(device *	dev)
 {
   net_local *		lp = (net_local *) dev->priv;
-  u_short		ioaddr = dev->base_addr;
+  u_long		ioaddr = dev->base_addr;
   unsigned short	txblock;
   unsigned short	txpred;
   unsigned short	tx_addr;
@@ -3441,7 +3533,7 @@ static inline void
 wv_82586_stop(device *	dev)
 {
   net_local *	lp = (net_local *) dev->priv;
-  u_short	ioaddr = dev->base_addr;
+  u_long	ioaddr = dev->base_addr;
   u_short	scb_cmd;
 
 #ifdef DEBUG_CONFIG_TRACE
@@ -3476,7 +3568,7 @@ static int
 wv_hw_reset(device *	dev)
 {
   net_local *	lp = (net_local *)dev->priv;
-  u_short	ioaddr = dev->base_addr;
+  u_long	ioaddr = dev->base_addr;
 
 #ifdef DEBUG_CONFIG_TRACE
   printk(KERN_DEBUG "%s: ->wv_hw_reset(dev=0x%x)\n", dev->name,
@@ -3521,7 +3613,7 @@ wv_hw_reset(device *	dev)
  * (called in wavelan_probe() and init_module())
  */
 static int
-wv_check_ioaddr(u_short		ioaddr,
+wv_check_ioaddr(u_long		ioaddr,
 		u_char *	mac)
 {
   int		i;		/* Loop counter */
@@ -3568,7 +3660,7 @@ wavelan_interrupt(int			irq,
 		  struct pt_regs *	regs)
 {
   device *	dev;
-  u_short	ioaddr;
+  u_long	ioaddr;
   net_local *	lp;
   u_short	hasr;
   u_short	status;
@@ -3715,7 +3807,7 @@ wavelan_watchdog(u_long		a)
 {
   device *		dev;
   net_local *		lp;
-  unsigned short	ioaddr;
+  u_long		ioaddr;
   unsigned long		x;
   unsigned int		nreaped;
 
@@ -3910,7 +4002,7 @@ wavelan_close(device *	dev)
 static int
 wavelan_config(device *	dev)
 {
-  u_short	ioaddr = dev->base_addr;
+  u_long	ioaddr = dev->base_addr;
   u_char	irq_mask;
   int		irq;
   net_local *	lp;

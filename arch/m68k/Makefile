@@ -36,7 +36,7 @@ endif
 
 LINKFLAGS = -Ttext 0x1000
 
-CFLAGS := $(CFLAGS) -pipe
+CFLAGS := $(CFLAGS) -pipe -fno-strength-reduce
 
 ifdef CONFIG_OPTIMIZE_040
 CFLAGS := $(CFLAGS) -m68040
@@ -46,40 +46,46 @@ ifdef CONFIG_OPTIMIZE_060
 CFLAGS := $(CFLAGS) -m68020-40
 endif
 
+ifdef CONFIG_KGDB
+# If configured for kgdb support, include debugging infos and keep the
+# frame pointer
+CFLAGS := $(subst -fomit-frame-pointer,,$(CFLAGS)) -g
+endif
+
 HEAD := arch/m68k/kernel/head.o
 
 SUBDIRS += arch/m68k/kernel arch/m68k/mm arch/m68k/lib
-ARCHIVES := arch/m68k/kernel/kernel.o arch/m68k/mm/mm.o $(ARCHIVES)
+CORE_FILES := arch/m68k/kernel/kernel.o arch/m68k/mm/mm.o $(CORE_FILES)
 LIBS += arch/m68k/lib/lib.a
 
 ifdef CONFIG_AMIGA
-ARCHIVES := $(ARCHIVES) arch/m68k/amiga/amiga.o
+CORE_FILES := $(CORE_FILES) arch/m68k/amiga/amiga.o
 SUBDIRS := $(SUBDIRS) arch/m68k/amiga
 endif
 
 ifdef CONFIG_ATARI
-ARCHIVES := $(ARCHIVES) arch/m68k/atari/atari.o
+CORE_FILES := $(CORE_FILES) arch/m68k/atari/atari.o
 SUBDIRS := $(SUBDIRS) arch/m68k/atari
 endif
 
 ifdef CONFIG_MAC
-ARCHIVES := $(ARCHIVES) arch/m68k/mac/mac.o
+CORE_FILES := $(CORE_FILES) arch/m68k/mac/mac.o
 SUBDIRS := $(SUBDIRS) arch/m68k/mac
 endif
 
 ifdef CONFIG_VT
 # add in console.a after {amiga,atari}.o that need it
-ARCHIVES := $(ARCHIVES) arch/m68k/console/console.a
+CORE_FILES := $(CORE_FILES) arch/m68k/console/console.a
 SUBDIRS := $(SUBDIRS) arch/m68k/console
 endif
 
 ifdef CONFIG_M68040
-ARCHIVES := $(ARCHIVES) arch/m68k/fpsp040/fpsp.o
+CORE_FILES := $(CORE_FILES) arch/m68k/fpsp040/fpsp.o
 SUBDIRS := $(SUBDIRS) arch/m68k/fpsp040
 endif
 
 ifdef CONFIG_M68060
-ARCHIVES := $(ARCHIVES) arch/m68k/ifpsp060/ifpsp.o
+CORE_FILES := $(CORE_FILES) arch/m68k/ifpsp060/ifpsp.o
 SUBDIRS := $(SUBDIRS) arch/m68k/ifpsp060
 endif
 
@@ -92,10 +98,24 @@ lilo:	vmlinux
 	cp System.map $(INSTALL_PATH)/System.map
 	if [ -x /sbin/lilo ]; then /sbin/lilo; else /etc/lilo/install; fi
 
-bootstrap:
+zImage compressed: vmlinux.gz
+
+vmlinux.gz: vmlinux
+
+ifdef CONFIG_KGDB
+	cp vmlinux vmlinux.tmp
+	$(STRIP) vmlinux.tmp
+	gzip -9c vmlinux.tmp >vmlinux.gz
+	rm vmlinux.tmp
+else
+	gzip -9c vmlinux >vmlinux.gz
+endif
+
+bootstrap: dummy
 	@$(MAKEBOOT) bootstrap
 
 archclean:
+	rm -f vmlinux.gz
 	@$(MAKEBOOT) clean
 
 archdep:

@@ -73,7 +73,7 @@ if [ "$CONFIG_NET_ETHERNET" = "y" ]; then
     if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
       tristate 'Ansel Communications EISA 3200 support (EXPERIMENTAL)' CONFIG_AC3200
     fi
-    
+
     tristate 'Apricot Xen-II on board ethernet' CONFIG_APRICOT
     tristate 'CS89x0 support' CONFIG_CS89x0
     tristate 'Generic DECchip & DIGITAL EtherWORKS PCI/EISA' CONFIG_DE4X5

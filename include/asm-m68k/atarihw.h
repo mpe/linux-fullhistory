@@ -79,6 +79,7 @@ struct atari_hw_present {
     ATARIHW_DECLARE(SCU);		/* System Control Unit */
     ATARIHW_DECLARE(BLITTER);		/* Blitter */
     ATARIHW_DECLARE(VME);		/* VME Bus */
+    ATARIHW_DECLARE(DSP56K);		/* DSP56k processor in Falcon */
 };
 
 extern struct atari_hw_present atari_hw_present;
@@ -97,6 +98,7 @@ void *atari_stram_alloc (long size, unsigned long *start_mem );
 void atari_stram_free (void *);
 
 extern int is_medusa;
+extern int is_hades;
 
 /* Do cache push/invalidate for DMA read/write. This function obeys the
  * snooping on some machines (Medusa) and processors: The Medusa itself can
@@ -356,8 +358,8 @@ struct CODEC
 {
   u_char tracks;
   u_char input_source;
-#define CODEC_SOURCE_MATRIX     1
-#define CODEC_SOURCE_ADC        2
+#define CODEC_SOURCE_ADC        1
+#define CODEC_SOURCE_MATRIX     2
   u_char adc_source;
 #define ADC_SOURCE_RIGHT_PSG    1
 #define ADC_SOURCE_LEFT_PSG     2
@@ -673,17 +675,28 @@ struct TT_DMASND {
 };
 # define tt_dmasnd ((*(volatile struct TT_DMASND *)TT_DMASND_BAS))
 
-#define	DMASND_CTRL_OFF		0x00
-#define	DMASND_CTRL_ON		0x01
-#define	DMASND_CTRL_REPEAT	0x02
-#define	DMASND_MODE_MONO	0x80
-#define	DMASND_MODE_STEREO	0x00
-#define DMASND_MODE_8BIT	0x00
-#define DMASND_MODE_16BIT	0x40	/* Falcon only */
-#define	DMASND_MODE_6KHZ	0x00	/* Falcon: mute */
-#define	DMASND_MODE_12KHZ	0x01
-#define	DMASND_MODE_25KHZ	0x02
-#define	DMASND_MODE_50KHZ	0x03
+#define DMASND_MFP_INT_REPLAY     0x01
+#define DMASND_MFP_INT_RECORD     0x02
+#define DMASND_TIMERA_INT_REPLAY  0x04
+#define DMASND_TIMERA_INT_RECORD  0x08
+
+#define	DMASND_CTRL_OFF		  0x00
+#define	DMASND_CTRL_ON		  0x01
+#define	DMASND_CTRL_REPEAT	  0x02
+#define DMASND_CTRL_RECORD_ON     0x10
+#define DMASND_CTRL_RECORD_OFF    0x00
+#define DMASND_CTRL_RECORD_REPEAT 0x20
+#define DMASND_CTRL_SELECT_REPLAY 0x00
+#define DMASND_CTRL_SELECT_RECORD 0x80
+#define	DMASND_MODE_MONO	  0x80
+#define	DMASND_MODE_STEREO	  0x00
+#define DMASND_MODE_8BIT	  0x00
+#define DMASND_MODE_16BIT	  0x40	/* Falcon only */
+#define	DMASND_MODE_6KHZ	  0x00	/* Falcon: mute */
+#define	DMASND_MODE_12KHZ	  0x01
+#define	DMASND_MODE_25KHZ	  0x02
+#define	DMASND_MODE_50KHZ	  0x03
+ 
 
 #define DMASNDSetBase(bufstart)						\
     do {								\

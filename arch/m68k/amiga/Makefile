@@ -16,4 +16,8 @@ ifdef CONFIG_FB_CYBER
 O_OBJS := $(O_OBJS) cyberfb.o
 endif
 
+ifdef CONFIG_FB_RETINAZ3
+O_OBJS := $(O_OBJS) retz3fb.o
+endif
+
 include $(TOPDIR)/Rules.make

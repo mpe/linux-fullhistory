@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_ipv4.c,v 1.30 1997/04/13 10:31:44 davem Exp $
+ * Version:	$Id: tcp_ipv4.c,v 1.31 1997/04/16 09:18:50 davem Exp $
  *
  *		IPv4 specific functions
  *
@@ -585,7 +585,7 @@ int tcp_v4_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 
 	skb_queue_tail(&sk->write_queue, buff);
 
-	atomic_inc(&sk->packets_out);
+	sk->packets_out++;
 	buff->when = jiffies;
 
 	skb1 = skb_clone(buff, GFP_KERNEL);
@@ -816,7 +816,7 @@ static void tcp_v4_send_synack(struct sock *sk, struct open_request *req)
 		return;
 	}
 
-	mss = (skb->dst->pmtu - sizeof(struct iphdr) + sizeof(struct tcphdr));
+	mss = (skb->dst->pmtu - sizeof(struct iphdr) - sizeof(struct tcphdr));
 	if (sk->user_mss)
 		mss = min(mss, sk->user_mss);
 	skb->h.th = th = (struct tcphdr *) skb_put(skb, sizeof(struct tcphdr));
@@ -1020,7 +1020,7 @@ struct sock * tcp_v4_syn_recv_sock(struct sock *sk, struct sk_buff *skb,
 	newtp->snd_nxt = newsk->write_seq;
 
 	newsk->urg_data = 0;
-	atomic_set(&newsk->packets_out, 0);
+	newsk->packets_out = 0;
 	atomic_set(&newsk->retransmits, 0);
 	newsk->linger=0;
 	newsk->destroy = 0;

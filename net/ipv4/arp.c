@@ -230,13 +230,6 @@ int sysctl_arp_max_pings = ARP_MAX_PINGS;
 
 int sysctl_arp_dead_res_time = ARP_DEAD_RES_TIME;
 
-/* This should be completely nuked... -DaveM */
-#if RT_CACHE_DEBUG >= 1
-#define ASSERT_BH() if (!in_interrupt()) printk(KERN_CRIT __FUNCTION__ " called from SPL=0\n");
-#else
-#define ASSERT_BH()
-#endif
-
 static void arp_neigh_destroy(struct neighbour *neigh);
 
 /*
@@ -251,8 +244,8 @@ struct neigh_ops arp_neigh_ops = {
 };
 
 
-static atomic_t arp_size = ATOMIC_INIT;
-static atomic_t arp_unres_size = ATOMIC_INIT;
+static atomic_t arp_size = ATOMIC_INIT(0);
+static atomic_t arp_unres_size = ATOMIC_INIT(0);
 
 #ifdef CONFIG_ARPD
 static int arpd_not_running;
@@ -340,20 +333,15 @@ static void arp_purge_send_q(struct arp_table *entry)
 {
 	struct sk_buff *skb;
 
-	ASSERT_BH();
-
 	/* Release the list of `skb' pointers. */
 	while ((skb = skb_dequeue(&entry->u.neigh.arp_queue)) != NULL)
 		kfree_skb(skb, FREE_WRITE);
-	return;
 }
 
 static void arp_free(struct arp_table **entryp)
 {
 	struct arp_table *entry = *entryp;
 	*entryp = entry->u.next;
-
-	ASSERT_BH();
 
 	if (!(entry->flags&ATF_PUBL)) {
 		atomic_dec(&arp_size);
@@ -372,8 +360,6 @@ static void arp_neigh_destroy(struct neighbour *neigh)
 {
 	struct arp_table *entry = (struct arp_table*)neigh;
 	struct hh_cache *hh, *next;
-
-	ASSERT_BH();
 
 	del_timer(&entry->timer);
 	arp_purge_send_q(entry);
@@ -877,11 +863,8 @@ static void arp_send_q(struct arp_table *entry)
 {
 	struct sk_buff *skb;
 
-	ASSERT_BH();
-
-	while((skb = skb_dequeue(&entry->u.neigh.arp_queue)) != NULL) {
+	while((skb = skb_dequeue(&entry->u.neigh.arp_queue)) != NULL)
 		dev_queue_xmit(skb);
-	}
 }
 
 

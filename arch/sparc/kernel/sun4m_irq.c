@@ -29,6 +29,7 @@
 #include <asm/openprom.h>
 #include <asm/oplib.h>
 #include <asm/traps.h>
+#include <asm/pgtable.h>
 #include <asm/smp.h>
 #include <asm/irq.h>
 #include <asm/io.h>
@@ -145,7 +146,7 @@ static unsigned long cpu_pil_to_imask[16] = {
 /*11*/	SUN4M_INT_SBUS(5) | SUN4M_INT_VME(5) | SUN4M_INT_FLOPPY,
 /*12*/	SUN4M_INT_SERIAL | SUN4M_INT_KBDMS,
 /*13*/	SUN4M_INT_AUDIO,
-/*14*/	0x00000000,
+/*14*/	SUN4M_INT_E14,
 /*15*/	0x00000000
 };
 
@@ -196,36 +197,17 @@ static void sun4m_clear_clock_irq(void)
 	clear_intr = sun4m_timers->l10_timer_limit;
 }
 
-static void sun4m_clear_profile_irq(void)
+static void sun4m_clear_profile_irq(int cpu)
 {
 	volatile unsigned int clear;
     
-	clear = sun4m_timers->cpu_timers[0].l14_timer_limit;
+	clear = sun4m_timers->cpu_timers[cpu].l14_timer_limit;
 }
 
-static void sun4m_load_profile_irq(unsigned int limit)
+static void sun4m_load_profile_irq(int cpu, unsigned int limit)
 {
-	sun4m_timers->cpu_timers[0].l14_timer_limit = limit;
+	sun4m_timers->cpu_timers[cpu].l14_timer_limit = limit;
 }
-
-#if HANDLE_LVL14_IRQ
-static void sun4m_lvl14_handler(int irq, void *dev_id, struct pt_regs * regs)
-{
-	volatile unsigned int clear;
-    
-	printk("CPU[%d]: TOOK A LEVEL14!\n", smp_processor_id());
-	/* we do nothing with this at present
-	 * this is purely to prevent OBP getting its mucky paws
-	 * in linux.
-	 */
-	clear = sun4m_timers->cpu_timers[0].l14_timer_limit; /* clear interrupt */
-    
-	/* reload with value, this allows on the fly retuning of the level14
-	 * timer
-	 */
-	sun4m_timers->cpu_timers[0].l14_timer_limit = lvl14_resolution;
-}
-#endif /* HANDLE_LVL14_IRQ */
 
 __initfunc(static void sun4m_init_timers(void (*counter_fn)(int, void *, struct pt_regs *)))
 {
@@ -282,13 +264,6 @@ __initfunc(static void sun4m_init_timers(void (*counter_fn)(int, void *, struct 
 		prom_halt();
 	}
     
-	/* Can't cope with multiple CPUS yet so no level14 tick events */
-#if HANDLE_LVL14_IRQ
-	if (linux_num_cpus > 1)
-		claim_ticker14(NULL, PROFILE_IRQ, 0);
-	else
-		claim_ticker14(sun4m_lvl14_handler, PROFILE_IRQ, lvl14_resolution);
-#endif /* HANDLE_LVL14_IRQ */
 	if(linux_num_cpus > 1) {
 		for(cpu = 0; cpu < 4; cpu++)
 			sun4m_timers->cpu_timers[cpu].l14_timer_limit = 0;
@@ -296,6 +271,25 @@ __initfunc(static void sun4m_init_timers(void (*counter_fn)(int, void *, struct 
 	} else {
 		sun4m_timers->cpu_timers[0].l14_timer_limit = 0;
 	}
+#ifdef __SMP__
+	{
+		unsigned long flags;
+		extern unsigned long lvl14_save[4];
+		struct tt_entry *trap_table = &sparc_ttable[SP_TRAP_IRQ1 + (14 - 1)];
+
+		/* For SMP we use the level 14 ticker, however the bootup code
+		 * has copied the firmwares level 14 vector into boot cpu's
+		 * trap table, we must fix this now or we get squashed.
+		 */
+		__save_and_cli(flags);
+		trap_table->inst_one = lvl14_save[0];
+		trap_table->inst_two = lvl14_save[1];
+		trap_table->inst_three = lvl14_save[2];
+		trap_table->inst_four = lvl14_save[3];
+		local_flush_cache_all();
+		__restore_flags(flags);
+	}
+#endif
 }
 
 __initfunc(void sun4m_init_IRQ(void))
@@ -349,10 +343,6 @@ __initfunc(void sun4m_init_IRQ(void))
 		 * Not sure, but writing here on SLAVIO systems may puke
 		 * so I don't do it unless there is more than 1 cpu.
 		 */
-#if 0
-		printk("Warning:"
-		       "sun4m multiple CPU interrupt code requires work\n");
-#endif
 		irq_rcvreg = (unsigned long *)
 				&sun4m_interrupts->undirected_target;
 		sun4m_interrupts->undirected_target = 0;

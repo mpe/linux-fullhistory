@@ -33,6 +33,9 @@
 
 #define FBTYPE_LASTPLUSONE      21	/* This is not last + 1 in fact... */
 
+/* Does not seem to be listed in the Sun file either */
+#define FBTYPE_CREATOR          22
+
 /* fbio ioctls */
 /* Returned by FBIOGTYPE */
 struct  fbtype {

@@ -1,4 +1,4 @@
-/* $Id: system.h,v 1.56 1997/04/14 05:39:30 davem Exp $ */
+/* $Id: system.h,v 1.57 1997/04/15 09:03:45 davem Exp $ */
 #ifndef __SPARC_SYSTEM_H
 #define __SPARC_SYSTEM_H
 
@@ -93,9 +93,7 @@ extern void fpsave(unsigned long *fpregs, unsigned long *fsr,
 	"rd	%%wim, %%g5\n\t"							\
 	"wr	%%g4, 0x20, %%psr\n\t"							\
 	"nop\n\t"									\
-	"mov	%5, %%g7\n\t"								\
 	"std	%%g4, [%%g6 + %2]\n\t"							\
-	"st	%%g7, [%%g6 + %6]\n\t"							\
 	"ldd	[%1 + %2], %%g4\n\t"							\
 	"mov	%1, %%g6\n\t"								\
 	"st	%1, [%0]\n\t"								\
@@ -113,8 +111,7 @@ extern void fpsave(unsigned long *fpregs, unsigned long *fsr,
 	" nop\n\t" : : "r" (&(current_set[smp_processor_id()])), "r" (next),		\
 	  "i" ((const unsigned long)(&((struct task_struct *)0)->tss.kpsr)),		\
 	  "i" ((const unsigned long)(&((struct task_struct *)0)->tss.ksp)),		\
-	  "r" (task_pc), "i" (255),							\
-	  "i" ((const unsigned long)(&((struct task_struct *)0)->processor))		\
+	  "r" (task_pc)									\
 	: "g1", "g2", "g3", "g4", "g5", "g7", "l2", "l3",				\
 	"l4", "l5", "l6", "l7", "i0", "i1", "i2", "i3", "i4", "i5", "o0", "o1", "o2",	\
 	"o3");										\

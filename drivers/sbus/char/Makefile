@@ -31,6 +31,9 @@ endif
 ifdef TADPOLE_FB_WEITEK
  FB_OBJS +=	weitek.o
 endif
+ifdef SUN_FB_CREATOR
+ FB_OBJS += creator.o
+endif
 #ifdef SUN_FB_FAST_ONE
 # FB_OBJS +=	sun_8bit_fast1.o
 #endif

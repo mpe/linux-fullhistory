@@ -19,6 +19,7 @@
 #include <linux/mman.h>
 #include <linux/mm.h>
 #include <linux/random.h>
+#include <linux/init.h>
 
 #include <asm/uaccess.h>
 #include <asm/io.h>
@@ -491,7 +492,7 @@ static struct file_operations memory_fops = {
 	NULL		/* fsync */
 };
 
-int chr_dev_init(void)
+__initfunc(int chr_dev_init(void))
 {
 	if (register_chrdev(MEM_MAJOR,"mem",&memory_fops))
 		printk("unable to get major %d for memory devs\n", MEM_MAJOR);

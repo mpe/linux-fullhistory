@@ -41,6 +41,7 @@
 #include <linux/personality.h>
 #include <linux/smp.h>
 #include <linux/smp_lock.h>
+#include <linux/init.h>
 
 #include <asm/system.h>
 #include <asm/uaccess.h>
@@ -65,7 +66,7 @@ asmlinkage int sys_brk(unsigned long);
 
 static struct linux_binfmt *formats = (struct linux_binfmt *) NULL;
 
-void binfmt_setup(void)
+__initfunc(void binfmt_setup(void))
 {
 #ifdef CONFIG_BINFMT_ELF
 	init_elf_binfmt();
@@ -533,7 +534,7 @@ int prepare_binprm(struct linux_binprm *bprm)
 		if (IS_NOSUID(bprm->inode)
 		    || (current->flags & PF_PTRACED)
 		    || (current->fs->count > 1)
-		    || (current->sig->count > 1)
+		    || (atomic_read(&current->sig->count) > 1)
 		    || (current->files->count > 1)) {
 			if (!suser())
 				return -EPERM;

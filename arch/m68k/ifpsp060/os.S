@@ -153,7 +153,7 @@ _060_dmem_read_byte:
 	btst		#0x5,0x4(%a6)		| check for supervisor state
 	bnes		dmrbs			| supervisor
 dmrbu:	clr.l		%d0			| clear whole longword
-	movs.b		(%a0),%d0		| fetch user byte
+dmrbuae:movs.b		(%a0),%d0		| fetch user byte
 	bras		dmrbr
 dmrbs:	clr.l		%d0			| clear whole longword
 	move.b		(%a0),%d0		| fetch super byte
@@ -190,7 +190,7 @@ _060_imem_read_word:
 	btst		#0x5,0x4(%a6)		| check for supervisor state
 	bnes		dmrws			| supervisor
 dmrwu:	clr.l		%d0			| clear whole longword
-	movs.w		(%a0), %d0		| fetch user word
+dmrwuae:movs.w		(%a0), %d0		| fetch user word
 	bras		dmrwr
 dmrws:	clr.l		%d0			| clear whole longword
 	move.w		(%a0), %d0		| fetch super word
@@ -226,7 +226,8 @@ _060_dmem_read_long:
 _060_imem_read_long:
 	btst		#0x5,0x4(%a6)		| check for supervisor state
 	bnes		dmrls			| supervisor
-dmrlu:	movs.l		(%a0),%d0		| fetch user longword
+dmrlu:
+dmrluae:movs.l		(%a0),%d0		| fetch user longword
 	bras		dmrlr
 dmrls:	move.l		(%a0),%d0		| fetch super longword
 dmrlr:	clr.l		%d1			| return success
@@ -248,7 +249,8 @@ dmrlr:	clr.l		%d1			| return success
 _060_dmem_write_byte:
 	btst		#0x5,0x4(%a6)		| check for supervisor state
 	bnes		dmwbs			| supervisor
-dmwbu:	movs.b		%d0,(%a0)		| store user byte
+dmwbu:
+dmwbuae:movs.b		%d0,(%a0)		| store user byte
 	bras		dmwbr
 dmwbs:	move.b		%d0,(%a0)		| store super byte
 dmwbr:	clr.l		%d1			| return success
@@ -270,7 +272,8 @@ dmwbr:	clr.l		%d1			| return success
 _060_dmem_write_word:
 	btst		#0x5,0x4(%a6)		| check for supervisor state
 	bnes		dmwws			| supervisor
-dmwwu:	movs.w		%d0,(%a0)		| store user word
+dmwwu:
+dmwwuae:movs.w		%d0,(%a0)		| store user word
 	bras		dmwwr
 dmwws:	move.w		%d0,(%a0)		| store super word
 dmwwr:	clr.l		%d1			| return success
@@ -292,7 +295,8 @@ dmwwr:	clr.l		%d1			| return success
 _060_dmem_write_long:
 	btst		#0x5,0x4(%a6)		| check for supervisor state
 	bnes		dmwls			| supervisor
-dmwlu:	movs.l		%d0,(%a0)		| store user longword
+dmwlu:
+dmwluae:movs.l		%d0,(%a0)		| store user longword
 	bra		dmwlr
 dmwls:	move.l		%d0,(%a0)		| store super longword
 dmwlr:	clr.l		%d1			| return success
@@ -322,9 +326,10 @@ _copyout:
     subq.l      #1,%d0
 moreout:
 	move.b		(%a0)+,%d1		| fetch supervisor byte
+copyoutae:
 	movs.b		%d1,(%a1)+		| store user byte
 	dbra		%d0,moreout		| are we through yet?
-    moveq		#0,%d0			| return success
+	moveq		#0,%d0			| return success
 	rts
 
 |
@@ -337,11 +342,12 @@ _copyin:
 	move.l		12(%sp),%d0		| count
     subq.l      #1,%d0
 morein:
+copyinae:	
 	movs.b		(%a0)+,%d1		| fetch user byte
 	move.b		%d1,(%a1)+		| write supervisor byte
 	subq.l		#0x1,%d0		| are we through yet?
 	dbra		%d0,morein		| are we through yet?
-    moveq		#0,%d0			| return success
+	moveq		#0,%d0			| return success
 	rts
 
 |###########################################################################
@@ -374,3 +380,22 @@ _060_real_trace:
 	.global		_060_real_access
 _060_real_access:
 	bral	SYMBOL_NAME(buserr)
+
+
+
+| Execption handling for movs access to illegal memory	
+	.section .fixup,#alloc,#execinstr
+	.even
+1:	moveq		#-1,%d1
+	rts
+.section __ex_table,#alloc
+	.align 4
+	.long	dmrbuae,1b
+	.long	dmrwuae,1b
+	.long	dmrluae,1b
+	.long	dmwbuae,1b
+	.long	dmwwuae,1b
+	.long	dmwluae,1b
+	.long	copyoutae,1b
+	.long	copyinae,1b
+	.text

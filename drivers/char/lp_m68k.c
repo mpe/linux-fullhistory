@@ -34,8 +34,8 @@
  *
  */
 
-#include <linux/module.h>
 #include <linux/config.h>
+#include <linux/module.h>
 #include <linux/errno.h>
 #include <linux/kernel.h>
 #include <linux/major.h>
@@ -139,40 +139,35 @@ static __inline__ int lp_char_interrupt(char lpchar, int dev)
 
 static int lp_error;
 
-void lp_interrupt(int irq, void *dummy, struct pt_regs *fp)
+void lp_interrupt(int dev)
 {
-    unsigned long flags;
-    int dev;
+    if (dev >= 0 && dev < MAX_LP && lp_table[dev]->do_print)
+    {
+	if (lp_table[dev]->copy_size)
+	{
+    		unsigned long flags;
+		save_flags(flags);
+		cli();
+		if (lp_char_interrupt(lp_table[dev]->lp_buffer[lp_table[dev]->bytes_written], dev)) {
+			--lp_table[dev]->copy_size;
+			++lp_table[dev]->bytes_written;
+			restore_flags(flags);
+		}
+		else
+		{
+			lp_table[dev]->do_print = 0;
+			restore_flags(flags);
+			lp_error = 1;
+			wake_up_interruptible(&lp_table[dev]->lp_wait_q);
+		}
+	}
+	else
+	{
+		lp_table[dev]->do_print = 0;
+		lp_error = 0;
+		wake_up_interruptible(&lp_table[dev]->lp_wait_q);
+	}
 
-    for (dev = 0; dev < MAX_LP; dev++) {
-	if ((lp_table[dev] != NULL) && (lp_table[dev]->lp_my_interrupt(dev) != 0))
-	  if (lp_table[dev]->do_print)
-	  {
-		  if (lp_table[dev]->copy_size)
-		  {
-			  save_flags(flags);
-			  cli();
-			  if (lp_char_interrupt(lp_table[dev]->lp_buffer[lp_table[dev]->bytes_written], dev)) {
-				  --lp_table[dev]->copy_size;
-				  ++lp_table[dev]->bytes_written;
-				  restore_flags(flags);
-			  }
-			  else
-			  {
-				  lp_table[dev]->do_print = 0;
-				  restore_flags(flags);
-				  lp_error = 1;
-				  wake_up_interruptible(&lp_table[dev]->lp_wait_q);
-			  }
-		  }
-		  else
-		  {
-			  lp_table[dev]->do_print = 0;
-			  lp_error = 0;
-			  wake_up_interruptible(&lp_table[dev]->lp_wait_q);
-		  }
-
-	  }
     }
 }
 
@@ -366,6 +361,7 @@ static long long lp_lseek(struct inode * inode, struct file * file,
 static int lp_open(struct inode *inode, struct file *file)
 {
 	int dev = MINOR(inode->i_rdev);
+	int ret;
 
 	if (dev >= MAX_LP)
 		return -ENODEV;
@@ -386,10 +382,14 @@ static int lp_open(struct inode *inode, struct file *file)
 
 	lp_table[dev]->flags |= LP_BUSY;
 
-	MOD_INC_USE_COUNT;
-	lp_table[dev]->lp_open();
-
-	return 0;
+	ret = lp_table[dev]->lp_open(dev);
+	if (ret != 0) {
+		lp_table[dev]->flags &= ~LP_BUSY;
+	}
+	else {
+		MOD_INC_USE_COUNT;
+	}
+	return ret;
 }
 
 static int lp_release(struct inode *inode, struct file *file)
@@ -397,7 +397,7 @@ static int lp_release(struct inode *inode, struct file *file)
 	int dev =MINOR(inode->i_rdev);
 
 	lp_table[dev]->flags &= ~LP_BUSY;
-	lp_table[dev]->lp_release();
+	lp_table[dev]->lp_release(dev);
 	MOD_DEC_USE_COUNT;
 	return 0;
 }
@@ -458,18 +458,12 @@ static struct file_operations lp_fops = {
 	lp_release
 };
 
-#ifdef CONFIG_MODULES
-static struct symbol_table parallel_syms = {
-#include <linux/symtab_begin.h>
-	X(lp_table),
-	X(lp_irq),
-	X(lp_interrupt),
-	X(lp_init),
-	X(register_parallel),
-	X(unregister_parallel),
-#include <linux/symtab_end.h>
-};
-#endif
+EXPORT_SYMBOL(lp_table);
+EXPORT_SYMBOL(lp_irq);
+EXPORT_SYMBOL(lp_interrupt);
+EXPORT_SYMBOL(lp_init);
+EXPORT_SYMBOL(register_parallel);
+EXPORT_SYMBOL(unregister_parallel);
 
 int lp_init(void)
 {
@@ -482,14 +476,6 @@ int lp_init(void)
 		printk(KERN_ERR "unable to get major %d for line printer\n", LP_MAJOR);
 		return -ENXIO;
 	}
-
-#ifdef CONFIG_MODULES
-	if (register_symtab(&parallel_syms)) {
-		unregister_chrdev(LP_MAJOR, "lp");
-		printk(KERN_CRIT "unable to register parallel symtab\n");
-		return -ENXIO;
-	}
-#endif
 
 #if WHICH_DRIVER == FORCE_POLLING
 	lp_irq = 0;

@@ -112,8 +112,8 @@ struct sched_param {
  * _adding_ to the beginning of the run-queue has
  * a separate lock).
  */
+extern rwlock_t tasklist_lock;
 extern spinlock_t scheduler_lock;
-extern spinlock_t tasklist_lock;
 
 extern void sched_init(void);
 extern void show_state(void);
@@ -174,14 +174,16 @@ struct mm_struct {
 		&init_mmap, &init_mmap, MUTEX }
 
 struct signal_struct {
-	int count;
-	struct sigaction action[32];
+	atomic_t		count;
+	struct sigaction	action[32];
+	spinlock_t		siglock;
 };
 
 
 #define INIT_SIGNALS { \
-		1, \
-		{ {0,}, } }
+		ATOMIC_INIT(1), \
+		{ {0,}, }, \
+		SPIN_LOCK_UNLOCKED }
 
 struct task_struct {
 /* these are hardcoded - don't touch */
@@ -261,6 +263,8 @@ struct task_struct {
 	int processor;
 	int last_processor;
 	int lock_depth;		/* Lock depth. We can context switch in and out of holding a syscall kernel lock... */	
+	/* Spinlocks for various pieces or per-task state. */
+	spinlock_t sigmask_lock;	/* Protects signal and blocked */
 };
 
 /*
@@ -471,11 +475,11 @@ extern inline void poll_wait(struct wait_queue ** wait_address, poll_table * p)
 	p->nr++;
 }
 
-#define REMOVE_LINKS(p) do { \
-	spin_lock(&tasklist_lock); \
+#define REMOVE_LINKS(p) do { unsigned long flags; \
+	write_lock_irqsave(&tasklist_lock, flags); \
 	(p)->next_task->prev_task = (p)->prev_task; \
 	(p)->prev_task->next_task = (p)->next_task; \
-	spin_unlock(&tasklist_lock); \
+	write_unlock_irqrestore(&tasklist_lock, flags); \
 	if ((p)->p_osptr) \
 		(p)->p_osptr->p_ysptr = (p)->p_ysptr; \
 	if ((p)->p_ysptr) \
@@ -484,13 +488,13 @@ extern inline void poll_wait(struct wait_queue ** wait_address, poll_table * p)
 		(p)->p_pptr->p_cptr = (p)->p_osptr; \
 	} while (0)
 
-#define SET_LINKS(p) do { \
-	spin_lock(&tasklist_lock); \
+#define SET_LINKS(p) do { unsigned long flags; \
+	write_lock_irqsave(&tasklist_lock, flags); \
 	(p)->next_task = &init_task; \
 	(p)->prev_task = init_task.prev_task; \
 	init_task.prev_task->next_task = (p); \
 	init_task.prev_task = (p); \
-	spin_unlock(&tasklist_lock); \
+	write_unlock_irqrestore(&tasklist_lock, flags); \
 	(p)->p_ysptr = NULL; \
 	if (((p)->p_osptr = (p)->p_pptr->p_cptr) != NULL) \
 		(p)->p_osptr->p_ysptr = p; \

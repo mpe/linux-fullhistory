@@ -1,4 +1,4 @@
-/* $Id: pgtable.h,v 1.27 1997/04/10 23:32:46 davem Exp $
+/* $Id: pgtable.h,v 1.28 1997/04/14 17:05:19 jj Exp $
  * pgtable.h: SpitFire page table operations.
  *
  * Copyright 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -672,6 +672,31 @@ extern inline pte_t mk_pte_io(unsigned long page, pgprot_t prot, int space)
 #define SWP_TYPE(entry)		(((entry>>PAGE_SHIFT) & 0xff))
 #define SWP_OFFSET(entry)	((entry) >> (PAGE_SHIFT+8))
 #define SWP_ENTRY(type,offset)	pte_val(mk_swap_pte((type),(offset)))
+
+extern __inline__ unsigned long
+sun4u_get_pte (unsigned long addr)
+{
+	pgd_t *pgdp;
+	pmd_t *pmdp;
+	pte_t *ptep;
+	
+	pgdp = pgd_offset (current->mm, addr);
+	pmdp = pmd_offset (pgdp, addr);
+	ptep = pte_offset (pmdp, addr);
+	return pte_val (*ptep) & _PAGE_PADDR;
+}
+
+extern __inline__ unsigned int
+__get_phys (unsigned long addr)
+{
+	return (sun4u_get_pte (addr) & 0x0fffffff);
+}
+
+extern __inline__ int
+__get_iospace (unsigned long addr)
+{
+	return ((sun4u_get_pte (addr) & 0xf0000000) >> 28);
+}
 
 #endif /* !(__ASSEMBLY__) */
 

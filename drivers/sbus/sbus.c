@@ -74,10 +74,10 @@ fill_sbus_device(int nd, struct linux_sbus_device *sbus_dev))
 		sbus_dev->slot = sbus_dev->reg_addrs[0].which_io;
 		sbus_dev->offset = base;
 		sbus_dev->reg_addrs[0].phys_addr = 
-			(char *) sbus_devaddr(sbus_dev->slot, base);
+			sbus_devaddr(sbus_dev->slot, base);
 		for(grrr=1; grrr<sbus_dev->num_registers; grrr++) {
 			base = (unsigned long) sbus_dev->reg_addrs[grrr].phys_addr;
-			sbus_dev->reg_addrs[grrr].phys_addr = (char *) 
+			sbus_dev->reg_addrs[grrr].phys_addr =
 				sbus_devaddr(sbus_dev->slot, base);
 		}
 		/* That surely sucked */

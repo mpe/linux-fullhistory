@@ -203,18 +203,20 @@ static int eth_rcv( Packet *pkt, int *len );
 /* get_remote_kernel():
  * Perform all necessary steps to get the kernel image
  * from the boot server. If successfull (retval == 0), subsequent calls to
- * kread() can access the data.
+ * kread() can access the data. Fatal errors (i.e., retrying is useless)
+ * return -2, others -1.
  */
 
 int get_remote_kernel( const char *kname /* optional */ )
 
 {	char	image_name[256];
-	
+	int		rv;
+
 	/* Check if a Ethernet interface is present and determine the Ethernet
 	 * address */
 	if (check_ethif() < 0) {
 		printf( "No Ethernet interface found -- no remote boot possible.\n" );
-		return( -1 );
+		return( -2 );
 	}
 	
 	/* Do a BOOTP request to find out our IP address and the kernel image's
@@ -223,23 +225,23 @@ int get_remote_kernel( const char *kname /* optional */ )
 		strcpy( image_name, kname );
 	else
 		*image_name = 0;
-	if (bootp( image_name ) < 0)
-		return( -1 );
+	if ((rv = bootp( image_name )) < 0)
+		return( rv );
 	
 	/* Now start a TFTP connection to receive the kernel image */
-	if (tftp( image_name ) < 0)
-		return( -1 );
+	if ((rv = tftp( image_name )) < 0)
+		return( rv );
 
 	return( 0 );
 }
 
 
-/* kread(), klseek(), kclose():
+/* ll_read(), ll_lseek(), ll_close():
  * Functions for accessing the received kernel image like with read(),
  * lseek(), close().
  */
 
-int kread( int fd, void *buf, unsigned cnt )
+int ll_read( int fd, void *buf, unsigned cnt )
 
 {	unsigned done = 0;
 	
@@ -261,18 +263,26 @@ int kread( int fd, void *buf, unsigned cnt )
 		buf += n;
 		done += n;
 		KFpos += n;
+
+		if (KFpos == endchunk) {
+			free( KFile[chunk] );
+			KFile[chunk] = NULL;
+		}
 	}
 
 	return( done );
 }
 
 
-int klseek( int fd, int where, int whence )
+int ll_lseek( int fd, int where, int whence )
 
 {
+    unsigned oldpos, oldchunk, newchunk;
+
 	if (!KFileSize)
 		return( lseek( fd, where, whence ) );
 
+    oldpos = KFpos;
 	switch( whence ) {
 	  case SEEK_SET:
 		KFpos = where;
@@ -295,11 +305,22 @@ int klseek( int fd, int where, int whence )
 		return( -1 );
 	}
 
+    /* free memory of skipped-over data */
+    oldchunk = oldpos >> KFILE_CHUNK_BITS;
+    newchunk = KFpos  >> KFILE_CHUNK_BITS;
+    while( oldchunk < newchunk ) {
+		if (KFile[oldchunk]) {
+			free( KFile[oldchunk] );
+			KFile[oldchunk] = NULL;
+		}
+		++oldchunk;
+    }
+    
 	return( KFpos );
 }
 
 
-int kclose( int fd )
+int ll_close( int fd )
 
 {
 	if (!KFileSize)
@@ -382,7 +403,7 @@ static int bootp( char *image_name )
 	}
 	if (retry >= BOOTP_RETRYS) {
 		printf( "No response from a bootp server\n" );
-		return( -1 );
+		return( -2 );
 	}
 	
 	ServerIPaddr = reply->bootp.siaddr;
@@ -433,7 +454,7 @@ static int tftp( char *image_name )
 		printf( "TFTP RREQ: %s\n", ErrStr[-err-1] );
 		if (--retries > 0)
 			goto repeat_req;
-		return( -1 );
+		return( err == ETIMEO ? -2 : -1 );
 	}
 
 	retries = 5;

@@ -1,4 +1,4 @@
-/* $Id: systbls.S,v 1.5 1997/04/09 08:25:16 jj Exp $
+/* $Id: systbls.S,v 1.6 1997/04/16 10:27:15 jj Exp $
  * systbls.S: System call entry point tables for OS compatibility.
  *            The native Linux system call table lives here also.
  *
@@ -56,7 +56,7 @@ sys_call_table32:
 	.xword sys_setpgid, sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys32_newuname
 /*190*/	.xword sys_nis_syscall, sys32_personality, sys_prof, sys_break, sys_lock
 	.xword sys_mpx, sys_ulimit, sys_getppid, sparc32_sigaction, sys_sgetmask
-/*200*/	.xword sys_ssetmask, sys_sigsuspend, sys32_newlstat, sys32_uselib, old_readdir
+/*200*/	.xword sys_ssetmask, sys_sigsuspend, sys32_newlstat, sys32_uselib, old32_readdir
 	.xword sys_nis_syscall, sys32_socketcall, sys32_syslog, sys32_olduname, sys_nis_syscall
 /*210*/	.xword sys_idle, sys_nis_syscall, sys32_waitpid, sys32_swapoff, sys32_sysinfo
 	.xword sys32_ipc, sys_sigreturn, sys_clone, sys_nis_syscall, sys32_adjtimex

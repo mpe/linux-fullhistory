@@ -1,4 +1,4 @@
-/* $Id: sys_sparc.c,v 1.34 1997/01/06 06:52:35 davem Exp $
+/* $Id: sys_sparc.c,v 1.35 1997/04/16 05:56:09 davem Exp $
  * linux/arch/sparc/kernel/sys_sparc.c
  *
  * This file contains various random system calls that
@@ -254,49 +254,45 @@ asmlinkage int
 sparc_sigaction (int signum, const struct sigaction *action, struct sigaction *oldaction)
 {
 	struct sigaction new_sa, *p;
-	int err = -EINVAL;
 
-	lock_kernel();
 	if(signum < 0) {
 		current->tss.new_signal = 1;
 		signum = -signum;
 	}
+	if(signum<1 || signum>32)
+		return -EINVAL;
 
-	if (signum<1 || signum>32)
-		goto out;
 	p = signum - 1 + current->sig->action;
-	if (action) {
-		err = verify_area(VERIFY_READ,action,sizeof(struct sigaction));
-		if (err)
-			goto out;
-		err = -EINVAL;
+	if(action) {
+		if(verify_area(VERIFY_READ,action,sizeof(struct sigaction)))
+			return -EFAULT;
 		if (signum==SIGKILL || signum==SIGSTOP)
-			goto out;
-		err = -EFAULT;
+			return -EINVAL;
 		if(copy_from_user(&new_sa, action, sizeof(struct sigaction)))
-			goto out;	
+			return -EFAULT;	
 		if (new_sa.sa_handler != SIG_DFL && new_sa.sa_handler != SIG_IGN) {
-			err = verify_area(VERIFY_READ, new_sa.sa_handler, 1);
-			if (err)
-				goto out;
+			if(verify_area(VERIFY_READ, new_sa.sa_handler, 1))
+				return -EFAULT;
 		}
 	}
 
 	if (oldaction) {
-		err = -EFAULT;
+		/* In the clone() case we could copy half consistant
+		 * state to the user, however this could sleep and
+		 * deadlock us if we held the signal lock on SMP.  So for
+		 * now I take the easy way out and do no locking.
+		 */
 		if (copy_to_user(oldaction, p, sizeof(struct sigaction)))
-			goto out;	
+			return -EFAULT;	
 	}
 
 	if (action) {
+		spin_lock_irq(&current->sig->siglock);
 		*p = new_sa;
 		check_pending(signum);
+		spin_unlock_irq(&current->sig->siglock);
 	}
-
-	err = 0;
-out:
-	unlock_kernel();
-	return err;
+	return 0;
 }
 
 #ifndef CONFIG_AP1000

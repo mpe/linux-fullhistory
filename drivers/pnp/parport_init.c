@@ -1,4 +1,4 @@
-/* $Id: parport_init.c,v 1.1.2.4 1997/04/01 18:19:10 phil Exp $
+/* $Id: parport_init.c,v 1.3.2.4 1997/04/16 21:20:44 phil Exp $
  * Parallel-port initialisation code.
  * 
  * Authors: David Campbell <campbell@tirian.che.curtin.edu.au>
@@ -26,8 +26,8 @@
 #include "parport_ll_io.h"
 
 static int io[PARPORT_MAX] = { 0, };
-static int irq[PARPORT_MAX] = { -1, };
-static int dma[PARPORT_MAX] = { -1, };
+static int irq[PARPORT_MAX] = { PARPORT_IRQ_NONE, };
+static int dma[PARPORT_MAX] = { PARPORT_DMA_NONE, };
 
 /******************************************************
  *  DMA detection section:
@@ -76,7 +76,7 @@ static int parport_enable_dma(int dma)
 	return dma;
 }
 
-static int parport_detect_dma_transfer(int dma,int size)
+static int parport_detect_dma_transfer(int dma,int size,int *resid)
 {
 	int i,n,retv;
 	int count=0;
@@ -88,10 +88,11 @@ static int parport_detect_dma_transfer(int dma,int size)
 			clear_dma_ff(i);
 			n = get_dma_residue(i);
 			if (n != size) {
+				*resid = n;
 				retv = i;
 				if (count > 0) {
 					retv = -1;	/* Multiple DMA's */
-					printk("Multiple DMA detected.\n");
+					printk(KERN_ERR "parport: multiple DMA detected.  Huh?\n");
 				}
 				count++;
 			}
@@ -118,7 +119,7 @@ static int programmable_dma_support(struct parport *pb)
 		return dma;
 }
 
-/* Only called if port support ECP mode.
+/* Only called if port supports ECP mode.
  *
  * The only restriction on DMA channels is that it has to be
  * between 0 to 7 (inclusive). Used only in an ECP mode, DMAs are
@@ -146,12 +147,11 @@ static int parport_dma_probe(struct parport *pb)
 	char *buff;
 
 	retv = programmable_dma_support(pb);
-	if( retv != -1 )
+	if (retv != -1)
 		return retv;
 	
-	buff = kmalloc(16, GFP_KERNEL | GFP_DMA);
-	if( !buff ){
-	    printk("parport: memory squezze\n");
+	if (!(buff = kmalloc(2048, GFP_KERNEL | GFP_DMA))) {
+	    printk(KERN_ERR "parport: memory squeeze\n");
 	    return -1;
 	}
 	
@@ -160,24 +160,26 @@ static int parport_dma_probe(struct parport *pb)
 
 	w_ecr(pb, 0xc0);	   /* ECP MODE */
  	w_ctr(pb, dsr_read );
-	dma=parport_prepare_dma(buff,8);
+	dma=parport_prepare_dma(buff,1000);
 	w_ecr(pb, 0xd8);	   /* ECP FIFO + enable DMA */
 	parport_enable_dma(dma);
-	udelay(30);           /* Give some for DMA tranfer */
-	retv = parport_detect_dma_transfer(dma,8);
+	udelay(500);           /* Give some for DMA tranfer */
+	retv = parport_detect_dma_transfer(dma,1000,&pb->speed);
+	pb->speed = pb->speed * 2000;  /* 500uSec * 2000 = 1sec */
 	
 	/*
 	 * National Semiconductors only supports DMA tranfers
 	 * in ECP MODE
 	 */
-	if( retv == -1 ){
+	if (retv == -1) {
 		w_ecr(pb, 0x60);	   /* ECP MODE */
 		w_ctr(pb, dsr_read );
-		dma=parport_prepare_dma(buff,8);
+		dma=parport_prepare_dma(buff,1000);
 		w_ecr(pb, 0x68);	   /* ECP FIFO + enable DMA */
 		parport_enable_dma(dma);
-		udelay(30);           /* Give some for DMA tranfer */
-		retv = parport_detect_dma_transfer(dma,8);
+		udelay(500);           /* Give some for DMA tranfer */
+		retv = parport_detect_dma_transfer(dma,1000,&pb->speed);
+		pb->speed = pb->speed * 2000;  /* 500uSec * 2000 = 1sec */
 	}
 	
 	kfree(buff);
@@ -198,10 +200,10 @@ static int epp_clear_timeout(struct parport *pb)
 {
 	int r;
 
-    if( !(r_str(pb) & 0x01) )
+	if (!(r_str(pb) & 0x01))
 		return 1;
 
-	/* To clear timeout some chip requiere double read */
+	/* To clear timeout some chips require double read */
 	r_str(pb);
 	r = r_str(pb);
 	w_str(pb, r | 0x01); /* Some reset by writing 1 */
@@ -213,23 +215,18 @@ static int epp_clear_timeout(struct parport *pb)
 
 
 /*
- * Checks for por existence, all ports support SPP MODE
+ * Checks for port existence, all ports support SPP MODE
  */
 static int parport_SPP_supported(struct parport *pb)
 {
-	int r,rr;
-	
 	/* Do a simple read-write test to make sure the port exists. */
+
 	w_dtr(pb, 0xaa);
-	r = r_dtr(pb);
+	if (r_dtr(pb) != 0xaa) return 0;
 	
 	w_dtr(pb, 0x55);
-	rr = r_dtr(pb);
-	
-	if (r != 0xaa || rr != 0x55) {
-		return 0;
-	}
-	
+	if (r_dtr(pb) != 0x55) return 0;
+
 	return PARPORT_MODE_SPP;
 }
 
@@ -249,23 +246,20 @@ static int parport_ECR_present(struct parport *pb)
 {
 	int r;
 
-	if( pb->base == 0x3BC )
-		return 0;
-	
 	r= r_ctr(pb);	
-	if( (r_ecr(pb) & 0x03) == (r & 0x03) ){
+	if ((r_ecr(pb) & 0x03) == (r & 0x03)) {
 		w_ctr(pb, r ^ 0x03 ); /* Toggle bits 0-1 */
 
 		r= r_ctr(pb);	
-		if( (r_ecr(pb) & 0x03) == (r & 0x03) )
+		if ((r_ecr(pb) & 0x03) == (r & 0x03))
 			return 0; /* Sure that no ECR register exists */
 	}
 	
-	if( (r_ecr(pb) & 0x03 ) != 0x01 )
+	if ((r_ecr(pb) & 0x03 ) != 0x01)
 		return 0;
 
 	w_ecr(pb,0x34);
-	if( r_ecr(pb) != 0x35 )
+	if (r_ecr(pb) != 0x35)
 		return 0;
 
 	w_ecr(pb,pb->ecr);
@@ -278,20 +272,22 @@ static int parport_ECP_supported(struct parport *pb)
 {
 	int i;
 	
-	if( !(pb->modes & PARPORT_MODE_ECR) )
+	/* If there is no ECR, we have no hope of supporting ECP. */
+	if (!(pb->modes & PARPORT_MODE_ECR))
 		return 0;
+
 	/*
-	 * Usign LGS chipset it uses ECR register, but
+	 * Using LGS chipset it uses ECR register, but
 	 * it doesn't support ECP or FIFO MODE
 	 */
 	
-	w_ecr(pb,0xc0); /* TEST FIFO */
-	for( i=0 ; i < 1024 && (r_ecr(pb) & 0x01) ; i++ )
+	w_ecr(pb, 0xc0); /* TEST FIFO */
+	for (i=0; i < 1024 && (r_ecr(pb) & 0x01); i++)
 		w_fifo(pb, 0xaa);
 
-	w_ecr(pb,pb->ecr);
+	w_ecr(pb, pb->ecr);
 
-	if( i >= 1024 )
+	if (i == 1024)
 		return 0;
 	
 	return PARPORT_MODE_ECP;
@@ -311,11 +307,8 @@ static int parport_ECP_supported(struct parport *pb)
  */
 static int parport_EPP_supported(struct parport *pb)
 {
-	if( pb->base == 0x3BC )
-		return 0;
-
 	/* If EPP timeout bit clear then EPP available */
-	if( !epp_clear_timeout(pb) )
+	if (!epp_clear_timeout(pb))
 		return 0;  /* No way to clear timeout */
 
 	w_ctr(pb, r_ctr(pb) | 0x20);
@@ -325,7 +318,7 @@ static int parport_EPP_supported(struct parport *pb)
 	r_epp(pb);
 	udelay(30);  /* Wait for possible EPP timeout */
 	
-	if( r_str(pb) & 0x01 ){
+	if (r_str(pb) & 0x01) {
 		epp_clear_timeout(pb);
 		return PARPORT_MODE_EPP;
 	}
@@ -337,7 +330,7 @@ static int parport_ECPEPP_supported(struct parport *pb)
 {
 	int mode;
 
-	if( !(pb->modes & PARPORT_MODE_ECR) )
+	if (!(pb->modes & PARPORT_MODE_ECR))
 		return 0;
 	
 	/* Search for SMC style EPP+ECP mode */
@@ -345,47 +338,55 @@ static int parport_ECPEPP_supported(struct parport *pb)
 	
 	mode = parport_EPP_supported(pb);
 
-	w_ecr(pb,pb->ecr);
+	w_ecr(pb, pb->ecr);
 	
-	if( mode )
+	if (mode)
 		return PARPORT_MODE_ECPEPP;
 	
 	return 0;
 }
 
-/* Detect LP_PS2 support
- * Bit 5 (0x20) sets the PS/2 data direction, setting this high
- * allows us to read data from the data lines, old style SPP ports
- * will return 0xff.  This may not be reliable if there is a
- * peripheral attached to the port. 
+/* Detect PS/2 support.
+ *
+ * Bit 5 (0x20) sets the PS/2 data direction; setting this high
+ * allows us to read data from the data lines.  In theory we would get back
+ * 0xff but any peripheral attached to the port may drag some or all of the
+ * lines down to zero.  So if we get back anything that isn't the contents
+ * of the data register we deem PS/2 support to be present. 
+ *
+ * Some SPP ports have "half PS/2" ability - you can't turn off the line
+ * drivers, but an external peripheral with sufficiently beefy drivers of
+ * its own can overpower them and assert its own levels onto the bus, from
+ * where they can then be read back as normal.  Ports with this property
+ * and the right type of device attached are likely to fail the SPP test,
+ * (as they will appear to have stuck bits) and so the fact that they might
+ * be misdetected here is rather academic. 
  */
+
 static int parport_PS2_supported(struct parport *pb)
 {
-	int r,rr;
-
+	int ok = 0;
+  
 	epp_clear_timeout(pb);
 
-	w_ctr(pb, pb->ctr | 0x20);	/* Tri-state the buffer */
+	w_ctr(pb, pb->ctr | 0x20);   /* try to tri-state the buffer */
 	
-	w_dtr(pb, 0xAA);
-	r = r_dtr(pb);
-
 	w_dtr(pb, 0x55);
-	rr = r_dtr(pb);
-	
-	w_ctr(pb, pb->ctr);	/* Reset CTR register */
+	if (r_dtr(pb) != 0x55) ok++;
 
-	if (r != 0xAA || rr != 0x55 )
-		return PARPORT_MODE_PS2;
+	w_dtr(pb, 0xaa);
+	if (r_dtr(pb) != 0xaa) ok++;
 	
-	return 0;
+	w_ctr(pb, pb->ctr);          /* cancel input mode */
+
+	return ok?PARPORT_MODE_PS2:0;
 }
 
 static int parport_ECPPS2_supported(struct parport *pb)
 {
 	int mode;
 
-	if( !(pb->modes & PARPORT_MODE_ECR) )
+	if (!(pb->modes & PARPORT_MODE_ECR))
 		return 0;
 	
 	w_ecr(pb, 0x20);
@@ -402,15 +403,19 @@ static int parport_ECPPS2_supported(struct parport *pb)
 
 /******************************************************
  *  IRQ detection section:
- */
-/*
+ *
  * This code is for detecting ECP interrupts (due to problems with the
  * monolithic interrupt probing routines).
  *
  * In short this is a voting system where the interrupt with the most
  * "votes" is the elected interrupt (it SHOULD work...)
+ *
+ * This is horribly x86-specific at the moment.  I'm not convinced it
+ * belongs at all.
  */
+
 static int intr_vote[16];
+
 static void parport_vote_intr_func(int irq, void *dev_id, struct pt_regs *regs)
 {
 	intr_vote[irq]++;
@@ -434,17 +439,16 @@ static long open_intr_election(void)
 
 static int close_intr_election(long tmp)
 {
-	long max_vote = 0;
-	int irq = -1;
+	int irq = PARPORT_IRQ_NONE;
 	int i;
 
 	/* We ignore the timer - irq 0 */
 	for (i = 1; i < 16; i++)
 		if (tmp & (1 << i)) {
-			if (intr_vote[i] > max_vote) {
-				if (max_vote)
-					return -1;
-				max_vote = intr_vote[i];
+			if (intr_vote[i]) {
+				if (irq != PARPORT_IRQ_NONE)
+					/* More than one interrupt */
+					return PARPORT_IRQ_NONE;
 				irq = i;
 			}
 			free_irq(i, intr_vote);
@@ -488,7 +492,7 @@ static int irq_probe_ECP(struct parport *pb)
 	irqs = open_intr_election();
 		
 	w_ecr(pb, 0x00);	    /* Reset FIFO */
-	w_ctr(pb, pb->ctr );    /* Force direction = 0 */
+	w_ctr(pb, pb->ctr );	    /* Force direction = 0 */
 	w_ecr(pb, 0xd0);	    /* TEST FIFO + nErrIntrEn */
 
 	/* If Full FIFO sure that WriteIntrThresold is generated */
@@ -497,8 +501,6 @@ static int irq_probe_ECP(struct parport *pb)
 	}
 		
 	pb->irq = close_intr_election(irqs);
-	if (pb->irq == 0)
-		pb->irq = -1;	/* No interrupt detected */
 	
 	w_ecr(pb, pb->ecr);
 
@@ -506,7 +508,7 @@ static int irq_probe_ECP(struct parport *pb)
 }
 
 /*
- * It's called only if supports EPP on National Semiconductors
+ * This detection seems that only works in National Semiconductors
  * This doesn't work in SMC, LGS, and Winbond 
  */
 static int irq_probe_EPP(struct parport *pb)
@@ -535,8 +537,6 @@ static int irq_probe_EPP(struct parport *pb)
 	udelay(20);
 
 	pb->irq = close_intr_election(irqs);
-	if (pb->irq == 0)
-		pb->irq = -1;	/* No interrupt detected */
 	
 	w_ctr(pb,pb->ctr);
 	
@@ -572,7 +572,7 @@ static int irq_probe_SPP(struct parport *pb)
 
 	pb->irq = probe_irq_off(irqs);
 	if (pb->irq <= 0)
-		pb->irq = -1;	/* No interrupt detected */
+		pb->irq = PARPORT_IRQ_NONE;	/* No interrupt detected */
 	
 	w_ctr(pb,pb->ctr);
 	
@@ -583,18 +583,18 @@ static int irq_probe_SPP(struct parport *pb)
  * such as sound cards and network cards seem to like using the
  * printer IRQs.
  *
- * When LP_ECP is available we can autoprobe for IRQs.
+ * When ECP is available we can autoprobe for IRQs.
  * NOTE: If we can autoprobe it, we can register the IRQ.
  */
 static int parport_irq_probe(struct parport *pb)
 {
-	if( pb->modes & PARPORT_MODE_ECR )
+	if (pb->modes & PARPORT_MODE_ECR)
 		pb->irq = programmable_irq_support(pb);
 
-	if( pb->modes & PARPORT_MODE_ECP )
+	if (pb->modes & PARPORT_MODE_ECP)
 		pb->irq = irq_probe_ECP(pb);
 			
-	if( pb->irq == -1 && (pb->modes & PARPORT_MODE_ECPEPP)){
+	if (pb->irq == PARPORT_IRQ_NONE && (pb->modes & PARPORT_MODE_ECPEPP)) {
 		w_ecr(pb,0x80);
 		pb->irq = irq_probe_EPP(pb);
 		w_ecr(pb,pb->ecr);
@@ -602,12 +602,12 @@ static int parport_irq_probe(struct parport *pb)
 
 	epp_clear_timeout(pb);
 
-	if( pb->irq == -1 && (pb->modes & PARPORT_MODE_EPP))
+	if (pb->irq == PARPORT_IRQ_NONE && (pb->modes & PARPORT_MODE_EPP))
 		pb->irq = irq_probe_EPP(pb);
 
 	epp_clear_timeout(pb);
 
-	if( pb->irq == -1 )
+	if (pb->irq == PARPORT_IRQ_NONE)
 		pb->irq = irq_probe_SPP(pb);
 
 	return pb->irq;
@@ -618,12 +618,12 @@ int initialize_parport(struct parport *pb, unsigned long base, int irq, int dma,
 {
 	/* Check some parameters */
 	if (dma < -2) {
-		printk("parport: Invalid DMA[%d] at base 0x%lx\n",dma,base);
+		printk(KERN_ERR "parport: Invalid DMA[%d] at base 0x%lx\n",dma,base);
 		return 0;
 	}
 
 	if (irq < -2) {
-		printk("parport: Invalid IRQ[%d] at base 0x%lx\n",irq,base);
+		printk(KERN_ERR "parport: Invalid IRQ[%d] at base 0x%lx\n",irq,base);
 		return 0;
 	}
 	
@@ -643,7 +643,7 @@ int initialize_parport(struct parport *pb, unsigned long base, int irq, int dma,
 
 	pb->name = kmalloc(15, GFP_KERNEL);
 	if (!pb->name) {
-		printk("parport: memory squeeze\n");
+		printk(KERN_ERR "parport: memory squeeze\n");
 		return 0;
 	}
 	sprintf(pb->name, "parport%d", count);
@@ -657,12 +657,15 @@ int initialize_parport(struct parport *pb, unsigned long base, int irq, int dma,
 	}
 
 	pb->modes |= PARPORT_MODE_SPP; 	/* All ports support SPP mode. */
-	pb->modes |= parport_ECR_present(pb);	
-	pb->modes |= parport_ECP_supported(pb);
 	pb->modes |= parport_PS2_supported(pb);
-	pb->modes |= parport_ECPPS2_supported(pb);
-	pb->modes |= parport_EPP_supported(pb);
-	pb->modes |= parport_ECPEPP_supported(pb);
+
+	if (pb->base != 0x3bc) {
+		pb->modes |= parport_ECR_present(pb);	
+		pb->modes |= parport_ECP_supported(pb);
+		pb->modes |= parport_ECPPS2_supported(pb);
+		pb->modes |= parport_EPP_supported(pb);
+		pb->modes |= parport_ECPEPP_supported(pb);
+	}
 
 	/* Now register regions */
 	if ((pb->modes & (PARPORT_MODE_EPP | PARPORT_MODE_ECPEPP)) && 
@@ -678,17 +681,17 @@ int initialize_parport(struct parport *pb, unsigned long base, int irq, int dma,
 
 	/* DMA check */
 	if (pb->modes & PARPORT_MODE_ECP) {
-		if (pb->dma == -1)
+		if (pb->dma == PARPORT_DMA_NONE)
 			pb->dma = parport_dma_probe(pb);
 		else if (pb->dma == -2)
-			pb->dma = -1;
+			pb->dma = PARPORT_DMA_NONE;
 	}
 
 	/* IRQ check */
-	if (pb->irq == -1)
+	if (pb->irq == PARPORT_IRQ_NONE)
 		pb->irq = parport_irq_probe(pb);
 	else if (pb->irq == -2)
-		pb->irq = -1;
+		pb->irq = PARPORT_IRQ_NONE;
 
 	return 1;
 }
@@ -700,7 +703,7 @@ void parport_setup(char *str, int *ints)
 {
 	if (ints[0] == 0 || ints[1] == 0) {
 		/* Disable parport if "parport=" or "parport=0" in cmdline */
-		io[0] = -2; 
+		io[0] = PARPORT_DISABLE; 
 		return;
 	}
 	if (parport_setup_ptr < PARPORT_MAX) {
@@ -738,17 +741,20 @@ int pnp_parport_init(void)
 	struct parport *pb;
 
 	printk(KERN_INFO "Parallel port sharing: %s\n",
-	       "$Revision: 1.1.2.4 $");
+	       "$Revision: 1.3.2.4 $");
 
-	if (io[0] == -2) return 1; 
+	if (io[0] == PARPORT_DISABLE) return 1; 
 
-	/* Register /proc/parport */
+#ifdef CONFIG_PROC_FS
 	parport_proc_register(NULL);
+#endif
 
 	/* Run probes to ensure parport does exist */
 #define PORT(a,b,c) \
 		if ((pb = parport_register_port((a), (b), (c))))  \
 		        parport_destroy(pb); 
+
+
 	if (io[0]) {
 		/* If the user specified any ports, use them */
 		int i;
@@ -757,15 +763,21 @@ int pnp_parport_init(void)
 		}
 	} else {
 		/* Go for the standard ports. */
-		PORT(0x378, -1, -1);
-		PORT(0x278, -1, -1);
-		PORT(0x3bc, -1, -1);
+		PORT(0x378, PARPORT_IRQ_NONE, PARPORT_DMA_NONE);
+		PORT(0x278, PARPORT_IRQ_NONE, PARPORT_DMA_NONE);
+		PORT(0x3bc, PARPORT_IRQ_NONE, PARPORT_DMA_NONE);
 #undef PORT
 	}
 
+#if defined(CONFIG_PNP_PARPORT_AUTOPROBE) || defined(CONFIG_PROC_FS)
+	for (pb = parport_enumerate(); pb; pb = pb->next) {
 #ifdef CONFIG_PNP_PARPORT_AUTOPROBE
-	for (pb = parport_enumerate(); pb; pb = pb->next)
 		parport_probe_one(pb);
+#endif
+#ifdef CONFIG_PROC_FS
+		parport_proc_register(pb);
+#endif
+	}
 #endif
 
 	return 0;
@@ -784,7 +796,7 @@ void cleanup_module(void)
 		kfree(port);
 	}
 	
-	parport_proc_unregister(NULL);
+	parport_proc_cleanup();
 }
 #endif
 

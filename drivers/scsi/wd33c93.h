@@ -2,7 +2,7 @@
  *    wd33c93.h -  Linux device driver definitions for the
  *                 Commodore Amiga A2091/590 SCSI controller card
  *
- *    IMPORTANT: This file is for version 1.23 - 04/Nov/1996
+ *    IMPORTANT: This file is for version 1.24 - 29/Jan/1997
  *
  * Copyright (c) 1996 John Shifflett, GeoLog Consulting
  *    john@geolog.com
@@ -23,6 +23,22 @@
 #ifndef WD33C93_H
 #define WD33C93_H
 
+
+#define PROC_INTERFACE     /* add code for /proc/scsi/wd33c93/xxx interface */
+#ifdef  PROC_INTERFACE
+#define PROC_STATISTICS    /* add code for keeping various real time stats */
+#endif
+
+#define SYNC_DEBUG         /* extra info on sync negotiation printed */
+#define DEBUGGING_ON       /* enable command-line debugging bitmask */
+#define DEBUG_DEFAULTS 0   /* default debugging bitmask */
+
+
+#ifdef DEBUGGING_ON
+#define DB(f,a) if (hostdata->args & (f)) a;
+#else
+#define DB(f,a)
+#endif
 
 #define uchar unsigned char
 
@@ -231,13 +247,17 @@ struct WD33C93_hostdata {
     uchar            sync_stat[8];     /* status of sync negotiation per target */
     uchar            no_sync;          /* bitmask: don't do sync on these targets */
     uchar            no_dma;           /* set this flag to disable DMA */
+#ifdef PROC_INTERFACE
     uchar            proc;             /* bitmask: what's in proc output */
+#ifdef PROC_STATISTICS
     unsigned long    cmd_cnt[8];       /* # of commands issued per target */
     unsigned long    int_cnt;          /* # of interrupts serviced */
     unsigned long    pio_cnt;          /* # of pio data transfers */
     unsigned long    dma_cnt;          /* # of DMA data transfers */
     unsigned long    disc_allowed_cnt[8]; /* # of disconnects allowed per target */
     unsigned long    disc_done_cnt[8]; /* # of disconnects done per target*/
+#endif
+#endif
     };
 
 

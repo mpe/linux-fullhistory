@@ -239,13 +239,18 @@ static unsigned long	atari_dma_stram_mask;
 static int atari_read_overruns = 0;
 #endif
 
-int setup_can_queue = -1;
-int setup_cmd_per_lun = -1;
-int setup_sg_tablesize = -1;
+static int setup_can_queue = -1;
+MODULE_PARM(setup_can_queue, "i");
+static int setup_cmd_per_lun = -1;
+MODULE_PARM(setup_cmd_per_lun, "i");
+static int setup_sg_tablesize = -1;
+MODULE_PARM(setup_sg_tablesize, "i");
 #ifdef SUPPORT_TAGS
-int setup_use_tagged_queuing = -1;
+static int setup_use_tagged_queuing = -1;
+MODULE_PARM(setup_use_tagged_queuing, "i");
 #endif
-int setup_hostid = -1;
+static int setup_hostid = -1;
+MODULE_PARM(setup_hostid, "i");
 
 
 #if defined(REAL_DMA)
@@ -660,7 +665,7 @@ int atari_scsi_detect (Scsi_Host_Template *host)
 	if (setup_use_tagged_queuing < 0)
 		setup_use_tagged_queuing = DEFAULT_USE_TAGGED_QUEUING;
 #endif
-
+#ifdef REAL_DMA
 	/* If running on a Falcon and if there's TT-Ram (i.e., more than one
 	 * memory block, since there's always ST-Ram in a Falcon), then allocate a
 	 * STRAM_BUFFER_SIZE byte dribble buffer for transfers from/to alternative
@@ -673,10 +678,14 @@ int atari_scsi_detect (Scsi_Host_Template *host)
 		atari_dma_phys_buffer = VTOP( atari_dma_buffer );
 		atari_dma_orig_addr = 0;
 	}
-
+#endif
 	instance = scsi_register (host, sizeof (struct NCR5380_hostdata));
 	atari_scsi_host = instance;
-	instance->irq = IS_A_TT() ? IRQ_TT_MFP_SCSI : IRQ_MFP_FSCSI;
+       /* Set irq to 0, to avoid that the mid-level code disables our interrupt
+        * during queue_command calls. This is completely unnecessary, and even
+        * worse causes bad problems on the Falcon, where the int is shared with
+        * IDE and floppy! */
+       instance->irq = 0;
 
 	atari_scsi_reset_boot();
 	NCR5380_init (instance, 0);
@@ -693,8 +702,8 @@ int atari_scsi_detect (Scsi_Host_Template *host)
 		tt_scsi_dma.dma_ctrl = 0;
 		atari_dma_residual = 0;
 #endif /* REAL_DMA */
-
-		if (is_medusa) {
+#ifdef REAL_DMA
+		if (is_medusa || is_hades) {
 			/* While the read overruns (described by Drew Eckhardt in
 			 * NCR5380.c) never happened on TTs, they do in fact on the Medusa
 			 * (This was the cause why SCSI didn't work right for so long
@@ -709,6 +718,7 @@ int atari_scsi_detect (Scsi_Host_Template *host)
 			 */
 			atari_read_overruns = 4;
 		}
+#endif
 		
 	}
 	else { /* ! IS_A_TT */

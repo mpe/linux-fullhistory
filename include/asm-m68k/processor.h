@@ -8,6 +8,7 @@
 #define __ASM_M68K_PROCESSOR_H
 
 #include <asm/segment.h>
+#include <asm/fpu.h>
 
 /*
  * User space process size: 3.75GB. This is hardcoded into a few places,
@@ -18,16 +19,13 @@
 /* This decides where the kernel will search for a free chunk of vm
  * space during mmap's.
  */
-#define TASK_UNMAPPED_BASE	(TASK_SIZE / 3)
+#define TASK_UNMAPPED_BASE	0xC0000000UL
 
 /*
  * Bus types
  */
 #define EISA_bus 0
 #define MCA_bus 0
-
-/* MAX floating point unit state size (FSAVE/FRESTORE) */
-#define FPSTATESIZE   (216/sizeof(unsigned char))
 
 /* 
  * if you change this structure, you must change the code and offsets

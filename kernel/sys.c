@@ -810,8 +810,7 @@ asmlinkage int sys_getsid(pid_t pid)
 	if (!pid) {
 		ret = current->session;
 	} else {
-		/* Walking the process table needs locks */
-		lock_kernel();
+		read_lock(&tasklist_lock);
 		for_each_task(p) {
 			if (p->pid == pid) {
 				ret = p->session;
@@ -820,7 +819,7 @@ asmlinkage int sys_getsid(pid_t pid)
 		}
 		ret = -ESRCH;
 out:
-		unlock_kernel();
+		read_unlock(&tasklist_lock);
 	}
 	return ret;
 }
@@ -830,7 +829,7 @@ asmlinkage int sys_setsid(void)
 	struct task_struct * p;
 	int err = -EPERM;
 
-	lock_kernel();
+	read_lock(&tasklist_lock);
 	for_each_task(p) {
 		if (p->pgrp == current->pid)
 		        goto out;
@@ -842,7 +841,7 @@ asmlinkage int sys_setsid(void)
 	current->tty_old_pgrp = 0;
 	err = current->pgrp;
 out:
-	unlock_kernel();
+	read_unlock(&tasklist_lock);
 	return err;
 }
 

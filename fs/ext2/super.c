@@ -33,6 +33,7 @@
 #include <linux/string.h>
 #include <linux/locks.h>
 #include <linux/blkdev.h>
+#include <linux/init.h>
 
 static char error_buf[1024];
 
@@ -727,7 +728,7 @@ static struct file_system_type ext2_fs_type = {
         ext2_read_super, "ext2", 1, NULL
 };
 
-int init_ext2_fs(void)
+__initfunc(int init_ext2_fs(void))
 {
         return register_filesystem(&ext2_fs_type);
 }

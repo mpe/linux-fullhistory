@@ -10,6 +10,7 @@
 #include <linux/stat.h>
 #include <linux/malloc.h>
 #include <linux/binfmts.h>
+#include <linux/init.h>
 
 static int do_load_script(struct linux_binprm *bprm,struct pt_regs *regs)
 {
@@ -103,7 +104,8 @@ struct linux_binfmt script_format = {
 #endif
 };
 
-int init_script_binfmt(void) {
+__initfunc(int init_script_binfmt(void))
+{
 	return register_binfmt(&script_format);
 }
 

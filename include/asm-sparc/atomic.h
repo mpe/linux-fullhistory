@@ -13,7 +13,7 @@ typedef struct { volatile int counter; } atomic_t;
 typedef struct { int counter; } atomic_t;
 #endif
 
-#define ATOMIC_INIT	{ 0 }
+#define ATOMIC_INIT(i)	{ (i << 8) }
 
 #ifdef __KERNEL__
 #include <asm/system.h>

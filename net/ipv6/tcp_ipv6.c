@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: tcp_ipv6.c,v 1.20 1997/04/13 10:31:48 davem Exp $
+ *	$Id: tcp_ipv6.c,v 1.21 1997/04/16 09:19:01 davem Exp $
  *
  *	Based on: 
  *	linux/net/ipv4/tcp.c
@@ -448,7 +448,7 @@ static int tcp_v6_connect(struct sock *sk, struct sockaddr *uaddr,
 	atomic_set(&sk->retransmits, 0);
 
 	skb_queue_tail(&sk->write_queue, buff);
-	atomic_inc(&sk->packets_out);
+	sk->packets_out++;
 	buff->when = jiffies;
 	skb1 = skb_clone(buff, GFP_KERNEL);
 	skb_set_owner_w(skb1, sk);
@@ -821,7 +821,7 @@ static struct sock * tcp_v6_syn_recv_sock(struct sock *sk, struct sk_buff *skb,
 	newtp->snd_nxt = newsk->write_seq;
 
 	newsk->urg_data = 0;
-	atomic_set(&newsk->packets_out, 0);
+	newsk->packets_out = 0;
 	atomic_set(&newsk->retransmits, 0);
 	newsk->linger=0;
 	newsk->destroy = 0;

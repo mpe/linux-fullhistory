@@ -30,6 +30,22 @@
  * static char linux_logo[] __initdata = { 0x32, 0x36, ... };
  */
 
+/*
+ * Disable the __initfunc macros if a file that is a part of a
+ * module attempts to use them. We do not want to interfere
+ * with module linking.
+ */
+
+#ifndef MODULE
 #include <asm/init.h>
+#else
+#define __init
+#define __initdata
+#define __initfunc(__arginit) __arginit
+/* For assembly routines */
+#define __INIT
+#define __FINIT
+#define __INITDATA
+#endif
 
 #endif

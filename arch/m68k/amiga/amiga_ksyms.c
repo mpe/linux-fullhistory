@@ -1,6 +1,7 @@
-#include <linux/types.h>
+#include <linux/config.h>
 #include <linux/module.h>
-#include <asm/zorro.h>
+#include <linux/types.h>
+#include <linux/zorro.h>
 #include <asm/amigahw.h>
 
 extern volatile u_short amiga_audio_min_period;

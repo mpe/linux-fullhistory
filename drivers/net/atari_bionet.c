@@ -80,12 +80,7 @@
 static char *version =
 	"bionet.c:v1.0 06-feb-96 (c) Hartmut Laue.\n";
 
-#ifdef MODULE
 #include <linux/module.h>
-#else
-#define MOD_INC_USE_COUNT
-#define MOD_DEC_USE_COUNT
-#endif
 
 #include <linux/errno.h>
 #include <linux/kernel.h>
@@ -596,22 +591,13 @@ static struct net_device_stats *net_get_stats(struct device *dev)
 
 #ifdef MODULE
 
-#include <linux/version.h>
-
-/* We should include the kernel identification string in the module.
- */
-static char kernel_version[] = UTS_RELEASE;
-
-#undef	NEXT_DEV
-#define NEXT_DEV	(&bio_dev)
-
 static char bio_name[16];
 static struct device bio_dev =
 	{
 		bio_name,	/* filled in by register_netdev() */
 		0, 0, 0, 0,	/* memory */
 		0, 0,		/* base, irq */
-		0, 0, 0, NEXT_DEV, bionet_probe,
+		0, 0, 0, NULL, bionet_probe,
 	};
 
 int

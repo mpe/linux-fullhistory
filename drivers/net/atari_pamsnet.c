@@ -77,12 +77,7 @@
 static char *version =
 	"pamsnet.c:v0.2beta 30-mar-96 (c) Torsten Lang.\n";
 
-#ifdef MODULE
 #include <linux/module.h>
-#else
-#define MOD_INC_USE_COUNT
-#define MOD_DEC_USE_COUNT
-#endif
 
 #include <linux/kernel.h>
 #include <linux/sched.h>
@@ -868,21 +863,12 @@ static struct net_device_stats *net_get_stats(struct device *dev)
 
 #ifdef MODULE
 
-#include <linux/version.h>
-
-/* We should include the kernel identification string in the module.
- */
-static char kernel_version[] = UTS_RELEASE;
-
-#undef	NEXT_DEV
-#define NEXT_DEV	(&pam_dev)
-
 static struct device pam_dev =
 	{
 		"        ",	/* filled in by register_netdev() */
 		0, 0, 0, 0,	/* memory */
 		0, 0,		/* base, irq */
-		0, 0, 0, NEXT_DEV, pamsnet_probe,
+		0, 0, 0, NULL, pamsnet_probe,
 	};
 
 int

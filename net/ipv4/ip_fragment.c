@@ -46,7 +46,7 @@
 
 static struct ipq *ipqueue = NULL;		/* IP fragment queue	*/
 
-atomic_t ip_frag_mem = ATOMIC_INIT;		/* Memory used for fragments */
+atomic_t ip_frag_mem = ATOMIC_INIT(0);		/* Memory used for fragments */
 
 char *in_ntoa(unsigned long in);
 

@@ -1,4 +1,4 @@
-/* $Id: entry.S,v 1.137 1997/04/14 05:38:17 davem Exp $
+/* $Id: entry.S,v 1.138 1997/04/15 09:00:50 davem Exp $
  * arch/sparc/kernel/entry.S:  Sparc trap low-level entry points.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -301,15 +301,26 @@ real_irq_continue:
 	mov	%l7, %o0		! irq level
 	call	C_LABEL(handler_irq)
 	 add	%sp, REGWIN_SZ, %o1	! pt_regs ptr
-
-#if 1 /* ndef __SMP__ */ /* You don't want to know... -DaveM */
 	wr	%l0, PSR_ET, %psr
 	WRITE_PAUSE
-#endif
 
 	RESTORE_ALL
 
 #ifdef __SMP__
+	/* SMP per-cpu ticker interrupts are handled specially. */
+smp_ticker:
+	bne	real_irq_continue
+	 or	%l0, PSR_PIL, %g2
+	wr	%g2, 0x0, %psr
+	WRITE_PAUSE
+	wr	%g2, PSR_ET, %psr
+	WRITE_PAUSE
+	call	C_LABEL(smp_percpu_timer_interrupt)
+	 add	%sp, REGWIN_SZ, %o0
+	wr	%l0, PSR_ET, %psr
+	WRITE_PAUSE
+	RESTORE_ALL
+
 	/* Here is where we check for possible SMP IPI passed to us
 	 * on some level other than 15 which is the NMI and only used
 	 * for cross calls.  That has a seperate entry point below.
@@ -322,8 +333,9 @@ maybe_smp_msg:
 	sll	%o3, 12, %o3
 	ld	[%o5 + %o3], %o1
 	andcc	%o1, %o4, %g0
-	be	real_irq_continue
-	 cmp	%l7, 13
+	be,a	smp_ticker
+	 cmp	%l7, 14
+	cmp	%l7, 13
 	add	%o5, %o3, %o5
 	bne,a	1f
 	 sethi	%hi(0x40000000), %o2

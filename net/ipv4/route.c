@@ -111,7 +111,7 @@ struct dst_ops ipv4_dst_ops =
  * Route cache.
  */
 
-static atomic_t		 rt_cache_size = ATOMIC_INIT;
+static atomic_t		 rt_cache_size = ATOMIC_INIT(0);
 static struct rtable 	*rt_hash_table[RT_HASH_DIVISOR];
 
 static struct rtable * rt_intern_hash(unsigned hash, struct rtable * rth, u16 protocol);

@@ -1,4 +1,4 @@
-/* $Id: stat.h,v 1.1 1996/12/26 14:22:31 davem Exp $ */
+/* $Id: stat.h,v 1.2 1997/04/16 14:52:34 jj Exp $ */
 #ifndef _SPARC64_STAT_H
 #define _SPARC64_STAT_H
 
@@ -18,24 +18,23 @@ struct __old_kernel_stat {
 	unsigned long  st_ctime;
 };
 
-/* XXX Fix this for full backwards 32-bit compat. */
 struct stat32 {
-	dev_t   st_dev;
-	ino_t   st_ino;
-	mode_t  st_mode;
-	short   st_nlink;
-	uid_t   st_uid;
-	gid_t   st_gid;
-	dev_t   st_rdev;
-	off_t   st_size;
-	time_t  st_atime;
-	unsigned int  __unused1;
-	time_t  st_mtime;
-	unsigned int  __unused2;
-	time_t  st_ctime;
-	unsigned int  __unused3;
-	off_t   st_blksize;
-	off_t   st_blocks;
+	__kernel_dev_t32   st_dev;
+	__kernel_ino_t32   st_ino;
+	__kernel_mode_t32  st_mode;
+	short   	   st_nlink;
+	__kernel_uid_t32   st_uid;
+	__kernel_gid_t32   st_gid;
+	__kernel_dev_t32   st_rdev;
+	__kernel_off_t32   st_size;
+	__kernel_time_t32  st_atime;
+	unsigned int       __unused1;
+	__kernel_time_t32  st_mtime;
+	unsigned int       __unused2;
+	__kernel_time_t32  st_ctime;
+	unsigned int       __unused3;
+	__kernel_off_t32   st_blksize;
+	__kernel_off_t32   st_blocks;
 	unsigned int  __unused4[2];
 };
 

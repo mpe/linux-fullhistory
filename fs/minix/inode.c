@@ -18,6 +18,7 @@
 #include <linux/string.h>
 #include <linux/stat.h>
 #include <linux/locks.h>
+#include <linux/init.h>
 
 #include <asm/system.h>
 #include <asm/uaccess.h>
@@ -946,7 +947,7 @@ static struct file_system_type minix_fs_type = {
 	minix_read_super, "minix", 1, NULL
 };
 
-int init_minix_fs(void)
+__initfunc(int init_minix_fs(void))
 {
         return register_filesystem(&minix_fs_type);
 }

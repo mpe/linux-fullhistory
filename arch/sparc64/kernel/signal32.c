@@ -1,4 +1,4 @@
-/*  $Id: signal32.c,v 1.5 1997/04/07 18:57:09 jj Exp $
+/*  $Id: signal32.c,v 1.6 1997/04/16 10:27:17 jj Exp $
  *  arch/sparc64/kernel/signal32.c
  *
  *  Copyright (C) 1991, 1992  Linus Torvalds
@@ -32,7 +32,8 @@
 
 #define synchronize_user_stack() do { } while (0)
 
-asmlinkage int sys_waitpid(pid_t pid, unsigned long *stat_addr, int options);
+asmlinkage int sys_wait4(pid_t pid, unsigned long *stat_addr,
+			 int options, unsigned long *ru);
 
 asmlinkage int do_signal32(unsigned long oldmask, struct pt_regs * regs,
 			 unsigned long orig_o0, int ret_from_syscall);
@@ -85,12 +86,15 @@ struct new_signal_frame32 {
  * atomically swap in the new signal mask, and wait for a signal.
  * This is really tricky on the Sparc, watch out...
  */
-asmlinkage inline void _sigpause32_common(unsigned int set, struct pt_regs *regs)
+asmlinkage void _sigpause32_common(unsigned int set, struct pt_regs *regs)
 {
 	unsigned int mask;
 
+	spin_lock_irq(&current->sigmask_lock);
 	mask = current->blocked;
 	current->blocked = set & _BLOCKABLE;
+	spin_unlock_irq(&current->sigmask_lock);
+	
 	regs->tpc = regs->tnpc;
 	regs->tnpc += 4;
 
@@ -115,16 +119,12 @@ asmlinkage inline void _sigpause32_common(unsigned int set, struct pt_regs *regs
 
 asmlinkage void do_sigpause32(unsigned int set, struct pt_regs *regs)
 {
-	lock_kernel ();
 	_sigpause32_common(set, regs);
-	unlock_kernel ();
 }
 
 asmlinkage void do_sigsuspend32(struct pt_regs *regs)
 {
-	lock_kernel ();
 	_sigpause32_common(regs->u_regs[UREG_I0], regs);
-	unlock_kernel ();
 }
 
 
@@ -158,15 +158,15 @@ void do_new_sigreturn32(struct pt_regs *regs)
 	sf = (struct new_signal_frame32 *) regs->u_regs [UREG_FP];
 	/* 1. Make sure we are not getting garbage from the user */
 	if (verify_area (VERIFY_READ, sf, sizeof (*sf))){
-		do_exit (SIGSEGV);
+		goto segv;
 	}
 	if (((unsigned long) sf) & 3){
-		do_exit (SIGSEGV);
+		goto segv;
 	}
 	get_user(pc, &sf->info.si_regs.pc);
 	__get_user(npc, &sf->info.si_regs.npc);
 	if ((pc | npc) & 3){
-		do_exit (SIGSEGV);
+		goto segv;
 	}
 	regs->tpc = pc;
 	regs->tnpc = npc;
@@ -187,15 +187,18 @@ void do_new_sigreturn32(struct pt_regs *regs)
 		restore_fpu_state32(regs, &sf->fpu_state);
 	__get_user(mask, &sf->info.si_mask);
 	current->blocked = mask & _BLOCKABLE;
-	unlock_kernel();
+	return;
+segv:
+	lock_kernel();
+	do_exit(SIGSEGV);
 }
 
 asmlinkage void do_sigreturn32(struct pt_regs *regs)
 {
 	struct sigcontext32 *scptr;
 	unsigned pc, npc, psr;
+	unsigned long mask;
 
-	lock_kernel ();
 	synchronize_user_stack();
 	if (current->tss.new_signal)
 		return do_new_sigreturn32(regs);
@@ -204,18 +207,15 @@ asmlinkage void do_sigreturn32(struct pt_regs *regs)
 	/* Check sanity of the user arg. */
 	if(verify_area(VERIFY_READ, scptr, sizeof(struct sigcontext32)) ||
 	   (((unsigned long) scptr) & 3)) {
-		printk("%s [%d]: do_sigreturn, scptr is invalid at "
-		       "pc<%016lx> scptr<%p>\n",
-		       current->comm, current->pid, regs->tpc, scptr);
-		do_exit(SIGSEGV);
+		goto segv;
 	}
 	__get_user(pc, &scptr->sigc_pc);
 	__get_user(npc, &scptr->sigc_npc);
 	if((pc | npc) & 3)
-		do_exit(SIGSEGV); /* Nice try. */
+		goto segv; /* Nice try. */
 
-	__get_user(current->blocked, &scptr->sigc_mask);
-	current->blocked &= _BLOCKABLE;
+	__get_user(mask, &scptr->sigc_mask);
+	current->blocked = (mask & _BLOCKABLE);
 	__get_user(current->tss.sstk_info.cur_status, &scptr->sigc_onstack);
 	current->tss.sstk_info.cur_status &= 1;
 	regs->tpc = pc;
@@ -228,7 +228,10 @@ asmlinkage void do_sigreturn32(struct pt_regs *regs)
 	__get_user(psr, &scptr->sigc_psr);
 	regs->tstate &= ~(TSTATE_ICC);
 	regs->tstate |= psr_to_tstate_icc(psr);
-	unlock_kernel ();
+	return;
+segv:
+	lock_kernel ();
+	do_exit (SIGSEGV);
 }
 
 /* Checks if the fp is valid */
@@ -239,7 +242,7 @@ static int invalid_frame_pointer(void *fp, int fplen)
 	return 0;
 }
 
-static inline void
+static void
 setup_frame32(struct sigaction *sa, unsigned long pc, unsigned long npc,
 	      struct pt_regs *regs, int signr, unsigned long oldmask)
 {
@@ -264,8 +267,8 @@ setup_frame32(struct sigaction *sa, unsigned long pc, unsigned long npc,
 		/* Don't change signal code and address, so that
 		 * post mortem debuggers can have a look.
 		 */
+		lock_kernel ();
 		do_exit(SIGILL);
-		return;
 	}
 
 	sc = &sframep->sig_context;
@@ -358,15 +361,15 @@ new_setup_frame32(struct sigaction *sa, struct pt_regs *regs,
 	sf = (struct new_signal_frame32 *)(regs->u_regs[UREG_FP] - sigframe_size);
 	
 	if (invalid_frame_pointer (sf, sigframe_size)){
+		lock_kernel ();
 		do_exit(SIGILL);
-		return;
 	}
 
 	if (current->tss.w_saved != 0){
 		printk ("%s[%d]: Invalid user stack frame for "
 			"signal delivery.\n", current->comm, current->pid);
+		lock_kernel ();
 		do_exit (SIGILL);
-		return;
 	}
 
 	/* 2. Save the current process state */
@@ -433,8 +436,8 @@ setup_svr4_frame32(struct sigaction *sa, unsigned long pc, unsigned long npc,
 #ifdef DEBUG_SIGNALS
 		printk ("Invalid stack frame\n");
 #endif
+		lock_kernel ();
 		do_exit(SIGILL);
-		return;
 	}
 
 	/* Start with a clean frame pointer and fill it */
@@ -705,7 +708,14 @@ asmlinkage int do_signal32(unsigned long oldmask, struct pt_regs * regs,
 		if(sa->sa_handler == SIG_IGN) {
 			if(signr != SIGCHLD)
 				continue;
-			while(sys_waitpid(-1,NULL,WNOHANG) > 0);
+
+                        /* sys_wait4() grabs the master kernel lock, so
+                         * we need not do so, that sucker should be
+                         * threaded and would not be that difficult to
+                         * do anyways.
+                         */
+                        while(sys_wait4(-1, NULL, WNOHANG, NULL) > 0)
+                                ;
 			continue;
 		}
 		if(sa->sa_handler == SIG_DFL) {

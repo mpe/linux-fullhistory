@@ -36,7 +36,7 @@
 #include <asm/setup.h>
 #include <asm/bitops.h>
 #include <asm/amigahw.h>
-#include <asm/zorro.h>
+#include <linux/zorro.h>
 
 #define TRUE                  (1)
 #define FALSE                 (0)

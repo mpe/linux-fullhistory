@@ -55,11 +55,6 @@ static struct mem_info m68k_ramdisk = { 0, 0 };
 static char m68k_command_line[CL_SIZE];
 char saved_command_line[CL_SIZE];
 
-/* setup some dummy routines */
-static void dummy_waitbut(void)
-{
-}
-
 void (*mach_sched_init) (void (*handler)(int, void *, struct pt_regs *));
 /* machine dependent keyboard functions */
 int (*mach_keyb_init) (void);
@@ -68,11 +63,6 @@ void (*mach_kbd_leds) (unsigned int) = NULL;
 /* machine dependent irq functions */
 void (*mach_init_IRQ) (void);
 void (*(*mach_default_handler)[]) (int, void *, struct pt_regs *) = NULL;
-int (*mach_request_irq) (unsigned int, void (*)(int, void *, struct pt_regs *),
-                         unsigned long, const char *, void *);
-int (*mach_free_irq) (unsigned int, void *);
-void (*mach_enable_irq) (unsigned int) = NULL;
-void (*mach_disable_irq) (unsigned int) = NULL;
 void (*mach_get_model) (char *model) = NULL;
 int (*mach_get_hardware_list) (char *buffer) = NULL;
 int (*mach_get_irq_list) (char *) = NULL;
@@ -82,19 +72,15 @@ unsigned long (*mach_gettimeoffset) (void);
 void (*mach_gettod) (int*, int*, int*, int*, int*, int*);
 int (*mach_hwclk) (int, struct hwclk_time*) = NULL;
 int (*mach_set_clock_mmss) (unsigned long) = NULL;
-void (*mach_mksound)( unsigned int count, unsigned int ticks );
 void (*mach_reset)( void );
-void (*waitbut)(void) = dummy_waitbut;
 struct fb_info *(*mach_fb_init)(long *);
 long mach_max_dma_address = 0x00ffffff; /* default set to the lower 16MB */
-void (*mach_debug_init)(void);
 void (*mach_video_setup) (char *, int *);
 #ifdef CONFIG_BLK_DEV_FD
 int (*mach_floppy_init) (void) = NULL;
 void (*mach_floppy_setup) (char *, int *) = NULL;
 void (*mach_floppy_eject) (void) = NULL;
 #endif
-void (*mach_syms_export)(void) = NULL;
 
 extern int amiga_parse_bootinfo(const struct bi_record *);
 extern int atari_parse_bootinfo(const struct bi_record *);
@@ -104,10 +90,6 @@ extern void config_atari(void);
 extern void config_mac(void);
 extern void config_sun3(void);
 extern void config_apollo(void);
-
-extern void register_console(void (*proc)(const char *));
-extern void ami_serial_print(const char *str);
-extern void ata_serial_print(const char *str);
 
 #define MASK_256K 0xfffc0000
 
@@ -166,12 +148,6 @@ void setup_arch(char **cmdline_p, unsigned long * memory_start_p,
 	extern int _etext, _edata, _end;
 	int i;
 	char *p, *q;
-
-	/* machtype is set up by head.S, thus we know our gender */
-	if (MACH_IS_AMIGA)
-		register_console(ami_serial_print);
-	if (MACH_IS_ATARI)
-		register_console(ata_serial_print);
 
 	/* The bootinfo is located right after the kernel bss */
 	m68k_parse_bootinfo((const struct bi_record *)&_end);

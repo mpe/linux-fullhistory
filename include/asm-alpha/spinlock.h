@@ -6,15 +6,36 @@
 typedef struct { } spinlock_t;
 #define SPIN_LOCK_UNLOCKED { }
 
-#define spin_lock_init(lock)			do { } while(0)
+/*
+ * Basic spinlocks - one can enter at a time
+ */
+
 #define spin_lock(lock)				do { } while(0)
 #define spin_trylock(lock)			do { } while(0)
 #define spin_unlock(lock)			do { } while(0)
 #define spin_lock_irq(lock)			setipl(7)
 #define spin_unlock_irq(lock)			setipl(0)
-
 #define spin_lock_irqsave(lock, flags)		swpipl(flags,7)
 #define spin_unlock_irqrestore(lock, flags)	setipl(flags)
+
+/*
+ * Read-write locks: we can have multiple readers, but
+ * only one writer
+ */
+
+#define read_lock(lock)				do { } while(0)
+#define read_unlock(lock)			do { } while(0)
+#define read_lock_irq(lock)			setipl(7)
+#define read_unlock_irq(lock)			setipl(0)
+#define read_lock_irqsave(lock, flags)		swpipl(flags,7)
+#define read_unlock_irqrestore(lock, flags)	setipl(flags)
+
+#define write_lock(lock)				do { } while(0)
+#define write_unlock(lock)			do { } while(0)
+#define write_lock_irq(lock)			setipl(7)
+#define write_unlock_irq(lock)			setipl(0)
+#define write_lock_irqsave(lock, flags)		swpipl(flags,7)
+#define write_unlock_irqrestore(lock, flags)	setipl(flags)
 
 #else
 
@@ -30,6 +51,8 @@ typedef struct {
 } spinlock_t;
 
 #define SPIN_LOCK_UNLOCKED { 0, 0 }
+
+#define spin_lock_init(lock)	do { (lock)->lock = 0; (lock)->previous = 0; } while(0)
 
 typedef struct { unsigned long a[100]; } __dummy_lock_t;
 #define __dummy_lock(lock) (*(__dummy_lock_t *)(lock))

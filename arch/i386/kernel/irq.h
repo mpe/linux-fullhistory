@@ -266,4 +266,26 @@ SYMBOL_NAME_STR(IRQ) #nr "_interrupt:\n\t" \
 	UNBLK_##chip(mask) \
 	"jmp ret_from_intr\n");
 
+/*
+ * x86 profiling function, SMP safe. We might want to do this in
+ * assembly totally?
+ */
+static inline void x86_do_profile (unsigned long eip)
+{
+	if (prof_buffer && current->pid) {
+		extern int _stext;
+		eip -= (unsigned long) &_stext;
+		eip >>= prof_shift;
+		if (eip < prof_len)
+			atomic_inc((atomic_t *)&prof_buffer[eip]);
+		else
+		/*
+		 * Dont ignore out-of-bounds EIP values silently,
+		 * put them into the last histogram slot, so if
+		 * present, they will show up as a sharp peak.
+		 */
+			atomic_inc((atomic_t *)&prof_buffer[prof_len-1]);
+	}
+}
+
 #endif

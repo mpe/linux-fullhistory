@@ -40,7 +40,7 @@
 */
 
 /*
-**	6 April 1997, version 1.18d
+**	16 April 1997, version 1.18e
 **
 **	Supported SCSI-II features:
 **	    Synchronous negotiation
@@ -4520,7 +4520,7 @@ static void ncr_start_reset(ncb_p np, int settle_delay)
 **
 **==========================================================
 */
-int ncr_reset_bus (Scsi_Cmnd *cmd)
+int ncr_reset_bus (Scsi_Cmnd *cmd, int sync_reset)
 {
         struct Scsi_Host   *host      = cmd->host;
 /*	Scsi_Device        *device    = cmd->device; */
@@ -4572,11 +4572,12 @@ int ncr_reset_bus (Scsi_Cmnd *cmd)
  */
 	ncr_wakeup(np, HS_RESET);
 /*
- * If the involved command was not in a driver queue, and is 
- * not in the waiting list, complete it with DID_RESET status,
+ * If the involved command was not in a driver queue, and the 
+ * scsi driver told us reset is synchronous, and the command is not 
+ * currently in the waiting list, complete it with DID_RESET status,
  * in order to keep it alive.
  */
-	if (!found && cmd && !remove_from_waiting_list(np, cmd)) {
+	if (!found && sync_reset && !retrieve_from_waiting_list(0, np, cmd)) {
 		cmd->result = ScsiResult(DID_RESET, 0);
 		cmd->scsi_done(cmd);
 	}
@@ -6363,27 +6364,13 @@ void ncr_exception (ncb_p np)
 		((INL(nc_dbc) & 0xf8000000) == SCR_WAIT_DISC)) {
 		/*
 		**      Unexpected data cycle while waiting for disconnect.
+		**	LDSC and CON bits may help in order to understand 
+		**	what really happened. Print some info message and let 
+		**	the reset function reset the BUS and the NCR.
 		*/
-		if (INB(nc_sstat2) & LDSC) {
-			/*
-			**	It's an early reconnect.
-			**	Let's continue ...
-			*/
-			OUTONB (nc_dcntl, (STD|NOCOM));
-			/*
-			**	info message
-			*/
-			printf ("%s: INFO: LDSC while IID.\n",
-				ncr_name (np));
-			return;
-		};
-		printf ("%s: target %d doesn't release the bus.\n",
-			ncr_name (np), (int)INB (nc_ctest0)&0x0f);
-		/*
-		**	return without restarting the NCR.
-		**	timeout will do the real work.
-		*/
-		return;
+		printf("%s:%d: data cycle while waiting for disconnect, LDSC=%d CON=%d\n",
+			ncr_name (np), (int)(INB(nc_ctest0)&0x0f),
+			(0!=(INB(nc_sstat2)&LDSC)), (0!=(INB(nc_scntl1)&ISCON)));
 	};
 
 	/*----------------------------------------
@@ -7375,7 +7362,7 @@ out:
 /*==========================================================
 **
 **
-**	Aquire a control block
+**	Acquire a control block
 **
 **
 **==========================================================
@@ -8617,25 +8604,93 @@ static void ncr53c8xx_timeout(unsigned long np)
 **   Linux entry point of reset() function
 */
 
-#if	LINUX_VERSION_CODE >= LinuxVersionCode(1,3,98)
+#if defined SCSI_RESET_SYNCHRONOUS && defined SCSI_RESET_ASYNCHRONOUS
+
 int ncr53c8xx_reset(Scsi_Cmnd *cmd, unsigned int reset_flags)
+{
+	int sts;
+	unsigned long flags;
+
+	printk("ncr53c8xx_reset: pid=%lu reset_flags=%x serial_number=%ld serial_number_at_timeout=%ld\n",
+		cmd->pid, reset_flags, cmd->serial_number, cmd->serial_number_at_timeout);
+
+	save_flags(flags); cli();
+
+	/*
+	 * We have to just ignore reset requests in some situations.
+	 */
+#if defined SCSI_RESET_NOT_RUNNING
+	if (cmd->serial_number != cmd->serial_number_at_timeout) {
+		sts = SCSI_RESET_NOT_RUNNING;
+		goto out;
+	}
+#endif
+	/*
+	 * If the mid-level driver told us reset is synchronous, it seems 
+	 * that we must call the done() callback for the involved command, 
+	 * even if this command was not queued to the low-level driver, 
+	 * before returning SCSI_RESET_SUCCESS.
+	 */
+
+	sts = ncr_reset_bus(cmd,
+	(reset_flags & (SCSI_RESET_SYNCHRONOUS | SCSI_RESET_ASYNCHRONOUS)) == SCSI_RESET_SYNCHRONOUS);
+	/*
+	 * Since we always reset the controller, when we return success, 
+	 * we add this information to the return code.
+	 */
+#if defined SCSI_RESET_HOST_RESET
+	if (sts == SCSI_RESET_SUCCESS)
+		sts |= SCSI_RESET_HOST_RESET;
+#endif
+
+out:
+	restore_flags(flags);
+	return sts;
+}
 #else
 int ncr53c8xx_reset(Scsi_Cmnd *cmd)
-#endif
 {
 	printk("ncr53c8xx_reset: command pid %lu\n", cmd->pid);
-	return ncr_reset_bus(cmd);
+	return ncr_reset_bus(cmd, 1);
 }
+#endif
 
 /*
 **   Linux entry point of abort() function
 */
 
+#if defined SCSI_RESET_SYNCHRONOUS && defined SCSI_RESET_ASYNCHRONOUS
+
+int ncr53c8xx_abort(Scsi_Cmnd *cmd)
+{
+	int sts;
+	unsigned long flags;
+
+	printk("ncr53c8xx_abort: pid=%lu serial_number=%ld serial_number_at_timeout=%ld\n",
+		cmd->pid, cmd->serial_number, cmd->serial_number_at_timeout);
+
+	save_flags(flags); cli();
+
+	/*
+	 * We have to just ignore abort requests in some situations.
+	 */
+	if (cmd->serial_number != cmd->serial_number_at_timeout) {
+		sts = SCSI_ABORT_NOT_RUNNING;
+		goto out;
+	}
+
+	sts = ncr_abort_command(cmd);
+out:
+	restore_flags(flags);
+	return sts;
+}
+#else
 int ncr53c8xx_abort(Scsi_Cmnd *cmd)
 {
 	printk("ncr53c8xx_abort: command pid %lu\n", cmd->pid);
 	return ncr_abort_command(cmd);
 }
+#endif
 
 #ifdef MODULE
 int ncr53c8xx_release(struct Scsi_Host *host)

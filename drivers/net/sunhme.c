@@ -20,6 +20,7 @@ static char *version =
 #include <linux/in.h>
 #include <linux/malloc.h>
 #include <linux/string.h>
+#include <linux/init.h>
 #include <asm/system.h>
 #include <asm/bitops.h>
 #include <asm/io.h>
@@ -2058,7 +2059,7 @@ static void happy_meal_set_multicast(struct device *dev)
 	dev->tbusy = 0;
 }
 
-static int happy_meal_ether_init(struct device *dev, struct linux_sbus_device *sdev)
+static inline int happy_meal_ether_init(struct device *dev, struct linux_sbus_device *sdev)
 {
 	static unsigned version_printed = 0;
 	struct happy_meal *hp;
@@ -2201,7 +2202,7 @@ static int happy_meal_ether_init(struct device *dev, struct linux_sbus_device *s
 	return 0;
 }
 
-int happy_meal_probe(struct device *dev)
+__initfunc(int happy_meal_probe(struct device *dev))
 {
 	struct linux_sbus *bus;
 	struct linux_sbus_device *sdev = 0;

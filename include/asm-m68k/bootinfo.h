@@ -141,8 +141,7 @@ struct bootversion {
 #define COMPAT_AMIGA_BOOTI_VERSION    MK_BI_VERSION( 1, 0 )
 #define COMPAT_ATARI_BOOTI_VERSION    MK_BI_VERSION( 1, 0 )
 
-#include <linux/config.h>
-#include <asm/zorro.h>
+#include <linux/zorro.h>
 
 #define COMPAT_NUM_AUTO    16
 

@@ -40,6 +40,7 @@
 #endif /* CONFIG_AMIGA */
 
 #ifdef CONFIG_ATARI
+#include <linux/interrupt.h>	/* intr_count */
 #include <asm/atarihw.h>
 #include <asm/atarihdreg.h>
 #include <asm/atariints.h>

@@ -1132,69 +1132,72 @@ int ppa_detect(Scsi_Host_Template * host)
 	nhosts = 0;
 
 	for (i = 0; pb; i++, pb=pb->next) {
-		int modes;
+		int modes = pb->modes;
 
-		/* transfer global values here */
-		if (ppa_speed >= 0)
-			ppa_hosts[i].speed = ppa_speed;
-		if (ppa_speed_fast >= 0)
-			ppa_hosts[i].speed_fast = ppa_speed_fast;
+		/* We only understand PC-style ports */
+		if (modes & PARPORT_MODE_SPP) {
 
-		ppa_hosts[i].dev =
-		    parport_register_device(pb, "ppa", NULL, ppa_wakeup,
-			      NULL, PARPORT_DEV_TRAN, (void *) &ppa_hosts[i]);
+			/* transfer global values here */
+			if (ppa_speed >= 0)
+				ppa_hosts[i].speed = ppa_speed;
+			if (ppa_speed_fast >= 0)
+				ppa_hosts[i].speed_fast = ppa_speed_fast;
+			
+			ppa_hosts[i].dev = parport_register_device(pb, "ppa", 
+				    NULL, ppa_wakeup, NULL,
+				    PARPORT_DEV_TRAN, (void *) &ppa_hosts[i]);
+			
+			/* Claim the bus so it remembers what we do to the
+			 * control registers. [ CTR and ECP ]
+			 */
+			ppa_pb_claim(i);
+			w_ctr(i, 0x0c);
 
-		/* Claim the bus so it remembers what we do to the control
-		 * registers. [ CTR and ECP ]
-		 */
-		ppa_pb_claim(i);
-		w_ctr(i, 0x0c);
-		modes = ppa_hosts[i].dev->port->modes;
+			ppa_hosts[i].mode = PPA_NIBBLE;
+			if (modes & (PARPORT_MODE_EPP | PARPORT_MODE_ECPEPP)) {
+				ppa_hosts[i].mode = PPA_EPP_32;
+				printk("PPA: Parport [ EPP ]\n");
+			} else if (modes & PARPORT_MODE_ECP) {
+				w_ecr(i, 0x20);
+				ppa_hosts[i].mode = PPA_PS2;
+				printk("PPA: Parport [ ECP in PS2 submode ]\n");
+			} else if (modes & PARPORT_MODE_PS2) {
+				ppa_hosts[i].mode = PPA_PS2;
+				printk("PPA: Parport [ PS2 ]\n");
+			}
+			/* Done configuration */
+			ppa_pb_release(i);
 
-		ppa_hosts[i].mode = PPA_NIBBLE;
-		if (modes & (PARPORT_MODE_EPP | PARPORT_MODE_ECPEPP)) {
-			ppa_hosts[i].mode = PPA_EPP_32;
-			printk("PPA: Parport [ EPP ]\n");
-		} else if (modes & PARPORT_MODE_ECP) {
-			w_ecr(i, 0x20);
-			ppa_hosts[i].mode = PPA_PS2;
-			printk("PPA: Parport [ ECP in PS2 submode ]\n");
-		} else if (modes & PARPORT_MODE_PS2) {
-			ppa_hosts[i].mode = PPA_PS2;
-			printk("PPA: Parport [ PS2 ]\n");
+			rs = ppa_init(i);
+			if (rs) {
+				parport_unregister_device(ppa_hosts[i].dev);
+				continue;
+			}
+			/* now the glue ... */
+			switch (ppa_hosts[i].mode) {
+			case PPA_NIBBLE:
+			case PPA_PS2:
+				ports = 3;
+				break;
+			case PPA_EPP_8:
+			case PPA_EPP_16:
+			case PPA_EPP_32:
+				ports = 8;
+				break;
+			default:	/* Never gets here */
+				continue;
+			}
+			
+			host->can_queue = PPA_CAN_QUEUE;
+			host->sg_tablesize = ppa_sg;
+			hreg = scsi_register(host, 0);
+			hreg->io_port = pb->base;
+			hreg->n_io_port = ports;
+			hreg->dma_channel = -1;
+			hreg->unique_id = i;
+			ppa_hosts[i].host = hreg->host_no;
+			nhosts++;
 		}
-		/* Done configuration */
-		ppa_pb_release(i);
-
-		rs = ppa_init(i);
-		if (rs) {
-			parport_unregister_device(ppa_hosts[i].dev);
-			continue;
-		}
-		/* now the glue ... */
-		switch (ppa_hosts[i].mode) {
-		case PPA_NIBBLE:
-		case PPA_PS2:
-			ports = 3;
-			break;
-		case PPA_EPP_8:
-		case PPA_EPP_16:
-		case PPA_EPP_32:
-			ports = 8;
-			break;
-		default:	/* Never gets here */
-			continue;
-		}
-
-		host->can_queue = PPA_CAN_QUEUE;
-		host->sg_tablesize = ppa_sg;
-		hreg = scsi_register(host, 0);
-		hreg->io_port = pb->base;
-		hreg->n_io_port = ports;
-		hreg->dma_channel = -1;
-		hreg->unique_id = i;
-		ppa_hosts[i].host = hreg->host_no;
-		nhosts++;
 	}
 	if (nhosts == 0)
 		return 0;

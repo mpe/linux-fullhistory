@@ -43,6 +43,16 @@ L_OBJS += keyboard.o defkeymap.o
 endif
 endif
 
+ifeq ($(CONFIG_ATARI_DSP56K),y)
+L_OBJS += dsp56k.o
+S = y
+else
+  ifeq ($(CONFIG_ATARI_DSP56K),m)
+  M_OBJS += dsp56k.o
+  SM = y
+  endif
+endif
+
 ifeq ($(CONFIG_DIGI),y)
 L_OBJS += pcxx.o
 else

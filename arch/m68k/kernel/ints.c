@@ -50,6 +50,24 @@ volatile unsigned int num_spurious;
 #define NUM_IRQ_NODES 100
 static irq_node_t nodes[NUM_IRQ_NODES];
 
+unsigned int local_irq_count[NR_CPUS];
+
+int __m68k_bh_counter;
+
+static void dummy_enable_irq(unsigned int irq);
+static void dummy_disable_irq(unsigned int irq);
+static int dummy_request_irq(unsigned int irq,
+		void (*handler) (int, void *, struct pt_regs *),
+		unsigned long flags, const char *devname, void *dev_id);
+static void dummy_free_irq(unsigned int irq, void *dev_id);
+
+void (*enable_irq) (unsigned int) = dummy_enable_irq;
+void (*disable_irq) (unsigned int) = dummy_disable_irq;
+
+int (*mach_request_irq) (unsigned int, void (*)(int, void *, struct pt_regs *),
+                      unsigned long, const char *, void *) = dummy_request_irq;
+void (*mach_free_irq) (unsigned int, void *) = dummy_free_irq;
+
 /*
  * void init_IRQ(void)
  *
@@ -92,14 +110,30 @@ irq_node_t *new_irq_node(void)
 	return NULL;
 }
 
-int request_irq(unsigned int irq, void (*handler)(int, void *, struct pt_regs *),
-                unsigned long flags, const char *devname, void *dev_id)
+/*
+ * We will keep these functions until I have convinced Linus to move
+ * the declaration of them from include/linux/sched.h to
+ * include/asm/irq.h.
+ */
+int request_irq(unsigned int irq,
+		void (*handler) (int, void *, struct pt_regs *),
+		unsigned long flags, const char *devname, void *dev_id)
 {
-	if (irq & IRQ_MACHSPEC)
-		return mach_request_irq(IRQ_IDX(irq), handler, flags, devname, dev_id);
+	return mach_request_irq(irq, handler, flags, devname, dev_id);
+}
 
+void free_irq(unsigned int irq, void *dev_id)
+{
+	mach_free_irq(irq, dev_id);
+}
+
+int sys_request_irq(unsigned int irq, 
+                    void (*handler)(int, void *, struct pt_regs *), 
+                    unsigned long flags, const char *devname, void *dev_id)
+{
 	if (irq < IRQ1 || irq > IRQ7) {
-		printk("%s: Incorrect IRQ %d from %s\n", __FUNCTION__, irq, devname);
+		printk("%s: Incorrect IRQ %d from %s\n",
+		       __FUNCTION__, irq, devname);
 		return -ENXIO;
 	}
 
@@ -109,7 +143,7 @@ int request_irq(unsigned int irq, void (*handler)(int, void *, struct pt_regs *)
 			       __FUNCTION__, irq, irq_list[irq].devname);
 			return -EBUSY;
 		}
-		if (flags & IRQ_FLG_REPLACE) {
+		if (!(flags & IRQ_FLG_REPLACE)) {
 			printk("%s: %s can't replace IRQ %d from %s\n",
 			       __FUNCTION__, devname, irq, irq_list[irq].devname);
 			return -EBUSY;
@@ -122,13 +156,8 @@ int request_irq(unsigned int irq, void (*handler)(int, void *, struct pt_regs *)
 	return 0;
 }
 
-void free_irq(unsigned int irq, void *dev_id)
+void sys_free_irq(unsigned int irq, void *dev_id)
 {
-	if (irq & IRQ_MACHSPEC) {
-		mach_free_irq(IRQ_IDX(irq), dev_id);
-		return;
-	}
-
 	if (irq < IRQ1 || irq > IRQ7) {
 		printk("%s: Incorrect IRQ %d\n", __FUNCTION__, irq);
 		return;
@@ -157,31 +186,42 @@ int probe_irq_off (unsigned long irqs)
 	return 0;
 }
 
-void enable_irq(unsigned int irq)
+static void dummy_enable_irq(unsigned int irq)
 {
-	if ((irq & IRQ_MACHSPEC) && mach_enable_irq)
-		mach_enable_irq(IRQ_IDX(irq));
+	printk("calling uninitialized enable_irq()\n");
 }
 
-void disable_irq(unsigned int irq)
+static void dummy_disable_irq(unsigned int irq)
 {
-	if ((irq & IRQ_MACHSPEC) && mach_disable_irq)
-		mach_disable_irq(IRQ_IDX(irq));
+	printk("calling uninitialized disable_irq()\n");
+}
+
+static int dummy_request_irq(unsigned int irq,
+		void (*handler) (int, void *, struct pt_regs *),
+		unsigned long flags, const char *devname, void *dev_id)
+{
+	printk("calling uninitialized request_irq()\n");
+	return 0;
+}
+
+static void dummy_free_irq(unsigned int irq, void *dev_id)
+{
+	printk("calling uninitialized disable_irq()\n");
 }
 
 asmlinkage void process_int(unsigned long vec, struct pt_regs *fp)
 {
-	if (vec < VEC_INT1 || vec > VEC_INT7) {
+	if (vec >= VEC_INT1 && vec <= VEC_INT7) {
+		vec -= VEC_SPUR;
+		kstat.interrupts[vec]++;
+		irq_list[vec].handler(vec, irq_list[vec].dev_id, fp);
+	} else {
 		if (mach_process_int)
 			mach_process_int(vec, fp);
 		else
 			panic("Can't process interrupt vector %ld\n", vec);
 		return;
 	}
-
-	vec -= VEC_SPUR;
-	kstat.interrupts[vec]++;
-	irq_list[vec].handler(vec, irq_list[vec].dev_id, fp);
 }
 
 int get_irq_list(char *buf)

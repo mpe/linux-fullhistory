@@ -9,7 +9,7 @@
 #include <asm/pgtable.h>
 #include <asm/amigaints.h>
 #include <asm/amigahw.h>
-#include <asm/zorro.h>
+#include <linux/zorro.h>
 #include <asm/irq.h>
 
 #include "scsi.h"
@@ -211,7 +211,7 @@ int a2091_detect(Scsi_Host_Template *tpnt)
 	address = cd->cd_BoardAddr;
 	instance = scsi_register (tpnt, sizeof (struct WD33C93_hostdata));
 	instance->base = (unsigned char *)ZTWO_VADDR(address);
-	instance->irq = IRQ_AMIGA_PORTS & ~IRQ_MACHSPEC;
+	instance->irq = IRQ_AMIGA_PORTS;
 	instance->unique_id = key;
 	DMA(instance)->DAWR = DAWR_A2091;
 	wd33c93_init(instance, (wd33c93_regs *)&(DMA(instance)->SASR),

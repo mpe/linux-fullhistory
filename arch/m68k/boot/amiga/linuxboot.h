@@ -24,14 +24,14 @@
 
 
 #include <asm/setup.h>
-#include <asm/zorro.h>
+#include <linux/zorro.h>
 
 
     /*
      *  Amiboot Version
      */
 
-#define AMIBOOT_VERSION		"5.1"
+#define AMIBOOT_VERSION		"5.4"
 
 
     /*
@@ -42,7 +42,7 @@
      */
 
 struct amiga_bootinfo {
-    u_long machtype;			/* machine type */
+    u_long machtype;			/* machine type = MACH_AMIGA */
     u_long cputype;			/* system CPU */
     u_long fputype;			/* system FPU */
     u_long mmutype;			/* system MMU */
@@ -67,9 +67,9 @@ struct amiga_bootinfo {
      */
 
 struct linuxboot_args {
+    struct amiga_bootinfo bi;	/* Initial values override detected values */
     const char *kernelname;
     const char *ramdiskname;
-    const char *commandline;
     int debugflag;
     int keep_video;
     int reset_boards;
@@ -84,7 +84,6 @@ struct linuxboot_args {
     void (*close)(int fd);
     int (*filesize)(const char *path);
     void (*sleep)(u_long micros);
-    int (*modify_bootinfo)(struct amiga_bootinfo *bi);
 };
 
 

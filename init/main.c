@@ -948,7 +948,7 @@ __initfunc(asmlinkage void start_kernel(void))
 }
 
 #ifdef CONFIG_BLK_DEV_INITRD
-__initfunc(static int do_linuxrc(void * shell))
+static int do_linuxrc(void * shell)
 {
 	static char *argv[] = { "linuxrc", NULL, };
 

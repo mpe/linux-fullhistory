@@ -29,6 +29,7 @@
 #endif
 
 #if defined(__sparc__)
+# include <linux/init.h>
 # include <linux/delay.h>         /* udelay() */
 
 # include <asm/oplib.h>           /* OpenProm Library */

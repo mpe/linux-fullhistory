@@ -1,9 +1,6 @@
 #ifndef _M68K_IRQ_H_
 #define _M68K_IRQ_H_
 
-extern void disable_irq(unsigned int);
-extern void enable_irq(unsigned int);
-
 #include <linux/config.h>
 
 /*
@@ -54,10 +51,24 @@ extern void enable_irq(unsigned int);
  * Adding an interrupt service routine for a source with this bit
  * set indicates a special machine specific interrupt source.
  * The machine specific files define these sources.
+ *
+ * The IRQ_MACHSPEC bit is now gone - the only thing it did was to
+ * introduce unnecessary overhead.
+ *
+ * All interrupt handling is actually machine specific so it is better
+ * to use function pointers, as used by the Sparc port, and select the
+ * interrupt handling functions when initializing the kernel. This way
+ * we save some unnecessary overhead at run-time. 
+ *                                                      01/11/97 - Jes
  */
 
-#define IRQ_MACHSPEC	(0x10000000L)
-#define IRQ_IDX(irq)	((irq) & ~IRQ_MACHSPEC)
+extern void (*enable_irq)(unsigned int);
+extern void (*disable_irq)(unsigned int);
+
+extern int sys_request_irq(unsigned int, 
+	void (*)(int, void *, struct pt_regs *), 
+	unsigned long, const char *, void *);
+extern void sys_free_irq(unsigned int, void *);
 
 /*
  * various flags for request_irq()

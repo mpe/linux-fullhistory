@@ -171,7 +171,9 @@
 #define __NR_mremap		163
 #define __NR_setresuid		164
 #define __NR_getresuid		165
-#define __NR_nfsservctl		166
+#define __NR_query_module	167
+#define __NR_poll		168
+#define __NR_nfsservctl		169
 
 /* user-visible error numbers are in the range -1 - -122: see
    <asm-m68k/errno.h> */
@@ -179,7 +181,10 @@
 #define __syscall_return(type, res) \
 do { \
 	if ((unsigned long)(res) >= (unsigned long)(-125)) { \
-		errno = -(res); \
+	/* avoid using res which is declared to be in register d0; \
+	   errno might expand to a function call and clobber it.  */ \
+		int __err = -(res); \
+		errno = __err; \
 		res = -1; \
 	} \
 	return (type) (res); \

@@ -34,8 +34,8 @@ struct timer_list	tcp_slow_timer = {
 
 
 struct tcp_sl_timer tcp_slt_array[TCP_SLT_MAX] = {
-	{ATOMIC_INIT, TCP_SYNACK_PERIOD, 0, tcp_syn_recv_timer},/* SYNACK	*/
-	{ATOMIC_INIT, TCP_KEEPALIVE_PERIOD, 0, tcp_keepalive}	/* KEEPALIVE	*/
+	{ATOMIC_INIT(0), TCP_SYNACK_PERIOD, 0, tcp_syn_recv_timer},/* SYNACK	*/
+	{ATOMIC_INIT(0), TCP_KEEPALIVE_PERIOD, 0, tcp_keepalive}   /* KEEPALIVE	*/
 };
 
 /*

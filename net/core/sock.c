@@ -189,7 +189,7 @@ int sock_setsockopt(struct socket *sock, int level, int optname,
 			 *	is best
 			 */
 			 
-			if(val > SK_WMEM_MAX*2 || val < 2048)
+			if(val > SK_WMEM_MAX*2)
 				return -EINVAL;
 			/*
 			 *	Once this is all 32bit values we can
@@ -197,7 +197,7 @@ int sock_setsockopt(struct socket *sock, int level, int optname,
 			 */
 			if(val > 65535)
 				return -EINVAL;
-			sk->sndbuf = val;
+			sk->sndbuf = max(val,2048);
 			/*
 			 *	Wake up sending tasks if we
 			 *	upped the value.
@@ -206,12 +206,12 @@ int sock_setsockopt(struct socket *sock, int level, int optname,
 			break;
 
 		case SO_RCVBUF:
-			if(val > SK_RMEM_MAX*2 || val < 256)
+			if(val > SK_RMEM_MAX*2)
 				return -EINVAL;
 			/* Can go soon: FIXME */
 			if(val > 65535)
 				return -EINVAL;
-			sk->rcvbuf = val;
+			sk->rcvbuf = max(val,256);
 			break;
 
 		case SO_KEEPALIVE:

@@ -1242,6 +1242,7 @@ struct fb_info *amiga_fb_init(long *mem_start);
 static int amifbcon_switch(int con);
 static int amifbcon_updatevar(int con);
 static void amifbcon_blank(int blank);
+static int amifbcon_setcmap(struct fb_cmap *cmap, int con);
 
 	/*
 	 * Internal routines
@@ -1315,7 +1316,15 @@ extern void Cyber_video_setup(char *options, int *ints);
 extern struct fb_info *Cyber_fb_init(long *mem_start);
 
 static int amifb_Cyber = 0;
-#endif /* CONFIG_FB_CYBER */
+#endif
+
+#ifdef CONFIG_FB_RETINAZ3			/* RetinaZ3 */
+extern int retz3_probe(void);
+extern void retz3_video_setup(char *options, int *ints);
+extern struct fb_info *retz3_fb_init(long *mem_start);
+
+static int amifb_retz3 = 0;
+#endif
 
 #ifdef CONFIG_GSP_RESOLVER			/* DMI Resolver */
 extern int resolver_probe(void);
@@ -1323,7 +1332,7 @@ extern void resolver_video_setup(char *options, int *ints);
 extern struct fb_info *resolver_fb_init(long *mem_start);
 
 static int amifb_resolver = 0;
-#endif /* CONFIG_GSP_RESOLVER */
+#endif
 
 static struct fb_ops amiga_fb_ops = {
 	amiga_fb_get_fix, amiga_fb_get_var, amiga_fb_set_var, amiga_fb_get_cmap,
@@ -1347,7 +1356,15 @@ void amiga_video_setup(char *options, int *ints)
 			Cyber_video_setup(options, ints);
 			return;
 		}
-#endif /* CONFIG_FB_CYBER */
+#endif
+#ifdef CONFIG_FB_RETINAZ3
+	if (options && *options)
+		if (!strncmp(options, "retz3", 5) && retz3_probe()) {
+			amifb_retz3 = 1;
+			retz3_video_setup(options, ints);
+			return;
+		}
+#endif
 #ifdef CONFIG_GSP_RESOLVER
 	if (options && *options)
 		if (!strncmp(options, "resolver", 5) && resolver_probe()) {
@@ -1797,7 +1814,14 @@ struct fb_info *amiga_fb_init(long *mem_start)
 #ifdef CONFIG_FB_CYBER
 	if (amifb_Cyber)
 		return Cyber_fb_init(mem_start);
-#endif /* CONFIG_FB_CYBER */
+#endif
+#ifdef CONFIG_FB_RETINAZ3
+	if (amifb_retz3){
+		custom.dmacon = DMAF_MASTER | DMAF_RASTER | DMAF_COPPER |
+				DMAF_BLITTER | DMAF_SPRITE;
+		return retz3_fb_init(mem_start);
+	}
+#endif
 #ifdef CONFIG_GSP_RESOLVER
 	if (amifb_resolver){
 		custom.dmacon = DMAF_MASTER | DMAF_RASTER | DMAF_COPPER |
@@ -1943,11 +1967,11 @@ default_chipset:
 
 	check_default_mode();
 
-	if (request_irq(IRQ3, amifb_interrupt, IRQ_FLG_LOCK,
+	if (request_irq(IRQ_AMIGA_AUTO_3, amifb_interrupt, IRQ_FLG_LOCK,
 	                "fb vertb handler", NULL))
 		panic("Couldn't add vblank interrupt\n");
-	ami_intena_vals[IRQ_IDX(IRQ_AMIGA_VERTB)] = IF_COPER;
-	ami_intena_vals[IRQ_IDX(IRQ_AMIGA_COPPER)] = 0;
+	ami_intena_vals[IRQ_AMIGA_VERTB] = IF_COPER;
+	ami_intena_vals[IRQ_AMIGA_COPPER] = 0;
 	custom.intena = IF_VERTB;
 	custom.intena = IF_SETCLR | IF_COPER;
 
@@ -1957,6 +1981,7 @@ default_chipset:
 	fb_info.switch_con = &amifbcon_switch;
 	fb_info.updatevar = &amifbcon_updatevar;
 	fb_info.blank = &amifbcon_blank;
+	fb_info.setcmap = &amifbcon_setcmap;
 
 	amiga_fb_set_var(&amiga_fb_predefined[0], 0);
 
@@ -1993,6 +2018,15 @@ static int amifbcon_updatevar(int con)
 static void amifbcon_blank(int blank)
 {
 	do_blank = blank ? blank : -1;
+}
+
+	/*
+	 * Set the colormap
+	 */
+
+static int amifbcon_setcmap(struct fb_cmap *cmap, int con)
+{
+	return(amiga_fb_set_cmap(cmap, 1, con));
 }
 
 /* ---------------------------- Generic routines ---------------------------- */
@@ -2213,10 +2247,11 @@ static void amifb_interrupt(int irq, void *dev_id, struct pt_regs *fp)
 {
 	u_short ints = custom.intreqr & custom.intenar;
 	static struct irq_server server = {0, 0};
+	unsigned long flags;
 
 	if (ints & IF_BLIT) {
 		custom.intreq = IF_BLIT;
-		amiga_do_irq(IRQ_IDX(IRQ_AMIGA_BLIT), fp);
+		amiga_do_irq(IRQ_AMIGA_BLIT, fp);
 	}
 
 	if (ints & IF_COPER) {
@@ -2240,8 +2275,11 @@ static void amifb_interrupt(int irq, void *dev_id, struct pt_regs *fp)
 				ami_set_sprite();
 		}
 
-		if (get_vbpos() < down2(currentpar.diwstrt_v - 4))
+		save_flags(flags);
+		cli();
+		if (get_vbpos() < down2(currentpar.diwstrt_v - 6))
 			custom.copjmp2 = 0;
+		restore_flags(flags);
 
 		if (do_blank) {
 			ami_do_blank();
@@ -2252,7 +2290,7 @@ static void amifb_interrupt(int irq, void *dev_id, struct pt_regs *fp)
 			ami_reinit_copper();
 			do_vmode_full = 0;
 		}
-		amiga_do_irq_list(IRQ_IDX(IRQ_AMIGA_VERTB), fp, &server);
+		amiga_do_irq_list(IRQ_AMIGA_VERTB, fp, &server);
 	}
 
 	if (ints & IF_VERTB) {

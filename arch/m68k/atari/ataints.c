@@ -56,9 +56,7 @@
  * All interrupt source have an internal number (defined in
  * <asm/atariints.h>): Autovector interrupts are 1..7, then follow ST-MFP,
  * TT-MFP, SCC, and finally VME interrupts. Vector numbers for the latter can
- * be allocated by atari_register_vme_int(). Currently, all int source numbers
- * have the IRQ_MACHSPEC bit set, to keep the general int handling functions
- * in kernel/ints.c from them.
+ * be allocated by atari_register_vme_int().
  *
  * Each interrupt can be of three types:
  * 
@@ -180,7 +178,7 @@ asmlinkage void IRQ_NAME(n);						   \
 void atari_slow_irq_##n##_dummy (void) {				   \
 __asm__ (ALIGN_STR "\n"							   \
 SYMBOL_NAME_STR(atari_slow_irq_) #n "_handler:\t"			   \
-"	addql	#1,"SYMBOL_NAME_STR(intr_count)"\n"			   \
+"	addql	#1,"SYMBOL_NAME_STR(local_irq_count)"\n"		   \
 	SAVE_ALL "\n"							   \
 "	andb	#~(1<<(" #n "&7)),"	/* mask this interrupt */	   \
 	"("MFP_MK_BASE"+(((" #n "&8)^8)>>2)+((" #n "&16)<<3)):w\n"	   \
@@ -192,7 +190,7 @@ SYMBOL_NAME_STR(atari_slow_irq_) #n "_handler:\t"			   \
 "	lea	"SYMBOL_NAME_STR(irq_handler)"+("#n"+8)*8,%%a0\n"	   \
 "	pea 	%%sp@\n"		/* push addr of frame */	   \
 "	movel	%%a0@(4),%%sp@-\n"	/* push handler data */		   \
-"	pea 	(" #n "+0x10000008)\n"	/* push int number */		   \
+"	pea 	(" #n "+8)\n"		/* push int number */		   \
 "	movel	%%a0@,%%a0\n"						   \
 "	jbsr	%%a0@\n"		/* call the handler */		   \
 "	addql	#8,%%sp\n"						   \
@@ -283,7 +281,7 @@ __asm__ (ALIGN_STR "\n"
 SYMBOL_NAME_STR(atari_fast_irq_handler) ":
 	orw 	#0x700,%%sr		/* disable all interrupts */
 "SYMBOL_NAME_STR(atari_prio_irq_handler) ":\t
-	addql	#1,"SYMBOL_NAME_STR(intr_count)"\n"
+	addql	#1,"SYMBOL_NAME_STR(local_irq_count)"\n"
 	SAVE_ALL "
 	/* get vector number from stack frame and convert to source */
 	bfextu	%%sp@(" FORMATVEC "){#4,#10},%%d0
@@ -296,7 +294,6 @@ SYMBOL_NAME_STR(atari_fast_irq_handler) ":
 	lea	%%a0@(%%d0:l:8),%%a0
 	pea 	%%sp@			/* push frame address */
 	movel	%%a0@(4),%%sp@-		/* push handler data */
-	bset	#28,%%d0		/* set MACHSPEC bit */
 	movel	%%d0,%%sp@-		/* push int number */
 	movel	%%a0@,%%a0
 	jsr	%%a0@			/* and call the handler */
@@ -587,14 +584,12 @@ unsigned long atari_register_vme_int(void)
 		return 0;
 
 	free_vme_vec_bitmap |= 1 << i;
-	return (VME_SOURCE_BASE + i) | IRQ_MACHSPEC;
+	return (VME_SOURCE_BASE + i);
 }
 
 
 void atari_unregister_vme_int(unsigned long irq)
 {
-	irq &= ~IRQ_MACHSPEC;
-	
 	if(irq >= VME_SOURCE_BASE && irq < VME_SOURCE_BASE + VME_MAX_SOURCES) {
 		irq -= VME_SOURCE_BASE;
 		free_vme_vec_bitmap &= ~(1 << irq);

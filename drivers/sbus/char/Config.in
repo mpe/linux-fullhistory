@@ -10,6 +10,7 @@ if [ "$CONFIG_SUN_FB_DISPLAY" = "n" ]; then
 	bool 'bwtwo support' SUN_FB_BWTWO
 	bool 'leo/zx support' SUN_FB_LEO
 	bool 'weitek P9X00 support' TADPOLE_FB_WEITEK
+	bool 'creator support' SUN_FB_CREATOR
 	if [ "$TADPOLE_FB_WEITEK" = "n" ]; then
 		fbs=$SUN_FB_CGSIX
 		fbs=$fbs$SUN_FB_TCX
@@ -34,6 +35,7 @@ else
 	define_bool SUN_FB_BWTWO y
 	define_bool SUN_FB_LEO y
 	define_bool TADPOLE_FB_WEITEK y
+	define_bool SUN_FB_CREATOR y
 fi
 
 comment 'Misc Linux/SPARC drivers'

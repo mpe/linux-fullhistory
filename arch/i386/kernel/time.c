@@ -33,6 +33,11 @@
 #include <linux/timex.h>
 #include <linux/config.h>
 
+/*
+ * for x86_do_profile()
+ */
+#include "irq.h"
+
 extern int setup_x86_irq(int, struct irqaction *);
 extern volatile unsigned long lost_ticks;
 
@@ -364,29 +369,6 @@ static int set_rtc_mmss(unsigned long nowtime)
 
 /* last time the cmos clock got updated */
 static long last_rtc_update = 0;
-
-
-/*
- * Move this to a header file - right now it shows
- * up both here and in smp.c
- */
-static inline void x86_do_profile (unsigned long eip)
-{
-	if (prof_buffer && current->pid) {
-		extern int _stext;
-		eip -= (unsigned long) &_stext;
-		eip >>= prof_shift;
-		if (eip < prof_len)
-			atomic_inc(&prof_buffer[eip]);
-		else
-		/*
-		 * Dont ignore out-of-bounds EIP values silently,
-		 * put them into the last histogram slot, so if
-		 * present, they will show up as a sharp peak.
-		 */
-			atomic_inc(&prof_buffer[prof_len-1]);
-	}
-}
 
 /*
  * timer_interrupt() needs to keep up the real-time clock,

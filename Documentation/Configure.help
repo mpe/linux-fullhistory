@@ -3063,22 +3063,20 @@ CONFIG_PT
   Documentation/networking/net-modules.txt. The module will be called
   pt.o.
 
-WaveLAN support
+AT&T WaveLAN & DEC RoamAbout DS support
 CONFIG_WAVELAN
-  These are cards for wireless ethernet-like networking. Supported are
-  AT&T GIS and NCR WaveLAN cards. If you want to use a card of this
-  type under Linux, say Y and read the Ethernet-HOWTO, available via
-  ftp (user: anonymous) in sunsite.unc.edu:/pub/Linux/docs/HOWTO. Some
-  more specific information is contained in
-  drivers/net/README.wavelan. This driver is also available as a
-  module ( = code which can be inserted in and removed from the
-  running kernel whenever you want). The module will be called
-  wavelan.o. If you want to compile it as a module, say M here and
-  read Documentation/modules.txt as well as
-  Documentation/networking/net-modules.txt. If you plan to use more
-  than one network card under linux, read the
-  Multiple-Ethernet-mini-HOWTO, available from
-  sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini.
+    The Lucent Wavelan (formerly NCR and AT&T ; or DEC RoamAbout DS)
+  is a Radio LAN (wireless ethernet-like) at 900 MHz and 2.4 GHz.
+    This driver support the ISA version of the Wavelan. A driver for
+  the pcmcia hardware is available in David Hinds's pcmcia package.
+    This driver is fairly stable and may be compiled as a module
+  (wavelan.o). It implements many nice feature and the Wireless
+  Extensions (you must get the Wireless tools from the net).
+    For documentation, refer to :
+      o the wavelan man page, wireless tools man pages
+      o wavelan.p.h and the source code
+      o Ethernet-HOWTO, Multiple-Ethernet-mini-HOWTO, Module-HOWTO
+      o More documentation to come when I will have the time :-)
 
 HP PCLAN+ (27247B and 27252A) support
 CONFIG_HPLAN_PLUS

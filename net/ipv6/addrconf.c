@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: addrconf.c,v 1.16 1997/04/12 04:32:44 davem Exp $
+ *	$Id: addrconf.c,v 1.18 1997/04/16 05:58:03 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -69,7 +69,7 @@ struct ifmcaddr6		*inet6_mcast_lst[IN6_ADDR_HSIZE];
  */
 struct inet6_dev		*inet6_dev_lst[IN6_ADDR_HSIZE];
 
-static atomic_t			addr_list_lock = ATOMIC_INIT;
+static atomic_t			addr_list_lock = ATOMIC_INIT(0);
 
 void addrconf_verify(unsigned long);
 

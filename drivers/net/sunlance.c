@@ -1,4 +1,4 @@
-/* $Id: sunlance.c,v 1.61 1997/04/10 06:40:54 davem Exp $
+/* $Id: sunlance.c,v 1.62 1997/04/16 10:27:25 jj Exp $
  * lance.c: Linux/Sparc/Lance driver
  *
  *	Written 1995, 1996 by Miguel de Icaza
@@ -75,6 +75,7 @@ static char *lancedma = "LANCE DMA";
 #include <linux/in.h>
 #include <linux/malloc.h>
 #include <linux/string.h>
+#include <linux/init.h>
 #include <asm/system.h>
 #include <asm/bitops.h>
 #include <asm/io.h>
@@ -934,9 +935,10 @@ static void lance_set_multicast (struct device *dev)
 	dev->tbusy = 0;
 }
 
-int sparc_lance_init (struct device *dev, struct linux_sbus_device *sdev,
-		      struct Linux_SBus_DMA *ledma,
-		      struct linux_sbus_device *lebuffer)
+__initfunc(static int 
+sparc_lance_init (struct device *dev, struct linux_sbus_device *sdev,
+		  struct Linux_SBus_DMA *ledma,
+		  struct linux_sbus_device *lebuffer))
 {
 	static unsigned version_printed = 0;
 	int    i;
@@ -1097,7 +1099,7 @@ no_link_test:
 }
 
 /* On 4m, find the associated dma for the lance chip */
-static struct Linux_SBus_DMA *
+static inline struct Linux_SBus_DMA *
 find_ledma (struct linux_sbus_device *dev)
 {
 	struct Linux_SBus_DMA *p;
@@ -1109,7 +1111,7 @@ find_ledma (struct linux_sbus_device *dev)
 }
 
 /* Find all the lance cards on the system and initialize them */
-int sparc_lance_probe (struct device *dev)
+__initfunc(int sparc_lance_probe (struct device *dev))
 {
 	struct linux_sbus *bus;
 	struct linux_sbus_device *sdev = 0;

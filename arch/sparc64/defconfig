@@ -107,7 +107,7 @@ CONFIG_BLK_DEV_SR_VENDOR=y
 #
 # Some SCSI devices (e.g. CD jukebox) support multiple LUNs
 #
-# CONFIG_SCSI_MULTI_LUN is not set
+CONFIG_SCSI_MULTI_LUN=y
 CONFIG_SCSI_CONSTANTS=y
 
 #

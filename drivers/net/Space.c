@@ -30,6 +30,7 @@
 #include <linux/config.h>
 #include <linux/netdevice.h>
 #include <linux/errno.h>
+#include <linux/init.h>
 
 #define	NEXT_DEV	NULL
 
@@ -93,7 +94,7 @@ extern int atp_init(struct device *);
 extern int de600_probe(struct device *);
 extern int de620_probe(struct device *);
 
-static int ethif_probe(struct device *dev)
+__initfunc(static int ethif_probe(struct device *dev))
 {
     u_long base_addr = dev->base_addr;
 

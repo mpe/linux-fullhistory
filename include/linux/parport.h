@@ -1,13 +1,19 @@
-/* $Id: parport.h,v 1.1.2.5 1997/03/29 21:08:31 phil Exp $ */
+/* $Id: parport.h,v 1.2.6.3 1997/04/16 21:21:03 phil Exp $ */
 
 #ifndef _PARPORT_H_
 #define _PARPORT_H_
 
 #include <asm/system.h>
 #include <asm/ptrace.h>
+#include <linux/proc_fs.h>
 
 /* Maximum of 8 ports per machine */
 #define PARPORT_MAX  8 
+
+/* Magic numbers */
+#define PARPORT_IRQ_NONE  -1
+#define PARPORT_DMA_NONE  -1
+#define PARPORT_DISABLE   -2
 
 /* Type classes for Plug-and-Play probe */
 
@@ -78,6 +84,14 @@ struct ppd {
 	struct ppd *prev;
 };
 
+struct parport_dir{
+	struct proc_dir_entry *entry;    /* Directory /proc/parport/X     */
+	struct proc_dir_entry *irq;      /* IRQ entry /proc/parport/X/irq */
+	struct proc_dir_entry *devices;  /* /proc/parport/X/devices       */
+	struct proc_dir_entry *hardware; /* /proc/parport/X/hardware      */
+    char name[4]; /* /proc/parport/"XXXX" */
+};
+
 /* A parallel port */
 struct parport {
 	unsigned int base;	/* base address */
@@ -93,8 +107,9 @@ struct parport {
 	unsigned int ecr;	/* ECP ECR register */
 	struct parport *next;
         unsigned int flags; 
-	struct proc_dir_entry *proc_dir;
+	struct parport_dir pdir;
 	struct parport_device_info probe_info; 
+	int speed;  /* Max Write in Bytes/s */
 };
 
 /* parport_register_port registers a new parallel port at the given address (if
@@ -174,8 +189,10 @@ extern int parport_wait_peripheral(struct parport *, unsigned char, unsigned
 				   char);
 
 /* Prototypes from parport_procfs */
+extern int parport_proc_init(void);
+extern int parport_proc_cleanup(void);
 extern int parport_proc_register(struct parport *pp);
-extern void parport_proc_unregister(struct parport *pp);
+extern int parport_proc_unregister(struct parport *pp);
 
 /* Prototypes from parport_ksyms.c */
 extern void dec_parport_count(void);

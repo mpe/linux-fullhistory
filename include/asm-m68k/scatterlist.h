@@ -6,12 +6,9 @@ struct scatterlist {
     char * alt_address; /* Location of actual if address is a 
 			 * dma indirect buffer.  NULL otherwise */
     unsigned int length;
-
-#ifdef __sparc__
-    char * dvma_address; /* A place to hang host-specific addresses at. */
-#endif
 };
 
+/* This is bogus and should go away. */
 #define ISA_DMA_THRESHOLD (0x00ffffff)
 
 #endif /* !(_M68K_SCATTERLIST_H) */

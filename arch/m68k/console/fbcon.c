@@ -61,7 +61,7 @@
 #endif
 #ifdef CONFIG_FB_CYBER
 #include "../amiga/s3blit.h"
-#endif /* CONFIG_FB_CYBER */
+#endif
 #include <linux/fb.h>
 #include <asm/font.h>
 #include <asm/machdep.h>
@@ -70,7 +70,7 @@
 #include <asm/uaccess.h>
 
 #include "../../../drivers/char/vt_kern.h"   /* vt_cons and vc_resize_con() */
-
+#include "../../../drivers/char/console_struct.h"
 
 /* Import console_blanked from console.c */
 
@@ -95,6 +95,7 @@ extern int console_blanked;
 #undef CONFIG_FBCON_24PACKED
 #undef CONFIG_FBCON_32PACKED
 #undef CONFIG_FBCON_CYBER
+#undef CONFIG_FBCON_RETINAZ3
 
 
 /* Monochrome is default */
@@ -117,7 +118,18 @@ extern int console_blanked;
 #ifndef CONFIG_FBCON_CYBER
 #define CONFIG_FBCON_CYBER
 #endif
-#endif /* CONFIG_FB_CYBER */
+#endif
+
+/* RetinaZ3 Graphics Board */
+
+#ifdef CONFIG_FB_RETINAZ3
+#ifndef CONFIG_FBCON_RETINAZ3
+#define CONFIG_FBCON_RETINAZ3
+#endif
+#ifndef CONFIG_FBCON_8PACKED
+#define CONFIG_FBCON_8PACKED
+#endif
+#endif
 
 #endif /* CONFIG_AMIGA */
 
@@ -151,9 +163,9 @@ extern int console_blanked;
 #undef CONFIG_FBCON_IPLAN2
 #endif
 
-#if defined(CONFIG_FBCON_CYBER) || defined(CONFIG_FBCON_8PACKED) || \
-    defined(CONFIG_FBCON_16PACKED) || defined(CONFIG_FBCON_24PACKED) || \
-    defined(CONFIG_FBCON_32PACKED)
+#if defined(CONFIG_FBCON_CYBER) || defined(CONFIG_FBCON_RETINAZ3) || \
+    defined(CONFIG_FBCON_8PACKED) || defined(CONFIG_FBCON_16PACKED) || \
+    defined(CONFIG_FBCON_24PACKED) || defined(CONFIG_FBCON_32PACKED)
 #define CONFIG_FBCON_PACKED
 #else
 #undef CONFIG_FBCON_PACKED
@@ -224,21 +236,24 @@ static __inline__ int CURSOR_UNDRAWN(void)
     *    Interface used by the world
     */
 
-static u_long fbcon_startup(u_long kmem_start, char **display_desc);
+static u_long fbcon_startup(u_long kmem_start, const char **display_desc);
 static void fbcon_init(struct vc_data *conp);
 static int fbcon_deinit(struct vc_data *conp);
 static int fbcon_changevar(int con);
 static int fbcon_clear(struct vc_data *conp, int sy, int sx, int height,
                        int width);
-static int fbcon_putc(struct vc_data *conp, int c, int y, int x);
-static int fbcon_putcs(struct vc_data *conp, const char *s, int count, int y,
-                       int x);
+static int fbcon_putc(struct vc_data *conp, int c, int yy, int xx);
+static int fbcon_putcs(struct vc_data *conp, const char *s, int count, int yy,
+                       int xx);
 static int fbcon_cursor(struct vc_data *conp, int mode);
 static int fbcon_scroll(struct vc_data *conp, int t, int b, int dir, int count);
 static int fbcon_bmove(struct vc_data *conp, int sy, int sx, int dy, int dx,
                        int height, int width);
 static int fbcon_switch(struct vc_data *conp);
 static int fbcon_blank(int blank);
+static int fbcon_get_font(struct vc_data *conp, int *w, int *h, char *data);
+static int fbcon_set_font(struct vc_data *conp, int w, int h, char *data);
+static int fbcon_set_palette(struct vc_data *conp, unsigned char *table);
 
 
    /*
@@ -264,14 +279,22 @@ static __inline__ void memset_even_8p(void *d, size_t count, u_long val1,
                                       u_long val2, u_long val3, u_long val4);
 static __inline__ void memmove_8p_col(void *d, void *s, int h, int bpr);
 static __inline__ void expand8dl(u_char c, u_long *ret1, u_long *ret2);
-static __inline__ void memclear_2p_col(void *d, size_t h, u_short val, int bpr);
+static __inline__ void memclear_2p_col(void *d, size_t h, u_short val,
+				       int bpr);
 static __inline__ void memset_even_2p(void *d, size_t count, u_long val);
 static __inline__ void memmove_2p_col(void *d, void *s, int h, int bpr);
 static __inline__ u_short expand2w(u_char c);
 static __inline__ u_long expand2l(u_char c);
 static __inline__ u_short dup2w(u_char c);
-static __inline__ int real_y(struct display *p, int y);
+static __inline__ int real_y(struct display *p, int yy);
 static void fbcon_vbl_handler(int irq, void *dummy, struct pt_regs *fp);
+static __inline__ void updatescrollmode(struct display *p);
+static __inline__ void ywrap_up(int unit, struct display *p, int count);
+static __inline__ void ywrap_down(int unit, struct display *p, int count);
+static __inline__ void ypan_up(int unit, struct vc_data *conp,
+			       struct display *p, int count);
+static __inline__ void ypan_down(int unit, struct vc_data *conp,
+				 struct display *p, int count);
 static void fbcon_bmove_rec(struct display *p, int sy, int sx, int dy, int dx,
                             int height, int width, u_int y_break);
 
@@ -285,11 +308,11 @@ static void bmove_mono(struct display *p, int sy, int sx, int dy, int dx,
                        int height, int width);
 static void clear_mono(struct vc_data *conp, struct display *p, int sy, int sx,
                        int height, int width);
-static void putc_mono(struct vc_data *conp, struct display *p, int c, int y,
-                      int x);
+static void putc_mono(struct vc_data *conp, struct display *p, int c, int yy,
+                      int xx);
 static void putcs_mono(struct vc_data *conp, struct display *p, const char *s,
-                       int count, int y, int x);
-static void rev_char_mono(struct display *p, int x, int y);
+                       int count, int yy, int xx);
+static void rev_char_mono(struct display *p, int xx, int yy);
 #endif /* CONFIG_FBCON_MONO */
 
 
@@ -302,11 +325,11 @@ static void bmove_ilbm(struct display *p, int sy, int sx, int dy, int dx,
                        int height, int width);
 static void clear_ilbm(struct vc_data *conp, struct display *p, int sy, int sx,
                        int height, int width);
-static void putc_ilbm(struct vc_data *conp, struct display *p, int c, int y,
-                      int x);
+static void putc_ilbm(struct vc_data *conp, struct display *p, int c, int yy,
+                      int xx);
 static void putcs_ilbm(struct vc_data *conp, struct display *p, const char *s,
-                       int count, int y, int x);
-static void rev_char_ilbm(struct display *p, int x, int y);
+                       int count, int yy, int xx);
+static void rev_char_ilbm(struct display *p, int xx, int yy);
 #endif /* CONFIG_FBCON_ILBM */
 
 
@@ -319,11 +342,11 @@ static void bmove_plan(struct display *p, int sy, int sx, int dy, int dx,
                        int height, int width);
 static void clear_plan(struct vc_data *conp, struct display *p, int sy, int sx,
                        int height, int width);
-static void putc_plan(struct vc_data *conp, struct display *p, int c, int y,
-                      int x);
+static void putc_plan(struct vc_data *conp, struct display *p, int c, int yy,
+                      int xx);
 static void putcs_plan(struct vc_data *conp, struct display *p, const char *s,
-                       int count, int y, int x);
-static void rev_char_plan(struct display *p, int x, int y);
+                       int count, int yy, int xx);
+static void rev_char_plan(struct display *p, int xx, int yy);
 #endif /* CONFIG_FBCON_PLANES */
 
 
@@ -336,11 +359,11 @@ static void bmove_2_plane(struct display *p, int sy, int sx, int dy, int dx,
                           int height, int width);
 static void clear_2_plane(struct vc_data *conp, struct display *p, int sy,
                           int sx, int height, int width);
-static void putc_2_plane(struct vc_data *conp, struct display *p, int c, int y,
-                         int x);
+static void putc_2_plane(struct vc_data *conp, struct display *p, int c, int yy,
+                         int xx);
 static void putcs_2_plane(struct vc_data *conp, struct display *p,
-                          const char *s, int count, int y, int x);
-static void rev_char_2_plane(struct display *display, int x, int y);
+                          const char *s, int count, int yy, int xx);
+static void rev_char_2_plane(struct display *display, int xx, int yy);
 #endif /* CONFIG_FBCON_2PLANE */
 
 
@@ -353,11 +376,11 @@ static void bmove_4_plane(struct display *p, int sy, int sx, int dy, int dx,
                           int height, int width);
 static void clear_4_plane(struct vc_data *conp, struct display *p, int sy,
                           int sx, int height, int width);
-static void putc_4_plane(struct vc_data *conp, struct display *p, int c, int y,
-                         int x);
+static void putc_4_plane(struct vc_data *conp, struct display *p, int c, int yy,
+                         int xx);
 static void putcs_4_plane(struct vc_data *conp, struct display *p,
-                          const char *s, int count, int y, int x);
-static void rev_char_4_plane(struct display *p, int x, int y);
+                          const char *s, int count, int yy, int xx);
+static void rev_char_4_plane(struct display *p, int xx, int yy);
 #endif /* CONFIG_FBCON_4PLANE */
 
 
@@ -370,11 +393,11 @@ static void bmove_8_plane(struct display *p, int sy, int sx, int dy, int dx,
                           int height, int width);
 static void clear_8_plane(struct vc_data *conp, struct display *p, int sy,
                           int sx, int height, int width);
-static void putc_8_plane(struct vc_data *conp, struct display *p, int c, int y,
-                         int x);
+static void putc_8_plane(struct vc_data *conp, struct display *p, int c, int yy,
+                         int xx);
 static void putcs_8_plane(struct vc_data *conp, struct display *p,
-                          const char *s, int count, int y, int x);
-static void rev_char_8_plane(struct display *display, int x, int y);
+                          const char *s, int count, int yy, int xx);
+static void rev_char_8_plane(struct display *display, int xx, int yy);
 #endif /* CONFIG_FBCON_8PLANE */
 
 
@@ -387,11 +410,11 @@ static void bmove_8_packed(struct display *p, int sy, int sx, int dy, int dx,
                            int height, int width);
 static void clear_8_packed(struct vc_data *conp, struct display *p, int sy,
                            int sx, int height, int width);
-static void putc_8_packed(struct vc_data *conp, struct display *p, int c, int y,
-                          int x);
+static void putc_8_packed(struct vc_data *conp, struct display *p, int c, int yy,
+                          int xx);
 static void putcs_8_packed(struct vc_data *conp, struct display *p,
-                           const char *s, int count, int y, int x);
-static void rev_char_8_packed(struct display *p, int x, int y);
+                           const char *s, int count, int yy, int xx);
+static void rev_char_8_packed(struct display *p, int xx, int yy);
 #endif /* CONFIG_FBCON_8PACKED */
 
 
@@ -405,10 +428,10 @@ static void bmove_16_packed(struct display *p, int sy, int sx, int dy, int dx,
 static void clear_16_packed(struct vc_data *conp, struct display *p, int sy,
                             int sx, int height, int width);
 static void putc_16_packed(struct vc_data *conp, struct display *p, int c,
-                           int y, int x);
+                           int yy, int xx);
 static void putcs_16_packed(struct vc_data *conp, struct display *p,
-                            const char *s, int count, int y, int x);
-static void rev_char_16_packed(struct display *p, int x, int y);
+                            const char *s, int count, int yy, int xx);
+static void rev_char_16_packed(struct display *p, int xx, int yy);
 #endif */ CONFIG_FBCON_8PACKED */
 
 
@@ -421,22 +444,38 @@ static void bmove_cyber(struct display *p, int sy, int sx, int dy, int dx,
                         int height, int width);
 static void clear_cyber(struct vc_data *conp, struct display *p, int sy, int sx,
                         int height, int width);
-static void putc_cyber(struct vc_data *conp, struct display *p, int c, int y,
-                       int x);
+static void putc_cyber(struct vc_data *conp, struct display *p, int c, int yy,
+                       int xx);
 static void putcs_cyber(struct vc_data *conp, struct display *p, const char *s,
-                        int count, int y, int x);
-static void rev_char_cyber(struct display *p, int x, int y);
+                        int count, int yy, int xx);
+static void rev_char_cyber(struct display *p, int xx, int yy);
 
 extern void Cyber_WaitQueue(u_short fifo);
 extern void Cyber_WaitBlit(void);
 extern void Cyber_BitBLT(u_short curx, u_short cury, u_short destx,
                          u_short desty, u_short width, u_short height,
                          u_short mode);
-extern void Cyber_RectFill(u_short x, u_short y, u_short width, u_short height,
+extern void Cyber_RectFill(u_short xx, u_short yy, u_short width, u_short height,
                            u_short mode, u_short color);
-extern void Cyber_MoveCursor(u_short x, u_short y);
+extern void Cyber_MoveCursor(u_short xx, u_short yy);
 #endif /* CONFIG_FBCON_CYBER */
 
+#ifdef CONFIG_FBCON_RETINAZ3
+static void clear_retz3(struct vc_data *conp, struct display *p, int
+			sy, int sx, int height, int width);
+static void bmove_retz3(struct display *p, int sy, int sx, int dy, int dx,
+                        int height, int width);
+extern void retz3_bitblt(struct fb_var_screeninfo *scr,
+			 unsigned short srcx, unsigned short srcy, unsigned
+			 short destx, unsigned short desty, unsigned short
+			 width, unsigned short height, unsigned short cmd,
+			 unsigned short mask);
+static void putc_retz3(struct vc_data *conp, struct display *p, int c,
+		       int yy, int xx);
+static void putcs_retz3(struct vc_data *conp, struct display *p, const
+			char *s, int count, int yy, int xx);
+static void rev_char_retz3(struct display *p, int xx, int yy);
+#endif
 
    /*
     *    `switch' for the Low Level Operations
@@ -447,10 +486,10 @@ struct display_switch {
                   int width);
     void (*clear)(struct vc_data *conp, struct display *p, int sy, int sx,
                   int height, int width);
-    void (*putc)(struct vc_data *conp, struct display *p, int c, int y, int x);
+    void (*putc)(struct vc_data *conp, struct display *p, int c, int yy, int xx);
     void (*putcs)(struct vc_data *conp, struct display *p, const char *s,
-                  int count, int y, int x);
-    void (*rev_char)(struct display *p, int x, int y);
+                  int count, int yy, int xx);
+    void (*rev_char)(struct display *p, int xx, int yy);
 };
 
 
@@ -509,8 +548,15 @@ static struct display_switch dispsw_cyber = {
 };
 #endif /* CONFIG_FBCON_CYBER */
 
+#ifdef CONFIG_FBCON_RETINAZ3
+static struct display_switch dispsw_retz3 = {
+   bmove_retz3, clear_retz3, putc_retz3,
+   putcs_retz3, rev_char_retz3
+};
+#endif
 
-static u_long fbcon_startup(u_long kmem_start, char **display_desc)
+
+static u_long fbcon_startup(u_long kmem_start, const char **display_desc)
 {
    int irqres = 0;
 
@@ -566,6 +612,19 @@ static int fbcon_changevar(int con)
 }
 
 
+static __inline__ void updatescrollmode(struct display *p)
+{
+   if (divides(p->ywrapstep, p->fontheight) &&
+       divides(p->fontheight, p->var.yres_virtual))
+      p->scrollmode = SCROLL_YWRAP;
+   else if (divides(p->ypanstep, p->fontheight) &&
+            p->var.yres_virtual >= p->var.yres+p->fontheight)
+      p->scrollmode = SCROLL_YPAN;
+   else
+      p->scrollmode = SCROLL_YMOVE;
+}
+
+
 static void fbcon_setup(int con, int setcol, int init)
 {
    struct display *p = &disp[con];
@@ -579,16 +638,12 @@ static void fbcon_setup(int con, int setcol, int init)
                      &p->fontdata) || p->fontwidth != 8)
 	   getdefaultfont(p->var.xres, p->var.yres, NULL, &p->fontwidth,
 	                  &p->fontheight, &p->fontdata);
-   if (p->fontwidth != 8)
-      panic("fbcon_setup: No support for fontwidth != 8");
-
-   if (divides(p->ywrapstep, p->fontheight) && divides(p->fontheight, p->var.yres_virtual))
-      p->scrollmode = SCROLL_YWRAP;
-   else if (divides(p->ypanstep, p->fontheight) &&
-            p->var.yres_virtual >= p->var.yres+p->fontheight)
-      p->scrollmode = SCROLL_YPAN;
-   else
-      p->scrollmode = SCROLL_YMOVE;
+   if (p->fontwidth != 8) {
+      /* ++Geert: changed from panic() to `correct and continue' */
+      printk("fbcon_setup: No support for fontwidth != 8");
+      p->fontwidth = 8;
+   }
+   updatescrollmode(p);
 
    nr_cols = p->var.xres/p->fontwidth;
    nr_rows = p->var.yres/p->fontheight;
@@ -638,7 +693,8 @@ static void fbcon_setup(int con, int setcol, int init)
    if (p->type == FB_TYPE_INTERLEAVED_PLANES && p->type_aux != 2) {
       if (p->line_length) {
          p->next_line = p->line_length*p->var.bits_per_pixel;
-         p->next_plane = p->line_length;
+         p->next_plane = p->line_length
+;
       } else {
          p->next_line = p->type_aux;
          p->next_plane = p->type_aux/p->var.bits_per_pixel;
@@ -658,13 +714,18 @@ static void fbcon_setup(int con, int setcol, int init)
 #endif /* CONFIG_FBCON_PLANES */
 #ifdef CONFIG_FBCON_PACKED
    if (p->type == FB_TYPE_PACKED_PIXELS) {
-      p->next_line = p->var.xres_virtual*p->var.bits_per_pixel>>3;
+      p->next_line = (p->var.xres_virtual*p->var.bits_per_pixel)>>3;
       p->next_plane = 0;
 #ifdef CONFIG_FBCON_CYBER
       if (p->var.accel == FB_ACCEL_CYBERVISION)
          p->dispsw = &dispsw_cyber;
       else
-#endif /* CONFIG_FBCON_CYBER */
+#endif
+#ifdef CONFIG_FBCON_RETINAZ3
+      if (p->var.accel == FB_ACCEL_RETINAZ3)
+         p->dispsw = &dispsw_retz3;
+      else
+#endif
 #ifdef CONFIG_FBCON_8PACKED
       if (p->var.bits_per_pixel == 8)
          p->dispsw = &dispsw_8_packed;
@@ -1399,12 +1460,12 @@ static __inline__ u_short dup2w(u_char c)
  * restriction is simplicity & efficiency at the moment.
  */
 
-static __inline__ int real_y(struct display *p, int y)
+static __inline__ int real_y(struct display *p, int yy)
 {
    int rows = p->vrows;
 
-   y += p->yscroll;
-   return(y < rows ? y : y-rows);
+   yy += p->yscroll;
+   return(yy < rows ? yy : yy-rows);
 }
 
 
@@ -1436,7 +1497,7 @@ static int fbcon_clear(struct vc_data *conp, int sy, int sx, int height,
 }
 
 
-static int fbcon_putc(struct vc_data *conp, int c, int y, int x)
+static int fbcon_putc(struct vc_data *conp, int c, int yy, int xx)
 {
    int unit = conp->vc_num;
    struct display *p = &disp[unit];
@@ -1444,17 +1505,17 @@ static int fbcon_putc(struct vc_data *conp, int c, int y, int x)
    if (!p->can_soft_blank && console_blanked)
       return(0);
 
-   if ((p->cursor_x == x) && (p->cursor_y == y))
+   if ((p->cursor_x == xx) && (p->cursor_y == yy))
        CURSOR_UNDRAWN();
 
-   p->dispsw->putc(conp, p, c, real_y(p, y), x);
+   p->dispsw->putc(conp, p, c, real_y(p, yy), xx);
 
    return(0);
 }
 
 
-static int fbcon_putcs(struct vc_data *conp, const char *s, int count, int y,
-                       int x)
+static int fbcon_putcs(struct vc_data *conp, const char *s, int count, int yy,
+                       int xx)
 {
    int unit = conp->vc_num;
    struct display *p = &disp[unit];
@@ -1462,10 +1523,10 @@ static int fbcon_putcs(struct vc_data *conp, const char *s, int count, int y,
    if (!p->can_soft_blank && console_blanked)
       return(0);
 
-   if ((p->cursor_y == y) && (x <= p->cursor_x) && (p->cursor_x < x+count))
+   if ((p->cursor_y == yy) && (xx <= p->cursor_x) && (p->cursor_x < xx+count))
       CURSOR_UNDRAWN();
 
-   p->dispsw->putcs(conp, p, s, count, real_y(p, y), x);
+   p->dispsw->putcs(conp, p, s, count, real_y(p, yy), xx);
 
    return(0);
 }
@@ -1520,6 +1581,62 @@ static void fbcon_vbl_handler(int irq, void *dummy, struct pt_regs *fp)
 }
 
 
+static __inline__ void ywrap_up(int unit, struct display *p, int count)
+{
+   p->yscroll += count;
+   if (p->yscroll >= p->vrows)	/* Deal with wrap */
+      p->yscroll -= p->vrows;
+   p->var.xoffset = 0;
+   p->var.yoffset = p->yscroll*p->fontheight;
+   p->var.vmode |= FB_VMODE_YWRAP;
+   fb_info->updatevar(unit);
+}
+
+
+static __inline__ void ywrap_down(int unit, struct display *p, int count)
+{
+   p->yscroll -= count;
+   if (p->yscroll < 0)		/* Deal with wrap */
+      p->yscroll += p->vrows;
+   p->var.xoffset = 0;
+   p->var.yoffset = p->yscroll*p->fontheight;
+   p->var.vmode |= FB_VMODE_YWRAP;
+   fb_info->updatevar(unit);
+}
+
+
+static __inline__ void ypan_up(int unit, struct vc_data *conp,
+			       struct display *p, int count)
+{
+   p->yscroll += count;
+   if (p->yscroll+conp->vc_rows > p->vrows) {
+      p->dispsw->bmove(p, p->yscroll, 0, 0, 0, conp->vc_rows-count,
+		       conp->vc_cols);
+      p->yscroll = 0;
+   }
+   p->var.xoffset = 0;
+   p->var.yoffset = p->yscroll*p->fontheight;
+   p->var.vmode &= ~FB_VMODE_YWRAP;
+   fb_info->updatevar(unit);
+}
+
+
+static __inline__ void ypan_down(int unit, struct vc_data *conp,
+				 struct display *p, int count)
+{
+   p->yscroll -= count;
+   if (p->yscroll < 0) {
+      p->yscroll = p->vrows-conp->vc_rows;
+      p->dispsw->bmove(p, 0, 0, p->yscroll+count, 0, conp->vc_rows-count,
+		       conp->vc_cols);
+   }
+   p->var.xoffset = 0;
+   p->var.yoffset = p->yscroll*p->fontheight;
+   p->var.vmode &= ~FB_VMODE_YWRAP;
+   fb_info->updatevar(unit);
+}
+
+
 static int fbcon_scroll(struct vc_data *conp, int t, int b, int dir, int count)
 {
    int unit = conp->vc_num;
@@ -1536,84 +1653,98 @@ static int fbcon_scroll(struct vc_data *conp, int t, int b, int dir, int count)
 
    switch (dir) {
       case SM_UP:
-         if (t == 0 && b == conp->vc_rows &&
-             vt_cons[unit]->vc_mode == KD_TEXT) {
-            if (count > conp->vc_rows)             /* Maximum realistic size */
-               count = conp->vc_rows;
-            switch (p->scrollmode) {
-               case SCROLL_YWRAP:
-                  p->yscroll += count;
-                  if (p->yscroll >= p->vrows) /* Deal with wrap */
-                     p->yscroll -= p->vrows;
-                  p->var.xoffset = 0;
-                  p->var.yoffset = p->yscroll*p->fontheight;
-                  p->var.vmode |= FB_VMODE_YWRAP;
-                  fb_info->updatevar(unit);
-                  break;
+	 if (count > conp->vc_rows)	/* Maximum realistic size */
+	    count = conp->vc_rows;
+	 if (vt_cons[unit]->vc_mode == KD_TEXT)
+	    switch (p->scrollmode) {
+	       case SCROLL_YWRAP:
+		  if (b-t-count > 3*conp->vc_rows>>2) {
+		     if (t > 0)
+			fbcon_bmove(conp, 0, 0, count, 0, t, conp->vc_cols);
+		     ywrap_up(unit, p, count);
+		     if (conp->vc_rows-b > 0)
+			fbcon_bmove(conp, b-count, 0, b, 0, conp->vc_rows-b,
+				    conp->vc_cols);
+		  } else
+		     fbcon_bmove(conp, t+count, 0, t, 0, b-t-count,
+				 conp->vc_cols);
+		  fbcon_clear(conp, b-count, 0, count, conp->vc_cols);
+		  break;
 
-               case SCROLL_YPAN:
-                  p->yscroll += count;
-                  if (p->yscroll+conp->vc_rows > p->vrows) {
-                     p->dispsw->bmove(p, p->yscroll, 0, 0, 0, b-count,
-                                      conp->vc_cols);
-                     p->yscroll = 0;
-                  }
-                  p->var.xoffset = 0;
-                  p->var.yoffset = p->yscroll*p->fontheight;
-                  p->var.vmode &= ~FB_VMODE_YWRAP;
-                  fb_info->updatevar(unit);
-                  break;
+	       case SCROLL_YPAN:
+		  if (b-t-count > 3*conp->vc_rows>>2) {
+		     if (t > 0)
+			fbcon_bmove(conp, 0, 0, count, 0, t, conp->vc_cols);
+		     ypan_up(unit, conp, p, count);
+		     if (conp->vc_rows-b > 0)
+			fbcon_bmove(conp, b-count, 0, b, 0, conp->vc_rows-b,
+				    conp->vc_cols);
+		  } else
+		     fbcon_bmove(conp, t+count, 0, t, 0, b-t-count,
+				 conp->vc_cols);
+		  fbcon_clear(conp, b-count, 0, count, conp->vc_cols);
+		  break;
 
-               case SCROLL_YMOVE:
-                  p->dispsw->bmove(p, count, 0, 0, 0, b-count, conp->vc_cols);
-                  break;
-            }
-         } else
-            fbcon_bmove(conp, t+count, 0, t, 0, b-t-count, conp->vc_cols);
-         fbcon_clear(conp, b-count, 0, count, conp->vc_cols);
+	       case SCROLL_YMOVE:
+		  p->dispsw->bmove(p, t+count, 0, t, 0, b-t-count,
+				   conp->vc_cols);
+		  p->dispsw->clear(conp, p, b-count, 0, count, conp->vc_cols);
+		  break;
+	    }
+	 else {
+	    fbcon_bmove(conp, t+count, 0, t, 0, b-t-count, conp->vc_cols);
+	    fbcon_clear(conp, b-count, 0, count, conp->vc_cols);
+	 }
          break;
 
       case SM_DOWN:
-         if (t == 0 && b == conp->vc_rows &&
-             vt_cons[unit]->vc_mode == KD_TEXT) {
-            if (count > conp->vc_rows)             /* Maximum realistic size */
-               count = conp->vc_rows;
-            switch (p->scrollmode) {
-               case SCROLL_YWRAP:
-                  p->yscroll -= count;
-                  if (p->yscroll < 0)              /* Deal with wrap */
-                     p->yscroll += p->vrows;
-                  p->var.xoffset = 0;
-                  p->var.yoffset = p->yscroll*p->fontheight;
-                  p->var.vmode |= FB_VMODE_YWRAP;
-                  fb_info->updatevar(unit);
-                  break;
+	 if (count > conp->vc_rows)	/* Maximum realistic size */
+	    count = conp->vc_rows;
+	 if (vt_cons[unit]->vc_mode == KD_TEXT)
+	    switch (p->scrollmode) {
+	       case SCROLL_YWRAP:
+		  if (b-t-count > 3*conp->vc_rows>>2) {
+		     if (conp->vc_rows-b > 0)
+			fbcon_bmove(conp, b, 0, b-count, 0, conp->vc_rows-b,
+				    conp->vc_cols);
+		     ywrap_down(unit, p, count);
+		     if (t > 0)
+			fbcon_bmove(conp, count, 0, 0, 0, t, conp->vc_cols);
+		  } else
+		     fbcon_bmove(conp, t, 0, t+count, 0, b-t-count,
+				 conp->vc_cols);
+		  fbcon_clear(conp, t, 0, count, conp->vc_cols);
+		  break;
 
-               case SCROLL_YPAN:
-                  p->yscroll -= count;
-                  if (p->yscroll < 0) {
-                     p->yscroll = p->vrows-conp->vc_rows;
-                     p->dispsw->bmove(p, 0, 0, p->yscroll+count, 0, b-count,
-                                      conp->vc_cols);
-                  }
-                  p->var.xoffset = 0;
-                  p->var.yoffset = p->yscroll*p->fontheight;
-                  p->var.vmode &= ~FB_VMODE_YWRAP;
-                  fb_info->updatevar(unit);
-                  break;
+	       case SCROLL_YPAN:
+		  if (b-t-count > 3*conp->vc_rows>>2) {
+		     if (conp->vc_rows-b > 0)
+			fbcon_bmove(conp, b, 0, b-count, 0, conp->vc_rows-b,
+				    conp->vc_cols);
+		     ypan_down(unit, conp, p, count);
+		     if (t > 0)
+			fbcon_bmove(conp, count, 0, 0, 0, t, conp->vc_cols);
+		  } else
+		     fbcon_bmove(conp, t, 0, t+count, 0, b-t-count,
+				 conp->vc_cols);
+		  fbcon_clear(conp, t, 0, count, conp->vc_cols);
+		  break;
 
-               case SCROLL_YMOVE:
-                  p->dispsw->bmove(p, 0, 0, count, 0, b-count, conp->vc_cols);
-                  break;
-            }
-         } else
-            fbcon_bmove(conp, t, 0, t+count, 0, b-t-count, conp->vc_cols);
-
-         /* Fixed bmove() should end Arno's frustration with copying?
-          * Confucius says:
-          *    Man who copies in wrong direction, end up with trashed data
-          */
-         fbcon_clear(conp, t, 0, count, conp->vc_cols);
+	       case SCROLL_YMOVE:
+		  p->dispsw->bmove(p, t, 0, t+count, 0, b-t-count,
+				   conp->vc_cols);
+		  p->dispsw->clear(conp, p, t, 0, count, conp->vc_cols);
+		  break;
+	    }
+	 else {
+	    /*
+	     * Fixed bmove() should end Arno's frustration with copying?
+	     * Confucius says:
+	     *    Man who copies in wrong direction, end up with trashed data
+	     */
+	    fbcon_bmove(conp, t, 0, t+count, 0, b-t-count, conp->vc_cols);
+	    fbcon_clear(conp, t, 0, count, conp->vc_cols);
+	 }
          break;
 
       case SM_LEFT:
@@ -1832,14 +1963,7 @@ static int fbcon_set_font(struct vc_data *conp, int w, int h, char *data)
 		/* Adjust the virtual screen-size to fontheight*rows */
 		p->var.yres_virtual = (p->var.yres/h)*h;
 		p->vrows = p->var.yres_virtual/h;
-		if (divides(p->ywrapstep, p->fontheight))
-			p->scrollmode = SCROLL_YWRAP;
-		else if (divides(p->ypanstep, p->fontheight) &&
-				 p->var.yres_virtual >= p->var.yres+p->fontheight)
-			p->scrollmode = SCROLL_YPAN;
-		else
-			p->scrollmode = SCROLL_YMOVE;
-
+		updatescrollmode(p);
 		vc_resize_con( p->var.yres/h, p->var.xres/w, unit );
 	}
 	else if (unit == fg_console)
@@ -1852,6 +1976,38 @@ static int fbcon_set_font(struct vc_data *conp, int w, int h, char *data)
 	}
 	
 	return( 0 );
+}
+
+static unsigned short palette_red[16];
+static unsigned short palette_green[16];
+static unsigned short palette_blue[16];
+
+static struct fb_cmap palette_cmap  = {
+    0, 16, palette_red, palette_green, palette_blue, NULL
+};
+
+static int fbcon_set_palette(struct vc_data *conp, unsigned char *table)
+{
+    int unit = conp->vc_num;
+    struct display *p = &disp[unit];
+    int i, j, k;
+    u_char val;
+
+    if (!conp->vc_can_do_color || (!p->can_soft_blank && console_blanked))
+	return(-EINVAL);
+    for (i = j = 0; i < 16; i++) {
+	k = table[i];
+	val = conp->vc_palette[j++];
+	palette_red[k] = (val<<8)|val;
+	val = conp->vc_palette[j++];
+	palette_green[k] = (val<<8)|val;
+	val = conp->vc_palette[j++];
+	palette_blue[k] = (val<<8)|val;
+    }
+    palette_cmap.len = 1<<p->var.bits_per_pixel;
+    if (palette_cmap.len > 16)
+	palette_cmap.len = 16;
+    return(fb_info->setcmap(&palette_cmap, unit));
 }
 
 
@@ -1882,8 +2038,8 @@ static void bmove_mono(struct display *p, int sy, int sx, int dy, int dx,
    u_char *src, *dest;
    u_int rows;
 
-   if (sx == 0 && sy == 0 && width == p->next_line) {
-      src = p->screen_base;
+   if (sx == 0 && dx == 0 && width == p->next_line) {
+      src = p->screen_base+sy*p->fontheight*width;
       dest = p->screen_base+dy*p->fontheight*width;
       mymemmove(dest, src, height*p->fontheight*width);
    } else if (dy <= sy) {
@@ -1928,28 +2084,28 @@ static void clear_mono(struct vc_data *conp, struct display *p, int sy, int sx,
 }
 
 
-static void putc_mono(struct vc_data *conp, struct display *p, int c, int y,
-                      int x)
+static void putc_mono(struct vc_data *conp, struct display *p, int c, int yy,
+                      int xx)
 {
    u_char *dest, *cdat;
-   u_int rows, bold, reverse, underline;
+   u_int rows, bold, revs, underl;
    u_char d;
 
    c &= 0xff;
 
-   dest = p->screen_base+y*p->fontheight*p->next_line+x;
+   dest = p->screen_base + yy*p->fontheight*p->next_line + xx;
    cdat = p->fontdata+c*p->fontheight;
    bold = attr_bold(p,conp);
-   reverse = attr_reverse(p,conp);
-   underline = attr_underline(p,conp);
+   revs = attr_reverse(p,conp);
+   underl = attr_underline(p,conp);
 
    for (rows = p->fontheight; rows--; dest += p->next_line) {
       d = *cdat++;
-      if (underline && !rows)
+      if (underl && !rows)
          d = 0xff;
       else if (bold)
          d |= d>>1;
-      if (reverse)
+      if (revs)
          d = ~d;
       *dest = d;
    }
@@ -1957,16 +2113,16 @@ static void putc_mono(struct vc_data *conp, struct display *p, int c, int y,
 
 
 static void putcs_mono(struct vc_data *conp, struct display *p, const char *s,
-                       int count, int y, int x)
+                       int count, int yy, int xx)
 {
    u_char *dest, *dest0, *cdat;
-   u_int rows, bold, reverse, underline;
+   u_int rows, bold, revs, underl;
    u_char c, d;
 
-   dest0 = p->screen_base+y*p->fontheight*p->next_line+x;
+   dest0 = p->screen_base + yy*p->fontheight*p->next_line + xx;
    bold = attr_bold(p,conp);
-   reverse = attr_reverse(p,conp);
-   underline = attr_underline(p,conp);
+   revs = attr_reverse(p,conp);
+   underl = attr_underline(p,conp);
 
    while (count--) {
       c = *s++;
@@ -1974,11 +2130,11 @@ static void putcs_mono(struct vc_data *conp, struct display *p, const char *s,
       cdat = p->fontdata+c*p->fontheight;
       for (rows = p->fontheight; rows--; dest += p->next_line) {
          d = *cdat++;
-         if (underline && !rows)
+         if (underl && !rows)
             d = 0xff;
          else if (bold)
             d |= d>>1;
-         if (reverse)
+         if (revs)
             d = ~d;
          *dest = d;
       }
@@ -1986,12 +2142,12 @@ static void putcs_mono(struct vc_data *conp, struct display *p, const char *s,
 }
 
 
-static void rev_char_mono(struct display *p, int x, int y)
+static void rev_char_mono(struct display *p, int xx, int yy)
 {
    u_char *dest;
    u_int rows;
 
-   dest = p->screen_base+y*p->fontheight*p->next_line+x;
+   dest = p->screen_base + yy*p->fontheight*p->next_line + xx;
    for (rows = p->fontheight; rows--; dest += p->next_line)
       *dest = ~*dest;
 }
@@ -2017,8 +2173,9 @@ static void rev_char_mono(struct display *p, int x, int y)
 static void bmove_ilbm(struct display *p, int sy, int sx, int dy, int dx,
                        int height, int width)
 {
-   if (sx == 0 && sy == 0 && width == p->next_plane)
-      mymemmove(p->screen_base+dy*p->fontheight*p->next_line, p->screen_base,
+   if (sx == 0 && dx == 0 && width == p->next_plane)
+      mymemmove(p->screen_base+dy*p->fontheight*p->next_line,
+		p->screen_base+sy*p->fontheight*p->next_line,
                 height*p->fontheight*p->next_line);
    else {
       u_char *src, *dest;
@@ -2068,8 +2225,8 @@ static void clear_ilbm(struct vc_data *conp, struct display *p, int sy, int sx,
 }
 
 
-static void putc_ilbm(struct vc_data *conp, struct display *p, int c, int y,
-                      int x)
+static void putc_ilbm(struct vc_data *conp, struct display *p, int c, int yy,
+                      int xx)
 {
    u_char *dest, *cdat;
    u_int rows, i;
@@ -2078,7 +2235,7 @@ static void putc_ilbm(struct vc_data *conp, struct display *p, int c, int y,
 
    c &= 0xff;
 
-   dest = p->screen_base+y*p->fontheight*p->next_line+x;
+   dest = p->screen_base + yy*p->fontheight*p->next_line + xx;
    cdat = p->fontdata+c*p->fontheight;
    fg0 = attr_fgcol(p,conp);
    bg0 = attr_bgcol(p,conp);
@@ -2114,14 +2271,14 @@ static void putc_ilbm(struct vc_data *conp, struct display *p, int c, int y,
  *                      address, to reduce the number of expensive Chip RAM
  *                      accesses.
  *
- *    Experiments on my A4000/040 revealed that this makes a console switch on a
- *    640x400 screen with 256 colors about 3 times faster.
+ *    Experiments on my A4000/040 revealed that this makes a console
+ *    switch on a 640x400 screen with 256 colors about 3 times faster.
  *
  *                                                                Geert
  */
 
 static void putcs_ilbm(struct vc_data *conp, struct display *p, const char *s,
-                       int count, int y, int x)
+                       int count, int yy, int xx)
 {
    u_char *dest0, *dest, *cdat1, *cdat2, *cdat3, *cdat4;
    u_int rows, i;
@@ -2129,15 +2286,15 @@ static void putcs_ilbm(struct vc_data *conp, struct display *p, const char *s,
    u_long d;
    int fg0, bg0, fg, bg;
 
-   dest0 = p->screen_base+y*p->fontheight*p->next_line+x;
+   dest0 = p->screen_base + yy*p->fontheight*p->next_line + xx;
    fg0 = attr_fgcol(p,conp);
    bg0 = attr_bgcol(p,conp);
 
    while (count--)
-      if (x&3 || count < 3) {   /* Slow version */
+      if (xx & 3 || count < 3) {   /* Slow version */
          c1 = *s++;
          dest = dest0++;
-         x++;
+         xx++;
 
          cdat1 = p->fontdata+c1*p->fontheight;
          for (rows = p->fontheight; rows--;) {
@@ -2191,19 +2348,19 @@ static void putcs_ilbm(struct vc_data *conp, struct display *p, const char *s,
          }
          s += 4;
          dest0 += 4;
-         x += 4;
+         xx += 4;
          count -= 3;
       }
 }
 
 
-static void rev_char_ilbm(struct display *p, int x, int y)
+static void rev_char_ilbm(struct display *p, int xx, int yy)
 {
    u_char *dest, *dest0;
    u_int rows, i;
    int mask;
 
-   dest0 = p->screen_base+y*p->fontheight*p->next_line+x;
+   dest0 = p->screen_base + yy*p->fontheight*p->next_line + xx;
    mask = p->fgcol ^ p->bgcol;
 
    /*
@@ -2239,8 +2396,8 @@ static void bmove_plan(struct display *p, int sy, int sx, int dy, int dx,
    u_char *src, *dest, *src0, *dest0;
    u_int i, rows;
 
-   if (sx == 0 && sy == 0 && width == p->next_line) {
-      src = p->screen_base;
+   if (sx == 0 && dx == 0 && width == p->next_line) {
+      src = p->screen_base+sy*p->fontheight*width;
       dest = p->screen_base+dy*p->fontheight*width;
       for (i = p->var.bits_per_pixel; i--;) {
          mymemmove(dest, src, height*p->fontheight*width);
@@ -2301,8 +2458,8 @@ static void clear_plan(struct vc_data *conp, struct display *p, int sy, int sx,
 }
 
 
-static void putc_plan(struct vc_data *conp, struct display *p, int c, int y,
-                      int x)
+static void putc_plan(struct vc_data *conp, struct display *p, int c, int yy,
+                      int xx)
 {
    u_char *dest, *dest0, *cdat, *cdat0;
    u_int rows, i;
@@ -2311,7 +2468,7 @@ static void putc_plan(struct vc_data *conp, struct display *p, int c, int y,
 
    c &= 0xff;
 
-   dest0 = p->screen_base+y*p->fontheight*p->next_line+x;
+   dest0 = p->screen_base + yy*p->fontheight*p->next_line + xx;
    cdat0 = p->fontdata+c*p->fontheight;
    fg = attr_fgcol(p,conp);
    bg = attr_bgcol(p,conp);
@@ -2344,7 +2501,7 @@ static void putc_plan(struct vc_data *conp, struct display *p, int c, int y,
  */
 
 static void putcs_plan(struct vc_data *conp, struct display *p, const char *s,
-                       int count, int y, int x)
+                       int count, int yy, int xx)
 {
    u_char *dest, *dest0, *dest1;
    u_char *cdat1, *cdat2, *cdat3, *cdat4, *cdat10, *cdat20, *cdat30, *cdat40;
@@ -2353,15 +2510,15 @@ static void putcs_plan(struct vc_data *conp, struct display *p, const char *s,
    u_long d;
    int fg0, bg0, fg, bg;
 
-   dest0 = p->screen_base+y*p->fontheight*p->next_line+x;
+   dest0 = p->screen_base + yy*p->fontheight*p->next_line + xx;
    fg0 = attr_fgcol(p,conp);
    bg0 = attr_bgcol(p,conp);
 
    while (count--)
-      if (x&3 || count < 3) {   /* Slow version */
+      if (xx & 3 || count < 3) {   /* Slow version */
          c1 = *s++;
          dest1 = dest0++;
-         x++;
+         xx++;
 
          cdat10 = p->fontdata+c1*p->fontheight;
          fg = fg0;
@@ -2424,19 +2581,19 @@ static void putcs_plan(struct vc_data *conp, struct display *p, const char *s,
          }
          s += 4;
          dest0 += 4;
-         x += 4;
+         xx += 4;
          count -= 3;
       }
 }
 
 
-static void rev_char_plan(struct display *p, int x, int y)
+static void rev_char_plan(struct display *p, int xx, int yy)
 {
    u_char *dest, *dest0;
    u_int rows, i;
    int mask;
 
-   dest0 = p->screen_base+y*p->fontheight*p->next_line+x;
+   dest0 = p->screen_base + yy*p->fontheight*p->next_line + xx;
    mask = p->fgcol ^ p->bgcol;
 
    /*
@@ -2499,8 +2656,8 @@ static void bmove_2_plane(struct display *p, int sy, int sx, int dy, int dx,
 		 * done with memmove()
 		 */
 		mymemmove(p->screen_base + dy * p->next_line * p->fontheight,
-				   p->screen_base + sy * p->next_line * p->fontheight,
-				   p->next_line * height * p->fontheight);
+			  p->screen_base + sy * p->next_line * p->fontheight,
+			  p->next_line * height * p->fontheight);
     } else {
         int rows, cols;
         u_char *src;
@@ -2607,8 +2764,8 @@ static void clear_2_plane(struct vc_data *conp, struct display *p, int sy,
     int bytes = p->next_line;
     int lines = height * p->fontheight;
     ulong  size;
-	u_long          cval;
-	u_short			pcval;
+    u_long          cval;
+    u_short			pcval;
 
     cval = expand2l (COLOR_2P (attr_bgcol_ec(p,conp)));
 
@@ -2650,43 +2807,45 @@ static void clear_2_plane(struct vc_data *conp, struct display *p, int sy,
 }
 
 
-static void putc_2_plane(struct vc_data *conp, struct display *p, int c, int y,
-                         int x)
+static void putc_2_plane(struct vc_data *conp, struct display *p, int
+			 c, int yy, int xx)
 {
-   u_char   *dest;
-    u_char   *cdat;
-    int rows;
-    int bytes = p->next_line;
-	ulong			  eorx, fgx, bgx, fdx;
+	u_char   *dest;
+	u_char   *cdat;
+	int rows;
+	int bytes = p->next_line;
+	ulong    eorx, fgx, bgx, fdx;
 
 	c &= 0xff;
 
-    dest  = p->screen_base + y * p->fontheight * bytes + (x>>1)*4 + (x & 1);
-    cdat  = p->fontdata + (c * p->fontheight);
+	dest  = p->screen_base + yy * p->fontheight * bytes +
+		(xx >> 1)*4 + (xx & 1);
+	cdat  = p->fontdata + (c * p->fontheight);
 
 	fgx   = expand2w(COLOR_2P(attr_fgcol(p,conp)));
 	bgx   = expand2w(COLOR_2P(attr_bgcol(p,conp)));
 	eorx  = fgx ^ bgx;
 
-    for(rows = p->fontheight ; rows-- ; dest += bytes) {
+	for(rows = p->fontheight ; rows-- ; dest += bytes) {
 		fdx = dup2w(*cdat++);
 		__asm__ __volatile__ ("movepw %1,%0@(0)" : /* no outputs */
-							   : "a" (dest), "d" ((fdx & eorx) ^ bgx));
+				      : "a" (dest), "d" ((fdx & eorx) ^ bgx));
 	}
 }
 
 
 static void putcs_2_plane(struct vc_data *conp, struct display *p,
-                          const char *s, int count, int y, int x)
+                          const char *s, int count, int yy, int xx)
 {
 	u_char   *dest, *dest0;
-    u_char   *cdat, c;
-    int rows;
-    int bytes;
-	ulong			  eorx, fgx, bgx, fdx;
+	u_char   *cdat, c;
+	int rows;
+	int bytes;
+	ulong    eorx, fgx, bgx, fdx;
 
-    bytes = p->next_line;
-    dest0 = p->screen_base + y * p->fontheight * bytes + (x>>1)*4 + (x & 1);
+	bytes = p->next_line;
+	dest0 = p->screen_base + yy * p->fontheight * bytes
+		+ (xx >> 1)*4 + (xx & 1);
 	fgx   = expand2w(COLOR_2P(attr_fgcol(p,conp)));
 	bgx   = expand2w(COLOR_2P(attr_bgcol(p,conp)));
 	eorx  = fgx ^ bgx;
@@ -2699,32 +2858,33 @@ static void putcs_2_plane(struct vc_data *conp, struct display *p,
 		for(rows = p->fontheight, dest = dest0; rows-- ; dest += bytes) {
 			fdx = dup2w(*cdat++);
 			__asm__ __volatile__ ("movepw %1,%0@(0)" : /* no outputs */
-								   : "a" (dest), "d" ((fdx & eorx) ^ bgx));
+					      : "a" (dest), "d" ((fdx & eorx) ^ bgx));
 		}
 		INC_2P(dest0);
 	}
 }
 
 
-static void rev_char_2_plane(struct display *p, int x, int y)
+static void rev_char_2_plane(struct display *p, int xx, int yy)
 {
-   u_char *dest;
-   int j;
-   int bytes;
+	u_char *dest;
+	int j;
+	int bytes;
 
-   dest = p->screen_base + y * p->fontheight * p->next_line + (x>>1)*4 + (x & 1);
-   j = p->fontheight;
-   bytes = p->next_line;
-   while (j--)
-     {
-      /* This should really obey the individual character's
-       * background and foreground colors instead of simply
-       * inverting.
-       */
-       dest[0] = ~dest[0];
-       dest[2] = ~dest[2];
-       dest += bytes;
-     }
+	dest = p->screen_base + yy * p->fontheight * p->next_line +
+		(xx >> 1)*4 + (xx & 1);
+	j = p->fontheight;
+	bytes = p->next_line;
+	while (j--)
+	{
+		/* This should really obey the individual character's
+		 * background and foreground colors instead of simply
+		 * inverting.
+		 */
+		dest[0] = ~dest[0];
+		dest[2] = ~dest[2];
+		dest += bytes;
+	}
 }
 #endif /* CONFIG_FBCON_2PLANE */
 
@@ -2763,8 +2923,8 @@ static void bmove_4_plane(struct display *p, int sy, int sx, int dy, int dx,
 		 * done with memmove()
 		 */
 		mymemmove(p->screen_base + dy * p->next_line * p->fontheight,
-				   p->screen_base + sy * p->next_line * p->fontheight,
-				   p->next_line * height * p->fontheight);
+			  p->screen_base + sy * p->next_line * p->fontheight,
+			  p->next_line * height * p->fontheight);
     } else {
         int rows, cols;
         u_char *src;
@@ -2871,9 +3031,9 @@ static void clear_4_plane(struct vc_data *conp, struct display *p, int sy,
     int bytes = p->next_line;
     int lines = height * p->fontheight;
     ulong  size;
-	u_long          cval1, cval2, pcval;
+    u_long          cval1, cval2, pcval;
 
-	expand4dl(attr_bgcol_ec(p,conp), &cval1, &cval2);
+    expand4dl(attr_bgcol_ec(p,conp), &cval1, &cval2);
 
     if (sx == 0 && width == bytes/4) {
 
@@ -2913,43 +3073,45 @@ static void clear_4_plane(struct vc_data *conp, struct display *p, int sy,
 }
 
 
-static void putc_4_plane(struct vc_data *conp, struct display *p, int c, int y,
-                         int x)
+static void putc_4_plane(struct vc_data *conp, struct display *p, int
+			 c, int yy, int xx)
 {
 	u_char   *dest;
-    u_char   *cdat;
-    int rows;
-    int bytes = p->next_line;
-	ulong			  eorx, fgx, bgx, fdx;
+	u_char   *cdat;
+	int rows;
+	int bytes = p->next_line;
+	ulong	  eorx, fgx, bgx, fdx;
 
 	c &= 0xff;
 
-    dest  = p->screen_base + y * p->fontheight * bytes + (x>>1)*8 + (x & 1);
-    cdat  = p->fontdata + (c * p->fontheight);
+	dest  = p->screen_base + yy * p->fontheight * bytes +
+		(xx >> 1)*8 + (xx & 1);
+	cdat  = p->fontdata + (c * p->fontheight);
 
 	fgx   = expand4l(attr_fgcol(p,conp));
 	bgx   = expand4l(attr_bgcol(p,conp));
 	eorx  = fgx ^ bgx;
 
-    for(rows = p->fontheight ; rows-- ; dest += bytes) {
+	for(rows = p->fontheight ; rows-- ; dest += bytes) {
 		fdx = dup4l(*cdat++);
 		__asm__ __volatile__ ("movepl %1,%0@(0)" : /* no outputs */
-							   : "a" (dest), "d" ((fdx & eorx) ^ bgx));
+				      : "a" (dest), "d" ((fdx & eorx) ^ bgx));
 	}
 }
 
 
 static void putcs_4_plane(struct vc_data *conp, struct display *p,
-                          const char *s, int count, int y, int x)
+                          const char *s, int count, int yy, int xx)
 {
 	u_char   *dest, *dest0;
-    u_char   *cdat, c;
-    int rows;
-    int bytes;
-	ulong			  eorx, fgx, bgx, fdx;
+	u_char   *cdat, c;
+	int rows;
+	int bytes;
+	ulong	  eorx, fgx, bgx, fdx;
 
-    bytes = p->next_line;
-    dest0 = p->screen_base + y * p->fontheight * bytes + (x>>1)*8 + (x & 1);
+	bytes = p->next_line;
+	dest0 = p->screen_base + yy * p->fontheight * bytes
+		+ (xx >> 1)*8 + (xx & 1);
 	fgx   = expand4l(attr_fgcol(p,conp));
 	bgx   = expand4l(attr_bgcol(p,conp));
 	eorx  = fgx ^ bgx;
@@ -2969,20 +3131,21 @@ static void putcs_4_plane(struct vc_data *conp, struct display *p,
 		for(rows = p->fontheight, dest = dest0; rows-- ; dest += bytes) {
 			fdx = dup4l(*cdat++);
 			__asm__ __volatile__ ("movepl %1,%0@(0)" : /* no outputs */
-								   : "a" (dest), "d" ((fdx & eorx) ^ bgx));
+					      : "a" (dest), "d" ((fdx & eorx) ^ bgx));
 		}
 		INC_4P(dest0);
 	}
 }
 
 
-static void rev_char_4_plane(struct display *p, int x, int y)
+static void rev_char_4_plane(struct display *p, int xx, int yy)
 {
    u_char *dest;
    int j;
    int bytes;
 
-   dest = p->screen_base + y * p->fontheight * p->next_line + (x>>1)*8 + (x & 1);
+   dest = p->screen_base + yy * p->fontheight * p->next_line +
+	   (xx >> 1)*8 + (xx & 1);
    j = p->fontheight;
    bytes = p->next_line;
 
@@ -3150,15 +3313,16 @@ static void clear_8_plane(struct vc_data *conp, struct display *p, int sy,
     int bytes = p->next_line;
     int lines = height * p->fontheight;
     ulong  size;
-	u_long          cval1, cval2, cval3, cval4, pcval1, pcval2;
+    u_long          cval1, cval2, cval3, cval4, pcval1, pcval2;
 
-	expand8ql(attr_bgcol_ec(p,conp), cval1, cval2, cval3, cval4);
+    expand8ql(attr_bgcol_ec(p,conp), cval1, cval2, cval3, cval4);
 
     if (sx == 0 && width == bytes/8) {
 
         offset = sy * bytes * p->fontheight;
         size   = lines * bytes;
-		memset_even_8p(p->screen_base+offset, size, cval1, cval2, cval3, cval4);
+		memset_even_8p(p->screen_base+offset, size, cval1,
+			       cval2, cval3, cval4);
 
     } else {
 
@@ -3193,48 +3357,50 @@ static void clear_8_plane(struct vc_data *conp, struct display *p, int sy,
 }
 
 
-static void putc_8_plane(struct vc_data *conp, struct display *p, int c, int y,
-                         int x)
+static void putc_8_plane(struct vc_data *conp, struct display *p, int c, int yy,
+                         int xx)
 {
 	u_char   *dest;
-    u_char   *cdat;
-    int rows;
-    int bytes = p->next_line;
-	ulong			  eorx1, eorx2, fgx1, fgx2, bgx1, bgx2, fdx;
+	u_char   *cdat;
+	int rows;
+	int bytes = p->next_line;
+	ulong	  eorx1, eorx2, fgx1, fgx2, bgx1, bgx2, fdx;
 
 	c &= 0xff;
 
-    dest  = p->screen_base + y * p->fontheight * bytes + (x>>1)*16 + (x & 1);
-    cdat  = p->fontdata + (c * p->fontheight);
+	dest  = p->screen_base + yy * p->fontheight * bytes +
+		(xx >> 1)*16 + (xx & 1);
+	cdat  = p->fontdata + (c * p->fontheight);
 
 	expand8dl(attr_fgcol(p,conp), &fgx1, &fgx2);
 	expand8dl(attr_bgcol(p,conp), &bgx1, &bgx2);
 	eorx1  = fgx1 ^ bgx1; eorx2  = fgx2 ^ bgx2;
 
-    for(rows = p->fontheight ; rows-- ; dest += bytes) {
+	for(rows = p->fontheight ; rows-- ; dest += bytes) {
 		fdx = dup4l(*cdat++);
 		__asm__ __volatile__
 			("movepl %1,%0@(0)\n\t"
-			  "movepl %2,%0@(8)"
-			  : /* no outputs */
-			  : "a" (dest), "d" ((fdx & eorx1) ^ bgx1),
-			    "d" ((fdx & eorx2) ^ bgx2)
+			 "movepl %2,%0@(8)"
+			 : /* no outputs */
+			 : "a" (dest), "d" ((fdx & eorx1) ^ bgx1),
+			 "d" ((fdx & eorx2) ^ bgx2)
 			);
 	}
 }
 
 
 static void putcs_8_plane(struct vc_data *conp, struct display *p,
-                          const char *s, int count, int y, int x)
+                          const char *s, int count, int yy, int xx)
 {
 	u_char   *dest, *dest0;
-    u_char   *cdat, c;
-    int rows;
-    int bytes;
-	ulong			  eorx1, eorx2, fgx1, fgx2, bgx1, bgx2, fdx;
+	u_char   *cdat, c;
+	int rows;
+	int bytes;
+	ulong	  eorx1, eorx2, fgx1, fgx2, bgx1, bgx2, fdx;
 
-    bytes = p->next_line;
-    dest0 = p->screen_base + y * p->fontheight * bytes + (x>>1)*16 + (x & 1);
+	bytes = p->next_line;
+	dest0 = p->screen_base + yy * p->fontheight * bytes
+		+ (xx >> 1)*16 + (xx & 1);
 
 	expand8dl(attr_fgcol(p,conp), &fgx1, &fgx2);
 	expand8dl(attr_bgcol(p,conp), &bgx1, &bgx2);
@@ -3267,30 +3433,31 @@ static void putcs_8_plane(struct vc_data *conp, struct display *p,
 }
 
 
-static void rev_char_8_plane(struct display *p, int x, int y)
+static void rev_char_8_plane(struct display *p, int xx, int yy)
 {
-   u_char *dest;
-   int j;
-   int bytes;
+	u_char *dest;
+	int j;
+	int bytes;
 
-   dest = p->screen_base + y * p->fontheight * p->next_line + (x>>1)*16 + (x & 1);
-   j = p->fontheight;
-   bytes = p->next_line;
+	dest = p->screen_base + yy * p->fontheight * p->next_line
+		+ (xx >> 1)*16 + (xx & 1);
+	j = p->fontheight;
+	bytes = p->next_line;
 
-   while (j--)
-     {
-      /* This should really obey the individual character's
-       * background and foreground colors instead of simply
-       * inverting. For 8 plane mode, only the lower 4 bits of the
-       * color are inverted, because only that color registers have
-       * been set up.
-       */
-       dest[0] = ~dest[0];
-       dest[2] = ~dest[2];
-       dest[4] = ~dest[4];
-       dest[6] = ~dest[6];
-       dest += bytes;
-     }
+	while (j--)
+	{
+		/* This should really obey the individual character's
+		 * background and foreground colors instead of simply
+		 * inverting. For 8 plane mode, only the lower 4 bits of the
+		 * color are inverted, because only that color registers have
+		 * been set up.
+		 */
+		dest[0] = ~dest[0];
+		dest[2] = ~dest[2];
+		dest[4] = ~dest[4];
+		dest[6] = ~dest[6];
+		dest += bytes;
+	}
 }
 #endif /* CONFIG_FBCON_8PLANE */
 
@@ -3378,8 +3545,8 @@ static void clear_8_packed(struct vc_data *conp, struct display *p, int sy,
 }
 
 
-static void putc_8_packed(struct vc_data *conp, struct display *p, int c, int y,
-                          int x)
+static void putc_8_packed(struct vc_data *conp, struct display *p, int c,
+			  int yy, int xx)
 {
 	u_char *dest,*cdat;
 	int bytes=p->next_line,rows;
@@ -3387,7 +3554,7 @@ static void putc_8_packed(struct vc_data *conp, struct display *p, int c, int y,
 
 	c &= 0xff;
 
-	dest = p->screen_base + y * p->fontheight * bytes + x * 8;
+	dest = p->screen_base + yy * p->fontheight * bytes + xx * 8;
 	cdat = p->fontdata + c * p->fontheight;
 
 	fgx=attr_fgcol(p,conp);
@@ -3408,13 +3575,13 @@ static void putc_8_packed(struct vc_data *conp, struct display *p, int c, int y,
 
 
 static void putcs_8_packed(struct vc_data *conp, struct display *p,
-                           const char *s, int count, int y, int x)
+                           const char *s, int count, int yy, int xx)
 {
 	u_char *cdat, c, *dest, *dest0;
 	int rows,bytes=p->next_line;
 	u_long eorx, fgx, bgx;
 
-	dest0 = p->screen_base + y * p->fontheight * bytes + x * 8;
+	dest0 = p->screen_base + yy * p->fontheight * bytes + xx * 8;
 	fgx=attr_fgcol(p,conp);
 	bgx=attr_bgcol(p,conp);
 	fgx |= (fgx << 8);
@@ -3437,12 +3604,12 @@ static void putcs_8_packed(struct vc_data *conp, struct display *p,
 }
 
 
-static void rev_char_8_packed(struct display *p, int x, int y)
+static void rev_char_8_packed(struct display *p, int xx, int yy)
 {
 	u_char *dest;
 	int bytes=p->next_line, rows;
 
-	dest = p->screen_base + y * p->fontheight * bytes + x * 8;
+	dest = p->screen_base + yy * p->fontheight * bytes + xx * 8;
 	for (rows = p->fontheight ; rows-- ; dest += bytes) {
 		((u_long *)dest)[0] ^= 0x0f0f0f0f;
 		((u_long *)dest)[1] ^= 0x0f0f0f0f;
@@ -3539,7 +3706,7 @@ static void clear_16_packed(struct vc_data *conp, struct display *p, int sy,
 
 
 static void putc_16_packed(struct vc_data *conp, struct display *p, int c,
-                           int y, int x)
+                           int yy, int xx)
 {
 	u_char *dest,*cdat;
 	int bytes=p->next_line,rows;
@@ -3547,7 +3714,7 @@ static void putc_16_packed(struct vc_data *conp, struct display *p, int c,
 
 	c &= 0xff;
 
-	dest = p->screen_base + y * p->fontheight * bytes + x * 16;
+	dest = p->screen_base + yy * p->fontheight * bytes + xx * 16;
 	cdat = p->fontdata + c * p->fontheight;
 
 	fgx = attr_fgcol(p,conp);
@@ -3573,13 +3740,13 @@ static void putc_16_packed(struct vc_data *conp, struct display *p, int c,
 
 /* TODO */
 static void putcs_16_packed(struct vc_data *conp, struct display *p,
-                            const char *s, int count, int y, int x)
+                            const char *s, int count, int yy, int xx)
 {
 	u_char *cdat, c, *dest, *dest0;
 	int rows,bytes=p->next_line;
 	u_long eorx, fgx, bgx;
 
-	dest0 = p->screen_base + y * p->fontheight * bytes + x * 16;
+	dest0 = p->screen_base + yy * p->fontheight * bytes + xx * 16;
 	fgx = attr_fgcol(p,conp);
 	fgx = packed16_cmap[fgx];
 	bgx = attr_bgcol(p,conp);
@@ -3606,12 +3773,12 @@ static void putcs_16_packed(struct vc_data *conp, struct display *p,
 }
 
 
-static void rev_char_16_packed(struct display *p, int x, int y)
+static void rev_char_16_packed(struct display *p, int xx, int yy)
 {
 	u_char *dest;
 	int bytes=p->next_line, rows;
 
-	dest = p->screen_base + y * p->fontheight * bytes + x * 16;
+	dest = p->screen_base + yy * p->fontheight * bytes + xx * 16;
 	for (rows = p->fontheight ; rows-- ; dest += bytes) {
 		((u_long *)dest)[0] ^= 0xffffffff;
 		((u_long *)dest)[1] ^= 0xffffffff;
@@ -3641,87 +3808,90 @@ static void bmove_cyber(struct display *p, int sy, int sx, int dy, int dx,
 }
 
 
-static void clear_cyber(struct vc_data *conp, struct display *p, int sy, int sx,
-                        int height, int width)
+static void clear_cyber(struct vc_data *conp, struct display *p, int
+			sy, int sx, int height, int width)
 {
-   u_char bg;
+	unsigned char bg;
         
 	sx *= 8; width *= 8;
 	bg = attr_bgcol_ec(p,conp);
-   Cyber_RectFill((u_short)sx, (u_short)(sy*p->fontheight), (u_short)width,
-                  (u_short)(height*p->fontheight), (u_short)S3_NEW,
-                  (u_short)bg); 
+	Cyber_RectFill((u_short)sx,
+		       (u_short)(sy*p->fontheight),
+		       (u_short)width,
+		       (u_short)(height*p->fontheight),
+		       (u_short)S3_NEW, 
+		       (u_short)bg); 
 }
 
 
-static void putc_cyber(struct vc_data *conp, struct display *p, int c, int y,
-                       int x)
+static void putc_cyber(struct vc_data *conp, struct display *p, int c, int yy,
+                       int xx)
 {
 	u_char *dest, *cdat;
 	u_long tmp;
-	u_int rows, reverse, underline; 
+	u_int rows, revs, underl; 
 	u_char d;
-   u_char fg, bg;
+	u_char fg, bg;
 
-   c &= 0xff;
+	c &= 0xff;
 
 	dest = p->screen_base+y*p->fontheight*p->next_line+8*x;
 	cdat = p->fontdata+(c*p->fontheight);
-   fg = disp->fgcol;
-   bg = disp->bgcol;
-	reverse = conp->vc_reverse;
-	underline = conp->vc_underline;
+	fg = disp->fgcol;
+	bg = disp->bgcol;
+	revs = conp->vc_reverse;
+	underl = conp->vc_underline;
 
    Cyber_WaitBlit();
 	for (rows = p->fontheight; rows--; dest += p->next_line) {
   		d = *cdat++;
 
-		if (underline && !rows)
+		if (underl && !rows)
 			d = 0xff;
-		if (reverse)
+		if (revs)
 			d = ~d;
 
-      tmp =  ((d & 0x80) ? fg : bg) << 24;
-      tmp |= ((d & 0x40) ? fg : bg) << 16;
-      tmp |= ((d & 0x20) ? fg : bg) << 8;
-      tmp |= ((d & 0x10) ? fg : bg);
-      *((u_long*) dest) = tmp;
-      tmp =  ((d & 0x8) ? fg : bg) << 24;
-      tmp |= ((d & 0x4) ? fg : bg) << 16;
-      tmp |= ((d & 0x2) ? fg : bg) << 8;
-      tmp |= ((d & 0x1) ? fg : bg);
-      *((u_long*) dest + 1) = tmp;
+		tmp =  ((d & 0x80) ? fg : bg) << 24;
+		tmp |= ((d & 0x40) ? fg : bg) << 16;
+		tmp |= ((d & 0x20) ? fg : bg) << 8;
+		tmp |= ((d & 0x10) ? fg : bg);
+		*((u_long*) dest) = tmp;
+		tmp =  ((d & 0x8) ? fg : bg) << 24;
+		tmp |= ((d & 0x4) ? fg : bg) << 16;
+		tmp |= ((d & 0x2) ? fg : bg) << 8;
+		tmp |= ((d & 0x1) ? fg : bg);
+		*((u_long*) dest + 1) = tmp;
 	}
 }
 
 
 static void putcs_cyber(struct vc_data *conp, struct display *p, const char *s,
-                        int count, int y, int x)
+                        int count, int yy, int xx)
 {
 	u_char *dest, *dest0, *cdat;
-   u_long tmp;
-	u_int rows, reverse, underline;
+	u_long tmp;
+	u_int rows, revs, underl;
 	u_char c, d;
-   u_char fg, bg;
+	u_char fg, bg;
 
 	dest0 = p->screen_base+y*p->fontheight*p->next_line+8*x;
-   fg = disp->fgcol;
-   bg = disp->bgcol;
-	reverse = conp->vc_reverse;
-	underline = conp->vc_underline;
+	fg = disp->fgcol;
+	bg = disp->bgcol;
+	revs = conp->vc_reverse;
+	underl = conp->vc_underline;
 
    Cyber_WaitBlit();
 	while (count--) {
 		c = *s++;
 		dest = dest0;
-      dest0 += 8;
+		dest0 += 8;
 		cdat = p->fontdata+(c*p->fontheight);
 		for (rows = p->fontheight; rows--; dest += p->next_line) {
  			d = *cdat++;
 
-			if (underline && !rows)
+			if (underl && !rows)
 				d = 0xff;
-			if (reverse)
+			if (revs)
 				d = ~d;
 
          tmp =  ((d & 0x80) ? fg : bg) << 24;
@@ -3739,31 +3909,207 @@ static void putcs_cyber(struct vc_data *conp, struct display *p, const char *s,
 }
 
 
-static void rev_char_cyber(struct display *p, int x, int y)
+static void rev_char_cyber(struct display *p, int xx, int yy)
 {
-	u_char *dest;
-	u_int rows;
-   u_char fg, bg;
+	unsigned char *dest;
+	unsigned int rows;
+	unsigned char fg, bg;
 
-   fg = disp->fgcol;
-   bg = disp->bgcol;
+	fg = disp->fgcol;
+	bg = disp->bgcol;
 
 	dest = p->screen_base+y*p->fontheight*p->next_line+8*x;
    Cyber_WaitBlit();
 	for (rows = p->fontheight; rows--; dest += p->next_line) {
 		*dest = (*dest == fg) ? bg : fg;
-      *(dest+1) = (*(dest + 1) == fg) ? bg : fg;
-      *(dest+2) = (*(dest + 2) == fg) ? bg : fg;
-      *(dest+3) = (*(dest + 3) == fg) ? bg : fg;
-      *(dest+4) = (*(dest + 4) == fg) ? bg : fg;
-      *(dest+5) = (*(dest + 5) == fg) ? bg : fg;
-      *(dest+6) = (*(dest + 6) == fg) ? bg : fg;
-      *(dest+7) = (*(dest + 7) == fg) ? bg : fg;
+		*(dest+1) = (*(dest + 1) == fg) ? bg : fg;
+		*(dest+2) = (*(dest + 2) == fg) ? bg : fg;
+		*(dest+3) = (*(dest + 3) == fg) ? bg : fg;
+		*(dest+4) = (*(dest + 4) == fg) ? bg : fg;
+		*(dest+5) = (*(dest + 5) == fg) ? bg : fg;
+		*(dest+6) = (*(dest + 6) == fg) ? bg : fg;
+		*(dest+7) = (*(dest + 7) == fg) ? bg : fg;
 	}
 }
 
 #endif /* CONFIG_FBCON_CYBER */
 
+
+#ifdef CONFIG_FBCON_RETINAZ3
+
+/*
+ *    RetinaZ3 (accelerated)
+ */
+
+#define Z3BLTcopy		0xc0
+#define Z3BLTset		0xf0
+
+static void clear_retz3(struct vc_data *conp, struct display *p, int
+			sy, int sx, int height, int width)
+{
+	unsigned short col;
+	int fontwidth = p->fontwidth;
+
+	sx *= fontwidth;
+	width *= fontwidth;
+
+	col = attr_bgcol_ec(p, conp);
+	col &= 0xff;
+	col |= (col << 8);
+
+	retz3_bitblt(&p->var,
+		     (unsigned short)sx,
+		     (unsigned short)(sy*p->fontheight),
+		     (unsigned short)sx,
+		     (unsigned short)(sy*p->fontheight),
+		     (unsigned short)width,
+		     (unsigned short)(height*p->fontheight),
+		     Z3BLTset,
+		     col); 
+}
+
+static void bmove_retz3(struct display *p, int sy, int sx, int dy, int dx,
+                        int height, int width)
+{
+	int fontwidth = p->fontwidth;
+
+	sx *= fontwidth;
+	dx *= fontwidth;
+	width *= fontwidth;
+
+	retz3_bitblt(&p->var,
+		     (unsigned short)sx,
+		     (unsigned short)(sy*p->fontheight),
+		     (unsigned short)dx,
+		     (unsigned short)(dy*p->fontheight),
+		     (unsigned short)width,
+		     (unsigned short)(height*p->fontheight),
+		     Z3BLTcopy,
+		     0xffff);
+}
+
+static void putc_retz3(struct vc_data *conp, struct display *p,
+		       int c, int yy, int xx)
+{
+	unsigned char *dest, *cdat;
+	unsigned long tmp;
+	unsigned int rows, revs, underl, bytes;
+	unsigned char d;
+	unsigned char fg, bg;
+   
+	c &= 0xff;
+
+	bytes = p->next_line;
+
+	dest = p->screen_base + yy*p->fontheight*bytes
+		+ xx*p->var.bits_per_pixel;
+	cdat = p->fontdata + c * p->fontheight;
+
+	fg = disp->fgcol;
+	bg = disp->bgcol;
+	revs = conp->vc_reverse;
+	underl = conp->vc_underline;
+
+	for (rows = p->fontheight; rows--; dest += bytes) {
+		d = *cdat++;
+
+		if (underl && !rows)
+			d = 0xff;
+		if (revs)
+			d = ~d;
+
+		tmp =  ((d & 0x80) ? fg : bg) << 24;
+		tmp |= ((d & 0x40) ? fg : bg) << 16;
+		tmp |= ((d & 0x20) ? fg : bg) << 8;
+		tmp |= ((d & 0x10) ? fg : bg);
+		*((unsigned long*) dest) = tmp;
+		tmp =  ((d & 0x8) ? fg : bg) << 24;
+		tmp |= ((d & 0x4) ? fg : bg) << 16;
+		tmp |= ((d & 0x2) ? fg : bg) << 8;
+		tmp |= ((d & 0x1) ? fg : bg);
+		*((unsigned long*) dest + 1) = tmp;
+	}
+}
+
+
+static void putcs_retz3(struct vc_data *conp, struct display *p,
+			const char *s, int count, int yy, int xx)
+{
+	unsigned char *dest, *dest0, *cdat;
+	unsigned long tmp;
+	unsigned int rows, revs, underl, bytes;
+	unsigned char c, d;
+	unsigned char fg, bg;
+
+	bytes = p->next_line;
+
+	dest0 = p->screen_base + yy*p->fontheight*bytes
+		+ xx * p->var.bits_per_pixel;
+	fg = disp->fgcol;
+	bg = disp->bgcol;
+	revs = conp->vc_reverse;
+	underl = conp->vc_underline;
+
+	while (count--) {
+		c = *s++;
+		dest = dest0;
+		dest0 += 8;
+
+		cdat = p->fontdata + c * p->fontheight;
+		for (rows = p->fontheight; rows--; dest += bytes) {
+ 			d = *cdat++;
+
+			if (underl && !rows)
+				d = 0xff;
+			if (revs)
+				d = ~d;
+
+			tmp =  ((d & 0x80) ? fg : bg) << 24;
+			tmp |= ((d & 0x40) ? fg : bg) << 16;
+			tmp |= ((d & 0x20) ? fg : bg) << 8;
+			tmp |= ((d & 0x10) ? fg : bg);
+			*((unsigned long*) dest) = tmp;
+			tmp =  ((d & 0x8) ? fg : bg) << 24;
+			tmp |= ((d & 0x4) ? fg : bg) << 16;
+			tmp |= ((d & 0x2) ? fg : bg) << 8;
+			tmp |= ((d & 0x1) ? fg : bg);
+			*((unsigned long*) dest + 1) = tmp;
+		}
+	}
+}
+
+static void rev_char_retz3(struct display *p, int xx, int yy)
+{
+	unsigned char *dest;
+	int bytes=p->next_line, rows;
+	unsigned int bpp, mask;
+
+	bpp = p->var.bits_per_pixel;
+
+	switch (bpp){
+	case 8:
+		mask = 0x0f0f0f0f;
+		break;
+	case 16:
+		mask = 0xffffffff;
+		break;
+	case 24:
+		mask = 0xffffffff; /* ??? */
+		break;
+	default:
+		printk("illegal depth for rev_char_retz3(), bpp = %i\n", bpp);
+		return;
+	}
+
+	dest = p->screen_base + yy * p->fontheight * bytes + xx * bpp;
+
+	for (rows = p->fontheight ; rows-- ; dest += bytes) {
+		((unsigned long *)dest)[0] ^= mask;
+		((unsigned long *)dest)[1] ^= mask;
+	}
+}
+
+#endif
 
 /* ====================================================================== */
 
@@ -3774,5 +4120,5 @@ static void rev_char_cyber(struct display *p, int x, int y)
 struct consw fb_con = {
    fbcon_startup, fbcon_init, fbcon_deinit, fbcon_clear, fbcon_putc,
    fbcon_putcs, fbcon_cursor, fbcon_scroll, fbcon_bmove, fbcon_switch,
-   fbcon_blank, fbcon_get_font, fbcon_set_font
+   fbcon_blank, fbcon_get_font, fbcon_set_font, fbcon_set_palette
 };

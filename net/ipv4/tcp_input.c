@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_input.c,v 1.42 1997/04/12 04:32:24 davem Exp $
+ * Version:	$Id: tcp_input.c,v 1.43 1997/04/16 09:18:47 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -332,7 +332,7 @@ static void tcp_fast_retrans(struct sock *sk, u32 ack, int not_dup)
 	 *     The packet acked data after high_seq;
 	 */
 
-	if (ack == tp->snd_una && atomic_read(&sk->packets_out) && (not_dup == 0))
+	if (ack == tp->snd_una && sk->packets_out && (not_dup == 0))
 	{
 		/*
 		 * 1. When the third duplicate ack is received, set ssthresh 
@@ -591,7 +591,7 @@ static int tcp_clean_rtx_queue(struct sock *sk, __u32 ack, __u32 *seq,
 		 * do packet "repackaging" for stacks that don't
 		 * like overlapping packets.
 		 */
-		atomic_dec(&sk->packets_out);
+		sk->packets_out--;
 
 		*seq = skb->seq;
 		*seq_rtt = now - skb->when;
@@ -744,7 +744,7 @@ static int tcp_ack(struct sock *sk, struct tcphdr *th,
 
 	if (atomic_read(&sk->retransmits))
 	{
-		if (atomic_read(&sk->packets_out) == 0)
+		if (sk->packets_out == 0)
 			atomic_set(&sk->retransmits, 0);
 	}
 	else
@@ -769,7 +769,7 @@ static int tcp_ack(struct sock *sk, struct tcphdr *th,
 		}
 	}
 
-	if (atomic_read(&sk->packets_out))
+	if (sk->packets_out)
 	{
 		if (flag & FLAG_DATA_ACKED)
 		{
@@ -1152,7 +1152,7 @@ static void tcp_data_snd_check(struct sock *sk)
 	if ((skb = tp->send_head))
 	{
 		if (!after(skb->end_seq, tp->snd_una + tp->snd_wnd) &&
-		    atomic_read(&sk->packets_out) < tp->snd_cwnd )
+		    sk->packets_out < tp->snd_cwnd )
 		{
 			/*
 			 *	Add more data to the send queue.
@@ -1165,7 +1165,7 @@ static void tcp_data_snd_check(struct sock *sk)
 			if(!sk->dead)
 				sk->write_space(sk);
 		}
-		else if (atomic_read(&sk->packets_out) == 0 && !tp->pending)
+		else if (sk->packets_out == 0 && !tp->pending)
  		{
  			/*
  			 *	Data to queue but no room.

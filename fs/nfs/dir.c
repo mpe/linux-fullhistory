@@ -206,7 +206,7 @@ again:
 		}
 		if (entry) {
 			dfprintk(DIRCACHE, "NFS: found dircache entry %d\n",
-						cache - dircache);
+						(int)(cache - dircache));
 			cache->locked = 1;
 			break;
 		}
@@ -223,7 +223,7 @@ again:
 			goto again;
 		}
 		dfprintk(DIRCACHE, "NFS: using free dircache entry %d\n",
-				free - dircache);
+				(int)(free - dircache));
 		cache->cookie = cookie;
 		cache->locked = 1;
 		cache->valid  = 0;
@@ -298,7 +298,7 @@ nfs_invalidate_dircache(struct inode *inode)
 	ino_t		ino = inode->i_ino;
 	int		i;
 
-	dfprintk(DIRCACHE, "NFS: invalidate dircache for %x/%ld\n", dev, ino);
+	dfprintk(DIRCACHE, "NFS: invalidate dircache for %x/%ld\n", dev, (long)ino);
 	for (i = 0, cache = dircache; i < NFS_MAX_DIRCACHE; i++, cache++) {
 		if (!cache->locked && cache->dev == dev && cache->ino == ino)
 			cache->valid = 0;	/* brute force */
@@ -445,7 +445,7 @@ static void nfs_lookup_cache_remove(struct inode *dir, struct inode *inode,
 		return;
 
 	dfprintk(LOOKUPCACHE, "NFS: lookup_cache_remove(%x/%ld)\n",
-				dev, fileid);
+				dev, (long)fileid);
 
 	for (i = 0; i < NFS_LOOKUP_CACHE_SIZE; i++) {
 		entry = nfs_lookup_cache + i;

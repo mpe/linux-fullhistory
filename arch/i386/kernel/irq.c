@@ -128,6 +128,11 @@ void enable_irq(unsigned int irq_nr)
  * other interrupts would have to avoid using the jiffies variable for delay
  * and interval timing operations to avoid hanging the system.
  */
+
+#if NR_IRQS != 16
+#error make irq stub building NR_IRQS dependent and remove me.
+#endif
+
 BUILD_TIMER_IRQ(FIRST,0,0x01)
 BUILD_IRQ(FIRST,1,0x02)
 BUILD_IRQ(FIRST,2,0x04)
@@ -231,7 +236,7 @@ int get_irq_list(char *buf)
 	int i, len = 0;
 	struct irqaction * action;
 
-	for (i = 0 ; i < 16 ; i++) {
+	for (i = 0 ; i < NR_IRQS ; i++) {
 		action = irq_action[i];
 		if (!action) 
 			continue;
@@ -734,14 +739,8 @@ __initfunc(void init_IRQ(void))
 	outb_p(LATCH & 0xff , 0x40);	/* LSB */
 	outb(LATCH >> 8 , 0x40);	/* MSB */
 
-	for (i = 0; i < 16 ; i++)
+	for (i = 0; i < NR_IRQS ; i++)
 		set_intr_gate(0x20+i,bad_interrupt[i]);
-
-	/*
-	 * This bit is a hack because we don't send timer messages to all
-	 * processors yet. It has to be here .. it doesn't work if you put
-	 * it down the bottom - assembler explodes 8)
-	 */
 
 #ifdef __SMP__	
 	/*
@@ -752,8 +751,19 @@ __initfunc(void init_IRQ(void))
 	 * want to spread these out a bit so that they don't
 	 * all fall in the same interrupt level
 	 */
+
+	/*
+	 * The reschedule interrupt slowly changes it's functionality,
+	 * while so far it was a kind of broadcasted timer interrupt,
+	 * in the future it should become a CPU-to-CPU rescheduling IPI,
+	 * driven by schedule() ?
+	 *
+	 * [ It has to be here .. it doesn't work if you put
+	 *   it down the bottom - assembler explodes 8) ]
+	 */
 	/* IRQ '16' (trap 0x30) - IPI for rescheduling */
 	set_intr_gate(0x20+i, reschedule_interrupt);
+
 
 	/* IRQ '17' (trap 0x31) - IPI for invalidation */
 	set_intr_gate(0x21+i, invalidate_interrupt);

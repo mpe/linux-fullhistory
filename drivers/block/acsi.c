@@ -43,8 +43,6 @@
  *
  */
 
-#include <linux/module.h>
-
 #define MAJOR_NR ACSI_MAJOR
 
 #include <linux/config.h>
@@ -1127,9 +1125,8 @@ static int acsi_ioctl( struct inode *inode, struct file *file,
 		 * ACSI disks...
 		 */
 	  case BLKGETSIZE:   /* Return device size */
-		if (put_user(acsi_part[MINOR(inode->i_rdev)].nr_sects,
-			     (long *)arg))
-                    return -EFAULT;                                     
+		return put_user(acsi_part[MINOR(inode->i_rdev)].nr_sects,
+				(long *) arg);
 	  case BLKFLSBUF:
 		if(!suser())  return -EACCES;
 		if(!inode->i_rdev) return -EINVAL;
@@ -1629,33 +1626,23 @@ static int acsi_devinit(struct acsi_info_struct *aip)
 	return DEV_SUPPORTED;
 }
 
+EXPORT_SYMBOL(acsi_delay_start);
+EXPORT_SYMBOL(acsi_delay_end);
+EXPORT_SYMBOL(acsi_wait_for_IRQ);
+EXPORT_SYMBOL(acsi_wait_for_noIRQ);
+EXPORT_SYMBOL(acsicmd_nodma);
+EXPORT_SYMBOL(acsi_getstatus);
+EXPORT_SYMBOL(acsi_buffer);
+EXPORT_SYMBOL(phys_acsi_buffer);
+
 #ifdef CONFIG_ATARI_SLM_MODULE
 void acsi_attach_SLMs( int (*attach_func)( int, int ) );
-#endif
 
-static struct symbol_table acsi_symbol_table =
-{
-#include <linux/symtab_begin.h>
+EXPORT_SYMBOL(acsi_extstatus);
+EXPORT_SYMBOL(acsi_end_extstatus);
+EXPORT_SYMBOL(acsi_extcmd);
+EXPORT_SYMBOL(acsi_attach_SLMs);
 
-	X(acsi_delay_start),
-	X(acsi_delay_end),
-	X(acsi_wait_for_IRQ),
-	X(acsi_wait_for_noIRQ),
-	X(acsicmd_nodma),
-	X(acsi_getstatus),
-	X(acsi_buffer),
-	X(phys_acsi_buffer),
-#ifdef CONFIG_ATARI_SLM_MODULE
-	X(acsi_extstatus),
-	X(acsi_end_extstatus),
-	X(acsi_extcmd),
-	X(acsi_attach_SLMs),
-#endif
-
-#include <linux/symtab_end.h>
-};
-
-#ifdef CONFIG_ATARI_SLM_MODULE
 /* to remember IDs of SLM devices, SLM module is loaded later
  * (index is target#, contents is lun#, -1 means "no SLM") */
 int SLM_devices[8];
@@ -1751,7 +1738,6 @@ static void acsi_geninit( struct gendisk *gd )
 	for( i = 0; i < (MAX_DEV << 4); i++ )
 		acsi_blocksizes[i] = 1024;
 	blksize_size[MAJOR_NR] = acsi_blocksizes;
-	register_symtab (&acsi_symbol_table);
 }
 
 #ifdef CONFIG_ATARI_SLM_MODULE

@@ -8,6 +8,7 @@
 
 #include <linux/module.h>
 
+#include <linux/init.h>
 #include <linux/fs.h>
 #include <linux/msdos_fs.h>
 #include <linux/kernel.h>
@@ -499,7 +500,7 @@ static struct file_system_type umsdos_fs_type = {
 	UMSDOS_read_super, "umsdos", 1, NULL
 };
 
-int init_umsdos_fs(void)
+__initfunc(int init_umsdos_fs(void))
 {
 	return register_filesystem(&umsdos_fs_type);
 }

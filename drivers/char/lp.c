@@ -693,24 +693,27 @@ int lp_init(void)
 	pb = parport_enumerate();
 
 	while (pb) {
-		if (parport[0] == -1 || lp_searchfor(parport, count) ||
-		    (parport[0] == -3 &&
-		     pb->probe_info.class == PARPORT_CLASS_PRINTER)) {
-			lp_table[count].dev =
-			    parport_register_device(pb, dev_name, NULL, 
-					    lp_wakeup,
-					    lp_interrupt, PARPORT_DEV_TRAN,
-					    (void *) &lp_table[count]);
-			lp_table[count].flags |= LP_EXIST;
-			printk(KERN_INFO "lp%d: using %s at 0x%x, ", count,
-			       pb->name, pb->base);
-			if (pb->irq == -1)
-				printk("polling.\n");
-			else
-				printk("irq %d.\n", pb->irq);
+		/* We only understand PC-style ports. */
+		if (pb->modes & PARPORT_MODE_SPP) {
+			if (parport[0] == -1 || lp_searchfor(parport, count) ||
+			    (parport[0] == -3 &&
+			     pb->probe_info.class == PARPORT_CLASS_PRINTER)) {
+				lp_table[count].dev =
+				  parport_register_device(pb, dev_name, NULL, 
+						lp_wakeup,
+						lp_interrupt, PARPORT_DEV_TRAN,
+						(void *) &lp_table[count]);
+				lp_table[count].flags |= LP_EXIST;
+				printk(KERN_INFO "lp%d: using %s at 0x%x, ", 
+				       count, pb->name, pb->base);
+				if (pb->irq == -1)
+					printk("polling.\n");
+				else
+					printk("irq %d.\n", pb->irq);
+			}
+			if (++count == LP_NO)
+				break;
 		}
-		if (++count == LP_NO)
-			break;
 		pb = pb->next;
   	}
 

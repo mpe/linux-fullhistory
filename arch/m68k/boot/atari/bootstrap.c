@@ -8,6 +8,8 @@
 ** for more details.
 **
 ** History:
+**	01 Feb 1997 Implemented kernel decompression (Roman)
+**	28 Nov 1996 Fixed and tested previous change (James)
 **	27 Nov 1996 Compatibility with bootinfo interface version 1.0 (Geert)
 **	12 Nov 1996 Fixed and tested previous change (Andreas)
 **	18 Aug 1996 Updated for the new boot information structure (untested!)
@@ -32,6 +34,8 @@
 
 
 #define BOOTINFO_COMPAT_1_0	/* bootinfo interface version 1.0 compatible */
+/* support compressed kernels? */
+#define ZKERNEL
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -159,6 +163,9 @@ extern char copyall, copyallend;
  * ...err! On the Afterburner040 (for the Falcon) it's the same... So we do
  * another test with 0x00ff82fe, that gives a bus error on the Falcon, but is
  * in the range where the Medusa always asserts DTACK.
+ * On the Hades address 0 is writeable as well and it asserts DTACK on
+ * address 0x00ff82fe. To test if the machine is a Hades, address 0xb0000000
+ * is tested. On the Medusa this gives a bus error.
  */
 
 int test_medusa( void )
@@ -177,7 +184,10 @@ int test_medusa( void )
 		  "nop		\n\t"
 		  "tstb		0x00ff82fe\n\t"
 		  "nop		\n\t"
-		  "moveq	#1,%0\n"
+		  "moveq	#1,%0\n\t"
+		  "tstb		0xb0000000\n\t"
+		  "nop		\n\t"
+		  "moveq	#0,%0\n"
 		"Lberr:\t"
 		  "movel	a1,sp\n\t"
 		  "movel	a0,0x8"
@@ -357,11 +367,21 @@ static int check_bootinfo_version(char *memptr)
 #ifdef USE_BOOTP
 # include "bootp.h"
 #else
-# define kread	read
-# define klseek	lseek
-# define kclose	close
+# define ll_read	read
+# define ll_lseek	lseek
+# define ll_close	close
 #endif
 
+#ifdef ZKERNEL
+static int load_zkernel( int fd );
+static int kread( int fd, void *buf, unsigned cnt );
+static int klseek( int fd, int where, int whence );
+static int kclose( int fd );
+#else
+# define kread		read
+# define klseek		lseek
+# define kclose		close
+#endif
 
 /* ++andreas: this must be inline due to Super */
 static inline void boot_exit (int) __attribute__ ((noreturn));
@@ -385,16 +405,18 @@ int main(int argc, char *argv[])
     Elf32_Ehdr kexec_elf;
     Elf32_Phdr *kernel_phdrs = NULL;
     u_long start_mem, mem_size, rd_size, text_offset = 0, kernel_size;
+    int prefer_bootp = 1, kname_set = 0, n_knames;
 #ifdef USE_BOOTP
-    int prefer_bootp = 1, kname_set = 0;
+    int err;
 #endif
+    char kname_list[5][64];
     void *bi_ptr;
 
     ramdisk_name = NULL;
     kernel_name = "vmlinux";
 
     /* print the startup message */
-    puts("\fLinux/68k Atari Bootstrap version 2.0"
+    puts("\fLinux/68k Atari Bootstrap version 2.2"
 #ifdef USE_BOOTP
 	 " (with BOOTP)"
 #endif
@@ -410,11 +432,7 @@ int main(int argc, char *argv[])
     bi.machtype = MACH_ATARI;
 
     /* check arguments */
-#ifdef USE_BOOTP
     while ((ch = getopt(argc, argv, "bdtsk:r:")) != EOF)
-#else
-    while ((ch = getopt(argc, argv, "dtsk:r:")) != EOF)
-#endif
 	switch (ch) {
 	  case 'd':
 	    debugflag = 1;
@@ -427,18 +445,14 @@ int main(int argc, char *argv[])
 	    break;
 	  case 'k':
 	    kernel_name = optarg;
-#ifdef USE_BOOTP
 	    kname_set = 1;
-#endif
 	    break;
 	  case 'r':
 	    ramdisk_name = optarg;
 	    break;
-#ifdef USE_BOOTP
 	  case 'b':
 	    prefer_bootp = 0;
 	    break;
-#endif
 	  case '?':
 	  default:
 	    usage();
@@ -744,38 +758,60 @@ int main(int argc, char *argv[])
     boot_exit(-1);
 #endif /* TEST */
 
+    i = 0;
 #ifdef USE_BOOTP
+    if (!kname_set)
+	kname_list[i++][0] = '\0'; /* default kernel which BOOTP server says */
+#endif
+#ifdef ZKERNEL
+    strcpy( kname_list[i], kernel_name );
+    strcat( kname_list[i], ".gz" );
+    ++i;
+#endif
+    strcpy( kname_list[i++], kernel_name );
+#ifdef ZKERNEL
+    if (!kname_set)
+	strcpy( kname_list[i++], "vmlinuz" );
+#endif
+    n_knames = i;
+
     kfd = -1;
+#ifdef USE_BOOTP
     if (prefer_bootp) {
-	/* First try to get a remote kernel, then use a local kernel (if
-	 * present) */
-	if (get_remote_kernel( kname_set ? kernel_name : NULL ) < 0) {
-	    printf( "\nremote boot failed; trying local kernel\n" );
-	    if ((kfd = open (kernel_name, O_RDONLY)) == -1) {
-		fprintf (stderr, "Unable to open kernel file %s\n",
-			 kernel_name);
-		boot_exit (EXIT_FAILURE);
-	    }
+	for( i = 0; i < n_knames; ++i ) {
+	    if ((err = get_remote_kernel( kname_list[i] )) >= 0)
+		goto kernel_open;
+	    if (err < -1) /* fatal error; retries don't help... */
+		break;
 	}
-    }
-    else {
-	/* Try BOOTP if local kernel cannot be opened */
-	if ((kfd = open (kernel_name, O_RDONLY)) == -1) {
-	    printf( "\nlocal kernel failed; trying remote boot\n" );
-	    if (get_remote_kernel( kname_set ? kernel_name : NULL ) < 0) {
-		fprintf (stderr, "Unable to remote boot and "
-			 "to open kernel file %s\n", kernel_name);
-		boot_exit (EXIT_FAILURE);
-	    }
-	}
-    }
-#else
-    /* open kernel executable and read exec header */
-    if ((kfd = open (kernel_name, O_RDONLY)) == -1) {
-	fprintf (stderr, "Unable to open kernel file %s\n", kernel_name);
-	boot_exit (EXIT_FAILURE);
+	printf( "\nremote boot failed; trying local kernel\n" );
     }
 #endif
+    for( i = 0; i < n_knames; ++i ) {
+	if ((kfd = open( kname_list[i], O_RDONLY )) != -1)
+	    goto kernel_open;
+    }
+#ifdef USE_BOOTP
+    if (!prefer_bootp) {
+	printf( "\nlocal kernel failed; trying remote boot\n" );
+	for( i = 0; i < n_knames; ++i ) {
+	    if ((err = get_remote_kernel( kname_list[i] )) >= 0)
+		goto kernel_open;
+	    if (err < -1) /* fatal error; retries don't help... */
+		break;
+	}
+    }
+#endif
+    fprintf( stderr, "Unable to open any kernel file\n(Tried " );
+    for( i = 0; i < n_knames; ++i ) {
+	fprintf( stderr, "%s%s", kname_list[i],
+		 i <  n_knames-2 ? ", " :
+		 i == n_knames-2 ? ", and " :
+		 ")\n" );
+    }
+    boot_exit( EXIT_FAILURE );
+    
+  kernel_open:
 
     if (kread (kfd, (void *)&kexec, sizeof(kexec)) != sizeof(kexec))
     {
@@ -783,6 +819,19 @@ int main(int argc, char *argv[])
 	boot_exit (EXIT_FAILURE);
     }
 
+#ifdef ZKERNEL
+    if (((unsigned char *)&kexec)[0] == 037 &&
+	(((unsigned char *)&kexec)[1] == 0213 ||
+	 ((unsigned char *)&kexec)[1] == 0236)) {
+	/* That's a compressed kernel */
+	printf( "Kernel is compressed\n" );
+	if (load_zkernel( kfd )) {
+	    printf( "Decompression error -- aborting\n" );
+	    boot_exit( EXIT_FAILURE );
+	}
+    }
+#endif
+    
     switch (N_MAGIC(kexec)) {
     case ZMAGIC:
 	text_offset = N_TXTOFF(kexec);
@@ -847,18 +896,6 @@ int main(int argc, char *argv[])
     }
     else
 	bi.ramdisk.size = 0;
-
-    rd_size = bi.ramdisk.size;
-    if (mem_size - rd_size < MB && bi.num_memory > 1)
-      /* If running low on ST ram load ramdisk into alternate ram.  */
-      bi.ramdisk.addr = (u_long) bi.memory[1].addr + bi.memory[1].size - rd_size;
-    else
-      /* Else hopefully there is enough ST ram. */
-      bi.ramdisk.addr = (u_long)start_mem + mem_size - rd_size;
-
-    /* create the bootinfo structure */
-    if (!create_bootinfo())
-	boot_exit (EXIT_FAILURE);
  
     /* calculate the total required amount of memory */
     if (elf_kernel)
@@ -885,6 +922,19 @@ int main(int argc, char *argv[])
       }
     else
       kernel_size = kexec.a_text + kexec.a_data + kexec.a_bss;
+
+    rd_size = bi.ramdisk.size;
+    if (rd_size + kernel_size > mem_size - MB/2 && bi.num_memory > 1)
+      /* If running low on ST ram load ramdisk into alternate ram.  */
+      bi.ramdisk.addr = (u_long) bi.memory[1].addr + bi.memory[1].size - rd_size;
+    else
+      /* Else hopefully there is enough ST ram. */
+      bi.ramdisk.addr = (u_long)start_mem + mem_size - rd_size;
+
+    /* create the bootinfo structure */
+    if (!create_bootinfo())
+	boot_exit (EXIT_FAILURE);
+
     memreq = kernel_size + bi_size;
 #ifdef BOOTINFO_COMPAT_1_0
     if (sizeof(compat_bootinfo) > bi_size)
@@ -997,7 +1047,7 @@ int main(int argc, char *argv[])
     if (debugflag)
     {
 	if (bi.ramdisk.size)
-	    printf ("RAM disk at %#lx, size is %ldK\n",
+	    printf ("RAM disk at %#lx, size is %ld\n",
 		    (u_long)(memptr + memreq - rd_size),
 		    bi.ramdisk.size);
 
@@ -1192,7 +1242,7 @@ static int create_bootinfo(void)
 static int add_bi_record(u_short tag, u_short size, const void *data)
 {
     struct bi_record *record;
-    u_int size2;
+    u_short size2;
 
     size2 = (sizeof(struct bi_record)+size+3)&-4;
     if (bi_size+size2+sizeof(bi_union.record.tag) > MAX_BI_SIZE) {
@@ -1238,7 +1288,7 @@ static int create_compat_bootinfo(void)
     else if (bi.cputype & CPU_68060)
 	compat_bootinfo.cputype = COMPAT_CPU_68060;
     else {
-	Printf("CPU type 0x%08lx not supported by kernel\n", bi.cputype);
+	printf("CPU type 0x%08lx not supported by kernel\n", bi.cputype);
 	return(0);
     }
     if (bi.fputype & FPU_68881)
@@ -1250,12 +1300,12 @@ static int create_compat_bootinfo(void)
     else if (bi.fputype & FPU_68060)
 	compat_bootinfo.cputype |= COMPAT_FPU_68060;
     else {
-	Printf("FPU type 0x%08lx not supported by kernel\n", bi.fputype);
+	printf("FPU type 0x%08lx not supported by kernel\n", bi.fputype);
 	return(0);
     }
     compat_bootinfo.num_memory = bi.num_memory;
     if (compat_bootinfo.num_memory > COMPAT_NUM_MEMINFO) {
-	Printf("Warning: using only %d blocks of memory\n",
+	printf("Warning: using only %d blocks of memory\n",
 	       COMPAT_NUM_MEMINFO);
 	compat_bootinfo.num_memory = COMPAT_NUM_MEMINFO;
     }
@@ -1278,3 +1328,275 @@ static int create_compat_bootinfo(void)
     return(1);
 }
 #endif /* BOOTINFO_COMPAT_1_0 */
+
+
+#ifdef ZKERNEL
+
+#define	ZFILE_CHUNK_BITS	16  /* chunk is 64 KB */
+#define	ZFILE_CHUNK_SIZE	(1 << ZFILE_CHUNK_BITS)
+#define	ZFILE_CHUNK_MASK	(ZFILE_CHUNK_SIZE-1)
+#define	ZFILE_N_CHUNKS		(2*1024*1024/ZFILE_CHUNK_SIZE)
+
+/* variables for storing the uncompressed data */
+static char *ZFile[ZFILE_N_CHUNKS];
+static int ZFileSize = 0;
+static int ZFpos = 0;
+static int Zwpos = 0;
+
+static int Zinfd = 0;	     /* fd of compressed file */
+
+/*
+ * gzip declarations
+ */
+
+#define OF(args)  args
+
+#define memzero(s, n)     memset ((s), 0, (n))
+
+typedef unsigned char  uch;
+typedef unsigned short ush;
+typedef unsigned long  ulg;
+
+#define INBUFSIZ 4096
+#define WSIZE 0x8000    /* window size--must be a power of two, and */
+			/*  at least 32K for zip's deflate method */
+
+static uch *inbuf;
+static uch *window;
+
+static unsigned insize = 0;  /* valid bytes in inbuf */
+static unsigned inptr = 0;   /* index of next byte to be processed in inbuf */
+static unsigned outcnt = 0;  /* bytes in output buffer */
+static int exit_code = 0;
+static long bytes_out = 0;
+
+#define get_byte()  (inptr < insize ? inbuf[inptr++] : fill_inbuf())
+		
+/* Diagnostic functions (stubbed out) */
+#define Assert(cond,msg)
+#define Trace(x)
+#define Tracev(x)
+#define Tracevv(x)
+#define Tracec(c,x)
+#define Tracecv(c,x)
+
+#define STATIC static
+
+static int  fill_inbuf(void);
+static void flush_window(void);
+static void error(char *m);
+static void gzip_mark(void **);
+static void gzip_release(void **);
+
+#include "../../../../lib/inflate.c"
+
+static void gzip_mark( void **ptr )
+{
+}
+
+static void gzip_release( void **ptr )
+{
+}
+
+
+/*
+ * Fill the input buffer. This is called only when the buffer is empty
+ * and at least one byte is really needed.
+ */
+static int fill_inbuf( void )
+{
+    if (exit_code)
+	return -1;
+
+    insize = ll_read( Zinfd, inbuf, INBUFSIZ );
+    if (insize <= 0)
+	return -1;
+
+    inptr = 1;
+    return( inbuf[0] );
+}
+
+/*
+ * Write the output window window[0..outcnt-1] and update crc and bytes_out.
+ * (Used for the decompressed data only.)
+ */
+static void flush_window( void )
+{
+    ulg c = crc;         /* temporary variable */
+    unsigned n;
+    uch *in, ch;
+    int chunk = Zwpos >> ZFILE_CHUNK_BITS;
+
+    if (chunk >= ZFILE_N_CHUNKS) {
+	fprintf( stderr, "compressed image too large! Aborting.\n" );
+	boot_exit( EXIT_FAILURE );
+    }
+    if (!ZFile[chunk]) {
+	if (!(ZFile[chunk] = (char *)Malloc( ZFILE_CHUNK_SIZE ))) {
+	    fprintf( stderr, "Out of memory for decompresing kernel image\n" );
+	    boot_exit( EXIT_FAILURE );
+	}
+    }
+    memcpy( ZFile[chunk] + (Zwpos & ZFILE_CHUNK_MASK), window, outcnt );
+    Zwpos += outcnt;
+    
+#define	DISPLAY_BITS 13
+    if ((Zwpos & ((1 << DISPLAY_BITS)-1)) == 0) {
+	printf( "." );
+	fflush( stdout );
+    }
+    
+    in = window;
+    for (n = 0; n < outcnt; n++) {
+	    ch = *in++;
+	    c = crc_32_tab[((int)c ^ ch) & 0xff] ^ (c >> 8);
+    }
+    crc = c;
+    bytes_out += (ulg)outcnt;
+    outcnt = 0;
+}
+
+static void error( char *x )
+{
+    fprintf( stderr, "\n%s", x);
+    exit_code = 1;
+}
+
+static int load_zkernel( int fd )
+{
+    int i, err;
+    
+    for( i = 0; i < ZFILE_N_CHUNKS; ++i )
+	ZFile[i] = NULL;
+    Zinfd = fd;
+    ll_lseek( fd, 0, SEEK_SET );
+    
+    if (!(inbuf = (uch *)Malloc( INBUFSIZ ))) {
+	fprintf( stderr, "Couldn't allocate gunzip buffer\n" );
+	boot_exit( EXIT_FAILURE );
+    }
+    if (!(window = (uch *)Malloc( WSIZE ))) {
+	fprintf( stderr, "Couldn't allocate gunzip window\n" );
+	boot_exit( EXIT_FAILURE );
+    }
+
+    printf( "Uncompressing kernel image " );
+    fflush( stdout );
+    makecrc();
+    if (!(err = gunzip()))
+	printf( "done\n" );
+    ZFileSize = Zwpos;
+    ll_close( Zinfd ); /* input file not needed anymore */
+    
+    Mfree( inbuf );
+    Mfree( window );
+    return( err );
+}
+
+/* Note about the read/lseek wrapper and its memory management: It assumes
+ * that all seeks are only forward, and thus data already read or skipped can
+ * be freed. This is true for current organization of bootstrap and kernels.
+ * Little exception: The struct kexec at the start of the file. After reading
+ * it, there may be a seek back to the end of the file. But this currently
+ * doesn't hurt. Same considerations apply to the TFTP file buffers. (Roman)
+ */
+
+static int kread( int fd, void *buf, unsigned cnt )
+{
+    unsigned done = 0;
+	
+    if (!ZFileSize)
+	return( ll_read( fd, buf, cnt ) );
+    
+    if (ZFpos + cnt > ZFileSize)
+	cnt = ZFileSize - ZFpos;
+    
+    while( cnt > 0 ) {
+	unsigned chunk = ZFpos >> ZFILE_CHUNK_BITS;
+	unsigned endchunk = (chunk+1) << ZFILE_CHUNK_BITS;
+	unsigned n = cnt;
+
+	if (ZFpos + n > endchunk)
+	    n = endchunk - ZFpos;
+	memcpy( buf, ZFile[chunk] + (ZFpos & ZFILE_CHUNK_MASK), n );
+	cnt -= n;
+	buf += n;
+	done += n;
+	ZFpos += n;
+
+	if (ZFpos == endchunk) {
+	    Mfree( ZFile[chunk] );
+	    ZFile[chunk] = NULL;
+	}
+    }
+
+    return( done );
+}
+
+
+static int klseek( int fd, int where, int whence )
+{
+    unsigned oldpos, oldchunk, newchunk;
+
+    if (!ZFileSize)
+	return( ll_lseek( fd, where, whence ) );
+
+    oldpos = ZFpos;
+    switch( whence ) {
+      case SEEK_SET:
+	ZFpos = where;
+	break;
+      case SEEK_CUR:
+	ZFpos += where;
+	break;
+      case SEEK_END:
+	ZFpos = ZFileSize + where;
+	break;
+      default:
+	return( -1 );
+    }
+    if (ZFpos < 0) {
+	ZFpos = 0;
+	return( -1 );
+    }
+    else if (ZFpos > ZFileSize) {
+	ZFpos = ZFileSize;
+	return( -1 );
+    }
+
+    /* free memory of skipped-over data */
+    oldchunk = oldpos >> ZFILE_CHUNK_BITS;
+    newchunk = ZFpos  >> ZFILE_CHUNK_BITS;
+    while( oldchunk < newchunk ) {
+	if (ZFile[oldchunk]) {
+	    Mfree( ZFile[oldchunk] );
+	    ZFile[oldchunk] = NULL;
+	}
+	++oldchunk;
+    }
+    
+    return( ZFpos );
+}
+
+
+static void free_zfile( void )
+{
+    int i;
+
+    for( i = 0; i < ZFILE_N_CHUNKS; ++i )
+	if (ZFile[i]) Mfree( ZFile[i] );
+}
+
+static int kclose( int fd )
+{
+    if (ZFileSize) {
+	free_zfile();
+	return( 0 );
+    }
+    else
+	return( ll_close( fd ) );
+}
+
+
+
+#endif /* ZKERNEL */

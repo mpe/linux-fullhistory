@@ -1,4 +1,4 @@
-/* $Id: sparc64_ksyms.c,v 1.3 1997/03/18 17:59:10 jj Exp $
+/* $Id: sparc64_ksyms.c,v 1.4 1997/04/14 17:04:43 jj Exp $
  * arch/sparc/kernel/ksyms.c: Sparc specific ksyms support.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -162,7 +162,8 @@ EXPORT_SYMBOL(__memmove);
 EXPORT_SYMBOL(__csum_partial_copy_sparc_generic);
 
 /* Moving data to/from userspace. */
-EXPORT_SYMBOL(__copy_user);
+EXPORT_SYMBOL(__copy_to_user);
+EXPORT_SYMBOL(__copy_from_user);
 EXPORT_SYMBOL(__strncpy_from_user);
 
 /* No version information on this, heavily used in inline asm,

@@ -1,4 +1,4 @@
-/* $Id: cgsix.c,v 1.26 1997/04/10 03:02:40 davem Exp $
+/* $Id: cgsix.c,v 1.27 1997/04/14 17:04:55 jj Exp $
  * cgsix.c: cgsix frame buffer driver
  *
  * Copyright (C) 1996 Miguel de Icaza (miguel@nuclecu.unam.mx)
@@ -264,17 +264,14 @@ cg6_mmap (struct inode *inode, struct file *file, struct vm_area_struct *vma,
 			map_size = PAGE_SIZE;
 			map_offset = get_phys ((unsigned long)fb->info.cg6.bt);
 			break;
-			
 		case CG6_DHC:
 			map_size = PAGE_SIZE * 40;
 			map_offset = get_phys ((unsigned long)fb->info.cg6.dhc);
 			break;
-			
 		case CG6_ROM:
 			map_size = PAGE_SIZE * 16;
 			map_offset = get_phys ((unsigned long)fb->info.cg6.rom);
 			break;
-
 		case CG6_RAM:
 			map_size = size-page;
 			map_offset = get_phys ((unsigned long) fb->base);
@@ -422,12 +419,12 @@ cg6_reset (fbinfo_t *fb)
 	cg6->bt->control |= 0x03 << 24;
 }
 
-__initfunc(void cg6_setup (fbinfo_t *fb, int slot, unsigned long cg6, int cg6_io))
+__initfunc(void cg6_setup (fbinfo_t *fb, int slot, u32 cg6, int cg6_io))
 {
 	struct cg6_info *cg6info;
 	unsigned int rev, cpu, conf;
 
-	printk ("cgsix%d at 0x%8.8x ", slot, (uint) cg6);
+	printk ("cgsix%d at 0x%8.8x ", slot, cg6);
 	
 	/* Fill in parameters we left out */
 	fb->type.fb_cmsize = 256;
@@ -447,23 +444,23 @@ __initfunc(void cg6_setup (fbinfo_t *fb, int slot, unsigned long cg6, int cg6_io
 	cg6info = (struct cg6_info *) &fb->info.cg6;
 
 	/* Map the hardware registers */
-	cg6info->bt = sparc_alloc_io ((u32)(cg6+CG6_BROOKTREE_OFFSET), 0,
+	cg6info->bt = sparc_alloc_io (cg6+CG6_BROOKTREE_OFFSET, 0,
 		 sizeof (struct bt_regs), "cgsix_dac", cg6_io, 0);
-	cg6info->fhc = sparc_alloc_io ((u32)(cg6+CG6_FHC_OFFSET), 0,
+	cg6info->fhc = sparc_alloc_io (cg6+CG6_FHC_OFFSET, 0,
 		 sizeof (int), "cgsix_fhc", cg6_io, 0);
-	cg6info->thc = sparc_alloc_io ((u32)(cg6+CG6_THC_OFFSET), 0,
+	cg6info->thc = sparc_alloc_io (cg6+CG6_THC_OFFSET, 0,
 		 sizeof (struct cg6_thc), "cgsix_thc", cg6_io, 0);
-	cg6info->tec = sparc_alloc_io ((u32)(cg6+CG6_TEC_OFFSET), 0,
+	cg6info->tec = sparc_alloc_io (cg6+CG6_TEC_OFFSET, 0,
 		 sizeof (struct cg6_tec), "cgsix_tec", cg6_io, 0);
-	cg6info->dhc = sparc_alloc_io ((u32)(cg6+CG6_DHC_OFFSET), 0,
+	cg6info->dhc = sparc_alloc_io (cg6+CG6_DHC_OFFSET, 0,
 		 0x40000, "cgsix_dhc", cg6_io, 0);
-	cg6info->fbc = sparc_alloc_io ((u32)(cg6+CG6_FBC_OFFSET), 0,
+	cg6info->fbc = sparc_alloc_io (cg6+CG6_FBC_OFFSET, 0,
 		 0x1000, "cgsix_fbc", cg6_io, 0);
-	cg6info->rom = sparc_alloc_io ((u32)(cg6+CG6_ROM_OFFSET), 0,
+	cg6info->rom = sparc_alloc_io (cg6+CG6_ROM_OFFSET, 0,
 		 0x10000, "cgsix_rom", cg6_io, 0);
 	if (!fb->base) {
 		fb->base = (unsigned long)
-			sparc_alloc_io ((u32)(cg6+CG6_RAM_OFFSET), 0,
+			sparc_alloc_io (cg6+CG6_RAM_OFFSET, 0,
 					fb->type.fb_size, "cgsix_ram", cg6_io, 0);
 	}
 	if (slot == sun_prom_console_id)

@@ -29,11 +29,15 @@
 #include <linux/linkage.h>
 
 #include <asm/setup.h>
+#include <asm/fpu.h>
 #include <asm/system.h>
 #include <asm/uaccess.h>
 #include <asm/traps.h>
 #include <asm/pgtable.h>
 #include <asm/machdep.h>
+#ifdef CONFIG_KGDB
+#include <asm/kgdb.h>
+#endif
 
 /* assembler routines */
 asmlinkage void system_call(void);
@@ -140,10 +144,9 @@ static inline void console_verbose(void)
 {
 	extern int console_loglevel;
 	console_loglevel = 15;
-	mach_debug_init();
 }
 
-char *vec_names[] = {
+static char *vec_names[] = {
 	"RESET SP", "RESET PC", "BUS ERROR", "ADDRESS ERROR",
 	"ILLEGAL INSTRUCTION", "ZERO DIVIDE", "CHK", "TRAPcc",
 	"PRIVILEGE VIOLATION", "TRACE", "LINE 1010", "LINE 1111",
@@ -162,17 +165,17 @@ char *vec_names[] = {
 	"FPCP BSUN", "FPCP INEXACT", "FPCP DIV BY 0", "FPCP UNDERFLOW",
 	"FPCP OPERAND ERROR", "FPCP OVERFLOW", "FPCP SNAN",
 	"FPCP UNSUPPORTED OPERATION",
-	"MMU CONFIGUATION ERROR"
+	"MMU CONFIGURATION ERROR"
 	};
 
-char *space_names[] = {
+static char *space_names[] = {
 	"Space 0", "User Data", "User Program", "Space 3",
 	"Space 4", "Super Data", "Super Program", "CPU"
 	};
 
 
 
-extern void die_if_kernel(char *,struct pt_regs *,int);
+void die_if_kernel(char *,struct pt_regs *,int);
 asmlinkage int do_page_fault(struct pt_regs *regs, unsigned long address,
                              unsigned long error_code);
 
@@ -184,7 +187,7 @@ static inline void access_error060 (struct frame *fp)
 	unsigned long fslw = fp->un.fmt4.pc; /* is really FSLW for access error */
 
 #ifdef DEBUG
-	printk("fslw=%#lx, fa=%#lx\n", ssw, fp->un.fmt4.effaddr);
+	printk("fslw=%#lx, fa=%#lx\n", fslw, fp->un.fmt4.effaddr);
 #endif
 
 	if (fslw & MMU060_BPE) {
@@ -194,7 +197,7 @@ static inline void access_error060 (struct frame *fp)
 				      "movec %/d0,%/cacr"
 				      : : : "d0" );
 		/* return if there's no other error */
-		if (!(fslw & MMU060_ERR_BITS))
+		if ((!(fslw & MMU060_ERR_BITS)) && !(fslw & MMU060_SEE))
 			return;
 	}
 	
@@ -209,8 +212,13 @@ static inline void access_error060 (struct frame *fp)
 		if (fslw & MMU060_MA)
 			addr = PAGE_ALIGN(addr);
 		do_page_fault(&fp->ptregs, addr, errorcode);
-	}
-	else {
+	} else if (fslw & (MMU060_SEE)){
+		/* Software Emulation Error. Probably an instruction
+		 * using an unsupported addressing mode
+		 */
+		send_sig (SIGSEGV, current, 1);
+	} else {
+		printk("pc=%#lx, fa=%#lx\n", fp->ptregs.pc, fp->un.fmt4.effaddr);
 		printk( "68060 access error, fslw=%lx\n", fslw );
 		trap_c( fp );
 	}
@@ -349,7 +357,7 @@ static inline void access_error040 (struct frame *fp)
 }
 #endif /* CONFIG_M68040 */
 
-#if defined(CONFIG_M68020_OR_M68030)
+#if defined(CPU_M68020_OR_M68030)
 static inline void bus_error030 (struct frame *fp)
 {
 	volatile unsigned short temp;
@@ -628,7 +636,7 @@ create_atc_entry:
 	asm volatile ("ploadr #2,%0@" : /* no outputs */
 		      : "a" (addr));
 }
-#endif /* CONFIG_M68020_OR_M68030 */
+#endif /* CPU_M68020_OR_M68030 */
 
 asmlinkage void buserr_c(struct frame *fp)
 {
@@ -651,7 +659,7 @@ asmlinkage void buserr_c(struct frame *fp)
 	  access_error040 (fp);
 	  break;
 #endif
-#if defined (CONFIG_M68020_OR_M68030)
+#if defined (CPU_M68020_OR_M68030)
 	case 0xa:
 	case 0xb:
 	  bus_error030 (fp);
@@ -675,6 +683,11 @@ int kstack_depth_to_print = 48;
 
 static void dump_stack(struct frame *fp)
 {
+#ifdef CONFIG_KGDB
+	/* This will never return to here, if kgdb has been initialized. And if
+	 * it returns from there, then to where the error happened... */
+	enter_kgdb( &fp->ptregs );
+#else
 	unsigned long *stack, *endstack, addr, module_start, module_end;
 	extern char _start, _etext;
 	int i;
@@ -772,10 +785,15 @@ static void dump_stack(struct frame *fp)
 	for (i = 0; i < 10; i++)
 		printk("%04x ", 0xffff & ((short *) fp->ptregs.pc)[i]);
 	printk ("\n");
+#endif
 }
 
 void bad_super_trap (struct frame *fp)
 {
+#ifdef CONFIG_KGDB
+	/* Save the register dump if we'll enter kgdb anyways */
+	if (!kgdb_initialized) {
+#endif
 	console_verbose();
 	if (fp->ptregs.vector < 4*sizeof(vec_names)/sizeof(vec_names[0]))
 		printk ("*** %s ***   FORMAT=%X\n",
@@ -805,6 +823,9 @@ void bad_super_trap (struct frame *fp)
 				fp->ptregs.pc);
 	}
 	printk ("Current process id is %d\n", current->pid);
+#ifdef CONFIG_KGDB
+	}
+#endif
 	die_if_kernel("BAD KERNEL TRAP", &fp->ptregs, 0);
 }
 
@@ -863,7 +884,7 @@ asmlinkage void trap_c(struct frame *fp)
 	    case VEC_FPOVER:
 	    case VEC_FPNAN:
 		{
-		  unsigned char fstate[216];
+		  unsigned char fstate[FPSTATESIZE];
 
 		  __asm__ __volatile__ (".chip 68k/68881\n\t"
 		  			"fsave %0@\n\t"
@@ -905,9 +926,13 @@ void die_if_kernel (char *str, struct pt_regs *fp, int nr)
 	if (!(fp->sr & PS_S))
 		return;
 
+#ifdef CONFIG_KGDB
+	/* Save the register dump if we'll enter kgdb anyways */
+	if (!kgdb_initialized) {
+#endif
 	console_verbose();
 	printk("%s: %08x\n",str,nr);
-	printk("PC: %08lx\nSR: %04x  SP: %p\n", fp->pc, fp->sr, fp);
+	printk("PC: [<%08lx>]\nSR: %04x  SP: %p\n", fp->pc, fp->sr, fp);
 	printk("d0: %08lx    d1: %08lx    d2: %08lx    d3: %08lx\n",
 	       fp->d0, fp->d1, fp->d2, fp->d3);
 	printk("d4: %08lx    d5: %08lx    a0: %08lx    a1: %08lx\n",
@@ -917,6 +942,18 @@ void die_if_kernel (char *str, struct pt_regs *fp, int nr)
 		printk("Corrupted stack page\n");
 	printk("Process %s (pid: %d, stackpage=%08lx)\n",
 		current->comm, current->pid, current->kernel_stack_page);
+#ifdef CONFIG_KGDB
+	}
+#endif
 	dump_stack((struct frame *)fp);
+	do_exit(SIGSEGV);
+}
+
+/*
+ * This function is called if an error occur while accessing
+ * user-space from the fpsp040 code.
+ */
+asmlinkage void fpsp040_die(void)
+{
 	do_exit(SIGSEGV);
 }

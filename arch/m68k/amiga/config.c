@@ -29,7 +29,7 @@
 #include <asm/amigaints.h>
 #include <asm/irq.h>
 #include <asm/machdep.h>
-#include <asm/zorro.h>
+#include <linux/zorro.h>
 
 u_long amiga_model;
 u_long amiga_eclock;
@@ -56,7 +56,7 @@ extern void amiga_init_IRQ (void);
 extern void (*amiga_default_handler[]) (int, void *, struct pt_regs *);
 extern int amiga_request_irq (unsigned int irq, void (*handler)(int, void *, struct pt_regs *),
                               unsigned long flags, const char *devname, void *dev_id);
-extern int amiga_free_irq (unsigned int irq, void *dev_id);
+extern void amiga_free_irq (unsigned int irq, void *dev_id);
 extern void amiga_enable_irq (unsigned int);
 extern void amiga_disable_irq (unsigned int);
 static void amiga_get_model(char *model);
@@ -74,15 +74,20 @@ extern int amiga_floppy_init (void);
 extern void amiga_floppy_setup(char *, int *);
 #endif
 static void amiga_reset (void);
-static void amiga_waitbut(void);
+static void amiga_wait_key(void);
 extern struct consw fb_con;
 extern struct fb_info *amiga_fb_init(long *);
 extern void zorro_init(void);
-static void ami_savekmsg_init(void);
-static void ami_mem_print(const char *b);
+static void amiga_savekmsg_init(void);
+static void amiga_mem_console_write(const char *b, unsigned int count);
+static void amiga_serial_console_write(const char *s, unsigned int count);
 static void amiga_debug_init(void);
+
 extern void amiga_video_setup(char *, int *);
-extern void amiga_syms_export(void);
+
+static struct console amiga_console_driver = {
+    NULL, NULL, amiga_wait_key
+};
 
 extern void (*kd_mksound)(unsigned int, unsigned int);
 
@@ -150,6 +155,8 @@ void config_amiga(void)
     amiga_eclock = 709379;
 
   memset(&amiga_hw_present, 0, sizeof(amiga_hw_present));
+
+  amiga_debug_init();
 
   printk("Amiga hardware found: ");
   if (amiga_model >= AMI_500 && amiga_model <= AMI_DRACO)
@@ -304,8 +311,8 @@ void config_amiga(void)
   mach_default_handler = &amiga_default_handler;
   mach_request_irq     = amiga_request_irq;
   mach_free_irq        = amiga_free_irq;
-  mach_enable_irq      = amiga_enable_irq;
-  mach_disable_irq     = amiga_disable_irq;
+  enable_irq           = amiga_enable_irq;
+  disable_irq          = amiga_disable_irq;
   mach_get_model       = amiga_get_model;
   mach_get_hardware_list = amiga_get_hardware_list;
   mach_get_irq_list    = amiga_get_irq_list;
@@ -329,18 +336,14 @@ void config_amiga(void)
 
   mach_hwclk           = amiga_hwclk;
   mach_set_clock_mmss  = amiga_set_clock_mmss;
-  mach_mksound         = amiga_mksound;
 #ifdef CONFIG_BLK_DEV_FD
   mach_floppy_init     = amiga_floppy_init;
   mach_floppy_setup    = amiga_floppy_setup;
 #endif
   mach_reset           = amiga_reset;
-  waitbut              = amiga_waitbut;
   conswitchp           = &fb_con;
   mach_fb_init         = amiga_fb_init;
-  mach_debug_init      = amiga_debug_init;
   mach_video_setup     = amiga_video_setup;
-  mach_syms_export     = amiga_syms_export;
   kd_mksound           = amiga_mksound;
 
   /* Fill in the clock values (based on the 700 kHz E-Clock) */
@@ -354,10 +357,6 @@ void config_amiga(void)
 
   /* initialize chipram allocator */
   amiga_chip_init ();
-
-  /* initialize only once here, not every time the debug level is raised */
-  if (!strcmp( m68k_debug_device, "mem" ))
-    ami_savekmsg_init();
 
   /*
    * if it is an A3000, set the magic bit that forces
@@ -588,7 +587,7 @@ static int amiga_set_clock_mmss (unsigned long nowtime)
 	return 0;
 }
 
-static void amiga_waitbut (void)
+static void amiga_wait_key (void)
 {
     int i;
 
@@ -611,33 +610,6 @@ static void amiga_waitbut (void)
 
 	if (ciaa.pra & 0x40)
 	    break;
-    }
-}
-
-void ami_serial_print (const char *str)
-{
-    while (*str) {
-        if (*str == '\n') {
-            custom.serdat = (unsigned char)'\r' | 0x100;
-            while (!(custom.serdatr & 0x2000))
-                ;
-        }
-        custom.serdat = (unsigned char)*str++ | 0x100;
-        while (!(custom.serdatr & 0x2000))
-            ;
-    }
-}
-
-static void amiga_debug_init (void)
-{
-    extern void (*debug_print_proc)(const char *);
-
-    if (!strcmp( m68k_debug_device, "ser" )) {
-        /* no initialization required (?) */
-        debug_print_proc = ami_serial_print;
-    } else if (!strcmp( m68k_debug_device, "mem" )) {
-        /* already initialized by config_amiga() (needed only once) */
-        debug_print_proc = ami_mem_print;
     }
 }
 
@@ -672,8 +644,10 @@ static void amiga_reset (void)
       ("movel    %0,%/d0\n\t"
        "andl     #0xff000000,%/d0\n\t"
        "orw      #0xe020,%/d0\n\t"   /* map 16 MB, enable, cacheable */
-       ".long    0x4e7b0004\n\t"   /* movec d0,itt0 */
-       ".long    0x4e7b0006\n\t"   /* movec d0,dtt0 */
+       ".chip    68040\n\t"
+       "movec    %%d0,%%itt0\n\t"
+       "movec    %%d0,%%dtt0\n\t"
+       ".chip    68k\n\t"
        "jmp      %0@\n\t"
        : /* no outputs */
        : "a" (jmp_addr040));
@@ -692,7 +666,9 @@ static void amiga_reset (void)
   /* disable translation on '040 now */
   __asm__ __volatile__    
     ("moveq #0,%/d0\n\t"
-     ".long 0x4e7b0003\n\t"         /* movec d0,tc; disable MMU */
+     ".chip 68040\n\t"
+     "movec %%d0,%%tc\n\t"	/* disable MMU */
+     ".chip 68k\n\t"
      : /* no outputs */
      : /* no inputs */
      : "d0");
@@ -718,11 +694,12 @@ static void amiga_reset (void)
 
 }
 
-extern void *amiga_chip_alloc(long size);
 
+    /*
+     *  Debugging
+     */
 
 #define SAVEKMSG_MAXMEM		128*1024
-
 
 #define SAVEKMSG_MAGIC1		0x53415645	/* 'SAVE' */
 #define SAVEKMSG_MAGIC2		0x4B4D5347	/* 'KMSG' */
@@ -737,8 +714,15 @@ struct savekmsg {
 
 static struct savekmsg *savekmsg = NULL;
 
+static void amiga_mem_console_write(const char *s, unsigned int count)
+{
+    if (savekmsg->size+count <= SAVEKMSG_MAXMEM-sizeof(struct savekmsg)) {
+        memcpy(savekmsg->data+savekmsg->size, s, count);
+        savekmsg->size += count;
+    }
+}
 
-static void ami_savekmsg_init(void)
+static void amiga_savekmsg_init(void)
 {
     savekmsg = (struct savekmsg *)amiga_chip_alloc(SAVEKMSG_MAXMEM);
     savekmsg->magic1 = SAVEKMSG_MAGIC1;
@@ -747,18 +731,87 @@ static void ami_savekmsg_init(void)
     savekmsg->size = 0;
 }
 
-
-static void ami_mem_print(const char *b)
+static void amiga_serial_putc(char c)
 {
-    int len;
+    custom.serdat = (unsigned char)c | 0x100;
+    while (!(custom.serdatr & 0x2000))
+	;
+}
 
-    for (len = 0; b[len]; len++);
-    if (savekmsg->size+len <= SAVEKMSG_MAXMEM) {
-        memcpy(savekmsg->data+savekmsg->size, b, len);
-        savekmsg->size += len;
+static void amiga_serial_console_write(const char *s, unsigned int count)
+{
+    while (count--) {
+	if (*s == '\n')
+	    amiga_serial_putc('\r');
+	amiga_serial_putc(*s++);
     }
 }
 
+#ifdef CONFIG_SERIAL_CONSOLE
+void amiga_serial_puts(const char *s)
+{
+    amiga_serial_console_write(s, strlen(s));
+}
+
+void amiga_serial_gets(char *s, int len)
+{
+    int ch, cnt = 0;
+
+    while (1) {
+	while (!(custom.intreqr & IF_RBF))
+	    barrier();
+	ch = custom.serdatr & 0xff;
+	/* clear the interrupt, so that another character can be read */
+	custom.intreq = IF_RBF;
+
+	/* Check for backspace. */
+	if (ch == 8 || ch == 127) {
+	    if (cnt == 0) {
+		amiga_serial_putc('\007');
+		continue;
+	    }
+	    cnt--;
+	    amiga_serial_puts("\010 \010");
+	    continue;
+	}
+
+	/* Check for enter. */
+	if (ch == 10 || ch == 13)
+	    break;
+
+	/* See if line is too long. */
+	if (cnt >= len + 1) {
+	    amiga_serial_putc(7);
+	    cnt--;
+	    continue;
+	}
+
+	/* Store and echo character. */
+	s[cnt++] = ch;
+	amiga_serial_putc(ch);
+    }
+    /* Print enter. */
+    amiga_serial_puts("\r\n");
+    s[cnt] = 0;
+}
+#endif
+
+static void amiga_debug_init(void)
+{
+    if (!strcmp( m68k_debug_device, "ser" )) {
+        /* no initialization required (?) */
+	amiga_console_driver.write = amiga_serial_console_write;
+    } else if (!strcmp( m68k_debug_device, "mem" )) {
+	amiga_savekmsg_init();
+	amiga_console_driver.write = amiga_mem_console_write;
+    }
+    register_console(&amiga_console_driver);
+}
+
+
+    /*
+     *  Amiga specific parts of /proc
+     */
 
 static void amiga_get_model(char *model)
 {

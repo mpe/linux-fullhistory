@@ -26,6 +26,7 @@
 #include <linux/amigaffs.h>
 #include <linux/major.h>
 #include <linux/blkdev.h>
+#include <linux/init.h>
 #include <asm/system.h>
 #include <asm/uaccess.h>
 
@@ -987,8 +988,7 @@ static struct file_system_type affs_fs_type = {
 	NULL
 };
 
-int
-init_affs_fs(void)
+__initfunc(int init_affs_fs(void))
 {
 	return register_filesystem(&affs_fs_type);
 }

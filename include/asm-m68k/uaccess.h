@@ -714,6 +714,9 @@ __constant_copy_to_user(void *to, const void *from, unsigned long n)
  __constant_copy_to_user(to, from, n) :		\
  __generic_copy_to_user(to, from, n))
 
+#define __copy_from_user(to, from, n) copy_from_user(to, from, n)
+#define __copy_to_user(to, from, n) copy_to_user(to, from, n)
+
 /*
  * Copy a null terminated string from userspace.
  */

@@ -1,4 +1,4 @@
-/* $Id: suncons.c,v 1.58 1997/04/04 00:50:04 davem Exp $
+/* $Id: suncons.c,v 1.61 1997/04/17 02:29:36 miguel Exp $
  *
  * suncons.c: Sun SparcStation console support.
  *
@@ -87,7 +87,7 @@
 #define cmapsz 8192
 
 #include "suncons_font.h"
-#include "linux_logo.h"
+#include <asm/linux_logo.h>
 
 fbinfo_t *fbinfo;
 int fbinfos;
@@ -382,7 +382,7 @@ render_screen(void)
 
     count = video_num_columns * video_num_lines;
     contents = (unsigned short *) video_mem_base;
-    
+
     for (;count--; contents++)
 	sun_blitc (*contents, (unsigned long) contents);
 }
@@ -434,11 +434,7 @@ __initfunc(void con_type_init_finish(void))
 	putconsxy(0, q);
 	ush = (unsigned short *) video_mem_base + video_num_columns * 2 + 20 + 11 * (linux_num_cpus - 1);
 
-#ifdef __sparc_v9__
-	p = "Linux/UltraSPARC version " UTS_RELEASE;
-#else
-	p = "Linux/SPARC version " UTS_RELEASE;
-#endif
+	p = linux_logo_banner;
 	for (; *p; p++, ush++) {
 		*ush = (attr << 8) + *p;
 		sun_blitc (*ush, (unsigned long) ush);
@@ -764,35 +760,15 @@ console_restore_palette (void)
 }
 
 unsigned int
-get_phys (unsigned int addr)
+get_phys (unsigned long addr)
 {
-	switch (sparc_cpu_model){
-	case sun4c:
-		return sun4c_get_pte (addr) << PAGE_SHIFT;
-	case sun4m:
-		return ((srmmu_get_pte (addr) & 0xffffff00) << 4);
-	case sun4u:
-		/* FIXME: */ return 0;
-	default:
-		panic ("get_phys called for unsupported cpu model\n");
-		return 0;
-	}
+	return __get_phys(addr);
 }
 
 int
-get_iospace (unsigned int addr)
+get_iospace (unsigned long addr)
 {
-	switch (sparc_cpu_model){
-	case sun4c:
-		return -1; /* Don't check iospace on sun4c */
-	case sun4m:
-		return (srmmu_get_pte (addr) >> 28);
-	case sun4u:
-		/* FIXME: */ return 0;
-	default:
-		panic ("get_iospace called for unsupported cpu model\n");
-		return -1;
-	}
+	return __get_iospace(addr);
 }
 
 __initfunc(unsigned long sun_cg_postsetup(fbinfo_t *fb, unsigned long start_mem))
@@ -803,7 +779,7 @@ __initfunc(unsigned long sun_cg_postsetup(fbinfo_t *fb, unsigned long start_mem)
 
 static char *known_cards [] __initdata = {
 	"cgsix", "cgthree", "cgRDI", "cgthree+", "bwtwo", "SUNW,tcx",
-	"cgfourteen", "SUNW,leo", 0
+	"cgfourteen", "SUNW,leo", "SUNW,ffb", 0
 };
 static char *v0_known_cards [] __initdata = {
 	"cgsix", "cgthree", "cgRDI", "cgthree+", "bwtwo", 0
@@ -844,6 +820,16 @@ __initfunc(static int cg14_present(void))
 
 	n = prom_getchild (n);
 	if ((n = prom_searchsiblings (n, "cgfourteen")) == 0)
+		return 0;
+	return n;
+}
+
+__initfunc(static int creator_present (void))
+{
+	int root, n;
+
+	root = prom_getchild (prom_root_node);
+	if ((n = prom_searchsiblings (root, "SUNW,ffb")) == 0)
 		return 0;
 	return n;
 }
@@ -941,78 +927,86 @@ __initfunc(static void
 		leo_setup (&fbinfo [n], n, base, io);
 		break;
 #endif
+#ifdef SUN_FB_CREATOR
+	case FBTYPE_CREATOR:
+		creator_setup (&fbinfo [n], n, con_node, base, io);
+		break;
+#endif
 	default:
 		fbinfo [n].type.fb_type = FBTYPE_NOTYPE;
 		return;
 	}
-	if (!n) {
-		con_type = type;
-		con_height = fbinfo [n].type.fb_height;
-		con_width = fbinfo [n].type.fb_width;
-		con_depth = (type == FBTYPE_SUN2BW) ? 1 : 8;
-		for (i = 0; scr_def [i].depth; i++){
-			if ((scr_def [i].resx != con_width) ||
-			    (scr_def [i].resy != con_height))
-				continue;
-			if (scr_def [i].depth != con_depth)
-		        	continue;
-			x_margin = scr_def [i].x_margin;
-			y_margin = scr_def [i].y_margin;
-			chars_per_line = (con_width * con_depth) / 8;
-			skip_bytes = chars_per_line * y_margin + x_margin;
-			ints_per_line = chars_per_line / 4;
-			ints_per_cursor = 14 * ints_per_line;
-			bytes_per_row = CHAR_HEIGHT * chars_per_line;
-			ORIG_VIDEO_COLS = con_width / 8 -
-						2 * x_margin / con_depth;
-			ORIG_VIDEO_LINES = (con_height - 2 * y_margin) / 16;
-			switch (chars_per_line) {
-			case 1280:
-				if (ORIG_VIDEO_COLS == 144)
-					color_fbuf_offset =
-						color_fbuf_offset_1280_144;
-				break;
-			case 1152:
-				if (ORIG_VIDEO_COLS == 128)
-					color_fbuf_offset =
-						color_fbuf_offset_1152_128;
-				break;
-			case 1024:
-				if (ORIG_VIDEO_COLS == 128)
-					color_fbuf_offset =
-						color_fbuf_offset_1024_128;
-				break;
-			case 800:
-				if (ORIG_VIDEO_COLS == 96)
-					color_fbuf_offset =
-						color_fbuf_offset_800_96;
-				break;
-			case 640:
-				if (ORIG_VIDEO_COLS == 80)
-					color_fbuf_offset =
-						color_fbuf_offset_640_80;
-				break;
-			}
+
+	if (n)
+		return;
+	
+	/* Code below here is just executed for the first frame buffer */
+	con_type = type;
+	con_height = fbinfo [n].type.fb_height;
+	con_width = fbinfo [n].type.fb_width;
+	con_depth = (type == FBTYPE_SUN2BW) ? 1 : 8;
+	for (i = 0; scr_def [i].depth; i++){
+		if ((scr_def [i].resx != con_width) ||
+		    (scr_def [i].resy != con_height))
+			continue;
+		if (scr_def [i].depth != con_depth)
+			continue;
+		x_margin = scr_def [i].x_margin;
+		y_margin = scr_def [i].y_margin;
+		chars_per_line = (con_width * con_depth) / 8;
+		skip_bytes = chars_per_line * y_margin + x_margin;
+		ints_per_line = chars_per_line / 4;
+		ints_per_cursor = 14 * ints_per_line;
+		bytes_per_row = CHAR_HEIGHT * chars_per_line;
+		ORIG_VIDEO_COLS = con_width / 8 -
+			2 * x_margin / con_depth;
+		ORIG_VIDEO_LINES = (con_height - 2 * y_margin) / 16;
+		switch (chars_per_line) {
+		case 1280:
+			if (ORIG_VIDEO_COLS == 144)
+				color_fbuf_offset =
+					color_fbuf_offset_1280_144;
+			break;
+		case 1152:
+			if (ORIG_VIDEO_COLS == 128)
+				color_fbuf_offset =
+					color_fbuf_offset_1152_128;
+			break;
+		case 1024:
+			if (ORIG_VIDEO_COLS == 128)
+				color_fbuf_offset =
+					color_fbuf_offset_1024_128;
+			break;
+		case 800:
+			if (ORIG_VIDEO_COLS == 96)
+				color_fbuf_offset =
+					color_fbuf_offset_800_96;
+			break;
+		case 640:
+			if (ORIG_VIDEO_COLS == 80)
+				color_fbuf_offset =
+					color_fbuf_offset_640_80;
 			break;
 		}
-
-		if (!scr_def [i].depth){
-			x_margin = y_margin = 0;
-			prom_printf ("console: unknown video resolution %dx%d,"
-				     " depth %d\n",
-			      	     con_width, con_height, con_depth);
-			prom_halt ();
-		}
-
-		/* P3: I fear this strips 15inch 1024/768 PC-like
-		 * monitors out. */
-		if ((linebytes*8) / con_depth != con_width) {
-			prom_printf("console: unusual video, linebytes=%d, "
-			    	    "width=%d, height=%d depth=%d\n",
-			    	    linebytes, con_width, con_height,
-				    con_depth);
-			prom_halt ();
-		}
+		break;
+	}
+	
+	if (!scr_def [i].depth){
+		x_margin = y_margin = 0;
+		prom_printf ("console: unknown video resolution %dx%d,"
+			     " depth %d\n",
+			     con_width, con_height, con_depth);
+		prom_halt ();
+	}
+	
+	/* P3: I fear this strips 15inch 1024/768 PC-like
+	 * monitors out. */
+	if ((linebytes*8) / con_depth != con_width) {
+		prom_printf("console: unusual video, linebytes=%d, "
+			    "width=%d, height=%d depth=%d\n",
+			    linebytes, con_width, con_height,
+			    con_depth);
+		prom_halt ();
 	}
 }
 
@@ -1022,9 +1016,9 @@ __initfunc(static int sparc_console_probe(void))
 	char prop[16];
 	struct linux_sbus_device *sbdp, *sbdprom;
 	struct linux_sbus *sbus;
-	int cg14 = 0;
+	int creator = 0, cg14 = 0;
 	char prom_name[40];	
-	int type;
+	int type, card_found = 0;
 	unsigned long con_base;
 	u32 tmp;
 	u32 prom_console_node = 0;
@@ -1109,18 +1103,22 @@ __initfunc(static int sparc_console_probe(void))
 				break;
 			}
 		}
-		if (!sbdprom) /* I'm just wondering if this if shouldn't be deleted.
-				 Is /obio/cgfourteen present only if /sbus/cgfourteen
-				 is not? If so, then the test here should be deleted.
-				 Otherwise, this comment should be deleted. */
-			cg14 = cg14_present ();
-		if (!sbdprom && !cg14) {
+		if (sbdprom)
+		    card_found = 1;
+		if (!card_found)
+		    card_found = cg14 = cg14_present ();
+		if (!card_found){
+			prom_printf ("Searching for a creator\n");
+			card_found = creator = creator_present ();
+		}
+		if (!card_found){
 			prom_printf ("Could not find a known video card on this machine\n");
 			prom_halt ();
 		}
 		
 		for_all_sbusdev(sbdp, sbus) {
-			if (!known_card (sbdp->prom_name, known_cards)) continue;
+			if (!known_card (sbdp->prom_name, known_cards))
+				continue;
 			con_node = sbdp->prom_node;
 			prom_apply_sbus_ranges (sbdp->my_bus, &sbdp->reg_addrs [0],
 						sbdp->num_registers, sbdp);
@@ -1170,6 +1168,11 @@ __initfunc(static int sparc_console_probe(void))
 			sparc_framebuffer_setup (!sbdprom, cg14, FBTYPE_MDICOLOR, 
 						 0, 0, 0, prom_console_node == cg14,
 						 prom_searchsiblings (prom_getchild (prom_root_node), "obio"));
+		}
+		if (creator){
+			sparc_framebuffer_setup (!sbdprom, creator, FBTYPE_CREATOR,
+						 0, 0, 0, prom_console_node == creator,
+						 prom_getchild (prom_root_node));
 		}
 		break;
 	default:

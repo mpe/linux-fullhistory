@@ -23,6 +23,7 @@
 #include <linux/locks.h>
 #include <linux/fcntl.h>
 #include <linux/malloc.h>
+#include <linux/init.h>
 #ifdef CONFIG_KERNELD
 #include <linux/kerneld.h>
 #endif
@@ -409,7 +410,7 @@ static struct file_system_type ncp_fs_type =
 	ncp_read_super, "ncpfs", 0, NULL
 };
 
-int init_ncp_fs(void)
+__initfunc(int init_ncp_fs(void))
 {
 	return register_filesystem(&ncp_fs_type);
 }

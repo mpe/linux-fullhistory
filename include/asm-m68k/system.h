@@ -65,21 +65,24 @@ struct __xchg_dummy { unsigned long a[100]; };
 
 #if defined(CONFIG_ATARI) && !defined(CONFIG_AMIGA) && !defined(CONFIG_MAC)
 /* block out HSYNC on the atari */
-#define sti() __asm__ __volatile__ ("andiw #0xfbff,%/sr": : : "memory")
+#define __sti() __asm__ __volatile__ ("andiw #0xfbff,%/sr": : : "memory")
 #else /* portable version */
-#define sti() __asm__ __volatile__ ("andiw #0xf8ff,%/sr": : : "memory")
+#define __sti() __asm__ __volatile__ ("andiw #0xf8ff,%/sr": : : "memory")
 #endif /* machine compilation types */ 
-#define cli() __asm__ __volatile__ ("oriw  #0x0700,%/sr": : : "memory")
+#define __cli() __asm__ __volatile__ ("oriw  #0x0700,%/sr": : : "memory")
 #define nop() __asm__ __volatile__ ("nop"::)
 #define mb()  __asm__ __volatile__ (""   : : :"memory")
 
-#define save_flags(x) \
+#define __save_flags(x) \
 __asm__ __volatile__("movew %/sr,%0":"=d" (x) : /* no input */ :"memory")
 
-#define restore_flags(x) \
+#define __restore_flags(x) \
 __asm__ __volatile__("movew %0,%/sr": /* no outputs */ :"d" (x) : "memory")
 
-#define iret() __asm__ __volatile__ ("rte": : :"memory", "sp", "cc")
+#define cli() __cli()
+#define sti() __sti()
+#define save_flags(x) __save_flags(x)
+#define restore_flags(x) __restore_flags(x)
 
 #ifndef CONFIG_RMW_INSNS
 static inline unsigned long __xchg(unsigned long x, volatile void * ptr, int size)

@@ -58,6 +58,9 @@ if [ "$CONFIG_AMIGA" = "y" ]; then
   bool 'Amiga ECS chipset support' CONFIG_AMIFB_ECS
   bool 'Amiga AGA chipset support' CONFIG_AMIFB_AGA
   bool 'Amiga Cybervision support' CONFIG_FB_CYBER
+  if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+    bool 'Amiga RetinaZ3 support' CONFIG_FB_RETINAZ3
+  fi
 #  bool 'Amiga GSP (TMS340x0) support' CONFIG_AMIGA_GSP
 #  if [ "$CONFIG_AMIGA_GSP" = "y" ]; then
 #    bool 'DMI Resolver support' CONFIG_GSP_RESOLVER
@@ -82,15 +85,15 @@ if [ "$CONFIG_BLK_DEV_IDE" != "n" ]; then
   dep_tristate '   SCSI emulation support' CONFIG_BLK_DEV_IDESCSI $CONFIG_BLK_DEV_IDE
 fi
 if [ "$CONFIG_AMIGA" = "y" ]; then
-tristate 'Amiga Zorro II ramdisk support' CONFIG_AMIGA_Z2RAM
+  tristate 'Amiga Zorro II ramdisk support' CONFIG_AMIGA_Z2RAM
 fi
 if [ "$CONFIG_ATARI" = "y" ]; then
-tristate 'Atari ACSI support' CONFIG_ATARI_ACSI
-if [ "$CONFIG_ATARI_ACSI" != "n" ]; then
-comment 'Some devices (e.g. CD jukebox) support multiple LUNs'
-bool 'Probe all LUNs on each ACSI device' CONFIG_ACSI_MULTI_LUN
-dep_tristate 'Atari SLM laser printer support' CONFIG_ATARI_SLM $CONFIG_ATARI_ACSI
-fi
+  tristate 'Atari ACSI support' CONFIG_ATARI_ACSI
+  if [ "$CONFIG_ATARI_ACSI" != "n" ]; then
+    comment 'Some devices (e.g. CD jukebox) support multiple LUNs'
+    bool 'Probe all LUNs on each ACSI device' CONFIG_ACSI_MULTI_LUN
+    dep_tristate 'Atari SLM laser printer support' CONFIG_ATARI_SLM $CONFIG_ATARI_ACSI
+  fi
 fi
 
 comment 'Additional Block Devices'
@@ -138,17 +141,23 @@ mainmenu_option next_comment
 comment 'SCSI low-level drivers'
 
 if [ "$CONFIG_AMIGA" = "y" ]; then
-tristate 'A3000 WD33C93A support' CONFIG_A3000_SCSI
-tristate 'A2091 WD33C93A support' CONFIG_A2091_SCSI
-tristate 'GVP Series II WD33C93A support' CONFIG_GVP11_SCSI
-bool 'CyberStorm SCSI support' CONFIG_CYBERSTORM_SCSI
-bool 'CyberStorm SCSI Mk II support' CONFIG_CYBERSTORMII_SCSI
-bool 'Blizzard 2060 SCSI support' CONFIG_BLZ2060_SCSI
-bool 'Blizzard 1230IV/1260 SCSI support' CONFIG_BLZ1230_SCSI
+  tristate 'A3000 WD33C93A support' CONFIG_A3000_SCSI
+  tristate 'A2091 WD33C93A support' CONFIG_A2091_SCSI
+  tristate 'GVP Series II WD33C93A support' CONFIG_GVP11_SCSI
+  bool 'CyberStorm SCSI support' CONFIG_CYBERSTORM_SCSI
+  bool 'CyberStorm SCSI Mk II support' CONFIG_CYBERSTORMII_SCSI
+  bool 'Blizzard 2060 SCSI support' CONFIG_BLZ2060_SCSI
+  bool 'Blizzard 1230IV/1260 SCSI support' CONFIG_BLZ1230_SCSI
+  bool 'Fastlane SCSI support' CONFIG_FASTLANE_SCSI
+  if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+    bool 'A4000T SCSI support' CONFIG_A4000T_SCSI
+    bool 'A4091 SCSI support' CONFIG_A4091_SCSI
+    bool 'WarpEngine SCSI support' CONFIG_WARPENGINE_SCSI
+  fi
 fi
 if [ "$CONFIG_ATARI" = "y" ]; then
-dep_tristate 'Atari native SCSI support' CONFIG_ATARI_SCSI $CONFIG_SCSI
-bool 'Long delays for Toshiba CD-ROMs' CONFIG_ATARI_SCSI_TOSHIBA_DELAY
+  dep_tristate 'Atari native SCSI support' CONFIG_ATARI_SCSI $CONFIG_SCSI
+  bool 'Long delays for Toshiba CD-ROMs' CONFIG_ATARI_SCSI_TOSHIBA_DELAY
 fi
 #dep_tristate 'SCSI debugging host adapter' CONFIG_SCSI_DEBUG $CONFIG_SCSI
 endmenu
@@ -202,6 +211,7 @@ comment 'Character devices'
 
 define_bool CONFIG_VT y
 define_bool CONFIG_VT_CONSOLE y
+define_bool CONFIG_FB_CONSOLE y
 
 tristate 'Parallel printer support' CONFIG_PRINTER
 if [ "$CONFIG_AMIGA" = "y" ]; then
@@ -214,12 +224,25 @@ fi
 if [ "$CONFIG_ATARI" = "y" ]; then
   tristate 'Atari MFP serial support' CONFIG_ATARI_MFPSER
   tristate 'Atari SCC serial support' CONFIG_ATARI_SCC
+  if [ "$CONFIG_ATARI_SCC" = "y" -o "$CONFIG_ATARI_SCC" = "m" ]; then
+    bool 'Atari SCC serial DMA support' CONFIG_ATARI_SCC_DMA
+  fi
   tristate 'Atari MIDI serial support' CONFIG_ATARI_MIDI
+  if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+    tristate 'Atari DSP56k support (EXPERIMENTAL)' CONFIG_ATARI_DSP56K
+  fi
 fi
 if [ "$CONFIG_AMIGA" = "y" ]; then
   tristate 'Amiga builtin serial support' CONFIG_AMIGA_BUILTIN_SERIAL
-  bool 'GVP IO-Extender support' CONFIG_GVPIOEXT
+  tristate 'GVP IO-Extender support' CONFIG_GVPIOEXT
+  dep_tristate 'GVP IO-Extender parallel printer support' CONFIG_GVPIOEXT_LP $CONFIG_GVPIOEXT
+  dep_tristate 'GVP IO-Extender PLIP support' CONFIG_GVPIOEXT_PLIP $CONFIG_GVPIOEXT
   tristate 'Multiface Card III serial support' CONFIG_MULTIFACE_III_TTY
+fi
+if [ "$CONFIG_ATARI_MFPSER" = "y" -o "$CONFIG_ATARI_SCC" = "y" -o \
+     "$CONFIG_ATARI_MIDI" = "y" -o "$CONFIG_AMIGA_BUILTIN_SERIAL" = "y" -o \
+     "$CONFIG_GVPIOEXT" = "y" -o "$CONFIG_MULTIFACE_III_TTY" = "y" ]; then
+  bool 'Serial console support' CONFIG_SERIAL_CONSOLE
 fi
 bool 'Support for user serial device modules' CONFIG_USERIAL
 bool 'Watchdog Timer Support'	CONFIG_WATCHDOG
@@ -228,6 +251,9 @@ if [ "$CONFIG_WATCHDOG" != "n" ]; then
   bool '   Software Watchdog' CONFIG_SOFT_WATCHDOG
 fi
 bool 'Support for user misc device modules' CONFIG_UMISC
+if [ "$CONFIG_AMIGA" = "y" -o "$CONFIG_ATARI" = "y" ]; then
+  define_bool CONFIG_ABSTRACT_CONSOLE y
+fi
 endmenu
 
 mainmenu_option next_comment
@@ -247,4 +273,5 @@ bool 'Kernel profiling support' CONFIG_PROFILE
 if [ "$CONFIG_PROFILE" = "y" ]; then
   int ' Profile shift count' CONFIG_PROFILE_SHIFT 2
 fi
+bool 'Remote debugging support' CONFIG_KGDB
 endmenu

@@ -200,7 +200,7 @@ static int initrd_release(struct inode *inode,struct file *file)
 {
 	unsigned long i;
 
-	if (--initrd_users) return;
+	if (--initrd_users) return 0;
 	for (i = initrd_start; i < initrd_end; i += PAGE_SIZE)
 		free_page(i);
 	initrd_start = 0;
@@ -405,11 +405,11 @@ identify_ramdisk_image(kdev_t device, struct file *fp, int start_block)
 	}
 
 	/* Try ext2 */
-	if (ext2sb->s_magic == EXT2_SUPER_MAGIC) {
+	if (ext2sb->s_magic == cpu_to_le16(EXT2_SUPER_MAGIC)) {
 		printk(KERN_NOTICE
 		       "RAMDISK: Ext2 filesystem found at block %d\n",
 		       start_block);
-		nblocks = ext2sb->s_blocks_count;
+		nblocks = le32_to_cpu(ext2sb->s_blocks_count);
 		goto done;
 	}
 

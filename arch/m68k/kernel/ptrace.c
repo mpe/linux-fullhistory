@@ -324,7 +324,6 @@ static int write_long(struct task_struct * tsk, unsigned long addr,
 asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 {
 	struct task_struct *child;
-	struct user * dummy = NULL;
 	int ret;
 
 	lock_kernel();

@@ -1,4 +1,4 @@
-/* $Id: parport_share.c,v 1.1.2.4 1997/04/01 18:19:11 phil Exp $
+/* $Id: parport_share.c,v 1.3.2.5 1997/04/16 21:20:44 phil Exp $
  * Parallel-port resource manager code.
  * 
  * Authors: David Campbell <campbell@tirian.che.curtin.edu.au>
@@ -21,6 +21,8 @@
 #include <linux/kernel.h>
 #include <linux/malloc.h>
 
+#undef PARPORT_PARANOID
+
 #include "parport_ll_io.h"
 
 static struct parport *portlist = NULL, *portlist_tail = NULL;
@@ -36,7 +38,7 @@ struct parport *parport_enumerate(void)
 	return portlist;
 }
 
-static void parport_null_intr_func(int irq, void *dev_id, struct pt_regs *regs)
+void parport_null_intr_func(int irq, void *dev_id, struct pt_regs *regs)
 {
 	/* NULL function - Does nothing */
 	return;
@@ -85,7 +87,7 @@ struct parport *parport_register_port(unsigned long base, int irq, int dma)
 	}
 	memcpy(tmp, &new, sizeof(struct parport));
 
-	if (new.irq != -1) {
+	if (new.irq != PARPORT_IRQ_NONE) {
 		if (request_irq(new.irq, parport_null_intr_func,
 			  SA_INTERRUPT, new.name, tmp) != 0) {
 			printk(KERN_INFO "%s: unable to claim IRQ %d\n", 
@@ -197,11 +199,10 @@ struct ppd *parport_register_device(struct parport *port, const char *name,
 				return NULL;
 			}
 		}
-		if (port->irq != -1) {
-			if (request_irq(port->irq, 
-							parport_null_intr_func,
-							SA_INTERRUPT, port->name,
-							port) != 0) {
+		if (port->irq != PARPORT_IRQ_NONE) {
+			if (request_irq(port->irq, parport_null_intr_func,
+					SA_INTERRUPT, port->name,
+					port) != 0) {
 				release_region(port->base, port->size);
 				if( port->modes & PARPORT_MODE_ECR )
 					release_region(port->base+0x400, 3);
@@ -212,7 +213,6 @@ struct ppd *parport_register_device(struct parport *port, const char *name,
 		}
 		port->flags &= ~PARPORT_FLAG_COMA;
 	}
-
 
 	tmp = kmalloc(sizeof(struct ppd), GFP_KERNEL);
 	tmp->name = (char *) name;
@@ -251,8 +251,7 @@ void parport_unregister_device(struct ppd *dev)
 	port = dev->port;
 
 	if (port->cad == dev) {
-		printk(KERN_INFO "%s: refused to unregister currently active device %s\n",
-			   port->name, dev->name);
+		printk(KERN_INFO "%s: refused to unregister currently active device %s\n", port->name, dev->name);
 		return;
 	}
 
@@ -299,8 +298,9 @@ int parport_claim(struct ppd *dev)
 			if (dev->port->modes & PARPORT_MODE_ECR)
 				dev->port->cad->ecr = dev->port->ecr = 
 					r_ecr(dev->port);
-			dev->port->cad->ctr = dev->port->ctr =
-				r_ctr(dev->port);
+			if (dev->port->modes & PARPORT_MODE_SPP)
+				dev->port->cad->ctr = dev->port->ctr =
+					r_ctr(dev->port);
 		} else
 			return -EAGAIN;
 	}
@@ -326,7 +326,8 @@ int parport_claim(struct ppd *dev)
 	/* Restore control registers */
 	if (dev->port->modes & PARPORT_MODE_ECR)
 		if (dev->ecr != dev->port->ecr) w_ecr(dev->port, dev->ecr);
-	if (dev->ctr != dev->port->ctr) w_ctr(dev->port, dev->ctr);
+	if (dev->port->modes & PARPORT_MODE_SPP)
+		if (dev->ctr != dev->port->ctr) w_ctr(dev->port, dev->ctr);
 
 	return 0;
 }
@@ -337,8 +338,7 @@ void parport_release(struct ppd *dev)
 
 	/* Make sure that dev is the current device */
 	if (dev->port->cad != dev) {
-		printk(KERN_WARNING "%s: %s tried to release parport when not owner\n",
-			   dev->port->name, dev->name);
+		printk(KERN_WARNING "%s: %s tried to release parport when not owner\n", dev->port->name, dev->name);
 		return;
 	}
 	dev->port->cad = NULL;
@@ -346,12 +346,13 @@ void parport_release(struct ppd *dev)
 	/* Save control registers */
 	if (dev->port->modes & PARPORT_MODE_ECR)
 		dev->ecr = dev->port->ecr = r_ecr(dev->port);
-	dev->ctr = dev->port->ctr = r_ctr(dev->port);
+	if (dev->port->modes & PARPORT_MODE_SPP)
+		dev->ctr = dev->port->ctr = r_ctr(dev->port);
 	
 	if (dev->port->irq >= 0) {
 		free_irq(dev->port->irq, dev->port);
 		request_irq(dev->port->irq, parport_null_intr_func,
-					SA_INTERRUPT, dev->port->name, dev->port);
+			    SA_INTERRUPT, dev->port->name, dev->port);
  	}
 
 	/* Walk the list, offering a wakeup callback to everybody other
@@ -384,16 +385,22 @@ void parport_release(struct ppd *dev)
 	if (dev->port->lurker && (dev->port->lurker != dev)) {
 		if (dev->port->lurker->wakeup) {
 			dev->port->lurker->wakeup(dev->port->lurker->private);
-			return;
+		} 
+#ifdef PARPORT_PARANOID
+		else {  /* can't happen */
+			printk(KERN_DEBUG
+			  "%s (%s): lurker's wakeup callback went away!\n",
+			       dev->port->name, dev->name);
 		}
-		printk(KERN_DEBUG
-		       "%s (%s): lurker's wakeup callback went away!\n",
-		       dev->port->name, dev->name);
+#endif
 	}
 }
 
 /* The following read funktions are an implementation of a status readback
  * and device id request confirming to IEEE1284-1994.
+ *
+ * These probably ought to go in some seperate file, so people like the SPARC
+ * don't have to pull them in.
  */
 
 /* Wait for Status line(s) to change in 35 ms - see IEEE1284-1994 page 24 to

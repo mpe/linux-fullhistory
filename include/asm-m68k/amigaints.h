@@ -18,53 +18,65 @@
 **
 */
 
-#define AMI_IRQS            (24)
+#define AUTO_IRQS           (8)
 #define AMI_STD_IRQS        (14)
 #define CIA_IRQS            (5)
+#define AMI_IRQS            (32) /* AUTO_IRQS+AMI_STD_IRQS+2*CIA_IRQS */
 
 /* vertical blanking interrupt */
-#define IRQ_AMIGA_VERTB     (IRQ_MACHSPEC | 0)
+#define IRQ_AMIGA_VERTB     0
 
 /* copper interrupt */
-#define IRQ_AMIGA_COPPER    (IRQ_MACHSPEC | 1)
+#define IRQ_AMIGA_COPPER    1
 
 /* Audio interrupts */
-#define IRQ_AMIGA_AUD0	    (IRQ_MACHSPEC | 2)
-#define IRQ_AMIGA_AUD1	    (IRQ_MACHSPEC | 3)
-#define IRQ_AMIGA_AUD2	    (IRQ_MACHSPEC | 4)
-#define IRQ_AMIGA_AUD3	    (IRQ_MACHSPEC | 5)
+#define IRQ_AMIGA_AUD0	    2
+#define IRQ_AMIGA_AUD1	    3
+#define IRQ_AMIGA_AUD2	    4
+#define IRQ_AMIGA_AUD3	    5
 
 /* Blitter done interrupt */
-#define IRQ_AMIGA_BLIT	    (IRQ_MACHSPEC | 6)
+#define IRQ_AMIGA_BLIT	    6
 
 /* floppy disk interrupts */
-#define IRQ_AMIGA_DSKSYN    (IRQ_MACHSPEC | 7)
-#define IRQ_AMIGA_DSKBLK    (IRQ_MACHSPEC | 8)
+#define IRQ_AMIGA_DSKSYN    7
+#define IRQ_AMIGA_DSKBLK    8
 
 /* builtin serial port interrupts */
-#define IRQ_AMIGA_RBF	    (IRQ_MACHSPEC | 9)
-#define IRQ_AMIGA_TBE	    (IRQ_MACHSPEC | 10)
+#define IRQ_AMIGA_RBF	    9
+#define IRQ_AMIGA_TBE	    10
 
 /* software interrupts */
-#define IRQ_AMIGA_SOFT      (IRQ_MACHSPEC | 11)
+#define IRQ_AMIGA_SOFT      11
 
 /* interrupts from external hardware */
-#define IRQ_AMIGA_PORTS	    (IRQ_MACHSPEC | 12)
-#define IRQ_AMIGA_EXTER	    (IRQ_MACHSPEC | 13)
+#define IRQ_AMIGA_PORTS	    12
+#define IRQ_AMIGA_EXTER	    13
 
 /* CIA interrupt sources */
-#define IRQ_AMIGA_CIAA      (IRQ_MACHSPEC | 14)
-#define IRQ_AMIGA_CIAA_TA   (IRQ_MACHSPEC | 14)
-#define IRQ_AMIGA_CIAA_TB   (IRQ_MACHSPEC | 15)
-#define IRQ_AMIGA_CIAA_ALRM (IRQ_MACHSPEC | 16)
-#define IRQ_AMIGA_CIAA_SP   (IRQ_MACHSPEC | 17)
-#define IRQ_AMIGA_CIAA_FLG  (IRQ_MACHSPEC | 18)
-#define IRQ_AMIGA_CIAB      (IRQ_MACHSPEC | 19)
-#define IRQ_AMIGA_CIAB_TA   (IRQ_MACHSPEC | 19)
-#define IRQ_AMIGA_CIAB_TB   (IRQ_MACHSPEC | 20)
-#define IRQ_AMIGA_CIAB_ALRM (IRQ_MACHSPEC | 21)
-#define IRQ_AMIGA_CIAB_SP   (IRQ_MACHSPEC | 22)
-#define IRQ_AMIGA_CIAB_FLG  (IRQ_MACHSPEC | 23)
+#define IRQ_AMIGA_CIAA      14
+#define IRQ_AMIGA_CIAA_TA   14
+#define IRQ_AMIGA_CIAA_TB   15
+#define IRQ_AMIGA_CIAA_ALRM 16
+#define IRQ_AMIGA_CIAA_SP   17
+#define IRQ_AMIGA_CIAA_FLG  18
+#define IRQ_AMIGA_CIAB      19
+#define IRQ_AMIGA_CIAB_TA   19
+#define IRQ_AMIGA_CIAB_TB   20
+#define IRQ_AMIGA_CIAB_ALRM 21
+#define IRQ_AMIGA_CIAB_SP   22
+#define IRQ_AMIGA_CIAB_FLG  23
+
+/* auto-vector interrupts */
+#define IRQ_AMIGA_AUTO      24
+#define IRQ_AMIGA_AUTO_0    24 /* This is just a dummy */
+#define IRQ_AMIGA_AUTO_1    25
+#define IRQ_AMIGA_AUTO_2    26
+#define IRQ_AMIGA_AUTO_3    27
+#define IRQ_AMIGA_AUTO_4    28
+#define IRQ_AMIGA_AUTO_5    29
+#define IRQ_AMIGA_AUTO_6    30
+#define IRQ_AMIGA_AUTO_7    31
 
 #define IRQ_FLOPPY	    IRQ_AMIGA_DSKBLK
 

@@ -23,14 +23,20 @@ MI_OBJS  :=
 MIX_OBJS :=
 
 ifeq ($(CONFIG_PNP_PARPORT),y)
-  L_OBJS += parport_share.o parport_procfs.o
+  L_OBJS += parport_share.o
+  ifeq ($(CONFIG_PROC_FS),y)
+    L_OBJS += parport_procfs.o
+  endif
   ifeq ($(CONFIG_PNP_PARPORT_AUTOPROBE),y)
     L_OBJS += parport_probe.o
   endif
   LX_OBJS += parport_init.o
 else
   ifeq ($(CONFIG_PNP_PARPORT),m)
-    MI_OBJS += parport_share.o parport_procfs.o
+    MI_OBJS += parport_share.o
+    ifneq ($(CONFIG_PROC_FS),n) 
+      MI_OBJS += parport_procfs.o
+    endif
     ifeq ($(CONFIG_PNP_PARPORT_AUTOPROBE),y)
       MI_OBJS += parport_probe.o
     endif

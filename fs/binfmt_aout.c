@@ -22,6 +22,7 @@
 #include <linux/malloc.h>
 #include <linux/binfmts.h>
 #include <linux/personality.h>
+#include <linux/init.h>
 
 #include <asm/system.h>
 #include <asm/uaccess.h>
@@ -89,7 +90,7 @@ do_aout_core_dump(long signr, struct pt_regs * regs)
 #       define START_DATA(u)	(u.start_data)
 #elif defined(__sparc__)
 #       define START_DATA(u)    (u.u_tsize)
-#elif defined(__i386__)
+#elif defined(__i386__) || defined(__mc68000__)
 #       define START_DATA(u)	(u.u_tsize << PAGE_SHIFT)
 #endif
 #ifdef __sparc__
@@ -555,7 +556,8 @@ load_aout_library(int fd)
 }
 
 
-int init_aout_binfmt(void) {
+__initfunc(int init_aout_binfmt(void))
+{
 	return register_binfmt(&aout_format);
 }
 

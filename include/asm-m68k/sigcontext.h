@@ -1,6 +1,8 @@
 #ifndef _ASM_M68k_SIGCONTEXT_H
 #define _ASM_M68k_SIGCONTEXT_H
 
+#include<asm/fpu.h>
+
 struct sigcontext {
 	unsigned long  sc_mask; 	/* old sigmask */
 	unsigned long  sc_usp;		/* old user stack pointer */
@@ -13,7 +15,7 @@ struct sigcontext {
 	unsigned short sc_formatvec;
 	unsigned long  sc_fpregs[2*3];  /* room for two fp registers */
 	unsigned long  sc_fpcntl[3];
-	unsigned char  sc_fpstate[216];
+	unsigned char  sc_fpstate[FPSTATESIZE];
 };
 
 #endif

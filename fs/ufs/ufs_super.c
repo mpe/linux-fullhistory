@@ -8,7 +8,7 @@
  *
  * Copyright (C) 1996  Eddie C. Dost  (ecd@skynet.be)
  *
- * $Id: ufs_super.c,v 1.22 1997/01/16 14:17:41 davem Exp $
+ * $Id: ufs_super.c,v 1.23 1997/04/16 04:53:39 tdyas Exp $
  *
  */
 
@@ -27,6 +27,7 @@
 #include <linux/fs.h>
 #include <linux/ufs_fs.h>
 #include <linux/locks.h>
+#include <linux/init.h>
 
 #include <asm/uaccess.h>
 
@@ -51,8 +52,7 @@ static struct file_system_type ufs_fs_type = {
 	ufs_read_super, "ufs", 1, NULL
 };
 
-int
-init_ufs_fs(void)
+__initfunc(int init_ufs_fs(void))
 {
 	return(register_filesystem(&ufs_fs_type));
 }

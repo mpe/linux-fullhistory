@@ -19,6 +19,7 @@ static char *version =
 #include <linux/in.h>
 #include <linux/malloc.h>
 #include <linux/string.h>
+#include <linux/init.h>
 #include <asm/system.h>
 #include <asm/bitops.h>
 #include <asm/io.h>
@@ -171,7 +172,7 @@ static inline int myri_do_handshake(struct myri_eth *mp)
 	return 0;
 }
 
-static int myri_load_lanai(struct myri_eth *mp)
+static inline int myri_load_lanai(struct myri_eth *mp)
 {
 	struct device		*dev = mp->dev;
 	struct myri_shmem	*shmem = mp->shmem;
@@ -893,7 +894,7 @@ static void dump_eeprom(struct myri_eth *mp)
 }
 #endif
 
-static int myri_ether_init(struct device *dev, struct linux_sbus_device *sdev, int num)
+static inline int myri_ether_init(struct device *dev, struct linux_sbus_device *sdev, int num)
 {
 	static unsigned version_printed = 0;
 	struct myri_eth *mp;
@@ -1105,7 +1106,7 @@ static int myri_ether_init(struct device *dev, struct linux_sbus_device *sdev, i
 	return 0;
 }
 
-int myri_sbus_probe(struct device *dev)
+__initfunc(int myri_sbus_probe(struct device *dev))
 {
 	struct linux_sbus *bus;
 	struct linux_sbus_device *sdev = 0;

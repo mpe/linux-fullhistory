@@ -23,7 +23,9 @@
 
 #define _BLOCKABLE (~(_S(SIGKILL) | _S(SIGSTOP)))
 
-asmlinkage int sys_waitpid(pid_t pid,unsigned long * stat_addr, int options);
+asmlinkage int sys_wait4(pid_t pid, unsigned long *stat_addr,
+			 int options, unsigned long *ru);
+
 asmlinkage int do_signal(unsigned long oldmask, struct pt_regs * regs);
 
 /*
@@ -31,24 +33,21 @@ asmlinkage int do_signal(unsigned long oldmask, struct pt_regs * regs);
  */
 asmlinkage int sys_sigsuspend(int restart, unsigned long oldmask, unsigned long set)
 {
+	struct pt_regs * regs = (struct pt_regs *) &restart;
 	unsigned long mask;
-	struct pt_regs * regs;
-	int res = -EINTR;
 
-	lock_kernel();
-	regs = (struct pt_regs *) &restart;
+	spin_lock_irq(&current->sigmask_lock);
 	mask = current->blocked;
 	current->blocked = set & _BLOCKABLE;
+	spin_unlock_irq(&current->sigmask_lock);
+
 	regs->eax = -EINTR;
 	while (1) {
 		current->state = TASK_INTERRUPTIBLE;
 		schedule();
-		if (do_signal(mask,regs))
-			goto out;
+		if (do_signal(mask, regs))
+			return -EINTR;
 	}
-out:
-	unlock_kernel();
-	return res;
 }
 
 static inline void restore_i387_hard(struct _fpstate *buf)
@@ -108,9 +107,7 @@ if (   (tmp & 0xfffc)     /* not a NULL selectors */ \
 __asm__("mov %w0,%%" #seg: :"r" (tmp)); }
 	struct sigcontext * context;
 	struct pt_regs * regs;
-	int res;
 
-	lock_kernel();
 	regs = (struct pt_regs *) &__unused;
 	context = (struct sigcontext *) regs->esp;
 	if (verify_area(VERIFY_READ, context, sizeof(*context)))
@@ -136,11 +133,12 @@ __asm__("mov %w0,%%" #seg: :"r" (tmp)); }
 			goto badframe;
 		restore_i387(buf);
 	}
-	res = context->eax;
-	unlock_kernel();
-	return res;
+	return context->eax;
+
 badframe:
+	lock_kernel();
 	do_exit(SIGSEGV);
+	unlock_kernel();
 }
 
 static inline struct _fpstate * save_i387_hard(struct _fpstate * buf)
@@ -194,7 +192,7 @@ static void setup_frame(struct sigaction * sa,
 		frame = (unsigned long *) sa->sa_restorer;
 	frame -= 64;
 	if (!access_ok(VERIFY_WRITE,frame,64*4))
-		do_exit(SIGSEGV);
+		goto segv_and_exit;
 
 /* set up the "normal" stack seen by the signal handler (iBCS2) */
 #define __CODE ((unsigned long)(frame+24))
@@ -206,7 +204,7 @@ static void setup_frame(struct sigaction * sa,
        We use __put_user() here because the access_ok() call was already
        done earlier. */  
 	if (__put_user(__CODE,frame))
-		do_exit(SIGSEGV);
+		goto segv_and_exit;
 	if (current->exec_domain && current->exec_domain->signal_invmap)
 		__put_user(current->exec_domain->signal_invmap[signr], frame+1);
 	else
@@ -259,6 +257,12 @@ __asm__("mov %%" #seg",%w0":"=r" (tmp):"0" (tmp)); __put_user(tmp,mem);
 		regs->xcs = USER_CS;
 	}
 	regs->eflags &= ~TF_MASK;
+	return;
+
+segv_and_exit:
+	lock_kernel();
+	do_exit(SIGSEGV);
+	unlock_kernel();
 }
 
 /*
@@ -292,8 +296,11 @@ static void handle_signal(unsigned long signr, struct sigaction *sa,
 
 	if (sa->sa_flags & SA_ONESHOT)
 		sa->sa_handler = NULL;
-	if (!(sa->sa_flags & SA_NOMASK))
+	if (!(sa->sa_flags & SA_NOMASK)) {
+		spin_lock_irq(&current->sigmask_lock);
 		current->blocked |= (sa->sa_mask | _S(signr)) & _BLOCKABLE;
+		spin_unlock_irq(&current->sigmask_lock);
+	}
 }
 
 /*
@@ -310,9 +317,7 @@ asmlinkage int do_signal(unsigned long oldmask, struct pt_regs * regs)
 	unsigned long mask;
 	unsigned long signr;
 	struct sigaction * sa;
-	int res;
 
-	lock_kernel();
 	mask = ~current->blocked;
 	while ((signr = current->signal & mask)) {
 		/*
@@ -322,6 +327,9 @@ asmlinkage int do_signal(unsigned long oldmask, struct pt_regs * regs)
 		 */
 		struct task_struct *t=current;
 		__asm__("bsf %3,%1\n\t"
+#ifdef __SMP__
+			"lock ; "
+#endif
 			"btrl %1,%0"
 			:"=m" (t->signal),"=r" (signr)
 			:"0" (t->signal), "1" (signr));
@@ -338,7 +346,9 @@ asmlinkage int do_signal(unsigned long oldmask, struct pt_regs * regs)
 			if (signr == SIGSTOP)
 				continue;
 			if (_S(signr) & current->blocked) {
+				spin_lock_irq(&current->sigmask_lock);
 				current->signal |= _S(signr);
+				spin_unlock_irq(&current->sigmask_lock);
 				continue;
 			}
 			sa = current->sig->action + signr - 1;
@@ -347,7 +357,7 @@ asmlinkage int do_signal(unsigned long oldmask, struct pt_regs * regs)
 			if (signr != SIGCHLD)
 				continue;
 			/* check for SIGCHLD: it's special */
-			while (sys_waitpid(-1,NULL,WNOHANG) > 0)
+			while (sys_wait4(-1,NULL,WNOHANG, NULL) > 0)
 				/* nothing */;
 			continue;
 		}
@@ -380,14 +390,19 @@ asmlinkage int do_signal(unsigned long oldmask, struct pt_regs * regs)
 				}
 				/* fall through */
 			default:
+				spin_lock_irq(&current->sigmask_lock);
 				current->signal |= _S(signr & 0x7f);
+				spin_unlock_irq(&current->sigmask_lock);
+
 				current->flags |= PF_SIGNALED;
+
+				lock_kernel(); /* 8-( */
 				do_exit(signr);
+				unlock_kernel();
 			}
 		}
 		handle_signal(signr, sa, oldmask, regs);
-		res = 1;
-		goto out;
+		return 1;
 	}
 
 	/* Did we come from a system call? */
@@ -400,8 +415,5 @@ asmlinkage int do_signal(unsigned long oldmask, struct pt_regs * regs)
 			regs->eip -= 2;
 		}
 	}
-	res = 0;
-out:
-	unlock_kernel();
-	return res;
+	return 0;
 }

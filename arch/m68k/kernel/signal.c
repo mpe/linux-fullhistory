@@ -291,20 +291,23 @@ static inline void setup_frame (struct sigaction * sa, struct pt_regs *regs,
 	tframe = frame;
 
 	/* return address points to code on stack */
-	put_user((ulong)(frame+4), tframe); tframe++;
+
+	if(put_user((ulong)(frame+4), tframe))
+		do_exit(SIGSEGV);
+	tframe++;
 	if (current->exec_domain && current->exec_domain->signal_invmap)
-	    put_user(current->exec_domain->signal_invmap[signr], tframe);
+	    __put_user(current->exec_domain->signal_invmap[signr], tframe);
 	else
-	    put_user(signr, tframe);
+	    __put_user(signr, tframe);
 	tframe++;
 
-	put_user(regs->vector, tframe); tframe++;
+	__put_user(regs->vector, tframe); tframe++;
 	/* "scp" parameter.  points to sigcontext */
-	put_user((ulong)(frame+6), tframe); tframe++;
+	__put_user((ulong)(frame+6), tframe); tframe++;
 
 /* set up the return code... */
-	put_user(0xdefc0014,tframe); tframe++; /* addaw #20,sp */
-	put_user(0x70774e40,tframe); tframe++; /* moveq #119,d0; trap #0 */
+	__put_user(0xdefc0014,tframe); tframe++; /* addaw #20,sp */
+	__put_user(0x70774e40,tframe); tframe++; /* moveq #119,d0; trap #0 */
 
 /* Flush caches so the instructions will be correctly executed. (MA) */
 	cache_push_v ((unsigned long)frame, (int)tframe - (int)frame);

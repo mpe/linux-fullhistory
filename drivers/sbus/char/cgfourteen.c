@@ -1,4 +1,4 @@
-/* $Id: cgfourteen.c,v 1.18 1997/03/24 17:44:27 jj Exp $
+/* $Id: cgfourteen.c,v 1.19 1997/04/14 17:04:57 jj Exp $
  * cgfourteen.c: Sun SparcStation console support.
  *
  * Copyright (C) 1995 Miguel de Icaza (miguel@nuclecu.unam.mx)
@@ -183,22 +183,22 @@ cg14_mmap (struct inode *inode, struct file *file,
 		        printk ("Wee!  They are mapping the register, report this to miguel@gnu.ai.mit.edu\n");
 			printk ("Mapping fb->info.regs!\n");
 			map_size = 0x7000;
-			map_offset = get_phys ((uint) fb->info.cg14.regs);
+			map_offset = get_phys ((unsigned long) fb->info.cg14.regs);
 			break;
 			
 		case CG3_MMAP_OFFSET:
 			map_size = size-page;
-			map_offset = get_phys ((uint) fb->base);
+			map_offset = get_phys ((unsigned long) fb->base);
 			break;
 
 		case MDI_PLANAR_X16_MAP:
 			map_size = ram_size/2;
-			map_offset = get_phys ((uint) fb->base) | 0x2000000;
+			map_offset = get_phys ((unsigned long) fb->base) | 0x2000000;
 			break;
 			
 		case MDI_PLANAR_C16_MAP:
 			map_size = ram_size/2;
-			map_offset = get_phys ((uint) fb->base) | 0x2800000;
+			map_offset = get_phys ((unsigned long) fb->base) | 0x2800000;
 			break;
 			
 		case MDI_CHUNKY_XBGR_MAP:
@@ -208,50 +208,50 @@ cg14_mmap (struct inode *inode, struct file *file,
 			
 		case MDI_CHUNKY_BGR_MAP:
 			map_size = ram_size;
-			map_offset = get_phys ((uint) fb->base) | 0x1000000;
+			map_offset = get_phys ((unsigned long) fb->base) | 0x1000000;
 			break;
 			
 		case MDI_PLANAR_X32_MAP:
 			map_size = ram_size/4;
-			map_offset = get_phys ((uint) fb->base) | 0x3000000;
+			map_offset = get_phys ((unsigned long) fb->base) | 0x3000000;
 			break;
 		case MDI_PLANAR_B32_MAP:
 			map_size = ram_size/4;
-			map_offset = get_phys ((uint) fb->base) | 0x3400000;
+			map_offset = get_phys ((unsigned long) fb->base) | 0x3400000;
 			break;
 		case MDI_PLANAR_G32_MAP:
 			map_size = ram_size/4;
-			map_offset = get_phys ((uint) fb->base) | 0x3800000;
+			map_offset = get_phys ((unsigned long) fb->base) | 0x3800000;
 			break;
 		case MDI_PLANAR_R32_MAP:
 			map_size = ram_size/4;
-			map_offset = get_phys ((uint) fb->base) | 0x3c00000;
+			map_offset = get_phys ((unsigned long) fb->base) | 0x3c00000;
 			break;
 
 		case MDI_CURSOR_MAP:
 			map_size = PAGE_SIZE;
-			map_offset = get_phys ((uint) fb->info.cg14.cursor_regs);
+			map_offset = get_phys ((unsigned long) fb->info.cg14.cursor_regs);
 			break;
 			
 		case CG14_REGS:
 		        printk ("Wee!  They are mapping the register, report this to miguel@gnu.ai.mit.edu\n");
 			map_size = PAGE_SIZE;
-			map_offset = get_phys ((uint) fb->info.cg14.regs);
+			map_offset = get_phys ((unsigned long) fb->info.cg14.regs);
 			break;
 			
 		case CG14_XLUT:
 			map_size = PAGE_SIZE;
-			map_offset = get_phys ((uint) fb->info.cg14.regs+0x3000);
+			map_offset = get_phys ((unsigned long) fb->info.cg14.regs+0x3000);
 			break;
 			
 		case CG14_CLUT1:
 			map_size = PAGE_SIZE;
-			map_offset = get_phys ((uint) fb->info.cg14.regs+0x4000);
+			map_offset = get_phys ((unsigned long) fb->info.cg14.regs+0x4000);
 			break;
 			
 		case CG14_CLUT2:
 			map_size = PAGE_SIZE;
-			map_offset = get_phys ((uint) fb->info.cg14.regs+0x5000);
+			map_offset = get_phys ((unsigned long) fb->info.cg14.regs+0x5000);
 			break;
 			
 		default:
@@ -424,11 +424,11 @@ cg14_reset (fbinfo_t *fb)
 	*mcr = (*mcr & ~(CG14_MCR_PIXMODE_MASK));
 }
 
-__initfunc(void cg14_setup (fbinfo_t *fb, int slot, int con_node, unsigned long cg14, int cg14_io))
+__initfunc(void cg14_setup (fbinfo_t *fb, int slot, int con_node, u32 cg14, int cg14_io))
 {
 	struct cg14_info *cg14info;
 	uint bases [2];
-	uint cg14regs = 0;
+	unsigned long cg14regs = 0;
 	struct cg14_regs *regs = 0;
 
 	if (!cg14) {
@@ -468,5 +468,5 @@ __initfunc(void cg14_setup (fbinfo_t *fb, int slot, int con_node, unsigned long 
 	/* If the bit is turned on, the card has 8 mb of ram, otherwise just 4 */
 	cg14info->ramsize = (regs->vca & CG14_VCA_8MB_MASK ? 8 : 4) * 1024 * 1024;
 	printk ("cgfourteen%d at 0x%8.8x with %d megs of RAM rev=%d, impl=%d\n",
-		slot, (uint)cg14, cg14info->ramsize/(1024*1024), regs->rev >> 4, regs->rev & 0xf);
+		slot, cg14, cg14info->ramsize/(1024*1024), regs->rev >> 4, regs->rev & 0xf);
 }

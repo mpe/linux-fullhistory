@@ -100,11 +100,12 @@ struct linux_binfmt em86_format = {
 #ifndef MODULE
 	NULL, 0, load_em86, NULL, NULL
 #else
-	NULL, &mod_use_count_, load_em86, NULL, NULL
+	NULL, &__this_module, load_em86, NULL, NULL
 #endif
 };
 
-int init_em86_binfmt(void) {
+__initfunc(int init_em86_binfmt(void))
+{
 	return register_binfmt(&em86_format);
 }
 

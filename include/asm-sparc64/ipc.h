@@ -4,12 +4,11 @@
 /* 
  * These are used to wrap system calls on the sparc.
  *
- * See arch/sparc64/kernel/sys_sparc.c for ugly details..
+ * See arch/sparc64/kernel/sys_sparc32.c for ugly details..
  */
-/* XXX 32-bit binary compatability... */
 struct ipc_kludge {
-	struct msgbuf *msgp;
-	long msgtyp;
+	u32 msgp;
+	s32 msgtyp;
 };
 
 #define SEMOP		 1
@@ -24,6 +23,7 @@ struct ipc_kludge {
 #define SHMGET		23
 #define SHMCTL		24
 
-#define IPCCALL(version,op)	((version)<<16 | (op))
+/* We don't need to maintain backward compatibility on 64bit, we've started fresh */
+#define IPCCALL(version,op)	(op)
 
 #endif

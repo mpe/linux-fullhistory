@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_output.c,v 1.34 1997/04/12 04:32:33 davem Exp $
+ * Version:	$Id: tcp_output.c,v 1.35 1997/04/16 09:18:53 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -79,12 +79,12 @@ static __inline__ int tcp_snd_test(struct sock *sk, struct sk_buff *skb)
 		
 	len = skb->end_seq - skb->seq;
 
-	if (!sk->nonagle && len < (sk->mss >> 1) && atomic_read(&sk->packets_out))
+	if (!sk->nonagle && len < (sk->mss >> 1) && sk->packets_out)
 	{
 		nagle_check = 0;
 	}
 
-	return (nagle_check && atomic_read(&sk->packets_out) < tp->snd_cwnd &&
+	return (nagle_check && sk->packets_out < tp->snd_cwnd &&
 		!after(skb->end_seq, tp->snd_una + tp->snd_wnd) &&
 		atomic_read(&sk->retransmits) == 0);
 }
@@ -168,7 +168,7 @@ int tcp_send_skb(struct sock *sk, struct sk_buff *skb)
 		skb_set_owner_w(buff, sk);
 
 		tp->snd_nxt = skb->end_seq;
-		atomic_inc(&sk->packets_out);
+		sk->packets_out++;
 
 		skb->when = jiffies;
 
@@ -189,7 +189,7 @@ queue:
 	if (tp->send_head == NULL)
 		tp->send_head = skb;
 
-	if (atomic_read(&sk->packets_out) == 0 && !tp->pending)
+	if (sk->packets_out == 0 && !tp->pending)
 	{
 		tp->pending = TIME_PROBE0;
 		tcp_reset_xmit_timer(sk, TIME_PROBE0, tp->rto);
@@ -333,7 +333,7 @@ static int tcp_wrxmit_frag(struct sock *sk, struct sk_buff *skb, int size)
 	{
 		/* !tcp_frament Failed! */
 		tp->send_head = skb;
-		atomic_dec(&sk->packets_out);
+		sk->packets_out--;
 		return -1;
 	}
 	else
@@ -441,7 +441,7 @@ void tcp_write_xmit(struct sock *sk)
 		update_send_head(sk);
 		clear_delayed_acks(sk);
 
-		atomic_inc(&sk->packets_out);
+		sk->packets_out++;
 		skb_set_owner_w(buff, sk);
 
 		tp->snd_nxt = skb->end_seq;
@@ -610,7 +610,7 @@ static int tcp_retrans_try_collapse(struct sock *sk, struct sk_buff *skb)
 	 */
 
 	kfree_skb(buff, FREE_WRITE);
-	atomic_dec(&sk->packets_out);
+	sk->packets_out--;
 
 	/* 
 	 *	Header checksum will be set by the retransmit procedure
@@ -672,7 +672,7 @@ void tcp_do_retransmit(struct sock *sk, int all)
 				printk(KERN_DEBUG "tcp_fragment failed\n");
 				return;
 			}
-			atomic_inc(&sk->packets_out);
+			sk->packets_out++;
 		}
 
 		if (!th->syn &&
@@ -833,7 +833,7 @@ void tcp_send_fin(struct sock *sk)
 	{
 		struct sk_buff *skb1;
 
-		atomic_inc(&sk->packets_out);
+		sk->packets_out++;
 		tp->snd_nxt = sk->write_seq;
 		buff->when = jiffies;
 
@@ -910,7 +910,7 @@ int tcp_send_synack(struct sock *sk)
 	{
 		skb_set_owner_w(buff, sk);
 
-		atomic_inc(&sk->packets_out);
+		sk->packets_out++;
 		skb->when = jiffies;
 
 		tp->af_specific->queue_xmit(buff);
@@ -1107,7 +1107,7 @@ void tcp_write_wakeup(struct sock *sk)
 			return;
 		}
 		skb_set_owner_w(buff, sk);
-		atomic_inc(&sk->packets_out);
+		sk->packets_out++;
 
 		clear_delayed_acks(sk);
 

@@ -111,12 +111,12 @@ static void sun4c_clear_clock_irq(void)
 	clear_intr = sun4c_timers->timer_limit10;
 }
 
-static void sun4c_clear_profile_irq(void)
+static void sun4c_clear_profile_irq(int cpu)
 {
 	/* Errm.. not sure how to do this.. */
 }
 
-static void sun4c_load_profile_irq(unsigned int limit)
+static void sun4c_load_profile_irq(int cpu, unsigned int limit)
 {
 	/* Errm.. not sure how to do this.. */
 }

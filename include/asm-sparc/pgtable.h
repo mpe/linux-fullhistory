@@ -1,4 +1,4 @@
-/* $Id: pgtable.h,v 1.59 1997/04/10 05:13:23 davem Exp $ */
+/* $Id: pgtable.h,v 1.60 1997/04/14 17:05:16 jj Exp $ */
 #ifndef _SPARC_PGTABLE_H
 #define _SPARC_PGTABLE_H
 
@@ -367,5 +367,31 @@ extern __inline__ void add_to_ctx_list(struct ctx_list *head, struct ctx_list *e
 }
 #define add_to_free_ctxlist(entry) add_to_ctx_list(&ctx_free, entry)
 #define add_to_used_ctxlist(entry) add_to_ctx_list(&ctx_used, entry)
+
+extern __inline__ unsigned int
+__get_phys (unsigned long addr)
+{
+	switch (sparc_cpu_model){
+	case sun4c:
+		return sun4c_get_pte (addr) << PAGE_SHIFT;
+	case sun4m:
+		return ((srmmu_get_pte (addr) & 0xffffff00) << 4);
+	default:
+		return 0;
+	}
+}
+
+extern __inline__ int
+__get_iospace (unsigned long addr)
+{
+	switch (sparc_cpu_model){
+	case sun4c:
+		return -1; /* Don't check iospace on sun4c */
+	case sun4m:
+		return (srmmu_get_pte (addr) >> 28);
+	default:
+		return -1;
+	}
+}
 
 #endif /* !(_SPARC_PGTABLE_H) */

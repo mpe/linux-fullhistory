@@ -1,4 +1,4 @@
-/* $Id: cgthree.c,v 1.16 1997/04/10 03:02:41 davem Exp $
+/* $Id: cgthree.c,v 1.18 1997/04/16 17:51:09 jj Exp $
  * cgtree.c: cg3 frame buffer driver
  *
  * Copyright (C) 1996 Miguel de Icaza (miguel@nuclecu.unam.mx)
@@ -109,7 +109,7 @@ cg3_mmap (struct inode *inode, struct file *file, struct vm_area_struct *vma,
 		switch (vma->vm_offset+page){
 		case CG3_MMAP_OFFSET:
 			map_size = size-page;
-			map_offset = get_phys ((uint) fb->base);
+			map_offset = get_phys ((unsigned long) fb->base);
 			if (map_size > fb->type.fb_size)
 				map_size = fb->type.fb_size;
 			break;
@@ -178,7 +178,7 @@ static u_char cg3_dacvals[] __initdata = {
 };
 
 
-__initfunc(void cg3_setup (fbinfo_t *fb, int slot, unsigned long cg3, int cg3_io,
+__initfunc(void cg3_setup (fbinfo_t *fb, int slot, u32 cg3, int cg3_io,
 			   struct linux_sbus_device *sbdp))
 {
 	struct cg3_info *cg3info = (struct cg3_info *) &fb->info.cg3;
@@ -200,10 +200,10 @@ __initfunc(void cg3_setup (fbinfo_t *fb, int slot, unsigned long cg3, int cg3_io
 				}
 			}
 		}
-		printk ("cgRDI%d at 0x%8.8x\n", slot, (uint)cg3);
+		printk ("cgRDI%d at 0x%8.8x\n", slot, cg3);
 		cg3info->cgrdi = 1;
 	} else {
-		printk ("cgthree%d at 0x%8.8x\n", slot, (uint)cg3);
+		printk ("cgthree%d at 0x%8.8x\n", slot, cg3);
 		cg3info->cgrdi = 0;
 	}
 	
@@ -218,7 +218,7 @@ __initfunc(void cg3_setup (fbinfo_t *fb, int slot, unsigned long cg3, int cg3_io
 	fb->unblank = cg3_unblank;
 
 	/* Map the card registers */
-	cg3info->regs = sparc_alloc_io ((u32)(cg3+CG3_REGS), 0,
+	cg3info->regs = sparc_alloc_io (cg3+CG3_REGS, 0,
 		 sizeof (struct cg3_regs),"cg3_regs", cg3_io, 0);
 
 	if (!prom_getbool(sbdp->prom_node, "width")) {
@@ -258,8 +258,8 @@ __initfunc(void cg3_setup (fbinfo_t *fb, int slot, unsigned long cg3, int cg3_io
 	}
 
 	if (!fb->base){
-		fb->base=(uint) sparc_alloc_io ((u32)(cg3+CG3_RAM), 0,
-				    fb->type.fb_size, "cg3_ram", cg3_io, 0);
+		fb->base=(unsigned long) sparc_alloc_io (cg3+CG3_RAM, 0,
+				         fb->type.fb_size, "cg3_ram", cg3_io, 0);
 	}
 }
 

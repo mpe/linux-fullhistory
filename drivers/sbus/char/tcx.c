@@ -1,4 +1,4 @@
-/* $Id: tcx.c,v 1.11 1997/04/10 03:02:43 davem Exp $
+/* $Id: tcx.c,v 1.12 1997/04/14 17:04:51 jj Exp $
  * tcx.c: SUNW,tcx 24/8bit frame buffer driver
  *
  * Copyright (C) 1996 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -126,24 +126,24 @@ tcx_mmap (struct inode *inode, struct file *file, struct vm_area_struct *vma,
 		switch (vma->vm_offset+page){
 		case TCX_RAM8BIT:
 			map_size = fb->type.fb_size;
-			map_offset = get_phys ((uint) fb->base);
+			map_offset = get_phys ((unsigned long) fb->base);
 			break;
 		case TCX_TEC:
 			map_size = PAGE_SIZE;
-			map_offset = get_phys ((uint)fb->info.tcx.tec);
+			map_offset = get_phys ((unsigned long)fb->info.tcx.tec);
 			break;
 		case TCX_BTREGS:
 			map_size = PAGE_SIZE;
-			map_offset = get_phys ((uint)fb->info.tcx.bt);
+			map_offset = get_phys ((unsigned long)fb->info.tcx.bt);
 			break;
 		case TCX_THC:
 			map_size = PAGE_SIZE;
-			map_offset = get_phys ((uint)fb->info.tcx.thc);
+			map_offset = get_phys ((unsigned long)fb->info.tcx.thc);
 			break;
 		case TCX_CONTROLPLANE:
 			if (fb->info.tcx.tcx_cplane) {
 				map_size = fb->info.tcx.tcx_sizes [TCX_CONTROLPLANE_OFFSET];
-				map_offset = get_phys ((uint)fb->info.tcx.tcx_cplane);
+				map_offset = get_phys ((unsigned long)fb->info.tcx.tcx_cplane);
 			} else
 				map_size = 0;
 			break;
@@ -272,12 +272,12 @@ tcx_reset (fbinfo_t *fb)
 	tcx->bt->control |= 0x03 << 24;
 }
 
-__initfunc(void tcx_setup (fbinfo_t *fb, int slot, int node, unsigned long tcx, struct linux_sbus_device *sbdp))
+__initfunc(void tcx_setup (fbinfo_t *fb, int slot, int node, u32 tcx, struct linux_sbus_device *sbdp))
 {
 	struct tcx_info *tcxinfo;
 	int i;
 
-	printk ("tcx%d at 0x%8.8x ", slot, (uint) tcx);
+	printk ("tcx%d at 0x%8.8x ", slot, tcx);
 	
 	/* Fill in parameters we left out */
 	fb->type.fb_cmsize = 256;

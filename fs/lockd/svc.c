@@ -130,8 +130,8 @@ lockd(struct svc_rqst *rqstp)
 			break;
 		}
 
-		dprintk("lockd: request from %08lx\n",
-				ntohl(rqstp->rq_addr.sin_addr.s_addr));
+		dprintk("lockd: request from %08x\n",
+				(unsigned)ntohl(rqstp->rq_addr.sin_addr.s_addr));
 
 		/*
 		 * Look up the NFS client handle. The handle is needed for

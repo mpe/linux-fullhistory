@@ -513,9 +513,12 @@ copyout:
 	movel	12(%sp),%d0	| count
 	subl	#1,%d0		| dec count by 1 for dbra
 	movel	#1,%d1
-	movec	%d1,%DFC		| set dfc for user data space
+
+|	DFC is already set
+|	movec	%d1,%DFC		| set dfc for user data space
 moreout:
 	moveb	(%a0)+,%d1	| fetch supervisor byte
+out_ea:
 	movesb	%d1,(%a1)+	| write user byte
 	dbf	%d0,moreout
 	rts
@@ -526,11 +529,24 @@ copyin:
 	movel	12(%sp),%d0	| count
 	subl	#1,%d0		| dec count by 1 for dbra
 	movel	#1,%d1
-	movec	%d1,%SFC		| set sfc for user space
+|	SFC is already set
+|	movec	%d1,%SFC		| set sfc for user space
 morein:
+in_ea:
 	movesb	(%a0)+,%d1	| fetch user byte
 	moveb	%d1,(%a1)+	| write supervisor byte
 	dbf	%d0,morein
 	rts
+
+	.section .fixup,#alloc,#execinstr
+	.even
+1:
+	jbra	SYMBOL_NAME(fpsp040_die)
+
+	.section __ex_table,#alloc
+	.align	4
+
+	.long	in_ea,1b
+	.long	out_ea,1b
 
 	|end

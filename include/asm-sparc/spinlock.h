@@ -23,12 +23,41 @@ typedef struct { } spinlock_t;
 #define spin_lock_irqsave(lock, flags)		save_and_cli(flags)
 #define spin_unlock_irqrestore(lock, flags)	restore_flags(flags)
 
+/*
+ * Read-write spinlocks, allowing multiple readers
+ * but only one writer.
+ *
+ * NOTE! it is quite common to have readers in interrupts
+ * but no interrupt writers. For those circumstances we
+ * can "mix" irq-safe locks - any writer needs to get a
+ * irq-safe write-lock, but readers can get non-irqsafe
+ * read-locks.
+ */
+typedef struct { } rwlock_t;
+#define RW_LOCK_UNLOCKED { }
+
+#define read_lock(lock)		do { } while(0)
+#define read_unlock(lock)	do { } while(0)
+#define write_lock(lock)	do { } while(0)
+#define write_unlock(lock)	do { } while(0)
+#define read_lock_irq(lock)	cli()
+#define read_unlock_irq(lock)	sti()
+#define write_lock_irq(lock)	cli()
+#define write_unlock_irq(lock)	sti()
+
+#define read_lock_irqsave(lock, flags)		save_and_cli(flags)
+#define read_unlock_irqrestore(lock, flags)	restore_flags(flags)
+#define write_lock_irqsave(lock, flags)		save_and_cli(flags)
+#define write_unlock_irqrestore(lock, flags)	restore_flags(flags)
+
 #else /* !(__SMP__) */
 
 #include <asm/psr.h>
 
 typedef unsigned char spinlock_t;
 #define SPIN_LOCK_UNLOCKED	0
+
+#define spin_lock_init(lock)	(*(lock) = 0)
 
 extern __inline__ void spin_lock(spinlock_t *lock)
 {
@@ -124,6 +153,92 @@ extern __inline__ void spin_unlock_irqrestore(spinlock_t *lock, unsigned long fl
 	: "r" (lock), "r" (flags)
 	: "memory", "cc");
 }
+
+/* Read-write spinlocks, allowing multiple readers
+ * but only one writer.
+ *
+ * NOTE! it is quite common to have readers in interrupts
+ * but no interrupt writers. For those circumstances we
+ * can "mix" irq-safe locks - any writer needs to get a
+ * irq-safe write-lock, but readers can get non-irqsafe
+ * read-locks.
+ *
+ * XXX This might create some problems with my dual spinlock
+ * XXX scheme, deadlocks etc. -DaveM
+ */
+typedef struct { volatile unsigned int lock; } rwlock_t;
+
+#define RW_LOCK_UNLOCKED { 0 }
+
+/* Sort of like atomic_t's on Sparc, but even more clever.
+ *
+ *	------------------------------------
+ *	| 16-bit counter   | clock | wlock |  rwlock_t
+ *	------------------------------------
+ *	 31              16 15    8 7     0
+ *
+ * wlock signifies the one writer is in, the clock protects
+ * counter bumping, however a reader must acquire wlock
+ * before he can bump the counter on a read_lock().
+ * Similarly a writer, once he has the wlock, must await
+ * for the top 24 bits to all clear before he can finish
+ * going in (this includes the clock of course).
+ *
+ * Unfortunately this scheme limits us to ~65,000 cpus.
+ */
+extern __inline__ void read_lock(rwlock_t *rw)
+{
+	register rwlock_t *lp asm("g1");
+	lp = rw;
+	__asm__ __volatile__("
+	mov	%%o7, %%g4
+	call	___rw_read_enter
+	 ldstub	[%%g1 + 3], %%g2
+"	: /* no outputs */
+	: "r" (lp)
+	: "g2", "g4", "g7", "memory", "cc");
+}
+
+extern __inline__ void read_unlock(rwlock_t *rw)
+{
+	register rwlock_t *lp asm("g1");
+	lp = rw;
+	__asm__ __volatile__("
+	mov	%%o7, %%g4
+	call	___rw_read_exit
+	 ldstub	[%%g1 + 2], %%g2
+"	: /* no outputs */
+	: "r" (lp)
+	: "g2", "g4", "g7", "memory", "cc");
+}
+
+extern __inline__ void write_lock(rwlock_t *rw)
+{
+	register rwlock_t *lp asm("g1");
+	lp = rw;
+	__asm__ __volatile__("
+	mov	%%o7, %%g4
+	call	___rw_write_enter
+	 ldstub	[%%g1 + 3], %%g2
+"	: /* no outputs */
+	: "r" (lp)
+	: "g2", "g4", "g7", "memory", "cc");
+}
+
+#define write_unlock(rw)	do { (rw)->lock = 0; } while(0)
+#define read_lock_irq(lock)	do { __cli(); read_lock(lock); } while (0)
+#define read_unlock_irq(lock)	do { read_unlock(lock); __sti(); } while (0)
+#define write_lock_irq(lock)	do { __cli(); write_lock(lock); } while (0)
+#define write_unlock_irq(lock)	do { write_unlock(lock); __sti(); } while (0)
+
+#define read_lock_irqsave(lock, flags)	\
+	do { __save_and_cli(flags); read_lock(lock); } while (0)
+#define read_unlock_irqrestore(lock, flags) \
+	do { read_unlock(lock); __restore_flags(flags); } while (0)
+#define write_lock_irqsave(lock, flags)	\
+	do { __save_and_cli(flags); write_lock(lock); } while (0)
+#define write_unlock_irqrestore(lock, flags) \
+	do { write_unlock(lock); __restore_flags(flags); } while (0)
 
 #endif /* __SMP__ */
 

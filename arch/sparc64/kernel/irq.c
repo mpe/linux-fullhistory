@@ -1,4 +1,4 @@
-/* $Id: irq.c,v 1.11 1997/04/14 05:38:59 davem Exp $
+/* $Id: irq.c,v 1.12 1997/04/16 05:56:20 davem Exp $
  * irq.c: UltraSparc IRQ handling/init/registry.
  *
  * Copyright (C) 1997 David S. Miller (davem@caip.rutgers.edu)
@@ -382,7 +382,7 @@ void free_irq(unsigned int irq, void *dev_cookie)
 
 /* Per-processor IRQ locking depth, both SMP and non-SMP code use this. */
 unsigned int local_irq_count[NR_CPUS];
-atomic_t __sparc64_bh_counter;
+atomic_t __sparc64_bh_counter = ATOMIC_INIT(0);
 
 #ifdef __SMP__
 #error SMP not supported on sparc64 just yet

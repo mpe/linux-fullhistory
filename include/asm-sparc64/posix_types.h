@@ -34,6 +34,27 @@ typedef struct {
 	int	val[2];
 } __kernel_fsid_t;
 
+/* Now 32bit compatibility types */
+typedef unsigned int           __kernel_size_t32;
+typedef int                    __kernel_ssize_t32;
+typedef int                    __kernel_ptrdiff_t32;
+typedef int                    __kernel_time_t32;
+typedef int                    __kernel_clock_t32;
+typedef int                    __kernel_pid_t32;
+typedef unsigned short         __kernel_ipc_pid_t32;
+typedef unsigned short         __kernel_uid_t32;
+typedef unsigned short         __kernel_gid_t32;
+typedef unsigned short         __kernel_dev_t32;
+typedef unsigned int           __kernel_ino_t32;
+typedef unsigned short         __kernel_mode_t32;
+typedef unsigned short         __kernel_umode_t32;
+typedef short                  __kernel_nlink_t32;
+typedef int                    __kernel_daddr_t32;
+typedef int                    __kernel_off_t32;
+typedef unsigned int           __kernel_caddr_t32;
+typedef long		       __kernel_loff_t32;
+typedef __kernel_fsid_t        __kernel_fsid_t32;
+
 #undef __FD_SET
 static __inline__ void __FD_SET(unsigned long fd, __kernel_fd_set *fdsetp)
 {

@@ -23,6 +23,7 @@
 #include <linux/locks.h>
 #include <linux/stat.h>
 #include <linux/string.h>
+#include <linux/init.h>
 #include <asm/bitops.h>
 #include <asm/uaccess.h>
 
@@ -1748,7 +1749,7 @@ static struct file_system_type hpfs_fs_type = {
         hpfs_read_super, "hpfs", 1, NULL
 };
 
-int init_hpfs_fs(void)
+__initfunc(int init_hpfs_fs(void))
 {
         return register_filesystem(&hpfs_fs_type);
 }

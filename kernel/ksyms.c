@@ -20,6 +20,7 @@
 #include <linux/kernel_stat.h>
 #include <linux/mm.h>
 #include <linux/malloc.h>
+#include <linux/slab.h>
 #include <linux/vmalloc.h>
 #include <linux/ptrace.h>
 #include <linux/sys.h>
@@ -130,6 +131,10 @@ EXPORT_SYMBOL(max_mapnr);
 EXPORT_SYMBOL(num_physpages);
 EXPORT_SYMBOL(high_memory);
 EXPORT_SYMBOL(update_vm_cache);
+EXPORT_SYMBOL(kmem_cache_create);
+EXPORT_SYMBOL(kmem_cache_destroy);
+EXPORT_SYMBOL(kmem_cache_alloc);
+EXPORT_SYMBOL(kmem_cache_free);
 
 /* filesystem internal functions */
 EXPORT_SYMBOL(getname);
@@ -258,7 +263,10 @@ EXPORT_SYMBOL(tq_immediate);
 EXPORT_SYMBOL(tq_scheduler);
 EXPORT_SYMBOL(timer_active);
 EXPORT_SYMBOL(timer_table);
+
 #ifdef __SMP__
+/* Various random spinlocks we want to export */
+EXPORT_SYMBOL(tqueue_lock);
 EXPORT_SYMBOL(waitqueue_lock);
 #endif
 

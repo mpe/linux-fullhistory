@@ -53,7 +53,7 @@
 #include <asm/bitops.h>
 #include <asm/amigaints.h>
 #include <asm/amigahw.h>
-#include <asm/zorro.h>
+#include <linux/zorro.h>
 #include <asm/io.h>
 #include <asm/irq.h>
 
@@ -365,7 +365,7 @@ static int ariadne_close(struct device *dev)
     if (ariadne_debug > 1) {
 	printk("%s: Shutting down ethercard, status was %2.2x.\n", dev->name,
 	       board->Lance.RDP);
-	printk("%s: %d packets missed\n", dev->name,
+	printk("%s: %lu packets missed\n", dev->name,
 	       priv->stats.rx_missed_errors);
     }
 

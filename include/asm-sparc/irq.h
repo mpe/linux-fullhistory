@@ -1,4 +1,4 @@
-/* $Id: irq.h,v 1.15 1997/04/14 05:39:28 davem Exp $
+/* $Id: irq.h,v 1.16 1997/04/15 09:03:40 davem Exp $
  * irq.h: IRQ registers on the Sparc.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -22,9 +22,9 @@ extern void (*disable_irq)(unsigned int);
 extern void (*enable_irq)(unsigned int);
 extern void (*disable_pil_irq)(unsigned int);
 extern void (*enable_pil_irq)(unsigned int);
-extern void (*clear_clock_irq)( void );
-extern void (*clear_profile_irq)( void );
-extern void (*load_profile_irq)( unsigned int timeout );
+extern void (*clear_clock_irq)(void);
+extern void (*clear_profile_irq)(int);
+extern void (*load_profile_irq)(int cpu, unsigned int timeout);
 extern void (*init_timers)(void (*lvl10_irq)(int, void *, struct pt_regs *));
 extern void claim_ticker14(void (*irq_handler)(int, void *, struct pt_regs *),
 			   int irq,

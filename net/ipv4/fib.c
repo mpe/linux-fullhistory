@@ -117,7 +117,7 @@ static void rtmsg_dev(unsigned long type, struct device *dev, struct nlmsghdr *n
  */
 
 static struct wait_queue *fib_wait;
-static atomic_t fib_users = ATOMIC_INIT;
+static atomic_t fib_users = ATOMIC_INIT(0);
 
 static void fib_lock(void)
 {

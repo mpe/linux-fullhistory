@@ -79,6 +79,7 @@
 #include <linux/stat.h>
 #include <net/br.h>
 #include <linux/net_alias.h>
+#include <linux/init.h>
 #ifdef CONFIG_KERNELD
 #include <linux/kerneld.h>
 #endif
@@ -122,7 +123,7 @@ struct packet_type *ptype_all = NULL;		/* Taps */
  *	Device list lock
  */
  
-atomic_t dev_lockct = ATOMIC_INIT;
+atomic_t dev_lockct = ATOMIC_INIT(0);
  
 /*
  *	Our notifier list
@@ -1578,7 +1579,7 @@ static struct proc_dir_entry proc_net_wireless = {
 #endif	/* CONFIG_PROC_FS */
 #endif	/* CONFIG_NET_RADIO */
 
-int net_dev_init(void)
+__initfunc(int net_dev_init(void))
 {
 	struct device *dev, **dp;
 

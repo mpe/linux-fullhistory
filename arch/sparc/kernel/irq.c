@@ -1,4 +1,4 @@
-/*  $Id: irq.c,v 1.66 1997/04/14 05:38:21 davem Exp $
+/*  $Id: irq.c,v 1.68 1997/04/16 05:55:58 davem Exp $
  *  arch/sparc/kernel/irq.c:  Interrupt request handling routines. On the
  *                            Sparc the IRQ's are basically 'cast in stone'
  *                            and you are supposed to probe the prom's device
@@ -41,6 +41,10 @@
 #include <asm/hardirq.h>
 #include <asm/softirq.h>
 
+#ifdef __SMP_PROF__
+extern volatile unsigned long smp_local_timer_ticks[1+NR_CPUS];
+#endif
+
 /*
  * Dave Redman (djhr@tadpole.co.uk)
  *
@@ -71,11 +75,11 @@ void (*enable_irq)(unsigned int) = (void (*)(unsigned int)) irq_panic;
 void (*disable_irq)(unsigned int) = (void (*)(unsigned int)) irq_panic;
 void (*enable_pil_irq)(unsigned int) = (void (*)(unsigned int)) irq_panic;
 void (*disable_pil_irq)(unsigned int) = (void (*)(unsigned int)) irq_panic;
-void (*clear_clock_irq)( void ) = irq_panic;
-void (*clear_profile_irq)( void ) = irq_panic;
-void (*load_profile_irq)( unsigned int ) =  (void (*)(unsigned int)) irq_panic;
-void (*init_timers)( void (*)(int, void *,struct pt_regs *)) =
-    (void (*)( void (*)(int, void *,struct pt_regs *))) irq_panic;
+void (*clear_clock_irq)(void) = irq_panic;
+void (*clear_profile_irq)(int) = (void (*)(int)) irq_panic;
+void (*load_profile_irq)(int, unsigned int) =  (void (*)(int, unsigned int)) irq_panic;
+void (*init_timers)(void (*)(int, void *,struct pt_regs *)) =
+    (void (*)(void (*)(int, void *,struct pt_regs *))) irq_panic;
 
 #ifdef __SMP__
 void (*set_cpu_int)(int, int);
@@ -127,6 +131,109 @@ int get_irq_list(char *buf)
 	}
 	return len;
 }
+
+#ifdef __SMP_PROF__
+
+static unsigned int int_count[NR_CPUS][NR_IRQS] = {{0},};
+
+extern unsigned int prof_multiplier[NR_CPUS];
+extern unsigned int prof_counter[NR_CPUS];
+
+int get_smp_prof_list(char *buf) {
+	int i,j, len = 0;
+	struct irqaction * action;
+	unsigned long sum_spins = 0;
+	unsigned long sum_spins_syscall = 0;
+	unsigned long sum_spins_sys_idle = 0;
+	unsigned long sum_smp_idle_count = 0;
+	unsigned long sum_local_timer_ticks = 0;
+
+	for (i=0;i<smp_num_cpus;i++) {
+		int cpunum = cpu_logical_map[i];
+		sum_spins+=smp_spins[cpunum];
+		sum_spins_syscall+=smp_spins_syscall[cpunum];
+		sum_spins_sys_idle+=smp_spins_sys_idle[cpunum];
+		sum_smp_idle_count+=smp_idle_count[cpunum];
+		sum_local_timer_ticks+=smp_local_timer_ticks[cpunum];
+	}
+
+	len += sprintf(buf+len,"CPUS: %10i \n", smp_num_cpus);
+	len += sprintf(buf+len,"            SUM ");
+	for (i=0;i<smp_num_cpus;i++)
+		len += sprintf(buf+len,"        P%1d ",cpu_logical_map[i]);
+	len += sprintf(buf+len,"\n");
+	for (i = 0 ; i < NR_IRQS ; i++) {
+		action = *(i + irq_action);
+		if (!action || !action->handler)
+			continue;
+		len += sprintf(buf+len, "%3d: %10d ",
+			i, kstat.interrupts[i]);
+		for (j=0;j<smp_num_cpus;j++)
+			len+=sprintf(buf+len, "%10d ",
+				int_count[cpu_logical_map[j]][i]);
+		len += sprintf(buf+len, "%c %s",
+			(action->flags & SA_INTERRUPT) ? '+' : ' ',
+			action->name);
+		for (action=action->next; action; action = action->next) {
+			len += sprintf(buf+len, ",%s %s",
+				(action->flags & SA_INTERRUPT) ? " +" : "",
+				action->name);
+		}
+		len += sprintf(buf+len, "\n");
+	}
+	len+=sprintf(buf+len, "LCK: %10lu",
+		sum_spins);
+
+	for (i=0;i<smp_num_cpus;i++)
+		len+=sprintf(buf+len," %10lu",smp_spins[cpu_logical_map[i]]);
+
+	len +=sprintf(buf+len,"   spins from int\n");
+
+	len+=sprintf(buf+len, "LCK: %10lu",
+		sum_spins_syscall);
+
+	for (i=0;i<smp_num_cpus;i++)
+		len+=sprintf(buf+len," %10lu",smp_spins_syscall[cpu_logical_map[i]]);
+
+	len +=sprintf(buf+len,"   spins from syscall\n");
+
+	len+=sprintf(buf+len, "LCK: %10lu",
+		sum_spins_sys_idle);
+
+	for (i=0;i<smp_num_cpus;i++)
+		len+=sprintf(buf+len," %10lu",smp_spins_sys_idle[cpu_logical_map[i]]);
+
+	len +=sprintf(buf+len,"   spins from sysidle\n");
+	len+=sprintf(buf+len,"IDLE %10lu",sum_smp_idle_count);
+
+	for (i=0;i<smp_num_cpus;i++)
+		len+=sprintf(buf+len," %10lu",smp_idle_count[cpu_logical_map[i]]);
+
+	len +=sprintf(buf+len,"   idle ticks\n");
+
+	len+=sprintf(buf+len,"TICK %10lu",sum_local_timer_ticks);
+	for (i=0;i<smp_num_cpus;i++)
+		len+=sprintf(buf+len," %10lu",smp_local_timer_ticks[cpu_logical_map[i]]);
+
+	len +=sprintf(buf+len,"   local APIC timer ticks\n");
+
+	len+=sprintf(buf+len,"MULT:          ");
+	for (i=0;i<smp_num_cpus;i++)
+		len+=sprintf(buf+len," %10u",prof_multiplier[cpu_logical_map[i]]);
+	len +=sprintf(buf+len,"   profiling multiplier\n");
+
+	len+=sprintf(buf+len,"COUNT:         ");
+	for (i=0;i<smp_num_cpus;i++)
+		len+=sprintf(buf+len," %10u",prof_counter[cpu_logical_map[i]]);
+
+	len +=sprintf(buf+len,"   profiling counter\n");
+
+	len+=sprintf(buf+len, "IPI: %10lu   received\n",
+		ipi_count);
+
+	return len;
+}
+#endif 
 
 void free_irq(unsigned int irq, void *dev_id)
 {
@@ -185,7 +292,7 @@ void free_irq(unsigned int irq, void *dev_id)
 
 /* Per-processor IRQ locking depth, both SMP and non-SMP code use this. */
 unsigned int local_irq_count[NR_CPUS];
-atomic_t __sparc_bh_counter;
+atomic_t __sparc_bh_counter = ATOMIC_INIT(0);
 
 #ifdef __SMP__
 /* SMP interrupt locking on Sparc. */
@@ -200,7 +307,7 @@ spinlock_t global_irq_lock = SPIN_LOCK_UNLOCKED;
 spinlock_t global_bh_lock = SPIN_LOCK_UNLOCKED;
 
 /* Global IRQ locking depth. */
-atomic_t global_irq_count = ATOMIC_INIT;
+atomic_t global_irq_count = ATOMIC_INIT(0);
 
 #define irq_active(cpu) \
 	(atomic_read(&global_irq_count) != local_irq_count[cpu])
@@ -352,6 +459,10 @@ static void irq_enter(int cpu, int irq)
 	extern void smp_irq_rotate(int cpu);
 	int stuck = INIT_STUCK;
 
+#ifdef __SMP_PROF__
+	int_count[cpu][irq]++;
+#endif
+
 	smp_irq_rotate(cpu);
 	hardirq_enter(cpu);
 	while(global_irq_lock) {
@@ -408,7 +519,7 @@ void handler_irq(int irq, struct pt_regs * regs)
 	int cpu = smp_processor_id();
 	
 	disable_pil_irq(cpu_irq);
-	irq_enter(cpu, irq);
+	irq_enter(cpu, cpu_irq);
 	action = *(cpu_irq + irq_action);
 	kstat.interrupts[cpu_irq]++;
 	do {
@@ -417,7 +528,7 @@ void handler_irq(int irq, struct pt_regs * regs)
 		action->handler(irq, action->dev_id, regs);
 		action = action->next;
 	} while (action);
-	irq_exit(cpu, irq);
+	irq_exit(cpu, cpu_irq);
 	enable_pil_irq(cpu_irq);
 }
 

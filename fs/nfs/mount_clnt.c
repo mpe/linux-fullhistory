@@ -49,8 +49,8 @@ nfs_mount(struct sockaddr_in *addr, char *path, struct nfs_fh *fh)
 	char			hostname[32];
 	int			status;
 
-	dprintk("NFS:      nfs_mount(%08lx:%s)\n",
-			ntohl(addr->sin_addr.s_addr), path);
+	dprintk("NFS:      nfs_mount(%08x:%s)\n",
+			(unsigned)ntohl(addr->sin_addr.s_addr), path);
 
 	strcpy(hostname, in_ntoa(addr->sin_addr.s_addr));
 	if (!(mnt_clnt = mnt_create(hostname, addr)))

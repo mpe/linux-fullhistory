@@ -30,6 +30,7 @@
 #include <linux/stat.h>
 #include <linux/string.h>
 #include <linux/locks.h>
+#include <linux/init.h>
 
 #include <asm/uaccess.h>
 
@@ -979,7 +980,7 @@ static struct file_system_type sysv_fs_type[3] = {
 	{sysv_read_super, "coherent", 1, NULL}
 };
 
-int init_sysv_fs(void)
+__initfunc(int init_sysv_fs(void))
 {
 	int i;
 	int ouch;

@@ -1,4 +1,4 @@
-/* $Id: fb.h,v 1.24 1997/03/24 17:44:15 jj Exp $
+/* $Id: fb.h,v 1.26 1997/04/17 02:29:33 miguel Exp $
  * fb.h: contains the definitions of the structures that various sun
  *       frame buffer can use to do console driver stuff.
  *
@@ -183,8 +183,8 @@ extern int con_height, con_linebytes;
 extern int ints_per_line;
 
 /* used in the mmap routines */
-extern unsigned int get_phys (unsigned int addr);
-extern int get_iospace (unsigned int addr);
+extern unsigned int get_phys (unsigned long addr);
+extern int get_iospace (unsigned long addr);
 extern void render_screen(void);
 
 extern void sun_hw_hide_cursor(void);
@@ -197,12 +197,14 @@ extern unsigned long sun_cg_postsetup(fbinfo_t *, unsigned long);
 
 #define FB_DEV(x) (MINOR(x) / 32)
 
-extern void cg3_setup (fbinfo_t *, int, unsigned long, int, struct linux_sbus_device *);
-extern void cg6_setup (fbinfo_t *, int, unsigned long, int);
-extern void cg14_setup (fbinfo_t *, int, int, unsigned long, int);
-extern void bwtwo_setup (fbinfo_t *, int, unsigned long, int,
+extern void cg3_setup (fbinfo_t *, int, u32, int, struct linux_sbus_device *);
+extern void cg6_setup (fbinfo_t *, int, u32, int);
+extern void cg14_setup (fbinfo_t *, int, int, u32, int);
+extern void bwtwo_setup (fbinfo_t *, int, u32, int,
 			 struct linux_sbus_device *);
-extern void leo_setup (fbinfo_t *, int, unsigned long, int);
-extern void tcx_setup (fbinfo_t *, int, int, unsigned long, struct linux_sbus_device *);
+extern void leo_setup (fbinfo_t *, int, u32, int);
+extern void tcx_setup (fbinfo_t *, int, int, u32, struct linux_sbus_device *);
+extern void creator_setup (fbinfo_t *, int, int, unsigned long, int);
+extern int io_remap_page_range(unsigned long from, unsigned long offset, unsigned long size, pgprot_t prot, int space);
 
 #endif __SPARC_FB_H_

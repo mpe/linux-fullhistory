@@ -20,7 +20,7 @@
 #include <net/dst.h>
 
 struct dst_entry * dst_garbage_list;
-atomic_t	dst_total = ATOMIC_INIT;
+atomic_t	dst_total = ATOMIC_INIT(0);
 
 static unsigned long dst_gc_timer_expires;
 static unsigned long dst_gc_timer_inc = DST_GC_MAX;

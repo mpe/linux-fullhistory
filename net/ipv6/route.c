@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: route.c,v 1.10 1997/04/12 04:32:57 davem Exp $
+ *	$Id: route.c,v 1.11 1997/04/16 05:58:05 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -62,7 +62,7 @@ struct dst_ops ip6_dst_ops = {
 };
 
 struct rt6_info ip6_null_entry = {
-	{{NULL, ATOMIC_INIT, ATOMIC_INIT, NULL,
+	{{NULL, ATOMIC_INIT(0), ATOMIC_INIT(0), NULL,
 	  0, 0, 0, 0, 0, 0, 0, 0, -ENETUNREACH, NULL, NULL,
 	  ip6_pkt_discard, ip6_pkt_discard, &ip6_dst_ops}},
 	NULL, {{{0}}}, 256, RTF_REJECT|RTF_NONEXTHOP, ~0UL,
@@ -93,7 +93,7 @@ static struct rt6_info	*rt6_flow_lookup(struct rt6_info *rt,
 #define ip6_rt_policy (0)
 #endif
 
-static atomic_t	rt6_tbl_lock	= ATOMIC_INIT;
+static atomic_t	rt6_tbl_lock	= ATOMIC_INIT(0);
 static int	rt6_bh_mask	= 0;
 
 #define RT_BH_REQUEST		1

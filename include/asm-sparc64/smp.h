@@ -106,51 +106,6 @@ extern __inline__ int smp_processor_id(void)
 
 
 extern __volatile__ unsigned long smp_proc_in_lock[NR_CPUS]; /* for computing process time */
-extern __volatile__ int smp_process_available;
-
-extern __inline__ __volatile__ void inc_smp_counter(volatile int *ctr)
-{
-	unsigned long temp0, temp1;
-
-	__asm__ __volatile__("
-	lduw		[%2], %0
-1:
-	add		%0, 1, %1
-	cas		[%2], %0, %1
-	cmp		%0, %1
-	bne,a,pn	%%icc, 1b
-	 lduw		[%2], %0
-2:
-	membar		#StoreStore | #StoreLoad
-" 	: "=&r" (temp0), "=&r" (temp1), "=r" (ctr)
-	: "ir" (i), "r" (ctr)
-	: "cc");
-}
-
-extern __inline__ __volatile__ void dec_smp_counter(volatile int *ctr)
-{
-	unsigned long temp0, temp1;
-
-	__asm__ __volatile__("
-	lduw		[%2], %0
-1:
-	sub		%0, 1, %1
-	cas		[%2], %0, %1
-	cmp		%0, %1
-	bne,a,pn	%%icc, 1b
-	 lduw		[%2], %0
-2:
-	membar		#StoreStore | #StoreLoad
-" 	: "=&r" (temp0), "=&r" (temp1), "=r" (ctr)
-	: "ir" (i), "r" (ctr)
-	: "cc");
-}
-
-extern __inline__ __volatile__ int read_smp_counter(volatile int *ctr)
-{
-	return *ctr;
-}
-
 #endif /* !(__ASSEMBLY__) */
 
 /* Sparc specific messages. */

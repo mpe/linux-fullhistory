@@ -21,7 +21,7 @@
 #define NLM_HOST_MAX		64
 #define NLM_HOST_NRHASH		32
 #define NLM_ADDRHASH(addr)	(ntohl(addr) & (NLM_HOST_NRHASH-1))
-#define NLM_PTRHASH(ptr)	((((u32) ptr) / 32) & (NLM_HOST_NRHASH-1))
+#define NLM_PTRHASH(ptr)	((((u32)(unsigned long) ptr) / 32) & (NLM_HOST_NRHASH-1))
 #define NLM_HOST_REBIND		(60 * HZ)
 #define NLM_HOST_EXPIRE		((nrhosts > NLM_HOST_MAX)? 300 * HZ : 120 * HZ)
 #define NLM_HOST_COLLECT	((nrhosts > NLM_HOST_MAX)? 120 * HZ :  60 * HZ)
@@ -81,8 +81,8 @@ nlm_lookup_host(struct svc_client *clnt, struct sockaddr_in *sin,
 		return NULL;
 	}
 
-	dprintk("lockd: nlm_lookup_host(%08lx, p=%d, v=%d)\n",
-			sin? ntohl(sin->sin_addr.s_addr) : 0, proto, version);
+	dprintk("lockd: nlm_lookup_host(%08x, p=%d, v=%d)\n",
+			(unsigned)(sin? ntohl(sin->sin_addr.s_addr) : 0), proto, version);
 
 	if (clnt)
 		hash = NLM_PTRHASH(clnt);
@@ -164,8 +164,8 @@ nlm_bind_host(struct nlm_host *host)
 	struct rpc_clnt	*clnt;
 	struct rpc_xprt	*xprt;
 
-	dprintk("lockd: nlm_bind_host(%08lx)\n",
-			ntohl(host->h_addr.sin_addr.s_addr));
+	dprintk("lockd: nlm_bind_host(%08x)\n",
+			(unsigned)ntohl(host->h_addr.sin_addr.s_addr));
 
 	/* Lock host handle */
 	down(&host->h_sema);

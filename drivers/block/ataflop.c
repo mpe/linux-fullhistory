@@ -52,6 +52,9 @@
  * Michael (MSch) 11/07/96:
  *  - implemented FDSETPRM and FDDEFPRM ioctl
  *
+ * Andreas (97/03/19):
+ *  - implemented missing BLK* ioctls
+ *
  *  Things left to do:
  *   - Formatting
  *   - Maybe a better strategy for disk change detection (does anyone
@@ -281,6 +284,7 @@ unsigned char *DMABuffer;			  /* buffer for writes */
 static unsigned long PhysDMABuffer;   /* physical address */
 
 static int UseTrackbuffer = -1;		  /* Do track buffering? */
+MODULE_PARM(UseTrackbuffer, "i");
 
 unsigned char *TrackBuffer;			  /* buffer for reads */
 static unsigned long PhysTrackBuffer; /* physical address */
@@ -305,6 +309,7 @@ static int MotorOn = 0, MotorOffTrys;
 static int IsFormatting = 0, FormatError;
 
 static int UserSteprate[FD_MAX_UNITS] = { -1, -1 };
+MODULE_PARM(UserSteprate, "1-" __MODULE_STRING(FD_MAX_UNITS) "i");
 
 /* Synchronization of FDC access. */
 static volatile int fdc_busy = 0;
@@ -405,7 +410,7 @@ static void fd_probe( int drive );
 static int fd_test_drive_present( int drive );
 static void config_types( void );
 static int floppy_open( struct inode *inode, struct file *filp );
-static void floppy_release( struct inode * inode, struct file * filp );
+static int floppy_release( struct inode * inode, struct file * filp );
 
 /************************* End of Prototypes **************************/
 
@@ -1582,6 +1587,7 @@ static int fd_ioctl(struct inode *inode, struct file *filp,
 	drive &= 3;
 	switch (cmd) {
 	case FDGETPRM:
+	case BLKGETSIZE:
 		if (type) {
 			if (--type >= NUM_DISK_MINORS)
 				return -ENODEV;
@@ -1599,6 +1605,9 @@ static int fd_ioctl(struct inode *inode, struct file *filp,
 			else
 				dtp = UDT;
 		}
+		if (cmd == BLKGETSIZE)
+			return put_user(dtp->blocks, (long *)param);
+
 		memset((void *)&getprm, 0, sizeof(getprm));
 		getprm.size = dtp->blocks;
 		getprm.sect = dtp->spt;
@@ -1607,6 +1616,22 @@ static int fd_ioctl(struct inode *inode, struct file *filp,
 		getprm.stretch = dtp->stretch;
 		if (copy_to_user((void *)param, &getprm, sizeof(getprm)))
 			return -EFAULT;
+		return 0;
+	case BLKRASET:
+		if (!suser())
+			return -EACCES;
+		if (param > 0xff)
+			return -EINVAL;
+		read_ahead[MAJOR(inode->i_rdev)] = param;
+		return 0;
+	case BLKRAGET:
+		return put_user(read_ahead[MAJOR(inode->i_rdev)],
+				(int *) param);
+	case BLKFLSBUF:
+		if (!suser())
+			return -EACCES;
+		fsync_dev(inode->i_rdev);
+		invalidate_buffers(inode->i_rdev);
 		return 0;
 	}
 	if (!IOCTL_ALLOWED)

@@ -30,13 +30,13 @@ struct ciabase {
 	irq_handler_t irq_list[CIA_IRQS];
 } ciaa_base = {
 	&ciaa, 0, 0, IF_PORTS,
-	IRQ2, IRQ_AMIGA_CIAA,
-	IRQ_IDX(IRQ_AMIGA_PORTS),
+	IRQ_AMIGA_AUTO_2, IRQ_AMIGA_CIAA,
+	IRQ_AMIGA_PORTS,
 	"CIAA handler", {0, 0}
 }, ciab_base = {
 	&ciab, 0, 0, IF_EXTER,
-	IRQ6, IRQ_AMIGA_CIAB,
-	IRQ_IDX(IRQ_AMIGA_EXTER),
+	IRQ_AMIGA_AUTO_6, IRQ_AMIGA_CIAB,
+	IRQ_AMIGA_EXTER,
 	"CIAB handler", {0, 0}
 };
 
@@ -95,14 +95,14 @@ int cia_request_irq(struct ciabase *base, unsigned int irq,
 
 	if (!(base->irq_list[irq].flags & IRQ_FLG_STD)) {
 		if (base->irq_list[irq].flags & IRQ_FLG_LOCK) {
-			printk("%s: IRQ %ld from %s is not replaceable\n",
-			       __FUNCTION__, IRQ_IDX(base->cia_irq + irq),
+			printk("%s: IRQ %i from %s is not replaceable\n",
+			       __FUNCTION__, base->cia_irq + irq,
 			       base->irq_list[irq].devname);
 			return -EBUSY;
 		}
-		if (flags & IRQ_FLG_REPLACE) {
-			printk("%s: %s can't replace IRQ %ld from %s\n", __FUNCTION__,
-			       devname, IRQ_IDX(base->cia_irq + irq),
+		if (!(flags & IRQ_FLG_REPLACE)) {
+			printk("%s: %s can't replace IRQ %i from %s\n", __FUNCTION__,
+			       devname, base->cia_irq + irq,
 			       base->irq_list[irq].devname);
 			return -EBUSY;
 		}
@@ -122,8 +122,8 @@ int cia_request_irq(struct ciabase *base, unsigned int irq,
 void cia_free_irq(struct ciabase *base, unsigned int irq, void *dev_id)
 {
 	if (base->irq_list[irq].dev_id != dev_id)
-		printk("%s: removing probably wrong IRQ %ld from %s\n",
-		       __FUNCTION__, IRQ_IDX(base->cia_irq + irq),
+		printk("%s: removing probably wrong IRQ %i from %s\n",
+		       __FUNCTION__, base->cia_irq + irq,
 		       base->irq_list[irq].devname);
 
 	base->irq_list[irq].handler = NULL;
@@ -139,7 +139,7 @@ static void cia_handler(int irq, void *dev_id, struct pt_regs *fp)
 	unsigned char ints;
 
 	mach_irq = base->cia_irq;
-	irq = SYS_IRQS + IRQ_IDX(mach_irq);
+	irq = SYS_IRQS + mach_irq;
 	ints = cia_set_irq(base, CIA_ICR_ALL);
 	custom.intreq = base->int_mask;
 	for (i = 0; i < CIA_IRQS; i++, irq++, mach_irq++) {
@@ -176,7 +176,7 @@ int cia_get_irq_list(struct ciabase *base, char *buf)
 {
 	int i, j, len = 0;
 
-	j = IRQ_IDX(base->cia_irq);
+	j = base->cia_irq;
 	for (i = 0; i < CIA_IRQS; i++) {
 		if (!(base->irq_list[i].flags & IRQ_FLG_STD)) {
 			len += sprintf(buf+len, "cia  %2d: %10d ", j + i,

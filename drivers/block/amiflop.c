@@ -56,6 +56,7 @@
 #include <linux/kernel.h>
 #include <linux/timer.h>
 #include <linux/fd.h>
+#include <linux/hdreg.h>
 #include <linux/errno.h>
 #include <linux/types.h>
 #include <linux/delay.h>
@@ -401,6 +402,7 @@ static int motor_on(int nr)
 	restore_flags(flags);
 
 	if (on_attempts == 0) {
+		on_attempts = -1;
 #if 0
 		printk (KERN_ERR "motor_on failed, turning motor off\n");
 		fd_motor_off (nr);
@@ -1511,93 +1513,103 @@ static int fd_ioctl(struct inode *inode, struct file *filp,
 	int error;
 	unsigned long flags;
 
-	switch(cmd)
-	 {
-	  case FDFMTBEG:
-	  get_hw(drive);
-	    if (fd_ref[drive] > 1) {
-	      rel_hw();
-	      return -EBUSY;
-	    }
-	    fsync_dev(inode->i_rdev);
-	    if (motor_on(drive) == 0) {
-	      rel_hw();
-	      return -ENODEV;
-	    }
-	    if (fd_calibrate(drive) == 0) {
-	      rel_hw();
-	      return -ENXIO;
-	    }
-	    floppy_off(drive);
-	    rel_hw();
+	switch(cmd){
+	case HDIO_GETGEO:
+	{
+		struct hd_geometry loc;
+		loc.heads = unit[drive].type->heads;
+		loc.sectors = unit[drive].sects;
+		loc.cylinders = unit[drive].type->tracks;
+		loc.start = 0;
+		if ((error = copy_to_user((void *)param, (void *)&loc,
+					  sizeof(struct hd_geometry))))
+			return error;
+		break;
+	}
+	case FDFMTBEG:
+		get_hw(drive);
+		if (fd_ref[drive] > 1) {
+			rel_hw();
+			return -EBUSY;
+		}
+		fsync_dev(inode->i_rdev);
+		if (motor_on(drive) == 0) {
+			rel_hw();
+			return -ENODEV;
+		}
+		if (fd_calibrate(drive) == 0) {
+			rel_hw();
+			return -ENXIO;
+		}
+		floppy_off(drive);
+		rel_hw();
+		break;
+	case FDFMTTRK:
+		if (param < unit[drive].type->tracks * unit[drive].type->heads)
+		{
+			get_fdc(drive);
+			get_hw(drive);
+			fd_select(drive);
+			if (fd_seek(drive,param)!=0){
+				savedtrack=param;
+				memset(trackdata, FD_FILL_BYTE,
+				       unit[drive].sects*512);
+				non_int_flush_track(drive);
+			}
+			floppy_off(drive);
+			rel_hw();
+			rel_fdc();
+		}
+		else
+			return -EINVAL;
+		break;
+	case FDFMTEND:
+		floppy_off(drive);
+		invalidate_inodes(inode->i_rdev);
+		invalidate_buffers(inode->i_rdev);
+		break;
+	case FDGETPRM:
+		memset((void *)&getprm, 0, sizeof (getprm));
+		getprm.track=unit[drive].type->tracks;
+		getprm.head=unit[drive].type->heads;
+		getprm.sect=unit[drive].sects;
+		getprm.size=unit[drive].blocks;
+		if ((error = copy_to_user((void *)param,
+					  (void *)&getprm,
+					  sizeof(struct floppy_struct))))
+			return error;
 	    break;
-	  case FDFMTTRK:
-	    if (param < unit[drive].type->tracks * unit[drive].type->heads)
-	     {
-	      get_fdc(drive);
-	      get_hw(drive);
-	      fd_select(drive);
-	      if (fd_seek(drive,param)!=0)
-	       {
-	        savedtrack=param;
-	        memset(trackdata,FD_FILL_BYTE,unit[drive].sects*512);
-	        non_int_flush_track(drive);
-	       }
-	      floppy_off(drive);
-	      rel_hw();
-	      rel_fdc();
-	     }
-	    else
-	      return -EINVAL;
-	    break;
-	  case FDFMTEND:
-	    floppy_off(drive);
-	    invalidate_inodes(inode->i_rdev);
-	    invalidate_buffers(inode->i_rdev);
-	    break;
-	  case FDGETPRM:
-	    error = verify_area(VERIFY_WRITE, (void *)param,
-				sizeof(struct floppy_struct));
-	    if (error)
-	      return error;
-	    memset((void *)&getprm, 0, sizeof (getprm));
-	    getprm.track=unit[drive].type->tracks;
-	    getprm.head=unit[drive].type->heads;
-	    getprm.sect=unit[drive].sects;
-	    getprm.size=unit[drive].blocks;
-	    copy_to_user((void *)param,(void *)&getprm,sizeof(struct floppy_struct));
-	    break;
-	  case BLKGETSIZE:
-	    if (put_user(unit[drive].blocks,(long *)param))
-		    return -EFAULT;
-            break;
-          case FDSETPRM:
-          case FDDEFPRM:
-            return -EINVAL;
-          case FDFLUSH:
-	    save_flags(flags);
-	    cli();
-            if ((drive == selected) && (writepending)) {
-              del_timer (&flush_track_timer);
-              restore_flags(flags);
-              non_int_flush_track(selected);
-            }
-            else
-              restore_flags(flags);
-            break;
+	case BLKGETSIZE:
+		if (put_user(unit[drive].blocks,(long *)param))
+			return -EFAULT;
+		break;
+	case FDSETPRM:
+	case FDDEFPRM:
+		return -EINVAL;
+	case FDFLUSH:
+		save_flags(flags);
+		cli();
+		if ((drive == selected) && (writepending)) {
+			del_timer (&flush_track_timer);
+			restore_flags(flags);
+			non_int_flush_track(selected);
+		}
+		else
+			restore_flags(flags);
+		break;
 #ifdef RAW_IOCTL
-	  case IOCTL_RAW_TRACK:
-	    error = verify_area(VERIFY_WRITE, (void *)param,
-	      unit[drive].type->read_size);
-	    if (error)
-	      return error;
-	    copy_to_user((void *)param, raw_buf, unit[drive].type->read_size);
-	    return unit[drive].type->read_size;
+	case IOCTL_RAW_TRACK:
+		error = copy_to_user((void *)param, raw_buf,
+				     unit[drive].type->read_size);
+		if (error)
+			return error;
+		else
+			return unit[drive].type->read_size;
 #endif
-	  default:
-	    printk(KERN_DEBUG "fd_ioctl: unknown cmd %d for drive %d.",cmd,drive);
-	    return -ENOSYS;
-         }
+	default:
+		printk(KERN_DEBUG "fd_ioctl: unknown cmd %d for drive %d.",cmd,drive);
+		return -ENOSYS;
+	}
 	return 0;
 }
 

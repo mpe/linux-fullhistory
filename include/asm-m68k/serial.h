@@ -171,7 +171,10 @@ typedef struct {
  */
 struct serial_icounter_struct {
 	int cts, dsr, rng, dcd;
-	int reserved[16];
+	int rx, tx;
+	int frame, overrun, parity, brk;
+	int buf_overrun;
+	int reserved[9];
 };
 
 
@@ -192,7 +195,9 @@ struct serial_icounter_struct {
  * Counters of the input lines (CTS, DSR, RI, CD) interrupts
  */
 struct async_icount {
-	__u32	cts, dsr, rng, dcd;	
+	__u32	cts, dsr, rng, dcd, tx, rx;
+	__u32	frame, parity, overrun, brk;
+	__u32	buf_overrun;
 };
 
 struct async_struct {
@@ -281,7 +286,7 @@ extern task_queue tq_serial;
 static __inline__ void rs_sched_event(struct async_struct *info, int event)
 {
 	info->event |= 1 << event;
-	queue_task_irq(&info->tqueue, &tq_serial);
+	queue_task(&info->tqueue, &tq_serial);
 	mark_bh(SERIAL_BH);
 }
 
@@ -299,7 +304,8 @@ static __inline__ void rs_receive_char( struct async_struct *info,
 	}
 	*tty->flip.flag_buf_ptr++ = err;
 	*tty->flip.char_buf_ptr++ = ch;
-	queue_task_irq(&tty->flip.tqueue, &tq_timer);
+	info->icount.rx++;
+	queue_task(&tty->flip.tqueue, &tq_timer);
 }
 
 static __inline__ int rs_get_tx_char( struct async_struct *info )
@@ -308,6 +314,7 @@ static __inline__ int rs_get_tx_char( struct async_struct *info )
 	
 	if (info->x_char) {
 		ch = info->x_char;
+		info->icount.tx++;
 		info->x_char = 0;
 		return( ch );
 	}
@@ -317,6 +324,7 @@ static __inline__ int rs_get_tx_char( struct async_struct *info )
 
 	ch = info->xmit_buf[info->xmit_tail++];
 	info->xmit_tail &= SERIAL_XMIT_SIZE - 1;
+	info->icount.tx++;
 	if (--info->xmit_cnt < WAKEUP_CHARS)
 		rs_sched_event(info, RS_EVENT_WRITE_WAKEUP);
 	return( ch );
@@ -348,8 +356,7 @@ static __inline__ void rs_dcd_changed( struct async_struct *info, int dcd )
 #ifdef SERIAL_DEBUG_OPEN
 			printk("scheduling hangup...");
 #endif
-			queue_task_irq(&info->tqueue_hangup,
-				       &tq_scheduler);
+			queue_task(&info->tqueue_hangup, &tq_scheduler);
 		}
 	}
 }

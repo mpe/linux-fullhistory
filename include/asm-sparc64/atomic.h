@@ -1,4 +1,4 @@
-/* $Id: atomic.h,v 1.13 1997/04/14 06:56:57 davem Exp $
+/* $Id: atomic.h,v 1.14 1997/04/16 05:57:06 davem Exp $
  * atomic.h: Thankfully the V9 is at least reasonable for this
  *           stuff.
  *
@@ -15,7 +15,7 @@
 #define __atomic_fool_gcc(x) ((struct { int a[100]; } *)x)
 
 typedef struct { int counter; } atomic_t;
-#define ATOMIC_INIT	{ 0 }
+#define ATOMIC_INIT(i)	{ (i) }
 
 #define atomic_read(v)		((v)->counter)
 #define atomic_set(v, i)	(((v)->counter) = i)

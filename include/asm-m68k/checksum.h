@@ -35,6 +35,9 @@ unsigned int csum_partial_copy(const char *src, char *dst, int len, int sum);
 
 unsigned int csum_partial_copy_fromuser(const char *src, char *dst, int len, int sum);
 
+extern unsigned int
+csum_partial_copy_from_user ( const char *src, char *dst,
+			      int len, int sum, int *csum_err);
 
 /*
  *	This is a version of ip_compute_csum() optimized for IP headers,

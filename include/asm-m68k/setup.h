@@ -48,7 +48,7 @@ extern u_long m68k_machtype;
 #elif defined(CONFIG_ATARI) || defined(CONFIG_MAC)
 #  define MACH_IS_AMIGA (m68k_machtype == MACH_AMIGA)
 #else
-#  define CONFIG_AMIGA_ONLY
+#  define MACH_AMIGA_ONLY
 #  define MACH_IS_AMIGA (1)
 #  define MACH_TYPE (MACH_AMIGA)
 #endif
@@ -58,7 +58,7 @@ extern u_long m68k_machtype;
 #elif defined(CONFIG_AMIGA) || defined(CONFIG_MAC)
 #  define MACH_IS_ATARI (m68k_machtype == MACH_ATARI)
 #else
-#  define CONFIG_ATARI_ONLY
+#  define MACH_ATARI_ONLY
 #  define MACH_IS_ATARI (1)
 #  define MACH_TYPE (MACH_ATARI)
 #endif
@@ -149,7 +149,7 @@ extern int m68k_is040or060;
 #elif defined(CONFIG_M68030) || defined(CONFIG_M68040) || defined(CONFIG_M68060)
 #  define CPU_IS_020 (m68k_cputype & CPU_68020)
 #else
-#  define CONFIG_M68020_ONLY
+#  define CPU_M68020_ONLY
 #  define CPU_IS_020 (1)
 #endif
 
@@ -158,7 +158,7 @@ extern int m68k_is040or060;
 #elif defined(CONFIG_M68020) || defined(CONFIG_M68040) || defined(CONFIG_M68060)
 #  define CPU_IS_030 (m68k_cputype & CPU_68030)
 #else
-#  define CONFIG_M68030_ONLY
+#  define CPU_M68030_ONLY
 #  define CPU_IS_030 (1)
 #endif
 
@@ -167,7 +167,7 @@ extern int m68k_is040or060;
 #elif defined(CONFIG_M68020) || defined(CONFIG_M68030) || defined(CONFIG_M68060)
 #  define CPU_IS_040 (m68k_cputype & CPU_68040)
 #else
-#  define CONFIG_M68040_ONLY
+#  define CPU_M68040_ONLY
 #  define CPU_IS_040 (1)
 #endif
 
@@ -176,18 +176,18 @@ extern int m68k_is040or060;
 #elif defined(CONFIG_M68020) || defined(CONFIG_M68030) || defined(CONFIG_M68040)
 #  define CPU_IS_060 (m68k_cputype & CPU_68060)
 #else
-#  define CONFIG_M68060_ONLY
+#  define CPU_M68060_ONLY
 #  define CPU_IS_060 (1)
 #endif
 
 #if !defined(CONFIG_M68020) && !defined(CONFIG_M68030)
 #  define CPU_IS_020_OR_030 (0)
 #else
-#  define CONFIG_M68020_OR_M68030
+#  define CPU_M68020_OR_M68030
 #  if defined(CONFIG_M68040) || defined(CONFIG_M68060)
 #    define CPU_IS_020_OR_030 (!m68k_is040or060)
 #  else
-#    define CONFIG_M68020_OR_M68030_ONLY
+#    define CPU_M68020_OR_M68030_ONLY
 #    define CPU_IS_020_OR_030 (1)
 #  endif
 #endif
@@ -195,11 +195,11 @@ extern int m68k_is040or060;
 #if !defined(CONFIG_M68040) && !defined(CONFIG_M68060)
 #  define CPU_IS_040_OR_060 (0)
 #else
-#  define CONFIG_M68040_OR_M68060
+#  define CPU_M68040_OR_M68060
 #  if defined(CONFIG_M68020) || defined(CONFIG_M68030)
 #    define CPU_IS_040_OR_060 (m68k_is040or060)
 #  else
-#    define CONFIG_M68040_OR_M68060_ONLY
+#    define CPU_M68040_OR_M68060_ONLY
 #    define CPU_IS_040_OR_060 (1)
 #  endif
 #endif

@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp.c,v 1.55 1997/04/13 10:31:45 davem Exp $
+ * Version:	$Id: tcp.c,v 1.56 1997/04/16 09:18:42 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -949,7 +949,7 @@ int tcp_do_sendmsg(struct sock *sk, int iovlen, struct iovec *iov, int flags)
 			tmp = MAX_HEADER + sk->prot->max_header + 
 				sizeof(struct sk_buff) + 15;
 			if (copy < min(sk->mss, sk->max_window >> 1) && 
-			    !(flags & MSG_OOB) && atomic_read(&sk->packets_out))
+			    !(flags & MSG_OOB) && sk->packets_out)
 			{
 				tmp += min(sk->mss, sk->max_window);
 			}

@@ -22,6 +22,7 @@
 #include <linux/malloc.h>
 #include <linux/errno.h>
 #include <linux/cdrom.h>
+#include <linux/init.h>
 
 #include <asm/system.h>
 #include <asm/uaccess.h>
@@ -920,7 +921,7 @@ static struct file_system_type iso9660_fs_type = {
 	isofs_read_super, "iso9660", 1, NULL
 };
 
-int init_iso9660_fs(void)
+__initfunc(int init_iso9660_fs(void))
 {
         return register_filesystem(&iso9660_fs_type);
 }

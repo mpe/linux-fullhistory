@@ -1,4 +1,4 @@
-/* $Id: weitek.c,v 1.8 1997/03/24 17:44:26 jj Exp $
+/* $Id: weitek.c,v 1.9 1997/04/14 17:04:57 jj Exp $
  * weitek.c: Tadpole P9100/P9000 console driver
  *
  * Copyright (C) 1996 David Redman (djhr@tadpole.co.uk)
@@ -54,13 +54,13 @@ weitek_mmap(struct inode *inode, struct file *file, struct vm_area_struct *vma,
 		switch (vma->vm_offset+page){
 		case WEITEK_VRAM_OFFSET:
 			map_size = size-page;
-			map_offset = get_phys ((uint) fb->base);
+			map_offset = get_phys ((unsigned long) fb->base);
 			if (map_size > fb->type.fb_size)
 				map_size = fb->type.fb_size;
 			break;
 		case WEITEK_GX_REG_OFFSET:
 			map_size = size-page;
-			map_offset = get_phys ((uint) fb->base);
+			map_offset = get_phys ((unsigned long) fb->base);
 			if (map_size > fb->type.fb_size)
 				map_size = fb->type.fb_size;
 			break;
@@ -95,11 +95,11 @@ weitek_loadcmap (void *fbinfo, int index, int count)
 }
 #endif
 
-__initfunc(void weitek_setup(fbinfo_t *fb, int slot, unsigned long addr, int io))
+__initfunc(void weitek_setup(fbinfo_t *fb, int slot, u32 addr, int io))
 {
 	extern struct screen_info screen_info;
 	
-	printk ("weitek%d at 0x%8.8x\n", slot, (uint)addr);
+	printk ("weitek%d at 0x%8.8x\n", slot, addr);
 	
 	/* Fill in parameters we left out */
 	fb->type.fb_type	= FBTYPE_NOTSUN1;

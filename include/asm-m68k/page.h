@@ -8,10 +8,58 @@
 
 #ifdef __KERNEL__
 
+#include<linux/config.h>
+
 #define STRICT_MM_TYPECHECKS
 
+/*
+ * We don't need to check for alignment etc.
+ */
+#if defined(CONFIG_OPTIMIZE_040) || defined(CONFIG_OPTIMIZE_060)
+static inline void copy_page(unsigned long to, unsigned long from)
+{
+  unsigned long tmp;
+
+  __asm__ __volatile__("1:\t"
+		       ".chip 68040\n\t"
+		       "move16 %1@+,%0@+\n\t"
+		       "move16 %1@+,%0@+\n\t"
+		       ".chip 68k\n\t"
+		       "dbra  %2,1b\n\t"
+		       : "=a" (to), "=a" (from), "=d" (tmp)
+		       : "0" (to), "1" (from) , "2" (PAGE_SIZE / 32 - 1)
+		       );
+}
+
+static inline void clear_page(unsigned long page)
+{
+	unsigned long data, sp, tmp;
+
+	sp = page;
+
+	data = 0;
+
+	*((unsigned long *)(page))++ = 0;
+	*((unsigned long *)(page))++ = 0;
+	*((unsigned long *)(page))++ = 0;
+	*((unsigned long *)(page))++ = 0;
+
+	__asm__ __volatile__("1:\t"
+			     ".chip 68040\n\t"
+			     "move16 %2@+,%0@+\n\t"
+			     ".chip 68k\n\t"
+			     "subqw  #8,%2\n\t"
+			     "subqw  #8,%2\n\t"
+			     "dbra   %1,1b\n\t"
+			     : "=a" (page), "=d" (tmp)
+			     : "a" (sp), "0" (page),
+			       "1" ((PAGE_SIZE - 16) / 16 - 1));
+}
+
+#else
 #define clear_page(page)	memset((void *)(page), 0, PAGE_SIZE)
 #define copy_page(to,from)	memcpy((void *)(to), (void *)(from), PAGE_SIZE)
+#endif
 
 #ifdef STRICT_MM_TYPECHECKS
 /*

@@ -34,9 +34,9 @@ typedef unsigned long IPADDR;
 /***************************** Prototypes *****************************/
 
 int get_remote_kernel( const char *kname );
-int kread( int fd, void *buf, unsigned cnt );
-int klseek( int fd, int where, int whence );
-int kclose( int fd );
+int ll_read( int fd, void *buf, unsigned cnt );
+int ll_lseek( int fd, int where, int whence );
+int ll_close( int fd );
 
 /************************* End of Prototypes **************************/
 

@@ -936,6 +936,7 @@ static int unix_dgram_sendmsg(struct socket *sock, struct msghdr *msg, int len,
 	if (scm->fp)
 		unix_attach_fds(scm, skb);
 
+	skb->h.raw = skb->data;
 	memcpy_fromiovec(skb_put(skb,len), msg->msg_iov, len);
 
 	other = unix_peer(sk);

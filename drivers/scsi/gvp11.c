@@ -9,7 +9,7 @@
 #include <asm/pgtable.h>
 #include <asm/amigaints.h>
 #include <asm/amigahw.h>
-#include <asm/zorro.h>
+#include <linux/zorro.h>
 #include <asm/irq.h>
 
 #include "scsi.h"
@@ -204,7 +204,7 @@ int gvp11_detect(Scsi_Host_Template *tpnt)
     struct Scsi_Host *instance;
     caddr_t address;
     enum GVP_ident epc;
-    int key;
+    int key = 0;
     struct ConfigDev *cd;
 
     if (!MACH_IS_AMIGA || called)
@@ -214,9 +214,18 @@ int gvp11_detect(Scsi_Host_Template *tpnt)
     tpnt->proc_dir = &proc_scsi_gvp11;
     tpnt->proc_info = &wd33c93_proc_info;
 
-    while ((key = zorro_find(MANUF_GVP, PROD_GVPIISCSI, 0, 0))) {
+    while ((key = zorro_find(MANUF_GVP, PROD_GVPIISCSI, 0, key))) {
 	cd = zorro_get_board(key);
 	address = cd->cd_BoardAddr;
+
+	/*
+	 * Rumors state that some GVP ram boards use the same product
+	 * code as the SCSI controllers. Therefore if the board-size
+	 * is not 64KB we asume it is a ram board and bail out.
+	 */
+	if (cd->cd_BoardSize != 0x10000)
+		continue;
+
 	/* check extended product code */
 	epc = *(unsigned short *)(ZTWO_VADDR(address) + 0x8000);
 	epc = epc & GVP_PRODMASK;
@@ -237,7 +246,7 @@ int gvp11_detect(Scsi_Host_Template *tpnt)
 
 	instance = scsi_register (tpnt, sizeof (struct WD33C93_hostdata));
 	instance->base = (unsigned char *)ZTWO_VADDR(address);
-	instance->irq = IRQ_AMIGA_PORTS & ~IRQ_MACHSPEC;
+	instance->irq = IRQ_AMIGA_PORTS;
 	instance->unique_id = key;
 
 	if (gvp11_xfer_mask)
@@ -307,11 +316,11 @@ Scsi_Host_Template driver_template = GVP11_SCSI;
 int gvp11_release(struct Scsi_Host *instance)
 {
 #ifdef MODULE
-DMA(instance)->CNTR = 0;
-zorro_unconfig_board(instance->unique_id, 0);
-if (--num_gvp11 == 0)
-  free_irq(IRQ_AMIGA_PORTS, gvp11_intr);
-  wd33c93_release();
+    DMA(instance)->CNTR = 0;
+    zorro_unconfig_board(instance->unique_id, 0);
+    if (--num_gvp11 == 0)
+	    free_irq(IRQ_AMIGA_PORTS, gvp11_intr);
+    wd33c93_release();
 #endif
-return 1;
+    return 1;
 }

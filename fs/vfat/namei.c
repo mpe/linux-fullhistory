@@ -20,6 +20,7 @@
 #include <linux/string.h>
 #include <linux/stat.h>
 #include <linux/mm.h>
+#include <linux/init.h>
 
 #include <asm/uaccess.h>
 
@@ -1587,7 +1588,7 @@ EXPORT_SYMBOL(vfat_read_super);
 EXPORT_SYMBOL(vfat_read_inode);
 EXPORT_SYMBOL(vfat_lookup);
 
-int init_vfat_fs(void)
+__initfunc(int init_vfat_fs(void))
 {
 	return register_filesystem(&vfat_fs_type);
 }

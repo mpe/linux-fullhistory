@@ -2,6 +2,8 @@
 #define _M68K_SEMAPHORE_H
 
 #include <linux/linkage.h>
+#include <asm/system.h>
+#include <asm/atomic.h>
 
 /*
  * SMP- and interrupt-safe semaphores..
@@ -12,21 +14,27 @@
  */
 
 struct semaphore {
-	int count;
-	int waiting;
+	atomic_t count;
+	atomic_t waking;
 	struct wait_queue * wait;
 };
 
-#define MUTEX ((struct semaphore) { 1, 0, NULL })
-#define MUTEX_LOCKED ((struct semaphore) { 0, 0, NULL })
+#define MUTEX ((struct semaphore) { { 1 }, { 0 }, NULL })
+#define MUTEX_LOCKED ((struct semaphore) { { 0 }, { 0 }, NULL })
 
 asmlinkage void __down_failed(void /* special register calling convention */);
+asmlinkage int  __down_failed_interruptible(void  /* params in registers */);
 asmlinkage void __up_wakeup(void /* special register calling convention */);
 
 extern void __down(struct semaphore * sem);
 extern void __up(struct semaphore * sem);
 
-#define sema_init(sem, val)	((sem)->count = val)
+#define sema_init(sem, val)	atomic_set(&((sem)->count), val)
+
+static inline void wake_one_more(struct semaphore * sem)
+{
+	atomic_inc(&sem->waking);
+}
 
 static inline int waking_non_zero(struct semaphore *sem)
 {
@@ -54,12 +62,34 @@ extern inline void down(struct semaphore * sem)
 	__asm__ __volatile__(
 		"| atomic down operation\n\t"
 		"lea %%pc@(1f),%%a0\n\t"
-		"subql #1,%0\n\t"
+		"subql #1,%0@\n\t"
 		"jmi " SYMBOL_NAME_STR(__down_failed) "\n"
 		"1:"
 		: /* no outputs */
-		: "m" (sem->count), "a" (sem1)
+		: "a" (sem1)
 		: "%a0", "memory");
+}
+
+/*
+ * This version waits in interruptible state so that the waiting
+ * process can be killed.  The down_failed_interruptible routine
+ * returns negative for signalled and zero for semaphore acquired.
+ */
+extern inline int down_interruptible(struct semaphore * sem)
+{
+	register int ret __asm__ ("%d0");
+	register struct semaphore *sem1 __asm__ ("%a1") = sem;
+	__asm__ __volatile__(
+		"| atomic interruptible down operation\n\t"
+		"lea %%pc@(1f),%%a0\n\t"
+		"subql #1,%1@\n\t"
+		"jmi " SYMBOL_NAME_STR(__down_failed_interruptible) "\n\t"
+		"clrl %0\n"
+		"1:"
+		: "=d" (ret)
+		: "a" (sem1)
+		: "%d0", "%a0", "memory");
+	return ret;
 }
 
 /*

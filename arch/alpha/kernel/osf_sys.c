@@ -171,7 +171,7 @@ asmlinkage int osf_getpriority(int which, int who, int a2, int a3, int a4,
 	int prio;
 
 	/*
-	 * We don't need to aquire the kernel lock here, because
+	 * We don't need to acquire the kernel lock here, because
 	 * all of these operations are local. sys_getpriority
 	 * will get the lock as required..
 	 */
@@ -193,7 +193,7 @@ asmlinkage unsigned long sys_madvise(void)
 }
 
 /*
- * No need to aquire the kernel lock, we're local..
+ * No need to acquire the kernel lock, we're local..
  */
 asmlinkage unsigned long sys_getxuid(int a0, int a1, int a2, int a3, int a4, int a5,
 				     struct pt_regs regs)
@@ -218,7 +218,7 @@ asmlinkage unsigned long sys_getxpid(int a0, int a1, int a2, int a3, int a4, int
 
 	/* 
 	 * This isn't strictly "local" any more and we should actually
-	 * aquire the kernel lock. The "p_opptr" pointer might change
+	 * acquire the kernel lock. The "p_opptr" pointer might change
 	 * if the parent goes away (or due to ptrace). But any race
 	 * isn't actually going to matter, as if the parent happens
 	 * to change we can happily return either of the pids.

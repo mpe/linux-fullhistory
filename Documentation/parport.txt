@@ -47,9 +47,13 @@ regardless of base address.
 Also:
 
  * If you selected the device autoprobe at compile time, you can say
-`lp=auto' on the kernel command line, and lp will create devices only
-for those ports that seem to have printers attached.
+   `lp=auto' on the kernel command line, and lp will create devices
+   only for those ports that seem to have printers attached.
 
  * If you give PLIP the `timid' parameter, either with `plip=timid' on
-the command line, or with `insmod plip timid=1' when using modules, it
-will avoid any ports that seem to be in use by other devices.
+   the command line, or with `insmod plip timid=1' when using modules,
+   it will avoid any ports that seem to be in use by other devices.
+
+ * If your BIOS allows you to engage "ECP mode", you may find that
+   your port's IRQ can be autoprobed, without having to specify any 
+   parameters.

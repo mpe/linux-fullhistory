@@ -9,8 +9,8 @@ struct semaphore {
 	struct wait_queue * wait;
 };
 
-#define MUTEX ((struct semaphore) { 1, 0, NULL })
-#define MUTEX_LOCKED ((struct semaphore) { 0, 0, NULL })
+#define MUTEX ((struct semaphore) { ATOMIC_INIT(1), ATOMIC_INIT(0), NULL })
+#define MUTEX_LOCKED ((struct semaphore) { ATOMIC_INIT(0), ATOMIC_INIT(0), NULL })
 
 extern void __down(struct semaphore * sem);
 extern void __up(struct semaphore * sem);

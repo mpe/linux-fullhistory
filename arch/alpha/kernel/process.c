@@ -39,7 +39,7 @@
 #include <asm/io.h>
 
 /*
- * No need to aquire the kernel lock, we're entirely local..
+ * No need to acquire the kernel lock, we're entirely local..
  */
 asmlinkage int sys_sethae(unsigned long hae, unsigned long a1, unsigned long a2,
 	unsigned long a3, unsigned long a4, unsigned long a5,

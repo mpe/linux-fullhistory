@@ -1,4 +1,4 @@
-/* $Id: statfs.h,v 1.1 1996/12/26 14:22:40 davem Exp $ */
+/* $Id: statfs.h,v 1.2 1997/04/14 17:05:22 jj Exp $ */
 #ifndef _SPARC64_STATFS_H
 #define _SPARC64_STATFS_H
 
@@ -10,7 +10,6 @@ typedef __kernel_fsid_t	fsid_t;
 
 #endif
 
-/* XXX Fix this for full backwards 32-bit compat. */
 struct statfs32 {
 	int f_type;
 	int f_bsize;
@@ -19,7 +18,7 @@ struct statfs32 {
 	int f_bavail;
 	int f_files;
 	int f_ffree;
-	__kernel_fsid_t f_fsid;
+	__kernel_fsid_t32 f_fsid;
 	int f_namelen;  /* SunOS ignores this field. */
 	int f_spare[6];
 };

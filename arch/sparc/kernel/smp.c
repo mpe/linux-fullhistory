@@ -12,6 +12,7 @@
 #include <linux/smp.h>
 #include <linux/smp_lock.h>
 #include <linux/interrupt.h>
+#include <linux/kernel_stat.h>
 
 #include <asm/delay.h>
 #include <asm/irq.h>
@@ -139,6 +140,8 @@ void smp_commence(void)
 	local_flush_tlb_all();
 }
 
+static void smp_setup_percpu_timer(void);
+
 void smp_callin(void)
 {
 	int cpuid = smp_processor_id();
@@ -146,6 +149,10 @@ void smp_callin(void)
 	local_flush_cache_all();
 	local_flush_tlb_all();
 	set_irq_udt(mid_xlate[boot_cpu_id]);
+
+	/* Get our local ticker going. */
+	smp_setup_percpu_timer();
+
 	calibrate_delay();
 	smp_store_cpu_info(cpuid);
 	local_flush_cache_all();
@@ -215,6 +222,7 @@ void smp_boot_cpus(void)
 	klock_info.akp = boot_cpu_id;
 	smp_store_cpu_info(boot_cpu_id);
 	set_irq_udt(mid_xlate[boot_cpu_id]);
+	smp_setup_percpu_timer();
 	local_flush_cache_all();
 	if(linux_num_cpus == 1)
 		return;  /* Not an MP box. */
@@ -506,4 +514,102 @@ void smp_stop_cpu_irq(void)
 	__sti();
 	while(1)
 		barrier();
+}
+
+/* Protects counters touched during level14 ticker */
+spinlock_t ticker_lock = SPIN_LOCK_UNLOCKED;
+
+/* 32-bit Sparc specific profiling function. */
+static inline void sparc_do_profile(unsigned long pc)
+{
+	if(prof_buffer && current->pid) {
+		extern int _stext;
+
+		pc -= (unsigned long) &_stext;
+		pc >>= prof_shift;
+
+		spin_lock(&ticker_lock);
+		if(pc < prof_len)
+			prof_buffer[pc]++;
+		else
+			prof_buffer[prof_len - 1]++;
+		spin_unlock(&ticker_lock);
+	}
+}
+
+volatile unsigned long smp_local_timer_ticks[1+NR_CPUS]={0,};
+
+unsigned int prof_multiplier[NR_CPUS];
+unsigned int prof_counter[NR_CPUS];
+
+extern void update_one_process(struct task_struct *p, unsigned long ticks,
+			       unsigned long user, unsigned long system);
+
+void smp_percpu_timer_interrupt(struct pt_regs *regs)
+{
+	int cpu = smp_processor_id();
+
+	clear_profile_irq(mid_xlate[cpu]);
+	if(!user_mode(regs))
+		sparc_do_profile(regs->pc);
+	if(!--prof_counter[cpu]) {
+		int user = user_mode(regs);
+		if(current->pid) {
+			update_one_process(current, 1, user, !user);
+
+			if(--current->counter < 0) {
+				current->counter = 0;
+				need_resched = 1;
+			}
+
+			spin_lock(&ticker_lock);
+			if(user) {
+				if(current->priority < DEF_PRIORITY)
+					kstat.cpu_nice++;
+				else
+					kstat.cpu_user++;
+			} else {
+				kstat.cpu_system++;
+			}
+			spin_unlock(&ticker_lock);
+		}
+		prof_counter[cpu] = prof_multiplier[cpu];
+	}
+#ifdef __SMP_PROF__
+	smp_local_timer_ticks[cpu]++;
+#endif
+}
+
+extern unsigned int lvl14_resolution;
+
+static void smp_setup_percpu_timer(void)
+{
+	int cpu = smp_processor_id();
+
+	prof_counter[cpu] = prof_multiplier[cpu] = 1;
+	load_profile_irq(mid_xlate[cpu], lvl14_resolution);
+
+	if(cpu == boot_cpu_id)
+		enable_pil_irq(14);
+}
+
+int setup_profiling_timer(unsigned int multiplier)
+{
+	int i;
+	unsigned long flags;
+
+	/* Prevent level14 ticker IRQ flooding. */
+	if((!multiplier) || (lvl14_resolution / multiplier) < 500)
+		return -EINVAL;
+
+	save_and_cli(flags);
+	for(i = 0; i < NR_CPUS; i++) {
+		if(cpu_present_map & (1 << i)) {
+			load_profile_irq(mid_xlate[i], lvl14_resolution / multiplier);
+			prof_multiplier[i] = multiplier;
+		}
+	}
+	restore_flags(flags);
+
+	return 0;
 }

@@ -14,7 +14,7 @@
 #define lock_kernel()				do { } while(0)
 #define unlock_kernel()				do { } while(0)
 #define release_kernel_lock(task, cpu, depth)	((depth) = 1)
-#define reaquire_kernel_lock(task, cpu, depth)	do { } while(0)
+#define reacquire_kernel_lock(task, cpu, depth)	do { } while(0)
 
 #else
 
@@ -34,7 +34,7 @@ do {							\
 } while(0)
 
 /* Do not fuck with this without consulting arch/sparc/lib/locks.S first! */
-#define reaquire_kernel_lock(task, cpu, depth)					\
+#define reacquire_kernel_lock(task, cpu, depth)					\
 do {										\
 	if(depth) {								\
 		register struct klock_info *klip asm("g1");			\
@@ -42,7 +42,7 @@ do {										\
 		klip = &klock_info;						\
 		proc = cpu;							\
 		__asm__ __volatile__("mov	%%o7, %%g4\n\t"			\
-				     "call	___lock_reaquire_kernel\n\t"	\
+				     "call	___lock_reacquire_kernel\n\t"	\
 				     " mov	%2, %%g2"			\
 				     : /* No outputs. */			\
 				     : "r" (klip), "r" (proc), "r" (depth)	\

@@ -1,4 +1,4 @@
-/* $Id: processor.h,v 1.20 1997/04/11 22:34:54 davem Exp $
+/* $Id: processor.h,v 1.21 1997/04/14 17:05:18 jj Exp $
  * include/asm-sparc64/processor.h
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -132,6 +132,7 @@ do { \
 	"stx		%%g0, [%0 + %2 + 0x68]\n\t" \
 	"stx		%1,   [%0 + %2 + 0x70]\n\t" \
 	"stx		%%g0, [%0 + %2 + 0x78]\n\t" \
+	"wrpr		%%g0, 1, %%wstate\n\t" \
 	: \
 	: "r" (regs), "r" (sp - REGWIN_SZ), \
 	  "i" ((const unsigned long)(&((struct pt_regs *)0)->u_regs[0]))); \
@@ -167,6 +168,7 @@ do { \
 	"stx		%%g0, [%0 + %2 + 0x68]\n\t" \
 	"stx		%1,   [%0 + %2 + 0x70]\n\t" \
 	"stx		%%g0, [%0 + %2 + 0x78]\n\t" \
+	"wrpr		%%g0, 2, %%wstate\n\t" \
 	: \
 	: "r" (regs), "r" (sp - REGWIN32_SZ), \
 	  "i" ((const unsigned long)(&((struct pt_regs *)0)->u_regs[0])), \

@@ -35,6 +35,12 @@
 
 /* ------------------------ SPECIFIC NOTES ------------------------ */
 /*
+ * wavelan.o is darn too big
+ * -------------------------
+ *	That's true ! There is a very simple way to reduce the driver
+ *	object by 33% (yes !). Comment out the following line :
+ *		#include <linux/wireless.h>
+ *
  * MAC address and hardware detection :
  * ----------------------------------
  *	The detection code of the wavelan chech that the first 3
@@ -80,14 +86,12 @@
  * caracteristics of the hardware in a standard way and support for
  * applications for taking advantage of it (like Mobile IP).
  *
- * By default, these wireless extensions are disabled, because they
- * need a patch to the Linux Kernel. This simple patch may be found
- * with the driver + some utilities to access those wireless
- * extensions (iwconfig...). Hopefully, those wireless extensions will
- * make their way in the kernel someday.
+ * You will need to enable the CONFIG_NET_RADIO define in the kernel
+ * configuration to enable the wireless extensions (this is the one
+ * giving access to the radio network device choice).
  *
- * You also will need to enable the CONFIG_NET_RADIO in the kernel
- * configuration to enable the wireless extensions.
+ * It might also be a good idea as well to fetch the wireless tools to
+ * configure the device and play a bit.
  */
 
 /* ---------------------------- FILES ---------------------------- */
@@ -161,6 +165,7 @@
  *	Ajay Bakre (bakre@paul.rutgers.edu),
  *	Donald Becker (becker@cesdis.gsfc.nasa.gov),
  *	Loeke Brederveld (Loeke.Brederveld@Utrecht.NCR.com),
+ *	Brent Elphick <belphick@uwaterloo.ca>,
  *	Anders Klemets (klemets@it.kth.se),
  *	Vladimir V. Kolpakov (w@stier.koenig.ru),
  *	Marc Meertens (Marc.Meertens@Utrecht.NCR.com),
@@ -185,6 +190,7 @@
  *	John Rosenberg (johnr@cs.usyd.edu.au),
  *	George Rossi (george@phm.gov.au),
  *	Arthur Scott (arthur@cs.usyd.edu.au),
+ *	Stanislav Sinyagin <stas@isf.ru>
  *	Peter Storey,
  * for their assistance and advice.
  *
@@ -254,16 +260,22 @@
  *	- Update to wireless extensions changes
  *	- Silly bug in card initial configuration (psa_conf_status)
  *
- * Changes made for release in 2.1.27 :
- * ----------------------------------
+ * Changes made for release in 2.1.27 & 2.0.30 :
+ * -------------------------------------------
  *	- Small bug in debug code (probably not the last one...)
  *	- Remove extern kerword for wavelan_probe()
  *	- Level threshold is now a standard wireless extension (version 4 !)
  *	- modules parameters types (new module interface)
  *
+ * Changes made for release in 2.1.36 :
+ * ----------------------------------
+ *	- byte count stats (courtesy of David Hinds)
+ *	- Remove dev_tint stuff (courtesy of David Hinds)
+ *	- Encryption setting from Brent Elphick (thanks a lot !)
+ *	- 'ioaddr' to 'u_long' for the Alpha (thanks to Stanislav Sinyagin)
+ *
  * Wishes & dreams :
  * ---------------
- *	- Encryption stuff
  *	- Roaming
  */
 
@@ -347,7 +359,7 @@
 /************************ CONSTANTS & MACROS ************************/
 
 #ifdef DEBUG_VERSION_SHOW
-static const char	*version	= "wavelan.c : v15 (wireless extensions) 12/2/97\n";
+static const char	*version	= "wavelan.c : v16 (wireless extensions) 17/4/97\n";
 #endif
 
 /* Watchdog temporisation */
@@ -436,69 +448,65 @@ static int
 	wv_psa_to_irq(u_char);
 /* ------------------- HOST ADAPTER SUBROUTINES ------------------- */
 static inline u_short		/* data */
-	hasr_read(u_short);	/* Read the host interface : base address */
+	hasr_read(u_long);	/* Read the host interface : base address */
 static inline void
-	hacr_write(u_short,	/* Write to host interface : base address */
+	hacr_write(u_long,	/* Write to host interface : base address */
 		   u_short),	/* data */
-	hacr_write_slow(u_short,
+	hacr_write_slow(u_long,
 		   u_short),
-	set_chan_attn(u_short,	/* ioaddr */
+	set_chan_attn(u_long,	/* ioaddr */
 		      u_short),	/* hacr */
-	wv_hacr_reset(u_short),	/* ioaddr */
-	wv_16_off(u_short,	/* ioaddr */
+	wv_hacr_reset(u_long),	/* ioaddr */
+	wv_16_off(u_long,	/* ioaddr */
 		  u_short),	/* hacr */
-	wv_16_on(u_short,	/* ioaddr */
+	wv_16_on(u_long,	/* ioaddr */
 		 u_short),	/* hacr */
 	wv_ints_off(device *),
 	wv_ints_on(device *);
 /* ----------------- MODEM MANAGEMENT SUBROUTINES ----------------- */
 static void
-	psa_read(u_short,	/* Read the Parameter Storage Area */
+	psa_read(u_long,	/* Read the Parameter Storage Area */
 		 u_short,	/* hacr */
 		 int,		/* offset in PSA */
 		 u_char *,	/* buffer to fill */
 		 int),		/* size to read */
-	psa_write(u_short, 	/* Write to the PSA */
+	psa_write(u_long, 	/* Write to the PSA */
 		  u_short,	/* hacr */
 		  int,		/* Offset in psa */
 		  u_char *,	/* Buffer in memory */
 		  int);		/* Length of buffer */
 static inline void
-	mmc_out(u_short,	/* Write 1 byte to the Modem Manag Control */
+	mmc_out(u_long,		/* Write 1 byte to the Modem Manag Control */
 		u_short,
 		u_char),
-	mmc_write(u_short,	/* Write n bytes to the MMC */
+	mmc_write(u_long,	/* Write n bytes to the MMC */
 		  u_char,
 		  u_char *,
 		  int);
 static inline u_char		/* Read 1 byte from the MMC */
-	mmc_in(u_short,
+	mmc_in(u_long,
 	       u_short);
 static inline void
-	mmc_read(u_short,	/* Read n bytes from the MMC */
+	mmc_read(u_long,	/* Read n bytes from the MMC */
 		 u_char,
 		 u_char *,
 		 int),
-	fee_wait(u_short,	/* Wait for frequency EEprom : base address */
+	fee_wait(u_long,	/* Wait for frequency EEprom : base address */
 		 int,		/* Base delay to wait for */
 		 int);		/* Number of time to wait */
 static void
-	fee_read(u_short,	/* Read the frequency EEprom : base address */
+	fee_read(u_long,	/* Read the frequency EEprom : base address */
 		 u_short,	/* destination offset */
 		 u_short *,	/* data buffer */
-		 int),		/* number of registers */
-	fee_write(u_short,	/* Write to frequency EEprom : base address */
-		  u_short,	/* destination offset */
-		  u_short *,	/* data buffer */
-		  int);		/* number of registers */
+		 int);		/* number of registers */
 /* ---------------------- I82586 SUBROUTINES ----------------------- */
 static /*inline*/ void
-	obram_read(u_short,	/* ioaddr */
+	obram_read(u_long,	/* ioaddr */
 		   u_short,	/* o */
 		   u_char *,	/* b */
 		   int);	/* n */
 static inline void
-	obram_write(u_short,	/* ioaddr */
+	obram_write(u_long,	/* ioaddr */
 		    u_short,	/* o */
 		    u_char *,	/* b */
 		    int);	/* n */
@@ -508,11 +516,11 @@ static inline int
 	wv_synchronous_cmd(device *,
 			   const char *),
 	wv_config_complete(device *,
-			   u_short,
+			   u_long,
 			   net_local *);
 static int
 	wv_complete(device *,
-		    u_short,
+		    u_long,
 		    net_local *);
 static inline void
 	wv_82586_reconfig(device *);
@@ -554,7 +562,7 @@ static inline void
 	wv_82586_stop(device *);
 static int
 	wv_hw_reset(device *),		/* Reset the wavelan hardware */
-	wv_check_ioaddr(u_short,	/* ioaddr */
+	wv_check_ioaddr(u_long,		/* ioaddr */
 			u_char *);	/* mac address (read) */
 /* ---------------------- INTERRUPT HANDLING ---------------------- */
 static void

@@ -20,6 +20,24 @@
  *  This file is subject to the terms and conditions of the GNU General Public
  *  License.  See the file COPYING in the main directory of this archive
  *  for more details.
+ *
+ *  History:
+ *	03 Feb 1997 Implemented kernel decompression (Geert, based on Roman's
+ *		    code for ataboot)
+ *	30 Dec 1996 Reverted the CPU detection to the old scheme
+ *		    New boot parameter override scheme (Geert)
+ *      27 Nov 1996 Compatibility with bootinfo interface version 1.0 (Geert)
+ *       9 Sep 1996 Rewritten option parsing
+ *		    New parameter passing to linuxboot() (linuxboot_args)
+ *		    (Geert)
+ *	18 Aug 1996 Updated for the new boot information structure (Geert)
+ *	10 Jan 1996 The real Linux/m68k boot code moved to linuxboot.[ch]
+ *		    (Geert)
+ *	11 Jul 1995 Support for ELF kernel (untested!) (Andreas)
+ *	 7 Mar 1995 Memory block sizes are rounded to a multiple of 256K
+ *		    instead of 1M (Geert)
+ *	31 May 1994 Memory thrash problem solved (Geert)
+ *	11 May 1994 A3640 MapROM check (Geert)
  */
 
 
@@ -29,6 +47,8 @@
 
 
 #define BOOTINFO_COMPAT_1_0	/* bootinfo interface version 1.0 compatible */
+/* support compressed kernels? */
+#define ZKERNEL
 
 #include <stddef.h>
 #include <string.h>
@@ -60,7 +80,7 @@ static Elf32_Ehdr kexec_elf;
 static const struct linuxboot_args *linuxboot_args;
 
 /* Bootinfo */
-static struct amiga_bootinfo bi;
+struct amiga_bootinfo bi;
 
 #ifdef BOOTINFO_COMPAT_1_0
 static struct compat_bootinfo compat_bootinfo;
@@ -75,7 +95,6 @@ static union {
 
 #define kernelname	linuxboot_args->kernelname
 #define ramdiskname	linuxboot_args->ramdiskname
-#define commandline	linuxboot_args->commandline
 #define debugflag	linuxboot_args->debugflag
 #define keep_video	linuxboot_args->keep_video
 #define reset_boards	linuxboot_args->reset_boards
@@ -91,8 +110,6 @@ static union {
 #define Close		linuxboot_args->close
 #define FileSize	linuxboot_args->filesize
 #define Sleep		linuxboot_args->sleep
-#define ModifyBootinfo	linuxboot_args->modify_bootinfo
-
 
     /*
      *  Function Prototypes
@@ -115,6 +132,16 @@ static void start_kernel(void (*startfunc)(), char *stackp, char *memptr,
 			 u_long kernel_size) __attribute__ ((noreturn));
 asmlinkage u_long maprommed(void);
 asmlinkage u_long check346(void);
+#ifdef ZKERNEL
+static int load_zkernel(int fd);
+static int KRead(int fd, void *buf, int cnt);
+static int KSeek(int fd, int offset);
+static int KClose(int fd);
+#else
+#define KRead		Read
+#define KSeek		Seek
+#define KClose		Close
+#endif
 
 
     /*
@@ -174,7 +201,7 @@ const u_long last_amiga_model = AMI_DRACO;
 
 u_long linuxboot(const struct linuxboot_args *args)
 {
-    int kfd = -1, rfd = -1, elf_kernel = 0;
+    int kfd = -1, rfd = -1, elf_kernel = 0, do_fast, do_chip;
     int i, j;
     const struct MemHeader *mnp;
     struct ConfigDev *cdp = NULL;
@@ -196,38 +223,42 @@ u_long linuxboot(const struct linuxboot_args *args)
     Puts("\nLinux/m68k Amiga Bootstrap version " AMIBOOT_VERSION "\n");
     Puts("Copyright 1993,1994 by Hamish Macdonald and Greg Harp\n\n");
 
-    memset(&bi, 0, sizeof(bi));
+    /* Note: Initial values in bi override detected values */
+    bi = args->bi;
 
     /* machine is Amiga */
     bi.machtype = MACH_AMIGA;
 
     /* determine chipset */
-    bi.chipset = get_chipset();
+    if (!bi.chipset)
+	bi.chipset = get_chipset();
 
     /* determine CPU, FPU and MMU type */
-    get_processor(&bi.cputype, &bi.fputype, &bi.mmutype);
+    if (!bi.cputype)
+	get_processor(&bi.cputype, &bi.fputype, &bi.mmutype);
 
     /* determine Amiga model */
-    bi.model = get_model(bi.chipset);
+    if (!bi.model)
+	bi.model = get_model(bi.chipset);
     model_mask = (bi.model != AMI_UNKNOWN) ? 1<<bi.model : 0;
 
     /* Memory & AutoConfig based on 'unix_boot.c' by C= */
 
     /* find all of the autoconfig boards in the system */
-    bi.num_autocon = 0;
-    for (i = 0; (cdp = (struct ConfigDev *)FindConfigDev(cdp, -1, -1)); i++) {
-	if (bi.num_autocon < ZORRO_NUM_AUTO) {
-	    /* copy the contents of each structure into our boot info */
-	    memcpy(&bi.autocon[bi.num_autocon], cdp, sizeof(struct ConfigDev));
-	    /* count this device */
-	    bi.num_autocon++;
-	} else
-	    Printf("Warning: too many AutoConfig devices. Ignoring device at "
-		   "0x%08lx\n", cdp->cd_BoardAddr);
-    }
+    if (!bi.num_autocon)
+	for (i = 0; (cdp = (struct ConfigDev *)FindConfigDev(cdp, -1, -1)); i++)
+	    if (bi.num_autocon < ZORRO_NUM_AUTO)
+		/* copy the contents of each structure into our boot info and
+		   count this device */
+		memcpy(&bi.autocon[bi.num_autocon++], cdp,
+		       sizeof(struct ConfigDev));
+	    else
+		Printf("Warning: too many AutoConfig devices. Ignoring device at "
+		       "0x%08lx\n", cdp->cd_BoardAddr);
 
+    do_fast = bi.num_memory ? 0 : 1;
+    do_chip = bi.chip_size ? 0 : 1;
     /* find out the memory in the system */
-    bi.num_memory = 0;
     for (mnp = (struct MemHeader *)SysBase->MemList.lh_Head;
 	 mnp->mh_Node.ln_Succ;
 	 mnp = (struct MemHeader *)mnp->mh_Node.ln_Succ) {
@@ -266,7 +297,7 @@ u_long linuxboot(const struct linuxboot_args *args)
 	mh.mh_Lower = (void *)((u_long)mh.mh_Lower & 0xfffff000);
 
 	/* if fast memory */
-	if (mh.mh_Attributes & MEMF_FAST) {
+	if (do_fast && mh.mh_Attributes & MEMF_FAST) {
 	    /* set the size value to the size of this block and mask off to a
 	       256K increment */
 	    u_long size = ((u_long)mh.mh_Upper-(u_long)mh.mh_Lower)&0xfffc0000;
@@ -279,30 +310,26 @@ u_long linuxboot(const struct linuxboot_args *args)
 		    bi.num_memory++;
 		} else
 		    Printf("Warning: too many memory blocks. Ignoring block "
-			   "of %ldK at 0x%08x\n", size>>10,
+		    	   "of %ldK at 0x%08x\n", size>>10,
 			   (u_long)mh.mh_Lower);
-	} else if (mh.mh_Attributes & MEMF_CHIP)
+	} else if (do_chip && mh.mh_Attributes & MEMF_CHIP)
 	    /* if CHIP memory, record the size */
 	    bi.chip_size = (u_long)mh.mh_Upper;
     }
 
     /* get info from ExecBase */
-    bi.vblank = SysBase->VBlankFrequency;
-    bi.psfreq = SysBase->PowerSupplyFrequency;
-    bi.eclock = SysBase->ex_EClockFrequency;
+    if (!bi.vblank)
+	bi.vblank = SysBase->VBlankFrequency;
+    if (!bi.psfreq)
+	bi.psfreq = SysBase->PowerSupplyFrequency;
+    if (!bi.eclock)
+	bi.eclock = SysBase->ex_EClockFrequency;
 
     /* serial port */
-    realbaud = baud ? baud : DEFAULT_BAUD;
-    bi.serper = (5*bi.eclock+realbaud/2)/realbaud-1;
-
-    /* copy command line options into the kernel command line */
-    strncpy(bi.command_line, commandline, CL_SIZE);
-    bi.command_line[CL_SIZE-1] = '\0';
-
-
-    /* modify the bootinfo, e.g. to change the memory configuration */
-    if (ModifyBootinfo && !ModifyBootinfo(&bi))
-	goto Fail;
+    if (!bi.serper) {
+	realbaud = baud ? baud : DEFAULT_BAUD;
+	bi.serper = (5*bi.eclock+realbaud/2)/realbaud-1;
+    }
 
     /* display Amiga model */
     if (bi.model >= first_amiga_model && bi.model <= last_amiga_model)
@@ -347,7 +374,7 @@ u_long linuxboot(const struct linuxboot_args *args)
     }
 
     /* display the chipset */
-    switch(bi.chipset) {
+    switch (bi.chipset) {
 	case CS_STONEAGE:
 	    Puts(", old or unknown chipset");
 	    break;
@@ -457,10 +484,23 @@ u_long linuxboot(const struct linuxboot_args *args)
 	Printf("Unable to open kernel file `%s'\n", kernelname);
 	goto Fail;
     }
-    if (Read(kfd, (void *)&kexec, sizeof(kexec)) != sizeof(kexec)) {
+    if (KRead(kfd, (void *)&kexec, sizeof(kexec)) != sizeof(kexec)) {
 	Puts("Unable to read exec header from kernel file\n");
 	goto Fail;
     }
+
+#ifdef ZKERNEL
+    if (((unsigned char *)&kexec)[0] == 037 &&
+	(((unsigned char *)&kexec)[1] == 0213 ||
+	 ((unsigned char *)&kexec)[1] == 0236)) {
+	/* That's a compressed kernel */
+	Puts("Kernel is compressed\n");
+	if (load_zkernel(kfd)) {
+	    Puts("Decompression error -- aborting\n");
+	    goto Fail;
+	}
+    }
+#endif
 
     switch (N_MAGIC(kexec)) {
 	case ZMAGIC:
@@ -479,8 +519,8 @@ u_long linuxboot(const struct linuxboot_args *args)
 
 	default:
 	    /* Try to parse it as an ELF header */
-	    Seek(kfd, 0);
-	    if ((Read(kfd, (void *)&kexec_elf, sizeof(kexec_elf)) ==
+	    KSeek(kfd, 0);
+	    if ((KRead(kfd, (void *)&kexec_elf, sizeof(kexec_elf)) ==
 		 sizeof(kexec_elf)) &&
 		 (memcmp(&kexec_elf.e_ident[EI_MAG0], ELFMAG, SELFMAG) == 0)) {
 		elf_kernel = 1;
@@ -501,8 +541,8 @@ u_long linuxboot(const struct linuxboot_args *args)
 		    Puts("Unable to allocate memory for program headers\n");
 		    goto Fail;
 		}
-		Seek(kfd, kexec_elf.e_phoff);
-		if (Read(kfd, (void *)kernel_phdrs,
+		KSeek(kfd, kexec_elf.e_phoff);
+		if (KRead(kfd, (void *)kernel_phdrs,
 			 kexec_elf.e_phnum*sizeof(*kernel_phdrs)) !=
 		    kexec_elf.e_phnum*sizeof(*kernel_phdrs)) {
 		    Puts("Unable to read program headers from kernel file\n");
@@ -557,32 +597,32 @@ u_long linuxboot(const struct linuxboot_args *args)
     /* read the text and data segments from the kernel image */
     if (elf_kernel)
 	for (i = 0; i < kexec_elf.e_phnum; i++) {
-	    if (Seek(kfd, kernel_phdrs[i].p_offset) == -1) {
+	    if (KSeek(kfd, kernel_phdrs[i].p_offset) == -1) {
 		Printf("Failed to seek to segment %ld\n", i);
 		goto Fail;
 	    }
-	    if (Read(kfd, memptr+kernel_phdrs[i].p_vaddr-PAGE_SIZE,
-		     kernel_phdrs[i].p_filesz) != kernel_phdrs[i].p_filesz) {
+	    if (KRead(kfd, memptr+kernel_phdrs[i].p_vaddr-PAGE_SIZE,
+		      kernel_phdrs[i].p_filesz) != kernel_phdrs[i].p_filesz) {
 		Printf("Failed to read segment %ld\n", i);
 		goto Fail;
 	    }
 	}
     else {
-	if (Seek(kfd, text_offset) == -1) {
+	if (KSeek(kfd, text_offset) == -1) {
 	    Puts("Failed to seek to text\n");
 	    goto Fail;
 	}
-	if (Read(kfd, memptr, kexec.a_text) != kexec.a_text) {
+	if (KRead(kfd, memptr, kexec.a_text) != kexec.a_text) {
 	    Puts("Failed to read text\n");
 	    goto Fail;
 	}
 	/* data follows immediately after text */
-	if (Read(kfd, memptr+kexec.a_text, kexec.a_data) != kexec.a_data) {
+	if (KRead(kfd, memptr+kexec.a_text, kexec.a_data) != kexec.a_data) {
 	    Puts("Failed to read data\n");
 	    goto Fail;
 	}
     }
-    Close(kfd);
+    KClose(kfd);
     kfd = -1;
 
     /* Check kernel's bootinfo version */
@@ -706,7 +746,7 @@ u_long linuxboot(const struct linuxboot_args *args)
     /* Clean up and exit in case of a failure */
 Fail:
     if (kfd != -1)
-	Close(kfd);
+	KClose(kfd);
     if (rfd != -1)
 	Close(rfd);
     if (memptr)
@@ -748,37 +788,17 @@ static u_long get_chipset(void)
      *	Determine the CPU Type
      */
 
-/* Dectection of 68030 and up is unreliable, so we check ourself */
-/* Keep consistent with asm/setup.h! */
-/* 24.11.1996 Joerg Dorchain */
-asm( ".text\n"
-ALIGN_STR "\n"
-SYMBOL_NAME_STR(check346) ":
-	orw	#0x700,%sr	| disable ints
-	movec	%vbr,%a0	| get vbr
-	movel	%a0@(11*4),%a1	| save old trap vector (Line F)
-	movel	#L1,%a0@(11*4)	| set L1 as new vector
-	movel	%sp,%d1		| save stack pointer
-	moveq	#2,%d0		| value with exception (030)
-	.long	0xf6208000	| move16 %a0@+,%a0@+, the 030 test instruction
-	nop			| clear instruction pipeline
-	movel	%d1,%sp		| restore stack pointer
-	movec	%vbr,%a0	| get vbr again
-	moveq	#4,%d0		| value with exception (040)
-	.word	0xf5c8		| plpar %a0@, the 040 test instruction
-	nop			| clear instruction pipeline
-	moveq	#8,%d0		| value if we come here
-L1:	movel	%d1,%sp		| restore stack pointer
-	movel	%a1,%a0@(11*4)	| restore vector
-	rte"
-);
-
 static void get_processor(u_long *cpu, u_long *fpu, u_long *mmu)
 {
-    if (SysBase->AttnFlags & (AFF_68030|AFF_68040|AFF_68060))
-        *cpu = Supervisor(check346);
+    *cpu = *fpu = 0;
+    if (SysBase->AttnFlags & AFF_68060)
+	*cpu = CPU_68060;
+    else if (SysBase->AttnFlags & AFF_68040)
+	*cpu = CPU_68040;
+    else if (SysBase->AttnFlags & AFF_68030)
+	*cpu = CPU_68030;
     else if (SysBase->AttnFlags & AFF_68020)
-        *cpu = CPU_68020;
+	*cpu = CPU_68020;
     if (*cpu == CPU_68040 || *cpu == CPU_68060) {
 	if (SysBase->AttnFlags & AFF_FPU40)
 	    *fpu = *cpu;
@@ -786,7 +806,7 @@ static void get_processor(u_long *cpu, u_long *fpu, u_long *mmu)
 	if (SysBase->AttnFlags & AFF_68882)
 	    *fpu = FPU_68882;
 	else if (SysBase->AttnFlags & AFF_68881)
-	    *cpu = FPU_68881;
+	    *fpu = FPU_68881;
     }
     *mmu = *cpu;
 }
@@ -806,7 +826,7 @@ static u_long get_model(u_long chipset)
     else {
 	if (debugflag)
 	    Puts("    Chipset: ");
-	switch(chipset) {
+	switch (chipset) {
 	    case CS_STONEAGE:
 		if (debugflag)
 		    Puts("Old or unknown\n");
@@ -1361,7 +1381,7 @@ static void reset_hydra(const struct ConfigDev *cd)
     Disable();
  
     *nic_cr = 0x21;	/* nic command register: software reset etc. */
-    while(((*nic_isr & 0x80) == 0) && --n)  /* wait for reset to complete */
+    while (((*nic_isr & 0x80) == 0) && --n)  /* wait for reset to complete */
 	;
  
     Enable();
@@ -1373,3 +1393,294 @@ static void reset_a2060(const struct ConfigDev *cd)
 #error reset_a2060: not yet implemented
 }
 #endif
+
+
+#ifdef ZKERNEL
+
+#define	ZFILE_CHUNK_BITS	16  /* chunk is 64 KB */
+#define	ZFILE_CHUNK_SIZE	(1 << ZFILE_CHUNK_BITS)
+#define	ZFILE_CHUNK_MASK	(ZFILE_CHUNK_SIZE-1)
+#define	ZFILE_N_CHUNKS		(2*1024*1024/ZFILE_CHUNK_SIZE)
+
+/* variables for storing the uncompressed data */
+static char *ZFile[ZFILE_N_CHUNKS];
+static int ZFileSize = 0;
+static int ZFpos = 0;
+static int Zwpos = 0;
+
+static int Zinfd = 0;	     /* fd of compressed file */
+
+/*
+ * gzip declarations
+ */
+
+#define OF(args)  args
+
+#define memzero(s, n)     memset ((s), 0, (n))
+
+typedef unsigned char  uch;
+typedef unsigned short ush;
+typedef unsigned long  ulg;
+
+#define INBUFSIZ 4096
+#define WSIZE 0x8000    /* window size--must be a power of two, and */
+			/*  at least 32K for zip's deflate method */
+
+static uch *inbuf;
+static uch *window;
+
+static unsigned insize = 0;  /* valid bytes in inbuf */
+static unsigned inptr = 0;   /* index of next byte to be processed in inbuf */
+static unsigned outcnt = 0;  /* bytes in output buffer */
+static int exit_code = 0;
+static long bytes_out = 0;
+
+#define get_byte()  (inptr < insize ? inbuf[inptr++] : fill_inbuf())
+		
+/* Diagnostic functions (stubbed out) */
+#define Assert(cond,msg)
+#define Trace(x)
+#define Tracev(x)
+#define Tracevv(x)
+#define Tracec(c,x)
+#define Tracecv(c,x)
+
+#define STATIC static
+
+static int  fill_inbuf(void);
+static void flush_window(void);
+static void error(char *m);
+static void gzip_mark(void **);
+static void gzip_release(void **);
+
+#define malloc(x)	AllocVec(x, MEMF_FAST | MEMF_PUBLIC)
+#define free(x)		FreeVec(x)
+
+#ifdef LILO
+#include "inflate.c"
+#else
+#include "../../../../lib/inflate.c"
+#endif
+
+static void gzip_mark(void **ptr)
+{
+}
+
+static void gzip_release(void **ptr)
+{
+}
+
+
+/*
+ * Fill the input buffer. This is called only when the buffer is empty
+ * and at least one byte is really needed.
+ */
+static int fill_inbuf(void)
+{
+    if (exit_code)
+	return -1;
+
+    insize = Read(Zinfd, inbuf, INBUFSIZ);
+    if (insize <= 0)
+	return -1;
+
+    inptr = 1;
+    return(inbuf[0]);
+}
+
+/*
+ * Write the output window window[0..outcnt-1] and update crc and bytes_out.
+ * (Used for the decompressed data only.)
+ */
+static void flush_window(void)
+{
+    ulg c = crc;         /* temporary variable */
+    unsigned n;
+    uch *in, ch;
+    int chunk = Zwpos >> ZFILE_CHUNK_BITS;
+
+    if (exit_code)
+	return;
+
+    if (chunk >= ZFILE_N_CHUNKS) {
+	error("Compressed image too large! Aborting.\n");
+	return;
+    }
+    if (!ZFile[chunk]) {
+	if (!(ZFile[chunk] = (char *)AllocMem(ZFILE_CHUNK_SIZE,
+					      MEMF_FAST | MEMF_PUBLIC))) {
+	    error("Out of memory for decompresing kernel image\n");
+	    return;
+	}
+    }
+    memcpy(ZFile[chunk] + (Zwpos & ZFILE_CHUNK_MASK), window, outcnt);
+    Zwpos += outcnt;
+    
+#define	DISPLAY_BITS 10
+    if ((Zwpos & ((1 << DISPLAY_BITS)-1)) == 0)
+	PutChar('.');
+    
+    in = window;
+    for (n = 0; n < outcnt; n++) {
+	ch = *in++;
+	c = crc_32_tab[((int)c ^ ch) & 0xff] ^ (c >> 8);
+    }
+    crc = c;
+    bytes_out += (ulg)outcnt;
+    outcnt = 0;
+}
+
+static void error(char *x)
+{
+    Printf("\n%s", x);
+    exit_code = 1;
+}
+
+static inline int call_sub(int (*func)(void), void *stackp)
+{
+    register int _res __asm("d0");
+    register int (*a0)(void) __asm("a0") = func;
+    register int (*a1)(void) __asm("a1") = stackp;
+
+    __asm __volatile ("movel sp,a2;"
+    		      "movel a1,sp;"
+    		      "jsr a0@;"
+    		      "movel a2,sp"
+		      : "=r" (_res)
+		      : "r" (a0), "r" (a1)
+		      : "a0", "a1", "a2", "d0", "d1", "memory");
+    return(_res);
+}
+
+static int load_zkernel(int fd)
+{
+    int i, err = -1;
+#define ZSTACKSIZE	(16384)
+    u_long *zstack;
+    
+    for (i = 0; i < ZFILE_N_CHUNKS; ++i)
+	ZFile[i] = NULL;
+    Zinfd = fd;
+    Seek(fd, 0);
+    
+    if (!(inbuf = (uch *)AllocMem(INBUFSIZ, MEMF_FAST | MEMF_PUBLIC)))
+	Puts("Couldn't allocate gunzip buffer\n");
+    else {
+	if (!(window = (uch *)AllocMem(WSIZE, MEMF_FAST | MEMF_PUBLIC)))
+	    Puts("Couldn't allocate gunzip window\n");
+	else {
+	    if (!(zstack = (u_long *)AllocMem(ZSTACKSIZE,
+	    				      MEMF_FAST | MEMF_PUBLIC)))
+		Puts("Couldn't allocate gunzip stack\n");
+	    else {
+		Puts("Uncompressing kernel image ");
+		makecrc();
+		if (!(err = call_sub(gunzip, (char *)zstack+ZSTACKSIZE)))
+		    Puts("done\n");
+		ZFileSize = Zwpos;
+		FreeMem(zstack, ZSTACKSIZE);
+	    }
+	    FreeMem(window, WSIZE);
+	    window = NULL;
+	}
+	FreeMem(inbuf, INBUFSIZ);
+	inbuf = NULL;
+    }
+    Close(Zinfd);	/* input file not needed anymore */
+    return(err);
+}
+
+
+/* Note about the read/lseek wrapper and its memory management: It assumes
+ * that all seeks are only forward, and thus data already read or skipped can
+ * be freed. This is true for current organization of bootstrap and kernels.
+ * Little exception: The struct kexec at the start of the file. After reading
+ * it, there may be a seek back to the end of the file. But this currently
+ * doesn't hurt. (Roman)
+ */
+
+static int KRead(int fd, void *buf, int cnt)
+{
+    unsigned done = 0;
+	
+    if (!ZFileSize)
+	return(Read(fd, buf, cnt));
+    
+    if (ZFpos + cnt > ZFileSize)
+	cnt = ZFileSize - ZFpos;
+    
+    while (cnt > 0) {
+	unsigned chunk = ZFpos >> ZFILE_CHUNK_BITS;
+	unsigned endchunk = (chunk+1) << ZFILE_CHUNK_BITS;
+	unsigned n = cnt;
+
+	if (ZFpos + n > endchunk)
+	    n = endchunk - ZFpos;
+	memcpy(buf, ZFile[chunk] + (ZFpos & ZFILE_CHUNK_MASK), n);
+	cnt -= n;
+	buf += n;
+	done += n;
+	ZFpos += n;
+
+	if (ZFpos == endchunk) {
+	    FreeMem(ZFile[chunk], ZFILE_CHUNK_SIZE);
+	    ZFile[chunk] = NULL;
+	}
+    }
+
+    return(done);
+}
+
+
+static int KSeek(int fd, int offset)
+{
+    unsigned oldpos, oldchunk, newchunk;
+
+    if (!ZFileSize)
+	return(Seek(fd, offset));
+
+    oldpos = ZFpos;
+    ZFpos = offset;
+    if (ZFpos < 0) {
+	ZFpos = 0;
+	return(-1);
+    } else if (ZFpos > ZFileSize) {
+	ZFpos = ZFileSize;
+	return(-1);
+    }
+
+    /* free memory of skipped-over data */
+    oldchunk = oldpos >> ZFILE_CHUNK_BITS;
+    newchunk = ZFpos  >> ZFILE_CHUNK_BITS;
+    while(oldchunk < newchunk) {
+	if (ZFile[oldchunk]) {
+	    FreeMem(ZFile[oldchunk], ZFILE_CHUNK_SIZE);
+	    ZFile[oldchunk] = NULL;
+	}
+	++oldchunk;
+    }
+    return(ZFpos);
+}
+
+
+static void free_zfile(void)
+{
+    int i;
+
+    for (i = 0; i < ZFILE_N_CHUNKS; ++i)
+	if (ZFile[i]) {
+	    FreeMem(ZFile[i], ZFILE_CHUNK_SIZE);
+	    ZFile[i] = NULL;
+	}
+}
+
+static int KClose(int fd)
+{
+    if (ZFileSize) {
+	free_zfile();
+	ZFileSize = 0;
+    } else
+	Close(fd);
+    return(0);
+}
+#endif /* ZKERNEL */

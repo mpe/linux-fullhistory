@@ -222,7 +222,7 @@ nfs_xdr_readres(struct rpc_rqst *req, u32 *p, struct nfs_readres *res)
 	struct iovec *iov = req->rq_rvec;
 	int	status, count, recvd, hdrlen;
 
-	dprintk("RPC:      readres OK status %lx\n", ntohl(*p));
+	dprintk("RPC:      readres OK status %lx\n", (long)ntohl(*p));
 	if ((status = ntohl(*p++)))
 		return -nfs_stat_to_errno(status);
 	p = xdr_decode_fattr(p, res->fattr);
@@ -414,9 +414,16 @@ nfs_xdr_readdirres(struct rpc_rqst *req, u32 *p, struct nfs_readdirres *res)
 		}
 		string -= len;
 		if ((void *) (entry+1) > (void *) string) {
+			/* This may actually happen because an nfs_entry
+			 * will take up more space than the XDR data. On
+			 * 32bit machines that's due to 8byte alignment,
+			 * on 64bit machines that's because the char * takes
+			 * up 2 longs.
+			 *
+			 * THIS IS BAD!
+			 */
 			printk(KERN_NOTICE "NFS: should not happen in %s!\n",
-					__FUNCTION__);
-			printk(KERN_NOTICE "NFS: len = %d, entry+1=%p, string=%p\n", len, entry+1, string);
+				__FUNCTION__);
 			break;
 		}
 
@@ -464,7 +471,7 @@ nfs_xdr_attrstat(struct rpc_rqst *req, u32 *p, struct nfs_fattr *fattr)
 {
 	int	status;
 
-	dprintk("RPC:      attrstat status %lx\n", ntohl(*p));
+	dprintk("RPC:      attrstat status %lx\n", (long)ntohl(*p));
 	if ((status = ntohl(*p++)))
 		return -nfs_stat_to_errno(status);
 	xdr_decode_fattr(p, fattr);
@@ -482,7 +489,7 @@ nfs_xdr_diropres(struct rpc_rqst *req, u32 *p, struct nfs_diropok *res)
 {
 	int	status;
 
-	dprintk("RPC:      diropres status %lx\n", ntohl(*p));
+	dprintk("RPC:      diropres status %lx\n", (long)ntohl(*p));
 	if ((status = ntohl(*p++)))
 		return -nfs_stat_to_errno(status);
 	p = xdr_decode_fhandle(p, res->fh);

@@ -108,10 +108,7 @@ bad_area:
 	up(&mm->mmap_sem);
 
 	/* Are we prepared to handle this fault?  */
-	if (CPU_IS_060 && regs->format == 4)
-		fault_pc = ((struct frame *)regs)->un.fmt4.pc;
-	else
-		fault_pc = regs->pc;
+	fault_pc = regs->pc;
 	if ((fixup = search_exception_table(fault_pc)) != 0) {
 		struct pt_regs *tregs;
 		printk(KERN_DEBUG "Exception at [<%lx>] (%lx)\n", fault_pc, fixup);

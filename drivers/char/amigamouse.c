@@ -172,11 +172,11 @@ static int fasync_mouse(struct inode *inode, struct file *filp, int on)
  * close access to the mouse
  */
 
-static int close_mouse(struct inode * inode, struct file * file)
+static int release_mouse(struct inode * inode, struct file * file)
 {
 	fasync_mouse(inode, file, 0);
 	if (--mouse.active)
-	  return;
+		return 0;
 	free_irq(IRQ_AMIGA_VERTB, mouse_interrupt);
 	MSE_INT_OFF();
 	MOD_DEC_USE_COUNT;
@@ -299,7 +299,7 @@ struct file_operations amiga_mouse_fops = {
 	NULL, 		/* mouse_ioctl */
 	NULL,		/* mouse_mmap */
 	open_mouse,
-	close_mouse,
+	release_mouse,
 	NULL,
 	fasync_mouse,
 };

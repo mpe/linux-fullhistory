@@ -51,9 +51,8 @@
 
 
 /* Library Bases */
+long __oslibversion = 36;
 extern const struct ExecBase *SysBase;
-const struct ExpansionBase *ExpansionBase;
-const struct GfxBase *GfxBase;
 
 static const char *memfile_name = NULL;
 
@@ -80,24 +79,25 @@ static int Read(int fd, char *buf, int count);
 static void Close(int fd);
 static int FileSize(const char *path);
 static void Sleep(u_long micros);
-static int ModifyBootinfo(struct amiga_bootinfo *bi);
 
 
 static void Usage(void)
 {
     fprintf(stderr,
-	    "Linux/m68k Amiga Bootstrap version " AMIBOOT_VERSION "\n\n"
-	    "Usage: %s [options] [kernel command line]\n\n"
-	    "Valid options are:\n"
-	    "    -h, --help           Display this usage information\n"
-	    "    -k, --kernel file    Use kernel image `file' (default is `vmlinux')\n"
-	    "    -r, --ramdisk file   Use ramdisk image `file'\n"
-	    "    -d, --debug          Enable debug mode\n"
-	    "    -b, --baud speed     Set the serial port speed (default is 9600)\n"
-	    "    -m, --memfile file   Use memory file `file'\n"
-	    "    -v, --keep-video     Don't reset the video mode\n"
-	    "    -t, --model id       Set the Amiga model to `id'\n\n",
-	    ProgramName);
+	"Linux/m68k Amiga Bootstrap version " AMIBOOT_VERSION "\n\n"
+	"Usage: %s [options] [kernel command line]\n\n"
+	"Basic options:\n"
+	"    -h, --help           Display this usage information\n"
+	"    -k, --kernel file    Use kernel image `file' (default is `vmlinux')\n"
+	"    -r, --ramdisk file   Use ramdisk image `file'\n"
+	"Advanced options:\n"
+	"    -d, --debug          Enable debug mode\n"
+	"    -b, --baud speed     Set the serial port speed (default is 9600)\n"
+	"    -m, --memfile file   Use memory file `file'\n"
+	"    -v, --keep-video     Don't reset the video mode\n"
+	"    -t, --model id       Set the Amiga model to `id'\n"
+	"    -p, --processor cfm  Set the processor type to `cfm\n\n",
+	ProgramName);
     exit(EXIT_FAILURE);
 }
 
@@ -105,7 +105,7 @@ static void Usage(void)
 int main(int argc, char *argv[])
 {
     int i;
-    int debugflag = 0, keep_video = 0;
+    int processor = 0, debugflag = 0, keep_video = 0;
     u_int baud = 0;
     const char *kernel_name = NULL;
     const char *ramdisk_name = NULL;
@@ -117,17 +117,17 @@ int main(int argc, char *argv[])
 	if (!strcmp(argv[0], "-h") || !strcmp(argv[0], "--help"))
 	    Usage();
 	else if (!strcmp(argv[0], "-k") || !strcmp(argv[0], "--kernel"))
-            if (--argc && !kernel_name) {
-                kernel_name = argv[1];
-                argv++;
-            } else
-                Usage();
+	    if (--argc && !kernel_name) {
+		kernel_name = argv[1];
+		argv++;
+	    } else
+		Usage();
 	else if (!strcmp(argv[0], "-r") || !strcmp(argv[0], "--ramdisk"))
-            if (--argc && !ramdisk_name) {
-                ramdisk_name = argv[1];
-                argv++;
-            } else
-                Usage();
+	    if (--argc && !ramdisk_name) {
+		ramdisk_name = argv[1];
+		argv++;
+	    } else
+		Usage();
 	else if (!strcmp(argv[0], "-d") || !strcmp(argv[0], "--debug"))
 	    debugflag = 1;
 	else if (!strcmp(argv[0], "-b") || !strcmp(argv[0], "--baud"))
@@ -137,19 +137,25 @@ int main(int argc, char *argv[])
 	    } else
 		Usage();
 	else if (!strcmp(argv[0], "-m") || !strcmp(argv[0], "--memfile"))
-            if (--argc && !memfile_name) {
-                memfile_name = argv[1];
-                argv++;
-            } else
-                Usage();
+	    if (--argc && !memfile_name) {
+		memfile_name = argv[1];
+		argv++;
+	    } else
+		Usage();
 	else if (!strcmp(argv[0], "-v") || !strcmp(argv[0], "--keep-video"))
 	    keep_video = 1;
 	else if (!strcmp(argv[0], "-t") || !strcmp(argv[0], "--model"))
-            if (--argc && !model) {
-                model = atoi(argv[1]);
-                argv++;
-            } else
-                Usage();
+	    if (--argc && !model) {
+		model = atoi(argv[1]);
+		argv++;
+	    } else
+		Usage();
+	else if (!strcmp(argv[0], "-p") || !strcmp(argv[0], "--processor"))
+	    if (--argc && !processor) {
+		processor = atoi(argv[1]);
+		argv++;
+	    } else
+		Usage();
 	else
 	    break;
     }
@@ -157,22 +163,6 @@ int main(int argc, char *argv[])
 	kernel_name = "vmlinux";
 
     SysBase = *(struct ExecBase **)4;
-
-    /* open Expansion Library */
-    ExpansionBase = (struct ExpansionBase *)OpenLibrary("expansion.library",
-							36);
-    if (!ExpansionBase) {
-	fputs("Unable to open expansion.library V36 or greater!  Aborting...\n",
-	      stderr);
-	exit(EXIT_FAILURE);
-   }
-
-    /* open Graphics Library */
-    GfxBase = (struct GfxBase *)OpenLibrary ("graphics.library", 0);
-    if (!GfxBase) {
-	fputs("Unable to open graphics.library!  Aborting...\n", stderr);
-	exit(EXIT_FAILURE);
-    }
 
     /*
      *	Join command line options
@@ -187,9 +177,52 @@ int main(int argc, char *argv[])
 	}
     }
 
+    memset(&args.bi, 0, sizeof(args.bi));
+    if (processor) {
+	int cpu = processor/100%10;
+	int fpu = processor/10%10;
+	int mmu = processor%10;
+	if (cpu)
+	    args.bi.cputype = 1<<(cpu-1);
+	if (fpu)
+	    args.bi.fputype = 1<<(fpu-1);
+	if (mmu)
+	    args.bi.mmutype = 1<<(mmu-1);
+    }
+    /*
+     *	If we have a memory file, read the memory information from it
+     */
+    if (memfile_name) {
+	FILE *fp;
+	int i;
+
+	if ((fp = fopen(memfile_name, "r")) == NULL) {
+	    perror("open memory file");
+	    fprintf(stderr, "Cannot open memory file %s\n", memfile_name);
+	    return(FALSE);
+	}
+
+	if (fscanf(fp, "%lu", &args.bi.chip_size) != 1) {
+	    fprintf(stderr, "memory file does not contain chip memory size\n");
+	    fclose(fp);
+	    return(FALSE);
+	}
+
+	for (i = 0; i < NUM_MEMINFO; i++)
+	    if (fscanf(fp, "%lx %lu", &args.bi.memory[i].addr,
+		       &args.bi.memory[i].size) != 2)
+		break;
+
+	fclose(fp);
+	args.bi.num_memory = i;
+    }
+    strncpy(args.bi.command_line, commandline, CL_SIZE);
+    args.bi.command_line[CL_SIZE-1] = '\0';
+    if (model != AMI_UNKNOWN)
+	args.bi.model = model;
+
     args.kernelname = kernel_name;
     args.ramdiskname = ramdisk_name;
-    args.commandline = commandline;
     args.debugflag = debugflag;
     args.keep_video = keep_video;
     args.reset_boards = 1;
@@ -204,13 +237,9 @@ int main(int argc, char *argv[])
     args.close = Close;
     args.filesize = FileSize;
     args.sleep = Sleep;
-    args.modify_bootinfo = ModifyBootinfo;
 
     /* Do The Right Stuff */
     linuxboot(&args);
-
-    CloseLibrary((struct Library *)GfxBase);
-    CloseLibrary((struct Library *)ExpansionBase);
 
     /* if we ever get here, something went wrong */
     exit(EXIT_FAILURE);
@@ -224,6 +253,7 @@ int main(int argc, char *argv[])
 static void Puts(const char *str)
 {
     fputs(str, stderr);
+    fflush(stderr);
 }
 
 static long GetChar(void)
@@ -234,6 +264,7 @@ static long GetChar(void)
 static void PutChar(char c)
 {
     fputc(c, stderr);
+    fflush(stderr);
 }
 
 static void Printf(const char *fmt, ...)
@@ -243,6 +274,7 @@ static void Printf(const char *fmt, ...)
     va_start(args, fmt);
     vfprintf(stderr, fmt, args);
     va_end(args);
+    fflush(stderr);
 }
 
 static int Open(const char *path)
@@ -271,8 +303,8 @@ static int FileSize(const char *path)
     int fd, size = -1;
 
     if ((fd = open(path, O_RDONLY)) != -1) {
-        size = lseek(fd, 0, SEEK_END);
-        close(fd);
+	size = lseek(fd, 0, SEEK_END);
+	close(fd);
     }
     return(size);
 }
@@ -298,47 +330,4 @@ static void Sleep(u_long micros)
 	}
 	DeleteMsgPort(TimerPort);
     }
-}
-
-
-static int ModifyBootinfo(struct amiga_bootinfo *bi)
-{
-   /*
-    * if we have a memory file, read the memory information from it
-    */
-   if (memfile_name) {
-      FILE *fp;
-      int i;
-
-      if ((fp = fopen(memfile_name, "r")) == NULL) {
-         perror("open memory file");
-         fprintf(stderr, "Cannot open memory file %s\n", memfile_name);
-         return(FALSE);
-      }
-
-      if (fscanf(fp, "%lu", &bi->chip_size) != 1) {
-         fprintf(stderr, "memory file does not contain chip memory size\n");
-         fclose(fp);
-         return(FALSE);
-      }
-                
-      for (i = 0; i < NUM_MEMINFO; i++) {
-         if (fscanf(fp, "%lx %lu", &bi->memory[i].addr, &bi->memory[i].size)
-	     != 2)
-            break;
-      }
-
-      fclose(fp);
-
-      if (i != bi->num_memory && i > 0)
-         bi->num_memory = i;
-   }
-
-   /*
-    * change the Amiga model, if necessary
-    */
-   if (model != AMI_UNKNOWN)
-      bi->model = model;
-
-   return(TRUE);
 }

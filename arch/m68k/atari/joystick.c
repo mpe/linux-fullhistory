@@ -10,6 +10,7 @@
 #include <linux/sched.h>
 #include <linux/errno.h>
 #include <linux/major.h>
+#include <linux/poll.h>
 
 #include <asm/atarikb.h>
 #include <asm/atari_joystick.h>
@@ -90,30 +91,28 @@ static long read_joystick(struct inode *inode, struct file *file,
 			  char *buffer, unsigned long count)
 {
     int minor = DEVICE_NR(inode->i_rdev);
-    int i;
 
     if (count < 2)
 	return -EINVAL;
     if (!joystick[minor].ready)
 	return -EAGAIN;
-    put_user(joystick[minor].fire, buffer++);
-    put_user(joystick[minor].dir, buffer++);
-    for (i = 0; i < count; i++)
-	put_user(0, buffer++);
     joystick[minor].ready = 0;
-
-    return i;
+    if (put_user(joystick[minor].fire, buffer++) ||
+	put_user(joystick[minor].dir, buffer++))
+	return -EFAULT;
+    if (count > 2)
+	if (clear_user(buffer, count - 2))
+	    return -EFAULT;
+    return count;
 }
 
-static int joystick_select(struct inode *inode, struct file *file, int sel_type, select_table *wait)
+static unsigned int joystick_poll(struct file *file, poll_table *wait)
 {
-    int minor = DEVICE_NR(inode->i_rdev);
+    int minor = DEVICE_NR(file->f_inode->i_rdev);
 
-    if (sel_type != SEL_IN)
-	return 0;
+    poll_wait(&joystick[minor].wait, wait);
     if (joystick[minor].ready)
-	return 1;
-    select_wait(&joystick[minor].wait, wait);
+	return POLLIN | POLLRDNORM;
     return 0;
 }
 
@@ -122,7 +121,7 @@ struct file_operations atari_joystick_fops = {
 	read_joystick,
 	write_joystick,
 	NULL,		/* joystick_readdir */
-	joystick_select,
+	joystick_poll,
 	NULL,		/* joystick_ioctl */
 	NULL,		/* joystick_mmap */
 	open_joystick,
@@ -135,7 +134,7 @@ int atari_joystick_init(void)
     joystick[0].ready = joystick[1].ready = 0;
     joystick[0].wait = joystick[1].wait = NULL;
 
-    if (register_chrdev(MAJOR_NR, "joystick", &atari_joystick_fops))
+    if (register_chrdev(MAJOR_NR, "Joystick", &atari_joystick_fops))
 	printk("unable to get major %d for joystick devices\n", MAJOR_NR);
 
     return 0;

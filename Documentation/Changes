@@ -29,7 +29,7 @@ English-language HTML version.
    Also, don't forget http://www.linuxhq.com/ for all your Linux kernel
 needs.
 
-Last updated: April 15, 1997.
+Last updated: April 17, 1997.
 Current Author: Chris Ricker (gt1355b@prism.gatech.edu).
 
 Current Minimal Requirements
@@ -184,7 +184,7 @@ requires that you be logged in as root.
 
 Binutils: ld -v
 Gnu C: gcc -v or gcc --version
-Kbd: loadkeys -h
+Kbd: dumpkeys -h
 Ld.so: ldd -v
 Libc: ls -l /lib/libc.so.*
 Libc++: ls -l /usr/lib/libg++.so.*
@@ -249,7 +249,7 @@ Modules utilities
 
 The 2.1.34 release:
 ftp://ftp.redhat.com/pub/alphabits/modutils-2.1.34.tar.gz
-ftp://ftp.kernel.org/pub/linux/kernel/modutils-2.1.34.tar.gz
+ftp://ftp.kernel.org/pub/linux/kernel/v2.1/modutils-2.1.34.tar.gz
 
 Procps utilities
 ================

@@ -2,7 +2,7 @@
 #define _M68K_USER_H
 
 #include <asm/page.h>
-#include <linux/ptrace.h>
+
 /* Core file format: The core file is written in such a way that gdb
    can understand it and provide useful information to the user (under
    linux we use the 'trad-core' bfd).  There are quite a number of
@@ -74,7 +74,8 @@ struct user{
 				   esp register.  */
   long int signal;     		/* Signal that caused the core dump. */
   int reserved;			/* No longer used */
-  struct pt_regs * u_ar0;	/* Used by gdb to help find the values for */
+  struct user_regs_struct *u_ar0;
+				/* Used by gdb to help find the values for */
 				/* the registers. */
   struct user_m68kfp_struct* u_fpstate;	/* Math Co-processor pointer. */
   unsigned long magic;		/* To uniquely identify a core file */

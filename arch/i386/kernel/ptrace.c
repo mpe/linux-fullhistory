@@ -584,10 +584,9 @@ out:
 
 asmlinkage void syscall_trace(void)
 {
-	lock_kernel();
 	if ((current->flags & (PF_PTRACED|PF_TRACESYS))
 			!= (PF_PTRACED|PF_TRACESYS))
-		goto out;
+		return;
 	current->exit_code = SIGTRAP;
 	current->state = TASK_STOPPED;
 	notify_parent(current);
@@ -597,9 +596,10 @@ asmlinkage void syscall_trace(void)
 	 * for normal use.  strace only continues with a signal if the
 	 * stopping signal is not SIGTRAP.  -brl
 	 */
-	if (current->exit_code)
+	if (current->exit_code) {
+		spin_lock_irq(&current->sigmask_lock);
 		current->signal |= (1 << (current->exit_code - 1));
+		spin_unlock_irq(&current->sigmask_lock);
+	}
 	current->exit_code = 0;
-out:
-	unlock_kernel();
 }

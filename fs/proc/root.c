@@ -365,7 +365,7 @@ static int proc_self_readlink(struct inode * inode, char * buffer, int buflen)
 	char tmp[30];
 
 	iput(inode);
-	len = 1 + sprintf(tmp, "%d", current->pid);
+	len = sprintf(tmp, "%d", current->pid);
 	if (buflen < len)
 		len = buflen;
 	copy_to_user(buffer, tmp, len);

@@ -1,4 +1,4 @@
-/* $Id: fcntl.h,v 1.2 1997/04/04 00:50:15 davem Exp $ */
+/* $Id: fcntl.h,v 1.3 1997/04/14 17:05:20 jj Exp $ */
 #ifndef _SPARC64_FCNTL_H
 #define _SPARC64_FCNTL_H
 
@@ -48,7 +48,6 @@
 				   blocking */
 #define LOCK_UN		8	/* remove lock */
 
-/* XXX 32-bit binary compatability item... -DaveM */
 struct flock {
 	short l_type;
 	short l_whence;
@@ -57,5 +56,16 @@ struct flock {
 	pid_t l_pid;
 	short __unused;
 };
+
+#ifdef __KERNEL__
+struct flock32 {
+	short l_type;
+	short l_whence;
+	__kernel_off_t32 l_start;
+	__kernel_off_t32 l_len;
+	__kernel_pid_t32 l_pid;
+	short __unused;
+};
+#endif
 
 #endif /* !(_SPARC64_FCNTL_H) */
