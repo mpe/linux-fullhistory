@@ -238,7 +238,8 @@ NCP_FINFO(inode)->volNumber, NCP_FINFO(inode)->dirEntNum, err);
 }
 
 static void ncp_add_handle_path(struct ncp_server *server, __u8 vol_num,
-				__u32 dir_base, int have_dir_base, char *path)
+				__u32 dir_base, int have_dir_base, 
+				const char *path)
 {
 	ncp_add_byte(server, vol_num);
 	ncp_add_dword(server, dir_base);
@@ -468,12 +469,17 @@ ncp_lookup_volume(struct ncp_server *server, char *volname,
 	target->nameLen = strlen(volname);
 	strcpy(target->entryName, volname);
 	target->attributes = aDIR;
+	/* set dates to Jan 1, 1986  00:00 */
+	target->creationTime = target->modifyTime = cpu_to_le16(0x0000);
+	target->creationDate = target->modifyDate = target->lastAccessDate = cpu_to_le16(0x0C21);
 	return 0;
 }
 
-int ncp_modify_file_or_subdir_dos_info(struct ncp_server *server,
-					struct inode *dir, __u32 info_mask,
-				       struct nw_modify_dos_info *info)
+int ncp_modify_file_or_subdir_dos_info_path(struct ncp_server *server,
+					    struct inode *dir,
+					    const char *path,
+					    __u32 info_mask,
+					    const struct nw_modify_dos_info *info)
 {
 	__u8  volnum = NCP_FINFO(dir)->volNumber;
 	__u32 dirent = NCP_FINFO(dir)->dirEntNum;
@@ -487,11 +493,20 @@ int ncp_modify_file_or_subdir_dos_info(struct ncp_server *server,
 
 	ncp_add_dword(server, info_mask);
 	ncp_add_mem(server, info, sizeof(*info));
-	ncp_add_handle_path(server, volnum, dirent, 1, NULL);
+	ncp_add_handle_path(server, volnum, dirent, 1, path);
 
 	result = ncp_request(server, 87);
 	ncp_unlock_server(server);
 	return result;
+}
+
+int ncp_modify_file_or_subdir_dos_info(struct ncp_server *server,
+				       struct inode *dir,
+				       __u32 info_mask,
+				       const struct nw_modify_dos_info *info)
+{
+	return ncp_modify_file_or_subdir_dos_info_path(server, dir, NULL,
+		info_mask, info);
 }
 
 static int
@@ -787,6 +802,35 @@ out:
 	ncp_unlock_server(server);
 	return result;
 }
+
+#ifdef CONFIG_NCPFS_EXTRAS
+int
+ncp_read_kernel(struct ncp_server *server, const char *file_id,
+		__u32 offset, __u16 to_read, char *target, int *bytes_read) {
+	int error;
+	mm_segment_t old_fs;
+	
+	old_fs = get_fs();
+	set_fs(get_ds());
+	error = ncp_read(server, file_id, offset, to_read, target, bytes_read);
+	set_fs(old_fs);
+	return error;
+}
+
+int
+ncp_write_kernel(struct ncp_server *server, const char *file_id,
+		 __u32 offset, __u16 to_write,
+		 const char *source, int *bytes_written) {
+	int error;
+	mm_segment_t old_fs;
+	
+	old_fs = get_fs();
+	set_fs(get_ds());
+	error = ncp_write(server, file_id, offset, to_write, source, bytes_written);
+	set_fs(old_fs);
+	return error;
+}
+#endif
 
 #ifdef CONFIG_NCPFS_IOCTL_LOCKING
 int

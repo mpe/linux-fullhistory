@@ -4,7 +4,7 @@
  *
  * (c) 1998,1999 Petr Vandrovec <vandrove@vc.cvut.cz>
  *
- * Version: 1.9 1999/01/04
+ * Version: 1.15 1999/04/19
  *
  * MTRR stuff: 1998 Tom Rini <tmrini@ntplx.net>
  *
@@ -23,6 +23,9 @@
  *
  *               "Daniel Haun" <haund@usa.net>
  *                     Testing, hardware cursor fixes
+ *
+ *               "Scott Wood" <sawst46+@pitt.edu>
+ *                     Fixes
  *
  *               "Gerd Knorr" <kraxel@goldbach.isdn.cs.tu-berlin.de>
  *                     Betatesting
@@ -452,7 +455,7 @@ struct matrox_accel_data {
 #define CPMINFO	const struct matrox_fb_info* minfo,
 #define PMINFO  minfo,
 
-static inline struct matrox_fb_info* mxinfo(struct display* p) {
+static inline struct matrox_fb_info* mxinfo(const struct display* p) {
 	return (struct matrox_fb_info*)p->fb_info;
 }
 
@@ -474,7 +477,7 @@ struct display global_disp;
 #define PMINFO
 
 #if 0
-static inline struct matrox_fb_info* mxinfo(struct display* p) {
+static inline struct matrox_fb_info* mxinfo(const struct display* p) {
 	return &global_mxinfo;
 }
 #endif
@@ -2191,7 +2194,7 @@ static void matrox_text_putcs(struct vc_data* conp, struct display* p, const uns
 
 	step = ACCESS_FBINFO(devflags.textstep);
 	offs = yy * p->next_line + xx * step;
-	attr = attr_fgcol(p,scr_readw(s)) | (attr_bgcol(p,scr_readw(s)) << 4);
+	attr = attr_fgcol(p, scr_readw(s)) | (attr_bgcol(p, scr_readw(s)) << 4);
 	while (count-- > 0) {
 		unsigned int chr = ((scr_readw(s++)) & p->charmask) << 8;
 		if (chr & 0x10000) chr ^= 0x10008;
@@ -2395,6 +2398,10 @@ static void initMatrox(WPMINFO struct display* p) {
 
 	DBG("initMatrox")
 	
+	if (ACCESS_FBINFO(currcon_display) != p)
+		return;
+	if (p->dispsw && p->conp)
+		fb_con.con_cursor(p->conp, CM_ERASE);
 	p->dispsw_data = NULL;
 	if ((p->var.accel_flags & FB_ACCELF_TEXT) != FB_ACCELF_TEXT) {
 		if (p->type == FB_TYPE_TEXT) {
@@ -4274,6 +4281,17 @@ static void Ti3026_restore(WPMINFO struct matrox_hw_state* hw, struct matrox_hw_
 	for (i = 0; i < 21; i++) {
 		outTi3026(PMINFO DACseq[i], hw->DACreg[i]);
 	}
+	if (oldhw) {
+		outTi3026(PMINFO TVP3026_XPLLADDR, 0x00);
+		oldhw->DACclk[0] = inTi3026(PMINFO TVP3026_XPIXPLLDATA);
+		oldhw->DACclk[3] = inTi3026(PMINFO TVP3026_XLOOPPLLDATA);
+		outTi3026(PMINFO TVP3026_XPLLADDR, 0x15);
+		oldhw->DACclk[1] = inTi3026(PMINFO TVP3026_XPIXPLLDATA);
+		oldhw->DACclk[4] = inTi3026(PMINFO TVP3026_XLOOPPLLDATA);
+		outTi3026(PMINFO TVP3026_XPLLADDR, 0x2A);
+		oldhw->DACclk[2] = inTi3026(PMINFO TVP3026_XPIXPLLDATA);
+		oldhw->DACclk[5] = inTi3026(PMINFO TVP3026_XLOOPPLLDATA);
+	}
 	if (!oldhw || memcmp(hw->DACclk, oldhw->DACclk, 6)) {
 		/* agrhh... setting up PLL is very slow on Millenium... */
 		/* Mystique PLL is locked in few ms, but Millenium PLL lock takes about 0.15 s... */
@@ -5296,7 +5314,7 @@ static struct board {
 		"MGA-G200 (AGP)"},
 	{PCI_VENDOR_ID_MATROX,	PCI_DEVICE_ID_MATROX_G200_AGP,	0xFF,
 		0,			0,
-		DEVF_VIDEO64BIT | DEVF_SWAPS,
+		DEVF_VIDEO64BIT | DEVF_SWAPS | DEVF_CROSS4MB,
 		230000,
 		&vbG200,
 		"unknown G200 (AGP)"},
@@ -5743,20 +5761,26 @@ leave:;
 }
 
 #ifndef MODULE
+static int __init initialized = 0;
+
 __initfunc(void matroxfb_init(void))
 {
 	DBG("matroxfb_init")
-#if defined(CONFIG_FB_OF)
-/* Nothing to do, must be called from offb */
-#else	
-	matrox_init();
-#endif
+	
+	if (!initialized) {
+		initialized = 1;
+		matrox_init();
+	}
 }
 
 #if defined(CONFIG_FB_OF)
 __initfunc(int matrox_of_init(struct device_node *dp)) {
 	DBG("matrox_of_init");
-	matrox_init();
+	
+	if (!initialized) {
+		initialized = 1;
+		matrox_init();
+	}
 	if (!fb_list) return -ENXIO;
 	return 0;
 }

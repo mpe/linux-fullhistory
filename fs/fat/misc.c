@@ -51,11 +51,11 @@ void fat_fs_panic(struct super_block *s,const char *msg)
 
 
 /*
- * is_binary selects optional text conversion based on the conversion mode and
- * the extension part of the file name.
+ * fat_is_binary selects optional text conversion based on the conversion mode
+ * and the extension part of the file name.
  */
 
-int is_binary(char conversion,char *extension)
+int fat_is_binary(char conversion,char *extension)
 {
 	char *walk;
 

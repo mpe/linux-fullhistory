@@ -16,11 +16,13 @@
 #define NCP_MOUNT_VERSION 3
 
 /* Values for flags */
-#define NCP_MOUNT_SOFT 0x0001
-#define NCP_MOUNT_INTR 0x0002
-#define NCP_MOUNT_STRONG 0x0004   /* enable delete/rename of r/o files */
-#define NCP_MOUNT_NO_OS2 0x0008
-#define NCP_MOUNT_NO_NFS 0x0010
+#define NCP_MOUNT_SOFT		0x0001
+#define NCP_MOUNT_INTR		0x0002
+#define NCP_MOUNT_STRONG	0x0004	/* enable delete/rename of r/o files */
+#define NCP_MOUNT_NO_OS2	0x0008	/* do not use OS/2 (LONG) namespace */
+#define NCP_MOUNT_NO_NFS	0x0010	/* do not use NFS namespace */
+#define NCP_MOUNT_EXTRAS	0x0020
+#define NCP_MOUNT_SYMLINKS	0x0040	/* enable symlinks */
 
 struct ncp_mount_data {
 	int version;

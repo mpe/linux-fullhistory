@@ -3,6 +3,7 @@
  *
  *  Copyright (C) 1995 by Volker Lendecke
  *  Modified for sparc by J.F. Chadima
+ *  Modified for __constant_ntoh by Frank A. Vorstenbosch
  *
  */
 
@@ -58,11 +59,21 @@ struct ncp_volume_info {
 
 /* these define the attribute byte as seen by NCP */
 #define aRONLY     (ntohl(0x01000000))
-#define aHIDDEN    (ntohl(0x02000000))
-#define aSYSTEM    (ntohl(0x04000000))
+#define aHIDDEN    (__constant_ntohl(0x02000000))
+#define aSYSTEM    (__constant_ntohl(0x04000000))
 #define aEXECUTE   (ntohl(0x08000000))
 #define aDIR       (ntohl(0x10000000))
 #define aARCH      (ntohl(0x20000000))
+#define aSHARED	   (ntohl(0x80000000))
+#define aDONTSUBALLOCATE (ntohl(1L<<(11+8)))
+#define aTRANSACTIONAL   (ntohl(1L<<(12+8)))
+#define aPURGE		 (ntohl(1L<<(16-8)))
+#define aRENAMEINHIBIT	 (ntohl(1L<<(17-8)))
+#define aDELETEINHIBIT	 (ntohl(1L<<(18-8)))
+#define aDONTCOMPRESS	 (nothl(1L<<(27-24)))
+
+#define NCP_MIN_SYMLINK_SIZE	8
+#define NCP_MAX_SYMLINK_SIZE	512
 
 #define AR_READ      (ntohs(0x0100))
 #define AR_WRITE     (ntohs(0x0200))

@@ -73,6 +73,10 @@ struct ncp_server {
 		size_t len;
 		void*  data;
 	} priv;
+
+	struct ncp_nls_ioctl nls_charsets;	/* NLS user data */
+	struct nls_table *nls_vol;    /* codepage used on volume */
+	struct nls_table *nls_io;     /* charset used for input and display */
 };
 
 static inline int ncp_conn_valid(struct ncp_server *server)

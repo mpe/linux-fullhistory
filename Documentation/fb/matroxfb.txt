@@ -1,6 +1,6 @@
 [This file is cloned from VesaFB. Thanks go to Gerd Knorr]
 
-what is matroxfb?
+What is matroxfb?
 =================
 
 This is a driver for a graphic framebuffer for Matrox devices on
@@ -221,6 +221,8 @@ pixclock:X - dotclocks, in ps (picoseconds). Default is derived from `vesa'
 sync:X   - sync. pulse - bit 0 inverts HSYNC polarity, bit 1 VSYNC polarity.
            If bit 3 (value 0x08) is set, composite sync instead of HSYNC is
 	   generated. If bit 5 (value 0x20) is set, sync on green is turned on.
+	   Do not forget that if you want sync on green, you also probably
+	   want composite sync.
 	   Default depends on `vesa'.
 depth:X  - Bits per pixel: 0=text, 4,8,15,16,24 or 32. Default depends on
            `vesa'.
@@ -284,8 +286,6 @@ And following features:
  + current fbset is not able to set 15bpp videomode: you must specify
    depth==16 and green.length==5. fbset does not allow you to set 
    green.length.
- + hardware cursor is available only in accelerated videomodes. Maybe that
-   this is misfeature and not feature.
  + text mode uses 6 bit VGA palette instead of 8 bit (one of 262144 colors
    instead of one of 16M colors). It is due to hardware limitation of 
    MilleniumI/II and SVGALib compatibility.

@@ -18,6 +18,9 @@
  *      fixed tick loss calculation in timer_interrupt
  *      (round system clock to nearest tick instead of truncating)
  *      fixed algorithm in time_init for getting time from CMOS clock
+ * 1999-04-16	Thorsten Kranzkowski (dl8bcu@gmx.net)
+ *	fixed algorithm in do_gettimeofday() for calculating the precise time
+ *	from processor cycle counter (now taking lost_ticks into account)
  */
 #include <linux/config.h>
 #include <linux/errno.h>
@@ -314,8 +317,10 @@ time_init(void)
 void
 do_gettimeofday(struct timeval *tv)
 {
-	unsigned long flags, now, delta_cycles, delta_usec;
+	unsigned long flags, delta_cycles, delta_usec;
 	unsigned long sec, usec;
+	__u32 now;
+	extern volatile unsigned long lost_ticks;	/*kernel/sched.c*/
 
 	now = rpcc();
 	save_and_cli(flags);
@@ -337,8 +342,14 @@ do_gettimeofday(struct timeval *tv)
 	 * with no clear gain.
 	 */
 
-	delta_usec = delta_cycles * state.scaled_ticks_per_cycle * 15625;
+	delta_usec = (delta_cycles * state.scaled_ticks_per_cycle 
+			+ state.partial_tick
+			+ (lost_ticks << FIX_SHIFT) ) * 15625;
 	delta_usec = ((delta_usec / ((1UL << (FIX_SHIFT-6-1)) * HZ)) + 1) / 2;
+
+	/* the 'lost_tics' term above implements this:	
+	 * delta_usec += lost_ticks * (1000000 / HZ);
+	 */
 
 	usec += delta_usec;
 	if (usec >= 1000000) {

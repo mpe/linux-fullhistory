@@ -4,6 +4,7 @@
  *  Copyright (C) 1995, 1996 by Volker Lendecke
  *  Modified for big endian by J.F. Chadima and David S. Miller
  *  Modified 1997 Peter Waltenberg, Bill Hawes, David Woodhouse for 2.1 dcache
+ *  Modified 1998 Wolfram Pienkoss for NLS
  *
  */
 
@@ -22,6 +23,7 @@
 #include <linux/locks.h>
 
 #include <linux/ncp_fs.h>
+
 #include "ncplib_kernel.h"
 
 struct ncp_dirent {
@@ -54,7 +56,10 @@ static int ncp_mkdir(struct inode *, struct dentry *, int);
 static int ncp_rmdir(struct inode *, struct dentry *);
 static int ncp_rename(struct inode *, struct dentry *,
 	  	      struct inode *, struct dentry *);
-
+#ifdef CONFIG_NCPFS_EXTRAS
+extern int ncp_symlink(struct inode *, struct dentry *, const char *);
+#endif
+		      
 static struct file_operations ncp_dir_operations =
 {
 	NULL,			/* lseek - default */
@@ -77,7 +82,11 @@ struct inode_operations ncp_dir_inode_operations =
 	ncp_lookup,		/* lookup */
 	NULL,			/* link */
 	ncp_unlink,		/* unlink */
+#ifdef CONFIG_NCPFS_EXTRAS
+	ncp_symlink,		/* symlink */
+#else
 	NULL,			/* symlink */
+#endif
 	ncp_mkdir,		/* mkdir */
 	ncp_rmdir,		/* rmdir */
 	NULL,			/* mknod */
@@ -191,14 +200,6 @@ dentry->d_parent->d_name.name, dentry->d_name.name);
 	}
 }
 
-/* Here we encapsulate the inode number handling that depends upon the
- * mount mode: When we mount a complete server, the memory address of
- * the ncp_inode_info is used as the inode number. When only a single
- * volume is mounted, then the dirEntNum is used as the inode
- * number. As this is unique for the complete volume, this should
- * enable the NFS exportability of a ncpfs-mounted volume.
- */
-
 /*
  * Generate a unique inode number.
  */
@@ -253,37 +254,30 @@ static int
 ncp_force_unlink(struct inode *dir, struct dentry* dentry)
 {
         int res=0x9c,res2;
-        struct iattr ia;
+	struct nw_modify_dos_info info;
+	__u32 old_nwattr;
+	struct inode *inode;
 
+	memset(&info, 0, sizeof(info));
+	
         /* remove the Read-Only flag on the NW server */
+	inode = dentry->d_inode;
 
-        memset(&ia,0,sizeof(struct iattr));
-        ia.ia_mode = dentry->d_inode->i_mode;
-        ia.ia_mode |= NCP_SERVER(dir)->m.file_mode & 0222;  /* set write bits */
-        ia.ia_valid = ATTR_MODE;
-
-        res2=ncp_notify_change(dentry, &ia);
-        if (res2)
-        {
-                goto leave_me;
-        }
+	old_nwattr = NCP_FINFO(inode)->nwattr;
+	info.attributes = old_nwattr & ~(aRONLY|aDELETEINHIBIT|aRENAMEINHIBIT);
+	res2 = ncp_modify_file_or_subdir_dos_info_path(NCP_SERVER(inode), inode, NULL, DM_ATTRIBUTES, &info);
+	if (res2)
+		goto leave_me;
 
         /* now try again the delete operation */
-
         res = ncp_del_file_or_subdir2(NCP_SERVER(dir), dentry);
 
         if (res)  /* delete failed, set R bit again */
         {
-                memset(&ia,0,sizeof(struct iattr));
-                ia.ia_mode = dentry->d_inode->i_mode;
-                ia.ia_mode &= ~(NCP_SERVER(dir)->m.file_mode & 0222);  /* clear write bits */
-                ia.ia_valid = ATTR_MODE;
-
-                res2=ncp_notify_change(dentry, &ia);
-                if (res2)
-                {
+		info.attributes = old_nwattr;
+		res2 = ncp_modify_file_or_subdir_dos_info_path(NCP_SERVER(inode), inode, NULL, DM_ATTRIBUTES, &info);
+		if (res2)
                         goto leave_me;
-                }
         }
 leave_me:
         return(res);
@@ -293,63 +287,58 @@ leave_me:
 #ifdef CONFIG_NCPFS_STRONG
 static int
 ncp_force_rename(struct inode *old_dir, struct dentry* old_dentry, char *_old_name,
-                 struct inode *new_dir, struct dentry* new_dentry, char *_new_name,
-                 int *done_flag)
+                 struct inode *new_dir, struct dentry* new_dentry, char *_new_name)
 {
+	struct nw_modify_dos_info info;
         int res=0x90,res2;
-        struct iattr ia;
+	struct inode *old_inode = old_dentry->d_inode;
+	__u32 old_nwattr = NCP_FINFO(old_inode)->nwattr;
+	__u32 new_nwattr = 0; /* shut compiler warning */
+	int old_nwattr_changed = 0;
+	int new_nwattr_changed = 0;
 
+	memset(&info, 0, sizeof(info));
+	
         /* remove the Read-Only flag on the NW server */
 
-        memset(&ia,0,sizeof(struct iattr));
-        ia.ia_mode = old_dentry->d_inode->i_mode;
-	if (S_ISDIR(ia.ia_mode))
-		goto leave_me;
-        ia.ia_mode |= NCP_SERVER(old_dir)->m.file_mode & 0222;  /* set write bits */
-        ia.ia_valid = ATTR_MODE;
-
-        res2=ncp_notify_change(old_dentry, &ia);
-        if (res2)
-        {
-                goto leave_me;
-        }
-
+	info.attributes = old_nwattr & ~(aRONLY|aRENAMEINHIBIT|aDELETEINHIBIT);
+	res2 = ncp_modify_file_or_subdir_dos_info_path(NCP_SERVER(old_inode), old_inode, NULL, DM_ATTRIBUTES, &info);
+	if (!res2)
+		old_nwattr_changed = 1;
+	if (new_dentry && new_dentry->d_inode) {
+		new_nwattr = NCP_FINFO(new_dentry->d_inode)->nwattr;
+		info.attributes = new_nwattr & ~(aRONLY|aRENAMEINHIBIT|aDELETEINHIBIT);
+		res2 = ncp_modify_file_or_subdir_dos_info_path(NCP_SERVER(new_dir), new_dir, _new_name, DM_ATTRIBUTES, &info);
+		if (!res2)
+			new_nwattr_changed = 1;
+	}
         /* now try again the rename operation */
-        res = ncp_ren_or_mov_file_or_subdir(NCP_SERVER(old_dir),
-                                            old_dir, _old_name,
-                                            new_dir, _new_name);
-
-        if (!res) {
-                ncp_invalid_dir_cache(old_dir);
-                ncp_invalid_dir_cache(new_dir);
-                d_move(old_dentry,new_dentry);
-                *done_flag=1;
-
-                if (!old_dentry->d_inode) {
-                        DPRINTK(KERN_INFO "ncpfs: no inode -- file remains rw\n");
-                        goto leave_me;
-                }
-                if ((res2=ncp_lookup_validate(old_dentry))) {
-                        DPRINTK(KERN_DEBUG "ncpfs: ncp_lookup_validate returned %d\n",res2);
-                }
-        }
-
-        memset(&ia,0,sizeof(struct iattr));
-        ia.ia_mode = old_dentry->d_inode->i_mode;
-        ia.ia_mode &= ~(NCP_SERVER(old_dentry->d_inode)->m.file_mode & 0222);  /* clear write bits */
-        ia.ia_valid = ATTR_MODE;
-
-        DPRINTK(KERN_INFO "calling ncp_notify_change() with %s/%s\n",
-               old_dentry->d_parent->d_name.name,old_dentry->d_name.name);
-
-        res2=ncp_notify_change(old_dentry, &ia);
-        if (res2)
-        {
-                printk(KERN_INFO "ncpfs: ncp_notify_change (2) failed: %08x\n",res2);
-                /* goto leave_me; */
-        }
-
- leave_me:
+	/* but only if something really happened */
+	if (new_nwattr_changed || old_nwattr_changed) {
+	        res = ncp_ren_or_mov_file_or_subdir(NCP_SERVER(old_dir),
+        	                                    old_dir, _old_name,
+                	                            new_dir, _new_name);
+	} 
+	if (res)
+		goto leave_me;
+	/* file was successfully renamed, so:
+	   do not set attributes on old file - it no longer exists
+	   copy attributes from old file to new */
+	new_nwattr_changed = old_nwattr_changed;
+	new_nwattr = old_nwattr;
+	old_nwattr_changed = 0;
+	
+leave_me:;
+	if (old_nwattr_changed) {
+		info.attributes = old_nwattr;
+		res2 = ncp_modify_file_or_subdir_dos_info_path(NCP_SERVER(old_inode), old_inode, NULL, DM_ATTRIBUTES, &info);
+		/* ignore errors */
+	}
+	if (new_nwattr_changed)	{
+		info.attributes = new_nwattr;
+		res2 = ncp_modify_file_or_subdir_dos_info_path(NCP_SERVER(new_dir), new_dir, _new_name, DM_ATTRIBUTES, &info);
+		/* ignore errors */
+	}
         return(res);
 }
 #endif	/* CONFIG_NCPFS_STRONG */
@@ -386,11 +375,6 @@ ncp_lookup_validate(struct dentry * dentry)
 printk(KERN_DEBUG "ncp_lookup_validate: %s, len %d\n", __name, len);
 #endif
 
-	if (!ncp_preserve_case(dir)) { 
-	  str_lower(__name);
-          down_case = 1;
-	}
-	
 	/* If the file is in the dir cache, we do not have to ask the
 	   server. */
 
@@ -400,17 +384,14 @@ dentry->d_parent->d_name.name, __name);
 #endif
 		if (ncp_is_server_root(dir))
 		{
-			str_upper(__name);
+			io2vol(server, __name, 1);
 			down_case = 1;
 			res = ncp_lookup_volume(server, __name,
 						&(finfo.nw_info.i));
 		} else
 	    	{
-			if (!ncp_preserve_case(dir))
-			{
-				str_upper(__name);
-				down_case = 1;
-			}
+			down_case = !ncp_preserve_case(dir);
+			io2vol(server, __name, down_case);
 			res = ncp_obtain_info(server, dir, __name,
 						&(finfo.nw_info.i));
 		}
@@ -429,6 +410,9 @@ dentry->d_parent->d_name.name, __name, res);
 		  else
 		    printk(KERN_DEBUG "ncp_lookup_validate: found, but dirEntNum changed\n");
 #endif
+		  vol2io(server, finfo.nw_info.i.entryName,
+			 !ncp_preserve_entry_case(dir,
+			 finfo.nw_info.i.NSCreator));
  		  ncp_update_inode2(dentry->d_inode, &finfo.nw_info);
 		}
 		if (!val) ncp_invalid_dir_cache(dir);
@@ -535,10 +519,11 @@ static int ncp_readdir(struct file *filp, void *dirent, filldir_t filldir)
 			c_last_returned_index = 0;
 			index = 0;
 
-			if (!ncp_preserve_case(inode)) {
-				for (i = 0; i < c_size; i++) {
-					str_lower(c_entry[i].i.entryName);
-				}
+			for (i = 0; i < c_size; i++)
+			{
+				vol2io(server, c_entry[i].i.entryName,
+					!ncp_preserve_entry_case(inode,
+					c_entry[i].i.NSCreator));
 			}
 		}
 	}
@@ -730,7 +715,7 @@ int ncp_conn_logged_in(struct ncp_server *server)
 		struct dentry* dent;
 
 		result = -ENOENT;
-		str_upper(server->m.mounted_vol);
+		io2vol(server, server->m.mounted_vol, 1);
 		if (ncp_lookup_volume(server, server->m.mounted_vol,
 				      &(server->root.finfo.i)) != 0) {
 #ifdef NCPFS_PARANOIA
@@ -738,7 +723,7 @@ printk(KERN_DEBUG "ncp_conn_logged_in: %s not found\n", server->m.mounted_vol);
 #endif
 			goto out;
 		}
-		str_lower(server->root.finfo.i.entryName);
+		vol2io(server, server->root.finfo.i.entryName, 1);
 		dent = server->root_dentry;
 		if (dent) {
 			struct inode* ino = dent->d_inode;
@@ -786,11 +771,6 @@ static int ncp_lookup(struct inode *dir, struct dentry *dentry)
 printk(KERN_DEBUG "ncp_lookup: %s, len %d\n", __name, len);
 #endif
 
-	if (!ncp_preserve_case(dir)) { 
-	  str_lower(__name);
-          down_case = 1;
-	}
-	
 	/* If the file is in the dir cache, we do not have to ask the
 	   server. */
 
@@ -830,17 +810,14 @@ dentry->d_parent->d_name.name, __name);
 #endif
 		if (ncp_is_server_root(dir))
 		{
-			str_upper(__name);
+			io2vol(server, __name, 1);
 			down_case = 1;
 			res = ncp_lookup_volume(server, __name,
 						&(finfo.nw_info.i));
 		} else
 	    	{
-			if (!ncp_preserve_case(dir))
-			{
-				str_upper(__name);
-				down_case = 1;
-			}
+			down_case = !ncp_preserve_case(dir);
+			io2vol(server, __name, down_case);
 			res = ncp_obtain_info(server, dir, __name,
 						&(finfo.nw_info.i));
 		}
@@ -851,8 +828,11 @@ dentry->d_parent->d_name.name, __name, res);
 		/*
 		 * If we didn't find an entry, make a negative dentry.
 		 */
-	   	if (res != 0)
+	   	if (res != 0) {
 			goto add_entry;
+		} else vol2io(server, finfo.nw_info.i.entryName,
+			      ncp_preserve_entry_case(dir,
+			      finfo.nw_info.i.NSCreator));
 	}
 
 	/*
@@ -906,18 +886,19 @@ dentry->d_parent->d_name.name, dentry->d_name.name);
 	goto out;
 }
 
-static int ncp_create(struct inode *dir, struct dentry *dentry, int mode)
+int ncp_create_new(struct inode *dir, struct dentry *dentry, int mode,
+		int attributes)
 {
 	int error, result;
 	struct ncpfs_inode_info finfo;
 	__u8 _name[dentry->d_name.len + 1];
-
+	
 #ifdef NCPFS_PARANOIA
-printk(KERN_DEBUG "ncp_create: creating %s/%s, mode=%x\n",
+printk(KERN_DEBUG "ncp_create_new: creating %s/%s, mode=%x\n",
 dentry->d_parent->d_name.name, dentry->d_name.name, mode);
 #endif
 	if (!dir || !S_ISDIR(dir->i_mode)) {
-		printk(KERN_WARNING "ncp_create: inode is NULL or not a directory\n");
+		printk(KERN_WARNING "ncp_create_new: inode is NULL or not a directory\n");
 		return -ENOENT;
 	}
 	error = -EIO;
@@ -927,14 +908,12 @@ dentry->d_parent->d_name.name, dentry->d_name.name, mode);
 	strncpy(_name, dentry->d_name.name, dentry->d_name.len);
 	_name[dentry->d_name.len] = '\0';
 
-	if (!ncp_preserve_case(dir)) {
-		str_upper(_name);
-	}
+	io2vol(NCP_SERVER(dir), _name, !ncp_preserve_case(dir));
 
 	error = -EACCES;
 	result = ncp_open_create_file_or_subdir(NCP_SERVER(dir), dir, _name,
 			   OC_MODE_CREATE | OC_MODE_OPEN | OC_MODE_REPLACE,
-			   0, AR_READ | AR_WRITE, &finfo.nw_info);
+			   attributes, AR_READ | AR_WRITE, &finfo.nw_info);
 	if (!result) {
 		finfo.nw_info.access = O_RDWR;
 		error = ncp_instantiate(dir, dentry, &finfo);
@@ -946,6 +925,11 @@ dentry->d_parent->d_name.name, dentry->d_name.name, mode);
 
 out:
 	return error;
+}
+
+static int ncp_create(struct inode *dir, struct dentry *dentry, int mode)
+{
+	return ncp_create_new(dir, dentry, mode, 0);
 }
 
 static int ncp_mkdir(struct inode *dir, struct dentry *dentry, int mode)
@@ -967,9 +951,7 @@ static int ncp_mkdir(struct inode *dir, struct dentry *dentry, int mode)
 
 	strncpy(_name, dentry->d_name.name, dentry->d_name.len);
 	_name[dentry->d_name.len] = '\0';
-	if (!ncp_preserve_case(dir)) {
-		str_upper(_name);
-	}
+	io2vol(NCP_SERVER(dir), _name, !ncp_preserve_case(dir));
 
 	error = -EACCES;
 	if (ncp_open_create_file_or_subdir(NCP_SERVER(dir), dir, _name,
@@ -1008,17 +990,34 @@ static int ncp_rmdir(struct inode *dir, struct dentry *dentry)
 	strncpy(_name, dentry->d_name.name, dentry->d_name.len);
 	_name[dentry->d_name.len] = '\0';
 	    
-	if (!ncp_preserve_case(dir))
-	{
-		str_upper(_name);
-	}
-	error = -EACCES;
+	io2vol(NCP_SERVER(dir), _name, !ncp_preserve_case(dir));
 	result = ncp_del_file_or_subdir(NCP_SERVER(dir), dir, _name);
-	if (!result)
-	{
-		ncp_invalid_dir_cache(dir);
-		error = 0;
-    	}
+	switch (result) {
+		case 0x00:
+   			ncp_invalid_dir_cache(dir);
+			error = 0;
+			break;
+		case 0x85:	/* unauthorized to delete file */
+		case 0x8A:	/* unauthorized to delete file */
+			error = -EACCES;
+			break;
+		case 0x8F:
+		case 0x90:	/* read only */
+			error = -EPERM;
+			break;
+		case 0x9F:	/* in use by another client */
+			error = -EBUSY;
+			break;
+		case 0xA0:	/* directory not empty */
+			error = -ENOTEMPTY;
+			break;
+		case 0xFF:	/* someone deleted file */
+			error = -ENOENT;
+			break;
+		default:
+			error = -EACCES;
+			break;
+       	}
 out:
 	return error;
 }
@@ -1052,19 +1051,38 @@ printk(KERN_DEBUG "ncp_unlink: closing file\n");
 
 	error = ncp_del_file_or_subdir2(NCP_SERVER(dir), dentry);
 #ifdef CONFIG_NCPFS_STRONG
+	/* 9C is Invalid path.. It should be 8F, 90 - read only, but
+	   it is not :-( */
 	if (error == 0x9C && NCP_SERVER(dir)->m.flags & NCP_MOUNT_STRONG) { /* R/O */
 		error = ncp_force_unlink(dir, dentry);
 	}
 #endif
-	if (!error) {
-		DPRINTK(KERN_DEBUG "ncp: removed %s/%s\n",
-			dentry->d_parent->d_name.name, dentry->d_name.name);
-		ncp_invalid_dir_cache(dir);
-		d_delete(dentry);
-	} else if (error == 0xFF) {
-		error = -ENOENT;
-	} else {
-		error = -EACCES;
+	switch (error) {
+		case 0x00:
+			DPRINTK(KERN_DEBUG "ncp: removed %s/%s\n",
+				dentry->d_parent->d_name.name, dentry->d_name.name);
+			ncp_invalid_dir_cache(dir);
+			d_delete(dentry);
+			break;
+		case 0x85:
+		case 0x8A:
+			error = -EACCES;
+			break;
+		case 0x8D:	/* some files in use */
+		case 0x8E:	/* all files in use */
+			error = -EBUSY;
+			break;
+		case 0x8F:	/* some read only */
+		case 0x90:	/* all read only */
+		case 0x9C:	/* !!! returned when in-use or read-only by NW4 */
+			error = -EPERM;
+			break;
+		case 0xFF:
+			error = -ENOENT;
+			break;
+		default:
+			error = -EACCES;
+			break;
 	}
 		
 out:
@@ -1076,7 +1094,7 @@ static int ncp_rename(struct inode *old_dir, struct dentry *old_dentry,
 {
 	int old_len = old_dentry->d_name.len;
 	int new_len = new_dentry->d_name.len;
-	int error, done_flag=0;
+	int error;
 	char _old_name[old_dentry->d_name.len + 1];
 	char _new_name[new_dentry->d_name.len + 1];
 
@@ -1099,44 +1117,38 @@ static int ncp_rename(struct inode *old_dir, struct dentry *old_dentry,
 
 	strncpy(_old_name, old_dentry->d_name.name, old_len);
 	_old_name[old_len] = '\0';
-	if (!ncp_preserve_case(old_dir)) {
-		str_upper(_old_name);
-	}
+	io2vol(NCP_SERVER(old_dir), _old_name, !ncp_preserve_case(old_dir));
 
 	strncpy(_new_name, new_dentry->d_name.name, new_len);
 	_new_name[new_len] = '\0';
-	if (!ncp_preserve_case(new_dir)) {
-		str_upper(_new_name);
-	}
+	io2vol(NCP_SERVER(new_dir), _new_name, !ncp_preserve_case(new_dir));
 
 	error = ncp_ren_or_mov_file_or_subdir(NCP_SERVER(old_dir),
 					    old_dir, _old_name,
 					    new_dir, _new_name);
 #ifdef CONFIG_NCPFS_STRONG
-	if (error == 0x90 && NCP_SERVER(old_dir)->m.flags & NCP_MOUNT_STRONG) {	/* RO */
+	if ((error == 0x90 || error == -EACCES) && NCP_SERVER(old_dir)->m.flags & NCP_MOUNT_STRONG) {	/* RO */
 		error = ncp_force_rename(old_dir, old_dentry, _old_name,
-                                         new_dir, new_dentry, _new_name,
-                                         &done_flag);
+                                         new_dir, new_dentry, _new_name);
 	}
 #endif
-	if (error == 0)
-	{
-                if (done_flag == 0)  /* if 1, the following already happened */
-                {                    /* in ncp_force_rename() */
-                        DPRINTK(KERN_DEBUG "ncp renamed %s -> %s.\n",
+	switch (error) {
+		case 0x00:
+               	        DPRINTK(KERN_DEBUG "ncp renamed %s -> %s.\n",
                                 old_dentry->d_name.name,new_dentry->d_name.name);
-                        ncp_invalid_dir_cache(old_dir);
-                        ncp_invalid_dir_cache(new_dir);
-			if (!S_ISDIR(old_dentry->d_inode->i_mode))
-				d_move(old_dentry,new_dentry);
-                }
-	} else {
-		if (error == 0x9E)
+       	                ncp_invalid_dir_cache(old_dir);
+               	        ncp_invalid_dir_cache(new_dir);
+			/* d_move(old_dentry, new_dentry); */
+			break;
+		case 0x9E:
 			error = -ENAMETOOLONG;
-		else if (error == 0xFF)
+			break;
+		case 0xFF:
 			error = -ENOENT;
-		else
+			break;
+		default:
 			error = -EACCES;
+			break;
 	}
 out:
 	return error;
@@ -1155,14 +1167,12 @@ extern struct timezone sys_tz;
 
 static int utc2local(int time)
 {
-	return time - sys_tz.tz_minuteswest * 60 +
-	    (sys_tz.tz_dsttime ? 3600 : 0);
+	return time - sys_tz.tz_minuteswest * 60;
 }
 
 static int local2utc(int time)
 {
-	return time + sys_tz.tz_minuteswest * 60 -
-	    (sys_tz.tz_dsttime ? 3600 : 0);
+	return time + sys_tz.tz_minuteswest * 60;
 }
 
 /* Convert a MS-DOS time/date pair to a UNIX date (seconds since 1 1 70). */
@@ -1171,7 +1181,9 @@ ncp_date_dos2unix(unsigned short time, unsigned short date)
 {
 	int month, year, secs;
 
-	month = ((date >> 5) & 15) - 1;
+	/* first subtract and mask after that... Otherwise, if
+	   date == 0, bad things happen */
+	month = ((date >> 5) - 1) & 15;
 	year = date >> 9;
 	secs = (time & 31) * 2 + 60 * ((time >> 5) & 63) + (time >> 11) * 3600 +
 		86400 * ((date & 31) - 1 + day_n[month] + (year / 4) + 

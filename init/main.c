@@ -1166,7 +1166,7 @@ asmlinkage void __init start_kernel(void)
 	filescache_init();
 	dcache_init();
 	vma_init();
-	buffer_init();
+	buffer_init(memory_end-memory_start);
 	signals_init();
 	inode_init();
 	file_table_init();

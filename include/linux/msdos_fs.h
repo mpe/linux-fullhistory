@@ -195,7 +195,7 @@ struct fat_cache {
 };
 
 /* misc.c */
-extern int is_binary(char conversion,char *extension);
+extern int fat_is_binary(char conversion,char *extension);
 extern void lock_fat(struct super_block *sb);
 extern void unlock_fat(struct super_block *sb);
 extern int fat_add_cluster(struct inode *inode);

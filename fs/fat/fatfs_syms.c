@@ -54,6 +54,7 @@ EXPORT_SYMBOL(lock_fat);
 EXPORT_SYMBOL(unlock_fat);
 EXPORT_SYMBOL(fat_dir_ioctl);
 EXPORT_SYMBOL(fat_readpage);
+EXPORT_SYMBOL(fat_is_binary);
 
 int init_fat_fs(void)
 {

@@ -169,7 +169,7 @@ extern int max_super_blocks, nr_super_blocks;
 extern void update_atime (struct inode *inode);
 #define UPDATE_ATIME(inode) update_atime (inode)
 
-extern void buffer_init(void);
+extern void buffer_init(unsigned long);
 extern void inode_init(void);
 extern void file_table_init(void);
 extern void dcache_init(void);

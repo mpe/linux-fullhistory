@@ -109,7 +109,7 @@ nfs_dir_open(struct inode *dir, struct file *file)
 
 	dfprintk(VFS, "NFS: nfs_dir_open(%s/%s)\n",
 		dentry->d_parent->d_name.name, dentry->d_name.name);
-	return nfs_revalidate_inode(NFS_DSERVER(dentry), dentry);
+	return _nfs_revalidate_inode(NFS_DSERVER(dentry), dentry);
 }
 
 static ssize_t
@@ -439,8 +439,10 @@ parent->d_name.name, dentry->d_name.name);
 		goto out_bad;
 
 	/* Filehandle matches? */
-	if (memcmp(dentry->d_fsdata, &fhandle, sizeof(struct nfs_fh)))
-		goto out_bad;
+	if (memcmp(dentry->d_fsdata, &fhandle, sizeof(struct nfs_fh))) {
+		if (dentry->d_count < 2 || nfs_revalidate(dentry))
+			goto out_bad;
+	}
 
 	/* Ok, remeber that we successfully checked it.. */
 	nfs_renew_times(dentry);

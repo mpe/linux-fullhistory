@@ -713,7 +713,7 @@ set_hid:
 	fat_cache_inval_inode(old_inode);
 	old_inode->i_version = ++event;
 	MSDOS_I(old_inode)->i_binary =
-		is_binary(MSDOS_SB(sb)->options.conversion, free_de->ext);
+		fat_is_binary(MSDOS_SB(sb)->options.conversion, free_de->ext);
 	old_inode->i_ino = free_ino;
 	fat_mark_buffer_dirty(sb, free_bh, 1);
 	old_de->name[0] = DELETED_FLAG;

@@ -4,6 +4,7 @@
  *  Copyright (C) 1995, 1996 by Volker Lendecke
  *  Modified for big endian by J.F. Chadima and David S. Miller
  *  Modified 1997 Peter Waltenberg, Bill Hawes, David Woodhouse for 2.1 dcache
+ *  Modified 1998 Wolfram Pienkoss for NLS
  *
  */
 
@@ -27,6 +28,7 @@
 #include <linux/init.h>
 
 #include <linux/ncp_fs.h>
+
 #include "ncplib_kernel.h"
 
 static void ncp_read_inode(struct inode *);
@@ -49,6 +51,10 @@ static struct super_operations ncp_sops =
 };
 
 extern struct dentry_operations ncp_dentry_operations;
+#ifdef CONFIG_NCPFS_EXTRAS
+extern struct inode_operations ncp_symlink_inode_operations;
+extern int ncp_symlink(struct inode*, struct dentry*, const char*);
+#endif
 
 static struct nw_file_info *read_nwinfo = NULL;
 static struct semaphore read_sem = MUTEX;
@@ -62,6 +68,12 @@ void ncp_update_inode(struct inode *inode, struct nw_file_info *nwinfo)
 	NCP_FINFO(inode)->dirEntNum = nwinfo->i.dirEntNum;
 	NCP_FINFO(inode)->volNumber = nwinfo->i.volNumber;
 
+#ifdef CONFIG_NCPFS_SMALLDOS
+	NCP_FINFO(inode)->origNS = nwinfo->i.NSCreator;
+#endif
+#ifdef CONFIG_NCPFS_STRONG
+	NCP_FINFO(inode)->nwattr = nwinfo->i.attributes;
+#endif
 	NCP_FINFO(inode)->opened = nwinfo->opened;
 	NCP_FINFO(inode)->access = nwinfo->access;
 	NCP_FINFO(inode)->server_file_handle = nwinfo->server_file_handle;
@@ -79,12 +91,42 @@ void ncp_update_inode2(struct inode* inode, struct nw_file_info *nwinfo)
 	struct ncp_server *server = NCP_SERVER(inode);
 
 	if (!NCP_FINFO(inode)->opened) {
+#ifdef CONFIG_NCPFS_STRONG
+		NCP_FINFO(inode)->nwattr = nwi->attributes;
+#endif
 		if (nwi->attributes & aDIR) {
 			inode->i_mode = server->m.dir_mode;
 			inode->i_size = 512;
 		} else {
 			inode->i_mode = server->m.file_mode;
 			inode->i_size = le32_to_cpu(nwi->dataStreamSize);
+#ifdef CONFIG_NCPFS_EXTRAS
+			if ((server->m.flags & (NCP_MOUNT_EXTRAS|NCP_MOUNT_SYMLINKS)) && (nwi->attributes & aSHARED)) {
+				switch (nwi->attributes & (aHIDDEN|aSYSTEM)) {
+					case aHIDDEN:
+						if (server->m.flags & NCP_MOUNT_SYMLINKS) {
+							if ((inode->i_size >= NCP_MIN_SYMLINK_SIZE)
+							 && (inode->i_size <= NCP_MAX_SYMLINK_SIZE)) {
+								inode->i_mode = (inode->i_mode & ~S_IFMT) | S_IFLNK;
+								break;
+							}
+						}
+						/* FALLTHROUGH */
+					case 0:
+						if (server->m.flags & NCP_MOUNT_EXTRAS)
+							inode->i_mode |= 0444;
+						break;
+					case aSYSTEM:
+						if (server->m.flags & NCP_MOUNT_EXTRAS)
+							inode->i_mode |= (inode->i_mode >> 2) & 0111;
+						break;
+					/* case aSYSTEM|aHIDDEN: */
+					default:
+						/* reserved combination */
+						break;
+				}
+			}
+#endif
 		}
 		if (nwi->attributes & aRONLY) inode->i_mode &= ~0222;
 	}
@@ -114,6 +156,34 @@ static void ncp_set_attr(struct inode *inode, struct nw_file_info *nwinfo)
 	} else {
 		inode->i_mode = server->m.file_mode;
 		inode->i_size = le32_to_cpu(nwi->dataStreamSize);
+#ifdef CONFIG_NCPFS_EXTRAS
+		if ((server->m.flags & (NCP_MOUNT_EXTRAS|NCP_MOUNT_SYMLINKS)) 
+		 && (nwi->attributes & aSHARED)) {
+			switch (nwi->attributes & (aHIDDEN|aSYSTEM)) {
+				case aHIDDEN:
+					if (server->m.flags & NCP_MOUNT_SYMLINKS) {
+						if ((inode->i_size >= NCP_MIN_SYMLINK_SIZE)
+						 && (inode->i_size <= NCP_MAX_SYMLINK_SIZE)) {
+							inode->i_mode = (inode->i_mode & ~S_IFMT) | S_IFLNK;
+							break;
+						}
+					}
+					/* FALLTHROUGH */
+				case 0:
+					if (server->m.flags & NCP_MOUNT_EXTRAS)
+						inode->i_mode |= 0444;
+					break;
+				case aSYSTEM:
+					if (server->m.flags & NCP_MOUNT_EXTRAS)
+						inode->i_mode |= (inode->i_mode >> 2) & 0111;
+					break;
+				/* case aSYSTEM|aHIDDEN: */
+				default:
+					/* reserved combination */
+					break;
+			}
+		}
+#endif
 	}
 	if (nwi->attributes & aRONLY) inode->i_mode &= ~0222;
 
@@ -157,6 +227,10 @@ static void ncp_read_inode(struct inode *inode)
 		inode->i_op = &ncp_file_inode_operations;
 	} else if (S_ISDIR(inode->i_mode)) {
 		inode->i_op = &ncp_dir_inode_operations;
+#ifdef CONFIG_NCPFS_EXTRAS
+	} else if (S_ISLNK(inode->i_mode)) {
+		inode->i_op = &ncp_symlink_inode_operations;
+#endif
 	} else {
 		inode->i_op = NULL;
 	}
@@ -211,7 +285,6 @@ static void ncp_init_root(struct ncp_server *server,
 {
 	struct ncp_inode_info *root = &(server->root);
 	struct nw_info_struct *i = &(root->finfo.i);
-	unsigned short dummy;
 
 	DPRINTK(KERN_DEBUG "ncp_init_root: i = %x\n", (int) i);
 
@@ -219,15 +292,13 @@ static void ncp_init_root(struct ncp_server *server,
 	i->dataStreamSize= 1024;
 	i->dirEntNum	 = 0;
 	i->DosDirNum	 = 0;
+#ifdef CONFIG_NCPFS_SMALLDOS
+	i->NSCreator	 = NW_NS_DOS;
+#endif
 	i->volNumber	 = NCP_NUMBER_OF_VOLUMES + 1;	/* illegal volnum */
-	ncp_date_unix2dos(0, &(i->creationTime), &(i->creationDate));
-	ncp_date_unix2dos(0, &(i->modifyTime  ), &(i->modifyDate));
-	ncp_date_unix2dos(0, &(dummy          ), &(i->lastAccessDate));
-	i->creationTime	 = le16_to_cpu(i->creationTime);
-	i->creationDate	 = le16_to_cpu(i->creationDate);
-	i->modifyTime	 = le16_to_cpu(i->modifyTime);
-	i->modifyDate	 = le16_to_cpu(i->modifyDate);
-	i->lastAccessDate= le16_to_cpu(i->lastAccessDate);
+	/* set dates of mountpoint to Jan 1, 1986; 00:00 */
+	i->creationTime = i->modifyTime = cpu_to_le16(0x0000);
+	i->creationDate = i->modifyDate = i->lastAccessDate = cpu_to_le16(0x0C21);
 	i->nameLen	 = 0;
 	i->entryName[0]  = '\0';
 
@@ -263,8 +334,6 @@ ncp_read_super(struct super_block *sb, void *raw_data, int silent)
 		goto out_bad_file2;
 
 	lock_super(sb);
-
-	sb->s_flags |= MS_ODD_RENAME; /* This should go away */
 
 	sb->s_blocksize = 1024;	/* Eh...  Is this correct? */
 	sb->s_blocksize_bits = 10;
@@ -309,6 +378,14 @@ ncp_read_super(struct super_block *sb, void *raw_data, int silent)
 			       (S_IRWXU | S_IRWXG | S_IRWXO)) | S_IFREG;
 	server->m.dir_mode = (server->m.dir_mode &
 			      (S_IRWXU | S_IRWXG | S_IRWXO)) | S_IFDIR;
+
+#ifdef CONFIG_NCPFS_NLS
+	/* load the default NLS charsets */
+	server->nls_charsets.codepage[0] = 0;
+	server->nls_charsets.iocharset[0] = 0;
+	server->nls_vol = load_nls_default();
+	server->nls_io = load_nls_default();
+#endif /* CONFIG_NCPFS_NLS */
 
 	server->packet_size = NCP_PACKET_SIZE;
 	server->packet = ncp_kmalloc(NCP_PACKET_SIZE, GFP_KERNEL);
@@ -379,6 +456,10 @@ out_free_packet:
 out_no_packet:
 	printk(KERN_ERR "ncp_read_super: could not alloc packet\n");
 out_free_server:
+#ifdef CONFIG_NCPFS_NLS
+	unload_nls(server->nls_io);
+	unload_nls(server->nls_vol);
+#endif
 	ncp_kfree_s(NCP_SBP(sb), sizeof(struct ncp_server));
 	goto out_unlock;
 out_no_server:
@@ -417,6 +498,20 @@ static void ncp_put_super(struct super_block *sb)
 	ncp_lock_server(server);
 	ncp_disconnect(server);
 	ncp_unlock_server(server);
+
+#ifdef CONFIG_NCPFS_NLS
+	/* unload the NLS charsets */
+	if (server->nls_vol)
+	{
+		unload_nls(server->nls_vol);
+		server->nls_vol = NULL;
+	}
+	if (server->nls_io)
+	{
+		unload_nls(server->nls_io);
+		server->nls_io = NULL;
+	}
+#endif /* CONFIG_NCPFS_NLS */
 
 	fput(server->ncp_filp);
 	kill_proc(server->m.wdog_pid, SIGTERM, 1);
@@ -459,9 +554,12 @@ int ncp_notify_change(struct dentry *dentry, struct iattr *attr)
 	int result = 0;
 	int info_mask;
 	struct nw_modify_dos_info info;
+	struct ncp_server *server;
 
 	result = -EIO;
-	if (!ncp_conn_valid(NCP_SERVER(inode)))
+
+	server = NCP_SERVER(inode);
+	if ((!server) || !ncp_conn_valid(server))
 		goto out;
 
 	result = inode_change_ok(inode, attr);
@@ -470,11 +568,11 @@ int ncp_notify_change(struct dentry *dentry, struct iattr *attr)
 
 	result = -EPERM;
 	if (((attr->ia_valid & ATTR_UID) &&
-	     (attr->ia_uid != NCP_SERVER(inode)->m.uid)))
+	     (attr->ia_uid != server->m.uid)))
 		goto out;
 
 	if (((attr->ia_valid & ATTR_GID) &&
-	     (attr->ia_gid != NCP_SERVER(inode)->m.gid)))
+	     (attr->ia_gid != server->m.gid)))
 		goto out;
 
 	if (((attr->ia_valid & ATTR_MODE) &&
@@ -488,26 +586,53 @@ int ncp_notify_change(struct dentry *dentry, struct iattr *attr)
 #if 1 
         if ((attr->ia_valid & ATTR_MODE) != 0)
         {
-                if (!S_ISREG(inode->i_mode))
+                if (S_ISDIR(inode->i_mode)) {
+                	umode_t newmode;
+
+                	info_mask |= DM_ATTRIBUTES;
+                	newmode = attr->ia_mode;
+                	newmode &= NCP_SERVER(inode)->m.dir_mode;
+
+                	if (newmode & 0222)
+                		info.attributes &= ~(aRONLY|aRENAMEINHIBIT|aDELETEINHIBIT);
+                	else
+				info.attributes |=  (aRONLY|aRENAMEINHIBIT|aDELETEINHIBIT);
+                } else if (!S_ISREG(inode->i_mode))
                 {
                         return -EPERM;
                 }
                 else
                 {
 			umode_t newmode;
-
+#ifdef CONFIG_NCPFS_EXTRAS			
+			int extras;
+			
+			extras = server->m.flags & NCP_MOUNT_EXTRAS;
+#endif
                         info_mask |= DM_ATTRIBUTES;
                         newmode=attr->ia_mode;
-                        newmode &= NCP_SERVER(inode)->m.file_mode;
+#ifdef CONFIG_NCPFS_EXTRAS
+			if (!extras)
+#endif
+	                        newmode &= server->m.file_mode;
 
                         if (newmode & 0222) /* any write bit set */
                         {
-                                info.attributes &= ~0x60001;
+                                info.attributes &= ~(aRONLY|aRENAMEINHIBIT|aDELETEINHIBIT);
                         }
                         else
                         {
-                                info.attributes |= 0x60001;
+                                info.attributes |=  (aRONLY|aRENAMEINHIBIT|aDELETEINHIBIT);
                         }
+#ifdef CONFIG_NCPFS_EXTRAS
+			if (extras) {
+				if (newmode & 0111) /* any execute bit set */
+					info.attributes |= aSHARED | aSYSTEM;
+				/* read for group/world and not in default file_mode */
+				else if (newmode & ~server->m.file_mode & 0444)
+					info.attributes |= aSHARED;
+			}
+#endif
                 }
         }
 #endif
@@ -548,6 +673,10 @@ int ncp_notify_change(struct dentry *dentry, struct iattr *attr)
 				result = 0;
 			}
 		}
+#ifdef CONFIG_NCPFS_STRONG		
+		if ((!result) && (info_mask & DM_ATTRIBUTES))
+			NCP_FINFO(inode)->nwattr = info.attributes;
+#endif
 	}
 	if ((attr->ia_valid & ATTR_SIZE) != 0) {
 		int written;

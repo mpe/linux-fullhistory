@@ -7443,6 +7443,26 @@ CONFIG_NCPFS_OS2_NS
   case insensitive, and case in names is preserved. Say Y. You can
   disable it at mount time with the -N os2 parameter of ncpmount.
 
+Lowercase DOS filenames on LONG namespace volume
+CONFIG_NCPFS_SMALLDOS
+  Saying Y here will convert every filename with creator/owner DOS
+  namespace on NetWare servers to lowercase characters as silently
+  kernel does when you mount  NetWare file server volumes with DOS
+  namespace without OS2/LONG namespace support. Saying N here will
+  give you these filenames with uppercase characters.
+  
+  This is  only cosmetic option  because of OS2/LONG  namespace is
+  case  insensitive.  The  only major  reason for  this option  is
+  backward  compatibility when  you want  to do  step from  DOS to
+  OS2/LONG  namespace support.  Long filenames  (created by Win95)
+  will not be affected.
+
+  This  option  does not  solve a  problem that  filenames  appear
+  differently  in Linux box  and in MS  environment because  of MS
+  does an additional  conversions on client side.  You can achieve
+  simillar effects  enabling ncpfs  option "Allow  using of Native
+  Language Support" below.
+
 Allow mounting of volume subdirectories
 CONFIG_NCPFS_MOUNT_SUBDIR
   Allows you to mount not only whole servers or whole volumes, but
@@ -7461,6 +7481,25 @@ CONFIG_NCPFS_NDS_DOMAINS
   servers. Do not say Y if security is primary for you because root
   can read your session key (from /proc/kcore).
 
+Allow using of Native Language Support
+CONFIG_NCPFS_NLS
+  Allows you to use codepages and I/O charsets for file name translation
+  between file system on server and input/output. This may be useful,
+  if you want to access to the server with other operating systems,
+  e.g. Windows 95. See also NLS for more Information.
+
+  To select codepages and I/O charsets use ncpfs-2.2.0.13 or newer.
+
+Symbolic links and mode permission bits
+CONFIG_NCPFS_EXTRAS
+  This enables the use of symbolic links and an execute permission
+  bit on NCPFS. The file server need not have long name space or NFS
+  name space loaded for these to work, they are stored using rarely
+  found combinations of Hidden, System and Shared flags.
+
+  To use the new attributes, you are recommended to use the flags
+  '-f 600 -d 755' on the ncpmount commandline.
+  
 nls codepage 437
 CONFIG_NLS_CODEPAGE_437
   The Microsoft fat filesystem family can deal with filenames in

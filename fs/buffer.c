@@ -486,33 +486,6 @@ static void remove_from_queues(struct buffer_head * bh)
 	remove_from_lru_list(bh);
 }
 
-static inline void put_last_lru(struct buffer_head * bh)
-{
-	if (bh) {
-		struct buffer_head **bhp = &lru_list[bh->b_list];
-
-		if (bh == *bhp) {
-			*bhp = bh->b_next_free;
-			return;
-		}
-
-		if(bh->b_dev == B_FREE)
-			panic("Wrong block for lru list");
-
-		/* Add to back of free list. */
-		remove_from_lru_list(bh);
-		if(!*bhp) {
-			*bhp = bh;
-			(*bhp)->b_prev_free = bh;
-		}
-
-		bh->b_next_free = *bhp;
-		bh->b_prev_free = (*bhp)->b_prev_free;
-		(*bhp)->b_prev_free->b_next_free = bh;
-		(*bhp)->b_prev_free = bh;
-	}
-}
-
 static inline void put_last_free(struct buffer_head * bh)
 {
 	if (bh) {
@@ -726,8 +699,6 @@ repeat:
 	bh = get_hash_table(dev, block, size);
 	if (bh) {
 		if (!buffer_dirty(bh)) {
-			if (buffer_uptodate(bh))
-				 put_last_lru(bh);
 			bh->b_flushtime = 0;
 		}
 		return bh;
@@ -854,6 +825,7 @@ void __bforget(struct buffer_head * buf)
 		return;
 	}
 	buf->b_count = 0;
+	buf->b_state = 0;
 	remove_from_queues(buf);
 	put_last_free(buf);
 }
@@ -1525,13 +1497,27 @@ void show_buffers(void)
  * Use gfp() for the hash table to decrease TLB misses, use
  * SLAB cache for buffer heads.
  */
-void __init buffer_init(void)
+void __init buffer_init(unsigned long memory_size)
 {
-	int order = 5;		/* Currently maximum order.. */
+	int order;
 	unsigned int nr_hash;
 
-	nr_hash = (1UL << order) * PAGE_SIZE / sizeof(struct buffer_head *);
-	hash_table = (struct buffer_head **) __get_free_pages(GFP_ATOMIC, order);
+	/* we need to guess at the right sort of size for a buffer cache.
+	   the heuristic from working with large databases and getting
+	   fsync times (ext2) manageable, is the following */
+
+	memory_size >>= 20;
+	for (order = 5; (1UL << order) < memory_size; order++);
+
+	/* try to allocate something until we get it or we're asking
+           for something that is really too small */
+
+	do {
+		nr_hash = (1UL << order) * PAGE_SIZE /
+		    sizeof(struct buffer_head *);
+		hash_table = (struct buffer_head **)
+		    __get_free_pages(GFP_ATOMIC, order);
+	} while (hash_table == NULL && --order > 4);
 	
 	if (!hash_table)
 		panic("Failed to allocate buffer hash table\n");

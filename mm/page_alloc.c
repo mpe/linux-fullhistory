@@ -33,7 +33,7 @@ int nr_free_pages = 0;
    for the ring buffers */
 #define NR_MEM_LISTS 12
 #else
-#define NR_MEM_LISTS 6
+#define NR_MEM_LISTS 10
 #endif
 
 /* The start of this MUST match the start of "struct page" */

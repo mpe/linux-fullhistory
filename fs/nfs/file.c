@@ -37,6 +37,7 @@ static ssize_t nfs_file_read(struct file *, char *, size_t, loff_t *);
 static ssize_t nfs_file_write(struct file *, const char *, size_t, loff_t *);
 static int  nfs_file_flush(struct file *);
 static int  nfs_fsync(struct file *, struct dentry *dentry);
+static int  nfs_file_open(struct inode *inode, struct file *filp);
 
 static struct file_operations nfs_file_operations = {
 	NULL,			/* lseek - default */
@@ -46,7 +47,7 @@ static struct file_operations nfs_file_operations = {
 	NULL,			/* select - default */
 	NULL,			/* ioctl - default */
 	nfs_file_mmap,		/* mmap */
-	NULL,			/* no special open is needed */
+	nfs_file_open,		/* open */
 	nfs_file_flush,		/* flush */
 	NULL,			/* release */
 	nfs_fsync,		/* fsync */
@@ -103,6 +104,19 @@ nfs_file_flush(struct file *file)
 	}
 	return status;
 }
+
+/*
+ * Open the file.
+ * Just checks the cache is synchronized.
+ */
+static int
+nfs_file_open(struct inode *inode, struct file *filp)
+{
+	struct dentry *dentry = filp->f_dentry;
+
+	return _nfs_revalidate_inode(NFS_DSERVER(dentry), dentry);
+}
+
 
 static ssize_t
 nfs_file_read(struct file * file, char * buf, size_t count, loff_t *ppos)

@@ -13,6 +13,15 @@
 #include <linux/types.h>
 
 #include <linux/ncp_mount.h>
+
+/* NLS charsets by ioctl */
+#define NCP_IOCSNAME_LEN 20
+struct ncp_nls_ioctl
+{
+	unsigned char codepage[NCP_IOCSNAME_LEN+1];
+	unsigned char iocharset[NCP_IOCSNAME_LEN+1];
+};
+                
 #include <linux/ncp_fs_sb.h>
 #include <linux/ncp_fs_i.h>
 
@@ -111,6 +120,9 @@ struct ncp_privatedata_ioctl
 #define NCP_IOC_GETPRIVATEDATA		_IOWR('n', 10, struct ncp_privatedata_ioctl)
 #define NCP_IOC_SETPRIVATEDATA		_IOR('n', 10, struct ncp_privatedata_ioctl)
 
+#define NCP_IOC_GETCHARSETS		_IOWR('n', 11, struct ncp_nls_ioctl)
+#define NCP_IOC_SETCHARSETS		_IOR('n', 11, struct ncp_nls_ioctl)
+
 /*
  * The packet size to allocate. One page should be enough.
  */
@@ -155,6 +167,12 @@ struct ncpfs_i {
 	__u32	dirEntNum __attribute__((packed));
 	__u32	DosDirNum __attribute__((packed));
 	__u32	volNumber __attribute__((packed));
+#ifdef CONFIG_NCPFS_SMALLDOS
+	__u32	origNS;
+#endif
+#ifdef CONFIG_NCPFS_STRONG
+	__u32	nwattr;
+#endif
 	int	opened;
 	int	access;
 	__u32	server_file_handle __attribute__((packed));
@@ -272,10 +290,13 @@ static inline int ncp_namespace(struct inode *inode)
 	return server->name_space[NCP_FINFO(inode)->volNumber];
 }
 
-static inline int ncp_preserve_case(struct inode *i)
-{
+static inline int ncp_preserve_entry_case(struct inode *i, __u32 nscreator) {
 #if defined(CONFIG_NCPFS_NFS_NS) || defined(CONFIG_NCPFS_OS2_NS)
 	int ns = ncp_namespace(i);
+#endif
+#if defined(CONFIG_NCPFS_SMALLDOS) && defined(CONFIG_NCPFS_OS2_NS)
+	if ((ns == NW_NS_OS2) && (nscreator == NW_NS_DOS))
+		return 0;
 #endif
 	return
 #ifdef CONFIG_NCPFS_OS2_NS
@@ -285,6 +306,11 @@ static inline int ncp_preserve_case(struct inode *i)
 	(ns == NW_NS_NFS) ||
 #endif	/* CONFIG_NCPFS_NFS_NS */
 	0;
+}
+
+static inline int ncp_preserve_case(struct inode *i)
+{
+	return ncp_preserve_entry_case(i, NW_NS_OS2);
 }
 
 static inline int ncp_case_sensitive(struct inode *i)

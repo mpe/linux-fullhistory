@@ -20,8 +20,6 @@ static inline unsigned long page_address(struct page * page)
 #define PAGE_HASH_BITS 12
 #define PAGE_HASH_SIZE (1 << PAGE_HASH_BITS)
 
-#define PAGE_AGE_VALUE 16
-
 extern unsigned long page_cache_size; /* # of pages currently in the hash table */
 extern struct page * page_hash_table[PAGE_HASH_SIZE];
 

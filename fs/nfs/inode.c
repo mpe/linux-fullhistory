@@ -234,6 +234,11 @@ nfs_read_super(struct super_block *sb, void *raw_data, int silent)
 	server->rsize    = nfs_block_size(data->rsize, NULL);
 	server->wsize    = nfs_block_size(data->wsize, NULL);
 	server->flags    = data->flags;
+
+	if (data->flags & NFS_MOUNT_NOAC) {
+		data->acregmin = data->acregmax = 0;
+		data->acdirmin = data->acdirmax = 0;
+	}
 	server->acregmin = data->acregmin*HZ;
 	server->acregmax = data->acregmax*HZ;
 	server->acdirmin = data->acdirmin*HZ;
@@ -659,10 +664,6 @@ _nfs_revalidate_inode(struct nfs_server *server, struct dentry *dentry)
 	struct inode	*inode = dentry->d_inode;
 	int		 status = 0;
 	struct nfs_fattr fattr;
-
-	/* Don't bother revalidating if we've done it recently */
-	if (jiffies - NFS_READTIME(inode) < NFS_ATTRTIMEO(inode))
-		goto out;
 
 	dfprintk(PAGECACHE, "NFS: revalidating %s/%s, ino=%ld\n",
 		dentry->d_parent->d_name.name, dentry->d_name.name,
