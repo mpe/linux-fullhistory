@@ -128,6 +128,11 @@ void disable_local_APIC(void)
 
 void __init sync_Arb_IDs(void)
 {
+	/*
+	 * Wait for idle.
+	 */
+	apic_wait_icr_idle();
+
 	Dprintk("Synchronizing Arb IDs.\n");
 	apic_write_around(APIC_ICR, APIC_DEST_ALLINC | APIC_INT_LEVELTRIG
 				| APIC_DM_INIT);

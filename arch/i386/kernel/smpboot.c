@@ -502,6 +502,11 @@ static inline void inquire_remote_apic(int apicid)
 	for (i = 0; i < sizeof(regs) / sizeof(*regs); i++) {
 		printk("... APIC #%d %s: ", apicid, names[i]);
 
+		/*
+		 * Wait for idle.
+		 */
+		apic_wait_icr_idle();
+
 		apic_write_around(APIC_ICR2, SET_APIC_DEST_FIELD(apicid));
 		apic_write_around(APIC_ICR, APIC_DM_REMRD | regs[i]);
 

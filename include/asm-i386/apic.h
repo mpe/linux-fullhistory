@@ -34,6 +34,11 @@ extern __inline unsigned long apic_read(unsigned long reg)
 	return *((volatile unsigned long *)(APIC_BASE+reg));
 }
 
+static __inline__ void apic_wait_icr_idle(void)
+{
+	do { } while ( apic_read( APIC_ICR ) & APIC_ICR_BUSY );
+}
+
 extern unsigned int apic_timer_irqs [NR_CPUS];
 
 #ifdef CONFIG_X86_GOOD_APIC

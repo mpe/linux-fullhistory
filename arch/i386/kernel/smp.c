@@ -133,6 +133,11 @@ static inline void __send_IPI_shortcut(unsigned int shortcut, int vector)
 	unsigned int cfg;
 
 	/*
+	 * Wait for idle.
+	 */
+	apic_wait_icr_idle();
+
+	/*
 	 * No need to touch the target chip field
 	 */
 	cfg = __prepare_ICR(shortcut, vector);
@@ -171,6 +176,11 @@ static inline void send_IPI_mask(int mask, int vector)
 
 	__save_flags(flags);
 	__cli();
+
+	/*
+	 * Wait for idle.
+	 */
+	apic_wait_icr_idle();
 
 	/*
 	 * prepare target chip field
