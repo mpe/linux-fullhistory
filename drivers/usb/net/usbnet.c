@@ -2654,10 +2654,16 @@ static const struct driver_info	blob_info = {
  * For the current version of that driver, the main way that framing is
  * nonstandard (also from perspective of the CDC ethernet model!) is a
  * crc32, added to help detect when some sa1100 usb-to-memory DMA errata
- * haven't been fully worked around.
+ * haven't been fully worked around.  Also, all Zaurii use the same
+ * default Ethernet address.
  *
  * PXA based models use the same framing, and also can't implement
  * set_interface properly.
+ *
+ * All known Zaurii lie about their standards conformance.  Most lie by
+ * saying they support CDC Ethernet.  Some lie and say they support CDC
+ * MDLM (as if for access to cell phone modems).  Someone, please beat 
+ * on Sharp for a while with a cluestick.
  *
  *-------------------------------------------------------------------------*/
 
@@ -2709,6 +2715,13 @@ static const struct driver_info	zaurus_pxa_info = {
 	.tx_fixup = 	zaurus_tx_fixup,
 };
 #define	ZAURUS_PXA_INFO		((unsigned long)&zaurus_pxa_info)
+
+static const struct driver_info	zaurus_pxa_mdlm_info = {
+	.description =	"Sharp Zaurus, PXA-255 based",
+	.flags =	FLAG_FRAMING_Z,
+	.check_connect = always_connected,
+	.tx_fixup = 	zaurus_tx_fixup,
+};
 
 static const struct driver_info	olympus_mxl_info = {
 	.description =	"Olympus R1000",
@@ -3906,6 +3919,7 @@ static const struct usb_device_id	products [] = {
  * Same idea as above, but different framing.
  *
  * PXA-2xx based models are also lying-about-cdc.
+ * Some models don't even tell the same lies ...
  *
  * NOTE:  OpenZaurus versions with 2.6 kernels won't use these entries,
  * unlike the older ones with 2.4 "embedix" kernels.
@@ -3963,9 +3977,25 @@ static const struct usb_device_id	products [] = {
 	.match_flags    =   USB_DEVICE_ID_MATCH_INT_INFO
 		 | USB_DEVICE_ID_MATCH_DEVICE,
 	.idVendor               = 0x04DD,
+	/* reported with some C860 units */
 	.idProduct              = 0x9050,	/* C-860 */
 	ZAURUS_MASTER_INTERFACE,
 	.driver_info = ZAURUS_PXA_INFO,
+#ifdef	CONFIG_USB_ZAURUS
+	/* at least some (reports vary) C-860 units have very different
+	 * lies about their standards support.
+	 */
+}, {
+	.match_flags    =   USB_DEVICE_ID_MATCH_INT_INFO
+		 | USB_DEVICE_ID_MATCH_DEVICE,
+	.idVendor               = 0x04DD,
+	/* reported with some C860 units */
+	.idProduct              = 0x9031,	/* C-860 */
+	.bInterfaceClass	= USB_CLASS_COMM,
+	.bInterfaceSubClass	= USB_CDC_SUBCLASS_MDLM,
+	.bInterfaceProtocol	= USB_CDC_PROTO_NONE,
+	.driver_info 		= (unsigned long) &zaurus_pxa_mdlm_info,
+#endif
 },
 
 /* Olympus has some models with a Zaurus-compatible option.
