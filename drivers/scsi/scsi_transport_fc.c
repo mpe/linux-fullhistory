@@ -1375,12 +1375,14 @@ EXPORT_SYMBOL(fc_remote_port_add);
 static void
 fc_rport_tgt_remove(struct fc_rport *rport)
 {
+	struct Scsi_Host *shost = rport_to_shost(rport);
+
 	scsi_target_unblock(&rport->dev);
 
 	/* Stop anything on the workq */
-	if (cancel_delayed_work(&rport->dev_loss_work) ||
-	    cancel_delayed_work(&rport->scan_work))
+	if (!cancel_delayed_work(&rport->dev_loss_work))
 		flush_scheduled_work();
+	scsi_flush_work(shost);
 
 	scsi_remove_target(&rport->dev);
 }
@@ -1625,7 +1627,7 @@ fc_remote_port_unblock(struct fc_rport *rport)
 	 * failure as the state machine state change will validate the
 	 * transaction.
 	 */
-	if (cancel_delayed_work(work))
+	if (!cancel_delayed_work(work))
 		flush_scheduled_work();
 
 	if (rport->port_state == FC_PORTSTATE_OFFLINE)

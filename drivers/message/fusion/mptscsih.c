@@ -96,23 +96,26 @@ MODULE_AUTHOR(MODULEAUTHOR);
 MODULE_DESCRIPTION(my_NAME);
 MODULE_LICENSE("GPL");
 
-#ifdef MODULE
-static int dv = MPTSCSIH_DOMAIN_VALIDATION;
-module_param(dv, int, 0);
-MODULE_PARM_DESC(dv, "DV Algorithm: enhanced = 1, basic = 0 (default=MPTSCSIH_DOMAIN_VALIDATION=1)");
+/* Command line args */
+static int mpt_dv = MPTSCSIH_DOMAIN_VALIDATION;
+MODULE_PARM(mpt_dv, "i");
+MODULE_PARM_DESC(mpt_dv, " DV Algorithm: enhanced=1, basic=0 (default=MPTSCSIH_DOMAIN_VALIDATION=1)");
 
-static int width = MPTSCSIH_MAX_WIDTH;
-module_param(width, int, 0);
-MODULE_PARM_DESC(width, "Max Bus Width: wide = 1, narrow = 0 (default=MPTSCSIH_MAX_WIDTH=1)");
+static int mpt_width = MPTSCSIH_MAX_WIDTH;
+MODULE_PARM(mpt_width, "i");
+MODULE_PARM_DESC(mpt_width, " Max Bus Width: wide=1, narrow=0 (default=MPTSCSIH_MAX_WIDTH=1)");
 
-static ushort factor = MPTSCSIH_MIN_SYNC;
-module_param(factor, ushort, 0);
-MODULE_PARM_DESC(factor, "Min Sync Factor: (default=MPTSCSIH_MIN_SYNC=0x08)");
+static int mpt_factor = MPTSCSIH_MIN_SYNC;
+MODULE_PARM(mpt_factor, "h");
+MODULE_PARM_DESC(mpt_factor, " Min Sync Factor (default=MPTSCSIH_MIN_SYNC=0x08)");
 
-static int saf_te = MPTSCSIH_SAF_TE;
-module_param(saf_te, int, 0);
-MODULE_PARM_DESC(saf_te, "Force enabling SEP Processor: (default=MPTSCSIH_SAF_TE=0)");
-#endif
+static int mpt_saf_te = MPTSCSIH_SAF_TE;
+MODULE_PARM(mpt_saf_te, "i");
+MODULE_PARM_DESC(mpt_saf_te, " Force enabling SEP Processor: enable=1  (default=MPTSCSIH_SAF_TE=0)");
+
+static int mpt_pq_filter = 0;
+MODULE_PARM(mpt_pq_filter, "i");
+MODULE_PARM_DESC(mpt_pq_filter, " Enable peripheral qualifier filter: enable=1  (default=0)");
 
 /*=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=*/
 
@@ -253,7 +256,6 @@ static int scandv_wait_done = 1;
 
 /* Driver command line structure
  */
-static struct mptscsih_driver_setup driver_setup;
 static struct scsi_host_template driver_template;
 
 /*=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=*/
@@ -1224,29 +1226,23 @@ mptscsih_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 		/* Update with the driver setup
 		 * values.
 		 */
-		if (ioc->spi_data.maxBusWidth >
-		  driver_setup.max_width) {
-			ioc->spi_data.maxBusWidth =
-			  driver_setup.max_width;
-		}
-
-		if (ioc->spi_data.minSyncFactor <
-		  driver_setup.min_sync_factor) {
-			ioc->spi_data.minSyncFactor =
-			  driver_setup.min_sync_factor;
-		}
+		if (ioc->spi_data.maxBusWidth > mpt_width)
+			ioc->spi_data.maxBusWidth = mpt_width;
+		if (ioc->spi_data.minSyncFactor < mpt_factor)
+			ioc->spi_data.minSyncFactor = mpt_factor;
 
 		if (ioc->spi_data.minSyncFactor == MPT_ASYNC) {
 			ioc->spi_data.maxSyncOffset = 0;
 		}
 
-		ioc->spi_data.Saf_Te = driver_setup.saf_te;
+		ioc->spi_data.Saf_Te = mpt_saf_te;
 
 		hd->negoNvram = 0;
 #ifndef MPTSCSIH_ENABLE_DOMAIN_VALIDATION
 		hd->negoNvram = MPT_SCSICFG_USE_NVRAM;
 #endif
 		ioc->spi_data.forceDv = 0;
+		ioc->spi_data.noQas = 0;
 		for (ii=0; ii < MPT_MAX_SCSI_DEVICES; ii++) {
 			ioc->spi_data.dvStatus[ii] =
 			  MPT_SCSICFG_NEGOTIATE;
@@ -1256,12 +1252,12 @@ mptscsih_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 			ioc->spi_data.dvStatus[ii] |=
 			  MPT_SCSICFG_DV_NOT_DONE;
 
-		ddvprintk((MYIOC_s_INFO_FMT
+		dinitprintk((MYIOC_s_INFO_FMT
 			"dv %x width %x factor %x saf_te %x\n",
-			ioc->name, driver_setup.dv,
-			driver_setup.max_width,
-			driver_setup.min_sync_factor,
-			driver_setup.saf_te));
+			ioc->name, mpt_dv,
+			mpt_width,
+			mpt_factor,
+			mpt_saf_te));
 	}
 
 	mpt_scsi_hosts++;
@@ -1476,18 +1472,6 @@ mptscsih_init(void)
 		dprintk((KERN_INFO MYNAM
 		  ": Registered for IOC reset notifications\n"));
 	}
-
-#ifdef MODULE
-	dinitprintk((KERN_INFO MYNAM
-		": Command Line Args: dv=%d max_width=%d "
-		"factor=0x%x saf_te=%d\n",
-		dv, width, factor, saf_te));
-
-	driver_setup.dv = (dv) ? 1 : 0;
-	driver_setup.max_width = (width) ? 1 : 0;
-	driver_setup.min_sync_factor = factor;
-	driver_setup.saf_te = (saf_te) ? 1 : 0;;
-#endif
 
 	if(mpt_device_driver_register(&mptscsih_driver,
 	  MPTSCSIH_DRIVER) != 0 ) {
@@ -3165,6 +3149,18 @@ mptscsih_initTarget(MPT_SCSI_HOST *hd, int bus_id, int target_id, u8 lun, char *
 	dinitprintk((MYIOC_s_INFO_FMT "initTarget bus=%d id=%d lun=%d hd=%p\n",
 			hd->ioc->name, bus_id, target_id, lun, hd));
 
+	/*
+	 * If the peripheral qualifier filter is enabled then if the target reports a 0x1
+	 * (i.e. The targer is capable of supporting the specified peripheral device type
+	 * on this logical unit; however, the physical device is not currently connected
+	 * to this logical unit) it will be converted to a 0x3 (i.e. The target is not 
+	 * capable of supporting a physical device on this logical unit). This is to work
+	 * around a bug in th emid-layer in some distributions in which the mid-layer will
+	 * continue to try to communicate to the LUN and evntually create a dummy LUN.
+	*/
+	if (mpt_pq_filter && dlen && (data[0] & 0xE0))
+		data[0] |= 0x40;
+	
 	/* Is LUN supported? If so, upper 2 bits will be 0
 	* in first byte of inquiry data.
 	*/
@@ -5161,7 +5157,7 @@ mptscsih_doDv(MPT_SCSI_HOST *hd, int bus_number, int id)
 	}
 	ddvprintk((MYIOC_s_NOTE_FMT "DV: Basic test on id=%d completed OK.\n", ioc->name, id));
 
-	if (driver_setup.dv == 0)
+	if (mpt_dv == 0)
 		goto target_done;
 
 	inq0 = (*pbuf1) & 0x1F;

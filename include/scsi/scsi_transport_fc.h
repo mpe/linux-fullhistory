@@ -212,9 +212,6 @@ struct fc_rport {	/* aka fc_starget_attrs */
 #define rport_to_shost(r)			\
 	dev_to_shost(r->dev.parent)
 
-#define FC_SCSI_SCAN_DELAY		(1 * HZ)	/* 1 second delay */
-
-
 /*
  * FC SCSI Target Attributes
  *

@@ -590,6 +590,7 @@ static inline struct Scsi_Host *dev_to_shost(struct device *dev)
 }
 
 extern int scsi_queue_work(struct Scsi_Host *, struct work_struct *);
+extern void scsi_flush_work(struct Scsi_Host *);
 
 extern struct Scsi_Host *scsi_host_alloc(struct scsi_host_template *, int);
 extern int __must_check scsi_add_host(struct Scsi_Host *, struct device *);

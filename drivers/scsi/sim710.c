@@ -127,16 +127,24 @@ sim710_probe_common(struct device *dev, unsigned long base_addr,
 	NCR_700_set_io_mapped(hostdata);
 
 	/* and register the chip */
-	if((host = NCR_700_detect(&sim710_driver_template, hostdata, dev, irq,
-				  scsi_id)) == NULL) {
+	if((host = NCR_700_detect(&sim710_driver_template, hostdata, dev))
+	   == NULL) {
 		printk(KERN_ERR "sim710: No host detected; card configuration problem?\n");
 		goto out_release;
+	}
+	host->this_id = scsi_id;
+	host->irq = irq;
+	if (request_irq(irq, NCR_700_intr, SA_SHIRQ, "sim710", host)) {
+		printk(KERN_ERR "sim710: request_irq failed\n");
+		goto out_put_host;
 	}
 
 	scsi_scan_host(host);
 
 	return 0;
 
+ out_put_host:
+	scsi_host_put(host);
  out_release:
 	release_region(host->base, 64);
  out_free:

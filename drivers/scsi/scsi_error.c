@@ -31,7 +31,6 @@
 #include <scsi/scsi_host.h>
 #include <scsi/scsi_ioctl.h>
 #include <scsi/scsi_request.h>
-#include <scsi/scsi_devinfo.h>
 
 #include "scsi_priv.h"
 #include "scsi_logging.h"
@@ -352,10 +351,7 @@ static int scsi_check_sense(struct scsi_cmnd *scmd)
 		return NEEDS_RETRY;
 
 	case HARDWARE_ERROR:
-		if (scsi_get_device_flags(scmd->device,
-					scmd->device->vendor,
-					scmd->device->model)
-				& BLIST_RETRY_HWERROR)
+		if (scmd->device->retry_hwerror)
 			return NEEDS_RETRY;
 		else
 			return SUCCESS;

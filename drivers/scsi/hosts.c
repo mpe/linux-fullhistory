@@ -443,3 +443,20 @@ int scsi_queue_work(struct Scsi_Host *shost, struct work_struct *work)
 }
 EXPORT_SYMBOL_GPL(scsi_queue_work);
 
+/**
+ * scsi_flush_work - Flush a Scsi_Host's workqueue.
+ * @shost:	Pointer to Scsi_Host.
+ **/
+void scsi_flush_work(struct Scsi_Host *shost)
+{
+	if (!shost->work_q) {
+		printk(KERN_ERR
+			"ERROR: Scsi host '%s' attempted to flush scsi-work, "
+			"when no workqueue created.\n", shost->hostt->name);
+		dump_stack();
+		return;
+	}
+
+	flush_workqueue(shost->work_q);
+}
+EXPORT_SYMBOL_GPL(scsi_flush_work);
