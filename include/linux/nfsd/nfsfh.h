@@ -86,8 +86,33 @@ typedef struct svc_fh {
 	struct knfs_fh		fh_handle;	/* FH data */
 	struct dentry *		fh_dentry;	/* validated dentry */
 	struct svc_export *	fh_export;	/* export pointer */
+#ifdef CONFIG_NFSD_V3
+	unsigned char		fh_post_saved;	/* post-op attrs saved */
+	unsigned char		fh_pre_saved;	/* pre-op attrs saved */
+#endif /* CONFIG_NFSD_V3 */
 	unsigned char		fh_locked;	/* inode locked by us */
 	unsigned char		fh_dverified;	/* dentry has been checked */
+
+#ifdef CONFIG_NFSD_V3
+	/* Pre-op attributes saved during fh_lock */
+	__u64			fh_pre_size;	/* size before operation */
+	time_t			fh_pre_mtime;	/* mtime before oper */
+	time_t			fh_pre_ctime;	/* ctime before oper */
+
+	/* Post-op attributes saved in fh_unlock */
+	umode_t			fh_post_mode;	/* i_mode */
+	nlink_t			fh_post_nlink;	/* i_nlink */
+	uid_t			fh_post_uid;	/* i_uid */
+	gid_t			fh_post_gid;	/* i_gid */
+	__u64			fh_post_size;	/* i_size */
+	unsigned long		fh_post_blocks; /* i_blocks */
+	unsigned long		fh_post_blksize;/* i_blksize */
+	kdev_t			fh_post_rdev;	/* i_rdev */
+	time_t			fh_post_atime;	/* i_atime */
+	time_t			fh_post_mtime;	/* i_mtime */
+	time_t			fh_post_ctime;	/* i_ctime */
+#endif /* CONFIG_NFSD_V3 */
+
 } svc_fh;
 
 /*
@@ -128,6 +153,53 @@ fh_init(struct svc_fh *fhp)
 	return fhp;
 }
 
+#ifdef CONFIG_NFSD_V3
+/*
+ * Fill in the pre_op attr for the wcc data
+ */
+static inline void
+fill_pre_wcc(struct svc_fh *fhp)
+{
+        struct inode    *inode;
+
+        inode = fhp->fh_dentry->d_inode;
+        if (!fhp->fh_pre_saved) {
+                fhp->fh_pre_mtime = inode->i_mtime;
+                        fhp->fh_pre_ctime = inode->i_ctime;
+                        fhp->fh_pre_size  = inode->i_size;
+                        fhp->fh_pre_saved = 1;
+        }
+        fhp->fh_locked = 1;
+}
+
+/*
+ * Fill in the post_op attr for the wcc data
+ */
+static inline void
+fill_post_wcc(struct svc_fh *fhp)
+{
+        struct inode    *inode = fhp->fh_dentry->d_inode;
+
+        if (fhp->fh_post_saved)
+                printk("nfsd: inode locked twice during operation.\n");
+
+        fhp->fh_post_mode       = inode->i_mode;
+        fhp->fh_post_nlink      = inode->i_nlink;
+        fhp->fh_post_uid        = inode->i_uid;
+        fhp->fh_post_gid        = inode->i_gid;
+        fhp->fh_post_size       = inode->i_size;
+        fhp->fh_post_blksize    = inode->i_blksize;
+        fhp->fh_post_blocks     = inode->i_blocks;
+        fhp->fh_post_rdev       = inode->i_rdev;
+        fhp->fh_post_atime      = inode->i_atime;
+        fhp->fh_post_mtime      = inode->i_mtime;
+        fhp->fh_post_ctime      = inode->i_ctime;
+        fhp->fh_post_saved      = 1;
+        fhp->fh_locked          = 0;
+}
+#endif /* CONFIG_NFSD_V3 */
+
+
 /*
  * Lock a file handle/inode
  */
@@ -152,7 +224,11 @@ fh_lock(struct svc_fh *fhp)
 
 	inode = dentry->d_inode;
 	down(&inode->i_sem);
+#ifdef CONFIG_NFSD_V3
+	fill_pre_wcc(fhp);
+#else
 	fhp->fh_locked = 1;
+#endif /* CONFIG_NFSD_V3 */
 }
 
 /*
@@ -165,11 +241,16 @@ fh_unlock(struct svc_fh *fhp)
 		printk(KERN_ERR "fh_unlock: fh not verified!\n");
 
 	if (fhp->fh_locked) {
+#ifdef CONFIG_NFSD_V3
+		fill_post_wcc(fhp);
+		up(&fhp->fh_dentry->d_inode->i_sem);
+#else
 		struct dentry *dentry = fhp->fh_dentry;
 		struct inode *inode = dentry->d_inode;
 
 		fhp->fh_locked = 0;
 		up(&inode->i_sem);
+#endif /* CONFIG_NFSD_V3 */
 	}
 }
 #endif /* __KERNEL__ */

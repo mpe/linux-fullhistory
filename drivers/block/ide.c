@@ -2684,6 +2684,7 @@ static int __init match_parm (char *s, const char *keywords[], int vals[], int m
  *
  * "hdx=swapdata"	: when the drive is a disk, byte swap all data
  * "hdx=bswap"		: same as above..........
+ * "hdxlun=xx"          : set the drive last logical unit.
  * "hdx=flash"		: allows for more than one ata_flash disk to be
  *				registered. In most cases, only one device
  *				will be present.
@@ -2787,6 +2788,19 @@ void __init ide_setup (char *s)
 		drive = &hwif->drives[unit];
 		if (strncmp(s + 4, "ide-", 4) == 0) {
 			strncpy(drive->driver_req, s + 4, 9);
+			goto done;
+		}
+		/*
+		 * Look for last lun option:  "hdxlun="
+		 */
+		if (s[3] == 'l' && s[4] == 'u' && s[5] == 'n') {
+			if (match_parm(&s[6], NULL, vals, 1) != 1)
+				goto bad_option;
+			if (vals[0] >= 0 && vals[0] <= 7) {
+				drive->last_lun = vals[0];
+				drive->forced_lun = 1;
+			} else
+				printk(" -- BAD LAST LUN! Expected value from 0 to 7");
 			goto done;
 		}
 		switch (match_parm(&s[3], hd_words, vals, 3)) {

@@ -123,7 +123,7 @@ int generic_NCR5380_proc_info(char* buffer, char** start, off_t offset, int leng
 
 #define NCR5380_map_config memory
 
-#define NCR5380_map_type volatile unsigned char*
+#define NCR5380_map_type unsigned long
 
 #define NCR5380_map_name base
 

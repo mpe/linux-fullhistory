@@ -3,7 +3,7 @@
  *
  * Process version 3 NFS requests.
  *
- * Copyright (C) 1996 Olaf Kirch <okir@monad.swb.de>
+ * Copyright (C) 1996, 1997, 1998 Olaf Kirch <okir@monad.swb.de>
  */
 
 #include <linux/linkage.h>
@@ -18,19 +18,32 @@
 #include <linux/version.h>
 #include <linux/unistd.h>
 #include <linux/malloc.h>
+#include <linux/major.h>
 
 #include <linux/sunrpc/svc.h>
 #include <linux/nfsd/nfsd.h>
 #include <linux/nfsd/cache.h>
 #include <linux/nfsd/xdr3.h>
-
-typedef struct svc_rqst	svc_rqst;
-typedef struct svc_buf	svc_buf;
+#include <linux/nfs3.h>
 
 #define NFSDDBG_FACILITY		NFSDDBG_PROC
 
 #define RETURN(st)	{ resp->status = (st); return (st); }
 
+static int	nfs3_ftypes[] = {
+	0,			/* NF3NON */
+	S_IFREG,		/* NF3REG */
+	S_IFDIR,		/* NF3DIR */
+	S_IFBLK,		/* NF3BLK */
+	S_IFCHR,		/* NF3CHR */
+	S_IFLNK,		/* NF3LNK */
+	S_IFIFO,		/* NF3FIFO */
+	S_IFSOCK,		/* NF3SOCK */
+};
+
+/*
+ * Reserve room in the send buffer
+ */
 static void
 svcbuf_reserve(struct svc_buf *buf, u32 **ptr, int *len, int nr)
 {
@@ -38,6 +51,9 @@ svcbuf_reserve(struct svc_buf *buf, u32 **ptr, int *len, int nr)
 	*len = buf->buflen - buf->len - nr;
 }
 
+/*
+ * NULL call.
+ */
 static int
 nfsd3_proc_null(struct svc_rqst *rqstp, void *argp, void *resp)
 {
@@ -46,7 +62,6 @@ nfsd3_proc_null(struct svc_rqst *rqstp, void *argp, void *resp)
 
 /*
  * Get a file's attributes
- * N.B. After this call resp->fh needs an fh_put
  */
 static int
 nfsd3_proc_getattr(struct svc_rqst *rqstp, struct nfsd_fhandle  *argp,
@@ -54,18 +69,17 @@ nfsd3_proc_getattr(struct svc_rqst *rqstp, struct nfsd_fhandle  *argp,
 {
 	int	nfserr;
 
-	dprintk("nfsd: GETATTR  %x/%ld\n",
+	dprintk("nfsd: GETATTR(3)  %x/%ld\n",
 				SVCFH_DEV(&argp->fh),
-				SVCFH_INO(&argp->fh));
+				(long)SVCFH_INO(&argp->fh));
 
-	resp->fh = argp->fh;
+	fh_copy(&resp->fh, &argp->fh);
 	nfserr = fh_verify(rqstp, &resp->fh, 0, MAY_NOP);
 	RETURN(nfserr);
 }
 
 /*
  * Set a file's attributes
- * N.B. After this call resp->fh needs an fh_put
  */
 static int
 nfsd3_proc_setattr(struct svc_rqst *rqstp, struct nfsd3_sattrargs *argp,
@@ -73,31 +87,30 @@ nfsd3_proc_setattr(struct svc_rqst *rqstp, struct nfsd3_sattrargs *argp,
 {
 	int	nfserr;
 
-	dprintk("nfsd: SETATTR  %x/%ld\n",
+	dprintk("nfsd: SETATTR(3)  %x/%ld\n",
 				SVCFH_DEV(&argp->fh),
-				SVCFH_INO(&argp->fh));
+				(long)SVCFH_INO(&argp->fh));
 
-	resp->fh = argp->fh;
+	fh_copy(&resp->fh, &argp->fh);
 	nfserr = nfsd_setattr(rqstp, &resp->fh, &argp->attrs);
 	RETURN(nfserr);
 }
 
 /*
  * Look up a path name component
- * N.B. After this call _both_ resp->dirfh and resp->fh need an fh_put
  */
 static int
 nfsd3_proc_lookup(struct svc_rqst *rqstp, struct nfsd3_diropargs *argp,
-					  struct nfsd3_lookupres *resp)
+					  struct nfsd3_diropres  *resp)
 {
 	int	nfserr;
 
-	dprintk("nfsd: LOOKUP   %x/%ld %s\n",
+	dprintk("nfsd: LOOKUP(3)   %x/%ld %s\n",
 				SVCFH_DEV(&argp->fh),
-				SVCFH_INO(&argp->fh),
+				(long)SVCFH_INO(&argp->fh),
 				argp->name);
 
-	resp->dirfh = argp->fh;
+	fh_copy(&resp->dirfh, &argp->fh);
 	nfserr = nfsd_lookup(rqstp, &resp->dirfh,
 				    argp->name,
 				    argp->len,
@@ -109,12 +122,20 @@ nfsd3_proc_lookup(struct svc_rqst *rqstp, struct nfsd3_diropargs *argp,
  * Check file access
  */
 static int
-nfsd3_proc_access(struct svc_rqst *rqstp, struct nfsd_fhandle   *argp,
+nfsd3_proc_access(struct svc_rqst *rqstp, struct nfsd3_accessargs *argp,
 					  struct nfsd3_accessres *resp)
 {
-	/* to be done */
-	resp->fh = argp->fh;
-	return nfserr_notsupp;
+	int	nfserr;
+
+	dprintk("nfsd: ACCESS(3)   %x/%ld 0x%x\n",
+				SVCFH_DEV(&argp->fh),
+				(long)SVCFH_INO(&argp->fh),
+				argp->access);
+
+	fh_copy(&resp->fh, &argp->fh);
+	resp->access = argp->access;
+	nfserr = nfsd_access(rqstp, &resp->fh, &resp->access);
+	RETURN(nfserr);
 }
 
 /*
@@ -127,23 +148,23 @@ nfsd3_proc_readlink(struct svc_rqst *rqstp, struct nfsd_fhandle     *argp,
 	u32		*path;
 	int		dummy, nfserr;
 
-	dprintk("nfsd: READLINK %x/%ld\n",
+	dprintk("nfsd: READLINK(3) %x/%ld\n",
 				SVCFH_DEV(&argp->fh),
-				SVCFH_INO(&argp->fh));
+				(long)SVCFH_INO(&argp->fh));
 
 	/* Reserve room for status, post_op_attr, and path length */
-	svcbuf_reserve(&rqstp->rq_resbuf, &path, &dummy, 1 + 22 + 1);
+	svcbuf_reserve(&rqstp->rq_resbuf, &path, &dummy,
+				1 + NFS3_POST_OP_ATTR_WORDS + 1);
 
 	/* Read the symlink. */
+	fh_copy(&resp->fh, &argp->fh);
 	resp->len = NFS3_MAXPATHLEN;
-	nfserr = nfsd_readlink(rqstp, &argp->fh, (char *) path, &resp->len);
-	fh_put(&argp->fh);
+	nfserr = nfsd_readlink(rqstp, &resp->fh, (char *) path, &resp->len);
 	RETURN(nfserr);
 }
 
 /*
  * Read a portion of a file.
- * N.B. After this call resp->fh needs an fh_put
  */
 static int
 nfsd3_proc_read(struct svc_rqst *rqstp, struct nfsd3_readargs *argp,
@@ -152,9 +173,9 @@ nfsd3_proc_read(struct svc_rqst *rqstp, struct nfsd3_readargs *argp,
 	u32 *	buffer;
 	int	nfserr, avail;
 
-	dprintk("nfsd: READ %x/%ld %lu bytes at %lu\n",
+	dprintk("nfsd: READ(3) %x/%ld %lu bytes at %lu\n",
 				SVCFH_DEV(&argp->fh),
-				SVCFH_INO(&argp->fh),
+				(long)SVCFH_INO(&argp->fh),
 				(unsigned long) argp->count,
 				(unsigned long) argp->offset);
 
@@ -162,30 +183,29 @@ nfsd3_proc_read(struct svc_rqst *rqstp, struct nfsd3_readargs *argp,
 	 * 1 (status) + 22 (post_op_attr) + 1 (count) + 1 (eof)
 	 * + 1 (xdr opaque byte count) = 26
 	 */
-	svcbuf_reserve(&rqstp->rq_resbuf, &buffer, &avail, 26);
-
-	if ((avail << 2) < argp->count) {
-		printk(KERN_NOTICE
-			"oversized read request from %08lx:%d (%d bytes)\n",
-				ntohl(rqstp->rq_addr.sin_addr.s_addr),
-				ntohs(rqstp->rq_addr.sin_port),
-				argp->count);
-		argp->count = avail;
-	}
+	svcbuf_reserve(&rqstp->rq_resbuf, &buffer, &avail,
+			1 + NFS3_POST_OP_ATTR_WORDS + 3);
 
 	resp->count = argp->count;
-	resp->fh    = argp->fh;
+	if ((avail << 2) < resp->count)
+		resp->count = avail << 2;
+
+	fh_copy(&resp->fh, &argp->fh);
 	nfserr = nfsd_read(rqstp, &resp->fh,
 				  argp->offset,
 				  (char *) buffer,
 				  &resp->count);
+	if (nfserr == 0) {
+		struct inode	*inode = resp->fh.fh_dentry->d_inode;
+
+		resp->eof = (argp->offset + resp->count) >= inode->i_size;
+	}
 
 	RETURN(nfserr);
 }
 
 /*
  * Write data to a file
- * N.B. After this call resp->fh needs an fh_put
  */
 static int
 nfsd3_proc_write(struct svc_rqst *rqstp, struct nfsd3_writeargs *argp,
@@ -193,19 +213,21 @@ nfsd3_proc_write(struct svc_rqst *rqstp, struct nfsd3_writeargs *argp,
 {
 	int	nfserr;
 
-	dprintk("nfsd: WRITE    %x/%ld %d bytes at %ld\n",
+	dprintk("nfsd: WRITE(3)    %x/%ld %d bytes at %ld%s\n",
 				SVCFH_DEV(&argp->fh),
-				SVCFH_INO(&argp->fh),
+				(long)SVCFH_INO(&argp->fh),
 				argp->len,
-				(unsigned long) argp->offset);
+				(unsigned long) argp->offset,
+				argp->stable? " stable" : "");
 
-	resp->fh = argp->fh;
+	fh_copy(&resp->fh, &argp->fh);
 	nfserr = nfsd_write(rqstp, &resp->fh,
 				   argp->offset,
 				   argp->data,
 				   argp->len,
 				   argp->stable);
 	resp->committed = argp->stable;
+	resp->count = argp->count;
 	RETURN(nfserr);
 }
 
@@ -213,20 +235,18 @@ nfsd3_proc_write(struct svc_rqst *rqstp, struct nfsd3_writeargs *argp,
  * With NFSv3, CREATE processing is a lot easier than with NFSv2.
  * At least in theory; we'll see how it fares in practice when the
  * first reports about SunOS compatibility problems start to pour in...
- * N.B. After this call _both_ resp->dirfh and resp->fh need an fh_put
  */
 static int
 nfsd3_proc_create(struct svc_rqst *rqstp, struct nfsd3_createargs *argp,
-					  struct nfsd3_createres  *resp)
+					  struct nfsd3_diropres   *resp)
 {
 	svc_fh		*dirfhp, *newfhp = NULL;
 	struct iattr	*attr;
-	int		mode;
 	u32		nfserr;
 
-	dprintk("nfsd: CREATE   %x/%ld %s\n",
+	dprintk("nfsd: CREATE(3)   %x/%ld %s\n",
 				SVCFH_DEV(&argp->fh),
-				SVCFH_INO(&argp->fh),
+				(long)SVCFH_INO(&argp->fh),
 				argp->name);
 
 	dirfhp = fh_copy(&resp->dirfh, &argp->fh);
@@ -243,131 +263,114 @@ nfsd3_proc_create(struct svc_rqst *rqstp, struct nfsd3_createargs *argp,
 	if (!(attr->ia_valid & ATTR_MODE)) { 
 		attr->ia_valid |= ATTR_MODE;
 		attr->ia_mode = S_IFREG;
+	} else {
+		attr->ia_mode = (attr->ia_mode & ~S_IFMT) | S_IFREG;
 	}
-	mode = attr->ia_mode & ~S_IFMT;
 
 	/* Now create the file and set attributes */
-	nfserr = nfsd_create(rqstp, dirfhp, argp->name, argp->len,
-				attr, S_IFREG, 0, newfhp);
+	nfserr = nfsd_create_v3(rqstp, dirfhp, argp->name, argp->len,
+				attr, newfhp,
+				argp->createmode, argp->verf);
 
 	RETURN(nfserr);
 }
 
-/* N.B. Is nfsd3_attrstat * correct for resp?? table says "void" */
+/*
+ * Make directory. This operation is not idempotent.
+ */
+static int
+nfsd3_proc_mkdir(struct svc_rqst *rqstp, struct nfsd3_createargs *argp,
+					 struct nfsd3_diropres   *resp)
+{
+	int	nfserr;
+
+	dprintk("nfsd: MKDIR(3)    %x/%ld %s\n",
+				SVCFH_DEV(&argp->fh),
+				(long)SVCFH_INO(&argp->fh),
+				argp->name);
+
+	argp->attrs.ia_valid &= ~ATTR_SIZE;
+	fh_copy(&resp->dirfh, &argp->fh);
+	fh_init(&resp->fh);
+	nfserr = nfsd_create(rqstp, &resp->dirfh, argp->name, argp->len,
+				    &argp->attrs, S_IFDIR, 0, &resp->fh);
+
+	RETURN(nfserr);
+}
+
+static int
+nfsd3_proc_symlink(struct svc_rqst *rqstp, struct nfsd3_symlinkargs *argp,
+					   struct nfsd3_diropres    *resp)
+{
+	int	nfserr;
+
+	dprintk("nfsd: SYMLINK(3)  %x/%ld %s -> %s\n",
+				SVCFH_DEV(&argp->ffh),
+				(long)SVCFH_INO(&argp->ffh),
+				argp->fname, argp->tname);
+
+	fh_copy(&resp->dirfh, &argp->ffh);
+	fh_init(&resp->fh);
+	nfserr = nfsd_symlink(rqstp, &resp->dirfh, argp->fname, argp->flen,
+						   argp->tname, argp->tlen,
+						   &resp->fh, &argp->attrs);
+	RETURN(nfserr);
+}
+
+/*
+ * Make socket/fifo/device.
+ */
+static int
+nfsd3_proc_mknod(struct svc_rqst *rqstp, struct nfsd3_mknodargs *argp,
+					 struct nfsd3_diropres  *resp)
+{
+	int	nfserr, type;
+	dev_t	rdev = 0;
+
+	dprintk("nfsd: MKNOD(3)    %x/%ld %s\n",
+				SVCFH_DEV(&argp->fh),
+				(long)SVCFH_INO(&argp->fh),
+				argp->name);
+
+	fh_copy(&resp->dirfh, &argp->fh);
+	fh_init(&resp->fh);
+
+	if (argp->ftype == 0 || argp->ftype >= NF3BAD)
+		return nfserr_inval;
+	if (argp->ftype == NF3CHR || argp->ftype == NF3BLK) {
+		if ((argp->ftype == NF3CHR && argp->major >= MAX_CHRDEV)
+		    || (argp->ftype == NF3BLK && argp->major >= MAX_BLKDEV)
+		    || argp->minor > 0xFF)
+			return nfserr_inval;
+		rdev = ((argp->major) << 8) | (argp->minor);
+	} else
+		if (argp->ftype != NF3SOCK || argp->ftype != NF3FIFO)
+			return nfserr_inval;
+
+	type = nfs3_ftypes[argp->ftype];
+	nfserr = nfsd_create(rqstp, &resp->dirfh, argp->name, argp->len,
+				    &argp->attrs, type, rdev, &resp->fh);
+
+	RETURN(nfserr);
+}
+
+/*
+ * Remove file/fifo/socket etc.
+ */
 static int
 nfsd3_proc_remove(struct svc_rqst *rqstp, struct nfsd3_diropargs *argp,
 					  struct nfsd3_attrstat  *resp)
 {
 	int	nfserr;
 
-	dprintk("nfsd: REMOVE   %x/%ld %s\n",
+	dprintk("nfsd: REMOVE(3)   %x/%ld %s\n",
 				SVCFH_DEV(&argp->fh),
-				SVCFH_INO(&argp->fh),
+				(long)SVCFH_INO(&argp->fh),
 				argp->name);
-
-	/* Is this correct?? */
-	fh_copy(&resp->fh, &argp->fh);
 
 	/* Unlink. -S_IFDIR means file must not be a directory */
+	fh_copy(&resp->fh, &argp->fh);
 	nfserr = nfsd_unlink(rqstp, &resp->fh, -S_IFDIR, argp->name, argp->len);
-	/* 
-	 * N.B. Should be an fh_put here ... nfsd3_proc_rmdir has one,
-	 * or else as an xdr release function
-	 */
-	fh_put(&resp->fh);
-	RETURN(nfserr);
-}
-
-static int
-nfsd3_proc_rename(struct svc_rqst *rqstp, struct nfsd3_renameargs *argp,
-				  	 void		        *resp)
-{
-	int	nfserr;
-
-	dprintk("nfsd: RENAME   %x/%ld %s -> %x/%ld %s\n",
-				SVCFH_DEV(&argp->ffh),
-				SVCFH_INO(&argp->ffh),
-				argp->fname,
-				SVCFH_DEV(&argp->tfh),
-				SVCFH_INO(&argp->tfh),
-				argp->tname);
-
-	nfserr = nfsd_rename(rqstp, &argp->ffh, argp->fname, argp->flen,
-				    &argp->tfh, argp->tname, argp->tlen);
-	fh_put(&argp->ffh);
-	fh_put(&argp->tfh);
-	RETURN(nfserr);
-}
-
-static int
-nfsd3_proc_link(struct svc_rqst *rqstp, struct nfsd3_linkargs *argp,
-				void			    *resp)
-{
-	int	nfserr;
-
-	dprintk("nfsd: LINK     %x/%ld -> %x/%ld %s\n",
-				SVCFH_DEV(&argp->ffh),
-				SVCFH_INO(&argp->ffh),
-				SVCFH_DEV(&argp->tfh),
-				SVCFH_INO(&argp->tfh),
-				argp->tname);
-
-	nfserr = nfsd_link(rqstp, &argp->tfh, argp->tname, argp->tlen,
-				  &argp->ffh);
-	fh_put(&argp->ffh);
-	fh_put(&argp->tfh);
-	RETURN(nfserr);
-}
-
-static int
-nfsd3_proc_symlink(struct svc_rqst *rqstp, struct nfsd3_symlinkargs *argp,
-				          void			  *resp)
-{
-	struct svc_fh	newfh;
-	int		nfserr;
-
-	dprintk("nfsd: SYMLINK  %x/%ld %s -> %s\n",
-				SVCFH_DEV(&argp->ffh),
-				SVCFH_INO(&argp->ffh),
-				argp->fname, argp->tname);
-
-	memset(&newfh, 0, sizeof(newfh));
-
-	/*
-	 * Create the link, look up new file and set attrs.
-	 */
-	nfserr = nfsd_symlink(rqstp, &argp->ffh, argp->fname, argp->flen,
-						 argp->tname, argp->tlen,
-						 &newfh);
-	if (!nfserr) {
-		argp->attrs.ia_valid &= ~ATTR_SIZE;
-		nfserr = nfsd_setattr(rqstp, &newfh, &argp->attrs);
-	}
-
-	fh_put(&argp->ffh);
-	fh_put(&newfh);
-	RETURN(nfserr);
-}
-
-/*
- * Make directory. This operation is not idempotent.
- * N.B. After this call resp->fh needs an fh_put
- */
-static int
-nfsd3_proc_mkdir(struct svc_rqst *rqstp, struct nfsd3_createargs *argp,
-					struct nfsd3_diropres   *resp)
-{
-	int	nfserr;
-
-	dprintk("nfsd: MKDIR    %x/%ld %s\n",
-				SVCFH_DEV(&argp->fh),
-				SVCFH_INO(&argp->fh),
-				argp->name);
-
-	argp->attrs.ia_valid &= ~ATTR_SIZE;
-	nfserr = nfsd_create(rqstp, &argp->fh, argp->name, argp->len,
-				    &argp->attrs, S_IFDIR, 0, &resp->fh);
-	fh_put(&argp->fh);
 	RETURN(nfserr);
 }
 
@@ -376,17 +379,58 @@ nfsd3_proc_mkdir(struct svc_rqst *rqstp, struct nfsd3_createargs *argp,
  */
 static int
 nfsd3_proc_rmdir(struct svc_rqst *rqstp, struct nfsd3_diropargs *argp,
-				 	void		      *resp)
+					 struct nfsd3_attrstat  *resp)
 {
 	int	nfserr;
 
-	dprintk("nfsd: RMDIR    %x/%ld %s\n",
+	dprintk("nfsd: RMDIR(3)    %x/%ld %s\n",
 				SVCFH_DEV(&argp->fh),
-				SVCFH_INO(&argp->fh),
+				(long)SVCFH_INO(&argp->fh),
 				argp->name);
 
-	nfserr = nfsd_unlink(rqstp, &argp->fh, S_IFDIR, argp->name, argp->len);
-	fh_put(&argp->fh);
+	fh_copy(&resp->fh, &argp->fh);
+	nfserr = nfsd_unlink(rqstp, &resp->fh, S_IFDIR, argp->name, argp->len);
+	RETURN(nfserr);
+}
+
+static int
+nfsd3_proc_rename(struct svc_rqst *rqstp, struct nfsd3_renameargs *argp,
+					  struct nfsd3_renameres  *resp)
+{
+	int	nfserr;
+
+	dprintk("nfsd: RENAME(3)   %x/%ld %s -> %x/%ld %s\n",
+				SVCFH_DEV(&argp->ffh),
+				(long)SVCFH_INO(&argp->ffh),
+				argp->fname,
+				SVCFH_DEV(&argp->tfh),
+				(long)SVCFH_INO(&argp->tfh),
+				argp->tname);
+
+	fh_copy(&resp->ffh, &argp->ffh);
+	fh_copy(&resp->tfh, &argp->tfh);
+	nfserr = nfsd_rename(rqstp, &resp->ffh, argp->fname, argp->flen,
+				    &resp->tfh, argp->tname, argp->tlen);
+	RETURN(nfserr);
+}
+
+static int
+nfsd3_proc_link(struct svc_rqst *rqstp, struct nfsd3_linkargs *argp,
+					struct nfsd3_linkres  *resp)
+{
+	int	nfserr;
+
+	dprintk("nfsd: LINK(3)     %x/%ld -> %x/%ld %s\n",
+				SVCFH_DEV(&argp->ffh),
+				(long)SVCFH_INO(&argp->ffh),
+				SVCFH_DEV(&argp->tfh),
+				(long)SVCFH_INO(&argp->tfh),
+				argp->tname);
+
+	fh_copy(&resp->fh,  &argp->ffh);
+	fh_copy(&resp->tfh, &argp->tfh);
+	nfserr = nfsd_link(rqstp, &resp->tfh, argp->tname, argp->tlen,
+				  &resp->fh);
 	RETURN(nfserr);
 }
 
@@ -395,30 +439,87 @@ nfsd3_proc_rmdir(struct svc_rqst *rqstp, struct nfsd3_diropargs *argp,
  */
 static int
 nfsd3_proc_readdir(struct svc_rqst *rqstp, struct nfsd3_readdirargs *argp,
-					  struct nfsd3_readdirres  *resp)
+					   struct nfsd3_readdirres  *resp)
 {
-	u32 *	buffer;
-	int	nfserr, count;
+	u32 *		buffer;
+	int		nfserr, count;
+	unsigned int	want;
 
-	dprintk("nfsd: READDIR  %x/%ld %d bytes at %d\n",
+	dprintk("nfsd: READDIR(3)  %x/%ld %d bytes at %d\n",
 				SVCFH_DEV(&argp->fh),
-				SVCFH_INO(&argp->fh),
-				argp->count, argp->cookie);
+				(long)SVCFH_INO(&argp->fh),
+				argp->count, (u32) argp->cookie);
 
-	/* Reserve buffer space for status */
-	svcbuf_reserve(&rqstp->rq_resbuf, &buffer, &count, 1);
+	/* Reserve buffer space for status, attributes and verifier */
+	svcbuf_reserve(&rqstp->rq_resbuf, &buffer, &count,
+				1 + NFS3_POST_OP_ATTR_WORDS + 2);
 
 	/* Make sure we've room for the NULL ptr & eof flag, and shrink to
 	 * client read size */
-	if ((count -= 8) > argp->count)
-		count = argp->count;
+	if ((count -= 2) > (want = (argp->count >> 2) - 2))
+		count = want;
 
 	/* Read directory and encode entries on the fly */
-	nfserr = nfsd_readdir(rqstp, &argp->fh, (loff_t) argp->cookie, 
-					nfssvc_encode_entry,
-					buffer, &count);
+	fh_copy(&resp->fh, &argp->fh);
+	nfserr = nfsd_readdir(rqstp, &resp->fh, (loff_t) argp->cookie, 
+					nfs3svc_encode_entry,
+					buffer, &count, argp->verf);
+	memcpy(resp->verf, argp->verf, 8);
 	resp->count = count;
 
+	RETURN(nfserr);
+}
+
+/*
+ * Read a portion of a directory, including file handles and attrs.
+ * For now, we choose to ignore the dircount parameter.
+ */
+static int
+nfsd3_proc_readdirplus(struct svc_rqst *rqstp, struct nfsd3_readdirargs *argp,
+					       struct nfsd3_readdirres  *resp)
+{
+	u32 *	buffer;
+	int	nfserr, count, want;
+
+	dprintk("nfsd: READDIR+(3) %x/%ld %d bytes at %d\n",
+				SVCFH_DEV(&argp->fh),
+				(long)SVCFH_INO(&argp->fh),
+				argp->count, (u32) argp->cookie);
+
+	/* Reserve buffer space for status, attributes and verifier */
+	svcbuf_reserve(&rqstp->rq_resbuf, &buffer, &count,
+				1 + NFS3_POST_OP_ATTR_WORDS + 2);
+
+	/* Make sure we've room for the NULL ptr & eof flag, and shrink to
+	 * client read size */
+	if ((count -= 2) > (want = argp->count >> 2))
+		count = want;
+
+	/* Read directory and encode entries on the fly */
+	fh_copy(&resp->fh, &argp->fh);
+	nfserr = nfsd_readdir(rqstp, &resp->fh, (loff_t) argp->cookie, 
+					nfs3svc_encode_entry_plus,
+					buffer, &count, argp->verf);
+	memcpy(resp->verf, argp->verf, 8);
+	resp->count = count;
+
+	RETURN(nfserr);
+}
+
+/*
+ * Get file system stats
+ */
+static int
+nfsd3_proc_fsstat(struct svc_rqst * rqstp, struct nfsd_fhandle    *argp,
+					   struct nfsd3_fsstatres *resp)
+{
+	int	nfserr;
+
+	dprintk("nfsd: FSSTAT(3)   %x/%ld\n",
+				SVCFH_DEV(&argp->fh),
+				(long)SVCFH_INO(&argp->fh));
+
+	nfserr = nfsd_statfs(rqstp, &argp->fh, &resp->stats);
 	fh_put(&argp->fh);
 	RETURN(nfserr);
 }
@@ -427,119 +528,162 @@ nfsd3_proc_readdir(struct svc_rqst *rqstp, struct nfsd3_readdirargs *argp,
  * Get file system info
  */
 static int
-nfsd3_proc_statfs(struct svc_rqst * rqstp, struct nfsd_fhandle   *argp,
-					  struct nfsd3_statfsres *resp)
+nfsd3_proc_fsinfo(struct svc_rqst * rqstp, struct nfsd_fhandle    *argp,
+					   struct nfsd3_fsinfores *resp)
 {
 	int	nfserr;
 
-	dprintk("nfsd: STATFS   %x/%ld\n",
+	dprintk("nfsd: FSINFO(3)   %x/%ld\n",
 				SVCFH_DEV(&argp->fh),
-				SVCFH_INO(&argp->fh));
+				(long)SVCFH_INO(&argp->fh));
 
-	nfserr = nfsd_statfs(rqstp, &argp->fh, &resp->stats);
+	resp->f_rtmax  = NFSSVC_MAXBLKSIZE;
+	resp->f_rtpref = NFSSVC_MAXBLKSIZE;
+	resp->f_rtmult = PAGE_SIZE;
+	resp->f_wtmax  = NFSSVC_MAXBLKSIZE;
+	resp->f_wtpref = NFSSVC_MAXBLKSIZE;
+	resp->f_wtmult = PAGE_SIZE;
+	resp->f_dtpref = PAGE_SIZE;
+	resp->f_maxfilesize = ~(u32) 0;
+	resp->f_properties = NFS3_FSF_DEFAULT;
+
+	nfserr = fh_verify(rqstp, &argp->fh, 0, MAY_NOP);
+
+	/* Check special features of the file system. May request
+	 * different read/write sizes for file systems known to have
+	 * problems with large blocks */
+	if (nfserr == 0) {
+		struct super_block *sb = argp->fh.fh_dentry->d_inode->i_sb;
+
+		/* Note that we don't care for remote fs's here */
+		if (sb->s_magic == 0x4d44 /* MSDOS_SUPER_MAGIC */) {
+			resp->f_properties = NFS3_FSF_BILLYBOY;
+		}
+	}
+
 	fh_put(&argp->fh);
 	RETURN(nfserr);
 }
 
 /*
- * NFSv2 Server procedures.
- * Only the results of non-idempotent operations are cached.
+ * Get pathconf info for the specified file
  */
-#define nfsd3_proc_none		NULL
-#define nfssvc_encode_void	NULL
-#define nfssvc_decode_void	NULL
-#define nfssvc_release_void	NULL
-struct nfsd3_void { int dummy; };
+static int
+nfsd3_proc_pathconf(struct svc_rqst * rqstp, struct nfsd_fhandle      *argp,
+					     struct nfsd3_pathconfres *resp)
+{
+	int	nfserr;
 
-#define PROC(name, argt, rest, relt, cache)	\
- { (svc_procfunc) nfsd3_proc_##name,	\
-   (kxdrproc_t) nfssvc_decode_##argt,	\
-   (kxdrproc_t) nfssvc_encode_##rest,	\
-   (kxdrproc_t) nfssvc_release_##relt,	\
-   sizeof(struct nfsd3_##argt),		\
-   sizeof(struct nfsd3_##rest),		\
-   0,					\
-   cache				\
- }
-struct svc_procedure		nfsd3_procedures2[18] = {
-  PROC(null,	 void,		void,		void,	 RC_NOCACHE),
-  PROC(getattr,	 fhandle,	attrstat,	fhandle, RC_NOCACHE),
-  PROC(setattr,  sattrargs,	attrstat,	fhandle, RC_REPLBUFF),
-  PROC(none,	 void,		void,		void,	 RC_NOCACHE),
-  PROC(lookup,	 diropargs,	diropres,	fhandle2,RC_NOCACHE),
-  PROC(readlink, fhandle,	readlinkres,	void,	 RC_NOCACHE),
-  PROC(read,	 readargs,	readres,	fhandle, RC_NOCACHE),
-  PROC(none,	 void,		void,		void,	 RC_NOCACHE),
-  PROC(write,	 writeargs,	attrstat,	fhandle, RC_REPLBUFF),
-  PROC(create,	 createargs,	diropres,	fhandle2,RC_REPLBUFF),
-  PROC(remove,	 diropargs,	void,/* ??*/	void,	 RC_REPLSTAT),
-  PROC(rename,	 renameargs,	void,		void,	 RC_REPLSTAT),
-  PROC(link,	 linkargs,	void,		void,	 RC_REPLSTAT),
-  PROC(symlink,	 symlinkargs,	void,		void,	 RC_REPLSTAT),
-  PROC(mkdir,	 createargs,	diropres,	fhandle, RC_REPLBUFF),
-  PROC(rmdir,	 diropargs,	void,		void,	 RC_REPLSTAT),
-  PROC(readdir,	 readdirargs,	readdirres,	void,	 RC_REPLSTAT),
-  PROC(statfs,	 fhandle,	statfsres,	void,	 RC_NOCACHE),
-};
+	dprintk("nfsd: PATHCONF(3) %x/%ld\n",
+				SVCFH_DEV(&argp->fh),
+				(long)SVCFH_INO(&argp->fh));
+
+	/* Set default pathconf */
+	resp->p_link_max = 255;		/* at least */
+	resp->p_name_max = 255;		/* at least */
+	resp->p_no_trunc = 0;
+	resp->p_chown_restricted = 1;
+	resp->p_case_insensitive = 0;
+	resp->p_case_preserving = 1;
+
+	nfserr = fh_verify(rqstp, &argp->fh, 0, MAY_NOP);
+
+	if (nfserr == 0) {
+		struct super_block *sb = argp->fh.fh_dentry->d_inode->i_sb;
+
+		/* Note that we don't care for remote fs's here */
+		switch (sb->s_magic) {
+		case EXT2_SUPER_MAGIC:
+			resp->p_link_max = EXT2_LINK_MAX;
+			resp->p_name_max = EXT2_NAME_LEN;
+			break;
+		case 0x4d44:	/* MSDOS_SUPER_MAGIC */
+			resp->p_case_insensitive = 1;
+			resp->p_case_preserving  = 0;
+			break;
+		}
+	}
+
+	fh_put(&argp->fh);
+	RETURN(nfserr);
+}
 
 
 /*
- * Map errnos to NFS errnos.
+ * Commit a file (range) to stable storage.
  */
-int
-nfserrno (int errno)
+static int
+nfsd3_proc_commit(struct svc_rqst * rqstp, struct nfsd3_commitargs *argp,
+					   struct nfsd3_commitres  *resp)
 {
-	static struct {
-		int	nfserr;
-		int	syserr;
-	} nfs_errtbl[] = {
-		{ NFS_OK, 0 },
-		{ NFSERR_PERM, EPERM },
-		{ NFSERR_NOENT, ENOENT },
-		{ NFSERR_IO, EIO },
-		{ NFSERR_NXIO, ENXIO },
-		{ NFSERR_ACCES, EACCES },
-		{ NFSERR_EXIST, EEXIST },
-		{ NFSERR_NODEV, ENODEV },
-		{ NFSERR_NOTDIR, ENOTDIR },
-		{ NFSERR_ISDIR, EISDIR },
-		{ NFSERR_INVAL, EINVAL },
-		{ NFSERR_FBIG, EFBIG },
-		{ NFSERR_NOSPC, ENOSPC },
-		{ NFSERR_ROFS, EROFS },
-		{ NFSERR_NAMETOOLONG, ENAMETOOLONG },
-		{ NFSERR_NOTEMPTY, ENOTEMPTY },
-#ifdef EDQUOT
-		{ NFSERR_DQUOT, EDQUOT },
-#endif
-		{ NFSERR_STALE, ESTALE },
-		{ NFSERR_WFLUSH, EIO },
-		{ -1, EIO }
-	};
-	int	i;
+	int	nfserr;
 
-	for (i = 0; nfs_errtbl[i].nfserr != -1; i++) {
-		if (nfs_errtbl[i].syserr == errno)
-			return htonl (nfs_errtbl[i].nfserr);
-	}
-	printk (KERN_INFO "nfsd: non-standard errno: %d\n", errno);
-	return nfserr_io;
+	dprintk("nfsd: COMMIT(3)   %x/%ld %d@%ld\n",
+				SVCFH_DEV(&argp->fh),
+				(long)SVCFH_INO(&argp->fh),
+				argp->count,
+				(unsigned long) argp->offset);
+
+	if (argp->offset > NFS_OFFSET_MAX)
+		return nfserr_inval;
+
+	fh_copy(&resp->fh, &argp->fh);
+	nfserr = nfsd_commit(rqstp, &resp->fh, argp->offset, argp->count);
+
+	RETURN(nfserr);
 }
 
-#if 0
-static void
-nfsd3_dump(char *tag, u32 *buf, int len)
-{
-	int	i;
 
-	printk(KERN_NOTICE
-		"nfsd: %s (%d words)\n", tag, len);
+/*
+ * NFSv3 Server procedures.
+ * Only the results of non-idempotent operations are cached.
+ */
+#define nfs3svc_decode_voidargs		NULL
+#define nfs3svc_release_void		NULL
+#define nfs3svc_decode_fhandleargs	nfs3svc_decode_fhandle
+#define nfs3svc_encode_attrstatres	nfs3svc_encode_attrstat
+#define nfs3svc_encode_wccstatres	nfs3svc_encode_wccstat
+#define nfsd3_mkdirargs			nfsd3_createargs
+#define nfsd3_readdirplusargs		nfsd3_readdirargs
+#define nfsd3_fhandleargs		nfsd_fhandle
+#define nfsd3_fhandleres		nfsd3_attrstat
+#define nfsd3_attrstatres		nfsd3_attrstat
+#define nfsd3_wccstatres		nfsd3_attrstat
+#define nfsd3_createres			nfsd3_diropres
+#define nfsd3_voidres			nfsd3_voidargs
+struct nfsd3_voidargs { int dummy; };
 
-	for (i = 0; i < len && i < 32; i += 8)
-		printk(KERN_NOTICE
-			" %08lx %08lx %08lx %08lx"
-			" %08lx %08lx %08lx %08lx\n",
-			buf[i],   buf[i+1], buf[i+2], buf[i+3],
-			buf[i+4], buf[i+5], buf[i+6], buf[i+7]);
-}
-#endif
+#define PROC(name, argt, rest, relt, cache)	\
+ { (svc_procfunc) nfsd3_proc_##name,		\
+   (kxdrproc_t) nfs3svc_decode_##argt##args,	\
+   (kxdrproc_t) nfs3svc_encode_##rest##res,	\
+   (kxdrproc_t) nfs3svc_release_##relt,		\
+   sizeof(struct nfsd3_##argt##args),		\
+   sizeof(struct nfsd3_##rest##res),		\
+   0,						\
+   cache					\
+ }
+struct svc_procedure		nfsd_procedures3[22] = {
+  PROC(null,	 void,		void,		void,	 RC_NOCACHE),
+  PROC(getattr,	 fhandle,	attrstat,	fhandle, RC_NOCACHE),
+  PROC(setattr,  sattr,		wccstat,	fhandle,  RC_REPLBUFF),
+  PROC(lookup,	 dirop,		dirop,		fhandle2, RC_NOCACHE),
+  PROC(access,	 access,	access,		fhandle,  RC_NOCACHE),
+  PROC(readlink, fhandle,	readlink,	fhandle,  RC_NOCACHE),
+  PROC(read,	 read,		read,		fhandle, RC_NOCACHE),
+  PROC(write,	 write,		write,		fhandle,  RC_REPLBUFF),
+  PROC(create,	 create,	create,		fhandle2, RC_REPLBUFF),
+  PROC(mkdir,	 mkdir,		create,		fhandle2, RC_REPLBUFF),
+  PROC(symlink,	 symlink,	create,		fhandle2, RC_REPLBUFF),
+  PROC(mknod,	 mknod,		create,		fhandle2, RC_REPLBUFF),
+  PROC(remove,	 dirop,		wccstat,	fhandle,  RC_REPLBUFF),
+  PROC(rmdir,	 dirop,		wccstat,	fhandle,  RC_REPLBUFF),
+  PROC(rename,	 rename,	rename,		fhandle,  RC_REPLBUFF),
+  PROC(link,	 link,		link,		fhandle2, RC_REPLBUFF),
+  PROC(readdir,	 readdir,	readdir,	fhandle,  RC_NOCACHE),
+  PROC(readdirplus,readdirplus,	readdir,	fhandle,  RC_NOCACHE),
+  PROC(fsstat,	 fhandle,	fsstat,		void,     RC_NOCACHE),
+  PROC(fsinfo,   fhandle,	fsinfo,		void,     RC_NOCACHE),
+  PROC(pathconf, fhandle,	pathconf,	void,     RC_NOCACHE),
+  PROC(commit,	 commit,	commit,		fhandle,  RC_NOCACHE)
+};

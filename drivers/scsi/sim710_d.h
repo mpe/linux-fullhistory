@@ -1,3 +1,4 @@
+/* DO NOT EDIT - Generated automatically by script_asm.pl */
 static u32 SCRIPT[] = {
 /*
 

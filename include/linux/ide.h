@@ -299,6 +299,8 @@ typedef struct ide_drive_s {
 	thresholds_t		smart_thresholds;
 	values_t		smart_values;
 #endif
+	int		last_lun;	/* last logical unit */
+	int		forced_lun;	/* if hdxlun was given at boot */
 } ide_drive_t;
 
 /*

@@ -1515,7 +1515,7 @@ static void __init i2o_sys_init()
 	{
 		niop = iop->next;
 #ifdef DRIVERDEBUG
-		printk(KERN_INFO "Enableing iop%d\n", iop->unit);
+		printk(KERN_INFO "Enabling iop%d\n", iop->unit);
 #endif
 		if(i2o_enable_controller(iop))
 		{
@@ -2680,6 +2680,7 @@ EXPORT_SYMBOL(i2o_report_controller_unit);
 EXPORT_SYMBOL(i2o_activate_controller);
 EXPORT_SYMBOL(i2o_online_controller);
 EXPORT_SYMBOL(i2o_get_class_name);
+EXPORT_SYMBOL(i2o_status_get);
 
 EXPORT_SYMBOL(i2o_query_scalar);
 EXPORT_SYMBOL(i2o_set_scalar);

@@ -1477,10 +1477,6 @@ CONFIG_NETFILTER
   Chances are that you should say Y here if you compile a kernel which
   will run as a router and N for regular hosts. If unsure, say N.
  
-Network packet filtering debugging
-CONFIG_NETFILTER_DEBUG
-  Say Y to make sure packets aren't leaking.
-
 SYN flood protection
 CONFIG_SYN_COOKIES
   Normal TCP/IP networking is open to an attack known as "SYN
@@ -1496,7 +1492,7 @@ CONFIG_SYN_COOKIES
   is no need for the legitimate users to change their TCP/IP software;
   SYN cookies work transparently to them. For technical information
   about SYN cookies, check out
-  ftp://koobera.math.uic.edu/pub/docs/syncookies-archive .
+  ftp://koobera.math.uic.edu/syncookies.html .
 
   If you are SYN flooded, the source address reported by the kernel is
   likely to have been forged by the attacker; it is only reported as
@@ -8415,7 +8411,15 @@ Emulate SUN NFS server
 CONFIG_NFSD_SUN
   If you would like for the server to allow clients to access
   directories that are mount points on the local filesystem (this is
-  how nfsd behaves on Sun systems), say Y here. If unsure, say N.
+  how nfsd behaves on Sun systems), say Y here. 
+  If you use Tru64 clients, say Y.
+  If unsure, say N.
+
+Provide NFSv3 server support (EXPERIMENTAL)
+CONFIG_NFSD_V3
+  If you would like to include the NFSv3 server was well as the NFSv2
+  server, say Y here.  File locking, via the NLMv4 protocol, is not
+  supported yet. If unsure, say N.
 
 OS/2 HPFS filesystem support
 CONFIG_HPFS_FS

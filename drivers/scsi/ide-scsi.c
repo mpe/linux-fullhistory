@@ -602,11 +602,14 @@ int idescsi_detect (Scsi_Host_Template *host_template)
 {
 	struct Scsi_Host *host;
 	int id;
+	int last_lun = 0;
 
 	host_template->proc_name = "ide-scsi";
 	host = scsi_register(host_template, 0);
-	for (id = 0; id < MAX_HWIFS * MAX_DRIVES && idescsi_drives[id]; id++);
+	for (id = 0; id < MAX_HWIFS * MAX_DRIVES && idescsi_drives[id]; id++)
+		last_lun = IDE_MAX(last_lun, idescsi_drives[id]->last_lun);
 	host->max_id = id;
+	host->max_lun = last_lun + 1;
 	host->can_queue = host->cmd_per_lun * id;
 	return 1;
 }

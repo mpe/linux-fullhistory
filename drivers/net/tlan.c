@@ -43,7 +43,7 @@
 #include <linux/pci.h>
 #include <linux/etherdevice.h>
 #include <linux/delay.h>
-
+#include <linux/spinlock.h>
 
 
 typedef u32 (TLanIntVectorFunc)( struct net_device *, u16 );
@@ -234,13 +234,15 @@ static inline void
 TLan_SetTimer( struct net_device *dev, u32 ticks, u32 type )
 {
 	TLanPrivateInfo *priv = (TLanPrivateInfo *) dev->priv;
+	unsigned long flags;
 
-	cli();
+	spin_lock_irqsave(&priv->lock, flags);
 	if ( priv->timer.function != NULL ) {
+		spin_unlock_irqrestore(&priv->lock, flags);
 		return;
 	}
 	priv->timer.function = &TLan_Timer;
-	sti();
+	spin_unlock_irqrestore(&priv->lock, flags);
 
 	priv->timer.data = (unsigned long) dev;
 	priv->timer.expires = jiffies + ticks;
@@ -336,6 +338,8 @@ extern int init_module(void)
 		priv->speed =      speed;
 		priv->sa_int =     sa_int;
 		priv->debug =      debug;
+		
+		spin_lock_init(&priv->lock);
 
 		ether_setup( dev );
 
@@ -770,6 +774,7 @@ int TLan_StartTx( struct sk_buff *skb, struct net_device *dev )
 	TLanList	*tail_list;
 	u8		*tail_buffer;
 	int		pad;
+	unsigned long	flags;
 
 	if ( ! priv->phyOnline ) {
 		TLAN_DBG( TLAN_DEBUG_TX, "TLAN TRANSMIT:  %s PHY is not ready\n", dev->name );
@@ -810,7 +815,7 @@ int TLan_StartTx( struct sk_buff *skb, struct net_device *dev )
 		tail_list->buffer[1].address = 0;
 	}
 
-	cli();
+	spin_lock_irqsave(&priv->lock, flags);
 	tail_list->cStat = TLAN_CSTAT_READY;
 	if ( ! priv->txInProgress ) {
 		priv->txInProgress = 1;
@@ -826,7 +831,7 @@ int TLan_StartTx( struct sk_buff *skb, struct net_device *dev )
 			( priv->txList + ( priv->txTail - 1 ) )->forward = virt_to_bus( tail_list );
 		}
 	}
-	sti();
+	spin_unlock_irqrestore(&priv->lock, flags);
 
 	CIRC_INC( priv->txTail, TLAN_NUM_TX_LISTS );
 
@@ -870,10 +875,12 @@ void TLan_HandleInterrupt(int irq, void *dev_id, struct pt_regs *regs)
 	u32		host_cmd;
 	u16		host_int;
 	int		type;
+	TLanPrivateInfo *priv;
 
 	dev = (struct net_device *) dev_id;
+	priv = (TLanPrivateInfo *) dev->priv;
 
-	cli();
+	spin_lock(&priv->lock);
 	if ( dev->interrupt ) {
 		printk( "TLAN:   Re-entering interrupt handler for %s: %ld.\n" , dev->name, dev->interrupt );
 	}
@@ -892,7 +899,7 @@ void TLan_HandleInterrupt(int irq, void *dev_id, struct pt_regs *regs)
 	}
 
 	dev->interrupt--;
-	sti();
+	spin_unlock(&priv->lock);
 
 } /* TLan_HandleInterrupts */
 
@@ -1558,6 +1565,7 @@ void TLan_Timer( unsigned long data )
 	struct net_device	*dev = (struct net_device *) data;
 	TLanPrivateInfo	*priv = (TLanPrivateInfo *) dev->priv;
 	u32		elapsed;
+	unsigned long	flags;
 
 	priv->timer.function = NULL;
 
@@ -1581,7 +1589,7 @@ void TLan_Timer( unsigned long data )
 			TLan_FinishReset( dev );
 			break;
 		case TLAN_TIMER_ACTIVITY:
-			cli();
+			spin_lock_irqsave(&priv->lock, flags);
 			if ( priv->timer.function == NULL ) {
 				elapsed = jiffies - priv->timerSetAt;
 				if ( elapsed >= TLAN_TIMER_ACT_DELAY ) {
@@ -1589,11 +1597,12 @@ void TLan_Timer( unsigned long data )
 				} else  {
 					priv->timer.function = &TLan_Timer;
 					priv->timer.expires = priv->timerSetAt + TLAN_TIMER_ACT_DELAY;
-					sti();
+					spin_unlock_irqrestore(&priv->lock, flags);
 					add_timer( &priv->timer );
+					break;
 				}
 			}
-			sti();
+			spin_unlock_irqrestore(&priv->lock, flags);
 			break;
 		default:
 			break;
@@ -2435,16 +2444,19 @@ int TLan_MiiReadReg( struct net_device *dev, u16 phy, u16 reg, u16 *val )
 {
 	u8	nack;
 	u16	sio, tmp;
-	u32	i;
+ 	u32	i;
 	int	err;
 	int	minten;
+	TLanPrivateInfo *priv = (TLanPrivateInfo *) dev->priv;
+	int	irq;
+	unsigned long flags;
 
 	err = FALSE;
 	outw(TLAN_NET_SIO, dev->base_addr + TLAN_DIO_ADR);
 	sio = dev->base_addr + TLAN_DIO_DATA + TLAN_NET_SIO;
 
 	if ( dev->interrupt == 0 )
-		cli();
+		spin_lock_irqsave(&priv->lock, flags);
 	dev->interrupt++;
 
 	TLan_MiiSync(dev->base_addr);
@@ -2494,7 +2506,7 @@ int TLan_MiiReadReg( struct net_device *dev, u16 phy, u16 reg, u16 *val )
 
 	dev->interrupt--;
 	if ( dev->interrupt == 0 )
-		sti();
+		spin_unlock_irqrestore(&priv->lock, flags);
 
 	return err;
 
@@ -2606,12 +2618,14 @@ void TLan_MiiWriteReg( struct net_device *dev, u16 phy, u16 reg, u16 val )
 {
 	u16	sio;
 	int	minten;
+	unsigned long flags;
+	TLanPrivateInfo *priv = (TLanPrivateInfo *) dev->priv;
 
 	outw(TLAN_NET_SIO, dev->base_addr + TLAN_DIO_ADR);
 	sio = dev->base_addr + TLAN_DIO_DATA + TLAN_NET_SIO;
 
 	if ( dev->interrupt == 0 )
-		cli();
+		spin_lock_irqsave(&priv->lock, flags);
 	dev->interrupt++;
 
 	TLan_MiiSync( dev->base_addr );
@@ -2636,7 +2650,7 @@ void TLan_MiiWriteReg( struct net_device *dev, u16 phy, u16 reg, u16 val )
 
 	dev->interrupt--;
 	if ( dev->interrupt == 0 )
-		sti();
+		spin_unlock_irqrestore(&priv->lock, flags);
 
 } /* TLan_MiiWriteReg */
 
@@ -2834,29 +2848,41 @@ void TLan_EeReceiveByte( u16 io_base, u8 *data, int stop )
 int TLan_EeReadByte( struct net_device *dev, u8 ee_addr, u8 *data )
 {
 	int err;
+	TLanPrivateInfo *priv = (TLanPrivateInfo *) dev->priv;
+	unsigned long flags;
+	int ret=0;
 
 	if ( dev->interrupt == 0 )
-		cli();
+		spin_lock_irqsave(&priv->lock, flags);
 	dev->interrupt++;
 
 	TLan_EeSendStart( dev->base_addr );
 	err = TLan_EeSendByte( dev->base_addr, 0xA0, TLAN_EEPROM_ACK );
 	if (err)
-		return 1;
+	{
+		ret=1;
+		goto fail;
+	}
 	err = TLan_EeSendByte( dev->base_addr, ee_addr, TLAN_EEPROM_ACK );
 	if (err)
-		return 2;
+	{
+		ret=2;
+		goto fail;
+	}
 	TLan_EeSendStart( dev->base_addr );
 	err = TLan_EeSendByte( dev->base_addr, 0xA1, TLAN_EEPROM_ACK );
 	if (err)
-		return 3;
+	{
+		ret=3;
+		goto fail;
+	}
 	TLan_EeReceiveByte( dev->base_addr, data, TLAN_EEPROM_STOP );
-
+fail:
 	dev->interrupt--;
 	if ( dev->interrupt == 0 )
-		sti();
+		spin_unlock_irqrestore(&priv->lock, flags);
 
-	return 0;
+	return ret;
 
 } /* TLan_EeReadByte */
 

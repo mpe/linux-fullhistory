@@ -4,7 +4,7 @@
  * Hodge-podge collection of knfsd-related stuff.
  * I will sort this out later.
  *
- * Copyright (C) 1995 Olaf Kirch <okir@monad.swb.de>
+ * Copyright (C) 1995-1997 Olaf Kirch <okir@monad.swb.de>
  */
 
 #ifndef LINUX_NFSD_NFSD_H
@@ -61,6 +61,9 @@ typedef int (*nfsd_dirop_t)(struct inode *, struct dentry *, int, int);
  * Procedure table for NFSv2
  */
 extern struct svc_procedure	nfsd_procedures2[];
+#ifdef CONFIG_NFSD_V3
+extern struct svc_procedure	nfsd_procedures3[];
+#endif /* CONFIG_NFSD_V3 */
 extern struct svc_program	nfsd_program;
 
 /*
@@ -74,11 +77,20 @@ void		nfsd_racache_init(void);
 void		nfsd_racache_shutdown(void);
 int		nfsd_lookup(struct svc_rqst *, struct svc_fh *,
 				const char *, int, struct svc_fh *);
+#ifdef CONFIG_NFSD_V3
+int		nfsd_access(struct svc_rqst *, struct svc_fh *, u32 *);
+#endif /* CONFIG_NFSD_V3 */
 int		nfsd_setattr(struct svc_rqst *, struct svc_fh *,
 				struct iattr *);
 int		nfsd_create(struct svc_rqst *, struct svc_fh *,
 				char *name, int len, struct iattr *attrs,
 				int type, dev_t rdev, struct svc_fh *res);
+#ifdef CONFIG_NFSD_V3
+int		nfsd_create_v3(struct svc_rqst *, struct svc_fh *,
+				char *name, int len, struct iattr *attrs,
+				struct svc_fh *res, int createmode,
+				u32 *verifier);
+#endif /* CONFIG_NFSD_V3 */
 int		nfsd_open(struct svc_rqst *, struct svc_fh *, int,
 				int, struct file *);
 void		nfsd_close(struct file *);
@@ -90,7 +102,7 @@ int		nfsd_readlink(struct svc_rqst *, struct svc_fh *,
 				char *, int *);
 int		nfsd_symlink(struct svc_rqst *, struct svc_fh *,
 				char *name, int len, char *path, int plen,
-				struct svc_fh *res);
+				struct svc_fh *res, struct iattr *);
 int		nfsd_link(struct svc_rqst *, struct svc_fh *,
 				char *, int, struct svc_fh *);
 int		nfsd_rename(struct svc_rqst *,
@@ -104,9 +116,13 @@ int		nfsd_truncate(struct svc_rqst *, struct svc_fh *,
 				unsigned long size);
 int		nfsd_readdir(struct svc_rqst *, struct svc_fh *,
 				loff_t, encode_dent_fn,
-				u32 *buffer, int *countp);
+				u32 *buffer, int *countp, u32 *verf);
 int		nfsd_statfs(struct svc_rqst *, struct svc_fh *,
 				struct statfs *);
+#ifdef CONFIG_NFSD_V3
+int		nfsd_commit(struct svc_rqst *, struct svc_fh *,
+				off_t, unsigned long);
+#endif /* CONFIG_NFSD_V3 */
 int		nfsd_notify_change(struct inode *, struct iattr *);
 int		nfsd_permission(struct svc_export *, struct dentry *, int);
 

@@ -106,13 +106,11 @@ swp_entry_t __get_swap_page(unsigned short count)
 			offset = scan_swap_map(p, count);
 			swap_device_unlock(p);
 			if (offset) {
-				int curtp = type;
-
 				entry = SWP_ENTRY(type,offset);
 				type = swap_info[type].next;
 				if (type < 0 ||
 					p->prio != swap_info[type].prio) {
-						swap_list.next = curtp;
+						swap_list.next = swap_list.head;
 				} else {
 					swap_list.next = type;
 				}

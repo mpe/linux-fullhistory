@@ -32,6 +32,8 @@ int decnet_time_wait = 30;
 int decnet_dn_count = 3;
 int decnet_di_count = 5;
 int decnet_dr_count = 5;
+
+#ifdef CONFIG_SYSCTL
 extern int decnet_dst_gc_interval;
 static int min_decnet_time_wait[] = { 5 };
 static int max_decnet_time_wait[] = { 600 };
@@ -471,3 +473,12 @@ void dn_unregister_sysctl(void)
 	unregister_sysctl_table(dn_table_header);
 }
 
+#else  /* CONFIG_SYSCTL */
+void dn_unregister_sysctl(void)
+{
+}
+void dn_register_sysctl(void)
+{
+}
+
+#endif

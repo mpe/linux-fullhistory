@@ -14,6 +14,7 @@
  *
  *      OPTi 82C928     MAD16           (replaced by C929)
  *      OAK OTI-601D    Mozart
+ *      OAK OTI-605	Mozart		(later version with MPU401 Midi)
  *      OPTi 82C929     MAD16 Pro
  *      OPTi 82C930
  *      OPTi 82C924
@@ -22,8 +23,9 @@
  * connect some other components (OPL-[234] and a WSS compatible codec)
  * to the PC bus and perform I/O, DMA and IRQ address decoding. There is
  * also a UART for the MPU-401 mode (not 82C928/Mozart).
- * The Mozart chip appears to be compatible with the 82C928 (can anybody
- * confirm this?).
+ * The Mozart chip appears to be compatible with the 82C928, although later
+ * issues of the card, using the OTI-605 chip, have an MPU-401 compatable Midi
+ * port. This port is configured differently to that of the OPTi audio chips.
  *
  * NOTE! If you want to set CD-ROM address and/or joystick enable, define
  *       MAD16_CONF in local.h as combination of the following bits:
@@ -65,8 +67,11 @@
  *				Improved debugging support.	16-May-1998
  *				Fixed bug.			16-Jun-1998
  *
- *     Torsten Duwe            Made Opti924 PnP support non-destructive
- *                                                             1998-12-23
+ *      Torsten Duwe            Made Opti924 PnP support non-destructive
+ *                                                             	23-Dec-1998
+ *
+ *	Paul Grayson		Added support for Midi on later Mozart cards.
+ *								25-Nov-1999
  */
 
 #include "sound_config.h"
@@ -719,29 +724,24 @@ void attach_mad16(struct address_info *hw_config)
 
 void attach_mad16_mpu(struct address_info *hw_config)
 {
-	if (board_type < C929)	/* Early chip. No MPU support. Just SB MIDI */
-	{
 #if defined(CONFIG_MIDI) && defined(CONFIG_MAD16_OLDCARD)
 
-		if (mad_read(MC1_PORT) & 0x20)
-			hw_config->io_base = 0x240;
-		else
-			hw_config->io_base = 0x220;
+	if (mad_read(MC1_PORT) & 0x20)
+		hw_config->io_base = 0x240;
+	else
+		hw_config->io_base = 0x220;
 
-		hw_config->name = "Mad16/Mozart";
-		sb_dsp_init(hw_config);
+	hw_config->name = "Mad16/Mozart";
+	sb_dsp_init(hw_config);
+	return;
 #endif
 
-		return;
-	}
-#if defined(CONFIG_UART401) && defined(CONFIG_MIDI)
 	if (!already_initialized)
 		return;
 
 	hw_config->driver_use_1 = SB_MIDI_ONLY;
 	hw_config->name = "Mad16/Mozart";
 	attach_uart401(hw_config);
-#endif
 }
 
 int probe_mad16_mpu(struct address_info *hw_config)
@@ -802,7 +802,60 @@ int probe_mad16_mpu(struct address_info *hw_config)
 		hw_config->driver_use_1 = SB_MIDI_ONLY;
 		return sb_dsp_detect(hw_config, 0, 0);
 #else
-		return 0;
+		/* assuming all later Mozart cards are identified as
+		 * either 82C928 or Mozart. If so, following code attempts
+		 * to set MPU register. TODO - add probing
+		 */
+
+		
+		unsigned char tmp;
+
+		tmp = mad_read(MC8_PORT);
+
+		switch (hw_config->irq)
+		{
+			case 5:
+				tmp |= 0x08;
+				break;
+			case 7:
+				tmp |= 0x10;
+				break;
+			case 9:
+				tmp |= 0x18;
+				break;
+			case 10:
+				tmp |= 0x20;
+				break;
+			case 11:
+				tmp |= 0x28;
+				break;
+			default:
+				printk(KERN_ERR "mad16/MOZART: invalid mpu_irq\n");
+				return 0;
+		}
+
+		switch (hw_config->io_base)
+		{
+			case 0x300:
+				tmp |= 0x01;
+				break;
+			case 0x310:
+				tmp |= 0x03;
+				break;
+			case 0x320:
+				tmp |= 0x05;
+				break;
+			case 0x330:
+				tmp |= 0x07;
+				break;
+			default:
+				printk(KERN_ERR "mad16/MOZART: invalid mpu_io\n");
+				return 0;
+		}
+
+		mad_write(MC8_PORT, tmp);	/* write MPU port parameters */
+
+		return probe_uart401(hw_config);
 #endif
 	}
 	tmp = mad_read(MC6_PORT) & 0x83;

@@ -741,7 +741,7 @@ RCProcI2OMsgQ(U16 AdapterID)
                 }
                 break;
             default:
-                printk("Unknown private I2O msg received: 0x%x\n",
+                printk("Unknown private I2O msg received: 0x%lx\n",
                        p32[5]);
                 break;
             }
@@ -1216,7 +1216,7 @@ RCGetPromiscuousMode(U16 AdapterID, PU32 pMode, PFNWAITCALLBACK WaitCallback)
         if (!timeout--)
         {
             kprintf("Timeout waiting for promiscuous mode from adapter\n");
-            kprintf("0x%08.8ulx\n", p32[0]);
+            kprintf("0x%8.8lx\n", p32[0]);
             return RC_RTN_NO_LINK_SPEED;
         }
     }
@@ -1337,7 +1337,7 @@ RCGetBroadcastMode(U16 AdapterID, PU32 pMode, PFNWAITCALLBACK WaitCallback)
         if (!timeout--)
         {
             kprintf("Timeout waiting for promiscuous mode from adapter\n");
-            kprintf("0x%08.8ulx\n", p32[0]);
+            kprintf("0x%8.8lx\n", p32[0]);
             return RC_RTN_NO_LINK_SPEED;
         }
     }
@@ -1421,7 +1421,7 @@ RCGetLinkSpeed(U16 AdapterID, PU32 pLinkSpeedCode, PFNWAITCALLBACK WaitCallback)
         if (!timeout--)
         {
             kprintf("Timeout waiting for link speed from IOP\n");
-            kprintf("0x%08.8ulx\n", p32[0]);
+            kprintf("0x%8.8lx\n", p32[0]);
             return RC_RTN_NO_LINK_SPEED;
         }
     }

@@ -16,9 +16,7 @@ ifeq ($(CONFIG_DECNET_FW),y)
 O_OBJS += dn_fw.o
 endif
 
-ifeq ($(CONFIG_SYSCTL),y)
 O_OBJS += sysctl_net_decnet.o
-endif
 
 include $(TOPDIR)/Rules.make
 

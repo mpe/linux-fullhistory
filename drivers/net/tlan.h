@@ -187,6 +187,7 @@ typedef struct tlan_private_tag {
 	u8			tlanRev;
 	u8			tlanFullDuplex;
 	char                    devName[8];
+	spinlock_t		lock;
 } TLanPrivateInfo;
 
 

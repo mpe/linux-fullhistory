@@ -291,7 +291,15 @@ static void dn_dev_sysctl_unregister(struct dn_dev_parms *parms)
 		kfree(t);
 	}
 }
-#endif
+#else /* CONFIG_SYSCTL */
+static void dn_dev_sysctl_unregister(struct dn_dev_parms *parms)
+{
+}
+static void dn_dev_sysctl_register(struct net_device *dev, struct dn_dev_parms *parms)
+{
+}
+
+#endif /* CONFIG_SYSCTL */
 
 static struct dn_ifaddr *dn_dev_alloc_ifa(void)
 {

@@ -88,6 +88,10 @@ if [ "$CONFIG_INET" = "y" ]; then
    if [ "$CONFIG_NFSD" != "n" ]; then
       bool '  Emulate SUN NFS server' CONFIG_NFSD_SUN
    fi
+   if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+      bool '  Provide NFSv3 server support (EXPERIMENTAL)' CONFIG_NFSD_V3
+   fi
+
    if [ "$CONFIG_NFS_FS" = "y" -o "$CONFIG_NFSD" = "y" ]; then
       define_tristate CONFIG_SUNRPC y
       define_tristate CONFIG_LOCKD y

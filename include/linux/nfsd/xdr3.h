@@ -3,17 +3,18 @@
  *
  * XDR types for NFSv3 in nfsd.
  *
- * Copyright (C) 1996, Olaf Kirch <okir@monad.swb.de>
+ * Copyright (C) 1996-1998, Olaf Kirch <okir@monad.swb.de>
  */
 
-#ifndef LINUX_NFSD_XDR3_H
-#define LINUX_NFSD_XDR3_H
+#ifndef _LINUX_NFSD_XDR3_H
+#define _LINUX_NFSD_XDR3_H
 
 #include <linux/nfsd/xdr.h>
 
 struct nfsd3_sattrargs {
 	struct svc_fh		fh;
 	struct iattr		attrs;
+	int			check_guard;
 	time_t			guardtime;
 };
 
@@ -88,7 +89,7 @@ struct nfsd3_symlinkargs {
 
 struct nfsd3_readdirargs {
 	struct svc_fh		fh;
-	__u32			cookie;
+	__u64			cookie;
 	__u32			dircount;
 	__u32			count;
 	__u32 *			verf;
@@ -97,7 +98,7 @@ struct nfsd3_readdirargs {
 struct nfsd3_commitargs {
 	struct svc_fh		fh;
 	__u64			offset;
-	__u64			count;
+	__u32			count;
 };
 
 struct nfsd3_attrstat {
@@ -105,7 +106,8 @@ struct nfsd3_attrstat {
 	struct svc_fh		fh;
 };
 
-struct nfsd3_lookupres  {
+/* LOOKUP, CREATE, MKDIR, SYMLINK, MKNOD */
+struct nfsd3_diropres  {
 	__u32			status;
 	struct svc_fh		dirfh;
 	struct svc_fh		fh;
@@ -137,12 +139,6 @@ struct nfsd3_writeres {
 	int			committed;
 };
 
-struct nfsd3_createres {
-	__u32			status;
-	struct svc_fh		dirfh;
-	struct svc_fh		fh;
-};
-
 struct nfsd3_renameres {
 	__u32			status;
 	struct svc_fh		ffh;
@@ -158,10 +154,11 @@ struct nfsd3_linkres {
 struct nfsd3_readdirres {
 	__u32			status;
 	struct svc_fh		fh;
-	__u32 *			list_end;
+	int			count;
+	__u32			verf[2];
 };
 
-struct nfsd3_statfsres {
+struct nfsd3_fsstatres {
 	__u32			status;
 	struct statfs		stats;
 	__u32			invarsec;
@@ -184,6 +181,8 @@ struct nfsd3_pathconfres {
 	__u32			status;
 	__u32			p_link_max;
 	__u32			p_name_max;
+	__u32			p_no_trunc;
+	__u32			p_chown_restricted;
 	__u32			p_case_insensitive;
 	__u32			p_case_preserving;
 };
@@ -194,7 +193,7 @@ struct nfsd3_commitres {
 };
 
 /* dummy type for release */
-struct nfsd3_fhandle2 {
+struct nfsd3_fhandle_pair {
 	__u32			dummy;
 	struct svc_fh		fh1;
 	struct svc_fh		fh2;
@@ -213,16 +212,15 @@ union nfsd3_xdrstore {
 	struct nfsd3_linkargs		linkargs;
 	struct nfsd3_symlinkargs	symlinkargs;
 	struct nfsd3_readdirargs	readdirargs;
-	struct nfsd3_lookupres 		lookupres;
+	struct nfsd3_diropres 		diropres;
 	struct nfsd3_accessres		accessres;
 	struct nfsd3_readlinkres	readlinkres;
 	struct nfsd3_readres		readres;
 	struct nfsd3_writeres		writeres;
-	struct nfsd3_createres		createres;
 	struct nfsd3_renameres		renameres;
 	struct nfsd3_linkres		linkres;
 	struct nfsd3_readdirres		readdirres;
-	struct nfsd3_statfsres		statfsres;
+	struct nfsd3_fsstatres		fsstatres;
 	struct nfsd3_fsinfores		fsinfores;
 	struct nfsd3_pathconfres	pathconfres;
 	struct nfsd3_commitres		commitres;
@@ -230,39 +228,87 @@ union nfsd3_xdrstore {
 
 #define NFS3_SVC_XDRSIZE		sizeof(union nfsd3_xdrstore)
 
-void nfsxdr_init(void);
-
 int nfs3svc_decode_fhandle(struct svc_rqst *, u32 *, struct svc_fh *);
-int nfs3svc_decode_sattr3args(struct svc_rqst *, u32 *,
+int nfs3svc_decode_sattrargs(struct svc_rqst *, u32 *,
 				struct nfsd3_sattrargs *);
-int nfs3svc_decode_dirop3args(struct svc_rqst *, u32 *,
+int nfs3svc_decode_diropargs(struct svc_rqst *, u32 *,
 				struct nfsd3_diropargs *);
-int nfs3svc_decode_read3args(struct svc_rqst *, u32 *,
+int nfs3svc_decode_accessargs(struct svc_rqst *, u32 *,
+				struct nfsd3_accessargs *);
+int nfs3svc_decode_readargs(struct svc_rqst *, u32 *,
 				struct nfsd3_readargs *);
-int nfs3svc_decode_write3args(struct svc_rqst *, u32 *,
+int nfs3svc_decode_writeargs(struct svc_rqst *, u32 *,
 				struct nfsd3_writeargs *);
-int nfs3svc_decode_create3args(struct svc_rqst *, u32 *,
+int nfs3svc_decode_createargs(struct svc_rqst *, u32 *,
 				struct nfsd3_createargs *);
-int nfs3svc_decode_rename3args(struct svc_rqst *, u32 *,
+int nfs3svc_decode_mkdirargs(struct svc_rqst *, u32 *,
+				struct nfsd3_createargs *);
+int nfs3svc_decode_mknodargs(struct svc_rqst *, u32 *,
+				struct nfsd3_mknodargs *);
+int nfs3svc_decode_renameargs(struct svc_rqst *, u32 *,
 				struct nfsd3_renameargs *);
-int nfs3svc_decode_link3args(struct svc_rqst *, u32 *,
+int nfs3svc_decode_linkargs(struct svc_rqst *, u32 *,
 				struct nfsd3_linkargs *);
-int nfs3svc_decode_symlink3args(struct svc_rqst *, u32 *,
+int nfs3svc_decode_symlinkargs(struct svc_rqst *, u32 *,
 				struct nfsd3_symlinkargs *);
-int nfs3svc_decode_readdir3args(struct svc_rqst *, u32 *,
+int nfs3svc_decode_readdirargs(struct svc_rqst *, u32 *,
 				struct nfsd3_readdirargs *);
+int nfs3svc_decode_readdirplusargs(struct svc_rqst *, u32 *,
+				struct nfsd3_readdirargs *);
+int nfs3svc_decode_commitargs(struct svc_rqst *, u32 *,
+				struct nfsd3_commitargs *);
+int nfs3svc_encode_voidres(struct svc_rqst *, u32 *, void *);
+int nfs3svc_encode_attrstat(struct svc_rqst *, u32 *,
+				struct nfsd3_attrstat *);
+int nfs3svc_encode_wccstat(struct svc_rqst *, u32 *,
+				struct nfsd3_attrstat *);
+int nfs3svc_encode_diropres(struct svc_rqst *, u32 *,
+				struct nfsd3_diropres *);
+int nfs3svc_encode_accessres(struct svc_rqst *, u32 *,
+				struct nfsd3_accessres *);
 int nfs3svc_encode_readlinkres(struct svc_rqst *, u32 *,
 				struct nfsd3_readlinkres *);
 int nfs3svc_encode_readres(struct svc_rqst *, u32 *, struct nfsd3_readres *);
-int nfs3svc_encode_statfsres(struct svc_rqst *, u32 *,
-				struct nfsd3_statfsres *);
+int nfs3svc_encode_writeres(struct svc_rqst *, u32 *, struct nfsd3_writeres *);
+int nfs3svc_encode_createres(struct svc_rqst *, u32 *,
+				struct nfsd3_diropres *);
+int nfs3svc_encode_renameres(struct svc_rqst *, u32 *,
+				struct nfsd3_renameres *);
+int nfs3svc_encode_linkres(struct svc_rqst *, u32 *,
+				struct nfsd3_linkres *);
 int nfs3svc_encode_readdirres(struct svc_rqst *, u32 *,
 				struct nfsd3_readdirres *);
-int nfs3svc_release_fhandle(struct svc_rqst *, u32 *,
-				struct nfsd_fhandle *);
-int nfs3svc_release_fhandle2(struct svc_rqst *, u32 *,
-				struct nfsd3_fhandle2 *);
-int nfs3svc_encode_entry(struct readdir_cd *, const char *name,
-				int namlen, unsigned long offset, ino_t ino);
+int nfs3svc_encode_fsstatres(struct svc_rqst *, u32 *,
+				struct nfsd3_fsstatres *);
+int nfs3svc_encode_fsinfores(struct svc_rqst *, u32 *,
+				struct nfsd3_fsinfores *);
+int nfs3svc_encode_pathconfres(struct svc_rqst *, u32 *,
+				struct nfsd3_pathconfres *);
+int nfs3svc_encode_commitres(struct svc_rqst *, u32 *,
+				struct nfsd3_commitres *);
 
-#endif /* LINUX_NFSD_XDR3_H */
+int nfs3svc_release_fhandle(struct svc_rqst *, u32 *,
+				struct nfsd3_attrstat *);
+int nfs3svc_release_fhandle2(struct svc_rqst *, u32 *,
+				struct nfsd3_fhandle_pair *);
+int nfs3svc_encode_entry(struct readdir_cd *, const char *name,
+				int namlen, off_t offset, ino_t ino);
+int nfs3svc_encode_entry_plus(struct readdir_cd *, const char *name,
+				int namlen, off_t offset, ino_t ino);
+
+#ifdef __KERNEL__
+
+/*
+ * This is needed in nfs_readdir for encoding NFS3 directory cookies.
+ */
+static inline u32 *
+enc64(u32 *p, u64 val)
+{
+	*p++ = htonl(val >> 32);
+	*p++ = htonl(val & 0xffffffff);
+	return p;
+}
+
+#endif /* __KERNEL__ */
+
+#endif /* _LINUX_NFSD_XDR3_H */

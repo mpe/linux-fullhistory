@@ -304,6 +304,7 @@ int __init generic_NCR5380_detect(Scsi_Host_Template * tpnt){
 	    break;
 	}
 
+#ifdef CONFIG_SCSI_G_NCR5380_PORT
 	if (ports) {
 	    /* wakeup sequence for the NCR53C400A and DTC3181E*/
 
@@ -343,7 +344,13 @@ int __init generic_NCR5380_detect(Scsi_Host_Template * tpnt){
 
 	request_region(overrides[current_override].NCR5380_map_name,
 					NCR5380_region_size, "ncr5380");
-
+#else
+	if(check_mem_region(overrides[current_override].NCR5380_map_name,
+		NCR5380_region_size))
+		continue;
+	request_mem_region(overrides[current_override].NCR5380_map_name,
+					NCR5380_region_size, "ncr5380");
+#endif
 	instance = scsi_register (tpnt, sizeof(struct NCR5380_hostdata));
 	instance->NCR5380_instance_name = overrides[current_override].NCR5380_map_name;
 
@@ -393,7 +400,11 @@ int generic_NCR5380_release_resources(struct Scsi_Host * instance)
 
     NCR5380_setup(instance);
 
+#ifdef CONFIG_SCSI_G_NCR5380_PORT
     release_region(instance->NCR5380_instance_name, NCR5380_region_size);
+#else
+    release_mem_region(instance->NCR5380_instance_name, NCR5380_region_size);
+#endif    
 
     if (instance->irq != IRQ_NONE)
 	free_irq(instance->irq, NULL);

@@ -11,6 +11,9 @@ O_TARGET := nfsd.o
 O_OBJS   := nfssvc.o nfsctl.o nfsproc.o nfsfh.o vfs.o \
 	    export.o auth.o lockd.o nfscache.o nfsxdr.o \
 	    stats.o
+ifdef CONFIG_NFSD_V3
+  O_OBJS += nfs3proc.o nfs3xdr.o
+endif
 
 M_OBJS   := $(O_TARGET)
 

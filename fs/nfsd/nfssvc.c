@@ -226,8 +226,20 @@ nfsd_dispatch(struct svc_rqst *rqstp, u32 *statp)
 		svc_putlong(&rqstp->rq_resbuf, nfserr);
 
 	/* Encode result.
-	 * FIXME: Most NFSv3 calls return wcc data even when the call failed
+	 * For NFSv2, additional info is never returned in case of an error.
 	 */
+#ifdef CONFIG_NFSD_V3
+	if (!(nfserr && rqstp->rq_vers == 2)) {
+		xdr = proc->pc_encode;
+		if (xdr && !xdr(rqstp, rqstp->rq_resbuf.buf, rqstp->rq_resp)) {
+			/* Failed to encode result. Release cache entry */
+			dprintk("nfsd: failed to encode result!\n");
+			nfsd_cache_update(rqstp, RC_NOCACHE, NULL);
+			*statp = rpc_system_err;
+			return 1;
+		}
+	}
+#else
 	xdr = proc->pc_encode;
 	if (!nfserr && xdr
 	 && !xdr(rqstp, rqstp->rq_resbuf.buf, rqstp->rq_resp)) {
@@ -237,6 +249,7 @@ nfsd_dispatch(struct svc_rqst *rqstp, u32 *statp)
 		*statp = rpc_system_err;
 		return 1;
 	}
+#endif /* CONFIG_NFSD_V3 */
 
 	/* Store reply in cache. */
 	nfsd_cache_update(rqstp, proc->pc_cachetype, statp + 1);
@@ -246,16 +259,16 @@ nfsd_dispatch(struct svc_rqst *rqstp, u32 *statp)
 static struct svc_version	nfsd_version2 = {
 	2, 18, nfsd_procedures2, nfsd_dispatch
 };
-#ifdef CONFIG_NFSD_NFS3
+#ifdef CONFIG_NFSD_V3
 static struct svc_version	nfsd_version3 = {
-	3, 23, nfsd_procedures3, nfsd_dispatch
+	3, 22, nfsd_procedures3, nfsd_dispatch
 };
 #endif
 static struct svc_version *	nfsd_version[] = {
 	NULL,
 	NULL,
 	&nfsd_version2,
-#ifdef CONFIG_NFSD_NFS3
+#ifdef CONFIG_NFSD_V3
 	&nfsd_version3,
 #endif
 };
