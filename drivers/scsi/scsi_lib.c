@@ -607,6 +607,22 @@ struct Scsi_Device_Template *scsi_get_request_dev(struct request *req)
 		if (spnt->blk && spnt->major == major) {
 			return spnt;
 		}
+		/*
+		 * I am still not entirely satisfied with this solution,
+		 * but it is good enough for now.  Disks have a number of
+		 * major numbers associated with them, the primary
+		 * 8, which we test above, and a secondary range of 7
+		 * different consecutive major numbers.   If this ever
+		 * becomes insufficient, then we could add another function
+		 * to the structure, and generalize this completely.
+		 */
+		if( spnt->min_major != 0 
+		    && spnt->max_major != 0
+		    && major >= spnt->min_major
+		    && major <= spnt->max_major )
+		{
+			return spnt;
+		}
 	}
 	return NULL;
 }
@@ -742,9 +758,14 @@ void scsi_request_fn(request_queue_t * q)
 			if (!SCpnt) {
 				break;
 			}
-			SHpnt->host_busy++;
-			SDpnt->device_busy++;
 		}
+
+		/*
+		 * Now bump the usage count for both the host and the
+		 * device.
+		 */
+		SHpnt->host_busy++;
+		SDpnt->device_busy++;
 
 		/*
 		 * FIXME(eric)

@@ -159,8 +159,6 @@ MODULE_PARM(recov_time, "i");
 #ifdef CONFIG_PCI
 /* Scan PCI bus? */
 static int do_pci_probe = 1;
-/* Default memory base address for CardBus controllers */
-static u_int cb_mem_base[] = { 0x68000000, 0xf8000000 };
 static int fast_pci = -1;
 static int hold_time = -1;
 /* Override BIOS interrupt routing mode? */
@@ -173,7 +171,6 @@ static int cb_bus_base = 0;
 static int cb_bus_step = 2;
 static int cb_write_post = -1;
 MODULE_PARM(do_pci_probe, "i");
-MODULE_PARM(cb_mem_base, "i");
 MODULE_PARM(fast_pci, "i");
 MODULE_PARM(hold_time, "i");
 MODULE_PARM(irq_mode, "i");
@@ -249,11 +246,11 @@ typedef struct socket_info_t {
     struct proc_dir_entry *proc;
 #endif
 #ifdef CONFIG_PCI
-    u_short		vendor, device;
-    u_char		revision, bus, devfn;
+    struct pci_dev	*pdev;
+    u_char		revision;
     u_short		bcr;
     u_char		pci_lat, cb_lat, sub_bus;
-    u_char		cache, pmcs;
+    u_char		cache;
     u_int		cb_phys;
     char		*cb_virt;
 #endif
@@ -294,23 +291,9 @@ static struct timer_list poll_timer;
 
 /*====================================================================*/
 
-#ifdef CONFIG_PCI
-
-#ifndef PCI_VENDOR_ID_INTEL
-#define PCI_VENDOR_ID_INTEL		0x8086
-#endif
-#ifndef PCI_VENDOR_ID_OMEGA
-#define PCI_VENDOR_ID_OMEGA		0x119b
-#endif
-#ifndef PCI_DEVICE_ID_OMEGA_PCMCIA
-#define PCI_DEVICE_ID_OMEGA_PCMCIA	0x1221
-#endif
-
 /* Default settings for PCI command configuration register */
 #define CMD_DFLT (PCI_COMMAND_IO|PCI_COMMAND_MEMORY| \
 		  PCI_COMMAND_MASTER|PCI_COMMAND_WAIT)
-
-#endif
 
 /* These definitions must match the pcic table! */
 typedef enum pcic_id {
@@ -379,9 +362,9 @@ static pcic_t pcic[] = {
     { "O2Micro OZ6730", IS_O2MICRO|IS_PCI|IS_VG_PWR,
       PCI_VENDOR_ID_O2, PCI_DEVICE_ID_O2_6730 },
     { "Intel 82092AA", IS_PCI,
-      PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_OMEGA_PCMCIA },
+      PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_82092AA_0 },
     { "Omega Micro 82C092G", IS_PCI,
-      PCI_VENDOR_ID_OMEGA, PCI_DEVICE_ID_OMEGA_PCMCIA },
+      PCI_VENDOR_ID_OMEGA, PCI_DEVICE_ID_OMEGA_82C092G },
     { "Cirrus PD6832", IS_CIRRUS|IS_CARDBUS,
       PCI_VENDOR_ID_CIRRUS, PCI_DEVICE_ID_CIRRUS_6832 },
     { "O2Micro OZ6832/OZ6833", IS_O2MICRO|IS_CARDBUS|IS_VG_PWR,
@@ -443,12 +426,12 @@ static pcic_t pcic[] = {
 
 /* Some PCI shortcuts */
 
-#define pci_readb		pcibios_read_config_byte
-#define pci_writeb		pcibios_write_config_byte
-#define pci_readw		pcibios_read_config_word
-#define pci_writew		pcibios_write_config_word
-#define pci_readl		pcibios_read_config_dword
-#define pci_writel		pcibios_write_config_dword
+#define config_readb(sock, r, v)	pci_read_config_byte((sock)->pdev, r, v)
+#define config_readw(sock, r, v)	pci_read_config_word((sock)->pdev, r, v)
+#define config_readl(sock, r, v)	pci_read_config_dword((sock)->pdev, r, v)
+#define config_writeb(sock, r, v)	pci_write_config_byte((sock)->pdev, r, v)
+#define config_writew(sock, r, v)	pci_write_config_word((sock)->pdev, r, v)
+#define config_writel(sock, r, v)	pci_write_config_dword((sock)->pdev, r, v)
 
 #define cb_readb(s, r)		readb(socket[s].cb_virt + (r))
 #define cb_readl(s, r)		readl(socket[s].cb_virt + (r))
@@ -701,21 +684,21 @@ static void ti113x_get_state(u_short s)
 {
     socket_info_t *t = &socket[s];
     ti113x_state_t *p = &socket[s].state.ti113x;
-    pci_readl(t->bus, t->devfn, TI113X_SYSTEM_CONTROL, &p->sysctl);
-    pci_readb(t->bus, t->devfn, TI113X_CARD_CONTROL, &p->cardctl);
-    pci_readb(t->bus, t->devfn, TI113X_DEVICE_CONTROL, &p->devctl);
-    pci_readb(t->bus, t->devfn, TI1250_DIAGNOSTIC, &p->diag);
+    config_readl(t, TI113X_SYSTEM_CONTROL, &p->sysctl);
+    config_readb(t, TI113X_CARD_CONTROL, &p->cardctl);
+    config_readb(t, TI113X_DEVICE_CONTROL, &p->devctl);
+    config_readb(t, TI1250_DIAGNOSTIC, &p->diag);
 }
 
 static void ti113x_set_state(u_short s)
 {
     socket_info_t *t = &socket[s];
     ti113x_state_t *p = &socket[s].state.ti113x;
-    pci_writel(t->bus, t->devfn, TI113X_SYSTEM_CONTROL, p->sysctl);
-    pci_writeb(t->bus, t->devfn, TI113X_CARD_CONTROL, p->cardctl);
-    pci_writeb(t->bus, t->devfn, TI113X_DEVICE_CONTROL, p->devctl);
-    pci_writeb(t->bus, t->devfn, TI1250_MULTIMEDIA_CTL, 0);
-    pci_writeb(t->bus, t->devfn, TI1250_DIAGNOSTIC, p->diag);
+    config_writel(t, TI113X_SYSTEM_CONTROL, p->sysctl);
+    config_writeb(t, TI113X_CARD_CONTROL, p->cardctl);
+    config_writeb(t, TI113X_DEVICE_CONTROL, p->devctl);
+    config_writeb(t, TI1250_MULTIMEDIA_CTL, 0);
+    config_writeb(t, TI1250_DIAGNOSTIC, p->diag);
     i365_set_pair(s, TI113X_IO_OFFSET(0), 0);
     i365_set_pair(s, TI113X_IO_OFFSET(1), 0);
 }
@@ -822,20 +805,20 @@ static void rl5c4xx_get_state(u_short s)
 {
     socket_info_t *t = &socket[s];
     rl5c4xx_state_t *p = &socket[s].state.rl5c4xx;
-    pci_readw(t->bus, t->devfn, RL5C4XX_MISC, &p->misc);
-    pci_readw(t->bus, t->devfn, RL5C4XX_16BIT_CTL, &p->ctl);
-    pci_readw(t->bus, t->devfn, RL5C4XX_16BIT_IO_0, &p->io);
-    pci_readw(t->bus, t->devfn, RL5C4XX_16BIT_MEM_0, &p->mem);
+    config_readw(t, RL5C4XX_MISC, &p->misc);
+    config_readw(t, RL5C4XX_16BIT_CTL, &p->ctl);
+    config_readw(t, RL5C4XX_16BIT_IO_0, &p->io);
+    config_readw(t, RL5C4XX_16BIT_MEM_0, &p->mem);
 }
 
 static void rl5c4xx_set_state(u_short s)
 {
     socket_info_t *t = &socket[s];
     rl5c4xx_state_t *p = &socket[s].state.rl5c4xx;
-    pci_writew(t->bus, t->devfn, RL5C4XX_MISC, p->misc);
-    pci_writew(t->bus, t->devfn, RL5C4XX_16BIT_CTL, p->ctl);
-    pci_writew(t->bus, t->devfn, RL5C4XX_16BIT_IO_0, p->io);
-    pci_writew(t->bus, t->devfn, RL5C4XX_16BIT_MEM_0, p->mem);
+    config_writew(t, RL5C4XX_MISC, p->misc);
+    config_writew(t, RL5C4XX_16BIT_CTL, p->ctl);
+    config_writew(t, RL5C4XX_16BIT_IO_0, p->io);
+    config_writew(t, RL5C4XX_16BIT_MEM_0, p->mem);
 }
 
 static u_int __init rl5c4xx_set_opts(u_short s, char *buf)
@@ -986,20 +969,20 @@ static void topic_get_state(u_short s)
 {
     socket_info_t *t = &socket[s];
     topic_state_t *p = &socket[s].state.topic;
-    pci_readb(t->bus, t->devfn, TOPIC_SLOT_CONTROL, &p->slot);
-    pci_readb(t->bus, t->devfn, TOPIC_CARD_CONTROL, &p->ccr);
-    pci_readb(t->bus, t->devfn, TOPIC_CARD_DETECT, &p->cdr);
-    pci_readl(t->bus, t->devfn, TOPIC_REGISTER_CONTROL, &p->rcr);
+    config_readb(t, TOPIC_SLOT_CONTROL, &p->slot);
+    config_readb(t, TOPIC_CARD_CONTROL, &p->ccr);
+    config_readb(t, TOPIC_CARD_DETECT, &p->cdr);
+    config_readl(t, TOPIC_REGISTER_CONTROL, &p->rcr);
 }
 
 static void topic_set_state(u_short s)
 {
     socket_info_t *t = &socket[s];
     topic_state_t *p = &socket[s].state.topic;
-    pci_writeb(t->bus, t->devfn, TOPIC_SLOT_CONTROL, p->slot);
-    pci_writeb(t->bus, t->devfn, TOPIC_CARD_CONTROL, p->ccr);
-    pci_writeb(t->bus, t->devfn, TOPIC_CARD_DETECT, p->cdr);
-    pci_writel(t->bus, t->devfn, TOPIC_REGISTER_CONTROL, p->rcr);
+    config_writeb(t, TOPIC_SLOT_CONTROL, p->slot);
+    config_writeb(t, TOPIC_CARD_CONTROL, p->ccr);
+    config_writeb(t, TOPIC_CARD_DETECT, p->cdr);
+    config_writel(t, TOPIC_REGISTER_CONTROL, p->rcr);
 }
 
 static int topic_set_irq_mode(u_short s, int pcsc, int pint)
@@ -1040,33 +1023,28 @@ static void cb_get_state(u_short s)
 {
     socket_info_t *t = &socket[s];
     
-    pci_readb(t->bus, t->devfn, PCI_CACHE_LINE_SIZE, &t->cache);
-    pci_readb(t->bus, t->devfn, PCI_LATENCY_TIMER, &t->pci_lat);
-    pci_readb(t->bus, t->devfn, CB_LATENCY_TIMER, &t->cb_lat);
-    pci_readb(t->bus, t->devfn, CB_CARDBUS_BUS, &t->cap.cardbus);
-    pci_readb(t->bus, t->devfn, CB_SUBORD_BUS, &t->sub_bus);
-    pci_readw(t->bus, t->devfn, CB_BRIDGE_CONTROL, &t->bcr);
-    {
-	struct pci_dev *pdev = pci_find_slot(t->bus, t->devfn);
-	t->cap.pci_irq = (pdev) ? pdev->irq : 0;
-    }
-    if (t->cap.pci_irq >= NR_IRQS) t->cap.pci_irq = 0;
+    config_readb(t, PCI_CACHE_LINE_SIZE, &t->cache);
+    config_readb(t, PCI_LATENCY_TIMER, &t->pci_lat);
+    config_readb(t, CB_LATENCY_TIMER, &t->cb_lat);
+    config_readb(t, CB_CARDBUS_BUS, &t->cap.cardbus);
+    config_readb(t, CB_SUBORD_BUS, &t->sub_bus);
+    config_readw(t, CB_BRIDGE_CONTROL, &t->bcr);
+    t->cap.pci_irq = t->pdev->irq;
 }
 
 static void cb_set_state(u_short s)
 {
     socket_info_t *t = &socket[s];
-    if (t->pmcs)
-	pci_writew(t->bus, t->devfn, t->pmcs, PCI_PMCS_PWR_STATE_D0);
-    pci_writel(t->bus, t->devfn, CB_LEGACY_MODE_BASE, 0);
-    pci_writel(t->bus, t->devfn, PCI_BASE_ADDRESS_0, t->cb_phys);
-    pci_writew(t->bus, t->devfn, PCI_COMMAND, CMD_DFLT);
-    pci_writeb(t->bus, t->devfn, PCI_CACHE_LINE_SIZE, t->cache);
-    pci_writeb(t->bus, t->devfn, PCI_LATENCY_TIMER, t->pci_lat);
-    pci_writeb(t->bus, t->devfn, CB_LATENCY_TIMER, t->cb_lat);
-    pci_writeb(t->bus, t->devfn, CB_CARDBUS_BUS, t->cap.cardbus);
-    pci_writeb(t->bus, t->devfn, CB_SUBORD_BUS, t->sub_bus);
-    pci_writew(t->bus, t->devfn, CB_BRIDGE_CONTROL, t->bcr);
+    pci_set_power_state(t->pdev, 0);	/* FIXME: Do we really need all of this? */
+    config_writel(t, CB_LEGACY_MODE_BASE, 0);
+    config_writel(t, PCI_BASE_ADDRESS_0, t->cb_phys);
+    config_writew(t, PCI_COMMAND, CMD_DFLT);
+    config_writeb(t, PCI_CACHE_LINE_SIZE, t->cache);
+    config_writeb(t, PCI_LATENCY_TIMER, t->pci_lat);
+    config_writeb(t, CB_LATENCY_TIMER, t->cb_lat);
+    config_writeb(t, CB_CARDBUS_BUS, t->cap.cardbus);
+    config_writeb(t, CB_SUBORD_BUS, t->sub_bus);
+    config_writew(t, CB_BRIDGE_CONTROL, t->bcr);
 }
 
 static int cb_get_irq_mode(u_short s)
@@ -1500,13 +1478,11 @@ static void __init add_pcic(int ns, int type)
     printk(KERN_INFO "  %s", pcic[type].name);
 #ifdef CONFIG_PCI
     if (t->flags & IS_UNKNOWN)
-	printk(" [0x%04x 0x%04x]", t->vendor, t->device);
+	printk(" [0x%04x 0x%04x]", t->pdev->vendor, t->pdev->device);
     if (t->flags & IS_CARDBUS)
-	printk(" PCI-to-CardBus at bus %d slot %d, mem 0x%08x",
-	       t->bus, PCI_SLOT(t->devfn), t->cb_phys);
+	printk(" PCI-to-CardBus at %s, mem 0x%08x", t->pdev->slot_name, t->cb_phys);
     else if (t->flags & IS_PCI)
-	printk(" PCI-to-PCMCIA at bus %d slot %d, port %#x",
-	       t->bus, PCI_SLOT(t->devfn), t->ioaddr);
+	printk(" PCI-to-PCMCIA at %s, port %#x", t->pdev->slot_name, t->ioaddr);
     else
 #endif
 	printk(" ISA-to-PCMCIA at port %#x ofs 0x%02x",
@@ -1596,107 +1572,50 @@ static void __init add_pcic(int ns, int type)
 
 #ifdef CONFIG_PCI
 
-typedef struct pci_dev *pci_id_t;
-static int __init pci_lookup(u_int class, pci_id_t *id,
-			     u_char *bus, u_char *devfn)
-{
-    if ((*id = pci_find_class(class<<8, *id)) != NULL) {
-	*bus = (*id)->bus->number;
-	*devfn = (*id)->devfn;
-	return 0;
-    } else return -1;
-}
-
-static void __init add_pci_bridge(int type, u_char bus, u_char devfn,
-				  u_short v, u_short d)
+static void __init add_pci_bridge(int type, struct pci_dev *dev)
 {
     socket_info_t *s = &socket[sockets];
     u_short i, ns;
-    u_int addr;
+    u32 addr = dev->resource[0].start;
 
     if (type == PCIC_COUNT) type = IS_UNK_PCI;
-    pci_readl(bus, devfn, PCI_BASE_ADDRESS_0, &addr);
-    addr &= ~0x1;
-    pci_writew(bus, devfn, PCI_COMMAND, CMD_DFLT);
+    pci_write_config_word(dev, PCI_COMMAND, CMD_DFLT);
     for (i = ns = 0; i < ((type == IS_I82092AA) ? 4 : 2); i++) {
-	s->bus = bus; s->devfn = devfn;
-	s->vendor = v; s->device = d;
+	s->pdev = dev;
 	add_socket(addr, i, type);
 	ns++; s++;
     }
     add_pcic(ns, type);
 }
 
-static void __init add_cb_bridge(int type, u_char bus, u_char devfn,
-				 u_short v, u_short d0)
+static void __init add_cb_bridge(int type, struct pci_dev *dev0)
 {
     socket_info_t *s = &socket[sockets];
-    u_short d, ns, i;
-    u_char a, b, r, max;
+    u_short i, ns;
+    u_char a, b;
     
-    /* PCI bus enumeration is broken on some systems */
-    for (ns = 0; ns < sockets; ns++)
-	if ((socket[ns].bus == bus) && (socket[ns].devfn == devfn))
-	    return;
-    
-    if (type == PCIC_COUNT) type = IS_UNK_CARDBUS;
-    pci_readb(bus, devfn, PCI_HEADER_TYPE, &a);
-    pci_readb(bus, devfn, PCI_CLASS_REVISION, &r);
-    max = (a & 0x80) ? 8 : 1;
-    for (ns = 0; ns < max; ns++, s++, devfn++) {
-	if (pci_readw(bus, devfn, PCI_DEVICE_ID, &d) || (d != d0))
-	    break;
-	s->bus = bus; s->devfn = devfn;
-	s->vendor = v; s->device = d; s->revision = r;
-	
-	/* Check for power management capabilities */
-	pci_readb(bus, devfn, PCI_STATUS, &a);
-	if (a & PCI_STATUS_CAPLIST) {
-	    pci_readb(bus, devfn, PCI_CB_CAPABILITY_POINTER, &b);
-	    while (b != 0) {
-		pci_readb(bus, devfn, b+PCI_CAPABILITY_ID, &a);
-		if (a == PCI_CAPABILITY_PM) {
-		    s->pmcs = b + PCI_PM_CONTROL_STATUS;
-		    break;
-		}
-		pci_readb(bus, devfn, b+PCI_NEXT_CAPABILITY, &b);
-	    }
-	}
-	/* If capability exists, make sure we're in D0 state */
-	if (s->pmcs)
-	    pci_writew(bus, devfn, s->pmcs, PCI_PMCS_PWR_STATE_D0);
-	
-	/* Map CardBus registers if they are not already mapped */
-	pci_writel(bus, devfn, CB_LEGACY_MODE_BASE, 0);
-	pci_readl(bus, devfn, PCI_BASE_ADDRESS_0, &s->cb_phys);
-	if (s->cb_phys == 0) {
-	    pci_writew(bus, devfn, PCI_COMMAND, CMD_DFLT);
-	    for (i = 0; i < sizeof(cb_mem_base)/sizeof(u_int); i++) {
-		s->cb_phys = cb_mem_base[i];
-		s->cb_virt = ioremap(s->cb_phys, 0x1000);
-		pci_writel(bus, devfn, PCI_BASE_ADDRESS_0, s->cb_phys);
-		/* Simple sanity checks */
-		if (!(readb(s->cb_virt+0x800+I365_IDENT) & 0x70) &&
-		    !(readb(s->cb_virt+0x800+I365_CSC) &&
-		      readb(s->cb_virt+0x800+I365_CSC) &&
-		      readb(s->cb_virt+0x800+I365_CSC)))
-		    break;
-		iounmap(s->cb_virt);
-	    }
-	    if (i == sizeof(cb_mem_base)/sizeof(u_int)) {
-		pci_writel(bus, devfn, PCI_BASE_ADDRESS_0, 0);
-		s->cb_phys = 0; s->cb_virt = NULL;
-		printk("\n");
-		printk(KERN_NOTICE "  Bridge register mapping failed:"
-		       " check cb_mem_base setting\n");
+    if (type == PCIC_COUNT)
+    	type = IS_UNK_CARDBUS;
+
+    for (ns = 0; ns < 8; ns++, s++) {
+	struct pci_dev *dev;
+
+	dev = pci_find_slot(dev0->bus->number, dev0->devfn + ns);
+	if (!dev)
 		break;
-	    }
-	    cb_mem_base[0] = cb_mem_base[i] + PAGE_SIZE;
-	} else {
-	    s->cb_virt = ioremap(s->cb_phys, 0x1000);
+	s->pdev = dev;
+	pci_read_config_byte(dev, PCI_CLASS_REVISION, &s->revision);
+
+	/* Map CardBus registers if they are not already mapped */
+	pci_write_config_dword(dev, CB_LEGACY_MODE_BASE, 0);
+	s->cb_phys = dev->resource[0].start;
+	if (!s->cb_phys || !(s->cb_virt = ioremap(s->cb_phys, 0x1000))) {
+	    printk("\n");
+	    printk(KERN_ERR "  No control registers found!\n");
+	    break;
 	}
-	
 	request_mem_region(s->cb_phys, 0x1000, "i82365");
+	s->cap.cb_bus = dev->subordinate;
 	add_socket(0, 0, type);
     }
     if (ns == 0) return;
@@ -1704,11 +1623,11 @@ static void __init add_cb_bridge(int type, u_char bus, u_char devfn,
     s -= ns;
     if (ns == 2) {
 	/* Nasty special check for bad bus mapping */
-	pci_readb(bus, s[0].devfn, CB_CARDBUS_BUS, &a);
-	pci_readb(bus, s[1].devfn, CB_CARDBUS_BUS, &b);
+	config_readb(&s[0], CB_CARDBUS_BUS, &a);
+	config_readb(&s[1], CB_CARDBUS_BUS, &b);
 	if (a == b) {
-	    pci_writeb(bus, s[0].devfn, CB_CARDBUS_BUS, 0);
-	    pci_writeb(bus, s[1].devfn, CB_CARDBUS_BUS, 0);
+	    config_writeb(&s[0], CB_CARDBUS_BUS, 0);
+	    config_writeb(&s[1], CB_CARDBUS_BUS, 0);
 	}
     }
     add_pcic(ns, type);
@@ -1728,43 +1647,19 @@ static void __init add_cb_bridge(int type, u_char bus, u_char devfn,
     if (i == 200)
 	printk(KERN_NOTICE "i82365: card voltage interrogation"
 	       " timed out!\n");
-
-    /* Set up PCI bus bridge structures if needed */
-    for (a = 0; a < ns; a++) {
-	struct pci_dev *self = pci_find_slot(bus, s[a].devfn);
-	struct pci_bus *child, *parent = self->bus;
-	for (child = parent->children; child; child = child->next)
-	    if (child->number == s[a].cap.cardbus) break;
-	if (!child) {
-	    child = kmalloc(sizeof(struct pci_bus), GFP_KERNEL);
-	    memset(child, 0, sizeof(struct pci_bus));
-	    child->self = self;
-	    child->primary = bus;
-	    child->number = child->secondary = s[a].cap.cardbus;
-	    child->subordinate = s[a].sub_bus;
-	    child->parent = parent;
-	    child->ops = parent->ops;
-	    child->next = parent->children;
-	}
-	s[a].cap.cb_bus = parent->children = child;
-    }
 }
 
-static void __init pci_probe(u_int class, void (add_fn)
-			     (int, u_char, u_char, u_short, u_short))
+static void __init pci_probe(u_int class, void (add_fn)(int, struct pci_dev *))
 {
-    u_short i, v, d;
-    u_char bus, devfn;
-    pci_id_t id;
-    
-    id = 0;
-    while (pci_lookup(class, &id, &bus, &devfn) == 0) {
-	if (PCI_FUNC(devfn) != 0) continue;
-	pci_readw(bus, devfn, PCI_VENDOR_ID, &v);
-	pci_readw(bus, devfn, PCI_DEVICE_ID, &d);
+    struct pci_dev *dev = NULL;
+    u_short i;
+
+    while ((dev = pci_find_class(class << 8, dev))) {
+	pci_enable_device(dev);
+	if (PCI_FUNC(dev->devfn) != 0) continue;
 	for (i = 0; i < PCIC_COUNT; i++)
-	    if ((pcic[i].vendor == v) && (pcic[i].device == d)) break;
-	add_fn(i, bus, devfn, v, d);
+	    if ((pcic[i].vendor == dev->vendor) && (pcic[i].device == dev->device)) break;
+	add_fn(i, dev);
     }
 }
 
@@ -2397,7 +2292,7 @@ static int cb_get_socket(u_short sock, socket_state_t *state)
     u_short bcr;
 
     cb_get_power(sock, state);
-    pci_readw(s->bus, s->devfn, CB_BRIDGE_CONTROL, &bcr);
+    config_readw(s, CB_BRIDGE_CONTROL, &bcr);
     state->flags |= (bcr & CB_BCR_CB_RESET) ? SS_RESET : 0;
     if (cb_get_irq_mode(sock) != 0)
 	state->io_irq = s->cap.pci_irq;
@@ -2454,15 +2349,15 @@ static int cb_get_bridge(u_short sock, struct cb_bridge_map *m)
     if (map > 1) return -EINVAL;
     m->flags &= MAP_IOSPACE;
     map += (m->flags & MAP_IOSPACE) ? 2 : 0;
-    pci_readl(s->bus, s->devfn, CB_MEM_BASE(map), &m->start);
-    pci_readl(s->bus, s->devfn, CB_MEM_LIMIT(map), &m->stop);
+    config_readl(s, CB_MEM_BASE(map), &m->start);
+    config_readl(s, CB_MEM_LIMIT(map), &m->stop);
     if (m->start || m->stop) {
 	m->flags |= MAP_ACTIVE;
 	m->stop |= (map > 1) ? 3 : 0x0fff;
     }
     if (map > 1) {
 	u_short bcr;
-	pci_readw(s->bus, s->devfn, CB_BRIDGE_CONTROL, &bcr);
+	config_readw(s, CB_BRIDGE_CONTROL, &bcr);
 	m->flags |= (bcr & CB_BCR_PREFETCH(map)) ? MAP_PREFETCH : 0;
     }
     DEBUG(1, "yenta: GetBridge(%d, %d) = %#2.2x, %#4.4x-%#4.4x\n",
@@ -2489,17 +2384,17 @@ static int cb_set_bridge(u_short sock, struct cb_bridge_map *m)
 	u_short bcr;
 	if ((m->start & 0x0fff) || ((m->stop & 0x0fff) != 0x0fff))
 	    return -EINVAL;
-	pci_readw(s->bus, s->devfn, CB_BRIDGE_CONTROL, &bcr);
+	config_readw(s, CB_BRIDGE_CONTROL, &bcr);
 	bcr &= ~CB_BCR_PREFETCH(map);
 	bcr |= (m->flags & MAP_PREFETCH) ? CB_BCR_PREFETCH(map) : 0;
-	pci_writew(s->bus, s->devfn, CB_BRIDGE_CONTROL, bcr);
+	config_writew(s, CB_BRIDGE_CONTROL, bcr);
     }
     if (m->flags & MAP_ACTIVE) {
-	pci_writel(s->bus, s->devfn, CB_MEM_BASE(map), m->start);
-	pci_writel(s->bus, s->devfn, CB_MEM_LIMIT(map), m->stop);
+	config_writel(s, CB_MEM_BASE(map), m->start);
+	config_writel(s, CB_MEM_LIMIT(map), m->stop);
     } else {
-	pci_writel(s->bus, s->devfn, CB_IO_BASE(map), 0);
-	pci_writel(s->bus, s->devfn, CB_IO_LIMIT(map), 0);
+	config_writel(s, CB_MEM_BASE(map), 0);
+	config_writel(s, CB_MEM_LIMIT(map), 0);
     }
     return 0;
 }
@@ -2525,7 +2420,7 @@ static int proc_read_info(char *buf, char **start, off_t pos,
 #ifdef CONFIG_PCI
     if (s->flags & (IS_PCI|IS_CARDBUS))
 	p += sprintf(p, "bus:      %02x\ndevfn:    %02x.%1x\n",
-		     s->bus, PCI_SLOT(s->devfn), PCI_FUNC(s->devfn));
+		     s->pdev->bus->number, PCI_SLOT(s->pdev->devfn), PCI_FUNC(s->pdev->devfn));
     if (s->flags & IS_CARDBUS)
 	p += sprintf(p, "cardbus:  %02x\n", s->cap.cardbus);
 #endif
@@ -2565,16 +2460,15 @@ static int proc_read_pci(char *buf, char **start, off_t pos,
 			 int count, int *eof, void *data)
 {
     socket_info_t *s = data;
-    u_char bus = s->bus, devfn = s->devfn;
     char *p = buf;
     u_int a, b, c, d;
     int i;
     
     for (i = 0; i < 0xc0; i += 0x10) {
-	pci_readl(bus, devfn, i, &a);
-	pci_readl(bus, devfn, i+4, &b);
-	pci_readl(bus, devfn, i+8, &c);
-	pci_readl(bus, devfn, i+12, &d);
+	config_readl(s, i, &a);
+	config_readl(s, i+4, &b);
+	config_readl(s, i+8, &c);
+	config_readl(s, i+12, &d);
 	p += sprintf(p, "%08x %08x %08x %08x\n", a, b, c, d);
     }
     return (p - buf);
@@ -2801,7 +2695,7 @@ static int __init init_i82365(void)
     sockets = 0;
 
 #ifdef CONFIG_PCI
-    if (do_pci_probe && pcibios_present()) {
+    if (do_pci_probe) {
 	pci_probe(PCI_CLASS_BRIDGE_CARDBUS, add_cb_bridge);
 	pci_probe(PCI_CLASS_BRIDGE_PCMCIA, add_pci_bridge);
     }
@@ -2892,4 +2786,3 @@ module_init(init_i82365);
 module_exit(exit_i82365);
 
 /*====================================================================*/
-

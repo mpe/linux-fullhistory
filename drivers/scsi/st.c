@@ -147,10 +147,16 @@ static int st_detect(Scsi_Device *);
 static void st_detach(Scsi_Device *);
 
 struct Scsi_Device_Template st_template =
-{NULL, "tape", "st", NULL, TYPE_TAPE,
- SCSI_TAPE_MAJOR, 0, 0, 0, 0,
- st_detect, st_init,
- NULL, st_attach, st_detach};
+{
+	name:"tape", 
+	tag:"st", 
+	scsi_type:TYPE_TAPE,
+	major:SCSI_TAPE_MAJOR, 
+	detect:st_detect, 
+	init:st_init,
+	attach:st_attach, 
+	detach:st_detach
+};
 
 static int st_compression(Scsi_Tape *, int);
 

@@ -283,20 +283,21 @@ int cb_alloc(socket_info_t *s)
     u_char i, hdr, fn, bus = s->cap.cardbus;
     cb_config_t *c;
 
+    memset(&tmp, 0, sizeof(tmp));
     tmp.bus = s->cap.cb_bus; tmp.devfn = 0;
-    tmp.next = pci_devices; pci_devices = &tmp;
 
-    pci_readw(bus, 0, PCI_VENDOR_ID, &vend);
-    pci_readw(bus, 0, PCI_DEVICE_ID, &dev);
+
+    pci_read_config_word(&tmp, PCI_VENDOR_ID, &vend);
+    pci_read_config_word(&tmp, PCI_DEVICE_ID, &dev);
     printk(KERN_INFO "cs: cb_alloc(bus %d): vendor 0x%04x, "
 	   "device 0x%04x\n", bus, vend, dev);
 
-    pci_readb(bus, 0, PCI_HEADER_TYPE, &hdr);
+    pci_read_config_byte(&tmp, PCI_HEADER_TYPE, &hdr);
     if (hdr & 0x80) {
 	/* Count functions */
 	for (fn = 0; fn < 8; fn++) {
 	    tmp.devfn = fn;
-	    pci_readw(bus, fn, PCI_VENDOR_ID, &v);
+	    pci_read_config_word(&tmp, PCI_VENDOR_ID, &v);
 	    if (v != vend) break;
 	}
     } else fn = 1;
@@ -307,7 +308,6 @@ int cb_alloc(socket_info_t *s)
     memset(c, 0, fn * sizeof(struct cb_config_t));
     s->cb_config = c;
 
-    pci_devices = tmp.next;
     for (i = 0; i < fn; i++) {
 	c[i].dev.bus = s->cap.cb_bus;
 	c[i].dev.devfn = i;
@@ -317,7 +317,7 @@ int cb_alloc(socket_info_t *s)
     }
     s->cap.cb_bus->devices = &c[0].dev;
     /* Link into PCI device chain */
-    c[s->functions-1].dev.next = pci_devices;
+    c[fn-1].dev.next = pci_devices;
     pci_devices = &c[0].dev;
     for (i = 0; i < fn; i++) {
 	c[i].dev.vendor = vend;
@@ -338,17 +338,17 @@ void cb_free(socket_info_t *s)
     cb_config_t *c = s->cb_config;
 
     if (c) {
-	struct pci_dev **p, *q;
+	struct pci_dev **p;
 	/* Unlink from PCI device chain */
-	for (p = &pci_devices; *p; p = &((*p)->next))
-	    if (*p == &c[0].dev) break;
-	for (q = *p; q; q = q->next) {
-	    if (q->bus != (*p)->bus) break;
+	for (p = &pci_devices; *p; p = &((*p)->next)) {
+	    struct pci_dev * dev = *p;
+	    if (dev->bus != s->cap.cb_bus)
+		continue;
+	    *p = dev->next;
 #ifdef CONFIG_PROC_FS
-	    pci_proc_detach_device(q);
+	    pci_proc_detach_device(dev);
 #endif
 	}
-	if (*p) *p = q;
 	s->cap.cb_bus->devices = NULL;
 	kfree(s->cb_config);
 	s->cb_config = NULL;

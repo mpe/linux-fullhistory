@@ -101,10 +101,17 @@ static int sg_detect(Scsi_Device *);
 static void sg_detach(Scsi_Device *);
 
 
-struct Scsi_Device_Template sg_template = {NULL, NULL, "sg", NULL, 0xff,
-                                           SCSI_GENERIC_MAJOR, 0, 0, 0, 0,
-                                           sg_detect, sg_init,
-                                           sg_finish, sg_attach, sg_detach};
+struct Scsi_Device_Template sg_template = 
+{
+	tag:"sg", 
+	scsi_type:0xff,
+	major:SCSI_GENERIC_MAJOR, 
+	detect:sg_detect, 
+	init:sg_init,
+	finish:sg_finish, 
+	attach:sg_attach, 
+	detach:sg_detach
+};
 
 
 typedef struct sg_scatter_hold  /* holding area for scsi scatter gather info */

@@ -30,7 +30,6 @@
 struct pci_bus *pci_root;
 struct pci_dev *pci_devices = NULL;
 static struct pci_dev **pci_last_dev_p = &pci_devices;
-static int pci_reverse __initdata = 0;
 
 struct pci_dev *
 pci_find_slot(unsigned int bus, unsigned int devfn)
@@ -270,7 +269,7 @@ static inline unsigned int pci_resource_flags(unsigned int flags)
 	return IORESOURCE_MEM;
 }
 
-void __init pci_read_bases(struct pci_dev *dev, unsigned int howmany, int rom)
+static void __init pci_read_bases(struct pci_dev *dev, unsigned int howmany, int rom)
 {
 	unsigned int pos, reg, next;
 	u32 l, sz, tmp;
@@ -433,7 +432,7 @@ static __init struct pci_bus *pci_add_new_bus(struct pci_bus *parent, struct pci
 
 	/*
 	 * Set up the primary, secondary and subordinate
-	 * bus numbers.  Read resource ranges behind the bridge.
+	 * bus numbers.
 	 */
 	child->number = child->secondary = busnr;
 	child->primary = parent->secondary;
@@ -578,24 +577,29 @@ static __init void pci_read_irq(struct pci_dev *dev)
 }
 
 /*
- * Read the config data for a PCI device
- * and sanity-check it and fill in the dev
- * structure...
+ * Read the config data for a PCI device, sanity-check it
+ * and fill in the dev structure...
  */
-static __init int pci_scan_device(struct pci_bus *bus, struct pci_dev *dev, unsigned int devfn)
+static struct pci_dev * __init pci_scan_device(struct pci_dev *temp)
 {
-	unsigned int l, class;
+	struct pci_dev *dev;
+	u32 l, class;
 
-	if (pci_read_config_dword(dev, PCI_VENDOR_ID, &l))
-		return -1;
+	if (pci_read_config_dword(temp, PCI_VENDOR_ID, &l))
+		return NULL;
 
-	/* some broken boards return 0 if a slot is empty: */
+	/* some broken boards return 0 or ~0 if a slot is empty: */
 	if (l == 0xffffffff || l == 0x00000000 || l == 0x0000ffff || l == 0xffff0000)
-		return -1;
+		return NULL;
 
+	dev = kmalloc(sizeof(*dev), GFP_KERNEL);
+	if (!dev)
+		return NULL;
+
+	memcpy(dev, temp, sizeof(*dev));
 	dev->vendor = l & 0xffff;
 	dev->device = (l >> 16) & 0xffff;
-	sprintf(dev->slot_name, "%02x:%02x.%d", bus->number, PCI_SLOT(devfn), PCI_FUNC(devfn));
+	sprintf(dev->slot_name, "%02x:%02x.%d", dev->bus->number, PCI_SLOT(dev->devfn), PCI_FUNC(dev->devfn));
 	pci_name_device(dev);
 
 	pci_read_config_dword(dev, PCI_CLASS_REVISION, &class);
@@ -631,7 +635,8 @@ static __init int pci_scan_device(struct pci_bus *bus, struct pci_dev *dev, unsi
 	default:				    /* unknown header */
 		printk(KERN_ERR "PCI: device %s has unknown header type %02x, ignoring.\n",
 			dev->slot_name, dev->hdr_type);
-		return -1;
+		kfree(dev);
+		return NULL;
 
 	bad:
 		printk(KERN_ERR "PCI: %s: class %x doesn't match header type %02x. Ignoring class.\n",
@@ -640,47 +645,32 @@ static __init int pci_scan_device(struct pci_bus *bus, struct pci_dev *dev, unsi
 	}
 
 	/* We found a fine healthy device, go go go... */
-	return 0;
+	return dev;
 }
 
-
-static unsigned int __init pci_do_scan_bus(struct pci_bus *bus)
+struct pci_dev * __init pci_scan_slot(struct pci_dev *temp)
 {
-	unsigned int devfn, max;
-	struct pci_dev *dev, **bus_last;
+	struct pci_bus *bus = temp->bus;
+	struct pci_dev *dev;
+	struct pci_dev *first_dev = NULL;
+	int func = 0;
 	int is_multi = 0;
+	u8 hdr_type;
 
-	DBG("pci_do_scan_bus for bus %d\n", bus->number);
-	bus_last = &bus->devices;
-	max = bus->secondary;
-
-	/* Allocate the device ahead of time.. */
-	dev = kmalloc(sizeof(*dev), GFP_KERNEL);
-	if (!dev)
-		return max;
-
-	/* Go find them, Rover! */
-	for (devfn = 0; devfn < 0xff; ++devfn) {
-		unsigned char hdr_type;
-
-		/* not a multi-function device */
-		if (PCI_FUNC(devfn) && !is_multi)
+	for (func = 0; func < 8; func++, temp->devfn++) {
+		if (func && !is_multi)		/* not a multi-function device */
 			continue;
-
-		memset(dev, 0, sizeof(*dev));
-		dev->bus = bus;
-		dev->sysdata = bus->sysdata;
-		dev->devfn  = devfn;
-
-		if (pci_read_config_byte(dev, PCI_HEADER_TYPE, &hdr_type))
+		if (pci_read_config_byte(temp, PCI_HEADER_TYPE, &hdr_type))
 			continue;
+		temp->hdr_type = hdr_type & 0x7f;
 
-		if (!PCI_FUNC(devfn))
+		dev = pci_scan_device(temp);
+		if (!dev)
+			continue;
+		if (!func) {
 			is_multi = hdr_type & 0x80;
-		dev->hdr_type = hdr_type & 0x7f;
-
-		if (pci_scan_device(bus, dev, devfn))
-			continue;
+			first_dev = dev;
+		}
 
 		DBG("PCI: %02x:%02x [%04x/%04x] %06x %02x\n", bus->number, dev->devfn, dev->vendor, dev->device, class, hdr_type);
 
@@ -688,37 +678,41 @@ static unsigned int __init pci_do_scan_bus(struct pci_bus *bus)
 		 * Put it into the global PCI device chain. It's used to
 		 * find devices once everything is set up.
 		 */
-		if (!pci_reverse) {
-			*pci_last_dev_p = dev;
-			pci_last_dev_p = &dev->next;
-		} else {
-			dev->next = pci_devices;
-			pci_devices = dev;
-		}
+		*pci_last_dev_p = dev;
+		pci_last_dev_p = &dev->next;
 
 		/*
 		 * Now insert it into the list of devices held
 		 * by the parent bus.
 		 */
-		*bus_last = dev;
-		bus_last = &dev->sibling;
+		*bus->last_dev_p = dev;
+		bus->last_dev_p = &dev->sibling;
 
 		/* Fix up broken headers */
 		pci_fixup_device(PCI_FIXUP_HEADER, dev);
-
-#if 0
-		/*
-		 * Setting of latency timer in case it was less than 32 was
-		 * a great idea, but it confused several broken devices. Grrr.
-		 */
-		pci_read_config_byte(dev, PCI_LATENCY_TIMER, &tmp);
-		if (tmp < 32)
-			pci_write_config_byte(dev, PCI_LATENCY_TIMER, 32);
-#endif
-
-		dev = kmalloc(sizeof(*dev), GFP_KERNEL);
 	}
-	kfree(dev);
+	return first_dev;
+}
+
+static unsigned int __init pci_do_scan_bus(struct pci_bus *bus)
+{
+	unsigned int devfn, max;
+	struct pci_dev *dev, dev0;
+
+	DBG("pci_do_scan_bus for bus %d\n", bus->number);
+	bus->last_dev_p = &bus->devices;
+	max = bus->secondary;
+
+	/* Create a device template */
+	memset(&dev0, 0, sizeof(dev0));
+	dev0.bus = bus;
+	dev0.sysdata = bus->sysdata;
+
+	/* Go find them, Rover! */
+	for (devfn = 0; devfn < 0x100; devfn += 8) {
+		dev0.devfn = devfn;
+		pci_scan_slot(&dev0);
+	}
 
 	/*
 	 * After performing arch-dependent fixup of the bus, look behind
@@ -759,7 +753,7 @@ static int __init pci_bus_exists(struct pci_bus *b, int nr)
 	return 0;
 }
 
-struct pci_bus * __init pci_scan_bus(int bus, struct pci_ops *ops, void *sysdata)
+struct pci_bus * __init pci_alloc_primary_bus(int bus)
 {
 	struct pci_bus *b, **r;
 
@@ -779,11 +773,19 @@ struct pci_bus * __init pci_scan_bus(int bus, struct pci_ops *ops, void *sysdata
 	*r = b;
 
 	b->number = b->secondary = bus;
-	b->sysdata = sysdata;
-	b->ops = ops;
 	b->resource[0] = &ioport_resource;
 	b->resource[1] = &iomem_resource;
-	b->subordinate = pci_do_scan_bus(b);
+	return b;
+}
+
+struct pci_bus * __init pci_scan_bus(int bus, struct pci_ops *ops, void *sysdata)
+{
+	struct pci_bus *b = pci_alloc_primary_bus(bus);
+	if (b) {
+		b->sysdata = sysdata;
+		b->ops = ops;
+		b->subordinate = pci_do_scan_bus(b);
+	}
 	return b;
 }
 
@@ -804,9 +806,8 @@ static int __init pci_setup(char *str)
 		if (k)
 			*k++ = 0;
 		if (*str && (str = pcibios_setup(str)) && *str) {
-			if (!strcmp(str, "reverse"))
-				pci_reverse = 1;
-			else printk(KERN_ERR "PCI: Unknown option `%s'\n", str);
+			/* PCI layer options should be handled here */
+			printk(KERN_ERR "PCI: Unknown option `%s'\n", str);
 		}
 		str = k;
 	}

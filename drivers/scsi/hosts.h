@@ -437,6 +437,8 @@ struct Scsi_Device_Template
     struct module * module;	  /* Used for loadable modules */
     unsigned char scsi_type;
     unsigned char major;
+    unsigned char min_major;      /* Minimum major in range. */ 
+    unsigned char max_major;      /* Maximum major in range. */
     unsigned char nr_dev;	  /* Number currently attached */
     unsigned char dev_noticed;	  /* Number of devices detected. */
     unsigned char dev_max;	  /* Current size of arrays */
@@ -447,7 +449,8 @@ struct Scsi_Device_Template
     void (*finish)(void);	  /* Perform initialization after attachment */
     int (*attach)(Scsi_Device *); /* Attach devices to arrays */
     void (*detach)(Scsi_Device *);
-    int (*init_command)(Scsi_Cmnd *);     /* Used by new queueing code. */
+    int (*init_command)(Scsi_Cmnd *);     /* Used by new queueing code. 
+                                           Selects command for blkdevs */
 };
 
 extern struct Scsi_Device_Template sd_template;

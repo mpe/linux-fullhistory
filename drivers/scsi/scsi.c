@@ -1470,9 +1470,6 @@ void scsi_do_cmd(Scsi_Cmnd * SCpnt, const void *cmnd,
 	 */
 
 
-	host->host_busy++;
-	device->device_busy++;
-
 	/*
 	 * Our own function scsi_done (which marks the host as not busy, disables
 	 * the timeout counter, etc) will be called by us or by the
@@ -1575,6 +1572,9 @@ void scsi_done(Scsi_Cmnd * SCpnt)
 	 * Since serial_number is now 0, the error handler cound detect this
 	 * situation and avoid to call the the low level driver abort routine.
 	 * (DB)
+         *
+         * FIXME(eric) - I believe that this test is now redundant, due to
+         * the test of the return status of del_timer().
 	 */
 	if (SCpnt->state == SCSI_STATE_TIMEOUT) {
 		SCSI_LOG_MLCOMPLETE(1, printk("Ignoring completion of %p due to timeout status", SCpnt));

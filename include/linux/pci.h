@@ -360,6 +360,7 @@ struct pci_bus {
 
 	struct pci_dev	*self;		/* bridge device as seen by parent */
 	struct pci_dev	*devices;	/* devices behind this bridge */
+	struct pci_dev	**last_dev_p;	/* where should next device be linked to */
 	struct resource	*resource[4];	/* address space routed to this bus */
 
 	void		*sysdata;	/* hook for sys-specific extension */
@@ -449,6 +450,8 @@ int pcibios_find_device (unsigned short vendor, unsigned short dev_id,
 
 void pci_init(void);
 struct pci_bus *pci_scan_bus(int bus, struct pci_ops *ops, void *sysdata);
+struct pci_bus *pci_alloc_primary_bus(int bus);
+struct pci_dev *pci_scan_slot(struct pci_dev *temp);
 int pci_proc_attach_device(struct pci_dev *dev);
 int pci_proc_detach_device(struct pci_dev *dev);
 void pci_name_device(struct pci_dev *dev);

@@ -202,6 +202,11 @@ struct Scsi_Device_Template sd_template = {
 	tag:"sd",
 	scsi_type:TYPE_DISK,
 	major:SCSI_DISK0_MAJOR,
+        /*
+         * Secondary range of majors that this driver handles.
+         */
+	min_major:SCSI_DISK1_MAJOR,
+	max_major:SCSI_DISK7_MAJOR,
 	blk:1,
 	detect:sd_detect,
 	init:sd_init,
@@ -229,7 +234,7 @@ static int sd_init_command(Scsi_Cmnd * SCpnt)
 	Scsi_Disk *dpnt;
 	char nbuff[6];
 
-	devm = MINOR(SCpnt->request.rq_dev);
+	devm = SD_PARTITION(SCpnt->request.rq_dev);
 	dev = DEVICE_NR(SCpnt->request.rq_dev);
 
 	block = SCpnt->request.sector;
@@ -561,7 +566,7 @@ static void rw_intr(Scsi_Cmnd * SCpnt)
 			default:
 				break;
 			}
-			error_sector -= sd[MINOR(SCpnt->request.rq_dev)].start_sect;
+			error_sector -= sd[SD_PARTITION(SCpnt->request.rq_dev)].start_sect;
 			error_sector &= ~(block_sectors - 1);
 			good_sectors = error_sector - SCpnt->request.sector;
 			if (good_sectors < 0 || good_sectors >= this_count)

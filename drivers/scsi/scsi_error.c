@@ -1778,6 +1778,17 @@ STATIC int scsi_unjam_host(struct Scsi_Host *host)
 	for (SCpnt = SCdone; SCpnt != NULL; SCpnt = SCdone) {
 		SCdone = SCpnt->bh_next;
 		SCpnt->bh_next = NULL;
+                /*
+                 * Oh, this is a vile hack.  scsi_done() expects a timer
+                 * to be running on the command.  If there isn't, it assumes
+                 * that the command has actually timed out, and a timer
+                 * handler is running.  That may well be how we got into
+                 * this fix, but right now things are stable.  We add
+                 * a timer back again so that we can report completion.
+                 * scsi_done() will immediately remove said timer from
+                 * the command, and then process it.
+                 */
+		scsi_add_timer(SCpnt, 100, scsi_eh_times_out);
 		scsi_done(SCpnt);
 	}
 
@@ -1809,7 +1820,14 @@ void scsi_error_handler(void *data)
 	int rtn;
 	DECLARE_MUTEX_LOCKED(sem);
 
+        /*
+         * We only listen to signals if the HA was loaded as a module.
+         * If the HA was compiled into the kernel, then we don't listen
+         * to any signals.
+         */
+        if( host->loaded_as_module ) {
 	siginitsetinv(&current->blocked, SHUTDOWN_SIGS);
+        }
 
 	lock_kernel();
 
@@ -1844,10 +1862,14 @@ void scsi_error_handler(void *data)
 		 * trying to unload a module.
 		 */
 		SCSI_LOG_ERROR_RECOVERY(1, printk("Error handler sleeping\n"));
+                if( host->loaded_as_module ) {
 		down_interruptible(&sem);
 
 		if (signal_pending(current))
 			break;
+                } else {
+                        down(&sem);
+                }
 
 		SCSI_LOG_ERROR_RECOVERY(1, printk("Error handler waking up\n"));
 

@@ -290,6 +290,30 @@ __inline static int __scsi_merge_fn(request_queue_t * q,
 
 	count = bh->b_size >> 9;
 	sector = bh->b_rsector;
+#if CONFIG_HIGHMEM
+	/*
+	 * This is a temporary hack for the time being.
+	 * In some cases, the ll_rw_blk layer is creating
+	 * bounce buffers for us - this implies that we don't
+	 * need to down here, but queue management becomes quite
+	 * difficult otherwise.  When the ll_rw_blk layer gets
+	 * cleaned up to handle bounce buffers better, then
+	 * this hack can be cleaned up.
+	 */
+	if( sector == -1 )
+	{
+		struct buffer_head * bh_new;
+		bh_new = (struct buffer_head *) bh->b_dev_id;
+		if( bh_new != NULL )
+		{
+			sector = bh_new->b_rsector;
+		}
+		if( sector == -1 )
+		{
+			panic("Unable to merge ambiguous block request");
+		}
+	}
+#endif
 
 	/*
 	 * We come in here in one of two cases.   The first is that we
@@ -765,7 +789,8 @@ __inline static int __init_io(Scsi_Cmnd * SCpnt,
 	if( scsi_dma_free_sectors > 30 ) {
 		for (this_count = 0, bh = SCpnt->request.bh;
 		     bh; bh = bh->b_reqnext) {
-			if( scsi_dma_free_sectors < 30 || this_count == sectors )
+			if( scsi_dma_free_sectors - this_count < 30 
+			    || this_count == sectors )
 			{
 				break;
 			}
@@ -831,24 +856,11 @@ static int _FUNCTION(Scsi_Cmnd * SCpnt)			\
  * We always force "_VALID" to 1.  Eventually clean this up
  * and get rid of the extra argument.
  */
-#if 0
-/* Old definitions */
-INITIO(scsi_init_io_, 0, 0, 0)
-INITIO(scsi_init_io_d, 0, 0, 1)
-INITIO(scsi_init_io_c, 0, 1, 0)
-INITIO(scsi_init_io_dc, 0, 1, 1)
-
-/* Newer redundant definitions. */
-INITIO(scsi_init_io_, 1, 0, 0)
-INITIO(scsi_init_io_d, 1, 0, 1)
-INITIO(scsi_init_io_c, 1, 1, 0)
-INITIO(scsi_init_io_dc, 1, 1, 1)
-#endif
-
 INITIO(scsi_init_io_v, 1, 0, 0)
 INITIO(scsi_init_io_vd, 1, 0, 1)
 INITIO(scsi_init_io_vc, 1, 1, 0)
 INITIO(scsi_init_io_vdc, 1, 1, 1)
+
 /*
  * Function:    initialize_merge_fn()
  *
@@ -881,21 +893,12 @@ void initialize_merge_fn(Scsi_Device * SDpnt)
 	 * If this host has an unlimited tablesize, then don't bother with a
 	 * merge manager.  The whole point of the operation is to make sure
 	 * that requests don't grow too large, and this host isn't picky.
-	 */
-	if (SHpnt->sg_tablesize == SG_ALL) {
-		if (!CLUSTERABLE_DEVICE(SHpnt, SDpnt) && SHpnt->unchecked_isa_dma == 0) {
-			SDpnt->scsi_init_io_fn = scsi_init_io_v;
-		} else if (!CLUSTERABLE_DEVICE(SHpnt, SDpnt) && SHpnt->unchecked_isa_dma != 0) {
-			SDpnt->scsi_init_io_fn = scsi_init_io_vd;
-		} else if (CLUSTERABLE_DEVICE(SHpnt, SDpnt) && SHpnt->unchecked_isa_dma == 0) {
-			SDpnt->scsi_init_io_fn = scsi_init_io_vc;
-		} else if (CLUSTERABLE_DEVICE(SHpnt, SDpnt) && SHpnt->unchecked_isa_dma != 0) {
-			SDpnt->scsi_init_io_fn = scsi_init_io_vdc;
-		}
-		return;
-	}
-	/*
-	 * Now pick out the correct function.
+	 *
+	 * Note that ll_rw_blk.c is effectively maintaining a segment
+	 * count which is only valid if clustering is used, and it obviously
+	 * doesn't handle the DMA case.   In the end, it
+	 * is simply easier to do it ourselves with our own functions
+	 * rather than rely upon the default behavior of ll_rw_blk.
 	 */
 	if (!CLUSTERABLE_DEVICE(SHpnt, SDpnt) && SHpnt->unchecked_isa_dma == 0) {
 		q->merge_fn = scsi_merge_fn_;
