@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_output.c,v 1.108 1999/05/08 21:48:59 davem Exp $
+ * Version:	$Id: tcp_output.c,v 1.109 1999/05/14 23:10:13 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -239,6 +239,11 @@ static int tcp_fragment(struct sock *sk, struct sk_buff *skb, u32 len)
 
 	/* Rechecksum original buffer. */
 	skb->csum = csum_partial(skb->data, skb->len, 0);
+
+	/* Looks stupid, but our code really uses when of
+	 * skbs, which it never sent before. --ANK
+	 */
+	TCP_SKB_CB(buff)->when = TCP_SKB_CB(skb)->when;
 
 	/* Link BUFF into the send queue. */
 	__skb_append(skb, buff);

@@ -1246,7 +1246,7 @@ static struct usb_driver cpia_driver = {
 /*
  * This should be a separate module.
  */
-int cpia_init(void)
+int usb_cpia_init(void)
 {
 	usb_register(&cpia_driver);
 

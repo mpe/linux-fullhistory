@@ -37,11 +37,10 @@ static unsigned long ncp_file_mmap_nopage(struct vm_area_struct *area,
 	struct dentry *dentry = file->f_dentry;
 	struct inode *inode = dentry->d_inode;
 	unsigned long page;
-	unsigned int clear;
-	unsigned long tmp;
+	unsigned int already_read;
+	unsigned int count;
 	int bufsize;
 	int pos;
-	mm_segment_t fs;
 
 	page = __get_free_page(GFP_KERNEL);
 	if (!page)
@@ -49,35 +48,24 @@ static unsigned long ncp_file_mmap_nopage(struct vm_area_struct *area,
 	address &= PAGE_MASK;
 	pos = address - area->vm_start + area->vm_offset;
 
-	clear = 0;
+	count = PAGE_SIZE;
 	if (address + PAGE_SIZE > area->vm_end) {
-		clear = address + PAGE_SIZE - area->vm_end;
+		count = area->vm_end - address;
 	}
 	/* what we can read in one go */
 	bufsize = NCP_SERVER(inode)->buffer_size;
 
-	fs = get_fs();
-	set_fs(get_ds());
-
-	if (ncp_make_open(inode, O_RDONLY) < 0) {
-		clear = PAGE_SIZE;
-	} else {
-		int already_read = 0;
-		int count = PAGE_SIZE - clear;
-		int to_read;
-
+	already_read = 0;
+	if (ncp_make_open(inode, O_RDONLY) >= 0) {
 		while (already_read < count) {
 			int read_this_time;
+			int to_read;
 
-			if ((pos % bufsize) != 0) {
-				to_read = bufsize - (pos % bufsize);
-			} else {
-				to_read = bufsize;
-			}
+			to_read = bufsize - (pos % bufsize);
 
 			to_read = min(to_read, count - already_read);
 
-			if (ncp_read(NCP_SERVER(inode),
+			if (ncp_read_kernel(NCP_SERVER(inode),
 				     NCP_FINFO(inode)->file_handle,
 				     pos, to_read,
 				     (char *) (page + already_read),
@@ -94,12 +82,9 @@ static unsigned long ncp_file_mmap_nopage(struct vm_area_struct *area,
 
 	}
 
-	set_fs(fs);
-
-	tmp = page + PAGE_SIZE;
-	while (clear--) {
-		*(char *) --tmp = 0;
-	}
+	if (already_read < PAGE_SIZE)
+		memset((char*)(page + already_read), 0, 
+		       PAGE_SIZE - already_read);
 	return page;
 }
 

@@ -88,7 +88,7 @@ smb_iget(struct super_block *sb, struct smb_fattr *fattr)
 		result->i_op = &smb_dir_inode_operations;
 	else
 		result->i_op = NULL;
-	insert_inode_hash(result)
+	insert_inode_hash(result);
 	return result;
 }
 

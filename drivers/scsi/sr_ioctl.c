@@ -122,11 +122,9 @@ retry:
             if (!quiet)
 		printk(KERN_ERR "sr%d: CDROM (ioctl) reports ILLEGAL "
 		       "REQUEST.\n", target);
-            if ((SCpnt->sense_buffer[12] == 0x20 ||
-	        SCpnt->sense_buffer[12] == 0x24) &&
+            if (SCpnt->sense_buffer[12] == 0x20 &&
                 SCpnt->sense_buffer[13] == 0x00) {
                 /* sense: Invalid command operation code */
-                /* or Invalid field in cdb */
                 err = -EDRIVE_CANT_DO_THIS;
             } else {
                 err = -EINVAL;

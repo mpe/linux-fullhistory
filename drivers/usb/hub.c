@@ -394,7 +394,7 @@ static struct usb_driver hub_driver = {
 /*
  * This should be a separate module.
  */
-int hub_init(void)
+int usb_hub_init(void)
 {
 	int pid;
 

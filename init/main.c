@@ -1332,21 +1332,6 @@ static void __init do_basic_setup(void)
 	/* Mount the root filesystem.. */
 	mount_root();
 
-#ifdef CONFIG_UMSDOS_FS
-	{
-		/*
-			When mounting a umsdos fs as root, we detect
-			the pseudo_root (/linux) and initialise it here.
-			pseudo_root is defined in fs/umsdos/inode.c
-		*/
-		extern struct inode *pseudo_root;
-		if (pseudo_root != NULL){
-			current->fs->root = pseudo_root->i_sb->s_root;
-			current->fs->pwd  = pseudo_root->i_sb->s_root;
-		}
-	}
-#endif
-
 #ifdef CONFIG_BLK_DEV_INITRD
 	root_mountflags = real_root_mountflags;
 	if (mount_initrd && ROOT_DEV != real_root_dev

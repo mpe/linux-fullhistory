@@ -51,7 +51,9 @@ struct msdos_sb_info {
 	struct nls_table *nls_disk;  /* Codepage used on disk */
 	struct nls_table *nls_io;    /* Charset used for input and display */
 	struct cvf_format* cvf_format;
-	void* private_data;	
+	void *dir_ops;		     /* Opaque; default directory operations */
+	void (*put_super_callback)(struct super_block *);
+	void *private_data;	
 };
 
 #endif

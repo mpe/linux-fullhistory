@@ -597,7 +597,7 @@ __initfunc(void mda_console_init(void))
 	if (mda_first_vc > mda_last_vc)
 		return;
 
-	take_over_console(&mda_con, mda_first_vc, mda_last_vc, 0);
+	take_over_console(&mda_con, mda_first_vc-1, mda_last_vc-1, 0);
 }
 
 #ifdef MODULE

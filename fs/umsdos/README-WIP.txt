@@ -14,7 +14,7 @@ you are trying to use UMSDOS as root partition.
 Legend: those lines marked with '+' on the beggining of line indicates it
 passed all of my tests, and performed perfect in all of them.
 
-Current status (981129) - UMSDOS dentry-pre 0.84:
+Current status (990202) - UMSDOS 0.85:
 
 (1) pure MSDOS (no --linux-.--- EMD file):
 
@@ -56,7 +56,7 @@ READ:
 
 WRITE:
 + create symlink		- works
-- create hardlink		- works, but see portability WARNING below
+- create hardlink		- works
 + create file			- works
 + create special file		- works
 + write to file			- works
@@ -90,24 +90,23 @@ example is specs file about it. Specifically, moving directory which
 contains hardlinks will break them.
 
 Note: (about pseudoroot) If you are currently trying to use UMSDOS as root
-partition (with linux installed in c:\linux) it will boot, but there are
+partition (with linux installed in c:\linux) it will boot, but there may be
 some problems. Volunteers ready to test pseudoroot are needed (preferably
-ones with working backups or unimportant data). There are problems with
-different interpretation of hard links in normal in pseudo-root modes,
-resulting is 'silent delete' of them sometimes. Also, '/DOS' pseudo
+ones with working backups or unimportant data).  For example, '/DOS' pseudo
 directory is only partially re-implemented and buggy. It works most of the
 time, though. Update: should work ok in 0.84, although it still does not
 work correctly in combination with initrd featere. Working on this!
 
-Warning: (about creating hardlinks in pseudoroot mode) - hardlinks created in
-pseudoroot mode are not compatibile with 'normal' hardlinks, and vice versa.
-That is because harlink which is /foo in pseudoroot mode, becomes
-/linux/foo in normal mode. I'm thinking about this one. However, since most
-people either always use pseudoroot, or always use normal umsdos filesystem,
-this is no showstopper.
+Note: (about creating hardlinks in pseudoroot mode) - hardlinks created in
+pseudoroot mode are now again compatibile with 'normal' hardlinks, and vice
+versa. Thanks to Sorin Iordachescu <sorin@rodae.ro> for providing fix.
 
-Warning: (about hardlinks) - modifying hardlinks (esp. if there are in
+Warning: (about hardlinks) - modifying hardlinks (esp. if they are in
 different directories) are currently somewhat broken, I'm working on it.
+Problem seems to be that code uses and updates EMD of directory where 'real
+hardlink' is stored, not EMD of directory where our pseudo-hardlink is
+located! I'm looking for ideas how to work around this in clean way, since
+without it modifying hardlinks in any but most simple ways is broken!
 
 ------------------------------------------------------------------------------
 

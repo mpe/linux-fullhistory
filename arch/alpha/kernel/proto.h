@@ -151,6 +151,8 @@ extern unsigned long srm_hae;
 extern void setup_smp(void);
 extern int smp_info(char *buffer);
 extern void handle_ipi(struct pt_regs *);
+extern void smp_percpu_timer_interrupt(struct pt_regs *);
+extern int smp_boot_cpuid;
 
 /* bios32.c */
 extern void reset_for_srm(void);
@@ -178,7 +180,7 @@ extern unsigned long alpha_read_fp_reg (unsigned long reg);
 extern void wrmces(unsigned long mces);
 extern void cserve_ena(unsigned long);
 extern void cserve_dis(unsigned long);
-extern void __start_cpu(unsigned long);
+extern void __smp_callin(void);
 
 /* entry.S */
 extern void entArith(void);

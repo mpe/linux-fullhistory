@@ -1,5 +1,5 @@
-		       Video Mode Selection Support 2.11
-	      (c) 1995--1997 Martin Mares, <mj@k332.feld.cvut.cz>
+		       Video Mode Selection Support 2.13
+		    (c) 1995--1999 Martin Mares, <mj@ucw.cz>
 --------------------------------------------------------------------------------
 
 1. Intro
@@ -8,6 +8,11 @@
 allows the use of various special video modes supported by the video BIOS. Due
 to usage of the BIOS, the selection is limited to boot time (before the
 kernel decompression starts) and works only on 80X86 machines.
+
+   **  Short intro for the impatient: Just use vga=ask for the first time,
+   **  enter `scan' on the video mode prompt, pick the mode you want to use,
+   **  remember its mode ID (the four-digit hexadecimal number) and then
+   **  set the vga parameter to this number (converted to decimal first).
 
    The video mode to be used is selected by a kernel parameter which can be
 specified in the kernel Makefile (the SVGA_MODE=... line) or by the "vga=..."
@@ -268,3 +273,4 @@ force setting of the correct mode.
 		- Removed the doc section describing adding of new probing
 		  functions as I try to get rid of _all_ hardware probing here.
 2.12 (25-May-98)- Added support for VESA frame buffer graphics.
+2.13 (14-May-99)- Minor documentation fixes.

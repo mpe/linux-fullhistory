@@ -21,13 +21,10 @@ struct file_system_type vfat_fs_type = {
 
 EXPORT_SYMBOL(vfat_create);
 EXPORT_SYMBOL(vfat_unlink);
-EXPORT_SYMBOL(vfat_unlink_uvfat);
 EXPORT_SYMBOL(vfat_mkdir);
 EXPORT_SYMBOL(vfat_rmdir);
 EXPORT_SYMBOL(vfat_rename);
-EXPORT_SYMBOL(vfat_put_super);
 EXPORT_SYMBOL(vfat_read_super);
-EXPORT_SYMBOL(vfat_read_inode);
 EXPORT_SYMBOL(vfat_lookup);
 
 int init_vfat_fs(void)

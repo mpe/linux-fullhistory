@@ -87,8 +87,13 @@ struct ohci_ed {
 /* get the head_td */
 #define ed_head_td(ed)	((ed)->_head_td & 0xfffffff0)
 
-/* save the carry flag while setting the head_td */
+/* save the carry & halted flag while setting the head_td */
 #define set_ed_head_td(ed, td)	((ed)->_head_td = (td) | ((ed)->_head_td & 3))
+
+/* Control the ED's halted flag */
+#define ohci_halt_ed(ed)	((ed)->_head_td |= 1)
+#define ohci_unhalt_ed(ed)	((ed)->_head_td &= ~(__u32)1)
+#define ohci_ed_halted(ed)	((ed)->_head_td & 1)
 
 #define OHCI_ED_SKIP	(1 << 14)
 #define OHCI_ED_MPS	(0x7ff << 16)
@@ -257,12 +262,12 @@ struct ohci_regs {
 /* 
  * Read a MMIO register and re-write it after ANDing with (m)
  */
-#define writel_mask(m, a) writel( (readl((__u32)(a))) & (__u32)(m), (__u32)(a) )
+#define writel_mask(m, a) writel( (readl((unsigned long)(a))) & (__u32)(m), (unsigned long)(a) )
 
 /*
  * Read a MMIO register and re-write it after ORing with (b)
  */
-#define writel_set(b, a) writel( (readl((__u32)(a))) | (__u32)(b), (__u32)(a) )
+#define writel_set(b, a) writel( (readl((unsigned long)(a))) | (__u32)(b), (unsigned long)(a) )
 
 
 #define PORT_CCS	(1)		/* port current connect status */
@@ -287,6 +292,16 @@ struct ohci_regs {
 #define OHCI_ROOT_LPSC	(1 << 16)	/* turn on root hub ports power */
 #define OHCI_ROOT_OCIC	(1 << 17)	/* Overcurrent indicator change */
 #define OHCI_ROOT_CRWE	(1 << 31)	/* Clear RemoteWakeupEnable */
+
+/*
+ * Root hub A register masks
+ */
+#define OHCI_ROOT_A_NPS	(1 << 9)
+#define OHCI_ROOT_A_PSM	(1 << 8)
+
+/*
+ * Root hub B register masks
+ */
 
 /*
  * Interrupt register masks
@@ -334,8 +349,10 @@ struct ohci {
 	struct list_head interrupt_list;	/* List of interrupt active TDs for this OHCI */
 };
 
-#define OHCI_TIMER
-#define OHCI_TIMER_FREQ	(1)		/* frequency of OHCI status checks */
+#define OHCI_TIMER		/* enable the OHCI timer */
+#define OHCI_TIMER_FREQ	(234)	/* ms between each root hub status check */
+
+#undef OHCI_RHSC_INT		/* don't use root hub status interrupts */
 
 /* Debugging code */
 void show_ohci_ed(struct ohci_ed *ed);

@@ -6,6 +6,14 @@
 #include <linux/list.h>
 #include <linux/sched.h>
 
+extern int usb_hub_init(void);
+extern int usb_kbd_init(void);
+extern int usb_cpia_init(void);
+extern int usb_mouse_init(void);
+
+extern void hub_cleanup(void);
+extern void usb_mouse_cleanup(void);
+
 static __inline__ void wait_ms(unsigned int ms)
 {
         current->state = TASK_UNINTERRUPTIBLE;
@@ -209,6 +217,7 @@ struct usb_operations {
 	struct usb_device *(*allocate)(struct usb_device *);
 	int (*deallocate)(struct usb_device *);
 	int (*control_msg)(struct usb_device *, unsigned int, void *, void *, int);
+	int (*bulk_msg)(struct usb_device *, unsigned int, void *, int);
 	int (*request_irq)(struct usb_device *, unsigned int, usb_device_irq, int, void *);
 };
 
@@ -262,6 +271,7 @@ extern void usb_disconnect(struct usb_device **);
 extern void usb_device_descriptor(struct usb_device *dev);
 
 extern int  usb_parse_configuration(struct usb_device *dev, void *buf, int len);
+extern void usb_destroy_configuration(struct usb_device *dev);
 
 /*
  * Calling this entity a "pipe" is glorifying it. A USB pipe

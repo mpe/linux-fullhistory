@@ -81,6 +81,8 @@ extern void s3triofb_init(void);
 extern void s3triofb_setup(char *options, int *ints);
 extern void vesafb_init(void);
 extern void vesafb_setup(char *options, int *ints);
+extern void vga16fb_init(void);
+extern void vga16fb_setup(char *options, int *ints);
 extern void matroxfb_init(void);
 extern void matroxfb_setup(char* options, int *ints);
 extern void hpfb_init(void);
@@ -163,6 +165,9 @@ static struct {
 #endif
 #ifdef CONFIG_FB_VESA
 	{ "vesa", vesafb_init, vesafb_setup },
+#endif 
+#ifdef CONFIG_FB_VGA16
+	{ "vga16", vga16fb_init, vga16fb_setup },
 #endif 
 #ifdef CONFIG_FB_MATROX
 	{ "matrox", matroxfb_init, matroxfb_setup },

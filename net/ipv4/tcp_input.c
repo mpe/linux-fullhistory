@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_input.c,v 1.164 1999/05/08 21:09:52 davem Exp $
+ * Version:	$Id: tcp_input.c,v 1.165 1999/05/14 23:10:08 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -748,7 +748,6 @@ static void tcp_ack_saw_tstamp(struct sock *sk, struct tcp_opt *tp,
 static __inline__ void tcp_ack_packets_out(struct sock *sk, struct tcp_opt *tp)
 {
 	struct sk_buff *skb = skb_peek(&sk->write_queue);
-	__u32 when = tp->rto - (tcp_time_stamp - TCP_SKB_CB(skb)->when);
 
 	/* Some data was ACK'd, if still retransmitting (due to a
 	 * timeout), resend more of the retransmit queue.  The
@@ -758,6 +757,9 @@ static __inline__ void tcp_ack_packets_out(struct sock *sk, struct tcp_opt *tp)
 		tcp_xmit_retransmit_queue(sk);
 		tcp_reset_xmit_timer(sk, TIME_RETRANS, tp->rto);
 	} else {
+		__u32 when = tp->rto - (tcp_time_stamp - TCP_SKB_CB(skb)->when);
+		if ((__s32)when < 0)
+			when = 1;
 		tcp_reset_xmit_timer(sk, TIME_RETRANS, when);
 	}
 }
@@ -784,8 +786,6 @@ static int tcp_ack(struct sock *sk, struct tcphdr *th,
 	 */
 	if (after(ack, tp->snd_nxt) || before(ack, tp->snd_una))
 		goto uninteresting_ack;
-
-	dst_confirm(sk->dst_cache);
 
 	/* If there is data set flag 1 */
 	if (len != th->doff*4) {
@@ -882,6 +882,24 @@ static int tcp_ack(struct sock *sk, struct tcphdr *th,
 		/* Clear any aborted fast retransmit starts. */
 		tp->dup_acks = 0;
 	}
+	/* It is not a brain fart, I thought a bit now. 8)
+	 *
+	 * Forward progress is indicated, if:
+	 *   1. the ack acknowledges new data.
+	 *   2. or the ack is duplicate, but it is caused by new segment
+	 *      arrival. This case is filtered by:
+	 *      - it contains no data, syn or fin.
+	 *      - it does not update window.
+	 *   3. or new SACK. It is difficult to check, so that we ignore it.
+	 *
+	 * Forward progress is also indicated by arrival new data,
+	 * which was caused by window open from our side. This case is more
+	 * difficult and it is made (alas, incorrectly) in tcp_data_queue().
+	 *                                              --ANK (990513)
+	 */
+	if (ack != tp->snd_una || (flag == 0 && !th->fin))
+		dst_confirm(sk->dst_cache);
+
 	/* Remember the highest ack received. */
 	tp->snd_una = ack;
 	return 1;
@@ -2067,20 +2085,80 @@ int tcp_rcv_state_process(struct sock *sk, struct sk_buff *skb,
 		 * not be in line code. [AC]
 		 */
 		if(th->ack) {
-			tp->snd_wl1 = TCP_SKB_CB(skb)->seq;
-
-			/* We got an ack, but it's not a good ack. */
-			if(!tcp_ack(sk,th, TCP_SKB_CB(skb)->seq,
-				    TCP_SKB_CB(skb)->ack_seq, len)) 
+			/* rfc793:
+			 * "If the state is SYN-SENT then
+			 *    first check the ACK bit
+			 *      If the ACK bit is set
+			 *	  If SEG.ACK =< ISS, or SEG.ACK > SND.NXT, send
+			 *        a reset (unless the RST bit is set, if so drop
+			 *        the segment and return)"
+			 *
+			 *  I cite this place to emphasize one essential
+			 *  detail, this check is different of one
+			 *  in established state: SND.UNA <= SEG.ACK <= SND.NXT.
+			 *  SEG_ACK == SND.UNA == ISS is invalid in SYN-SENT,
+			 *  because we have no previous data sent before SYN.
+			 *                                        --ANK(990513)
+			 *
+			 *  We do not send data with SYN, so that RFC-correct
+			 *  test reduces to:
+			 */
+			if (sk->zapped ||
+			    TCP_SKB_CB(skb)->ack_seq != tp->snd_nxt)
 				return 1;
 
-			if(th->rst) {
+			/* Now ACK is acceptable.
+			 *
+			 * "If the RST bit is set
+			 *    If the ACK was acceptable then signal the user "error:
+			 *    connection reset", drop the segment, enter CLOSED state,
+			 *    delete TCB, and return."
+			 */
+
+			if (th->rst) {
 				tcp_reset(sk);
 				goto discard;
 			}
 
-			if(!th->syn) 
+			/* rfc793:
+			 *   "fifth, if neither of the SYN or RST bits is set then
+			 *    drop the segment and return."
+			 *
+			 *    See note below!
+			 *                                        --ANK(990513)
+		         */
+			
+			if (!th->syn)
 				goto discard;
+
+			/* rfc793:
+			 *   "If the SYN bit is on ...
+			 *    are acceptable then ...
+			 *    (our SYN has been ACKed), change the connection
+			 *    state to ESTABLISHED..."
+			 *
+			 * Do you see? SYN-less ACKs in SYN-SENT state are
+			 * completely ignored.
+			 *
+			 * The bug causing stalled SYN-SENT sockets
+			 * was here: tcp_ack advanced snd_una and canceled
+			 * retransmit timer, so that bare ACK received
+			 * in SYN-SENT state (even with invalid ack==ISS,
+			 * because tcp_ack check is too weak for SYN-SENT)
+			 * causes moving socket to invalid semi-SYN-SENT,
+			 * semi-ESTABLISHED state and connection hangs.
+			 *
+			 * There exist buggy stacks, which really send
+			 * such ACKs: f.e. 202.226.91.94 (okigate.oki.co.jp)
+			 * Actually, if this host did not try to get something
+			 * from ftp.inr.ac.ru I'd never find this bug 8)
+			 *
+			 *                                     --ANK (990514)
+			 */
+
+			tp->snd_wl1 = TCP_SKB_CB(skb)->seq;
+			tcp_ack(sk,th, TCP_SKB_CB(skb)->seq,
+				TCP_SKB_CB(skb)->ack_seq, len);
 
 			/* Ok.. it's good. Set up sequence numbers and
 			 * move to established.

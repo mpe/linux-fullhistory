@@ -32,20 +32,24 @@
 #include <linux/ncp_fs.h>
 #include <linux/ncp_fs_sb.h>
 
+#define NCP_MIN_SYMLINK_SIZE	8
+#define NCP_MAX_SYMLINK_SIZE	512
+
 int ncp_negotiate_buffersize(struct ncp_server *, int, int *);
 int ncp_negotiate_size_and_options(struct ncp_server *server, int size,
   			  int options, int *ret_size, int *ret_options);
 int ncp_get_volume_info_with_number(struct ncp_server *, int,
 				struct ncp_volume_info *);
 int ncp_close_file(struct ncp_server *, const char *);
-int ncp_read(struct ncp_server *, const char *, __u32, __u16, char *, int *);
-int ncp_write(struct ncp_server *, const char *, __u32, __u16,
-		const char *, int *);
-#ifdef CONFIG_NCPFS_EXTRAS
-int ncp_read_kernel(struct ncp_server *, const char *, __u32, __u16, char *, int *);
+static inline int ncp_read_bounce_size(__u32 size) {
+	return sizeof(struct ncp_reply_header) + 2 + 2 + size + 8;
+};
+int ncp_read_bounce(struct ncp_server *, const char *, __u32, __u16, 
+		char *, int *, void* bounce, __u32 bouncelen);
+int ncp_read_kernel(struct ncp_server *, const char *, __u32, __u16, 
+		char *, int *);
 int ncp_write_kernel(struct ncp_server *, const char *, __u32, __u16,
 		const char *, int *);
-#endif
 
 int ncp_obtain_info(struct ncp_server *server, struct inode *, char *,
 		struct nw_info_struct *target);

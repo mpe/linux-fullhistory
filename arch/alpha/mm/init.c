@@ -256,26 +256,6 @@ paging_init(unsigned long start_mem, unsigned long end_mem)
 	return start_mem;
 }
 
-#ifdef __SMP__
-/*
- * paging_init_secondary(), called ONLY by secondary CPUs,
- * sets up current->tss contents appropriately and does a load_PCB.
- * note that current should be pointing at the idle thread task struct
- * for this CPU.
- */
-void
-paging_init_secondary(void)
-{
-	current->tss.ptbr = init_task.tss.ptbr;
-	current->tss.pal_flags = 1;
-	current->tss.flags = 0;
-	load_PCB(&current->tss);
-	tbia();
-
-	return;
-}
-#endif /* __SMP__ */
-
 #if defined(CONFIG_ALPHA_GENERIC) || defined(CONFIG_ALPHA_SRM)
 void
 srm_paging_stop (void)

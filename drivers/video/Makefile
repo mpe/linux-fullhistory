@@ -202,6 +202,10 @@ ifeq ($(CONFIG_FB_VESA),y)
 L_OBJS += vesafb.o
 endif
 
+ifeq ($(CONFIG_FB_VGA16),y)
+L_OBJS += vga16fb.o
+endif
+
 ifeq ($(CONFIG_FB_VIRGE),y)
 L_OBJS += virgefb.o
 else
@@ -459,6 +463,14 @@ OX_OBJS += fbcon-mfb.o
 else
   ifeq ($(CONFIG_FBCON_MFB),m)
   MX_OBJS += fbcon-mfb.o
+  endif
+endif
+
+ifeq ($(CONFIG_FBCON_VGA_PLANES),y)
+OX_OBJS += fbcon-vga-planes.o
+else
+  ifeq ($(CONFIG_FBCON_VGA_PLANES),m)
+  MX_OBJS += fbcon-vga-planes.o
   endif
 endif
 

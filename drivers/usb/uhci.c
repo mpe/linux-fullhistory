@@ -418,8 +418,8 @@ void *uhci_alloc_isochronous(struct usb_device *usb_dev, unsigned int pipe, void
 	struct uhci_device *dev = usb_to_uhci(usb_dev);
 	unsigned long destination, status;
 	struct uhci_td *td;
-	int ret, i;
 	struct uhci_iso_td *isodesc;
+	int i;
 
 	isodesc = kmalloc(sizeof(*isodesc), GFP_KERNEL);
 	if (!isodesc) {
@@ -700,6 +700,186 @@ static int uhci_control_msg(struct usb_device *usb_dev, unsigned int pipe, void 
 	return ret;
 }
 
+
+/*
+ * Bulk thread operations: we just mark the last TD
+ * in a bulk thread as an interrupt TD, and wake up
+ * the front-end on completion.
+ *
+ * We need to remove the TD from the lists (both interrupt
+ * list and TD lists) by hand if something bad happens!
+ */
+static DECLARE_WAIT_QUEUE_HEAD(bulk_wakeup);
+
+static int uhci_bulk_completed(int status, void *buffer, void *dev_id)
+{
+	wake_up(&bulk_wakeup);
+	return 0;			/* Don't re-instate */
+}
+
+/* td points to the last td in the list, which interrupts on completion */
+static int uhci_run_bulk(struct uhci_device *dev, struct uhci_td *first, struct uhci_td *last)
+{
+	DECLARE_WAITQUEUE(wait, current);
+	struct uhci_qh *bulk_qh = uhci_qh_allocate(dev);
+	struct uhci_td *curtd;
+
+
+
+	current->state = TASK_UNINTERRUPTIBLE;
+	add_wait_queue(&bulk_wakeup, &wait);
+
+	uhci_add_irq_list(dev->uhci, last, uhci_bulk_completed, NULL);
+	
+	/* FIXME: This is kinda kludged */
+	/* Walk the TD list and update the QH pointer */
+	{
+	int maxcount = 100;
+
+	curtd = first;
+	do {
+		curtd->qh = bulk_qh;
+		if (curtd->link & 1)
+			break;
+
+		curtd = bus_to_virt(curtd->link & ~0xF);
+		if (!--maxcount) {
+			printk("runaway tds!\n");
+			break;
+		}
+	} while (1);
+	}
+
+	uhci_insert_tds_in_qh(bulk_qh, first, last);
+
+//	bulk0 is empty here...	
+//	show_status(dev->uhci);
+//	show_queues(dev->uhci);
+	
+	/* Add it into the skeleton */
+	/*WARNING! HUB HAS NO BULK QH TIL NOW!!!!!!!!!!!*/
+	uhci_insert_qh(&dev->uhci->root_hub->skel_bulk0_qh, bulk_qh);
+
+//	now we're in the queue... but don't ask WHAT is in there ;-(
+//	show_status(dev->uhci);
+//	show_queues(dev->uhci);
+
+	schedule_timeout(HZ/10);
+
+	remove_wait_queue(&bulk_wakeup, &wait);
+
+	/* Clean up in case it failed.. */
+	uhci_remove_irq_list(last);
+
+#if 0
+	printk("Looking for tds [%p, %p]\n", dev->control_td, td);
+#endif
+
+	/* Remove it from the skeleton */
+	uhci_remove_qh(&dev->uhci->root_hub->skel_bulk0_qh, bulk_qh);
+
+	uhci_qh_deallocate(bulk_qh);
+
+	return uhci_td_result(dev, last);
+}
+
+/*
+ * Send or receive a bulk message on a pipe.
+ *
+ * Note that the "pipe" structure is set up to map
+ * easily to the uhci destination fields.
+ *
+ * A bulk message is only built up from
+ * the data phase
+ *
+ * The data phase can be an arbitrary number of TD's
+ * although we currently had better not have more than
+ * 31 TD's here.
+ *
+ * 31 TD's is a minimum of 248 bytes worth of bulk
+ * information.
+ */
+static int uhci_bulk_msg(struct usb_device *usb_dev, unsigned int pipe, void *data, int len)
+{
+	struct uhci_device *dev = usb_to_uhci(usb_dev);
+	struct uhci_td *first, *td, *prevtd;
+	unsigned long destination, status;
+	int ret;
+
+	if (len > usb_maxpacket(usb_dev->maxpacketsize) * 31)
+		printk("Warning, too much data for a bulk packet, crashing\n");
+
+	/* The "pipe" thing contains the destination in bits 8--18, 0x69 is IN */
+	/*
+	  IS THIS NECCESARY? PERHAPS WE CAN JUST USE THE PIPE
+	  LOOK AT: usb_pipeout and the pipe bits
+	  I FORGOT WHAT IT EXACTLY DOES
+	*/
+	if (usb_pipeout(pipe)) {
+		destination = (pipe & 0x0007ff00) | 0xE1;
+	}
+	else {
+		destination = (pipe & 0x0007ff00) | 0x69;
+	}
+
+	/* Status:    slow/fast,       Active,    Short Packet Detect     Three Errors */
+	status = (pipe & (1 << 26)) | (1 << 23)   |   (1 << 29)       |    (3 << 27);
+
+	/*
+	 * Build the TDs for the bulk request
+	 */
+        first = td = uhci_td_allocate(dev);
+        prevtd = first; //This is fake, but at least it's not NULL
+	while (len > 0) {
+		/* Build the TD for control status */
+		int pktsze = len;
+		int maxsze = usb_maxpacket(pipe);
+
+		if (pktsze > maxsze)
+			pktsze = maxsze;
+
+		td->status = status;					/* Status */
+		td->info = destination | ((pktsze-1) << 21);		/* pktsze bytes of data */
+		td->buffer = virt_to_bus(data);
+		td->backptr = &prevtd->link;
+
+		prevtd = td;
+		td = uhci_td_allocate(dev);
+		prevtd->link = 4 | virt_to_bus(td);			/* Update previous TD */
+
+		data += maxsze;
+		len -= maxsze;
+		/* Alternate Data0/1 (start with Data0) */
+		destination ^= 1 << 19;
+	}
+	td->link = 1;					/* Terminate */
+
+	/* Start it up.. */
+	ret = uhci_run_bulk(dev, first, td);
+
+	{
+		int maxcount = 100;
+		struct uhci_td *curtd = first;
+		unsigned int nextlink;
+
+		do {
+			nextlink = curtd->link;
+			uhci_remove_td(curtd);
+			uhci_td_deallocate(curtd);
+			if (nextlink & 1)	/* Tail? */
+				break;
+
+			curtd = bus_to_virt(nextlink & ~0xF);
+			if (!--maxcount) {
+				printk("runaway td's!?\n");
+				break;
+			}
+		} while (1);
+	}
+
+	return ret;
+}
+
 static struct usb_device *uhci_usb_allocate(struct usb_device *parent)
 {
 	struct usb_device *usb_dev;
@@ -787,6 +967,7 @@ struct usb_operations uhci_device_operations = {
 	uhci_usb_allocate,
 	uhci_usb_deallocate,
 	uhci_control_msg,
+	uhci_bulk_msg,
 	uhci_request_irq,
 };
 
@@ -1399,32 +1580,10 @@ int uhci_init(void)
 		if (retval < 0)
 			continue;
 
-#ifdef CONFIG_USB_MOUSE
-		usb_mouse_init();
-#endif
-#ifdef CONFIG_USB_KBD		
-		usb_kbd_init();
-#endif		
-		hub_init();
-#ifdef CONFIG_USB_AUDIO		
-		usb_audio_init();
-#endif		
-#ifdef CONFIG_USB_CPIA
-		cpia_init();
-#endif
 #ifdef CONFIG_APM
 		apm_register_callback(&handle_apm_event);
 #endif
-
 		return 0;
 	}
 	return retval;
-}
-
-void cleanup_drivers(void)
-{
-	hub_cleanup();
-#ifdef CONFIG_USB_MOUSE
-	usb_mouse_cleanup();
-#endif
 }

@@ -234,10 +234,14 @@ static struct usb_device *sohci_usb_allocate(struct usb_device *parent) {
 	return usb_dev;
 }
 
+/* FIXME! */
+#define sohci_bulk_msg NULL
+
 struct usb_operations sohci_device_operations = {
 	sohci_usb_allocate,
 	sohci_usb_deallocate,
 	sohci_control_msg,
+	sohci_bulk_msg,
 	sohci_request_irq,
 };
 
@@ -1429,7 +1433,6 @@ static int handle_apm_event(apm_event_t event)
 #endif
 
 
- int usb_mouse_init(void); 
 #ifdef MODULE
 
 void cleanup_module(void)
@@ -1460,16 +1463,6 @@ int ohci_hcd_init(void)
     if (retval < 0) break;
 
     
-#ifdef CONFIG_USB_MOUSE
-		usb_mouse_init();
-#endif
-#ifdef CONFIG_USB_KBD		
-		usb_kbd_init();
-#endif		
-		hub_init();
-#ifdef CONFIG_USB_AUDIO		
-		usb_audio_init();
-#endif		
 #ifdef CONFIG_APM
 		apm_register_callback(&handle_apm_event);
 #endif
@@ -1478,12 +1471,3 @@ int ohci_hcd_init(void)
   }
   return retval;
 }
-
-void cleanup_drivers(void)
-{
-	 hub_cleanup(); 
-#ifdef CONFIG_USB_MOUSE
-	 usb_mouse_cleanup();
-#endif
-}
-

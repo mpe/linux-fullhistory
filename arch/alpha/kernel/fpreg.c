@@ -1,10 +1,10 @@
 /*
- * kernel/fpreg.c
+ * arch/alpha/kernel/fpreg.c
  *
  * (C) Copyright 1998 Linus Torvalds
  */
 
-#ifdef __alpha_cix__
+#if defined(__alpha_cix__) || defined(__alpha_fix__)
 #define STT(reg,val)  asm volatile ("ftoit $f"#reg",%0" : "=r"(val));
 #else
 #define STT(reg,val)  asm volatile ("stt $f"#reg",%0" : "=m"(val));
@@ -52,7 +52,7 @@ alpha_read_fp_reg (unsigned long reg)
 	return val;
 }
 
-#ifdef __alpha_cix__
+#if defined(__alpha_cix__) || defined(__alpha_fix__)
 #define LDT(reg,val)  asm volatile ("itoft %0,$f"#reg : : "r"(val));
 #else
 #define LDT(reg,val)  asm volatile ("ldt $f"#reg",%0" : : "m"(val));

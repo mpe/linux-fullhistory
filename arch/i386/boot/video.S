@@ -1,14 +1,19 @@
 !
-!	Display adapter & video mode setup, version 2.12 (25-May-98)
+!	Display adapter & video mode setup, version 2.13 (14-May-99)
 !
-!	Copyright (C) 1995 -- 1998 Martin Mares <mj@atrey.karlin.mff.cuni.cz>
+!	Copyright (C) 1995 -- 1999 Martin Mares <mj@ucw.cz>
 !	Based on the original setup.S code (C) Linus Torvalds and Mats Anderson
+!
+!	For further information, look at Documentation/svga.txt.
 !
 
 #include <linux/config.h> /* for CONFIG_VIDEO_* */
 
 ! Enable autodetection of SVGA adapters and modes. If you really need this
-! feature, drop me a mail as I think of removing it some day...
+! feature, drop me a mail as I think of removing it some day. You can
+! always enter `scan' to get the video mode table and then use the real
+! video mode numbers (those 4-digit hexadecimal numbers, NOT the menu
+! item numbers) which don't rely on any autodetection.
 #undef CONFIG_VIDEO_SVGA
 
 ! Enable autodetection of VESA modes
@@ -1939,7 +1944,7 @@ unknt:		.ascii	"Unknown mode ID. Try again."
 badmdt:		.ascii	"You passed an undefined mode number."
 		db	0x0d, 0x0a, 0
 vesaer:		.ascii	"Error: Scanning of VESA modes failed. Please "
-		.ascii	"report to <mj@k332.feld.cvut.cz>."
+		.ascii	"report to <mj@ucw.cz>."
 		db	0x0d, 0x0a, 0
 old_name:	.ascii	"CGA/MDA/HGA"
 		db	0

@@ -296,6 +296,7 @@ static int invalidate_list(struct list_head *head, struct super_block * sb, stru
 			INIT_LIST_HEAD(&inode->i_hash);
 			list_del(&inode->i_list);
 			list_add(&inode->i_list, dispose);
+			inode->i_state |= I_FREEING;
 			continue;
 		}
 		busy = 1;
@@ -356,6 +357,7 @@ static int free_inodes(void)
 		list_del(&INODE(tmp)->i_hash);
 		INIT_LIST_HEAD(&INODE(tmp)->i_hash);
 		list_add(tmp, freeable);
+		list_entry(tmp, struct inode, i_list)->i_state = I_FREEING;
 		found = 1;
 	}
 
@@ -639,6 +641,43 @@ static inline unsigned long hash(struct super_block *sb, unsigned long i_ino)
 	return tmp & HASH_MASK;
 }
 
+/* Yeah, I know about quadratic hash. Maybe, later. */
+ino_t iunique(struct super_block *sb, ino_t max_reserved)
+{
+	static ino_t counter = 0;
+	struct inode *inode;
+	struct list_head * head;
+	ino_t res;
+	spin_lock(&inode_lock);
+retry:
+	if (counter > max_reserved) {
+		head = inode_hashtable + hash(sb,counter);
+		inode = find_inode(sb, res = counter++, head);
+		if (!inode) {
+			spin_unlock(&inode_lock);
+			return res;
+		}
+		inode->i_count--; /* compensate find_inode() */
+	} else {
+		counter = max_reserved + 1;
+	}
+	goto retry;
+	
+}
+
+struct inode *igrab(struct inode *inode)
+{
+	spin_lock(&inode_lock);
+	if (inode->i_state & I_FREEING)
+		inode = NULL;
+	else
+		inode->i_count++;
+	spin_unlock(&inode_lock);
+	if (inode)
+		wait_on_inode(inode);
+	return inode;
+}
+
 struct inode *iget(struct super_block *sb, unsigned long ino)
 {
 	struct list_head * head = inode_hashtable + hash(sb,ino);
@@ -692,6 +731,7 @@ void iput(struct inode *inode)
 				INIT_LIST_HEAD(&inode->i_hash);
 				list_del(&inode->i_list);
 				INIT_LIST_HEAD(&inode->i_list);
+				inode->i_state|=I_FREEING;
 				if (op && op->delete_inode) {
 					void (*delete)(struct inode *) = op->delete_inode;
 					spin_unlock(&inode_lock);
@@ -702,6 +742,7 @@ void iput(struct inode *inode)
 			if (list_empty(&inode->i_hash)) {
 				list_del(&inode->i_list);
 				INIT_LIST_HEAD(&inode->i_list);
+				inode->i_state|=I_FREEING;
 				spin_unlock(&inode_lock);
 				clear_inode(inode);
 				spin_lock(&inode_lock);

@@ -754,7 +754,7 @@ int ncp_ren_or_mov_file_or_subdir(struct ncp_server *server,
 
 /* We have to transfer to/from user space */
 int
-ncp_read(struct ncp_server *server, const char *file_id,
+ncp_read_kernel(struct ncp_server *server, const char *file_id,
 	     __u32 offset, __u16 to_read, char *target, int *bytes_read)
 {
 	char *source;
@@ -772,18 +772,60 @@ ncp_read(struct ncp_server *server, const char *file_id,
 	*bytes_read = ntohs(ncp_reply_word(server, 0));
 	source = ncp_reply_data(server, 2 + (offset & 1));
 
-	result = -EFAULT;
-	if (!copy_to_user(target, source, *bytes_read))
-		result = 0;
+	memcpy(target, source, *bytes_read);
 out:
 	ncp_unlock_server(server);
 	return result;
 }
 
+/* There is a problem... egrep and some other silly tools do:
+	x = mmap(NULL, MAP_PRIVATE, PROT_READ|PROT_WRITE, <ncpfs fd>, 32768);
+	read(<ncpfs fd>, x, 32768);
+   Now copying read result by copy_to_user causes pagefault. This pagefault
+   could not be handled because of server was locked due to read. So we have
+   to use temporary buffer. So ncp_unlock_server must be done before
+   copy_to_user (and for write, copy_from_user must be done before 
+   ncp_init_request... same applies for send raw packet ioctl). Because of
+   file is normally read in bigger chunks, caller provides kmalloced 
+   (vmalloced) chunk of memory with size >= to_read...
+ */
 int
-ncp_write(struct ncp_server *server, const char *file_id,
-	      __u32 offset, __u16 to_write,
-		const char *source, int *bytes_written)
+ncp_read_bounce(struct ncp_server *server, const char *file_id,
+	 __u32 offset, __u16 to_read, char *target, int *bytes_read,
+	 void* bounce, __u32 bufsize)
+{
+	int result;
+
+	ncp_init_request(server);
+	ncp_add_byte(server, 0);
+	ncp_add_mem(server, file_id, 6);
+	ncp_add_dword(server, htonl(offset));
+	ncp_add_word(server, htons(to_read));
+	result = ncp_request2(server, 72, bounce, bufsize);
+	ncp_unlock_server(server);
+	if (!result) {
+		int len = be16_to_cpu(get_unaligned((__u16*)((char*)bounce + 
+			  sizeof(struct ncp_reply_header))));
+		result = -EIO;
+		if (len <= to_read) {
+			char* source;
+
+			source = (char*)bounce + 
+			         sizeof(struct ncp_reply_header) + 2 + 
+			         (offset & 1);
+			*bytes_read = len;
+			result = 0;
+			if (copy_to_user(target, source, len))
+				result = -EFAULT;
+		}
+	}
+	return result;
+}
+
+int
+ncp_write_kernel(struct ncp_server *server, const char *file_id,
+		 __u32 offset, __u16 to_write,
+		 const char *source, int *bytes_written)
 {
 	int result;
 
@@ -792,45 +834,13 @@ ncp_write(struct ncp_server *server, const char *file_id,
 	ncp_add_mem(server, file_id, 6);
 	ncp_add_dword(server, htonl(offset));
 	ncp_add_word(server, htons(to_write));
-	ncp_add_mem_fromfs(server, source, to_write);
-
-	if ((result = ncp_request(server, 73)) != 0)
-		goto out;
-	*bytes_written = to_write;
-	result = 0;
-out:
+	ncp_add_mem(server, source, to_write);
+	
+	if ((result = ncp_request(server, 73)) == 0)
+		*bytes_written = to_write;
 	ncp_unlock_server(server);
 	return result;
 }
-
-#ifdef CONFIG_NCPFS_EXTRAS
-int
-ncp_read_kernel(struct ncp_server *server, const char *file_id,
-		__u32 offset, __u16 to_read, char *target, int *bytes_read) {
-	int error;
-	mm_segment_t old_fs;
-	
-	old_fs = get_fs();
-	set_fs(get_ds());
-	error = ncp_read(server, file_id, offset, to_read, target, bytes_read);
-	set_fs(old_fs);
-	return error;
-}
-
-int
-ncp_write_kernel(struct ncp_server *server, const char *file_id,
-		 __u32 offset, __u16 to_write,
-		 const char *source, int *bytes_written) {
-	int error;
-	mm_segment_t old_fs;
-	
-	old_fs = get_fs();
-	set_fs(get_ds());
-	error = ncp_write(server, file_id, offset, to_write, source, bytes_written);
-	set_fs(old_fs);
-	return error;
-}
-#endif
 
 #ifdef CONFIG_NCPFS_IOCTL_LOCKING
 int
@@ -876,4 +886,5 @@ ncp_ClearPhysicalRecord(struct ncp_server *server, const char *file_id,
 	return 0;
 }
 #endif	/* CONFIG_NCPFS_IOCTL_LOCKING */
+
 

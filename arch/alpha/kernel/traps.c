@@ -1,5 +1,5 @@
 /*
- * kernel/traps.c
+ * arch/alpha/kernel/traps.c
  *
  * (C) Copyright 1994 Linus Torvalds
  */
@@ -95,6 +95,9 @@ die_if_kernel(char * str, struct pt_regs *regs, long err, unsigned long *r9_15)
 {
 	if (regs->ps & 8)
 		return;
+#ifdef __SMP__
+	printk("CPU %d ", hard_smp_processor_id());
+#endif
 	printk("%s(%d): %s %ld\n", current->comm, current->pid, str, err);
 	dik_show_regs(regs, r9_15);
 	dik_show_code((unsigned int *)regs->pc);
@@ -128,8 +131,8 @@ do_entArith(unsigned long summary, unsigned long write_mask,
 	if (summary & 1) {
 		/* Software-completion summary bit is set, so try to
 		   emulate the instruction.  */
-		if (implver() == IMPLVER_EV6) {
-			/* Whee!  EV6 has precice exceptions.  */
+		if (!amask(AMASK_PRECISE_TRAP)) {
+			/* 21264 (except pass 1) has precise exceptions.  */
 			if (alpha_fp_emul(regs.pc - 4))
 				return;
 		} else {
@@ -138,14 +141,12 @@ do_entArith(unsigned long summary, unsigned long write_mask,
 		}
 	}
 
-	lock_kernel();
 #if 0
 	printk("%s: arithmetic trap at %016lx: %02lx %016lx\n",
 		current->comm, regs.pc, summary, write_mask);
 #endif
 	die_if_kernel("Arithmetic fault", &regs, 0, 0);
 	send_sig(SIGFPE, current, 1);
-	unlock_kernel();
 }
 
 asmlinkage void
@@ -235,10 +236,8 @@ do_entDbg(unsigned long type, unsigned long a1,
 	  unsigned long a2, unsigned long a3, unsigned long a4,
 	  unsigned long a5, struct pt_regs regs)
 {
-	lock_kernel();
 	die_if_kernel("Instruction fault", &regs, type, 0);
 	force_sig(SIGILL, current);
-	unlock_kernel();
 }
 
 
@@ -453,10 +452,8 @@ got_exception:
 		unsigned long newpc;
 		newpc = fixup_exception(una_reg, fixup, pc);
 
-		lock_kernel();
 		printk("Forwarding unaligned exception at %lx (%lx)\n",
 		       pc, newpc);
-		unlock_kernel();
 
 		(&regs)->pc = newpc;
 		return;
@@ -610,11 +607,9 @@ do_entUnaUser(void * va, unsigned long opcode,
 			cnt = 0;
 		}
 		if (++cnt < 5) {
-			lock_kernel();
 			printk("%s(%d): unaligned trap at %016lx: %p %lx %ld\n",
 			       current->comm, current->pid,
 			       regs->pc - 4, va, opcode, reg);
-			unlock_kernel();
 		}
 		last_time = jiffies;
 	}
@@ -868,16 +863,12 @@ do_entUnaUser(void * va, unsigned long opcode,
 
 give_sigsegv:
 	regs->pc -= 4;  /* make pc point to faulting insn */
-	lock_kernel();
 	send_sig(SIGSEGV, current, 1);
-	unlock_kernel();
 	return;
 
 give_sigbus:
 	regs->pc -= 4;
-	lock_kernel();
 	send_sig(SIGBUS, current, 1);
-	unlock_kernel();
 	return;
 }
 

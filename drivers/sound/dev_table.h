@@ -234,9 +234,9 @@ struct audio_operations
 	int parent_dev;		/* 0 -> no parent, 1 to n -> parent=parent_dev+1 */
 
 	/* fields formerly in dmabuf.c */
-	struct wait_queue *in_sleeper;
-	struct wait_queue *out_sleeper;
-	struct wait_queue *poll_sleeper;
+	wait_queue_head_t in_sleeper;
+	wait_queue_head_t out_sleeper;
+	wait_queue_head_t poll_sleeper;
 
 	/* fields formerly in audio.c */
 	int audio_mode;

@@ -24,6 +24,10 @@ ifeq ($(CONFIG_USB_MOUSE),y)
   USBX_OBJS += mouse.o
 endif
 
+ifeq ($(CONFIG_USB_ACM),y)
+  USBX_OBJS += acm.o
+endif
+
 ifeq ($(CONFIG_USB_KBD),y)
   USBX_OBJS += keyboard.o keymap.o
 endif

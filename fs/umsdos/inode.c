@@ -60,8 +60,8 @@ void UMSDOS_put_inode (struct inode *inode)
 			" Notify jacques@solucorp.qc.ca\n");
 	}
 
-	inode->u.umsdos_i.i_patched = 0;
-	fat_put_inode (inode);
+	if (inode->i_count == 1)
+		inode->u.umsdos_i.i_patched = 0;
 }
 
 
@@ -166,29 +166,6 @@ dentry, f_pos));
 	} else
 		init_special_inode(inode, inode->i_mode,
 					kdev_t_to_nr(inode->i_rdev));
-}
-
-
-/*
- * Load an inode from disk.
- */
-/* #Specification: Inode / post initialisation
- * To completely initialise an inode, we need access to the owner
- * directory, so we can locate more info in the EMD file. This is
- * not available the first time the inode is accessed, so we use
- * a value in the inode to tell if it has been finally initialised.
- * 
- * New inodes are obtained by the lookup and create routines, and
- * each of these must ensure that the inode gets patched.
- */
-void UMSDOS_read_inode (struct inode *inode)
-{
-	Printk ((KERN_DEBUG "UMSDOS_read_inode %p ino = %lu ",
-		inode, inode->i_ino));
-	msdos_read_inode (inode);
-
-	/* inode needs patching */
-	inode->u.umsdos_i.i_patched = 0;
 }
 
 
@@ -337,7 +314,7 @@ void UMSDOS_write_inode (struct inode *inode)
 
 static struct super_operations umsdos_sops =
 {
-	UMSDOS_read_inode,	/* read_inode */
+	NULL,			/* read_inode */
 	UMSDOS_write_inode,	/* write_inode */
 	UMSDOS_put_inode,	/* put_inode */
 	fat_delete_inode,	/* delete_inode */
@@ -345,7 +322,8 @@ static struct super_operations umsdos_sops =
 	UMSDOS_put_super,	/* put_super */
 	NULL,			/* write_super */
 	fat_statfs,		/* statfs */
-	NULL			/* remount_fs */
+	NULL,			/* remount_fs */
+	fat_clear_inode,	/* clear_inode */
 };
 
 /*
@@ -367,7 +345,7 @@ struct super_block *UMSDOS_read_super (struct super_block *sb, void *data,
 	if (!res)
 		goto out_fail;
 
-	printk (KERN_INFO "UMSDOS dentry-pre 0.84 "
+	printk (KERN_INFO "UMSDOS 0.85 "
 		"(compatibility level %d.%d, fast msdos)\n", 
 		UMSDOS_VERSION, UMSDOS_RELEASE);
 
@@ -412,16 +390,20 @@ out_fail:
 /*
  * Check for an alternate root if we're the root device.
  */
+
+extern kdev_t ROOT_DEV;
 static struct dentry *check_pseudo_root(struct super_block *sb)
 {
 	struct dentry *root, *init;
 
 	/*
 	 * Check whether we're mounted as the root device.
-	 * If so, this should be the only superblock.
+	 * must check like this, because we can be used with initrd
 	 */
-	if (sb->s_list.next->next != &sb->s_list)
+		
+	if (sb->s_dev != ROOT_DEV)
 		goto out_noroot;
+		
 printk("check_pseudo_root: mounted as root\n");
 
 	root = lookup_dentry(UMSDOS_PSDROOT_NAME, dget(sb->s_root), 0); 

@@ -75,33 +75,46 @@ sys_sethae(unsigned long hae, unsigned long a1, unsigned long a2,
 	return 0;
 }
 
-static void __attribute__((noreturn))
-do_cpu_idle(void)
-{
-	/* An endless idle loop with no priority at all.  */
-	current->priority = 0;
-	while (1) {
-		check_pgt_cache();
-		run_task_queue(&tq_scheduler);
-		current->counter = 0;
-		schedule();
-	}
-}
-
 #ifdef __SMP__
 void
 cpu_idle(void *unused)
 {
-	do_cpu_idle();
+	/* An endless idle loop with no priority at all.  */
+	current->priority = 0;
+	current->counter = -100;
+
+	while (1) {
+		/* FIXME -- EV6 and LCA45 know how to power down
+		   the CPU.  */
+
+		/* Although we are an idle CPU, we do not want to 
+		   get into the scheduler unnecessarily.  */
+		if (current->need_resched) {
+			schedule();
+			check_pgt_cache();
+		}
+	}
 }
 #endif
 
 asmlinkage int
 sys_idle(void)
 {
-	if (current->pid == 0)
-        	do_cpu_idle();
-	return -EPERM;
+	if (current->pid != 0)
+		return -EPERM;
+
+	/* An endless idle loop with no priority at all.  */
+	current->priority = 0;
+	current->counter = -100;
+	init_idle();
+
+	while (1) {
+		/* FIXME -- EV6 and LCA45 know how to power down
+		   the CPU.  */
+
+		schedule();
+		check_pgt_cache();
+	}
 }
 
 void

@@ -91,6 +91,9 @@
 #include <asm/machdep.h>
 #include <asm/setup.h>
 #endif
+#ifdef CONFIG_FBCON_VGA_PLANES
+#include <asm/io.h>
+#endif
 #define INCLUDE_LINUX_LOGO_DATA
 #include <asm/linux_logo.h>
 
@@ -2237,6 +2240,35 @@ __initfunc(static int fbcon_show_logo( void ))
 	    done = 1;
 	}
 #endif
+#if defined(CONFIG_FBCON_VGA_PLANES)
+	if (depth == 4 && p->type == FB_TYPE_VGA_PLANES) {
+		outb_p(1,0x3ce); outb_p(0xf,0x3cf);
+		outb_p(3,0x3ce); outb_p(0,0x3cf);
+		outb_p(5,0x3ce); outb_p(0,0x3cf);
+
+		src = logo;
+		for (y1 = 0; y1 < LOGO_H; y1++) {
+			for (x1 = 0; x1 < LOGO_W / 2; x1++) {
+				dst = fb + y1*line + x1/4 + x/8;
+
+				outb_p(0,0x3ce);
+				outb_p(*src >> 4,0x3cf);
+				outb_p(8,0x3ce);
+				outb_p(1 << (7 - x1 % 4 * 2),0x3cf);
+				*(volatile char *) dst |= 1;
+
+				outb_p(0,0x3ce);
+				outb_p(*src & 0xf,0x3cf);
+				outb_p(8,0x3ce);
+				outb_p(1 << (7 - (1 + x1 % 4 * 2)),0x3cf);
+				*(volatile char *) dst |= 1;
+
+				src++;
+			}
+		}
+		done = 1;
+	}
+#endif			
     }
     
     if (p->fb_info->fbops->fb_rasterimg)
@@ -2300,3 +2332,4 @@ struct display_switch fbcon_dummy = {
 EXPORT_SYMBOL(fb_display);
 EXPORT_SYMBOL(fbcon_redraw_bmove);
 EXPORT_SYMBOL(fbcon_dummy);
+EXPORT_SYMBOL(fb_con);

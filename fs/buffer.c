@@ -644,7 +644,9 @@ void set_blocksize(kdev_t dev, int size)
 				clear_bit(BH_Req, &bh->b_state);
 				bh->b_flushtime = 0;
 			}
-			remove_from_hash_queue(bh);
+			remove_from_queues(bh);
+			bh->b_dev=B_FREE;
+			insert_into_queues(bh);
 		}
 	}
 }

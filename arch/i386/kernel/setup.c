@@ -9,6 +9,9 @@
  *  Force Cyrix 6x86(MX) and M II processors to report MTRR capability
  *  and fix against Cyrix "coma bug" by
  *      Zoltan Boszormenyi <zboszor@mol.hu> February 1999.
+ * 
+ *  Force Centaur C6 processors to report MTRR capability.
+ *      Bart Hartgers <bart@etpmod.phys.tue.nl>, May 199.
  */
 
 /*
@@ -861,6 +864,8 @@ __initfunc(void print_cpu_info(struct cpuinfo_x86 *c))
 		/* lv|=(1<<6);	- may help too if the board can cope */
 		printk("now 0x%X", lv);
 		wrmsr(0x107, lv, hv);
+		/* Emulate MTRRs using Centaur's MCR. */
+		c->x86_capability |= X86_FEATURE_MTRR;	   	
 	}
 	printk("\n");
 }

@@ -22,7 +22,7 @@
 #define CONFIG_SUN_PARTITION 1
 #endif
 
-#if defined(CONFIG_SGI)
+#if defined(CONFIG_SGI) || defined(CONFIG_SGI_DISKLABEL)
 #define CONFIG_SGI_PARTITION 1
 #endif
 

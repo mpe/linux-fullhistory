@@ -12,6 +12,6 @@
 #define __FINIT		.previous
 #define __INITDATA	.section	.data.init,"a"
 
-#define __cacheline_aligned __attribute__((__aligned__(L1_CACHE_BYTES)))
+#define __cacheline_aligned __attribute__((__aligned__(32)))
 
 #endif

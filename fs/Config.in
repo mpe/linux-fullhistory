@@ -19,6 +19,10 @@ dep_tristate '  MSDOS fs support' CONFIG_MSDOS_FS $CONFIG_FAT_FS
 dep_tristate '  UMSDOS: Unix-like filesystem on top of standard MSDOS filesystem' CONFIG_UMSDOS_FS $CONFIG_MSDOS_FS
 dep_tristate '  VFAT (Windows-95) fs support' CONFIG_VFAT_FS $CONFIG_FAT_FS
 
+if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+  tristate 'EFS filesystem support (read only) (experimental)' CONFIG_EFS_FS
+fi
+
 tristate 'ISO 9660 CDROM filesystem support' CONFIG_ISO9660_FS
 if [ "$CONFIG_ISO9660_FS" != "n" ]; then
   bool 'Microsoft Joliet CDROM extensions' CONFIG_JOLIET

@@ -1334,13 +1334,13 @@ static Sg_fd * sg_add_sfp(Sg_device * sdp, int dev, int get_reserved)
         return sdp->headfp;
     }
     sfp = (Sg_fd *)sg_low_malloc(sizeof(Sg_fd), 0, SG_HEAP_KMAL, 0);
-    if (sfp) {
-        memset(sfp, 0, sizeof(Sg_fd));
-        sfp->my_mem_src = SG_HEAP_KMAL;
-    }
-    else
-        return NULL;
-        
+    if (!sfp)
+	return NULL;
+
+    memset(sfp, 0, sizeof(Sg_fd));
+    sfp->my_mem_src = SG_HEAP_KMAL;
+
+    init_waitqueue_head(&sfp->read_wait);    
     sfp->timeout = SG_DEFAULT_TIMEOUT;
     sfp->force_packid = SG_DEF_FORCE_PACK_ID;
     sfp->low_dma = (SG_DEF_FORCE_LOW_DMA == 0) ?

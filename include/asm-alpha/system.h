@@ -147,6 +147,13 @@ enum implver_enum {
 #endif
 #endif
 
+enum amask_enum {
+	AMASK_BWX = (1UL << 0),
+	AMASK_FIX = (1UL << 1),
+	AMASK_MAX = (1UL << 8),
+	AMASK_PRECISE_TRAP = (1UL << 9),
+};
+
 #define amask(mask)						\
 ({ unsigned long __amask, __input = (mask);			\
    __asm__ ("amask %1,%0" : "=r"(__amask) : "rI"(__input));	\

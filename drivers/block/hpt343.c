@@ -370,7 +370,6 @@ __initfunc(unsigned int pci_init_hpt343 (struct pci_dev *dev, const char *name))
 		inb(hpt343IoBase + 0x0011));
 #endif
 
-	pci_write_config_byte(dev, HPT343_PCI_INIT_REG, 0x80);
 	if (cmd & PCI_COMMAND_MEMORY) {
 		if (dev->rom_address) {
 			pci_write_config_byte(dev, PCI_ROM_ADDRESS, dev->rom_address | PCI_ROM_ADDRESS_ENABLE);

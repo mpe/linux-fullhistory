@@ -40,12 +40,11 @@
 #include <linux/errno.h>
 #include <linux/hdreg.h>
 #include <linux/malloc.h>
+#include <linux/ide.h>
 
 #include <asm/io.h>
 #include <asm/bitops.h>
 #include <asm/uaccess.h>
-
-#include "../block/ide.h"
 
 #include "scsi.h"
 #include "hosts.h"

@@ -51,14 +51,8 @@ extern void mda_console_init(void);
 #if defined(CONFIG_PPC) || defined(CONFIG_MAC)
 extern void adbdev_init(void);
 #endif
-#ifdef CONFIG_USB_UHCI
-int uhci_init(void);
-#endif
-#ifdef CONFIG_USB_OHCI
-int ohci_init(void);
-#endif
-#ifdef CONFIG_USB_OHCI_HCD
-int ohci_hcd_init(void);
+#ifdef CONFIG_USB
+extern void usb_init(void);
 #endif
      
 static ssize_t do_write_mem(struct file * file, void *p, unsigned long realp,
@@ -609,15 +603,7 @@ __initfunc(int chr_dev_init(void))
 		printk("unable to get major %d for memory devs\n", MEM_MAJOR);
 	rand_initialize();
 #ifdef CONFIG_USB
-#ifdef CONFIG_USB_UHCI
-	uhci_init();
-#endif
-#ifdef CONFIG_USB_OHCI
-	ohci_init();
-#endif
-#ifdef CONFIG_USB_OHCI_HCD
-        ohci_hcd_init(); 
-#endif
+	usb_init();
 #endif
 #if defined (CONFIG_FB)
 	fbmem_init();

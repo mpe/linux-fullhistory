@@ -1,6 +1,6 @@
 /*  Generic MTRR (Memory Type Range Register) driver.
 
-    Copyright (C) 1997-1998  Richard Gooch
+    Copyright (C) 1997-1999  Richard Gooch
 
     This library is free software; you can redistribute it and/or
     modify it under the terms of the GNU Library General Public
@@ -196,6 +196,11 @@
     19990310   Richard Gooch <rgooch@atnf.csiro.au>
 	       Support K6-II/III based on Alan Cox's <alan@redhat.com> patches.
   v1.34
+    19990511   Bart Hartgers <bart@etpmod.phys.tue.nl>
+	       Support Centaur C6 MCR's.
+    19990512   Richard Gooch <rgooch@atnf.csiro.au>
+	       Minor cleanups.
+  v1.35
 */
 #include <linux/types.h>
 #include <linux/errno.h>
@@ -232,7 +237,7 @@
 #include <asm/hardirq.h>
 #include "irq.h"
 
-#define MTRR_VERSION            "1.34 (19990310)"
+#define MTRR_VERSION            "1.35 (19990512)"
 
 #define TRUE  1
 #define FALSE 0
@@ -313,8 +318,13 @@ static void set_mtrr_prepare (struct set_mtrr_context *ctxt)
     /*  Disable interrupts locally  */
     __save_flags (ctxt->flags); __cli ();
 
-    if (boot_cpu_data.x86_vendor == X86_VENDOR_AMD) return;
-
+    switch (boot_cpu_data.x86_vendor)
+    {
+      case X86_VENDOR_AMD:
+      case X86_VENDOR_CENTAUR:
+	return;
+	/*break;*/
+    }
     /*  Save value of CR4 and clear Page Global Enable (bit 7)  */
     if (boot_cpu_data.x86_capability & X86_FEATURE_PGE)
 	asm volatile ("movl  %%cr4, %0\n\t"
@@ -352,12 +362,14 @@ static void set_mtrr_done (struct set_mtrr_context *ctxt)
 {
     unsigned long tmp;
 
-    if (boot_cpu_data.x86_vendor == X86_VENDOR_AMD)
+    switch (boot_cpu_data.x86_vendor)
     {
+      case X86_VENDOR_AMD:
+      case X86_VENDOR_CENTAUR:
 	__restore_flags (ctxt->flags);
 	return;
+	/*break;*/
     }
-
     /*  Flush caches and TLBs  */
     asm volatile ("wbinvd" : : : "memory" );
 
@@ -399,7 +411,9 @@ static unsigned int get_num_var_ranges (void)
 	return (config & 0xff);
 	/*break;*/
       case X86_VENDOR_CYRIX:
-	/*  Cyrix have 8 ARRs */
+	/*  Cyrix have 8 ARRs  */
+      case X86_VENDOR_CENTAUR:
+        /*  and Centaur has 8 MCR's  */
 	return 8;
 	/*break;*/
       case X86_VENDOR_AMD:
@@ -422,6 +436,7 @@ static int have_wrcomb (void)
 	/*break;*/
       case X86_VENDOR_CYRIX:
       case X86_VENDOR_AMD:
+      case X86_VENDOR_CENTAUR:
 	return 1;
 	/*break;*/
     }
@@ -450,7 +465,6 @@ static void intel_get_mtrr (unsigned int reg, unsigned long *base,
 
     /* Clean up mask_lo so it gives the real address mask. */
     mask_lo = (mask_lo & 0xfffff000UL);
-    
     /* This works correctly if size is a power of two, i.e. a
        contiguous range. */
     *size = ~(mask_lo - 1);
@@ -480,7 +494,6 @@ static void cyrix_get_arr (unsigned int reg, unsigned long *base,
 
     /* Enable interrupts if it was enabled previously */
     __restore_flags (flags);
-    
     shift = ((unsigned char *) base)[1] & 0x0f;
     *base &= 0xfffff000UL;
 
@@ -549,6 +562,20 @@ static void amd_get_mtrr (unsigned int reg, unsigned long *base,
     *size = (low + 4) << 15;
     return;
 }   /*  End Function amd_get_mtrr  */
+
+static struct
+{
+    unsigned long high;
+    unsigned long low;
+} centaur_mcr[8];
+
+static void centaur_get_mcr (unsigned int reg, unsigned long *base,
+			     unsigned long *size, mtrr_type *type)
+{
+    *base = centaur_mcr[reg].high & 0xfffff000;
+    *size = (~(centaur_mcr[reg].low & 0xfffff000))+1;
+    *type = MTRR_TYPE_WRCOMB;	/*  If it is there, it is write-combining  */
+}   /*  End Function centaur_get_mcr  */
 
 static void (*get_mtrr) (unsigned int reg, unsigned long *base,
 			 unsigned long *size, mtrr_type *type) = NULL;
@@ -647,11 +674,10 @@ static void amd_set_mtrr_up (unsigned int reg, unsigned long base,
     else
 	/* Set the register to the base (already shifted for us), the
 	   type (off by one) and an inverted bitmask of the size
-        	   
 	   The size is the only odd bit. We are fed say 512K
 	   We invert this and we get 111 1111 1111 1011 but
 	   if you subtract one and invert you get the desired
-	   111 1111 1111 1100 mask 
+	   111 1111 1111 1100 mask
 	   */
 	*(reg ? &high : &low)=(((~(size-1))>>15)&0x0001FFFC)|base|(type+1);
     /*
@@ -663,10 +689,36 @@ static void amd_set_mtrr_up (unsigned int reg, unsigned long base,
     if (do_safe) set_mtrr_done (&ctxt);
 }   /*  End Function amd_set_mtrr_up  */
 
+
+static void centaur_set_mcr_up (unsigned int reg, unsigned long base,
+				unsigned long size, mtrr_type type,
+				int do_safe)
+{
+    struct set_mtrr_context ctxt;
+    unsigned long low, high;
+
+    if (do_safe) set_mtrr_prepare( &ctxt );
+    if (size == 0)
+    {
+        /*  Disable  */
+        high = low = 0;
+    }
+    else
+    {
+        high = base & 0xfffff000; /* base works on 4K pages... */
+        low = ((~(size-1))&0xfffff000);
+        low |= 0x1f;		  /* only support write-combining... */
+    }
+    centaur_mcr[reg].high = high;
+    centaur_mcr[reg].low = low;
+    wrmsr (0x110 + reg, low, high);
+    if (do_safe) set_mtrr_done( &ctxt );
+}   /*  End Function centaur_set_mtrr_up  */
+
 static void (*set_mtrr_up) (unsigned int reg, unsigned long base,
 			    unsigned long size, mtrr_type type,
 			    int do_safe) = NULL;
-     
+
 #ifdef __SMP__
 
 struct mtrr_var_range
@@ -694,23 +746,21 @@ __initfunc(static int set_mtrr_var_range_testing (unsigned int index,
 {
     unsigned int lo, hi;
     int changed = FALSE;
-    
-    rdmsr(MTRRphysBase_MSR(index), lo, hi); 
 
+    rdmsr(MTRRphysBase_MSR(index), lo, hi);
     if ((vr->base_lo & 0xfffff0ffUL) != (lo & 0xfffff0ffUL)
 	|| (vr->base_hi & 0xfUL) != (hi & 0xfUL)) {
-	wrmsr(MTRRphysBase_MSR(index), vr->base_lo, vr->base_hi); 
+	wrmsr(MTRRphysBase_MSR(index), vr->base_lo, vr->base_hi);
 	changed = TRUE;
     }
 
-    rdmsr(MTRRphysMask_MSR(index), lo, hi); 
+    rdmsr(MTRRphysMask_MSR(index), lo, hi);
 
     if ((vr->mask_lo & 0xfffff800UL) != (lo & 0xfffff800UL)
 	|| (vr->mask_hi & 0xfUL) != (hi & 0xfUL)) {
-	wrmsr(MTRRphysMask_MSR(index), vr->mask_lo, vr->mask_hi); 
+	wrmsr(MTRRphysMask_MSR(index), vr->mask_lo, vr->mask_hi);
 	changed = TRUE;
     }
-    
     return changed;
 }   /*  End Function set_mtrr_var_range_testing  */
 
@@ -723,7 +773,6 @@ __initfunc(static void get_fixed_ranges(mtrr_type *frs))
 
     for (i = 0; i < 2; i++)
 	rdmsr(MTRRfix16K_80000_MSR + i, p[2 + i*2], p[3 + i*2]);
- 
     for (i = 0; i < 8; i++)
 	rdmsr(MTRRfix4K_C0000_MSR + i, p[6 + i*2], p[7 + i*2]);
 }   /*  End Function get_fixed_ranges  */
@@ -777,14 +826,13 @@ __initfunc(static void get_mtrr_state(struct mtrr_state *state))
     unsigned long lo, dummy;
 
     nvrs = state->num_var_ranges = get_num_var_ranges();
-    vrs = state->var_ranges 
+    vrs = state->var_ranges
               = kmalloc (nvrs * sizeof (struct mtrr_var_range), GFP_KERNEL);
     if (vrs == NULL)
 	nvrs = state->num_var_ranges = 0;
 
     for (i = 0; i < nvrs; i++)
 	get_mtrr_var_range (i, &vrs[i]);
-    
     get_fixed_ranges (state->fixed_ranges);
 
     rdmsr (MTRRdefType_MSR, lo, dummy);
@@ -818,7 +866,6 @@ __initfunc(static unsigned long set_mtrr_state (struct mtrr_state *state,
 
     if ( set_fixed_ranges_testing(state->fixed_ranges) )
 	change_mask |= MTRR_CHANGE_MASK_FIXED;
-    
     /*  Set_mtrr_restore restores the old value of MTRRdefType,
 	so to set it we fiddle with the saved value  */
     if ((ctxt->deftype_lo & 0xff) != state->def_type
@@ -831,7 +878,7 @@ __initfunc(static unsigned long set_mtrr_state (struct mtrr_state *state,
     return change_mask;
 }   /*  End Function set_mtrr_state  */
 
- 
+
 static atomic_t undone_count;
 static volatile int wait_barrier_execute = FALSE;
 static volatile int wait_barrier_cache_enable = FALSE;
@@ -1025,13 +1072,22 @@ int mtrr_add (unsigned long base, unsigned long size, unsigned int type,
 	}
 	/*  Fall through  */
       case X86_VENDOR_CYRIX:
+      case X86_VENDOR_CENTAUR:
 	if ( (base & 0xfff) || (size & 0xfff) )
 	{
 	    printk ("mtrr: size and base must be multiples of 4 kiB\n");
 	    printk ("mtrr: size: %lx  base: %lx\n", size, base);
 	    return -EINVAL;
 	}
-	if (base + size < 0x100000)
+        if (boot_cpu_data.x86_vendor == X86_VENDOR_CENTAUR)
+	{
+	    if (type != MTRR_TYPE_WRCOMB)
+	    {
+		printk ("mtrr: only write-combining is supported\n");
+		return -EINVAL;
+	    }
+	}
+	else if (base + size < 0x100000)
 	{
 	    printk ("mtrr: cannot set region below 1 MiB (0x%lx,0x%lx)\n",
 		    base, size);
@@ -1050,7 +1106,7 @@ int mtrr_add (unsigned long base, unsigned long size, unsigned int type,
 	}
 	break;
       case X86_VENDOR_AMD:
-    	/* Apply the K6 block alignment and size rules 
+    	/* Apply the K6 block alignment and size rules
     	   In order
     	      o Uncached or gathering only
     	      o 128K or bigger block
@@ -1572,6 +1628,30 @@ __initfunc(static void cyrix_arr_init(void))
     if ( ccrc[6] ) printk ("mtrr: ARR3 was write protected, unprotected\n");
 }   /*  End Function cyrix_arr_init  */
 
+__initfunc(static void centaur_mcr_init (void))
+{
+    unsigned i;
+    struct set_mtrr_context ctxt;
+
+    set_mtrr_prepare (&ctxt);
+    /* Unfortunately, MCR's are read-only, so there is no way to
+     * find out what the bios might have done.
+     */
+    /* Clear all MCR's.
+     * This way we are sure that the centaur_mcr array contains the actual
+     * values. The disadvantage is that any BIOS tweaks are thus undone.
+     */
+    for (i = 0; i < 8; ++i)
+    {
+        centaur_mcr[i].high = 0;
+	centaur_mcr[i].low = 0;
+	wrmsr (0x110 + i , 0, 0);
+    }
+    /*  Throw the main write-combining switch...  */
+    wrmsr (0x120, 0x01f0001f, 0);
+    set_mtrr_done (&ctxt);
+}   /*  End Function centaur_mcr_init  */
+
 __initfunc(static void mtrr_setup (void))
 {
     printk ("mtrr: v%s Richard Gooch (rgooch@atnf.csiro.au)\n", MTRR_VERSION);
@@ -1582,7 +1662,6 @@ __initfunc(static void mtrr_setup (void))
 	set_mtrr_up = intel_set_mtrr_up;
 	break;
       case X86_VENDOR_CYRIX:
-	printk ("mtrr: Using Cyrix style ARRs\n");
 	get_mtrr = cyrix_get_arr;
 	set_mtrr_up = cyrix_set_arr_up;
 	get_free_region = cyrix_get_free_region;
@@ -1591,6 +1670,10 @@ __initfunc(static void mtrr_setup (void))
 	get_mtrr = amd_get_mtrr;
 	set_mtrr_up = amd_set_mtrr_up;
 	break;
+     case X86_VENDOR_CENTAUR:
+        get_mtrr = centaur_get_mcr;
+        set_mtrr_up = centaur_set_mcr_up;
+        break;
     }
 }   /*  End Function mtrr_setup  */
 
@@ -1611,6 +1694,9 @@ __initfunc(void mtrr_init_boot_cpu (void))
       case X86_VENDOR_CYRIX:
 	cyrix_arr_init ();
 	break;
+      case X86_VENDOR_CENTAUR:
+        centaur_mcr_init ();
+        break;
     }
 }   /*  End Function mtrr_init_boot_cpu  */
 
@@ -1675,6 +1761,9 @@ __initfunc(int mtrr_init(void))
       case X86_VENDOR_CYRIX:
 	cyrix_arr_init ();
 	break;
+      case X86_VENDOR_CENTAUR:
+        centaur_mcr_init ();
+        break;
     }
 #  endif  /*  !__SMP__  */
 

@@ -74,6 +74,7 @@ if [ "$CONFIG_FB" = "y" ]; then
   fi
   if [ "$ARCH" = "i386" ]; then
     bool 'VESA VGA graphics console' CONFIG_FB_VESA
+    bool 'VGA 16-color graphics console' CONFIG_FB_VGA16
     define_bool CONFIG_VIDEO_SELECT y
   fi
   if [ "$CONFIG_VISWS" = "y" ]; then
@@ -141,6 +142,7 @@ if [ "$CONFIG_FB" = "y" ]; then
     tristate 'Atari interleaved bitplanes (8 planes) support' CONFIG_FBCON_IPLAN2P8
 #   tristate 'Atari interleaved bitplanes (16 planes) support' CONFIG_FBCON_IPLAN2P16
     tristate 'Mac variable bpp packed pixels support' CONFIG_FBCON_MAC
+    bool 'VGA 16-color planar support' CONFIG_FBCON_VGA_PLANES
     tristate 'VGA characters/attributes support' CONFIG_FBCON_VGA
   else
     # Guess what we need
@@ -282,6 +284,9 @@ if [ "$CONFIG_FB" = "y" ]; then
       if [ "$CONFIG_FB_MAC" = "m" -o "$CONFIG_FB_VIRTUAL" = "m" ]; then
 	define_bool CONFIG_FBCON_MAC  m
       fi
+    fi
+    if [ "$CONFIG_FB_VGA16" = "y" ]; then
+      define_bool CONFIG_FBCON_VGA_PLANES y
     fi
     if [ "$CONFIG_FB_MDA" = "y" -o "$CONFIG_FB_VGA" = "y" ]; then
       define_bool CONFIG_FBCON_VGA y

@@ -429,7 +429,7 @@ static int ohci_request_irq(struct usb_device *usb, unsigned int pipe,
 	ohci_fill_new_td(td, td_set_dir_out(usb_pipeout(pipe)),
 			TOGGLE_AUTO,
 			OHCI_TD_ROUND,
-			dev->data, DATA_BUF_LEN,
+			&dev->data, DATA_BUF_LEN,
 			dev_id, handler);
 	/*
 	 * TODO: be aware that OHCI won't advance out of the 4kb
@@ -728,6 +728,8 @@ static int ohci_usb_deallocate(struct usb_device *usb_dev)
 	return 0;
 }
 
+/* FIXME! */
+#define ohci_bulk_msg NULL
 
 /*
  * functions for the generic USB driver
@@ -736,6 +738,7 @@ struct usb_operations ohci_device_operations = {
 	ohci_usb_allocate,
 	ohci_usb_deallocate,
 	ohci_control_msg,
+	ohci_bulk_msg,
 	ohci_request_irq,
 };
 
@@ -818,6 +821,18 @@ static int start_hc(struct ohci *ohci)
 	
 	/* Enable control lists */
 	writel_set(OHCI_USB_IE | OHCI_USB_CLE | OHCI_USB_BLE, &ohci->regs->control);
+
+	/* Force global power enable -gal@cs.uni-magdeburg.de */
+	/* 
+	 * This turns on global power switching for all the ports
+	 * and tells the HC that all of the ports should be powered on
+	 * all of the time.
+	 *
+	 * TODO: This could be battery draining for laptops.. We
+	 *       should implement power switching.
+	 */
+	writel_set( OHCI_ROOT_A_NPS, &ohci->regs->roothub.a );
+	writel_mask( ~((__u32)OHCI_ROOT_A_PSM), &ohci->regs->roothub.a );
 
 	/* Turn on power to the root hub ports (thanks Roman!) */
 	writel( OHCI_ROOT_LPSC, &ohci->regs->roothub.status );
@@ -1262,23 +1277,23 @@ static struct ohci *alloc_ohci(void* mem_base)
 	 * Initialize the polling table to call interrupts at the
 	 * intended intervals.
 	 */
-	dev->hcca->int_table[0] = virt_to_bus(&dev->ed[ED_INT_32]);
+	dev->hcca->int_table[0] = virt_to_bus(&dev->ed[ED_INT_1]);
 	for (i = 1; i < NUM_INTS; i++) {
-		if (i & 1)
+		if (i & 16)
+			dev->hcca->int_table[i] =
+				virt_to_bus(&dev->ed[ED_INT_32]);
+		if (i & 8)
 			dev->hcca->int_table[i] =
 				virt_to_bus(&dev->ed[ED_INT_16]);
-		else if (i & 2)
+		if (i & 4)
 			dev->hcca->int_table[i] =
 				virt_to_bus(&dev->ed[ED_INT_8]);
-		else if (i & 4)
+		if (i & 2)
 			dev->hcca->int_table[i] =
 				virt_to_bus(&dev->ed[ED_INT_4]);
-		else if (i & 8)
+		if (i & 1)
 			dev->hcca->int_table[i] =
 				virt_to_bus(&dev->ed[ED_INT_2]);
-		else if (i & 16)
-			dev->hcca->int_table[i] =
-				virt_to_bus(&dev->ed[ED_INT_1]);
 	}
 
 	/*
@@ -1470,9 +1485,12 @@ static int handle_apm_event(apm_event_t event)
 #ifdef OHCI_TIMER
 /*
  * Inspired by Iñaky's driver.  This function is a timer routine that
- * is called OHCI_TIMER_FREQ times per second.  It polls the root hub
- * for status changes as on my system things are acting a bit odd at
- * the moment..
+ * is called every OHCI_TIMER_FREQ ms.  It polls the root hub for
+ * status changes as on my system the RHSC interrupt just doesn't
+ * play well with others.. (so RHSC is turned off by default in this
+ * driver)
+ * [my controller is a "SiS 7001 USB (rev 16)"]
+ * -greg
  */
 static void ohci_timer_func (unsigned long ohci_ptr)
 {
@@ -1480,8 +1498,9 @@ static void ohci_timer_func (unsigned long ohci_ptr)
 
 	ohci_root_hub_events(ohci);
 
-	/* press the snooze button... */
-	mod_timer(&ohci_timer, jiffies + (OHCI_TIMER_FREQ*HZ));
+	/* set the next timer */
+	mod_timer(&ohci_timer, jiffies + ((OHCI_TIMER_FREQ*HZ)/1000));
+
 } /* ohci_timer_func() */
 #endif
 
@@ -1507,9 +1526,10 @@ static int found_ohci(int irq, void* mem_base)
 
 #ifdef OHCI_TIMER
 	init_timer(&ohci_timer);
-	ohci_timer.expires = jiffies + (OHCI_TIMER_FREQ*HZ);
+	ohci_timer.expires = jiffies + ((OHCI_TIMER_FREQ*HZ)/1000);
 	ohci_timer.data = (unsigned long)ohci;
 	ohci_timer.function = ohci_timer_func;
+	add_timer(&ohci_timer);
 #endif
 
 	retval = -EBUSY;
@@ -1644,18 +1664,6 @@ int ohci_init(void)
 		if (retval < 0)
 			continue;
 
-		/* TODO check module params here to determine what to load */
-
-#ifdef CONFIG_USB_MOUSE
-		usb_mouse_init();
-#endif
-#ifdef CONFIG_USB_KBD		
-		usb_kbd_init();
-#endif		
-		hub_init();
-#ifdef CONFIG_USB_AUDIO		
-		usb_audio_init();
-#endif		
 #ifdef CONFIG_APM
 		apm_register_callback(&handle_apm_event);
 #endif

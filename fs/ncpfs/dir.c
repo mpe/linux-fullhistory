@@ -38,8 +38,7 @@ static int c_size;
 static int c_seen_eof;
 static int c_last_returned_index;
 static struct ncp_dirent *c_entry = NULL;
-static int c_lock = 0;
-static DECLARE_WAIT_QUEUE_HEAD(c_wait);
+static DECLARE_MUTEX(c_sem);
 
 static int ncp_read_volume_list(struct ncp_server *, int, int,
 					struct ncp_dirent *);
@@ -230,15 +229,12 @@ static inline int ncp_is_server_root(struct inode *inode)
 
 static inline void ncp_lock_dircache(void)
 {
-	while (c_lock)
-		sleep_on(&c_wait);
-	c_lock = 1;
+	down(&c_sem);
 }
 
 static inline void ncp_unlock_dircache(void)
 {
-	c_lock = 0;
-	wake_up(&c_wait);
+	up(&c_sem);
 }
 
 

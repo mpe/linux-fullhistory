@@ -314,7 +314,7 @@ static int			got_clock_diff = 0;
 static int			debug = 0;
 static int			apm_disabled = 0;
 
-static struct wait_queue *	process_list = NULL;
+static DECLARE_WAIT_QUEUE_HEAD(process_list);
 static struct apm_bios_struct *	user_list = NULL;
 
 static struct timer_list	apm_timer;

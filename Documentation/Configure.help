@@ -8855,6 +8855,9 @@ CONFIG_MTRR
 
   The AMD K6-2 (stepping 8 and above) and K6-3 processors have two
   MTRRs. These are supported.
+  
+  The Centaur C6 (WinChip) has 8 MCRs, allowing write-combining. These
+  are supported.
 
   Saying Y here also fixes a problem with buggy SMP BIOSes which only
   set the MTRRs for the boot CPU and not the secondary CPUs. This can

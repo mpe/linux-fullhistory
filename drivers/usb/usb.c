@@ -42,6 +42,55 @@
 
 #include "usb.h"
 
+#ifdef CONFIG_USB_UHCI
+int uhci_init(void);
+#endif
+#ifdef CONFIG_USB_OHCI
+int ohci_init(void);
+#endif
+#ifdef CONFIG_USB_OHCI_HCD
+int ohci_hcd_init(void);
+#endif
+
+int usb_init(void)
+{
+#ifdef CONFIG_USB_UHCI
+	uhci_init();
+#endif
+#ifdef CONFIG_USB_OHCI
+	ohci_init();
+#endif
+#ifdef CONFIG_USB_OHCI_HCD
+	ohci_hcd_init(); 
+#endif
+#ifdef CONFIG_USB_MOUSE
+	usb_mouse_init();
+#endif
+#ifdef CONFIG_USB_KBD
+	usb_kbd_init();
+#endif
+#ifdef CONFIG_USB_AUDIO
+	usb_audio_init();
+#endif
+#ifdef CONFIG_USB_ACM
+	usb_acm_init();
+#endif
+#ifdef CONFIG_USB_CPIA
+	usb_cpia_init();
+#endif
+
+	usb_hub_init();
+	return 0;
+}
+
+void cleanup_drivers(void)
+{
+	hub_cleanup();
+#ifdef CONFIG_USB_MOUSE
+	usb_mouse_cleanup();
+#endif
+}
+
 /*
  * We have a per-interface "registered driver" list.
  */
@@ -596,20 +645,20 @@ int usb_get_report(struct usb_device *dev)
 
 int usb_get_configuration(struct usb_device *dev)
 {
-	unsigned int cfgno,size;
+	unsigned int cfgno;
 	unsigned char buffer[400];
 	unsigned char * bufptr;
 	
-	bufptr=buffer;
-        for (cfgno=0;cfgno<dev->descriptor.bNumConfigurations;cfgno++) {
+	bufptr = buffer;
+	for (cfgno = 0 ; cfgno < dev->descriptor.bNumConfigurations ; cfgno++) {
+		unsigned int size;
   		/* Get the first 8 bytes - guaranteed */
 	  	if (usb_get_descriptor(dev, USB_DT_CONFIG, cfgno, bufptr, 8))
 	    		return -1;
 
   	  	/* Get the full buffer */
 	  	size = *(unsigned short *)(bufptr+2);
-	  	if (bufptr+size > buffer+sizeof(buffer))
-	  	{
+	  	if (bufptr+size > buffer+sizeof(buffer)) {
 			printk(KERN_INFO "usb: truncated DT_CONFIG (want %d).\n", size);
 			size = buffer+sizeof(buffer)-bufptr;
 		}
@@ -617,9 +666,9 @@ int usb_get_configuration(struct usb_device *dev)
 			return -1;
 			
 		/* Prepare for next configuration */
-		bufptr+=size;
+		bufptr += size;
 	}
-	return usb_parse_configuration(dev, buffer, size);
+	return usb_parse_configuration(dev, buffer, bufptr - buffer);
 }
 
 /*

@@ -32,6 +32,9 @@ struct msdos_inode_info {
 	int i_busy;	/* file is either deleted but still open, or
 			   inconsistent (mkdir) */
 	int i_binary;	/* file contains non-text data */
+	int i_location;	/* on-disk position of directory entry or 0 */
+	struct inode *i_fat_inode;	/* struct inode of this one */
+	struct list_head i_fat_hash;	/* hash by i_location */
 };
 
 #endif

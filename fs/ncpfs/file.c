@@ -100,6 +100,8 @@ ncp_file_read(struct file *file, char *buf, size_t count, loff_t *ppos)
 	size_t already_read = 0;
 	off_t pos;
 	int bufsize, error;
+	void* freepage;
+	int freelen;
 
 	DPRINTK(KERN_DEBUG "ncp_file_read: enter %s/%s\n",
 		dentry->d_parent->d_name.name, dentry->d_name.name);
@@ -135,16 +137,24 @@ ncp_file_read(struct file *file, char *buf, size_t count, loff_t *ppos)
 
 	bufsize = NCP_SERVER(inode)->buffer_size;
 
+	error = -EIO;
+	freelen = ncp_read_bounce_size(bufsize);
+	freepage = kmalloc(freelen, GFP_NFS);
+	if (!freepage)
+		goto out;
+	error = 0;
 	/* First read in as much as possible for each bufsize. */
 	while (already_read < count) {
 		int read_this_time;
 		int to_read = min(bufsize - (pos % bufsize),
 				  count - already_read);
 
-		error = ncp_read(NCP_SERVER(inode),
+		error = ncp_read_bounce(NCP_SERVER(inode),
 			 	NCP_FINFO(inode)->file_handle,
-				pos, to_read, buf, &read_this_time);
+				pos, to_read, buf, &read_this_time, 
+				freepage, freelen);
 		if (error) {
+			kfree(freepage);
 			error = -EIO;	/* This is not exact, i know.. */
 			goto out;
 		}
@@ -156,6 +166,7 @@ ncp_file_read(struct file *file, char *buf, size_t count, loff_t *ppos)
 			break;
 		}
 	}
+	kfree(freepage);
 
 	file->f_pos = pos;
 
@@ -177,6 +188,7 @@ ncp_file_write(struct file *file, const char *buf, size_t count, loff_t *ppos)
 	size_t already_written = 0;
 	off_t pos;
 	int bufsize, errno;
+	void* bouncebuffer;
 
 	DPRINTK(KERN_DEBUG "ncp_file_write: enter %s/%s\n",
 		dentry->d_parent->d_name.name, dentry->d_name.name);
@@ -210,14 +222,23 @@ ncp_file_write(struct file *file, const char *buf, size_t count, loff_t *ppos)
 
 	already_written = 0;
 
+	bouncebuffer = kmalloc(bufsize, GFP_NFS);
+	if (!bouncebuffer)
+		return -EIO;	/* -ENOMEM */
 	while (already_written < count) {
 		int written_this_time;
 		int to_write = min(bufsize - (pos % bufsize),
 				   count - already_written);
 
-		if (ncp_write(NCP_SERVER(inode), NCP_FINFO(inode)->file_handle,
-			  pos, to_write, buf, &written_this_time) != 0) {
-			return -EIO;
+		if (copy_from_user(bouncebuffer, buf, to_write)) {
+			errno = -EFAULT;
+			break;
+		}
+		if (ncp_write_kernel(NCP_SERVER(inode), 
+		    NCP_FINFO(inode)->file_handle,
+		    pos, to_write, buf, &written_this_time) != 0) {
+			errno = -EIO;
+			break;
 		}
 		pos += written_this_time;
 		buf += written_this_time;
@@ -227,7 +248,7 @@ ncp_file_write(struct file *file, const char *buf, size_t count, loff_t *ppos)
 			break;
 		}
 	}
-
+	kfree(bouncebuffer);
 	inode->i_mtime = inode->i_atime = CURRENT_TIME;
 	
 	file->f_pos = pos;

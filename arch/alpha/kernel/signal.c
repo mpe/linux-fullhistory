@@ -24,6 +24,9 @@
 #include <asm/sigcontext.h>
 #include <asm/ucontext.h>
 
+#include "proto.h"
+
+
 #define DEBUG_SIG 0
 
 #define _BLOCKABLE (~(sigmask(SIGKILL) | sigmask(SIGSTOP)))

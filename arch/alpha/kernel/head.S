@@ -32,24 +32,26 @@ __start:
 
 #ifdef __SMP__
 	.align 3
-	.globl	__start_cpu
-	.ent	__start_cpu
-	/* On entry here from SRM console, the HWPCB of this processor
-	   has been loaded, and $27 contains the task pointer */
-__start_cpu:
-	.prologue 0
-	/* First order of business, load the GP */
-	br	$26,1f
-1:	ldgp	$29,0($26)
-	/* We need to get current loaded up with our first task...  */
-	mov	$27,$8
-	/* Set FEN */
-	lda	$16,1($31)
-	call_pal PAL_wrfen
-	/* ... and then we can start the processor.  */
-	jsr	$26,start_secondary
+	.globl	__smp_callin
+	.ent	__smp_callin
+	/* On entry here from SRM console, the HWPCB of the per-cpu
+	   slot for this processor has been loaded.  We've arranged
+	   for the UNIQUE value for this process to contain the PCBB
+	   of the target idle task.  */
+__smp_callin:
+	.prologue 1
+	ldgp	$29,0($27)	# First order of business, load the GP.
+
+	call_pal PAL_rduniq	# Grab the target PCBB.
+	mov	$0,$16		# Install it.
+	call_pal PAL_swpctx
+
+	lda	$8,0x3fff	# Find "current".
+	bic	$30,$8,$8
+	
+	jsr	$26,smp_callin
 	call_pal PAL_halt
-	.end __start_cpu
+	.end __smp_callin
 #endif /* __SMP__ */
 
 	.align 3

@@ -72,9 +72,6 @@ struct ncp_volume_info {
 #define aDELETEINHIBIT	 (ntohl(1L<<(18-8)))
 #define aDONTCOMPRESS	 (nothl(1L<<(27-24)))
 
-#define NCP_MIN_SYMLINK_SIZE	8
-#define NCP_MAX_SYMLINK_SIZE	512
-
 #define AR_READ      (ntohs(0x0100))
 #define AR_WRITE     (ntohs(0x0200))
 #define AR_EXCLUSIVE (ntohs(0x2000))

@@ -22,6 +22,7 @@
 #include <linux/ncp_fs.h>
 #include <linux/affs_fs.h>
 #include <linux/ufs_fs.h>
+#include <linux/efs_fs.h>
 #include <linux/romfs_fs.h>
 #include <linux/auto_fs.h>
 #include <linux/qnx4_fs.h>
@@ -127,6 +128,10 @@ void __init filesystem_setup(void)
 
 #ifdef CONFIG_UFS_FS
 	init_ufs_fs();
+#endif
+
+#ifdef CONFIG_EFS_FS
+	init_efs_fs();
 #endif
 
 #ifdef CONFIG_AUTOFS_FS

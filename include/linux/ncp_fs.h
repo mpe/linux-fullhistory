@@ -248,7 +248,11 @@ void ncp_date_unix2dos(int unix_date, __u16 * time, __u16 * date);
 int ncp_ioctl(struct inode *, struct file *, unsigned int, unsigned long);
 
 /* linux/fs/ncpfs/sock.c */
-int ncp_request(struct ncp_server *server, int function);
+int ncp_request2(struct ncp_server *server, int function,
+	void* reply, int max_reply_size);
+static int inline ncp_request(struct ncp_server *server, int function) {
+	return ncp_request2(server, function, server->packet, server->packet_size);
+}
 int ncp_connect(struct ncp_server *server);
 int ncp_disconnect(struct ncp_server *server);
 void ncp_lock_server(struct ncp_server *server);

@@ -240,7 +240,6 @@ __initfunc(static unsigned int ide_special_settings (struct pci_dev *dev, const 
 					dev->base_address[i] |= PCI_BASE_ADDRESS_SPACE_IO;
 
 				pci_read_config_word(dev, PCI_COMMAND, &pcicmd);
-				pci_write_config_byte(dev, 0x80, 0x80);
 				if (!(pcicmd & PCI_COMMAND_MEMORY))
 					pci_write_config_byte(dev, PCI_LATENCY_TIMER, 0x20);
 			}

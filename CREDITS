@@ -661,7 +661,7 @@ N: Richard E. Gooch
 E: rgooch@atnf.csiro.au
 D: parent process death signal to children
 D: prctl() syscall
-D: /proc/mtrr support to manipulate MTRRs on Pentium Pro's
+D: /proc/mtrr support to manipulate MTRRs on Intel P6 family
 S: CSIRO Australia Telescope National Facility
 S: P.O. Box 76, Epping
 S: New South Wales, 2121
@@ -758,6 +758,13 @@ D: xringd, vuzkern, greekXfonts
 S: 77 Clarence Mews
 S: London SE16 1GD
 S: United Kingdom
+
+N: Bart Hartgers
+E: bart@etpmod.phys.tue.nl
+D: MTRR emulation with Centaur MCRs
+S: Gen Stedmanstraat 212
+S: 5623 HZ Eindhoven
+S: The Netherlands
 
 N: Kai Harrekilde-Petersen
 E: khp@dolphinics.no

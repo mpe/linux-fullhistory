@@ -1,0 +1,282 @@
+/*
+ *  linux/fs/hpfs/dir.c
+ *
+ *  Mikulas Patocka (mikulas@artax.karlin.mff.cuni.cz), 1998-1999
+ *
+ *  directory VFS functions
+ */
+
+#include "hpfs_fn.h"
+
+int hpfs_dir_read(struct file *filp, char *name, size_t len, loff_t *loff)
+{
+	return -EISDIR;
+}
+
+int hpfs_dir_release(struct inode *inode, struct file *filp)
+{
+	hpfs_del_pos(inode, &filp->f_pos);
+	/*hpfs_write_if_changed(inode);*/
+	return 0;
+}
+
+int hpfs_readdir(struct file *filp, void * dirent, filldir_t filldir)
+{
+	struct inode *inode = filp->f_dentry->d_inode;
+	struct quad_buffer_head qbh;
+	struct hpfs_dirent *de;
+	int lc;
+	long old_pos;
+	char *tempname;
+	int c1, c2 = 0;
+
+	if (!inode) return -EBADF;
+	if (!S_ISDIR(inode->i_mode)) return -EBADF;
+	if (inode->i_sb->s_hpfs_chk) {
+		if (hpfs_chk_sectors(inode->i_sb, inode->i_ino, 1, "dir_fnode"))
+			return -EFSERROR;
+		if (hpfs_chk_sectors(inode->i_sb, inode->i_hpfs_dno, 4, "dir_dnode"))
+			return -EFSERROR;
+	}
+	if (inode->i_sb->s_hpfs_chk >= 2) {
+		struct buffer_head *bh;
+		struct fnode *fno;
+		int e = 0;
+		if (!(fno = hpfs_map_fnode(inode->i_sb, inode->i_ino, &bh)))
+			return -EIOERROR;
+		if (!fno->dirflag) {
+			e = 1;
+			hpfs_error(inode->i_sb, "not a directory, fnode %08x",inode->i_ino);
+		}
+		if (inode->i_hpfs_dno != fno->u.external[0].disk_secno) {
+			e = 1;
+			hpfs_error(inode->i_sb, "corrupted inode: i_hpfs_dno == %08x, fnode -> dnode == %08x", inode->i_hpfs_dno, fno->u.external[0].disk_secno);
+		}
+		brelse(bh);
+		if (e) return -EFSERROR;
+	}
+	lc = inode->i_sb->s_hpfs_lowercase;
+	if (filp->f_pos == -2) { /* diff -r requires this (note, that diff -r */
+		filp->f_pos = -3; /* also fails on msdos filesystem in 2.0) */
+		return 0;
+	}
+	if (filp->f_pos == -3) return -ENOENT;
+	
+	hpfs_lock_inode(inode);
+	
+	while (1) {
+		again:
+		/* This won't work when cycle is longer than number of dirents
+		   accepted by filldir, but what can I do?
+		   maybe killall -9 ls helps */
+		if (inode->i_sb->s_hpfs_chk)
+			if (hpfs_stop_cycles(inode->i_sb, filp->f_pos, &c1, &c2, "hpfs_readdir")) {
+				hpfs_unlock_inode(inode);
+				return -EFSERROR;
+			}
+		if (filp->f_pos == -2) {
+			hpfs_unlock_inode(inode);
+			return 0;
+		}
+		if (filp->f_pos == 3 || filp->f_pos == 4 || filp->f_pos == 5) {
+			printk("HPFS: warning: pos==%d\n",(int)filp->f_pos);
+			hpfs_unlock_inode(inode);
+			return 0;
+		}
+		if (filp->f_pos == 0) {
+			if (filldir(dirent, ".", 1, filp->f_pos, inode->i_ino) < 0) {
+				hpfs_unlock_inode(inode);
+				return 0;
+			}
+			filp->f_pos = -1;
+		}
+		if (filp->f_pos == -1) {
+			if (filldir(dirent, "..", 2, filp->f_pos, inode->i_hpfs_parent_dir) < 0) {
+				hpfs_unlock_inode(inode);
+				return 0;
+			}
+			filp->f_pos = 1;
+		}
+		if (filp->f_pos == 1) {
+			filp->f_pos = ((loff_t) hpfs_de_as_down_as_possible(inode->i_sb, inode->i_hpfs_dno) << 4) + 1;
+			hpfs_add_pos(inode, &filp->f_pos);
+			filp->f_version = inode->i_version;
+		}
+			/*if (filp->f_version != inode->i_version) {
+				hpfs_unlock_inode(inode);
+				return -ENOENT;
+			}*/	
+			old_pos = filp->f_pos;
+			if (!(de = map_pos_dirent(inode, &filp->f_pos, &qbh))) {
+				hpfs_unlock_inode(inode);
+				return -EIOERROR;
+			}
+			if (de->first || de->last) {
+				if (inode->i_sb->s_hpfs_chk) {
+					if (de->first && !de->last && (de->namelen != 2 || de ->name[0] != 1 || de->name[1] != 1)) hpfs_error(inode->i_sb, "hpfs_readdir: bad ^A^A entry; pos = %08x", old_pos);
+					if (de->last && (de->namelen != 1 || de ->name[0] != 255)) hpfs_error(inode->i_sb, "hpfs_readdir: bad \\377 entry; pos = %08x", old_pos);
+				}
+				hpfs_brelse4(&qbh);
+				goto again;
+			}
+			tempname = hpfs_translate_name(inode->i_sb, de->name, de->namelen, lc, de->not_8x3);
+			if (filldir(dirent, tempname, de->namelen, old_pos, de->fnode) < 0) {
+				filp->f_pos = old_pos;
+				if (tempname != (char *)de->name) kfree(tempname);
+				hpfs_brelse4(&qbh);
+				hpfs_unlock_inode(inode);
+				return 0;
+			}
+			if (tempname != (char *)de->name) kfree(tempname);
+			hpfs_brelse4(&qbh);
+	}
+}
+
+/*
+ * lookup.  Search the specified directory for the specified name, set
+ * *result to the corresponding inode.
+ *
+ * lookup uses the inode number to tell read_inode whether it is reading
+ * the inode of a directory or a file -- file ino's are odd, directory
+ * ino's are even.  read_inode avoids i/o for file inodes; everything
+ * needed is up here in the directory.  (And file fnodes are out in
+ * the boondocks.)
+ *
+ *    - M.P.: this is over, sometimes we've got to read file's fnode for eas
+ *	      inode numbers are just fnode sector numbers; iget lock is used
+ *	      to tell read_inode to read fnode or not.
+ */
+
+struct dentry *hpfs_lookup(struct inode *dir, struct dentry *dentry)
+{
+	const char *name = dentry->d_name.name;
+	int len = dentry->d_name.len;
+	struct quad_buffer_head qbh;
+	struct hpfs_dirent *de;
+	struct inode *inode;
+	ino_t ino;
+
+	struct inode *result = NULL;
+	if (dir == 0) return -ENOENT;
+	hpfs_adjust_length((char *)name, &len);
+	hpfs_lock_inode(dir);
+	if (!S_ISDIR(dir->i_mode)) goto bail;
+	/*
+	 * Read in the directory entry. "." is there under the name ^A^A .
+	 * Always read the dir even for . and .. in case we need the dates.
+	 *
+	 * M.P.: No - we can't read '^A^A' for current directory. In some cases
+	 * the information under '^A^A' is incomplete (missing ea_size, bad
+	 * fnode number) - chkdsk ignores such errors and it doesn't seem to
+	 * matter under OS/2.
+	 */
+	if (name[0] == '.' && len == 1) {
+		result = dir;
+		dir->i_count++;
+		goto end;
+	} else if (name[0] == '.' && name[1] == '.' && len == 2) {
+		struct buffer_head *bh;
+		struct fnode *fnode;
+		if (dir->i_ino == dir->i_sb->s_hpfs_root) {
+			result = dir;
+			dir->i_count++;
+			goto end;
+		}
+		if (dir->i_hpfs_parent_dir == dir->i_sb->s_hpfs_root) {
+			result = dir->i_sb->s_root->d_inode;
+			result->i_count++;
+			goto end;
+		}
+		if (!(fnode = hpfs_map_fnode(dir->i_sb, dir->i_hpfs_parent_dir, &bh))) goto bail;
+		de = map_fnode_dirent(dir->i_sb, dir->i_hpfs_parent_dir, fnode, &qbh);
+		brelse(bh);
+	} else
+		de = map_dirent(dir, dir->i_hpfs_dno, (char *) name, len, NULL, &qbh, NULL);
+
+	/*
+	 * This is not really a bailout, just means file not found.
+	 */
+
+	if (!de) {
+		result = NULL;
+		goto end;
+	}
+
+	/*
+	 * Get inode number, what we're after.
+	 */
+
+	ino = de->fnode;
+
+	/*
+	 * Go find or make an inode.
+	 */
+
+	hpfs_lock_iget(dir->i_sb, de->directory || (de->ea_size && dir->i_sb->s_hpfs_eas) ? 1 : 2);
+	if (!(inode = iget(dir->i_sb, ino))) {
+		hpfs_unlock_iget(dir->i_sb);
+		hpfs_error(inode->i_sb, "hpfs_lookup: can't get inode");
+		goto bail1;
+	}
+	if (!de->directory) inode->i_hpfs_parent_dir = dir->i_ino;
+	hpfs_unlock_iget(dir->i_sb);
+
+	hpfs_decide_conv(inode, (char *)name, len);
+
+	if (de->has_acl || de->has_xtd_perm) if (!(dir->i_sb->s_flags & MS_RDONLY)) {
+		hpfs_error(inode->i_sb, "ACLs or XPERM found. This is probably HPFS386. This driver doesn't support it now. Send me some info on these structures");
+		goto bail1;
+	}
+
+	/*
+	 * Fill in the info from the directory if this is a newly created
+	 * inode.
+	 */
+
+	if (!inode->i_ctime) {
+		if (!(inode->i_ctime = local_to_gmt(dir->i_sb, de->creation_date)))
+			inode->i_ctime = 1;
+		inode->i_mtime = local_to_gmt(dir->i_sb, de->write_date);
+		inode->i_atime = local_to_gmt(dir->i_sb, de->read_date);
+		inode->i_hpfs_ea_size = de->ea_size;
+		if (!inode->i_hpfs_ea_mode && de->read_only)
+			inode->i_mode &= ~0222;
+		if (!de->directory) {
+			if (inode->i_size == -1) {
+				inode->i_size = de->file_size;
+			/*
+			 * i_blocks should count the fnode and any anodes.
+			 * We count 1 for the fnode and don't bother about
+			 * anodes -- the disk heads are on the directory band
+			 * and we want them to stay there.
+			 */
+				inode->i_blocks = 1 + ((inode->i_size + 511) >> 9);
+			}
+		}
+	}
+
+	hpfs_brelse4(&qbh);
+
+	/*
+	 * Made it.
+	 */
+
+	result = inode;
+	end:
+	hpfs_unlock_inode(dir);
+	hpfs_set_dentry_operations(dentry);
+	d_add(dentry, result);
+	return NULL;
+
+	/*
+	 * Didn't.
+	 */
+	bail1:
+	
+	hpfs_brelse4(&qbh);
+	
+	bail:
+
+	hpfs_unlock_inode(dir);
+	return ERR_PTR(-ENOENT);
+}

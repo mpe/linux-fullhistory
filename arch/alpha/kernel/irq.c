@@ -192,13 +192,21 @@ unmask_irq(unsigned long irq)
 }
 
 void
-disable_irq(unsigned int irq_nr)
+disable_irq_nosync(unsigned int irq_nr)
 {
 	unsigned long flags;
 
 	save_and_cli(flags);
 	mask_irq(irq_nr);
 	restore_flags(flags);
+}
+
+void
+disable_irq(unsigned int irq_nr)
+{
+	/* This works non-SMP, and SMP until we write code to distribute
+	   interrupts to more that cpu 0.  */
+	disable_irq_nosync(irq_nr);
 }
 
 void

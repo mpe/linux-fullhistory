@@ -407,6 +407,9 @@ struct dentry * lookup_inode(kdev_t dev, ino_t dirino, ino_t ino)
 	sb = get_super(dev);
 	if (!sb)
 		goto out_page;
+	result = ERR_PTR(-ENOSYS);
+	if (!sb->s_op->read_inode)	/* No working iget(), e.g. FAT */
+		goto out_page;
 	root = dget(sb->s_root);
 	root_ino = root->d_inode->i_ino; /* usually 2 */
 

@@ -116,6 +116,8 @@ EXPORT_SYMBOL(get_super);
 EXPORT_SYMBOL(get_fs_type);
 EXPORT_SYMBOL(getname);
 EXPORT_SYMBOL(__fput);
+EXPORT_SYMBOL(igrab);
+EXPORT_SYMBOL(iunique);
 EXPORT_SYMBOL(iget);
 EXPORT_SYMBOL(iput);
 EXPORT_SYMBOL(__namei);
@@ -184,6 +186,7 @@ EXPORT_SYMBOL(vfs_rmdir);
 EXPORT_SYMBOL(vfs_unlink);
 EXPORT_SYMBOL(vfs_rename);
 EXPORT_SYMBOL(__pollwait);
+EXPORT_SYMBOL(ROOT_DEV);
 
 #if !defined(CONFIG_NFSD) && defined(CONFIG_NFSD_MODULE)
 EXPORT_SYMBOL(do_nfsservctl);
