@@ -604,107 +604,75 @@ struct quattro {
 /* We use this to acquire receive skb's that we can DMA directly into. */
 #define ALIGNED_RX_SKB_ADDR(addr) \
         ((((unsigned long)(addr) + (64 - 1)) & ~(64 - 1)) - (unsigned long)(addr))
-static inline struct sk_buff *happy_meal_alloc_skb(unsigned int length, int gfp_flags)
-{
-	struct sk_buff *skb;
-
-	skb = alloc_skb(length + 64, gfp_flags);
-	if(skb) {
-		int offset = ALIGNED_RX_SKB_ADDR(skb->data);
-
-		if(offset)
-			skb_reserve(skb, offset);
-	}
-	return skb;
-}
+#define happy_meal_alloc_skb(__length, __gfp_flags) \
+({	struct sk_buff *__skb; \
+	__skb = alloc_skb((__length) + 64, (__gfp_flags)); \
+	if(__skb) { \
+		int __offset = ALIGNED_RX_SKB_ADDR(__skb->data); \
+		if(__offset) \
+			skb_reserve(__skb, __offset); \
+	} \
+	__skb; \
+})
 
 /* Register/DMA access stuff, used to cope with differences between
  * PCI and SBUS happy meals.
  */
-extern inline u32 kva_to_hva(struct happy_meal *hp, char *addr)
-{
-#ifdef CONFIG_PCI
-	if(hp->happy_flags & HFLAG_PCI)
-		return (u32) virt_to_bus((volatile void *)addr);
-	else
+#if defined(CONFIG_PCI)
+#define kva_to_hva(__hp, __addr) \
+({	u32 __ret; \
+	if ((__hp)->happy_flags & HFLAG_PCI) \
+		(__ret) = (u32) virt_to_bus((volatile void *)(__addr)); \
+	else \
+		(__ret) = sbus_dvma_addr(__addr); \
+	__ret; \
+})
+#define hme_read32(__hp, __reg) \
+({	unsigned int __ret; \
+	if ((__hp)->happy_flags & HFLAG_PCI) \
+		__ret = readl((unsigned long)(__reg)); \
+	else \
+		__ret = *(__reg); \
+	__ret; \
+})
+#define hme_write32(__hp, __reg, __val) \
+do {	if ((__hp)->happy_flags & HFLAG_PCI) \
+		writel((__val), (unsigned long)(__reg)); \
+	else \
+		*(__reg) = (__val); \
+} while(0)
+#else
+#define kva_to_hva(__hp, __addr) ((u32)sbus_dvma_addr(__addr))
+#define hme_read32(__hp, __reg)	(*(__reg))
+#define hme_write32(__hp, __reg, __val)	((*(__reg)) = (__val))
 #endif
-	{
-#ifdef __sparc_v9__
-		if (((unsigned long) addr) >= MAX_DMA_ADDRESS) {
-			printk("sunhme: Bogus DMA buffer address "
-			       "[%016lx]\n", ((unsigned long) addr));
-			panic("DMA address too large, tell DaveM");
-		}
-#endif
-		return sbus_dvma_addr(addr);
-	}
-}
-
-extern inline unsigned int hme_read32(struct happy_meal *hp,
-				      volatile unsigned int *reg)
-{
-#ifdef CONFIG_PCI
-	if(hp->happy_flags & HFLAG_PCI)
-		return readl((unsigned long)reg);
-	else
-#endif
-		return *reg;
-}
-
-extern inline void hme_write32(struct happy_meal *hp,
-			       volatile unsigned int *reg,
-			       unsigned int val)
-{
-#ifdef CONFIG_PCI
-	if(hp->happy_flags & HFLAG_PCI)
-		writel(val, (unsigned long)reg);
-	else
-#endif
-		*reg = val;
-}
 
 #ifdef CONFIG_PCI
 #ifdef __sparc_v9__
-extern inline void pcihme_write_rxd(struct happy_meal_rxd *rp,
-				    unsigned int flags,
-				    unsigned int addr)
-{
-	__asm__ __volatile__("
-	stwa	%3, [%0] %2
-	stwa	%4, [%1] %2
-"	: /* no outputs */
-	: "r" (&rp->rx_addr), "r" (&rp->rx_flags),
-	  "i" (ASI_PL), "r" (addr), "r" (flags));
-}
+#define pcihme_write_rxd(__rp, __flags, __addr) \
+	__asm__ __volatile__("stwa	%3, [%0] %2\n\t" \
+			     "stwa	%4, [%1] %2" \
+			     : /* no outputs */ \
+			     : "r" (&(__rp)->rx_addr), "r" (&(__rp)->rx_flags), \
+			       "i" (ASI_PL), "r" (__addr), "r" (__flags))
 
-extern inline void pcihme_write_txd(struct happy_meal_txd *tp,
-				    unsigned int flags,
-				    unsigned int addr)
-{
-	__asm__ __volatile__("
-	stwa	%3, [%0] %2
-	stwa	%4, [%1] %2
-"	: /* no outputs */
-	: "r" (&tp->tx_addr), "r" (&tp->tx_flags),
-	  "i" (ASI_PL), "r" (addr), "r" (flags));
-}
+#define pcihme_write_txd(__tp, __flags, __addr) \
+	__asm__ __volatile__("stwa	%3, [%0] %2\n\t" \
+			     "stwa	%4, [%1] %2" \
+			     : /* no outputs */ \
+			     : "r" (&(__tp)->tx_addr), "r" (&(__tp)->tx_flags), \
+			       "i" (ASI_PL), "r" (__addr), "r" (__flags))
 #else
 
-extern inline void pcihme_write_rxd(struct happy_meal_rxd *rp,
-				    unsigned int flags,
-				    unsigned int addr)
-{
-	rp->rx_addr = flip_dword(addr);
-	rp->rx_flags = flip_dword(flags);
-}
+#define pcihme_write_rxd(__rp, __flags, __addr) \
+do {	(__rp)->rx_addr = flip_dword(__addr); \
+	(__rp)->rx_flags = flip_dword(__flags); \
+} while(0)
 	
-extern inline void pcihme_write_txd(struct happy_meal_txd *tp,
-				    unsigned int flags,
-				    unsigned int addr)
-{
-	tp->tx_addr = flip_dword(addr);
-	tp->tx_flags = flip_dword(flags);
-}
+#define pcihme_write_txd(__tp, __flags, __addr) \
+do {	(__tp)->tx_addr = flip_dword(__addr); \
+	(__tp)->tx_flags = flip_dword(__flags); \
+} while(0)
 	
 #endif  /* def __sparc_v9__ */
 #endif  /* def CONFIG_PCI */

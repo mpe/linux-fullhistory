@@ -479,7 +479,7 @@ static void show(char * str)
 	stack = (unsigned long *) &stack;
 	for (i = 40; i ; i--) {
 		unsigned long x = *++stack;
-		if (x > (unsigned long) &get_options && x < (unsigned long) &vsprintf) {
+		if (x > (unsigned long) &get_option && x < (unsigned long) &vsprintf) {
 			printk("<[%08lx]> ", x);
 		}
 	}

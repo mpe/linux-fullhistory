@@ -1,4 +1,4 @@
-/* $Id: sys_sparc.c,v 1.28 1999/07/30 09:35:27 davem Exp $
+/* $Id: sys_sparc.c,v 1.29 1999/08/04 07:04:10 jj Exp $
  * linux/arch/sparc64/kernel/sys_sparc.c
  *
  * This file contains various random system calls that
@@ -41,7 +41,9 @@ extern asmlinkage unsigned long sys_brk(unsigned long brk);
 
 asmlinkage unsigned long sparc_brk(unsigned long brk)
 {
-	if(brk >= 0x80000000000UL)	/* VM hole */
+	if((brk >= 0x80000000000UL && brk < PAGE_OFFSET) ||
+	   (brk - current->mm->brk > 0x80000000000UL &&
+	    brk - current->mm->brk < PAGE_OFFSET)) /* VM hole */
 		return current->mm->brk;
 	return sys_brk(brk);
 }
@@ -178,7 +180,7 @@ asmlinkage unsigned long sys_mmap(unsigned long addr, unsigned long len,
 		    (addr < 0x80000000000UL &&
 		     addr > 0x80000000000UL-len))
 			goto out_putf;
-		if (addr >= 0x80000000000ULL && addr < 0xfffff80000000000UL) {
+		if (addr >= 0x80000000000UL && addr < PAGE_OFFSET) {
 			/* VM hole */
 			retval = current->mm->brk;
 			goto out_putf;

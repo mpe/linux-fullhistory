@@ -310,13 +310,9 @@ int parport_negotiate (struct parport *port, int mode)
 
 	/* Event 6: nAck goes high */
 	if (parport_wait_peripheral (port,
-				     PARPORT_STATUS_ACK
-				     | PARPORT_STATUS_PAPEROUT,
+				     PARPORT_STATUS_ACK,
 				     PARPORT_STATUS_ACK)) {
-		if (parport_read_status (port) & PARPORT_STATUS_ACK)
-			printk (KERN_DEBUG
-				"%s: working around buggy peripheral: tell "
-				"Tim what make it is\n", port->name);
+		/* This shouldn't really happen with a compliant device. */
 		DPRINTK (KERN_DEBUG
 			 "%s: Mode 0x%02x not supported? (0x%02x)\n",
 			 port->name, mode, port->ops->read_status (port));

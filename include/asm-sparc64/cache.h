@@ -11,4 +11,12 @@
 
 #define        SMP_CACHE_BYTES		64 /* L2 cache line size. */
 
+#ifdef MODULE
+#define __cacheline_aligned __attribute__((__aligned__(SMP_CACHE_BYTES)))
+#else
+#define __cacheline_aligned					\
+  __attribute__((__aligned__(SMP_CACHE_BYTES),			\
+		 __section__(".data.cacheline_aligned")))
+#endif
+
 #endif

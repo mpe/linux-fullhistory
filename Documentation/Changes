@@ -61,7 +61,7 @@ running, the suggested command should tell you.
 - Bash                   1.14.7                  ; bash -version
 - Ncpfs                  2.2.0                   ; ncpmount -v
 - Pcmcia-cs              3.0.7                   ; cardmgr -V
-- PPP                    2.3.5                   ; pppd --version
+- PPP                    2.3.9                   ; pppd --version
 - Util-linux             2.9i                    ; chsh -v
 
 Upgrade notes
@@ -390,8 +390,8 @@ support utils to the latest release of pcmcia-cs.
 PPP
 ===
 
-   Due to changes in the routing code, those of you using PPP
-networking will need to upgrade your pppd.
+   Due to changes in the PPP driver and routing code, those of you
+using PPP networking will need to upgrade your pppd.
 
 iBCS
 ====
@@ -689,8 +689,8 @@ ftp://metalab.unc.edu/pub/Linux/system/serial/setserial-2.15.tar.gz
 PPP
 ===
 
-The 2.3.5 release:
-ftp://cs.anu.edu.au/pub/software/ppp/ppp-2.3.5.tar.gz
+The 2.3.9 release:
+ftp://cs.anu.edu.au/pub/software/ppp/ppp-2.3.9.tar.gz
 
 IP Chains
 =========

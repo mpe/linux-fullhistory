@@ -9,6 +9,8 @@
 #ifndef _ASM_AXP_PARPORT_H
 #define _ASM_AXP_PARPORT_H 1
 
+#include <linux/config.h>
+
 /* Maximum number of ports to support.  It is useless to set this greater
    than PARPORT_MAX (in <linux/parport.h>).  */
 #define PARPORT_PC_MAX_PORTS  8

@@ -2552,17 +2552,16 @@ void cleanup_module(void)
 static int __init sonicvibes_setup(char *str)
 {
 	static unsigned __initdata nr_dev = 0;
-        int ints[11];
 
 	if (nr_dev >= NR_DEVICE)
 		return 0;
-        get_options(str, ints);
-	if (ints[0] >= 1)
-		reverb[nr_dev] = ints[1];
+
+	(   (get_option(&str, &reverb   [nr_dev]) == 2)
 #if 0
-	if (ints[0] >= 2)
-		wavetable[nr_dev] = ints[2];
+	 &&  get_option(&str, &wavetable[nr_dev])
 #endif
+	};
+
 	nr_dev++;
 	return 1;
 }

@@ -1,4 +1,4 @@
-/* $Id: psycho.c,v 1.87 1999/07/23 01:56:45 davem Exp $
+/* $Id: psycho.c,v 1.89 1999/08/06 10:37:35 davem Exp $
  * psycho.c: Ultra/AX U2P PCI controller support.
  *
  * Copyright (C) 1997 David S. Miller (davem@caipfs.rutgers.edu)
@@ -808,6 +808,264 @@ static void __init apb_init(struct linux_psycho *sabre)
 	}
 }
 
+extern struct pci_bus pci_root;
+extern struct pci_dev *pci_devices;
+static struct pci_dev **pci_last_dev_p = &pci_devices;
+extern int pci_reverse;
+
+extern void pci_namedevice(struct pci_dev *);
+
+static void __init sparc64_pci_read_bases(struct pci_dev *dev, unsigned int howmany)
+{
+	unsigned int reg;
+	u32 l;
+
+	for(reg=0; reg < howmany; reg++) {
+		struct resource *res = dev->resource + reg;
+		unsigned long mask;
+		unsigned int newval, size;
+
+		res->name = dev->name;
+		pci_read_config_dword(dev, PCI_BASE_ADDRESS_0 + (reg << 2), &l);
+		if (l == 0xffffffff)
+			continue;
+
+		pci_write_config_dword(dev, PCI_BASE_ADDRESS_0 + (reg << 2), 0xffffffff);
+		pci_read_config_dword(dev, PCI_BASE_ADDRESS_0 + (reg << 2), &newval);
+		pci_write_config_dword(dev, PCI_BASE_ADDRESS_0 + (reg << 2), l);
+
+		mask = PCI_BASE_ADDRESS_MEM_MASK;
+		if (l & PCI_BASE_ADDRESS_SPACE_IO)
+			mask = PCI_BASE_ADDRESS_IO_MASK;
+
+		newval &= mask;
+		if (!newval)
+			continue;
+
+		res->start = l & mask;
+		res->flags = l & ~mask;
+
+		size = 1;
+		do {
+			size <<= 1;
+		} while (!(size & newval));
+
+		/* 64-bit memory? */
+		if ((l & (PCI_BASE_ADDRESS_SPACE | PCI_BASE_ADDRESS_MEM_TYPE_MASK))
+		    == (PCI_BASE_ADDRESS_SPACE_MEMORY | PCI_BASE_ADDRESS_MEM_TYPE_64)) {
+		    	unsigned int high;
+			reg++;
+			pci_read_config_dword(dev, PCI_BASE_ADDRESS_0 + (reg << 2), &high);
+			if (high)
+				res->start |= ((unsigned long) high) << 32;
+		}
+		res->end = res->start + size - 1;
+	}
+}
+
+static unsigned int __init sparc64_pci_scan_bus(struct pci_bus *bus)
+{
+	unsigned int devfn, l, max, class;
+	unsigned char cmd, irq, tmp, hdr_type, is_multi = 0;
+	struct pci_dev *dev, **bus_last;
+	struct pci_bus *child;
+
+	bus_last = &bus->devices;
+	max = bus->secondary;
+	for (devfn = 0; devfn < 0xff; ++devfn) {
+		if (PCI_FUNC(devfn) && !is_multi) {
+			/* not a multi-function device */
+			continue;
+		}
+		if (pcibios_read_config_byte(bus->number, devfn, PCI_HEADER_TYPE, &hdr_type))
+			continue;
+		if (!PCI_FUNC(devfn))
+			is_multi = hdr_type & 0x80;
+
+		if (pcibios_read_config_dword(bus->number, devfn, PCI_VENDOR_ID, &l) ||
+		    /* some broken boards return 0 if a slot is empty: */
+		    l == 0xffffffff || l == 0x00000000 || l == 0x0000ffff || l == 0xffff0000)
+			continue;
+
+		dev = kmalloc(sizeof(*dev), GFP_ATOMIC);
+		if(dev==NULL)
+		{
+			printk(KERN_ERR "pci: out of memory.\n");
+			continue;
+		}
+		memset(dev, 0, sizeof(*dev));
+		dev->bus = bus;
+		dev->devfn  = devfn;
+		dev->vendor = l & 0xffff;
+		dev->device = (l >> 16) & 0xffff;
+		pci_namedevice(dev);
+
+		/* non-destructively determine if device can be a master: */
+		pcibios_read_config_byte(bus->number, devfn, PCI_COMMAND, &cmd);
+		pcibios_write_config_byte(bus->number, devfn, PCI_COMMAND, cmd | PCI_COMMAND_MASTER);
+		pcibios_read_config_byte(bus->number, devfn, PCI_COMMAND, &tmp);
+		dev->master = ((tmp & PCI_COMMAND_MASTER) != 0);
+		pcibios_write_config_byte(bus->number, devfn, PCI_COMMAND, cmd);
+
+		pcibios_read_config_dword(bus->number, devfn, PCI_CLASS_REVISION, &class);
+		class >>= 8;				    /* upper 3 bytes */
+		dev->class = class;
+		class >>= 8;
+		dev->hdr_type = hdr_type;
+
+		switch (hdr_type & 0x7f) {		    /* header type */
+		case PCI_HEADER_TYPE_NORMAL:		    /* standard header */
+			if (class == PCI_CLASS_BRIDGE_PCI)
+				goto bad;
+			/*
+			 * If the card generates interrupts, read IRQ number
+			 * (some architectures change it during pcibios_fixup())
+			 */
+			pcibios_read_config_byte(bus->number, dev->devfn, PCI_INTERRUPT_PIN, &irq);
+			if (irq)
+				pcibios_read_config_byte(bus->number, dev->devfn, PCI_INTERRUPT_LINE, &irq);
+			dev->irq = irq;
+			sparc64_pci_read_bases(dev, 6);
+			pcibios_read_config_dword(bus->number, devfn, PCI_ROM_ADDRESS, &l);
+			dev->rom_address = (l == 0xffffffff) ? 0 : l;
+			break;
+		case PCI_HEADER_TYPE_BRIDGE:		    /* bridge header */
+			if (class != PCI_CLASS_BRIDGE_PCI)
+				goto bad;
+			sparc64_pci_read_bases(dev, 2);
+			pcibios_read_config_dword(bus->number, devfn, PCI_ROM_ADDRESS1, &l);
+			dev->rom_address = (l == 0xffffffff) ? 0 : l;
+			break;
+		case PCI_HEADER_TYPE_CARDBUS:		    /* CardBus bridge header */
+			if (class != PCI_CLASS_BRIDGE_CARDBUS)
+				goto bad;
+			sparc64_pci_read_bases(dev, 1);
+			break;
+		default:				    /* unknown header */
+		bad:
+			printk(KERN_ERR "PCI: %02x:%02x [%04x/%04x/%06x] has unknown header type %02x, ignoring.\n",
+			       bus->number, dev->devfn, dev->vendor, dev->device, class, hdr_type);
+			continue;
+		}
+
+		/*
+		 * Put it into the global PCI device chain. It's used to
+		 * find devices once everything is set up.
+		 */
+		if (!pci_reverse) {
+			*pci_last_dev_p = dev;
+			pci_last_dev_p = &dev->next;
+		} else {
+			dev->next = pci_devices;
+			pci_devices = dev;
+		}
+
+		/*
+		 * Now insert it into the list of devices held
+		 * by the parent bus.
+		 */
+		*bus_last = dev;
+		bus_last = &dev->sibling;
+	}
+
+	/*
+	 * After performing arch-dependent fixup of the bus, look behind
+	 * all PCI-to-PCI bridges on this bus.
+	 */
+	pcibios_fixup_bus(bus);
+	for(dev=bus->devices; dev; dev=dev->sibling)
+		/*
+		 * If it's a bridge, scan the bus behind it.
+		 */
+		if ((dev->class >> 8) == PCI_CLASS_BRIDGE_PCI) {
+			unsigned int buses;
+			unsigned int devfn = dev->devfn;
+			unsigned short cr;
+
+			/*
+			 * Insert it into the tree of buses.
+			 */
+			child = kmalloc(sizeof(*child), GFP_ATOMIC);
+			if(child==NULL)
+			{
+				printk(KERN_ERR "pci: out of memory for bridge.\n");
+				continue;
+			}
+			memset(child, 0, sizeof(*child));
+			child->next = bus->children;
+			bus->children = child;
+			child->self = dev;
+			child->parent = bus;
+
+			/*
+			 * Set up the primary, secondary and subordinate
+			 * bus numbers.
+			 */
+			child->number = child->secondary = ++max;
+			child->primary = bus->secondary;
+			child->subordinate = 0xff;
+			/*
+			 * Clear all status bits and turn off memory,
+			 * I/O and master enables.
+			 */
+			pcibios_read_config_word(bus->number, devfn, PCI_COMMAND, &cr);
+			pcibios_write_config_word(bus->number, devfn, PCI_COMMAND, 0x0000);
+			pcibios_write_config_word(bus->number, devfn, PCI_STATUS, 0xffff);
+			/*
+			 * Read the existing primary/secondary/subordinate bus
+			 * number configuration to determine if the PCI bridge
+			 * has already been configured by the system.  If so,
+			 * do not modify the configuration, merely note it.
+			 */
+			pcibios_read_config_dword(bus->number, devfn, PCI_PRIMARY_BUS, &buses);
+			if ((buses & 0xFFFFFF) != 0)
+			  {
+			    unsigned int cmax;
+
+			    child->primary = buses & 0xFF;
+			    child->secondary = (buses >> 8) & 0xFF;
+			    child->subordinate = (buses >> 16) & 0xFF;
+			    child->number = child->secondary;
+			    cmax = sparc64_pci_scan_bus(child);
+			    if (cmax > max) max = cmax;
+			  }
+			else
+			  {
+			    /*
+			     * Configure the bus numbers for this bridge:
+			     */
+			    buses &= 0xff000000;
+			    buses |=
+			      (((unsigned int)(child->primary)     <<  0) |
+			       ((unsigned int)(child->secondary)   <<  8) |
+			       ((unsigned int)(child->subordinate) << 16));
+			    pcibios_write_config_dword(bus->number, devfn, PCI_PRIMARY_BUS, buses);
+			    /*
+			     * Now we can scan all subordinate buses:
+			     */
+			    max = sparc64_pci_scan_bus(child);
+			    /*
+			     * Set the subordinate bus number to its real
+			     * value:
+			     */
+			    child->subordinate = max;
+			    buses = (buses & 0xff00ffff)
+			      | ((unsigned int)(child->subordinate) << 16);
+			    pcibios_write_config_dword(bus->number, devfn, PCI_PRIMARY_BUS, buses);
+			  }
+			pcibios_write_config_word(bus->number, devfn, PCI_COMMAND, cr);
+		}
+
+	/*
+	 * We've scanned the bus and so we know all about what's on
+	 * the other side of any bridges that may be on this bus plus
+	 * any devices.
+	 *
+	 * Return how far we've got finding sub-buses.
+	 */
+	return max;
+}
+
 static void __init sabre_probe(struct linux_psycho *sabre)
 {
 	struct pci_bus *pbus = sabre->pci_bus;
@@ -816,7 +1074,7 @@ static void __init sabre_probe(struct linux_psycho *sabre)
 	pbus->number = pbus->secondary = busno;
 	pbus->sysdata = sabre;
 
-	pbus->subordinate = pci_scan_bus(pbus);
+	pbus->subordinate = sparc64_pci_scan_bus(pbus);
 	busno = pbus->subordinate + 1;
 
 	for(pbus = pbus->children; pbus; pbus = pbus->next) {
@@ -847,7 +1105,7 @@ static void __init pbm_probe(struct linux_pbm_info *pbm)
 
 	pbm_fixup_busno(pbm, busno);
 
-	pbus->subordinate = pci_scan_bus(pbus);
+	pbus->subordinate = sparc64_pci_scan_bus(pbus);
 
 	/*
 	 * Set the maximum subordinate bus of this pbm.
@@ -1159,7 +1417,7 @@ static void __init fixup_regs(struct pci_dev *pdev,
 		int bustype = (pregs[preg].phys_hi >> 24) & 0x3;
 		int bsreg, brindex;
 		unsigned int rtmp;
-		u64 pci_addr;
+		u64 pci_addr, pci_size;
 
 		if(bustype == 0) {
 			/* Config space cookie, nothing to do. */
@@ -1216,6 +1474,8 @@ static void __init fixup_regs(struct pci_dev *pdev,
 		/* Now construct UPA physical address. */
 		pci_addr  = (((u64)pregs[preg].phys_mid) << 32UL);
 		pci_addr |= (((u64)pregs[preg].phys_lo));
+		pci_size  = (((u64)pregs[preg].size_hi) << 32UL);
+		pci_size |= (((u64)pregs[preg].size_lo));
 
 		if(ap) {
 			pci_addr += ((u64)ap->phys_lo);
@@ -1224,12 +1484,12 @@ static void __init fixup_regs(struct pci_dev *pdev,
 
 		/* Final step, apply PBM range. */
 		for(rng = 0; rng < pbm->num_pbm_ranges; rng++) {
-			struct linux_prom_pci_ranges *rp = &pbm->pbm_ranges[rng];
-			int space = (rp->child_phys_hi >> 24) & 3;
+			struct linux_prom_pci_ranges *rngp = &pbm->pbm_ranges[rng];
+			int space = (rngp->child_phys_hi >> 24) & 3;
 
 			if(space == bustype) {
-				pci_addr += ((u64)rp->parent_phys_lo);
-				pci_addr += (((u64)rp->parent_phys_hi) << 32UL);
+				pci_addr += ((u64)rngp->parent_phys_lo);
+				pci_addr += (((u64)rngp->parent_phys_hi) << 32UL);
 				break;
 			}
 		}
@@ -1246,15 +1506,31 @@ static void __init fixup_regs(struct pci_dev *pdev,
 			 */
 			pci_read_config_dword(pdev, PCI_ROM_ADDRESS, &rtmp);
 			pci_write_config_dword(pdev, PCI_ROM_ADDRESS, rtmp & ~1);
-		} else
-			pdev->base_address[brindex] = (unsigned long)__va(pci_addr);
-
-		/* Preserve I/O space bit. */
-		if(bustype == 0x1) {
-			pdev->base_address[brindex] |= 1;
-			IO_seen = 1;
 		} else {
-			MEM_seen = 1;
+			struct resource *root, *rp;
+
+			rp = &pdev->resource[brindex];
+
+			pci_read_config_dword(pdev, PCI_BASE_ADDRESS_0 + (brindex * 4), &rtmp);
+			if (rtmp & 0x1)
+				rtmp &= 0x1;
+			else
+				rtmp &= 0xf;
+
+			rp->name = pdev->name;
+			rp->start = (unsigned long)__va(pci_addr);
+			rp->end = rp->start + pci_size - 1;
+
+			/* Keep track of what we've seen so far. */
+			if(rtmp & 0x1) {
+				IO_seen = 1;
+				root = &ioport_resource;
+			} else {
+				MEM_seen = 1;
+				root = &iomem_resource;
+			}
+			rp->flags = rtmp;
+			request_resource(root, rp);
 		}
 	}
 
@@ -1267,28 +1543,32 @@ static void __init fixup_regs(struct pci_dev *pdev,
 		int breg;
 
 		for(breg = PCI_BASE_ADDRESS_0; breg <= PCI_BASE_ADDRESS_5; breg += 4) {
+			struct resource *rp;
 			int io;
 
 			ridx = ((breg - PCI_BASE_ADDRESS_0) >> 2);
-			base = (unsigned int)pdev->base_address[ridx];
+			rp = &pdev->resource[ridx];
+			base = (unsigned int)rp->start;
 
-			if(pdev->base_address[ridx] > PAGE_OFFSET)
+			/* Already handled? */
+			if(rp->start > PAGE_OFFSET)
 				continue;
 
-			io = (base & PCI_BASE_ADDRESS_SPACE)==PCI_BASE_ADDRESS_SPACE_IO;
-			base &= ~((io ?
-				   PCI_BASE_ADDRESS_IO_MASK :
-				   PCI_BASE_ADDRESS_MEM_MASK));
+			pci_read_config_dword(pdev, breg, &rtmp);
+			io = (rtmp & 0x1);
 			offset = (pdev->bus->number << 16) | (pdev->devfn << 8) | breg;
 			vp = pci_find_vma(pbm, base, offset, io);
 			if(!vp || vp->start > base) {
 				unsigned int size, new_base;
 
-				pci_read_config_dword(pdev, breg, &rtmp);
 				pci_write_config_dword(pdev, breg, 0xffffffff);
 				pci_read_config_dword(pdev, breg, &size);
+
 				if(io)
-					size &= ~1;
+					size &= ~0x1;
+				else
+					size &= ~0xf;
+
 				size = (~(size) + 1);
 				if(!size)
 					continue;
@@ -1332,17 +1612,17 @@ static void __init fixup_regs(struct pci_dev *pdev,
 				/* Apply PBM ranges and update pci_dev. */
 				pci_addr = new_base;
 				for(rng = 0; rng < pbm->num_pbm_ranges; rng++) {
-					struct linux_prom_pci_ranges *rp;
+					struct linux_prom_pci_ranges *rngp;
 					int rspace;
 
-					rp = &pbm->pbm_ranges[rng];
-					rspace = (rp->child_phys_hi >> 24) & 3;
+					rngp = &pbm->pbm_ranges[rng];
+					rspace = (rngp->child_phys_hi >> 24) & 3;
 					if(io && rspace != 1)
 						continue;
 					else if(!io && rspace != 2)
 						continue;
-					pci_addr += ((u64)rp->parent_phys_lo);
-					pci_addr += (((u64)rp->parent_phys_hi)<<32UL);
+					pci_addr += ((u64)rngp->parent_phys_lo);
+					pci_addr += (((u64)rngp->parent_phys_hi)<<32UL);
 					break;
 				}
 				if(rng == pbm->num_pbm_ranges) {
@@ -1350,14 +1630,19 @@ static void __init fixup_regs(struct pci_dev *pdev,
 					prom_printf("fixup_doit: YIEEE, cannot find "
 						    "PBM ranges\n");
 				}
-				pdev->base_address[ridx] = (unsigned long)__va(pci_addr);
+				rp->name = pdev->name;
+				rp->start = (unsigned long) __va(pci_addr);
+				rp->end = rp->start + size - 1;
 
-				/* Preserve I/O space bit. */
+				/* Keep track of what we've seen so far. */
 				if(io) {
-					pdev->base_address[ridx] |= 1;
 					IO_seen = 1;
+					rp->flags = rtmp & 0x1;
+					request_resource(&ioport_resource, rp);
 				} else {
 					MEM_seen = 1;
+					rp->flags = rtmp & 0xf;
+					request_resource(&iomem_resource, rp);
 				}
 			}
 		}
@@ -1420,15 +1705,15 @@ static void __init fixup_regs(struct pci_dev *pdev,
 			/* Apply PBM ranges and update pci_dev. */
 			pci_addr = new_base;
 			for(rng = 0; rng < pbm->num_pbm_ranges; rng++) {
-				struct linux_prom_pci_ranges *rp;
+				struct linux_prom_pci_ranges *rngp;
 				int rspace;
 
-				rp = &pbm->pbm_ranges[rng];
-				rspace = (rp->child_phys_hi >> 24) & 3;
+				rngp = &pbm->pbm_ranges[rng];
+				rspace = (rngp->child_phys_hi >> 24) & 3;
 				if(rspace != 2)
 					continue;
-				pci_addr += ((u64)rp->parent_phys_lo);
-				pci_addr += (((u64)rp->parent_phys_hi)<<32UL);
+				pci_addr += ((u64)rngp->parent_phys_lo);
+				pci_addr += (((u64)rngp->parent_phys_hi)<<32UL);
 				break;
 			}
 			if(rng == pbm->num_pbm_ranges) {
@@ -1471,8 +1756,8 @@ static void __init fixup_regs(struct pci_dev *pdev,
 #ifdef FIXUP_REGS_DEBUG
 	dprintf("REG_FIXUP[%04x,%04x]: ", pdev->vendor, pdev->device);
 	for(preg = 0; preg < 6; preg++) {
-		if(pdev->base_address[preg] != 0)
-			dprintf("%d[%016lx] ", preg, pdev->base_address[preg]);
+		if(pdev->resource[preg].start != 0)
+			dprintf("%d[%016lx] ", preg, pdev->resource[preg].start);
 	}
 	dprintf("\n");
 #endif
@@ -2119,9 +2404,10 @@ out_of_range(struct linux_pbm_info *pbm, unsigned char bus, unsigned char devfn)
 static inline int
 sabre_out_of_range(unsigned char devfn)
 {
-	return ((PCI_SLOT(devfn) == 0) && (PCI_FUNC(devfn) > 0)) ||
-	       ((PCI_SLOT(devfn) == 1) && (PCI_FUNC(devfn) > 1)) ||
-	       (PCI_SLOT(devfn) > 1);
+	return (((PCI_SLOT(devfn) == 0) && (PCI_FUNC(devfn) > 0)) ||
+		((PCI_SLOT(devfn) == 1) && (PCI_FUNC(devfn) > 1)) ||
+		(PCI_SLOT(devfn) > 1) ||
+		(pci_probe_enable == 0));
 }
 
 static int

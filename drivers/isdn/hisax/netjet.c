@@ -1074,7 +1074,7 @@ setup_netjet(struct IsdnCard *card)
 		printk(KERN_WARNING "NETjet: No IRQ for PCI card found\n");
 		return(0);
 	}
-		cs->hw.njet.base = dev_netjet->base_address[0] &
+		cs->hw.njet.base = dev_netjet->resource[0].start &
 			PCI_BASE_ADDRESS_IO_MASK; 
 		if (!cs->hw.njet.base) {
 		printk(KERN_WARNING "NETjet: No IO-Adr for PCI card found\n");

@@ -302,16 +302,38 @@ endif
 # bsd_comp.o is *always* a module, for some documented reason
 # (licensing).
 ifeq ($(CONFIG_PPP),y)
-LX_OBJS += ppp.o
-M_OBJS += bsd_comp.o
+LX_OBJS += ppp_generic.o
 CONFIG_SLHC_BUILTIN = y
-CONFIG_PPPDEF_BUILTIN = y
+  ifeq ($(CONFIG_PPP_ASYNC),y)
+  LX_OBJS += ppp_async.o
+  else
+    ifeq ($(CONFIG_PPP_ASYNC),m)
+    MX_OBJS += ppp_async.o
+    endif
+  endif
+  ifeq ($(CONFIG_PPP_DEFLATE),y)
+  CONFIG_PPPDEF_BUILTIN = y
+  else
+    ifeq ($(CONFIG_PPP_DEFLATE),m)
+    CONFIG_PPPDEF_MODULE = y
+    endif
+  endif
+  ifeq ($(CONFIG_PPP_BSDCOMP),m)
+  M_OBJS += bsd_comp.o
+  endif
 else
   ifeq ($(CONFIG_PPP),m)
+  MX_OBJS += ppp_generic.o
   CONFIG_SLHC_MODULE = y
-  CONFIG_PPPDEF_MODULE = y
-  MX_OBJS += ppp.o
-  M_OBJS += bsd_comp.o
+    ifeq ($(CONFIG_PPP_ASYNC),m)
+    MX_OBJS += ppp_async.o
+    endif
+    ifeq ($(CONFIG_PPP_DEFLATE),m)
+    CONFIG_PPPDEF_MODULE = y
+    endif
+    ifeq ($(CONFIG_PPP_BSDCOMP),m)
+    M_OBJS += bsd_comp.o
+    endif
   endif
 endif
 
@@ -845,13 +867,11 @@ endif
 
 # if anything built-in uses ppp_deflate, then build it into the kernel also.
 # If not, but a module uses it, build as a module.
-# ... NO!!!  ppp_deflate.o does not work as resident;
-# it works only as a module!
 ifdef CONFIG_PPPDEF_BUILTIN
-MX_OBJS += ppp_deflate.o
+L_OBJS += ppp_deflate.o
 else
   ifdef CONFIG_PPPDEF_MODULE
-  MX_OBJS += ppp_deflate.o
+  M_OBJS += ppp_deflate.o
   endif
 endif
 

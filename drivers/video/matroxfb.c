@@ -5354,11 +5354,11 @@ __initfunc(static int initMatrox2(WPMINFO struct display* d, struct board* b)) {
 	if (ACCESS_FBINFO(capable.cross4MB) < 0)
 		ACCESS_FBINFO(capable.cross4MB) = b->flags & DEVF_CROSS4MB;
 	if (b->flags & DEVF_SWAPS) {
-		ctrlptr_phys = ACCESS_FBINFO(pcidev)->base_address[1] & ~0x3FFF;
-		video_base_phys = ACCESS_FBINFO(pcidev)->base_address[0] & ~0x7FFFFF;	/* aligned at 8MB (or 16 for Mill 2) */
+		ctrlptr_phys = ACCESS_FBINFO(pcidev)->resource[1].start & ~0x3FFF;
+		video_base_phys = ACCESS_FBINFO(pcidev)->resource[0].start & ~0x7FFFFF;	/* aligned at 8MB (or 16 for Mill 2) */
 	} else {
-		ctrlptr_phys = ACCESS_FBINFO(pcidev)->base_address[0] & ~0x3FFF;
-		video_base_phys = ACCESS_FBINFO(pcidev)->base_address[1] & ~0x7FFFFF;	/* aligned at 8MB */
+		ctrlptr_phys = ACCESS_FBINFO(pcidev)->resource[0].start & ~0x3FFF;
+		video_base_phys = ACCESS_FBINFO(pcidev)->resource[1].start & ~0x7FFFFF;	/* aligned at 8MB */
 	}
 	if (!ctrlptr_phys) {
 		printk(KERN_ERR "matroxfb: control registers are not available, matroxfb disabled\n");

@@ -194,9 +194,11 @@ if [ ! "$CONFIG_PARPORT" = "n" ]; then
   dep_tristate 'PLIP (parallel port) support' CONFIG_PLIP $CONFIG_PARPORT
 fi
 
-tristate 'PPP (point-to-point) support' CONFIG_PPP
+tristate 'PPP (point-to-point protocol) support' CONFIG_PPP
 if [ ! "$CONFIG_PPP" = "n" ]; then
-  comment 'CCP compressors for PPP are only built as modules.'
+  dep_tristate 'PPP support for async serial ports' CONFIG_PPP_ASYNC $CONFIG_PPP
+  dep_tristate 'PPP Deflate compression' CONFIG_PPP_DEFLATE $CONFIG_PPP
+  dep_tristate 'PPP BSD-Compress compression' CONFIG_PPP_BSDCOMP m
 fi
 
 tristate 'SLIP (serial line) support' CONFIG_SLIP

@@ -313,7 +313,7 @@ void sparcaudio_output_done(struct sparcaudio_driver * drv, int status)
     kill_procs(drv->sd_siglist,SIGPOLL,S_MSG);
 
     /* Stop the lowlevel driver from outputing. */
-    /* drv->ops->stop_output(drv); Should not be necessary  -- DJB 5/25/98 */
+    drv->ops->stop_output(drv); 
     drv->output_active = 0;
 		  
     /* Wake up any waiting writers or syncers and return. */
@@ -669,7 +669,7 @@ static int sparcaudio_mixer_ioctl(struct inode * inode, struct file * file,
   case SOUND_MIXER_WRITE_CD:
   case SOUND_MIXER_WRITE_LINE:
   case SOUND_MIXER_WRITE_IMIX:
-    if(get_user(k, arg))
+    if(COPY_IN(arg, k))
       return -EFAULT;
     tprintk(("setting input volume (0x%x)", k));
     if (drv->ops->get_input_channels)
@@ -700,7 +700,7 @@ static int sparcaudio_mixer_ioctl(struct inode * inode, struct file * file,
   case SOUND_MIXER_WRITE_PCM:
   case SOUND_MIXER_WRITE_VOLUME:
   case SOUND_MIXER_WRITE_SPEAKER:
-    if(get_user(k, arg))
+    if(COPY_IN(arg, k))
 	return -EFAULT;
     tprintk(("setting output volume (0x%x)", k));
     if (drv->ops->get_output_channels)
@@ -741,7 +741,7 @@ static int sparcaudio_mixer_ioctl(struct inode * inode, struct file * file,
   case SOUND_MIXER_WRITE_RECSRC: 
     if (!drv->ops->set_input_port)
       return -EINVAL;
-    if(get_user(k, arg))
+    if(COPY_IN(arg, k))
       return -EFAULT;
     /* only one should ever be selected */
     if (k & SOUND_MASK_IMIX) j = AUDIO_ANALOG_LOOPBACK;

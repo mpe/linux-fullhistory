@@ -195,4 +195,9 @@ struct compressor {
 #define CI_PREDICTOR_2		2	/* config option for Predictor-2 */
 #define CILEN_PREDICTOR_2	2	/* length of its config option */
 
+#ifdef __KERNEL__
+extern int ppp_register_compressor(struct compressor *);
+extern void ppp_unregister_compressor(struct compressor *);
+#endif /* __KERNEL__ */
+
 #endif /* _NET_PPP_COMP_H */

@@ -257,7 +257,7 @@ static int __init ioapic_pirq_setup(char *str)
 	int i, max;
 	int ints[MAX_PIRQS+1];
 
-	get_options(str, MAX_PIRQS+1, ints);
+	get_options(str, ARRAY_SIZE(ints), ints);
 
 	for (i = 0; i < MAX_PIRQS; i++)
 		pirq_entries[i] = -1;

@@ -366,7 +366,7 @@ char * strstr(const char * s1,const char * s2)
 #ifndef __HAVE_ARCH_MEMCHR
 void *memchr(const void *s, int c, size_t n)
 {
-	unsigned char *p = s;
+	const unsigned char *p = s;
 	while (n-- != 0) {
         	if ((unsigned char)c == *p++) {
 			return p-1;

@@ -5182,23 +5182,11 @@ CONFIG_SLIP_MODE_SLIP6
   end of the link as well. It's good enough, for example, to run IP
   over the async ports of a Camtec JNT Pad. If unsure, say N.
 
-PPP (point-to-point) support
+PPP (point-to-point protocol) support
 CONFIG_PPP
   PPP (Point to Point Protocol) is a newer and better SLIP. It serves
   the same purpose: sending Internet traffic over telephone (and other
-  serial) lines. Ask your access provider if they support it, because
-  otherwise you can't use it (not quite true any more: the free
-  program SLiRP can emulate a PPP line if you just have a regular dial
-  up shell account on some UNIX computer; get it via FTP (user:
-  anonymous) from
-  ftp://metalab.unc.edu/pub/Linux/system/network/serial/). Note that
-  you don't need "PPP support" if you just want to run term (term is a
-  program which gives you almost full Internet connectivity if you
-  have a regular dial up shell account on some Internet connected UNIX
-  computer. Read
-  http://www.bart.nl/~patrickr/term-howto/Term-HOWTO.html (to browse
-  the WWW, you need to have access to a machine on the Internet that
-  has a program like lynx or netscape)).
+  serial) lines.  Most ISPs these days support PPP rather than SLIP.
 
   To use PPP, you need an additional program called pppd as described
   in Documentation/networking/ppp.txt and in the PPP-HOWTO, available
@@ -5206,19 +5194,55 @@ CONFIG_PPP
   from an older kernel, you might need to upgrade pppd as well. The
   PPP option enlarges your kernel by about 16 KB.
 
+  Almost always, if you answer Y or M to this question, you should
+  give the same answer to the next question, about PPP support for
+  async serial ports.
+
   This driver is also available as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want).
   If you said Y to "Version information on all symbols" above, then
   you cannot compile the PPP driver into the kernel; you can then only
-  compile it as a module. The module will be called ppp.o. If you want
-  to compile it as a module, say M here and read
+  compile it as a module. The module will be called ppp_generic.o.  If
+  you want to compile it as a module, say M here and read
   Documentation/modules.txt as well as
-  Documentation/networking/net-modules.txt. Note that, no matter what
-  you do, the BSD compression code (used to compress the IP packets
-  sent over the serial line; has to be supported at the other end as
-  well) will always be compiled as a module; it is called bsd_comp.o
-  and will show up in the directory modules once you have said "make
-  modules". If unsure, say N.
+  Documentation/networking/net-modules.txt.
+
+PPP support for async serial ports
+CONFIG_PPP_ASYNC
+  Say Y (or M) here if you want to be able to use PPP over standard
+  asynchronous serial ports, such as COM1 or COM2 on a PC.  If you use
+  a modem (not a synchronous or ISDN modem) to contact your ISP, you
+  need this option.
+
+  This code is also available as a module (code which can be inserted
+  into and removed from the running kernel).  If you want to compile
+  it as a module, say M here and read Documentation/modules.txt.
+
+PPP Deflate compression
+CONFIG_PPP_DEFLATE
+  Support for the Deflate compression method for PPP, which uses the
+  Deflate algorithm (the same algorithm that gzip uses) to compress
+  each PPP packet before it is sent over the wire.  The peer (the
+  machine at the other end of the PPP link, usually your ISP) has to
+  support the Deflate compression method as well for this to be
+  useful.
+
+  This code is also available as a module (code which can be inserted
+  into and removed from the running kernel).  If you want to compile
+  it as a module, say M here and read Documentation/modules.txt.
+
+PPP BSD-Compress compression
+CONFIG_PPP_BSDCOMP
+  Support for the BSD-Compress compression method for PPP, which uses
+  the LZW compression method to compress each PPP packet before it is
+  sent over the wire.  The peer (the other end of the PPP link) has to
+  support the BSD-Compress compression method as well for this to be
+  useful.  The PPP Deflate compression method is preferable to
+  BSD-Compress, because it compresses better and is patent-free.
+
+  Note that the BSD compression code will always be compiled as a
+  module; it is called bsd_comp.o and will show up in the directory
+  modules once you have said "make modules". If unsure, say N.
 
 Wireless LAN (non-hamradio)
 CONFIG_NET_RADIO

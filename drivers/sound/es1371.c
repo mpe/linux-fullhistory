@@ -76,7 +76,6 @@
 
 /*****************************************************************************/
       
-#include <linux/config.h>
 #include <linux/version.h>
 #include <linux/module.h>
 #include <linux/string.h>
@@ -2925,9 +2924,7 @@ static int __init es1371_setup(char *str)
 
 	if (nr_dev >= NR_DEVICE)
 		return 0;
-        get_options(str, ints);
-	if (ints[0] >= 1)
-		joystick[nr_dev] = ints[1];
+	get_option(&str, &joystick[nr_dev]);
 	nr_dev++;
 	return 1;
 }

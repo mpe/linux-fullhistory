@@ -492,8 +492,10 @@ layout_dev(struct pci_dev *dev)
 					   0xffffffff);
 		pcibios_read_config_dword(bus->number, dev->devfn, off, &base);
 		if (!base) {
-			/* this base-address register is unused */
-			dev->base_address[idx] = 0;
+			/* This base-address register is unused.  */
+			dev->resource[idx].start = 0;
+			dev->resource[idx].end = 0;
+			dev->resource[idx].flags = 0;
 			continue;
 		}
 
@@ -542,7 +544,12 @@ layout_dev(struct pci_dev *dev)
 			new_io_reset(dev, off, orig_base);
 
 			handle = PCI_HANDLE(bus->number) | base | 1;
-			dev->base_address[idx] = handle;
+			dev->resource[idx].start
+			  = handle & PCI_BASE_ADDRESS_IO_MASK;
+			dev->resource[idx].end
+			  = dev->resource[idx].start + size - 1;
+			dev->resource[idx].flags
+			  = handle & ~PCI_BASE_ADDRESS_IO_MASK;
 
 			DBG_DEVS(("layout_dev: dev 0x%x IO @ 0x%lx (0x%x)\n",
 				  dev->device, handle, size));
@@ -622,7 +629,12 @@ layout_dev(struct pci_dev *dev)
 			new_io_reset(dev, off, orig_base);
 
 			handle = PCI_HANDLE(bus->number) | base;
-			dev->base_address[idx] = handle;
+			dev->resource[idx].start
+			  = handle & PCI_BASE_ADDRESS_MEM_MASK;
+			dev->resource[idx].end
+			  = dev->resource[idx].start + size - 1;
+			dev->resource[idx].flags
+			  = handle & ~PCI_BASE_ADDRESS_MEM_MASK;
 
 			/*
 			 * Currently for 64-bit cards, we simply do the usual
@@ -644,7 +656,9 @@ layout_dev(struct pci_dev *dev)
 					new_io_reset (dev, off+4, orig_base2);
 				}
 				/* Bypass hi reg in the loop.  */
-				dev->base_address[++idx] = 0;
+				dev->resource[++idx].start = 0;
+				dev->resource[idx].end = 0;
+				dev->resource[idx].flags = 0;
 
 				printk("bios32 WARNING: "
 				       "handling 64-bit device in "

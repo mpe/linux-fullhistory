@@ -29,8 +29,9 @@
 
 struct pci_bus pci_root;
 struct pci_dev *pci_devices = NULL;
+int pci_reverse __initdata = 0;
+
 static struct pci_dev **pci_last_dev_p = &pci_devices;
-static int pci_reverse __initdata = 0;
 
 struct pci_dev *
 pci_find_slot(unsigned int bus, unsigned int devfn)

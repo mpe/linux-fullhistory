@@ -68,7 +68,6 @@ int register_binfmt(struct linux_binfmt * fmt)
 	return 0;	
 }
 
-#ifdef CONFIG_MODULES
 int unregister_binfmt(struct linux_binfmt * fmt)
 {
 	struct linux_binfmt ** tmp = &formats;
@@ -82,7 +81,6 @@ int unregister_binfmt(struct linux_binfmt * fmt)
 	}
 	return -EINVAL;
 }
-#endif	/* CONFIG_MODULES */
 
 /* N.B. Error returns must be < 0 */
 int open_dentry(struct dentry * dentry, int mode)

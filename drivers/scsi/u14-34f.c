@@ -467,7 +467,6 @@ struct proc_dir_entry proc_scsi_u14_34f = {
 #define ASOK              0x00
 #define ASST              0x91
 
-#define ARRAY_SIZE(arr) (sizeof (arr) / sizeof (arr)[0])
 #define YESNO(a) ((a) ? 'y' : 'n')
 #define TLDEV(type) ((type) == TYPE_DISK || (type) == TYPE_ROM)
 

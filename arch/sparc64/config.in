@@ -1,4 +1,4 @@
-# $Id: config.in,v 1.72 1999/08/04 03:19:17 davem Exp $
+# $Id: config.in,v 1.73 1999/08/06 12:11:47 davem Exp $
 # For a description of the syntax of this configuration file,
 # see the Configure script.
 #
@@ -106,7 +106,8 @@ if [ "$CONFIG_PCI" = "y" ]; then
 	  dep_tristate '   SCSI emulation support' CONFIG_BLK_DEV_IDESCSI $CONFIG_BLK_DEV_IDE
 	  define_bool CONFIG_BLK_DEV_IDEPCI y
 	  define_bool CONFIG_BLK_DEV_IDEDMA y
-	  define_bool CONFIG_IDEDMA_PCI_AUTO y
+	  define_bool CONFIG_IDEDMA_AUTO y
+	  define_bool IDEDMA_NEW_DRIVE_LISTINGS y
 	  define_bool CONFIG_BLK_DEV_NS87415 y
 	  define_bool CONFIG_BLK_DEV_CMD646 y
 	fi

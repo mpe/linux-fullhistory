@@ -128,7 +128,6 @@
 
 /*****************************************************************************/
       
-#include <linux/config.h>
 #include <linux/version.h>
 #include <linux/module.h>
 #include <linux/string.h>
@@ -2480,17 +2479,15 @@ void cleanup_module(void)
 static int __init es1370_setup(char *str)
 {
 	static unsigned __initdata nr_dev = 0;
-        int ints[11];
 
 	if (nr_dev >= NR_DEVICE)
 		return 0;
-        get_options(str, ints);
-	if (ints[0] >= 1)
-		joystick[nr_dev] = ints[1];
-	if (ints[0] >= 2)
-		lineout[nr_dev] = ints[2];
-	if (ints[0] >= 3)
-		micbias[nr_dev] = ints[3];
+
+	(   (get_option(&str,&joystick[nr_dev]) == 2)
+	 && (get_option(&str,&lineout [nr_dev]) == 2)
+	 &&  get_option(&str,&micbias [nr_dev])
+	);
+
 	nr_dev++;
 	return 1;
 }

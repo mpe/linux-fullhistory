@@ -1,4 +1,4 @@
-/* $Id: ebus.c,v 1.36 1999/05/04 03:21:42 davem Exp $
+/* $Id: ebus.c,v 1.38 1999/08/06 10:37:32 davem Exp $
  * ebus.c: PCI to EBus bridge device.
  *
  * Copyright (C) 1997  Eddie C. Dost  (ecd@skynet.be)
@@ -17,6 +17,7 @@
 #include <asm/ebus.h>
 #include <asm/oplib.h>
 #include <asm/bpp.h>
+#include <asm/irq.h>
 
 #undef PROM_DEBUG
 #undef DEBUG_FILL_EBUS_DEV
@@ -56,9 +57,9 @@ static inline unsigned long ebus_alloc(size_t size)
 	return mem;
 }
 
-__initfunc(void ebus_intmap_match(struct linux_ebus *ebus,
-				  struct linux_prom_registers *reg,
-				  int *interrupt))
+void __init ebus_intmap_match(struct linux_ebus *ebus,
+			      struct linux_prom_registers *reg,
+			      int *interrupt)
 {
 	unsigned int hi, lo, irq;
 	int i;
@@ -83,8 +84,8 @@ __initfunc(void ebus_intmap_match(struct linux_ebus *ebus,
 	prom_halt();
 }
 
-__initfunc(void fill_ebus_child(int node, struct linux_prom_registers *preg,
-				struct linux_ebus_child *dev))
+void __init fill_ebus_child(int node, struct linux_prom_registers *preg,
+			    struct linux_ebus_child *dev)
 {
 	int regs[PROMREG_MAX];
 	int irqs[PROMREG_MAX];
@@ -135,10 +136,11 @@ __initfunc(void fill_ebus_child(int node, struct linux_prom_registers *preg,
 	}
 
 #ifdef DEBUG_FILL_EBUS_DEV
-	dprintf("child '%s': address%s\n", dev->prom_name,
+	dprintf("child '%s': address%s ", dev->prom_name,
 	       dev->num_addrs > 1 ? "es" : "");
 	for (i = 0; i < dev->num_addrs; i++)
-		dprintf("        %016lx\n", dev->base_address[i]);
+		dprintf("%016lx ", dev->base_address[i]);
+	dprintf("\n");
 	if (dev->num_irqs) {
 		dprintf("        IRQ%s", dev->num_irqs > 1 ? "s" : "");
 		for (i = 0; i < dev->num_irqs; i++)
@@ -148,7 +150,7 @@ __initfunc(void fill_ebus_child(int node, struct linux_prom_registers *preg,
 #endif
 }
 
-__initfunc(void fill_ebus_device(int node, struct linux_ebus_device *dev))
+void __init fill_ebus_device(int node, struct linux_ebus_device *dev)
 {
 	struct linux_prom_registers regs[PROMREG_MAX];
 	struct linux_ebus_child *child;
@@ -172,7 +174,7 @@ __initfunc(void fill_ebus_device(int node, struct linux_ebus_device *dev))
 	for (i = 0; i < dev->num_addrs; i++) {
 		n = (regs[i].which_io - 0x10) >> 2;
 
-		dev->base_address[i] = dev->bus->self->base_address[n];
+		dev->base_address[i] = dev->bus->self->resource[n].start;
 		dev->base_address[i] += (unsigned long)regs[i].phys_addr;
 	}
 
@@ -189,10 +191,11 @@ __initfunc(void fill_ebus_device(int node, struct linux_ebus_device *dev))
 	}
 
 #ifdef DEBUG_FILL_EBUS_DEV
-	dprintf("'%s': address%s\n", dev->prom_name,
+	dprintf("'%s': address%s ", dev->prom_name,
 	       dev->num_addrs > 1 ? "es" : "");
 	for (i = 0; i < dev->num_addrs; i++)
-		dprintf("  %016lx\n", dev->base_address[i]);
+		dprintf("%016lx ", dev->base_address[i]);
+	dprintf("\n");
 	if (dev->num_irqs) {
 		dprintf("  IRQ%s", dev->num_irqs > 1 ? "s" : "");
 		for (i = 0; i < dev->num_irqs; i++)
@@ -225,7 +228,7 @@ __initfunc(void fill_ebus_device(int node, struct linux_ebus_device *dev))
 
 extern void clock_probe(void);
 
-__initfunc(void ebus_init(void))
+void __init ebus_init(void)
 {
 	struct linux_prom_pci_registers regs[PROMREG_MAX];
 	struct linux_pbm_info *pbm;
@@ -234,7 +237,8 @@ __initfunc(void ebus_init(void))
 	struct pci_dev *pdev;
 	struct pcidev_cookie *cookie;
 	char lbuf[128];
-	unsigned long addr, *base;
+	struct resource *base;
+	unsigned long addr;
 	unsigned short pci_command;
 	int nd, len, ebusnd;
 	int reg, rng, nreg;
@@ -317,7 +321,7 @@ __initfunc(void ebus_init(void))
 		}
 		nreg = len / sizeof(struct linux_prom_pci_registers);
 
-		base = &ebus->self->base_address[0];
+		base = &ebus->self->resource[0];
 		for (reg = 0; reg < nreg; reg++) {
 			if (!(regs[reg].phys_hi & 0x03000000))
 				continue;
@@ -334,7 +338,14 @@ __initfunc(void ebus_init(void))
 				addr += (u64)regs[reg].phys_mid << 32UL;
 				addr += (u64)rp->parent_phys_lo;
 				addr += (u64)rp->parent_phys_hi << 32UL;
-				*base++ = (unsigned long)__va(addr);
+
+				base->name = "EBUS";
+				base->start = (unsigned long)__va(addr);
+				base->end = base->start + regs[reg].size_lo - 1;
+				base->flags = 0;
+				request_resource(&ioport_resource, base);
+
+				base += 1;
 
 				printk(" %lx[%x]", (unsigned long)__va(addr),
 				       regs[reg].size_lo);

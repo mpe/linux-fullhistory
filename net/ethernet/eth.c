@@ -60,8 +60,6 @@
 #include <asm/system.h>
 #include <asm/checksum.h>
 
-#define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
-
 static int __init eth_setup(char *str)
 {
 	int ints[5];

@@ -1,4 +1,4 @@
-/* $Id: elf.h,v 1.20 1999/07/30 09:31:14 davem Exp $ */
+/* $Id: elf.h,v 1.21 1999/08/04 07:04:23 jj Exp $ */
 #ifndef __ASM_SPARC64_ELF_H
 #define __ASM_SPARC64_ELF_H
 
@@ -48,7 +48,7 @@ typedef struct {
    that it will "exec", and that there is sufficient room for the brk.  */
 
 #ifndef ELF_ET_DYN_BASE
-#define ELF_ET_DYN_BASE         0x50000000000
+#define ELF_ET_DYN_BASE         0xfffff80000000000UL
 #endif
 
 

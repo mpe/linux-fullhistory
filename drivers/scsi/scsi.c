@@ -406,15 +406,21 @@ static void scan_scsis_done (Scsi_Cmnd * SCpnt)
 	up(SCpnt->request.sem);
 }
 
-void __init scsi_logging_setup(char *str, int *ints)
+static int __init scsi_logging_setup (char *str)
 {
-    if (ints[0] != 1) {
-	printk("scsi_logging_setup : usage scsi_logging_level=n "
+	int tmp;
+
+	if (get_option(&str, &tmp)==1) {
+	   	scsi_logging_level = (tmp ? ~0 : 0);
+		return 1;
+	} else {
+		printk("scsi_logging_setup : usage scsi_logging_level=n "
                "(n should be 0 or non-zero)\n");
-    } else {
-	scsi_logging_level = (ints[1])? ~0 : 0;
+		return 0;
     }
 }
+
+__setup("scsi_logging=", scsi_logging_setup);
 
 #ifdef CONFIG_SCSI_MULTI_LUN
 static int max_scsi_luns = 8;
@@ -422,14 +428,21 @@ static int max_scsi_luns = 8;
 static int max_scsi_luns = 1;
 #endif
 
-void __init scsi_luns_setup(char *str, int *ints)
+static int __init scsi_luns_setup (char *str)
 {
-    if (ints[0] != 1)
-	printk("scsi_luns_setup : usage max_scsi_luns=n (n should be between 1 and 8)\n");
-    else
-	max_scsi_luns = ints[1];
+	int tmp;
+
+	if (get_option(&str, &tmp)==1) {
+		max_scsi_luns = tmp;
+		return 1;
+	} else {
+		printk("scsi_luns_setup : usage max_scsi_luns=n "
+			   "(n should be between 1 and 8)\n");
+		return 0;
+    }
 }
 
+__setup("max_scsi_luns=", scsi_luns_setup);
 /*
  *  Detecting SCSI devices :
  *  We scan all present host adapter's busses,  from ID 0 to ID (max_id).

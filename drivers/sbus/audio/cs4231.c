@@ -1522,6 +1522,7 @@ static void eb4231_stop_output(struct sparcaudio_driver *drv)
 
   /* Else subsequent speed setting changes are ignored by the chip. */
   cs4231_disable_play(drv);
+  cs4231_chip->perchip_info.play.active = 0;
 }
 #endif
 
@@ -1548,8 +1549,10 @@ static void cs4231_stop_output(struct sparcaudio_driver *drv)
   /* Else subsequent speed setting changes are ignored by the chip. */
   cs4231_chip->regs->dmacsr &= ~(APC_GENL_INT | APC_XINT_ENA | APC_XINT_PLAY 
                                  | APC_XINT_GENL | APC_PDMA_READY 
-                                 | APC_XINT_PENA );
+                                 | APC_XINT_PENA | APC_PPAUSE );
+  printk("in cs4231_stop_output: 0x%x\n", cs4231_chip->regs->dmacsr);
   cs4231_disable_play(drv);
+  cs4231_chip->perchip_info.play.active = 0;
 #endif
 }
 
@@ -1871,7 +1874,6 @@ void eb4231_pinterrupt(int irq, void *dev_id, struct pt_regs *regs)
   }
 
   if((dummy & EBUS_DCSR_A_LOADED) == 0) {
-    cs4231_chip->perchip_info.play.active = 0;
     eb4231_playintr(drv);
 
     eb4231_getsamplecount(drv, cs4231_chip->playlen, 0);
@@ -1896,13 +1898,11 @@ void cs4231_interrupt(int irq, void *dev_id, struct pt_regs *regs)
    * if anything since we may be doing shared interrupts 
    */
 
-  if (dummy & APC_PLAY_INT) {
-    if (dummy & APC_XINT_PEMP) {
+  if (dummy & (APC_PLAY_INT|APC_XINT_PNVA|APC_XINT_PLAY|APC_XINT_EMPT|APC_XINT_PEMP)) {
       cs4231_chip->perchip_info.play.samples += 
 	cs4231_length_to_samplecount(&(cs4231_chip->perchip_info.play), 
 				     cs4231_chip->playlen); 
       cs4231_playintr(drv);
-    } 
     /* Any other conditions we need worry about? */
   }
 
@@ -1927,6 +1927,7 @@ void cs4231_interrupt(int irq, void *dev_id, struct pt_regs *regs)
   }
 
   if (dummy & APC_XINT_EMPT) {
+#if 0 /* Call to stop_output from midlevel will get this */
     if (!cs4231_chip->output_next_dma_handle) {
       cs4231_chip->regs->dmacsr |= (APC_PPAUSE);
       cs4231_disable_play(drv);
@@ -1934,6 +1935,7 @@ void cs4231_interrupt(int irq, void *dev_id, struct pt_regs *regs)
     }
     cs4231_chip->perchip_info.play.active = 0;
     cs4231_playintr(drv);
+#endif
 
     cs4231_getsamplecount(drv, cs4231_chip->playlen, 0);
   }

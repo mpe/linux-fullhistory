@@ -148,18 +148,18 @@ static unsigned short get_pins(unsigned minor)
  */
 struct bpp_regs {
       /* DMA registers */
-      __u32 p_csr;		/* DMA Control/Status Register */
-      __u32 p_addr;		/* Address Register */
-      __u32 p_bcnt;		/* Byte Count Register */
-      __u32 p_tst_csr;		/* Test Control/Status (DMA2 only) */
+      __volatile__ __u32 p_csr;		/* DMA Control/Status Register */
+      __volatile__ __u32 p_addr;	/* Address Register */
+      __volatile__ __u32 p_bcnt;	/* Byte Count Register */
+      __volatile__ __u32 p_tst_csr;	/* Test Control/Status (DMA2 only) */
       /* Parallel Port registers */
-      __u16 p_hcr;		/* Hardware Configuration Register */
-      __u16 p_ocr;		/* Operation Configuration Register */
-      __u8 p_dr;		/* Parallel Data Register */
-      __u8 p_tcr;		/* Transfer Control Register */
-      __u8 p_or;		/* Output Register */
-      __u8 p_ir;		/* Input Register */
-      __u16 p_icr;		/* Interrupt Control Register */
+      __volatile__ __u16 p_hcr;		/* Hardware Configuration Register */
+      __volatile__ __u16 p_ocr;		/* Operation Configuration Register */
+      __volatile__ __u8 p_dr;		/* Parallel Data Register */
+      __volatile__ __u8 p_tcr;		/* Transfer Control Register */
+      __volatile__ __u8 p_or;		/* Output Register */
+      __volatile__ __u8 p_ir;		/* Input Register */
+      __volatile__ __u16 p_icr;		/* Interrupt Control Register */
 };
 
 /* P_CSR.  Bits of type RW1 are cleared with writting '1'. */

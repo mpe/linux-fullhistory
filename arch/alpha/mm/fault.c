@@ -75,7 +75,8 @@ do_page_fault(unsigned long address, unsigned long mmcsr,
 {
 	struct vm_area_struct * vma;
 	struct mm_struct *mm = current->mm;
-	unsigned fixup;
+	unsigned int fixup;
+	int fault;
 
 	/* As of EV6, a load into $31/$f31 is a prefetch, and never faults
 	   (or is suppressed by the PALcode).  Support that for older CPUs
@@ -91,8 +92,12 @@ do_page_fault(unsigned long address, unsigned long mmcsr,
 		}
 	}
 
+	/* If we're in an interrupt context, or have no user context,
+	   we must not take the fault.  */
+	if (!mm || in_interrupt())
+		goto no_context;
+
 	down(&mm->mmap_sem);
-	lock_kernel();
 	vma = find_vma(mm, address);
 	if (!vma)
 		goto bad_area;
@@ -118,9 +123,21 @@ good_area:
 		if (!(vma->vm_flags & VM_WRITE))
 			goto bad_area;
 	}
-	handle_mm_fault(current, vma, address, cause > 0);
+
+	/*
+	 * If for any reason at all we couldn't handle the fault,
+	 * make sure we exit gracefully rather than endlessly redo
+	 * the fault.
+	 */
+	fault = handle_mm_fault(current, vma, address, cause > 0);
 	up(&mm->mmap_sem);
-	goto out;
+
+	if (fault < 0)
+		goto out_of_memory;
+	if (fault == 0)
+		goto do_sigbus;
+
+	return;
 
 /*
  * Something tried to access memory that isn't in our memory map..
@@ -131,9 +148,10 @@ bad_area:
 
 	if (user_mode(regs)) {
 		force_sig(SIGSEGV, current);
-		goto out;
+		return;
 	}
 
+no_context:
 	/* Are we prepared to handle this fault as an exception?  */
 	if ((fixup = search_exception_table(regs->pc)) != 0) {
 		unsigned long newpc;
@@ -141,7 +159,7 @@ bad_area:
 		printk("%s: Exception at [<%lx>] (%lx)\n",
 		       current->comm, regs->pc, newpc);
 		regs->pc = newpc;
-		goto out;
+		return;
 	}
 
 /*
@@ -152,7 +170,25 @@ bad_area:
 	       "virtual address %016lx\n", address);
 	die_if_kernel("Oops", regs, cause, (unsigned long*)regs - 16);
 	do_exit(SIGKILL);
- out:
-	unlock_kernel();
-}
 
+/*
+ * We ran out of memory, or some other thing happened to us that made
+ * us unable to handle the page fault gracefully.
+ */
+out_of_memory:
+	printk(KERN_ALERT "VM: killing process %s(%d)\n",
+	       current->comm, current->pid);
+	if (!user_mode(regs))
+		goto no_context;
+	do_exit(SIGKILL);
+
+do_sigbus:
+	/*
+	 * Send a sigbus, regardless of whether we were in kernel
+	 * or user mode.
+	 */
+	force_sig(SIGBUS, current);
+	if (!user_mode(regs))
+		goto no_context;
+	return;
+}

@@ -1311,28 +1311,6 @@ int apm_get_info(char *buf, char **start, off_t fpos, int length, int dummy)
 	return p - buf;
 }
 
-void __init apm_setup(char *str, int *dummy)
-{
-	int	invert;
-
-	while ((str != NULL) && (*str != '\0')) {
-		if (strncmp(str, "off", 3) == 0)
-			apm_disabled = 1;
-		if (strncmp(str, "on", 2) == 0)
-			apm_disabled = 0;
-		invert = (strncmp(str, "no-", 3) == 0);
-		if (invert)
-			str += 3;
-		if (strncmp(str, "debug", 5) == 0)
-			debug = !invert;
-		if (strncmp(str, "smp-power-off", 13) == 0)
-			smp_hack = !invert;
-		str = strchr(str, ',');
-		if (str != NULL)
-			str += strspn(str, ", \t");
-	}
-}
-
 static int apm(void *unused)
 {
 	unsigned short	bx;
@@ -1422,6 +1400,31 @@ static int apm(void *unused)
 	apm_mainloop();
 	return 0;
 }
+
+static int __init apm_setup(char *str)
+{
+	int	invert;
+
+	while ((str != NULL) && (*str != '\0')) {
+		if (strncmp(str, "off", 3) == 0)
+			apm_disabled = 1;
+		if (strncmp(str, "on", 2) == 0)
+			apm_disabled = 0;
+		invert = (strncmp(str, "no-", 3) == 0);
+		if (invert)
+			str += 3;
+		if (strncmp(str, "debug", 5) == 0)
+			debug = !invert;
+		if (strncmp(str, "smp-power-off", 13) == 0)
+			smp_hack = !invert;
+		str = strchr(str, ',');
+		if (str != NULL)
+			str += strspn(str, ", \t");
+	}
+	return 1;
+}
+
+__setup("apm=", apm_setup);
 
 /*
  * Just start the APM thread. We do NOT want to do APM BIOS

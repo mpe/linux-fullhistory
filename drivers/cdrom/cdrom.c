@@ -143,11 +143,17 @@
   -- Now default to checking media type.
   -- CDROM_SEND_PACKET ioctl added. The infrastructure was in place for
   doing this anyway, with the generic_packet addition.
+  
+  3.01 Aug 6, 1999 - Jens Axboe <axboe@image.dk>
+  -- Fix up the sysctl handling so that the option flags get set
+  correctly.
+  -- Fix up ioctl handling so the device specific ones actually get
+  called :).
 
 -------------------------------------------------------------------------*/
 
-#define REVISION "Revision: 3.00"
-#define VERSION "Id: cdrom.c 3.00 1999/08/05"
+#define REVISION "Revision: 3.01"
+#define VERSION "Id: cdrom.c 3.01 1999/08/06"
 
 /* I use an error-log mask to give fine grain control over the type of
    messages dumped to the system logs.  The available masks include: */
@@ -1329,18 +1335,11 @@ int cdrom_ioctl(struct inode *ip, struct file *fp,
 	   let it go through the device specific ones. */
 	if (CDROM_CAN(CDC_GENERIC_PACKET)) {
 		ret = mmc_ioctl(cdi, cmd, arg);
-		if (ret != -ENOTTY)
+		if (ret != -ENOTTY) {
 			return ret;
+		}
 	}
-	
-	/* Now all the audio-ioctls follow, they are all routed through the
-	   same call audio_ioctl(). */
-	if (!CDROM_CAN(CDC_PLAY_AUDIO)) {
-		if (CDROM_CAN(CDC_IOCTLS))
-			return cdo->dev_ioctl(cdi, cmd, arg);
-		return -ENOSYS;
-	}
-	
+
 	/* note: most of the cdinfo() calls are commented out here,
 	   because they fill up the sys log when CD players poll
 	   the drive. */
@@ -1348,6 +1347,8 @@ int cdrom_ioctl(struct inode *ip, struct file *fp,
 	case CDROMSUBCHNL: {
 		struct cdrom_subchnl q;
 		u_char requested, back;
+		if (!CDROM_CAN(CDC_PLAY_AUDIO))
+			return -ENOSYS;
 		/* cdinfo(CD_DO_IOCTL,"entering CDROMSUBCHNL\n");*/ 
 		IOCTL_IN(arg, struct cdrom_subchnl, q);
 		requested = q.cdsc_format;
@@ -1366,6 +1367,8 @@ int cdrom_ioctl(struct inode *ip, struct file *fp,
 		}
 	case CDROMREADTOCHDR: {
 		struct cdrom_tochdr header;
+		if (!CDROM_CAN(CDC_PLAY_AUDIO))
+			return -ENOSYS;
 		/* cdinfo(CD_DO_IOCTL, "entering CDROMREADTOCHDR\n"); */ 
 		IOCTL_IN(arg, struct cdrom_tochdr, header);
 		if ((ret=cdo->audio_ioctl(cdi, cmd, &header)))
@@ -1377,6 +1380,8 @@ int cdrom_ioctl(struct inode *ip, struct file *fp,
 	case CDROMREADTOCENTRY: {
 		struct cdrom_tocentry entry;
 		u_char requested_format;
+		if (!CDROM_CAN(CDC_PLAY_AUDIO))
+			return -ENOSYS;
 		/* cdinfo(CD_DO_IOCTL, "entering CDROMREADTOCENTRY\n"); */ 
 		IOCTL_IN(arg, struct cdrom_tocentry, entry);
 		requested_format = entry.cdte_format;
@@ -1395,6 +1400,8 @@ int cdrom_ioctl(struct inode *ip, struct file *fp,
 		}
 	case CDROMPLAYMSF: {
 		struct cdrom_msf msf;
+		if (!CDROM_CAN(CDC_PLAY_AUDIO))
+			return -ENOSYS;
 		cdinfo(CD_DO_IOCTL, "entering CDROMPLAYMSF\n"); 
 		IOCTL_IN(arg, struct cdrom_msf, msf);
 		CHECKAUDIO;
@@ -1402,6 +1409,8 @@ int cdrom_ioctl(struct inode *ip, struct file *fp,
 		}
 	case CDROMPLAYTRKIND: {
 		struct cdrom_ti ti;
+		if (!CDROM_CAN(CDC_PLAY_AUDIO))
+			return -ENOSYS;
 		cdinfo(CD_DO_IOCTL, "entering CDROMPLAYTRKIND\n"); 
 		IOCTL_IN(arg, struct cdrom_ti, ti);
 		CHECKAUDIO;
@@ -1409,12 +1418,16 @@ int cdrom_ioctl(struct inode *ip, struct file *fp,
 		}
 	case CDROMVOLCTRL: {
 		struct cdrom_volctrl volume;
+		if (!CDROM_CAN(CDC_PLAY_AUDIO))
+			return -ENOSYS;
 		cdinfo(CD_DO_IOCTL, "entering CDROMVOLCTRL\n"); 
 		IOCTL_IN(arg, struct cdrom_volctrl, volume);
 		return cdo->audio_ioctl(cdi, cmd, &volume);
 		}
 	case CDROMVOLREAD: {
 		struct cdrom_volctrl volume;
+		if (!CDROM_CAN(CDC_PLAY_AUDIO))
+			return -ENOSYS;
 		cdinfo(CD_DO_IOCTL, "entering CDROMVOLREAD\n"); 
 		if ((ret=cdo->audio_ioctl(cdi, cmd, &volume)))
 			return ret;
@@ -1425,12 +1438,18 @@ int cdrom_ioctl(struct inode *ip, struct file *fp,
 	case CDROMSTOP:
 	case CDROMPAUSE:
 	case CDROMRESUME: {
+		if (!CDROM_CAN(CDC_PLAY_AUDIO))
+			return -ENOSYS;
 		cdinfo(CD_DO_IOCTL, "doing audio ioctl (start/stop/pause/resume)\n"); 
 		CHECKAUDIO;
 		return cdo->audio_ioctl(cdi, cmd, NULL);
 		}
 	} /* switch */
 
+	/* do the device specific ioctls */
+	if (CDROM_CAN(CDC_IOCTLS))
+		return cdo->dev_ioctl(cdi, cmd, arg);
+	
 	return -ENOSYS;
 }
 
@@ -1654,6 +1673,34 @@ int cdrom_sysctl_info(ctl_table *ctl, int write, struct file * filp,
         return proc_dostring(ctl, write, filp, buffer, lenp);
 }
 
+/* Unfortunately, per device settings are not implemented through
+   procfs/sysctl yet. When they are, this will naturally disappear. For now
+   just update all drives. Later this will become the template on which
+   new registered drives will be based. */
+void cdrom_update_settings(void)
+{
+	struct cdrom_device_info *cdi;
+
+	for (cdi = topCdromPtr; cdi != NULL; cdi = cdi->next) {
+		if (autoclose && CDROM_CAN(CDC_CLOSE_TRAY))
+			cdi->options |= CDO_AUTO_CLOSE;
+		else if (!autoclose)
+			cdi->options &= ~CDO_AUTO_CLOSE;
+		if (autoeject && CDROM_CAN(CDC_OPEN_TRAY))
+			cdi->options |= CDO_AUTO_EJECT;
+		else if (!autoeject)
+			cdi->options &= ~CDO_AUTO_EJECT;
+		if (lockdoor && CDROM_CAN(CDC_LOCK))
+			cdi->options |= CDO_LOCK;
+		else if (!lockdoor)
+			cdi->options &= ~CDO_LOCK;
+		if (check_media_type)
+			cdi->options |= CDO_CHECK_TYPE;
+		else
+			cdi->options &= ~CDO_CHECK_TYPE;
+	}
+}
+
 static int cdrom_sysctl_handler(ctl_table *ctl, int write, struct file * filp,
 				void *buffer, size_t *lenp)
 {
@@ -1663,8 +1710,13 @@ static int cdrom_sysctl_handler(ctl_table *ctl, int write, struct file * filp,
 	
 	ret = proc_dointvec(ctl, write, filp, buffer, lenp);
 
-	/* FIXME: only 1's and 0's should be accepted */
 	if (write && *valp != val) {
+	
+		/* we only care for 1 or 0. */
+		if (*valp)
+			*valp = 1;
+		else
+			*valp = 0;
 
 		switch (ctl->ctl_name) {
 		case DEV_CDROM_AUTOCLOSE: {
@@ -1693,6 +1745,10 @@ static int cdrom_sysctl_handler(ctl_table *ctl, int write, struct file * filp,
 			break;
 			}
 		}
+		/* update the option flags according to the changes. we
+		   don't have per device options through sysctl yet,
+		   but we will have and then this will disappear. */
+		cdrom_update_settings();
 	}
 
         return ret;
@@ -1754,7 +1810,7 @@ static void cdrom_sysctl_register(void)
 
 	cdrom_sysctl_header = register_sysctl_table(cdrom_root_table, 1);
 	cdrom_root_table->child->de->fill_inode = &cdrom_procfs_modcount;
-	
+
 	/* set the defaults */
 	cdrom_sysctl_settings.autoclose = autoclose;
 	cdrom_sysctl_settings.autoeject = autoeject;

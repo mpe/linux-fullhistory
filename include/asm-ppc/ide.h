@@ -21,6 +21,7 @@
 
 #ifdef __KERNEL__
 
+#include <linux/config.h>
 #include <linux/hdreg.h>
 #include <linux/ioport.h>
 #include <asm/io.h>

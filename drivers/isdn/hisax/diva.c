@@ -510,7 +510,7 @@ setup_diva(struct IsdnCard *card)
 			/* get IRQ */
 			cs->irq = dev_diva->irq;
 			/* get IO address */
-			cs->hw.diva.cfg_reg = dev_diva->base_address[2]
+			cs->hw.diva.cfg_reg = dev_diva->resource[2].start
 				& PCI_BASE_ADDRESS_IO_MASK;
 		} else if ((dev_diva_u = pci_find_device(PCI_VENDOR_EICON_DIEHL,
 			PCI_DIVA20_U_ID, dev_diva_u))) {
@@ -518,7 +518,7 @@ setup_diva(struct IsdnCard *card)
 			/* get IRQ */
 			cs->irq = dev_diva_u->irq;
 			/* get IO address */
-			cs->hw.diva.cfg_reg = dev_diva_u->base_address[2]
+			cs->hw.diva.cfg_reg = dev_diva_u->resource[2].start
 				& PCI_BASE_ADDRESS_IO_MASK;
 		} else {
 			printk(KERN_WARNING "Diva: No PCI card found\n");

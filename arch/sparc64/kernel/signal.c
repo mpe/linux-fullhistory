@@ -1,4 +1,4 @@
-/*  $Id: signal.c,v 1.43 1999/07/30 09:35:24 davem Exp $
+/*  $Id: signal.c,v 1.44 1999/08/04 07:04:13 jj Exp $
  *  arch/sparc64/kernel/signal.c
  *
  *  Copyright (C) 1991, 1992  Linus Torvalds
@@ -230,9 +230,9 @@ struct rt_signal_frame {
 	struct sparc_stackf	ss;
 	siginfo_t	info;
 	struct pt_regs		regs;
-	sigset_t		mask;
 	__siginfo_fpu_t *	fpu_save;
 	stack_t			stack;
+	sigset_t		mask;
 	__siginfo_fpu_t		fpu_state;
 };
 

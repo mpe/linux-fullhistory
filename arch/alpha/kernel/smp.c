@@ -75,17 +75,22 @@ extern void calibrate_delay(void);
 extern asmlinkage void entInt(void);
 
 
-/*
- * Process bootcommand SMP options, like "nosmp" and "maxcpus=".
- */
-void __init
-smp_setup(char *str, int *ints)
+static int __init nosmp(char *str)
 {
-	if (ints && ints[0] > 0)
-		max_cpus = ints[1];
-	else
-		max_cpus = 0;
+	max_cpus = 0;
+	return 1;
 }
+
+__setup("nosmp", nosmp);
+
+static int __init maxcpus(char *str)
+{
+	get_option(&str, &max_cpus);
+	return 1;
+}
+
+__setup("maxcpus", maxcpus);
+
 
 /*
  * Called by both boot and secondaries to move global data into
@@ -132,6 +137,10 @@ smp_callin(void)
 
 	/* Setup the scheduler for this processor.  */
 	init_idle();
+
+	/* ??? This should be in init_idle.  */
+	atomic_inc(&init_mm.mm_count);
+	current->active_mm = &init_mm;
 
 	/* Get our local ticker going. */
 	smp_setup_percpu_timer(cpuid);
@@ -515,6 +524,10 @@ smp_boot_cpus(void)
 
 	init_idle();
 
+	/* ??? This should be in init_idle.  */
+	atomic_inc(&init_mm.mm_count);
+	current->active_mm = &init_mm;
+
 	/* Nothing to do on a UP box, or when told not to.  */
 	if (smp_num_probed == 1 || max_cpus == 0) {
 	        printk(KERN_INFO "SMP mode deactivated.\n");
@@ -862,16 +875,16 @@ static void
 ipi_flush_tlb_mm(void *x)
 {
 	struct mm_struct *mm = (struct mm_struct *) x;
-	if (mm == current->mm)
+	if (mm == current->active_mm)
 		flush_tlb_current(mm);
 }
 
 void
 flush_tlb_mm(struct mm_struct *mm)
 {
-	if (mm == current->mm) {
+	if (mm == current->active_mm) {
 		flush_tlb_current(mm);
-		if (atomic_read(&mm->count) == 1)
+		if (atomic_read(&mm->mm_users) <= 1)
 			return;
 	} else
 		flush_tlb_other(mm);
@@ -891,7 +904,7 @@ static void
 ipi_flush_tlb_page(void *x)
 {
 	struct flush_tlb_page_struct *data = (struct flush_tlb_page_struct *)x;
-	if (data->mm == current->mm)
+	if (data->mm == current->active_mm)
 		flush_tlb_current_page(data->mm, data->vma, data->addr);
 }
 
@@ -901,9 +914,9 @@ flush_tlb_page(struct vm_area_struct *vma, unsigned long addr)
 	struct flush_tlb_page_struct data;
 	struct mm_struct *mm = vma->vm_mm;
 
-	if (mm == current->mm) {
+	if (mm == current->active_mm) {
 		flush_tlb_current_page(mm, vma, addr);
-		if (atomic_read(&mm->count) == 1)
+		if (atomic_read(&mm->mm_users) <= 1)
 			return;
 	} else
 		flush_tlb_other(mm);

@@ -571,7 +571,7 @@ static inline int dev_ifsioc(unsigned int fd, unsigned int cmd, unsigned long ar
 			if(cmd == SIOCETHTOOL)
 				len = sizeof(struct ethtool_cmd);
 			if(cmd == SIOCGPPPVER)
-				len = strlen(PPP_VERSION) + 1;
+				len = strlen((char *)ifr.ifr_data) + 1;
 			else if(cmd == SIOCGPPPCSTATS)
 				len = sizeof(struct ppp_comp_stats);
 			else

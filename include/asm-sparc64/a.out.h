@@ -1,4 +1,4 @@
-/* $Id: a.out.h,v 1.5 1999/07/30 09:31:09 davem Exp $ */
+/* $Id: a.out.h,v 1.6 1999/08/04 07:04:21 jj Exp $ */
 #ifndef __SPARC64_A_OUT_H__
 #define __SPARC64_A_OUT_H__
 
@@ -95,7 +95,7 @@ struct relocation_info /* used when header.a_machtype == M_SPARC */
 
 #ifdef __KERNEL__
 
-#define STACK_TOP (current->thread.flags & SPARC_FLAG_32BIT ? 0xf0000000 : TASK_SIZE)
+#define STACK_TOP (current->thread.flags & SPARC_FLAG_32BIT ? 0xf0000000 : 0x80000000000L)
 
 #endif
 

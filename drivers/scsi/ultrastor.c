@@ -162,8 +162,6 @@ struct proc_dir_entry proc_scsi_ultrastor = {
 
 #define VERSION "1.12"
 
-#define ARRAY_SIZE(arr) (sizeof (arr) / sizeof (arr)[0])
-
 #define PACKED		__attribute__((packed))
 #define ALIGNED(x)	__attribute__((aligned(x)))
 

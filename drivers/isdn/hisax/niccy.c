@@ -319,16 +319,16 @@ setup_niccy(struct IsdnCard *card)
 			return(0);
 		}
 			cs->irq = niccy_dev->irq;
-			if (!niccy_dev->base_address[0]) {
+			if (!niccy_dev->resource[0].start) {
 				printk(KERN_WARNING "Niccy: No IO-Adr for PCI cfg found\n");
 			return(0);
 		}
-			cs->hw.niccy.cfg_reg = niccy_dev->base_address[0] & PCI_BASE_ADDRESS_IO_MASK;
-			if (!niccy_dev->base_address[1]) {
+			cs->hw.niccy.cfg_reg = niccy_dev->resource[0].start & PCI_BASE_ADDRESS_IO_MASK;
+			if (!niccy_dev->resource[1].start) {
 			printk(KERN_WARNING "Niccy: No IO-Adr for PCI card found\n");
 			return(0);
 		}
-			pci_ioaddr = niccy_dev->base_address[1] & PCI_BASE_ADDRESS_IO_MASK;
+			pci_ioaddr = niccy_dev->resource[1].start & PCI_BASE_ADDRESS_IO_MASK;
 		cs->hw.niccy.isac = pci_ioaddr + ISAC_PCI_DATA;
 		cs->hw.niccy.isac_ale = pci_ioaddr + ISAC_PCI_ADDR;
 		cs->hw.niccy.hscx = pci_ioaddr + HSCX_PCI_DATA;

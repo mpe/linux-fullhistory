@@ -781,8 +781,8 @@ static int BusLogic_InitializeMultiMasterProbeInfo(BusLogic_HostAdapter_T
       unsigned char Bus = PCI_Device->bus->number;
       unsigned char Device = PCI_Device->devfn >> 3;
       unsigned int IRQ_Channel = PCI_Device->irq;
-      unsigned long BaseAddress0 = PCI_Device->base_address[0];
-      unsigned long BaseAddress1 = PCI_Device->base_address[1];
+      unsigned long BaseAddress0 = PCI_Device->resource[0].start;
+      unsigned long BaseAddress1 = PCI_Device->resource[1].start;
       BusLogic_IO_Address_T IO_Address =
 	BaseAddress0 & PCI_BASE_ADDRESS_IO_MASK;
       BusLogic_PCI_Address_T PCI_Address =
@@ -987,7 +987,7 @@ static int BusLogic_InitializeMultiMasterProbeInfo(BusLogic_HostAdapter_T
       unsigned char Device = PCI_Device->devfn >> 3;
       unsigned int IRQ_Channel = PCI_Device->irq;
       BusLogic_IO_Address_T IO_Address =
-	PCI_Device->base_address[0] & PCI_BASE_ADDRESS_IO_MASK;
+	PCI_Device->resource[0].start & PCI_BASE_ADDRESS_IO_MASK;
       if (IO_Address == 0 || IRQ_Channel == 0) continue;
       for (i = 0; i < BusLogic_ProbeInfoCount; i++)
 	{
@@ -1030,8 +1030,8 @@ static int BusLogic_InitializeFlashPointProbeInfo(BusLogic_HostAdapter_T
       unsigned char Bus = PCI_Device->bus->number;
       unsigned char Device = PCI_Device->devfn >> 3;
       unsigned int IRQ_Channel = PCI_Device->irq;
-      unsigned long BaseAddress0 = PCI_Device->base_address[0];
-      unsigned long BaseAddress1 = PCI_Device->base_address[1];
+      unsigned long BaseAddress0 = PCI_Device->resource[0].start;
+      unsigned long BaseAddress1 = PCI_Device->resource[1].start;
       BusLogic_IO_Address_T IO_Address =
 	BaseAddress0 & PCI_BASE_ADDRESS_IO_MASK;
       BusLogic_PCI_Address_T PCI_Address =

@@ -43,6 +43,7 @@ size_t parport_ieee1284_write_compat (struct parport *port,
 				      const void *buffer, size_t len,
 				      int flags)
 {
+	int no_irq;
 	ssize_t count = 0;
 	const unsigned char *addr = buffer;
 	unsigned char byte;
@@ -54,6 +55,7 @@ size_t parport_ieee1284_write_compat (struct parport *port,
 		parport_enable_irq (port);
 
 	port->physport->ieee1284.phase = IEEE1284_PH_FWD_DATA;
+	no_irq = polling (dev);
 	while (count < len) {
 		long expire = jiffies + dev->timeout;
 		long wait = (HZ + 99) / 100;
@@ -97,7 +99,7 @@ size_t parport_ieee1284_write_compat (struct parport *port,
                            first time around the loop, don't let go of
                            the port.  This way, we find out if we have
                            our interrupt handler called. */
-			if (count && polling (dev)) {
+			if (count && no_irq) {
 				parport_release (dev);
 				current->state = TASK_INTERRUPTIBLE;
 				schedule_timeout (wait);
@@ -129,14 +131,30 @@ size_t parport_ieee1284_write_compat (struct parport *port,
 		parport_write_control (port, ctl);
 		udelay (1); /* hold */
 
-		/* Wait until it's received (up to 20us). */
-		for (i = 0; i < 20; i++) {
+		if (no_irq)
+			/* Assume the peripheral received it. */
+			goto done;
+
+		/* Wait until it's received, up to 500us (this ought to be
+		 * tuneable). */
+		for (i = 500; i; i--) {
 			if (!down_trylock (&port->physport->ieee1284.irq) ||
 			    !(parport_read_status (port) & PARPORT_STATUS_ACK))
-				break;
+				goto done;
 			udelay (1);
 		}
 
+		/* Two choices:
+		 * 1. Assume that the peripheral got the data and just
+		 *    hasn't acknowledged it yet.
+		 * 2. Assume that the peripheral never saw the strobe pulse.
+		 *
+		 * We can't know for sure, so let's be conservative.
+		 */
+		DPRINTK (KERN_DEBUG "%s: no ack", port->name);
+		break;
+
+	done:
 		count++;
 
                 /* Let another process run if it needs to. */

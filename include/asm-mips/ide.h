@@ -14,6 +14,8 @@
 
 #ifdef __KERNEL__
 
+#include <linux/config.h>
+
 #ifndef MAX_HWIFS
 #define MAX_HWIFS	6
 #endif

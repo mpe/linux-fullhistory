@@ -2094,7 +2094,7 @@ S: Toowong, QLD. 4066
 S: Australia
 
 N: Jeffrey A. Uphoff
-E: juphoff@nrao.edu
+E: juphoff@transmeta.com
 E: jeff.uphoff@linux.org
 P: 1024/9ED505C5 D7 BB CA AA 10 45 40 1B  16 19 0A C0 38 A0 3E CB
 D: Linux Security/Alert mailing lists' moderator/maintainer.
@@ -2102,9 +2102,9 @@ D: NSM (rpc.statd) developer.
 D: PAM S/Key module developer.
 D: 'dip' contributor.
 D: AIPS port, astronomical community support.
-S: National Radio Astronomy Observatory
-S: 520 Edgemont Road
-S: Charlottesville, Virginia 22903
+S: Transmeta Corporation
+S: 2540 Mission College Blvd.
+S: Santa Clara, CA 95054
 S: USA
 
 N: Matthias Urlichs

@@ -7,6 +7,7 @@
 #ifndef _ASM_SPARC64_PARPORT_H
 #define _ASM_SPARC64_PARPORT_H 1
 
+#include <linux/config.h>
 #include <asm/ebus.h>
 #include <asm/ns87303.h>
 

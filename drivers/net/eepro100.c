@@ -73,7 +73,6 @@ static int debug = -1;			/* The debug level */
 #error You must compile this driver with "-O".
 #endif
 
-#include <linux/config.h>
 #include <linux/version.h>
 #include <linux/module.h>
 #ifdef MODVERSIONS

@@ -330,7 +330,6 @@ static int inr; /* size of reply buffer, when called from interrupt */
 
 #define SEL_DLY (2*HZ/100)
 
-#define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
 /*
  * this struct defines the different floppy drive types.
  */

@@ -20,6 +20,7 @@
  *	I2O Interface Objects
  */
 
+#include <linux/config.h>
 #include <linux/notifier.h>
 #include <asm/atomic.h>
 

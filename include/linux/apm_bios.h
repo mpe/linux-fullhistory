@@ -76,9 +76,6 @@ struct apm_bios_struct {
  */
 extern struct apm_bios_info	apm_bios_info;
 
-extern void		apm_init(void);
-extern void		apm_setup(char *, int *);
-
 extern int		apm_register_callback(int (*callback)(apm_event_t));
 extern void		apm_unregister_callback(int (*callback)(apm_event_t));
 

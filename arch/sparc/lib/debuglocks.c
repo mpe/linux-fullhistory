@@ -1,4 +1,4 @@
-/* $Id: debuglocks.c,v 1.7 1999/04/21 02:26:58 anton Exp $
+/* $Id: debuglocks.c,v 1.8 1999/08/05 09:49:59 anton Exp $
  * debuglocks.c: Debugging versions of SMP locking primitives.
  *
  * Copyright (C) 1997 David S. Miller (davem@caip.rutgers.edu)
@@ -53,7 +53,7 @@ static inline void show_write(char *str, rwlock_t *lock, unsigned long caller)
 		lock, cpu, caller, lock->owner_pc & ~3, lock->owner_pc & 3);
 
 	for(i = 0; i < NR_CPUS; i++)
-		printk(" reader[i]=%08lx", lock->reader_pc[i]);
+		printk(" reader[%d]=%08lx", i, lock->reader_pc[i]);
 
 	printk("\n");
 }
