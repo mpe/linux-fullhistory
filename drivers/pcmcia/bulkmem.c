@@ -294,9 +294,9 @@ int MTDHelperEntry(int func, void *a1, void *a2)
 {
     switch (func) {
     case MTDRequestWindow:
-	return CardServices(RequestWindow, a1, a2, NULL);
+	return pcmcia_request_window(a1, a2);
     case MTDReleaseWindow:
-	return CardServices(ReleaseWindow, a1, NULL, NULL);
+	return pcmcia_release_window(a1);
     case MTDModifyWindow:
 	return mtd_modify_window(a1, a2); break;
     case MTDSetVpp:
@@ -403,7 +403,7 @@ static int match_region(client_handle_t handle, memory_handle_t list,
     return CS_NO_MORE_ITEMS;
 } /* match_region */
 
-int get_first_region(client_handle_t handle, region_info_t *rgn)
+int pcmcia_get_first_region(client_handle_t handle, region_info_t *rgn)
 {
     socket_info_t *s = SOCKET(handle);
     if (CHECK_HANDLE(handle))
@@ -422,7 +422,7 @@ int get_first_region(client_handle_t handle, region_info_t *rgn)
 	return match_region(handle, s->c_region, rgn);
 } /* get_first_region */
 
-int get_next_region(client_handle_t handle, region_info_t *rgn)
+int pcmcia_get_next_region(client_handle_t handle, region_info_t *rgn)
 {
     if (CHECK_HANDLE(handle))
 	return CS_BAD_HANDLE;
@@ -435,7 +435,7 @@ int get_next_region(client_handle_t handle, region_info_t *rgn)
     
 ======================================================================*/
 
-int register_mtd(client_handle_t handle, mtd_reg_t *reg)
+int pcmcia_register_mtd(client_handle_t handle, mtd_reg_t *reg)
 {
     memory_handle_t list;
     socket_info_t *s;
@@ -470,7 +470,7 @@ int register_mtd(client_handle_t handle, mtd_reg_t *reg)
     
 ======================================================================*/
 
-int register_erase_queue(client_handle_t *handle, eraseq_hdr_t *header)
+int pcmcia_register_erase_queue(client_handle_t *handle, eraseq_hdr_t *header)
 {
     eraseq_t *queue;
 
@@ -485,7 +485,7 @@ int register_erase_queue(client_handle_t *handle, eraseq_hdr_t *header)
     return CS_SUCCESS;
 } /* register_erase_queue */
 
-int deregister_erase_queue(eraseq_handle_t eraseq)
+int pcmcia_deregister_erase_queue(eraseq_handle_t eraseq)
 {
     int i;
     if (CHECK_ERASEQ(eraseq))
@@ -499,7 +499,7 @@ int deregister_erase_queue(eraseq_handle_t eraseq)
     return CS_SUCCESS;
 } /* deregister_erase_queue */
 
-int check_erase_queue(eraseq_handle_t eraseq)
+int pcmcia_check_erase_queue(eraseq_handle_t eraseq)
 {
     int i;
     if (CHECK_ERASEQ(eraseq))
@@ -517,7 +517,7 @@ int check_erase_queue(eraseq_handle_t eraseq)
     
 ======================================================================*/
 
-int open_memory(client_handle_t *handle, open_mem_t *open)
+int pcmcia_open_memory(client_handle_t *handle, open_mem_t *open)
 {
     socket_info_t *s;
     memory_handle_t region;
@@ -550,7 +550,7 @@ int open_memory(client_handle_t *handle, open_mem_t *open)
     
 ======================================================================*/
 
-int close_memory(memory_handle_t handle)
+int pcmcia_close_memory(memory_handle_t handle)
 {
     DEBUG(1, "cs: close_memory(0x%p)\n", handle);
     if (CHECK_REGION(handle))
@@ -565,7 +565,7 @@ int close_memory(memory_handle_t handle)
     
 ======================================================================*/
 
-int read_memory(memory_handle_t handle, mem_op_t *req, caddr_t buf)
+int pcmcia_read_memory(memory_handle_t handle, mem_op_t *req, caddr_t buf)
 {
     mtd_request_t mtd;
     if (CHECK_REGION(handle))
@@ -591,7 +591,7 @@ int read_memory(memory_handle_t handle, mem_op_t *req, caddr_t buf)
     
 ======================================================================*/
 
-int write_memory(memory_handle_t handle, mem_op_t *req, caddr_t buf)
+int pcmcia_write_memory(memory_handle_t handle, mem_op_t *req, caddr_t buf)
 {
     mtd_request_t mtd;
     if (CHECK_REGION(handle))
@@ -616,7 +616,7 @@ int write_memory(memory_handle_t handle, mem_op_t *req, caddr_t buf)
     
 ======================================================================*/
 
-int copy_memory(memory_handle_t handle, copy_op_t *req)
+int pcmcia_copy_memory(memory_handle_t handle, copy_op_t *req)
 {
     if (CHECK_REGION(handle))
 	return CS_BAD_HANDLE;

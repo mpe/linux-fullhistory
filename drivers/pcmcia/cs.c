@@ -316,6 +316,7 @@ int register_ss_entry(int nsock, ss_entry_t ss_entry)
 	s->cis_mem.flags = 0;
 	s->cis_mem.speed = cis_speed;
 	s->erase_busy.next = s->erase_busy.prev = &s->erase_busy;
+	spin_lock_init(&s->lock);
 	
 	for (i = 0; i < sockets; i++)
 	    if (socket_table[i] == NULL) break;
@@ -779,7 +780,7 @@ static void release_io_space(socket_info_t *s, ioaddr_t base,
     
 ======================================================================*/
 
-static int access_configuration_register(client_handle_t handle,
+int pcmcia_access_configuration_register(client_handle_t handle,
 					 conf_reg_t *reg)
 {
     socket_info_t *s;
@@ -826,7 +827,7 @@ static int access_configuration_register(client_handle_t handle,
     
 ======================================================================*/
 
-static int bind_device(bind_req_t *req)
+int pcmcia_bind_device(bind_req_t *req)
 {
     client_t *client;
     socket_info_t *s;
@@ -861,7 +862,7 @@ static int bind_device(bind_req_t *req)
     
 ======================================================================*/
 
-static int bind_mtd(mtd_bind_t *req)
+int pcmcia_bind_mtd(mtd_bind_t *req)
 {
     socket_info_t *s;
     memory_handle_t region;
@@ -890,7 +891,7 @@ static int bind_mtd(mtd_bind_t *req)
 
 /*====================================================================*/
 
-static int deregister_client(client_handle_t handle)
+int pcmcia_deregister_client(client_handle_t handle)
 {
     client_t **client;
     socket_info_t *s;
@@ -945,7 +946,7 @@ static int deregister_client(client_handle_t handle)
 
 /*====================================================================*/
 
-static int get_configuration_info(client_handle_t handle,
+int pcmcia_get_configuration_info(client_handle_t handle,
 				  config_info_t *config)
 {
     socket_info_t *s;
@@ -1016,7 +1017,7 @@ static int get_configuration_info(client_handle_t handle,
     
 ======================================================================*/
 
-static int get_card_services_info(servinfo_t *info)
+int pcmcia_get_card_services_info(servinfo_t *info)
 {
     info->Signature[0] = 'C';
     info->Signature[1] = 'S';
@@ -1034,7 +1035,7 @@ static int get_card_services_info(servinfo_t *info)
     
 ======================================================================*/
 
-static int get_first_client(client_handle_t *handle, client_req_t *req)
+int pcmcia_get_first_client(client_handle_t *handle, client_req_t *req)
 {
     socket_t s;
     if (req->Attributes & CLIENT_THIS_SOCKET)
@@ -1051,7 +1052,7 @@ static int get_first_client(client_handle_t *handle, client_req_t *req)
 
 /*====================================================================*/
 
-static int get_next_client(client_handle_t *handle, client_req_t *req)
+int pcmcia_get_next_client(client_handle_t *handle, client_req_t *req)
 {
     socket_info_t *s;
     if ((handle == NULL) || CHECK_HANDLE(*handle))
@@ -1070,7 +1071,7 @@ static int get_next_client(client_handle_t *handle, client_req_t *req)
 
 /*====================================================================*/
 
-static int get_window(window_handle_t *handle, int idx, win_req_t *req)
+int pcmcia_get_window(window_handle_t *handle, int idx, win_req_t *req)
 {
     socket_info_t *s;
     window_t *win;
@@ -1103,18 +1104,18 @@ static int get_window(window_handle_t *handle, int idx, win_req_t *req)
     return CS_SUCCESS;
 } /* get_window */
 
-static int get_first_window(client_handle_t *handle, win_req_t *req)
+int pcmcia_get_first_window(client_handle_t *handle, win_req_t *req)
 {
     if ((handle == NULL) || CHECK_HANDLE(*handle))
 	return CS_BAD_HANDLE;
-    return get_window((window_handle_t *)handle, 0, req);
+    return pcmcia_get_window((window_handle_t *)handle, 0, req);
 }
 
-static int get_next_window(window_handle_t *win, win_req_t *req)
+int pcmcia_get_next_window(window_handle_t *win, win_req_t *req)
 {
     if ((win == NULL) || ((*win)->magic != WINDOW_MAGIC))
 	return CS_BAD_HANDLE;
-    return get_window(win, (*win)->index+1, req);
+    return pcmcia_get_window(win, (*win)->index+1, req);
 }
 
 /*======================================================================
@@ -1124,7 +1125,7 @@ static int get_next_window(window_handle_t *win, win_req_t *req)
     
 ======================================================================*/
 
-static int get_status(client_handle_t handle, cs_status_t *status)
+int pcmcia_get_status(client_handle_t handle, cs_status_t *status)
 {
     socket_info_t *s;
     config_t *c;
@@ -1194,7 +1195,7 @@ static int get_status(client_handle_t handle, cs_status_t *status)
     
 ======================================================================*/
 
-static int get_mem_page(window_handle_t win, memreq_t *req)
+int pcmcia_get_mem_page(window_handle_t win, memreq_t *req)
 {
     if ((win == NULL) || (win->magic != WINDOW_MAGIC))
 	return CS_BAD_HANDLE;
@@ -1203,7 +1204,7 @@ static int get_mem_page(window_handle_t win, memreq_t *req)
     return CS_SUCCESS;
 } /* get_mem_page */
 
-static int map_mem_page(window_handle_t win, memreq_t *req)
+int pcmcia_map_mem_page(window_handle_t win, memreq_t *req)
 {
     socket_info_t *s;
     if ((win == NULL) || (win->magic != WINDOW_MAGIC))
@@ -1223,7 +1224,7 @@ static int map_mem_page(window_handle_t win, memreq_t *req)
     
 ======================================================================*/
 
-static int modify_configuration(client_handle_t handle,
+int pcmcia_modify_configuration(client_handle_t handle,
 				modconf_t *mod)
 {
     socket_info_t *s;
@@ -1272,7 +1273,7 @@ static int modify_configuration(client_handle_t handle,
 
 ======================================================================*/
 
-static int modify_window(window_handle_t win, modwin_t *req)
+int pcmcia_modify_window(window_handle_t win, modwin_t *req)
 {
     if ((win == NULL) || (win->magic != WINDOW_MAGIC))
 	return CS_BAD_HANDLE;
@@ -1301,7 +1302,7 @@ static int modify_window(window_handle_t win, modwin_t *req)
     
 ======================================================================*/
 
-static int register_client(client_handle_t *handle, client_reg_t *req)
+int pcmcia_register_client(client_handle_t *handle, client_reg_t *req)
 {
     client_t *client;
     socket_info_t *s;
@@ -1378,8 +1379,7 @@ static int register_client(client_handle_t *handle, client_reg_t *req)
 
 /*====================================================================*/
 
-static int release_configuration(client_handle_t handle,
-				 socket_t *Socket)
+int pcmcia_release_configuration(client_handle_t handle)
 {
     pccard_io_map io;
     socket_info_t *s;
@@ -1435,7 +1435,7 @@ static int release_configuration(client_handle_t handle,
     
 ======================================================================*/
 
-static int release_io(client_handle_t handle, io_req_t *req)
+int pcmcia_release_io(client_handle_t handle, io_req_t *req)
 {
     socket_info_t *s;
     
@@ -1472,7 +1472,7 @@ static int release_io(client_handle_t handle, io_req_t *req)
 
 /*====================================================================*/
 
-static int cs_release_irq(client_handle_t handle, irq_req_t *req)
+int pcmcia_release_irq(client_handle_t handle, irq_req_t *req)
 {
     socket_info_t *s;
     if (CHECK_HANDLE(handle) || !(handle->state & CLIENT_IRQ_REQ))
@@ -1508,7 +1508,7 @@ static int cs_release_irq(client_handle_t handle, irq_req_t *req)
 
 /*====================================================================*/
 
-static int release_window(window_handle_t win)
+int pcmcia_release_window(window_handle_t win)
 {
     socket_info_t *s;
     
@@ -1534,7 +1534,7 @@ static int release_window(window_handle_t win)
 
 /*====================================================================*/
 
-static int request_configuration(client_handle_t handle,
+int pcmcia_request_configuration(client_handle_t handle,
 				 config_req_t *req)
 {
     int i;
@@ -1672,7 +1672,7 @@ static int request_configuration(client_handle_t handle,
     
 ======================================================================*/
 
-static int request_io(client_handle_t handle, io_req_t *req)
+int pcmcia_request_io(client_handle_t handle, io_req_t *req)
 {
     socket_info_t *s;
     config_t *c;
@@ -1738,7 +1738,7 @@ static int request_io(client_handle_t handle, io_req_t *req)
     
 ======================================================================*/
 
-static int cs_request_irq(client_handle_t handle, irq_req_t *req)
+int pcmcia_request_irq(client_handle_t handle, irq_req_t *req)
 {
     socket_info_t *s;
     config_t *c;
@@ -1814,7 +1814,7 @@ static int cs_request_irq(client_handle_t handle, irq_req_t *req)
 
 ======================================================================*/
 
-static int request_window(client_handle_t *handle, win_req_t *req)
+int pcmcia_request_window(client_handle_t *handle, win_req_t *req)
 {
     socket_info_t *s;
     window_t *win;
@@ -1889,7 +1889,7 @@ static int request_window(client_handle_t *handle, win_req_t *req)
     
 ======================================================================*/
 
-static int reset_card(client_handle_t handle, client_req_t *req)
+int pcmcia_reset_card(client_handle_t handle, client_req_t *req)
 {
     int i, ret;
     socket_info_t *s;
@@ -1924,7 +1924,7 @@ static int reset_card(client_handle_t handle, client_req_t *req)
     
 ======================================================================*/
 
-static int suspend_card(client_handle_t handle, client_req_t *req)
+int pcmcia_suspend_card(client_handle_t handle, client_req_t *req)
 {
     int i;
     socket_info_t *s;
@@ -1945,7 +1945,7 @@ static int suspend_card(client_handle_t handle, client_req_t *req)
     return CS_SUCCESS;
 } /* suspend_card */
 
-static int resume_card(client_handle_t handle, client_req_t *req)
+int pcmcia_resume_card(client_handle_t handle, client_req_t *req)
 {
     int i;
     socket_info_t *s;
@@ -1970,7 +1970,7 @@ static int resume_card(client_handle_t handle, client_req_t *req)
     
 ======================================================================*/
 
-static int eject_card(client_handle_t handle, client_req_t *req)
+int pcmcia_eject_card(client_handle_t handle, client_req_t *req)
 {
     int i, ret;
     socket_info_t *s;
@@ -1996,7 +1996,7 @@ static int eject_card(client_handle_t handle, client_req_t *req)
     
 } /* eject_card */
 
-static int insert_card(client_handle_t handle, client_req_t *req)
+int pcmcia_insert_card(client_handle_t handle, client_req_t *req)
 {
     int i, status;
     socket_info_t *s;
@@ -2034,7 +2034,7 @@ static int insert_card(client_handle_t handle, client_req_t *req)
     
 ======================================================================*/
 
-static int set_event_mask(client_handle_t handle, eventmask_t *mask)
+int pcmcia_set_event_mask(client_handle_t handle, eventmask_t *mask)
 {
     u_int events, bit;
     if (CHECK_HANDLE(handle))
@@ -2054,7 +2054,7 @@ static int set_event_mask(client_handle_t handle, eventmask_t *mask)
 
 /*====================================================================*/
 
-static int report_error(client_handle_t handle, error_info_t *err)
+int pcmcia_report_error(client_handle_t handle, error_info_t *err)
 {
     int i;
     char *serv;
@@ -2101,103 +2101,103 @@ int CardServices(int func, void *a1, void *a2, void *a3)
 #endif
     switch (func) {
     case AccessConfigurationRegister:
-	return access_configuration_register(a1, a2); break;
+	return pcmcia_access_configuration_register(a1, a2); break;
     case AdjustResourceInfo:
-	return adjust_resource_info(a1, a2); break;
+	return pcmcia_adjust_resource_info(a1, a2); break;
     case CheckEraseQueue:
-	return check_erase_queue(a1); break;
+	return pcmcia_check_erase_queue(a1); break;
     case CloseMemory:
-	return close_memory(a1); break;
+	return pcmcia_close_memory(a1); break;
     case CopyMemory:
-	return copy_memory(a1, a2); break;
+	return pcmcia_copy_memory(a1, a2); break;
     case DeregisterClient:
-	return deregister_client(a1); break;
+	return pcmcia_deregister_client(a1); break;
     case DeregisterEraseQueue:
-	return deregister_erase_queue(a1); break;
+	return pcmcia_deregister_erase_queue(a1); break;
     case GetFirstClient:
-	return get_first_client(a1, a2); break;
+	return pcmcia_get_first_client(a1, a2); break;
     case GetCardServicesInfo:
-	return get_card_services_info(a1); break;
+	return pcmcia_get_card_services_info(a1); break;
     case GetConfigurationInfo:
-	return get_configuration_info(a1, a2); break;
+	return pcmcia_get_configuration_info(a1, a2); break;
     case GetNextClient:
-	return get_next_client(a1, a2); break;
+	return pcmcia_get_next_client(a1, a2); break;
     case GetFirstRegion:
-	return get_first_region(a1, a2); break;
+	return pcmcia_get_first_region(a1, a2); break;
     case GetFirstTuple:
-	return get_first_tuple(a1, a2); break;
+	return pcmcia_get_first_tuple(a1, a2); break;
     case GetNextRegion:
-	return get_next_region(a1, a2); break;
+	return pcmcia_get_next_region(a1, a2); break;
     case GetNextTuple:
-	return get_next_tuple(a1, a2); break;
+	return pcmcia_get_next_tuple(a1, a2); break;
     case GetStatus:
-	return get_status(a1, a2); break;
+	return pcmcia_get_status(a1, a2); break;
     case GetTupleData:
-	return get_tuple_data(a1, a2); break;
+	return pcmcia_get_tuple_data(a1, a2); break;
     case MapMemPage:
-	return map_mem_page(a1, a2); break;
+	return pcmcia_map_mem_page(a1, a2); break;
     case ModifyConfiguration:
-	return modify_configuration(a1, a2); break;
+	return pcmcia_modify_configuration(a1, a2); break;
     case ModifyWindow:
-	return modify_window(a1, a2); break;
+	return pcmcia_modify_window(a1, a2); break;
     case OpenMemory:
-	return open_memory(a1, a2);
+	return pcmcia_open_memory(a1, a2);
     case ParseTuple:
-	return parse_tuple(a1, a2, a3); break;
+	return pcmcia_parse_tuple(a1, a2, a3); break;
     case ReadMemory:
-	return read_memory(a1, a2, a3); break;
+	return pcmcia_read_memory(a1, a2, a3); break;
     case RegisterClient:
-	return register_client(a1, a2); break;
+	return pcmcia_register_client(a1, a2); break;
     case RegisterEraseQueue:
-	return register_erase_queue(a1, a2); break;
+	return pcmcia_register_erase_queue(a1, a2); break;
     case RegisterMTD:
-	return register_mtd(a1, a2); break;
+	return pcmcia_register_mtd(a1, a2); break;
     case ReleaseConfiguration:
-	return release_configuration(a1, a2); break;
+	return pcmcia_release_configuration(a1); break;
     case ReleaseIO:
-	return release_io(a1, a2); break;
+	return pcmcia_release_io(a1, a2); break;
     case ReleaseIRQ:
-	return cs_release_irq(a1, a2); break;
+	return pcmcia_release_irq(a1, a2); break;
     case ReleaseWindow:
-	return release_window(a1); break;
+	return pcmcia_release_window(a1); break;
     case RequestConfiguration:
-	return request_configuration(a1, a2); break;
+	return pcmcia_request_configuration(a1, a2); break;
     case RequestIO:
-	return request_io(a1, a2); break;
+	return pcmcia_request_io(a1, a2); break;
     case RequestIRQ:
-	return cs_request_irq(a1, a2); break;
+	return pcmcia_request_irq(a1, a2); break;
     case RequestWindow:
-	return request_window(a1, a2); break;
+	return pcmcia_request_window(a1, a2); break;
     case ResetCard:
-	return reset_card(a1, a2); break;
+	return pcmcia_reset_card(a1, a2); break;
     case SetEventMask:
-	return set_event_mask(a1, a2); break;
+	return pcmcia_set_event_mask(a1, a2); break;
     case ValidateCIS:
-	return validate_cis(a1, a2); break;
+	return pcmcia_validate_cis(a1, a2); break;
     case WriteMemory:
-	return write_memory(a1, a2, a3); break;
+	return pcmcia_write_memory(a1, a2, a3); break;
     case BindDevice:
-	return bind_device(a1); break;
+	return pcmcia_bind_device(a1); break;
     case BindMTD:
-	return bind_mtd(a1); break;
+	return pcmcia_bind_mtd(a1); break;
     case ReportError:
-	return report_error(a1, a2); break;
+	return pcmcia_report_error(a1, a2); break;
     case SuspendCard:
-	return suspend_card(a1, a2); break;
+	return pcmcia_suspend_card(a1, a2); break;
     case ResumeCard:
-	return resume_card(a1, a2); break;
+	return pcmcia_resume_card(a1, a2); break;
     case EjectCard:
-	return eject_card(a1, a2); break;
+	return pcmcia_eject_card(a1, a2); break;
     case InsertCard:
-	return insert_card(a1, a2); break;
+	return pcmcia_insert_card(a1, a2); break;
     case ReplaceCIS:
-	return replace_cis(a1, a2); break;
+	return pcmcia_replace_cis(a1, a2); break;
     case GetFirstWindow:
-	return get_first_window(a1, a2); break;
+	return pcmcia_get_first_window(a1, a2); break;
     case GetNextWindow:
-	return get_next_window(a1, a2); break;
+	return pcmcia_get_next_window(a1, a2); break;
     case GetMemPage:
-	return get_mem_page(a1, a2); break;
+	return pcmcia_get_mem_page(a1, a2); break;
     default:
 	return CS_UNSUPPORTED_FUNCTION; break;
     }

@@ -192,4 +192,16 @@ extern int MTDHelperEntry(int func, void *a1, void *a2);
 extern int MTDHelperEntry(int func, ...);
 #endif
 
+int pcmcia_get_first_region(client_handle_t handle, region_info_t *rgn);
+int pcmcia_get_next_region(client_handle_t handle, region_info_t *rgn);
+int pcmcia_register_mtd(client_handle_t handle, mtd_reg_t *reg);
+int pcmcia_register_erase_queue(client_handle_t *handle, eraseq_hdr_t *header);
+int pcmcia_deregister_erase_queue(eraseq_handle_t eraseq);
+int pcmcia_check_erase_queue(eraseq_handle_t eraseq);
+int pcmcia_open_memory(client_handle_t *handle, open_mem_t *open);
+int pcmcia_close_memory(memory_handle_t handle);
+int pcmcia_read_memory(memory_handle_t handle, mem_op_t *req, caddr_t buf);
+int pcmcia_write_memory(memory_handle_t handle, mem_op_t *req, caddr_t buf);
+int pcmcia_copy_memory(memory_handle_t handle, copy_op_t *req);
+
 #endif /* _LINUX_BULKMEM_H */

@@ -2703,7 +2703,7 @@ static int pcic_service(u_int sock, u_int cmd, void *arg)
 static int __init init_i82365(void)
 {
     servinfo_t serv;
-    CardServices(GetCardServicesInfo, &serv);
+    pcmcia_get_card_services_info(&serv);
     if (serv.Revision != CS_RELEASE_CODE) {
 	printk(KERN_NOTICE "i82365: Card Services release "
 	       "does not match!\n");

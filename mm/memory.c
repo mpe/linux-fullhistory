@@ -1012,11 +1012,12 @@ static int do_swap_page(struct task_struct * tsk,
 	swap_free(entry);
 	if (write_access && !is_page_shared(page)) {
 		delete_from_swap_cache_nolock(page);
+		UnlockPage(page);
 		page = replace_with_highmem(page);
 		pte = mk_pte(page, vma->vm_page_prot);
 		pte = pte_mkwrite(pte_mkdirty(pte));
-	}
-	UnlockPage(page);
+	} else
+		UnlockPage(page);
 
 	set_pte(page_table, pte);
 	/* No need to invalidate - it was non-present before */

@@ -440,6 +440,42 @@ extern int CardServices(int func, void *a1, void *a2, void *a3);
 extern int CardServices(int func, ...);
 #endif
 
+int pcmcia_access_configuration_register(client_handle_t handle, conf_reg_t *reg);
+int pcmcia_bind_device(bind_req_t *req);
+int pcmcia_bind_mtd(mtd_bind_t *req);
+int pcmcia_deregister_client(client_handle_t handle);
+int pcmcia_get_configuration_info(client_handle_t handle, config_info_t *config);
+int pcmcia_get_card_services_info(servinfo_t *info);
+int pcmcia_get_first_client(client_handle_t *handle, client_req_t *req);
+int pcmcia_get_next_client(client_handle_t *handle, client_req_t *req);
+int pcmcia_get_window(window_handle_t *handle, int idx, win_req_t *req);
+int pcmcia_get_first_window(client_handle_t *handle, win_req_t *req);
+int pcmcia_get_next_window(window_handle_t *win, win_req_t *req);
+int pcmcia_get_status(client_handle_t handle, cs_status_t *status);
+int pcmcia_get_mem_page(window_handle_t win, memreq_t *req);
+int pcmcia_map_mem_page(window_handle_t win, memreq_t *req);
+int pcmcia_modify_configuration(client_handle_t handle, modconf_t *mod);
+int pcmcia_modify_window(window_handle_t win, modwin_t *req);
+int pcmcia_register_client(client_handle_t *handle, client_reg_t *req);
+int pcmcia_release_configuration(client_handle_t handle);
+int pcmcia_release_io(client_handle_t handle, io_req_t *req);
+int pcmcia_release_irq(client_handle_t handle, irq_req_t *req);
+int pcmcia_release_window(window_handle_t win);
+int pcmcia_request_configuration(client_handle_t handle, config_req_t *req);
+int pcmcia_request_io(client_handle_t handle, io_req_t *req);
+int pcmcia_request_irq(client_handle_t handle, irq_req_t *req);
+int pcmcia_request_window(client_handle_t *handle, win_req_t *req);
+int pcmcia_reset_card(client_handle_t handle, client_req_t *req);
+int pcmcia_suspend_card(client_handle_t handle, client_req_t *req);
+int pcmcia_resume_card(client_handle_t handle, client_req_t *req);
+int pcmcia_eject_card(client_handle_t handle, client_req_t *req);
+int pcmcia_insert_card(client_handle_t handle, client_req_t *req);
+int pcmcia_set_event_mask(client_handle_t handle, eventmask_t *mask);
+int pcmcia_report_error(client_handle_t handle, error_info_t *err);
+
+/* rsrc_mgr.c */
+int pcmcia_adjust_resource_info(client_handle_t handle, adjust_t *adj);
+
 #endif /* __KERNEL__ */
 
 #endif /* _LINUX_CS_H */

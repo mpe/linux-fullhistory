@@ -312,8 +312,9 @@ static char rcsid[] = "Raylink/WebGear wireless LAN - Corey <Thomas corey@world.
 static void cs_error(client_handle_t handle, int func, int ret)
 {
     error_info_t err = { func, ret };
-    CardServices(ReportError, handle, &err);
+    pcmcia_report_error(handle, &err);
 }
+
 /*=============================================================================
     ray_attach() creates an "instance" of the driver, allocating
     local data structures for one device.  The device is registered
@@ -409,7 +410,7 @@ static dev_link_t *ray_attach(void)
 
     init_timer(&local->timer);
 
-    ret = CardServices(RegisterClient, &link->handle, &client_reg);
+    ret = pcmcia_register_client(&link->handle, &client_reg);
     if (ret != 0) {
         printk("ray_cs ray_attach RegisterClient unhappy - detaching\n");
         cs_error(link->handle, RegisterClient, ret);
@@ -462,7 +463,7 @@ static void ray_detach(dev_link_t *link)
 
     /* Break the link with Card Services */
     if (link->handle)
-        CardServices(DeregisterClient, link->handle);
+        pcmcia_deregister_client(link->handle);
     
     /* Unlink device structure, free pieces */
     *linkp = link->next;
@@ -482,14 +483,14 @@ static void ray_detach(dev_link_t *link)
     ethernet device available to the system.
 =============================================================================*/
 #define CS_CHECK(fn, args...) \
-while ((last_ret=CardServices(last_fn=(fn),args))!=0) goto cs_failed
+while ((last_ret=fn(args))!=0) goto cs_failed
 #define MAX_TUPLE_SIZE 128
 static void ray_config(dev_link_t *link)
 {
     client_handle_t handle = link->handle;
     tuple_t tuple;
     cisparse_t parse;
-    int last_fn, last_ret;
+    int last_fn = 0, last_ret = 0;
     int i;
     u_char buf[MAX_TUPLE_SIZE];
     win_req_t req;
@@ -501,23 +502,23 @@ static void ray_config(dev_link_t *link)
 
     /* This reads the card's CONFIG tuple to find its configuration regs */
     tuple.DesiredTuple = CISTPL_CONFIG;
-    CS_CHECK(GetFirstTuple, handle, &tuple);
+    CS_CHECK(pcmcia_get_first_tuple, handle, &tuple);
     tuple.TupleData = buf;
     tuple.TupleDataMax = MAX_TUPLE_SIZE;
     tuple.TupleOffset = 0;
-    CS_CHECK(GetTupleData, handle, &tuple);
-    CS_CHECK(ParseTuple, handle, &tuple, &parse);
+    CS_CHECK(pcmcia_get_tuple_data, handle, &tuple);
+    CS_CHECK(pcmcia_parse_tuple, handle, &tuple, &parse);
     link->conf.ConfigBase = parse.config.base;
     link->conf.Present = parse.config.rmask[0];
 
     /* Determine card type and firmware version */
     buf[0] = buf[MAX_TUPLE_SIZE - 1] = 0;
     tuple.DesiredTuple = CISTPL_VERS_1;
-    CS_CHECK(GetFirstTuple, handle, &tuple);
+    CS_CHECK(pcmcia_get_first_tuple, handle, &tuple);
     tuple.TupleData = buf;
     tuple.TupleDataMax = MAX_TUPLE_SIZE;
     tuple.TupleOffset = 2;
-    CS_CHECK(GetTupleData, handle, &tuple);
+    CS_CHECK(pcmcia_get_tuple_data, handle, &tuple);
 
     for (i=0; i<tuple.TupleDataLen - 4; i++) 
         if (buf[i] == 0) buf[i] = ' ';
@@ -529,13 +530,13 @@ static void ray_config(dev_link_t *link)
     /* Now allocate an interrupt line.  Note that this does not
        actually assign a handler to the interrupt.
     */
-    CS_CHECK(RequestIRQ, link->handle, &link->irq);
+    CS_CHECK(pcmcia_request_irq, link->handle, &link->irq);
     dev->irq = link->irq.AssignedIRQ;
     
     /* This actually configures the PCMCIA socket -- setting up
        the I/O windows and the interrupt mapping.
     */
-    CS_CHECK(RequestConfiguration, link->handle, &link->conf);
+    CS_CHECK(pcmcia_request_configuration, link->handle, &link->conf);
 
 /*** Set up 32k window for shared memory (transmit and control) ************/
     req.Attributes = WIN_DATA_WIDTH_8 | WIN_MEMORY_TYPE_CM | WIN_ENABLE | WIN_USE_WAIT;
@@ -543,9 +544,9 @@ static void ray_config(dev_link_t *link)
     req.Size = 0x8000;
     req.AccessSpeed = ray_mem_speed;
     link->win = (window_handle_t)link->handle;
-    CS_CHECK(RequestWindow, &link->win, &req);
+    CS_CHECK(pcmcia_request_window, &link->win, &req);
     mem.CardOffset = 0x0000; mem.Page = 0;
-    CS_CHECK(MapMemPage, link->win, &mem);
+    CS_CHECK(pcmcia_map_mem_page, link->win, &mem);
     local->sram = (UCHAR *)(ioremap(req.Base,req.Size));
 
 /*** Set up 16k window for shared memory (receive buffer) ***************/
@@ -554,9 +555,9 @@ static void ray_config(dev_link_t *link)
     req.Size = 0x4000;
     req.AccessSpeed = ray_mem_speed;
     local->rmem_handle = (window_handle_t)link->handle;
-    CS_CHECK(RequestWindow, &local->rmem_handle, &req);
+    CS_CHECK(pcmcia_request_window, &local->rmem_handle, &req);
     mem.CardOffset = 0x8000; mem.Page = 0;
-    CS_CHECK(MapMemPage, local->rmem_handle, &mem);
+    CS_CHECK(pcmcia_map_mem_page, local->rmem_handle, &mem);
     local->rmem = (UCHAR *)(ioremap(req.Base,req.Size));
 
 /*** Set up window for attribute memory ***********************************/
@@ -565,9 +566,9 @@ static void ray_config(dev_link_t *link)
     req.Size = 0x1000;
     req.AccessSpeed = ray_mem_speed;
     local->amem_handle = (window_handle_t)link->handle;
-    CS_CHECK(RequestWindow, &local->amem_handle, &req);
+    CS_CHECK(pcmcia_request_window, &local->amem_handle, &req);
     mem.CardOffset = 0x0000; mem.Page = 0;
-    CS_CHECK(MapMemPage, local->amem_handle, &mem);
+    CS_CHECK(pcmcia_map_mem_page, local->amem_handle, &mem);
     local->amem = (UCHAR *)(ioremap(req.Base,req.Size));
 
     DEBUG(3,"ray_config sram=%p\n",local->sram);
@@ -893,15 +894,15 @@ static void ray_release(u_long arg)
     iounmap(local->rmem);
     iounmap(local->amem);
     /* Do bother checking to see if these succeed or not */
-    i = CardServices(ReleaseWindow, link->win);
+    i = pcmcia_release_window(link->win);
     if ( i != CS_SUCCESS ) DEBUG(0,"ReleaseWindow(link->win) ret = %x\n",i);
-    i = CardServices(ReleaseWindow, local->amem_handle);
+    i = pcmcia_release_window(local->amem_handle);
     if ( i != CS_SUCCESS ) DEBUG(0,"ReleaseWindow(local->amem) ret = %x\n",i);
-    i = CardServices(ReleaseWindow, local->rmem_handle);
+    i = pcmcia_release_window(local->rmem_handle);
     if ( i != CS_SUCCESS ) DEBUG(0,"ReleaseWindow(local->rmem) ret = %x\n",i);
-    i = CardServices(ReleaseConfiguration, link->handle);
+    i = pcmcia_release_configuration(link->handle);
     if ( i != CS_SUCCESS ) DEBUG(0,"ReleaseConfiguration ret = %x\n",i);
-    i = CardServices(ReleaseIRQ, link->handle, &link->irq);
+    i = pcmcia_release_irq(link->handle, &link->irq);
     if ( i != CS_SUCCESS ) DEBUG(0,"ReleaseIRQ ret = %x\n",i);
 
     link->state &= ~DEV_CONFIG;
@@ -950,7 +951,7 @@ static int ray_event(event_t event, int priority,
                 dev->tbusy = 1;
                 dev->start = 0;
             }
-            CardServices(ReleaseConfiguration, link->handle);
+            pcmcia_release_configuration(link->handle);
         }
         break;
     case CS_EVENT_PM_RESUME:
@@ -958,7 +959,7 @@ static int ray_event(event_t event, int priority,
         /* Fall through... */
     case CS_EVENT_CARD_RESET:
         if (link->state & DEV_CONFIG) {
-            CardServices(RequestConfiguration, link->handle, &link->conf);
+            pcmcia_request_configuration(link->handle, &link->conf);
             if (link->open) {
                 ray_reset(dev);
                 dev->tbusy = 0;
@@ -2671,14 +2672,8 @@ static int build_auth_frame(ray_dev_t *local, UCHAR *dest, int auth_type)
 static int __init init_ray_cs(void)
 {
     int rc;
-    servinfo_t serv;
     
     DEBUG(1, "%s\n", rcsid);
-    CardServices(GetCardServicesInfo, &serv);
-    if (serv.Revision != CS_RELEASE_CODE) {
-        printk(KERN_NOTICE "ray: Card Services release does not match!\n");
-        return -1;
-    }
     rc = register_pcmcia_driver(&dev_info, &ray_attach, &ray_detach);
     DEBUG(1, "raylink init_module register_pcmcia_driver returns 0x%x\n",rc);
 #ifdef CONFIG_PROC_FS    

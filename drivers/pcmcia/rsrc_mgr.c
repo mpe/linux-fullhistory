@@ -629,7 +629,7 @@ static int adjust_irq(adjust_t *adj)
 
 /*====================================================================*/
 
-int adjust_resource_info(client_handle_t handle, adjust_t *adj)
+int pcmcia_adjust_resource_info(client_handle_t handle, adjust_t *adj)
 {
     if (CHECK_HANDLE(handle))
 	return CS_BAD_HANDLE;

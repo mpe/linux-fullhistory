@@ -580,4 +580,12 @@ typedef struct cisdump_t {
     cisdata_t	Data[CISTPL_MAX_CIS_SIZE];
 } cisdump_t;
 
+int pcmcia_get_first_tuple(client_handle_t handle, tuple_t *tuple);
+int pcmcia_get_next_tuple(client_handle_t handle, tuple_t *tuple);
+int pcmcia_get_tuple_data(client_handle_t handle, tuple_t *tuple);
+int pcmcia_parse_tuple(client_handle_t handle, tuple_t *tuple, cisparse_t *parse);
+
+int pcmcia_validate_cis(client_handle_t handle, cisinfo_t *info);
+int pcmcia_replace_cis(client_handle_t handle, cisdump_t *cis);
+
 #endif /* LINUX_CISTPL_H */

@@ -379,7 +379,7 @@ static int __init init_tcic(void)
     servinfo_t serv;
 
     DEBUG(0, "%s\n", version);
-    CardServices(GetCardServicesInfo, &serv);
+    pcmcia_get_card_services_info(&serv);
     if (serv.Revision != CS_RELEASE_CODE) {
 	printk(KERN_NOTICE "tcic: Card Services release "
 	       "does not match!\n");

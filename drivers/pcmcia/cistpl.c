@@ -158,7 +158,7 @@ static int cis_readable(u_long base)
     vs->cis_mem.sys_start = base;
     vs->cis_mem.sys_stop = base+vs->cap.map_size-1;
     vs->cis_virt = bus_ioremap(vs->cap.bus, base, vs->cap.map_size);
-    ret = validate_cis(vs->clients, &info1);
+    ret = pcmcia_validate_cis(vs->clients, &info1);
     /* invalidate mapping and CIS cache */
     bus_iounmap(vs->cap.bus, vs->cis_virt); vs->cis_used = 0;
     if ((ret != 0) || (info1.Chains == 0))
@@ -167,7 +167,7 @@ static int cis_readable(u_long base)
     vs->cis_mem.sys_stop = base+2*vs->cap.map_size-1;
     vs->cis_virt = bus_ioremap(vs->cap.bus, base+vs->cap.map_size,
 			       vs->cap.map_size);
-    ret = validate_cis(vs->clients, &info2);
+    ret = pcmcia_validate_cis(vs->clients, &info2);
     bus_iounmap(vs->cap.bus, vs->cis_virt); vs->cis_used = 0;
     return ((ret == 0) && (info1.Chains == info2.Chains));
 }
@@ -315,7 +315,7 @@ int verify_cis_cache(socket_info_t *s)
     
 ======================================================================*/
 
-int replace_cis(client_handle_t handle, cisdump_t *cis)
+int pcmcia_replace_cis(client_handle_t handle, cisdump_t *cis)
 {
     socket_info_t *s;
     if (CHECK_HANDLE(handle))
@@ -353,9 +353,9 @@ typedef struct tuple_flags {
 #define MFC_FN(f)	(((tuple_flags *)(&(f)))->mfc_fn)
 #define SPACE(f)	(((tuple_flags *)(&(f)))->space)
 
-int get_next_tuple(client_handle_t handle, tuple_t *tuple);
+int pcmcia_get_next_tuple(client_handle_t handle, tuple_t *tuple);
 
-int get_first_tuple(client_handle_t handle, tuple_t *tuple)
+int pcmcia_get_first_tuple(client_handle_t handle, tuple_t *tuple)
 {
     socket_info_t *s;
     if (CHECK_HANDLE(handle))
@@ -381,15 +381,15 @@ int get_first_tuple(client_handle_t handle, tuple_t *tuple)
 	!(tuple->Attributes & TUPLE_RETURN_COMMON)) {
 	cisdata_t req = tuple->DesiredTuple;
 	tuple->DesiredTuple = CISTPL_LONGLINK_MFC;
-	if (get_next_tuple(handle, tuple) == CS_SUCCESS) {
+	if (pcmcia_get_next_tuple(handle, tuple) == CS_SUCCESS) {
 	    tuple->DesiredTuple = CISTPL_LINKTARGET;
-	    if (get_next_tuple(handle, tuple) != CS_SUCCESS)
+	    if (pcmcia_get_next_tuple(handle, tuple) != CS_SUCCESS)
 		return CS_NO_MORE_ITEMS;
 	} else
 	    tuple->CISOffset = tuple->TupleLink = 0;
 	tuple->DesiredTuple = req;
     }
-    return get_next_tuple(handle, tuple);
+    return pcmcia_get_next_tuple(handle, tuple);
 }
 
 static int follow_link(socket_info_t *s, tuple_t *tuple)
@@ -430,7 +430,7 @@ static int follow_link(socket_info_t *s, tuple_t *tuple)
     return ofs;
 }
 
-int get_next_tuple(client_handle_t handle, tuple_t *tuple)
+int pcmcia_get_next_tuple(client_handle_t handle, tuple_t *tuple)
 {
     socket_info_t *s;
     u_char link[2], tmp;
@@ -510,7 +510,7 @@ int get_next_tuple(client_handle_t handle, tuple_t *tuple)
 	ofs += link[1] + 2;
     }
     if (i == MAX_TUPLES) {
-	DEBUG(1, "cs: overrun in get_next_tuple for socket %d\n",
+	DEBUG(1, "cs: overrun in pcmcia_get_next_tuple for socket %d\n",
 	      handle->Socket);
 	return CS_NO_MORE_ITEMS;
     }
@@ -525,7 +525,7 @@ int get_next_tuple(client_handle_t handle, tuple_t *tuple)
 
 #define _MIN(a, b)		(((a) < (b)) ? (a) : (b))
 
-int get_tuple_data(client_handle_t handle, tuple_t *tuple)
+int pcmcia_get_tuple_data(client_handle_t handle, tuple_t *tuple)
 {
     socket_info_t *s;
     u_int len;
@@ -1234,7 +1234,7 @@ static int parse_org(tuple_t *tuple, cistpl_org_t *org)
 
 /*====================================================================*/
 
-int parse_tuple(client_handle_t handle, tuple_t *tuple, cisparse_t *parse)
+int pcmcia_parse_tuple(client_handle_t handle, tuple_t *tuple, cisparse_t *parse)
 {
     int ret = CS_SUCCESS;
     
@@ -1326,14 +1326,14 @@ int read_tuple(client_handle_t handle, cisdata_t code, void *parse)
     
     tuple.DesiredTuple = code;
     tuple.Attributes = TUPLE_RETURN_COMMON;
-    ret = CardServices(GetFirstTuple, handle, &tuple, NULL);
+    ret = pcmcia_get_first_tuple(handle, &tuple);
     if (ret != CS_SUCCESS) return ret;
     tuple.TupleData = buf;
     tuple.TupleOffset = 0;
     tuple.TupleDataMax = sizeof(buf);
-    ret = CardServices(GetTupleData, handle, &tuple, NULL);
+    ret = pcmcia_get_tuple_data(handle, &tuple);
     if (ret != CS_SUCCESS) return ret;
-    ret = CardServices(ParseTuple, handle, &tuple, parse);
+    ret = pcmcia_parse_tuple(handle, &tuple, parse);
     return ret;
 }
 
@@ -1347,7 +1347,7 @@ int read_tuple(client_handle_t handle, cisdata_t code, void *parse)
     
 ======================================================================*/
 
-int validate_cis(client_handle_t handle, cisinfo_t *info)
+int pcmcia_validate_cis(client_handle_t handle, cisinfo_t *info)
 {
     tuple_t tuple;
     cisparse_t p;
@@ -1359,7 +1359,7 @@ int validate_cis(client_handle_t handle, cisinfo_t *info)
     info->Chains = reserved = errors = 0;
     tuple.DesiredTuple = RETURN_FIRST_TUPLE;
     tuple.Attributes = TUPLE_RETURN_COMMON;
-    ret = get_first_tuple(handle, &tuple);
+    ret = pcmcia_get_first_tuple(handle, &tuple);
     if (ret != CS_SUCCESS)
 	return CS_SUCCESS;
 
@@ -1380,7 +1380,7 @@ int validate_cis(client_handle_t handle, cisinfo_t *info)
 	return CS_SUCCESS;
     
     for (info->Chains = 1; info->Chains < MAX_TUPLES; info->Chains++) {
-	ret = get_next_tuple(handle, &tuple);
+	ret = pcmcia_get_next_tuple(handle, &tuple);
 	if (ret != CS_SUCCESS) break;
 	if (((tuple.TupleCode > 0x23) && (tuple.TupleCode < 0x40)) ||
 	    ((tuple.TupleCode > 0x47) && (tuple.TupleCode < 0x80)) ||

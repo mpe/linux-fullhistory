@@ -128,7 +128,7 @@ static int init_status = 1;
 static void cs_error(client_handle_t handle, int func, int ret)
 {
     error_info_t err = { func, ret };
-    CardServices(ReportError, handle, &err);
+    pcmcia_report_error(handle, &err);
 }
 
 /*======================================================================
@@ -340,7 +340,7 @@ static int bind_mtd(int i, mtd_info_t *mtd_info)
     bind_req.Attributes = mtd_info->Attributes;
     bind_req.Socket = i;
     bind_req.CardOffset = mtd_info->CardOffset;
-    ret = CardServices(BindMTD, &bind_req);
+    ret = pcmcia_bind_mtd(&bind_req);
     if (ret != CS_SUCCESS) {
 	cs_error(NULL, BindMTD, ret);
 	printk(KERN_NOTICE "ds: unable to bind MTD '%s' to socket %d"
@@ -394,7 +394,7 @@ static int bind_request(int i, bind_info_t *bind_info)
     bind_req.Socket = i;
     bind_req.Function = bind_info->function;
     bind_req.dev_info = &driver->dev_info;
-    ret = CardServices(BindDevice, &bind_req);
+    ret = pcmcia_bind_device(&bind_req);
     if (ret != CS_SUCCESS) {
 	cs_error(NULL, BindDevice, ret);
 	printk(KERN_NOTICE "ds: unable to bind '%s' to socket %d\n",
@@ -687,78 +687,74 @@ static int ds_ioctl(struct inode * inode, struct file * file,
     
     switch (cmd) {
     case DS_ADJUST_RESOURCE_INFO:
-	ret = CardServices(AdjustResourceInfo, s->handle, &buf.adjust);
+	ret = pcmcia_adjust_resource_info(s->handle, &buf.adjust);
 	break;
     case DS_GET_CARD_SERVICES_INFO:
-	ret = CardServices(GetCardServicesInfo, &buf.servinfo);
+	ret = pcmcia_get_card_services_info(&buf.servinfo);
 	break;
     case DS_GET_CONFIGURATION_INFO:
-	ret = CardServices(GetConfigurationInfo, s->handle, &buf.config);
+	ret = pcmcia_get_configuration_info(s->handle, &buf.config);
 	break;
     case DS_GET_FIRST_TUPLE:
-	ret = CardServices(GetFirstTuple, s->handle, &buf.tuple);
+	ret = pcmcia_get_first_tuple(s->handle, &buf.tuple);
 	break;
     case DS_GET_NEXT_TUPLE:
-	ret = CardServices(GetNextTuple, s->handle, &buf.tuple);
+	ret = pcmcia_get_next_tuple(s->handle, &buf.tuple);
 	break;
     case DS_GET_TUPLE_DATA:
 	buf.tuple.TupleData = buf.tuple_parse.data;
 	buf.tuple.TupleDataMax = sizeof(buf.tuple_parse.data);
-	ret = CardServices(GetTupleData, s->handle, &buf.tuple);
+	ret = pcmcia_get_tuple_data(s->handle, &buf.tuple);
 	break;
     case DS_PARSE_TUPLE:
 	buf.tuple.TupleData = buf.tuple_parse.data;
-	ret = CardServices(ParseTuple, s->handle, &buf.tuple,
-			   &buf.tuple_parse.parse);
+	ret = pcmcia_parse_tuple(s->handle, &buf.tuple, &buf.tuple_parse.parse);
 	break;
     case DS_RESET_CARD:
-	ret = CardServices(ResetCard, s->handle, NULL);
+	ret = pcmcia_reset_card(s->handle, NULL);
 	break;
     case DS_GET_STATUS:
-	ret = CardServices(GetStatus, s->handle, &buf.status);
+	ret = pcmcia_get_status(s->handle, &buf.status);
 	break;
     case DS_VALIDATE_CIS:
-	ret = CardServices(ValidateCIS, s->handle, &buf.cisinfo);
+	ret = pcmcia_validate_cis(s->handle, &buf.cisinfo);
 	break;
     case DS_SUSPEND_CARD:
-	ret = CardServices(SuspendCard, s->handle, NULL);
+	ret = pcmcia_suspend_card(s->handle, NULL);
 	break;
     case DS_RESUME_CARD:
-	ret = CardServices(ResumeCard, s->handle, NULL);
+	ret = pcmcia_resume_card(s->handle, NULL);
 	break;
     case DS_EJECT_CARD:
-	ret = CardServices(EjectCard, s->handle, NULL);
+	ret = pcmcia_eject_card(s->handle, NULL);
 	break;
     case DS_INSERT_CARD:
-	ret = CardServices(InsertCard, s->handle, NULL);
+	ret = pcmcia_insert_card(s->handle, NULL);
 	break;
     case DS_ACCESS_CONFIGURATION_REGISTER:
 	if ((buf.conf_reg.Action == CS_WRITE) && !suser())
 	    return -EPERM;
-	ret = CardServices(AccessConfigurationRegister, s->handle,
-			   &buf.conf_reg);
+	ret = pcmcia_access_configuration_register(s->handle, &buf.conf_reg);
 	break;
     case DS_GET_FIRST_REGION:
-        ret = CardServices(GetFirstRegion, s->handle, &buf.region);
+        ret = pcmcia_get_first_region(s->handle, &buf.region);
 	break;
     case DS_GET_NEXT_REGION:
-	ret = CardServices(GetNextRegion, s->handle, &buf.region);
+	ret = pcmcia_get_next_region(s->handle, &buf.region);
 	break;
     case DS_GET_FIRST_WINDOW:
 	buf.win_info.handle = (window_handle_t)s->handle;
-	ret = CardServices(GetFirstWindow, &buf.win_info.handle,
-			   &buf.win_info.window);
+	ret = pcmcia_get_first_window(&buf.win_info.handle, &buf.win_info.window);
 	break;
     case DS_GET_NEXT_WINDOW:
-	ret = CardServices(GetNextWindow, &buf.win_info.handle,
-			   &buf.win_info.window);
+	ret = pcmcia_get_next_window(&buf.win_info.handle, &buf.win_info.window);
 	break;
     case DS_GET_MEM_PAGE:
-	ret = CardServices(GetMemPage, buf.win_info.handle,
+	ret = pcmcia_get_mem_page(buf.win_info.handle,
 			   &buf.win_info.map);
 	break;
     case DS_REPLACE_CIS:
-	ret = CardServices(ReplaceCIS, s->handle, &buf.cisdump);
+	ret = pcmcia_replace_cis(s->handle, &buf.cisdump);
 	break;
     case DS_BIND_REQUEST:
 	if (!suser()) return -EPERM;
@@ -838,7 +834,7 @@ int __init init_pcmcia_ds(void)
     
     DEBUG(0, "%s\n", version);
     
-    CardServices(GetCardServicesInfo, &serv);
+    pcmcia_get_card_services_info(&serv);
     if (serv.Revision != CS_RELEASE_CODE) {
 	printk(KERN_NOTICE "ds: Card Services release does not match!\n");
 	return -1;
@@ -876,13 +872,13 @@ int __init init_pcmcia_ds(void)
     for (i = 0; i < sockets; i++) {
 	bind.Socket = i;
 	bind.Function = BIND_FN_ALL;
-	ret = CardServices(BindDevice, &bind);
+	ret = pcmcia_bind_device(&bind);
 	if (ret != CS_SUCCESS) {
 	    cs_error(NULL, BindDevice, ret);
 	    break;
 	}
 	client_reg.event_callback_args.client_data = &socket_table[i];
-	ret = CardServices(RegisterClient, &socket_table[i].handle,
+	ret = pcmcia_register_client(&socket_table[i].handle,
 			   &client_reg);
 	if (ret != CS_SUCCESS) {
 	    cs_error(NULL, RegisterClient, ret);
@@ -923,7 +919,7 @@ void __exit cleanup_module(void)
     if (major_dev != -1)
 	unregister_chrdev(major_dev, "pcmcia");
     for (i = 0; i < sockets; i++)
-	CardServices(DeregisterClient, socket_table[i].handle);
+	pcmcia_deregister_client(socket_table[i].handle);
     sockets = 0;
     kfree(socket_table);
 }

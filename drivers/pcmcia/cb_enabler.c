@@ -113,7 +113,7 @@ static bus_info_t bus_table[MAX_DRIVER];
 static void cs_error(client_handle_t handle, int func, int ret)
 {
     error_info_t err = { func, ret };
-    CardServices(ReportError, handle, &err);
+    pcmcia_report_error(handle, &err);
 }
 
 /*====================================================================*/
@@ -148,7 +148,7 @@ struct dev_link_t *cb_attach(int n)
 	CS_EVENT_PM_SUSPEND | CS_EVENT_PM_RESUME;
     client_reg.Version = 0x0210;
     client_reg.event_callback_args.client_data = link;
-    ret = CardServices(RegisterClient, &link->handle, &client_reg);
+    ret = pcmcia_register_client(&link->handle, &client_reg);
     if (ret != 0) {
 	cs_error(link->handle, RegisterClient, ret);
 	cb_detach(link);
@@ -183,7 +183,7 @@ static void cb_detach(dev_link_t *link)
     }
     
     if (link->handle)
-	CardServices(DeregisterClient, link->handle);
+	pcmcia_deregister_client(link->handle);
     
     *linkp = link->next;
     kfree_s(link, sizeof(struct dev_link_t));
@@ -206,7 +206,7 @@ static void cb_config(dev_link_t *link)
     link->state |= DEV_CONFIG;
 
     /* Get PCI bus info */
-    CardServices(GetConfigurationInfo, handle, &config);
+    pcmcia_get_configuration_info(handle, &config);
     bus = config.Option; devfn = config.Function;
 
     /* Is this a new bus? */
@@ -221,14 +221,14 @@ static void cb_config(dev_link_t *link)
 	b->ncfg = b->nuse = 1;
 
 	/* Special hook: CS know what to do... */
-	i = CardServices(RequestIO, handle, NULL);
+	i = pcmcia_request_io(handle, NULL);
 	if (i != CS_SUCCESS) {
 	    cs_error(handle, RequestIO, i);
 	    return;
 	}
 	b->flags |= DID_REQUEST;
 	b->owner = link;
-	i = CardServices(RequestConfiguration, handle, &link->conf);
+	i = pcmcia_request_configuration(handle, &link->conf);
 	if (i != CS_SUCCESS) {
 	    cs_error(handle, RequestConfiguration, i);
 	    return;
@@ -267,12 +267,11 @@ static void cb_release(u_long arg)
 	if (link->state & DEV_SUSPEND)
 	    b->flags &= ~DID_CONFIG;
 	else if ((b->flags & DID_CONFIG) && (--b->ncfg == 0)) {
-	    CardServices(ReleaseConfiguration, b->owner->handle,
-			 &b->owner->conf);
+	    pcmcia_release_configuration(b->owner->handle);
 	    b->flags &= ~DID_CONFIG;
 	}
 	if ((b->flags & DID_REQUEST) && (--b->nuse == 0)) {
-	    CardServices(ReleaseIO, b->owner->handle, NULL);
+	    pcmcia_release_io(b->owner->handle, NULL);
 	    b->flags &= ~DID_REQUEST;
 	}
 	if (b->flags == 0) {
@@ -314,8 +313,7 @@ static int cb_event(event_t event, int priority,
 		drv->ops->suspend(link->dev);
 	    b->ncfg--;
 	    if (b->ncfg == 0)
-		CardServices(ReleaseConfiguration, link->handle,
-			     &link->conf);
+		pcmcia_release_configuration(link->handle);
 	}
 	break;
     case CS_EVENT_PM_RESUME:
@@ -325,7 +323,7 @@ static int cb_event(event_t event, int priority,
 	if (link->state & DEV_CONFIG) {
 	    b->ncfg++;
 	    if (b->ncfg == 1)
-		CardServices(RequestConfiguration, link->handle,
+		pcmcia_request_configuration(link->handle,
 			     &link->conf);
 	    if (drv->ops->resume != NULL)
 		drv->ops->resume(link->dev);
@@ -379,7 +377,7 @@ static int __init init_cb_enabler(void)
 {
     servinfo_t serv;
     DEBUG(0, "%s\n", version);
-    CardServices(GetCardServicesInfo, &serv);
+    pcmcia_get_card_services_info(&serv);
     if (serv.Revision != CS_RELEASE_CODE) {
 	printk(KERN_NOTICE "cb_enabler: Card Services release "
 	       "does not match!\n");
