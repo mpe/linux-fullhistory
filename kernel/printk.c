@@ -96,7 +96,7 @@ asmlinkage int sys_syslog(int type, char * buf, int len)
 		cli();
 		error = -ERESTARTSYS;
 		while (!log_size) {
-			if (current->signal & ~current->blocked) {
+			if (signal_pending(current)) {
 				sti();
 				goto out;
 			}

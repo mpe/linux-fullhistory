@@ -368,7 +368,7 @@ static int pcxx_waitcarrier(struct tty_struct *tty,struct file *filp,struct chan
 		    (info->asyncflags & ASYNC_CLOSING) == 0 &&
 			(do_clocal || (info->imodem & info->dcd)))
 			break;
-		if(current->signal & ~current->blocked) {
+		if(signal_pending(current)) {
 			retval = -ERESTARTSYS;
 			break;
 		}

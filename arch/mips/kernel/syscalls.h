@@ -212,3 +212,4 @@ SYS(sys_setresgid, 3)				/* 4190 */
 SYS(sys_getresgid, 3)
 SYS(sys_setresgid, 3)				/* 4190 */
 SYS(sys_getresgid, 3)
+SYS(sys_prctl, 5)

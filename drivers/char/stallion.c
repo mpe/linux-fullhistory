@@ -889,7 +889,7 @@ static int stl_waitcarrier(stlport_t *portp, struct file *filp)
 				(doclocal || (portp->sigs & TIOCM_CD))) {
 			break;
 		}
-		if (current->signal & ~current->blocked) {
+		if (signal_pending(current)) {
 			rc = -ERESTARTSYS;
 			break;
 		}

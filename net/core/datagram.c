@@ -114,7 +114,7 @@ restart:
 
 		/* handle signals */
 		error = -ERESTARTSYS;
-		if (current->signal & ~current->blocked)
+		if (signal_pending(current))
 			goto no_packet;
 
 		/* User doesn't want to wait */

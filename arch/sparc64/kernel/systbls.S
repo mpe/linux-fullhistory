@@ -68,7 +68,7 @@ sys_call_table32:
 /*240*/	.word sys_munlockall, sys32_sched_setparam, sys32_sched_getparam, sys_nis_syscall, sys_nis_syscall
 	.word sys_nis_syscall, sys_sched_get_priority_max, sys_sched_get_priority_min, sys32_sched_rr_get_interval, sys32_nanosleep
 /*250*/	.word sys32_mremap, sys_sysctl, sys_getsid, sys_fdatasync, sys32_nfsservctl
-	.word sys_aplib
+	.word sys_aplib, sys_prctl
 
 	/* Now the 64-bit native Linux syscall table. */
 
@@ -127,7 +127,7 @@ sys_call_table:
 /*240*/	.word sys_munlockall, sys_sched_setparam, sys_sched_getparam, sys_nis_syscall, sys_nis_syscall
 	.word sys_nis_syscall, sys_sched_get_priority_max, sys_sched_get_priority_min, sys_sched_rr_get_interval, sys_nanosleep
 /*250*/	.word sys_mremap, sys_sysctl, sys_getsid, sys_fdatasync, sys_nfsservctl
-	.word sys_aplib
+	.word sys_aplib, sys_prctl
 
 	/* Now the 32-bit SunOS syscall table. */
 
@@ -221,3 +221,4 @@ sunos_sys_table:
 	.word sunos_nosys, sunos_nosys
 /*250*/	.word sunos_nosys, sunos_nosys, sunos_nosys
 	.word sunos_nosys, sunos_nosys, sys_aplib
+	.word sunos_nosys

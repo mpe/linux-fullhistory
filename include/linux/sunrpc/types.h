@@ -70,6 +70,6 @@ __rpc_remove_list(struct rpc_listitem **q, struct rpc_listitem *item)
 /*
  * Shorthands
  */
-#define signalled()		(current->signal & ~current->blocked)
+#define signalled()		(signal_pending(current))
 
 #endif /* _LINUX_SUNRPC_TYPES_H_ */

@@ -947,7 +947,7 @@ static void mcdx_delay(struct s_drive_stuff *stuff, long jifs)
 		xtrace(SLEEP, "*** delay: sleepq\n");
 		interruptible_sleep_on(&stuff->sleepq);
 		xtrace(SLEEP, "delay awoken\n");
-		if (current->signal & ~current->blocked) {
+		if (signal_pending(current)) {
 			xtrace(SLEEP, "got signal\n");
 		}
 	}
@@ -1410,7 +1410,7 @@ static int mcdx_xfer(struct s_drive_stuff *stuffp,
 
 			if (!stuffp->introk) { xtrace(XFER, "error via interrupt\n"); }
 			else if (current->timeout == 0) { xtrace(XFER, "timeout\n"); }
-			else if (current->signal & ~current->blocked) {
+			else if (signal_pending(current)) {
 				xtrace(XFER, "signal\n");
 			} else continue;
 

@@ -1978,10 +1978,14 @@ static int floppy_release( struct inode * inode, struct file * filp )
 
   drive = inode->i_rdev & 3;
 
-  if (!filp || (filp->f_mode & (2 | OPEN_WRITE_BIT)))
-    /* if the file is mounted OR (writable now AND writable at open
-       time) Linus: Does this cover all cases? */
-    block_fsync (filp, filp->f_dentry);
+	/*
+	 * If filp is NULL, we're being called from blkdev_release
+	 * or after a failed mount attempt.  In the former case the
+	 * device has already been sync'ed, and in the latter no
+	 * sync is required.  Otherwise, sync if filp is writable.
+	 */
+	if (filp && (filp->f_mode & (2 | OPEN_WRITE_BIT)))
+		block_fsync (filp, filp->f_dentry);
 
   if (fd_ref[drive] < 0)
     fd_ref[drive] = 0;

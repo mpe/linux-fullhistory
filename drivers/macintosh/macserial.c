@@ -1562,7 +1562,7 @@ static int block_til_ready(struct tty_struct *tty, struct file * filp,
 		    !(info->flags & ZILOG_CLOSING) &&
 		    (do_clocal || (read_zsreg(info->zs_channel, 0) & DCD)))
 			break;
-		if (current->signal & ~current->blocked) {
+		if (signal_pending(current)) {
 			retval = -ERESTARTSYS;
 			break;
 		}

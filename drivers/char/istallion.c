@@ -813,7 +813,7 @@ static int stli_open(struct tty_struct *tty, struct file *filp)
 	portp->refcount++;
 
 	while (test_bit(ST_INITIALIZING, &portp->state)) {
-		if (current->signal & ~current->blocked)
+		if (signal_pending(current))
 			return(-ERESTARTSYS);
 		interruptible_sleep_on(&portp->raw_wait);
 	}
@@ -1048,7 +1048,7 @@ static int stli_rawopen(stlibrd_t *brdp, stliport_t *portp, unsigned long arg, i
  *	memory, so we must wait until it is complete.
  */
 	while (test_bit(ST_CLOSING, &portp->state)) {
-		if (current->signal & ~current->blocked) {
+		if (signal_pending(current)) {
 			restore_flags(flags);
 			return(-ERESTARTSYS);
 		}
@@ -1081,7 +1081,7 @@ static int stli_rawopen(stlibrd_t *brdp, stliport_t *portp, unsigned long arg, i
 	rc = 0;
 	set_bit(ST_OPENING, &portp->state);
 	while (test_bit(ST_OPENING, &portp->state)) {
-		if (current->signal & ~current->blocked) {
+		if (signal_pending(current)) {
 			rc = -ERESTARTSYS;
 			break;
 		}
@@ -1123,7 +1123,7 @@ static int stli_rawclose(stlibrd_t *brdp, stliport_t *portp, unsigned long arg, 
  */
 	if (wait) {
 		while (test_bit(ST_CLOSING, &portp->state)) {
-			if (current->signal & ~current->blocked) {
+			if (signal_pending(current)) {
 				restore_flags(flags);
 				return(-ERESTARTSYS);
 			}
@@ -1155,7 +1155,7 @@ static int stli_rawclose(stlibrd_t *brdp, stliport_t *portp, unsigned long arg, 
  */
 	rc = 0;
 	while (test_bit(ST_CLOSING, &portp->state)) {
-		if (current->signal & ~current->blocked) {
+		if (signal_pending(current)) {
 			rc = -ERESTARTSYS;
 			break;
 		}
@@ -1188,7 +1188,7 @@ static int stli_cmdwait(stlibrd_t *brdp, stliport_t *portp, unsigned long cmd, v
 	save_flags(flags);
 	cli();
 	while (test_bit(ST_CMDING, &portp->state)) {
-		if (current->signal & ~current->blocked) {
+		if (signal_pending(current)) {
 			restore_flags(flags);
 			return(-ERESTARTSYS);
 		}
@@ -1198,7 +1198,7 @@ static int stli_cmdwait(stlibrd_t *brdp, stliport_t *portp, unsigned long cmd, v
 	stli_sendcmd(brdp, portp, cmd, arg, size, copyback);
 
 	while (test_bit(ST_CMDING, &portp->state)) {
-		if (current->signal & ~current->blocked) {
+		if (signal_pending(current)) {
 			restore_flags(flags);
 			return(-ERESTARTSYS);
 		}
@@ -1312,7 +1312,7 @@ static int stli_waitcarrier(stlibrd_t *brdp, stliport_t *portp, struct file *fil
 				(doclocal || (portp->sigs & TIOCM_CD))) {
 			break;
 		}
-		if (current->signal & ~current->blocked) {
+		if (signal_pending(current)) {
 			rc = -ERESTARTSYS;
 			break;
 		}

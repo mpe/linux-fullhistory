@@ -24,7 +24,7 @@ typedef struct user_i387_struct elf_fpregset_t;
  * These are used to set parameters in the core dumps.
  */
 #define ELF_CLASS	ELFCLASS32
-#define ELF_DATA	ELFDATA2LSB;
+#define ELF_DATA	ELFDATA2LSB
 #define ELF_ARCH	EM_386
 
 /* SVR4/i386 ABI (pages 3-31, 3-32) says that when the program starts %edx

@@ -87,7 +87,13 @@ asmlinkage int old_readdir(unsigned int fd, void * dirent, unsigned int count)
 	if (!file->f_op || !file->f_op->readdir)
 		goto out;
 
+	/*
+	 * Get the inode's semaphore to prevent changes
+	 * to the directory while we read it.
+	 */
+	down(&inode->i_sem);
 	error = file->f_op->readdir(file, &buf, fillonedir);
+	up(&inode->i_sem);
 	if (error < 0)
 		goto out;
 	error = buf.count;
@@ -173,7 +179,13 @@ asmlinkage int sys_getdents(unsigned int fd, void * dirent, unsigned int count)
 	if (!file->f_op || !file->f_op->readdir)
 		goto out;
 
+	/*
+	 * Get the inode's semaphore to prevent changes
+	 * to the directory while we read it.
+	 */
+	down(&inode->i_sem);
 	error = file->f_op->readdir(file, &buf, filldir);
+	up(&inode->i_sem);
 	if (error < 0)
 		goto out;
 	lastdirent = buf.previous;

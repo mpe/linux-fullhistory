@@ -1,4 +1,24 @@
-Thu Aug 23 23:43 1997 Gerard Roudier (groudier@club-internet.fr)
+Sat Sep 20 21:00 1997 Gerard Roudier (groudier@club-internet.fr)
+	* revision 2.5c
+	- Several PCI configuration registers fix-ups for powerpc.
+	  (Patch sent by Cort).
+
+Thu Aug 28 10:00 1997 Gerard Roudier (groudier@club-internet.fr)
+	* revision 2.5b
+	- Add 'ncr53c8xx' char pointer variable. This variable allows to 
+	  pass a boot command to the driver when it is loaded as a module.
+	  Option separator is ' ' instead of ','. Example:
+	    insmod <mod_path>/ncr53c8xx.o ncr53c8xx='verb:2 sync:0 specf:n'
+	- Always use 'driver_setup.settle_delay' for internal resets.
+	  2 seconds hardcoded is sometimes too short. Suggested by Richard W. 
+	  This delay may be shortenned in order to avoid spurious timeouts.
+	- Fix release module stuff that failed for more than 1 controller.
+	- For linux versions > 1.3.70, trust the 'dev_id' parameter passed 
+	  to the interrupt handler (dev_id = struct ncb *).
+	- Fix up in 'ncr_log_hard_error()' when the DSP points outside scripts.
+	  Suggested by Stefan Esser.
+
+Tue Aug 23 23:43 1997 Gerard Roudier (groudier@club-internet.fr)
 	* revision 2.5a
 	- Update Configure.help for inclusion in linux-2.1.51/2/3
 	- Use BASE_2 address from PCI config space instead of some 

@@ -900,18 +900,18 @@ static int get_statm(int pid, char * buffer)
  * For the /proc/<pid>/maps file, we use fixed length records, each containing
  * a single line.
  */
-#define MAPS_LINE_LENGTH	1024
-#define MAPS_LINE_SHIFT		10
+#define MAPS_LINE_LENGTH	4096
+#define MAPS_LINE_SHIFT		12
 /*
  * f_pos = (number of the vma in the task->mm->mmap list) * MAPS_LINE_LENGTH
  *         + (index into the line)
  */
 /* for systems with sizeof(void*) == 4: */
-#define MAPS_LINE_FORMAT4	  "%08lx-%08lx %s %08lx %s %lu\n"
+#define MAPS_LINE_FORMAT4	  "%08lx-%08lx %s %08lx %s %lu"
 #define MAPS_LINE_MAX4	49 /* sum of 8  1  8  1 4 1 8 1 5 1 10 1 */
 
 /* for systems with sizeof(void*) == 8: */
-#define MAPS_LINE_FORMAT8	  "%016lx-%016lx %s %016lx %s %lu\n"
+#define MAPS_LINE_FORMAT8	  "%016lx-%016lx %s %016lx %s %lu"
 #define MAPS_LINE_MAX8	73 /* sum of 16  1  16  1 4 1 16 1 5 1 10 1 */
 
 #define MAPS_LINE_MAX	MAPS_LINE_MAX8
@@ -926,12 +926,15 @@ static long read_maps (int pid, struct file * file,
 	int column;
 	struct vm_area_struct * map;
 	int i;
+	char * buffer;
 
 	if (!p)
 		return -EINVAL;
 
 	if (!p->mm || p->mm == &init_mm || count == 0)
 		return 0;
+
+	buffer = (char*)__get_free_page(GFP_KERNEL);
 
 	/* decode f_pos */
 	lineno = file->f_pos >> MAPS_LINE_SHIFT;
@@ -945,11 +948,13 @@ static long read_maps (int pid, struct file * file,
 
 	for ( ; map ; ) {
 		/* produce the next line */
-		char line[MAPS_LINE_MAX+1];
+		char *line;
 		char str[5], *cp = str;
 		int flags;
 		kdev_t dev;
 		unsigned long ino;
+		int maxlen = (sizeof(void*) == 4) ? 
+			MAPS_LINE_MAX4 :  MAPS_LINE_MAX8;
 		int len;
 
 		flags = map->vm_flags;
@@ -965,13 +970,26 @@ static long read_maps (int pid, struct file * file,
 		if (map->vm_dentry != NULL) {
 			dev = map->vm_dentry->d_inode->i_dev;
 			ino = map->vm_dentry->d_inode->i_ino;
-		}
+			line = d_path(map->vm_dentry, buffer, PAGE_SIZE);
+			buffer[PAGE_SIZE-1] = '\n';
+			line -= maxlen;
+			if(line < buffer)
+				line = buffer;
+		} else
+			line = buffer;
 
 		len = sprintf(line,
 			      sizeof(void*) == 4 ? MAPS_LINE_FORMAT4 : MAPS_LINE_FORMAT8,
 			      map->vm_start, map->vm_end, str, map->vm_offset,
 			      kdevname(dev), ino);
 
+		if(map->vm_dentry) {
+			int i;
+			for(i = len; i < maxlen; i++)
+				line[i] = ' ';
+			len = buffer + PAGE_SIZE - line;
+		} else
+			line[len++] = '\n';
 		if (column >= len) {
 			column = 0; /* continue with next line at column 0 */
 			lineno++;
@@ -1005,6 +1023,7 @@ static long read_maps (int pid, struct file * file,
 	/* encode f_pos */
 	file->f_pos = (lineno << MAPS_LINE_SHIFT) + column;
 
+	free_page((unsigned long)buffer);
 	return destptr-buf;
 }
 

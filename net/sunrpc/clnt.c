@@ -142,7 +142,10 @@ rpc_destroy_client(struct rpc_clnt *clnt)
 	dprintk("RPC: destroying %s client for %s\n",
 			clnt->cl_protname, clnt->cl_server);
 
-	rpcauth_destroy(clnt->cl_auth);
+	if (clnt->cl_auth) {
+		rpcauth_destroy(clnt->cl_auth);
+		clnt->cl_auth = NULL;
+	}
 	if (clnt->cl_xprt) {
 		xprt_destroy(clnt->cl_xprt);
 		clnt->cl_xprt = NULL;

@@ -607,7 +607,7 @@ static inline int do_tty_write(
 		if (!count)
 			break;
 		ret = -ERESTARTSYS;
-		if (current->signal & ~current->blocked)
+		if (signal_pending(current))
 			break;
 		if (need_resched)
 			schedule();
@@ -1217,7 +1217,7 @@ retry_open:
 		release_dev(filp);
 		if (retval != -ERESTARTSYS)
 			return retval;
-		if (current->signal & ~current->blocked)
+		if (signal_pending(current))
 			return retval;
 		schedule();
 		/*

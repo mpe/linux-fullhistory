@@ -1089,7 +1089,7 @@ int vt_waitactive(int vt)
 		if (vt == fg_console)
 			break;
 		retval = -EINTR;
-		if (current->signal & ~current->blocked)
+		if (signal_pending(current))
 			break;
 		schedule();
 	}

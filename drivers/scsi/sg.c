@@ -106,7 +106,7 @@ static int sg_open(struct inode * inode, struct file * filp)
 	    if (flags & O_NONBLOCK)
 		return -EBUSY;
 	    interruptible_sleep_on(&scsi_generics[dev].generic_wait);
-	    if (current->signal & ~current->blocked)
+	    if (signal_pending(current))
 		return -ERESTARTSYS;
 	}
 	scsi_generics[dev].exclude=1;
@@ -121,7 +121,7 @@ static int sg_open(struct inode * inode, struct file * filp)
 	    if (flags & O_NONBLOCK)
 		return -EBUSY;
 	    interruptible_sleep_on(&scsi_generics[dev].generic_wait);
-	    if (current->signal & ~current->blocked)
+	    if (signal_pending(current))
 		return -ERESTARTSYS;
 	}
 
@@ -172,7 +172,7 @@ static char *sg_malloc(int size)
 	while(big_inuse)
 	{
 	    interruptible_sleep_on(&big_wait);
-	    if (current->signal & ~current->blocked)
+	    if (signal_pending(current))
 		return NULL;
 	}
 	big_inuse=1;
@@ -222,7 +222,7 @@ static long sg_read(struct inode *inode,struct file *filp,char *buf,unsigned lon
 	    return -EAGAIN;
 	}
 	interruptible_sleep_on(&device->read_wait);
-	if (current->signal & ~current->blocked)
+	if (signal_pending(current))
 	{
 	    restore_flags(flags);
 	    return -ERESTARTSYS;
@@ -355,7 +355,7 @@ static long sg_write(struct inode *inode,struct file *filp,const char *buf,unsig
 	printk("sg_write: sleeping on pending request\n");
 #endif
 	interruptible_sleep_on(&device->write_wait);
-	if (current->signal & ~current->blocked)
+	if (signal_pending(current))
 	    return -ERESTARTSYS;
     }
 

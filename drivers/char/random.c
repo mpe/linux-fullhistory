@@ -1098,7 +1098,7 @@ random_read(struct inode * inode, struct file * file, char * buf, unsigned long 
 				retval = -EAGAIN;
 				break;
 			}
-			if (current->signal & ~current->blocked) {
+			if (signal_pending(current)) {
 				retval = -ERESTARTSYS;
 				break;
 			}

@@ -355,6 +355,9 @@ static inline int do_try_to_free_page(int priority, int dma, int wait)
 	int i=6;
 	int stop;
 
+	/* Always trim SLAB caches when memory gets low. */
+	(void) kmem_cache_reap(0, dma, wait);
+
 	/* we don't try as hard if we're not waiting.. */
 	stop = 3;
 	if (wait)
@@ -366,19 +369,9 @@ static inline int do_try_to_free_page(int priority, int dma, int wait)
 				return 1;
 			state = 1;
 		case 1:
-			/*
-			 * We shouldn't have a priority here:
-			 * If we're low on memory we should
-			 * unconditionally throw away _all_
-			 * kmalloc caches!
-			 */
-			if (kmem_cache_reap(0, dma, wait))
-				return 1;
-			state = 2;
-		case 2:
 			if (shm_swap(i, dma))
 				return 1;
-			state = 3;
+			state = 2;
 		default:
 			if (swap_out(i, dma, wait))
 				return 1;

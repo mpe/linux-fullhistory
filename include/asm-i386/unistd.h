@@ -177,6 +177,7 @@
 #define __NR_nfsservctl		169
 #define __NR_setresgid		170
 #define __NR_getresgid		171
+#define __NR_prctl              172
 
 /* user-visible error numbers are in the range -1 - -122: see <asm-i386/errno.h> */
 

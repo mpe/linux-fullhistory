@@ -1576,7 +1576,7 @@ isdn_tty_block_til_ready(struct tty_struct *tty, struct file *filp, modem_info *
 		    (do_clocal || (info->msr & UART_MSR_DCD))) {
 			break;
 		}
-		if (current->signal & ~current->blocked) {
+		if (signal_pending(current)) {
 			retval = -ERESTARTSYS;
 			break;
 		}

@@ -674,7 +674,7 @@ struct sk_buff *sock_alloc_send_skb(struct sock *sk, unsigned long size, unsigne
 			{
 				sk->socket->flags &= ~SO_NOSPACE;
 				interruptible_sleep_on(sk->sleep);
-				if (current->signal & ~current->blocked) 
+				if (signal_pending(current)) 
 				{
 					sti();
 					*errcode = -ERESTARTSYS;

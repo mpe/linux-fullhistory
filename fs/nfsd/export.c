@@ -404,7 +404,7 @@ exp_writelock(void)
 	while (hash_count || hash_lock)
 		interruptible_sleep_on(&hash_wait);
 	want_lock--;
-	if (current->signal & ~current->blocked)
+	if (signal_pending(current))
 		return -EINTR;
 	hash_lock = 1;
 	return 0;

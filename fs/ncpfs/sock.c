@@ -167,7 +167,7 @@ static int do_ncp_rpc_call(struct ncp_server *server, int size)
 			schedule();
 			remove_wait_queue(entry.wait_address, &entry.wait);
 			current->state = TASK_RUNNING;
-			if (current->signal & ~current->blocked) {
+			if (signal_pending(current)) {
 				current->timeout = 0;
 				result = -ERESTARTSYS;
 				break;

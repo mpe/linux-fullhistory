@@ -705,7 +705,7 @@ static int unix_stream_connect1(struct socket *sock, struct msghdr *msg,
 		if(nonblock)
 			return -EINPROGRESS;
 		interruptible_sleep_on(sk->sleep);
-		if(current->signal & ~current->blocked)
+		if(signal_pending(current))
 			return -ERESTARTSYS;
 	}
 	
@@ -802,7 +802,7 @@ static int unix_accept(struct socket *sock, struct socket *newsock, int flags)
 			if(flags&O_NONBLOCK)
 				return -EAGAIN;
 			interruptible_sleep_on(sk->sleep);
-			if(current->signal & ~current->blocked)
+			if(signal_pending(current))
 				return -ERESTARTSYS;
 			continue;
 		}
@@ -1219,7 +1219,7 @@ static int unix_stream_recvmsg(struct socket *sock, struct msghdr *msg, int size
 			if (noblock)
 				return -EAGAIN;
 			unix_data_wait(sk);
-			if (current->signal & ~current->blocked)
+			if (signal_pending(current))
 				return -ERESTARTSYS;
 			down(&sk->protinfo.af_unix.readsem);
 			continue;

@@ -55,7 +55,7 @@ static inline void generate(unsigned long sig, struct task_struct * p)
 	spin_lock(&p->sigmask_lock);
 	p->signal |= mask;
 	spin_unlock(&p->sigmask_lock);
-	if (p->state == TASK_INTERRUPTIBLE && (p->signal & ~p->blocked))
+	if (p->state == TASK_INTERRUPTIBLE && signal_pending(p))
 		wake_up_process(p);
 out:
 	spin_unlock_irqrestore(&p->sig->siglock, flags);
@@ -349,7 +349,8 @@ static inline void forget_original_parent(struct task_struct * father)
 	for_each_task(p) {
 		if (p->p_opptr == father) {
 			p->exit_signal = SIGCHLD;
-			p->p_opptr = task[smp_num_cpus] ? : task[0];	/* init */
+			p->p_opptr = task[smp_num_cpus] ? : task[0]; /* init */
+			if (p->pdeath_signal) send_sig(p->pdeath_signal, p, 0);
 		}
 	}
 	read_unlock(&tasklist_lock);
@@ -659,7 +660,7 @@ repeat:
 		if (options & WNOHANG)
 			goto end_wait4;
 		retval = -ERESTARTSYS;
-		if (current->signal & ~current->blocked)
+		if (signal_pending(current))
 			goto end_wait4;
 		current->state=TASK_INTERRUPTIBLE;
 		schedule();

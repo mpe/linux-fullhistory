@@ -565,7 +565,7 @@ asmlinkage int irix_sigpoll_sys(unsigned long *set, struct irix5_siginfo *info,
 			timeo = 1;
 			break;
 		}
-		if(current->signal & ~(current->blocked)) return -EINTR;
+		if(signal_pending(current)) return -EINTR;
 	}
 
 	if(timeo) return -EAGAIN;
@@ -692,7 +692,7 @@ repeat:
 		if(options & W_NOHANG)
 			goto end_waitsys;
 		retval = -ERESTARTSYS;
-		if(current->signal & ~current->blocked)
+		if(signal_pending(current))
 			goto end_waitsys;
 		current->state = TASK_INTERRUPTIBLE;
 		schedule();

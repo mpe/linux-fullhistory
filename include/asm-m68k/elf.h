@@ -24,7 +24,7 @@ typedef struct user_m68kfp_struct elf_fpregset_t;
  * These are used to set parameters in the core dumps.
  */
 #define ELF_CLASS	ELFCLASS32
-#define ELF_DATA	ELFDATA2MSB;
+#define ELF_DATA	ELFDATA2MSB
 #define ELF_ARCH	EM_68K
 
 /* For SVR4/m68k the function pointer to be registered with `atexit' is

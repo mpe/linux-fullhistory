@@ -47,6 +47,14 @@
 #include <linux/nfs_fs_sb.h>
 #include <linux/nfs_mount.h>
 
+/*
+ * We use a semaphore to synchronize all mount/umount
+ * activity - imagine the mess if we have a race between
+ * unmounting a filesystem and re-mounting it (or something
+ * else).
+ */
+static struct semaphore mount_sem = MUTEX;
+
 extern void wait_for_keypress(void);
 extern struct file_operations * get_blkfops(unsigned int major);
 
@@ -665,6 +673,9 @@ static int umount_dev(kdev_t dev)
 		goto out_iput;
 
 	fsync_dev(dev);
+
+	down(&mount_sem);
+
 	retval = do_umount(dev,0);
 	if (!retval) {
 		fsync_dev(dev);
@@ -673,6 +684,8 @@ static int umount_dev(kdev_t dev)
 			put_unnamed_dev(dev);
 		}
 	}
+
+	up(&mount_sem);
 out_iput:
 	iput(inode);
 out:
@@ -767,6 +780,7 @@ int do_mount(kdev_t dev, const char * dev_name, const char * dir_name, const cha
 	struct vfsmount *vfsmnt;
 	int error;
 
+	down(&mount_sem);
 	error = -EACCES;
 	if (!(flags & MS_RDONLY) && dev && is_read_only(dev))
 		goto out;
@@ -810,12 +824,14 @@ int do_mount(kdev_t dev, const char * dev_name, const char * dir_name, const cha
 		vfsmnt->mnt_sb = sb;
 		vfsmnt->mnt_flags = flags;
 		d_mount(dir_d, sb->s_root);
-		return 0;		/* we don't dput(dir) - see umount */
+		error = 0;
+		goto out;		/* we don't dput(dir) - see umount */
 	}
 
 dput_and_out:
 	dput(dir_d);
 out:
+	up(&mount_sem);
 	return error;	
 }
 

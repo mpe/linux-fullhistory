@@ -1384,7 +1384,7 @@ static int block_til_ready(struct tty_struct *tty,
 			  (do_clocal || (ch->imodem & ch->dcd)))
 			break;
 
-		if (current->signal & ~current->blocked) 
+		if (signal_pending(current)) 
 		{
 			retval = -ERESTARTSYS;
 			break;

@@ -1775,7 +1775,7 @@ static int block_til_ready(struct tty_struct *tty, struct file * filp,
 		    !(info->flags & ZILOG_CLOSING) &&
 		    (do_clocal || (DCD & r0)))
 			break;
-		if (current->signal & ~current->blocked) {
+		if (signal_pending(current)) {
 			retval = -ERESTARTSYS;
 			break;
 		}

@@ -1247,11 +1247,11 @@ static int sab82532_ioctl(struct tty_struct *tty, struct file * file,
 			if (retval)
 				return retval;
 			tty_wait_until_sent(tty, 0);
-			if (current->signal & ~current->blocked)
+			if (signal_pending(current))
 				return -EINTR;
 			if (!arg) {
 				send_break(info, HZ/4);	/* 1/4 second */
-				if (current->signal & ~current->blocked)
+				if (signal_pending(current))
 					return -EINTR;
 			}
 			return 0;
@@ -1260,10 +1260,10 @@ static int sab82532_ioctl(struct tty_struct *tty, struct file * file,
 			if (retval)
 				return retval;
 			tty_wait_until_sent(tty, 0);
-			if (current->signal & ~current->blocked)
+			if (signal_pending(current))
 				return -EINTR;
 			send_break(info, arg ? arg*(HZ/10) : HZ/4);
-			if (current->signal & ~current->blocked)
+			if (signal_pending(current))
 				return -EINTR;
 			return 0;
 		case TIOCSBRK:
@@ -1325,7 +1325,7 @@ static int sab82532_ioctl(struct tty_struct *tty, struct file * file,
 			while (1) {
 				interruptible_sleep_on(&info->delta_msr_wait);
 				/* see if a signal did it */
-				if (current->signal & ~current->blocked)
+				if (signal_pending(current))
 					return -ERESTARTSYS;
 				cli();
 				cnow = info->icount; /* atomic copy */
@@ -1699,7 +1699,7 @@ static int block_til_ready(struct tty_struct *tty, struct file * filp,
 		    !(info->flags & ASYNC_CLOSING) &&
 		    (do_clocal || !(info->regs->r.vstr & SAB82532_VSTR_CD)))
 			break;
-		if (current->signal & ~current->blocked) {
+		if (signal_pending(current)) {
 			retval = -ERESTARTSYS;
 			break;
 		}

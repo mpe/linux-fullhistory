@@ -179,7 +179,7 @@ static void send_sigio(int pid, uid_t uid, uid_t euid)
 		    (uid ^ p->suid) && (uid ^ p->uid))
 			continue;
 		p->signal |= 1 << (SIGIO-1);
-		if (p->state == TASK_INTERRUPTIBLE && (p->signal & ~p->blocked))
+		if (p->state == TASK_INTERRUPTIBLE && signal_pending(p))
 			wake_up_process(p);
 	}
 	read_unlock(&tasklist_lock);

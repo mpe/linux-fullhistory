@@ -22,9 +22,9 @@ typedef elf_fpreg_t elf_fpregset_t[ELF_NFPREG];
  */
 #define ELF_CLASS	ELFCLASS32
 #ifdef __MIPSEB__
-#define ELF_DATA       ELFDATA2MSB;
+#define ELF_DATA	ELFDATA2MSB
 #elif __MIPSEL__
-#define ELF_DATA       ELFDATA2LSB;
+#define ELF_DATA	ELFDATA2LSB
 #endif
 #define ELF_ARCH	EM_MIPS
 

@@ -67,7 +67,7 @@
 */
 
 /*
-**	23 August 1997, version 2.5a
+**	20 September 1997, version 2.5c
 **
 **	Supported SCSI-II features:
 **	    Synchronous negotiation
@@ -457,9 +457,9 @@ static int guess_xfer_direction(int opcode);
 /*
 **	Head of list of NCR boards
 **
-**	Host is retrieved by its irq level.
-**	If interrupts are shared, the internal host control block 
-**	address (struct ncb) is used as device id.
+**	For kernel version < 1.3.70, host is retrieved by its irq level.
+**	For later kernels, the internal host control block address 
+**	(struct ncb) is used as device id parameter of the irq stuff.
 */
 
 static struct Scsi_Host		*first_host	= NULL;
@@ -528,6 +528,9 @@ static struct ncr_driver_setup
 #ifdef	SCSI_NCR_BOOT_COMMAND_LINE_SUPPORT
 static struct ncr_driver_setup
 	driver_safe_setup __initdata	= SCSI_NCR_DRIVER_SAFE_SETUP;
+#ifdef	MODULE
+char *ncr53c8xx = 0;	/* command line passed by insmod */
+#endif
 #endif
 
 /*
@@ -4579,7 +4582,7 @@ printf(KERN_INFO "ncr53c%s-%d: rev=0x%02x, base=0x%x, io_port=0x%x, irq=%d\n",
 			SA_INTERRUPT|SA_SHIRQ, "ncr53c8xx", np)) {
 #else
 	if (request_irq(device->slot.irq, ncr53c8xx_intr,
-			SA_INTERRUPT, "ncr53c8xx", NULL)) {
+			SA_INTERRUPT, "ncr53c8xx", np)) {
 #endif
 #else
 	if (request_irq(device->slot.irq, ncr53c8xx_intr,
@@ -4736,13 +4739,20 @@ int ncr_queue_command (Scsi_Cmnd *cmd, void (* done)(Scsi_Cmnd *))
 
 	/*---------------------------------------------------
 	**
-	**	Assign a ccb / bind cmd
+	**	Assign a ccb / bind cmd.
+	**	If resetting, shorten settle_time if necessary
+	**	in order to avoid spurious timeouts.
 	**	If resetting or no free ccb,
 	**	insert cmd into the waiting list.
 	**
 	**----------------------------------------------------
 	*/
 	save_flags(flags); cli();
+
+	if (np->settle_time && cmd->timeout_per_command >= HZ &&
+		np->settle_time > jiffies + cmd->timeout_per_command - HZ) {
+		np->settle_time = jiffies + cmd->timeout_per_command - HZ;
+	}
 
         if (np->settle_time || !(cp=ncr_get_ccb (np, cmd->target, cmd->lun))) {
 		insert_into_waiting_list(np, cmd);
@@ -5234,7 +5244,7 @@ int ncr_reset_bus (Scsi_Cmnd *cmd, int sync_reset)
  * Commands will now be queued in the waiting list until a settle 
  * delay of 2 seconds will be completed.
  */
-	ncr_start_reset(np, 2);
+	ncr_start_reset(np, driver_setup.settle_delay);
 /*
  * First, look in the wakeup list
  */
@@ -5382,7 +5392,7 @@ static int ncr_abort_command (Scsi_Cmnd *cmd)
 */
 
 #ifdef MODULE
-static int ncr_detach(ncb_p np, int irq)
+static int ncr_detach(ncb_p np)
 {
 	ccb_p cp;
 	tcb_p tp;
@@ -5421,16 +5431,12 @@ static int ncr_detach(ncb_p np, int irq)
 */
 
 #ifdef DEBUG_NCR53C8XX
-	printf("%s: freeing irq %d\n", ncr_name(np), irq);
+	printf("%s: freeing irq %d\n", ncr_name(np), np->irq);
 #endif
 #if LINUX_VERSION_CODE >= LinuxVersionCode(1,3,70)
-#   ifdef SCSI_NCR_SHARE_IRQ
-	free_irq(irq, np);
-#   else
-	free_irq(irq, NULL);
-#   endif
+	free_irq(np->irq, np);
 #else
-	free_irq(irq);
+	free_irq(np->irq);
 #endif
 
 	/*
@@ -6786,14 +6792,20 @@ static void ncr_log_hard_error(ncb_p np, u_short sist, u_char dstat)
 		script_base	= (u_char *) np->script;
 		script_name	= "script";
 	}
-	else {
+	else if (np->p_scripth < dsp && 
+		 dsp <= np->p_scripth + sizeof(struct scripth)) {
 		script_ofs	= dsp - np->p_scripth;
 		script_size	= sizeof(struct scripth);
 		script_base	= (u_char *) np->scripth;
 		script_name	= "scripth";
+	} else {
+		script_ofs	= dsp;
+		script_size	= 0;
+		script_base	= 0;
+		script_name	= "mem";
 	}
 
-	printf ("%s:%d: ERROR (%x:%x) (%x-%x-%x) (%x/%x) @ %s (%x:%08x).\n",
+	printf ("%s:%d: ERROR (%x:%x) (%x-%x-%x) (%x/%x) @ (%s %x:%08x).\n",
 		ncr_name (np), (unsigned)INB (nc_ctest0)&0x0f, dstat, sist,
 		(unsigned)INB (nc_socl), (unsigned)INB (nc_sbcl), (unsigned)INB (nc_sbdl),
 		(unsigned)INB (nc_sxfer),(unsigned)INB (nc_scntl3), script_name, script_ofs,
@@ -6978,13 +6990,13 @@ void ncr_exception (ncb_p np)
 
 	if ((sist & (SGE)) ||
 		(dstat & (MDPE|BF|ABORT|IID))) {
-		ncr_start_reset(np, 2);
+		ncr_start_reset(np, driver_setup.settle_delay);
 		return;
 	};
 
 	if (sist & HTH) {
 		printf ("%s: handshake timeout\n", ncr_name(np));
-		ncr_start_reset(np, 2);
+		ncr_start_reset(np, driver_setup.settle_delay);
 		return;
 	};
 
@@ -6994,7 +7006,7 @@ void ncr_exception (ncb_p np)
 			OUTB (nc_scr1, HS_UNEXPECTED);
 			OUTL (nc_dsp, NCB_SCRIPT_PHYS (np, cleanup));
 		};
-		ncr_start_reset(np, 2);
+		ncr_start_reset(np, driver_setup.settle_delay);
 		return;
 	};
 
@@ -7085,7 +7097,7 @@ static int ncr_int_sbmc (ncb_p np)
 		ncr_name(np), np->scsi_mode, scsi_mode);
 
 	np->scsi_mode = scsi_mode;
-	ncr_start_reset(np, 2);
+	ncr_start_reset(np, driver_setup.settle_delay);
 
 	return 1;
 }
@@ -8913,7 +8925,11 @@ void ncr53c8xx_setup(char *str, int *ints)
 		else
 			printf("ncr53c8xx_setup: unexpected boot option '%.*s' ignored\n", (int)(pc-cur+1), cur);
 
+#ifdef MODULE
+		if ((cur = strchr(cur, ' ')) != NULL)
+#else
 		if ((cur = strchr(cur, ',')) != NULL)
+#endif
 			++cur;
 	}
 #endif /* SCSI_NCR_BOOT_COMMAND_LINE_SUPPORT */
@@ -9089,6 +9105,11 @@ int ncr53c8xx_detect(Scsi_Host_Template *tpnt)
 # endif
 #endif
 
+#if	defined(SCSI_NCR_BOOT_COMMAND_LINE_SUPPORT) && defined(MODULE)
+if (ncr53c8xx)
+	ncr53c8xx_setup(ncr53c8xx, (int *) 0);
+#endif
+
 	/* 
 	** Detect all 53c8xx hosts and then attach them.
 	**
@@ -9247,6 +9268,28 @@ static int ncr53c8xx_pci_init(Scsi_Host_Template *tpnt,
 		printk("ncr53c8xx: not initializing, device not supported\n");
 		return -1;
 	}
+
+#ifdef __powerpc__
+	/*
+	 *	Severall fix-up for power/pc.
+	 *	Should not be performed by the driver.
+	 */
+	if ((command &
+		(PCI_COMMAND_MASTER|PCI_COMMAND_IO|PCI_COMMAND_MEMORY)) !=
+		(PCI_COMMAND_MASTER|PCI_COMMAND_IO|PCI_COMMAND_MEMORY)) {
+		printk("ncr53c8xx : setting PCI master/io/command bit\n");
+		command |= PCI_COMMAND_MASTER|PCI_COMMAND_IO|PCI_COMMAND_MEMORY;
+		pcibios_write_config_word(bus, device_fn, PCI_COMMAND, command);
+	}
+       if (io_port >= 0x10000000) {
+		io_port = (io_port & 0x00FFFFFF) | 0x01000000;
+		pcibios_write_config_dword(bus, device_fn, PCI_BASE_ADDRESS_0, io_port);
+       }
+	if (base >= 0x10000000) {
+		base = (base & 0x00FFFFFF) | 0x01000000;
+		pcibios_write_config_dword(bus, device_fn, PCI_BASE_ADDRESS_1, base);
+	}
+#endif
 
 	/*
 	 * Check availability of IO space, memory space and master capability.
@@ -9510,47 +9553,41 @@ printk("ncr53c8xx : command successfully queued\n");
 }
 
 /*
-**   Linux entry point of the interrupt handler
+**   Linux entry point of the interrupt handler.
+**   Fort linux versions > 1.3.70, we trust the kernel for 
+**   passing the internal host descriptor as 'dev_id'.
+**   Otherwise, we scan the host list and call the interrupt 
+**   routine for each host that uses this IRQ.
 */
 
 #if LINUX_VERSION_CODE >= LinuxVersionCode(1,3,70)
 static void ncr53c8xx_intr(int irq, void *dev_id, struct pt_regs * regs)
+{
+#ifdef DEBUG_NCR53C8XX
+     printk("ncr53c8xx : interrupt received\n");
+#endif
+
+     if (DEBUG_FLAGS & DEBUG_TINY) printf ("[");
+     ncr_exception((ncb_p) dev_id);
+     if (DEBUG_FLAGS & DEBUG_TINY) printf ("]\n");
+}
+
 #else
 static void ncr53c8xx_intr(int irq, struct pt_regs * regs)
-#endif
 {
      struct Scsi_Host *host;
      struct host_data *host_data;
-#if 0
-     u_long flags;
-
-     save_flags(flags); cli();
-#endif
-
-#ifdef DEBUG_NCR53C8XX
-printk("ncr53c8xx : interrupt received\n");
-#endif
 
      for (host = first_host; host; host = host->next) {
 	  if (host->hostt == the_template && host->irq == irq) {
 	       host_data = (struct host_data *) host->hostdata;
-#if LINUX_VERSION_CODE >= LinuxVersionCode(1,3,70)
-#   ifdef SCSI_NCR_SHARE_IRQ
-               if (dev_id == host_data->ncb) {
-#else
-               if (1) {
-#   endif
-#endif
-                    if (DEBUG_FLAGS & DEBUG_TINY) printf ("[");
-	            ncr_exception(host_data->ncb);
-                    if (DEBUG_FLAGS & DEBUG_TINY) printf ("]\n");
-               }
+               if (DEBUG_FLAGS & DEBUG_TINY) printf ("[");
+               ncr_exception(host_data->ncb);
+               if (DEBUG_FLAGS & DEBUG_TINY) printf ("]\n");
 	  }
      }
-#if 0
-     restore_flags(flags);
-#endif
 }
+#endif
 
 /*
 **   Linux entry point of the timer handler
@@ -9656,17 +9693,10 @@ int ncr53c8xx_abort(Scsi_Cmnd *cmd)
 #ifdef MODULE
 int ncr53c8xx_release(struct Scsi_Host *host)
 {
-     struct host_data *host_data;
 #ifdef DEBUG_NCR53C8XX
 printk("ncr53c8xx : release\n");
 #endif
-
-     for (host = first_host; host; host = host->next) {
-	  if (host->hostt == the_template) {
-	       host_data = (struct host_data *) host->hostdata;
-	       ncr_detach(host_data->ncb, host->irq);
-	  }
-     }
+     ncr_detach(((struct host_data *) host->hostdata)->ncb);
 
      return 1;
 }

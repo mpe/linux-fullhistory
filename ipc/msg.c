@@ -136,7 +136,7 @@ static int real_msgsnd (int msqid, struct msgbuf *msgp, size_t msgsz, int msgflg
 			/* still no space in queue */
 			if (msgflg & IPC_NOWAIT)
 				return -EAGAIN;
-			if (current->signal & ~current->blocked)
+			if (signal_pending(current))
 				return -EINTR;
 			if (in_interrupt()) {
 				/* Very unlikely, but better safe than sorry */
@@ -383,7 +383,7 @@ static int real_msgrcv (int msqid, struct msgbuf *msgp, size_t msgsz, long msgty
 				DROP_TIMER;
 				return -ENOMSG;
 			}
-			if (current->signal & ~current->blocked) {
+			if (signal_pending(current)) {
 				DROP_TIMER;
 				return -EINTR; 
 			}

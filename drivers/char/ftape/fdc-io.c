@@ -335,12 +335,12 @@ int fdc_interrupt_wait(int time)
 /*** remove me when sure this doesn't happen ***/
 			if (current->timeout > 0) {
 				TRACE(-1, "*** BUG: unexpected schedule exit ***");
-				if (current->signal & ~current->blocked) {
+				if (signal_pending(current)) {
 					TRACE(4, "caused by signal ?");
 				}
 			}
 #endif
-			if (current->signal & ~current->blocked) {
+			if (signal_pending(current)) {
 				result = -EINTR;
 			} else {
 				result = -ETIME;

@@ -683,8 +683,7 @@ static int grab_drive(struct floppy_state *fs, enum swim_state state,
 	if (fs->state != idle) {
 		++fs->wanted;
 		while (fs->state != available) {
-			if (interruptible
-			    && (current->signal & ~current->blocked)) {
+			if (interruptible && signal_pending(current)) {
 				--fs->wanted;
 				restore_flags(flags);
 				return -EINTR;
@@ -720,7 +719,7 @@ static int fd_eject(struct floppy_state *fs)
 	for (n = 2*HZ; n > 0; --n) {
 		if (swim3_readbit(fs, RELAX))
 			break;
-		if ((current->signal & ~current->blocked) != 0) {
+		if (signal_pending(current)) {
 			err = -EINTR;
 			break;
 		}
@@ -781,7 +780,7 @@ static int floppy_open(struct inode *inode, struct file *filp)
 		for (n = HZ; n > 0; --n) {
 			if (swim3_readbit(fs, SEEK_COMPLETE))
 				break;
-			if ((current->signal & ~current->blocked) != 0) {
+			if (signal_pending(current)) {
 				err = -EINTR;
 				break;
 			}
@@ -840,9 +839,16 @@ static int floppy_release(struct inode *inode, struct file *filp)
 
 	if (MINOR(inode->i_rdev) != 0)
 		return -ENXIO;
+	/*
+	 * If filp is NULL, we're being called from blkdev_release
+	 * or after a failed mount attempt.  In the former case the
+	 * device has already been sync'ed, and in the latter no
+	 * sync is required.  Otherwise, sync if filp is writable.
+	 */
+	if (filp && (filp->f_mode & (2 | OPEN_WRITE_BIT)))
+		block_fsync (filp, filp->f_dentry);
+
 	fs = &floppy_states[0];
-	if (filp == 0 || (filp->f_mode & (2 | OPEN_WRITE_BIT)))
-		block_fsync(filp, filp->f_dentry);
 	sw = fs->swim3;
 	if (fs->ref_count > 0 && --fs->ref_count == 0) {
 		swim3_action(fs, MOTOR_OFF);
@@ -880,7 +886,7 @@ static int floppy_revalidate(kdev_t dev)
 	for (n = HZ; n > 0; --n) {
 		if (swim3_readbit(fs, SEEK_COMPLETE))
 			break;
-		if ((current->signal & ~current->blocked) != 0)
+		if (signal_pending(current))
 			break;
 		current->state = TASK_INTERRUPTIBLE;
 		current->timeout = jiffies + 1;

@@ -2207,11 +2207,11 @@ static int rs_ioctl(struct tty_struct *tty, struct file * file,
 			if (retval)
 				return retval;
 			tty_wait_until_sent(tty, 0);
-			if (current->signal & ~current->blocked)
+			if (signal_pending(current))
 				return -EINTR;
 			if (!arg) {
 				send_break(info, HZ/4);	/* 1/4 second */
-				if (current->signal & ~current->blocked)
+				if (signal_pending(current))
 					return -EINTR;
 			}
 			return 0;
@@ -2220,10 +2220,10 @@ static int rs_ioctl(struct tty_struct *tty, struct file * file,
 			if (retval)
 				return retval;
 			tty_wait_until_sent(tty, 0);
-			if (current->signal & ~current->blocked)
+			if (signal_pending(current))
 				return -EINTR;
 			send_break(info, arg ? arg*(HZ/10) : HZ/4);
-			if (current->signal & ~current->blocked)
+			if (signal_pending(current))
 				return -EINTR;
 			return 0;
 		case TIOCSBRK:
@@ -2310,7 +2310,7 @@ static int rs_ioctl(struct tty_struct *tty, struct file * file,
 			while (1) {
 				interruptible_sleep_on(&info->delta_msr_wait);
 				/* see if a signal did it */
-				if (current->signal & ~current->blocked)
+				if (signal_pending(current))
 					return -ERESTARTSYS;
 				cli();
 				cnow = info->state->icount; /* atomic copy */
@@ -2562,7 +2562,7 @@ static void rs_wait_until_sent(struct tty_struct *tty, int timeout)
 		current->counter = 0;	/* make us low-priority */
 		current->timeout = jiffies + char_time;
 		schedule();
-		if (current->signal & ~current->blocked)
+		if (signal_pending(current))
 			break;
 		if (timeout && ((orig_jiffies + timeout) < jiffies))
 			break;
@@ -2709,7 +2709,7 @@ static int block_til_ready(struct tty_struct *tty, struct file * filp,
 		    (do_clocal || (serial_in(info, UART_MSR) &
 				   UART_MSR_DCD)))
 			break;
-		if (current->signal & ~current->blocked) {
+		if (signal_pending(current)) {
 			retval = -ERESTARTSYS;
 			break;
 		}

@@ -924,7 +924,7 @@ do_it_again:
 				retval = -EAGAIN;
 				break;
 			}
-			if (current->signal & ~current->blocked) {
+			if (signal_pending(current)) {
 				retval = -ERESTARTSYS;
 				break;
 			}
@@ -1022,7 +1022,7 @@ static int write_chan(struct tty_struct * tty, struct file * file,
 	add_wait_queue(&tty->write_wait, &wait);
 	while (1) {
 		current->state = TASK_INTERRUPTIBLE;
-		if (current->signal & ~current->blocked) {
+		if (signal_pending(current)) {
 			retval = -ERESTARTSYS;
 			break;
 		}

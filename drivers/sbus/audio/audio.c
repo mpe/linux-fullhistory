@@ -183,7 +183,7 @@ static int sparcaudio_write(struct inode * inode, struct file * file,
 		/* Check to make sure that an output buffer is available. */
 		if (driver->output_count == driver->num_output_buffers) {
 			interruptible_sleep_on(&driver->output_write_wait);
-			if (current->signal & ~current->blocked)
+			if (signal_pending(current))
 				return bytes_written > 0 ? bytes_written : -EINTR;
 		}
 
@@ -226,7 +226,7 @@ static int sparcaudio_ioctl(struct inode * inode, struct file * file,
 	case AUDIO_DRAIN:
 		if (driver->output_count > 0) {
 			interruptible_sleep_on(&driver->output_drain_wait);
-			retval = (current->signal & ~current->blocked) ? -EINTR : 0;
+			retval = signal_pending(current) ? -EINTR : 0;
 		}
 		break;
 
@@ -270,7 +270,7 @@ static int sparcaudio_open(struct inode * inode, struct file * file)
 			return -EBUSY;
 
 		interruptible_sleep_on(&driver->open_wait);
-		if (current->signal & ~current->blocked)
+		if (signal_pending(current))
 			return -EINTR;
 		goto retry_open;
 	}
@@ -279,7 +279,7 @@ static int sparcaudio_open(struct inode * inode, struct file * file)
 			return -EBUSY;
 
 		interruptible_sleep_on(&driver->open_wait);
-		if (current->signal & ~current->blocked)
+		if (signal_pending(current))
 			return -EINTR;
 		goto retry_open;
 	}

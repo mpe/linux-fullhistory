@@ -174,6 +174,7 @@
 #define __NR_query_module	166
 #define __NR_poll		167
 #define __NR_nfsservctl		168
+#define __NR_prctl		169
 
 #define __NR(n)	#n
 #define __do_syscall(n) \

@@ -138,7 +138,7 @@ void ftape_sleep(unsigned int time)
 			while (current->state != TASK_RUNNING) {
 				schedule();
 			}
-			if (current->signal & ~current->blocked) {
+			if (signal_pending(current)) {
 				TRACE(1, "awoken by non-blocked signal :-(");
 				break;	/* exit on signal */
 			}

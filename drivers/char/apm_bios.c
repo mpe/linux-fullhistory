@@ -831,8 +831,7 @@ static long do_read(struct inode *inode, struct file *fp,
 		add_wait_queue(&process_list, &wait);
 repeat:
 		current->state = TASK_INTERRUPTIBLE;
-		if (queue_empty(as)
-		    && !(current->signal & ~current->blocked)) {
+		if (queue_empty(as) && !signal_pending(current)) {
 			schedule();
 			goto repeat;
 		}
@@ -859,7 +858,7 @@ repeat:
 	}
 	if (i < count)
 		return count - i;
-	if (current->signal & ~current->blocked)
+	if (signal_pending(current))
 		return -ERESTARTSYS;
 	return 0;
 }
@@ -958,7 +957,7 @@ static int do_open(struct inode * inode, struct file * filp)
 
 	as = (struct apm_bios_struct *)kmalloc(sizeof(*as), GFP_KERNEL);
 	if (as == NULL) {
-		printk(KERN_ER "apm_bios: cannot allocate struct of size %d bytes",
+		printk(KERN_ERR "apm_bios: cannot allocate struct of size %d bytes",
 		       sizeof(*as));
 		return -ENOMEM;
 	}

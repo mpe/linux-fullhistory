@@ -2,6 +2,9 @@
 // Copyright (C) 1995 Greg McGary <gkm@magilla.cichlid.com>
 // compile like so: g++ -o ksymoops ksymoops.cc -liostream
 
+// Update to binutils 2.8 and handling of header text on oops lines by
+// Keith Owens <kaos@ocs.com.au>
+
 //////////////////////////////////////////////////////////////////////////////
 
 // This program is free software; you can redistribute it and/or modify
@@ -26,8 +29,6 @@
 //////////////////////////////////////////////////////////////////////////////
 
 // BUGS:
-// * Doesn't deal with line-prefixes prepended by syslog--strip
-//   these off first, before submitting to ksymoops.
 // * Only resolves operands of jump and call instructions.
 
 #include <fstream.h>
@@ -39,7 +40,6 @@
 #include <unistd.h>
 #include <ctype.h>
 
-inline int strequ(char const* x, char const* y) { return (::strcmp(x, y) == 0); }
 inline int strnequ(char const* x, char const* y, size_t n) { return (::strncmp(x, y, n) == 0); }
 
 const int code_size = 20;
@@ -188,6 +188,8 @@ NameList::decode(unsigned char* code, long eip_addr)
     int eip_seen = 0;
     long offset;
     while (fgets(buf, sizeof(buf), objdump_FILE)) {
+	if (strlen(buf) < 14)
+	    continue;
 	if (eip_seen && buf[4] == ':') {
 	    // assume objdump from binutils 2.8..., reformat to old style
 	    offset = strtol(buf, 0, 16);
@@ -279,6 +281,7 @@ int
 main(int argc, char** argv)
 {
     char c;
+    char *oops_column = NULL;
     program_name = (argc--, *argv++);
 
     NameList names;
@@ -299,46 +302,63 @@ main(int argc, char** argv)
     cout << endl;
 
     char buffer[1024];
-    while (!cin.eof())
-    {
+    while (1) {
 	long eip_addr;
-	cin >> buffer;
-	if (strequ(buffer, "EIP:") && names.valid()) {
-	    cin >> ::hex >> eip_addr;
-	    cin >> c >> c >> c;
-	    cin >> ::hex >> eip_addr;
-	    cin >> c >> c >> buffer;
-	    if (!strequ(buffer, "EFLAGS:")) {
-		clog << "Please strip the line-prefixes and rerun " << program_name << endl;
+	cin.get(buffer, sizeof(buffer));
+	if (cin.eof())
+	    break;
+	cin.get(c);	/* swallow newline */
+	if (strstr(buffer, "EIP:") && names.valid()) {
+	    oops_column =  strstr(buffer, "EIP:");
+	    if (sscanf(oops_column+13, "[<%x>]", &eip_addr) != 1) {
+	    	cout << "Cannot read eip address from EIP: line.  Is this a valid oops file?" << endl;
 		exit(1);
 	    }
+	    cout << ">>EIP: ";
 	    KSym* ksym = names.find(eip_addr);
 	    if (ksym)
-		cout << ">>EIP: " << *ksym << endl;
-	} else if (strequ(buffer, "Trace:") && names.valid()) {
-	    unsigned long address;
-	    while ((cin >> buffer) && 
-		   (sscanf(buffer, " [<%x>]", &address) == 1) &&
-		   address > 0xc) {
-		cout << "Trace: ";
-		KSym* ksym = names.find(address);
-		if (ksym)
-		    cout << *ksym;
-		else
-		    cout << ::hex << address;
-		cout << endl;
-	    }
-	    cout << endl;
+		cout << *ksym << endl;
+	    else
+		cout << ::hex << eip_addr << " cannot be resolved" << endl;
 	}
-	if (strequ(buffer, "ode:") || strequ(buffer, "Code:")) {
-	    // The 'C' might have been consumed as a hex number
+	else if (oops_column && strstr(oops_column, "[<") && names.valid()) {
+	    unsigned long address;
+	    while (strstr(oops_column, "[<")) {
+		char *p = oops_column;
+		while (1) {
+		    while (*p && *p++ != '[')
+			;
+		    if (sscanf(p, "<%x>]", &address) != 1)
+			break;
+		    cout << "Trace: ";
+		    KSym* ksym = names.find(address);
+		    if (ksym)
+			cout << *ksym;
+		    else
+			cout << ::hex << address;
+		    cout << endl;
+		}
+		cin.get(buffer, sizeof(buffer));
+		if (cin.eof())
+		    break;
+		cin.get(c);	/* swallow newline */
+	    }
+	}
+	if (oops_column && strnequ(oops_column, "Code:", 5)) {
 	    unsigned char code[code_size];
 	    unsigned char* cp = code;
 	    unsigned char* end = &code[code_size];
-	    while (cp < end) {
-		int c;
-		cin >> ::hex >> c;
+	    char *p = oops_column + 5;
+	    int c;
+	    memset(code, '\0', sizeof(code));
+	    while (*p && cp < end) {
+	    	while (*p == ' ')
+		    ++p;
+		if (sscanf(p, "%x", &c) != 1)
+		    break;
 		*cp++ = c;
+	    	while (*p && *p++ != ' ')
+		    ;
 	    }
 	    names.decode(code, eip_addr);
 	}

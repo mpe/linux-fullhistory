@@ -724,7 +724,7 @@ static void wait_for_tcp_memory(struct sock * sk)
 		sk->socket->flags &= ~SO_NOSPACE;
 		add_wait_queue(sk->sleep, &wait);
 		for (;;) {
-			if (current->signal & ~current->blocked)
+			if (signal_pending(current))
 				break;
 			current->state = TASK_INTERRUPTIBLE;
 			if (tcp_memory_free(sk))
@@ -792,7 +792,7 @@ int tcp_do_sendmsg(struct sock *sk, int iovlen, struct iovec *iov, int flags)
 		if (flags&MSG_DONTWAIT)
 			return -EAGAIN;
 		
-		if (current->signal & ~current->blocked)
+		if (signal_pending(current))
 			return -ERESTARTSYS;
 		
 		wait_for_tcp_connect(sk);
@@ -915,7 +915,7 @@ int tcp_do_sendmsg(struct sock *sk, int iovlen, struct iovec *iov, int flags)
 					return -EAGAIN;
 				}
 
-				if (current->signal & ~current->blocked) {
+				if (signal_pending(current)) {
 					if (copied)
 						return copied;
 					return -ERESTARTSYS;
@@ -1155,7 +1155,7 @@ int tcp_recvmsg(struct sock *sk, struct msghdr *msg,
 		 * handling. FIXME: Need to check this doesnt impact 1003.1g
 		 * and move it down to the bottom of the loop
 		 */
-		if (current->signal & ~current->blocked) {
+		if (signal_pending(current)) {
 			if (copied)
 				break;
 			copied = -ERESTARTSYS;
@@ -1473,7 +1473,7 @@ void tcp_close(struct sock *sk, unsigned long timeout)
 		current->timeout = timeout;
 		while(closing(sk) && current->timeout) {
 			interruptible_sleep_on(sk->sleep);
-			if (current->signal & ~current->blocked)
+			if (signal_pending(current))
 				break;
 		}
 		current->timeout=0;
@@ -1518,7 +1518,7 @@ static struct open_request * wait_for_connect(struct sock * sk,
 		req = tcp_find_established(&(sk->tp_pinfo.af_tcp), pprev);
 		if (req) 
 			break;
-		if (current->signal & ~current->blocked)
+		if (signal_pending(current))
 			break;
 	}
 	remove_wait_queue(sk->sleep, &wait);

@@ -1733,7 +1733,7 @@ static void send_break(	struct esp_struct * info, int duration)
 
 	interruptible_sleep_on(&info->break_wait);
 
-	if (current->signal & ~current->blocked) {
+	if (signal_pending(current)) {
 		serial_out(info, UART_ESI_CMD1, ESI_ISSUE_BREAK);
 		serial_out(info, UART_ESI_CMD2, 0x00);
 		sti();
@@ -1775,11 +1775,11 @@ static int rs_ioctl(struct tty_struct *tty, struct file * file,
 			if (retval)
 				return retval;
 			tty_wait_until_sent(tty, 0);
-			if (current->signal & ~current->blocked)
+			if (signal_pending(current))
 				return -EINTR;
 			if (!arg) {
 				send_break(info, HZ/4);	/* 1/4 second */
-				if (current->signal & ~current->blocked)
+				if (signal_pending(current))
 					return -EINTR;
 			}
 			return 0;
@@ -1788,10 +1788,10 @@ static int rs_ioctl(struct tty_struct *tty, struct file * file,
 			if (retval)
 				return retval;
 			tty_wait_until_sent(tty, 0);
-			if (current->signal & ~current->blocked)
+			if (signal_pending(current))
 				return -EINTR;
 			send_break(info, arg ? arg*(HZ/10) : HZ/4);
-			if (current->signal & ~current->blocked)
+			if (signal_pending(current))
 				return -EINTR;
 			return 0;
 		case TIOCGSOFTCAR:
@@ -1845,7 +1845,7 @@ static int rs_ioctl(struct tty_struct *tty, struct file * file,
 			while (1) {
 				interruptible_sleep_on(&info->delta_msr_wait);
 				/* see if a signal did it */
-				if (current->signal & ~current->blocked)
+				if (signal_pending(current))
 					return -ERESTARTSYS;
 				cli();
 				cnow = info->icount;	/* atomic copy */
@@ -2086,7 +2086,7 @@ static void rs_wait_until_sent(struct tty_struct *tty, int timeout)
 		current->timeout = jiffies + char_time;
 		schedule();
 
-		if (current->signal & ~current->blocked)
+		if (signal_pending(current))
 			break;
 
 		if (timeout && ((orig_jiffies + timeout) < jiffies))
@@ -2243,7 +2243,7 @@ static int block_til_ready(struct tty_struct *tty, struct file * filp,
 		    !(info->flags & ASYNC_CLOSING) &&
 		    (do_clocal))
 			break;
-		if (current->signal & ~current->blocked) {
+		if (signal_pending(current)) {
 			retval = -ERESTARTSYS;
 			break;
 		}

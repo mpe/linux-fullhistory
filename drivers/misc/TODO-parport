@@ -6,7 +6,7 @@ Things to be done.
 
 2. Overhaul lp.c:
 
-   a) It's a mess, and there is a lot of code duplication.
+   a) It's a _mess_
 
    b) ECP support would be nice.  This can only work if both the port and
       the printer support it.

@@ -222,7 +222,7 @@ static long lp_write_interrupt(struct inode *inode, struct file *file,
       lp_table[dev]->do_print = 0;
       rc = total_bytes_written + lp_table[dev]->bytes_written;
 
-      if (current->signal & ~current->blocked) {
+      if (signal_pending(current)) {
 	if (rc)
 	  return rc;
 	else
@@ -320,7 +320,7 @@ static long lp_write_polled(struct inode *inode, struct file *file,
 			}
 
 			/* check for signals before going to sleep */
-			if (current->signal & ~current->blocked) {
+			if (signal_pending(current)) {
 				if (temp != buf)
 					return temp-buf;
 				else

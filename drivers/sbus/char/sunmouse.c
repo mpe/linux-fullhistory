@@ -367,7 +367,7 @@ sun_mouse_read(struct inode *inode, struct file *file, char *buffer,
 		if (file->f_flags & O_NONBLOCK)
 			return -EWOULDBLOCK;
 		add_wait_queue (&sunmouse.proc_list, &wait);
-		while (queue_empty () && !(current->signal & ~current->blocked)){
+		while (queue_empty () && !signal_pending(current)) {
 			current->state = TASK_INTERRUPTIBLE;
 			schedule ();
 		}
@@ -414,7 +414,7 @@ sun_mouse_read(struct inode *inode, struct file *file, char *buffer,
 		return count-c;
 	}
 	/* Only called if nothing was sent */
-	if (current->signal & ~current->blocked)
+	if (signal_pending(current))
 		return -ERESTARTSYS;
 	return 0;
 }

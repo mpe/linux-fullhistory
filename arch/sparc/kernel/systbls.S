@@ -125,6 +125,7 @@ C_LABEL(sys_call_table):
 	.long C_LABEL(sys_fdatasync)
 	.long C_LABEL(sys_nfsservctl)
 /*255*/	.long C_LABEL(sys_aplib)
+	.long C_LABEL(sys_prctl)
 	.long C_LABEL(sys_nis_syscall)
 
 	/* Now the SunOS syscall table. */
@@ -219,3 +220,4 @@ C_LABEL(sunos_sys_table):
 	.long C_LABEL(sunos_nosys), C_LABEL(sunos_nosys)
 /*250*/	.long C_LABEL(sunos_nosys), C_LABEL(sunos_nosys), C_LABEL(sunos_nosys)
 	.long C_LABEL(sunos_nosys), C_LABEL(sunos_nosys), C_LABEL(sys_aplib)
+	.long C_LABEL(sunos_nosys)

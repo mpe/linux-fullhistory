@@ -148,7 +148,7 @@ static int nfs_readdir(struct file *filp, void *dirent, filldir_t filldir)
 again:
 	if (waitp) {
 		interruptible_sleep_on(waitp);
-		if (current->signal & ~current->blocked)
+		if (signal_pending(current))
 			return -ERESTARTSYS;
 		waitp = NULL;
 	}

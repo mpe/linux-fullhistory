@@ -415,7 +415,7 @@ static int probing = 0;
 
 static volatile int command_status = FD_COMMAND_NONE, fdc_busy = 0;
 static struct wait_queue *fdc_wait = NULL, *command_done = NULL;
-#define NO_SIGNAL (!(current->signal & ~current->blocked) || !interruptible)
+#define NO_SIGNAL (!interruptible || !signal_pending(current))
 #define CALL(x) if ((x) == -EINTR) return -EINTR
 #define ECALL(x) if ((ret = (x))) return ret;
 #define _WAIT(x,i) CALL(ret=wait_til_done((x),i))
@@ -3500,9 +3500,13 @@ static int floppy_release(struct inode * inode, struct file * filp)
 
 	drive = DRIVE(inode->i_rdev);
 
-	if (!filp || (filp->f_mode & (2 | OPEN_WRITE_BIT)))
-		/* if the file is mounted OR (writable now AND writable at
-		 * open time) Linus: Does this cover all cases? */
+	/*
+	 * If filp is NULL, we're being called from blkdev_release
+	 * or after a failed mount attempt.  In the former case the
+	 * device has already been sync'ed, and in the latter no
+	 * sync is required.  Otherwise, sync if filp is writable.
+	 */
+	if (filp && (filp->f_mode & (2 | OPEN_WRITE_BIT)))
 		block_fsync(filp, filp->f_dentry);
 
 	if (UDRS->fd_ref < 0)

@@ -457,7 +457,7 @@ static inline int aplib_poll(unsigned counter)
 		tnet_check_completion();
 		if (resched_needed())
 			break;
-		if (current->signal & ~current->blocked) break;
+		if (signal_pending(current)) break;
 	}
 	return 0;
 }

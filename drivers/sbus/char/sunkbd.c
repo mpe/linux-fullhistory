@@ -1256,7 +1256,7 @@ kbd_read (struct inode *inode, struct file *f, char *buffer, unsigned long count
 		if (f->f_flags & O_NONBLOCK)
 			return -EWOULDBLOCK;
 		add_wait_queue (&kbd_wait, &wait);
-		while (kbd_head == kbd_tail && !(current->signal & ~current->blocked)){
+		while (kbd_head == kbd_tail && !signal_pending(current)) {
 			current->state = TASK_INTERRUPTIBLE;
 			schedule ();
 		}

@@ -25,6 +25,7 @@
 #include <linux/smp_lock.h>
 #include <linux/notifier.h>
 #include <linux/reboot.h>
+#include <linux/prctl.h>
 
 #include <asm/uaccess.h>
 #include <asm/io.h>
@@ -1004,4 +1005,26 @@ asmlinkage int sys_umask(int mask)
 {
 	mask = xchg(&current->fs->umask, mask & S_IRWXUGO);
 	return mask;
+}
+    
+asmlinkage int sys_prctl(int option, unsigned long arg2, unsigned long arg3,
+                         unsigned long arg4, unsigned long arg5)
+{
+	int error = 0;
+	int sig;
+
+	switch (option) {
+		case PR_SET_PDEATHSIG:
+			sig = arg2;
+			if (sig > _NSIG) {
+                        	error = -EINVAL;
+                                break;
+                        }
+                        current->pdeath_signal = sig;
+                        break;
+		default:
+			error = -EINVAL;
+			break;
+        }
+        return error;
 }

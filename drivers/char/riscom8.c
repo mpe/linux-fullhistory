@@ -1040,7 +1040,7 @@ static int block_til_ready(struct tty_struct *tty, struct file * filp,
 		    !(port->flags & ASYNC_CLOSING) &&
 		    (do_clocal || CD))
 			break;
-		if (current->signal & ~current->blocked) {
+		if (signal_pending(current)) {
 			retval = -ERESTARTSYS;
 			break;
 		}

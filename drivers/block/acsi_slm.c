@@ -634,7 +634,7 @@ static long slm_write( struct inode *node, struct file *file,
 	while( SLMState == PRINTING ||
 		   (SLMState == FILLING && SLMBufOwner != device) ) {
 		interruptible_sleep_on( &slm_wait );
-		if (current->signal & ~current->blocked)
+		if (signal_pending(current))
 			return( -ERESTARTSYS );
 	}
 	if (SLMState == IDLE) {

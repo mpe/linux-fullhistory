@@ -277,7 +277,7 @@ dma_reset_output (int dev)
   audio_devs[dev]->dmap_out->flags |= DMA_SYNCING;
 
   audio_devs[dev]->dmap_out->underrun_count = 0;
-  if (!(current->signal & ~current->blocked)
+  if (!signal_pending(current)
       && audio_devs[dev]->dmap_out->qlen
       && audio_devs[dev]->dmap_out->underrun_count == 0)
     {
@@ -416,7 +416,7 @@ DMAbuf_sync (int dev)
       audio_devs[dev]->dmap_out->flags |= DMA_SYNCING;
 
       audio_devs[dev]->dmap_out->underrun_count = 0;
-      while (!(current->signal & ~current->blocked)
+      while (!signal_pending(current)
 	     && n++ <= audio_devs[dev]->dmap_out->nbufs
 	     && audio_devs[dev]->dmap_out->qlen
 	     && audio_devs[dev]->dmap_out->underrun_count == 0)
@@ -456,7 +456,7 @@ DMAbuf_sync (int dev)
       cli ();
       if (audio_devs[dev]->d->local_qlen)	/* Device has hidden buffers */
 	{
-	  while (!((current->signal & ~current->blocked))
+	  while (!signal_pending(current)
 		 && audio_devs[dev]->d->local_qlen (dev))
 	    {
 
@@ -496,7 +496,7 @@ DMAbuf_release (int dev, int mode)
 
   if (audio_devs[dev]->open_mode & OPEN_WRITE)
     if (!(audio_devs[dev]->dmap_in->mapping_flags & DMA_MAP_MAPPED))
-      if (!((current->signal & ~current->blocked))
+      if (!signal_pending(current)
 	  && (audio_devs[dev]->dmap_out->dma_mode == DMODE_OUTPUT))
 	{
 	  DMAbuf_sync (dev);
@@ -856,7 +856,7 @@ output_sleep (int dev, int dontblock)
 	tmout = 20 * HZ;
     }
 
-  if ((current->signal & ~current->blocked))
+  if (signal_pending(current))
     return -EIO;
 
 
@@ -882,7 +882,7 @@ output_sleep (int dev, int dontblock)
       ;
       dma_reset_output (dev);
     }
-  else if ((current->signal & ~current->blocked))
+  else if (signal_pending(current))
     {
       err = -EINTR;
     }

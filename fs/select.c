@@ -184,7 +184,7 @@ static int do_select(int n, fd_set_buffer *fds, poll_table *wait)
 			}
 		}
 		wait = NULL;
-		if (retval || !current->timeout || (current->signal & ~current->blocked))
+		if (retval || !current->timeout || signal_pending(current))
 			break;
 		schedule();
 	}
@@ -333,7 +333,7 @@ asmlinkage int sys_select(int n, fd_set *inp, fd_set *outp, fd_set *exp, struct 
 		goto out;
 	if (!error) {
 		error = -ERESTARTNOHAND;
-		if (current->signal & ~current->blocked)
+		if (signal_pending(current))
 			goto out;
 		error = 0;
 	}
@@ -384,7 +384,7 @@ static int do_poll(unsigned int nfds, struct pollfd *fds, poll_table *wait)
 		}
 
 		wait = NULL;
-		if (count || !current->timeout || (current->signal & ~current->blocked))
+		if (count || !current->timeout || signal_pending(current))
 			break;
 		schedule();
 	}
@@ -439,7 +439,7 @@ asmlinkage int sys_poll(struct pollfd * ufds, unsigned int nfds, int timeout)
 		__put_user(fds->revents, &ufds->revents);
 	}
 	kfree(fds1);
-	if (!fdcount && (current->signal & ~current->blocked))
+	if (!fdcount && signal_pending(current))
 		err = -EINTR;
 	else
 		err = fdcount;

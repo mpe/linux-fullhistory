@@ -29,7 +29,7 @@ static int fifo_open(struct inode * inode,struct file * filp)
 		if (!(filp->f_flags & O_NONBLOCK) && !PIPE_WRITERS(*inode)) {
 			PIPE_RD_OPENERS(*inode)++;
 			while (!PIPE_WRITERS(*inode)) {
-				if (current->signal & ~current->blocked) {
+				if (signal_pending(current)) {
 					retval = -ERESTARTSYS;
 					break;
 				}
@@ -62,7 +62,7 @@ static int fifo_open(struct inode * inode,struct file * filp)
 		if (!PIPE_READERS(*inode)) {
 			PIPE_WR_OPENERS(*inode)++;
 			while (!PIPE_READERS(*inode)) {
-				if (current->signal & ~current->blocked) {
+				if (signal_pending(current)) {
 					retval = -ERESTARTSYS;
 					break;
 				}

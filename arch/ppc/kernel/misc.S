@@ -539,6 +539,7 @@ sys_call_table:
 	.long sys_query_module
 	.long sys_poll
 	.long sys_nfsservctl
+	.long sys_prctl
 	.long sys_debug
-	.space (NR_syscalls-170)*4
+	.space (NR_syscalls-171)*4
 

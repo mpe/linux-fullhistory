@@ -223,7 +223,7 @@ static int autofs_root_lookup(struct inode *dir, struct dentry * dentry)
 	 * a signal. If so we can force a restart..
 	 */
 	if (dentry->d_flags & DCACHE_AUTOFS_PENDING) {
-		if (current->signal & ~current->blocked)
+		if (signal_pending(current))
 			return -ERESTARTNOINTR;
 	}
 

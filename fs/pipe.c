@@ -52,7 +52,7 @@ static long pipe_read(struct inode * inode, struct file * filp,
 			if (!PIPE_WRITERS(*inode))
 				return 0;
 		}
-		if (current->signal & ~current->blocked)
+		if (signal_pending(current))
 			return -ERESTARTSYS;
 		interruptible_sleep_on(&PIPE_WAIT(*inode));
 	}
@@ -104,7 +104,7 @@ static long pipe_write(struct inode * inode, struct file * filp,
 				send_sig(SIGPIPE,current,0);
 				return written? :-EPIPE;
 			}
-			if (current->signal & ~current->blocked)
+			if (signal_pending(current))
 				return written? :-ERESTARTSYS;
 			if (filp->f_flags & O_NONBLOCK)
 				return written? :-EAGAIN;

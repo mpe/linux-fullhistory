@@ -605,7 +605,7 @@ int inet_stream_connect(struct socket *sock, struct sockaddr * uaddr,
 	cli();
 	while(sk->state == TCP_SYN_SENT || sk->state == TCP_SYN_RECV) {
 		interruptible_sleep_on(sk->sleep);
-		if (current->signal & ~current->blocked) {
+		if (signal_pending(current)) {
 			sti();
 			return(-ERESTARTSYS);
 		}
@@ -670,7 +670,7 @@ int inet_accept(struct socket *sock, struct socket *newsock, int flags)
 	cli();
 	while (sk2->state == TCP_SYN_RECV) {
 		interruptible_sleep_on(sk2->sleep);
-		if (current->signal & ~current->blocked)
+		if (signal_pending(current))
 			goto do_interrupted;
 	}
 	sti();

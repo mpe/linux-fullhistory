@@ -844,7 +844,7 @@ do_sony_cd_cmd(unsigned char cmd,
       while (sony_inuse)
       {
          interruptible_sleep_on(&sony_wait);
-         if (current->signal & ~current->blocked)
+         if (signal_pending(current))
          {
             result_buffer[0] = 0x20;
             result_buffer[1] = SONY_SIGNAL_OP_ERR;
@@ -1556,7 +1556,7 @@ do_cdu31a_request(void)
    while (sony_inuse)
    {
       interruptible_sleep_on(&sony_wait);
-      if (current->signal & ~current->blocked)
+      if (signal_pending(current))
       {
          restore_flags(flags);
          if (CURRENT && CURRENT->rq_status != RQ_INACTIVE)
@@ -2262,7 +2262,7 @@ read_audio(struct cdrom_read_audio *ra,
    while (sony_inuse)
    {
       interruptible_sleep_on(&sony_wait);
-      if (current->signal & ~current->blocked)
+      if (signal_pending(current))
       {
          restore_flags(flags);
          return -EAGAIN;

@@ -8,7 +8,7 @@
 #define file_operation_handle file_operations
 
 #define connect_wrapper(x) 0
-#define current_got_fatal_signal() (current->signal & ~current->blocked)
+#define current_got_fatal_signal() (signal_pending(current))
 #define current_set_timeout(val) current->timeout = val
 
 #define module_interruptible_sleep_on interruptible_sleep_on

@@ -533,7 +533,7 @@ midi_synth_load_patch (int dev, int format, const char *addr,
 
   sysex_sleep_flag.opts = WK_NONE;
 
-  for (i = 0; i < left && !(current->signal & ~current->blocked); i++)
+  for (i = 0; i < left && !signal_pending(current); i++)
     {
       unsigned char   data;
 
@@ -554,7 +554,7 @@ midi_synth_load_patch (int dev, int format, const char *addr,
 	}
 
       while (!midi_devs[orig_dev]->outputc (orig_dev, (unsigned char) (data & 0xff)) &&
-	     !(current->signal & ~current->blocked))
+	     !signal_pending(current))
 
 	{
 	  unsigned long   tlimit;

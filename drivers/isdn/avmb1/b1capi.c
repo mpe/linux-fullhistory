@@ -760,7 +760,7 @@ static int capi_manufacturer(unsigned int cmd, void *data)
 			current->state = TASK_INTERRUPTIBLE;
 			schedule();
 
-			if (current->signal & ~current->blocked)
+			if (signal_pending(current))
 				return -EINTR;
 		}
 		return 0;

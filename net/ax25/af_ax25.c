@@ -1174,7 +1174,7 @@ static int ax25_connect(struct socket *sock, struct sockaddr *uaddr, int addr_le
 	/* A DM or timeout will go to closed, a UA will go to ABM */
 	while (sk->state == TCP_SYN_SENT) {
 		interruptible_sleep_on(sk->sleep);
-		if (current->signal & ~current->blocked) {
+		if (signal_pending(current)) {
 			sti();
 			return -ERESTARTSYS;
 		}
@@ -1227,7 +1227,7 @@ static int ax25_accept(struct socket *sock, struct socket *newsock, int flags)
 				return -EWOULDBLOCK;
 			}
 			interruptible_sleep_on(sk->sleep);
-			if (current->signal & ~current->blocked) {
+			if (signal_pending(current)) {
 				sti();
 				return -ERESTARTSYS;
 			}

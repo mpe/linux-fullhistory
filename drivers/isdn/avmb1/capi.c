@@ -138,7 +138,7 @@ static long capi_read(struct inode *inode, struct file *file,
 			interruptible_sleep_on(&cdev->recv_wait);
 			if ((skb = skb_dequeue(&cdev->recv_queue)) != 0)
 				break;
-			if (current->signal & ~current->blocked)
+			if (signal_pending(current))
 				break;
 		}
 		if (skb == 0)

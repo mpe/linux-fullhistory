@@ -376,7 +376,7 @@ int wait_on_int(volatile int *p,int x,int interval)
 		add_timer(timer);
 		interruptible_sleep_on(&timer_wait);
 		del_timer(timer);
-		if (current->signal & ~current->blocked)
+		if (signal_pending(current))
 			return -EINTR;
 	}
 	kfree_s(timer,sizeof(*timer));

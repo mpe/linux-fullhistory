@@ -1711,7 +1711,7 @@ ppp_tty_read (struct tty_struct *tty, struct file *file, __u8 * buf,
 			current->state	 = TASK_INTERRUPTIBLE;
 			schedule ();
 
-			if (current->signal & ~current->blocked)
+			if (signal_pending(current))
 				return -EINTR;
 			continue;
 		}
@@ -1753,7 +1753,7 @@ ppp_tty_read (struct tty_struct *tty, struct file *file, __u8 * buf,
 					"ppp_tty_read: sleeping(read_wait)\n");
 
 			interruptible_sleep_on (&ppp->read_wait);
-			if (current->signal & ~current->blocked)
+			if (signal_pending(current))
 				return -EINTR;
 			continue;
 		}
@@ -2104,7 +2104,7 @@ ppp_tty_write (struct tty_struct *tty, struct file *file, const __u8 * data,
 			return 0;
 		}
 
-		if (current->signal & ~current->blocked) {
+		if (signal_pending(current)) {
 			kfree (new_data);
 			return -EINTR;
 		}

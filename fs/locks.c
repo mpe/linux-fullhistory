@@ -560,7 +560,7 @@ repeat:
 		if (posix_locks_conflict(fl, &tfl)) {
 			if (filp && (filp->f_flags & O_NONBLOCK))
 				return (-EAGAIN);
-			if (current->signal & ~current->blocked)
+			if (signal_pending(current))
 				return (-ERESTARTSYS);
 			if (posix_locks_deadlock(&tfl, fl))
 				return (-EDEADLK);
@@ -569,7 +569,7 @@ repeat:
 			interruptible_sleep_on(&tfl.fl_wait);
 			locks_delete_block(fl, &tfl);
 
-			if (current->signal & ~current->blocked)
+			if (signal_pending(current))
 				return (-ERESTARTSYS);
 			/* If we've been sleeping someone might have
 			 * changed the permissions behind our back.
@@ -822,7 +822,7 @@ search:
 repeat:
 	/* Check signals each time we start */
 	error = -ERESTARTSYS;
-	if (current->signal & ~current->blocked)
+	if (signal_pending(current))
 		goto out;
 	for (fl = inode->i_flock; (fl != NULL) && (fl->fl_flags & FL_FLOCK);
 	     fl = fl->fl_next) {
@@ -882,7 +882,7 @@ int posix_lock_file(struct file *filp, struct file_lock *caller,
 	if (caller->fl_type != F_UNLCK) {
   repeat:
 		error = -ERESTARTSYS;
-		if (current->signal & ~current->blocked)
+		if (signal_pending(current))
 			goto out;
 		for (fl = inode->i_flock; fl != NULL; fl = fl->fl_next) {
 			if (!(fl->fl_flags & FL_POSIX))

@@ -528,6 +528,7 @@ ENTRY(sys_call_table)
 	.long SYMBOL_NAME(sys_nfsservctl)
 	.long SYMBOL_NAME(sys_setresgid)	/* 170 */
 	.long SYMBOL_NAME(sys_getresgid)
-	.rept NR_syscalls-171
+	.long SYMBOL_NAME(sys_prctl)
+	.rept NR_syscalls-172
 		.long SYMBOL_NAME(sys_ni_syscall)
 	.endr

@@ -91,7 +91,7 @@ static long mem_read(struct inode * inode, struct file * file,
 		return count;
 	tmp = buf;
 	while (count > 0) {
-		if (current->signal & ~current->blocked)
+		if (signal_pending(current))
 			break;
 		page_dir = pgd_offset(tsk->mm,addr);
 		if (pgd_none(*page_dir))
@@ -145,7 +145,7 @@ static long mem_write(struct inode * inode, struct file * file,
 		return -ESRCH;
 	tmp = buf;
 	while (count > 0) {
-		if (current->signal & ~current->blocked)
+		if (signal_pending(current))
 			break;
 		page_dir = pgd_offset(tsk,addr);
 		if (pgd_none(*page_dir))
@@ -180,7 +180,7 @@ static long mem_write(struct inode * inode, struct file * file,
 	file->f_pos = addr;
 	if (tmp != buf)
 		return tmp-buf;
-	if (current->signal & ~current->blocked)
+	if (signal_pending(current))
 		return -ERESTARTSYS;
 	return 0;
 }

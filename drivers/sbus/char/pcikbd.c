@@ -740,7 +740,7 @@ static long read_aux(struct inode * inode, struct file * file,
 		add_wait_queue(&queue->proc_list, &wait);
 repeat:
 		current->state = TASK_INTERRUPTIBLE;
-		if (queue_empty() && !(current->signal & ~current->blocked)) {
+		if (queue_empty() && !signal_pending(current)) {
 			schedule();
 			goto repeat;
 		}
@@ -757,7 +757,7 @@ repeat:
 		inode->i_atime = CURRENT_TIME;
 		return count-i;
 	}
-	if (current->signal & ~current->blocked)
+	if (signal_pending(current))
 		return -ERESTARTSYS;
 	return 0;
 }

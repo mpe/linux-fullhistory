@@ -111,7 +111,7 @@ static long netlink_read(struct inode * inode, struct file * file, char * buf,
 			return -EAGAIN;
 		}
 		interruptible_sleep_on(&read_space_wait[minor]);
-		if(current->signal & ~current->blocked)
+		if(signal_pending(current))
 		{
 			sti();
 			return -ERESTARTSYS;

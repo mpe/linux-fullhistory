@@ -174,6 +174,7 @@
 #define __NR_query_module	167
 #define __NR_poll		168
 #define __NR_nfsservctl		169
+#define __NR_prctl		170
 
 /* user-visible error numbers are in the range -1 - -122: see
    <asm-m68k/errno.h> */

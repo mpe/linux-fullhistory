@@ -36,7 +36,7 @@ static int adb_wait_reply(struct adbdev_state *state, struct file *file)
 			ret = -EAGAIN;
 			break;
 		}
-		if (current->signal & ~current->blocked) {
+		if (signal_pending(current)) {
 			ret = -ERESTARTSYS;
 			break;
 		}

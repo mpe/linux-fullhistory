@@ -209,7 +209,7 @@ nfs_lock(struct file *filp, int cmd, struct file_lock *fl)
 	/* If unlocking a file region, flush dirty pages (unless we've
 	 * been killed by a signal, that is). */
 	if (cmd == F_SETLK && fl->fl_type == F_UNLCK
-	 && !(current->signal & ~current->blocked)) {
+	    && !signal_pending(current)) {
 		status = nfs_flush_dirty_pages(inode,
 			fl->fl_start, fl->fl_end == NLM_OFFSET_MAX? 0 :
 			fl->fl_end - fl->fl_start + 1);

@@ -400,7 +400,7 @@ asmlinkage void schedule(void)
 	timeout = 0;
 	switch (prev->state) {
 		case TASK_INTERRUPTIBLE:
-			if (prev->signal & ~prev->blocked)
+			if (signal_pending(prev))
 				goto makerunnable;
 			timeout = prev->timeout;
 			if (timeout && (timeout <= jiffies)) {
@@ -623,9 +623,7 @@ static inline int __do_down(struct semaphore * sem, int task_state)
 		if (waking_non_zero(sem))	/* are we waking up?  */
 			break;			/* yes, exit loop */
 
-		if (   task_state == TASK_INTERRUPTIBLE
-		    && (tsk->signal & ~tsk->blocked)	/* signalled */
-		   ) {
+		if (task_state == TASK_INTERRUPTIBLE && signal_pending(tsk)) {
 			ret = -EINTR;			/* interrupted */
 			atomic_inc(&sem->count);	/* give up on down operation */
 			break;
