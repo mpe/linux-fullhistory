@@ -376,7 +376,9 @@ void __init ixp2000_init_irq(void)
 	set_irq_chained_handler(IRQ_IXP2000_GPIO, ixp2000_GPIO_irq_handler);
 
 	/*
-	 * Enable PCI irq
+	 * Enable PCI irqs.  The actual PCI[AB] decoding is done in
+	 * entry-macro.S, so we don't need a chained handler for the
+	 * PCI interrupt source.
 	 */
 	ixp2000_reg_write(IXP2000_IRQ_ENABLE_SET, (1 << IRQ_IXP2000_PCI));
 	for (irq = IRQ_IXP2000_PCIA; irq <= IRQ_IXP2000_PCIB; irq++) {
