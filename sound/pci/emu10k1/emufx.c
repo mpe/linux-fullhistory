@@ -2092,7 +2092,7 @@ static int snd_emu10k1_fx8010_info(emu10k1_t *emu, emu10k1_fx8010_info_t *info)
 	memset(info, 0, sizeof(info));
 	info->card = emu->card_type;
 	info->internal_tram_size = emu->fx8010.itram_size;
-	info->external_tram_size = emu->fx8010.etram_pages.bytes;
+	info->external_tram_size = emu->fx8010.etram_pages.bytes / 2;
 	fxbus = fxbuses;
 	extin = emu->audigy ? audigy_ins : creative_ins;
 	extout = emu->audigy ? audigy_outs : creative_outs;
