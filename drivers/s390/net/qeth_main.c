@@ -1,6 +1,6 @@
 /*
  *
- * linux/drivers/s390/net/qeth_main.c ($Revision: 1.203 $)
+ * linux/drivers/s390/net/qeth_main.c ($Revision: 1.206 $)
  *
  * Linux on zSeries OSA Express and HiperSockets support
  *
@@ -12,7 +12,7 @@
  *			  Frank Pavlic (pavlic@de.ibm.com) and
  *		 	  Thomas Spatzier <tspat@de.ibm.com>
  *
- *    $Revision: 1.203 $	 $Date: 2005/03/02 15:53:57 $
+ *    $Revision: 1.206 $	 $Date: 2005/03/24 09:04:18 $
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -77,7 +77,7 @@ qeth_eyecatcher(void)
 #include "qeth_mpc.h"
 #include "qeth_fs.h"
 
-#define VERSION_QETH_C "$Revision: 1.203 $"
+#define VERSION_QETH_C "$Revision: 1.206 $"
 static const char *version = "qeth S/390 OSA-Express driver";
 
 /**
@@ -3812,6 +3812,7 @@ qeth_fill_header(struct qeth_card *card, struct qeth_hdr *hdr,
 {
 	QETH_DBF_TEXT(trace, 6, "fillhdr");
 
+	memset(hdr, 0, sizeof(struct qeth_hdr));
 	if (card->options.layer2) {
 		qeth_layer2_fill_header(card, hdr, skb, cast_type);
 		return;
@@ -4065,6 +4066,12 @@ qeth_send_packet(struct qeth_card *card, struct sk_buff *skb)
 		}
 	}
 	cast_type = qeth_get_cast_type(card, skb);
+	if ((cast_type == RTN_BROADCAST) && (card->info.broadcast_capable == 0)){
+		card->stats.tx_dropped++;
+		card->stats.tx_errors++;
+		dev_kfree_skb_any(skb);
+		return NETDEV_TX_OK;
+	}
 	queue = card->qdio.out_qs
 		[qeth_get_priority_queue(card, skb, ipv, cast_type)];
 
