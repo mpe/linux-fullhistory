@@ -772,7 +772,7 @@ int idescsi_queue (Scsi_Cmnd *cmd, void (*done)(Scsi_Cmnd *))
 	rq->cmd = IDESCSI_PC_RQ;
 	spin_unlock(&io_request_lock);
 	(void) ide_do_drive_cmd (drive, rq, ide_end);
-	spin_lock(&io_request_lock);
+	spin_lock_irq(&io_request_lock);
 	return 0;
 abort:
 	if (pc) kfree (pc);

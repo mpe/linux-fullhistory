@@ -1525,6 +1525,7 @@ int ide_revalidate_disk(kdev_t i_rdev)
 			if (sb)
 				invalidate_inodes(sb);
 			invalidate_buffers (devp);
+			set_blocksize(devp, 1024);
 		}
 		drive->part[p].start_sect = 0;
 		drive->part[p].nr_sects   = 0;

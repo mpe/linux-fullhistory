@@ -105,9 +105,18 @@ void scheduling_functions_start_here(void) { }
 
 static inline void reschedule_idle(struct task_struct * p)
 {
+
 	/*
 	 * For SMP, we try to see if the CPU the task used
 	 * to run on is idle..
+	 */
+#if 0
+	/*
+	 * Disable this for now. Ingo has some interesting
+	 * code that looks too complex, and I have some ideas,
+	 * but in the meantime.. One problem is that "wakeup()"
+	 * can be (and is) called before we've even initialized
+	 * SMP completely, so..
 	 */
 #ifdef __SMP__
 	int want_cpu = p->processor;
@@ -131,6 +140,7 @@ static inline void reschedule_idle(struct task_struct * p)
 			}
 		} while (--i > 0);
 	}
+#endif
 #endif
 	if (p->policy != SCHED_OTHER || p->counter > current->counter + 3)
 		current->need_resched = 1;	

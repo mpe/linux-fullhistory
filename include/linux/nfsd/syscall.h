@@ -12,6 +12,7 @@
 #include <linux/config.h>
 #include <linux/types.h>
 #include <linux/socket.h>
+#include <linux/posix_types.h>
 #include <linux/nfsd/const.h>
 #include <linux/nfsd/export.h>
 #include <linux/nfsd/nfsfh.h>
@@ -54,29 +55,29 @@ struct nfsctl_client {
 struct nfsctl_export {
 	char			ex_client[NFSCLNT_IDMAX+1];
 	char			ex_path[NFS_MAXPATHLEN+1];
-	dev_t			ex_dev;
-	ino_t			ex_ino;
+	__kernel_dev_t		ex_dev;
+	__kernel_ino_t		ex_ino;
 	int			ex_flags;
-	uid_t			ex_anon_uid;
-	gid_t			ex_anon_gid;
+	__kernel_uid_t		ex_anon_uid;
+	__kernel_gid_t		ex_anon_gid;
 };
 
 /* UGIDUPDATE */
 struct nfsctl_uidmap {
 	char *			ug_ident;
-	uid_t			ug_uidbase;
+	__kernel_uid_t		ug_uidbase;
 	int			ug_uidlen;
-	uid_t *			ug_udimap;
-	uid_t			ug_gidbase;
+	__kernel_uid_t *	ug_udimap;
+	__kernel_gid_t		ug_gidbase;
 	int			ug_gidlen;
-	gid_t *			ug_gdimap;
+	__kernel_gid_t *	ug_gdimap;
 };
 
 /* GETFH */
 struct nfsctl_fhparm {
 	struct sockaddr		gf_addr;
-	dev_t			gf_dev;
-	ino_t			gf_ino;
+	__kernel_dev_t		gf_dev;
+	__kernel_ino_t		gf_ino;
 	int			gf_version;
 };
 

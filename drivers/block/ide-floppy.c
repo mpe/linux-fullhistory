@@ -43,6 +43,7 @@
 #include <linux/errno.h>
 #include <linux/genhd.h>
 #include <linux/malloc.h>
+#include <linux/cdrom.h>
 
 #include <asm/byteorder.h>
 #include <asm/irq.h>
@@ -1141,7 +1142,18 @@ static int idefloppy_get_capacity (ide_drive_t *drive)
 static int idefloppy_ioctl (ide_drive_t *drive, struct inode *inode, struct file *file,
 				 unsigned int cmd, unsigned long arg)
 {
-	return -EIO;
+	idefloppy_pc_t pc;
+
+	if (cmd == CDROMEJECT) {
+		if (drive->usage > 1)
+			return -EBUSY;
+		idefloppy_create_prevent_cmd (&pc, 0);
+		(void) idefloppy_queue_pc_tail (drive, &pc);
+		idefloppy_create_start_stop_cmd (&pc, 2);
+		(void) idefloppy_queue_pc_tail (drive, &pc);
+		return 0;
+	}
+ 	return -EIO;
 }
 
 /*

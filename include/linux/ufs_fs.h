@@ -21,10 +21,6 @@
 #ifndef __LINUX_UFS_FS_H
 #define __LINUX_UFS_FS_H
 
-#undef UFS_HEAVY_DEBUG
-/*#define UFS_HEAVY_DEBUG 1*/
-/* Uncomment the line above when hacking ufs code */
-
 #include <linux/types.h>
 #include <linux/kernel.h>
 #include <linux/time.h>
@@ -35,11 +31,15 @@
 #define UFS_SBLOCK 8192
 #define UFS_SBSIZE 8192
 
+#define SECTOR_SIZE 512
+#define SECTOR_BITS 9
 #define UFS_MAGIC 0x00011954
 #define UFS_CIGAM 0x54190100 /* byteswapped MAGIC */
 
-#define UFS_FSIZE 1024
-#define UFS_BSIZE 8192
+#define UFS_BSIZE	8192
+#define UFS_MINBSIZE	4096
+#define UFS_FSIZE	1024
+#define UFS_MAXFRAG	(UFS_BSIZE / UFS_FSIZE)
 
 #define UFS_NDADDR 12
 #define UFS_NINDIR 3
@@ -48,7 +48,13 @@
 #define UFS_DIND_BLOCK	(UFS_NDADDR + 1)
 #define UFS_TIND_BLOCK	(UFS_NDADDR + 2)
 
+#define UFS_NDIR_FRAGMENT (UFS_NDADDR << uspi->s_fpbshift)
+#define UFS_IND_FRAGMENT (UFS_IND_BLOCK << uspi->s_fpbshift)
+#define UFS_DIND_FRAGMENT (UFS_DIND_BLOCK << uspi->s_fpbshift)
+#define UFS_TIND_FRAGMENT (UFS_TIND_BLOCK << uspi->s_fpbshift)
+
 #define UFS_ROOTINO 2
+#define UFS_FIRST_INO (UFS_ROOTINO + 1)
 
 #define UFS_USEEFT  ((__u16)65535)
 
@@ -87,62 +93,109 @@
 #define UFS_HURD		0x00000130
 #define UFS_SUN			0x00000200
 #define UFS_NEXT		0x00000400
-/* we preserve distinction in flavor identification even without difference,
- * because yet-to-be-supported features may introduce difference in the future
- */
-/* last but not least, debug flags */
-#define UFS_DEBUG       	0x01000000
-#define UFS_DEBUG_INODE 	0x02000000
-#define UFS_DEBUG_NAMEI 	0x04000000
-#define UFS_DEBUG_LINKS 	0x08000000
-
-#ifdef UFS_HEAVY_DEBUG
-#  define UFS_DEBUG_INITIAL UFS_DEBUG
-#else
-#  define UFS_DEBUG_INITIAL 0
-#endif
 
 /* fs_inodefmt options */
 #define UFS_42INODEFMT	-1
 #define UFS_44INODEFMT	2
 
-#define UFS_ADDR_PER_BLOCK(sb)		((sb)->u.ufs_sb.s_bsize >> 2)
-#define UFS_ADDR_PER_BLOCK_BITS(sb)	((sb)->u.ufs_sb.s_bshift - 2)
+/*
+ * MINFREE gives the minimum acceptable percentage of file system
+ * blocks which may be free. If the freelist drops below this level
+ * only the superuser may continue to allocate blocks. This may
+ * be set to 0 if no reserve of free blocks is deemed necessary,
+ * however throughput drops by fifty percent if the file system
+ * is run at between 95% and 100% full; thus the minimum default
+ * value of fs_minfree is 5%. However, to get good clustering
+ * performance, 10% is a better choice. hence we use 10% as our
+ * default value. With 10% free space, fragmentation is not a
+ * problem, so we choose to optimize for time.
+ */
+#define UFS_MINFREE         5
+#define UFS_DEFAULTOPT      UFS_OPTTIME
+            
+/*
+ * Turn file system block numbers into disk block addresses.
+ * This maps file system blocks to device size blocks.
+ */
+#define ufs_fsbtodb(uspi, b)	((b) << (uspi)->s_fsbtodb)
+#define	ufs_dbtofsb(uspi, b)	((b) >> (uspi)->s_fsbtodb)
 
-/* Test if the inode number is valid. */
-#define ufs_ino_ok(inode)  ((inode->i_ino < 2) &&  \
-	                    (inode->i_ino > (inode->i_sb->u.ufs_sb.s_ncg * inode->i_sb->u.ufs_sb.s_ipg - 1)))
+/*
+ * Cylinder group macros to locate things in cylinder groups.
+ * They calc file system addresses of cylinder group data structures.
+ */
+#define	ufs_cgbase(c)	(uspi->s_fpg * (c))
+#define ufs_cgstart(c)	(ufs_cgbase(c)  + uspi->s_cgoffset * ((c) & ~uspi->s_cgmask))
+#define	ufs_cgsblock(c)	(ufs_cgstart(c) + uspi->s_sblkno)	/* super blk */
+#define	ufs_cgcmin(c)	(ufs_cgstart(c) + uspi->s_cblkno)	/* cg block */
+#define	ufs_cgimin(c)	(ufs_cgstart(c) + uspi->s_iblkno)	/* inode blk */
+#define	ufs_cgdmin(c)	(ufs_cgstart(c) + uspi->s_dblkno)	/* 1st data */
 
-/* Convert (sb,cg) to the first physical block number for that cg. */
-#define ufs_cgstart(sb, cg)   \
-  (((sb)->u.ufs_sb.s_fpg * (cg)) + (sb)->u.ufs_sb.s_cgoffset * ((cg) & ~((sb)->u.ufs_sb.s_cgmask)))
+/*
+ * Macros for handling inode numbers:
+ *     inode number to file system block offset.
+ *     inode number to cylinder group number.
+ *     inode number to file system block address.
+ */
+#define	ufs_inotocg(x)		((x) / uspi->s_ipg)
+#define	ufs_inotocgoff(x)	((x) % uspi->s_ipg)
+#define	ufs_inotofsba(x)	(ufs_cgimin(ufs_inotocg(x)) + ufs_inotocgoff(x) / uspi->s_inopf)
+#define	ufs_inotofsbo(x)	((x) % uspi->s_inopf)
 
-/* Convert (sb,cg) to the first phys. block number for inodes in that cg. */
-#define ufs_cgimin(sb, cg) (ufs_cgstart((sb), (cg)) + (sb)->u.ufs_sb.s_iblkno)
-#define ufs_cgdmin(sb, cg) (ufs_cgstart((sb), (cg)) + (sb)->u.ufs_sb.s_dblkno)
+/*
+ * Give cylinder group number for a file system block.
+ * Give cylinder group block number for a file system block.
+ */
+#define	ufs_dtog(d)	((d) / uspi->s_fpg)
+#define	ufs_dtogd(d)	((d) % uspi->s_fpg)
 
-/* Convert an inode number to a cg number. */
-/* XXX - this can be optimized if s_ipg is a power of 2. */
-#define ufs_ino2cg(inode)  ((inode)->i_ino/(inode)->i_sb->u.ufs_sb.s_ipg)
+/*
+ * Compute the cylinder and rotational position of a cyl block addr.
+ */
+#define ufs_cbtocylno(bno) \
+	((bno) * uspi->s_nspf / uspi->s_spc)
+#define ufs_cbtorpos(bno) \
+	((((bno) * uspi->s_nspf % uspi->s_spc / uspi->s_nsect \
+	* uspi->s_trackskew + (bno) * uspi->s_nspf % uspi->s_spc \
+	% uspi->s_nsect * uspi->s_interleave) % uspi->s_nsect \
+	* uspi->s_nrpos) / uspi->s_npsect)
 
-/* current filesystem state; method depends on flags */
-#define UFS_STATE(usb) \
-		( ((flags&UFS_ST_MASK) == UFS_ST_OLD) \
-                  ? (usb)->fs_u.fs_sun.fs_state /* old normal way */ \
-                  : (usb)->fs_u.fs_44.fs_state /* 4.4BSD way */ )
+/*
+ * The following macros optimize certain frequently calculated
+ * quantities by using shifts and masks in place of divisions
+ * modulos and multiplications.
+ */
+#define ufs_blkoff(loc)		((loc) & uspi->s_qbmask)
+#define ufs_fragoff(loc)	((loc) & uspi->s_qfmask)
+#define ufs_lblktosize(blk)	((blk) << uspi->s_bshift)
+#define ufs_lblkno(loc)		((loc) >> uspi->s_bshift)
+#define ufs_numfrags(loc)	((loc) >> uspi->s_fshift)
+#define ufs_blkroundup(size)	(((size) + uspi->s_qbmask) & uspi->s_bmask)
+#define ufs_fragroundup(size)	(((size) + uspi->s_qfmask) & uspi->s_fmask)
+#define ufs_fragstoblks(frags)	((frags) >> uspi->s_fpbshift)
+#define ufs_blkstofrags(blks)	((blks) << uspi->s_fpbshift)
+#define ufs_fragnum(fsb)	((fsb) & uspi->s_fpbmask)
+#define ufs_blknum(fsb)		((fsb) & ~uspi->s_fpbmask)
 
 #define	UFS_MAXNAMLEN 255
+#define UFS_MAXMNTLEN 512
+#define UFS_MAXCSBUFS 31
+#define UFS_LINK_MAX EXT2_LINK_MAX
 
-#define ufs_lbn(sb, block)		((block) >> (sb)->u.ufs_sb.s_lshift)
-#define ufs_boff(sb, block)		((block) & ~((sb)->u.ufs_sb.s_lmask))
-#define ufs_dbn(sb, block, boff)	((block) + ufs_boff((sb), (boff)))
+/*
+ * UFS_DIR_PAD defines the directory entries boundaries
+ * (must be a multiple of 4)
+ */
+#define UFS_DIR_PAD			4
+#define UFS_DIR_ROUND			(UFS_DIR_PAD - 1)
+#define UFS_DIR_REC_LEN(name_len)	(((name_len) + 1 + 8 + UFS_DIR_ROUND) & ~UFS_DIR_ROUND)
 
 struct ufs_timeval {
 	__s32	tv_sec;
 	__s32	tv_usec;
 };
 
-struct ufs_direct {
+struct ufs_dir_entry {
 	__u32  d_ino;			/* inode number of this entry */
 	__u16  d_reclen;		/* length of this entry */
 	union {
@@ -155,9 +208,6 @@ struct ufs_direct {
 	__u8	d_name[UFS_MAXNAMLEN + 1];	/* file name */
 };
 
-#define MAXMNTLEN 512
-#define MAXCSBUFS 32
-
 struct ufs_csum {
 	__u32	cs_ndir;	/* number of directories */
 	__u32	cs_nbfree;	/* number of free blocks */
@@ -168,7 +218,7 @@ struct ufs_csum {
 /*
  * This is the actual superblock, as it is laid out on the disk.
  */
-struct ufs_superblock {
+struct ufs_super_block {
 	__u32	fs_link;	/* UNUSED */
 	__u32	fs_rlink;	/* UNUSED */
 	__u32	fs_sblkno;	/* addr of super-block in filesys */
@@ -237,15 +287,18 @@ struct ufs_superblock {
 	__u8	fs_clean;	/* file system is clean flag */
 	__u8	fs_ronly;	/* mounted read-only flag */
 	__u8	fs_flags;	/* currently unused flag */
-	__u8	fs_fsmnt[MAXMNTLEN];	/* name mounted on */
+	__u8	fs_fsmnt[UFS_MAXMNTLEN];	/* name mounted on */
 /* these fields retain the current block allocation info */
 	__u32	fs_cgrotor;	/* last cg searched */
-	__u32	fs_csp[MAXCSBUFS];	/* list of fs_cs info buffers */
+	__u32	fs_csp[UFS_MAXCSBUFS];	/* list of fs_cs info buffers */
+	__u32	fs_maxcluster;
 	__u32	fs_cpc;		/* cyl per cycle in postbl */
 	__u16	fs_opostbl[16][8];	/* old rotation block list head */	
 	union {
 		struct {
-			__s32	fs_sparecon[55];/* reserved for future constants */
+			__s32	fs_sparecon[53];/* reserved for future constants */
+			__s32	fs_reclaim;
+			__s32	fs_sparecon2[1];
 			__s32	fs_state;	/* file system state time stamp */
 			__u32	fs_qbmask[2];	/* ~usb_bmask */
 			__u32	fs_qfmask[2];	/* ~usb_fmask */
@@ -255,7 +308,7 @@ struct ufs_superblock {
 			__s32	fs_contigsumsize;/* size of cluster summary array */
 			__s32	fs_maxsymlinklen;/* max length of an internal symlink */
 			__s32	fs_inodefmt;	/* format of on-disk inodes */
-			__u32	fs_maxfilesize[2];/* max representable file size */
+			__u32	fs_maxfilesize[2];	/* max representable file size */
 			__u32	fs_qbmask[2];	/* ~usb_bmask */
 			__u32	fs_qfmask[2];	/* ~usb_fmask */
 			__s32	fs_state;	/* file system state time stamp */
@@ -270,6 +323,59 @@ struct ufs_superblock {
 };
 
 /*
+ * Preference for optimization.
+ */
+#define UFS_OPTTIME	0	/* minimize allocation time */
+#define UFS_OPTSPACE	1	/* minimize disk fragmentation */
+
+/*
+ * Rotational layout table format types
+ */
+#define UFS_42POSTBLFMT		-1	/* 4.2BSD rotational table format */
+#define UFS_DYNAMICPOSTBLFMT	1	/* dynamic rotational table format */
+
+/*
+ * Convert cylinder group to base address of its global summary info.
+ */
+#define fs_cs(indx) \
+	u.ufs_sb.s_csp[(indx) >> uspi->s_csshift][(indx) & ~uspi->s_csmask]
+
+/*
+ * Cylinder group block for a file system.
+ *
+ * Writable fields in the cylinder group are protected by the associated
+ * super block lock fs->fs_lock.
+ */
+#define	CG_MAGIC	0x090255
+#define ufs_cg_chkmagic(ucg)	(SWAB32((ucg)->cg_magic) == CG_MAGIC)
+
+/*
+ * size of this structure is 172 B
+ */
+struct	ufs_cylinder_group {
+	__u32	cg_link;		/* linked list of cyl groups */
+	__u32	cg_magic;		/* magic number */
+	__u32	cg_time;		/* time last written */
+	__u32	cg_cgx;			/* we are the cgx'th cylinder group */
+	__u16	cg_ncyl;		/* number of cyl's this cg */
+	__u16	cg_niblk;		/* number of inode blocks this cg */
+	__u32	cg_ndblk;		/* number of data blocks this cg */
+	struct	ufs_csum cg_cs;		/* cylinder summary information */
+	__u32	cg_rotor;		/* position of last used block */
+	__u32	cg_frotor;		/* position of last used frag */
+	__u32	cg_irotor;		/* position of last used inode */
+	__u32	cg_frsum[UFS_MAXFRAG];	/* counts of available frags */
+	__u32	cg_btotoff;		/* (__u32) block totals per cylinder */
+	__u32	cg_boff;		/* (short) free block positions */
+	__u32	cg_iusedoff;		/* (char) used inode map */
+	__u32	cg_freeoff;		/* (u_char) free block map */
+	__u32	cg_nextfreeoff;		/* (u_char) next available space */
+	__u32	cg_sparecon[16];	/* reserved for future use */
+	__u8	cg_space[1];		/* space for cylinder group maps */
+/* actually longer */
+};
+
+/*
  * structure of an on-disk inode
  */
 struct ufs_inode {
@@ -277,11 +383,11 @@ struct ufs_inode {
 	__u16	ui_nlink;		/*  0x2 */
 	union {
 		struct {
-			__u16	suid;	/*  0x4 */
-			__u16	sgid;	/*  0x6 */
+			__u16	ui_suid;	/*  0x4 */
+			__u16	ui_sgid;	/*  0x6 */
 		} oldids;
-		__u32	inumber;	/*  0x4 lsf: inode number */
-		__u32	author;		/*  0x4 GNU HURD: author */
+		__u32	ui_inumber;	/*  0x4 lsf: inode number */
+		__u32	ui_author;		/*  0x4 GNU HURD: author */
 	} ui_u1;
 	__u64	ui_size;		/*  0x8 */
 	struct ufs_timeval ui_atime;	/* 0x10 access */
@@ -333,43 +439,73 @@ struct ufs_inode {
 #define UFS_SF_IMMUTABLE  0x00020000  /* immutable (can't "change") */
 #define UFS_SF_APPEND     0x00040000  /* append-only */
 #define UFS_SF_NOUNLINK   0x00100000  /* can't be removed or renamed */
-    
- 
+
 #ifdef __KERNEL__
-/*
- * Function prototypes
- */
 
-/* ufs_inode.c */
-extern int ufs_bmap (struct inode *, int);
-extern void ufs_read_inode(struct inode * inode);
-extern void ufs_put_inode(struct inode * inode);
+/* acl.c */
+extern int ufs_permission (struct inode *, int);
 
-extern void ufs_print_inode (struct inode *);
+/* balloc.c */
+extern void ufs_free_fragments (struct inode *, unsigned, unsigned);
+extern void ufs_free_blocks (struct inode *, unsigned, unsigned);
+extern unsigned ufs_new_fragments (struct inode *, u32 *, unsigned, unsigned, unsigned, int *);
 
-/* ufs_namei.c */
-extern int ufs_lookup (struct inode *, struct dentry *);
+/* cylinder.c */
+extern struct ufs_cg_private_info * ufs_load_cylinder (struct super_block *, unsigned);
+extern void ufs_put_cylinder (struct super_block *, unsigned);
 
-/* ufs_super.c */
-extern void ufs_warning (struct super_block *, const char *, const char *, ...)
-        __attribute__ ((format (printf, 3, 4)));
-extern int init_ufs_fs(void);
-
-/*
- * Inodes and files operations
- */
-
-/* ufs_dir.c */
+/* dir.c */
 extern struct inode_operations ufs_dir_inode_operations;
 extern struct file_operations ufs_dir_operations;
+extern int ufs_check_dir_entry (const char *, struct inode *, struct ufs_dir_entry *, struct buffer_head *, unsigned long);
 
-/* ufs_file.c */
+/* file.c */
 extern struct inode_operations ufs_file_inode_operations;
 extern struct file_operations ufs_file_operations;
 
-/* ufs_symlink.c */
+/* ialloc.c */
+extern void ufs_free_inode (struct inode *inode);
+extern struct inode * ufs_new_inode (const struct inode *, int, int *);
+
+/* inode.c */
+extern int ufs_bmap (struct inode *, int);
+extern void ufs_read_inode (struct inode *);
+extern void ufs_put_inode (struct inode *);
+extern void ufs_write_inode (struct inode *);
+extern int ufs_sync_inode (struct inode *);
+extern void ufs_print_inode (struct inode *);
+extern void ufs_write_inode (struct inode *);
+extern void ufs_delete_inode (struct inode *);
+extern struct buffer_head * ufs_getfrag (struct inode *, unsigned, int, int *);
+extern struct buffer_head * ufs_bread (struct inode *, unsigned, int, int *);
+
+/* namei.c */
+extern int ufs_lookup (struct inode *, struct dentry *);
+extern int ufs_mkdir(struct inode *, struct dentry *, int);
+extern int ufs_rmdir (struct inode *, struct dentry *);
+extern int ufs_unlink (struct inode *, struct dentry *);
+extern int ufs_create (struct inode *, struct dentry *, int);
+extern int ufs_rename (struct inode *, struct dentry *, struct inode *, struct dentry *);
+extern int ufs_mknod (struct inode *, struct dentry *, int, int);
+extern int ufs_symlink (struct inode *, struct dentry *, const char *);
+extern int ufs_link (struct dentry *, struct inode *, struct dentry *);
+        
+/* super.c */
+extern struct super_operations ufs_super_ops;
+extern struct file_system_type ufs_fs_type;
+extern void ufs_warning (struct super_block *, const char *, const char *, ...) __attribute__ ((format (printf, 3, 4)));
+extern void ufs_error (struct super_block *, const char *, const char *, ...) __attribute__ ((format (printf, 3, 4)));
+extern void ufs_panic (struct super_block *, const char *, const char *, ...) __attribute__ ((format (printf, 3, 4)));
+        
+extern int init_ufs_fs(void);
+extern void ufs_write_super (struct super_block *);
+extern void ufs_print_cylinder_stuff(struct ufs_cylinder_group *, __u32);
+
+/* symlink.c */
 extern struct inode_operations ufs_symlink_inode_operations;
-extern struct file_operations ufs_symlink_operations;
+
+/* truncate.c */
+extern void ufs_truncate (struct inode *);
 
 #endif	/* __KERNEL__ */
 

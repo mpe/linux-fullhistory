@@ -19,10 +19,6 @@
 #include <linux/config.h>
 #include <asm/processor.h>
 
-#ifdef CONFIG_MTRR
-#  include <asm/mtrr.h>
-#endif
-
 #define CONFIG_BUGi386
 
 __initfunc(static void no_halt(char *s, int *ints))
@@ -333,7 +329,4 @@ __initfunc(static void check_bugs(void))
 	check_amd_k6();
 	check_pentium_f00f();
 	system_utsname.machine[1] = '0' + boot_cpu_data.x86;
-#if defined(CONFIG_MTRR)
-	mtrr_init ();
-#endif
 }

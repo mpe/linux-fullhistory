@@ -1488,6 +1488,76 @@ CONFIG_FB
   If you want to play with it, say Y here and to the driver for your
   graphics board, below. If unsure, say N.
 
+Acorn VIDC support
+CONFIG_FB_ACORN
+  This is the frame buffer device driver for the Acorn VIDC graphics
+  chipset.
+
+Apollo frame buffer device
+CONFIG_FB_APOLLO
+  This is the frame buffer device driver for the monochrome graphics
+  hardware found in some Apollo workstations.
+
+Amiga native chipset support
+CONFIG_FB_AMIGA
+  This is the frame buffer device driver for the builtin graphics
+  chipset found in Amigas.
+
+Amiga OCS chipset support
+CONFIG_FB_AMIGA_OCS
+  This enables support for the original Agnus and Denise video chips,
+  found in the Amiga 1000 and most A500's and A2000's.  If you intend
+  to run Linux on any of these systems, say Y; otherwise say N.
+
+Amiga ECS chipset support
+CONFIG_FB_AMIGA_ECS
+  This enables support for the Enhanced Chip Set, found in later
+  A500's, later A2000's, the A600, the A3000, the A3000T and CDTV.  If
+  you intend to run Linux on any of these systems, say Y; otherwise
+  say N.
+
+Amiga AGA chipset support
+CONFIG_FB_AMIGA_AGA
+  This enables support for the Advanced Graphics Architecture (also
+  known as the AGA or AA) Chip Set, found in the A1200, A4000, A4000T
+  and CD32.  If you intend to run Linux on any of these systems, say Y;
+  otherwise say N.
+
+Amiga CyberVision support
+CONFIG_FB_CYBER
+  This enables support for the Cybervision 64 graphics card from Phase5.
+  Please note that its use is not all that intuitive (i.e. if you have
+  any questions, be sure to ask!).  Say N unless you have a Cybervision
+  64 or plan to get one before you next recompile the kernel.         
+  Please note that this driver DOES NOT support the Cybervision 64 3D
+  card, as they use incompatible video chips.           
+
+Amiga CyberVision3D support (EXPERIMENTAL)
+CONFIG_FB_VIRGE
+  This enables support for the Cybervision 64/3D graphics card from Phase5.
+  Please note that its use is not all that intuitive (i.e. if you have
+  any questions, be sure to ask!).  Say N unless you have a Cybervision
+  64/3D or plan to get one before you next recompile the kernel.         
+  Please note that this driver DOES NOT support the older Cybervision 64
+  card, as they use incompatible video chips.           
+
+Amiga RetinaZ3 support (EXPERIMENTAL)
+CONFIG_FB_RETINAZ3
+  This enables support for the Retina Z3 graphics card. Say N unless you
+  have a Retina Z3 or plan to get one before you next recompile the kernel.
+
+Amiga CLgen driver (EXPERIMENTAL)
+CONFIG_FB_CLGEN
+  This enables support for Cirrus Logic GD542x/543x based boards on Amiga:
+  SD64, Piccolo, Picasso II/II+, Picasso IV, or EGS Spectrum.  Say N
+  unless you have such a graphics board or plan to get one before you next
+  recompile the kernel.
+
+Atari native chipset support
+CONFIG_FB_ATARI
+  This is the frame buffer device driver for the builtin graphics
+  chipset found in Ataris.
+
 Open Firmware frame buffer device support 
 CONFIG_FB_OF
   Say Y if you want support with Open Firmware for your graphics board.
@@ -1499,6 +1569,31 @@ CONFIG_FB_S3TRIO
 ATI Mach64 display support
 CONFIG_FB_ATY
   This driver supports graphics boards with the ATI Mach64 chips.
+
+PowerMac "control" frame buffer device support
+CONFIG_FB_CONTROL
+  This driver supports a frame buffer for the graphics adapter in the
+  Power Macintosh 7300 and others.
+
+PowerMac "platinum" frame buffer device support
+CONFIG_FB_PLATINUM
+  This driver supports a frame buffer for the "platinum" graphics adapter
+  in some Power Macintoshes.
+
+Chips 65550 display support
+CONFIG_FB_CT65550
+  This is the frame buffer device driver for the Chips & Technologies
+  65550 graphics chip in PowerBooks.
+
+Mac frame buffer device
+CONFIG_FB_MAC
+  This is the frame buffer device driver for the graphics hardware in
+  m68k Macintoshes.
+
+HP300 frame buffer device
+CONFIG_FB_HP300
+  This is the frame buffer device driver for the Topcat graphics
+  hardware found in HP300 workstations.
 
 VGA chipset support (text only)
 CONFIG_FB_VGA
@@ -1530,38 +1625,143 @@ CONFIG_FB_MDA
   
   If unsure, say N.
 
-###
-### Somebody please explain the following options
-###
-# Virtual Frame Buffer support (ONLY FOR TESTING!)
-# CONFIG_FB_VIRTUAL
-#
-# Advanced low level driver options
-# CONFIG_FBCON_ADVANCED
-#
-# Monochrome support
-# CONFIG_FBCON_MFB
-#
-# 2 bpp packed pixels support
-# CONFIG_FBCON_CFB2
-#
-# 4 bpp packed pixels support
-# CONFIG_FBCON_CFB4
-#
-# 8 bpp packed pixels support
-# CONFIG_FBCON_CFB8
-#
-# 16 bpp packed pixels support
-# CONFIG_FBCON_CFB16
-#
-# 24 bpp packed pixels support
-# CONFIG_FBCON_CFB24
-#
-# 32 bpp packed pixels support
-# CONFIG_FBCON_CFB32
-#
-# VGA characters/attributes support
-# CONFIG_FBCON_VGA
+SBUS and UPA framebuffers
+CONFIG_FB_SBUS
+  Say Y if you want support for SBUS or UPA based frame buffer device.
+
+Creator/Creator3D support
+CONFIG_FB_CREATOR
+  This is the frame buffer device driver for the Creator and Creator3D
+  graphics boards.
+
+CGsix (GX,TurboGX) support
+CONFIG_FB_CGSIX
+  This is the frame buffer device driver for the CGsix (GX, TurboGX)
+  frame buffer.
+
+BWtwo support
+CONFIG_FB_BWTWO
+  This is the frame buffer device driver for the BWtwo frame buffer.
+
+CGthree support
+CONFIG_FB_CGTHREE
+  This is the frame buffer device driver for the CGthree frame buffer.
+
+TCX (SS4/SS5 only) support
+CONFIG_FB_TCX
+  This is the frame buffer device driver for the TCX 24/8bit frame buffer.
+
+Virtual Frame Buffer support (ONLY FOR TESTING!)
+CONFIG_FB_VIRTUAL
+  This is a `virtual' frame buffer device.  It operates on a chunk of
+  unswapable kernel memory instead of on the memory of a graphics board.
+  This means you cannot see any output sent to this frame buffer device,
+  while it does consume precious memory.  The main use of this frame
+  buffer device is testing and debugging the frame buffer subsystem. Do
+  NOT enable it for normal systems! To protect the innocent, it has to
+  be enabled explicitly on boot time using the kernel option `video=vfb:'.
+
+  This driver is also available as a module ( = code which can be
+  inserted and removed from the running kernel whenever you want).
+  The module will be called vfb.o.  If you want to compile it as
+  a module, say M here and read Documentation/modules.txt.
+ 
+  If unsure, say N.
+
+Advanced low level driver options
+CONFIG_FBCON_ADVANCED
+  The frame buffer console uses character drawing routines that are
+  tailored to the specific organization of pixels in the memory of your
+  graphics hardware.  These are called the low level frame buffer console
+  drivers. Note that they are used for text console output only; they are
+  NOT needed for graphical applications.
+
+  If you do not enable this option, the needed low level drivers are
+  automatically enabled, depending on what frame buffer devices you
+  selected. This is recommended for most users.
+
+  If you enable this option, you have more fine-grained control over which
+  low level drivers are enabled. You can e.g. leave out low level drivers
+  for color depths you do not intend to use for text consoles.
+
+  Low level frame buffer console drivers can be modules ( = code which
+  can be inserted and removed from the running kernel whenever you want).
+  The modules will be called fbcon-*.o.  If you want to compile (some of)
+  them as modules, read Documentation/modules.txt.
+  
+  If unsure, say N.
+
+Monochrome support
+CONFIG_FBCON_MFB
+  This is the low level frame buffer console driver for monochrome
+  (2 colors) packed pixels.
+
+2 bpp packed pixels support
+CONFIG_FBCON_CFB2
+  This is the low level frame buffer console driver for 2 bits per pixel
+  (4 colors) packed pixels.
+
+4 bpp packed pixels support
+CONFIG_FBCON_CFB4
+  This is the low level frame buffer console driver for 4 bits per pixel
+  (16 colors) packed pixels.
+
+8 bpp packed pixels support
+CONFIG_FBCON_CFB8
+  This is the low level frame buffer console driver for 8 bits per pixel
+  (256 colors) packed pixels.
+
+16 bpp packed pixels support
+CONFIG_FBCON_CFB16
+  This is the low level frame buffer console driver for 15 or 16 bits
+  per pixel (32K or 64K colors, also known as `hicolor') packed pixels.
+
+24 bpp packed pixels support
+CONFIG_FBCON_CFB24
+  This is the low level frame buffer console driver for 24 bits per
+  pixel (16M colors, also known as `truecolor') packed pixels. It is
+  NOT for `sparse' 32 bits per pixel mode.
+
+32 bpp packed pixels support
+CONFIG_FBCON_CFB32
+  This is the low level frame buffer console driver for 32 bits per pixel
+  (16M colors, also known as `truecolor') sparse packed pixels.
+
+Amiga bitplanes support
+CONFIG_FBCON_AFB
+  This is the low level frame buffer console driver for 1 to 8 bitplanes
+  (2 to 256 colors) on Amiga.
+
+Amiga interleaved bitplanes support
+CONFIG_FBCON_ILBM
+  This is the low level frame buffer console driver for 1 to 8
+  interleaved bitplanes (2 to 256 colors) on Amiga.
+
+Atari interleaved bitplanes (2 planes) support
+CONFIG_FBCON_IPLAN2P2
+  This is the low level frame buffer console driver for 2 interleaved
+  bitplanes (4 colors) on Atari.
+
+Atari interleaved bitplanes (4 planes) support
+CONFIG_FBCON_IPLAN2P4
+  This is the low level frame buffer console driver for 4 interleaved
+  bitplanes (16 colors) on Atari.
+
+Atari interleaved bitplanes (8 planes) support
+CONFIG_FBCON_IPLAN2P8
+  This is the low level frame buffer console driver for 8 interleaved
+  bitplanes (256 colors) on Atari.
+
+Mac variable bpp packed pixels support
+CONFIG_FBCON_MAC
+  This is the low level frame buffer console driver for 1/2/4/8/16/32
+  bits per pixel packed pixels on Mac. It supports variable fontwidths
+  for low resolution screens.
+  
+VGA characters/attributes support
+CONFIG_FBCON_VGA
+  This is the low level frame buffer console driver for VGA text mode, as
+  used by vgafb.
 
 Parallel-port support
 CONFIG_PARPORT

@@ -532,6 +532,7 @@ asmlinkage int sys_swapon(const char * specialfile, int swap_flags)
 		error = blkdev_open(swap_dentry->d_inode, &filp);
 		if (error)
 			goto bad_swap_2;
+		set_blocksize(p->swap_device, PAGE_SIZE);
 		error = -ENODEV;
 		if (!p->swap_device ||
 		    (blk_size[MAJOR(p->swap_device)] &&

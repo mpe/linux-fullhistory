@@ -66,7 +66,7 @@ tristate 'Kernel automounter support' CONFIG_AUTOFS_FS
 if [ "$CONFIG_AFFS_FS" != "n" ]; then
   define_bool CONFIG_AMIGA_PARTITION y
 fi
-tristate 'UFS filesystem support (read only)' CONFIG_UFS_FS
+tristate 'UFS filesystem support' CONFIG_UFS_FS
 if [ "$CONFIG_UFS_FS" != "n" ]; then
   bool 'BSD disklabel (FreeBSD partition tables) support' CONFIG_BSD_DISKLABEL
   bool 'SMD disklabel (Sun partition tables) support' CONFIG_SMD_DISKLABEL

@@ -750,6 +750,7 @@ int scan_scsis_single (int channel, int dev, int lun, int *max_dev_lun,
   case TYPE_MOD:
   case TYPE_PROCESSOR:
   case TYPE_SCANNER:
+  case TYPE_MEDIUM_CHANGER:
     SDpnt->writeable = 1;
     break;
   case TYPE_WORM:

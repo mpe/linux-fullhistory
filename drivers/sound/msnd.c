@@ -24,7 +24,6 @@
  *
  ********************************************************************/
 
-#include <linux/config.h>
 #include <linux/version.h>
 #if LINUX_VERSION_CODE < 0x020101
 #  define LINUX20

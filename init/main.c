@@ -48,6 +48,10 @@
 #include <linux/dio.h>
 #endif
 
+#ifdef CONFIG_MTRR
+#  include <asm/mtrr.h>
+#endif
+
 /*
  * Versions of gcc older than that listed below may actually compile
  * and link okay, but the end product can have subtle run time bugs.
@@ -1106,11 +1110,21 @@ __initfunc(asmlinkage void start_kernel(void))
 #if defined(CONFIG_QUOTA)
 	dquot_init_hash();
 #endif
+	printk("POSIX conformance testing by UNIFIX\n");
+	check_bugs();
+
 #ifdef __SMP__
 	smp_init();
 #endif
-	printk("POSIX conformance testing by UNIFIX\n");
-	check_bugs();
+
+#if defined(CONFIG_MTRR)	/* Do this after SMP initialization */
+/*
+ * We should probably create some architecture-dependent "fixup after
+ * everything is up" style function where this would belong better
+ * than in init/main.c..
+ */
+	mtrr_init ();
+#endif
 
 	sock_init();
 #ifdef CONFIG_SYSCTL

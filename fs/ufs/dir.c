@@ -11,11 +11,22 @@
  * 4.4BSD (FreeBSD) support added on February 1st 1998 by
  * Niels Kristian Bech Jensen <nkbj@image.dk> partially based
  * on code by Martin von Loewis <martin@mira.isdn.cs.tu-berlin.de>.
+ *
+ * write support by Daniel Pirkl <daniel.pirkl@email.cz> 1998
  */
 
 #include <linux/fs.h>
 
-#include "ufs_swab.h"
+#include "swab.h"
+#include "util.h"
+
+#undef UFS_DIR_DEBUG
+
+#ifdef UFS_DIR_DEBUG
+#define UFSD(x) printk("(%s, %d), %s: ", __FILE__, __LINE__, __FUNCTION__); printk x;
+#else
+#define UFSD(x)
+#endif
 
 /*
  * This is blatantly stolen from ext2fs
@@ -28,10 +39,11 @@ ufs_readdir (struct file * filp, void * dirent, filldir_t filldir)
 	unsigned long offset, lblk, blk;
 	int i, stored;
 	struct buffer_head * bh;
-	struct ufs_direct * de;
+	struct ufs_dir_entry * de;
 	struct super_block * sb;
 	int de_reclen;
-	__u32 flags;
+	unsigned flags, swab;
+
 
 	/* Isn't that already done in the upper layer???
          * the VFS layer really needs some explicit documentation!
@@ -40,13 +52,10 @@ ufs_readdir (struct file * filp, void * dirent, filldir_t filldir)
 		return -EBADF;
 
 	sb = inode->i_sb;
+	swab = sb->u.ufs_sb.s_swab;
         flags = sb->u.ufs_sb.s_flags;
 
-	if (flags & UFS_DEBUG) {
-	        printk("ufs_readdir: ino %lu  f_pos %lu\n",
-	               inode->i_ino, (unsigned long) filp->f_pos);
-	        ufs_print_inode(inode);
-	}
+	UFSD(("ENTER, ino %lu  f_pos %lu\n", inode->i_ino, (unsigned long) filp->f_pos))
 
 	stored = 0;
 	bh = NULL;
@@ -73,8 +82,7 @@ revalidate:
 		 * to make sure. */
 		if (filp->f_version != inode->i_version) {
 			for (i = 0; i < sb->s_blocksize && i < offset; ) {
-				de = (struct ufs_direct *)
-					(bh->b_data + i);
+				de = (struct ufs_dir_entry *)(bh->b_data + i);
 				/* It's too expensive to do a full
 				 * dirent test each time round this
 				 * loop, but we do have to test at
@@ -94,9 +102,9 @@ revalidate:
 
 		while (!error && filp->f_pos < inode->i_size
 		       && offset < sb->s_blocksize) {
-			de = (struct ufs_direct *) (bh->b_data + offset);
+			de = (struct ufs_dir_entry *) (bh->b_data + offset);
 	                /* XXX - put in a real ufs_check_dir_entry() */
-	                if ((de->d_reclen == 0) || (NAMLEN(de) == 0)) {
+	                if ((de->d_reclen == 0) || (ufs_namlen(de) == 0)) {
 			/* SWAB16() was unneeded -- compare to 0 */
 	                        filp->f_pos = (filp->f_pos &
 				              (sb->s_blocksize - 1)) +
@@ -128,11 +136,9 @@ revalidate:
 				 * during the copy operation. */
 				unsigned long version = inode->i_version;
 
-	                        if (flags & UFS_DEBUG) {
-	                                printk("ufs_readdir: filldir(%s,%u)\n",
-	                                       de->d_name, SWAB32(de->d_ino));
-	                        }
-				error = filldir(dirent, de->d_name, NAMLEN(de),
+				UFSD(("filldir(%s,%u)\n", de->d_name, SWAB32(de->d_ino)))
+				UFSD(("namlen %u\n", ufs_namlen(de)))
+				error = filldir(dirent, de->d_name, ufs_namlen(de),
 				                filp->f_pos, SWAB32(de->d_ino));
 				if (error)
 					break;
@@ -145,13 +151,43 @@ revalidate:
 		offset = 0;
 		brelse (bh);
 	}
-#if 0 /* XXX */
-	if (!IS_RDONLY(inode)) {
-		inode->i_atime = CURRENT_TIME;
-		inode->i_dirt = 1;
-	}
-#endif /* XXX */
+	UPDATE_ATIME(inode);
 	return 0;
+}
+
+int ufs_check_dir_entry (const char * function,	struct inode * dir,
+	struct ufs_dir_entry * de, struct buffer_head * bh, 
+	unsigned long offset)
+{
+	struct super_block * sb;
+	const char * error_msg;
+	unsigned flags, swab;
+	
+	sb = dir->i_sb;
+	flags = sb->u.ufs_sb.s_flags;
+	swab = sb->u.ufs_sb.s_swab;
+	error_msg = NULL;
+			
+	if (SWAB16(de->d_reclen) < UFS_DIR_REC_LEN(1))
+		error_msg = "reclen is smaller than minimal";
+	else if (SWAB16(de->d_reclen) % 4 != 0)
+		error_msg = "reclen % 4 != 0";
+	else if (SWAB16(de->d_reclen) < UFS_DIR_REC_LEN(ufs_namlen(de)))
+		error_msg = "reclen is too small for namlen";
+	else if (dir && ((char *) de - bh->b_data) + SWAB16(de->d_reclen) >
+		 dir->i_sb->s_blocksize)
+		error_msg = "directory entry across blocks";
+	else if (dir && SWAB32(de->d_ino) > (sb->u.ufs_sb.s_uspi->s_ipg * sb->u.ufs_sb.s_uspi->s_ncg))
+		error_msg = "inode out of bounds";
+
+	if (error_msg != NULL)
+		ufs_error (sb, function, "bad entry in directory #%lu, size %lu: %s - "
+			    "offset=%lu, inode=%lu, reclen=%d, namlen=%d",
+			    dir->i_ino, dir->i_size, error_msg, offset,
+			    (unsigned long) SWAB32(de->d_ino),
+			    SWAB16(de->d_reclen), ufs_namlen(de));
+	
+	return (error_msg == NULL ? 1 : 0);
 }
 
 static struct file_operations ufs_dir_operations = {
@@ -172,20 +208,21 @@ static struct file_operations ufs_dir_operations = {
 
 struct inode_operations ufs_dir_inode_operations = {
 	&ufs_dir_operations,	/* default directory file operations */
-	NULL,			/* create */
+	ufs_create,		/* create */
 	ufs_lookup,		/* lookup */
-	NULL,			/* link */
-	NULL,			/* unlink */
-	NULL,			/* symlink */
-	NULL,			/* mkdir */
-	NULL,			/* rmdir */
-	NULL,			/* mknod */
-	NULL,			/* rename */
+	ufs_link,		/* link */
+	ufs_unlink,		/* unlink */
+	ufs_symlink,		/* symlink */
+	ufs_mkdir,		/* mkdir */
+	ufs_rmdir,		/* rmdir */
+	ufs_mknod,		/* mknod */
+	ufs_rename,		/* rename */
 	NULL,			/* readlink */
+	NULL,			/* follow_link */
 	NULL,			/* readpage */
 	NULL,			/* writepage */
-	NULL,			/* bmap */
-	NULL,			/* truncate */
-	NULL,			/* permission */
+	ufs_bmap,		/* bmap */
+	ufs_truncate,		/* truncate */
+	ufs_permission,		/* permission */
 	NULL,			/* smap */
 };
