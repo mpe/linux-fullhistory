@@ -1105,6 +1105,9 @@ static int vfat_find(struct inode *dir,struct qstr* qname,
 	fil.f_pos = 0;
 	vf.name = qname->name;
 	vf.len = qname->len;
+	while (vf.len && vf.name[vf.len-1] == '.') {
+		vf.len--;
+	}
 	vf.new_filename = new_filename;
 	vf.found = 0;
 	vf.posix = MSDOS_SB(sb)->options.posixfs;
@@ -1135,7 +1138,7 @@ static int vfat_find(struct inode *dir,struct qstr* qname,
 		goto cleanup;
 	}
 	
-	res = vfat_build_slots(dir, qname->name, qname->len, ds, 
+	res = vfat_build_slots(dir, qname->name, vf.len, ds, 
 			       &slots, &is_long);
 	if (res < 0) goto cleanup;
 

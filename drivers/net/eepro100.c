@@ -33,7 +33,23 @@ static int rxdmacount = 0;
 
 /* Set the copy breakpoint for the copy-only-tiny-buffer Rx method.
    Lower values use more memory, but are faster. */
-static int rx_copybreak = 200;
+/*
+ * NOTE! The value of 2000 means that this optimization never gets
+ * used. Rationale: it seems to be broken when in low-memory situations,
+ * apparently when alloc_skb() can return NULL the clever list of
+ * copy-buffers can get buggered. 
+ *
+ * My personal suspicion is that the allocation failure will cause
+ * us to not remove the skb from the list of available buffers, but
+ * we'd already have done a "skb_push()" with the data we got, so
+ * the buffer stays on the list but the available memory in it
+ * shrinks until we panic.
+ *
+ * Donald, when you fix this you can shrink this value again.
+ *
+ *		Linus
+ */
+static int rx_copybreak = 2000;
 
 /* Maximum events (Rx packets, etc.) to handle at each interrupt. */
 static int max_interrupt_work = 200;

@@ -16,7 +16,7 @@
 #include <linux/config.h>
 
 #ifdef CONFIG_VGA_CONSOLE
-#ifndef CONFIG_FB_MODULE
+#if !defined(CONFIG_FB) && !defined(CONFIG_FB_MODULE)
 #define VT_BUF_VRAM_ONLY
 #endif
 #include <asm/vga.h>

@@ -86,50 +86,16 @@
  * semantics.  See the comments in "open_namei" and "do_link" below.
  */
 
-char * getname_quicklist = NULL;
-int getname_quickcount = 0;
-spinlock_t getname_quicklock = SPIN_LOCK_UNLOCKED;
-
-/* Tuning: increase locality by reusing same pages again...
- * if getname_quicklist becomes too long on low memory machines, either a limit
- * should be added or after a number of cycles some pages should
- * be released again ...
- */
 static inline char * get_page(void)
 {
 	char * res;
-	spin_lock(&getname_quicklock);
-	res = getname_quicklist;
-	if (res) {
-#ifdef DEBUG
-		char * tmp = res;
-		int i;
-		for(i=0; i<getname_quickcount; i++)
-			tmp = *(char**)tmp;
-		if (tmp)
-			printk("bad quicklist %x\n", (int)tmp);
-#endif
-		getname_quicklist = *(char**)res;
-		getname_quickcount--;
-	}
-	spin_unlock(&getname_quicklock);
-	if (!res)
-		res = (char*)__get_free_page(GFP_KERNEL);
+	res = (char*)__get_free_page(GFP_KERNEL);
 	return res;
 }
 
 inline void putname(char * name)
 {
-	if (name) {
-		spin_lock(&getname_quicklock);
-		*(char**)name = getname_quicklist;
-		getname_quicklist = name;
-		getname_quickcount++;
-		spin_unlock(&getname_quicklock);
-	}
-	/* if a getname_quicklist limit is necessary to introduce, call
-	 * free_page((unsigned long) name);
-	 */
+	free_page((unsigned long) name); 
 }
 
 /* In order to reduce some races, while at the same time doing additional

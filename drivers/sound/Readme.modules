@@ -29,7 +29,7 @@ modules in the usual way.
  Then, add to your /etc/modules.conf or /etc/conf.modules something like:
 
 alias char-major-14 sb
-post-install sb modprobe  "-k" "adlib_card"
+post-install sb /sbin/modprobe "-k" "adlib_card"
 options sb io=0x220 irq=7 dma=1 dma16=5 mpu_io=0x330
 options adlib_card io=0x388     # FM synthesizer
 

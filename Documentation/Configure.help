@@ -7556,24 +7556,6 @@ CONFIG_MTRR
 
   See Documentation/mtrr.txt for more information.
 
-Cyrix low power feature
-CONFIG_CYRIX_SUSP
-  Cyrix 6x86 family CPUs include a feature named "Suspend on Halt".
-  When enabled, a single "halt" instruction puts the CPU in suspend mode
-  till the next interruption. In suspend mode, the CPU dissipates less
-  than the fiftieth of its nominal power ; the good news is that Linux
-  executes a halt instruction when it has nothing to, so that your CPU
-  will spend its idle time in suspend mode. Note that you can also
-  manually activate/deactivate this feature by using the set6x86 tool
-  available at :
-      ftp://tsx-11.mit.edu/pub/linux/sources/sbin/set6x86.tar.gz
-
-  There's no risk to use this. The only reason why you would say no is
-  if you are enough of hearing you fans changing speed because of the
-  difference in power consumption between idle and work time.
-
-  Please email any comments to : tarreau@aemiaif.lip6.fr
-
 Main CPU frequency, only for DEC alpha machine
 CONFIG_FT_ALPHA_CLOCK
   On some DEC Alpha machines the CPU clock frequency cannot be

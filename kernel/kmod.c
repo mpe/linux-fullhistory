@@ -21,7 +21,7 @@
 	modprobe_path is set via /proc/sys.
 */
 char modprobe_path[256] = "/sbin/modprobe";
-static char * envp[] = { "HOME=/", "TERM=linux", "PATH=/usr/bin:/bin", NULL };
+static char * envp[] = { "HOME=/", "TERM=linux", "PATH=/sbin:/usr/sbin:/bin:/usr/bin", NULL };
 
 /*
 	exec_modprobe is spawned from a kernel-mode user process,

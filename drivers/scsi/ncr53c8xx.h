@@ -42,6 +42,8 @@
 #ifndef NCR53C8XX_H
 #define NCR53C8XX_H
 
+#include <linux/config.h>
+
 #if 0
 #define CONFIG_SCSI_NCR53C8XX_PROFILE
 #endif
@@ -62,7 +64,6 @@
 #if !defined(LINUX_VERSION_CODE)
 #include <linux/version.h>
 #endif
-#include <linux/config.h>
 
 #define LinuxVersionCode(v, p, s) (((v)<<16)+((p)<<8)+(s))
 

@@ -444,7 +444,7 @@ out:
  * to be.  This works out OK, because we now do proper aging on page
  * contents. 
  */
-static inline int do_try_to_free_page(int gfp_mask)
+static int do_try_to_free_page(int gfp_mask)
 {
 	static int state = 0;
 	int i=6;
@@ -457,9 +457,10 @@ static inline int do_try_to_free_page(int gfp_mask)
 	stop = 3;
 	if (gfp_mask & __GFP_WAIT)
 		stop = 0;
+
 	if (((buffermem >> PAGE_SHIFT) * 100 > buffer_mem.borrow_percent * num_physpages)
 		   || (page_cache_size * 100 > page_cache.borrow_percent * num_physpages))
-		state = 0;
+		shrink_mmap(i, gfp_mask);
 
 	switch (state) {
 		do {
@@ -482,23 +483,6 @@ static inline int do_try_to_free_page(int gfp_mask)
 		} while ((i - stop) >= 0);
 	}
 	return 0;
-}
-
-/*
- * This is REALLY ugly.
- *
- * We need to make the locks finer granularity, but right
- * now we need this so that we can do page allocations
- * without holding the kernel lock etc.
- */
-int try_to_free_page(int gfp_mask)
-{
-	int retval;
-
-	lock_kernel();
-	retval = do_try_to_free_page(gfp_mask);
-	unlock_kernel();
-	return retval;
 }
 
 /*
@@ -573,15 +557,16 @@ int kswapd(void *unused)
 		 * woken up more often and the rate will be even
 		 * higher).
 		 */
-		tries = pager_daemon.tries_base >> free_memory_available(3);
+		tries = pager_daemon.tries_base;
+		tries >>= 4*free_memory_available();
 	
 		while (tries--) {
 			int gfp_mask;
 
-			if (++tried > pager_daemon.tries_min && free_memory_available(0))
+			if (free_memory_available() > 1)
 				break;
 			gfp_mask = __GFP_IO;
-			try_to_free_page(gfp_mask);
+			do_try_to_free_page(gfp_mask);
 			/*
 			 * Syncing large chunks is faster than swapping
 			 * synchronously (less head movement). -- Rik.
@@ -595,6 +580,27 @@ int kswapd(void *unused)
 	remove_wait_queue(&kswapd_wait, &wait);
 	unlock_kernel();
 	return 0;
+}
+
+/*
+ * This is REALLY ugly.
+ *
+ * We need to make the locks finer granularity, but right
+ * now we need this so that we can do page allocations
+ * without holding the kernel lock etc.
+ */
+int try_to_free_pages(unsigned int gfp_mask, int count)
+{
+	int retval;
+
+	lock_kernel();
+	retval = 0;
+	do {
+		retval |= do_try_to_free_page(gfp_mask);
+		count--;
+	} while (count > 0);
+	unlock_kernel();
+	return retval;
 }
 
 /* 
@@ -616,11 +622,11 @@ void swap_tick(void)
 	 * Schedule for wakeup if there isn't lots
 	 * of free memory.
 	 */
-	switch (free_memory_available(3)) {
+	switch (free_memory_available()) {
 	case 0:
 		want = now;
 		/* Fall through */
-	case 1 ... 3:
+	case 1:
 		want_wakeup = 1;
 	default:
 	}

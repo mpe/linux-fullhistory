@@ -57,19 +57,19 @@ int vm_enough_memory(long pages)
 	 * simple, it hopefully works in most obvious cases.. Easy to
 	 * fool it, but this should catch most mistakes.
 	 */
-	long freepages;
+	long free;
 	
         /* Sometimes we want to use more memory than we have. */
 	if (sysctl_overcommit_memory)
 	    return 1;
 
-	freepages = buffermem >> PAGE_SHIFT;
-	freepages += page_cache_size;
-	freepages >>= 1;
-	freepages += nr_free_pages;
-	freepages += nr_swap_pages;
-	freepages -= num_physpages >> 4;
-	return freepages > pages;
+	free = buffermem >> PAGE_SHIFT;
+	free += page_cache_size;
+	free >>= 1;
+	free += nr_free_pages;
+	free += nr_swap_pages;
+	free -= num_physpages >> 4;
+	return free > pages;
 }
 
 /* Remove one vm structure from the inode's i_mmap ring. */

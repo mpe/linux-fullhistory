@@ -423,6 +423,54 @@ void show_regs(struct pt_regs * regs)
 		0xffff & regs->xds,0xffff & regs->xes);
 }
 
+/*
+ * Allocation and freeing of basic task resources.
+ *
+ * NOTE! The task struct and the stack go together
+ *
+ * The task structure is a two-page thing, and as such
+ * not reliable to allocate using the basic page alloc
+ * functions. We have a small cache of structures for
+ * when the allocations fail..
+ *
+ * This extra buffer essentially acts to make for less
+ * "jitter" in the allocations..
+ */
+#define EXTRA_TASK_STRUCT	16
+static struct task_struct * task_struct_stack[EXTRA_TASK_STRUCT];
+static int task_struct_stack_ptr = -1;
+
+struct task_struct * alloc_task_struct(void)
+{
+	int index;
+	struct task_struct *ret;
+
+	index = task_struct_stack_ptr;
+	if (index >= EXTRA_TASK_STRUCT/2)
+		goto use_cache;
+	ret = (struct task_struct *) __get_free_pages(GFP_KERNEL,1);
+	if (!ret) {
+		index = task_struct_stack_ptr;
+		if (index >= 0) {
+use_cache:
+			ret = task_struct_stack[index];
+			task_struct_stack_ptr = index-1;
+		}
+	}
+	return ret;
+}
+
+void free_task_struct(struct task_struct *p)
+{
+	int index = task_struct_stack_ptr+1;
+
+	if (index < EXTRA_TASK_STRUCT) {
+		task_struct_stack[index] = p;
+		task_struct_stack_ptr = index;
+	} else
+		free_pages((unsigned long) p, 1);
+}
+
 void release_segments(struct mm_struct *mm)
 {
 	void * ldt = mm->segments;

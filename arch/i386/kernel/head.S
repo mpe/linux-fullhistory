@@ -4,8 +4,7 @@
  *  Copyright (C) 1991, 1992  Linus Torvalds
  *
  *  Enhanced CPU detection and feature setting code by Mike Jagdis
- *  and Martin Mares, November 1997, and partially recoded and moved
- *  to setup.c by Willy Tarreau, July 1998.
+ *  and Martin Mares, November 1997.
  */
 
 .text
@@ -22,9 +21,7 @@
 #define CL_OFFSET	0x90022
 
 /*
- * References to members of the boot_cpu_data structure. Member
- * definitions other than X86 and X86_HARD_MATH may be removed
- * since they're no more used here.
+ * References to members of the boot_cpu_data structure.
  */
 
 #define CPU_PARAMS	SYMBOL_NAME(boot_cpu_data)
@@ -141,13 +138,17 @@ startup_32:
 #ifdef __SMP__
 checkCPUtype:
 #endif
+
+	movl $-1,X86_CPUID		#  -1 for no CPUID initially
+
+/* check if it is 486 or 386. */
 /*
- * check if the cpu is >=486 or <=386.
  * XXX - this does a lot of unnecessary setup.  Alignment checks don't
  * apply at our cpl of 0 and the stack ought to be aligned already, and
  * we don't need to preserve eflags.
  */
 
+	movl $3,X86		# at least 386
 	pushfl			# push EFLAGS
 	popl %eax		# get EFLAGS
 	movl %eax,%ecx		# save original EFLAGS
@@ -157,21 +158,56 @@ checkCPUtype:
 	pushfl			# get new EFLAGS
 	popl %eax		# put it in eax
 	xorl %ecx,%eax		# change in flags
-	pushl %ecx		# get original EFLAGS
-	popfl			# restore EFLAGS
 	andl $0x40000,%eax	# check if AC bit changed
-	movl %cr0,%eax		# prepares new EAX
-	je 1f			# at most a 386
+	je is386
 
 	movl $4,X86		# at least 486
+	movl %ecx,%eax
+	xorl $0x200000,%eax	# check ID flag
+	pushl %eax
+	popfl			# if we are on a straight 486DX, SX, or
+	pushfl			# 487SX we can't change it
+	popl %eax
+	xorl %ecx,%eax
+	pushl %ecx		# restore original EFLAGS
+	popfl
+	andl $0x200000,%eax
+	je is486
+
+	/* get vendor info */
+	xorl %eax,%eax			# call CPUID with 0 -> return vendor ID
+	cpuid
+	movl %eax,X86_CPUID		# save CPUID level
+	movl %ebx,X86_VENDOR_ID		# lo 4 chars
+	movl %edx,X86_VENDOR_ID+4	# next 4 chars
+	movl %ecx,X86_VENDOR_ID+8	# last 4 chars
+
+	orl %eax,%eax			# do we have processor info as well?
+	je is486
+
+	movl $1,%eax		# Use the CPUID instruction to get CPU type
+	cpuid
+	movb %al,%cl		# save reg for future use
+	andb $0x0f,%ah		# mask processor family
+	movb %ah,X86
+	andb $0xf0,%al		# mask model
+	shrb $4,%al
+	movb %al,X86_MODEL
+	andb $0x0f,%cl		# mask mask revision
+	movb %cl,X86_MASK
+	movl %edx,X86_CAPABILITY
+
+is486:
+	movl %cr0,%eax		# 486 or better
 	andl $0x80000011,%eax	# Save PG,PE,ET
 	orl $0x50022,%eax	# set AM, WP, NE and MP
 	jmp 2f
-1:
-	movl $3,X86		# at most 386
+
+is386:	pushl %ecx		# restore original EFLAGS
+	popfl
+	movl %cr0,%eax		# 386
 	andl $0x80000011,%eax	# Save PG,PE,ET
 	orl $2,%eax		# set MP
-
 2:	movl %eax,%cr0
 	call check_x87
 #ifdef __SMP__
@@ -209,7 +245,6 @@ checkCPUtype:
 	pushl %eax
 	pushl %eax
 	cld			# gcc2 wants the direction flag cleared at all times
-	call SYMBOL_NAME(refine_cpu_detection)	# get more info about cpu
 	call SYMBOL_NAME(start_kernel)
 L6:
 	jmp L6			# main should never return here, but

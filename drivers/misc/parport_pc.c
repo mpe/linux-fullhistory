@@ -783,11 +783,6 @@ int parport_pc_init(int *io, int *irq, int *dma)
 		count += probe_one_port(0x278, irq[0], dma[0]);
 	}
 
-	/* Give any attached devices a chance to gather their thoughts */
-	current->state = TASK_INTERRUPTIBLE;
-	current->timeout = jiffies + 75;
-	schedule ();
-
 	return count;
 }
 

@@ -125,8 +125,8 @@ int shrink_mmap(int priority, int gfp_mask)
 	struct buffer_head *tmp, *bh;
 	int count_max, count_min;
 
-	count_max = (limit<<1) >> (priority>>1);
-	count_min = (limit<<1) >> (priority);
+	count_max = (limit<<2) >> (priority>>1);
+	count_min = (limit<<2) >> (priority);
 
 	page = mem_map + clock;
 	do {

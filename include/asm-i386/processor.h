@@ -100,6 +100,51 @@ extern void identify_cpu(struct cpuinfo_x86 *);
 extern void print_cpu_info(struct cpuinfo_x86 *);
 
 /*
+ *	Generic CPUID function
+ */
+extern inline void cpuid(int op, int *eax, int *ebx, int *ecx, int *edx)
+{
+	__asm__("cpuid"
+		: "=a" (*eax),
+		  "=b" (*ebx),
+		  "=c" (*ecx),
+		  "=d" (*edx)
+		: "a" (op)
+		: "cc");
+}
+
+/*
+ *      Cyrix CPU configuration register indexes
+ */
+#define CX86_CCR2 0xc2
+#define CX86_CCR3 0xc3
+#define CX86_CCR4 0xe8
+#define CX86_CCR5 0xe9
+#define CX86_DIR0 0xfe
+#define CX86_DIR1 0xff
+
+/*
+ *      Cyrix CPU indexed register access macros
+ */
+
+extern inline unsigned char getCx86(unsigned char reg)
+{
+	unsigned char data;
+
+	__asm__ __volatile__("movb %1,%%al\n\t"
+		      "outb %%al,$0x22\n\t"
+		      "inb $0x23,%%al" : "=a" (data) : "q" (reg));
+	return data;
+}
+
+extern inline void setCx86(unsigned char reg, unsigned char data)
+{
+	__asm__ __volatile__("outb %%al,$0x22\n\t"
+	     "movb %1,%%al\n\t"
+	     "outb %%al,$0x23" : : "a" (reg), "q" (data));
+}
+
+/*
  * Bus types (default is ISA, but people can check others with these..)
  */
 extern int EISA_bus;
@@ -248,13 +293,8 @@ extern inline unsigned long thread_saved_pc(struct thread_struct *t)
 	return ((unsigned long *)t->esp)[3];
 }
 
-/* Allocation and freeing of basic task resources. */
-/*
- * NOTE! The task struct and the stack go together
- */
-#define alloc_task_struct() \
-	((struct task_struct *) __get_free_pages(GFP_KERNEL,1))
-#define free_task_struct(p)	free_pages((unsigned long)(p),1)
+extern struct task_struct * alloc_task_struct(void);
+extern void free_task_struct(struct task_struct *);
 
 #define init_task	(init_task_union.task)
 #define init_stack	(init_task_union.stack)

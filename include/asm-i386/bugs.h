@@ -2,6 +2,11 @@
  *  include/asm-i386/bugs.h
  *
  *  Copyright (C) 1994  Linus Torvalds
+ *
+ *  Cyrix stuff, June 1998 by:
+ *	- Rafael R. Reilova (moved everything from head.S),
+ *	- Channing Corn (tests & fixes),
+ *	- Andrew D. Balsa (code cleanup).
  */
 
 /*
@@ -226,13 +231,99 @@ __initfunc(static void check_pentium_f00f(void))
 	}
 }
 
+/*
+ * perform the Cyrix 5/2 test (!0 means it's a Cyrix)
+ */
+
+static inline int test_cyrix_52div(void)
+{
+	int test;
+
+	__asm__ __volatile__("xor %%eax,%%eax\n\t"
+	     "sahf\n\t"
+	     "movb $5,%%al\n\t"
+	     "movb $2,%%bl\n\t"
+	     "div %%bl\n\t"
+	     "lahf\n\t"
+	     "andl $0x200,%%eax": "=a" (test) : : "bx", "cc");
+
+	return test;
+}
+
+/*
+ * Cyrix CPUs without cpuid or with cpuid not yet enabled can be detected
+ * by the fact that they preserve the flags across the division of 5/2.
+ * PII and PPro exhibit this behavior too, but they have cpuid available.
+ */
+
+__initfunc(static void check_cyrix_cpu(void))
+{
+	if (boot_cpu_data.cpuid_level == -1 && boot_cpu_data.x86 == 4
+	    && test_cyrix_52div()) {
+
+		/* default to an unknown Cx486, (we will diferentiate later) */
+		/* NOTE:  using 0xff since 0x00 is a valid DIR0 value */
+		strcpy(boot_cpu_data.x86_vendor_id, "CyrixInstead");
+		boot_cpu_data.x86_model = 0xff;
+		boot_cpu_data.x86_mask = 0;
+	}
+}
+
+/*
+ * Fix two problems with the Cyrix 686 and 686L:
+ *   -- the cpuid is disabled on power up, enable it, use it.
+ *   -- the SLOP bit needs resetting on some motherboards due to old BIOS,
+ *      so that the udelay loop calibration works well.  Recalibrate.
+ */
+
+extern void calibrate_delay(void) __init;
+
+__initfunc(static void check_cx686_cpuid_slop(void))
+{
+	if (boot_cpu_data.x86_vendor == X86_VENDOR_CYRIX &&
+	    (boot_cpu_data.x86_model & 0xf0) == 0x30) {  /* 686(L) */
+		int dummy;
+		unsigned char ccr3, ccr5;
+
+		cli();
+		ccr3 = getCx86(CX86_CCR3);
+		setCx86(CX86_CCR3, (ccr3 & 0x0f) | 0x10);      /* enable MAPEN  */
+		setCx86(CX86_CCR4, getCx86(CX86_CCR4) | 0x80); /* enable cpuid  */
+		ccr5 = getCx86(CX86_CCR5);
+		if (ccr5 & 2)   /* reset SLOP if needed, old BIOS do this wrong */
+			setCx86(CX86_CCR5, ccr5 & 0xfd);
+		setCx86(CX86_CCR3, ccr3);                      /* disable MAPEN */
+		sti();
+
+		boot_cpu_data.cpuid_level = 1;  /* should cover all 6x86(L) */
+		boot_cpu_data.x86 = 5;
+
+		/* we know we have level 1 available on the 6x86(L) */
+		cpuid(1, &dummy, &dummy, &dummy,
+		      &boot_cpu_data.x86_capability);
+		/*
+		 * DON'T use the x86_mask and x86_model from cpuid, these are
+		 * not as accurate (or the same) as those from the DIR regs.
+		 * already in place after cyrix_model() in setup.c
+		 */
+
+		if (ccr5 & 2) { /* possible wrong calibration done */
+			printk(KERN_INFO "Recalibrating delay loop with SLOP bit reset\n");
+			calibrate_delay();
+			boot_cpu_data.loops_per_sec = loops_per_sec;
+		}
+	}
+}
+
 __initfunc(static void check_bugs(void))
 {
+	check_cyrix_cpu();
 	identify_cpu(&boot_cpu_data);
 #ifndef __SMP__
 	printk("CPU: ");
 	print_cpu_info(&boot_cpu_data);
 #endif
+	check_cx686_cpuid_slop();
 	check_tlb();
 	check_fpu();
 	check_hlt();

@@ -103,48 +103,28 @@ spinlock_t page_alloc_lock = SPIN_LOCK_UNLOCKED;
 /*
  * This routine is used by the kernel swap daemon to determine
  * whether we have "enough" free pages. It is fairly arbitrary,
- * but this had better return false if any reasonable "get_free_page()"
- * allocation could currently fail..
+ * having a low-water and high-water mark.
  *
- * This will return zero if no list was found, non-zero
- * if there was memory (the bigger, the better).
+ * This returns:
+ *  0 - urgent need for memory
+ *  1 - need some memory, but do it slowly in the background
+ *  2 - no need to even think about it.
  */
-int free_memory_available(int nr)
+int free_memory_available(void)
 {
-	int retval = 0;
-	unsigned long flags;
-	struct free_area_struct * list;
+	static int available = 1;
 
-	/*
-	 * If we have more than about 3% to 5% of all memory free,
-	 * consider it to be good enough for anything.
-	 * It may not be, due to fragmentation, but we
-	 * don't want to keep on forever trying to find
-	 * free unfragmented memory.
-	 * Added low/high water marks to avoid thrashing -- Rik.
-	 */
-	if (nr_free_pages > (nr ? freepages.low : freepages.high))
-		return nr+1;
+	if (nr_free_pages < freepages.low) {
+		available = 0;
+		return 0;
+	}
 
-	list = free_area + NR_MEM_LISTS;
-	spin_lock_irqsave(&page_alloc_lock, flags);
-	/* We fall through the loop if the list contains one
-	 * item. -- thanks to Colin Plumb <colin@nyx.net>
-	 */
-	do {
-		list--;
-		/* Empty list? Bad - we need more memory */
-		if (list->next == memory_head(list))
-			break;
-		/* One item on the list? Look further */
-		if (list->next->next == memory_head(list))
-			continue;
-		/* More than one item? We're ok */
-		retval = nr + 1;
-		break;
-	} while (--nr >= 0);
-	spin_unlock_irqrestore(&page_alloc_lock, flags);
-	return retval;
+	if (nr_free_pages > freepages.high) {
+		available = 1;
+		return 2;
+	}
+
+	return available;
 }
 
 static inline void free_pages_ok(unsigned long map_nr, unsigned long order)
@@ -217,13 +197,11 @@ void free_pages(unsigned long addr, unsigned long order)
 	change_bit((index) >> (1+(order)), (area)->map)
 #define CAN_DMA(x) (PageDMA(x))
 #define ADDRESS(x) (PAGE_OFFSET + ((x) << PAGE_SHIFT))
-#define RMQUEUE(order, maxorder, dma) \
+#define RMQUEUE(order, dma) \
 do { struct free_area_struct * area = free_area+order; \
      unsigned long new_order = order; \
 	do { struct page *prev = memory_head(area), *ret = prev->next; \
 		while (memory_head(area) != ret) { \
-			if (new_order >= maxorder && ret->next == prev) \
-				break; \
 			if (!dma || CAN_DMA(ret)) { \
 				unsigned long map_nr = ret->map_nr; \
 				(prev->next = ret->next)->prev = prev; \
@@ -255,39 +233,36 @@ do { unsigned long size = 1 << high; \
 
 unsigned long __get_free_pages(int gfp_mask, unsigned long order)
 {
-	unsigned long flags, maxorder;
+	unsigned long flags;
 
 	if (order >= NR_MEM_LISTS)
 		goto nopage;
 
-	/*
-	 * "maxorder" is the highest order number that we're allowed
-	 * to empty in order to find a free page..
-	 */
-	maxorder = NR_MEM_LISTS-1;
-	if (gfp_mask & __GFP_HIGH)
-		maxorder = NR_MEM_LISTS;
+	if (gfp_mask & __GFP_WAIT) {
+		if (in_interrupt()) {
+			static int count = 0;
+			if (++count < 5) {
+				printk("gfp called nonatomically from interrupt %p\n",
+					__builtin_return_address(0));
+			}
+			goto nopage;
+		}
 
-	if (in_interrupt() && (gfp_mask & __GFP_WAIT)) {
-		static int count = 0;
-		if (++count < 5) {
-			printk("gfp called nonatomically from interrupt %p\n",
-				__builtin_return_address(0));
-			gfp_mask &= ~__GFP_WAIT;
+		if (freepages.min > nr_free_pages) {
+			int freed;
+			freed = try_to_free_pages(gfp_mask, SWAP_CLUSTER_MAX);
+			/*
+			 * Low priority (user) allocations must not
+			 * succeed if we didn't have enough memory
+			 * and we couldn't get more..
+			 */
+			if (!freed && !(gfp_mask & (__GFP_MED | __GFP_HIGH)))
+				goto nopage;
 		}
 	}
-
-	for (;;) {
-		spin_lock_irqsave(&page_alloc_lock, flags);
-		RMQUEUE(order, maxorder, (gfp_mask & GFP_DMA));
-		spin_unlock_irqrestore(&page_alloc_lock, flags);
-		if (!(gfp_mask & __GFP_WAIT))
-			break;
-		if (!try_to_free_pages(gfp_mask, SWAP_CLUSTER_MAX))
-			break;
-		gfp_mask &= ~__GFP_WAIT;	/* go through this only once */
-		maxorder = NR_MEM_LISTS;	/* Allow anything this time */
-	}
+	spin_lock_irqsave(&page_alloc_lock, flags);
+	RMQUEUE(order, (gfp_mask & GFP_DMA));
+	spin_unlock_irqrestore(&page_alloc_lock, flags);
 nopage:
 	return 0;
 }
@@ -303,6 +278,11 @@ void show_free_areas(void)
  	unsigned long total = 0;
 
 	printk("Free pages:      %6dkB\n ( ",nr_free_pages<<(PAGE_SHIFT-10));
+	printk("Free: %d (%d %d %d)\n",
+		nr_free_pages,
+		freepages.min,
+		freepages.low,
+		freepages.high);
 	spin_lock_irqsave(&page_alloc_lock, flags);
  	for (order=0 ; order < NR_MEM_LISTS; order++) {
 		struct page * tmp;

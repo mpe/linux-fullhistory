@@ -34,6 +34,7 @@
  *	locking at some point in 2.3.x.
  */
 
+#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/malloc.h>
 #include <linux/types.h>

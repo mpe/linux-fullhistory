@@ -50,7 +50,7 @@ struct sysinfo;
 extern int shm_swap (int, int);
 
 /* linux/mm/vmscan.c */
-extern int try_to_free_page(int);
+extern int try_to_free_pages(unsigned int gfp_mask, int count);
 
 /* linux/mm/page_io.c */
 extern void rw_swap_page(int, unsigned long, char *, int);
@@ -126,21 +126,6 @@ static inline int is_page_shared(struct page *page)
 	if (PageFreeAfter(page))
 		count--;
 	return (count > 1);
-}
-
-/*
- * When we're freeing pages from a user application, we want
- * to cluster swapouts too.	-- Rik.
- * linux/mm/page_alloc.c
- */
-static inline int try_to_free_pages(int gfp_mask, int count)
-{
-	int retval = 0;
-	while (count--) {
-		if (try_to_free_page(gfp_mask))
-			retval = 1;
-	}
-	return retval;
 }
 
 /*

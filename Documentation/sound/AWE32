@@ -54,8 +54,7 @@ but the wavetable needs THREE! My working string is:
 (IO 3 (BASE 0x0E20)) (ACT Y) ))"
 
 Resources 0x0620, 0x0A20 and 0x0E20 should work. Other on-board devices: 
-Gameport and StereoEnhance are not needed. In my case StereoEnhance didn't
-even work!
+Gameport and StereoEnhance are not required to be inited.
 
 Now you can execute "isapnp /etc/isapnp.conf". No errors should be reported.
 If you correctly installed isapnptools, then isapnp will run every boot time.
@@ -64,22 +63,20 @@ If you correctly installed isapnptools, then isapnp will run every boot time.
 because the AWE32 driver is included in them.  ATTENTION!  In kernels 2.1.102, 
 2.1.103, 2.1.104-pre1 and 2.1.104 (not the others) the lowlevel sound driver
 is not working. You should use the patch available at 
-http://members.xoom.com/yar. If you are using stable kernel releases 
-2.0.x (I am not sure about 2.0.34), then get the latest version (3.8s9) of 
+http://members.xoom.com/yar/history.html. If you are using stable kernel
+releases 2.0.x, then get the latest version (3.8s9) of 
 OSS/Free at http://members.xoom.com/yar/ossfree38s9-linux20x.tar.gz
-and untar it in /usr/src/ (assuming you keep your kernel source in
-/usr/src/linux).  Then go to /usr/src/linux/ and view
-the README file. That file contains info about kernel compilation and
-installation. If you use kernel version 2.0.x or version <= 2.1.104 go 
-to substep a, on 2.1.105 or later go to step b.
+and gunzip/untar it in /usr/src/ (assuming you keep your kernel source in
+/usr/src/linux).  Then go to /usr/src/linux/ and view the README file. That
+file contains info about kernel compilation and installation.
 
 In "make (x,menu)config" select in "Sound":
 "Sound card support", "100% Sound Blaster compatibles (SB16/32/64, ESS, Jazz16) support",
 "Generic OPL2/OPL3 FM synthesizer support" and "FM synthesizer (YM3812/OPL-3) 
 support" as <M> (module).
 
-If you use kernel version 2.0.x or version <= 2.1.104 skip substep a, on 
-2.1.105 or later go through it.
+If you use kernel version 2.0.x or version 2.1.y (y <= 2.1.104) skip substep a,
+on 2.1.105 or later go through it.
 
 substep a:
 In "make (x,menu)config" select in "Sound":
@@ -90,7 +87,7 @@ In "Additional low level sound drivers":
 Select "Additional low level sound drivers" as [y] (or [*] (yes)) (If it is not
 available as [y], select it as <M> (module))
 Now recompile the kernel (make dep; make (b)zImage; make modules; 
-make modules_install) and boot new kernel.
+make modules_install), update your boot loader and boot new kernel.
 
 6) Now download awesfx program 
 http://members.xoom.com/yar/awesfx-0.4.2.tgz here. Compile it.

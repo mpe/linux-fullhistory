@@ -360,9 +360,10 @@ blocked:
 			/* First add ourselves to the end of the wait list. */
 			dev->waitnext = NULL;
 			dev->waitprev = port->waittail;
-			if (port->waittail)
+			if (port->waittail) {
 				port->waittail->waitnext = dev;
-			else
+				port->waittail = dev;
+			} else
 				port->waithead = port->waittail = dev;
 		}
 		spin_unlock_irqrestore (&port->lock, flags);

@@ -254,21 +254,9 @@ extern inline unsigned long get_free_page(int gfp_mask)
 /* memory.c & swap.c*/
 
 /*
- * This traverses "nr" memory size lists,
- * and returns true if there is enough memory.
- *
- * For example, we want to keep on waking up
- * kswapd every once in a while until the highest
- * memory order has an entry (ie nr == 0), but
- * we want to do it in the background.
- *
- * We want to do it in the foreground only if
- * none of the three highest lists have enough
- * memory. Random number.
+ * Decide if we should try to do some swapout..
  */
-extern int free_memory_available(int nr);
-#define kswapd_continue()	(!free_memory_available(3))
-#define kswapd_wakeup()		(!free_memory_available(0))
+extern int free_memory_available(void);
 
 #define free_page(addr) free_pages((addr),0)
 extern void FASTCALL(free_pages(unsigned long addr, unsigned long order));
@@ -330,8 +318,8 @@ extern void put_cached_page(unsigned long);
 #define GFP_BUFFER	(__GFP_LOW | __GFP_WAIT)
 #define GFP_ATOMIC	(__GFP_HIGH)
 #define GFP_USER	(__GFP_LOW | __GFP_WAIT | __GFP_IO)
-#define GFP_KERNEL	(__GFP_LOW | __GFP_WAIT | __GFP_IO)
-#define GFP_NFS		(__GFP_MED | __GFP_WAIT | __GFP_IO)
+#define GFP_KERNEL	(__GFP_MED | __GFP_WAIT | __GFP_IO)
+#define GFP_NFS		(__GFP_HIGH | __GFP_WAIT | __GFP_IO)
 
 /* Flag - indicates that the buffer will be suitable for DMA.  Ignored on some
    platforms, used as appropriate on others */
