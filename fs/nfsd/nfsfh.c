@@ -999,21 +999,19 @@ out:
 u32
 fh_verify(struct svc_rqst *rqstp, struct svc_fh *fhp, int type, int access)
 {
+	struct knfs_fh	*fh = &fhp->fh_handle;
 	struct svc_export *exp;
 	struct dentry	*dentry;
 	struct inode	*inode;
-	struct knfs_fh	*fh = &fhp->fh_handle;
 	u32		error = 0;
 
+	dprintk("nfsd: fh_verify(exp %x/%ld cookie %p)\n",
+		fh->fh_xdev, fh->fh_xino, fh->fh_dcookie);
+
 	if(fhp->fh_dverified)
-		goto out;
-
-	dprintk("nfsd: fh_lookup(exp %x/%ld fh %p)\n",
-			fh->fh_xdev, fh->fh_xino, fh->fh_dcookie);
-
+		goto check_type;
 	/*
 	 * Look up the export entry.
-	 * N.B. We need to lock this while in use ...
 	 */
 	error = nfserr_stale;
 	exp = exp_get(rqstp->rq_client, fh->fh_xdev, fh->fh_xino);
@@ -1057,6 +1055,8 @@ fh_verify(struct svc_rqst *rqstp, struct svc_fh *fhp, int type, int access)
 	 * spec says this is incorrect (implementation notes for the
 	 * write call).
 	 */
+check_type:
+	dentry = fhp->fh_dentry;
 	inode = dentry->d_inode;
 	if (type > 0 && (inode->i_mode & S_IFMT) != type) {
 		error = (type == S_IFDIR)? nfserr_notdir : nfserr_isdir;
@@ -1069,9 +1069,11 @@ fh_verify(struct svc_rqst *rqstp, struct svc_fh *fhp, int type, int access)
 
 	/* Finally, check access permissions. */
 	error = nfsd_permission(fhp->fh_export, dentry, access);
+#ifdef NFSD_PARANOIA
 if (error)
 printk("fh_verify: %s/%s permission failure, acc=%x, error=%d\n",
 dentry->d_parent->d_name.name, dentry->d_name.name, access, error);
+#endif
 
 out:
 	return error;

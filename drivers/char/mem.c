@@ -30,10 +30,13 @@
 void soundcard_init(void);
 #endif
 #ifdef CONFIG_ISDN
-void isdn_init(void);
+int isdn_init(void);
 #endif
 #ifdef CONFIG_PCWATCHDOG
-void pcwatchdog_init(void);
+int pcwatchdog_init(void);
+#endif
+#ifdef CONFIG_VIDEO_DEV
+extern int videodev_init(void);
 #endif
 
 static ssize_t do_write_mem(struct file * file, void *p, unsigned long realp,

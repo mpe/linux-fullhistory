@@ -68,8 +68,6 @@ void cleanup_module(void)
 #else
 __initfunc(int parport_init(void))
 {
-	struct parport *pb;
-
 	if (io[0] == PARPORT_DISABLE) 
 		return 1;
 

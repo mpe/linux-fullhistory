@@ -610,7 +610,7 @@ static int pms_capture(struct pms_device *dev, char *buf, int rgb555, int count)
 {
 	int y;
 	int dw = 2*dev->width;
-	char *src = (char *)bus_to_virt((void *)mem_base);
+	char *src = (char *)bus_to_virt(mem_base);
 
 	char tmp[dw+32]; /* using a temp buffer is faster than direct  */
 	int cnt = 0;

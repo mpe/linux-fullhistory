@@ -97,9 +97,9 @@ struct vm_operations_struct fat_file_mmap = {
 int fat_mmap(struct file * file, struct vm_area_struct * vma)
 {
 	struct inode *inode = file->f_dentry->d_inode;
-	if(MSDOS_SB(inode->i_sb)->cvf_format)
-	  if(MSDOS_SB(inode->i_sb)->cvf_format->cvf_mmap)
-	    return MSDOS_SB(inode->i_sb)->cvf_format->cvf_mmap(file,vma);
+	if (MSDOS_SB(inode->i_sb)->cvf_format &&
+	    MSDOS_SB(inode->i_sb)->cvf_format->cvf_mmap)
+		return MSDOS_SB(inode->i_sb)->cvf_format->cvf_mmap(file,vma);
 
 	if (vma->vm_flags & VM_SHARED)	/* only PAGE_COW or read-only supported now */
 		return -EINVAL;
@@ -121,10 +121,9 @@ int fat_mmap(struct file * file, struct vm_area_struct * vma)
 int fat_readpage(struct dentry * dentry, struct page * page)
 {
 	struct inode * inode = dentry->d_inode;
-	if(MSDOS_SB(inode->i_sb)->cvf_format)
-		if(MSDOS_SB(inode->i_sb)->cvf_format->cvf_readpage)
-			return MSDOS_SB(inode->i_sb)->cvf_format
-				->cvf_readpage(inode,page);
+	if (MSDOS_SB(inode->i_sb)->cvf_format &&
+	    MSDOS_SB(inode->i_sb)->cvf_format->cvf_readpage)
+		return MSDOS_SB(inode->i_sb)->cvf_format->cvf_readpage(inode,page);
 	    
 	printk("fat_readpage called with no handler (shouldn't happen)\n");
 	return -1;

@@ -171,7 +171,7 @@ extern void ftape_trace_log (const char *file, const char *name);
  *  but rather into ftape-rw.h (maybe)
  */
 #define FT_SIGNAL_EXIT(sig_mask)					\
-	if (current->signal & (sig_mask)) {				\
+	if (sigtestsetmask(&current->signal, sig_mask)) {		\
 		TRACE_ABORT(-EINTR,					\
 			    ft_t_warn,					\
 			    "interrupted by non-blockable signal");	\

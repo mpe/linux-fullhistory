@@ -437,10 +437,10 @@ int fat_dir_ioctl(struct inode * inode, struct file * filp,
 	}
 	default:
 		/* forward ioctl to CVF extension */
-	       if(MSDOS_SB(inode->i_sb)->cvf_format
-	          &&MSDOS_SB(inode->i_sb)->cvf_format->cvf_dir_ioctl)
-	              return MSDOS_SB(inode->i_sb)->cvf_format->
-	                        cvf_dir_ioctl(inode,filp,cmd,arg);
+	       if (MSDOS_SB(inode->i_sb)->cvf_format &&
+		   MSDOS_SB(inode->i_sb)->cvf_format->cvf_dir_ioctl)
+		       return MSDOS_SB(inode->i_sb)->cvf_format
+			       ->cvf_dir_ioctl(inode,filp,cmd,arg);
 		return -EINVAL;
 	}
 

@@ -1012,7 +1012,7 @@ static void chip_init()
     outb(SYNC_MODE, SYNCOFF);   /* synchronous mode */  
 }
 
-__initfunc(void calc_port_addr())
+__initfunc(void calc_port_addr(void))
 {
     /* Control Register Set 0 */
     TC_LSB		= (port_base+0x00);

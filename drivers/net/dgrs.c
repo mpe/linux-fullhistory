@@ -1250,12 +1250,12 @@ dgrs_found_device(
 ))
 {
 	DGRS_PRIV	*priv;
-	int		i;
 
 	#ifdef MODULE
 	{
 		/* Allocate and fill new device structure. */
 		int dev_size = sizeof(struct device) + sizeof(DGRS_PRIV);
+		int i;
 
 		dev = (struct device *) kmalloc(dev_size, GFP_KERNEL);
 		memset(dev, 0, dev_size);

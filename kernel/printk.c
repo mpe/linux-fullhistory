@@ -229,9 +229,7 @@ asmlinkage int printk(const char *fmt, ...)
 	static signed char msg_level = -1;
 	long flags;
 
-	__save_flags(flags);
-	__cli();
-	spin_lock(&console_lock);
+	spin_lock_irqsave(&console_lock, flags);
 	va_start(args, fmt);
 	i = vsprintf(buf + 3, fmt, args); /* hopefully i < sizeof(buf)-4 */
 	buf_end = buf + 3 + i;
@@ -279,9 +277,8 @@ asmlinkage int printk(const char *fmt, ...)
 		if (line_feed)
 			msg_level = -1;
 	}
-	spin_unlock(&console_lock);
-	__restore_flags(flags);
-/*	wake_up_interruptible(&log_wait);*/
+	spin_unlock_irqrestore(&console_lock, flags);
+	wake_up_interruptible(&log_wait);
 	return i;
 }
 

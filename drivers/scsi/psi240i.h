@@ -327,7 +327,7 @@ extern struct proc_dir_entry Proc_Scsi_Psi240i;
 		  queuecommand:	  Psi240i_QueueCommand,		\
 		  abort:	  Psi240i_Abort,			\
 		  reset:	  Psi240i_Reset,			\
-		  biosparam:	  Psi240i_BiosParam,                 	\
+		  bios_param:	  Psi240i_BiosParam,                 	\
 		  can_queue:	  1, 					\
 		  this_id:	  -1, 					\
 		  sg_tablesize:	  SG_NONE,		 		\

@@ -39,7 +39,7 @@ EXPORT_SYMBOL(local_irq_count);
 EXPORT_SYMBOL_NOVERS(__down_failed);
 EXPORT_SYMBOL_NOVERS(__down_failed_interruptible);
 EXPORT_SYMBOL_NOVERS(__up_wakeup);
-EXPORT_SYMBOL(__intel_bh_counter);
+EXPORT_SYMBOL(global_bh_lock);
 /* Networking helper routines. */
 EXPORT_SYMBOL(csum_partial_copy);
 /* Delay loops */

@@ -532,7 +532,8 @@ ENTRY(sys_call_table)
 	.long SYMBOL_NAME(sys_rt_sigsuspend)
 	.long SYMBOL_NAME(sys_pread)		/* 180 */
 	.long SYMBOL_NAME(sys_pwrite)
+	.long SYMBOL_NAME(sys_lchown);
 	
-	.rept NR_syscalls-181
+	.rept NR_syscalls-182
 		.long SYMBOL_NAME(sys_ni_syscall)
 	.endr

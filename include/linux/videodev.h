@@ -173,4 +173,14 @@ struct video_key
 #define VID_HARDWARE_PMS	3
 #define VID_HARDWARE_QCAM_C	4
 
+/*
+ *	Initialiser list
+ */
+ 
+struct video_init
+{
+	char *name;
+	int (*init)(struct video_init *);
+};
+
 #endif

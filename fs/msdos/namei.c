@@ -21,8 +21,7 @@
 
 #include "../fat/msbuffer.h"
 
-#define MSDOS_PARANOIA 1	
-/* #define MSDOS_DEBUG 1 */	
+#define MSDOS_DEBUG 0
 #define PRINTK(x)
 
 /* MS-DOS "device special files" */
@@ -257,7 +256,7 @@ int msdos_lookup(struct inode *dir,struct dentry *dentry)
 	int ino,res;
 	struct msdos_dir_entry *de;
 	struct buffer_head *bh;
-	struct inode *next, *inode;
+	struct inode *inode;
 	
 	PRINTK (("msdos_lookup\n"));
 
@@ -294,20 +293,8 @@ int msdos_lookup(struct inode *dir,struct dentry *dentry)
 		return 0;
 	}
 	PRINTK (("msdos_lookup 6\n"));
-	while (MSDOS_I(inode)->i_old) {
-		next = MSDOS_I(inode)->i_old;
-#ifdef MSDOS_PARANOIA
-printk("msdos_lookup: ino %ld, old ino=%ld\n", inode->i_ino, next->i_ino);
-if (MSDOS_I(next)->i_depend != inode)
-printk("msdos_lookup: depend=%p, inode=%p??\n", MSDOS_I(next)->i_depend, inode);
-#endif
-		next->i_count++;
-		iput(inode);
-		inode = next;
-	}
-	PRINTK (("msdos_lookup 7\n"));
 	d_add(dentry, inode);
-	PRINTK (("msdos_lookup 8\n"));
+	PRINTK (("msdos_lookup 7\n"));
 	return 0;
 }
 
@@ -428,6 +415,9 @@ static int msdos_empty(struct inode *dir)
 		pos = 0;
 		bh = NULL;
 		while (fat_get_entry(dir,&pos,&bh,&de) > -1) {
+			/* Ignore vfat longname entries */
+			if (de->attr == ATTR_EXT)
+				continue;
 			if (!IS_FREE(de->name) && 
 			    strncmp(de->name,MSDOS_DOT   , MSDOS_NAME) &&
 			    strncmp(de->name,MSDOS_DOTDOT, MSDOS_NAME)) {
@@ -471,7 +461,7 @@ int msdos_rmdir(struct inode *dir, struct dentry *dentry)
 	res = -EBUSY;
 	if (dentry->d_count > 1) {
 #ifdef MSDOS_DEBUG
-printk("rename_diff_dir: %s/%s busy, d_count=%d\n",
+printk("msdos_rmdir: %s/%s busy, d_count=%d\n",
 dentry->d_parent->d_name.name, dentry->d_name.name, dentry->d_count);
 #endif
 		goto rmdir_done;
@@ -744,53 +734,31 @@ static int rename_diff_dir(struct inode *old_dir,char *old_name,
 		mark_inode_dirty(new_dir);
 	}
 	msdos_read_inode(free_inode);
-	/*
-	 * Check whether there's already a linked inode ...
-	 */
-	if (MSDOS_I(old_inode)->i_linked) {
-		struct inode *linked = MSDOS_I(old_inode)->i_linked;
-#ifdef MSDOS_PARANOIA
-printk("rename_diff_dir: inode %ld already has link %ld, freeing it\n",
-old_inode->i_ino, linked->i_ino);
-#endif
-		MSDOS_I(old_inode)->i_linked = NULL;
-		MSDOS_I(linked)->i_oldlink = NULL;
-		iput(linked);
-	}
-	MSDOS_I(old_inode)->i_busy = 1;
-	MSDOS_I(old_inode)->i_linked = free_inode;
-	MSDOS_I(free_inode)->i_oldlink = old_inode;
-#ifdef MSDOS_DEBUG
-printk("rename_diff_dir: inode %ld added as link of %ld\n",
-free_inode->i_ino, old_inode->i_ino);
-#endif
+
+	free_inode->i_mode   = old_inode->i_mode;
+	free_inode->i_size   = old_inode->i_size;
+	free_inode->i_blocks = old_inode->i_blocks;
+	free_inode->i_mtime  = old_inode->i_mtime;
+	free_inode->i_atime  = old_inode->i_atime;
+	free_inode->i_ctime  = old_inode->i_ctime;
+	MSDOS_I(free_inode)->i_ctime_ms = MSDOS_I(old_inode)->i_ctime_ms;
+
+	MSDOS_I(free_inode)->i_start = MSDOS_I(old_inode)->i_start;
+	MSDOS_I(free_inode)->i_logstart = MSDOS_I(old_inode)->i_logstart;
+	MSDOS_I(free_inode)->i_attrs = MSDOS_I(old_inode)->i_attrs;
+
+	/* Detach d_alias from old inode and attach to new inode */
+	list_del(&old_dentry->d_alias);
+	d_instantiate(old_dentry, free_inode);
+	iput(old_inode);
+
 	fat_cache_inval_inode(old_inode);
 	mark_inode_dirty(old_inode);
 	old_de->name[0] = DELETED_FLAG;
 	fat_mark_buffer_dirty(sb, old_bh, 1);
 	fat_mark_buffer_dirty(sb, free_bh, 1);
+
 	if (exists) {
-		/*
-		 * Check whether there's already a depend inode ...
-		 */
-		if (MSDOS_I(new_inode)->i_depend) {
-			struct inode *depend = MSDOS_I(new_inode)->i_depend;
-#ifdef MSDOS_PARANOIA
-printk("rename_diff_dir: inode %ld already has depend %ld, freeing it\n",
-new_inode->i_ino, depend->i_ino);
-#endif
-			MSDOS_I(new_inode)->i_depend = NULL;
-			MSDOS_I(depend)->i_old = NULL;
-			iput(depend);
-		}
-		MSDOS_I(new_inode)->i_depend = free_inode;
-		MSDOS_I(free_inode)->i_old = new_inode;
-		/* Two references now exist to free_inode so increase count */
-		free_inode->i_count++;
-#ifdef MSDOS_DEBUG
-printk("rename_diff_dir: inode %ld added as depend of %ld\n",
-free_inode->i_ino, new_inode->i_ino);
-#endif
 		/* free_inode is put after putting new_inode and old_inode */
 		fat_brelse(sb, new_bh);
 	}
@@ -815,6 +783,7 @@ free_inode->i_ino, new_inode->i_ino);
 		iput(dotdot_inode);
 		fat_brelse(sb, dotdot_bh);
 	}
+
 	/* Update the dcache */
 	d_move(old_dentry, new_dentry);
 	error = 0;

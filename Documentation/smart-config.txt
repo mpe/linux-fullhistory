@@ -1,0 +1,103 @@
+Smart CONFIG_* Dependencies
+Fri 2 Dec 1997
+
+Michael Chastain   <mec@shout.net>
+Werner Almesberger <almesber@lrc.di.epfl.ch>
+Martin von Loewis  <martin@mira.isdn.cs.tu-berlin.de>
+
+Here is the problem:
+
+    Suppose that drivers/net/foo.c has the following lines:
+
+	#include <linux/config.h>
+
+	...
+
+	#ifdef CONFIG_FOO_AUTOFROB
+	    /* Code for auto-frobbing */
+	#else
+	    /* Manual frobbing only */
+	#endif
+
+	...
+
+	#ifdef CONFIG_FOO_MODEL_TWO
+	    /* Code for model two */
+	#endif
+
+    Now suppose the user (the person building kernels) reconfigures the
+    kernel to change some unrelated setting.  This will regenerate the
+    file include/linux/autoconf.h, which will cause include/linux/config.h
+    to be out of date, which will cause drivers/net/foo.c to be recompiled.
+
+    Most kernel sources, perhaps 80% of them, have at least one CONFIG_*
+    dependency somewhere.  So changing _any_ CONFIG_* setting requires
+    almost _all_ of the kernel to be recompiled.
+
+Here is the solution:
+
+    We've made the dependency generator, mkdep.c, smarter.  Instead of
+    generating this dependency:
+
+	drivers/net/foo.c: include/linux/config.h
+
+    It now generates these dependencies:
+
+	drivers/net/foo.c: \
+	    include/config/foo_autofrob.h \
+	    include/config/foo_model_two.h
+
+    So drivers/net/foo.c depends only on the CONFIG_* lines that
+    it actually uses.
+
+    A new program, split-include.c, runs at the end of make config (also
+    make oldconfig, make menuconfig, and make xconfig).  split-include
+    reads include/linux/autoconf.h and updates the include/linux/*.h
+    directory, writing one file per option.  It updates only the files
+    that changed.
+
+    mkdep.c also generates much better warning messages for missing
+    or unneeded <linux/config.h> lines.  In fact, you can get these
+    messages without generating dependencies with the new top-level
+    target 'make checkconfig'.
+
+Flag Dependencies
+
+    Martin Von Loewis contributed another feature to this patch:
+    'flag dependencies'.  The idea is that a .o file depends on
+    the compilation flags used to build it.  The file foo.o has
+    its flags stored in .flags.foo.o.
+
+    Suppose the user changes the foo driver from resident to
+    modular, 'make' will notice that the foo.o was not compiled
+    with -DMODULE and will recompile foo.c.
+
+    Flag dependencies also work with per-source-file flags such
+    as those in drivers/net/CONFIG.
+
+    All .a and .o files made from C source or with 'ld' or 'ar'
+    have flag dependencies.  .S files do not have flag dependencies.
+
+Per-source-file Flags
+
+    You can specify compilation flags for individual source files
+    like this:
+
+	CFLAGS_foo.o = -DSPECIAL_FOO_DEFINE
+
+    This helps clean up drivers/net/Makefile, drivers/scsi/Makefile,
+    and several other Makefiles.
+
+Credit
+
+    Werner Almesberger had the original idea and wrote the first
+    version of this patch.
+    
+    Michael Chastain picked it up and continued development.  He is
+    now the principal author and maintainer.  Report bugs to him,
+    or to all three people together.
+
+    Martin von Loewis wrote flag dependencies, with some modifications
+    by Michael Chastain.
+
+    Thanks to all of the beta testers.

@@ -430,6 +430,14 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_SCSI_PLUTO),y)
+L_OBJS += pluto.o
+else
+  ifeq ($(CONFIG_SCSI_PLUTO),m)
+  M_OBJS += pluto.o
+  endif
+endif
+
 ifeq ($(CONFIG_SCSI_EATA),y)
 L_OBJS += eata.o
 else

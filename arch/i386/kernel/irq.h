@@ -42,6 +42,8 @@ extern spinlock_t irq_controller_lock; /*
 
 #ifdef __SMP__
 
+#include <asm/atomic.h>
+
 static inline void irq_enter(int cpu, int irq)
 {
 	hardirq_enter(cpu);

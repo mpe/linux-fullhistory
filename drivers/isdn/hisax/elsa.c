@@ -1180,7 +1180,7 @@ initelsa(struct IsdnCardState *sp)
 	int ret, irq_cnt, cnt = 3;
 	long flags;
 
-	irq_cnt = kstat.interrupts[sp->irq];
+	irq_cnt = kstat_irqs(sp->irq);
 	printk(KERN_INFO "Elsa: IRQ %d count %d\n", sp->irq, irq_cnt);
 	ret = get_irq(sp->cardnr, &elsa_interrupt);
 #ifdef CONFIG_HISAX_ELSA_PCC
@@ -1213,8 +1213,8 @@ initelsa(struct IsdnCardState *sp)
 		}
 #endif
 		printk(KERN_INFO "Elsa: IRQ %d count %d\n", sp->irq,
-		       kstat.interrupts[sp->irq]);
-		if (kstat.interrupts[sp->irq] == irq_cnt) {
+		       kstat_irqs(sp->irq));
+		if (kstat_irqs(sp->irq) == irq_cnt) {
 			printk(KERN_WARNING
 			       "Elsa: IRQ(%d) getting no interrupts during init %d\n",
 			       sp->irq, 4 - cnt);

@@ -385,7 +385,7 @@ int fdc_issue_command(const __u8 * out_data, int out_count,
 int fdc_interrupt_wait(unsigned int time)
 {
 	struct wait_queue wait = {current, NULL};
-	int current_blocked = current->blocked;
+	sigset_t old_sigmask;	
 	static int resetting = 0;
 	TRACE_FUN(ft_t_fdc_dma);
 
@@ -401,14 +401,23 @@ int fdc_interrupt_wait(unsigned int time)
 	/* timeout time will be up to USPT microseconds too long ! */
 	current->timeout = jiffies + (1000 * time + FT_USPT - 1) / FT_USPT;
 	current->state = TASK_INTERRUPTIBLE;
-	current->blocked = _BLOCK_ALL; /* isn't this already set by the
-					* high level routines?
-					*/
+
+	spin_lock_irq(&current->sigmask_lock);
+        old_sigmask = current->blocked;
+        siginitset(&current->blocked, _BLOCK_ALL);
+        recalc_sigpending(current);
+        spin_unlock_irq(&current->sigmask_lock);
+
 	add_wait_queue(&ftape_wait_intr, &wait);
 	while (!ft_interrupt_seen && current->state != TASK_RUNNING) {
 		schedule();	/* sets TASK_RUNNING on timeout */
         }
-	current->blocked = current_blocked;	/* restore */
+
+	spin_lock_irq(&current->sigmask_lock);
+        current->blocked = old_sigmask;
+        recalc_sigpending(current);
+        spin_unlock_irq(&current->sigmask_lock);
+	
 	remove_wait_queue(&ftape_wait_intr, &wait);
 	/*  the following IS necessary. True: as well
 	 *  wake_up_interruptible() as the schedule() set TASK_RUNNING

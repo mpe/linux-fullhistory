@@ -342,11 +342,6 @@ int proc_register(struct proc_dir_entry * dir, struct proc_dir_entry * dp)
 		if (dp->ops == NULL)
 			dp->ops = &proc_file_inode_operations;
 	}
-	/*
-	 * kludge until we fixup the md device driver
-	 */
-	if (dp->low_ino == PROC_MD)
-		dp->ops = &proc_array_inode_operations;
 	return 0;
 }
 

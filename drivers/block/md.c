@@ -493,7 +493,7 @@ static int do_md_stop (int minor, struct inode *inode)
 		/*
 		 * ioctl : one open channel
 		 */
-		printk ("STOP_MD md%x failed : i_count=%ld, busy=%d\n",
+		printk ("STOP_MD md%x failed : i_count=%d, busy=%d\n",
 				minor, inode->i_count, md_dev[minor].busy);
 		return -EBUSY;
 	}
@@ -846,6 +846,7 @@ EXPORT_SYMBOL(md_do_sync);
 static struct proc_dir_entry proc_md = {
 	PROC_MD, 6, "mdstat",
 	S_IFREG | S_IRUGO, 1, 0, 0,
+	0, &proc_array_inode_operations,
 };
 
 static void md_geninit (struct gendisk *gdisk)

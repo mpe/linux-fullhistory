@@ -350,7 +350,7 @@ int audio_read(int dev, struct fileinfo *file, char *buf, int count)
 int audio_ioctl(int dev, struct fileinfo *file_must_not_be_used,
 		unsigned int cmd, caddr_t arg)
 {
-	int val, info, count;
+	int val = 0, info, count;
 	unsigned long flags;
 	struct dma_buffparms *dmap;
 

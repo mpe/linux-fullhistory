@@ -881,8 +881,8 @@ ntfs_read_super_unl:
 ntfs_read_super_vol:
 	#ifndef NTFS_IN_LINUX_KERNEL
 	ntfs_free(vol);
-	#endif
 ntfs_read_super_dec:
+	#endif
 	ntfs_debug(DEBUG_OTHER, "read_super: done\n");
 	MOD_DEC_USE_COUNT;
 	return NULL;

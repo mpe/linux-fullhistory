@@ -1710,10 +1710,11 @@ void floppy_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 		} while ((ST0 & 0x83) != UNIT(current_drive) && inr == 2);
 	}
 	if (handler) {
-		if(softirq_trylock()) {
+		int cpu = smp_processor_id();
+		if(softirq_trylock(cpu)) {
 			/* got the lock, call the handler immediately */
 			handler();
-			softirq_endlock();
+			softirq_endlock(cpu);
 		} else
 			/* we interrupted a bottom half. Defer handler */
 			schedule_bh( (void *)(void *) handler);

@@ -80,6 +80,8 @@ rtc.txt
 	- notes on how to use the Real Time Clock (aka CMOS clock) driver.
 scsi.txt
 	- short blurb on using SCSI support as a module.
+smart-config.txt
+	- description of the Smart Config makefile feature.
 smp.tex
 	- TeX document describing implementation of Multiprocessor Linux
 svga.txt

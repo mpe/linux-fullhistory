@@ -174,6 +174,11 @@ extern inline void sigdelsetmask(sigset_t *set, unsigned long mask)
 	set->sig[0] &= ~mask;
 }
 
+extern inline int sigtestsetmask(sigset_t *set, unsigned long mask)
+{
+	return (set->sig[0] & mask) != 0;
+}
+
 extern inline void siginitset(sigset_t *set, unsigned long mask)
 {
 	set->sig[0] = mask;

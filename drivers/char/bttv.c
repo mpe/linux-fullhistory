@@ -129,16 +129,22 @@ static int I2CRead(struct bttv *btv, int addr)
 	btwrite(BT848_INT_I2CDONE, BT848_INT_STAT);
   
 	btwrite(((addr & 0xff) << 24) | I2C_COMMAND, BT848_I2C);
-  
-	for (i=0x7fffffff; i; i--)
+
+	/*
+	 * Timeout for I2CRead is 1 second (this should be enough, really!)
+	 */
+	for (i=1000; i; i--)
 	{
 		stat=btread(BT848_INT_STAT);
 		if (stat & BT848_INT_I2CDONE)
 			break;
+		udelay(1000); /* 1ms, as I2C is 1kHz (?) */
 	}
   
-	if (!i)
+	if (!i) {
+		printk(KERN_DEBUG "bttv: I2CRead timeout\n");
 		return -1;
+	}
 	if (!(stat & BT848_INT_RACK))
 		return -2;
   
@@ -167,15 +173,18 @@ static int I2CWrite(struct bttv *btv, unchar addr, unchar b1,
   
 	btwrite(data, BT848_I2C);
 
-	for (i=0x7fffffff; i; i--)
+	for (i=1000; i; i--)
 	{
 		stat=btread(BT848_INT_STAT);
 		if (stat & BT848_INT_I2CDONE)
 			break;
+		udelay(1000);
 	}
   
-	if (!i)
+	if (!i) {
+		printk(KERN_DEBUG "bttv: I2CWrite timeout\n");
 		return -1;
+	}
 	if (!(stat & BT848_INT_RACK))
 		return -2;
   
@@ -772,7 +781,7 @@ static void write_risc_data(struct bttv *btv, struct video_clip *vp, int count)
 	/*
 	 *	32bit depth frame buffers need extra flags setting
 	 */
-	 
+
 	if (depth==4)
 		mask=BT848_RISC_BYTE3;
 	else
@@ -1093,13 +1102,13 @@ static int bttv_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 		case VIDIOCGPICT:
 		{
 			struct video_picture p=btv->picture;
-			if(btv->win.bpp==8)
+			if(btv->win.bpp==1)
 				p.palette=VIDEO_PALETTE_HI240;
-			if(btv->win.bpp==16)
+			if(btv->win.bpp==2)
 				p.palette=VIDEO_PALETTE_RGB565;
-			if(btv->win.bpp==24)
+			if(btv->win.bpp==3)
 				p.palette=VIDEO_PALETTE_RGB24;
-			if(btv->win.bpp==32)
+			if(btv->win.bpp==4)
 				p.palette=VIDEO_PALETTE_RGB32;
 			if(copy_to_user(arg, &p, sizeof(p)))
 				return -EFAULT;

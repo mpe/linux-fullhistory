@@ -42,6 +42,7 @@
 extern struct svc_program	nfsd_program;
 static void			nfsd(struct svc_rqst *rqstp);
 struct timeval			nfssvc_boot = { 0, 0 };
+static int			nfsd_active = 0;
 
 int
 nfsd_svc(unsigned short port, int nrservs)
@@ -97,6 +98,7 @@ nfsd(struct svc_rqst *rqstp)
 	oldumask = current->fs->umask;		/* Set umask to 0.  */
 	current->fs->umask = 0;
 	nfssvc_boot = xtime;			/* record boot time */
+	nfsd_active++;
 	lockd_up();				/* start lockd */
 
 	/*
@@ -160,6 +162,11 @@ nfsd(struct svc_rqst *rqstp)
 
 	/* Release lockd */
 	lockd_down();
+	if (!--nfsd_active) {
+		printk("nfsd: last server exiting\n");
+		/* revoke all exports */
+		nfsd_export_shutdown();
+	}
 
 	/* Destroy the thread */
 	svc_exit_thread(rqstp);

@@ -923,11 +923,12 @@ void cleanup_module(void)
 		close_bwqcam(qcams[i]);
 }
 #else
-__initfunc(int init_bwqcams(struct video_init *unused))
+__initfunc(int init_bw_qcams(struct video_init *unused))
 {
 	struct parport *port;
 
 	for (port = parport_enumerate(); port; port=port->next)
 		init_bwqcam(port);
+	return 0;
 }
 #endif

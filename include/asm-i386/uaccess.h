@@ -263,7 +263,7 @@ do {									\
 		"	.long 0b,3b\n"					\
 		"	.long 1b,2b\n"					\
 		".previous"						\
-		: "=c"(size)						\
+		: "=&c"(size)						\
 		: "r"(size & 3), "0"(size / 4), "D"(to), "S"(from)	\
 		: "di", "si", "memory")
 

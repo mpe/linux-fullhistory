@@ -771,5 +771,6 @@ __initfunc(int init_colour_qcams(struct video_init *unused))
 
 	for (port = parport_enumerate(); port; port=port->next)
 		init_cqcam(port);
+	return 0;
 }
 #endif

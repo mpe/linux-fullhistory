@@ -209,7 +209,7 @@ extern struct proc_dir_entry Proc_Scsi_Pci2000;
 		  queuecommand:	  Pci2000_QueueCommand,			\
 		  abort:	  Pci2000_Abort,			\
 		  reset:	  Pci2000_Reset,			\
-		  biosparam:	  Pci2000_BiosParam,                 	\
+		  bios_param:	  Pci2000_BiosParam,                 	\
 		  can_queue:	  16, 					\
 		  this_id:	  -1, 					\
 		  sg_tablesize:	  16,		 			\

@@ -611,7 +611,7 @@ __initfunc(void lance_probe1(int ioaddr))
 		   can watch the LEDs even if the board isn't opened. */
 		outw(0x0002, ioaddr+LANCE_ADDR);
 		/* set autoselect and clean xmausel */
-		outw(inw(ioaddr+LANCE_BUS_IF) & 0xfffe | 0x0002, ioaddr+LANCE_BUS_IF);
+		outw((inw(ioaddr+LANCE_BUS_IF) & 0xfffe) | 0x0002, ioaddr+LANCE_BUS_IF);
 	}
 
 	if (lance_debug > 0  &&  did_version++ == 0)
@@ -667,7 +667,7 @@ lance_open(struct device *dev)
 		/* This is 79C960-specific: Turn on auto-select of media (AUI, BNC). */
 		outw(0x0002, ioaddr+LANCE_ADDR);
 		/* set autoselect and clean xmausel */
-		outw(inw(ioaddr+LANCE_BUS_IF) & 0xfffe | 0x0002, ioaddr+LANCE_BUS_IF);
+		outw((inw(ioaddr+LANCE_BUS_IF) & 0xfffe) | 0x0002, ioaddr+LANCE_BUS_IF);
 	}
 
 	if (lance_debug > 1)

@@ -187,6 +187,7 @@
 #define __NR_rt_sigsuspend	179
 #define __NR_pread		180
 #define __NR_pwrite		181
+#define __NR_lchown		182
 
 /* user-visible error numbers are in the range -1 - -122: see <asm-i386/errno.h> */
 

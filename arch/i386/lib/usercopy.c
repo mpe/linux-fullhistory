@@ -89,7 +89,7 @@ strncpy_from_user(char *dst, const char *src, long count)
 		"	.long 0b,3b\n"					\
 		"	.long 1b,2b\n"					\
 		".previous"						\
-		: "=c"(size)						\
+		: "=&c"(size)						\
 		: "r"(size & 3), "0"(size / 4), "D"(addr), "a"(0)	\
 		: "di")
 

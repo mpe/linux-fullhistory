@@ -1101,8 +1101,7 @@ sound_alloc_dmap(int dev, struct dma_buffparms *dmap, int chan)
 
 		dmap->buffsize = PAGE_SIZE * (1 << sz);
 
-		start_addr = (char *) __get_free_pages(GFP_ATOMIC | GFP_DMA, sz);
-		if (start_addr == NULL)
+		if ((start_addr = (char *) __get_free_pages(GFP_ATOMIC|GFP_DMA, sz)) == NULL)
 			dmap->buffsize /= 2;
 	}
 

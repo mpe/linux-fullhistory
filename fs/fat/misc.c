@@ -221,9 +221,9 @@ if (last) printk("next set to %d\n",fat_access(sb,last,-1));
 #endif
 	sector = MSDOS_SB(sb)->data_start+(nr-2)*cluster_size;
 	last_sector = sector + cluster_size;
-	if(MSDOS_SB(sb)->cvf_format&&
-	  MSDOS_SB(sb)->cvf_format->zero_out_cluster)
-	    MSDOS_SB(sb)->cvf_format->zero_out_cluster(inode,nr);
+	if (MSDOS_SB(sb)->cvf_format &&
+	    MSDOS_SB(sb)->cvf_format->zero_out_cluster)
+		MSDOS_SB(sb)->cvf_format->zero_out_cluster(inode,nr);
 	else
 	for ( ; sector < last_sector; sector++) {
 		#ifdef DEBUG

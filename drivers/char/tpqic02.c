@@ -1766,8 +1766,10 @@ static ssize_t qic02_tape_read(struct file * filp, char * buf, size_t count, lof
 
     if (TP_DIAGS(current_tape_dev))
       /* can't print a ``long long'' (for filp->f_pos), so chop it */
-      printk(TPQIC02_NAME ": request READ, minor=%x, buf=%p, count=%lx, pos=%lx, flags=%x\n",
-	     MINOR(dev), buf, count, (unsigned long) filp->f_pos, flags);
+      printk(TPQIC02_NAME ": request READ, minor=%x, buf=%p, count=%lx"
+	                  ", pos=%lx, flags=%x\n",
+	     MINOR(dev), buf, (long) count,
+	     (unsigned long) filp->f_pos, flags);
     
     if (count % TAPE_BLKSIZE)	/* Only allow mod 512 bytes at a time. */
     {
@@ -1980,8 +1982,10 @@ static ssize_t qic02_tape_write( struct file * filp,  const char * buf,
     if (TP_DIAGS(current_tape_dev))
     {
 	/* can't print a ``long long'' (for filp->f_pos), so chop it */
-	printk(TPQIC02_NAME ": request WRITE, minor=%x, buf=%p, count=%lx, pos=%lx, flags=%x\n",
-	       MINOR(dev), buf, count, (unsigned long) filp->f_pos, flags);
+	printk(TPQIC02_NAME ": request WRITE, minor=%x, buf=%p"
+	                    ", count=%lx, pos=%lx, flags=%x\n",
+	       MINOR(dev), buf,
+	       (long) count, (unsigned long) filp->f_pos, flags);
     }
     
     if (count % TAPE_BLKSIZE) 	/* only allow mod 512 bytes at a time */
@@ -2128,7 +2132,9 @@ static ssize_t qic02_tape_write( struct file * filp,  const char * buf,
     tpqputs(TPQD_ALWAYS, "write request for <0 bytes");
     if (TPQDBG(DEBUG))
     {
-	printk(TPQIC02_NAME ": status_bytes_wr %x, buf %p, total_bytes_done %lx, count %lx\n", status_bytes_wr, buf, total_bytes_done, count);
+	printk(TPQIC02_NAME ": status_bytes_wr %x, buf %p"
+	                    ", total_bytes_done %lx, count %lx\n",
+	       status_bytes_wr, buf, total_bytes_done, (long) count);
     }
     return -EINVAL;
 } /* qic02_tape_write */
@@ -2865,7 +2871,7 @@ static int qic02_get_resources(void)
     return 0;
 } /* qic02_get_resources */
 
-__initfunc(static int qic02_tape_init(void))
+__initfunc(int qic02_tape_init(void))
 {
     if (TPSTATSIZE != 6)
     {

@@ -68,6 +68,7 @@ static inline void dentry_iput(struct dentry * dentry)
 	if (inode) {
 		dentry->d_inode = NULL;
 		list_del(&dentry->d_alias);
+		INIT_LIST_HEAD(&dentry->d_alias);
 		if (dentry->d_op && dentry->d_op->d_iput)
 			dentry->d_op->d_iput(dentry, inode);
 		else

@@ -5958,7 +5958,7 @@ print_queues (struct Scsi_Host *host) {
 		    host->host_no, cmd->pid);
 	    /* print_dsa does sanity check on address, no need to check */
 	    else
-	    	print_dsa (host, le32_to_cpu(((struct NCR53c7x0_cmd *) cmd->host_scribble)-> dsa), "");
+	    	print_dsa (host, bus_to_virt(le32_to_cpu(((struct NCR53c7x0_cmd *) cmd->host_scribble)-> dsa)), "");
 	} else 
 	    printk ("scsi%d : scsi pid %ld for target %d lun %d has no NCR53c7x0_cmd\n",
 		host->host_no, cmd->pid, cmd->target, cmd->lun);

@@ -433,19 +433,37 @@ exp_readlock(void)
 int
 exp_writelock(void)
 {
+	/* fast track */
+	if (!hash_count && !hash_lock) {
+	lock_it:
+		hash_lock = 1;
+		return 0;
+	}
+
+	current->sigpending = 0;
 	want_lock++;
-	while (hash_count || hash_lock)
+	while (hash_count || hash_lock) {
 		interruptible_sleep_on(&hash_wait);
+		if (signal_pending(current))
+			break;
+	}
 	want_lock--;
-	if (signal_pending(current))
-		return -EINTR;
-	hash_lock = 1;
-	return 0;
+
+	/* restore the task's signals */
+	spin_lock_irq(&current->sigmask_lock);
+	recalc_sigpending(current);
+	spin_unlock_irq(&current->sigmask_lock);
+
+	if (!hash_count && !hash_lock)
+		goto lock_it;
+	return -EINTR;
 }
 
 void
 exp_unlock(void)
 {
+	if (!hash_count && !hash_lock)
+		printk(KERN_WARNING "exp_unlock: not locked!\n");
 	if (hash_count)
 		hash_count--;
 	else

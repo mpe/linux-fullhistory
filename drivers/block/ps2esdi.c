@@ -1038,14 +1038,9 @@ static void dump_cmd_complete_status(u_int int_ret_code)
 }
 
 
-
 static int ps2esdi_open(struct inode *inode, struct file *file)
 {
-	int dev = DEVICE_NR(MINOR(inode->i_rdev));
-
-#if 0
-	printk("%s: dev= %d\n", DEVICE_NAME, dev);
-#endif
+	int dev = DEVICE_NR(inode->i_rdev);
 
 	if (dev < ps2esdi_drives) {
 		while (!ps2esdi_valid[dev])
@@ -1062,7 +1057,7 @@ static int ps2esdi_open(struct inode *inode, struct file *file)
 
 static int ps2esdi_release(struct inode *inode, struct file *file)
 {
-	int dev = DEVICE_NR(MINOR(inode->i_rdev));
+	int dev = DEVICE_NR(inode->i_rdev);
 
 	if (dev < ps2esdi_drives) {
 		sync_dev(dev);
@@ -1078,7 +1073,7 @@ static int ps2esdi_ioctl(struct inode *inode,
 {
 
 	struct ps2esdi_geometry *geometry = (struct ps2esdi_geometry *) arg;
-	int dev = DEVICE_NR(MINOR(inode->i_rdev)), err;
+	int dev = DEVICE_NR(inode->i_rdev), err;
 
 	if (inode && (dev < ps2esdi_drives))
 		switch (cmd) {
@@ -1133,7 +1128,7 @@ static int ps2esdi_ioctl(struct inode *inode,
 
 static int ps2esdi_reread_partitions(int dev)
 {
-	int target = DEVICE_NR(MINOR(dev));
+	int target = DEVICE_NR(dev);
 	int start = target << ps2esdi_gendisk.minor_shift;
 	int partition;
 
@@ -1145,15 +1140,20 @@ static int ps2esdi_reread_partitions(int dev)
 
 	for (partition = ps2esdi_gendisk.max_p - 1;
 	     partition >= 0; partition--) {
-		sync_dev(MAJOR_NR << 8 | start | partition);
-		invalidate_inodes(MAJOR_NR << 8 | start | partition);
-		invalidate_buffers(MAJOR_NR << 8 | start | partition);
+		int minor = (start | partition);
+		kdev_t devp = MKDEV(MAJOR_NR, minor);
+		struct super_block * sb = get_super(devp);
+		
+		sync_dev(devp);
+		if (sb)
+			invalidate_inodes(sb);
+		invalidate_buffers(devp);
 		ps2esdi_gendisk.part[start + partition].start_sect = 0;
 		ps2esdi_gendisk.part[start + partition].nr_sects = 0;
-	};
+	}
 
 	ps2esdi_gendisk.part[start].nr_sects = ps2esdi_info[target].head *
-	    ps2esdi_info[target].cyl * ps2esdi_info[target].sect;
+		ps2esdi_info[target].cyl * ps2esdi_info[target].sect;
 	resetup_one_dev(&ps2esdi_gendisk, target);
 
 	ps2esdi_valid[target] = 1;

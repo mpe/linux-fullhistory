@@ -841,7 +841,7 @@ initix1micro(struct IsdnCardState *sp)
 	int loop = 0;
 	char tmp[40];
 
-	sp->counter = kstat.interrupts[sp->irq];
+	sp->counter = kstat_irqs(sp->irq);
 	sprintf(tmp, "IRQ %d count %d", sp->irq, sp->counter);
 	debugl1(sp, tmp);
 	clear_pending_ints(sp);
@@ -854,16 +854,16 @@ initix1micro(struct IsdnCardState *sp)
 			/* At least 1-3 irqs must happen
 			 * (one from HSCX A, one from HSCX B, 3rd from ISAC)
 			 */
-			if (kstat.interrupts[sp->irq] > sp->counter)
+			if (kstat_irqs(sp->irq) > sp->counter)
 				break;
 			current->state = TASK_INTERRUPTIBLE;
 			current->timeout = jiffies + 1;
 			schedule();
 		}
 		sprintf(tmp, "IRQ %d count %d", sp->irq,
-			kstat.interrupts[sp->irq]);
+			kstat_irqs(sp->irq));
 		debugl1(sp, tmp);
-		if (kstat.interrupts[sp->irq] == sp->counter) {
+		if (kstat_irqs(sp->irq) == sp->counter) {
 			printk(KERN_WARNING
 			       "ix1-Micro: IRQ(%d) getting no interrupts during init\n",
 			       sp->irq);

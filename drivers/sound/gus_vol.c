@@ -34,10 +34,10 @@ extern int      gus_wave_volume;
  * we can give a big boost to very weak voices like nylon guitar and the
  * basses.  The normal value is 64.  Strings are assigned lower values.
  */
-unsigned short
-gus_adagio_vol(int vel, int mainv, int xpn, int voicev)
+
+unsigned short gus_adagio_vol(int vel, int mainv, int xpn, int voicev)
 {
-	int             i, m, n, x;
+	int i, m, n, x;
 
 
 	/*
@@ -50,6 +50,7 @@ gus_adagio_vol(int vel, int mainv, int xpn, int voicev)
 	/*
 	 * Boost expression by voice volume above neutral.
 	 */
+	 
 	if (voicev > 65)
 		xpn += voicev - 64;
 	xpn += (voicev - 64) / 2;
@@ -85,18 +86,22 @@ gus_adagio_vol(int vel, int mainv, int xpn, int voicev)
 	 * Convert to GUS's logarithmic form with 4 bit exponent i and 8 bit
 	 * mantissa m.
 	 */
+	 
 	n = x;
 	i = 7;
 	if (n < 128)
-	  {
+	{
 		  while (i > 0 && n < (1 << i))
 			  i--;
-	} else
+	}
+	else
+	{
 		while (n > 255)
-		  {
+		{
 			  n >>= 1;
 			  i++;
-		  }
+		}
+	}
 	/*
 	 * Mantissa is part of linear volume not expressed in exponent.  (This is
 	 * not quite like real logs -- I wonder if it's right.)
@@ -107,12 +112,12 @@ gus_adagio_vol(int vel, int mainv, int xpn, int voicev)
 	 * Adjust mantissa to 8 bits.
 	 */
 	if (m > 0)
-	  {
-		  if (i > 8)
-			  m >>= i - 8;
-		  else if (i < 8)
-			  m <<= 8 - i;
-	  }
+	{
+		if (i > 8)
+			m >>= i - 8;
+		else if (i < 8)
+			m <<= 8 - i;
+	}
 	return ((i << 8) + m);
 }
 
@@ -122,10 +127,9 @@ gus_adagio_vol(int vel, int mainv, int xpn, int voicev)
  * and the volume set by the mixer-device (default 60%).
  */
 
-unsigned short
-gus_linear_vol(int vol, int mainvol)
+unsigned short gus_linear_vol(int vol, int mainvol)
 {
-	int             mixer_mainvol;
+	int mixer_mainvol;
 
 	if (vol <= 0)
 		vol = 0;
@@ -146,7 +150,6 @@ gus_linear_vol(int vol, int mainvol)
 #else
 	mainvol = 127;
 #endif
-
 	return gus_linearvol[(((vol * mainvol) / 127) * mixer_mainvol) / 100];
 }
 

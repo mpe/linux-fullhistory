@@ -268,8 +268,8 @@ int acct_process(long exitcode)
 
 
 	/*
-	 * Fill the accounting struct with the needed info as recorded by the different
-	 * kernel functions.
+	 * Fill the accounting struct with the needed info as recorded
+	 * by the different kernel functions.
 	 */
 	memset((caddr_t)&ac, 0, sizeof(struct acct));
 
@@ -304,7 +304,7 @@ int acct_process(long exitcode)
 	}
 	vsize = vsize / 1024;
 	ac.ac_mem = encode_comp_t(vsize);
-	ac.ac_io = encode_comp_t(current->io_usage);
+	ac.ac_io = encode_comp_t(current->io_usage);	/* %% */
 	ac.ac_rw = encode_comp_t(ac.ac_io / 1024);
 	ac.ac_minflt = encode_comp_t(current->min_flt);
 	ac.ac_majflt = encode_comp_t(current->maj_flt);

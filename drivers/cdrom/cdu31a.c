@@ -1242,6 +1242,7 @@ size_to_buf(unsigned int size,
    buf[2] = size % 256;
 }
 
+#if 0
 /* Uniform cdrom interface function.
    Return the status of the current disc:
    If it is recognized as CD-I -> return XA Mode 2 Form 2
@@ -1268,6 +1269,7 @@ static int scd_disc_status(struct cdrom_device_info *cdi)
   } else 
     return CDS_NO_INFO;
 }
+#endif
 
 /* Starts a read operation. Returns 0 on success and 1 on failure. 
    The read operation used here allows multiple sequential sectors 

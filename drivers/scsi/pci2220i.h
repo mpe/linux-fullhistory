@@ -328,7 +328,7 @@ extern struct proc_dir_entry Proc_Scsi_Pci2220i;
 		  queuecommand:	  Pci2220i_QueueCommand,		\
 		  abort:	  Pci2220i_Abort,			\
 		  reset:	  Pci2220i_Reset,			\
-		  biosparam:	  Pci2220i_BiosParam,                 	\
+		  bios_param:	  Pci2220i_BiosParam,                 	\
 		  can_queue:	  1, 					\
 		  this_id:	  -1, 					\
 		  sg_tablesize:	  SG_NONE,		 		\

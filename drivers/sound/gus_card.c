@@ -28,8 +28,7 @@ extern int      gus_pcm_volume;
 extern int      have_gus_max;
 int             gus_pnp_flag = 0;
 
-void
-attach_gus_card(struct address_info *hw_config)
+void attach_gus_card(struct address_info *hw_config)
 {
 	snd_set_irq_handler(hw_config->irq, gusintr, "Gravis Ultrasound", hw_config->osp);
 
@@ -48,8 +47,7 @@ attach_gus_card(struct address_info *hw_config)
 #endif
 }
 
-int
-probe_gus(struct address_info *hw_config)
+int probe_gus(struct address_info *hw_config)
 {
 	int             irq;
 	int             io_addr;
@@ -63,13 +61,13 @@ probe_gus(struct address_info *hw_config)
 		if (irq != 3 && irq != 5 && irq != 7 && irq != 9 &&
 		    irq != 11 && irq != 12 && irq != 15)
 		  {
-			  printk("GUS: Unsupported IRQ %d\n", irq);
+			  printk(KERN_ERR "GUS: Unsupported IRQ %d\n", irq);
 			  return 0;
 		  }
 	if (check_region(hw_config->io_base, 16))
-		printk("GUS: I/O range conflict (1)\n");
+		printk(KERN_ERR "GUS: I/O range conflict (1)\n");
 	else if (check_region(hw_config->io_base + 0x100, 16))
-		printk("GUS: I/O range conflict (2)\n");
+		printk(KERN_ERR "GUS: I/O range conflict (2)\n");
 	else if (gus_wave_detect(hw_config->io_base))
 		return 1;
 
@@ -95,8 +93,7 @@ probe_gus(struct address_info *hw_config)
 	return 0;
 }
 
-void
-unload_gus(struct address_info *hw_config)
+void unload_gus(struct address_info *hw_config)
 {
 	DDB(printk("unload_gus(%x)\n", hw_config->io_base));
 
@@ -112,8 +109,7 @@ unload_gus(struct address_info *hw_config)
 		sound_free_dma(hw_config->dma2);
 }
 
-void
-gusintr(int irq, void *dev_id, struct pt_regs *dummy)
+void gusintr(int irq, void *dev_id, struct pt_regs *dummy)
 {
 	unsigned char   src;
 	extern int      gus_timer_enabled;
@@ -126,56 +122,50 @@ gusintr(int irq, void *dev_id, struct pt_regs *dummy)
 #endif
 
 	while (1)
-	  {
-		  if (!(src = inb(u_IrqStatus)))
-			  return;
+	{
+		if (!(src = inb(u_IrqStatus)))
+			return;
 
-		  if (src & DMA_TC_IRQ)
-		    {
-			    guswave_dma_irq();
-		    }
-		  if (src & (MIDI_TX_IRQ | MIDI_RX_IRQ))
-		    {
+		if (src & DMA_TC_IRQ)
+		{
+			guswave_dma_irq();
+		}
+		if (src & (MIDI_TX_IRQ | MIDI_RX_IRQ))
+		{
 #if defined(CONFIG_MIDI)
-			    gus_midi_interrupt(0);
+			gus_midi_interrupt(0);
 #endif
-		    }
-		  if (src & (GF1_TIMER1_IRQ | GF1_TIMER2_IRQ))
-		    {
+		}
+		if (src & (GF1_TIMER1_IRQ | GF1_TIMER2_IRQ))
+		{
 #if defined(CONFIG_SEQUENCER) || defined(CONFIG_SEQUENCER_MODULE)
-			    if (gus_timer_enabled)
-			      {
-				      sound_timer_interrupt();
-			      }
-			    gus_write8(0x45, 0);	/* Ack IRQ */
-			    gus_timer_command(4, 0x80);		/* Reset IRQ flags */
-
+			if (gus_timer_enabled)
+				sound_timer_interrupt();
+			gus_write8(0x45, 0);	/* Ack IRQ */
+			gus_timer_command(4, 0x80);		/* Reset IRQ flags */
 #else
-			    gus_write8(0x45, 0);	/* Stop timers */
+			gus_write8(0x45, 0);	/* Stop timers */
 #endif
-		    }
-		  if (src & (WAVETABLE_IRQ | ENVELOPE_IRQ))
-		    {
-			    gus_voice_irq();
-		    }
-	  }
+		}
+		if (src & (WAVETABLE_IRQ | ENVELOPE_IRQ))
+			gus_voice_irq();
+	}
 }
 
 #endif
 
 /*
- * Some extra code for the 16 bit sampling option
+ *	Some extra code for the 16 bit sampling option
  */
+
 #ifdef CONFIG_GUS16
 
-int
-probe_gus_db16(struct address_info *hw_config)
+int probe_gus_db16(struct address_info *hw_config)
 {
 	return ad1848_detect(hw_config->io_base, NULL, hw_config->osp);
 }
 
-void
-attach_gus_db16(struct address_info *hw_config)
+void attach_gus_db16(struct address_info *hw_config)
 {
 #if defined(CONFIG_GUSHW) || defined(MODULE)
 	gus_pcm_volume = 100;
@@ -189,8 +179,7 @@ attach_gus_db16(struct address_info *hw_config)
 					  hw_config->osp);
 }
 
-void
-unload_gus_db16(struct address_info *hw_config)
+void unload_gus_db16(struct address_info *hw_config)
 {
 
 	ad1848_unload(hw_config->io_base,
@@ -226,16 +215,15 @@ MODULE_PARM(type, "i");
 MODULE_PARM(gus16, "i");
 MODULE_PARM(db16, "i");
 
-int
-init_module(void)
+int init_module(void)
 {
-	printk("Gravis Ultrasound audio driver Copyright (C) by Hannu Savolainen 1993-1996\n");
+	printk(KERN_INFO "Gravis Ultrasound audio driver Copyright (C) by Hannu Savolainen 1993-1996\n");
 
 	if (io == -1 || dma == -1 || irq == -1)
-	  {
-		  printk("I/O, IRQ, and DMA are mandatory\n");
-		  return -EINVAL;
-	  }
+	{
+		printk(KERN_ERR "I/O, IRQ, and DMA are mandatory\n");
+		return -EINVAL;
+	}
 	config.io_base = io;
 	config.irq = irq;
 	config.dma = dma;
@@ -244,10 +232,10 @@ init_module(void)
 
 #if defined(CONFIG_GUS16)
 	if (probe_gus_db16(&config) && gus16)
-	  {
-		  attach_gus_db16(&config);
-		  db16 = 1;
-	  }
+	{
+		attach_gus_db16(&config);
+		db16 = 1;
+	}	
 #endif
 	if (probe_gus(&config) == 0)
 		return -ENODEV;
@@ -256,8 +244,7 @@ init_module(void)
 	return 0;
 }
 
-void
-cleanup_module(void)
+void cleanup_module(void)
 {
 #if defined(CONFIG_GUS16)
 	if (db16)

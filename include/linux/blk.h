@@ -39,6 +39,9 @@
 #ifdef CONFIG_CDROM
 extern int cdrom_init(void);
 #endif CONFIG_CDROM 
+#ifdef CONFIG_ISP16_CDI
+extern int isp16_init(void);
+#endif CONFIG_ISP16_CDI
 #ifdef CONFIG_CDU31A
 extern int cdu31a_init(void);
 #endif CONFIG_CDU31A

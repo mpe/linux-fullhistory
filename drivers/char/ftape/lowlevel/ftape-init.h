@@ -32,12 +32,9 @@
 #include <linux/linkage.h>
 #include <linux/signal.h>
 
-#define _S(nr) (1<<((nr)-1))
-#define _NEVER_BLOCK    (_S(SIGKILL)|_S(SIGSTOP))
-#define _DONT_BLOCK     (_NEVER_BLOCK|_S(SIGINT))
-#define _DO_BLOCK       (_S(SIGPIPE))
-#define _BLOCK_ALL      (0xffffffffL)
-
+#define _NEVER_BLOCK    (sigmask(SIGKILL) | sigmask(SIGSTOP))
+#define _DONT_BLOCK     (_NEVER_BLOCK | sigmask(SIGINT))
+#define _DO_BLOCK       (sigmask(SIGPIPE))
 
 #ifndef QIC117_TAPE_MAJOR
 #define QIC117_TAPE_MAJOR 27

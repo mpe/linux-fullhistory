@@ -36,9 +36,9 @@ int snd_find_driver(int type)
 
 static void start_services(void)
 {
+#ifdef FIXME
 	int soundcards_installed;
 
-#ifdef FIXME
 	if (!(soundcards_installed = sndtable_get_cardcount()))
 		return;		/* No cards detected */
 #endif

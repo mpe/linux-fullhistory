@@ -546,6 +546,23 @@ asmlinkage int sys_chown(const char * filename, uid_t user, gid_t group)
 	int error;
 
 	lock_kernel();
+	dentry = namei(filename);
+
+	error = PTR_ERR(dentry);
+	if (!IS_ERR(dentry)) {
+		error = chown_common(dentry, user, group);
+		dput(dentry);
+	}
+	unlock_kernel();
+	return error;
+}
+
+asmlinkage int sys_lchown(const char * filename, uid_t user, gid_t group)
+{
+	struct dentry * dentry;
+	int error;
+
+	lock_kernel();
 	dentry = lnamei(filename);
 
 	error = PTR_ERR(dentry);

@@ -40,6 +40,9 @@
 #
 # 221297 Michael Chastain (mec@shout.net) - make define_bool actually
 # define its arguments so that later tests on them work right.
+#
+# 160198 Michael Chastain (mec@shout.net) - fix bug with 'c' command
+# (complement existing value) when used on virgin uninitialized variables.
 #----------------------------------------------------------------------------
 
 
@@ -349,6 +352,7 @@ function l_bool () {
 		   	case $x in
 		   	y) eval $1=n ;;
 		   	n) eval $1=y ;;
+			*) eval $1=y ;;
 		   	esac ;;
 		*)	eval $1=n ;;
 		esac
@@ -392,6 +396,7 @@ As a result, this feature will be built as a module." 4 70
 			case $x in
 			m) eval $1=n ;;
 			n) eval $1=m ;;
+			*) eval $1=m ;;
 			esac ;;
 		*)	eval $1=n ;;
 		esac
@@ -416,6 +421,7 @@ function l_tristate () {
 		   y) eval $1=n ;;
 		   n) eval $1=m ;;
 		   m) eval $1=y ;;
+		   *) eval $1=y ;;
 		   esac ;;
 		*) eval $1=n ;;
 		esac

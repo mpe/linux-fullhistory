@@ -109,7 +109,6 @@ static void mouse_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 static int fasync_mouse(struct file *filp, int on)
 {
 	int retval;
-	struct inode *inode = filp->f_dentry->d_inode;
 
 	retval = fasync_helper(filp, on, &mouse.fasyncptr);
 	if (retval < 0)

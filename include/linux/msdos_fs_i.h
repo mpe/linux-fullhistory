@@ -28,16 +28,9 @@ struct msdos_inode_info {
 	int i_start;	/* first cluster or 0 */
 	int i_logstart;	/* logical first cluster */
 	int i_attrs;	/* unused attribute bits */
+	int i_ctime_ms;	/* unused change time in milliseconds */
 	int i_busy;	/* file is either deleted but still open, or
 			   inconsistent (mkdir) */
-	struct inode *i_depend; /* pointer to inode that depends on the
-				   current inode */
-	struct inode *i_old;	/* pointer to the old inode this inode
-				   depends on */
-	struct inode *i_linked;	/* pointer to inode linked to the current one,
-				   happens when an open file is moved */
-	struct inode *i_oldlink;/* pointer to open inode that references
-				   the same file */
 	int i_binary;	/* file contains non-text data */
 };
 

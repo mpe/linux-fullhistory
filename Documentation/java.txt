@@ -4,45 +4,92 @@
 Linux beats them ALL! While all other OS's are TALKING about direct
 support of Java Binaries in the OS, Linux is doing it!
 
-You execute Java classes as you would any other executable, after a few
-small details:
+You can execute Java applications and Java Applets just like any
+other program after you have done the following:
 
-	1) You MUST FIRST install the Java Developers Kit for Linux.
-	   The Java on Linux HOWTO gives the details on getting and
-	   installing this. This HOWTO can be found at:
+1) You MUST FIRST install the Java Developers Kit for Linux.
+   The Java on Linux HOWTO gives the details on getting and
+   installing this. This HOWTO can be found at:
 
-		ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO/Java-HOWTO
+	ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO/Java-HOWTO
 
-	   If you install the JDK in a location other than /usr/bin/java,
-	   then you will need to tell the kernel where you put the Java
-	   interpreter.  
-           There are two ways to do this.
-           One, edit fs/binfmt_java.c file and make the needed change to 
-	   the _PATH_JAVA definition at the top of that file.  
-           Two, as root, issue the command:
-	 echo "/path/to/java/interpreter" > /proc/sys/kernel/java-interpreter
-	   (Currently, this does not work if you're using a module for
-	    Java support.)
+   You should also set up a reasonable CLASSPATH environment
+   variable to use Java applications that make use of any
+   nonstandard classes (not included in the same directory
+   as the application itself).
 
-	2) You must chmod the '*.class' files you wish to execute with
-	   the execute bit. This is not normally (till now) done with
-	   '.class' files.
+2) You have to compile BINFMT_MISC either as module or into
+   the kernel (CONFIG_BINFMT_MISC) and set it up properly.
+   If you choose to compile it as a module, you will have
+   to insert it manually with modprobe/insmod, as kerneld
+   can not easy be supported with binfmt_misc. 
+   Read the file 'binfmt_misc.txt' in this directory to know
+   more about the configuration process.
 
-	3) You must optionally export a CLASSPATH environment variable,
-	   if you plan to use Java applications installed outside of
-	   /usr/local/java/classes/*.
+3) Add the following configuration items to binfmt_misc
+   (you should really have read binfmt_misc.txt now):
+   support for Java applications:
+     ':Java:M::\xca\xfe\xba\xbe::/usr/local/java/bin/javawrapper:'
+   support for Java Applets:
+     ':Applet:E::html::/usr/local/java/bin/appletviewer:'
+   or the following, if you want to be more selective:
+     ':Applet:M::<!--applet::/usr/local/java/bin/appletviewer:'
 
-	4) Either compile your kernel with Java support builtin, or
-	   as a loadable module. If a module, load it with insmod or
-	   kerneld.
+   Of cause you have to fix the path names, if you installed the JDK
+   at another place than /usr/local/java.
 
-	5) A caveat.  When executing a java file, the java interpreter is
-	   invoked only with the class name, not with the complete file path.
-	   Therefore it is possible that the file the shell finds with PATH
-	   is not the same file the java interpreter finds with CLASSPATH.
-	   The recommended solution is to make symbolic links from a directory
-	   in PATH to the actual class file in CLASSPATH, e.g.,
-	   /usr/local/bin/myapp -> /usr/local/java/classes/myapp.class.
+   Note, that for the more selective applet support you have to modify
+   existing html-files to contain <!--applet--> in the first line
+   ('<' has to be the first character!) to let this work!
+
+   For the compiled Java programs you need a wrapper script like the
+   following (this is because Java is broken in case of the filename
+   handling), again fix the path names, both in the script and in the
+   above given configuration string:
+
+====================== Cut here ===================
+#!/bin/bash
+# /usr/local/java/bin/javawrapper - the wrapper for binfmt_misc/java
+CLASS=$1
+
+# if classname is a link, we follow it (this could be done easier - how?)
+if [ -L "$1" ] ; then
+        CLASS=`ls --color=no -l $1 | tr -s '\t ' '  ' | cut -d ' ' -f 11`
+fi
+CLASSN=`basename $CLASS .class`
+CLASSP=`dirname $CLASS`
+
+FOO=$PATH
+PATH=$CLASSPATH
+if [ -z "`type -p -a $CLASSN.class`" ] ; then
+        # class is not in CLASSPATH
+        if [ -e "$CLASSP/$CLASSN.class" ] ; then
+                # append dir of class to CLASSPATH
+                if [ -z "${CLASSPATH}" ] ; then
+                        export CLASSPATH=$CLASSP
+                else
+                        export CLASSPATH=$CLASSP:$CLASSPATH
+                fi
+        else
+                # uh! now we would have to create a symbolic link - really
+                # ugly, i.e. print a message that one has to change the setup
+                echo "Hey! This is not a good setup to run $1 !"
+                exit 1
+        fi
+fi
+PATH=$FOO
+
+shift
+/usr/local/java/bin/java $CLASSN "$@"
+====================== Cut here ===================
+
+
+Now simply chmod +x the .class and/or .html files you want to execute.
+To add a Java program to your path best put a symbolic link to the main
+.class file into /usr/bin (or another place you like) omitting the .class
+extension. The directory containing the original .class file will be
+added to your CLASSPATH during execution.
+
 
 To test your new setup, enter in the following simple Java app, and name
 it "HelloWorld.java":
@@ -53,59 +100,20 @@ it "HelloWorld.java":
 		}
 	}
 
-
 Now compile the application with:
-
-	/usr/local/java/bin/javac HelloWorld.java
+	javac HelloWorld.java
 
 Set the executable permissions of the binary file, with:
-
 	chmod 755 HelloWorld.class
 
 And then execute it:
-
 	./HelloWorld.class
 
 
-Yes, it's JUST THAT EASY! ;-)
-
------------------------------------------------------------------
-
-Nope, I didn't forget about Java Applets! ;-)
-
-While this may not be the best way to do this, it works!
-
-Take any html file used with the Java appletviewer (like the
-demo/Blink/example1.html file), and:
-
-	1) Insert a new first line of:
-
-		<!--applet-->
-
-	   Make sure the '<' is the first character in the file. This
-	   will be treated as a valid HTML comment outside of this
-	   Java Applet support, so the modified file can still be used
-	   with all known browsers.
-
-	2) If you install the applet viewer in a location other than
-	   /usr/bin/appletviewer, then you will need to tell the
-	   kernel where you put the Java appletviewer.  
-           There are two ways to do this.
-           One, edit fs/binfmt_java.c file and make the needed change to 
-	   the _PATH_APPLET definition at the top of that file.  
-           Two, as root, issue the command:
-	echo "/path/to/java/appletviewer" > /proc/sys/kernel/java-appletviewer
-	   (Currently, this does not work if you're using a module for
-	    Java support.)
-
-	3) You must chmod the '*.html' files you wish to execute with
-	   the execute bit. This is not normally (till now) done with
-	   '.html' files.
-
-	4) And then execute it.
+To execute Java Applets, simple chmod the *.html files to include
+the execution bit, then just do
+	./Applet.html
 
 
-Brian A. Lantz
-brian@lantz.com
-(/proc/sys/kernel/java-* support by Mike Shaver (shaver@ingenia.com))
-
+originally by Brian A. Lantz, brian@lantz.com
+heavily edited for binfmt_misc by Richard Günther.

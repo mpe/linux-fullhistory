@@ -776,7 +776,9 @@ static int mac_partition(struct gendisk *hd, kdev_t dev, unsigned long fsec)
 	int blk, blocks_in_map;
 	int dev_bsize, dev_pos, pos;
 	unsigned secsize;
+#ifdef CONFIG_PMAC
 	int first_bootable = 1;
+#endif
 	struct mac_partition *part;
 	struct mac_driver_desc *md;
 

@@ -15,7 +15,6 @@ extern unsigned int local_irq_count[NR_CPUS];
 #define hardirq_exit(cpu)	(local_irq_count[cpu]--)
 
 #define synchronize_irq()	do { } while (0)
-#define synchronize_one_irq(x)	do { } while (0)
 
 #else
 
@@ -30,7 +29,7 @@ static inline void release_irqlock(int cpu)
 	/* if we didn't own the irq lock, just ignore.. */
 	if (global_irq_holder == (unsigned char) cpu) {
 		global_irq_holder = NO_PROC_ID;
-		global_irq_lock = 0;
+		clear_bit(0,&global_irq_lock);
 	}
 }
 
@@ -70,7 +69,6 @@ static inline void hardirq_endlock(int cpu)
 }
 
 extern void synchronize_irq(void);
-extern void synchronize_one_irq(unsigned int irq);
 
 #endif /* __SMP__ */
 

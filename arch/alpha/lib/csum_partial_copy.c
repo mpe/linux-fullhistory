@@ -112,7 +112,7 @@ csum_partial_cfu_aligned(const unsigned long *src, unsigned long *dst,
  * easy.
  */
 static inline unsigned long
-csum_partial_cfu_dest_aligned(unsigned long *src, unsigned long *dst,
+csum_partial_cfu_dest_aligned(const unsigned long *src, unsigned long *dst,
 			      unsigned long soff,
 			      long len, unsigned long checksum,
 			      int *errp)

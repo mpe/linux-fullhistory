@@ -73,7 +73,7 @@ const ftape_info *zft_status;
 /*      Local vars.
  */
 static int busy_flag = 0;
-static int orig_sigmask;
+static sigset_t orig_sigmask;
 
 /*  the interface to the kernel vfs layer
  */
@@ -171,7 +171,7 @@ static int zft_open(struct inode *ino, struct file *filep)
 		TRACE_ABORT(-ENXIO, ft_t_err, "failed: illegal unit nr");
 	}
 	orig_sigmask = current->blocked;
-	current->blocked = _BLOCK_ALL;
+	sigfillset(&current->blocked);
 	result = _zft_open(MINOR(ino->i_rdev), filep->f_flags & O_ACCMODE);
 	if (result < 0) {
 		current->blocked = orig_sigmask; /* restore mask */
@@ -186,18 +186,15 @@ static int zft_open(struct inode *ino, struct file *filep)
 		/* Mask signals that will disturb proper operation of the
 		 * program that is calling.
 		 */
-		current->blocked = orig_sigmask | _DO_BLOCK;
+		current->blocked = orig_sigmask;
+		sigaddsetmask (&current->blocked, _DO_BLOCK);
 		TRACE_EXIT 0;
 	}
 }
 
 /*      Close floppy tape device
  */
-#if LINUX_VERSION_CODE >= KERNEL_VER(2,1,31)
 static int zft_close(struct inode *ino, struct file *filep)
-#else
-static void zft_close(struct inode *ino, struct file *filep)
-#endif
 {
 	int result;
 	TRACE_FUN(ft_t_flow);
@@ -210,7 +207,7 @@ static void zft_close(struct inode *ino, struct file *filep)
 		TRACE_EXIT; /* keep busy_flag !(?) */
 #endif
 	}
-	current->blocked = _BLOCK_ALL;
+	sigfillset(&current->blocked);
 	result = _zft_close();
 	if (result < 0) {
 		TRACE(ft_t_err, "_zft_close failed");
@@ -235,7 +232,7 @@ static int zft_ioctl(struct inode *ino, struct file *filep,
 		     unsigned int command, unsigned long arg)
 {
 	int result = -EIO;
-	int old_sigmask;
+	sigset_t old_sigmask;
 	TRACE_FUN(ft_t_flow);
 
 	if (!busy_flag || MINOR(ino->i_rdev) != zft_unit || ft_failure) {
@@ -243,7 +240,7 @@ static int zft_ioctl(struct inode *ino, struct file *filep,
 			    "failed: not busy, failure or wrong unit");
 	}
 	old_sigmask = current->blocked; /* save mask */
-	current->blocked = _BLOCK_ALL;
+	sigfillset(&current->blocked);
 	/* This will work as long as sizeof(void *) == sizeof(long) */
 	result = _zft_ioctl(command, (void *) arg);
 	current->blocked = old_sigmask; /* restore mask */
@@ -261,7 +258,7 @@ static int zft_mmap(struct inode *ino,
 #endif
 {
 	int result = -EIO;
-	int old_sigmask;
+	sigset_t old_sigmask;
 	TRACE_FUN(ft_t_flow);
 
 	if (!busy_flag || 
@@ -276,7 +273,7 @@ static int zft_mmap(struct inode *ino,
 			    "failed: not busy, failure or wrong unit");
 	}
 	old_sigmask = current->blocked; /* save mask */
-	current->blocked = _BLOCK_ALL;
+	sigfillset(&current->blocked);
 	if ((result = ftape_mmap(vma)) >= 0) {
 #ifndef MSYNC_BUG_WAS_FIXED
 		static struct vm_operations_struct dummy = { NULL, };
@@ -307,7 +304,7 @@ static int  zft_read(struct inode *ino, struct file *fp, char *buff,
 #endif
 {
 	int result = -EIO;
-	int old_sigmask;
+	sigset_t old_sigmask;
 #if LINUX_VERSION_CODE >= KERNEL_VER(2,1,60)
 	struct inode *ino = fp->f_dentry->d_inode;
 #endif
@@ -319,7 +316,7 @@ static int  zft_read(struct inode *ino, struct file *fp, char *buff,
 			    "failed: not busy, failure or wrong unit");
 	}
 	old_sigmask = current->blocked; /* save mask */
-	current->blocked = _BLOCK_ALL;
+	sigfillset(&current->blocked);
 	result = _zft_read(buff, req_len);
 	current->blocked = old_sigmask; /* restore mask */
 	TRACE(ft_t_data_flow, "return with count: %d", result);
@@ -343,7 +340,7 @@ static int  zft_write(struct inode *ino, struct file *fp, char *buff,
 #endif
 {
 	int result = -EIO;
-	int old_sigmask;
+	sigset_t old_sigmask;
 #if LINUX_VERSION_CODE >= KERNEL_VER(2,1,60)
 	struct inode *ino = fp->f_dentry->d_inode;
 #endif
@@ -355,7 +352,7 @@ static int  zft_write(struct inode *ino, struct file *fp, char *buff,
 			    "failed: not busy, failure or wrong unit");
 	}
 	old_sigmask = current->blocked; /* save mask */
-	current->blocked = _BLOCK_ALL;
+	sigfillset(&current->blocked);
 	result = _zft_write(buff, req_len);
 	current->blocked = old_sigmask; /* restore mask */
 	TRACE(ft_t_data_flow, "return with count: %d", result);

@@ -200,16 +200,6 @@ extern int dispatch_scsi_info(int ino, char *buffer, char **start,
 static void scsi_dump_status(int level);
 
 
-/*
- *  This is the number  of clock ticks we should wait before we time out
- *  and abort the command.  This is for  where the scsi.c module generates
- *  the command, not where it originates from a higher level, in which
- *  case the timeout is specified there.
- *
- */
-
-
-
 struct dev_info{
     const char * vendor;
     const char * model;
@@ -3208,7 +3198,7 @@ scsi_dump_status(int level)
         printk(" %d %d %d : %d %p\n",
                shpnt->host_failed,
                shpnt->host_busy,
-               shpnt->host_active,
+               atomic_read(&shpnt->host_active),
                shpnt->host_blocked,
                shpnt->pending_commands);
 

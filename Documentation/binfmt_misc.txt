@@ -54,10 +54,10 @@ A few examples (assumed you are in /proc/sys/fs/binfmt_misc):
 - enable support for packed DOS applications (pre-configured dosemu hdimages):
   echo ':DEXE:M::\x0eDEX::/usr/bin/dosexec:' > register
 
-- enable support for DOS/Windows executables (using mzloader and dosemu/wine):
-  echo ':DOSWin:M::MZ::/usr/sbin/mzloader:' > register
-  echo ':DOScom:E::com::/usr/sbin/mzloader:' > register
-  echo ':DOSexe:E::exe::/usr/sbin/mzloader:' > register
+- enable support for Windows executables using wine:
+  echo ':DOSWin:M::MZ::/usr/local/bin/wine:' > register
+
+For java support see Documentation/java.txt
 
 
 You can enable/disable binfmt_misc or one binary type by echoing 0 (to disable)
@@ -68,73 +68,12 @@ You can remove one entry or all entries by echoing -1 to /proc/.../the_name
 or /proc/sys/fs/binfmt_misc/status.
 
 
-Emulating binfmt_java:
-======================
-
-To emulate binfmt_java the following register-strings could be used: 
-for compiled Java programs use
-  ':Java:M::\xca\xfe\xba\xbe::/usr/local/java/bin/javawrapper:'
-for simple applet support use
-  ':Applet:E::html::/usr/local/java/bin/appletviewer:'
-for more selective applet support (like binfmt_java) use
-  ':Applet:M::<!--applet::/usr/local/java/bin/appletviewer:'
-
-Note, that for the more selective applet support you have to modify
-existing html-files to contain <!--applet--> in the first line to
-let this work!
-
-For the compiled Java programs you need a wrapper script like the
-following (this is because Java is broken in case of the filename
-handling):
-
-====================== Cut here ===================
-#!/bin/bash
-# /usr/local/java/bin/javawrapper - the wrapper for binfmt_misc/java
-CLASS=$1
-
-# if classname is a link, we follow it (this could be done easier - how?)
-if [ -L "$1" ] ; then
-	CLASS=`ls --color=no -l $1 | tr -s '\t ' '  ' | cut -d ' ' -f 11` 
-fi
-CLASSN=`basename $CLASS .class`
-CLASSP=`dirname $CLASS`
-
-FOO=$PATH
-PATH=$CLASSPATH
-if [ -z "`type -p -a $CLASSN.class`" ] ; then
-	# class is not in CLASSPATH
-	if [ -e "$CLASSP/$CLASSN.class" ] ; then
-		# append dir of class to CLASSPATH
-		if [ -z "${CLASSPATH}" ] ; then
-			export CLASSPATH=$CLASSP
-		else
-			export CLASSPATH=$CLASSP:$CLASSPATH
-		fi
-	else
-		# uh! now we would have to create a symbolic link - really
-		# ugly, i.e. print a message that one has to change the setup
-		echo "Hey! This is not a good setup to run $1 !"
-		exit 1
-	fi
-fi
-PATH=$FOO
-
-shift
-/usr/local/java/bin/java $CLASSN $@
-====================== Cut here ===================
-
-To add a Java program to your path best put a symbolic link to the main
-.class file into /usr/bin (or another place you like) omitting the .class
-extension. The directory containing the original .class file will be
-added to your CLASSPATH during execution.
-
-
-
 HINTS:
 ======
 
 If you want to pass special arguments to your interpreter, you can
-write a wrapper script for it.
+write a wrapper script for it. See Documentation/java.txt for an
+example.
 
 Your interpreter should NOT look in the PATH for the filename; the
 kernel passes it the full filename to use.  Using the PATH can cause

@@ -794,8 +794,8 @@ void ftape_disable(void)
 			      i, *ft_buffer[i]->address);
 		}
 	}
-	if ((current->signal & _DONT_BLOCK) && 
-	    !(current->signal & _NEVER_BLOCK) &&
+	if (sigtestsetmask(&current->signal, _DONT_BLOCK) && 
+	    !(sigtestsetmask(&current->signal, _NEVER_BLOCK)) &&
 	    ftape_tape_running) {
 		TRACE(ft_t_warn,
 		      "Interrupted by fatal signal and tape still running");

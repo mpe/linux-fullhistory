@@ -482,9 +482,11 @@ static void set_multicast_list(struct device *dev, int num_addrs, void *addrs);
 /* This driver uses 'options' to pass the media type, full-duplex flag, etc. */
 /* Note: this is the only limit on the number of cards supported!! */
 static int options[8] = { -1, -1, -1, -1, -1, -1, -1, -1,};
+#ifdef MODULE
 static int full_duplex[8] = {-1, -1, -1, -1, -1, -1, -1, -1};
 /* A list of all installed Vortex devices, for removing the driver module. */
 static struct device *root_vortex_dev = NULL;
+#endif
 
 #ifdef MODULE
 /* Variables to work-around the Compaq PCI BIOS32 problem. */

@@ -68,12 +68,8 @@
 # define SYNC_OTHER_CORES(x) __asm__ __volatile__ ("nop")
 #endif
 
+unsigned int local_bh_count[NR_CPUS];
 unsigned int local_irq_count[NR_CPUS];
-#ifdef __SMP__
-atomic_t __intel_bh_counter;
-#else
-int __intel_bh_counter;
-#endif
 
 atomic_t nmi_counter;
 
@@ -129,53 +125,27 @@ static int irq_owner [NR_IRQS] = { NO_PROC_ID, };
    *  - explicitly use irq 16-19 depending on which PCI irq
    *    line your PCI controller uses.
    */
-  unsigned int io_apic_irqs = 0xFF0000;
+  unsigned int io_apic_irqs = 0xff0000;
 #endif
 
-static inline int ack_irq(int irq)
+static inline void mask_8259A(int irq)
 {
-	/*
-	 * The IO-APIC part will be moved to assembly, nested
-	 * interrupts will be ~5 instructions from entry to iret ...
-	 */
-	int should_handle_irq = 0;
-	int cpu = smp_processor_id();
-
-	/*
-	 * We always call this with local irqs disabled
-	 */
-	spin_lock(&irq_controller_lock);
-
-	if (!irq_events[irq]++ && !disabled_irq[irq]) {
-		should_handle_irq = 1;
-#ifdef __SMP__
-		irq_owner[irq] = cpu;
-#endif
-		hardirq_enter(cpu);
+	cached_irq_mask |= 1 << irq;
+	if (irq & 8) {
+		outb(cached_A1,0xA1);
+	} else {
+		outb(cached_21,0x21);
 	}
+}
 
-	if (IO_APIC_IRQ(irq))
-		ack_APIC_irq ();
-	else {
-	/*
-	 * 8259-triggered INTA-cycle interrupt
-	 */
-		if (should_handle_irq)
-			mask_irq(irq);
-			
-		if (irq & 8) {
-			inb(0xA1);	/* DUMMY */
-			outb(0x62,0x20);	/* Specific EOI to cascade */
-			outb(0x20,0xA0);
-		} else {
-			inb(0x21);	/* DUMMY */
-			outb(0x20,0x20);
-		}
+static inline void unmask_8259A(int irq)
+{
+	cached_irq_mask &= ~(1 << irq);
+	if (irq & 8) {
+		outb(cached_A1,0xA1);
+	} else {
+		outb(cached_21,0x21);
 	}
-
-	spin_unlock(&irq_controller_lock);
-
-	return (should_handle_irq);
 }
 
 void set_8259A_irq_mask(int irq)
@@ -393,8 +363,8 @@ unsigned char global_irq_holder = NO_PROC_ID;
 unsigned volatile int global_irq_lock;
 atomic_t global_irq_count;
 
-#define irq_active(cpu) \
-	(global_irq_count != local_irq_count[cpu])
+atomic_t global_bh_count;
+atomic_t global_bh_lock;
 
 /*
  * "global_cli()" is a special case, in that it can hold the
@@ -412,35 +382,56 @@ static inline void check_smp_invalidate(int cpu)
 	}
 }
 
-static unsigned long previous_irqholder;
-
-static inline void wait_on_irq(int cpu, unsigned long where)
+static void show(char * str)
 {
-	int local_count = local_irq_count[cpu];
+	int i;
+	unsigned long *stack;
+	int cpu = smp_processor_id();
 
-	/* Are we the only one in an interrupt context? */
-	while (local_count != atomic_read(&global_irq_count)) {
-		/*
-		 * No such luck. Now we need to release the lock,
-		 * _and_ release our interrupt context, because
-		 * otherwise we'd have dead-locks and live-locks
-		 * and other fun things.
-		 */
-		atomic_sub(local_count, &global_irq_count);
-		global_irq_holder = NO_PROC_ID;
-		global_irq_lock = 0;
+	printk("\n%s, CPU %d:\n", str, cpu);
+	printk("irq:  %d [%d %d]\n",
+		atomic_read(&global_irq_count), local_irq_count[0], local_irq_count[1]);
+	printk("bh:   %d [%d %d]\n",
+		atomic_read(&global_bh_count), local_bh_count[0], local_bh_count[1]);
+	stack = (unsigned long *) &str;
+	for (i = 40; i ; i--) {
+		unsigned long x = *++stack;
+		if (x > (unsigned long) &init_task_union && x < (unsigned long) &vsprintf) {
+			printk("<[%08lx]> ", x);
+		}
+	}
+}
+	
 
-		/*
-		 * Wait for everybody else to go away and release
-		 * their things before trying to get the lock again.
-		 */
+#define MAXCOUNT 100000000
+
+static inline void wait_on_bh(void)
+{
+	int count = MAXCOUNT;
+	do {
+		if (!--count) {
+			show("wait_on_bh");
+			count = ~0;
+		}
+		/* nothing .. wait for the other bh's to go away */
+	} while (atomic_read(&global_bh_count) != 0);
+}
+
+static inline void wait_on_irq(int cpu)
+{
+	int count = MAXCOUNT;
+
+	while (atomic_read(&global_irq_count)) {
+		clear_bit(0,&global_irq_lock);
+
 		for (;;) {
-			atomic_add(local_count, &global_irq_count);
+			if (!--count) {
+				show("wait_on_irq");
+				count = ~0;
+			}
 			__sti();
 			SYNC_OTHER_CORES(cpu);
 			__cli();
-			atomic_sub(local_count, &global_irq_count);
-			SYNC_OTHER_CORES(cpu);
 			check_smp_invalidate(cpu);
 			if (atomic_read(&global_irq_count))
 				continue;
@@ -449,8 +440,24 @@ static inline void wait_on_irq(int cpu, unsigned long where)
 			if (!test_and_set_bit(0,&global_irq_lock))
 				break;
 		}
-		atomic_add(local_count, &global_irq_count);
-		global_irq_holder = cpu;
+	}
+}
+
+/*
+ * This is called when we want to synchronize with
+ * bottom half handlers. We need to wait until
+ * no other CPU is executing any bottom half handler.
+ *
+ * Don't wait if we're already running in an interrupt
+ * context or are inside a bh handler.
+ */
+void synchronize_bh(void)
+{
+	if (atomic_read(&global_bh_count)) {
+		int cpu = smp_processor_id();
+		if (!local_irq_count[cpu] && !local_bh_count[cpu]) {
+			wait_on_bh();
+		}
 	}
 }
 
@@ -460,37 +467,15 @@ static inline void wait_on_irq(int cpu, unsigned long where)
  * stop sending interrupts: but to make sure there
  * are no interrupts that are executing on another
  * CPU we need to call this function.
- *
- * We have to give pending interrupts a chance to
- * arrive (ie. let them get until hard_irq_enter()),
- * even if they are arriving to another CPU.
- *
- * On UP this is a no-op.
- *
- * UPDATE: this method is not quite safe, as it wont
- * catch irq handlers polling for the irq lock bit
- * in __global_cli():get_interrupt_lock():wait_on_irq().
- * drivers should rather use disable_irq()/enable_irq()
- * and/or synchronize_one_irq()
  */
 void synchronize_irq(void)
 {
-	int local_count = local_irq_count[smp_processor_id()];
-
-	if (local_count != atomic_read(&global_irq_count)) {
-		int i;
-
-		/* The very stupid way to do this */
-		for (i=0; i<NR_IRQS; i++) {
-			disable_irq(i);
-			enable_irq(i);
-		}
-		cli();
-		sti();
-	}
+	/* Stupid approach */
+	cli();
+	sti();
 }
 
-static inline void get_irqlock(int cpu, unsigned long where)
+static inline void get_irqlock(int cpu)
 {
 	if (test_and_set_bit(0,&global_irq_lock)) {
 		/* do we already hold the lock? */
@@ -503,34 +488,40 @@ static inline void get_irqlock(int cpu, unsigned long where)
 			} while (test_bit(0,&global_irq_lock));
 		} while (test_and_set_bit(0,&global_irq_lock));		
 	}
-	/*
-	 * Ok, we got the lock bit.
-	 * But that's actually just the easy part.. Now
-	 * we need to make sure that nobody else is running
+	/* 
+	 * We also to make sure that nobody else is running
 	 * in an interrupt context. 
 	 */
-	wait_on_irq(cpu, where);
+	wait_on_irq(cpu);
 
 	/*
-	 * Finally.
+	 * Ok, finally..
 	 */
 	global_irq_holder = cpu;
-	previous_irqholder = where;
 }
 
+/*
+ * A global "cli()" while in an interrupt context
+ * turns into just a local cli(). Interrupts
+ * should use spinlocks for the (very unlikely)
+ * case that they ever want to protect against
+ * each other.
+ */
 void __global_cli(void)
 {
 	int cpu = smp_processor_id();
-	unsigned long where;
 
-	__asm__("movl 16(%%esp),%0":"=r" (where));
 	__cli();
-	get_irqlock(cpu, where);
+	if (!local_irq_count[cpu])
+		get_irqlock(cpu);
 }
 
 void __global_sti(void)
 {
-	release_irqlock(smp_processor_id());
+	int cpu = smp_processor_id();
+
+	if (!local_irq_count[cpu])
+		release_irqlock(cpu);
 	__sti();
 }
 
@@ -543,8 +534,7 @@ void __global_restore_flags(unsigned long flags)
 {
 	switch (flags) {
 	case 0:
-		release_irqlock(smp_processor_id());
-		__sti();
+		__global_sti();
 		break;
 	case 1:
 		__global_cli();
@@ -555,56 +545,19 @@ void __global_restore_flags(unsigned long flags)
 	}
 }
 
-void synchronize_one_irq(unsigned int irq)
-{
-	int cpu = smp_processor_id(), owner;
-	int local_count = local_irq_count[cpu];
-	unsigned long flags;
-
-	__save_flags(flags);
-	__cli();
-	release_irqlock(cpu);
-	atomic_sub(local_count, &global_irq_count);
-
-repeat:	
-	spin_lock(&irq_controller_lock);
-	owner = irq_owner[irq];
-	spin_unlock(&irq_controller_lock);
-
-	if ((owner != NO_PROC_ID) && (owner != cpu)) {
-		atomic_add(local_count, &global_irq_count);
-		__sti();
-		SYNC_OTHER_CORES(cpu);
-		__cli();
-		atomic_sub(local_count, &global_irq_count);
-		SYNC_OTHER_CORES(cpu);
-		goto repeat;
-	}
-
-	if (!disabled_irq[irq])
-		printk("\n...WHAT??.#1...\n");
-
-	atomic_add(local_count, &global_irq_count);
-	__restore_flags(flags);
-}
-
 #endif
 
-static void handle_IRQ_event(int irq, struct pt_regs * regs)
+static int handle_IRQ_event(int irq, struct pt_regs * regs)
 {
 	struct irqaction * action;
-	int status, cpu = smp_processor_id();
+	int status;
 
-again:
-#ifdef __SMP__
-	while (test_bit(0,&global_irq_lock)) mb();
-#endif
-
-	kstat.irqs[cpu][irq]++;
 	status = 0;
 	action = *(irq + irq_action);
 
 	if (action) {
+		status |= 1;
+
 		if (!(action->flags & SA_INTERRUPT))
 			__sti();
 
@@ -618,23 +571,7 @@ again:
 		__cli();
 	}
 
-	spin_lock(&irq_controller_lock);
-
-#ifdef __SMP__
-	release_irqlock(cpu);
-#endif
-
-	if ((--irq_events[irq]) && (!disabled_irq[irq])) {
-		spin_unlock(&irq_controller_lock);
-		goto again;
-	}
-#ifdef __SMP__
-	/* FIXME: move this into hardirq.h */
-	irq_owner[irq] = NO_PROC_ID;
-#endif
-	hardirq_exit(cpu);
-
-	spin_unlock(&irq_controller_lock);
+	return status;
 }
 
 
@@ -644,94 +581,103 @@ again:
  */
 void disable_irq(unsigned int irq)
 {
-#ifdef __SMP__
-	int cpu = smp_processor_id();
-#endif
-	unsigned long f, flags;
+	unsigned long flags;
 
-	save_flags(flags);
-	__save_flags(f);
-	__cli();
-	spin_lock(&irq_controller_lock);
-
+	spin_lock_irqsave(&irq_controller_lock, flags);
 	disabled_irq[irq]++;
+	mask_irq(irq);
+	spin_unlock_irqrestore(&irq_controller_lock, flags);
 
-#ifdef __SMP__
-	/*
-	 * We have to wait for all irq handlers belonging to this IRQ
-	 * vector to finish executing.
-	 */
-	if ((irq_owner[irq] == NO_PROC_ID) || (irq_owner[irq] == cpu) ||
-		(disabled_irq[irq] > 1)) {
-
-		spin_unlock(&irq_controller_lock);
-		__restore_flags(f);
-		restore_flags(flags);
-		if (disabled_irq[irq] > 100)
-			printk("disable_irq(%d), infinit recursion!\n",irq);
-		return;
-	}
-#endif
-
-	spin_unlock(&irq_controller_lock);
-
-#ifdef __SMP__
-	synchronize_one_irq(irq);
-#endif
-
-	__restore_flags(f);
-	restore_flags(flags);
+	synchronize_irq();
 }
 
 void enable_irq(unsigned int irq)
 {
 	unsigned long flags;
-	int cpu = smp_processor_id();
 
-	spin_lock_irqsave(&irq_controller_lock,flags);
-
-	if (!disabled_irq[irq]) {
-		spin_unlock_irqrestore(&irq_controller_lock,flags);
-		printk("more enable_irq(%d)'s than disable_irq(%d)'s!!",irq,irq);
-		return;
-	}
-
+	spin_lock_irqsave(&irq_controller_lock, flags);
 	disabled_irq[irq]--;
+	unmask_irq(irq);
+	spin_unlock_irqrestore(&irq_controller_lock, flags);
+}
 
-#ifndef __SMP__
-	if (disabled_irq[irq]) {
-		spin_unlock_irqrestore(&irq_controller_lock,flags);
-		return;
+/*
+ * Careful! The 8259A is a fragile beast, it pretty
+ * much _has_ to be done exactly like this (mask it
+ * first, _then_ send the EOI, and the order of EOI
+ * to the two 8259s is important!
+ */
+static inline void mask_and_ack_8259A(int irq_nr)
+{
+	spin_lock(&irq_controller_lock);
+	cached_irq_mask |= 1 << irq_nr;
+	if (irq_nr & 8) {
+		inb(0xA1);	/* DUMMY */
+		outb(cached_A1,0xA1);
+		outb(0x62,0x20);	/* Specific EOI to cascade */
+		outb(0x20,0xA0);
+	} else {
+		inb(0x21);	/* DUMMY */
+		outb(cached_21,0x21);
+		outb(0x20,0x20);
 	}
-#else
-	if (disabled_irq[irq] || (irq_owner[irq] != NO_PROC_ID)) {
-		spin_unlock_irqrestore(&irq_controller_lock,flags);
-		return;
-	}
-#endif
+	spin_unlock(&irq_controller_lock);
+}
 
-	/*
-	 * Nobody is executing this irq handler currently, lets check
-	 * wether we have outstanding events to be handled.
-	 */
+static void do_8259A_IRQ(int irq, int cpu, struct pt_regs * regs)
+{
+	mask_and_ack_8259A(irq);
 
-	if (irq_events[irq]) {
-		struct pt_regs regs;
+	irq_enter(cpu, irq);
 
-#ifdef __SMP__
-		irq_owner[irq] = cpu;
-#endif
-		hardirq_enter(cpu);
-#ifdef __SMP__
-		release_irqlock(cpu);
-#endif
+	if (handle_IRQ_event(irq, regs)) {
+		spin_lock(&irq_controller_lock);
+		unmask_8259A(irq);
 		spin_unlock(&irq_controller_lock);
-
-		handle_IRQ_event(irq,&regs);
-		__restore_flags(flags);
-		return;
 	}
-	spin_unlock_irqrestore(&irq_controller_lock,flags);
+
+	irq_exit(cpu, irq);
+}
+
+/*
+ * FIXME! This is completely broken.
+ */
+static void do_ioapic_IRQ(int irq, int cpu, struct pt_regs * regs)
+{
+	int should_handle_irq;
+
+	spin_lock(&irq_controller_lock);
+	should_handle_irq = 0;
+	if (!irq_events[irq]++ && !disabled_irq[irq]) {
+		should_handle_irq = 1;
+		irq_owner[irq] = cpu;
+		hardirq_enter(cpu);
+	}
+
+	ack_APIC_irq();
+
+	spin_unlock(&irq_controller_lock);
+	
+	if (should_handle_irq) {
+again:
+		if (!handle_IRQ_event(irq, regs))
+			disabled_irq[irq] = 1;
+
+	}
+
+	spin_lock(&irq_controller_lock);
+	release_irqlock(cpu);
+
+	if ((--irq_events[irq]) && (!disabled_irq[irq]) && should_handle_irq) {
+		spin_unlock(&irq_controller_lock);
+		goto again;
+	}
+
+	irq_owner[irq] = NO_PROC_ID;
+	hardirq_exit(cpu);
+	spin_unlock(&irq_controller_lock);
+
+	enable_IO_APIC_irq(irq);
 }
 
 /*
@@ -749,7 +695,9 @@ void enable_irq(unsigned int irq)
  * overlapping ... i saw no driver problem so far.
  */
 asmlinkage void do_IRQ(struct pt_regs regs)
-{
+{	
+	void (*do_lowlevel_IRQ)(int, int, struct pt_regs *);
+
 	/* 
 	 * We ack quickly, we don't want the irq controller
 	 * thinking we're snobs just because some other CPU has
@@ -761,16 +709,15 @@ asmlinkage void do_IRQ(struct pt_regs regs)
 	 * handled by some other CPU. (or is disabled)
 	 */
 	int irq = regs.orig_eax & 0xff;
+	int cpu = smp_processor_id();
 
-/*
-	printk("<%d>",irq);
- */
-	if (!ack_irq(irq))
-		return;
+	kstat.irqs[cpu][irq]++;
 
-	handle_IRQ_event(irq,&regs);
-
-	unmask_irq(irq);
+	do_lowlevel_IRQ = do_8259A_IRQ;
+	if (IO_APIC_IRQ(irq))
+		do_lowlevel_IRQ = do_ioapic_IRQ;
+	
+	do_lowlevel_IRQ(irq, cpu, &regs);
 
 	/*
 	 * This should be conditional: we should really get

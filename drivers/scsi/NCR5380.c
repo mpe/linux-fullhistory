@@ -625,7 +625,7 @@ static inline void NCR5380_all_init (void) {
  */
 
 
-static int probe_irq __initdata;
+static int probe_irq __initdata ;
 __initfunc(static void probe_intr (int irq, void *dev_id, struct pt_regs * regs)) {
     probe_irq = irq;
 };
