@@ -139,10 +139,31 @@ unsigned long save_v86_state(int signr,struct vm86_regs * regs)
 		do_exit(SIGSEGV);
 	}
 	memcpy_tofs(&(current->vm86_info->regs),regs,sizeof(*regs));
+	put_fs_long(current->screen_bitmap,&(current->vm86_info->screen_bitmap));
 	stack = current->tss.esp0;
 	current->tss.esp0 = current->saved_kernel_stack;
 	current->saved_kernel_stack = 0;
 	return stack;
+}
+
+static void mark_screen_rdonly(struct task_struct * tsk)
+{
+	unsigned long tmp;
+	unsigned long *pg_table;
+
+	if (tmp = tsk->tss.cr3) {
+		tmp = *(unsigned long *) tmp;
+		if (tmp & PAGE_PRESENT) {
+			tmp &= 0xfffff000;
+			pg_table = (0xA00000 >> PAGE_SHIFT) + (unsigned long *) tmp;
+			tmp = 32;
+			while (tmp--) {
+				if (PAGE_PRESENT & *pg_table)
+					*pg_table &= ~PAGE_RW;
+				pg_table++;
+			}
+		}
+	}
 }
 
 int sys_vm86(struct vm86_struct * v86)
@@ -171,6 +192,9 @@ int sys_vm86(struct vm86_struct * v86)
 	current->saved_kernel_stack = current->tss.esp0;
 	current->tss.esp0 = (unsigned long) pt_regs;
 	current->vm86_info = v86;
+	current->screen_bitmap = info.screen_bitmap;
+	if (info.flags & VM86_SCREEN_BITMAP)
+		mark_screen_rdonly(current);
 	__asm__ __volatile__("movl %0,%%esp\n\t"
 		"pushl $ret_from_sys_call\n\t"
 		"ret"::"g" ((long) &(info.regs)),"a" (info.regs.eax));

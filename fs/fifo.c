@@ -84,16 +84,16 @@ static int fifo_open(struct inode * inode,struct file * filp)
 		wake_up(&PIPE_READ_WAIT(*inode));
 	if (PIPE_READERS(*inode))
 		wake_up(&PIPE_WRITE_WAIT(*inode));
-	if (retval || inode->i_size)
+	if (retval || PIPE_BASE(*inode))
 		return retval;
 	page = get_free_page(GFP_KERNEL);
-	if (inode->i_size) {
+	if (PIPE_BASE(*inode)) {
 		free_page(page);
 		return 0;
 	}
 	if (!page)
 		return -ENOMEM;
-	inode->i_size = page;
+	PIPE_BASE(*inode) = (char *) page;
 	return 0;
 }
 

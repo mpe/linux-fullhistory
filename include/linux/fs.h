@@ -15,19 +15,19 @@
 /* devices are as follows: (same as minix, so we can use the minix
  * file system. These are major numbers.)
  *
- * 0 - unused (nodev)
- * 1 - /dev/mem
- * 2 - /dev/fd
- * 3 - /dev/hd
- * 4 - /dev/ttyx
- * 5 - /dev/tty
- * 6 - /dev/lp
- * 7 - unnamed pipes
- * 8 - /dev/sd
- * 9 - /dev/st
+ *  0 - unused (nodev)
+ *  1 - /dev/mem
+ *  2 - /dev/fd
+ *  3 - /dev/hd
+ *  4 - /dev/ttyx
+ *  5 - /dev/tty
+ *  6 - /dev/lp
+ *  7 -
+ *  8 - /dev/sd
+ *  9 - /dev/st
+ * 10 - mice
+ * 11 - scsi cdrom
  */
-
-#define IS_SEEKABLE(x) ((x)>=1 && (x)<=3 || (x)==8)
 
 #define MAY_EXEC 1
 #define MAY_WRITE 2
@@ -46,16 +46,6 @@ extern void buffer_init(void);
 #ifndef NULL
 #define NULL ((void *) 0)
 #endif
-
-#define PIPE_READ_WAIT(inode) ((inode).i_wait)
-#define PIPE_WRITE_WAIT(inode) ((inode).i_wait2)
-#define PIPE_HEAD(inode) ((inode).i_data[0])
-#define PIPE_TAIL(inode) ((inode).i_data[1])
-#define PIPE_READERS(inode) ((inode).i_data[2])
-#define PIPE_WRITERS(inode) ((inode).i_data[3])
-#define PIPE_SIZE(inode) ((PIPE_HEAD(inode)-PIPE_TAIL(inode))&(PAGE_SIZE-1))
-#define PIPE_EMPTY(inode) (PIPE_HEAD(inode)==PIPE_TAIL(inode))
-#define PIPE_FULL(inode) (PIPE_SIZE(inode)==(PAGE_SIZE-1))
 
 #define NIL_FILP	((struct file *)0)
 #define SEL_IN		1
@@ -113,6 +103,7 @@ struct buffer_head {
 	struct buffer_head * b_reqnext;		/* request queue */
 };
 
+#include <linux/pipe_fs_i.h>
 #include <linux/minix_fs_i.h>
 #include <linux/ext_fs_i.h>
 #include <linux/msdos_fs_i.h>
@@ -131,11 +122,9 @@ struct inode {
 	time_t		i_ctime;
 	unsigned long	i_blksize;
 	unsigned long	i_blocks;
-	unsigned long i_data[16];
 	struct inode_operations * i_op;
 	struct super_block * i_sb;
 	struct wait_queue * i_wait;
-	struct wait_queue * i_wait2;	/* for pipes */
 	struct file_lock *i_flock;
 	unsigned short i_count;
 	unsigned short i_flags;
@@ -146,6 +135,7 @@ struct inode {
 	unsigned char i_seek;
 	unsigned char i_update;
 	union {
+		struct pipe_inode_info pipe_i;
 		struct minix_inode_info minix_i;
 		struct ext_inode_info ext_i;
 		struct msdos_inode_info msdos_i;

@@ -42,14 +42,15 @@ struct vm86_regs {
 	long gs;
 };
 
-/*
- * flags isn't even used yet: it's just there as an example of
- * what kind of information we might want to give sys_vm86() (or
- * want it to return to us).
- */
 struct vm86_struct {
 	struct vm86_regs regs;
 	unsigned long flags;
+	unsigned long screen_bitmap;
 };
+
+/*
+ * flags masks
+ */
+#define VM86_SCREEN_BITMAP 1
 
 #endif

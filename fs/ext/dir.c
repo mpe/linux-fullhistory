@@ -48,14 +48,14 @@ struct inode_operations ext_dir_inode_operations = {
 	ext_rename,		/* rename */
 	NULL,			/* readlink */
 	NULL,			/* follow_link */
-	ext_bmap,		/* bmap */
+	NULL,			/* bmap */
 	ext_truncate		/* truncate */
 };
 
 static int ext_readdir(struct inode * inode, struct file * filp,
 	struct dirent * dirent, int count)
 {
-	unsigned int block,offset,i;
+	unsigned int offset,i;
 	char c;
 	struct buffer_head * bh;
 	struct ext_dir_entry * de;
@@ -64,8 +64,8 @@ static int ext_readdir(struct inode * inode, struct file * filp,
 		return -EBADF;
 	while (filp->f_pos < inode->i_size) {
 		offset = filp->f_pos & 1023;
-		block = ext_bmap(inode,(filp->f_pos)>>BLOCK_SIZE_BITS);
-		if (!block || !(bh = bread(inode->i_dev, block, BLOCK_SIZE))) {
+		bh = ext_bread(inode,(filp->f_pos)>>BLOCK_SIZE_BITS,0);
+		if (!bh) {
 			filp->f_pos += 1024-offset;
 			continue;
 		}

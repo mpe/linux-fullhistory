@@ -39,12 +39,12 @@
 #include <linux/kernel.h>
 #include <linux/string.h>
 #include <linux/errno.h>
+#include <linux/kd.h>
 
 #include <asm/io.h>
 #include <asm/system.h>
 #include <asm/segment.h>
 
-#include <sys/kd.h>
 #include "vt_kern.h"
 
 #define NPAR 16
@@ -186,6 +186,13 @@ static int console_blanked = 0;
 #define kbdraw		(vt_cons[currcons].vc_kbdraw)
 #define kbdleds		(vt_cons[currcons].vc_kbdleds)
 #define vtmode		(vt_cons[currcons].vt_mode)
+
+#if defined KBD_NUMERIC_LOCK
+#define NUMLED_DEFAULT 0x02
+
+#else
+#define NUMLED_DEFAULT 0
+#endif
 
 #define SET(mode,fg,v) \
 	(mode) = (v); \
@@ -866,7 +873,7 @@ static void reset_terminal(int currcons, int do_clear)
 		ckmode		= 0;
 		kapplic		= 0;
 		lfnlmode	= 0;
-		kleds		= 2;
+		kleds		= NUMLED_DEFAULT;
 		kmode		= 0;
 		set_leds();
 	} else {
@@ -874,7 +881,7 @@ static void reset_terminal(int currcons, int do_clear)
 		decckm		= 0;
 		kbdapplic	= 0;
 		lnm		= 0;
-		kbdleds		= 2;
+		kbdleds		= NUMLED_DEFAULT;
 		kbdmode		= 0;
 	}
 

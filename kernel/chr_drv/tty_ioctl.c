@@ -375,13 +375,16 @@ int tty_ioctl(struct inode * inode, struct file * file,
 				set_window_size(other_tty,(struct winsize *) arg);
 			return set_window_size(tty,(struct winsize *) arg);
 		case TIOCMGET:
-			return -EINVAL; /* not implemented */
+			if (!IS_A_SERIAL(dev))
+				return -EINVAL;
+			verify_area((void *) arg,sizeof(unsigned int *));
+			return get_modem_info(dev-64,(unsigned int *) arg);
 		case TIOCMBIS:
-			return -EINVAL; /* not implemented */
 		case TIOCMBIC:
-			return -EINVAL; /* not implemented */
 		case TIOCMSET:
-			return -EINVAL; /* not implemented */
+			if (!IS_A_SERIAL(dev))
+				return -EINVAL;
+			return set_modem_info(dev-64,cmd,(unsigned int *) arg);
 		case TIOCGSOFTCAR:
 			return -EINVAL; /* not implemented */
 		case TIOCSSOFTCAR:

@@ -444,6 +444,54 @@ int set_serial_info(unsigned int line, struct serial_struct * info)
 	return 0;
 }
 
+int get_modem_info(unsigned int line, unsigned int *value)
+{
+	unsigned port = (serial_table + line)->port;
+	unsigned char control = inb(port+4);
+	unsigned char status = inb(port+6);
+	unsigned int result;
+
+	result =  ((control & 0x02) ? TIOCM_RTS : 0)
+		| ((control & 0x01) ? TIOCM_DTR : 0)
+		| ((status  & 0x80) ? TIOCM_CAR : 0)
+		| ((status  & 0x40) ? TIOCM_RNG : 0)
+		| ((status  & 0x20) ? TIOCM_DSR : 0)
+		| ((status  & 0x10) ? TIOCM_CTS : 0);
+	put_fs_long(result,(unsigned long *) value);
+	return 0;
+}
+
+int set_modem_info(unsigned int line, unsigned int cmd, unsigned int *value)
+{
+	unsigned port = (serial_table + line)->port;
+	unsigned char control = inb(port+4);
+	unsigned int arg = get_fs_long((unsigned long *) value);
+	
+	switch (cmd) {
+		case TIOCMBIS:
+			if (arg & TIOCM_RTS)
+				control |= 0x02;
+			if (arg & TIOCM_DTR)
+				control |= 0x01;
+			break;
+		case TIOCMBIC:
+			if (arg & TIOCM_RTS)
+				control &= ~0x02;
+			if (arg & TIOCM_DTR)
+				control &= ~0x01;
+			break;
+		case TIOCMSET:
+			control = (control & ~0x03)
+				| ((arg & TIOCM_RTS) ? 0x02 : 0)
+				| ((arg & TIOCM_DTR) ? 0x01 : 0);
+			break;
+		default:
+			return -EINVAL;
+	}
+	outb(port,control);
+	return 0;
+}
+
 long rs_init(long kmem_start)
 {
 	int i;

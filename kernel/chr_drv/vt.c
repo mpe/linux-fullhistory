@@ -10,13 +10,13 @@
 #include <linux/tty.h>
 #include <linux/timer.h>
 #include <linux/kernel.h>
+#include <linux/kd.h>
+#include <linux/vt.h>
 
 #include <asm/io.h>
 #include <asm/segment.h>
 
 #include "vt_kern.h"
-#include <sys/kd.h>
-#include <sys/vt.h>
 
 /*
  * console (vt and kd) routines, as defined by usl svr4 manual

@@ -188,7 +188,7 @@ int aha1542_test_port(void)
 /* What's this little function for? */
 char *aha1542_info(void)
 {
-    static char buffer[] = "Adaptec 1542";
+    static char buffer[] = "";			/* looks nicer without anything here */
     return buffer;
 }
 
@@ -200,6 +200,8 @@ void aha1542_intr_handle(void)
 
     do_done = NULL;
 #ifdef DEBUG
+    {
+    int flag = inb(INTRFLAGS);
     printk("aha1542_intr_handle: ");
     if (!(flag&ANYINTR)) printk("no interrupt?");
     if (flag&MBIF) printk("MBIF ");
@@ -209,6 +211,7 @@ void aha1542_intr_handle(void)
     printk("status %02x\n", inb(STATUS));
     if (ccb.tarstat|ccb.hastat)
       printk("aha1542_command: returning %x (status %d)\n", ccb.tarstat + ((int) ccb.hastat << 16), mb[1].status);
+  };
 #endif
     aha1542_intr_reset();
     if (!my_done) {
@@ -236,9 +239,11 @@ void aha1542_intr_handle(void)
     if (ccb.tarstat == 2) {
 	int i;
 	DEB(printk("aha1542_intr_handle: sense:"));
+#ifdef DEBUG
 	for (i = 0; i < 12; i++)
 	  printk("%02x ", ccb.cdb[ccb.cdblen+i]);
 	printk("\n");
+#endif
 /*
 	DEB(printk("aha1542_intr_handle: buf:"));
 	for (i = 0; i < bufflen; i++)
@@ -259,6 +264,12 @@ int aha1542_queuecommand(unchar target, const void *cmnd, void *buff, int buffle
 
     DEB(if (target > 1) {done(aha1542_host, DID_TIME_OUT << 16); return 0;});
     
+    if(*cmd == REQUEST_SENSE){
+      memcpy(buff, &ccb.cdb[ccb.cdblen], bufflen);
+      done(aha1542_host, 0); 
+      return 0;
+    };
+
 #ifdef DEBUG
     if (*cmd == READ_10 || *cmd == WRITE_10)
       i = xscsi2int(cmd+2);
@@ -387,10 +398,10 @@ int aha1542_detect(int hostnum)
 	aha1542_intr_reset();
     }
 
-    aha1542_stat();
+    DEB(aha1542_stat());
     setup_mailboxes();
 
-    aha1542_stat();
+    DEB(aha1542_stat());
 
     DEB(printk("aha1542_detect: enable interrupt channel %d\n", intr_chan));
     call_buh();

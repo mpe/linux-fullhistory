@@ -138,7 +138,7 @@ void minix_statfs (struct super_block *sb, struct statfs *buf)
 	/* Don't know what value to put in buf->f_fsid */
 }
 
-#define inode_bmap(inode,nr) ((inode)->i_data[(nr)])
+#define inode_bmap(inode,nr) ((inode)->u.minix_i.i_data[(nr)])
 
 static int block_bmap(struct buffer_head * bh, int nr)
 {
@@ -185,13 +185,15 @@ int minix_bmap(struct inode * inode,int block)
 static struct buffer_head * inode_getblk(struct inode * inode, int nr, int create)
 {
 	int tmp;
+	unsigned short *p;
 	struct buffer_head * result;
 
+	p = inode->u.minix_i.i_data + nr;
 repeat:
-	tmp = inode->i_data[nr];
+	tmp = *p;
 	if (tmp) {
 		result = getblk(inode->i_dev, tmp, BLOCK_SIZE);
-		if (tmp == inode->i_data[nr])
+		if (tmp == *p)
 			return result;
 		brelse(result);
 		goto repeat;
@@ -202,12 +204,12 @@ repeat:
 	if (!tmp)
 		return NULL;
 	result = getblk(inode->i_dev, tmp, BLOCK_SIZE);
-	if (inode->i_data[nr]) {
+	if (*p) {
 		minix_free_block(inode->i_dev,tmp);
 		brelse(result);
 		goto repeat;
 	}
-	inode->i_data[nr] = tmp;
+	*p = tmp;
 	inode->i_ctime = CURRENT_TIME;
 	inode->i_dirt = 1;
 	return result;
@@ -324,7 +326,7 @@ void minix_read_inode(struct inode * inode)
 	if (S_ISCHR(inode->i_mode) || S_ISBLK(inode->i_mode))
 		inode->i_rdev = raw_inode->i_zone[0];
 	else for (block = 0; block < 9; block++)
-		inode->i_data[block] = raw_inode->i_zone[block];
+		inode->u.minix_i.i_data[block] = raw_inode->i_zone[block];
 	brelse(bh);
 	inode->i_op = NULL;
 	if (S_ISREG(inode->i_mode))
@@ -339,8 +341,8 @@ void minix_read_inode(struct inode * inode)
 		inode->i_op = &minix_blkdev_inode_operations;
 	else if (S_ISFIFO(inode->i_mode)) {
 		inode->i_op = &minix_fifo_inode_operations;
-		inode->i_size = 0;
 		inode->i_pipe = 1;
+		PIPE_BASE(*inode) = NULL;
 		PIPE_HEAD(*inode) = PIPE_TAIL(*inode) = 0;
 		PIPE_READERS(*inode) = PIPE_WRITERS(*inode) = 0;
 	}
@@ -367,7 +369,7 @@ void minix_write_inode(struct inode * inode)
 	if (S_ISCHR(inode->i_mode) || S_ISBLK(inode->i_mode))
 		raw_inode->i_zone[0] = inode->i_rdev;
 	else for (block = 0; block < 9; block++)
-		raw_inode->i_zone[block] = inode->i_data[block];
+		raw_inode->i_zone[block] = inode->u.minix_i.i_data[block];
 	bh->b_dirt=1;
 	inode->i_dirt=0;
 	brelse(bh);

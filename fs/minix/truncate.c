@@ -26,6 +26,7 @@
 
 static int trunc_direct(struct inode * inode)
 {
+	unsigned short * p;
 	struct buffer_head * bh;
 	int i, tmp;
 	int retry = 0;
@@ -33,20 +34,20 @@ static int trunc_direct(struct inode * inode)
 
 repeat:
 	for (i = DIRECT_BLOCK ; i < 7 ; i++) {
-		tmp = inode->i_data[i];
-		if (!tmp)
+		p = i + inode->u.minix_i.i_data;
+		if (!(tmp = *p))
 			continue;
 		bh = getblk(inode->i_dev,tmp,BLOCK_SIZE);
 		if (i < DIRECT_BLOCK) {
 			brelse(bh);
 			goto repeat;
 		}
-		if ((bh && bh->b_count != 1) || tmp != inode->i_data[i]) {
+		if ((bh && bh->b_count != 1) || tmp != *p) {
 			retry = 1;
 			brelse(bh);
 			continue;
 		}
-		inode->i_data[i] = 0;
+		*p = 0;
 		inode->i_dirt = 1;
 		brelse(bh);
 		minix_free_block(inode->i_dev,tmp);
@@ -120,20 +121,20 @@ static int trunc_dindirect(struct inode * inode)
 {
 	int i, tmp;
 	struct buffer_head * dind_bh;
-	unsigned short * dind;
+	unsigned short * dind, * p;
 	int retry = 0;
 #define DINDIRECT_BLOCK ((DIRECT_BLOCK-(512+7))>>9)
 
-	tmp = inode->i_data[8];
-	if (!tmp)
+	p = 8 + inode->u.minix_i.i_data;
+	if (!(tmp = *p))
 		return 0;
 	dind_bh = bread(inode->i_dev, tmp, BLOCK_SIZE);
-	if (tmp != inode->i_data[8]) {
+	if (tmp != *p) {
 		brelse(dind_bh);
 		return 1;
 	}
 	if (!dind_bh) {
-		inode->i_data[8] = 0;
+		*p = 0;
 		return 0;
 	}
 repeat:
@@ -154,8 +155,8 @@ repeat:
 		if (dind_bh->b_count != 1)
 			retry = 1;
 		else {
-			tmp = inode->i_data[8];
-			inode->i_data[8] = 0;
+			tmp = *p;
+			*p = 0;
 			inode->i_dirt = 1;
 			minix_free_block(inode->i_dev,tmp);
 		}
@@ -170,13 +171,9 @@ void minix_truncate(struct inode * inode)
 	if (!(S_ISREG(inode->i_mode) || S_ISDIR(inode->i_mode) ||
 	     S_ISLNK(inode->i_mode)))
 		return;
-	if (inode->i_data[7] & 0xffff0000) {
-		printk("BAD! minix inode has 16 high bits set\n");
-		inode->i_data[7] = 0;
-	}
 	while (1) {
 		retry = trunc_direct(inode);
-		retry |= trunc_indirect(inode,7,(unsigned short *)&inode->i_data[7]);
+		retry |= trunc_indirect(inode,7,inode->u.minix_i.i_data+7);
 		retry |= trunc_dindirect(inode);
 		if (!retry)
 			break;

@@ -350,7 +350,7 @@ int remap_page_range(unsigned long from, unsigned long to, unsigned long size,
 			 * when the page is referenced. current assumptions
 			 * cause it to be treated as demand allocation.
 			 */
-			if (mask == 4 || to >= high_memory)
+			if (mask == 4 || to >= high_memory || !mem_map[MAP_NR(to)])
 				*page_table++ = 0;	/* not present */
 			else {
 				++current->rss;
@@ -788,14 +788,19 @@ void show_mem(void)
 void do_page_fault(unsigned long *esp, unsigned long error_code)
 {
 	unsigned long address;
-	unsigned long user_esp;
+	unsigned long user_esp = 0;
 
-	if ((0xffff & esp[1]) == 0xf)
-		user_esp = esp[3];
-	else
-		user_esp = 0;
 	/* get the address */
 	__asm__("movl %%cr2,%0":"=r" (address));
+	if (esp[2] & VM_MASK) {
+		unsigned int bit;
+
+		bit = (address - 0xA0000) >> PAGE_SHIFT;
+		if (bit < 32)
+			current->screen_bitmap |= 1 << bit;
+	} else
+		if ((0xffff & esp[1]) == 0xf)
+			user_esp = esp[3];
 	if (!(error_code & 1))
 		do_no_page(error_code, address, current, user_esp);
 	else

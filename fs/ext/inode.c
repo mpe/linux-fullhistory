@@ -22,6 +22,14 @@
 
 int sync_dev(int dev);
 
+static inline void wait_on_buffer(struct buffer_head * bh)
+{
+	cli();
+	while (bh->b_lock)
+		sleep_on(&bh->b_wait);
+	sti();
+}
+
 void ext_put_inode(struct inode *inode)
 {
 	inode->i_size = 0;
@@ -152,130 +160,190 @@ void ext_statfs (struct super_block *sb, struct statfs *buf)
 	/* Don't know what value to put in buf->f_fsid */
 }
 
-static int _ext_bmap(struct inode * inode,int block,int create)
-{
-	struct buffer_head * bh;
-	int i;
+#define inode_bmap(inode,nr) ((inode)->u.ext_i.i_data[(nr)])
 
-	if (block<0) {
-		printk("_ext_bmap: block<0");
+static int block_bmap(struct buffer_head * bh, int nr)
+{
+	int tmp;
+
+	if (!bh)
 		return 0;
-	}
-	if (block >= 9+256+256*256+256*256*256) {
-		printk("_ext_bmap: block>big");
-		return 0;
-	}
-	if (block<9) {
-		if (create && !inode->i_data[block])
-			if (inode->i_data[block]=ext_new_block(inode->i_dev)) {
-				inode->i_ctime=CURRENT_TIME;
-				inode->i_dirt=1;
-			}
-		return inode->i_data[block];
-	}
-	block -= 9;
-	if (block<256) {
-		if (create && !inode->i_data[9])
-			if (inode->i_data[9]=ext_new_block(inode->i_dev)) {
-				inode->i_dirt=1;
-				inode->i_ctime=CURRENT_TIME;
-			}
-		if (!inode->i_data[9])
-			return 0;
-		if (!(bh = bread(inode->i_dev, inode->i_data[9], BLOCK_SIZE)))
-			return 0;
-		i = ((unsigned long *) (bh->b_data))[block];
-		if (create && !i)
-			if (i=ext_new_block(inode->i_dev)) {
-				((unsigned long *) (bh->b_data))[block]=i;
-				bh->b_dirt=1;
-			}
-		brelse(bh);
-		return i;
-	}
-	block -= 256;
-	if (block<256*256) {
-		if (create && !inode->i_data[10])
-			if (inode->i_data[10]=ext_new_block(inode->i_dev)) {
-				inode->i_dirt=1;
-				inode->i_ctime=CURRENT_TIME;
-			}
-		if (!inode->i_data[10])
-			return 0;
-		if (!(bh=bread(inode->i_dev, inode->i_data[10], BLOCK_SIZE)))
-			return 0;
-		i = ((unsigned long *)bh->b_data)[block>>8];
-		if (create && !i)
-			if (i=ext_new_block(inode->i_dev)) {
-				((unsigned long *) (bh->b_data))[block>>8]=i;
-				bh->b_dirt=1;
-			}
-		brelse(bh);
-		if (!i)
-			return 0;
-		if (!(bh=bread(inode->i_dev, i, BLOCK_SIZE)))
-			return 0;
-		i = ((unsigned long *)bh->b_data)[block&255];
-		if (create && !i)
-			if (i=ext_new_block(inode->i_dev)) {
-				((unsigned long *) (bh->b_data))[block&255]=i;
-				bh->b_dirt=1;
-			}
-		brelse(bh);
-		return i;
-	}
-	if (create && !inode->i_data[11])
-		if (inode->i_data[11] = ext_new_block(inode->i_dev)) {
-			inode->i_dirt = 1;
-			inode->i_ctime = CURRENT_TIME;
-		}
-	if (!inode->i_data[11])
-		return 0;
-	if (!(bh = bread(inode->i_dev, inode->i_data[11], BLOCK_SIZE)))
-		return 0;
-	i = ((unsigned long *) bh->b_data)[block >> 16];
-	if (create && !i)
-		if (i = ext_new_block(inode->i_dev)) {
-			((unsigned long *) bh->b_data)[block >> 16] = i;
-			bh->b_dirt = 1;
-		}
-	brelse (bh);
-	if (!i)
-		return 0;
-	if (!(bh = bread(inode->i_dev, i, BLOCK_SIZE)))
-		return 0;
-	i = ((unsigned long *) bh->b_data)[(block >> 8) & 255];
-	if (create && !i)
-		if (i = ext_new_block(inode->i_dev)) {
-			((unsigned long *) bh->b_data)[(block >> 8) & 255] = i;
-			bh->b_dirt = 1;
-		}
-	brelse (bh);
-	if (!i)
-		return 0;
-	if (!(bh = bread(inode->i_dev, i, BLOCK_SIZE)))
-		return 0;
-	i = ((unsigned long *) bh->b_data)[block & 255];
-	if (create && !i)
-		if (i = ext_new_block(inode->i_dev)) {
-			((unsigned long *) bh->b_data)[block & 255] = i;
-			bh->b_dirt = 1;
-		}
-	brelse (bh);
-	return i;
-	
-	printk("ext_bmap: triple indirection not yet implemented\n");
-	return 0;
+	tmp = ((unsigned long *) bh->b_data)[nr];
+	brelse(bh);
+	return tmp;
 }
 
 int ext_bmap(struct inode * inode,int block)
 {
-	return _ext_bmap(inode,block,0);
+	int i;
+
+	if (block<0) {
+		printk("ext_bmap: block<0");
+		return 0;
+	}
+	if (block >= 9+256+256*256+256*256*256) {
+		printk("ext_bmap: block>big");
+		return 0;
+	}
+	if (block<9)
+		return inode_bmap(inode,block);
+	block -= 9;
+	if (block<256) {
+		i = inode_bmap(inode,9);
+		if (!i)
+			return 0;
+		return block_bmap(bread(inode->i_dev,i,BLOCK_SIZE),block);
+	}
+	block -= 256;
+	if (block<256*256) {
+		i = inode_bmap(inode,10);
+		if (!i)
+			return 0;
+		i = block_bmap(bread(inode->i_dev,i,BLOCK_SIZE),block>>8);
+		if (!i)
+			return 0;
+		return block_bmap(bread(inode->i_dev,i,BLOCK_SIZE),block & 255);
+	}
+	block -= 256*256;
+	i = inode_bmap(inode,11);
+	if (!i)
+		return 0;
+	i = block_bmap(bread(inode->i_dev,i,BLOCK_SIZE),block>>16);
+	if (!i)
+		return 0;
+	i = block_bmap(bread(inode->i_dev,i,BLOCK_SIZE),(block>>8) & 255);
+	if (!i)
+		return 0;
+	return block_bmap(bread(inode->i_dev,i,BLOCK_SIZE),block & 255);
 }
 
-int ext_create_block(struct inode * inode, int block)
+static struct buffer_head * inode_getblk(struct inode * inode, int nr, int create)
 {
-	return _ext_bmap(inode,block,1);
+	int tmp;
+	unsigned long * p;
+	struct buffer_head * result;
+
+	p = inode->u.ext_i.i_data + nr;
+repeat:
+	tmp = *p;
+	if (tmp) {
+		result = getblk(inode->i_dev, tmp, BLOCK_SIZE);
+		if (tmp == *p)
+			return result;
+		brelse(result);
+		goto repeat;
+	}
+	if (!create)
+		return NULL;
+	tmp = ext_new_block(inode->i_dev);
+	if (!tmp)
+		return NULL;
+	result = getblk(inode->i_dev, tmp, BLOCK_SIZE);
+	if (*p) {
+		ext_free_block(inode->i_dev,tmp);
+		brelse(result);
+		goto repeat;
+	}
+	*p = tmp;
+	inode->i_ctime = CURRENT_TIME;
+	inode->i_dirt = 1;
+	return result;
+}
+
+static struct buffer_head * block_getblk(struct buffer_head * bh, int nr, int create)
+{
+	int tmp;
+	unsigned long * p;
+	struct buffer_head * result;
+
+	if (!bh)
+		return NULL;
+	if (!bh->b_uptodate) {
+		ll_rw_block(READ,bh);
+		wait_on_buffer(bh);
+		if (!bh->b_uptodate) {
+			brelse(bh);
+			return NULL;
+		}
+	}
+	p = nr + (unsigned long *) bh->b_data;
+repeat:
+	tmp = *p;
+	if (tmp) {
+		result = getblk(bh->b_dev, tmp, BLOCK_SIZE);
+		if (tmp == *p) {
+			brelse(bh);
+			return result;
+		}
+		brelse(result);
+		goto repeat;
+	}
+	if (!create) {
+		brelse(bh);
+		return NULL;
+	}
+	tmp = ext_new_block(bh->b_dev);
+	if (!tmp) {
+		brelse(bh);
+		return NULL;
+	}
+	result = getblk(bh->b_dev, tmp, BLOCK_SIZE);
+	if (*p) {
+		ext_free_block(bh->b_dev,tmp);
+		brelse(result);
+		goto repeat;
+	}
+	*p = tmp;
+	bh->b_dirt = 1;
+	brelse(bh);
+	return result;
+}
+
+struct buffer_head * ext_getblk(struct inode * inode, int block, int create)
+{
+	struct buffer_head * bh;
+
+	if (block<0) {
+		printk("ext_getblk: block<0\n");
+		return NULL;
+	}
+	if (block >= 9+256+256*256+256*256*256) {
+		printk("ext_getblk: block>big\n");
+		return NULL;
+	}
+	if (block<9)
+		return inode_getblk(inode,block,create);
+	block -= 9;
+	if (block<256) {
+		bh = inode_getblk(inode,9,create);
+		return block_getblk(bh,block,create);
+	}
+	block -= 256;
+	if (block<256*256) {
+		bh = inode_getblk(inode,10,create);
+		bh = block_getblk(bh,block>>8,create);
+		return block_getblk(bh,block & 255,create);
+	}
+	block -= 256*256;
+	bh = inode_getblk(inode,11,create);
+	bh = block_getblk(bh,block>>16,create);
+	bh = block_getblk(bh,(block>>8) & 255,create);
+	return block_getblk(bh,block & 255,create);
+}
+
+struct buffer_head * ext_bread(struct inode * inode, int block, int create)
+{
+	struct buffer_head * bh;
+
+	bh = ext_getblk(inode,block,create);
+	if (!bh || bh->b_uptodate) 
+		return bh;
+	ll_rw_block(READ,bh);
+	wait_on_buffer(bh);
+	if (bh->b_uptodate)
+		return bh;
+	brelse(bh);
+	return NULL;
 }
 
 void ext_read_inode(struct inode * inode)
@@ -299,7 +367,7 @@ void ext_read_inode(struct inode * inode)
 	if (S_ISCHR(inode->i_mode) || S_ISBLK(inode->i_mode))
 		inode->i_rdev = raw_inode->i_zone[0];
 	else for (block = 0; block < 12; block++)
-		inode->i_data[block] = raw_inode->i_zone[block];
+		inode->u.ext_i.i_data[block] = raw_inode->i_zone[block];
 	brelse(bh);
 	inode->i_op = NULL;
 	if (S_ISREG(inode->i_mode))
@@ -314,8 +382,8 @@ void ext_read_inode(struct inode * inode)
 		inode->i_op = &ext_blkdev_inode_operations;
 	else if (S_ISFIFO(inode->i_mode)) {
 		inode->i_op = &ext_fifo_inode_operations;
-		inode->i_size = 0;
 		inode->i_pipe = 1;
+		PIPE_BASE(*inode) = NULL;
 		PIPE_HEAD(*inode) = PIPE_TAIL(*inode) = 0;
 		PIPE_READERS(*inode) = PIPE_WRITERS(*inode) = 0;
 	}
@@ -341,7 +409,7 @@ void ext_write_inode(struct inode * inode)
 	if (S_ISCHR(inode->i_mode) || S_ISBLK(inode->i_mode))
 		raw_inode->i_zone[0] = inode->i_rdev;
 	else for (block = 0; block < 12; block++)
-		raw_inode->i_zone[block] = inode->i_data[block];
+		raw_inode->i_zone[block] = inode->u.ext_i.i_data[block];
 	bh->b_dirt=1;
 	inode->i_dirt=0;
 	brelse(bh);

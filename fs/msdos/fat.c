@@ -226,7 +226,7 @@ int get_cluster(struct inode *inode,int cluster)
 		if ((this = fat_access(inode->i_sb,this,-1)) == -1) return 0;
 		if (!this) return 0;
 	}
-	if (!(MSDOS_I(inode)->i_busy || inode->i_nlink))
+	if (!(MSDOS_I(inode)->i_busy && inode->i_nlink))
 		cache_add(inode,cluster,this);
 	/* don't add clusters of moved files, because we can't invalidate them
 	   when this inode is returned. */

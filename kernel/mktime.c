@@ -4,7 +4,7 @@
  *  Copyright (C) 1991, 1992  Linus Torvalds
  */
 
-#include <time.h>
+#include <linux/mktime.h>
 
 /*
  * This isn't the library routine, it is only used in the kernel.
@@ -38,21 +38,21 @@ static int month[12] = {
 	DAY*(31+29+31+30+31+30+31+31+30+31+30)
 };
 
-long kernel_mktime(struct tm * tm)
+long kernel_mktime(struct mktime * time)
 {
 	long res;
 	int year;
 
-	year = tm->tm_year - 70;
+	year = time->year - 70;
 /* magic offsets (y+1) needed to get leapyears right.*/
 	res = YEAR*year + DAY*((year+1)/4);
-	res += month[tm->tm_mon];
+	res += month[time->mon];
 /* and (y+2) here. If it wasn't a leap-year, we have to adjust */
-	if (tm->tm_mon>1 && ((year+2)%4))
+	if (time->mon>1 && ((year+2)%4))
 		res -= DAY;
-	res += DAY*(tm->tm_mday-1);
-	res += HOUR*tm->tm_hour;
-	res += MINUTE*tm->tm_min;
-	res += tm->tm_sec;
+	res += DAY*(time->day-1);
+	res += HOUR*time->hour;
+	res += MINUTE*time->min;
+	res += time->sec;
 	return res;
 }

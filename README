@@ -1,4 +1,10 @@
 
+ [ NOTE! As of linux-0.97.pl5, the linux kernel include-files have
+   finally been totally integrated with the normal headers.  That means
+   no more "-nostdinc -I$(KERNELHDRS)" in the Makefiles etc, but it
+   also means that you /have/ to have the correct /usr/include/linux
+   and ../asm symlinks. See "Basic configuration 2" ]
+
 	VERY QUICK AND DIRTY README
 	    by Lars Wirzenius
 
@@ -30,22 +36,18 @@ the FPU if it finds one, even with MATH_EMULATION defined.  The kernel
 will be slightly bigger.  It is probably not worth it to recompile the
 kernel just to get rid of the emulation.
 
-[ Linus' note1: if you have a correctly installed gcc-2.2.2d, you can
-  also remove the "-nostdinc -I$(KERNELHDRS)" thing from the main
-  Makefile CC definition. But it doesn't hurt to have it, as long as
-  KERNELHDRS is correctly defined ]
+2.  Create the symlinks:
 
-2.  Create a symlink:
+	ln -fs /usr/src/linux/include/linux /usr/include/linux 
+	ln -fs /usr/src/linux/include/asm /usr/include/asm
 
-	ln -s /usr/src/linux/include/linux /usr/include/linux 
+This is required so that the linux sources will correctly find their
+header files - it is also used by the normal user-level header files to
+get some system-specific information.
 
-This is required so that tools/build.c will compile and link (it
-requires the standard versions of headers instead of the kernel specific
-headers, as it is a normal application, not kernel code).
-
-[ Linus' note2: This is automatically done by the gcc-2.2.2d
+[ Linus' note2: This is automatically done by the gcc-2.2.2d and newer
   installation script, so if you have the new compiler, you should
-  already have this link ]
+  already have these links ]
 
 * Things you may want to get rid of
 

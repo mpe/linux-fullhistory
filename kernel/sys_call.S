@@ -126,17 +126,17 @@ _system_call:
 	movl %eax,EAX(%esp)		# save the return value
 	.align 4,0x90
 ret_from_sys_call:
-	movl EFLAGS(%esp),%eax
-	testl $VM_MASK,%eax
-	jne 1f
+	movl EFLAGS(%esp),%eax		# check VM86 flag: CS/SS are
+	testl $VM_MASK,%eax		# different then
+	jne 4f
 	cmpw $0x0f,CS(%esp)		# was old code segment supervisor ?
 	jne 2f
 	cmpw $0x17,OLDSS(%esp)		# was stack segment = 0x17 ?
 	jne 2f
-1:	orl $IF_MASK,%eax		# these just try to make sure
+4:	orl $IF_MASK,%eax		# these just try to make sure
 	andl $~NT_MASK,%eax		# the program doesn't do anything
 	movl %eax,EFLAGS(%esp)		# stupid
-	cmpl $0,_need_resched
+1:	cmpl $0,_need_resched
 	jne reschedule
 	movl _current,%eax
 	cmpl _task,%eax			# task[0] cannot have signals

@@ -117,8 +117,8 @@ void iput(struct inode * inode)
 		return;
 	}
 	if (inode->i_pipe) {
-		wake_up(&inode->i_wait);
-		wake_up(&inode->i_wait2);
+		wake_up(&PIPE_READ_WAIT(*inode));
+		wake_up(&PIPE_WRITE_WAIT(*inode));
 	}
 repeat:
 	if (inode->i_count>1) {
@@ -126,8 +126,9 @@ repeat:
 		return;
 	}
 	if (inode->i_pipe) {
-		free_page(inode->i_size);
-		inode->i_size = 0;
+		unsigned long page = (unsigned long) PIPE_BASE(*inode);
+		PIPE_BASE(*inode) = NULL;
+		free_page(page);
 	}
 	if (!inode->i_dev) {
 		inode->i_count--;
@@ -188,7 +189,7 @@ struct inode * get_pipe_inode(void)
 
 	if (!(inode = get_empty_inode()))
 		return NULL;
-	if (!(inode->i_size = get_free_page(GFP_USER))) {
+	if (!(PIPE_BASE(*inode) = (char *) get_free_page(GFP_USER))) {
 		inode->i_count = 0;
 		return NULL;
 	}

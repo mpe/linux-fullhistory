@@ -8,8 +8,6 @@
  * Some corrections by tytso.
  */
 
-#include <const.h>
-
 #include <asm/segment.h>
 
 #include <linux/errno.h>
@@ -218,7 +216,7 @@ int open_namei(const char * pathname, int flag, int mode,
 	struct task_struct ** p;
 
 	mode &= 07777 & ~current->umask;
-	mode |= I_REGULAR;
+	mode |= S_IFREG;
 	error = dir_namei(pathname,&namelen,&basename,base,&dir);
 	if (error)
 		return error;

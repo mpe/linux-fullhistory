@@ -35,7 +35,7 @@ clean:
 
 dep:
 	sed '/\#\#\# Dependencies/q' < Makefile > tmp_make
-	for i in *.c;do $(CPP) -M $$i;done >> tmp_make
+	$(CPP) -M *.c >> tmp_make
 	cp tmp_make Makefile
 	@for i in $(SUBDIRS); do (cd $$i && echo $$i && $(MAKE) dep) || exit; done
 

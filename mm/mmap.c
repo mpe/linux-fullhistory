@@ -8,11 +8,10 @@
 #include <linux/kernel.h>
 #include <linux/mm.h>
 #include <linux/errno.h>
+#include <linux/mman.h>
 
 #include <asm/segment.h>
 #include <asm/system.h>
-
-#include <sys/mman.h>
 
 /*
  * description of effects of mapping type and prot in current implementation.

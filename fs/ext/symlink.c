@@ -50,13 +50,13 @@ static int ext_follow_link(struct inode * dir, struct inode * inode,
 	unsigned short fs;
 	struct buffer_head * bh;
 
+	*res_inode = NULL;
 	if (!dir) {
 		dir = current->root;
 		dir->i_count++;
 	}
 	if (!inode) {
 		iput(dir);
-		*res_inode = NULL;
 		return -ENOENT;
 	}
 	if (!S_ISLNK(inode->i_mode)) {
@@ -64,15 +64,18 @@ static int ext_follow_link(struct inode * dir, struct inode * inode,
 		*res_inode = inode;
 		return 0;
 	}
-	__asm__("mov %%fs,%0":"=r" (fs));
-	if ((current->link_count > 5) || !inode->i_data[0] ||
-	   !(bh = bread(inode->i_dev, inode->i_data[0], BLOCK_SIZE))) {
+	if (current->link_count > 5) {
 		iput(dir);
 		iput(inode);
-		*res_inode = NULL;
 		return -ELOOP;
 	}
+	if (!(bh = ext_bread(inode, 0, 0))) {
+		iput(inode);
+		iput(dir);
+		return -EIO;
+	}
 	iput(inode);
+	__asm__("mov %%fs,%0":"=r" (fs));
 	__asm__("mov %0,%%fs"::"r" ((unsigned short) 0x10));
 	current->link_count++;
 	error = open_namei(bh->b_data,flag,mode,res_inode,dir);
@@ -94,10 +97,7 @@ static int ext_readlink(struct inode * inode, char * buffer, int buflen)
 	}
 	if (buflen > 1023)
 		buflen = 1023;
-	if (inode->i_data[0])
-		bh = bread(inode->i_dev, inode->i_data[0], BLOCK_SIZE);
-	else
-		bh = NULL;
+	bh = ext_bread(inode, 0, 0);
 	iput(inode);
 	if (!bh)
 		return 0;

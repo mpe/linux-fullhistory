@@ -28,6 +28,10 @@
 #include <asm/system.h>
 #include <asm/io.h>
 
+#ifdef CONFIG_BLK_DEV_SR
+extern int check_cdrom_media_change(int, int);
+#endif
+
 static struct buffer_head * hash_table[NR_HASH];
 static struct buffer_head * free_list = NULL;
 static struct buffer_head * unused_list = NULL;
@@ -121,14 +125,27 @@ void check_disk_change(int dev)
 	int i;
 	struct buffer_head * bh;
 
-	if (MAJOR(dev) != 2)
+	switch(MAJOR(dev)){
+	case 2: /* floppy disc */
+		if (!(bh = getblk(dev,0,1024)))
+			return;
+		i = floppy_change(bh);
+		brelse(bh);
+		break;
+
+#ifdef CONFIG_BLK_DEV_SR
+         case 11: /* CDROM */
+		i = check_cdrom_media_change(dev, 0);
+		if (i) printk("Flushing buffers and inodes for CDROM\n");
+		break;
+#endif
+
+         default:
 		return;
-	if (!(bh = getblk(dev,0,1024)))
-		return;
-	i = floppy_change(bh);
-	brelse(bh);
-	if (!i)
-		return;
+	};
+
+	if (!i)	return;
+
 	for (i=0 ; i<NR_SUPER ; i++)
 		if (super_block[i].s_dev == dev)
 			put_super(super_block[i].s_dev);

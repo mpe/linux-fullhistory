@@ -29,13 +29,20 @@
 #define NUMLED   0x02
 #define CAPSLED  0x04
 
+#if defined KBD_NUMERIC_LOCK
+#define NUMLED_DEFAULT NUMLED
+
+#else
+#define NUMLED_DEFAULT 0
+#endif
+
 #define NO_META_BIT 0x80
 
 unsigned char kapplic = 0;
 unsigned char ckmode = 0;
 unsigned char krepeat = 1;
 unsigned char kmode = 0;
-unsigned char kleds = NUMLED;
+unsigned char kleds = NUMLED_DEFAULT;
 unsigned char ke0 = 0;
 unsigned char kraw = 0;
 unsigned char kbd_flags = KBDFLAGS;
@@ -48,7 +55,7 @@ extern struct tty_queue *table_list[];
 
 typedef void (*fptr)(int);
 
-static unsigned char old_leds = 2;
+static unsigned char old_leds = NUMLED;
 static int diacr = -1;
 static int npadch = 0;
 fptr key_table[];

@@ -5,11 +5,11 @@
  */
 
 #include <stdarg.h>
-#include <time.h>
 
 #include <asm/system.h>
 #include <asm/io.h>
 
+#include <linux/mktime.h>
 #include <linux/types.h>
 #include <linux/fcntl.h>
 #include <linux/config.h>
@@ -63,8 +63,7 @@ extern long chr_dev_init(long,long);
 extern void floppy_init(void);
 extern void sock_init(void);
 extern long rd_init(long mem_start, int length);
-extern long kernel_mktime(struct tm * tm);
-extern void malloc_grab_pages(void);
+extern long kernel_mktime(struct mktime * time);
 
 #ifdef CONFIG_SCSI
 extern void scsi_dev_init(void);
@@ -106,23 +105,23 @@ inb_p(0x71); \
 
 static void time_init(void)
 {
-	struct tm time;
+	struct mktime time;
 
 	do {
-		time.tm_sec = CMOS_READ(0);
-		time.tm_min = CMOS_READ(2);
-		time.tm_hour = CMOS_READ(4);
-		time.tm_mday = CMOS_READ(7);
-		time.tm_mon = CMOS_READ(8);
-		time.tm_year = CMOS_READ(9);
-	} while (time.tm_sec != CMOS_READ(0));
-	BCD_TO_BIN(time.tm_sec);
-	BCD_TO_BIN(time.tm_min);
-	BCD_TO_BIN(time.tm_hour);
-	BCD_TO_BIN(time.tm_mday);
-	BCD_TO_BIN(time.tm_mon);
-	BCD_TO_BIN(time.tm_year);
-	time.tm_mon--;
+		time.sec = CMOS_READ(0);
+		time.min = CMOS_READ(2);
+		time.hour = CMOS_READ(4);
+		time.day = CMOS_READ(7);
+		time.mon = CMOS_READ(8);
+		time.year = CMOS_READ(9);
+	} while (time.sec != CMOS_READ(0));
+	BCD_TO_BIN(time.sec);
+	BCD_TO_BIN(time.min);
+	BCD_TO_BIN(time.hour);
+	BCD_TO_BIN(time.day);
+	BCD_TO_BIN(time.mon);
+	BCD_TO_BIN(time.year);
+	time.mon--;
 	startup_time = kernel_mktime(&time);
 }
 
@@ -184,7 +183,6 @@ void start_kernel(void)
 	buffer_init();
 	time_init();
 	floppy_init();
-	malloc_grab_pages();
 	sock_init();
 	sti();
 #ifdef CONFIG_SCSI

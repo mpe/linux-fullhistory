@@ -23,8 +23,11 @@ chr_drv.a: $(OBJS)
 	$(AR) rcs chr_drv.a $(OBJS)
 	sync
 
+console.o: console.c
+	$(CC) $(CFLAGS) $(NUM_LOCK) -c -o console.o console.c
+
 keyboard.o: keyboard.c
-	$(CC) $(CFLAGS) $(KEYBOARD) -c -o keyboard.o keyboard.c
+	$(CC) $(CFLAGS) $(KEYBOARD) $(NUM_LOCK) -c -o keyboard.o keyboard.c
 
 clean:
 	rm -f core *.o *.a tmp_make keyboard.s

@@ -247,7 +247,7 @@ static int try_to_swap_out(unsigned long * table_ptr)
 	*table_ptr = 0;
 	invalidate();
 	free_page(page);
-	return !mem_map[MAP_NR(page)];
+	return 1 + mem_map[MAP_NR(page)];
 }
 
 /*
@@ -316,9 +316,10 @@ check_table:
 		swap_table++;
 		goto check_dir;
 	}
-	if (try_to_swap_out(swap_page + (unsigned long *) pg_table)) {
-		p->rss--;
-		return 1;
+	switch (try_to_swap_out(swap_page + (unsigned long *) pg_table)) {
+		case 0: break;
+		case 1: p->rss--; return 1;
+		default: p->rss--;
 	}
 	swap_page++;
 	goto check_table;
@@ -517,6 +518,7 @@ repeat:
 				read_swap_page(page>>1, (char *) tmp);
 				if (*ppage == page) {
 					*ppage = tmp | (PAGE_DIRTY | 7);
+					++p->rss;
 					swap_free(page>>1);
 					tmp = 0;
 				}

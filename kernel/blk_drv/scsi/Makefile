@@ -22,10 +22,11 @@ LOWLEVELSSRC = seagate2.s
 LOWLEVELCSRC = aha1542.c fdomain.c seagate.c ultrastor.c 7000fasst.c
 LOWLEVELHSRC = aha1542.h fdomain.h seagate.h ultrastor.h 7000fasst.o
  
-CSRC = hosts.c sd.c sd_ioctl.c st.c st_ioctl.c scsi.c scsi_ioctl.c $(LOWLEVELCSRC)
-HSRC = hosts.h sd.h st.h scsi.h scsi_ioctl.h $(LOWLEVELHSRC)
+CSRC = hosts.c sd.c sd_ioctl.c st.c st_ioctl.c sr.c sr_ioctl.c scsi.c scsi_ioctl.c $(LOWLEVELCSRC)
+HSRC = hosts.h sd.h st.h sr.h sr_ioctl.h scsi.h scsi_ioctl.h $(LOWLEVELHSRC)
 
 OBJS =	scsi.o hosts.o scsi_ioctl.o sd.o sd_ioctl.o st.o st_ioctl.o \
+	sr.o sr_ioctl.o \
 	aha1542.o fdomain.o seagate.o seagate2.o ultrastor.o 7000fasst.o
 
 all: scsi.a

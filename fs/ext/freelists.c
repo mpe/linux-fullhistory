@@ -41,7 +41,7 @@ __asm__("cld\n\t" \
         "stosl" \
         ::"a" (0),"c" (BLOCK_SIZE/4),"D" ((long) (addr)):"cx","di")
 
-int ext_free_block(int dev, int block)
+void ext_free_block(int dev, int block)
 {
 	struct super_block * sb;
 	struct buffer_head * bh;
@@ -50,21 +50,15 @@ int ext_free_block(int dev, int block)
 	if (!(sb = get_super(dev)))
 		panic("trying to free block on nonexistent device");
 	lock_super (sb);
-	if (block < sb->u.ext_sb.s_firstdatazone
-		|| block >= sb->u.ext_sb.s_nzones)
-		panic("trying to free block not in datazone");
-	bh = get_hash_table(dev, block, sb->s_blocksize);
-	if (bh) {
-		if (bh->b_count > 1) {
-			brelse(bh);
-			free_super (sb);
-			return 0;
-		}
-		bh->b_dirt=0;
-		bh->b_uptodate=0;
-		if (bh->b_count)
-			brelse(bh);
+	if (block < sb->u.ext_sb.s_firstdatazone ||
+	    block >= sb->u.ext_sb.s_nzones) {
+		printk("trying to free block not in datazone\n");
+		return;
 	}
+	bh = get_hash_table(dev, block, sb->s_blocksize);
+	if (bh)
+		bh->b_dirt=0;
+	brelse(bh);
 	if (sb->u.ext_sb.s_firstfreeblock)
 		efb = (struct ext_free_block *) sb->u.ext_sb.s_firstfreeblock->b_data;
 	if (!sb->u.ext_sb.s_firstfreeblock || efb->count == 254) {
@@ -87,7 +81,7 @@ printk("ext_free_block: block full, skipping to %d\n", block);
 	sb->s_dirt = 1;
 	sb->u.ext_sb.s_firstfreeblock->b_dirt = 1;
 	free_super (sb);
-	return 1;
+	return;
 }
 
 int ext_new_block(int dev)

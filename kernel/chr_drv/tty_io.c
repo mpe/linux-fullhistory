@@ -18,12 +18,12 @@
 #include <linux/sched.h>
 #include <linux/tty.h>
 #include <linux/ctype.h>
+#include <linux/kd.h>
 
 #include <asm/io.h>
 #include <asm/segment.h>
 #include <asm/system.h>
 
-#include <sys/kd.h>
 #include "vt_kern.h"
 
 #define QUEUES	(3*(NR_CONSOLES+NR_SERIALS+2*NR_PTYS))

@@ -32,7 +32,7 @@ static int pipe_read(struct inode * inode, struct file * filp, char * buf, int c
 			chars = count;
 		if (chars > size)
 			chars = size;
-		memcpy_tofs(buf, (char *)inode->i_size+PIPE_TAIL(*inode), chars );
+		memcpy_tofs(buf, PIPE_BASE(*inode)+PIPE_TAIL(*inode), chars );
 		read += chars;
 		PIPE_TAIL(*inode) += chars;
 		PIPE_TAIL(*inode) &= (PAGE_SIZE-1);
@@ -75,7 +75,7 @@ static int pipe_write(struct inode * inode, struct file * filp, char * buf, int 
 				chars = count;
 			if (chars > size)
 				chars = size;
-			memcpy_fromfs((char *)inode->i_size+PIPE_HEAD(*inode), buf, chars );
+			memcpy_fromfs(PIPE_BASE(*inode)+PIPE_HEAD(*inode), buf, chars );
 			written += chars;
 			PIPE_HEAD(*inode) += chars;
 			PIPE_HEAD(*inode) &= (PAGE_SIZE-1);

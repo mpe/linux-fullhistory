@@ -25,10 +25,7 @@ static void cp_old_stat(struct inode * inode, struct old_stat * statbuf)
 	tmp.st_uid = inode->i_uid;
 	tmp.st_gid = inode->i_gid;
 	tmp.st_rdev = inode->i_rdev;
-	if( S_ISFIFO(inode->i_mode) )
-		tmp.st_size = 0;
-	else
-		tmp.st_size = inode->i_size;
+	tmp.st_size = inode->i_size;
 	tmp.st_atime = inode->i_atime;
 	tmp.st_mtime = inode->i_mtime;
 	tmp.st_ctime = inode->i_ctime;
@@ -48,10 +45,7 @@ static void cp_new_stat(struct inode * inode, struct new_stat * statbuf)
 	tmp.st_uid = inode->i_uid;
 	tmp.st_gid = inode->i_gid;
 	tmp.st_rdev = inode->i_rdev;
-	if( S_ISFIFO(inode->i_mode) )
-		tmp.st_size = 0;
-	else
-		tmp.st_size = inode->i_size;
+	tmp.st_size = inode->i_size;
 	tmp.st_atime = inode->i_atime;
 	tmp.st_mtime = inode->i_mtime;
 	tmp.st_ctime = inode->i_ctime;
@@ -74,12 +68,10 @@ static void cp_new_stat(struct inode * inode, struct new_stat * statbuf)
 			}
 			blocks += indirect;
 		}
-		tmp.st_blksize = 512;
 		tmp.st_blocks = blocks;
-	} else {
-		tmp.st_blksize = inode->i_blksize;
-		tmp.st_blocks = inode->i_blocks;
-	}
+	} else
+		tmp.st_blocks = (inode->i_blocks * inode->i_blksize) / 512;
+	tmp.st_blksize = 512;
 	memcpy_tofs(statbuf,&tmp,sizeof(tmp));
 }
 

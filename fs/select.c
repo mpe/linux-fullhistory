@@ -18,8 +18,6 @@
 #include <asm/segment.h>
 #include <asm/system.h>
 
-#include <const.h>
-
 /*
  * Ok, Peter made a complicated, but straightforward multiple_wait() function.
  * I have rewritten this, taking some shortcuts: This code may not be easy to

@@ -10,6 +10,7 @@
 #include <linux/errno.h>
 #include <linux/string.h>
 #include <linux/stat.h>
+#include <linux/termios.h>
 
 static int file_ioctl(struct file *filp,unsigned int cmd,unsigned long arg)
 {
@@ -17,15 +18,25 @@ static int file_ioctl(struct file *filp,unsigned int cmd,unsigned long arg)
 
 	switch (cmd) {
 		case FIBMAP:
-			if (filp->f_inode->i_op == NULL) return -EBADF;
-		    	if (filp->f_inode->i_op->bmap == NULL) return -EINVAL;
+			if (filp->f_inode->i_op == NULL)
+				return -EBADF;
+		    	if (filp->f_inode->i_op->bmap == NULL)
+				return -EINVAL;
+			verify_area((void *) arg,4);
 			block = get_fs_long((long *) arg);
 			block = filp->f_inode->i_op->bmap(filp->f_inode,block);
 			put_fs_long(block,(long *) arg);
 			return 0;
 		case FIGETBSZ:
-			if (filp->f_inode->i_sb == NULL) return -EBADF;
+			if (filp->f_inode->i_sb == NULL)
+				return -EBADF;
+			verify_area((void *) arg,4);
 			put_fs_long(filp->f_inode->i_sb->s_blocksize,
+			    (long *) arg);
+			return 0;
+		case FIONREAD:
+			verify_area((void *) arg,4);
+			put_fs_long(filp->f_inode->i_size - filp->f_pos,
 			    (long *) arg);
 			return 0;
 		default:

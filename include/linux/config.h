@@ -65,6 +65,7 @@
 #define CONFIG_BLK_DEV_HD
 #undef CONFIG_BLK_DEV_SD
 #undef CONFIG_BLK_DEV_ST
+#undef CONFIG_BLK_DEV_SR
 
 
 /*
@@ -80,7 +81,7 @@
 #undef CONFIG_SCSI_ULTRASTOR
 #undef CONFIG_SCSI_7000FASST
 
-#if defined(CONFIG_BLK_DEV_SD) || defined(CONFIG_BLK_DEV_CD) || \
+#if defined(CONFIG_BLK_DEV_SD) || defined(CONFIG_BLK_DEV_SR) || \
 defined(CONFIG_CHR_DEV_ST)
 #ifndef CONFIG_SCSI
 	#define CONFIG_SCSI

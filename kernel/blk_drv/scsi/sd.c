@@ -38,7 +38,7 @@ struct hd_struct sd[MAX_SD << 4];
 				
 int NR_SD=0;
 Scsi_Disk rscsi_disks[MAX_SD];
-static int sd_sizes[MAX_SD << 4];
+static int sd_sizes[MAX_SD << 4] = {0, };
 static int this_count;
 static int the_result;
 
@@ -56,9 +56,7 @@ static struct gendisk sd_gendisk;
 static void sd_geninit (void) {
 	int i;
 	for (i = 0; i < NR_SD; ++i)
-		sd_sizes[i << 4] = 
-		(sd[i << 4].nr_sects = rscsi_disks[i].capacity) >>
-		(BLOCK_SIZE_BITS - 9);
+	  sd[i << 4].nr_sects = rscsi_disks[i].capacity;
 	sd_gendisk.nr_real = NR_SD;
 }
 
@@ -414,9 +412,8 @@ void sd_init(void)
 		}
 
 	blk_dev[MAJOR_NR].request_fn = DEVICE_REQUEST;
-	blk_size[MAJOR_NR] = sd_sizes;	
-	blkdev_fops[MAJOR_NR] = &sd_fops; 
+	blkdev_fops[MAJOR_NR] = &sd_fops;
 	sd_gendisk.next = gendisk_head;
 	gendisk_head = &sd_gendisk;
-}	
+}
 #endif

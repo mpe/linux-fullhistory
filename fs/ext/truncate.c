@@ -32,146 +32,208 @@
 
 static int trunc_direct(struct inode * inode)
 {
-	int i;
-	int result = 0;
+	int i, tmp;
+	unsigned long * p;
+	struct buffer_head * bh;
+	int retry = 0;
 #define DIRECT_BLOCK ((inode->i_size + 1023) >> 10)
 
 repeat:
 	for (i = DIRECT_BLOCK ; i < 9 ; i++) {
-		if (i < DIRECT_BLOCK)
-			goto repeat;
-		if (!inode->i_data[i])
+		p = inode->u.ext_i.i_data+i;
+		if (!(tmp = *p))
 			continue;
-		result = 1;
-		if (ext_free_block(inode->i_dev,inode->i_data[i]))
-			inode->i_data[i] = 0;
+		bh = getblk(inode->i_dev,tmp,BLOCK_SIZE);
+		if (i < DIRECT_BLOCK) {
+			brelse(bh);
+			goto repeat;
+		}
+		if ((bh && bh->b_count != 1) || tmp != *p) {
+			retry = 1;
+			brelse(bh);
+			continue;
+		}
+		*p = 0;
+		inode->i_dirt = 1;
+		brelse(bh);
+		ext_free_block(inode->i_dev,tmp);
 	}
-	return result;
+	return retry;
 }
 
 static int trunc_indirect(struct inode * inode, int offset, unsigned long * p)
 {
-	int i;
-	struct buffer_head * bh = NULL;
+	int i, tmp;
+	struct buffer_head * bh;
+	struct buffer_head * ind_bh;
 	unsigned long * ind;
-	int result = 0;
+	int retry = 0;
 #define INDIRECT_BLOCK (DIRECT_BLOCK-offset)
 
-	if (*p)
-		bh = bread(inode->i_dev, *p, BLOCK_SIZE);
-	if (!bh)
+	tmp = *p;
+	if (!tmp)
 		return 0;
+	ind_bh = bread(inode->i_dev, tmp, BLOCK_SIZE);
+	if (tmp != *p) {
+		brelse(ind_bh);
+		return 1;
+	}
+	if (!ind_bh) {
+		*p = 0;
+		return 0;
+	}
 repeat:
 	for (i = INDIRECT_BLOCK ; i < 256 ; i++) {
 		if (i < 0)
 			i = 0;
 		if (i < INDIRECT_BLOCK)
 			goto repeat;
-		ind = i+(unsigned long *) bh->b_data;
-		if (!*ind)
+		ind = i+(unsigned long *) ind_bh->b_data;
+		tmp = *ind;
+		if (!tmp)
 			continue;
-		result = 1;
-		if (ext_free_block(inode->i_dev,*ind))
-			*ind = 0;
+		bh = getblk(inode->i_dev,tmp,BLOCK_SIZE);
+		if (i < INDIRECT_BLOCK) {
+			brelse(bh);
+			goto repeat;
+		}
+		if ((bh && bh->b_count != 1) || tmp != *ind) {
+			retry = 1;
+			brelse(bh);
+			continue;
+		}
+		*ind = 0;
+		ind_bh->b_dirt = 1;
+		brelse(bh);
+		ext_free_block(inode->i_dev,tmp);
 	}
-	ind = (unsigned long *) bh->b_data;
+	ind = (unsigned long *) ind_bh->b_data;
 	for (i = 0; i < 256; i++)
 		if (*(ind++))
 			break;
-	brelse(bh);
-	if (i >= 256) {
-		result = 1;
-		if (ext_free_block(inode->i_dev,*p))
+	if (i >= 256)
+		if (ind_bh->b_count != 1)
+			retry = 1;
+		else {
+			tmp = *p;
 			*p = 0;
-	}
-	return result;
+			inode->i_dirt = 1;
+			ext_free_block(inode->i_dev,tmp);
+		}
+	brelse(ind_bh);
+	return retry;
 }
-		
+
 static int trunc_dindirect(struct inode * inode, int offset, unsigned long * p)
 {
-	int i;
-	struct buffer_head * bh = NULL;
+	int i,tmp;
+	struct buffer_head * dind_bh;
 	unsigned long * dind;
-	int result = 0;
+	int retry = 0;
 #define DINDIRECT_BLOCK ((DIRECT_BLOCK-offset)>>8)
 
-	if (*p)
-		bh = bread(inode->i_dev, *p, BLOCK_SIZE);
-	if (!bh)
+	tmp = *p;
+	if (!tmp)
 		return 0;
+	dind_bh = bread(inode->i_dev, tmp, BLOCK_SIZE);
+	if (tmp != *p) {
+		brelse(dind_bh);
+		return 1;
+	}
+	if (!dind_bh) {
+		*p = 0;
+		return 0;
+	}
 repeat:
 	for (i = DINDIRECT_BLOCK ; i < 256 ; i ++) {
 		if (i < 0)
 			i = 0;
 		if (i < DINDIRECT_BLOCK)
 			goto repeat;
-		dind = i+(unsigned long *) bh->b_data;
-		if (!*dind)
+		dind = i+(unsigned long *) dind_bh->b_data;
+		tmp = *dind;
+		if (!tmp)
 			continue;
-		result |= trunc_indirect(inode,offset+(i<<8),dind);
+		retry |= trunc_indirect(inode,offset+(i<<8),dind);
+		dind_bh->b_dirt = 1;
 	}
-	dind = (unsigned long *) bh->b_data;
+	dind = (unsigned long *) dind_bh->b_data;
 	for (i = 0; i < 256; i++)
 		if (*(dind++))
 			break;
-	brelse(bh);
-	if (i >= 256) {
-		result = 1;
-		if (ext_free_block(inode->i_dev,*p))
+	if (i >= 256)
+		if (dind_bh->b_count != 1)
+			retry = 1;
+		else {
+			tmp = *p;
 			*p = 0;
-	}
-	return result;
+			inode->i_dirt = 1;
+			ext_free_block(inode->i_dev,tmp);
+		}
+	brelse(dind_bh);
+	return retry;
 }
 
 static int trunc_tindirect(struct inode * inode)
 {
-	int i;
-	struct buffer_head * bh = NULL;
-	unsigned long * tind;
-	int result = 0;
+	int i,tmp;
+	struct buffer_head * tind_bh;
+	unsigned long * tind, * p;
+	int retry = 0;
 #define TINDIRECT_BLOCK ((DIRECT_BLOCK-(256*256+256+9))>>16)
 
-	if (inode->i_data[11])
-		bh = bread(inode->i_dev, inode->i_data[11], BLOCK_SIZE);
-	if (!bh)
+	p = inode->u.ext_i.i_data+11;
+	if (!(tmp = *p))
 		return 0;
+	tind_bh = bread(inode->i_dev, tmp, BLOCK_SIZE);
+	if (tmp != *p) {
+		brelse(tind_bh);
+		return 1;
+	}
+	if (!tind_bh) {
+		*p = 0;
+		return 0;
+	}
 repeat:
 	for (i = TINDIRECT_BLOCK ; i < 256 ; i ++) {
 		if (i < 0)
 			i = 0;
 		if (i < TINDIRECT_BLOCK)
 			goto repeat;
-		tind = i+(unsigned long *) bh->b_data;
-		if (!*tind)
-			continue;
-		result |= trunc_dindirect(inode,9+256+256*256+(i<<16),tind);
+		tind = i+(unsigned long *) tind_bh->b_data;
+		retry |= trunc_dindirect(inode,9+256+256*256+(i<<16),tind);
+		tind_bh->b_dirt = 1;
 	}
-	tind = (unsigned long *) bh->b_data;
+	tind = (unsigned long *) tind_bh->b_data;
 	for (i = 0; i < 256; i++)
 		if (*(tind++))
 			break;
-	brelse(bh);
-	if (i >= 256) {
-		result = 1;
-		if (ext_free_block(inode->i_dev,inode->i_data[11]))
-			inode->i_data[11] = 0;
-	}
-	return result;
+	if (i >= 256)
+		if (tind_bh->b_count != 1)
+			retry = 1;
+		else {
+			tmp = *p;
+			*p = 0;
+			inode->i_dirt = 1;
+			ext_free_block(inode->i_dev,tmp);
+		}
+	brelse(tind_bh);
+	return retry;
 }
-		
+
 void ext_truncate(struct inode * inode)
 {
-	int flag;
+	int retry;
 
 	if (!(S_ISREG(inode->i_mode) || S_ISDIR(inode->i_mode) ||
 	     S_ISLNK(inode->i_mode)))
 		return;
 	while (1) {
-		flag = trunc_direct(inode);
-		flag |= trunc_indirect(inode,9,(unsigned long *)&inode->i_data[9]);
-		flag |= trunc_dindirect(inode,9+256,(unsigned long *)&inode->i_data[10]);
-		flag |= trunc_tindirect(inode);
-		if (!flag)
+		retry = trunc_direct(inode);
+		retry |= trunc_indirect(inode,9,inode->u.ext_i.i_data+9);
+		retry |= trunc_dindirect(inode,9+256,inode->u.ext_i.i_data+10);
+		retry |= trunc_tindirect(inode);
+		if (!retry)
 			break;
 		current->counter = 0;
 		schedule();

@@ -249,6 +249,8 @@ extern void change_speed(unsigned int line);
 extern void send_break(unsigned int line);
 extern int get_serial_info(unsigned int, struct serial_struct *);
 extern int set_serial_info(unsigned int, struct serial_struct *);
+extern int get_modem_info(unsigned int, unsigned int *);
+extern int set_modem_info(unsigned int, unsigned int, unsigned int *);
 
 /* pty.c */
 

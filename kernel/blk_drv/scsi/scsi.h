@@ -254,6 +254,9 @@ extern void scsi_dev_init (void);
 
 /*
 	You guesed it.  This sends a command to the selected SCSI host 
+
+extern void print_inquiry(unsigned char *data);
+
 */
 
 

@@ -78,11 +78,13 @@ extern struct inode * ext_new_inode(int dev);
 extern void ext_free_inode(struct inode * inode);
 extern unsigned long ext_count_free_inodes(struct super_block *sb);
 extern int ext_new_block(int dev);
-extern int ext_free_block(int dev, int block);
+extern void ext_free_block(int dev, int block);
 extern unsigned long ext_count_free_blocks(struct super_block *sb);
 
-extern int ext_create_block(struct inode *, int);
 extern int ext_bmap(struct inode *,int);
+
+extern struct buffer_head * ext_getblk(struct inode *, int, int);
+extern struct buffer_head * ext_bread(struct inode *, int, int);
 
 extern void ext_truncate(struct inode *);
 extern void ext_put_super(struct super_block *);

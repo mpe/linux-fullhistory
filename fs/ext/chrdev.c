@@ -62,7 +62,7 @@ struct inode_operations ext_chrdev_inode_operations = {
 	NULL,			/* rename */
 	NULL,			/* readlink */
 	NULL,			/* follow_link */
-	ext_bmap,		/* bmap */
-	ext_truncate		/* truncate */
+	NULL,			/* bmap */
+	NULL			/* truncate */
 };
 

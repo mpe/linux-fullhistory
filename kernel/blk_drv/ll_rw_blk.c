@@ -162,7 +162,7 @@ static void make_request(int major,int rw, struct buffer_head * bh)
 	}
 repeat:
 	cli();
-	if ((major == 3 ||  major == 8 )&& (req = blk_dev[major].current_request)) {
+	if ((major == 3 ||  major == 8 || major == 11)&& (req = blk_dev[major].current_request)) {
 		while (req = req->next) {
 			if (req->dev == bh->b_dev &&
 			    !req->waiting &&
