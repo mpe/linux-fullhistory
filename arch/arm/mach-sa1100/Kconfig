@@ -47,6 +47,7 @@ config SA1100_COLLIE
 	bool "Sharp Zaurus SL5500"
 	select SHARP_LOCOMO
 	select SHARP_SCOOP
+	select SHARP_PARAM
 	help
 	  Say Y here to support the Sharp Zaurus SL5500 PDAs.
 

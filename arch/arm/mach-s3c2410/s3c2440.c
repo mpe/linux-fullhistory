@@ -159,7 +159,7 @@ struct sleep_save s3c2440_sleep[] = {
 	SAVE_ITEM(S3C2440_GPJUP)
 };
 
-static int s3c2440_suspend(struct sys_device *dev, u32 state)
+static int s3c2440_suspend(struct sys_device *dev, pm_message_t state)
 {
 	s3c2410_pm_do_save(s3c2440_sleep, ARRAY_SIZE(s3c2440_sleep));
 	return 0;

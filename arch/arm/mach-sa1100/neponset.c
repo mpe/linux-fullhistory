@@ -178,7 +178,7 @@ static int neponset_probe(struct device *dev)
 /*
  * LDM power management.
  */
-static int neponset_suspend(struct device *dev, u32 state, u32 level)
+static int neponset_suspend(struct device *dev, pm_message_t state, u32 level)
 {
 	/*
 	 * Save state.

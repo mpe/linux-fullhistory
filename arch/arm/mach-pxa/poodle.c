@@ -35,6 +35,7 @@
 
 #include <asm/hardware/scoop.h>
 #include <asm/hardware/locomo.h>
+#include <asm/mach/sharpsl_param.h>
 
 #include "generic.h"
 
@@ -152,6 +153,12 @@ static void __init poodle_init(void)
 	}
 }
 
+static void __init fixup_poodle(struct machine_desc *desc,
+		struct tag *tags, char **cmdline, struct meminfo *mi)
+{
+	sharpsl_save_param();
+}
+
 static struct map_desc poodle_io_desc[] __initdata = {
  /* virtual     physical    length                   */
   { 0xef800000, 0x00000000, 0x00800000, MT_DEVICE }, /* Boot Flash */
@@ -174,6 +181,7 @@ static void __init poodle_map_io(void)
 
 MACHINE_START(POODLE, "SHARP Poodle")
 	BOOT_MEM(0xa0000000, 0x40000000, io_p2v(0x40000000))
+	FIXUP(fixup_poodle)
 	MAPIO(poodle_map_io)
 	INITIRQ(pxa_init_irq)
 	.timer = &pxa_timer,

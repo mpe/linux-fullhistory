@@ -1092,7 +1092,7 @@ EXPORT_SYMBOL(s3c2410_dma_getposition);
 
 #ifdef CONFIG_PM
 
-static int s3c2410_dma_suspend(struct sys_device *dev, u32 state)
+static int s3c2410_dma_suspend(struct sys_device *dev, pm_message_t state)
 {
 	s3c2410_dma_chan_t *cp = container_of(dev, s3c2410_dma_chan_t, dev);
 
