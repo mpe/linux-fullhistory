@@ -483,7 +483,9 @@ sys_init_module(const char *name_user, struct module *mod_user)
 
 	/* Ok, that's about all the sanity we can stomach; copy the rest.  */
 
-	if (copy_from_user(mod+1, mod_user+1, mod->size-sizeof(*mod))) {
+	if (copy_from_user((char *)mod+mod_user_size,
+			   (char *)mod_user+mod_user_size,
+			   mod->size-mod_user_size)) {
 		error = -EFAULT;
 		goto err3;
 	}

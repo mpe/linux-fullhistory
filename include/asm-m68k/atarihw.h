@@ -123,7 +123,7 @@ extern struct atari_hw_present atari_hw_present;
  */
 
 #include <linux/mm.h>
-#include <asm/pgtable.h>
+#include <asm/pgalloc.h>
 
 static inline void dma_cache_maintenance( unsigned long paddr,
 					  unsigned long len,

@@ -36,17 +36,17 @@ static inline u_char pcmcia_get_intreq(void)
 
 static inline void pcmcia_ack_int(u_char intreq)
 {
-	gayle.intreq = ((intreq & 0x2c) ^ 0x2c) | 0xc0;
+	gayle.intreq = 0xf8;
 }
 
 static inline void pcmcia_enable_irq(void)
 {
-	gayle.inten = GAYLE_IRQ_IDE|GAYLE_IRQ_IRQ;
+	gayle.inten |= GAYLE_IRQ_IRQ;
 }
 
 static inline void pcmcia_disable_irq(void)
 {
-	gayle.inten = GAYLE_IRQ_IDE;
+	gayle.inten &= ~GAYLE_IRQ_IRQ;
 }
 
 #define PCMCIA_INSERTED	(gayle.cardstatus & GAYLE_CS_CCDET)

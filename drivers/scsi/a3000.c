@@ -3,6 +3,7 @@
 #include <linux/blk.h>
 #include <linux/sched.h>
 #include <linux/version.h>
+#include <linux/ioport.h>
 #include <linux/init.h>
 #include <linux/spinlock.h>
 
@@ -100,7 +101,9 @@ static int dma_setup (Scsi_Cmnd *cmd, int dir_in)
 	cache_push (addr, cmd->SCp.this_residual);
 
     /* start DMA */
+    mb();			/* make sure setup is completed */
     DMA(a3000_host)->ST_DMA = 1;
+    mb();			/* make sure DMA has started before next IO */
 
     /* return success */
     return 0;
@@ -116,12 +119,15 @@ static void dma_stop (struct Scsi_Host *instance, Scsi_Cmnd *SCpnt,
 	cntr |= CNTR_DDIR;
 
     DMA(instance)->CNTR = cntr;
+    mb();			/* make sure CNTR is updated before next IO */
 
     /* flush if we were reading */
     if (HDATA(instance)->dma_dir) {
 	DMA(instance)->FLUSH = 1;
+	mb();			/* don't allow prefetch */
 	while (!(DMA(instance)->ISTR & ISTR_FE_FLG))
-	    ;
+	    barrier();
+	mb();			/* no IO until FLUSH is done */
     }
 
     /* clear a possible interrupt */
@@ -132,9 +138,11 @@ static void dma_stop (struct Scsi_Host *instance, Scsi_Cmnd *SCpnt,
 
     /* stop DMA */
     DMA(instance)->SP_DMA = 1;
+    mb();			/* make sure DMA is stopped before next IO */
 
     /* restore the CONTROL bits (minus the direction flag) */
     DMA(instance)->CNTR = CNTR_PDMD | CNTR_INTEN;
+    mb();			/* make sure CNTR is updated before next IO */
 
     /* copy from a bounce buffer, if necessary */
     if (status && HDATA(instance)->dma_bounce_buffer) {
@@ -170,13 +178,17 @@ int __init a3000_detect(Scsi_Host_Template *tpnt)
 
     if  (!MACH_IS_AMIGA || !AMIGAHW_PRESENT(A3000_SCSI))
 	return 0;
+    if (!request_mem_region(0xDD0000, 256, "wd33c93"))
+	return -EBUSY;
 
     tpnt->proc_name = "A3000";
     tpnt->proc_info = &wd33c93_proc_info;
 
     a3000_host = scsi_register (tpnt, sizeof(struct WD33C93_hostdata));
-    if(a3000_host == NULL)
+    if (a3000_host == NULL) {
+	release_mem_region(0xDD0000, 256);
     	return 0;
+    }
     a3000_host->base = ZTWO_VADDR(0xDD0000);
     a3000_host->irq = IRQ_AMIGA_PORTS;
     DMA(a3000_host)->DAWR = DAWR_A3000;
@@ -192,9 +204,7 @@ int __init a3000_detect(Scsi_Host_Template *tpnt)
 
 #define HOSTS_C
 
-#include "a3000.h"
-
-static Scsi_Host_Template driver_template = A3000_SCSI;
+static Scsi_Host_Template driver_template = _A3000_SCSI;
 
 #include "scsi_module.c"
 
@@ -203,6 +213,7 @@ int a3000_release(struct Scsi_Host *instance)
 #ifdef MODULE
     wd33c93_release();
     DMA(instance)->CNTR = 0;
+    release_mem_region(0xDD0000, 256);
     free_irq(IRQ_AMIGA_PORTS, a3000_intr);
 #endif
     return 1;

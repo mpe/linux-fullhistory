@@ -8,6 +8,11 @@
 
 /* 2.3.x PCI/resources, 1999 Andrea Arcangeli <andrea@suse.de> */
 
+/*
+ * Nov 2000, Ivan Kokshaysky <ink@jurassic.park.msu.ru>
+ *	     PCI-PCI bridges cleanup
+ */
+
 #include <linux/string.h>
 #include <linux/pci.h>
 #include <linux/init.h>
@@ -71,6 +76,26 @@ quirk_ali_ide_ports(struct pci_dev *dev)
 		dev->resource[3].end = dev->resource[3].start + 7;
 }
 
+/*
+ * Notorious Cy82C693 chip. One of its numerous bugs: although
+ * Cypress IDE controller doesn't support native mode, it has
+ * programmable addresses of IDE command/control registers.
+ * This violates PCI specifications, confuses IDE subsystem
+ * and causes resource conflict between primary HD_CMD register
+ * and floppy controller. Ugh.
+ * Fix that.
+ */
+static void __init
+quirk_cypress_ide_ports(struct pci_dev *dev)
+{
+	if (dev->class >> 8 != PCI_CLASS_STORAGE_IDE)
+		return;
+	dev->resource[1].start |= 2;
+	dev->resource[1].end = dev->resource[1].start;
+	pci_claim_resource(dev, 0);
+	pci_claim_resource(dev, 1);
+}
+
 static void __init
 quirk_vga_enable_rom(struct pci_dev *dev)
 {
@@ -78,7 +103,6 @@ quirk_vga_enable_rom(struct pci_dev *dev)
 	   But if its a Cirrus 543x/544x DISABLE it, since
 	   enabling ROM disables the memory... */
 	if ((dev->class >> 8) == PCI_CLASS_DISPLAY_VGA &&
-	    /* But if its a Cirrus 543x/544x DISABLE it */
 	    (dev->vendor != PCI_VENDOR_ID_CIRRUS ||
 	     (dev->device < 0x00a0) || (dev->device > 0x00ac)))
 	{
@@ -98,6 +122,8 @@ struct pci_fixup pcibios_fixups[] __initdata = {
 	  quirk_isa_bridge },
 	{ PCI_FIXUP_HEADER, PCI_VENDOR_ID_AL, PCI_DEVICE_ID_AL_M5229,
 	  quirk_ali_ide_ports },
+	{ PCI_FIXUP_HEADER, PCI_VENDOR_ID_CONTAQ, PCI_DEVICE_ID_CONTAQ_82C693,
+	  quirk_cypress_ide_ports },
 	{ PCI_FIXUP_FINAL, PCI_ANY_ID, PCI_ANY_ID, quirk_vga_enable_rom },
 	{ 0 }
 };
@@ -122,18 +148,12 @@ pcibios_align_resource(void *data, struct resource *res, unsigned long size)
 			start = PCIBIOS_MIN_IO + hose->io_space->start;
 
 		/*
-		 * Aligning to 0x800 rather than the minimum base of
-		 * 0x400 is an attempt to avoid having devices in 
-		 * any 0x?C?? range, which is where the de4x5 driver
-		 * probes for EISA cards.
-		 *
-		 * Adaptecs, especially, resent such intrusions.
-		 *
-		 * The de4x5 driver has the eisa probe conditionalized
-		 * out for Alpha, so lower the minimum base back to 0x400.
+		 * Put everything into 0x00-0xff region modulo 0x400
 		 */
-		alignto = MAX(0x400, size);
-		start = ALIGN(start, alignto);
+		if (start & 0x300) {
+			start = (start + 0x3ff) & ~0x3ff;
+			res->start = start;
+		}
 	}
 	else if	(res->flags & IORESOURCE_MEM) {
 		/* Make sure we start at our min on all hoses */
@@ -181,44 +201,6 @@ pcibios_align_resource(void *data, struct resource *res, unsigned long size)
 #undef MB
 #undef GB
 
-/* 
- * Pre-layout host-independant device initialization.
- */
-
-static void __init
-pcibios_assign_special(struct pci_dev * dev)
-{
-	int i;
-
-	/* The first three resources of an IDE controler are often magic, 
-	   so leave them unchanged.  This is true, for instance, of the
-	   Contaq 82C693 as seen on SX164 and DP264.  */
-
-	if (dev->class >> 8 == PCI_CLASS_STORAGE_IDE) {
-		/* Resource 1 of IDE controller is the address of HD_CMD
-		   register which actually occupies a single byte (0x3f6
-		   for ide0) in reported 0x3f4-3f7 range. We have to fix
-		   that to avoid resource conflict with AT-style floppy
-		   controller. */
-		dev->resource[1].start += 2;
-		dev->resource[1].end = dev->resource[1].start;
-		for (i = 0; i < PCI_NUM_RESOURCES; i++)
-			if (dev->resource[i].flags && dev->resource[i].start)
-				pci_claim_resource(dev, i);
-	}
-	/*
-	 * We don't have code that will init the CYPRESS bridge correctly
-	 * so we do the next best thing, and depend on the previous
-	 * console code to do the right thing, and ignore it here... :-\
-	 */
-	else if (dev->vendor == PCI_VENDOR_ID_CONTAQ &&
-		 dev->device == PCI_DEVICE_ID_CONTAQ_82C693)
-		for (i = 0; i < PCI_NUM_RESOURCES; i++)
-			if (dev->resource[i].flags && dev->resource[i].start)
-				pci_claim_resource(dev, i);
-}
-
-
 void __init
 pcibios_init(void)
 {
@@ -257,7 +239,6 @@ pcibios_fixup_device_resources(struct pci_dev *dev, struct pci_bus *bus)
 			pcibios_fixup_resource(&dev->resource[i],
 					       hose->mem_space);
 	}
-	pcibios_assign_special(dev);
 }
 
 void __init
@@ -265,17 +246,33 @@ pcibios_fixup_bus(struct pci_bus *bus)
 {
 	/* Propogate hose info into the subordinate devices.  */
 
-	struct pci_controler *hose = (struct pci_controler *) bus->sysdata;
+	struct pci_controler *hose = bus->sysdata;
 	struct list_head *ln;
+	struct pci_dev *dev = bus->self;
 
-	/* ???? */
-	bus->resource[0] = hose->io_space;
-	bus->resource[1] = hose->mem_space;
+	if (!dev) {
+		/* Root bus */
+		bus->resource[0] = hose->io_space;
+		bus->resource[1] = hose->mem_space;
+	} else {
+		/* This is a bridge. Do not care how it's initialized,
+		   just link its resources to the bus ones */
+		int i;
 
-	/* If this is a bridge, get the current bases */
-	if (bus->self) {
-		pci_read_bridge_bases(bus);
-		pcibios_fixup_device_resources(bus->self, bus->parent);
+		for(i=0; i<3; i++) {
+			bus->resource[i] =
+				&dev->resource[PCI_BRIDGE_RESOURCES+i];
+			bus->resource[i]->name = bus->name;
+		}
+		bus->resource[0]->flags |= pci_bridge_check_io(dev);
+		bus->resource[1]->flags |= IORESOURCE_MEM;
+		/* For now, propogate hose limits to the bus;
+		   we'll adjust them later. */
+		bus->resource[0]->end = hose->io_space->end;
+		bus->resource[1]->end = hose->mem_space->end;
+		/* Turn off downstream PF memory address range by default */
+		bus->resource[2]->start = 1024*1024;
+		bus->resource[2]->end = bus->resource[2]->start - 1;
 	}
 
 	for (ln = bus->devices.next; ln != &bus->devices; ln = ln->next) {
@@ -385,99 +382,6 @@ pcibios_set_master(struct pci_dev *dev)
 	pci_write_config_byte(dev, PCI_LATENCY_TIMER, 64);
 }
 
-#define ROUND_UP(x, a)		(((x) + (a) - 1) & ~((a) - 1))
-
-static void __init
-pcibios_size_bridge(struct pci_bus *bus, struct pbus_set_ranges_data *outer)
-{
-	struct pbus_set_ranges_data inner;
-	struct pci_dev *dev;
-	struct pci_dev *bridge = bus->self;
-	struct pci_controler *hose = bus->sysdata;
-	struct list_head *ln;
-
-	if (!bridge)
-		return;	/* host bridge, nothing to do */
-
-	/* set reasonable default locations for pcibios_align_resource */
-	inner.io_start = hose->io_space->start + PCIBIOS_MIN_IO;
-	inner.mem_start = hose->mem_space->start + PCIBIOS_MIN_MEM;
-	inner.io_end = inner.io_start;
-	inner.mem_end = inner.mem_start;
-
-	/* Collect information about how our direct children are layed out. */
-	for (ln=bus->devices.next; ln != &bus->devices; ln=ln->next) {
-		int i;
-		dev = pci_dev_b(ln);
-
-		/* Skip bridges for now */
-		if (dev->class >> 8 == PCI_CLASS_BRIDGE_PCI)
-			continue;
-
-		for (i = 0; i < PCI_NUM_RESOURCES; i++) {
-			struct resource res;
-			unsigned long size;
-
-			memcpy(&res, &dev->resource[i], sizeof(res));
-			size = res.end - res.start + 1;
-
-			if (res.flags & IORESOURCE_IO) {
-				res.start = inner.io_end;
-				pcibios_align_resource(dev, &res, size);
-				inner.io_end = res.start + size;
-			} else if (res.flags & IORESOURCE_MEM) {
-				res.start = inner.mem_end;
-				pcibios_align_resource(dev, &res, size);
-				inner.mem_end = res.start + size;
-			}
-		}
-	}
-
-	/* And for all of the subordinate busses. */
-	for (ln=bus->children.next; ln != &bus->children; ln=ln->next)
-		pcibios_size_bridge(pci_bus_b(ln), &inner);
-
-	/* turn the ending locations into sizes (subtract start) */
-	inner.io_end -= inner.io_start;
-	inner.mem_end -= inner.mem_start;
-
-	/* Align the sizes up by bridge rules */
-	inner.io_end = ROUND_UP(inner.io_end, 4*1024) - 1;
-	inner.mem_end = ROUND_UP(inner.mem_end, 1*1024*1024) - 1;
-
-	/* Adjust the bridge's allocation requirements */
-	bridge->resource[0].end = bridge->resource[0].start + inner.io_end;
-	bridge->resource[1].end = bridge->resource[1].start + inner.mem_end;
-
-	bridge->resource[PCI_BRIDGE_RESOURCES].end =
-	    bridge->resource[PCI_BRIDGE_RESOURCES].start + inner.io_end;
-	bridge->resource[PCI_BRIDGE_RESOURCES+1].end =
-	    bridge->resource[PCI_BRIDGE_RESOURCES+1].start + inner.mem_end;
-
-	/* adjust parent's resource requirements */
-	if (outer) {
-		outer->io_end = ROUND_UP(outer->io_end, 4*1024);
-		outer->io_end += inner.io_end;
-
-		outer->mem_end = ROUND_UP(outer->mem_end, 1*1024*1024);
-		outer->mem_end += inner.mem_end;
-	}
-}
-
-#undef ROUND_UP
-
-static void __init 
-pcibios_size_bridges(void)
-{
-	struct list_head *ln1, *ln2;
-
-	for(ln1=pci_root_buses.next; ln1 != &pci_root_buses; ln1=ln1->next)
-		for(ln2 = pci_bus_b(ln1)->children.next; 
-		    ln2 != &pci_bus_b(ln1)->children;
-		    ln2 = ln2->next)
-			pcibios_size_bridge(pci_bus_b(ln2), NULL);
-}
-
 void __init
 common_init_pci(void)
 {
@@ -495,10 +399,8 @@ common_init_pci(void)
 		next_busno += 1;
 	}
 
-	pcibios_size_bridges();
 	pci_assign_unassigned_resources();
 	pci_fixup_irqs(alpha_mv.pci_swizzle, alpha_mv.pci_map_irq);
-	pci_set_bus_ranges();
 }
 
 

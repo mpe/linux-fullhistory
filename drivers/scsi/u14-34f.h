@@ -5,30 +5,23 @@
 #define _U14_34F_H
 
 #include <scsi/scsicam.h>
-#include <linux/version.h>
 
 int u14_34f_detect(Scsi_Host_Template *);
 int u14_34f_release(struct Scsi_Host *);
 int u14_34f_queuecommand(Scsi_Cmnd *, void (*done)(Scsi_Cmnd *));
 int u14_34f_abort(Scsi_Cmnd *);
-int u14_34f_old_abort(Scsi_Cmnd *);
 int u14_34f_reset(Scsi_Cmnd *);
-int u14_34f_old_reset(Scsi_Cmnd *, unsigned int);
 int u14_34f_biosparam(Disk *, kdev_t, int *);
 
-#define U14_34F_VERSION "5.11.00"
-
-#ifndef LinuxVersionCode
-#define LinuxVersionCode(v, p, s) (((v)<<16)+((p)<<8)+(s))
-#endif
+#define U14_34F_VERSION "6.02.00"
 
 #define ULTRASTOR_14_34F {                                                   \
                 name:         "UltraStor 14F/34F rev. " U14_34F_VERSION " ", \
                 detect:                  u14_34f_detect,                     \
                 release:                 u14_34f_release,                    \
                 queuecommand:            u14_34f_queuecommand,               \
-                abort:                   u14_34f_old_abort,                  \
-                reset:                   u14_34f_old_reset,                  \
+                abort:                   NULL,                               \
+                reset:                   NULL,                               \
                 eh_abort_handler:        u14_34f_abort,                      \
                 eh_device_reset_handler: NULL,                               \
                 eh_bus_reset_handler:    NULL,                               \

@@ -25,7 +25,6 @@ EXPORT_SYMBOL(amiga_audio_period);
 EXPORT_SYMBOL(amiga_audio_min_period);
 EXPORT_SYMBOL(amiga_do_irq);
 EXPORT_SYMBOL(amiga_do_irq_list);
-EXPORT_SYMBOL(amiga_intena_vals);
 
 #ifdef CONFIG_AMIGA_PCMCIA
   EXPORT_SYMBOL(pcmcia_reset);

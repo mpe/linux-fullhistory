@@ -7,14 +7,12 @@
 
 #include <asm/atomic.h>
 
-#define local_bh_disable()	(local_bh_count(smp_processor_id())++)
-#define local_bh_enable()	(local_bh_count(smp_processor_id())--)
+#define cpu_bh_disable(cpu)	do { local_bh_count(cpu)++; barrier(); } while (0)
+#define cpu_bh_enable(cpu)	do { barrier(); local_bh_count(cpu)--; } while (0)
 
-#define in_softirq() (local_bh_count != 0)
+#define local_bh_disable()	cpu_bh_disable(smp_processor_id())
+#define local_bh_enable()	cpu_bh_enable(smp_processor_id())
 
-/* These are for the irq's testing the lock */
-#define softirq_trylock(cpu)  (local_bh_count(cpu) ? 0 : (local_bh_count(cpu)=1))
-#define softirq_endlock(cpu)  (local_bh_count(cpu) = 0)
-#define synchronize_bh()	barrier()
+#define in_softirq() (local_bh_count(smp_processor_id()) != 0)
 
 #endif

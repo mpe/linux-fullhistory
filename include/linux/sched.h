@@ -174,18 +174,19 @@ struct files_struct {
 	struct file * fd_array[NR_OPEN_DEFAULT];
 };
 
-#define INIT_FILES { \
-	ATOMIC_INIT(1), \
-	RW_LOCK_UNLOCKED, \
-	NR_OPEN_DEFAULT, \
-	__FD_SETSIZE, \
-	0, \
-	&init_files.fd_array[0], \
-	&init_files.close_on_exec_init, \
-	&init_files.open_fds_init, \
-	{ { 0, } }, \
-	{ { 0, } }, \
-	{ NULL, } \
+#define INIT_FILES \
+{ 							\
+	count:		ATOMIC_INIT(1), 		\
+	file_lock:	RW_LOCK_UNLOCKED, 		\
+	max_fds:	NR_OPEN_DEFAULT, 		\
+	max_fdset:	__FD_SETSIZE, 			\
+	next_fd:	0, 				\
+	fd:		&init_files.fd_array[0], 	\
+	close_on_exec:	&init_files.close_on_exec_init, \
+	open_fds:	&init_files.open_fds_init, 	\
+	close_on_exec_init: { { 0, } }, 		\
+	open_fds_init:	{ { 0, } }, 			\
+	fd_array:	{ NULL, } 			\
 }
 
 /* Maximum number of active map areas.. This is a random (large) number */
@@ -220,18 +221,19 @@ struct mm_struct {
 	void * segments;
 };
 
-#define INIT_MM(name) {					\
-		&init_mmap, NULL, NULL,			\
-		swapper_pg_dir, 			\
-		ATOMIC_INIT(2), ATOMIC_INIT(1), 1,	\
-		__MUTEX_INITIALIZER(name.mmap_sem),	\
-		SPIN_LOCK_UNLOCKED,			\
-		0,					\
-		0, 0, 0, 0,				\
-		0, 0, 0, 				\
-		0, 0, 0, 0,				\
-		0, 0, 0,				\
-		0, 0, 0, 0, NULL }
+#define INIT_MM(name) \
+{			 				\
+	mmap:		&init_mmap, 			\
+	mmap_avl:	NULL, 				\
+	mmap_cache:	NULL, 				\
+	pgd:		swapper_pg_dir, 		\
+	mm_users:	ATOMIC_INIT(2), 		\
+	mm_count:	ATOMIC_INIT(1), 		\
+	map_count:	1, 				\
+	mmap_sem:	__MUTEX_INITIALIZER(name.mmap_sem), \
+	page_table_lock: SPIN_LOCK_UNLOCKED, 		\
+	segments:	NULL 				\
+}
 
 struct signal_struct {
 	atomic_t		count;
@@ -240,10 +242,11 @@ struct signal_struct {
 };
 
 
-#define INIT_SIGNALS { \
-		ATOMIC_INIT(1), \
-		{ {{0,}}, }, \
-		SPIN_LOCK_UNLOCKED }
+#define INIT_SIGNALS {	\
+	count:		ATOMIC_INIT(1), 		\
+	action:		{ {{0,}}, }, 			\
+	siglock:	SPIN_LOCK_UNLOCKED 		\
+}
 
 /*
  * Some day this will be a full-fledged user tracking system..

@@ -195,8 +195,6 @@ out_failed:
 out_free_success:
 	page_cache_release(page);
 	return 1;
-out_failed:
-	return 0;
 out_unlock_restore:
 	set_pte(page_table, pte);
 	UnlockPage(page);

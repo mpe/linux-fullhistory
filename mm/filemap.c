@@ -2462,7 +2462,7 @@ generic_file_write(struct file *file,const char *buf,size_t count,loff_t *ppos)
 	if (count) {
 		remove_suid(inode);
 		inode->i_ctime = inode->i_mtime = CURRENT_TIME;
-		mark_inode_dirty(inode);
+		mark_inode_dirty_sync(inode);
 	}
 
 	while (count) {
@@ -2521,8 +2521,14 @@ unlock:
 	if (cached_page)
 		page_cache_free(cached_page);
 
+	/* For now, when the user asks for O_SYNC, we'll actually
+	 * provide O_DSYNC. */
+	if ((status >= 0) && (file->f_flags & O_SYNC))
+		status = generic_osync_inode(inode, 1); /* 1 means datasync */
+	
 	err = written ? written : status;
 out:
+
 	up(&inode->i_sem);
 	return err;
 fail_write:

@@ -286,7 +286,6 @@ void __init pcibios_init(void)
     pci_scan_bus(0, &nile4_pci_ops, NULL);
     ddb5074_pci_fixup();
     pci_assign_unassigned_resources();
-    pci_set_bus_ranges();
     pcibios_fixup_irqs();
 }
 

@@ -750,13 +750,6 @@ static struct fb_info fb_info;
 
 
 	/*
-	 * The minimum period for audio depends on htotal (for OCS/ECS/AGA)
-	 * (Imported from arch/m68k/amiga/amisound.c)
-	 */
-
-extern volatile u_short amiga_audio_min_period;
-
-	/*
 	 * Since we can't read the palette on OCS/ECS, and since reading one
 	 * single color palette entry requires 5 expensive custom chip bus accesses
 	 * on AGA, we keep a copy of the current palette.
@@ -1206,6 +1199,8 @@ int __init amifb_setup(char *options)
 		if (!strcmp(this_opt, "inverse")) {
 			amifb_inverse = 1;
 			fb_invert_cmaps();
+		} else if (!strcmp(this_opt, "off")) {
+			amifb_video_off();
 		} else if (!strcmp(this_opt, "ilbm"))
 			amifb_ilbm = 1;
 		else if (!strncmp(this_opt, "monitorcap:", 11))
@@ -1771,7 +1766,7 @@ default_chipset:
 	 * access the videomem with writethrough cache
 	 */
 	videomemory_phys = (u_long)ZTWO_PADDR(videomemory);
-	videomemory = (u_long)ioremap_writethrough(videomemory_phys, videomemorysize);
+	//videomemory = (u_long)ioremap_writethrough(videomemory_phys, videomemorysize);
 	if (!videomemory) {
 		printk("amifb: WARNING! unable to map videomem cached writethrough\n");
 		videomemory = ZTWO_VADDR(videomemory_phys);
@@ -1792,15 +1787,11 @@ default_chipset:
 
 	ami_init_copper();
 
-	if (request_irq(IRQ_AMIGA_AUTO_3, amifb_interrupt, 0,
-	                "fb vertb handler", NULL)) {
+	if (request_irq(IRQ_AMIGA_VERTB, amifb_interrupt, 0,
+	                "fb vertb handler", &currentpar)) {
 		err = -EBUSY;
 		goto amifb_error;
 	}
-	amiga_intena_vals[IRQ_AMIGA_VERTB] = IF_COPER;
-	amiga_intena_vals[IRQ_AMIGA_COPPER] = 0;
-	custom.intena = IF_VERTB;
-	custom.intena = IF_SETCLR | IF_COPER;
 
 	amifb_set_var(&var, -1, &fb_info);
 
@@ -1895,57 +1886,33 @@ static int flash_cursor(void)
 
 static void amifb_interrupt(int irq, void *dev_id, struct pt_regs *fp)
 {
-	u_short ints = custom.intreqr & custom.intenar;
-	static struct irq_server server = {0, 0};
-	unsigned long flags;
+	if (do_vmode_pan || do_vmode_full)
+		ami_update_display();
 
-	if (ints & IF_BLIT) {
-		custom.intreq = IF_BLIT;
-		amiga_do_irq(IRQ_AMIGA_BLIT, fp);
-	}
+	if (do_vmode_full)
+		ami_init_display();
 
-	if (ints & IF_COPER) {
-		custom.intreq = IF_COPER;
-		if (do_vmode_pan || do_vmode_full)
-			ami_update_display();
-
-		if (do_vmode_full)
-			ami_init_display();
-
-		if (do_vmode_pan) {
-			flash_cursor();
-			ami_rebuild_copper();
-			do_cursor = do_vmode_pan = 0;
-		} else if (do_cursor) {
-			flash_cursor();
+	if (do_vmode_pan) {
+		flash_cursor();
+		ami_rebuild_copper();
+		do_cursor = do_vmode_pan = 0;
+	} else if (do_cursor) {
+		flash_cursor();
+		ami_set_sprite();
+		do_cursor = 0;
+	} else {
+		if (flash_cursor())
 			ami_set_sprite();
-			do_cursor = 0;
-		} else {
-			if (flash_cursor())
-				ami_set_sprite();
-		}
-
-		save_flags(flags);
-		cli();
-		if (get_vbpos() < down2(currentpar.diwstrt_v - 6))
-			custom.copjmp2 = 0;
-		restore_flags(flags);
-
-		if (do_blank) {
-			ami_do_blank();
-			do_blank = 0;
-		}
-
-		if (do_vmode_full) {
-			ami_reinit_copper();
-			do_vmode_full = 0;
-		}
-		amiga_do_irq_list(IRQ_AMIGA_VERTB, fp, &server);
 	}
 
-	if (ints & IF_VERTB) {
-		printk("%s: Warning: IF_VERTB was enabled\n", __FUNCTION__);
-		custom.intena = IF_VERTB;
+	if (do_blank) {
+		ami_do_blank();
+		do_blank = 0;
+	}
+
+	if (do_vmode_full) {
+		ami_reinit_copper();
+		do_vmode_full = 0;
 	}
 }
 
@@ -3379,5 +3346,6 @@ void cleanup_module(void)
 {
 	unregister_framebuffer(&fb_info);
 	amifb_deinit();
+	amifb_video_off();
 }
 #endif /* MODULE */

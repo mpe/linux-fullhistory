@@ -60,6 +60,8 @@ static int atari_get_hardware_list(char *buffer);
 /* atari specific keyboard functions */
 extern int atari_keyb_init(void);
 extern int atari_kbdrate (struct kbd_repeat *);
+extern int atari_kbd_translate(unsigned char keycode, unsigned char *keycodep,
+			       char raw_mode);
 extern void atari_kbd_leds (unsigned int);
 /* atari specific irq functions */
 extern void atari_init_IRQ (void);
@@ -253,6 +255,8 @@ void __init config_atari(void)
     mach_sched_init      = atari_sched_init;
     mach_keyb_init       = atari_keyb_init;
     mach_kbdrate         = atari_kbdrate;
+    mach_kbd_translate   = atari_kbd_translate;
+    SYSRQ_KEY            = 0xff;
     mach_kbd_leds        = atari_kbd_leds;
     mach_init_IRQ        = atari_init_IRQ;
     mach_request_irq     = atari_request_irq;

@@ -291,7 +291,7 @@ static int __init fmi_init(void)
 		printk(KERN_ERR "You must set an I/O address with io=0x???\n");
 		return -EINVAL;
 	}
-	if (check_region(io, 2)) 
+	if (request_region(io, 2, "fmi")) 
 	{
 		printk(KERN_ERR "fmi: port 0x%x already in use\n", io);
 		return -EBUSY;
@@ -306,9 +306,11 @@ static int __init fmi_init(void)
 	init_MUTEX(&lock);
 	
 	if(video_register_device(&fmi_radio, VFL_TYPE_RADIO)==-1)
+	{
+		release_region(io, 2);
 		return -EINVAL;
+	}
 		
-	request_region(io, 2, "fmi");
 	printk(KERN_INFO "SF16FMx radio card driver at 0x%x.\n", io);
 	printk(KERN_INFO "(c) 1998 Petr Vandrovec, vandrove@vc.cvut.cz.\n");
 	/* mute card - prevents noisy bootups */

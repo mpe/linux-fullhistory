@@ -83,6 +83,12 @@ extern __inline__ int __generic_test_and_clear_bit(int nr, void * vaddr)
 	return retval;
 }
 
+/*
+ * clear_bit() doesn't provide any barrier for the compiler.
+ */
+#define smp_mb__before_clear_bit()	barrier()
+#define smp_mb__after_clear_bit()	barrier()
+
 #define clear_bit(nr,vaddr) \
   (__builtin_constant_p(nr) ? \
    __constant_clear_bit(nr, vaddr) : \

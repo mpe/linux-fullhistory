@@ -19,6 +19,12 @@ struct resource {
 	struct resource *parent, *sibling, *child;
 };
 
+struct resource_list {
+	struct resource_list *next;
+	struct resource *res;
+	struct pci_dev *dev;
+};
+
 /*
  * IO resources have these defined flags.
  */
@@ -34,6 +40,7 @@ struct resource {
 #define IORESOURCE_CACHEABLE	0x00004000
 #define IORESOURCE_RANGELENGTH	0x00008000
 #define IORESOURCE_SHADOWABLE	0x00010000
+#define IORESOURCE_BUS_HAS_VGA	0x00080000
 
 #define IORESOURCE_UNSET	0x20000000
 #define IORESOURCE_AUTO		0x40000000

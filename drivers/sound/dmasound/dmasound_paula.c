@@ -27,8 +27,6 @@
    /*
     *	The minimum period for audio depends on htotal (for OCS/ECS/AGA)
     *	(Imported from arch/m68k/amiga/amisound.c)
-    *
-    *	FIXME: if amifb is not used, there should be a method to change htotal
     */
 
 extern volatile u_short amiga_audio_min_period;

@@ -58,7 +58,7 @@ extern int cia_get_irq_list(struct ciabase *base, char *buf);
 /* irq node variables for amiga interrupt sources */
 static irq_node_t *ami_irq_list[AMI_STD_IRQS];
 
-unsigned short amiga_intena_vals[AMI_STD_IRQS] = {
+static unsigned short amiga_intena_vals[AMI_STD_IRQS] = {
 	IF_VERTB, IF_COPER, IF_AUD0, IF_AUD1, IF_AUD2, IF_AUD3, IF_BLIT,
 	IF_DSKSYN, IF_DSKBLK, IF_RBF, IF_TBE, IF_SOFT, IF_PORTS, IF_EXTER
 };
@@ -106,7 +106,7 @@ void __init amiga_init_IRQ(void)
 
 	/* turn off PCMCIA interrupts */
 	if (AMIGAHW_PRESENT(PCMCIA))
-		pcmcia_disable_irq();
+		gayle.inten = GAYLE_IRQ_IDE;
 
 	/* turn off all interrupts and enable the master interrupt bit */
 	custom.intena = 0x7fff;
@@ -352,67 +352,16 @@ inline void amiga_do_irq(int irq, struct pt_regs *fp)
 	ami_irq_list[irq]->handler(irq, ami_irq_list[irq]->dev_id, fp);
 }
 
-void amiga_do_irq_list(int irq, struct pt_regs *fp, struct irq_server *server)
+void amiga_do_irq_list(int irq, struct pt_regs *fp)
 {
-	irq_node_t *node, *slow_nodes;
-	unsigned short flags, intena;
+	irq_node_t *node;
 
 	kstat.irqs[0][SYS_IRQS + irq]++;
-	if (server->count++)
-		server->reentrance = 1;
 
-	intena = amiga_intena_vals[irq];
-	custom.intreq = intena;
+	custom.intreq = amiga_intena_vals[irq];
 
-	/* serve fast handler if present - there can only be one of these */
-	node = ami_irq_list[irq];
-
-	/*
-	 * Timer interrupts show up like this
-	 */
-	if (!node) {
-		server->count--;
-		return;
-	}
-
-	if (node && (node->flags & SA_INTERRUPT)) {
-		save_flags(flags);
-		cli();
+	for (node = ami_irq_list[irq]; node; node = node->next)
 		node->handler(irq, node->dev_id, fp);
-		restore_flags(flags);
-
-		server->count--;
-		return;
-	}
-
-	/*
-	 * Disable the interrupt source in question and reenable all
-	 * other interrupts. No interrupt handler should ever touch
-	 * the intena flags directly!
-	 */
-	custom.intena = intena;
-	save_flags(flags);
-#if 0 /* def CPU_M68060_ONLY */
-	sti();
-#else
-	restore_flags((flags & ~0x0700) | (fp->sr & 0x0700));
-#endif
-
-	slow_nodes = node;
-	for (;;) {
-		for (; node; node = node->next)
-			node->handler(irq, node->dev_id, fp);
-
-		if (!server->reentrance) {
-			server->count--;
-			restore_flags(flags);
-			custom.intena = IF_SETCLR | intena;
-			return;
-		}
-
-		server->reentrance = 0;
-		node = slow_nodes;
-	}
 }
 
 /*
@@ -445,7 +394,6 @@ static void ami_int1(int irq, void *dev_id, struct pt_regs *fp)
 static void ami_int3(int irq, void *dev_id, struct pt_regs *fp)
 {
 	unsigned short ints = custom.intreqr & custom.intenar;
-	static struct irq_server server = {0, 0};
 
 	/* if a blitter interrupt */
 	if (ints & IF_BLIT) {
@@ -461,7 +409,7 @@ static void ami_int3(int irq, void *dev_id, struct pt_regs *fp)
 
 	/* if a vertical blank interrupt */
 	if (ints & IF_VERTB)
-		amiga_do_irq_list(IRQ_AMIGA_VERTB, fp, &server);
+		amiga_do_irq_list(IRQ_AMIGA_VERTB, fp);
 }
 
 static void ami_int4(int irq, void *dev_id, struct pt_regs *fp)

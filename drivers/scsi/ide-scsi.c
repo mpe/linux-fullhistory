@@ -840,7 +840,7 @@ static void __exit exit_idescsi_module(void)
 		failed = 0;
 		while ((drive = ide_scan_devices (media[i], idescsi_driver.name, &idescsi_driver, failed)) != NULL)
 			if (idescsi_cleanup (drive)) {
-				printk ("%s: cleanup_module() called while still busy\n", drive->name);
+				printk ("%s: exit_idescsi_module() called while still busy\n", drive->name);
 				failed++;
 			}
 	}

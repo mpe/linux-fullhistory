@@ -243,6 +243,9 @@ struct buffer_head {
 
 	unsigned long b_rsector;	/* Real buffer location on disk */
 	wait_queue_head_t b_wait;
+
+	struct inode *	     b_inode;
+	struct list_head     b_inode_buffers;	/* doubly linked list of inode dirty buffers */
 };
 
 typedef void (bh_end_io_t)(struct buffer_head *bh, int uptodate);
@@ -382,6 +385,8 @@ struct inode {
 	struct list_head	i_hash;
 	struct list_head	i_list;
 	struct list_head	i_dentry;
+	
+	struct list_head	i_dirty_buffers;
 
 	unsigned long		i_ino;
 	atomic_t		i_count;
@@ -452,16 +457,25 @@ struct inode {
 };
 
 /* Inode state bits.. */
-#define I_DIRTY		1
-#define I_LOCK		2
-#define I_FREEING	4
-#define I_CLEAR		8
+#define I_DIRTY_SYNC		1 /* Not dirty enough for O_DATASYNC */
+#define I_DIRTY_DATASYNC	2 /* Data-related inode changes pending */
+#define I_LOCK			4
+#define I_FREEING		8
+#define I_CLEAR			16
 
-extern void __mark_inode_dirty(struct inode *);
+#define I_DIRTY (I_DIRTY_SYNC | I_DIRTY_DATASYNC)
+
+extern void __mark_inode_dirty(struct inode *, int);
 static inline void mark_inode_dirty(struct inode *inode)
 {
-	if (!(inode->i_state & I_DIRTY))
-		__mark_inode_dirty(inode);
+	if ((inode->i_state & I_DIRTY) != I_DIRTY)
+		__mark_inode_dirty(inode, I_DIRTY);
+}
+
+static inline void mark_inode_dirty_sync(struct inode *inode)
+{
+	if (!(inode->i_state & I_DIRTY_SYNC))
+		__mark_inode_dirty(inode, I_DIRTY_SYNC);
 }
 
 struct fown_struct {
@@ -1025,10 +1039,18 @@ static inline void buffer_IO_error(struct buffer_head * bh)
 	bh->b_end_io(bh, 0);
 }
 
+extern void buffer_insert_inode_queue(struct buffer_head *, struct inode *);
+static inline void mark_buffer_dirty_inode(struct buffer_head *bh, struct inode *inode)
+{
+	mark_buffer_dirty(bh);
+	buffer_insert_inode_queue(bh, inode);
+}
+
 extern void balance_dirty(kdev_t);
 extern int check_disk_change(kdev_t);
 extern int invalidate_inodes(struct super_block *);
 extern void invalidate_inode_pages(struct inode *);
+extern void invalidate_inode_buffers(struct inode *);
 #define invalidate_buffers(dev)	__invalidate_buffers((dev), 0)
 #define destroy_buffers(dev)	__invalidate_buffers((dev), 1)
 extern void __invalidate_buffers(kdev_t dev, int);
@@ -1036,6 +1058,9 @@ extern void sync_inodes(kdev_t);
 extern void write_inode_now(struct inode *, int);
 extern void sync_dev(kdev_t);
 extern int fsync_dev(kdev_t);
+extern int fsync_inode_buffers(struct inode *);
+extern int osync_inode_buffers(struct inode *);
+extern int inode_has_buffers(struct inode *);
 extern void sync_supers(kdev_t);
 extern int bmap(struct inode *, int);
 extern int notify_change(struct dentry *, struct iattr *);
@@ -1249,6 +1274,7 @@ extern ssize_t block_write(struct file *, const char *, size_t, loff_t *);
 
 extern int file_fsync(struct file *, struct dentry *, int);
 extern int generic_buffer_fdatasync(struct inode *inode, unsigned long start_idx, unsigned long end_idx);
+extern int generic_osync_inode(struct inode *, int);
 
 extern int inode_change_ok(struct inode *, struct iattr *);
 extern void inode_setattr(struct inode *, struct iattr *);

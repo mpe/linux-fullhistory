@@ -97,10 +97,10 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 	ret = -EPERM;
 	if (request == PTRACE_TRACEME) {
 		/* are we already being traced? */
-		if (current->flags & PF_PTRACED)
+		if (current->ptrace & PT_PTRACED)
 			goto out;
 		/* set the ptrace bit in the process flags. */
-		current->flags |= PF_PTRACED;
+		current->ptrace |= PT_PTRACED;
 		ret = 0;
 		goto out;
 	}
@@ -126,9 +126,9 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 	 	    (current->gid != child->gid)) && !capable(CAP_SYS_PTRACE))
 			goto out;
 		/* the same process cannot be attached many times */
-		if (child->flags & PF_PTRACED)
+		if (child->ptrace & PT_PTRACED)
 			goto out;
-		child->flags |= PF_PTRACED;
+		child->ptrace |= PT_PTRACED;
 
 		write_lock_irqsave(&tasklist_lock, flags);
 		if (child->p_pptr != current) {
@@ -143,7 +143,7 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 		goto out;
 	}
 	ret = -ESRCH;
-	if (!(child->flags & PF_PTRACED))
+	if (!(child->ptrace & PT_PTRACED))
 		goto out;
 	if (child->state != TASK_STOPPED) {
 		if (request != PTRACE_KILL)
@@ -250,9 +250,9 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 			if ((unsigned long) data > _NSIG)
 				goto out;
 			if (request == PTRACE_SYSCALL)
-				child->flags |= PF_TRACESYS;
+				child->ptrace |= PT_TRACESYS;
 			else
-				child->flags &= ~PF_TRACESYS;
+				child->ptrace &= ~PT_TRACESYS;
 			child->exit_code = data;
 			/* make sure the single step bit is not set. */
 			tmp = get_reg(child, PT_SR) & ~(TRACE_BITS << 16);
@@ -287,7 +287,7 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 			ret = -EIO;
 			if ((unsigned long) data > _NSIG)
 				goto out;
-			child->flags &= ~PF_TRACESYS;
+			child->ptrace &= ~PT_TRACESYS;
 			tmp = get_reg(child, PT_SR) | (TRACE_BITS << 16);
 			put_reg(child, PT_SR, tmp);
 
@@ -304,7 +304,7 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 			ret = -EIO;
 			if ((unsigned long) data > _NSIG)
 				goto out;
-			child->flags &= ~(PF_PTRACED|PF_TRACESYS);
+			child->ptrace &= ~(PT_PTRACED|PT_TRACESYS);
 			child->exit_code = data;
 			write_lock_irqsave(&tasklist_lock, flags);
 			REMOVE_LINKS(child);
@@ -384,8 +384,8 @@ out:
 asmlinkage void syscall_trace(void)
 {
 	lock_kernel();
-	if ((current->flags & (PF_PTRACED|PF_TRACESYS))
-			!= (PF_PTRACED|PF_TRACESYS))
+	if ((current->ptrace & (PT_PTRACED|PT_TRACESYS))
+			!= (PT_PTRACED|PT_TRACESYS))
 		goto out;
 	current->exit_code = SIGTRAP;
 	current->state = TASK_STOPPED;

@@ -9,148 +9,237 @@
  * Support routines for initializing a PCI subsystem.
  */
 
+/*
+ * Nov 2000, Ivan Kokshaysky <ink@jurassic.park.msu.ru>
+ *	     PCI-PCI bridges cleanup, sorted resource allocation
+ */
+
 #include <linux/init.h>
 #include <linux/kernel.h>
 #include <linux/pci.h>
 #include <linux/errno.h>
 #include <linux/ioport.h>
 #include <linux/cache.h>
+#include <linux/slab.h>
 
 
-#define DEBUG_CONFIG 0
+#define DEBUG_CONFIG 1
 #if DEBUG_CONFIG
 # define DBGC(args)     printk args
 #else
 # define DBGC(args)
 #endif
 
-
 #define ROUND_UP(x, a)		(((x) + (a) - 1) & ~((a) - 1))
-#define ROUND_DOWN(x, a)	((x) & ~((a) - 1))
+
+static int __init
+pbus_assign_resources_sorted(struct pci_bus *bus,
+			     struct pbus_set_ranges_data *ranges)
+{
+	struct list_head *ln;
+	struct resource *res;
+	struct resource_list head_io, head_mem, *list, *tmp;
+	unsigned long io_reserved = 0, mem_reserved = 0;
+	int idx, found_vga = 0;
+
+	head_io.next = head_mem.next = NULL;
+	for (ln=bus->devices.next; ln != &bus->devices; ln=ln->next) {
+		struct pci_dev *dev = pci_dev_b(ln);
+		u16 cmd;
+
+		/* First, disable the device to avoid side
+		   effects of possibly overlapping I/O and
+		   memory ranges.
+		   Except the VGA - for obvious reason. :-)  */
+		if (dev->class >> 8 == PCI_CLASS_DISPLAY_VGA)
+			found_vga = 1;
+		else {
+			pci_read_config_word(dev, PCI_COMMAND, &cmd);
+			cmd &= ~(PCI_COMMAND_IO | PCI_COMMAND_MEMORY
+						| PCI_COMMAND_MASTER);
+			pci_write_config_word(dev, PCI_COMMAND, cmd);
+		}
+ 
+		/* Reserve some resources for CardBus.
+		   Are these values reasonable? */
+		if (dev->class >> 8 == PCI_CLASS_BRIDGE_CARDBUS) {
+			io_reserved += 8*1024;
+			mem_reserved += 32*1024*1024;
+			continue;
+		}
+
+		pdev_sort_resources(dev, &head_io, IORESOURCE_IO);
+		pdev_sort_resources(dev, &head_mem, IORESOURCE_MEM);
+	}
+
+	for (list = head_io.next; list;) {
+		res = list->res;
+		idx = res - &list->dev->resource[0];
+		if (pci_assign_resource(list->dev, idx) == 0
+		    && ranges->io_end < res->end)
+			ranges->io_end = res->end;
+		tmp = list;
+		list = list->next;
+		kfree(tmp);
+	}
+	for (list = head_mem.next; list;) {
+		res = list->res;
+		idx = res - &list->dev->resource[0];
+		if (pci_assign_resource(list->dev, idx) == 0
+		    && ranges->mem_end < res->end)
+			ranges->mem_end = res->end;
+		tmp = list;
+		list = list->next;
+		kfree(tmp);
+	}
+
+	ranges->io_end += io_reserved;
+	ranges->mem_end += mem_reserved;
+
+	/* PCI-to-PCI Bridge Architecture Specification rev. 1.1 (1998)
+	   requires that if there is no I/O ports or memory behind the
+	   bridge, corresponding range must be turned off by writing base
+	   value greater than limit to the bridge's base/limit registers.  */
+#if 1
+	/* But assuming that some hardware designed before 1998 might
+	   not support this (very unlikely - at least all DEC bridges
+	   are ok and I believe that was standard de-facto. -ink), we
+	   must allow for at least one unit.  */
+	if (ranges->io_end == ranges->io_start)
+		ranges->io_end += 1;
+	if (ranges->mem_end == ranges->mem_start)
+		ranges->mem_end += 1;
+#endif
+	ranges->io_end = ROUND_UP(ranges->io_end, 4*1024);
+	ranges->mem_end = ROUND_UP(ranges->mem_end, 1024*1024);
+
+	return found_vga;
+}
+
+/* Initialize bridges with base/limit values we have collected */
+static void __init
+pci_setup_bridge(struct pci_bus *bus)
+{
+	struct pbus_set_ranges_data ranges;
+	struct pci_dev *bridge = bus->self;
+	u32 l;
+
+	if (!bridge || (bridge->class >> 8) != PCI_CLASS_BRIDGE_PCI)
+		return;
+	ranges.io_start = bus->resource[0]->start;
+	ranges.io_end = bus->resource[0]->end;
+	ranges.mem_start = bus->resource[1]->start;
+	ranges.mem_end = bus->resource[1]->end;
+	pcibios_fixup_pbus_ranges(bus, &ranges);
+
+	DBGC(("PCI: Bus %d, bridge: %s\n", bus->number, bridge->name));
+	DBGC(("  IO window: %04lx-%04lx\n", ranges.io_start, ranges.io_end));
+	DBGC(("  MEM window: %08lx-%08lx\n", ranges.mem_start, ranges.mem_end));
+
+	/* Set up the top and bottom of the PCI I/O segment for this bus. */
+	pci_read_config_dword(bridge, PCI_IO_BASE, &l);
+	l &= 0xffff0000;
+	l |= (ranges.io_start >> 8) & 0x00f0;
+	l |= ranges.io_end & 0xf000;
+	pci_write_config_dword(bridge, PCI_IO_BASE, l);
+
+	/* Clear upper 16 bits of I/O base/limit. */
+	pci_write_config_dword(bridge, PCI_IO_BASE_UPPER16, 0);
+
+	/* Clear out the upper 32 bits of PREF base/limit. */
+	pci_write_config_dword(bridge, PCI_PREF_BASE_UPPER32, 0);
+	pci_write_config_dword(bridge, PCI_PREF_LIMIT_UPPER32, 0);
+
+	/* Set up the top and bottom of the PCI Memory segment
+	   for this bus. */
+	l = (ranges.mem_start >> 16) & 0xfff0;
+	l |= ranges.mem_end & 0xfff00000;
+	pci_write_config_dword(bridge, PCI_MEMORY_BASE, l);
+
+	/* Set up PREF base/limit. */
+	l = (bus->resource[2]->start >> 16) & 0xfff0;
+	l |= bus->resource[2]->end & 0xfff00000;
+	pci_write_config_dword(bridge, PCI_PREF_MEMORY_BASE, l);
+
+	/* Check if we have VGA behind the bridge.
+	   Enable ISA in either case. */
+	l = (bus->resource[0]->flags & IORESOURCE_BUS_HAS_VGA) ? 0x0c : 0x04;
+	pci_write_config_word(bridge, PCI_BRIDGE_CONTROL, l);
+}
 
 static void __init
-pbus_set_ranges(struct pci_bus *bus, struct pbus_set_ranges_data *outer)
+pbus_assign_resources(struct pci_bus *bus, struct pbus_set_ranges_data *ranges)
 {
-	struct pbus_set_ranges_data inner;
-	struct pci_dev *dev;
 	struct list_head *ln;
+	int found_vga = pbus_assign_resources_sorted(bus, ranges);
 
-	inner.found_vga = 0;
-	inner.mem_start = inner.io_start = ~0UL;
-	inner.mem_end = inner.io_end = 0;
+	if (!ranges->found_vga && found_vga) {
+		struct pci_bus *b;
 
-	/* Collect information about how our direct children are layed out. */
-	for (ln=bus->devices.next; ln != &bus->devices; ln=ln->next) {
-		int i;
-		dev = pci_dev_b(ln);
-		for (i = 0; i < PCI_NUM_RESOURCES; i++) {
-			struct resource *res = &dev->resource[i];
-			if (res->flags & IORESOURCE_IO) {
-				if (res->start < inner.io_start)
-					inner.io_start = res->start;
-				if (res->end > inner.io_end)
-					inner.io_end = res->end;
-			} else if (res->flags & IORESOURCE_MEM) {
-				if (res->start < inner.mem_start)
-					inner.mem_start = res->start;
-				if (res->end > inner.mem_end)
-					inner.mem_end = res->end;
-			}
+		ranges->found_vga = 1;
+		/* Propogate presence of the VGA to upstream bridges */
+		for (b = bus; b->parent; b = b->parent) {
+#if 0
+			/* ? Do we actually need to enable PF memory? */
+			b->resource[2]->start = 0;
+#endif
+			b->resource[0]->flags |= IORESOURCE_BUS_HAS_VGA;
 		}
-                if ((dev->class >> 8) == PCI_CLASS_DISPLAY_VGA)
-                        inner.found_vga = 1;
 	}
+	for (ln=bus->children.next; ln != &bus->children; ln=ln->next) {
+		struct pci_bus *b = pci_bus_b(ln);
 
-	/* And for all of the sub-busses.  */
-	for (ln=bus->children.next; ln != &bus->children; ln=ln->next)
-		pbus_set_ranges(pci_bus_b(ln), &inner);
+		b->resource[0]->start = ranges->io_start = ranges->io_end;
+		b->resource[1]->start = ranges->mem_start = ranges->mem_end;
 
-	/* Align the values.  */
-	inner.io_start = ROUND_DOWN(inner.io_start, 4*1024);
-	inner.io_end = ROUND_UP(inner.io_end, 4*1024);
+		pbus_assign_resources(b, ranges);
 
-	inner.mem_start = ROUND_DOWN(inner.mem_start, 1*1024*1024);
-	inner.mem_end = ROUND_UP(inner.mem_end, 1*1024*1024);
+		b->resource[0]->end = ranges->io_end - 1;
+		b->resource[1]->end = ranges->mem_end - 1;
 
-	pcibios_fixup_pbus_ranges(bus, &inner);
-
-	/* Configure the bridge, if possible.  */
-	if (bus->self) {
-		struct pci_dev *bridge = bus->self;
-		u32 l;
-
-                /* Set up the top and bottom of the PCI I/O segment
-                   for this bus.  */
-                pci_read_config_dword(bridge, PCI_IO_BASE, &l);
-                l &= 0xffff0000;
-                l |= (inner.io_start >> 8) & 0x00f0;
-		l |= (inner.io_end - 1) & 0xf000;
-                pci_write_config_dword(bridge, PCI_IO_BASE, l);
-
-                /*
-                 * Clear out the upper 16 bits of IO base/limit.
-                 * Clear out the upper 32 bits of PREF base/limit.
-                 */
-                pci_write_config_dword(bridge, PCI_IO_BASE_UPPER16, 0);
-                pci_write_config_dword(bridge, PCI_PREF_BASE_UPPER32, 0);
-                pci_write_config_dword(bridge, PCI_PREF_LIMIT_UPPER32, 0);
-
-                /* Set up the top and bottom of the PCI Memory segment
-                   for this bus.  */
-                l = (inner.mem_start & 0xfff00000) >> 16;
-		l |= (inner.mem_end - 1) & 0xfff00000;
-                pci_write_config_dword(bridge, PCI_MEMORY_BASE, l);
-
-                /*
-                 * Turn off downstream PF memory address range, unless
-                 * there is a VGA behind this bridge, in which case, we
-                 * enable the PREFETCH range to include BIOS ROM at C0000.
-                 *
-                 * NOTE: this is a bit of a hack, done with PREFETCH for
-                 * simplicity, rather than having to add it into the above
-                 * non-PREFETCH range, which could then be bigger than we want.
-                 * We might assume that we could relocate the BIOS ROM, but
-                 * that would depend on having it found by those who need it
-                 * (the DEC BIOS emulator would find it, but I do not know
-                 * about the Xservers). So, we do it this way for now... ;-)
-                 */
-                l = (inner.found_vga) ? 0 : 0x0000ffff;
-                pci_write_config_dword(bridge, PCI_PREF_MEMORY_BASE, l);
-
-                /*
-                 * Tell bridge that there is an ISA bus in the system,
-                 * and (possibly) a VGA as well.
-                 */
-                l = (inner.found_vga) ? 0x0c : 0x04;
-                pci_write_config_byte(bridge, PCI_BRIDGE_CONTROL, l);
-
-                /*
-                 * Clear status bits,
-                 * turn on I/O    enable (for downstream I/O),
-                 * turn on memory enable (for downstream memory),
-                 * turn on master enable (for upstream memory and I/O).
-                 */
-                pci_write_config_dword(bridge, PCI_COMMAND, 0xffff0007);
-	}
-
-	if (outer) {
-		outer->found_vga |= inner.found_vga;
-		if (inner.io_start < outer->io_start)
-			outer->io_start = inner.io_start;
-		if (inner.io_end > outer->io_end)
-			outer->io_end = inner.io_end;
-		if (inner.mem_start < outer->mem_start)
-			outer->mem_start = inner.mem_start;
-		if (inner.mem_end > outer->mem_end)
-			outer->mem_end = inner.mem_end;
+		pci_setup_bridge(b);
 	}
 }
 
-void __init
-pci_set_bus_ranges(void)
+void __init 
+pci_assign_unassigned_resources(void)
 {
+	struct pbus_set_ranges_data ranges;
 	struct list_head *ln;
+	struct pci_dev *dev;
 
-	for(ln=pci_root_buses.next; ln != &pci_root_buses; ln=ln->next)
-		pbus_set_ranges(pci_bus_b(ln), NULL);
+	for(ln=pci_root_buses.next; ln != &pci_root_buses; ln=ln->next) {
+		struct pci_bus *b = pci_bus_b(ln);
+
+		ranges.io_start = b->resource[0]->start;
+		ranges.mem_start = b->resource[1]->start;
+		ranges.io_end = ranges.io_start;
+		ranges.mem_end = ranges.mem_start;
+		ranges.found_vga = 0;
+		pbus_assign_resources(b, &ranges);
+	}
+	pci_for_each_dev(dev) {
+		pdev_enable_device(dev);
+	}
+}
+
+/* Check whether the bridge supports I/O forwarding.
+   If not, its I/O base/limit register must be
+   read-only and read as 0. */
+unsigned long __init
+pci_bridge_check_io(struct pci_dev *bridge)
+{
+	u16 io;
+
+	pci_read_config_word(bridge, PCI_IO_BASE, &io);
+	if (!io) {
+		pci_write_config_word(bridge, PCI_IO_BASE, 0xf0f0);
+		pci_read_config_word(bridge, PCI_IO_BASE, &io);
+		pci_write_config_word(bridge, PCI_IO_BASE, 0x0);
+	}
+	if (io)
+		return IORESOURCE_IO;
+	printk(KERN_WARNING "PCI: bridge %s does not support I/O forwarding!\n",
+				bridge->name);
+	return 0;
 }

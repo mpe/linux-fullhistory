@@ -11,6 +11,10 @@
  *
  * See Documentation/usb/usb-serial.txt for more information on using this driver
  * 
+ * (11/12/2000) gkh
+ *	Fixed bug with data being dropped on the floor by forcing tty->low_latency
+ *	to be on.  Hopefully this fixes the OHCI issue!
+ *
  * (11/01/2000) Adam J. Richter
  *	usb_device_id table support
  * 
@@ -171,6 +175,11 @@ static int visor_open (struct usb_serial_port *port, struct file *filp)
 		bytes_in = 0;
 		bytes_out = 0;
 
+		/* force low_latency on so that our tty_push actually forces the data through, 
+		   otherwise it is scheduled, and with high data rates (like with OHCI) data
+		   can get lost. */
+		port->tty->low_latency = 1;
+		
 		/* Start reading from the device */
 		FILL_BULK_URB(port->read_urb, serial->dev, 
 			      usb_rcvbulkpipe(serial->dev, port->bulk_in_endpointAddress),
@@ -348,6 +357,11 @@ static void visor_read_bulk_callback (struct urb *urb)
 	tty = port->tty;
 	if (urb->actual_length) {
 		for (i = 0; i < urb->actual_length ; ++i) {
+			/* if we insert more than TTY_FLIPBUF_SIZE characters, we drop them. */
+			if(tty->flip.count >= TTY_FLIPBUF_SIZE) {
+				tty_flip_buffer_push(tty);
+			}
+			/* this doesn't actually push the data through unless tty->low_latency is set */
 			tty_insert_flip_char(tty, data[i], 0);
 		}
 		tty_flip_buffer_push(tty);

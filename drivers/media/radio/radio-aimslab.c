@@ -338,7 +338,7 @@ static int __init rtrack_init(void)
 		return -EINVAL;
 	}
 
-	if (check_region(io, 2)) 
+	if (request_region(io, 2, "rtrack")) 
 	{
 		printk(KERN_ERR "rtrack: port 0x%x already in use\n", io);
 		return -EBUSY;
@@ -347,9 +347,10 @@ static int __init rtrack_init(void)
 	rtrack_radio.priv=&rtrack_unit;
 	
 	if(video_register_device(&rtrack_radio, VFL_TYPE_RADIO)==-1)
+	{
+		release_region(io, 2);
 		return -EINVAL;
-		
-	request_region(io, 2, "rtrack");
+	}
 	printk(KERN_INFO "AIMSlab RadioTrack/RadioReveal card driver.\n");
 
 	/* Set up the I/O locking */

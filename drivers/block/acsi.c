@@ -1785,7 +1785,7 @@ int acsi_init( void )
 		return -EBUSY;
 	}
 	if (!(acsi_buffer =
-		  (char *)atari_stram_alloc( ACSI_BUFFER_SIZE, NULL, "acsi" ))) {
+		  (char *)atari_stram_alloc(ACSI_BUFFER_SIZE, "acsi"))) {
 		printk( KERN_ERR "Unable to get ACSI ST-Ram buffer.\n" );
 		devfs_unregister_blkdev( MAJOR_NR, "ad" );
 		return -ENOMEM;

@@ -49,6 +49,11 @@ struct mtrr_gentry
 #define MTRRIOC_DEL_ENTRY        _IOW(MTRR_IOCTL_BASE,  2, struct mtrr_sentry)
 #define MTRRIOC_GET_ENTRY        _IOWR(MTRR_IOCTL_BASE, 3, struct mtrr_gentry)
 #define MTRRIOC_KILL_ENTRY       _IOW(MTRR_IOCTL_BASE,  4, struct mtrr_sentry)
+#define MTRRIOC_ADD_PAGE_ENTRY   _IOW(MTRR_IOCTL_BASE,  5, struct mtrr_sentry)
+#define MTRRIOC_SET_PAGE_ENTRY   _IOW(MTRR_IOCTL_BASE,  6, struct mtrr_sentry)
+#define MTRRIOC_DEL_PAGE_ENTRY   _IOW(MTRR_IOCTL_BASE,  7, struct mtrr_sentry)
+#define MTRRIOC_GET_PAGE_ENTRY   _IOWR(MTRR_IOCTL_BASE, 8, struct mtrr_gentry)
+#define MTRRIOC_KILL_PAGE_ENTRY  _IOW(MTRR_IOCTL_BASE,  9, struct mtrr_sentry)
 
 /*  These are the region types  */
 #define MTRR_TYPE_UNCACHABLE 0
@@ -79,14 +84,27 @@ static char *mtrr_strings[MTRR_NUM_TYPES] =
 # ifdef CONFIG_MTRR
 extern int mtrr_add (unsigned long base, unsigned long size,
 		     unsigned int type, char increment);
+extern int mtrr_add_page (unsigned long base, unsigned long size,
+		     unsigned int type, char increment);
 extern int mtrr_del (int reg, unsigned long base, unsigned long size);
+extern int mtrr_del_page (int reg, unsigned long base, unsigned long size);
 #  else
 static __inline__ int mtrr_add (unsigned long base, unsigned long size,
 				unsigned int type, char increment)
 {
     return -ENODEV;
 }
+static __inline__ int mtrr_add_page (unsigned long base, unsigned long size,
+				unsigned int type, char increment)
+{
+    return -ENODEV;
+}
 static __inline__ int mtrr_del (int reg, unsigned long base,
+				unsigned long size)
+{
+    return -ENODEV;
+}
+static __inline__ int mtrr_del_page (int reg, unsigned long base,
 				unsigned long size)
 {
     return -ENODEV;

@@ -316,7 +316,7 @@ static void wacom_close(struct input_dev *dev)
 		usb_unlink_urb(&wacom->irq);
 }
 
-static void *wacom_probe(struct usb_device *dev, unsigned int ifnum)
+static void *wacom_probe(struct usb_device *dev, unsigned int ifnum, const struct usb_device_id *id)
 {
 	struct usb_endpoint_descriptor *endpoint;
 	struct wacom *wacom;

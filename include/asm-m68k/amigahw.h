@@ -16,6 +16,8 @@
 #ifndef _M68K_AMIGAHW_H
 #define _M68K_AMIGAHW_H
 
+#include <linux/ioport.h>
+
     /*
      *  Different Amiga models
      */
@@ -279,11 +281,27 @@ struct CIA {
 #define ciab   ((*(volatile struct CIA *)(zTwoBase + CIAB_PHYSADDR)))
 
 #define CHIP_PHYSADDR	    (0x000000)
-#define chipaddr ((unsigned long)(zTwoBase + CHIP_PHYSADDR))
+
 void amiga_chip_init (void);
-void *amiga_chip_alloc (long size, const char *name);
-void amiga_chip_free (void *);
+void *amiga_chip_alloc(unsigned long size, const char *name);
+void *amiga_chip_alloc_res(unsigned long size, struct resource *res);
+void amiga_chip_free(void *ptr);
 unsigned long amiga_chip_avail( void ); /*MILAN*/
+extern volatile unsigned short amiga_audio_min_period;
+
+static inline void amifb_video_off(void)
+{
+	if (amiga_chipset == CS_ECS || amiga_chipset == CS_AGA) {
+		/* program Denise/Lisa for a higher maximum play rate */
+		custom.htotal = 113;        /* 31 kHz */
+		custom.vtotal = 223;        /* 70 Hz */
+		custom.beamcon0 = 0x4390;   /* HARDDIS, VAR{BEAM,VSY,HSY,CSY}EN */
+		/* suspend the monitor */
+		custom.hsstrt = custom.hsstop = 116;
+		custom.vsstrt = custom.vsstop = 226;
+		amiga_audio_min_period = 57;
+	}
+}
 
 struct tod3000 {
   unsigned int  :28, second2:4;	/* lower digit */

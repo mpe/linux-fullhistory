@@ -846,7 +846,7 @@ foo_open (...)
    first class of operations work on <type>atomic_t</type>
 
    <filename class=headerfile>include/asm/atomic.h</filename>; this
-   contains a signed integer (at least 32 bits long), and you must use
+   contains a signed integer (at least 24 bits long), and you must use
    these functions to manipulate or read atomic_t variables.
    <function>atomic_read()</function> and
    <function>atomic_set()</function> get and set the counter,
@@ -870,8 +870,8 @@ foo_open (...)
   </para>
 
   <para>
-   The second class of atomic operations is atomic bit operations,
-   defined in
+   The second class of atomic operations is atomic bit operations on a
+   <type>long</type>, defined in
 
    <filename class=headerfile>include/asm/bitops.h</filename>.  These
    operations generally take a pointer to the bit pattern, and a bit
@@ -887,8 +887,14 @@ foo_open (...)
   
   <para>
    It is possible to call these operations with bit indices greater
-   than 31.  The resulting behavior is strange on big-endian
+   than BITS_PER_LONG.  The resulting behavior is strange on big-endian
    platforms though so it is a good idea not to do this.
+  </para>
+
+  <para>
+   Note that the order of bits depends on the architecture, and in
+   particular, the bitfield passed to these operations must be at
+   least as large as a <type>long</type>.
   </para>
  </chapter>
 

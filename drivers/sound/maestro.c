@@ -1958,6 +1958,7 @@ mixer_push_state(struct ess_card *card)
 static int mixer_ioctl(struct ess_card *card, unsigned int cmd, unsigned long arg)
 {
 	int i, val=0;
+       unsigned long flags;
 
 	VALIDATE_CARD(card);
         if (cmd == SOUND_MIXER_INFO) {
@@ -1990,9 +1991,9 @@ static int mixer_ioctl(struct ess_card *card, unsigned int cmd, unsigned long ar
 			if(!card->mix.recmask_io) {
 				val = 0;
 			} else {
-				spin_lock(&card->lock);
+                               spin_lock_irqsave(&card->lock, flags);
 				val = card->mix.recmask_io(card,1,0);
-				spin_unlock(&card->lock);
+                               spin_unlock_irqrestore(&card->lock, flags);
 			}
 			break;
 			
@@ -2019,9 +2020,9 @@ static int mixer_ioctl(struct ess_card *card, unsigned int cmd, unsigned long ar
 				return -EINVAL;
 
 			/* do we ever want to touch the hardware? */
-/*			spin_lock(&card->lock);
+/*                     spin_lock_irqsave(&card->lock, flags);
 			val = card->mix.read_mixer(card,i);
-			spin_unlock(&card->lock);*/
+                       spin_unlock_irqrestore(&card->lock, flags);*/
 
 			val = card->mix.mixer_state[i];
 /*			M_printk("returned 0x%x for mixer %d\n",val,i);*/
@@ -2046,9 +2047,9 @@ static int mixer_ioctl(struct ess_card *card, unsigned int cmd, unsigned long ar
 		if(!val) return 0;
 		if(! (val &= card->mix.record_sources)) return -EINVAL;
 
-		spin_lock(&card->lock);
+               spin_lock_irqsave(&card->lock, flags);
 		card->mix.recmask_io(card,0,val);
-		spin_unlock(&card->lock);
+               spin_unlock_irqrestore(&card->lock, flags);
 		return 0;
 
 	default:
@@ -2057,9 +2058,9 @@ static int mixer_ioctl(struct ess_card *card, unsigned int cmd, unsigned long ar
 		if ( ! supported_mixer(card,i)) 
 			return -EINVAL;
 
-		spin_lock(&card->lock);
+               spin_lock_irqsave(&card->lock, flags);
 		set_mixer(card,i,val);
-		spin_unlock(&card->lock);
+               spin_unlock_irqrestore(&card->lock, flags);
 
 		return 0;
 	}
@@ -3391,6 +3392,19 @@ maestro_install(struct pci_dev *pcidev, int card_type)
 	}
 	
 	ess = &card->channels[0];
+
+	if (pci_enable_device(pcidev)) {
+		printk (KERN_ERR "maestro: pci_enable_device() failed\n");
+		for (i = 0; i < NR_DSPS; i++) {
+			struct ess_state *s = &card->channels[i];
+			if (s->dev_audio != -1)
+				unregister_sound_dsp(s->dev_audio);
+		}
+		release_region(card->iobase, 256);
+		unregister_reboot_notifier(&maestro_nb);
+		kfree(card);
+		return 0;
+	}
 
 	/*
 	 *	Ok card ready. Begin setup proper

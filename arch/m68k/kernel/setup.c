@@ -73,6 +73,8 @@ void (*mach_sched_init) (void (*handler)(int, void *, struct pt_regs *)) __initd
 int (*mach_keyb_init) (void) __initdata = NULL;
 int (*mach_kbdrate) (struct kbd_repeat *) = NULL;
 void (*mach_kbd_leds) (unsigned int) = NULL;
+int (*mach_kbd_translate)(unsigned char scancode, unsigned char *keycode, char raw_mode) = NULL;
+unsigned int SYSRQ_KEY;
 /* machine dependent irq functions */
 void (*mach_init_IRQ) (void) __initdata = NULL;
 void (*(*mach_default_handler)[]) (int, void *, struct pt_regs *) = NULL;

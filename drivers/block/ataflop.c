@@ -1990,7 +1990,7 @@ int __init atari_floppy_init (void)
 	SelectedDrive = -1;
 	BufferDrive = -1;
 
-	DMABuffer = atari_stram_alloc( BUFFER_SIZE+512, NULL, "ataflop" );
+	DMABuffer = atari_stram_alloc(BUFFER_SIZE+512, "ataflop");
 	if (!DMABuffer) {
 		printk(KERN_ERR "atari_floppy_init: cannot get dma buffer\n");
 		unregister_blkdev(MAJOR_NR, "fd");

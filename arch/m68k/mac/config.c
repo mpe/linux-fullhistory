@@ -61,10 +61,6 @@ void *mac_env;		/* Loaded by the boot asm */
 /* The phys. video addr. - might be bogus on some machines */
 unsigned long mac_orig_videoaddr;
 
-/* Mac specific keyboard functions */
-extern int mackbd_init_hw(void);
-extern void mackbd_leds(unsigned int leds);
-
 /* Mac specific timer functions */
 extern void mac_gettod (int *, int *, int *, int *, int *, int *);
 extern unsigned long mac_gettimeoffset (void);
@@ -91,19 +87,20 @@ extern void nubus_sweep_video(void);
 extern void mac_debug_init(void);
 extern void mac_debugging_long(int, long);
 
-#ifdef CONFIG_MAGIC_SYSRQ
-static char mac_sysrq_xlate[128] =
-	"\000sdfghzxcv\000bqwer"				/* 0x00 - 0x0f */
-	"yt123465=97-80)o"					/* 0x10 - 0x1f */
-	"u(ip\rlj'k;\\,/nm."					/* 0x20 - 0x2f */
-	"\t `\000\033\000\000\000\000\000\000\000\000\000\000\000"	/* 0x30 - 0x3f */
-	"\000.\000*\000+\000\000\000\000\000/\r\000-\000"	/* 0x40 - 0x4f */
-	"\000\00001234567a89\000\000\000"			/* 0x50 - 0x5f */
-	"\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"  /* 0x60 - 0x6f */
-	"\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"; /* 0x70 - 0x7f */
-#endif
-
 extern void (*kd_mksound)(unsigned int, unsigned int);
+
+extern int mackbd_init_hw(void);
+extern void mackbd_leds(unsigned int leds);
+extern int mackbd_translate(unsigned char keycode, unsigned char *keycodep, char raw_mode);
+
+extern void mac_hid_init_hw(void);
+extern int mac_hid_kbd_translate(unsigned char scancode, unsigned char *keycode, char raw_mode);
+
+#ifdef CONFIG_MAGIC_SYSRQ
+extern unsigned char mac_hid_kbd_sysrq_xlate[128];
+extern unsigned char pckbd_sysrq_xlate[128];
+extern unsigned char mackbd_sysrq_xlate[128];
+#endif /* CONFIG_MAGIC_SYSRQ */
 
 static void mac_get_model(char *str);
 
@@ -213,76 +210,93 @@ static void mac_cache_card_flush(int writeback)
 
 void __init config_mac(void)
 {
-
-    if (!MACH_IS_MAC) {
-      printk("ERROR: no Mac, but config_mac() called!! \n");
-    }
-    
-    mach_sched_init      = mac_sched_init;
-    mach_keyb_init       = mackbd_init_hw;
-    mach_kbd_leds        = mackbd_leds;
-    mach_init_IRQ        = mac_init_IRQ;
-    mach_request_irq     = mac_request_irq;
-    mach_free_irq        = mac_free_irq;
-    enable_irq           = mac_enable_irq;
-    disable_irq          = mac_disable_irq;
-    mach_get_model	 = mac_get_model;
-    mach_default_handler = &mac_handlers;
-    mach_get_irq_list    = mac_get_irq_list;
-    mach_gettimeoffset   = mac_gettimeoffset;
-    mach_gettod          = mac_gettod;
-    mach_hwclk           = mac_hwclk;
-    mach_set_clock_mmss	 = mac_set_clock_mmss;
-#if 0
-    mach_mksound         = mac_mksound;
-#endif
-    mach_reset           = mac_reset;
-    mach_halt            = mac_poweroff;
-    mach_power_off       = mac_poweroff;
-    conswitchp	         = &dummy_con;
-    mach_max_dma_address = 0xffffffff;
-#if 0
-    mach_debug_init	 = mac_debug_init;
-#endif
-    kd_mksound		 = mac_mksound;
+	if (!MACH_IS_MAC) {
+	  printk("ERROR: no Mac, but config_mac() called!! \n");
+	}
+	
+#ifdef CONFIG_VT
+#ifdef CONFIG_INPUT_ADBHID
+	mach_keyb_init       = mac_hid_init_hw;
+	mach_kbd_translate   = mac_hid_kbd_translate;
 #ifdef CONFIG_MAGIC_SYSRQ
-    mach_sysrq_key = 114;         /* HELP */
-    mach_sysrq_shift_state = 8;   /* Alt */
-    mach_sysrq_shift_mask = 0xff; /* all modifiers except CapsLock */
-    mach_sysrq_xlate = mac_sysrq_xlate;
+#ifdef CONFIG_MAC_ADBKEYCODES
+	if (!keyboard_sends_linux_keycodes) {
+		mach_sysrq_xlate = mac_hid_kbd_sysrq_xlate;
+		SYSRQ_KEY = 0x69;
+	} else
+#endif /* CONFIG_MAC_ADBKEYCODES */
+	{
+		mach_sysrq_xlate = pckbd_sysrq_xlate;
+		SYSRQ_KEY = 0x54;
+	}
+#endif /* CONFIG_MAGIC_SYSRQ */
+#elif defined(CONFIG_ADB_KEYBOARD)
+	mach_keyb_init       = mackbd_init_hw;
+	mach_kbd_leds        = mackbd_leds;
+	mach_kbd_translate   = mackbd_translate;
+	mach_sysrq_xlate     = mackbd_sysrq_xlate;
+	SYSRQ_KEY = 0x69;
+#endif /* CONFIG_INPUT_ADBHID */
+#endif /* CONFIG_VT */
+
+	mach_sched_init      = mac_sched_init;
+	mach_init_IRQ        = mac_init_IRQ;
+	mach_request_irq     = mac_request_irq;
+	mach_free_irq        = mac_free_irq;
+	enable_irq           = mac_enable_irq;
+	disable_irq          = mac_disable_irq;
+	mach_get_model	 = mac_get_model;
+	mach_default_handler = &mac_handlers;
+	mach_get_irq_list    = mac_get_irq_list;
+	mach_gettimeoffset   = mac_gettimeoffset;
+	mach_gettod          = mac_gettod;
+	mach_hwclk           = mac_hwclk;
+	mach_set_clock_mmss	 = mac_set_clock_mmss;
+#if 0
+	mach_mksound         = mac_mksound;
 #endif
+	mach_reset           = mac_reset;
+	mach_halt            = mac_poweroff;
+	mach_power_off       = mac_poweroff;
+	conswitchp	         = &dummy_con;
+	mach_max_dma_address = 0xffffffff;
+#if 0
+	mach_debug_init	 = mac_debug_init;
+#endif
+	kd_mksound		 = mac_mksound;
 #ifdef CONFIG_HEARTBEAT
 #if 0
-    mach_heartbeat = mac_heartbeat;
-    mach_heartbeat_irq = IRQ_MAC_TIMER;
+	mach_heartbeat = mac_heartbeat;
+	mach_heartbeat_irq = IRQ_MAC_TIMER;
 #endif
 #endif
 
-    /*
-     * Determine hardware present
-     */
+	/*
+	 * Determine hardware present
+	 */
      
-    mac_identify();
-    mac_report_hardware();
+	mac_identify();
+	mac_report_hardware();
     
-    /* AFAIK only the IIci takes a cache card.  The IIfx has onboard
-       cache ... someone needs to figure out how to tell if it's on or
-       not. */
-    if (macintosh_config->ident == MAC_MODEL_IICI
-	|| macintosh_config->ident == MAC_MODEL_IIFX) {
-    	mach_l2_flush = mac_cache_card_flush;
-    }
+	/* AFAIK only the IIci takes a cache card.  The IIfx has onboard
+	   cache ... someone needs to figure out how to tell if it's on or
+	   not. */
+
+	if (macintosh_config->ident == MAC_MODEL_IICI
+	    || macintosh_config->ident == MAC_MODEL_IIFX) {
+		mach_l2_flush = mac_cache_card_flush;
+	}
 #ifdef MAC_DEBUG_SOUND
-    /* goes on forever if timers broken */
-    mac_mksound(1000,10);
+	/* goes on forever if timers broken */
+	mac_mksound(1000,10);
 #endif
 
-    /*
-     * Check for machine specific fixups.
-     */
+	/*
+	 * Check for machine specific fixups.
+	 */
 
 #ifdef OLD_NUBUS_CODE
-    nubus_sweep_video();
+	 nubus_sweep_video();
 #endif
 }	
 

@@ -708,9 +708,12 @@ static int nsc_ircc_setup(chipio_t *info)
 	switch_bank(iobase, BANK0);
 	
 	/* Set FIFO threshold to TX17, RX16, reset and enable FIFO's */
-	switch_bank(iobase, BANK0);	
+	switch_bank(iobase, BANK0);
 	outb(FCR_RXTH|FCR_TXTH|FCR_TXSR|FCR_RXSR|FCR_FIFO_EN, iobase+FCR);
-	
+
+	outb(0x03, iobase+LCR); 	/* 8 bit word length */
+	outb(MCR_SIR, iobase+MCR); 	/* Start at SIR-mode, also clears LSR*/
+
 	/* Set FIFO size to 32 */
 	switch_bank(iobase, BANK2);
 	outb(EXCR2_RFSIZ|EXCR2_TFSIZ, iobase+EXCR2);
@@ -723,7 +726,7 @@ static int nsc_ircc_setup(chipio_t *info)
 	switch_bank(iobase, BANK6);
 	outb(0x20, iobase+0); /* Set 32 bits FIR CRC */
 	outb(0x0a, iobase+1); /* Set MIR pulse width */
-	outb(0x0d, iobase+2); /* Set SIR pulse width */
+	outb(0x0d, iobase+2); /* Set SIR pulse width to 1.6us */
 	outb(0x2a, iobase+4); /* Set beginning frag, and preamble length */
 
 	MESSAGE("%s, driver loaded (Dag Brattli)\n", driver_name);
@@ -804,8 +807,6 @@ static void nsc_ircc_init_dongle_interface (int iobase, int dongle_id)
 			   dongle_types[dongle_id]); 
 		break;
 	case 0x04: /* Sharp RY5HD01 */
-		IRDA_DEBUG(0, __FUNCTION__ "(), %s not supported yet\n",
-			   dongle_types[dongle_id]); 
 		break;
 	case 0x05: /* Reserved, but this is what the Thinkpad reports */
 		IRDA_DEBUG(0, __FUNCTION__ "(), %s not defined by irda yet\n",
@@ -892,8 +893,7 @@ static void nsc_ircc_change_dongle_speed(int iobase, int speed, int dongle_id)
 			   dongle_types[dongle_id]); 
 		break;
 	case 0x04: /* Sharp RY5HD01 */
-		IRDA_DEBUG(0, __FUNCTION__ "(), %s not supported yet\n",
-			   dongle_types[dongle_id]); 
+		break;
 	case 0x05: /* Reserved */
 		IRDA_DEBUG(0, __FUNCTION__ "(), %s not defined by irda yet\n",
 			   dongle_types[dongle_id]); 

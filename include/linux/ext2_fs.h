@@ -549,6 +549,7 @@ extern int ext2_write (struct inode *, struct file *, char *, int);
 
 /* fsync.c */
 extern int ext2_sync_file (struct file *, struct dentry *, int);
+extern int ext2_fsync_inode (struct inode *, int);
 
 /* ialloc.c */
 extern struct inode * ext2_new_inode (const struct inode *, int, int *);

@@ -90,6 +90,12 @@ static struct console q40_console_driver = {
 extern char *q40_mem_cptr; /*=(char *)0xff020000;*/
 static int _cpleft;
 
+int q40_kbd_translate(unsigned char keycode, unsigned char *keycodep, char raw_mode)
+{
+        *keycodep = keycode;
+        return 1;
+}
+
 static void q40_mem_console_write(struct console *co, const char *s,
 				  unsigned int count)
 {
@@ -199,6 +205,7 @@ void __init config_q40(void)
     mach_sched_init      = q40_sched_init;           /* ok */
     /*mach_kbdrate         = q40_kbdrate;*/          /* unneeded ?*/
     mach_keyb_init       = q40_keyb_init;            /* OK */
+    mach_kbd_translate   = q40_kbd_translate;
     mach_init_IRQ        = q40_init_IRQ;   
     mach_gettimeoffset   = q40_gettimeoffset; 
     mach_gettod  	 = q40_gettod;

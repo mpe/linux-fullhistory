@@ -119,6 +119,7 @@ conf_read(unsigned long addr, unsigned char type1)
 	stat0 = *(vip)CIA_IOC_CIA_ERR;
 	*(vip)CIA_IOC_CIA_ERR = stat0;
 	mb();
+	*(vip)CIA_IOC_CIA_ERR; /* re-read to force write */
 
 	/* If Type1 access, must set CIA CFG. */
 	if (type1) {
@@ -128,6 +129,7 @@ conf_read(unsigned long addr, unsigned char type1)
 		*(vip)CIA_IOC_CFG;
 	}
 
+	mb();
 	draina();
 	mcheck_expected(0) = 1;
 	mcheck_taken(0) = 0;
@@ -171,6 +173,7 @@ conf_write(unsigned long addr, unsigned int value, unsigned char type1)
 	stat0 = *(vip)CIA_IOC_CIA_ERR;
 	*(vip)CIA_IOC_CIA_ERR = stat0;
 	mb();
+	*(vip)CIA_IOC_CIA_ERR; /* re-read to force write */
 
 	/* If Type1 access, must set CIA CFG.  */
 	if (type1) {
@@ -180,6 +183,7 @@ conf_write(unsigned long addr, unsigned int value, unsigned char type1)
 		*(vip)CIA_IOC_CFG;
 	}
 
+	mb();
 	draina();
 	mcheck_expected(0) = 1;
 	mcheck_taken(0) = 0;
@@ -188,7 +192,7 @@ conf_write(unsigned long addr, unsigned int value, unsigned char type1)
 	/* Access configuration space.  */
 	*(vip)addr = value;
 	mb();
-	mb();  /* magic */
+	*(vip)addr; /* read back to force the write */
 
 	mcheck_expected(0) = 0;
 	mb();
@@ -606,7 +610,8 @@ do_init_arch(int is_pyxis)
 	*(vip)CIA_IOC_ERR_MASK = temp;
 
 	/* Clear all currently pending errors.  */
-	*(vip)CIA_IOC_CIA_ERR = 0;
+	temp = *(vip)CIA_IOC_CIA_ERR;
+	*(vip)CIA_IOC_CIA_ERR = temp;
 
 	/* Turn on mchecks.  */
 	temp = *(vip)CIA_IOC_CIA_CTRL;

@@ -404,7 +404,7 @@ static int ext2_alloc_branch(struct inode *inode,
 		branch[n].p = (u32*) bh->b_data + offsets[n];
 		*branch[n].p = branch[n].key;
 		mark_buffer_uptodate(bh, 1);
-		mark_buffer_dirty(bh);
+		mark_buffer_dirty_inode(bh, inode);
 		if (IS_SYNC(inode) || inode->u.ext2_i.i_osync) {
 			ll_rw_block (WRITE, 1, &bh);
 			wait_on_buffer (bh);
@@ -469,7 +469,7 @@ static inline int ext2_splice_branch(struct inode *inode,
 
 	/* had we spliced it onto indirect block? */
 	if (where->bh) {
-		mark_buffer_dirty(where->bh);
+		mark_buffer_dirty_inode(where->bh, inode);
 		if (IS_SYNC(inode) || inode->u.ext2_i.i_osync) {
 			ll_rw_block (WRITE, 1, &where->bh);
 			wait_on_buffer(where->bh);
@@ -591,7 +591,7 @@ struct buffer_head * ext2_getblk(struct inode * inode, long block, int create, i
 				wait_on_buffer(bh);
 			memset(bh->b_data, 0, inode->i_sb->s_blocksize);
 			mark_buffer_uptodate(bh, 1);
-			mark_buffer_dirty(bh);
+			mark_buffer_dirty_inode(bh, inode);
 		}
 		return bh;
 	}
@@ -907,7 +907,7 @@ void ext2_truncate (struct inode * inode)
 		if (partial == chain)
 			mark_inode_dirty(inode);
 		else
-			mark_buffer_dirty(partial->bh);
+			mark_buffer_dirty_inode(partial->bh, inode);
 		ext2_free_branches(inode, &nr, &nr+1, (chain+n-1) - partial);
 	}
 	/* Clear the ends of indirect blocks on the shared branch */
@@ -916,7 +916,7 @@ void ext2_truncate (struct inode * inode)
 				   partial->p + 1,
 				   (u32*)partial->bh->b_data + addr_per_block,
 				   (chain+n-1) - partial);
-		mark_buffer_dirty(partial->bh);
+		mark_buffer_dirty_inode(partial->bh, inode);
 		if (IS_SYNC(inode)) {
 			ll_rw_block (WRITE, 1, &partial->bh);
 			wait_on_buffer (partial->bh);
@@ -1208,7 +1208,7 @@ static int ext2_update_inode(struct inode * inode, int do_sync)
 		raw_inode->i_block[0] = cpu_to_le32(kdev_t_to_nr(inode->i_rdev));
 	else for (block = 0; block < EXT2_N_BLOCKS; block++)
 		raw_inode->i_block[block] = inode->u.ext2_i.i_data[block];
-	mark_buffer_dirty(bh);
+	mark_buffer_dirty_inode(bh, inode);
 	if (do_sync) {
 		ll_rw_block (WRITE, 1, &bh);
 		wait_on_buffer (bh);

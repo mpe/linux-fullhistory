@@ -3990,7 +3990,7 @@ pci_plx9050_fn(struct pci_dev *dev, struct pci_board *board, int enable)
 	if (dev->vendor == PCI_VENDOR_ID_PANACOM)
 		irq_config = 0x43;
 	if ((dev->vendor == PCI_VENDOR_ID_PLX) &&
-	    (dev->device == PCI_VENDOR_ID_PLX_ROMULUS)) {
+	    (dev->device == PCI_DEVICE_ID_PLX_ROMULUS)) {
 		/*
 		 * As the megawolf cards have the int pins active
 		 * high, and have 2 UART chips, both ints must be
@@ -4324,7 +4324,7 @@ static struct pci_board pci_boards[] __devinitdata = {
 		SPCI_FL_BASE2, 8, 460800 },
 	/* Megawolf Romulus PCI Serial Card, from Mike Hudson */
 	/* (Exoray@isys.ca) */
-	{	PCI_VENDOR_ID_PLX, PCI_VENDOR_ID_PLX_ROMULUS,
+	{	PCI_VENDOR_ID_PLX, PCI_DEVICE_ID_PLX_ROMULUS,
 		0x10b5, 0x106a,
 		SPCI_FL_BASE2, 4, 921600,
 		0x20, 2, pci_plx9050_fn, 0x03 },

@@ -346,7 +346,7 @@ int __init gvp11_detect(Scsi_Host_Template *tpnt)
 	continue;
 
 release:
-	release_mem_region(ZTWO_PADDR(instance->base), 256);
+	release_mem_region(address, 256);
     }
 
     return num_gvp11;

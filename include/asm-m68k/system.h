@@ -3,6 +3,7 @@
 
 #include <linux/config.h> /* get configuration macros */
 #include <linux/linkage.h>
+#include <linux/kernel.h>
 #include <asm/segment.h>
 #include <asm/entry.h>
 
@@ -70,18 +71,22 @@ asmlinkage void resume(void);
 #define sti()			__sti()
 #define save_flags(x)		__save_flags(x)
 #define restore_flags(x)	__restore_flags(x)
-
+#define save_and_cli(flags)   do { save_flags(flags); cli(); } while(0)
 
 /*
  * Force strict CPU ordering.
  * Not really required on m68k...
  */
-#define nop()  asm volatile ("nop"::)
-#define mb()   asm volatile (""   : : :"memory")
-#define rmb()  asm volatile (""   : : :"memory")
-#define wmb()  asm volatile (""   : : :"memory")
+#define nop()		do { asm volatile ("nop"); barrier(); } while (0)
+#define mb()		barrier()
+#define rmb()		barrier()
+#define wmb()		barrier()
 #define set_mb(var, value)    do { xchg(&var, value); } while (0)
 #define set_wmb(var, value)    do { var = value; wmb(); } while (0)
+
+#define smp_mb()	barrier()
+#define smp_rmb()	barrier()
+#define smp_wmb()	barrier()
 
 
 #define xchg(ptr,x) ((__typeof__(*(ptr)))__xchg((unsigned long)(x),(ptr),sizeof(*(ptr))))

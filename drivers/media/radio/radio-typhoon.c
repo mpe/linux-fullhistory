@@ -350,7 +350,7 @@ static int __init typhoon_init(void)
 
 	printk(KERN_INFO BANNER);
 	io = typhoon_unit.iobase;
-	if (check_region(io, 8)) {
+	if (request_region(io, 8, "typhoon")) {
 		printk(KERN_ERR "radio-typhoon: port 0x%x already in use\n",
 		       typhoon_unit.iobase);
 		return -EBUSY;
@@ -358,9 +358,10 @@ static int __init typhoon_init(void)
 
 	typhoon_radio.priv = &typhoon_unit;
 	if (video_register_device(&typhoon_radio, VFL_TYPE_RADIO) == -1)
+	{
+		release_region(io, 8);
 		return -EINVAL;
-
-	request_region(typhoon_unit.iobase, 8, "typhoon");
+	}
 	printk(KERN_INFO "radio-typhoon: port 0x%x.\n", typhoon_unit.iobase);
 	printk(KERN_INFO "radio-typhoon: mute frequency is %lu kHz.\n",
 	       typhoon_unit.mutefreq);

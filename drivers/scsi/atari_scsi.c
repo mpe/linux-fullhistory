@@ -656,7 +656,7 @@ int atari_scsi_detect (Scsi_Host_Template *host)
 	 */
 	if (MACH_IS_ATARI && ATARIHW_PRESENT(ST_SCSI) &&
 	    !ATARIHW_PRESENT(EXTD_DMA) && m68k_num_memory > 1) {
-		atari_dma_buffer = atari_stram_alloc( STRAM_BUFFER_SIZE, NULL, "SCSI" );
+		atari_dma_buffer = atari_stram_alloc(STRAM_BUFFER_SIZE, "SCSI");
 		if (!atari_dma_buffer) {
 			printk( KERN_ERR "atari_scsi_detect: can't allocate ST-RAM "
 					"double buffer\n" );

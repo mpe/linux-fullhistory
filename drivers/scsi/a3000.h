@@ -1,4 +1,5 @@
 #ifndef A3000_H
+#define A3000_H
 
 /* $Id: a3000.h,v 1.4 1997/01/19 23:07:10 davem Exp $
  *
@@ -29,7 +30,7 @@ int wd33c93_reset(Scsi_Cmnd *, unsigned int);
 #define CAN_QUEUE 16
 #endif
 
-#define A3000_SCSI {  proc_name:	   "A3000",			\
+#define _A3000_SCSI { proc_name:	   "A3000",			\
 		      proc_info:           NULL,			\
 		      name:                "Amiga 3000 built-in SCSI",	\
 		      detect:              a3000_detect,		\

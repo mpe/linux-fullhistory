@@ -56,9 +56,9 @@ ruffian_init_irq(void)
 	
 	init_i8259a_irqs();
 
-	/* Not interested in the bogus interrupts (0,3,4,6), 
+	/* Not interested in the bogus interrupts (0,3,6),
 	   NMI (1), HALT (2), flash (5), or 21142 (8).  */
-	init_pyxis_irqs(0x17f0000);
+	init_pyxis_irqs(0x16f0000);
 
 	common_init_isa_dma();
 }

@@ -530,12 +530,13 @@ void pci_set_master(struct pci_dev *dev);
 int pci_set_power_state(struct pci_dev *dev, int state);
 int pci_assign_resource(struct pci_dev *dev, int i);
 
-/* Helper functions for low-level code (drivers/pci/setup.c) */
+/* Helper functions for low-level code (drivers/pci/setup-[bus,res].c) */
 
 int pci_claim_resource(struct pci_dev *, int);
 void pci_assign_unassigned_resources(void);
-void pdev_assign_unassigned_resources(struct pci_dev *dev);
-void pci_set_bus_ranges(void);
+void pdev_enable_device(struct pci_dev *);
+void pdev_sort_resources(struct pci_dev *, struct resource_list *, u32);
+unsigned long pci_bridge_check_io(struct pci_dev *);
 void pci_fixup_irqs(u8 (*)(struct pci_dev *, u8 *),
 		    int (*)(struct pci_dev *, u8, u8));
 

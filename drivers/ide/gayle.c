@@ -17,8 +17,10 @@
 #include <linux/ide.h>
 #include <linux/init.h>
 
+#include <asm/setup.h>
 #include <asm/amigahw.h>
 #include <asm/amigaints.h>
+#include <asm/amigayle.h>
 
 
     /*
@@ -42,7 +44,7 @@
 #define GAYLE_STATUS	0x1e		/* see status-bits */
 #define GAYLE_CONTROL	0x101a
 
-static int __init gayle_offsets[IDE_NR_PORTS] = {
+static int gayle_offsets[IDE_NR_PORTS] __initdata = {
     GAYLE_DATA, GAYLE_ERROR, GAYLE_NSECTOR, GAYLE_SECTOR, GAYLE_LCYL,
     GAYLE_HCYL, GAYLE_SELECT, GAYLE_STATUS, -1, -1
 };
@@ -87,7 +89,7 @@ static int gayle_ack_intr_a4000(ide_hwif_t *hwif)
     unsigned char ch;
 
     ch = inb(hwif->io_ports[IDE_IRQ_OFFSET]);
-    if (!(ch & 0x80))
+    if (!(ch & GAYLE_IRQ_IDE))
 	return 0;
     return 1;
 }
@@ -97,10 +99,10 @@ static int gayle_ack_intr_a1200(ide_hwif_t *hwif)
     unsigned char ch;
 
     ch = inb(hwif->io_ports[IDE_IRQ_OFFSET]);
-    if (!(ch & 0x80))
+    if (!(ch & GAYLE_IRQ_IDE))
 	return 0;
     (void)inb(hwif->io_ports[IDE_STATUS_OFFSET]);
-    outb(0x7c | (ch & 0x03), hwif->io_ports[IDE_IRQ_OFFSET]);
+    outb(0x7c, hwif->io_ports[IDE_IRQ_OFFSET]);
     return 1;
 }
 

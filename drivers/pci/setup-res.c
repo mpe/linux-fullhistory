@@ -11,15 +11,21 @@
 
 /* fixed for multiple pci buses, 1999 Andrea Arcangeli <andrea@suse.de> */
 
+/*
+ * Nov 2000, Ivan Kokshaysky <ink@jurassic.park.msu.ru>
+ *	     Resource sorting
+ */
+
 #include <linux/init.h>
 #include <linux/kernel.h>
 #include <linux/pci.h>
 #include <linux/errno.h>
 #include <linux/ioport.h>
 #include <linux/cache.h>
+#include <linux/slab.h>
 
 
-#define DEBUG_CONFIG 0
+#define DEBUG_CONFIG 1
 #if DEBUG_CONFIG
 # define DBGC(args)     printk args
 #else
@@ -114,19 +120,58 @@ pci_assign_resource(struct pci_dev *dev, int i)
 		}
 	}
 
-	DBGC(("  got res[%lx:%lx] for resource %d\n", res->start, res->end, i));
+	DBGC(("  got res[%lx:%lx] for resource %d of %s\n", res->start,
+						res->end, i, dev->name));
 
 	return 0;
 }
 
-void
-pdev_assign_unassigned_resources(struct pci_dev *dev)
+/* Sort resources of a given type by alignment */
+void __init
+pdev_sort_resources(struct pci_dev *dev,
+		    struct resource_list *head, u32 type_mask)
+{
+	int i;
+
+	for (i = 0; i < PCI_NUM_RESOURCES; i++) {
+		struct resource *r;
+		struct resource_list *list, *tmp;
+
+		/* PCI-PCI bridges may have I/O ports or
+		   memory on the primary bus */
+		if (dev->class >> 8 == PCI_CLASS_BRIDGE_PCI &&
+						i >= PCI_BRIDGE_RESOURCES)
+			continue;
+
+		r = &dev->resource[i];
+		if (!(r->flags & type_mask) || r->parent)
+			continue;
+		for (list = head; ; list = list->next) {
+			unsigned long size = 0;
+			struct resource_list *ln = list->next;
+
+			if (ln)
+				size = ln->res->end - ln->res->start;
+			if (r->end - r->start > size) {
+				tmp = kmalloc(sizeof(*tmp), GFP_KERNEL);
+				tmp->next = ln;
+				tmp->res = r;
+				tmp->dev = dev;
+				list->next = tmp;
+				break;
+			}
+		}
+	}
+}
+
+void __init
+pdev_enable_device(struct pci_dev *dev)
 {
 	u32 reg;
 	u16 cmd;
 	int i;
 
-	DBGC(("PCI assign unassigned: (%s)\n", dev->name));
+	DBGC(("PCI enable device: (%s)\n", dev->name));
 
 	pci_read_config_word(dev, PCI_COMMAND, &cmd);
 
@@ -137,13 +182,6 @@ pdev_assign_unassigned_resources(struct pci_dev *dev)
 			cmd |= PCI_COMMAND_IO;
 		else if (res->flags & IORESOURCE_MEM)
 			cmd |= PCI_COMMAND_MEMORY;
-
-		/* If it is already assigned or the resource does
-		   not exist, there is nothing to do.  */
-		if (res->parent != NULL || res->flags == 0)
-			continue;
-
-		pci_assign_resource(dev, i);
 	}
 
 	/* Special case, disable the ROM.  Several devices act funny
@@ -171,24 +209,12 @@ pdev_assign_unassigned_resources(struct pci_dev *dev)
 	   it, the bit will go into the bucket. */
 	cmd |= PCI_COMMAND_MASTER;
 
+	/* Set the cache line and default latency (32).  */
+	pci_write_config_word(dev, PCI_CACHE_LINE_SIZE,
+			(32 << 8) | (L1_CACHE_BYTES / sizeof(u32)));
+
 	/* Enable the appropriate bits in the PCI command register.  */
 	pci_write_config_word(dev, PCI_COMMAND, cmd);
 
 	DBGC(("  cmd reg 0x%x\n", cmd));
-
-	/* If this is a PCI bridge, set the cache line correctly.  */
-	if ((dev->class >> 8) == PCI_CLASS_BRIDGE_PCI) {
-		pci_write_config_byte(dev, PCI_CACHE_LINE_SIZE,
-				      (L1_CACHE_BYTES / sizeof(u32)));
-	}
-}
-
-void __init
-pci_assign_unassigned_resources(void)
-{
-	struct pci_dev *dev;
-
-	pci_for_each_dev(dev) {
-		pdev_assign_unassigned_resources(dev);
-	}
 }

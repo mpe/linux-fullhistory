@@ -5,28 +5,23 @@
 #define _EATA_H
 
 #include <scsi/scsicam.h>
-#include <linux/version.h>
 
 int eata2x_detect(Scsi_Host_Template *);
 int eata2x_release(struct Scsi_Host *);
 int eata2x_queuecommand(Scsi_Cmnd *, void (*done)(Scsi_Cmnd *));
 int eata2x_abort(Scsi_Cmnd *);
-int eata2x_old_abort(Scsi_Cmnd *);
 int eata2x_reset(Scsi_Cmnd *);
-int eata2x_old_reset(Scsi_Cmnd *, unsigned int);
 int eata2x_biosparam(Disk *, kdev_t, int *);
 
-#define EATA_VERSION "5.11.00"
-
-#define LinuxVersionCode(v, p, s) (((v)<<16)+((p)<<8)+(s))
+#define EATA_VERSION "6.02.00"
 
 #define EATA {                                                               \
                 name:              "EATA/DMA 2.0x rev. " EATA_VERSION " ",   \
                 detect:                  eata2x_detect,                      \
                 release:                 eata2x_release,                     \
                 queuecommand:            eata2x_queuecommand,                \
-                abort:                   eata2x_old_abort,                   \
-                reset:                   eata2x_old_reset,                   \
+                abort:                   NULL,                               \
+                reset:                   NULL,                               \
                 eh_abort_handler:        eata2x_abort,                       \
                 eh_device_reset_handler: NULL,                               \
                 eh_bus_reset_handler:    NULL,                               \

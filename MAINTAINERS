@@ -393,7 +393,7 @@ S:	Maintained
 
 EATA ISA/EISA/PCI SCSI DRIVER
 P:	Dario Ballabio
-M:	dario@milano.europe.dg.com
+M:	ballabio_dario@emc.com
 L:	linux-scsi@vger.kernel.org
 S:	Maintained
 
@@ -651,9 +651,9 @@ S:	Maintained
 
 IRDA SUBSYSTEM
 P:      Dag Brattli
-M:      Dag Brattli <dagb@cs.uit.no>
+M:      Dag Brattli <dag@brattli.net>
 L:      linux-irda@pasta.cs.uit.no
-W:      http://www.cs.uit.no/linux-irda/
+W:      http://irda.sourceforge.net/
 S:      Maintained
 
 ISAPNP
@@ -1223,7 +1223,7 @@ S:	Maintained
 
 U14-34F SCSI DRIVER
 P:	Dario Ballabio
-M:	dario@milano.europe.dg.com
+M:	ballabio_dario@emc.com
 L:	linux-scsi@vger.kernel.org
 S:	Maintained
 

@@ -96,6 +96,7 @@ static void init_once(void * foo, kmem_cache_t * cachep, unsigned long flags)
 		INIT_LIST_HEAD(&inode->i_hash);
 		INIT_LIST_HEAD(&inode->i_data.pages);
 		INIT_LIST_HEAD(&inode->i_dentry);
+		INIT_LIST_HEAD(&inode->i_dirty_buffers);
 		sema_init(&inode->i_sem, 1);
 		sema_init(&inode->i_zombie, 1);
 		spin_lock_init(&inode->i_data.i_shared_lock);
@@ -122,14 +123,14 @@ static void init_once(void * foo, kmem_cache_t * cachep, unsigned long flags)
  *	Mark an inode as dirty. Callers should use mark_inode_dirty.
  */
  
-void __mark_inode_dirty(struct inode *inode)
+void __mark_inode_dirty(struct inode *inode, int flags)
 {
 	struct super_block * sb = inode->i_sb;
 
 	if (sb) {
 		spin_lock(&inode_lock);
-		if (!(inode->i_state & I_DIRTY)) {
-			inode->i_state |= I_DIRTY;
+		if ((inode->i_state & flags) != flags) {
+			inode->i_state |= flags;
 			/* Only add valid (ie hashed) inodes to the dirty list */
 			if (!list_empty(&inode->i_hash)) {
 				list_del(&inode->i_list);
@@ -196,7 +197,8 @@ static inline void sync_one(struct inode *inode, int sync)
 							? &inode_in_use
 							: &inode_unused);
 		/* Set I_LOCK, reset I_DIRTY */
-		inode->i_state ^= I_DIRTY | I_LOCK;
+		inode->i_state |= I_LOCK;
+		inode->i_state &= ~I_DIRTY;
 		spin_unlock(&inode_lock);
 
 		write_inode(inode, sync);
@@ -279,6 +281,60 @@ void write_inode_now(struct inode *inode, int sync)
 	}
 	else
 		printk("write_inode_now: no super block\n");
+}
+
+/**
+ * generic_osync_inode - flush all dirty data for a given inode to disk
+ * @inode: inode to write
+ * @datasync: if set, don't bother flushing timestamps
+ *
+ * This can be called by file_write functions for files which have the
+ * O_SYNC flag set, to flush dirty writes to disk.  
+ */
+
+int generic_osync_inode(struct inode *inode, int datasync)
+{
+	int err;
+	
+	/* 
+	 * WARNING
+	 *
+	 * Currently, the filesystem write path does not pass the
+	 * filp down to the low-level write functions.  Therefore it
+	 * is impossible for (say) __block_commit_write to know if
+	 * the operation is O_SYNC or not.
+	 *
+	 * Ideally, O_SYNC writes would have the filesystem call
+	 * ll_rw_block as it went to kick-start the writes, and we
+	 * could call osync_inode_buffers() here to wait only for
+	 * those IOs which have already been submitted to the device
+	 * driver layer.  As it stands, if we did this we'd not write
+	 * anything to disk since our writes have not been queued by
+	 * this point: they are still on the dirty LRU.
+	 * 
+	 * So, currently we will call fsync_inode_buffers() instead,
+	 * to flush _all_ dirty buffers for this inode to disk on 
+	 * every O_SYNC write, not just the synchronous I/Os.  --sct
+	 */
+
+#ifdef WRITERS_QUEUE_IO
+	err = osync_inode_buffers(inode);
+#else
+	err = fsync_inode_buffers(inode);
+#endif
+
+	spin_lock(&inode_lock);
+	if (!(inode->i_state & I_DIRTY))
+		goto out;
+	if (datasync && !(inode->i_state & I_DIRTY_DATASYNC))
+		goto out;
+	spin_unlock(&inode_lock);
+	write_inode_now(inode, 1);
+	return err;
+
+ out:
+	spin_unlock(&inode_lock);
+	return err;
 }
 
 /**
@@ -412,7 +468,8 @@ int invalidate_inodes(struct super_block * sb)
  *      dispose_list.
  */
 #define CAN_UNUSE(inode) \
-	(((inode)->i_state | (inode)->i_data.nrpages) == 0)
+	((((inode)->i_state | (inode)->i_data.nrpages) == 0)  && \
+	 !inode_has_buffers(inode))
 #define INODE(entry)	(list_entry(entry, struct inode, i_list))
 
 void prune_icache(int goal)
@@ -911,7 +968,7 @@ void update_atime (struct inode *inode)
 	if ( IS_NODIRATIME (inode) && S_ISDIR (inode->i_mode) ) return;
 	if ( IS_RDONLY (inode) ) return;
 	inode->i_atime = CURRENT_TIME;
-	mark_inode_dirty (inode);
+	mark_inode_dirty_sync (inode);
 }   /*  End Function update_atime  */
 
 

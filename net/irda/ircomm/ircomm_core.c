@@ -512,7 +512,7 @@ int ircomm_proc_read(char *buf, char **start, off_t offset, int len)
 #endif /* CONFIG_PROC_FS */
 
 #ifdef MODULE
-MODULE_AUTHOR("Dag Brattli <dagb@cs.uit.no>");
+MODULE_AUTHOR("Dag Brattli <dag@brattli.net>");
 MODULE_DESCRIPTION("IrCOMM protocol");
 
 int init_module(void) 

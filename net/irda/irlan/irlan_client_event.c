@@ -108,11 +108,10 @@ static int irlan_client_state_idle(struct irlan_cb *self, IRLAN_EVENT event,
 		self->client.iriap = iriap_open(LSAP_ANY, IAS_CLIENT, self,
 						irlan_client_get_value_confirm);
 		/* Get some values from peer IAS */
+		irlan_next_client_state(self, IRLAN_QUERY);
 		iriap_getvaluebyclass_request(self->client.iriap,
 					      self->saddr, self->daddr,
 					      "IrLAN", "IrDA:TinyTP:LsapSel");
-		
-		irlan_next_client_state(self, IRLAN_QUERY);
 		break;
 	case IRLAN_WATCHDOG_TIMEOUT:
 		IRDA_DEBUG(2, __FUNCTION__ "(), IRLAN_WATCHDOG_TIMEOUT\n");

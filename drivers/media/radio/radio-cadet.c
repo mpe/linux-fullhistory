@@ -27,6 +27,7 @@
 #include <linux/videodev.h>	/* kernel radio structs		*/
 #include <linux/config.h>	/* CONFIG_RADIO_CADET_PORT 	*/
 #include <linux/param.h>
+#include <linux/isapnp.h>
 
 #ifndef CONFIG_RADIO_CADET_PORT
 #define CONFIG_RADIO_CADET_PORT 0x330
@@ -44,16 +45,9 @@ static __u8 rdsin=0,rdsout=0,rdsstat=0;
 static unsigned char rdsbuf[RDS_BUFFER];
 static int cadet_lock=0;
 
-#ifndef MODULE
 static int cadet_probe(void);
-#endif
-
-#ifdef CONFIG_ISAPNP
-#include <linux/isapnp.h>
-
-struct pci_dev *dev;
+static struct pci_dev *dev;
 static int isapnp_cadet_probe(void);
-#endif
 
 /*
  * Signal Strength Threshold Values
@@ -551,7 +545,6 @@ static struct video_device cadet_radio=
 	ioctl:		cadet_ioctl,
 };
 
-#ifdef CONFIG_ISAPNP
 static int isapnp_cadet_probe(void)
 {
 	dev = isapnp_find_dev (NULL, ISAPNP_VENDOR('M','S','M'),
@@ -574,9 +567,7 @@ static int isapnp_cadet_probe(void)
 
 	return io;
 }
-#endif		/* CONFIG_ISAPNP */
 
-#ifdef MODULE
 static int cadet_probe(void)
 {
         static int iovals[8]={0x330,0x332,0x334,0x336,0x338,0x33a,0x33c,0x33e};
@@ -584,30 +575,35 @@ static int cadet_probe(void)
 
 	for(i=0;i<8;i++) {
 	        io=iovals[i];
-	        if(check_region(io,2)>=0) {
+	        if(request_region(io,2, "cadet-probe")>=0) {
 		        cadet_setfreq(1410);
 			if(cadet_getfreq()==1410) {
+				release_region(io, 2);
 			        return io;
 			}
+			release_region(io, 2);
 		}
 	}
 	return -1;
 }
-#endif		/* MODULE */
 
 static int __init cadet_init(void)
 {
-#ifdef CONFIG_ISAPNP
-	io = isapnp_cadet_probe();
-
+	/*
+	 *	If a probe was requested then probe ISAPnP first (safest)
+	 */
 	if (io < 0)
-		return (io);
-#else
-#ifndef MODULE		/* only probe on non-ISAPnP monolithic compiles */
-	io = cadet_probe ();
-#endif /* MODULE */
-#endif /* CONFIG_ISAPNP */
+		io = isapnp_cadet_probe();
+	/*
+	 *	If that fails then probe unsafely if probe is requested
+	 */
+	if(io < 0)
+		io = cadet_probe ();
 
+	/*
+	 *	Else we bail out
+	 */
+	 
         if(io < 0) {
 #ifdef MODULE        
 		printk(KERN_ERR "You must set an I/O address with io=0x???\n");
@@ -638,10 +634,8 @@ static void __exit cadet_cleanup_module(void)
 	video_unregister_device(&cadet_radio);
 	release_region(io,2);
 
-#ifdef CONFIG_ISAPNP
 	if (dev)
 		dev->deactivate(dev);
-#endif
 }
 
 module_init(cadet_init);

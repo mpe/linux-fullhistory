@@ -20,6 +20,7 @@
 #include <linux/vmalloc.h>
 #include <linux/pagemap.h>
 #include <linux/shm.h>
+#include <linux/bootmem.h>
 
 #include <asm/setup.h>
 #include <asm/machdep.h>
@@ -33,6 +34,7 @@
 
 #ifdef CONFIG_STRAM_SWAP
 #define MAJOR_NR    Z2RAM_MAJOR
+#define do_z2_request do_stram_request
 #include <linux/blk.h>
 #undef DEVICE_NAME
 #define DEVICE_NAME	"stram"
@@ -123,6 +125,10 @@
    unswap_by_move disabled because it does not handle swapped shm pages.
 */
 
+/* 2000-05-01: ++andreas
+   Integrated with bootmem.  Remove all traces of unswap_by_move.
+*/
+
 #ifdef CONFIG_STRAM_SWAP
 #define ALIGN_IF_SWAP(x)	PAGE_ALIGN(x)
 #else
@@ -130,10 +136,10 @@
 #endif
 
 /* get index of swap page at address 'addr' */
-#define SWAP_NR(addr)		(((unsigned long)(addr)-swap_start) >> PAGE_SHIFT)
+#define SWAP_NR(addr)		(((addr) - swap_start) >> PAGE_SHIFT)
 
 /* get address of swap page #'nr' */
-#define SWAP_ADDR(nr)		((void *)(swap_start + ((nr)<<PAGE_SHIFT)))
+#define SWAP_ADDR(nr)		(swap_start + ((nr) << PAGE_SHIFT))
 
 /* get number of pages for 'n' bytes (already page-aligned) */
 #define N_PAGES(n)			((n) >> PAGE_SHIFT)
@@ -144,11 +150,8 @@
 #define MAX_STRAM_FRACTION_NOM		1
 #define MAX_STRAM_FRACTION_DENOM	3
 
-/* Start and end of the (pre-mem_init) reserved ST-RAM region */
-static unsigned long rsvd_stram_beg, rsvd_stram_end;
-
 /* Start and end (virtual) of ST-RAM */
-static unsigned long stram_start, stram_end;
+static void *stram_start, *stram_end;
 
 /* set after memory_init() executed and allocations via start_mem aren't
  * possible anymore */
@@ -159,7 +162,7 @@ static int kernel_in_stram;
 
 typedef struct stram_block {
 	struct stram_block *next;
-	unsigned long start;
+	void *start;
 	unsigned long size;
 	unsigned flags;
 	const char *owner;
@@ -168,7 +171,6 @@ typedef struct stram_block {
 /* values for flags field */
 #define BLOCK_FREE		0x01	/* free structure in the BLOCKs pool */
 #define BLOCK_KMALLOCED	0x02	/* structure allocated by kmalloc() */
-#define BLOCK_STATIC	0x04	/* pre-mem_init() allocated block */
 #define BLOCK_GFP		0x08	/* block allocated with __get_dma_pages() */
 #define BLOCK_INSWAP	0x10	/* block allocated in swap space */
 
@@ -191,7 +193,7 @@ static BLOCK static_blocks[N_STATIC_BLOCKS];
 static int max_swap_size = -1;
 
 /* start and end of swapping area */
-static unsigned long swap_start, swap_end;
+static void *swap_start, *swap_end;
 
 /* The ST-RAM's swap info structure */
 static struct swap_info_struct *stram_swap_info;
@@ -215,7 +217,6 @@ static DECLARE_MUTEX(stram_swap_sem);
 #ifdef DO_PROC
 static unsigned stat_swap_read = 0;
 static unsigned stat_swap_write = 0;
-static unsigned stat_swap_move = 0;
 static unsigned stat_swap_force = 0;
 #endif /* DO_PROC */
 
@@ -224,21 +225,19 @@ static unsigned stat_swap_force = 0;
 /***************************** Prototypes *****************************/
 
 #ifdef CONFIG_STRAM_SWAP
-static int swap_init( unsigned long start_mem, unsigned long swap_data );
+static int swap_init(void *start_mem, void *swap_data);
 static void *get_stram_region( unsigned long n_pages );
 static void free_stram_region( unsigned long offset, unsigned long n_pages
 			       );
-static int in_some_region( unsigned long addr );
+static int in_some_region(void *addr);
 static unsigned long find_free_region( unsigned long n_pages, unsigned long
 				       *total_free, unsigned long
 				       *region_free );
-static void do_stram_request( void );
+static void do_stram_request(request_queue_t *);
 static int stram_open( struct inode *inode, struct file *filp );
 static int stram_release( struct inode *inode, struct file *filp );
-static void do_z2_request( void );
 #endif
-static int get_gfp_order( unsigned long size );
-static void reserve_region( unsigned long addr, unsigned long end );
+static void reserve_region(void *start, void *end);
 static BLOCK *add_region( void *addr, unsigned long size );
 static BLOCK *find_region( void *addr );
 static int remove_region( BLOCK *block );
@@ -264,14 +263,12 @@ void __init atari_stram_init(void)
 
 	/* determine whether kernel code resides in ST-RAM (then ST-RAM is the
 	 * first memory block at virtual 0x0) */
-	stram_start = (unsigned long)phys_to_virt(0);
+	stram_start = phys_to_virt(0);
 	kernel_in_stram = (stram_start == 0);
 
 	for( i = 0; i < m68k_num_memory; ++i ) {
 		if (m68k_memory[i].addr == 0) {
 			/* skip first 2kB or page (supervisor-only!) */
-			rsvd_stram_beg = stram_start + ALIGN_IF_SWAP(0x800);
-			rsvd_stram_end = rsvd_stram_beg;
 			stram_end = stram_start + m68k_memory[i].size;
 			return;
 		}
@@ -282,10 +279,10 @@ void __init atari_stram_init(void)
 
 
 /*
- * This function is called from mem_init() to reserve the pages needed for
+ * This function is called from setup_arch() to reserve the pages needed for
  * ST-RAM management.
  */
-void __init atari_stram_reserve_pages(unsigned long start_mem)
+void __init atari_stram_reserve_pages(void *start_mem)
 {
 #ifdef CONFIG_STRAM_SWAP
 	/* if max_swap_size is negative (i.e. no stram_swap= option given),
@@ -299,42 +296,24 @@ void __init atari_stram_reserve_pages(unsigned long start_mem)
 		max_swap_size =
 			(!MACH_IS_HADES &&
 			 (N_PAGES(stram_end-stram_start)*MAX_STRAM_FRACTION_DENOM <=
-			  max_mapnr*MAX_STRAM_FRACTION_NOM)) ? 16*1024*1024 : 0;
+			  (high_memory>>PAGE_SHIFT)*MAX_STRAM_FRACTION_NOM)) ? 16*1024*1024 : 0;
 	DPRINTK( "atari_stram_reserve_pages: max_swap_size = %d\n", max_swap_size );
 #endif
 
 	/* always reserve first page of ST-RAM, the first 2 kB are
 	 * supervisor-only! */
-	set_bit( PG_reserved, &virt_to_page(stram_start)->flags );
+	if (!kernel_in_stram)
+		reserve_bootmem (0, PAGE_SIZE);
 
 #ifdef CONFIG_STRAM_SWAP
-	if (!max_swap_size) {
-	  fallback:
-#endif
-		DPRINTK( "atari_stram_reserve_pages: swapping disabled\n" );
-		if (!kernel_in_stram) {
-			/* Reserve all pages that have been marked by pre-mem_init
-			 * stram_alloc() (e.g. for the screen memory). */
-			reserve_region( rsvd_stram_beg, rsvd_stram_end );
-			DPRINTK( "atari_stram_reserve_pages: reseverved %08lx-%08lx\n",
-					 rsvd_stram_beg, rsvd_stram_end );
-		}
-		/* else (kernel in ST-RAM): nothing to do, ST-RAM buffers are
-		 * kernel data */
-#ifdef CONFIG_STRAM_SWAP
-	}
-	else {
-		unsigned long swap_data;
-		BLOCK *p;
+	{
+		void *swap_data;
 
-		/* determine first page to use as swap:
-		 * if the kernel is in TT-RAM, this is the first page of (usable)
-		 * ST-RAM; else if there were already some allocations (probable...),
-		 * use the lowest address of these (the list is sorted by address!);
-		 * otherwise just use the end of kernel data (= start_mem) */
-		swap_start = !kernel_in_stram ? stram_start + PAGE_SIZE :
-					 alloc_list ? alloc_list->start :
-					 start_mem;
+		start_mem = (void *) PAGE_ALIGN ((unsigned long) start_mem);
+		/* determine first page to use as swap: if the kernel is
+		   in TT-RAM, this is the first page of (usable) ST-RAM;
+		   otherwise just use the end of kernel data (= start_mem) */
+		swap_start = !kernel_in_stram ? stram_start + PAGE_SIZE : start_mem;
 		/* decrement by one page, rest of kernel assumes that first swap page
 		 * is always reserved and maybe doesn't handle SWP_ENTRY == 0
 		 * correctly */
@@ -343,7 +322,7 @@ void __init atari_stram_reserve_pages(unsigned long start_mem)
 		if (swap_end-swap_start > max_swap_size)
 			swap_end =  swap_start + max_swap_size;
 		DPRINTK( "atari_stram_reserve_pages: swapping enabled; "
-				 "swap=%08lx-%08lx\n", swap_start, swap_end );
+				 "swap=%p-%p\n", swap_start, swap_end);
 		
 		/* reserve some amount of memory for maintainance of
 		 * swapping itself: one page for each 2048 (PAGE_SIZE/2)
@@ -352,24 +331,18 @@ void __init atari_stram_reserve_pages(unsigned long start_mem)
 		start_mem += ((SWAP_NR(swap_end) + PAGE_SIZE/2 - 1)
 			      >> (PAGE_SHIFT-1)) << PAGE_SHIFT;
 		/* correct swap_start if necessary */
-		if (swap_start == swap_data)
-			swap_start = start_mem;
+		if (swap_start + PAGE_SIZE == swap_data)
+			swap_start = start_mem - PAGE_SIZE;
 		
 		if (!swap_init( start_mem, swap_data )) {
 			printk( KERN_ERR "ST-RAM swap space initialization failed\n" );
 			max_swap_size = 0;
-			goto fallback;
+			return;
 		}
 		/* reserve region for swapping meta-data */
-		reserve_region( swap_data, start_mem );
+		reserve_region(swap_data, start_mem);
 		/* reserve swapping area itself */
-		reserve_region( swap_start+PAGE_SIZE, swap_end );
-
-		/* Formerly static areas have been included in the swap area. */
-		for( p = alloc_list; p; p = p->next ) {
-			if (p->flags & BLOCK_STATIC)
-				p->flags = (p->flags & ~BLOCK_STATIC) | BLOCK_INSWAP;
-		}
+		reserve_region(swap_start + PAGE_SIZE, swap_end);
 
 		/*
 		 * If the whole ST-RAM is used for swapping, there are no allocatable
@@ -387,15 +360,12 @@ void __init atari_stram_reserve_pages(unsigned long start_mem)
 		 * You just will get non-DMA-able memory...
 		 */
 		mach_max_dma_address = 0xffffffff;
-
-		/*
-		 * Ok, num_physpages needs not be really exact, but it's better to
-		 * subtract the pages set aside for swapping.
-		 */
-		num_physpages -= SWAP_NR(swap_end)-1;
 	}
 #endif
-	
+}
+
+void atari_stram_mem_init_hook (void)
+{
 	mem_init_done = 1;
 }
 
@@ -420,68 +390,33 @@ void __init atari_stram_reserve_pages(unsigned long start_mem)
  *    likely to fail :-(
  * 
  */
-void *atari_stram_alloc( long size, unsigned long *start_mem,
-						 const char *owner )
+void *atari_stram_alloc(long size, const char *owner)
 {
 	void *addr = NULL;
 	BLOCK *block;
 	int flags;
 
-	DPRINTK( "atari_stram_alloc(size=%08lx,*start_mem=%08lx,owner=%s)\n",
-			 size, start_mem ? *start_mem : 0xffffffff, owner );
-	
-	if (start_mem && mem_init_done) {
-		printk( KERN_ERR "atari_stram_alloc called with start_mem!=NULL "
-				"after mem_init() from %p\n", __builtin_return_address(0) );
-		return( NULL );
-	}
-	if (!start_mem && !mem_init_done) {
-		printk( KERN_ERR "atari_stram_alloc called with start_mem==NULL "
-				"before mem_init() from %p\n", __builtin_return_address(0) );
-		return( NULL );
-	}
+	DPRINTK("atari_stram_alloc(size=%08lx,owner=%s)\n", size, owner);
 
 	size = ALIGN_IF_SWAP(size);
 	DPRINTK( "atari_stram_alloc: rounded size = %08lx\n", size );
-	if (!mem_init_done) {
-		/* before mem_init(): allocate "statically", i.e. either in the kernel
-		 * data space (current end in *start_mem), or at the end of currently
-		 * reserved ST-RAM. */
-		if (kernel_in_stram) {
-			/* Get memory from kernel data space */
-			*start_mem = ALIGN_IF_SWAP(*start_mem);
-			addr = (void *)*start_mem;
-			*start_mem += size;
-			DPRINTK( "atari_stram_alloc: pre-mem_init and k/ST: "
-					 "shifted start_mem to %08lx, addr=%p\n",
-					 *start_mem, addr );
-		}
-		else {
-			/* Get memory from rsvd_stram_beg */
-			if (rsvd_stram_end + size < stram_end) {
-				addr = (void *) rsvd_stram_end;
-				rsvd_stram_end += size;
-				DPRINTK( "atari_stram_alloc: pre-mem_init and k/TT: "
-						 "shifted rsvd_stram_end to %08lx, addr=%p\n",
-						 rsvd_stram_end, addr );
-			}
-		}
-		flags = BLOCK_STATIC;
-	}
 #ifdef CONFIG_STRAM_SWAP
-	else if (max_swap_size) {
-		/* If swapping is active (can only be the case after mem_init()!):
-		 * make some free space in the swap "device". */
+	if (max_swap_size) {
+		/* If swapping is active: make some free space in the swap
+		   "device". */
 		DPRINTK( "atari_stram_alloc: after mem_init, swapping ok, "
 				 "calling get_region\n" );
 		addr = get_stram_region( N_PAGES(size) );
 		flags = BLOCK_INSWAP;
 	}
+	else
 #endif
+	if (!mem_init_done)
+		return alloc_bootmem_low(size);
 	else {
 		/* After mem_init() and no swapping: can only resort to
 		 * __get_dma_pages() */
-		addr = (void *)__get_dma_pages(GFP_KERNEL, get_gfp_order(size));
+		addr = (void *)__get_dma_pages(GFP_KERNEL, get_order(size));
 		flags = BLOCK_GFP;
 		DPRINTK( "atari_stram_alloc: after mem_init, swapping off, "
 				 "get_pages=%p\n", addr );
@@ -492,14 +427,12 @@ void *atari_stram_alloc( long size, unsigned long *start_mem,
 			/* out of memory for BLOCK structure :-( */
 			DPRINTK( "atari_stram_alloc: out of mem for BLOCK -- "
 					 "freeing again\n" );
-			if (flags == BLOCK_STATIC)
-				rsvd_stram_end -= size;
 #ifdef CONFIG_STRAM_SWAP
-			else if (flags == BLOCK_INSWAP)
+			if (flags == BLOCK_INSWAP)
 				free_stram_region( SWAP_NR(addr), N_PAGES(size) );
-#endif
 			else
-				free_pages( (unsigned long)addr, get_gfp_order(size));
+#endif
+				free_pages((unsigned long)addr, get_order(size));
 			return( NULL );
 		}
 		block->owner = owner;
@@ -527,15 +460,15 @@ void atari_stram_free( void *addr )
 	if (!max_swap_size) {
 #endif
 		if (block->flags & BLOCK_GFP) {
-			DPRINTK( "atari_stram_free: is kmalloced, order_size=%d\n",
-					 get_gfp_order(block->size) );
-			free_pages( (unsigned long)addr, get_gfp_order(block->size) );
+			DPRINTK("atari_stram_free: is kmalloced, order_size=%d\n",
+				get_order(block->size));
+			free_pages((unsigned long)addr, get_order(block->size));
 		}
 		else
 			goto fail;
 #ifdef CONFIG_STRAM_SWAP
 	}
-	else if (block->flags & (BLOCK_INSWAP|BLOCK_STATIC)) {
+	else if (block->flags & BLOCK_INSWAP) {
 		DPRINTK( "atari_stram_free: is swap-alloced\n" );
 		free_stram_region( SWAP_NR(block->start), N_PAGES(block->size) );
 	}
@@ -563,17 +496,18 @@ void atari_stram_free( void *addr )
  * Initialize ST-RAM swap device
  * (lots copied and modified from sys_swapon() in mm/swapfile.c)
  */
-static int __init swap_init(unsigned long start_mem, unsigned long swap_data)
+static int __init swap_init(void *start_mem, void *swap_data)
 {
-	static struct dentry fake_dentry[3];
+	static struct dentry fake_dentry;
+	static struct vfsmount fake_vfsmnt;
 	struct swap_info_struct *p;
 	struct inode swap_inode;
 	unsigned int type;
-	unsigned long addr;
+	void *addr;
 	int i, j, k, prev;
 
-	DPRINTK( "swap_init(start_mem=%08lx, swap_data=%08lx)\n",
-			 start_mem, swap_data );
+	DPRINTK("swap_init(start_mem=%p, swap_data=%p)\n",
+		start_mem, swap_data);
 	
 	/* need at least one page for swapping to (and this also isn't very
 	 * much... :-) */
@@ -598,18 +532,16 @@ static int __init swap_init(unsigned long start_mem, unsigned long swap_data)
 	stram_swap_type = type;
 
 	/* fake some dir cache entries to give us some name in /dev/swaps */
-	fake_dentry[0].d_covers = &fake_dentry[1];
-	fake_dentry[0].d_parent = &fake_dentry[0];
-	fake_dentry[1].d_parent = &fake_dentry[2];
-	fake_dentry[1].d_name.name = "stram (internal)";
-	fake_dentry[1].d_name.len = 16;
-	fake_dentry[2].d_covers = &fake_dentry[2];
-	fake_dentry[2].d_parent = &fake_dentry[2];
+	fake_dentry.d_parent = &fake_dentry;
+	fake_dentry.d_name.name = "stram (internal)";
+	fake_dentry.d_name.len = 16;
+	fake_vfsmnt.mnt_parent = &fake_vfsmnt;
 	
 	p->flags        = SWP_USED;
-	p->swap_file    = &fake_dentry[0];
+	p->swap_file    = &fake_dentry;
+	p->swap_vfsmnt  = &fake_vfsmnt;
 	p->swap_device  = 0;
-	p->swap_map	= (unsigned short *)swap_data;
+	p->swap_map	= swap_data;
 	p->cluster_nr   = 0;
 	p->next         = -1;
 	p->prio         = 0x7ff0;	/* a rather high priority, but not the higest
@@ -628,7 +560,7 @@ static int __init swap_init(unsigned long start_mem, unsigned long swap_data)
 	k = 0; /* # of already allocated pages (from pre-mem_init stram_alloc()) */
 	p->lowest_bit = 0;
 	p->highest_bit = 0;
-	for( i = 1, addr = (unsigned long)SWAP_ADDR(1); i < p->max;
+	for( i = 1, addr = SWAP_ADDR(1); i < p->max;
 		 i++, addr += PAGE_SIZE ) {
 		if (in_some_region( addr )) {
 			p->swap_map[i] = SWAP_MAP_BAD;
@@ -685,8 +617,8 @@ static int __init swap_init(unsigned long start_mem, unsigned long swap_data)
  * what to do if a write is requested later.
  */
 static inline void unswap_pte(struct vm_area_struct * vma, unsigned long
-			      address, pte_t *dir, unsigned long entry,
-			      unsigned long page /*, int isswap */)
+			      address, pte_t *dir, swp_entry_t entry,
+			      struct page *page)
 {
 	pte_t pte = *dir;
 
@@ -698,34 +630,25 @@ static inline void unswap_pte(struct vm_area_struct * vma, unsigned long
                    memory */
 		if (pte_page(pte) != page)
 			return;
-		if (0 /* isswap */)
-			virt_to_page(pte_page(pte))->offset = page;
-		else
-			/* We will be removing the swap cache in a moment, so... */
-			set_pte(dir, pte_mkdirty(pte));
+		/* We will be removing the swap cache in a moment, so... */
+		set_pte(dir, pte_mkdirty(pte));
 		return;
 	}
-	if (pte_val(pte) != entry)
+	if (pte_val(pte) != entry.val)
 		return;
 
-	if (0 /* isswap */) {
-		DPRINTK( "unswap_pte: replacing entry %08lx by %08lx", entry, page );
-		set_pte(dir, __pte(page));
-	}
-	else {
-		DPRINTK( "unswap_pte: replacing entry %08lx by new page %08lx",
-				 entry, page );
-		set_pte(dir, pte_mkdirty(__mk_pte(page,vma->vm_page_prot)));
-		atomic_inc(&virt_to_page(page)->count);
-		++vma->vm_mm->rss;
-	}
+	DPRINTK("unswap_pte: replacing entry %08lx by new page %p",
+		entry.val, page);
+	set_pte(dir, pte_mkdirty(mk_pte(page, vma->vm_page_prot)));
 	swap_free(entry);
+	get_page(page);
+	++vma->vm_mm->rss;
 }
 
 static inline void unswap_pmd(struct vm_area_struct * vma, pmd_t *dir,
 			      unsigned long address, unsigned long size,
-			      unsigned long offset, unsigned long entry,
-			      unsigned long page /* , int isswap */)
+			      unsigned long offset, swp_entry_t entry,
+			      struct page *page)
 {
 	pte_t * pte;
 	unsigned long end;
@@ -733,7 +656,7 @@ static inline void unswap_pmd(struct vm_area_struct * vma, pmd_t *dir,
 	if (pmd_none(*dir))
 		return;
 	if (pmd_bad(*dir)) {
-		printk("unswap_pmd: bad pmd (%08lx)\n", pmd_val(*dir));
+		pmd_ERROR(*dir);
 		pmd_clear(dir);
 		return;
 	}
@@ -744,8 +667,7 @@ static inline void unswap_pmd(struct vm_area_struct * vma, pmd_t *dir,
 	if (end > PMD_SIZE)
 		end = PMD_SIZE;
 	do {
-		unswap_pte(vma, offset+address-vma->vm_start, pte, entry,
-			   page /* , isswap */);
+		unswap_pte(vma, offset+address-vma->vm_start, pte, entry, page);
 		address += PAGE_SIZE;
 		pte++;
 	} while (address < end);
@@ -753,8 +675,7 @@ static inline void unswap_pmd(struct vm_area_struct * vma, pmd_t *dir,
 
 static inline void unswap_pgd(struct vm_area_struct * vma, pgd_t *dir,
 			      unsigned long address, unsigned long size,
-			      unsigned long entry, unsigned long page
-			      /* , int isswap */)
+			      swp_entry_t entry, struct page *page)
 {
 	pmd_t * pmd;
 	unsigned long offset, end;
@@ -762,7 +683,7 @@ static inline void unswap_pgd(struct vm_area_struct * vma, pgd_t *dir,
 	if (pgd_none(*dir))
 		return;
 	if (pgd_bad(*dir)) {
-		printk("unswap_pgd: bad pgd (%08lx)\n", pgd_val(*dir));
+		pgd_ERROR(*dir);
 		pgd_clear(dir);
 		return;
 	}
@@ -774,28 +695,26 @@ static inline void unswap_pgd(struct vm_area_struct * vma, pgd_t *dir,
 		end = PGDIR_SIZE;
 	do {
 		unswap_pmd(vma, pmd, address, end - address, offset, entry,
-			   page /* , isswap */);
+			   page);
 		address = (address + PMD_SIZE) & PMD_MASK;
 		pmd++;
 	} while (address < end);
 }
 
 static void unswap_vma(struct vm_area_struct * vma, pgd_t *pgdir,
-		       unsigned long entry, unsigned long page
-		       /* , int isswap */)
+		       swp_entry_t entry, struct page *page)
 {
 	unsigned long start = vma->vm_start, end = vma->vm_end;
 
-	while (start < end) {
-		unswap_pgd(vma, pgdir, start, end - start, entry, page
-			   /* , isswap */);
+	do {
+		unswap_pgd(vma, pgdir, start, end - start, entry, page);
 		start = (start + PGDIR_SIZE) & PGDIR_MASK;
 		pgdir++;
-	}
+	} while (start < end);
 }
 
-static void unswap_process(struct mm_struct * mm, unsigned long entry, 
-			   unsigned long page /* , int isswap */)
+static void unswap_process(struct mm_struct * mm, swp_entry_t entry, 
+			   struct page *page)
 {
 	struct vm_area_struct* vma;
 
@@ -806,110 +725,18 @@ static void unswap_process(struct mm_struct * mm, unsigned long entry,
 		return;
 	for (vma = mm->mmap; vma; vma = vma->vm_next) {
 		pgd_t * pgd = pgd_offset(mm, vma->vm_start);
-		unswap_vma(vma, pgd, entry, page /* , isswap */);
+		unswap_vma(vma, pgd, entry, page);
 	}
 }
 
-
-#if 0
-static int unswap_by_move(unsigned short *map, unsigned long max,
-			  unsigned long start, unsigned long n_pages)
-{
-	struct task_struct *p;
-	unsigned long entry, rover = (start == 1) ? n_pages+1 : 1;
-	unsigned long i, j;
-
-	DPRINTK( "unswapping %lu..%lu by moving in swap\n",
-			 start, start+n_pages-1 );
-	
-	/* can free the allocated pages by moving them to other swap pages */
-	for( i = start; i < start+n_pages; ++i ) {
-		if (!map[i]) {
-			map[i] = SWAP_MAP_BAD;
-			DPRINTK( "unswap: page %lu was free\n", i );
-			continue;
-		}
-		else if (map[i] == SWAP_MAP_BAD) {
-			printk( KERN_ERR "get_stram_region: page %lu already "
-					"reserved??\n", i );
-		}
-		DPRINTK( "unswap: page %lu is alloced, count=%u\n", i, map[i] );
-
-		/* find a free page not in our region */
-		for( j = rover; j != rover-1; j = (j == max-1) ? 1 : j+1 ) {
-			if (j >= start && j < start+n_pages)
-				continue;
-			if (!map[j]) {
-				rover = j+1;
-				break;
-			}
-		}
-		if (j == rover-1) {
-			printk( KERN_ERR "get_stram_region: not enough free swap "
-					"pages now??\n" );
-			return( -ENOMEM );
-		}
-		DPRINTK( "unswap: map[i=%lu]=%u map[j=%lu]=%u nr_swap=%u\n",
-				 i, map[i], j, map[j], nr_swap_pages );
-		
-		--nr_swap_pages;
-		entry = SWP_ENTRY( stram_swap_type, j );
-		if (stram_swap_info->lowest_bit == j)
-			stram_swap_info->lowest_bit++;
-		if (stram_swap_info->highest_bit == j)
-			stram_swap_info->highest_bit--;
-		
-		memcpy( SWAP_ADDR(j), SWAP_ADDR(i), PAGE_SIZE );
-#ifdef DO_PROC
-		stat_swap_move++;
-#endif
-
-		while( map[i] ) {
-			read_lock(&tasklist_lock);
-			for_each_task(p) {
-				if (unswap_process( p->mm, SWP_ENTRY( stram_swap_type, i ),
-									entry, 1 )) {
-					read_unlock(&tasklist_lock);
-					map[j]++;
-					goto repeat;
-				}
-			}
-			read_unlock(&tasklist_lock);
-			if (map[i] && map[i] != SWAP_MAP_MAX) {
-				printk( KERN_ERR "get_stram_region: ST-RAM swap page %lu "
-						"not used by any process\n", i );
-				/* quit while loop and overwrite bad map entry */
-				break;
-			}
-			else if (!map[i]) {
-				/* somebody else must have swapped in that page, so free the
-				 * new one (we're moving to) */
-				DPRINTK( "unswap: map[i] became 0, also clearing map[j]\n" );
-				map[j] = 0;
-			}
-		  repeat:
-		}
-
-		DPRINTK( "unswap: map[i=%lu]=%u map[j=%lu]=%u nr_swap=%u\n",
-				 i, map[i], j, map[j], nr_swap_pages );
-		map[i] = SWAP_MAP_BAD;
-		if (stram_swap_info->lowest_bit == i)
-			stram_swap_info->lowest_bit++;
-		if (stram_swap_info->highest_bit == i)
-			stram_swap_info->highest_bit--;
-		--nr_swap_pages;
-	}
-	return( 0 );
-}
-#endif
 
 static int unswap_by_read(unsigned short *map, unsigned long max,
 			  unsigned long start, unsigned long n_pages)
 {
 	struct task_struct *p;
-	unsigned long entry, page;
+	struct page *page;
+	swp_entry_t entry;
 	unsigned long i;
-	struct page *page_map;
 
 	DPRINTK( "unswapping %lu..%lu by reading in\n",
 			 start, start+n_pages-1 );
@@ -932,28 +759,24 @@ static int unswap_by_read(unsigned short *map, unsigned long max,
 			/* Get a page for the entry, using the existing
 			   swap cache page if there is one.  Otherwise,
 			   get a clean page and read the swap into it. */
-			page_map = read_swap_cache(entry);
-			if (page_map) {
-				page = (unsigned long) page_address(page_map);
-				read_lock(&tasklist_lock);
-				for_each_task(p)
-					unswap_process(p->mm, entry, page
-						       /* , 0 */);
-				read_unlock(&tasklist_lock);
-				shm_unuse(entry, page);
-				/* Now get rid of the extra reference to
-				   the temporary page we've been using. */
-				if (PageSwapCache(page_map))
-					delete_from_swap_cache(page_map);
-				__free_page(page_map);
-	#ifdef DO_PROC
-				stat_swap_force++;
-	#endif
-			}
-			else {
+			page = read_swap_cache(entry);
+			if (!page) {
 				swap_free(entry);
 				return -ENOMEM;
 			}
+			read_lock(&tasklist_lock);
+			for_each_task(p)
+				unswap_process(p->mm, entry, page);
+			read_unlock(&tasklist_lock);
+			shm_unuse(entry, page);
+			/* Now get rid of the extra reference to the
+			   temporary page we've been using. */
+			if (PageSwapCache(page))
+				delete_from_swap_cache(page);
+			__free_page(page);
+	#ifdef DO_PROC
+			stat_swap_force++;
+	#endif
 		}
 
 		DPRINTK( "unswap: map[i=%lu]=%u nr_swap=%u\n",
@@ -998,14 +821,7 @@ static void *get_stram_region( unsigned long n_pages )
 	DPRINTK( "get_stram_region: region starts at %lu, has %lu free pages\n",
 			 start, region_free );
 
-#if 0
-	err = ((total_free-region_free >= n_pages-region_free) ?
-		   unswap_by_move( map, max, start, n_pages ) :
-		   unswap_by_read( map, max, start, n_pages ));
-#else
 	err = unswap_by_read(map, max, start, n_pages);
-#endif
-
 	if (err)
 		goto end;
 
@@ -1062,7 +878,7 @@ static void free_stram_region( unsigned long offset, unsigned long n_pages )
 
 
 /* is addr in some of the allocated regions? */
-static int in_some_region( unsigned long addr )
+static int in_some_region(void *addr)
 {
 	BLOCK *p;
 	
@@ -1164,17 +980,13 @@ static int stram_sizes[14] = {
 	0, 0, 0, 0, 0, 0, 0, 0,	0, 0, 0, 0, 0, 0 };
 static int refcnt = 0;
 
-static void do_stram_request( void )
+static void do_stram_request(request_queue_t *q)
 {
-	unsigned long start, len;
+	void *start;
+	unsigned long len;
 
-	while( !QUEUE_EMPTY ) {
-		if (MAJOR(CURRENT->rq_dev) != MAJOR_NR)
-			panic("stram: request list destroyed");
-		if (CURRENT->bh) {
-			if (!buffer_locked(CURRENT->bh))
-				panic("stram: block not locked");
-		}
+	while (1) {
+		INIT_REQUEST;
 		
 		start = swap_start + (CURRENT->sector << 9);
 		len   = CURRENT->current_nr_sectors << 9;
@@ -1188,13 +1000,13 @@ static void do_stram_request( void )
 		}
 
 		if (CURRENT->cmd == READ) {
-			memcpy( CURRENT->buffer, (char *)start, len );
+			memcpy(CURRENT->buffer, start, len);
 #ifdef DO_PROC
 			stat_swap_read += N_PAGES(len);
 #endif
 		}
 		else {
-			memcpy( (char *)start, CURRENT->buffer, len );
+			memcpy(start, CURRENT->buffer, len);
 #ifdef DO_PROC
 			stat_swap_write += N_PAGES(len);
 #endif
@@ -1251,18 +1063,14 @@ int __init stram_device_init(void)
 	return( -ENXIO );
     }
 
-    blk_dev[STRAM_MAJOR].request_fn = do_stram_request;
+    blk_init_queue(BLK_DEFAULT_QUEUE(STRAM_MAJOR), do_stram_request);
     blksize_size[STRAM_MAJOR] = stram_blocksizes;
 	stram_sizes[STRAM_MINOR] = (swap_end - swap_start)/1024;
     blk_size[STRAM_MAJOR] = stram_sizes;
 	register_disk(NULL, MKDEV(STRAM_MAJOR, STRAM_MINOR), 1, &stram_fops,
 			(swap_end-swap_start)>>9);
-	do_z2_request(); /* to avoid warning */
 	return( 0 );
 }
-
-/* to avoid warning */
-static void do_z2_request( void ) { }
 
 #endif /* CONFIG_STRAM_SWAP */
 
@@ -1271,30 +1079,10 @@ static void do_z2_request( void ) { }
 /*							Misc Utility Functions							*/
 /* ------------------------------------------------------------------------ */
 
-
-/* return log2 of #pages for size */
-static int get_gfp_order( unsigned long size )
+/* reserve a range of pages */
+static void reserve_region(void *start, void *end)
 {
-	int order;
-
-	size = N_PAGES( size + PAGE_SIZE -1 );
-	order = -1;
-	do {
-		size >>= 1;
-		order++;
-	} while (size);
-
-	return( order );
-}
-
-
-/* reserve a range of pages in mem_map[] */
-static void reserve_region( unsigned long addr, unsigned long end )
-{
-	mem_map_t *mapp = virt_to_page(addr);
-
-	for( ; addr < end; addr += PAGE_SIZE, ++mapp )
-		set_bit( PG_reserved, &mapp->flags );
+	reserve_bootmem (virt_to_phys(start), end - start);
 }
 
 
@@ -1328,11 +1116,11 @@ static BLOCK *add_region( void *addr, unsigned long size )
 		printk( KERN_ERR "Out of memory for ST-RAM descriptor blocks\n" );
 		return( NULL );
 	}
-	n->start = (unsigned long)addr;
+	n->start = addr;
 	n->size  = size;
 
 	for( p = &alloc_list; *p; p = &((*p)->next) )
-		if ((*p)->start > (unsigned long)addr) break;
+		if ((*p)->start > addr) break;
 	n->next = *p;
 	*p = n;
 
@@ -1346,9 +1134,9 @@ static BLOCK *find_region( void *addr )
 	BLOCK *p;
 	
 	for( p = alloc_list; p; p = p->next ) {
-		if (p->start == (unsigned long)addr)
+		if (p->start == addr)
 			return( p );
-		if (p->start > (unsigned long)addr)
+		if (p->start > addr)
 			break;
 	}
 	return( NULL );
@@ -1405,14 +1193,13 @@ int get_stram_list( char *buf )
 				++used;
 		}
 		PRINT_PROC(
-			"Total ST-RAM:      %8lu kB\n"
+			"Total ST-RAM:      %8u kB\n"
 			"Total ST-RAM swap: %8lu kB\n"
 			"Free swap:         %8u kB\n"
 			"Used swap:         %8u kB\n"
 			"Allocated swap:    %8u kB\n"
 			"Swap Reads:        %8u\n"
 			"Swap Writes:       %8u\n"
-			"Swap Moves:        %8u\n"
 			"Swap Forced Reads: %8u\n",
 			(stram_end - stram_start) >> 10,
 			(max-1) << (PAGE_SHIFT-10),
@@ -1421,17 +1208,13 @@ int get_stram_list( char *buf )
 			rsvd << (PAGE_SHIFT-10),
 			stat_swap_read,
 			stat_swap_write,
-			stat_swap_move,
 			stat_swap_force );
 	}
 	else {
 #endif
 		PRINT_PROC( "ST-RAM swapping disabled\n" );
-		PRINT_PROC(
-			"Total ST-RAM:      %8lu kB\n"
-			"Reserved ST-RAM:   %8lu kB\n",
-			(stram_end - stram_start) >> 10,
-			(rsvd_stram_end - rsvd_stram_beg) >> 10 );
+		PRINT_PROC("Total ST-RAM:      %8u kB\n",
+			   (stram_end - stram_start) >> 10);
 #ifdef CONFIG_STRAM_SWAP
 	}
 #endif
@@ -1441,12 +1224,10 @@ int get_stram_list( char *buf )
 		if (len + 50 >= PAGE_SIZE)
 			break;
 		PRINT_PROC("0x%08lx-0x%08lx: %s (",
-			   virt_to_phys((void *)p->start),
-			   virt_to_phys((void *)p->start+p->size-1),
+			   virt_to_phys(p->start),
+			   virt_to_phys(p->start+p->size-1),
 			   p->owner);
-		if (p->flags & BLOCK_STATIC)
-			PRINT_PROC( "static)\n" );
-		else if (p->flags & BLOCK_GFP)
+		if (p->flags & BLOCK_GFP)
 			PRINT_PROC( "page-alloced)\n" );
 		else if (p->flags & BLOCK_INSWAP)
 			PRINT_PROC( "in swap)\n" );

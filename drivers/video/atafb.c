@@ -2425,6 +2425,21 @@ do_install_cmap(int con, struct fb_info *info)
 }
 
 static int
+atafb_get_fix(struct fb_fix_screeninfo *fix, int con, struct fb_info *info)
+{
+	struct atafb_par par;
+	if (con == -1)
+		atafb_get_par(&par);
+	else {
+	  int err;
+		if ((err=fbhw->decode_var(&fb_display[con].var,&par)))
+		  return err;
+	}
+	memset(fix, 0, sizeof(struct fb_fix_screeninfo));
+	return fbhw->encode_fix(fix, &par);
+}
+	
+static int
 atafb_get_var(struct fb_var_screeninfo *var, int con, struct fb_info *info)
 {
 	struct atafb_par par;
@@ -2776,7 +2791,7 @@ int __init atafb_init(void)
 #endif /* ATAFB_EXT */
 		mem_req = default_mem_req + ovsc_offset + ovsc_addlen;
 		mem_req = PAGE_ALIGN(mem_req) + PAGE_SIZE;
-		screen_base = atari_stram_alloc(mem_req, NULL, "atafb");
+		screen_base = atari_stram_alloc(mem_req, "atafb");
 		if (!screen_base)
 			panic("Cannot allocate screen memory");
 		memset(screen_base, 0, mem_req);

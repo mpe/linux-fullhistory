@@ -865,12 +865,9 @@ static int qcam_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 		case VIDIOCGWIN:
 		{
 			struct video_window vw;
-			vw.x=0;
-			vw.y=0;
+			memset(&vw, 0, sizeof(vw));
 			vw.width=qcam->width/qcam->transfer_scale;
 			vw.height=qcam->height/qcam->transfer_scale;
-			vw.chromakey=0;
-			vw.flags=0;
 			if(copy_to_user(arg, &vw, sizeof(vw)))
 				return -EFAULT;
 			return 0;

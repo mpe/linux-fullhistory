@@ -289,7 +289,7 @@ static int __init aztech_init(void)
 		return -EINVAL;
 	}
 
-	if (check_region(io, 2)) 
+	if (request_region(io, 2, "aztech")) 
 	{
 		printk(KERN_ERR "aztech: port 0x%x already in use\n", io);
 		return -EBUSY;
@@ -299,9 +299,11 @@ static int __init aztech_init(void)
 	aztech_radio.priv=&aztech_unit;
 	
 	if(video_register_device(&aztech_radio, VFL_TYPE_RADIO)==-1)
+	{
+		release_region(io,2);
 		return -EINVAL;
+	}
 		
-	request_region(io, 2, "aztech");
 	printk(KERN_INFO "Aztech radio card driver v1.00/19990224 rkroll@exploits.org\n");
 	/* mute card - prevents noisy bootups */
 	outb (0, io);

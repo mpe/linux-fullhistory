@@ -309,7 +309,7 @@ static int __init terratec_init(void)
 		printk(KERN_ERR "You must set an I/O address with io=0x???\n");
 		return -EINVAL;
 	}
-	if (check_region(io, 2)) 
+	if (request_region(io, 2, "terratec")) 
 	{
 		printk(KERN_ERR "TerraTec: port 0x%x already in use\n", io);
 		return -EBUSY;
@@ -320,9 +320,11 @@ static int __init terratec_init(void)
 	spin_lock_init(&lock);
 	
 	if(video_register_device(&terratec_radio, VFL_TYPE_RADIO)==-1)
+	{
+		release_region(io,2);
 		return -EINVAL;
+	}
 		
-	request_region(io, 2, "terratec");
 	printk(KERN_INFO "TERRATEC ActivRadio Standalone card driver.\n");
 
  	/* mute card - prevents noisy bootups */

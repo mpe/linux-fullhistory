@@ -1,12 +1,20 @@
 /*
  *      u14-34f.c - Low-level driver for UltraStor 14F/34F SCSI host adapters.
  *
+ *      01 Nov 2000 Rev. 6.02 for linux 2.4.0-test11
+ *        + Removed old scsi error handling support.
+ *        + The obsolete boot option flag eh:n is silently ignored.
+ *        + Removed error messages while a disk drive is powered up at
+ *          boot time.
+ *        + Improved boot messages: all tagged capable device are
+ *          indicated as "tagged".
+ *
  *      16 Sep 1999 Rev. 5.11 for linux 2.2.12 and 2.3.18
  *        + Updated to the new __setup interface for boot command line options.
  *        + When loaded as a module, accepts the new parameter boot_options
  *          which value is a string with the same format of the kernel boot
  *          command line options. A valid example is:
- *          modprobe u14-34f 'boot_options=\"0x230,0x340,lc:y,mq:4\"'
+ *          modprobe u14-34f boot_options=\"0x230,0x340,lc:y,mq:4\"
  *
  *      22 Jul 1999 Rev. 5.00 for linux 2.2.10 and 2.3.11
  *        + Removed pre-2.2 source code compatibility.
@@ -169,7 +177,9 @@
  *
  *          Multiple U14F and/or U34F host adapters are supported.
  *
- *  Copyright (C) 1994-1999 Dario Ballabio (dario@milano.europe.dg.com)
+ *  Copyright (C) 1994-2000 Dario Ballabio (ballabio_dario@emc.com)
+ *
+ *  Alternate email: dario.ballabio@inwind.it, dario.ballabio@tiscalinet.it
  *
  *  Redistribution and use in source and binary forms, with or without
  *  modification, are permitted provided that redistributions of source
@@ -261,8 +271,6 @@
  *  After the optional list of detection probes, other possible command line
  *  options are:
  *
- *  eh:y  use new scsi code;
- *  eh:n  use old scsi code;
  *  et:y  use disk geometry returned by scsicam_bios_param;
  *  et:n  use disk geometry jumpered on the board;
  *  lc:y  enables linked commands;
@@ -273,13 +281,13 @@
  *
  *  The default value is: "u14-34f=lc:n,of:n,mq:8,et:n".
  *  An example using the list of detection probes could be:
- *  "u14-34f=0x230,0x340,lc:y,of:n,mq:4,eh:n,et:n".
+ *  "u14-34f=0x230,0x340,lc:y,of:n,mq:4,et:n".
  *
  *  When loading as a module, parameters can be specified as well.
  *  The above example would be (use 1 in place of y and 0 in place of n):
  *
  *  modprobe u14-34f io_port=0x230,0x340 linked_comm=1 have_old_firmware=0 \
- *                max_queue_depth=4 use_new_eh_code=0 ext_tran=0
+ *                max_queue_depth=4 ext_tran=0
  *
  *  ----------------------------------------------------------------------------
  *  In this implementation, linked commands are designed to work with any DISK
@@ -322,7 +330,10 @@
 
 #include <linux/version.h>
 
+#ifndef LinuxVersionCode
 #define LinuxVersionCode(v, p, s) (((v)<<16)+((p)<<8)+(s))
+#endif
+
 #define MAX_INT_PARAM 10
 
 #if defined(MODULE)
@@ -334,7 +345,6 @@ MODULE_PARM(linked_comm, "i");
 MODULE_PARM(have_old_firmware, "i");
 MODULE_PARM(link_statistics, "i");
 MODULE_PARM(max_queue_depth, "i");
-MODULE_PARM(use_new_eh_code, "i");
 MODULE_PARM(ext_tran, "i");
 MODULE_AUTHOR("Dario Ballabio");
 
@@ -360,12 +370,7 @@ MODULE_AUTHOR("Dario Ballabio");
 #include <linux/config.h>
 #include <linux/init.h>
 #include <linux/ctype.h>
-
-#if LINUX_VERSION_CODE < LinuxVersionCode(2,3,18)
-#include <asm/spinlock.h>
-#else
 #include <linux/spinlock.h>
-#endif
 
 #define SPIN_FLAGS unsigned long spin_flags;
 #define SPIN_LOCK spin_lock_irq(&io_request_lock);
@@ -449,10 +454,6 @@ MODULE_AUTHOR("Dario Ballabio");
 #define CMD_ENA_INTR      0x81
 #define ASOK              0x00
 #define ASST              0x91
-
-#if LINUX_VERSION_CODE < LinuxVersionCode(2,3,18)
-#define ARRAY_SIZE(x) (sizeof (x) / sizeof((x)[0]))
-#endif
 
 #define YESNO(a) ((a) ? 'y' : 'n')
 #define TLDEV(type) ((type) == TYPE_DISK || (type) == TYPE_ROM)
@@ -554,10 +555,9 @@ static void do_interrupt_handler(int, void *, struct pt_regs *);
 static void flush_dev(Scsi_Device *, unsigned long, unsigned int, unsigned int);
 static int do_trace = FALSE;
 static int setup_done = FALSE;
-static int link_statistics = 0;
+static int link_statistics;
 static int ext_tran = FALSE;
-static int use_new_eh_code = TRUE;
-static char *boot_options = NULL;
+static char *boot_options;
 
 #if defined(HAVE_OLD_UX4F_FIRMWARE)
 static int have_old_firmware = TRUE;
@@ -619,9 +619,9 @@ static void select_queue_depths(struct Scsi_Host *host, Scsi_Device *devlist) {
          }
 
       if (dev->tagged_supported && TLDEV(dev->type) && dev->tagged_queue)
-         tag_suffix = ", tagged";
+         tag_suffix = ", soft-tagged";
       else if (dev->tagged_supported && TLDEV(dev->type))
-         tag_suffix = ", untagged";
+         tag_suffix = ", tagged";
 
       printk("%s: scsi%d, channel %d, id %d, lun %d, cmds/lun %d%s%s.\n",
              BN(j), host->host_no, dev->channel, dev->id, dev->lun,
@@ -766,8 +766,6 @@ static inline int port_detect \
 
    if (have_old_firmware) tpnt->use_clustering = DISABLE_CLUSTERING;
 
-   tpnt->use_new_eh_code = use_new_eh_code;
-
    sh[j] = scsi_register(tpnt, sizeof(struct hostdata));
 
    if (sh[j] == NULL) {
@@ -875,10 +873,10 @@ static inline int port_detect \
    if (max_queue_depth < MAX_CMD_PER_LUN) max_queue_depth = MAX_CMD_PER_LUN;
 
    if (j == 0) {
-      printk("UltraStor 14F/34F: Copyright (C) 1994-1999 Dario Ballabio.\n");
-      printk("%s config options -> of:%c, lc:%c, mq:%d, eh:%c, et:%c.\n",
+      printk("UltraStor 14F/34F: Copyright (C) 1994-2000 Dario Ballabio.\n");
+      printk("%s config options -> of:%c, lc:%c, mq:%d, et:%c.\n",
              driver_name, YESNO(have_old_firmware), YESNO(linked_comm),
-             max_queue_depth, YESNO(use_new_eh_code), YESNO(ext_tran));
+             max_queue_depth, YESNO(ext_tran));
       }
 
    printk("%s: %s 0x%03lx, BIOS 0x%05x, IRQ %u, %s, SG %d, MB %d.\n",
@@ -921,7 +919,6 @@ static void internal_setup(char *str, int *ints) {
       else if (!strncmp(cur, "of:", 3)) have_old_firmware = val;
       else if (!strncmp(cur, "mq:", 3))  max_queue_depth = val;
       else if (!strncmp(cur, "ls:", 3))  link_statistics = val;
-      else if (!strncmp(cur, "eh:", 3))  use_new_eh_code = val;
       else if (!strncmp(cur, "et:", 3))  ext_tran = val;
 
       if ((cur = strchr(cur, ','))) ++cur;
@@ -1112,79 +1109,6 @@ int u14_34f_queuecommand(Scsi_Cmnd *SCpnt, void (*done)(Scsi_Cmnd *)) {
    return rtn;
 }
 
-static inline int do_old_abort(Scsi_Cmnd *SCarg) {
-   unsigned int i, j;
-
-   j = ((struct hostdata *) SCarg->host->hostdata)->board_number;
-
-   if (SCarg->host_scribble == NULL ||
-       (SCarg->serial_number_at_timeout &&
-       (SCarg->serial_number != SCarg->serial_number_at_timeout))) {
-      printk("%s: abort, target %d.%d:%d, pid %ld inactive.\n",
-             BN(j), SCarg->channel, SCarg->target, SCarg->lun, SCarg->pid);
-      return SCSI_ABORT_NOT_RUNNING;
-      }
-
-   i = *(unsigned int *)SCarg->host_scribble;
-   printk("%s: abort, mbox %d, target %d.%d:%d, pid %ld.\n",
-          BN(j), i, SCarg->channel, SCarg->target, SCarg->lun, SCarg->pid);
-
-   if (i >= sh[j]->can_queue)
-      panic("%s: abort, invalid SCarg->host_scribble.\n", BN(j));
-
-   if (wait_on_busy(sh[j]->io_port, MAXLOOP)) {
-      printk("%s: abort, timeout error.\n", BN(j));
-      return SCSI_ABORT_ERROR;
-      }
-
-   if (HD(j)->cp_stat[i] == FREE) {
-      printk("%s: abort, mbox %d is free.\n", BN(j), i);
-      return SCSI_ABORT_NOT_RUNNING;
-      }
-
-   if (HD(j)->cp_stat[i] == IN_USE) {
-      printk("%s: abort, mbox %d is in use.\n", BN(j), i);
-
-      if (SCarg != HD(j)->cp[i].SCpnt)
-         panic("%s: abort, mbox %d, SCarg %p, cp SCpnt %p.\n",
-               BN(j), i, SCarg, HD(j)->cp[i].SCpnt);
-
-      if (inb(sh[j]->io_port + REG_SYS_INTR) & IRQ_ASSERTED)
-         printk("%s: abort, mbox %d, interrupt pending.\n", BN(j), i);
-
-      return SCSI_ABORT_SNOOZE;
-      }
-
-   if (HD(j)->cp_stat[i] == IN_RESET) {
-      printk("%s: abort, mbox %d is in reset.\n", BN(j), i);
-      return SCSI_ABORT_ERROR;
-      }
-
-   if (HD(j)->cp_stat[i] == LOCKED) {
-      printk("%s: abort, mbox %d is locked.\n", BN(j), i);
-      return SCSI_ABORT_NOT_RUNNING;
-      }
-
-   if (HD(j)->cp_stat[i] == READY || HD(j)->cp_stat[i] == ABORTING) {
-      SCarg->result = DID_ABORT << 16;
-      SCarg->host_scribble = NULL;
-      HD(j)->cp_stat[i] = FREE;
-      printk("%s, abort, mbox %d ready, DID_ABORT, pid %ld done.\n",
-             BN(j), i, SCarg->pid);
-      SCarg->scsi_done(SCarg);
-      return SCSI_ABORT_SUCCESS;
-      }
-
-   panic("%s: abort, mbox %d, invalid cp_stat.\n", BN(j), i);
-}
-
-int u14_34f_old_abort(Scsi_Cmnd *SCarg) {
-   int rtn;
-
-   rtn = do_old_abort(SCarg);
-   return rtn;
-}
-
 static inline int do_abort(Scsi_Cmnd *SCarg) {
    unsigned int i, j;
 
@@ -1260,152 +1184,6 @@ static inline int do_abort(Scsi_Cmnd *SCarg) {
 int u14_34f_abort(Scsi_Cmnd *SCarg) {
 
    return do_abort(SCarg);
-}
-
-static inline int do_old_reset(Scsi_Cmnd *SCarg) {
-   unsigned int i, j, time, k, c, limit = 0;
-   int arg_done = FALSE;
-   Scsi_Cmnd *SCpnt;
-
-   j = ((struct hostdata *) SCarg->host->hostdata)->board_number;
-   printk("%s: reset, enter, target %d.%d:%d, pid %ld.\n",
-          BN(j), SCarg->channel, SCarg->target, SCarg->lun, SCarg->pid);
-
-   if (SCarg->host_scribble == NULL)
-      printk("%s: reset, pid %ld inactive.\n", BN(j), SCarg->pid);
-
-   if (SCarg->serial_number_at_timeout &&
-       (SCarg->serial_number != SCarg->serial_number_at_timeout)) {
-      printk("%s: reset, pid %ld, reset not running.\n", BN(j), SCarg->pid);
-      return SCSI_RESET_NOT_RUNNING;
-      }
-
-   if (HD(j)->in_reset) {
-      printk("%s: reset, exit, already in reset.\n", BN(j));
-      return SCSI_RESET_ERROR;
-      }
-
-   if (wait_on_busy(sh[j]->io_port, MAXLOOP)) {
-      printk("%s: reset, exit, timeout error.\n", BN(j));
-      return SCSI_RESET_ERROR;
-      }
-
-   HD(j)->retries = 0;
-
-   for (c = 0; c <= sh[j]->max_channel; c++)
-      for (k = 0; k < sh[j]->max_id; k++) {
-         HD(j)->target_redo[k][c] = TRUE;
-         HD(j)->target_to[k][c] = 0;
-         }
-
-   for (i = 0; i < sh[j]->can_queue; i++) {
-
-      if (HD(j)->cp_stat[i] == FREE) continue;
-
-      if (HD(j)->cp_stat[i] == LOCKED) {
-         HD(j)->cp_stat[i] = FREE;
-         printk("%s: reset, locked mbox %d forced free.\n", BN(j), i);
-         continue;
-         }
-
-      if (!(SCpnt = HD(j)->cp[i].SCpnt))
-         panic("%s: reset, mbox %d, SCpnt == NULL.\n", BN(j), i);
-
-      if (HD(j)->cp_stat[i] == READY || HD(j)->cp_stat[i] == ABORTING) {
-         HD(j)->cp_stat[i] = ABORTING;
-         printk("%s: reset, mbox %d aborting, pid %ld.\n",
-                BN(j), i, SCpnt->pid);
-         }
-
-      else {
-         HD(j)->cp_stat[i] = IN_RESET;
-         printk("%s: reset, mbox %d in reset, pid %ld.\n",
-                BN(j), i, SCpnt->pid);
-         }
-
-      if (SCpnt->host_scribble == NULL)
-         panic("%s: reset, mbox %d, garbled SCpnt.\n", BN(j), i);
-
-      if (*(unsigned int *)SCpnt->host_scribble != i)
-         panic("%s: reset, mbox %d, index mismatch.\n", BN(j), i);
-
-      if (SCpnt->scsi_done == NULL)
-         panic("%s: reset, mbox %d, SCpnt->scsi_done == NULL.\n", BN(j), i);
-
-      if (SCpnt == SCarg) arg_done = TRUE;
-      }
-
-   if (wait_on_busy(sh[j]->io_port, MAXLOOP)) {
-      printk("%s: reset, cannot reset, timeout error.\n", BN(j));
-      return SCSI_RESET_ERROR;
-      }
-
-   outb(CMD_RESET, sh[j]->io_port + REG_LCL_INTR);
-   printk("%s: reset, board reset done, enabling interrupts.\n", BN(j));
-
-#if defined(DEBUG_RESET)
-   do_trace = TRUE;
-#endif
-
-   HD(j)->in_reset = TRUE;
-   SPIN_UNLOCK
-   time = jiffies;
-   while ((jiffies - time) < (10 * HZ) && limit++ < 200000) udelay(100L);
-   SPIN_LOCK
-   printk("%s: reset, interrupts disabled, loops %d.\n", BN(j), limit);
-
-   for (i = 0; i < sh[j]->can_queue; i++) {
-
-      if (HD(j)->cp_stat[i] == IN_RESET) {
-         SCpnt = HD(j)->cp[i].SCpnt;
-         SCpnt->result = DID_RESET << 16;
-         SCpnt->host_scribble = NULL;
-
-         /* This mailbox is still waiting for its interrupt */
-         HD(j)->cp_stat[i] = LOCKED;
-
-         printk("%s, reset, mbox %d locked, DID_RESET, pid %ld done.\n",
-                BN(j), i, SCpnt->pid);
-         }
-
-      else if (HD(j)->cp_stat[i] == ABORTING) {
-         SCpnt = HD(j)->cp[i].SCpnt;
-         SCpnt->result = DID_RESET << 16;
-         SCpnt->host_scribble = NULL;
-
-         /* This mailbox was never queued to the adapter */
-         HD(j)->cp_stat[i] = FREE;
-
-         printk("%s, reset, mbox %d aborting, DID_RESET, pid %ld done.\n",
-                BN(j), i, SCpnt->pid);
-         }
-
-      else
-
-         /* Any other mailbox has already been set free by interrupt */
-         continue;
-
-      SCpnt->scsi_done(SCpnt);
-      }
-
-   HD(j)->in_reset = FALSE;
-   do_trace = FALSE;
-
-   if (arg_done) {
-      printk("%s: reset, exit, success.\n", BN(j));
-      return SCSI_RESET_SUCCESS;
-      }
-   else {
-      printk("%s: reset, exit, wakeup.\n", BN(j));
-      return SCSI_RESET_PUNT;
-      }
-}
-
-int u14_34f_old_reset(Scsi_Cmnd *SCarg, unsigned int reset_flags) {
-   int rtn;
-
-   rtn = do_old_reset(SCarg);
-   return rtn;
 }
 
 static inline int do_reset(Scsi_Cmnd *SCarg) {
@@ -1663,7 +1441,7 @@ static inline int reorder(unsigned int j, unsigned long cursec,
 
    if (link_statistics) {
       if (cursec > sl[0]) iseek = cursec - sl[0]; else iseek = sl[0] - cursec;
-      batchcount++; readycount += n_ready, seeknosort += seek / 1024;
+      batchcount++; readycount += n_ready; seeknosort += seek / 1024;
       if (input_only) inputcount++;
       if (overlap) { ovlcount++; seeksorted += iseek / 1024; }
       else seeksorted += (iseek + maxsec - minsec) / 1024;
@@ -1837,7 +1615,9 @@ static inline void ihdlr(int irq, unsigned int j) {
          if (tstatus == GOOD)
             HD(j)->target_redo[SCpnt->target][SCpnt->channel] = FALSE;
 
-         if (spp->target_status && SCpnt->device->type == TYPE_DISK)
+         if (spp->target_status && SCpnt->device->type == TYPE_DISK &&
+             (!(tstatus == CHECK_CONDITION && HD(j)->iocount <= 1000 &&
+               (SCpnt->sense_buffer[2] & 0xf) == NOT_READY)))
             printk("%s: ihdlr, target %d.%d:%d, pid %ld, "\
                    "target_status 0x%x, sense key 0x%x.\n", BN(j),
                    SCpnt->channel, SCpnt->target, SCpnt->lun,
@@ -1969,13 +1749,5 @@ static Scsi_Host_Template driver_template = ULTRASTOR_14_34F;
 #include "scsi_module.c"
 
 #ifndef MODULE
-
-#if LINUX_VERSION_CODE < LinuxVersionCode(2,3,18)
-void u14_34f_setup(char *str, int *ints) {
-   internal_setup(str, ints);
-}
-#else
 __setup("u14-34f=", option_setup);
-#endif
-
 #endif /* end MODULE */

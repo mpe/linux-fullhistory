@@ -9,14 +9,14 @@
  * disable interrupts while they operate.  (You have to provide inline
  * routines to cli() and sti().)
  *
- * Also note, these routines assume that you have 32 bit integers.
+ * Also note, these routines assume that you have 32 bit longs.
  * You will have to change this if you are trying to port Linux to the
  * Alpha architecture or to a Cray.  :-)
  * 
  * C language equivalents written by Theodore Ts'o, 9/26/92
  */
 
-extern __inline__ int set_bit(int nr,int * addr)
+extern __inline__ int set_bit(int nr,long * addr)
 {
 	int	mask, retval;
 
@@ -29,7 +29,7 @@ extern __inline__ int set_bit(int nr,int * addr)
 	return retval;
 }
 
-extern __inline__ int clear_bit(int nr, int * addr)
+extern __inline__ int clear_bit(int nr, long * addr)
 {
 	int	mask, retval;
 
@@ -42,7 +42,7 @@ extern __inline__ int clear_bit(int nr, int * addr)
 	return retval;
 }
 
-extern __inline__ int test_bit(int nr, int * addr)
+extern __inline__ int test_bit(int nr, long * addr)
 {
 	int	mask;
 

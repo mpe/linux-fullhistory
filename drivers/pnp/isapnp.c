@@ -270,17 +270,16 @@ static int isapnp_next_rdp(void)
 {
 	int rdp = isapnp_rdp;
 	while (rdp <= 0x3ff) {
-		if (!check_region(rdp, 1)) {
-			isapnp_rdp = rdp;
-			return 0;
-		}
-		rdp += RDP_STEP;
 		/*
 		 *	We cannot use NE2000 probe spaces for ISAPnP or we
 		 *	will lock up machines.
 		 */
-		if(rdp >= 0x280 && rdp <= 0x380)
-			continue;
+		if ((rdp < 0x280 || rdp >  0x380) && !check_region(rdp, 1)) 
+		{
+			isapnp_rdp = rdp;
+			return 0;
+		}
+		rdp += RDP_STEP;
 	}
 	return -1;
 }

@@ -23,7 +23,6 @@ extern int q40kbd_translate(unsigned char scancode, unsigned char *keycode,
 			   char raw_mode);
 extern char q40kbd_unexpected_up(unsigned char keycode);
 extern void q40kbd_leds(unsigned char leds);
-extern int q40kbd_is_sysrq(unsigned char keycode);
 extern void q40kbd_init_hw(void);
 extern unsigned char q40kbd_sysrq_xlate[128];
 
@@ -36,7 +35,6 @@ extern unsigned char q40kbd_sysrq_xlate[128];
 #define kbd_unexpected_up	q40kbd_unexpected_up
 #define kbd_leds		q40kbd_leds
 #define kbd_init_hw		q40kbd_init_hw
-#define kbd_is_sysrq		q40kbd_is_sysrq
 #define kbd_sysrq_xlate		q40kbd_sysrq_xlate
 
 

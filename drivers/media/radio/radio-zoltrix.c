@@ -355,20 +355,22 @@ static int __init zoltrix_init(void)
 		printk(KERN_ERR "You must set an I/O address with io=0x???\n");
 		return -EINVAL;
 	}
-	if (check_region(io, 2)) {
-		printk(KERN_ERR "zoltrix: port 0x%x already in use\n", io);
-		return -EBUSY;
-	}
 	if ((io != 0x20c) && (io != 0x30c)) {
 		printk(KERN_ERR "zoltrix: invalid port, try 0x20c or 0x30c\n");
 		return -ENXIO;
 	}
+
 	zoltrix_radio.priv = &zoltrix_unit;
+	if (request_region(io, 2, "zoltrix")) {
+		printk(KERN_ERR "zoltrix: port 0x%x already in use\n", io);
+		return -EBUSY;
+	}
 
 	if (video_register_device(&zoltrix_radio, VFL_TYPE_RADIO) == -1)
+	{
+		release_region(io, 2);
 		return -EINVAL;
-
-	request_region(io, 2, "zoltrix");
+	}
 	printk(KERN_INFO "Zoltrix Radio Plus card driver.\n");
 
 	init_MUTEX(&zoltrix_unit.lock);

@@ -31,6 +31,7 @@
 #include <asm/amigahw.h>
 #include <asm/amigaints.h>
 #include <asm/irq.h>
+#include <asm/keyboard.h>
 #include <asm/machdep.h>
 #include <asm/io.h>
 
@@ -71,6 +72,8 @@ static void amiga_sched_init(void (*handler)(int, void *, struct pt_regs *));
 /* amiga specific keyboard functions */
 extern int amiga_keyb_init(void);
 extern int amiga_kbdrate (struct kbd_repeat *);
+extern int amiga_kbd_translate(unsigned char keycode, unsigned char *keycodep,
+			       char raw_mode);
 /* amiga specific irq functions */
 extern void amiga_init_IRQ (void);
 extern void (*amiga_default_handler[]) (int, void *, struct pt_regs *);
@@ -388,6 +391,8 @@ void __init config_amiga(void)
   mach_sched_init      = amiga_sched_init;
   mach_keyb_init       = amiga_keyb_init;
   mach_kbdrate         = amiga_kbdrate;
+  mach_kbd_translate   = amiga_kbd_translate;
+  SYSRQ_KEY            = 0xff;
   mach_init_IRQ        = amiga_init_IRQ;
   mach_default_handler = &amiga_default_handler;
   mach_request_irq     = amiga_request_irq;
@@ -862,7 +867,9 @@ static void amiga_mem_console_write(struct console *co, const char *s,
 
 static void amiga_savekmsg_init(void)
 {
-    savekmsg = (struct savekmsg *)amiga_chip_alloc(SAVEKMSG_MAXMEM, "Debug");
+    static struct resource debug_res = { "Debug" };
+
+    savekmsg = amiga_chip_alloc_res(SAVEKMSG_MAXMEM, &debug_res);
     savekmsg->magic1 = SAVEKMSG_MAGIC1;
     savekmsg->magic2 = SAVEKMSG_MAGIC2;
     savekmsg->magicptr = virt_to_phys(savekmsg);

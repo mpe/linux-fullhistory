@@ -10,10 +10,12 @@
 #include <linux/interrupt.h>
 #include <linux/tty.h>
 #include <linux/mm.h>
+#include <linux/keyboard.h>
 #include <linux/signal.h>
 #include <linux/ioport.h>
 #include <linux/init.h>
 #include <linux/kbd_ll.h>
+#include <linux/kbd_kern.h>
 #include <linux/delay.h>
 #include <linux/sysrq.h>
 #include <linux/random.h>
@@ -342,7 +344,6 @@ static void keyboard_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
 	unsigned char status;
 
-	disable_keyboard();
 	spin_lock(&kbd_controller_lock);
 	kbd_pt_regs = regs;
 
@@ -378,8 +379,7 @@ static void keyboard_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 
 		handle_scancode(scancode, ! keyup );
 		keyup=0;
-		mark_bh(KEYBOARD_BH);
-
+		tasklet_schedule(&keyboard_tasklet);
 	      }
 	    else
 	      keyup=1;
@@ -387,20 +387,7 @@ static void keyboard_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 exit:
 	spin_unlock(&kbd_controller_lock);
 	master_outb(-1,KEYBOARD_UNLOCK_REG); /* keyb ints reenabled herewith */
-	enable_keyboard();
 }
-
-
-
-
-#ifdef CONFIG_MAGIC_SYSRQ
-int kbd_is_sysrq(unsigned char keycode)
-{
-	return( keycode == SYSRQ_KEY );
-}
-#endif /* CONFIG_MAGIC_SYSRQ */
-
-
 
 
 #define KBD_NO_DATA	(-1)	/* No data */

@@ -190,7 +190,9 @@
    /* This is what the 3393 chip looks like to us */
 typedef struct {
    volatile unsigned char   SASR;
+#if !defined(CONFIG_MVME147_SCSI)
    char                     pad;
+#endif
 #ifdef CONFIG_SGI_IP22
    char                     pad2,pad3;
 #endif
@@ -341,5 +343,6 @@ int wd33c93_queuecommand (Scsi_Cmnd *cmd, void (*done)(Scsi_Cmnd *));
 void wd33c93_intr (struct Scsi_Host *instance);
 int wd33c93_proc_info(char *, char **, off_t, int, int, int);
 int wd33c93_reset (Scsi_Cmnd *, unsigned int);
+void wd33c93_release(void);
 
 #endif /* WD33C93_H */

@@ -451,7 +451,6 @@ void __init pcibios_init(void)
 	 */
 	pci_assign_unassigned_resources();
 	pci_fixup_irqs(hw_pci->swizzle, hw_pci->map_irq);
-	pci_set_bus_ranges();
 }
 
 char * __init pcibios_setup(char *str)

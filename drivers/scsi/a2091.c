@@ -231,8 +231,6 @@ int __init a2091_detect(Scsi_Host_Template *tpnt)
 
 #define HOSTS_C
 
-#include "a2091.h"
-
 static Scsi_Host_Template driver_template = A2091_SCSI;
 
 #include "scsi_module.c"

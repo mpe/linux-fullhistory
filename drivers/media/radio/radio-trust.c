@@ -300,14 +300,15 @@ static int __init trust_init(void)
 		printk(KERN_ERR "You must set an I/O address with io=0x???\n");
 		return -EINVAL;
 	}
-	if(check_region(io, 2)) {
+	if(request_region(io, 2, "Trust FM Radio")) {
 		printk(KERN_ERR "trust: port 0x%x already in use\n", io);
 		return -EBUSY;
 	}
 	if(video_register_device(&trust_radio, VFL_TYPE_RADIO)==-1)
+	{
+		release_region(io, 2);
 		return -EINVAL;
-		
-	request_region(io, 2, "Trust FM Radio");
+	}
 
 	printk(KERN_INFO "Trust FM Radio card driver v1.0.\n");
 

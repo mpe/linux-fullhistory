@@ -69,6 +69,8 @@ static char buffersize_index[65] =
  *	lru_list_lock > hash_table_lock > free_list_lock > unused_list_lock
  */
 
+#define BH_ENTRY(list) list_entry((list), struct buffer_head, b_inode_buffers)
+
 /*
  * Hash table gook..
  */
@@ -567,6 +569,42 @@ unsigned int get_hardblocksize(kdev_t dev)
 	return 0;
 }
 
+void buffer_insert_inode_queue(struct buffer_head *bh, struct inode *inode)
+{
+	spin_lock(&lru_list_lock);
+	if (bh->b_inode)
+		list_del(&bh->b_inode_buffers);
+	bh->b_inode = inode;
+	list_add(&bh->b_inode_buffers, &inode->i_dirty_buffers);
+	spin_unlock(&lru_list_lock);
+}
+
+/* The caller must have the lru_list lock before calling the 
+   remove_inode_queue functions.  */
+static void __remove_inode_queue(struct buffer_head *bh)
+{
+	bh->b_inode = NULL;
+	list_del(&bh->b_inode_buffers);
+}
+
+static inline void remove_inode_queue(struct buffer_head *bh)
+{
+	if (bh->b_inode)
+		__remove_inode_queue(bh);
+}
+
+int inode_has_buffers(struct inode *inode)
+{
+	int ret;
+	
+	spin_lock(&lru_list_lock);
+	ret = !list_empty(&inode->i_dirty_buffers);
+	spin_unlock(&lru_list_lock);
+	
+	return ret;
+}
+
+
 /* If invalidate_buffers() will trash dirty buffers, it means some kind
    of fs corruption is going on. Trashing dirty data always imply losing
    information that was supposed to be just stored on the physical layer
@@ -615,6 +653,7 @@ void __invalidate_buffers(kdev_t dev, int destroy_dirty_buffers)
 			write_lock(&hash_table_lock);
 			if (!atomic_read(&bh->b_count) &&
 			    (destroy_dirty_buffers || !buffer_dirty(bh))) {
+				remove_inode_queue(bh);
 				__remove_from_queues(bh);
 				put_last_free(bh);
 			}
@@ -679,6 +718,7 @@ void set_blocksize(kdev_t dev, int size)
 					printk(KERN_WARNING
 					       "set_blocksize: dev %s buffer_dirty %lu size %hu\n",
 					       kdevname(dev), bh->b_blocknr, bh->b_size);
+				remove_inode_queue(bh);
 				__remove_from_queues(bh);
 				put_last_free(bh);
 			} else {
@@ -792,6 +832,136 @@ still_busy:
 	spin_unlock_irqrestore(&page_uptodate_lock, flags);
 	return;
 }
+
+/*
+ * Synchronise all the inode's dirty buffers to the disk.
+ *
+ * We have conflicting pressures: we want to make sure that all
+ * initially dirty buffers get waited on, but that any subsequently
+ * dirtied buffers don't.  After all, we don't want fsync to last
+ * forever if somebody is actively writing to the file.
+ *
+ * Do this in two main stages: first we copy dirty buffers to a
+ * temporary inode list, queueing the writes as we go.  Then we clean
+ * up, waiting for those writes to complete.
+ * 
+ * During this second stage, any subsequent updates to the file may end
+ * up refiling the buffer on the original inode's dirty list again, so
+ * there is a chance we will end up with a buffer queued for write but
+ * not yet completed on that list.  So, as a final cleanup we go through
+ * the osync code to catch these locked, dirty buffers without requeuing
+ * any newly dirty buffers for write.
+ */
+
+int fsync_inode_buffers(struct inode *inode)
+{
+	struct buffer_head *bh;
+	struct inode tmp;
+	int err = 0, err2;
+	
+	INIT_LIST_HEAD(&tmp.i_dirty_buffers);
+	
+	spin_lock(&lru_list_lock);
+
+	while (!list_empty(&inode->i_dirty_buffers)) {
+		bh = BH_ENTRY(inode->i_dirty_buffers.next);
+		list_del(&bh->b_inode_buffers);
+		if (!buffer_dirty(bh) && !buffer_locked(bh))
+			bh->b_inode = NULL;
+		else {
+			bh->b_inode = &tmp;
+			list_add(&bh->b_inode_buffers, &tmp.i_dirty_buffers);
+			atomic_inc(&bh->b_count);
+			if (buffer_dirty(bh)) {
+				spin_unlock(&lru_list_lock);
+				ll_rw_block(WRITE, 1, &bh);
+				spin_lock(&lru_list_lock);
+			}
+		}
+	}
+
+	while (!list_empty(&tmp.i_dirty_buffers)) {
+		bh = BH_ENTRY(tmp.i_dirty_buffers.prev);
+		remove_inode_queue(bh);
+		spin_unlock(&lru_list_lock);
+		wait_on_buffer(bh);
+		if (!buffer_uptodate(bh))
+			err = -EIO;
+		brelse(bh);
+		spin_lock(&lru_list_lock);
+	}
+	
+	spin_unlock(&lru_list_lock);
+	err2 = osync_inode_buffers(inode);
+
+	if (err)
+		return err;
+	else
+		return err2;
+}
+
+
+/*
+ * osync is designed to support O_SYNC io.  It waits synchronously for
+ * all already-submitted IO to complete, but does not queue any new
+ * writes to the disk.
+ *
+ * To do O_SYNC writes, just queue the buffer writes with ll_rw_block as
+ * you dirty the buffers, and then use osync_inode_buffers to wait for
+ * completion.  Any other dirty buffers which are not yet queued for
+ * write will not be flushed to disk by the osync.
+ */
+
+int osync_inode_buffers(struct inode *inode)
+{
+	struct buffer_head *bh;
+	struct list_head *list;
+	int err = 0;
+
+	spin_lock(&lru_list_lock);
+	
+ repeat:
+	
+	for (list = inode->i_dirty_buffers.prev; 
+	     bh = BH_ENTRY(list), list != &inode->i_dirty_buffers;
+	     list = bh->b_inode_buffers.prev) {
+		if (buffer_locked(bh)) {
+			atomic_inc(&bh->b_count);
+			spin_unlock(&lru_list_lock);
+			wait_on_buffer(bh);
+			brelse(bh);
+			if (!buffer_uptodate(bh))
+				err = -EIO;
+			spin_lock(&lru_list_lock);
+			goto repeat;
+		}
+	}
+
+	spin_unlock(&lru_list_lock);
+	return err;
+}
+
+
+/*
+ * Invalidate any and all dirty buffers on a given inode.  We are
+ * probably unmounting the fs, but that doesn't mean we have already
+ * done a sync().  Just drop the buffers from the inode list.
+ */
+
+void invalidate_inode_buffers(struct inode *inode)
+{
+	struct list_head *list, *next;
+	
+	spin_lock(&lru_list_lock);
+	list = inode->i_dirty_buffers.next; 
+	while (list != &inode->i_dirty_buffers) {
+		next = list->next;
+		remove_inode_queue(BH_ENTRY(list));
+		list = next;
+	}
+	spin_unlock(&lru_list_lock);
+}
+
 
 /*
  * Ok, this is getblk, and it isn't very clear, again to hinder
@@ -941,6 +1111,8 @@ static void __refile_buffer(struct buffer_head *bh)
 	if (dispose != bh->b_list) {
 		__remove_from_lru_list(bh, bh->b_list);
 		bh->b_list = dispose;
+		if (dispose == BUF_CLEAN)
+			remove_inode_queue(bh);
 		__insert_into_lru_list(bh, dispose);
 	}
 }
@@ -978,6 +1150,7 @@ void __bforget(struct buffer_head * buf)
 	if (!atomic_dec_and_test(&buf->b_count) || buffer_locked(buf))
 		goto in_use;
 	__hash_unlink(buf);
+	remove_inode_queue(buf);
 	write_unlock(&hash_table_lock);
 	__remove_from_lru_list(buf, buf->b_list);
 	spin_unlock(&lru_list_lock);
@@ -1074,6 +1247,8 @@ struct buffer_head * breada(kdev_t dev, int block, int bufsize,
  */
 static __inline__ void __put_unused_buffer_head(struct buffer_head * bh)
 {
+	if (bh->b_inode)
+		BUG();
 	if (nr_unused_buffer_heads >= MAX_UNUSED_BUFFERS) {
 		kmem_cache_free(bh_cachep, bh);
 	} else {
@@ -1441,6 +1616,7 @@ static int __block_write_full_page(struct inode *inode, struct page *page, get_b
 		}
 		set_bit(BH_Uptodate, &bh->b_state);
 		if (!atomic_set_buffer_dirty(bh)) {
+			buffer_insert_inode_queue(bh, inode);
 			__mark_dirty(bh);
 			need_balance_dirty = 1;
 		}
@@ -1551,6 +1727,7 @@ static int __block_commit_write(struct inode *inode, struct page *page,
 			set_bit(BH_Uptodate, &bh->b_state);
 			if (!atomic_set_buffer_dirty(bh)) {
 				__mark_dirty(bh);
+				buffer_insert_inode_queue(bh, inode);
 				need_balance_dirty = 1;
 			}
 		}
@@ -2313,9 +2490,10 @@ cleaned_buffers_try_again:
 		/* The buffer can be either on the regular
 		 * queues or on the free list..
 		 */
-		if (p->b_dev != B_FREE)
+		if (p->b_dev != B_FREE) {
+			remove_inode_queue(p);
 			__remove_from_queues(p);
-		else
+		} else
 			__remove_from_free_list(p, index);
 		__put_unused_buffer_head(p);
 	} while (tmp != bh);

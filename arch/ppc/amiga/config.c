@@ -796,7 +796,7 @@ static void amiga_mem_console_write(struct console *co, const char *s,
 
 static void amiga_savekmsg_init(void)
 {
-    savekmsg = (struct savekmsg *)amiga_chip_alloc(SAVEKMSG_MAXMEM);
+    savekmsg = (struct savekmsg *)amiga_chip_alloc(SAVEKMSG_MAXMEM, "Debug");
     savekmsg->magic1 = SAVEKMSG_MAGIC1;
     savekmsg->magic2 = SAVEKMSG_MAGIC2;
     savekmsg->magicptr = virt_to_phys(savekmsg);

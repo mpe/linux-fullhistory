@@ -8,6 +8,7 @@
  * for more details.
  */
 
+#include <linux/config.h>
 #include <linux/sched.h>
 #include <linux/timer.h>
 #include <linux/init.h>
@@ -42,7 +43,9 @@ static u_long clock_constant;
 
 void __init amiga_init_sound(void)
 {
-	snd_data = amiga_chip_alloc(sizeof(sine_data), "Beep");
+	static struct resource beep_res = { "Beep" };
+
+	snd_data = amiga_chip_alloc_res(sizeof(sine_data), &beep_res);
 	if (!snd_data) {
 		printk (KERN_CRIT "amiga init_sound: failed to allocate chipmem\n");
 		return;
@@ -51,6 +54,11 @@ void __init amiga_init_sound(void)
 
 	/* setup divisor */
 	clock_constant = (amiga_colorclock+DATA_SIZE/2)/DATA_SIZE;
+
+	/* without amifb, turn video off and enable high quality sound */
+#ifndef CONFIG_FB_AMIGA
+	amifb_video_off();
+#endif
 }
 
 static void nosound( unsigned long ignored );

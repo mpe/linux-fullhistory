@@ -4,10 +4,10 @@
  * Version:       0.9
  * Description:   IrLAP state machine implementation
  * Status:        Experimental.
- * Author:        Dag Brattli <dagb@cs.uit.no>
+ * Author:        Dag Brattli <dag@brattli.net>
  * Created at:    Sat Aug 16 00:59:29 1997
  * Modified at:   Sat Dec 25 21:07:57 1999
- * Modified by:   Dag Brattli <dagb@cs.uit.no>
+ * Modified by:   Dag Brattli <dag@brattli.net>
  * 
  *     Copyright (c) 1998-2000 Dag Brattli <dag@brattli.net>,
  *     Copyright (c) 1998      Thomas Davis <ratbert@radiks.net>
@@ -551,13 +551,15 @@ static int irlap_state_query(struct irlap_cb *self, IRLAP_EVENT event,
 		 * since we want to work even with devices that violate the
 		 * timing requirements.
 		 */
-		if (irda_device_is_receiving(self->netdev)) {
-			IRDA_DEBUG(1, __FUNCTION__ 
+		if (irda_device_is_receiving(self->netdev) && !self->add_wait) {
+			IRDA_DEBUG(2, __FUNCTION__ 
 				   "(), device is slow to answer, "
 				   "waiting some more!\n");
 			irlap_start_slot_timer(self, MSECS_TO_JIFFIES(10));
+			self->add_wait = TRUE;
 			return ret;
 		}
+		self->add_wait = FALSE;
 
 		if (self->s < self->S) {
 			irlap_send_discovery_xid_frame(self, self->S, 
@@ -1324,9 +1326,7 @@ static int irlap_state_nrm_p(struct irlap_cb *self, IRLAP_EVENT event,
 		 *  of receiving a frame (page 45, IrLAP). Check that
 		 *  we only do this once for each frame.
 		 */
-		if (irda_device_is_receiving(self->netdev) && 
-		    !self->add_wait) 
-		{
+		if (irda_device_is_receiving(self->netdev) && !self->add_wait) {
 			IRDA_DEBUG(1, "FINAL_TIMER_EXPIRED when receiving a "
 			      "frame! Waiting a little bit more!\n");
 			irlap_start_final_timer(self, MSECS_TO_JIFFIES(300));

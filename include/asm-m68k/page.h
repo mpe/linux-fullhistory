@@ -160,7 +160,7 @@ static inline void *__va(unsigned long x)
 #endif	/* CONFIG_SUN3 */
 
 #define MAP_NR(addr)		(((unsigned long)(addr)-PAGE_OFFSET) >> PAGE_SHIFT)
-#define virt_to_page(kaddr)	(mem_map + (((unsigned long)(addr)-PAGE_OFFSET) >> PAGE_SHIFT))
+#define virt_to_page(kaddr)	(mem_map + (((unsigned long)(kaddr)-PAGE_OFFSET) >> PAGE_SHIFT))
 #define VALID_PAGE(page)	((page - mem_map) < max_mapnr)
 
 #ifndef CONFIG_SUN3

@@ -24,6 +24,7 @@ int main(void)
 	/* offsets into the task struct */
 	DEFINE(TASK_STATE, offsetof(struct task_struct, state));
 	DEFINE(TASK_FLAGS, offsetof(struct task_struct, flags));
+	DEFINE(TASK_PTRACE, offsetof(struct task_struct, ptrace));
 	DEFINE(TASK_SIGPENDING, offsetof(struct task_struct, sigpending));
 	DEFINE(TASK_NEEDRESCHED, offsetof(struct task_struct, need_resched));
 	DEFINE(TASK_THREAD, offsetof(struct task_struct, thread));

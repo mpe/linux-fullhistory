@@ -816,7 +816,7 @@ static void AtaRelease(void)
 
 static void *AtaAlloc(unsigned int size, int flags)
 {
-	return atari_stram_alloc( size, NULL, "dmasound" );
+	return atari_stram_alloc(size, "dmasound");
 }
 
 static void AtaFree(void *obj, unsigned int size)

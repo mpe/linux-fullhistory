@@ -960,7 +960,7 @@ static int irtty_net_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)
 	ASSERT(self != NULL, return -1;);
 	ASSERT(self->magic == IRTTY_MAGIC, return -1;);
 
-	IRDA_DEBUG(2, __FUNCTION__ "(), %s, (cmd=0x%X)\n", dev->name, cmd);
+	IRDA_DEBUG(3, __FUNCTION__ "(), %s, (cmd=0x%X)\n", dev->name, cmd);
 	
 	/* Disable interrupts & save flags */
 	save_flags(flags);

@@ -1531,8 +1531,32 @@ static void __init init_intel(struct cpuinfo_x86 *c)
 				dh = des >> 4;
 				dl = des & 0x0F;
 
+				/* Black magic... */
+
 				switch ( dh )
 				{
+				case 0:
+					switch ( dl ) {
+					case 6:
+						/* L1 I cache */
+						l1i += 8;
+						break;
+					case 8:
+						/* L1 I cache */
+						l1i += 16;
+						break;
+					case 10:
+						/* L1 D cache */
+						l1d += 8;
+						break;
+					case 12:
+						/* L1 D cache */
+						l1d += 16;
+						break;
+					default:
+						/* TLB, or unknown */
+					}
+					break;
 				case 2:
 					if ( dl ) {
 						/* L3 cache */
@@ -1541,6 +1565,16 @@ static void __init init_intel(struct cpuinfo_x86 *c)
 					}
 					break;
 				case 4:
+					if ( c->x86 > 6 && dl ) {
+						/* P4 family */
+						if ( dl ) {
+							/* L3 cache */
+							cs = 128 << (dl-1);
+							l3 += cs;
+							break;
+						}
+					}
+					/* else same as 8 - fall through */
 				case 8:
 					if ( dl ) {
 						/* L2 cache */
@@ -1556,9 +1590,16 @@ static void __init init_intel(struct cpuinfo_x86 *c)
 					}
 					break;
 				case 7:
-					/* L1 I cache */
-					cs = dl ? (16 << (dl-1)) : 12;
-					l1i += cs;
+					if ( dl >= 8 ) 
+					{
+						/* L2 cache */
+						cs = 64<<(dl-8);
+						l2 += cs;
+					} else {
+						/* L0 I cache, count as L1 */
+						cs = dl ? (16 << (dl-1)) : 12;
+						l1i += cs;
+					}
 					break;
 				default:
 					/* TLB, or something else we don't know about */
@@ -2066,8 +2107,8 @@ int get_cpuinfo(char * buffer)
 		/* Intel-defined */
 	        "fpu", "vme", "de", "pse", "tsc", "msr", "pae", "mce",
 	        "cx8", "apic", NULL, "sep", "mtrr", "pge", "mca", "cmov",
-	        "pat", "pse36", "pn", "clflsh", NULL, "dtes", "acpi", "mmx",
-	        "fxsr", "sse", "sse2", "selfsnoop", NULL, "acc", "ia64", NULL,
+	        "pat", "pse36", "pn", "clflush", NULL, "dts", "acpi", "mmx",
+	        "fxsr", "sse", "sse2", "ss", NULL, "tm", "ia64", NULL,
 
 		/* AMD-defined */
 		NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,

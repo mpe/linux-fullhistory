@@ -128,7 +128,7 @@ ENTRY(system_call)
 	| save top of frame
 	movel	%sp,%curptr@(TASK_THREAD+THREAD_ESP0)
 
-	btst	#PF_TRACESYS_BIT,%curptr@(TASK_FLAGS+PF_TRACESYS_OFF)
+	btst	#PT_TRACESYS_BIT,%curptr@(TASK_PTRACE+PT_TRACESYS_OFF)
 	jne	do_trace
 	cmpl	#NR_syscalls,%d0
 	jcc	badsys
@@ -149,7 +149,7 @@ SYMBOL_NAME_LABEL(ret_from_exception)
 	jeq	2f
 #endif
 					| check for delayed trace
-	bclr	#PF_DTRACE_BIT,%curptr@(TASK_FLAGS+PF_DTRACE_OFF)
+	bclr	#PT_DTRACE_BIT,%curptr@(TASK_PTRACE+PT_DTRACE_OFF)
 	jne	do_delayed_trace
 5:
 	tstl	%curptr@(TASK_STATE)	| state

@@ -8,7 +8,6 @@
  *  This file contains the m68k architecture specific keyboard definitions
  */
 
-#include <linux/config.h> /* CONFIG_MAGIC_SYSRQ */
 #ifndef __M68K_KEYBOARD_H
 #define __M68K_KEYBOARD_H
 
@@ -39,17 +38,6 @@ static __inline__ int kbd_getkeycode(unsigned int scancode)
     return scancode > 127 ? -EINVAL : scancode;
 }
 
-static __inline__ int kbd_translate(unsigned char scancode,
-				    unsigned char *keycode, char raw_mode)
-{
-#ifdef CONFIG_Q40
-    if (MACH_IS_Q40)
-        return q40kbd_translate(scancode,keycode,raw_mode);
-#endif
-    *keycode = scancode;
-    return 1;
-}
-
 static __inline__ char kbd_unexpected_up(unsigned char keycode)
 {
 #ifdef CONFIG_Q40
@@ -65,15 +53,16 @@ static __inline__ void kbd_leds(unsigned char leds)
 	mach_kbd_leds(leds);
 }
 
-#ifdef CONFIG_MAGIC_SYSRQ
-#define kbd_is_sysrq(keycode)	((keycode) == mach_sysrq_key && \
-				 (up_flag || \
-				  (shift_state & mach_sysrq_shift_mask) == \
-				  mach_sysrq_shift_state))
-#define kbd_sysrq_xlate			mach_sysrq_xlate
-#endif
+#define kbd_init_hw		mach_keyb_init
+#define kbd_translate		mach_kbd_translate
 
-#define kbd_init_hw	mach_keyb_init
+#define kbd_sysrq_xlate		mach_sysrq_xlate
+
+/* resource allocation */
+#define kbd_request_region()
+#define kbd_request_irq(handler)
+
+extern unsigned int SYSRQ_KEY;
 
 #endif /* __KERNEL__ */
 

@@ -230,7 +230,7 @@ static int __init rtrack2_init(void)
 		printk(KERN_ERR "You must set an I/O address with io=0x20c or io=0x30c\n");
 		return -EINVAL;
 	}
-	if (check_region(io, 4)) 
+	if (request_region(io, 4, "rtrack2")) 
 	{
 		printk(KERN_ERR "rtrack2: port 0x%x already in use\n", io);
 		return -EBUSY;
@@ -240,9 +240,11 @@ static int __init rtrack2_init(void)
 
 	spin_lock_init(&lock);	
 	if(video_register_device(&rtrack2_radio, VFL_TYPE_RADIO)==-1)
+	{
+		release_region(io, 4);
 		return -EINVAL;
+	}
 		
-	request_region(io, 4, "rtrack2");
 	printk(KERN_INFO "AIMSlab Radiotrack II card driver.\n");
 
  	/* mute card - prevents noisy bootups */

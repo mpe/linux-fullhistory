@@ -49,13 +49,13 @@
 LFLUSH_I_AND_D = 0x00000808
 LSIGTRAP = 5
 
-/* process bits for task_struct.flags */
-PF_TRACESYS_OFF = 3
-PF_TRACESYS_BIT = 5
-PF_PTRACED_OFF = 3
-PF_PTRACED_BIT = 4
-PF_DTRACE_OFF = 1
-PF_DTRACE_BIT = 5
+/* process bits for task_struct.ptrace */
+PT_TRACESYS_OFF = 3
+PT_TRACESYS_BIT = 1
+PT_PTRACED_OFF = 3
+PT_PTRACED_BIT = 0
+PT_DTRACE_OFF = 3
+PT_DTRACE_BIT = 2
 
 #define SAVE_ALL_INT save_all_int
 #define SAVE_ALL_SYS save_all_sys

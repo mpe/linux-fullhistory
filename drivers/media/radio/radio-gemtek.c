@@ -265,7 +265,7 @@ static int __init gemtek_init(void)
 		return -EINVAL;
 	}
 
-	if (check_region(io, 4)) 
+	if (request_region(io, 4, "gemtek")) 
 	{
 		printk(KERN_ERR "gemtek: port 0x%x already in use\n", io);
 		return -EBUSY;
@@ -274,9 +274,10 @@ static int __init gemtek_init(void)
 	gemtek_radio.priv=&gemtek_unit;
 	
 	if(video_register_device(&gemtek_radio, VFL_TYPE_RADIO)==-1)
+	{
+		release_region(io, 4);
 		return -EINVAL;
-		
-	request_region(io, 4, "gemtek");
+	}
 	printk(KERN_INFO "GemTek Radio Card driver.\n");
 
 	spin_lock_init(&lock);

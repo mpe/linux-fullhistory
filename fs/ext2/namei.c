@@ -296,7 +296,7 @@ int ext2_add_entry (struct inode * dir, const char * name, int namelen,
 			dir->u.ext2_i.i_flags &= ~EXT2_BTREE_FL;
 			mark_inode_dirty(dir);
 			dir->i_version = ++event;
-			mark_buffer_dirty(bh);
+			mark_buffer_dirty_inode(bh, dir);
 			if (IS_SYNC(dir)) {
 				ll_rw_block (WRITE, 1, &bh);
 				wait_on_buffer (bh);
@@ -337,7 +337,7 @@ static int ext2_delete_entry (struct inode * dir,
 			else
 				de->inode = 0;
 			dir->i_version = ++event;
-			mark_buffer_dirty(bh);
+			mark_buffer_dirty_inode(bh, dir);
 			if (IS_SYNC(dir)) {
 				ll_rw_block (WRITE, 1, &bh);
 				wait_on_buffer (bh);
@@ -449,7 +449,7 @@ static int ext2_mkdir(struct inode * dir, struct dentry * dentry, int mode)
 	strcpy (de->name, "..");
 	ext2_set_de_type(dir->i_sb, de, S_IFDIR);
 	inode->i_nlink = 2;
-	mark_buffer_dirty(dir_block);
+	mark_buffer_dirty_inode(dir_block, dir);
 	brelse (dir_block);
 	inode->i_mode = S_IFDIR | mode;
 	if (dir->i_mode & S_ISGID)
@@ -755,7 +755,7 @@ static int ext2_rename (struct inode * old_dir, struct dentry *old_dentry,
 					      EXT2_FEATURE_INCOMPAT_FILETYPE))
 			new_de->file_type = old_de->file_type;
 		new_dir->i_version = ++event;
-		mark_buffer_dirty(new_bh);
+		mark_buffer_dirty_inode(new_bh, new_dir);
 		if (IS_SYNC(new_dir)) {
 			ll_rw_block (WRITE, 1, &new_bh);
 			wait_on_buffer (new_bh);
@@ -786,7 +786,7 @@ static int ext2_rename (struct inode * old_dir, struct dentry *old_dentry,
 	mark_inode_dirty(old_dir);
 	if (dir_bh) {
 		PARENT_INO(dir_bh->b_data) = le32_to_cpu(new_dir->i_ino);
-		mark_buffer_dirty(dir_bh);
+		mark_buffer_dirty_inode(dir_bh, old_inode);
 		old_dir->i_nlink--;
 		mark_inode_dirty(old_dir);
 		if (new_inode) {
