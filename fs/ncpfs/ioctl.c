@@ -250,21 +250,21 @@ int ncp_ioctl(struct inode *inode, struct file *filp,
 		{
 			return -EACCES;
 		}
-		if (server->sign_active)
-		{
-			return -EINVAL;
-		}
-		if (server->sign_wanted)
-		{
-			struct ncp_sign_init sign;
+		if (arg) {
+			if (server->sign_wanted)
+			{
+				struct ncp_sign_init sign;
 
-			if (copy_from_user(&sign, (struct ncp_sign_init *) arg,
-			      sizeof(sign))) return -EFAULT;
-			memcpy(server->sign_root,sign.sign_root,8);
-			memcpy(server->sign_last,sign.sign_last,16);
-			server->sign_active = 1;
+				if (copy_from_user(&sign, (struct ncp_sign_init *) arg,
+				      sizeof(sign))) return -EFAULT;
+				memcpy(server->sign_root,sign.sign_root,8);
+				memcpy(server->sign_last,sign.sign_last,16);
+				server->sign_active = 1;
+			}
+			/* ignore when signatures not wanted */
+		} else {
+			server->sign_active = 0;
 		}
-		/* ignore when signatures not wanted */
 		return 0;		
 		
         case NCP_IOC_SIGN_WANTED:

@@ -812,8 +812,8 @@ fh_put(struct svc_fh *fhp)
 {
 	struct dentry * dentry = fhp->fh_dentry;
 	if (fhp->fh_dverified) {
-		fhp->fh_dentry = NULL;
 		fh_unlock(fhp);
+		fhp->fh_dentry = NULL;
 		fhp->fh_dverified = 0;
 		dput(dentry);
 		nfsd_nr_put++;

@@ -233,12 +233,12 @@ static struct {
 	/* Not a real frame buffer device... */
 	{ "resolver", NULL, resolver_video_setup },
 #endif
+#ifdef CONFIG_FB_SIS
+	{ "sisfb", sisfb_init, sisfb_setup },
+#endif
 #ifdef CONFIG_FB_VIRTUAL
 	/* Must be last to avoid that vfb becomes your primary display */
 	{ "vfb", vfb_init, vfb_setup },
-#endif
-#ifdef CONFIG_FB_SIS
-	{ "sisfb", sisfb_init, sisfb_setup },
 #endif
 };
 

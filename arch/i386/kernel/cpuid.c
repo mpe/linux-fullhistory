@@ -71,14 +71,14 @@ extern inline void do_cpuid(int cpu, u32 reg, u32 *data)
     smp_call_function(cpuid_smp_cpuid, (void *)cmd, 1, 1);
   }
 }
-#else /* ! __SMP__ */
+#else /* ! CONFIG_SMP */
 
 extern inline void do_cpuid(int cpu, u32 reg, u32 *data)
 {
   cpuid(reg, &data[0], &data[1], &data[2], &data[3]);
 }
 
-#endif /* ! __SMP__ */
+#endif /* ! CONFIG_SMP */
 
 static loff_t cpuid_seek(struct file *file, loff_t offset, int orig)
 {

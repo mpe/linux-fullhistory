@@ -143,7 +143,7 @@ extern inline int do_rdmsr(int cpu, u32 reg, u32 *eax, u32 *edx)
   }
 }
 
-#else /* ! __SMP__ */
+#else /* ! CONFIG_SMP */
 
 extern inline int do_wrmsr(int cpu, u32 reg, u32 eax, u32 edx)
 {
@@ -155,7 +155,7 @@ extern inline int do_rdmsr(int cpu, u32 reg, u32 *eax, u32 *edx)
   return rdmsr_eio(reg, eax, edx);
 }
 
-#endif /* ! __SMP__ */
+#endif /* ! CONFIG_SMP */
 
 static loff_t msr_seek(struct file *file, loff_t offset, int orig)
 {

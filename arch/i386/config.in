@@ -18,15 +18,15 @@ endmenu
 mainmenu_option next_comment
 comment 'Processor type and features'
 choice 'Processor family' \
-	"386			CONFIG_M386	\
-	 486/Cx486		CONFIG_M486	\
-	 586/K5/5x86/6x86/6x86MX	CONFIG_M586	\
-	 Pentium/TSC		CONFIG_M586TSC	\
-	 PPro/P-II/P-III	CONFIG_M686 \
-	 Pentium-III		CONFIG_M686FX \
-	 K6/II/III		CONFIG_MK6 \
-	 Crusoe			CONFIG_MCRUSOE \
-	 Athlon                 CONFIG_MK7" PPro
+	"386				CONFIG_M386 \
+	 486/Cx486			CONFIG_M486 \
+	 586/K5/5x86/6x86/6x86MX	CONFIG_M586 \
+	 Pentium/TSC			CONFIG_M586TSC \
+	 PPro/Pentium-II		CONFIG_M686 \
+	 Pentium-III			CONFIG_M686FX \
+	 K6/K6-II/K6-III		CONFIG_MK6 \
+	 Athlon				CONFIG_MK7 \
+	 Crusoe				CONFIG_MCRUSOE" PPro
 #
 # Define implied options from the CPU selection here
 #
@@ -53,10 +53,6 @@ if [ "$CONFIG_M586TSC" = "y" ]; then
    define_int  CONFIG_X86_L1_CACHE_BYTES 32
    define_bool CONFIG_X86_USE_STRING_486 y
    define_bool CONFIG_X86_ALIGNMENT_16 y
-   define_bool CONFIG_X86_TSC y
-fi
-if [ "$CONFIG_MCRUSOE" = "y" ]; then
-   define_int  CONFIG_X86_L1_CACHE_BYTES 32
    define_bool CONFIG_X86_TSC y
 fi
 if [ "$CONFIG_M686" = "y" ]; then
@@ -87,6 +83,10 @@ if [ "$CONFIG_MK7" = "y" ]; then
    define_bool CONFIG_X86_USE_3DNOW y
    define_bool CONFIG_X86_PGE y
    define_bool CONFIG_X86_USE_PPRO_CHECKSUM y
+fi
+if [ "$CONFIG_MCRUSOE" = "y" ]; then
+   define_int  CONFIG_X86_L1_CACHE_BYTES 32
+   define_bool CONFIG_X86_TSC y
 fi
 
 tristate '/dev/cpu/microcode - Intel P6 CPU microcode support' CONFIG_MICROCODE

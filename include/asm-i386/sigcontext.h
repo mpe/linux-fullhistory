@@ -1,6 +1,7 @@
 #ifndef _ASMi386_SIGCONTEXT_H
 #define _ASMi386_SIGCONTEXT_H
 
+#include <linux/config.h>
 /*
  * As documented in the iBCS2 standard..
  *

@@ -275,12 +275,22 @@ out:
 	return already_written ? already_written : errno;
 }
 
+static int ncp_release(struct inode *inode, struct file *file) {
+	if (NCP_FINFO(inode)->opened) {
+		if (ncp_make_closed(inode)) {
+			DPRINTK("ncp_release: failed to close\n");
+		}
+	}
+	return 0;
+}
+
 struct file_operations ncp_file_operations =
 {
 	read:		ncp_file_read,
 	write:		ncp_file_write,
 	ioctl:		ncp_ioctl,
 	mmap:		ncp_mmap,
+	release:	ncp_release,
 	fsync:		ncp_fsync,
 };
 

@@ -41,8 +41,20 @@ fb_find_mode() first tries the specified video mode (or any mode that matches,
 e.g. there can be multiple 640x480 modes, each of them is tried). If that
 fails, the default mode is tried. If that fails, it walks over all modes.
 
+To specify a video mode at bootup, use the following boot options:
+    video=<driver>:<xres>x<yres>[-<bpp>][@refresh]
+
+where <driver> is a name from the table below.  Valid default modes can be
+found in linux/drivers/video/modedb.c.  Check your driver's documentation.
+There may be more modes.
+
+    Drivers that support modedb boot options
+    Boot Name	  Cards Supported
+
+    ami		- Amiga chipset frame buffer
+    aty128fb	- ATI Rage128 / Pro frame buffer
+    atyfb	- ATI Mach64 frame buffer
+    tdfx	- 3D Fx frame buffer
+
 BTW, only a few drivers use this at the moment. Others are to follow
 (feel free to send patches).
-
-
-
