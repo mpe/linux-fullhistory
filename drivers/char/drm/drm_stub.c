@@ -43,8 +43,8 @@ EXPORT_SYMBOL(drm_debug);
 MODULE_AUTHOR( DRIVER_AUTHOR );
 MODULE_DESCRIPTION( DRIVER_DESC );
 MODULE_LICENSE("GPL and additional rights");
-MODULE_PARM_DESC(drm_cards_limit, "Maximum number of graphics cards");
-MODULE_PARM_DESC(drm_debug, "Enable debug output");
+MODULE_PARM_DESC(cards_limit, "Maximum number of graphics cards");
+MODULE_PARM_DESC(debug, "Enable debug output");
 
 module_param_named(cards_limit, drm_cards_limit, int, 0444);
 module_param_named(debug, drm_debug, int, 0666);
