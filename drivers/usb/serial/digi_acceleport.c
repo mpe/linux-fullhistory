@@ -246,6 +246,7 @@
 #include <linux/workqueue.h>
 #include <asm/uaccess.h>
 #include <linux/usb.h>
+#include <linux/wait.h>
 #include "usb-serial.h"
 
 /* Defines */
@@ -573,23 +574,14 @@ static inline long cond_wait_interruptible_timeout_irqrestore(
 	wait_queue_head_t *q, long timeout,
 	spinlock_t *lock, unsigned long flags )
 {
+	DEFINE_WAIT(wait);
 
-	wait_queue_t wait;
-
-
-	init_waitqueue_entry( &wait, current );
-
-	set_current_state( TASK_INTERRUPTIBLE );
-
-	add_wait_queue( q, &wait );
-
-	spin_unlock_irqrestore( lock, flags );
-
+	prepare_to_wait(q, &wait, TASK_UNINTERRUPTIBLE);
+	spin_unlock_irqrestore(lock, flags);
 	timeout = schedule_timeout(timeout);
+	finish_wait(q, &wait);
 
-	remove_wait_queue( q, &wait );
-
-	return( timeout );
+	return timeout;
 
 }
 
@@ -1528,7 +1520,7 @@ dbg( "digi_open: TOP: port=%d, open_count=%d", priv->dp_port_num, port->open_cou
 
 static void digi_close( struct usb_serial_port *port, struct file *filp )
 {
-
+	DEFINE_WAIT(wait);
 	int ret;
 	unsigned char buf[32];
 	struct tty_struct *tty = port->tty;
@@ -1604,8 +1596,9 @@ dbg( "digi_close: TOP: port=%d, open_count=%d", priv->dp_port_num, port->open_co
 			dbg( "digi_close: write oob failed, ret=%d", ret );
 
 		/* wait for final commands on oob port to complete */
-		interruptible_sleep_on_timeout( &priv->dp_flush_wait,
-			DIGI_CLOSE_TIMEOUT );
+		prepare_to_wait(&priv->dp_flush_wait, &wait, TASK_UNINTERRUPTIBLE);
+		schedule_timeout(DIGI_CLOSE_TIMEOUT);
+		finish_wait(&priv->dp_flush_wait, &wait);
 
 		/* shutdown any outstanding bulk writes */
 		usb_kill_urb(port->write_urb);
@@ -2002,7 +1995,7 @@ opcode, line, status, val );
 
 		} else if( opcode == DIGI_CMD_IFLUSH_FIFO ) {
 
-			wake_up_interruptible( &priv->dp_flush_wait );
+			wake_up( &priv->dp_flush_wait );
 
 		}
 
