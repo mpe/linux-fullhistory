@@ -149,6 +149,9 @@ struct console_font_op {
 
 #define KD_FONT_FLAG_GLOBAL		1	/* Change on _all_ consoles */
 #define KD_FONT_FLAG_DONT_RECALC 	2	/* Don't recalculate hw charcell size [compat] */
+#ifdef __KERNEL__
+#define KD_FONT_FLAG_NEW		0x80000000	/* Indicate new KDFONTOP interface, which should be more strict */
+#endif
 
 /* note: 0x4B00-0x4B4E all have had a value at some time;
    don't reuse for the time being */

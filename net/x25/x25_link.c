@@ -264,11 +264,14 @@ void x25_link_established(struct x25_neigh *neigh)
 
 /*
  *	Called when the link layer has terminated, or an establishment
- *	request has failed. XXX should tell sockets.
+ *	request has failed.
  */
+
 void x25_link_terminated(struct x25_neigh *neigh)
 {
 	neigh->state = X25_LINK_STATE_0;
+	/* Out of order: clear existing virtual calls (X.25 03/93 4.6.3) */
+	x25_kill_by_neigh(neigh);
 }
 
 /*

@@ -430,6 +430,7 @@ static int sonic_send_packet(struct sk_buff *skb, struct device *dev)
 	lp->tda[(lp->cur_tx-1) % SONIC_TDS_MASK].link &= ~SONIC_END_OF_LINKS;
     
     lp->cur_tx++;
+    lp->stats.tx_bytes += length;
     
     if (sonic_debug > 2)
       printk("sonic_send_packet: issueing Tx command\n");
@@ -610,6 +611,7 @@ sonic_rx(struct device *dev)
 	    skb->protocol=eth_type_trans(skb,dev);
 	    netif_rx(skb);			/* pass the packet to upper layers */
 	    lp->stats.rx_packets++;
+	    lp->stats.rx_bytes += pkt_len;
 	    
 	} else {
 	    /* This should only happen, if we enable accepting broken packets. */

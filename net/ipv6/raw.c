@@ -7,7 +7,7 @@
  *
  *	Adapted from linux/net/ipv4/raw.c
  *
- *	$Id: raw.c,v 1.19 1998/03/20 09:12:20 davem Exp $
+ *	$Id: raw.c,v 1.20 1998/07/15 05:05:41 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -596,6 +596,8 @@ static void rawv6_close(struct sock *sk, unsigned long timeout)
 {
 	sk->state = TCP_CLOSE;
 	ipv6_sock_mc_close(sk);
+	if (sk->num == IPPROTO_RAW)
+		ip6_ra_control(sk, -1, NULL);
 	sk->dead = 1;
 	destroy_sock(sk);
 }

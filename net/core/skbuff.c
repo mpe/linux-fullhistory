@@ -77,11 +77,22 @@ extern atomic_t ip_frag_mem;
 static kmem_cache_t *skbuff_head_cache;
 
 /*
- *	Strings we don't want inline's duplicating
+ *	Keep out-of-line to prevent kernel bloat.
+ *	__builtin_return_address is not used because it is not always
+ *	reliable. 
  */
- 
-const char skb_push_errstr[]="skpush:under: %p:%d";
-const char skb_put_errstr[] ="skput:over: %p:%d";
+
+void skb_over_panic(struct sk_buff *skb, int sz, void *here)
+{
+	panic("skput:over: %p:%d put:%d dev:%s", 
+		here, skb->len, sz, skb->dev ? skb->dev->name : "<NULL>");
+}
+
+void skb_under_panic(struct sk_buff *skb, int sz, void *here)
+{
+        panic("skput:over: %p:%d put:%d dev:%s",
+                here, skb->len, sz, skb->dev ? skb->dev->name : "<NULL>");
+}
 
 void show_net_buffers(void)
 {

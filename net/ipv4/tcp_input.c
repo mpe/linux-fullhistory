@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_input.c,v 1.119 1998/05/23 13:10:24 davem Exp $
+ * Version:	$Id: tcp_input.c,v 1.121 1998/07/15 04:39:12 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -156,8 +156,8 @@ static __inline__ void tcp_rtt_estimator(struct tcp_opt *tp, __u32 mrtt)
 	}
 }
 
-/* Calculate rto without backoff. This is the second half of Van Jacobsons
- * routine refered to above.
+/* Calculate rto without backoff.  This is the second half of Van Jacobson's
+ * routine referred to above.
  */
 
 static __inline__ void tcp_set_rto(struct tcp_opt *tp)
@@ -186,13 +186,21 @@ static __inline__ void tcp_bound_rto(struct tcp_opt *tp)
 }
 
 /* WARNING: this must not be called if tp->saw_timestamp was false. */
-extern __inline__ void tcp_replace_ts_recent(struct tcp_opt *tp, __u32 end_seq)
+extern __inline__ void tcp_replace_ts_recent(struct sock *sk, struct tcp_opt *tp,
+					     __u32 start_seq, __u32 end_seq)
 {
 	/* From draft-ietf-tcplw-high-performance: the correct
 	 * test is last_ack_sent <= end_seq.
 	 * (RFC1323 stated last_ack_sent < end_seq.)
+	 *
+	 * HOWEVER: The current check contradicts the draft statements.
+	 * It has been done for good reasons.
+	 * The implemented check improves security and eliminates
+	 * unnecessary RTT overestimation.
+	 *		1998/06/27  Andrey V. Savochkin <saw@msu.ru>
 	 */
-	if (!before(end_seq, tp->last_ack_sent)) {
+	if (!before(end_seq, tp->last_ack_sent - sk->rcvbuf) &&
+	    !after(start_seq, tp->rcv_wup + tp->rcv_wnd)) {
 		/* PAWS bug workaround wrt. ACK frames, the PAWS discard
 		 * extra check below makes sure this can only happen
 		 * for pure ACK frames.  -DaveM
@@ -1657,7 +1665,9 @@ int tcp_rcv_established(struct sock *sk, struct sk_buff *skb,
 					goto discard;
 				}
 			}
-			tcp_replace_ts_recent(tp, TCP_SKB_CB(skb)->end_seq);
+			tcp_replace_ts_recent(sk, tp,
+					      TCP_SKB_CB(skb)->seq,
+					      TCP_SKB_CB(skb)->end_seq);
 		}
 	}
 
@@ -2031,7 +2041,9 @@ int tcp_rcv_state_process(struct sock *sk, struct sk_buff *skb,
 					goto discard;
 				}
 			}
-			tcp_replace_ts_recent(tp, TCP_SKB_CB(skb)->end_seq);
+			tcp_replace_ts_recent(sk, tp,
+					      TCP_SKB_CB(skb)->seq,
+					      TCP_SKB_CB(skb)->end_seq);
 		}
 	}
 

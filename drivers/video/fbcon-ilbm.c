@@ -103,7 +103,7 @@ void fbcon_ilbm_putc(struct vc_data *conp, struct display *p, int c, int yy,
     int fg0, bg0, fg, bg;
 
     dest = p->screen_base+yy*p->fontheight*p->next_line+xx;
-    cdat = p->fontdata+(c&0xff)*p->fontheight;
+    cdat = p->fontdata+(c&p->charmask)*p->fontheight;
     fg0 = attr_fgcol(p,c);
     bg0 = attr_bgcol(p,c);
 
@@ -149,7 +149,7 @@ void fbcon_ilbm_putcs(struct vc_data *conp, struct display *p,
 {
     u8 *dest0, *dest, *cdat1, *cdat2, *cdat3, *cdat4;
     u_int rows, i;
-    u8 c1, c2, c3, c4;
+    u16 c1, c2, c3, c4;
     u32 d;
     int fg0, bg0, fg, bg;
 
@@ -159,7 +159,7 @@ void fbcon_ilbm_putcs(struct vc_data *conp, struct display *p,
 
     while (count--)
 	if (xx&3 || count < 3) {	/* Slow version */
-	    c1 = *s++;
+	    c1 = *s++ & p->charmask;
 	    dest = dest0++;
 	    xx++;
 
@@ -185,10 +185,10 @@ void fbcon_ilbm_putcs(struct vc_data *conp, struct display *p,
 		}
 	    }
 	} else {		/* Fast version */
-	    c1 = s[0];
-	    c2 = s[1];
-	    c3 = s[2];
-	    c4 = s[3];
+	    c1 = s[0] & p->charmask;
+	    c2 = s[1] & p->charmask;
+	    c3 = s[2] & p->charmask;
+	    c4 = s[3] & p->charmask;
 
 	    dest = dest0;
 	    cdat1 = p->fontdata+c1*p->fontheight;

@@ -95,6 +95,7 @@ extern int bionet_probe(struct device *);
 extern int pamsnet_probe(struct device *);
 extern int tlan_probe(struct device *);
 extern int mace_probe(struct device *);
+extern int bmac_probe(struct device *);
 extern int cs89x0_probe(struct device *dev);
 extern int ethertap_probe(struct device *dev);
 extern int ether1_probe (struct device *dev);
@@ -380,6 +381,9 @@ struct devprobe m68k_probes[] __initdata = {
 struct devprobe ppc_probes[] __initdata = {
 #ifdef CONFIG_MACE
 	{mace_probe, 0},
+#endif
+#ifdef CONFIG_BMAC
+	{bmac_probe, 0},
 #endif
 	{NULL, 0},
 };

@@ -2,8 +2,6 @@
      *  16 bpp packed pixel (cfb16)
      */
 
-#include <linux/config.h>
-
 #ifdef MODULE
 #if defined(CONFIG_FBCON_CFB16) || defined(CONFIG_FBCON_CFB16_MODULE)
 #define FBCON_HAS_CFB16
@@ -26,3 +24,4 @@ extern void fbcon_cfb16_putc(struct vc_data *conp, struct display *p, int c,
 extern void fbcon_cfb16_putcs(struct vc_data *conp, struct display *p,
 			      const unsigned short *s, int count, int yy, int xx);
 extern void fbcon_cfb16_revc(struct display *p, int xx, int yy);
+extern void fbcon_cfb16_clear_margins(struct vc_data *conp, struct display *p);

@@ -105,6 +105,7 @@
 #include <linux/slab.h>
 #include <linux/interrupt.h>
 #include <linux/poll.h>
+#include <linux/init.h>
 
 #include <asm/uaccess.h>
 #include <asm/system.h>
@@ -212,7 +213,7 @@ int sock_setsockopt(struct socket *sock, int level, int optname,
 			   are treated in BSD as hints */
 			   
 			if (val > sysctl_wmem_max)
-				return 0;
+				val = sysctl_wmem_max;
 
 			sk->sndbuf = max(val*2,2048);
 
@@ -230,7 +231,7 @@ int sock_setsockopt(struct socket *sock, int level, int optname,
 			   are treated in BSD as hints */
 			  
 			if (val > sysctl_rmem_max)
-				return 0;
+				val = sysctl_rmem_max;
 
 			/* FIXME: is this lower bound the right one? */
 			sk->rcvbuf = max(val*2,256);
@@ -495,10 +496,11 @@ void sk_free(struct sock *sk)
 	kmem_cache_free(sk_cachep, sk);
 }
 
-void sk_init(void)
+__initfunc(void sk_init(void))
 {
 	sk_cachep = kmem_cache_create("sock", sizeof(struct sock), 0,
 				      SLAB_HWCACHE_ALIGN, 0, 0);
+
 }
 
 /*

@@ -1,10 +1,11 @@
-/* $Id: promcon.c,v 1.6 1998/07/19 12:49:26 mj Exp $
+/* $Id: promcon.c,v 1.10 1998/07/24 15:31:53 jj Exp $
  * Console driver utilizing PROM sun terminal emulation
  *
  * Copyright (C) 1998  Eddie C. Dost  (ecd@skynet.be)
  * Copyright (C) 1998  Jakub Jelinek  (jj@ultra.linux.cz)
  */
 
+#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/errno.h>
@@ -15,15 +16,23 @@
 #include <linux/delay.h>
 #include <linux/console.h>
 #include <linux/console_struct.h>
+#include <linux/vt_kern.h>
 #include <linux/selection.h>
 #include <linux/fb.h>
+#include <linux/init.h>
+#include <linux/kd.h>
 
 #include <asm/oplib.h>
+#include <asm/uaccess.h>
 
 static short pw = 80 - 1, ph = 34 - 1;
 static short px, py;
+static unsigned long promcon_uni_pagedir[2];
 
-#define PROMCON_COLOR 1
+extern u8 promfont_unicount[];
+extern u16 promfont_unitable[];
+
+#define PROMCON_COLOR 0
 
 #if PROMCON_COLOR
 #define inverted(s)	((((s) & 0x7700) == 0x0700) ? 0 : 1)
@@ -119,12 +128,70 @@ __initfunc(const char *promcon_startup(void))
 	return display_desc;
 }
 
+__initfunc(static void
+promcon_init_unimap(struct vc_data *conp))
+{
+	mm_segment_t old_fs = get_fs();
+	struct unipair *p, *p1;
+	u16 *q;
+	int i, j, k;
+	
+	p = kmalloc(256*sizeof(struct unipair), GFP_KERNEL);
+	if (!p) return;
+	
+	q = promfont_unitable;
+	p1 = p;
+	k = 0;
+	for (i = 0; i < 256; i++)
+		for (j = promfont_unicount[i]; j; j--) {
+			p1->unicode = *q++;
+			p1->fontpos = i;
+			p1++;
+			k++;
+		}
+	set_fs(KERNEL_DS);
+	con_clear_unimap(conp->vc_num, NULL);
+	con_set_unimap(conp->vc_num, k, p);
+	con_protect_unimap(conp->vc_num, 1);
+	set_fs(old_fs);
+	kfree(p);
+}
+
 static void
 promcon_init(struct vc_data *conp, int init)
 {
+	unsigned long p;
+	
 	conp->vc_can_do_color = PROMCON_COLOR;
-	conp->vc_cols = pw + 1;
-	conp->vc_rows = ph + 1;
+	if (init) {
+		conp->vc_cols = pw + 1;
+		conp->vc_rows = ph + 1;
+	}
+	p = *conp->vc_uni_pagedir_loc;
+	if (conp->vc_uni_pagedir_loc == &conp->vc_uni_pagedir ||
+	    !--conp->vc_uni_pagedir_loc[1])
+		con_free_unimap(conp->vc_num);
+	conp->vc_uni_pagedir_loc = promcon_uni_pagedir;
+	promcon_uni_pagedir[1]++;
+	if (!promcon_uni_pagedir[0] && p) {
+		promcon_init_unimap(conp);
+	}
+	if (!init) {
+		if (conp->vc_cols != pw + 1 || conp->vc_rows != ph + 1)
+			vc_resize_con(ph + 1, pw + 1, conp->vc_num);
+		else if (conp->vc_num == fg_console)
+			update_screen(fg_console);
+	}
+}
+
+static void
+promcon_deinit(struct vc_data *conp)
+{
+	/* When closing the last console, reset video origin */
+	if (!--promcon_uni_pagedir[1])
+		con_free_unimap(conp->vc_num);
+	conp->vc_uni_pagedir_loc = &conp->vc_uni_pagedir;
+	con_set_default_unimap(conp->vc_num);
 }
 
 static int
@@ -482,6 +549,13 @@ promcon_scroll(struct vc_data *conp, int t, int b, int dir, int count)
 	return 0;
 }
 
+#if !(PROMCON_COLOR)
+static u8 promcon_build_attr(struct vc_data *conp, u8 _color, u8 _intensity, u8 _blink, u8 _underline, u8 _reverse)
+{
+	return (_reverse) ? 0xf : 0x7;
+}
+#endif
+
 /*
  *  The console 'switch' structure for the VGA based console
  */
@@ -496,7 +570,7 @@ static int promcon_dummy(void)
 struct consw prom_con = {
 	con_startup:		promcon_startup,
 	con_init:		promcon_init,
-	con_deinit:		DUMMY,
+	con_deinit:		promcon_deinit,
 	con_clear:		promcon_clear,
 	con_putc:		promcon_putc,
 	con_putcs:		promcon_putcs,
@@ -510,6 +584,18 @@ struct consw prom_con = {
 	con_scrolldelta:	DUMMY,
 	con_set_origin:		NULL,
 	con_save_screen:	NULL,
+#if PROMCON_COLOR
 	con_build_attr:		NULL,
+#else
+	con_build_attr:		promcon_build_attr,
+#endif
 	con_invert_region:	NULL,
 };
+
+__initfunc(void prom_con_init(void))
+{
+	if (conswitchp == &dummy_con)
+		take_over_console(&prom_con, 0, MAX_NR_CONSOLES-1, 1);
+	else if (conswitchp == &prom_con)
+		promcon_init_unimap(vc_cons[fg_console].d);
+}

@@ -1103,7 +1103,7 @@ static inline int qec_ether_init(struct device *dev, struct linux_sbus_device *s
 			qe_devs[i]->hard_start_xmit = qe_start_xmit;
 		qe_devs[i]->get_stats = qe_get_stats;
 		qe_devs[i]->set_multicast_list = qe_set_multicast;
-		qe_devs[i]->irq = (unsigned char) sdev->irqs[0].pri;
+		qe_devs[i]->irq = sdev->irqs[0];
 		qe_devs[i]->dma = 0;
 		ether_setup(qe_devs[i]);
 	}
@@ -1114,32 +1114,14 @@ static inline int qec_ether_init(struct device *dev, struct linux_sbus_device *s
 	 * for it now.
 	 */
 	if(sparc_cpu_model == sun4c) {
-		if(request_irq(sdev->irqs[0].pri, &sun4c_qec_interrupt,
+		if(request_irq(sdev->irqs[0], &sun4c_qec_interrupt,
 			       SA_SHIRQ, "QuadEther", (void *) qecp)) {
 			printk("QuadEther: Can't register QEC master irq handler.\n");
 			res = EAGAIN;
 			goto qec_free_devs;
 		}
-	}
-#ifdef __sparc_v9__
-	else if(sparc_cpu_model == sun4u) {
-		struct devid_cookie dcookie;
-
-		dcookie.real_dev_id = qecp;
-		dcookie.imap = dcookie.iclr = 0;
-		dcookie.pil = -1;
-		dcookie.bus_cookie = sdev->my_bus;
-		if(request_irq(sdev->irqs[0].pri, &qec_interrupt,
-			       (SA_SHIRQ | SA_SBUS | SA_DCOOKIE),
-			       "QuadEther", &dcookie)) {
-			printk("QuadEther: Can't register QEC master irq handler.\n");
-			res = EAGAIN;
-			goto qec_free_devs;
-		}
-	}
-#endif
-	else {
-		if(request_irq(sdev->irqs[0].pri, &qec_interrupt,
+	} else {
+		if(request_irq(sdev->irqs[0], &qec_interrupt,
 			       SA_SHIRQ, "QuadEther", (void *) qecp)) {
 			printk("QuadEther: Can't register QEC master irq handler.\n");
 			res = EAGAIN;
@@ -1241,7 +1223,7 @@ cleanup_module(void)
 			unregister_netdev(root_qec_dev->qes[i]->dev);
 			kfree(root_qec_dev->qes[i]);
 		}
-		free_irq(root_qec_dev->qec_sbus_dev->irqs[0].pri, (void *)root_qec_dev);
+		free_irq(root_qec_dev->qec_sbus_dev->irqs[0], (void *)root_qec_dev);
 		kfree(root_qec_dev);
 		root_qec_dev = next_qec;
 	}

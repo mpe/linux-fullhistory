@@ -1,4 +1,4 @@
-/* $Id: creatorfb.c,v 1.7 1998/07/21 10:36:48 jj Exp $
+/* $Id: creatorfb.c,v 1.10 1998/07/25 22:54:37 davem Exp $
  * creatorfb.c: Creator/Creator3D frame buffer driver
  *
  * Copyright (C) 1997,1998 Jakub Jelinek (jj@ultra.linux.cz)
@@ -185,7 +185,7 @@ static void ffb_clear(struct vc_data *conp, struct display *p, int sy, int sx,
 	int x, y, w, h;
 	
 	fbc->ppc = 0x1803;
-	fbc->fg = ffb_cmap[attr_bg_col_ec(conp)];
+	fbc->fg = ffb_cmap[attr_bgcol_ec(p,conp)];
 	fbc->fbc = 0x2000707f;
 	fbc->rop = 0x83;
 	fbc->pmask = 0xffffffff;
@@ -207,13 +207,13 @@ static void ffb_clear(struct vc_data *conp, struct display *p, int sy, int sx,
 	fbc->bw = w;
 }
 
-static void ffb_fill(struct fb_info_sbusfb *fb, int s,
+static void ffb_fill(struct fb_info_sbusfb *fb, struct display *p, int s,
 		     int count, unsigned short *boxes)
 {
 	register struct ffb_fbc *fbc = fb->s.ffb.fbc;
 
 	fbc->ppc = 0x1803;
-	fbc->fg = ffb_cmap[attr_bg_col(s)];
+	fbc->fg = ffb_cmap[attr_bgcol(p,s)];
 	fbc->fbc = 0x2000707f;
 	fbc->rop = 0x83;
 	fbc->pmask = 0xffffffff;
@@ -236,11 +236,15 @@ static void ffb_putc(struct vc_data *conp, struct display *p, int c, int yy, int
 
 	if (p->fontheightlog) {
 		xy = (yy << (16 + p->fontheightlog));
-		i = ((c & 0xff) << p->fontheightlog);
+		i = ((c & p->charmask) << p->fontheightlog);
 	} else {
 		xy = ((yy * p->fontheight) << 16);
-		i = (c & 0xff) * p->fontheight;
+		i = (c & p->charmask) * p->fontheight;
 	}
+#ifdef CONFIG_FBCON_FONTWIDTH8_ONLY
+	fd = p->fontdata + i;
+	xy += (xx * 8) + fb->s.ffb.xy_margin;
+#else
 	if (p->fontwidth <= 8)
 		fd = p->fontdata + i;
 	else
@@ -249,24 +253,29 @@ static void ffb_putc(struct vc_data *conp, struct display *p, int c, int yy, int
 		xy += (xx << p->fontwidthlog) + fb->s.ffb.xy_margin;
 	else
 		xy += (xx * p->fontwidth) + fb->s.ffb.xy_margin;
+#endif
 	fbc->ppc = 0x203;
-	fbc->fg = ffb_cmap[attr_fg_col(c)];
+	fbc->fg = ffb_cmap[attr_fgcol(p,c)];
 	fbc->fbc = 0x2000707f;
 	fbc->rop = 0x83;
 	fbc->pmask = 0xffffffff;
-	fbc->bg = ffb_cmap[attr_bg_col(c)];
+	fbc->bg = ffb_cmap[attr_bgcol(p,c)];
 	fbc->fontw = p->fontwidth;
 	fbc->fontinc = 0x10000;
 	fbc->fontxy = xy;
+#ifndef CONFIG_FBCON_FONTWIDTH8_ONLY
 	if (p->fontwidth <= 8) {
+#endif
 		for (i = 0; i < p->fontheight; i++)
 			fbc->font = *fd++ << 24;
+#ifndef CONFIG_FBCON_FONTWIDTH8_ONLY
 	} else {
 		for (i = 0; i < p->fontheight; i++) {
 			fbc->font = *(u16 *)fd << 16;
 			fd += 2;
 		}
 	}
+#endif
 }
 
 static void ffb_putcs(struct vc_data *conp, struct display *p, const unsigned short *s,
@@ -278,42 +287,51 @@ static void ffb_putcs(struct vc_data *conp, struct display *p, const unsigned sh
 	u8 *fd1, *fd2, *fd3, *fd4;
 
 	fbc->ppc = 0x203;
-	fbc->fg = ffb_cmap[attr_fg_col(*s)];
+	fbc->fg = ffb_cmap[attr_fgcol(p,*s)];
 	fbc->fbc = 0x2000707f;
 	fbc->rop = 0x83;
 	fbc->pmask = 0xffffffff;
-	fbc->bg = ffb_cmap[attr_bg_col(*s)];
+	fbc->bg = ffb_cmap[attr_bgcol(p,*s)];
 	xy = fb->s.ffb.xy_margin;
+#ifdef CONFIG_FBCON_FONTWIDTH8_ONLY
+	xy += xx * 8;
+#else
 	if (p->fontwidthlog)
 		xy += (xx << p->fontwidthlog);
 	else
 		xy += xx * p->fontwidth;
+#endif
 	if (p->fontheightlog)
 		xy += (yy << (16 + p->fontheightlog));
 	else
 		xy += ((yy * p->fontheight) << 16);
+#ifndef CONFIG_FBCON_FONTWIDTH8_ONLY
 	if (p->fontwidth <= 8) {
+#endif
 		while (count >= 4) {
 			count -= 4;
 			fbc->fontw = 4 * p->fontwidth;
 			fbc->fontinc = 0x10000;
 			fbc->fontxy = xy;
 			if (p->fontheightlog) {
-				fd1 = p->fontdata + ((*s++ & 0xff) << p->fontheightlog);
-				fd2 = p->fontdata + ((*s++ & 0xff) << p->fontheightlog);
-				fd3 = p->fontdata + ((*s++ & 0xff) << p->fontheightlog);
-				fd4 = p->fontdata + ((*s++ & 0xff) << p->fontheightlog);
+				fd1 = p->fontdata + ((*s++ & p->charmask) << p->fontheightlog);
+				fd2 = p->fontdata + ((*s++ & p->charmask) << p->fontheightlog);
+				fd3 = p->fontdata + ((*s++ & p->charmask) << p->fontheightlog);
+				fd4 = p->fontdata + ((*s++ & p->charmask) << p->fontheightlog);
 			} else {
-				fd1 = p->fontdata + ((*s++ & 0xff) * p->fontheight);
-				fd2 = p->fontdata + ((*s++ & 0xff) * p->fontheight);
-				fd3 = p->fontdata + ((*s++ & 0xff) * p->fontheight);
-				fd4 = p->fontdata + ((*s++ & 0xff) * p->fontheight);
+				fd1 = p->fontdata + ((*s++ & p->charmask) * p->fontheight);
+				fd2 = p->fontdata + ((*s++ & p->charmask) * p->fontheight);
+				fd3 = p->fontdata + ((*s++ & p->charmask) * p->fontheight);
+				fd4 = p->fontdata + ((*s++ & p->charmask) * p->fontheight);
 			}
+#ifndef CONFIG_FBCON_FONTWIDTH8_ONLY
 			if (p->fontwidth == 8) {
+#endif
 				for (i = 0; i < p->fontheight; i++)
 					fbc->font = ((u32)*fd4++) | ((((u32)*fd3++) | ((((u32)*fd2++) | (((u32)*fd1++) 
 						<< 8)) << 8)) << 8);
 				xy += 32;
+#ifndef CONFIG_FBCON_FONTWIDTH8_ONLY
 			} else {
 				for (i = 0; i < p->fontheight; i++)
 					fbc->font = (((u32)*fd4++) | ((((u32)*fd3++) | ((((u32)*fd2++) | (((u32)*fd1++) 
@@ -328,11 +346,11 @@ static void ffb_putcs(struct vc_data *conp, struct display *p, const unsigned sh
 			fbc->fontinc = 0x10000;
 			fbc->fontxy = xy;
 			if (p->fontheightlog) {
-				fd1 = p->fontdata + ((*s++ & 0xff) << (p->fontheightlog + 1));
-				fd2 = p->fontdata + ((*s++ & 0xff) << (p->fontheightlog + 1));
+				fd1 = p->fontdata + ((*s++ & p->charmask) << (p->fontheightlog + 1));
+				fd2 = p->fontdata + ((*s++ & p->charmask) << (p->fontheightlog + 1));
 			} else {
-				fd1 = p->fontdata + (((*s++ & 0xff) * p->fontheight) << 1);
-				fd2 = p->fontdata + (((*s++ & 0xff) * p->fontheight) << 1);
+				fd1 = p->fontdata + (((*s++ & p->charmask) * p->fontheight) << 1);
+				fd2 = p->fontdata + (((*s++ & p->charmask) * p->fontheight) << 1);
 			}
 			for (i = 0; i < p->fontheight; i++) {
 				fbc->font = ((((u32)*(u16 *)fd1) << p->fontwidth) | ((u32)*(u16 *)fd2)) << (16 - p->fontwidth);
@@ -340,6 +358,7 @@ static void ffb_putcs(struct vc_data *conp, struct display *p, const unsigned sh
 			}
 			xy += 2 * p->fontwidth;
 		}
+#endif
 	}
 	while (count) {
 		count--;
@@ -347,13 +366,16 @@ static void ffb_putcs(struct vc_data *conp, struct display *p, const unsigned sh
 		fbc->fontinc = 0x10000;
 		fbc->fontxy = xy;
 		if (p->fontheightlog)
-			i = ((*s++ & 0xff) << p->fontheightlog);
+			i = ((*s++ & p->charmask) << p->fontheightlog);
 		else
-			i = ((*s++ & 0xff) * p->fontheight);
+			i = ((*s++ & p->charmask) * p->fontheight);
+#ifndef CONFIG_FBCON_FONTWIDTH8_ONLY
 		if (p->fontwidth <= 8) {
+#endif
 			fd1 = p->fontdata + i;
 			for (i = 0; i < p->fontheight; i++)
 				fbc->font = *fd1++ << 24;
+#ifndef CONFIG_FBCON_FONTWIDTH8_ONLY
 		} else {
 			fd1 = p->fontdata + (i << 1);
 			for (i = 0; i < p->fontheight; i++) {
@@ -361,6 +383,7 @@ static void ffb_putcs(struct vc_data *conp, struct display *p, const unsigned sh
 				fd1 += 2;
 			}
 		}
+#endif
 		xy += p->fontwidth;
 	}
 }
@@ -471,11 +494,8 @@ __initfunc(char *creatorfb_init(struct fb_info_sbusfb *fb))
 	strcpy(fb->info.modename, "Creator");
 		
 	strcpy(fix->id, "Creator");
-	fix->smem_start = (char *)(regs[0].phys_addr) + FFB_DFB24_POFF;
 	fix->visual = FB_VISUAL_DIRECTCOLOR;
 	fix->line_length = 8192;
-	fix->mmio_start = (char *)(regs[0].phys_addr) + FFB_FBC_REGS_POFF;
-	fix->mmio_len = PAGE_SIZE;
 	fix->accel = FB_ACCEL_SUN_CREATOR;
 	
 	var->bits_per_pixel = 32;

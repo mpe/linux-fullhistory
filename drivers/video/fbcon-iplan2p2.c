@@ -307,7 +307,7 @@ void fbcon_iplan2p2_putc(struct vc_data *conp, struct display *p, int c,
     u16 eorx, fgx, bgx, fdx;
 
     dest = p->screen_base + yy * p->fontheight * bytes + (xx>>1)*4 + (xx & 1);
-    cdat = p->fontdata + (c & 0xff) * p->fontheight;
+    cdat = p->fontdata + (c & p->charmask) * p->fontheight;
 
     fgx = expand2w(COLOR_2P(attr_fgcol(p,c)));
     bgx = expand2w(COLOR_2P(attr_bgcol(p,c)));
@@ -323,7 +323,8 @@ void fbcon_iplan2p2_putcs(struct vc_data *conp, struct display *p,
 			  const unsigned short *s, int count, int yy, int xx)
 {
     u8 *dest, *dest0;
-    u8 *cdat, c;
+    u8 *cdat;
+    u16 c;
     int rows;
     int bytes;
     u16 eorx, fgx, bgx, fdx;
@@ -335,7 +336,7 @@ void fbcon_iplan2p2_putcs(struct vc_data *conp, struct display *p,
     eorx = fgx ^ bgx;
 
     while (count--) {
-	c = *s++;
+	c = *s++ & p->charmask;
 	cdat  = p->fontdata + (c * p->fontheight);
 
 	for (rows = p->fontheight, dest = dest0; rows-- ; dest += bytes) {

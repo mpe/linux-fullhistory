@@ -91,7 +91,7 @@
  *			Jonathan(G4KLX)		Support for packet forwarding.
  *	AX.25 036	Jonathan(G4KLX)		Major restructuring.
  *			Joerg(DL1BKE)		Fixed DAMA Slave.
- *			Jonathan(G4KLX)		Fix widlcard listen parameter setting.
+ *			Jonathan(G4KLX)		Fix wildcard listen parameter setting.
  *	AX.25 037	Jonathan(G4KLX)		New timer architecture.
  *      AX.25 038       Matthias(DG2FEF)        Small fixes to the syscall interface to make kernel
  *                                              independent of AX25_MAX_DIGIS used by applications.

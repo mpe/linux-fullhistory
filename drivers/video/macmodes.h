@@ -50,3 +50,11 @@ extern int mac_vmode_to_var(int vmode, int cmode,
 extern int mac_var_to_vmode(const struct fb_var_screeninfo *var, int *vmode,
 			    int *cmode);
 extern int mac_map_monitor_sense(int sense);
+
+
+    /*
+     *  Addresses in NVRAM where video mode and pixel size are stored.
+     */
+
+#define NV_VMODE		0x140f
+#define NV_CMODE		0x1410

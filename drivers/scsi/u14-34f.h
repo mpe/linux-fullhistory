@@ -4,6 +4,7 @@
 #ifndef _U14_34F_H
 #define _U14_34F_H
 
+#include <scsi/scsicam.h>
 #include <linux/version.h>
 
 int u14_34f_detect(Scsi_Host_Template *);
@@ -15,7 +16,7 @@ int u14_34f_reset(Scsi_Cmnd *);
 int u14_34f_old_reset(Scsi_Cmnd *, unsigned int);
 int u14_34f_biosparam(Disk *, kdev_t, int *);
 
-#define U14_34F_VERSION "4.32.00"
+#define U14_34F_VERSION "4.33.00"
 
 #define LinuxVersionCode(v, p, s) (((v)<<16)+((p)<<8)+(s))
 

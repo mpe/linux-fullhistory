@@ -469,6 +469,9 @@ struct sock {
 #ifdef CONFIG_NETLINK
 		struct netlink_opt	af_netlink;
 #endif
+#if defined(CONFIG_ECONET) || defined(CONFIG_ECONET_MODULE)
+		struct econet_opt	*af_econet;
+#endif
 	} protinfo;  		
 
 	/* IP 'private area' or will be eventually. */

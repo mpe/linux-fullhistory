@@ -7,7 +7,8 @@
  *            [minor: N]
  *
  * /dev/vcsaN: idem, but including attributes, and prefixed with
- *	the 4 bytes lines,columns,x,y (as screendump used to give)
+ *	the 4 bytes lines,columns,x,y (as screendump used to give).
+ *	Attribute/character pair is in native endianity.
  *            [minor: N+128]
  *
  * This replaces screendump and part of selection, so that the system
@@ -19,6 +20,8 @@
  *	 - fixed some fatal off-by-one bugs (0-- no longer == -1 -> looping and looping and looping...)
  *	 - making it shorter - scr_readw are macros which expand in PRETTY long code
  */
+
+#include <linux/config.h>
 
 #include <linux/kernel.h>
 #include <linux/major.h>
@@ -38,18 +41,6 @@
 #undef org
 #undef addr
 #define HEADER_SIZE	4
-
-static unsigned short
-func_scr_readw(unsigned short *org)
-{
-return scr_readw( org );
-}
-
-static void
-func_scr_writew(unsigned short val, unsigned short *org)
-{
-scr_writew( val, org );
-}
 
 static int
 vcs_size(struct inode *inode)
@@ -91,7 +82,7 @@ static long long vcs_lseek(struct file *file, long long offset, int orig)
 	return file->f_pos;
 }
 
-#define RETURN( x ) { enable_bh( CONSOLE_BH ); return x; }
+#define RETURN(x) { enable_bh(CONSOLE_BH); return x; }
 static ssize_t
 vcs_read(struct file *file, char *buf, size_t count, loff_t *ppos)
 {
@@ -104,7 +95,7 @@ vcs_read(struct file *file, char *buf, size_t count, loff_t *ppos)
 
 	attr = (currcons & 128);
 	currcons = (currcons & 127);
-	disable_bh( CONSOLE_BH );
+	disable_bh(CONSOLE_BH);
 	if (currcons == 0) {
 		currcons = fg_console;
 		viewed = 1;
@@ -125,7 +116,7 @@ vcs_read(struct file *file, char *buf, size_t count, loff_t *ppos)
 	if (!attr) {
 		org = screen_pos(currcons, p, viewed);
 		while (count-- > 0)
-			put_user(func_scr_readw(org++) & 0xff, buf++);
+			put_user(vcs_scr_readw(currcons, org++) & 0xff, buf++);
 	} else {
 		if (p < HEADER_SIZE) {
 			char header[HEADER_SIZE];
@@ -140,21 +131,21 @@ vcs_read(struct file *file, char *buf, size_t count, loff_t *ppos)
 		    org = screen_pos(currcons, p/2, viewed);
 		    if ((p & 1) && count > 0)
 #ifdef __BIG_ENDIAN
-			    { count--; put_user(func_scr_readw(org++) & 0xff, buf++); }
+			    { count--; put_user(vcs_scr_readw(currcons, org++) & 0xff, buf++); }
 #else
-			    { count--; put_user(func_scr_readw(org++) >> 8, buf++); }
+			    { count--; put_user(vcs_scr_readw(currcons, org++) >> 8, buf++); }
 #endif
 		}
 		while (count > 1) {
-			put_user(func_scr_readw(org++), (unsigned short *) buf);
+			put_user(vcs_scr_readw(currcons, org++), (unsigned short *) buf);
 			buf += 2;
 			count -= 2;
 		}
 		if (count > 0)
 #ifdef __BIG_ENDIAN
-			put_user(func_scr_readw(org) >> 8, buf++);
+			put_user(vcs_scr_readw(currcons, org) >> 8, buf++);
 #else
-			put_user(func_scr_readw(org) & 0xff, buf++);
+			put_user(vcs_scr_readw(currcons, org) & 0xff, buf++);
 #endif
 	}
 	read = buf - buf0;
@@ -174,7 +165,7 @@ vcs_write(struct file *file, const char *buf, size_t count, loff_t *ppos)
 
 	attr = (currcons & 128);
 	currcons = (currcons & 127);
-	disable_bh( CONSOLE_BH );
+	disable_bh(CONSOLE_BH);
 	if (currcons == 0) {
 		currcons = fg_console;
 		viewed = 1;
@@ -198,7 +189,7 @@ vcs_write(struct file *file, const char *buf, size_t count, loff_t *ppos)
 			unsigned char c;
 			count--;
 			get_user(c, (const unsigned char*)buf++);
-			func_scr_writew((func_scr_readw(org) & 0xff00) | c, org);
+			vcs_scr_writew(currcons, (vcs_scr_readw(currcons, org) & 0xff00) | c, org);
 			org++;
 		}
 	} else {
@@ -218,11 +209,11 @@ vcs_write(struct file *file, const char *buf, size_t count, loff_t *ppos)
 				count--;
 				get_user(c,buf++);
 #ifdef __BIG_ENDIAN
-				func_scr_writew(c |
-				     (func_scr_readw(org) & 0xff00), org);
+				vcs_scr_writew(currcons, c |
+				     (vcs_scr_readw(currcons, org) & 0xff00), org);
 #else
-				func_scr_writew((c << 8) |
-				     (func_scr_readw(org) & 0xff), org);
+				vcs_scr_writew(currcons, (c << 8) |
+				     (vcs_scr_readw(currcons, org) & 0xff), org);
 #endif
 				org++;
 			}
@@ -230,7 +221,7 @@ vcs_write(struct file *file, const char *buf, size_t count, loff_t *ppos)
 		while (count > 1) {
 			unsigned short w;
 			get_user(w, (const unsigned short *) buf);
-			func_scr_writew(w, org++);
+			vcs_scr_writew(currcons, w, org++);
 			buf += 2;
 			count -= 2;
 		}
@@ -238,9 +229,9 @@ vcs_write(struct file *file, const char *buf, size_t count, loff_t *ppos)
 			unsigned char c;
 			get_user(c, (const unsigned char*)buf++);
 #ifdef __BIG_ENDIAN
-			func_scr_writew((func_scr_readw(org) & 0xff) | (c << 8), org);
+			vcs_scr_writew(currcons, (vcs_scr_readw(currcons, org) & 0xff) | (c << 8), org);
 #else
-			func_scr_writew((func_scr_readw(org) & 0xff00) | c, org);
+			vcs_scr_writew(currcons, (vcs_scr_readw(currcons, org) & 0xff00) | c, org);
 #endif
 		}
 	}

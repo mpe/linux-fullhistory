@@ -100,6 +100,7 @@ struct netlink_callback;
 extern int inet6_dump_fib(struct sk_buff *skb, struct netlink_callback *cb);
 extern int inet6_rtm_newroute(struct sk_buff *skb, struct nlmsghdr* nlh, void *arg);
 extern int inet6_rtm_delroute(struct sk_buff *skb, struct nlmsghdr* nlh, void *arg);
+extern int inet6_rtm_getroute(struct sk_buff *skb, struct nlmsghdr* nlh, void *arg);
 
 extern void rt6_ifdown(struct device *dev);
 

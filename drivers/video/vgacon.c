@@ -33,7 +33,7 @@
  *  more details.
  */
 
-#include <linux/config.h>
+
 #include <linux/types.h>
 #include <linux/sched.h>
 #include <linux/fs.h>
@@ -94,6 +94,7 @@ static void vgacon_save_screen(struct vc_data *c);
 static int vgacon_scroll(struct vc_data *c, int t, int b, int dir, int lines);
 static u8 vgacon_build_attr(struct vc_data *c, u8 color, u8 intensity, u8 blink, u8 underline, u8 reverse);
 static void vgacon_invert_region(struct vc_data *c, u16 *p, int count);
+static unsigned long vgacon_uni_pagedir[2];
 
 
 /* Description of the hardware situation */
@@ -292,16 +293,23 @@ __initfunc(static const char *vgacon_startup(void))
 	return display_desc;
 }
 
-static int vga_use_count;
-
 static void vgacon_init(struct vc_data *c, int init)
 {
+	unsigned long p;
+	
 	/* We cannot be loaded as a module, therefore init is always 1 */
 	c->vc_can_do_color = vga_can_do_color;
 	c->vc_cols = vga_video_num_columns;
 	c->vc_rows = vga_video_num_lines;
 	c->vc_complement_mask = 0x7700;
-	vga_use_count++;
+	p = *c->vc_uni_pagedir_loc;
+	if (c->vc_uni_pagedir_loc == &c->vc_uni_pagedir ||
+	    !--c->vc_uni_pagedir_loc[1])
+		con_free_unimap(c->vc_num);
+	c->vc_uni_pagedir_loc = vgacon_uni_pagedir;
+	vgacon_uni_pagedir[1]++;
+	if (!vgacon_uni_pagedir[0] && p)
+		con_set_default_unimap(c->vc_num);
 }
 
 static inline void vga_set_mem_top(struct vc_data *c)
@@ -312,10 +320,13 @@ static inline void vga_set_mem_top(struct vc_data *c)
 static void vgacon_deinit(struct vc_data *c)
 {
 	/* When closing the last console, reset video origin */
-	if (!--vga_use_count) {
+	if (!--vgacon_uni_pagedir[1]) {
 		c->vc_visible_origin = vga_vram_base;
 		vga_set_mem_top(c);
+		con_free_unimap(c->vc_num);
 	}
+	c->vc_uni_pagedir_loc = &c->vc_uni_pagedir;
+	con_set_default_unimap(c->vc_num);
 }
 
 static u8 vgacon_build_attr(struct vc_data *c, u8 color, u8 intensity, u8 blink, u8 underline, u8 reverse)
@@ -345,15 +356,19 @@ static u8 vgacon_build_attr(struct vc_data *c, u8 color, u8 intensity, u8 blink,
 
 static void vgacon_invert_region(struct vc_data *c, u16 *p, int count)
 {
-	int col = vga_can_do_color;
-
-	while (count--) {
-		u16 a = *p;
-		if (col)
-			a = ((a) & 0x88ff) | (((a) & 0x7000) >> 4) | (((a) & 0x0700) << 4);
-		else
+	if (vga_can_do_color) {
+		while (count--) {
+			u16 a = scr_readw(p);
+			a = (((a) & 0x88ff) | (((a) & 0x7000) >> 4)
+			     | (((a) & 0x0700) << 4));
+			scr_writew(a, p++);
+		}
+	} else {
+		while (count--) {
+			u16 a = scr_readw(p);
 			a ^= ((a & 0x0700) == 0x0100) ? 0x7000 : 0x7700;
-		*p++ = a;
+			scr_writew(a, p++);
+		}
 	}
 }
 
@@ -862,6 +877,7 @@ static int vgacon_font_op(struct vc_data *c, struct console_font_op *op)
 		op->width = 8;
 		op->height = vga_video_font_height;
 		op->charcount = vga_512_chars ? 512 : 256;
+		if (!op->data) return 0;
 		rc = vgacon_do_font_op(op->data, 0, 0);
 	} else
 		rc = -ENOSYS;

@@ -251,7 +251,7 @@ void fbcon_afb_putc(struct vc_data *conp, struct display *p, int c, int yy,
     int fg, bg;
 
     dest0 = p->screen_base+yy*p->fontheight*p->next_line+xx;
-    cdat0 = p->fontdata+(c&0xff)*p->fontheight;
+    cdat0 = p->fontdata+(c&p->charmask)*p->fontheight;
     fg = attr_fgcol(p,c);
     bg = attr_bgcol(p,c);
 
@@ -286,7 +286,7 @@ void fbcon_afb_putcs(struct vc_data *conp, struct display *p,
     u8 *dest, *dest0, *dest1, *expand;
     u8 *cdat1, *cdat2, *cdat3, *cdat4, *cdat10, *cdat20, *cdat30, *cdat40;
     u_short i, j;
-    u8 c1, c2, c3, c4;
+    u16 c1, c2, c3, c4;
     int fg0, bg0, fg, bg;
 
     dest0 = p->screen_base+yy*p->fontheight*p->next_line+xx;
@@ -295,7 +295,7 @@ void fbcon_afb_putcs(struct vc_data *conp, struct display *p,
 
     while (count--)
 	if (xx&3 || count < 3) {	/* Slow version */
-	    c1 = *s++;
+	    c1 = *s++ & p->charmask;
 	    dest1 = dest0++;
 	    xx++;
 
@@ -322,10 +322,10 @@ void fbcon_afb_putcs(struct vc_data *conp, struct display *p,
 		dest1 += p->next_plane;
 	    } while (--i);
 	} else {			/* Fast version */
-	    c1 = s[0];
-	    c2 = s[1];
-	    c3 = s[2];
-	    c4 = s[3];
+	    c1 = s[0] & p->charmask;
+	    c2 = s[1] & p->charmask;
+	    c3 = s[2] & p->charmask;
+	    c4 = s[3] & p->charmask;
 
 	    dest1 = dest0;
 	    cdat10 = p->fontdata+c1*p->fontheight;

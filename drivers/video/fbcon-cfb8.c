@@ -110,9 +110,9 @@ void fbcon_cfb8_putc(struct vc_data *conp, struct display *p, int c, int yy,
 
     dest = p->screen_base + yy * p->fontheight * bytes + xx * p->fontwidth;
     if (p->fontwidth <= 8)
-	cdat = p->fontdata + (c & 0xff) * p->fontheight;
+	cdat = p->fontdata + (c & p->charmask) * p->fontheight;
     else
-	cdat = p->fontdata + ((c & 0xff) * p->fontheight << 1);
+	cdat = p->fontdata + ((c & p->charmask) * p->fontheight << 1);
 
     fgx=attr_fgcol(p,c);
     bgx=attr_bgcol(p,c);
@@ -122,16 +122,19 @@ void fbcon_cfb8_putc(struct vc_data *conp, struct display *p, int c, int yy,
     bgx |= (bgx << 16);
     eorx = fgx ^ bgx;
 
+#ifndef CONFIG_FBCON_FONTWIDTH8_ONLY
     switch (p->fontwidth) {
     case 4:
 	for (rows = p->fontheight ; rows-- ; dest += bytes)
 	    ((u32 *)dest)[0]= (nibbletab_cfb8[*cdat++ >> 4] & eorx) ^ bgx;
         break;
     case 8:
+#endif
 	for (rows = p->fontheight ; rows-- ; dest += bytes) {
 	    ((u32 *)dest)[0]= (nibbletab_cfb8[*cdat >> 4] & eorx) ^ bgx;
 	    ((u32 *)dest)[1]= (nibbletab_cfb8[*cdat++ & 0xf] & eorx) ^ bgx;
         }
+#ifndef CONFIG_FBCON_FONTWIDTH8_ONLY
         break;
     case 12:
     case 16:
@@ -145,12 +148,14 @@ void fbcon_cfb8_putc(struct vc_data *conp, struct display *p, int c, int yy,
         }
         break;
     }
+#endif
 }
 
 void fbcon_cfb8_putcs(struct vc_data *conp, struct display *p, 
 		      const unsigned short *s, int count, int yy, int xx)
 {
-    u8 *cdat, c, *dest, *dest0;
+    u8 *cdat, *dest, *dest0;
+    u16 c;
     int rows,bytes=p->next_line;
     u32 eorx, fgx, bgx;
 
@@ -162,10 +167,11 @@ void fbcon_cfb8_putcs(struct vc_data *conp, struct display *p,
     bgx |= (bgx << 8);
     bgx |= (bgx << 16);
     eorx = fgx ^ bgx;
+#ifndef CONFIG_FBCON_FONTWIDTH8_ONLY
     switch (p->fontwidth) {
     case 4:
 	while (count--) {
-	    c = *s++;
+	    c = *s++ & p->charmask;
 	    cdat = p->fontdata + c * p->fontheight;
 
 	    for (rows = p->fontheight, dest = dest0; rows-- ; dest += bytes)
@@ -174,8 +180,9 @@ void fbcon_cfb8_putcs(struct vc_data *conp, struct display *p,
         }
         break;
     case 8:
+#endif
 	while (count--) {
-	    c = *s++;
+	    c = *s++ & p->charmask;
 	    cdat = p->fontdata + c * p->fontheight;
 
 	    for (rows = p->fontheight, dest = dest0; rows-- ; dest += bytes) {
@@ -184,11 +191,12 @@ void fbcon_cfb8_putcs(struct vc_data *conp, struct display *p,
 	    }
 	    dest0+=8;
         }
+#ifndef CONFIG_FBCON_FONTWIDTH8_ONLY
         break;
     case 12:
     case 16:
 	while (count--) {
-	    c = *s++;
+	    c = *s++ & p->charmask;
 	    cdat = p->fontdata + (c * p->fontheight << 1);
 
 	    for (rows = p->fontheight, dest = dest0; rows-- ; dest += bytes) {
@@ -203,6 +211,7 @@ void fbcon_cfb8_putcs(struct vc_data *conp, struct display *p,
         }
         break;
     }
+#endif
 }
 
 void fbcon_cfb8_revc(struct display *p, int xx, int yy)
@@ -212,6 +221,10 @@ void fbcon_cfb8_revc(struct display *p, int xx, int yy)
 
     dest = p->screen_base + yy * p->fontheight * bytes + xx * p->fontwidth;
     for (rows = p->fontheight ; rows-- ; dest += bytes) {
+#ifdef CONFIG_FBCON_FONTWIDTH8_ONLY
+    	((u32 *)dest)[1] ^= 0x0f0f0f0f;
+    	((u32 *)dest)[0] ^= 0x0f0f0f0f;
+#else
     	switch (p->fontwidth) {
     	case 16: ((u32 *)dest)[3] ^= 0x0f0f0f0f; /* FALL THROUGH */
     	case 12: ((u32 *)dest)[2] ^= 0x0f0f0f0f; /* FALL THROUGH */
@@ -219,6 +232,7 @@ void fbcon_cfb8_revc(struct display *p, int xx, int yy)
     	case 4: ((u32 *)dest)[0] ^= 0x0f0f0f0f;  /* FALL THROUGH */
     	default: break;
     	}
+#endif
     }
 }
 

@@ -573,6 +573,7 @@ static void mace_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	if ((fs & XMTSV) == 0) {
 	    printk(KERN_ERR "mace: xmtfs not valid! (fs=%x xc=%d ds=%x)\n",
 		   fs, xcount, dstat);
+	    return;
 	}
 	cp = mp->tx_cmds + NCMDS_TX * i;
 	stat = ld_le16(&cp->xfer_status);
@@ -765,7 +766,14 @@ static void mace_rxdma_intr(int irq, void *dev_id, struct pt_regs *regs)
 		if (frame_status & RS_FCSERR)
 		    ++mp->stats.rx_crc_errors;
 	    } else {
-		nb -= 8;
+		/* Mace feature AUTO_STRIP_RCV is on by default, dropping the
+		 * FCS on frames with 802.3 headers. This means that Ethernet 
+		 * frames have 8 extra octets at the end, while 802.3 frames 
+		 * have only 4. We need to correctly account for this. */
+		if (*(unsigned short *)(data+12) < 1536) /* 802.3 header */
+		    nb -= 4;
+		else	/* Ethernet header; mace includes FCS */
+		    nb -= 8;
 		skb_put(skb, nb);
 		skb->dev = dev;
 		skb->protocol = eth_type_trans(skb, dev);

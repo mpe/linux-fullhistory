@@ -1,6 +1,6 @@
 /* linux/net/inet/arp.c
  *
- * Version:	$Id: arp.c,v 1.66 1998/05/08 01:54:55 davem Exp $
+ * Version:	$Id: arp.c,v 1.67 1998/06/19 13:22:31 davem Exp $
  *
  * Copyright (C) 1994 by Florian  La Roche
  *
@@ -15,7 +15,7 @@
  * 2 of the License, or (at your option) any later version.
  *
  * Fixes:
- *		Alan Cox	:	Removed the ethernet assumptions in 
+ *		Alan Cox	:	Removed the Ethernet assumptions in 
  *					Florian's code
  *		Alan Cox	:	Fixed some small errors in the ARP 
  *					logic
@@ -230,7 +230,7 @@ static int arp_constructor(struct neighbour *neigh)
 		neigh->ops = &arp_direct_ops;
 		neigh->output = neigh->ops->queue_xmit;
 	} else {
-		/* Good devices (checked by reading texts, but only ethernet is
+		/* Good devices (checked by reading texts, but only Ethernet is
 		   tested)
 
 		   ARPHRD_ETHER: (ethernet, apfddi)
@@ -240,7 +240,7 @@ static int arp_constructor(struct neighbour *neigh)
 		   ARPHRD_ARCNET:
 		   etc. etc. etc.
 
-		   ARPHRD_IPDDP will also work, if author repaires it.
+		   ARPHRD_IPDDP will also work, if author repairs it.
 		   I did not it, because this driver does not work even
 		   in old paradigm.
 		 */
@@ -1099,7 +1099,7 @@ __initfunc(void arp_init (void))
 #ifdef CONFIG_AX25_MODULE
 
 /*
- *	ax25 -> ascii conversion
+ *	ax25 -> ASCII conversion
  */
 char *ax2asc(ax25_address *a)
 {

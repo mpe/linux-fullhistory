@@ -6,6 +6,7 @@
  * with information needed by the vt package
  */
 
+#include <linux/config.h>
 #include <linux/vt.h>
 
 /*
@@ -16,7 +17,9 @@
  * fixed.  The linux/Documentation directory includes a code snippet
  * to save and restore the text font.
  */
+#ifdef CONFIG_VGA_CONSOLE
 #define BROKEN_GRAPHICS_PROGRAMS 1
+#endif
 
 extern struct vt_struct {
 	int vc_num;				/* The console number */
@@ -66,10 +69,12 @@ int con_set_trans_old(unsigned char * table);
 int con_get_trans_old(unsigned char * table);
 int con_set_trans_new(unsigned short * table);
 int con_get_trans_new(unsigned short * table);
-void con_clear_unimap(struct unimapinit *ui);
-int con_set_unimap(ushort ct, struct unipair *list);
-int con_get_unimap(ushort ct, ushort *uct, struct unipair *list);
-void con_set_default_unimap(void);
+int con_clear_unimap(int currcons, struct unimapinit *ui);
+int con_set_unimap(int currcons, ushort ct, struct unipair *list);
+int con_get_unimap(int currcons, ushort ct, ushort *uct, struct unipair *list);
+int con_set_default_unimap(int currcons);
+void con_free_unimap(int currcons);
+void con_protect_unimap(int currcons, int rdonly);
 
 /* vt.c */
 

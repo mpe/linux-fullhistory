@@ -59,9 +59,10 @@
  *	Changes by Christopher Turcksin <wabbit@rtfc.demon.co.uk>
  *	+ Now compiles ok as a module again.
  *
- *	Changes by Paul Norton (pnorton@cts.com) :
+ *	Changes by Paul Norton (p.norton@computer.org) :
  *      + moved the header manipulation code in tr_tx and tr_rx to
  *        net/802/tr.c. (July 12 1997)
+ *      + add retry and timeout on open if cable disconnected. (May 5 1998)
  *      + lifted 2000 byte mtu limit. now depends on shared-RAM size.
  *        May 25 1998)
  */
@@ -929,9 +930,12 @@ void tok_interrupt (int irq, void *dev_id, struct pt_regs *regs)
 							      DPRINTK("No signal detected for Auto Speed Detection.\n");
 						      else if (open_error_code==0x11)
 						      {
-						      	      ti->open_status=FAILURE;
-						      	      DPRINTK("Ring broken/disconnected.\n");
-						      	      wake_up(&ti->wait_for_reset);
+							      if (ti->retry_count--) 
+								      DPRINTK("Ring broken/disconnected, retrying...\n");
+							      else {
+								      DPRINTK("Ring broken/disconnected, open failed.\n");
+								      ti->open_status = FAILURE;
+							      }
 						      }
 						      else DPRINTK("Unrecoverable error: error code = %04x.\n",
 								   open_error_code);

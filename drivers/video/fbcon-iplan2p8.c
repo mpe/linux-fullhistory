@@ -349,7 +349,7 @@ void fbcon_iplan2p8_putc(struct vc_data *conp, struct display *p, int c,
     u32 eorx1, eorx2, fgx1, fgx2, bgx1, bgx2, fdx;
 
     dest = p->screen_base + yy * p->fontheight * bytes + (xx>>1)*16 + (xx & 1);
-    cdat = p->fontdata + (c & 0xff) * p->fontheight;
+    cdat = p->fontdata + (c & p->charmask) * p->fontheight;
 
     expand8dl(attr_fgcol(p,c), &fgx1, &fgx2);
     expand8dl(attr_bgcol(p,c), &bgx1, &bgx2);
@@ -365,7 +365,8 @@ void fbcon_iplan2p8_putcs(struct vc_data *conp, struct display *p,
 			  const unsigned short *s, int count, int yy, int xx)
 {
     u8 *dest, *dest0;
-    u8 *cdat, c;
+    u8 *cdat;
+    u16 c;
     int rows;
     int bytes;
     u32 eorx1, eorx2, fgx1, fgx2, bgx1, bgx2, fdx;
@@ -387,7 +388,7 @@ void fbcon_iplan2p8_putcs(struct vc_data *conp, struct display *p,
 	* cache :-(
 	*/
 
-	c = *s++;
+	c = *s++ & p->charmask;
 	cdat  = p->fontdata + (c * p->fontheight);
 
 	for(rows = p->fontheight, dest = dest0; rows-- ; dest += bytes) {

@@ -147,6 +147,7 @@ extern unsigned int x25_new_lci(struct x25_neigh *);
 extern struct sock *x25_find_socket(unsigned int, struct x25_neigh *);
 extern void x25_destroy_socket(struct sock *);
 extern int  x25_rx_call_request(struct sk_buff *, struct x25_neigh *, unsigned int);
+extern void x25_kill_by_neigh(struct x25_neigh *);
 
 #include <net/x25call.h>
 
@@ -161,6 +162,7 @@ extern void x25_terminate_link(struct x25_neigh *);
 extern int  x25_parse_facilities(struct sk_buff *, struct x25_facilities *);
 extern int  x25_create_facilities(unsigned char *, struct x25_facilities *);
 extern int  x25_negotiate_facilities(struct sk_buff *, struct sock *, struct x25_facilities *);
+extern void x25_limit_facilities(struct x25_facilities *, struct x25_neigh *);
 
 /* x25_in.c */
 extern int  x25_process_rx_frame(struct sock *, struct sk_buff *);

@@ -49,17 +49,20 @@ static int x25_queue_rx_frame(struct sock *sk, struct sk_buff *skb, int more)
 	if (more) {
 		sk->protinfo.x25->fraglen += skb->len;
 		skb_queue_tail(&sk->protinfo.x25->fragment_queue, skb);
+		skb_set_owner_r(skb, sk);
 		return 0;
 	}
 
 	if (!more && sk->protinfo.x25->fraglen > 0) {	/* End of fragment */
-		sk->protinfo.x25->fraglen += skb->len;
+		int len = sk->protinfo.x25->fraglen + skb->len;
+
+		if ((skbn = alloc_skb(len, GFP_ATOMIC)) == NULL){
+			kfree_skb(skb);
+			return 1;
+		}
+
 		skb_queue_tail(&sk->protinfo.x25->fragment_queue, skb);
 
-		if ((skbn = alloc_skb(sk->protinfo.x25->fraglen, GFP_ATOMIC)) == NULL)
-			return 1;
-
-		skb_set_owner_r(skbn, sk);
 		skbn->h.raw = skbn->data;
 
 		skbo = skb_dequeue(&sk->protinfo.x25->fragment_queue);
@@ -75,7 +78,12 @@ static int x25_queue_rx_frame(struct sock *sk, struct sk_buff *skb, int more)
 		sk->protinfo.x25->fraglen = 0;		
 	}
 
-	return sock_queue_rcv_skb(sk, skbn);
+	skb_set_owner_r(skbn, sk);
+	skb_queue_tail(&sk->receive_queue, skbn);
+	if (!sk->dead)
+		sk->data_ready(sk,skbn->len);
+
+	return 0;
 }
 
 /*

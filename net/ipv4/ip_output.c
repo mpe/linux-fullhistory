@@ -5,7 +5,7 @@
  *
  *		The Internet Protocol (IP) output module.
  *
- * Version:	$Id: ip_output.c,v 1.58 1998/05/15 15:21:36 davem Exp $
+ * Version:	$Id: ip_output.c,v 1.59 1998/07/15 05:05:15 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -814,7 +814,7 @@ void ip_fragment(struct sk_buff *skb, int (*output)(struct sk_buff*))
 		 * will inherit fixed options.
 		 */
 		if (offset == 0)
-			ip_options_fragment(skb2);
+			ip_options_fragment(skb);
 
 		/*
 		 *	Added AC : If we are fragmenting a fragment that's not the

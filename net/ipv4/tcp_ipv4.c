@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_ipv4.c,v 1.147 1998/05/06 13:25:00 freitag Exp $
+ * Version:	$Id: tcp_ipv4.c,v 1.148 1998/07/23 12:28:25 freitag Exp $
  *
  *		IPv4 specific functions
  *
@@ -1033,7 +1033,14 @@ tcp_v4_save_options(struct sock *sk, struct sk_buff *skb,
 	return dopt;
 }
 
-int sysctl_max_syn_backlog = 1024; 
+/* 
+ * Maximum number of SYN_RECV sockets in queue per LISTEN socket.
+ * One SYN_RECV socket costs about 80bytes on a 32bit machine.
+ * It would be better to replace it with a global counter for all sockets
+ * but then some measure against one socket starving all other sockets
+ * would be needed.
+ */
+int sysctl_max_syn_backlog = 128; 
 
 struct or_calltable or_ipv4 = {
 	tcp_v4_send_synack,

@@ -30,13 +30,13 @@ ifeq ($(CONFIG_DUMMY_CONSOLE),y)
 endif
 
 ifeq ($(CONFIG_PROM_CONSOLE),y)
-  L_OBJS += promcon.o
+  L_OBJS += promcon.o promcon_tbl.o
 endif
 
 ifeq ($(CONFIG_FB),y)
   L_OBJS += fonts.o
   OX_OBJS += fbcon.o fbcmap.o
-# fbgen is not compiled by default since nobody uses it yet
+# fbgen is not compiled by default since nobody uses it yet, except clgenfb
   ifeq ($(CONFIG_FONT_8x8),y)
     L_OBJS += font_8x8.o
   endif
@@ -94,6 +94,14 @@ ifeq ($(CONFIG_FB_ATY),y)
 L_OBJS += atyfb.o
 endif
 
+ifeq ($(CONFIG_FB_CONTROL),y)
+L_OBJS += controlfb.o
+endif
+
+ifeq ($(CONFIG_FB_PLATINUM),y)
+L_OBJS += platinumfb.o
+endif
+
 ifeq ($(CONFIG_FB_CT65550),y)
 L_OBJS += chipsfb.o
 endif
@@ -123,6 +131,16 @@ L_OBJS += retz3fb.o
 else
   ifeq ($(CONFIG_FB_RETINAZ3),m)
   M_OBJS += retz3fb.o
+  endif
+endif
+
+ifeq ($(CONFIG_FB_CLGEN),y)
+L_OBJS += clgenfb.o
+OX_OBJS += fbgen.o
+else
+  ifeq ($(CONFIG_FB_CLGEN),m)
+  M_OBJS += clgenfb.o
+  OX_OBJS += fbgen.o
   endif
 endif
 
@@ -186,6 +204,27 @@ L_OBJS += sbusfb.o
     M_OBJS += cgsixfb.o
     endif
   endif
+  ifeq ($(CONFIG_FB_BWTWO),y)
+    L_OBJS += bwtwofb.o
+  else
+    ifeq ($(CONFIG_FB_BWTWO),m)
+    M_OBJS += bwtwofb.o
+    endif
+  endif
+  ifeq ($(CONFIG_FB_CGTHREE),y)
+    L_OBJS += cgthreefb.o
+  else
+    ifeq ($(CONFIG_FB_CGTHREE),m)
+    M_OBJS += cgthreefb.o
+    endif
+  endif
+  ifeq ($(CONFIG_FB_TCX),y)
+    L_OBJS += tcxfb.o
+  else
+    ifeq ($(CONFIG_FB_TCX),m)
+    M_OBJS += tcxfb.o
+    endif
+  endif
 else
   ifeq ($(CONFIG_FB_SBUS),m)
   M_OBJS += sbusfb.o
@@ -201,6 +240,27 @@ else
     else
       ifeq ($(CONFIG_FB_CGSIX),m)
       M_OBJS += cgsixfb.o
+      endif
+    endif
+    ifeq ($(CONFIG_FB_BWTWO),y)
+      M_OBJS += bwtwofb.o
+    else
+      ifeq ($(CONFIG_FB_BWTWO),m)
+      M_OBJS += bwtwofb.o
+      endif
+    endif
+    ifeq ($(CONFIG_FB_CGTHREE),y)
+      M_OBJS += cgthreefb.o
+    else
+      ifeq ($(CONFIG_FB_CGTHREE),m)
+      M_OBJS += cgthreefb.o
+      endif
+    endif
+    ifeq ($(CONFIG_FB_TCX),y)
+      M_OBJS += tcxfb.o
+    else
+      ifeq ($(CONFIG_FB_TCX),m)
+      M_OBJS += tcxfb.o
       endif
     endif
   endif
@@ -353,3 +413,10 @@ include $(TOPDIR)/Rules.make
 gspcore.c: gspcore.gsp
 	$(GSPA) $< > $*.hex
 	$(GSPH2C) $*.hex > gspcore.c
+
+promcon_tbl.c: prom.uni
+	../char/conmakehash prom.uni | \
+	sed -e '/#include <[^>]*>/p' -e 's/types/init/' \
+	    -e 's/dfont\(_uni.*\]\)/promfont\1 __initdata/' > promcon_tbl.c
+
+promcon_tbl.o: promcon_tbl.c $(TOPDIR)/include/linux/types.h

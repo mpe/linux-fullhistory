@@ -127,16 +127,23 @@ static inline void free_one_pgd(pgd_t * dir)
  */
 void clear_page_tables(struct task_struct * tsk)
 {
+	pgd_t * page_dir = tsk->mm->pgd;
 	int i;
-	pgd_t * page_dir;
 
-	page_dir = tsk->mm->pgd;
-	if (!page_dir || page_dir == swapper_pg_dir) {
-		printk("%s trying to clear kernel page-directory: not good\n", tsk->comm);
-		return;
-	}
+	if (!page_dir || page_dir == swapper_pg_dir)
+		goto out_bad;
 	for (i = 0 ; i < USER_PTRS_PER_PGD ; i++)
 		free_one_pgd(page_dir + i);
+
+	/* keep the page table cache within bounds */
+	check_pgt_cache();
+	return;
+
+out_bad:
+	printk(KERN_ERR 
+		"clear_page_tables: %s trying to clear kernel pgd\n",
+		tsk->comm);
+	return;
 }
 
 /*
@@ -146,19 +153,26 @@ void clear_page_tables(struct task_struct * tsk)
  */
 void free_page_tables(struct mm_struct * mm)
 {
+	pgd_t * page_dir = mm->pgd;
 	int i;
-	pgd_t * page_dir;
 
-	page_dir = mm->pgd;
-	if (page_dir) {
-		if (page_dir == swapper_pg_dir) {
-			printk("free_page_tables: Trying to free kernel pgd\n");
-			return;
-		}
-		for (i = 0 ; i < USER_PTRS_PER_PGD ; i++)
-			free_one_pgd(page_dir + i);
-		pgd_free(page_dir);
-	}
+	if (!page_dir)
+		goto out;
+	if (page_dir == swapper_pg_dir)
+		goto out_bad;
+	for (i = 0 ; i < USER_PTRS_PER_PGD ; i++)
+		free_one_pgd(page_dir + i);
+	pgd_free(page_dir);
+
+	/* keep the page table cache within bounds */
+	check_pgt_cache();
+out:
+	return;
+
+out_bad:
+	printk(KERN_ERR
+		"free_page_tables: Trying to free kernel pgd\n");
+	return;
 }
 
 int new_page_tables(struct task_struct * tsk)

@@ -1,4 +1,4 @@
-/* $Id: cgsixfb.c,v 1.4 1998/07/21 10:36:53 jj Exp $
+/* $Id: cgsixfb.c,v 1.7 1998/07/22 12:44:59 jj Exp $
  * cgsixfb.c: CGsix (GX,GXplus) frame buffer driver
  *
  * Copyright (C) 1996,1998 Jakub Jelinek (jj@ultra.linux.cz)
@@ -237,8 +237,8 @@ static void cg6_clear(struct vc_data *conp, struct display *p, int sy, int sx,
 	do {
 		i = fbc->s;
 	} while (i & 0x10000000);
-	fbc->fg = attr_bg_col_ec(conp);
-	fbc->bg = attr_bg_col_ec(conp);
+	fbc->fg = attr_bgcol_ec(p,conp);
+	fbc->bg = attr_bgcol_ec(p,conp);
 	fbc->pixelm = ~(0);
 	fbc->alu = 0xea80ff00;
 	fbc->s = 0;
@@ -264,7 +264,7 @@ static void cg6_clear(struct vc_data *conp, struct display *p, int sy, int sx,
 	} while (i < 0 && (i & 0x20000000));
 }
 
-static void cg6_fill(struct fb_info_sbusfb *fb, int s,
+static void cg6_fill(struct fb_info_sbusfb *fb, struct display *p, int s,
 		     int count, unsigned short *boxes)
 {
 	int i;
@@ -273,8 +273,8 @@ static void cg6_fill(struct fb_info_sbusfb *fb, int s,
 	do {
 		i = fbc->s;
 	} while (i & 0x10000000);
-	fbc->fg = attr_bg_col(s);
-	fbc->bg = attr_bg_col(s);
+	fbc->fg = attr_bgcol(p,s);
+	fbc->bg = attr_bgcol(p,s);
 	fbc->pixelm = ~(0);
 	fbc->alu = 0xea80ff00;
 	fbc->s = 0;
@@ -301,11 +301,15 @@ static void cg6_putc(struct vc_data *conp, struct display *p, int c, int yy, int
 
 	if (p->fontheightlog) {
 		y = fb->y_margin + (yy << p->fontheightlog);
-		i = ((c & 0xff) << p->fontheightlog);
+		i = ((c & p->charmask) << p->fontheightlog);
 	} else {
 		y = fb->y_margin + (yy * p->fontheight);
-		i = (c & 0xff) * p->fontheight;
+		i = (c & p->charmask) * p->fontheight;
 	}
+#ifdef CONFIG_FBCON_FONTWIDTH8_ONLY
+	fd = p->fontdata + i;
+	x = fb->x_margin + xx * 8;
+#else
 	if (p->fontwidth <= 8)
 		fd = p->fontdata + i;
 	else
@@ -314,11 +318,12 @@ static void cg6_putc(struct vc_data *conp, struct display *p, int c, int yy, int
 		x = fb->x_margin + (xx << p->fontwidthlog);
 	else
 		x = fb->x_margin + (xx * p->fontwidth);
+#endif
 	do {
 		i = fbc->s;
 	} while (i & 0x10000000);
-	fbc->fg = attr_fg_col(c);
-	fbc->bg = attr_bg_col(c);
+	fbc->fg = attr_fgcol(p,c);
+	fbc->bg = attr_bgcol(p,c);
 	fbc->mode = 0x140000;
 	fbc->alu = 0xe880fc30;
 	fbc->pixelm = ~(0);
@@ -330,15 +335,19 @@ static void cg6_putc(struct vc_data *conp, struct display *p, int c, int yy, int
 	fbc->x0 = x;
 	fbc->x1 = x + p->fontwidth - 1;
 	fbc->y0 = y;
+#ifndef CONFIG_FBCON_FONTWIDTH8_ONLY
 	if (p->fontwidth <= 8) {
+#endif
 		for (i = 0; i < p->fontheight; i++)
 			fbc->font = *fd++ << 24;
+#ifndef CONFIG_FBCON_FONTWIDTH8_ONLY
 	} else {
 		for (i = 0; i < p->fontheight; i++) {
 			fbc->font = *(u16 *)fd << 16;
 			fd += 2;
 		}
 	}
+#endif
 }
 
 static void cg6_putcs(struct vc_data *conp, struct display *p, const unsigned short *s,
@@ -352,8 +361,8 @@ static void cg6_putcs(struct vc_data *conp, struct display *p, const unsigned sh
 	do {
 		i = fbc->s;
 	} while (i & 0x10000000);
-	fbc->fg = attr_fg_col(*s);
-	fbc->bg = attr_bg_col(*s);
+	fbc->fg = attr_fgcol(p,*s);
+	fbc->bg = attr_bgcol(p,*s);
 	fbc->mode = 0x140000;
 	fbc->alu = 0xe880fc30;
 	fbc->pixelm = ~(0);
@@ -362,15 +371,21 @@ static void cg6_putcs(struct vc_data *conp, struct display *p, const unsigned sh
 	fbc->pm = 0xff;
 	x = fb->x_margin;
 	y = fb->y_margin;
+#ifdef CONFIG_FBCON_FONTWIDTH8_ONLY
+	x += xx * 8;
+#else
 	if (p->fontwidthlog)
 		x += (xx << p->fontwidthlog);
 	else
 		x += xx * p->fontwidth;
+#endif
 	if (p->fontheightlog)
 		y += (yy << p->fontheightlog);
 	else
 		y += (yy * p->fontheight);
+#ifndef CONFIG_FBCON_FONTWIDTH8_ONLY
 	if (p->fontwidth <= 8) {
+#endif
 		while (count >= 4) {
 			count -= 4;
 			fbc->incx = 0;
@@ -379,20 +394,23 @@ static void cg6_putcs(struct vc_data *conp, struct display *p, const unsigned sh
 			fbc->x1 = (x += 4 * p->fontwidth) - 1;
 			fbc->y0 = y;
 			if (p->fontheightlog) {
-				fd1 = p->fontdata + ((*s++ & 0xff) << p->fontheightlog);
-				fd2 = p->fontdata + ((*s++ & 0xff) << p->fontheightlog);
-				fd3 = p->fontdata + ((*s++ & 0xff) << p->fontheightlog);
-				fd4 = p->fontdata + ((*s++ & 0xff) << p->fontheightlog);
+				fd1 = p->fontdata + ((*s++ & p->charmask) << p->fontheightlog);
+				fd2 = p->fontdata + ((*s++ & p->charmask) << p->fontheightlog);
+				fd3 = p->fontdata + ((*s++ & p->charmask) << p->fontheightlog);
+				fd4 = p->fontdata + ((*s++ & p->charmask) << p->fontheightlog);
 			} else {
-				fd1 = p->fontdata + ((*s++ & 0xff) * p->fontheight);
-				fd2 = p->fontdata + ((*s++ & 0xff) * p->fontheight);
-				fd3 = p->fontdata + ((*s++ & 0xff) * p->fontheight);
-				fd4 = p->fontdata + ((*s++ & 0xff) * p->fontheight);
+				fd1 = p->fontdata + ((*s++ & p->charmask) * p->fontheight);
+				fd2 = p->fontdata + ((*s++ & p->charmask) * p->fontheight);
+				fd3 = p->fontdata + ((*s++ & p->charmask) * p->fontheight);
+				fd4 = p->fontdata + ((*s++ & p->charmask) * p->fontheight);
 			}
+#ifndef CONFIG_FBCON_FONTWIDTH8_ONLY
 			if (p->fontwidth == 8) {
+#endif
 				for (i = 0; i < p->fontheight; i++)
 					fbc->font = ((u32)*fd4++) | ((((u32)*fd3++) | ((((u32)*fd2++) | (((u32)*fd1++) 
 						<< 8)) << 8)) << 8);
+#ifndef CONFIG_FBCON_FONTWIDTH8_ONLY
 			} else {
 				for (i = 0; i < p->fontheight; i++)
 					fbc->font = (((u32)*fd4++) | ((((u32)*fd3++) | ((((u32)*fd2++) | (((u32)*fd1++) 
@@ -408,17 +426,18 @@ static void cg6_putcs(struct vc_data *conp, struct display *p, const unsigned sh
 			fbc->x1 = (x += 2 * p->fontwidth) - 1;
 			fbc->y0 = y;
 			if (p->fontheightlog) {
-				fd1 = p->fontdata + ((*s++ & 0xff) << (p->fontheightlog + 1));
-				fd2 = p->fontdata + ((*s++ & 0xff) << (p->fontheightlog + 1));
+				fd1 = p->fontdata + ((*s++ & p->charmask) << (p->fontheightlog + 1));
+				fd2 = p->fontdata + ((*s++ & p->charmask) << (p->fontheightlog + 1));
 			} else {
-				fd1 = p->fontdata + (((*s++ & 0xff) * p->fontheight) << 1);
-				fd2 = p->fontdata + (((*s++ & 0xff) * p->fontheight) << 1);
+				fd1 = p->fontdata + (((*s++ & p->charmask) * p->fontheight) << 1);
+				fd2 = p->fontdata + (((*s++ & p->charmask) * p->fontheight) << 1);
 			}
 			for (i = 0; i < p->fontheight; i++) {
 				fbc->font = ((((u32)*(u16 *)fd1) << p->fontwidth) | ((u32)*(u16 *)fd2)) << (16 - p->fontwidth);
 				fd1 += 2; fd2 += 2;
 			}
 		}
+#endif
 	}
 	while (count) {
 		count--;
@@ -428,13 +447,16 @@ static void cg6_putcs(struct vc_data *conp, struct display *p, const unsigned sh
 		fbc->x1 = (x += p->fontwidth) - 1;
 		fbc->y0 = y;
 		if (p->fontheightlog)
-			i = ((*s++ & 0xff) << p->fontheightlog);
+			i = ((*s++ & p->charmask) << p->fontheightlog);
 		else
-			i = ((*s++ & 0xff) * p->fontheight);
+			i = ((*s++ & p->charmask) * p->fontheight);
+#ifndef CONFIG_FBCON_FONTWIDTH8_ONLY
 		if (p->fontwidth <= 8) {
+#endif
 			fd1 = p->fontdata + i;
 			for (i = 0; i < p->fontheight; i++)
 				fbc->font = *fd1++ << 24;
+#ifndef CONFIG_FBCON_FONTWIDTH8_ONLY
 		} else {
 			fd1 = p->fontdata + (i << 1);
 			for (i = 0; i < p->fontheight; i++) {
@@ -442,6 +464,7 @@ static void cg6_putcs(struct vc_data *conp, struct display *p, const unsigned sh
 				fd1 += 2;
 			}
 		}
+#endif
 	}
 }
 
@@ -466,7 +489,6 @@ static void cg6_loadcmap (struct fb_info_sbusfb *fb, int index, int count)
 static void cg6_restore_palette (struct fb_info_sbusfb *fb)
 {
 	struct bt_regs *bt = fb->s.cg6.bt;
-	int i;
                 
 	bt->addr = 0;
 	bt->color_map = 0xffffffff;
@@ -592,10 +614,7 @@ __initfunc(char *cgsixfb_init(struct fb_info_sbusfb *fb))
 	strcpy(fb->info.modename, "CGsix");
 		
 	strcpy(fix->id, "CGsix");
-	fix->smem_start = (char *)phys + CG6_RAM_OFFSET;
 	fix->line_length = fb->var.xres_virtual;
-	fix->mmio_start = (char *)phys + CG6_FBC_OFFSET;
-	fix->mmio_len = PAGE_SIZE;
 	fix->accel = FB_ACCEL_SUN_CGSIX;
 	
 	var->accel_flags = FB_ACCELF_TEXT;
@@ -648,7 +667,12 @@ __initfunc(char *cgsixfb_init(struct fb_info_sbusfb *fb))
 	default: p = "i386"; break;
 	}
 	                                                                        
-	sprintf(idstring, "cgsix at %02x.%08lx TEC Rev %x CPU %s Rev %x", fb->iospace, phys, 
+	sprintf(idstring, 
+#ifdef __sparc_v9__
+		    "cgsix at %016lx TEC Rev %x CPU %s Rev %x", phys, 
+#else	
+		    "cgsix at %x.%08lx TEC Rev %x CPU %s Rev %x", fb->iospace, phys, 
+#endif
 		    (fb->s.cg6.thc->thc_misc >> CG6_THC_MISC_REV_SHIFT) & CG6_THC_MISC_REV_MASK,
 		    p, conf >> CG6_FHC_REV_SHIFT & CG6_FHC_REV_MASK);
 		    

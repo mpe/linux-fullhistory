@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_output.c,v 1.91 1998/05/23 13:10:21 davem Exp $
+ * Version:	$Id: tcp_output.c,v 1.92 1998/06/19 13:22:44 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -166,10 +166,10 @@ void tcp_send_skb(struct sock *sk, struct sk_buff *skb, int force_queue)
 	}
 }
 
-/* Function to create two new tcp segments.  Shrinks the given segment
+/* Function to create two new TCP segments.  Shrinks the given segment
  * to the specified size and appends a new segment with the rest of the
- * packet to the list. This won't be called frenquently, I hope... 
- * Remember, these are still header-less SKB's at this point.
+ * packet to the list.  This won't be called frequently, I hope. 
+ * Remember, these are still headerless SKBs at this point.
  */
 static int tcp_fragment(struct sock *sk, struct sk_buff *skb, u32 len)
 {
@@ -256,7 +256,7 @@ void tcp_write_xmit(struct sock *sk)
 		 *
 		 * a) following SWS avoidance [and Nagle algorithm]
 		 * b) not exceeding our congestion window.
-		 * c) not retransmiting [Nagle]
+		 * c) not retransmitting [Nagle]
 		 */
 		while((skb = tp->send_head) && tcp_snd_test(sk, skb)) {
 			if (skb->len > mss_now) {
@@ -288,14 +288,14 @@ void tcp_write_xmit(struct sock *sk)
  * 2. We limit memory per socket
  *
  * RFC 1122:
- * "the suggested [SWS] avoidance algoritm for the receiver is to keep
+ * "the suggested [SWS] avoidance algorithm for the receiver is to keep
  *  RECV.NEXT + RCV.WIN fixed until:
  *  RCV.BUFF - RCV.USER - RCV.WINDOW >= min(1/2 RCV.BUFF, MSS)"
  *
  * i.e. don't raise the right edge of the window until you can raise
  * it at least MSS bytes.
  *
- * Unfortunately, the recomended algorithm breaks header prediction,
+ * Unfortunately, the recommended algorithm breaks header prediction,
  * since header prediction assumes th->window stays fixed.
  *
  * Strictly speaking, keeping th->window fixed violates the receiver
@@ -474,7 +474,7 @@ static __inline__ void update_retrans_head(struct sock *sk)
 
 /* This retransmits one SKB.  Policy decisions and retransmit queue
  * state updates are done by the caller.  Returns non-zero if an
- * error occured which prevented the send.
+ * error occurred which prevented the send.
  */
 int tcp_retransmit_skb(struct sock *sk, struct sk_buff *skb)
 {
@@ -505,7 +505,7 @@ int tcp_retransmit_skb(struct sock *sk, struct sk_buff *skb)
 	tp->retrans_out++;
 
 	/* Make a copy, if the first transmission SKB clone we made
-	 * is still in somebodies hands, else make a clone.
+	 * is still in somebody's hands, else make a clone.
 	 */
 	TCP_SKB_CB(skb)->when = jiffies;
 	if(skb_cloned(skb))
@@ -827,7 +827,7 @@ void tcp_connect(struct sock *sk, struct sk_buff *buff, int mss)
 		mss = min(mss, sk->user_mss);
 
 	if (mss < 1) {
-		printk(KERN_DEBUG "intial sk->mss below 1\n");
+		printk(KERN_DEBUG "initial sk->mss below 1\n");
 		mss = 1;	/* Sanity limit */
 	}
 

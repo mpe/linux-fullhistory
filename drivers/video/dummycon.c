@@ -5,7 +5,6 @@
  *  available, usually until fbcon takes console over.
  */
 
-#include <linux/config.h>
 #include <linux/types.h>
 #include <linux/kdev_t.h>
 #include <linux/tty.h>
@@ -18,11 +17,7 @@
  *  Dummy console driver
  */
 
-#ifdef __sparc__
-/* Some reasonable defaults, so that we don't loose any text */
-#define DUMMY_COLUMNS	128
-#define DUMMY_ROWS	54
-#elif defined(CONFIG_ARM)
+#if defined(CONFIG_ARM)
 #define DUMMY_COLUMNS	ORIG_VIDEO_COLS
 #define DUMMY_ROWS	ORIG_VIDEO_LINES
 #else

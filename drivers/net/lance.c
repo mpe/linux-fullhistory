@@ -326,8 +326,7 @@ __initfunc(int lance_init(void))
 	    struct pci_dev *pdev = NULL;
 		if (lance_debug > 1)
 			printk("lance.c: PCI is present, checking for devices...\n");
-		while (pdev = pci_find_device(PCI_VENDOR_ID_AMD, PCI_DEVICE_ID_AMD_LANCE, pdev)) {
-			unsigned char pci_bus, pci_device_fn;
+		while ((pdev = pci_find_device(PCI_VENDOR_ID_AMD, PCI_DEVICE_ID_AMD_LANCE, pdev))) {
 			unsigned int pci_ioaddr;
 			unsigned short pci_command;
 

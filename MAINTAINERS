@@ -310,6 +310,12 @@ M:	Paul.Russell@rustcorp.com.au
 W:	http://www.adelaide.net.au/~rustcorp/ipfwchains/ipfwchains.html
 S:	Maintained
 
+IP FIREWALL
+P:	Paul Russell
+M:	Paul.Russell@rustcorp.com.au
+W:	http://www.adelaide.net.au/~rustcorp/ipfwchains/ipfwchains.html
+S:	Maintained
+
 IPX/SPX NETWORK LAYER
 P:	Jay Schulist
 M:	Jay Schulist <Jay.Schulist@spacs.k12.wi.us>
@@ -325,6 +331,7 @@ S:	Maintained
 JOYSTICK DRIVER
 P:	Vojtech Pavlik
 M:	vojtech@atrey.karlin.mff.cuni.cz
+W:	http://atrey.karlin.mff.cuni.cz/~vojtech/joystick/
 L:	linux-joystick@atrey.karlin.mff.cuni.cz
 S:	Maintained
 
@@ -555,6 +562,12 @@ P:	Roger Wolff
 M:	R.E.Wolff@BitWizard.nl
 M:	io8-linux@specialix.co.uk
 L:	linux-kernel@vger.rutgers.edu ?
+S:	Supported
+
+SPX NETWORK LAYER
+P:	Jay Schulist
+M:	Jay.Schulist@spacs.k12.wi.us
+L:	linux-net@vger.rutgers.edu
 S:	Supported
 
 SPX NETWORK LAYER

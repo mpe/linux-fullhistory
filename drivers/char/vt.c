@@ -113,21 +113,18 @@ kd_size_changed(int row, int col)
 }
 
 /*
- * Generates sound of some count for some number of clock ticks
- * [count = 1193180 / frequency]
+ * Generates sound of some frequency for some number of clock ticks
  *
  * If freq is 0, will turn off sound, else will turn it on for that time.
  * If msec is 0, will return immediately, else will sleep for msec time, then
  * turn sound off.
  *
- * We use the BEEP_TIMER vector since we're using the same method to
- * generate sound, and we'll overwrite any beep in progress. That may
- * be something to fix later, if we like.
- *
  * We also return immediately, which is what was implied within the X
  * comments - KDMKTONE doesn't put the process to sleep.
  */
-/* FIXME: This should go to arch-dependent code */
+
+#if defined(__i386__) || defined(__alpha__) || defined(__powerpc__) || defined(__mips__)
+
 static void
 kd_nosound(unsigned long ignored)
 {
@@ -167,6 +164,15 @@ _kd_mksound(unsigned int hz, unsigned int ticks)
 	sti();
 	return;
 }
+
+#else
+
+void
+_kd_mksound(unsigned int hz, unsigned int ticks)
+{
+}
+
+#endif
 
 void (*kd_mksound)(unsigned int hz, unsigned int ticks) = _kd_mksound;
 
@@ -394,8 +400,6 @@ do_fontx_ioctl(int cmd, struct consolefontdesc *user_cfd, int perm)
 		op.data = cfdarg.chardata;
 		return con_font_op(fg_console, &op);
 	case GIO_FONTX: {
-		if (!cfdarg.chardata)
-			return 0;
 		op.op = KD_FONT_OP_GET;
 		op.flags = 0;
 		op.width = 8;
@@ -432,9 +436,9 @@ do_unimap_ioctl(int cmd, struct unimapdesc *user_ud,int perm)
 	case PIO_UNIMAP:
 		if (!perm)
 			return -EPERM;
-		return con_set_unimap(tmp.entry_ct, tmp.entries);
+		return con_set_unimap(fg_console, tmp.entry_ct, tmp.entries);
 	case GIO_UNIMAP:
-		return con_get_unimap(tmp.entry_ct, &(user_ud->entry_ct), tmp.entries);
+		return con_get_unimap(fg_console, tmp.entry_ct, &(user_ud->entry_ct), tmp.entries);
 	}
 	return 0;
 }
@@ -994,11 +998,11 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 #else
 		{
 		struct console_font_op op;
-		op.op = KD_FONT_SET_DEFAULT;
+		op.op = KD_FONT_OP_SET_DEFAULT;
 		op.data = NULL;
 		i = con_font_op(fg_console, &op);
 		if (i) return i;
-		con_set_default_unimap();
+		con_set_default_unimap(fg_console);
 		return 0;
 		}
 #endif
@@ -1010,6 +1014,7 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 			return -EFAULT;
 		if (!perm && op.op != KD_FONT_OP_GET)
 			return -EPERM;
+		op.flags |= KD_FONT_FLAG_NEW;
 		i = con_font_op(console, &op);
 		if (i) return i;
 		if (copy_to_user((void *) arg, &op, sizeof(op)))
@@ -1039,7 +1044,7 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 			return -EPERM;
 		i = copy_from_user(&ui, (void *)arg, sizeof(struct unimapinit));
 		if (i) return -EFAULT;
-		con_clear_unimap(&ui);
+		con_clear_unimap(fg_console, &ui);
 		return 0;
 	      }
 
@@ -1189,10 +1194,6 @@ void complete_change_console(unsigned int new_console)
 {
 	unsigned char old_vc_mode;
 
-        if ((new_console == fg_console) || (vt_dont_switch))
-                return;
-        if (!vc_cons_allocated(new_console))
-                return;
 	last_console = fg_console;
 
 	/*

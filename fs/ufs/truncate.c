@@ -267,7 +267,7 @@ next:
 	for (i = 0; i < uspi->s_apb; i++)
 		if (SWAB32(*ubh_get_addr32(ind_ubh,i)))
 			break;
-	if (i >= uspi->s_apb)
+	if (i >= uspi->s_apb) {
 		if (ubh_max_bcount(ind_ubh) != 1) {
 			retry = 1;
 		}
@@ -280,6 +280,7 @@ next:
 			ubh_bforget(ind_ubh);
 			ind_ubh = NULL;
 		}
+	}
 	if (IS_SYNC(inode) && ind_ubh && ubh_buffer_dirty(ind_ubh)) {
 		ubh_ll_rw_block (WRITE, 1, &ind_ubh);
 		ubh_wait_on_buffer (ind_ubh);

@@ -420,6 +420,9 @@ fb_mmap(struct file *file, struct vm_area_struct * vma)
 #elif defined(__sparc__)
 	/* Should never get here, all fb drivers should have their own
 	   mmap routines */
+#elif defined(__i386__)
+	if (boot_cpu_data.x86 > 3)
+		pgprot_val(vma->vm_page_prot) |= _PAGE_PCD;
 #else
 #warning What do we have to do here??
 #endif
@@ -497,7 +500,7 @@ register_framebuffer(struct fb_info *fb_info)
 
 	if (first) {
 		first = 0;
-		take_over_console(&fb_con, 0, MAX_NR_CONSOLES-1, 1);
+		take_over_console(&fb_con, 12, MAX_NR_CONSOLES-1, 1);
 	}
 
 	return 0;

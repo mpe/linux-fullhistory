@@ -30,7 +30,7 @@ static struct fbcon_font_desc *fbcon_fonts[] = {
     &font_vga_8x16,
 #endif
 #ifdef CONFIG_FONT_6x11
-#if !defined(CONFIG_MAC) && !defined(CONFIG_FB_SBUS)
+#if defined(CONFIG_MAC) || defined(CONFIG_FB_SBUS)
 #undef NO_FONTS
 #endif
     &font_vga_6x11,
@@ -40,7 +40,7 @@ static struct fbcon_font_desc *fbcon_fonts[] = {
     &font_sun_8x16,
 #endif
 #ifdef CONFIG_FONT_SUN12x22
-#if !defined(CONFIG_FB_SBUS) && !defined(CONFIG_FBCON_CFB8)
+#if defined(CONFIG_FB_SBUS) || defined(CONFIG_FBCON_CFB8) || defined(CONFIG_FBCON_CFB16) || defined(CONFIG_FBCON_CFB24) || defined(CONFIG_FBCON_CFB32)
 #undef NO_FONTS
 #endif
     &font_sun_12x22,

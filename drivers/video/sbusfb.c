@@ -277,7 +277,7 @@ static void sbusfb_clear_margin(struct display *p, int s)
 		rects [13] = fb->var.yres_virtual - fb->y_margin;
 		rects [14] = fb->var.xres_virtual - fb->x_margin;
 		rects [15] = fb->var.yres_virtual;
-		(*fb->fill)(fb, s, 4, rects);
+		(*fb->fill)(fb, p, s, 4, rects);
 	} else {
 		unsigned char *fb_base = p->screen_base, *q;
 		int skip_bytes = fb->y_margin * fb->var.xres_virtual;
@@ -298,13 +298,13 @@ static void sbusfb_clear_margin(struct display *p, int s)
 				memset (q, ~0, size);
 		} else {
 			fb_base -= (skip_bytes + fb->x_margin);
-			memset (fb_base, attr_bg_col(s), skip_bytes - fb->x_margin);
-			memset (fb_base + scr_size - skip_bytes + fb->x_margin, attr_bg_col(s), skip_bytes - fb->x_margin);
+			memset (fb_base, attr_bgcol(p,s), skip_bytes - fb->x_margin);
+			memset (fb_base + scr_size - skip_bytes + fb->x_margin, attr_bgcol(p,s), skip_bytes - fb->x_margin);
 			incr = fb->var.xres_virtual;
 			size = fb->x_margin * 2;
 			for (q = fb_base + skip_bytes - fb->x_margin, h = 0;
 			     h <= he; q += incr, h++)
-				memset (q, attr_bg_col(s), size);
+				memset (q, attr_bgcol(p,s), size);
 		}
 	}
 	if (fb->switch_from_graph)
@@ -942,6 +942,7 @@ __initfunc(static void sbusfb_init_fb(int node, int parent, int fbtype,
 	
 	type->fb_height = h = prom_getintdefault(node, "height", 900);
 	type->fb_width  = w = prom_getintdefault(node, "width", 1152);
+sizechange:
 	type->fb_depth  = depth = (fbtype == FBTYPE_SUN2BW) ? 1 : 8;
 	linebytes = prom_getintdefault(node, "linebytes", w * depth / 8);
 	type->fb_size   = PAGE_ALIGN((linebytes) * h);
@@ -990,7 +991,7 @@ __initfunc(static void sbusfb_init_fb(int node, int parent, int fbtype,
 	fb->cursor.hwsize.fbx = 32;
 	fb->cursor.hwsize.fby = 32;
 	
-	if (depth > 1)
+	if (depth > 1 && !fb->color_map)
 		fb->color_map = kmalloc(256 * 3, GFP_ATOMIC);
 		
 	switch(fbtype) {
@@ -1028,6 +1029,9 @@ __initfunc(static void sbusfb_init_fb(int node, int parent, int fbtype,
 		kfree(fb);
 		return;
 	}
+	
+	if (p == SBUSFBINIT_SIZECHANGE)
+		goto sizechange;
 
 	disp->dispsw = &fb->dispsw;
 	if (fb->setcursor)

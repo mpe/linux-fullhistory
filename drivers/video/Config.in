@@ -23,6 +23,7 @@ if [ "$CONFIG_FB" = "y" ]; then
     if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
       bool 'Amiga CyberVision3D support (experimental)' CONFIG_FB_VIRGE
       tristate 'Amiga RetinaZ3 support' CONFIG_FB_RETINAZ3
+      tristate 'Amiga CLgen driver' CONFIG_FB_CLGEN
     fi
   fi
   if [ "$CONFIG_ATARI" = "y" ]; then
@@ -32,8 +33,8 @@ if [ "$CONFIG_FB" = "y" ]; then
   if [ "$CONFIG_PPC" = "y" ]; then
     bool 'Open Firmware frame buffer device support' CONFIG_FB_OF
     if [ "$CONFIG_FB_OF" = "y" ]; then
-#     bool 'Apple "control" display support' CONFIG_FB_CONTROL
-#     bool 'Apple "platinum" display support' CONFIG_FB_PLATINUM
+      bool 'Apple "control" display support' CONFIG_FB_CONTROL
+      bool 'Apple "platinum" display support' CONFIG_FB_PLATINUM
 #     bool 'Apple "valkyrie" display support' CONFIG_FB_VALKYRIE
       bool 'ATI Mach64 display support' CONFIG_FB_ATY
 #     bool 'IMS Twin Turbo display support' CONFIG_FB_IMSTT
@@ -69,7 +70,12 @@ if [ "$CONFIG_FB" = "y" ]; then
       if [ "$ARCH" = "sparc64" ]; then
 	bool '  Creator/Creator3D support' CONFIG_FB_CREATOR
       fi
-      bool '  CGsix (GX,GXplus) support' CONFIG_FB_CGSIX
+      bool '  CGsix (GX,TurboGX) support' CONFIG_FB_CGSIX
+      bool '  BWtwo support' CONFIG_FB_BWTWO
+      bool '  CGthree support' CONFIG_FB_CGTHREE
+      if [ "$ARCH" = "sparc" ]; then
+        bool '  TCX (SS4/SS5 only) support' CONFIG_FB_TCX
+      fi
     fi
   fi
   if [ "$ARCH" = "sparc64" ]; then
@@ -104,13 +110,15 @@ if [ "$CONFIG_FB" = "y" ]; then
     if [ "$CONFIG_FB_ACORN" = "y" -o "$CONFIG_FB_AMIGA" = "y" -o \
 	 "$CONFIG_FB_ATARI" = "y" -o "$CONFIG_FB_CYBER" = "y" -o \
 	 "$CONFIG_FB_MAC" = "y" -o "$CONFIG_FB_RETINAZ3" = "y" -o \
-	 "$CONFIG_FB_VIRGE" = "y" -o "$CONFIG_FB_VIRTUAL" = "y" ]; then
+	 "$CONFIG_FB_VIRGE" = "y" -o "$CONFIG_FB_VIRTUAL" = "y" -o \
+	 "$CONFIG_FB_BWTWO" = "y" -o "$CONFIG_FB_CLGEN" = "y" ]; then
       define_bool CONFIG_FBCON_MFB y
     else
       if [ "$CONFIG_FB_ACORN" = "m" -o "$CONFIG_FB_AMIGA" = "m" -o \
 	   "$CONFIG_FB_ATARI" = "m" -o "$CONFIG_FB_CYBER" = "m" -o \
 	   "$CONFIG_FB_MAC" = "m" -o "$CONFIG_FB_RETINAZ3" = "m" -o \
-	   "$CONFIG_FB_VIRGE" = "m" -o "$CONFIG_FB_VIRTUAL" = "m" ]; then
+	   "$CONFIG_FB_VIRGE" = "m" -o "$CONFIG_FB_VIRTUAL" = "m" -o \
+	   "$CONFIG_FB_BWTWO" = "m" -o "$CONFIG_FB_CLGEN" = "m" ]; then
 	define_bool CONFIG_FBCON_MFB m
       fi
     fi
@@ -128,40 +136,50 @@ if [ "$CONFIG_FB" = "y" ]; then
     if [ "$CONFIG_FB_ACORN" = "y" -o "$CONFIG_FB_ATARI" = "y" -o \
 	 "$CONFIG_FB_ATY" = "y" -o "$CONFIG_FB_MAC" = "y" -o \
 	 "$CONFIG_FB_OF" = "y" -o "$CONFIG_FB_TGA" = "y" -o \
-	 "$CONFIG_FB_VESA" = "y" -o "$CONFIG_FB_VIRTUAL" = "y" ]; then
+	 "$CONFIG_FB_VESA" = "y" -o "$CONFIG_FB_VIRTUAL" = "y" -o \
+	 "$CONFIG_FB_TCX" = "y" -o "$CONFIG_FB_CGTHREE" = "y" -o \
+	 "$CONFIG_FB_CONTROL" = "y" -o "$CONFIG_FB_CLGEN" = "y" ]; then
       define_bool CONFIG_FBCON_CFB8 y
     else
       if [ "$CONFIG_FB_ACORN" = "m" -o "$CONFIG_FB_ATARI" = "m" -o \
 	   "$CONFIG_FB_ATY" = "y" -o "$CONFIG_FB_MAC" = "y" -o \
 	   "$CONFIG_FB_OF" = "m" -o "$CONFIG_FB_TGA" = "m" -o \
-	   "$CONFIG_FB_VESA" = "m" -o "$CONFIG_FB_VIRTUAL" = "m" ]; then
+	   "$CONFIG_FB_VESA" = "m" -o "$CONFIG_FB_VIRTUAL" = "m" -o \
+	   "$CONFIG_FB_TCX" = "m" -o "$CONFIG_FB_CGTHREE" = "m" -o \
+	   "$CONFIG_FB_CONTROL" = "m" ]; then
 	define_bool CONFIG_FBCON_CFB8 m
       fi
     fi
     if [ "$CONFIG_FB_ATARI" = "y" -o "$CONFIG_FB_ATY" = "y" -o \
 	 "$CONFIG_FB_MAC" = "y" -o "$CONFIG_FB_VESA" = "y" -o \
-	 "$CONFIG_FB_VIRTUAL" = "y" -o "$CONFIG_FB_TBOX" = "y" ]; then
+	 "$CONFIG_FB_VIRTUAL" = "y" -o "$CONFIG_FB_TBOX" = "y" -o \
+	 "$CONFIG_FB_CONTROL" = "y" -o "$CONFIG_FB_CLGEN" = "y" ]; then
       define_bool CONFIG_FBCON_CFB16 y
     else
       if [ "$CONFIG_FB_ATARI" = "m" -o "$CONFIG_FB_ATY" = "m" -o \
 	   "$CONFIG_FB_MAC" = "m" -o "$CONFIG_FB_VESA" = "m" -o \
-	   "$CONFIG_FB_VIRTUAL" = "m" -o "$CONFIG_FB_TBOX" = "m" ]; then
+	   "$CONFIG_FB_VIRTUAL" = "m" -o "$CONFIG_FB_TBOX" = "m" -o \
+	   "$CONFIG_FB_CONTROL" = "m" -o "$CONFIG_FB_CLGEN" = "m" ]; then
 	define_bool CONFIG_FBCON_CFB16 m
       fi
     fi
-    if [ "$CONFIG_FB_ATY" = "y" -o "$CONFIG_FB_VIRTUAL" = "y" ]; then
+    if [ "$CONFIG_FB_ATY" = "y" -o "$CONFIG_FB_VIRTUAL" = "y" -o \
+	 "$CONFIG_FB_CLGEN" = "y" ]; then
       define_bool CONFIG_FBCON_CFB24 y
     else
-      if [ "$CONFIG_FB_ATY" = "m" -o "$CONFIG_FB_VIRTUAL" = "m" ]; then
+      if [ "$CONFIG_FB_ATY" = "m" -o "$CONFIG_FB_VIRTUAL" = "m" -o \
+	   "$CONFIG_FB_CLGEN" = "m" ]; then
 	define_bool CONFIG_FBCON_CFB24 m
       fi
     fi
     if [ "$CONFIG_FB_ATARI" = "y" -o "$CONFIG_FB_ATY" = "y" -o \
-	 "$CONFIG_FB_VESA" = "y" -o "$CONFIG_FB_VIRTUAL" = "y" ]; then
+	 "$CONFIG_FB_VESA" = "y" -o "$CONFIG_FB_VIRTUAL" = "y" -o \
+	 "$CONFIG_FB_CONTROL" = "y" -o "$CONFIG_FB_CLGEN" = "y" ]; then
       define_bool CONFIG_FBCON_CFB32 y
     else
       if [ "$CONFIG_FB_ATARI" = "m" -o "$CONFIG_FB_ATY" = "m" -o \
-	   "$CONFIG_FB_VESA" = "m" -o "$CONFIG_FB_VIRTUAL" = "m" ]; then
+	   "$CONFIG_FB_VESA" = "m" -o "$CONFIG_FB_VIRTUAL" = "m" -o \
+	   "$CONFIG_FB_CONTROL" = "m" -o "$CONFIG_FB_CLGEN" = "m" ]; then
 	define_bool CONFIG_FBCON_CFB32 m
       fi
     fi
@@ -202,14 +220,19 @@ if [ "$CONFIG_FB" = "y" ]; then
       fi
     fi
   fi
+  bool 'Support only 8 pixels wide fonts' CONFIG_FBCON_FONTWIDTH8_ONLY
   if [ "$ARCH" = "sparc" -o "$ARCH" = "sparc64" ]; then
     bool 'Sparc console 8x16 font' CONFIG_FONT_SUN8x16
-    bool 'Sparc console 12x22 font (not supported by all drivers)' CONFIG_FONT_SUN12x22
+    if [ "$CONFIG_FBCON_FONTWIDTH8_ONLY" = "n" ]; then
+      bool 'Sparc console 12x22 font (not supported by all drivers)' CONFIG_FONT_SUN12x22
+    fi
     bool 'Select other fonts' CONFIG_FBCON_FONTS
     if [ "$CONFIG_FBCON_FONTS" = "y" ]; then
       bool '  VGA 8x8 font' CONFIG_FONT_8x8
       bool '  VGA 8x16 font' CONFIG_FONT_8x16
-      bool '  Mac console 6x11 font (not supported by all drivers)' CONFIG_FONT_6x11
+      if [ "$CONFIG_FBCON_FONTWIDTH8_ONLY" = "n" ]; then
+        bool '  Mac console 6x11 font (not supported by all drivers)' CONFIG_FONT_6x11
+      fi
       bool '  Pearl (old m68k) console 8x8 font' CONFIG_FONT_PEARL_8x8
       bool '  Acorn console 8x8 font' CONFIG_FONT_ACORN_8x8
     fi
@@ -219,15 +242,19 @@ if [ "$CONFIG_FB" = "y" ]; then
       bool '  VGA 8x8 font' CONFIG_FONT_8x8
       bool '  VGA 8x16 font' CONFIG_FONT_8x16
       bool '  Sparc console 8x16 font' CONFIG_FONT_SUN8x16
-      bool '  Sparc console 12x22 font (not supported by all drivers)' CONFIG_FONT_SUN12x22
-      bool '  Mac console 6x11 font (not supported by all drivers)' CONFIG_FONT_6x11
+      if [ "$CONFIG_FBCON_FONTWIDTH8_ONLY" = "n" ]; then
+        bool '  Sparc console 12x22 font (not supported by all drivers)' CONFIG_FONT_SUN12x22
+        bool '  Mac console 6x11 font (not supported by all drivers)' CONFIG_FONT_6x11
+      fi
       bool '  Pearl (old m68k) console 8x8 font' CONFIG_FONT_PEARL_8x8
       bool '  Acorn console 8x8 font' CONFIG_FONT_ACORN_8x8
     else
       define_bool CONFIG_FONT_8x8 y
       define_bool CONFIG_FONT_8x16 y
       if [ "$CONFIG_MAC" = "y" ]; then
-        define_bool CONFIG_FONT_6x11 y
+	if [ "$CONFIG_FBCON_FONTWIDTH8_ONLY" = "n" ]; then
+          define_bool CONFIG_FONT_6x11 y
+        fi
       fi
       if [ "$CONFIG_AMIGA" = "y" ]; then
         define_bool CONFIG_FONT_PEARL_8x8 y

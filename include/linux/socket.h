@@ -183,6 +183,7 @@ struct ucred {
 #define PF_ROUTE	AF_ROUTE
 #define PF_PACKET	AF_PACKET
 #define PF_ASH		AF_ASH
+#define PF_ECONET	AF_ECONET
 #define PF_ATMSVC	AF_ATMSVC
 #define PF_SNA		AF_SNA
 

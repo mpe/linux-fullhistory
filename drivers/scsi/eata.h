@@ -14,8 +14,9 @@ int eata2x_abort(Scsi_Cmnd *);
 int eata2x_old_abort(Scsi_Cmnd *);
 int eata2x_reset(Scsi_Cmnd *);
 int eata2x_old_reset(Scsi_Cmnd *, unsigned int);
+int eata2x_biosparam(Disk *, kdev_t, int *);
 
-#define EATA_VERSION "4.32.00"
+#define EATA_VERSION "4.33.00"
 
 #define LinuxVersionCode(v, p, s) (((v)<<16)+((p)<<8)+(s))
 
@@ -32,7 +33,7 @@ int eata2x_old_reset(Scsi_Cmnd *, unsigned int);
                 eh_device_reset_handler: NULL,                               \
                 eh_bus_reset_handler:    NULL,                               \
                 eh_host_reset_handler:   eata2x_reset,                       \
-                bios_param:              scsicam_bios_param,                 \
+                bios_param:              eata2x_biosparam,                   \
                 this_id:                 7,                                  \
                 unchecked_isa_dma:       1,                                  \
                 use_clustering:          ENABLE_CLUSTERING,                  \
@@ -48,7 +49,7 @@ int eata2x_old_reset(Scsi_Cmnd *, unsigned int);
                 queuecommand:            eata2x_queuecommand,                \
                 abort:                   eata2x_old_abort,                   \
                 reset:                   eata2x_old_reset,                   \
-                bios_param:              scsicam_bios_param,                 \
+                bios_param:              eata2x_biosparam,                   \
                 this_id:                 7,                                  \
                 unchecked_isa_dma:       1,                                  \
                 use_clustering:          ENABLE_CLUSTERING                   \

@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: ip6_output.c,v 1.12 1998/04/11 22:11:06 davem Exp $
+ *	$Id: ip6_output.c,v 1.13 1998/07/15 05:05:38 davem Exp $
  *
  *	Based on linux/net/ipv4/ip_output.c
  *
@@ -32,6 +32,7 @@
 #include <net/protocol.h>
 #include <net/ip6_route.h>
 #include <net/addrconf.h>
+#include <net/rawv6.h>
 
 static u32	ipv6_fragmentation_id = 1;
 
@@ -519,25 +520,104 @@ int ip6_build_xmit(struct sock *sk, inet_getfrag_t getfrag, const void *data,
 	return err;
 }
 
+int ip6_call_ra_chain(struct sk_buff *skb, int sel)
+{
+	struct ip6_ra_chain *ra;
+	struct sock *last = NULL;
+
+	for (ra = ip6_ra_chain; ra; ra = ra->next) {
+		struct sock *sk = ra->sk;
+		if (sk && ra->sel == sel) {
+			if (last) {
+				struct sk_buff *skb2 = skb_clone(skb, GFP_ATOMIC);
+				if (skb2) {
+					skb2->sk = last;
+					rawv6_rcv(skb2, skb2->dev, &skb2->nh.ipv6h->saddr,
+						  &skb2->nh.ipv6h->daddr, NULL, skb2->len);
+				}
+			}
+			last = sk;
+		}
+	}
+
+	if (last) {
+		skb->sk = last;
+		rawv6_rcv(skb, skb->dev, &skb->nh.ipv6h->saddr,
+			  &skb->nh.ipv6h->daddr, NULL, skb->len);
+		return 1;
+	}
+	return 0;
+}
+
 int ip6_forward(struct sk_buff *skb)
 {
 	struct dst_entry *dst = skb->dst;
 	struct ipv6hdr *hdr = skb->nh.ipv6h;
 	int size;
 	
-	if (ipv6_devconf.forwarding == 0) {
-		kfree_skb(skb);
-		return -EINVAL;
-	}
+	if (ipv6_devconf.forwarding == 0)
+		goto drop;
 
 	/*
 	 *	check hop-by-hop options present
 	 */
-#if 0
-	if (hdr->nexthdr == NEXTHDR_HOP)
-	{
+	/*
+	 *	Note, that NEXTHDR_HOP header must be checked
+	 *	always at the most beginning of ipv6_rcv.
+	 *	The result should be saved somewhere, but
+	 *	we do not it for now. Alas. Let's do it here. --ANK
+	 *
+	 *	Second note: we DO NOT make any processing on
+	 *	RA packets, pushing them to user level AS IS
+	 *	without ane WARRANTY that application will able
+	 *	to interpret them. The reson is that we
+	 *	cannot make anything clever here.
+	 *
+	 *	We are not end-node, so that if packet contains
+	 *	AH/ESP, we cannot make anything.
+	 *	Defragmentation also would be mistake, RA packets
+	 *	cannot be fragmented, because there is no warranty
+	 *	that different fragments will go along one path. --ANK
+	 */
+	if (hdr->nexthdr == NEXTHDR_HOP) {
+		int ra_value = -1;
+		u8 *ptr = (u8*)(skb->nh.ipv6h+1);
+		int len = (ptr[1]+1)<<3;
+
+		if (len + sizeof(struct ipv6hdr) > skb->len)
+			goto drop;
+
+		ptr += 2;
+		len -= 2;
+		while (len > 0) {
+			u8 *opt;
+			int optlen;
+
+			if (ptr[0] == 0) {
+				len--;
+				ptr++;
+				continue;
+			}
+			opt = ptr;
+			optlen = ptr[1]+1;
+
+			len -= optlen;
+			ptr += optlen;
+			if (len < 0)
+				goto drop;
+
+			if (opt[0] == 20) {
+				/* Router Alert as of draft-ietf-ipngwg-ipv6router-alert-04 */
+				if (optlen < 4)
+					goto drop;
+				ra_value = opt[2] + (opt[3]<<8);
+			} else if (!ip6_dstopt_unknown(skb, (struct ipv6_tlvtype*)opt))
+				goto drop;
+		}
+		if (ra_value>=0 && ip6_call_ra_chain(skb, ra_value))
+			return 0;
 	}
-#endif
+
 	/*
 	 *	check and decrement ttl
 	 */
@@ -589,4 +669,8 @@ int ip6_forward(struct sk_buff *skb)
 	dst->output(skb);
 
 	return 0;
+
+drop:
+	kfree_skb(skb);
+	return -EINVAL;
 }

@@ -151,6 +151,14 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_ETHERH),y)
+CONFIG_8390_BUILTIN = y
+else
+  ifeq ($(CONFIG_ETHERH),m)
+  CONFIG_8390_MODULE = y
+  endif
+endif
+
 ifeq ($(CONFIG_NE2K_PCI),y)
 L_OBJS += ne2k-pci.o
 CONFIG_8390_BUILTIN = y
@@ -851,6 +859,10 @@ endif
 
 ifeq ($(CONFIG_MACE),y)
 L_OBJS += mace.o
+endif
+
+ifeq ($(CONFIG_BMAC),y)
+L_OBJS += bmac.o
 endif
 
 ifeq ($(CONFIG_VENDOR_SANGOMA),y)

@@ -1106,6 +1106,8 @@ hardware_send_packet(struct device *dev, void *buf, short length)
 			dev->tbusy = 0;
 		}
 
+		lp->stats.tx_bytes += length;
+
 		if (net_debug > 5)
 			printk("eepro: exiting hardware_send_packet routine.\n");
 		return;
@@ -1164,6 +1166,7 @@ eepro_rx(struct device *dev)
 			skb->protocol = eth_type_trans(skb,dev);
 			netif_rx(skb);
 			lp->stats.rx_packets++;
+			lp->stats.rx_bytes += rcv_size;
 		}
 		else { /* Not sure will ever reach here,
 			  I set the 595 to discard bad received frames */

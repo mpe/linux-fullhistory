@@ -1,6 +1,14 @@
 /*
  *      u14-34f.c - Low-level driver for UltraStor 14F/34F SCSI host adapters.
  *
+ *      26 Jul 1998 Rev. 4.33 for linux 2.0.35 and 2.1.111
+ *          Added command line option (et:[y|n]) to use the existing
+ *          translation (returned by scsicam_bios_param) as disk geometry.
+ *          The default is et:n, which uses the disk geometry jumpered
+ *          on the board.
+ *          The default value et:n is compatible with all previous revisions
+ *          of this driver.
+ *
  *      28 May 1998 Rev. 4.32 for linux 2.0.33 and 2.1.104
  *          Increased busy timeout from 10 msec. to 200 msec. while
  *          processing interrupts.
@@ -245,20 +253,23 @@
  *
  *  eh:y  use new scsi code (linux 2.2 only);
  *  eh:n  use old scsi code;
+ *  et:y  use disk geometry returned by scsicam_bios_param;
+ *  et:n  use disk geometry jumpered on the board;
  *  lc:y  enables linked commands;
  *  lc:n  disables linked commands;
  *  of:y  enables old firmware support;
  *  of:n  disables old firmware support;
  *  mq:xx set the max queue depth to the value xx (2 <= xx <= 8).
  *
- *  The default value is: "u14-34f=lc:n,of:n,mq:8". An example using the list
- *  of detection probes could be: "u14-34f=0x230,0x340,lc:y,of:n,mq:4,eh:n".
+ *  The default value is: "u14-34f=lc:n,of:n,mq:8,et:n".
+ *  An example using the list of detection probes could be:
+ *  "u14-34f=0x230,0x340,lc:y,of:n,mq:4,eh:n,et:n".
  *
  *  When loading as a module, parameters can be specified as well.
  *  The above example would be (use 1 in place of y and 0 in place of n):
  *
  *  modprobe u14-34f io_port=0x230,0x340 linked_comm=1 have_old_firmware=0 \
- *                max_queue_depth=4 use_new_eh_code=0
+ *                max_queue_depth=4 use_new_eh_code=0 ext_tran=0
  *
  *  ----------------------------------------------------------------------------
  *  In this implementation, linked commands are designed to work with any DISK
@@ -314,6 +325,7 @@ MODULE_PARM(have_old_firmware, "i");
 MODULE_PARM(link_statistics, "i");
 MODULE_PARM(max_queue_depth, "i");
 MODULE_PARM(use_new_eh_code, "i");
+MODULE_PARM(ext_tran, "i");
 MODULE_AUTHOR("Dario Ballabio");
 #endif
 
@@ -405,6 +417,7 @@ struct proc_dir_entry proc_scsi_u14_34f = {
 #undef  DEBUG_RESET
 #undef  DEBUG_GENERATE_ERRORS
 #undef  DEBUG_GENERATE_ABORTS
+#undef  DEBUG_GEOMETRY
 
 #define MAX_ISA 3
 #define MAX_VESA 1
@@ -556,6 +569,7 @@ static void flush_dev(Scsi_Device *, unsigned long, unsigned int, unsigned int);
 static int do_trace = FALSE;
 static int setup_done = FALSE;
 static int link_statistics = 0;
+static int ext_tran = FALSE;
 
 #if defined(HAVE_OLD_UX4F_FIRMWARE)
 static int have_old_firmware = TRUE;
@@ -876,9 +890,9 @@ __initfunc (static inline int port_detect \
 
    if (j == 0) {
       printk("UltraStor 14F/34F: Copyright (C) 1994-1998 Dario Ballabio.\n");
-      printk("%s config options -> of:%c, lc:%c, mq:%d, eh:%c.\n",
+      printk("%s config options -> of:%c, lc:%c, mq:%d, eh:%c, et:%c.\n",
              driver_name, YESNO(have_old_firmware), YESNO(linked_comm),
-             max_queue_depth, YESNO(use_new_eh_code));
+             max_queue_depth, YESNO(use_new_eh_code), YESNO(ext_tran));
       }
 
    printk("%s: %s 0x%03lx, BIOS 0x%05x, IRQ %u, %s, SG %d, MB %d.\n",
@@ -922,6 +936,7 @@ __initfunc (void u14_34f_setup(char *str, int *ints)) {
       else if (!strncmp(cur, "mq:", 3))  max_queue_depth = val;
       else if (!strncmp(cur, "ls:", 3))  link_statistics = val;
       else if (!strncmp(cur, "eh:", 3))  use_new_eh_code = val;
+      else if (!strncmp(cur, "et:", 3))  ext_tran = val;
 
       if ((cur = strchr(cur, ','))) ++cur;
       }
@@ -1555,6 +1570,18 @@ int u14_34f_biosparam(Disk *disk, kdev_t dev, int *dkinfo) {
    dkinfo[0] = HD(j)->heads;
    dkinfo[1] = HD(j)->sectors;
    dkinfo[2] = size / (HD(j)->heads * HD(j)->sectors);
+
+   if (ext_tran && (scsicam_bios_param(disk, dev, dkinfo) < 0)) {
+      dkinfo[0] = 255;
+      dkinfo[1] = 63;
+      dkinfo[2] = size / (dkinfo[0] * dkinfo[1]);
+      }
+
+#if defined (DEBUG_GEOMETRY)
+   printk ("%s: biosparam, head=%d, sec=%d, cyl=%d.\n", driver_name,
+           dkinfo[0], dkinfo[1], dkinfo[2]);
+#endif
+
    return FALSE;
 }
 

@@ -8,7 +8,8 @@
 #define IBMPC_MAP 2
 #define USER_MAP 3
 
-extern int hashtable_contents_valid;
-extern unsigned char inverse_translate(int glyph);
+struct vc_data;
+
+extern unsigned char inverse_translate(struct vc_data *conp, int glyph);
 extern unsigned short *set_translate(int m);
-extern int conv_uni_to_pc(long ucs);
+extern int conv_uni_to_pc(struct vc_data *conp, long ucs);

@@ -340,7 +340,8 @@ clean:	archclean
 	rm -f core `find . -name '.*.flags' -print`
 	rm -f vmlinux System.map
 	rm -f .tmp*
-	rm -f drivers/char/consolemap_deftbl.c drivers/char/conmakehash
+	rm -f drivers/char/consolemap_deftbl.c drivers/video/promcon_tbl.c
+	rm -f drivers/char/conmakehash
 	rm -f drivers/sound/bin2hex drivers/sound/hex2hex
 	if [ -d modules ]; then \
 		rm -f core `find modules/ -type f -print`; \

@@ -2,8 +2,6 @@
      *  VGA characters/attributes
      */
 
-#include <linux/config.h>
-
 #ifdef MODULE
 #if defined(CONFIG_FBCON_VGA) || defined(CONFIG_FBCON_VGA_MODULE)
 #define FBCON_HAS_VGA

@@ -1044,27 +1044,11 @@ static inline int myri_ether_init(struct device *dev, struct linux_sbus_device *
 	dev->hard_start_xmit = &myri_start_xmit;
 	dev->get_stats = &myri_get_stats;
 	dev->set_multicast_list = &myri_set_multicast;
-	dev->irq = sdev->irqs[0].pri;
+	dev->irq = sdev->irqs[0];
 	dev->dma = 0;
 
 	/* Register interrupt handler now. */
 	DET(("Requesting MYRIcom IRQ line.\n"));
-#ifdef __sparc_v9__
-	if(sparc_cpu_model == sun4u) {
-		struct devid_cookie dcookie;
-
-		dcookie.real_dev_id = dev;
-		dcookie.imap = dcookie.iclr = 0;
-		dcookie.pil = -1;
-		dcookie.bus_cookie = sdev->my_bus;
-		if(request_irq(dev->irq, &myri_interrupt,
-			       (SA_SHIRQ | SA_SBUS | SA_DCOOKIE),
-			       "MyriCOM Ethernet", &dcookie)) {
-			printk("MyriCOM: Cannot register interrupt handler.\n");
-			return ENODEV;
-		}
-	} else
-#endif
 	if(request_irq(dev->irq, &myri_interrupt,
 		       SA_SHIRQ, "MyriCOM Ethernet", (void *) dev)) {
 		printk("MyriCOM: Cannot register interrupt handler.\n");

@@ -451,6 +451,8 @@ el3_start_xmit(struct sk_buff *skb, struct device *dev)
 		dev->tbusy = 0;
 	}
 
+	lp->stats.tx_bytes += skb->len;
+	
 	if (el3_debug > 4) {
 		printk("%s: el3_start_xmit(length = %u) called, status %4.4x.\n",
 			   dev->name, skb->len, inw(ioaddr + EL3_STATUS));
@@ -667,6 +669,7 @@ el3_rx(struct device *dev)
 			struct sk_buff *skb;
 
 			skb = dev_alloc_skb(pkt_len+5);
+			lp->stats.rx_bytes += pkt_len;
 			if (el3_debug > 4)
 				printk("Receiving packet size %d status %4.4x.\n",
 					   pkt_len, rx_status);

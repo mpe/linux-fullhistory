@@ -11,6 +11,7 @@
 #ifndef __VIDEO_FBCON_H
 #define __VIDEO_FBCON_H
 
+#include <linux/config.h>
 #include <linux/console_struct.h>
 
 
@@ -35,11 +36,21 @@ struct display_switch {
     unsigned int fontwidthmask;      /* 1 at (1 << (width - 1)) if width is supported */
 }; 
 
+#ifdef CONFIG_FBCON_FONTWIDTH8_ONLY
+
+/* fontwidth w is supported by dispsw */
+#define FONTWIDTH(w)	(1 << ((8) - 1))
+/* fontwidths w1-w2 inclusive are supported by dispsw */
+#define FONTWIDTHRANGE(w1,w2)	FONTWIDTH(8)
+
+#else
+
 /* fontwidth w is supported by dispsw */
 #define FONTWIDTH(w)	(1 << ((w) - 1))
 /* fontwidths w1-w2 inclusive are supported by dispsw */
 #define FONTWIDTHRANGE(w1,w2)	(FONTWIDTH(w2+1) - FONTWIDTH(w1))
 
+#endif
 
     /*
      *  Attribute Decoding
@@ -47,11 +58,11 @@ struct display_switch {
 
 /* Color */
 #define attr_fgcol(p,s)    \
-	(((s) >> ((p)->inverse ? 12 : 8)) & 0x0f)
+	(((s) >> ((p)->fgshift)) & 0x0f)
 #define attr_bgcol(p,s)    \
-	(((s) >> ((p)->inverse ? 8 : 12)) & 0x0f)
+	(((s) >> ((p)->bgshift)) & 0x0f)
 #define	attr_bgcol_ec(p,conp) \
-	(((conp)->vc_video_erase_char >> ((p)->inverse ? 8 : 12)) & 0x0f)
+	(((conp)->vc_video_erase_char >> ((p)->bgshift)) & 0x0f)
 
 /* Monochrome */
 #define attr_bold(p,s) \

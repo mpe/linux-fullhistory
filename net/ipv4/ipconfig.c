@@ -1,5 +1,5 @@
 /*
- *  $Id: ipconfig.c,v 1.13 1998/06/09 03:40:47 zaitcev Exp $
+ *  $Id: ipconfig.c,v 1.15 1998/06/19 13:22:33 davem Exp $
  *
  *  Automatic Configuration of IP -- use BOOTP or RARP or user-supplied
  *  information to configure own IP address and routes.
@@ -323,7 +323,7 @@ ic_rarp_recv(struct sk_buff *skb, struct device *dev, struct packet_type *pt))
 	if (rarp->ar_op != htons(ARPOP_RREPLY))
 		goto drop;
 
-	/* If it's not ethernet, delete it. */
+	/* If it's not Ethernet, delete it. */
 	if (rarp->ar_pro != htons(ETH_P_IP))
 		goto drop;
 

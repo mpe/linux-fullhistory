@@ -5,7 +5,7 @@
  *
  *		The IP to API glue.
  *		
- * Version:	$Id: ip_sockglue.c,v 1.35 1998/05/08 21:06:28 davem Exp $
+ * Version:	$Id: ip_sockglue.c,v 1.36 1998/07/15 05:05:06 davem Exp $
  *
  * Authors:	see ip.c
  *
@@ -70,17 +70,11 @@ static void ip_cmsg_recv_pktinfo(struct msghdr *msg, struct sk_buff *skb)
 
 static void ip_cmsg_recv_ttl(struct msghdr *msg, struct sk_buff *skb)
 {
-	if (IPCB(skb)->opt.optlen == 0)
-		return;
-
 	put_cmsg(msg, SOL_IP, IP_TTL, 1, &skb->nh.iph->ttl);
 }
 
 static void ip_cmsg_recv_tos(struct msghdr *msg, struct sk_buff *skb)
 {
-	if (IPCB(skb)->opt.optlen == 0)
-		return;
-
 	put_cmsg(msg, SOL_IP, IP_TOS, 1, &skb->nh.iph->tos);
 }
 

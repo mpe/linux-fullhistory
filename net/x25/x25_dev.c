@@ -98,6 +98,7 @@ static int x25_receive_data(struct sk_buff *skb, struct x25_neigh *neigh)
 int x25_lapb_receive_frame(struct sk_buff *skb, struct device *dev, struct packet_type *ptype)
 {
 	struct x25_neigh *neigh;
+	int queued;
 
 	skb->sk = NULL;
 
@@ -113,7 +114,13 @@ int x25_lapb_receive_frame(struct sk_buff *skb, struct device *dev, struct packe
 	switch (skb->data[0]) {
 		case 0x00:
 			skb_pull(skb, 1);
-			return x25_receive_data(skb, neigh);
+			queued = x25_receive_data(skb, neigh);
+			if( ! queued )
+				/* We need to free the skb ourselves because
+				 * net_bh() won't care about our return code.
+				 */
+				kfree_skb(skb);
+			return 0;
 
 		case 0x01:
 			x25_link_established(neigh);
@@ -215,6 +222,8 @@ void x25_send_frame(struct sk_buff *skb, struct x25_neigh *neigh)
 {
 	unsigned char *dptr;
 
+	skb->nh.raw = skb->data;
+
 	switch (neigh->dev->type) {
 		case ARPHRD_X25:
 			dptr  = skb_push(skb, 1);
@@ -238,3 +247,6 @@ void x25_send_frame(struct sk_buff *skb, struct x25_neigh *neigh)
 }
 
 #endif
+
+
+

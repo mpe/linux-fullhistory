@@ -188,7 +188,7 @@ static inline unsigned short *screenpos(int currcons, int offset, int viewed)
 	return p;
 }
 
-static inline void scrolldelta(int lines)
+static void scrolldelta(int lines)
 {
 	int currcons = fg_console;
 
@@ -314,6 +314,8 @@ static u8 build_attr(int currcons, u8 _color, u8 _intensity, u8 _blink, u8 _unde
 		a ^= 0x80;
 	if (_intensity == 2)
 		a ^= 0x08;
+	if (hi_font_mask == 0x100)
+		a <<= 1;
 	return a;
 	}
 #else
@@ -339,17 +341,23 @@ void invert_screen(int currcons, int offset, int count, int viewed)
 		sw->con_invert_region(vc_cons[currcons].d, p, count);
 #ifndef VT_BUF_VRAM_ONLY
 	else {
-		int col = can_do_color;
 		u16 *q = p;
 		int cnt = count;
 
-		while (cnt--) {
-			u16 a = *q;
-			if (col)
+		if (!can_do_color) {
+			while (cnt--) *q++ ^= 0x0800;
+		} else if (hi_font_mask == 0x100) {
+			while (cnt--) {
+				u16 a = *q;
+				a = ((a) & 0x11ff) | (((a) & 0xe000) >> 4) | (((a) & 0x0e00) << 4);
+				*q++ = a;
+			}
+		} else {
+			while (cnt--) {
+				u16 a = *q;
 				a = ((a) & 0x88ff) | (((a) & 0x7000) >> 4) | (((a) & 0x0700) << 4);
-			else
-				a ^= 0x0800;
-			*q++ = a;
+				*q++ = a;
+			}
 		}
 	}
 #endif
@@ -436,9 +444,9 @@ static void add_softcursor(int currcons)
 	int i = scr_readw((u16 *) pos);
 	u32 type = cursor_type;
 
+	if (! (type & 0x10)) return;
 	if (softcursor_original != -1) return;
 	softcursor_original = i;
-	if (! (type & 0x10)) return;
 	i |= ((type >> 8) & 0xff00 );
 	i ^= ((type) & 0xff00 );
 	if ((type & 0x20) && ((softcursor_original & 0x7000) == (i & 0x7000))) i ^= 0x7000;
@@ -450,6 +458,8 @@ static void add_softcursor(int currcons)
 
 static void hide_cursor(int currcons)
 {
+	if (currcons == sel_cons)
+		clear_selection();
 	if (softcursor_original != -1) {
 		scr_writew(softcursor_original,(u16 *) pos);
 		if (DO_UPDATE)
@@ -464,6 +474,8 @@ void set_cursor(int currcons)
     if (!IS_FG || console_blanked || vcmode == KD_GRAPHICS)
 	return;
     if (deccm) {
+	if (currcons == sel_cons)
+		clear_selection();
 	add_softcursor(currcons);
 	if ((cursor_type & 0x0f) != 1)
 	    sw->con_cursor(vc_cons[currcons].d,CM_DRAW);
@@ -510,8 +522,6 @@ void update_screen(int new_console)
 	}
 	lock = 1;
 
-	clear_selection();
-
 	hide_cursor(currcons);
 	if (fg_console != new_console) {
 		display = vc_cons[new_console].d->vc_display_fg;
@@ -552,6 +562,8 @@ void visual_init(int currcons)
     sw = conswitchp;
     cons_num = currcons;
     display_fg = &master_display_fg;
+    vc_cons[currcons].d->vc_uni_pagedir_loc = &vc_cons[currcons].d->vc_uni_pagedir;
+    vc_cons[currcons].d->vc_uni_pagedir = 0;
     hi_font_mask = 0;
     complement_mask = 0;
     sw->con_init(vc_cons[currcons].d, 1);
@@ -591,6 +603,7 @@ int vc_allocate(unsigned int currcons, int init)	/* return 0 on success */
 		vt_cons[currcons] = NULL;
 		return -ENOMEM;
 	    }
+	    con_set_default_unimap(currcons);
 	    screenbuf = (unsigned short *) q;
 	    kmalloced = 1;
 	    screenbuf_size = video_screen_size;
@@ -1667,14 +1680,10 @@ static void do_con_trol(struct tty_struct *tty, unsigned int currcons, int c)
 			/* DEC screen alignment test. kludge :-) */
 			video_erase_char =
 				(video_erase_char & 0xff00) | 'E';
-			/* Arno:
-			 * Doesn't work, because csi_J(c,2)
-			 * calls con_clear and doesn't print
-			 * the erase char..	FIXME
-			 */
 			csi_J(currcons, 2);
 			video_erase_char =
 				(video_erase_char & 0xff00) | ' ';
+			do_update_region(currcons, origin, screenbuf_size/2);
 		}
 		return;
 	case ESsetG0:
@@ -1755,10 +1764,6 @@ static int do_con_write(struct tty_struct * tty, int from_user,
 	if (IS_FG)
 		hide_cursor(currcons);
 
-	/* clear the selection */
-	if (currcons == sel_cons)
-		clear_selection();
-
 	disable_bh(CONSOLE_BH);
 	while (!tty->stopped && count) {
 		enable_bh(CONSOLE_BH);
@@ -1825,11 +1830,11 @@ static int do_con_write(struct tty_struct * tty, int from_user,
 
 		if (vc_state == ESnormal && ok) {
 			/* Now try to find out how to display it */
-			tc = conv_uni_to_pc(tc);
+			tc = conv_uni_to_pc(vc_cons[currcons].d, tc);
 			if ( tc == -4 ) {
                                 /* If we got -4 (not found) then see if we have
                                    defined a replacement character (U+FFFD) */
-                                tc = conv_uni_to_pc(0xfffd);
+                                tc = conv_uni_to_pc(vc_cons[currcons].d, 0xfffd);
 
 				/* One reason for the -4 can be that we just
 				   did a clear_unimap();
@@ -1889,8 +1894,7 @@ static int do_con_write(struct tty_struct * tty, int from_user,
 static void console_bh(void)
 {
 	if (want_console >= 0) {
-		if (want_console != fg_console) {
-			clear_selection();
+		if (want_console != fg_console && vc_cons_allocated(want_console)) {
 			hide_cursor(fg_console);
 			save_screen();
 			change_console(want_console);
@@ -2401,8 +2405,8 @@ void do_blank_screen(int nopowersave)
 
 	/* entering graphics mode? */
 	if (nopowersave) {
-		save_screen();
 		hide_cursor(currcons);
+		save_screen();
 		sw->con_blank(vc_cons[currcons].d, -1);
 		console_blanked = fg_console + 1;
 		set_origin(currcons);
@@ -2460,6 +2464,9 @@ void do_unblank_screen(void)
 
 	currcons = fg_console;
 	console_blanked = 0;
+#ifdef CONFIG_APM
+	apm_display_unblank();
+#endif
 	if (sw->con_blank(vc_cons[currcons].d, 0))
 		/* Low-level driver cannot restore -> do it ourselves */
 		update_screen(fg_console);
@@ -2567,24 +2574,31 @@ void reset_palette (int currcons)
  *  /Jes
  */
 
-#define max_font_size 32768
+#define max_font_size 65536
 
 int con_font_op(int currcons, struct console_font_op *op)
 {
 	int rc = -EINVAL;
-	int size, set;
-	u8 *temp;
+	int size = max_font_size, set;
+	u8 *temp = NULL;
 	struct console_font_op old_op;
 
 	if (vt_cons[currcons]->vc_mode != KD_TEXT)
 		goto quit;
-	memcpy(&old_op, &op, sizeof(op));
+	memcpy(&old_op, op, sizeof(old_op));
 	if (op->op == KD_FONT_OP_SET) {
+		if (!op->data)
+			return -EINVAL;
 		if (op->charcount > 512)
 			goto quit;
 		if (!op->height) {		/* Need to guess font height [compat] */
 			int h, i;
 			u8 *charmap = op->data, tmp;
+			
+			/* If from KDFONTOP ioctl, don't allow things which can be done in userland,
+			   so that we can get rid of this soon */
+			if (op->flags & KD_FONT_FLAG_NEW)
+				goto quit;
 			rc = -EFAULT;
 			for (h = 32; h > 0; h--)
 				for (i = 0; i < op->charcount; i++) {
@@ -2605,32 +2619,44 @@ int con_font_op(int currcons, struct console_font_op *op)
 		if (size > max_font_size)
 			return -ENOSPC;
 		set = 1;
-	} else if (op->op == KD_FONT_OP_GET) {
-		size = max_font_size;
+	} else if (op->op == KD_FONT_OP_GET)
 		set = 0;
-	} else
+	else
 		return sw->con_font_op(vc_cons[currcons].d, op);
-	temp = kmalloc(size, GFP_KERNEL);
-	if (!temp)
-		return -ENOMEM;
-	if (set && copy_from_user(temp, op->data, size)) {
-		rc = -EFAULT;
-		goto quit2;
+	if (op->data) {
+		temp = kmalloc(size, GFP_KERNEL);
+		if (!temp)
+			return -ENOMEM;
+		if (set && copy_from_user(temp, op->data, size)) {
+			rc = -EFAULT;
+			goto quit;
+		}
+		op->data = temp;
 	}
-	op->data = temp;
 	rc = sw->con_font_op(vc_cons[currcons].d, op);
 	op->data = old_op.data;
 	if (!rc && !set) {
 		int c = (op->width+7)/8 * 32 * op->charcount;
-		if (op->width > old_op.width ||
-		    op->height > old_op.height ||
-		    op->charcount > old_op.charcount)
+		
+		if (op->data && op->charcount > old_op.charcount)
 			rc = -ENOSPC;
-		else if (copy_to_user(old_op.data, op->data, c))
+		if (op->flags & KD_FONT_FLAG_NEW) {
+			if (op->width > old_op.width || 
+			    op->height > old_op.height)
+				rc = -ENOSPC;
+		} else {
+			if (op->width != 8)
+				rc = -EIO;
+			else if ((old_op.height && op->height > old_op.height) ||
+			         op->height > 32)
+				rc = -ENOSPC;
+		}
+		if (!rc && op->data && copy_to_user(op->data, temp, c))
 			rc = -EFAULT;
 	}
-quit2:	kfree_s(temp, size);
-quit:	return rc;
+quit:	if (temp)
+		kfree_s(temp, size);
+	return rc;
 }
 
 /*
@@ -2664,6 +2690,22 @@ void putconsxy(int currcons, char *p)
 {
 	gotoxy(currcons, p[0], p[1]);
 	set_cursor(currcons);
+}
+
+u16 vcs_scr_readw(int currcons, u16 *org)
+{
+	if (org == pos && softcursor_original != -1)
+		return softcursor_original;
+	return scr_readw(org);
+}
+
+void vcs_scr_writew(int currcons, u16 val, u16 *org)
+{
+	scr_writew(val, org);
+	if (org == pos) {
+		softcursor_original = -1;
+		add_softcursor(currcons);
+	}
 }
 
 

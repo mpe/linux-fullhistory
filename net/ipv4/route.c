@@ -5,7 +5,7 @@
  *
  *		ROUTE - implementation of the IP router.
  *
- * Version:	$Id: route.c,v 1.52 1998/06/11 03:15:47 davem Exp $
+ * Version:	$Id: route.c,v 1.54 1998/07/15 05:05:22 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -1166,7 +1166,7 @@ int ip_route_input(struct sk_buff *skb, u32 daddr, u32 saddr,
 	}
 
 	/* Multicast recognition logic is moved from route cache to here.
-	   The problem was that too many ethernet cards have broken/missing
+	   The problem was that too many Ethernet cards have broken/missing
 	   hardware multicast filters :-( As result the host on multicasting
 	   network acquires a lot of useless route cache entries, sort of
 	   SDR messages from all the world. Now we try to get rid of them.
@@ -1496,7 +1496,7 @@ static int rt_fill_info(struct sk_buff *skb, pid_t pid, u32 seq, int event, int 
 	nlh->nlmsg_flags = nowait ? NLM_F_MULTI : 0;
 	r->rtm_family = AF_INET;
 	r->rtm_dst_len = 32;
-	r->rtm_src_len = 32;
+	r->rtm_src_len = 0;
 	r->rtm_tos = rt->key.tos;
 	r->rtm_table = RT_TABLE_MAIN;
 	r->rtm_type = rt->rt_type;
@@ -1509,9 +1509,16 @@ static int rt_fill_info(struct sk_buff *skb, pid_t pid, u32 seq, int event, int 
 	o = skb->tail;
 #endif
 	RTA_PUT(skb, RTA_DST, 4, &rt->rt_dst);
-	RTA_PUT(skb, RTA_SRC, 4, &rt->rt_src);
+	if (rt->key.src) {
+		r->rtm_src_len = 32;
+		RTA_PUT(skb, RTA_SRC, 4, &rt->key.src);
+	}
 	if (rt->u.dst.dev)
 		RTA_PUT(skb, RTA_OIF, sizeof(int), &rt->u.dst.dev->ifindex);
+	if (rt->key.iif)
+		RTA_PUT(skb, RTA_PREFSRC, 4, &rt->rt_spec_dst);
+	else if (rt->rt_src != rt->key.src)
+		RTA_PUT(skb, RTA_PREFSRC, 4, &rt->rt_src);
 	if (rt->rt_dst != rt->rt_gateway)
 		RTA_PUT(skb, RTA_GATEWAY, 4, &rt->rt_gateway);
 #ifdef CONFIG_RTNL_OLD_IFINFO
@@ -1533,7 +1540,6 @@ static int rt_fill_info(struct sk_buff *skb, pid_t pid, u32 seq, int event, int 
 	if (mx->rta_len == RTA_LENGTH(0))
 		skb_trim(skb, (u8*)mx - skb->data);
 #endif
-	RTA_PUT(skb, RTA_PREFSRC, 4, &rt->rt_spec_dst);
 	ci.rta_lastuse = jiffies - rt->u.dst.lastuse;
 	ci.rta_used = atomic_read(&rt->u.dst.refcnt);
 	ci.rta_clntref = atomic_read(&rt->u.dst.use);

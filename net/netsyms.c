@@ -60,8 +60,7 @@ extern int tcp_tw_death_row_slot;
 	defined(CONFIG_EL2)	||	defined(CONFIG_NE2000)		|| \
 	defined(CONFIG_E2100)	||	defined(CONFIG_HPLAN_PLUS)	|| \
 	defined(CONFIG_HPLAN)	||	defined(CONFIG_AC3200)		|| \
-	defined(CONFIG_ES3210)	||	defined(CONFIG_ULTRA32)		|| \
-	defined(CONFIG_LNE390)
+	defined(CONFIG_ES3210)
 #include "../drivers/net/8390.h"
 #endif
 
@@ -85,8 +84,8 @@ extern int sysctl_max_syn_backlog;
 EXPORT_SYMBOL(dev_lockct);
 
 /* Skbuff symbols. */
-EXPORT_SYMBOL(skb_push_errstr);
-EXPORT_SYMBOL(skb_put_errstr);
+EXPORT_SYMBOL(skb_over_panic);
+EXPORT_SYMBOL(skb_under_panic);
 
 /* Socket layer registration */
 EXPORT_SYMBOL(sock_register);
@@ -222,6 +221,7 @@ EXPORT_SYMBOL(ip_mc_inc_group);
 EXPORT_SYMBOL(ip_mc_dec_group);
 EXPORT_SYMBOL(__ip_finish_output);
 EXPORT_SYMBOL(inet_dgram_ops);
+EXPORT_SYMBOL(ip_cmsg_recv);
 EXPORT_SYMBOL(__release_sock);
 
 /* needed for ip_gre -cw */
@@ -358,8 +358,7 @@ EXPORT_SYMBOL(sock_rmalloc);
 	defined(CONFIG_EL2)	||	defined(CONFIG_NE2000)		|| \
 	defined(CONFIG_E2100)	||	defined(CONFIG_HPLAN_PLUS)	|| \
 	defined(CONFIG_HPLAN)	||	defined(CONFIG_AC3200)		|| \
-	defined(CONFIG_ES3210)	||	defined(CONFIG_ULTRA32)		|| \
-	defined(CONFIG_LNE390)
+	defined(CONFIG_ES3210)
 /* If 8390 NIC support is built in, we will need these. */
 EXPORT_SYMBOL(ei_open);
 EXPORT_SYMBOL(ei_close);

@@ -7,6 +7,7 @@
 #define TR_RESET_INTERVAL (HZ/20) /* 5 on PC = 50 ms */
 #define TR_BUSY_INTERVAL (HZ/5) /* 5 on PC = 200 ms */
 #define TR_SPIN_INTERVAL (3*HZ) /* 3 seconds before init timeout */
+#define TR_RETRIES 6            /* number of open retries */ 
 
 #define TR_ISA 1
 #define TR_MCA 2
@@ -215,6 +216,7 @@ struct tok_info {
         struct timer_list tr_timer;
 	unsigned char ring_speed;
 	__u32 func_addr;
+	unsigned int retry_count;
 };
 
 /* token ring adapter commands */

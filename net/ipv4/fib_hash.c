@@ -5,7 +5,7 @@
  *
  *		IPv4 FIB: lookup engine and maintenance routines.
  *
- * Version:	$Id: fib_hash.c,v 1.3 1998/03/08 05:56:16 davem Exp $
+ * Version:	$Id: fib_hash.c,v 1.4 1998/07/15 05:05:08 davem Exp $
  *
  * Authors:	Alexey Kuznetsov, <kuznet@ms2.inr.ac.ru>
  *
@@ -274,7 +274,7 @@ fn_hash_lookup(struct fib_table *tb, const struct rt_key *key, struct fib_result
 #endif
 			    ) {
 				if (matched)
-					return 1;
+					break;
 				continue;
 			}
 			matched = 1;

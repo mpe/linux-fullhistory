@@ -17,44 +17,7 @@
 #include <asm/uaccess.h>
 
 
-
 static int currcon = 0;
-
-static struct display disp;
-
-
-    /*
-     *  `Generic' versions of the frame buffer device operations
-     */
-
-extern int fbgen_get_fix(struct fb_fix_screeninfo *fix, int con,
-			 struct fb_info *info);
-extern int fbgen_get_var(struct fb_var_screeninfo *var, int con,
-			 struct fb_info *info);
-extern int fbgen_set_var(struct fb_var_screeninfo *var, int con,
-			 struct fb_info *info);
-extern int fbgen_get_cmap(struct fb_cmap *cmap, int kspc, int con,
-			  struct fb_info *info);
-extern int fbgen_set_cmap(struct fb_cmap *cmap, int kspc, int con,
-			  struct fb_info *info);
-extern int fbgen_pan_display(struct fb_var_screeninfo *var, int con,
-			     struct fb_info *info);
-extern int fbgen_ioctl(struct inode *inode, struct file *file,
-		       unsigned int cmd, unsigned long arg, int con,
-		       struct fb_info *info);
-
-
-    /*
-     *  Helper functions
-     */
-
-int fbgen_do_set_var(struct fb_var_screeninfo *var, int isactive,
-		     struct fb_info_gen *info);
-void fbgen_set_disp(int con, struct fb_info_gen *info);
-void fbgen_install_cmap(int con, struct fb_info_gen *info);
-int fbgen_update_var(int con, struct fb_info *info);
-int fbgen_switch(int con, struct fb_info *info);
-void fbgen_blank(int blank, struct fb_info *info);
 
 
 /* ---- `Generic' versions of the frame buffer device operations ----------- */
@@ -156,9 +119,10 @@ int fbgen_get_cmap(struct fb_cmap *cmap, int kspc, int con,
     else
 	if (fb_display[con].cmap.len)	/* non default colormap ? */
 	    fb_copy_cmap(&fb_display[con].cmap, cmap, kspc ? 0 : 2);
-	else
-	    fb_copy_cmap(fb_default_cmap(1<<fb_display[con].var.bits_per_pixel),
-			 cmap, kspc ? 0 : 2);
+	else {
+	    int size = fb_display[con].var.bits_per_pixel == 16 ? 64 : 256;
+	    fb_copy_cmap(fb_default_cmap(size), cmap, kspc ? 0 : 2);
+	}
     return 0;
 }
 
@@ -175,8 +139,8 @@ int fbgen_set_cmap(struct fb_cmap *cmap, int kspc, int con,
     int err;
 
     if (!fb_display[con].cmap.len) {	/* no colormap allocated ? */
-	if ((err = fb_alloc_cmap(&fb_display[con].cmap,
-				 1 << fb_display[con].var.bits_per_pixel, 0)))
+	int size = fb_display[con].var.bits_per_pixel == 16 ? 64 : 256;
+	if ((err = fb_alloc_cmap(&fb_display[con].cmap, size, 0)))
 	    return err;
     }
     if (con == currcon)			/* current console ? */
@@ -272,7 +236,7 @@ void fbgen_set_disp(int con, struct fb_info_gen *info)
     if (con >= 0)
 	display = &fb_display[con];
     else
-	display = &disp;	/* used during initialization */
+	display = info->info.disp;	/* used during initialization */
 
     if (con == -1)
 	fbhw->get_par(&par, info);
@@ -314,9 +278,11 @@ void fbgen_install_cmap(int con, struct fb_info_gen *info)
     if (fb_display[con].cmap.len)
 	fb_set_cmap(&fb_display[con].cmap, &fb_display[con].var, 1,
 		    fbhw->setcolreg, &info->info);
-    else
-	fb_set_cmap(fb_default_cmap(1<<fb_display[con].var.bits_per_pixel),
-		    &fb_display[con].var, 1, fbhw->setcolreg, &info->info);
+    else {
+	int size = fb_display[con].var.bits_per_pixel == 16 ? 64 : 256;
+	fb_set_cmap(fb_default_cmap(size), &fb_display[con].var, 1,
+		    fbhw->setcolreg, &info->info);
+    }
 }
 
 

@@ -174,7 +174,8 @@ static void x25_kill_by_device(struct device *dev)
 	struct sock *s;
 
 	for (s = x25_list; s != NULL; s = s->next)
-		if (s->protinfo.x25->neighbour->dev == dev)
+		if (s->protinfo.x25->neighbour &&
+		    s->protinfo.x25->neighbour->dev == dev)
 			x25_disconnect(s, ENETUNREACH, 0, 0);
 }
 
@@ -621,6 +622,9 @@ static int x25_connect(struct socket *sock, struct sockaddr *uaddr, int addr_len
 	if ((sk->protinfo.x25->neighbour = x25_get_neigh(dev)) == NULL)
 		return -ENETUNREACH;
 
+	x25_limit_facilities(&sk->protinfo.x25->facilities,
+			     sk->protinfo.x25->neighbour);
+
 	if ((sk->protinfo.x25->lci = x25_new_lci(sk->protinfo.x25->neighbour)) == 0)
 		return -ENETUNREACH;
 
@@ -785,6 +789,13 @@ int x25_rx_call_request(struct sk_buff *skb, struct x25_neigh *neigh, unsigned i
 		x25_transmit_clear_request(neigh, lci, 0x01);
 		return 0;
 	}
+
+	/*
+	 * current neighbour/link might impose additional limits
+	 * on certain facilties
+	 */
+
+	x25_limit_facilities(&facilities,neigh);
 
 	/*
 	 *	Try to create a new socket.
@@ -1124,18 +1135,8 @@ static int x25_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 				return -EINVAL;
 			if (facilities.pacsize_out < X25_PS16 || facilities.pacsize_out > X25_PS4096)
 				return -EINVAL;
-			if (sk->state == TCP_CLOSE || sk->protinfo.x25->neighbour->extended) 
-			{
-				if (facilities.winsize_in < 1 || facilities.winsize_in > 127)
-					return -EINVAL;
-				if (facilities.winsize_out < 1 || facilities.winsize_out > 127)
-					return -EINVAL;
-			} else {
-				if (facilities.winsize_in < 1 || facilities.winsize_in > 7)
-					return -EINVAL;
-				if (facilities.winsize_out < 1 || facilities.winsize_out > 7)
-					return -EINVAL;
-			}
+			if (facilities.winsize_in < 1 || facilities.winsize_in > 127)
+				return -EINVAL;
 			if (facilities.throughput < 0x03 || facilities.throughput > 0x2C)
 				return -EINVAL;
 			if (facilities.reverse != 0 && facilities.reverse != 1)
@@ -1275,6 +1276,16 @@ struct notifier_block x25_dev_notifier = {
 	x25_device_event,
 	0
 };
+
+void x25_kill_by_neigh(struct x25_neigh *neigh)
+{
+	struct sock *s;
+
+	for( s=x25_list; s != NULL; s=s->next){
+		if( s->protinfo.x25->neighbour == neigh )
+			x25_disconnect(s, ENETUNREACH, 0, 0);
+	} 
+}
 
 #ifdef CONFIG_PROC_FS
 static struct proc_dir_entry proc_net_x25 = {

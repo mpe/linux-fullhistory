@@ -272,7 +272,7 @@ void fbcon_mac_putc(struct vc_data *conp, struct display *p, int c, int yy,
    u8 d;
    int j;
 
-   cdat = p->fontdata+(c&0xff)*p->fontheight;
+   cdat = p->fontdata+(c&p->charmask)*p->fontheight;
    bold = attr_bold(p,c);
    ch_reverse = attr_reverse(p,c);
    ch_underline = attr_underline(p,c);

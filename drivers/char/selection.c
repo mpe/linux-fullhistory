@@ -60,7 +60,7 @@ highlight_pointer(const int where) {
 static unsigned char
 sel_pos(int n)
 {
-	return inverse_translate(screen_glyph(sel_cons, n));
+	return inverse_translate(vc_cons[sel_cons].d, screen_glyph(sel_cons, n));
 }
 
 /* remove the current selection highlight, if any,

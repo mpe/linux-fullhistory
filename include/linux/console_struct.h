@@ -15,6 +15,8 @@
  */
 #define CUR_DEFAULT CUR_UNDERLINE
 
+#include <linux/config.h>
+
 #define NPAR 16
 
 struct vc_data {
@@ -33,7 +35,7 @@ struct vc_data {
 	unsigned char	vc_ulcolor;		/* Color for underline mode */
 	unsigned char	vc_halfcolor;		/* Color for half intensity mode */
 	unsigned short	vc_complement_mask;	/* [#] Xor mask for mouse pointer */
-	unsigned short	vc_hi_font_mask;	/* [#] Attribute set for upper 256 chars or font or 0 if not supported */
+	unsigned short	vc_hi_font_mask;	/* [#] Attribute set for upper 256 chars of font or 0 if not supported */
 	unsigned int	vc_x, vc_y;		/* Cursor position */
 	unsigned int	vc_top, vc_bottom;	/* Scrolling region */
 	unsigned int	vc_state;		/* Escape sequence parser state */
@@ -84,6 +86,8 @@ struct vc_data {
 	unsigned int	vc_bell_duration;	/* Console bell duration */
 	unsigned int	vc_cursor_type;
 	struct vc_data **vc_display_fg;		/* [!] Ptr to var holding fg console for this display */
+	unsigned long	vc_uni_pagedir;
+	unsigned long	*vc_uni_pagedir_loc;  /* [!] Location of uni_pagedir variable for this console */
 	/* additional information is in vt_kern.h */
 };
 

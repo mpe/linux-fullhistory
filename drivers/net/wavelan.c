@@ -264,7 +264,7 @@ psa_read(u_long		ioaddr,
 static void
 psa_write(u_long	ioaddr,
 	  u_short	hacr,
-	  int		o,	/* Offset in psa */
+	  int		o,	/* Offset in PSA */
 	  u_char *	b,	/* Buffer in memory */
 	  int		n)	/* Length of buffer */
 {
@@ -403,7 +403,7 @@ mmc_read(u_long		ioaddr,
  * Get the type of encryption available.
  */
 static inline int
-mmc_encr(u_long		ioaddr)	/* i/o port of the card */
+mmc_encr(u_long		ioaddr)	/* I/O port of the card */
 {
   int	temp;
 
@@ -420,7 +420,7 @@ mmc_encr(u_long		ioaddr)	/* i/o port of the card */
  * I hope this one will be optimally inlined.
  */
 static inline void
-fee_wait(u_long		ioaddr,	/* i/o port of the card */
+fee_wait(u_long		ioaddr,	/* I/O port of the card */
 	 int		delay,	/* Base delay to wait for */
 	 int		number)	/* Number of time to wait */
 {
@@ -436,7 +436,7 @@ fee_wait(u_long		ioaddr,	/* i/o port of the card */
  * Read bytes from the Frequency EEPROM (frequency select cards).
  */
 static void
-fee_read(u_long		ioaddr,	/* i/o port of the card */
+fee_read(u_long		ioaddr,	/* I/O port of the card */
 	 u_short	o,	/* destination offset */
 	 u_short *	b,	/* data buffer */
 	 int		n)	/* number of registers */
@@ -471,7 +471,7 @@ fee_read(u_long		ioaddr,	/* i/o port of the card */
  * Jean II
  */
 static void
-fee_write(u_long	ioaddr,	/* i/o port of the card */
+fee_write(u_long	ioaddr,	/* I/O port of the card */
 	  u_short	o,	/* destination offset */
 	  u_short *	b,	/* data buffer */
 	  int		n)	/* number of registers */
@@ -486,7 +486,7 @@ fee_write(u_long	ioaddr,	/* i/o port of the card */
   fee_wait(ioaddr, 10, 100);
 
   /* Read the protected register. */
-  printk("Protected 2 : %02X-%02X\n",
+  printk("Protected 2:  %02X-%02X\n",
 	 mmc_in(ioaddr, mmroff(0, mmr_fee_data_h)),
 	 mmc_in(ioaddr, mmroff(0, mmr_fee_data_l)));
 #endif	/* DOESNT_SEEM_TO_WORK */
@@ -501,7 +501,7 @@ fee_write(u_long	ioaddr,	/* i/o port of the card */
   mmc_out(ioaddr, mmwoff(0, mmw_fee_addr), o + n);
   mmc_out(ioaddr, mmwoff(0, mmw_fee_ctrl), MMW_FEE_CTRL_PRWRITE);
 #ifdef DOESNT_SEEM_TO_WORK	/* disabled */
-  /* Or use : */
+  /* or use: */
   mmc_out(ioaddr, mmwoff(0, mmw_fee_ctrl), MMW_FEE_CTRL_PRCLEAR);
 #endif	/* DOESNT_SEEM_TO_WORK */
 
@@ -758,7 +758,7 @@ wv_complete(device *	dev,
       /* Read the first transmit buffer */
       obram_read(ioaddr, acoff(lp->tx_first_in_use, ac_status), (unsigned char *)&tx_status, sizeof(tx_status));
 
-      /* Hack for reconfiguration... */
+      /* Hack for reconfiguration */
       if(tx_status == 0xFFFF)
 	if(!wv_config_complete(dev, ioaddr, lp))
 	  break;	/* Not completed */
@@ -787,7 +787,7 @@ if (lp->tx_n_in_use > 0)
 	    lp->tx_first_in_use -= NTXBLOCKS * TXBLOCKZ;
 	}
 
-      /* Hack for reconfiguration... */
+      /* Hack for reconfiguration */
       if(tx_status == 0xFFFF)
 	continue;
 
@@ -921,7 +921,7 @@ wv_82586_reconfig(device *	dev)
 static void
 wv_psa_show(psa_t *	p)
 {
-  printk(KERN_DEBUG "##### WaveLAN psa contents: #####\n");
+  printk(KERN_DEBUG "##### WaveLAN PSA contents: #####\n");
   printk(KERN_DEBUG "psa_io_base_addr_1: 0x%02X %02X %02X %02X\n",
 	 p->psa_io_base_addr_1,
 	 p->psa_io_base_addr_2,
@@ -1107,10 +1107,10 @@ wv_scb_show(u_long	ioaddr)
   printk(KERN_DEBUG "status: ");
   printk("stat 0x%x[%s%s%s%s] ",
 	 (scb.scb_status & (SCB_ST_CX | SCB_ST_FR | SCB_ST_CNA | SCB_ST_RNR)) >> 12,
-	 (scb.scb_status & SCB_ST_CX) ? "cmd completion interrupt," : "",
+	 (scb.scb_status & SCB_ST_CX) ? "command completion interrupt," : "",
 	 (scb.scb_status & SCB_ST_FR) ? "frame received," : "",
-	 (scb.scb_status & SCB_ST_CNA) ? "cmd unit not active," : "",
-	 (scb.scb_status & SCB_ST_RNR) ? "rcv unit not ready," : "");
+	 (scb.scb_status & SCB_ST_CNA) ? "command unit not active," : "",
+	 (scb.scb_status & SCB_ST_RNR) ? "receiving unit not ready," : "");
   printk("cus 0x%x[%s%s%s] ",
 	 (scb.scb_status & SCB_ST_CUS) >> 8,
 	 ((scb.scb_status & SCB_ST_CUS) == SCB_ST_CUS_IDLE) ? "idle" : "",
@@ -1166,7 +1166,7 @@ wv_ru_show(device *	dev)
   printk(KERN_DEBUG "##### WaveLAN i82586 receiver unit status: #####\n");
   printk(KERN_DEBUG "ru:");
   /*
-   * Not implemented yet...
+   * Not implemented yet
    */
   printk("\n");
 } /* wv_ru_show */
@@ -1335,7 +1335,7 @@ wv_init_info(device *	dev)
 #endif
 
 #ifdef DEBUG_BASIC_SHOW
-  /* Now, let's go for the basic stuff */
+  /* Now, let's go for the basic stuff. */
   printk(KERN_NOTICE "%s: WaveLAN at %#x,", dev->name, ioaddr);
   for(i = 0; i < WAVELAN_ADDR_SIZE; i++)
     printk("%s%02X", (i == 0) ? " " : ":", dev->dev_addr[i]);
@@ -1353,9 +1353,8 @@ wv_init_info(device *	dev)
     {
       unsigned short	freq;
 
-      /* Ask the EEPROM to read the frequency from the first area */
-      fee_read(ioaddr, 0x00 /* 1st area - frequency... */,
-	       &freq, 1);
+      /* Ask the EEPROM to read the frequency from the first area. */
+      fee_read(ioaddr, 0x00, &freq, 1);
 
       /* Print frequency */
       printk(", 2.00, %ld", (freq >> 6) + 2400L);
@@ -1539,16 +1538,16 @@ wavelan_set_mac_address(device *	dev,
   return 0;
 }
 
-#ifdef WIRELESS_EXT	/* if wireless extension exists in the kernel */
+#ifdef WIRELESS_EXT	/* if wireless extensions exist in the kernel */
 
 /*------------------------------------------------------------------*/
 /*
- * Frequency setting (for hardware able of it)
- * It's a bit complicated and you don't really want to look into it...
+ * Frequency setting (for hardware capable of it)
+ * It's a bit complicated and you don't really want to look into it.
  * (called in wavelan_ioctl)
  */
 static inline int
-wv_set_frequency(u_long		ioaddr,	/* i/o port of the card */
+wv_set_frequency(u_long		ioaddr,	/* I/O port of the card */
 		 iw_freq *	frequency)
 {
   const int	BAND_NUM = 10;	/* Number of bands */
@@ -1560,8 +1559,8 @@ wv_set_frequency(u_long		ioaddr,	/* i/o port of the card */
   /* Setting by frequency */
   /* Theoretically, you may set any frequency between
    * the two limits with a 0.5 MHz precision. In practice,
-   * I don't want you to have trouble with local
-   * regulations. */
+   * I don't want you to have trouble with local regulations.
+   */
   if((frequency->e == 1) &&
      (frequency->m >= (int) 2.412e8) && (frequency->m <= (int) 2.487e8))
     {
@@ -1587,8 +1586,7 @@ wv_set_frequency(u_long		ioaddr,	/* i/o port of the card */
       u_short	table[10];	/* Authorized frequency table */
 
       /* Read the frequency table. */
-      fee_read(ioaddr, 0x71 /* frequency table */,
-	       table, 10);
+      fee_read(ioaddr, 0x71, table, 10);
 
 #ifdef DEBUG_IOCTL_INFO
       printk(KERN_DEBUG "Frequency table: ");
@@ -1616,29 +1614,26 @@ wv_set_frequency(u_long		ioaddr,	/* i/o port of the card */
       unsigned short	area_verify[16];
       unsigned short	dac_verify[2];
       /* Corresponding gain (in the power adjust value table)
-       * see AT&T WaveLAN Data Manual, REF 407-024689/E, page 3-8
-       * & WCIN062D.DOC, page 6.2.9 */
+       * See AT&T WaveLAN Data Manual, REF 407-024689/E, page 3-8
+       * and WCIN062D.DOC, page 6.2.9. */
       unsigned short	power_limit[] = { 40, 80, 120, 160, 0 };
       int		power_band = 0;		/* Selected band */
       unsigned short	power_adjust;		/* Correct value */
 
-      /* Search for the gain */
+      /* Search for the gain. */
       power_band = 0;
       while((freq > power_limit[power_band]) &&
 	    (power_limit[++power_band] != 0))
 	;
 
       /* Read the first area. */
-      fee_read(ioaddr, 0x00,
-	       area, 16);
+      fee_read(ioaddr, 0x00, area, 16);
 
       /* Read the DAC. */
-      fee_read(ioaddr, 0x60,
-	       dac, 2);
+      fee_read(ioaddr, 0x60, dac, 2);
 
       /* Read the new power adjust value. */
-      fee_read(ioaddr, 0x6B - (power_band >> 1),
-	       &power_adjust, 1);
+      fee_read(ioaddr, 0x6B - (power_band >> 1), &power_adjust, 1);
       if(power_band & 0x1)
 	power_adjust >>= 8;
       else
@@ -1682,15 +1677,13 @@ wv_set_frequency(u_long		ioaddr,	/* i/o port of the card */
       fee_write(ioaddr, 0x60,
 		dac, 2);
 
-      /* We now should verify here that the writing of the EEPROM was OK. */
+      /* We now should verify here that the writing of the EEPROM went OK. */
 
       /* Reread the first area. */
-      fee_read(ioaddr, 0x00,
-	       area_verify, 16);
+      fee_read(ioaddr, 0x00, area_verify, 16);
 
       /* Reread the DAC. */
-      fee_read(ioaddr, 0x60,
-	       dac_verify, 2);
+      fee_read(ioaddr, 0x60, dac_verify, 2);
 
       /* Compare. */
       if(memcmp(area, area_verify, 16 * 2) ||
@@ -1710,16 +1703,16 @@ wv_set_frequency(u_long		ioaddr,	/* i/o port of the card */
       mmc_out(ioaddr, mmwoff(0, mmw_fee_ctrl),
 	      MMW_FEE_CTRL_READ | MMW_FEE_CTRL_DWLD);
 
-      /* Wait until the download is finished */
+      /* Wait until the download is finished. */
       fee_wait(ioaddr, 100, 100);
 
       /* We must now download the power adjust value (gain) to
-       * the synthesizers (from the EEPROM - area 7 - DAC) */
+       * the synthesizers (from the EEPROM - area 7 - DAC). */
       mmc_out(ioaddr, mmwoff(0, mmw_fee_addr), 0x61);
       mmc_out(ioaddr, mmwoff(0, mmw_fee_ctrl),
 	      MMW_FEE_CTRL_READ | MMW_FEE_CTRL_DWLD);
 
-      /* Wait until the download is finished */
+      /* Wait for the download to finish. */
       fee_wait(ioaddr, 100, 100);
 
 #ifdef DEBUG_IOCTL_INFO
@@ -1745,22 +1738,21 @@ wv_set_frequency(u_long		ioaddr,	/* i/o port of the card */
 
 /*------------------------------------------------------------------*/
 /*
- * Give the list of available frequencies
+ * Give the list of available frequencies.
  */
 static inline int
-wv_frequency_list(u_long	ioaddr,	/* i/o port of the card */
-		  iw_freq *	list,	/* List of frequency to fill */
+wv_frequency_list(u_long	ioaddr,	/* I/O port of the card */
+		  iw_freq *	list,	/* List of frequencies to fill */
 		  int		max)	/* Maximum number of frequencies */
 {
   u_short	table[10];	/* Authorized frequency table */
   long		freq = 0L;	/* offset to 2.4 GHz in .5 MHz + 12 MHz */
   int		i;		/* index in the table */
 
-  /* Read the frequency table */
-  fee_read(ioaddr, 0x71 /* frequency table */,
-	   table, 10);
+  /* Read the frequency table. */
+  fee_read(ioaddr, 0x71 /* frequency table */, table, 10);
 
-  /* Check all frequencies */
+  /* Check all frequencies. */
   i = 0;
   for(freq = 0; freq < 150; freq++)
     /* Look in the table if the frequency is allowed */
@@ -1837,8 +1829,8 @@ wl_his_gather(device *	dev,
 
 /*------------------------------------------------------------------*/
 /*
- * Perform ioctl:  configuration and information
- * This is here that are treated the wireless extensions (iwconfig)
+ * Perform ioctl for configuration and information.
+ * It is here that the wireless extensions are treated (iwconfig).
  */
 static int
 wavelan_ioctl(struct device *	dev,	/* device on which the ioctl is applied */
@@ -1857,7 +1849,7 @@ wavelan_ioctl(struct device *	dev,	/* device on which the ioctl is applied */
   printk(KERN_DEBUG "%s: ->wavelan_ioctl(cmd=0x%X)\n", dev->name, cmd);
 #endif
 
-  /* Disable interrupts & save flags */
+  /* Disable interrupts and save flags. */
   x = wv_splhi();
 
   /* Look what is the request */
@@ -1866,21 +1858,21 @@ wavelan_ioctl(struct device *	dev,	/* device on which the ioctl is applied */
       /* --------------- WIRELESS EXTENSIONS --------------- */
 
     case SIOCGIWNAME:
-      strcpy(wrq->u.name, "Wavelan");
+      strcpy(wrq->u.name, "WaveLAN");
       break;
 
     case SIOCSIWNWID:
       /* Set NWID in WaveLAN. */
       if(wrq->u.nwid.on)
 	{
-	  /* Set NWID in psa */
+	  /* Set NWID in psa. */
 	  psa.psa_nwid[0] = (wrq->u.nwid.nwid & 0xFF00) >> 8;
 	  psa.psa_nwid[1] = wrq->u.nwid.nwid & 0xFF;
 	  psa.psa_nwid_select = 0x01;
 	  psa_write(ioaddr, lp->hacr, (char *)psa.psa_nwid - (char *)&psa,
 		    (unsigned char *)psa.psa_nwid, 3);
 
-	  /* Set NWID in mmc */
+	  /* Set NWID in mmc. */
 	  m.w.mmw_netw_id_l = wrq->u.nwid.nwid & 0xFF;
 	  m.w.mmw_netw_id_h = (wrq->u.nwid.nwid & 0xFF00) >> 8;
 	  mmc_write(ioaddr, (char *)&m.w.mmw_netw_id_l - (char *)&m,
@@ -1925,9 +1917,8 @@ wavelan_ioctl(struct device *	dev,	/* device on which the ioctl is applied */
 	{
 	  unsigned short	freq;
 
-	  /* Ask the EEPROM to read the frequency from the first area */
-	  fee_read(ioaddr, 0x00 /* 1st area - frequency... */,
-		   &freq, 1);
+	  /* Ask the EEPROM to read the frequency from the first area. */
+	  fee_read(ioaddr, 0x00, &freq, 1);
 	  wrq->u.freq.m = ((freq >> 5) * 5 + 24000L) * 10000;
 	  wrq->u.freq.e = 1;
 	}
@@ -2096,7 +2087,7 @@ wavelan_ioctl(struct device *	dev,	/* device on which the ioctl is applied */
 	    { SIOCGIPHISTO, 0,	    IW_PRIV_TYPE_INT | 16, "gethisto" },
 	  };
 
-	  /* Verify the user buffer */
+	  /* Verify the user buffer. */
 	  ret = verify_area(VERIFY_WRITE, wrq->u.data.pointer,
 			    sizeof(priv));
 	  if(ret)
@@ -2149,7 +2140,7 @@ wavelan_ioctl(struct device *	dev,	/* device on which the ioctl is applied */
 	  memset(lp->spy_stat, 0x00, sizeof(iw_qual) * IW_MAX_SPY);
 
 #ifdef DEBUG_IOCTL_INFO
-	  printk(KERN_DEBUG "SetSpy - Set of new addresses is: \n");
+	  printk(KERN_DEBUG "SetSpy:  set of new addresses is: \n");
 	  for(i = 0; i < wrq->u.data.length; i++)
 	    printk(KERN_DEBUG "%02X:%02X:%02X:%02X:%02X:%02X \n",
 		   lp->spy_address[i][0],
@@ -2226,7 +2217,7 @@ wavelan_ioctl(struct device *	dev,	/* device on which the ioctl is applied */
 
 #ifdef HISTOGRAM
     case SIOCSIPHISTO:
-      /* Verif if the user is root */
+      /* Verify that the user is root. */
       if(!suser())
 	return -EPERM;
 
@@ -2416,10 +2407,11 @@ wv_packet_read(device *		dev,
       u_char	stats[3];	/* signal level, noise level, signal quality */
 
       /* Read signal level, silence level and signal quality bytes. */
-      /* Note: in the PCMCIA hardware, these are part of the frame. It seems
+      /* Note: in the PCMCIA hardware, these are part of the frame.  It seems
        * that for the ISA hardware, it's nowhere to be found in the frame,
        * so I'm obliged to do this (it has a side effect on /proc/net/wireless).
-       * Any ideas? */
+       * Any ideas?
+       */
       mmc_out(ioaddr, mmwoff(0, mmw_freeze), 1);
       mmc_read(ioaddr, mmroff(0, mmr_signal_lvl), stats, 3);
       mmc_out(ioaddr, mmwoff(0, mmw_freeze), 0);
@@ -2631,14 +2623,14 @@ wv_receive(device *	dev)
  * The principle:
  * Each block contains a transmit command, a NOP command,
  * a transmit block descriptor and a buffer.
- * The CU reads the transmit block which points to the tbd,
- * reads the tbd and the content of the buffer.
- * When it has finished with it, it goes to the next command
+ * The CU read the transmit block which point to the tbd,
+ * read the tbd and the content of the buffer.
+ * When it has finish with it, it goes to the next command
  * which in our case is the NOP. The NOP points on itself,
- * so the CU stops here.
+ * so the CU stop here.
  * When we add the next block, we modify the previous nop
  * to make it point on the new tx command.
- * Simple, isn't it?
+ * Simple, isn't it ?
  *
  * (called in wavelan_packet_xmit())
  */
@@ -2772,8 +2764,8 @@ if (lp->tx_n_in_use > 0)
 /*------------------------------------------------------------------*/
 /*
  * This routine is called when we want to send a packet (NET3 callback)
- * In this routine, we check if the hardware is ready to accept
- * the packet. We also prevent reentrance. Then, we call the function
+ * In this routine, we check if the harware is ready to accept
+ * the packet.  We also prevent reentrance.  Then we call the function
  * to send the packet.
  */
 static int
@@ -2876,7 +2868,7 @@ wv_mmc_init(device *	dev)
       /* Disable encryption */
       psa.psa_encryption_select = 0;
 
-      /* Set to standard values
+      /* Set to standard values:
        * 0x04 for AT,
        * 0x01 for MCA,
        * 0x04 for PCMCIA and 2.00 card (AT&T 407-024689/E document)
@@ -2891,7 +2883,7 @@ wv_mmc_init(device *	dev)
       psa.psa_conf_status |= 1;
 
 #ifdef USE_PSA_CONFIG
-      /* Write the psa */
+      /* Write the psa. */
       psa_write(ioaddr, lp->hacr, (char *)psa.psa_nwid - (char *)&psa,
 		(unsigned char *)psa.psa_nwid, 4);
       psa_write(ioaddr, lp->hacr, (char *)&psa.psa_thr_pre_set - (char *)&psa,
@@ -2948,7 +2940,7 @@ wv_mmc_init(device *	dev)
   mmc_write(ioaddr, 0, (u_char *)&m, sizeof(m));
 
   /* The following code starts the modem of the 2.00 frequency
-   * selectable cards at power on. It's not strictly needed for the
+   * selectable cards at power on.  It's not strictly needed for the
    * following boots.
    * The original patch was by Joe Finney for the PCMCIA driver, but
    * I've cleaned it up a bit and added documentation.

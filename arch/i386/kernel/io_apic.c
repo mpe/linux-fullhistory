@@ -966,21 +966,6 @@ static void disable_level_ioapic_irq(unsigned int irq)
 	mask_IO_APIC_irq(irq);
 }
 
-/*
- * Enter and exit the irq handler context..
- */
-static inline void enter_ioapic_irq(int cpu)
-{
-	hardirq_enter(cpu);
-	while (test_bit(0,&global_irq_lock)) barrier();
-}
-
-static inline void exit_ioapic_irq(int cpu)
-{
-	hardirq_exit(cpu);
-	release_irqlock(cpu);
-}	
-
 static void do_edge_ioapic_IRQ(unsigned int irq, int cpu, struct pt_regs * regs)
 {
 	irq_desc_t *desc = irq_desc + irq;
@@ -1014,7 +999,7 @@ static void do_edge_ioapic_IRQ(unsigned int irq, int cpu, struct pt_regs * regs)
 	if (!action)
 		return;
 
-	enter_ioapic_irq(cpu);
+	irq_enter(cpu, irq);
 
 	/*
 	 * Edge triggered interrupts need to remember
@@ -1035,7 +1020,7 @@ static void do_edge_ioapic_IRQ(unsigned int irq, int cpu, struct pt_regs * regs)
 	desc->status &= IRQ_DISABLED;
 	spin_unlock(&irq_controller_lock);
 
-	exit_ioapic_irq(cpu);
+	irq_exit(cpu, irq);
 }
 
 static void do_level_ioapic_IRQ (unsigned int irq, int cpu,
@@ -1074,7 +1059,7 @@ static void do_level_ioapic_IRQ (unsigned int irq, int cpu,
 	if (!action)
 		return;
 
-	enter_ioapic_irq(cpu);
+	irq_enter(cpu, irq);
 
 	handle_IRQ_event(irq, regs);
 
@@ -1084,7 +1069,7 @@ static void do_level_ioapic_IRQ (unsigned int irq, int cpu,
 		unmask_IO_APIC_irq(irq);
 	spin_unlock(&irq_controller_lock);
 
-	exit_ioapic_irq(cpu);
+	irq_exit(cpu, irq);
 }
 
 /*

@@ -7,7 +7,7 @@
  *
  *	Based on linux/ipv4/udp.c
  *
- *	$Id: udp.c,v 1.29 1998/05/15 15:21:39 davem Exp $
+ *	$Id: udp.c,v 1.31 1998/07/15 05:05:45 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -185,12 +185,18 @@ static struct sock *udp_v6_lookup(struct in6_addr *saddr, u16 sport,
 int udpv6_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 {
 	struct sockaddr_in6	*usin = (struct sockaddr_in6 *) uaddr;
+	struct ipv6_pinfo      	*np = &sk->net_pinfo.af_inet6;
 	struct in6_addr		*daddr;
 	struct dst_entry	*dst;
-	struct ipv6_pinfo      	*np;
 	struct inet6_ifaddr	*ifa;
 	struct flowi		fl;
 	int			addr_type;
+	int			err;
+
+	if (usin->sin6_family == AF_INET) {
+		err = udp_connect(sk, uaddr, addr_len);
+		goto ipv4_connected;
+	}
 
 	if (addr_len < sizeof(*usin)) 
 	  	return(-EINVAL);
@@ -199,7 +205,6 @@ int udpv6_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 	  	return(-EAFNOSUPPORT);
 
 	addr_type = ipv6_addr_type(&usin->sin6_addr);
-	np = &sk->net_pinfo.af_inet6;
 
 	if (addr_type == IPV6_ADDR_ANY) {
 		/*
@@ -212,18 +217,21 @@ int udpv6_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 
 	if (addr_type == IPV6_ADDR_MAPPED) {
 		struct sockaddr_in sin;
-		int err;
 
 		sin.sin_family = AF_INET;
 		sin.sin_addr.s_addr = daddr->s6_addr32[3];
+		sin.sin_port = usin->sin6_port;
 
 		err = udp_connect(sk, (struct sockaddr*) &sin, sizeof(sin));
-		
+
+ipv4_connected:
 		if (err < 0)
 			return err;
 		
-		ipv6_addr_copy(&np->daddr, daddr);
-		
+		ipv6_addr_set(&np->daddr, 0, 0, 
+			      __constant_htonl(0x0000ffff),
+			      sk->daddr);
+
 		if(ipv6_addr_any(&np->saddr)) {
 			ipv6_addr_set(&np->saddr, 0, 0, 
 				      __constant_htonl(0x0000ffff),
@@ -236,7 +244,7 @@ int udpv6_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 				      __constant_htonl(0x0000ffff),
 				      sk->rcv_saddr);
 		}
-
+		return 0;
 	}
 
 	ipv6_addr_copy(&np->daddr, daddr);
@@ -347,6 +355,8 @@ int udpv6_recvmsg(struct sock *sk, struct msghdr *msg, int len,
 		if (skb->protocol == __constant_htons(ETH_P_IP)) {
 			ipv6_addr_set(&sin6->sin6_addr, 0, 0,
 				      __constant_htonl(0xffff), skb->nh.iph->saddr);
+			if (sk->ip_cmsg_flags)
+				ip_cmsg_recv(msg, skb);
 		} else {
 			memcpy(&sin6->sin6_addr, &skb->nh.ipv6h->saddr,
 			       sizeof(struct in6_addr));
@@ -668,6 +678,9 @@ static int udpv6_sendmsg(struct sock *sk, struct msghdr *msg, int ulen)
 		return(-EINVAL);
 
 	if (sin6) {
+		if (sin6->sin6_family == AF_INET)
+			return udp_sendmsg(sk, msg, ulen);
+
 		if (addr_len < sizeof(*sin6))
 			return(-EINVAL);
 		
@@ -702,8 +715,10 @@ static int udpv6_sendmsg(struct sock *sk, struct msghdr *msg, int ulen)
 		
 		sin.sin_family = AF_INET;
 		sin.sin_addr.s_addr = daddr->s6_addr32[3];
+		sin.sin_port = udh.uh.dest;
+		msg->msg_name = (struct sockaddr *)(&sin);
 
-		return udp_sendmsg(sk, msg, len);
+		return udp_sendmsg(sk, msg, ulen);
 	}
 
 	udh.daddr = NULL;

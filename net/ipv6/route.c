@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: route.c,v 1.30 1998/05/08 21:06:33 davem Exp $
+ *	$Id: route.c,v 1.32 1998/07/25 23:28:52 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -1722,7 +1722,6 @@ int inet6_rtm_newroute(struct sk_buff *skb, struct nlmsghdr* nlh, void *arg)
 	return err;
 }
 
-
 struct rt6_rtnl_dump_arg
 {
 	struct sk_buff *skb;
@@ -1733,6 +1732,9 @@ struct rt6_rtnl_dump_arg
 };
 
 static int rt6_fill_node(struct sk_buff *skb, struct rt6_info *rt,
+			 struct in6_addr *dst,
+			 struct in6_addr *src,
+			 int iif,
 			 int type, pid_t pid, u32 seq)
 {
 	struct rtmsg *rtm;
@@ -1777,10 +1779,23 @@ static int rt6_fill_node(struct sk_buff *skb, struct rt6_info *rt,
 #ifdef CONFIG_RTNL_OLD_IFINFO
 	o = skb->tail;
 #endif
-	if (rtm->rtm_dst_len)
+	if (dst) {
+		RTA_PUT(skb, RTA_DST, 16, dst);
+	        rtm->rtm_dst_len = 128;
+	} else if (rtm->rtm_dst_len)
 		RTA_PUT(skb, RTA_DST, 16, &rt->rt6i_dst.addr);
-	if (rtm->rtm_src_len)
+	if (src) {
+		RTA_PUT(skb, RTA_SRC, 16, src);
+	        rtm->rtm_src_len = 128;
+	} else if (rtm->rtm_src_len)
 		RTA_PUT(skb, RTA_SRC, 16, &rt->rt6i_src.addr);
+	if (iif)
+		RTA_PUT(skb, RTA_IIF, 4, &iif);
+	else if (dst) {
+		struct inet6_ifaddr *ifp = ipv6_get_saddr(&rt->u.dst, dst);
+		if (ifp)
+			RTA_PUT(skb, RTA_PREFSRC, 16, &ifp->addr);
+	}
 #ifdef CONFIG_RTNL_OLD_IFINFO
 	if (rt->u.dst.pmtu)
 		RTA_PUT(skb, RTA_MTU, sizeof(unsigned), &rt->u.dst.pmtu);
@@ -1842,7 +1857,7 @@ static void rt6_dump_node(struct fib6_node *fn, void *p_arg)
 			arg->count++;
 			continue;
 		}
-		if (rt6_fill_node(arg->skb, rt, RTM_NEWROUTE,
+		if (rt6_fill_node(arg->skb, rt, NULL, NULL, 0, RTM_NEWROUTE,
 				  NETLINK_CB(arg->cb->skb).pid, arg->cb->nlh->nlmsg_seq) <= 0) {
 			arg->stop = 1;
 			break;
@@ -1870,6 +1885,68 @@ int inet6_dump_fib(struct sk_buff *skb, struct netlink_callback *cb)
 	return skb->len;
 }
 
+int inet6_rtm_getroute(struct sk_buff *in_skb, struct nlmsghdr* nlh, void *arg)
+{
+	struct rtattr **rta = arg;
+	int iif = 0;
+	int err;
+	struct sk_buff *skb;
+	struct flowi fl;
+	struct rt6_info *rt;
+
+	skb = alloc_skb(NLMSG_GOODSIZE, GFP_KERNEL);
+	if (skb == NULL)
+		return -ENOBUFS;
+
+	/* Reserve room for dummy headers, this skb can pass
+	   through good chunk of routing engine.
+	 */
+	skb->mac.raw = skb->data;
+	skb_reserve(skb, MAX_HEADER + sizeof(struct ipv6hdr));
+
+	fl.proto = 0;
+	fl.nl_u.ip6_u.daddr = NULL;
+	fl.nl_u.ip6_u.saddr = NULL;
+	fl.uli_u.icmpt.type = 0;
+	fl.uli_u.icmpt.code = 0;
+	if (rta[RTA_SRC-1])
+		fl.nl_u.ip6_u.saddr = (struct in6_addr*)RTA_DATA(rta[RTA_SRC-1]);
+	if (rta[RTA_DST-1])
+		fl.nl_u.ip6_u.daddr = (struct in6_addr*)RTA_DATA(rta[RTA_DST-1]);
+
+	if (rta[RTA_IIF-1])
+		memcpy(&iif, RTA_DATA(rta[RTA_IIF-1]), sizeof(int));
+
+	if (iif) {
+		struct device *dev;
+		dev = dev_get_by_index(iif);
+		if (!dev)
+			return -ENODEV;
+	}
+
+	fl.oif = 0;
+	if (rta[RTA_OIF-1])
+		memcpy(&fl.oif, RTA_DATA(rta[RTA_OIF-1]), sizeof(int));
+
+	rt = (struct rt6_info*)ip6_route_output(NULL, &fl);
+
+	skb->dst = &rt->u.dst;
+
+	NETLINK_CB(skb).dst_pid = NETLINK_CB(in_skb).pid;
+	err = rt6_fill_node(skb, rt, 
+			    fl.nl_u.ip6_u.daddr,
+			    fl.nl_u.ip6_u.saddr,
+			    iif,
+			    RTM_NEWROUTE, NETLINK_CB(in_skb).pid, nlh->nlmsg_seq);
+	if (err < 0)
+		return -EMSGSIZE;
+
+	err = netlink_unicast(rtnl, skb, NETLINK_CB(in_skb).pid, MSG_DONTWAIT);
+	if (err < 0)
+		return err;
+	return 0;
+}
+
 void inet6_rt_notify(int event, struct rt6_info *rt)
 {
 	struct sk_buff *skb;
@@ -1880,7 +1957,7 @@ void inet6_rt_notify(int event, struct rt6_info *rt)
 		netlink_set_err(rtnl, 0, RTMGRP_IPV6_ROUTE, ENOBUFS);
 		return;
 	}
-	if (rt6_fill_node(skb, rt, event, 0, 0) < 0) {
+	if (rt6_fill_node(skb, rt, NULL, NULL, 0, event, 0, 0) < 0) {
 		kfree_skb(skb);
 		netlink_set_err(rtnl, 0, RTMGRP_IPV6_ROUTE, EINVAL);
 		return;

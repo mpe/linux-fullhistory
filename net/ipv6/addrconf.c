@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: addrconf.c,v 1.41 1998/05/08 21:06:31 davem Exp $
+ *	$Id: addrconf.c,v 1.43 1998/07/15 05:05:32 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -1034,7 +1034,7 @@ static void addrconf_dev_config(struct device *dev)
 	struct inet6_dev    * idev;
 
 	if (dev->type != ARPHRD_ETHER) {
-		/* Alas, we support only ethernet autoconfiguration. */
+		/* Alas, we support only Ethernet autoconfiguration. */
 		return;
 	}
 
@@ -1609,7 +1609,7 @@ static struct rtnetlink_link inet6_rtnetlink_table[RTM_MAX-RTM_BASE+1] =
 
 	{ inet6_rtm_newroute,	NULL,			},
 	{ inet6_rtm_delroute,	NULL,			},
-	{ NULL,			inet6_dump_fib,		},
+	{ inet6_rtm_getroute,	inet6_dump_fib,		},
 	{ NULL,			NULL,			},
 };
 #endif

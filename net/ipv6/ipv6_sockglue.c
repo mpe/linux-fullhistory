@@ -7,7 +7,7 @@
  *
  *	Based on linux/net/ipv4/ip_sockglue.c
  *
- *	$Id: ipv6_sockglue.c,v 1.21 1998/05/07 15:43:13 davem Exp $
+ *	$Id: ipv6_sockglue.c,v 1.22 1998/07/15 05:05:39 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -67,12 +67,54 @@ static struct notifier_block ipv6_dev_notf = {
 	0
 };
 
+struct ip6_ra_chain *ip6_ra_chain;
+
+int ip6_ra_control(struct sock *sk, int sel, void (*destructor)(struct sock *))
+{
+	struct ip6_ra_chain *ra, *new_ra, **rap;
+
+	/* RA packet may be delivered ONLY to IPPROTO_RAW socket */
+	if (sk->type != SOCK_RAW || sk->num != IPPROTO_RAW)
+		return -EINVAL;
+
+	new_ra = (sel>=0) ? kmalloc(sizeof(*new_ra), GFP_KERNEL) : NULL;
+
+	for (rap = &ip6_ra_chain; (ra=*rap) != NULL; rap = &ra->next) {
+		if (ra->sk == sk) {
+			if (sel>=0) {
+				if (new_ra)
+					kfree(new_ra);
+				return -EADDRINUSE;
+			}
+			*rap = ra->next;
+			if (ra->destructor)
+				ra->destructor(sk);
+			kfree(ra);
+			return 0;
+		}
+	}
+	if (new_ra == NULL)
+		return -ENOBUFS;
+	new_ra->sk = sk;
+	new_ra->sel = sel;
+	new_ra->destructor = destructor;
+	start_bh_atomic();
+	new_ra->next = ra;
+	*rap = new_ra;
+	end_bh_atomic();
+	return 0;
+}
+
+
 int ipv6_setsockopt(struct sock *sk, int level, int optname, char *optval, 
 		    int optlen)
 {
 	struct ipv6_pinfo *np = &sk->net_pinfo.af_inet6;
 	int val, err;
 	int retv = -ENOPROTOOPT;
+
+	if(level==SOL_IP && sk->type != SOCK_RAW)
+		return udp_prot.setsockopt(sk, level, optname, optval, optlen);
 
 	if(level!=SOL_IPV6)
 		goto out;
@@ -197,7 +239,11 @@ int ipv6_setsockopt(struct sock *sk, int level, int optname, char *optval,
 			retv = ipv6_sock_mc_join(sk, mreq.ipv6mr_ifindex, &mreq.ipv6mr_multiaddr);
 		else
 			retv = ipv6_sock_mc_drop(sk, mreq.ipv6mr_ifindex, &mreq.ipv6mr_multiaddr);
+		break;
 	}
+	case IPV6_ROUTER_ALERT:
+		retv = ip6_ra_control(sk, val, NULL);
+		break;
 	};
 
 out:
@@ -207,7 +253,11 @@ out:
 int ipv6_getsockopt(struct sock *sk, int level, int optname, char *optval, 
 		    int *optlen)
 {
-	return 0;
+	if(level==SOL_IP && sk->type != SOCK_RAW)
+		return udp_prot.getsockopt(sk, level, optname, optval, optlen);
+	if(level!=SOL_IPV6)
+		return -ENOPROTOOPT;
+	return -EINVAL;
 }
 
 #if defined(MODULE) && defined(CONFIG_SYSCTL)

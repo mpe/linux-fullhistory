@@ -4,7 +4,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>
  *
- *	$Id: ipv6.h,v 1.11 1998/05/07 15:42:46 davem Exp $
+ *	$Id: ipv6.h,v 1.12 1998/07/15 05:05:02 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -117,6 +117,31 @@ struct frag_queue {
 	__u8			nexthdr;
 	__u8			*nhptr;
 };
+
+struct ipv6_tlvtype
+{
+	u8 type;
+	u8 len;
+};
+
+struct ip6_ra_chain
+{
+	struct ip6_ra_chain	*next;
+	struct sock		*sk;
+	int			sel;
+	void			(*destructor)(struct sock *);
+};
+
+extern struct ip6_ra_chain	*ip6_ra_chain;
+
+extern int 			ip6_ra_control(struct sock *sk, int sel,
+					       void (*destructor)(struct sock *));
+
+
+extern int			ip6_call_ra_chain(struct sk_buff *skb, int sel);
+
+extern int 			ip6_dstopt_unknown(struct sk_buff *skb,
+						   struct ipv6_tlvtype *hdr);
 
 extern int			ipv6_routing_header(struct sk_buff **skb, 
 						    struct device *dev,

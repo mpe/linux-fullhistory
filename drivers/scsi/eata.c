@@ -1,6 +1,21 @@
 /*
  *      eata.c - Low-level driver for EATA/DMA SCSI host adapters.
  *
+ *      26 Jul 1998 Rev. 4.33 for linux 2.0.35 and 2.1.111
+ *        + Added command line option (rs:[y|n]) to reverse the scan order
+ *          of PCI boards. The default is rs:y, which reverses the BIOS order
+ *          while registering PCI boards. The default value rs:y generates
+ *          the same order of all previous revisions of this driver.
+ *          Pls. note that "BIOS order" might have been reversed itself
+ *          after the 2.1.9x PCI modifications in the linux kernel.
+ *          The rs value is ignored when the explicit list of addresses
+ *          is used by the "eata=port0,port1,..." command line option.
+ *        + Added command line option (et:[y|n]) to force use of extended
+ *          translation (255 heads, 63 sectors) as disk geometry.
+ *          The default is et:n, which uses the disk geometry returned
+ *          by scsicam_bios_param. The default value et:n is compatible with
+ *          all previous revisions of this driver.
+ *
  *      28 May 1998 Rev. 4.32 for linux 2.0.33 and 2.1.104
  *          Increased busy timeout from 10 msec. to 200 msec. while
  *          processing interrupts.
@@ -193,6 +208,10 @@
  *  PM3222     -  SmartRAID Adapter for EISA (PM3222W is 16-bit wide SCSI)
  *  PM3224     -  SmartRAID Adapter for PCI  (PM3224W is 16-bit wide SCSI)
  *
+ *  The above list is just an indication: as a matter of fact all DPT
+ *  boards using the EATA/DMA protocol are supported by this driver,
+ *  since they use exactely the same programming interface.
+ *
  *  The DPT PM2001 provides only the EATA/PIO interface and hence is not
  *  supported by this driver.
  *
@@ -255,6 +274,10 @@
  *
  *  eh:y  use new scsi code (linux 2.2 only);
  *  eh:n  use old scsi code;
+ *  et:y  force use of extended translation (255 heads, 63 sectors);
+ *  et:n  use disk geometry detected by scsicam_bios_param;
+ *  rs:y  reverse scan order while detecting PCI boards;
+ *  rs:n  use BIOS order while detecting PCI boards;
  *  lc:y  enables linked commands;
  *  lc:n  disables linked commands;
  *  tc:y  enables tagged commands;
@@ -265,15 +288,16 @@
  *  tm:3  use only ordered queue tags;
  *  mq:xx set the max queue depth to the value xx (2 <= xx <= 32).
  *
- *  The default value is: "eata=lc:n,tc:n,mq:16,tm:0". An example using
- *  the list of detection probes could be:
- *  "eata=0x7410,0x230,lc:y,tc:n,mq:4,eh:n".
+ *  The default value is: "eata=lc:n,tc:n,mq:16,tm:0,et:n,rs:n".
+ *  An example using the list of detection probes could be:
+ *  "eata=0x7410,0x230,lc:y,tc:n,mq:4,eh:n,et:n".
  *
  *  When loading as a module, parameters can be specified as well.
  *  The above example would be (use 1 in place of y and 0 in place of n):
  *
  *  modprobe eata io_port=0x7410,0x230 linked_comm=1 tagged_comm=0 \
- *                max_queue_depth=4 tag_mode=0 use_new_eh_code=0
+ *                max_queue_depth=4 tag_mode=0 use_new_eh_code=0 \
+ *                ext_tran=0 rev_scan=1
  *
  *  ----------------------------------------------------------------------------
  *  In this implementation, linked commands are designed to work with any DISK
@@ -307,6 +331,19 @@
  *        When the driver detects a batch including overlapping requests
  *        (a really rare event) strict serial (pid) order is enforced.
  *  ----------------------------------------------------------------------------
+ *  The extended translation option (et:y) is useful when using large physical
+ *  disks/arrays. It could also be useful when switching between Adaptec boards
+ *  and DPT boards without reformatting the disk.
+ *  When a boot disk is partitioned with extended translation, in order to
+ *  be able to boot it with a DPT board is could be necessary to add to
+ *  lilo.conf additional commands as in the following example:
+ *
+ *  fix-table
+ *  disk=/dev/sda bios=0x80 sectors=63 heads=128 cylindres=546
+ *
+ *  where the above geometry should be replaced with the one reported at
+ *  power up by the DPT controller.
+ *  ----------------------------------------------------------------------------
  *
  *  The boards are named EATA0, EATA1,... according to the detection order.
  *
@@ -330,6 +367,8 @@ MODULE_PARM(link_statistics, "i");
 MODULE_PARM(max_queue_depth, "i");
 MODULE_PARM(tag_mode, "i");
 MODULE_PARM(use_new_eh_code, "i");
+MODULE_PARM(ext_tran, "i");
+MODULE_PARM(rev_scan, "i");
 MODULE_AUTHOR("Dario Ballabio");
 #endif
 
@@ -413,6 +452,7 @@ struct proc_dir_entry proc_scsi_eata2x = {
 #undef  DEBUG_RESET
 #undef  DEBUG_GENERATE_ERRORS
 #undef  DEBUG_GENERATE_ABORTS
+#undef  DEBUG_GEOMETRY
 
 #define MAX_ISA 4
 #define MAX_VESA 0
@@ -663,6 +703,8 @@ static int do_trace = FALSE;
 static int setup_done = FALSE;
 static int link_statistics = 0;
 static int tag_mode = TAG_MIXED;
+static int ext_tran = FALSE;
+static int rev_scan = TRUE;
 
 #if defined(CONFIG_SCSI_EATA_TAGGED_QUEUE)
 static int tagged_comm = TRUE;
@@ -1067,9 +1109,9 @@ __initfunc (static inline int port_detect \
 
    if (j == 0) {
       printk("EATA/DMA 2.0x: Copyright (C) 1994-1998 Dario Ballabio.\n");
-      printk("%s config options -> tc:%c, lc:%c, mq:%d, eh:%c.\n",
-             driver_name, tag_type, YESNO(linked_comm),
-             max_queue_depth, YESNO(use_new_eh_code));
+      printk("%s config options -> tc:%c, lc:%c, mq:%d, eh:%c, rs:%c, et:%c.\n",
+             driver_name, tag_type, YESNO(linked_comm), max_queue_depth,
+             YESNO(use_new_eh_code), YESNO(rev_scan), YESNO(ext_tran));
       }
 
    printk("%s: 2.0%c, %s 0x%03lx, IRQ %u, %s, SG %d, MB %d.\n",
@@ -1132,6 +1174,8 @@ __initfunc (void eata2x_setup(char *str, int *ints)) {
       else if (!strncmp(cur, "mq:", 3))  max_queue_depth = val;
       else if (!strncmp(cur, "ls:", 3))  link_statistics = val;
       else if (!strncmp(cur, "eh:", 3))  use_new_eh_code = val;
+      else if (!strncmp(cur, "et:", 3))  ext_tran = val;
+      else if (!strncmp(cur, "rs:", 3))  rev_scan = val;
 
       if ((cur = strchr(cur, ','))) ++cur;
       }
@@ -1165,8 +1209,8 @@ __initfunc (static void add_pci_ports(void)) {
       if ((addr & PCI_BASE_ADDRESS_SPACE) != PCI_BASE_ADDRESS_SPACE_IO)
              continue;
 
-      /* Reverse the returned address order */
-      io_port[MAX_INT_PARAM + MAX_PCI - k] =
+      /* Order addresses according to rev_scan value */
+      io_port[MAX_INT_PARAM + (rev_scan ? (MAX_PCI - k) : (1 + k))] =
              (addr & PCI_BASE_ADDRESS_IO_MASK) + PCI_BASE_ADDRESS_0;
       }
 
@@ -1193,8 +1237,8 @@ __initfunc (static void add_pci_ports(void)) {
       if ((addr & PCI_BASE_ADDRESS_SPACE) != PCI_BASE_ADDRESS_SPACE_IO)
              continue;
 
-      /* Reverse the returned address order */
-      io_port[MAX_INT_PARAM + MAX_PCI - k] =
+      /* Order addresses according to rev_scan value */
+      io_port[MAX_INT_PARAM + (rev_scan ? (MAX_PCI - k) : (1 + k))] =
              (addr & PCI_BASE_ADDRESS_IO_MASK) + PCI_BASE_ADDRESS_0;
       }
 
@@ -1845,6 +1889,23 @@ int eata2x_reset(Scsi_Cmnd *SCarg) {
 }
 
 #endif /* new_eh_code */
+
+int eata2x_biosparam(Disk *disk, kdev_t dev, int *dkinfo) {
+   int size = disk->capacity;
+
+   if (ext_tran || (scsicam_bios_param(disk, dev, dkinfo) < 0)) {
+      dkinfo[0] = 255;
+      dkinfo[1] = 63;
+      dkinfo[2] = size / (dkinfo[0] * dkinfo[1]);
+      }
+
+#if defined (DEBUG_GEOMETRY)
+   printk ("%s: biosparam, head=%d, sec=%d, cyl=%d.\n", driver_name,
+           dkinfo[0], dkinfo[1], dkinfo[2]);
+#endif
+
+   return FALSE;
+}
 
 static void sort(unsigned long sk[], unsigned int da[], unsigned int n,
                  unsigned int rev) {

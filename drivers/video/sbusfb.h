@@ -24,6 +24,18 @@ struct fb_info_cgsix {
 	struct cg6_tec *tec;
 	volatile u32 *fhc;
 };
+struct fb_info_bwtwo {
+	struct bw2_regs *regs;
+};
+struct fb_info_cgthree {
+	struct cg3_regs *regs;
+};
+struct fb_info_tcx {
+	struct bt_regs *bt;
+	struct tcx_thc *thc;
+	struct tcx_tec *tec;
+	u32 *cplane;
+};
 
 struct cg_cursor {
 	short	enable;         /* cursor is enabled */
@@ -56,6 +68,9 @@ struct fb_info_sbusfb {
 	union {
 		struct fb_info_creator ffb;
 		struct fb_info_cgsix cg6;
+		struct fb_info_bwtwo bw2;
+		struct fb_info_cgthree cg3;
+		struct fb_info_tcx tcx;
 	} s;
 	unsigned char *color_map;
 	struct cg_cursor cursor;
@@ -81,7 +96,7 @@ struct fb_info_sbusfb {
 	void (*unblank)(struct fb_info_sbusfb *);
 	void (*margins)(struct fb_info_sbusfb *, struct display *, int, int);
 	void (*reset)(struct fb_info_sbusfb *);
-	void (*fill)(struct fb_info_sbusfb *, int, int, unsigned short *);
+	void (*fill)(struct fb_info_sbusfb *, struct display *, int, int, unsigned short *);
 	void (*switch_from_graph)(struct fb_info_sbusfb *);
 	void (*restore_palette)(struct fb_info_sbusfb *);
 };
@@ -94,13 +109,8 @@ extern char *leofb_init(struct fb_info_sbusfb *);
 extern char *bwtwofb_init(struct fb_info_sbusfb *);
 extern char *cgfourteenfb_init(struct fb_info_sbusfb *);
 
-#define attr_fg_col(s)    \
-	(((s) >> 8) & 0x0f)
-#define attr_bg_col(s)    \
-	(((s) >> 12) & 0x0f)
-#define attr_bg_col_ec(conp) \
-	(((conp)->vc_video_erase_char >> 12) & 0x0f)
-
 #define sbusfbinfod(disp) ((struct fb_info_sbusfb *)(disp->fb_info))
 #define sbusfbinfo(info) ((struct fb_info_sbusfb *)(info))
 #define CM(i, j) [3*(i)+(j)]
+
+#define SBUSFBINIT_SIZECHANGE ((char *)-1)

@@ -1,4 +1,4 @@
-/* $Id: sunlance.c,v 1.75 1998/04/24 12:29:50 davem Exp $
+/* $Id: sunlance.c,v 1.79 1998/06/04 09:54:58 jj Exp $
  * lance.c: Linux/Sparc/Lance driver
  *
  *	Written 1995, 1996 by Miguel de Icaza
@@ -672,39 +672,11 @@ static int lance_open (struct device *dev)
 
 	last_dev = dev;
 
-#ifdef __sparc_v9__
-	if (sparc_cpu_model == sun4u) {
-		struct devid_cookie dcookie;
-
-		dcookie.real_dev_id = dev;
-		dcookie.imap = dcookie.iclr = 0;
-		dcookie.pil = -1;
-		dcookie.bus_cookie = lp->sbus;
-		if(request_irq(dev->irq, &lance_interrupt,
-			       (SA_SHIRQ | SA_SBUS | SA_DCOOKIE),
-			       lancestr, &dcookie)) {
-			printk ("Lance: Can't get irq %d\n", dev->irq);
-			return -EAGAIN;
-		}
-	}
-#else
-	if (sparc_cpu_model == sun4d) {
-		struct devid_cookie dcookie;
-
-		dcookie.real_dev_id = dev;
-		dcookie.bus_cookie = (void *)dev->base_addr;
-		if(request_irq(dev->irq, &lance_interrupt,
-			       (SA_SHIRQ | SA_DCOOKIE),
-			       lancestr, &dcookie)) {
-			printk ("Lance: Can't get irq %d\n", dev->irq);
-			return -EAGAIN;
-		}
-	} else if (request_irq (dev->irq, &lance_interrupt, SA_SHIRQ,
+	if (request_irq (dev->irq, &lance_interrupt, SA_SHIRQ,
 			 lancestr, (void *) dev)) {
-		printk ("Lance: Can't get irq %d\n", dev->irq);
+		printk ("Lance: Can't get irq %s\n", __irq_itoa(dev->irq));
 		return -EAGAIN;
 	}
-#endif	
 
 	/* Stop the Lance */
 	ll->rap = LE_CSR0;
@@ -1124,7 +1096,7 @@ no_link_test:
 	dev->get_stats = &lance_get_stats;
 	dev->set_multicast_list = &lance_set_multicast;
 
-	dev->irq = (unsigned char) sdev->irqs [0].pri;
+	dev->irq = sdev->irqs[0];
 
 	dev->dma = 0;
 	ether_setup (dev);
@@ -1166,7 +1138,7 @@ __initfunc(int sparc_lance_probe (struct device *dev))
 	if (idprom->id_machtype == (SM_SUN4|SM_4_330)) {
 		memset (&sdev, 0, sizeof(sdev));
 		sdev.reg_addrs[0].phys_addr = SUN4_300_ETH_PHYSADDR;
-		sdev.irqs[0].pri = 6;
+		sdev.irqs[0] = 6;
 		return sparc_lance_init(dev, &sdev, 0, 0);
 	}
 	return ENODEV;

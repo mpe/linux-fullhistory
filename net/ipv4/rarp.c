@@ -3,11 +3,11 @@
  * Copyright (C) 1994 by Ross Martin
  * Based on linux/net/inet/arp.c, Copyright (C) 1994 by Florian La Roche
  *
- * $Id: rarp.c,v 1.24 1998/03/08 05:56:30 davem Exp $
+ * $Id: rarp.c,v 1.25 1998/06/19 13:22:34 davem Exp $
  *
  * This module implements the Reverse Address Resolution Protocol 
  * (RARP, RFC 903), which is used to convert low level addresses such
- * as ethernet addresses into high level addresses such as IP addresses.
+ * as Ethernet addresses into high level addresses such as IP addresses.
  * The most common use of RARP is as a means for a diskless workstation 
  * to discover its IP address during a network boot.
  *
@@ -19,7 +19,7 @@
  ***	unless you have all the rest to boot the box from it. 
  **
  * 
- * Currently, only ethernet address -> IP address is likely to work.
+ * Currently, only Ethernet address -> IP address is likely to work.
  * (Is RARP ever used for anything else?)
  *
  * This code is free software; you can redistribute it and/or

@@ -2,8 +2,6 @@
      *  Monochrome (mfb)
      */
 
-#include <linux/config.h>
-
 #ifdef MODULE
 #if defined(CONFIG_FBCON_MFB) || defined(CONFIG_FBCON_MFB_MODULE)
 #define FBCON_HAS_MFB

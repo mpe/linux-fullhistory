@@ -282,6 +282,13 @@ extern void s3triofb_init_of(struct device_node *dp);
 #ifdef CONFIG_FB_CT65550
 extern void chips_of_init(struct device_node *dp);
 #endif /* CONFIG_FB_CT65550 */
+#ifdef CONFIG_FB_CONTROL
+extern void control_of_init(struct device_node *dp);
+#endif /* CONFIG_FB_CONTROL */
+#ifdef CONFIG_FB_PLATINUM
+extern void platinum_of_init(struct device_node *dp);
+#endif /* CONFIG_FB_PLATINUM */
+
 
     /*
      *  Initialisation
@@ -318,6 +325,19 @@ __initfunc(void offb_init(void))
 		continue;
 	    }
 #endif /* CONFIG_FB_CT65550 */
+#ifdef CONFIG_FB_CONTROL
+		if(!strcmp(dp->name, "control")) {
+			control_of_init(dp);
+			continue;
+		}
+#endif /* CONFIG_FB_CONTROL */
+#ifdef CONFIG_FB_PLATINUM
+	    if (!strncmp(dp->name, "platinum",8)) {
+	    	printk("jonh: offb_init sees device node %s\n", dp->name);
+		platinum_of_init(dp);
+		continue;
+	    }
+#endif /* CONFIG_FB_PLATINUM */
 	}
 
 	info = kmalloc(sizeof(struct fb_info_offb), GFP_ATOMIC);

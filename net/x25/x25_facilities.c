@@ -200,4 +200,26 @@ int x25_negotiate_facilities(struct sk_buff *skb, struct sock *sk, struct x25_fa
 	return len;
 }
 
+/*
+ *	Limit values of certain facilities according to the capability of the 
+ *      currently attached x25 link.
+ */
+void x25_limit_facilities(struct x25_facilities *facilities,
+			  struct x25_neigh *neighbour)
+{
+
+	if( ! neighbour->extended ){
+		if( facilities->winsize_in  > 7 ){
+			printk(KERN_DEBUG "X.25: incoming winsize limited to 7\n");
+			facilities->winsize_in = 7;
+		}
+		if( facilities->winsize_out > 7 ){
+			facilities->winsize_out = 7;
+			printk( KERN_DEBUG "X.25: outgoing winsize limited to 7\n");
+		}
+	}
+}
+
 #endif
+
+

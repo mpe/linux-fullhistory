@@ -126,5 +126,6 @@ struct ipv6_mreq {
 #define IPV6_MULTICAST_LOOP	19
 #define IPV6_ADD_MEMBERSHIP	20
 #define IPV6_DROP_MEMBERSHIP	21
+#define IPV6_ROUTER_ALERT	22
 
 #endif

@@ -2098,6 +2098,7 @@ static void pci_happy_meal_interrupt(int irq, void *dev_id, struct pt_regs *regs
 }
 #endif
 
+#ifndef __sparc_v9__
 static void sun4c_happy_meal_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
 	struct device *dev            = (struct device *) dev_id;
@@ -2141,6 +2142,7 @@ static void sun4c_happy_meal_interrupt(int irq, void *dev_id, struct pt_regs *re
 	dev->interrupt = 0;
 	HMD(("done\n"));
 }
+#endif
 
 static int happy_meal_open(struct device *dev)
 {
@@ -2148,6 +2150,7 @@ static int happy_meal_open(struct device *dev)
 	int res;
 
 	HMD(("happy_meal_open: "));
+#ifndef __sparc_v9__
 	if(sparc_cpu_model == sun4c) {
 		if(request_irq(dev->irq, &sun4c_happy_meal_interrupt,
 			       SA_SHIRQ, "HAPPY MEAL", (void *) dev)) {
@@ -2155,47 +2158,26 @@ static int happy_meal_open(struct device *dev)
 			printk("happy meal: Can't order irq %d to go.\n", dev->irq);
 			return -EAGAIN;
 		}
-	}
-#ifdef __sparc_v9__
-	else if(sparc_cpu_model == sun4u) {
-		struct devid_cookie dcookie;
-
+	} else
+#else
 #ifdef CONFIG_PCI
-		if(hp->happy_flags & HFLAG_PCI) {
-			if(request_irq(dev->irq, &pci_happy_meal_interrupt,
-				       SA_SHIRQ, "HAPPY MEAL (PCI)", dev)) {
-				HMD(("EAGAIN\n"));
-				printk("happy_meal(PCI: Can't order irq %d to go.\n",
-				       dev->irq);
-				return -EAGAIN;
-			}
-			goto v9_done;
-		}
-#endif
-		dcookie.real_dev_id = dev;
-		dcookie.imap = dcookie.iclr = 0;
-		dcookie.pil = -1;
-		dcookie.bus_cookie = hp->happy_sbus_dev->my_bus;
-		if(request_irq(dev->irq, &happy_meal_interrupt,
-			       (SA_SHIRQ | SA_SBUS | SA_DCOOKIE),
-			       "HAPPY MEAL", &dcookie)) {
-			HMD(("EAGAIN\n"));
-			printk("happy_meal(SBUS): Can't order irq %d to go.\n",
-			       dev->irq);
+	if(hp->happy_flags & HFLAG_PCI) {
+		if(request_irq(dev->irq, &pci_happy_meal_interrupt,
+			       SA_SHIRQ, "HAPPY MEAL (PCI)", dev)) {
+		HMD(("EAGAIN\n"));
+		printk("happy_meal(PCI: Can't order irq %s to go.\n",
+		       __irq_itoa(dev->irq));
 			return -EAGAIN;
 		}
-#ifdef CONFIG_PCI
-	v9_done:
+	} else
 #endif
-	}
 #endif
-	else {
-		if(request_irq(dev->irq, &happy_meal_interrupt,
-			       SA_SHIRQ, "HAPPY MEAL", (void *) dev)) {
-			HMD(("EAGAIN\n"));
-			printk("happy meal: Can't order irq %d to go.\n", dev->irq);
-			return -EAGAIN;
-		}
+	if(request_irq(dev->irq, &happy_meal_interrupt,
+		       SA_SHIRQ, "HAPPY MEAL", (void *)dev)) {
+		HMD(("EAGAIN\n"));
+		printk("happy_meal(SBUS): Can't order irq %s to go.\n",
+		       __irq_itoa(dev->irq));
+		return -EAGAIN;
 	}
 	HMD(("Init happy timer\n"));
 	init_timer(&hp->happy_timer);
@@ -2594,7 +2576,7 @@ static inline int happy_meal_ether_init(struct device *dev, struct linux_sbus_de
 	dev->get_stats = &happy_meal_get_stats;
 	dev->set_multicast_list = &happy_meal_set_multicast;
 
-	dev->irq = sdev->irqs[0].pri;
+	dev->irq = sdev->irqs[0];
 	dev->dma = 0;
 	ether_setup(dev);
 #ifdef MODULE

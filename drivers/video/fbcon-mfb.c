@@ -90,7 +90,7 @@ void fbcon_mfb_putc(struct vc_data *conp, struct display *p, int c, int yy,
     u8 d;
 
     dest = p->screen_base+yy*p->fontheight*p->next_line+xx;
-    cdat = p->fontdata+(c&0xff)*p->fontheight;
+    cdat = p->fontdata+(c&p->charmask)*p->fontheight;
     bold = attr_bold(p,c);
     revs = attr_reverse(p,c);
     underl = attr_underline(p,c);
@@ -112,7 +112,8 @@ void fbcon_mfb_putcs(struct vc_data *conp, struct display *p,
 {
     u8 *dest, *dest0, *cdat;
     u_int rows, bold, revs, underl;
-    u8 c, d;
+    u8 d;
+    u16 c;
 
     dest0 = p->screen_base+yy*p->fontheight*p->next_line+xx;
     bold = attr_bold(p,*s);
@@ -120,7 +121,7 @@ void fbcon_mfb_putcs(struct vc_data *conp, struct display *p,
     underl = attr_underline(p,*s);
 
     while (count--) {
-	c = *s++;
+	c = *s++ & p->charmask;
 	dest = dest0++;
 	cdat = p->fontdata+c*p->fontheight;
 	for (rows = p->fontheight; rows--; dest += p->next_line) {

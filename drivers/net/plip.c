@@ -574,6 +574,7 @@ plip_receive_packet(struct device *dev, struct net_local *nl,
 		/* Inform the upper layer for the arrival of a packet. */
 		rcv->skb->protocol=eth_type_trans(rcv->skb, dev);
 		netif_rx(rcv->skb);
+		nl->enet_stats.rx_bytes += rcv->length.h;
 		nl->enet_stats.rx_packets++;
 		rcv->skb = NULL;
 		if (net_debug > 2)
@@ -741,6 +742,7 @@ plip_send_packet(struct device *dev, struct net_local *nl,
 			      &snd->nibble, snd->checksum))
 			return TIMEOUT;
 
+		nl->enet_stats.tx_bytes += snd->skb->len;
 		dev_kfree_skb(snd->skb);
 		nl->enet_stats.tx_packets++;
 		snd->state = PLIP_PK_DONE;

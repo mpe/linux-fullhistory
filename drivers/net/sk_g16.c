@@ -1250,6 +1250,8 @@ static int SK_send_packet(struct sk_buff *skb, struct device *dev)
 	    */
 	   dev->tbusy = 0;
 	}
+
+	p->stats.tx_bytes += skb->len;
     }
     dev_kfree_skb(skb);
     return 0;  
@@ -1585,6 +1587,7 @@ static void SK_rxintr(struct device *dev)
 
 	    writeb(RX_OWN, rmdp->u.s.status);
 	    p->stats.rx_packets++;
+	    p->stats.rx_bytes += len;
 
 
 	    p->rmdnum++;

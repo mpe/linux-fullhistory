@@ -272,6 +272,8 @@ struct display {
    struct display_switch *dispsw;   /* low level operations */
    u_short scrollmode;              /* Scroll Method */
    short yscroll;                   /* Hardware scrolling */
+   unsigned char fgshift, bgshift;
+   unsigned short charmask;	    /* 0xff or 0x1ff */
 };
 
 
@@ -333,6 +335,38 @@ struct fb_info_gen {
 
    /* From here on everything is device dependent */
 };
+
+    /*
+     *  `Generic' versions of the frame buffer device operations
+     */
+
+extern int fbgen_get_fix(struct fb_fix_screeninfo *fix, int con,
+			 struct fb_info *info);
+extern int fbgen_get_var(struct fb_var_screeninfo *var, int con,
+			 struct fb_info *info);
+extern int fbgen_set_var(struct fb_var_screeninfo *var, int con,
+			 struct fb_info *info);
+extern int fbgen_get_cmap(struct fb_cmap *cmap, int kspc, int con,
+			  struct fb_info *info);
+extern int fbgen_set_cmap(struct fb_cmap *cmap, int kspc, int con,
+			  struct fb_info *info);
+extern int fbgen_pan_display(struct fb_var_screeninfo *var, int con,
+			     struct fb_info *info);
+extern int fbgen_ioctl(struct inode *inode, struct file *file,
+		       unsigned int cmd, unsigned long arg, int con,
+		       struct fb_info *info);
+
+    /*
+     *  Helper functions
+     */
+
+extern int fbgen_do_set_var(struct fb_var_screeninfo *var, int isactive,
+			    struct fb_info_gen *info);
+extern void fbgen_set_disp(int con, struct fb_info_gen *info);
+extern void fbgen_install_cmap(int con, struct fb_info_gen *info);
+extern int fbgen_update_var(int con, struct fb_info *info);
+extern int fbgen_switch(int con, struct fb_info *info);
+extern void fbgen_blank(int blank, struct fb_info *info);
 
 
 struct fb_videomode {

@@ -151,6 +151,8 @@ extern int			skb_headroom(struct sk_buff *skb);
 extern int			skb_tailroom(struct sk_buff *skb);
 extern void			skb_reserve(struct sk_buff *skb, unsigned int len);
 extern void 			skb_trim(struct sk_buff *skb, unsigned int len);
+extern void	skb_over_panic(struct sk_buff *skb, int len, void *here);
+extern void	skb_under_panic(struct sk_buff *skb, int len, void *here);
 
 /* Internal */
 extern __inline__ atomic_t *skb_datarefp(struct sk_buff *skb)
@@ -437,10 +439,6 @@ extern __inline__ struct sk_buff *skb_dequeue_tail(struct sk_buff_head *list)
 	return result;
 }
 
-
-extern const char skb_put_errstr[];
-extern const char skb_push_errstr[];
-
 /*
  *	Add data to an sk_buff
  */
@@ -452,9 +450,9 @@ extern __inline__ unsigned char *skb_put(struct sk_buff *skb, unsigned int len)
 	skb->len+=len;
 	if(skb->tail>skb->end)
 	{
-		__label__ here;
-		panic(skb_put_errstr,&&here,len);
-here:          ;
+		__label__ here; 
+		skb_over_panic(skb, len, &&here); 
+here:		;
 	}
 	return tmp;
 }
@@ -466,8 +464,8 @@ extern __inline__ unsigned char *skb_push(struct sk_buff *skb, unsigned int len)
 	if(skb->data<skb->head)
 	{
 		__label__ here;
-		panic(skb_push_errstr, &&here,len);
-here:          ;
+		skb_under_panic(skb, len, &&here);
+here: 		;
 	}
 	return skb->data;
 }

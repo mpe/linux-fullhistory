@@ -372,6 +372,7 @@ static int
 seeq8005_send_packet(struct sk_buff *skb, struct device *dev)
 {
 	int ioaddr = dev->base_addr;
+	struct net_local *lp = (struct net_local *)dev->priv;
 
 	if (dev->tbusy) {
 		/* If we get here, some higher level has decided we are broken.
@@ -397,6 +398,7 @@ seeq8005_send_packet(struct sk_buff *skb, struct device *dev)
 
 		hardware_send_packet(dev, buf, length); 
 		dev->trans_start = jiffies;
+		lp->stats.tx_bytes += length;
 	}
 	dev_kfree_skb (skb);
 
@@ -547,6 +549,7 @@ seeq8005_rx(struct device *dev)
 			skb->protocol=eth_type_trans(skb,dev);
 			netif_rx(skb);
 			lp->stats.rx_packets++;
+			lp->stats.rx_bytes += pkt_len;
 		}
 	} while ((--boguscount) && (pkt_hdr & SEEQPKTH_CHAIN));
 

@@ -182,6 +182,8 @@ static int autoprobe_read_proc (char *page, char **start, off_t off,
 	int len = 0;
 	const char *str;
 
+	page[0] = '\0';
+
 	if ((str = pp->probe_info.class_name) != NULL)
 		len += sprintf (page+len, "CLASS:%s;\n", str);
 
@@ -199,7 +201,7 @@ static int autoprobe_read_proc (char *page, char **start, off_t off,
 
 	*start = 0;
 	*eof   = 1;
-	return strlen (page);
+	return len;
 }
 
 static inline void destroy_proc_entry(struct proc_dir_entry *root, 

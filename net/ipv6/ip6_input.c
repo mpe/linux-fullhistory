@@ -6,7 +6,7 @@
  *	Pedro Roque		<roque@di.fc.ul.pt>
  *	Ian P. Morris		<I.P.Morris@soton.ac.uk>
  *
- *	$Id: ip6_input.c,v 1.9 1998/04/30 16:24:24 freitag Exp $
+ *	$Id: ip6_input.c,v 1.10 1998/07/15 05:05:34 davem Exp $
  *
  *	Based in linux/net/ipv4/ip_input.c
  *
@@ -65,11 +65,6 @@ struct hdrtype_proc {
 /* New header structures */
 
 
-struct ipv6_tlvtype {
-	u8 type;
-	u8 len;
-};
-
 struct tlvtype_proc {
 	u8	type;
 	int	(*func) (struct sk_buff *, struct device *dev, __u8 *ptr,
@@ -82,7 +77,7 @@ struct tlvtype_proc {
 	{255,			NULL}
 };
 
-static int ip6_dstopt_unknown(struct sk_buff *skb, struct ipv6_tlvtype *hdr)
+int ip6_dstopt_unknown(struct sk_buff *skb, struct ipv6_tlvtype *hdr)
 {
 	struct in6_addr *daddr;
 	int pos;
@@ -91,7 +86,7 @@ static int ip6_dstopt_unknown(struct sk_buff *skb, struct ipv6_tlvtype *hdr)
 	 *	unkown destination option type
 	 */
 	
-	pos = (__u8 *) skb->h.raw - (__u8 *) skb->nh.raw;
+	pos = (__u8 *) hdr - (__u8 *) skb->nh.raw;
 	
 	/* I think this is correct please check - IPM */
 
