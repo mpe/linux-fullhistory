@@ -3,9 +3,28 @@
 # 
 tristate 'CBQ packet scheduler' CONFIG_NET_SCH_CBQ
 tristate 'CSZ packet scheduler' CONFIG_NET_SCH_CSZ
-#tristate 'HFQ packet scheduler' CONFIG_NET_SCH_HFQ
-tristate 'RED queueing discipline' CONFIG_NET_SCH_RED
-tristate 'SFQ queueing discipline' CONFIG_NET_SCH_SFQ
-tristate 'auxiliary TBF queue' CONFIG_NET_SCH_TBF
-tristate 'auxiliary FIFO queue' CONFIG_NET_SCH_PFIFO
-tristate 'auxiliary PRIO queue' CONFIG_NET_SCH_PRIO
+#tristate 'H-PFQ packet scheduler' CONFIG_NET_SCH_HPFQ
+#tristate 'H-FSC packet scheduler' CONFIG_NET_SCH_HFCS
+tristate 'The simplest PRIO pseudoscheduler' CONFIG_NET_SCH_PRIO
+tristate 'RED queue' CONFIG_NET_SCH_RED
+tristate 'SFQ queue' CONFIG_NET_SCH_SFQ
+tristate 'TEQL queue' CONFIG_NET_SCH_TEQL
+tristate 'TBF queue' CONFIG_NET_SCH_TBF
+bool 'QoS support' CONFIG_NET_QOS
+if [ "$CONFIG_NET_QOS" = "y" ]; then
+    bool 'Rate estimator' CONFIG_NET_ESTIMATOR
+fi
+if [ "$CONFIG_IP_MULTIPLE_TABLES" = "y" ]; then
+  bool 'Packet classifier API' CONFIG_NET_CLS
+fi
+if [ "$CONFIG_NET_CLS" = "y" ]; then
+  bool 'Routing tables based classifier' CONFIG_NET_CLS_ROUTE
+#  bool 'Firewall based classifier' CONFIG_NET_CLS_FW
+  tristate 'U32 classifier' CONFIG_NET_CLS_U32
+  if [ "$CONFIG_NET_QOS" = "y" ]; then
+    tristate 'Special RSVP classifier' CONFIG_NET_CLS_RSVP
+    tristate 'Special RSVP classifier for IPv6' CONFIG_NET_CLS_RSVP6
+    bool 'Ingres traffic policing' CONFIG_NET_CLS_POLICE
+  fi
+fi
+

@@ -14,7 +14,7 @@ Features since version 0.33
 - Full audio support, that is, both  workman, workbone and cdp work
   now reasonably. Reading TOC still takes some time. xmcd has been
   reported to run successfully. 
-- Made auto-probe code a little better, i hope
+- Made auto-probe code a little better, I hope
 
 Features since version 0.28
 ---------------------------
@@ -37,8 +37,8 @@ options:
    Further, you must decide if you are going to specify the base port
    address and the interrupt request line of the adapter card cm260 as
    boot options for (a), module parameters for (b), use automatic
-   probing of these values, or hard-wire your adaptor cards settings
-   into the source code. If you don't care, you can choose for
+   probing of these values, or hard-wire your adaptor card's settings
+   into the source code. If you don't care, you can choose 
    autoprobing, which is the default. In that case you can move on to
    the next step.
 
@@ -48,10 +48,10 @@ Compiling the kernel
 
 	make config
 
-   If you have chosen for option (a), answer yes to CONFIG_CM206 and
+   If you have chosen option (a), answer yes to CONFIG_CM206 and
    CONFIG_ISO9660_FS.
 
-   If you have chosen for option (b), answer yes to CONFIG_MODVERSIONS
+   If you have chosen option (b), answer yes to CONFIG_MODVERSIONS
    and no (!) to CONFIG_CM206 and CONFIG_ISO9660_FS. 
 
 2) then do a 
@@ -64,7 +64,7 @@ Compiling the kernel
 
 Using the driver as a module
 ----------------------------
-If you will only seldomly use the cd-rom driver, you can choose for
+If you will only occasionally use the cd-rom driver, you can choose
 option (b), install as a loadable module. You may have to re-compile
 the module when you upgrade the kernel to a new version. 
 
@@ -84,7 +84,7 @@ line to be used, e.g.
 
 	insmod /usr/src/linux/modules/cm206.o cm206=0x300,11
 
-The order of base port and irq line doesn't matter; you may specify only
+The order of base port and irq line doesn't matter; if you specify only
 one, the other will have the value of the compiled-in default.  You
 may also have to install the file-system module `iso9660.o', if you
 didn't compile that into the kernel. 
@@ -92,17 +92,17 @@ didn't compile that into the kernel.
 
 Using the driver as part of the kernel
 --------------------------------------
-If you have chosen for option a, you can specify the base-port
+If you have chosen option (a), you can specify the base-port
 address and irq on the lilo boot command line, e.g.:
 
 	LILO: linux cm206=0x340,11
 
 This assumes that your linux kernel image keyword is `linux'. 
-If you may specify either IRQ (3--11) or base port (0x300--0x370),
+If you specify either IRQ (3--11) or base port (0x300--0x370),
 auto probing is turned off for both settings, thus setting the 
 other value to the compiled-in default.
 
-Note that you can put these parameters also in the lilo configuration file:
+Note that you can also put these parameters in the lilo configuration file:
 
 # linux config
 image = /vmlinuz
@@ -122,7 +122,7 @@ the defines of CM206_IRQ and CM206_BASE.
 
 Mounting the cdrom
 ------------------
-1) Make sure that there is the right device installed in /dev.
+1) Make sure that the right device is installed in /dev.
 
   	mknod /dev/cm206cd b 32 0
 
@@ -159,7 +159,7 @@ If things don't work
 DISCLAIMER 
 ---------- 
 I cannot guarantee that this driver works, or that the hardware will
-not be harmed, although i consider it most unlikely. 
+not be harmed, although I consider it most unlikely. 
 
 I hope that you'll find this driver in some way useful. 
 

@@ -26,7 +26,7 @@ To use the card you need the t4-files to download the firmware.
 AVM GmbH provides several t4-files for the different D-channel
 protocols (b1.t4 for Euro-ISDN). Install these file in /lib/isdn.
 
-If you not compile the driver as modules, you have to add the
+If you do not compile the driver as modules, you have to add the
 card(s) and load them after booting:
 
 avmcapictrl add 0x150 15

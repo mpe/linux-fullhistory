@@ -22,7 +22,7 @@ Commands for enabling/disabling audio mode:
 
 Commands supported in audio mode:
 
-All audio mode commands have the one of the following form:
+All audio mode commands have one of the following forms:
 
         AT+Vxx?          Show current setting.
         AT+Vxx=?         Show possible settings.
@@ -89,8 +89,8 @@ General behavior and description of data formats/protocol.
     <DLE><ETX>              End of audio data. (i.e. caused by a
                             hangup of the remote side) Emulator stops
                             recording, responding with VCON.
-	<DLE><DC4>				Abort recording, (send by appl.) Emulator
-							stops recording, sends DLE,ETX.
+    <DLE><DC4>		    Abort recording, (send by appl.) Emulator
+			    stops recording, sends DLE,ETX.
     <DLE><DLE>              Escape sequence for DLE in data stream.
     <DLE>0                  Touchtone "0" received.
          ...

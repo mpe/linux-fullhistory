@@ -3,7 +3,7 @@ insmod sound
 insmod ad1848
 insmod gus io=* irq=* dma=* ...
 
-This loads the driver for the Gravis Ultrasound familily of soundcards.
+This loads the driver for the Gravis Ultrasound family of soundcards.
 
 The gus modules takes the following arguments
 
@@ -22,7 +22,7 @@ no_wave_dma option
 This option defaults to a value of 0, which allows the Ultrasound wavetable
 DSP to use DMA for for playback and downloading samples. This is the same
 as the old behaviour. If set to 1, no DMA is needed for downloading samples,
-and allows owners of a GUS MAX to make use of simultanious digital audio
+and allows owners of a GUS MAX to make use of simultaneous digital audio
 (/dev/dsp), MIDI, and wavetable playback.
 
 

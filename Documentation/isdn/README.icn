@@ -62,8 +62,8 @@ Setting up the IO-address dipswitches for the ICN-ISDN-card:
       1  1  1  0  0x368
       1  1  1  1  NOT ALLOWED!
 
-The ICN driver either may be build into kernel or as a module. Initialization
-depends on how the drive is built:
+The ICN driver may be built into the kernel or as a module. Initialization
+depends on how the driver is built:
 
 Driver built into the kernel:
 
@@ -102,7 +102,7 @@ Driver built as module:
 
     portbase=p membase=m icn_id=idstring [icn_id2=idstring2]
 
-  where p, m, idstring1 and idstring2 have the same meanings like
+  where p, m, idstring1 and idstring2 have the same meanings as the
   parameters described for the kernel-version above.
       
   When using the ICN double card (4B), you MUST define TWO idstrings.
@@ -127,12 +127,12 @@ Loading the firmware into the card:
     pc_1t_ca.bin - Image of firmware for german 1TR6 protocol.
     pc_eu_ca.bin - Image if firmware for EDSS1 (Euro-ISDN) protocol.
 
-  Assumed you have installed the utility-package correctly, the firmware
+  Assuming you have installed the utility-package correctly, the firmware
   will be downloaded into the 2B-card using the following command:
 
     icnctrl -d Idstring load /etc/isdn/loadpg.bin /etc/isdn/pc_XX_ca.bin
 
-  where XX is either "1t" or "eu", depending of the D-Channel protocol
+  where XX is either "1t" or "eu", depending on the D-Channel protocol
   used on your S0-bus and Idstring is the Name of the card, given during
   insmod-time or (for kernel-builtin driver) on the kernel commandline.
 

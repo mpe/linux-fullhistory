@@ -52,7 +52,7 @@ Released 1994-06-13
 	3. FILES IN THIS RELEASE.
 
 	README.DLINK  This file.
-	de600.c       The Source (,may it be with You :-) for the DE-600
+	de600.c       The Source (may it be with You :-) for the DE-600
 	de620.c       ditto for the DE-620
 	de620.h       Macros for de620.c
 
@@ -78,7 +78,7 @@ Released 1994-06-13
 	  modify "linux/drivers/net/CONFIG" accordingly, or adjust
 	  the parameters in the "tuning" section in the sources.
 
-	If you are going to use the drivers a loadable modules, do _not_
+	If you are going to use the drivers as loadable modules, do _not_
 	enable them while doing "make config", but instead make sure that
 	the drivers are included in "linux/drivers/net/MODULES".
 

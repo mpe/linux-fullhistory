@@ -1789,7 +1789,9 @@ __initfunc(int net_dev_init(void))
 {
 	struct device *dev, **dp;
 
+#ifdef CONFIG_NET_SCHED
 	pktsched_init();
+#endif
 
 	/*
 	 *	Initialise the packet receive queue.

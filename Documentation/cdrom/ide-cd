@@ -22,7 +22,7 @@ This driver provides the following features:
  - Reading from data tracks, and mounting iso9660 filesystems.
 
  - Playing audio tracks.  Most of the cdrom player programs floating
-   around should work; i usually use Workman.
+   around should work; I usually use Workman.
 
  - Multisession support.
 
@@ -148,7 +148,7 @@ workbone, cdplayer, etc.).  Lacking anything else, you could use the
 cdtester program in Documentation/cdrom/sbpcd.
 
 On a few drives, you can read digital audio directly using a program
-such as cdda2wav.  The only types of drive which i've heard support
+such as cdda2wav.  The only types of drive which I've heard support
 this are Sony and Toshiba drives.  You will get errors if you try to
 use this function on a drive which does not support it.
 
@@ -189,7 +189,7 @@ CDROM_NBLOCKS_BUFFER
   ioctl.  The default is 8.
 
 TEST
-  This presently enables an additional ioctl which enables a user-mode
+  This currently enables an additional ioctl which enables a user-mode
   program to execute an arbitrary packet command.  See the source for
   details.  This should be left off unless you know what you're doing.
 
@@ -271,7 +271,7 @@ b. Timeout/IRQ errors.
     and 15 for the secondary (0x1f0) interface.)  Also be sure that
     you don't have some other hardware which might be conflicting with
     the IRQ you're using.  Also check the BIOS setup for your system;
-    some have the ability to disable individual IRQ levels, and i've
+    some have the ability to disable individual IRQ levels, and I've
     had one report of a system which was shipped with IRQ 15 disabled
     by default.
 
@@ -282,7 +282,7 @@ b. Timeout/IRQ errors.
   - If you own a Pioneer DR-A24X, you _will_ get nasty error messages 
     on boot such as "irq timeout: status=0x50 { DriveReady SeekComplete }"
     The Pioneer DR-A24X cdrom drives are fairly popular these days.
-    Unfortunatly, these drives seem to become very confused when we perform
+    Unfortunately, these drives seem to become very confused when we perform
     the standard Linux ATA disk drive probe. If you own one of these drives,
     you can bypass the ATA probing which confuses these cdrom drives, by 
     adding `append="hdX=noprobe hdX=cdrom"' to your lilo.conf file and runing 
@@ -377,7 +377,7 @@ f. Data corruption.
 /*
  * cdchange.c  [-v]  <device>  [<slot>]
  *
- * This load a cdrom from a specified slot in a changer, and displays 
+ * This loads a cdrom from a specified slot in a changer, and displays 
  * information about the changer status.  The drive should be unmounted before 
  * using this program.
  *

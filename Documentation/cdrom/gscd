@@ -1,7 +1,7 @@
 	Goldstar R420 CD-Rom device driver README
 
 For all kind of other information about the GoldStar R420 CDROM
-and this Linux device driver is a WWW-URL Page installed:
+and this Linux device driver see the WWW page:
 
         http://linux.rz.fh-hannover.de/~raupach        
 
@@ -44,12 +44,12 @@ Install your new kernel as usual - maybe you do it with 'make zlilo'.
 
 Before you can use the driver, you have to
    mknod /dev/gscd0 b 16 0
-to create the appropriate device file (once for all times).
+to create the appropriate device file (you only need to do this once).
 
 If you use modules, you can try to insert the driver.
 Say: 'insmod /usr/src/linux/modules/gscd.o'
 or:  'insmod /usr/src/linux/modules/gscd.o gscd=<address>'
-The driver should report his results now.
+The driver should report its results.
 
 That's it! Mount a disk, i.e. 'mount -rt iso9660 /dev/gscd0 /cdrom'
 

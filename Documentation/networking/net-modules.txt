@@ -2,31 +2,31 @@ Wed 2-Aug-95  <matti.aarnio@utu.fi>
 
 		Linux network driver modules
 
-	Do not mistake this to "README.modules" at the top-level
+	Do not mistake this for "README.modules" at the top-level
 	directory!  That document tells about modules in general, while
 	this one tells only about network device driver modules.
 
 	This is a potpourri of INSMOD-time(*) configuration options
 	(if such exists) and their default values of various modules
-	on Linux network drivers collection.
+	in the Linux network drivers collection.
 
 	Some modules have also hidden (= non-documented) tunable values.
-	Choice of not documenting them is based on general belief, that
-	the less user needs to know, the better.  (There are things that
-	driver developer can use, others should not confuse themselves.)
+	The choice of not documenting them is based on general belief, that
+	the less the user needs to know, the better.  (There are things that
+	driver developers can use, others should not confuse themselves.)
 
 	In many cases it is highly preferred that insmod:ing is done
 	ONLY with defining an explicit address for the card, AND BY
 	NOT USING AUTO-PROBING!
 
-	Now most cards have some explicitly defined base address, they
+	Now most cards have some explicitly defined base address that they
 	are compiled with (to avoid auto-probing, among other things).
 	If that compiled value does not match your actual configuration,
-	do use  "io=0xXXX" -parameter for the  insmod, and give there
+	do use the "io=0xXXX" -parameter for the insmod, and give there
 	a value matching your environment.
 
 	If you are adventurous, you can ask the driver to autoprobe
-	by using "io=0" parameter, however it is potentially dangerous
+	by using the "io=0" parameter, however it is a potentially dangerous
 	thing to do in a live system.  (If you don't know where the
 	card is located, you can try autoprobing, and after possible
 	crash recovery, insmod with proper IO-address..)

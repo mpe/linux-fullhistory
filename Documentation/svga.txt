@@ -5,8 +5,8 @@
 1. Intro
 ~~~~~~~~
    This small document describes the "Video Mode Selection" feature which
-allows to use various special video modes supported by the video BIOS. Due
-to usage of the BIOS, the selection is limited to the boot time (before the
+allows the use of various special video modes supported by the video BIOS. Due
+to usage of the BIOS, the selection is limited to boot time (before the
 kernel decompression starts) and works only on 80X86 machines.
 
    The video mode to be used is selected by a kernel parameter which can be
@@ -58,16 +58,16 @@ of chipsets is turned off by default (see CONFIG_VIDEO_SVGA in chapter 4 to see
 how to enable it if you really want) as it's inherently unreliable due to
 absolutely insane PC design.
 
-   "0  0F00  80x25" tells that the first menu item (the menu items are numbered
+   "0  0F00  80x25" means that the first menu item (the menu items are numbered
 from "0" to "9" and from "a" to "z") is a 80x25 mode with ID=0x0f00 (see the
 next section for a description of mode ID's).
 
-   <flashing-cursor-here> encourages you to write the item number or mode ID
+   <flashing-cursor-here> encourages you to enter the item number or mode ID
 you wish to set and press <RETURN>. If the computer complains something about
-"Unknown mode ID", it tries to explain you that it isn't possible to set such
+"Unknown mode ID", it is trying to tell you that it isn't possible to set such
 a mode. It's also possible to press only <RETURN> which leaves the current mode.
 
-   The mode list usually contains only few basic modes and some VESA modes.  In
+   The mode list usually contains a few basic modes and some VESA modes.  In
 case your chipset has been detected, some chipset-specific modes are shown as
 well (some of these might be missing or unusable on your machine as different
 BIOSes are often shipped with the same card and the mode numbers depend purely
@@ -173,7 +173,7 @@ in setup.S, but it's better to upgrade the boot loader...)
 
    CONFIG_VIDEO_LOCAL - enables inclusion of "local modes" in the list. The
 local modes are added automatically to the beginning of the list not depending
-by hardware configuration. The local modes are listed in the source text after
+on hardware configuration. The local modes are listed in the source text after
 the "local_mode_table:" line. The comment before this line describes the format
 of the table (which also includes a video card name to be displayed on the
 top of the menu).
@@ -201,7 +201,7 @@ your kernel with the video mode set directly via the kernel parameter.
    In either case, please send me a bug report containing what _exactly_
 happens and how do the configuration switches affect the behaviour of the bug.
 
-   If you start Linux from the M$-DOS, you might also use some DOS tools for
+   If you start Linux from M$-DOS, you might also use some DOS tools for
 video mode setting. In this case, you must specify the 0x0f04 mode ("leave
 current settings") to Linux, because if you don't and you use any non-standard
 mode, Linux will switch to 80x25 automatically.

@@ -1,10 +1,10 @@
  -- Documentation/cdrom/sjcd
 				80% of the work takes 20% of the time,
 				20% of the work takes 80% of the time...
-						(Murphy law)
+						(Murphy's law)
 
 				Once started, training can not be stopped...
-						(StarWars)
+						(Star Wars)
 
 This is the README for the sjcd cdrom driver, version 1.6.
 
@@ -13,7 +13,7 @@ cdrom drive. It will grow as the questions arise. ;-)
 For info on configuring the ISP16 sound card look at Documentation/cdrom/isp16.
 
 The driver should work with any of the Panasonic, Sony or Mitsumi style
-CDROM interface.
+CDROM interfaces.
 The cdrom interface on Media Magic's soft configurable sound card ISP16,
 which used to be included in the driver, is now supported in a separate module.
 This initialisation module will probably also work with other interfaces

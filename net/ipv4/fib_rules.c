@@ -5,7 +5,7 @@
  *
  *		IPv4 Forwarding Information Base: policy rules.
  *
- * Version:	$Id: fib_rules.c,v 1.4 1998/03/21 07:27:58 davem Exp $
+ * Version:	$Id: fib_rules.c,v 1.5 1998/04/28 06:21:57 davem Exp $
  *
  * Authors:	Alexey Kuznetsov, <kuznet@ms2.inr.ac.ru>
  *
@@ -65,6 +65,9 @@ struct fib_rule
 	u8		r_flags;
 	u8		r_tos;
 	int		r_ifindex;
+#ifdef CONFIG_NET_CLS_ROUTE
+	__u32		r_tclassid;
+#endif
 	char		r_ifname[IFNAMSIZ];
 };
 
@@ -165,6 +168,10 @@ int inet_rtm_newrule(struct sk_buff *skb, struct nlmsghdr* nlh, void *arg)
 		if (dev)
 			new_r->r_ifindex = dev->ifindex;
 	}
+#ifdef CONFIG_NET_CLS_ROUTE
+	if (rta[RTA_FLOW-1])
+		memcpy(&new_r->r_tclassid, RTA_DATA(rta[RTA_FLOW-1]), 4);
+#endif
 
 	rp = &fib_rules;
 	if (!new_r->r_preference) {
@@ -213,6 +220,16 @@ u32 fib_rules_policy(u32 saddr, struct fib_result *res, unsigned *flags)
 	return saddr;
 }
 
+#ifdef CONFIG_NET_CLS_ROUTE
+u32 fib_rules_tclass(struct fib_result *res)
+{
+	if (res->r)
+		return res->r->r_tclassid;
+	return 0;
+}
+#endif
+
+
 static void fib_rules_detach(struct device *dev)
 {
 	struct fib_rule *r;
@@ -246,7 +263,7 @@ FRprintk("Lookup: %08x <- %08x ", key->dst, key->src);
 	for (r = fib_rules; r; r=r->r_next) {
 		if (((saddr^r->r_src) & r->r_srcmask) ||
 		    ((daddr^r->r_dst) & r->r_dstmask) ||
-#ifdef CONFIG_IP_TOS_ROUTING
+#ifdef CONFIG_IP_ROUTE_TOS
 		    (r->r_tos && r->r_tos != key->tos) ||
 #endif
 		    (r->r_ifindex && r->r_ifindex != key->iif))
@@ -339,6 +356,10 @@ extern __inline__ int inet_fill_rule(struct sk_buff *skb,
 		RTA_PUT(skb, RTA_PRIORITY, 4, &r->r_preference);
 	if (r->r_srcmap)
 		RTA_PUT(skb, RTA_GATEWAY, 4, &r->r_srcmap);
+#ifdef CONFIG_NET_CLS_ROUTE
+	if (r->r_tclassid)
+		RTA_PUT(skb, RTA_FLOW, 4, &r->r_tclassid);
+#endif
 	nlh->nlmsg_len = skb->tail - b;
 	return skb->len;
 

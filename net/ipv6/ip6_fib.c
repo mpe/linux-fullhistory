@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: ip6_fib.c,v 1.12 1998/03/20 09:12:16 davem Exp $
+ *	$Id: ip6_fib.c,v 1.13 1998/04/28 06:22:03 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -694,8 +694,13 @@ static void fib6_del_2(struct fib6_node *fn)
 		/*
 		 *	We can't tidy a case of two children.
 		 */
-		 
-		if (children > 1 || (fn->fn_flags & RTN_RTINFO))
+		if (children > 1) {
+			if (fn->leaf == NULL)
+				goto split_repair;
+			break;
+		}
+
+		if (fn->fn_flags & RTN_RTINFO)
 			break;
 
 		/*
@@ -765,6 +770,8 @@ static void fib6_del_2(struct fib6_node *fn)
 stree_node:
 
 	rt6_release(fn->leaf);
+
+split_repair:
 	rt = fib6_find_prefix(fn);
 
 	if (rt == NULL)

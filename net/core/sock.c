@@ -290,6 +290,7 @@ int sock_setsockopt(struct socket *sock, int level, int optname,
 			break;
 			
 			
+#ifdef CONFIG_NETDEVICES
 		case SO_BINDTODEVICE:
 			/* Bind this socket to a particular device like "eth0",
 			 * as specified in an ifreq structure. If the device
@@ -316,6 +317,7 @@ int sock_setsockopt(struct socket *sock, int level, int optname,
 				}
 			}
 			return 0;
+#endif
 
 
 #ifdef CONFIG_FILTER

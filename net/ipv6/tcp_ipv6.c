@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: tcp_ipv6.c,v 1.76 1998/04/06 08:42:34 davem Exp $
+ *	$Id: tcp_ipv6.c,v 1.78 1998/04/16 16:29:22 freitag Exp $
  *
  *	Based on: 
  *	linux/net/ipv4/tcp.c
@@ -48,7 +48,7 @@ static void	tcp_v6_send_reset(struct sk_buff *skb);
 static void	tcp_v6_send_check(struct sock *sk, struct tcphdr *th, int len, 
 				  struct sk_buff *skb);
 
-static int	tcp_v6_backlog_rcv(struct sock *sk, struct sk_buff *skb);
+static int	tcp_v6_do_rcv(struct sock *sk, struct sk_buff *skb);
 static void	tcp_v6_xmit(struct sk_buff *skb);
 static struct open_request *tcp_v6_search_req(struct tcp_opt *tp,
 					      struct ipv6hdr *ip6h,
@@ -403,7 +403,7 @@ static int tcp_v6_connect(struct sock *sk, struct sockaddr *uaddr,
 
 		if (err) {
 			sk->tp_pinfo.af_tcp.af_specific = &ipv6_specific;
-			sk->backlog_rcv = tcp_v6_backlog_rcv;
+			sk->backlog_rcv = tcp_v6_do_rcv;
 		}
 		
 		return err;
@@ -654,9 +654,6 @@ void tcp_v6_err(struct sk_buff *skb, int type, int code, unsigned char *header, 
 }
 
 
-/* FIXME: this is substantially similar to the ipv4 code.
- * Can some kind of merge be done? -- erics
- */
 static void tcp_v6_send_synack(struct sock *sk, struct open_request *req)
 {
 	struct sk_buff * skb;
@@ -1011,6 +1008,97 @@ static void tcp_v6_rst_req(struct sock *sk, struct sk_buff *skb)
 	tcp_synq_unlink(tp, req, prev);
 	req->class->destructor(req);
 	tcp_openreq_free(req); 
+	net_statistics.EmbryonicRsts++; 
+}
+
+static inline struct sock *tcp_v6_hnd_req(struct sock *sk, struct sk_buff *skb)
+{
+	struct tcphdr *th = skb->h.th; 
+	u32 flg = ((u32 *)th)[3]; 
+
+	/* Check for RST */
+	if (flg & __constant_htonl(0x00040000)) {
+		tcp_v6_rst_req(sk, skb);
+		return NULL;
+	}
+		
+	/* Check SYN|ACK */
+	if (flg & __constant_htonl(0x00120000)) {
+		struct open_request *req, *dummy;
+		struct tcp_opt *tp = &(sk->tp_pinfo.af_tcp);
+			
+		req = tcp_v6_search_req(tp, skb->nh.ipv6h,th, &dummy);
+		if (req) {
+			sk = tcp_check_req(sk, skb, req);
+		}
+#if 0 /*def CONFIG_SYN_COOKIES */
+		 else {
+			sk = cookie_v6_check(sk, skb, (struct ipv6_options *) skb->cb);
+		 }
+#endif
+	}
+	return sk;
+}
+
+static int tcp_v6_do_rcv(struct sock *sk, struct sk_buff *skb)
+{
+	/* Imagine: socket is IPv6. IPv4 packet arrives,
+	   goes to IPv4 receive handler and backlogged.
+	   From backlog it always goes here. Kerboom...
+	   Fortunately, tcp_rcv_established and rcv_established
+	   handle them correctly, but it is not case with
+	   tcp_v6_hnd_req and tcp_v6_send_reset().   --ANK
+	 */
+
+	if (skb->protocol == __constant_htons(ETH_P_IP))
+		return tcp_v4_do_rcv(sk, skb);
+
+	/*
+	 *	socket locking is here for SMP purposes as backlog rcv
+	 *	is currently called with bh processing disabled.
+	 */
+
+	/* XXX We need to think more about socket locking
+	 * XXX wrt. backlog queues, __release_sock(), etc.  -DaveM
+	 */
+	lock_sock(sk); 
+
+	/* 
+	 * This doesn't check if the socket has enough room for the packet.
+	 * Either process the packet _without_ queueing it and then free it,
+	 * or do the check later.
+	 */
+	skb_set_owner_r(skb, sk);
+
+	if (sk->state == TCP_ESTABLISHED) { /* Fast path */
+		if (tcp_rcv_established(sk, skb, skb->h.th, skb->len))
+			goto reset;
+		release_sock(sk);
+		return 0;
+	}
+
+	if (sk->state == TCP_LISTEN) { 
+		struct sock *nsk;
+		
+		nsk = tcp_v6_hnd_req(sk, skb);
+		if (!nsk)
+			goto discard;
+		lock_sock(nsk);
+		release_sock(sk);
+		sk = nsk;
+	}
+
+	if (tcp_rcv_state_process(sk, skb, skb->h.th, skb->cb, skb->len))
+		goto reset;
+	release_sock(sk);
+	return 0;
+
+reset:
+	tcp_v6_send_reset(skb);
+discard:
+	kfree_skb(skb);
+	release_sock(sk);  
+	return 0;
 }
 
 int tcp_v6_rcv(struct sk_buff *skb, struct device *dev,
@@ -1021,118 +1109,60 @@ int tcp_v6_rcv(struct sk_buff *skb, struct device *dev,
 	struct tcphdr *th;	
 	struct sock *sk;
 
-	/*
-	 * "redo" is 1 if we have already seen this skb but couldn't
-	 * use it at that time (the socket was locked).  In that case
-	 * we have already done a lot of the work (looked up the socket
-	 * etc).
-	 */
-
 	th = skb->h.th;
 
-	sk = skb->sk;
-
-	if (!redo) {
-		if (skb->pkt_type != PACKET_HOST)
-			goto discard_it;
-
-		/*
-		 *	Pull up the IP header.
-		 */
-
-		__skb_pull(skb, skb->h.raw - skb->data);
-
-		/*
-		 *	Count it even if it's bad.
-		 */
-
-		tcp_statistics.TcpInSegs++;
-
-		/*
-		 *	Try to use the device checksum if provided.
-		 */
-
-		switch (skb->ip_summed) {
-		case CHECKSUM_NONE:
-			skb->csum = csum_partial((char *)th, len, 0);
-		case CHECKSUM_HW:
-			if (tcp_v6_check(th,len,saddr,daddr,skb->csum)) {
-				printk(KERN_DEBUG "tcp csum failed\n");
-				tcp_statistics.TcpInErrs++;
-				goto discard_it;
-			}
-		default:
-			/* CHECKSUM_UNNECESSARY */
-		};
-
-		sk = __tcp_v6_lookup(th, saddr, th->source, daddr, th->dest, dev->ifindex);
-
-		if (!sk) {
-			printk(KERN_DEBUG "socket not found\n");
-			goto no_tcp_socket;
-		}
-
-		TCP_SKB_CB(skb)->seq = ntohl(th->seq);
-		TCP_SKB_CB(skb)->end_seq = (TCP_SKB_CB(skb)->seq + th->syn + th->fin +
-					    len - th->doff*4);
-		TCP_SKB_CB(skb)->ack_seq = ntohl(th->ack_seq);
-		skb->used = 0;
-		if(sk->state == TCP_TIME_WAIT)
-			goto do_time_wait;
-
-		skb->sk = sk;
-	}
+	if (skb->pkt_type != PACKET_HOST)
+		goto discard_it;
 
 	/*
-	 * We may need to add it to the backlog here.
+	 *	Pull up the IP header.
 	 */
 
-	if (sk->sock_readers) {
-		__skb_queue_tail(&sk->back_log, skb);
-		return(0);
-	}
+	__skb_pull(skb, skb->h.raw - skb->data);
 
-	skb_set_owner_r(skb, sk);
+	/*
+	 *	Count it even if it's bad.
+	 */
 
-	if (sk->state == TCP_ESTABLISHED) {
-		if (tcp_rcv_established(sk, skb, th, len))
-			goto no_tcp_socket;
-		return 0;
-	}
+	tcp_statistics.TcpInSegs++;
 
-	if (sk->state == TCP_LISTEN) { 
-		__u32 flg = ((u32 *)th)[3]; 
+	/*
+	 *	Try to use the device checksum if provided.
+	 */
 
-		/* Check for RST */
-		if (flg & __constant_htonl(0x00040000)) {
-			tcp_v6_rst_req(sk, skb); 
+	switch (skb->ip_summed) {
+	case CHECKSUM_NONE:
+		skb->csum = csum_partial((char *)th, len, 0);
+	case CHECKSUM_HW:
+		if (tcp_v6_check(th,len,saddr,daddr,skb->csum)) {
+			printk(KERN_DEBUG "tcp csum failed\n");
+			tcp_statistics.TcpInErrs++;
+			goto discard_it;
 		}
-		
-		/* Check SYN|ACK */
-		if (flg & __constant_htonl(0x00120000)) {
-			struct open_request *req, *prev;
-			struct tcp_opt *tp = &(sk->tp_pinfo.af_tcp);
-			
-			req = tcp_v6_search_req(tp, skb->nh.ipv6h,th,&prev); 
-			if (req) {
-				sk = tcp_check_req(sk, skb, req); 
-			}
-			/* else do syncookies (add them here) */
-			if (sk == NULL)
-				goto discard_it;
-		}
-	}
+	default:
+		/* CHECKSUM_UNNECESSARY */
+	};
 
-	if (tcp_rcv_state_process(sk, skb, th, opt, len) == 0)
-		return 0;
+	sk = __tcp_v6_lookup(th, saddr, th->source, daddr, th->dest, dev->ifindex);
+
+	if (!sk)
+		goto no_tcp_socket;
+
+	TCP_SKB_CB(skb)->seq = ntohl(th->seq);
+	TCP_SKB_CB(skb)->end_seq = (TCP_SKB_CB(skb)->seq + th->syn + th->fin +
+				    len - th->doff*4);
+	TCP_SKB_CB(skb)->ack_seq = ntohl(th->ack_seq);
+	skb->used = 0;
+	if(sk->state == TCP_TIME_WAIT)
+		goto do_time_wait;
+
+	if (!sk->sock_readers)
+		return tcp_v6_do_rcv(sk, skb);
+
+	__skb_queue_tail(&sk->back_log, skb);
+	return(0);
 
 no_tcp_socket:
-
-	/*
-	 *	No such TCB. If th->rst is 0 send a reset
-	 *	(checked in tcp_v6_send_reset)
-	 */
-
 	tcp_v6_send_reset(skb);
 
 discard_it:
@@ -1180,18 +1210,6 @@ static int tcp_v6_rebuild_header(struct sock *sk)
 	}
 
 	return dst->error;
-}
-
-static int tcp_v6_backlog_rcv(struct sock *sk, struct sk_buff *skb)
-{
-	int res;
-
-	res = tcp_v6_rcv(skb, skb->dev,
-			 &skb->nh.ipv6h->saddr, &skb->nh.ipv6h->daddr,
-			 (struct ipv6_options *) skb->cb,
-			 skb->len, 1,
-			 (struct inet6_protocol *) sk->pair);
-	return res;
 }
 
 static struct sock * tcp_v6_get_sock(struct sk_buff *skb, struct tcphdr *th)
@@ -1372,7 +1390,7 @@ struct proto tcpv6_prot = {
 	tcp_v6_sendmsg,			/* sendmsg */
 	tcp_recvmsg,			/* recvmsg */
 	NULL,				/* bind */
-	tcp_v6_backlog_rcv,		/* backlog_rcv */
+	tcp_v6_do_rcv,			/* backlog_rcv */
 	tcp_v6_hash,			/* hash */
 	tcp_v6_unhash,			/* unhash */
 	tcp_v6_rehash,			/* rehash */

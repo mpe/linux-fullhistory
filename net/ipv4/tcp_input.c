@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_input.c,v 1.106 1998/04/10 23:56:19 davem Exp $
+ * Version:	$Id: tcp_input.c,v 1.114 1998/04/28 06:42:22 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -47,6 +47,9 @@
  *		Andrey Savochkin:	Check sequence numbers correctly when
  *					removing SACKs due to in sequence incoming
  *					data segments.
+ *		Andi Kleen:		Make sure we never ack data there is not
+ *					enough room for. Also make this condition
+ *					a fatal error if it might still happen.
  */
 
 #include <linux/config.h>
@@ -75,6 +78,8 @@ int sysctl_tcp_cong_avoidance;
 int sysctl_tcp_syncookies = SYNC_INIT; 
 int sysctl_tcp_stdurg;
 int sysctl_tcp_rfc1337;
+
+static int prune_queue(struct sock *sk);
 
 /* There is something which you must keep in mind when you analyze the
  * behavior of the tp->ato delayed ack timeout interval.  When a
@@ -343,6 +348,13 @@ void tcp_parse_options(struct sock *sk, struct tcphdr *th, struct tcp_opt *tp, i
 						if (!no_fancy && sysctl_tcp_window_scaling) {
 							tp->wscale_ok = 1;
 							tp->snd_wscale = *(__u8 *)ptr;
+							if(tp->snd_wscale > 14) {
+								if(net_ratelimit())
+									printk("tcp_parse_options: Illegal window "
+									       "scaling value %d >14 received.",
+									       tp->snd_wscale);
+								tp->snd_wscale = 14;
+							}
 						}
 					break;
 				case TCPOPT_TIMESTAMP:
@@ -598,11 +610,13 @@ static int tcp_clean_rtx_queue(struct sock *sk, __u32 ack,
 	int acked = 0;
 
 	while((skb=skb_peek(&sk->write_queue)) && (skb != tp->send_head)) {
+		struct tcp_skb_cb *scb = TCP_SKB_CB(skb); 
+		
 		/* If our packet is before the ack sequence we can
 		 * discard it as it's confirmed to have arrived at
 		 * the other end.
 		 */
-		if (after(TCP_SKB_CB(skb)->end_seq, ack))
+		if (after(scb->end_seq, ack))
 			break;
 
 		/* Initial outgoing SYN's get put onto the write_queue
@@ -612,8 +626,8 @@ static int tcp_clean_rtx_queue(struct sock *sk, __u32 ack,
 		 * connection startup slow start one packet too
 		 * quickly.  This is severely frowned upon behavior.
 		 */
-		if(!(TCP_SKB_CB(skb)->flags & TCPCB_FLAG_SYN)) {
-			__u8 sacked = TCP_SKB_CB(skb)->sacked;
+		if(!(scb->flags & TCPCB_FLAG_SYN)) {
+			__u8 sacked = scb->sacked;
 
 			acked |= FLAG_DATA_ACKED;
 			if(sacked & TCPCB_SACKED_RETRANS) {
@@ -634,8 +648,8 @@ static int tcp_clean_rtx_queue(struct sock *sk, __u32 ack,
 			tp->retrans_head = NULL;
 		}		
 		tp->packets_out--;
-		*seq = TCP_SKB_CB(skb)->seq;
-		*seq_rtt = now - TCP_SKB_CB(skb)->when;
+		*seq = scb->seq;
+		*seq_rtt = now - scb->when;
 		__skb_unlink(skb, skb->list);
 		kfree_skb(skb);
 	}
@@ -850,13 +864,12 @@ uninteresting_ack:
 }
 
 /* New-style handling of TIME_WAIT sockets. */
-static void tcp_timewait_kill(unsigned long __arg)
+extern void tcp_tw_schedule(struct tcp_tw_bucket *tw);
+extern void tcp_tw_reschedule(struct tcp_tw_bucket *tw);
+extern void tcp_tw_deschedule(struct tcp_tw_bucket *tw);
+
+void tcp_timewait_kill(struct tcp_tw_bucket *tw)
 {
-	struct tcp_tw_bucket *tw = (struct tcp_tw_bucket *)__arg;
-
-	/* Zap the timer. */
-	del_timer(&tw->timer);
-
 	/* Unlink from various places. */
 	if(tw->bind_next)
 		tw->bind_next->bind_pprev = tw->bind_pprev;
@@ -908,7 +921,8 @@ int tcp_timewait_state_process(struct tcp_tw_bucket *tw, struct sk_buff *skb,
 		isn = tw->rcv_nxt + 128000;
 		if(isn == 0)
 			isn++;
-		tcp_timewait_kill((unsigned long)tw);
+		tcp_tw_deschedule(tw);
+		tcp_timewait_kill(tw);
 		sk = af_specific->get_sock(skb, th);
 		if(sk == NULL || !ipsec_sk_policy(sk,skb))
 			return 0;
@@ -925,16 +939,16 @@ int tcp_timewait_state_process(struct tcp_tw_bucket *tw, struct sk_buff *skb,
 		 * Oh well... nobody has a sufficient solution to this
 		 * protocol bug yet.
 		 */
-		if(sysctl_tcp_rfc1337 == 0)
-			tcp_timewait_kill((unsigned long)tw);
-
+		if(sysctl_tcp_rfc1337 == 0) {
+			tcp_tw_deschedule(tw);
+			tcp_timewait_kill(tw);
+		}
 		if(!th->rst)
 			return 1; /* toss a reset back */
 	} else {
-		if(th->ack) {
-			/* In this case we must reset the TIMEWAIT timer. */
-			mod_timer(&tw->timer, jiffies + TCP_TIMEWAIT_LEN);
-		}
+		/* In this case we must reset the TIMEWAIT timer. */
+		if(th->ack)
+			tcp_tw_reschedule(tw);
 	}
 	return 0; /* Discard the frame. */
 }
@@ -1010,11 +1024,7 @@ void tcp_time_wait(struct sock *sk)
 		tcp_tw_hashdance(sk, tw);
 
 		/* Get the TIME_WAIT timeout firing. */
-		init_timer(&tw->timer);
-		tw->timer.function = tcp_timewait_kill;
-		tw->timer.data = (unsigned long) tw;
-		tw->timer.expires = jiffies + TCP_TIMEWAIT_LEN;
-		add_timer(&tw->timer);
+		tcp_tw_schedule(tw);
 
 		/* CLOSE the SK. */
 		if(sk->state == TCP_ESTABLISHED)
@@ -1440,6 +1450,20 @@ static int tcp_data(struct sk_buff *skb, struct sock *sk, unsigned int len)
         if (skb->len == 0 && !th->fin)
 		return(0);
 
+	/* 
+	 *	If our receive queue has grown past its limits shrink it.
+	 *	Make sure to do this before moving snd_nxt, otherwise
+	 *	data might be acked for that we don't have enough room.
+	 */
+	if (atomic_read(&sk->rmem_alloc) > sk->rcvbuf) { 
+		if (prune_queue(sk) < 0) { 
+			/* Still not enough room. That can happen when
+			 * skb->true_size differs significantly from skb->len.
+			 */
+			return 0;
+		}
+	}
+
 	/* We no longer have anyone receiving data on this connection. */
 	tcp_data_queue(sk, skb);
 
@@ -1497,7 +1521,7 @@ static __inline__ void __tcp_ack_snd_check(struct sock *sk)
 	 */
 
 	    /* Two full frames received or... */
-	if (((tp->rcv_nxt - tp->rcv_wup) >= (sk->mss << 1)) ||
+	if (((tp->rcv_nxt - tp->rcv_wup) >= sk->mss * MAX_DELAY_ACK) ||
 	    /* We will update the window "significantly" or... */
 	    tcp_raise_window(sk) ||
 	    /* We entered "quick ACK" mode or... */
@@ -1599,7 +1623,7 @@ static inline void tcp_urg(struct sock *sk, struct tcphdr *th, unsigned long len
  * Clean first the out_of_order queue, then the receive queue until
  * the socket is in its memory limits again.
  */
-static void prune_queue(struct sock *sk)
+static int prune_queue(struct sock *sk)
 {
 	struct tcp_opt *tp = &sk->tp_pinfo.af_tcp; 
 	struct sk_buff * skb;
@@ -1613,7 +1637,7 @@ static void prune_queue(struct sock *sk)
 	while ((skb = __skb_dequeue_tail(&tp->out_of_order_queue))) { 
 		kfree_skb(skb);
 		if (atomic_read(&sk->rmem_alloc) <= sk->rcvbuf)
-			return;
+			return 0;
 	}
 	
 	/* Now continue with the receive queue if it wasn't enough */
@@ -1626,9 +1650,10 @@ static void prune_queue(struct sock *sk)
 
 		/* Never remove packets that have been already acked */
 		if (before(TCP_SKB_CB(skb)->end_seq, tp->last_ack_sent+1)) {
-			printk(KERN_DEBUG "prune_queue: hit acked data c=%x,%x,%x\n",
-				tp->copied_seq, TCP_SKB_CB(skb)->end_seq, tp->last_ack_sent);
-			break; 
+			SOCK_DEBUG(sk, "prune_queue: hit acked data c=%x,%x,%x\n",
+				   tp->copied_seq, TCP_SKB_CB(skb)->end_seq,
+				   tp->last_ack_sent);
+			return -1;
 		}
 		__skb_unlink(skb, skb->list);
 		tp->rcv_nxt = TCP_SKB_CB(skb)->seq;
@@ -1639,6 +1664,7 @@ static void prune_queue(struct sock *sk)
 		if (atomic_read(&sk->rmem_alloc) <= sk->rcvbuf) 
 			break;
 	}
+	return 0;
 }
 
 int tcp_rcv_established(struct sock *sk, struct sk_buff *skb,
@@ -1763,13 +1789,11 @@ int tcp_rcv_established(struct sock *sk, struct sk_buff *skb,
 	/* step 7: process the segment text */
 	queued = tcp_data(skb, sk, len);
 
-	tcp_data_snd_check(sk);
-
-	/* If our receive queue has grown past its limits shrink it */
-	if (atomic_read(&sk->rmem_alloc) > sk->rcvbuf)
-		prune_queue(sk);
-
-	tcp_ack_snd_check(sk);
+	/* Be careful, tcp_data() may have put this into TIME_WAIT. */
+	if(sk->state != TCP_CLOSE) {
+		tcp_data_snd_check(sk);
+		tcp_ack_snd_check(sk);
+	}
 
 	if (!queued) {
 	discard:
@@ -1779,42 +1803,44 @@ int tcp_rcv_established(struct sock *sk, struct sk_buff *skb,
 	return 0;
 }
 
-/* Shared between IPv4 and IPv6 now. */
-struct sock *
-tcp_check_req(struct sock *sk, struct sk_buff *skb, struct open_request *req)
+/* 
+ *	Process an incoming SYN or SYN-ACK.
+ */
+
+struct sock *tcp_check_req(struct sock *sk, struct sk_buff *skb, 
+			   struct open_request *req)
 {
 	struct tcp_opt *tp = &(sk->tp_pinfo.af_tcp);
+	u32 flg;
 
 	/*	assumption: the socket is not in use.
 	 *	as we checked the user count on tcp_rcv and we're
 	 *	running from a soft interrupt.
 	 */
 
+	/* Check for syn retransmission */
+	flg = *(((u32 *)skb->h.th) + 3);
+	
+	flg &= __constant_htonl(0x00170000);
+	/* Only SYN set? */
+	if (flg == __constant_htonl(0x00020000)) {
+		if (!after(TCP_SKB_CB(skb)->seq, req->rcv_isn)) {
+			/*	retransmited syn.
+			 */
+			req->class->rtx_syn_ack(sk, req); 
+			return NULL;
+		} else {
+			return sk; /* Pass new SYN to the listen socket. */
+		}
+	}
+
+	/* We know it's an ACK here */	
 	if (req->sk) {
 		/*	socket already created but not
 		 *	yet accepted()...
 		 */
 		sk = req->sk;
 	} else {
-		u32 flg;
-
-		/* Check for syn retransmission */
-		flg = *(((u32 *)skb->h.th) + 3);
-		
-		flg &= __constant_htonl(0x00170000);
-		/* Only SYN set? */
-		if (flg == __constant_htonl(0x00020000)) {
-			if (!after(TCP_SKB_CB(skb)->seq, req->rcv_isn)) {
-				/*	retransmited syn.
-				 */
-				req->class->rtx_syn_ack(sk, req); 
-				return NULL;
-			} else {
-				return sk; /* New SYN */
-			}
-		}
-
-		/* We know it's an ACK here */
 		/* In theory the packet could be for a cookie, but
 		 * TIME_WAIT should guard us against this. 
 		 * XXX: Nevertheless check for cookies?
@@ -1901,6 +1927,8 @@ int tcp_rcv_state_process(struct sock *sk, struct sk_buff *skb,
 			/* We got an ack, but it's not a good ack. */
 			if(!tcp_ack(sk,th, TCP_SKB_CB(skb)->seq,
 				    TCP_SKB_CB(skb)->ack_seq, len)) {
+				sk->err = ECONNRESET;
+				sk->state_change(sk);
 				tcp_statistics.TcpAttemptFails++;
 				return 1;
 			}
@@ -1914,6 +1942,8 @@ int tcp_rcv_state_process(struct sock *sk, struct sk_buff *skb,
 				/* A valid ack from a different connection
 				 * start.  Shouldn't happen but cover it.
 				 */
+				sk->err = ECONNRESET;
+				sk->state_change(sk);
 				tcp_statistics.TcpAttemptFails++;
 				return 1;
 			}
@@ -2112,8 +2142,10 @@ int tcp_rcv_state_process(struct sock *sk, struct sk_buff *skb,
 			break;
 
 		case TCP_CLOSING:	
-			if (tp->snd_una == tp->write_seq)
+			if (tp->snd_una == tp->write_seq) {
 				tcp_time_wait(sk);
+				goto discard;
+			}
 			break;
 
 		case TCP_LAST_ACK:
@@ -2155,10 +2187,6 @@ step6:
 		
 	case TCP_ESTABLISHED: 
 		queued = tcp_data(skb, sk, len);
-
-		/* This can only happen when MTU+skbheader > rcvbuf */
-		if (atomic_read(&sk->rmem_alloc) > sk->rcvbuf)
-			prune_queue(sk);
 		break;
 	}
 

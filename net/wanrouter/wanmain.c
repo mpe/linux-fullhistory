@@ -18,11 +18,12 @@
 *		as published by the Free Software Foundation; either version
 *		2 of the License, or (at your option) any later version.
 * ============================================================================
-* Oct 15, 1997  Farhan Thawar   changed wan_encapsulate to add a pad byte of 0
-* Jun 27, 1997  Alan Cox	realigned with vendor code
+* Dec 27, 1996	Gene Kozin	Initial version (based on Sangoma's WANPIPE)
 * Jan 16, 1997	Gene Kozin	router_devlist made public
 * Jan 31, 1997  Alan Cox	Hacked it about a bit for 2.1
-* Dec 27, 1996	Gene Kozin	Initial version (based on Sangoma's WANPIPE)
+* Jun 27, 1997  Alan Cox	realigned with vendor code
+* Oct 15, 1997  Farhan Thawar   changed wan_encapsulate to add a pad byte of 0
+* Apr 20, 1998	Alan Cox	Fixed 2.1 symbols
 *****************************************************************************/
 
 #include <linux/stddef.h>	/* offsetof(), etc. */
@@ -165,6 +166,7 @@ __initfunc(void wanrouter_init(void))
  *	Context:	process
  */
 
+
 int register_wan_device(wan_device_t* wandev)
 {
 	int err, namelen;
@@ -223,6 +225,7 @@ int register_wan_device(wan_device_t* wandev)
  *			<0	error.
  *	Context:	process
  */
+
  
 int unregister_wan_device(char* name)
 {
@@ -269,6 +272,7 @@ int unregister_wan_device(char* name)
  *	1. This function may be called on interrupt context.
  */
 
+
 int wanrouter_encapsulate (struct sk_buff* skb, struct device* dev)
 {
 	int hdr_len = 0;
@@ -309,6 +313,7 @@ int wanrouter_encapsulate (struct sk_buff* skb, struct device* dev)
  *	Notes:
  *	1. This function may be called on interrupt context.
  */
+
 
 unsigned short wanrouter_type_trans (struct sk_buff* skb, struct device* dev)
 {
@@ -679,6 +684,14 @@ static int delete_interface (wan_device_t* wandev, char* name, int force)
 	return 0;
 }
 
+#ifdef MODULE
+EXPORT_SYMBOL(register_wan_device);
+EXPORT_SYMBOL(unregister_wan_device);
+EXPORT_SYMBOL(wanrouter_encapsulate);
+EXPORT_SYMBOL(wanrouter_type_trans);
+#endif
+
 /*
  *	End
  */
+

@@ -120,8 +120,8 @@ Symbolic links
 Although the Amiga and Linux file systems resemble each other, there
 are some, not always subtle, differences. One of them becomes apparent
 with symbolic links. While Linux has a file system with exactly one
-root directory, the Amiga has a seperate root directory for each
-file system (i. e. partition, floppy disk, ...). With the Amiga,
+root directory, the Amiga has a separate root directory for each
+file system (e.g. partition, floppy disk, ...). With the Amiga,
 these entities are called "volumes". They have symbolic names which
 can be used to access them. Thus, symbolic links can point to a
 different volume. AFFS turns the volume name into a directory name
@@ -156,7 +156,7 @@ fs/affs/Changes.
 
 Filenames are truncated to 30 characters without warning (this
 can be changed by setting the compile-time option AFFS_NO_TRUNCATE
-ina include/linux/amigaffs.h).
+in include/linux/amigaffs.h).
 
 Case is ignored by the affs in filename matching, but Linux shells
 do care about the case. Example (with /mnt being an affs mounted fs):

@@ -18,7 +18,7 @@ other program after you have done the following:
    nonstandard classes (not included in the same directory
    as the application itself).
 
-2) You have to compile BINFMT_MISC either as module or into
+2) You have to compile BINFMT_MISC either as a module or into
    the kernel (CONFIG_BINFMT_MISC) and set it up properly.
    If you choose to compile it as a module, you will have
    to insert it manually with modprobe/insmod, as kerneld

@@ -63,6 +63,19 @@ void rtnl_unlock()
 	rtnl_shunlock();
 }
 
+int rtattr_parse(struct rtattr *tb[], int maxattr, struct rtattr *rta, int len)
+{
+	memset(tb, 0, sizeof(struct rtattr*)*maxattr);
+
+	while (RTA_OK(rta, len)) {
+		unsigned flavor = rta->rta_type;
+		if (flavor && flavor <= maxattr)
+			tb[flavor-1] = rta;
+		rta = RTA_NEXT(rta, len);
+	}
+	return 0;
+}
+
 #ifdef CONFIG_RTNETLINK
 struct sock *rtnl;
 
@@ -109,6 +122,19 @@ void __rta_fill(struct sk_buff *skb, int attrtype, int attrlen, const void *data
 	memcpy(RTA_DATA(rta), data, attrlen);
 }
 
+int rtnetlink_send(struct sk_buff *skb, u32 pid, unsigned group, int echo)
+{
+	int err = 0;
+
+	NETLINK_CB(skb).dst_groups = group;
+	if (echo)
+		atomic_inc(&skb->users);
+	netlink_broadcast(rtnl, skb, pid, group, GFP_KERNEL);
+	if (echo)
+		err = netlink_unicast(rtnl, skb, pid, MSG_DONTWAIT);
+	return err;
+}
+
 #ifdef CONFIG_RTNL_OLD_IFINFO
 static int rtnetlink_fill_ifinfo(struct sk_buff *skb, struct device *dev,
 				 int type, pid_t pid, u32 seq)
@@ -132,7 +158,7 @@ static int rtnetlink_fill_ifinfo(struct sk_buff *skb, struct device *dev,
 	strncpy(r->ifi_name, dev->name, IFNAMSIZ-1);
 	r->ifi_qdiscname[0] = 0;
 	r->ifi_qdisc = dev->qdisc_sleeping->handle;
-	if (dev->qdisc_sleeping->ops)
+	if (dev->qdisc_sleeping)
 		strcpy(r->ifi_qdiscname, dev->qdisc_sleeping->ops->id);
 	if (dev->get_stats) {
 		struct net_device_stats *stats = dev->get_stats(dev);
@@ -175,7 +201,7 @@ static int rtnetlink_fill_ifinfo(struct sk_buff *skb, struct device *dev,
 	}
 	if (dev->ifindex != dev->iflink)
 		RTA_PUT(skb, IFLA_LINK, sizeof(int), &dev->iflink);
-	if (dev->qdisc_sleeping->ops)
+	if (dev->qdisc_sleeping)
 		RTA_PUT(skb, IFLA_QDISC,
 			strlen(dev->qdisc_sleeping->ops->id) + 1,
 			dev->qdisc_sleeping->ops->id);

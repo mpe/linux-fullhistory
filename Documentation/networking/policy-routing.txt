@@ -127,7 +127,7 @@ Applications
 	It is funny, but pretty useless algorithm.
 	I listed it just to show power of new routing code.
 
-5.	All the variaty of combinations......
+5.	All the variety of combinations......
 
 
 GATED

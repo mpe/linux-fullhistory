@@ -8,14 +8,14 @@ Introduction
 
 Ethertap provides packet reception and transmission for user
 space programs. It can be viewed as a simple ethernet device,
-which instead of recieving packets from a network wire, it recieves
+which instead of receiving packets from a network wire, it receives
 them from user space.
 
-Ethertap can be used for anything from Appletalk to IPX to even 
+Ethertap can be used for anything from AppleTalk to IPX to even 
 building bridging tunnels. It also has many other general purpose
 uses.
 
-Ethertap also can do ARP for you. Although this is not enabled per
+Ethertap also can do ARP for you, although this is not enabled by
 default.
 
 SetUp
@@ -36,7 +36,7 @@ proper IP number for your situation.)
 If you want your Ethertap device to ARP for you would ifconfig
 the interface like this: ifconfig tap* 192.168.1.1 arp
 
-Remember that the you need to have a corresponding /dev/tap* file
+Remember that you need to have a corresponding /dev/tap* file
 for each tap* device you need to ifconfig.
 
 Now Ethertap should be ready to use.
@@ -65,7 +65,7 @@ The routing on our box would be
 C code for a Simple program using an EtherTap device
 ====================================================
 
-This code is just excepts from a real program, so some parts are missing
+This code is just excerpts from a real program, so some parts are missing
 but the important stuff is below.
 
 void main (void)

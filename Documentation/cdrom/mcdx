@@ -1,6 +1,6 @@
 This is a first attempt to create an `improved' driver for the Mitsumi drives.
 It is able to "live together" with mcd.c, if you have at least two Mitsumi
-drives: each driver can use his own drive.
+drives: each driver can use its own drive.
 
 To allow this "coexistence" as long as mcdx.c is not a superset of mcd.c,
 this driver has to use its own device files. We use MAJOR 20 for it. So,

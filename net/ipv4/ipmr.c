@@ -9,7 +9,7 @@
  *	as published by the Free Software Foundation; either version
  *	2 of the License, or (at your option) any later version.
  *
- *	Version: $Id: ipmr.c,v 1.33 1998/03/08 20:52:37 davem Exp $
+ *	Version: $Id: ipmr.c,v 1.34 1998/04/28 06:21:59 davem Exp $
  *
  *	Fixes:
  *	Michael Chastain	:	Incorrect size of copying.
@@ -703,8 +703,7 @@ int ip_mroute_setsockopt(struct sock *sk,int optname,char *optval,int optlen)
 			mrtsock_destruct(sk);
 			return -EADDRINUSE;
 		case MRT_DONE:
-			mrtsock_destruct(sk);
-			return 0;
+			return ip_ra_control(sk, 0, NULL);
 		case MRT_ADD_VIF:
 		case MRT_DEL_VIF:
 			if(optlen!=sizeof(vif))

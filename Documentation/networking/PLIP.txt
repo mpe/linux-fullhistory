@@ -29,11 +29,11 @@ Advantages of PLIP
 It's cheap, it's available everywhere, and it's easy.
 
 The PLIP cable is all that's needed to connect two Linux boxes, and it
-can be build for very few bucks.
+can be built for very few bucks.
 
-Connecting two Linux boxes takes only a seconds decision and a few
-minutes work, no need to search for a [supported] netcard. This might
-even be especially important in the case of notebooks, where netcard
+Connecting two Linux boxes takes only a second's decision and a few
+minutes' work, no need to search for a [supported] netcard. This might
+even be especially important in the case of notebooks, where netcards
 are not easily available.
 
 Not requiring a netcard also means that apart from connecting the
@@ -45,7 +45,7 @@ Disadvantages of PLIP
 
 Doesn't work over a modem, like SLIP and PPP. Limited range, 15 m.
 Can only be used to connect three (?) Linux boxes. Doesn't connect to
-an exiting ethernet. Isn't standard (not even de facto standard, like
+an existing ethernet. Isn't standard (not even de facto standard, like
 SLIP).
 
 Performance
@@ -150,7 +150,8 @@ Each octet is sent as
 
 To start a transfer the transmitting machine outputs a nibble 0x08.
 The raises the ACK line, triggering an interrupt in the receiving
-machine.  The receiving machine disables
+machine.  The receiving machine disables interrupts and raises its own ACK
+line. 
 
 Restated:
 

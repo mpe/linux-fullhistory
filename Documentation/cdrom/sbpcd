@@ -4,7 +4,7 @@ CD-ROM driver for Linux.
 
 sbpcd really, really is NOT for ANY IDE/ATAPI drive!
 Not even if you have an "original" SoundBlaster card with an IDE interface!
-So, you better have a look into README.ide if your port address is 0x1F0,
+So, you'd better have a look into README.ide if your port address is 0x1F0,
 0x170, 0x1E8, 0x168 or similar.
 I get tons of mails from IDE/ATAPI drive users - I really can't continue
 any more to answer them all. So, if your drive/interface information sheets
@@ -18,7 +18,7 @@ LILO commands
 and get lucky.
 To make it fully clear to you: if you mail me about IDE/ATAPI drive problems,
 my answer is above, and I simply will discard your mail, hoping to stop the
-flood and to find time to lead my 12-years old son towards happy computing.
+flood and to find time to lead my 12-year old son towards happy computing.
 
 The driver is able to drive the whole family of "traditional" AT-style (that
 is NOT the new "Enhanced IDE" or "ATAPI" drive standard) Matsushita,
@@ -29,13 +29,13 @@ CR-574 is an IDE/ATAPI drive.
 The Longshine LCS-7260 is a double-speed drive which uses the "old"
 Matsushita command set. It is supported - with help by Serge Robyns.
 Vertos ("Elitegroup Computer Systems", ECS) has a similar drive - support
-has started; come in contact if you have such a "Vertos 100" or "ECS-AT"
+has started; get in contact if you have such a "Vertos 100" or "ECS-AT"
 drive.
 
 There exists an "IBM External ISA CD-ROM Drive" which in fact is a CR-563
 with a special controller board. This drive is supported (the interface is
 of the "LaserMate" type), and it is possibly the best buy today (cheaper than
-an internal drive, and you can use it as an internal, too - f.e. plug it into
+an internal drive, and you can use it as an internal, too - e.g. plug it into
 a soundcard).
 
 CreativeLabs has a new drive "CD200" and a similar drive "CD200F". The latter
@@ -51,7 +51,7 @@ speed". The data rate already reaches 500 kB/sec if you set SBP_BUFFER_FRAMES
 to 64 (it is not recommended to do that for normal "file access" usage, but it
 can speed up things a lot if you use something like "dd" to read from the
 drive; I use it for verifying self-written CDs this way).
-The drive itself is able to deliver 600 kB/sec, so this has to get a point of
+The drive itself is able to deliver 600 kB/sec, so this needs
 work; with the normal setup, the performance currently is not even as good as
 double-speed.
 
@@ -63,7 +63,7 @@ and include an original log message excerpt, and try to give all information
 a complete idiot needs to understand your hassle already with your first
 mail. And if you want to say "as I have mailed you before", be sure that I
 don't remember your "case" by such remarks; at the moment, I have some 
-hundreds open correspondences about Linux CDROM questions (hope to reduce if
+hundreds of open correspondences about Linux CDROM questions (hope to reduce if
 the IDE/ATAPI user questions disappear). 
 
 
@@ -79,7 +79,7 @@ specify the type "SBPRO 2" and the true CDROM port address with it, not the
 If you have a sound card which needs a "configuration driver" instead of
 jumpers for interface types and addresses (like Mozart cards) - those
 drivers get invoked before the DOS CDROM driver in your CONFIG.SYS, typical
-names are "cdsetup.sys" and "mztinit.sys" -, let the sound driver do the
+names are "cdsetup.sys" and "mztinit.sys" - let the sound driver do the
 CDROM port configuration (the leading comments in linux/drivers/sound/mad16.c
 are just for you!). Hannu Savolainen's mad16.c code is able to set up my
 Mozart card - I simply had to add
@@ -184,10 +184,10 @@ To install:
 
 1. Setup your hardware parameters. Though the driver does "auto-probing" at a
    lot of (not all possible!) addresses, this step is recommended for
-   every-day use. You should let sbpcd auto-probe once and use the reported
+   everyday use. You should let sbpcd auto-probe once and use the reported
    address if a drive got found. The reported type may be incorrect; it is
    correct if you can mount a data CD. There is no choice for you with the
-   type; only one is the right, the others are deadly wrong.
+   type; only one is right, the others are deadly wrong.
 
    a. Go into /usr/src/linux/drivers/cdrom/sbpcd.h and configure it for your
       hardware (near the beginning):
@@ -229,7 +229,7 @@ To install:
    second, third, or fourth controller installed, do not say "y" to the 
    secondary Matsushita CD-ROM questions.
 
-3. Then do a "make dep", then make the kernel image ("make zlilo" or else).
+3. Then do a "make dep", then make the kernel image ("make zlilo" or similar).
 
 4. Make the device file(s). This step usually already has been done by the
    MAKEDEV script.
@@ -242,7 +242,7 @@ To install:
         mknod /dev/sbpcd3 b 25 3
    to make the node(s).
 
-   The "first found" drive gets MINOR 0 (regardless to its jumpered ID), the
+   The "first found" drive gets MINOR 0 (regardless of its jumpered ID), the
    "next found" (at the same cable) gets MINOR 1, ...
    
    For a second interface board, you have to make nodes like
@@ -297,21 +297,21 @@ No DMA and no IRQ is used.
 
 To reduce or increase the amount of kernel messages, edit sbpcd.c and play
 with the "DBG_xxx" switches (initialization of the variable "sbpcd_debug").
-Don't forget to reflect what you do; enabling all DBG_xxx switches at once
+Don't forget to reflect on what you do; enabling all DBG_xxx switches at once
 may crash your system, and each message line is accompanied by a delay.
 
 The driver uses the "variable BLOCK_SIZE" feature. To use it, you have to
 specify "block=2048" as a mount option. Doing this will disable the direct
 execution of a binary from the CD; you have to copy it to a device with the
-standard BLOCK_SIZE (1024) before. So, do not use this if your system is
+standard BLOCK_SIZE (1024) first. So, do not use this if your system is
 directly "running from the CDROM" (like some of YGGDRASIL's installation
 variants). There are CDs on the market (like the german "unifix" Linux
 distribution) which MUST get handled with a block_size of 1024. Generally,
 one can say all the CDs which hold files of the name YMTRANS.TBL are defective;
 do not use block=2048 with those.
 
-Within sbpcd.h, you will find some "#define"s (f.e. EJECT and JUKEBOX). With
-that, you can configure the driver for some special things.
+Within sbpcd.h, you will find some "#define"s (e.g. EJECT and JUKEBOX). With
+these, you can configure the driver for some special things.
 You can use the appended program "cdtester" to set the auto-eject feature
 during runtime. Jeff Tranter's "eject" utility can do this, too (and more)
 for you.
@@ -344,7 +344,7 @@ o.k., but you will get I/O errors during mount). In that case, use the "kernel
 command line" feature and specify address & type at boot time to find out the
 right setup.
 
-For every-day use, address and type should get configured within sbpcd.h. That
+For everyday use, address and type should get configured within sbpcd.h. That
 will stop the auto-probing due to success with the first try.
 
 The kernel command "sbpcd=0" suppresses each auto-probing and causes
@@ -373,7 +373,7 @@ Almost all of the "SoundBlaster compatible" cards behave like the no-sound
 interfaces, i.e. need SBPRO 0! 
 
 With "original" SB Pro cards, an initial setting of CD_volume through the
-sound cards MIXER register gets done.
+sound card's MIXER register gets done.
 If you are using a "compatible" sound card of types "LaserMate" or "SPEA",
 you can set SOUND_BASE (in sbpcd.h) to get it done with your card, too...
 
@@ -385,8 +385,8 @@ Workman, WorkBone, xcdplayer, cdplayer and the nice little tool "cdplay" (see
 README.aztcd from the Aztech driver package) should work.
 
 The program CDplayer likes to talk to "/dev/mcd" only, xcdplayer wants
-"/dev/rsr0", workman loves "/dev/sr0" or "/dev/cdrom" - so, do the appropriate
-links for using them without the need of supplying parameters.
+"/dev/rsr0", workman loves "/dev/sr0" or "/dev/cdrom" - so, make the 
+appropriate links to use them without the need to supply parameters.
 
 
 Copying audio tracks:

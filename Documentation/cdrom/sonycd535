@@ -35,7 +35,7 @@ REQUIREMENTS
 	- Drive must be set up as unit 1.  Only the first unit will be 
 	  recognized
 
-	- you must enter your interface address into 
+	- You must enter your interface address into 
           /usr/src/linux/drivers/cdrom/sonycd535.h and build the
           appropriate kernel or use the "kernel command line" parameter
                 sonycd535=0x320

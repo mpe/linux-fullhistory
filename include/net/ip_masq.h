@@ -24,11 +24,6 @@
  *	I used an extra 4K port-space
  */
 
-/*
- *	Linux ports don't normally get allocated above 32K.
- *	I used an extra 4K port-space
- */
- 
 #define PORT_MASQ_BEGIN	61000
 #define PORT_MASQ_END	(PORT_MASQ_BEGIN+4096)
 

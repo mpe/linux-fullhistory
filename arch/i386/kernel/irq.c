@@ -725,7 +725,7 @@ static inline void trigger_pending_irqs(unsigned int irq)
 {
 	if (irq_events[irq] && !ipi_pending[irq]) {
 		ipi_pending[irq] = 1;
-		send_IPI(smp_processor_id(), IO_APIC_VECTOR(irq));
+		send_IPI(APIC_DEST_SELF, IO_APIC_VECTOR(irq));
 	}
 }
 

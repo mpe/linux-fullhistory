@@ -202,7 +202,7 @@ configured and mail me (see 6.) the appropriate information.
 5.1 MULTISESSION SUPPORT
 Multisession support for CD's still is a myth. I implemented and tested a basic
 support for multisession and XA CDs, but I still have not enough CDs and appli-
-cations to test it rigourously. So if you'd like to help me, please contact me
+cations to test it rigorously. So if you'd like to help me, please contact me
 (Email address see below). As of version 1.4 and newer you can enable the 
 multisession support in aztcd.h by setting AZT_MULTISESSION to 1. Doing so 
 will cause the ISO9660-filesystem to deal with multisession CDs, ie. redirect 
@@ -375,7 +375,7 @@ If this still does not help,
  the finite state machine in azt_poll(). The most important are the status
  messages, look how they are defined and try to understand, if they make
  sense in the context where they appear. With a CD-ROM inserted the status 
- should always be 8, except in aztcd_open(). Try to open the tray, insert a
+ should always be 8, except in aztcd_open(). Try to open the tray, insert an
  audio disk, insert no disk or reinsert the CD-ROM and check, if the status
  bits change accordingly. The status bits are the most likely point, where 
  the drive manufacturers may implement changes.
@@ -400,7 +400,7 @@ following:
  that the ACMD_SOFT_RESET is issued in any case, by substituting the
  if-statement 'if ( ...=AFL_OP_OK)' by 'if (1)'.
 
-If you succeed, please mail may the exact version string of your drive and
+If you succeed, please mail me the exact version string of your drive and
 the code modifications, you have made together with a short explanation.
 If you don't succeed, you may mail me the output of the debugging messages.
 But remember, they are only useful, if they are exact and complete and you
@@ -439,13 +439,13 @@ d) I did not get information about changing drive mode. So I doubt, that the
 code around function azt_poll() case AZT_S_MODE does work. In my test I have
 not been able to switch to reading in raw mode. For reading raw mode, Aztech
 uses a different command than for cooked mode, which I only have implemen-
-ted in the ioctl-section but not in the section which is used by the ISO9660- 
+ted in the ioctl-section but not in the section which is used by the ISO9660. 
 
 The driver was developed on an AST PC with Intel 486/DX2, 8MB RAM, 340MB IDE 
 hard disk and on an AST PC with Intel Pentium 60MHz, 16MB RAM, 520MB IDE 
 running Linux kernel version 1.0.9 from the LST 1.8 Distribution. The kernel 
 was compiled with gcc.2.5.8. My CD-ROM drive is an Aztech CDA268-01A. My
-drive says, that it has Firmware Version AZT26801A1.3. It came with a ISA-bus
+drive says, that it has Firmware Version AZT26801A1.3. It came with an ISA-bus
 interface card and works with polled I/O without DMA and without interrupts.
 The code for all other drives was 'remote' tested and debugged by a number of 
 volunteers on the Internet.
@@ -508,7 +508,7 @@ You have to set the correct permissions for cdplay *and* for /dev/mcd0 or
 /dev/aztcd0 in order to use it. Remember, that you should not have /dev/cdrom 
 mounted, when you're playing audio CDs. 
 
-This program is just a hack for testing the ioctl-functions in aztcd.c, I will 
+This program is just a hack for testing the ioctl-functions in aztcd.c. I will 
 not maintain it, so if you run into problems, discard it or have a look into 
 the source code 'cdplay.c'. The program does only contain a minimum of user 
 protection and input error detection. If you use the commands in the wrong 
@@ -517,11 +517,11 @@ or even hang your machine. If you get STEN_LOW, STEN_LOW_WAIT or segment violati
 error messages when using cdplay, after that, the system might not be stable 
 any more, so you'd better reboot. As the ioctl-functions run in kernel mode,
 most normal Linux-multitasking protection features do not work. By using
-uninitialized 'wild' pointers etc., it is easy to write to other users data and
-program areas, destroy kernel tables etc.. So if you experiment with ioctls
+uninitialized 'wild' pointers etc., it is easy to write to other users' data 
+and program areas, destroy kernel tables etc.. So if you experiment with ioctls
 as always when you are doing systems programming and kernel hacking, you
 should have a backup copy of your system in a safe place (and you also
-should try before, how to restore from a backup copy)!
+should try restoring from a backup copy first)!
 
 A reworked and improved version called 'cdtester.c', which has yet more
 features for testing CDROM-drives can be found in

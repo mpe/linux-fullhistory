@@ -1,5 +1,5 @@
 #
-# Makefile for the Linux TCP/IP (INET) layer.
+# Makefile for the Linux unix domain socket layer.
 #
 # Note! Dependencies are done automagically by 'make dep', which also
 # removes any old dependencies. DON'T put your own dependencies here

@@ -16,10 +16,10 @@ use only.
 
 The Interface of the driver
 
-The driver provides a kernel network drivers named sm[0-3]. sethdlc 
+The driver provides kernel network drivers named sm[0-3]. sethdlc 
 from the ax25 utilities may be used to set driver states etc. Users
 of userland AX.25 stacks may use the net2kiss utility (also available
-in the ax25 utilities package) to converts packets of a network interface
+in the ax25 utilities package) to convert packets of a network interface
 to a KISS stream on a pseudo tty. There's also a patch available from
 me for WAMPES which allows attaching a kernel network interface directly.
 

@@ -82,7 +82,7 @@
     To unload a module, turn off the associated interface(s) 
     'ifconfig eth?? down' then 'rmmod de4x5'.
 
-    Automedia detection is included so that in  principal you can disconnect
+    Automedia detection is included so that in  principle you can disconnect
     from, e.g.  TP, reconnect  to BNC  and  things will still work  (after a
     pause whilst the   driver figures out   where its media went).  My tests
     using ping showed that it appears to work....
@@ -118,7 +118,7 @@
     debt to <mjacob@feral.com> for the  testing and feedback that helped get
     this feature working.  So far we have  tested KINGSTON, SMC8432, SMC9332
     (with the latest SROM complying  with the SROM spec  V3: their first was
-    broken), ZNYX342  and  LinkSys. ZYNX314 (dual  21041  MAC) and  ZNYX 315
+    broken), ZNYX342  and  LinkSys. ZNYX314 (dual  21041  MAC) and  ZNYX 315
     (quad 21041 MAC)  cards also  appear  to work despite their  incorrectly
     wired IRQs.
 

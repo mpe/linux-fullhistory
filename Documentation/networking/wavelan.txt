@@ -1,18 +1,19 @@
 Sun Jul  2 01:38:33 EST 1995
 
-1. At present the driver autoprobes for a WaveLAN card only at I/O address 0x390.
-   The version of the card that I use (NCR) supports four I/O addresses (selectable
-   via a pair of DIP switches).  If you want the driver to autoprobe a different
-   subset of the four valid addresses then you will need to edit
-   .../drivers/net/wavelan.c (near line 714) and change the initialisation of the
-   `iobase[]' array.  Normally, I use a LILO configuration file directive to
-   obviate the need for autoprobing entirely, a course of action I heartily
-   recommend.
+1. At present the driver autoprobes for a WaveLAN card only at I/O address 
+   0x390. The version of the card that I use (NCR) supports four I/O addresses
+   (selectable via a pair of DIP switches).  If you want the driver to
+   autoprobe a different subset of the four valid addresses then you will need
+   to edit .../drivers/net/wavelan.c (near line 714) and change the 
+   initialisation of the `iobase[]' array.  Normally, I use a LILO 
+   configuration file directive to obviate the need for autoprobing entirely, 
+   a course of action I heartily recommend.
 
-2. By default, the driver uses the Network ID (NWID) stored in the card's Parameter
-   Storage Area (PSA).  However, the PSA NWID can be overridden by a value passed
-   explicitly as the third numeric argument to LILO's "ether=" directive, either
-   at the LILO prompt at boot time or within LILO's configuration file.
+2. By default, the driver uses the Network ID (NWID) stored in the card's 
+   Parameter Storage Area (PSA).  However, the PSA NWID can be overridden by a
+   value passed explicitly as the third numeric argument to LILO's "ether="
+   directive, either  at the LILO prompt at boot time or within LILO's 
+   configuration file.
    For example, the following line from such a LILO configuration file would
    auto-configure the IRQ value, set the I/O base to 0x390 and set the NWID to
    0x4321, all on a WaveLAN card labelled "eth0":

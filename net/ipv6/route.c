@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: route.c,v 1.27 1998/03/21 07:28:04 davem Exp $
+ *	$Id: route.c,v 1.28 1998/04/28 06:22:04 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -90,7 +90,11 @@ struct rt6_info ip6_null_entry = {
 	{{NULL, ATOMIC_INIT(1), ATOMIC_INIT(1), NULL,
 	  -1, 0, 0, 0, 0, 0, 0, 0, 0,
 	  -ENETUNREACH, NULL, NULL,
-	  ip6_pkt_discard, ip6_pkt_discard, &ip6_dst_ops}},
+	  ip6_pkt_discard, ip6_pkt_discard,
+#ifdef CONFIG_NET_CLS_ROUTE
+	  0,
+#endif
+	  &ip6_dst_ops}},
 	NULL, {{{0}}}, 256, RTF_REJECT|RTF_NONEXTHOP, ~0U,
 	255, 0, {NULL}, {{{{0}}}, 0}, {{{{0}}}, 0}
 };
@@ -751,7 +755,7 @@ struct rt6_info *ip6_route_add(struct in6_rtmsg *rtmsg, int *err)
 				goto out;
 			}
 
-			grt = rt6_lookup(gw_addr, NULL, dev->ifindex, RTF_LINKRT);
+			grt = rt6_lookup(gw_addr, NULL, rtmsg->rtmsg_ifindex, RTF_LINKRT);
 
 			if (grt == NULL || (grt->rt6i_flags&RTF_GATEWAY)) {
 				*err = -EHOSTUNREACH;

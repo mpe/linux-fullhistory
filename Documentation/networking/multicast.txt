@@ -52,6 +52,6 @@ wd		YES		YES		YES		Hardware
 znet		YES		YES		YES		Software
 
 
-PROMISC = This multicasts mode is in fact promiscuous mode. Avoid using
+PROMISC = This multicast mode is in fact promiscuous mode. Avoid using
 cards who go PROMISC on any multicast in a multicast kernel.
 (#) = Hardware multicast support is not used yet.

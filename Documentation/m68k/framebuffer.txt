@@ -86,14 +86,15 @@ which data structures they work. Here's just a brief overview:
 
   - You can request and change variable information about the hardware, like
     visible and virtual geometry, depth, color map format, timing, and so on.
-    If you try to change that informations, the driver maybe will round up some
+    If you try to change that information, the driver maybe will round up some
     values to meet the hardware's capabilities (or return EINVAL if that isn't
     possible).
 
   - You can get and set parts of the color map. Communication is done with 16
-    bit per color part (red, green, blue, transparency) to support all existing
-    hardware. The driver does all the computations needed to bring it into the
-    hardware (round it down to less bits, maybe throw away transparency).
+    bits per color part (red, green, blue, transparency) to support all 
+    existing hardware. The driver does all the computations needed to apply 
+    it to the hardware (round it down to less bits, maybe throw away 
+    transparency).
 
 All this hardware abstraction makes the implementation of application programs
 easier and more portable. E.g. the X server works completely on /dev/fb* and
@@ -113,8 +114,8 @@ much trouble...
 3. Frame Buffer Resolution Maintenance
 --------------------------------------
 
-Frame buffer resolutions are maintained using the utility `fbset'. It allows to
-change the video mode properties of the current resolution. It's main usage is
+Frame buffer resolutions are maintained using the utility `fbset'. It can
+change the video mode properties of the current resolution. Its main usage is
 to change the current video mode, e.g. during boot up in one of your /etc/rc.*
 or /etc/init.d/* files.
 

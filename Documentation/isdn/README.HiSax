@@ -66,7 +66,7 @@ It can be configured using the command line feature while loading the kernel
 with LILO or LOADLIN or, if built as a module, using insmod/modprobe with
 parameters.
 There is also some config needed before you compile the kernel and/or
-modules. It is enclose in the normal "make [menu]config" target at the
+modules. It is included in the normal "make [menu]config" target at the
 kernel. Don't forget it, especially to select the right D-channel protocol.
 
 Please note: All PnP cards need to be configured with isapnp and will work
@@ -152,7 +152,7 @@ Card types:
 At the moment IRQ sharing is not possible. Please make sure that your IRQ
 is free and enabled for ISA use.
 Note: For using the ELSA PCMCIA you need the cardmanager under MSDOS for
-enabling in the moment, then boot linux with loadlin.
+enabling at the moment, then boot linux with loadlin.
 
 
 Examples for module loading
@@ -272,7 +272,7 @@ At the moment, debugging messages are enabled with the hisaxctrl tool:
 
     hisaxctrl <DriverId> DebugCmd <debugging_flags>
 
-<DriverId> default is HiSax, if you didn't specified one.
+<DriverId> default is HiSax, if you didn't specify one.
 
 DebugCmd is  1  for generic debugging
             11  for layer 1 development debugging
@@ -309,18 +309,18 @@ With DebugCmd set to 11:
 With DebugCmd set to 13:
 
          1  Warnings (default: on)
-         2  l3 protocol discriptor errors
+         2  l3 protocol descriptor errors
          4  l3 state machine
          8  charge info debugging (1TR6)
 
 For example, 'hisaxctrl HiSax 1 0x3ff' enables full generic debugging.
 
 Because of some obscure problems with some switch equipment, the delay
-between CONNECT message and sending the first data on th B-channel is now
+between the CONNECT message and sending the first data on the B-channel is now
 configurable with 
 
 hisaxctrl <DriverId> 2 <delay>
-<delay> in ms Value between 50 an 800 ms are recommended.
+<delay> in ms Value between 50 and 800 ms is recommended.
 
 
 Warning
@@ -389,7 +389,7 @@ Original from Juergen Quade, new version KKe.
 Attention NEW VERSION, the old leased line syntax won't work !!!
 
 You can use HiSax to connect your Linux-Box via an ISDN leased line
-to i.e. the internet:
+to e.g. the Internet:
 
 1. Build a kernel which includes the HiSax driver either as a module
    or as part of the kernel.
@@ -407,7 +407,7 @@ to i.e. the internet:
      vi /etc/lilo.conf
      <add HiSax driver parameter in the global section (see below)>
      lilo
-   Your lilo.conf _might_ look as the following:
+   Your lilo.conf _might_ look like the following:
 
 	# LILO configuration-file
 	# global section
@@ -449,7 +449,7 @@ to i.e. the internet:
       /sbin/isdnctrl secure isdn0 on
       /sbin/isdnctrl huptimeout isdn0 0
       /sbin/isdnctrl l2_prot isdn0 hdlc
-      # Attention you must not set a outgoing number !!! This won't work !!!
+      # Attention you must not set an outgoing number !!! This won't work !!!
       # The incomming number is LEASED0 for the first card, LEASED1 for the
       # second and so on. 
       /sbin/isdnctrl addphone isdn0 in LEASED0
@@ -465,7 +465,7 @@ to i.e. the internet:
       /sbin/hisaxctrl HiSax 5 1
  
 Remarks:
-a) If you have a CISCO don´t forget to switch off the KEEP ALIVE option!
+a) If you have a CISCO don't forget to switch off the KEEP ALIVE option!
 
 Here an example script:
 #!/bin/sh

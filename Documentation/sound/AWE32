@@ -18,7 +18,7 @@ course with the suitable values for the parameters):
 alias char-major-14 sb
 post-install sb modprobe "-k" "adlib_card"
 options sb io=0x220 irq=5 dma=1 dma16=5 mpu_io=0x330
-options adlib_card io=0x388     # FM synthetiser
+options adlib_card io=0x388     # FM synthesiser
 
 and then these two commands can be issued:
 

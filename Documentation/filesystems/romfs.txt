@@ -22,7 +22,7 @@ genromfs.  It is available via anonymous ftp on sunsite.unc.edu and
 its mirrors, in the /pub/Linux/system/recovery/ directory.
 
 As the name suggests, romfs could be also used (space-efficiently) on
-various read-only medias, like (E)EPROM disks if someone will have the
+various read-only media, like (E)EPROM disks if someone will have the
 motivation.. :)
 
 However, the main purpose of romfs is to have a very small kernel,
@@ -79,7 +79,7 @@ The first eight bytes identify the filesystem, even for the casual
 inspector.  After that, in the 3rd longword, it contains the number of
 bytes accessible from the start of this filesystem.  The 4th longword
 is the checksum of the first 512 bytes (or the number of bytes
-accessible, whichever is smallest).  The applied algorithm is the same
+accessible, whichever is smaller).  The applied algorithm is the same
 as in the AFFS filesystem, namely a simple sum of the longwords
 (assuming bigendian quantities again).  For details, please consult
 the source.  This algorithm was chosen because although it's not quite

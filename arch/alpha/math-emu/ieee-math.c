@@ -733,19 +733,23 @@ ieee_CVTQT (int f, unsigned long a, unsigned long *b)
  *       FPCR_INV if invalid operation occurred, etc.
  */
 unsigned long
-ieee_CVTTQ (int f, unsigned long a, unsigned long *b)
+ieee_CVTTQ (int f, unsigned long a, unsigned long *pb)
 {
 	unsigned int midway;
-	unsigned long ov, uv, res = 0;
+	unsigned long ov, uv, res, b;
 	fpclass_t a_type;
 	EXTENDED temp;
 
-	*b = 0;
 	a_type = extend_ieee(a, &temp, DOUBLE);
+
+	b = 0x7fffffffffffffff;
+	res = FPCR_INV;
 	if (a_type == NaN || a_type == INFTY)
-		return FPCR_INV;
+		goto out;
+
+	res = 0;
 	if (a_type == QNaN)
-		return 0;
+		goto out;
 
 	if (temp.e > 0) {
 		ov = 0;
@@ -757,7 +761,7 @@ ieee_CVTTQ (int f, unsigned long a, unsigned long *b)
 		if (ov || (temp.f[1] & 0xffc0000000000000))
 			res |= FPCR_IOV | FPCR_INE;
 	}
-	if (temp.e < 0) {
+	else if (temp.e < 0) {
 		while (temp.e < 0) {
 			++temp.e;
 			uv = temp.f[0] & 1;		/* save sticky bit */
@@ -765,7 +769,8 @@ ieee_CVTTQ (int f, unsigned long a, unsigned long *b)
 			temp.f[0] |= uv;
 		}
 	}
-	*b = ((temp.f[1] << 9) | (temp.f[0] >> 55)) & 0x7fffffffffffffff;
+	b = (temp.f[1] << 9) | (temp.f[0] >> 55);
+
 	/*
 	 * Notice: the fraction is only 52 bits long.  Thus, rounding
 	 * cannot possibly result in an integer overflow.
@@ -776,18 +781,18 @@ ieee_CVTTQ (int f, unsigned long a, unsigned long *b)
 			midway = (temp.f[0] & 0x003fffffffffffff) == 0;
 			if ((midway && (temp.f[0] & 0x0080000000000000)) ||
 			    !midway)
-				++*b;
+				++b;
 		}
 		break;
 
 	      case ROUND_PINF:
 		if ((temp.f[0] & 0x007fffffffffffff) != 0)
-			++*b;
+			++b;
 		break;
 
 	      case ROUND_NINF:
 		if ((temp.f[0] & 0x007fffffffffffff) != 0)
-			--*b;
+			--b;
 		break;
 
 	      case ROUND_CHOP:
@@ -798,8 +803,11 @@ ieee_CVTTQ (int f, unsigned long a, unsigned long *b)
 		res |= FPCR_INE;
 
 	if (temp.s) {
-		*b = -*b;
+		b = -b;
 	}
+
+out:
+	*pb = b;
 	return res;
 }
 

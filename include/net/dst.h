@@ -51,6 +51,10 @@ struct dst_entry
 	int			(*input)(struct sk_buff*);
 	int			(*output)(struct sk_buff*);
 
+#ifdef CONFIG_NET_CLS_ROUTE
+	__u32			tclassid;
+#endif
+
 	struct  dst_ops	        *ops;
 		
 	char			info[0];

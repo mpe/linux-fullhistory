@@ -18,16 +18,16 @@ creating filters.
 LSF is much simpler that BPF. One does not have to worry about
 devices or anything like that. You simply create your filter
 code, send it to the kernel via the SO_ATTACH_FILTER ioctl and
-if you filter code passes the kernel check on it, you then
+if your filter code passes the kernel check on it, you then
 immediately begin filtering data on that socket.
 
 You can also detach filters from your socket via the
 SO_DETACH_FILTER ioctl. This will probably not be used much
 since when you close a socket that has a filter on it the
-filter is automagicly removed. The other less common case
-may be adding a differnt filter on the same socket you had another
-filter that is still running, the kernel takes care of removing
-the old one and placing your new one in its place, assumming your
+filter is automagically removed. The other less common case
+may be adding a different filter on the same socket where you had another
+filter that is still running: the kernel takes care of removing
+the old one and placing your new one in its place, assuming your
 filter has passed the checks, otherwise if it fails the old filter
 will remain on that socket.
 

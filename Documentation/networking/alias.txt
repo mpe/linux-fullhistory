@@ -11,7 +11,7 @@ o Alias creation.
   200.1.1.1 alias for eth0 ...
   
     # ifconfig eth0:0 200.1.1.1  etc,etc....
-                   ~~ -> request alias #0 creation (if it not exists) for eth0
+                   ~~ -> request alias #0 creation (if not yet exists) for eth0
     and routing stuff also ...
     # route add -host 200.1.1.1 dev eth0:0  (if same IP network as
 					    main device)
@@ -28,7 +28,7 @@ o Alias deletion.
   		   		   
 Alias (re-)configuring
 
-  Aliases are no real devices, but should be able to configure and
+  Aliases are not real devices, but programs` should be able to configure and
   refer to them as usual (ifconfig, route, etc).
 
 Relationship with main device

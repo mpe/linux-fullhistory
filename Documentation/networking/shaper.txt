@@ -29,8 +29,8 @@ for normal use.
 
 Gotchas:
 
-	The shaper shapes transmitted traffic. Its rather impossible to
-shape received traffic except at the end (or a router) transmiting it.
+	The shaper shapes transmitted traffic. It's rather impossible to
+shape received traffic except at the end (or a router) transmitting it.
 
 	Gated/routed/rwhod/mrouted all see the shaper as an additional device
 and will treat it as such unless patched. Note that for mrouted you can run

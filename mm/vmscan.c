@@ -441,9 +441,6 @@ static inline int do_try_to_free_page(int gfp_mask)
 	int i=6;
 	int stop;
 
-	/* Let the dcache know we're looking for memory ... */
-	shrink_dcache();
-
 	/* Always trim SLAB caches when memory gets low. */
 	kmem_cache_reap(gfp_mask);
 
@@ -458,17 +455,17 @@ static inline int do_try_to_free_page(int gfp_mask)
 	switch (state) {
 		do {
 		case 0:
+			state = 1;
 			if (shrink_mmap(i, gfp_mask))
 				return 1;
-			state = 1;
 		case 1:
+			state = 2;
 			if ((gfp_mask & __GFP_IO) && shm_swap(i, gfp_mask))
 				return 1;
-			state = 2;
 		default:
+			state = 0;
 			if (swap_out(i, gfp_mask))
 				return 1;
-			state = 0;
 		i--;
 		} while ((i - stop) >= 0);
 	}
@@ -556,23 +553,17 @@ int kswapd(void *unused)
 		 * more aggressive if we're really
 		 * low on free memory.
 		 *
-		 * Normally this is called 4 times
-		 * a second if we need more memory,
-		 * so this has a normal rate of
-		 * X*4 pages of memory free'd per
-		 * second. That rate goes up when
-		 *
-		 * - we're really low on memory (we get woken
-		 *   up a lot more)
-		 * - other processes fail to allocate memory,
-		 *   at which time they try to do their own
-		 *   freeing.
-		 *
-		 * A "tries" value of 50 means up to 200 pages
-		 * per second (1.6MB/s). This should be a /proc
-		 * thing.
+		 * The number of tries is 512 divided by an
+		 * 'urgency factor'. In practice this will mean
+		 * a value of 512 / 8 = 64 pages at a time,
+		 * giving 64 * 4 (times/sec) * 4k (pagesize) =
+		 * 1 MB/s in lowest-priority background
+		 * paging. This number rises to 8 MB/s when the
+		 * priority is highest (but then we'll be woken
+		 * up more often and the rate will be even higher).
+		 * -- Should make this sysctl tunable...
 		 */
-		tries = (50 << 2) >> free_memory_available(3);
+		tries = (512) >> free_memory_available(3);
 	
 		while (tries--) {
 			int gfp_mask;
@@ -625,7 +616,7 @@ void swap_tick(void)
  
 	if ((long) (now - want) >= 0) {
 		if (want_wakeup || (num_physpages * buffer_mem.max_percent) < (buffermem >> PAGE_SHIFT) * 100
-				|| (num_physpages * page_cache.max_percent < page_cache_size)) {
+				|| (num_physpages * page_cache.max_percent < page_cache_size * 100)) {
 			/* Set the next wake-up time */
 			next_swap_jiffies = now + swapout_interval;
 			wake_up(&kswapd_wait);

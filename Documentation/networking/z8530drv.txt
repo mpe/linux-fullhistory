@@ -232,7 +232,7 @@ will print a skeleton z8530drv.conf for the OptoSCC to stdout.
 
 gencfg 2 0x300 2 4 5 -4 0 7 4915200 0x10
 
-does the same for the BAYCOM USCC card. I my opinion it is much easier
+does the same for the BAYCOM USCC card. In my opinion it is much easier
 to edit scc_config.h... 
 
 
@@ -318,9 +318,9 @@ the kernel AX.25.
 =======================
 
 Since the TTY driver (aka KISS TNC emulation) is gone you need
-to emulate the old behaviour. The cost using these programs is
-that you probably need to compile the kernel AX.25, regardless 
-if you actually use it or not. First setup your /etc/ax25/axports,
+to emulate the old behaviour. The cost of using these programs is
+that you probably need to compile the kernel AX.25, regardless of whether
+you actually use it or not. First setup your /etc/ax25/axports,
 for example:
 
 	9k6	dl0tha-9  9600  255 4 9600 baud port (scc3)
@@ -406,7 +406,7 @@ NoSpace		- number of times a buffer could not get allocated
 
 An overrun is abnormal. If lots of these occur, the product of
 baudrate and number of interfaces is too high for the processing
-power of you computer. NoSpace errors are unlikely caused by the
+power of your computer. NoSpace errors are unlikely to be caused by the
 driver or the kernel AX.25.
 
 
@@ -559,7 +559,7 @@ txoff:
 
 group:
      It is possible to build special radio equipment to use more than 
-     one frequency on the same bad, e.g. using several receivers and 
+     one frequency on the same band, e.g. using several receivers and 
      only one transmitter that can be switched between frequencies.
      Also, you can connect several radios that are active on the same 
      band.  In these cases, it is not possible, or not a good idea, to 
@@ -617,7 +617,7 @@ I got reports that the driver has problems on some 386-based systems.
 (i.e. Amstrad) Those systems have a bogus AT bus timing which will
 lead to delayed answers on interrupts. You can recognize these
 problems by looking at the output of Sccstat for the suspected
-port. See if it shows under- and overruns you own such a system.
+port. If it shows under- and overruns you own such a system.
 
 Delayed processing of received data: This depends on
 
@@ -634,7 +634,7 @@ Delayed processing of received data: This depends on
 
 - using information from rxecho or kissbridge.
 
-Kernel panics: please read to /linux/README and find out if it
+Kernel panics: please read /linux/README and find out if it
 really occurred within the scc driver.
 
 If you cannot solve a problem, send me

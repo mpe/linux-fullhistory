@@ -28,7 +28,7 @@ kernel support.
 
   This document describes the communication between Venus and kernel
   level file system code needed for the operation of the Coda filesys-
-  tem.  This version document is meant to describe the current interface
+  tem.  This document version is meant to describe the current interface
   (version 1.0) as well as improvements we envisage.
   ______________________________________________________________________
 
@@ -161,7 +161,7 @@ kernel support.
   client cache and makes remote procedure calls to Coda file servers and
   related servers (such as authentication servers) to service these
   requests it receives from the operating system.  When Venus has
-  serviced a request it replies to the operating system with appropiate
+  serviced a request it replies to the operating system with appropriate
   return codes, and other data related to the request.  Optionally the
   kernel support for Coda may maintain a minicache of recently processed
   requests to limit the number of interactions with Venus.  Venus
@@ -218,10 +218,10 @@ kernel support.
   as applicable in the operating system. These differ very significantly
   among operating systems, but share features such as facilities to
   read/write and create and remove objects.  The Coda FS layer services
-  such VFS requests in by invoking on or more well defined services
+  such VFS requests by invoking one or more well defined services
   offered by the cache manager Venus.  When the replies from Venus have
   come back to the FS driver, servicing of the VFS call continues and
-  finishes with a reply to the kernels VFS. Finally the VFS layer
+  finishes with a reply to the kernel's VFS. Finally the VFS layer
   returns to the process.
 
   As a result of this design a basic interface exposed by the FS driver
@@ -277,7 +277,7 @@ kernel support.
   FS Driver in kernel memory on behalf of P and copied to user memory in
   Venus.
 
-  The FS Driver while servicing P makes upcall's to Venus.  Such an
+  The FS Driver while servicing P makes upcalls to Venus.  Such an
   upcall is dispatched to Venus by creating a message structure.  The
   structure contains the identification of P, the message sequence
   number, the size of the request and a pointer to the data in kernel
@@ -289,7 +289,7 @@ kernel support.
   synchronization objects.  In the upcall routine the message structure
   is filled in, flags are set to 0, and it is placed on the _p_e_n_d_i_n_g
   queue.  The routine calling upcall is responsible for allocating the
-  data buffer; it's structure will be described in the next section.
+  data buffer; its structure will be described in the next section.
 
   A facility must exist to notify Venus that the message has been
   created, and implemented using available synchronization objects in
@@ -323,15 +323,15 @@ kernel support.
 
   +o  The message is a _d_o_w_n_c_a_l_l.  A downcall is a request from Venus to
      the FS Driver. The FS driver processes the request immediately
-     (usually a cache eviction or replacement) and when finishes
+     (usually a cache eviction or replacement) and when it finishes
      sendmsg_to_kernel returns.
 
   Now P awakes and continues processing upcall.  There are some
-  subtleties to take account off. First P will determine if it was woken
+  subtleties to take account of. First P will determine if it was woken
   up in upcall by a signal from some other source (for example an
   attempt to terminate P) or as is normally the case by Venus in its
   sendmsg_to_kernel call.  In the normal case, the upcall routine will
-  deallocate message structure and return.  The FS routine can proceed
+  deallocate the message structure and return.  The FS routine can proceed
   with its processing.
 
 
@@ -344,7 +344,7 @@ kernel support.
 
   In case P is woken up by a signal and not by Venus, it will first look
   at the flags field.  If the message is not yet READ, the process P can
-  handle it's signal without notifying Venus.  If Venus has READ, and
+  handle its signal without notifying Venus.  If Venus has READ, and
   the request should not be processed, P can send Venus a signal message
   to indicate that it should disregard the previous message.  Such
   signals are put in the queue at the head, and read first by Venus.  If
@@ -407,7 +407,7 @@ kernel support.
   Before going on let us elucidate the role of the various fields. The
   inputArgs start with the opcode which defines the type of service
   requested from Venus. There are approximately 30 upcalls at present
-  which we will discuss.   The unique field labels the inputArg with
+  which we will discuss.   The unique field labels the inputArg with a
   unique number which will identify the message uniquely.  A process and
   process group id are passed.  Finally the credentials of the caller
   are included.
@@ -421,9 +421,9 @@ kernel support.
   44..11..  DDaattaa ssttrruuccttuurreess sshhaarreedd bbyy tthhee kkeerrnneell aanndd VVeennuuss
 
 
-  The CodaCred structure defines a variety of user and group id's as
+  The CodaCred structure defines a variety of user and group ids as
   they are set for the calling process. The vuid_t and guid_t are 32 bit
-  unsigned integers.  It also defines group member ship in an array.  On
+  unsigned integers.  It also defines group membership in an array.  On
   Unix the CodaCred has proven sufficient to implement good security
   semantics for Coda but the structure may have to undergo modification
   for the Windows environment when these mature.
@@ -462,7 +462,7 @@ kernel support.
   to be prefixed to identify the Coda cell; this will probably take the
   form of a Ipv6 size IP address naming the Coda cell through DNS.
 
-  The next important structure shared between Venus and the kernel are
+  The next important structure shared between Venus and the kernel is
   the attributes of the file.  The following structure is used to
   exchange information.  It has room for future extensions such as
   support for device files (currently not present in Coda).
@@ -514,7 +514,7 @@ kernel support.
 
   Coda specific requests can be made by application through the pioctl
   interface. The pioctl is implemented as an ordinary ioctl on a
-  ficticious file /coda/.CONTROL.  The piocl call opens this file, gets
+  ficticious file /coda/.CONTROL.  The pioctl call opens this file, gets
   a file handle and makes the ioctl call. Finally it closes the file.
 
   The kernel involvement in this is limited to providing the facility to
@@ -614,7 +614,7 @@ kernel support.
   The name of the object is an 8 bit character string of maximum length
   CFS_MAXNAMLEN, currently set to 256 (including a 0 terminator.)
 
-  It is extremely important to realize that Venus bitwise or's the field
+  It is extremely important to realize that Venus bitwise ors the field
   cfs_lookup.vtype with CFS_NOCACHE to indicate that the object should
   not be put in the kernel name cache.
 
@@ -650,11 +650,11 @@ kernel support.
   DDeessccrriippttiioonn This call returns the attributes of the file identified by
   fid.
 
-  EErrrroorrss Errors can occur if the object with fid does not exist, are
+  EErrrroorrss Errors can occur if the object with fid does not exist, is
   unaccessible or if the caller does not have permission to fetch
   attributes.
 
-  NNoottee Many kernel FS drivers (Linux, NT and Windows 95 need to acquire
+  NNoottee Many kernel FS drivers (Linux, NT and Windows 95) need to acquire
   the attributes as well as the Fid for the instantiation of an internal
   "inode" or "FileHandle".  A significant improvement in performance on
   such systems could be made by combining the _l_o_o_k_u_p and _g_e_t_a_t_t_r calls
@@ -689,7 +689,7 @@ kernel support.
   in BSD style.  Attributes not to be changed are set to -1, apart from
   vtype which is set to VNON. Other are set to the value to be assigned.
   The only attributes which the FS driver may request to change are the
-  mode, ownner, groupid, atime, mtime and ctime.  The return value
+  mode, owner, groupid, atime, mtime and ctime.  The return value
   indicates success or failure.
 
   EErrrroorrss A variety of errors can occur.  The object may not exist, may
@@ -719,7 +719,7 @@ kernel support.
   DDeessccrriippttiioonn Verify if access to the object identified by VFid for
   operations described by flags is permitted.  The result indicates if
   access will be granted.  It is important to remember that Coda uses
-  ACL's to enforce protection and that ultimately the servers, not the
+  ACLs to enforce protection and that ultimately the servers, not the
   clients enforce the security of the system.  The result of this call
   will depend on wether a _t_o_k_e_n is held by the user.
 
@@ -851,7 +851,7 @@ kernel support.
 
   DDeessccrriippttiioonn This call creates a link to the sourceFid in the directory
   identified by destFid with name tname.  The source must reside in the
-  targets parent, i.e. the source must be have parent destFid, i.e. Coda
+  target's parent, i.e. the source must be have parent destFid, i.e. Coda
   does not support cross directory hard links.  Only the return value is
   relevant.  It indicates success or the type of failure.
 
@@ -1015,7 +1015,7 @@ kernel support.
   EErrrroorrss
 
   NNOOTTEE Currently the cfs_open_out structure is not properly adapted to
-  deal with the windows case.  It might be best to implement two
+  deal with the Windows case.  It might be best to implement two
   upcalls, one to open aiming at a container file name, the other at a
   container file inode.
 
@@ -1051,7 +1051,7 @@ kernel support.
   fetching the data in Venus vproc_vfscalls.  This seems silly.  If a
   file is being closed, the data in the container file is to be the new
   data.  Here again the execp flag might be in play to create confusion:
-  presently Venus might think a file can be flushed from the cache when
+  currently Venus might think a file can be flushed from the cache when
   it is still memory mapped.  This needs to be understood.
 
   0wpage
@@ -1059,7 +1059,7 @@ kernel support.
   44..1177..  iiooccttll
 
 
-  SSuummmmaarryy Do an ioctl on a file. This includes the piocl interface.
+  SSuummmmaarryy Do an ioctl on a file. This includes the pioctl interface.
 
   AArrgguummeennttss
 
@@ -1091,7 +1091,7 @@ kernel support.
   EErrrroorrss
 
   NNOOTTEE Another bogus parameter.  flags is not used.  What is the
-  business about PREFETCHING in the Venus' code?
+  business about PREFETCHING in the Venus code?
 
 
   0wpage
@@ -1154,8 +1154,8 @@ kernel support.
 
 
   DDeessccrriippttiioonn Read directory entries from VFid starting at offset and
-  read at most count bytes.  Returns the data into data and indicates
-  the size returned size.
+  read at most count bytes.  Returns the data in data and returns
+  the size in size.
 
   EErrrroorrss
 
@@ -1196,7 +1196,7 @@ kernel support.
 
   NNOOTTEE This operation is not used.  However, it is extremely useful
   since it can be used to deal with read/write memory mapped files.
-  These can be "pinned" in the Venus cache using vget and release with
+  These can be "pinned" in the Venus cache using vget and released with
   inactive.
 
   0wpage
@@ -1219,8 +1219,8 @@ kernel support.
      oouutt
         none
 
-  DDeessccrriippttiioonn  Ask Venus to update RVM attributes of object VFid. This
-  should be called as  part of kernel level fsync type calls.  The
+  DDeessccrriippttiioonn Ask Venus to update RVM attributes of object VFid. This
+  should be called as part of kernel level fsync type calls.  The
   result indicates if the synching was successful.
 
   EErrrroorrss
@@ -1452,7 +1452,7 @@ kernel support.
   4. the cnode of the object
 
   The lookup call in the Coda FS Driver may request the cnode of the
-  desired object from the cache, by passing it's name, directory and the
+  desired object from the cache, by passing its name, directory and the
   CodaCred's of the caller.  The cache will return the cnode or indicate
   that it cannot be found.  The Coda FS Driver must be careful to
   invalidate cache entries when it modifies or removes objects.
@@ -1496,7 +1496,7 @@ kernel support.
 
 
   DDeessccrriippttiioonn Remove all entries in the cache carrying the Cred.  This
-  call is issued when tokes for a user expire or are flushed.
+  call is issued when tokens for a user expire or are flushed.
 
 
   55..44..  ZZAAPPFFIILLEE
@@ -1567,7 +1567,7 @@ kernel support.
 
 
   DDeessccrriippttiioonn Flush the attribute for the file. If it is a dir (odd
-  vnode), purge its children from the namecache remove the file from the
+  vnode), purge its children from the namecache and remove the file from the
   namecache.
 
 
@@ -1589,7 +1589,7 @@ kernel support.
   DDeessccrriippttiioonn This routine replaces a ViceFid in the name cache with
   another.  It is added to allow Venus during reintegration to replace
   locally allocated temp fids while disconnected with global fids even
-  when the reference count on those fids are not zero.
+  when the reference counts on those fids are not zero.
 
   0wpage
 
@@ -1629,7 +1629,7 @@ kernel support.
   66..11..  RReeqquuiirreemmeennttss
 
 
-  The following requirements should be accomodated:
+  The following requirements should be accommodated:
 
   1. The message queueus should have open and close routines.  On Unix
      the opening of the character devices are such routines.
@@ -1659,7 +1659,7 @@ kernel support.
 
   6. All memory held by cnodes can be freed without relying on upcalls.
 
-  7. Unmounting the file system can be done without relying on upcalss.
+  7. Unmounting the file system can be done without relying on upcalls.
 
   8. Mounting the Coda filesystem should fail gracefully if Venus cannot
      get the rootfid or the attributes of the rootfid.  The latter is

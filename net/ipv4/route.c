@@ -5,7 +5,7 @@
  *
  *		ROUTE - implementation of the IP router.
  *
- * Version:	$Id: route.c,v 1.42 1998/03/20 09:12:09 davem Exp $
+ * Version:	$Id: route.c,v 1.47 1998/04/28 06:22:01 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -577,7 +577,7 @@ static struct dst_entry *ipv4_negative_advice(struct dst_entry *dst)
 	if (rt != NULL) {
 		if (dst->obsolete || rt->rt_flags&RTCF_REDIRECTED) {
 #if RT_CACHE_DEBUG >= 1
-			printk(KERN_DEBUG "ip_rt_advice: redirect to %08x/%02x dropped\n", rt->rt_dst, rt->key.tos);
+			printk(KERN_DEBUG "ip_rt_advice: redirect to %d.%d.%d.%d/%02x dropped\n", NIPQUAD(rt->rt_dst), rt->key.tos);
 #endif
 			ip_rt_put(rt);
 			rt_cache_flush(0);
@@ -725,11 +725,11 @@ unsigned short ip_rt_frag_needed(struct iphdr *iph, unsigned short new_mtu)
 
 					mtu = guess_mtu(old_mtu);
 				}
-				if (mtu < rth->u.dst.pmtu) {
-					/* New mtu received -> path was valid */
-					dst_confirm(&rth->u.dst);
-
-					rth->u.dst.pmtu = mtu;
+				if (mtu <= rth->u.dst.pmtu) {
+					if (mtu < rth->u.dst.pmtu) { 
+						dst_confirm(&rth->u.dst);
+						rth->u.dst.pmtu = mtu;
+					}
 					est_mtu = mtu;
 				}
 			}
@@ -808,11 +808,18 @@ static void rt_set_nexthop(struct rtable *rt, struct fib_result *res)
 #endif
 		rt->u.dst.window= fi->fib_window ? : 0;
 		rt->u.dst.rtt	= fi->fib_rtt ? : TCP_TIMEOUT_INIT;
+#ifdef CONFIG_NET_CLS_ROUTE
+		rt->u.dst.tclassid = FIB_RES_NH(*res).nh_tclassid;
+#endif
 	} else {
 		rt->u.dst.pmtu	= rt->u.dst.dev->mtu;
 		rt->u.dst.window= 0;
 		rt->u.dst.rtt	= TCP_TIMEOUT_INIT;
 	}
+#ifdef CONFIG_NET_CLS_ROUTE
+	if (rt->u.dst.tclassid == 0)
+		rt->u.dst.tclassid = fib_rules_tclass(res);
+#endif
         rt->rt_type = res->type;
 }
 
@@ -1205,6 +1212,9 @@ int ip_route_output_slow(struct rtable **rp, u32 daddr, u32 saddr, u32 tos, int 
 	key.oif = oif;
 	key.scope = (tos&RTO_ONLINK) ? RT_SCOPE_LINK : RT_SCOPE_UNIVERSE;
 	res.fi = NULL;
+#ifdef CONFIG_IP_MULTIPLE_TABLES
+	res.r = NULL;
+#endif
 
 	if (saddr) {
 		if (MULTICAST(saddr) || BADCLASS(saddr) || ZERONET(saddr))

@@ -2,7 +2,7 @@
 
 		      Jonathan Naylor 29.12.96
 
-The LAPB module will be a seperately compiled module for use by any parts of
+The LAPB module will be a separately compiled module for use by any parts of
 the Linux operating system that require a LAPB service. This document
 defines the interfaces to, and the services provided by this module. The
 term module in this context does not imply that the LAPB module is a
@@ -73,7 +73,7 @@ be unacknowledged by the remote end, the value of the window is between 1
 and 7 for a standard LAPB link, and between 1 and 127 for an extended LAPB
 link.
 
-The mode variable is a bit field is used for setting (at present) three values.
+The mode variable is a bit field used for setting (at present) three values.
 The bit fields have the following meanings:
 
 Bit	Meaning

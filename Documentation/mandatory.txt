@@ -19,7 +19,7 @@ troublesome) is access to a user's mailbox. The mail user agent and the mail
 transfer agent must guard against updating the mailbox at the same time, and
 prevent reading the mailbox while it is being updated.
 
-In a perfect world all process would use and honour a cooperative, or
+In a perfect world all processes would use and honour a cooperative, or
 "advisory" locking scheme. However, the world isn't perfect, and there's
 a lot of poorly written code out there.
 
@@ -47,8 +47,8 @@ scheme is defined by the System V Interface Definition (SVID) Version 3.
 2. Marking a file for mandatory locking
 ---------------------------------------
 
-A file is marked as a candidate for mandatory by setting the group-id bit in
-its file mode but removing the group-execute bit. This is an otherwise
+A file is marked as a candidate for mandatory locking by setting the group-id
+bit in its file mode but removing the group-execute bit. This is an otherwise
 meaningless combination, and was chosen by the System V implementors so as not
 to break existing user programs.
 
@@ -103,7 +103,7 @@ agree.
 2. If a process has locked a region of a file with a mandatory read lock, then
    other processes are permitted to read from that region. If any of these
    processes attempts to write to the region it will block until the lock is
-   released, unless the process has opened the file opened with the O_NONBLOCK
+   released, unless the process has opened the file with the O_NONBLOCK
    flag in which case the system call will return immediately with the error
    status EAGAIN.
 
@@ -145,7 +145,7 @@ better still fix the system calls yourself and submit a patch to me or Linus.
 6. Warning!
 -----------
 
-Not even root can override a mandatory lock, so runaway process can wreak
+Not even root can override a mandatory lock, so runaway processes can wreak
 havoc if they lock crucial files. The way around it is to change the file
 permissions (remove the setgid bit) before trying to read or write to it.
 Of course, that might be a bit tricky if the system is hung :-(

@@ -41,7 +41,7 @@ and then you get a better idea of what happens than with the gdb
 disassembly.
 
 Now, the trick is just then to combine all the data you have: the C 
-sources (and general knowledge of what it _should_ do, the assembly 
+sources (and general knowledge of what it _should_ do), the assembly 
 listing and the code disassembly (and additionally the register dump you 
 also get from the "oops" message - that can be useful to see _what_ the 
 corrupted pointers were, and when you have the assembler listing you can 

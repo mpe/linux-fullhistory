@@ -32,7 +32,7 @@ same card).  They are not software compatible.
 Setting Up the Hardware
 -----------------------
 
-The CDU31A driver in unable to safely tell if an interface card is
+The CDU31A driver is unable to safely tell if an interface card is
 present that it can use because the interface card does not announce
 its presence in any way besides placing 4 I/O locations in memory.  It
 used to just probe memory and attempt commands, but Linus wisely asked
@@ -44,7 +44,7 @@ is, what interrupts are used, and possibly if you are on a PAS-16
 soundcard.
 
 If you have the Sony CDU31A/CDU33A drive interface card, the following
-diagram will help you set it up.  If You have another card, you are on
+diagram will help you set it up.  If you have another card, you are on
 your own.  You need to make sure that the I/O address and interrupt is
 not used by another card in the system.  You will need to know the I/O
 address and interrupt you have set.  Note that use of interrupts is

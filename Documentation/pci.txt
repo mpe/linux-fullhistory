@@ -22,7 +22,7 @@ ID, it should use:
    In case you want to do some complex matching, look at pci_devices -- it's
 a linked list of pci_dev structures for all PCI devices in the system.
 
-   All these methods return pointer to a pci_dev structure which is used as a
+   All these methods return a pointer to a pci_dev structure which is used as a
 parameter for many other PCI functions. The rest of them accept bus and
 device/function numbers which can be found in pci_dev->bus->number and
 pci_dev->devfn. Feel free to use all other fields of the pci_dev structure, but
@@ -34,8 +34,8 @@ machine.
 2. How to access PCI config space
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
    You can use pci_(read|write)_config_(byte|word|dword) to access the config
-space of device represented by pci_dev. All these functions return 0 when
-successfull or an error code (PCIBIOS_...) which can be translated to text
+space of a device represented by pci_dev. All these functions return 0 when
+successful or an error code (PCIBIOS_...) which can be translated to a text
 string by pcibios_strerror. Most drivers expect that accesses to valid PCI
 devices don't fail.
 

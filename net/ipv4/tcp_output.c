@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_output.c,v 1.84 1998/04/06 08:48:29 davem Exp $
+ * Version:	$Id: tcp_output.c,v 1.87 1998/04/26 01:11:35 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -234,18 +234,14 @@ static int tcp_fragment(struct sock *sk, struct sk_buff *skb, u32 len)
 void tcp_write_xmit(struct sock *sk)
 {
 	struct tcp_opt *tp = &(sk->tp_pinfo.af_tcp);
-	int mss_now = sk->mss;
+	unsigned int mss_now;
 
 	/* Account for SACKS, we may need to fragment due to this.
 	 * It is just like the real MSS changing on us midstream.
 	 * We also handle things correctly when the user adds some
 	 * IP options mid-stream.  Silly to do, but cover it.
 	 */
-	if(tp->sack_ok && tp->num_sacks)
-		mss_now -= (TCPOLEN_SACK_BASE_ALIGNED +
-			    (tp->num_sacks * TCPOLEN_SACK_PERBLOCK));
-	if(sk->opt && sk->opt->optlen)
-		mss_now -= sk->opt->optlen;
+	mss_now = tcp_current_mss(sk); 
 
 	/* If we are zapped, the bytes will have to remain here.
 	 * In time closedown will empty the write queue and all
@@ -439,14 +435,14 @@ static void tcp_retrans_try_collapse(struct sock *sk, struct sk_buff *skb, int m
 }
 
 /* Do a simple retransmit without using the backoff mechanisms in
- * tcp_timer. This is used to speed up path mtu recovery. Note that
- * these simple retransmits aren't counted in the usual tcp retransmit
- * backoff counters. 
+ * tcp_timer. This is used for path mtu discovery. 
  * The socket is already locked here.
  */ 
 void tcp_simple_retransmit(struct sock *sk)
 {
 	struct tcp_opt *tp = &(sk->tp_pinfo.af_tcp);
+	struct sk_buff *skb; 
+	unsigned int mss = tcp_current_mss(sk); 
 
  	/* Don't muck with the congestion window here. */
  	tp->dup_acks = 0;
@@ -457,7 +453,10 @@ void tcp_simple_retransmit(struct sock *sk)
 	 * and not use it for RTT calculation in the absence of
 	 * the timestamp option.
 	 */
- 	tcp_retransmit_skb(sk, skb_peek(&sk->write_queue)); 
+	for (skb = skb_peek(&sk->write_queue); skb != tp->send_head;
+	     skb = skb->next) 
+		if (skb->len > mss)
+			tcp_retransmit_skb(sk, skb); 
 }
 
 static __inline__ void update_retrans_head(struct sock *sk)
@@ -477,17 +476,10 @@ static __inline__ void update_retrans_head(struct sock *sk)
 int tcp_retransmit_skb(struct sock *sk, struct sk_buff *skb)
 {
 	struct tcp_opt *tp = &(sk->tp_pinfo.af_tcp);
-	int current_mss = sk->mss;
+	unsigned int cur_mss = tcp_current_mss(sk);
 
-	/* Account for outgoing SACKS and IP options, if any. */
-	if(tp->sack_ok && tp->num_sacks)
-		current_mss -= (TCPOLEN_SACK_BASE_ALIGNED +
-				(tp->num_sacks * TCPOLEN_SACK_PERBLOCK));
-	if(sk->opt && sk->opt->optlen)
-		current_mss -= sk->opt->optlen;
-
-	if(skb->len > current_mss) {
-		if(tcp_fragment(sk, skb, current_mss))
+	if(skb->len > cur_mss) {
+		if(tcp_fragment(sk, skb, cur_mss))
 			return 1; /* We'll try again later. */
 
 		/* New SKB created, account for it. */
@@ -496,11 +488,11 @@ int tcp_retransmit_skb(struct sock *sk, struct sk_buff *skb)
 
 	/* Collapse two adjacent packets if worthwhile and we can. */
 	if(!(TCP_SKB_CB(skb)->flags & TCPCB_FLAG_SYN) &&
-	   (skb->len < (current_mss >> 1)) &&
+	   (skb->len < (cur_mss >> 1)) &&
 	   (skb->next != tp->send_head) &&
 	   (skb->next != (struct sk_buff *)&sk->write_queue) &&
 	   (sysctl_tcp_retrans_collapse != 0))
-		tcp_retrans_try_collapse(sk, skb, current_mss);
+		tcp_retrans_try_collapse(sk, skb, cur_mss);
 
 	if(tp->af_specific->rebuild_header(sk))
 		return 1; /* Routing failure or similar. */
@@ -602,17 +594,14 @@ void tcp_send_fin(struct sock *sk)
 {
 	struct tcp_opt *tp = &(sk->tp_pinfo.af_tcp);	
 	struct sk_buff *skb = skb_peek_tail(&sk->write_queue);
-	int mss_now = sk->mss;
+	unsigned int mss_now;
 	
 	/* Optimization, tack on the FIN if we have a queue of
 	 * unsent frames.  But be careful about outgoing SACKS
 	 * and IP options.
 	 */
-	if(tp->sack_ok && tp->num_sacks)
-		mss_now -= (TCPOLEN_SACK_BASE_ALIGNED +
-			    (tp->num_sacks * TCPOLEN_SACK_PERBLOCK));
-	if(sk->opt && sk->opt->optlen)
-		mss_now -= sk->opt->optlen;
+	mss_now = tcp_current_mss(sk); 
+
 	if((tp->send_head != NULL) && (skb->len < mss_now)) {
 		/* tcp_write_xmit() takes care of the rest. */
 		TCP_SKB_CB(skb)->flags |= TCPCB_FLAG_FIN;
@@ -720,6 +709,9 @@ int tcp_send_synack(struct sock *sk)
 	return 0;
 }
 
+/*
+ * Prepare a SYN-ACK.
+ */
 struct sk_buff * tcp_make_synack(struct sock *sk, struct dst_entry *dst,
 				 struct open_request *req, int mss)
 {
@@ -792,7 +784,7 @@ struct sk_buff * tcp_make_synack(struct sock *sk, struct dst_entry *dst,
 
 	skb->csum = 0;
 	th->doff = (tcp_header_size >> 2);
-	tcp_statistics.TcpOutSegs++;
+	tcp_statistics.TcpOutSegs++; 
 	return skb;
 }
 

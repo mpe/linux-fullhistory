@@ -71,7 +71,7 @@ POSSIBLE PROBLEMS
 * vfat_valid_longname does not properly checked reserved names.
 * When a volume name is the same as a directory name in the root
   directory of the filesystem, the directory name sometimes shows
-  up empty an empty file.
+  up as an empty file.
 * autoconv option does not work correctly.
 
 BUG REPORTS
@@ -103,7 +103,7 @@ but it appears to be so.
 The extended FAT file system is almost identical to the FAT
 file system used in DOS versions up to and including 6.223410239847
 :-).  The significant change has been the addition of long file names.
-Theses names support up to 255 characters including spaces and lower
+These names support up to 255 characters including spaces and lower
 case characters as opposed to the traditional 8.3 short names.
 
 Here is the description of the traditional FAT entry in the current
@@ -142,7 +142,7 @@ directory entries for any files with extended names.  (Any name which
 legally fits within the old 8.3 encoding scheme does not have extra
 entries.)  I call these extra entries slots.  Basically, a slot is a
 specially formatted directory entry which holds up to 13 characters of
-a files extended name.  Think of slots as additional labeling for the
+a file's extended name.  Think of slots as additional labeling for the
 directory entry of the file to which they correspond.  Microsoft
 prefers to refer to the 8.3 entry for a file as its alias and the
 extended slot directory entries as the file name. 
@@ -163,7 +163,7 @@ The C structure for a slot directory entry follows:
 If the layout of the slots looks a little odd, it's only
 because of Microsoft's efforts to maintain compatibility with old
 software.  The slots must be disguised to prevent old software from
-panicing.  To this end, a number of measures are taken:
+panicking.  To this end, a number of measures are taken:
 
         1) The attribute byte for a slot directory entry is always set
            to 0x0f.  This corresponds to an old directory entry with
@@ -206,9 +206,9 @@ the following:
                         sum = (((sum&1)<<7)|((sum&0xfe)>>1)) + name[i]
                 }
 
-	3) If there is in the final slot, a Unicode NULL (0x0000) is stored
-           after the final character.  After that, all unused characters in
-           the final slot are set to Unicode 0xFFFF.
+	3) If there is free space in the final slot, a Unicode NULL (0x0000) 
+	   is stored after the final character.  After that, all unused 
+	   characters in the final slot are set to Unicode 0xFFFF.
 
 Finally, note that the extended name is stored in Unicode.  Each Unicode
 character takes two bytes.

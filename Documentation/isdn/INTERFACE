@@ -53,7 +53,7 @@ Description of the Interface between Linklevel and Hardwarelevel
     ***CHANGE0.6: New since this version.
 
     Also to be preset by the HL-driver. With this value the HL-driver
-    tells to the LL the maximum size of a data-packet it will accept. 
+    tells the LL the maximum size of a data-packet it will accept. 
 
   unsigned long features;
 
@@ -70,8 +70,8 @@ Description of the Interface between Linklevel and Hardwarelevel
     ***CHANGE0.7.4: New field.
 
     To be preset by the HL-driver, if it supports sk_buff's. The driver
-    should put here the amount of additional space needed in sk-buff's for
-    its internal purposes. Drivers not supporting sk_buff's should put
+    should put here the amount of additional space needed in sk_buff's for
+    its internal purposes. Drivers not supporting sk_buff's should 
     initialize this field to 0.
 
   void (*rcvcallb_skb)(int, int, struct sk_buff *)
@@ -211,7 +211,7 @@ Description of the Interface between Linklevel and Hardwarelevel
 
    All commands will be performed by calling the function command() described
    above from within the LL. The field command of the struct-parameter will
-   contain the desired command, the field driver always is set to the
+   contain the desired command, the field driver is always set to the
    appropriate driver-Id.
 
    Until now, the following commands are defined:
@@ -436,7 +436,7 @@ Description of the Interface between Linklevel and Hardwarelevel
       arg         = unused.
       para        = unused.
 
-3. Description of the events to be signaled by the HL-driver to th LL.
+3. Description of the events to be signaled by the HL-driver to the LL.
 
   All status-changes are signaled via calling the previously described
   function statcallb(). The field command of the struct isdn_cmd has
@@ -520,7 +520,7 @@ Description of the Interface between Linklevel and Hardwarelevel
    remote-station has initiated establishment)
 
    The HL driver should call this when the logical l2/l3 protocol 
-   connection on top of the physical B-channel is esatblished .
+   connection on top of the physical B-channel is established.
 
     Parameter:
       driver      = driver-Id
@@ -624,7 +624,7 @@ Description of the Interface between Linklevel and Hardwarelevel
     With this call, the HL-driver delivers CAUSE-messages to the LL.
     Currently the LL does not use this messages. Their contents is simply
     logged via kernel-messages. Therefore, currently the format of the
-    messages is currently completely free. However they should be printable.
+    messages is completely free. However they should be printable.
 
     Parameter:
       driver      = driver-Id

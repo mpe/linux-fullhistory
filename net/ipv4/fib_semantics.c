@@ -5,7 +5,7 @@
  *
  *		IPv4 Forwarding Information Base: semantics.
  *
- * Version:	$Id: fib_semantics.c,v 1.7 1998/03/08 05:56:18 davem Exp $
+ * Version:	$Id: fib_semantics.c,v 1.8 1998/04/28 06:21:58 davem Exp $
  *
  * Authors:	Alexey Kuznetsov, <kuznet@ms2.inr.ac.ru>
  *
@@ -124,6 +124,9 @@ extern __inline__ int nh_comp(const struct fib_info *fi, const struct fib_info *
 #ifdef CONFIG_IP_ROUTE_MULTIPATH
 		    nh->nh_weight != onh->nh_weight ||
 #endif
+#ifdef CONFIG_NET_CLS_ROUTE
+		    nh->nh_tclassid != onh->nh_tclassid ||
+#endif
 		    ((nh->nh_flags^onh->nh_flags)&~RTNH_F_DEAD))
 			return -1;
 		onh++;
@@ -217,8 +220,12 @@ fib_get_nhs(struct fib_info *fi, const struct rtattr *rta, const struct rtmsg *r
 		nh->nh_flags = (r->rtm_flags&~0xFF) | nhp->rtnh_flags;
 		nh->nh_oif = nhp->rtnh_ifindex;
 		nh->nh_weight = nhp->rtnh_hops + 1;
-		if (attrlen)
+		if (attrlen) {
 			nh->nh_gw = fib_get_attr32(RTNH_DATA(nhp), attrlen, RTA_GATEWAY);
+#ifdef CONFIG_NET_CLS_ROUTE
+			nh->nh_tclassid = fib_get_attr32(RTNH_DATA(nhp), attrlen, RTA_FLOW);
+#endif
+		}
 		nhp = RTNH_NEXT(nhp);
 	} endfor_nexthops(fi);
 	return 0;
@@ -267,6 +274,11 @@ int fib_nh_match(struct rtmsg *r, struct nlmsghdr *nlh, struct kern_rta *rta,
 			gw = fib_get_attr32(RTNH_DATA(nhp), attrlen, RTA_GATEWAY);
 			if (gw && gw != nh->nh_gw)
 				return 1;
+#ifdef CONFIG_NET_CLS_ROUTE
+			gw = fib_get_attr32(RTNH_DATA(nhp), attrlen, RTA_FLOW);
+			if (gw && gw != nh->nh_tclassid)
+				return 1;
+#endif
 		}
 		nhp = RTNH_NEXT(nhp);
 	} endfor_nexthops(fi);
@@ -459,6 +471,10 @@ fib_create_info(const struct rtmsg *r, struct kern_rta *rta,
 			goto err_inval;
 		if (rta->rta_gw && memcmp(&fi->fib_nh->nh_gw, rta->rta_gw, 4))
 			goto err_inval;
+#ifdef CONFIG_NET_CLS_ROUTE
+		if (rta->rta_flow && memcmp(&fi->fib_nh->nh_tclassid, rta->rta_flow, 4))
+			goto err_inval;
+#endif
 #else
 		goto err_inval;
 #endif
@@ -468,6 +484,10 @@ fib_create_info(const struct rtmsg *r, struct kern_rta *rta,
 			nh->nh_oif = *rta->rta_oif;
 		if (rta->rta_gw)
 			memcpy(&nh->nh_gw, rta->rta_gw, 4);
+#ifdef CONFIG_NET_CLS_ROUTE
+		if (rta->rta_flow)
+			memcpy(&nh->nh_tclassid, rta->rta_flow, 4);
+#endif
 		nh->nh_flags = r->rtm_flags;
 #ifdef CONFIG_IP_ROUTE_MULTIPATH
 		nh->nh_weight = 1;
@@ -654,6 +674,10 @@ fib_dump_info(struct sk_buff *skb, pid_t pid, u32 seq, int event,
 	if (fi->fib_rtt)
 		RTA_PUT(skb, RTA_RTT, sizeof(unsigned), &fi->fib_rtt);
 #else
+#ifdef CONFIG_NET_CLS_ROUTE
+	if (fi->fib_nh[0].nh_tclassid)
+		RTA_PUT(skb, RTA_FLOW, 4, &fi->fib_nh[0].nh_tclassid);
+#endif
 	if (fi->fib_mtu || fi->fib_window || fi->fib_rtt) {
 		int i;
 		struct rtattr *mx = (struct rtattr *)skb->tail;

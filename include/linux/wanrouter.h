@@ -359,10 +359,10 @@ typedef struct wan_device
 } wan_device_t;
 
 /* Public functions available for device drivers */
-extern int register_wandev (wan_device_t* wandev);
-extern int unregister_wandev (char* name);
-unsigned short wan_type_trans (struct sk_buff* skb, struct device* dev);
-int wan_encapsulate (struct sk_buff* skb, struct device* dev);
+extern int register_wan_device(wan_device_t* wandev);
+extern int unregister_wan_device(char* name);
+unsigned short wanrouter_type_trans(struct sk_buff* skb, struct device* dev);
+int wanrouter_encapsulate(struct sk_buff* skb, struct device* dev);
 
 /* Proc interface functions. These must not be called by the drivers! */
 extern int wanrouter_proc_init (void);

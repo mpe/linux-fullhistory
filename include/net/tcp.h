@@ -172,7 +172,8 @@ struct tcp_tw_bucket {
 	__u32			rcv_nxt;
 	struct tcp_func		*af_specific;
 	struct tcp_bind_bucket	*tb;
-	struct timer_list	timer;
+	struct tcp_tw_bucket	*next_death;
+	int			death_slot;
 #if defined(CONFIG_IPV6) || defined(CONFIG_IPV6_MODULE)
 	struct in6_addr		v6_daddr;
 	struct in6_addr		v6_rcv_saddr;
@@ -248,9 +249,11 @@ static __inline__ int tcp_sk_listen_hashfn(struct sock *sk)
 #define MAX_RESET_SIZE	(NETHDR_SIZE + sizeof(struct tcphdr) + MAX_HEADER + 15)
 #define MAX_TCPHEADER_SIZE (NETHDR_SIZE + sizeof(struct tcphdr) + 20 + MAX_HEADER + 15)
 
-#define MAX_WINDOW	32767		/* Never offer a window over 32767 without using
-					   window scaling (not yet supported). Some poor
-					   stacks do signed 16bit maths! */
+/* 
+ * Never offer a window over 32767 without using window scaling. Some
+ * poor stacks do signed 16bit maths! 
+ */
+#define MAX_WINDOW	32767	
 #define MIN_WINDOW	2048
 #define MAX_ACK_BACKLOG	2
 #define MAX_DELAY_ACK	2
@@ -293,12 +296,16 @@ static __inline__ int tcp_sk_listen_hashfn(struct sock *sk)
 #define TCP_KEEPALIVE_PROBES	9		/* Max of 9 keepalive probes	*/
 #define TCP_KEEPALIVE_PERIOD ((75*HZ)>>2)	/* period of keepalive check	*/
 
-#define TCP_SYNACK_PERIOD	(HZ/2)
+#define TCP_SYNACK_PERIOD	(HZ/2) /* How often to run the synack slow timer */
 #define TCP_QUICK_TRIES		8  /* How often we try to retransmit, until
-				    * we tell the LL layer that it is something
+				    * we tell the link layer that it is something
 				    * wrong (e.g. that it can expire redirects) */
 
 #define TCP_BUCKETGC_PERIOD	(HZ)
+
+/* TIME_WAIT reaping mechanism. */
+#define TCP_TWKILL_SLOTS	8	/* Please keep this a power of 2. */
+#define TCP_TWKILL_PERIOD	((HZ*60)/TCP_TWKILL_SLOTS)
 
 /*
  *	TCP option
@@ -564,6 +571,8 @@ extern struct sock *cookie_v4_check(struct sock *sk, struct sk_buff *skb,
 extern __u32 cookie_v4_init_sequence(struct sock *sk, struct sk_buff *skb, 
 				     __u16 *mss);
 
+/* tcp_output.c */
+
 extern void tcp_read_wakeup(struct sock *);
 extern void tcp_write_xmit(struct sock *);
 extern void tcp_time_wait(struct sock *);
@@ -571,8 +580,6 @@ extern int tcp_retransmit_skb(struct sock *, struct sk_buff *);
 extern void tcp_fack_retransmit(struct sock *);
 extern void tcp_xmit_retransmit_queue(struct sock *);
 extern void tcp_simple_retransmit(struct sock *);
-
-/* tcp_output.c */
 
 extern void tcp_send_probe0(struct sock *);
 extern void tcp_send_partial(struct sock *);
@@ -615,11 +622,38 @@ struct tcp_sl_timer {
 
 #define TCP_SLT_SYNACK		0
 #define TCP_SLT_KEEPALIVE	1
-#define TCP_SLT_BUCKETGC	2
-#define TCP_SLT_MAX		3
+#define TCP_SLT_TWKILL		2
+#define TCP_SLT_BUCKETGC	3
+#define TCP_SLT_MAX		4
 
 extern struct tcp_sl_timer tcp_slt_array[TCP_SLT_MAX];
  
+/* Compute the current effective MSS, taking SACKs and IP options,
+ * and even PMTU discovery events into account.
+ */
+static __inline__ unsigned int tcp_current_mss(struct sock *sk)
+{
+	struct tcp_opt *tp = &sk->tp_pinfo.af_tcp;
+	struct dst_entry *dst = sk->dst_cache;
+	unsigned int mss_now = sk->mss; 
+
+	if(dst && (sk->mtu < dst->pmtu)) {
+		unsigned int mss_distance = (sk->mtu - sk->mss);
+
+		/* PMTU discovery event has occurred. */
+		sk->mtu = dst->pmtu;
+		sk->mss = sk->mtu - mss_distance;
+	}
+
+	if(tp->sack_ok && tp->num_sacks)
+		mss_now -= (TCPOLEN_SACK_BASE_ALIGNED +
+			    (tp->num_sacks * TCPOLEN_SACK_PERBLOCK));
+	if(sk->opt)
+		mss_now -= sk->opt->optlen;
+
+	return mss_now; 
+}
+
 /* Compute the actual receive window we are currently advertising. */
 static __inline__ u32 tcp_receive_window(struct tcp_opt *tp)
 {
@@ -919,7 +953,7 @@ extern __inline__ void tcp_select_initial_window(__u32 space, __u16 mss,
 	 * our initial window offering to 32k. There should also
 	 * be a sysctl option to stop being nice.
 	 */
-	(*rcv_wnd) = min(space,32767);
+	(*rcv_wnd) = min(space, MAX_WINDOW);
 	(*rcv_wscale) = 0;
 	if (wscale_ok) {
 		/* See RFC1323 for an explanation of the limit to 14 */

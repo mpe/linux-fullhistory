@@ -248,6 +248,7 @@ static struct dev_info device_list[] =
 {"SONY","CD-ROM CDU-55S","1.0i", BLIST_NOLUN},
 {"SONY","CD-ROM CDU-561","1.7x", BLIST_NOLUN},
 {"TANDBERG","TDC 3600","U07", BLIST_NOLUN},     /* Locks up if polled for lun != 0 */
+{"TEAC","CD-R55S","1.0H", BLIST_NOLUN},		/* Locks up if polled for lun != 0 */
 {"TEAC","CD-ROM","1.06", BLIST_NOLUN},          /* causes failed REQUEST SENSE on lun 1
 						 * for seagate controller, which causes
 						 * SCSI code to reset bus.*/

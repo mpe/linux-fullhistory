@@ -5,7 +5,7 @@ A Brief Overview of the Virtual File System
 Noone else seems to be writing this, so here's a quick description of what
 I've learned while writing lofs...
 
-The VFS relatively simple, but it is nice not to have to browse through
+The VFS is relatively simple, but it is nice not to have to browse through
 pages of code to determine what is expected when writing a filesystem.
 Hopefully this helps anyone attempting such a feat, as well as clearing up
 a few important points/dependencies.
@@ -133,9 +133,9 @@ struct inode_operations
 
 	int (*follow_link) (struct inode *,struct inode *,int,int,struct inode **);
 	[optional]
-		The follow_link function is only nescessary if a filesystem uses a really
+		The follow_link function is only necessary if a filesystem uses a really
 		twisted form of symbolic links - namely if the symbolic link comes from a
-		foriegn filesystem that makes no sense....
+		foreign filesystem that makes no sense....
 		I threw this one out - too much redundant code!
 
 	int (*readpage) (struct inode *, struct page *);	[optional]

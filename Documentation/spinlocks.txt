@@ -6,7 +6,7 @@ On Fri, 2 Jan 1998, Doug Ledford wrote:
 > SMP safe as well as UP safe during interrupts and other manipulating
 > routines.  So far, I've added a spin_lock variable to things like my queue
 > structs.  Now, from what I recall, there are some spin lock functions I can
-> use to lock these spin locks frmo other use as oppossed to a (nasty)
+> use to lock these spin locks from other use as opposed to a (nasty)
 > save_flags(); cli(); stuff; restore_flags(); construct.  Where do I find
 > these routines and go about making use of them?  Do they only lock on a
 > per-processor basis or can they also lock say an interrupt routine from
@@ -25,7 +25,7 @@ See <asm/spinlock.h>. The basic version is:
 	... critical section here ..
 	spin_unlock_irqrestore(&xxx_lock, flags);
 
-and the above is always safe. It will disable interrupt _locally_, but the
+and the above is always safe. It will disable interrupts _locally_, but the
 spinlock itself will guarantee the global lock, so it will guarantee that
 there is only one thread-of-control within the region(s) protected by that
 lock. 

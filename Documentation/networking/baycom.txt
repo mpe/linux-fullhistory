@@ -43,7 +43,7 @@ but it is now a true kernel network interface. Installation is therefore
 simple. Once installed, four interfaces named bc[0-3] are available.
 sethdlc from the ax25 utilities may be used to set driver states etc.
 Users of userland AX.25 stacks may use the net2kiss utility (also available
-in the ax25 utilities package) to converts packets of a network interface
+in the ax25 utilities package) to convert packets of a network interface
 to a KISS stream on a pseudo tty. There's also a patch available from
 me for WAMPES which allows attaching a kernel network interface directly.
 
@@ -72,7 +72,7 @@ first parallel port (LPT1 under DOS). options=1 instructs the driver to use
 the software DCD algorithm (see below).
   
 The channel access parameters can be set with sethdlc -a or kissparms.
-Note that both utilities interpret the values slightly different.
+Note that both utilities interpret the values slightly differently.
 
 
 Hardware DCD versus Software DCD
@@ -93,7 +93,7 @@ par96:  the software DCD algorithm for this type of modem is rather poor.
         feeds the DCD input of the PAR96 modem, the use of the hardware
         DCD circuitry is recommended.
 
-picpar: the picpar modem features a builtin DCD hardware, which is highly
+picpar: the picpar modem features builtin DCD hardware, which is highly
         recommended.
 
 

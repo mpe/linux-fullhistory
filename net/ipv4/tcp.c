@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp.c,v 1.111 1998/04/06 16:09:05 davem Exp $
+ * Version:	$Id: tcp.c,v 1.114 1998/04/26 01:11:33 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -702,7 +702,7 @@ static void wait_for_tcp_memory(struct sock * sk)
 int tcp_do_sendmsg(struct sock *sk, int iovlen, struct iovec *iov, int flags)
 {
 	struct tcp_opt *tp = &(sk->tp_pinfo.af_tcp);
-	int mss_now = sk->mss;
+	int mss_now;
 	int err = 0;
 	int copied  = 0;
 
@@ -715,14 +715,7 @@ int tcp_do_sendmsg(struct sock *sk, int iovlen, struct iovec *iov, int flags)
 		if((err = wait_for_tcp_connect(sk, flags)) != 0)
 			return err;
 
-	/* The socket is locked, nothing can change the state of pending
-	 * SACKs or IP options.
-	 */
-	if(tp->sack_ok && tp->num_sacks)
-		mss_now -= (TCPOLEN_SACK_BASE_ALIGNED +
-			    (tp->num_sacks * TCPOLEN_SACK_PERBLOCK));
-	if(sk->opt && sk->opt->optlen)
-		mss_now -= (sk->opt->optlen);
+	mss_now = tcp_current_mss(sk);
 
 	/* Ok commence sending. */
 	while(--iovlen >= 0) {
@@ -842,6 +835,11 @@ int tcp_do_sendmsg(struct sock *sk, int iovlen, struct iovec *iov, int flags)
 					goto do_interrupted;
 				}
 				wait_for_tcp_memory(sk);
+
+				/* If SACK's were formed or PMTU events happened,
+				 * we must find out about it.
+				 */
+				mss_now = tcp_current_mss(sk);
 				continue;
 			}
 
@@ -908,10 +906,8 @@ void tcp_read_wakeup(struct sock *sk)
 	/* If we're closed, don't send an ack, or we'll get a RST
 	 * from the closed destination.
 	 */
-	if ((1 << sk->state) & (TCPF_CLOSE|TCPF_TIME_WAIT))
-		return;
-
-	tcp_send_ack(sk);
+	if (sk->state != TCP_CLOSE)
+		tcp_send_ack(sk);
 }
 
 /*
@@ -1402,7 +1398,12 @@ void tcp_close(struct sock *sk, unsigned long timeout)
 		return;
 	}
 
-	sk->keepopen = 1;
+	/* It is questionable, what the role of this is now.
+	 * In any event either it should be removed, or
+	 * increment of SLT_KEEPALIVE be done, this is causing
+	 * big problems.  For now I comment it out.  -DaveM
+	 */
+	/* sk->keepopen = 1; */
 	sk->shutdown = SHUTDOWN_MASK;
 
 	if (!sk->dead)

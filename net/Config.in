@@ -42,6 +42,11 @@ if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
 #  if [ "$CONFIG_LLC" = "y" ]; then
 #   bool 'Netbeui (EXPERIMENTAL)' CONFIG_NETBEUI
 #  fi
+  tristate 'Acorn Econet/AUN protocols (EXPERIMENTAL)' CONFIG_ECONET
+  if [ "$CONFIG_ECONET" != "n" ]; then
+    bool '  AUN over UDP' CONFIG_ECONET_AUNUDP
+    bool '  Native Econet' CONFIG_ECONET_NATIVE
+  fi
   tristate 'WAN router' CONFIG_WAN_ROUTER
   bool 'Fast switching (read help!)' CONFIG_NET_FASTROUTE
   bool 'Forwarding between high speed interfaces' CONFIG_NET_HW_FLOWCONTROL

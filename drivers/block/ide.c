@@ -1125,9 +1125,6 @@ struct request **ide_get_queue (kdev_t dev)
 static void do_hwgroup_request (ide_hwgroup_t *hwgroup)
 {
 	if (hwgroup->handler == NULL) {
-		ide_hwif_t *hgif = hwgroup->hwif;
-		ide_hwif_t *hwif = hgif;
-
 		del_timer(&hwgroup->timer);
 		ide_get_lock(&ide_lock, ide_intr, hwgroup);
 		hwgroup->active = 1;

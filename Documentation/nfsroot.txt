@@ -81,7 +81,7 @@ ip=<client-ip>:<server-ip>:<gw-ip>:<netmask>:<hostname>:<device>:<autoconf>
 
   This parameter tells the kernel how to configure IP addresses of devices
   and also how to set up the IP routing table. It was originally called `nfsaddrs',
-  but now the boot-time IP configuration works independently on NFS, so it
+  but now the boot-time IP configuration works independently of NFS, so it
   was renamed to `ip' and the old name remained as an alias for compatibility
   reasons.
 
@@ -106,14 +106,14 @@ ip=<client-ip>:<server-ip>:<gw-ip>:<netmask>:<hostname>:<device>:<autoconf>
 		the address of the server is used which answered the RARP
 		or BOOTP request.
 
-  <gw-ip>	IP address of a gateway if the server in on a different
+  <gw-ip>	IP address of a gateway if the server is on a different
 		subnet. If this entry is empty no gateway is used and the
 		server is assumed to be on the local network, unless a
 		value has been received by BOOTP.
 
   <netmask>	Netmask for local network interface. If this is empty,
 		the netmask is derived from the client IP address assuming
-		classful addressing, unless overriden in BOOTP reply.
+		classful addressing, unless overridden in BOOTP reply.
 
   <hostname>	Name of the client. If empty, the client IP address is
 		used in ASCII-notation, or the value received by BOOTP.

@@ -48,6 +48,7 @@
  *	Revision 0.37:	Began adding POSIXisms.
  *	Revision 0.38:  Asynchronous socket stuff made current.
  *	Revision 0.39: 	SPX interfaces
+ *	Revision 0.40:	Tiny SIOCGSTAMP fix (chris@cybernet.co.nz)
  *
  *	Protect the module by a MOD_INC_USE_COUNT/MOD_DEC_USE_COUNT
  *	pair. Also, now usage count is managed this way
@@ -627,6 +628,14 @@ static int ipxitf_send(ipx_interface *intrfc, struct sk_buff *skb, char *node)
 
 	if (ipx->ipx_source.net != intrfc->if_netnum)
 	{
+		/*
+		 *	Unshare the buffer before modifying the count in
+		 *	case its a flood or tcpdump
+		 */
+		skb=skb_unshare(skb, GFP_ATOMIC);
+		if(!skb)
+			return 0;
+		ipx = skb->nh.ipxh;
 		if (++(ipx->ipx_tctrl) > ipxcfg_max_hops)
 			send_to_wire = 0;
 	}
@@ -725,7 +734,7 @@ static int ipxitf_rcv(ipx_interface *intrfc, struct sk_buff *skb)
 		}
 	}
 
-	if( ipx->ipx_type == IPX_TYPE_PPROP && ipx->ipx_tctrl < 8 && skb->pkt_type == PACKET_HOST ) 
+	if( ipx->ipx_type == IPX_TYPE_PPROP && ipx->ipx_tctrl < 8 && skb->pkt_type != PACKET_OTHERHOST ) 
 	{
 		int i;
         	ipx_interface *ifcs;
@@ -2169,6 +2178,7 @@ static int ipx_recvmsg(struct socket *sock, struct msghdr *msg, int size,
 					copied);
 	if (err)
 		goto out_free;
+	sk->stamp=skb->stamp;
 
 	msg->msg_namelen = sizeof(*sipx);
 
@@ -2429,7 +2439,7 @@ EXPORT_SYMBOL(ipx_unregister_spx);
  * sockets be closed from user space.
  */
 
-__initfunc(static void ipx_proto_finito(void))
+static void ipx_proto_finito(void)
 {
 	ipx_interface	*ifc;
 

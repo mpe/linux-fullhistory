@@ -94,7 +94,7 @@ the kernel or modules.
 
 When the new kernel is booted, or the loadable module loaded then the
 driver will emit some kernel trace messages about whether the configured
-boards where detected or not. Depending on how your system logger is set
+boards were detected or not. Depending on how your system logger is set
 up these may come out on the console, or just be logged to
 /var/adm/messages. You should check the messages to confirm that all is well.
 
@@ -141,7 +141,7 @@ addressing limit).
 
 The higher than 1Mb memory addresses are fully supported by this driver.
 Just enter the address as you normally would for a lower than 1Mb address
-(in the drivers board configuration structure).
+(in the driver's board configuration structure).
 
 
 
@@ -165,7 +165,7 @@ ONboard boards is software programmable, but not on the Brumby boards.
 
 The intelligent boards also need to have their "firmware" code downloaded
 to them. This is done via a user level application supplied in the driver
-utility package called "stlload". Compile this program where ever you dropped
+utility package called "stlload". Compile this program wherever you dropped
 the package files, by typing "make". In its simplest form you can then type
     ./stlload -i cdk.sys
 in this directory and that will download board 0 (assuming board 0 is an
@@ -220,7 +220,7 @@ intentional, obviously this is the easiest way to emulate its behavior!
 
 Since this driver tries to emulate the standard serial ports as much as
 possible, most system utilities should work as they do for the standard
-COM ports. Most importantly "stty" works as expected and "setserial" can be
+COM ports. Most importantly "stty" works as expected and "setserial" can
 also be used (excepting the ability to auto-configure the I/O and IRQ
 addresses of boards). Higher baud rates are supported in the usual fashion
 through setserial or using the CBAUDEX extensions. Note that the EasyIO and

@@ -49,7 +49,7 @@ As an example, here is my /etc/rc.net
 /sbin/route add -host 44.136.8.95  dev pt0b
 /sbin/route add -host 44.255.255.255 dev pt0b
 
-This version of the driver comes under the GNU GPL.  If you have one on my
+This version of the driver comes under the GNU GPL.  If you have one of my
 previous (non-GPL) versions of the driver, please update to this one.
 
 I hope that this all works well for you.  I would be pleased to hear how

@@ -19,7 +19,7 @@ To confuse matters a little, an 802.2 LLC implementation for Linux is being
 written which will allow X.25 to be run over an Ethernet (or Token Ring) and
 conform with the JNT "Pink Book", this will have a different interface to
 the Packet Layer but there will be no confusion since the class of device
-being served by the LLC will be completely seperate from LAPB. The LLC
+being served by the LLC will be completely separate from LAPB. The LLC
 implementation is being done as part of another protocol project (SNA) and
 by a different author.
 

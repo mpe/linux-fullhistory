@@ -15,7 +15,7 @@
   1.  Introduction
 
   Which is worse? A huge fee for a 56K leased line or two phone lines?
-  Its probably the former.  If you find yourself craving more bandwidth,
+  It's probably the former.  If you find yourself craving more bandwidth,
   and have a ISP that is flexible, it is now possible to bind modems
   together to work as one point-to-point link to increase your
   bandwidth.  All without having to have a special black box on either
@@ -64,7 +64,7 @@
        -rw-r--r-- guru/ncm	2195 Jan 10 21:48 1995 eql-1.1/eql_enslave.c
        ______________________________________________________________________
 
-  Unpack a recent kernel (something after 1.1.92) Someplace convenient
+  Unpack a recent kernel (something after 1.1.92) someplace convenient
   like say /usr/src/linux-1.1.92.eql. Use symbolic links to point
   /usr/src/linux to this development directory.
 
@@ -250,13 +250,13 @@
 
   One version of the scheduler was able to push 5.3 K/s through the
   28800 and 14400 connections, but when the priorities on the links were
-  very wide apart (57600 vs. 14400) The "faster" modem received all
+  very wide apart (57600 vs. 14400) the "faster" modem received all
   traffic and the "slower" modem starved.
 
 
-  5.  Tester's Reports
+  5.  Testers' Reports
 
-  Some people have experimented with the eql device with newer kernels
+  Some people have experimented with the eql device with newer
   kernels (than 1.1.75).  I have since updated the driver to patch
   cleanly in newer kernels because of the removal of the old "slave-
   balancing" driver config option.
@@ -469,7 +469,7 @@
 	  I've installed your patch and it works great. I have trialed
 	  it over twin SL/IP lines, just over null modems, but I was
 	  able to data at over 48Kb/s [ISDN link -Simon]. I managed a
-	  transfer of upto 7.5 Kbyte/s on one go, but averaged around
+	  transfer of up to 7.5 Kbyte/s on one go, but averaged around
 	  6.4 Kbyte/s, which I think is pretty cool.  :)
 
 

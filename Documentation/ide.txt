@@ -221,7 +221,7 @@ If you always get timeout errors, interrupts from the drive are probably
 not making it to the host.  Check how you have the hardware jumpered
 and make sure it matches what the driver expects (see the configuration
 instructions above).  If you have a PCI system, also check the BIOS
-setup; i've had one report of a system which was shipped with IRQ 15
+setup; I've had one report of a system which was shipped with IRQ 15
 disabled by the BIOS.
 
 The kernel is able to execute binaries directly off of the cdrom,

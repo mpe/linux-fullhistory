@@ -43,7 +43,7 @@ When the value in this file is 0, ctrl-alt-del is trapped and
 sent to the init(1) program to handle a graceful restart.
 When, however, the value is > 0, Linux's reaction to a Vulcan
 Nerve Pinch (tm) will be an immediate reboot, without even
-syncing it's dirty buffers.
+syncing its dirty buffers.
 
 Note: when a program (like dosemu) has the keyboard in 'raw'
 mode, the ctrl-alt-del is intercepted by the program before it
@@ -68,7 +68,7 @@ struct {
 Dentries are dynamically allocated and deallocated, and
 nr_dentry seems to be 0 all the time. Hence it's safe to
 assume that only nr_unused, age_limit and want_pages are
-used. Nr_unused seems to be exactly what it's name says.
+used. Nr_unused seems to be exactly what its name says.
 Age_limit is the age in seconds after which dcache entries
 can be reclaimed when memory is short and want_pages is
 nonzero when shrink_dcache_pages() has been called and the
@@ -101,7 +101,7 @@ The three values in file-nr denote the number of allocated
 file handles, the number of used file handles and the maximum
 number of file handles. When the allocated filehandles come
 close to the maximum, but the number of actually used ones is
-far behind, you've encountered a peek in your filehandle usage
+far behind, you've encountered a peak in your filehandle usage
 and you don't need to increase the maximum.
 
 ==============================================================
@@ -112,7 +112,7 @@ As with filehandles, the kernel allocates the inode structures
 dynamically, but can't free them yet...
 
 The value in inode-max denotes the maximum number of inode
-handlers. This value should be 3-4 times larger as the value
+handlers. This value should be 3-4 times larger than the value
 in file-max, since stdin, stdout and network sockets also
 need an inode struct to handle them. When you regularly run
 out of inodes, you need to increase this value.
@@ -126,7 +126,7 @@ nr_free_inodes and preshrink.
 
 Nr_inodes stands for the number of inodes the system has
 allocated, this can be slightly more than inode-max because
-Linux allocates them one pagefull at a time.
+Linux allocates them one pageful at a time.
 
 Nr_free_inodes represents the number of free inodes (?) and
 preshrink is nonzero when the nr_inodes > inode-max and the

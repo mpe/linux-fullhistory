@@ -5,18 +5,18 @@ The Digiboard Driver for Linux supports the following boards:
 
  DigiBoard PC/Xi, PC/Xe, PC/Xeve(which is the newer, smaller Xe with
  a 8K window which is also known as PC/Xe(8K) and has no memory/irq
- switches) You can use up to 4 cards with this driver and should work
+ switches) You can use up to 4 cards with this driver and it should work
  on other architectures than intel also.
 
-In case you have problems with this version(1.6.1) of this driver, please
+In case you have problems with this version (1.6.1) of this driver, please
 email directly to me as I made the last update. It you have a report about
 runnning it on other architectures than intel, email me, so I can document
 it here.
 
-An version of this driver has been taken by Digiboard to make a driver
+A version of this driver has been taken by Digiboard to make a driver
 software package which supports also PC/Xem cards and newer PCI cards
-but it don't support the old PC/Xi cards and it isn't yet ported to
-linux-2.1.x and may not be useable on other architectures than intel now.
+but it doesn't support the old PC/Xi cards and it isn't yet ported to
+linux-2.1.x and may not be usable on other architectures than intel now.
 It is available from ftp.digi.com/ftp.digiboard.com. You can write me if
 you need an patch for this driver.
 
@@ -25,7 +25,7 @@ you need an patch for this driver.
 Configuring the Driver
 ----------------------
 
-The driver can be build direct into the kernel or as module.
+The driver can be built direct into the kernel or as a module.
 The pcxx driver can be configured using the command line feature while
 loading the kernel with LILO or LOADLIN or, if built as a module,
 with arguments to insmod and modprobe or with parameters in
@@ -66,14 +66,14 @@ io       - I/O port address of that card.
 membase  - Memory start address of that card.
 memsize  - Memory size of that card, in kilobytes. If given, this value
            is compared against the card to verify configuration and
-           hinder the driver to use a misconfigured card. If the parameter
+           hinder the driver from using a misconfigured card. If the parameter
            does not match the board it is disabled with a memory size error.
 numports - Number of ports on this card. This is the number of devices to
            assign to this card or reserve if disabled.
 altpin   - 1: swap DCD and DSR for 8-pin RJ-45 with modems.
 	   0: don't swap DCD and DSR.
            other values count as 1.
-verbose  - 1: give nice verbose output during initialisation of the driver.
+verbose  - 1: give nice verbose output during initialisation of the driver,
               possibly helpful during board configuration.
            0: normal terse output.
 
@@ -82,19 +82,19 @@ If the io= parameter is not given, the default config is used. This is
 
   io=0x200 membase=0xD0000 numports=16 altpin=0
 
-Only parameters applicable need be specified. For example to configure
+Only applicable parameters need be specified. For example to configure
 2 boards, first one at 0x200 with 8 ports, rest defaults, second one at
 0x120, memory at 0xD80000, altpin enabled, rest defaults, you can do this
 by using these parameters:
 
   modprobe pcxx io=0x200,0x120 numports=8,8 membase=,0xD80000 altpin=,1
 
-To disable a temporary unuseable board without changing the mapping of the
+To disable a temporary unusable board without changing the mapping of the
 devices following that board, you can empty the io-value for that board:
 
   modprobe pcxx io=,0x120 numports=8,8 membase=,0xD80000 altpin=,1
 
-The remainig board still uses ttyD8-ttyD15 and cud8-cud15.
+The remaining board still uses ttyD8-ttyD15 and cud8-cud15.
 
 Example line for /etc/conf.modules for use with kerneld and as default
 parameters for modprobe:
@@ -120,7 +120,7 @@ Card status:      Enable      - use that board
 
 Card type:        PC/Xi       - the old ones with 64/128/256/512K RAM.
 		  PC/Xe       - PC/Xe(old ones with 64k mem range).
-		  PC/Xeve     - PC/Xe(newers with 8k mem range).
+		  PC/Xeve     - PC/Xe(new ones with 8k mem range).
 
 Note: This is for documentation only, the type is detected from the board.
 
@@ -146,7 +146,8 @@ If you don't give a digi= commandline, the compiled-in defaults of
 board 1: io=0x200, membase=0xd0000, altpin=off and numports=16 are used.
 
 If you have the resources (io&mem) free for use, configure your board to
-these settings and you should be set up fine even if yours has not 16 ports.
+these settings and you should be set up fine even if yours has not got 16 
+ports.
 
 
 Sources of Information
@@ -274,7 +275,7 @@ Samples:
    append="digi=E,PC/Xi,D,16,200,D0000"
    append="digi=1,0,0,16,512,(whatever D0000 is in base 10 :)
 
-Driver's minor device numbers are conserved. This means that instead of
+Drivers' minor device numbers are conserved. This means that instead of
 each board getting a block of 16 minors pre-assigned, it gets however
 many it should, with the next card following directly behind it.  A
 system with 4 2-port PC/Xi boards will use minor numbers 0-7.

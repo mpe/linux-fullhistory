@@ -9,25 +9,26 @@ Copyright (c) 1995-1997 Sangoma Technologies Inc.
 
 INTRODUCTION
 
-WANPIPE(tm) is a family of intelligent muliprotocol WAN communication adapters
+WANPIPE(tm) is a family of intelligent multiprotocol WAN communication adapters
 for personal computers (ISA bus) designed to provide PC connectivity to
 various communication links, such as leased lines and public data networks, at
-speeds up to T1/E1 using variety of synchronous communications protocols,
+speeds up to T1/E1 using a variety of synchronous communications protocols,
 including frame relay, PPP, X.25, SDLC, etc.
 
-WANPIPE driver together with Linux WAN Router module allows you to build
-relatively inexpensive, yet high-prformance multiprotocol WAN router.  For
-more information about Linux WAN Router please read file
-Documentation/networking/wan-router.txt.  You must also obtain WAN Tools
-package to be able to use Linux WAN Router and WANPIPE driver.  The package
+WANPIPE driver together with Linux WAN Router module allows you to build a
+relatively inexpensive, yet high-performance multiprotocol WAN router.  For
+more information about the Linux WAN Router please read the file
+Documentation/networking/wan-router.txt.  You must also obtain the WAN Tools
+package to be able to use the Linux WAN Router and WANPIPE driver.  The package
 is available via the Internet from Sangoma Technologies' anonymous FTP server:
 
 	ftp.sangoma.com/pub/linux/wantools-X.Y.Z.tgz
 			or
 	ftp.sangoma.com/pub/linux/wanpipe-X.Y.Z.tgz
 
-The name of the package differ only due to naming convention.  The functionalityof wantools and wanpipe packages are the same.  The latest version of WAN 
-Drivers is wanpipe-2.0.0.
+The names of the packages differ only due to naming convention.  The 
+functionality of wantools and wanpipe packages are the same.  The latest 
+version of the WAN Drivers is wanpipe-2.0.0.
 
 For technical questions and/or comments please e-mail to jaspreet@sangoma.com.
 For general inquiries please contact Sangoma Technologies Inc. by
@@ -74,7 +75,7 @@ drivers/net:
 	sdladrv.c	SDLA support module source code
 	sdla_fr.c	SDLA Frame Relay source code
 	sdla_ppp.c	SDLA PPP source code
-	sdla_x25.c	SDLA X25 source code
+	sdla_x25.c	SDLA X.25 source code
 	sdlamain.c	SDLA support source code
 
 include/linux:
@@ -137,7 +138,7 @@ REVISION HISTORY
 	o Added support for synchronous PPP
 	o Added support for S503 adapter
 	o Added API for executing adapter commands
-	o Fixed a re-entrancy problem in frame relaty driver
+	o Fixed a re-entrancy problem in frame relay driver
 	o Changed interface between SDLA driver and protocol support modules
 	o Updated frame relay firmware
 

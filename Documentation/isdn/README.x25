@@ -3,7 +3,7 @@ X25 support within isdn4linux
 
 
 This is experimental code and should be used with linux version 2.1.72.
-or later. Use it completely on your own risk.
+or later. Use it completely at your own risk.
 
 
 As new versions appear, the stuff described here might suddenly change
@@ -161,7 +161,7 @@ is needed to set up x25 routes. I.e.
 x25route add 01 <iface-name>
 
 will cause all x.25 connections to the destination x.25-address
-"01" beeing routed to your created isdn network interface.
+"01" to be routed to your created isdn network interface.
 
 
 There are currently no real x25 applications available. However, for
@@ -185,14 +185,14 @@ ix25test start
 This will set up a sample configuration using the isdnloop and hisax
 driver and create some isdn network interfaces.
 It is recommended that all other isdn drivers and the
-x25 module is unloaded before calling this script.
+x25 module are unloaded before calling this script.
 
 
 
 Known problems and deficiencies:
 
 The isdnloop HL driver apparently has problems to re-establish a
-connection that has been hang up from the outgoing device. You have to
+connection that has been hung up from the outgoing device. You have to
 unload the isdnloop driver after the faked isdn-connection is closed
 and insmod it again. With the Hisax driver, this problem is not present.
 
@@ -210,7 +210,7 @@ The latter problem could be reproduced by using hisax as well as the
 isdnloop driver. It seems that it is not caused by the isdn code.
 Somehow, the inode of a socket is freed while a process still refers
 the socket's wait queue. This causes problems when the process tries to
-remove itsself from the wait queue (refered by the dangling
+remove itself from the wait queue (refered by the dangling
 sock->sleep pointer) before returning from a select() system call.
 
 - Henner

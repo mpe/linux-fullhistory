@@ -51,7 +51,7 @@ be specified by using the irq= option.  The format is:
 irq=[0x100],[0x140],[0x180],[0x200],[0x240],[0x280],[0x300],[0x380]
 
 The address in brackets is the base address of the card.  The IRQ of
-nonexistant cards can be set to 0.  If and IRQ of a card that does exist is set
+nonexistent cards can be set to 0.  If an IRQ of a card that does exist is set
 to 0, the driver will attempt to guess at the correct IRQ.  For example, to set
 the IRQ of the card at address 0x300 to 12, the insmod command would be:
 

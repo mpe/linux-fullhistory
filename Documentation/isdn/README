@@ -62,7 +62,7 @@ README for the ISDN-subsystem
      read:  raw D-channel-messages (format: depends on driver).
      ioctl: depends on driver, i.e. for the ICN-driver, the base-address of
             the ports and the shared memory on the card can be set and read
-            also the boot-code an the protocol software can be loaded into 
+            also the boot-code and the protocol software can be loaded into 
             the card.
 
    O N L Y !!!  for debugging (no locking against other devices):
@@ -74,7 +74,7 @@ README for the ISDN-subsystem
 
    128 tty-devices (64 cuix and 64 ttyIx) with integrated modem-emulator:
    The functionality is almost the same as that of a serial device
-   (the line-discs are handled by the kernel, which lets you run 
+   (the line-discs are handled by the kernel), which lets you run 
    SLIP, CSLIP and asynchronous PPP through the devices. We have tested 
    Seyon, minicom, CSLIP (uri-dip) PPP and mgetty (compiled with NO_FAX),
    XCept.
@@ -96,7 +96,7 @@ README for the ISDN-subsystem
 	       ATI      Return "ISDN for Linux...".
                ATI0        "
                ATI1        "
-			   ATI2 Report of last connection.
+	       ATI2     Report of last connection.
                ATO      On line (data mode).
                ATQ0     Enable result codes (default).
                ATQ1     Disable result codes (default).
@@ -107,9 +107,9 @@ README for the ISDN-subsystem
 	       ATZ      Load registers and EAZ/MSN from Profile.
 	       AT&Bx    Set Send-Packet-size to x (max. 4000)
                         The real packet-size may be limited by the
-                        low-level-driver used. i.e.: the HiSax-Module-
+                        low-level-driver used. e.g. the HiSax-Module-
                         limit is 2000. You will get NO Error-Message,
-                        if you set it to higher Values, because at the
+                        if you set it to higher values, because at the
                         time of giving this command the corresponding
                         driver may not be selected (see "Automatic
                         Assignment") however the size of outgoing packets
@@ -245,7 +245,7 @@ README for the ISDN-subsystem
              19   0         Service-Octet-2
              20   0         Bit coded register (readonly)
                             Service-Octet-1 of last call.
-                            Bit mapping is the same like register 18
+                            Bit mapping is the same as register 18
              21   0         Bit coded register (readonly)
                             Set on incoming call (during RING) to
                             octet 3 of calling party number IE (Numbering plan)
@@ -263,17 +263,17 @@ README for the ISDN-subsystem
   All inactive physical lines are listening to all EAZs for incoming
   calls and are NOT assigned to a specific tty or network interface.
   When an incoming call is detected, the driver looks first for a network 
-  interfaces and then for an opened tty which:
+  interface and then for an opened tty which:
 
   1. is configured for the same EAZ.
   2. has the same protocol settings for the B-channel.
   3. (only for network interfaces if the security flag is set)
      contains the caller number in its access list.
   4. Either the channel is not bound exclusively to another Net-interface, or
-     it is bound AND the other checks apply to exact this Interface.
+     it is bound AND the other checks apply to exactly this Interface.
      (For usage of the bind-features, refer to the isdnctrl-man-page)
 
-  Only when a matching interface or tty is found, the call is accepted
+  Only when a matching interface or tty is found is the call accepted
   and the "connection" between the low-level-layer and the link-level-layer
   is established and kept until the end of the connection.
   In all other cases no connection is established. Isdn4linux can be
@@ -309,7 +309,7 @@ README for the ISDN-subsystem
 
 4. Device-inodes
 
-   The major and minor-numbers and its names are described in
+   The major and minor numbers and their names are described in
    Documentation/devices.txt. The major-numbers are:
 
      43 for the ISDN-tty's.
@@ -357,7 +357,7 @@ README for the ISDN-subsystem
 
    i) Setup the interface with ifconfig as usual, and set a route to it.
 
-   j) (optional) If you run X11 and have Tcl/Tk-wish Version4.0, you can use
+   j) (optional) If you run X11 and have Tcl/Tk-wish Version 4.0, you can use
      the script tools/tcltk/isdnmon. You can add actions for line-status
      changes. See the comments at the beginning of the script for how to
      do that. There are other tty-based tools in the tools-subdirectory
@@ -399,7 +399,7 @@ README for the ISDN-subsystem
 
 
    "isdnctrl secure <InterfaceName> off" 
-   Switch of secure operation (default).
+   Switch off secure operation (default).
 
    "isdnctrl ihup <InterfaceName> [on|off]" 
    Switch the hang-up-timer for incoming calls on or off.
@@ -434,15 +434,15 @@ README for the ISDN-subsystem
    Selects the type of packet-encapsulation. The encapsulation can be changed
    only while an interface is down.
 
-   At the moment th following Values are supported:
+   At the moment the following values are supported:
  
    rawip    (Default) Selects raw-IP-encapsulation. This means, MAC-headers
             are stripped off.  
    ip       IP with type-field. Same as IP but the type-field of the MAC-header
             is preserved.
-   x25iface x25 interface encapsulation (first byte semantics as defined in
+   x25iface X.25 interface encapsulation (first byte semantics as defined in
 	    ../networking/x25-iface.txt). Use this for running the linux
-	    x25 network protocol stack (AF_X25 sockets) on top of isdn.
+	    X.25 network protocol stack (AF_X25 sockets) on top of isdn.
    cisco-h  A special-mode for communicating with a Cisco, which is configured
             to do "hdlc"
    ethernet No stripping. Packets are sent with full MAC-header.
@@ -483,7 +483,7 @@ README for the ISDN-subsystem
    dial out using a specific Card or even preserve a specific Channel for
    Dialout of a specific net-interface. This can be done with the above
    command. Replace <DriverId> by whatever you assigned while loading the
-   module. The <ChannelNumber> is counting from zero. the upper Limit
+   module. The <ChannelNumber> is counting from zero. The upper Limit
    depends on the card used. At the Moment no card supports more than
    2 Channels, so the upper limit is one.
 

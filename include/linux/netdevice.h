@@ -256,6 +256,7 @@ struct device
 
 	struct Qdisc		*qdisc;
 	struct Qdisc		*qdisc_sleeping;
+	struct Qdisc		*qdisc_list;
 	unsigned long		tx_queue_len;	/* Max frames per queue allowed */
 
 	/* Pointers to interface service routines.	*/

@@ -40,22 +40,6 @@ TABLE OF CONTENTS
         6.3.2 Crystal's Bulletin Board Service
 
 
-8.3 OBTAINING THE LATEST DRIVER VERSION
-
-You can obtain the latest CS89XX drivers and support software from Crystal's 
-BBS or Web site.
-
-
-8.3.1 CRYSTAL'S WEB SITE
-
-Crystal Semiconductor maintains a web page at http://www.crystal.com with the
-the latest drivers and technical publications.
-
-
-8.3.2 CRYSTAL'S BULLETIN BOARD SERVICE
-
-
-
 
 1.0 CRYSTAL LAN CS8900/CS8920 ETHERNET ADAPTERS
 ===============================================================================
@@ -172,7 +156,7 @@ with the following "default" settings:
                        10BASE-T (10BASE-T only adapter)
 
 You should only change the default configuration settings if conflicts with 
-another adapter exists. To change the adapter's configuration, run the 
+another adapter exist. To change the adapter's configuration, run the 
 CS8900/20 Setup Utility. 
 
 
@@ -388,7 +372,7 @@ Example:
 5.1 KNOWN DEFECTS and LIMITATIONS
 
 Refer to the RELEASE.TXT file distributed as part of this archive for a list of 
-know defects, driver limitations, and work arounds.
+known defects, driver limitations, and work arounds.
 
 
 5.2 TESTING THE ADAPTER

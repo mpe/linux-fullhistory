@@ -1148,11 +1148,11 @@ MAJOR NUMBER 42 IS NONCOMPLIANT.
 \end{devicelist}
 
 \noindent
-Network Block Device is somehow similar to loopback devices: If you
-read from it, it sends packet accross network asking server for
-data. If you write to it, it sends packet telling server to write. It
-could be used to mounting filesystems over the net, swapping over the
-net, implementing block device in userland etc.
+Network Block Device is somewhat similar to the loopback device: if you
+read from it, it sends packets across the network asking a server for
+data. If you write to it, it sends packets telling the server to write. It
+could be used for mounting filesystems over the net, swapping over the
+net, implementing block devices in userland etc.
 
 \begin{devicelist}
 \major{44}{}{char }{isdn4linux virtual modem -- alternate devices}
@@ -1283,7 +1283,7 @@ microcontrollers}
 \end{devicelist}
 
 \noindent
-This device is used for the interfacing to the MC683xx
+This device is used for interfacing to the MC683xx
 microcontrollers via Background Debug Mode by use of a Parallel Port
 interface. PD is the Motorola Public Domain Interface and ICD is the
 commercial interface by P\&E.
@@ -1832,7 +1832,7 @@ virtual console such as {\file /dev/tty1}, or to a serial port primary
 
 Serial ports are RS-232 serial ports and any device which simulates
 one, either in hardware (such as internal modems) or in software (such
-as the ISDN driver.)  Under Linux, each serial ports has two device
+as the ISDN driver.)  Under Linux, each serial port has two device
 names, the primary or callin device and the alternate or callout one.
 Each kind of device is indicated by a different letter.  For any
 letter $X$, the names of the devices are {\file /dev/tty${X\#}$} and

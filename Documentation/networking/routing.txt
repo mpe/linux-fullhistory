@@ -18,18 +18,18 @@ The directory ftp.inr.ac.ru:/ip-routing contains:
 
 NEWS for user.
 
-- Policy based routing. Routing decisions are made on the base
+- Policy based routing. Routing decisions are made on the basis
   not only of destination address, but also source address,
   TOS and incoming interface.
 - Complete set of IP level control messages.
-  Now Linux is the only in the world OS comlying to RFC requirements.
+  Now Linux is the only OS in the world complying to RFC requirements.
   Great win 8)
 - New interface addressing paradigm.
   Assignment of address ranges to interface,
   multiple prefixes etc. etc.
   Do not bother, it is compatible with old one. Moreover:
-- You more need not make "route add aaa.bbb.ccc... eth0",
-  it is made automatically.
+- You more need not do "route add aaa.bbb.ccc... eth0",
+  it is done automatically.
 - "Abstract" UNIX sockets and security enhancements.
   It is necessary to use TIRPC and TLI emulation library.
 

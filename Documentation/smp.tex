@@ -39,11 +39,11 @@ The Intel pentium processors have a wide variety of inbuilt facilities for
 supporting multiprocessing, including hardware cache coherency, built in 
 interprocessor interrupt handling and a set of atomic test and set, 
 exchange and similar operations. The cache coherency in particular makes the 
-operating systems job far easier.
+operating system's job far easier.
 
 The specification defines a detailed configuration structure in ROM that 
 the boot up processor can read to find the full configuration of the 
-processors and busses. It also defines a procedure for starting up the 
+processors and buses. It also defines a procedure for starting up the 
 other processors.
 
 
@@ -53,7 +53,7 @@ locking and protection of its own tables to prevent two processes updating
 them at once and for example allocating the same memory block. There are 
 two strategies for this within current Unix and Unixlike kernels. 
 Traditional unix systems from the earliest of days use a scheme of 'Coarse 
-Grained Locking' where the entire kernel is protected as a small number of 
+Grained Locking' where the entire kernel is protected by a small number of 
 locks only. Some modern systems use fine grained locking. Because fine 
 grained locking has more overhead it is normally used only on 
 multiprocessor kernels and real time kernels. In a real time kernel the 
@@ -64,7 +64,7 @@ Within the Linux kernel certain guarantees are made. No process running in
 kernel mode will be pre-empted by another kernel mode process unless it 
 voluntarily sleeps.  This ensures that blocks of kernel code are 
 effectively atomic with respect to other processes and greatly simplifies 
-many operation. Secondly interrupts may pre-empt a kernel running process, 
+many operations. Secondly interrupts may pre-empt a kernel running process, 
 but will always return to that process. A process in kernel mode may 
 disable interrupts on the processor and guarantee such an interruption will 
 not occur. The final guarantee is that an interrupt will not be pre-empted 
@@ -124,7 +124,7 @@ some processors to set each CPU up correctly.  These functions will
 probably need to be modified in existing kernels to cope with this.
 
 
-Each additional CPU the calls the architecture specific function
+Each additional CPU then calls the architecture specific function
 
 {\tt \bf void smp\_callin(void)}
 
@@ -142,7 +142,7 @@ they will run when they have no real work to process.
 
 
 \subsubsection{Scheduling}
-The kernel scheduler implements a simple but very and effective task 
+The kernel scheduler implements a simple but very effective task 
 scheduler. The basic structure of this scheduler is unchanged in the 
 multiprocessor kernel. A processor field is added to each task, and this 
 maintains the number of the processor executing a given task, or a magic 
@@ -185,7 +185,7 @@ that are provided by the processor specification functionality. These are
 
 {\tt \bf int smp\_processor\_id(void) }
 
-which returns the identity of the process the call is executed upon. This 
+which returns the identity of the processor the call is executed upon. This 
 call is assumed to be valid at all times. This may mean additional tests 
 are needed during initialisation.
 
@@ -203,7 +203,7 @@ work. Refer to the processor specific code documentation for more details.
 
 
 \subsection{Architecture Specific Code For the Intel MP Port}
-The architecture specific code for the intel port splits fairly cleanly 
+The architecture specific code for the Intel port splits fairly cleanly 
 into four sections. Firstly the initialisation code used to boot the 
 system, secondly the message handling and support code, thirdly the 
 interrupt and kernel syscall entry function handling and finally the 
@@ -286,7 +286,7 @@ spinlock it spins continually on the lock with interrupts disabled. This
 causes a specific deadlock problem. The lock owner may need to send an 
 invalidate request to the rest of the processors and wait for these to 
 complete before continuing. A processor spinning on the lock would not be 
-able to do thus. Thus the loop of the spinlock tests and handles invalidate 
+able to do this. Thus the loop of the spinlock tests and handles invalidate 
 requests. If the invalidate bit for the spinning CPU is set the processor 
 invalidates its TLB and atomically clears the bit. When the spinlock is 
 obtained that processor will take an IPI and in the IPI test the bit and 
@@ -341,6 +341,6 @@ architecture which does not cover the 80386/80387 processor pair. \
 
 The /proc filesystem support is changed so that the /proc/cpuinfo file 
 contains a column for each processor present. This information is extracted 
-from the data save by smp\_store\_cpu\_info().
+from the data saved by smp\_store\_cpu\_info().
 
 \end{document}

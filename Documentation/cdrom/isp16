@@ -71,7 +71,7 @@ sound card configuration.
 The syntax of the command line does not allow the specification of
 irq when there's nothing specified for the base address and no
 specification of dma when there is no specification of irq.
-The value 'nosip16' for drive_type, which may be used as the first
+The value 'noisp16' for drive_type, which may be used as the first
 non-integer option value (e.g. 'isp16=noisp16'), makes sure that probing
 for and subsequent configuration of an ISP16-compatible card is skipped
 all together. This can be useful to overcome possible conflicts which

@@ -146,10 +146,10 @@ will need them to identify the devices.
 
 If you happen to be using a MicroSolutions backpack device, you will
 also need to know the unit ID number for each drive.  This is usually
-the last two digits of the drive's serial number (but read MicroSolution's
+the last two digits of the drive's serial number (but read MicroSolutions'
 documentation about this).
 
-As an example, lets assume that you have a MicroSolutions PD/CD drive
+As an example, let's assume that you have a MicroSolutions PD/CD drive
 with unit ID number 36 connected to the parallel port at 0x378, a SyQuest 
 EZ-135 connected to the chained port on the PD/CD drive and also an 
 Imation Superdisk connected to port 0x278.  You could give the following 

@@ -4,7 +4,7 @@ insmod uart401
 insmod sb ...
 
 This loads the driver for the soundblaster and assorted clones. Cards that
-are covered by other drivers should not be using with this driver.
+are covered by other drivers should not be using this driver.
 
 The soundblaster module takes the following arguments
 
@@ -34,5 +34,5 @@ OS. IBM are being difficult about documenting how to load this firmware.
 
 Avance Logic ALS007
 
-This card isnt currently supported. I have patches to merge however that
+This card isn't currently supported. I have patches to merge however that
 add limited support.

@@ -100,7 +100,6 @@ extern int		ip_acct_output(struct sk_buff *skb);
 #define ip_acct_output	dev_queue_xmit
 #endif
 extern void		ip_fragment(struct sk_buff *skb, int (*out)(struct sk_buff*));
-extern struct sk_buff *	ip_reply(struct sk_buff *skb, int payload);
 extern int		ip_do_nat(struct sk_buff *skb);
 extern void		ip_send_check(struct iphdr *ip);
 extern int		ip_id_count;			  
@@ -116,6 +115,18 @@ extern int		ip_build_xmit(struct sock *sk,
 				      struct ipcm_cookie *ipc,
 				      struct rtable *rt,
 				      int flags);
+
+
+struct ip_reply_arg {
+	struct iovec iov[2];   
+	int          n_iov;    /* redundant */
+	u32 	     csum; 
+	int	     csumoffset; /* u16 offset of csum in iov[0].iov_base */
+				 /* -1 if not needed */ 
+}; 
+
+void ip_send_reply(struct sock *sk, struct sk_buff *skb, struct ip_reply_arg *arg,
+		   unsigned int len); 
 
 extern int __ip_finish_output(struct sk_buff *skb);
 

@@ -36,7 +36,7 @@ IRQ is configured by software. Possible values are:
   3, 5, 7, 10, 11, 12, 15 and none (polled mode)
 
 
-The ACT2000 driver either may be build into kernel or as a module.
+The ACT2000 driver may either be built into the kernel or as a module.
 Initialization depends on how the driver is built:
 
 Driver built into the kernel:
@@ -78,11 +78,11 @@ Driver built as module:
 
     act_bus=b act_port=p act_irq=i act_id=idstring
 
-  where b, p, i and idstring have the same meanings like parameters
+  where b, p, i and idstring have the same meanings as the parameters
   described for the builtin version above.
 
   Using the "actctrl"-utility, the same features apply to the modularized
-  version like to the kernel-builtin one. (i.e. loading of firmware and
+  version as to the kernel-builtin one. (i.e. loading of firmware and
   configuring the D-channel protocol)
 
 Loading the firmware into the card:
@@ -90,7 +90,7 @@ Loading the firmware into the card:
   The firmware is supplied together with the isdn4k-utils package. It
   can be found in the subdirectory act2000/firmware/
 
-  Assumed you have installed the utility-package correctly, the firmware
+  Assuming you have installed the utility-package correctly, the firmware
   will be downloaded into the card using the following command:
 
     actctrl -d idstring load /etc/isdn/bip11.btl

@@ -5,7 +5,7 @@
  *
  *		AF_INET protocol family socket handler.
  *
- * Version:	$Id: af_inet.c,v 1.69 1998/04/03 09:49:42 freitag Exp $
+ * Version:	$Id: af_inet.c,v 1.71 1998/04/16 05:38:16 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -1052,6 +1052,8 @@ static struct proc_dir_entry proc_net_udp = {
 #endif		/* CONFIG_PROC_FS */
 
 extern void tcp_init(void);
+extern void tcp_v4_init(struct net_proto_family *);
+
 
 /*
  *	Called by socket.c on kernel startup.  
@@ -1101,8 +1103,11 @@ __initfunc(void inet_proto_init(struct net_proto *pro))
 
 	ip_init();
 
+	tcp_v4_init(&inet_family_ops);
+
 	/* Setup TCP slab cache for open requests. */
 	tcp_init();
+
 
 	/*
 	 *	Set the ICMP layer up

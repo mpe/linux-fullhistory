@@ -30,360 +30,14 @@
 #include <net/sock.h>
 #include <net/pkt_sched.h>
 
+#define BUG_TRAP(x) if (!(x)) { printk("Assertion (" #x ") failed at " __FILE__ "(%d):" __FUNCTION__ "\n", __LINE__); }
+
+/* Main transmission queue. */
+
 struct Qdisc_head qdisc_head = { &qdisc_head };
 
-static struct Qdisc_ops *qdisc_base = NULL;
-
-static int default_requeue(struct sk_buff *skb, struct Qdisc* qdisc);
-
-
-/* NOTES.
-
-   Every discipline has two major routines: enqueue and dequeue.
-
-   ---dequeue
-
-   dequeue usually returns a skb to send. It is allowed to return NULL,
-   but it does not mean that queue is empty, it just means that
-   discipline does not want to send anything this time.
-   Queue is really empty if q->q.qlen == 0.
-   For complicated disciplines with multiple queues q->q is not
-   real packet queue, but however q->q.qlen must be valid.
-
-   ---enqueue
-
-   enqueue returns number of enqueued packets i.e. this number is 1,
-   if packet was enqueued sucessfully and <1 if something (not
-   necessary THIS packet) was dropped.
-
- */
-
-int register_qdisc(struct Qdisc_ops *qops)
-{
-	struct Qdisc_ops *q, **qp;
-	for (qp = &qdisc_base; (q=*qp)!=NULL; qp = &q->next)
-		if (strcmp(qops->id, q->id) == 0)
-			return -EEXIST;
-	qops->next = NULL;
-	qops->refcnt = 0;
-	*qp = qops;
-	return 0;
-}
-
-int unregister_qdisc(struct Qdisc_ops *qops)
-{
-	struct Qdisc_ops *q, **qp;
-	for (qp = &qdisc_base; (q=*qp)!=NULL; qp = &q->next)
-		if (q == qops)
-			break;
-	if (!q)
-		return -ENOENT;
-	if (q->requeue == NULL)
-		q->requeue = default_requeue;
-	*qp = q->next;
-	return 0;
-}
-
-struct Qdisc *qdisc_lookup(int handle)
-{
-	return NULL;
-}
-
-
-/* "NOOP" scheduler: the best scheduler, recommended for all interfaces
-   in all curcumstances. It is difficult to invent anything more
-   fast or cheap.
- */
-
-static int
-noop_enqueue(struct sk_buff *skb, struct Qdisc * qdisc)
-{
-	kfree_skb(skb);
-	return 0;
-}
-
-static struct sk_buff *
-noop_dequeue(struct Qdisc * qdisc)
-{
-	return NULL;
-}
-
-struct Qdisc noop_qdisc =
-{
-        { NULL }, 
-	noop_enqueue,
-	noop_dequeue,
-};
-
-struct Qdisc noqueue_qdisc =
-{
-        { NULL }, 
-	NULL,
-	NULL,
-};
-
-
-
-/* 3-band FIFO queue: old style, but should be a bit faster (several CPU insns) */
-
-static int
-pfifo_fast_enqueue(struct sk_buff *skb, struct Qdisc* qdisc)
-{
-	const static u8 prio2band[8] = { 1, 2, 2, 2, 1, 2, 0, 0 };
-	struct sk_buff_head *list;
-
-	list = ((struct sk_buff_head*)qdisc->data) + prio2band[skb->priority&7];
-
-	if (list->qlen <= skb->dev->tx_queue_len) {
-		__skb_queue_tail(list, skb);
-		return 1;
-	}
-	qdisc->dropped++;
-	kfree_skb(skb);
-	return 0;
-}
-
-static struct sk_buff *
-pfifo_fast_dequeue(struct Qdisc* qdisc)
-{
-	int prio;
-	struct sk_buff_head *list = ((struct sk_buff_head*)qdisc->data);
-	struct sk_buff *skb;
-
-	for (prio = 0; prio < 3; prio++, list++) {
-		skb = __skb_dequeue(list);
-		if (skb)
-			return skb;
-	}
-	return NULL;
-}
-
-static int
-pfifo_fast_requeue(struct sk_buff *skb, struct Qdisc* qdisc)
-{
-	const static u8 prio2band[8] = { 1, 2, 2, 2, 1, 2, 0, 0 };
-	struct sk_buff_head *list;
-
-	list = ((struct sk_buff_head*)qdisc->data) + prio2band[skb->priority&7];
-
-	__skb_queue_head(list, skb);
-	return 1;
-}
-
-static void
-pfifo_fast_reset(struct Qdisc* qdisc)
-{
-	int prio;
-	struct sk_buff_head *list = ((struct sk_buff_head*)qdisc->data);
-
-	for (prio=0; prio < 3; prio++)
-		skb_queue_purge(list+prio);
-}
-
-static int pfifo_fast_init(struct Qdisc *qdisc, void *arg)
-{
-	int i;
-	struct sk_buff_head *list;
-
-	list = ((struct sk_buff_head*)qdisc->data);
-
-	for(i=0; i<3; i++)
-		skb_queue_head_init(list+i);
-
-	return 0;
-}
-
-static struct Qdisc_ops pfifo_fast_ops =
-{
-	NULL,
-	"pfifo_fast",
-	1,
-	3 * sizeof(struct sk_buff_head),
-	pfifo_fast_enqueue,
-	pfifo_fast_dequeue,
-	pfifo_fast_reset,
-	NULL,
-	pfifo_fast_init,
-	NULL,
-	pfifo_fast_requeue
-};
-
-static int
-default_requeue(struct sk_buff *skb, struct Qdisc* qdisc)
-{
-	if (net_ratelimit())
-		printk(KERN_DEBUG "%s deferred output. It is buggy.\n", skb->dev->name);
-	kfree_skb(skb);
-	return 0;
-}
-
-static struct Qdisc *
-qdisc_alloc(struct device *dev, struct Qdisc_ops *ops, void *arg)
-{
-	struct Qdisc *sch;
-	int size = sizeof(*sch) + ops->priv_size;
-
-	sch = kmalloc(size, GFP_KERNEL);
-	if (!sch)
-		return NULL;
-	memset(sch, 0, size);
-
-	skb_queue_head_init(&sch->q);
-	sch->ops = ops;
-	sch->enqueue = ops->enqueue;
-	sch->dequeue = ops->dequeue;
-	sch->dev = dev;
-	if (ops->init && ops->init(sch, arg))
-		return NULL;
-	ops->refcnt++;
-	return sch;
-}
-
-void qdisc_reset(struct Qdisc *qdisc)
-{
-	struct Qdisc_ops *ops = qdisc->ops;
-	if (ops) {
-		start_bh_atomic();
-		if (ops->reset)
-			ops->reset(qdisc);
-		end_bh_atomic();
-	}
-}
-
-void qdisc_destroy(struct Qdisc *qdisc)
-{
-	struct Qdisc_ops *ops = qdisc->ops;
-	if (ops) {
-		start_bh_atomic();
-		if (ops->reset)
-			ops->reset(qdisc);
-		if (ops->destroy)
-			ops->destroy(qdisc);
-		ops->refcnt--;
-		end_bh_atomic();
-		kfree(qdisc);
-	}
-}
-
-static void dev_do_watchdog(unsigned long dummy);
-
-static struct timer_list dev_watchdog =
-	{ NULL, NULL, 0L, 0L, &dev_do_watchdog };
-
-static void dev_do_watchdog(unsigned long dummy)
-{
-	struct Qdisc_head *h;
-
-	for (h = qdisc_head.forw; h != &qdisc_head; h = h->forw) {
-		struct Qdisc *q = (struct Qdisc*)h;
-		struct device *dev = q->dev;
-		if (dev->tbusy && jiffies - q->tx_last > q->tx_timeo) {
-			qdisc_restart(dev);
-		}
-	}
-	dev_watchdog.expires = jiffies + 5*HZ;
-	add_timer(&dev_watchdog);
-}
-
-
-void dev_activate(struct device *dev)
-{
-	/* No queueing discipline is attached to device;
-	   create default one i.e. pfifo_fast for devices,
-	   which need queueing and noqueue_qdisc for
-	   virtual intrfaces
-	 */
-
-	if (dev->qdisc_sleeping == &noop_qdisc) {
-		if (dev->tx_queue_len) {
-			struct Qdisc *qdisc;
-			qdisc = qdisc_alloc(dev, &pfifo_fast_ops, NULL);
-			if (qdisc == NULL)
-				return;
-			dev->qdisc_sleeping = qdisc;
-		} else
-			dev->qdisc_sleeping = &noqueue_qdisc;
-	}
-
-	start_bh_atomic();
-	if ((dev->qdisc = dev->qdisc_sleeping) != &noqueue_qdisc) {
-		dev->qdisc->tx_timeo = 5*HZ;
-		dev->qdisc->tx_last = jiffies - dev->qdisc->tx_timeo;
-		if (!dev_watchdog.expires) {
-			dev_watchdog.expires = jiffies + 5*HZ;
-			add_timer(&dev_watchdog);
-		}
-	}
-	end_bh_atomic();
-}
-
-void dev_deactivate(struct device *dev)
-{
-	struct Qdisc *qdisc;
-
-	start_bh_atomic();
-
-	qdisc = dev->qdisc;
-	dev->qdisc = &noop_qdisc;
-
-	qdisc_reset(qdisc);
-
-	if (qdisc->h.forw) {
-		struct Qdisc_head **hp, *h;
-
-		for (hp = &qdisc_head.forw; (h = *hp) != &qdisc_head; hp = &h->forw) {
-			if (h == &qdisc->h) {
-				*hp = h->forw;
-				break;
-			}
-		}
-	}
-
-	end_bh_atomic();
-}
-
-void dev_init_scheduler(struct device *dev)
-{
-	dev->qdisc = &noop_qdisc;
-	dev->qdisc_sleeping = &noop_qdisc;
-}
-
-void dev_shutdown(struct device *dev)
-{
-	struct Qdisc *qdisc;
-
-	start_bh_atomic();
-	qdisc = dev->qdisc_sleeping;
-	dev->qdisc_sleeping = &noop_qdisc;
-	qdisc_destroy(qdisc);	
-	end_bh_atomic();
-}
-
-void dev_set_scheduler(struct device *dev, struct Qdisc *qdisc)
-{
-	struct Qdisc *oqdisc;
-
-	if (dev->flags & IFF_UP)
-		dev_deactivate(dev);
-
-	start_bh_atomic();
-	oqdisc = dev->qdisc_sleeping;
-
-	/* Destroy old scheduler */
-	if (oqdisc)
-		qdisc_destroy(oqdisc);
-
-	/* ... and attach new one */
-	dev->qdisc_sleeping = qdisc;
-	dev->qdisc = &noop_qdisc;
-	end_bh_atomic();
-
-	if (dev->flags & IFF_UP)
-		dev_activate(dev);
-}
-
-/* Kick the queue "q".
-   Note, that this procedure is called by watchdog timer, so that
+/* Kick device.
+   Note, that this procedure can be called by watchdog timer, so that
    we do not check dev->tbusy flag here.
 
    Returns:  0  - queue is empty.
@@ -392,7 +46,6 @@ void dev_set_scheduler(struct device *dev, struct Qdisc *qdisc)
 
    NOTE: Called only from NET BH
 */
-
 
 int qdisc_restart(struct device *dev)
 {
@@ -408,16 +61,30 @@ int qdisc_restart(struct device *dev)
 			return -1;
 		}
 
-		if (q->ops) {
-			q->ops->requeue(skb, q);
-			return -1;
-		}
+		/* Device kicked us out :(
+		   It is possible in three cases:
 
-		printk(KERN_DEBUG "%s: it is impossible!!!\n", dev->name);
-		kfree_skb(skb);
+		   1. fastroute is enabled
+		   2. device cannot determine busy state
+		      before start of transmission (f.e. dialout)
+		   3. device is buggy (ppp)
+		 */
+
+		q->ops->requeue(skb, q);
+		return -1;
 	}
 	return q->q.qlen;
 }
+
+/* Scan transmission queue and kick devices.
+
+   Deficiency: slow devices (ppp) and fast ones (100Mb ethernet)
+   share one queue. It means, that if we have a lot of loaded ppp channels,
+   we will scan a long list on every 100Mb EOI.
+   I have no idea how to solve it using only "anonymous" Linux mark_bh().
+
+   To change queue from device interrupt? Ough... only not this...
+ */
 
 void qdisc_run_queues(void)
 {
@@ -450,114 +117,357 @@ void qdisc_run_queues(void)
 	}
 }
 
+/* Periodic watchdoc timer to recover of hard/soft device bugs. */
 
-int tc_init(struct pschedctl *pctl)
+static void dev_do_watchdog(unsigned long dummy);
+
+static struct timer_list dev_watchdog =
+	{ NULL, NULL, 0L, 0L, &dev_do_watchdog };
+
+static void dev_do_watchdog(unsigned long dummy)
 {
-	struct Qdisc *q;
-	struct Qdisc_ops *qops;
+	struct Qdisc_head *h;
 
-	if (pctl->handle) {
-		q = qdisc_lookup(pctl->handle);
-		if (q == NULL)
-			return -ENOENT;
-		qops = q->ops;
-		if (pctl->ifindex && q->dev->ifindex != pctl->ifindex)
-			return -EINVAL;
+	for (h = qdisc_head.forw; h != &qdisc_head; h = h->forw) {
+		struct Qdisc *q = (struct Qdisc*)h;
+		struct device *dev = q->dev;
+		if (dev->tbusy && jiffies - q->tx_last > q->tx_timeo)
+			qdisc_restart(dev);
 	}
-	return -EINVAL;
-}
-
-int tc_destroy(struct pschedctl *pctl)
-{
-	return -EINVAL;
-}
-
-int tc_attach(struct pschedctl *pctl)
-{
-	return -EINVAL;
-}
-
-int tc_detach(struct pschedctl *pctl)
-{
-	return -EINVAL;
+	dev_watchdog.expires = jiffies + 5*HZ;
+	add_timer(&dev_watchdog);
 }
 
 
-int psched_ioctl(void *arg)
+
+/* "NOOP" scheduler: the best scheduler, recommended for all interfaces
+   in all curcumstances. It is difficult to invent anything more
+   fast or cheap.
+ */
+
+static int
+noop_enqueue(struct sk_buff *skb, struct Qdisc * qdisc)
 {
-	struct pschedctl ctl;
-	struct pschedctl *pctl = &ctl;
-	int err;
+	kfree_skb(skb);
+	return 0;
+}
 
-	if (copy_from_user(&ctl, arg, sizeof(ctl)))
-		return -EFAULT;
+static struct sk_buff *
+noop_dequeue(struct Qdisc * qdisc)
+{
+	return NULL;
+}
 
-	if (ctl.arglen > 0) {
-		pctl = kmalloc(sizeof(ctl) + ctl.arglen, GFP_KERNEL);
-		if (pctl == NULL)
-			return -ENOBUFS;
-		memcpy(pctl, &ctl, sizeof(ctl));
-		if (copy_from_user(pctl->args, ((struct pschedctl*)arg)->args, ctl.arglen)) {
-			kfree(pctl);
-			return -EFAULT;
+static int
+noop_requeue(struct sk_buff *skb, struct Qdisc* qdisc)
+{
+	if (net_ratelimit())
+		printk(KERN_DEBUG "%s deferred output. It is buggy.\n", skb->dev->name);
+	kfree_skb(skb);
+	return 0;
+}
+
+struct Qdisc_ops noop_qdisc_ops =
+{
+	NULL,
+	NULL,
+	"noop",
+	0,
+
+	noop_enqueue,
+	noop_dequeue,
+	noop_requeue,
+};
+
+struct Qdisc noop_qdisc =
+{
+        { NULL }, 
+	noop_enqueue,
+	noop_dequeue,
+	TCQ_F_DEFAULT|TCQ_F_BUILTIN,
+	&noop_qdisc_ops,	
+};
+
+
+struct Qdisc_ops noqueue_qdisc_ops =
+{
+	NULL,
+	NULL,
+	"noqueue",
+	0,
+
+	noop_enqueue,
+	noop_dequeue,
+	noop_requeue,
+
+};
+
+struct Qdisc noqueue_qdisc =
+{
+        { NULL }, 
+	NULL,
+	NULL,
+	TCQ_F_DEFAULT|TCQ_F_BUILTIN,
+	&noqueue_qdisc_ops,
+};
+
+
+static const u8 prio2band[TC_PRIO_MAX+1] =
+{ 1, 2, 2, 2, 1, 2, 0, 0 , 1, 1, 1, 1, 1, 1, 1, 1 };
+
+/* 3-band FIFO queue: old style, but should be a bit faster than
+   generic prio+fifo combination.
+ */
+
+static int
+pfifo_fast_enqueue(struct sk_buff *skb, struct Qdisc* qdisc)
+{
+	struct sk_buff_head *list;
+
+	list = ((struct sk_buff_head*)qdisc->data) +
+		prio2band[skb->priority&TC_PRIO_MAX];
+
+	if (list->qlen <= skb->dev->tx_queue_len) {
+		__skb_queue_tail(list, skb);
+		qdisc->q.qlen++;
+		return 1;
+	}
+	qdisc->stats.drops++;
+	kfree_skb(skb);
+	return 0;
+}
+
+static struct sk_buff *
+pfifo_fast_dequeue(struct Qdisc* qdisc)
+{
+	int prio;
+	struct sk_buff_head *list = ((struct sk_buff_head*)qdisc->data);
+	struct sk_buff *skb;
+
+	for (prio = 0; prio < 3; prio++, list++) {
+		skb = __skb_dequeue(list);
+		if (skb) {
+			qdisc->q.qlen--;
+			return skb;
+		}
+	}
+	return NULL;
+}
+
+static int
+pfifo_fast_requeue(struct sk_buff *skb, struct Qdisc* qdisc)
+{
+	struct sk_buff_head *list;
+
+	list = ((struct sk_buff_head*)qdisc->data) +
+		prio2band[skb->priority&TC_PRIO_MAX];
+
+	__skb_queue_head(list, skb);
+	qdisc->q.qlen++;
+	return 1;
+}
+
+static void
+pfifo_fast_reset(struct Qdisc* qdisc)
+{
+	int prio;
+	struct sk_buff_head *list = ((struct sk_buff_head*)qdisc->data);
+
+	for (prio=0; prio < 3; prio++)
+		skb_queue_purge(list+prio);
+	qdisc->q.qlen = 0;
+}
+
+static int pfifo_fast_init(struct Qdisc *qdisc, struct rtattr *opt)
+{
+	int i;
+	struct sk_buff_head *list;
+
+	list = ((struct sk_buff_head*)qdisc->data);
+
+	for (i=0; i<3; i++)
+		skb_queue_head_init(list+i);
+
+	return 0;
+}
+
+static struct Qdisc_ops pfifo_fast_ops =
+{
+	NULL,
+	NULL,
+	"pfifo_fast",
+	3 * sizeof(struct sk_buff_head),
+
+	pfifo_fast_enqueue,
+	pfifo_fast_dequeue,
+	pfifo_fast_requeue,
+	NULL,
+
+	pfifo_fast_init,
+	pfifo_fast_reset,
+};
+
+struct Qdisc * qdisc_create_dflt(struct device *dev, struct Qdisc_ops *ops)
+{
+	struct Qdisc *sch;
+	int size = sizeof(*sch) + ops->priv_size;
+
+	sch = kmalloc(size, GFP_KERNEL);
+	if (!sch)
+		return NULL;
+	memset(sch, 0, size);
+
+	skb_queue_head_init(&sch->q);
+	sch->ops = ops;
+	sch->enqueue = ops->enqueue;
+	sch->dequeue = ops->dequeue;
+	sch->dev = dev;
+	sch->flags |= TCQ_F_DEFAULT;
+	if (ops->init && ops->init(sch, NULL) == 0)
+		return sch;
+
+	kfree(sch);
+	return NULL;
+}
+
+void qdisc_reset(struct Qdisc *qdisc)
+{
+	struct Qdisc_ops *ops = qdisc->ops;
+	start_bh_atomic();
+	if (ops->reset)
+		ops->reset(qdisc);
+	end_bh_atomic();
+}
+
+void qdisc_destroy(struct Qdisc *qdisc)
+{
+	struct Qdisc_ops *ops = qdisc->ops;
+#ifdef CONFIG_NET_SCHED
+	if (qdisc->dev) {
+		struct Qdisc *q, **qp;
+		for (qp = &qdisc->dev->qdisc_list; (q=*qp) != NULL; qp = &q->next)
+			if (q == qdisc) {
+				*qp = q->next;
+				q->next = NULL;
+				break;
+			}
+	}
+#ifdef CONFIG_NET_ESTIMATOR
+	qdisc_kill_estimator(&qdisc->stats);
+#endif
+#endif
+	start_bh_atomic();
+	if (ops->reset)
+		ops->reset(qdisc);
+	if (ops->destroy)
+		ops->destroy(qdisc);
+	end_bh_atomic();
+	if (!(qdisc->flags&TCQ_F_BUILTIN))
+		kfree(qdisc);
+}
+
+
+void dev_activate(struct device *dev)
+{
+	/* No queueing discipline is attached to device;
+	   create default one i.e. pfifo_fast for devices,
+	   which need queueing and noqueue_qdisc for
+	   virtual interfaces
+	 */
+
+	if (dev->qdisc_sleeping == &noop_qdisc) {
+		if (dev->tx_queue_len) {
+			struct Qdisc *qdisc;
+			qdisc = qdisc_create_dflt(dev, &pfifo_fast_ops);
+			if (qdisc == NULL) {
+				printk(KERN_INFO "%s: activation failed\n", dev->name);
+				return;
+			}
+			dev->qdisc_sleeping = qdisc;
+		} else
+			dev->qdisc_sleeping = &noqueue_qdisc;
+	}
+
+	start_bh_atomic();
+	if ((dev->qdisc = dev->qdisc_sleeping) != &noqueue_qdisc) {
+		dev->qdisc->tx_timeo = 5*HZ;
+		dev->qdisc->tx_last = jiffies - dev->qdisc->tx_timeo;
+		if (!del_timer(&dev_watchdog))
+			dev_watchdog.expires = jiffies + 5*HZ;
+		add_timer(&dev_watchdog);
+	}
+	end_bh_atomic();
+}
+
+void dev_deactivate(struct device *dev)
+{
+	struct Qdisc *qdisc;
+
+	start_bh_atomic();
+
+	qdisc = xchg(&dev->qdisc, &noop_qdisc);
+
+	qdisc_reset(qdisc);
+
+	if (qdisc->h.forw) {
+		struct Qdisc_head **hp, *h;
+
+		for (hp = &qdisc_head.forw; (h = *hp) != &qdisc_head; hp = &h->forw) {
+			if (h == &qdisc->h) {
+				*hp = h->forw;
+				break;
+			}
 		}
 	}
 
-	rtnl_lock();
-
-	switch (ctl.command) {
-	case PSCHED_TC_INIT:
-		err = tc_init(pctl);
-		break;
-	case PSCHED_TC_DESTROY:
-		err = tc_destroy(pctl);
-		break;
-	case PSCHED_TC_ATTACH:
-		err = tc_attach(pctl);
-		break;
-	case PSCHED_TC_DETACH:
-		err = tc_detach(pctl);
-		break;
-	default:
-		err = -EINVAL;
-	}
-
-	rtnl_unlock();
-
-	if (pctl != &ctl)
-		kfree(pctl);
-	return err;
+	end_bh_atomic();
 }
 
-__initfunc(int pktsched_init(void))
+void dev_init_scheduler(struct device *dev)
 {
-#define INIT_QDISC(name) { \
-          extern struct Qdisc_ops name##_ops; \
-          register_qdisc(&##name##_ops); \
-	}
-
-	register_qdisc(&pfifo_fast_ops);
-#ifdef CONFIG_NET_SCH_CBQ
-	INIT_QDISC(cbq);
-#endif
-#ifdef CONFIG_NET_SCH_CSZ
-	INIT_QDISC(csz);
-#endif
-#ifdef CONFIG_NET_SCH_RED
-	INIT_QDISC(red);
-#endif
-#ifdef CONFIG_NET_SCH_SFQ
-	INIT_QDISC(sfq);
-#endif
-#ifdef CONFIG_NET_SCH_TBF
-	INIT_QDISC(tbf);
-#endif
-#ifdef CONFIG_NET_SCH_PFIFO
-	INIT_QDISC(pfifo);
-	INIT_QDISC(bfifo);
-#endif
-#ifdef CONFIG_NET_SCH_PRIO
-	INIT_QDISC(prio);
-#endif
-	return 0;
+	dev->qdisc = &noop_qdisc;
+	dev->qdisc_sleeping = &noop_qdisc;
+	dev->qdisc_list = NULL;
 }
+
+void dev_shutdown(struct device *dev)
+{
+	struct Qdisc *qdisc;
+
+	start_bh_atomic();
+	qdisc = dev->qdisc_sleeping;
+	dev->qdisc = &noop_qdisc;
+	dev->qdisc_sleeping = &noop_qdisc;
+	qdisc_destroy(qdisc);
+	BUG_TRAP(dev->qdisc_list == NULL);
+	dev->qdisc_list = NULL;
+	end_bh_atomic();
+}
+
+struct Qdisc * dev_set_scheduler(struct device *dev, struct Qdisc *qdisc)
+{
+	struct Qdisc *oqdisc;
+
+	if (dev->flags & IFF_UP)
+		dev_deactivate(dev);
+
+	start_bh_atomic();
+	oqdisc = dev->qdisc_sleeping;
+
+	/* Prune old scheduler */
+	if (oqdisc)
+		qdisc_reset(oqdisc);
+
+	/* ... and graft new one */
+	if (qdisc == NULL)
+		qdisc = &noop_qdisc;
+	dev->qdisc_sleeping = qdisc;
+	dev->qdisc = &noop_qdisc;
+	end_bh_atomic();
+
+	if (dev->flags & IFF_UP)
+		dev_activate(dev);
+
+	return oqdisc;
+}
+

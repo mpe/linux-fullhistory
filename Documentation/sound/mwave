@@ -36,7 +36,7 @@ The steps, then:
         BootGUI=0
 
         [Note msdos.sys IS a text file but it needs to be 'unhidden' and make
-         read-writable before it can be eddited]
+         read-writable before it can be edited]
 
     Edit Config .sys to have multiple config menus. I have one for win95, and
     five for linux. Like this:
@@ -123,7 +123,7 @@ initrd image, and has a parm file named LINDOC3.PAR in c:\linux\boot\parms:
 #
 c:\linux\boot\zImage.krn         # first value must be the filename of the Linux-kernel
 root=/dev/hda3                    # the device which gets mounted as root FS
-ro                                      # Other kernel agruments go here
+ro                                      # Other kernel arguments go here
 apm=off
 doc=yes
 3
@@ -170,7 +170,7 @@ Default=SBPRO
 Reboot to Win95 and choose Linux. When booted, use sndconfig to configure the  
 sound modules and VOILA - ThinkPad sound with Linux.
 
-Now the gottchas - You can either have CD sound OR Mixers but not both. Thats a
+Now the gotchas - You can either have CD sound OR Mixers but not both. That's a
 problem with the SB1.5(CD sound) or SBPRO(Mixers) settings. No-one knows why
 this is!
 

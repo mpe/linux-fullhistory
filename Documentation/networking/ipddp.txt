@@ -1,42 +1,42 @@
 Text file for ipddp.c:
-	Appletalk-IP Decapsulation and Appletalk-IP Encapsulation
+	AppleTalk-IP Decapsulation and AppleTalk-IP Encapsulation
 
 This text file writen by Jay Schulist <Jay.Schulist@spacs.k12.wi.us>
 
 Introduction
 ------------
 
-Appletalk-IP (IPDDP) is the method computers connected to Appletalk
-networks can communicate via IP. Appletalk-IP is simply IP datagrams
-inside Appletalk packets.
+AppleTalk-IP (IPDDP) is the method computers connected to AppleTalk
+networks can use to communicate via IP. AppleTalk-IP is simply IP datagrams
+inside AppleTalk packets.
 
 Through this driver you can either allow your Linux box to communicate
-IP over an Appletalk network or you can provide IP gatewaying functions
-for you Appletalk users.
+IP over an AppleTalk network or you can provide IP gatewaying functions
+for your AppleTalk users.
 
-You can currently Encapsulate or Decapsulate Appletalk-IP on LocalTalk,
+You can currently Encapsulate or Decapsulate AppleTalk-IP on LocalTalk,
 EtherTalk and PPPTalk. The only limit on the protocol is that of what
-the kernel Appletalk layer and drivers are available.
+kernel AppleTalk layer and drivers are available.
 
 Each mode requires its own user space software.
 
-Compiling Appletalk-IP Decapsulation/Encapsulation
+Compiling AppleTalk-IP Decapsulation/Encapsulation
 =================================================
 
-Appletalk-IP Decapsulation needs to be compiled into your kernel. You
+AppleTalk-IP Decapsulation needs to be compiled into your kernel. You
 will need to turn on Appletalk-IP driver support. Then you will need to
-select ONE of the two options; IP to Appletalk-IP Encapsulation support or
-Appletalk-IP to IP Decapsulation support. If you compile the driver
-staticly you will only be able to use the driver for the function you have
+select ONE of the two options; IP to AppleTalk-IP Encapsulation support or
+AppleTalk-IP to IP Decapsulation support. If you compile the driver
+statically you will only be able to use the driver for the function you have
 enabled in the kernel. If you compile the driver as a module you can
 select what mode you want it to run in via a module loading param.
-ipddp_mode=1 for Appletalk-IP Encapsulation and ipddp_mode=2 for
-Appletalk-IP to IP Decapsulation.
+ipddp_mode=1 for AppleTalk-IP Encapsulation and ipddp_mode=2 for
+AppleTalk-IP to IP Decapsulation.
 
 Basic instructions for user space tools
 =======================================
 
-To enable Appletalk-IP Decapsulation/Encapsulation you will need the 
+To enable AppleTalk-IP Decapsulation/Encapsulation you will need the 
 proper tools. You can get the tools for Decapsulation from
 http://spacs1.spacs.k12.wi.us/~jschlst/MacGate and for Encapsulation
 from http://www.maths.unm.edu/~bradford/ltpc.html
@@ -46,7 +46,7 @@ need to consult the supporting documentation for each set of tools.
 
 Decapsulation - You will need to download a software package called
 MacGate. In this distribution there will be a tool called MacRoute
-which enabled you to add routes to the kernel for your Macs by hand.
+which enables you to add routes to the kernel for your Macs by hand.
 Also the tool MacRegGateWay is included to register the
 proper IP Gateway and IP addresses for your machine. Included in this
 distribution is a patch to netatalk-1.4b2+asun2.0a17.2 (available from
@@ -55,13 +55,13 @@ but it allows automatic adding and deleting of routes for Macs. (Handy
 for locations with large Mac installations)
 
 Encapsulation - You will need to download a software daemon called ipddpd.
-This software expects there to be and Appletalk-IP gateway on the network.
+This software expects there to be an AppleTalk-IP gateway on the network.
 You will also need to add the proper routes to route your Linux box's IP
 traffic out the ipddp interface.
 
 Common Uses of ipddp.c
 ----------------------
-Of course Appletalk-IP Decapsulation and Encapsulation, but specificly
+Of course AppleTalk-IP Decapsulation and Encapsulation, but specificly
 Decapsulation is being used most for connecting LocalTalk networks to
 IP networks. Although it has been used on EtherTalk networks to allow
 Macs that are only able to tunnel IP over EtherTalk.
@@ -70,9 +70,9 @@ Encapsulation has been used to allow a Linux box stuck on a LocalTalk
 network to use IP. It should work equally well if you are stuck on an
 EtherTalk only network.
 
-Further Assisatance
+Further Assistance
 -------------------
 You can contact me (Jay Schulist <Jay.Schulist@spacs.k12.wi.us>) with any
 questions reguarding Decapsulation or Encapsulation. Bradford W. Johnson
 <johns393@maroon.tc.umn.edu> originally wrote the ipddp.c driver for IP
-encapsulation in Appletalk.
+encapsulation in AppleTalk.

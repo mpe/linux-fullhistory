@@ -44,10 +44,10 @@ instead of in a manual that can get lost. Ever misplace your Linux
 kernel sources?  And the manual of one of the boards in your computer?
 
 
-Adresses and interrupts
-=======================
+Addresses and interrupts
+========================
 
-Addres dip switch settings:
+Address dip switch settings:
 The dip switch sets bits 2-9 of the IO address. 
 
        9 8 7 6 5 4 3 2 
@@ -111,7 +111,7 @@ The Specialix card uses a 25MHz crystal (in times two mode, which in
 fact is a divided by two mode). This is not enough to reach the rated
 115k2 on all ports at the same time. With this clock rate you can only
 do 37% of this rate. This means that at 115k2 on all ports you are
-going to loose characters (The chip cannot handle that many incoming
+going to lose characters (The chip cannot handle that many incoming
 bits at this clock rate.) (Yes, you read that correctly: there is a
 limit to the number of -=bits=- per second that the chip can handle.)
 
@@ -129,7 +129,7 @@ got: +++[0d]ATQ0V1H0[0d][0d][8a]O[cb][0d][8a]
 
 The three characters that have the "^^^" under them have suffered a
 bit error in the highest bit. In conclusion: I've tested it, and found
-that it simply DOESN"T work for me. I also suspect that this is also
+that it simply DOESN'T work for me. I also suspect that this is also
 caused by the baud rate being just a little bit out of tune. 
 
 

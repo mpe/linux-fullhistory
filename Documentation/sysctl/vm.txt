@@ -62,7 +62,7 @@ of the buffer still have to be written to disk (as opposed
 to a clean buffer, which can just be forgotten about).
 Setting this to a high value means that Linux can delay disk
 writes for a long time, but it also means that it will have
-to do a lot I/O at once when memory becomes short. A low
+to do a lot of I/O at once when memory becomes short. A low
 value will spread out disk I/O more evenly.
 
 The second parameter (ndirty) gives the maximum number of
@@ -94,7 +94,8 @@ buffermem:
 
 The three values in this file correspond to the values in
 the struct buffer_mem. It controls how much memory should
-be used for buffer memory.
+be used for buffer memory. The percentage is calculated
+as a percentage of total system memory.
 
 The values are:
 min_percent	-- this is the minumum percentage of memory
@@ -111,29 +112,9 @@ freepages:
 This file contains the values in the struct freepages. That
 struct contains three members: min, low and high.
 
-These numbers are used by the VM subsystem to keep a reasonable
-number of pages on the free page list, so that programs can
-allocate new pages without having to wait for the system to
-free used pages first. The actual freeing of pages is done
-by kswapd, a kernel daemon.
-
-min  -- when the number of free pages reaches this
-        level, only the kernel can allocate memory
-        for _critical_ tasks only
-low  -- when the number of free pages drops below
-        this level, kswapd is woken up immediately
-high -- this is kswapd's target, when more than <high>
-        pages are free, kswapd will stop swapping.
-
-When the number of free pages is between low and high,
-and kswapd hasn't run for swapout_interval jiffies, then
-kswapd is woken up too. See swapout_interval for more info.
-
-When free memory is always low on your system, and kswapd has
-trouble keeping up with allocations, you might want to
-increase these values, especially high and perhaps low.
-I've found that a 1:2:4 relation for these values tend to work
-rather well in a heavily loaded system.
+These variables are currently unused (?), but they're
+very likely to be abused for something else in the near
+future, so don't yet remove it from the source...
 
 ==============================================================
 
@@ -209,23 +190,23 @@ typedef struct swap_control_v5
 } swap_control_v5;
 --------------------------------------------------------------
 
-The first four variables are used to keep track of Linux'
+The first four variables are used to keep track of Linux's
 page aging. Page aging is a bookkeeping method to keep track
 of which pages of memory are used often, and which pages can
 be swapped out without consequences.
 
 When a page is swapped in, it starts at sc_page_initial_age
-(default 3) and when the page is scanned by kswapd, it's age
+(default 3) and when the page is scanned by kswapd, its age
 is adjusted according to the following scheme:
-- if the page was used since the last time we scanned, it's
-  age is increased sc_page_advance (default 3) up to a maximum
+- if the page was used since the last time we scanned, its
+  age is increased by sc_page_advance (default 3) up to a maximum
   of sc_max_page_age (default 20)
-- else (it wasn't used) it's age is decreased sc_page_decline
+- else (it wasn't used) its age is decreased by sc_page_decline
   (default 1)
 And when a page reaches age 0, it's ready to be swapped out.
 
 The next four variables can be used to control kswapd's
-agressiveness in swapping out pages.
+aggressiveness in swapping out pages.
 
 sc_age_cluster_fract is used to calculate how many pages from
 a process are to be scanned by kswapd. The formula used is
@@ -236,10 +217,10 @@ represented by sc_age_cluster_min, this is done so kswapd will
 also scan small processes.
 
 The values of sc_pageout_weight and sc_bufferout_weight are
-used to control the how many tries kswapd will do in order
+used to control how many tries kswapd will make in order
 to swapout one page / buffer. These values can be used to
 finetune the ratio between user pages and buffer/cache memory.
-When you find that your Linux system is swapping out too much
+When you find that your Linux system is swapping out too many
 process pages in order to satisfy buffer memory demands, you
 might want to either increase sc_bufferout_weight, or decrease
 the value of sc_pageout_weight.

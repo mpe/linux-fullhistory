@@ -34,7 +34,7 @@ like compression and decompression silently.
 
 - BMAP problems
 
-  CVF filesystems cannot do bmap. It's impossible by principle. Thus
+  CVF filesystems cannot do bmap. It's impossible in principle. Thus
   all actions that require bmap do not work (swapping, writable mmapping).
   Read-only mmapping works because the FAT driver has a hack for this
   situation :) Well, with some tricks writable mmapping could work,
@@ -66,7 +66,7 @@ driver's standard options:
 
   cvf_format=xxx
     Forces the driver to use the CVF module "xxx" instead of auto-detection.
-    This is only necessary if the CVF format is not recognized corrrectly
+    This is only necessary if the CVF format is not recognized correctly
     because of bugs or incompatibilities in the CVF modules. (It skips
     the detect_cvf call.) "xxx" may be the text "none" (without the quotes)
     to inhibit using any of the loaded CVF modules, just in case a CVF
@@ -80,7 +80,7 @@ driver's standard options:
     misinterpretation by the FAT driver, which would recognize the text 
     after a comma as a FAT driver option and might get confused or print 
     strange error messages. The documentation for the CVF module should 
-    offer a different seperation symbol, for example the dot ".", which
+    offer a different separation symbol, for example the dot ".", which
     is only valid inside the string "yyy".
 
 
@@ -109,11 +109,11 @@ to introduce the module to the FAT/CVF-FAT driver.
 
 It contains...
   - cvf_version:
-      A version id which must be uniqe. Choose one.
+      A version id which must be unique. Choose one.
   - cvf_version_text:
       A human readable version string that should be one short word 
       describing the CVF format the module implements. This text is used
-      for the cvf_format option. This name must also be uniqe.
+      for the cvf_format option. This name must also be unique.
   - flags:
       Bit coded flags, currently only used for a readpage/mmap hack that 
       provides both mmap and readpage functionality. If CVF_USE_READPAGE
@@ -178,7 +178,7 @@ int unregister_cvf_format(struct cvf_format*cvf_format);
   This is usually called in cleanup_module. Return value =0 means
   success. An error only occurs if you try to unregister a CVF format
   that has not been previously registered. The code uses the version id
-  to distinguish the modules, so be sure to keep it uniqe.
+  to distinguish the modules, so be sure to keep it unique.
 
 5. CVS Modules
 ------------------------------------------------------------------------------

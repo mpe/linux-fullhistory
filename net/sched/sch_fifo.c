@@ -1,9 +1,15 @@
 /*
- * net/sched/sch_fifo.c	Simple FIFO "scheduler"
+ * net/sched/sch_fifo.c	The simplest FIFO queue.
+ *
+ *		This program is free software; you can redistribute it and/or
+ *		modify it under the terms of the GNU General Public License
+ *		as published by the Free Software Foundation; either version
+ *		2 of the License, or (at your option) any later version.
  *
  * Authors:	Alexey Kuznetsov, <kuznet@ms2.inr.ac.ru>
  */
 
+#include <linux/config.h>
 #include <asm/uaccess.h>
 #include <asm/system.h>
 #include <asm/bitops.h>
@@ -32,9 +38,7 @@
 
 struct fifo_sched_data
 {
-	int	qmaxbytes;
-	int	qmaxlen;
-	int	qbytes;
+	unsigned limit;
 };
 
 static int
@@ -42,41 +46,62 @@ bfifo_enqueue(struct sk_buff *skb, struct Qdisc* sch)
 {
 	struct fifo_sched_data *q = (struct fifo_sched_data *)sch->data;
 
-	if (q->qbytes <= q->qmaxbytes) {
-		skb_queue_tail(&sch->q, skb);
-		q->qbytes += skb->len;
-		return 0;
+	if (sch->stats.backlog <= q->limit) {
+		__skb_queue_tail(&sch->q, skb);
+		sch->stats.backlog += skb->len;
+		sch->stats.bytes += skb->len;
+		sch->stats.packets++;
+		return 1;
 	}
-	kfree_skb(skb);
+	sch->stats.drops++;
+#ifdef CONFIG_NET_CLS_POLICE
+	if (sch->reshape_fail==NULL || sch->reshape_fail(skb, sch))
+#endif
+		kfree_skb(skb);
+	return 0;
+}
+
+static int
+bfifo_requeue(struct sk_buff *skb, struct Qdisc* sch)
+{
+	__skb_queue_head(&sch->q, skb);
+	sch->stats.backlog += skb->len;
 	return 1;
 }
 
 static struct sk_buff *
 bfifo_dequeue(struct Qdisc* sch)
 {
-	struct fifo_sched_data *q = (struct fifo_sched_data *)sch->data;
 	struct sk_buff *skb;
 
-	skb = skb_dequeue(&sch->q);
+	skb = __skb_dequeue(&sch->q);
 	if (skb)
-		q->qbytes -= skb->len;
+		sch->stats.backlog -= skb->len;
 	return skb;
 }
 
-static void
-bfifo_reset(struct Qdisc* sch)
+static int
+fifo_drop(struct Qdisc* sch)
 {
-	struct fifo_sched_data *q = (struct fifo_sched_data *)sch->data;
 	struct sk_buff *skb;
 
-	while((skb=skb_dequeue(&sch->q)) != NULL) {
-		q->qbytes -= skb->len;
+	skb = __skb_dequeue_tail(&sch->q);
+	if (skb) {
+		sch->stats.backlog -= skb->len;
 		kfree_skb(skb);
+		return 1;
 	}
-	if (q->qbytes) {
-		printk("fifo_reset: qbytes=%d\n", q->qbytes);
-		q->qbytes = 0;
-	}
+	return 0;
+}
+
+static void
+fifo_reset(struct Qdisc* sch)
+{
+	struct sk_buff *skb;
+
+	while ((skb=__skb_dequeue(&sch->q)) != NULL)
+		kfree_skb(skb);
+	sch->stats.backlog = 0;
 }
 
 static int
@@ -84,96 +109,106 @@ pfifo_enqueue(struct sk_buff *skb, struct Qdisc* sch)
 {
 	struct fifo_sched_data *q = (struct fifo_sched_data *)sch->data;
 
-	if (sch->q.qlen <= q->qmaxlen) {
-		skb_queue_tail(&sch->q, skb);
-		return 0;
+	if (sch->q.qlen <= q->limit) {
+		__skb_queue_tail(&sch->q, skb);
+		sch->stats.bytes += skb->len;
+		sch->stats.packets++;
+		return 1;
 	}
-	kfree_skb(skb);
+	sch->stats.drops++;
+#ifdef CONFIG_NET_CLS_POLICE
+	if (sch->reshape_fail==NULL || sch->reshape_fail(skb, sch))
+#endif
+		kfree_skb(skb);
+	return 0;
+}
+
+static int
+pfifo_requeue(struct sk_buff *skb, struct Qdisc* sch)
+{
+	__skb_queue_head(&sch->q, skb);
 	return 1;
 }
+
 
 static struct sk_buff *
 pfifo_dequeue(struct Qdisc* sch)
 {
-	return skb_dequeue(&sch->q);
-}
-
-static void
-pfifo_reset(struct Qdisc* sch)
-{
-	struct sk_buff *skb;
-
-	while((skb=skb_dequeue(&sch->q))!=NULL)
-		kfree_skb(skb);
+	return __skb_dequeue(&sch->q);
 }
 
 
-static int fifo_init(struct Qdisc *sch, void *arg /* int bytes, int pkts */)
+static int fifo_init(struct Qdisc *sch, struct rtattr *opt)
 {
-	struct fifo_sched_data *q;
-/*
-	struct device *dev = sch->dev;
- */
+	struct fifo_sched_data *q = (void*)sch->data;
 
-	q = (struct fifo_sched_data *)sch->data;
-/*
-	if (pkts<0)
-		pkts = dev->tx_queue_len;
-	if (bytes<0)
-		bytes = pkts*dev->mtu;
-	q->qmaxbytes = bytes;
-	q->qmaxlen = pkts;
- */
+	if (opt == NULL) {
+		q->limit = sch->dev->tx_queue_len;
+		if (sch->ops == &bfifo_qdisc_ops)
+			q->limit *= sch->dev->mtu;
+	} else {
+		struct tc_fifo_qopt *ctl = RTA_DATA(opt);
+		if (opt->rta_len < RTA_LENGTH(sizeof(*ctl)))
+			return -EINVAL;
+		q->limit = ctl->limit;
+	}
 	return 0;
 }
 
-struct Qdisc_ops pfifo_ops =
+#ifdef CONFIG_RTNETLINK
+static int fifo_dump(struct Qdisc *sch, struct sk_buff *skb)
 {
-	NULL,
-	"pfifo",
-	0,
-	sizeof(struct fifo_sched_data),
-	pfifo_enqueue,
-	pfifo_dequeue,
-	pfifo_reset,
-	NULL,
-	fifo_init,
-};
+	struct fifo_sched_data *q = (void*)sch->data;
+	unsigned char	 *b = skb->tail;
+	struct tc_fifo_qopt opt;
 
-struct Qdisc_ops bfifo_ops =
-{
-	NULL,
-	"pfifo",
-	0,
-	sizeof(struct fifo_sched_data),
-	bfifo_enqueue,
-	bfifo_dequeue,
-	bfifo_reset,
-	NULL,
-	fifo_init,
-};
+	opt.limit = q->limit;
+	RTA_PUT(skb, TCA_OPTIONS, sizeof(opt), &opt);
 
-#ifdef MODULE
-#include <linux/module.h>
-int init_module(void)
-{
-	int err;
+	return skb->len;
 
-	/* Load once and never free it. */
-	MOD_INC_USE_COUNT;
-
-	err = register_qdisc(&pfifo_ops);
-	if (err == 0) {
-		err = register_qdisc(&bfifo_ops);
-		if (err)
-			unregister_qdisc(&pfifo_ops);
-	}
-	if (err)
-		MOD_DEC_USE_COUNT;
-	return err;
-}
-
-void cleanup_module(void) 
-{
+rtattr_failure:
+	skb_trim(skb, b - skb->data);
+	return -1;
 }
 #endif
+
+struct Qdisc_ops pfifo_qdisc_ops =
+{
+	NULL,
+	NULL,
+	"pfifo",
+	sizeof(struct fifo_sched_data),
+
+	pfifo_enqueue,
+	pfifo_dequeue,
+	pfifo_requeue,
+	fifo_drop,
+
+	fifo_init,
+	fifo_reset,
+	NULL,
+#ifdef CONFIG_RTNETLINK
+	fifo_dump,
+#endif
+};
+
+struct Qdisc_ops bfifo_qdisc_ops =
+{
+	NULL,
+	NULL,
+	"bfifo",
+	sizeof(struct fifo_sched_data),
+
+	bfifo_enqueue,
+	bfifo_dequeue,
+	bfifo_requeue,
+	fifo_drop,
+
+	fifo_init,
+	fifo_reset,
+	NULL,
+#ifdef CONFIG_RTNETLINK
+	fifo_dump,
+#endif
+};

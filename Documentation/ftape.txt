@@ -6,7 +6,7 @@ floppy tape device driver that comes with the Linux kernel. This
 document deals with ftape-3.04 and later. Please read the section
 "Changes" for the most striking differences between version 3.04 and
 2.08; the latter was the version of ftape delivered with the kernel
-until kernel version 2.030 and 2.1.57. ftape-3.x developed as the
+until kernel version 2.0.30 and 2.1.57. ftape-3.x developed as the
 re-unification of ftape-2.x and zftape. zftape was developed in
 parallel with the stock ftape-2.x driver sharing the same hardware
 support but providing an enhanced file system interface. zftape also
@@ -54,7 +54,7 @@ A minus 1. Ftape documentation
 ==============================
 
 Unluckily, the ftape-HOWTO is out of date. This really needs to be
-changed. Up to data documentation as well as recent development
+changed. Up to date documentation as well as recent development
 versions of ftape and useful links to related topics can be found at
 the ftape home page at
 
@@ -245,7 +245,7 @@ C. Boot and load time configuration
    insmod ftape.o ft_tracing=4
 
    or by editing the file `/etc/conf.modules' in which case they take
-   affect each time when the module is loaded with `modprobe' (please
+   effect each time when the module is loaded with `modprobe' (please
    refer to the modules documentation, i.e. `modules.txt' and the
    respective manual pages). Thus, you should add a line
 

@@ -8,7 +8,8 @@
 # Note 2! The CFLAGS definition is now in the main makefile...
 
 O_TARGET := wanrouter.o
-O_OBJS   := wanmain.o wanproc.o
+OX_OBJS   := wanmain.o
+O_OBJS :=  wanproc.o
 M_OBJS   := $(O_TARGET)
 
 include $(TOPDIR)/Rules.make

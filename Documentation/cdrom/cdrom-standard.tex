@@ -45,15 +45,15 @@ presumably
 \end{itemize}
 The openness of \linux, and the many different types of available
 hardware has allowed \linux\ to support many different hardware devices.
-Unfortunatly, the very openness that has allowed \linux\ to support
+Unfortunately, the very openness that has allowed \linux\ to support
 all these different devices has also allowed the behavior of each
 device driver to differ significantly from one device to another.
-This divergence of behavior has been the very significant for \cdrom\
+This divergence of behavior has been very significant for \cdrom\
 devices; the way a particular drive reacts to a `standard' $ioctl()$
 call varies greatly from one device driver to another. To avoid making
 their drivers totally inconsistent, the writers of \linux\ \cdrom\
 drivers generally created new device drivers by understanding, copying,
-and then changing an existing one. Unfortunatly, this practice did not
+and then changing an existing one. Unfortunately, this practice did not
 maintain uniform behavior across all the \linux\ \cdrom\ drivers. 
 
 This document describes an effort to establish Uniform behavior across
@@ -85,7 +85,7 @@ which was expressed through \cdromh, it appeared to be a rather wild
 set of commands and data formats.\footnote{I cannot recollect what
 kernel version I looked at, then, presumably 1.2.13 and 1.3.34---the
 latest kernel that I was indirectly involved in.} It seemed that many
-features of the software interface had been added to accomodate the
+features of the software interface had been added to accommodate the
 capabilities of a particular drive, in an {\fo ad hoc\/} manner. More
 importantly, it appeared that the behavior of the `standard' commands
 was different for most of the different drivers: \eg, some drivers
@@ -93,7 +93,7 @@ close the tray if an $open()$ call occurs when the tray is open, while
 others do not. Some drivers lock the door upon opening the device, to
 prevent an incoherent file system, but others don't, to allow software
 ejection. Undoubtedly, the capabilities of the different drives vary,
-but even when two drives have the same capability their driver's
+but even when two drives have the same capability their drivers'
 behavior was usually different.
 
 I decided to start a discussion on how to make all the \linux\ \cdrom\
@@ -109,7 +109,7 @@ hardware will allow).
 
 The goal of the \UCD\ is {\em not\/} to alienate driver developers who
 have not yet taken steps to support this effort. The goal of \UCD\ is
-simply is give people writing application programs for \cdrom\ drives
+simply to give people writing application programs for \cdrom\ drives
 {\em one\/} \linux\ \cdrom\ interface with consistent behavior for all
 \cdrom\ devices. In addition, this also provides a consistent interface
 between the low-level device driver code and the \linux\ kernel. Care
@@ -147,14 +147,14 @@ software-level, that separates the $ioctl()$ and $open()$ implementation
 from the actual hardware implementation. Note that this effort has
 made few changes which will effect a user's application programs. The
 greatest change involved moving the contents of the various low-level
-\cdrom\ driver's header files to the kernel's cdrom directory. This was
+\cdrom\ drivers' header files to the kernel's cdrom directory. This was
 done to help ensure that the user is only presented with only one cdrom
 interface, the interface defined in \cdromh.
 
 \cdrom\ drives are specific enough (\ie, different from other
 block-devices such as floppy or hard disc drives), to define a set
 of common {\em \cdrom\ device operations}, $<cdrom-device>_dops$.
-These operations are different than the classical block-device file
+These operations are different from the classical block-device file
 operations, $<block-device>_fops$.
 
 The routines for the \UCD\ interface level are implemented in the file
@@ -267,7 +267,7 @@ difficult in computer programming.
 
 Note that most functions have fewer parameters than their
 $blkdev_fops$ counterparts. This is because very little of the
-information in the structures $inode$ and $file$ are used. For most
+information in the structures $inode$ and $file$ is used. For most
 drivers, the main parameter is the $struct$ $cdrom_device_info$, from
 which the major and minor number can be extracted. (Most low-level
 \cdrom\ drivers don't even look at the major and minor number though,
@@ -291,7 +291,7 @@ struct& cdrom_device_info\ \{ \hidewidth\cr
 \noalign{\medskip}
   &int& options : 30;& options flags \cr
   &long& mc_flags : 2;& media-change buffer flags \cr
-  & int& use_count;& number of times devices is opened\cr
+  & int& use_count;& number of times device is opened\cr
 \}\cr
 }$$
 Using this $struct$, a linked list of the registered minor devices is
@@ -312,23 +312,23 @@ registration.
 A few registers contain variables local to the \cdrom\ drive. The
 flags $options$ are used to specify how the general \cdrom\ routines
 should behave. These various flags registers should provide enough
-flexibility to adapt to the different user's wishes (and {\em not\/} the
+flexibility to adapt to the different users' wishes (and {\em not\/} the
 `arbitrary' wishes of the author of the low-level device driver, as is
 the case in the old scheme). The register $mc_flags$ is used to buffer
 the information from $media_changed()$ to two separate queues. Other
-data that is specific to minor drive, can be accessed through $handle$,
+data that is specific to a minor drive, can be accessed through $handle$,
 which can point to a data structure specific to the low-level driver.
 The fields $use_count$, $next$, $options$ and $mc_flags$ need not be
 initialized.
 
-The intermediate software layer that \cdromc\ forms will performs some
+The intermediate software layer that \cdromc\ forms will perform some
 additional bookkeeping. The use count of the device (the number of
 processes that have the device opened) is registered in $use_count$. The
 function $cdrom_ioctl()$ will verify the appropriate user-memory regions
 for read and write, and in case a location on the CD is transferred,
 it will `sanitize' the format by making requests to the low-level
 drivers in a standard format, and translating all formats between the
-user-software and low level drivers. This relieves much of the drivers
+user-software and low level drivers. This relieves much of the drivers'
 memory checking and format checking and translation. Also, the necessary
 structures will be declared on the program stack.
 
@@ -469,7 +469,7 @@ addressing mode), whatever the calling software requested. But
 sanitization goes even further: the low-level implementation may
 return the requested information in $CDROM_MSF$ format if it wishes so
 (setting the $ms_info\rightarrow addr_format$ field appropriately, of
-course) and the routines in \cdromc\ will make the transform if
+course) and the routines in \cdromc\ will make the transformation if
 necessary. The return value is 0 upon success.
 
 \subsection{$Int\ get_mcn(struct\ cdrom_device_info * cdi, struct\
@@ -498,7 +498,7 @@ driver to time out.
 Some of the \cdrom-$ioctl$s defined in \cdromh\ can be
 implemented by the routines described above, and hence the function
 $cdrom_ioctl$ will use those. However, most $ioctl$s deal with
-audio-control. We have decided to leave these accessed through a
+audio-control. We have decided to leave these to be accessed through a
 single function, repeating the arguments $cmd$ and $arg$. Note that
 the latter is of type $void*{}$, rather than $unsigned\ long\
 int$. The routine $cdrom_ioctl()$ does do some useful things,
@@ -532,7 +532,7 @@ problem here could be the fact that audio-frames are 2352 bytes long,
 so either the audio-file-system should ask for 75264 bytes at once
 (the least common multiple of 512 and 2352), or the drivers should
 bend their backs to cope with this incoherence (to which I would be
-opposed).  Furthermore, it it very difficult for the hardware to find
+opposed).  Furthermore, it is very difficult for the hardware to find
 the exact frame boundaries, since there are no synchronization headers
 in audio frames.  Once these issues are resolved, this code should be
 standardized in \cdromc.
@@ -562,7 +562,7 @@ CDC_LOCK& can lock and unlock the door\cr
 CDC_SELECT_SPEED& can select speed, in units of $\sim$150\,kB/s\cr
 CDC_SELECT_DISC& drive is juke-box\cr
 CDC_MULTI_SESSION& can read sessions $>\rm1$\cr
-CDC_MCN& can read Medium Catalog Number\cr
+CDC_MCN& can read Media Catalog Number\cr
 CDC_MEDIA_CHANGED& can report if disc has changed\cr
 CDC_PLAY_AUDIO& can perform audio-functions (play, pause, etc)\cr
 CDC_RESET& hard reset device\cr
@@ -724,12 +724,12 @@ modes of operation can be set:
 \begin{description}
 \item[$CDO_AUTO_CLOSE \mathrel| CDO_USE_FFLAGS \mathrel| CDO_LOCK$] This
 is the default setting. (With $CDO_CHECK_TYPE$ it will be better, in the
-future.) If the device is not yet opened by any other process, and it
+future.) If the device is not yet opened by any other process, and if
 the device is being opened for data ($O_NONBLOCK$ is not set) and the
 tray is found to be open, an attempt to close the tray is made. Then,
 it is verified that a disc is in the drive and, if $CDO_CHECK_TYPE$ is
 set, that it contains tracks of type `data mode 1.' Only if all tests
-are passed, the return value is zero. The door is locked to prevent file
+are passed is the return value zero. The door is locked to prevent file
 system corruption. If the drive is opened for audio ($O_NONBLOCK$ is
 set), no actions are taken and a value of 0 will be returned. 
 \item[$CDO_AUTO_CLOSE \mathrel| CDO_AUTO_EJECT \mathrel| CDO_LOCK$] This
@@ -745,7 +745,7 @@ driver scheme and option flag interpretation.
 \newsection{Description of routines in \cdromc}
 
 Only a few routines in \cdromc\ are exported to the drivers. In this
-newsection we will discuss these, as well as the functions that `take
+new section we will discuss these, as well as the functions that `take
 over' the \cdrom\ interface to the kernel. The header file belonging
 to \cdromc\ is called \cdromh. Formerly, some of the contents of this
 file were placed in the file {\tt {ucdrom.h}}, but this file has now been
@@ -833,7 +833,7 @@ not masked:
 \item[CDROMEJECT_SW] If $arg\not=0$, set behavior to auto-close (close
 tray on first open) and auto-eject (eject on last release), otherwise
 set behavior to non-moving on $open()$ and $release()$ calls.
-\item[CDROM_GET_MCN or CDROM_GET_UPC] Get the Medium Catalog Number from a CD.
+\item[CDROM_GET_MCN or CDROM_GET_UPC] Get the Media Catalog Number from a CD.
 \end{description}
 
 \subsubsection{$Ioctl$s routed through $audio_ioctl()$}
@@ -878,7 +878,7 @@ the current flags.
 \item[CDROM_SELECT_SPEED] Select head-rate speed of disc specified as
   by $arg$ in units of standard cdrom speed (176\,kB/sec raw data or
   150\,kB/sec file system data). The value 0 means `auto-select', \ie,
-  play audio discs at real time and data disc at maximum speed. The value
+  play audio discs at real time and data discs at maximum speed. The value
   $arg$ is checked against the maximum head rate of the drive found in the
   $cdrom_dops$.
 \item[CDROM_SELECT_DISC] Select disc numbered $arg$ from a juke-box.
@@ -887,18 +887,18 @@ the current flags.
 \item[CDROM_MEDIA_CHANGED] Returns 1 if a disc has been changed since
   the last call. Note that calls to $cdrom_media_changed$ by the VFS
   are treated by an independent queue, so both mechanisms will detect
-  a media change once. For Juke-boxes, an extra argument $arg$
+  a media change once. For juke-boxes, an extra argument $arg$
   specifies the slot for which the information is given. The special
   value $CDSL_CURRENT$ requests that information about the currently
-  selected slot is returned.
+  selected slot be returned.
 \item[CDROM_DRIVE_STATUS] Returns the status of the drive by a call to
   $drive_status()$. Return values are defined in section~\ref{drive
    status}. Note that this call doesn't return information on the
   current playing activity of the drive; this can be polled through an
-  $ioctl$ call to $CDROMSUBCHNL$. For Juke-boxes, an extra argument
+  $ioctl$ call to $CDROMSUBCHNL$. For juke-boxes, an extra argument
   $arg$ specifies the slot for which (possibly limited) information is
   given. The special value $CDSL_CURRENT$ requests that information
-  about the currently selected slot is returned.
+  about the currently selected slot be returned.
 \item[CDROM_DISC_STATUS] Returns the type of the disc currently in the
   drive.  It should be viewed as a complement to $CDROM_DRIVE_STATUS$.
   This $ioctl$ can provide \emph {some} information about the current
@@ -996,7 +996,7 @@ $\&<your-drive>_fops$ to $\&cdrom_fops$.
 \item Change the prototypes of $<device>_open()$ and
   $<device>_release()$, and remove any strategic code (\ie, tray
   movement, door locking, etc.).
-\item Try to recompile the drivers. We advice you to use modules, both
+\item Try to recompile the drivers. We advise you to use modules, both
   for {\tt {cdrom.o}} and your driver, as debugging is much easier this
   way.
 \end{enumerate} 
@@ -1004,7 +1004,7 @@ $\&<your-drive>_fops$ to $\&cdrom_fops$.
 \newsection{Thanks}
 
 Thanks to all the people involved.  First, Erik Andersen, who has
-taken over the torch in maintaining \cdromc\ and integrating many
+taken over the torch in maintaining \cdromc\ and integrating much
 \cdrom-related code in the 2.1-kernel.  Thanks to Scott Snyder and
 Gerd Knorr, who were the first to implement this interface for SCSI
 and IDE-CD drivers and added many ideas for extension of the data

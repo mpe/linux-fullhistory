@@ -1,5 +1,5 @@
 /*
- * net/sched/sch_tbf.c	Token Bucket Filter.
+ * net/sched/sch_tbf.c	Token Bucket Filter queue.
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -10,6 +10,8 @@
  *
  */
 
+#include <linux/config.h>
+#include <linux/module.h>
 #include <asm/uaccess.h>
 #include <asm/system.h>
 #include <asm/bitops.h>
@@ -39,69 +41,91 @@
 	=======================================
 
 	SOURCE.
+	-------
 
 	None.
 
-	ALGORITHM.
+	Description.
+	------------
 
-	Sequence of packets satisfy token bucket filter with
-	rate $r$ and depth $b$, if all the numbers defined by:
-	\begin{eqnarray*}
-	n_0 &=& b, \\
-	n_i &=& {\rm max} ( b, n_{i-1} + r*(t_i-t_{i-1}) - L_i ),
-	\end{eqnarray*}
-	where $t_i$ --- departure time of $i$-th packet and
-	$L_i$ -- its length, never less than zero.
+	Data flow obeys TBF with rate R and depth B, if for any
+	time interval t_i...t_f number of transmitted bits
+	does not exceed B + R*(t_f-t_i).
 
-	It is convenient to rescale $n_i$ by factor $r$, so
-	that the sequence has "canonical" form:
-	\[
-	n_0 = b/r,
-	n_i = max { b/r, n_{i-1} + t_i - t_{i-1} - L_i/r },
-	\]
+	Packetized version of this definition:
+	sequence of packets of sizes s_i served at moments t_i
+	obeys TBF, if for any i<=k:
 
-	If a packet has n_i < 0, we throttle filter
-	by $-n_i$ usecs.
+	s_i+....+s_k <= B + R*(t_k - t_i)
+
+	Algorithm.
+	----------
+	
+	Let N(t_i) be B/R initially and N(t) grows continuously with time as:
+
+	N(t+delta) = min{B/R, N(t) + delta}
+
+	If the first packet in queue has length S, it may be
+	transmited only at the time t_* when S/R <= N(t_*),
+	and in this case N(t) jumps:
+
+	N(t_* + 0) = N(t_* - 0) - S/R.
+
+
+
+	Actually, QoS requires two TBF to be applied to data stream.
+	One of them controls steady state burst size, another
+	with rate P (peak rate) and depth M (equal to link MTU)
+	limits bursts at smaller time scale.
+
+	Apparently, P>R, and B>M. If P is infinity, this double
+	TBF is equivalent to single one.
+
+	When TBF works in reshaping mode, latency is estimated as:
+
+	lat = max ((L-B)/R, (L-M)/P)
+
 
 	NOTES.
+	------
 
 	If TBF throttles, it starts watchdog timer, which will wake up it
-	after 0...10 msec.
+	when it will be ready to transmit.
+	Note, that minimal timer resolution is 1/HZ.
 	If no new packets will arrive during this period,
 	or device will not be awaken by EOI for previous packet,
-	tbf could stop its activity for 10 msec.
+	tbf could stop its activity for 1/HZ.
 
-	It means that tbf will sometimes introduce pathological
-	10msec delays to flow corresponding to rate*10msec bytes.
-	For 10Mbit/sec flow it is about 12Kb, on 100Mbit/sec -- ~100Kb.
-	This number puts lower reasonbale bound on token bucket depth,
-	but even if depth is larger traffic is erratic at large rates.
 
-	This problem is not specific for THIS implementation. Really,
-	there exists statement that any attempt to shape traffic
-	in transit will increase delays and jitter much more than
-	we expected naively.
+	It means, that with depth B, the maximal rate is
 
-	Particularily, it means that delay/jitter sensitive traffic
-	MUST NOT be shaped. Cf. CBQ (wrong) and CSZ (correct) approaches.
+	R_crit = B*HZ
+
+	F.e. for 10Mbit ethernet and HZ=100 minimal allowed B is ~10Kbytes.
+
+	Note, that peak rate TBF is much more tough: with MTU 1500
+	P_crit = 150Kbytes/sec. So that, if you need greater peak
+	rates, use alpha with HZ=1000 :-)
 */
 
 struct tbf_sched_data
 {
 /* Parameters */
-	int		cell_log;	/* 1<<cell_log is quantum of packet size */
-	unsigned long	L_tab[256];	/* Lookup table for L/B values */
-	unsigned long	depth;		/* Token bucket depth/B: MUST BE >= MTU/B */
-	unsigned long	max_bytes;	/* Maximal length of backlog: bytes */
+	u32		limit;		/* Maximal length of backlog: bytes */
+	u32		buffer;		/* Token bucket depth/rate: MUST BE >= MTU/B */
+	u32		mtu;
+	struct qdisc_rate_table	*R_tab;
+	struct qdisc_rate_table	*P_tab;
 
 /* Variables */
-	unsigned long	bytes;		/* Current length of backlog */
-	unsigned long	tokens;		/* Current number of tokens */
+	long	tokens;			/* Current number of B tokens */
+	long	ptokens;		/* Current number of P tokens */
 	psched_time_t	t_c;		/* Time check-point */
 	struct timer_list wd_timer;	/* Watchdog timer */
 };
 
-#define L2T(q,L) ((q)->L_tab[(L)>>(q)->cell_log])
+#define L2T(q,L)   ((q)->R_tab->data[(L)>>(q)->R_tab->rate.cell_log])
+#define L2T_P(q,L) ((q)->P_tab->data[(L)>>(q)->P_tab->rate.cell_log])
 
 static int
 tbf_enqueue(struct sk_buff *skb, struct Qdisc* sch)
@@ -109,29 +133,55 @@ tbf_enqueue(struct sk_buff *skb, struct Qdisc* sch)
 	struct tbf_sched_data *q = (struct tbf_sched_data *)sch->data;
 
 	__skb_queue_tail(&sch->q, skb);
-	if ((q->bytes += skb->len) <= q->max_bytes)
+	if ((sch->stats.backlog += skb->len) <= q->limit) {
+		sch->stats.bytes += skb->len;
+		sch->stats.packets++;
 		return 1;
+	}
 
 	/* Drop action: undo the things that we just made,
 	 * i.e. make tail drop
 	 */
 
 	__skb_unlink(skb, &sch->q);
-	q->bytes -= skb->len;
-	kfree_skb(skb);
+	sch->stats.backlog -= skb->len;
+	sch->stats.drops++;
+#ifdef CONFIG_NET_CLS_POLICE
+	if (sch->reshape_fail==NULL || sch->reshape_fail(skb, sch))
+#endif
+		kfree_skb(skb);
+	return 0;
+}
+
+static int
+tbf_requeue(struct sk_buff *skb, struct Qdisc* sch)
+{
+	__skb_queue_head(&sch->q, skb);
+	sch->stats.backlog += skb->len;
+	return 1;
+}
+
+static int
+tbf_drop(struct Qdisc* sch)
+{
+	struct sk_buff *skb;
+
+	skb = __skb_dequeue_tail(&sch->q);
+	if (skb) {
+		sch->stats.backlog -= skb->len;
+		sch->stats.drops++;
+		kfree_skb(skb);
+		return 1;
+	}
 	return 0;
 }
 
 static void tbf_watchdog(unsigned long arg)
 {
 	struct Qdisc *sch = (struct Qdisc*)arg;
-	struct tbf_sched_data *q = (struct tbf_sched_data *)sch->data;
-
-	q->wd_timer.function = NULL;
 
 	qdisc_wakeup(sch->dev);
 }
-
 
 static struct sk_buff *
 tbf_dequeue(struct Qdisc* sch)
@@ -144,17 +194,40 @@ tbf_dequeue(struct Qdisc* sch)
 	if (skb) {
 		psched_time_t now;
 		long toks;
+		long ptoks = 0;
 
 		PSCHED_GET_TIME(now);
 
-		toks = PSCHED_TDIFF_SAFE(now, q->t_c, q->depth, 0)
-			+ q->tokens - L2T(q,skb->len);
+		toks = PSCHED_TDIFF_SAFE(now, q->t_c, q->buffer, 0);
 
-		if (toks >= 0) {
+		if (q->P_tab) {
+			ptoks = toks + q->ptokens;
+			if (ptoks > (long)q->mtu)
+				ptoks = q->mtu;
+			ptoks -= L2T_P(q, skb->len);
+		}
+		toks += q->tokens;
+		if (toks > (long)q->buffer)
+			toks = q->buffer;
+		toks -= L2T(q, skb->len);
+
+		if ((toks|ptoks) >= 0) {
 			q->t_c = now;
-			q->tokens = toks <= q->depth ? toks : q->depth;
-			q->bytes -= skb->len;
+			q->tokens = toks;
+			q->ptokens = ptoks;
+			sch->stats.backlog -= skb->len;
 			return skb;
+		}
+
+		if (!sch->dev->tbusy) {
+			long delay = PSCHED_US2JIFFIE(max(-toks, -ptoks));
+
+			if (delay == 0)
+				delay = 1;
+
+			del_timer(&q->wd_timer);
+			q->wd_timer.expires = jiffies + delay;
+			add_timer(&q->wd_timer);
 		}
 
 		/* Maybe, we have in queue a shorter packet,
@@ -164,17 +237,12 @@ tbf_dequeue(struct Qdisc* sch)
 
 		   Really, if we splitted flow to independent
 		   subflows, it would be very good solution.
-		   Look at sch_csz.c.
+		   It is main idea of all FQ algorithms
+		   (cf. CSZ, HPFQ, HFCS)
 		 */
 		__skb_queue_head(&sch->q, skb);
 
-		if (!sch->dev->tbusy) {
-			if (q->wd_timer.function)
-				del_timer(&q->wd_timer);
-			q->wd_timer.function = tbf_watchdog;
-			q->wd_timer.expires = jiffies + PSCHED_US2JIFFIE(-toks);
-			add_timer(&q->wd_timer);
-		}
+		sch->stats.overlimits++;
 	}
 	return NULL;
 }
@@ -184,69 +252,135 @@ static void
 tbf_reset(struct Qdisc* sch)
 {
 	struct tbf_sched_data *q = (struct tbf_sched_data *)sch->data;
-	struct sk_buff *skb;
 
-	while ((skb = __skb_dequeue(&sch->q)) != NULL)
-		kfree_skb(skb);
-	q->bytes = 0;
+	skb_queue_purge(&sch->q);
+	sch->stats.backlog = 0;
 	PSCHED_GET_TIME(q->t_c);
-	q->tokens = q->depth;
-	if (q->wd_timer.function) {
-		del_timer(&q->wd_timer);
-		q->wd_timer.function = NULL;
-	}
+	q->tokens = q->buffer;
+	q->ptokens = q->mtu;
+	del_timer(&q->wd_timer);
 }
 
-static int tbf_init(struct Qdisc* sch, void *arg)
+static int tbf_init(struct Qdisc* sch, struct rtattr *opt)
 {
 	struct tbf_sched_data *q = (struct tbf_sched_data *)sch->data;
-	struct tbfctl *ctl = (struct tbfctl*)arg;
+	struct rtattr *tb[TCA_TBF_PTAB];
+	struct tc_tbf_qopt *qopt;
+
+	MOD_INC_USE_COUNT;
+
+	if (opt == NULL ||
+	    rtattr_parse(tb, TCA_TBF_PTAB, RTA_DATA(opt), RTA_PAYLOAD(opt)) ||
+	    tb[TCA_TBF_PARMS-1] == NULL ||
+	    RTA_PAYLOAD(tb[TCA_TBF_PARMS-1]) < sizeof(*qopt)) {
+		MOD_DEC_USE_COUNT;
+		return -EINVAL;
+	}
+
+	qopt = RTA_DATA(tb[TCA_TBF_PARMS-1]);
+	q->R_tab = qdisc_get_rtab(&qopt->rate, tb[TCA_TBF_RTAB-1]);
+	if (q->R_tab == NULL) {
+		MOD_DEC_USE_COUNT;
+		return -EINVAL;
+	}
+
+	if (qopt->peakrate.rate) {
+		q->P_tab = qdisc_get_rtab(&qopt->rate, tb[TCA_TBF_PTAB-1]);
+		if (q->P_tab == NULL) {
+			MOD_DEC_USE_COUNT;
+			qdisc_put_rtab(q->R_tab);
+			return -EINVAL;
+		}
+	}
 
 	PSCHED_GET_TIME(q->t_c);
 	init_timer(&q->wd_timer);
-	q->wd_timer.function = NULL;
+	q->wd_timer.function = tbf_watchdog;
 	q->wd_timer.data = (unsigned long)sch;
-	if (ctl) {
-		q->max_bytes = ctl->bytes;
-		q->depth = ctl->depth;
-		q->tokens = q->tokens;
-		q->cell_log = ctl->cell_log;
-		memcpy(q->L_tab, ctl->L_tab, 256*sizeof(unsigned long));
-	}
+	q->limit = qopt->limit;
+	q->mtu = qopt->mtu;
+	if (q->mtu == 0)
+		q->mtu = psched_mtu(sch->dev);
+	q->buffer = qopt->buffer;
+	q->tokens = q->buffer;
+	q->ptokens = q->mtu;
 	return 0;
 }
 
-struct Qdisc_ops tbf_ops =
+static void tbf_destroy(struct Qdisc *sch)
+{
+	struct tbf_sched_data *q = (struct tbf_sched_data *)sch->data;
+
+	del_timer(&q->wd_timer);
+
+	if (q->P_tab)
+		qdisc_put_rtab(q->P_tab);
+	if (q->R_tab)
+		qdisc_put_rtab(q->R_tab);
+
+	MOD_DEC_USE_COUNT;
+}
+
+#ifdef CONFIG_RTNETLINK
+static int tbf_dump(struct Qdisc *sch, struct sk_buff *skb)
+{
+	struct tbf_sched_data *q = (struct tbf_sched_data *)sch->data;
+	unsigned char	 *b = skb->tail;
+	struct rtattr *rta;
+	struct tc_tbf_qopt opt;
+
+	rta = (struct rtattr*)b;
+	RTA_PUT(skb, TCA_OPTIONS, 0, NULL);
+
+	opt.limit = q->limit;
+	opt.rate = q->R_tab->rate;
+	if (q->P_tab)
+		opt.peakrate = q->P_tab->rate;
+	else
+		memset(&opt.peakrate, 0, sizeof(opt.peakrate));
+	opt.mtu = q->mtu;
+	opt.buffer = q->buffer;
+	RTA_PUT(skb, TCA_TBF_PARMS, sizeof(opt), &opt);
+	rta->rta_len = skb->tail - b;
+
+	return skb->len;
+
+rtattr_failure:
+	skb_trim(skb, b - skb->data);
+	return -1;
+}
+#endif
+
+struct Qdisc_ops tbf_qdisc_ops =
 {
 	NULL,
+	NULL,
 	"tbf",
-	0,
 	sizeof(struct tbf_sched_data),
+
 	tbf_enqueue,
 	tbf_dequeue,
-	tbf_reset,
-	NULL,
+	tbf_requeue,
+	tbf_drop,
+
 	tbf_init,
-	NULL,
+	tbf_reset,
+	tbf_destroy,
+
+#ifdef CONFIG_RTNETLINK
+	tbf_dump,
+#endif
 };
 
 
 #ifdef MODULE
-#include <linux/module.h>
 int init_module(void)
 {
-	int err;
-
-	/* Load once and never free it. */
-	MOD_INC_USE_COUNT;
-
-	err = register_qdisc(&tbf_ops);
-	if (err)
-		MOD_DEC_USE_COUNT;
-	return err;
+	return register_qdisc(&tbf_qdisc_ops);
 }
 
 void cleanup_module(void) 
 {
+	unregister_qdisc(&tbf_qdisc_ops);
 }
 #endif

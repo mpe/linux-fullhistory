@@ -67,7 +67,7 @@ arises.
 
 Until an updated version of mount(8) becomes available you may have to apply
 this patch to the mount sources (based on the version distributed with Rick
-Faiths util-linux-2.5 package):
+Faith's util-linux-2.5 package):
 
 *** mount.c.orig	Sat Jun  8 09:14:31 1996
 --- mount.c	Sat Jun  8 09:13:02 1996

@@ -161,7 +161,7 @@ __nlmsg_put(struct sk_buff *skb, pid_t pid, u32 seq, int type, int len)
 }
 
 #define NLMSG_PUT(skb, pid, seq, type, len) \
-({ if (skb_tailroom(skb) < NLMSG_SPACE(len)) goto nlmsg_failure; \
+({ if (skb_tailroom(skb) < (int)NLMSG_SPACE(len)) goto nlmsg_failure; \
    __nlmsg_put(skb, pid, seq, type, len); })
 
 extern int netlink_dump_start(struct sock *ssk, struct sk_buff *skb,

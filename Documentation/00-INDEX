@@ -68,12 +68,12 @@ magic-number.txt
 	- list of magic numbers used to mark/protect kernel data structures.
 mandatory.txt
 	- info on the linux implementation of Sys V mandatory file locking.
+mca.txt
+	- info on supporting Micro Channel Architecture (e.g. PS/2) systems.
 md.txt
 	- info on boot arguments for the multiple devices driver
 memory.txt
 	- info on typical Linux memory problems.
-mca.txt
-	- info on supporting Micro Channel Architecture (e.g. PS/2) systems.
 modules.txt
 	- short guide on how to make kernel parts into loadable modules
 nbd.txt
@@ -84,12 +84,14 @@ nfsroot.txt
 	- short guide on setting up a diskless box with NFS root filesystem
 oops-tracing.txt
 	- how to decode those nasty internal kernel error dump messages.
-pcwd-watchdog.txt
-	- info and sample code for using with the PC Watchdog reset card.
 paride.txt
 	- information about the parallel port IDE subsystem.
 parport.txt
 	- how to use the parallel-port driver.
+pci.txt
+	- info on the PCI subsystem for device driver authors
+pcwd-watchdog.txt
+	- info and sample code for using with the PC Watchdog reset card.
 powerpc/
 	- directory with info on using linux with the PowerPC.
 ramdisk.txt
@@ -104,8 +106,12 @@ serial-console.txt
 	- how to set up linux with a serial line console as the default.
 smart-config.txt
 	- description of the Smart Config makefile feature.
+smp
+	- how to setup the kernel for SMP
 smp.tex
 	- TeX document describing implementation of Multiprocessor Linux
+sound/
+	- directory with info on sound card support
 specialix.txt
 	- info on hardware/driver for specialix IO8+ multiport serial card.
 spinlocks.txt
@@ -114,6 +120,10 @@ stallion.txt
 	- info on using the Stallion multiport serial driver.
 svga.txt
 	- short guide on selecting video modes at boot via VGA BIOS.
+sysctl/
+	- directory with info on the /proc/sys/* files
+sysrq.txt
+	- info on the magic SysRq key
 transname.txt
 	- how to use name translation to ease use of diskless systems.
 unicode.txt

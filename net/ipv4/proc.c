@@ -7,7 +7,7 @@
  *		PROC file system.  It is mainly used for debugging and
  *		statistics.
  *
- * Version:	$Id: proc.c,v 1.28 1998/04/03 09:49:45 freitag Exp $
+ * Version:	$Id: proc.c,v 1.30 1998/04/16 16:29:05 freitag Exp $
  *
  * Authors:	Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
  *		Gerald J. Heim, <heim@peanuts.informatik.uni-tuebingen.de>
@@ -99,12 +99,19 @@ static inline void get__sock(struct sock *sp, char *tmpbuf, int i, int format)
 	destp = ntohs(destp);
 	srcp  = ntohs(srcp);
 	if((format == 0) && (sp->state == TCP_TIME_WAIT)) {
+		extern int tcp_tw_death_row_slot;
 		struct tcp_tw_bucket *tw = (struct tcp_tw_bucket *)sp;
+		int slot_dist;
 
 		tw_bucket	= 1;
 		timer_active1	= timer_active2 = 0;
 		timer_active	= 3;
-		timer_expires	= tw->timer.expires;
+		slot_dist	= tw->death_slot;
+		if(slot_dist > tcp_tw_death_row_slot)
+			slot_dist = (TCP_TWKILL_SLOTS - slot_dist) + tcp_tw_death_row_slot;
+		else
+			slot_dist = tcp_tw_death_row_slot - slot_dist;
+		timer_expires	= jiffies + (slot_dist * TCP_TWKILL_PERIOD);
 	} else {
 		timer_active1 = del_timer(&tp->retransmit_timer);
 		timer_active2 = del_timer(&sp->timer);
@@ -349,11 +356,13 @@ int netstat_get_info(char *buffer, char **start, off_t offset, int length, int d
 	int len;
 
 	len = sprintf(buffer,
-		      "TcpExt: SyncookiesSent SyncookiesRecv SyncookiesFailed\n"
-		      "TcpExt: %lu %lu %lu\n",
+		      "TcpExt: SyncookiesSent SyncookiesRecv SyncookiesFailed"
+		      "EmbryonicRsts\n"
+		      "TcpExt: %lu %lu %lu %lu\n",
 		      net_statistics.SyncookiesSent,
 		      net_statistics.SyncookiesRecv,
-		      net_statistics.SyncookiesFailed);
+		      net_statistics.SyncookiesFailed,
+		      net_statistics.EmbryonicRsts);
 
 	if (offset >= len)
 	{

@@ -50,6 +50,9 @@ struct fib_nh
 	int			nh_weight;
 	int			nh_power;
 #endif
+#ifdef CONFIG_NET_CLS_ROUTE
+	__u32			nh_tclassid;
+#endif
 	int			nh_oif;
 	u32			nh_gw;
 };
@@ -229,9 +232,11 @@ extern int inet_rtm_delrule(struct sk_buff *skb, struct nlmsghdr* nlh, void *arg
 extern int inet_rtm_newrule(struct sk_buff *skb, struct nlmsghdr* nlh, void *arg);
 extern int inet_dump_rules(struct sk_buff *skb, struct netlink_callback *cb);
 extern u32 fib_rules_map_destination(u32 daddr, struct fib_result *res);
+#ifdef CONFIG_NET_CLS_ROUTE
+extern u32 fib_rules_tclass(struct fib_result *res);
+#endif
 extern u32 fib_rules_policy(u32 saddr, struct fib_result *res, unsigned *flags);
 extern void fib_rules_init(void);
 #endif
-
 
 #endif  _NET_FIB_H

@@ -10,6 +10,8 @@
  *
  */
 
+#include <linux/config.h>
+#include <linux/module.h>
 #include <asm/uaccess.h>
 #include <asm/system.h>
 #include <asm/bitops.h>
@@ -48,16 +50,16 @@
 	but it has pretty poor delay characteristics.
 	Round-robin scheduling and link-sharing goals
 	apparently contradict to minimization of network delay and jitter.
-	Moreover, correct handling of predicted flows seems to be
+	Moreover, correct handling of predictive flows seems to be
 	impossible in CBQ.
 
 	CSZ presents more precise but less flexible and less efficient
 	approach. As I understand, the main idea is to create
 	WFQ flows for each guaranteed service and to allocate
 	the rest of bandwith to dummy flow-0. Flow-0 comprises
-	the predicted services and the best effort traffic;
+	the predictive services and the best effort traffic;
 	it is handled by a priority scheduler with the highest
-	priority band allocated	for predicted services, and the rest ---
+	priority band allocated	for predictive services, and the rest ---
 	to the best effort packets.
 
 	Note, that in CSZ flows are NOT limited to their bandwidth.
@@ -67,14 +69,16 @@
 	will introduce undesired delays and raise jitter.
 
 	At the moment CSZ is the only scheduler that provides
-	real guaranteed service. Another schemes (including CBQ)
+	true guaranteed service. Another schemes (including CBQ)
 	do not provide guaranteed delay and randomize jitter.
 	There exists the statement (Sally Floyd), that delay
 	can be estimated by a IntServ compliant formulae.
 	This result is true formally, but it is wrong in principle.
-	At first, it ignores delays introduced by link sharing.
-	And the second (and main) it limits bandwidth,
-	it is fatal flaw.
+	It takes into account only round-robin delays,
+	ignoring delays introduced by link sharing i.e. overlimiting.
+	Note, that temporary overlimits are inevitable because
+	real links are not ideal, and true algorithm must take it
+	into account.
 
         ALGORITHM.
 
@@ -204,9 +208,8 @@
 
 /* This number is arbitrary */
 
-#define CSZ_MAX_GUARANTEED 16
-
-#define CSZ_FLOW_ID(skb)   (CSZ_MAX_GUARANTEED)
+#define CSZ_GUARANTEED		16
+#define CSZ_FLOWS		(CSZ_GUARANTEED+4)
 
 struct csz_head
 {
@@ -224,12 +227,15 @@ struct csz_flow
 	struct csz_head		*fprev;
 
 /* Parameters */
-	unsigned long		rate;	/* Flow rate. Fixed point is at rate_log */
-	unsigned long		*L_tab;	/* Lookup table for L/(B*r_a) values */
-	unsigned long		max_bytes;	/* Maximal length of queue */
+	struct tc_ratespec	rate;
+	struct tc_ratespec	slice;
+	u32			*L_tab;	/* Lookup table for L/(B*r_a) values */
+	unsigned long		limit;	/* Maximal length of queue */
 #ifdef CSZ_PLUS_TBF
-	unsigned long		depth;	/* Depth of token bucket, normalized
+	struct tc_ratespec	peakrate;
+	__u32			buffer;	/* Depth of token bucket, normalized
 					   as L/(B*r_a) */
+	__u32			mtu;
 #endif
 
 /* Variables */
@@ -246,12 +252,11 @@ struct csz_flow
 	struct sk_buff_head	q;	/* FIFO queue */
 };
 
-#define L2R(q,f,L) ((f)->L_tab[(L)>>(q)->cell_log])
+#define L2R(f,L) ((f)->L_tab[(L)>>(f)->slice.cell_log])
 
 struct csz_sched_data
 {
 /* Parameters */
-	unsigned char	cell_log;	/* 1<<cell_log is quantum of packet size */
 	unsigned char	rate_log;	/* fixed point position for rate;
 					 * really we need not it */
 	unsigned char	R_log;		/* fixed point position for round number */
@@ -259,6 +264,8 @@ struct csz_sched_data
 					 * 21 <-> 2.1sec is MAXIMAL value */
 
 /* Variables */
+	struct tcf_proto *filter_list;
+	u8	prio2band[TC_PRIO_MAX+1];
 #ifdef CSZ_PLUS_TBF
 	struct timer_list wd_timer;
 	long		wd_expires;
@@ -270,8 +277,8 @@ struct csz_sched_data
 	struct csz_head	f;		/* Flows sorted by "finish"	*/
 
 	struct sk_buff_head	other[4];/* Predicted (0) and the best efforts
-					     classes (1,2,3) */
-	struct csz_flow	flow[CSZ_MAX_GUARANTEED]; /* Array of flows */
+					    classes (1,2,3) */
+	struct csz_flow	flow[CSZ_GUARANTEED]; /* Array of flows */
 };
 
 /* These routines (csz_insert_finish and csz_insert_start) are
@@ -353,7 +360,11 @@ extern __inline__ void csz_insert_start(struct csz_head *b,
    It is another time consuming part, but
    it is impossible to avoid it.
 
-   Fixed point arithmetic is not ... does not ... Well, it is just CRAP.
+   It costs O(N) that make all the algorithm useful only
+   to play with closest to ideal fluid model.
+
+   There exist less academic, but more practical modifications,
+   which might have even better characteristics (WF2Q+, HPFQ, HFSC)
  */
 
 static unsigned long csz_update(struct Qdisc *sch)
@@ -430,9 +441,9 @@ do_reset:
 
 		tmp = ((F-q->R_c)*q->rate)<<q->R_log;
 		R_c = F;
-		q->rate -= a->rate;
+		q->rate -= a->slice.rate;
 
-		if (delay - tmp >= 0) {
+		if ((long)(delay - tmp) >= 0) {
 			delay -= tmp;
 			continue;
 		}
@@ -443,35 +454,41 @@ do_reset:
 	return tmp;
 }
 
+unsigned csz_classify(struct sk_buff *skb, struct csz_sched_data *q)
+{
+	return CSZ_GUARANTEED;
+}
+
 static int
 csz_enqueue(struct sk_buff *skb, struct Qdisc* sch)
 {
 	struct csz_sched_data *q = (struct csz_sched_data *)sch->data;
-	unsigned flow_id = CSZ_FLOW_ID(skb);
+	unsigned flow_id = csz_classify(skb, q);
 	unsigned long R;
-	int prio;
+	int prio = 0;
 	struct csz_flow *this;
 
-	if (flow_id >= CSZ_MAX_GUARANTEED) {
-		prio = flow_id - CSZ_MAX_GUARANTEED;
+	if (flow_id >= CSZ_GUARANTEED) {
+		prio = flow_id - CSZ_GUARANTEED;
 		flow_id = 0;
 	}
 
 	this = &q->flow[flow_id];
-	if (this->q.qlen >= this->max_bytes || this->L_tab == NULL) {
+	if (this->q.qlen >= this->limit || this->L_tab == NULL) {
+		sch->stats.drops++;
 		kfree_skb(skb);
 		return 0;
 	}
 
 	R = csz_update(sch);
 
-	if (this->finish - R >= 0) {
+	if ((long)(this->finish - R) >= 0) {
 		/* It was active */
-		this->finish += L2R(q,this,skb->len);
+		this->finish += L2R(this,skb->len);
 	} else {
 		/* It is inactive; activate it */
-		this->finish = R + L2R(q,this,skb->len);
-		q->rate += this->rate;
+		this->finish = R + L2R(this,skb->len);
+		q->rate += this->slice.rate;
 		csz_insert_finish(&q->f, this);
 	}
 
@@ -486,6 +503,8 @@ csz_enqueue(struct sk_buff *skb, struct Qdisc* sch)
 	else
 		skb_queue_tail(&q->other[prio], skb);
 	sch->q.qlen++;
+	sch->stats.bytes += skb->len;
+	sch->stats.packets++;
 	return 1;
 }
 
@@ -524,10 +543,6 @@ skb_peek_best(struct csz_sched_data * q)
 static void csz_watchdog(unsigned long arg)
 {
 	struct Qdisc *sch = (struct Qdisc*)arg;
-	struct csz_sched_data *q = (struct csz_sched_data*)sch->data;
-
-	q->wd_timer.expires = 0;
-	q->wd_timer.function = NULL;
 
 	qdisc_wakeup(sch->dev);
 }
@@ -568,7 +583,7 @@ static __inline__ int csz_enough_tokens(struct csz_sched_data *q,
 	if (toks >= 0) {
 		/* Now we have enough tokens to proceed */
 
-		this->tokens = toks <= this->depth ? toks ? this->depth;
+		this->tokens = toks <= this->depth ? toks : this->depth;
 		this->t_tbf = now;
 	
 		if (!this->throttled)
@@ -601,7 +616,7 @@ static __inline__ int csz_enough_tokens(struct csz_sched_data *q,
 	   This apriory shift in R will be adjusted later to reflect
 	   real delay. We cannot avoid it because of:
 	   - throttled flow continues to be active from the viewpoint
-	     of CSZ, so that it would acquire highest priority,
+	     of CSZ, so that it would acquire the highest priority,
 	     if you not adjusted start numbers.
 	   - Eventually, finish number would become less than round
 	     number and flow were declared inactive.
@@ -654,7 +669,7 @@ csz_dequeue(struct Qdisc* sch)
 #endif
 				if (this->q.qlen) {
 					struct sk_buff *nskb = skb_peek(&this->q);
-					this->start += L2R(q,this,nskb->len);
+					this->start += L2R(this,nskb->len);
 					csz_insert_start(&q->s, this);
 				}
 				sch->q.qlen--;
@@ -668,7 +683,7 @@ csz_dequeue(struct Qdisc* sch)
 
 				if (--this->q.qlen) {
 					struct sk_buff *nskb;
-					unsigned dequeued = L2R(q,this,skb->len);
+					unsigned dequeued = L2R(this,skb->len);
 
 					/* We got not the same thing that
 					   peeked earlier; adjust start number
@@ -677,7 +692,7 @@ csz_dequeue(struct Qdisc* sch)
 						this->start += dequeued - peeked;
 
 					nskb = skb_peek_best(q);
-					peeked = L2R(q,this,nskb->len);
+					peeked = L2R(this,nskb->len);
 					this->start += peeked;
 					this->peeked = peeked;
 					csz_insert_start(&q->s, this);
@@ -692,11 +707,13 @@ csz_dequeue(struct Qdisc* sch)
 	   Schedule watchdog timer, if it occured because of shaping.
 	 */
 	if (q->wd_expires) {
-		if (q->wd_timer.function)
-			del_timer(&q->wd_timer);
-		q->wd_timer.function = csz_watchdog;
-		q->wd_timer.expires = jiffies + PSCHED_US2JIFFIE(q->wd_expires);
+		unsigned long delay = PSCHED_US2JIFFIE(q->wd_expires);
+		del_timer(&q->wd_timer);
+		if (delay == 0)
+			delay = 1;
+		q->wd_timer.expires = jiffies + delay;
 		add_timer(&q->wd_timer);
+		sch->stats.overlimits++;
 	}
 #endif
 	return NULL;
@@ -706,17 +723,14 @@ static void
 csz_reset(struct Qdisc* sch)
 {
 	struct csz_sched_data *q = (struct csz_sched_data *)sch->data;
-	struct sk_buff *skb;
 	int    i;
 
 	for (i=0; i<4; i++)
-		while ((skb=skb_dequeue(&q->other[i])) != NULL)
-			kfree_skb(skb);
+		skb_queue_purge(&q->other[i]);
 
-	for (i=0; i<CSZ_MAX_GUARANTEED; i++) {
+	for (i=0; i<CSZ_GUARANTEED; i++) {
 		struct csz_flow *this = q->flow + i;
-		while ((skb = skb_dequeue(&this->q)) != NULL)
-			kfree_skb(skb);
+		skb_queue_purge(&this->q);
 		this->snext = this->sprev =
 		this->fnext = this->fprev = (struct csz_head*)this;
 		this->start = this->finish = 0;
@@ -727,10 +741,7 @@ csz_reset(struct Qdisc* sch)
 #ifdef CSZ_PLUS_TBF
 	PSCHED_GET_TIME(&q->t_tbf);
 	q->tokens = q->depth;
-	if (q->wd_timer.function) {
-		del_timer(&q->wd_timer);
-		q->wd_timer.function = NULL;
-	}
+	del_timer(&q->wd_timer);
 #endif
 	sch->q.qlen = 0;
 }
@@ -738,25 +749,34 @@ csz_reset(struct Qdisc* sch)
 static void
 csz_destroy(struct Qdisc* sch)
 {
-/*
-	struct csz_sched_data *q = (struct csz_sched_data *)sch->data;
-	int	i;
-
-	for (i=0; i<4; i++)
-		qdisc_destroy(q->other[i]);
- */
+	MOD_DEC_USE_COUNT;
 }
 
-static int csz_init(struct Qdisc *sch, void *arg)
+static int csz_init(struct Qdisc *sch, struct rtattr *opt)
 {
 	struct csz_sched_data *q = (struct csz_sched_data *)sch->data;
-	struct cszinitctl *ctl = (struct cszinitctl*)arg;
+	struct rtattr *tb[TCA_CSZ_PTAB];
+	struct tc_csz_qopt *qopt;
 	int    i;
+
+	rtattr_parse(tb, TCA_CSZ_PTAB, RTA_DATA(opt), RTA_PAYLOAD(opt));
+	if (tb[TCA_CSZ_PARMS-1] == NULL ||
+	    RTA_PAYLOAD(tb[TCA_CSZ_PARMS-1]) < sizeof(*qopt))
+		return -EINVAL;
+	qopt = RTA_DATA(tb[TCA_CSZ_PARMS-1]);
+
+	q->R_log = qopt->R_log;
+	q->delta_log = qopt->delta_log;
+	for (i=0; i<=TC_PRIO_MAX; i++) {
+		if (qopt->priomap[i] >= CSZ_FLOWS)
+			return -EINVAL;
+		q->prio2band[i] = qopt->priomap[i];
+	}
 
 	for (i=0; i<4; i++)
 		skb_queue_head_init(&q->other[i]);
 
-	for (i=0; i<CSZ_MAX_GUARANTEED; i++) {
+	for (i=0; i<CSZ_GUARANTEED; i++) {
 		struct csz_flow *this = q->flow + i;
 		skb_queue_head_init(&this->q);
 		this->snext = this->sprev =
@@ -769,64 +789,268 @@ static int csz_init(struct Qdisc *sch, void *arg)
 #ifdef CSZ_PLUS_TBF
 	init_timer(&q->wd_timer);
 	q->wd_timer.data = (unsigned long)sch;
+	q->wd_timer.function = csz_watchdog;
 #endif
-	if (ctl) {
-		if (ctl->flows != CSZ_MAX_GUARANTEED)
-			return -EINVAL;
-		q->cell_log = ctl->cell_log;
-	}
+	MOD_INC_USE_COUNT;
 	return 0;
 }
 
-static int csz_control(struct Qdisc *sch, struct pschedctl *gctl)
+#ifdef CONFIG_RTNETLINK
+static int csz_dump(struct Qdisc *sch, struct sk_buff *skb)
 {
-/*
 	struct csz_sched_data *q = (struct csz_sched_data *)sch->data;
-	struct cszctl *ctl = (struct cszctl*)gctl->arg;
-	struct sk_buff *skb;
-	int    i;
+	unsigned char	 *b = skb->tail;
+	struct rtattr *rta;
+	struct tc_csz_qopt opt;
 
-	if (op == PSCHED_TC_ATTACH) {
-		
+	rta = (struct rtattr*)b;
+	RTA_PUT(skb, TCA_OPTIONS, 0, NULL);
+
+	opt.flows = CSZ_FLOWS;
+	memcpy(&opt.priomap, q->prio2band, TC_PRIO_MAX+1);
+	RTA_PUT(skb, TCA_CSZ_PARMS, sizeof(opt), &opt);
+	rta->rta_len = skb->tail - b;
+
+	return skb->len;
+
+rtattr_failure:
+	skb_trim(skb, b - skb->data);
+	return -1;
+}
+#endif
+
+
+static int csz_graft(struct Qdisc *sch, unsigned long cl, struct Qdisc *new,
+		     struct Qdisc **old)
+{
+	return -EINVAL;
+}
+
+static unsigned long csz_get(struct Qdisc *sch, u32 classid)
+{
+	struct csz_sched_data *q = (struct csz_sched_data *)sch->data;
+	unsigned long band = TC_H_MIN(classid) - 1;
+
+	if (band >= CSZ_FLOWS)
+		return 0;
+
+	if (band < CSZ_GUARANTEED && q->flow[band].L_tab == NULL)
+		return 0;
+
+	return band+1;
+}
+
+static void csz_put(struct Qdisc *sch, unsigned long cl)
+{
+	return;
+}
+
+static int csz_change(struct Qdisc *sch, u32 handle, u32 parent, struct rtattr **tca, unsigned long *arg)
+{
+	unsigned long cl = *arg;
+	struct csz_sched_data *q = (struct csz_sched_data *)sch->data;
+	struct rtattr *opt = tca[TCA_OPTIONS-1];
+	struct rtattr *tb[TCA_CSZ_PTAB];
+	struct tc_csz_copt *copt;
+
+	rtattr_parse(tb, TCA_CSZ_PTAB, RTA_DATA(opt), RTA_PAYLOAD(opt));
+	if (tb[TCA_CSZ_PARMS-1] == NULL ||
+	    RTA_PAYLOAD(tb[TCA_CSZ_PARMS-1]) < sizeof(*copt))
+		return -EINVAL;
+	copt = RTA_DATA(tb[TCA_CSZ_PARMS-1]);
+
+	if (tb[TCA_CSZ_RTAB-1] &&
+	    RTA_PAYLOAD(tb[TCA_CSZ_RTAB-1]) < 1024)
+		return -EINVAL;
+
+	if (cl) {
+		struct csz_flow *a;
+		cl--;
+		if (cl >= CSZ_FLOWS)
+			return -ENOENT;
+		if (cl >= CSZ_GUARANTEED || q->flow[cl].L_tab == NULL)
+			return -EINVAL;
+
+		a = &q->flow[cl];
+
+		start_bh_atomic();	
+#if 0
+		a->rate_log = copt->rate_log;
+#endif
+#ifdef CSZ_PLUS_TBF
+		a->limit = copt->limit;
+		a->rate = copt->rate;
+		a->buffer = copt->buffer;
+		a->mtu = copt->mtu;
+#endif
+
+		if (tb[TCA_CSZ_RTAB-1])
+			memcpy(a->L_tab, RTA_DATA(tb[TCA_CSZ_RTAB-1]), 1024);
+
+		end_bh_atomic();
+		return 0;
 	}
-*/
+	/* NI */
 	return 0;
 }
 
+static int csz_delete(struct Qdisc *sch, unsigned long cl)
+{
+	struct csz_sched_data *q = (struct csz_sched_data *)sch->data;
+	struct csz_flow *a;
 
+	cl--;
 
+	if (cl >= CSZ_FLOWS)
+		return -ENOENT;
+	if (cl >= CSZ_GUARANTEED || q->flow[cl].L_tab == NULL)
+		return -EINVAL;
 
-struct Qdisc_ops csz_ops =
+	a = &q->flow[cl];
+
+	start_bh_atomic();
+	a->fprev->fnext = a->fnext;
+	a->fnext->fprev = a->fprev;
+	a->sprev->snext = a->snext;
+	a->snext->sprev = a->sprev;
+	a->start = a->finish = 0;
+	kfree(xchg(&q->flow[cl].L_tab, NULL));
+	end_bh_atomic();
+
+	return 0;
+}
+
+#ifdef CONFIG_RTNETLINK
+static int csz_dump_class(struct Qdisc *sch, unsigned long cl, struct sk_buff *skb, struct tcmsg *tcm)
+{
+	struct csz_sched_data *q = (struct csz_sched_data *)sch->data;
+	unsigned char	 *b = skb->tail;
+	struct rtattr *rta;
+	struct tc_csz_copt opt;
+
+	tcm->tcm_handle = sch->handle|cl;
+
+	cl--;
+
+	if (cl > CSZ_FLOWS)
+		goto rtattr_failure;
+
+	if (cl < CSZ_GUARANTEED) {
+		struct csz_flow *f = &q->flow[cl];
+
+		if (f->L_tab == NULL)
+			goto rtattr_failure;
+
+		rta = (struct rtattr*)b;
+		RTA_PUT(skb, TCA_OPTIONS, 0, NULL);
+
+		opt.limit = f->limit;
+		opt.rate = f->rate;
+		opt.slice = f->slice;
+		memset(&opt.peakrate, 0, sizeof(opt.peakrate));
+#ifdef CSZ_PLUS_TBF
+		opt.buffer = f->buffer;
+		opt.mtu = f->mtu;
+#else
+		opt.buffer = 0;
+		opt.mtu = 0;
+#endif
+
+		RTA_PUT(skb, TCA_CSZ_PARMS, sizeof(opt), &opt);
+		rta->rta_len = skb->tail - b;
+	}
+
+	return skb->len;
+
+rtattr_failure:
+	skb_trim(skb, b - skb->data);
+	return -1;
+}
+#endif
+
+static void csz_walk(struct Qdisc *sch, struct qdisc_walker *arg)
+{
+	struct csz_sched_data *q = (struct csz_sched_data *)sch->data;
+	int prio = 0;
+
+	if (arg->stop)
+		return;
+
+	for (prio = 0; prio < CSZ_FLOWS; prio++) {
+		if (arg->count < arg->skip) {
+			arg->count++;
+			continue;
+		}
+		if (prio < CSZ_GUARANTEED && q->flow[prio].L_tab == NULL) {
+			arg->count++;
+			continue;
+		}
+		if (arg->fn(sch, prio+1, arg) < 0) {
+			arg->stop = 1;
+			break;
+		}
+		arg->count++;
+	}
+}
+
+static struct tcf_proto ** csz_find_tcf(struct Qdisc *sch, unsigned long cl)
+{
+	struct csz_sched_data *q = (struct csz_sched_data *)sch->data;
+
+	if (cl)
+		return NULL;
+
+	return &q->filter_list;
+}
+
+struct Qdisc_class_ops csz_class_ops =
+{
+	csz_graft,
+	csz_get,
+	csz_put,
+	csz_change,
+	csz_delete,
+	csz_walk,
+
+	csz_find_tcf,
+	csz_get,
+	csz_put,
+
+#ifdef CONFIG_RTNETLINK
+	csz_dump_class,
+#endif
+};
+
+struct Qdisc_ops csz_qdisc_ops =
 {
 	NULL,
+	&csz_class_ops,
 	"csz",
-	0,
 	sizeof(struct csz_sched_data),
+
 	csz_enqueue,
 	csz_dequeue,
+	NULL,
+	NULL,
+
+	csz_init,
 	csz_reset,
 	csz_destroy,
-	csz_init,
-	csz_control,
+
+#ifdef CONFIG_RTNETLINK
+	csz_dump,
+#endif
 };
 
 
 #ifdef MODULE
-#include <linux/module.h>
 int init_module(void)
 {
-	int err;
-
-	/* Load once and never free it. */
-	MOD_INC_USE_COUNT;
-
-	err = register_qdisc(&csz_ops);
-	if (err)
-		MOD_DEC_USE_COUNT;
-	return err;
+	return register_qdisc(&csz_qdisc_ops);
 }
 
 void cleanup_module(void) 
 {
+	unregister_qdisc(&csz_qdisc_ops);
 }
 #endif

@@ -1,8 +1,8 @@
 This is the ALPHA version of the ltpc driver.
 
 In order to use it, you will need at least version 1.3.3 of the
-netatalk package, and the Apple or Farallon Localtalk PC card.
-There are a number of different Localtalk cards for the PC; this
+netatalk package, and the Apple or Farallon LocalTalk PC card.
+There are a number of different LocalTalk cards for the PC; this
 driver applies only to the one with the 65c02 processor chip on it.
 
 To include it in the kernel, select the CONFIG_LTPC switch in the
@@ -20,7 +20,7 @@ The driver will autoprobe, and you should see a message like:
 at bootup.
 
 The appropriate netatalk configuration depends on whether you are
-attached to a network that includes appletalk routers or not.  If,
+attached to a network that includes AppleTalk routers or not.  If,
 like me, you are simply connecting to your home Macintoshes and
 printers, you need to set up netatalk to "seed".  The way I do this
 is to have the lines
@@ -29,14 +29,14 @@ dummy -seed -phase 2 -net 2000 -addr 2000.26 -zone "1033"
 ltalk0 -seed -phase 1 -net 1033 -addr 1033.27 -zone "1033"
 
 in my atalkd.conf.  What is going on here is that I need to fool
-netatalk into thinking that there are two appletalk interfaces
+netatalk into thinking that there are two AppleTalk interfaces
 present -- otherwise it refuses to seed.  This is a hack, and a
 more permanent solution would be to alter the netatalk code.
 Note that the dummy driver needs to accept multicasts also -- earlier
 versions of dummy.c may need to be patched.  
 
 
-If you are attached to an extended appletalk network, with routers on
+If you are attached to an extended AppleTalk network, with routers on
 it, then you don't need to fool around with this -- the appropriate
 line in atalkd.conf is
 
@@ -75,7 +75,7 @@ board.  Set the switches so as not to conflict with other hardware.
 
 IP:
 	Many people are interested in this driver in order to use IP
-when Localtalk, but no Ethernet, is available.  While the code to do
+when LocalTalk, but no Ethernet, is available.  While the code to do
 this is not strictly speaking part of this driver, an experimental 
 version is available which seems to work under kernel 2.0.xx.  It is
 not yet functional in the 2.1.xx kernels.

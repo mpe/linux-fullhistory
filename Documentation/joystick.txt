@@ -15,7 +15,7 @@ stories are also welcome.
 2. Usage
 ~~~~~~~~
   If you enable the joystick driver in the kernel configuration, all
-connected joystick should be found automatically. If that doesn't work, you
+connected joysticks should be found automatically. If that doesn't work, you
 can pass the joystick driver the following kernel command line arguments:
 
 js=0xXX,0xYY
@@ -120,7 +120,7 @@ Version 0.4	Linux 0.99.6 and fixed race condition in js_read.
      		port started ALL the joystick one shots. If the
      		one that we are reading is short enough and the
      		first one to be read, the second one will return
-     		bad data if it's one shot has not expired when
+     		bad data if its one shot has not expired when
      		the joystick port is written for the second time.
      		Thus solves the mystery delay problem in 0.2!
 Version 0.5	Upgraded the driver to the 0.99.9 kernel, added
@@ -155,7 +155,7 @@ Version 0.9	Ported to 2.1.x
 		Better ioctl names. Kept binary compatibility.
 		Removed 'save_busy'. Just set busy to 1.
 Version 0.9.0	Based on 0.7.3
-		New read function that allows two axes have same value
+		New read function that allows two axes to have the same value
      		New joystick calibration code
      		Real support for 3-axis joysticks	
      		CPU speed independent timeouts
@@ -180,7 +180,7 @@ Version 1.0.1	Complete rewrite
 Version 1.0.2	Works, many bugs fixed, more yet to come
 Version 1.0.3	Tail cutting logic changes & fixes
      		Fix in js_do_bh - no more zero values for axes
-     		Lost event changest & fixes
+     		Lost event changes & fixes
 Version 1.0.4	Kernel command line & module configuration support
      		Better cli()/sti() handling
      		Linux 2.1.25 select => poll changes

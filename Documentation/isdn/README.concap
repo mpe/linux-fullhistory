@@ -10,7 +10,7 @@ Thus, the mnemonic: "CONnection CONtrolling eNCAPsulation Protocol".
 
 This is currently only used inside the isdn subsystem. But it might
 also be useful to other kinds of network devices. Thus, if you want
-to suggest changes that improve usability or performace of the
+to suggest changes that improve usability or performance of the
 interface, please let me know. I'm willing to include them in future
 releases (even if I needed to adapt the current isdn code to the
 changed interface).
@@ -25,14 +25,14 @@ Thus, a device driver for a certain type of hardware must support
 several different encapsulation protocols at once.
 
 The isdn device driver did already support several different
-encapsulation protocols. The encapsulation protocol is configuered by a
+encapsulation protocols. The encapsulation protocol is configured by a
 user space utility (isdnctrl). The isdn network interface code then
 uses several case statements which select appropriate actions
-depending on the currently configuered encapsulation protocol.
+depending on the currently configured encapsulation protocol.
 
 In contrast, LAN network interfaces always used a single encapsulation
 protocol which is unique to the hardware type of the interface. The LAN
-encapsulation is usually done by just sticking a header at the data. Thus,
+encapsulation is usually done by just sticking a header on the data. Thus,
 traditional linux network device drivers used to process the
 encapsulation protocol directly (usually by just providing a hard_header()
 method in the device structure) using some hardware type specific support
@@ -46,13 +46,13 @@ the requirements for complex WAN encapsulations.
 
 
 Many Encapsulation protocols used on top of WAN connections will not just
-stick a header at the data. They also might need to set up or release
+stick a header on the data. They also might need to set up or release
 the WAN connection. They also might want to send other data for their
-private purpose over the wire. I.e. ppp does a lot of link level
-negotiation before the first peace of user data can be transmitted.
+private purpose over the wire, e.g. ppp does a lot of link level
+negotiation before the first piece of user data can be transmitted.
 Such encapsulation protocols for WAN devices are typically more complex
-than encapsulation protocols for lan devices. Thus, network interfaces
-code for typical WAN devices also tends to be more more complex.
+than encapsulation protocols for lan devices. Thus, network interface
+code for typical WAN devices also tends to be more complex.
 
 
 In order to support Linux' x25 PLP implementation on top of
@@ -65,22 +65,22 @@ protocol, complexity could be reduced and maintainability could be
 increased.
 
 
-Likewise, a same encapsulation protocol will frequently be needed by
-several different interfaces of even different hardware type. I.e. the
-synchronous ppp implementaion used by the isdn driver and the
-asyncronous ppp implemntation used by the ppp driver have a lot of
+Likewise, a similar encapsulation protocol will frequently be needed by
+several different interfaces of even different hardware type, e.g. the
+synchronous ppp implementation used by the isdn driver and the
+asyncronous ppp implementation used by the ppp driver have a lot of
 similar code in them. By cleanly separating the encapsulation protocol
 from the hardware specific interface stuff such code could be shared
 better in future.
 
 
-When operating over dial-up-connections (i.e. telephone lines via modem,
+When operating over dial-up-connections (e.g. telephone lines via modem,
 non-permanent virtual circuits of wide area networks, ISDN) many
-encapsulation protocols will need to control the connection. Therfore,
+encapsulation protocols will need to control the connection. Therefore,
 some basic connection control primitives are supported. The type and
 semantics of the connection (i.e the ISO layer where connection service
 is provided) is outside our scope and might be different depending on
-the encapsulation protocol used. I.e. for a ppp module using our service
+the encapsulation protocol used, e.g. for a ppp module using our service
 on top of a modem connection a connect_request will result in dialing
 a (somewhere else configured) remote phone number. For an X25-interface
 module (LAPB semantics, as defined in Documentation/networking/x25-iface.txt)
@@ -88,7 +88,7 @@ a connect_request will ask for establishing a reliable lapb
 datalink connection.
 
 
-The encapsulation protocol currently provides the follwing
+The encapsulation protocol currently provides the following
 service primitives to the network device.
 
 - create a new encapsulation protocol instance
@@ -121,7 +121,7 @@ struct concap_proto_ops{
 		       struct device *ndev,
 		       struct concap_device_ops *dops);
 
-	/* inactivate an encapsulation protocol instance. The encapsulation
+	/* deactivate an encapsulation protocol instance. The encapsulation
 	   protocol may not call any *dops methods after this. */
 	int (*close)(struct concap_proto *cprot);
 
@@ -145,24 +145,24 @@ The data structures are defined in the header file include/linux/concap.h.
 A Network interface using encapsulation protocols must also provide
 some service primitives to the encapsulation protocol:
 
-- request data beeing submitted by lower layer (device hardware) 
-- request a connection beeing set up by lower layer 
-- request a connection beeing released by lower layer
+- request data being submitted by lower layer (device hardware) 
+- request a connection being set up by lower layer 
+- request a connection being released by lower layer
 
-The encapsulations protocol accesses those primitives via callbacks
+The encapsulation protocol accesses those primitives via callbacks
 provided by the network interface within a struct concap_device_ops.
 
 struct concap_device_ops{
 
-	/* to request data is submitted by device*/ 
+	/* to request data be submitted by device */ 
 	int (*data_req)(struct concap_proto *, struct sk_buff *);
 
 	/* Control methods must be set to NULL by devices which do not
-	   support connection control.*/
-	/* to request a connection is set up */ 
+	   support connection control. */
+	/* to request a connection be set up */ 
 	int (*connect_req)(struct concap_proto *);
 
-	/* to request a connection is released */
+	/* to request a connection be released */
 	int (*disconn_req)(struct concap_proto *);	
 };
 
@@ -172,7 +172,7 @@ because the encapsulation protocol directly calls netif_rx().
 
 
 
-An encapsulation protocol itsself is actually the
+An encapsulation protocol itself is actually the
 struct concap_proto{
 	struct device *net_dev;		/* net device using our service  */
 	struct concap_device_ops *dops; /* callbacks provided by device */
@@ -189,7 +189,7 @@ struct concap_proto{
 
 Most of this is filled in when the device requests the protocol to 
 be reset (opend). The network interface must provide the net_dev and
-dops pointers. Other concap_proto members should be considerd private
+dops pointers. Other concap_proto members should be considered private
 data that are only accessed by the pops callback functions. Likewise,
 a concap proto should access the network device's private data
 only by means of the callbacks referred to by the dops pointer.
@@ -217,21 +217,21 @@ The concept of the concap proto might help to reuse protocol code and
 reduce the complexity of certain network interface implementations.
 The trade off is that it introduces yet another procedure call layer
 when processing the protocol. This has of course some impact on
-performace. However, typically the concap interface will be used by
+performance. However, typically the concap interface will be used by
 devices attached to slow lines (like telephone, isdn, leased synchronous
-lines). For such slow lines, the overhead is probably neglectable.
+lines). For such slow lines, the overhead is probably negligible.
 This might no longer hold for certain high speed WAN links (like
 ATM).
 
 
 If general linux network interfaces explicitly supported concap
-protocols (i.e. by a member struct concap_proto* in struct device)
+protocols (e.g. by a member struct concap_proto* in struct device)
 then the interface of the service function could be changed
 by passing a pointer of type (struct device*) instead of
 type (struct concap_proto*). Doing so would make many of the service
-functions compatible to network device support fuctions. i.e.
+functions compatible to network device support fuctions.
 
-i.e. instead of the concap protocol's service function
+e.g. instead of the concap protocol's service function
 
   int (*encap_and_xmit)(struct concap_proto *cprot, struct sk_buff *skb);
 
@@ -252,7 +252,7 @@ The device's data request function could also be defined as
 This might even allow for some protocol stacking. And the network
 interface might even register the same data_req() function directly
 as its hard_start_xmit() method when a zero layer encapsulation
-protocol is configured. Thus, eliminating the performace penalty
+protocol is configured. Thus, eliminating the performance penalty
 of the concap interface when a trivial concap protocol is used.
 Nevertheless, the device remains able to support encapsulation
 protocol configuration.

@@ -130,6 +130,7 @@ struct linux_mib
 	unsigned long	SyncookiesSent;
 	unsigned long	SyncookiesRecv;
 	unsigned long	SyncookiesFailed;
+	unsigned long	EmbryonicRsts;
 };
  	
 #endif

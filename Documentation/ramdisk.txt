@@ -31,7 +31,7 @@ command has changed.
 Also, the new ramdisk supports up to 16 ramdisks out of the box, and can
 be reconfigured in rd.c to support up to 255 ramdisks.  To use multiple
 ramdisk support with your system, run 'mknod /dev/ramX b 1 X' and chmod
-(to change it's permissions) it to your liking.  The default /dev/ram(disk)
+(to change its permissions) it to your liking.  The default /dev/ram(disk)
 uses minor #1, so start with ram2 and go from there.
 
 The old "ramdisk=<ram_size>" has been changed to "ramdisk_size=<ram_size>"
@@ -42,7 +42,7 @@ The new ramdisk also has the ability to load compressed ramdisk images,
 allowing one to squeeze more programs onto an average installation or 
 rescue floppy disk.
 
-Notes: You may have "dev/ram" or "/dev/ramdisk" or both. They are
+Notes: You may have "/dev/ram" or "/dev/ramdisk" or both. They are
 equivalent from the standpoint of this document. Also, the new ramdisk
 is a config option. When running "make config", make sure you enable
 ramdisk support for the kernel you intend to use the ramdisk with.
@@ -113,7 +113,7 @@ size). Bit 14 indicates that a ramdisk is to be loaded, and bit 15
 indicates whether a prompt/wait sequence is to be given before trying
 to read the ramdisk. Since the ramdisk dynamically grows as data is
 being written into it, a size field is no longer required. Bits 11
-to 13 are not presently used and may as well be zero. These numbers
+to 13 are not currently used and may as well be zero. These numbers
 are no magical secrets, as seen below:
 
 ./arch/i386/kernel/setup.c:#define RAMDISK_IMAGE_START_MASK     0x07FF
@@ -160,7 +160,7 @@ of RAM. If using a spare disk partition instead of /dev/ram, then this
 restriction does not apply.
 
 a) Decide on the ramdisk size that you want. Say 2MB for this example.
-   Create it by writing to the ramdisk device. (This step is not presently
+   Create it by writing to the ramdisk device. (This step is not currently
    required, but may be in the future.) It is wise to zero out the
    area (esp. for disks) so that maximal compression is achieved for
    the unused blocks of the image that you are about to create.

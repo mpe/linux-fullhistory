@@ -37,12 +37,12 @@
 #define	RTM_GETRULE	(RTM_BASE+18)
 
 #define	RTM_NEWQDISC	(RTM_BASE+20)
-#define	RTM_DELQDSIC	(RTM_BASE+21)
+#define	RTM_DELQDISC	(RTM_BASE+21)
 #define	RTM_GETQDISC	(RTM_BASE+22)
 
-#define	RTM_NEWTFLOW	(RTM_BASE+24)
-#define	RTM_DELTFLOW	(RTM_BASE+25)
-#define	RTM_GETTFLOW	(RTM_BASE+26)
+#define	RTM_NEWTCLASS	(RTM_BASE+24)
+#define	RTM_DELTCLASS	(RTM_BASE+25)
+#define	RTM_GETTCLASS	(RTM_BASE+26)
 
 #define	RTM_NEWTFILTER	(RTM_BASE+28)
 #define	RTM_DELTFILTER	(RTM_BASE+29)
@@ -533,10 +533,11 @@ enum
 	TCA_KIND,
 	TCA_OPTIONS,
 	TCA_STATS,
-	TCA_XSTATS
+	TCA_XSTATS,
+	TCA_RATE,
 };
 
-#define TCA_MAX TCA_XSTATS
+#define TCA_MAX TCA_RATE
 
 #define TCA_RTA(r)  ((struct rtattr*)(((char*)(r)) + NLMSG_ALIGN(sizeof(struct tcmsg))))
 #define TCA_PAYLOAD(n) NLMSG_PAYLOAD(n,sizeof(struct tcmsg))
@@ -551,6 +552,7 @@ enum
 #define RTMGRP_LINK		1
 #define RTMGRP_NOTIFY		2
 #define RTMGRP_NEIGH		4
+#define RTMGRP_TC		8
 
 #define RTMGRP_IPV4_IFADDR	0x10
 #define RTMGRP_IPV4_MROUTE	0x20
@@ -567,6 +569,14 @@ enum
 extern atomic_t rtnl_rlockct;
 extern struct wait_queue *rtnl_wait;
 
+extern __inline__ int rtattr_strcmp(struct rtattr *rta, char *str)
+{
+	int len = strlen(str) + 1;
+	return len > rta->rta_len || memcmp(RTA_DATA(rta), str, len);
+}
+
+extern int rtattr_parse(struct rtattr *tb[], int maxattr, struct rtattr *rta, int len);
+
 #ifdef CONFIG_RTNETLINK
 extern struct sock *rtnl;
 
@@ -578,12 +588,12 @@ struct rtnetlink_link
 
 extern struct rtnetlink_link * rtnetlink_links[NPROTO];
 extern int rtnetlink_dump_ifinfo(struct sk_buff *skb, struct netlink_callback *cb);
-
+extern int rtnetlink_send(struct sk_buff *skb, u32 pid, unsigned group, int echo);
 
 extern void __rta_fill(struct sk_buff *skb, int attrtype, int attrlen, const void *data);
 
 #define RTA_PUT(skb, attrtype, attrlen, data) \
-({ if (skb_tailroom(skb) < RTA_SPACE(attrlen)) goto rtattr_failure; \
+({ if (skb_tailroom(skb) < (int)RTA_SPACE(attrlen)) goto rtattr_failure; \
    __rta_fill(skb, attrtype, attrlen, data); })
 
 extern unsigned long rtnl_wlockct;

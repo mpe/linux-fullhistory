@@ -1,8 +1,8 @@
      Kernel Support for miscellaneous (your favourite) Binary Formats v1.1
      =====================================================================
 
-This Kernel feature allows to invoke almost (for restrictions see below) every
-program by simply typing its name in the shell.
+This Kernel feature allows you to invoke almost (for restrictions see below)
+every program by simply typing its name in the shell.
 This includes for example compiled Java(TM), Python or Emacs programs.
 
 To achieve this you must tell binfmt_misc which interpreter has to be invoked
@@ -34,7 +34,7 @@ Here is what the fields mean:
 
 There are some restrictions:
  - the whole register string may not exceed 255 characters
- - the magic must resist in the first 128 bytes of the file, i.e.
+ - the magic must reside in the first 128 bytes of the file, i.e.
    offset+size(magic) has to be less than 128
  - the interpreter string may not exceed 127 characters
 

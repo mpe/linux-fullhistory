@@ -150,6 +150,7 @@ extern struct mpc_config_intsrc mp_irqs [MAX_IRQ_SOURCES];
 extern int mpc_default_type;
 int mp_bus_id_to_pci_bus [MAX_MP_BUSSES] = { -1, };
 int mp_current_pci_id = 0;
+unsigned long mp_lapic_addr = 0;
 
 /* #define SMP_DEBUG */
 
@@ -270,9 +271,8 @@ __initfunc(static int smp_read_mpc(struct mp_config_table *mpc))
 
 	printk("APIC at: 0x%lX\n",mpc->mpc_lapic);
 
-	/* check the local APIC address */
-	if ((char *)phys_to_virt((unsigned long)mpc->mpc_lapic) != APIC_BASE)
-		panic("unexpected APIC address");
+	/* save the local APIC address, it might be non-default */
+	mp_lapic_addr = mpc->mpc_lapic;
 
 	/*
 	 *	Now process the configuration blocks.
@@ -453,7 +453,7 @@ __initfunc(int smp_scan_config(unsigned long base, unsigned long length))
 					 */
 			
 					cfg=pg0[0];
-					pg0[0] = ((unsigned long)APIC_BASE | 7);
+					pg0[0] = (mp_lapic_addr | 7);
 					local_flush_tlb();
 
 					boot_cpu_id = GET_APIC_ID(*((volatile unsigned long *) APIC_ID));

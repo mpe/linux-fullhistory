@@ -43,7 +43,7 @@ running:
 	A) if your board is unlisted, then mail to linux-smp to get
 	   it into either the white or the blacklist
 	B) if your board is blacklisted, then figure out the apropriate
-	   pirq= option to get your system boot
+	   pirq= option to get your system to boot
 
 
 pirq= lines look like the following in /etc/lilo.conf:
@@ -107,9 +107,9 @@ card (IRQ11) in Slot3, and have Slot1 empty:
 slots.]
 
 generally, it's always possible to find out the correct pirq= settings, just
-permutate all IRQ numbers properly ... it will take some time though. An
+permute all IRQ numbers properly ... it will take some time though. An
 'incorrect' pirq line will cause the booting process to hang, or a device
-wont function properly (if it's inserted as eg. a module).
+won't function properly (if it's inserted as eg. a module).
 
 If you have 2 PCI buses, then you can use up to 8 pirq values. Although such
 boards tend to have a good configuration and will be included in the

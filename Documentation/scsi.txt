@@ -5,7 +5,7 @@ understand  your options, we should first define a few terms.
 
 	The scsi-core contains the core of scsi support.  Without it
 you can do nothing with any of the other scsi drivers.  The scsi core
-support can be a module (scsi_mod.o), or it can be build into the kernel.
+support can be a module (scsi_mod.o), or it can be built into the kernel.
 If the core is a module, it must be the first scsi module loaded, and
 if you unload the modules, it will have to be the last one unloaded.
 

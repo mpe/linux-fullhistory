@@ -87,7 +87,7 @@ Valid names are:
   /dev/adc: -> 0x1c20 (third ACSI device)
   /dev/add: -> 0x1c30 (forth ACSI device)
 
-The last for names are available only if the kernel has been compiled
+The last four names are available only if the kernel has been compiled
 with Atari and ACSI support.
 
   The name must be followed by a decimal number, that stands for the
@@ -114,8 +114,8 @@ consequences: If, for example, you have a symbolic link from /dev/fd
 to /dev/fd0D720 as an abbreviation for floppy driver #0 in DD format,
 you cannot use this name for specifying the root device, because the
 kernel cannot see this symlink before mounting the root FS and it
-isn't in the table above. If you would use it, the root device weren't
-set at all, without error message. Another example: You cannot use a
+isn't in the table above. If you use it, the root device will not be 
+set at all, without an error message. Another example: You cannot use a
 partition on e.g. the sixth SCSI disk as the root filesystem, if you
 want to specify it by name. This is, because only the devices up to
 /dev/sde are in the table above, but not /dev/sdf. Although, you can
@@ -561,7 +561,7 @@ thresholds.
 Syntax: ataflop=<drive type>[,<trackbuffering>[,<steprateA>[,<steprateB>]]]
 
    The drive type may be 0, 1, or 2, for DD, HD, and ED, resp. This
-   setting affects how much buffers are reserved and which formats are
+   setting affects how many buffers are reserved and which formats are
    probed (see also below). The default is 1 (HD). Only one drive type
    can be selected. If you have two disk drives, select the "better"
    type.
@@ -586,12 +586,12 @@ defaults depend on whether TT-style or Falcon-style SCSI is used.
 Below, defaults are noted as n/m, where the first value refers to
 TT-SCSI and the latter to Falcon-SCSI. If an illegal value is given
 for one parameter, an error message is printed and that one setting is
-ignored (other aren't affected).
+ignored (others aren't affected).
 
   <can_queue>:
-    This is the maximum number of SCSI commands queued internal to the
+    This is the maximum number of SCSI commands queued internally to the
     Atari SCSI driver. A value of 1 effectively turns off the driver
-    internal multitasking (if it makes problems). Legal values are >=
+    internal multitasking (if it causes problems). Legal values are >=
     1. <can_queue> can be as high as you like, but values greater than
     <cmd_per_lun> times the number of SCSI targets (LUNs) you have
     don't make sense. Default: 16/8.
@@ -632,7 +632,7 @@ ignored (other aren't affected).
     0 means turn off tagged queuing support, all other values > 0 mean
     use tagged queuing for targets that support it. Default: currently
     off, but this may change when tagged queuing handling has been
-    proofed to be reliable.
+    proved to be reliable.
 
     Tagged queuing means that more than one command can be issued to
     one LUN, and the SCSI device itself orders the requests so they
@@ -689,7 +689,7 @@ even if you have less alternate RAM. 0 stands for never swap to
 ST-RAM, even if it's small enough compared to the rest of memory.
 
   If ST-RAM swapping is enabled, the kernel usually uses all free
-ST-RAM as swap "device". (If the kernel resides in ST-RAM, the region
+ST-RAM as swap "device". If the kernel resides in ST-RAM, the region
 allocated by it is obviously never used for swapping :-) You can also
 limit this amount by specifying the second parameter, <max_swap>, if
 you want to use parts of ST-RAM as normal system memory. <max_swap> is
@@ -852,8 +852,8 @@ Syntax: clock:x
 
   x = clock input in MHz for WD33c93 chip. Normal values would be from
 8 through 20. The default value depends on your hostadapter(s),
-default for the A3000 internal controller is 14, for the A2091 its 8
-and for the GVP hostadapters its either 8 or 14, depending on the
+default for the A3000 internal controller is 14, for the A2091 it's 8
+and for the GVP hostadapters it's either 8 or 14, depending on the
 hostadapter and the SCSI-clock jumper present on some GVP
 hostadapters.
 

@@ -9,20 +9,20 @@ Last update: April 7, 1998
 
 1. What is 6pack, and what are the advantages to KISS?
 
-6pack is a transmission protocol for the data exchange between the PC and
+6pack is a transmission protocol for data exchange between the PC and
 the TNC over a serial line. It can be used as an alternative to KISS.
 
 6pack has two major advantages:
-- The PC is given the full control over the radio
+- The PC is given full control over the radio
   channel. Special control data is exchanged between the PC and the TNC so
-  that the PC knows at any time if the TNC is receiving data, if an TNC
+  that the PC knows at any time if the TNC is receiving data, if a TNC
   buffer underrun or overrun has occured, if the PTT is
   set and so on. This control data is processed at a higher priority than
   normal data, so a data stream can be interrupted at any time to issue an
-  important event. This helps to improve the channel access and timing algorithms
-  as everything is computed in the PC. It would even be possible to experiment with
-  something completely different than the known CSMA and DAMA channel access
-  methods.
+  important event. This helps to improve the channel access and timing 
+  algorithms as everything is computed in the PC. It would even be possible 
+  to experiment with something completely different from the known CSMA and 
+  DAMA channel access methods.
   This kind of real-time control is especially important to supply several
   TNCs that are connected between each other and the PC by a daisy chain
   (however, this feature is not supported yet by the Linux 6pack driver).
@@ -55,15 +55,15 @@ To be able to use 6pack, a special firmware for the TNC is needed. The EPROM
 of a newly bought TNC does not contain 6pack, so you will have to
 program an EPROM yourself. The image file for 6pack EPROMs should be
 available on any packet radio box where PC/FlexNet can be found. The name of
-the file is 6pack.bin. This file is copyrighted and maintainend by the FlexNet
+the file is 6pack.bin. This file is copyrighted and maintained by the FlexNet
 team. It can be used under the terms of the license that comes along
 with PC/FlexNet. Please do not ask me about the internals of this file as I
 don't know anything about it. I used a textual description of the 6pack
 protocol to program the Linux driver.
 
 TNCs contain a 64kByte EPROM, the lower half of which is used for
-TheFirmware/KISS. The upper half is either empty or is sometimes
-programmed with a software called TAPR. In the latter case, the TNC
+the firmware/KISS. The upper half is either empty or is sometimes
+programmed with software called TAPR. In the latter case, the TNC
 is supplied with a DIP switch so you can easily change between the
 two systems. When programming a new EPROM, one of the systems is replaced
 by 6pack. It is useful to replace TAPR, as this software is rarely used
@@ -76,7 +76,7 @@ the TNC correctly.
 
 5. Building and installing the 6pack driver
 
-The driver has been tested with kernel version 2.1.90. Using with older
+The driver has been tested with kernel version 2.1.90. Use with older
 kernels may lead to a compilation error because the interface to a kernel
 function has been changed in the 2.1.8x kernels.
 
@@ -93,7 +93,7 @@ How to turn on 6pack support:
 To use the driver, the kissattach program delivered with the AX.25 utilities
 has to be modified.
 
-- Do a cd to the directory that keeps the kissattach sources. Edit the
+- Do a cd to the directory that holds the kissattach sources. Edit the
   kissattach.c file. At the top, insert the following lines:
 
   #ifndef N_6PACK
@@ -110,8 +110,8 @@ has to be modified.
 
 Installing the driver:
 
-- Do an insmod 6pack. Look at your
-  /var/log/messages file to check if the module has printed its initialization message.
+- Do an insmod 6pack. Look at your /var/log/messages file to check if the 
+  module has printed its initialization message.
 
 - Do a spattach as you would launch kissattach when starting a KISS port.
   Check if the kernel prints the message '6pack: TNC found'. 
@@ -130,7 +130,7 @@ Note that the connect and status LEDs of the TNC are controlled in a
 different way than they are when the TNC is used with PC/FlexNet. When using
 FlexNet, the connect LED is on if there is a connection; the status LED is
 on if there is data in the buffer of the PC's AX.25 engine that has to be
-transmitted. Under LinuX, the 6pack layer is beyond the AX.25 layer,
+transmitted. Under Linux, the 6pack layer is beyond the AX.25 layer,
 so the 6pack driver doesn't know anything about connects or data that
 has not yet been transmitted. Therefore the LEDs are controlled
 as they are in KISS mode: The connect LED is turned on if data is transferred
@@ -143,7 +143,7 @@ When testing the driver with 2.0.3x kernels and
 operating with data rates on the radio channel of 9600 Baud or higher,
 the driver may, on certain systems, sometimes print the message '6pack:
 bad checksum', which is due to data loss if the other station sends two
-or more subsequent packets. I have been told that this is due tu a problem
+or more subsequent packets. I have been told that this is due to a problem
 with the serial driver of 2.0.3x kernels. I don't know yet if the problem
 still exists with 2.1.x kernels, as I have heard that the serial driver
 code has been changed with 2.1.x.

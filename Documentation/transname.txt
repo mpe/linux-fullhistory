@@ -14,8 +14,8 @@ contents on the clients and on the server, but have to be replicated
 This duplication causes very large efforts in practise, since at least
 the /etc directory has to be duplicated for every client. Even in /etc
 many files are identical, for example sendmail.cf, initrc scripts and
-others. Maintaining a large pool means to ensure coherence amoung the
-duplicates. Classical methods like symlinks are unconvenient
+others. Maintaining a large pool requires means to ensure coherence among 
+the duplicates. Classical methods like symlinks are inconvenient
 for this task because they have to be valid in the view of mounted
 filesystems at all clients, not at the server.
 
@@ -28,17 +28,17 @@ create two different files named /etc/config#host=myserver# and
 file /etc/config (without the #...=...# suffix). On host "myclient",
 the corresponding other file will appear as /etc/config. So you
 can access the right file contents under the _same_ name, depending
-on which host you are working.
+on which host you are working on.
 
-A similar concept can be found in elder HP-UX versions, but with
-so-called "hidden directories" which don't allow contemporary viewing
+A similar concept can be found in older HP-UX versions, but with
+so-called "hidden directories" which don't allow contemporary viewing of
 all versions by default. In contrast, transname shows all context-dependent
 files in the dir listing and they can be edited using the
 fully qualified name.
 
-Transname was developped for and is used at our Linux pool at the
-University of Stuttgart with good results. Maintainance of the pool is
-at a minimum, and adding new clients is a child's play. No worry with
+Transname was developed for and is used at our Linux pool at the
+University of Stuttgart with good results. Maintenance of the pool is
+at a minimum, and adding new clients is child's play. No worry with
 keeping up mail configurations, newly installed tools, changed /etc/services,
 /etc/shells, /etc/resolv.conf and many, many others. In contrast to a
 sophisticated symlink solution, adding a new file to the /etc directory
@@ -46,7 +46,7 @@ is seen immediately by all clients.
 
 An example for the use of linux-2.0-transname.patch:
 
-For example, you can make your /etc/fstab context-dependend. If you want
+For example, you can make your /etc/fstab context-dependent. If you want
 to do that, you should create an /etc/fstab#ktype=default# for the
 server and an /etc/fstab#ktype=diskless# for all clients. This is because
 your clients may not yet know their own hostname when they attempt to mount
@@ -54,7 +54,7 @@ the root filesystem. You can compile in the kerneltypes "default" and
 "diskless" into different kernels for servers and clients. Of course,
 if your clients boot via bootp and know their names when mounting the root,
 you can use /etc/fstab#host=myclient# instead. But at least servers
-booting from disk normally dont know their hostname at root mount time,
+booting from disk normally don't know their hostname at root mount time,
 so you can mix methods and use /etc/fstab#ktype=default# for the server,
 /etc/fstab#ktype=diskless# for the majority of the clients and
 /etc/fstab#host=myclient# for some specific client, because translation
@@ -73,7 +73,7 @@ five types of default translations are supported:
 
 Others may be added in future.
 
-The current translation are displayed at boot time in the kernel messages
+The current translations are displayed at boot time in the kernel messages
 for easier debugging, and can be retrieved by reading
 /proc/sys/kernel/nametrans which is a special file containing the currently
 valid translations.
@@ -105,7 +105,7 @@ back to the default translations by executing
 echo "" > /proc/sys/kernel/nametrans
 
 Another drawback is that administration tools currently are not aware of
-context-dependend files, so you cannot switch between contexts inside
+context-dependent files, so you cannot switch between contexts inside
 one tool session. However, you can simulate administration sessions
 on the server as if they were running on some client. To do this,
 you have to set an environment variable NAMETRANS which has to be the
@@ -131,7 +131,7 @@ exists a template filename like /etc/mtab#host=CREATE#. As soon as a
 process running on "mango" tries to create a file /etc/mtab, the version
 /etc/mtab#host=mango# is created instead (which appears in turn as
 hardlinked to /etc/mtab). Note that if you want to make /etc/fstab
-context-dependend, you should execute "touch /etc/mtab#host=CREATE#" and
+context-dependent, you should execute "touch /etc/mtab#host=CREATE#" and
 "touch /etc/mtab.tmp#host=CREATE#", because mount, umount and others
 running on different hosts would otherwise try to create one shared
 /etc/mtab which would result in a clash. Also one should execute
@@ -155,11 +155,11 @@ or "make xconfig", just go to the section "filesystems". Take a look at
 the help texts that are associated with the transname options, they tell
 you further hints not mentioned in this README. Then build your kernel as
 usual, install it with a *new* kernel-filename, add a *new* entry to
-/etc/lilo.conf and run lilo. **DONT CHANGE** any configuration files for the
+/etc/lilo.conf and run lilo. **DON'T CHANGE** any configuration files for the
 first reboot!
 
 Just reboot the new kernel and play a little bit around with
-creating context-dependend filenames in your home directory.
+creating context-dependent filenames in your home directory.
 Try all modes including setting NAMETRANS to different values.
 
 As an example for the changes necessary on our LST-1.8-based Linux pool,
@@ -247,7 +247,7 @@ where /usr/sbin/rpc.mountd has the contents
 #!/bin/sh
 exec /usr/bin/env - NAMETRANS= "`/usr/bin/env`" $0.notrans $*
 
-Of course, that could be improved, but is a quick hack to get things work.
+Of course, that could be improved, but is a quick hack to get things to work.
 
 Enjoy,
 

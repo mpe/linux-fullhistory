@@ -57,7 +57,7 @@ into memory.  mca_read_stored_pos() accesses that data.  mca_read_pos()
 and mca_write_pos() are also available for (safer) direct POS access,
 but their use is _highly_ discouraged.  mca_write_pos() is particularly
 dangerous, as it is possible for adapters to be put in inconsistent
-states (i.e. sharing IO address, etc) and may result in crashes, toasted
+states (e.g. sharing IO address, etc) and may result in crashes, toasted
 hardware, and operator injury.
 
 User level drivers (such as the AGX X server) can use /proc/mca to find
@@ -124,7 +124,7 @@ Your typical proc function will look something like this:
 	}
 
 Some of the standard MCA information will already be printed, so don't
-bother repeating it.  Don't try putting in more that 3K of information.
+bother repeating it.  Don't try putting in more than 3K of information.
 
 Enable this function with:
 	mca_set_adapter_procfn( slot, dev_getinfo, dev );
@@ -132,8 +132,8 @@ Enable this function with:
 Disable it with:
 	mca_set_adapter_procfn( slot, NULL, NULL );
 
-It is also recommended that, even if you don't write a proc function, to
-set the name of the adapter (i.e. "PS/2 ESDI Controller") via
+It is also recommended, even if you don't write a proc function, to
+set the name of the adapter (e.g. "PS/2 ESDI Controller") via
 mca_set_adapter_name( int slot, char* name ).  Up to 30 characters are
 used.
 

@@ -24,7 +24,7 @@ and resources specified in /etc/isapnp.conf agree.
 Compiling the sound driver
 --------------------------
 I highly recommend that you build a modularized sound driver.
-This document does not cover sound-driver which is built in
+This document does not cover a sound-driver which is built in
 the kernel.
 
 Sound card support should be enabled as a module (chose m).
@@ -95,7 +95,7 @@ request to loading the main sound module. The main sound module
 contains only common code which is needed by all the sound drivers,
 and the driver for /dev/sndstat.
 
-The sound module in it's turn will request loading of a sub-driver
+The sound module in its turn will request loading of a sub-driver
 for mixer, audio, midi or synthesizer device. The first 3 are
 supported by the mad16 driver. The synth device is supported
 by the opl3 driver.
@@ -105,7 +105,7 @@ if more than one card is installed.
 
 options sb mad16=1
 
-This is left for historical reason. If you enable the
+This is left for historical reasons. If you enable the
 config option 'Support MIDI in older MAD16 based cards (requires SB)'
 or if you use an older mad16 driver it will force loading of the
 SoundBlaster driver. This option tells the SB driver not to look
@@ -154,11 +154,11 @@ If you do use the sound card it is important that you load
 the mad16 driver (use "modprobe mad16" to prevent auto-unloading)
 before the cdrom is accessed the first time.
 
-Using the sound driver built-in the kernel may help here. but...
+Using the sound driver built-in to the kernel may help here, but...
 Most new systems have a PnP bios and also two IDE controllers.
 The IDE controller on the sound card may be needed only on older
 systems (which have only one IDE controller) but these systems
-also do not have a PnP bios - requiring isapnptoosl and a modularized
+also do not have a PnP bios - requiring isapnptools and a modularized
 driver.
 
 Known problems
@@ -167,8 +167,8 @@ Known problems
 
 2. On my system the codec cannot capture companded sound samples.
    (eg., recording from /dev/audio). When any companded capture is
-   requested I get a stereo-16 bit samples instead. Playback of
-   companded samples work well. Apparently this problem is not common
+   requested I get stereo-16 bit samples instead. Playback of
+   companded samples works well. Apparently this problem is not common
    to all C931 based cards. I do not know how to identify cards that
    have this problem.
 

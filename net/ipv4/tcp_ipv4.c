@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_ipv4.c,v 1.133 1998/04/06 08:42:28 davem Exp $
+ * Version:	$Id: tcp_ipv4.c,v 1.141 1998/04/24 19:38:19 freitag Exp $
  *
  *		IPv4 specific functions
  *
@@ -50,6 +50,7 @@
 #include <linux/types.h>
 #include <linux/fcntl.h>
 #include <linux/random.h>
+#include <linux/init.h>
 #include <linux/ipsec.h>
 
 #include <net/icmp.h>
@@ -60,6 +61,9 @@
 
 #include <linux/inet.h>
 
+/* That should be really in a standard kernel include file. */
+#define offsetof(t,m) ((unsigned int) (&((t *)0)->m))
+
 extern int sysctl_tcp_timestamps;
 extern int sysctl_tcp_window_scaling;
 extern int sysctl_tcp_sack;
@@ -68,6 +72,10 @@ extern int sysctl_ip_dynaddr;
 
 /* Check TCP sequence numbers in ICMP packets. */
 #define ICMP_MIN_LENGTH 8
+
+/* Socket used for sending RSTs */ 	
+struct inode tcp_inode;
+struct socket *tcp_socket=&tcp_inode.u.socket_i;
 
 static void tcp_v4_send_reset(struct sk_buff *skb);
 
@@ -158,6 +166,18 @@ struct tcp_bind_bucket *tcp_bucket_create(unsigned short snum)
 		tb->pprev = head;
 	}
 	return tb;
+}
+
+/* Ensure that the bound bucket for the port exists.
+ * Return 0 on success.
+ */
+static __inline__ int tcp_bucket_check(unsigned short snum)
+{
+	if (tcp_bound_hash[tcp_bhashfn(snum)] == NULL &&
+			tcp_bucket_create(snum) == NULL)
+		return 1;
+	else
+		return 0;
 }
 
 static int tcp_v4_verify_bind(struct sock *sk, unsigned short snum)
@@ -850,49 +870,42 @@ void tcp_v4_send_check(struct sock *sk, struct tcphdr *th, int len,
 static void tcp_v4_send_reset(struct sk_buff *skb)
 {
 	struct tcphdr *th = skb->h.th;
+	struct tcphdr rth;
+	struct ip_reply_arg arg;
 
 	/* Never send a reset in response to a reset. */
-	if (th->rst == 0) {
-		struct tcphdr  *th = skb->h.th;
-		struct sk_buff *skb1 = ip_reply(skb, sizeof(struct tcphdr));
-		struct tcphdr  *th1;
+	if (th->rst)
+		return; 
 
-		if (skb1 == NULL)
-			return;
- 
-		skb1->h.th = th1 = (struct tcphdr *)
-			skb_put(skb1, sizeof(struct tcphdr));
+	/* Swap the send and the receive. */
+	memset(&rth, 0, sizeof(struct tcphdr)); 
+	rth.dest = th->source;
+	rth.source = th->dest; 
+	rth.doff = sizeof(struct tcphdr)/4;
+	rth.rst = 1;
 
-		/* Swap the send and the receive. */
-		memset(th1, 0, sizeof(*th1));
-		th1->dest = th->source;
-		th1->source = th->dest;
-		th1->doff = sizeof(*th1)/4;
-		th1->rst = 1;
-
-		if (th->ack) {
-			th1->seq = th->ack_seq;
-		} else {
-			th1->ack = 1;
-			if (!th->syn)
-				th1->ack_seq = th->seq;
-			else
-				th1->ack_seq = htonl(ntohl(th->seq)+1);
-		}
-		skb1->csum = csum_partial((u8 *) th1, sizeof(*th1), 0);
-		th1->check = tcp_v4_check(th1, sizeof(*th1), skb1->nh.iph->saddr,
-					  skb1->nh.iph->daddr, skb1->csum);
-
-		/* Finish up some IP bits. */
-		skb1->nh.iph->tot_len = htons(skb1->len);
-		ip_send_check(skb1->nh.iph);
-
-		/* All the other work was done by ip_reply(). */
-		skb1->dst->output(skb1);
-
-		tcp_statistics.TcpOutSegs++;
-		tcp_statistics.TcpOutRsts++;
+	if (th->ack) {
+		rth.seq = th->ack_seq;
+	} else {
+		rth.ack = 1;
+		rth.ack_seq = th->syn ? htonl(ntohl(th->seq)+1) : th->seq;
 	}
+
+	memset(&arg, 0, sizeof arg); 
+	arg.iov[0].iov_base = (unsigned char *)&rth; 
+	arg.iov[0].iov_len  = sizeof rth;
+	arg.csum = csum_tcpudp_magic(skb->nh.iph->daddr, 
+				skb->nh.iph->saddr, /*XXX*/
+				sizeof(struct tcphdr),
+				IPPROTO_TCP,
+				0); 
+	arg.n_iov = 1;
+	arg.csumoffset = offsetof(struct tcphdr, check) / sizeof(u16); 
+
+	ip_send_reply(tcp_socket->sk, skb, &arg, sizeof rth);
+
+	tcp_statistics.TcpOutSegs++;
+	tcp_statistics.TcpOutRsts++;
 }
 
 #ifdef CONFIG_IP_TRANSPARENT_PROXY
@@ -1277,18 +1290,28 @@ struct sock * tcp_v4_syn_recv_sock(struct sock *sk, struct sk_buff *skb,
 			return NULL;
 	        dst = &rt->u.dst;
 	}
-
-	sk->tp_pinfo.af_tcp.syn_backlog--;
-	sk->ack_backlog++;
+#ifdef CONFIG_IP_TRANSPARENT_PROXY
+	/* The new socket created for transparent proxy may fall
+	 * into a non-existed bind bucket because sk->num != newsk->num.
+	 * Ensure existance of the bucket now. The placement of the check
+	 * later will require to destroy just created newsk in the case of fail.
+	 * 1998/04/22 Andrey V. Savochkin <saw@msu.ru>
+	 */
+	if (tcp_bucket_check(ntohs(skb->h.th->dest)))
+		goto exit;
+#endif
 
 	mtu = dst->pmtu;
-	if (mtu < 68)
+	if (mtu < 68) /* XXX: we should turn pmtu disc off when this happens. */
 		mtu = 68;
 	snd_mss = mtu - sizeof(struct iphdr);
 
 	newsk = tcp_create_openreq_child(sk, req, skb, snd_mss);
 	if (!newsk) 
 		goto exit;
+
+	sk->tp_pinfo.af_tcp.syn_backlog--;
+	sk->ack_backlog++;
 
 	newsk->dst_cache = dst;
 
@@ -1329,6 +1352,8 @@ static void tcp_v4_rst_req(struct sock *sk, struct sk_buff *skb)
 	(req->sk ? sk->ack_backlog : tp->syn_backlog)--;
 	req->class->destructor(req);
 	tcp_openreq_free(req); 
+
+	net_statistics.EmbryonicRsts++;
 }
 
 /* Check for embryonic sockets (open_requests) We check packets with
@@ -1358,9 +1383,9 @@ static inline struct sock *tcp_v4_hnd_req(struct sock *sk,struct sk_buff *skb)
 			sk = tcp_check_req(sk, skb, req);
 		}
 #ifdef CONFIG_SYN_COOKIES
-		 else {
+		else {
 			sk = cookie_v4_check(sk, skb, &(IPCB(skb)->opt));
-		 }
+		}
 #endif
 	}
 	return sk; 
@@ -1454,9 +1479,9 @@ int tcp_v4_rcv(struct sk_buff *skb, unsigned short len)
 		if (tcp_v4_check(th,len,skb->nh.iph->saddr,skb->nh.iph->daddr,skb->csum)) {
 			printk(KERN_DEBUG "TCPv4 bad checksum from %d.%d.%d.%d:%04x to %d.%d.%d.%d:%04x, "
 			       "len=%d/%d/%d\n",
- 			       NIPQUAD(ntohl(skb->nh.iph->saddr)),
+ 			       NIPQUAD(skb->nh.iph->saddr),
 			       ntohs(th->source), 
-			       NIPQUAD(ntohl(skb->nh.iph->daddr)),
+			       NIPQUAD(skb->nh.iph->daddr),
 			       ntohs(th->dest),
 			       len, skb->len,
 			       ntohs(skb->nh.iph->tot_len));
@@ -1712,3 +1737,25 @@ struct proto tcp_prot = {
 	0,				/* inuse */
 	0				/* highestinuse */
 };
+
+
+
+__initfunc(void tcp_v4_init(struct net_proto_family *ops))
+{
+	int err;
+
+	tcp_inode.i_mode = S_IFSOCK;
+	tcp_inode.i_sock = 1;
+	tcp_inode.i_uid = 0;
+	tcp_inode.i_gid = 0;
+
+	tcp_socket->inode = &tcp_inode;
+	tcp_socket->state = SS_UNCONNECTED;
+	tcp_socket->type=SOCK_RAW;
+
+	if ((err=ops->create(tcp_socket, IPPROTO_TCP))<0)
+		panic("Failed to create the TCP control socket.\n");
+	tcp_socket->sk->allocation=GFP_ATOMIC;
+	tcp_socket->sk->num = 256;		/* Don't receive any data */
+	tcp_socket->sk->ip_ttl = MAXTTL;
+}

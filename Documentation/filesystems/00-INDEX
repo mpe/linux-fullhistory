@@ -2,12 +2,19 @@
 	- this file (info on some of the filesystems supported by linux).
 affs.txt
 	- info and mount options for the Amiga Fast File System.
+coda.txt
+	- description of the CODA filesystem.
+fat_cvf.txt
+	- Description of the Compressed Volume Files extension to the FAT
+	  filesystem
 hpfs.txt
 	- info and mount options for the OS/2 HPFS.
 isofs.txt
 	- info and mount options for the ISO9660 (CDROM) filesystem.
 ncpfs.txt
 	- info on Novell Netware(tm) filesystem using NCP protocol.
+ntfs.txt
+	- info and mount options for the NTFS filesystem (Win NT).
 romfs.txt
 	- Description of the ROMFS filesystem.
 smbfs.txt
@@ -18,3 +25,5 @@ umsdos.txt
 	- info on the umsdos extensions to the msdos filesystem.
 vfat.txt
 	- info on using the VFAT filesystem used in Win NT and Win 95
+vfs.txt
+	- Overview of the Virtual File System

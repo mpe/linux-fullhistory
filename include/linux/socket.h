@@ -60,7 +60,7 @@ struct cmsghdr {
 
 #define CMSG_ALIGN(len) ( ((len)+sizeof(long)-1) & ~(sizeof(long)-1) )
 
-#define CMSG_DATA(cmsg)	((void *)(cmsg) + CMSG_ALIGN(sizeof(struct cmsghdr)))
+#define CMSG_DATA(cmsg)	((void *)((char *)(cmsg) + CMSG_ALIGN(sizeof(struct cmsghdr))))
 #define CMSG_SPACE(len) (CMSG_ALIGN(sizeof(struct cmsghdr)) + CMSG_ALIGN(len))
 #define CMSG_LEN(len) (CMSG_ALIGN(sizeof(struct cmsghdr)) + (len))
 
@@ -75,6 +75,10 @@ struct cmsghdr {
  
 #ifdef __KERNEL__
 #define __KINLINE extern __inline__
+#elif  defined(__GNUC__) 
+#define __KINLINE static __inline__
+#elif defined(__cplusplus)
+#define __KINLINE static inline
 #else
 #define __KINLINE static
 #endif
@@ -138,7 +142,7 @@ struct ucred {
 #define AF_APPLETALK	5	/* Appletalk DDP 		*/
 #define AF_NETROM	6	/* Amateur Radio NET/ROM 	*/
 #define AF_BRIDGE	7	/* Multiprotocol bridge 	*/
-#define AF_AAL5		8	/* Reserved for Werner's ATM 	*/
+#define AF_ATMPVC	8	/* ATM PVCs			*/
 #define AF_X25		9	/* Reserved for X.25 project 	*/
 #define AF_INET6	10	/* IP version 6			*/
 #define AF_ROSE		11	/* Amateur Radio X.25 PLP	*/
@@ -151,6 +155,7 @@ struct ucred {
 #define AF_PACKET	17	/* Packet family		*/
 #define AF_ASH		18	/* Ash				*/
 #define AF_ECONET	19	/* Acorn Econet			*/
+#define AF_ATMSVC	20	/* ATM SVCs			*/
 #define AF_MAX		32	/* For now.. */
 
 /* Protocol families, same as address families. */
@@ -163,7 +168,7 @@ struct ucred {
 #define PF_APPLETALK	AF_APPLETALK
 #define	PF_NETROM	AF_NETROM
 #define PF_BRIDGE	AF_BRIDGE
-#define PF_AAL5		AF_AAL5
+#define PF_ATMPVC	AF_ATMPVC
 #define PF_X25		AF_X25
 #define PF_INET6	AF_INET6
 #define PF_ROSE		AF_ROSE
@@ -175,6 +180,7 @@ struct ucred {
 #define PF_ROUTE	AF_ROUTE
 #define PF_PACKET	AF_PACKET
 #define PF_ASH		AF_ASH
+#define PF_ATMSVC	AF_ATMSVC
 
 #define PF_MAX		AF_MAX
 
@@ -223,6 +229,8 @@ struct ucred {
 #define SOL_DECNET	261
 #define	SOL_X25		262
 #define SOL_PACKET	263
+#define SOL_ATM		264	/* ATM layer (cell level) */
+#define SOL_AAL		265	/* ATM Adaption Layer (packet level) */
 
 /* IPX options */
 #define IPX_TYPE	1

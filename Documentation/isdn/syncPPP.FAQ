@@ -1,8 +1,8 @@
 simple isdn4linux PPP FAQ .. to be continued .. not 'debugged' 
 -------------------------------------------------------------------
 
-Q01: what's pppd,ipppd, syncPPP , asyncPPP ??
-Q02: error message "this systems lacks PPP support"
+Q01: what's pppd, ipppd, syncPPP, asyncPPP ??
+Q02: error message "this system lacks PPP support"
 Q03: strange information using 'ifconfig'
 Q04: MPPP?? What's that and how can I use it ...
 Q05: I tried MPPP but it doesn't work 
@@ -16,7 +16,7 @@ Q12: How can I reduce login delay?
 
 -------------------------------------------------------------------
 
-Q01: pppd,ipppd, syncPPP , asyncPPP .. what is that ?
+Q01: pppd, ipppd, syncPPP, asyncPPP .. what is that ?
    what should I use?
 A: The pppd is for asynchronous PPP .. asynchronous means
    here, the framing is character based. (e.g when
@@ -45,7 +45,7 @@ A: The pppd is for asynchronous PPP .. asynchronous means
 --
 
 Q02: when I start the ipppd .. I only get the
-   error message "this systems lacks PPP support"
+   error message "this system lacks PPP support"
 A: check that at least the device 'ippp0' exists.
    (you can check this e.g with the program 'ifconfig')
    The ipppd NEEDS this device under THIS name .. 
@@ -123,7 +123,7 @@ A: (from Alexanter Strauss: )
 
 --
 
-Q08: A wanna talk to remote machines, which need
+Q08: I wanna talk to remote machines, which need
    a different configuration. The only way
    I found to do this is to kill the ipppd and
    start a new one with another config to connect
@@ -152,14 +152,14 @@ A: When starting, the ipppd calls functions which may
 Q10: I wanna use dynamic IP address assignment ... How 
    must I configure the network device.
 
-A: At least you must have a routing, which forwards
+A: At least you must have a route which forwards
    a packet to the ippp network-interface to trigger
    the dial-on-demand.
-   A default routing to the ippp-interface will work.
+   A default route to the ippp-interface will work.
    Now you must choose a dummy IP address for your
    interface.
    If for some reason you can't set the default
-   routing to the ippp interface, you may take any 
+   route to the ippp interface, you may take any 
    address of the subnet from which you expect your
    dynamic IP number and set a 'network route' for
    this subnet to the ippp interface.
