@@ -55,7 +55,7 @@ asmlinkage void do_page_fault(struct pt_regs *regs, unsigned long write,
 	 * If we're in an interrupt or have no user
 	 * context, we must not take the fault..
 	 */
-	if (in_interrupt() || mm == &init_mm)
+	if (in_interrupt() || !mm)
 		goto no_context;
 #if 0
 	printk("[%s:%d:%08lx:%ld:%08lx]\n", current->comm, current->pid,

@@ -527,10 +527,10 @@ __initfunc(void setup_arch(char **cmdline_p,
 	/* reboot on panic */	
 	panic_timeout = 180;
 	
-	init_task.mm->start_code = PAGE_OFFSET;
-	init_task.mm->end_code = (unsigned long) _etext;
-	init_task.mm->end_data = (unsigned long) _edata;
-	init_task.mm->brk = (unsigned long) klimit;	
+	init_mm.start_code = PAGE_OFFSET;
+	init_mm.end_code = (unsigned long) _etext;
+	init_mm.end_data = (unsigned long) _edata;
+	init_mm.brk = (unsigned long) klimit;	
 
 	/* Save unparsed command line copy for /proc/cmdline */
 	strcpy(saved_command_line, cmd_line);

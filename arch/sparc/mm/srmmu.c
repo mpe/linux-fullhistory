@@ -846,7 +846,7 @@ void srmmu_mapioaddr(unsigned long physaddr, unsigned long virt_addr, int bus_ty
 	unsigned long tmp;
 
 	physaddr &= PAGE_MASK;
-	pgdp = srmmu_pgd_offset(init_task.mm, virt_addr);
+	pgdp = srmmu_pgd_offset(&init_mm, virt_addr);
 	pmdp = pmd_offset(pgdp, virt_addr);
 	ptep = pte_offset(pmdp, virt_addr);
 	tmp = (physaddr >> 4) | SRMMU_ET_PTE;
@@ -871,7 +871,7 @@ void srmmu_unmapioaddr(unsigned long virt_addr)
 	pmd_t *pmdp;
 	pte_t *ptep;
 
-	pgdp = srmmu_pgd_offset(init_task.mm, virt_addr);
+	pgdp = srmmu_pgd_offset(&init_mm, virt_addr);
 	pmdp = pmd_offset(pgdp, virt_addr);
 	ptep = pte_offset(pmdp, virt_addr);
 
@@ -1476,7 +1476,7 @@ static inline void srmmu_allocate_ptable_skeleton(unsigned long start, unsigned 
 	pte_t *ptep;
 
 	while(start < end) {
-		pgdp = srmmu_pgd_offset(init_task.mm, start);
+		pgdp = srmmu_pgd_offset(&init_mm, start);
 		if(srmmu_pgd_none(*pgdp)) {
 			pmdp = sparc_init_alloc(&mempool, SRMMU_PMD_TABLE_SIZE);
 			srmmu_early_pgd_set(pgdp, pmdp);
@@ -1526,7 +1526,7 @@ __initfunc(void srmmu_inherit_prom_mappings(unsigned long start,unsigned long en
 				what = 2;
 		}
     
-		pgdp = srmmu_pgd_offset(init_task.mm, start);
+		pgdp = srmmu_pgd_offset(&init_mm, start);
 		if(what == 2) {
 			*pgdp = __pgd(prompte);
 			start += SRMMU_PGDIR_SIZE;
@@ -1626,7 +1626,7 @@ __initfunc(void srmmu_end_memory(unsigned long memory_size, unsigned long *end_m
 /* Create a third-level SRMMU 16MB page mapping. */
 __initfunc(static void do_large_mapping(unsigned long vaddr, unsigned long phys_base))
 {
-	pgd_t *pgdp = srmmu_pgd_offset(init_task.mm, vaddr);
+	pgd_t *pgdp = srmmu_pgd_offset(&init_mm, vaddr);
 	unsigned long big_pte;
 
 	MKTRACE(("dlm[v<%08lx>-->p<%08lx>]", vaddr, phys_base));
@@ -1840,7 +1840,7 @@ check_and_return:
 		}
 	}
 	MKTRACE(("success\n"));
-	init_task.mm->mmap->vm_start = page_offset = low_base;
+	init_mm.mmap->vm_start = page_offset = low_base;
 	stack_top = page_offset - PAGE_SIZE;
 	BTFIXUPSET_SETHI(page_offset, low_base);
 	BTFIXUPSET_SETHI(stack_top, page_offset - PAGE_SIZE);

@@ -156,7 +156,9 @@ int vsprintf(char *buf, const char *fmt, va_list args)
 	int precision;		/* min. # of digits for integers; max
 				   number of chars for from string */
 	int qualifier;		/* 'h', 'l', or 'L' for integer fields */
+	                        /* 'z' support added 23/7/1999 S.H.    */
 
+	
 	for (str=buf ; *fmt ; ++fmt) {
 		if (*fmt != '%') {
 			*str++ = *fmt;
@@ -206,7 +208,7 @@ int vsprintf(char *buf, const char *fmt, va_list args)
 
 		/* get the conversion qualifier */
 		qualifier = -1;
-		if (*fmt == 'h' || *fmt == 'l' || *fmt == 'L') {
+		if (*fmt == 'h' || *fmt == 'l' || *fmt == 'L' || *fmt =='z') {
 			qualifier = *fmt;
 			++fmt;
 		}
@@ -255,6 +257,9 @@ int vsprintf(char *buf, const char *fmt, va_list args)
 			if (qualifier == 'l') {
 				long * ip = va_arg(args, long *);
 				*ip = (str - buf);
+			} else if (qualifier == 'z') {
+				size_t * ip = va_arg(args, size_t *);
+				*ip = (str - buf);
 			} else {
 				int * ip = va_arg(args, int *);
 				*ip = (str - buf);
@@ -292,6 +297,8 @@ int vsprintf(char *buf, const char *fmt, va_list args)
 		}
 		if (qualifier == 'l')
 			num = va_arg(args, unsigned long);
+		else if (qualifier == 'z')
+			num = va_arg(args, size_t);
 		else if (qualifier == 'h') {
 			num = (unsigned short) va_arg(args, int);
 			if (flags & SIGN)

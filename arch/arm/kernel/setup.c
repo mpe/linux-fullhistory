@@ -297,10 +297,10 @@ setup_arch(char **cmdline_p, unsigned long * memory_start_p, unsigned long * mem
 
 	setup_processor();
 
-	init_task.mm->start_code = TASK_SIZE;
-	init_task.mm->end_code	 = TASK_SIZE + (unsigned long) &_etext;
-	init_task.mm->end_data	 = TASK_SIZE + (unsigned long) &_edata;
-	init_task.mm->brk	 = TASK_SIZE + (unsigned long) &_end;
+	init_mm.start_code = TASK_SIZE;
+	init_mm.end_code	 = TASK_SIZE + (unsigned long) &_etext;
+	init_mm.end_data	 = TASK_SIZE + (unsigned long) &_edata;
+	init_mm.brk	 = TASK_SIZE + (unsigned long) &_end;
 
 	/*
 	 * Add your machine dependencies here

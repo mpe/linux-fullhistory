@@ -66,7 +66,7 @@ define_bool CONFIG_BINFMT_ELF y
 define_bool CONFIG_KERNEL_ELF y
 tristate 'Kernel support for MISC binaries' CONFIG_BINFMT_MISC
 
-source drivers/misc/Config.in
+source drivers/parport/Config.in
 
 bool 'Support for VGA Console' CONFIG_VGA_CONSOLE
 bool 'Support for frame buffer devices' CONFIG_FB

@@ -227,7 +227,7 @@ void zero_paged(void)
 		/*
 		 * Make the page no cache so we don't blow our cache with 0's
 		 */
-		pte = find_pte(init_task.mm, pageptr);
+		pte = find_pte(&init_mm, pageptr);
 		if ( !pte )
 		{
 			printk("pte NULL in zero_paged()\n");
@@ -235,7 +235,7 @@ void zero_paged(void)
 		}
 		
 		pte_uncache(*pte);
-		flush_tlb_page(find_vma(init_task.mm,pageptr),pageptr);
+		flush_tlb_page(find_vma(&init_mm,pageptr),pageptr);
 		/*
 		 * Important here to not take time away from real processes.
 		 */
@@ -260,7 +260,7 @@ void zero_paged(void)
 		
 		/* turn cache on for this page */
 		pte_cache(*pte);
-		flush_tlb_page(find_vma(init_task.mm,pageptr),pageptr);
+		flush_tlb_page(find_vma(&init_mm,pageptr),pageptr);
 		/* atomically add this page to the list */
 		asm (	"101:lwarx  %0,0,%1\n"  /* reserve zero_cache */
 			"    stw    %0,0(%2)\n" /* update *pageptr */

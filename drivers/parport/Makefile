@@ -16,18 +16,17 @@ SUB_DIRS     :=
 MOD_SUB_DIRS := $(SUB_DIRS)
 ALL_SUB_DIRS := $(SUB_DIRS)
 
-L_TARGET := misc.a
+L_TARGET := parport.a
 MX_OBJS  :=
 LX_OBJS  := 
 MI_OBJS  :=
 MIX_OBJS :=
 
 ifeq ($(CONFIG_PARPORT),y)
-  L_OBJS += parport_share.o parport_ieee1284.o parport_ieee1284_ops.o \
-            parport_procfs.o
+  L_OBJS += share.o ieee1284.o ieee1284_ops.o procfs.o
 
   ifeq ($(CONFIG_PARPORT_1284),y)
-    L_OBJS += parport_daisy.o parport_probe.o
+    L_OBJS += daisy.o probe.o
   endif
 
   ifeq ($(CONFIG_PARPORT_PC),y)
@@ -65,17 +64,17 @@ ifeq ($(CONFIG_PARPORT),y)
       M_OBJS += parport_atari.o
     endif
   endif
-  LX_OBJS += parport_init.o
+  LX_OBJS += init.o
 else
   ifeq ($(CONFIG_PARPORT),m)
-    MI_OBJS += parport_share.o parport_ieee1284.o parport_ieee1284_ops.o
+    MI_OBJS += share.o ieee1284.o ieee1284_ops.o
     ifeq ($(CONFIG_PARPORT_1284),y)
-      MI_OBJS += parport_daisy.o parport_probe.o
+      MI_OBJS += daisy.o probe.o
     endif
     ifneq ($(CONFIG_PROC_FS),n) 
-      MI_OBJS += parport_procfs.o
+      MI_OBJS += procfs.o
     endif
-    MIX_OBJS += parport_init.o
+    MIX_OBJS += init.o
     M_OBJS += parport.o
   endif
   ifeq ($(CONFIG_PARPORT_PC),m)

@@ -531,10 +531,10 @@ __initfunc(void setup_arch(char **cmdline_p,
 #endif	
 
 	/* Due to stack alignment restrictions and assumptions... */
-	init_task.mm->mmap->vm_page_prot = PAGE_SHARED;
-	init_task.mm->mmap->vm_start = PAGE_OFFSET;
-	init_task.mm->mmap->vm_end = *memory_end_p;
-	init_task.mm->context = (unsigned long) NO_CONTEXT;
+	init_mm.mmap->vm_page_prot = PAGE_SHARED;
+	init_mm.mmap->vm_start = PAGE_OFFSET;
+	init_mm.mmap->vm_end = *memory_end_p;
+	init_mm.context = (unsigned long) NO_CONTEXT;
 	init_task.tss.kregs = &fake_swapper_regs;
 
 #ifdef CONFIG_IP_PNP

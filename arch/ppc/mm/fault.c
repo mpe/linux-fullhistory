@@ -82,7 +82,7 @@ void do_page_fault(struct pt_regs *regs, unsigned long address,
 			return;
 	}
 #endif
-	if (in_interrupt()) {
+	if (in_interrupt() || !mm) {
 		static int complained;
 		if (complained < 20) {
 			++complained;

@@ -205,7 +205,7 @@ asmlinkage void do_sparc_fault(struct pt_regs *regs, int text_fault, int write,
 	 * If we're in an interrupt or have no user
 	 * context, we must not take the fault..
 	 */
-        if (in_interrupt() || mm == &init_mm)
+        if (in_interrupt() || !mm)
                 goto do_kernel_fault;
 
 	down(&mm->mmap_sem);

@@ -104,15 +104,18 @@ static struct dentry * proc_follow_link(struct dentry *dentry,
 			struct vm_area_struct * vma;
 			if (!p->mm)
 				goto out_unlock;
+			down(&p->mm->mmap_sem);
 			vma = p->mm->mmap;
 			while (vma) {
 				if ((vma->vm_flags & VM_EXECUTABLE) && 
 				    vma->vm_file) {
 					result = vma->vm_file->f_dentry;
+					up(&p->mm->mmap_sem);
 					goto out_dget;
 				}
 				vma = vma->vm_next;
 			}
+			up(&p->mm->mmap_sem);
 			goto out_unlock;
 		}
 		default:

@@ -17,6 +17,10 @@
  *		       potential and subtle race discovered by Ulrich Schmid
  *		       in down_interruptible(). Since I started to play here I
  *		       also implemented the `trylock' semaphore operation.
+ *          1999-07-02 Artur Skawina <skawina@geocities.com>
+ *                     Optimized "0(ecx)" -> "(ecx)" (the assembler does not
+ *                     do this). Changed calling sequences from push/jmp to
+ *                     traditional call/ret.
  *
  * If you would like to see an analysis of this implementation, please
  * ftp to gcom.com and download the file
@@ -112,12 +116,12 @@ extern inline void down(struct semaphore * sem)
 #ifdef __SMP__
 		"lock ; "
 #endif
-		"decl 0(%0)\n\t"
+		"decl (%0)\n\t"     /* --sem->count */
 		"js 2f\n"
 		"1:\n"
 		".section .text.lock,\"ax\"\n"
-		"2:\tpushl $1b\n\t"
-		"jmp __down_failed\n"
+		"2:\tcall __down_failed\n\t"
+		"jmp 1b\n"
 		".previous"
 		:/* no outputs */
 		:"c" (sem)
@@ -137,13 +141,13 @@ extern inline int down_interruptible(struct semaphore * sem)
 #ifdef __SMP__
 		"lock ; "
 #endif
-		"decl 0(%1)\n\t"
+		"decl (%1)\n\t"     /* --sem->count */
 		"js 2f\n\t"
 		"xorl %0,%0\n"
 		"1:\n"
 		".section .text.lock,\"ax\"\n"
-		"2:\tpushl $1b\n\t"
-		"jmp __down_failed_interruptible\n"
+		"2:\tcall __down_failed_interruptible\n\t"
+		"jmp 1b\n"
 		".previous"
 		:"=a" (result)
 		:"c" (sem)
@@ -164,13 +168,13 @@ extern inline int down_trylock(struct semaphore * sem)
 #ifdef __SMP__
 		"lock ; "
 #endif
-		"decl 0(%1)\n\t"
+		"decl (%1)\n\t"     /* --sem->count */
 		"js 2f\n\t"
 		"xorl %0,%0\n"
 		"1:\n"
 		".section .text.lock,\"ax\"\n"
-		"2:\tpushl $1b\n\t"
-		"jmp __down_failed_trylock\n"
+		"2:\tcall __down_failed_trylock\n\t"
+		"jmp 1b\n"
 		".previous"
 		:"=a" (result)
 		:"c" (sem)
@@ -194,12 +198,12 @@ extern inline void up(struct semaphore * sem)
 #ifdef __SMP__
 		"lock ; "
 #endif
-		"incl 0(%0)\n\t"
+		"incl (%0)\n\t"     /* ++sem->count */
 		"jle 2f\n"
 		"1:\n"
 		".section .text.lock,\"ax\"\n"
-		"2:\tpushl $1b\n\t"
-		"jmp __up_wakeup\n"
+		"2:\tcall __up_wakeup\n\t"
+		"jmp 1b\n"
 		".previous"
 		:/* no outputs */
 		:"c" (sem)

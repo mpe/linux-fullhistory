@@ -444,11 +444,11 @@ unsigned long iopa(unsigned long addr)
 #endif /* CONFIG_APUS */
 #endif /* CONFIG_8xx */
 	/* Do we have a page table? */
-	if (init_task.mm->pgd == NULL)
+	if (init_mm.pgd == NULL)
 		return 0;
 
 	/* Use upper 10 bits of addr to index the first level map */
-	pd = (pmd_t *) (init_task.mm->pgd + (addr >> PGDIR_SHIFT));
+	pd = (pmd_t *) (init_mm.pgd + (addr >> PGDIR_SHIFT));
 	if (pmd_none(*pd))
 		return 0;
 

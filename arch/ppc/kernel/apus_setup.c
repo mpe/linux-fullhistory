@@ -345,7 +345,7 @@ void kernel_set_cachemode( unsigned long address, unsigned long size,
 	{
 		pte_t *pte;
 
-		pte = my_find_pte(init_task.mm, address);
+		pte = my_find_pte(&init_mm, address);
 		if ( !pte )
 		{
 			printk("pte NULL in kernel_set_cachemode()\n");
@@ -354,7 +354,7 @@ void kernel_set_cachemode( unsigned long address, unsigned long size,
 
                 pte_val (*pte) &= mask;
                 pte_val (*pte) |= flags;
-                flush_tlb_page(find_vma(init_task.mm,address),address);
+                flush_tlb_page(find_vma(&init_mm,address),address);
 
 		address += PAGE_SIZE;
 	}

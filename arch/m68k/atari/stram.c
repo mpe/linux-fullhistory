@@ -805,7 +805,7 @@ static void unswap_process(struct mm_struct * mm, unsigned long entry,
 	/*
 	 * Go through process' page directory.
 	 */
-	if (!mm || mm == &init_mm)
+	if (!mm)
 		return;
 	for (vma = mm->mmap; vma; vma = vma->vm_next) {
 		pgd_t * pgd = pgd_offset(mm, vma->vm_start);

@@ -313,10 +313,10 @@ __initfunc(void setup_arch(char **cmdline_p,
 	if (!MOUNT_ROOT_RDONLY)
 		root_mountflags &= ~MS_RDONLY;
 	memory_start = (unsigned long) &_end;
-	init_task.mm->start_code = PAGE_OFFSET;
-	init_task.mm->end_code = (unsigned long) &_etext;
-	init_task.mm->end_data = (unsigned long) &_edata;
-	init_task.mm->brk = (unsigned long) &_end;
+	init_mm.start_code = PAGE_OFFSET;
+	init_mm.end_code = (unsigned long) &_etext;
+	init_mm.end_data = (unsigned long) &_edata;
+	init_mm.brk = (unsigned long) &_end;
 
 	/* Save unparsed command line copy for /proc/cmdline */
 	memcpy(saved_command_line, COMMAND_LINE, COMMAND_LINE_SIZE);
@@ -354,7 +354,7 @@ __initfunc(void setup_arch(char **cmdline_p,
 	*to = '\0';
 	*cmdline_p = command_line;
 
-#define VMALLOC_RESERVE	(64 << 20)	/* 64MB for vmalloc */
+#define VMALLOC_RESERVE	(128 << 20)	/* 128MB for vmalloc and initrd */
 #define MAXMEM	((unsigned long)(-PAGE_OFFSET-VMALLOC_RESERVE))
 
 	if (memory_end > MAXMEM)

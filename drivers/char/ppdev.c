@@ -11,7 +11,7 @@
  * as published by the Free Software Foundation; either version
  * 2 of the License, or (at your option) any later version.
  *
- * A /dev/parportxy device node represents an arbitrary device ('y')
+ * A /dev/parportx device node represents an arbitrary device
  * on port 'x'.  The following operations are possible:
  *
  * open		do nothing, set up default IEEE 1284 protocol to be COMPAT

@@ -283,8 +283,8 @@ do_another_FPU_instruction:
 	  FPU_EIP = FPU_ORIG_EIP;	/* Point to current FPU instruction. */
 
 	  RE_ENTRANT_CHECK_OFF;
-	  current->tss.trap_no = 16;
-	  current->tss.error_code = 0;
+	  current->thread.trap_no = 16;
+	  current->thread.error_code = 0;
 	  send_sig(SIGFPE, current, 1);
 	  return;
 	}
@@ -662,8 +662,8 @@ static int valid_prefix(u_char *Byte, u_char **fpu_eip,
 void math_abort(struct info * info, unsigned int signal)
 {
 	FPU_EIP = FPU_ORIG_EIP;
-	current->tss.trap_no = 16;
-	current->tss.error_code = 0;
+	current->thread.trap_no = 16;
+	current->thread.error_code = 0;
 	send_sig(signal,current,1);
 	RE_ENTRANT_CHECK_OFF;
 	__asm__("movl %0,%%esp ; ret": :"g" (((long) info)-4));

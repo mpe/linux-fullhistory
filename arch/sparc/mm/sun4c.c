@@ -1560,7 +1560,7 @@ __initfunc(static unsigned long sun4c_init_lock_areas(unsigned long start_mem))
 	memset((void *) start_mem, 0, bitmap_size);
 	start_mem += bitmap_size;
 
-	sun4c_kstack_vma.vm_mm = init_task.mm;
+	sun4c_kstack_vma.vm_mm = &init_mm;
 	sun4c_kstack_vma.vm_start = sun4c_taskstack_start;
 	sun4c_kstack_vma.vm_end = sun4c_taskstack_end;
 	sun4c_kstack_vma.vm_page_prot = PAGE_SHARED;

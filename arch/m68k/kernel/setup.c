@@ -213,10 +213,10 @@ __initfunc(void setup_arch(char **cmdline_p, unsigned long * memory_start_p,
 		asm __volatile__ ("frestore %0" : : "m" (zero));
 	}
 
-	init_task.mm->start_code = PAGE_OFFSET;
-	init_task.mm->end_code = (unsigned long) &_etext;
-	init_task.mm->end_data = (unsigned long) &_edata;
-	init_task.mm->brk = (unsigned long) &_end;
+	init_mm.start_code = PAGE_OFFSET;
+	init_mm.end_code = (unsigned long) &_etext;
+	init_mm.end_data = (unsigned long) &_edata;
+	init_mm.brk = (unsigned long) &_end;
 
 	*cmdline_p = m68k_command_line;
 	memcpy(saved_command_line, *cmdline_p, CL_SIZE);

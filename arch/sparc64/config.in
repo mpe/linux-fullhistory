@@ -68,7 +68,7 @@ if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
 fi
 
 if [ "$CONFIG_PCI" = "y" ]; then
-  source drivers/misc/Config.in
+  source drivers/parport/Config.in
   dep_tristate '  Parallel printer support' CONFIG_PRINTER $CONFIG_PARPORT
   tristate 'SUNW,envctrl support' CONFIG_ENVCTRL
 fi

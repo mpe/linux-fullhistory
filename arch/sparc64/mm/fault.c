@@ -154,7 +154,7 @@ asmlinkage void do_sparc64_fault(struct pt_regs *regs, unsigned long address, in
 	 * If we're in an interrupt or have no user
 	 * context, we must not take the fault..
 	 */
-	if (in_interrupt() || mm == &init_mm)
+	if (in_interrupt() || !mm)
 		goto do_kernel_fault;
 
 	down(&mm->mmap_sem);

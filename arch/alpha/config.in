@@ -188,7 +188,7 @@ tristate 'Kernel support for a.out (ECOFF) binaries' CONFIG_BINFMT_AOUT
 tristate 'Kernel support for ELF binaries' CONFIG_BINFMT_ELF
 tristate 'Kernel support for MISC binaries' CONFIG_BINFMT_MISC
 tristate 'Kernel support for Linux/Intel ELF binaries' CONFIG_BINFMT_EM86
-source drivers/misc/Config.in
+source drivers/parpor/Config.in
 endmenu
 
 source drivers/pnp/Config.in

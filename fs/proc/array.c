@@ -743,10 +743,11 @@ static inline char * task_mem(struct task_struct *p, char *buffer)
 	struct mm_struct * mm = p->mm;
 
 	if (mm) {
-		struct vm_area_struct * vma = mm->mmap;
+		struct vm_area_struct * vma;
 		unsigned long data = 0, stack = 0;
 		unsigned long exec = 0, lib = 0;
 
+		down(&mm->mmap_sem);
 		for (vma = mm->mmap; vma; vma = vma->vm_next) {
 			unsigned long len = (vma->vm_end - vma->vm_start) >> 10;
 			if (!vma->vm_file) {
@@ -763,7 +764,7 @@ static inline char * task_mem(struct task_struct *p, char *buffer)
 					continue;
 				lib += len;
 			}
-		}	
+		}
 		buffer += sprintf(buffer,
 			"VmSize:\t%8lu kB\n"
 			"VmLck:\t%8lu kB\n"
@@ -777,6 +778,7 @@ static inline char * task_mem(struct task_struct *p, char *buffer)
 			mm->rss << (PAGE_SHIFT-10),
 			data - stack, stack,
 			exec - lib, lib);
+		up(&mm->mmap_sem);
 	}
 	return buffer;
 }

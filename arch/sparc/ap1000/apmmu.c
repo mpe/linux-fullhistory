@@ -295,7 +295,7 @@ static inline unsigned long apmmu_hwprobe(unsigned long vaddr)
 
 static inline void apmmu_uncache_page(unsigned long addr)
 {
-	pgd_t *pgdp = apmmu_pgd_offset(init_task.mm, addr);
+	pgd_t *pgdp = apmmu_pgd_offset(&init_mm, addr);
 	pmd_t *pmdp;
 	pte_t *ptep;
 
@@ -316,7 +316,7 @@ static inline void apmmu_uncache_page(unsigned long addr)
 
 static inline void apmmu_recache_page(unsigned long addr)
 {
-	pgd_t *pgdp = apmmu_pgd_offset(init_task.mm, addr);
+	pgd_t *pgdp = apmmu_pgd_offset(&init_mm, addr);
 	pmd_t *pmdp;
 	pte_t *ptep;
 
@@ -782,7 +782,7 @@ __initfunc(static inline void apmmu_allocate_ptable_skeleton(unsigned long start
 	pte_t *ptep;
 
 	while(start < end) {
-		pgdp = apmmu_pgd_offset(init_task.mm, start);
+		pgdp = apmmu_pgd_offset(&init_mm, start);
 		if(apmmu_pgd_none(*pgdp)) {
 			pmdp = sparc_init_alloc(&mempool, APMMU_PMD_TABLE_SIZE);
 			apmmu_early_pgd_set(pgdp, pmdp);
@@ -804,7 +804,7 @@ __initfunc(static void make_page(unsigned virt_page, unsigned phys_page, unsigne
 	pte_t *ptep;
 	unsigned start = virt_page<<12;
 
-	pgdp = apmmu_pgd_offset(init_task.mm, start);
+	pgdp = apmmu_pgd_offset(&init_mm, start);
 	if(apmmu_pgd_none(*pgdp)) {
 		pmdp = sparc_init_alloc(&mempool, APMMU_PMD_TABLE_SIZE);
 		apmmu_early_pgd_set(pgdp, pmdp);
@@ -824,7 +824,7 @@ __initfunc(static void make_large_page(unsigned virt_page, unsigned phys_page, u
 	pgd_t *pgdp;
 	unsigned start = virt_page<<12;
 
-	pgdp = apmmu_pgd_offset(init_task.mm, start);
+	pgdp = apmmu_pgd_offset(&init_mm, start);
 	*pgdp = __pgd((phys_page<<8) | prot);
 }
 
@@ -907,7 +907,7 @@ __initfunc(static void map_kernel(void))
 		make_large_page((KERNBASE+phys)>>12,
 				(phys>>12),
 				APMMU_CACHE|APMMU_PRIV|APMMU_VALID);
-	init_task.mm->mmap->vm_start = page_offset = KERNBASE;
+	init_mm.mmap->vm_start = page_offset = KERNBASE;
 	stack_top = page_offset - PAGE_SIZE;
 }
 

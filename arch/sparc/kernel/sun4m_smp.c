@@ -109,7 +109,7 @@ __initfunc(void smp4m_callin(void))
 			     : "memory" /* paranoid */);
 	current->mm->mmap->vm_page_prot = PAGE_SHARED;
 	current->mm->mmap->vm_start = PAGE_OFFSET;
-	current->mm->mmap->vm_end = init_task.mm->mmap->vm_end;
+	current->mm->mmap->vm_end = init_mm.mmap->vm_end;
 	
 	while(!smp_commenced)
 		barrier();

@@ -403,7 +403,7 @@ void __init smp_callin(void)
 #if 0
 	current->mm->mmap->vm_page_prot = PAGE_SHARED;
 	current->mm->mmap->vm_start = PAGE_OFFSET;
-	current->mm->mmap->vm_end = init_task.mm->mmap->vm_end;
+	current->mm->mmap->vm_end = init_mm.mmap->vm_end;
 #endif
 	cpu_callin_map[current->processor] = 1;
 	while(!smp_commenced)
