@@ -136,8 +136,7 @@ static int sigd_send(struct atm_vcc *vcc,struct sk_buff *skb)
 			vcc = *(struct atm_vcc **) &msg->listen_vcc;
 			DPRINTK("as_indicate!!!\n");
 			lock_sock(sk);
-			if (sk->sk_ack_backlog ==
-			    sk->sk_max_ack_backlog) {
+			if (sk_acceptq_is_full(sk)) {
 				sigd_enq(NULL,as_reject,vcc,NULL,NULL);
 				dev_kfree_skb(skb);
 				goto as_indicate_complete;

@@ -358,7 +358,7 @@ static int ax25_rcv(struct sk_buff *skb, struct net_device *dev,
 
 	if (sk != NULL) {
 		bh_lock_sock(sk);
-		if (sk->sk_ack_backlog == sk->sk_max_ack_backlog ||
+		if (sk_acceptq_is_full(sk) ||
 		    (make = ax25_make_new(sk, ax25_dev)) == NULL) {
 			if (mine)
 				ax25_return_dm(dev, &src, &dest, &dp);
