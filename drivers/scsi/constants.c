@@ -23,6 +23,8 @@
 #define CONST_XSENSE    0x08
 #define CONST_CMND      0x10
 #define CONST_MSG       0x20
+#define CONST_HOST	0x40
+#define CONST_DRIVER	0x80
 
 static const char unknown[] = "UNKNOWN";
 
@@ -30,7 +32,8 @@ static const char unknown[] = "UNKNOWN";
 #ifdef CONSTANTS
 #undef CONSTANTS
 #endif
-#define CONSTANTS (CONST_COMMAND | CONST_STATUS | CONST_SENSE | CONST_XSENSE | CONST_CMND | CONST_MSG)
+#define CONSTANTS (CONST_COMMAND | CONST_STATUS | CONST_SENSE | CONST_XSENSE \
+		   | CONST_CMND | CONST_MSG | CONST_HOST | CONST_DRIVER)
 #endif
 
 #if (CONSTANTS & CONST_COMMAND)
@@ -567,6 +570,64 @@ void print_Scsi_Cmnd (Scsi_Cmnd *cmd) {
     printk("        command = ");
     print_command (cmd->cmnd);
 }
+
+#if (CONSTANTS & CONST_HOST)
+static const char * hostbyte_table[]={
+"DID_OK", "DID_NO_CONNECT", "DID_BUS_BUSY", "DID_TIME_OUT", "DID_BAD_TARGET", 
+"DID_ABORT", "DID_PARITY", "DID_ERROR", "DID_RESET", "DID_BAD_INTR",NULL};
+
+void print_hostbyte(int scsiresult)
+{   static int maxcode=0;
+    int i;
+   
+    if(!maxcode) {
+	for(i=0;hostbyte_table[i];i++) ;
+	maxcode=i-1;
+    }
+    printk("Hostbyte=0x%02x",host_byte(scsiresult));
+    if(host_byte(scsiresult)>maxcode) {
+	printk("is invalid "); 
+	return;
+    }
+    printk("(%s) ",hostbyte_table[host_byte(scsiresult)]);
+}
+#else
+void print_hostbyte(int scsiresult)
+{   printk("Hostbyte=0x%02x ",hostbyte(scsiresult));
+}
+#endif
+
+#if (CONSTANTS & CONST_DRIVER)
+static const char * driverbyte_table[]={
+"DRIVER_OK", "DRIVER_BUSY", "DRIVER_SOFT",  "DRIVER_MEDIA", "DRIVER_ERROR", 
+"DRIVER_INVALID", "DRIVER_TIMEOUT", "DRIVER_HARD",NULL };
+
+static const char * driversuggest_table[]={"SUGGEST_OK",
+"SUGGEST_RETRY", "SUGGEST_ABORT", "SUGGEST_REMAP", "SUGGEST_DIE",
+unknown,unknown,unknown, "SUGGEST_SENSE",NULL};
+
+
+void print_driverbyte(int scsiresult)
+{   static int driver_max=0,suggest_max=0;
+    int i,dr=driver_byte(scsiresult)&DRIVER_MASK, 
+	su=(driver_byte(scsiresult)&SUGGEST_MASK)>>4;
+
+    if(!driver_max) {
+        for(i=0;driverbyte_table[i];i++) ;
+        driver_max=i;
+	for(i=0;driversuggest_table[i];i++) ;
+	suggest_max=i;
+    }
+    printk("Driverbyte=0x%02x",driver_byte(scsiresult));
+    printk("(%s,%s) ",
+	dr<driver_max  ? driverbyte_table[dr]:"invalid",
+	su<suggest_max ? driversuggest_table[su]:"invalid");
+}
+#else
+void print_driverbyte(int scsiresult)
+{   printk("Driverbyte=0x%02x ",driver_byte(scsiresult));
+}
+#endif
 
 /*
  * Overrides for Emacs so that we almost follow Linus's tabbing style.

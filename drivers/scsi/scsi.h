@@ -89,6 +89,7 @@ extern const unsigned char scsi_command_size[8];
 #define DRIVER_INVALID      0x05
 #define DRIVER_TIMEOUT      0x06
 #define DRIVER_HARD         0x07
+#define DRIVER_SENSE	    0x08
 
 #define SUGGEST_RETRY       0x10
 #define SUGGEST_ABORT       0x20 
@@ -96,8 +97,6 @@ extern const unsigned char scsi_command_size[8];
 #define SUGGEST_DIE         0x40
 #define SUGGEST_SENSE       0x80
 #define SUGGEST_IS_OK       0xff
-
-#define DRIVER_SENSE        0x08
 
 #define DRIVER_MASK         0x0f
 #define SUGGEST_MASK        0xf0
@@ -448,6 +447,8 @@ extern void proc_print_scsidevice(Scsi_Device *, char *, int *, int);
 
 extern void print_command(unsigned char *);
 extern void print_sense(const char *, Scsi_Cmnd *);
+extern void print_driverbyte(int scsiresult);
+extern void print_hostbyte(int scsiresult);
 
 extern void scsi_mark_host_bus_reset(struct Scsi_Host *Host);
 

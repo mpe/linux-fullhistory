@@ -152,6 +152,8 @@ struct device
   
   unsigned long		   pkt_queue;	/* Packets queued */
   struct device		  *slave;	/* Slave device */
+  struct net_alias_info		*alias_info;	/* main dev alias info */
+  struct net_alias		*my_alias;	/* alias devs */
   
 
   /* Pointer to the interface buffers. */

@@ -4,6 +4,7 @@
 mainmenu_option next_comment
 comment 'Networking options'
 bool 'Network firewalls' CONFIG_FIREWALL
+bool 'Network aliasing'  CONFIG_NET_ALIAS
 bool 'TCP/IP networking' CONFIG_INET
 if [ "$CONFIG_INET" = "y" ]; then
   source net/ipv4/Config.in

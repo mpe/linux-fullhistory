@@ -19,6 +19,10 @@ ifdef CONFIG_FIREWALL
 O_OBJS += firewall.o
 endif
 
+ifdef CONFIG_NET_ALIAS
+O_OBJS += net_alias.o
+endif
+
 endif
 
 include $(TOPDIR)/Rules.make

@@ -17,6 +17,9 @@ if [ "$CONFIG_IP_FORWARD" = "y" ]; then
     bool 'IP: multicast routing(in progress)' CONFIG_IP_MROUTE
   fi
 fi
+if [ "$CONFIG_NET_ALIAS" = "y" ]; then
+	tristate 'IP: aliasing support' CONFIG_IP_ALIAS
+fi
 comment '(it is safe to leave these untouched)'
 bool 'IP: PC/TCP compatibility mode' CONFIG_INET_PCTCP
 tristate 'IP: Reverse ARP' CONFIG_INET_RARP

@@ -36,6 +36,14 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_IP_ALIAS),y)
+IPV4_OBJS += ip_alias.o
+else
+  ifeq ($(CONFIG_IP_ALIAS),m)
+  M_OBJS += ip_alias.o
+  endif
+endif
+
 ifdef CONFIG_INET
 O_OBJS := $(IPV4_OBJS)
 endif

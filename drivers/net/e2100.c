@@ -299,7 +299,12 @@ e21_get_8390_hdr(struct device *dev, struct e8390_pkt_hdr *hdr, int ring_page)
 
 	mem_on(ioaddr, shared_mem, ring_page);
 
+#ifdef notdef
+	/* Officially this is what we are doing, but the readl() is faster */
 	memcpy_fromio(hdr, shared_mem, sizeof(struct e8390_pkt_hdr));
+#else
+	((unsigned int*)hdr)[0] = readl(shared_mem);
+#endif
 
 	/* Turn off memory access: we would need to reprogram the window anyway. */
 	mem_off(ioaddr);

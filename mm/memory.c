@@ -134,7 +134,7 @@ void clear_page_tables(struct task_struct * tsk)
 	}
 	for (i = 0 ; i < USER_PTRS_PER_PGD ; i++)
 		free_one_pgd(page_dir + i);
-	invalidate();
+	invalidate_mm(tsk->mm);
 }
 
 /*
@@ -153,12 +153,12 @@ void free_page_tables(struct task_struct * tsk)
 		printk("%s trying to free kernel page-directory: not good\n", tsk->comm);
 		return;
 	}
+	invalidate_mm(tsk->mm);
 	SET_PAGE_DIR(tsk, swapper_pg_dir);
 	tsk->mm->pgd = swapper_pg_dir;	/* or else... */
 	for (i = 0 ; i < PTRS_PER_PGD ; i++)
 		free_one_pgd(page_dir + i);
 	pgd_free(page_dir);
-	invalidate();
 }
 
 int new_page_tables(struct task_struct * tsk)
@@ -171,6 +171,7 @@ int new_page_tables(struct task_struct * tsk)
 	page_dir = pgd_offset(&init_mm, 0);
 	for (i = USER_PTRS_PER_PGD ; i < PTRS_PER_PGD ; i++)
 		new_pg[i] = page_dir[i];
+	invalidate_mm(tsk->mm);
 	SET_PAGE_DIR(tsk, new_pg);
 	tsk->mm->pgd = new_pg;
 	return 0;
@@ -285,7 +286,9 @@ int copy_page_range(struct mm_struct *dst, struct mm_struct *src,
 			break;
 		address = (address + PGDIR_SIZE) & PGDIR_MASK;
 	}
-	invalidate();
+	/* Note that the src ptes get c-o-w treatment, so they change too. */
+	invalidate_range(src, vma->vm_start, vma->vm_end);
+	invalidate_range(dst, vma->vm_start, vma->vm_end);
 	return error;
 }
 
@@ -369,7 +372,7 @@ int zap_page_range(struct mm_struct *mm, unsigned long address, unsigned long si
 		address = (address + PGDIR_SIZE) & PGDIR_MASK;
 		dir++;
 	}
-	invalidate();
+	invalidate_range(mm, end - size, end);
 	return 0;
 }
 
@@ -429,7 +432,7 @@ int zeromap_page_range(unsigned long address, unsigned long size, pgprot_t prot)
 		address = (address + PGDIR_SIZE) & PGDIR_MASK;
 		dir++;
 	}
-	invalidate();
+	invalidate_range(current->mm, end - size, end);
 	return error;
 }
 
@@ -499,7 +502,7 @@ int remap_page_range(unsigned long from, unsigned long offset, unsigned long siz
 		from = (from + PGDIR_SIZE) & PGDIR_MASK;
 		dir++;
 	}
-	invalidate();
+	invalidate_range(current->mm, from - size, from);
 	return error;
 }
 
@@ -514,7 +517,7 @@ static void put_page(pte_t * page_table, pte_t pte)
 		return;
 	}
 /* no need for invalidate */
-	*page_table = pte;
+	set_pte(page_table, pte);
 }
 
 /*
@@ -547,7 +550,7 @@ unsigned long put_dirty_page(struct task_struct * tsk, unsigned long page, unsig
 	if (!pte_none(*pte)) {
 		printk("put_dirty_page: page already exists\n");
 		pte_clear(pte);
-		invalidate();
+		invalidate_page(tsk->mm, address);
 	}
 	set_pte(pte, pte_mkwrite(pte_mkdirty(mk_pte(page, PAGE_COPY))));
 /* no need for invalidate */
@@ -610,17 +613,17 @@ void do_wp_page(struct task_struct * tsk, struct vm_area_struct * vma,
 			copy_page(old_page,new_page);
 			set_pte(page_table, pte_mkwrite(pte_mkdirty(mk_pte(new_page, vma->vm_page_prot))));
 			free_page(old_page);
-			invalidate();
+			invalidate_page(vma->vm_mm, address);
 			return;
 		}
 		set_pte(page_table, BAD_PAGE);
 		free_page(old_page);
 		oom(tsk);
-		invalidate();
+		invalidate_page(vma->vm_mm, address);
 		return;
 	}
 	set_pte(page_table, pte_mkdirty(pte_mkwrite(pte)));
-	invalidate();
+	invalidate_page(vma->vm_mm, address);
 	if (new_page)
 		free_page(new_page);
 	return;
@@ -842,7 +845,7 @@ static int try_to_share(unsigned long to_address, struct vm_area_struct * to_are
 		return 1;
 /* ok, need to mark it read-only, so invalidate any possible old TB entry */
 	set_pte(from_table, pte_wrprotect(from));
-	invalidate();
+	invalidate_page(from_area->vm_mm, from_address);
 	return 1;
 }
 

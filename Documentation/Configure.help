@@ -1,4 +1,4 @@
-# LAST EDIT: Fri Oct 27 23:03:01 1995 by Axel Boldt (boldt@math.ucsb.edu) 
+# LAST EDIT: Thu Nov 30 22:39:07 1995 by Axel Boldt (boldt@math.ucsb.edu) 
 #
 # This version of the Linux kernel configuration help texts
 # corresponds to the kernel versions 1.3.x. Be aware that these
@@ -9,7 +9,7 @@
 #
 # Information about what a kernel is, what it does, how to patch and
 # compile it and much more is contained in the Kernel-HOWTO, available
-# via anonymous ftp from sunsite.unc.edu in the directory
+# via ftp (user: anonymous) from sunsite.unc.edu in the directory
 # /pub/Linux/docs/HOWTO. 
 #
 # Format: description<nl>variable<nl>helptext<nl><nl>. The help texts
@@ -21,10 +21,7 @@
 # All this was shamelessly stolen from several different sources. Many
 # thanks to all the contributors.  Feel free to use these help texts
 # in your own kernel configuration tools. The texts are copyrighted
-# (c) 1995 by Axel Boldt and governed by our beloved little Copyleft
-# virus, the GNU Public License. This essentially means that you can
-# do with them whatever you want unless you try to restrict someone
-# else's right to do whatever they want.
+# (c) 1995 by Axel Boldt and governed by the GNU Public License.
 #
 # Send comments to Axel Boldt <boldt@math.ucsb.edu>.
 
@@ -82,26 +79,26 @@ CONFIG_ST506
 Use old (reliable) disk-only driver for primary i/f
 CONFIG_BLK_DEV_HD
   As you might have guessed, there are now two drivers for IDE
-  harddrives around: the old reliable one and the new improved
-  one. The new driver can also handle IDE/ATAPI CDROM drives (ATAPI =
-  AT Attachment Packet Interface is a new protocol currently used for
-  controlling CDROM and tape drives, similar to the SCSI
-  protocol. Some newer CDROM drives such as NEC 260 and MITSUMI
-  triple/quad speed drives use it, but most MITSUMI CDROM drives
-  don't). The old driver supports up to two hard drives, while the new
-  one can deal with any mix of up to eight hard drives and IDE/ATAPI
-  CDROMs, two per IDE interface. Using the old driver makes sense if
-  you have older MFM/RLL/ESDI drives, since it is smaller and these
-  drives don't benefit from the additional features of the new
-  driver. If you have more than one IDE interface (=controller), you
-  can use the old driver on the first and the new one on the others,
-  if you like.  In that case (or if you have just one interface and
-  don't want to use the new driver at all) you would say Y here,
-  thereby enlarging your kernel by about 4 kB. If you want to use the
-  new driver exclusively, say N and answer Y to the following
-  question(s). Useful information about how to use large (>504MB) IDE
-  harddrives is contained in drivers/block/README.ide. If unsure, say
-  N.
+  harddrives around: the old one and the new improved one. The old one
+  is not any longer more reliable than the new one. The new driver can
+  also handle IDE/ATAPI CDROM drives (ATAPI = AT Attachment Packet
+  Interface is a new protocol currently used for controlling CDROM and
+  tape drives, similar to the SCSI protocol. Some newer CDROM drives
+  such as NEC 260 and MITSUMI triple/quad speed drives use it, but
+  most MITSUMI CDROM drives don't). The old driver supports up to two
+  hard drives, while the new one can deal with any mix of up to eight
+  hard drives and IDE/ATAPI CDROMs, two per IDE interface. Using the
+  old driver makes sense if you have older MFM/RLL/ESDI drives, since
+  it is smaller and these drives don't benefit from the additional
+  features of the new driver. If you have more than one IDE interface
+  (=controller), you can use the old driver on the first and the new
+  one on the others, if you like.  In that case (or if you have just
+  one interface and don't want to use the new driver at all) you would
+  say Y here, thereby enlarging your kernel by about 4 kB. If you want
+  to use the new driver exclusively, say N and answer Y to the
+  following question(s). Useful information about how to use large
+  (>504MB) IDE harddrives is contained in drivers/block/README.ide. If
+  unsure, say N.
 
 Use new IDE driver for primary/secondary i/f 
 CONFIG_BLK_DEV_IDE 
@@ -173,11 +170,11 @@ CONFIG_NET
 
 Sun floppy controller support
 CONFIG_BLK_DEV_SUNFD
-  This is support for floppy drives on Sun workstations. But this
-  support does not exist at this time, so you might as well say N.
+  This is support for floppy drives on Sun Sparc workstations. Say Y
+  if you have a floppy drive, otherwise N. Easy.
 
 Alpha system type
-CONFIG_ALPHA_JENSEN
+CONFIG_ALPHA_AVANTI
   Find out what type of Alpha system you are running. If you can't
   find one of the given names, then try "Noname". For this question,
   it suffices to give a unique prefix of the option you want to
@@ -204,6 +201,19 @@ CONFIG_ALPHA_SRM
 ##### Don't know what this is about.
 #####
 
+Echo console messages on /dev/ttyS1
+CONFIG_SERIAL_ECHO
+  If you enable this option, all kernel messages that would usually go
+  to the console will also be sent to the device /dev/ttyS1 which
+  corresponds to a serial port; this could be useful if you attached
+  a terminal or printer to that port.
+
+TGA Console Support
+CONFIG_TGA_CONSOLE
+#####
+##### Has something to do with Alpha.
+#####
+
 PCI bios support
 CONFIG_PCI
   Find out whether you have a PCI motherboard. PCI is the name of a
@@ -216,12 +226,9 @@ CONFIG_PCI
   valuable information about which PCI hardware works under Linux and
   which doesn't.  If some of PCI devices don't work and you get a
   warning during boot time, please follow the instructions at the top of
-  include/linux/pci.h. Information regarding the buggy PCTech RZ 1000 IDE
-  harddrive controller which is used in some PCI systems is on the WWW
-  at http://www.powerquest.com/hardware.html. (To browse the WWW, you
-  need to have access to a machine on the Internet that has one of the
-  programs lynx, netscape or Mosaic). The new IDE driver detects this
-  controller and works around this bug, though.
+  include/linux/pci.h. The buggy PCTech RZ 1000 IDE
+  harddrive controller which is used in some PCI systems is detected
+  and correctly handled by this driver.
 
 PCI bridge optimization (experimental)
 CONFIG_PCI_OPTIMIZE
@@ -241,17 +248,19 @@ CONFIG_BLK_DEV_TRITON
 
 System V IPC
 CONFIG_SYSVIPC
-  InterProcessCommunication is a suite of library functions and system
+  Inter Process Communication is a suite of library functions and system
   calls which let processes (= running programs) synchronize and
   exchange information. It is generally considered to be a good thing,
-  and some programs won't run unless you enable this. You can find
-  documentation about IPC in ipc.info, which is contained in
-  sunsite.unc.edu:/pub/Linux/docs/man/info.tar.gz (available via ftp,
-  user: anonymous; extract with "tar xzvf filename"). These docs
-  are in the info format which is used to document GNU software and
-  can be read from within emacs ("Ctrl-h i") or with the program info
-  ("man info"). Enabling this option enlarges your kernel by about
-  7kB. Just say Y.
+  and some programs won't run unless you enable this. In particular,
+  if you want to run the DOS emulator dosemu under Linux (read the
+  DOSEMU-HOWTO, available via ftp (user: anonymous) in
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO), you'll need to say Y here. You
+  can find documentation about IPC in ipc.info, which is contained in
+  sunsite.unc.edu:/pub/Linux/docs/man/info.tar.gz (extract with "tar
+  xzvf filename"). These docs are in the info format which is used to
+  document GNU software and can be read from within emacs ("Ctrl-h i")
+  or with the program info ("man info"). Enabling this option enlarges
+  your kernel by about 7kB. Just say Y.
 
 Kernel support for ELF binaries
 CONFIG_BINFMT_ELF
@@ -291,27 +300,13 @@ CONFIG_KERNEL_ELF
   kernel in ELF by saying Y here and editing the variables CC
   and LD in the toplevel Makefile.
 
-Use -m486 flag for 486-specific optimizations
+Use 486-specific optimizations (does NOT work on i386)
 CONFIG_M486
-  If you have a 486 as opposed to a 386 or Pentium CPU, say Y here:
+  If you have a 486 or better, as opposed to a 386, say Y here:
   things will be slightly faster. However, it is not required: the
-  kernel will run on all CPUs with and without this option. If you are
-  not sure, say Y; apart from enlarging your kernel by about 6 kB, it
-  won't hurt.
-
-SMP Kernel (experimental - gcc2.5.8 only: see Documentation/SMP.txt)
-CONFIG_SMP
-  This is experimental support for multiprocessor Pentium machines
-  that agree with the Intel MP v1.1 specification. It can deal with up
-  to 32 processors. You can only compile it with gcc version 2.5.8
-  ("gcc -v"). For details, see Documentation/SMP.ez in the kernel
-  source (this document has been formatted using the ez andrew word
-  processor, available via ftp (user: anonymous) from
-  sunsite.unc.edu:/pub/Linux/X11/andrew/auis63L3-wp.tgz) and
-  http://www.linux.org.uk/SMP/title.html on the WWW (to browse the
-  WWW, you need to have access to a machine on the Internet that has
-  one of the programs lynx, netscape or Mosaic). Please back up all
-  your harddrives before using kernels compiled with this option.
+  kernel will run on all CPUs without this option. If you are
+  not sure, say N; This option will make the kernel use some
+  instructions that are only available on 486+ machines.
 
 Set version information on all symbols for modules
 CONFIG_MODVERSIONS
@@ -384,8 +379,11 @@ CONFIG_IP_MULTICAST
   tables, require that this option be compiled in. You also need
   multicasting if you intend to participate in the MBONE, a high
   bandwidth network on top of the internet which carries audio and
-  video broadcasts. Information about the multicast capabilities of
-  the various network cards is contained in
+  video broadcasts. More information about the MBONE is on the WWW at
+  http://www.best.com/~prince/techinfo/mbone.html (to browse the WWW,
+  you need to have access to a machine on the Internet that has one of
+  the programs lynx, netscape or Mosaic). Information about the
+  multicast capabilities of the various network cards is contained in
   drivers/net/README.multicast. For most people, it's safe to say N.
 
 IP: firewalling
@@ -399,13 +397,14 @@ CONFIG_IP_FIREWALL
   sunsite.unc.edu:/pub/Linux/docs/HOWTO. Also, you will have to use
   the ipfw tool from the net-tools package, available via ftp (user:
   anonymous) from
-  ftp.linux.org.uk:/pub/linux/Networking/PROGRAMS/NetTools. It allows
-  selective blocking of internet traffic based on type, origin and
-  destination.  You need to enable IP firewalling in order to be able
-  to use IP masquerading (i.e. IP traffic from one of the local
-  computers and destined for an outside host is changed by your box so
-  that it appears to come from you). Chances are that you don't want
-  this, so say N.
+  ftp.linux.org.uk:/pub/linux/Networking/PROGRAMS/NetTools, or
+  preferably ipfwadm from ftp.xos.nl:/pub/linux/ipfwadm/. These
+  programs allow selective blocking of internet traffic based on type,
+  origin and destination.  You need to enable IP firewalling in order
+  to be able to use IP masquerading (i.e. IP traffic from one of the
+  local computers and destined for an outside host is changed by your
+  box so that it appears to come from you). Chances are that you don't
+  want this, so say N.
 
 IP: accounting
 CONFIG_IP_ACCT
@@ -487,7 +486,7 @@ CONFIG_INET_RARP
   Since you asked: if there are diskless machines on your network that
   know their hardware ethernet address but don't know their IP
   addresses upon startup, they send out a Reverse
-  AddressResolutionProtocol request to find out their own IP
+  Address Resolution Protocol request to find out their own IP
   addresses. If you want your Linux box to be able to *answer* such
   requests, say Y here; you'd use the program rarp ("man rarp"). If
   you want to compile this as a module ( = code which can be inserted
@@ -503,13 +502,21 @@ CONFIG_INET_SNARL
   links, between machines of your IP network, say N.  If in doubt, say
   Y.
 
+Disable Path MTU Discovery (normally enabled)
+CONFIG_NO_PATH_MTU_DISCOVERY
+  MTU (maximal transfer unit) is the size of the chunks we send out
+  over the net. "Path MTU Discovery" means that, instead of always
+  sending very small chunks, we start out sending big ones and if we
+  then discover that some host along the way likes its chunks smaller,
+  we adjust to a smaller size. This is good, so say N.
+
 Disable NAGLE algorithm (normally enabled)
 CONFIG_TCP_NAGLE_OFF
   The NAGLE algorithm works by requiring an acknowledgment before
-  sending small IP frames (= packets).  This keeps tiny packets from
-  telnet and rlogin from congesting Wide Area Networks.  You may wish
-  to disable it if you run your X-server from across the network, or
-  if multiple byte key sequences are delayed. Most people strongly
+  sending small IP frames (= packets).  This keeps tiny telnet and
+  rlogin packets from congesting Wide Area Networks.  You may wish to
+  disable it if you run your X-server from across the network, or if
+  multiple byte key sequences are delayed. Most people strongly
   recommend to say N here, though, thereby leaving NAGLE enabled.
 
 IP: Drop source routed frames
@@ -542,17 +549,19 @@ CONFIG_SKB_LARGE
 
 The IPX protocol
 CONFIG_IPX
-  This is support for the Novell networking protocol. You need it if
-  you want to access Novell Netware servers from within the Linux DOS
-  emulator dosemu (read the DOSEMU-HOWTO, available via ftp (user:
-  anonymous) in sunsite.unc.edu:/pub/Linux/docs/HOWTO). It's very
-  limited and won't make your Linux box into a Novell server. It would
-  enlarge your kernel by about 5 kB. General information about how to
-  connect Linux, Windows machines and Macs is on the WWW at
-  http://eats.com/linux_mac_win.html (to browse the WWW, you need to
-  have access to a machine on the Internet that has one of the
-  programs lynx, netscape or Mosaic). Unless you have Novell computers
-  on your local network, say N.
+  This is support for the Novell networking protocol, IPX. You need it
+  if you want to access Novell Netware servers from within the Linux
+  DOS emulator dosemu (read the DOSEMU-HOWTO, available via ftp (user:
+  anonymous) in sunsite.unc.edu:/pub/Linux/docs/HOWTO). To
+  turn your Linux box into a fully featured Netware file server and
+  IPX router, say Y here and fetch lwared from
+  sunsite.unc.edu:/pub/Linux/system/Networking/daemons/. General
+  information about how to connect Linux, Windows machines and Macs is
+  on the WWW at http://eats.com/linux_mac_win.html (to browse the WWW,
+  you need to have access to a machine on the Internet that has one of
+  the programs lynx, netscape or Mosaic). This driver would enlarge
+  your kernel by about 5 kB. Unless you have Novell computers on your
+  local network, say N.
 
 Appletalk DDP
 CONFIG_ATALK
@@ -617,22 +626,22 @@ CONFIG_NETROM
 
 Kernel/User network link driver(ALPHA)
 CONFIG_NETLINK
-  This driver will allow for two-way communication between certain
-  parts of the kernel or modules and user processes; the user
-  processes will be able to read from and write to special files in
-  the /dev directory having major mode 18. So far, the kernel uses it
-  to publish some network related information if you enable "Routing
+  This driver allows for two-way communication between certain parts
+  of the kernel or modules and user processes; the user processes are
+  able to read from and write to character special files in the /dev
+  directory having major mode 18. So far, the kernel uses it to
+  publish some network related information if you enable "Routing
   messages", below. Say Y if you want to experiment with it; this is
   ALPHA code, which means that it need not be completely stable; it
   has nothing to do with the computer architecture of the same name.
 
 Routing messages
 CONFIG_RTNETLINK
-  If you enable this and create a special file with major number 18
-  and minor number 0 with mknod ("man mknod"), you can read some
-  network related information from that file. Everything you write to
-  that file will be discarded. Say Y, because otherwise the network
-  link driver is pointless.
+  If you enable this and create a character special file /dev/route
+  with major number 18 and minor number 0 using mknod ("man mknod"),
+  you can read some network related routing information from that
+  file. Everything you write to that file will be discarded. Say Y,
+  because otherwise the network link driver is pointless.
 
 SCSI support?
 CONFIG_SCSI
@@ -752,7 +761,9 @@ CONFIG_SCSI_BUSLOGIC
   the documentation in drivers/scsi/README.BusLogic for more information.
   BusLogic FlashPoint SCSI Host Adapters are not supported by this driver.
   If this driver does not work correctly without modification, please
-  consult the author.  This driver is not currently available as a module.
+  consult the author. This driver is not currently available as a module.
+  You might want to read the SCSI-HOWTO, available via ftp (user: 
+  anonymous) at sunsite.unc.edu:/pub/Linux/docs/HOWTO.
  
 EATA-DMA (DPT,NEC&ATT for ISA,EISA,PCI) support
 CONFIG_SCSI_EATA_DMA
@@ -948,7 +959,9 @@ CONFIG_DUMMY
   handy, the default is Y. It won't enlarge your kernel either. What a
   deal.  If you want to compile this as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want),
-  say M here and read Documentation/modules.txt.
+  say M here and read Documentation/modules.txt. If you want to use
+  more than one dummy device at a time, you need to compile it as a
+  module. 
   
 SLIP (serial line) support
 CONFIG_SLIP
@@ -1334,10 +1347,14 @@ CONFIG_EEXPRESS
   If you have a network (ethernet) card of this type, say Y and read
   the Ethernet-HOWTO, available via ftp (user: anonymous) in
   sunsite.unc.edu:/pub/Linux/docs/HOWTO. Note that the Intel
-  EtherExpress card is generally regarded to be a very poor choice and
-  the driver is not very reliable. If you want to compile this as a
-  module ( = code which can be inserted in and removed from the
-  running kernel whenever you want), say M here and read
+  EtherExpress16 card is generally regarded to be a very poor choice
+  and the driver is not very reliable. (Roger Wolff
+  (R.E.Wolff@et.tudelft.nl) is attempting to do something about
+  this. At the moment he could use 1) one or more etherexpress16 cards
+  to test locally 2) Alpha testers: people to try new versions of the
+  driver to see if things improve...)  If you want to compile this
+  driver as a module ( = code which can be inserted in and removed
+  from the running kernel whenever you want), say M here and read
   Documentation/modules.txt as well as
   Documentation/networking/net-modules.txt. If you plan to use more
   than one network card under linux, read the
@@ -1503,6 +1520,19 @@ CONFIG_DE4X5
   Multiple-Ethernet-mini-HOWTO, available from
   sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini.
 
+ICL EtherTeam 16i/32 support
+CONFIG_ETH16I
+  If you have a network (ethernet) card of this type, say Y and read
+  the Ethernet-HOWTO, available via ftp (user: anonymous) in
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO. This driver is also available
+  as a module ( = code which can be inserted in and removed from the
+  running kernel whenever you want). If you want to compile it as a
+  module, say M here and read Documentation/modules.txt as well as
+  Documentation/networking/net-modules.txt. If you plan to use more
+  than one network card under linux, read the
+  Multiple-Ethernet-mini-HOWTO, available from
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini.
+
 Zenith Z-Note support
 CONFIG_ZNET
   The Zenith Z-Note notebook computer has a built-in network
@@ -1517,9 +1547,6 @@ CONFIG_NET_POCKET
   port ("pocket adaptors"). If you have one of those, say Y and read
   the Ethernet-HOWTO, available via ftp (user: anonymous) from
   sunsite.unc.edu:/pub/Linux/docs/HOWTO. If you plan to use more than
-#####
-##### What should you say to CONFIG_PRINTER in order to use these?
-#####
   one network card under linux, read the Multiple-Ethernet-mini-HOWTO,
   available from sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini. If you
   want to plug a network card into the PCMCIA slot of your laptop
@@ -1530,9 +1557,11 @@ CONFIG_NET_POCKET
   will just cause this configure script to skip all the questions
   about this class of network devices.  If you say Y, you will be
   asked for your specific device in the following questions.  If you
-  plan to use more than one network card under linux, read the
+  plan to use more than one network device under linux, read the
   Multiple-Ethernet-mini-HOWTO, available from
-  sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini.
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini. If you intend to use an
+  adaptor attaching to the parallel port as well as a parallel
+  printer, you should compile both drivers as modules (if possible).
 
 AT-LAN-TEC/RealTek pocket adaptor support
 CONFIG_ATP
@@ -1542,7 +1571,9 @@ CONFIG_ATP
   sunsite.unc.edu:/pub/Linux/docs/HOWTO if you want to use this. If
   you plan to use more than one network card under linux, read the
   Multiple-Ethernet-mini-HOWTO, available from
-  sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini.
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini. If you intend to use
+  this driver, you should have said N to the Parallel Printer support,
+  because the two drivers don't like each other.
 
 D-Link DE600 pocket adaptor support
 CONFIG_DE600
@@ -1552,10 +1583,11 @@ CONFIG_DE600
   sunsite.unc.edu:/pub/Linux/docs/HOWTO if you want to use this.  If
   you want to compile this as a module ( = code which can be inserted
   in and removed from the running kernel whenever you want), say M
-  here and read Documentation/modules.txt. If you plan to use more
-  than one network card under linux, read the
-  Multiple-Ethernet-mini-HOWTO, available from
-  sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini.
+  here and read Documentation/modules.txt. If you intend to use this
+  pocket adaptor as well as a parallel printer, you should compile
+  both drivers as modules. If you plan to use more than one network
+  card under linux, read the Multiple-Ethernet-mini-HOWTO, available
+  from sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini.
 
 D-Link DE620 pocket adaptor support
 CONFIG_DE620
@@ -1565,10 +1597,11 @@ CONFIG_DE620
   sunsite.unc.edu:/pub/Linux/docs/HOWTO if you want to use this.  If
   you want to compile this as a module ( = code which can be inserted
   in and removed from the running kernel whenever you want), say M
-  here and read Documentation/modules.txt. If you plan to use more
-  than one network card under linux, read the
-  Multiple-Ethernet-mini-HOWTO, available from
-  sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini.
+  here and read Documentation/modules.txt. If you intend to use this
+  pocket adaptor as well as a parallel printer, you should compile
+  both drivers as modules. If you plan to use more than one network
+  card under linux, read the Multiple-Ethernet-mini-HOWTO, available
+  from sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini.
  
 Token Ring driver support
 CONFIG_TR
@@ -1673,17 +1706,17 @@ CONFIG_SBPCD2
 
 Aztech/Orchid/Okano/Wearnes (non IDE) CDROM support
 CONFIG_AZTCD
-  If you have a CDA268-01A, ORCHID CD-3110, OKANO/WEARNES CDD110 CDROM
-  drive, say Y here and also to "ISO9660 cdrom filesystem support"
-  below. This is NOT for CDROM drives with IDE interface, such as
-  Aztech CDA269-031SE. (If you have one of those, you should have said
-  Y to the new IDE driver above.) You want to read
-  Documentation/cdrom/aztcd and include/linux/aztcd.h in the kernel
-  source and the CDROM-HOWTO, available via ftp (user: anonymous) from
-  sunsite.unc.edu:/pub/Linux/docs/HOWTO. If unsure, say N.  If you
-  want to compile this as a module ( = code which can be inserted in
-  and removed from the running kernel whenever you want), say M here
-  and read Documentation/modules.txt.
+  If you have a CDA268-01A, ORCHID CD-3110, OKANO/WEARNES CDD110 or
+  Conrad TXC CDROM drive, say Y here and also to "ISO9660 cdrom
+  filesystem support" below. This is NOT for CDROM drives with IDE
+  interface, such as Aztech CDA269-031SE. (If you have one of those,
+  you should have said Y to the new IDE driver above.) You want to
+  read Documentation/cdrom/aztcd and include/linux/aztcd.h in the
+  kernel source and the CDROM-HOWTO, available via ftp (user:
+  anonymous) from sunsite.unc.edu:/pub/Linux/docs/HOWTO. If unsure,
+  say N.  If you want to compile this as a module ( = code which can
+  be inserted in and removed from the running kernel whenever you
+  want), say M here and read Documentation/modules.txt.
 
 Sony CDU535 CDROM driver support
 CONFIG_CDU535
@@ -1790,13 +1823,13 @@ CONFIG_EXT2_FS
 
 xiafs filesystem support
 CONFIG_XIA_FS
-  This filesystem (= method to organize files on a harddisk partition
-  or a floppy disk) is only used rarely these days. This option would
-  enlarge your kernel by about 28 kB. Say N.  If you want to compile
-  this as a module ( = code which can be inserted in and removed from
-  the running kernel whenever you want), say M here and read
-  Documentation/modules.txt. Note that the filesystem of your root
-  partition cannot be compiled as a module.
+  This is an old filesystem (= method to organize files on a harddisk
+  partition or a floppy disk) and not in use anymore. This option
+  would enlarge your kernel by about 28 kB. Let's all kill this beast:
+  say N.  If you want to compile this as a module ( = code which can
+  be inserted in and removed from the running kernel whenever you
+  want), say M here and read Documentation/modules.txt. Note that the
+  filesystem of your root partition cannot be compiled as a module.
 
 msdos fs support
 CONFIG_MSDOS_FS
@@ -1847,31 +1880,29 @@ CONFIG_PROC_FS
   them. Also, you cannot read the files with less or more: you need to
   use cat. The filesystem is explained in the Kernel Hacker's Guide,
   available via ftp (user: anonymous) in
-  sunsite.unc.edu:/pub/Linux/docs/LDP.  This option will enlarge your
-  kernel by about 18 kB. It's totally cool; for example, "cat
-  /proc/interrupts" gives information about what the different IRQs
-  are used for at the moment (there is a small number of Interrupt
-  ReQuest lines in your computer that are used by the periphery to
-  gain the CPU's attention - often a source of trouble if two devices
-  are mistakenly configured to use the same IRQ). Several programs
-  depend on this, so everyone should say Y here.
+  sunsite.unc.edu:/pub/Linux/docs/LDP and also on the proc(8) manpage
+  ("man 8 proc").  This option will enlarge your kernel by about 18
+  kB. It's totally cool; for example, "cat /proc/interrupts" gives
+  information about what the different IRQs are used for at the moment
+  (there is a small number of Interrupt ReQuest lines in your computer
+  that are used by the periphery to gain the CPU's attention - often a
+  source of trouble if two devices are mistakenly configured to use
+  the same IRQ). Several programs depend on this, so everyone should
+  say Y here.
   
 NFS filesystem support
 CONFIG_NFS_FS
-  If you are connected to a network (using SLIP, PPP or ethernet, not
-  term [term is a program which gives you almost full Internet
-  connectivity if you have a regular dial up shell account on some
-  Internet connected Unix computer. Read the Term-HOWTO, available via
-  ftp (user: anonymous) on sunsite.unc.edu:/pub/Linux/docs/HOWTO]) and
-  want to mount files residing on another UNIX computer (the NFS
-  server) using the NetworkFileSharing protocol, say Y. "Mounting
-  files" means that the client can access the files with usual UNIX
-  commands as if they were sitting on the client's harddisk. For this
-  to work, the server must run the programs nfsd and mountd (but does
-  not need to have NFS filesystem support enabled). NFS is explained
-  in the Network Administrator's Guide, available via ftp (user:
-  anonymous) in sunsite.unc.edu:/pub/Linux/docs/LDP, and on its man
-  page: "man nfs". There is also a NFS-FAQ in
+  If you are connected to some other (usually local) Unix computer
+  (using SLIP, PLIP, PPP or ethernet) and want to mount files
+  residing on that computer (the NFS server) using the Network
+  File Sharing protocol, say Y. "Mounting files" means that the client
+  can access the files with usual UNIX commands as if they were
+  sitting on the client's harddisk. For this to work, the server must
+  run the programs nfsd and mountd (but does not need to have NFS
+  filesystem support enabled). NFS is explained in the Network
+  Administrator's Guide, available via ftp (user: anonymous) in
+  sunsite.unc.edu:/pub/Linux/docs/LDP, and on its man page: "man
+  nfs". There is also a NFS-FAQ in
   sunsite.unc.edu:/pub/Linux/docs/faqs which presumes that you know
   the basics of NFS already. If you say Y here, you should have said Y
   to TCP/IP networking also. This option would enlarge your kernel by
@@ -1880,6 +1911,18 @@ CONFIG_NFS_FS
   whenever you want). If you want to compile it as a module, say M
   here and read Documentation/modules.txt. If you don't know what all
   this is about, say N.
+
+Root file system on NFS
+CONFIG_ROOT_NFS
+  If you want your Linux box to mount its whole root filesystem from
+  some other computer over the net via NFS (presumably because your
+  box doesn't have a harddisk), say Y here. You will then have to
+  specify the directory that should be remotely mounted with the
+  "root" kernel command line option. See the documentation of your
+  boot loader (lilo or loadlin) about how to pass options to the
+  kernel. The lilo procedure is also explained in the SCSI-HOWTO,
+  available via ftp (user: anonymous) in
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO.) Most people say N here.
 
 ISO9660 cdrom filesystem support
 CONFIG_ISO9660_FS
@@ -1909,25 +1952,27 @@ System V and Coherent filesystem support
 CONFIG_SYSV_FS
   SCO, Xenix and Coherent are commercial Unix systems for intel
   machines. Enabling this option would allow you to read and write to
-  and from their floppies and harddisk partitions. You need this if
-  you want to run iBCS2 (iBCS2 [Intel Binary Compatibility Standard]
-  is a kernel module which lets you run SCO, Xenix, Wyse, Unix Ware,
-  Dell Unix and System V programs under Linux and is often needed to
-  run commercial software, most prominently WordPerfect. It's in
-  tsx-11.mit.edu:/pub/linux/BETA). If you only intend to mount files
-  from some other Unix over the network using NFS, you don't need this
-  (but you need nfs filesystem support obviously). Note that this
-  option is generally not needed for floppies, since a good portable
-  way to transport files between unixes (and even to other operating
-  systems) is given by the tar program ("man tar").  Note also that
-  this option has nothing to do whatsoever with the option "System V
-  IPC". Read about the System V filesystem in
-  Documentation/filesystems/sysv-fs.txt. This option will enlarge your
-  kernel by about 34 kB. If you want to compile this as a module
-  ( = code which can be inserted in and removed from the running
-  kernel whenever you want), say M here and read
+  and from their floppies and harddisk partitions. If you have a
+  floppy or harddisk partition like that, it is probable that they
+  contain binaries from those other Unix systems; in order to run
+  these binaries, you will want to install iBCS2 (iBCS2 [Intel Binary
+  Compatibility Standard] is a kernel module which lets you run SCO,
+  Xenix, Wyse, Unix Ware, Dell Unix and System V programs under Linux
+  and is often needed to run commercial software, most prominently
+  WordPerfect. It's in tsx-11.mit.edu:/pub/linux/BETA). If you only
+  intend to mount files from some other Unix over the network using
+  NFS, you don't need this (but you need nfs filesystem support
+  obviously). Note that this option is generally not needed for
+  floppies, since a good portable way to transport files between
+  unixes (and even to other operating systems) is given by the tar
+  program ("man tar").  Note also that this option has nothing to do
+  whatsoever with the option "System V IPC". Read about the System V
+  filesystem in Documentation/filesystems/sysv-fs.txt. This option
+  will enlarge your kernel by about 34 kB. If you want to compile this
+  as a module ( = code which can be inserted in and removed from the
+  running kernel whenever you want), say M here and read
   Documentation/modules.txt. If you haven't heard about all of this
-  before, it's safe to say N.  
+  before, it's safe to say N.
 
 SMB filesystem (to mount WfW shares etc..) support
 CONFIG_SMB_FS
@@ -1947,14 +1992,17 @@ CONFIG_SMB_FS
   the programs lynx, netscape or Mosaic).  If you want to compile this
   as a module ( = code which can be inserted in and removed from the
   running kernel whenever you want), say M here and read
-  Documentation/modules.txt. Most people say N here.
+  Documentation/modules.txt. Most people say N, however.
 
 Cyclades async mux support
 CONFIG_CYCLADES
   This is a card which gives you many serial ports. You would need
   something like this to connect more than two modems to your linux
-  box, for instance in order to become a BBS. If you haven't heard
-  about it, it's safe to say N.
+  box, for instance in order to become a BBS. If you want to compile
+  this as a module ( = code which can be inserted in and removed from
+  the running kernel whenever you want), say M here and read
+  Documentation/modules.txt. If you haven't heard about it, it's safe
+  to say N.
 
 Stallion multiport serial support 
 CONFIG_STALDRV
@@ -1989,9 +2037,10 @@ CONFIG_PRINTER
   running kernel whenever you want), say M here and read
   Documentation/modules.txt. If you intend to use PLIP (Parallel Line
   Internet Protocol is mainly used to create a mini network by
-  connecting the parallel ports of two local machines) and a parallel
-  printer, you should compile both as modules because the drivers
-  don't like each other.
+  connecting the parallel ports of two local machines) or a ethernet
+  network pocket adaptor attaching to the parallel port and a parallel
+  printer as well, you should compile both drivers as modules because
+  the drivers don't like each other.
 
 Logitech busmouse support
 CONFIG_BUSMOUSE
@@ -2163,12 +2212,12 @@ CONFIG_PROFILE_SHIFT
 # LocalWords:  cdrom harddisk diskless netboot nfs xzvf ATAPI MB harddrives ide
 # LocalWords:  HD harddisks CDROMs IDECD NEC MITSUMI filesystem XT XD PCI bios
 # LocalWords:  ISA EISA Microchannel VESA BIOSes bussystem IPC SYSVIPC ipc Ctrl
-# LocalWords:  InterProcessCommunication BINFMT Linkable http ac uk jo html GCC
+# LocalWords:  BINFMT Linkable http ac uk jo html GCC Sparc AVANTI CABRIOLET EB
 # LocalWords:  netscape gcc LD CC toplevel MODVERSIONS insmod rmmod modprobe IP
 # LocalWords:  genksyms INET loopback gatewaying ethernet internet PPP ARP Arp
 # LocalWords:  howto multicasting MULTICAST MBONE firewalling ipfw ACCT resp ip
 # LocalWords:  proc acct IPIP encapsulator decapsulator klogd PCTCP RARP EXT PS
-# LocalWords:  telneting AddressResolutionProtocol subnetted NAGLE rlogin NOSR
+# LocalWords:  telneting subnetted NAGLE rlogin NOSR ttyS TGA techinfo mbone nl
 # LocalWords:  Mb SKB IPX Novell Netware dosemu Appletalk DDP ATALK tapedrive
 # LocalWords:  SD CHR scsi thingy SG CD LUNs LUN jukebox Adaptec BusLogic EATA
 # LocalWords:  buslogic DMA DPT ATT eata dma PIO UltraStor fdomain umsdos ext
@@ -2196,5 +2245,7 @@ CONFIG_PROFILE_SHIFT
 # LocalWords:  Multisession STALDRV EasyIO EC EasyConnection ISTALLION ONboard
 # LocalWords:  Brumby pci TNC cis ohio faq usenet NETLINK dev hydra ca Tyne mem
 # LocalWords:  carleton Deskstation DECstation SUNFD JENSEN Noname XXXM SLiRP
-# LocalWords:  pppd Zilog ZS soundcards SRM bootloader SMP smp ez mainmenu rarp
-# LocalWords:  RTNETLINK mknod
+# LocalWords:  pppd Zilog ZS soundcards SRM bootloader ez mainmenu rarp ipfwadm
+# LocalWords:  RTNETLINK mknod xos MTU lwared Macs mac netatalk macs cs Wolff
+# LocalWords:  dartmouth flowerpt MultiMaster FlashPoint tudelft etherexpress
+# LocalWords:  ICL EtherTeam ETH IDESCSI TXC

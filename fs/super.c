@@ -91,13 +91,13 @@ struct vfsmount *add_vfsmnt(kdev_t dev, const char *dev_name, const char *dir_na
 	lptr->mnt_sem.count = 1;
 	if (dev_name && !getname(dev_name, &tmp)) {
 		if ((lptr->mnt_devname =
-		    (char *) kmalloc(strlen(tmp), GFP_KERNEL)) != (char *)NULL)
+		    (char *) kmalloc(strlen(tmp)+1, GFP_KERNEL)) != (char *)NULL)
 			strcpy(lptr->mnt_devname, tmp);
 		putname(tmp);
 	}
 	if (dir_name && !getname(dir_name, &tmp)) {
 		if ((lptr->mnt_dirname =
-		    (char *) kmalloc(strlen(tmp), GFP_KERNEL)) != (char *)NULL)
+		    (char *) kmalloc(strlen(tmp)+1, GFP_KERNEL)) != (char *)NULL)
 			strcpy(lptr->mnt_dirname, tmp);
 		putname(tmp);
 	}

@@ -48,5 +48,7 @@ struct vt_consize {
 	ushort v_ccol;		/* number of pixel columns per character */
 };
 #define VT_RESIZEX      0x560A  /* set kernel's idea of screensize + more */
+#define VT_LOCKSWITCH   0x560B  /* disallow vt switching */
+#define VT_UNLOCKSWITCH 0x560C  /* allow vt switching */
 
 #endif /* _LINUX_VT_H */

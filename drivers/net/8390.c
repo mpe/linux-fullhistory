@@ -32,8 +32,6 @@ static const char *version =
   Much of this code should have been cleaned up, but every attempt 
   has broken some clone part.
   
-  Doesn't currently work on all shared memory cards.
-  
   Sources:
   The National Semiconductor LAN Databook, and the 3Com 3c503 databook.
   */
@@ -512,8 +510,9 @@ static void ei_receive(struct device *dev)
 	if (rx_pkt_count > high_water_mark)
 		high_water_mark = rx_pkt_count;
 
-    /* Bug alert!  Reset ENISR_OVER to avoid spurious overruns! */
-    outb_p(ENISR_RX+ENISR_RX_ERR+ENISR_OVER, e8390_base+EN0_ISR);
+    /* We used to also ack ENISR_OVER here, but that would sometimes mask
+    a real overrun, leaving the 8390 in a stopped state with rec'vr off. */
+    outb_p(ENISR_RX+ENISR_RX_ERR, e8390_base+EN0_ISR);
     return;
 }
 
@@ -550,7 +549,7 @@ static void ei_rx_overrun(struct device *dev)
     /* Remove packets right away. */
     ei_receive(dev);
     
-    outb_p(0xff, e8390_base+EN0_ISR);
+    outb_p(ENISR_OVER, e8390_base+EN0_ISR);
     /* Generic 8390 insns to start up again, same as in open_8390(). */
     outb_p(E8390_NODMA + E8390_PAGE0 + E8390_START, e8390_base + E8390_CMD);
     outb_p(E8390_TXCONFIG, e8390_base + EN0_TXCR); /* xmit on. */

@@ -445,7 +445,7 @@ static int shm_map (struct vm_area_struct *shmd)
 			return -ENOMEM;
 		set_pte(page_table, __pte(shm_sgn));
 	}
-	invalidate();
+	invalidate_range(shmd->vm_mm, shmd->vm_start, shmd->vm_end);
 	return 0;
 }
 
@@ -680,7 +680,7 @@ int shm_swap (int prio, unsigned long limit)
 	struct vm_area_struct *shmd;
 	unsigned long swap_nr;
 	unsigned long id, idx;
-	int loop = 0, invalid = 0;
+	int loop = 0;
 	int counter;
 	
 	counter = shm_rss >> prio;
@@ -716,8 +716,6 @@ int shm_swap (int prio, unsigned long limit)
 
 	if (--counter < 0) { /* failed */
 		failed:
-		if (invalid)
-			invalidate();
 		swap_free (swap_nr);
 		return 0;
 	}
@@ -766,7 +764,7 @@ int shm_swap (int prio, unsigned long limit)
 		mem_map[MAP_NR(pte_page(pte))].count--;
 		if (shmd->vm_mm->rss > 0)
 			shmd->vm_mm->rss--;
-		invalid++;
+		invalidate_range(shmd->vm_mm, shmd->vm_start, shmd->vm_end);
 	    /* continue looping through circular list */
 	    } while (0);
 	    if ((shmd = shmd->vm_next_share) == shp->attaches)
@@ -776,8 +774,6 @@ int shm_swap (int prio, unsigned long limit)
 	if (mem_map[MAP_NR(pte_page(page))].count != 1)
 		goto check_table;
 	shp->shm_pages[idx] = swap_nr;
-	if (invalid)
-		invalidate();
 	write_swap_page (swap_nr, (char *) pte_page(page));
 	free_page(pte_page(page));
 	swap_successes++;

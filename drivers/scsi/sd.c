@@ -1304,12 +1304,14 @@ static void sd_finish()
 	if (!rscsi_disks[i].capacity && 
 	    rscsi_disks[i].device)
 	{
-	    i = sd_init_onedisk(i);
 	    if (MODULE_FLAG
 		&& !rscsi_disks[i].has_part_table) {
 		sd_sizes[i << 4] = rscsi_disks[i].capacity;
+		/* revalidate does sd_init_onedisk via MAYBE_REINIT*/
 		revalidate_scsidisk(MKDEV(MAJOR_NR, i << 4), 0);
 	    }
+	    else
+	    	i=sd_init_onedisk(i);
 	    rscsi_disks[i].has_part_table = 1;
 	}
     

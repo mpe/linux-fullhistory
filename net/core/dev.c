@@ -70,6 +70,9 @@
 #include <net/arp.h>
 #include <linux/proc_fs.h>
 #include <linux/stat.h>
+#ifdef CONFIG_NET_ALIAS
+#include <linux/net_alias.h>
+#endif
 
 /*
  *	The list of packet types we will receive (as opposed to discard)
@@ -356,6 +359,19 @@ void dev_queue_xmit(struct sk_buff *skb, struct device *dev, int pri)
 		return;
 	}
 
+	/*
+	 *
+	 * 	If dev is an alias, switch to its main device.
+	 *	"arp" resolution has been made with alias device, so
+	 *	arp entries refer to alias, not main.
+	 *
+	 */
+
+#ifdef CONFIG_NET_ALIAS
+	if (net_alias_is(dev))
+	  	skb->dev = dev = net_alias_main_dev(dev);
+#endif
+
 	save_flags(flags);
 	cli();	
 	if (!where)	 	/* Always keep order. It helps other hosts
@@ -561,7 +577,7 @@ void dev_transmit(void)
 {
 	struct device *dev;
 
-	for (dev = dev_base; dev != NULL; dev = dev->next) 
+	for (dev = dev_base; dev != NULL; dev = dev->next)
 	{
 		if (dev->flags != 0 && !dev->tbusy) {
 			/*
@@ -753,6 +769,13 @@ void dev_tint(struct device *dev)
 	struct sk_buff *skb;
 	unsigned long flags;
 	
+	/*
+	 * aliases do not trasmit (by now :)
+	 */
+
+#ifdef CONFIG_NET_ALIAS
+	if (net_alias_is(dev)) return;
+#endif
 	save_flags(flags);	
 	/*
 	 *	Work the queues in priority order
@@ -984,9 +1007,20 @@ static int dev_ifsioc(void *arg, unsigned int getset)
 	 *	See which interface the caller is talking about. 
 	 */
 	 
+	/*
+	 *
+	 *	net_alias_dev_get(): dev_get() with added alias naming magic.
+	 *	only allow alias creation/deletion if (getset==SIOCSIFADDR)
+	 *
+	 */
+
+#ifdef CONFIG_NET_ALIAS
+	if ((dev = net_alias_dev_get(ifr.ifr_name, getset == SIOCSIFADDR, &err, NULL, NULL)) == NULL)
+		return(err);
+#else
 	if ((dev = dev_get(ifr.ifr_name)) == NULL) 
 		return(-ENODEV);
-
+#endif
 	switch(getset) 
 	{
 		case SIOCGIFFLAGS:	/* Get interface flags */
@@ -1079,6 +1113,16 @@ static int dev_ifsioc(void *arg, unsigned int getset)
 			}
 			else
 			{
+
+				/*
+				 *	if dev is an alias, must rehash to update
+				 *	address change
+				 */
+
+#ifdef CONFIG_NET_ALIAS
+			  	if (net_alias_is(dev))
+			    	net_alias_rehash(dev->my_alias,&ifr.ifr_addr);
+#endif
 				dev->pa_addr = (*(struct sockaddr_in *)
 					 &ifr.ifr_addr).sin_addr.s_addr;
 				dev->family = ifr.ifr_addr.sa_family;
@@ -1381,6 +1425,18 @@ int net_dev_init(void)
 		0, &proc_net_inode_operations,
 		dev_get_info
 	});
+
+	/*	
+	 *	Initialise net_alias engine 
+	 *
+	 *		- register net_alias device notifier
+	 *		- register proc entries:	/proc/net/alias_types
+	 *									/proc/net/aliases
+	 */
+
+#ifdef CONFIG_NET_ALIAS
+	net_alias_init();
+#endif
 
 	bh_base[NET_BH].routine = net_bh;
 	enable_bh(NET_BH);

@@ -19,7 +19,6 @@ M_OBJS   :=
 L_OBJS   := tty_io.o n_tty.o console.o keyboard.o serial.o \
 	tty_ioctl.o pty.o vt.o mem.o vc_screen.o random.o \
 	defkeymap.o consolemap.o selection.o
-SYMTAB_OBJS :=
 
 ifeq ($(CONFIG_CYCLADES),y)
 L_OBJS += cyclades.o
@@ -98,8 +97,7 @@ L_OBJS += tpqic02.o
 endif
 
 ifdef CONFIG_APM
-L_OBJS += apm_bios.o
-SYMTAB_OBJS += apm_bios.o
+LX_OBJS += apm_bios.o
 endif
 
 ifdef M

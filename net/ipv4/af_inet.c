@@ -88,6 +88,9 @@
 #include <net/raw.h>
 #include <net/icmp.h>
 #include <linux/ip_fw.h>
+#ifdef CONFIG_IP_ALIAS
+#include <net/ip_alias.h>
+#endif
 
 #define min(a,b)	((a)<(b)?(a):(b))
 
@@ -1530,6 +1533,13 @@ void inet_proto_init(struct net_proto *pro)
 	ip_mr_init();
 #endif
 
+	/*
+	 *  Initialise AF_INET alias type (register net_alias_type)
+	 */
+
+#if defined(CONFIG_IP_ALIAS)
+	ip_alias_init();
+#endif
 	/*
 	 *	Create all the /proc entries.
 	 */

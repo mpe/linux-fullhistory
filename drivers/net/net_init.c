@@ -34,6 +34,9 @@
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
 #include <linux/trdevice.h>
+#ifdef CONFIG_NET_ALIAS
+#include <linux/net_alias.h>
+#endif
 
 /* The network devices currently exist only in the socket namespace, so these
    entries are unused.  The only ones that make sense are
@@ -293,6 +296,28 @@ void unregister_netdev(struct device *dev)
 	/* else */
 	if (dev->start)
 		printk("ERROR '%s' busy and not MOD_IN_USE.\n", dev->name);
+
+	/*
+	 * 	must jump over main_device+aliases
+	 * 	avoid alias devices unregistration so that only
+	 * 	net_alias module manages them
+	 */
+#ifdef CONFIG_NET_ALIAS		
+	if (dev_base == dev)
+	  dev_base = net_alias_nextdev(dev);
+	else
+	{
+	    while(d && (net_alias_nextdev(d) != dev)) /* skip aliases */
+		    d = net_alias_nextdev(d);
+	  
+	    if (d && (net_alias_nextdev(d) == dev))
+		{
+    /*
+	 * 	critical: bypass by consider devices as blocks (maindev+aliases)
+	 */
+		    net_alias_nextdev_set(d, net_alias_nextdev(dev)); 
+		}
+#else
 	if (dev_base == dev)
 		dev_base = dev->next;
 	else 
@@ -304,6 +329,7 @@ void unregister_netdev(struct device *dev)
 		{
 			d->next = dev->next;
 		}
+#endif
 		else 
 		{
 			printk("unregister_netdev: '%s' not found\n", dev->name);

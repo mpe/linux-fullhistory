@@ -20,6 +20,8 @@
 # 180995 Bernhard Kaindl (bkaindl@ping.at) - added dummy functions for
 # use with a config.in modified for make menuconfig.
 #
+# 301195 (boldt@math.ucsb.edu) - added help text support
+#
 
 #
 # Make sure we're really running bash.
@@ -43,6 +45,37 @@ function mainmenu_option () {
 function mainmenu_name () {
 	:
 }
+
+#
+# help prints the corresponding help text from Configure.help to stdout
+#
+#       help variable
+#
+function help () {
+  if [ -f Documentation/Configure.help ]
+  then
+     #first escape regexp special characters in the argument:
+     var=$(echo "$1"|sed 's/[][\/.^$*]/\\&/g')
+     #now pick out the right help text:
+     text=$(sed -n "/^$var[ 	]*\$/,\${
+                        /^$var[ 	]*\$/b
+                        /^#.*/b;/^[ 	]*\$/q
+                        p
+                    }" Documentation/Configure.help)
+     if [ -z "$text" ]
+     then
+          echo; echo "  Sorry, no help available for this option yet.";echo
+     else
+          (echo; echo "$text"; echo) | more
+     fi
+  else
+     echo;
+     echo "  Can't access the file Documentation/Configure.help which"
+     echo "  should contain the help texts."
+     echo
+  fi
+}
+
 
 #
 # readln reads a line into $ans.
@@ -78,17 +111,17 @@ function comment () {
 #
 function define_bool () {
         case "$2" in
-         "y" | "Y")
+         "y")
 		echo "$1=y" >>$CONFIG
 		echo "#define $1 1" >>$CONFIG_H
 		;;
 
-         "m" | "M")
+         "m")
 		echo "$1=m" >>$CONFIG
 		echo "#undef  $1" >>$CONFIG_H
 		;;
 
-         "n" | "N")
+         "n")
 		echo "# $1 is not set" >>$CONFIG
 		echo "#undef  $1" >>$CONFIG_H
                 ;;
@@ -102,18 +135,24 @@ function define_bool () {
 #	bool question define
 #
 function bool () {
-	ans=""
 	def=$(eval echo "\${$2:-'n'}")
         case "$def" in
-         "y") defprompt="Y/n"
+         "y") defprompt="Y/n/?"
               ;;
-         "n") defprompt="N/y"
+         "n") defprompt="N/y/?"
               ;;
         esac
-	while [ "$ans" != "y" -a "$ans" != "n" ]; do
-		readln "$1 ($2) [$defprompt] " "$def" 
-	done
-	define_bool "$2" "$ans"
+        while :; do
+          readln "$1 ($2) [$defprompt] " "$def"
+          case "$ans" in
+            [yY] | [yY]es ) define_bool "$2" "y"
+                            break;;
+            [nN] | [nN]o )  define_bool "$2" "n"
+                            break;;
+            * )             help "$2"
+                            ;;
+          esac
+        done
 }
 
 #
@@ -122,20 +161,28 @@ function bool () {
 #	tristate question define
 #
 function tristate () {
-	ans=""
 	def=$(eval echo "\${$2:-'n'}")
         case "$def" in
-         "y") defprompt="Y/m/n"
+         "y") defprompt="Y/m/n/?"
               ;;
-         "m") defprompt="M/n/y"
+         "m") defprompt="M/n/y/?"
               ;;
-         "n") defprompt="N/y/m"
+         "n") defprompt="N/y/m/?"
               ;;
         esac
-	while [ "$ans" != "y" -a "$ans" != "n" -a "$ans" != "m" ]; do
-		readln "$1 ($2) [$defprompt] " "$def"
-	done
-	define_bool "$2" "$ans"
+        while :; do
+          readln "$1 ($2) [$defprompt] " "$def"
+          case "$ans" in
+            [yY] | [yY]es ) define_bool "$2" "y"
+                            break ;;
+            [nN] | [nN]o )  define_bool "$2" "n"
+                            break ;;
+            [mM] )          define_bool "$2" "m"
+                            break ;;
+	    * )             help "$2"
+                            ;;
+          esac
+        done
 }
 
 #
@@ -153,18 +200,32 @@ function dep_tristate () {
 	if [ "$3" != "m" ]; then
 		tristate "$1" "$2"
 	else
-		ans=""
 	        case "$def" in
-        	 "y" | "m") defprompt="M/n"
+        	 "y" | "m") defprompt="M/n/?"
 		      def="m"
         	      ;;
-        	 "n") defprompt="N/m"
+        	 "n") defprompt="N/m/?"
         	      ;;
 	        esac
-		while [ "$ans" != "n" -a "$ans" != "m" ]; do
-			readln "$1 ($2) [$defprompt] " "$def"
-		done
-		define_bool "$2" "$ans"
+                while :; do
+                  readln "$1 ($2) [$defprompt] " "$def"
+                  case "$ans" in
+                      [nN] | [nN]o )  define_bool "$2" "n"
+                                      break ;;
+                      [mM] )          define_bool "$2" "m"
+                                      break ;;
+                      [yY] | [yY]es ) echo 
+   echo "  This answer is not allowed, because it is not consistent with"
+   echo "  your other choices."
+   echo "  This driver depends on another one which you chose to compile"
+   echo "  as a module. This means that you can either compile this one"
+   echo "  as a module as well (with M) or leave it out altogether (N)."
+                                      echo
+                                      ;;
+                      * )             help "$2"
+                                      ;;
+                  esac
+                done
 	fi
 }
 
@@ -185,13 +246,17 @@ function define_int () {
 #	int question define default
 #
 function int () {
-	# Slimier hack to get bash to rescan a line.
-	ans="x"
 	def=$(eval echo "\${$2:-$3}")
-	while [ $[$ans+0] != "$ans" ]; do
-		readln "$1 ($2) [$def] " "$def"
-	done
-	define_int "$2" "$ans"
+        while :; do
+          readln "$1 ($2) [$def] " "$def"
+          case "$ans" in
+             [1-9] | [1-9][0-9] | [1-9][0-9][0-9] | [1-9][0-9][0-9][0-9] ) 
+                 define_int "$2" "$ans"
+                 break;;
+             * ) help "$2"
+                 ;;
+          esac
+        done
 }
 
 #
@@ -216,6 +281,7 @@ function choice () {
 	# determine default answer:
 	names=""
 	set -- $choices
+        firstvar=$2
 	while [ -n "$2" ]; do
 		if [ -n "$names" ]; then
 			names="$names, $1"
@@ -230,29 +296,34 @@ function choice () {
 
 	val=""
 	while [ -z "$val" ]; do
+                ambg=n
 		readln "$question ($names) [$def] " "$def"
 		ans=$(echo $ans | tr a-z A-Z)
 		set -- $choices
-		val=""
 		while [ -n "$1" ]; do
 			name=$(echo $1 | tr a-z A-Z)
 			case "$name" in
-				${ans}*)
+				"$ans"* )
 					if [ "$name" = "$ans" ]; then
 						val="$2"
 						break	# stop on exact match
 					fi
 					if [ -n "$val" ]; then
-						echo \
+						echo;echo \
 		"  Sorry, \"$ans\" is ambiguous; please enter a longer string."
+                                                echo
 						val=""
+                                                ambg=y
 						break
 					else
 						val="$2"
 					fi;;
 			esac
 			shift; shift
-		done
+                done
+	        if [ "$val" = "" -a "$ambg" = "n" ]; then
+                        help "$firstvar"
+                fi
 	done
 	set -- $choices
 	while [ -n "$2" ]; do

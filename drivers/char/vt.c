@@ -5,6 +5,7 @@
  *
  *  Dynamic diacritical handling - aeb@cwi.nl - Dec 1993
  *  Dynamic keymap and string allocation - aeb@cwi.nl - May 1994
+ *  Restrict VT switching via ioctl() - grif@cs.ucr.edu - Dec 1995
  */
 
 #include <linux/types.h>
@@ -28,6 +29,7 @@
 #include "diacr.h"
 #include "selection.h"
 
+extern char vt_dont_switch;
 extern struct tty_driver console_driver;
 
 #define VT_IS_IN_USE(i)	(console_driver.table[i] && console_driver.table[i]->count)
@@ -1094,7 +1096,16 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 		  return i;
 		return con_get_unimap(ct, &(ud->entry_ct), list);
 	      }
- 
+	case VT_LOCKSWITCH:
+		if (!suser())
+		   return -EPERM;
+		vt_dont_switch = 1;
+		return 0;
+	case VT_UNLOCKSWITCH:
+		if (!suser())
+		   return -EPERM;
+		vt_dont_switch = 0;
+		return 0;
 	default:
 		return -ENOIOCTLCMD;
 	}

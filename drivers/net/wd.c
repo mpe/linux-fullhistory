@@ -129,6 +129,13 @@ int wd_probe1(struct device *dev, int ioaddr)
 		dev = init_etherdev(0, 0);
 	}
 
+	/* Check for semi-valid mem_start/end values if supplied. */
+	if ((dev->mem_start % 0x2000) || (dev->mem_end % 0x2000)) {
+		printk(KERN_WARNING "wd.c: user supplied mem_start or mem_end not on 8kB boundary - ignored.\n");
+		dev->mem_start = 0;
+		dev->mem_end = 0;
+	}
+
 	if (ei_debug  &&  version_printed++ == 0)
 		printk(version);
 
@@ -246,7 +253,7 @@ int wd_probe1(struct device *dev, int ioaddr)
 
 	/* Snarf the interrupt now.  There's no point in waiting since we cannot
 	   share and the board will usually be enabled. */
-	if (request_irq(dev->irq, ei_interrupt, 0, "wd")) {
+	if (request_irq(dev->irq, ei_interrupt, 0, model_name)) {
 		printk (" unable to get IRQ %d.\n", dev->irq);
 		return EAGAIN;
 	}
@@ -259,7 +266,7 @@ int wd_probe1(struct device *dev, int ioaddr)
 	}
 
 	/* OK, were are certain this is going to work.  Setup the device. */
-	request_region(ioaddr, WD_IO_EXTENT,"wd");
+	request_region(ioaddr, WD_IO_EXTENT, model_name);
 
 	ei_status.name = model_name;
 	ei_status.word16 = word16;
@@ -352,7 +359,12 @@ wd_get_8390_hdr(struct device *dev, struct e8390_pkt_hdr *hdr, int ring_page)
 	if (ei_status.word16)
 		outb(ISA16 | ei_status.reg5, wd_cmdreg+WD_CMDREG5);
 
+#ifdef notdef
+	/* Officially this is what we are doing, but the readl() is faster */
 	memcpy_fromio(hdr, hdr_start, sizeof(struct e8390_pkt_hdr));
+#else
+	((unsigned int*)hdr)[0] = readl(hdr_start);
+#endif
 }
 
 /* Block input and output are easy on shared memory ethercards, and trivial

@@ -297,7 +297,8 @@ int mem_mmap(struct inode * inode, struct file * file,
 		dtmp += PAGE_SIZE;
 	}
 
-	invalidate();
+	invalidate_range(vma->vm_mm, vma->vm_start, vma->vm_end);
+	invalidate_range(src_vma->vm_mm, src_vma->vm_start, src_vma->vm_end);
 	return 0;
 }
 

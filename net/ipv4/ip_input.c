@@ -151,6 +151,9 @@
 #include <linux/firewall.h>
 #include <linux/mroute.h>
 #include <net/netlink.h>
+#ifdef CONFIG_NET_ALIAS
+#include <linux/net_alias.h>
+#endif
 
 extern int last_retran;
 extern void sort_send(struct sock *sk);
@@ -313,7 +316,18 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	 *	function entry.
 	 */
 
+	/*
+	 *	also check device aliases address : will avoid
+	 *	a full lookup over device chain
+	 */
+
+#ifdef CONFIG_NET_ALIAS
+	if ( iph->daddr == skb->dev->pa_addr ||
+	    ( net_alias_has(skb->dev) && net_alias_addr_chk32(skb->dev,AF_INET, iph->daddr )) ||
+	    (brd = ip_chk_addr(iph->daddr)) != 0)
+#else
 	if ( iph->daddr == skb->dev->pa_addr || (brd = ip_chk_addr(iph->daddr)) != 0)
+#endif
 	{
 	        if (opt && opt->srr) 
 	        {

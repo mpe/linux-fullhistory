@@ -26,32 +26,81 @@
  *  - invalidate_page(mm, vmaddr) invalidates one page
  *  - invalidate_range(mm, start, end) invalidates a range of pages
  *
- * ..but the i386 has somewhat limited invalidation capabilities.
+ * ..but the i386 has somewhat limited invalidation capabilities,
+ * and page-granular invalidates are available only on i486 and up.
  */
+
+#define __invalidate() \
+__asm__ __volatile__("movl %%cr3,%%eax\n\tmovl %%eax,%%cr3": : :"ax")
+
+#ifdef __i486__
+#define __invalidate_one(addr) \
+__asm__ __volatile__("invlpg %0": :"m" (*(char *) addr))
+#else
+#define __invalidate_one(addr) invalidate()
+#endif
  
 #ifndef __SMP__
-#define invalidate() \
-__asm__ __volatile__("movl %%cr3,%%eax\n\tmovl %%eax,%%cr3": : :"ax")
+
+#define invalidate() __invalidate()
+#define invalidate_all() __invalidate()
+
+static inline void invalidate_mm(struct mm_struct *mm)
+{
+	if (mm == current->mm)
+		__invalidate();
+}
+
+static inline void invalidate_page(struct mm_struct *mm,
+	unsigned long addr)
+{
+	if (mm == current->mm)
+		__invalidate_one(addr);
+}
+
+static inline void invalidate_range(struct mm_struct *mm,
+	unsigned long start, unsigned long end)
+{
+	if (mm == current->mm)
+		__invalidate();
+}
+
 #else
-#include <asm/smp.h>
-#define local_invalidate() \
-__asm__ __volatile__("movl %%cr3,%%eax\n\tmovl %%eax,%%cr3": : :"ax")
-#define invalidate() \
-	smp_invalidate();
-#endif
 
 /*
- * We aren't very clever about this yet. On a 486+ we could actually do
- * page-granularity invalidates for better performance in some cases.
- * And SMP could certainly avoid some global invalidates..
+ * We aren't very clever about this yet -  SMP could certainly
+ * avoid some global invalidates..
  */
+
+#include <asm/smp.h>
+
+#define local_invalidate() \
+	__invalidate()
+
+#define invalidate() \
+	smp_invalidate()
+
 #define invalidate_all() invalidate()
-#define invalidate_mm(mm_struct) \
-do { if ((mm_struct) == current->mm) invalidate(); } while (0)
-#define invalidate_page(mm_struct,addr) \
-do { if ((mm_struct) == current->mm) invalidate(); } while (0)
-#define invalidate_range(mm_struct,start,end) \
-do { if ((mm_struct) == current->mm) invalidate(); } while (0)
+
+static inline void invalidate_mm(struct mm_struct *mm)
+{
+	invalidate();
+}
+
+static inline void invalidate_page(struct mm_struct *mm,
+	unsigned long addr)
+{
+	invalidate();
+}
+
+static inline void invalidate_range(struct mm_struct *mm,
+	unsigned long start, unsigned long end)
+{
+	invalidate();
+}
+
+#endif
+
 
 /* Certain architectures need to do special things when pte's
  * within a page table are directly modified.  Thus, the following

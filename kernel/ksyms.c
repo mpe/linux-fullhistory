@@ -76,6 +76,9 @@ extern void __remqu (void);
 #include "../drivers/net/slhc.h"
 #endif
 #endif
+#ifdef CONFIG_NET_ALIAS
+#include <linux/net_alias.h>
+#endif
 #endif
 #ifdef CONFIG_PCI
 #include <linux/bios32.h>
@@ -412,6 +415,10 @@ struct symbol_table symbol_table = {
 	/* Device callback registration */
 	X(register_netdevice_notifier),
 	X(unregister_netdevice_notifier),
+#ifdef CONFIG_NET_ALIAS
+	X(register_net_alias_type),
+	X(unregister_net_alias_type),
+#endif
 #endif
 
 	/* support for loadable net drivers */
@@ -452,11 +459,7 @@ struct symbol_table symbol_table = {
  	 * So we add it here too.  There is a duplicate set in scsi.c
  	 * that is used when the entire scsi subsystem is a loadable
  	 * module.
-    	 * 
- 	 * in_scan_scsis is a hack, and should go away once the new 
-	 * memory allocation code is in the NCR driver 
 	 */
-    	X(in_scan_scsis),
 	X(scsi_register_module),
 	X(scsi_unregister_module),
 	X(scsi_free),

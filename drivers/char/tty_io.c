@@ -41,6 +41,9 @@
  *
  * New TIOCLINUX variants added.
  *	-- mj@k332.feld.cvut.cz, 19-Nov-95
+ * 
+ * Restrict vt switching via ioctl()
+ *      -- grif@cs.ucr.edu, 5-Dec-95
  */
 
 #include <linux/config.h>
@@ -97,6 +100,7 @@ int last_console = 0;
 int kmsg_redirect = 0;
 struct tty_struct * redirect = NULL;
 struct wait_queue * keypress_wait = NULL;
+char vt_dont_switch = 0;
 
 static void initialize_tty_struct(struct tty_struct *tty);
 
@@ -523,7 +527,7 @@ void complete_change_console(unsigned int new_console)
 {
 	unsigned char old_vc_mode;
 
-        if (new_console == fg_console)
+        if ((new_console == fg_console) || (vt_dont_switch))
                 return;
         if (!vc_cons_allocated(new_console))
                 return;
@@ -594,7 +598,7 @@ void complete_change_console(unsigned int new_console)
  */
 void change_console(unsigned int new_console)
 {
-        if (new_console == fg_console)
+        if ((new_console == fg_console) || (vt_dont_switch))
                 return;
         if (!vc_cons_allocated(new_console))
 		return;

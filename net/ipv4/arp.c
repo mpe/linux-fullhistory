@@ -96,6 +96,9 @@
 #include <net/netrom.h>
 #endif
 #endif
+#ifdef CONFIG_NET_ALIAS
+#include <linux/net_alias.h>
+#endif
 
 #include <asm/system.h>
 #include <asm/segment.h>
@@ -891,6 +894,19 @@ int arp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
  *  cache.
  */
 
+/*
+ *	try to switch to alias device whose address is tip, if any
+ */
+
+#ifdef CONFIG_NET_ALIAS
+	if (net_alias_has(dev))
+	{
+		struct device *adev;
+		adev = net_alias_chk32(dev,AF_INET,tip,IFF_UP,IFF_NOARP);
+		if (adev != NULL) dev = adev;
+	}
+#endif
+
 	if (arp->ar_op == htons(ARPOP_REQUEST))
 	{ 
 /*
@@ -1019,7 +1035,15 @@ int arp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 		entry->timer.data = (unsigned long)entry;
 		memcpy(entry->ha, sha, dev->addr_len);
 		entry->last_updated = entry->last_used = jiffies;
+/*
+ *	make entry point to	'correct' device
+ */
+
+#ifdef CONFIG_NET_ALIAS
+		entry->dev = dev;
+#else
 		entry->dev = skb->dev;
+#endif
 		skb_queue_head_init(&entry->skb);
 		if (arp_lock == 1)
 		{

@@ -134,6 +134,12 @@ S: Computer Science Department
 S: Baltimore, Maryland 21218
 S: USA
 
+N: Axel Boldt
+E: boldt@math.ucsb.edu
+W: http://math-www.uni-paderborn.de/~axel/
+D: Configuration help text support
+D: Linux CD and Support Giveaway List
+
 N: John Boyd
 E: boyd@cis.ohio-state.edu
 D: Co-author of wd7000 SCSI driver
@@ -214,7 +220,7 @@ S: United Kingdom
 
 N: Ray Dassen
 E: jdassen@wi.LeidenUniv.nl
-U: http://www.wi.leidenuniv.nl/~jdassen/
+W: http://www.wi.leidenuniv.nl/~jdassen/
 D: Debian GNU/Linux: www.debian.org maintainer, FAQ co-maintainer,
 D: packages testing, nit-picking & fixing. Enjoying BugFree (TM) kernels.
 S: Zuidsingel 10A

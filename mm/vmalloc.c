@@ -105,7 +105,7 @@ static void free_area_pages(unsigned long address, unsigned long size)
 		address = (address + PGDIR_SIZE) & PGDIR_MASK;
 		dir++;
 	}
-	invalidate();
+	invalidate_all();
 }
 
 static inline int alloc_area_pte(pte_t * pte, unsigned long address, unsigned long size)
@@ -166,7 +166,7 @@ static int alloc_area_pages(unsigned long address, unsigned long size)
 		address = (address + PGDIR_SIZE) & PGDIR_MASK;
 		dir++;
 	}
-	invalidate();
+	invalidate_all();
 	return 0;
 }
 
@@ -227,7 +227,7 @@ static int remap_area_pages(unsigned long address, unsigned long offset, unsigne
 		address = (address + PGDIR_SIZE) & PGDIR_MASK;
 		dir++;
 	}
-	invalidate();
+	invalidate_all();
 	return 0;
 }
 

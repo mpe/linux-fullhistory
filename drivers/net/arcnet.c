@@ -17,6 +17,19 @@
          
 	**********************
 
+	v2.22 (95/12/08)
+	  - IRQ is always printed as a decimal, instead of a hex number.
+	  - Replaced most remaining printk's with BUGMSG macros.
+	  - Moved variables for VERIFY_ACK from the Outgoing struct into
+	    the lp struct; Outgoing is really for packet-splitting info
+	    only.
+	  - Simplified INTMASK handling using a memory variable to keep a
+	    "running total."
+	  - Tracked down more (maybe the last?) "missed IRQ" messages caused
+	    by TX-done IRQ's occurring WHILE arcnet??_send_packet was in
+	    progress.  These were pretty obscure and mostly harmless.
+	  - Made an actual non-ALPHA release of the thing.
+
 	v2.21 ALPHA (95/11/29)
 	  - "Unknown protocol ID" messages now also indicate the station
 	    which sent the unrecognized packet, to aid in debugging network
@@ -146,12 +159,15 @@
            mainly a portability fix.  This will confuse autoprobe a bit, so
            test that too.
          - What about cards with shared memory that can be "turned off?"
-         - NFS mount freezes after several megabytes to SOSS for DOS. 
- 	   unmount/remount fixes it.  Is this arcnet-specific?  I don't know.
+           (or that have none at all, like the SMC PC500longboard)
          - Some newer ARCnets support promiscuous mode, supposedly.  If
            someone sends me information, I'll try to implement it.
          - Dump Linux 1.2 support and its ugly #ifdefs.
          - Add support for the new 1.3.x IP header cache features.
+         - Support printk's priority levels.
+         - Make arcnetE_send_packet use arcnet_prepare_tx for loading the
+           packet into ARCnet memory.
+         - Move the SKB and memory dump code into separate functions.
          - ATA protocol support?? 
          - Banyan VINES TCP/IP support??
 
@@ -162,17 +178,17 @@
 	 	Donald Becker - it didn't work :)
 	 - skeleton.c v0.05 dated 11/16/93 by Donald Becker
 	 	(from Linux Kernel 1.1.45)
+	 - RFC's 1201 and 1051 - re: TCP/IP over ARCnet
 	 - The official ARCnet data sheets (!) thanks to Ken Cornetet
 		<kcornete@nyx10.cs.du.edu>
-	 - RFC's 1201 and 1051 - re: TCP/IP over ARCnet
-	 - net/inet/eth.c (from kernel 1.1.50) for header-building info...
+	 - net/inet/eth.c (from kernel 1.1.50) for header-building info.
 	 - Alternate Linux ARCnet source by V.Shergin <vsher@sao.stavropol.su>
 	 - Textual information and more alternate source from Joachim Koenig
 	 	<jojo@repas.de>
 */
 
 static const char *version =
- "arcnet.c: v2.21 ALPHA 95/11/29 Avery Pennarun <apenwarr@foxnet.net>\n";
+ "arcnet.c: v2.22 95/12/08 Avery Pennarun <apenwarr@foxnet.net>\n";
 
  
 
@@ -368,6 +384,8 @@ extern struct device *irq2dev_map[16];
 #define COMMAND (ioaddr+1)	/* writable, returns random vals on read (?) */
 #define RESET  (ioaddr+8)		/* software reset writable */
 
+#define SETMASK outb(lp->intmask,INTMASK);
+
 	/* Time needed for various things (in clock ticks, 1/100 sec) */
 	/* We mostly don't bother with these - watch out. */
 #define RESETtime 40		/* reset */
@@ -395,12 +413,6 @@ extern struct device *irq2dev_map[16];
 #define RES1flag        0x20            /* unused */
 #define RES2flag        0x40            /* unused */
 #define NORXflag        0x80            /* receiver inhibited */
-
-#ifdef DETECT_RECONFIGS
-	#define RECON_flag RECONflag
-#else
-	#define RECON_flag 0
-#endif
 
        /* in the command register, the following bits have these meanings:
         *                0-2     command
@@ -530,26 +542,26 @@ struct Outgoing
 	      segnum,			/* segment being sent */
 	      numsegs,			/* number of segments */
 	      seglen;			/* length of segment */
-#ifdef VERIFY_ACK
-	short lastload_dest,		/* can last loaded packet be acked? */
-	      lasttrans_dest;		/* can last TX'd packet be acked? */
-#endif
-	
 };
 
 
 /* Information that needs to be kept for each board. */
 struct arcnet_local {
 	struct enet_statistics stats;
-	u_char arcnum;		/* arcnet number - our 8-bit address */
 	u_short sequence;	/* sequence number (incs with each packet) */
-	u_char recbuf,		/* receive buffer # (0 or 1) */
-	       txbuf,		/* transmit buffer # (2 or 3) */
-	       txready;		/* buffer where a packet is ready to send */
+	u_char stationid,	/* our 8-bit station address */
+		recbuf,		/* receive buffer # (0 or 1) */
+		txbuf,		/* transmit buffer # (2 or 3) */
+		txready,	/* buffer where a packet is ready to send */
+		intmask;	/* current value of INTMASK register */
 	short intx,		/* in TX routine? */
 	      in_txhandler,	/* in TX_IRQ handler? */
 	      sending;		/* transmit in progress? */
-	short tx_left;		/* segments of split packet left to TX */
+
+#ifdef VERIFY_ACK
+	short lastload_dest,		/* can last loaded packet be acked? */
+	      lasttrans_dest;		/* can last TX'd packet be acked? */
+#endif
 
 #if defined(DETECT_RECONFIGS) && defined(RECON_THRESHOLD)
 	time_t first_recon,	/* time of "first" RECON message to count */
@@ -685,7 +697,7 @@ arcnet_probe(struct device *dev)
 
 	printk(version);
 	
-#if 1
+#if 0
 	BUGLVL(D_NORMAL)
 	{
 		printk("arcnet: ***\n");
@@ -696,7 +708,7 @@ arcnet_probe(struct device *dev)
 		printk("arcnet: ***\n");
 	}
 #else
-	BUGLVL(D_INIT)
+	BUGLVL(D_EXTRA)
 	{
 		printk("arcnet: ***\n");
 		printk("arcnet: * Read README.arcnet for important release notes!\n");
@@ -707,7 +719,7 @@ arcnet_probe(struct device *dev)
 	}
 #endif
 
-	BUGMSG(D_INIT,"given: base %lXh, IRQ %Xh, shmem %lXh\n",
+	BUGMSG(D_INIT,"given: base %lXh, IRQ %d, shmem %lXh\n",
 			dev->base_addr,dev->irq,dev->mem_start);
 
 #ifndef MODULE
@@ -758,11 +770,9 @@ arcnet_probe(struct device *dev)
 	if (!dev->base_addr || !dev->irq || !dev->mem_start 
 		|| !dev->rmem_start)
 	{
-		printk("%6s: loadable modules can't autoprobe!\n",dev->name);
-		printk("%6s:  try using io=, irqnum=, and shmem= on the insmod line.\n",
-			dev->name);
-		printk("%6s:  you may also need num= to change the device name. (ie. num=1 for arc1)\n",
-			dev->name);
+		BUGMSG(D_NORMAL,"loadable modules can't autoprobe!\n");
+		BUGMSG(D_NORMAL,"try using io=, irqnum=, and shmem= on the insmod line.\n");
+		BUGMSG(D_NORMAL,"you may also need num= to change the device name. (ie. num=1 for arc1)\n");
 		return ENODEV;
 	}
 #endif
@@ -771,8 +781,8 @@ arcnet_probe(struct device *dev)
 		int irqval = request_irq(dev->irq, &arcnet_interrupt, 0,
 			"arcnet");
 		if (irqval) {
-			printk("%6s: unable to get IRQ %d (irqval=%d).\n",
-				dev->name,dev->irq, irqval);
+			BUGMSG(D_NORMAL,"unable to get IRQ %d (irqval=%d).\n",
+				dev->irq, irqval);
 			return EAGAIN;
 		}
 		
@@ -782,8 +792,8 @@ arcnet_probe(struct device *dev)
 	/* Grab the region so we can find another board if autoIRQ fails. */
 	request_region(dev->base_addr, ARCNET_TOTAL_SIZE,"arcnet");
 	
-	printk("%6s: ARCnet card found at %03lXh, IRQ %d, ShMem at %lXh.\n", 
-		dev->name, dev->base_addr, dev->irq, dev->mem_start);
+	BUGMSG(D_NORMAL,"ARCnet card found at %03lXh, IRQ %d, ShMem at %lXh.\n", 
+		dev->base_addr, dev->irq, dev->mem_start);
 
 	/* Initialize the device structure. */
 	dev->priv = kmalloc(sizeof(struct arcnet_local), GFP_KERNEL);
@@ -819,14 +829,12 @@ arcnet_probe(struct device *dev)
 	arcnet_reset(dev);
 	JIFFER(50);
 	BUGMSG(D_NORMAL,"We appear to be station %d (%02Xh)\n",
-			lp->arcnum,lp->arcnum);
-	if (lp->arcnum==0)
-		printk("%6s: WARNING!  Station address 0 is reserved for broadcasts!\n",
-			dev->name);
-	if (lp->arcnum==255)
-		printk("%6s: WARNING!  Station address 255 may confuse DOS networking programs!\n",
-			dev->name);
-	dev->dev_addr[0]=lp->arcnum;
+			lp->stationid,lp->stationid);
+	if (lp->stationid==0)
+		BUGMSG(D_NORMAL,"WARNING!  Station address 0 is reserved for broadcasts!\n");
+	if (lp->stationid==255)
+		BUGMSG(D_NORMAL,"WARNING!  Station address 255 may confuse DOS networking programs!\n");
+	dev->dev_addr[0]=lp->stationid;
 	lp->sequence=1;
 	lp->recbuf=0;
 
@@ -907,9 +915,6 @@ int arcnet_ioprobe(struct device *dev, short ioaddr)
 	/* if we do this, we're sure to get an IRQ since the card has
 	 * just reset and the NORXflag is on until we tell it to start
 	 * receiving.
-	 *
-	 * However, this could, theoretically, cause a lockup.  Maybe I'm just
-	 * not very good at theory! :)
 	 */
 	outb(NORXflag,INTMASK);
 	JIFFER(RESETtime);
@@ -919,8 +924,8 @@ int arcnet_ioprobe(struct device *dev, short ioaddr)
 	outb(CFLAGScmd|RESETclear|CONFIGclear,COMMAND);
 
 	airq = autoirq_report(0);
-	BUGLVL(D_INIT) if (airq)
-		printk("%6s:  autoirq is %d\n", dev->name, airq);
+	if (airq)
+		BUGMSG(D_INIT," autoirq is %d\n", airq);
 
 	/* if there was no autoirq AND the user hasn't set any defaults,
 	 * give up.
@@ -1014,7 +1019,8 @@ int arcnet_reset(struct device *dev)
 	int delayval,recbuf=lp->recbuf;
 	u_char *cardmem;
 	
-	outb(0,INTMASK);	/* no IRQ's, please! */
+	lp->intmask=0;
+	SETMASK;		/* no IRQ's, please! */
 	
 	BUGMSG(D_INIT,"Resetting %s (status=%Xh)\n",
 			dev->name,inb(STATUS));
@@ -1034,7 +1040,7 @@ int arcnet_reset(struct device *dev)
 		BUGMSG(D_INIT,"reset failed: TESTvalue not present.\n");
 		return 1;
 	}
-	lp->arcnum=cardmem[1];  /* save address for later use */
+	lp->stationid=cardmem[1];  /* save address for later use */
 	
 	/* clear out status variables */
 	recbuf=lp->recbuf=0;
@@ -1051,7 +1057,11 @@ int arcnet_reset(struct device *dev)
 	EnableReceiver();
 
 	/* re-enable interrupts */
-	outb(NORXflag|RECON_flag,INTMASK);
+	lp->intmask|=NORXflag;
+#ifdef DETECT_RECONFIGS
+	lp->intmask|=RECONflag;
+#endif
+	SETMASK;
 	
 	/* done!  return success. */
 	return 0;
@@ -1094,7 +1104,7 @@ static int arcnetE_init(struct device *dev)
 
 	ether_setup(dev); /* we're emulating ether here, not ARCnet */
 	dev->dev_addr[0]=0;
-	dev->dev_addr[5]=lp->arcnum;
+	dev->dev_addr[5]=lp->stationid;
 	dev->mtu=512-sizeof(struct HardHeader)-dev->hard_header_len-1;
 	dev->open=NULL;
 	dev->stop=NULL;
@@ -1114,7 +1124,7 @@ static int arcnetS_init(struct device *dev)
 	arcnet_setup(dev);
        
 	/* And now fill particular fields with arcnet values */
-	dev->dev_addr[0]=lp->arcnum;
+	dev->dev_addr[0]=lp->stationid;
 	dev->hard_header_len=sizeof(struct S_ClientData);
 	dev->mtu=512-sizeof(struct HardHeader)-dev->hard_header_len
 		+ S_EXTRA_CLIENTDATA;
@@ -1204,11 +1214,11 @@ arcnet_open(struct device *dev)
 	
 	/* make sure we're ready to receive IRQ's.
 	 * arcnet_reset sets this for us, but if we receive one before
-	 * START is set to 1, bad things happen.
+	 * START is set to 1, it could be ignored.
 	 */
 	outb(0,INTMASK);
 	JIFFER(ACKtime);
-	outb(NORXflag|RECON_flag,INTMASK);
+	SETMASK;
 	
 	MOD_INC_USE_COUNT;
 	return 0;
@@ -1227,7 +1237,8 @@ arcnet_close(struct device *dev)
 	START=0;
 
 	/* Flush TX and disable RX */
-	outb(0,INTMASK);	/* no IRQ's (except RESET, of course) */
+	lp->intmask=0;
+	SETMASK;	/* no IRQ's (except RESET, of course) */
 	outb(NOTXcmd,COMMAND);  /* stop transmit */
 	outb(NORXcmd,COMMAND);	/* disable receive */
 	
@@ -1309,20 +1320,21 @@ arcnet_send_packet_bad(struct sk_buff *skb, struct device *dev)
 			return 1;
 		}
 
-		outb(0,INTMASK);
-
+		lp->intmask &= ~TXFREEflag;
+		SETMASK;
+		
 		if (status&TXFREEflag)	/* transmit _DID_ finish */
 		{
-			BUGMSG(D_EXTRA,"tx timed out - missed IRQ? (status=%Xh, inTX=%d, inTXh=%d, tickssofar=%d)\n",
-					status,lp->intx,
-					lp->in_txhandler,tickssofar);
+			BUGMSG(D_NORMAL,"tx timeout - missed IRQ? (status=%Xh, inTXh=%d, ticks=%d, mask=%Xh)\n",
+					status,lp->in_txhandler,tickssofar,
+					lp->intmask);
 			lp->stats.tx_errors++;
 		}
 		else
 		{
-			BUGMSG(D_NORMAL,"tx timed out (status=%Xh, inTX=%d, inTXh=%d, tickssofar=%d)\n",
-					status,lp->intx,
-					lp->in_txhandler,tickssofar);
+			BUGMSG(D_NORMAL,"tx timed out (status=%Xh, inTXh=%d, tickssofar=%d, intmask=%Xh)\n",
+					status,lp->in_txhandler,tickssofar,
+					lp->intmask);
 			lp->stats.tx_errors++;
 			lp->stats.tx_aborted_errors++;
 
@@ -1340,8 +1352,6 @@ arcnet_send_packet_bad(struct sk_buff *skb, struct device *dev)
 		lp->txready=0;
 		lp->sending=0;
 
-		outb(NORXflag|RECON_flag,INTMASK);
-
 		return 1;
 	}
 
@@ -1349,8 +1359,8 @@ arcnet_send_packet_bad(struct sk_buff *skb, struct device *dev)
 	   we are passed NULL. Caution: dev_tint() handles the cli()/sti()
 	   itself. */
 	if (skb == NULL) {
-		printk("%6s: tx passed null skb (status=%Xh, inTX=%d, tickssofar=%ld)\n",
-			dev->name,inb(STATUS),lp->intx,jiffies-dev->trans_start);
+		BUGMSG(D_NORMAL,"tx passed null skb (status=%Xh, inTX=%d, tickssofar=%ld)\n",
+			inb(STATUS),lp->intx,jiffies-dev->trans_start);
 		lp->stats.tx_errors++;
 		dev_tint(dev);
 		return 0;
@@ -1358,9 +1368,10 @@ arcnet_send_packet_bad(struct sk_buff *skb, struct device *dev)
 	
 	if (lp->txready)	/* transmit already in progress! */
 	{
-		printk("%6s: trying to start new packet while busy! (status=%Xh)\n",
-			dev->name,inb(STATUS));
-		outb(0,INTMASK);
+		BUGMSG(D_NORMAL,"trying to start new packet while busy! (status=%Xh)\n",
+			inb(STATUS));
+		lp->intmask &= ~TXFREEflag;
+		SETMASK;
 		outb(NOTXcmd,COMMAND); /* abort current send */
 		arcnet_inthandler(dev); /* fake an interrupt */
 		lp->stats.tx_errors++;
@@ -1374,8 +1385,8 @@ arcnet_send_packet_bad(struct sk_buff *skb, struct device *dev)
 	   done with atomic_swap(1, dev->tbusy), but set_bit() works as well. */
         if (set_bit(0, (void*)&dev->tbusy) != 0)
         {
-            printk("%6s: transmitter called with busy bit set! (status=%Xh, inTX=%d, tickssofar=%ld)\n",
-            		dev->name,inb(STATUS),lp->intx,jiffies-dev->trans_start);
+            BUGMSG(D_NORMAL,"transmitter called with busy bit set! (status=%Xh, inTX=%d, tickssofar=%ld)\n",
+            		inb(STATUS),lp->intx,jiffies-dev->trans_start);
             lp->stats.tx_errors++;
             lp->stats.tx_fifo_errors++;
             return -EBUSY;
@@ -1394,9 +1405,6 @@ arcnetA_send_packet(struct sk_buff *skb, struct device *dev)
 	int ioaddr=dev->base_addr,bad;
 	struct Outgoing *out=&(lp->outgoing);
 
-	BUGMSG(D_DURING,"transmit requested (status=%Xh, inTX=%d)\n",
-			inb(STATUS),lp->intx);
-
 	lp->intx++;
 	
 	bad=arcnet_send_packet_bad(skb,dev);
@@ -1407,7 +1415,7 @@ arcnetA_send_packet(struct sk_buff *skb, struct device *dev)
 	}
 	
 	TBUSY=1;
-		
+	
 	out->length = 1 < skb->len ? skb->len : 1;
 	out->hdr=(struct ClientData*)skb->data;
 	out->skb=skb;
@@ -1415,9 +1423,9 @@ arcnetA_send_packet(struct sk_buff *skb, struct device *dev)
 	BUGLVL(D_SKB)
 	{
 		short i;
-		for( i=0; i< skb->len; i++)
+		for(i=0; i<skb->len; i++)
 		{
-			if( i%16 == 0 ) printk("\n[%04hX] ",i);
+			if(i%16 == 0) printk("\n[%04hX] ",i);
 			printk("%02hX ",((unsigned char*)skb->data)[i]);
 		}
 		printk("\n");
@@ -1425,16 +1433,14 @@ arcnetA_send_packet(struct sk_buff *skb, struct device *dev)
 
 	out->hdr->sequence=(lp->sequence++);
 	
-	/*arcnet_go_tx(dev);*/	/* Make sure buffers are clear */
-
 	/* fits in one packet? */
 	if (out->length-EXTRA_CLIENTDATA<=XMTU)
 	{
 		BUGMSG(D_DURING,"not splitting %d-byte packet. (split_flag=%d)\n",
 				out->length,out->hdr->split_flag);
-		BUGLVL(D_EXTRA) if (out->hdr->split_flag)
-			printk("%6s: short packet has split_flag set?! (split_flag=%d)\n",
-				dev->name,out->hdr->split_flag);
+		if (out->hdr->split_flag)
+			BUGMSG(D_NORMAL,"short packet has split_flag set?! (split_flag=%d)\n",
+				out->hdr->split_flag);
 		out->numsegs=1;
 		out->segnum=1;
 		arcnetAS_prepare_tx(dev,
@@ -1463,9 +1469,8 @@ arcnetA_send_packet(struct sk_buff *skb, struct device *dev)
 				+ sizeof(struct ClientData);
 		out->dataleft=out->length-sizeof(struct ClientData);
 		out->numsegs=(out->dataleft+maxsegsize-1)/maxsegsize;
-				
 		out->segnum=0;
-			
+		
 		BUGMSG(D_TX,"packet (%d bytes) split into %d fragments:\n",
 			out->length,out->numsegs);
 
@@ -1500,6 +1505,11 @@ arcnetA_send_packet(struct sk_buff *skb, struct device *dev)
 
 	dev->trans_start=jiffies;
 	lp->intx--;
+	
+	/* make sure we didn't ignore a TX IRQ while we were in here */
+	lp->intmask |= TXFREEflag;
+	SETMASK;
+
 	return 0;
 }
 
@@ -1510,14 +1520,12 @@ static int
 arcnetE_send_packet(struct sk_buff *skb, struct device *dev)
 {
 	struct arcnet_local *lp = (struct arcnet_local *)dev->priv;
-	int bad;
+	int ioaddr=dev->base_addr,bad;
 	union ArcPacket *arcpacket = 
 		(union ArcPacket *)(dev->mem_start+512*(lp->txbuf^1));
 	u_char *arcsoft,daddr;
 	short offset,length=skb->len+1;
 
-	BUGMSG(D_DURING,"in arcnetE_send_packet (skb=%p)\n",skb);
-		
 	lp->intx++;
 	
 	bad=arcnet_send_packet_bad(skb,dev);
@@ -1531,11 +1539,12 @@ arcnetE_send_packet(struct sk_buff *skb, struct device *dev)
 		
 	if (length>XMTU)
 	{
-		printk("%6s: MTU must be <= 493 for ethernet encap (length=%d).\n",
-			dev->name,length);
-		printk("%6s: transmit aborted.\n",dev->name);
+		BUGMSG(D_NORMAL,"MTU must be <= 493 for ethernet encap (length=%d).\n",
+			length);
+		BUGMSG(D_NORMAL,"transmit aborted.\n");
 
 		dev_kfree_skb(skb,FREE_WRITE);
+		lp->intx--;
 		return 0;
 	}
 		
@@ -1603,7 +1612,7 @@ arcnetE_send_packet(struct sk_buff *skb, struct device *dev)
 	}
 
 #ifdef VERIFY_ACK
-	lp->outgoing.lastload_dest=daddr;
+	lp->lastload_dest=daddr;
 #endif
 	lp->txready=lp->txbuf;	/* packet is ready for sending */
 
@@ -1618,6 +1627,11 @@ arcnetE_send_packet(struct sk_buff *skb, struct device *dev)
 
 	dev->trans_start=jiffies;
 	lp->intx--;
+	
+	/* make sure we didn't ignore a TX IRQ while we were in here */
+	lp->intmask |= TXFREEflag;
+	SETMASK;
+
 	return 0;
 }
 
@@ -1633,9 +1647,6 @@ arcnetS_send_packet(struct sk_buff *skb, struct device *dev)
 
 	lp->intx++;
 	
-	BUGMSG(D_DURING,"transmit requested (status=%Xh, inTX=%d)\n",
-			inb(STATUS),lp->intx);
-
 	bad=arcnet_send_packet_bad(skb,dev);
 	if (bad)
 	{
@@ -1652,14 +1663,11 @@ arcnetS_send_packet(struct sk_buff *skb, struct device *dev)
 		short i;
 		for(i=0; i<skb->len; i++)
 		{
-			if( i%16 == 0 ) printk("\n[%04hX] ",i);
+			if (i%16 == 0) printk("\n[%04hX] ",i);
 			printk("%02hX ",((unsigned char*)skb->data)[i]);
 		}
 		printk("\n");
 	}
-
-	/*if (lp->txready && inb(STATUS)&TXFREEflag)
-		arcnet_go_tx(dev);*/
 
 	/* fits in one packet? */
 	if (length-S_EXTRA_CLIENTDATA<=XMTU)
@@ -1683,7 +1691,7 @@ arcnetS_send_packet(struct sk_buff *skb, struct device *dev)
 	}
 	else			/* too big for one - not accepted */
 	{
-		printk("arcnetS: packet too long (length=%d)\n",
+		BUGMSG(D_NORMAL,"packet too long (length=%d)\n",
 			length);
 		dev_kfree_skb(skb,FREE_WRITE);
 		lp->stats.tx_dropped++;
@@ -1693,6 +1701,11 @@ arcnetS_send_packet(struct sk_buff *skb, struct device *dev)
 
 	dev->trans_start=jiffies;
 	lp->intx--;
+
+	/* make sure we didn't ignore a TX IRQ while we were in here */
+	lp->intmask |= TXFREEflag;
+	SETMASK;
+
 	return 0;
 }
 
@@ -1704,20 +1717,22 @@ arcnetS_send_packet(struct sk_buff *skb, struct device *dev)
 static void arcnetA_continue_tx(struct device *dev)
 {
 	struct arcnet_local *lp = (struct arcnet_local *)dev->priv;
-	int maxsegsize=XMTU-4;
+	int ioaddr=dev->base_addr,maxsegsize=XMTU-4;
 	struct Outgoing *out=&(lp->outgoing);
+	
+	BUGMSG(D_DURING,"continue_tx called (status=%Xh, intx=%d, intxh=%d, intmask=%Xh\n",
+		inb(STATUS),lp->intx,lp->in_txhandler,lp->intmask);
 	
 	if (lp->txready)
 	{
-		printk("%6s: continue_tx: called with packet in buffer!\n",
-			dev->name);
+		BUGMSG(D_NORMAL,"continue_tx: called with packet in buffer!\n");
 		return;
 	}
-
+	
 	if (out->segnum>=out->numsegs)
 	{
-		printk("%6s: continue_tx: building segment %d of %d!\n",
-			dev->name,out->segnum+1,out->numsegs);
+		BUGMSG(D_NORMAL,"continue_tx: building segment %d of %d!\n",
+			out->segnum+1,out->numsegs);
 	}
 
 	if (!out->segnum)	/* first packet */
@@ -1840,13 +1855,20 @@ arcnetAS_prepare_tx(struct device *dev,u_char *hdr,int hdrlen,
 	}
 
 #ifdef VERIFY_ACK
-	lp->outgoing.lastload_dest=daddr;
+	lp->lastload_dest=daddr;
 #endif
 	lp->txready=lp->txbuf;	/* packet is ready for sending */
 }
 
 /* Actually start transmitting a packet that was placed in the card's
  * buffer by arcnetAS_prepare_tx.  Returns 1 if a Tx is really started.
+ *
+ * This should probably always be called with the INTMASK register set to 0,
+ * so go_tx is not called recursively.
+ *
+ * The enable_irq flag determines whether to actually write INTMASK value
+ * to the card; TXFREEflag is always OR'ed into the memory variable either
+ * way.
  */
 static int
 arcnet_go_tx(struct device *dev,int enable_irq)
@@ -1854,19 +1876,15 @@ arcnet_go_tx(struct device *dev,int enable_irq)
 	struct arcnet_local *lp=(struct arcnet_local *)dev->priv;
 	int ioaddr=dev->base_addr;
 
-	BUGMSG(D_DURING,"go_tx: status=%Xh\n",
-			inb(STATUS));
-			
-	outb(0,INTMASK);
+	BUGMSG(D_DURING,"go_tx: status=%Xh, intmask=%Xh, txready=%d, sending=%d\n",
+		inb(STATUS),lp->intmask,lp->txready,lp->sending);
 
 	if (lp->sending || !lp->txready)
 	{
-		if (enable_irq)
+		if (enable_irq && lp->sending)
 		{
-			if (lp->sending)
-				outb(TXFREEflag|NORXflag|RECON_flag,INTMASK);
-			else
-				outb(NORXflag|RECON_flag,INTMASK);
+			lp->intmask |= TXFREEflag;
+			SETMASK;
 		}
 		return 0;
 	}
@@ -1879,12 +1897,13 @@ arcnet_go_tx(struct device *dev,int enable_irq)
 	lp->sending++;
 
 #ifdef VERIFY_ACK	
-	lp->outgoing.lasttrans_dest=lp->outgoing.lastload_dest;
-	lp->outgoing.lastload_dest=0;
+	lp->lasttrans_dest=lp->lastload_dest;
+	lp->lastload_dest=0;
 #endif
 
-	if (enable_irq)
-		outb(TXFREEflag|NORXflag|RECON_flag,INTMASK);
+	lp->intmask |= TXFREEflag;
+
+	if (enable_irq)	SETMASK;
 
 	return 1;
 }
@@ -1933,37 +1952,20 @@ arcnet_inthandler(struct device *dev)
 
 	if (IF_INTERRUPT)
 	{
-		printk("%6s: DRIVER PROBLEM!  Nested arcnet interrupts!\n",
-			dev->name);
+		BUGMSG(D_NORMAL,"DRIVER PROBLEM!  Nested arcnet interrupts!\n");
 		return;	/* don't even try. */
 	}
+	
 	outb(0,INTMASK);
 	INTERRUPT = 1;
 
-	BUGMSG(D_DURING,"in arcnet_inthandler (status=%Xh)\n",inb(STATUS));
+	BUGMSG(D_DURING,"in arcnet_inthandler (status=%Xh, intmask=%Xh)\n",
+		inb(STATUS),lp->intmask);
 
-#if 1 /* Whatever you do, don't set this to 0. */
 	do
 	{
 		status = inb(STATUS);
 		didsomething=0;
-	
-#if 0 /* no longer necessary - doing checking in arcnet_interrupt now */
-		if (!dev->start)
-		{
-			BUGMSG(D_DURING,"ARCnet not yet initialized.  irq ignored. (status=%Xh)\n",
-					status);
-			if (!(status&NORXflag))
-				outb(NORXflag|RECON_flag,INTMASK);
-
-			/* using dev->interrupt here instead of INTERRUPT
-			 * because if dev->start is 0, the other devices
-			 * probably do not exist.
-			 */
-			dev->interrupt=0;
-			return;
-		}
-#endif
 	
 		/* RESET flag was enabled - card is resetting and if RX
 		 * is disabled, it's NOT because we just got a packet.
@@ -1975,7 +1977,7 @@ arcnet_inthandler(struct device *dev)
 					status);
 		}
 #ifdef DETECT_RECONFIGS
-		if (status & RECONflag)
+		if (status & (lp->intmask) & RECONflag)
 		{
 			outb(CFLAGScmd|CONFIGclear,COMMAND);
 			lp->stats.tx_carrier_errors++;
@@ -1991,8 +1993,7 @@ arcnet_inthandler(struct device *dev)
 				jiffies-lp->last_recon > HZ*10)
 			{
 				if (lp->network_down)
-					printk("%6s: reconfiguration detected: cabling restored?\n",
-						dev->name);
+					BUGMSG(D_NORMAL,"reconfiguration detected: cabling restored?\n");
 				lp->first_recon=lp->last_recon=jiffies;
 				lp->num_recons=lp->network_down=0;
 				
@@ -2020,8 +2021,7 @@ arcnet_inthandler(struct device *dev)
 				    && lp->num_recons >= RECON_THRESHOLD)
 				{
 					lp->network_down=1;
-					printk("%6s: many reconfigurations detected: cabling problem?\n",
-						dev->name);
+					BUGMSG(D_NORMAL,"many reconfigurations detected: cabling problem?\n");
 				}
 				else if (!lp->network_down
 				    && lp->last_recon-lp->first_recon > HZ*60)
@@ -2039,7 +2039,7 @@ arcnet_inthandler(struct device *dev)
 		else if (lp->network_down && jiffies-lp->last_recon > HZ*10)
 		{
 			if (lp->network_down)
-				printk("%6s: cabling restored?\n",dev->name);
+				BUGMSG(D_NORMAL,"cabling restored?\n");
 			lp->first_recon=lp->last_recon=0;
 			lp->num_recons=lp->network_down=0;
 			
@@ -2049,7 +2049,7 @@ arcnet_inthandler(struct device *dev)
 #endif /* DETECT_RECONFIGS */
 
 		/* RX is inhibited - we must have received something. */
-		if (status & NORXflag)
+		if (status & lp->intmask & NORXflag)
 		{
 			int recbuf=lp->recbuf=!lp->recbuf;
 
@@ -2065,24 +2065,27 @@ arcnet_inthandler(struct device *dev)
 		}
 		
 		/* it can only be an xmit-done irq if we're xmitting :) */
-		if (status&TXFREEflag && !lp->in_txhandler && lp->sending)
+		/*if (status&TXFREEflag && !lp->in_txhandler && lp->sending)*/
+		if (status & lp->intmask & TXFREEflag)
 		{
 			struct Outgoing *out=&(lp->outgoing);
+			int was_sending=lp->sending;
 			
+			lp->intmask &= ~TXFREEflag;
+
 			lp->in_txhandler++;
-			lp->sending--;
-			
+			if (was_sending) lp->sending--;
+
 			BUGMSG(D_DURING,"TX IRQ (stat=%Xh, numsegs=%d, segnum=%d, skb=%ph)\n",
 					status,out->numsegs,out->segnum,out->skb);
 					
 #ifdef VERIFY_ACK
-			if (!(status&TXACKflag))
+			if (was_sending && !(status&TXACKflag))
 			{
-				if (lp->outgoing.lasttrans_dest != 0)
+				if (lp->lasttrans_dest != 0)
 				{
-					printk("%6s: transmit was not acknowledged! (status=%Xh, dest=%d)\n",
-						dev->name,status,
-						lp->outgoing.lasttrans_dest);
+					BUGMSG(D_NORMAL,"transmit was not acknowledged! (status=%Xh, dest=%d)\n",
+						status,lp->lasttrans_dest);
 					lp->stats.tx_errors++;
 					lp->stats.tx_carrier_errors++;
 				}
@@ -2090,7 +2093,7 @@ arcnet_inthandler(struct device *dev)
 				{
 					BUGMSG(D_DURING,"broadcast was not acknowledged; that's normal (status=%Xh, dest=%d)\n",
 							status,
-							lp->outgoing.lasttrans_dest);
+							lp->lasttrans_dest);
 				}
 			}
 #endif
@@ -2100,6 +2103,8 @@ arcnet_inthandler(struct device *dev)
 			
 			if (lp->intx)
 			{
+				BUGMSG(D_DURING,"TXDONE while intx! (status=%Xh, intx=%d)\n",
+					inb(STATUS),lp->intx);
 				lp->in_txhandler--;
 				continue;
 			}
@@ -2114,7 +2119,6 @@ arcnet_inthandler(struct device *dev)
 					TBUSY=0;
 					mark_bh(NET_BH);
 				}
-				
 				lp->in_txhandler--;
 				continue;
 			}
@@ -2145,7 +2149,7 @@ arcnet_inthandler(struct device *dev)
 				}
 			}
 			didsomething++;
-			
+
 			lp->in_txhandler--;
 		}
 		else if (lp->txready && !lp->sending && !lp->intx)
@@ -2160,17 +2164,7 @@ arcnet_inthandler(struct device *dev)
 	BUGMSG(D_DURING,"net_interrupt complete (status=%Xh, count=%d)\n\n",
 			inb(STATUS),boguscount);
 
-	if (dev->start && (lp->sending || (lp->txready && !lp->intx)))
-		outb(NORXflag|TXFREEflag|RECON_flag,INTMASK);
-	else
-		outb(NORXflag|RECON_flag,INTMASK);
-
-#else /* Disable everything */
-
-	outb(RXcmd|(0<<3)|RXbcasts,COMMAND);
-	outb(NORXflag,INTMASK);
-
-#endif
+	SETMASK;	/* put back interrupt mask */
 
 	INTERRUPT=0;
 }
@@ -2206,8 +2200,8 @@ arcnet_rx(struct device *dev,int recbuf)
 	/* if source is 0, it's a "used" packet! */
 	if (saddr==0)
 	{
-		printk("%6s: discarding old packet. (status=%Xh)\n",
-			dev->name,inb(STATUS));
+		BUGMSG(D_NORMAL,"discarding old packet. (status=%Xh)\n",
+			inb(STATUS));
 		lp->stats.rx_errors++;
 		return;
 	}
@@ -2249,8 +2243,8 @@ arcnet_rx(struct device *dev,int recbuf)
 		break;
 	case ARC_P_LANSOFT: /* don't understand.  fall through. */
 	default:
-		printk("%6s: received unknown protocol %d (%Xh) from station %d.\n",
-			dev->name,arcsoft[0],arcsoft[0],saddr);
+		BUGMSG(D_NORMAL,"received unknown protocol %d (%Xh) from station %d.\n",
+			arcsoft[0],arcsoft[0],saddr);
 		lp->stats.rx_errors++;
 		lp->stats.rx_crc_errors++;
 		break;
@@ -2324,7 +2318,7 @@ arcnetA_rx(struct device *dev,u_char *buf,
 			
 		if (in->skb)	/* already assembling one! */
         	{
-        		BUGMSG(D_EXTRA,"aborting assembly (seq=%d) for unsplit packet (splitflag=%d, seq=%d)\n",
+        		BUGMSG(D_NORMAL,"aborting assembly (seq=%d) for unsplit packet (splitflag=%d, seq=%d)\n",
         			in->sequence,arcsoft->split_flag,
         			arcsoft->sequence);
         		kfree_skb(in->skb,FREE_WRITE);
@@ -2337,8 +2331,7 @@ arcnetA_rx(struct device *dev,u_char *buf,
 
          	skb = alloc_skb(length, GFP_ATOMIC);
          	if (skb == NULL) {
-         		printk("%6s: Memory squeeze, dropping packet.\n",
-         			dev->name);
+         		BUGMSG(D_NORMAL,"Memory squeeze, dropping packet.\n");
          		lp->stats.rx_dropped++;
          		return;
          	}
@@ -2383,8 +2376,8 @@ arcnetA_rx(struct device *dev,u_char *buf,
          		}
          		else
          		{
-         			printk("%6s: funny-shaped ARP packet. (%Xh, %Xh)\n",
-         				dev->name,arp->ar_hln,arp->ar_pln);
+         			BUGMSG(D_NORMAL,"funny-shaped ARP packet. (%Xh, %Xh)\n",
+         				arp->ar_hln,arp->ar_pln);
          			lp->stats.rx_errors++;
          			lp->stats.rx_crc_errors++;
          		}
@@ -2393,7 +2386,7 @@ arcnetA_rx(struct device *dev,u_char *buf,
 		BUGLVL(D_SKB)
 		{
 	            short i;
-	               	for( i=0; i< skb->len; i++)
+	               	for(i=0; i< skb->len; i++)
                		{
                        		if( i%16 == 0 ) printk("\n[%04hX] ",i);
                        		printk("%02hX ",((unsigned char*)skb->data)[i]);
@@ -2433,8 +2426,8 @@ arcnetA_rx(struct device *dev,u_char *buf,
 
 		if (in->skb && in->sequence!=arcsoft->sequence)
 		{
-			BUGMSG(D_EXTRA,"wrong seq number, aborting assembly (expected=%d, seq=%d, splitflag=%d)\n",	
-				in->sequence,arcsoft->sequence,
+			BUGMSG(D_NORMAL,"wrong seq number, aborting assembly (saddr=%d, expected=%d, seq=%d, splitflag=%d)\n",
+				saddr,in->sequence,arcsoft->sequence,
 				arcsoft->split_flag);
 	        	kfree_skb(in->skb,FREE_WRITE);
 	        	in->skb=NULL;
@@ -2449,7 +2442,7 @@ arcnetA_rx(struct device *dev,u_char *buf,
 	        		arcsoft->split_flag);
 	        	if (in->skb)	/* already assembling one! */
 	        	{
-	        		BUGMSG(D_EXTRA,"aborting previous (seq=%d) assembly (splitflag=%d, seq=%d)\n",
+	        		BUGMSG(D_NORMAL,"aborting previous (seq=%d) assembly (splitflag=%d, seq=%d)\n",
 	        			in->sequence,arcsoft->split_flag,
 	        			arcsoft->sequence);
 				lp->stats.rx_errors++;
@@ -2463,7 +2456,7 @@ arcnetA_rx(struct device *dev,u_char *buf,
 	        	
 	        	if (in->numpackets>16)
 	        	{
-	        		BUGMSG(D_EXTRA,"incoming packet more than 16 segments; dropping. (splitflag=%d)\n",
+	        		BUGMSG(D_NORMAL,"incoming packet more than 16 segments; dropping. (splitflag=%d)\n",
 	        			arcsoft->split_flag);
 	        		lp->stats.rx_errors++;
 	        		lp->stats.rx_length_errors++;
@@ -2474,8 +2467,7 @@ arcnetA_rx(struct device *dev,u_char *buf,
                 			+ sizeof(struct ClientData),
 	                		GFP_ATOMIC);
                 	if (skb == NULL) {
-                		printk("%6s: (split) memory squeeze, dropping packet.\n", 
-                			dev->name);
+                		BUGMSG(D_NORMAL,"(split) memory squeeze, dropping packet.\n");
                 		lp->stats.rx_dropped++;
                 		return;
                 	}
@@ -2504,7 +2496,7 @@ arcnetA_rx(struct device *dev,u_char *buf,
 			 */			
 			if (!in->skb)
 			{
-				BUGMSG(D_EXTRA,"can't continue split without starting first! (splitflag=%d, seq=%d)\n",
+				BUGMSG(D_NORMAL,"can't continue split without starting first! (splitflag=%d, seq=%d)\n",
 					arcsoft->split_flag,arcsoft->sequence);
 				lp->stats.rx_errors++;
 				lp->stats.rx_missed_errors++;
@@ -2517,7 +2509,7 @@ arcnetA_rx(struct device *dev,u_char *buf,
 				/* harmless duplicate? ignore. */
 				if (packetnum<=in->lastpacket-1)
 				{
-					BUGMSG(D_EXTRA,"duplicate splitpacket ignored! (splitflag=%d)\n",
+					BUGMSG(D_NORMAL,"duplicate splitpacket ignored! (splitflag=%d)\n",
 						arcsoft->split_flag);
 					lp->stats.rx_errors++;
 					lp->stats.rx_frame_errors++;
@@ -2525,7 +2517,7 @@ arcnetA_rx(struct device *dev,u_char *buf,
 				}
 				
 				/* "bad" duplicate, kill reassembly */
-				BUGMSG(D_EXTRA,"out-of-order splitpacket, reassembly (seq=%d) aborted (splitflag=%d, seq=%d)\n",	
+				BUGMSG(D_NORMAL,"out-of-order splitpacket, reassembly (seq=%d) aborted (splitflag=%d, seq=%d)\n",	
 					in->sequence,arcsoft->split_flag,
 					arcsoft->sequence);
 	        		kfree_skb(in->skb,FREE_WRITE);
@@ -2555,8 +2547,8 @@ arcnetA_rx(struct device *dev,u_char *buf,
          	{
          		if (!skb || !in->skb)
          		{
-         			printk("%6s: ?!? done reassembling packet, no skb? (skb=%ph, in->skb=%ph)\n",
-         				dev->name,skb,in->skb);
+         			BUGMSG(D_NORMAL,"?!? done reassembling packet, no skb? (skb=%ph, in->skb=%ph)\n",
+         				skb,in->skb);
          		}
          		else
          		{
@@ -2565,7 +2557,7 @@ arcnetA_rx(struct device *dev,u_char *buf,
 			
 				BUGLVL(D_SKB)
 				{
-		        	    short i;
+					short i;
 		        	       	for(i=0; i<skb->len; i++)
                				{
                 		       		if( i%16 == 0 ) printk("\n[%04hX] ",i);
@@ -2600,7 +2592,7 @@ arcnetE_rx(struct device *dev,u_char *arcsoft,
 
        	skb = alloc_skb(length, GFP_ATOMIC);
        	if (skb == NULL) {
-       		printk("%6s: Memory squeeze, dropping packet.\n",dev->name);
+       		BUGMSG(D_NORMAL,"Memory squeeze, dropping packet.\n");
        		lp->stats.rx_dropped++;
        		return;
        	}
@@ -2653,7 +2645,7 @@ arcnetS_rx(struct device *dev,u_char *buf,
 
          	skb = alloc_skb(length, GFP_ATOMIC);
          	if (skb == NULL) {
-         		printk("arcnetS: Memory squeeze, dropping packet.\n");
+         		BUGMSG(D_NORMAL,"Memory squeeze, dropping packet.\n");
          		lp->stats.rx_dropped++;
          		return;
          	}
@@ -2780,8 +2772,8 @@ int arcnetA_header(struct sk_buff *skb,struct device *dev,
 		head->protocol_id=ARC_P_ATALK;
 		break;
 	default:
-		printk("%6s: I don't understand protocol %d (%Xh)\n",
-			dev->name,type,type);
+		BUGMSG(D_NORMAL,"I don't understand protocol %d (%Xh)\n",
+			type,type);
 		lp->stats.tx_errors++;
 		lp->stats.tx_aborted_errors++;
 		return 0;
@@ -2850,7 +2842,7 @@ int arcnetS_header(struct sk_buff *skb,struct device *dev,
 		BUGMSG(D_DURING,"S_header: ARP_RFC1051 packet.\n");
 		break;
 	default:
-		printk("arcnetS: I don't understand protocol %d (%Xh)\n",
+		BUGMSG(D_NORMAL,"I don't understand protocol %d (%Xh)\n",
 			type,type);
 		lp->stats.tx_errors++;
 		lp->stats.tx_aborted_errors++;
@@ -2901,8 +2893,8 @@ int arcnetA_rebuild_header(void *buff,struct device *dev,unsigned long dst,
 	 
 	if(head->protocol_id != ARC_P_IP) 
 	{
-		printk("%6s: I don't understand protocol type %d (%Xh) addresses!\n",
-			dev->name,head->protocol_id,head->protocol_id);
+		BUGMSG(D_NORMAL,"I don't understand protocol type %d (%Xh) addresses!\n",
+			head->protocol_id,head->protocol_id);
 		lp->stats.tx_errors++;
 		lp->stats.tx_aborted_errors++;
 		head->daddr=0;
@@ -2938,7 +2930,7 @@ int arcnetS_rebuild_header(void *buff,struct device *dev,unsigned long dst,
 	 
 	if(head->protocol_id != ARC_P_IP_RFC1051) 
 	{
-		printk("arcnetS: I don't understand protocol type %d (%Xh) addresses!\n",
+		BUGMSG(D_NORMAL,"I don't understand protocol type %d (%Xh) addresses!\n",
 			head->protocol_id,head->protocol_id);
 		lp->stats.tx_errors++;
 		lp->stats.tx_aborted_errors++;
@@ -2996,7 +2988,7 @@ unsigned short arcnetA_type_trans(struct sk_buff *skb,struct device *dev)
 	case ARC_P_NOVELL_EC:
 		return htons(ETH_P_802_3);
 	default:
-		BUGMSG(D_EXTRA,"received packet of unknown protocol id %d (%Xh)\n",
+		BUGMSG(D_NORMAL,"received packet of unknown protocol id %d (%Xh)\n",
 				head->protocol_id,head->protocol_id);
 		lp->stats.rx_errors++;
 		lp->stats.rx_crc_errors++;
@@ -3037,8 +3029,8 @@ unsigned short arcnetS_type_trans(struct sk_buff *skb,struct device *dev)
 	case ARC_P_ARP_RFC1051:	return htons(ETH_P_ARP);
 	case ARC_P_ATALK:   return htons(ETH_P_ATALK); /* untested appletalk */
 	default:
-		BUGMSG(D_EXTRA,"received packet of unknown protocol id %d (%Xh)\n",
-				head->protocol_id,head->protocol_id);
+		BUGMSG(D_NORMAL,"received packet of unknown protocol id %d (%Xh)\n",
+			head->protocol_id,head->protocol_id);
 		lp->stats.rx_errors++;
 		lp->stats.rx_crc_errors++;
 		return 0;

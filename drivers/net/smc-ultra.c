@@ -270,7 +270,12 @@ ultra_get_8390_hdr(struct device *dev, struct e8390_pkt_hdr *hdr, int ring_page)
 	unsigned long hdr_start = dev->mem_start + ((ring_page - START_PG)<<8);
 
 	outb(ULTRA_MEMENB, dev->base_addr - ULTRA_NIC_OFFSET);	/* shmem on */
+#ifdef notdef
+	/* Officially this is what we are doing, but the readl() is faster */
 	memcpy_fromio(hdr, hdr_start, sizeof(struct e8390_pkt_hdr));
+#else
+	((unsigned int*)hdr)[0] = readl(hdr_start);
+#endif
 	outb(0x00, dev->base_addr - ULTRA_NIC_OFFSET); /* shmem off */
 }
 

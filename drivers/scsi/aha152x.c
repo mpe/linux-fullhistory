@@ -918,7 +918,7 @@ int aha152x_abort( Scsi_Cmnd *SCpnt)
 
       ptr->host_scribble = NULL;
       ptr->result = DID_ABORT << 16;
-      ptr->done(ptr);
+      ptr->scsi_done(ptr);
       return SCSI_ABORT_SUCCESS;
     }
 
@@ -942,7 +942,7 @@ int aha152x_abort( Scsi_Cmnd *SCpnt)
     /* target entered bus free before COMMAND COMPLETE, nothing to abort */
     restore_flags(flags);
     current_SC->result = DID_ERROR << 16;
-    current_SC->done(current_SC);
+    current_SC->scsi_done(current_SC);
     current_SC = (Scsi_Cmnd *) NULL;
     return SCSI_ABORT_SUCCESS;
   }
@@ -1063,7 +1063,7 @@ int aha152x_reset(Scsi_Cmnd * __unused)
 	 {
 	   current_SC->host_scribble = NULL;
 	   current_SC->result = DID_RESET << 16;
-	   current_SC->done(current_SC);
+	   current_SC->scsi_done(current_SC);
 	   current_SC=NULL;
 	 }
 
@@ -1083,7 +1083,7 @@ int aha152x_reset(Scsi_Cmnd * __unused)
   
 	       ptr->host_scribble = NULL;
 	       ptr->result        = DID_RESET << 16;
-	       ptr->done(ptr);
+	       ptr->scsi_done(ptr);
   
 	       ptr = next; 
 	     }

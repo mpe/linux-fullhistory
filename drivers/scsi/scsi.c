@@ -65,6 +65,7 @@ static void scsi_times_out (Scsi_Cmnd * SCpnt, int pid);
 static int scan_scsis_single (int channel,int dev,int lun,int * max_scsi_dev ,
                  Scsi_Device ** SDpnt, Scsi_Cmnd * SCpnt,
                  struct Scsi_Host *shpnt, char * scsi_result);
+void scsi_build_commandblocks(Scsi_Device * SDpnt);
 
 
 static unsigned char * dma_malloc_freelist = NULL;
@@ -272,18 +273,6 @@ static int get_device_flags(unsigned char * response_data){
     return 0;
 }
 
-/*
- *  As the actual SCSI command runs in the background, we must set up a
- *  flag that tells scan_scsis() when the result it has is valid.
- *  scan_scsis can set the_result to -1, and watch for it to become the
- *  actual return code for that call.  the scan_scsis_done function() is
- *  our user specified completion function that is passed on to the
- *  scsi_do_cmd() function.
- */
-
-volatile int in_scan_scsis = 0;
-static int the_result;
-
 void scsi_make_blocked_list(void)  {
     int block_count = 0, index;
     unsigned int flags;
@@ -385,9 +374,10 @@ static void scan_scsis (struct Scsi_Host *shpnt, unchar hardcoded,
   int max_dev_lun;
   Scsi_Cmnd *SCpnt;
 
-  in_scan_scsis++;
   SCpnt = (Scsi_Cmnd *) scsi_init_malloc (sizeof (Scsi_Cmnd), GFP_ATOMIC | GFP_DMA);
   SDpnt = (Scsi_Device *) scsi_init_malloc (sizeof (Scsi_Device), GFP_ATOMIC);
+  memset (SCpnt, 0, sizeof (Scsi_Cmnd));
+
 
   /* Make sure we have something that is valid for DMA purposes */
   scsi_result = ((!dma_malloc_freelist || !shpnt->unchecked_isa_dma)
@@ -398,9 +388,17 @@ static void scan_scsis (struct Scsi_Host *shpnt, unchar hardcoded,
     goto leave;
   }
 
-  shpnt->host_queue = SCpnt;    /* We need this so that commands can time out */
+  /* We must chain ourself in the host_queue, so commands can time out */
+  if(shpnt->host_queue)
+      shpnt->host_queue->prev = SCpnt;
+  SCpnt->next = shpnt->host_queue;
+  SCpnt->prev = NULL;
+  shpnt->host_queue = SCpnt;
+
 
   if (hardcoded == 1) {
+    Scsi_Device *oldSDpnt=SDpnt;
+    struct Scsi_Device_Template * sdtpnt;
     channel = hchannel;
     if(channel > shpnt->max_channel) goto leave;
     dev = hid;
@@ -409,11 +407,31 @@ static void scan_scsis (struct Scsi_Host *shpnt, unchar hardcoded,
     if(lun >= shpnt->max_lun) goto leave;
     scan_scsis_single (channel, dev, lun, &max_dev_lun,
                    &SDpnt, SCpnt, shpnt, scsi_result);
+    if(SDpnt!=oldSDpnt) {
+
+	/* it could happen the blockdevice hasn't yet been inited */
+    for(sdtpnt = scsi_devicelist; sdtpnt; sdtpnt = sdtpnt->next)
+        if(sdtpnt->init && sdtpnt->dev_noticed) (*sdtpnt->init)();
+
+            oldSDpnt->scsi_request_fn = NULL;
+            for(sdtpnt = scsi_devicelist; sdtpnt; sdtpnt = sdtpnt->next)
+                if(sdtpnt->attach) {
+		  (*sdtpnt->attach)(oldSDpnt);
+                  if(oldSDpnt->attached) scsi_build_commandblocks(oldSDpnt);}
+	    resize_dma_pool();
+  
+        for(sdtpnt = scsi_devicelist; sdtpnt; sdtpnt = sdtpnt->next) {
+            if(sdtpnt->finish && sdtpnt->nr_dev)
+                {(*sdtpnt->finish)();}
+	}
+    }
+
   }
   else {
     for (channel = 0; channel <= shpnt->max_channel; channel++) {
       for (dev = 0; dev < shpnt->max_id; ++dev) {
         if (shpnt->this_id != dev) {
+
           /*
            * We need the for so our continue, etc. work fine. We put this in
            * a variable so that we can override it during the scan if we
@@ -421,20 +439,32 @@ static void scan_scsis (struct Scsi_Host *shpnt, unchar hardcoded,
            */
           max_dev_lun = (max_scsi_luns < shpnt->max_lun ?
                          max_scsi_luns : shpnt->max_lun);
-
           for (lun = 0; lun < max_dev_lun; ++lun) {
-
             if (!scan_scsis_single (channel, dev, lun, &max_dev_lun,
                                     &SDpnt, SCpnt, shpnt, scsi_result))
-              break; /* break means don't probe for luns!=0 */
+              break; /* break means don't probe further for luns!=0 */
           }                     /* for lun ends */
         }                       /* if this_id != id ends */
       }                         /* for dev ends */
     }                           /* for channel ends */
+  } 				/* if/else hardcoded */
 
-leave:
-    shpnt->host_queue = NULL;   /* No longer needed here */
+  leave:
 
+  {/* Unchain SCpnt from host_queue */
+    Scsi_Cmnd *prev,*next,*hqptr;
+    for(hqptr=shpnt->host_queue; hqptr!=SCpnt; hqptr=hqptr->next) ;
+    if(hqptr) {
+      prev=hqptr->prev;
+      next=hqptr->next;
+      if(prev) 
+     	prev->next=next;
+      else 
+     	shpnt->host_queue=next;
+      if(next) next->prev=prev;
+    }
+  }
+ 
      /* Last device block does not exist.  Free memory. */
     if (SDpnt != NULL)
       scsi_init_free ((char *) SDpnt, sizeof (Scsi_Device));
@@ -446,14 +476,12 @@ leave:
     if (scsi_result != &scsi_result0[0] && scsi_result != NULL)
       scsi_free (scsi_result, 512);
 
-    in_scan_scsis--;
-  }
 }
 
 /*
  * The worker for scan_scsis.
  * Returning 0 means Please don't ask further for lun!=0, 1 means OK go on.
- * Global variables used : scsi_devices(linked list), the_result
+ * Global variables used : scsi_devices(linked list)
  */
 int scan_scsis_single (int channel, int dev, int lun, int *max_dev_lun,
     Scsi_Device **SDpnt2, Scsi_Cmnd * SCpnt, struct Scsi_Host * shpnt, 
@@ -490,7 +518,6 @@ int scan_scsis_single (int channel, int dev, int lun, int *max_dev_lun,
   scsi_cmd[1] = lun << 5;
   scsi_cmd[2] = scsi_cmd[3] = scsi_cmd[4] = scsi_cmd[5] = 0;
 
-  memset (SCpnt, 0, sizeof (Scsi_Cmnd));
   SCpnt->host = SDpnt->host;
   SCpnt->device = SDpnt;
   SCpnt->target = SDpnt->id;
@@ -507,8 +534,10 @@ int scan_scsis_single (int channel, int dev, int lun, int *max_dev_lun,
   }
 
 #if defined(DEBUG) || defined(DEBUG_INIT)
-  printk ("scsi: scan_scsis_single id %d lun %d. Return code %d\n",
+  printk ("scsi: scan_scsis_single id %d lun %d. Return code 0x%08x\n",
           dev, lun, SCpnt->result);
+  print_driverbyte(SCpnt->result); print_hostbyte(SCpnt->result);
+  printk("\n");
 #endif
 
   if (SCpnt->result) {
@@ -546,13 +575,12 @@ int scan_scsis_single (int channel, int dev, int lun, int *max_dev_lun,
     down (&sem);
   }
 
-  the_result = SCpnt->result;
 #if defined(DEBUG) || defined(DEBUG_INIT)
   printk ("scsi: INQUIRY %s with code 0x%x\n",
-          the_result ? "failed" : "successful", the->result);
+          SCpnt->result ? "failed" : "successful", SCpnt->result);
 #endif
 
-  if (the_result)
+  if (SCpnt->result)
     return 0;     /* assume no peripheral if any sort of error */
 
   /*
@@ -696,7 +724,7 @@ int scan_scsis_single (int channel, int dev, int lun, int *max_dev_lun,
   SDpnt = (Scsi_Device *) scsi_init_malloc (sizeof (Scsi_Device), GFP_ATOMIC);
   *SDpnt2=SDpnt;
   if (!SDpnt)
-    printk ("scsi: scan_scsis_single: No memory\n");
+    printk ("scsi: scan_scsis_single: Cannot malloc\n");
 
 
   /*
@@ -750,7 +778,7 @@ static void scsi_times_out (Scsi_Cmnd * SCpnt, int pid)
     switch (SCpnt->internal_timeout & (IN_ABORT | IN_RESET))
     {
     case NORMAL_TIMEOUT:
-	if (!in_scan_scsis) {
+	{
 #ifdef DEBUG_TIMEOUT
 	    scsi_dump_status();
 #endif
@@ -1460,7 +1488,7 @@ static void scsi_done (Scsi_Cmnd * SCpnt)
 			printk ("Internal error %s %d \n", __FILE__,
 				__LINE__);
 		    }
-		}
+		} /* end WAS_SENSE */
 		else
 		{
 #ifdef DEBUG
@@ -1734,8 +1762,7 @@ int scsi_abort (Scsi_Cmnd * SCpnt, int why, int pid)
 	    SCpnt->internal_timeout |= IN_ABORT;
 	    oldto = update_timeout(SCpnt, ABORT_TIMEOUT);
 	    
-	    if ((SCpnt->flags & IS_RESETTING) &&
-		SCpnt->device->soft_reset) {
+	    if ((SCpnt->flags & IS_RESETTING) && SCpnt->device->soft_reset) {
 		/* OK, this command must have died when we did the
 		 *  reset.  The device itself must have lied. 
 		 */
@@ -1797,6 +1824,8 @@ int scsi_abort (Scsi_Cmnd * SCpnt, int why, int pid)
 		/* We should have already aborted this one.  No
 		 * need to adjust timeout 
 		 */
+                 SCpnt->internal_timeout &= ~IN_ABORT;
+                 return 0;
 	    case SCSI_ABORT_NOT_RUNNING:
 		SCpnt->internal_timeout &= ~IN_ABORT;
 		update_timeout(SCpnt, 0);
@@ -1837,10 +1866,8 @@ int scsi_reset (Scsi_Cmnd * SCpnt, int bus_reset_flag)
     Scsi_Cmnd * SCpnt1;
     struct Scsi_Host * host = SCpnt->host;
 
-#ifdef DEBUG
-    printk("Danger Will Robinson! - SCSI bus for host %d is being reset.\n",
+    printk("SCSI bus is being reset for host %d.\n",
 	   host->host_no);
-#endif
  
     /*
      * First of all, we need to make a recommendation to the low-level
@@ -1862,10 +1889,8 @@ int scsi_reset (Scsi_Cmnd * SCpnt, int bus_reset_flag)
     SCpnt1 = host->host_queue;
     while(SCpnt1) {
 	if( SCpnt1->request.rq_status != RQ_INACTIVE
-	   && (SCpnt1->flags & (WAS_RESET | IS_RESETTING)) == 0 )
-	{
-            break;
-	}
+	    && (SCpnt1->flags & (WAS_RESET | IS_RESETTING)) == 0 )
+            	break;
         SCpnt1 = SCpnt1->next;
  	}
     if( SCpnt1 == NULL ) {
@@ -2154,7 +2179,7 @@ int scsi_free(void *obj, unsigned int len)
     unsigned long flags;
     
 #ifdef DEBUG
-    printk("Sfree %p %d\n",obj, len);
+    printk("scsi_free %p %d\n",obj, len);
 #endif
     
     offset = -1;
@@ -2167,20 +2192,20 @@ int scsi_free(void *obj, unsigned int len)
 	    break;
 	}
     
-    if (page == (dma_sectors >> 3)) panic("Bad offset");
+    if (page == (dma_sectors >> 3)) panic("scsi_free:Bad offset");
     sector = offset >> 9;
-    if(sector >= dma_sectors) panic ("Bad page");
+    if(sector >= dma_sectors) panic ("scsi_free:Bad page");
     
     sector = (offset >> 9) & (sizeof(*dma_malloc_freelist) * 8 - 1);
     nbits = len >> 9;
     mask = (1 << nbits) - 1;
     
-    if ((mask << sector) > 0xffff) panic ("Bad memory alignment");
+    if ((mask << sector) > 0xffff) panic ("scsi_free:Bad memory alignment");
     
     save_flags(flags);
     cli();
     if((dma_malloc_freelist[page] & (mask << sector)) != (mask<<sector))
-	panic("Trying to free unused memory");
+	panic("scsi_free:Trying to free unused memory");
     
     dma_free_sectors += nbits;
     dma_malloc_freelist[page] &= ~(mask << sector);
@@ -2438,8 +2463,13 @@ int scsi_proc_info(char *buffer, char **start, off_t offset, int length,
     /*
      * Usage: echo "scsi singledevice 0 1 2 3" >/proc/scsi/scsi
      * with  "0 1 2 3" replaced by your "Host Channel Id Lun".
-     * Consider this feature ALPHA, as you can easily hang your
-     * scsi system (depending on your low level driver).
+     * Consider this feature BETA.
+     *     CAUTION: This is not for hotplugging your peripherals. As
+     *     SCSI was not designed for this you could damage your
+     *     hardware !  
+     * However perhaps it is legal to switch on an
+     * already connected device. It is perhaps not 
+     * guaranteed this device doesn't corrupt an ongoing data transfer.
      */
     if(!buffer || length < 25 || strncmp("scsi", buffer, 4))
 	return(-EINVAL);

@@ -72,6 +72,7 @@ static inline void change_pmd_range(pgd_t * pgd, unsigned long address,
 static void change_protection(unsigned long start, unsigned long end, pgprot_t newprot)
 {
 	pgd_t *dir;
+	unsigned long beg = start;
 
 	dir = pgd_offset(current->mm, start);
 	while (start < end) {
@@ -79,7 +80,7 @@ static void change_protection(unsigned long start, unsigned long end, pgprot_t n
 		start = (start + PGDIR_SIZE) & PGDIR_MASK;
 		dir++;
 	}
-	invalidate();
+	invalidate_range(current->mm, beg, end);
 	return;
 }
 
