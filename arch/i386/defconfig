@@ -281,7 +281,7 @@ CONFIG_NET_PCI=y
 # CONFIG_DE4X5 is not set
 # CONFIG_TULIP is not set
 # CONFIG_DGRS is not set
-CONFIG_EEXPRESS_PRO100=y
+CONFIG_EEPRO100=y
 # CONFIG_NE2K_PCI is not set
 # CONFIG_8139TOO is not set
 # CONFIG_SIS900 is not set
@@ -427,7 +427,7 @@ CONFIG_PCMCIA_SERIAL=y
 #
 
 #
-# Filesystems
+# File systems
 #
 # CONFIG_QUOTA is not set
 # CONFIG_AUTOFS_FS is not set
@@ -446,19 +446,17 @@ CONFIG_ISO9660_FS=y
 # CONFIG_JOLIET is not set
 # CONFIG_MINIX_FS is not set
 # CONFIG_NTFS_FS is not set
-# CONFIG_NTFS_RW is not set
 # CONFIG_HPFS_FS is not set
 CONFIG_PROC_FS=y
+# CONFIG_DEVFS_FS is not set
+# CONFIG_DEVFS_DEBUG is not set
 CONFIG_DEVPTS_FS=y
 # CONFIG_QNX4FS_FS is not set
-# CONFIG_QNX4FS_RW is not set
 # CONFIG_ROMFS_FS is not set
 CONFIG_EXT2_FS=y
 # CONFIG_SYSV_FS is not set
-# CONFIG_SYSV_FS_WRITE is not set
 # CONFIG_UDF_FS is not set
 # CONFIG_UFS_FS is not set
-# CONFIG_UFS_FS_WRITE is not set
 
 #
 # Network File Systems

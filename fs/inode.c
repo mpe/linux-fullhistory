@@ -156,6 +156,19 @@ static inline void write_inode(struct inode *inode)
 		inode->i_sb->s_op->write_inode(inode);
 }
 
+static inline void __iget(struct inode * inode)
+{
+	if (!inode->i_count++)
+	{
+		if (!(inode->i_state & I_DIRTY))
+		{
+			list_del(&inode->i_list);
+			list_add(&inode->i_list, &inode_in_use);
+		}
+		inodes_stat.nr_unused--;
+	}
+}
+
 static inline void sync_one(struct inode *inode)
 {
 	if (inode->i_state & I_LOCK) {
@@ -417,19 +430,6 @@ int shrink_icache_memory(int priority, int gfp_mask, zone_t *zone)
 	kmem_cache_shrink(inode_cachep);
 
 	return 0;
-}
-
-static inline void __iget(struct inode * inode)
-{
-	if (!inode->i_count++)
-	{
-		if (!(inode->i_state & I_DIRTY))
-		{
-			list_del(&inode->i_list);
-			list_add(&inode->i_list, &inode_in_use);
-		}
-		inodes_stat.nr_unused--;
-	}
 }
 
 /*
