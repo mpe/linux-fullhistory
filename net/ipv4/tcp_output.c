@@ -110,7 +110,7 @@ int tcp_send_skb(struct sock *sk, struct sk_buff *skb)
 	 
 	if (size < sizeof(struct tcphdr) || size > skb->len) 
 	{
-		printk("tcp_send_skb: bad skb (skb = %p, data = %p, th = %p, len = %lu)\n",
+		printk("tcp_send_skb: bad skb (skb = %p, data = %p, th = %p, len = %u)\n",
 			skb, skb->data, th, skb->len);
 		kfree_skb(skb, FREE_WRITE);
 		return 0;

@@ -806,7 +806,7 @@ asmlinkage int sys_accept(int fd, struct sockaddr *upeer_sockaddr, int *upeer_ad
  *	include the -EINPROGRESS status for such sockets.
  */
  
-asmlinkage int sys_connect(int fd, struct sockaddr *uservaddr, size_t addrlen)
+asmlinkage int sys_connect(int fd, struct sockaddr *uservaddr, int addrlen)
 {
 	struct socket *sock;
 	struct file *file;
@@ -857,7 +857,7 @@ asmlinkage int sys_connect(int fd, struct sockaddr *uservaddr, size_t addrlen)
  *	name to user space.
  */
 
-asmlinkage int sys_getsockname(int fd, struct sockaddr *usockaddr, size_t *usockaddr_len)
+asmlinkage int sys_getsockname(int fd, struct sockaddr *usockaddr, int *usockaddr_len)
 {
 	struct socket *sock;
 	char address[MAX_SOCK_ADDR];
@@ -882,7 +882,7 @@ asmlinkage int sys_getsockname(int fd, struct sockaddr *usockaddr, size_t *usock
  *	name to user space.
  */
  
-asmlinkage int sys_getpeername(int fd, struct sockaddr *usockaddr, size_t *usockaddr_len)
+asmlinkage int sys_getpeername(int fd, struct sockaddr *usockaddr, int *usockaddr_len)
 {
 	struct socket *sock;
 	char address[MAX_SOCK_ADDR];
@@ -942,7 +942,7 @@ asmlinkage int sys_send(int fd, void * buff, size_t len, unsigned flags)
  */
 
 asmlinkage int sys_sendto(int fd, void * buff, size_t len, unsigned flags,
-	   struct sockaddr *addr, size_t addr_len)
+	   struct sockaddr *addr, int addr_len)
 {
 	struct socket *sock;
 	struct file *file;
@@ -1025,7 +1025,7 @@ asmlinkage int sys_recv(int fd, void * ubuf, size_t size, unsigned flags)
  */
 
 asmlinkage int sys_recvfrom(int fd, void * ubuf, size_t size, unsigned flags,
-	     struct sockaddr *addr, size_t *addr_len)
+	     struct sockaddr *addr, int *addr_len)
 {
 	struct socket *sock;
 	struct file *file;

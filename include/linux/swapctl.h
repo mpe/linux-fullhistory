@@ -11,21 +11,21 @@ enum RCL_POLICY {RCL_ROUND_ROBIN, RCL_BUFF_FIRST, RCL_PERSIST};
 
 typedef struct swap_control_v5
 {
-	int	sc_max_page_age;
-	int	sc_page_advance;
-	int	sc_page_decline;
-	int	sc_page_initial_age;
-	int	sc_max_buff_age;
-	int	sc_buff_advance;
-	int	sc_buff_decline;
-	int	sc_buff_initial_age;
-	int	sc_age_cluster_fract;
-	int	sc_age_cluster_min;
-	int	sc_pageout_weight;
-	int	sc_bufferout_weight;
-	int 	sc_buffer_grace;
-	int 	sc_nr_buffs_to_free;
-	int 	sc_nr_pages_to_free;
+	unsigned int	sc_max_page_age;
+	unsigned int	sc_page_advance;
+	unsigned int	sc_page_decline;
+	unsigned int	sc_page_initial_age;
+	unsigned int	sc_max_buff_age;
+	unsigned int	sc_buff_advance;
+	unsigned int	sc_buff_decline;
+	unsigned int	sc_buff_initial_age;
+	unsigned int	sc_age_cluster_fract;
+	unsigned int	sc_age_cluster_min;
+	unsigned int	sc_pageout_weight;
+	unsigned int	sc_bufferout_weight;
+	unsigned int 	sc_buffer_grace;
+	unsigned int 	sc_nr_buffs_to_free;
+	unsigned int 	sc_nr_pages_to_free;
 	enum RCL_POLICY	sc_policy;
 } swap_control_v5;
 typedef struct swap_control_v5 swap_control_t;
@@ -33,22 +33,22 @@ extern swap_control_t swap_control;
 
 typedef struct kswapd_control_v1
 {
-	int	maxpages;
-	int	pages_buff;
-	int	pages_shm;
-	int	pages_mmap;
-	int	pages_swap;
+	unsigned int	maxpages;
+	unsigned int	pages_buff;
+	unsigned int	pages_shm;
+	unsigned int	pages_mmap;
+	unsigned int	pages_swap;
 } kswapd_control_v1;
 typedef kswapd_control_v1 kswapd_control_t;
 extern kswapd_control_t kswapd_ctl;
 
 typedef struct swapstat_v1
 {
-	int	wakeups;
-	int	pages_reclaimed;
-	int	pages_shm;
-	int	pages_mmap;
-	int	pages_swap;
+	unsigned int	wakeups;
+	unsigned int	pages_reclaimed;
+	unsigned int	pages_shm;
+	unsigned int	pages_mmap;
+	unsigned int	pages_swap;
 } swapstat_v1;
 typedef swapstat_v1 swapstat_t;
 extern swapstat_t swapstats;
@@ -94,7 +94,7 @@ extern int min_free_pages, free_pages_low, free_pages_high;
  * scan the resource list. */
 static inline int AGE_CLUSTER_SIZE(int resources)
 {
-	int n = (resources * AGE_CLUSTER_FRACT) >> 10;
+	unsigned int n = (resources * AGE_CLUSTER_FRACT) >> 10;
 	if (n < AGE_CLUSTER_MIN)
 		return AGE_CLUSTER_MIN;
 	else

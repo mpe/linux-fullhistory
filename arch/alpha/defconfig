@@ -67,6 +67,7 @@ CONFIG_BLK_DEV_RAM=y
 #
 # Networking options
 #
+# CONFIG_NETLINK is not set
 # CONFIG_FIREWALL is not set
 # CONFIG_NET_ALIAS is not set
 CONFIG_INET=y
@@ -89,7 +90,6 @@ CONFIG_SKB_LARGE=y
 # CONFIG_IPX is not set
 # CONFIG_ATALK is not set
 # CONFIG_AX25 is not set
-# CONFIG_NETLINK is not set
 
 #
 # SCSI support
@@ -145,12 +145,9 @@ CONFIG_SCSI_QLOGIC_ISP=y
 # Network device support
 #
 CONFIG_NETDEVICES=y
+# CONFIG_ARCNET is not set
 CONFIG_DUMMY=m
 # CONFIG_EQUALIZER is not set
-# CONFIG_PLIP is not set
-# CONFIG_PPP is not set
-# CONFIG_SLIP is not set
-# CONFIG_NET_RADIO is not set
 CONFIG_NET_ETHERNET=y
 # CONFIG_NET_VENDOR_3COM is not set
 # CONFIG_LANCE is not set
@@ -162,8 +159,12 @@ CONFIG_DE4X5=y
 # CONFIG_DEC_ELCP is not set
 # CONFIG_DGRS is not set
 # CONFIG_NET_POCKET is not set
+# CONFIG_FDDI is not set
+# CONFIG_PLIP is not set
+# CONFIG_PPP is not set
+# CONFIG_NET_RADIO is not set
+# CONFIG_SLIP is not set
 # CONFIG_TR is not set
-# CONFIG_ARCNET is not set
 
 #
 # ISDN subsystem

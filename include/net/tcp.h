@@ -316,7 +316,7 @@ extern int			tcp_v4_backlog_rcv(struct sock *sk,
 						   struct sk_buff *skb);
 extern int			tcp_v4_connect(struct sock *sk,
 					       struct sockaddr *uaddr,
-					       size_t addr_len);
+					       int addr_len);
 
 
 extern void tcp_read_wakeup(struct sock *);

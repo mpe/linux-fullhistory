@@ -599,7 +599,7 @@ int udp_recvmsg(struct sock *sk, struct msghdr *msg, int len,
   	return(copied);
 }
 
-int udp_connect(struct sock *sk, struct sockaddr *uaddr, size_t addr_len)
+int udp_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 {
 	struct sockaddr_in *usin = (struct sockaddr_in *) uaddr;
 	struct rtable *rt;

@@ -6,8 +6,7 @@
 
 #include <linux/ctype.h>
 
-char _ctmp;
-unsigned char _ctype[] = {0x00,			/* EOF */
+unsigned char _ctype[] = {
 _C,_C,_C,_C,_C,_C,_C,_C,			/* 0-7 */
 _C,_C|_S,_C|_S,_C|_S,_C|_S,_C|_S,_C,_C,		/* 8-15 */
 _C,_C,_C,_C,_C,_C,_C,_C,			/* 16-23 */

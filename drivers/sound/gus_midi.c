@@ -27,6 +27,7 @@ static volatile unsigned char gus_midi_control;
 static void     (*midi_input_intr) (int dev, unsigned char data);
 
 static unsigned char tmp_queue[256];
+extern int      gus_pnp_flag;
 static volatile int qlen;
 static volatile unsigned char qhead, qtail;
 extern int      gus_base, gus_irq, gus_dma;
@@ -58,10 +59,11 @@ gus_midi_open (int dev, int mode,
   input_opened = 0;
 
   if (mode == OPEN_READ || mode == OPEN_READWRITE)
-    {
-      gus_midi_control |= MIDI_ENABLE_RCV;
-      input_opened = 1;
-    }
+    if (!gus_pnp_flag)
+      {
+	gus_midi_control |= MIDI_ENABLE_RCV;
+	input_opened = 1;
+      }
 
 
   outb ((gus_midi_control), u_MidiControl);	/* Enable */

@@ -203,7 +203,10 @@ open_dmap (int dev, int mode, struct dma_buffparms *dmap, int chan)
   }
 
   if (dmap->raw_buf == NULL)
-    return -ENOSPC;		/* Memory allocation failed during boot */
+    {
+      printk ("Sound: DMA buffers not available\n");
+      return -ENOSPC;		/* Memory allocation failed during boot */
+    }
 
   if (sound_open_dma (chan, audio_devs[dev]->name))
     {
@@ -451,6 +454,9 @@ launch_output (int dev, struct dma_buffparms *dmap)
     }
 
   dmap->dma_mode |= DMODE_OUTPUT;
+
+  if (dmap->counts[dmap->qhead] == 0)
+    dmap->counts[dmap->qhead] = dmap->fragment_size;
 
   audio_devs[dev]->d->output_block (dev, dmap->raw_buf_phys +
 				    dmap->qhead * dmap->fragment_size,
@@ -870,7 +876,7 @@ get_buffer_pointer (int dev, int chan, struct dma_buffparms *dmap)
       pos = get_dma_residue (chan);
       if (chan > 3)		/* Word count */
 	pos *= 2;
-      pos = dmap->bytes_in_use - pos;
+      pos = dmap->bytes_in_use - pos - 1;
       if (pos < 0)
 	pos = 0;
       if (pos > dmap->bytes_in_use)
@@ -1605,6 +1611,9 @@ DMAbuf_outputintr (int dev, int event_type)
 
       if (!(audio_devs[dev]->flags & DMA_AUTOMODE))
 	{
+	  if (dmap->counts[dmap->qhead] == 0)
+	    dmap->counts[dmap->qhead] = dmap->fragment_size;
+
 	  audio_devs[dev]->d->output_block (dev, dmap->raw_buf_phys +
 					  dmap->qhead * dmap->fragment_size,
 					    dmap->counts[dmap->qhead], 1,

@@ -127,7 +127,7 @@ repeat:
 
 int shrink_mmap(int priority, int dma)
 {
-	static int clock = 0;
+	static unsigned long clock = 0;
 	struct page * page;
 	unsigned long limit = max_mapnr;
 	struct buffer_head *tmp, *bh;

@@ -282,7 +282,7 @@ int packet_attach(struct sock *sk, struct device *dev)
  *	Bind a packet socket to a device
  */
 
-static int packet_bind(struct sock *sk, struct sockaddr *uaddr, size_t addr_len)
+static int packet_bind(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 {
 	char name[15];
 	struct device *dev;

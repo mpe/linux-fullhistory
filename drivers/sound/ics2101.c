@@ -121,35 +121,41 @@ ics2101_mixer_ioctl (int dev, unsigned int cmd, caddr_t arg)
   if (((cmd >> 8) & 0xff) == 'M')
     {
       if (_IOC_DIR (cmd) & _IOC_WRITE)
-	switch (cmd & 0xff)
-	  {
-	  case SOUND_MIXER_RECSRC:
-	    return gus_default_mixer_ioctl (dev, cmd, arg);
-	    break;
+	{
+	  int             val;
 
-	  case SOUND_MIXER_MIC:
-	    return ioctl_out (arg, set_volumes (DEV_MIC, ioctl_in (arg)));
-	    break;
+	  get_user (val, (int *) arg);
 
-	  case SOUND_MIXER_CD:
-	    return ioctl_out (arg, set_volumes (DEV_CD, ioctl_in (arg)));
-	    break;
+	  switch (cmd & 0xff)
+	    {
+	    case SOUND_MIXER_RECSRC:
+	      return gus_default_mixer_ioctl (dev, cmd, arg);
+	      break;
 
-	  case SOUND_MIXER_LINE:
-	    return ioctl_out (arg, set_volumes (DEV_LINE, ioctl_in (arg)));
-	    break;
+	    case SOUND_MIXER_MIC:
+	      return ioctl_out (arg, set_volumes (DEV_MIC, val));
+	      break;
 
-	  case SOUND_MIXER_SYNTH:
-	    return ioctl_out (arg, set_volumes (DEV_GF1, ioctl_in (arg)));
-	    break;
+	    case SOUND_MIXER_CD:
+	      return ioctl_out (arg, set_volumes (DEV_CD, val));
+	      break;
 
-	  case SOUND_MIXER_VOLUME:
-	    return ioctl_out (arg, set_volumes (DEV_VOL, ioctl_in (arg)));
-	    break;
+	    case SOUND_MIXER_LINE:
+	      return ioctl_out (arg, set_volumes (DEV_LINE, val));
+	      break;
 
-	  default:
-	    return -EINVAL;
-	  }
+	    case SOUND_MIXER_SYNTH:
+	      return ioctl_out (arg, set_volumes (DEV_GF1, val));
+	      break;
+
+	    case SOUND_MIXER_VOLUME:
+	      return ioctl_out (arg, set_volumes (DEV_VOL, val));
+	      break;
+
+	    default:
+	      return -EINVAL;
+	    }
+	}
       else
 	switch (cmd & 0xff)	/*
 				 * Return parameters

@@ -304,6 +304,19 @@ sb_mixer_ioctl (int dev, unsigned int cmd, caddr_t arg)
   sb_devc        *devc = mixer_devs[dev]->devc;
   int             val;
 
+/*
+ * Use ioctl(fd, SOUND_MIXER_PRIVATE1, &mode) to turn AGC off (0) or on (1).
+ */
+  if (cmd == SOUND_MIXER_PRIVATE1 && devc->model == MDL_SB16)
+    {
+      int             tmp;
+
+      get_user (tmp, (int *) arg);
+
+      sb_setmixer (devc, 0x43, (~tmp) & 0x01);
+      return 0;
+    }
+
   if (((cmd >> 8) & 0xff) == 'M')
     {
       if (_IOC_DIR (cmd) & _IOC_WRITE)

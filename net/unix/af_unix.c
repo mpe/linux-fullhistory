@@ -397,7 +397,7 @@ static unix_socket *unix_find_other(char *path, int *error)
 }
 
 
-static int unix_bind(struct socket *sock, struct sockaddr *uaddr, size_t addr_len)
+static int unix_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 {
 	struct sockaddr_un *sunaddr=(struct sockaddr_un *)uaddr;
 	unix_socket *sk=sock->data;
@@ -444,7 +444,7 @@ static int unix_bind(struct socket *sock, struct sockaddr *uaddr, size_t addr_le
 	
 }
 
-static int unix_connect(struct socket *sock, struct sockaddr *uaddr, size_t addr_len, int flags)
+static int unix_connect(struct socket *sock, struct sockaddr *uaddr, int addr_len, int flags)
 {
 	unix_socket *sk=sock->data;
 	struct sockaddr_un *sunaddr=(struct sockaddr_un *)uaddr;
@@ -669,7 +669,7 @@ static int unix_accept(struct socket *sock, struct socket *newsock, int flags)
 	return 0;
 }
 
-static int unix_getname(struct socket *sock, struct sockaddr *uaddr, size_t *uaddr_len, int peer)
+static int unix_getname(struct socket *sock, struct sockaddr *uaddr, int *uaddr_len, int peer)
 {
 	unix_socket *sk=sock->data;
 	struct sockaddr_un *sunaddr=(struct sockaddr_un *)uaddr;

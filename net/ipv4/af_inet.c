@@ -767,7 +767,7 @@ int inet_release(struct socket *sock, struct socket *peer)
 
 
 static int inet_bind(struct socket *sock, struct sockaddr *uaddr,
-	       size_t addr_len)
+	       int addr_len)
 {
 	struct sockaddr_in *addr=(struct sockaddr_in *)uaddr;
 	struct sock *sk=(struct sock *)sock->data, *sk2;
@@ -923,7 +923,7 @@ static int inet_bind(struct socket *sock, struct sockaddr *uaddr,
  */
  
 int inet_connect(struct socket *sock, struct sockaddr * uaddr,
-		 size_t addr_len, int flags)
+		 int addr_len, int flags)
 {
 	struct sock *sk=(struct sock *)sock->data;
 	int err;
@@ -1090,7 +1090,7 @@ int inet_accept(struct socket *sock, struct socket *newsock, int flags)
  */
  
 static int inet_getname(struct socket *sock, struct sockaddr *uaddr,
-		 size_t *uaddr_len, int peer)
+		 int *uaddr_len, int peer)
 {
 	struct sockaddr_in *sin=(struct sockaddr_in *)uaddr;
 	struct sock *sk;

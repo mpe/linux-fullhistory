@@ -25,7 +25,8 @@
 #include <asm/bitops.h>
 #include <asm/pgtable.h>
 
-int nr_swapfiles = 0;
+unsigned int nr_swapfiles = 0;
+
 static struct {
 	int head;	/* head of priority-ordered swapfile list */
 	int next;	/* swapfile to be used next */
@@ -36,7 +37,7 @@ struct swap_info_struct swap_info[MAX_SWAPFILES];
 
 static inline int scan_swap_map(struct swap_info_struct *si)
 {
-	int offset;
+	unsigned long offset;
 	/* 
 	 * We try to cluster swap pages by allocating them
 	 * sequentially in swap.  Once we've allocated

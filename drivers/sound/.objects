@@ -56,10 +56,6 @@ ifdef CONFIG_PAS
 	OBJS := $(OBJS)  pas2_card.o pas2_midi.o pas2_mixer.o pas2_pcm.o
 endif
 
-ifdef CONFIG_SEQUENCER
-	OBJS := $(OBJS)  patmgr.o
-endif
-
 ifdef CONFIG_PSS
 	OBJS := $(OBJS)  pss.o
 endif
@@ -71,6 +67,7 @@ endif
 ifdef CONFIG_SEQUENCER
 	OBJS := $(OBJS)  sequencer.o
 endif
+
 
 ifdef CONFIG_SEQUENCER
 	OBJS := $(OBJS)  sound_timer.o

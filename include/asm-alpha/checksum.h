@@ -39,7 +39,7 @@ extern unsigned int csum_partial(const unsigned char * buff, int len, unsigned i
  * here even more important to align src and dst on a 32-bit (or even
  * better 64-bit) boundary
  */
-unsigned int csum_partial_copy( const char *src, char *dst, int len, int sum);
+unsigned int csum_partial_copy(const char *src, char *dst, int len, unsigned int sum);
 
 /*
  * the same as csum_partial, but copies from user space (but on the alpha

@@ -1749,9 +1749,6 @@ guswave_load_patch (int dev, int format, const char *addr,
 
   count -= sizeof_patch;
 
-  if (gus_mem_size == 0)
-    return -ENOSPC;
-
   if (free_sample >= MAX_SAMPLE)
     {
       printk ("GUS: Sample table full\n");
@@ -1764,6 +1761,12 @@ guswave_load_patch (int dev, int format, const char *addr,
    */
 
   copy_from_user (&((char *) &patch)[offs], &(addr)[offs], sizeof_patch - offs);
+
+  if (patch.mode & WAVE_ROM)
+    return -EINVAL;
+  if (gus_mem_size == 0)
+
+    return -ENOSPC;
 
   instr = patch.instr_no;
 
@@ -1993,8 +1996,6 @@ guswave_load_patch (int dev, int format, const char *addr,
 
   free_mem_ptr += patch.len;
 
-  if (!pmgr_flag)
-    pmgr_inform (dev, PM_E_PATCH_LOADED, instr, free_sample, 0, 0);
   free_sample++;
   return 0;
 }
@@ -2273,40 +2274,6 @@ gus_audio_ioctl (int dev, unsigned int cmd, caddr_t arg, int local)
 
     case SOUND_PCM_READ_FILTER:
       return ioctl_out (arg, -EINVAL);
-      break;
-
-/* This is just a temporary hack used for reading the ROM patch set. */
-
-    case SNDCTL_PMGR_ACCESS:
-      {
-	copr_msg       *buf;
-	int             i, pos;
-
-	buf = (copr_msg *) vmalloc (sizeof (copr_msg));
-	if (buf == NULL)
-	  return -ENOSPC;
-
-	copy_from_user ((char *) buf, &((char *) arg)[0], sizeof (*buf));
-
-	pos = buf->len;
-
-	gus_write8 (0x53, gus_look8 (0x53) | 0x02);	/* Select ROM I/O access */
-
-	for (i = 0; i < 2048; i++)
-	  {
-	    buf->data[i] = gus_peek (pos + i);
-	  }
-	gus_write8 (0x53, gus_look8 (0x53) & ~0x02);	/* Select DRAM I/O access */
-	buf->len = 2048;	/* feed back number of WORDs sent */
-	{
-	  char           *fixit = (char *) buf;
-
-	  copy_to_user (&((char *) arg)[0], fixit, sizeof (*buf));
-	};
-	vfree (buf);
-
-	return 0;
-      }
       break;
 
     }
@@ -2811,189 +2778,6 @@ guswave_bender (int dev, int voice, int value)
 }
 
 static int
-guswave_patchmgr (int dev, struct patmgr_info *rec)
-{
-  int             i, n;
-
-  switch (rec->command)
-    {
-    case PM_GET_DEVTYPE:
-      rec->parm1 = PMTYPE_WAVE;
-      return 0;
-      break;
-
-    case PM_GET_NRPGM:
-      rec->parm1 = MAX_PATCH;
-      return 0;
-      break;
-
-    case PM_GET_PGMMAP:
-      rec->parm1 = MAX_PATCH;
-
-      for (i = 0; i < MAX_PATCH; i++)
-	{
-	  int             ptr = patch_table[i];
-
-	  rec->data.data8[i] = 0;
-
-	  while (ptr >= 0 && ptr < free_sample && ptr != NOT_SAMPLE)
-	    {
-	      rec->data.data8[i]++;
-	      ptr = samples[ptr].key;	/* Follow link */
-	    }
-	}
-      return 0;
-      break;
-
-    case PM_GET_PGM_PATCHES:
-      {
-	int             ptr = patch_table[rec->parm1];
-
-	n = 0;
-
-	while (ptr >= 0 && ptr < free_sample && ptr != NOT_SAMPLE)
-	  {
-	    rec->data.data32[n++] = ptr;
-	    ptr = samples[ptr].key;	/* Follow link */
-	  }
-      }
-      rec->parm1 = n;
-      return 0;
-      break;
-
-    case PM_GET_PATCH:
-      {
-	int             ptr = rec->parm1;
-	struct patch_info *pat;
-
-	if (ptr < 0 || ptr >= free_sample)
-	  return -EINVAL;
-
-	memcpy (rec->data.data8, (char *) &samples[ptr],
-		sizeof (struct patch_info));
-
-	pat = (struct patch_info *) rec->data.data8;
-
-	pat->key = GUS_PATCH;	/* Restore patch type */
-	rec->parm1 = sample_ptrs[ptr];	/* DRAM location */
-	rec->parm2 = sizeof (struct patch_info);
-      }
-      return 0;
-      break;
-
-    case PM_SET_PATCH:
-      {
-	int             ptr = rec->parm1;
-	struct patch_info *pat;
-
-	if (ptr < 0 || ptr >= free_sample)
-	  return -EINVAL;
-
-	pat = (struct patch_info *) rec->data.data8;
-
-	if (pat->len > samples[ptr].len)	/* Cannot expand sample */
-	  return -EINVAL;
-
-	pat->key = samples[ptr].key;	/* Ensure the link is correct */
-
-	memcpy ((char *) &samples[ptr], rec->data.data8,
-		sizeof (struct patch_info));
-
-	pat->key = GUS_PATCH;
-      }
-      return 0;
-      break;
-
-    case PM_READ_PATCH:	/* Returns a block of wave data from the DRAM */
-      {
-	int             sample = rec->parm1;
-	int             n;
-	long            offs = rec->parm2;
-	int             l = rec->parm3;
-
-	if (sample < 0 || sample >= free_sample)
-	  return -EINVAL;
-
-	if (offs < 0 || offs >= samples[sample].len)
-	  return -EINVAL;	/* Invalid offset */
-
-	n = samples[sample].len - offs;		/* Num of bytes left */
-
-	if (l > n)
-	  l = n;
-
-	if (l > sizeof (rec->data.data8))
-	  l = sizeof (rec->data.data8);
-
-	if (l <= 0)
-	  return -EINVAL;	/*
-				   * Was there a bug?
-				 */
-
-	offs += sample_ptrs[sample];	/*
-					 * Begin offset + offset to DRAM
-					 */
-
-	for (n = 0; n < l; n++)
-	  rec->data.data8[n] = gus_peek (offs++);
-	rec->parm1 = n;		/*
-				 * Nr of bytes copied
-				 */
-      }
-      return 0;
-      break;
-
-    case PM_WRITE_PATCH:	/*
-				 * Writes a block of wave data to the DRAM
-				 */
-      {
-	int             sample = rec->parm1;
-	int             n;
-	long            offs = rec->parm2;
-	int             l = rec->parm3;
-
-	if (sample < 0 || sample >= free_sample)
-	  return -EINVAL;
-
-	if (offs < 0 || offs >= samples[sample].len)
-	  return -EINVAL;	/*
-				   * Invalid offset
-				 */
-
-	n = samples[sample].len - offs;		/*
-						   * Nr of bytes left
-						 */
-
-	if (l > n)
-	  l = n;
-
-	if (l > sizeof (rec->data.data8))
-	  l = sizeof (rec->data.data8);
-
-	if (l <= 0)
-	  return -EINVAL;	/*
-				   * Was there a bug?
-				 */
-
-	offs += sample_ptrs[sample];	/*
-					 * Begin offsets + offset to DRAM
-					 */
-
-	for (n = 0; n < l; n++)
-	  gus_poke (offs++, rec->data.data8[n]);
-	rec->parm1 = n;		/*
-				 * Nr of bytes copied
-				 */
-      }
-      return 0;
-      break;
-
-    default:
-      return -EINVAL;
-    }
-}
-
-static int
 guswave_alloc (int dev, int chn, int note, struct voice_alloc_info *alloc)
 {
   int             i, p, best = -1, best_time = 0x7fffffff;
@@ -3058,7 +2842,6 @@ static struct synth_operations guswave_operations =
   guswave_controller,
   guswave_panning,
   guswave_volume_method,
-  guswave_patchmgr,
   guswave_bender,
   guswave_alloc,
   guswave_setup_voice
@@ -3440,8 +3223,8 @@ gus_wave_init (struct address_info *hw_config)
     }
 
   conf_printf (tmp2, hw_config);
-  strncpy (gus_info.name, tmp2, sizeof (tmp2));
-  gus_info.name[sizeof (tmp2) - 1] = 0;
+  tmp2[sizeof (gus_info.name) - 1] = 0;
+  strncpy (gus_info.name, tmp2, strlen (tmp2));
 
   if (num_synths >= MAX_SYNTH_DEV)
     printk ("GUS Error: Too many synthesizers\n");

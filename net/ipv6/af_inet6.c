@@ -254,7 +254,7 @@ static int inet6_dup(struct socket *newsock, struct socket *oldsock)
  */
 
 static int inet6_bind(struct socket *sock, struct sockaddr *uaddr,
-		      size_t addr_len)
+		      int addr_len)
 {
 	struct sockaddr_in6 *addr=(struct sockaddr_in6 *)uaddr;
 	struct sock *sk=(struct sock *)sock->data, *sk2;
@@ -434,7 +434,7 @@ static int inet6_socketpair(struct socket *sock1, struct socket *sock2)
  */
  
 static int inet6_getname(struct socket *sock, struct sockaddr *uaddr,
-		 size_t *uaddr_len, int peer)
+		 int *uaddr_len, int peer)
 {
 	struct sockaddr_in6 *sin=(struct sockaddr_in6 *)uaddr;
 	struct sock *sk;

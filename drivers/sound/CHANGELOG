@@ -1,5 +1,9 @@
-Changelog for version 3.7-beta5
--------------------------------
+Changelog for version 3.7-beta10
+--------------------------------
+
+Since 3.5-beta5
+- Disabled MIDI input with GUS PnP (Interwave). There seems to be constant
+stream of received 0x00 bytes when the MIDI receiver is enabled.
 
 Since 3.5
 - Changes almost everywhere.

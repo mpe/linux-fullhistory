@@ -22,10 +22,10 @@ struct swap_info_struct {
 	struct inode * swap_file;
 	unsigned char * swap_map;
 	unsigned char * swap_lockmap;
-	int lowest_bit;
-	int highest_bit;
-	int cluster_next;
-	int cluster_nr;
+	unsigned int lowest_bit;
+	unsigned int highest_bit;
+	unsigned int cluster_next;
+	unsigned int cluster_nr;
 	int prio;			/* swap priority */
 	int pages;
 	unsigned long max;
@@ -70,7 +70,7 @@ extern unsigned long init_swap_cache(unsigned long, unsigned long);
 extern void swap_duplicate(unsigned long);
 
 /* linux/mm/swapfile.c */
-extern int nr_swapfiles;
+extern unsigned int nr_swapfiles;
 extern struct swap_info_struct swap_info[];
 void si_swapinfo(struct sysinfo *);
 unsigned long get_swap_page(void);

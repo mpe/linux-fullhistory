@@ -72,6 +72,7 @@ clean:
 	rm -f core core.* *.o *.a tmp_make *~ x y z *%
 	rm -f configure
 	cd lowlevel;make clean
+	cd vivo;make clean
 
 indent:
 	for n in *.c;do echo indent $$n;indent $$n;done

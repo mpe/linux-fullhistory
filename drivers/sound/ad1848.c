@@ -74,6 +74,7 @@ typedef struct
     int             timer_running;
     int             irq_ok;
     mixer_ents     *mix_devices;
+    int             mixer_output_port;
   }
 
 ad1848_info;
@@ -509,12 +510,40 @@ ad1848_mixer_reset (ad1848_info * devc)
     if (devc->supported_devices & (1 << i))
       ad1848_mixer_set (devc, i, devc->levels[i]);
   ad1848_set_recmask (devc, SOUND_MASK_MIC);
+  devc->mixer_output_port = devc->levels[31] | AUDIO_HEADPHONE | AUDIO_LINE_OUT;
+  if (devc->mixer_output_port & AUDIO_SPEAKER)
+    ad_write (devc, 26, ad_read (devc, 26) & ~0x40);	/* Unmute mono out */
+  else
+    ad_write (devc, 26, ad_read (devc, 26) | 0x40);	/* Mute mono out */
 }
 
 static int
 ad1848_mixer_ioctl (int dev, unsigned int cmd, caddr_t arg)
 {
   ad1848_info    *devc = mixer_devs[dev]->devc;
+
+  if (cmd == SOUND_MIXER_PRIVATE1)
+    {
+      int             val;
+
+      get_user (val, (int *) arg);
+
+      if (val == 0xffff)
+	return ioctl_out (arg, devc->mixer_output_port);
+
+      val &= (AUDIO_SPEAKER | AUDIO_HEADPHONE | AUDIO_LINE_OUT);
+
+      devc->mixer_output_port = val;
+      val |= AUDIO_HEADPHONE | AUDIO_LINE_OUT;	/* Always on */
+      devc->mixer_output_port = val;
+
+      if (val & AUDIO_SPEAKER)
+	ad_write (devc, 26, ad_read (devc, 26) & ~0x40);	/* Unmute mono out */
+      else
+	ad_write (devc, 26, ad_read (devc, 26) | 0x40);		/* Mute mono out */
+
+      return ioctl_out (arg, devc->mixer_output_port);
+    }
 
   if (((cmd >> 8) & 0xff) == 'M')
     {
@@ -961,25 +990,26 @@ ad1848_prepare_for_output (int dev, int bsize, int bcount)
   ad1848_info    *devc = (ad1848_info *) audio_devs[dev]->devc;
 
   ad_mute (devc);
-  {
+  if (devc->model != MD_4232)
+    {
 /*
  * This code fragment ensures that the playback FIFO is empty before
  * setting the codec for playback. Enabling playback for a moment should
  * be enough to do that.
  */
-    int             tmout;
+      int             tmout;
 
-    ad_write (devc, 9, ad_read (devc, 9) | 0x01);	/* Enable playback */
-    disable_dma (audio_devs[dev]->dmachan1);
-    for (tmout = 0; tmout < 1000000; tmout++)
-      if (ad_read (devc, 11) & 0x10)	/* DRQ active */
-	if (tmout > 10000)
-	  break;
-    ad_write (devc, 9, ad_read (devc, 9) & ~0x01);	/* Stop playback */
+      ad_write (devc, 9, ad_read (devc, 9) | 0x01);	/* Enable playback */
+      disable_dma (audio_devs[dev]->dmachan1);
+      for (tmout = 0; tmout < 1000000; tmout++)
+	if (ad_read (devc, 11) & 0x10)	/* DRQ active */
+	  if (tmout > 10000)
+	    break;
+      ad_write (devc, 9, ad_read (devc, 9) & ~0x01);	/* Stop playback */
 
-    enable_dma (audio_devs[dev]->dmachan1);
-    devc->audio_mode &= ~PCM_ENABLE_OUTPUT;
-  }
+      enable_dma (audio_devs[dev]->dmachan1);
+      devc->audio_mode &= ~PCM_ENABLE_OUTPUT;
+    }
 
   return ad1848_prepare_for_IO (dev, bsize, bcount);
 }
@@ -1415,7 +1445,7 @@ ad1848_detect (int io_base, int *ad_flags, int *osp)
   for (i = 0; i < 16; i++)
     if ((tmp1 = ad_read (devc, i)) != (tmp2 = ad_read (devc, i + 16)))
       {
-	DDB (printk ("ad1848 detect step F(%d/%x/%x) - OPTi chip?\n", i, tmp1, tmp2));
+	DDB (printk ("ad1848 detect step F(%d/%x/%x) - OPTi chip???\n", i, tmp1, tmp2));
 	if (!ad1847_flag)
 	  optiC930 = 1;
 	break;
@@ -1511,6 +1541,12 @@ ad1848_detect (int io_base, int *ad_flags, int *osp)
 		  devc->model = MD_4232;
 		  break;
 
+		case 0x03:
+		case 0x83:
+		  devc->chip_name = "CS4236";
+		  devc->model = MD_4232;
+		  break;
+
 		case 0x80:
 		  {
 		    /* 
@@ -1539,6 +1575,7 @@ ad1848_detect (int io_base, int *ad_flags, int *osp)
 		  break;
 
 		default:	/* Assume CS4231 or OPTi 82C930 */
+		  DDB (printk ("ad1848: I25 = %02x\n", ad_read (devc, 25)));
 		  if (optiC930)
 		    {
 		      devc->chip_name = "82C930";

@@ -166,3 +166,13 @@ static int default_mixer_levels[32] =
 
 #define LEFT_CHN	0
 #define RIGHT_CHN	1
+
+/*
+ * Channel enable bits for ioctl(SOUND_MIXER_PRIVATE1)
+ */
+
+#ifndef AUDIO_SPEAKER
+#define	AUDIO_SPEAKER		0x01	/* Enable mono output */
+#define	AUDIO_HEADPHONE		0x02	/* Sparc only */
+#define	AUDIO_LINE_OUT		0x04	/* Sparc only */
+#endif

@@ -210,7 +210,6 @@ struct synth_operations {
 	void (*controller) (int dev, int voice, int ctrl_num, int value);
 	void (*panning) (int dev, int voice, int value);
 	void (*volume_method) (int dev, int mode);
-	int (*pmgr_interface) (int dev, struct patmgr_info *info);
 	void (*bender) (int dev, int chn, int value);
 	int (*alloc_voice) (int dev, int chn, int note, struct voice_alloc_info *alloc);
 	void (*setup_voice) (int dev, int voice, int chn);

@@ -1234,7 +1234,7 @@ static int atalk_autobind(atalk_socket *sk)
  *	Set the address 'our end' of the connection.
  */
  
-static int atalk_bind(struct socket *sock, struct sockaddr *uaddr,size_t addr_len)
+static int atalk_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 {
 	atalk_socket *sk;
 	struct sockaddr_at *addr=(struct sockaddr_at *)uaddr;
@@ -1289,7 +1289,7 @@ static int atalk_bind(struct socket *sock, struct sockaddr *uaddr,size_t addr_le
  */
  
 static int atalk_connect(struct socket *sock, struct sockaddr *uaddr,
-	size_t addr_len, int flags)
+	int addr_len, int flags)
 {
 	atalk_socket *sk=(atalk_socket *)sock->data;
 	struct sockaddr_at *addr;
@@ -1350,7 +1350,7 @@ static int atalk_accept(struct socket *sock, struct socket *newsock, int flags)
  */
  
 static int atalk_getname(struct socket *sock, struct sockaddr *uaddr,
-	size_t *uaddr_len, int peer)
+	int *uaddr_len, int peer)
 {
 	struct sockaddr_at sat;
 	atalk_socket *sk;

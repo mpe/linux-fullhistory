@@ -47,7 +47,7 @@ struct udp_mib udp_stats_in6;
  *
  */
 
-int udpv6_connect(struct sock *sk, struct sockaddr *uaddr, size_t addr_len)
+int udpv6_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 {
 	struct sockaddr_in6	*usin = (struct sockaddr_in6 *) uaddr;
 	struct in6_addr		*daddr;

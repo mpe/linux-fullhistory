@@ -37,7 +37,7 @@ extern void	udp_err(int type, int code, unsigned char *header,
 extern void	udp_send_check(struct udphdr *uh, __u32 saddr, 
 			__u32 daddr, int len, struct sock *sk);
 extern int	udp_connect(struct sock *sk,
-			    struct sockaddr *usin, size_t addr_len);
+			    struct sockaddr *usin, int addr_len);
 
 extern int	udp_sendmsg(struct sock *sk, struct msghdr *msg,
 			    int len, int noblock, int flags);

@@ -14,6 +14,7 @@
  *      added 6850 support, used with COVOX SoundMaster II and custom cards.
  */
 
+#include <linux/config.h>
 #include "sound_config.h"
 
 #if defined(CONFIG_UART6850) && defined(CONFIG_MIDI)

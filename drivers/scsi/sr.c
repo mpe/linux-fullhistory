@@ -35,6 +35,7 @@
 #include <linux/interrupt.h>
 #include <linux/config.h>
 #include <asm/system.h>
+#include <asm/io.h>
 
 #define MAJOR_NR SCSI_CDROM_MAJOR
 #include <linux/blk.h>
@@ -617,7 +618,7 @@ void requeue_sr_request (Scsi_Cmnd * SCpnt)
 		    if (count+1 != SCpnt->use_sg) panic("Bad sr request list");
 		    break;
 		};
-		if (((long) sgpnt[count].address) + sgpnt[count].length - 1 >
+		if (virt_to_phys(sgpnt[count].address) + sgpnt[count].length - 1 >
 		    ISA_DMA_THRESHOLD && SCpnt->host->unchecked_isa_dma) {
 		    sgpnt[count].alt_address = sgpnt[count].address;
 		    /* We try to avoid exhausting the DMA pool, since it is easier
@@ -681,7 +682,7 @@ void requeue_sr_request (Scsi_Cmnd * SCpnt)
 	    {
 	    this_count -= this_count % 4;
 	    buffer = (unsigned char *) SCpnt->request.buffer;
-	    if (((long) buffer) + (this_count << 9) > ISA_DMA_THRESHOLD &&
+	    if (virt_to_phys(buffer) + (this_count << 9) > ISA_DMA_THRESHOLD &&
 		SCpnt->host->unchecked_isa_dma)
 		buffer = (unsigned char *) scsi_malloc(this_count << 9);
 	    }

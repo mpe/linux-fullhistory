@@ -117,17 +117,15 @@
 #define SNDCTL_SEQ_GETOUTCOUNT		_SIOR ('Q', 4, int)
 #define SNDCTL_SEQ_GETINCOUNT		_SIOR ('Q', 5, int)
 #define SNDCTL_SEQ_PERCMODE		_SIOW ('Q', 6, int)
-#define SNDCTL_FM_LOAD_INSTR		_SIOW ('Q', 7, struct sbi_instrument)	/* Valid for FM only */
+#define SNDCTL_FM_LOAD_INSTR		_SIOW ('Q', 7, struct sbi_instrument)	/* Obsolete */
 #define SNDCTL_SEQ_TESTMIDI		_SIOW ('Q', 8, int)
 #define SNDCTL_SEQ_RESETSAMPLES		_SIOW ('Q', 9, int)
 #define SNDCTL_SEQ_NRSYNTHS		_SIOR ('Q',10, int)
 #define SNDCTL_SEQ_NRMIDIS		_SIOR ('Q',11, int)
 #define SNDCTL_MIDI_INFO		_SIOWR('Q',12, struct midi_info)
 #define SNDCTL_SEQ_THRESHOLD		_SIOW ('Q',13, int)
-#define SNDCTL_SEQ_TRESHOLD		SNDCTL_SEQ_THRESHOLD	/* there was once a typo */
 #define SNDCTL_SYNTH_MEMAVL		_SIOWR('Q',14, int)	/* in=dev#, out=memsize */
 #define SNDCTL_FM_4OP_ENABLE		_SIOW ('Q',15, int)	/* in=dev# */
-#define SNDCTL_PMGR_ACCESS		_SIOWR('Q',16, struct patmgr_info)
 #define SNDCTL_SEQ_PANIC		_SIO  ('Q',17)
 #define SNDCTL_SEQ_OUTOFBAND		_SIOW ('Q',18, struct seq_event_rec)
 #define SNDCTL_SEQ_GETTIME		_SIOR ('Q',19, int)
@@ -197,6 +195,9 @@ struct patch_info {
 #define WAVE_TREMOLO	0x00020000	/* The tremolo info is valid */
 #define WAVE_SCALE	0x00040000	/* The scaling info is valid */
 #define WAVE_FRACTIONS	0x00080000	/* Fraction information is valid */
+/* Reserved bits */
+#define WAVE_ROM	0x40000000	/* For future use */
+#define WAVE_MULAW	0x20000000	/* For future use */
 /* Other bits must be zeroed */
 
 		int len;	/* Size of the wave data in bytes */
@@ -250,7 +251,8 @@ struct patch_info {
 	
 	        int		volume;
 		int		fractions;
-	        int		spare[3];
+		int		reserved1;
+	        int		spare[2];
 		char data[1];	/* The waveform data starts here */
 	};
 
@@ -262,90 +264,6 @@ struct sysex_info {
 		int len;	/* Size of the sysex data in bytes */
 		unsigned char data[1];	/* Sysex data starts here */
 	};
-
-/*
- * Patch management interface (/dev/sequencer, /dev/patmgr#)
- * Don't use these calls if you want to maintain compatibility with
- * the future versions of the driver.
- */
-
-#define 	PS_NO_PATCHES		0	/* No patch support on device */
-#define		PS_MGR_NOT_OK		1	/* Plain patch support (no mgr) */
-#define		PS_MGR_OK		2	/* Patch manager supported */
-#define		PS_MANAGED		3	/* Patch manager running */
-
-#define SNDCTL_PMGR_IFACE		_SIOWR('P', 1, struct patmgr_info)
-
-/*
- * The patmgr_info is a fixed size structure which is used for two
- * different purposes. The intended use is for communication between
- * the application using /dev/sequencer and the patch manager daemon
- * associated with a synthesizer device (ioctl(SNDCTL_PMGR_ACCESS)).
- *
- * This structure is also used with ioctl(SNDCTL_PGMR_IFACE) which allows
- * a patch manager daemon to read and write device parameters. This
- * ioctl available through /dev/sequencer also. Avoid using it since it's
- * extremely hardware dependent. In addition access trough /dev/sequencer 
- * may confuse the patch manager daemon.
- */
-
-struct patmgr_info {
-	  unsigned int key;	/* Don't worry. Reserved for communication
-	  			   between the patch manager and the driver. */
-#define PM_K_EVENT		1 /* Event from the /dev/sequencer driver */
-#define PM_K_COMMAND		2 /* Request from an application */
-#define PM_K_RESPONSE		3 /* From patmgr to application */
-#define PM_ERROR		4 /* Error returned by the patmgr */
-	  int device;
-	  int command;
-
-/* 
- * Commands 0x000 to 0xfff reserved for patch manager programs 
- */
-#define PM_GET_DEVTYPE	1	/* Returns type of the patch mgr interface of dev */
-#define		PMTYPE_FM2	1	/* 2 OP fm */
-#define		PMTYPE_FM4	2	/* Mixed 4 or 2 op FM (OPL-3) */
-#define		PMTYPE_WAVE	3	/* Wave table synthesizer (GUS) */
-#define PM_GET_NRPGM	2	/* Returns max # of midi programs in parm1 */
-#define PM_GET_PGMMAP	3	/* Returns map of loaded midi programs in data8 */
-#define PM_GET_PGM_PATCHES 4	/* Return list of patches of a program (parm1) */
-#define PM_GET_PATCH	5	/* Return patch header of patch parm1 */
-#define PM_SET_PATCH	6	/* Set patch header of patch parm1 */
-#define PM_READ_PATCH	7	/* Read patch (wave) data */
-#define PM_WRITE_PATCH	8	/* Write patch (wave) data */
-
-/*
- * Commands 0x1000 to 0xffff are for communication between the patch manager
- * and the client
- */
-#define _PM_LOAD_PATCH	0x100
-
-/* 
- * Commands above 0xffff reserved for device specific use
- */
-
-	  int parm1;
-	  int parm2;
-	  int parm3;
-
-	  union {
-		unsigned char data8[4000];
-		unsigned short data16[2000];
-		unsigned int data32[1000];
-		struct patch_info patch;
-	  } data;
-	};
-
-/*
- * When a patch manager daemon is present, it will be informed by the
- * driver when something important happens. For example when the
- * /dev/sequencer is opened or closed. A record with key == PM_K_EVENT is
- * returned. The command field contains the event type:
- */
-#define PM_E_OPENED		1	/* /dev/sequencer opened */
-#define PM_E_CLOSED		2	/* /dev/sequencer closed */
-#define PM_E_PATCH_RESET	3	/* SNDCTL_RESETSAMPLES called */
-#define PM_E_PATCH_LOADED	4	/* A patch has been loaded by appl */
 
 /*
  * /dev/sequencer input events.
@@ -1036,7 +954,6 @@ void seqbuf_dump(void);	/* This function must be provided by programs */
 #define SEQ_DEFINEBUF(len)		unsigned char _seqbuf[len]; int _seqbuflen = len;int _seqbufptr = 0
 #define SEQ_USE_EXTBUF()		extern unsigned char _seqbuf[]; extern int _seqbuflen;extern int _seqbufptr
 #define SEQ_DECLAREBUF()		SEQ_USE_EXTBUF()
-#define SEQ_PM_DEFINES			struct patmgr_info _pm_info
 #define _SEQ_NEEDBUF(len)		if ((_seqbufptr+(len)) > _seqbuflen) seqbuf_dump()
 #define _SEQ_ADVBUF(len)		_seqbufptr += len
 #define SEQ_DUMPBUF			seqbuf_dump
@@ -1057,15 +974,6 @@ void seqbuf_dump(void);	/* This function must be provided by programs */
  */
 #define _SEQ_NEEDBUF(len)	/* empty */
 #endif
-
-#define PM_LOAD_PATCH(dev, bank, pgm)	(SEQ_DUMPBUF(), _pm_info.command = _PM_LOAD_PATCH, \
-					_pm_info.device=dev, _pm_info.data.data8[0]=pgm, \
-					_pm_info.parm1 = bank, _pm_info.parm2 = 1, \
-					ioctl(seqfd, SNDCTL_PMGR_ACCESS, &_pm_info))
-#define PM_LOAD_PATCHES(dev, bank, pgm) (SEQ_DUMPBUF(), _pm_info.command = _PM_LOAD_PATCH, \
-					_pm_info.device=dev, memcpy(_pm_info.data.data8, pgm, 128), \
-					_pm_info.parm1 = bank, _pm_info.parm2 = 128, \
-					ioctl(seqfd, SNDCTL_PMGR_ACCESS, &_pm_info))
 
 #define SEQ_VOLUME_MODE(dev, mode)	{_SEQ_NEEDBUF(8);\
 					_seqbuf[_seqbufptr] = SEQ_EXTENDED;\

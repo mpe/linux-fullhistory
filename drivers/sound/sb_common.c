@@ -191,6 +191,8 @@ sb_dsp_reset (sb_devc * devc)
 {
   int             loopc;
 
+  DDB (printk ("Entered sb_dsp_reset()\n"));
+
   if (devc->model == MDL_ESS)
     outb ((3), DSP_RESET);	/* Reset FIFO too */
   else
@@ -205,11 +207,15 @@ sb_dsp_reset (sb_devc * devc)
   for (loopc = 0; loopc < 1000 && !(inb (DSP_DATA_AVAIL) & 0x80); loopc++);
 
   if (inb (DSP_READ) != 0xAA)
-    return 0;			/* Sorry */
+    {
+      DDB (printk ("sb: No response to RESET\n"));
+      return 0;			/* Sorry */
+    }
 
   if (devc->model == MDL_ESS)
     sb_dsp_command (devc, 0xc6);	/* Enable extended mode */
 
+  DDB (printk ("sb_dsp_reset() OK\n"));
   return 1;
 }
 
@@ -220,6 +226,7 @@ dsp_get_vers (sb_devc * devc)
 
   unsigned long   flags;
 
+  DDB (printk ("Entered dsp_get_vers()\n"));
   save_flags (flags);
   cli ();
   devc->major = devc->minor = 0;
@@ -238,6 +245,7 @@ dsp_get_vers (sb_devc * devc)
 	    }
 	}
     }
+  DDB (printk ("DSP version %d.%d\n", devc->major, devc->minor));
   restore_flags (flags);
 }
 
@@ -896,6 +904,7 @@ sb_getmixer (sb_devc * devc, unsigned int port)
   tenmicrosec (devc->osp);
   tenmicrosec (devc->osp);
   val = inb (MIXER_DATA);
+  tenmicrosec (devc->osp);
   tenmicrosec (devc->osp);
   restore_flags (flags);
 

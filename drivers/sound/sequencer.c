@@ -77,8 +77,6 @@ static int      seq_queue (unsigned char *note, char nonblock);
 static void     seq_startplay (void);
 static int      seq_sync (void);
 static void     seq_reset (void);
-static int      pmgr_present[MAX_SYNTH_DEV] =
-{0};
 
 #if MAX_SYNTH_DEV > 15
 #error Too many synthesizer devices enabled.
@@ -94,11 +92,6 @@ sequencer_read (int dev, struct fileinfo *file, char *buf, int count)
   dev = dev >> 4;
 
   ev_len = seq_mode == SEQ_1 ? 4 : 8;
-
-  if (dev)			/*
-				 * Patch manager device
-				 */
-    return pmgr_read (dev - 1, file, buf, count);
 
   save_flags (flags);
   cli ();
@@ -263,9 +256,6 @@ sequencer_write (int dev, struct fileinfo *file, const char *buf, int count)
 
   if (mode == OPEN_READ)
     return -EIO;
-
-  if (dev)
-    return pmgr_write (dev - 1, file, buf, count);
 
   c = count;
 
@@ -1087,9 +1077,8 @@ sequencer_open (int dev, struct fileinfo *file)
       return -ENXIO;
     }
 
-  if (dev)			/* Patch manager device */
+  if (dev)			/* Patch manager device (obsolete) */
     {
-      printk ("Patch manager interface is currently broken. Sorry\n");
       return -ENXIO;
     }
 
@@ -1209,10 +1198,6 @@ sequencer_open (int dev, struct fileinfo *file)
   midi_sleep_flag.opts = WK_NONE;
   output_threshold = SEQ_MAX_QUEUE / 2;
 
-  for (i = 0; i < num_synths; i++)
-    if (pmgr_present[i])
-      pmgr_inform (i, PM_E_OPENED, 0, 0, 0, 0);
-
   return 0;
 }
 
@@ -1273,16 +1258,6 @@ sequencer_release (int dev, struct fileinfo *file)
 
   DEB (printk ("sequencer_release(dev=%d)\n", dev));
 
-  if (dev)			/*
-				 * Patch manager device
-				 */
-    {
-      dev--;
-      pmgr_release (dev);
-      pmgr_present[dev] = 0;
-      return;
-    }
-
   /*
    * * Wait until the queue is empty (if we don't have nonblock)
    */
@@ -1317,10 +1292,6 @@ sequencer_release (int dev, struct fileinfo *file)
 	      midi_opened[synth_devs[i]->midi_dev] = 0;
 	  }
     }
-
-  for (i = 0; i < num_synths; i++)
-    if (pmgr_present[i])
-      pmgr_inform (i, PM_E_CLOSED, 0, 0, 0, 0);
 
   for (i = 0; i < max_mididev; i++)
     {
@@ -1523,7 +1494,7 @@ int
 sequencer_ioctl (int dev, struct fileinfo *file,
 		 unsigned int cmd, caddr_t arg)
 {
-  int             midi_dev, orig_dev;
+  int             midi_dev, orig_dev, val;
   int             mode = file->mode & O_ACCMODE;
 
   orig_dev = dev = dev >> 4;
@@ -1537,8 +1508,6 @@ sequencer_ioctl (int dev, struct fileinfo *file,
     case SNDCTL_TMR_CONTINUE:
     case SNDCTL_TMR_METRONOME:
     case SNDCTL_TMR_SOURCE:
-      if (dev)			/* Patch manager */
-	return -EIO;
 
       if (seq_mode != SEQ_2)
 	return -EINVAL;
@@ -1546,8 +1515,6 @@ sequencer_ioctl (int dev, struct fileinfo *file,
       break;
 
     case SNDCTL_TMR_SELECT:
-      if (dev)			/* Patch manager */
-	return -EIO;
 
       if (seq_mode != SEQ_2)
 	return -EINVAL;
@@ -1567,10 +1534,6 @@ sequencer_ioctl (int dev, struct fileinfo *file,
       break;
 
     case SNDCTL_SEQ_SYNC:
-      if (dev)			/*
-				 * Patch manager
-				 */
-	return -EIO;
 
       if (mode == OPEN_READ)
 	return 0;
@@ -1583,23 +1546,14 @@ sequencer_ioctl (int dev, struct fileinfo *file,
       break;
 
     case SNDCTL_SEQ_RESET:
-      if (dev)			/*
-				 * Patch manager
-				 */
-	return -EIO;
 
       seq_reset ();
       return 0;
       break;
 
     case SNDCTL_SEQ_TESTMIDI:
-      if (dev)			/*
-				 * Patch manager
-				 */
-	return -EIO;
-
       get_user (midi_dev, (int *) arg);
-      if (midi_dev >= max_mididev)
+      if (midi_dev < 0 || midi_dev >= max_mididev)
 	return -ENXIO;
 
       if (!midi_opened[midi_dev])
@@ -1619,11 +1573,6 @@ sequencer_ioctl (int dev, struct fileinfo *file,
       break;
 
     case SNDCTL_SEQ_GETINCOUNT:
-      if (dev)			/*
-				 * Patch manager
-				 */
-	return -EIO;
-
       if (mode == OPEN_WRITE)
 	return 0;
       return ioctl_out (arg, iqlen);
@@ -1644,16 +1593,14 @@ sequencer_ioctl (int dev, struct fileinfo *file,
       break;
 
     case SNDCTL_SEQ_CTRLRATE:
-      if (dev)			/* Patch manager */
-	return -EIO;
-
       /*
        * If *arg == 0, just return the current rate
        */
       if (seq_mode == SEQ_2)
 	return tmr->ioctl (tmr_no, cmd, arg);
 
-      if (ioctl_in (arg) != 0)
+      get_user (val, (int *) arg);
+      if (val != 0)
 	return -EINVAL;
 
       return ioctl_out (arg, HZ);
@@ -1673,9 +1620,6 @@ sequencer_ioctl (int dev, struct fileinfo *file,
 	  {
 	    return -EBUSY;
 	  }
-
-	if (!orig_dev && pmgr_present[dev])
-	  pmgr_inform (dev, PM_E_PATCH_RESET, 0, 0, 0, 0);
 
 	err = synth_devs[dev]->ioctl (dev, cmd, arg);
 	return err;
@@ -1708,7 +1652,9 @@ sequencer_ioctl (int dev, struct fileinfo *file,
 
     case SNDCTL_FM_4OP_ENABLE:
       {
-	int             dev = ioctl_in (arg);
+	int             dev;
+
+	get_user (dev, (int *) arg);
 
 	if (dev < 0 || dev >= num_synths)
 	  return -ENXIO;
@@ -1777,98 +1723,11 @@ sequencer_ioctl (int dev, struct fileinfo *file,
       }
       break;
 
-    case SNDCTL_PMGR_IFACE:
-      {
-	struct patmgr_info *inf;
-	int             dev, err;
-
-	if ((inf = (struct patmgr_info *) vmalloc (sizeof (*inf))) == NULL)
-	  {
-	    printk ("patmgr: Can't allocate memory for a message\n");
-	    return -EIO;
-	  }
-
-	copy_from_user ((char *) inf, &((char *) arg)[0], sizeof (*inf));
-	dev = inf->device;
-
-	if (dev < 0 || dev >= num_synths)
-	  {
-	    vfree (inf);
-	    return -ENXIO;
-	  }
-
-	if (!synth_devs[dev]->pmgr_interface)
-	  {
-	    vfree (inf);
-	    return -ENXIO;
-	  }
-
-	if ((err = synth_devs[dev]->pmgr_interface (dev, inf)) == -1)
-	  {
-	    vfree (inf);
-	    return err;
-	  }
-
-	{
-	  char           *fixit = (char *) inf;
-
-	  copy_to_user (&((char *) arg)[0], fixit, sizeof (*inf));
-	};
-	vfree (inf);
-	return 0;
-      }
-      break;
-
-    case SNDCTL_PMGR_ACCESS:
-      {
-	struct patmgr_info *inf;
-	int             dev, err;
-
-	if ((inf = (struct patmgr_info *) vmalloc (sizeof (*inf))) == NULL)
-	  {
-	    printk ("patmgr: Can't allocate memory for a message\n");
-	    return -EIO;
-	  }
-
-	copy_from_user ((char *) inf, &((char *) arg)[0], sizeof (*inf));
-	dev = inf->device;
-
-	if (dev < 0 || dev >= num_synths)
-	  {
-	    vfree (inf);
-	    return -ENXIO;
-	  }
-
-	if (!pmgr_present[dev])
-	  {
-	    vfree (inf);
-	    return -ESRCH;
-	  }
-
-	if ((err = pmgr_access (dev, inf)) < 0)
-	  {
-	    vfree (inf);
-	    return err;
-	  }
-
-	{
-	  char           *fixit = (char *) inf;
-
-	  copy_to_user (&((char *) arg)[0], fixit, sizeof (*inf));
-	};
-	vfree (inf);
-	return 0;
-      }
-      break;
-
     case SNDCTL_SEQ_THRESHOLD:
       {
-	int             tmp = ioctl_in (arg);
+	int             tmp;
 
-	if (dev)		/*
-				 * Patch manager
-				 */
-	  return -EIO;
+	get_user (tmp, (int *) arg);
 
 	if (tmp < 1)
 	  tmp = 1;
@@ -1881,7 +1740,9 @@ sequencer_ioctl (int dev, struct fileinfo *file,
 
     case SNDCTL_MIDI_PRETIME:
       {
-	int             val = ioctl_in (arg);
+	int             val;
+
+	get_user (val, (int *) arg);
 
 	if (val < 0)
 	  val = 0;
@@ -1893,11 +1754,6 @@ sequencer_ioctl (int dev, struct fileinfo *file,
       break;
 
     default:
-      if (dev)			/*
-				 * Patch manager
-				 */
-	return -EIO;
-
       if (mode == OPEN_READ)
 	return -EIO;
 

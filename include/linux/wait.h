@@ -8,6 +8,8 @@
 
 #ifdef __KERNEL__
 
+#include <asm/page.h>
+
 struct wait_queue {
 	struct task_struct * task;
 	struct wait_queue * next;
@@ -32,11 +34,11 @@ struct select_table_entry {
 };
 
 typedef struct select_table_struct {
-	int nr;
+	unsigned int nr;
 	struct select_table_entry * entry;
 } select_table;
 
-#define __MAX_SELECT_TABLE_ENTRIES (4096 / sizeof (struct select_table_entry))
+#define __MAX_SELECT_TABLE_ENTRIES (PAGE_SIZE / sizeof (struct select_table_entry))
 
 #endif /* __KERNEL__ */
 

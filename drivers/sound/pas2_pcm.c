@@ -148,6 +148,8 @@ pcm_set_bits (int arg)
 static int
 pas_audio_ioctl (int dev, unsigned int cmd, caddr_t arg, int local)
 {
+  int             val;
+
   DEB (printk ("pas2_pcm.c: static int pas_audio_ioctl(unsigned int cmd = %X, unsigned int arg = %X)\n", cmd, arg));
 
   switch (cmd)
@@ -155,7 +157,8 @@ pas_audio_ioctl (int dev, unsigned int cmd, caddr_t arg, int local)
     case SOUND_PCM_WRITE_RATE:
       if (local)
 	return pcm_set_speed ((int) arg);
-      return ioctl_out (arg, pcm_set_speed (ioctl_in (arg)));
+      get_user (val, (int *) arg);
+      return ioctl_out (arg, pcm_set_speed (val));
       break;
 
     case SOUND_PCM_READ_RATE:
@@ -167,13 +170,15 @@ pas_audio_ioctl (int dev, unsigned int cmd, caddr_t arg, int local)
     case SNDCTL_DSP_STEREO:
       if (local)
 	return pcm_set_channels ((int) arg + 1) - 1;
-      return ioctl_out (arg, pcm_set_channels (ioctl_in (arg) + 1) - 1);
+      get_user (val, (int *) arg);
+      return ioctl_out (arg, pcm_set_channels (val + 1) - 1);
       break;
 
     case SOUND_PCM_WRITE_CHANNELS:
       if (local)
 	return pcm_set_channels ((int) arg);
-      return ioctl_out (arg, pcm_set_channels (ioctl_in (arg)));
+      get_user (val, (int *) arg);
+      return ioctl_out (arg, pcm_set_channels (val));
       break;
 
     case SOUND_PCM_READ_CHANNELS:
@@ -185,7 +190,8 @@ pas_audio_ioctl (int dev, unsigned int cmd, caddr_t arg, int local)
     case SNDCTL_DSP_SETFMT:
       if (local)
 	return pcm_set_bits ((int) arg);
-      return ioctl_out (arg, pcm_set_bits (ioctl_in (arg)));
+      get_user (val, (int *) arg);
+      return ioctl_out (arg, pcm_set_bits (val));
       break;
 
     case SOUND_PCM_READ_BITS:
@@ -196,9 +202,10 @@ pas_audio_ioctl (int dev, unsigned int cmd, caddr_t arg, int local)
     case SOUND_PCM_WRITE_FILTER:	/*
 					 * NOT YET IMPLEMENTED
 					 */
-      if (ioctl_in (arg) > 1)
+      get_user (val, (int *) arg);
+      if (val > 1)
 	return -EINVAL;
-      pcm_filter = ioctl_in (arg);
+      pcm_filter = val;
       break;
 
     case SOUND_PCM_READ_FILTER:

@@ -110,9 +110,6 @@ static char mcchannelid[]={0x04, 0x0d, 0x04, 0x01,
 #include <linux/sched.h>
 #include <linux/timer.h>
 #include <linux/in.h>
-#include <asm/io.h>
-#include <asm/system.h>
-#include <asm/bitops.h>
 #include <linux/ioport.h>
 #include <linux/errno.h>
 #include <linux/string.h>
@@ -121,7 +118,12 @@ static char mcchannelid[]={0x04, 0x0d, 0x04, 0x01,
 #include <linux/delay.h>
 #include <linux/netdevice.h>
 #include <linux/trdevice.h>
-#include <stddef.h>
+#include <linux/stddef.h>
+
+#include <asm/io.h>
+#include <asm/system.h>
+#include <asm/bitops.h>
+
 #include "ibmtr.h"
 
 

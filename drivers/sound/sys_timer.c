@@ -253,10 +253,15 @@ def_tmr_ioctl (int dev,
       break;
 
     case SNDCTL_SEQ_CTRLRATE:
-      if (ioctl_in (arg) != 0)	/* Can't change */
-	return -EINVAL;
+      {
+	int             val;
 
-      return ioctl_out (arg, ((curr_tempo * curr_timebase) + 30) / 60);
+	get_user (val, (int *) arg);
+	if (val != 0)		/* Can't change */
+	  return -EINVAL;
+
+	return ioctl_out (arg, ((curr_tempo * curr_timebase) + 30) / 60);
+      }
       break;
 
     case SNDCTL_SEQ_GETTIME:

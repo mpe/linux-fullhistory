@@ -765,7 +765,7 @@ static int rose_release(struct socket *sock, struct socket *peer)
 	return 0;
 }
 
-static int rose_bind(struct socket *sock, struct sockaddr *uaddr, size_t addr_len)
+static int rose_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 {
 	struct sock *sk;
 	struct sockaddr_rose *addr = (struct sockaddr_rose *)uaddr;
@@ -813,7 +813,7 @@ static int rose_bind(struct socket *sock, struct sockaddr *uaddr, size_t addr_le
 	return 0;
 }
 
-static int rose_connect(struct socket *sock, struct sockaddr *uaddr, size_t addr_len, int flags)
+static int rose_connect(struct socket *sock, struct sockaddr *uaddr, int addr_len, int flags)
 {
 	struct sock *sk = (struct sock *)sock->data;
 	struct sockaddr_rose *addr = (struct sockaddr_rose *)uaddr;
@@ -963,7 +963,7 @@ static int rose_accept(struct socket *sock, struct socket *newsock, int flags)
 }
 
 static int rose_getname(struct socket *sock, struct sockaddr *uaddr,
-	size_t *uaddr_len, int peer)
+	int *uaddr_len, int peer)
 {
 	struct sockaddr_rose *srose = (struct sockaddr_rose *)uaddr;
 	struct sock *sk;

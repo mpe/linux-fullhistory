@@ -6,7 +6,15 @@
  * Mixer routines for the Pro Audio Spectrum cards.
  */
 
+/*
+ * Copyright (C) by Hannu Savolainen 1993-1996
+ *
+ * OSS/Free for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
+ * Version 2 (June 1991). See the "COPYING" file distributed with this software
+ * for more info.
+ */
 #include <linux/config.h>
+
 #include "sound_config.h"
 
 #if defined(CONFIG_PAS)
@@ -296,8 +304,12 @@ pas_mixer_ioctl (int dev, unsigned int cmd, caddr_t arg)
 
   if (((cmd >> 8) & 0xff) == 'M')
     {
+      int             v;
+
+      get_user (v, (int *) arg);
+
       if (_IOC_DIR (cmd) & _IOC_WRITE)
-	return ioctl_out (arg, pas_mixer_set (cmd & 0xff, ioctl_in (arg)));
+	return ioctl_out (arg, pas_mixer_set (cmd & 0xff, v));
       else
 	{			/*
 				 * Read parameters

@@ -182,15 +182,6 @@ int probe_uart6850(struct address_info *hw_config);
 /*	From opl3.c */
 void enable_opl3_mode(int left, int right, int both);
 
-/*	From patmgr.c */
-int pmgr_open(int dev);
-void pmgr_release(int dev);
-int pmgr_read (int dev, struct fileinfo *file, char * buf, int count);
-int pmgr_write (int dev, struct fileinfo *file, const char * buf, int count);
-int pmgr_access(int dev, struct patmgr_info *rec);
-int pmgr_inform(int dev, int event, unsigned long parm1, unsigned long parm2,
-				    unsigned long parm3, unsigned long parm4);
-
 /* 	From ics2101.c */
 void ics2101_mixer_init(void);
 

@@ -21,8 +21,6 @@
 #if (defined(CONFIG_MPU401) || defined(CONFIG_MPU_EMU)) && defined(CONFIG_MIDI)
 #include "coproc.h"
 
-static int      init_sequence[20];	/* NOTE! pos 0 = len, start pos 1. */
-
 
 #ifdef CONFIG_SEQUENCER
 static int      timer_mode = TMR_INTERNAL, timer_caps = TMR_INTERNAL;
@@ -775,23 +773,20 @@ static int
 mpu401_ioctl (int dev, unsigned cmd, caddr_t arg)
 {
   struct mpu_config *devc;
+  int             val;
 
   devc = &dev_conf[dev];
 
   switch (cmd)
     {
-    case 1:
-      copy_from_user ((char *) init_sequence, &((char *) arg)[0], sizeof (init_sequence));
-      return 0;
-      break;
-
     case SNDCTL_MIDI_MPUMODE:
       if (!(devc->capabilities & MPU_CAP_INTLG))	/* No intelligent mode */
 	{
 	  printk ("MPU-401: Intelligent mode not supported by the HW\n");
 	  return -EINVAL;
 	}
-      set_uart_mode (dev, devc, !ioctl_in (arg));
+      get_user (val, (int *) arg);
+      set_uart_mode (dev, devc, !val);
       return 0;
       break;
 
@@ -976,7 +971,6 @@ static struct synth_operations mpu401_synth_proto =
   midi_synth_controller,
   midi_synth_panning,
   NULL,
-  midi_synth_patchmgr,
   midi_synth_bender,
   NULL,				/* alloc */
   midi_synth_setup_voice,
@@ -1639,8 +1633,9 @@ mpu_timer_ioctl (int dev,
 
     case SNDCTL_TMR_TIMEBASE:
       {
-	int             val = (int) ioctl_in (arg);
+	int             val;
 
+	get_user (val, (int *) arg);
 	if (val)
 	  set_timebase (midi_dev, val);
 
@@ -1650,8 +1645,10 @@ mpu_timer_ioctl (int dev,
 
     case SNDCTL_TMR_TEMPO:
       {
-	int             val = (int) ioctl_in (arg);
+	int             val;
 	int             ret;
+
+	get_user (val, (int *) arg);
 
 	if (val)
 	  {
@@ -1673,10 +1670,15 @@ mpu_timer_ioctl (int dev,
       break;
 
     case SNDCTL_SEQ_CTRLRATE:
-      if (ioctl_in (arg) != 0)	/* Can't change */
-	return -EINVAL;
+      {
+	int             val;
 
-      return ioctl_out (arg, ((curr_tempo * curr_timebase) + 30) / 60);
+	get_user (val, (int *) arg);
+	if (val != 0)		/* Can't change */
+	  return -EINVAL;
+
+	return ioctl_out (arg, ((curr_tempo * curr_timebase) + 30) / 60);
+      }
       break;
 
     case SNDCTL_SEQ_GETTIME:
@@ -1684,7 +1686,7 @@ mpu_timer_ioctl (int dev,
       break;
 
     case SNDCTL_TMR_METRONOME:
-      metronome_mode = (int) ioctl_in (arg);
+      get_user (metronome_mode, (int *) arg);
       setup_metronome (midi_dev);
       return 0;
       break;

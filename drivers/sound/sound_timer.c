@@ -190,6 +190,8 @@ static int
 timer_ioctl (int dev,
 	     unsigned int cmd, caddr_t arg)
 {
+  int             val;
+
   switch (cmd)
     {
     case SNDCTL_TMR_SOURCE:
@@ -213,49 +215,43 @@ timer_ioctl (int dev,
       break;
 
     case SNDCTL_TMR_TIMEBASE:
-      {
-	int             val;
+      get_user (val, (int *) arg);
 
-	get_user (val, (int *) arg);
+      if (val)
+	{
+	  if (val < 1)
+	    val = 1;
+	  if (val > 1000)
+	    val = 1000;
+	  curr_timebase = val;
+	}
 
-	if (val)
-	  {
-	    if (val < 1)
-	      val = 1;
-	    if (val > 1000)
-	      val = 1000;
-	    curr_timebase = val;
-	  }
-
-	return ioctl_out (arg, curr_timebase);
-      }
+      return ioctl_out (arg, curr_timebase);
       break;
 
     case SNDCTL_TMR_TEMPO:
-      {
-	int             val;
+      get_user (val, (int *) arg);
 
-	get_user (val, (int *) arg);
+      if (val)
+	{
+	  if (val < 8)
+	    val = 8;
+	  if (val > 250)
+	    val = 250;
+	  tmr_offs = tmr_ctr;
+	  ticks_offs += tmr2ticks (tmr_ctr);
+	  tmr_ctr = 0;
+	  curr_tempo = val;
+	  reprogram_timer ();
+	}
 
-	if (val)
-	  {
-	    if (val < 8)
-	      val = 8;
-	    if (val > 250)
-	      val = 250;
-	    tmr_offs = tmr_ctr;
-	    ticks_offs += tmr2ticks (tmr_ctr);
-	    tmr_ctr = 0;
-	    curr_tempo = val;
-	    reprogram_timer ();
-	  }
-
-	return ioctl_out (arg, curr_tempo);
-      }
+      return ioctl_out (arg, curr_tempo);
       break;
 
     case SNDCTL_SEQ_CTRLRATE:
-      if (ioctl_in (arg) != 0)	/* Can't change */
+      get_user (val, (int *) arg);
+
+      if (val != 0)		/* Can't change */
 	return -EINVAL;
 
       return ioctl_out (arg, ((curr_tempo * curr_timebase) + 30) / 60);

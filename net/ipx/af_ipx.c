@@ -1792,7 +1792,7 @@ ipx_first_free_socketnum(ipx_interface *intrfc)
 	return	ntohs(socketNum);
 }
 	
-static int ipx_bind(struct socket *sock, struct sockaddr *uaddr,size_t addr_len)
+static int ipx_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 {
 	ipx_socket *sk;
 	ipx_interface *intrfc;
@@ -1893,7 +1893,7 @@ static int ipx_bind(struct socket *sock, struct sockaddr *uaddr,size_t addr_len)
 }
 
 static int ipx_connect(struct socket *sock, struct sockaddr *uaddr,
-	size_t addr_len, int flags)
+	int addr_len, int flags)
 {
 	ipx_socket *sk=(ipx_socket *)sock->data;
 	struct sockaddr_ipx *addr;
@@ -1949,7 +1949,7 @@ static int ipx_accept(struct socket *sock, struct socket *newsock, int flags)
 }
 
 static int ipx_getname(struct socket *sock, struct sockaddr *uaddr,
-	size_t *uaddr_len, int peer)
+	int *uaddr_len, int peer)
 {
 	ipx_address *addr;
 	struct sockaddr_ipx sipx;

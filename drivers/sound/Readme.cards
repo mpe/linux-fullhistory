@@ -85,7 +85,9 @@ support for PnP cards. There are bugs in setting DMA channels in earlier
 versions of isapnptools so at least version 1.6 is required with soundcards.
 
 Yet another way to use PnP cards is to use (commercial) OSS/Linux drivers.
-See http://www.4front-tech.com/linux.html for more info.
+See http://www.4front-tech.com/linux.html for more info. This is the way
+you propably like to do it if you don't waste hours of time in recompiling
+kernel and the required tools.
 
 Read this before trying to configure the driver
 -----------------------------------------------

@@ -505,7 +505,7 @@ void __skb_unlink(struct sk_buff *skb)
  *	Add data to an sk_buff
  */
  
-unsigned char *skb_put(struct sk_buff *skb, int len)
+unsigned char *skb_put(struct sk_buff *skb, unsigned int len)
 {
 	unsigned char *tmp=skb->tail;
 	IS_SKB(skb);
@@ -517,7 +517,7 @@ unsigned char *skb_put(struct sk_buff *skb, int len)
 	return tmp;
 }
 
-unsigned char *skb_push(struct sk_buff *skb, int len)
+unsigned char *skb_push(struct sk_buff *skb, unsigned int len)
 {
 	IS_SKB(skb);
 	skb->data-=len;
@@ -528,7 +528,7 @@ unsigned char *skb_push(struct sk_buff *skb, int len)
 	return skb->data;
 }
 
-unsigned char * skb_pull(struct sk_buff *skb, int len)
+unsigned char * skb_pull(struct sk_buff *skb, unsigned int len)
 {
 	IS_SKB(skb);
 	if(len>skb->len)
@@ -550,7 +550,7 @@ int skb_tailroom(struct sk_buff *skb)
 	return skb->end-skb->tail;
 }
 
-void skb_reserve(struct sk_buff *skb, int len)
+void skb_reserve(struct sk_buff *skb, unsigned int len)
 {
 	IS_SKB(skb);
 	skb->data+=len;
@@ -562,7 +562,7 @@ void skb_reserve(struct sk_buff *skb, int len)
 	IS_SKB(skb);
 }
 
-void skb_trim(struct sk_buff *skb, int len)
+void skb_trim(struct sk_buff *skb, unsigned int len)
 {
 	IS_SKB(skb);
 	if(skb->len>len)

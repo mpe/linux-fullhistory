@@ -92,14 +92,14 @@ struct proto_ops {
   int	(*dup)		(struct socket *newsock, struct socket *oldsock);
   int	(*release)	(struct socket *sock, struct socket *peer);
   int	(*bind)		(struct socket *sock, struct sockaddr *umyaddr,
-			 size_t sockaddr_len);
+			 int sockaddr_len);
   int	(*connect)	(struct socket *sock, struct sockaddr *uservaddr,
-			 size_t sockaddr_len, int flags);
+			 int sockaddr_len, int flags);
   int	(*socketpair)	(struct socket *sock1, struct socket *sock2);
   int	(*accept)	(struct socket *sock, struct socket *newsock,
 			 int flags);
   int	(*getname)	(struct socket *sock, struct sockaddr *uaddr,
-			 size_t *usockaddr_len, int peer);
+			 int *usockaddr_len, int peer);
   int	(*select)	(struct socket *sock, int sel_type,
 			 select_table *wait);
   int	(*ioctl)	(struct socket *sock, unsigned int cmd,

@@ -27,6 +27,10 @@
 #define SO_ERROR	0x1007
 #define SO_SNDBUF	0x1001
 #define SO_RCVBUF	0x1002
+#define	SO_RCVLOWAT	0x1010
+#define	SO_SNDLOWAT	0x1011
+#define	SO_RCVTIMEO	0x1012
+#define	SO_SNDTIMEO	0x1013
 
 /* linux-specific, might as well be the same as on i386 */
 #define SO_NO_CHECK	11

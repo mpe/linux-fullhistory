@@ -31,7 +31,7 @@ struct linger {
 struct msghdr 
 {
 	void	*	msg_name;	/* Socket name			*/
-	size_t		msg_namelen;	/* Length of name		*/
+	int		msg_namelen;	/* Length of name		*/
 	struct iovec *	msg_iov;	/* Data blocks			*/
 	size_t 		msg_iovlen;	/* Number of blocks		*/
 	void 	*	msg_control;	/* Per protocol magic (eg BSD file descriptor passing) */

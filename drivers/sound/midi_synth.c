@@ -652,12 +652,6 @@ midi_synth_controller (int dev, int channel, int ctrl_num, int value)
   midi_outc (orig_dev, value & 0x7f);
 }
 
-int
-midi_synth_patchmgr (int dev, struct patmgr_info *rec)
-{
-  return -EINVAL;
-}
-
 void
 midi_synth_bender (int dev, int channel, int value)
 {

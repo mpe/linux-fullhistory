@@ -19,7 +19,7 @@ extern void				tcpv6_init(void);
 
 extern int				udpv6_connect(struct sock *sk,
 						      struct sockaddr *uaddr,
-						      size_t addr_len);
+						      int addr_len);
 
 extern int			datagram_recv_ctl(struct sock *sk,
 						  struct msghdr *msg,

@@ -482,8 +482,7 @@ unsigned long loops_per_sec = (1<<12);
 
 void calibrate_delay(void)
 {
-	int ticks;
-	int loopbit;
+	unsigned long ticks, loopbit;
 	int lps_precision = LPS_PREC;
 
 	loops_per_sec = (1<<12);

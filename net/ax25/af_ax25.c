@@ -1368,7 +1368,7 @@ static int ax25_release(struct socket *sock, struct socket *peer)
  *	BSD 4.4 ADDIFADDR type support. It is however small and trivially backward
  *	compatible 8)
  */
-static int ax25_bind(struct socket *sock, struct sockaddr *uaddr,size_t addr_len)
+static int ax25_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 {
 	struct sock *sk;
 	struct full_sockaddr_ax25 *addr = (struct full_sockaddr_ax25 *)uaddr;
@@ -1431,7 +1431,7 @@ static int ax25_bind(struct socket *sock, struct sockaddr *uaddr,size_t addr_len
 }
 
 static int ax25_connect(struct socket *sock, struct sockaddr *uaddr,
-	size_t addr_len, int flags)
+	int addr_len, int flags)
 {
 	struct sock *sk = (struct sock *)sock->data;
 	struct sockaddr_ax25 *addr = (struct sockaddr_ax25 *)uaddr;
@@ -1608,7 +1608,7 @@ static int ax25_accept(struct socket *sock, struct socket *newsock, int flags)
 }
 
 static int ax25_getname(struct socket *sock, struct sockaddr *uaddr,
-	size_t *uaddr_len, int peer)
+	int *uaddr_len, int peer)
 {
 	struct full_sockaddr_ax25 *sax = (struct full_sockaddr_ax25 *)uaddr;
 	struct sock *sk;

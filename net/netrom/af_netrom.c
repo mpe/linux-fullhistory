@@ -780,7 +780,7 @@ static int nr_release(struct socket *sock, struct socket *peer)
 	return 0;
 }
 
-static int nr_bind(struct socket *sock, struct sockaddr *uaddr, size_t addr_len)
+static int nr_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 {
 	struct sock *sk;
 	struct full_sockaddr_ax25 *addr = (struct full_sockaddr_ax25 *)uaddr;
@@ -834,7 +834,7 @@ static int nr_bind(struct socket *sock, struct sockaddr *uaddr, size_t addr_len)
 }
 
 static int nr_connect(struct socket *sock, struct sockaddr *uaddr,
-	size_t addr_len, int flags)
+	int addr_len, int flags)
 {
 	struct sock *sk = (struct sock *)sock->data;
 	struct sockaddr_ax25 *addr = (struct sockaddr_ax25 *)uaddr;
@@ -985,7 +985,7 @@ static int nr_accept(struct socket *sock, struct socket *newsock, int flags)
 }
 
 static int nr_getname(struct socket *sock, struct sockaddr *uaddr,
-	size_t *uaddr_len, int peer)
+	int *uaddr_len, int peer)
 {
 	struct full_sockaddr_ax25 *sax = (struct full_sockaddr_ax25 *)uaddr;
 	struct sock *sk;

@@ -127,7 +127,6 @@ opl3_ioctl (int dev,
 	    return -EINVAL;
 	  }
 
-	pmgr_inform (dev, PM_E_PATCH_LOADED, ins.channel, 0, 0, 0);
 	return store_instr (ins.channel, &ins);
       }
       break;
@@ -1015,12 +1014,6 @@ opl3_controller (int dev, int voice, int ctrl_num, int value)
     }
 }
 
-static int
-opl3_patchmgr (int dev, struct patmgr_info *rec)
-{
-  return -EINVAL;
-}
-
 static void
 opl3_bender (int dev, int voice, int value)
 {
@@ -1131,7 +1124,6 @@ static struct synth_operations opl3_operations =
   opl3_controller,
   opl3_panning,
   opl3_volume_method,
-  opl3_patchmgr,
   opl3_bender,
   opl3_alloc_voice,
   opl3_setup_voice

@@ -35,15 +35,15 @@
 
 int pcibios_present(void)
 {
-        return 0;
+	return 0;
 }
 asmlinkage int sys_pciconfig_read()
 {
-        return 0;
+	return 0;
 }
 asmlinkage int sys_pciconfig_write()
 {
-        return 0;
+	return 0;
 }
 
 #else /* CONFIG_PCI */
@@ -56,7 +56,7 @@ asmlinkage int sys_pciconfig_write()
 
 #include <asm/hwrpb.h>
 #include <asm/io.h>
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 
 
 #define KB		1024
@@ -133,10 +133,10 @@ static void disable_dev(struct pci_dev *dev)
 	 * HACK: the PCI-to-EISA bridge does not seem to identify
 	 *       itself as a bridge... :-(
 	 */
-        if (dev->vendor == 0x8086 && dev->device == 0x0482) {
-          DBG_DEVS(("disable_dev: ignoring PCEB...\n"));
-          return;
-        }
+	if (dev->vendor == 0x8086 && dev->device == 0x0482) {
+	  DBG_DEVS(("disable_dev: ignoring PCEB...\n"));
+	  return;
+	}
 #endif
 
 	bus = dev->bus;
@@ -165,10 +165,10 @@ static void layout_dev(struct pci_dev *dev)
 	 * HACK: the PCI-to-EISA bridge does not seem to identify
 	 *       itself as a bridge... :-(
 	 */
-        if (dev->vendor == 0x8086 && dev->device == 0x0482) {
-          DBG_DEVS(("layout_dev: ignoring PCEB...\n"));
-          return;
-        }
+	if (dev->vendor == 0x8086 && dev->device == 0x0482) {
+	  DBG_DEVS(("layout_dev: ignoring PCEB...\n"));
+	  return;
+	}
 #endif
 
 	bus = dev->bus;
@@ -287,7 +287,7 @@ static void layout_dev(struct pci_dev *dev)
 			pcibios_write_config_dword(bus->number, dev->devfn,
 						   reg, base);
 		}
-        }
+	}
 	/* enable device: */
 	if (dev->class >> 8 == PCI_CLASS_NOT_DEFINED ||
 	    dev->class >> 8 == PCI_CLASS_NOT_DEFINED_VGA ||
@@ -339,7 +339,7 @@ static void layout_bus(struct pci_bus *bus)
 	 */
 	for (dev = bus->devices; dev; dev = dev->sibling) {
 		if (dev->class >> 16 != PCI_BASE_CLASS_BRIDGE) {
-		        disable_dev(dev) ;
+			disable_dev(dev) ;
 		}
 	}
 
@@ -360,7 +360,7 @@ static void layout_bus(struct pci_bus *bus)
 
     	for (child = bus->children; child; child = child->next) {
 		layout_bus(child);
-        }
+	}
 	/*
 	 * Align the current bases on 4K and 1MB boundaries:
 	 */
@@ -417,7 +417,7 @@ int pcibios_find_device (unsigned short vendor, unsigned short device_id,
 			 unsigned short index, unsigned char *bus,
 			 unsigned char *devfn)
 {
-        unsigned int curr = 0;
+	unsigned int curr = 0;
 	struct pci_dev *dev;
 
 	for (dev = pci_devices; dev; dev = dev->next) {
@@ -441,7 +441,7 @@ int pcibios_find_device (unsigned short vendor, unsigned short device_id,
 int pcibios_find_class (unsigned int class_code, unsigned short index,
 			unsigned char *bus, unsigned char *devfn)
 {
-        unsigned int curr = 0;
+	unsigned int curr = 0;
 	struct pci_dev *dev;
 
 	for (dev = pci_devices; dev; dev = dev->next) {
@@ -460,7 +460,7 @@ int pcibios_find_class (unsigned int class_code, unsigned short index,
 
 int pcibios_present(void)
 {
-        return 1;
+	return 1;
 }
 
 
@@ -537,8 +537,8 @@ static inline void enable_ide(long ide_base)
  */
 static inline unsigned char bridge_swizzle(unsigned char pin, unsigned int slot) 
 {
-        /* swizzle */
-        return (((pin-1) + slot) % 4) + 1 ;
+	/* swizzle */
+	return (((pin-1) + slot) % 4) + 1 ;
 }
 
 /*
@@ -559,14 +559,14 @@ static inline void common_fixup(long min_idsel, long max_idsel, long irqs_per_sl
 	 * Go through all devices, fixing up irqs as we see fit:
 	 */
 	for (dev = pci_devices; dev; dev = dev->next) {
-	        if (dev->class >> 16 != PCI_BASE_CLASS_BRIDGE
+		if (dev->class >> 16 != PCI_BASE_CLASS_BRIDGE
 #if defined(CONFIG_ALPHA_MIKASA) || defined(CONFIG_ALPHA_ALCOR)
 		    /* PCEB (PCI to EISA bridge) does not identify
 		       itself as a bridge... :-( */
 		    && !((dev->vendor==0x8086) && (dev->device==0x482))
 #endif
 		    ) {
-		        dev->irq = 0;
+			dev->irq = 0;
 			/*
 			 * This device is not on the primary bus, we need to figure out which
 			 * interrupt pin it will come in on.   We know which slot it will come
@@ -575,7 +575,7 @@ static inline void common_fixup(long min_idsel, long max_idsel, long irqs_per_sl
 			 * (see the inline static routine above).
 			 */
 			if (dev->bus->number != 0) {
-			        struct pci_dev *curr = dev ;
+				struct pci_dev *curr = dev ;
 				/* read the pin and do the PCI-PCI bridge interrupt pin swizzle */
 				pcibios_read_config_byte(dev->bus->number, dev->devfn,
 							 PCI_INTERRUPT_PIN, &pin);
@@ -583,16 +583,16 @@ static inline void common_fixup(long min_idsel, long max_idsel, long irqs_per_sl
 				if (pin == 0) pin = 1 ;
 				/* follow the chain of bridges, swizzling as we go */
 				do {
-				        /* swizzle */
-				        pin = bridge_swizzle(pin, PCI_SLOT(curr->devfn)) ;
+					/* swizzle */
+					pin = bridge_swizzle(pin, PCI_SLOT(curr->devfn)) ;
 					/* move up the chain of bridges */
 					curr = curr->bus->self ;
 				} while (curr->bus->self) ;
 				/* The slot is the slot of the last bridge. */
 				slot = PCI_SLOT(curr->devfn) ;
 			} else {
-			        /* work out the slot */
-		                slot = PCI_SLOT(dev->devfn) ;
+				/* work out the slot */
+				slot = PCI_SLOT(dev->devfn) ;
 				/* read the pin */
 				pcibios_read_config_byte(dev->bus->number,
 							 dev->devfn,
@@ -600,7 +600,7 @@ static inline void common_fixup(long min_idsel, long max_idsel, long irqs_per_sl
 							 &pin);
 			}
 			if (irq_tab[slot - min_idsel][pin] != -1)
-			        dev->irq = irq_tab[slot - min_idsel][pin];
+				dev->irq = irq_tab[slot - min_idsel][pin];
 #if PCI_MODIFY
 			/* tell the device: */
 			pcibios_write_config_byte(dev->bus->number, dev->devfn,
@@ -1041,7 +1041,7 @@ static inline void sio_fixup(void)
 	 */
 	level_bits = 0;
 	for (dev = pci_devices; dev; dev = dev->next) {
-	        if (dev->class >> 16 == PCI_BASE_CLASS_BRIDGE)
+		if (dev->class >> 16 == PCI_BASE_CLASS_BRIDGE)
 			continue;
 		dev->irq = 0;
 		if (dev->bus->number != 0) {
@@ -1169,7 +1169,7 @@ unsigned long pcibios_fixup(unsigned long mem_start, unsigned long mem_end)
 #endif
 
 #ifdef CONFIG_TGA_CONSOLE
-        tga_console_init();
+	tga_console_init();
 #endif /* CONFIG_TGA_CONSOLE */
 
 	return mem_start;
@@ -1178,28 +1178,28 @@ unsigned long pcibios_fixup(unsigned long mem_start, unsigned long mem_end)
 
 const char *pcibios_strerror (int error)
 {
-        static char buf[80];
+	static char buf[80];
 
-        switch (error) {
-                case PCIBIOS_SUCCESSFUL:
-                        return "SUCCESSFUL";
+	switch (error) {
+		case PCIBIOS_SUCCESSFUL:
+			return "SUCCESSFUL";
 
-                case PCIBIOS_FUNC_NOT_SUPPORTED:
-                        return "FUNC_NOT_SUPPORTED";
+		case PCIBIOS_FUNC_NOT_SUPPORTED:
+			return "FUNC_NOT_SUPPORTED";
 
-                case PCIBIOS_BAD_VENDOR_ID:
-                        return "SUCCESSFUL";
+		case PCIBIOS_BAD_VENDOR_ID:
+			return "SUCCESSFUL";
 
-                case PCIBIOS_DEVICE_NOT_FOUND:
-                        return "DEVICE_NOT_FOUND";
+		case PCIBIOS_DEVICE_NOT_FOUND:
+			return "DEVICE_NOT_FOUND";
 
-                case PCIBIOS_BAD_REGISTER_NUMBER:
-                        return "BAD_REGISTER_NUMBER";
+		case PCIBIOS_BAD_REGISTER_NUMBER:
+			return "BAD_REGISTER_NUMBER";
 
-                default:
-                        sprintf (buf, "UNKNOWN RETURN 0x%x", error);
-                        return buf;
-        }
+		default:
+			sprintf (buf, "UNKNOWN RETURN 0x%x", error);
+			return buf;
+	}
 }
 
 asmlinkage int sys_pciconfig_read(
@@ -1209,35 +1209,35 @@ asmlinkage int sys_pciconfig_read(
 	unsigned long len,
 	unsigned char *buf)
 {
-        unsigned char ubyte;
-        unsigned short ushort;
-        unsigned int uint;
+	unsigned char ubyte;
+	unsigned short ushort;
+	unsigned int uint;
 	long err = 0;
 
 	switch (len) {
 	    case 1:
-	        err = pcibios_read_config_byte(bus, dfn, off, &ubyte);
+		err = pcibios_read_config_byte(bus, dfn, off, &ubyte);
 		if (err != PCIBIOS_SUCCESSFUL)
 		    ubyte = 0xff;
 		put_user(ubyte, buf);
 		break;
 	    case 2:
-	        err = pcibios_read_config_word(bus, dfn, off, &ushort);
+		err = pcibios_read_config_word(bus, dfn, off, &ushort);
 		if (err != PCIBIOS_SUCCESSFUL)
 		    ushort = 0xffff;
 		put_user(ushort, (unsigned short *)buf);
 		break;
 	    case 4:
-	        err = pcibios_read_config_dword(bus, dfn, off, &uint);
+		err = pcibios_read_config_dword(bus, dfn, off, &uint);
 		if (err != PCIBIOS_SUCCESSFUL)
 		    uint = 0xffffffff;
 		put_user(uint, (unsigned int *)buf);
 		break;
 	    default:
-	        err = -EINVAL;
-	        break;
+		err = -EINVAL;
+		break;
 	}
-        return err;
+	return err;
 }
 asmlinkage int sys_pciconfig_write(
 	unsigned long bus,
@@ -1246,37 +1246,43 @@ asmlinkage int sys_pciconfig_write(
 	unsigned long len,
 	unsigned char *buf)
 {
-        unsigned char ubyte;
-        unsigned short ushort;
-        unsigned int uint;
-        long err = 0;
+	unsigned char ubyte;
+	unsigned short ushort;
+	unsigned int uint;
+	long err = 0;
 
 	switch (len) {
 	    case 1:
-                ubyte = get_user(buf);
-                err = pcibios_write_config_byte(bus, dfn, off, ubyte);
-                if (err != PCIBIOS_SUCCESSFUL) {
+		err = get_user(ubyte, buf);
+		if (err)
+			break;
+		err = pcibios_write_config_byte(bus, dfn, off, ubyte);
+		if (err != PCIBIOS_SUCCESSFUL) {
 			err = -EFAULT;
 		}
 		break;
 	    case 2:
-                ushort = get_user((unsigned short *)buf);
-                err = pcibios_write_config_word(bus, dfn, off, ushort);
-                if (err != PCIBIOS_SUCCESSFUL) {
+		err = get_user(ushort, (unsigned short *)buf);
+		if (err)
+			break;
+		err = pcibios_write_config_word(bus, dfn, off, ushort);
+		if (err != PCIBIOS_SUCCESSFUL) {
 			err = -EFAULT;
 		}
 		break;
 	    case 4:
-                uint = get_user((unsigned int *)buf);
-                err = pcibios_write_config_dword(bus, dfn, off, uint);
-                if (err != PCIBIOS_SUCCESSFUL) {
+		err = get_user(uint, (unsigned int *)buf);
+		if (err)
+			break;
+		err = pcibios_write_config_dword(bus, dfn, off, uint);
+		if (err != PCIBIOS_SUCCESSFUL) {
 			err = -EFAULT;
 		}
 		break;
 	    default:
-	        err = -EINVAL;
-	        break;
+		err = -EINVAL;
+		break;
 	}
-        return err;
+	return err;
 }
 #endif /* CONFIG_PCI */

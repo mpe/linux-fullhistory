@@ -245,7 +245,6 @@ static void awe_aftertouch(int dev, int voice, int pressure);
 static void awe_controller(int dev, int voice, int ctrl_num, int value);
 static void awe_panning(int dev, int voice, int value);
 static void awe_volume_method(int dev, int mode);
-static int awe_patchmgr(int dev, struct patmgr_info *rec);
 static void awe_bender(int dev, int voice, int value);
 static int awe_alloc(int dev, int chn, int note, struct voice_alloc_info *alloc);
 static void awe_setup_voice(int dev, int voice, int chn);
@@ -374,7 +373,6 @@ static struct synth_operations awe_operations =
 	awe_controller,
 	awe_panning,
 	awe_volume_method,
-	awe_patchmgr,
 	awe_bender,
 	awe_alloc,
 	awe_setup_voice
@@ -2541,15 +2539,6 @@ awe_volume_method(int dev, int mode)
 {
 	/* not impremented */
 	DEBUG(0,printk("AWE32: [volmethod mode=%d]\n", mode));
-}
-
-
-/* patch manager */
-static int
-awe_patchmgr(int dev, struct patmgr_info *rec)
-{
-	FATALERR(printk("AWE32 Warning: patch manager control not supported\n"));
-	return 0;
 }
 
 

@@ -127,7 +127,7 @@ static int tcp_unique_address(u32 saddr, u16 snum, u32 daddr, u16 dnum)
  *	This will initiate an outgoing connection. 
  */
  
-int tcp_v4_connect(struct sock *sk, struct sockaddr *uaddr, size_t addr_len)
+int tcp_v4_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 {
 	struct sk_buff *buff;
 	struct sk_buff *skb1;

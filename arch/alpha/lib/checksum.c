@@ -44,7 +44,7 @@ unsigned short int csum_tcpudp_magic(unsigned long saddr,
  * inner loop could be unrolled a bit further, and there are better
  * ways to do the carry, but this is reasonable.
  */
-static inline unsigned long do_csum(unsigned char * buff, int len)
+static inline unsigned long do_csum(const unsigned char * buff, int len)
 {
 	int odd, count;
 	unsigned long result = 0;
@@ -127,7 +127,7 @@ unsigned short ip_fast_csum(unsigned char * iph, unsigned int ihl)
  *
  * it's best to have buff aligned on a 32-bit boundary
  */
-unsigned int csum_partial(unsigned char * buff, int len, unsigned int sum)
+unsigned int csum_partial(const unsigned char * buff, int len, unsigned int sum)
 {
 	unsigned long result = do_csum(buff, len);
 

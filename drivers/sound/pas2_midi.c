@@ -3,9 +3,17 @@
  *
  * The low level driver for the PAS Midi Interface.
  */
+/*
+ * Copyright (C) by Hannu Savolainen 1993-1996
+ *
+ * OSS/Free for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
+ * Version 2 (June 1991). See the "COPYING" file distributed with this software
+ * for more info.
+ */
+#include <linux/config.h>
+
 
 #include "sound_config.h"
-#include <linux/config.h>
 
 #if defined(CONFIG_PAS) && defined(CONFIG_MIDI)
 

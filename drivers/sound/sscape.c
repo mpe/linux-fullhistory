@@ -813,18 +813,14 @@ attach_sscape (struct address_info *hw_config)
   devc->failed = 0;
 }
 
-int
-probe_sscape (struct address_info *hw_config)
+static int
+detect_ga (sscape_info * devc)
 {
   unsigned char   save;
 
-  devc->base = hw_config->io_base;
-  devc->irq = hw_config->irq;
-  devc->dma = hw_config->dma;
+  DDB (printk ("Entered Soundscape detect_ga(%x)\n", devc->base));
 
-  devc->failed = 1;
-
-  if (sscape_detected != 0 && sscape_detected != hw_config->io_base)
+  if (check_region (devc->base, 8))
     return 0;
 
   /*
@@ -876,6 +872,25 @@ probe_sscape (struct address_info *hw_config)
       DDB (printk ("soundscape: Detect error F\n"));
       return 0;
     }
+
+  return 1;
+}
+
+int
+probe_sscape (struct address_info *hw_config)
+{
+
+  devc->base = hw_config->io_base;
+  devc->irq = hw_config->irq;
+  devc->dma = hw_config->dma;
+
+  if (sscape_detected != 0 && sscape_detected != hw_config->io_base)
+    return 0;
+
+  devc->failed = 1;
+
+  if (!detect_ga (devc))
+    return 0;
 
 #ifdef SSCAPE_DEBUG1
   /*

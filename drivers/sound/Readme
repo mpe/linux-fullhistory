@@ -19,7 +19,7 @@ check http://www.4front-tech.com/pguide for more info.
 -  THIS VERSION ____REQUIRES____ Linux 2.1.5 OR LATER.
    ====================================================
 
-Packages "snd-util-3.5.tar.gz" and "snd-data-0.1.tar.Z"
+Packages "snd-util-3.7.tar.gz" and "snd-data-0.1.tar.Z"
 contain useful utilities to be used with this driver.
 See http://www.4front-tech.com/ossfree/getting.html for
 download instructions.

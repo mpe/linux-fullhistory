@@ -88,8 +88,8 @@ struct sk_buff
 
 	struct neighbour *nexthop;
 #endif		
-	unsigned long 	len;			/* Length of actual data			*/
-	unsigned long	csum;			/* Checksum 					*/
+	unsigned int 	len;			/* Length of actual data			*/
+	unsigned int	csum;			/* Checksum 					*/
 	__u32		saddr;			/* IP source address				*/
 	__u32		daddr;			/* IP target address				*/
 	__u32		raddr;			/* IP next hop address				*/
@@ -171,13 +171,13 @@ extern void			skb_device_lock(struct sk_buff *skb);
 extern void			skb_device_unlock(struct sk_buff *skb);
 extern void			dev_kfree_skb(struct sk_buff *skb, int mode);
 extern int			skb_device_locked(struct sk_buff *skb);
-extern unsigned char *		skb_put(struct sk_buff *skb, int len);
-extern unsigned char *		skb_push(struct sk_buff *skb, int len);
-extern unsigned char *		skb_pull(struct sk_buff *skb, int len);
+extern unsigned char *		skb_put(struct sk_buff *skb, unsigned int len);
+extern unsigned char *		skb_push(struct sk_buff *skb, unsigned int len);
+extern unsigned char *		skb_pull(struct sk_buff *skb, unsigned int len);
 extern int			skb_headroom(struct sk_buff *skb);
 extern int			skb_tailroom(struct sk_buff *skb);
-extern void			skb_reserve(struct sk_buff *skb, int len);
-extern void 			skb_trim(struct sk_buff *skb, int len);
+extern void			skb_reserve(struct sk_buff *skb, unsigned int len);
+extern void 			skb_trim(struct sk_buff *skb, unsigned int len);
 
 extern __inline__ int skb_queue_empty(struct sk_buff_head *list)
 {
@@ -410,7 +410,7 @@ extern __inline__ void skb_unlink(struct sk_buff *skb)
  *	Add data to an sk_buff
  */
  
-extern __inline__ unsigned char *skb_put(struct sk_buff *skb, int len)
+extern __inline__ unsigned char *skb_put(struct sk_buff *skb, unsigned int len)
 {
 	extern char *skb_put_errstr;
 	unsigned char *tmp=skb->tail;
@@ -425,7 +425,7 @@ here:
 	return tmp;
 }
 
-extern __inline__ unsigned char *skb_push(struct sk_buff *skb, int len)
+extern __inline__ unsigned char *skb_push(struct sk_buff *skb, unsigned int len)
 {
 	extern char *skb_push_errstr;
 	skb->data-=len;
@@ -439,9 +439,9 @@ here:
 	return skb->data;
 }
 
-extern __inline__ unsigned char * skb_pull(struct sk_buff *skb, int len)
+extern __inline__ unsigned char * skb_pull(struct sk_buff *skb, unsigned int len)
 {
-	if(len > skb->len)
+	if (len > skb->len)
 		return NULL;
 	skb->data+=len;
 	skb->len-=len;
@@ -458,18 +458,17 @@ extern __inline__ int skb_tailroom(struct sk_buff *skb)
 	return skb->end-skb->tail;
 }
 
-extern __inline__ void skb_reserve(struct sk_buff *skb, int len)
+extern __inline__ void skb_reserve(struct sk_buff *skb, unsigned int len)
 {
 	skb->data+=len;
 	skb->tail+=len;
 }
 
-extern __inline__ void skb_trim(struct sk_buff *skb, int len)
+extern __inline__ void skb_trim(struct sk_buff *skb, unsigned int len)
 {
-	if(skb->len>len)
-	{
-		skb->len=len;
-		skb->tail=skb->data+len;
+	if (skb->len > len) {
+		skb->len = len;
+		skb->tail = skb->data+len;
 	}
 }
 
