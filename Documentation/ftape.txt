@@ -267,9 +267,9 @@ C. Boot and load time configuration
 
    ii.  Hardware setup
 	BASE is the base address of your floppy disk controller,
-        IRQ and DMA give its interrupt and dma channel, respectively.
-        BOOL is an integer, "0" means: "NO!", any other value means:
-	"YES!". You don't need to specify anything if connecting your tape
+        IRQ and DMA give its interrupt and DMA channel, respectively.
+        BOOL is an integer, "0" means "no"; any other value means
+	"yes". You don't need to specify anything if connecting your tape
         drive to the standard floppy disk controller. All of these
 	values have reasonable defaults. The defaults can be modified
 	during kernel configuration, i.e. while running "make config",

@@ -92,7 +92,7 @@ struct MCA_info {
  * is set to zero.
  */
 
-static struct MCA_info* mca_info = 0;
+static struct MCA_info* mca_info = NULL;
 
 /* MCA registers */
 
@@ -160,7 +160,10 @@ static void mca_configure_adapter_status(int slot) {
 
 		/* id = 0x0000 usually indicates hardware failure,
 		 * however, ZP Gu (zpg@castle.net> reports that his 9556
-		 * has 0x0000 as id and everything still works.
+		 * has 0x0000 as id and everything still works. There
+		 * also seem to be an adapter with id = 0x0000; the
+		 * NCR Parallel Bus Memory Card. Until this is confirmed,
+		 * however, this code will stay.
 		 */
 
 		mca_info->slot[slot].status = MCA_ADAPTER_ERROR;
@@ -222,7 +225,13 @@ __initfunc(void mca_init(void))
 
 	/* Allocate MCA_info structure (at address divisible by 8) */
 
-	mca_info = kmalloc(sizeof(struct MCA_info), GFP_ATOMIC);
+	mca_info = kmalloc(sizeof(struct MCA_info), GFP_KERNEL);
+
+	if(mca_info == NULL) {
+		printk("Failed to allocate memory for mca_info!");
+		restore_flags(flags);
+		return;
+	}
 
 	/* Make sure adapter setup is off */
 
@@ -382,7 +391,7 @@ void mca_handle_nmi(void)
 
 int mca_find_adapter(int id, int start)
 {
-	if(mca_info == 0 || id == 0 || id == 0xffff) {
+	if(mca_info == NULL || id == 0xffff) {
 		return MCA_NOTFOUND;
 	}
 
@@ -412,7 +421,7 @@ int mca_find_adapter(int id, int start)
 
 int mca_find_unused_adapter(int id, int start) 
 {
-	if(mca_info == 0 || id == 0 || id == 0xffff) {
+	if(mca_info == NULL || id == 0xffff) {
 		return MCA_NOTFOUND;
 	}
 
@@ -443,7 +452,7 @@ int mca_find_unused_adapter(int id, int start)
 
 unsigned char mca_read_stored_pos(int slot, int reg) 
 {
-	if(slot < 0 || slot >= MCA_NUMADAPTERS || mca_info == 0) return 0;
+	if(slot < 0 || slot >= MCA_NUMADAPTERS || mca_info == NULL) return 0;
 	if(reg < 0 || reg >= 8) return 0;
 	return mca_info->slot[slot].pos[reg];
 } /* mca_read_stored_pos() */
@@ -455,7 +464,7 @@ unsigned char mca_read_pos(int slot, int reg)
 	unsigned int byte = 0;
 	unsigned long flags;
 
-	if(slot < 0 || slot >= MCA_NUMADAPTERS || mca_info == 0) return 0;
+	if(slot < 0 || slot >= MCA_NUMADAPTERS || mca_info == NULL) return 0;
 	if(reg < 0 || reg >= 8) return 0;
 
 	save_flags(flags);
@@ -527,7 +536,7 @@ void mca_write_pos(int slot, int reg, unsigned char byte)
 		return;
 	if(reg < 0 || reg >= 8)
 		return;
-	if(mca_info == 0)
+	if(mca_info == NULL)
 		return;
 
 	save_flags(flags);
@@ -554,7 +563,7 @@ void mca_write_pos(int slot, int reg, unsigned char byte)
 
 void mca_set_adapter_name(int slot, char* name) 
 {
-	if(mca_info == 0) return;
+	if(mca_info == NULL) return;
 
 	if(slot >= 0 && slot < MCA_NUMADAPTERS) {
 		if(name != NULL) {
@@ -570,7 +579,7 @@ void mca_set_adapter_name(int slot, char* name)
 
 void mca_set_adapter_procfn(int slot, MCA_ProcFn procfn, void* dev)
 {
-	if(mca_info == 0) return;
+	if(mca_info == NULL) return;
 
 	if(slot >= 0 && slot < MCA_NUMADAPTERS) {
 		mca_info->slot[slot].procfn = procfn;
@@ -597,7 +606,7 @@ void mca_mark_as_unused(int slot)
  
 char *mca_get_adapter_name(int slot) 
 {
-	if(mca_info == 0) return 0;
+	if(mca_info == NULL) return 0;
 
 	if(slot >= 0 && slot < MCA_NUMADAPTERS) {
 		return mca_info->slot[slot].name;
@@ -608,7 +617,7 @@ char *mca_get_adapter_name(int slot)
 
 int mca_isadapter(int slot)
 {
-	if(mca_info == 0) return 0;
+	if(mca_info == NULL) return 0;
 
 	if(slot >= 0 && slot < MCA_NUMADAPTERS) {
 		return ((mca_info->slot[slot].status == MCA_ADAPTER_NORMAL)
@@ -620,7 +629,7 @@ int mca_isadapter(int slot)
 
 int mca_isenabled(int slot)
 {
-	if(mca_info == 0) return 0;
+	if(mca_info == NULL) return 0;
 
 	if(slot >= 0 && slot < MCA_NUMADAPTERS) {
 		return (mca_info->slot[slot].status == MCA_ADAPTER_NORMAL);
@@ -637,7 +646,7 @@ int get_mca_info(char *buf)
 {
 	int i, j, len = 0;
 
-	if(MCA_bus && mca_info != 0) 
+	if(MCA_bus && mca_info != NULL) 
 	{
 		/* Format POS registers of eight MCA slots */
 
@@ -676,10 +685,10 @@ int get_mca_info(char *buf)
 
 __initfunc(void mca_do_proc_init(void))
 {
-	int i = 0;
-	struct proc_dir_entry* node = 0;
+	int i;
+	struct proc_dir_entry* node = NULL;
 
-	if(mca_info == 0) return;	/* Should never happen */
+	if(mca_info == NULL) return;	/* Should never happen */
 
 	proc_register(&proc_mca, &(struct proc_dir_entry) {
 		PROC_MCA_REGISTERS, 3, "pos", S_IFREG|S_IRUGO,
@@ -696,8 +705,12 @@ __initfunc(void mca_do_proc_init(void))
 		mca_info->slot[i].dev = 0;
 
 		if(!mca_isadapter(i)) continue;
-		node = kmalloc(sizeof(struct proc_dir_entry), GFP_ATOMIC);
+		node = kmalloc(sizeof(struct proc_dir_entry), GFP_KERNEL);
 
+		if(node == NULL) {
+			printk("Failed to allocate memory for MCA proc-entries!");
+			return;
+		}
 		if(i < MCA_MAX_SLOT_NR) {
 			node->low_ino = PROC_MCA_SLOT + i;
 			node->namelen = sprintf(mca_info->slot[i].procname,
@@ -727,7 +740,7 @@ int mca_default_procfn(char* buf, int slot)
 
 	/* This really shouldn't happen... */
 
-	if(mca_info == 0) {
+	if(mca_info == NULL) {
 		*buf = 0;
 		return 0;
 	}

@@ -5,15 +5,16 @@
  *  Due to the inconsistancy in reading from the signal flags
  *  it is difficult to get an accurate tuned signal.
  *
- *  There seems to be a problem with the volume setting that I must still
- *  figure out. 
- *  It seems that the card has is not linear to 0 volume. It cuts off
- *  at a low frequency, and it is not possible (at least I have not found)
+ *  It seems that the card is not linear to 0 volume. It cuts off
+ *  at a low volume, and it is not possible (at least I have not found)
  *  to get fine volume control over the low volume range.
  *
  *  Some code derived from code by Romolo Manfredini
  *				   romolo@bicnet.it
  *
+ * 1999-05-06 - (C. van Schaik)
+ *	      - Make signal strength and stereo scans
+ *	        kinder to cpu while in delay
  * 1999-01-05 - (C. van Schaik)
  *	      - Changed tuning to 1/160Mhz accuracy
  *	      - Added stereo support
@@ -51,18 +52,10 @@ struct zol_device {
 
 /* local things */
 
-static void sleep_delay(long n)
+static void sleep_delay(void)
 {
-	/* Sleep nicely for 'n' uS */
-	int d = n / (1000000 / HZ);
-	if (!d)
-		udelay(n);
-	else {
-		/* Yield CPU time */
-		unsigned long x = jiffies;
-		while ((jiffies - x) <= d)
-			schedule();
-	}
+	/* Sleep nicely for +/- 10 mS */
+	schedule();
 }
 
 static int zol_setvol(struct zol_device *dev, int vol)
@@ -79,7 +72,7 @@ static int zol_setvol(struct zol_device *dev, int vol)
 	}
 
 	outb(dev->curvol-1, io);
-	sleep_delay(10000);
+	sleep_delay();
 	inb(io + 2);
 
 	return 0;
@@ -125,18 +118,18 @@ static int zol_setfreq(struct zol_device *dev, unsigned long freq)
 	while (i--) {
 		if ((bitmask & 0x8000000000000000ull) != 0) {
 			outb(0x80, io);
-			sleep_delay(50);
+			udelay(50);
 			outb(0x00, io);
-			sleep_delay(50);
+			udelay(50);
 			outb(0x80, io);
-			sleep_delay(50);
+			udelay(50);
 		} else {
 			outb(0xc0, io);
-			sleep_delay(50);
+			udelay(50);
 			outb(0x40, io);
-			sleep_delay(50);
+			udelay(50);
 			outb(0xc0, io);
-			sleep_delay(50);
+			udelay(50);
 		}
 		bitmask *= 2;
 	}
@@ -144,16 +137,16 @@ static int zol_setfreq(struct zol_device *dev, unsigned long freq)
 	outb(0x80, io);
 	outb(0xc0, io);
 	outb(0x40, io);
-	sleep_delay(1000);
+	udelay(1000);
 	inb(io+2);
 
-        sleep_delay(1000);
+        udelay(1000);
 	if (dev->muted)
 	{
 		outb(0, io);
 		outb(0, io);
 		inb(io + 3);
-		sleep_delay(1000);
+		udelay(1000);
 	} else
         zol_setvol(dev, dev->curvol);
 	return 0;
@@ -167,10 +160,11 @@ int zol_getsigstr(struct zol_device *dev)
 
 	outb(0x00, io);         /* This stuff I found to do nothing */
 	outb(dev->curvol, io);
-	sleep_delay(20000);
+	sleep_delay();
+	sleep_delay();
 
 	a = inb(io);
-	sleep_delay(1000);
+	sleep_delay();
 	b = inb(io);
 
 	if (a != b)
@@ -188,10 +182,11 @@ int zol_is_stereo (struct zol_device *dev)
 
 	outb(0x00, io);
 	outb(dev->curvol, io);
-	sleep_delay(20000);
+	sleep_delay();
+	sleep_delay();
 
 	x1 = inb(io);
-	sleep_delay(1000);
+	sleep_delay();
 	x2 = inb(io);
 
 	if ((x1 == x2) && (x1 == 0xcf))
@@ -362,7 +357,8 @@ __initfunc(int zoltrix_init(struct video_init *v))
 
 	outb(0, io);
 	outb(0, io);
-	sleep_delay(20000);
+	sleep_delay();
+	sleep_delay();
 	inb(io + 3);
 
 	zoltrix_unit.curvol = 0;

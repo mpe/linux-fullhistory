@@ -456,9 +456,9 @@ static int pci_etherdev_probe(struct device *dev, struct pci_id_info pci_tbl[])
 				   pci_tbl[chip_idx].name, pciaddr, irq);
 
 		if (pci_tbl[chip_idx].flags & PCI_USES_IO) {
-			if (check_region(pciaddr, pci_tbl[chip_idx].io_size))
-				continue;
 			ioaddr = pciaddr & ~3;
+			if (check_region(ioaddr, pci_tbl[chip_idx].io_size))
+				continue;
 		} else if ((ioaddr = (long)ioremap(pciaddr & ~0xf,
 										 pci_tbl[chip_idx].io_size)) == 0) {
 			printk(KERN_INFO "Failed to map PCI address %#lx.\n",

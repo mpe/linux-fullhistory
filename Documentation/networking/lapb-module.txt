@@ -216,7 +216,7 @@ void (*disconnect_confirmation)(void *token, int reason);
 
 This is called by the LAPB module when an event occurs after the device
 driver has called lapb_disconnect_request (see above). The reason indicates
-what has happended. In all cases the LAPB link can be regarded as being
+what has happened. In all cases the LAPB link can be regarded as being
 terminated. The values for reason are:
 
 LAPB_OK			The LAPB link was terminated normally.

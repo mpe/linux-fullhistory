@@ -57,7 +57,7 @@ static unsigned short isa_ports[] =
 };
 #define ISA_NRPORTS (sizeof(isa_ports)/sizeof(unsigned short))
 
-act2000_card *cards = (act2000_card *) NULL;
+act2000_card *actcards = (act2000_card *) NULL;
 
 /* Parameters to be set by insmod */
 static int   act_bus  =  0;
@@ -589,7 +589,7 @@ act2000_logstat(struct act2000_card *card, char *str)
 static inline act2000_card *
 act2000_findcard(int driverid)
 {
-        act2000_card *p = cards;
+        act2000_card *p = actcards;
 
         while (p) {
                 if (p->myid == driverid)
@@ -714,8 +714,8 @@ act2000_alloccard(int bus, int port, int irq, char *id)
         card->bus = bus;
         card->port = port;
         card->irq = irq;
-        card->next = cards;
-        cards = card;
+        card->next = actcards;
+        actcards = card;
 }
 
 /*
@@ -805,9 +805,9 @@ act2000_addcard(int bus, int port, int irq, char *id)
 				       bus);
 		}
 	}
-	if (!cards)
+	if (!actcards)
 		return 1;
-        p = cards;
+        p = actcards;
         while (p) {
 		initialized = 0;
 		if (!p->interface.statcallb) {
@@ -870,9 +870,9 @@ act2000_addcard(int bus, int port, int irq, char *id)
                                 kfree(p);
                                 p = q->next;
                         } else {
-                                cards = p->next;
+                                actcards = p->next;
                                 kfree(p);
-                                p = cards;
+                                p = actcards;
                         }
 			failed++;
                 }
@@ -890,9 +890,9 @@ int
 act2000_init(void)
 {
         printk(KERN_INFO "%s\n", DRIVERNAME);
-        if (!cards)
+        if (!actcards)
 		act2000_addcard(act_bus, act_port, act_irq, act_id);
-        if (!cards)
+        if (!actcards)
                 printk(KERN_INFO "act2000: No cards defined yet\n");
         /* No symbols to export, hide all symbols */
         EXPORT_NO_SYMBOLS;
@@ -903,14 +903,14 @@ act2000_init(void)
 void
 cleanup_module(void)
 {
-        act2000_card *card = cards;
+        act2000_card *card = actcards;
         act2000_card *last;
         while (card) {
                 unregister_card(card);
 		del_timer(&card->ptimer);
                 card = card->next;
         }
-        card = cards;
+        card = actcards;
         while (card) {
                 last = card;
                 card = card->next;

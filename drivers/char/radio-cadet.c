@@ -1,7 +1,7 @@
 /* cadet.c - A video4linux driver for the ADS Cadet AM/FM Radio Card 
  *
  * by Fred Gleason <fredg@wava.com>
- * Version 0.1.2
+ * Version 0.3.1
  *
  * (Loosely) based on code for the Aztech radio card by
  *
@@ -22,42 +22,110 @@
 #include <asm/uaccess.h>	/* copy to/from user		*/
 #include <linux/videodev.h>	/* kernel radio structs		*/
 #include <linux/config.h>	/* CONFIG_RADIO_CADET_PORT 	*/
+#include <linux/param.h>
 
 #ifndef CONFIG_RADIO_CADET_PORT
 #define CONFIG_RADIO_CADET_PORT 0x330
 #endif
+#define RDS_BUFFER 256
 
 static int io=CONFIG_RADIO_CADET_PORT; 
 static int users=0;
 static int curtuner=0;
+static int tunestat=0;
+static int sigstrength=0;
+struct wait_queue *tunerq,*rdsq,*readq;
+struct timer_list tunertimer,rdstimer,readtimer;
+static __u8 rdsin=0,rdsout=0,rdsstat=0;
+static unsigned char rdsbuf[RDS_BUFFER];
+static int cadet_lock=0;
+
+/*
+ * Signal Strength Threshold Values
+ * The V4L API spec does not define any particular unit for the signal 
+ * strength value.  These values are in microvolts of RF at the tuner's input.
+ */
+static __u16 sigtable[2][4]={{5,10,30,150},{28,40,63,1000}};
+
+
+
+void cadet_wake(unsigned long qnum)
+{
+        switch(qnum) {
+	case 0:           /* cadet_setfreq */
+	        wake_up(&tunerq);
+		break;
+	case 1:           /* cadet_getrds */
+	        wake_up(&rdsq);
+		break;
+	}	
+}
+
+
+
+static int cadet_getrds(void)
+{
+        int rdsstat=0;
+
+	cadet_lock++;
+        outb(3,io);                 /* Select Decoder Control/Status */
+	outb(inb(io+1)&0x7f,io+1);  /* Reset RDS detection */
+	cadet_lock--;
+	init_timer(&rdstimer);
+	rdstimer.function=cadet_wake;
+	rdstimer.data=(unsigned long)1;
+	rdstimer.expires=jiffies+(HZ/10);
+	rdsq=NULL;
+	add_timer(&rdstimer);
+	sleep_on(&rdsq);
+	
+	cadet_lock++;
+        outb(3,io);                 /* Select Decoder Control/Status */
+	if((inb(io+1)&0x80)!=0) {
+	        rdsstat|=VIDEO_TUNER_RDS_ON;
+	}
+	if((inb(io+1)&0x10)!=0) {
+	        rdsstat|=VIDEO_TUNER_MBS_ON;
+	}
+	cadet_lock--;
+	return rdsstat;
+}
+
+
+
 
 static int cadet_getstereo(void)
 {
-  if(curtuner!=0) {          /* Only FM has stereo capability! */
+        if(curtuner!=0) {          /* Only FM has stereo capability! */
 	        return 0;
 	}
+        cadet_lock++;
         outb(7,io);          /* Select tuner control */
         if((inb(io+1)&0x40)==0) {
+	        cadet_lock--;
                 return 1;    /* Stereo pilot detected */
         }
         else {
+	        cadet_lock--;
                 return 0;    /* Mono */
         }
 }
 
 
-static unsigned cadet_getfreq(void)
+
+static unsigned cadet_gettune(void)
 {
         int curvol,i;
-        unsigned freq=0,test,fifo=0;
-  
+	unsigned fifo=0;
 
         /*
          * Prepare for read
          */
+	cadet_lock++;
         outb(7,io);       /* Select tuner control */
         curvol=inb(io+1); /* Save current volume/mute setting */
         outb(0x00,io+1);  /* Ensure WRITE-ENABLE is LOW */
+	tunestat=0xffff;
 
         /*
          * Read the shift register
@@ -66,6 +134,7 @@ static unsigned cadet_getfreq(void)
                 fifo=(fifo<<1)|((inb(io+1)>>7)&0x01);
                 if(i<24) {
                         outb(0x01,io+1);
+			tunestat&=inb(io+1);
                         outb(0x00,io+1);
                 }
         }
@@ -74,6 +143,22 @@ static unsigned cadet_getfreq(void)
          * Restore volume/mute setting
          */
         outb(curvol,io+1);
+	cadet_lock--;
+	
+	return fifo;
+}
+
+
+
+static unsigned cadet_getfreq(void)
+{
+        int i;
+        unsigned freq=0,test,fifo=0;
+
+	/*
+	 * Read current tuning
+	 */
+	fifo=cadet_gettune();
 
         /*
          * Convert to actual frequency
@@ -98,10 +183,40 @@ static unsigned cadet_getfreq(void)
 }
 
 
+
+static void cadet_settune(unsigned fifo)
+{
+        int i;
+	unsigned test;  
+
+	cadet_lock++;
+	outb(7,io);                /* Select tuner control */
+	/*
+	 * Write the shift register
+	 */
+	test=0;
+	test=(fifo>>23)&0x02;      /* Align data for SDO */
+	test|=0x1c;                /* SDM=1, SWE=1, SEN=1, SCK=0 */
+	outb(7,io);                /* Select tuner control */
+	outb(test,io+1);           /* Initialize for write */
+	for(i=0;i<25;i++) {
+   	        test|=0x01;              /* Toggle SCK High */
+		outb(test,io+1);
+		test&=0xfe;              /* Toggle SCK Low */
+		outb(test,io+1);
+		fifo=fifo<<1;            /* Prepare the next bit */
+		test=0x1c|((fifo>>23)&0x02);
+		outb(test,io+1);
+	}
+	cadet_lock--;
+}
+
+
+
 static void cadet_setfreq(unsigned freq)
 {
         unsigned fifo;
-        int i,test;
+        int i,j,test;
         int curvol;
 
         /* 
@@ -129,39 +244,47 @@ static void cadet_setfreq(unsigned freq)
         /*
          * Save current volume/mute setting
          */
+	cadet_lock++;
+	outb(7,io);                /* Select tuner control */
         curvol=inb(io+1); 
 
-        /*
-         * Write the shift register
-         */
-        test=0;
-        test=(fifo>>23)&0x02;      /* Align data for SDO */
-        test|=0x1c;                /* SDM=1, SWE=1, SEN=1, SCK=0 */
-        outb(7,io);                /* Select tuner control */
-        outb(test,io+1);           /* Initialize for write */
-        for(i=0;i<25;i++) {
-                test|=0x01;              /* Toggle SCK High */
-                outb(test,io+1);
-                test&=0xfe;              /* Toggle SCK Low */
-                outb(test,io+1);
-                fifo=fifo<<1;            /* Prepare the next bit */
-                test=0x1c|((fifo>>23)&0x02);
-                outb(test,io+1);
-        }
-        /*
-         * Restore volume/mute setting
-         */
-        outb(curvol,io+1);
+	/*
+	 * Tune the card
+	 */
+	for(j=3;j>-1;j--) {
+	        cadet_settune(fifo|(j<<16));
+		outb(7,io);         /* Select tuner control */
+		outb(curvol,io+1);
+		cadet_lock--;
+		init_timer(&tunertimer);
+		tunertimer.function=cadet_wake;
+		tunertimer.data=(unsigned long)0;
+		tunertimer.expires=jiffies+(HZ/10);
+		tunerq=NULL;
+		add_timer(&tunertimer);
+		sleep_on(&tunerq);
+		cadet_gettune();
+		if((tunestat&0x40)==0) {   /* Tuned */
+		        sigstrength=sigtable[curtuner][j];
+			return;
+		}
+		cadet_lock++;
+	}
+	cadet_lock--;
+	sigstrength=0;
 }
 
 
 static int cadet_getvol(void)
 {
+        cadet_lock++;
         outb(7,io);                /* Select tuner control */
         if((inb(io+1)&0x20)!=0) {
+	        cadet_lock--;
                 return 0xffff;
         }
         else {
+	        cadet_lock--;
                 return 0;
         }
 }
@@ -169,6 +292,7 @@ static int cadet_getvol(void)
 
 static void cadet_setvol(int vol)
 {
+        cadet_lock++;
         outb(7,io);                /* Select tuner control */
         if(vol>0) {
                 outb(0x20,io+1);
@@ -176,7 +300,86 @@ static void cadet_setvol(int vol)
         else {
                 outb(0x00,io+1);
         }
+	cadet_lock--;
 }  
+
+
+
+void cadet_handler(unsigned long data)
+{
+	/*
+	 * Service the RDS fifo
+	 */
+        if(cadet_lock==0) {
+	        outb(0x3,io);       /* Select RDS Decoder Control */
+		if((inb(io+1)&0x20)!=0) {
+		        printk(KERN_CRIT "cadet: RDS fifo overflow\n");
+		}
+		outb(0x80,io);      /* Select RDS fifo */
+		while((inb(io)&0x80)!=0) {
+		        rdsbuf[rdsin++]=inb(io+1);
+			if(rdsin==rdsout) {
+			        printk(KERN_CRIT "cadet: RDS buffer overflow\n");
+			}
+		}
+	}
+
+	/*
+	 * Service pending read
+	 */
+	if((rdsin!=rdsout)&&(readq!=NULL)) {
+	        wake_up_interruptible(&readq);
+	}
+
+	/* 
+	 * Clean up and exit
+	 */
+	init_timer(&readtimer);
+	readtimer.function=cadet_handler;
+	readtimer.data=(unsigned long)0;
+	readtimer.expires=jiffies+(HZ/20);
+	add_timer(&readtimer);
+}
+
+
+
+static long cadet_read(struct video_device *v,char *buf,unsigned long count,
+		       int nonblock)
+{
+        int i=0,c;
+	unsigned char readbuf[RDS_BUFFER];
+
+        if(rdsstat==0) {
+	        cadet_lock++;
+	        rdsstat=1;
+		outb(0x80,io);        /* Select RDS fifo */
+		c=3*(inb(io)&0x03);
+		for(i=0;i<c;i++) {    /* Flush the fifo */
+		        inb(io+1);
+		}
+		cadet_lock--;
+		init_timer(&readtimer);
+		readtimer.function=cadet_handler;
+		readtimer.data=(unsigned long)0;
+		readtimer.expires=jiffies+(HZ/20);
+		add_timer(&readtimer);
+	}
+	if(rdsin==rdsout) {
+  	        if(nonblock) {
+		        return -EWOULDBLOCK;
+		}
+	        interruptible_sleep_on(&readq);
+       		readq=NULL;
+	}		
+	while((i<count)&&(rdsin!=rdsout)) {
+	        readbuf[i++]=rdsbuf[rdsout++];
+	}
+	if(copy_to_user(buf,readbuf,i)) {
+	        return -EFAULT;
+	}
+	return i;
+}
+
 
 
 static int cadet_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
@@ -217,10 +420,11 @@ static int cadet_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 			        v.flags=0;
 			        v.mode=0;
 			        v.mode|=VIDEO_MODE_AUTO;
-			        v.signal=0xFFFF;
+			        v.signal=sigstrength;
 			        if(cadet_getstereo()==1) {
 				        v.flags|=VIDEO_TUNER_STEREO_ON;
 			        }
+				v.flags|=cadet_getrds();
 			        if(copy_to_user(arg,&v, sizeof(v))) {
 				        return -EFAULT;
 			        }
@@ -233,7 +437,7 @@ static int cadet_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 			        v.flags|=VIDEO_TUNER_LOW;
 			        v.mode=0;
 			        v.mode|=VIDEO_MODE_AUTO;
-			        v.signal=0xFFFF;
+			        v.signal=sigstrength;
 			        if(copy_to_user(arg,&v, sizeof(v))) {
 				        return -EFAULT;
 			        }
@@ -313,11 +517,16 @@ static int cadet_open(struct video_device *dev, int flags)
 		return -EBUSY;
 	users++;
 	MOD_INC_USE_COUNT;
+	readq=NULL;
 	return 0;
 }
 
 static void cadet_close(struct video_device *dev)
 {
+        if(rdsstat==1) {
+                del_timer(&readtimer);
+		rdsstat=0;
+	}
 	users--;
 	MOD_DEC_USE_COUNT;
 }
@@ -330,7 +539,7 @@ static struct video_device cadet_radio=
 	VID_HARDWARE_CADET,
 	cadet_open,
 	cadet_close,
-	NULL,	/* Can't read  (no capture ability) */
+	cadet_read,
 	NULL,	/* Can't write */
 	NULL,	/* No poll */
 	cadet_ioctl,
@@ -354,6 +563,7 @@ __initfunc(int cadet_init(struct video_init *v))
 }
 
 
+#ifndef MODULE
 static int cadet_probe(void)
 {
         static int iovals[8]={0x330,0x332,0x334,0x336,0x338,0x33a,0x33c,0x33e};
@@ -371,6 +581,7 @@ static int cadet_probe(void)
 	}
 	return -1;
 }
+#endif
 
 
 

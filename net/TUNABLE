@@ -5,10 +5,7 @@ This is far from complete
 
 Item			Description
 ----------------------------------------------------------------------------
-MAX_SOCKETS		Tunable on boot, maximum sockets we will allocate
-NUM_PROTO		Maximum loadable address family, will need recompile
 MAX_LINKS		Maximum number of netlink minor devices. (1-32)
-MAX_QBYTES		Size of a netlink device queue (tunable)
 RIF_TABLE_SIZE		Token ring RIF cache size (tunable)
 AARP_HASH_SIZE		Size of Appletalk hash table (tunable)
 AX25_DEF_T1		AX.25 parameters. These are all tunable via
@@ -34,18 +31,9 @@ MAX_WINDOW		Offered maximum window (tunable)
 MAX_HEADER		Largest physical header (tunable)
 MAX_ADDR_LEN		Largest physical address (tunable)
 SOCK_ARRAY_SIZE		IP socket array hash size (tunable)
-ARP_RES_TIME		Time we try to resolve (tunable)
-ARP_DEAD_RES_TIME	Time the entry stays dead (tunable)
-ARP_MAX_TRIES		Maximum tries (tunable)
-ARP_TIMEOUT		Timeout on an ARP (tunable)
-ARP_CHECK_INTERVAL	Check interval to refresh an arp (tunable)
-ARP_CONFIRM_INTERVAL	Confirm poll time (tunable)
-ARP_TABLE_SIZE		Hash table size for ARP (tunable)
 IP_MAX_MEMBERSHIPS	Largest number of groups per socket (BSD style) (tunable)
 16			Hard coded constant for amount of room allowed for
 			cache align and faster forwarding (tunable)
-IPFRAG_HIGH_THRESH	Limit on fragments, we free fragments until we reach
-IPFRAG_LOW_THRESH	which provides some breathing space. (tunable)
 IP_FRAG_TIME		Time we hold a fragment for. (tunable)
 PORT_MASQ_BEGIN		First port reserved for masquerade (tunable)
 PORT_MASQ_END		Last port used for masquerade	(tunable)

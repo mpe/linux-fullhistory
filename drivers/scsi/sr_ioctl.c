@@ -82,7 +82,8 @@ retry:
 	switch(SCpnt->sense_buffer[2] & 0xf) {
 	case UNIT_ATTENTION:
 	    scsi_CDs[target].device->changed = 1;
-	    printk(KERN_INFO "sr%d: disc change detected.\n", target);
+	    if (!quiet)
+	    	printk(KERN_INFO "sr%d: disc change detected.\n", target);
 	    if (retries++ < 10)
 		goto retry;
 	    err = -ENOMEDIUM;
@@ -105,12 +106,13 @@ retry:
 		    spin_unlock_irqrestore(&io_request_lock, flags);
                     goto retry;
 		} else {
-		    /* 20 secs are enouth? */
+		    /* 20 secs are enough? */
 		    err = -ENOMEDIUM;
 		    break;
 		}
             }
-            printk(KERN_INFO "sr%d: CDROM not ready.  Make sure there is a disc in the drive.\n",target);
+	    if (!quiet)
+            	printk(KERN_INFO "sr%d: CDROM not ready.  Make sure there is a disc in the drive.\n",target);
 #ifdef DEBUG
             print_sense("sr", SCpnt);
 #endif
@@ -120,9 +122,11 @@ retry:
             if (!quiet)
 		printk(KERN_ERR "sr%d: CDROM (ioctl) reports ILLEGAL "
 		       "REQUEST.\n", target);
-            if (SCpnt->sense_buffer[12] == 0x20 &&
+            if ((SCpnt->sense_buffer[12] == 0x20 ||
+	        SCpnt->sense_buffer[12] == 0x24) &&
                 SCpnt->sense_buffer[13] == 0x00) {
                 /* sense: Invalid command operation code */
+                /* or Invalid field in cdb */
                 err = -EDRIVE_CANT_DO_THIS;
             } else {
                 err = -EINVAL;
@@ -408,7 +412,7 @@ int sr_audio_ioctl(struct cdrom_device_info *cdi, unsigned int cmd, void* arg)
         spin_unlock_irqrestore(&io_request_lock, flags);
 	if(!buffer) return -ENOMEM;
 	
-	result = sr_do_ioctl(target, sr_cmd, buffer, 12, 0);
+	result = sr_do_ioctl(target, sr_cmd, buffer, 12, 1);
 	
 	tochdr->cdth_trk0 = buffer[2];
 	tochdr->cdth_trk1 = buffer[3];

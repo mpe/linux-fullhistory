@@ -18,7 +18,7 @@
    Fortunately, as more and more people get to GNU/Linux, more and more
    get interested in the Kernel. But reading the sources is not always
    enough. It is easy to understand the code, but miss the concepts, the
-   philosophy and design decissions behind this code.
+   philosophy and design decisions behind this code.
    
    Unfortunately, not many documents are available for beginners to
    start. And, even if they exist, there was no "well-known" place which
@@ -33,7 +33,7 @@
    The papers that follow are listed in no particular order. All are
    catalogued with the following fields: the document's "Title", the
    "Author"/s, the "URL" where they can be found, some "Keywords"
-   helpfull when searching for specific topics, and a brief "Description"
+   helpful when searching for specific topics, and a brief "Description"
    of the Document.
    
    Enjoy!
@@ -170,9 +170,9 @@
             http://anchor.cs.binghamton.edu/courses/cs628/linux-net.html
             Keywords: files, sk_buffs.
             Description: A short description of files under the net/
-            directory. Each file has a one or two lines paragrahp
-            description. sk_buffs explained, too, with some beatiful
-            pictures. A little bit outdated.
+            directory. Each file has a one- or two-line paragraph to
+            describe it. Also, sk_buffs is explained with some
+            beautiful pictures. A little bit outdated.
    
           + Title: "Linux ioctl() Primer"
             Author: Vipul Gupta.
@@ -222,7 +222,7 @@
             ftp://ftp.llp.fu-berlin.de/pub/linux/LINUX-LAB/whitepapers/dr
             ivers.ps.gz
             Keywords: character device drivers, I/O, signals, DMA,
-            accesing ports in user space, kernel environment.
+            accessing ports in user space, kernel environment.
             Description: 68 pages paper on writing character drivers. A
             little bit old (1.993, 1.994) although still useful.
        
@@ -298,7 +298,7 @@
             Description: The title says it all. There's a fixed kernel
             section summarizing developers' work, bug fixes, new features
             and versions produced during the week. Published every
-            thursday.
+            Thursday.
        
           + Name: CuTTiNG.eDGe.LiNuX.
             URL: http://edge.linuxhq.com

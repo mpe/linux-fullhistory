@@ -11,7 +11,7 @@
  * History:
  *
  * Rolf Fokkens	(Dec 20 1998):	ES188x recording level support on a per
- *								input basis.
+ * fokkensr@vertis.nl			input basis.
  *				(Dec 24 1998):	Recognition of ES1788, ES1887, ES1888,
  *								ES1868, ES1869 and ES1878. Could be used for
  *								specific handling in the future. All except
@@ -32,6 +32,14 @@
  *								any applications to test it though. So why did
  *								I bother to create it anyway?? :) Just for
  *								fun.
+ *				(May  2 1999):	I tried to be too smart by "introducing"
+ *								ess_calc_best_speed (). The idea was that two
+ *								dividers could be used to setup a samplerate,
+ *								ess_calc_best_speed () would choose the best.
+ *								This works for playback, but results in
+ *								recording problems for high samplerates. I
+ *								fixed this by removing ess_calc_best_speed ()
+ *								and just doing what the documentation says. 
  *
  * This files contains ESS chip specifics. It's based on the existing ESS
  * handling as it resided in sb_common.c, sb_mixer.c and sb_audio.c. This
@@ -315,6 +323,7 @@ static int ess_calc_div (int clock, int revert, int *speedp, int *diffp)
 	return retval;
 }
 
+#ifdef OBSOLETE
 static int ess_calc_best_speed
 	(int clock1, int rev1, int clock2, int rev2, int *divp, int *speedp)
 {
@@ -338,6 +347,7 @@ static int ess_calc_best_speed
 
 	return retval;
 }
+#endif
 
 /*
  * Depending on the audiochannel ESS devices can
@@ -349,7 +359,7 @@ static int ess_calc_best_speed
  */
 static void ess_common_speed (sb_devc *devc, int *speedp, int *divp)
 {
-	int diff = 0, div, choice;
+	int diff = 0, div;
 
 	if (devc->duplex) {
 		/*
@@ -357,8 +367,11 @@ static void ess_common_speed (sb_devc *devc, int *speedp, int *divp)
 		 */
 		div = 0x80 | ess_calc_div (795500, 128, speedp, &diff);
 	} else {
-		choice = ess_calc_best_speed (397700, 128, 795500, 256, &div, speedp);
-		if (choice == 2) div |= 0x80;
+		if (*speedp > 22000) {
+			div = 0x80 | ess_calc_div (795500, 256, speedp, &diff);
+		} else {
+			div = 0x00 | ess_calc_div (397700, 128, speedp, &diff);
+		}
 	}
 	*divp = div;
 }
@@ -1144,6 +1157,18 @@ FKS_test (devc);
 		if (chip == NULL) {
 			chip = "ES1688";
 		};
+
+	    printk ( KERN_INFO "ESS chip %s %s%s\n"
+               , chip
+               , ( esstype == ESSTYPE_DETECT || esstype == ESSTYPE_LIKE20
+                 ? "detected"
+                 : "specified"
+                 )
+               , ( esstype == ESSTYPE_LIKE20
+                 ? " (kernel 2.0 compatible)"
+                 : ""
+                 )
+               );
 
 		sprintf(name,"ESS %s AudioDrive (rev %d)", chip, ess_minor & 0x0f);
 	} else {

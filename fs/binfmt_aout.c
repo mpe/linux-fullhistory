@@ -58,8 +58,19 @@ static void set_brk(unsigned long start, unsigned long end)
  * These are the only things you should do on a core-file: use only these
  * macros to write out all the necessary info.
  */
-#define DUMP_WRITE(addr,nr) \
-while (file->f_op->write(file,(char *)(addr),(nr),&file->f_pos) != (nr)) goto close_coredump
+
+static int dump_write(struct file *file, const void *addr, int nr)
+{
+	int r;
+	down(&file->f_dentry->d_inode->i_sem);
+	r = file->f_op->write(file, addr, nr, &file->f_pos) == nr;
+	up(&file->f_dentry->d_inode->i_sem);
+	return r;
+}
+
+#define DUMP_WRITE(addr, nr)	\
+	if (!dump_write(file, (void *)(addr), (nr))) \
+		goto close_coredump;
 
 #define DUMP_SEEK(offset) \
 if (file->f_op->llseek) { \

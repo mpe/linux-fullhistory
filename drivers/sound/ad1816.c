@@ -32,10 +32,10 @@ Please report any bugs to: tek@rbg.informatik.tu-darmstadt.de
 
 -------------------------------------------------------------------------------
 
-version: 1.2
-cvs: $Header: /home/tek/tmp/CVSROOT/sound21/ad1816.c,v 1.28 1999/01/16 19:01:36 tek Exp $
+version: 1.3
+cvs: $Header: /home/tek/CVSROOT/sound22/ad1816.c,v 1.3 1999/04/18 16:41:41 tek Exp $
 status: experimental
-date: 1999/01/16
+date: 1999/4/18
 
 Changes:
 	Oleg Drokin: Some cleanup of load/unload functions.    1998/11/24
@@ -44,6 +44,13 @@ Changes:
 	some argument checks added                             1998/11/30
 
 	Thorsten Knabe: Buggy isa bridge workaround added      1999/01/16
+	
+	David Moews/Thorsten Knabe: Introduced options 
+	parameter. Added slightly modified patch from 
+	David Moews to disable dsp audio sources by setting 
+	bit 0 of options parameter. This seems to be
+	required by some Aztech/Newcom SC-16 cards.            1999/04/18
+	
 */
 
 #include <linux/config.h>
@@ -99,6 +106,8 @@ ad1816_info;
 static int  nr_ad1816_devs = 0;
 
 static int  ad1816_clockfreq=33000;
+
+static int options=0;
 
 /* for backward mapping of irq to sound device */
 
@@ -1091,12 +1100,14 @@ int probe_ad1816 ( struct address_info *hw_config )
 	int tmp;
 	
 	printk("ad1816: AD1816 sounddriver Copyright (C) 1998 by Thorsten Knabe\n");
-	printk("ad1816: $Header: /home/tek/tmp/CVSROOT/sound21/ad1816.c,v 1.28 1999/01/16 19:01:36 tek Exp $\n");
-	printk("ad1816: io=0x%x, irq=%d, dma=%d, dma2=%d, isadmabug=%d\n",
+	printk("ad1816: $Header: /home/tek/CVSROOT/sound22/ad1816.c,v 1.3 1999/04/18 16:41:41 tek Exp $\n");
+	printk("ad1816: io=0x%x, irq=%d, dma=%d, dma2=%d, clockfreq=%d, options=%d isadmabug=%d\n",
 	       hw_config->io_base,
 	       hw_config->irq,
 	       hw_config->dma,
 	       hw_config->dma2,
+	       ad1816_clockfreq,
+	       options,
 	       isa_dma_bridge_buggy);
 
 	if (check_region (io_base, 16)) {
@@ -1264,7 +1275,11 @@ void attach_ad1816 (struct address_info *hw_config)
 	nr_ad1816_devs++;
 
 	ad_write(devc,32,0x80f0); /* sound system mode */
-	ad_write(devc,33,0x03f8); /* enable all audiosources for dsp */
+	if (options&1) {
+	        ad_write(devc,33,0); /* disable all audiosources for dsp */
+	} else {
+	        ad_write(devc,33,0x03f8); /* enable all audiosources for dsp */
+	}
 	ad_write(devc,4,0x8080);  /* default values for volumes (muted)*/
 	ad_write(devc,5,0x8080);
 	ad_write(devc,6,0x8080);
@@ -1274,7 +1289,7 @@ void attach_ad1816 (struct address_info *hw_config)
 	ad_write(devc,17,0x8888);
 	ad_write(devc,18,0x8888);
 	ad_write(devc,19,0xc888); /* +20db mic active */
-	ad_write(devc,14,0x0000); /* Master volume unmuted full power */
+	ad_write(devc,14,0x0000); /* Master volume unmuted */
 	ad_write(devc,39,0x009f); /* 3D effect on 0% phone out muted */
 	ad_write(devc,44,0x0080); /* everything on power, 3d enabled for d/a */
 	outb(0x10,devc->base+8); /* set dma mode */
@@ -1382,6 +1397,7 @@ MODULE_PARM(irq,"i");
 MODULE_PARM(dma,"i");
 MODULE_PARM(dma2,"i");
 MODULE_PARM(ad1816_clockfreq,"i");
+MODULE_PARM(options,"i");
 
 struct address_info cfg;
 

@@ -213,7 +213,7 @@ typedef struct act2000_card {
         char regname[35];                /* Name used for request_region     */
 } act2000_card;
 
-extern act2000_card *cards;
+extern act2000_card *actcards;
 
 extern __inline__ void act2000_schedule_tx(act2000_card *card)
 {

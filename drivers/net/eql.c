@@ -363,8 +363,8 @@ static int eql_slave_xmit(struct sk_buff *skb, struct device *dev)
 
 	eql_schedule_slaves (eql->queue);
   
-	slave_dev = eql_best_slave_dev (eql->queue);
 	slave = eql_best_slave (eql->queue); 
+	slave_dev = slave ? slave->dev : 0;
 
 	if ( slave_dev != 0 )
 	{

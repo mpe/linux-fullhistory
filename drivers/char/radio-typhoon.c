@@ -48,6 +48,10 @@
 #define CONFIG_RADIO_TYPHOON_MUTEFREQ 0
 #endif
 
+#ifndef CONFIG_PROC_FS
+#undef CONFIG_RADIO_TYPHOON_PROC_FS
+#endif
+
 struct typhoon_device {
 	int users;
 	int iobase;

@@ -62,7 +62,7 @@ struct irda_entry {
 
 struct proc_dir_entry *proc_irda;
 
-static irda_entry dir[] = {
+static struct irda_entry dir[] = {
 #if 0 
 	{"lpt", irlpt_proc_read},
 #endif

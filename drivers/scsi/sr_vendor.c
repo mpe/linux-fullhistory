@@ -175,7 +175,7 @@ int sr_cd_check(struct cdrom_device_info *cdi)
 		cmd[1] = (scsi_CDs[minor].device->lun << 5);
 		cmd[8] = 12;
 		cmd[9] = 0x40;
-		rc = sr_do_ioctl(minor, cmd, buffer, 12, 0);	
+		rc = sr_do_ioctl(minor, cmd, buffer, 12, 1);
 		if (rc != 0)
 			break;
 		if ((buffer[0] << 8) + buffer[1] < 0x0a) {
@@ -199,7 +199,7 @@ int sr_cd_check(struct cdrom_device_info *cdi)
 		cmd[0] = 0xde;
 		cmd[1] = (scsi_CDs[minor].device->lun << 5) | 0x03;
 		cmd[2] = 0xb0;
-		rc = sr_do_ioctl(minor, cmd, buffer, 0x16, 0);
+		rc = sr_do_ioctl(minor, cmd, buffer, 0x16, 1);
 		if (rc != 0)
 			break;
 		if (buffer[14] != 0 && buffer[14] != 0xb0) {
@@ -223,7 +223,7 @@ int sr_cd_check(struct cdrom_device_info *cdi)
 		memset(cmd,0,12);
 		cmd[0] = 0xc7;
 		cmd[1] = (scsi_CDs[minor].device->lun << 5) | 3;
-		rc = sr_do_ioctl(minor, cmd, buffer, 4, 0);
+		rc = sr_do_ioctl(minor, cmd, buffer, 4, 1);
 		if (rc == -EINVAL) {
 			printk(KERN_INFO "sr%d: Hmm, seems the drive "
 			       "doesn't support multisession CD's\n",minor);
@@ -248,7 +248,7 @@ int sr_cd_check(struct cdrom_device_info *cdi)
 		cmd[1] = (scsi_CDs[minor].device->lun << 5);
 		cmd[8] = 0x04;
 		cmd[9] = 0x40;
-		rc = sr_do_ioctl(minor, cmd, buffer, 0x04, 0);
+		rc = sr_do_ioctl(minor, cmd, buffer, 0x04, 1);
 		if (rc != 0) {
 			break;
 		}
@@ -263,7 +263,7 @@ int sr_cd_check(struct cdrom_device_info *cdi)
 		cmd[6] = rc & 0x7f;  /* number of last session */
 		cmd[8] = 0x0c;
 		cmd[9] = 0x40;
-		rc = sr_do_ioctl(minor, cmd, buffer, 12, 0);	
+		rc = sr_do_ioctl(minor, cmd, buffer, 12, 1);	
 		if (rc != 0) {
 			break;
 		}

@@ -1,6 +1,6 @@
 The directory ftp.inr.ac.ru:/ip-routing contains:
 
-- iproute.c - "professional" routing table maintainance utility.
+- iproute.c - "professional" routing table maintenance utility.
 
 - rdisc.tar.gz - rdisc daemon, ported from Sun.
 	STRONGLY RECOMMENDED FOR ALL HOSTS.
