@@ -918,11 +918,7 @@ static int load_elf_library(int fd)
  */
 static int dump_write(struct file *file, const void *addr, int nr)
 {
-	int r;
-	down(&file->f_dentry->d_inode->i_sem);
-	r = file->f_op->write(file, addr, nr, &file->f_pos) == nr;
-	up(&file->f_dentry->d_inode->i_sem);
-	return r;
+	return file->f_op->write(file, addr, nr, &file->f_pos) == nr;
 }
 
 static int dump_seek(struct file *file, off_t off)

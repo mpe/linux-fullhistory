@@ -348,6 +348,90 @@ not_found:
 }
 
 /*
+ * By the time this is called, the page is locked and
+ * we don't have to worry about any races any more.
+ *
+ * Start the IO..
+ */
+static int writeout_one_page(struct page *page)
+{
+	struct buffer_head *bh, *head = page->buffers;
+
+	bh = head;
+	do {
+		if (buffer_locked(bh) || !buffer_dirty(bh))
+			continue;
+
+		bh->b_flushtime = 0;
+		ll_rw_block(WRITE, 1, &bh);	
+	} while ((bh = bh->b_this_page) != head);
+	return 0;
+}
+
+static int waitfor_one_page(struct page *page)
+{
+	int error = 0;
+	struct buffer_head *bh, *head = page->buffers;
+
+	bh = head;
+	do {
+		wait_on_buffer(bh);
+		if (!buffer_uptodate(bh))
+			error = -EIO;
+	} while ((bh = bh->b_this_page) != head);
+	return error;
+}
+
+static int do_buffer_fdatasync(struct inode *inode, unsigned long start, unsigned long end, int (*fn)(struct page *))
+{
+	struct page *next;
+	int retval = 0;
+
+	start &= PAGE_MASK;
+
+	spin_lock(&pagecache_lock);
+	next = inode->i_pages;
+	while (next) {
+		struct page *page = next;
+		next = page->next;
+		if (!page->buffers)
+			continue;
+		if (page->offset >= end)
+			continue;
+		if (page->offset < start)
+			continue;
+
+		get_page(page);
+		spin_unlock(&pagecache_lock);
+		lock_page(page);
+
+		/* The buffers could have been free'd while we waited for the page lock */
+		if (page->buffers)
+			retval |= fn(page);
+
+		UnlockPage(page);
+		spin_lock(&pagecache_lock);
+		next = page->next;
+		page_cache_release(page);
+	}
+
+	return retval;
+}
+
+/*
+ * Two-stage data sync: first start the IO, then go back and
+ * collect the information..
+ */
+int generic_buffer_fdatasync(struct inode *inode, unsigned long start, unsigned long end)
+{
+	int retval;
+
+	retval = do_buffer_fdatasync(inode, start, end, writeout_one_page);
+	retval |= do_buffer_fdatasync(inode, start, end, waitfor_one_page);
+	return retval;
+}
+
+/*
  * This adds a page to the page cache, starting out as locked,
  * owned by us, referenced, but not uptodate and with no errors.
  */

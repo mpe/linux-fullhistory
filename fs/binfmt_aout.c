@@ -59,11 +59,7 @@ static void set_brk(unsigned long start, unsigned long end)
 
 static int dump_write(struct file *file, const void *addr, int nr)
 {
-	int r;
-	down(&file->f_dentry->d_inode->i_sem);
-	r = file->f_op->write(file, addr, nr, &file->f_pos) == nr;
-	up(&file->f_dentry->d_inode->i_sem);
-	return r;
+	return file->f_op->write(file, addr, nr, &file->f_pos) == nr;
 }
 
 #define DUMP_WRITE(addr, nr)	\

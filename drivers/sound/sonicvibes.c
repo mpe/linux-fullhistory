@@ -68,6 +68,8 @@
  *                     SOUND_PCM_READ_CHANNELS, SOUND_PCM_READ_BITS; 
  *                     Alpha fixes reported by Peter Jones <pjones@redhat.com>
  *                     Note: dmaio hack might still be wrong on archs other than i386
+ *    15.06.99   0.15  Fix bad allocation bug.
+ *                     Thanks to Deti Fliegl <fliegl@in.tum.de>
  *
  */
 
@@ -699,8 +701,9 @@ static int prog_dmabuf(struct sv_state *s, unsigned rec)
 	db->hwptr = db->swptr = db->total_bytes = db->count = db->error = db->endcleared = 0;
 	if (!db->rawbuf) {
 		db->ready = db->mapped = 0;
-		for (order = DMABUF_DEFAULTORDER; order >= DMABUF_MINORDER && !db->rawbuf; order--)
-			db->rawbuf = (void *)__get_free_pages(GFP_KERNEL | GFP_DMA, order);
+		for (order = DMABUF_DEFAULTORDER; order >= DMABUF_MINORDER; order--)
+			if ((db->rawbuf = (void *)__get_free_pages(GFP_KERNEL | GFP_DMA, order)))
+				break;
 		if (!db->rawbuf)
 			return -ENOMEM;
 		db->buforder = order;
@@ -2321,7 +2324,7 @@ __initfunc(int init_sonicvibes(void))
 
 	if (!pci_present())   /* No PCI bus in this machine! */
 		return -ENODEV;
-	printk(KERN_INFO "sv: version v0.14 time " __TIME__ " " __DATE__ "\n");
+	printk(KERN_INFO "sv: version v0.15 time " __TIME__ " " __DATE__ "\n");
 #if 0
 	if (!(wavetable_mem = __get_free_pages(GFP_KERNEL, 20-PAGE_SHIFT)))
 		printk(KERN_INFO "sv: cannot allocate 1MB of contiguous nonpageable memory for wavetable data\n");

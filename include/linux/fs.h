@@ -900,6 +900,7 @@ extern ssize_t block_write(struct file *, const char *, size_t, loff_t *);
 
 extern int block_fsync(struct file *, struct dentry *);
 extern int file_fsync(struct file *, struct dentry *);
+extern int generic_buffer_fdatasync(struct inode *inode, unsigned long start, unsigned long end);
 
 extern int inode_change_ok(struct inode *, struct iattr *);
 extern void inode_setattr(struct inode *, struct iattr *);

@@ -65,6 +65,8 @@
  *                     reported by "Ivan N. Kokshaysky" <ink@jurassic.park.msu.ru>
  *                     Note: joystick address handling might still be wrong on archs
  *                     other than i386
+ *    15.06.99   0.12  Fix bad allocation bug.
+ *                     Thanks to Deti Fliegl <fliegl@in.tum.de>
  *
  */
 
@@ -759,8 +761,9 @@ static int prog_dmabuf(struct es1371_state *s, struct dmabuf *db, unsigned rate,
 	db->hwptr = db->swptr = db->total_bytes = db->count = db->error = db->endcleared = 0;
 	if (!db->rawbuf) {
 		db->ready = db->mapped = 0;
-		for (order = DMABUF_DEFAULTORDER; order >= DMABUF_MINORDER && !db->rawbuf; order--)
-			db->rawbuf = (void *)__get_free_pages(GFP_KERNEL, order);
+		for (order = DMABUF_DEFAULTORDER; order >= DMABUF_MINORDER; order--)
+			if ((db->rawbuf = (void *)__get_free_pages(GFP_KERNEL, order)))
+				break;
 		if (!db->rawbuf)
 			return -ENOMEM;
 		db->buforder = order;
@@ -2732,7 +2735,7 @@ __initfunc(int init_es1371(void))
 
 	if (!pci_present())   /* No PCI bus in this machine! */
 		return -ENODEV;
-	printk(KERN_INFO "es1371: version v0.11 time " __TIME__ " " __DATE__ "\n");
+	printk(KERN_INFO "es1371: version v0.12 time " __TIME__ " " __DATE__ "\n");
 	while (index < NR_DEVICE && 
 	       (pcidev = pci_find_device(PCI_VENDOR_ID_ENSONIQ, PCI_DEVICE_ID_ENSONIQ_ES1371, pcidev))) {
 		if (pcidev->base_address[0] == 0 || 
