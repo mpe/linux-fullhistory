@@ -85,6 +85,13 @@ void flush_thread(void)
 	 */
 }
 
+void release_thread(struct task_struct *dead_task)
+{
+	/*
+	 * Nothing to do
+	 */
+}
+
 #define IS_CLONE (regs->orig_reg2 == __NR_clone)
 
 void copy_thread(int nr, unsigned long clone_flags, struct task_struct * p, struct pt_regs * regs)

@@ -4,9 +4,9 @@
  |                                                                           |
  | Rounding/truncation/etc for FPU basic arithmetic functions.               |
  |                                                                           |
- | Copyright (C) 1993                                                        |
+ | Copyright (C) 1993,1995                                                   |
  |                       W. Metzenthen, 22 Parker St, Ormond, Vic 3163,      |
- |                       Australia.  E-mail   billm@vaxc.cc.monash.edu.au    |
+ |                       Australia.  E-mail billm@jacobi.maths.monash.edu.au |
  |                                                                           |
  | This code has four possible entry points.                                 |
  | The following must be entered by a jmp instruction:                       |
@@ -69,7 +69,7 @@
  +---------------------------------------------------------------------------*/
 
 
-#include "fpu_asm.h"
+#include "fpu_emu.h"
 #include "exception.h"
 #include "control_w.h"
 

@@ -628,34 +628,6 @@ typedef char flag;
 #define BLOCKS_BEYOND_EW	2	/* nr of blocks after Early Warning hole */
 #define BOGUS_IRQ		32009
 
-/* structure for MTIOCGETCONFIG/MTIOCSETCONFIG primarily intended
- * as an interim solution for QIC-02 until DDI is fully implemented.
- */
-struct mtconfiginfo {
-	long	mt_type;	/* drive type */
-	long	ifc_type;	/* interface card type */
-	unsigned short	irqnr;	/* IRQ number to use */
-	unsigned short	dmanr;	/* DMA channel to use */
-	unsigned short	port;	/* IO port base address */
-
-	unsigned long	debug;	/* debugging flags */
-
-	unsigned	have_dens:1;
-	unsigned	have_bsf:1;
-	unsigned	have_fsr:1;
-	unsigned	have_bsr:1;
-	unsigned	have_eod:1;
-	unsigned	have_seek:1;
-	unsigned	have_tell:1;
-	unsigned	have_ras1:1;
-	unsigned	have_ras2:1;
-	unsigned	have_ras3:1;
-	unsigned	have_qfa:1;
-
-	unsigned	pad1:5;
-	char		reserved[10];
-};
-
 
 /* This is internal data, filled in based on the ifc_type field given
  * by the user. Everex is mapped to Wangtek with a different

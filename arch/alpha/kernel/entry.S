@@ -478,7 +478,7 @@ ret_from_sys_call:
 	beq	$0,restore_all
 ret_from_reschedule:
 	lda	$0,need_resched
-	lda	$1,current
+	lda	$1,current_set
 	ldl	$2,0($0)
 	lda	$4,init_task
 	ldq	$3,0($1)

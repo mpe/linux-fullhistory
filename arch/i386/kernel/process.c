@@ -178,6 +178,10 @@ void flush_thread(void)
 		current->debugreg[i] = 0;
 }
 
+void release_thread(struct task_struct *dead_task)
+{
+}
+
 void copy_thread(int nr, unsigned long clone_flags, unsigned long esp,
 	struct task_struct * p, struct pt_regs * regs)
 {

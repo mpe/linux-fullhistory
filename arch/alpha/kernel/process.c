@@ -83,6 +83,10 @@ void flush_thread(void)
 {
 }
 
+void release_thread(struct task_struct *dead_task)
+{
+}
+
 /*
  * "alpha_clone()".. By the time we get here, the
  * non-volatile registers have also been saved on the

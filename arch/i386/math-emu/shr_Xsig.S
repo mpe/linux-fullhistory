@@ -4,9 +4,9 @@
  |                                                                           |
  | 12 byte right shift function                                              |
  |                                                                           |
- | Copyright (C) 1992,1994                                                   |
+ | Copyright (C) 1992,1994,1995                                              |
  |                       W. Metzenthen, 22 Parker St, Ormond, Vic 3163,      |
- |                       Australia.  E-mail   billm@vaxc.cc.monash.edu.au    |
+ |                       Australia.  E-mail billm@jacobi.maths.monash.edu.au |
  |                                                                           |
  | Call from C as:                                                           |
  |   void shr_Xsig(Xsig *arg, unsigned nr)                                   |
@@ -18,7 +18,7 @@
  |                                                                           |
  +---------------------------------------------------------------------------*/
 
-#include "fpu_asm.h"
+#include "fpu_emu.h"
 
 .text
 ENTRY(shr_Xsig)

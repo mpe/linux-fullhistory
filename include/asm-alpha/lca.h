@@ -52,6 +52,8 @@
  * ugh).
  */
 
+#include <asm/system.h>
+
 #define LCA_DMA_WIN_BASE	(1024*1024*1024)
 #define LCA_DMA_WIN_SIZE	(1024*1024*1024)
 
@@ -323,6 +325,45 @@ extern inline void writel(unsigned int b, unsigned long addr)
 extern unsigned long lca_init (unsigned long mem_start, unsigned long mem_end);
 
 #endif /* __KERNEL__ */
+
+/*
+ * Data structure for handling LCA machine checks.  Correctable errors
+ * result in a short logout frame, uncorrectably ones in a long one.
+ */
+struct el_lca_mcheck_short {
+	struct el_common	h;		/* common logout header */
+	unsigned long		reason;		/* reason for machine check */
+	unsigned long		esr;		/* error-status register */
+	unsigned long		ear;		/* error-address register */
+	unsigned long		dc_stat;	/* dcache status register */
+	unsigned long		ioc_stat0;	/* I/O controller status register 0 */
+	unsigned long		ioc_stat1;	/* I/O controller status register 1 */
+};
+
+struct el_lca_mcheck_long {
+	struct el_common	h;		/* common logout header */
+	unsigned long		pt[32];		/* PAL temps (pt[0] is reason) */
+	unsigned long		exc_addr;	/* exception address */
+	unsigned long		pal_base;	/* PALcode base address */
+	unsigned long		hier;		/* hw interrupt enable */
+	unsigned long		hirr;		/* hw interrupt request */
+	unsigned long		mm_csr;		/* MMU control & status */
+	unsigned long		dc_stat;	/* data cache status */
+	unsigned long		dc_addr;	/* data cache addr register */
+	unsigned long		abox_ctl;	/* address box control register */
+	unsigned long		esr;		/* error status register */
+	unsigned long		ear;		/* error address register */
+	unsigned long		car;		/* cache control register */
+	unsigned long		ioc_stat0;	/* I/O controller status register 0 */
+	unsigned long		ioc_stat1;	/* I/O controller status register 1 */
+	unsigned long		va;		/* virtual address register */
+};
+
+union el_lca {
+	struct el_common *		c;
+	struct el_lca_mcheck_long *	l;
+	struct el_lca_mcheck_short *	s;
+};
 
 #define RTC_PORT(x)	(0x70 + (x))
 #define RTC_ADDR(x)	(0x80 | (x))

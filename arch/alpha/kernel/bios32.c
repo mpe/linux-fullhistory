@@ -310,17 +310,17 @@ int pcibios_find_device (unsigned short vendor, unsigned short device_id,
 			 unsigned short index, unsigned char *bus,
 			 unsigned char *devfn)
 {
-        unsigned int current = 0;
+        unsigned int curr = 0;
 	struct pci_dev *dev;
 
 	for (dev = pci_devices; dev; dev = dev->next) {
 		if (dev->vendor == vendor && dev->device == device_id) {
-			if (current == index) {
+			if (curr == index) {
 				*devfn = dev->devfn;
 				*bus = dev->bus->number;
 				return PCIBIOS_SUCCESSFUL;
 			}
-			++current;
+			++curr;
 		}
 	}
 	return PCIBIOS_DEVICE_NOT_FOUND;
@@ -334,17 +334,17 @@ int pcibios_find_device (unsigned short vendor, unsigned short device_id,
 int pcibios_find_class (unsigned int class_code, unsigned short index,
 			unsigned char *bus, unsigned char *devfn)
 {
-        unsigned int current = 0;
+        unsigned int curr = 0;
 	struct pci_dev *dev;
 
 	for (dev = pci_devices; dev; dev = dev->next) {
 		if (dev->class == class_code) {
-			if (current == index) {
+			if (curr == index) {
 				*devfn = dev->devfn;
 				*bus = dev->bus->number;
 				return PCIBIOS_SUCCESSFUL;
 			}
-			++current;
+			++curr;
 		}
 	}
 	return PCIBIOS_DEVICE_NOT_FOUND;

@@ -424,18 +424,17 @@ int apecs_pci_clr_err(void)
 void apecs_machine_check(unsigned long vector, unsigned long la_ptr,
 			 struct pt_regs * regs)
 {
-	struct el_common_logout_header *mchk_header;
+	struct el_common *mchk_header;
 	struct el_apecs_sysdata_mcheck *mchk_sysdata;
 
-	mchk_header = (struct el_common_logout_header *)la_ptr;
+	mchk_header = (struct el_common *)la_ptr;
 
 	mchk_sysdata = 
-	  (struct el_apecs_sysdata_mcheck *)(la_ptr + mchk_header->elfl_sysoffset);
+	  (struct el_apecs_sysdata_mcheck *)(la_ptr + mchk_header->sys_offset);
 
 	DBG(("apecs_machine_check: vector=0x%lx la_ptr=0x%lx\n", vector, la_ptr));
 	DBG(("                     pc=0x%lx size=0x%x procoffset=0x%x sysoffset 0x%x\n",
-	     regs->pc, mchk_header->elfl_size, mchk_header->elfl_procoffset,
-	     mchk_header->elfl_sysoffset));
+	     regs->pc, mchk_header->size, mchk_header->proc_offset, mchk_header->sys_offset));
 	DBG(("apecs_machine_check: expected %d DCSR 0x%lx PEAR 0x%lx\n",
 	     apecs_mcheck_expected, mchk_sysdata->epic_dcsr, mchk_sysdata->epic_pear));
 #ifdef DEBUG
@@ -443,7 +442,7 @@ void apecs_machine_check(unsigned long vector, unsigned long la_ptr,
 	int i;
 
 	ptr = (unsigned long *)la_ptr;
-	for (i = 0; i < mchk_header->elfl_size / sizeof(long); i += 2) {
+	for (i = 0; i < mchk_header->size / sizeof(long); i += 2) {
 		printk(" +%x %lx %lx\n", i*sizeof(long), ptr[i], ptr[i+1]);
 	}
 #endif /* DEBUG */

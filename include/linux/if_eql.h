@@ -19,6 +19,8 @@
 #ifndef _LINUX_IF_EQL_H
 #define _LINUX_IF_EQL_H
 
+#include <linux/timer.h>
+
 #define EQL_DEFAULT_SLAVE_PRIORITY 28800
 #define EQL_DEFAULT_MAX_SLAVES     4
 #define EQL_DEFAULT_MTU            576

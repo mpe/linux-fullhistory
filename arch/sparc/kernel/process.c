@@ -72,6 +72,11 @@ void flush_thread(void)
   halt();
 }
 
+void release_thread(struct task_struct *dead_task)
+{
+  halt();
+}
+
 extern void ret_sys_call(void);
 
 /*

@@ -1527,12 +1527,12 @@ int ip_forward(struct sk_buff *skb, struct device *dev, int is_frag,
 	unsigned char *ptr;	/* Data pointer */
 	unsigned long raddr;	/* Router IP address */
 	struct   options * opt	= (struct options*)skb->proto_priv;
+	int encap = 0;		/* Encap length */
 #ifdef CONFIG_IP_FIREWALL
 	int fw_res = 0;		/* Forwarding result */	
 #ifdef CONFIG_IP_MASQUERADE	
 	struct sk_buff *skb_in = skb;	/* So we can remember if the masquerader did some swaps */
 #endif
-	int encap = 0;		/* Encap length */
 	
 	/* 
 	 *	See if we are allowed to forward this.

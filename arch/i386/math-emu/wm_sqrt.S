@@ -4,9 +4,9 @@
  |                                                                           |
  | Fixed point arithmetic square root evaluation.                            |
  |                                                                           |
- | Copyright (C) 1992,1993                                                   |
+ | Copyright (C) 1992,1993,1995                                              |
  |                       W. Metzenthen, 22 Parker St, Ormond, Vic 3163,      |
- |                       Australia.  E-mail   billm@vaxc.cc.monash.edu.au    |
+ |                       Australia.  E-mail billm@jacobi.maths.monash.edu.au |
  |                                                                           |
  | Call from C as:                                                           |
  |   void wm_sqrt(FPU_REG *n, unsigned int control_word)                     |
@@ -26,7 +26,7 @@
  +---------------------------------------------------------------------------*/
 
 #include "exception.h"
-#include "fpu_asm.h"
+#include "fpu_emu.h"
 
 
 #ifndef NON_REENTRANT_FPU

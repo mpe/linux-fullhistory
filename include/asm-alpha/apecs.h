@@ -351,17 +351,8 @@ extern unsigned long apecs_init (unsigned long mem_start,
 #endif /* __KERNEL__ */
 
 /*
- * data structures for handling APECS machine checks
+ * Data structure for handling APECS machine checks:
  */
-
-struct el_common_logout_header {
-        u_int   elfl_size;              /* size in bytes of logout area. */
-        int     elfl_sbz1:31;           /* Should be zero. */
-        char    elfl_retry:1;           /* Retry flag. */
-        u_int   elfl_procoffset;        /* Processor-specific offset. */
-        u_int   elfl_sysoffset;         /* Offset of system-specific. */
-};
-
 struct el_apecs_sysdata_mcheck {
     u_long      coma_gcr;                       
     u_long      coma_edsr;                      

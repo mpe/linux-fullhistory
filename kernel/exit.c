@@ -94,6 +94,7 @@ void release(struct task_struct * p)
 			nr_tasks--;
 			task[i] = NULL;
 			REMOVE_LINKS(p);
+			release_thread(p);
 			if (STACK_MAGIC != *(unsigned long *)p->kernel_stack_page)
 				printk(KERN_ALERT "release: %s kernel stack corruption. Aiee\n", p->comm);
 			free_page(p->kernel_stack_page);

@@ -4,9 +4,9 @@
  |                                                                           |
  | Divide one FPU_REG by another and put the result in a destination FPU_REG.|
  |                                                                           |
- | Copyright (C) 1992,1993,1994                                              |
+ | Copyright (C) 1992,1993,1994,1995                                         |
  |                       W. Metzenthen, 22 Parker St, Ormond, Vic 3163,      |
- |                       Australia.  E-mail   billm@vaxc.cc.monash.edu.au    |
+ |                       Australia.  E-mail billm@jacobi.maths.monash.edu.au |
  |                                                                           |
  | Call from C as:                                                           |
  |   void reg_div(FPU_REG *a, FPU_REG *b, FPU_REG *dest,                     |
@@ -15,7 +15,7 @@
  +---------------------------------------------------------------------------*/
 
 #include "exception.h"
-#include "fpu_asm.h"
+#include "fpu_emu.h"
 
 
 .text

@@ -59,6 +59,7 @@ static void nfs_put_inode(struct inode * inode)
 void nfs_put_super(struct super_block *sb)
 {
 	close_fp(sb->u.nfs_sb.s_server.file);
+	rpc_closesock(sb->u.nfs_sb.s_server.rsock);
 	lock_super(sb);
 	sb->s_dev = 0;
 	unlock_super(sb);
@@ -162,6 +163,12 @@ struct super_block *nfs_read_super(struct super_block *sb, void *raw_data,
 	  memcpy((char *)&(server->toaddr),(char *)(&data->addr),sizeof(server->toaddr));
 	}
 	/* End of JSP NFS patch */
+
+	if ((server->rsock = rpc_makesock(filp)) == NULL) {
+		printk("NFS: cannot create RPC socket.\n");
+		MOD_DEC_USE_COUNT;
+		return NULL;
+	}
 
 	sb->u.nfs_sb.s_root = data->root;
 	unlock_super(sb);

@@ -107,6 +107,9 @@ struct serial_multiport_struct {
  * For definitions of the flags field, see tty.h
  */
 
+#include <linux/termios.h>
+#include <linux/tqueue.h>
+
 struct async_struct {
 	int			magic;
 	int			baud_base;

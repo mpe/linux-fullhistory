@@ -24,6 +24,29 @@
 #define vulp	volatile unsigned long *
 
 /*
+ * Machine check reasons.  Defined according to PALcode sources
+ * (osf.h and platform.h).
+ */
+#define MCHK_K_TPERR		0x0080
+#define MCHK_K_TCPERR		0x0082
+#define MCHK_K_HERR		0x0084
+#define MCHK_K_ECC_C		0x0086
+#define MCHK_K_ECC_NC		0x0088
+#define MCHK_K_UNKNOWN		0x008A
+#define MCHK_K_CACKSOFT		0x008C
+#define MCHK_K_BUGCHECK		0x008E
+#define MCHK_K_OS_BUGCHECK	0x0090
+#define MCHK_K_DCPERR		0x0092
+#define MCHK_K_ICPERR		0x0094
+
+/*
+ * Platform-specific machine-check reasons:
+ */
+#define MCHK_K_SIO_SERR		0x204	/* all platforms so far */
+#define MCHK_K_SIO_IOCHK	0x206	/* all platforms so far */
+#define MCHK_K_DCSR		0x208	/* all but Noname */
+
+/*
  * Given a bus, device, and function number, compute resulting
  * configuration space address and setup the LCA_IOC_CONF register
  * accordingly.  It is therefore not safe to have concurrent
@@ -280,19 +303,60 @@ unsigned long lca_init(unsigned long mem_start, unsigned long mem_end)
 }
 
 
+
+
 void lca_machine_check (unsigned long vector, unsigned long la, struct pt_regs *regs)
 {
-	unsigned long mces;
+	const char * reason;
+	union el_lca el;
 
-	mces = rdmces();
-	wrmces(mces);		/* reset machine check asap */
-	printk("Machine check (la=0x%lx,mces=0x%lx)\n", la, mces);
-	printk("esr=%lx, ear=%lx, ioc_stat0=%lx, ioc_stat1=%lx\n",
-	       *(unsigned long*)LCA_MEM_ESR, *(unsigned long*)LCA_MEM_EAR,
-	       *(unsigned long*)LCA_IOC_STAT0, *(unsigned long*)LCA_IOC_STAT1);
-#ifdef CONFIG_ALPHA_NONAME
-	printk("NMMI status & control (0x61)=%02x\n", inb(0x61));
-#endif
+	printk("lca: machine check (la=0x%lx)\n", la);
+	el.c = (struct el_common *) la;
+	/*
+	 * The first quadword after the common header always seems to
+	 * be the machine check reason---don't know why this isn't
+	 * part of the common header instead.
+	 */
+	switch (el.s->reason) {
+	      case MCHK_K_TPERR:	reason = "tag parity error"; break;
+	      case MCHK_K_TCPERR:	reason = "tag something parity error"; break;
+	      case MCHK_K_HERR:		reason = "access to non-existent memory"; break;
+	      case MCHK_K_ECC_C:	reason = "correctable ECC error"; break;
+	      case MCHK_K_ECC_NC:	reason = "non-correctable ECC error"; break;
+	      case MCHK_K_CACKSOFT:	reason = "MCHK_K_CACKSOFT"; break; /* what's this? */
+	      case MCHK_K_BUGCHECK:	reason = "illegal exception in PAL mode"; break;
+	      case MCHK_K_OS_BUGCHECK:	reason = "callsys in kernel mode"; break;
+	      case MCHK_K_DCPERR:	reason = "d-cache parity error"; break;
+	      case MCHK_K_ICPERR:	reason = "i-cache parity error"; break;
+	      case MCHK_K_SIO_SERR:	reason = "SIO SERR occurred on on PCI bus"; break;
+	      case MCHK_K_SIO_IOCHK:	reason = "SIO IOCHK occurred on ISA bus"; break;
+	      case MCHK_K_DCSR:		reason = "MCHK_K_DCSR"; break;
+	      case MCHK_K_UNKNOWN:
+	      default:			reason = "reason for machine-check unknown"; break;
+	}
+
+	switch (el.c->size) {
+	      case sizeof(struct el_lca_mcheck_short):
+		printk("  Reason: %s (short frame%s):\n",
+		       reason, el.h->retry ? ", retryable" : "");
+		printk("\tesr: %lx  ear: %lx\n", el.s->esr, el.s->ear);
+		printk("\tdc_stat: %lx  ioc_stat0: %lx  ioc_stat1: %lx\n",
+		       el.s->dc_stat, el.s->ioc_stat0, el.s->ioc_stat1);
+		break;
+
+	      case sizeof(struct el_lca_mcheck_long):
+		printk("  Reason: %s (long frame%s):\n",
+		       reason, el.h->retry ? ", retryable" : "");
+		printk("\treason: %lx  exc_addr: %lx  dc_stat: %lx\n", 
+		       el.l->pt[0], el.l->exc_addr, el.l->dc_stat);
+		printk("\tesr: %lx  ear: %lx  car: %lx\n", el.l->esr, el.l->ear, el.l->car);
+		printk("\tioc_stat0: %lx  ioc_stat1: %lx\n", el.l->ioc_stat0, el.l->ioc_stat1);
+		break;
+
+	      default:
+		printk("  Unknown errorlog size %d\n", el.c->size);
+	}
+	wrmces(rdmces());		/* reset machine check asap */
 }
 
 #endif /* CONFIG_ALPHA_LCA */

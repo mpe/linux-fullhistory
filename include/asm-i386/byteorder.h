@@ -19,10 +19,10 @@ extern unsigned short int	ntohs(unsigned short int);
 extern unsigned long int	htonl(unsigned long int);
 extern unsigned short int	htons(unsigned short int);
 
-extern unsigned long int	__ntohl(unsigned long int);
-extern unsigned short int	__ntohs(unsigned short int);
-extern unsigned long int	__constant_ntohl(unsigned long int);
-extern unsigned short int	__constant_ntohs(unsigned short int);
+extern __inline__ unsigned long int	__ntohl(unsigned long int);
+extern __inline__ unsigned short int	__ntohs(unsigned short int);
+extern __inline__ unsigned long int	__constant_ntohl(unsigned long int);
+extern __inline__ unsigned short int	__constant_ntohs(unsigned short int);
 
 extern __inline__ unsigned long int
 __ntohl(unsigned long int x)

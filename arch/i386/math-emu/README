@@ -1,9 +1,9 @@
  +---------------------------------------------------------------------------+
  |  wm-FPU-emu   an FPU emulator for 80386 and 80486SX microprocessors.      |
  |                                                                           |
- | Copyright (C) 1992,1993,1994                                              |
+ | Copyright (C) 1992,1993,1994,1995                                         |
  |                       W. Metzenthen, 22 Parker St, Ormond, Vic 3163,      |
- |                       Australia.  E-mail   billm@vaxc.cc.monash.edu.au    |
+ |                       Australia.  E-mail billm@jacobi.maths.monash.edu.au |
  |                                                                           |
  |    This program is free software; you can redistribute it and/or modify   |
  |    it under the terms of the GNU General Public License version 2 as      |
@@ -42,13 +42,11 @@ but is very close.  See "Limitations" later in this file for a list of
 some differences.
 
 Please report bugs, etc to me at:
-       billm@vaxc.cc.monash.edu.au
-  or at:
        billm@jacobi.maths.monash.edu.au
 
 
 --Bill Metzenthen
-  August 1994
+  October 1995
 
 
 ----------------------- Internals of wm-FPU-emu -----------------------

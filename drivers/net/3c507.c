@@ -830,7 +830,7 @@ el16_rx(struct device *dev)
 		ushort pkt_len = data_frame[0];
 
 		if (rfd_cmd != 0 || data_buffer_addr != rx_head + 22
-			|| pkt_len & 0xC000 != 0xC000) {
+			|| (pkt_len & 0xC000) != 0xC000) {
 			printk("%s: Rx frame at %#x corrupted, status %04x cmd %04x"
 				   "next %04x data-buf @%04x %04x.\n", dev->name, rx_head,
 				   frame_status, rfd_cmd, next_rx_frame, data_buffer_addr,

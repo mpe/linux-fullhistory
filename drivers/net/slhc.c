@@ -83,6 +83,10 @@
 #include <net/checksum.h>
 #include "slhc.h"
 
+#ifdef __alpha__
+# include <asm/unaligned.h>
+#endif
+
 int last_retran;
 
 static unsigned char *encode(unsigned char *cp, unsigned short n);
@@ -621,7 +625,11 @@ slhc_uncompress(struct slcompress *comp, unsigned char *icp, int isize)
 	  cp += (ip->ihl - 5) * 4;
 	}
 
+#ifdef __alpha__
+	stw_u(ip_fast_csum(icp, ip->ihl), &((struct iphdr *)icp)->check);
+#else
 	((struct iphdr *)icp)->check = ip_fast_csum(icp, ((struct iphdr*)icp)->ihl);
+#endif
 
 	memcpy(cp, thp, 20);
 	cp += 20;

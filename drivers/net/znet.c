@@ -448,7 +448,7 @@ static void	znet_interrupt(int irq, struct pt_regs * regs)
 				if (!(tx_status & 0x0040)) lp->stats.tx_heartbeat_errors++;
 				if (tx_status & 0x0020)  lp->stats.tx_aborted_errors++;
 				/* ...and the catch-all. */
-				if (tx_status | 0x0760 != 0x0760)
+				if ((tx_status | 0x0760) != 0x0760)
 				  lp->stats.tx_errors++;
 			}
 			dev->tbusy = 0;

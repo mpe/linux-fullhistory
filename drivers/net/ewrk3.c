@@ -417,7 +417,7 @@ ewrk3_hw_init(struct device *dev, short iobase)
   */
   DISABLE_IRQs;
 
-  if (nicsr == TXD|RXD) {
+  if (nicsr == (TXD|RXD)) {
 
     /*
     ** Check that the EEPROM is alive and well and not living on Pluto...

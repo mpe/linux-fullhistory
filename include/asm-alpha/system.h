@@ -31,6 +31,18 @@
 
 #ifndef __ASSEMBLY__
 
+/*
+ * This is the logout header that should be common to all platforms
+ * (assuming they are running OSF/1 PALcode, I guess).
+ */
+struct el_common {
+        unsigned int	size;		/* size in bytes of logout area */
+        int		sbz1	: 31;	/* should be zero */
+        char		retry	:  1;	/* retry flag */
+        unsigned int	proc_offset;	/* processor-specific offset */
+        unsigned int	sys_offset;	/* system-specific offset */
+};
+
 extern void wrent(void *, unsigned long);
 extern void wrkgp(unsigned long);
 extern void wrusp(unsigned long);

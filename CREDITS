@@ -211,6 +211,15 @@ S: Northampton
 S: NN1 3QT
 S: United Kingdom
 
+N: Ray Dassen
+E: jdassen@wi.LeidenUniv.nl
+U: http://www.wi.leidenuniv.nl/~jdassen/
+D: Debian GNU/Linux: www.debian.org maintainer, FAQ co-maintainer,
+D: packages testing, nit-picking & fixing. Enjoying BugFree (TM) kernels.
+S: Zuidsingel 10A
+S: 2312 SB  Leiden
+S: The Netherlands
+
 N: Wayne Davison
 E: davison@borland.com
 D: Second extended file system co-designer
@@ -621,7 +630,6 @@ S: Fairfax, Virginia 22033
 S: USA
 
 N: William (Bill) Metzenthen
-E: billm@vaxc.cc.monash.edu.au
 E: billm@jacobi.maths.monash.edu.au
 D: Author of the FPU emulator.
 D: Minor kernel hacker for other lost causes (Hercules mono, etc).

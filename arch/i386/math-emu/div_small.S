@@ -4,8 +4,9 @@
  |                                                                           |
  | Divide a 64 bit integer by a 32 bit integer & return remainder.           |
  |                                                                           |
- | Copyright (C) 1992    W. Metzenthen, 22 Parker St, Ormond, Vic 3163,      |
- |                       Australia.  E-mail   billm@vaxc.cc.monash.edu.au    |
+ | Copyright (C) 1992,1995                                                   |
+ |                       W. Metzenthen, 22 Parker St, Ormond, Vic 3163,      |
+ |                       Australia.  E-mail billm@jacobi.maths.monash.edu.au |
  |                                                                           |
  |                                                                           |
  +---------------------------------------------------------------------------*/
@@ -14,7 +15,7 @@
  |    unsigned long div_small(unsigned long long *x, unsigned long y)        |
  +---------------------------------------------------------------------------*/
 
-#include "fpu_asm.h"
+#include "fpu_emu.h"
 
 .text
 ENTRY(div_small)

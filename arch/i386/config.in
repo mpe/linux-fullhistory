@@ -17,7 +17,7 @@ if [ "$CONFIG_ST506" = "y" ]; then
     bool '   Use new IDE driver for primary/secondary i/f' CONFIG_BLK_DEV_IDE y
   fi
   if [ "$CONFIG_BLK_DEV_IDE" = "y" ]; then
-    bool '   Include support for IDE/ATAPI CDROMs' CONFIG_BLK_DEV_IDECD n
+    bool '   Include support for IDE/ATAPI CDROMs' CONFIG_BLK_DEV_IDECD y
   fi
 fi
 
@@ -80,7 +80,7 @@ fi
 
 comment 'SCSI support'
 
-tristate 'SCSI support' CONFIG_SCSI y
+tristate 'SCSI support' CONFIG_SCSI n
 
 if [ "$CONFIG_SCSI" = "n" ]; then
 
@@ -101,8 +101,8 @@ bool 'Probe all LUNs on each SCSI device' CONFIG_SCSI_MULTI_LUN n
 
 comment 'SCSI low-level drivers'
 
-dep_tristate 'Adaptec AHA152X support' CONFIG_SCSI_AHA152X y $CONFIG_SCSI
-dep_tristate 'Adaptec AHA1542 support' CONFIG_SCSI_AHA1542 n $CONFIG_SCSI
+dep_tristate 'Adaptec AHA152X support' CONFIG_SCSI_AHA152X n $CONFIG_SCSI
+dep_tristate 'Adaptec AHA1542 support' CONFIG_SCSI_AHA1542 y $CONFIG_SCSI
 dep_tristate 'Adaptec AHA1740 support' CONFIG_SCSI_AHA1740 n $CONFIG_SCSI
 dep_tristate 'Adaptec AHA274X/284X/294X support' CONFIG_SCSI_AIC7XXX n $CONFIG_SCSI
 dep_tristate 'BusLogic SCSI support' CONFIG_SCSI_BUSLOGIC n $CONFIG_SCSI

@@ -187,7 +187,7 @@ int at1700_probe1(struct device *dev, short ioaddr)
 #endif
 	if (at1700_probe_list[inb(ioaddr + IOCONFIG) & 0x07] != ioaddr
 		|| read_eeprom(ioaddr, 4) != 0x0000
-		|| read_eeprom(ioaddr, 5) & 0xff00 != 0xF400)
+		|| (read_eeprom(ioaddr, 5) & 0xff00) != 0xF400)
 		return -ENODEV;
 
 	/* Reset the internal state machines. */

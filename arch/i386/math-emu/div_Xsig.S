@@ -4,9 +4,9 @@
  |                                                                           |
  | Division subroutine for 96 bit quantities                                 |
  |                                                                           |
- | Copyright (C) 1994                                                        |
+ | Copyright (C) 1994,1995                                                   |
  |                       W. Metzenthen, 22 Parker St, Ormond, Vic 3163,      |
- |                       Australia.  E-mail   billm@vaxc.cc.monash.edu.au    |
+ |                       Australia.  E-mail billm@jacobi.maths.monash.edu.au |
  |                                                                           |
  |                                                                           |
  +---------------------------------------------------------------------------*/
@@ -28,7 +28,7 @@
  +---------------------------------------------------------------------------*/
 
 #include "exception.h"
-#include "fpu_asm.h"
+#include "fpu_emu.h"
 
 
 #define	XsigLL(x)	(x)
