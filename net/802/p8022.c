@@ -1,8 +1,10 @@
+#include <linux/module.h>
 #include <linux/netdevice.h>
 #include <linux/skbuff.h>
 #include <net/datalink.h>
 #include <linux/mm.h>
 #include <linux/in.h>
+#include <net/p8022.h>
 
 static struct datalink_proto *p8022_list = NULL;
 
@@ -65,12 +67,20 @@ static struct packet_type p8022_packet_type =
 	NULL,
 	NULL,
 };
+
+static struct symbol_table p8022_proto_syms = {
+#include <linux/symtab_begin.h>
+	X(register_8022_client),
+	X(unregister_8022_client),
+#include <linux/symtab_end.h>
+};
  
 
 void p8022_proto_init(struct net_proto *pro)
 {
 	p8022_packet_type.type=htons(ETH_P_802_2);
 	dev_add_pack(&p8022_packet_type);
+	register_symtab(&p8022_proto_syms);
 }
 	
 struct datalink_proto *
@@ -96,3 +106,24 @@ register_8022_client(unsigned char type, int (*rcvfunc)(struct sk_buff *, struct
 	return proto;
 }
 
+void unregister_8022_client(unsigned char type)
+{
+	struct datalink_proto *tmp, **clients = &p8022_list;
+	unsigned long flags;
+
+	save_flags(flags);
+	cli();
+
+	while ((tmp = *clients) != NULL)
+	{
+		if (tmp->type[0] == type) {
+			*clients = tmp->next;
+			kfree_s(tmp, sizeof(struct datalink_proto));
+			break;
+		} else {
+			clients = &tmp->next;
+		}
+	}
+
+	restore_flags(flags);
+}

@@ -26,7 +26,6 @@
 #include <asm/segment.h>
 #include <asm/system.h>
 #include <asm/bitops.h>
-#include <linux/config.h>
 #include <linux/types.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
@@ -38,18 +37,17 @@
 #include <linux/errno.h>
 #include <linux/interrupt.h>
 #include <linux/if_ether.h>
-#include <linux/if_arp.h>
 #include <linux/inet.h>
 #include <linux/notifier.h>
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
+#include <linux/if_arp.h>
 #include <linux/skbuff.h>
 #include <net/sock.h>
 #include <net/datalink.h>
 #include <net/psnap.h>
 #include <linux/atalk.h>
 
-#ifdef CONFIG_ATALK
 /*
  *	Lists of aarp entries
  */
@@ -790,10 +788,11 @@ static struct notifier_block aarp_notifier={
 	0
 };
 
+static char aarp_snap_id[]={0x00,0x00,0x00,0x80,0xF3};
+
 
 void aarp_proto_init(void)
 {
-	static char aarp_snap_id[]={0x00,0x00,0x00,0x80,0xF3};
 	if((aarp_dl=register_snap_client(aarp_snap_id, aarp_rcv))==NULL)
 		printk("Unable to register AARP with SNAP.\n");
 	init_timer(&aarp_timer);
@@ -803,4 +802,43 @@ void aarp_proto_init(void)
 	add_timer(&aarp_timer);
 	register_netdevice_notifier(&aarp_notifier);
 }
-#endif
+
+
+#ifdef MODULE
+
+/* Free all the entries in an aarp list. Caller should turn off interrupts. */
+static void free_entry_list(struct aarp_entry *list)
+{
+	struct aarp_entry *tmp;
+
+	while (list != NULL)
+	{
+		tmp = list->next;
+		aarp_expire(list);
+		list = tmp;
+	}
+}
+
+/* General module cleanup. Called from cleanup_module() in ddp.c. */
+void aarp_cleanup_module(void)
+{
+	unsigned long flags;
+	int i;
+
+	save_flags(flags);
+	cli();
+
+	del_timer(&aarp_timer);
+	unregister_netdevice_notifier(&aarp_notifier);
+	unregister_snap_client(aarp_snap_id);
+
+	for (i = 0; i < AARP_HASH_SIZE; i++)
+	{
+		free_entry_list(resolved[i]);
+		free_entry_list(unresolved[i]);
+	}
+
+	restore_flags(flags);
+}
+
+#endif  /* MODULE */

@@ -586,32 +586,29 @@ asmlinkage void start_secondary(void)
  
 static void smp_init(void)
 {
-	int i=0;
+	int i, j;
 	smp_boot_cpus();
 	
 	/*
 	 *	Create the slave init tasks as sharing pid 0.
+	 *
+	 *	This should only happen if we have virtual CPU numbers
+	 *	higher than 0.
 	 */
 
-	for (i=0; i<NR_CPUS; i++)
+	for (i=1; i<smp_num_cpus; i++)
 	{
+		j = cpu_logical_map[i];
 		/*
-		 *	This should only do anything if the mapping
-		 *	corresponds to a live CPU which is not the boot CPU.
+		 *	We use kernel_thread for the idlers which are
+		 *	unlocked tasks running in kernel space.
 		 */
-		if (cpu_number_map[i] > 0)
-		{
-			/*
-			 *	We use kernel_thread for the idlers which are
-			 *	unlocked tasks running in kernel space.
-			 */
-			kernel_thread(cpu_idle, NULL, CLONE_PID);
-			/*
-			 *	Don't assume linear processor numbering
-			 */
-			current_set[i]=task[cpu_number_map[i]];
-			current_set[i]->processor=i;
-		}
+		kernel_thread(cpu_idle, NULL, CLONE_PID);
+		/*
+		 *	Don't assume linear processor numbering
+		 */
+		current_set[j]=task[i];
+		current_set[j]->processor=j;
 	}
 }		
 

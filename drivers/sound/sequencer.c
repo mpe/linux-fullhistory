@@ -1908,12 +1908,12 @@ sequencer_select (int dev, struct fileinfo *file, int sel_type, select_table_han
       cli ();
       if (!iqlen)
 	{
+
 	  midi_sleep_flag.mode = WK_SLEEP;
 	  module_select_wait (&midi_sleeper, wait);
 	  restore_flags (flags);
 	  return 0;
 	}
-      midi_sleep_flag.mode &= ~WK_SLEEP;
       restore_flags (flags);
       return 1;
       break;
@@ -1923,12 +1923,12 @@ sequencer_select (int dev, struct fileinfo *file, int sel_type, select_table_han
       cli ();
       if ((SEQ_MAX_QUEUE - qlen) < output_treshold)
 	{
+
 	  seq_sleep_flag.mode = WK_SLEEP;
 	  module_select_wait (&seq_sleeper, wait);
 	  restore_flags (flags);
 	  return 0;
 	}
-      seq_sleep_flag.mode &= ~WK_SLEEP;
       restore_flags (flags);
       return 1;
       break;

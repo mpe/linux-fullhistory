@@ -37,7 +37,7 @@
 #define _IOC_WRITE	4U
 
 #define _IOC(dir,type,nr,size)			\
-	((__u32)				\
+	((unsigned int)				\
 	 (((dir)  << _IOC_DIRSHIFT) |		\
 	  ((type) << _IOC_TYPESHIFT) |		\
 	  ((nr)   << _IOC_NRSHIFT) |		\
@@ -63,4 +63,4 @@
 #define IOCSIZE_MASK	(_IOC_SIZEMASK << _IOC_SIZESHIFT)
 #define IOCSIZE_SHIFT	(_IOC_SIZESHIFT)
 
-#endif
+#endif /* _ALPHA_IOCTL_H */

@@ -22,7 +22,6 @@
 #include <linux/fcntl.h>
 #include <linux/acct.h>
 #include <linux/tty.h>
-#include <sys/sysmacros.h>
 
 #include <asm/segment.h>
 #include <asm/io.h>
@@ -297,12 +296,12 @@ int acct_process(long exitcode)
       ac.ac_etime = CURRENT_TIME - ac.ac_btime;
       ac.ac_uid   = current->uid;
       ac.ac_gid   = current->gid;
-      ac.ac_tty   = (current)->tty == NULL ? -1 : 
-         makedev (4, current->tty->device);
+      ac.ac_tty   = (current)->tty == NULL ? -1 :
+	  MKDEV(4, current->tty->device);
       ac.ac_flag  = 0;
       if (current->flags & PF_FORKNOEXEC)
          ac.ac_flag |= AFORK;
-      if (current->flags & PF_SUPERPREV)
+      if (current->flags & PF_SUPERPRIV)
          ac.ac_flag |= ASU;
       if (current->flags & PF_DUMPCORE)
          ac.ac_flag |= ACORE;

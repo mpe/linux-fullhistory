@@ -220,7 +220,7 @@ dialog_menu (const char *title, const char *prompt, int height, int width,
                        (items[(scroll+choice)*2][0] != ':'));
 
 	    if (key == KEY_UP || key == '-') {
-                if (choice < 6 && scroll) {
+                if (choice < 2 && scroll) {
 	            /* Scroll menu down */
                     scrollok (menu, TRUE);
                     wscrl (menu, -1);
@@ -238,7 +238,9 @@ dialog_menu (const char *title, const char *prompt, int height, int width,
 		print_item (menu, items[(scroll+choice)*2+1], choice, FALSE,
                                 (items[(scroll+choice)*2][0] != ':'));
 
-                if ((choice > 4) && (scroll + max_choice < item_no)) {
+                if ((choice > max_choice-3) &&
+                    (scroll + max_choice < item_no)
+                   ) {
 		    /* Scroll menu up */
 		    scrollok (menu, TRUE);
                     scroll (menu);

@@ -319,6 +319,8 @@ static void floppy_off(unsigned int nr);
 #define CURRENT (blk_dev[MAJOR_NR].current_request)
 #endif
 
+#define CURRENT_PLUGGED IS_PLUGGED(blk_dev+MAJOR_NR)
+
 #define CURRENT_DEV DEVICE_NR(CURRENT->rq_dev)
 
 #ifdef DEVICE_INTR
@@ -356,7 +358,7 @@ static void (DEVICE_REQUEST)(void);
 #endif
 
 #define INIT_REQUEST \
-	if (!CURRENT) {\
+	if (!CURRENT || CURRENT_PLUGGED) {\
 		CLEAR_INTR; \
 		return; \
 	} \

@@ -480,6 +480,7 @@ extern int do_truncate(struct inode *, unsigned long);
 extern int register_blkdev(unsigned int, const char *, struct file_operations *);
 extern int unregister_blkdev(unsigned int major, const char * name);
 extern int blkdev_open(struct inode * inode, struct file * filp);
+extern void blkdev_release (struct inode * inode);
 extern struct file_operations def_blk_fops;
 extern struct inode_operations blkdev_inode_operations;
 

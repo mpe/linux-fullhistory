@@ -513,6 +513,7 @@ MIDIbuf_select (int dev, struct fileinfo *file, int sel_type, select_table_handl
     case SEL_IN:
       if (!DATA_AVAIL (midi_in_buf[dev]))
 	{
+
 	  input_sleep_flag[dev].mode = WK_SLEEP;
 	  module_select_wait (&input_sleeper[dev], wait);
 	  return 0;
@@ -523,6 +524,7 @@ MIDIbuf_select (int dev, struct fileinfo *file, int sel_type, select_table_handl
     case SEL_OUT:
       if (SPACE_AVAIL (midi_out_buf[dev]))
 	{
+
 	  midi_sleep_flag[dev].mode = WK_SLEEP;
 	  module_select_wait (&midi_sleeper[dev], wait);
 	  return 0;

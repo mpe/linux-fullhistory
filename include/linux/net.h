@@ -83,6 +83,7 @@ struct socket {
   struct wait_queue	**wait;		/* ptr to place to wait on	*/
   struct inode		*inode;
   struct fasync_struct  *fasync_list;	/* Asynchronous wake up list	*/
+  struct file		*file;		/* File back pointer for gc	*/
 };
 
 #define SOCK_INODE(S)	((S)->inode)

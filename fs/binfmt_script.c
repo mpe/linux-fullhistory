@@ -13,8 +13,8 @@
 
 static int do_load_script(struct linux_binprm *bprm,struct pt_regs *regs)
 {
-	char *cp, *interp, *i_name, *i_arg, *page;
-	int retval, offset;
+	char *cp, *interp, *i_name, *i_arg;
+	int retval;
 	if ((bprm->buf[0] != '#') || (bprm->buf[1] != '!') || (bprm->sh_bang)) 
 		return -ENOEXEC;
 	/*
@@ -60,16 +60,7 @@ static int do_load_script(struct linux_binprm *bprm,struct pt_regs *regs)
 	 * This is done in reverse order, because of how the
 	 * user environment and arguments are stored.
 	 */
-	if (bprm->argc) {
-		offset = bprm->p % PAGE_SIZE;
-		page = (char*)bprm->page[bprm->p/PAGE_SIZE];
-		while(bprm->p++,*(page+offset++))
-			if(offset==PAGE_SIZE){
-				offset=0;
-				page = (char*)bprm->page[bprm->p/PAGE_SIZE];
-			}
-		bprm->argc--;
-	}
+	remove_arg_zero(bprm);
 	bprm->p = copy_strings(1, &bprm->filename, bprm->page, bprm->p, 2);
 	bprm->argc++;
 	if (i_arg) {

@@ -51,14 +51,14 @@ extern __inline int max(int a,int b)
 int smp_found_config=0;					/* Have we found an SMP box 				*/
 
 unsigned long cpu_present_map = 0;			/* Bitmask of existing CPU's 				*/
-int smp_num_cpus;					/* Total count of live CPU's 				*/
+int smp_num_cpus = 1;					/* Total count of live CPU's 				*/
 int smp_threads_ready=0;				/* Set when the idlers are all forked 			*/
 volatile int cpu_number_map[NR_CPUS];			/* which CPU maps to which logical number		*/
+volatile int cpu_logical_map[NR_CPUS];			/* which logical number maps to which CPU		*/
 volatile unsigned long cpu_callin_map[NR_CPUS] = {0,};	/* We always use 0 the rest is ready for parallel delivery */
 volatile unsigned long smp_invalidate_needed;		/* Used for the invalidate map thats also checked in the spinlock */
 struct cpuinfo_x86 cpu_data[NR_CPUS];			/* Per cpu bogomips and other parameters 		*/
 static unsigned int num_processors = 1;			/* Internal processor count				*/
-int smp_top_cpu = 0;					/* Highest used APIC id 				*/
 static unsigned long io_apic_addr = 0xFEC00000;		/* Address of the I/O apic (not yet used) 		*/
 unsigned char boot_cpu_id = 0;				/* Processor that is doing the boot up 			*/
 static unsigned char *kstack_base,*kstack_end;		/* Kernel stack list pointers 				*/
@@ -220,7 +220,6 @@ static int smp_read_mpc(struct mp_config_table *mpc)
 					{
 						SMP_PRINTK(("    Bootup CPU\n"));
 						boot_cpu_id=m->mpc_apicid;
-						nlong = boot_cpu_id<<24;	/* Dummy 'self' for bootup */
 					}
 					else	/* Boot CPU already counted */
 						num_processors++;
@@ -294,7 +293,7 @@ static int smp_read_mpc(struct mp_config_table *mpc)
  *	Scan the memory blocks for an SMP configuration block.
  */
  
-void smp_scan_config(unsigned long base, unsigned long length)
+int smp_scan_config(unsigned long base, unsigned long length)
 {
 	unsigned long *bp=(unsigned long *)base;
 	struct intel_mp_floating *mpf;
@@ -325,6 +324,48 @@ void smp_scan_config(unsigned long base, unsigned long length)
 				 */
 				if(mpf->mpf_feature1!=0)
 				{
+					unsigned long cfg;
+
+					/*
+					 *	We need to know what the local
+					 *	APIC id of the boot CPU is!
+					 */
+
+/*
+ *
+ *	HACK HACK HACK HACK HACK HACK HACK HACK HACK HACK HACK HACK HACK
+ *
+ *	It's not just a crazy hack...  ;-)
+ */
+					/*
+					 *	Standard page mapping
+					 *	functions don't work yet.
+					 *	We know that page 0 is not
+					 *	used.  Steal it for now!
+					 */
+			 
+					cfg=pg0[0];
+					pg0[0] = (apic_addr | 7);
+					local_invalidate();
+
+					boot_cpu_id = GET_APIC_ID(*((volatile unsigned long *) APIC_ID));
+
+					/*
+					 *	Give it back
+					 */
+
+					pg0[0]= cfg;
+					local_invalidate();
+
+/*
+ *
+ *	END OF HACK   END OF HACK   END OF HACK   END OF HACK   END OF HACK
+ *
+ */					
+					/*
+					 *	2 CPUs, numbered 0 & 1.
+					 */
+					cpu_present_map=3;
 					num_processors=2;
 					printk("I/O APIC at 0xFEC00000.\n");
 					printk("Bus#0 is ");
@@ -351,75 +392,49 @@ void smp_scan_config(unsigned long base, unsigned long length)
 					default:
 						printk("???\nUnknown standard configuration %d\n",
 							mpf->mpf_feature1);
-						return;
+						return 1;
 				}
 				if(mpf->mpf_feature1>4)
+				{
 					printk("Bus #1 is PCI\n");
+
+					/*
+					 *	Set local APIC version to
+					 *	the integrated form.
+					 *	It's initialized to zero
+					 *	otherwise, representing
+					 *	a discrete 82489DX.
+					 */
+					apic_version[0] = 0x10;
+					apic_version[1] = 0x10;
+				}
 				/*
 				 *	Read the physical hardware table.
+				 *	Anything here will override the
+				 *	defaults.
 				 */
 				if(mpf->mpf_physptr)
 					smp_read_mpc((void *)mpf->mpf_physptr);
-				else
-				{
-					unsigned long cfg;
 
-					/*
-					 *	If no table present, determine
-					 *	what the CPU mapping is.
-					 */
+				/*
+				 *	Now that the boot CPU id is known,
+				 *	set some other information about it.
+				 */
+				nlong = boot_cpu_id<<24;	/* Dummy 'self' for bootup */
+				cpu_logical_map[0] = boot_cpu_id;
 
-/*
- *
- *	HACK HACK HACK HACK HACK HACK HACK HACK HACK HACK HACK HACK HACK
- *
- */
-					/*
-					 *	Standard page mapping
-					 *	functions don't work yet.
-					 *	We know that page 0 is not
-					 *	used.  Steal it for now!
-					 */
-			 
-					cfg=pg0[0];
-					pg0[0] = (apic_addr | 7);
-					local_invalidate();
-
-					boot_cpu_id = GET_APIC_ID(*((volatile unsigned long *) APIC_ID));
-					nlong = boot_cpu_id<<24;	/* Dummy 'self' for bootup */
-
-					/*
-					 *	Give it back
-					 */
-
-					pg0[0]= cfg;
-					local_invalidate();
-
-/*
- *
- *	END OF HACK   END OF HACK   END OF HACK   END OF HACK   END OF HACK
- *
- */					
-
-					/*
-					 *	If boot CPU != 0, other CPU
-					 *	is 0, else other CPU is 1.
-					 */
-					if (boot_cpu_id)
-						cpu_present_map=1 | (1 << boot_cpu_id);
-					else
-						cpu_present_map=3;
-				}
 				printk("Processors: %d\n", num_processors);
 				/*
-				 *	Only use the first one found.
+				 *	Only use the first configuration found.
 				 */
-				return;
+				return 1;
 			}
 		}
 		bp+=4;
 		length-=16;
 	}
+
+	return 0;
 }
 
 /*
@@ -565,7 +580,7 @@ void smp_callin(void)
  
 void smp_boot_cpus(void)
 {
-	int i,j;
+	int i;
 	int cpucount=0;
 	unsigned long cfg;
 	void *stack;
@@ -667,15 +682,12 @@ void smp_boot_cpus(void)
 		 *	Don't even attempt to start the boot CPU!
 		 */
 		if (i == boot_cpu_id)
-		{
-			smp_top_cpu=max(smp_top_cpu,i);
 			continue;
-		}
 		
 		if (cpu_present_map & (1 << i))
 		{
 			unsigned long send_status, accept_status;
-			int timeout, num_starts;
+			int timeout, num_starts, j;
 			
 			/*
 			 *	We need a kernel stack for each processor.
@@ -719,8 +731,11 @@ void smp_boot_cpus(void)
 			 *	Be paranoid about clearing APIC errors.
 			 */
 
-			apic_write(APIC_ESR, 0);
-			accept_status = (apic_read(APIC_ESR) & 0xEF);
+			if ( apic_version[i] & 0xF0 )
+			{
+				apic_write(APIC_ESR, 0);
+				accept_status = (apic_read(APIC_ESR) & 0xEF);
+			}
 			
 			/*
 			 *	Status is now clean
@@ -777,8 +792,8 @@ void smp_boot_cpus(void)
 			 *	Run STARTUP IPI loop.
 			 */
 
-			for (j = 0; !(send_status || accept_status)
-				    && (j < num_starts) ; j++)
+			for (j = 1; !(send_status || accept_status)
+				    && (j <= num_starts) ; j++)
 			{
 				SMP_PRINTK(("Sending STARTUP #%d.\n",j));
 
@@ -826,8 +841,7 @@ void smp_boot_cpus(void)
 					cpucount++;
 					/* number CPUs logically, starting from 1 (BSP is 0) */
 					cpu_number_map[i] = cpucount;
-					smp_top_cpu=max(smp_top_cpu,i);
-					
+					cpu_logical_map[cpucount] = i;
 				}
 				else
 				{
@@ -951,10 +965,12 @@ void smp_message_pass(int target, int msg, unsigned long data, int wait)
 	/*
 	 *	Sanity check we don't re-enter this across CPU's. Only the kernel
 	 *	lock holder may send messages. For a STOP_CPU we are bringing the
-	 *	entire box to the fastest halt we can.. 
+	 *	entire box to the fastest halt we can.. A reschedule carries
+	 *	no data and can occur during an invalidate.. guess what panic
+	 *	I got to notice this bug...
 	 */
 	 
-	if(message_cpu!=NO_PROC_ID && msg!=MSG_STOP_CPU)
+	if(message_cpu!=NO_PROC_ID && msg!=MSG_STOP_CPU && msg!=MSG_RESCHEDULE)
 	{
 		panic("CPU #%d: Message pass %d but pass in progress by %d of %d\n",
 			smp_processor_id(),msg,message_cpu, smp_msg_id);

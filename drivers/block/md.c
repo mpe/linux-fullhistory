@@ -7,6 +7,8 @@
 
    A lot of inspiration came from hd.c ...
 
+   kerneld support by Boris Tobotras <boris@xtalk.msk.su>
+
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
    the Free Software Foundation; either version 2, or (at your option)
@@ -29,6 +31,9 @@
 #include <linux/proc_fs.h>
 #include <linux/blkdev.h>
 #include <linux/genhd.h>
+#ifdef CONFIG_KERNELD
+#include <linux/kerneld.h>
+#endif
 #include <errno.h>
 
 #define MAJOR_NR MD_MAJOR
@@ -92,14 +97,14 @@ static struct gendisk *find_gendisk (kdev_t dev)
 /* Picked up from genhd.c */
 char *partition_name (kdev_t dev)
 {
-  static char name[10];		/* This should be long
+  static char name[40];		/* This should be long
 				   enough for a device name ! */
-  struct gendisk *hd=find_gendisk (dev);
+  struct gendisk *hd = find_gendisk (dev);
 
   if (!hd)
   {
-    printk ("No gendisk entry for dev %04x\n", dev);
-    sprintf (name, "dev %04x", dev);
+    printk ("No gendisk entry for dev %s\n", kdevname(dev));
+    sprintf (name, "dev %s", kdevname(dev));
     return (name);
   }
 
@@ -197,9 +202,19 @@ static int md_ioctl (struct inode *inode, struct file *file,
     md_dev[minor].repartition=(int) arg;
     
     if ((index=PERSONALITY(md_dev+minor) >> (PERSONALITY_SHIFT))
-	>= MAX_PERSONALITY ||
-	!pers[index])
+	>= MAX_PERSONALITY)
       return -EINVAL;
+
+    if (!pers[index])
+    {
+#ifdef CONFIG_KERNELD
+      char module_name[80];
+      sprintf (module_name, "md-personality-%d", index);
+      request_module (module_name);
+      if (!pers[index])
+#endif
+	return -EINVAL;
+    }
 
     md_dev[minor].pers=pers[index];
 
@@ -404,7 +419,7 @@ static void do_md_request (void)
     minor = MINOR(req->rq_dev);
     if ((MAJOR(req->rq_dev) != MD_MAJOR) || (minor >= MAX_REAL))
     {
-      printk("md: bad device number: 0x%04x\n", req->rq_dev);
+      printk("md: bad device: %s\n", kdevname(req->rq_dev));
       end_request(0, req);
       continue;
     }
@@ -437,15 +452,16 @@ void make_md_request (struct request *pending, int n)
   kdev_t dev;
   struct buffer_head *bh;
   struct request *req;
+  long flags;
   
   down (&request_lock);
+  save_flags (flags);
+  cli();
 
   for (i=0; i<n; i++)
   {
     if (!pending[i].bh)
       continue;
-
-    cli();
 
     found=0;
     rw=pending[i].cmd;
@@ -470,7 +486,7 @@ void make_md_request (struct request *pending, int n)
 
       while (req && !found)
       {
-	if (req->rq_status!=RQ_INACTIVE && req->rq_status!=RQ_ACTIVE)
+	if (req->rq_status!=RQ_ACTIVE)
 	  printk ("Saw bad status request !\n");
 
 	if (req->rq_dev == dev &&
@@ -494,7 +510,7 @@ void make_md_request (struct request *pending, int n)
 	    (req->nr_sectors + pending[i].nr_sectors) < 245)
 	{
 	  req->nr_sectors += pending[i].nr_sectors;
-	  bh->b_reqnext = req->bh;
+	  pending[i].bhtail->b_reqnext = req->bh;
 	  req->buffer = bh->b_data;
 	  req->current_nr_sectors = bh->b_size >> 9;
 	  req->sector = pending[i].sector;
@@ -511,6 +527,7 @@ void make_md_request (struct request *pending, int n)
       continue;
 
     up (&request_lock);
+    sti ();
     req=get_md_request (max_req, dev);
     
     /* Build it up... */
@@ -530,9 +547,11 @@ void make_md_request (struct request *pending, int n)
 
     add_request (blk_dev + MAJOR(dev), req);
     down (&request_lock);
+    cli ();
   }
 
   up (&request_lock);
+  restore_flags (flags);
   for (j=0; j<n; j++)
   {
     if (!pending[j].bh)
@@ -540,8 +559,6 @@ void make_md_request (struct request *pending, int n)
     
     pending[j].bh=NULL;
   }
-
-  sti ();
 }
 
 
@@ -656,7 +673,7 @@ int get_md_status (char *page)
     sz+=sprintf (page+sz, "\n");
     sz+=md_dev[i].pers->status (page+sz, i, md_dev+i);
   }
-  
+
   return (sz);
 }
 

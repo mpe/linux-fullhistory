@@ -9,7 +9,7 @@
 #
 # Please send comments / questions / bug fixes to raymondc@microsoft.com.
 #
-#              ***** IMPORTANT COMPATABILITY NOTE ****
+#              ***** IMPORTANT COMPATIBILITY NOTE ****
 # If configuration changes are made which might adversely effect 
 # Menuconfig or xconfig, please notify the respective authors so that 
 # those utilities can be updated in parallel.
@@ -39,6 +39,9 @@
 #
 # 150296 Dick Streefland (dicks@tasking.nl) - report new configuration
 # items and ask for a value even when doing a "make oldconfig"
+#
+# 200396 Tom Dyas (tdyas@eden.rutgers.edu) - when the module option is
+# chosen for an item, define the macro <option_name>_MODULE
 
 #
 # Make sure we're really running bash.
@@ -141,6 +144,7 @@ function define_bool () {
 	 "m")
 		echo "$1=m" >>$CONFIG
 		echo "#undef  $1" >>$CONFIG_H
+		echo "#define $1_MODULE 1" >>$CONFIG_H
 		;;
 
 	 "n")

@@ -33,6 +33,7 @@
  *					for NetROM and future kernel nfsd type
  *					stuff.
  *		Alan Cox	:	sendmsg/recvmsg basics.
+ *		Tom Dyas	:	Export net symbols.
  *
  *
  *		This program is free software; you can redistribute it and/or
@@ -64,11 +65,16 @@
 #include <linux/netdevice.h>
 #include <linux/proc_fs.h>
 #include <linux/firewall.h>
+#include <linux/kerneld.h>
 
 #include <net/netlink.h>
 
 #include <asm/system.h>
 #include <asm/segment.h>
+
+#ifdef CONFIG_MODULES
+extern void export_net_symbols(void);
+#endif
 
 static int sock_lseek(struct inode *inode, struct file *file, off_t offset,
 		      int whence);
@@ -255,6 +261,7 @@ struct socket *sock_alloc(void)
 	sock->conn = NULL;
 	sock->iconn = NULL;
 	sock->next = NULL;
+	sock->file = NULL;
 	sock->wait = &inode->i_wait;
 	sock->inode = inode;		/* "backlink": we could use pointer arithmetic instead */
 	sock->fasync_list = NULL;
@@ -302,6 +309,7 @@ void sock_release(struct socket *sock)
 	if (peersock)
 		sock_release_peer(peersock);
 	--sockets_in_use;	/* Bookkeeping.. */
+	sock->file=NULL;
 	iput(SOCK_INODE(sock));
 }
 
@@ -506,6 +514,19 @@ int sock_wake_async(struct socket *sock, int how)
  *	family, then create a fresh socket.
  */
 
+static int find_protocol_family(int family)
+{
+	register int i;
+	for (i = 0; i < NPROTO; i++)
+	{
+		if (pops[i] == NULL)
+			continue;
+		if (pops[i]->family == family)
+			return i;
+	}
+	return -1;
+}
+
 asmlinkage int sys_socket(int family, int type, int protocol)
 {
 	int i, fd;
@@ -513,14 +534,20 @@ asmlinkage int sys_socket(int family, int type, int protocol)
 	struct proto_ops *ops;
 
 	/* Locate the correct protocol family. */
-	for (i = 0; i < NPROTO; ++i) 
-	{
-		if (pops[i] == NULL) continue;
-		if (pops[i]->family == family) 
-			break;
-	}
+	i = find_protocol_family(family);
 
-	if (i == NPROTO) 
+#ifdef CONFIG_KERNELD
+	/* Attempt to load a protocol module if the find failed. */
+	if (i < 0)
+	{
+		char module_name[30];
+		sprintf(module_name,"net-pf-%d",family);
+		request_module(module_name);
+		i = find_protocol_family(family);
+	}
+#endif
+
+	if (i < 0)
 	{
   		return -EINVAL;
 	}
@@ -564,6 +591,8 @@ asmlinkage int sys_socket(int family, int type, int protocol)
 		sock_release(sock);
 		return(-EINVAL);
 	}
+
+	sock->file=current->files->fd[fd];
 
 	return(fd);
 }
@@ -745,7 +774,8 @@ asmlinkage int sys_accept(int fd, struct sockaddr *upeer_sockaddr, int *upeer_ad
 		sock_release(newsock);
 		return(-EINVAL);
 	}
-
+	sock->file=current->files->fd[fd];
+	
 	if (upeer_sockaddr)
 	{
 		newsock->ops->getname(newsock, (struct sockaddr *)address, &len, 1);
@@ -1347,7 +1377,7 @@ void sock_init(void)
 {
 	int i;
 
-	printk("Swansea University Computer Society NET3.033 for Linux 1.3.50\n");
+	printk("Swansea University Computer Society NET3.034 for Linux 1.3.77\n");
 
 	/*
 	 *	Initialize all address (protocol) families. 
@@ -1383,6 +1413,14 @@ void sock_init(void)
 	 */
 
 	proto_init();
+
+	/*
+	 *	Export networking symbols to the world.
+	 */
+
+#ifdef CONFIG_MODULES
+	export_net_symbols();
+#endif
 }
 
 int socket_get_info(char *buffer, char **start, off_t offset, int length)

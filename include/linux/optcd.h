@@ -43,7 +43,7 @@
 #define STOP_TIMEOUT		1000		/* for poll wait */
 #define RESET_WAIT		1000		/* busy wait at drive reset */
 
-/* # of buffer for block size conversion. 6 is optimal for my setup (P75),
+/* # of buffers for block size conversion. 6 is optimal for my setup (P75),
    giving 280 kb/s, with 0.4% CPU usage. Experiment to find your optimal
    setting */
 #define N_BUFS		6

@@ -208,9 +208,10 @@ int ip_forward(struct sk_buff *skb, struct device *dev, int is_frag,
 		 *	we calculated.
 		 */
 #ifndef CONFIG_IP_NO_ICMP_REDIRECT
-		if (dev == dev2 && !((iph->saddr^iph->daddr)&dev->pa_mask) &&
-		    (rt->rt_flags&RTF_MODIFIED) && !opt->srr)
-			icmp_send(skb, ICMP_REDIRECT, ICMP_REDIR_HOST, raddr, dev);
+		if (dev == dev2 && 
+			!((iph->saddr^dev->pa_addr)&dev->pa_mask) &&
+		    	(rt->rt_flags&RTF_MODIFIED) && !opt->srr)
+				icmp_send(skb, ICMP_REDIRECT, ICMP_REDIR_HOST, raddr, dev);
 #endif
 #ifdef CONFIG_IP_MROUTE
 	}

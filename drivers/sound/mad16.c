@@ -23,7 +23,6 @@
  */
 #include <linux/config.h>
 
-
 /*
  * sound/mad16.c
  *
@@ -32,6 +31,7 @@
  *      OPTi 82C928     MAD16           (replaced by C929)
  *      OAK OTI-601D    Mozart
  *      OPTi 82C929     MAD16 Pro
+ *      OPTi 82C930     (Not supported yet)
  *
  * These audio interface chips don't prduce sound themselves. They just
  * connect some other components (OPL-[234] and a WSS compatible codec)
@@ -82,6 +82,7 @@ static int      already_initialized = 0;
 #define C928	1
 #define MOZART	2
 #define C929	3
+#define C930	4
 
 /*
  *    Registers
@@ -92,6 +93,7 @@ static int      already_initialized = 0;
  *      only until the next I/O read or write.
  */
 
+#define MC0_PORT	0xf8c	/* Dummy port */
 #define MC1_PORT	0xf8d	/* SB address, CDROM interface type, joystick */
 #define MC2_PORT	0xf8e	/* CDROM address, IRQ, DMA, plus OPL4 bit */
 #define MC3_PORT	0xf8f
@@ -100,6 +102,11 @@ static int      already_initialized = 0;
 #define MC5_PORT	0xf91
 #define MC6_PORT	0xf92
 #define MC7_PORT	0xf93
+#define MC8_PORT	0xf94
+#define MC9_PORT	0xf95
+#define MC10_PORT	0xf96
+#define MC11_PORT	0xf97
+#define MC12_PORT	0xf98
 
 static int      board_type = C928;
 
@@ -128,6 +135,7 @@ mad_read (int port)
     case C929:
       outb (0xE3, PASSWD_REG);
       break;
+
     }
 
   tmp = inb (port);
@@ -154,6 +162,7 @@ mad_write (int port, int value)
     case C929:
       outb (0xE3, PASSWD_REG);
       break;
+
     }
 
   outb ((unsigned char) (value & 0xff), port);
@@ -164,6 +173,7 @@ static int
 detect_mad16 (void)
 {
   unsigned char   tmp, tmp2;
+  int             i;
 
 /*
  * Check that reading a register doesn't return bus float (0xff)
@@ -176,6 +186,10 @@ detect_mad16 (void)
       DDB (printk ("MC1_PORT returned 0xff\n"));
       return 0;
     }
+
+  for (i = 0xf8d; i <= 0xf98; i++)
+    DDB (printk ("Port %0x (init value) = %0x\n", i, mad_read (i)));
+
 /*
  * Now check that the gate is closed on first I/O after writing
  * the password. (This is how a MAD16 compatible card works).
@@ -188,7 +202,6 @@ detect_mad16 (void)
     }
 
   mad_write (MC1_PORT, tmp ^ 0x80);	/* Togge a bit */
-
   if ((tmp2 = mad_read (MC1_PORT)) != (tmp ^ 0x80))	/* Compare the bit */
     {
       mad_write (MC1_PORT, tmp);	/* Restore */
@@ -199,6 +212,67 @@ detect_mad16 (void)
   mad_write (MC1_PORT, tmp);	/* Restore */
   return 1;			/* Bingo */
 
+}
+
+static int
+wss_init (struct address_info *hw_config)
+{
+  int             ad_flags = 0;
+
+/*
+ *    Verify the WSS parameters
+ */
+
+  if (check_region (hw_config->io_base, 8))
+    {
+      printk ("MSS: I/O port conflict\n");
+      return 0;
+    }
+
+  if (!ad1848_detect (hw_config->io_base + 4, &ad_flags, mad16_osp))
+    return 0;
+  /*
+     * Check if the IO port returns valid signature. The original MS Sound
+     * system returns 0x04 while some cards (AudioTriX Pro for example)
+     * return 0x00.
+   */
+
+  if ((inb (hw_config->io_base + 3) & 0x3f) != 0x04 &&
+      (inb (hw_config->io_base + 3) & 0x3f) != 0x00)
+    {
+      DDB (printk ("No MSS signature detected on port 0x%x (0x%x)\n",
+		   hw_config->io_base, inb (hw_config->io_base + 3)));
+      return 0;
+    }
+
+  if (hw_config->irq > 11)
+    {
+      printk ("MSS: Bad IRQ %d\n", hw_config->irq);
+      return 0;
+    }
+
+  if (hw_config->dma != 0 && hw_config->dma != 1 && hw_config->dma != 3)
+    {
+      printk ("MSS: Bad DMA %d\n", hw_config->dma);
+      return 0;
+    }
+
+  /*
+     * Check that DMA0 is not in use with a 8 bit board.
+   */
+
+  if (hw_config->dma == 0 && inb (hw_config->io_base + 3) & 0x80)
+    {
+      printk ("MSS: Can't use DMA0 with a 8 bit card/slot\n");
+      return 0;
+    }
+
+  if (hw_config->irq > 7 && hw_config->irq != 9 && inb (hw_config->io_base + 3) & 0x80)
+    {
+      printk ("MSS: Can't use IRQ%d with a 8 bit card/slot\n", hw_config->irq);
+    }
+
+  return 1;
 }
 
 int
@@ -238,9 +312,13 @@ probe_mad16 (struct address_info *hw_config)
       DDB (printk ("Detect using password = 0xE3\n"));
 
       if (!detect_mad16 ())
-	return 0;
-
-      DDB (printk ("mad16.c: 82C929 detected\n"));
+	{
+	  return 0;
+	}
+      else
+	{
+	  DDB (printk ("mad16.c: 82C929 detected\n"));
+	}
     }
   else
     {
@@ -259,7 +337,7 @@ probe_mad16 (struct address_info *hw_config)
     }
 
   for (i = 0xf8d; i <= 0xf93; i++)
-    DDB (printk ("port %03x = %03x\n", i, mad_read (i)));
+    DDB (printk ("port %03x = %02x\n", i, mad_read (i)));
 
 /*
  * Set the WSS address
@@ -323,59 +401,9 @@ probe_mad16 (struct address_info *hw_config)
     }
 
   for (i = 0xf8d; i <= 0xf93; i++)
-    DDB (printk ("port %03x after init = %03x\n", i, mad_read (i)));
+    DDB (printk ("port %03x after init = %02x\n", i, mad_read (i)));
 
-/*
- *    Verify the WSS parameters
- */
-
-  if (check_region (hw_config->io_base, 8))
-    {
-      printk ("MSS: I/O port conflict\n");
-      return 0;
-    }
-
-  /*
-     * Check if the IO port returns valid signature. The original MS Sound
-     * system returns 0x04 while some cards (AudioTriX Pro for example)
-     * return 0x00.
-   */
-
-  if ((inb (hw_config->io_base + 3) & 0x3f) != 0x04 &&
-      (inb (hw_config->io_base + 3) & 0x3f) != 0x00)
-    {
-      DDB (printk ("No MSS signature detected on port 0x%x (0x%x)\n",
-		   hw_config->io_base, inb (hw_config->io_base + 3)));
-      return 0;
-    }
-
-  if (hw_config->irq > 11)
-    {
-      printk ("MSS: Bad IRQ %d\n", hw_config->irq);
-      return 0;
-    }
-
-  if (hw_config->dma != 0 && hw_config->dma != 1 && hw_config->dma != 3)
-    {
-      printk ("MSS: Bad DMA %d\n", hw_config->dma);
-      return 0;
-    }
-
-  /*
-     * Check that DMA0 is not in use with a 8 bit board.
-   */
-
-  if (hw_config->dma == 0 && inb (hw_config->io_base + 3) & 0x80)
-    {
-      printk ("MSS: Can't use DMA0 with a 8 bit card/slot\n");
-      return 0;
-    }
-
-  if (hw_config->irq > 7 && hw_config->irq != 9 && inb (hw_config->io_base + 3) & 0x80)
-    {
-      printk ("MSS: Can't use IRQ%d with a 8 bit card/slot\n", hw_config->irq);
-      return 0;
-    }
+  wss_init (hw_config);
 
   return 1;
 }

@@ -2185,7 +2185,7 @@ static int NCR5380_transfer_dma (struct Scsi_Host *instance,
 
     *data = d + c;
     *count = 0;
-    *phase = (NCR5380_read(STATUS_REG & PHASE_MASK));
+    *phase = NCR5380_read(STATUS_REG) & PHASE_MASK;
 #if 0
     NCR5380_print_phase(instance);
 #endif

@@ -1525,7 +1525,7 @@ cdu31a_request_startover:
        * The beginning here is stolen from the hard disk driver.  I hope
        * it's right.
        */
-      if (!(CURRENT) || CURRENT->rq_status == RQ_INACTIVE)
+      if (!(CURRENT) || CURRENT_PLUGGED || CURRENT->rq_status == RQ_INACTIVE)
       {
          goto end_do_cdu31a_request;
       }

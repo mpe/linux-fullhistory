@@ -1463,7 +1463,7 @@ void inet_proto_init(struct net_proto *pro)
 	int i;
 
 
-	printk("Swansea University Computer Society TCP/IP for NET3.033\n");
+	printk("Swansea University Computer Society TCP/IP for NET3.034\n");
 
 	/*
 	 *	Tell SOCKET that we are alive... 

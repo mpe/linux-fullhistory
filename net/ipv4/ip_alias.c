@@ -38,74 +38,77 @@
 #include <net/ip_alias.h>
 
 /*
- * AF_INET alias init
+ *	AF_INET alias init
  */
-static int 
-ip_alias_init_1(struct net_alias_type *this, struct net_alias *alias, struct sockaddr *sa)
+ 
+static int ip_alias_init_1(struct net_alias_type *this, struct net_alias *alias, struct sockaddr *sa)
 {
 #ifdef ALIAS_USER_LAND_DEBUG
-  printk("alias_init(%s) called.\n", alias->name);
+	printk("alias_init(%s) called.\n", alias->name);
 #endif
-  MOD_INC_USE_COUNT;
-  return 0;
+	MOD_INC_USE_COUNT;
+	return 0;
 }
 
 /*
- * AF_INET alias done
+ *	AF_INET alias done
  */
-static int
-ip_alias_done_1(struct net_alias_type *this, struct net_alias *alias)
+ 
+static int ip_alias_done_1(struct net_alias_type *this, struct net_alias *alias)
 {
 #ifdef ALIAS_USER_LAND_DEBUG
-  printk("alias_done(%s) called.\n", alias->name);
+	printk("alias_done(%s) called.\n", alias->name);
 #endif
-  MOD_DEC_USE_COUNT;
-  return 0;
+	MOD_DEC_USE_COUNT;
+	return 0;
 }
 
 /*
- * print alias address info
+ *	Print alias address info
  */
 
-int
-ip_alias_print_1(struct net_alias_type *this, struct net_alias *alias, char *buf, int len)
+int ip_alias_print_1(struct net_alias_type *this, struct net_alias *alias, char *buf, int len)
 {
-  char *p;
+	char *p;
 
-  p = (char *) &alias->dev.pa_addr;
-  return sprintf(buf, "%d.%d.%d.%d",
-		 (p[0] & 255), (p[1] & 255), (p[2] & 255), (p[3] & 255));
+	p = (char *) &alias->dev.pa_addr;
+	return sprintf(buf, "%d.%d.%d.%d",
+		(p[0] & 255), (p[1] & 255), (p[2] & 255), (p[3] & 255));
 }
 
-struct device *
-ip_alias_dev_select(struct net_alias_type *this, struct device *main_dev, struct sockaddr *sa)
+struct device *ip_alias_dev_select(struct net_alias_type *this, struct device *main_dev, struct sockaddr *sa)
 {
-  __u32 addr;
-  struct rtable *rt;
+	__u32 addr;
+	struct rtable *rt;
+	struct device *dev=NULL;
   
-  /*
-   * defensive...
-   */
+	/*
+	 *	Defensive...	
+	 */
   
-  if (main_dev == NULL) return NULL;
+	if (main_dev == NULL) 
+		return NULL;
 
-  /*
-   * get u32 address. 
-   */
+	/*
+	 *	Get u32 address. 
+	 */
 
-  addr =  (sa)? (*(struct sockaddr_in *)sa).sin_addr.s_addr : 0;
+	addr =  (sa)? (*(struct sockaddr_in *)sa).sin_addr.s_addr : 0;
+	if (addr == 0)
+		return NULL;
 
-  if (addr == 0) return NULL;
+	/*
+	 *	Find 'closest' device to address given. any other suggestions? ...
+	 *	net_alias module will check if returned device is main_dev's alias
+	 */
 
-  /*
-   * find 'closest' device to address given. any other suggestions? ...
-   * net_alias module will check if returned device is main_dev's alias
-   */
-
-  rt = ip_rt_route(addr, 0);
-
-  return (rt)? rt->rt_dev : NULL;
-
+	rt = ip_rt_route(addr, 0);
+	if(rt)
+	{
+		dev=rt->rt_dev;
+		ip_rt_put(rt);
+	}
+	return dev;
 }
 
 /*
@@ -114,16 +117,16 @@ ip_alias_dev_select(struct net_alias_type *this, struct device *main_dev, struct
 
 struct net_alias_type ip_alias_type =
 {
-  AF_INET,			/* type */
-  0,				/* n_attach */
-  "ip",				/* name */
-  NULL,				/* get_addr32() */
-  NULL,				/* dev_addr_chk() */
-  ip_alias_dev_select,		/* dev_select() */
-  ip_alias_init_1,		/* alias_init_1() */
-  ip_alias_done_1,		/* alias_done_1() */
-  ip_alias_print_1,		/* alias_print_1() */
-  NULL				/* next */
+	AF_INET,		/* type */
+	0,			/* n_attach */
+	"ip",			/* name */
+	NULL,			/* get_addr32() */
+	NULL,			/* dev_addr_chk() */
+	ip_alias_dev_select,	/* dev_select() */
+	ip_alias_init_1,	/* alias_init_1() */
+	ip_alias_done_1,	/* alias_done_1() */
+	ip_alias_print_1,	/* alias_print_1() */
+	NULL			/* next */
 };
 
 /*
@@ -132,7 +135,7 @@ struct net_alias_type ip_alias_type =
 
 int ip_alias_init(void)
 {
-  return register_net_alias_type(&ip_alias_type, AF_INET);
+	return register_net_alias_type(&ip_alias_type, AF_INET);
 }
 
 /*
@@ -141,22 +144,22 @@ int ip_alias_init(void)
 
 int ip_alias_done(void)
 {
-  return unregister_net_alias_type(&ip_alias_type);
+	return unregister_net_alias_type(&ip_alias_type);
 }
 
 #ifdef MODULE
 
 int init_module(void)
 {
-  if (ip_alias_init() != 0)
-    return -EIO;
-  return 0;
+	if (ip_alias_init() != 0)
+		return -EIO;
+	return 0;
 }
 
 void cleanup_module(void)
 {
-  if (ip_alias_done() != 0)
-    printk("ip_alias: can't remove module");
+	if (ip_alias_done() != 0)
+		printk("ip_alias: can't remove module");
 }
 
 #endif /* MODULE */

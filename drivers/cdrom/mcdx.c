@@ -1,7 +1,7 @@
 /*
  * The Mitsumi CDROM interface
  * Copyright (C) 1995 Heiko Schlittermann <heiko@lotte.sax.de>
- * VERSION: 1.8
+ * VERSION: 1.9
  *
  ****************** H E L P *********************************
  * If you ever plan to update your CD ROM drive and perhaps
@@ -44,7 +44,7 @@
 
 #if RCS
 static const char *mcdx_c_version
-		= "$Id: mcdx.c,v 1.39 1996/03/15 00:00:59 heiko Exp $";
+		= "mcdx.c,v 1.2 1996/03/22 01:14:59 heiko Exp";
 #endif
 
 #include <linux/version.h>
@@ -850,7 +850,7 @@ static void mcdx_delay(struct s_drive_stuff *stuff, long jifs)
 	I wanna make this independend of cpu speed. [1 jiffie is 1/HZ] sec */
 {
     unsigned long tout = jiffies + jifs;
-	if (jifs < 0) printk ("********\n");
+    if (jifs < 0) return;
 
     /* TRACE((INIT, "mcdx_delay %d\n", jifs)); */
 
@@ -1102,12 +1102,12 @@ int mcdx_init(void)
 	int drive;
 
 #ifdef MODULE
-	WARN(("Version 1.8 for %s\n", kernel_version));
+	WARN(("Version 1.9 for %s\n", kernel_version));
 #else
-	WARN(("Version 1.8\n"));
+	WARN(("Version 1.9\n"));
 #endif
 
-	WARN(("$Id: mcdx.c,v 1.39 1996/03/15 00:00:59 heiko Exp $\n"));
+	WARN(("mcdx.c,v 1.2 1996/03/22 01:14:59 heiko Exp\n"));
 
 	/* zero the pointer array */
 	for (drive = 0; drive < MCDX_NDRIVES; drive++)

@@ -402,6 +402,10 @@ extern inline void * __constant_memcpy(void * to, const void * from, size_t n)
 		case 4:
 			*(unsigned long *)to = *(const unsigned long *)from;
 			return to;
+		case 8:
+			*(unsigned long *)to = *(const unsigned long *)from;
+			*(1+(unsigned long *)to) = *(1+(const unsigned long *)from);
+			return to;
 	}
 #define COMMON(x) \
 __asm__("cld\n\t" \

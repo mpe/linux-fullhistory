@@ -26,6 +26,7 @@
  *					Mike Shaver's work.
  *		Marty Leisner	:	Fixes to fd passing
  *		Nick Nevin	:	recvmsg bugfix.
+ *		Alan Cox	:	Started proper garbage collector
  *
  * Known differences from reference BSD that was tested:
  *
@@ -69,7 +70,7 @@
 #include <net/af_unix.h>
 #include <linux/proc_fs.h>
 
-static unix_socket *unix_socket_list=NULL;
+unix_socket *unix_socket_list=NULL;
 
 #define min(a,b)	(((a)<(b))?(a):(b))
 
@@ -745,19 +746,12 @@ static int unix_fd_copy(struct sock *sk, struct cmsghdr *cmsg, struct file **fp)
 			return -EBADF;
 	}
 	
-	/*
-	 *	Make sure the garbage collector can cope.
-	 */
-	 
-	if(unix_gc_free<num)
-		return -ENOBUFS;
-	
         /* add another reference to these files */
 	for(i=0; i< num; i++)
 	{
 		fp[i]=current->files->fd[fdp[i]];
 		fp[i]->f_count++;
-		unix_gc_add(sk, fp[i]);
+		unix_inflight(fp[i]);
 	}
 	
 	return num;
@@ -773,7 +767,7 @@ static void unix_fd_free(struct sock *sk, struct file **fp, int num)
 	for(i=0;i<num;i++)
 	{
 		close_fp(fp[i]);
-		unix_gc_remove(fp[i]);
+		unix_notinflight(fp[i]);
 	}
 }
 
@@ -851,7 +845,7 @@ static void unix_detach_fds(struct sk_buff *skb, struct cmsghdr *cmsg)
 		ufp[ufn]=fp[i];
 		*cmfptr++=ufn;
 		FD_CLR(ufn,&current->files->close_on_exec);
-		unix_gc_remove(fp[i]);
+		unix_notinflight(fp[i]);
 	}
 	/*
 	 *	Dump those that don't
@@ -859,7 +853,7 @@ static void unix_detach_fds(struct sk_buff *skb, struct cmsghdr *cmsg)
 	for(;i<fdnum;i++)
 	{
 		close_fp(fp[i]);
-		unix_gc_remove(fp[i]);
+		unix_notinflight(fp[i]);
 	}
 	kfree(skb->h.filp);
 	skb->h.filp=NULL;
@@ -1265,17 +1259,19 @@ static int unix_get_info(char *buffer, char **start, off_t offset, int length, i
 	int len=0;
 	unix_socket *s=unix_socket_list;
 	
-	len+= sprintf(buffer,"Num       RefCount Protocol Flags    Type St Path\n");
+	len+= sprintf(buffer,"Num       RefCount Protocol Flags    Type St "
+	    "Inode Path\n");
 	
 	while(s!=NULL)
 	{
-		len+=sprintf(buffer+len,"%p: %08X %08X %08lX %04X %02X",
+		len+=sprintf(buffer+len,"%p: %08X %08X %08lX %04X %02X %5ld",
 			s,
 			s->protinfo.af_unix.locks,
 			0,
 			s->socket->flags,
 			s->socket->type,
-			s->socket->state);
+			s->socket->state,
+			s->socket->inode ? s->socket->inode->i_ino : 0);
 		if(s->protinfo.af_unix.name!=NULL)
 			len+=sprintf(buffer+len, " %s\n", s->protinfo.af_unix.name);
 		else
@@ -1299,7 +1295,7 @@ static int unix_get_info(char *buffer, char **start, off_t offset, int length, i
 }
 #endif
 
-static struct proto_ops unix_proto_ops = {
+struct proto_ops unix_proto_ops = {
 	AF_UNIX,
 	
 	unix_create,

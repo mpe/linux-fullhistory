@@ -14,7 +14,6 @@ extern void smp_boot_cpus(void);		/* Boot processor call to load the other CPU's
 extern void smp_callin(void);			/* Processor call in. Must hold processors until .. */
 extern void smp_commence(void);			/* Multiprocessors may now schedule */
 extern int smp_num_cpus;
-extern int smp_top_cpu;				/* Top CPU number  */
 extern int smp_threads_ready;			/* True once the per process idle is forked */
 #ifdef __SMP_PROF__
 extern volatile unsigned long smp_spins[NR_CPUS];	/* count of interrupt spins */
@@ -48,7 +47,6 @@ extern volatile int smp_msg_id;
  
 #define smp_num_cpus			1
 #define smp_processor_id()		0
-#define smp_top_cpu			0
 #define smp_message_pass(t,m,d,w)	
 #define smp_threads_ready		1
 #define kernel_lock()

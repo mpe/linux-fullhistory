@@ -389,8 +389,6 @@ char            kernel_version[] = UTS_RELEASE;
 
 #endif
 
-static int      debugmem = 0;	/* switched off by default */
-
 static int      sound[20] =
 {0};
 
@@ -442,6 +440,11 @@ cleanup_module (void)
 {
   int             i;
 
+  if (MOD_IN_USE)
+    {
+      return;
+    }
+
   if (chrdev_registered)
     module_unregister_chrdev (sound_major, "sound");
 
@@ -461,6 +464,7 @@ cleanup_module (void)
 	printk ("Sound: Hmm, DMA%d was left allocated - fixed\n", i);
 	sound_free_dma (i);
       }
+
 }
 #endif
 
@@ -599,6 +603,8 @@ sound_stop_timer (void)
 fatal_error__This_version_is_not_compatible_with_this_kernel;
 #endif
 
+static int      debugmem = 0;	/* switched off by default */
+
 static int      dma_buffsize = DSP_BUFFSIZE;
 
 int
@@ -647,7 +653,7 @@ sound_alloc_dmap (int dev, struct dma_buffparms *dmap, int chan)
 
       audio_devs[dev]->buffsize = PAGE_SIZE * (1 << sz);
 
-      if ((start_addr = (char *) __get_free_pages (GFP_ATOMIC, sz, 1)) == NULL)
+      if ((start_addr = (char *) __get_free_pages (GFP_ATOMIC, sz, MAX_DMA_ADDRESS)) == NULL)
 	audio_devs[dev]->buffsize /= 2;
     }
 
@@ -726,6 +732,7 @@ soud_map_buffer (int dev, struct dma_buffparms *dmap, buffmem_desc * info)
   printk ("Exited sound_map_buffer()\n");
   return -EINVAL;
 }
+#endif
 
 void
 conf_printf (char *name, struct address_info *hw_config)
@@ -768,4 +775,3 @@ conf_printf2 (char *name, int base, int irq, int dma, int dma2)
 
   printk ("\n");
 }
-#endif

@@ -23,6 +23,26 @@ ncp_ioctl (struct inode * inode, struct file * filp,
 	struct ncp_fs_info info;
 	struct ncp_server *server = NCP_SERVER(inode);
 
+	/*
+	 * Binary compatible with 1.3.XX releases.
+	 * Take this out in 2.1.0 development series.
+	 * <mec@duracef.shout.net> 12 Mar 1996
+	 */
+	switch(cmd) {
+	case _IOR('n', 1, unsigned char *):
+	    cmd = NCP_IOC_NCPREQUEST;
+	    break;
+	case _IOR('u', 1, uid_t):
+	    cmd = NCP_IOC_GETMOUNTUID;
+	    break;
+	case _IO('l', 1):
+	    cmd = NCP_IOC_CONN_LOGGED_IN;
+	    break;
+	case _IOWR('i', 1, unsigned char *):
+	    cmd = NCP_IOC_GET_FS_INFO;
+	    break;
+	}
+
 	switch(cmd) {
 	case NCP_IOC_NCPREQUEST:
 
@@ -106,10 +126,12 @@ ncp_ioctl (struct inode * inode, struct file * filp,
 			return -EINVAL;
 		}
 
-		info.addr        = server->m.serv_addr;
-		info.mounted_uid = server->m.mounted_uid;
-		info.connection  = server->connection;
-		info.buffer_size = server->buffer_size;
+		info.addr          = server->m.serv_addr;
+		info.mounted_uid   = server->m.mounted_uid;
+		info.connection    = server->connection;
+		info.buffer_size   = server->buffer_size;
+		info.volume_number = NCP_ISTRUCT(inode)->volNumber;
+		info.directory_id  = NCP_ISTRUCT(inode)->DosDirNum;
 
 		memcpy_tofs((struct ncp_fs_info *)arg, &info, sizeof(info));
 		return 0;		

@@ -7,7 +7,7 @@ works with this driver, and that doesn't report itself as DOLPHIN,
 please drop me a mail.
 
 The support for multisession CDs is in ALPHA stage. If you use it,
-please mail me your experiences. Multisession support can be disables
+please mail me your experiences. Multisession support can be disabled
 at compile time.
 
 You can find some older versions of the driver at

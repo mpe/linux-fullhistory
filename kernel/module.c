@@ -38,7 +38,7 @@
  *
  * On 1-Aug-95:  <Matti.Aarnio@utu.fi>  altered code to use same style as
  *		 do  /proc/net/XXX  "files".  Namely allow more than 4kB
- *		 (or what the block size if) output.
+ *		 (or what the block size is) output.
  *
  *	- Use dummy syscall functions for users who disable all
  *	  module support. Similar to kernel/sys.c (Paul Gortmaker)

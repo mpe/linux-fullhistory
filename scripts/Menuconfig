@@ -40,6 +40,180 @@ single_menu_mode=
 #
 set -h
 
+
+
+
+
+#
+# Load the functions used by the config.in files.
+#
+# I do this because these functions must be redefined depending
+# on whether they are being called for interactive use or for
+# saving a configuration to a file.
+#
+# Thank the heavens bash supports nesting function definitions.
+#
+load_functions () {
+
+#
+# Additional comments
+#
+function comment () {
+	comment_ctr=$[ comment_ctr + 1 ]
+	echo -ne "': $comment_ctr' '--- $1' " >>MCmenu
+}
+
+#
+# Don't need this yet, but we don't want to puke either.
+#
+function define_bool () {
+	:	
+}
+
+#
+# Create a boolean (Yes/No) function for our current menu
+# which calls our local bool function.
+#
+function bool () {
+	eval $2=\${$2:-'n'}  x=\$$2
+
+	case $x in
+	y|m) yes='ON' no='OFF' flag="*"
+	   ;;
+	n) yes='OFF' no='ON' flag=" "
+	   ;;
+	esac
+
+	echo -ne "'$2' '($flag) $1' " >>MCmenu
+
+	echo -e "function $2 () { l_bool '$1' '$yes' '$no' '$2' }\n" \
+		>>MCradiolists
+}
+
+#
+# Create a tristate (Yes/No/Module) radiolist function
+# which calls our local tristate function.
+#
+# Collapses to a boolean (Yes/No) if module support is disabled.
+#
+function tristate () {
+	if [ "$CONFIG_MODULES" != "y" ]
+	then
+		bool "$1" "$2"
+	else
+		eval $2=\${$2:-'n'}  x=\$$2
+	
+		case $x in
+		y) yes='ON'  no='OFF' module='OFF' flag="*"
+   		;;
+		m) yes='OFF' no='OFF' module='ON' flag="M"
+   		;;
+		*) yes='OFF' no='ON'  module='OFF' flag=" "
+   		;;
+		esac
+	
+		echo -ne "'$2' '<$flag> $1' " >>MCmenu
+	
+		echo -e "
+		function $2 () { \
+			l_tristate '$1' '$yes' '$no' '$module' '$2'
+		}"  >>MCradiolists
+	fi
+}
+
+#
+# Create a tristate radiolist function which is dependent on
+# another kernel configuration option.
+#
+# Quote from the original configure script:
+#
+#       If the option we depend upon is a module,
+#       then the only allowable options are M or N.  If Y, then
+#       this is a normal tristate.  This is used in cases where modules
+#       are nested, and one module requires the presence of something
+#       else in the kernel.
+#
+function dep_tristate () {
+	if [ "$CONFIG_MODULES" != "y" ]
+	then
+		bool "$1" "$2"
+	else
+		if  eval [ "_$3" != "_m" ]
+		then
+			tristate "$1" "$2" $3
+		else
+			mod_bool "$1" "$2"
+		fi
+	fi
+}
+
+#
+# Add a menu item which will call our local int function.
+# 
+function int () {
+	eval $2=\${$2:-"$3"} x=\$$2
+
+	echo -ne "'$2' '($x) $1' " >>MCmenu
+
+	echo -e "function $2 () { l_int '$1' '$2' '$3' '$x' }\n" >>MCradiolists
+}
+
+#
+# Add a menu item which will call our local int function.
+# 
+function hex () {
+	eval $2=\${$2:-"$3"} x=\${$2##*[x,X]}
+
+	echo -ne "'$2' '($x) $1' " >>MCmenu
+
+	echo -e "function $2 () { l_hex '$1' '$2' '$3' '$x' }\n" >>MCradiolists
+}
+
+#
+# Add a menu item which will call our local One-of-Many choice list.
+#
+function choice () {
+	#
+	# Need to remember params cause the're gonna get reset.
+	#
+	title=$1
+	choices=$2
+	default=$3
+	current=
+
+	#
+	# Find out if one of the choices is already set.
+	# If it's not then make it the default.
+	#
+	set -- $choices
+	firstchoice=$2
+
+	while [ -n "$2" ]
+	do
+		if eval [ "_\$$2" = "_y" ]
+		then
+			current=$1
+			break
+		fi
+		shift ; shift
+	done
+
+	: ${current:=$default}
+
+	echo -ne "'$firstchoice' '($current) $title' " >>MCmenu
+
+	echo -e "
+	function $firstchoice () {
+		l_choice '$title' \"$choices\" $current
+	}\n" >>MCradiolists
+}
+
+} # END load_functions()
+
+
+
+
+
 #
 # Extract available help for an option from Configure.help
 # and send it to standard output.
@@ -108,21 +282,6 @@ function menu_name () {
 }
 
 #
-# Additional comments
-#
-function comment () {
-	comment_ctr=$[ comment_ctr + 1 ]
-	echo -ne "': $comment_ctr' '--- $1' " >>MCmenu
-}
-
-#
-# Don't need this yet, but we don't want to puke either.
-#
-function define_bool () {
-	:	
-}
-
-#
 # Add a submenu option to the menu currently under construction.
 #
 function submenu () {
@@ -144,27 +303,6 @@ function soundcfg () {
 function l_soundcfg () {
 	clear
 	$MAKE -C drivers/sound config
-}
-
-
-#
-# Create a boolean (Yes/No) function for our current menu
-# which calls our local bool function.
-#
-function bool () {
-	eval $2=\${$2:-'n'}  x=\$$2
-
-	case $x in
-	y|m) yes='ON' no='OFF' flag="*"
-	   ;;
-	n) yes='OFF' no='ON' flag=" "
-	   ;;
-	esac
-
-	echo -ne "'$2' '($flag) $1' " >>MCmenu
-
-	echo -e "function $2 () { l_bool '$1' '$yes' '$no' '$2' }\n" \
-		>>MCradiolists
 }
 
 #
@@ -202,7 +340,7 @@ function mod_bool () {
 	   ;;
 	esac
 
-	echo -ne "'$2' '($flag) $1' " >>MCmenu
+	echo -ne "'$2' '<$flag> $1' " >>MCmenu
 
 	echo -e "function $2 () { l_mod_bool '$1' '$module' '$no' '$2' }\n" \
 		>>MCradiolists
@@ -232,37 +370,6 @@ function l_mod_bool() {
 }
 
 #
-# Create a tristate (Yes/No/Module) radiolist function
-# which calls our local tristate function.
-#
-# Collapses to a boolean (Yes/No) if module support is disabled.
-#
-function tristate () {
-	if [ "$CONFIG_MODULES" != "y" ]
-	then
-		bool "$1" "$2"
-	else
-		eval $2=\${$2:-'n'}  x=\$$2
-	
-		case $x in
-		y) yes='ON'  no='OFF' module='OFF' flag="*"
-   		;;
-		m) yes='OFF' no='OFF' module='ON' flag="M"
-   		;;
-		*) yes='OFF' no='ON'  module='OFF' flag=" "
-   		;;
-		esac
-	
-		echo -ne "'$2' '($flag) $1' " >>MCmenu
-	
-		echo -e "
-		function $2 () { \
-			l_tristate '$1' '$yes' '$no' '$module' '$2'
-		}"  >>MCradiolists
-	fi
-}
-
-#
 # Handle a tristate (Yes/No/Module) option.
 #
 function l_tristate () {
@@ -283,43 +390,6 @@ function l_tristate () {
 		*) break ;;
 		esac
 	done
-}
-
-#
-# Create a tristate radiolist function which is dependent on
-# another kernel configuration option.
-#
-# Quote from the original configure script:
-#
-#       If the option we depend upon is a module,
-#       then the only allowable options are M or N.  If Y, then
-#       this is a normal tristate.  This is used in cases where modules
-#       are nested, and one module requires the presence of something
-#       else in the kernel.
-#
-function dep_tristate () {
-	if [ "$CONFIG_MODULES" != "y" ]
-	then
-		bool "$1" "$2"
-	else
-		if  eval [ "_$3" != "_m" ]
-		then
-			tristate "$1" "$2" $3
-		else
-			mod_bool "$1" "$2"
-		fi
-	fi
-}
-
-#
-# Add a menu item which will call our local int function.
-# 
-function int () {
-	eval $2=\${$2:-"$3"} x=\$$2
-
-	echo -ne "'$2' '($x) $1' " >>MCmenu
-
-	echo -e "function $2 () { l_int '$1' '$2' '$3' '$x' }\n" >>MCradiolists
 }
 
 #
@@ -352,18 +422,6 @@ function l_int () {
 
 		help "$2" "$1"
 	done
-}
-
-
-#
-# Add a menu item which will call our local int function.
-# 
-function hex () {
-	eval $2=\${$2:-"$3"} x=\${$2##*[x,X]}
-
-	echo -ne "'$2' '($x) $1' " >>MCmenu
-
-	echo -e "function $2 () { l_hex '$1' '$2' '$3' '$x' }\n" >>MCradiolists
 }
 
 #
@@ -400,45 +458,8 @@ function l_hex () {
 }
 
 #
-# Add a menu item which will call our local One-of-Many choice list.
+# Handle a on-of-many choice list.
 #
-function choice () {
-	#
-	# Need to remember params cause the're gonna get reset.
-	#
-	title=$1
-	choices=$2
-	default=$3
-	current=
-
-	#
-	# Find out if one of the choices is already set.
-	# If it's not then make it the default.
-	#
-	set -- $choices
-	firstchoice=$2
-
-	while [ -n "$2" ]
-	do
-		if eval [ "_\$$2" = "_y" ]
-		then
-			current=$1
-			break
-		fi
-		shift ; shift
-	done
-
-	: ${current:=$default}
-
-	echo -ne "'$firstchoice' '($current) $title' " >>MCmenu
-
-	echo -e "
-	function $firstchoice () {
-		l_choice '$title' \"$choices\" $current
-	}\n" >>MCradiolists
-}
-
-
 function l_choice () {
 	#
 	# Need to remember params cause the're gonna get reset.
@@ -590,13 +611,16 @@ function parse_config_files () {
 	echo 'default=$1' >>MCmenu0
 	echo "menu_name 'Main Menu'" >>MCmenu0
 
-
 	if [ "_$single_menu_mode" = "_TRUE" ]
 	then
 		parser2
 	else
 		parser1
 	fi
+
+	echo "comment ''"	>>MCmenu0
+	echo "g_alt_config" 	>>MCmenu0
+	echo "s_alt_config" 	>>MCmenu0
 
 	echo "}" >>MCmenu0
 
@@ -644,7 +668,8 @@ function activate_menu () {
 			default="${selection%% *}"
 
 			case "$selection" in
-			*"-->"*) show_readme ;;
+			*"-->"*|\
+			*"alt_config"*) show_readme ;;
 			*)	 eval help $selection ;;
 			esac
 			;;
@@ -656,15 +681,154 @@ function activate_menu () {
 }
 
 #
+# Create a menu item to load an alternate configuration file.
+#
+g_alt_config () {
+	echo -n "get_alt_config 'Load  an Alternate Configuration File' "\
+		>>MCmenu
+}
+
+#
+# Get alternate config file name and load the 
+# configuration from it.
+#
+get_alt_config () {
+	while true
+	do
+		ALT_CONFIG="${ALT_CONFIG:-$DEFAULTS}"
+
+		$DIALOG --backtitle "$backtitle" \
+			--inputbox "\
+Enter the name of the configuration file you wish to load.  \
+Accept the name shown to restore the configuration you \
+last retrieved.  Leave blank to abort."\
+			11 55 "$ALT_CONFIG" 2>MCdialog.out
+
+		if [ "$?" = "0" ]
+		then
+			ALT_CONFIG=`cat MCdialog.out`
+
+			[ "_" = "_$ALT_CONFIG" ] && break
+
+			if [ -r "$ALT_CONFIG" ]
+			then
+				load_config_file "$ALT_CONFIG"
+				break
+			else
+				echo -ne "\007"
+				$DIALOG	--backtitle "$backtitle" \
+					--infobox "File does not exit!"  3 38
+				sleep 2
+			fi
+		else
+			cat <<EOM >help.out
+
+For various reasons, one may wish to keep several different kernel
+configurations available on a single machine.  
+
+If you have saved a previous configuration in a file other than the
+kernel's default, entering the name of the file here will allow you
+to modify that configuration.
+
+If you are uncertain, then you have probably never used alternate 
+configuration files.  You should therefor leave this blank to abort.
+
+EOM
+			$DIALOG	--backtitle "$backtitle"\
+				--title "Load Alternate Configuration"\
+				--textbox help.out $LINES $COLS
+		fi
+	done
+
+	rm -f help.out MCdialog.out
+}
+
+#
+# Create a menu item to store an alternate config file.
+#
+s_alt_config () {
+	echo -n "save_alt_config 'Store an Alternate Configuration File' "\
+		 >>MCmenu
+}
+
+#
+# Get an alternate config file name and save the current
+# configuration to it.
+#
+save_alt_config () {
+	while true
+	do
+		$DIALOG --backtitle "$backtitle" \
+			--inputbox "\
+Enter a filename to which this configuration should be saved \
+as an alternate.  Leave blank to abort."\
+			10 55 "$ALT_CONFIG" 2>MCdialog.out
+
+		if [ "$?" = "0" ]
+		then
+			ALT_CONFIG=`cat MCdialog.out`
+
+			[ "_" = "_$ALT_CONFIG" ] && break
+			
+			if touch $ALT_CONFIG 2>/dev/null
+			then
+				save_configuration $ALT_CONFIG
+				load_functions  ## RELOAD
+				break
+			else
+				echo -ne "\007"
+				$DIALOG	--backtitle "$backtitle" \
+					--infobox "Can't create file!  Probably a nonexistent directory." 3 60
+				sleep 2
+			fi
+		else
+			cat <<EOM >help.out
+
+For various reasons, one may wish to keep different kernel
+configurations available on a single machine.  
+
+Entering a file name here will allow you to later retrieve, modify
+and use the current configuration as an alternate to whatever 
+configuration options you have selected at that time.
+
+If you are uncertain what all this means then you should probably
+leave this blank.
+EOM
+			$DIALOG	--backtitle "$backtitle"\
+				--title "Store Alternate Configuration"\
+				--textbox help.out $LINES $COLS
+		fi
+	done
+
+	rm -f help.out MCdialog.out
+}
+
+#
+# Load config options from a file.
+# Converts all "# OPTION is not set" lines to "OPTION=" lines
+#
+function load_config_file () {
+	awk '
+	  /# .* is not set.*/ { printf("%s=\n", $2) }
+	! /# .* is not set.*/ { print }
+	' $1 >.tmpconfig
+
+	source .tmpconfig
+	rm -f .tmpconfig
+}
+
+#
 # Just what it says.
 #
 save_configuration () {
 	${DIALOG} --backtitle "$backtitle" \
-		  --infobox "Saving your new kernel configuration..."  3 43
+		  --infobox "Saving your kernel configuration..."  3 40
 
 	#
 	# Now, let's redefine the configuration functions for final
 	# output to the config files.
+	#
+	# Nested function definitions, YIPEE!
 	#
 	function bool () {
 		eval define_bool "$2" "\${$2:-n}"
@@ -721,7 +885,7 @@ save_configuration () {
                 	;;
 
          	n)
-                	echo "# $1 is not set"	>>$CONFIG
+			echo "# $1 is not set"	>>$CONFIG
                 	echo "#undef  $1"	>>$CONFIG_H
                 	;;
         	esac
@@ -787,6 +951,9 @@ save_configuration () {
 		fi
 	}
 
+	DEF_CONFIG="${1:-.config}"
+	DEF_CONFIG_H="include/linux/autoconf.h"
+
 	CONFIG=.tmpconfig
 	CONFIG_H=.tmpconfig.h
 
@@ -802,24 +969,30 @@ save_configuration () {
 	
 	if . $CONFIG_IN >>.menuconfig.log 2>&1
 	then
-		#
-		# Create the sound driver's config files for cards
-		# Which are compatible with the new config method.
-		#
-		if [ "_$CONFIG_TRIX"   != "_y" -a\
-		     "_$CONFIG_PSS"    != "_y" -a\
-		     "_$CONFIG_SMWAVE" != "_y"    ]
+		if [ "$DEF_CONFIG" = ".config" ]
 		then
-			make -C drivers/sound kernelconfig >>.menuconfig.log 2>&1
+			#
+			# Create the sound driver's config files for cards
+			# Which are compatible with the new config method.
+			#
+			if [ "_$CONFIG_TRIX"   != "_y" -a\
+			     "_$CONFIG_PSS"    != "_y" -a\
+			     "_$CONFIG_SMWAVE" != "_y"   ]
+			then
+				make -C drivers/sound kernelconfig >>.menuconfig.log 2>&1
+			fi
+
+			mv $CONFIG_H $DEF_CONFIG_H
 		fi
 
-		if [ -f .config ]
+		if [ -f "$DEF_CONFIG" ]
 		then
-			rm -f .config.old
-			mv .config .config.old
+			rm -f ${DEF_CONFIG}.old
+			mv $DEF_CONFIG ${DEF_CONFIG}.old
 		fi
-		mv .tmpconfig .config
-		mv .tmpconfig.h include/linux/autoconf.h
+
+		mv $CONFIG $DEF_CONFIG
+			
 		return 0
 	else
 		return 1
@@ -856,18 +1029,20 @@ esac
 	
 
 menu_instructions="\
-Arrow keys navigate the menu.  \
+The Arrow keys navigate the menu.  \
 Highlighted letters are hotkeys.  \
-Select an item with <Space Bar> or <Enter>.  \
-When finished press <Esc><Esc> or <X>.  \
-A (*) marks an option to be compiled into the kernel.  \
-An (M) marks an option to be compiled as a module."
+Press the <Space Bar> to select an item.  \
+Press <Esc><Esc> to exit.  \
+Press <?> for Help.  \
+(*) options will be compiled into the kernel.  \
+(M) options will be modules.  \
+< > marks module capable options."
 
 radiolist_instructions="\
 Use the arrow keys to navigate this window or \
 press the hotkey of the item you wish to select \
 followed by the <SPACE BAR>.
-Press <H> for additional information about this option."
+Press <?> for additional information about this option."
 
 inputbox_instructions_int="\
 Please enter a decimal value between 1 and 9999. \
@@ -886,15 +1061,10 @@ kernel_version="${VERSION}.${PATCHLEVEL}.${SUBLEVEL}"
 
 trap "cleanup ; rm -f .menuconfig ; exit 1" 1 2 15
 
+
 #
 # Locate default files.
 #
-DEFAULT=""
-if [ "$1" = "-d" ] ; then
-	DEFAULT="-d"
-	shift
-fi
-
 CONFIG_IN=./config.in
 if [ "$1" != "" ] ; then
 	CONFIG_IN=$1
@@ -905,7 +1075,8 @@ if [ -f .config ]; then
   DEFAULTS=.config
 fi
 
-if [ -f $DEFAULTS ]; then
+if [ -f $DEFAULTS ]
+then
   echo "#"
   echo "# Using defaults found in" $DEFAULTS
   echo "#"
@@ -916,9 +1087,9 @@ else
   echo "#"
 fi
 
+
 # Fresh new log.
 >.menuconfig.log
-
 
 $DIALOG	--backtitle "$backtitle" \
 	--infobox "Preparing configuration scripts..." 3 40
@@ -947,6 +1118,9 @@ then
 
 	echo "# $kernel_version" >.menuconfig
 fi
+
+# Load the functions used by the config.in files.
+load_functions
 
 #
 # Read config.in files and parse them into one shell function per menu.

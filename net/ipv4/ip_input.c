@@ -260,6 +260,17 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 
 	skb_trim(skb,ntohs(iph->tot_len));
 
+	/*
+	 *	Try to select closest <src,dst> alias device, if any.
+	 *	net_alias_dev_rcv_sel32 returns main device if it 
+	 *	fails to found other.
+	 */
+
+#ifdef CONFIG_NET_ALIAS
+	if (iph->daddr != skb->dev->pa_addr && net_alias_has(skb->dev)) 
+		skb->dev = dev = net_alias_dev_rcv_sel32(skb->dev, AF_INET, iph->saddr, iph->daddr);
+#endif
+
 	if (iph->ihl > 5) 
 	{
 		skb->ip_summed = 0;
@@ -275,17 +286,6 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 #endif					
 	}
 	
-	/*
-	 *	Try to select closest <src,dst> alias device, if any.
-	 *	net_alias_dev_rcv_sel32 returns main device if it 
-	 *	fails to found other.
-	 */
-
-#ifdef CONFIG_NET_ALIAS
-	if (iph->daddr != skb->dev->pa_addr && net_alias_has(skb->dev)) 
-		skb->dev = dev = net_alias_dev_rcv_sel32(skb->dev, AF_INET, iph->saddr, iph->daddr);
-#endif
-
 	/*
 	 *	Account for the packet (even if the packet is
 	 *	not accepted by the firewall!).

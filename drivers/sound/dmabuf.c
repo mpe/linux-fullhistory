@@ -360,6 +360,8 @@ dma_sync (int dev)
       save_flags (flags);
       cli ();
 
+      audio_devs[dev]->flags |= DMA_SYNCING;
+
       audio_devs[dev]->dmap_out->underrun_count = 0;
       while (!current_got_fatal_signal ()
 	     && audio_devs[dev]->dmap_out->qlen
@@ -384,10 +386,12 @@ dma_sync (int dev)
 	  };
 	  if ((out_sleep_flag[dev].mode & WK_TIMEOUT))
 	    {
+	      audio_devs[dev]->flags &= ~DMA_SYNCING;
 	      restore_flags (flags);
 	      return audio_devs[dev]->dmap_out->qlen;
 	    }
 	}
+      audio_devs[dev]->flags &= ~DMA_SYNCING;
       restore_flags (flags);
 
       /*
@@ -1023,6 +1027,8 @@ DMAbuf_getwrbuffer (int dev, char **buf, int *size, int dontblock)
   int             abort, err = EIO;
   struct dma_buffparms *dmap = audio_devs[dev]->dmap_out;
 
+  dmap->flags &= ~DMA_CLEAN;
+
   if (audio_devs[dev]->dmap_out->mapping_flags & DMA_MAP_MAPPED)
     {
       printk ("Sound: Can't write to mmapped device (3)\n");
@@ -1165,6 +1171,7 @@ DMAbuf_start_output (int dev, int buff_no, int l)
   struct dma_buffparms *dmap = audio_devs[dev]->dmap_out;
 
   dmap->cfrag = -1;
+
 /*
  * Bypass buffering if using mmaped access
  */
@@ -1401,7 +1408,8 @@ DMAbuf_outputintr (int dev, int event_type)
 	{
 	  dmap->underrun_count++;
 
-	  if (dmap->underrun_count > 5 || dmap->flags & DMA_EMPTY)
+	  if (!(dmap->flags & DMA_CLEAN) &&
+	      (audio_devs[dev]->flags & DMA_SYNCING || dmap->underrun_count > 5 || dmap->flags & DMA_EMPTY))
 	    {
 	      dmap->qlen = 0;
 	      force_restart (dev, dmap);
@@ -1624,6 +1632,7 @@ DMAbuf_select (int dev, struct fileinfo *file, int sel_type, select_table_handle
 
 	  save_flags (flags);
 	  cli ();
+
 	  in_sleep_flag[dev].mode = WK_SLEEP;
 	  module_select_wait (&in_sleeper[dev], wait);
 	  restore_flags (flags);
@@ -1650,6 +1659,7 @@ DMAbuf_select (int dev, struct fileinfo *file, int sel_type, select_table_handle
 	{
 	  save_flags (flags);
 	  cli ();
+
 	  in_sleep_flag[dev].mode = WK_SLEEP;
 	  module_select_wait (&in_sleeper[dev], wait);
 	  restore_flags (flags);
@@ -1668,6 +1678,7 @@ DMAbuf_select (int dev, struct fileinfo *file, int sel_type, select_table_handle
 
 	  save_flags (flags);
 	  cli ();
+
 	  out_sleep_flag[dev].mode = WK_SLEEP;
 	  module_select_wait (&out_sleeper[dev], wait);
 	  restore_flags (flags);
@@ -1688,6 +1699,7 @@ DMAbuf_select (int dev, struct fileinfo *file, int sel_type, select_table_handle
 	{
 	  save_flags (flags);
 	  cli ();
+
 	  out_sleep_flag[dev].mode = WK_SLEEP;
 	  module_select_wait (&out_sleeper[dev], wait);
 	  restore_flags (flags);

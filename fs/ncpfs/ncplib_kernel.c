@@ -217,14 +217,9 @@ ncp_close_file(struct ncp_server *server, const char *file_id)
 	ncp_add_byte(server, 0);
 	ncp_add_mem(server, file_id, 6);
 
-	if ((result = ncp_request(server, 66)) != 0)
-	{
-		ncp_unlock_server(server);
-		return result;
-	}
-
+	result = ncp_request(server, 66);
 	ncp_unlock_server(server);
-	return 0;
+	return result;
 }
 
 static void
@@ -366,14 +361,9 @@ ncp_modify_file_or_subdir_dos_info(struct ncp_server *server,
 	ncp_add_handle_path(server, file->volNumber,
 			    file->DosDirNum, 1, NULL);
 
-	if ((result = ncp_request(server, 87)) != 0)
-	{
-		ncp_unlock_server(server);
-		return result;
-	}
-
+	result = ncp_request(server, 87);
 	ncp_unlock_server(server);
-	return 0;
+	return result;
 }
 
 int
@@ -390,14 +380,9 @@ ncp_del_file_or_subdir(struct ncp_server *server,
 	ncp_add_handle_path(server, dir->volNumber,
 			    dir->DosDirNum, 1, name);
 	
-	if ((result = ncp_request(server, 87)) != 0)
-	{
-		ncp_unlock_server(server);
-		return result;
-	}
-
+	result = ncp_request(server, 87);
 	ncp_unlock_server(server);
-	return 0;
+	return result;
 }
 
 static inline void

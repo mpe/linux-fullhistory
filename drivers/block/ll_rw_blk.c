@@ -76,40 +76,30 @@ int * blksize_size[MAX_BLKDEV] = { NULL, NULL, };
 int * hardsect_size[MAX_BLKDEV] = { NULL, NULL, };
 
 /*
- * "plug" the device if there are no outstanding requests: this will
- * force the transfer to start only after we have put all the requests
- * on the list.
+ * remove the plug and let it rip..
  */
-static inline void plug_device(struct blk_dev_struct * dev, struct request * plug)
+static void unplug_device(void * data)
 {
+	struct blk_dev_struct * dev = (struct blk_dev_struct *) data;
 	unsigned long flags;
 
-	plug->rq_status = RQ_INACTIVE;
-	plug->cmd = -1;
-	plug->next = NULL;
 	save_flags(flags);
 	cli();
-	if (!dev->current_request)
-		dev->current_request = plug;
+	if (dev->current_request)
+		(dev->request_fn)();
 	restore_flags(flags);
 }
 
 /*
- * remove the plug and let it rip..
+ * "plug" the device if there are no outstanding requests: this will
+ * force the transfer to start only after we have put all the requests
+ * on the list.
  */
-static inline void unplug_device(struct blk_dev_struct * dev)
+static inline void plug_device(struct blk_dev_struct * dev)
 {
-	struct request * req;
-	unsigned long flags;
-
-	save_flags(flags);
-	cli();
-	req = dev->current_request;
-	if (req && req->rq_status == RQ_INACTIVE && req->cmd == -1) {
-		dev->current_request = req->next;
-		(dev->request_fn)();
+	if (!dev->current_request && !IS_PLUGGED(dev)) {
+		queue_task_irq_off(&dev->plug_tq, &tq_scheduler);
 	}
-	restore_flags(flags);
 }
 
 /*
@@ -154,7 +144,6 @@ static struct request * __get_request_wait(int n, kdev_t dev)
 
 	add_wait_queue(&wait_for_request, &wait);
 	for (;;) {
-		unplug_device(MAJOR(dev)+blk_dev);
 		current->state = TASK_UNINTERRUPTIBLE;
 		cli();
 		req = get_request(n, dev);
@@ -261,7 +250,8 @@ void add_request(struct blk_dev_struct * dev, struct request * req)
 	if (!(tmp = dev->current_request)) {
 		dev->current_request = req;
 		up (&request_lock);
-		(dev->request_fn)();
+		if (!IS_PLUGGED(dev))
+			(dev->request_fn)();
 		sti();
 		return;
 	}
@@ -276,7 +266,7 @@ void add_request(struct blk_dev_struct * dev, struct request * req)
 
 	up (&request_lock);
 /* for SCSI devices, call request_fn unconditionally */
-	if (scsi_major(MAJOR(req->rq_dev)) && MAJOR(req->rq_dev)!=MD_MAJOR)
+	if (!IS_PLUGGED(dev) && scsi_major(MAJOR(req->rq_dev)) && MAJOR(req->rq_dev)!=MD_MAJOR)
 		(dev->request_fn)();
 
 	sti();
@@ -340,8 +330,8 @@ static void make_request(int major,int rw, struct buffer_head * bh)
 	}
 
 /* look for a free request. */
-	cli();
 	down (&request_lock);
+	cli();
 
 /* The scsi disk and cdrom drivers completely remove the request
  * from the queue when they start processing an entry.  For this reason
@@ -479,7 +469,6 @@ void ll_rw_page(int rw, kdev_t dev, unsigned long page, char * buffer)
 void ll_rw_block(int rw, int nr, struct buffer_head * bh[])
 {
 	unsigned int major;
-	struct request plug;
 	int correct_size;
 	struct blk_dev_struct * dev;
 	int i;
@@ -531,8 +520,7 @@ void ll_rw_block(int rw, int nr, struct buffer_head * bh[])
 	   from starting until we have shoved all of the blocks into the
 	   queue, and then we let it rip.  */
 
-	if (nr > 1)
-		plug_device(dev, &plug);
+	plug_device(dev);
 	for (i = 0; i < nr; i++) {
 		if (bh[i]) {
 			set_bit(BH_Req, &bh[i]->b_state);
@@ -543,7 +531,6 @@ void ll_rw_block(int rw, int nr, struct buffer_head * bh[])
 			make_request(major, rw, bh[i]);
 		}
 	}
-	unplug_device(dev);
 	return;
 
       sorry:
@@ -622,6 +609,8 @@ int blk_dev_init(void)
 	for (dev = blk_dev + MAX_BLKDEV; dev-- != blk_dev;) {
 		dev->request_fn      = NULL;
 		dev->current_request = NULL;
+		dev->plug_tq.routine = &unplug_device;
+		dev->plug_tq.data    = dev;
 	}
 
 	req = all_requests + NR_REQUEST;

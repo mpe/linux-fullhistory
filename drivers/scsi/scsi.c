@@ -2153,7 +2153,7 @@ static int update_timeout(Scsi_Cmnd * SCset, int timeout)
     
     if(SCset){
 	oldto = SCset->timeout - used;
-	SCset->timeout = timeout + used;
+	SCset->timeout = timeout;
     }
 
     least = 0xffffffff;
@@ -2161,7 +2161,8 @@ static int update_timeout(Scsi_Cmnd * SCset, int timeout)
     for(host = scsi_hostlist; host; host = host->next)
 	for(SCpnt = host->host_queue; SCpnt; SCpnt = SCpnt->next)
 	    if (SCpnt->timeout > 0) {
-		SCpnt->timeout -= used;
+	        if (SCpnt != SCset)
+		  SCpnt->timeout -= used;
 		if(SCpnt->timeout <= 0) SCpnt->timeout = -1;
 		if(SCpnt->timeout > 0 && SCpnt->timeout < least)
 		    least = SCpnt->timeout;

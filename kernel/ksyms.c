@@ -48,32 +48,6 @@
 
 extern unsigned char aux_device_present, kbd_read_mask;
 
-#ifdef CONFIG_NET
-#include <linux/in.h>
-#include <linux/net.h>
-#include <linux/netdevice.h>
-#include <linux/firewall.h>
-#include <linux/trdevice.h>
-
-#ifdef CONFIG_AX25
-#include <net/ax25.h>
-#endif
-#ifdef CONFIG_INET
-#include <linux/ip.h>
-#include <linux/etherdevice.h>
-#include <net/protocol.h>
-#include <net/arp.h>
-#include <net/ip.h>
-#include <net/udp.h>
-#include <net/tcp.h>
-#include <net/icmp.h>
-#include <net/route.h>
-#include <linux/net_alias.h>
-#endif
-#ifdef CONFIG_NET_ALIAS
-#include <linux/net_alias.h>
-#endif
-#endif
 #ifdef CONFIG_PCI
 #include <linux/bios32.h>
 #include <linux/pci.h>
@@ -96,17 +70,9 @@ extern void blkdev_release(struct inode * inode);
 
 extern void *sys_call_table;
 
-#if	defined(CONFIG_ULTRA)	||	defined(CONFIG_WD80x3)		|| \
-	defined(CONFIG_EL2)	||	defined(CONFIG_NE2000)		|| \
-	defined(CONFIG_E2100)	||	defined(CONFIG_HPLAN_PLUS)	|| \
-	defined(CONFIG_HPLAN)	||	defined(CONFIG_AC3200)
-#include "../drivers/net/8390.h"
-#endif
-
 extern int sys_tz;
 extern int request_dma(unsigned int dmanr, char * deviceID);
 extern void free_dma(unsigned int dmanr);
-extern int (*rarp_ioctl_hook)(int,void*);
 
 struct symbol_table symbol_table = {
 #include <linux/symtab_begin.h>
@@ -251,6 +217,7 @@ struct symbol_table symbol_table = {
 	X(unregister_binfmt),
 	X(search_binary_handler),
 	X(prepare_binprm),
+	X(remove_arg_zero),
 
 	/* execution environment registration */
 	X(lookup_exec_domain),
@@ -339,94 +306,7 @@ struct symbol_table symbol_table = {
 
 	/* Miscellaneous access points */
 	X(si_meminfo),
-#ifdef CONFIG_NET
-	/* Socket layer registration */
-	X(sock_register),
-	X(sock_unregister),
-	/* Socket layer support routines */
-	X(skb_recv_datagram),
-	X(skb_free_datagram),
-	X(skb_copy_datagram),
-	X(skb_copy_datagram_iovec),
-	X(datagram_select),
-#ifdef CONFIG_FIREWALL
-	/* Firewall registration */
-	X(register_firewall),
-	X(unregister_firewall),
-#endif
-#ifdef CONFIG_INET	
-	/* Internet layer registration */
-	X(inet_add_protocol),
-	X(inet_del_protocol),
-	X(rarp_ioctl_hook),
-	X(init_etherdev),
-	X(ip_rt_route),
-	X(icmp_send),
-	X(ip_options_compile),
-	X(ip_rt_put),
-	X(arp_send),
-#ifdef CONFIG_IP_FORWARD
-	X(ip_forward),
-#endif
-#if	defined(CONFIG_ULTRA)	||	defined(CONFIG_WD80x3)		|| \
-	defined(CONFIG_EL2)	||	defined(CONFIG_NE2000)		|| \
-	defined(CONFIG_E2100)	||	defined(CONFIG_HPLAN_PLUS)	|| \
-	defined(CONFIG_HPLAN)	||	defined(CONFIG_AC3200)
-	/* If 8390 NIC support is built in, we will need these. */
-	X(ei_open),
-	X(ei_close),
-	X(ei_debug),
-	X(ei_interrupt),
-	X(ethdev_init),
-	X(NS8390_init),
-#endif
-#ifdef CONFIG_NET_ALIAS
-#include <linux/net_alias.h>
-#endif
-#endif
-	/* Device callback registration */
-	X(register_netdevice_notifier),
-	X(unregister_netdevice_notifier),
-#ifdef CONFIG_NET_ALIAS
-	X(register_net_alias_type),
-	X(unregister_net_alias_type),
-#endif
-#endif
 
-	/* support for loadable net drivers */
-#ifdef CONFIG_AX25
-	X(ax25_encapsulate),
-	X(ax25_rebuild_header),	
-#endif	
-#ifdef CONFIG_INET
-	X(register_netdev),
-	X(unregister_netdev),
-	X(ether_setup),
-	X(eth_type_trans),
-	X(eth_copy_and_sum),
-	X(alloc_skb),
-	X(kfree_skb),
-	X(skb_clone),
-	X(dev_alloc_skb),
-	X(dev_kfree_skb),
-	X(netif_rx),
-	X(dev_tint),
-	X(irq2dev_map),
-	X(dev_add_pack),
-	X(dev_remove_pack),
-	X(dev_get),
-	X(dev_ioctl),
-	X(dev_queue_xmit),
-	X(dev_base),
-	X(dev_close),
-	X(arp_find),
-	X(n_tty_ioctl),
-	X(tty_register_ldisc),
-	X(kill_fasync),
-#ifdef CONFIG_FIREWALL
-	X(call_in_firewall),
-#endif
-#endif
 #ifndef CONFIG_SCSI
 	/*
 	 * With no scsi configured, we still need to export a few

@@ -29,3 +29,9 @@ make_8023_client(void)
 	return proto;
 }
 
+void destroy_8023_client(struct datalink_proto *dl)
+{
+	if (dl)
+		kfree_s(dl,sizeof(struct datalink_proto));
+}
+

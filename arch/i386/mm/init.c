@@ -128,13 +128,15 @@ unsigned long paging_init(unsigned long start_mem, unsigned long end_mem)
 	memset((void *) 0, 0, PAGE_SIZE);
 #endif
 #ifdef __SMP__
-	smp_scan_config(0x0,0x400);	/* Scan the bottom 1K for a signature */
-	/*
-	 *	FIXME: Linux assumes you have 640K of base ram.. this continues
-	 *	the error...
-	 */
-	smp_scan_config(639*0x400,0x400);	/* Scan the top 1K of base RAM */
-	smp_scan_config(0xF0000,0x10000);	/* Scan the 64K of bios */
+	if (!smp_scan_config(0x0,0x400))	/* Scan the bottom 1K for a signature */
+	{
+		/*
+		 *	FIXME: Linux assumes you have 640K of base ram.. this continues
+		 *	the error...
+		 */
+		if (!smp_scan_config(639*0x400,0x400))	/* Scan the top 1K of base RAM */
+			smp_scan_config(0xF0000,0x10000);	/* Scan the 64K of bios */
+	}
 	/*
 	 *	If it is an SMP machine we should know now, unless the configuration
 	 *	is in an EISA/MCA bus machine with an extended bios data area. I don't

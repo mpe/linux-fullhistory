@@ -260,7 +260,7 @@ struct task_struct {
 #define PF_PTRACED	0x00000010	/* set if ptrace (0) has been called. */
 #define PF_TRACESYS	0x00000020	/* tracing system calls */
 #define PF_FORKNOEXEC	0x00000040	/* forked but didn't exec */
-#define PF_SUPERPREV	0x00000100	/* used super-user privileges */
+#define PF_SUPERPRIV	0x00000100	/* used super-user privileges */
 #define PF_DUMPCORE	0x00000200	/* dumped core */
 #define PF_SIGNALED	0x00000400	/* killed by a signal */
 
@@ -362,7 +362,7 @@ extern void free_irq(unsigned int irq, void *dev_id);
 extern inline int suser(void)
 {
 	if (current->euid == 0)
-		current->flags |= PF_SUPERPREV;
+		current->flags |= PF_SUPERPRIV;
 	return (current->euid == 0);
 }
 

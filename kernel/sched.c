@@ -7,7 +7,7 @@
 /*
  * 'sched.c' is the main kernel file. It contains scheduling primitives
  * (sleep_on, wakeup, schedule etc) as well as a number of simple system
- * call functions (type getpid(), which just extracts a field from
+ * call functions (type getpid()), which just extract a field from
  * current-task
  */
 
@@ -136,13 +136,11 @@ static inline void add_to_runqueue(struct task_struct * p)
 	if ((0!=p->pid) && smp_threads_ready)
 	{
 		int i;
-		for (i=0;i<=smp_top_cpu;i++)
+		for (i=0;i<smp_num_cpus;i++)
 		{
-			if (cpu_number_map[i]==-1)
-				continue;
-			if (0==current_set[i]->pid) 
+			if (0==current_set[cpu_logical_map[i]]->pid) 
 			{
-				smp_message_pass(i, MSG_RESCHEDULE, 0L, 0);
+				smp_message_pass(cpu_logical_map[i], MSG_RESCHEDULE, 0L, 0);
 				break;
 			}
 		}
@@ -929,14 +927,13 @@ static void update_process_times(unsigned long ticks, unsigned long system)
 		update_one_process(p, ticks, ticks-system, system);
 	}
 #else
-	int cpu,i;
+	int cpu,j;
 	cpu = smp_processor_id();
-	for (i=0;i<=smp_top_cpu;i++)
+	for (j=0;j<smp_num_cpus;j++)
 	{
+		int i = cpu_logical_map[j];
 		struct task_struct *p;
 		
-		if(cpu_number_map[i]==-1)
-			continue;
 #ifdef __SMP_PROF__
 		if (test_bit(i,&smp_idle_map)) 
 			smp_idle_count[i]++;

@@ -157,7 +157,7 @@ sb16_dsp_ioctl (int dev, unsigned int cmd, caddr_t arg, int local)
     {
     case SOUND_PCM_WRITE_RATE:
       if (local)
-	return dsp_set_speed ((int) arg);
+	return dsp_set_speed ((long) arg);
       return snd_ioctl_return ((int *) arg, dsp_set_speed (get_fs_long ((long *) arg)));
 
     case SOUND_PCM_READ_RATE:
@@ -167,12 +167,12 @@ sb16_dsp_ioctl (int dev, unsigned int cmd, caddr_t arg, int local)
 
     case SNDCTL_DSP_STEREO:
       if (local)
-	return dsp_set_stereo ((int) arg);
+	return dsp_set_stereo ((long) arg);
       return snd_ioctl_return ((int *) arg, dsp_set_stereo (get_fs_long ((long *) arg)));
 
     case SOUND_PCM_WRITE_CHANNELS:
       if (local)
-	return dsp_set_stereo ((int) arg - 1) + 1;
+	return dsp_set_stereo ((long) arg - 1) + 1;
       return snd_ioctl_return ((int *) arg, dsp_set_stereo (get_fs_long ((long *) arg) - 1) + 1);
 
     case SOUND_PCM_READ_CHANNELS:
@@ -182,7 +182,7 @@ sb16_dsp_ioctl (int dev, unsigned int cmd, caddr_t arg, int local)
 
     case SNDCTL_DSP_SETFMT:
       if (local)
-	return dsp_set_bits ((int) arg);
+	return dsp_set_bits ((long) arg);
       return snd_ioctl_return ((int *) arg, dsp_set_bits (get_fs_long ((long *) arg)));
 
     case SOUND_PCM_READ_BITS:

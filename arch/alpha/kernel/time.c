@@ -20,13 +20,42 @@
 
 #include <asm/segment.h>
 #include <asm/io.h>
+#include <asm/hwrpb.h>
 
 #include <linux/mc146818rtc.h>
 #include <linux/timex.h>
 
 #define TIMER_IRQ 0
 
+extern struct hwrpb_struct *hwrpb;
+
 static int set_rtc_mmss(unsigned long);
+
+
+/*
+ * Shift amount by which scaled_ticks_per_cycle is scaled.  Shifting
+ * by 48 gives us 16 bits for HZ while keeping the accuracy good even
+ * for large CPU clock rates.
+ */
+#define FIX_SHIFT	48
+
+/* lump static variables together for more efficient access: */
+static struct {
+	__u32		last_time;		/* cycle counter last time it got invoked */
+	__u32		max_cycles_per_tick;	/* more makes us think we lost an interrupt */
+	unsigned long	scaled_ticks_per_cycle;	/* ticks/cycle * 2^48 */
+	long		last_rtc_update;	/* last time the cmos clock got updated */
+} state;
+
+
+static inline __u32 rpcc(void)
+{
+    __u32 result;
+
+    asm volatile ("rpcc %0" : "r="(result));
+    return result;
+}
+
 
 /*
  * timer_interrupt() needs to keep up the real-time clock,
@@ -34,9 +63,19 @@ static int set_rtc_mmss(unsigned long);
  */
 void timer_interrupt(struct pt_regs * regs)
 {
-	/* last time the cmos clock got updated */
-	static long last_rtc_update=0;
+	__u32 delta, now;
 
+	now = rpcc();
+	delta = now - state.last_time;
+	state.last_time = now;
+	if (delta > state.max_cycles_per_tick) {
+		int i, missed_ticks;
+
+		missed_ticks = ((delta * state.scaled_ticks_per_cycle) >> FIX_SHIFT) - 1;
+		for (i = 0; i < missed_ticks; ++i) {
+			do_timer(regs);
+		}
+	}
 	do_timer(regs);
 
 	/*
@@ -44,13 +83,13 @@ void timer_interrupt(struct pt_regs * regs)
 	 * CMOS clock accordingly every ~11 minutes. Set_rtc_mmss() has to be
 	 * called as close as possible to 500 ms before the new second starts.
 	 */
-	if (time_state != TIME_BAD && xtime.tv_sec > last_rtc_update + 660 &&
+	if (time_state != TIME_BAD && xtime.tv_sec > state.last_rtc_update + 660 &&
 	    xtime.tv_usec > 500000 - (tick >> 1) &&
 	    xtime.tv_usec < 500000 + (tick >> 1))
 	  if (set_rtc_mmss(xtime.tv_sec) == 0)
-	    last_rtc_update = xtime.tv_sec;
+	    state.last_rtc_update = xtime.tv_sec;
 	  else
-	    last_rtc_update = xtime.tv_sec - 600; /* do it again in 60 s */
+	    state.last_rtc_update = xtime.tv_sec - 600; /* do it again in 60 s */
 }
 
 /* Converts Gregorian date to seconds since 1970-01-01 00:00:00.
@@ -130,6 +169,15 @@ void time_init(void)
 		year += 100;
 	xtime.tv_sec = mktime(year, mon, day, hour, min, sec);
 	xtime.tv_usec = 0;
+
+	if (HZ > (1<<16)) {
+		extern void __you_loose (void);
+		__you_loose();
+	}
+	state.last_time = rpcc();
+	state.scaled_ticks_per_cycle = ((unsigned long) HZ << FIX_SHIFT) / hwrpb->cycle_freq;
+	state.max_cycles_per_tick = (2 * hwrpb->cycle_freq) / HZ;
+	state.last_rtc_update = 0;
 }
 
 /*

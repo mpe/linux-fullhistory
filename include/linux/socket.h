@@ -96,6 +96,8 @@ struct msghdr
 #define SOL_TCP		6
 #define SOL_UDP		17
 
+#ifdef __KERNEL__
+
 /* IP options */
 #define IP_TOS		1
 #define	IPTOS_LOWDELAY		0x10
@@ -111,6 +113,7 @@ struct msghdr
 #define IP_ADD_MEMBERSHIP		35
 #define IP_DROP_MEMBERSHIP		36
 
+#endif /* __KERNEL__ */
 
 /* These need to appear somewhere around here */
 #define IP_DEFAULT_MULTICAST_TTL        1

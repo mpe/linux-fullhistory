@@ -31,10 +31,14 @@
  *	  PCI-CPU bridge or PCI-ISA bridge.
  *	- If you can't find the actual information in your hardware
  *	  booklet, try to read the references of the chip on the board.
- *	- Send all that, with the word PCIPROBE in the subject,
- *	  to frederic@cao-vlsi.ibp.fr, and I'll add your device to 
- *	  the list as soon as possible
- *		fred.
+ *	- Send all that to linux-pcisupport@cao-vlsi.ibp.fr,
+ *	  and I'll add your device to the list as soon as possible
+ *
+ * BEFORE you send a mail, please check the latest linux releases
+ * to be sure it has not been recently added.
+ *
+ *        Thanks
+ *		Frederic Potter.
  */
 
 
@@ -266,7 +270,6 @@
 #define PCI_DEVICE_ID_CIRRUS_5434_4	0x00a4
 #define PCI_DEVICE_ID_CIRRUS_5434_8	0x00a8
 #define PCI_DEVICE_ID_CIRRUS_5436	0x00ac
-#define PCI_DEVICE_ID_CIRRUS_6205	0x0205
 #define PCI_DEVICE_ID_CIRRUS_6729	0x1100
 #define PCI_DEVICE_ID_CIRRUS_7542	0x1200
 #define PCI_DEVICE_ID_CIRRUS_7543	0x1202
@@ -299,6 +302,7 @@
 #define PCI_DEVICE_ID_CT_65548		0x00dc
 
 #define PCI_VENDOR_ID_MIRO		0x1031
+#define PCI_DEVICE_ID_MIRO_36050	0x5601
 
 #define PCI_VENDOR_ID_FD		0x1036
 #define PCI_DEVICE_ID_FD_36C70		0x0000
@@ -306,6 +310,7 @@
 #define PCI_VENDOR_ID_SI		0x1039
 #define PCI_DEVICE_ID_SI_6201		0x0001
 #define PCI_DEVICE_ID_SI_6202		0x0002
+#define PCI_DEVICE_ID_SI_6205		0x0205
 #define PCI_DEVICE_ID_SI_503		0x0008
 #define PCI_DEVICE_ID_SI_501		0x0406
 #define PCI_DEVICE_ID_SI_496		0x0496
@@ -442,7 +447,20 @@
 #define PCI_DEVICE_ID_VIA_82C416	0x1571
 
 #define PCI_VENDOR_ID_VORTEX		0x1119
-#define PCI_DEVICE_ID_VORTEX_GDT	0x0001
+#define PCI_DEVICE_ID_VORTEX_GDT60x0	0x0000
+#define PCI_DEVICE_ID_VORTEX_GDT6000B	0x0001
+#define PCI_DEVICE_ID_VORTEX_GDT6x10	0x0002
+#define PCI_DEVICE_ID_VORTEX_GDT6x20	0x0003
+#define PCI_DEVICE_ID_VORTEX_GDT6530	0x0004
+#define PCI_DEVICE_ID_VORTEX_GDT6550	0x0005
+#define PCI_DEVICE_ID_VORTEX_GDT6x17	0x0006
+#define PCI_DEVICE_ID_VORTEX_GDT6x27	0x0007
+#define PCI_DEVICE_ID_VORTEX_GDT6537	0x0008
+#define PCI_DEVICE_ID_VORTEX_GDT6557	0x0009
+#define PCI_DEVICE_ID_VORTEX_GDT6x15	0x000a
+#define PCI_DEVICE_ID_VORTEX_GDT6x25	0x000b
+#define PCI_DEVICE_ID_VORTEX_GDT6535	0x000c
+#define PCI_DEVICE_ID_VORTEX_GDT6555	0x000d
 
 #define PCI_VENDOR_ID_EF		0x111a
 #define PCI_DEVICE_ID_EF_ATM_FPGA	0x0000
@@ -450,6 +468,7 @@
 
 #define PCI_VENDOR_ID_FORE		0x1127
 #define PCI_DEVICE_ID_FORE_PCA200PC	0x0210
+#define PCI_DEVICE_ID_FORE_PCA200E	0x0300
 
 #define PCI_VENDOR_ID_IMAGINGTECH	0x112f
 #define PCI_DEVICE_ID_IMAGINGTECH_ICPCI	0x0000

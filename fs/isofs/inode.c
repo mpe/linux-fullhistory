@@ -137,7 +137,9 @@ static int parse_options(char *options, struct iso9660_options * popt)
 		  if (*vpnt) return 0;
 		  switch(*this_char) {
 		  case 'b':
-		    if (ivalue != 1024 && ivalue != 2048) return 0;
+		    if (   ivalue != 512 
+			&& ivalue != 1024 
+			&& ivalue != 2048) return 0;
 		    popt->blocksize = ivalue;
 		    break;
 		  case 'u':
@@ -200,6 +202,7 @@ struct super_block *isofs_read_super(struct super_block *s,void *data,
 	int high_sierra;
 	kdev_t dev = s->s_dev;
 	unsigned int vol_desc_start;
+	int orig_zonesize;
 
 	struct iso_volume_descriptor *vdp;
 	struct hs_volume_descriptor *hdp;
@@ -324,6 +327,7 @@ struct super_block *isofs_read_super(struct super_block *s,void *data,
 	
 	/* RDE: convert log zone size to bit shift */
 
+	orig_zonesize = s -> u.isofs_sb.s_log_zone_size;
 	switch (s -> u.isofs_sb.s_log_zone_size)
 	  { case  512: s -> u.isofs_sb.s_log_zone_size =  9; break;
 	    case 1024: s -> u.isofs_sb.s_log_zone_size = 10; break;
@@ -336,7 +340,8 @@ struct super_block *isofs_read_super(struct super_block *s,void *data,
 
 	/* RDE: data zone now byte offset! */
 
-	s->u.isofs_sb.s_firstdatazone = (isonum_733( rootp->extent) 
+	s->u.isofs_sb.s_firstdatazone = ((isonum_733 (rootp->extent) + 
+					   isonum_711 (rootp->ext_attr_length))
 					 << s -> u.isofs_sb.s_log_zone_size);
 	s->s_magic = ISOFS_SUPER_MAGIC;
 	
@@ -354,11 +359,32 @@ struct super_block *isofs_read_super(struct super_block *s,void *data,
 	       1UL << s->u.isofs_sb.s_log_zone_size);
 	printk(KERN_DEBUG "First datazone:%ld   Root inode number %d\n",
 	       s->u.isofs_sb.s_firstdatazone >> s -> u.isofs_sb.s_log_zone_size,
-	       isonum_733 (rootp->extent) << s -> u.isofs_sb.s_log_zone_size);
+	       (isonum_733(rootp->extent) + isonum_711(rootp->ext_attr_length))
+			<< s -> u.isofs_sb.s_log_zone_size);
 	if(high_sierra) printk(KERN_DEBUG "Disc in High Sierra format.\n");
 	unlock_super(s);
 	/* set up enough so that it can read an inode */
 	
+	/*
+	 * Force the blocksize to 512 for 512 byte sectors.  The file
+	 * read primitives really get it wrong in a bad way if we don't
+	 * do this.
+	 */
+	if( orig_zonesize < opt.blocksize )
+	  {
+	    opt.blocksize = orig_zonesize;
+	    blocksize_bits = 0;
+	    {
+	      int i = opt.blocksize;
+	      while (i != 1){
+		blocksize_bits++;
+		i >>=1;
+	      }
+	    }
+	    set_blocksize(dev, opt.blocksize);
+	    printk(KERN_DEBUG "Forcing new log zone size:%d\n", opt.blocksize);
+	  }
+
 	s->s_dev = dev;
 	s->s_op = &isofs_sops;
 	s->u.isofs_sb.s_mapping = opt.map;
@@ -376,7 +402,9 @@ struct super_block *isofs_read_super(struct super_block *s,void *data,
 	s->u.isofs_sb.s_mode = opt.mode & 0777;
 	s->s_blocksize = opt.blocksize;
 	s->s_blocksize_bits = blocksize_bits;
-	s->s_mounted = iget(s, isonum_733 (rootp->extent) << s -> u.isofs_sb.s_log_zone_size);
+	s->s_mounted = iget(s, (isonum_733(rootp->extent) + 
+			    isonum_711(rootp->ext_attr_length))
+				<< s -> u.isofs_sb.s_log_zone_size);
 	unlock_super(s);
 
 	if (!(s->s_mounted)) {

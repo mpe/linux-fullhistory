@@ -1,9 +1,9 @@
 extern void unix_proto_init(struct net_proto *pro);
-
+extern struct proto_ops unix_proto_ops;
+extern void unix_inflight(struct file *fp);
+extern void unix_notinflight(struct file *fp);
 typedef struct sock unix_socket;
 
-extern int unix_gc_free;
-extern void unix_gc_add(struct sock *sk, struct file *fp);
-extern void unix_gc_remove(struct file *fp);
+unix_socket *unix_socket_list;
 
 #define UNIX_MAX_FD	8

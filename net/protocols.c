@@ -18,7 +18,7 @@
 #ifdef	CONFIG_INET
 #include <linux/inet.h>
 #endif
-#ifdef CONFIG_IPX
+#if defined(CONFIG_IPX) || defined(CONFIG_IPX_MODULE)
 #include <net/ipxcall.h>
 #include <net/p8022call.h>
 #endif
@@ -28,8 +28,8 @@
 #include <net/nrcall.h>
 #endif
 #endif
-#ifdef CONFIG_ATALK
-#ifndef CONFIG_IPX
+#if defined(CONFIG_ATALK) || defined(CONFIG_ATALK_MODULE)
+#if ! ( defined(CONFIG_IPX) || defined(CONFIG_IPX_MODULE) )
 #include <net/p8022call.h>
 #endif
 #include <net/atalkcall.h>
@@ -48,7 +48,8 @@ struct net_proto protocols[] = {
 #ifdef	CONFIG_UNIX
   { "UNIX",	unix_proto_init	},			/* Unix domain socket family 	*/
 #endif
-#if defined(CONFIG_IPX)||defined(CONFIG_ATALK)  
+#if defined(CONFIG_IPX)   || defined(CONFIG_IPX_MODULE) || \
+    defined(CONFIG_ATALK) || defined(CONFIG_ATALK_MODULE)
   { "802.2",	p8022_proto_init },			/* 802.2 demultiplexor		*/
   { "SNAP",	snap_proto_init },			/* SNAP demultiplexor		*/
 #endif
@@ -72,5 +73,3 @@ struct net_proto protocols[] = {
 #endif
   { NULL,	NULL		}			/* End marker			*/
 };
-
-

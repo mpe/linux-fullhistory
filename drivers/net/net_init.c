@@ -29,11 +29,11 @@
 #include <linux/fs.h>
 #include <linux/malloc.h>
 #include <linux/if_ether.h>
-#include <linux/if_arp.h>
 #include <linux/string.h>
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
 #include <linux/trdevice.h>
+#include <linux/if_arp.h>
 #ifdef CONFIG_NET_ALIAS
 #include <linux/net_alias.h>
 #endif

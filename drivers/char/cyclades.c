@@ -2376,7 +2376,7 @@ cy_close(struct tty_struct * tty, struct file * filp)
     if (info->flags & ASYNC_CALLOUT_ACTIVE)
 	info->callout_termios = *tty->termios;
     if (info->flags & ASYNC_INITIALIZED)
-	tty_wait_until_sent(tty, 3000); /* 30 seconds timeout */
+	tty_wait_until_sent(tty, 30*HZ); /* 30 seconds timeout */
     shutdown(info);
     if (tty->driver.flush_buffer)
 	tty->driver.flush_buffer(tty);

@@ -30,6 +30,7 @@ TOPDIR=/usr/src/linux
 endif
 
 
+ifndef HOSTCC
 build:
 	@echo Compiling modularized sound driver
 	@make sound.o
@@ -37,6 +38,7 @@ build:
 
 install:	sound.o
 	cp sound.o $(MODULEDIR)
+endif
 
 .c.o:
 	$(CC) $(CFLAGS) -c $<

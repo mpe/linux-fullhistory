@@ -78,7 +78,7 @@
 #include <asm/bitops.h>
 #include <asm/segment.h>
 
-#include <net/if.h>
+#include <linux/if.h>
 
 #include <linux/if_ether.h>
 #include <linux/netdevice.h>
@@ -92,9 +92,9 @@
 #include <linux/netprotocol.h>
 #endif
 
-#include <netinet/ip.h>
-#include <netinet/tcp.h>
-#include <net/if_arp.h>
+#include <linux/ip.h>
+#include <linux/tcp.h>
+#include <linux/if_arp.h>
 
 #undef   PACKETPTR
 #define  PACKETPTR 1

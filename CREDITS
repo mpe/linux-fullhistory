@@ -298,6 +298,7 @@ S: USA
 
 N: Bjorn Ekwall
 E: bj0rn@blox.se
+W: http://www.pi.se/blox/
 D: Extended support for loadable modules
 D: D-Link pocket adapter drivers
 S: Myrstuguv. 83
@@ -735,6 +736,15 @@ D: XF86_Mach32
 D: XF86_Mach8
 D: XF86_8514
 D: cfdisk (curses based disk partitioning program)
+
+N: Mike McLagan
+E: mike.mclagan@linux.org
+W: http://www.invlogic.com/~mmclagan
+S: Innovative Logic Corp
+S: P.O. Box 1068
+S: Laurel, MD  20732
+S: USA
+D: DLCI/FRAD drivers for Sangoma SDLAs
 
 N: Bradley McLean
 E: brad@bradpc.gaylord.com

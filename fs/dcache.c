@@ -18,8 +18,6 @@
  * string-hash computed over the name. 
  */
 
-#include <stddef.h>
-
 #include <linux/fs.h>
 #include <linux/string.h>
 
@@ -51,9 +49,11 @@ struct dir_cache_entry {
 	struct dir_cache_entry * next_lru,  * prev_lru;
 };
 
+#define dcache_offset(x) ((unsigned long)&((struct dir_cache_entry*)0)->x)
+#define dcache_datalen (dcache_offset(lru_head) - dcache_offset(dc_dev))
+
 #define COPYDATA(de, newde) \
-memcpy((void *) &newde->dc_dev, (void *) &de->dc_dev, \
-sizeof(kdev_t) + 3*sizeof(unsigned long) + 1 + DCACHE_NAME_LEN)
+memcpy((void *) &newde->dc_dev, (void *) &de->dc_dev, dcache_datalen)
 
 static struct dir_cache_entry level1_cache[DCACHE_SIZE];
 static struct dir_cache_entry level2_cache[DCACHE_SIZE];
@@ -69,22 +69,27 @@ static struct dir_cache_entry * level2_head;
  * The hash-queues are also doubly-linked circular lists, but the head is
  * itself on the doubly-linked list, not just a pointer to the first entry.
  */
-#define DCACHE_HASH_QUEUES 19
+#define DCACHE_HASH_QUEUES 32
 #define hash_fn(dev,dir,namehash) ((HASHDEV(dev) ^ (dir) ^ (namehash)) % DCACHE_HASH_QUEUES)
 
 static struct hash_list hash_table[DCACHE_HASH_QUEUES];
 
 static inline void remove_lru(struct dir_cache_entry * de)
 {
-	de->next_lru->prev_lru = de->prev_lru;
-	de->prev_lru->next_lru = de->next_lru;
+	struct dir_cache_entry * next = de->next_lru;
+	struct dir_cache_entry * prev = de->prev_lru;
+
+	next->prev_lru = prev;
+	prev->next_lru = next;
 }
 
 static inline void add_lru(struct dir_cache_entry * de, struct dir_cache_entry *head)
 {
+	struct dir_cache_entry * prev = head->prev_lru;
+
 	de->next_lru = head;
-	de->prev_lru = head->prev_lru;
-	de->prev_lru->next_lru = de;
+	de->prev_lru = prev;
+	prev->next_lru = de;
 	head->prev_lru = de;
 }
 
@@ -104,7 +109,9 @@ static inline void update_lru(struct dir_cache_entry * de)
  */
 static inline unsigned long namehash(const char * name, int len)
 {
-	return len * *(const unsigned char *) name;
+	return len +
+		((const unsigned char *) name)[0]+
+		((const unsigned char *) name)[len-1];
 }
 
 /*
@@ -112,18 +119,22 @@ static inline unsigned long namehash(const char * name, int len)
  */
 static inline void remove_hash(struct dir_cache_entry * de)
 {
-	if (de->h.next) {
-		de->h.next->h.prev = de->h.prev;
-		de->h.prev->h.next = de->h.next;
+	struct dir_cache_entry * next = de->h.next;
+
+	if (next) {
+		struct dir_cache_entry * prev = de->h.prev;
+		next->h.prev = prev;
+		prev->h.next = next;
 		de->h.next = NULL;
 	}
 }
 
 static inline void add_hash(struct dir_cache_entry * de, struct hash_list * hash)
 {
-	de->h.next = hash->next;
+	struct dir_cache_entry * next = hash->next;
+	de->h.next = next;
 	de->h.prev = (struct dir_cache_entry *) hash;
-	hash->next->h.prev = de;
+	next->h.prev = de;
 	hash->next = de;
 }
 

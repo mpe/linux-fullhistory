@@ -46,10 +46,12 @@
 #include <net/netrom.h>
 #endif
 #endif
-#ifdef CONFIG_IPX
+
+#if defined(CONFIG_IPX) || defined(CONFIG_IPX_MODULE)
 #include <net/ipx.h>
 #endif
-#ifdef CONFIG_ATALK
+
+#if defined(CONFIG_ATALK) || defined(CONFIG_ATALK_MODULE)
 #include <linux/atalk.h>
 #endif
 
@@ -73,6 +75,9 @@ struct unix_opt
 	struct inode *		inode;
 	struct semaphore	readsem;
 	struct sock *		other;
+	int 			marksweep;
+#define MARKED			1
+	int			inflight;
 };
 
 /*
@@ -92,7 +97,7 @@ struct inet_packet_opt
  *	Once the IPX ncpd patches are in these are going into protinfo
  */
 
-#ifdef CONFIG_IPX 
+#if defined(CONFIG_IPX) || defined(CONFIG_IPX_MODULE)
 struct ipx_opt
 {
 	ipx_address		dest_addr;
@@ -261,12 +266,12 @@ struct sock
 	union
 	{
 	  	struct unix_opt	af_unix;
-#ifdef CONFIG_ATALK
+#if defined(CONFIG_ATALK) || defined(CONFIG_ATALK_MODULE)
 		struct atalk_sock	af_at;
 #endif
-#ifdef CONFIG_IPX
+#if defined(CONFIG_IPX) || defined(CONFIG_IPX_MODULE)
 		struct ipx_opt		af_ipx;
-#endif		
+#endif
 #ifdef CONFIG_INET
 		struct inet_packet_opt  af_packet;
 #ifdef CONFIG_NUTCP		

@@ -51,6 +51,7 @@ extern int init_aout_binfmt(void);
 extern int init_script_binfmt(void);
 
 extern int prepare_binprm(struct linux_binprm *);
+extern void remove_arg_zero(struct linux_binprm *);
 extern int search_binary_handler(struct linux_binprm *,struct pt_regs *);
 extern void flush_old_exec(struct linux_binprm * bprm);
 extern unsigned long setup_arg_pages(unsigned long p, struct linux_binprm * bprm);

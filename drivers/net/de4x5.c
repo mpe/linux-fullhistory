@@ -176,11 +176,17 @@
 			    Changed driver to autprobe as a module. No irq
 			    checking is done now - assume BIOS is good!
 			  Added SMC9332 detection <manabe@Roy.dsl.tutics.ac.jp>
+      0.41    21-Mar-96   Don't check for get_hw_addr checksum unless DEC card
+                          only <niles@axp745gsfc.nasa.gov>
+			  Fix for multiple PCI cards reported by <jos@xos.nl>
+			  Duh, put the SA_SHIRQ flag into request_interrupt().
+			  Fix SMC ethernet address in enet_det[].
+			  Print chip name instead of "UNKNOWN" during boot.
 
     =========================================================================
 */
 
-static const char *version = "de4x5.c:v0.40 96/3/5 davies@wanton.lkg.dec.com\n";
+static const char *version = "de4x5.c:v0.41 96/3/21 davies@wanton.lkg.dec.com\n";
 
 #include <linux/module.h>
 
@@ -255,7 +261,7 @@ static struct phy_table phy_info[] = {
 ** Define special SROM detection cases
 */
 static c_char enet_det[][ETH_ALEN] = {
-    {0x00, 0x00, 0x0c, 0x00, 0x00, 0x00}
+    {0x00, 0x00, 0xc0, 0x00, 0x00, 0x00}
 };
 
 #define SMC 1
@@ -897,7 +903,8 @@ de4x5_open(struct device *dev)
     
     de4x5_dbg_open(dev);
     
-    if (request_irq(dev->irq, (void *)de4x5_interrupt, 0, lp->adapter_name, dev)) {
+    if (request_irq(dev->irq, (void *)de4x5_interrupt, SA_SHIRQ, 
+		                                     lp->adapter_name, dev)) {
 	printk("de4x5_open(): Requested IRQ%d is busy\n",dev->irq);
 	status = -EAGAIN;
     } else {
@@ -1577,7 +1584,7 @@ static void pci_probe(struct device *dev, u_long ioaddr)
     u_int iobase;
     struct bus_type *lp = &bus;
     
-    if (!ioaddr && autoprobed) return;       /* Been here before ! */
+    if ((!ioaddr || !loading_module) && autoprobed) return;
     
     if (!pcibios_present()) return;          /* No PCI bus in this machine! */
     
@@ -2811,8 +2818,11 @@ static int PCI_signature(char *name, struct bus_type *lp)
     if (i == siglen) {
 	if (dec_only) {
 	    *name = '\0';
-	} else {
-	    strcpy(name, "UNKNOWN");
+	} else {                        /* Use chip name to avoid confusion */
+	    strcpy(name, (((lp->chipset == DC21040) ? "DC21040" :
+			   ((lp->chipset == DC21041) ? "DC21041" :
+			    ((lp->chipset == DC21140) ? "DC21140" : "UNKNOWN"
+			     )))));
 	}
     }
     
@@ -2885,12 +2895,12 @@ static int get_hw_addr(struct device *dev)
 	    chksum = (u_char) tmp;
 	    while ((tmp = inl(DE4X5_APROM)) < 0);
 	    chksum |= (u_short) (tmp << 8);
-	    if (k != chksum) status = -1;
+	    if ((k != chksum) && (dec_only)) status = -1;
 	}
     } else {
 	chksum = (u_char) inb(EISA_APROM);
 	chksum |= (u_short) (inb(EISA_APROM) << 8);
-	if (k != chksum) status = -1;
+	if ((k != chksum) && (dec_only)) status = -1;
     }
     
     return status;

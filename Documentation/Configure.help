@@ -654,6 +654,26 @@ CONFIG_KERNELD
   later on, such as a user level "beeper" and a generic screen blanker.
   The "kerneld" daemon is included in "modules-1.2.8" and later.
 
+ARP daemon support
+CONFIG_ARPD
+  Normally, the kernel maintains an internal cache which maps IP 
+  addresses to hardware addresses on the local network, so that
+  Ethernet/Token Ring/ etc. frames are sent to the proper address
+  on the physical networking layer.  For small networks having
+  a few hundred directly connected hosts or less, keeping  this
+  address resolution cache (ARP) inside the kernel works well.
+  However, maintaining an internal ARP cache does not work well for
+  very large switched networks, and will use a lot of kernel memory
+  if TCP/IP connections are made to many machines on the network.
+  By enabling this option, the kernel's internal ARP cache will
+  never grow to more than 256 entries (the oldest entries are 
+  expired in a LIFO manner) and communication will be attempted
+  with an external ARP daemon, arpd, via the kerneld message
+  queue.  This code is still experimental.  If you do enable
+  arpd support, you should obtain a copy of arpd from
+  http://www.loran.com/~layes/arpd/index.html.  If unsure,
+  say N.  
+
 TCP/IP networking
 CONFIG_INET
   These are the protocols used on the Internet and on most local

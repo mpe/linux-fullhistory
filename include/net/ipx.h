@@ -11,6 +11,7 @@
 #ifndef _NET_INET_IPX_H_
 #define _NET_INET_IPX_H_
 
+#include <linux/netdevice.h>
 #include <linux/skbuff.h>
 #include <net/datalink.h>
 #include <linux/ipx.h>

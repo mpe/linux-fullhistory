@@ -2310,7 +2310,7 @@ static int ax25_get_info(char *buffer, char **start, off_t offset, int length, i
 		len += sprintf(buffer + len, " %s", ax25->dama_slave? " slave" : "    no");
 
 		if (ax25->sk != NULL) {
-			len += sprintf(buffer + len, " %5ld %5ld\n",
+			len += sprintf(buffer + len, " %5d %5d\n",
 				ax25->sk->wmem_alloc,
 				ax25->sk->rmem_alloc);
 		} else {
@@ -2419,7 +2419,7 @@ void ax25_proto_init(struct net_proto *pro)
 		ax25_cs_get_info
 	});
 
-	printk("G4KLX/GW4PTS AX.25 for Linux. Version 0.31 BETA for Linux NET3.032 (Linux 1.3.53)\n");
+	printk("G4KLX/GW4PTS AX.25 for Linux. Version 0.32 BETA for Linux NET3.034 (Linux 1.3.77)\n");
 
 #ifdef CONFIG_BPQETHER
 	proc_net_register(&(struct proc_dir_entry) {
@@ -2584,7 +2584,7 @@ int ax25_rebuild_header(unsigned char *bp, struct device *dev, unsigned long des
 			 *	freeing it).
 			 */
 			struct sk_buff *ourskb=skb_clone(skb, GFP_ATOMIC);
-			dev_kfree_skb(skb, FREE_READ);
+			dev_kfree_skb(skb, FREE_WRITE);
 			if(ourskb==NULL)
 				return 1;			
 			skb_pull(ourskb, AX25_HEADER_LEN - 1);	/* Keep PID */

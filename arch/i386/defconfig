@@ -47,6 +47,7 @@ CONFIG_BLK_DEV_RZ1000=y
 # CONFIG_BLK_DEV_LOOP is not set
 # CONFIG_BLK_DEV_XD is not set
 # CONFIG_BLK_DEV_MD is not set
+
 #
 # Networking options
 #
@@ -90,6 +91,7 @@ CONFIG_DUMMY=m
 # CONFIG_SCC is not set
 # CONFIG_PLIP is not set
 # CONFIG_EQUALIZER is not set
+# CONFIG_FRAD is not set
 # CONFIG_NET_ALPHA is not set
 # CONFIG_NET_VENDOR_SMC is not set
 # CONFIG_LANCE is not set

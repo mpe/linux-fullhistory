@@ -1152,9 +1152,9 @@ ad1848_detect (int io_base, int *ad_flags, int *osp)
 {
 
   unsigned char   tmp;
-  int             i;
   ad1848_info    *devc = &dev_info[nr_ad1848_devs];
   unsigned char   tmp1 = 0xff, tmp2 = 0xff;
+  int             i;
 
   DDB (printk ("ad1848_detect(%x)\n", io_base));
 
@@ -1200,6 +1200,11 @@ ad1848_detect (int io_base, int *ad_flags, int *osp)
 		   inb (devc->base)));
       return 0;
     }
+
+  DDB (printk ("ad1848: regs: "));
+  for (i = 0; i < 32; i++)
+    DDB (printk ("%02x ", ad_read (devc, i)));
+  DDB (printk ("\n"));
 
   /*
      * Test if it's possible to change contents of the indirect registers.
@@ -1254,15 +1259,6 @@ ad1848_detect (int io_base, int *ad_flags, int *osp)
      * with CS4231.
    */
 
-  DDB (printk ("ad1848_detect() - step F\n"));
-  ad_write (devc, 12, 0);	/* Mode2=disabled */
-
-  for (i = 0; i < 16; i++)
-    if ((tmp1 = ad_read (devc, i)) != (tmp2 = ad_read (devc, i + 16)))
-      {
-	DDB (printk ("ad1848 detect error - step F(%d/%x/%x)\n", i, tmp1, tmp2));
-	return 0;
-      }
 
   /*
      * Try to switch the chip to mode2 (CS4231) by setting the MODE2 bit (0x40).

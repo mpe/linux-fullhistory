@@ -9,6 +9,7 @@
 
 O_TARGET := ipx.o
 O_OBJS   := af_ipx.o
+M_OBJS   := $(O_TARGET)
 
 include $(TOPDIR)/Rules.make
 

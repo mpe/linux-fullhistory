@@ -71,7 +71,8 @@ get__netinfo(struct proto *pro, char *buffer, int format, char **start, off_t of
 	off_t begin=0;
   
 	s_array = pro->sock_array;
-	len += sprintf(buffer, "sl  local_address rem_address   st tx_queue rx_queue tr tm->when uid\n");
+	len += sprintf(buffer, "sl  local_address rem_address   st tx_queue "
+	    "rx_queue tr tm->when uid inode\n");
 /*
  *	This was very pretty but didn't work when a socket is destroyed
  *	at the wrong moment (eg a syn recv socket getting a reset), or
@@ -108,13 +109,16 @@ get__netinfo(struct proto *pro, char *buffer, int format, char **start, off_t of
 			    timer_active=timer_active2;
 			    timer_expires=sp->timer.expires;
 			}
-			len += sprintf(buffer+len, "%2d: %08lX:%04X %08lX:%04X %02X %08X:%08X %02X:%08lX %08X %d %d\n",
+			len += sprintf(buffer+len, "%2d: %08lX:%04X %08lX:%04X"
+			    " %02X %08X:%08X %02X:%08lX %08X %d %d %ld\n",
 				i, src, srcp, dest, destp, sp->state, 
 				format==0?sp->write_seq-sp->rcv_ack_seq:sp->wmem_alloc, 
 				format==0?sp->acked_seq-sp->copied_seq:sp->rmem_alloc,
 				timer_active, timer_expires-jiffies, (unsigned) sp->retransmits,
 				(sp->socket&&SOCK_INODE(sp->socket))?SOCK_INODE(sp->socket)->i_uid:0,
-				timer_active?sp->timeout:0);
+				timer_active?sp->timeout:0,
+				sp->socket && SOCK_INODE(sp->socket) ?
+				SOCK_INODE(sp->socket)->i_ino : 0);
 			if (timer_active1) add_timer(&sp->retransmit_timer);
 			if (timer_active2) add_timer(&sp->timer);
 			/*

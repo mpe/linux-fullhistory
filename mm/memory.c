@@ -734,16 +734,23 @@ bad_area:
 	return -EFAULT;
 }
 
-static inline void get_empty_page(struct task_struct * tsk, struct vm_area_struct * vma, pte_t * page_table)
+static inline void get_empty_page(struct task_struct * tsk, struct vm_area_struct * vma,
+	pte_t * page_table, int write_access)
 {
-	unsigned long tmp;
+	pte_t pte;
 
-	if (!(tmp = get_free_page(GFP_KERNEL))) {
-		oom(tsk);
-		put_page(page_table, BAD_PAGE);
-		return;
+	pte = pte_wrprotect(mk_pte(ZERO_PAGE, vma->vm_page_prot));
+	if (write_access) {
+		unsigned long page = get_free_page(GFP_KERNEL);
+		pte = pte_mkwrite(mk_pte(page, vma->vm_page_prot));
+		vma->vm_mm->rss++;
+		tsk->min_flt++;
+		if (!page) {
+			oom(tsk);
+			pte = BAD_PAGE;
+		}
 	}
-	put_page(page_table, pte_mkwrite(mk_pte(tmp, vma->vm_page_prot)));
+	put_page(page_table, pte);
 }
 
 /*
@@ -894,9 +901,7 @@ void do_no_page(struct task_struct * tsk, struct vm_area_struct * vma,
 	}
 	address &= PAGE_MASK;
 	if (!vma->vm_ops || !vma->vm_ops->nopage) {
-		++vma->vm_mm->rss;
-		++tsk->min_flt;
-		get_empty_page(tsk, vma, page_table);
+		get_empty_page(tsk, vma, page_table, write_access);
 		return;
 	}
 	++tsk->maj_flt;

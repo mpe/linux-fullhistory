@@ -18,17 +18,6 @@
 #include <asm/pgtable.h>
 
 /*
- * Map memory not associated with any file into a process
- * address space.  Adjacent memory is merged.
- */
-static inline int anon_map(struct inode *ino, struct file * file, struct vm_area_struct * vma)
-{
-	if (zeromap_page_range(vma->vm_start, vma->vm_end - vma->vm_start, vma->vm_page_prot))
-		return -ENOMEM;
-	return 0;
-}
-
-/*
  * description of effects of mapping type and prot in current implementation.
  * this is due to the limited x86 page protection hardware.  The expected
  * behavior is in parens:
@@ -53,7 +42,6 @@ pgprot_t protection_map[16] = {
 unsigned long do_mmap(struct file * file, unsigned long addr, unsigned long len,
 	unsigned long prot, unsigned long flags, unsigned long off)
 {
-	int error;
 	struct vm_area_struct * vma;
 
 	if ((len = PAGE_ALIGN(len)) == 0)
@@ -165,15 +153,15 @@ unsigned long do_mmap(struct file * file, unsigned long addr, unsigned long len,
 
 	do_munmap(addr, len);	/* Clear old maps */
 
-	if (file)
-		error = file->f_op->mmap(file->f_inode, file, vma);
-	else
-		error = anon_map(NULL, NULL, vma);
+	if (file) {
+		int error = file->f_op->mmap(file->f_inode, file, vma);
 	
-	if (error) {
-		kfree(vma);
-		return error;
+		if (error) {
+			kfree(vma);
+			return error;
+		}
 	}
+
 	flags = vma->vm_flags;
 	insert_vm_struct(current, vma);
 	merge_segments(current, vma->vm_start, vma->vm_end);

@@ -41,13 +41,16 @@
  *			Supports sendmsg/recvmsg
  *	Revision 0.33:	Internal network support, routing changes, uses a
  *			protocol private area for ipx data.
+ *	Revision 0.34:	Module support. <Jim Freeman>
  *
  * 	Portions Copyright (c) 1995 Caldera, Inc. <greg@caldera.com>
  *	Neither Greg Page nor Caldera, Inc. admit liability nor provide 
  *	warranty for any of this software. This material is provided 
  *	"AS-IS" and at no charge.		
  */
-  
+
+#include <linux/module.h>
+
 #include <linux/config.h>
 #include <linux/errno.h>
 #include <linux/types.h>
@@ -59,11 +62,10 @@
 #include <linux/string.h>
 #include <linux/sockios.h>
 #include <linux/net.h>
-#include <linux/ipx.h>
-#include <linux/inet.h>
 #include <linux/netdevice.h>
+#include <net/ipx.h>
+#include <linux/inet.h>
 #include <linux/route.h>
-#include <linux/skbuff.h>
 #include <net/sock.h>
 #include <asm/segment.h>
 #include <asm/system.h>
@@ -77,7 +79,10 @@
 #include <linux/stat.h>
 #include <linux/firewall.h>
 
-#ifdef CONFIG_IPX
+#ifdef MODULE
+static void ipx_proto_finito(void);
+#endif /* def MODULE */
+
 /* Configuration Variables */
 static unsigned char	ipxcfg_max_hops = 16;
 static char		ipxcfg_auto_select_primary = 0;
@@ -89,10 +94,10 @@ static struct datalink_proto	*pEII_datalink = NULL;
 static struct datalink_proto	*p8023_datalink = NULL;
 static struct datalink_proto	*pSNAP_datalink = NULL;
 
-static ipx_interface	*ipx_interfaces = NULL;
 static ipx_route 	*ipx_routes = NULL;
-static ipx_interface	*ipx_internal_net = NULL;
+static ipx_interface	*ipx_interfaces = NULL;
 static ipx_interface	*ipx_primary_net = NULL;
+static ipx_interface	*ipx_internal_net = NULL;
 
 static int
 ipxcfg_set_auto_create(char val)
@@ -187,6 +192,7 @@ ipx_destroy_socket(ipx_socket *sk)
 	}
 	
 	kfree_s(sk,sizeof(*sk));
+	MOD_DEC_USE_COUNT;
 }
 	
 /* The following code is used to support IPX Interfaces (IPXITF).  An
@@ -194,7 +200,7 @@ ipx_destroy_socket(ipx_socket *sk)
  */
 
 static ipx_route * ipxrtr_lookup(unsigned long);
- 
+
 static void
 ipxitf_clear_primary_net(void)
 {
@@ -324,6 +330,10 @@ ipxitf_down(ipx_interface *intrfc)
 		ipx_internal_net = NULL;
 
 	kfree_s(intrfc, sizeof(*intrfc));
+	/* sockets still dangling
+	 * - must be closed from user space
+	 */
+	return;
 }
 
 static int 
@@ -790,6 +800,7 @@ ipxitf_insert(ipx_interface *intrfc)
 
 	if (ipxcfg_auto_select_primary && (ipx_primary_net == NULL))
 		ipx_primary_net = intrfc;
+	return;
 }
 
 static int 
@@ -1155,7 +1166,7 @@ ipxrtr_delete(long net)
 /*
  *	Route an outgoing frame from a socket.
  */
- 
+
 static int ipxrtr_route_packet(ipx_socket *sk, struct sockaddr_ipx *usipx, struct iovec *iov, int len)
 {
 	struct sk_buff *skb;
@@ -1259,7 +1270,7 @@ ipxrtr_route_skb(struct sk_buff *skb)
 /*
  *	We use a normal struct rtentry for route handling
  */
- 
+
 static int ipxrtr_ioctl(unsigned int cmd, void *arg)
 {
 	int err;
@@ -1483,7 +1494,7 @@ static int ipx_rt_get_info(char *buffer, char **start, off_t offset,
 *	      Handling for system calls applied via the various interfaces to an IPX socket object		    *
 *														    *
 \*******************************************************************************************************************/
- 
+
 static int ipx_fcntl(struct socket *sock, unsigned int cmd, unsigned long arg)
 {
 	switch(cmd)
@@ -1642,6 +1653,7 @@ ipx_create(struct socket *sock, int protocol)
 	sk->error_report=def_callback1;
 
 	sk->zapped=1;
+	MOD_INC_USE_COUNT;
 	return 0;
 }
 
@@ -1830,8 +1842,10 @@ static int ipx_socketpair(struct socket *sock1, struct socket *sock2)
 
 static int ipx_accept(struct socket *sock, struct socket *newsock, int flags)
 {
-	if(newsock->data)
+	if(newsock->data) {
 		kfree_s(newsock->data,sizeof(ipx_socket));
+		MOD_DEC_USE_COUNT;
+	}
 	return -EOPNOTSUPP;
 }
 
@@ -2187,7 +2201,7 @@ static struct packet_type ipx_8023_packet_type =
 	NULL,
 	NULL,
 };
- 
+
 static struct packet_type ipx_dix_packet_type = 
 {
 	0,	/* MUTTER ntohs(ETH_P_IPX),*/
@@ -2196,7 +2210,7 @@ static struct packet_type ipx_dix_packet_type =
 	NULL,
 	NULL,
 };
- 
+
 static struct notifier_block ipx_dev_notifier={
 	ipxitf_device_event,
 	NULL,
@@ -2206,12 +2220,30 @@ static struct notifier_block ipx_dev_notifier={
 
 extern struct datalink_proto	*make_EII_client(void);
 extern struct datalink_proto	*make_8023_client(void);
+extern void	destroy_EII_client(struct datalink_proto *);
+extern void	destroy_8023_client(struct datalink_proto *);
 
-void ipx_proto_init(struct net_proto *pro)
+struct proc_dir_entry ipx_procinfo = {
+	PROC_NET_IPX, 3, "ipx", S_IFREG | S_IRUGO,
+	1, 0, 0, 0, &proc_net_inode_operations, ipx_get_info
+};
+
+struct proc_dir_entry ipx_if_procinfo = {
+	PROC_NET_IPX_INTERFACE, 13, "ipx_interface", S_IFREG | S_IRUGO,
+	1, 0, 0, 0, &proc_net_inode_operations, ipx_interface_get_info
+};
+
+struct proc_dir_entry ipx_rt_procinfo = {
+	PROC_NET_IPX_ROUTE, 9, "ipx_route", S_IFREG | S_IRUGO,
+	1, 0, 0, 0, &proc_net_inode_operations, ipx_rt_get_info
+};
+
+static unsigned char	ipx_8022_type = 0xE0;
+static unsigned char	ipx_snap_id[5] =  { 0x0, 0x0, 0x0, 0x81, 0x37 };
+
+void
+ipx_proto_init(struct net_proto *pro)
 {
-	unsigned char	val = 0xE0;
-	unsigned char	snapval[5] =  { 0x0, 0x0, 0x0, 0x81, 0x37 };
-
 	(void) sock_register(ipx_proto_ops.family, &ipx_proto_ops);
 
 	pEII_datalink = make_EII_client();
@@ -2222,34 +2254,82 @@ void ipx_proto_init(struct net_proto *pro)
 	ipx_8023_packet_type.type=htons(ETH_P_802_3);
 	dev_add_pack(&ipx_8023_packet_type);
 	
-	if ((p8022_datalink = register_8022_client(val, ipx_rcv)) == NULL)
+	if ((p8022_datalink = register_8022_client(ipx_8022_type, ipx_rcv)) == NULL)
 		printk("IPX: Unable to register with 802.2\n");
 
-	if ((pSNAP_datalink = register_snap_client(snapval, ipx_rcv)) == NULL)
+	if ((pSNAP_datalink = register_snap_client(ipx_snap_id, ipx_rcv)) == NULL)
 		printk("IPX: Unable to register with SNAP\n");
 	
 	register_netdevice_notifier(&ipx_dev_notifier);
 
-	proc_net_register(&(struct proc_dir_entry) {
-		PROC_NET_IPX, 3, "ipx",
-		S_IFREG | S_IRUGO, 1, 0, 0,
-		0, &proc_net_inode_operations,
-		ipx_get_info
-	});
-	proc_net_register(&(struct proc_dir_entry) {
-		PROC_NET_IPX_INTERFACE, 13, "ipx_interface",
-		S_IFREG | S_IRUGO, 1, 0, 0,
-		0, &proc_net_inode_operations,
-		ipx_interface_get_info
-	});
-	proc_net_register(&(struct proc_dir_entry) {
-		PROC_NET_IPX_ROUTE, 9, "ipx_route",
-		S_IFREG | S_IRUGO, 1, 0, 0,
-		0, &proc_net_inode_operations,
-		ipx_rt_get_info
-	});
+	proc_net_register(&ipx_procinfo);
+	proc_net_register(&ipx_if_procinfo);
+	proc_net_register(&ipx_rt_procinfo);
 		
-	printk("Swansea University Computer Society IPX 0.33 for NET3.032\n");
+	printk("Swansea University Computer Society IPX 0.34 for NET3.034\n");
 	printk("IPX Portions Copyright (c) 1995 Caldera, Inc.\n");
 }
-#endif
+
+#ifdef MODULE
+/* Note on MOD_{INC,DEC}_USE_COUNT:
+ *
+ * Use counts are incremented/decremented when
+ * sockets are created/deleted.
+ * 
+ * Routes are always associated with an interface, and
+ * allocs/frees will remain properly accounted for by
+ * their associated interfaces.
+ * 
+ * Ergo, before the ipx module can be removed, all IPX
+ * sockets be closed from user space. 
+ */
+
+static void
+ipx_proto_finito(void)
+{	ipx_interface	*ifc;
+
+	while (ipx_interfaces) {
+		ifc = ipx_interfaces;
+		ipx_interfaces = ifc->if_next;
+		ifc->if_next = NULL;
+		ipxitf_down(ifc);
+	}
+
+	proc_net_unregister(PROC_NET_IPX_ROUTE);
+	proc_net_unregister(PROC_NET_IPX_INTERFACE);
+	proc_net_unregister(PROC_NET_IPX);
+
+	unregister_netdevice_notifier(&ipx_dev_notifier);
+
+	unregister_snap_client(ipx_snap_id);
+	pSNAP_datalink = NULL;
+
+	unregister_8022_client(ipx_8022_type);
+	p8022_datalink = NULL;
+
+	dev_remove_pack(&ipx_8023_packet_type);
+	destroy_8023_client(p8023_datalink);
+	p8023_datalink = NULL;
+
+	dev_remove_pack(&ipx_dix_packet_type);
+	destroy_EII_client(pEII_datalink);
+	pEII_datalink = NULL;
+
+	(void) sock_unregister(ipx_proto_ops.family);
+
+	return;
+}
+
+int init_module(void)
+{
+	ipx_proto_init(NULL);
+	register_symtab(0);
+	return 0;
+}
+
+void cleanup_module(void)
+{
+	ipx_proto_finito();
+	return;
+}
+#endif /* def MODULE */

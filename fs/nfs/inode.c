@@ -80,7 +80,7 @@ void nfs_put_super(struct super_block *sb)
  * The way this works is that the mount process passes a structure
  * in the data argument which contains an open socket to the NFS
  * server and the root file handle obtained from the server's mount
- * daemon.  We stash theses away in the private superblock fields.
+ * daemon.  We stash these away in the private superblock fields.
  * Later we can add other mount parameters like caching values.
  */
 
@@ -169,7 +169,7 @@ struct super_block *nfs_read_super(struct super_block *sb, void *raw_data,
 	    sock->ops->getname(sock, &(server->toaddr), &dummylen, 1) ;
 	  }
 	} else {
-	/*  printk("NFS: coppying passed addr to server->toaddr\n") ;*/
+	/*  printk("NFS: copying passed addr to server->toaddr\n") ;*/
 	  memcpy((char *)&(server->toaddr),(char *)(&data->addr),sizeof(server->toaddr));
 	}
 	/* End of JSP NFS patch */

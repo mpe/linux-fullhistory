@@ -34,8 +34,6 @@
 #include <linux/errno.h>
 #include <linux/fcntl.h>
 #include <linux/in.h>
-#include <linux/if_ether.h>	/* For the statistics structure. */
-#include <linux/if_arp.h>	/* For ARPHRD_ETHER */
 
 #include <asm/system.h>
 #include <asm/segment.h>
@@ -46,6 +44,8 @@
 #include <linux/etherdevice.h>
 #include <linux/skbuff.h>
 #include <net/sock.h>
+#include <linux/if_ether.h>	/* For the statistics structure. */
+#include <linux/if_arp.h>	/* For ARPHRD_ETHER */
 
 #define LOOPBACK_MTU (PAGE_SIZE*7/8)
 
@@ -72,7 +72,7 @@ static int loopback_xmit(struct sk_buff *skb, struct device *dev)
 	  	skb=skb_clone(skb, GFP_ATOMIC);		/* Clone the buffer */
 	  	if(skb==NULL)
 	  		return 1;
-	  	dev_kfree_skb(skb2, FREE_READ);
+	  	dev_kfree_skb(skb2, FREE_WRITE);
   		unlock=0;
 	}
 	else if(skb->sk)
@@ -81,7 +81,7 @@ static int loopback_xmit(struct sk_buff *skb, struct device *dev)
 	  	 *	Packet sent but looped back around. Cease to charge
 	  	 *	the socket for the frame.
 	  	 */
-	  	skb->sk->wmem_alloc-=skb->truesize;
+		atomic_sub(skb->truesize, &skb->sk->wmem_alloc);
 	  	skb->sk->write_space(skb->sk);
 	}
 

@@ -523,12 +523,12 @@ sound_ioctl_sw (int dev, struct fileinfo *file,
   if (((cmd >> 8) & 0xff) == 'M' && num_mixers > 0)	/* Mixer ioctl */
     if ((dev & 0x0f) != SND_DEV_CTL)
       {
+#ifdef CONFIG_AUDIO
 	int             dtype = dev & 0x0f;
 	int             mixdev;
 
 	switch (dtype)
 	  {
-#ifdef CONFIG_AUDIO
 	  case SND_DEV_DSP:
 	  case SND_DEV_DSP16:
 	  case SND_DEV_AUDIO:
@@ -536,12 +536,9 @@ sound_ioctl_sw (int dev, struct fileinfo *file,
 	    if (mixdev < 0 || mixdev >= num_mixers)
 	      return -ENXIO;
 	    return mixer_devs[mixdev]->ioctl (mixdev, cmd, arg);
-	    break;
-#endif
-
-	  default:
-	    return mixer_devs[0]->ioctl (0, cmd, arg);
 	  }
+#endif
+	  return mixer_devs[0]->ioctl (0, cmd, arg);
       }
 
   switch (dev & 0x0f)

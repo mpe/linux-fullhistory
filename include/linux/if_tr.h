@@ -45,37 +45,36 @@
 
 /* This is an Token-Ring frame header. */
 struct trh_hdr {
-	unsigned char   ac;	/* access control field */
-	unsigned char   fc;	/* frame control field */
-	unsigned char   daddr[TR_ALEN];	/* destination address */
-	unsigned char   saddr[TR_ALEN];	/* source address */
-	unsigned short  rcf;	/* route control field */
-	unsigned short  rseg[8];/* routing registers */
+	__u8  ac;			/* access control field */
+	__u8  fc;			/* frame control field */
+	__u8  daddr[TR_ALEN];		/* destination address */
+	__u8  saddr[TR_ALEN];		/* source address */
+	__u16 rcf;			/* route control field */
+	__u16 rseg[8];			/* routing registers */
 };
 
 /* This is an Token-Ring LLC structure */
 struct trllc {
-	unsigned char   dsap;	/* destination SAP */
-	unsigned char   ssap;	/* source SAP */
-	unsigned char   llc;	/* LLC control field */
-	unsigned char   protid[3];	/* protocol id */
-	unsigned short  ethertype;	/* ether type field */
+	__u8  dsap;			/* destination SAP */
+	__u8  ssap;			/* source SAP */
+	__u8  llc;			/* LLC control field */
+	__u8  protid[3];		/* protocol id */
+	__u16 ethertype;		/* ether type field */
 };
 
-
 /* Token-Ring statistics collection data. */
-struct tr_statistics{
-  int	rx_packets;			/* total packets received	*/
-  int	tx_packets;			/* total packets transmitted	*/
-  int	rx_errors;			/* bad packets received		*/
-  int	tx_errors;			/* packet transmit problems	*/
-  int	rx_dropped;			/* no space in linux buffers	*/
-  int	tx_dropped;			/* no space available in linux	*/
-  int	multicast;			/* multicast packets received	*/
-  int   transmit_collision;
+struct tr_statistics {
+	int rx_packets;			/* total packets received	*/
+	int tx_packets;			/* total packets transmitted	*/
+	int rx_errors;			/* bad packets received		*/
+	int tx_errors;			/* packet transmit problems	*/
+	int rx_dropped;			/* no space in linux buffers	*/
+	int tx_dropped;			/* no space available in linux	*/
+	int multicast;			/* multicast packets received	*/
+	int transmit_collision;
 
-	/* detailed Token-Ring errors. See IBM Token-Ring Network Architecture
-      for more info */
+	/* detailed Token-Ring errors. See IBM Token-Ring Network
+	   Architecture for more info */
 
 	int line_errors;
 	int internal_errors;
@@ -88,7 +87,6 @@ struct tr_statistics{
 	int frequency_errors;
 	int token_errors;
 	int dummy1;
-	
 };
 
 /* source routing stuff */

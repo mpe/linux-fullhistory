@@ -768,7 +768,7 @@ gus_initialize (void)
 
   irq_image = 0;
   tmp = gus_irq_map[gus_irq];
-  if (!tmp)
+  if (!gus_pnp_flag && !tmp)
     printk ("Warning! GUS IRQ not selected\n");
   irq_image |= tmp;
   irq_image |= 0x40;		/* Combine IRQ1 (GF1) and IRQ2 (Midi) */
@@ -1658,7 +1658,7 @@ guswave_load_patch (int dev, int format, const char *addr,
 	  blk_sz = blk_end - target;
 	}
 
-      if (gus_no_dma)
+      if (gus_pnp_flag || gus_no_dma)
 	{
 	  /*
 	   * For some reason the DMA is not possible. We have to use PIO.

@@ -306,7 +306,7 @@ sscapeintr (int irq, void *dev_id, struct pt_regs *dummy)
   unsigned char   bits, tmp;
   static int      debug = 0;
 
-  printk ("sscapeintr(0x%02x)\n", (bits = sscape_read (devc, GA_INTSTAT_REG)));
+  bits = sscape_read (devc, GA_INTSTAT_REG);
   if ((sscape_sleep_flag.mode & WK_SLEEP))
     {
       {

@@ -1,9 +1,12 @@
-#ifndef __ARCH_I386_ATOMIC__
-#define __ARCH_I386_ATOMIC__
+#ifndef __ARCH_ALPHA_ATOMIC__
+#define __ARCH_ALPHA_ATOMIC__
 
 /*
  * Atomic operations that C can't guarantee us.  Useful for
- * resource counting etc..
+ * resource counting etc...
+ *
+ * But use these as seldom as possible since they are much more slower
+ * than regular operations.
  */
 
 /*

@@ -655,7 +655,6 @@ void net_bh(void)
 	 
 		else
 			kfree_skb(skb, FREE_WRITE);
-
 		/*
 		 *	Again, see if we can transmit anything now. 
 		 *	[Ought to take this out judging by tests it slows
@@ -1142,8 +1141,14 @@ static int dev_ifsioc(void *arg, unsigned int getset)
 			 
 			if(ifr.ifr_mtu<68)
 				return -EINVAL;
-			dev->mtu = ifr.ifr_mtu;
-			ret = 0;
+
+                        if (dev->change_mtu)
+				ret = (*dev->change_mtu)(dev, ifr.ifr_mtu);
+                        else
+                        {
+				dev->mtu = ifr.ifr_mtu;
+				ret = 0;
+			}
 			break;
 	
 		case SIOCGIFMEM:	/* Get the per device memory space. We can add this but currently
@@ -1301,6 +1306,8 @@ extern int lance_init(void);
 extern int ni65_init(void);
 extern int pi_init(void);
 extern int dec21040_init(void);
+extern void sdla_setup(void);
+extern void dlci_setup(void);
 
 int net_dev_init(void)
 {
@@ -1332,6 +1339,12 @@ int net_dev_init(void)
 #if defined(CONFIG_DEC_ELCP)
 	dec21040_init();
 #endif	
+#if defined(CONFIG_DLCI)
+        dlci_setup();
+#endif
+#if defined(CONFIG_SDLA)
+        sdla_setup();
+#endif
 	/*
 	 *	SLHC if present needs attaching so other people see it
 	 *	even if not opened.

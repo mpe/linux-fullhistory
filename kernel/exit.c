@@ -49,7 +49,9 @@ int send_sig(unsigned long sig,struct task_struct * p,int priv)
 	if (!p || sig > 32)
 		return -EINVAL;
 	if (!priv && ((sig != SIGCONT) || (current->session != p->session)) &&
-	    (current->euid != p->euid) && (current->euid != p->uid) && !suser())
+	    (current->euid ^ p->euid) && (current->euid ^ p->uid) &&
+	    (current->uid ^ p->euid) && (current->uid ^ p->uid) &&
+	    !suser())
 		return -EPERM;
 	if (!sig)
 		return 0;

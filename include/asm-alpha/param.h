@@ -1,14 +1,8 @@
-#ifndef _ASMAXP_PARAM_H
-#define _ASMAXP_PARAM_H
-
-#include <linux/config.h>
+#ifndef _ASM_ALPHA_PARAM_H
+#define _ASM_ALPHA_PARAM_H
 
 #ifndef HZ
-# if defined(CONFIG_ALPHA_EB66) || defined(CONFIG_ALPHA_EB66P)
-#  define HZ	 977	/* Evaluation Boards seem to be a little odd */
-# else
-#  define HZ	1024	/* normal value for Alpha systems */
-# endif
+# define HZ	1024
 #endif
 
 #define EXEC_PAGESIZE	8192
@@ -23,4 +17,4 @@
 
 #define MAXHOSTNAMELEN	64	/* max length of hostname */
 
-#endif
+#endif /* _ASM_ALPHA_PARAM_H */

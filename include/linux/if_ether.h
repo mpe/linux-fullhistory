@@ -17,19 +17,25 @@
  *		as published by the Free Software Foundation; either version
  *		2 of the License, or (at your option) any later version.
  */
+ 
 #ifndef _LINUX_IF_ETHER_H
 #define _LINUX_IF_ETHER_H
 
-/* IEEE 802.3 Ethernet magic constants.  The frame sizes omit the preamble
-   and FCS/CRC (frame check sequence). */
+/*
+ *	IEEE 802.3 Ethernet magic constants.  The frame sizes omit the preamble
+ *	and FCS/CRC (frame check sequence). 
+ */
+
 #define ETH_ALEN	6		/* Octets in one ethernet addr	 */
 #define ETH_HLEN	14		/* Total octets in header.	 */
 #define ETH_ZLEN	60		/* Min. octets in frame sans FCS */
 #define ETH_DATA_LEN	1500		/* Max. octets in payload	 */
 #define ETH_FRAME_LEN	1514		/* Max. octets in frame sans FCS */
 
+/*
+ *	These are the defined Ethernet Protocol ID's.
+ */
 
-/* These are the defined Ethernet Protocol ID's. */
 #define ETH_P_LOOP	0x0060		/* Ethernet Loopback packet	*/
 #define ETH_P_ECHO	0x0200		/* Ethernet Echo packet		*/
 #define ETH_P_PUP	0x0400		/* Xerox PUP packet		*/
@@ -64,39 +70,49 @@
 #define ETH_P_WAN_PPP   0x0007          /* Dummy type for WAN PPP frames*/
 #define ETH_P_PPP_MP    0x0008          /* Dummy type for PPP MP frames */
 #define ETH_P_LOCALTALK 0x0009		/* Localtalk pseudeo type 	*/
+#define ETH_P_PPPTALK	0x0010		/* Dummy type for Atalk over PPP*/
 
-/* This is an Ethernet frame header. */
-struct ethhdr {
-  unsigned char		h_dest[ETH_ALEN];	/* destination eth addr	*/
-  unsigned char		h_source[ETH_ALEN];	/* source ether addr	*/
-  unsigned short	h_proto;		/* packet type ID field	*/
+/*
+ *	This is an Ethernet frame header.
+ */
+ 
+struct ethhdr 
+{
+	unsigned char	h_dest[ETH_ALEN];	/* destination eth addr	*/
+	unsigned char	h_source[ETH_ALEN];	/* source ether addr	*/
+	unsigned short	h_proto;		/* packet type ID field	*/
 };
 
-/* Ethernet statistics collection data. */
-struct enet_statistics{
-  int	rx_packets;			/* total packets received	*/
-  int	tx_packets;			/* total packets transmitted	*/
-  int	rx_errors;			/* bad packets received		*/
-  int	tx_errors;			/* packet transmit problems	*/
-  int	rx_dropped;			/* no space in linux buffers	*/
-  int	tx_dropped;			/* no space available in linux	*/
-  int	multicast;			/* multicast packets received	*/
-  int	collisions;
+/*
+ *	Ethernet statistics collection data. 
+ */
+ 
+struct enet_statistics
+{
+	int	rx_packets;		/* total packets received	*/
+	int	tx_packets;		/* total packets transmitted	*/
+	int	rx_errors;		/* bad packets received		*/
+	int	tx_errors;		/* packet transmit problems	*/
+	int	rx_dropped;		/* no space in linux buffers	*/
+	int	tx_dropped;		/* no space available in linux	*/
+	int	multicast;		/* multicast packets received	*/
+	int	collisions;
 
-  /* detailed rx_errors: */
-  int	rx_length_errors;
-  int	rx_over_errors;			/* receiver ring buff overflow	*/
-  int	rx_crc_errors;			/* recved pkt with crc error	*/
-  int	rx_frame_errors;		/* recv'd frame alignment error */
-  int	rx_fifo_errors;			/* recv'r fifo overrun		*/
-  int	rx_missed_errors;		/* receiver missed packet	*/
+	/* detailed rx_errors: */
+	int	rx_length_errors;
+	int	rx_over_errors;		/* receiver ring buff overflow	*/
+	int	rx_crc_errors;		/* recved pkt with crc error	*/
+	int	rx_frame_errors;	/* recv'd frame alignment error */
+	int	rx_fifo_errors;		/* recv'r fifo overrun		*/
+	int	rx_missed_errors;	/* receiver missed packet	*/
 
-  /* detailed tx_errors */
-  int	tx_aborted_errors;
-  int	tx_carrier_errors;
-  int	tx_fifo_errors;
-  int	tx_heartbeat_errors;
-  int	tx_window_errors;
+	/* detailed tx_errors */
+	int	tx_aborted_errors;
+	int	tx_carrier_errors;
+	int	tx_fifo_errors;
+	int	tx_heartbeat_errors;
+	int	tx_window_errors;
 };
+
 
 #endif	/* _LINUX_IF_ETHER_H */

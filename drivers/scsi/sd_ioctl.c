@@ -19,6 +19,7 @@
 #include "scsi_ioctl.h"
 #include "hosts.h"
 #include "sd.h"
+#include <linux/scsicam.h>     /* must follow "hosts.h" */
 
 int sd_ioctl(struct inode * inode, struct file * file, unsigned int cmd, unsigned long arg)
 {

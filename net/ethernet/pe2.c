@@ -30,3 +30,8 @@ make_EII_client(void)
 	return proto;
 }
 
+void destroy_EII_client(struct datalink_proto *dl)
+{
+	if (dl)
+		kfree_s(dl, sizeof(struct datalink_proto));
+}

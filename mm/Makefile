@@ -8,7 +8,7 @@
 # Note 2! The CFLAGS definition is now in the main makefile...
 
 O_TARGET := mm.o
-O_OBJS	 := memory.o mmap.o filemap.o mprotect.o mlock.o \
+O_OBJS	 := memory.o mmap.o filemap.o mprotect.o mlock.o mremap.o \
 	    kmalloc.o vmalloc.o \
 	    swap.o vmscan.o page_io.o page_alloc.o swap_state.o swapfile.o
 

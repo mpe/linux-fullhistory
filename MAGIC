@@ -94,6 +94,7 @@ Ioctl	Include File		Comments
 'f'	linux/ext2_fs.h
 'm'	linux/mtio.h		conflict!
 'm'	linux/soundcard.h	conflict!
+'n'	linux/ncp_fs.h
 's'	linux/cdk.h
 't'	linux/if_ppp.h
 'u'	linux/smb_fs.h

@@ -10,6 +10,7 @@
  *		2 of the License, or (at your option) any later version.
  */
  
+#include <linux/module.h>
 #include <linux/netdevice.h>
 #include <linux/skbuff.h>
 #include <net/datalink.h>
@@ -81,12 +82,20 @@ static void snap_datalink_header(struct datalink_proto *dl, struct sk_buff *skb,
 /*
  *	Set up the SNAP layer
  */
+
+static struct symbol_table snap_proto_syms = {
+#include <linux/symtab_begin.h>
+	X(register_snap_client),
+	X(unregister_snap_client),
+#include <linux/symtab_end.h>
+};
  
 void snap_proto_init(struct net_proto *pro)
 {
 	snap_dl=register_8022_client(0xAA, snap_rcv);
 	if(snap_dl==NULL)
 		printk("SNAP - unable to register with 802.2\n");
+	register_symtab(&snap_proto_syms);
 }
 	
 /*
@@ -114,5 +123,33 @@ struct datalink_proto *register_snap_client(unsigned char *desc, int (*rcvfunc)(
 	}
 
 	return proto;
+}
+
+/*
+ *	Unregister SNAP clients. Protocols no longer want to play with us ...
+ */
+
+void unregister_snap_client(unsigned char *desc)
+{
+	struct datalink_proto **clients = &snap_list;
+	struct datalink_proto *tmp;
+	unsigned long flags;
+
+	save_flags(flags);
+	cli();
+
+	while ((tmp = *clients) != NULL)
+	{
+		if (memcmp(tmp->type,desc,5) == 0)
+		{
+			*clients = tmp->next;
+			kfree_s(tmp, sizeof(struct datalink_proto));
+			break;
+		}
+		else
+			clients = &tmp->next;
+	}
+
+	restore_flags(flags);
 }
 

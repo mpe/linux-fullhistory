@@ -982,6 +982,9 @@ int fdomain_16x0_detect( Scsi_Host_Template *tpnt )
 				   get resources.  */
 
    shpnt = scsi_register( tpnt, 0 );
+   shpnt->irq = interrupt_level;
+   shpnt->io_port = port_base;
+   shpnt->n_io_port = 0x10;
    print_banner( shpnt );
 
 				/* Log IRQ with kernel */   

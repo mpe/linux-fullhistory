@@ -11,7 +11,8 @@
  *		Portions taken from the KA9Q/NOS (v2.00m PA0GRI) source.
  *		Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
- *		Florian La Roche.
+ *		Florian La Roche,
+ *		Jonathan Layes <layes@loran.com>
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -31,6 +32,8 @@
 #define	ARPHRD_IEEE802	6		/* IEEE 802.2 Ethernet/TR/TB	*/
 #define	ARPHRD_ARCNET	7		/* ARCnet			*/
 #define	ARPHRD_APPLETLK	8		/* APPLEtalk			*/
+#define ARPHRD_DLCI	15		/* Frame Relay DLCI		*/
+
 /* Dummy types for non ARP hardware */
 #define ARPHRD_SLIP	256
 #define ARPHRD_CSLIP	257
@@ -39,9 +42,10 @@
 #define ARPHRD_RSRVD	260		/* Notional KISS type 		*/
 #define ARPHRD_ADAPT	264
 #define ARPHRD_PPP	512
+
 #define ARPHRD_TUNNEL	768		/* IPIP tunnel			*/
 #define ARPHRD_TUNNEL6	769		/* IPIP6 tunnel			*/
-#define ARPHRD_FRAD	770		/* Frame Relay			*/
+#define ARPHRD_FRAD	770		/* Frame Relay Access Device	*/
 #define ARPHRD_SKIP	771		/* SKIP vif			*/
 #define ARPHRD_LOOPBACK	772		/* Loopback device		*/
 #define ARPHRD_LOCALTLK 773		/* Localtalk device		*/
@@ -99,6 +103,24 @@ struct arphdr
 	unsigned char		ar_tip[4];		/* target IP address		*/
 #endif
 
+};
+
+/* Support for the user space arp daemon, arpd */
+
+#define ARPD_UPDATE	0x01
+#define ARPD_LOOKUP	0x02
+
+struct arpd_request
+{
+	unsigned short	req;			/* request type */
+	__u32		ip;			/* ip address of entry */
+	__u32		mask;			/* netmask - used for proxy */
+	unsigned char	ha[MAX_ADDR_LEN];	/* Hardware address */
+	unsigned long	last_used;		/* For expiry */
+	unsigned long	last_updated;		/* For expiry */
+	unsigned int	flags;			/* Control status */
+	struct device	*dev;			/* Device entry is tied to */
+	int		loc;			/* Debugging call location */
 };
 
 #endif	/* _LINUX_IF_ARP_H */

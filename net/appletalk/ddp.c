@@ -20,6 +20,9 @@
  *		Alan Cox		:	Supports new ARPHRD_LOOPBACK
  *		Christer Weinigel	: 	Routing and /proc fixes.
  *		Bradford Johnson	:	Locatalk.
+ *		Tom Dyas		:	Module support.
+ *		Alan Cox		:	Hooks for PPP (based on the
+ *						localtalk hook).
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -30,10 +33,11 @@
  *		ASYNC I/O
  */
  
+#include <linux/config.h>
+#include <linux/module.h>
 #include <asm/segment.h>
 #include <asm/system.h>
 #include <asm/bitops.h>
-#include <linux/config.h>
 #include <linux/types.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
@@ -45,12 +49,12 @@
 #include <linux/errno.h>
 #include <linux/interrupt.h>
 #include <linux/if_ether.h>
-#include <linux/if_arp.h>
 #include <linux/route.h>
 #include <linux/inet.h>
 #include <linux/notifier.h>
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
+#include <linux/if_arp.h>
 #include <linux/skbuff.h>
 #include <linux/termios.h>	/* For TIOCOUTQ/INQ */
 #include <net/datalink.h>
@@ -62,7 +66,6 @@
 #include <linux/stat.h>
 #include <linux/firewall.h>
 
-#ifdef CONFIG_ATALK
 
 #undef APPLETALK_DEBUG
 
@@ -214,7 +217,10 @@ static void atalk_destroy_socket(atalk_socket *sk)
 	}
 	
 	if(sk->wmem_alloc == 0 && sk->rmem_alloc == 0 && sk->dead)
+	{
 		kfree_s(sk,sizeof(*sk));
+		MOD_DEC_USE_COUNT;
+	}
 	else
 	{
 		/*
@@ -256,7 +262,7 @@ int atalk_get_info(char *buffer, char **start, off_t offset, int length, int dum
 			ntohs(s->protinfo.af_at.dest_net),
 			s->protinfo.af_at.dest_node,
 			s->protinfo.af_at.dest_port);
-		len += sprintf (buffer+len,"%08lX:%08lX ", s->wmem_alloc, s->rmem_alloc);
+		len += sprintf (buffer+len,"%08X:%08X ", s->wmem_alloc, s->rmem_alloc);
 		len += sprintf (buffer+len,"%02X %d\n", s->state, SOCK_INODE(s->socket)->i_uid);
 		
 		/* Are we still dumping unwanted data then discard the record */
@@ -359,8 +365,8 @@ static int atif_probe_device(struct atalk_iface *atif)
  *	now for the 1.4 release as is.
  *
  */
-	if(atif->dev->type == ARPHRD_LOCALTLK &&
-		atif->dev->do_ioctl) 
+	if((atif->dev->type == ARPHRD_LOCALTLK || atif->dev->type == ARPHRD_PPP)
+		&& atif->dev->do_ioctl) 
 	{
 		/* fake up the request and pass it down */
 		sa = (struct sockaddr_at*)&atreq.ifr_addr;
@@ -753,7 +759,7 @@ int atif_ioctl(int cmd, void *arg)
 			if(sa->sat_family!=AF_APPLETALK)
 				return -EINVAL;
 			if(dev->type!=ARPHRD_ETHER&&dev->type!=ARPHRD_LOOPBACK
-				&&dev->type!=ARPHRD_LOCALTLK)
+				&&dev->type!=ARPHRD_LOCALTLK && dev->type!=ARPHRD_PPP)
 				return -EPROTONOSUPPORT;
 			nr=(struct netrange *)&sa->sat_zero[0];
 			/*
@@ -1133,6 +1139,9 @@ static int atalk_create(struct socket *sock, int protocol)
 			kfree_s((void *)sk,sizeof(*sk));
 			return(-ESOCKTNOSUPPORT);
 	}
+
+	MOD_INC_USE_COUNT;
+
 	sk->dead=0;
 	sk->next=NULL;
 	sk->broadcast=0;
@@ -1400,7 +1409,8 @@ static int atalk_getname(struct socket *sock, struct sockaddr *uaddr,
 /*
  *	Receive a packet (in skb) from device dev. This has come from the SNAP decoder, and on entry
  *	skb->h.raw is the DDP header, skb->len is the DDP length. The physical headers have been 
- *	extracted.
+ *	extracted. PPP should probably pass frames marked as for this layer
+ *	[ie ARPHRD_ETHERTALK]
  */
  
 static int atalk_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
@@ -2005,17 +2015,31 @@ struct packet_type ltalk_packet_type=
 	NULL
 };
 
+struct packet_type ppptalk_packet_type=
+{
+	0,
+	NULL,
+	atalk_rcv,
+	NULL,
+	NULL
+};
+
+static char ddp_snap_id[]={0x08,0x00,0x07,0x80,0x9B};
+
+
 /* Called by proto.c on kernel start up */
 
 void atalk_proto_init(struct net_proto *pro)
 {
-	static char ddp_snap_id[]={0x08,0x00,0x07,0x80,0x9B};
 	(void) sock_register(atalk_proto_ops.family, &atalk_proto_ops);
 	if ((ddp_dl = register_snap_client(ddp_snap_id, atalk_rcv)) == NULL)
 		printk("Unable to register DDP with SNAP.\n");
 	
 	ltalk_packet_type.type=htons(ETH_P_LOCALTALK);	
 	dev_add_pack(&ltalk_packet_type);
+	
+	ppptalk_packet_type.type=htons(ETH_P_PPPTALK);
+	dev_add_pack(&ppptalk_packet_type);
 	
 	register_netdevice_notifier(&ddp_notifier);
 	aarp_proto_init();
@@ -2039,6 +2063,71 @@ void atalk_proto_init(struct net_proto *pro)
 		atalk_if_get_info
 	});
 
-	printk("Appletalk 0.16 for Linux NET3.033\n");
+	printk("Appletalk 0.17 for Linux NET3.034\n");
 }
-#endif
+
+#ifdef MODULE
+
+int init_module(void)
+{
+	atalk_proto_init(NULL);
+	register_symtab(0);
+	return 0;
+}
+
+/*
+ *	FIX THIS: If there are any routes/devices configured
+ *	for appletalk we must not be unloaded.
+ */
+ 
+/* Remove all route entries. Interrupts must be off. */
+extern inline void free_route_list(void)
+{
+	struct atalk_route *list = atalk_router_list, *tmp;
+
+	while (list != NULL)
+	{
+		tmp = list->next;
+		kfree_s(list, sizeof(struct atalk_route));
+		list = tmp;
+	}
+}
+
+/* Remove all interface entries. Interrupts must be off. */
+extern inline void free_interface_list(void)
+{
+	struct atalk_iface *list = atalk_iface_list, *tmp;
+
+	while (list != NULL)
+	{
+		tmp = list->next;
+		kfree_s(list, sizeof(struct atalk_iface));
+		list = tmp;
+	}
+}
+
+void cleanup_module(void)
+{
+	unsigned long flags;
+
+	save_flags(flags);
+	cli();
+
+	aarp_cleanup_module();
+
+	proc_net_unregister(PROC_NET_ATALK);
+	proc_net_unregister(PROC_NET_AT_ROUTE);
+	proc_net_unregister(PROC_NET_ATIF);
+	unregister_netdevice_notifier(&ddp_notifier);
+	dev_remove_pack(&ltalk_packet_type);
+	dev_remove_pack(&ppptalk_packet_type);
+	unregister_snap_client(ddp_snap_id);
+	sock_unregister(atalk_proto_ops.family);
+
+	free_route_list();
+	free_interface_list();
+
+	restore_flags(flags);
+}
+
+#endif  /* MODULE */

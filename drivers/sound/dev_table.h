@@ -71,8 +71,8 @@ typedef struct pnp_sounddev
 #define MAX_SUB_BUFFERS		(32*MAX_REALTIME_FACTOR)
 
 #define DMODE_NONE		0
-#define DMODE_OUTPUT		1
-#define DMODE_INPUT		2
+#define DMODE_OUTPUT		PCM_ENABLE_OUTPUT
+#define DMODE_INPUT		PCM_ENABLE_INPUT
 
 struct dma_buffparms {
 	int      dma_mode;	/* DMODE_INPUT, DMODE_OUTPUT or DMODE_NONE */
@@ -96,6 +96,8 @@ struct dma_buffparms {
 #define DMA_STARTED	0x00000008
 #define DMA_EMPTY	0x00000010	
 #define DMA_ALLOC_DONE	0x00000020
+#define DMA_SYNCING	0x00000040
+#define DMA_CLEAN	0x00000080
 
 	int      open_mode;
 

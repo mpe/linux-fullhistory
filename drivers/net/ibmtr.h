@@ -1,22 +1,17 @@
 /* Definitions for an IBM Token Ring card. */
 /* This file is distributed under the GNU GPL   */
 
-#define TR_RETRY_INTERVAL 500
+/* ported to the Alpha architecture 02/20/96 (just used the HZ macro) */
+
+#define TR_RETRY_INTERVAL (5*HZ) /* 500 on PC = 5 s */
+#define TR_RESET_INTERVAL (HZ/20) /* 5 on PC = 50 ms */
+#define TR_BUSY_INTERVAL (HZ/5) /* 5 on PC = 200 ms */
+
 #define TR_ISA 1
 #define TR_MCA 2
 #define TR_ISAPNP 3
 #define NOTOK 0
 #define TOKDEBUG 1
-
-/* Mike Eckhoff -- 96/02/08 */
-/* This defines the minimum timeout. If a transmission takes */
-/* longer then TX_TIMEOUT to send, we will wait and retry. */
-/* On large networks, this value may need to be increased. */
-/* We will start at .2s because that is what most drivers seem to be doing */
-/* now and the original value of .05s was not nearly enough for large nets. */
-
-#define TX_TIMEOUT (HZ/5)
-
 
 #ifndef IBMTR_SHARED_RAM_BASE
 #define IBMTR_SHARED_RAM_BASE 0xD0
@@ -168,105 +163,68 @@
 #define ACA_RW 0x00
 
 #ifdef ENABLE_PAGING
-#define SET_PAGE(x) (*(unsigned char *) \
-                         (ti->mmio + ACA_OFFSET + ACA_RW + SRPR_EVEN)\
-                                                = (x>>8)&ti.page_mask)
+#define SET_PAGE(x) (writeb(((x>>8)&ti.page_mask), \
+  ti->mmio + ACA_OFFSET + ACA_RW + SRPR_EVEN))
 #else
 #define SET_PAGE(x)
 #endif
 
 typedef enum { IN_PROGRESS, SUCCES, FAILURE, CLOSED } open_state;
 
-struct tok_info {
-        unsigned char irq;
-        unsigned char *mmio;
-        unsigned char hw_address[32];
-        unsigned char adapter_type;
-        unsigned char data_rate;
-        unsigned char token_release;
-        unsigned char avail_shared_ram;
-        unsigned char shared_ram_paging;
-        unsigned char dhb_size4mb;
-        unsigned char dhb_size16mb;
-/* Additions by David Morris       */
-        unsigned char do_tok_int;
+/* do_tok_int possible values */
 #define FIRST_INT 1
 #define NOT_FIRST 2
-        struct wait_queue *wait_for_tok_int;
-        struct wait_queue *wait_for_reset;
-        unsigned char sram_base;
-/* Additions by Peter De Schrijver */
-        unsigned char page_mask;     /* mask to select RAM page to Map*/
-        unsigned char mapped_ram_size;  /* size of RAM page */
-        unsigned char *sram; /* Shared memory base address */
-        unsigned char *init_srb;  /* Initial System Request Block address */
-        unsigned char *srb;  /* System Request Block address */
-        unsigned char *ssb;  /* System Status Block address */
-        unsigned char *arb;  /* Adapter Request Block address */
-        unsigned char *asb;  /* Adapter Status Block address */
-        unsigned short exsap_station_id;
-        unsigned short global_int_enable;
-        struct sk_buff *current_skb;
-        struct tr_statistics tr_stats;
-        unsigned char auto_ringspeedsave;
+
+struct tok_info {
+	unsigned char irq;
+	__u32 mmio;
+	unsigned char hw_address[32];
+	unsigned char adapter_type;
+	unsigned char data_rate;
+	unsigned char token_release;
+	unsigned char avail_shared_ram;
+	unsigned char shared_ram_paging;
+	unsigned char dhb_size4mb;
+	unsigned char dhb_size16mb;
+	/* Additions by David Morris       */
+	unsigned char do_tok_int;
+	struct wait_queue *wait_for_tok_int;
+	struct wait_queue *wait_for_reset;
+	unsigned char sram_base;
+	/* Additions by Peter De Schrijver */
+	unsigned char page_mask;          /* mask to select RAM page to Map*/
+	unsigned char mapped_ram_size;    /* size of RAM page */
+	__u32 sram;                       /* Shared memory base address */
+	__u32 init_srb;                   /* Initial System Request Block address */
+	__u32 srb;                        /* System Request Block address */
+	__u32 ssb;                        /* System Status Block address */
+	__u32 arb;                        /* Adapter Request Block address */
+	__u32 asb;                        /* Adapter Status Block address */
+	unsigned short exsap_station_id;
+	unsigned short global_int_enable;
+	struct sk_buff *current_skb;
+	struct tr_statistics tr_stats;
+	unsigned char auto_ringspeedsave;
 	open_state open_status;
-	
 };
 
-struct srb_init_response {
-        unsigned char command;
-        unsigned char init_status;
-	unsigned char init_status_2;
-        unsigned char reserved[3];
-        unsigned short bring_up_code;
-        unsigned short encoded_address;
-        unsigned short level_address;
-        unsigned short adapter_address;
-        unsigned short parms_address;
-        unsigned short mac_address;
-};
-
-#define DIR_OPEN_ADAPTER 0x03
-
-struct dir_open_adapter {
-        unsigned char command;
-        char reserved[7];
-        unsigned short open_options;
-        unsigned char node_address[6];
-        unsigned char group_address[4];
-        unsigned char funct_address[4];
-        unsigned short num_rcv_buf;
-        unsigned short rcv_buf_len;
-        unsigned short dhb_length;
-        unsigned char num_dhb;
-        char reserved2;
-        unsigned char dlc_max_sap;
-        unsigned char dlc_max_sta;
-        unsigned char dlc_max_gsap;
-        unsigned char dlc_max_gmem;
-        unsigned char dlc_t1_tick_1;
-        unsigned char dlc_t2_tick_1;
-        unsigned char dlc_ti_tick_1;
-        unsigned char dlc_t1_tick_2;
-        unsigned char dlc_t2_tick_2;
-        unsigned char dlc_ti_tick_2;
-        unsigned char product_id[18];
-};
-
-struct srb_open_response {
-        unsigned char command;
-        unsigned char reserved1;
-        unsigned char ret_code;
-        unsigned char reserved2[3];
-        unsigned short error_code;
-        unsigned short asb_addr;
-        unsigned short srb_addr;
-        unsigned short arb_addr;
-        unsigned short ssb_addr;
-};
+/* token ring adapter commands */
+#define DIR_INTERRUPT 		0x00 /* struct srb_interrupt */
+#define DIR_MOD_OPEN_PARAMS 	0x01
+#define DIR_OPEN_ADAPTER 	0x03 /* struct dir_open_adapter */
+#define DIR_CLOSE_ADAPTER   	0x04
+#define DIR_SET_GRP_ADDR    	0x06
+#define DIR_SET_FUNC_ADDR   	0x07
+#define DIR_READ_LOG 		0x08 /* struct srb_read_log */
+#define DLC_OPEN_SAP 		0x15 /* struct dlc_open_sap */
+#define DLC_CLOSE_SAP       	0x16
+#define DATA_LOST 		0x20 /* struct asb_rec */
+#define REC_DATA 		0x81 /* struct arb_rec_req */
+#define XMIT_DATA_REQ 		0x82 /* struct arb_xmit_req */
+#define DLC_STATUS 		0x83 /* struct arb_dlc_status */
+#define RING_STAT_CHANGE    	0x84 /* struct dlc_open_sap ??? */
 
 /* DIR_OPEN_ADAPTER options */
-
 #define OPEN_PASS_BCON_MAC 0x0100
 #define NUM_RCV_BUF 16
 #define RCV_BUF_LEN 136
@@ -275,158 +233,17 @@ struct srb_open_response {
 #define DLC_MAX_SAP 2
 #define DLC_MAX_STA 1
 
-#define DLC_OPEN_SAP 0x15
-
-struct dlc_open_sap {
-        unsigned char command;
-        unsigned char reserved1;
-        unsigned char ret_code;
-        unsigned char reserved2;
-        unsigned short station_id;
-        unsigned char timer_t1;
-        unsigned char timer_t2;
-        unsigned char timer_ti;
-        unsigned char maxout;
-        unsigned char maxin;
-        unsigned char maxout_incr;
-        unsigned char max_retry_count;
-        unsigned char gsap_max_mem;
-        unsigned short max_i_field;
-        unsigned char sap_value;
-        unsigned char sap_options;
-        unsigned char station_count;
-        unsigned char sap_gsap_mem;
-        unsigned char gsap[0];
-};
-
 /* DLC_OPEN_SAP options */
-
 #define MAX_I_FIELD 0x0088
 #define SAP_OPEN_IND_SAP 0x04
 #define SAP_OPEN_PRIORITY 0x20
 #define SAP_OPEN_STATION_CNT 0x1
-
-#define XMIT_DIR_FRAME 0x0a
+#define XMIT_DIR_FRAME 0x0A
 #define XMIT_UI_FRAME  0x0d
 #define XMIT_XID_CMD   0x0e
 #define XMIT_TEST_CMD  0x11
 
-struct srb_xmit {
-        unsigned char command;
-        unsigned char cmd_corr;
-        unsigned char ret_code;
-        unsigned char reserved1;
-        unsigned short station_id;
-};
-
-#define DIR_INTERRUPT 0x00
-struct srb_interrupt {
-        unsigned char command;
-        unsigned char cmd_corr;
-        unsigned char ret_code;
-};
-
-#define DIR_READ_LOG 0x08
-struct srb_read_log {
-        unsigned char command;
-        unsigned char reserved1;
-        unsigned char ret_code;
-        unsigned char reserved2;
-        unsigned char line_errors;
-        unsigned char internal_errors;
-        unsigned char burst_errors;
-        unsigned char A_C_errors;
-        unsigned char abort_delimiters;
-        unsigned char reserved3;
-        unsigned char lost_frames;
-        unsigned char recv_congest_count;
-        unsigned char frame_copied_errors;
-        unsigned char frequency_errors;
-        unsigned char token_errors;
-};
-
-struct asb_xmit_resp {
-        unsigned char command;
-        unsigned char cmd_corr;
-        unsigned char ret_code;
-        unsigned char reserved;
-        unsigned short station_id;
-        unsigned short frame_length;
-        unsigned char hdr_length;
-        unsigned        char rsap_value;
-};
-
-#define XMIT_DATA_REQ 0x82
-struct arb_xmit_req {
-        unsigned char command;
-        unsigned char cmd_corr;
-        unsigned char reserved1[2];
-        unsigned short station_id;
-        unsigned short dhb_address;
-};
-
-#define REC_DATA 0x81
-struct arb_rec_req {
-        unsigned char command;
-        unsigned char reserved1[3];
-        unsigned short station_id;
-        unsigned short rec_buf_addr;
-        unsigned char lan_hdr_len;
-        unsigned char dlc_hdr_len;
-        unsigned short frame_len;
-        unsigned char msg_type;
-};
-
-#define DATA_LOST 0x20
-struct asb_rec {
-        unsigned char command;
-        unsigned char reserved1;
-        unsigned char ret_code;
-        unsigned char reserved2;
-        unsigned short station_id;
-        unsigned short rec_buf_addr;
-};
-
-struct rec_buf {
-        unsigned char reserved1[2];
-        unsigned short buf_ptr;
-        unsigned char reserved2;
-        unsigned short buf_len;
-        unsigned char data[0];
-};
-
-#define DLC_STATUS          0x83
-struct arb_dlc_status {
-        unsigned char command;
-        unsigned char reserved1[3];
-        unsigned short station_id;
-        unsigned short status;
-        unsigned char frmr_data[5];
-        unsigned char access_prio;
-        unsigned char rem_addr[TR_ALEN];
-        unsigned        char rsap_value;
-};
-
-#define RING_STAT_CHANGE    0x84
-struct arb_ring_stat_change {
-        unsigned char command;
-        unsigned char reserved1[5];
-        unsigned short ring_status;
-};
-
-#define DIR_CLOSE_ADAPTER   0x04
-struct srb_close_adapter {
-        unsigned char command;
-        unsigned char reserved1;
-        unsigned char ret_code;
-};
-
-#define DIR_MOD_OPEN_PARAMS 0x01
-#define DIR_SET_GRP_ADDR    0x06
-#define DIR_SET_FUNC_ADDR   0x07
-#define DLC_CLOSE_SAP       0x16
-
-
+/* srb close return code */
 #define SIGNAL_LOSS  0x8000
 #define HARD_ERROR   0x4000
 #define XMIT_BEACON  0x1000
@@ -435,4 +252,178 @@ struct srb_close_adapter {
 #define REMOVE_RECV  0x0100
 #define LOG_OVERFLOW 0x0080
 #define RING_RECOVER 0x0020
+
+struct srb_init_response {
+	unsigned char command;
+	unsigned char init_status;
+	unsigned char init_status_2;
+	unsigned char reserved[3];
+	__u16 bring_up_code;
+	__u16 encoded_address;
+	__u16 level_address;
+	__u16 adapter_address;
+	__u16 parms_address;
+	__u16 mac_address;
+};
+
+struct dir_open_adapter {
+	unsigned char command;
+	char reserved[7];
+	__u16 open_options;
+	unsigned char node_address[6];
+	unsigned char group_address[4];
+	unsigned char funct_address[4];
+	__u16 num_rcv_buf;
+	__u16 rcv_buf_len;
+	__u16 dhb_length;
+	unsigned char num_dhb;
+	char reserved2;
+	unsigned char dlc_max_sap;
+	unsigned char dlc_max_sta;
+	unsigned char dlc_max_gsap;
+	unsigned char dlc_max_gmem;
+	unsigned char dlc_t1_tick_1;
+	unsigned char dlc_t2_tick_1;
+	unsigned char dlc_ti_tick_1;
+	unsigned char dlc_t1_tick_2;
+	unsigned char dlc_t2_tick_2;
+	unsigned char dlc_ti_tick_2;
+	unsigned char product_id[18];
+};
+
+struct srb_open_response {
+	unsigned char command;
+	unsigned char reserved1;
+	unsigned char ret_code;
+	unsigned char reserved2[3];
+	__u16 error_code;
+	__u16 asb_addr;
+	__u16 srb_addr;
+	__u16 arb_addr;
+	__u16 ssb_addr;
+};
+
+struct dlc_open_sap {
+	unsigned char command;
+	unsigned char reserved1;
+	unsigned char ret_code;
+	unsigned char reserved2;
+	__u16 station_id;
+	unsigned char timer_t1;
+	unsigned char timer_t2;
+	unsigned char timer_ti;
+	unsigned char maxout;
+	unsigned char maxin;
+	unsigned char maxout_incr;
+	unsigned char max_retry_count;
+	unsigned char gsap_max_mem;
+	__u16 max_i_field;
+	unsigned char sap_value;
+	unsigned char sap_options;
+	unsigned char station_count;
+	unsigned char sap_gsap_mem;
+	unsigned char gsap[0];
+};
+
+struct srb_xmit {
+	unsigned char command;
+	unsigned char cmd_corr;
+	unsigned char ret_code;
+	unsigned char reserved1;
+	__u16 station_id;
+};
+
+struct srb_interrupt {
+	unsigned char command;
+	unsigned char cmd_corr;
+	unsigned char ret_code;
+};
+
+struct srb_read_log {
+	unsigned char command;
+	unsigned char reserved1;
+	unsigned char ret_code;
+	unsigned char reserved2;
+	unsigned char line_errors;
+	unsigned char internal_errors;
+	unsigned char burst_errors;
+	unsigned char A_C_errors;
+	unsigned char abort_delimiters;
+	unsigned char reserved3;
+	unsigned char lost_frames;
+	unsigned char recv_congest_count;
+	unsigned char frame_copied_errors;
+	unsigned char frequency_errors;
+	unsigned char token_errors;
+};
+
+struct asb_xmit_resp {
+	unsigned char command;
+	unsigned char cmd_corr;
+	unsigned char ret_code;
+	unsigned char reserved;
+	__u16 station_id;
+	__u16 frame_length;
+	unsigned char hdr_length;
+	unsigned char rsap_value;
+};
+
+struct arb_xmit_req {
+	unsigned char command;
+	unsigned char cmd_corr;
+	unsigned char reserved1[2];
+	__u16 station_id;
+	__u16 dhb_address;
+};
+
+struct arb_rec_req {
+	unsigned char command;
+	unsigned char reserved1[3];
+	__u16 station_id;
+	__u16 rec_buf_addr;
+	unsigned char lan_hdr_len;
+	unsigned char dlc_hdr_len;
+	__u16 frame_len;
+	unsigned char msg_type;
+};
+
+struct asb_rec {
+	unsigned char command;
+	unsigned char reserved1;
+	unsigned char ret_code;
+	unsigned char reserved2;
+	__u16 station_id;
+	__u16 rec_buf_addr;
+};
+
+struct rec_buf {
+	unsigned char reserved1[2];
+	__u16 buf_ptr;
+	unsigned char reserved2;
+	__u16 buf_len;
+	unsigned char data[0];
+};
+
+struct arb_dlc_status {
+	unsigned char command;
+	unsigned char reserved1[3];
+	__u16 station_id;
+	__u16 status;
+	unsigned char frmr_data[5];
+	unsigned char access_prio;
+	unsigned char rem_addr[TR_ALEN];
+	unsigned char rsap_value;
+};
+
+struct arb_ring_stat_change {
+	unsigned char command;
+	unsigned char reserved1[5];
+	__u16 ring_status;
+};
+
+struct srb_close_adapter {
+	unsigned char command;
+	unsigned char reserved1;
+	unsigned char ret_code;
+};
 

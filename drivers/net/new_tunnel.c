@@ -273,8 +273,9 @@ printk("Required room: %d, Tunnel hlen: %d\n", max_headroom, TUNL_HLEN);
 	/*
 	 *	Push down and install the IPIP header.
 	 */
-	iph = skb->h.iph;
-	iph->version	= 	4;
+	 
+	iph 			=	skb->h.iph;
+	iph->version		= 	4;
 	iph->tos		=	skb->ip_hdr->tos;
 	iph->ttl		=	skb->ip_hdr->ttl;
 	iph->frag_off		=	0;
@@ -285,8 +286,8 @@ printk("Required room: %d, Tunnel hlen: %d\n", max_headroom, TUNL_HLEN);
 	iph->tot_len		=	htons(skb->len);
 	iph->id			=	htons(ip_id_count++);	/* Race condition here? */
 	ip_send_check(iph);
-	skb->ip_hdr = skb->h.iph;
-
+	skb->ip_hdr 		= skb->h.iph;
+	skb->protocol		=	htons(ETH_P_IP);
 #ifdef TUNNEL_DEBUG
 	printk("New IP Header....\n");
 	print_ip(iph);
@@ -317,8 +318,7 @@ printk("Required room: %d, Tunnel hlen: %d\n", max_headroom, TUNL_HLEN);
 	return 0;
 }
 
-static struct enet_statistics *
-tunnel_get_stats(struct device *dev)
+static struct enet_statistics *tunnel_get_stats(struct device *dev)
 {
 	return((struct enet_statistics*) dev->priv);
 }
@@ -336,7 +336,7 @@ int tunnel_init(struct device *dev)
 	static int tun_msg=0;
 	if(!tun_msg)
 	{
-		printk ( KERN_INFO "tunnel: version v0.2b\n" );
+		printk ( KERN_INFO "tunnel: version v0.2b2\n" );
 		tun_msg=1;
 	}
 
@@ -393,11 +393,13 @@ static int tunnel_probe(struct device *dev)
 	return 0;
 }
 
-static struct device dev_tunnel = {
+static struct device dev_tunnel = 
+{
 	"tunl0\0   ", 
 	0, 0, 0, 0,
  	0x0, 0,
- 	0, 0, 0, NULL, tunnel_probe };
+ 	0, 0, 0, NULL, tunnel_probe 
+ };
 
 int init_module(void)
 {

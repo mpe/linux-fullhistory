@@ -34,18 +34,16 @@ struct ncp_fs_info {
 	int    buffer_size;	/* The negotiated buffer size, to be
 				   used for read/write requests! */
 
-	/* Not used yet, but here some day the namespace numbers will be
-	   stored. */
 	int    volume_number;
 	__u32  directory_id;
 };	
 
-#define	NCP_IOC_NCPREQUEST		_IOR('n', 1, unsigned char *)
-#define	NCP_IOC_GETMOUNTUID		_IOR('u', 1, uid_t)
-#define NCP_IOC_CONN_LOGGED_IN          _IO('l', 1)
+#define	NCP_IOC_NCPREQUEST		_IOR('n', 1, struct ncp_ioctl_request)
+#define	NCP_IOC_GETMOUNTUID		_IOW('n', 2, uid_t)
+#define NCP_IOC_CONN_LOGGED_IN          _IO('n', 3)
 
 #define NCP_GET_FS_INFO_VERSION (1)
-#define NCP_IOC_GET_FS_INFO             _IOWR('i', 1, unsigned char *)
+#define NCP_IOC_GET_FS_INFO             _IOWR('n', 4, struct ncp_fs_info)
 
 /*
  * The packet size to allocate. One page should be enough.

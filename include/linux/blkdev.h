@@ -4,6 +4,7 @@
 #include <linux/major.h>
 #include <linux/sched.h>
 #include <linux/genhd.h>
+#include <linux/tqueue.h>
 
 /*
  * Ok, this is an expanded form so that we can use the same
@@ -35,7 +36,10 @@ struct request {
 struct blk_dev_struct {
 	void (*request_fn)(void);
 	struct request * current_request;
+	struct tq_struct plug_tq;
 };
+
+#define IS_PLUGGED(dev) ((dev)->plug_tq.sync)
 
 struct sec_size {
 	unsigned block_size;

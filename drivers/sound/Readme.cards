@@ -601,8 +601,7 @@ the file when configuring the driver. The easiest way is to mount the DOS
 partition containing the file with Linux. 
 
 It's possible to load your own DSP algorithms and run them with the card.
-Look at the directory pss_test of snd-util-3.0.tar.gz for more info.§
-package.
+Look at the directory pss_test of snd-util-3.0.tar.gz for more info.
 
 AudioTriX Pro
 -------------
@@ -688,9 +687,6 @@ If you have initialized the card using a wrong microcode file (sounds
 are terrible), just modify ssinit.c to use another microcode file and try
 again. It's possible to use an earlier version of sndscape.co[01] but it
 may sound wierd.
-
-Btw, The driver may complain something about "sscapeintr()" after
-running ssinit. You should just ignore these messages.
 
 MAD16 (Pro) and Mozart
 ----------------------

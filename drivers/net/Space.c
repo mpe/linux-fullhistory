@@ -188,6 +188,22 @@ ethif_probe(struct device *dev)
     return 0;
 }
 
+#ifdef CONFIG_SDLA
+    extern int sdla_init(struct device *);
+    static struct device sdla0_dev = { "sdla0", 0, 0, 0, 0, 0, 0, 0, 0, 0, NEXT_DEV, sdla_init, };
+
+#   undef NEXT_DEV
+#   define NEXT_DEV	(&sdla0_dev)
+#endif
+
+/* This must be AFTER the various FRADs so it initializes FIRST! */
+	
+#ifdef CONFIG_FRAD
+    extern int dlci_init(struct device *);
+    static struct device dlci_dev = { "dlci", 0, 0, 0, 0, 0, 0, 0, 0, 0, NEXT_DEV, dlci_init, };
+#   undef NEXT_DEV
+#   define NEXT_DEV	(&dlci_dev)
+#endif
 
 #ifdef CONFIG_NETROM
 	extern int nr_init(struct device *);
@@ -366,7 +382,7 @@ struct device eql_dev = {
 
 #endif 
 #endif
-	
+
 extern int loopback_init(struct device *dev);
 struct device loopback_dev = {
 	"lo",			/* Software Loopback interface		*/

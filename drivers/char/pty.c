@@ -195,9 +195,13 @@ int pty_open(struct tty_struct *tty, struct file * filp)
 	tty->driver_data = pty;
 
 	if (!tmp_buf) {
-		tmp_buf = (unsigned char *) get_free_page(GFP_KERNEL);
-		if (!tmp_buf)
-			return -ENOMEM;
+		unsigned long page = get_free_page(GFP_KERNEL);
+		if (!tmp_buf) {
+			if (!page)
+				return -ENOMEM;
+			tmp_buf = (unsigned char *) page;
+		} else
+			free_page(page);
 	}
 
 	if (tty->driver.subtype == PTY_TYPE_SLAVE)

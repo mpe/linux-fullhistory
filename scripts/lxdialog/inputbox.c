@@ -27,14 +27,15 @@ unsigned char dialog_input_result[MAX_LEN + 1];
  *  Print the termination buttons
  */
 static void
-print_buttons(WINDOW *dialog, int height, int width, int okval, int cancelval)
+print_buttons(WINDOW *dialog, int height, int width, int selected)
 {
     int x = width / 2 - 11;
     int y = height - 2;
 
-    print_button (dialog, "  Ok  ", y, x, okval);
-    print_button (dialog, " Help ", y, x + 14, cancelval);
+    print_button (dialog, "  Ok  ", y, x, selected==0);
+    print_button (dialog, " Help ", y, x + 14, selected==1);
 
+    wmove(dialog, y, x+1+14*selected);
     wrefresh(dialog);
 }
 
@@ -86,7 +87,7 @@ dialog_inputbox (const char *title, const char *prompt, int height, int width,
     draw_box (dialog, y + 1, box_x - 1, 3, box_width + 2,
 	      border_attr, dialog_attr);
 
-    print_buttons(dialog, height, width, TRUE, FALSE);
+    print_buttons(dialog, height, width, 0);
 
     /* Set up the initial value */
     wmove (dialog, box_y, box_x);
@@ -180,17 +181,17 @@ dialog_inputbox (const char *title, const char *prompt, int height, int width,
 	    switch (button) {
 	    case -1:
 		button = 1;	/* Indicates "Cancel" button is selected */
-		print_buttons(dialog, height, width, FALSE, TRUE);
+		print_buttons(dialog, height, width, 1);
 		break;
 	    case 0:
 		button = -1;	/* Indicates input box is selected */
-		print_buttons(dialog, height, width, TRUE, FALSE);
+		print_buttons(dialog, height, width, 0);
 		wmove (dialog, box_y, box_x + input_x);
 		wrefresh (dialog);
 		break;
 	    case 1:
 		button = 0;	/* Indicates "OK" button is selected */
-		print_buttons(dialog, height, width, TRUE, FALSE);
+		print_buttons(dialog, height, width, 0);
 		break;
 	    }
 	    break;
@@ -200,15 +201,15 @@ dialog_inputbox (const char *title, const char *prompt, int height, int width,
 	    switch (button) {
 	    case -1:
 		button = 0;	/* Indicates "OK" button is selected */
-		print_buttons(dialog, height, width, TRUE, FALSE);
+		print_buttons(dialog, height, width, 0);
 		break;
 	    case 0:
 		button = 1;	/* Indicates "Cancel" button is selected */
-		print_buttons(dialog, height, width, FALSE, TRUE);
+		print_buttons(dialog, height, width, 1);
 		break;
 	    case 1:
 		button = -1;	/* Indicates input box is selected */
-		print_buttons(dialog, height, width, TRUE, FALSE);
+		print_buttons(dialog, height, width, 0);
 		wmove (dialog, box_y, box_x + input_x);
 		wrefresh (dialog);
 		break;

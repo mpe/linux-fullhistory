@@ -501,7 +501,7 @@ round_s_ieee (int f, EXTENDED *a, unsigned long *b)
 
 
 static unsigned long
-round_t_ieee (EXTENDED *a, unsigned long *b, int f)
+round_t_ieee (int f, EXTENDED *a, unsigned long *b)
 {
 	unsigned long diff1, diff2, res;
 	EXTENDED z1, z2;
@@ -626,7 +626,7 @@ ieee_CVTST (int f, unsigned long a, unsigned long *b)
 		}
 		return 0;
 	}
-	return round_s_ieee(f, &temp, b);
+	return round_t_ieee(f, &temp, b);
 }
 
 
@@ -717,7 +717,7 @@ ieee_CVTQT (int f, unsigned long a, unsigned long *b)
 	}
 	op_b.e = 55;
 	normalize(&op_b);
-	return round_t_ieee(&op_b, b, f);
+	return round_t_ieee(f, &op_b, b);
 }
 
 
@@ -993,7 +993,7 @@ ieee_ADDT (int f, unsigned long a, unsigned long b, unsigned long *c)
 	if (a_type == ZERO && b_type == ZERO)
 		op_c.s = op_a.s && op_b.s;
 
-	return round_t_ieee(&op_c, c, f);	
+	return round_t_ieee(f, &op_c, c);
 }
 
 
@@ -1093,7 +1093,7 @@ ieee_SUBT (int f, unsigned long a, unsigned long b, unsigned long *c)
 	if (a_type == ZERO && b_type == ZERO)
 		op_c.s = op_a.s && op_b.s;
 
-	return round_t_ieee(&op_c, c, f);
+	return round_t_ieee(f, &op_c, c);
 }
 
 
@@ -1206,7 +1206,7 @@ ieee_MULT (int f, unsigned long a, unsigned long b, unsigned long *c)
 	normalize(&op_c);
 	op_c.e -= 55;	/* drop the 55 original bits. */
 
-	return round_t_ieee(&op_c, c, f);
+	return round_t_ieee(f, &op_c, c);
 }
 
 
@@ -1339,5 +1339,5 @@ ieee_DIVT (int f, unsigned long a, unsigned long b, unsigned long *c)
 		op_c.f[0] |= STICKY_T;
 	normalize(&op_c);
 	op_c.e -= 9;		/* remove excess exp from original shift */
-	return round_t_ieee(&op_c, c, f);
+	return round_t_ieee(f, &op_c, c);
 }

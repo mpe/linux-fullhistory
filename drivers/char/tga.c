@@ -328,7 +328,6 @@ get_scrmem(int currcons)
 {
 	memcpyw((unsigned short *)vc_scrbuf[currcons],
 		(unsigned short *)origin, video_screen_size);
-	__scrollback_mode = 0 ;
 	origin = video_mem_start = (unsigned long)vc_scrbuf[currcons];
 	scr_end = video_mem_end = video_mem_start + video_screen_size;
 	pos = origin + y*video_size_row + (x<<1);

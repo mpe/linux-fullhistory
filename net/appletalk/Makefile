@@ -9,6 +9,7 @@
 
 O_TARGET := appletalk.o
 O_OBJS	 := aarp.o ddp.o
+M_OBJS   := $(O_TARGET)
 
 include $(TOPDIR)/Rules.make
 

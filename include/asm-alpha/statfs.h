@@ -1,9 +1,13 @@
 #ifndef _ALPHA_STATFS_H
 #define _ALPHA_STATFS_H
 
-typedef struct {
-	int	val[2];
-} fsid_t;
+#ifndef _LINUX_TYPES_DONT_EXPORT
+
+#include <linux/posix_types.h>
+
+typedef __fsid_t	fsid_t;
+
+#endif
 
 /*
  * The OSF/1 statfs structure is much larger, but this should
@@ -19,7 +23,7 @@ struct statfs {
 	int	f_bavail;
 	int	f_files;
 	int	f_ffree;
-	fsid_t	f_fsid;
+	__fsid_t f_fsid;
 	/* linux-specific entries start here.. */
 	int	f_namelen;
 };

@@ -602,7 +602,9 @@ int lp_init(void)
 {
 	int offset = 0;
 	int count = 0;
+#ifdef MODULE
 	int failed = 0;
+#endif
 
 	if (register_chrdev(LP_MAJOR,"lp",&lp_fops)) {
 		printk("lp: unable to get major %d\n", LP_MAJOR);

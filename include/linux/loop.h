@@ -12,6 +12,8 @@
 
 #define LO_NAME_SIZE	64
 #define LO_KEY_SIZE	32
+
+#ifdef __KERNEL__
        
 struct loop_device {
 	int		lo_number;
@@ -39,6 +41,9 @@ typedef	int (* transfer_proc_t)(struct loop_device *, int cmd,
  * Loop flags
  */
 #define LO_FLAGS_DO_BMAP	0x00000001
+#define LO_FLAGS_READ_ONLY	0x00000002
+
+#endif /* __KERNEL__ */
 
 struct loop_info {
 	int		lo_number;	/* ioctl r/o */

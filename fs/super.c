@@ -612,6 +612,9 @@ int do_mount(kdev_t dev, const char * dev_name, const char * dir_name, const cha
 	struct vfsmount *vfsmnt;
 	int error;
 
+	if (!(flags & MS_RDONLY) && dev && is_read_only(dev))
+		return -EACCES;
+		/*flags |= MS_RDONLY;*/
 	error = namei(dir_name, &dir_i);
 	if (error)
 		return error;
@@ -656,6 +659,7 @@ int do_mount(kdev_t dev, const char * dev_name, const char * dir_name, const cha
 static int do_remount_sb(struct super_block *sb, int flags, char *data)
 {
 	int retval;
+	struct vfsmount *vfsmnt;
 	
 	if (!(flags & MS_RDONLY) && sb->s_dev && is_read_only(sb->s_dev))
 		return -EACCES;
@@ -671,6 +675,9 @@ static int do_remount_sb(struct super_block *sb, int flags, char *data)
 	}
 	sb->s_flags = (sb->s_flags & ~MS_RMT_MASK) |
 		(flags & MS_RMT_MASK);
+	vfsmnt = lookup_vfsmnt(sb->s_dev);
+	if (vfsmnt)
+		vfsmnt->mnt_flags = sb->s_flags;
 	return 0;
 }
 

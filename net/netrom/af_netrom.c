@@ -1274,7 +1274,7 @@ static int nr_get_info(char *buffer, char **start, off_t offset, int length, int
 			ax2asc(&s->nr->user_addr));
 		len += sprintf(buffer + len, "%-9s ",
 			ax2asc(&s->nr->dest_addr));
-		len += sprintf(buffer + len, "%-9s %-3s  %02X/%02X %02X/%02X %2d %2d %2d %2d %3d/%03d %2d/%02d %2d/%02d %3d %3d %5ld %5ld\n",
+		len += sprintf(buffer + len, "%-9s %-3s  %02X/%02X %02X/%02X %2d %2d %2d %2d %3d/%03d %2d/%02d %2d/%02d %3d %3d %5d %5d\n",
 			ax2asc(&s->nr->source_addr),
 			devname, s->nr->my_index, s->nr->my_id,
 			s->nr->your_index, s->nr->your_id,
@@ -1341,7 +1341,7 @@ void nr_proto_init(struct net_proto *pro)
 {
 	sock_register(nr_proto_ops.family, &nr_proto_ops);
 	register_netdevice_notifier(&nr_dev_notifier);
-	printk("G4KLX NET/ROM for Linux. Version 0.4 ALPHA for AX25.030 Linux 1.3.45\n");
+	printk("G4KLX NET/ROM for Linux. Version 0.4 ALPHA for AX25.032 Linux 1.3.77\n");
 
 	nr_default.quality    = NR_DEFAULT_QUAL;
 	nr_default.obs_count  = NR_DEFAULT_OBS;

@@ -175,7 +175,7 @@ alpha_fp_emul (unsigned long pc)
 
 	insn = get_user((__u32*)pc);
 	fc     = (insn >>  0) &  0x1f;	/* destination register */
-	func   = (insn >>  5) & 0x3ff;
+	func   = (insn >>  5) & 0x7ff;
 	fb     = (insn >> 16) &  0x1f;
 	fa     = (insn >> 21) &  0x1f;
 	opcode = insn >> 26;

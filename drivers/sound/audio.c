@@ -51,7 +51,7 @@ static int      audio_format[MAX_AUDIO_DEV];
 static int      local_conversion[MAX_AUDIO_DEV];
 
 static int
-set_format (int dev, int fmt)
+set_format (int dev, long fmt)
 {
   if (fmt != AFMT_QUERY)
     {
@@ -80,7 +80,7 @@ int
 audio_open (int dev, struct fileinfo *file)
 {
   int             ret;
-  int             bits;
+  long            bits;
   int             dev_type = dev & 0x0f;
   int             mode = file->mode & O_ACCMODE;
 
@@ -128,13 +128,31 @@ audio_open (int dev, struct fileinfo *file)
 void
 sync_output (int dev)
 {
-  int             buf_no, buf_ptr, buf_size;
+  int             buf_no, buf_ptr, buf_size, p, i;
   char           *dma_buf;
+  struct dma_buffparms *dmap = audio_devs[dev]->dmap_out;
 
   if (DMAbuf_get_curr_buffer (dev, &buf_no, &dma_buf, &buf_ptr, &buf_size) >= 0)
     {
       DMAbuf_start_output (dev, buf_no, buf_ptr);
     }
+
+/*
+ * Clean all unused buffer fragments.
+ */
+
+  p = dmap->qtail;
+
+  for (i = dmap->qlen; i < dmap->nbufs; i++)
+    {
+      memset (dmap->raw_buf + p * dmap->fragment_size,
+	      dmap->neutral_byte,
+	      dmap->fragment_size);
+
+      p = (p + 1) % dmap->nbufs;
+    }
+
+  dmap->flags |= DMA_CLEAN;
 }
 
 void

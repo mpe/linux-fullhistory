@@ -419,6 +419,22 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_SDLA),y)
+L_OBJS += sdla.o
+else
+  ifeq ($(CONFIG_SDLA),m)
+  M_OBJS += sdla.o
+  endif
+endif
+
+ifeq ($(CONFIG_FRAD),y)
+L_OBJS += dlci.o 
+else
+  ifeq ($(CONFIG_FRAD),m)
+  M_OBJS += dlci.o
+  endif
+endif
+
 include $(TOPDIR)/Rules.make
 
 clean:
@@ -475,3 +491,8 @@ lance.o: lance.c CONFIG
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(LANCE_OPTS) -c $<
 
 8390.o: 8390.c 8390.h CONFIG
+
+sdla.o: sdla.c CONFIG 
+
+dlci.o: dlci.c CONFIG
+

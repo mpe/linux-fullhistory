@@ -181,7 +181,10 @@ repeat:
 		offset -= blksize;
 	}
 	len = CURRENT->current_nr_sectors << 9;
-	if ((CURRENT->cmd != WRITE) && (CURRENT->cmd != READ)) {
+	if (CURRENT->cmd == WRITE) {
+		if (lo->lo_flags & LO_FLAGS_READ_ONLY)
+			goto error_out;
+	} else if (CURRENT->cmd != READ) {
 		printk("unknown loop device command (%d)?!?", CURRENT->cmd);
 		goto error_out;
 	}
@@ -235,11 +238,11 @@ error_out:
 	goto repeat;
 }
 
-static int loop_set_fd(struct loop_device *lo, unsigned int arg)
+static int loop_set_fd(struct loop_device *lo, kdev_t dev, unsigned int arg)
 {
 	struct file	*file;
 	struct inode	*inode;
-	
+
 	if (arg >= NR_OPEN || !(file = current->files->fd[arg]))
 		return -EBADF;
 	if (lo->lo_inode)
@@ -261,7 +264,14 @@ static int loop_set_fd(struct loop_device *lo, unsigned int arg)
 	} else
 		return -EINVAL;
 
-	invalidate_inode_pages (inode);
+	if (IS_RDONLY (inode) || is_read_only(lo->lo_device)) {
+		lo->lo_flags |= LO_FLAGS_READ_ONLY;
+		set_device_ro(dev, 1);
+	} else {
+		invalidate_inode_pages (inode);
+		set_device_ro(dev, 0);
+	}
+
 	lo->lo_inode = inode;
 	lo->lo_inode->i_count++;
 	lo->transfer = NULL;
@@ -274,7 +284,7 @@ static int loop_clr_fd(struct loop_device *lo, kdev_t dev)
 {
 	if (!lo->lo_inode)
 		return -ENXIO;
-	if (lo->lo_refcnt > 1)
+	if (lo->lo_refcnt > 1)	/* we needed one fd for the ioctl */
 		return -EBUSY;
 	if (S_ISBLK(lo->lo_inode->i_mode))
 		blkdev_release (lo->lo_inode);
@@ -378,7 +388,7 @@ static int lo_ioctl(struct inode * inode, struct file * file,
 	lo = &loop_dev[dev];
 	switch (cmd) {
 	case LOOP_SET_FD:
-		return loop_set_fd(lo, arg);
+		return loop_set_fd(lo, inode->i_rdev, arg);
 	case LOOP_CLR_FD:
 		return loop_clr_fd(lo, inode->i_rdev);
 	case LOOP_SET_STATUS:
@@ -442,8 +452,6 @@ static void lo_release(struct inode *inode, struct file *file)
 		lo->lo_refcnt--;
 		MOD_DEC_USE_COUNT;
 	}
-
-	return;
 }
 
 static struct file_operations lo_fops = {

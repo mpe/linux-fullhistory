@@ -74,8 +74,10 @@ type_of_loader:	.byte	0		! = 0, old one (LILO, Loadlin,
 					!      Bootlin, SYSLX, bootsect...)
 					! else it is set by the loader:
 					! 0xTV: T=0 for LILO
-					!       T=1 for Loadlin
-					!       T=2 for bootsect-loader
+					!	T=1 for Loadlin
+					!	T=2 for bootsect-loader
+					!	T=3 for SYSLX
+					!	T=4 for ETHERBOOT
 					!       V = version
 loadflags:	.byte	0	! unused bits =0 (reserved for future development)
 LOADED_HIGH	= 1		! bit within loadflags,

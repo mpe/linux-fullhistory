@@ -48,6 +48,7 @@ Maintainers List (try to look for most precise areas first)
 P: Person
 M: Mail patches to
 L: Mailing list that is relevant to this area
+W: Web-page with status/info
 S: Status
 	Supported:	Someone is actually paid to look after this (wildly
 			improbable).
@@ -89,6 +90,12 @@ M:	Leonard N. Zubkoff <lnz@dandelion.com>
 L:	None
 S:	Maintained
 
+FRAME RELAY DLCI/FRAD (Sangoma drivers too)
+P:	Mike McLagan
+M:	mike.mclagan@linux.org
+L:	linux-net@vger.rutgers.edu
+S:	Maintained
+
 FUTURE DOMAIN TMC-16x0 SCSI DRIVER (16-bit)
 P:      Rik Faith
 M:      faith@cs.unc.edu
@@ -122,7 +129,14 @@ S:	Maintained
 MODULE SUPPORT [GENERAL], KERNELD
 P:	Bjorn Ekwall
 M:	bj0rn@blox.se
+W:	http://www.pi.se/blox/modules/
 L:	linux-kernel@vger.rutgers.edu
+S:	Maintained
+
+ARPD SUPPORT
+P:	Jonathan Layes
+M:	layes@loran.com
+L:	linux-net@vger.rutgers.edu
 S:	Maintained
 
 NCP FILESYSTEM:

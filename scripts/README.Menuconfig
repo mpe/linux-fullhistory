@@ -78,6 +78,22 @@ If Menuconfig quits with an error while saving your configuration,
 you may look in the file /usr/src/linux/.menuconfig.log for
 information which may help you determine the cause.
 
+Alternate Configuration Files
+-----------------------------
+Menuconfig supports the use of alternate configuration files for
+those who, for various reasons, find it necessary to switch 
+between different kernel configurations.
+
+At the end of the main menu you will find two options.  One is
+for saving the current configuration to a file of your choosing.
+The other option is for loading a previously saved alternate
+configuration.
+
+Even if you don't use alternate configuration files, but you 
+find during a Menuconfig session that you have completely messed
+up your settings, you may use the "Load Alternate..." option to
+restore your previously saved settings from ".config" without 
+restarting Menuconfig.
 
 Other information
 -----------------
