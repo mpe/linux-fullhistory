@@ -6,8 +6,8 @@
 #include <linux/types.h>
 #include <linux/errno.h>
 
-int nr_dquots = 0, nr_free_dquots = 0;
-int max_dquots = 0;
+int nr_dquots, nr_free_dquots;
+int max_dquots;
 
 asmlinkage long sys_quotactl(int cmd, const char *special, int id, caddr_t addr)
 {

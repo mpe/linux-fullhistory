@@ -1,8 +1,4 @@
-CFLAGS	= -D__KERNEL__ -g -O2 -Wall -I$(TOPDIR)/include
-
-ifdef CONFIG_SMP
- CFLAGS += -D__SMP__
-endif
+CFLAGS	= -g -O2 -Wall $(CPPFLAGS)
 
 TARGET	= $(TOPDIR)/include/asm-ia64/offsets.h
 

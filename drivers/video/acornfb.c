@@ -1,7 +1,7 @@
 /*
  * linux/drivers/video/acornfb.c
  *
- * Copyright (C) 1998,1999 Russell King
+ * Copyright (C) 1998-2000 Russell King
  *
  * Frame buffer code for Acorn platforms
  *
@@ -958,9 +958,6 @@ acornfb_set_var(struct fb_var_screeninfo *var, int con, struct fb_info *info)
 	else
 		display = &global_disp;
 
-	if (!current_par.allow_modeset && con != -1)
-		return -EINVAL;
-
 	err = acornfb_decode_var(var, con, &visual);
 	if (err)
 		return err;
@@ -1088,9 +1085,7 @@ acornfb_set_var(struct fb_var_screeninfo *var, int con, struct fb_info *info)
 		outl(control, IOMD_VIDCR);
 #endif
 		acornfb_update_dma(var);
-
-		if (current_par.allow_modeset)
-			acornfb_set_timing(var);
+		acornfb_set_timing(var);
 
 		if (display->cmap.len)
 			cmap = &display->cmap;
@@ -1375,37 +1370,49 @@ acornfb_parse_font(char *opt)
 static void __init
 acornfb_parse_mon(char *opt)
 {
+	char *p = opt;
+
 	current_par.montype = -2;
 
-	fb_info.monspecs.hfmin = simple_strtoul(opt, &opt, 0);
-	if (*opt == '-')
-		fb_info.monspecs.hfmax = simple_strtoul(opt + 1, &opt, 0);
+	fb_info.monspecs.hfmin = simple_strtoul(p, &p, 0);
+	if (*p == '-')
+		fb_info.monspecs.hfmax = simple_strtoul(p + 1, &p, 0);
 	else
 		fb_info.monspecs.hfmax = fb_info.monspecs.hfmin;
 
-	if (*opt != ':')
-		return;
+	if (*p != ':')
+		goto bad;
 
-	fb_info.monspecs.vfmin = simple_strtoul(opt + 1, &opt, 0);
-	if (*opt == '-')
-		fb_info.monspecs.vfmax = simple_strtoul(opt + 1, &opt, 0);
+	fb_info.monspecs.vfmin = simple_strtoul(p + 1, &p, 0);
+	if (*p == '-')
+		fb_info.monspecs.vfmax = simple_strtoul(p + 1, &p, 0);
 	else
 		fb_info.monspecs.vfmax = fb_info.monspecs.vfmin;
 
-	if (*opt != ':')
-		return;
+	if (*p != ':')
+		goto check_values;
 
-	fb_info.monspecs.dpms = simple_strtoul(opt + 1, &opt, 0);
+	fb_info.monspecs.dpms = simple_strtoul(p + 1, &p, 0);
 
-	if (*opt != ':')
-		return;
+	if (*p != ':')
+		goto check_values;
 
-	init_var.width = simple_strtoul(opt + 1, &opt, 0);
+	init_var.width = simple_strtoul(p + 1, &p, 0);
 
-	if (*opt != ':')
-		return;
+	if (*p != ':')
+		goto check_values;
 
-	init_var.height = simple_strtoul(opt + 1, NULL, 0);
+	init_var.height = simple_strtoul(p + 1, NULL, 0);
+
+check_values:
+	if (fb_info.monspecs.hfmax < fb_info.monspecs.hfmin ||
+	    fb_info.monspecs.vfmax < fb_info.monspecs.vfmin)
+		goto bad;
+	return;
+
+bad:
+	printk(KERN_ERR "Acornfb: bad monitor settings: %s\n", opt);
+	current_par.montype = -1;
 }
 
 static void __init
@@ -1574,9 +1581,10 @@ acornfb_init(void)
 	if (current_par.montype == -1 || current_par.montype > NR_MONTYPES)
 		current_par.montype = 4;
 
-	if (current_par.montype > 0)
+	if (current_par.montype > 0) {
 		fb_info.monspecs = monspecs[current_par.montype];
-	fb_info.monspecs.dpms = current_par.dpms;
+		fb_info.monspecs.dpms = current_par.dpms;
+	}
 
 	/*
 	 * Try to select a suitable default mode
@@ -1667,7 +1675,6 @@ acornfb_init(void)
 	
 	current_par.screen_size	   = size;
 	current_par.palette_size   = VIDC_PALETTE_SIZE;
-	current_par.allow_modeset  = 1;
 
 	/*
 	 * Lookup the timing for this resolution.  If we can't
@@ -1683,13 +1690,6 @@ acornfb_init(void)
 		printk("Acornfb: no valid mode found\n");
 	}
 
-	/*
-	 * Again, if this does not succeed, then we disallow
-	 * changes to the resolution parameters.
-	 */
-	if (acornfb_set_var(&init_var, -1, &fb_info))
-		current_par.allow_modeset = 0;
-
 	h_sync = 1953125000 / init_var.pixclock;
 	h_sync = h_sync * 512 / (init_var.xres + init_var.left_margin +
 		 init_var.right_margin + init_var.hsync_len);
@@ -1702,6 +1702,15 @@ acornfb_init(void)
 		current_par.using_vram ? 'V' : 'D',
 		VIDC_NAME, init_var.xres, init_var.yres,
 		h_sync / 1000, h_sync % 1000, v_sync);
+
+	printk(KERN_INFO "Acornfb: Monitor: %d.%03d-%d.%03dkHz, %d-%dHz%s\n",
+		fb_info.monspecs.hfmin / 1000, fb_info.monspecs.hfmin % 1000,
+		fb_info.monspecs.hfmax / 1000, fb_info.monspecs.hfmax % 1000,
+		fb_info.monspecs.vfmin, fb_info.monspecs.vfmax,
+		fb_info.monspecs.dpms ? ", DPMS" : "");
+
+	if (acornfb_set_var(&init_var, -1, &fb_info))
+		printk(KERN_ERR "Acornfb: unable to set display parameters\n");
 
 	if (register_framebuffer(&fb_info) < 0)
 		return -EINVAL;

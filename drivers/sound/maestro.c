@@ -2381,8 +2381,20 @@ static unsigned int ess_poll(struct file *file, struct poll_table_struct *wait)
 	struct ess_state *s = (struct ess_state *)file->private_data;
 	unsigned long flags;
 	unsigned int mask = 0;
+	int ret;
 
 	VALIDATE_STATE(s);
+
+/* In 0.14 prog_dmabuf always returns success anyway ... */
+	if (file->f_mode & FMODE_WRITE) {
+		if (!s->dma_dac.ready && (ret = prog_dmabuf(s, 0))) 
+			return POLLERR;
+	}
+	if (file->f_mode & FMODE_READ) {
+	  	if (!s->dma_adc.ready && (ret = prog_dmabuf(s, 1)))
+			return POLLERR;
+	}
+
 	if (file->f_mode & FMODE_WRITE)
 		poll_wait(file, &s->dma_dac.wait, wait);
 	if (file->f_mode & FMODE_READ)

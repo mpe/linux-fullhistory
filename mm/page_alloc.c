@@ -24,9 +24,9 @@
 #define NUMNODES numnodes
 #endif
 
-int nr_swap_pages = 0;
-int nr_lru_pages = 0;
-pg_data_t *pgdat_list = (pg_data_t *)0;
+int nr_swap_pages;
+int nr_lru_pages;
+pg_data_t *pgdat_list;
 
 static char *zone_names[MAX_NR_ZONES] = { "DMA", "Normal", "HighMem" };
 static int zone_balance_ratio[MAX_NR_ZONES] = { 128, 128, 128, };

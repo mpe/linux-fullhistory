@@ -18,7 +18,7 @@
 #include <asm/pgtable.h>
 
 spinlock_t swaplock = SPIN_LOCK_UNLOCKED;
-unsigned int nr_swapfiles = 0;
+unsigned int nr_swapfiles;
 
 struct swap_list_t swap_list = {-1, -1};
 

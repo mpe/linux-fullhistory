@@ -82,6 +82,9 @@
 #define FB_ACCEL_CT_6555x	30	/* C&T 6555x			*/
 #define FB_ACCEL_3DFX_BANSHEE	31	/* 3Dfx Banshee			*/
 #define FB_ACCEL_ATI_RAGE128	32	/* ATI Rage128 family		*/
+#define FB_ACCEL_IGS_CYBER2000	33	/* CyberPro 2000		*/
+#define FB_ACCEL_IGS_CYBER2010	34	/* CyberPro 2010		*/
+#define FB_ACCEL_IGS_CYBER5000	35	/* CyberPro 5000		*/
 
 struct fb_fix_screeninfo {
 	char id[16];			/* identification string eg "TT Builtin" */

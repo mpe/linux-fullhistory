@@ -23,7 +23,7 @@
 #include <linux/slab.h>
 #include <linux/pm.h>
 
-int pm_active = 0;
+int pm_active;
 
 static spinlock_t pm_devs_lock = SPIN_LOCK_UNLOCKED;
 static LIST_HEAD(pm_devs);

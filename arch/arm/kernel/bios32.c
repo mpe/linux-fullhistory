@@ -378,6 +378,9 @@ static int __init netwinder_map_irq(struct pci_dev *dev, u8 slot, u8 pin)
 	case DEV(PCI_VENDOR_ID_INTERG, PCI_DEVICE_ID_INTERG_5000):
 		return IRQ_NETWINDER_VGA;
 
+	case DEV(PCI_VENDOR_ID_DEC, PCI_DEVICE_ID_DEC_21285):
+		return 0;
+
 	default:
 		printk(KERN_ERR "PCI: %02X:%02X [%04X:%04X] unknown device\n",
 			dev->bus->number, dev->devfn,

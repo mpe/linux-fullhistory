@@ -289,10 +289,10 @@ static void uhci_free_td(struct uhci_td *td)
 	if (!list_empty(&td->list))
 		dbg("td is still in URB list!");
 
-	kmem_cache_free(uhci_td_cachep, td);
-
 	if (td->dev)
 		usb_dec_dev_use(td->dev);
+
+	kmem_cache_free(uhci_td_cachep, td);
 }
 
 static struct uhci_qh *uhci_alloc_qh(struct usb_device *dev)
@@ -318,10 +318,10 @@ static struct uhci_qh *uhci_alloc_qh(struct usb_device *dev)
 
 static void uhci_free_qh(struct uhci_qh *qh)
 {
-	kmem_cache_free(uhci_qh_cachep, qh);
-
 	if (qh->dev)
 		usb_dec_dev_use(qh->dev);
+
+	kmem_cache_free(uhci_qh_cachep, qh);
 }
 
 static void uhci_insert_qh(struct uhci *uhci, struct uhci_qh *skelqh, struct uhci_qh *qh)

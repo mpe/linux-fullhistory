@@ -29,12 +29,12 @@
 
 #define SA1100_STD_IO_MAPPING \
  /* virtual     physical    length      domain     r  w  c  b */ \
-  { 0xe0000000, 0x20000000, 0x04000000, DOMAIN_IO, 0, 1, 0, 0 }, /* PCMCIA0 IO */ \
-  { 0xe4000000, 0x30000000, 0x04000000, DOMAIN_IO, 0, 1, 0, 0 }, /* PCMCIA1 IO */ \
-  { 0xe8000000, 0x28000000, 0x04000000, DOMAIN_IO, 0, 1, 0, 0 }, /* PCMCIA0 attr */ \
-  { 0xec000000, 0x38000000, 0x04000000, DOMAIN_IO, 0, 1, 0, 0 }, /* PCMCIA1 attr */ \
-  { 0xf0000000, 0x2c000000, 0x04000000, DOMAIN_IO, 0, 1, 0, 0 }, /* PCMCIA0 mem */ \
-  { 0xf4000000, 0x3c000000, 0x04000000, DOMAIN_IO, 0, 1, 0, 0 }, /* PCMCIA1 mem */ \
+  { 0xe0000000, 0x20000000, 0x04000000, DOMAIN_IO, 1, 1, 0, 0 }, /* PCMCIA0 IO */ \
+  { 0xe4000000, 0x30000000, 0x04000000, DOMAIN_IO, 1, 1, 0, 0 }, /* PCMCIA1 IO */ \
+  { 0xe8000000, 0x28000000, 0x04000000, DOMAIN_IO, 1, 1, 0, 0 }, /* PCMCIA0 attr */ \
+  { 0xec000000, 0x38000000, 0x04000000, DOMAIN_IO, 1, 1, 0, 0 }, /* PCMCIA1 attr */ \
+  { 0xf0000000, 0x2c000000, 0x04000000, DOMAIN_IO, 1, 1, 0, 0 }, /* PCMCIA0 mem */ \
+  { 0xf4000000, 0x3c000000, 0x04000000, DOMAIN_IO, 1, 1, 0, 0 }, /* PCMCIA1 mem */ \
   { 0xf8000000, 0x80000000, 0x02000000, DOMAIN_IO, 0, 1, 0, 0 }, /* PCM */ \
   { 0xfa000000, 0x90000000, 0x02000000, DOMAIN_IO, 0, 1, 0, 0 }, /* SCM */ \
   { 0xfc000000, 0xa0000000, 0x02000000, DOMAIN_IO, 0, 1, 0, 0 }, /* MER */ \
@@ -63,16 +63,21 @@ static struct map_desc empeg_io_desc[] __initdata = {
 #endif
 };
 
-static struct map_desc thinclient_io_desc[] __initdata = {
-#ifdef CONFIG_SA1100_THINCLIENT
-#if 1
-  /* ThinClient: only one of those... */
-//  { 0xd0000000, 0x00000000, 0x01000000, DOMAIN_IO, 1, 1, 0, 0 }, /* Flash bank 0 when JP1 2-4 */
-  { 0xd0000000, 0x08000000, 0x01000000, DOMAIN_IO, 1, 1, 0, 0 }, /* Flash bank 1 when JP1 3-4 */
-#else
-  /* GraphicsClient: */
+static struct map_desc graphicsclient_io_desc[] __initdata = {
+#ifdef CONFIG_SA1100_GRAPHICSCLIENT
   { 0xd0000000, 0x08000000, 0x00800000, DOMAIN_IO, 1, 1, 0, 0 }, /* Flash bank 1 */
   { 0xd0800000, 0x18000000, 0x00800000, DOMAIN_IO, 1, 1, 0, 0 }, /* Flash bank 3 */
+  { 0xdc000000, 0x10000000, 0x00400000, DOMAIN_IO, 0, 1, 0, 0 }, /* CPLD */
+  SA1100_STD_IO_MAPPING
+#endif
+};
+
+static struct map_desc thinclient_io_desc[] __initdata = {
+#ifdef CONFIG_SA1100_THINCLIENT
+#if 0
+  { 0xd0000000, 0x00000000, 0x01000000, DOMAIN_IO, 1, 1, 0, 0 }, /* Flash bank 0 when JP1 2-4 */
+#else
+  { 0xd0000000, 0x08000000, 0x01000000, DOMAIN_IO, 1, 1, 0, 0 }, /* Flash bank 1 when JP1 3-4 */
 #endif
   { 0xdc000000, 0x10000000, 0x00400000, DOMAIN_IO, 0, 1, 0, 0 }, /* CPLD */
   SA1100_STD_IO_MAPPING
@@ -104,7 +109,7 @@ static struct map_desc default_io_desc[] __initdata = {
  * Here it would be wiser to simply assign a pointer to the appropriate 
  * list, but io_desc is already declared as an array in "map.h".
  */
-struct map_desc io_desc[20] __initdata = { { 0, }, };
+struct map_desc io_desc[20] __initdata = {};
 unsigned int io_desc_size;
 
 void __init select_sa1100_io_desc(void)
@@ -118,6 +123,9 @@ void __init select_sa1100_io_desc(void)
 	} else if( machine_is_empeg() ) {
 		memcpy( io_desc, empeg_io_desc, sizeof(empeg_io_desc) );
 		io_desc_size = SIZE(empeg_io_desc);
+	} else if( machine_is_graphicsclient() ) {
+		memcpy( io_desc, graphicsclient_io_desc, sizeof(graphicsclient_io_desc) );
+		io_desc_size = SIZE(graphicsclient_io_desc);
 	} else if( machine_is_thinclient() ) {
 		memcpy( io_desc, thinclient_io_desc, sizeof(thinclient_io_desc) );
 		io_desc_size = SIZE(thinclient_io_desc);

@@ -109,54 +109,41 @@ void remove_inode_page(struct page *page)
 	spin_unlock(&pagecache_lock);
 }
 
-#define ITERATIONS 100
+/**
+ * invalidate_inode_pages - Invalidate all the unlocked pages of one inode
+ * @inode: the inode which pages we want to invalidate
+ *
+ * This function only removes the unlocked pages, if you want to
+ * remove all the pages of one inode, you must call truncate_inode_pages.
+ */
 
 void invalidate_inode_pages(struct inode * inode)
 {
 	struct list_head *head, *curr;
 	struct page * page;
-	int count;
 
 	head = &inode->i_mapping->pages;
 
-	while (head != head->next) {
-		spin_lock(&pagecache_lock);
-		spin_lock(&pagemap_lru_lock);
-		head = &inode->i_mapping->pages;
-		curr = head->next;
-		count = 0;
+	spin_lock(&pagecache_lock);
+	spin_lock(&pagemap_lru_lock);
+	curr = head->next;
 
-		while ((curr != head) && (count++ < ITERATIONS)) {
-			page = list_entry(curr, struct page, list);
-			curr = curr->next;
+	while (curr != head) {
+		page = list_entry(curr, struct page, list);
+		curr = curr->next;
 
-			/* We cannot invalidate a locked page */
-			if (TryLockPage(page))
-				continue;
+		/* We cannot invalidate a locked page */
+		if (TryLockPage(page))
+			continue;
 
-			__lru_cache_del(page);
-			__remove_inode_page(page);
-			UnlockPage(page);
-			page_cache_release(page);
-		}
-
-		/* At this stage we have passed through the list
-		 * once, and there may still be locked pages. */
-
-		if (head->next!=head) {
-			page = list_entry(head->next, struct page, list);
-			get_page(page);
-			spin_unlock(&pagemap_lru_lock);
-			spin_unlock(&pagecache_lock);
-			/* We need to block */
-			lock_page(page);
-			UnlockPage(page);
-			page_cache_release(page);
-		} else {                                         
-			spin_unlock(&pagemap_lru_lock);
-			spin_unlock(&pagecache_lock);
-		}
+		__lru_cache_del(page);
+		__remove_inode_page(page);
+		UnlockPage(page);
+		page_cache_release(page);
 	}
+
+	spin_unlock(&pagemap_lru_lock);
+	spin_unlock(&pagecache_lock);
 }
 
 /*
@@ -187,13 +174,13 @@ repeat:
 		/* page wholly truncated - free it */
 		if (offset >= start) {
 			if (TryLockPage(page)) {
-				get_page(page);
+				page_cache_get(page);
 				spin_unlock(&pagecache_lock);
 				wait_on_page(page);
 				page_cache_release(page);
 				goto repeat;
 			}
-			get_page(page);
+			page_cache_get(page);
 			spin_unlock(&pagecache_lock);
 
 			if (!page->buffers || block_flushpage(page, 0))
@@ -237,7 +224,7 @@ repeat:
 			spin_unlock(&pagecache_lock);
 			goto repeat;
 		}
-		get_page(page);
+		page_cache_get(page);
 		spin_unlock(&pagecache_lock);
 
 		memclear_highpage_flush(page, partial, PAGE_CACHE_SIZE-partial);
@@ -252,9 +239,6 @@ repeat:
 		 */
 		UnlockPage(page);
 		page_cache_release(page);
-		get_page(page);
-		wait_on_page(page);
-		put_page(page);
 		goto repeat;
 	}
 	spin_unlock(&pagecache_lock);
@@ -312,7 +296,7 @@ int shrink_mmap(int priority, int gfp_mask)
 		spin_unlock(&pagemap_lru_lock);
 
 		/* avoid freeing the page while it's locked */
-		get_page(page);
+		page_cache_get(page);
 
 		/*
 		 * Is it a buffer page? Try to clean it up regardless
@@ -376,7 +360,7 @@ cache_unlock_continue:
 unlock_continue:
 		spin_lock(&pagemap_lru_lock);
 		UnlockPage(page);
-		put_page(page);
+		page_cache_release(page);
 dispose_continue:
 		list_add(page_lru, dispose);
 	}
@@ -386,7 +370,7 @@ made_inode_progress:
 	page_cache_release(page);
 made_buffer_progress:
 	UnlockPage(page);
-	put_page(page);
+	page_cache_release(page);
 	ret = 1;
 	spin_lock(&pagemap_lru_lock);
 	/* nr_lru_pages needs the spinlock */
@@ -474,7 +458,7 @@ static int do_buffer_fdatasync(struct inode *inode, unsigned long start, unsigne
 		if (page->index < start)
 			continue;
 
-		get_page(page);
+		page_cache_get(page);
 		spin_unlock(&pagecache_lock);
 		lock_page(page);
 
@@ -516,7 +500,7 @@ void add_to_page_cache_locked(struct page * page, struct address_space *mapping,
 	if (!PageLocked(page))
 		BUG();
 
-	get_page(page);
+	page_cache_get(page);
 	spin_lock(&pagecache_lock);
 	page->index = index;
 	add_page_to_inode_queue(mapping, page);
@@ -541,7 +525,7 @@ static inline void __add_to_page_cache(struct page * page,
 
 	flags = page->flags & ~((1 << PG_uptodate) | (1 << PG_error) | (1 << PG_dirty));
 	page->flags = flags | (1 << PG_locked) | (1 << PG_referenced);
-	get_page(page);
+	page_cache_get(page);
 	page->index = offset;
 	add_page_to_inode_queue(mapping, page);
 	__add_page_to_hash_queue(page, hash);
@@ -683,7 +667,7 @@ repeat:
 	spin_lock(&pagecache_lock);
 	page = __find_page_nolock(mapping, offset, *hash);
 	if (page)
-		get_page(page);
+		page_cache_get(page);
 	spin_unlock(&pagecache_lock);
 
 	/* Found the page, sleep if locked. */
@@ -733,7 +717,7 @@ repeat:
 	spin_lock(&pagecache_lock);
 	page = __find_page_nolock(mapping, offset, *hash);
 	if (page)
-		get_page(page);
+		page_cache_get(page);
 	spin_unlock(&pagecache_lock);
 
 	/* Found the page, sleep if locked. */
@@ -1091,7 +1075,7 @@ void do_generic_file_read(struct file * filp, loff_t *ppos, read_descriptor_t * 
 		if (!page)
 			goto no_cached_page;
 found_page:
-		get_page(page);
+		page_cache_get(page);
 		spin_unlock(&pagecache_lock);
 
 		if (!Page_Uptodate(page))
@@ -1594,7 +1578,7 @@ static inline int filemap_sync_pte(pte_t * ptep, struct vm_area_struct *vma,
 		set_pte(ptep, pte_mkclean(pte));
 		flush_tlb_page(vma, address);
 		page = pte_page(pte);
-		get_page(page);
+		page_cache_get(page);
 	} else {
 		if (pte_none(pte))
 			return 0;

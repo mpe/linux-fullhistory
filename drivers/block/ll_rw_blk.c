@@ -373,40 +373,23 @@ void set_device_ro(kdev_t dev,int flag)
 	else ro_bits[major][minor >> 5] &= ~(1 << (minor & 31));
 }
 
-static inline void drive_stat_acct(struct request *req,
+inline void drive_stat_acct (kdev_t dev, int rw,
 				unsigned long nr_sectors, int new_io)
 {
-	int major = MAJOR(req->rq_dev);
-	int minor = MINOR(req->rq_dev);
-	unsigned int disk_index;
+	unsigned int major = MAJOR(dev);
+	unsigned int index;
 
-	switch (major) {
-		case DAC960_MAJOR+0:
-			disk_index = (minor & 0x00f8) >> 3;
-			break;
-		case SCSI_DISK0_MAJOR:
-			disk_index = (minor & 0x00f0) >> 4;
-			break;
-		case IDE0_MAJOR:	/* same as HD_MAJOR */
-		case XT_DISK_MAJOR:
-			disk_index = (minor & 0x0040) >> 6;
-			break;
-		case IDE1_MAJOR:
-			disk_index = ((minor & 0x0040) >> 6) + 2;
-			break;
-		default:
-			return;
-	}
-	if (disk_index >= DK_NDRIVE)
+	index = disk_index(dev);
+	if ((index >= DK_MAX_DISK) || (major >= DK_MAX_MAJOR))
 		return;
 
-	kstat.dk_drive[disk_index] += new_io;
-	if (req->cmd == READ) {
-		kstat.dk_drive_rio[disk_index] += new_io;
-		kstat.dk_drive_rblk[disk_index] += nr_sectors;
-	} else if (req->cmd == WRITE) {
-		kstat.dk_drive_wio[disk_index] += new_io;
-		kstat.dk_drive_wblk[disk_index] += nr_sectors;
+	kstat.dk_drive[major][index] += new_io;
+	if (rw == READ) {
+		kstat.dk_drive_rio[major][index] += new_io;
+		kstat.dk_drive_rblk[major][index] += nr_sectors;
+	} else if (rw == WRITE) {
+		kstat.dk_drive_wio[major][index] += new_io;
+		kstat.dk_drive_wblk[major][index] += nr_sectors;
 	} else
 		printk(KERN_ERR "drive_stat_acct: cmd not R/W?\n");
 }
@@ -426,7 +409,7 @@ static inline void add_request(request_queue_t * q, struct request * req,
 {
 	int major;
 
-	drive_stat_acct(req, req->nr_sectors, 1);
+	drive_stat_acct(req->rq_dev, req->cmd, req->nr_sectors, 1);
 
 	if (list_empty(head)) {
 		req->elevator_sequence = elevator_sequence(&q->elevator, latency);
@@ -686,7 +669,7 @@ static inline void __make_request(request_queue_t * q, int rw,
 			req->bhtail->b_reqnext = bh;
 			req->bhtail = bh;
 		    	req->nr_sectors = req->hard_nr_sectors += count;
-			drive_stat_acct(req, count, 0);
+			drive_stat_acct(req->rq_dev, req->cmd, count, 0);
 
 			elevator_merge_after(elevator, req, latency);
 
@@ -716,7 +699,7 @@ static inline void __make_request(request_queue_t * q, int rw,
 		    	req->current_nr_sectors = count;
 		    	req->sector = req->hard_sector = sector;
 		    	req->nr_sectors = req->hard_nr_sectors += count;
-			drive_stat_acct(req, count, 0);
+			drive_stat_acct(req->rq_dev, req->cmd, count, 0);
 
 			elevator_merge_before(elevator, req, latency);
 
@@ -1090,6 +1073,7 @@ EXPORT_SYMBOL(io_request_lock);
 EXPORT_SYMBOL(end_that_request_first);
 EXPORT_SYMBOL(end_that_request_last);
 EXPORT_SYMBOL(blk_init_queue);
+EXPORT_SYMBOL(blk_get_queue);
 EXPORT_SYMBOL(blk_cleanup_queue);
 EXPORT_SYMBOL(blk_queue_headactive);
 EXPORT_SYMBOL(blk_queue_pluggable);

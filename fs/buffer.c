@@ -71,18 +71,18 @@ static char buffersize_index[65] =
 /*
  * Hash table gook..
  */
-static unsigned int bh_hash_mask = 0;
-static unsigned int bh_hash_shift = 0;
+static unsigned int bh_hash_mask;
+static unsigned int bh_hash_shift;
 static struct buffer_head **hash_table;
 static rwlock_t hash_table_lock = RW_LOCK_UNLOCKED;
 
 static struct buffer_head *lru_list[NR_LIST];
 static spinlock_t lru_list_lock = SPIN_LOCK_UNLOCKED;
-static int nr_buffers_type[NR_LIST] = {0,};
-static unsigned long size_buffers_type[NR_LIST] = {0,};
+static int nr_buffers_type[NR_LIST];
+static unsigned long size_buffers_type[NR_LIST];
 
-static struct buffer_head * unused_list = NULL;
-static int nr_unused_buffer_heads = 0;
+static struct buffer_head * unused_list;
+static int nr_unused_buffer_heads;
 static spinlock_t unused_list_lock = SPIN_LOCK_UNLOCKED;
 static DECLARE_WAIT_QUEUE_HEAD(buffer_wait);
 
@@ -1264,7 +1264,7 @@ static int create_page_buffers(int rw, struct page *page, kdev_t dev, int b[], i
 		set_bit(BH_Mapped, &bh->b_state);
 	}
 	tail->b_this_page = head;
-	get_page(page);
+	page_cache_get(page);
 	page->buffers = head;
 	return 0;
 }
@@ -1351,7 +1351,7 @@ static void create_empty_buffers(struct page *page, struct inode *inode, unsigne
 	} while (bh);
 	tail->b_this_page = head;
 	page->buffers = head;
-	get_page(page);
+	page_cache_get(page);
 }
 
 static void unmap_underlying_metadata(struct buffer_head * bh)
@@ -2106,7 +2106,7 @@ static int grow_buffers(int size)
 	return 1;
 
 no_buffer_head:
-	__free_page(page);
+	page_cache_release(page);
 out:
 	return 0;
 }
@@ -2190,7 +2190,7 @@ int try_to_free_buffers(struct page * page)
 
 	/* And free the page */
 	page->buffers = NULL;
-	__free_page(page);
+	page_cache_release(page);
 	spin_unlock(&free_list[index].lock);
 	write_unlock(&hash_table_lock);
 	spin_unlock(&lru_list_lock);

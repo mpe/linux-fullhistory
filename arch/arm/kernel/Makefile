@@ -19,6 +19,7 @@ O_OBJS_ebsa110    = dma-dummy.o
 O_OBJS_footbridge = dma.o dma-footbridge.o $(ISA_DMA_OBJS) hw-footbridge.o isa.o
 O_OBJS_nexuspci   = dma-dummy.o
 O_OBJS_sa1100     = dma-dummy.o fiq.o
+O_OBJS_l7200      = dma-dummy.o fiq.o
 
 O_TARGET := kernel.o
 

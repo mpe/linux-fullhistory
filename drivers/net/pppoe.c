@@ -39,7 +39,6 @@
 #include <linux/ppp_defs.h>
 #include <linux/if_ppp.h>
 #include <linux/if_pppvar.h>
-#include <linux/init.h>
 #include <linux/notifier.h>
 #include <linux/file.h>
 #include <linux/proc_fs.h>

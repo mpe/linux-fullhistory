@@ -34,11 +34,18 @@ extern unsigned int __machine_arch_type;
 #define MACH_TYPE_SHARK			15
 #define MACH_TYPE_BRUTUS		16
 #define MACH_TYPE_PERSONAL_SERVER	17
+#define MACH_TYPE_SA1100		18	/* unused/too general */
+#define MACH_TYPE_L7200			19
+#define MACH_TYPE_SA1110		20	/* unused/too general */
+#define MACH_TYPE_INTEGRATOR		21
 #define MACH_TYPE_BITSY			22
+#define MACH_TYPE_IXP1200		23
 #define MACH_TYPE_THINCLIENT		24
 #define MACH_TYPE_ASSABET		25
 #define MACH_TYPE_VICTOR		26
 #define MACH_TYPE_LART			27
+#define MACH_TYPE_RANGER		28
+#define MACH_TYPE_GRAPHICSCLIENT	29
 
 /*
  * Sort out a definition for machine_arch_type
@@ -53,6 +60,9 @@ extern unsigned int __machine_arch_type;
  *  -  switch (machine_arch_type) { }
  *  -  if (machine_arch_type = xxxx)
  *  -  __machine_arch_type
+ *
+ * Please note that these are kept in numeric order (ie, the same
+ * order as the list above).
  */
 #ifdef CONFIG_ARCH_EBSA110
 # ifdef machine_arch_type
@@ -198,28 +208,40 @@ extern unsigned int __machine_arch_type;
 # define machine_is_personal_server()	(0)
 #endif
 
-#ifdef CONFIG_SA1100_ITSY
+#ifdef CONFIG_ARCH_L7200
 # ifdef machine_arch_type
 #  undef machine_arch_type
 #  define machine_arch_type	__machine_arch_type
 # else
-#  define machine_arch_type	MACH_TYPE_ITSY
+#  define machine_arch_type	MACH_TYPE_L7200
 # endif
-# define machine_is_itsy()	(machine_arch_type == MACH_TYPE_ITSY)
+# define machine_is_l7200()	(machine_arch_type == MACH_TYPE_L7200)
 #else
-# define machine_is_itsy()	(0)
+# define machine_is_l7200()	(0)
 #endif
 
-#ifdef CONFIG_SA1100_EMPEG
+#ifdef CONFIG_SA1100_BITSY
 # ifdef machine_arch_type
 #  undef machine_arch_type
 #  define machine_arch_type	__machine_arch_type
 # else
-#  define machine_arch_type	MACH_TYPE_EMPEG
+#  define machine_arch_type	MACH_TYPE_BITSY
 # endif
-# define machine_is_empeg()	(machine_arch_type == MACH_TYPE_EMPEG)
+# define machine_is_bitsy()	(machine_arch_type == MACH_TYPE_BITSY)
 #else
-# define machine_is_empeg()	(0)
+# define machine_is_bitsy()	(0)
+#endif
+
+#ifdef CONFIG_SA1100_THINCLIENT
+# ifdef machine_arch_type
+#  undef machine_arch_type
+#  define machine_arch_type	__machine_arch_type
+# else
+#  define machine_arch_type	MACH_TYPE_THINCLIENT
+# endif
+# define machine_is_thinclient()	(machine_arch_type == MACH_TYPE_THINCLIENT)
+#else
+# define machine_is_thinclient()	(0)
 #endif
 
 #ifdef CONFIG_SA1100_ASSABET
@@ -258,16 +280,31 @@ extern unsigned int __machine_arch_type;
 # define machine_is_lart()	(0)
 #endif
 
-#ifdef CONFIG_SA1100_BITSY
+/*
+ * The following are currently unregistered
+ */
+#ifdef CONFIG_SA1100_ITSY
 # ifdef machine_arch_type
 #  undef machine_arch_type
 #  define machine_arch_type	__machine_arch_type
 # else
-#  define machine_arch_type	MACH_TYPE_BITSY
+#  define machine_arch_type	MACH_TYPE_ITSY
 # endif
-# define machine_is_bitsy()	(machine_arch_type == MACH_TYPE_BITSY)
+# define machine_is_itsy()	(machine_arch_type == MACH_TYPE_ITSY)
 #else
-# define machine_is_bitsy()	(0)
+# define machine_is_itsy()	(0)
+#endif
+
+#ifdef CONFIG_SA1100_EMPEG
+# ifdef machine_arch_type
+#  undef machine_arch_type
+#  define machine_arch_type	__machine_arch_type
+# else
+#  define machine_arch_type	MACH_TYPE_EMPEG
+# endif
+# define machine_is_empeg()	(machine_arch_type == MACH_TYPE_EMPEG)
+#else
+# define machine_is_empeg()	(0)
 #endif
 
 #ifdef CONFIG_SA1100_TIFON
@@ -292,18 +329,6 @@ extern unsigned int __machine_arch_type;
 # define machine_is_pleb()	(machine_arch_type == MACH_TYPE_PLEB)
 #else
 # define machine_is_pleb()	(0)
-#endif
-
-#ifdef CONFIG_SA1100_THINCLIENT
-# ifdef machine_arch_type
-#  undef machine_arch_type
-#  define machine_arch_type	__machine_arch_type
-# else
-#  define machine_arch_type	MACH_TYPE_THINCLIENT
-# endif
-# define machine_is_thinclient()	(machine_arch_type == MACH_TYPE_THINCLIENT)
-#else
-# define machine_is_thinclient()	(0)
 #endif
 
 #ifdef CONFIG_SA1100_PENNY

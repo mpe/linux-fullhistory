@@ -184,13 +184,11 @@ static int linear_status (char *page, mddev_t *mddev)
 static mdk_personality_t linear_personality=
 {
 	"linear",
-	NULL,
 	linear_make_request,
 	NULL,
 	linear_run,
 	linear_stop,
 	linear_status,
-	NULL,
 	0,
 	NULL,
 	NULL,

@@ -126,7 +126,7 @@ kdev_t real_root_dev;
 #endif
 
 int root_mountflags = MS_RDONLY;
-char *execute_command = NULL;
+char *execute_command;
 char root_device_name[64];
 
 

@@ -18,10 +18,12 @@
  *	1999/10/5	Proper register args for newer GCCs and minor bugs
  *			fixed - Petko Manolov (petkan@spct.net)
  *	1999/10/14	3DNow memscpy() added - Petkan
+ *	2000/05/09	extern changed to static in function definitions
+ *			and a few cleanups - Petkan
  */
 
 #define __HAVE_ARCH_STRCPY
-extern inline char * strcpy(char * dest,const char *src)
+static inline char * strcpy(char * dest,const char *src)
 {
 register char *tmp= (char *)dest;
 register char dummy;
@@ -40,7 +42,7 @@ return dest;
 }
 
 #define __HAVE_ARCH_STRNCPY
-extern inline char * strncpy(char * dest,const char *src,size_t count)
+static inline char * strncpy(char * dest,const char *src,size_t count)
 {
 register char *tmp= (char *)dest;
 register char dummy;
@@ -68,7 +70,7 @@ return dest;
 }
 
 #define __HAVE_ARCH_STRCAT
-extern inline char * strcat(char * dest,const char * src)
+static inline char * strcat(char * dest,const char * src)
 {
 register char *tmp = (char *)(dest-1);
 register char dummy;
@@ -89,7 +91,7 @@ return dest;
 }
 
 #define __HAVE_ARCH_STRNCAT
-extern inline char * strncat(char * dest,const char * src,size_t count)
+static inline char * strncat(char * dest,const char * src,size_t count)
 {
 register char *tmp = (char *)(dest-1);
 register char dummy;
@@ -114,7 +116,7 @@ return dest;
 }
 
 #define __HAVE_ARCH_STRCMP
-extern inline int strcmp(const char * cs,const char * ct)
+static inline int strcmp(const char * cs,const char * ct)
 {
 register int __res;
 __asm__ __volatile__(
@@ -138,7 +140,7 @@ return __res;
 }
 
 #define __HAVE_ARCH_STRNCMP
-extern inline int strncmp(const char * cs,const char * ct,size_t count)
+static inline int strncmp(const char * cs,const char * ct,size_t count)
 {
 register int __res;
 __asm__ __volatile__(
@@ -163,7 +165,7 @@ return __res;
 }
 
 #define __HAVE_ARCH_STRCHR
-extern inline char * strchr(const char * s, int c)
+static inline char * strchr(const char * s, int c)
 {
 register char * __res;
 __asm__ __volatile__(
@@ -182,7 +184,7 @@ return __res;
 }
 
 #define __HAVE_ARCH_STRRCHR
-extern inline char * strrchr(const char * s, int c)
+static inline char * strrchr(const char * s, int c)
 {
 int	d0, d1;
 register char * __res;
@@ -199,35 +201,9 @@ __asm__ __volatile__(
 return __res;
 }
 
-#define __HAVE_ARCH_STRSPN
-extern inline size_t strspn(const char * cs, const char * ct)
-{
-int	d0, d1;
-register char * __res;
-__asm__ __volatile__(
-	"movl %6,%%edi\n\t"
-	"repne\n\t"
-	"scasb\n\t"
-	"notl %%ecx\n\t"
-	"decl %%ecx\n\t"
-	"movl %%ecx,%%edx\n"
-	"1:\tlodsb\n\t"
-	"testb %%al,%%al\n\t"
-	"je 2f\n\t"
-	"movl %6,%%edi\n\t"
-	"movl %%edx,%%ecx\n\t"
-	"repne\n\t"
-	"scasb\n\t"
-	"je 1b\n"
-	"2:\tdecl %0"
-	:"=S" (__res), "=&a" (d0), "=&c" (d1)
-	:"0" (cs), "1" (0), "2" (0xffffffff), "g" (ct)
-	:"dx", "di");
-return __res-cs;
-}
 
 #define __HAVE_ARCH_STRCSPN
-extern inline size_t strcspn(const char * cs, const char * ct)
+static inline size_t strcspn(const char * cs, const char * ct)
 {
 int	d0, d1;
 register char * __res;
@@ -253,72 +229,9 @@ __asm__ __volatile__(
 return __res-cs;
 }
 
-#if 0
-#define __HAVE_ARCH_STRPBRK
-extern inline char * strpbrk(const char * cs,const char * ct)
-{
-int	d0, d1;
-register char * __res;
-__asm__ __volatile__(
-	"movl %6,%%edi\n\t"
-	"repne\n\t"
-	"scasb\n\t"
-	"notl %%ecx\n\t"
-	"decl %%ecx\n\t"
-	"movl %%ecx,%%edx\n"
-	"1:\tlodsb\n\t"
-	"testb %%al,%%al\n\t"
-	"je 2f\n\t"
-	"movl %6,%%edi\n\t"
-	"movl %%edx,%%ecx\n\t"
-	"repne\n\t"
-	"scasb\n\t"
-	"jne 1b\n\t"
-	"decl %0\n\t"
-	"jmp 3f\n"
-	"2:\txorl %0,%0\n"
-	"3:"
-	:"=S" (__res), "=&a" (d0), "=&c" (d1)
-	:"0" (cs), "1" (0), "2" (0xffffffff), "g" (ct)
-	:"dx", "di");
-return __res;
-}
-#endif
-
-#if 0
-#define __HAVE_ARCH_STRSTR
-extern inline char * strstr(const char * cs,const char * ct)
-{
-int	d0, d1;
-register char * __res;
-__asm__ __volatile__(
-	"movl %6,%%edi\n\t"
-	"repne\n\t"
-	"scasb\n\t"
-	"notl %%ecx\n\t"
-	"decl %%ecx\n\t"	/* NOTE! This also sets Z if searchstring='' */
-	"movl %%ecx,%%edx\n"
-	"1:\tmovl %6,%%edi\n\t"
-	"movl %%esi,%%eax\n\t"
-	"movl %%edx,%%ecx\n\t"
-	"repe\n\t"
-	"cmpsb\n\t"
-	"je 2f\n\t"		/* also works for empty string, see above */
-	"xchgl %%eax,%%esi\n\t"
-	"incl %%esi\n\t"
-	"cmpb $0,-1(%%eax)\n\t"
-	"jne 1b\n\t"
-	"xorl %%eax,%%eax\n\t"
-	"2:"
-	:"=a" (__res), "=&c" (d0), "=&S" (d1)
-	:"0" (0), "1" (0xffffffff), "2" (cs), "g" (ct)
-	:"dx", "di");
-return __res;
-}
-#endif
 
 #define __HAVE_ARCH_STRLEN
-extern inline size_t strlen(const char * s)
+static inline size_t strlen(const char * s)
 {
 /*
  * slightly slower on a 486, but with better chances of
@@ -339,7 +252,7 @@ return (tmp-s-1);
 
 /* Added by Gertjan van Wingerde to make minix and sysv module work */
 #define __HAVE_ARCH_STRNLEN
-extern inline size_t strnlen(const char * s, size_t count)
+static inline size_t strnlen(const char * s, size_t count)
 {
 int	d0;
 register int __res;
@@ -359,73 +272,12 @@ return __res;
 }
 /* end of additional stuff */
 
-#if 0
-#define __HAVE_ARCH_STRTOK
-extern inline char * strtok(char * s,const char * ct)
-{
-register char * __res;
-__asm__ __volatile__(
-	"testl %1,%1\n\t"
-	"jne 1f\n\t"
-	"testl %0,%0\n\t"
-	"je 8f\n\t"
-	"movl %0,%1\n"
-	"1:\txorl %0,%0\n\t"
-	"movl $-1,%%ecx\n\t"
-	"xorl %%eax,%%eax\n\t"
-	"movl %4,%%edi\n\t"
-	"repne\n\t"
-	"scasb\n\t"
-	"notl %%ecx\n\t"
-	"decl %%ecx\n\t"
-	"je 7f\n\t"			/* empty delimiter-string */
-	"movl %%ecx,%%edx\n"
-	"2:\tlodsb\n\t"
-	"testb %%al,%%al\n\t"
-	"je 7f\n\t"
-	"movl %4,%%edi\n\t"
-	"movl %%edx,%%ecx\n\t"
-	"repne\n\t"
-	"scasb\n\t"
-	"je 2b\n\t"
-	"decl %1\n\t"
-	"cmpb $0,(%1)\n\t"
-	"je 7f\n\t"
-	"movl %1,%0\n"
-	"3:\tlodsb\n\t"
-	"testb %%al,%%al\n\t"
-	"je 5f\n\t"
-	"movl %4,%%edi\n\t"
-	"movl %%edx,%%ecx\n\t"
-	"repne\n\t"
-	"scasb\n\t"
-	"jne 3b\n\t"
-	"decl %1\n\t"
-	"cmpb $0,(%1)\n\t"
-	"je 5f\n\t"
-	"movb $0,(%1)\n\t"
-	"incl %1\n\t"
-	"jmp 6f\n"
-	"5:\txorl %1,%1\n"
-	"6:\tcmpb $0,(%0)\n\t"
-	"jne 7f\n\t"
-	"xorl %0,%0\n"
-	"7:\ttestl %0,%0\n\t"
-	"jne 8f\n\t"
-	"movl %0,%1\n"
-	"8:"
-	:"=b" (__res),"=S" (___strtok)
-	:"0" (___strtok),"1" (s),"g" (ct)
-	:"ax","cx","dx","di","memory");
-return __res;
-}
-#endif
 
 /*
  *	These ought to get tweaked to do some cache priming.
  */
  
-extern inline void * __memcpy_by4(void * to, const void * from, size_t n)
+static inline void * __memcpy_by4(void * to, const void * from, size_t n)
 {
 register void *tmp = (void *)to;
 register int dummy1,dummy2;
@@ -442,7 +294,7 @@ __asm__ __volatile__ (
 return (to);
 }
 
-extern inline void * __memcpy_by2(void * to, const void * from, size_t n)
+static inline void * __memcpy_by2(void * to, const void * from, size_t n)
 {
 register void *tmp = (void *)to;
 register int dummy1,dummy2;
@@ -463,7 +315,7 @@ __asm__ __volatile__ (
 return (to);
 }
 
-extern inline void * __memcpy_g(void * to, const void * from, size_t n)
+static inline void * __memcpy_g(void * to, const void * from, size_t n)
 {
 int	d0, d1, d2;
 register void *tmp = (void *)to;
@@ -511,14 +363,14 @@ return (to);
 **      This CPU favours 3DNow strongly (eg AMD K6-II, K6-III, Athlon)
 */
 
-extern inline void * __constant_memcpy3d(void * to, const void * from, size_t len)
+static inline void * __constant_memcpy3d(void * to, const void * from, size_t len)
 {
 	if(len<512 || in_interrupt())
 		return __memcpy_c(to, from, len);
 	return _mmx_memcpy(to, from, len);
 }
 
-extern __inline__ void *__memcpy3d(void *to, const void *from, size_t len)
+static inline void *__memcpy3d(void *to, const void *from, size_t len)
 {
 	if(len<512 || in_interrupt())
 		return __memcpy_g(to, from, len);
@@ -536,12 +388,24 @@ extern __inline__ void *__memcpy3d(void *to, const void *from, size_t len)
 **	Generic routines
 */
 
+
 #define memcpy(d, s, count) __memcpy(d, s, count)
 
 #endif /* CONFIG_X86_USE_3DNOW */ 
 
+
+extern void __struct_cpy_bug( void );
+
+#define struct_cpy(x,y)				\
+({						\
+	if (sizeof(*(x)) != sizeof(*(y)))	\
+		__struct_cpy_bug;		\
+	memcpy(x, y, sizeof(*(x)));		\
+})
+
+
 #define __HAVE_ARCH_MEMMOVE
-extern inline void * memmove(void * dest,const void * src, size_t n)
+static inline void * memmove(void * dest,const void * src, size_t n)
 {
 int	d0, d1, d2;
 register void *tmp = (void *)dest;
@@ -564,7 +428,9 @@ __asm__ __volatile__ (
 return dest;
 }
 
-extern inline int memcmp(const void * cs,const void * ct,size_t count)
+
+#define	__HAVE_ARCH_MEMCMP
+static inline int memcmp(const void * cs,const void * ct,size_t count)
 {
 int	d0, d1, d2;
 register int __res;
@@ -580,8 +446,9 @@ __asm__ __volatile__(
 return __res;
 }
 
+
 #define __HAVE_ARCH_MEMCHR
-extern inline void * memchr(const void * cs,int c,size_t count)
+static inline void * memchr(const void * cs,int c,size_t count)
 {
 int	d0;
 register void * __res;
@@ -622,7 +489,7 @@ return __res;
   __memset_gc((s),(c),(count)) : \
   __memset_gg((s),(c),(count))))
 
-extern inline void * __memset_cc_by4(void * s, char c, size_t count)
+static inline void * __memset_cc_by4(void * s, char c, size_t count)
 {
 /*
  * register char *tmp = s;
@@ -640,7 +507,7 @@ __asm__ __volatile__ (
 return s;
 }
 
-extern inline void * __memset_cc_by2(void * s, char c, size_t count)
+static inline void * __memset_cc_by2(void * s, char c, size_t count)
 {
 register void *tmp = (void *)s;
 register int  dummy;
@@ -658,7 +525,7 @@ __asm__ __volatile__ (
 return s;
 }
 
-extern inline void * __memset_gc_by4(void * s, char c, size_t count)
+static inline void * __memset_gc_by4(void * s, char c, size_t count)
 {
 register void *tmp = (void *)s;
 register int dummy;
@@ -677,7 +544,7 @@ __asm__ __volatile__ (
 return s;
 }
 
-extern inline void * __memset_gc_by2(void * s, char c, size_t count)
+static inline void * __memset_gc_by2(void * s, char c, size_t count)
 {
 register void *tmp = (void *)s;
 register int dummy1,dummy2;
@@ -699,7 +566,7 @@ __asm__ __volatile__ (
 return s;
 }
 
-extern inline void * __memset_cg(void * s, char c, size_t count)
+static inline void * __memset_cg(void * s, char c, size_t count)
 {
 int	d0, d1;
 register void *tmp = (void *)s;
@@ -716,7 +583,7 @@ __asm__ __volatile__ (
 return s;
 }
 
-extern inline void * __memset_gg(void * s,char c,size_t count)
+static inline void * __memset_gg(void * s,char c,size_t count)
 {
 int	d0, d1, d2;
 register void *tmp = (void *)s;
@@ -739,7 +606,7 @@ return s;
  * find the first occurrence of byte 'c', or 1 past the area if none
  */
 #define __HAVE_ARCH_MEMSCAN
-extern inline void * memscan(void * addr, int c, size_t size)
+static inline void * memscan(void * addr, int c, size_t size)
 {
 	if (!size)
 		return addr;

@@ -542,14 +542,12 @@ int kswapd(void *unused)
 					continue;
 				something_to_do = 1;
 				do_try_to_free_pages(GFP_KSWAPD);
-				if (tsk->need_resched)
-					schedule();
 			}
 			run_task_queue(&tq_disk);
 			pgdat = pgdat->node_next;
 		} while (pgdat);
 
-		if (!something_to_do) {
+		if (tsk->need_resched || !something_to_do) {
 			tsk->state = TASK_INTERRUPTIBLE;
 			interruptible_sleep_on(&kswapd_wait);
 		}

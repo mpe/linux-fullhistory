@@ -47,30 +47,30 @@ DECLARE_TASK_QUEUE(tq_scheduler);
 /* TIME_ERROR prevents overwriting the CMOS clock */
 int time_state = TIME_OK;		/* clock synchronization status	*/
 int time_status = STA_UNSYNC;		/* clock status bits		*/
-long time_offset = 0;			/* time adjustment (us)		*/
+long time_offset;			/* time adjustment (us)		*/
 long time_constant = 2;			/* pll time constant		*/
 long time_tolerance = MAXFREQ;		/* frequency tolerance (ppm)	*/
 long time_precision = 1;		/* clock precision (us)		*/
 long time_maxerror = NTP_PHASE_LIMIT;	/* maximum error (us)		*/
 long time_esterror = NTP_PHASE_LIMIT;	/* estimated error (us)		*/
-long time_phase = 0;			/* phase offset (scaled us)	*/
+long time_phase;			/* phase offset (scaled us)	*/
 long time_freq = ((1000000 + HZ/2) % HZ - HZ/2) << SHIFT_USEC;
 					/* frequency offset (scaled ppm)*/
-long time_adj = 0;			/* tick adjust (scaled 1 / HZ)	*/
-long time_reftime = 0;			/* time at last adjustment (s)	*/
+long time_adj;				/* tick adjust (scaled 1 / HZ)	*/
+long time_reftime;			/* time at last adjustment (s)	*/
 
-long time_adjust = 0;
-long time_adjust_step = 0;
+long time_adjust;
+long time_adjust_step;
 
-unsigned long event = 0;
+unsigned long event;
 
 extern int do_setitimer(int, struct itimerval *, struct itimerval *);
 
-unsigned long volatile jiffies = 0;
+unsigned long volatile jiffies;
 
-unsigned int * prof_buffer = NULL;
-unsigned long prof_len = 0;
-unsigned long prof_shift = 0;
+unsigned int * prof_buffer;
+unsigned long prof_len;
+unsigned long prof_shift;
 
 /*
  * Event timer code
@@ -92,11 +92,11 @@ struct timer_vec_root {
 	struct list_head vec[TVR_SIZE];
 };
 
-static struct timer_vec tv5 = { 0 };
-static struct timer_vec tv4 = { 0 };
-static struct timer_vec tv3 = { 0 };
-static struct timer_vec tv2 = { 0 };
-static struct timer_vec_root tv1 = { 0 };
+static struct timer_vec tv5;
+static struct timer_vec tv4;
+static struct timer_vec tv3;
+static struct timer_vec tv2;
+static struct timer_vec_root tv1;
 
 static struct timer_vec * const tvecs[] = {
 	(struct timer_vec *)&tv1, &tv2, &tv3, &tv4, &tv5
@@ -118,7 +118,7 @@ void init_timervecs (void)
 		INIT_LIST_HEAD(tv1.vec + i);
 }
 
-static unsigned long timer_jiffies = 0;
+static unsigned long timer_jiffies;
 
 static inline void internal_add_timer(struct timer_list *timer)
 {
@@ -338,7 +338,7 @@ void immediate_bh(void)
 	run_task_queue(&tq_immediate);
 }
 
-unsigned long timer_active = 0;
+unsigned long timer_active;
 struct timer_struct timer_table[32];
 
 /*
@@ -625,7 +625,7 @@ static unsigned long count_active_tasks(void)
  * Nothing else seems to be standardized: the fractional size etc
  * all seem to differ on different machines.
  */
-unsigned long avenrun[3] = { 0,0,0 };
+unsigned long avenrun[3];
 
 static inline void calc_load(unsigned long ticks)
 {
@@ -642,8 +642,8 @@ static inline void calc_load(unsigned long ticks)
 	}
 }
 
-volatile unsigned long lost_ticks = 0;
-static unsigned long lost_ticks_system = 0;
+volatile unsigned long lost_ticks;
+static unsigned long lost_ticks_system;
 
 /*
  * This spinlock protect us from races in SMP while playing with xtime. -arca

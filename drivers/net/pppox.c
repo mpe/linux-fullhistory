@@ -17,6 +17,7 @@
  *
  */
 
+#include <linux/config.h>
 #include <linux/string.h>
 #include <linux/module.h>
 

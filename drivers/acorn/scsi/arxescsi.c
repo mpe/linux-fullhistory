@@ -1,7 +1,7 @@
 /*
  * linux/arch/arm/drivers/scsi/arxescsi.c
  *
- * Copyright (C) 1997-2000 Russell King
+ * Copyright (C) 1997-2000 Russell King, Stefan Hanske
  *
  * This driver is based on experimentation.  Hence, it may have made
  * assumptions about the particular card that I have available, and
@@ -11,9 +11,11 @@
  *  30-08-1997	RMK	0.0.0	Created, READONLY version as cumana_2.c
  *  22-01-1998	RMK	0.0.1	Updated to 2.1.80
  *  15-04-1998	RMK	0.0.1	Only do PIO if FAS216 will allow it.
- *  11-06-1998 		0.0.2   Changed to support ARXE 16-bit SCSI card, enabled writing
- *  				by Stefan Hanske
- *  02-04-2000	RMK	0.0.3	Updated for new error handling code.
+ *  11-06-1998 	SH	0.0.2   Changed to support ARXE 16-bit SCSI card
+ *				enabled writing
+ *  01-01-2000	SH	0.1.0   Added *real* pseudo dma writing
+ *				(arxescsi_pseudo_dma_write)
+ *  02-04-2000	RMK	0.1.1	Updated for new error handling code.
  */
 
 #include <linux/module.h>
@@ -54,8 +56,8 @@
  * Version
  */
 #define VER_MAJOR	0
-#define VER_MINOR	0
-#define VER_PATCH	3
+#define VER_MINOR	1
+#define VER_PATCH	1
 
 static struct expansion_card *ecs[MAX_ECARDS];
 
@@ -115,6 +117,33 @@ static __inline__ void putw(unsigned int address, unsigned int reg, unsigned lon
 	: "r" (value), "r" (address), "r" (reg) );
 }
 
+void arxescsi_pseudo_dma_write(unsigned char *addr, unsigned int io)
+{
+       __asm__ __volatile__(
+       "               stmdb   sp!, {r0-r12}\n"
+       "               mov     r3, %0\n"
+       "               mov     r1, %1\n"
+       "               add     r2, r1, #512\n"
+       "               mov     r4, #256\n"
+       ".loop_1:       ldmia   r3!, {r6, r8, r10, r12}\n"
+       "               mov     r5, r6, lsl #16\n"
+       "               mov     r7, r8, lsl #16\n"
+       ".loop_2:       ldrb    r0, [r1, #1536]\n"
+       "               tst     r0, #1\n"
+       "               beq     .loop_2\n"
+       "               stmia   r2, {r5-r8}\n\t"
+       "               mov     r9, r10, lsl #16\n"
+       "               mov     r11, r12, lsl #16\n"
+       ".loop_3:       ldrb    r0, [r1, #1536]\n"
+       "               tst     r0, #1\n"
+       "               beq     .loop_3\n"
+       "               stmia   r2, {r9-r12}\n"
+       "               subs    r4, r4, #16\n"
+       "               bne     .loop_1\n"
+       "               ldmia   sp!, {r0-r12}\n"
+       :
+       : "r" (addr), "r" (io) );
+}
 
 /*
  * Function: int arxescsi_dma_pseudo(host, SCpnt, direction, transfer)
@@ -136,26 +165,36 @@ void arxescsi_dma_pseudo(struct Scsi_Host *host, Scsi_Pointer *SCp,
 	io = __ioaddr(host->io_port);
 
 	if (direction == DMA_OUT) {
-		while (length > 0) {
-			unsigned long word;
-
-
-			word = *addr | *(addr + 1) << 8;
-			if (getb(io, 4) & STAT_INT)
+		unsigned int word;
+		while (length > 256) {
+			if (getb(io, 4) & STAT_INT) {
+				error=1;
 				break;
-
-			if (!(getb(io, 48) & CSTATUS_IRQ))
-				continue;
-
-			putw(io, 16, word);
-			if (length > 1) {
-				addr += 2;
-				length -= 2;
-			} else {
-				addr += 1;
-				length -= 1;
 			}
+			arxescsi_pseudo_dma_write(addr, io);
+			addr += 256;
+			length -= 256;
 		}
+
+		if (!error)
+			while (length > 0) {
+				if (getb(io, 4) & STAT_INT)
+					break;
+	 
+				if (!(getb(io, 48) & CSTATUS_IRQ))
+					continue;
+
+				word = *addr | *(addr + 1) << 8;
+
+				putw(io, 16, word);
+				if (length > 1) {
+					addr += 2;
+					length -= 2;
+				} else {
+					addr += 1;
+					length -= 1;
+				}
+			}
 	}
 	else {
 		if (transfer && (transfer & 255)) {

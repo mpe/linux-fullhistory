@@ -1,26 +1,29 @@
-#ifndef __ASM_ARM_BITOPS_H
-#define __ASM_ARM_BITOPS_H
-
 /*
  * Copyright 1995, Russell King.
  * Various bits and pieces copyrights include:
  *  Linus Torvalds (test_bit).
- */
-
-/*
- * These should be done with inline assembly.
- * All bit operations return 0 if the bit
- * was cleared before the operation and != 0 if it was not.
  *
  * bit 0 is the LSB of addr; bit 32 is the LSB of (addr+1).
+ *
+ * Please note that the code in this file should never be included
+ * from user space.  Many of these are not implemented in assembler
+ * since they would be too costly.  Also, they require priviledged
+ * instructions (which are not available from user mode) to ensure
+ * that they are atomic.
  */
 
+#ifndef __ASM_ARM_BITOPS_H
+#define __ASM_ARM_BITOPS_H
+
+#ifdef __KERNEL__
+
 /*
- * Function prototypes to keep gcc -Wall happy
+ * Function prototypes to keep gcc -Wall happy.
  */
 extern void set_bit(int nr, volatile void * addr);
 extern void clear_bit(int nr, volatile void * addr);
 extern void change_bit(int nr, volatile void * addr);
+
 extern int test_and_set_bit(int nr, volatile void * addr);
 extern int test_and_clear_bit(int nr, volatile void * addr);
 extern int test_and_change_bit(int nr, volatile void * addr);
@@ -53,8 +56,6 @@ extern __inline__ unsigned long ffz(unsigned long word)
         return k;
 }
 
-#ifdef __KERNEL__
-
 /*
  * ffs: find first bit set. This is defined the same way as
  * the libc and compiler builtin ffs routines, therefore
@@ -71,10 +72,6 @@ extern __inline__ unsigned long ffz(unsigned long word)
 #define hweight32(x) generic_hweight32(x)
 #define hweight16(x) generic_hweight16(x)
 #define hweight8(x) generic_hweight8(x)
-
-#endif /* __KERNEL__ */
-
-#ifdef __KERNEL__
 
 #define ext2_set_bit			test_and_set_bit
 #define ext2_clear_bit			test_and_clear_bit

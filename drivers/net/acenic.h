@@ -324,7 +324,7 @@ struct event {
 #define E_LNK_STATE		0x06
 #define E_C_LINK_UP		0x01
 #define E_C_LINK_DOWN		0x02
-#define E_C_LINK_UP_FAST	0x03
+#define E_C_LINK_10_100		0x03
 
 #define E_ERROR			0x07
 #define E_C_ERR_INVAL_CMD	0x01

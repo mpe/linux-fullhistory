@@ -93,7 +93,7 @@
 
 #define u8	unsigned char
 #define u16	unsigned short
-#define u32	unsigned long
+#define u32	unsigned int
 
 #define MAX_TX_QUEUE_LEN	20 // number of packets queued by driver
 #define MAX_FRAME_SIZE		4550
@@ -127,11 +127,12 @@ struct s_smt_os {
 	u32	bus_type;		/* bus type (0 == PCI, 1 == EISA) */
 	struct pci_dev 	pdev;		/* PCI device structure */
 	
-	u32	base_addr;
+	unsigned long base_addr;
 	unsigned char factory_mac_addr[8];
 	ulong	SharedMemSize;
 	ulong	SharedMemHeap;
 	void*	SharedMemAddr;
+	dma_addr_t SharedMemDMA;
 
 	ulong	QueueSkb;
 	struct	sk_buff_head SendSkbQueue;
@@ -144,8 +145,10 @@ struct s_smt_os {
 
 	// receive into this local buffer if no skb available
 	// data will be not valid, because multiple RxDs can
-	// point here at the same time
-	unsigned char LocalRxBuffer[MAX_FRAME_SIZE];
+	// point here at the same time, it must be at least
+	// MAX_FRAME_SIZE bytes in size
+	unsigned char *LocalRxBuffer;
+	dma_addr_t LocalRxBufferDMA;
 	
 	// Version (required by SMT module).
 	u_long smc_version ;

@@ -22,14 +22,14 @@
 #define __NWBUTTON_C		/* Tell the header file who we are */
 #include "nwbutton.h"
 
-static int button_press_count = 0;	/* The count of button presses */
+static int button_press_count;		/* The count of button presses */
 static struct timer_list button_timer;	/* Times for the end of a sequence */ 
 static DECLARE_WAIT_QUEUE_HEAD(button_wait_queue); /* Used for blocking read */
 static char button_output_buffer[32];	/* Stores data to write out of device */
-static int bcount = 0;			/* The number of bytes in the buffer */
+static int bcount;			/* The number of bytes in the buffer */
 static int bdelay = BUTTON_DELAY;	/* The delay, in jiffies */
 static struct button_callback button_callback_list[32]; /* The callback list */
-static int callback_count = 0;		/* The number of callbacks registered */
+static int callback_count;		/* The number of callbacks registered */
 static int reboot_count = NUM_PRESSES_REBOOT; /* Number of presses to reboot */
 
 /*

@@ -14,7 +14,7 @@ bool 'Prompt for development and/or incomplete code/drivers' CONFIG_EXPERIMENTAL
 endmenu
 
 mainmenu_option next_comment
-comment 'System and processor type'
+comment 'System and Processor Type'
 
 choice 'ARM system type'	\
 	"Archimedes		CONFIG_ARCH_ARC \
@@ -22,6 +22,8 @@ choice 'ARM system type'	\
 	 RiscPC			CONFIG_ARCH_RPC \
 	 EBSA-110		CONFIG_ARCH_EBSA110 \
 	 FootBridge-based	CONFIG_FOOTBRIDGE" RiscPC
+# the following are placeholders for when they are fully integrated
+#	 LinkUp-L7200		CONFIG_ARCH_L7200
 # 	 SA1100-based		CONFIG_ARCH_SA1100
 
 if [ "$CONFIG_FOOTBRIDGE" = "y" ]; then
@@ -34,6 +36,7 @@ if [ "$CONFIG_FOOTBRIDGE" = "y" ]; then
 fi
 
 if [ "$CONFIG_HOST_FOOTBRIDGE" = "y" ]; then
+   comment 'Footbridge Implementations'
    bool '  Include support for EBSA285' CONFIG_ARCH_EBSA285
    bool '  Include support for CATS' CONFIG_ARCH_CATS
    bool '  Include support for NetWinder' CONFIG_ARCH_NETWINDER
@@ -47,15 +50,19 @@ if [ "$CONFIG_ADDIN_FOOTBRIDGE" = "y" ]; then
 fi
 
 if [ "$CONFIG_ARCH_SA1100" = "y" ]; then
-   choice 'SA1100 implementation' \
-	   "Brutus		CONFIG_SA1100_BRUTUS \
-	    Empeg		CONFIG_SA1100_EMPEG \
-	    Itsy		CONFIG_SA1100_ITSY \
-	    LART		CONFIG_SA1100_LART \
-	    PLEB		CONFIG_SA1100_PLEB \
-	    ThinClient		CONFIG_SA1100_THINCLIENT \
-	    Victor		CONFIG_SA1100_VICTOR \
-	    Tifon		CONFIG_SA1100_TIFON" Brutus
+   comment 'SA11x0 Implementations'
+   bool '  Include support for Assabet' CONFIG_SA110_ASSABET
+   bool '  Include support for Bitsy' CONFIG_SA1100_BITSY
+   bool '  Include support for Brutus' CONFIG_SA1100_BRUTUS
+#   bool '  Include support for Empeg' CONFIG_SA1100_EMPEG
+#   bool '  Include support for Itsy' CONFIG_SA1100_ITSY
+   bool '  Include support for LART' CONFIG_SA1100_LART
+#   bool '  Include support for PLEB' CONFIG_SA1100_PLEB
+   bool '  Include support for ThinClient' CONFIG_SA1100_THINCLIENT
+   bool '  Include support for GraphicsClient' CONFIG_SA1100_GRAPHICSCLIENT
+   bool '  Include support for Victor' CONFIG_SA1100_VICTOR
+#   bool '  Include support for Tifon' CONFIG_SA1100_TIFON
+   define_bool CONFIG_DISCONTIGMEM y
 fi
 
 #
@@ -87,30 +94,32 @@ if [ "$CONFIG_ARCH_ARC" = "y" -o \
 else
    define_bool CONFIG_CPU_32 y
    define_bool CONFIG_CPU_26 n
+fi
 
-   #
-   # Select CPU and optimisation dependent on architecture
-   #
-   if [ "$CONFIG_ARCH_EBSA110" = "y" -o \
-        "$CONFIG_ARCH_SA1100" = "y" -o \
-        "$CONFIG_FOOTBRIDGE" = "y" -o \
-	"$CONFIG_ARCH_TBOX" = "y" -o \
-	"$CONFIG_ARCH_SHARK" = "y" -o \
-        "$CONFIG_ARCH_NEXUSPCI" = "y" ]; then
-      define_bool CONFIG_CPU_32v4 y
-      if [ "$CONFIG_ARCH_SA1100" = "y" ]; then
-         define_bool CONFIG_CPU_SA1100 y
-      else
-         define_bool CONFIG_CPU_SA110 y
-      fi
-   else
-      if [ "$CONFIG_ARCH_RPC" = "y" ]; then
-	 define_bool CONFIG_CPU_32v3 y
-	 bool 'Support ARM610' CONFIG_CPU_ARM6
-	 bool 'Support ARM710' CONFIG_CPU_ARM7
-	 bool 'Support StrongARM110' CONFIG_CPU_SA110
-      fi
-   fi
+#
+# Select CPU and optimisation dependent on architecture
+#
+if [ "$CONFIG_ARCH_RPC" = "y" ]; then
+   define_bool CONFIG_CPU_32v3 y
+   bool 'Support ARM610' CONFIG_CPU_ARM6
+   bool 'Support ARM710' CONFIG_CPU_ARM7
+   bool 'Support StrongARM110' CONFIG_CPU_SA110
+fi
+if [ "$CONFIG_ARCH_EBSA110" = "y" -o \
+     "$CONFIG_FOOTBRIDGE" = "y" -o \
+     "$CONFIG_ARCH_TBOX" = "y" -o \
+     "$CONFIG_ARCH_SHARK" = "y" -o \
+     "$CONFIG_ARCH_NEXUSPCI" = "y" ]; then
+   define_bool CONFIG_CPU_32v4 y
+   define_bool CONFIG_CPU_SA110 y
+fi
+if [ "$CONFIG_ARCH_L7200" = "y" ]; then
+   define_bool CONFIG_CPU_32v4 y
+   define_bool CONFIG_CPU_ARM720 y
+fi
+if [ "$CONFIG_ARCH_SA1100" = "y" ]; then
+   define_bool CONFIG_CPU_32v4 y
+   define_bool CONFIG_CPU_SA1100 y
 fi
 
 #
@@ -137,10 +146,12 @@ else
    define_bool CONFIG_ISA_DMA n
 fi
 
+define_bool CONFIG_SBUS n
+define_bool CONFIG_PCMCIA n
+
 if [ "$CONFIG_CPU_32" = "y" -a "$CONFIG_ARCH_EBSA110" != "y" ]; then
    bool 'Kernel-mode alignment trap handler' CONFIG_ALIGNMENT_TRAP
 fi
-#bool 'Split text into discardable sections' CONFIG_TEXT_SECTIONS
 endmenu
 
 mainmenu_option next_comment

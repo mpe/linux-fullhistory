@@ -39,9 +39,7 @@ extern int cumanascsi_2_proc_info (char *buffer, char **start, off_t offset,
 
 #include <scsi/scsicam.h>
 
-#ifndef HOSTS_C
 #include "fas216.h"
-#endif
 
 #define CUMANASCSI_2 {					\
 proc_info:			cumanascsi_2_proc_info,	\

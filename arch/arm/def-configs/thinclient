@@ -18,12 +18,15 @@ CONFIG_EXPERIMENTAL=y
 # CONFIG_ARCH_EBSA110 is not set
 # CONFIG_FOOTBRIDGE is not set
 CONFIG_ARCH_SA1100=y
+# CONFIG_SA1100_ASSABET is not set
 # CONFIG_SA1100_BRUTUS is not set
 # CONFIG_SA1100_EMPEG is not set
 # CONFIG_SA1100_ITSY is not set
+# CONFIG_SA1100_BITSY is not set
 # CONFIG_SA1100_LART is not set
 # CONFIG_SA1100_PLEB is not set
 CONFIG_SA1100_THINCLIENT=y
+# CONFIG_SA1100_GRAPHICSCLIENT is not set
 # CONFIG_SA1100_VICTOR is not set
 # CONFIG_SA1100_TIFON is not set
 CONFIG_DISCONTIGMEM=y
@@ -32,7 +35,11 @@ CONFIG_CPU_32=y
 # CONFIG_CPU_26 is not set
 CONFIG_CPU_32v4=y
 CONFIG_CPU_SA1100=y
+# CONFIG_PCI is not set
+# CONFIG_ISA is not set
 # CONFIG_ISA_DMA is not set
+# CONFIG_SBUS is not set
+# CONFIG_PCMCIA is not set
 CONFIG_ALIGNMENT_TRAP=y
 
 #
@@ -56,14 +63,18 @@ CONFIG_BINFMT_AOUT=y
 CONFIG_BINFMT_ELF=y
 # CONFIG_BINFMT_MISC is not set
 # CONFIG_ARTHUR is not set
+
+#
+# Parallel port support
+#
 # CONFIG_PARPORT is not set
 CONFIG_CMDLINE="root=nfs"
+# CONFIG_LEDS is not set
 
 #
 # I2O device support
 #
 # CONFIG_I2O is not set
-# CONFIG_I2O_PCI is not set
 # CONFIG_I2O_BLOCK is not set
 # CONFIG_I2O_LAN is not set
 # CONFIG_I2O_SCSI is not set
@@ -79,25 +90,23 @@ CONFIG_CMDLINE="root=nfs"
 # Block devices
 #
 # CONFIG_BLK_DEV_FD is not set
-# CONFIG_BLK_DEV_IDE is not set
-
-#
-# Please see Documentation/ide.txt for help/info on IDE drives
-#
-# CONFIG_BLK_DEV_HD_ONLY is not set
+# CONFIG_BLK_DEV_XD is not set
+# CONFIG_PARIDE is not set
+# CONFIG_BLK_CPQ_DA is not set
+# CONFIG_BLK_DEV_DAC960 is not set
 
 #
 # Additional Block Devices
 #
 # CONFIG_BLK_DEV_LOOP is not set
 # CONFIG_BLK_DEV_NBD is not set
+# CONFIG_BLK_DEV_LVM is not set
 # CONFIG_BLK_DEV_MD is not set
+# CONFIG_MD_LINEAR is not set
+# CONFIG_MD_STRIPED is not set
 CONFIG_BLK_DEV_RAM=y
 CONFIG_BLK_DEV_INITRD=y
-# CONFIG_BLK_DEV_XD is not set
-# CONFIG_PARIDE is not set
-# CONFIG_BLK_DEV_IDE_MODES is not set
-# CONFIG_BLK_DEV_HD is not set
+CONFIG_BLK_DEV_FLASH=y
 
 #
 # Character devices
@@ -135,7 +144,6 @@ CONFIG_UNIX98_PTY_COUNT=32
 # CONFIG_WATCHDOG is not set
 # CONFIG_NVRAM is not set
 # CONFIG_RTC is not set
-# CONFIG_EFI_RTC is not set
 
 #
 # Video For Linux
@@ -154,15 +162,6 @@ CONFIG_UNIX98_PTY_COUNT=32
 # CONFIG_AGP is not set
 
 #
-# USB support
-#
-# CONFIG_USB is not set
-
-#
-# Misc devices
-#
-
-#
 # Console drivers
 #
 # CONFIG_VGA_CONSOLE is not set
@@ -174,10 +173,6 @@ CONFIG_FB=y
 CONFIG_FB=y
 CONFIG_DUMMY_CONSOLE=y
 CONFIG_FB_SA1100=y
-# CONFIG_FB_MATROX is not set
-# CONFIG_FB_ATY is not set
-# CONFIG_FB_ATY128 is not set
-# CONFIG_FB_3DFX is not set
 # CONFIG_FB_VIRTUAL is not set
 # CONFIG_FBCON_ADVANCED is not set
 CONFIG_FBCON_CFB2=y
@@ -300,7 +295,7 @@ CONFIG_SMC9194=y
 # CONFIG_NET_RADIO is not set
 
 #
-# Token Ring driver support
+# Token Ring devices
 #
 # CONFIG_TR is not set
 # CONFIG_NET_FC is not set
@@ -311,6 +306,13 @@ CONFIG_SMC9194=y
 # Wan interfaces
 #
 # CONFIG_WAN is not set
+
+#
+# ATA/IDE/MFM/RLL support
+#
+# CONFIG_IDE is not set
+# CONFIG_BLK_DEV_IDE_MODES is not set
+# CONFIG_BLK_DEV_HD is not set
 
 #
 # SCSI support
@@ -324,6 +326,7 @@ CONFIG_SMC9194=y
 # CONFIG_AUTOFS_FS is not set
 # CONFIG_AUTOFS4_FS is not set
 # CONFIG_ADFS_FS is not set
+# CONFIG_ADFS_FS_RW is not set
 # CONFIG_AFFS_FS is not set
 # CONFIG_HFS_FS is not set
 # CONFIG_BFS_FS is not set
@@ -368,6 +371,11 @@ CONFIG_LOCKD=y
 # CONFIG_PARTITION_ADVANCED is not set
 CONFIG_MSDOS_PARTITION=y
 # CONFIG_NLS is not set
+
+#
+# USB support
+#
+# CONFIG_USB is not set
 
 #
 # Kernel hacking

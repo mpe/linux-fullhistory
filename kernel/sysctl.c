@@ -49,7 +49,7 @@ extern int nr_queued_signals, max_queued_signals;
 
 /* this is needed for the proc_dointvec_minmax for [fs_]overflow UID and GID */
 static int maxolduid = 65535;
-static int minolduid = 0;
+static int minolduid;
 
 #ifdef CONFIG_KMOD
 extern char modprobe_path[];

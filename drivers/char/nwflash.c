@@ -50,10 +50,10 @@ static long long flash_llseek(struct file *file, long long offset, int orig);
 #define KFLASH_ID	0x89A6		//Intel flash
 #define KFLASH_ID4	0xB0D4		//Intel flash 4Meg
 
-static int flashdebug = 0;	//if set - we will display progress msgs
+static int flashdebug;		//if set - we will display progress msgs
 
-static int gbWriteEnable = 0;
-static int gbWriteBase64Enable = 0;
+static int gbWriteEnable;
+static int gbWriteBase64Enable;
 MSTATIC int gbFlashSize = KFLASH_SIZE;
 
 extern spinlock_t gpio_lock;

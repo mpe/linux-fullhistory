@@ -1477,7 +1477,7 @@ CONFIG_MD_LINEAR
   If unsure, say Y.
 
 RAID-0 (striping) mode
-CONFIG_MD_STRIPED
+CONFIG_MD_RAID0
   If you say Y here, then your multiple devices driver will be able to
   use the so-called raid0 mode, i.e. it will combine the hard disk
   partitions into one logical device in such a fashion as to fill them
@@ -1496,8 +1496,17 @@ CONFIG_MD_STRIPED
 
   If unsure, say Y.
 
+DANGEROUS! RAID-1/RAID-5 code
+CONFIG_RAID15_DANGEROUS
+  This new RAID1/RAID5 code has been freshly merged, and has not seen
+  enough testing yet. While there are no known bugs in it, it might
+  destroy your filesystems, eat your data and start World War III.
+  You have been warned.
+
+  If unsure, say N.
+
 RAID-1 (mirroring) mode
-CONFIG_MD_MIRRORING
+CONFIG_MD_RAID1
   A RAID-1 set consists of several disk drives which are exact copies
   of each other. In the event of a mirror failure, the RAID driver
   will continue to use the operational mirrors in the set, providing
@@ -9160,7 +9169,6 @@ CONFIG_SKFP
   Read Documentation/networking/skfp.txt for information about
   the driver.
 
-  WARNING: this driver does currently not support 64 bit systems!
   Questions concerning this driver can be addressed to:
     linux@syskonnect.de
 
@@ -15220,6 +15228,17 @@ CONFIG_ARCH_PERSONAL_SERVER
   If you have any questions or comments about the  Compaq Personal
   Server, send e-mail to skiff@crl.dec.com
 
+Include support for the LinkUp Systems L7200 SDB
+CONFIG_ARCH_L7200
+  Say Y here if you intend to run this kernel on a LinkUp Systems
+  L7200 Software Development Board which uses an ARM720T processor.
+  Information on this board can be obtained at:
+
+  http://www.linkupsys.com/
+
+  If you have any questions or comments about the Linux kernel port
+  to this board, send e-mail to sjhill@cotw.com
+
 Math emulation
 CONFIG_NWFPE
   Say Y to include the NWFPE floating point emulator in the kernel.
@@ -15331,6 +15350,18 @@ Console on 21285 serial port
 CONFIG_SERIAL_21285_CONSOLE
   If you have enabled the serial port on the 21285 footbridge you can
   make it the console by answering Y to this option.
+
+L7200 serial port support
+CONFIG_SERIAL_L7200
+  If you have a LinkUp Systems L7200 board you can enable its two
+  onboard serial ports by enabling this option. The device numbers
+  are major ID 4 with minor 64 and 65 respectively.
+
+Console on L7200 serial port
+CONFIG_SERIAL_L7200_CONSOLE
+  If you have enabled the serial ports on the L7200 development board
+  you can make the first serial port the console by answering Y to
+  this option.
 
 Footbridge Mode
 CONFIG_HOST_FOOTBRIDGE

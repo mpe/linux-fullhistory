@@ -287,14 +287,12 @@ static int kstat_read_proc(char *page, char **start, off_t off,
 	int i, len;
 	extern unsigned long total_forks;
 	unsigned long jif = jiffies;
-#if !defined(CONFIG_ARCH_S390)
 	unsigned sum = 0;
+	int major, disk;
 
 	for (i = 0 ; i < NR_IRQS ; i++)
 		sum += kstat_irqs(i);
-#endif
 
-#ifdef CONFIG_SMP
 	len = sprintf(page,
 		"cpu  %u %u %u %lu\n",
 		kstat.cpu_user,
@@ -311,59 +309,38 @@ static int kstat_read_proc(char *page, char **start, off_t off,
 			           + kstat.per_cpu_nice[cpu_logical_map(i)] \
 			           + kstat.per_cpu_system[cpu_logical_map(i)]));
 	len += sprintf(page + len,
-		"disk %u %u %u %u\n"
-		"disk_rio %u %u %u %u\n"
-		"disk_wio %u %u %u %u\n"
-		"disk_rblk %u %u %u %u\n"
-		"disk_wblk %u %u %u %u\n"
 		"page %u %u\n"
-#if !defined(CONFIG_ARCH_S390)
                 "swap %u %u\n"
 		"intr %u",
-#else
-                "swap %u %u\n",
-#endif
-#else
-	len = sprintf(page,
-		"cpu  %u %u %u %lu\n"
-		"disk %u %u %u %u\n"
-		"disk_rio %u %u %u %u\n"
-		"disk_wio %u %u %u %u\n"
-		"disk_rblk %u %u %u %u\n"
-		"disk_wblk %u %u %u %u\n"
-		"page %u %u\n"
-#if !defined(CONFIG_ARCH_S390)
-                "swap %u %u\n"
-		"intr %u",
-#else
-                "swap %u %u\n",
-#endif
-		kstat.cpu_user,
-		kstat.cpu_nice,
-		kstat.cpu_system,
-		jif*smp_num_cpus - (kstat.cpu_user + kstat.cpu_nice + kstat.cpu_system),
-#endif
-		kstat.dk_drive[0], kstat.dk_drive[1],
-		kstat.dk_drive[2], kstat.dk_drive[3],
-		kstat.dk_drive_rio[0], kstat.dk_drive_rio[1],
-		kstat.dk_drive_rio[2], kstat.dk_drive_rio[3],
-		kstat.dk_drive_wio[0], kstat.dk_drive_wio[1],
-		kstat.dk_drive_wio[2], kstat.dk_drive_wio[3],
-		kstat.dk_drive_rblk[0], kstat.dk_drive_rblk[1],
-		kstat.dk_drive_rblk[2], kstat.dk_drive_rblk[3],
-		kstat.dk_drive_wblk[0], kstat.dk_drive_wblk[1],
-		kstat.dk_drive_wblk[2], kstat.dk_drive_wblk[3],
-		kstat.pgpgin,
-		kstat.pgpgout,
-		kstat.pswpin,
-#if !defined(CONFIG_ARCH_S390)
-		kstat.pswpout,
-		sum);
-        for (i = 0 ; i < NR_IRQS ; i++)
-                len += sprintf(page + len, " %u", kstat_irqs(i));
-#else
-                kstat.pswpout);
-#endif
+			kstat.pgpgin,
+			kstat.pgpgout,
+			kstat.pswpin,
+			kstat.pswpout,
+			sum
+	);
+	for (i = 0 ; i < NR_IRQS ; i++)
+		len += sprintf(page + len, " %u", kstat_irqs(i));
+
+	len += sprintf(page + len, "\ndisk_io: ");
+
+	for (major = 0; major < DK_MAX_MAJOR; major++) {
+		for (disk = 0; disk < DK_MAX_DISK; disk++) {
+			int active = kstat.dk_drive_rio[major][disk] +
+				kstat.dk_drive_rblk[major][disk] +
+				kstat.dk_drive_wio[major][disk] +
+				kstat.dk_drive_wblk[major][disk];
+			if (active)
+				len += sprintf(page + len,
+					"(%u,%u):(%u,%u,%u,%u) ",
+					major, disk,
+					kstat.dk_drive_rio[major][disk],
+					kstat.dk_drive_rblk[major][disk],
+					kstat.dk_drive_wio[major][disk],
+					kstat.dk_drive_wblk[major][disk]
+			);
+		}
+	}
+
 	len += sprintf(page + len,
 		"\nctxt %u\n"
 		"btime %lu\n"
@@ -371,6 +348,7 @@ static int kstat_read_proc(char *page, char **start, off_t off,
 		kstat.context_swtch,
 		xtime.tv_sec - jif / HZ,
 		total_forks);
+
 	if (len <= off+count) *eof = 1;
 	*start = page + off;
 	len -= off;

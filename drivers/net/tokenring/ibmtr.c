@@ -1750,9 +1750,9 @@ static void tr_rx(struct net_device *dev)
 	/* Copy the payload... */
 	for (;;) {
 		if (IPv4_p)
-			chksum = csum_partial_copy(bus_to_virt(rbufdata), data,
+			chksum = csum_partial_copy_generic(bus_to_virt(rbufdata), data,
 						   length < rbuffer_len ? length : rbuffer_len,
-						   chksum);
+						   chksum, NULL, NULL);
 		else
 			isa_memcpy_fromio(data, rbufdata, rbuffer_len);
 		rbuffer = ntohs(isa_readw(rbuffer));

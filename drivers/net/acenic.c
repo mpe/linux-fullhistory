@@ -29,6 +29,7 @@
  *                                       infrastructure and Sparc support
  *   Pierrick Pinasseau (CERN): For lending me an Ultra 5 to test the
  *                              driver under Linux/Sparc64
+ *   Matt Domsch <Matt_Domsch@dell.com>: Detect 1000baseT cards
  */
 
 #include <linux/config.h>
@@ -70,7 +71,10 @@
 
 #ifndef PCI_VENDOR_ID_ALTEON
 #define PCI_VENDOR_ID_ALTEON		0x12ae	
-#define PCI_DEVICE_ID_ALTEON_ACENIC	0x0001
+#endif
+#ifndef PCI_DEVICE_ID_ALTEON_ACENIC_FIBRE
+#define PCI_DEVICE_ID_ALTEON_ACENIC_FIBRE  0x0001
+#define PCI_DEVICE_ID_ALTEON_ACENIC_COPPER 0x0002
 #endif
 #ifndef PCI_DEVICE_ID_3COM_3C985
 #define PCI_DEVICE_ID_3COM_3C985	0x0001
@@ -104,6 +108,12 @@
 #define SMP_CACHE_BYTES	L1_CACHE_BYTES
 #endif
 
+
+#if (LINUX_VERSION_CODE < 0x02030d)
+#define pci_resource_start(dev, bar)	dev->base_address[bar]
+#elif (LINUX_VERSION_CODE < 0x02032c)
+#define pci_resource_start(dev, bar)	dev->resource[bar].start
+#endif
 
 #if (LINUX_VERSION_CODE < 0x02030e)
 #define net_device device
@@ -379,7 +389,7 @@ static int tx_ratio[ACE_MAX_MOD_PARMS] = {0, };
 static int dis_pci_mem_inval[ACE_MAX_MOD_PARMS] = {1, 1, 1, 1, 1, 1, 1, 1};
 
 static const char __initdata *version = 
-  "acenic.c: v0.42 03/02/2000  Jes Sorensen, linux-acenic@SunSITE.auc.dk\n"
+  "acenic.c: v0.44 05/11/2000  Jes Sorensen, linux-acenic@SunSITE.auc.dk\n"
   "                            http://home.cern.ch/~jes/gige/acenic.html\n";
 
 static struct net_device *root_dev = NULL;
@@ -414,7 +424,8 @@ int __init acenic_probe (struct net_device *dev)
 	while ((pdev = pci_find_class(PCI_CLASS_NETWORK_ETHERNET<<8, pdev))) {
 
 		if (!((pdev->vendor == PCI_VENDOR_ID_ALTEON) &&
-		      (pdev->device == PCI_DEVICE_ID_ALTEON_ACENIC)) &&
+		      ((pdev->device == PCI_DEVICE_ID_ALTEON_ACENIC_FIBRE) ||
+		       (pdev->device == PCI_DEVICE_ID_ALTEON_ACENIC_COPPER)) ) &&
 		    !((pdev->vendor == PCI_VENDOR_ID_3COM) &&
 		      (pdev->device == PCI_DEVICE_ID_3COM_3C985)) &&
 		    !((pdev->vendor == PCI_VENDOR_ID_NETGEAR) &&
@@ -494,11 +505,7 @@ int __init acenic_probe (struct net_device *dev)
 		 * dev->base_addr since it was means for I/O port
 		 * addresses but who gives a damn.
 		 */
-#if (LINUX_VERSION_CODE < 0x02030d)
-		dev->base_addr = pdev->base_address[0];
-#else
-		dev->base_addr = pdev->resource[0].start;
-#endif
+		dev->base_addr = pci_resource_start(pdev, 0);
 		ap->regs = (struct ace_regs *)ioremap(dev->base_addr, 0x4000);
 		if (!ap->regs) {
 			printk(KERN_ERR "%s:  Unable to map I/O register, "
@@ -717,10 +724,7 @@ void cleanup_module(void)
 {
 	ace_module_cleanup();
 }
-#endif
-
-
-#if (LINUX_VERSION_CODE >= 0x02032a)
+#else
 module_init(ace_module_init);
 module_exit(ace_module_cleanup);
 #endif
@@ -1087,11 +1091,17 @@ static int __init ace_init(struct net_device *dev)
 #endif
 	writel(tmp, &regs->PciState);
 
+#if 0
+	/*
+	 * I have received reports from people having problems when this
+	 * bit is enabled.
+	 */
 	if (!(ap->pci_command & PCI_COMMAND_FAST_BACK)) {
 		printk(KERN_INFO "  Enabling PCI Fast Back to Back\n");
 		ap->pci_command |= PCI_COMMAND_FAST_BACK;
 		pci_write_config_word(ap->pdev, PCI_COMMAND, ap->pci_command);
 	}
+#endif
 		
 	/*
 	 * Initialize the generic info block and the command+event rings
@@ -1760,16 +1770,23 @@ static u32 ace_handle_event(struct net_device *dev, u32 evtcsm, u32 evtprd)
 		case E_LNK_STATE:
 		{
 			u16 code = ap->evt_ring[evtcsm].code;
-			if (code == E_C_LINK_UP) {
+			switch (code) {
+			case E_C_LINK_UP:
 				printk(KERN_WARNING "%s: Optical link UP\n",
 				       dev->name);
-			}
-			else if (code == E_C_LINK_DOWN)
+				break;
+			case E_C_LINK_DOWN:
 				printk(KERN_WARNING "%s: Optical link DOWN\n",
 				       dev->name);
-			else
+				break;
+			case E_C_LINK_10_100:
+				printk(KERN_WARNING "%s: 10/100BaseT link "
+				       "UP\n", dev->name);
+				break;
+			default:
 				printk(KERN_ERR "%s: Unknown optical link "
 				       "state %02x\n", dev->name, code);
+			}
 			break;
 		}
 		case E_ERROR:
@@ -2949,6 +2966,6 @@ static int __init read_eeprom_byte(struct net_device *dev,
 
 /*
  * Local variables:
- * compile-command: "gcc -D__KERNEL__ -DMODULE -I../../include -Wall -Wstrict-prototypes -O2 -fomit-frame-pointer -pipe -fno-strength-reduce -DMODVERSIONS -include ../../include/linux/modversions.h   -c -o acenic.o acenic.c"
+ * compile-command: "gcc -D__SMP__ -D__KERNEL__ -DMODULE -I../../include -Wall -Wstrict-prototypes -O2 -fomit-frame-pointer -pipe -fno-strength-reduce -DMODVERSIONS -include ../../include/linux/modversions.h   -c -o acenic.o acenic.c"
  * End:
  */

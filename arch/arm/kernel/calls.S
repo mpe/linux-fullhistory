@@ -68,7 +68,7 @@
 		.long	SYMBOL_NAME(sys_ni_syscall)		/* was sys_mpx */
 		.long	SYMBOL_NAME(sys_setpgid)
 		.long	SYMBOL_NAME(sys_ni_syscall)		/* was sys_ulimit */
-		.long	SYMBOL_NAME(sys_olduname)
+		.long	SYMBOL_NAME(sys_ni_syscall)		/* was sys_olduname */
 /* 60 */	.long	SYMBOL_NAME(sys_umask)
 		.long	SYMBOL_NAME(sys_chroot)
 		.long	SYMBOL_NAME(sys_ustat)
@@ -118,7 +118,7 @@
 		.long	SYMBOL_NAME(sys_newstat)
 		.long	SYMBOL_NAME(sys_newlstat)
 		.long	SYMBOL_NAME(sys_newfstat)
-		.long	SYMBOL_NAME(sys_uname)
+		.long	SYMBOL_NAME(sys_ni_syscall)		/* was sys_uname */
 /* 110 */	.long	SYMBOL_NAME(sys_iopl)
 		.long	SYMBOL_NAME(sys_vhangup)
 		.long	SYMBOL_NAME(sys_ni_syscall)

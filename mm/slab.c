@@ -396,12 +396,12 @@ static struct semaphore	cache_chain_sem;
 static	kmem_cache_t	*clock_searchp = &cache_cache;
 
 /* Internal slab management cache, for when slab management is off-slab. */
-static kmem_cache_t	*cache_slabp = NULL;
+static kmem_cache_t	*cache_slabp;
 
 /* Max number of objs-per-slab for caches which use bufctl's.
  * Needed to avoid a possible looping condition in kmem_cache_grow().
  */
-static unsigned long bufctl_limit = 0;
+static unsigned long bufctl_limit;
 
 /* Initialisation - setup the `cache' cache. */
 void __init kmem_cache_init(void)

@@ -423,9 +423,7 @@ ENTRY(cpu_sa1100_proc_init)
 
 ENTRY(cpu_sa110_proc_fin)
 		stmfd	sp!, {r1, lr}
-		mrs	r0, cpsr
-		orr	r0, r0, #F_BIT | I_BIT
-		msr	cpsr, r0
+		msr	cpsr_c, #F_BIT | I_BIT | SVC_MODE
 		bl	cpu_sa110_flush_cache_all	@ clean caches
 1:		mov	r0, #0
 		mcr	p15, 0, r0, c15, c2, 2		@ Disable clock switching
@@ -437,9 +435,7 @@ ENTRY(cpu_sa110_proc_fin)
 
 ENTRY(cpu_sa1100_proc_fin)
 		stmfd	sp!, {r1, lr}
-		mrs	r0, cpsr
-		orr	r0, r0, #F_BIT | I_BIT
-		msr	cpsr, r0
+		msr	cpsr_c, #F_BIT | I_BIT | SVC_MODE
 		bl	cpu_sa1100_flush_cache_all	@ clean caches
 		b	1b
 
@@ -505,7 +501,8 @@ cpu_sa1110_name:
 
 		.section ".text.init", #alloc, #execinstr
 
-__sa110_setup:	mov	r0, #0
+__sa110_setup:	msr	cpsr_c, #F_BIT | I_BIT | SVC_MODE
+		mov	r0, #0
 		mcr	p15, 0, r0, c7, c7		@ flush I,D caches on v4
 		mcr	p15, 0, r0, c7, c10, 4		@ drain write buffer on v4
 		mcr	p15, 0, r0, c8, c7		@ flush I,D TLBs on v4

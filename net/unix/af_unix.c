@@ -45,6 +45,7 @@
  *					dgram receiver.
  *		Artur Skawina   :	Hash function optimizations
  *	     Alexey Kuznetsov   :	Full scale SMP. Lot of bugs are introduced 8)
+ *	      Malcolm Beattie   :	Set peercred for socketpair
  *
  *
  * Known differences from reference BSD that was tested:
@@ -982,6 +983,9 @@ static int unix_socketpair(struct socket *socka, struct socket *sockb)
 	sock_hold(skb);
 	unix_peer(ska)=skb;
 	unix_peer(skb)=ska;
+	ska->peercred.pid = skb->peercred.pid = current->pid;
+	ska->peercred.uid = skb->peercred.uid = current->euid;
+	ska->peercred.gid = skb->peercred.gid = current->egid;
 
 	if (ska->type != SOCK_DGRAM)
 	{

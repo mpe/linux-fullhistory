@@ -49,7 +49,7 @@ static struct
 		sizeof(struct ipt_entry),
 		sizeof(struct ipt_standard),
 		0, { 0, 0 }, { } },
-	      { { sizeof(struct ipt_standard_target), { "" }, { } },
+	      { { { { IPT_ALIGN(sizeof(struct ipt_standard_target)), "" } }, { } },
 		-NF_ACCEPT - 1 } },
 	    /* FORWARD */
 	    { { { { 0 }, { 0 }, { 0 }, { 0 }, "", "", { 0 }, { 0 }, 0, 0, 0 },
@@ -57,7 +57,7 @@ static struct
 		sizeof(struct ipt_entry),
 		sizeof(struct ipt_standard),
 		0, { 0, 0 }, { } },
-	      { { sizeof(struct ipt_standard_target), { "" }, { } },
+	      { { { { IPT_ALIGN(sizeof(struct ipt_standard_target)), "" } }, { } },
 		-NF_ACCEPT - 1 } },
 	    /* LOCAL_OUT */
 	    { { { { 0 }, { 0 }, { 0 }, { 0 }, "", "", { 0 }, { 0 }, 0, 0, 0 },
@@ -65,7 +65,7 @@ static struct
 		sizeof(struct ipt_entry),
 		sizeof(struct ipt_standard),
 		0, { 0, 0 }, { } },
-	      { { sizeof(struct ipt_standard_target), { "" }, { } },
+	      { { { { IPT_ALIGN(sizeof(struct ipt_standard_target)), "" } }, { } },
 		-NF_ACCEPT - 1 } }
     },
     /* ERROR */
@@ -74,7 +74,7 @@ static struct
 	sizeof(struct ipt_entry),
 	sizeof(struct ipt_error),
 	0, { 0, 0 }, { } },
-      { { sizeof(struct ipt_error_target), { IPT_ERROR_TARGET },
+      { { { { IPT_ALIGN(sizeof(struct ipt_error_target)), IPT_ERROR_TARGET } },
 	  { } },
 	"ERROR"
       }

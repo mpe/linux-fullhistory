@@ -46,7 +46,7 @@ int strnicmp(const char *s1, const char *s2, size_t len)
 }
 #endif
 
-char * ___strtok = NULL;
+char * ___strtok;
 
 #ifndef __HAVE_ARCH_STRCPY
 char * strcpy(char * dest,const char *src)

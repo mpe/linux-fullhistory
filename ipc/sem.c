@@ -97,7 +97,7 @@ int sem_ctls[4] = {SEMMSL, SEMMNS, SEMOPM, SEMMNI};
 #define sc_semopm	(sem_ctls[2])
 #define sc_semmni	(sem_ctls[3])
 
-static int used_sems = 0;
+static int used_sems;
 
 void __init sem_init (void)
 {

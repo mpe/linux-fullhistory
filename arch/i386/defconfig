@@ -110,7 +110,8 @@ CONFIG_BLK_DEV_FD=y
 # CONFIG_BLK_DEV_LVM is not set
 # CONFIG_BLK_DEV_MD is not set
 # CONFIG_MD_LINEAR is not set
-# CONFIG_MD_STRIPED is not set
+# CONFIG_MD_RAID0 is not set
+# CONFIG_RAID15_DANGEROUS is not set
 # CONFIG_BLK_DEV_RAM is not set
 # CONFIG_BLK_DEV_INITRD is not set
 

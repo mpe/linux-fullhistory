@@ -24,7 +24,7 @@
 #endif
 #include <linux/netfilter_ipv4.h>
 
-#define IPT_FUNCTION_MAXNAMELEN 32
+#define IPT_FUNCTION_MAXNAMELEN 30
 #define IPT_TABLE_MAXNAMELEN 32
 
 /* Yes, Virginia, you have to zero the padding. */
@@ -47,13 +47,22 @@ struct ipt_ip {
 
 struct ipt_entry_match
 {
-	/* Total length */
-	u_int16_t match_size;
 	union {
-		/* Used by userspace */
-		char name[IPT_FUNCTION_MAXNAMELEN];
-		/* Used inside the kernel */
-		struct ipt_match *match;
+		struct {
+			u_int16_t match_size;
+
+			/* Used by userspace */
+			char name[IPT_FUNCTION_MAXNAMELEN];
+		} user;
+		struct {
+			u_int16_t match_size;
+
+			/* Used inside the kernel */
+			struct ipt_match *match;
+		} kernel;
+
+		/* Total length */
+		u_int16_t match_size;
 	} u;
 
 	unsigned char data[0];
@@ -61,13 +70,22 @@ struct ipt_entry_match
 
 struct ipt_entry_target
 {
-	/* Total length */
-	u_int16_t target_size;
 	union {
-		/* Used by userspace */
-		char name[IPT_FUNCTION_MAXNAMELEN];
-		/* Used inside the kernel */
-		struct ipt_target *target;
+		struct {
+			u_int16_t target_size;
+
+			/* Used by userspace */
+			char name[IPT_FUNCTION_MAXNAMELEN];
+		} user;
+		struct {
+			u_int16_t target_size;
+
+			/* Used inside the kernel */
+			struct ipt_target *target;
+		} kernel;
+
+		/* Total length */
+		u_int16_t target_size;
 	} u;
 
 	unsigned char data[0];
@@ -286,7 +304,7 @@ ipt_get_target(struct ipt_entry *e)
 						\
 	for (__i = sizeof(struct ipt_entry);	\
 	     __i < (e)->target_offset;		\
-	     __i += __m->match_size) {		\
+	     __i += __m->u.match_size) {	\
 		__m = (void *)(e) + __i;	\
 						\
 		__ret = fn(__m , ## args);	\
@@ -421,6 +439,6 @@ extern unsigned int ipt_do_table(struct sk_buff **pskb,
 				 struct ipt_table *table,
 				 void *userdata);
 
-#define IPT_ALIGN(s) (((s) + (__alignof__(struct ipt_match)-1)) & ~(__alignof__(struct ipt_match)-1))
+#define IPT_ALIGN(s) (((s) + (__alignof__(struct ipt_entry)-1)) & ~(__alignof__(struct ipt_entry)-1))
 #endif /*__KERNEL__*/
 #endif /* _IPTABLES_H */

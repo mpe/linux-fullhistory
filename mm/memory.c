@@ -48,9 +48,9 @@
 #include <linux/pagemap.h>
 
 
-unsigned long max_mapnr = 0;
-unsigned long num_physpages = 0;
-void * high_memory = NULL;
+unsigned long max_mapnr;
+unsigned long num_physpages;
+void * high_memory;
 struct page *highmem_start_page;
 
 /*
@@ -861,7 +861,7 @@ static int do_wp_page(struct mm_struct *mm, struct vm_area_struct * vma,
 	 * Ok, we need to copy. Oh, well..
 	 */
 	spin_unlock(&mm->page_table_lock);
-	new_page = alloc_page(GFP_HIGHUSER);
+	new_page = page_cache_alloc();
 	if (!new_page)
 		return -1;
 	spin_lock(&mm->page_table_lock);

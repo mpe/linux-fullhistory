@@ -63,31 +63,39 @@ ENTRY(_stext)
 		mov	r5, #0
 		movne	pc, r0
 
+		mov	r0, #0			@ catch old NeTTroms
+		mov	r1, #5			@ (will go in 2.5)
+#endif
+#ifdef CONFIG_ARCH_L7200
+/*
+ * FIXME - No bootloader, so manually set 'r1' with our architecture number.
+ */
 		mov	r0, #0
-		mov	r1, #5
+		mov	r1, #19
 #endif
 
 /*
  * Entry point.  Entry *must* be called with r0 == 0, with the MMU off.
  *  r1 contains the unique architecture number.  See
- * linux/arch/arm/kernel/setup.c machine_desc[] array for the complete
- * list.  If you require a new number, please follow the instructions
- * given in Documentation/arm/README.
+ * linux/arch/arm/kernel/arch.c and linux/include/asm-arm/system.h for
+ * the complete list.  If you require a new number, please follow the
+ * instructions given towards the end of Documentation/arm/README.
  */
-__entry:	teq	r0, #0
-		movne	r0, #'i'
+__entry:	teq	r0, #0				@ wrong register vals?
+		movne	r0, #'i'			@ yes, error 'i'
 		bne	__error
 		bl	__lookup_processor_type
 		teq	r10, #0				@ invalid processor?
-		moveq	r0, #'p'
+		moveq	r0, #'p'			@ yes, error 'p'
 		beq	__error
 		bl	__lookup_architecture_type
 		teq	r7, #0				@ invalid architecture?
-		moveq	r0, #'a'
+		moveq	r0, #'a'			@ yes, error 'a'
 		beq	__error
 		bl	__create_page_tables
-		adr	lr, __ret
-		add	pc, r10, #12			@ flush caches (returns ctrl reg)
+		adr	lr, __ret			@ return address
+		add	pc, r10, #12			@ initialise processor
+							@ (return control reg)
 
 __switch_data:	.long	__mmap_switched
 		.long	SYMBOL_NAME(__bss_start)
@@ -115,7 +123,8 @@ __ret:		ldr	lr, __switch_data
 		.align	5
 __mmap_switched:
 		adr	r3, __switch_data + 4
-		ldmia	r3, {r4, r5, r6, r7, r8, sp}	@ Setup stack
+		ldmia	r3, {r4, r5, r6, r7, r8, sp}	@ r4 = __bss_start
+							@ sp = stack pointer
 
 		mov	fp, #0				@ Clear BSS
 1:		cmp	r4, r5
@@ -150,8 +159,8 @@ __create_page_tables:
 		add	r4, r5, #SWAPPER_PGDIR_OFFSET
 		mov	r0, r4
 		mov	r3, #0
-		add	r2, r0, #0x4000			@ Clear page table
-1:		str	r3, [r0], #4
+		add	r2, r0, #0x4000			@ 16k of page table
+1:		str	r3, [r0], #4			@ Clear page table
 		str	r3, [r0], #4
 		str	r3, [r0], #4
 		str	r3, [r0], #4
@@ -164,19 +173,19 @@ __create_page_tables:
 		 *
 		 * The identity mapping will be removed by  paging_init()
 		 */
-		mov	r3, #0x0c
-		orr	r3, r3, r8
-		add	r3, r3, r5
+		mov	r3, #0x0c			@ cacheable, bufferable
+		orr	r3, r3, r8			@ | pagetable flags
+		add	r3, r3, r5			@ + start of RAM
 		add	r0, r4, r5, lsr #18
-		str	r3, [r0]
-		add	r0, r4, #(TEXTADDR - 0x8000) >> 18
-		str	r3, [r0], #4
+		str	r3, [r0]			@ identity mapping
+		add	r0, r4, #(TEXTADDR - 0x8000) >> 18 @ start of kernel
+		str	r3, [r0], #4			@ PAGE_OFFSET + 0MB
 		add	r3, r3, #1 << 20
-		str	r3, [r0], #4
+		str	r3, [r0], #4			@ PAGE_OFFSET + 1MB
 		add	r3, r3, #1 << 20
-		str	r3, [r0], #4
+		str	r3, [r0], #4			@ PAGE_OFFSET + 2MB
 		add	r3, r3, #1 << 20
-		str	r3, [r0], #4
+		str	r3, [r0], #4			@ PAGE_OFFSET + 3MB
 #ifdef CONFIG_DEBUG_LL
 		/*
 		 * Map in IO space for serial debugging.
@@ -194,6 +203,10 @@ __create_page_tables:
 		teq	r0, r2
 		bne	1b
 #ifdef CONFIG_ARCH_NETWINDER
+		/*
+		 * If we're using the NetWinder, we need to map in
+		 * the 16550-type serial port for the debug messages
+		 */
 		teq	r1, #5
 		bne	1f
 		add	r0, r4, #0x3fc0
@@ -228,7 +241,10 @@ __create_page_tables:
  * proceed.  We ought to tell the user, but since we
  * don't have any guarantee that we're even running on
  * the right architecture, we do virtually nothing.
- * r0 = ascii error character
+ * r0 = ascii error character:
+ *	a = invalid architecture
+ *	p = invalid processor
+ *	i = invalid calling convention
  *
  * Generally, only serious errors cause this.
  */
@@ -262,8 +278,11 @@ err_str:	.asciz	"\nError: "
 #endif
 
 /*
- * Read processor ID register (CP#15, CR0), and determine
- * processor type.
+ * Read processor ID register (CP#15, CR0), and look up in the linker-built
+ * supported processor list.  Note that we can't use the absolute addresses
+ * for the __proc_info lists since we aren't running with the MMU on
+ * (and therefore, we are not in the correct address space).  We have to
+ * calculate the offset.
  *
  * Returns:
  *	r5, r6, r7 corrupted
@@ -274,20 +293,24 @@ err_str:	.asciz	"\nError: "
 __lookup_processor_type:
 		adr	r5, 2f
 		ldmia	r5, {r7, r9, r10}
-		sub	r5, r5, r10
-		add	r7, r7, r5
+		sub	r5, r5, r10			@ convert addresses
+		add	r7, r7, r5			@ to our address space
 		add	r10, r9, r5
 		mrc	p15, 0, r9, c0, c0		@ get processor id
 1:		ldmia	r10, {r5, r6, r8}		@ value, mask, mmuflags
-		eor	r5, r5, r9
-		tst	r5, r6
+		and	r6, r6, r9			@ mask wanted bits
+		teq	r5, r6
 		moveq	pc, lr
 		add	r10, r10, #36			@ sizeof(proc_info_list)
 		cmp	r10, r7
 		blt	1b
-		mov	r10, #0
+		mov	r10, #0				@ unknown processor
 		mov	pc, lr
 
+/*
+ * Look in include/asm-arm/procinfo.h and arch/arm/kernel/arch.[ch] for
+ * more information about the __proc_info and __arch_info structures.
+ */
 2:		.long	__proc_info_end
 		.long	__proc_info_begin
 		.long	2b
@@ -295,10 +318,14 @@ __lookup_processor_type:
 		.long	__arch_info_end
 
 /*
- * Lookup machine architecture
- * r1 = machine architecture number
+ * Lookup machine architecture in the linker-build list of architectures.
+ * Note that we can't use the absolute addresses for the __arch_info
+ * lists since we aren't running with the MMU on (and therefore, we are
+ * not in the correct address space).  We have to calculate the offset.
+ *
+ *  r1 = machine architecture number
  * Returns:
- *  r4 = unused word
+ *  r2, r3, r4 corrupted
  *  r5 = physical start address of RAM
  *  r6 = physical address of IO
  *  r7 = byte offset into page tables for IO
@@ -306,16 +333,17 @@ __lookup_processor_type:
 __lookup_architecture_type:
 		adr	r4, 2b
 		ldmia	r4, {r2, r3, r5, r6, r7}	@ throw away r2, r3
-		sub	r5, r4, r5
-		add	r4, r6, r5
+		sub	r5, r4, r5			@ convert addresses
+		add	r4, r6, r5			@ to our address space
 		add	r7, r7, r5
-1:		ldr	r5, [r4]
+1:		ldr	r5, [r4]			@ get machine type
 		teq	r5, r1
 		beq	2f
 		add	r4, r4, #SIZEOF_MACHINE_DESC
 		cmp	r4, r7
 		blt	1b
-		mov	r7, #0
+		mov	r7, #0				@ unknown architecture
 		mov	pc, lr
-2:		ldmib	r4, {r5, r6, r7}
+2:		ldmib	r4, {r5, r6, r7}		@ found, get results
+		mov	r7, r7, lsr #18			@ pagetable byte offset
 		mov	pc, lr

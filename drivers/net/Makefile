@@ -204,29 +204,12 @@ obj-$(CONFIG_ES3210) += es3210.o 8390.o
 obj-$(CONFIG_LNE390) += lne390.o 8390.o
 obj-$(CONFIG_NE3210) += ne3210.o 8390.o
 
-# bsd_comp.o is *always* a module, for some documented reason
-# (licensing).
-ifeq ($(CONFIG_PPP),y)
-  obj-y += ppp_generic.o slhc.o
-  obj-$(CONFIG_PPP_ASYNC) += ppp_async.o
-  obj-$(CONFIG_PPP_SYNC_TTY) += ppp_synctty.o
-  obj-$(CONFIG_PPP_DEFLATE) += ppp_deflate.o
-  ifeq ($(CONFIG_PPP_BSDCOMP),m)
-    obj-m += bsd_comp.o
-  endif
-  obj-$(CONFIG_PPPOE) += pppox.o pppoe.o
-else
-  ifeq ($(CONFIG_PPP),m)
-    obj-m += ppp_generic.o slhc.o
-    obj-$(CONFIG_PPP_ASYNC) += ppp_async.o
-    obj-$(CONFIG_PPP_SYNC_TTY) += ppp_synctty.o
-    obj-$(CONFIG_PPP_DEFLATE) += ppp_deflate.o
-    obj-$(CONFIG_PPPOE) += pppox.o pppoe.o
-    ifeq ($(CONFIG_PPP_BSDCOMP),m)
-      obj-m += bsd_comp.o
-    endif
-  endif
-endif
+obj-$(CONFIG_PPP) += ppp_generic.o slhc.o
+obj-$(CONFIG_PPP_ASYNC) += ppp_async.o
+obj-$(CONFIG_PPP_SYNC_TTY) += ppp_synctty.o
+obj-$(CONFIG_PPP_DEFLATE) += ppp_deflate.o
+obj-$(CONFIG_PPP_BSDCOMP) += bsd_comp.o
+obj-$(CONFIG_PPPOE) += pppox.o pppoe.o
 
 obj-$(CONFIG_SLIP) += slip.o
 ifeq ($(CONFIG_SLIP),y)

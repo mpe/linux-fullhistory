@@ -254,9 +254,7 @@ ENTRY(cpu_arm7_proc_init)
 
 ENTRY(cpu_arm6_proc_fin)
 ENTRY(cpu_arm7_proc_fin)
-		mrs	r0, cpsr
-		orr	r0, r0, #F_BIT | I_BIT
-		msr	cpsr, r0
+		msr	cpsr_c, #F_BIT | I_BIT | SVC_MODE
 		mov	r0, #0x31			@ ....S..DP...M
 		mcr	p15, 0, r0, c1, c0, 0		@ disable caches
 		mov	pc, lr
@@ -366,7 +364,8 @@ cpu_arm710_name:
 
 		.section ".text.init", #alloc, #execinstr
 
-__arm6_setup:	mov	r0, #0
+__arm6_setup:	msr	cpsr_c, #F_BIT | I_BIT | SVC_MODE
+		mov	r0, #0
 		mcr	p15, 0, r0, c7, c0		@ flush caches on v3
 		mcr	p15, 0, r0, c5, c0		@ flush TLBs on v3
 		mcr	p15, 0, r4, c2, c0		@ load page table pointer
@@ -376,7 +375,8 @@ __arm6_setup:	mov	r0, #0
 		orr	r0, r0, #0x100
 		mov	pc, lr
 
-__arm7_setup:	mov	r0, #0
+__arm7_setup:	msr	cpsr_c, #F_BIT | I_BIT | SVC_MODE
+		mov	r0, #0
 		mcr	p15, 0, r0, c7, c0		@ flush caches on v3
 		mcr	p15, 0, r0, c5, c0		@ flush TLBs on v3
 		mcr	p15, 0, r4, c2, c0		@ load page table pointer

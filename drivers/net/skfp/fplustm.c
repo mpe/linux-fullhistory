@@ -390,9 +390,9 @@ struct s_smc *smc ;
 	outpw(FM_A(FM_TREQ0),(unsigned)t_requ) ;
 }
 
-void set_long(p,l)
+void set_int(p,l)
 char *p;
-long l;
+int l;
 {
 	p[0] = (char)(l >> 24) ;
 	p[1] = (char)(l >> 16) ;
@@ -416,12 +416,12 @@ unsigned off;		/* start address within buffer memory */
 int len ;		/* lenght of the frame including the FC */
 {
 	int	i ;
-	u_long	*p ;
+	u_int	*p ;
 
 	CHECK_NPP() ;
 	MARW(off) ;		/* set memory address reg for writes */
 
-	p = (u_long *) mac ;
+	p = (u_int *) mac ;
 	for (i = (len + 3)/4 ; i ; i--) {
 		if (i == 1) {
 			/* last word, set the tag bit */
@@ -460,7 +460,7 @@ int len ;		/* lenght of the frame including the FC */
 static void directed_beacon(smc)
 struct s_smc *smc ;
 {
-	SK_LOC_DECL(u_long,a[2]) ;
+	SK_LOC_DECL(u_int,a[2]) ;
 
 	/*
 	 * set UNA in frame
@@ -491,7 +491,7 @@ static void build_claim_beacon(smc,t_request)
 struct s_smc *smc ;
 u_long t_request;
 {
-	u_long	td ;
+	u_int	td ;
 	int	len ;
 	struct fddi_mac_sf *mac ;
 
@@ -499,13 +499,13 @@ u_long t_request;
 	 * build claim packet
 	 */
 	len = 17 ;
-	td = TX_DESCRIPTOR | ((((u_long)len-1)&3)<<27) ;
+	td = TX_DESCRIPTOR | ((((u_int)len-1)&3)<<27) ;
 	mac = &smc->hw.fp.mac_sfb ;
 	mac->mac_fc = FC_CLAIM ;
 	/* DA == SA in claim frame */
 	mac->mac_source = mac->mac_dest = MA ;
 	/* 2's complement */
-	set_long((char *)mac->mac_info,(long)t_request) ;
+	set_int((char *)mac->mac_info,(int)t_request) ;
 
 	copy_tx_mac(smc,td,(struct fddi_mac *)mac,
 		smc->hw.fp.fifo.rbc_ram_start + CLAIM_FRAME_OFF,len) ;
@@ -516,11 +516,11 @@ u_long t_request;
 	 * build beacon packet
 	 */
 	len = 17 ;
-	td = TX_DESCRIPTOR | ((((u_long)len-1)&3)<<27) ;
+	td = TX_DESCRIPTOR | ((((u_int)len-1)&3)<<27) ;
 	mac->mac_fc = FC_BEACON ;
 	mac->mac_source = MA ;
 	mac->mac_dest = null_addr ;		/* DA == 0 in beacon frame */
-	set_long((char *) mac->mac_info,((long)BEACON_INFO<<24L) + 0 ) ;
+	set_int((char *) mac->mac_info,((int)BEACON_INFO<<24) + 0 ) ;
 
 	copy_tx_mac(smc,td,(struct fddi_mac *)mac,
 		smc->hw.fp.fifo.rbc_ram_start + BEACON_FRAME_OFF,len) ;
@@ -532,13 +532,13 @@ u_long t_request;
 	 * contains optional UNA
 	 */
 	len = 23 ;
-	td = TX_DESCRIPTOR | ((((u_long)len-1)&3)<<27) ;
+	td = TX_DESCRIPTOR | ((((u_int)len-1)&3)<<27) ;
 	mac->mac_fc = FC_BEACON ;
 	mac->mac_source = MA ;
 	mac->mac_dest = dbeacon_multi ;		/* multicast */
-	set_long((char *) mac->mac_info,((long)DBEACON_INFO<<24L) + 0 ) ;
-	set_long((char *) mac->mac_info+4,0L) ;
-	set_long((char *) mac->mac_info+8,0L) ;
+	set_int((char *) mac->mac_info,((int)DBEACON_INFO<<24) + 0 ) ;
+	set_int((char *) mac->mac_info+4,0) ;
+	set_int((char *) mac->mac_info+8,0) ;
 
 	copy_tx_mac(smc,td,(struct fddi_mac *)mac,
 		smc->hw.fp.fifo.rbc_ram_start + DBEACON_FRAME_OFF,len) ;

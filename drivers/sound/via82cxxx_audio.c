@@ -11,7 +11,7 @@
  */
  
 
-#define VIA_VERSION	"1.1.5"
+#define VIA_VERSION	"1.1.6"
 
 
 #include <linux/config.h>
@@ -23,6 +23,7 @@
 #include <linux/proc_fs.h>
 #include <linux/spinlock.h>
 #include <linux/sound.h>
+#include <linux/poll.h>
 #include <linux/soundcard.h>
 #include <linux/ac97_codec.h>
 #include <asm/io.h>
@@ -30,8 +31,9 @@
 #include <asm/uaccess.h>
 #include <asm/hardirq.h>
 
-#include "sound_config.h"
-#include "soundmodule.h"
+/* much better to duplicate this value than include
+ * drivers/sound/sound_config.h just for this definition */
+#define SND_DEV_DSP16 5 
 
 
 #undef VIA_DEBUG	/* define to enable debugging output and checks */
@@ -286,7 +288,6 @@ static int via_dsp_release(struct inode *inode, struct file *file);
 static u16 via_ac97_read_reg (struct ac97_codec *codec, u8 reg);
 static void via_ac97_write_reg (struct ac97_codec *codec, u8 reg, u16 value);
 static u8 via_ac97_wait_idle (struct via_info *card);
-static u32 via_ac97_wait_valid (struct via_info *card);
 
 static void via_chan_free (struct via_info *card, struct via_channel *chan);
 static void via_chan_clear (struct via_channel *chan);
@@ -403,11 +404,6 @@ static void via_stop_everything (struct via_info *card)
 
 static int via_set_rate (struct via_info *card, unsigned rate, int inhale_deeply)
 {
-#if 0
-	unsigned long flags;
-	u32 status;
-	u8 status8;
-#endif
 
 	DPRINTK ("ENTER, rate = %d, inhale = %s\n",
 		 rate, inhale_deeply ? "yes" : "no");
@@ -415,37 +411,12 @@ static int via_set_rate (struct via_info *card, unsigned rate, int inhale_deeply
 	if (rate > 48000)		rate = 48000;
 	if (rate < 4000) 		rate = 4000;
 	
-#if 0
-	status8 = via_ac97_wait_idle (card);
-	if (status8 & VIA_CR83_BUSY) {
-		DPRINTK ("EXIT, status=0x%X, returning -EIO\n", status);
-		return -EIO;
-	}
-
-	if (inhale_deeply) {
-		card->ch_in.rate = rate;
-
-		spin_lock_irqsave (&card->lock, flags);
-		outl (VIA_SET_RATE_IN + rate,
-		      card->baseaddr + VIA_BASE0_AC97_CTRL);
-		spin_unlock_irqrestore (&card->lock, flags);
-	} else {
-		card->ch_out.rate = rate;
-
-		spin_lock_irqsave (&card->lock, flags);
-		outl (VIA_SET_RATE_OUT + rate,
-		      card->baseaddr + VIA_BASE0_AC97_CTRL);
-		spin_unlock_irqrestore (&card->lock, flags);
-	}
-
-#else
 	via_ac97_write_reg (&card->ac97, AC97_POWER_CONTROL,
 		(via_ac97_read_reg (&card->ac97, AC97_POWER_CONTROL) & ~0x0200) |
 		0x0200);
 	via_ac97_write_reg (&card->ac97, AC97_PCM_FRONT_DAC_RATE, rate);
 	via_ac97_write_reg (&card->ac97, AC97_POWER_CONTROL,
 		via_ac97_read_reg (&card->ac97, AC97_POWER_CONTROL) & ~0x0200);
-#endif
 
 	DPRINTK ("EXIT, returning 0\n");
 	return rate;
@@ -769,38 +740,6 @@ static u8 via_ac97_wait_idle (struct via_info *card)
 }
 
 
-static u32 via_ac97_wait_valid (struct via_info *card)
-{
-	u32 tmp;
-	int counter = VIA_COUNTER_LIMIT;
-	
-	DPRINTK ("ENTER\n");
-
-	assert (card != NULL);
-	assert (card->pdev != NULL);
-	
-	do {
-		if (current->need_resched)
-			schedule ();
-
-		spin_lock_irq (&card->lock);
-		tmp = inl (card->baseaddr + VIA_BASE0_AC97_CTRL);
-		spin_unlock_irq (&card->lock);
-		
-		udelay (10);
-
-		if (tmp & VIA_CR80_FIRST_CODEC_VALID) {
-			DPRINTK ("EXIT valid, tmp=0x%X, cnt=%d\n", tmp, counter);
-			return tmp;
-		}
-	} while ((tmp & VIA_CR80_BUSY) && (counter-- > 0));
-
-	DPRINTK ("EXIT, tmp=0x%X, cnt=%d%s\n", tmp, counter, 
-		 counter > 0 ? "" : ", counter limit reached");
-	return tmp;
-}
-
-
 static u16 via_ac97_read_reg (struct ac97_codec *codec, u8 reg)
 {
 	u32 data;
@@ -957,6 +896,7 @@ static struct file_operations via_mixer_fops = {
 };
 
 
+#if 0 /* values reasoned from debugging dumps of via's driver */
 static struct {
 	u8 reg;
 	u16 data;
@@ -976,6 +916,7 @@ static struct {
 	{ 0x2, 0x808 },
 	{ 0x18, 0x808 },
 };
+#endif
 
 
 static int __init via_ac97_reset (struct via_info *card)
@@ -983,7 +924,6 @@ static int __init via_ac97_reset (struct via_info *card)
 	struct pci_dev *pdev = card->pdev;
 	u8 tmp8;
 	u16 tmp16;
-	size_t idx;
 	
 	DPRINTK ("ENTER\n");
 
@@ -1015,8 +955,6 @@ static int __init via_ac97_reset (struct via_info *card)
 	}
 #endif
 
-#if 1
-
         /*
          * reset AC97 controller: enable, disable, enable
          * pause after each command for good luck
@@ -1032,35 +970,6 @@ static int __init via_ac97_reset (struct via_info *card)
 			       VIA_CR41_AC97_ENABLE | VIA_CR41_PCM_ENABLE |
                                VIA_CR41_VRA | VIA_CR41_AC97_RESET);
         udelay (100);
-#endif
-
-#if 0
-	/*
-	 * reset AC97 controller
-	 */
-	pci_read_config_byte(pdev, 0x08, &tmp8);
-	if ((tmp8 & 0xff) >= 0x20 ) {
-		pci_read_config_byte(pdev, 0x42, &tmp8);
-		pci_write_config_byte(pdev, 0x42,(tmp8 & 0x3f));
-	}
-	udelay (100);
-
-	/* init other mixer defaults */
-	for (idx = 0; idx < arraysize(mixer_init_vals); idx++) {
-		via_ac97_write_reg (&card->ac97,
-				    mixer_init_vals[idx].reg,
-				    mixer_init_vals[idx].data);
-		udelay (20);
-	}
-	
-	pci_write_config_byte (pdev, 0x41, 0xc0);
-	udelay (10);
-	pci_read_config_byte (pdev, 0x41, &tmp8);
-	udelay (10);
-	pci_write_config_byte (pdev, 0x41, tmp8 | 0x0f);
-	udelay (10);
-
-#endif
 
 	/* disable legacy stuff */
 	pci_write_config_byte (pdev, 0x42, 0x00);
@@ -1072,16 +981,6 @@ static int __init via_ac97_reset (struct via_info *card)
 	
 	/* disable all codec GPI interrupts */
 	outl (0, pci_resource_start (pdev, 0) + 0x8C);
-
-#if 0 /* ALSA */
-	via_ac97_write_reg (&card->ac97, AC97_EXTENDED_STATUS, 0x0009);
-#if 0
-	via_ac97_write_reg (&card->ac97, AC97_POWER_CONTROL,
-		via_ac97_read_reg (&card->ac97, AC97_POWER_CONTROL) | 0x0300);
-#endif
-	via_ac97_write_reg (&card->ac97, AC97_EXTENDED_STATUS,
-		via_ac97_read_reg (&card->ac97, AC97_EXTENDED_STATUS) | 0xe800);
-#endif
 
 	/* enable variable rate */
 	tmp16 = via_ac97_read_reg (&card->ac97, 0x2A);
@@ -1836,24 +1735,24 @@ static int via_dsp_ioctl (struct inode *inode, struct file *file,
 			return -EINVAL;
 		if (val > 0) {
 			rc = 0;
-			spin_lock_irqsave (&card->lock, flags);
+			spin_lock_irq (&card->lock);
 			if (rc == 0 && rd)
 				rc = via_chan_set_speed (card, &card->ch_in, val);
 			if (rc == 0 && wr)
 				rc = via_chan_set_speed (card, &card->ch_out, val);
-			spin_unlock_irqrestore (&card->lock, flags);
+			spin_unlock_irq (&card->lock);
 			if (rc <= 0)
 				return rc ? rc : -EINVAL;
 			val = rc;
 		} else {
-			spin_lock_irqsave (&card->lock, flags);
+			spin_lock_irq (&card->lock);
 			if (rd)
 				val = card->ch_in.rate;
 			else if (wr)
 				val = card->ch_out.rate;
 			else
 				val = 0;
-			spin_unlock_irqrestore (&card->lock, flags);
+			spin_unlock_irq (&card->lock);
 		}
 		DPRINTK("SPEED EXIT, returning %d\n", val);
                 return put_user (val, (int *)arg);
@@ -1868,18 +1767,16 @@ static int via_dsp_ioctl (struct inode *inode, struct file *file,
 
 	/* stop recording/playback immediately */
         case SNDCTL_DSP_RESET:
+		spin_lock_irq (&card->lock);
 		if (rd) {
-			spin_lock_irqsave (&card->lock, flags);
 			via_chan_clear (&card->ch_in);
 			via_chan_pcm_fmt (card, &card->ch_in, 1);
-			spin_unlock_irqrestore (&card->lock, flags);
 		}
 		if (wr) {
-			spin_lock_irqsave (&card->lock, flags);
 			via_chan_clear (&card->ch_out);
 			via_chan_pcm_fmt (card, &card->ch_out, 1);
-			spin_unlock_irqrestore (&card->lock, flags);
 		}
+		spin_unlock_irq (&card->lock);
 		DPRINTK("RESET EXIT, returning 0\n");
 		return 0;
 
@@ -2109,7 +2006,6 @@ static int via_info_read_proc (char *page, char **start, off_t off,
 	int len = 0;
 	u8 r40, r41, r42, r44;
 	struct via_info *card = data;
-	u16 tmp16;
 	
 	DPRINTK ("ENTER\n");
 
@@ -2306,41 +2202,11 @@ static int __init via_init_one (struct pci_dev *pdev, const struct pci_device_id
 		goto err_out;
 	}
 
-#if 0
-	/* chipset init copied from via */
-	pci_write_config_byte(pdev, 0x41,(0xc0));
-	udelay(10);
-	pci_read_config_byte(pdev, 0x41, &tmp);
-	udelay(10);
-	pci_write_config_byte(pdev, 0x41,(tmp | 0x0f));
-	udelay(10);
-	pci_read_config_byte(pdev, 0x42, &tmp);
-	udelay(10);
-	pci_write_config_byte(pdev, 0x42,(tmp | 0x3f));
-#endif
-
 	if (pci_enable_device (pdev)) {
 		rc = -EIO;
 		goto err_out_none;
 	}
 	
-#if 0
-	/* chipset init copied from ALSA */
-	pci_write_config_byte(pdev, 0x42, 0);
-	pci_write_config_byte(pdev, 0x41, 0x40);
-	udelay(100);
-	pci_write_config_byte(pdev, 0x41, 0x60);
-	udelay(10);
-	pci_write_config_byte(pdev, 0x41, 0xCC);
-	udelay(10);
-	
-	{
-	u32 data = ((AC97_POWER_CONTROL & 0x7F) << 16) | 0x0000;
-	udelay(100);
-	outl (data, pci_resource_start (pdev, 0) + VIA_BASE0_AC97_CTRL);
-	}
-#endif
-
 	card = kmalloc (sizeof (*card), GFP_KERNEL);
 	if (!card) {
 		printk (KERN_ERR PFX "out of memory, aborting\n");

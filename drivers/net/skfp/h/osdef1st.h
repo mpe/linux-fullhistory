@@ -97,22 +97,27 @@
  *
  * Note: The size of these structures must follow this rule:
  *
- *	size = 8 + n * 16, n >= 0
+ *	sizeof(struct) + 2*sizeof(void*) == n * 16, n >= 1
  *
- * NOTE: The size of this structures may not be changed, because
- *       libskfddi.a depends on it. But the dummy fields can be
- *       used freely.
+ * We use the dma_addr fields under Linux to keep track of the
+ * DMA address of the packet data, for later pci_unmap_single. -DaveM
  */
 
 struct s_txd_os {	// os-specific part of transmit descriptor
 	struct sk_buff *skb;
-	long dummy;
+	dma_addr_t dma_addr;
 } ;
 
 struct s_rxd_os {	// os-specific part of receive descriptor
 	struct sk_buff *skb;
-	long dummy;
+	dma_addr_t dma_addr;
 } ;
 
 
+/*
+ * So we do not need to make too many modifications to the generic driver
+ * parts, we take advantage of the AIX byte swapping macro interface.
+ */
 
+#define AIX_REVERSE(x)		((u32)le32_to_cpu((u32)(x)))
+#define MDR_REVERSE(x)		((u32)le32_to_cpu((u32)(x)))

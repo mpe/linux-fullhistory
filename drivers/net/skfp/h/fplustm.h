@@ -54,12 +54,12 @@ struct err_st {
  *	Transmit Descriptor struct
  */
 struct s_smt_fp_txd {
-	u_long txd_tbctrl ;		/* transmit buffer control */
-	u_long txd_txdscr ;		/* transmit frame status word */
-	u_long txd_tbadr ;		/* physical tx buffer address */
-	u_long txd_ntdadr ;		/* physical pointer to the next TxD */
+	u_int txd_tbctrl ;		/* transmit buffer control */
+	u_int txd_txdscr ;		/* transmit frame status word */
+	u_int txd_tbadr ;		/* physical tx buffer address */
+	u_int txd_ntdadr ;		/* physical pointer to the next TxD */
 #ifdef	ENA_64BIT_SUP
-	u_long txd_tbadr_hi ;		/* physical tx buffer addr (high dword)*/
+	u_int txd_tbadr_hi ;		/* physical tx buffer addr (high dword)*/
 #endif
 	char far *txd_virt ;		/* virtual pointer to the data frag */
 					/* virt pointer to the next TxD */
@@ -71,12 +71,12 @@ struct s_smt_fp_txd {
  *	Receive Descriptor struct
  */
 struct s_smt_fp_rxd {
-	u_long rxd_rbctrl ;		/* receive buffer control */
-	u_long rxd_rfsw ;		/* receive frame status word */
-	u_long rxd_rbadr ;		/* physical rx buffer address */
-	u_long rxd_nrdadr ;		/* physical pointer to the next RxD */
+	u_int rxd_rbctrl ;		/* receive buffer control */
+	u_int rxd_rfsw ;		/* receive frame status word */
+	u_int rxd_rbadr ;		/* physical rx buffer address */
+	u_int rxd_nrdadr ;		/* physical pointer to the next RxD */
 #ifdef	ENA_64BIT_SUP
-	u_long rxd_rbadr_hi ;		/* physical tx buffer addr (high dword)*/
+	u_int rxd_rbadr_hi ;		/* physical tx buffer addr (high dword)*/
 #endif
 	char far *rxd_virt ;		/* virtual pointer to the data frag */
 					/* virt pointer to the next RxD */
@@ -259,7 +259,9 @@ struct s_smt_fp {
 				 (((x)>> 8L)&0x0000ff00L)	+	\
 				 (((x)>>24L)&0x000000ffL))
 #else
+#ifndef AIX_REVERSE
 #define	AIX_REVERSE(x)	(x)
+#endif
 #endif
 
 #ifdef	MDR_REV	
@@ -268,7 +270,9 @@ struct s_smt_fp {
 				 (((x)>> 8L)&0x0000ff00L)	+	\
 				 (((x)>>24L)&0x000000ffL))
 #else
+#ifndef MDR_REVERSE
 #define	MDR_REVERSE(x)	(x)
+#endif
 #endif
 
 #endif

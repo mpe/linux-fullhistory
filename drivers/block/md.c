@@ -1,6 +1,6 @@
 /*
    md.c : Multiple Devices driver for Linux
-          Copyright (C) 1998, 1999, 2000 Ingo Molnar
+	  Copyright (C) 1998, 1999, 2000 Ingo Molnar
 
      completely rewritten, based on the MD driver code from Marc Zyngier
 
@@ -12,6 +12,11 @@
    - kmod support by: Cyrus Durgin
    - RAID0 bugfixes: Mark Anthony Lisher <markal@iname.com>
    - Devfs support by Richard Gooch <rgooch@atnf.csiro.au>
+
+   - lots of fixes and improvements to the RAID1/RAID5 and generic
+     RAID code (such as request based resynchronization):
+
+     Neil Brown <neilb@cse.unsw.edu.au>.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -25,6 +30,7 @@
 
 #include <linux/config.h>
 #include <linux/raid/md.h>
+#include <linux/raid/xor.h>
 #include <linux/devfs_fs_kernel.h>
 
 #ifdef CONFIG_KMOD
@@ -39,8 +45,6 @@
 extern asmlinkage int sys_sched_yield(void);
 extern asmlinkage int sys_setsid(void);
 
-extern unsigned long io_events[MAX_BLKDEV];
-
 #define MAJOR_NR MD_MAJOR
 #define MD_DRIVER
 
@@ -54,6 +58,41 @@ extern unsigned long io_events[MAX_BLKDEV];
 #endif
 
 static mdk_personality_t *pers[MAX_PERSONALITY] = {NULL, };
+
+/*
+ * Current RAID-1,4,5 parallel reconstruction 'guaranteed speed limit'
+ * is 100 KB/sec, so the extra system load does not show up that much.
+ * Increase it if you want to have more _guaranteed_ speed. Note that
+ * the RAID driver will use the maximum available bandwith if the IO
+ * subsystem is idle. There is also an 'absolute maximum' reconstruction
+ * speed limit - in case reconstruction slows down your system despite
+ * idle IO detection.
+ *
+ * you can change it via /proc/sys/dev/raid/speed_limit_min and _max.
+ */
+
+static int sysctl_speed_limit_min = 100;
+static int sysctl_speed_limit_max = 100000;
+
+static struct ctl_table_header *raid_table_header;
+
+static ctl_table raid_table[] = {
+	{DEV_RAID_SPEED_LIMIT_MIN, "speed_limit_min",
+	 &sysctl_speed_limit_min, sizeof(int), 0644, NULL, &proc_dointvec},
+	{DEV_RAID_SPEED_LIMIT_MAX, "speed_limit_max",
+	 &sysctl_speed_limit_max, sizeof(int), 0644, NULL, &proc_dointvec},
+	{0}
+};
+
+static ctl_table raid_dir_table[] = {
+	{DEV_RAID, "raid", NULL, 0, 0555, raid_table},
+	{0}
+};
+
+static ctl_table raid_root_table[] = {
+	{CTL_DEV, "dev", NULL, 0, 0555, raid_dir_table},
+	{0}
+};
 
 /*
  * these have to be allocated separately because external
@@ -215,8 +254,8 @@ static mddev_t * alloc_mddev (kdev_t dev)
 	blk_queue_make_request(q, md_make_request);
 	
 	q->plug_tq.sync = 0;
-        q->plug_tq.routine = &md_unplug_device;
-        q->plug_tq.data = mddev;
+	q->plug_tq.routine = &md_unplug_device;
+	q->plug_tq.data = mddev;
 
 	/*
 	 * The 'base' mddev is the one with data NULL.
@@ -504,7 +543,7 @@ static int read_disk_sb (mdk_rdev_t * rdev)
 	struct buffer_head *bh = NULL;
 	kdev_t dev = rdev->dev;
 	mdp_super_t *sb;
-	u32 sb_offset;
+	unsigned long sb_offset;
 
 	if (!rdev->sb) {
 		MD_BUG();
@@ -517,8 +556,7 @@ static int read_disk_sb (mdk_rdev_t * rdev)
 	 */
 	sb_offset = calc_dev_sboffset(rdev->dev, rdev->mddev, 1);
 	rdev->sb_offset = sb_offset;
-	printk("(read) %s's sb offset: %d", partition_name(dev),
-							 sb_offset);
+	printk("(read) %s's sb offset: %ld", partition_name(dev), sb_offset);
 	fsync_dev(dev);
 	set_blocksize (dev, MD_SB_BYTES);
 	bh = bread (dev, sb_offset / MD_SB_BLOCKS, MD_SB_BYTES);
@@ -604,6 +642,18 @@ static mdk_rdev_t * match_dev_unit(mddev_t *mddev, kdev_t dev)
 			return rdev;
 
 	return NULL;
+}
+
+static int match_mddev_units(mddev_t *mddev1, mddev_t *mddev2)
+{
+	struct md_list_head *tmp;
+	mdk_rdev_t *rdev;
+
+	ITERATE_RDEV(mddev1,rdev,tmp)
+		if (match_dev_unit(mddev2, rdev->dev))
+			return 1;
+
+	return 0;
 }
 
 static MD_LIST_HEAD(all_raid_disks);
@@ -798,7 +848,7 @@ static void print_sb(mdp_super_t *sb)
 
 static void print_rdev(mdk_rdev_t *rdev)
 {
-	printk(" rdev %s: O:%s, SZ:%08d F:%d DN:%d ",
+	printk(" rdev %s: O:%s, SZ:%08ld F:%d DN:%d ",
 		partition_name(rdev->dev), partition_name(rdev->old_dev),
 		rdev->size, rdev->faulty, rdev->desc_nr);
 	if (rdev->sb) {
@@ -815,9 +865,9 @@ void md_print_devices (void)
 	mddev_t *mddev;
 
 	printk("\n");
-	printk("       **********************************\n");
-	printk("       * <COMPLETE RAID STATE PRINTOUT> *\n");
-	printk("       **********************************\n");
+	printk("	**********************************\n");
+	printk("	* <COMPLETE RAID STATE PRINTOUT> *\n");
+	printk("	**********************************\n");
 	ITERATE_MDDEV(mddev,tmp) {
 		printk("md%d: ", mdidx(mddev));
 
@@ -833,7 +883,7 @@ void md_print_devices (void)
 		ITERATE_RDEV(mddev,rdev,tmp2)
 			print_rdev(rdev);
 	}
-	printk("       **********************************\n");
+	printk("	**********************************\n");
 	printk("\n");
 }
 
@@ -907,7 +957,7 @@ static int write_disk_sb(mdk_rdev_t * rdev)
 {
 	struct buffer_head *bh;
 	kdev_t dev;
-	u32 sb_offset, size;
+	unsigned long sb_offset, size;
 	mdp_super_t *sb;
 
 	if (!rdev->sb) {
@@ -926,7 +976,7 @@ static int write_disk_sb(mdk_rdev_t * rdev)
 	dev = rdev->dev;
 	sb_offset = calc_dev_sboffset(dev, rdev->mddev, 1);
 	if (rdev->sb_offset != sb_offset) {
-		printk("%s's sb offset has changed from %d to %d, skipping\n", partition_name(dev), rdev->sb_offset, sb_offset);
+		printk("%s's sb offset has changed from %ld to %ld, skipping\n", partition_name(dev), rdev->sb_offset, sb_offset);
 		goto skip;
 	}
 	/*
@@ -936,11 +986,11 @@ static int write_disk_sb(mdk_rdev_t * rdev)
 	 */
 	size = calc_dev_size(dev, rdev->mddev, 1);
 	if (size != rdev->size) {
-		printk("%s's size has changed from %d to %d since import, skipping\n", partition_name(dev), rdev->size, size);
+		printk("%s's size has changed from %ld to %ld since import, skipping\n", partition_name(dev), rdev->size, size);
 		goto skip;
 	}
 
-	printk("(write) %s's sb offset: %d\n", partition_name(dev), sb_offset);
+	printk("(write) %s's sb offset: %ld\n", partition_name(dev), sb_offset);
 	fsync_dev(dev);
 	set_blocksize(dev, MD_SB_BYTES);
 	bh = getblk(dev, sb_offset / MD_SB_BLOCKS, MD_SB_BYTES);
@@ -1053,7 +1103,7 @@ repeat:
 		printk("%s ", partition_name(rdev->dev));
 		if (!rdev->faulty) {
 			printk("[events: %08lx]",
-			       (unsigned long)get_unaligned(&rdev->sb->events));
+				(unsigned long)get_unaligned(&rdev->sb->events));
 			err += write_disk_sb(rdev);
 		} else
 			printk(")\n");
@@ -1244,7 +1294,7 @@ static int analyze_sbs (mddev_t * mddev)
 		}
 
 		printk("%s's event counter: %08lx\n", partition_name(rdev->dev),
-		       (unsigned long)get_unaligned(&rdev->sb->events));
+			(unsigned long)get_unaligned(&rdev->sb->events));
 		if (!freshest) {
 			freshest = rdev;
 			continue;
@@ -1488,7 +1538,7 @@ static int device_size_calculation (mddev_t * mddev)
 		rdev->size = calc_dev_size(rdev->dev, mddev, persistent);
 		if (rdev->size < sb->chunk_size / 1024) {
 			printk (KERN_WARNING
-				"Dev %s smaller than chunk_size: %dk < %dk\n",
+				"Dev %s smaller than chunk_size: %ldk < %dk\n",
 				partition_name(rdev->dev),
 				rdev->size, sb->chunk_size / 1024);
 			return -EINVAL;
@@ -2640,7 +2690,7 @@ static int md_ioctl (struct inode *inode, struct file *file,
 
 		case STOP_ARRAY:
 			err = do_md_stop (mddev, 0);
-			goto done_unlock;
+			goto done;
 
 		case STOP_ARRAY_RO:
 			err = do_md_stop (mddev, 1);
@@ -2817,13 +2867,13 @@ int md_thread(void * arg)
 		DECLARE_WAITQUEUE(wait, current);
 
 		add_wait_queue(&thread->wqueue, &wait);
+		set_task_state(current, TASK_INTERRUPTIBLE);
 		if (!test_bit(THREAD_WAKEUP, &thread->flags)) {
-			set_task_state(current, TASK_INTERRUPTIBLE);
 			dprintk("thread %p went to sleep.\n", thread);
 			schedule();
 			dprintk("thread %p woke up.\n", thread);
-			current->state = TASK_RUNNING;
 		}
+		current->state = TASK_RUNNING;
 		remove_wait_queue(&thread->wqueue, &wait);
 		clear_bit(THREAD_WAKEUP, &thread->flags);
 
@@ -2914,12 +2964,13 @@ void md_recover_arrays (void)
 
 int md_error (kdev_t dev, kdev_t rdev)
 {
-	mddev_t *mddev = kdev_to_mddev(dev);
+	mddev_t *mddev;
 	mdk_rdev_t * rrdev;
 	int rc;
 
-	printk("md_error dev:(%d:%d), rdev:(%d:%d), (caller: %p,%p,%p,%p).\n",MAJOR(dev),MINOR(dev),MAJOR(rdev),MINOR(rdev), __builtin_return_address(0),__builtin_return_address(1),__builtin_return_address(2),__builtin_return_address(3));
-
+	mddev = kdev_to_mddev(dev);
+/*	printk("md_error dev:(%d:%d), rdev:(%d:%d), (caller: %p,%p,%p,%p).\n",MAJOR(dev),MINOR(dev),MAJOR(rdev),MINOR(rdev), __builtin_return_address(0),__builtin_return_address(1),__builtin_return_address(2),__builtin_return_address(3));
+ */
 	if (!mddev) {
 		MD_BUG();
 		return 0;
@@ -2970,11 +3021,10 @@ static int status_unused (char * page)
 static int status_resync (char * page, mddev_t * mddev)
 {
 	int sz = 0;
-	unsigned int blocksize, max_blocks, resync, res, dt, tt, et;
+	unsigned int max_blocks, resync, res, dt, tt, et;
 
 	resync = mddev->curr_resync;
-	blocksize = blksize_size[MD_MAJOR][mdidx(mddev)];
-	max_blocks = blk_size[MD_MAJOR][mdidx(mddev)] / (blocksize >> 10);
+	max_blocks = mddev->sb->size;
 
 	/*
 	 * Should not happen.
@@ -3093,7 +3143,7 @@ static int md_status_read_proc(char *page, char **start, off_t off,
 			sz += status_resync (page+sz, mddev);
 		} else {
 			if (md_atomic_read(&mddev->resync_sem.count) != 1)
-				sz += sprintf(page + sz, "       resync=DELAYED");
+				sz += sprintf(page + sz, "	resync=DELAYED");
 		}
 		sz += sprintf(page + sz, "\n");
 	}
@@ -3124,6 +3174,298 @@ int unregister_md_personality (int pnum)
 	pers[pnum] = NULL;
 	return 0;
 } 
+
+static mdp_disk_t *get_spare(mddev_t *mddev)
+{
+	mdp_super_t *sb = mddev->sb;
+	mdp_disk_t *disk;
+	mdk_rdev_t *rdev;
+	struct md_list_head *tmp;
+
+	ITERATE_RDEV(mddev,rdev,tmp) {
+		if (rdev->faulty)
+			continue;
+		if (!rdev->sb) {
+			MD_BUG();
+			continue;
+		}
+		disk = &sb->disks[rdev->desc_nr];
+		if (disk_faulty(disk)) {
+			MD_BUG();
+			continue;
+		}
+		if (disk_active(disk))
+			continue;
+		return disk;
+	}
+	return NULL;
+}
+
+static int is_mddev_idle (mddev_t *mddev)
+{
+	mdk_rdev_t * rdev;
+	struct md_list_head *tmp;
+	int idle;
+	unsigned long curr_events;
+
+	idle = 1;
+	ITERATE_RDEV(mddev,rdev,tmp) {
+		int major = MAJOR(rdev->dev);
+		int idx = disk_index(rdev->dev);
+
+		curr_events = kstat.dk_drive_rblk[major][idx] +
+						kstat.dk_drive_wblk[major][idx] ;
+//		printk("events(major: %d, idx: %d): %ld\n", major, idx, curr_events);
+		if (curr_events != rdev->last_events) {
+//			printk("!I(%ld)", curr_events - rdev->last_events);
+			rdev->last_events = curr_events;
+			idle = 0;
+		}
+	}
+	return idle;
+}
+
+MD_DECLARE_WAIT_QUEUE_HEAD(resync_wait);
+
+void md_done_sync(mddev_t *mddev, int blocks, int ok)
+{
+	/* another "blocks" (1K) blocks have been synced */
+	atomic_sub(blocks, &mddev->recovery_active);
+	wake_up(&mddev->recovery_wait);
+	if (!ok) {
+		// stop recovery, signal do_sync ....
+	}
+}
+
+int md_do_sync(mddev_t *mddev, mdp_disk_t *spare)
+{
+	mddev_t *mddev2;
+	unsigned int max_blocks, currspeed,
+		j, window, err, serialize;
+	kdev_t read_disk = mddev_to_kdev(mddev);
+	unsigned long starttime;
+	struct md_list_head *tmp;
+	unsigned long last_check;
+
+
+	err = down_interruptible(&mddev->resync_sem);
+	if (err)
+		goto out_nolock;
+
+recheck:
+	serialize = 0;
+	ITERATE_MDDEV(mddev2,tmp) {
+		if (mddev2 == mddev)
+			continue;
+		if (mddev2->curr_resync && match_mddev_units(mddev,mddev2)) {
+			printk(KERN_INFO "md: serializing resync, md%d has overlapping physical units with md%d!\n", mdidx(mddev), mdidx(mddev2));
+			serialize = 1;
+			break;
+		}
+	}
+	if (serialize) {
+		interruptible_sleep_on(&resync_wait);
+		if (md_signal_pending(current)) {
+			md_flush_signals();
+			err = -EINTR;
+			goto out;
+		}
+		goto recheck;
+	}
+
+	mddev->curr_resync = 1;
+
+	max_blocks = mddev->sb->size;
+
+	printk(KERN_INFO "md: syncing RAID array md%d\n", mdidx(mddev));
+	printk(KERN_INFO "md: minimum _guaranteed_ reconstruction speed: %d KB/sec/disc.\n",
+						sysctl_speed_limit_min);
+	printk(KERN_INFO "md: using maximum available idle IO bandwith (but not more than %d KB/sec) for reconstruction.\n", sysctl_speed_limit_max);
+
+	/*
+	 * Resync has low priority.
+	 */
+	current->priority = 1;
+
+	is_mddev_idle(mddev); /* this also initializes IO event counters */
+	starttime = jiffies;
+	mddev->resync_start = starttime;
+
+	/*
+	 * Tune reconstruction:
+	 */
+	window = md_maxreadahead[mdidx(mddev)]/1024;
+	printk(KERN_INFO "md: using %dk window, over a total of %d blocks.\n",window,max_blocks);
+
+	atomic_set(&mddev->recovery_active, 0);
+	init_waitqueue_head(&mddev->recovery_wait);
+	last_check = 0;
+	for (j = 0; j < max_blocks;) {
+		int blocks;
+		if (j)
+			mddev->curr_resync = j;
+
+/*		wait_event(mddev->recovery_wait,
+			   atomic_read(&mddev->recovery_active) < window);
+*/
+		blocks = mddev->pers->sync_request(mddev, j);
+
+		if (blocks < 0) {
+			err = blocks;
+			goto out;
+		}
+		atomic_add(blocks, &mddev->recovery_active);
+		j += blocks;
+
+		if (last_check + window > j)
+			continue;
+		
+		run_task_queue(&tq_disk); //??
+
+
+		if (md_signal_pending(current)) {
+			/*
+			 * got a signal, exit.
+			 */
+			mddev->curr_resync = 0;
+			printk("md_do_sync() got signal ... exiting\n");
+			md_flush_signals();
+			err = -EINTR;
+			goto out;
+		}
+
+		/*
+		 * this loop exits only if either when we are slower than
+		 * the 'hard' speed limit, or the system was IO-idle for
+		 * a jiffy.
+		 * the system might be non-idle CPU-wise, but we only care
+		 * about not overloading the IO subsystem. (things like an
+		 * e2fsck being done on the RAID array should execute fast)
+		 */
+repeat:
+		if (md_need_resched(current))
+			schedule();
+
+		currspeed = j/((jiffies-starttime)/HZ + 1) + 1;
+		if (currspeed > sysctl_speed_limit_min) {
+			current->priority = 1;
+
+			if ((currspeed > sysctl_speed_limit_max) ||
+					!is_mddev_idle(mddev)) {
+				current->state = TASK_INTERRUPTIBLE;
+				md_schedule_timeout(HZ/4);
+				if (!md_signal_pending(current))
+					goto repeat;
+			}
+		} else
+			current->priority = 40;
+	}
+	wait_event(mddev->recovery_wait, atomic_read(&mddev->recovery_active)==0);
+	fsync_dev(read_disk);
+	printk(KERN_INFO "md: md%d: sync done.\n",mdidx(mddev));
+	err = 0;
+	/*
+	 * this also signals 'finished resyncing' to md_stop
+	 */
+out:
+	up(&mddev->resync_sem);
+out_nolock:
+	mddev->curr_resync = 0;
+	wake_up(&resync_wait);
+	return err;
+}
+
+
+/*
+ * This is a kernel thread which syncs a spare disk with the active array
+ *
+ * the amount of foolproofing might seem to be a tad excessive, but an
+ * early (not so error-safe) version of raid1syncd synced the first 0.5 gigs
+ * of my root partition with the first 0.5 gigs of my /home partition ... so
+ * i'm a bit nervous ;)
+ */
+void md_do_recovery (void *data)
+{
+	int err;
+	mddev_t *mddev;
+	mdp_super_t *sb;
+	mdp_disk_t *spare;
+	struct md_list_head *tmp;
+
+	printk(KERN_INFO "md: recovery thread got woken up ...\n");
+restart:
+	ITERATE_MDDEV(mddev,tmp) {
+		sb = mddev->sb;
+		if (!sb)
+			continue;
+		if (mddev->recovery_running)
+			continue;
+		if (sb->active_disks == sb->raid_disks)
+			continue;
+		if (!sb->spare_disks) {
+			printk(KERN_ERR "md%d: no spare disk to reconstruct array! -- continuing in degraded mode\n", mdidx(mddev));
+			continue;
+		}
+		/*
+		 * now here we get the spare and resync it.
+		 */
+		if ((spare = get_spare(mddev)) == NULL)
+			continue;
+		printk(KERN_INFO "md%d: resyncing spare disk %s to replace failed disk\n", mdidx(mddev), partition_name(MKDEV(spare->major,spare->minor)));
+		if (!mddev->pers->diskop)
+			continue;
+		if (mddev->pers->diskop(mddev, &spare, DISKOP_SPARE_WRITE))
+			continue;
+		down(&mddev->recovery_sem);
+		mddev->recovery_running = 1;
+		err = md_do_sync(mddev, spare);
+		if (err == -EIO) {
+			printk(KERN_INFO "md%d: spare disk %s failed, skipping to next spare.\n", mdidx(mddev), partition_name(MKDEV(spare->major,spare->minor)));
+			if (!disk_faulty(spare)) {
+				mddev->pers->diskop(mddev,&spare,DISKOP_SPARE_INACTIVE);
+				mark_disk_faulty(spare);
+				mark_disk_nonsync(spare);
+				mark_disk_inactive(spare);
+				sb->spare_disks--;
+				sb->working_disks--;
+				sb->failed_disks++;
+			}
+		} else
+			if (disk_faulty(spare))
+				mddev->pers->diskop(mddev, &spare,
+						DISKOP_SPARE_INACTIVE);
+		if (err == -EINTR) {
+			/*
+			 * Recovery got interrupted ...
+			 * signal back that we have finished using the array.
+			 */
+			mddev->pers->diskop(mddev, &spare,
+							 DISKOP_SPARE_INACTIVE);
+			up(&mddev->recovery_sem);
+			mddev->recovery_running = 0;
+			continue;
+		} else {
+			mddev->recovery_running = 0;
+			up(&mddev->recovery_sem);
+		}
+		if (!disk_faulty(spare)) {
+			/*
+			 * the SPARE_ACTIVE diskop possibly changes the
+			 * pointer too
+			 */
+			mddev->pers->diskop(mddev, &spare, DISKOP_SPARE_ACTIVE);
+			mark_disk_sync(spare);
+			mark_disk_active(spare);
+			sb->active_disks++;
+			sb->spare_disks--;
+		}
+		mddev->sb_dirty = 1;
+		md_update_sb(mddev);
+		goto restart;
+	}
+	printk(KERN_INFO "md: recovery thread finished ...\n");
+	
+}
 
 int md_notify_reboot(struct notifier_block *this,
 					unsigned long code, void *x)
@@ -3211,6 +3553,8 @@ void raid5_init (void);
 
 int md__init md_init (void)
 {
+	static char * name = "mdrecoveryd";
+	
 	printk (KERN_INFO "md driver %d.%d.%d MAX_MD_DEVS=%d, MAX_REAL=%d\n",
 			MD_MAJOR_VERSION, MD_MINOR_VERSION,
 			MD_PATCHLEVEL_VERSION, MAX_MD_DEVS, MAX_REAL);
@@ -3222,8 +3566,8 @@ int md__init md_init (void)
 	}
 	devfs_handle = devfs_mk_dir (NULL, "md", 0, NULL);
 	devfs_register_series (devfs_handle, "%u",MAX_MD_DEVS,DEVFS_FL_DEFAULT,
-			       MAJOR_NR, 0, S_IFBLK | S_IRUSR | S_IWUSR, 0, 0,
-			       &md_fops, NULL);
+				MAJOR_NR, 0, S_IFBLK | S_IRUSR | S_IWUSR, 0, 0,
+				&md_fops, NULL);
 
 	blk_dev[MD_MAJOR].queue = md_get_queue;
 
@@ -3232,24 +3576,29 @@ int md__init md_init (void)
 
 	gendisk_head = &md_gendisk;
 
+	md_recovery_thread = md_register_thread(md_do_recovery, NULL, name);
+	if (!md_recovery_thread)
+		printk(KERN_ALERT "bug: couldn't allocate md_recovery_thread\n");
+
 	md_register_reboot_notifier(&md_notifier);
+	raid_table_header = register_sysctl_table(raid_root_table, 1);
 
 #ifdef CONFIG_MD_LINEAR
 	linear_init ();
 #endif
-#ifdef CONFIG_MD_STRIPED
+#ifdef CONFIG_MD_RAID0
 	raid0_init ();
 #endif
-#ifdef CONFIG_MD_MIRRORING
+#ifdef CONFIG_MD_RAID1
 	raid1_init ();
 #endif
 #ifdef CONFIG_MD_RAID5
 	raid5_init ();
 #endif
 #if defined(CONFIG_MD_RAID5) || defined(CONFIG_MD_RAID5_MODULE)
-        /*
-         * pick a XOR routine, runtime.
-         */
+	/*
+	 * pick a XOR routine, runtime.
+	 */
 	calibrate_xor_block();
 #endif
 	md_geninit();
@@ -3261,6 +3610,8 @@ MD_EXPORT_SYMBOL(register_md_personality);
 MD_EXPORT_SYMBOL(unregister_md_personality);
 MD_EXPORT_SYMBOL(partition_name);
 MD_EXPORT_SYMBOL(md_error);
+MD_EXPORT_SYMBOL(md_do_sync);
+MD_EXPORT_SYMBOL(md_done_sync);
 MD_EXPORT_SYMBOL(md_recover_arrays);
 MD_EXPORT_SYMBOL(md_register_thread);
 MD_EXPORT_SYMBOL(md_unregister_thread);

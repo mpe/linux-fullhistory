@@ -28,6 +28,7 @@
 #define PAGE_CACHE_MASK		PAGE_MASK
 #define PAGE_CACHE_ALIGN(addr)	(((addr)+PAGE_CACHE_SIZE-1)&PAGE_CACHE_MASK)
 
+#define page_cache_get(x)	get_page(x)
 #define page_cache_alloc()	alloc_pages(GFP_HIGHUSER, 0)
 #define page_cache_free(x)	__free_page(x)
 #define page_cache_release(x)	__free_page(x)

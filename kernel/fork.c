@@ -25,12 +25,12 @@
 #include <asm/mmu_context.h>
 
 /* The idle threads do not count.. */
-int nr_threads=0;
-int nr_running=0;
+int nr_threads;
+int nr_running;
 
 int max_threads;
-unsigned long total_forks = 0;	/* Handle normal Linux uptimes. */
-int last_pid=0;
+unsigned long total_forks;	/* Handle normal Linux uptimes. */
+int last_pid;
 
 /* SLAB cache for mm_struct's. */
 kmem_cache_t *mm_cachep;

@@ -528,7 +528,7 @@ struct nfs_page *nfs_create_request(struct dentry *dentry, struct page *page,
 	 * long write-back delay. This will be adjusted in
 	 * update_nfs_request below if the region is not locked. */
 	req->wb_page    = page;
-	get_page(page);
+	page_cache_get(page);
 	req->wb_offset  = offset;
 	req->wb_bytes   = count;
 	req->wb_dentry  = dget(dentry);

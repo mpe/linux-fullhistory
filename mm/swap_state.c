@@ -31,10 +31,10 @@ struct address_space swapper_space = {
 };
 
 #ifdef SWAP_CACHE_INFO
-unsigned long swap_cache_add_total = 0;
-unsigned long swap_cache_del_total = 0;
-unsigned long swap_cache_find_total = 0;
-unsigned long swap_cache_find_success = 0;
+unsigned long swap_cache_add_total;
+unsigned long swap_cache_del_total;
+unsigned long swap_cache_find_total;
+unsigned long swap_cache_find_success;
 
 void show_swap_cache_info(void)
 {
@@ -136,7 +136,7 @@ void free_page_and_swap_cache(struct page *page)
 		}
 		UnlockPage(page);
 	}
-	__free_page(page);
+        page_cache_release(page);
 }
 
 
@@ -172,7 +172,7 @@ repeat:
 		 */
 		if (!PageSwapCache(found)) {
 			UnlockPage(found);
-			__free_page(found);
+			page_cache_release(found);
 			goto repeat;
 		}
 		if (found->mapping != &swapper_space)
@@ -187,7 +187,7 @@ repeat:
 out_bad:
 	printk (KERN_ERR "VM: Found a non-swapper swap page!\n");
 	UnlockPage(found);
-	__free_page(found);
+	page_cache_release(found);
 	return 0;
 }
 
@@ -237,7 +237,7 @@ struct page * read_swap_cache_async(swp_entry_t entry, int wait)
 	return new_page;
 
 out_free_page:
-	__free_page(new_page);
+	page_cache_release(new_page);
 out_free_swap:
 	swap_free(entry);
 out:

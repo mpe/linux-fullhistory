@@ -68,9 +68,9 @@ int acct_parm[3] = {4, 2, 30};
  */
 void acct_timeout(unsigned long);
 
-static volatile int acct_active = 0;
-static volatile int acct_needcheck = 0;
-static struct file *acct_file = NULL;
+static volatile int acct_active;
+static volatile int acct_needcheck;
+static struct file *acct_file;
 static struct timer_list acct_timer = { NULL, NULL, 0, 0, acct_timeout };
 static int do_acct_process(long, struct file *);
 

@@ -41,7 +41,7 @@ static int create_strip_zones (mddev_t *mddev)
 		printk("raid0: looking at %s\n", partition_name(rdev1->dev));
 		c = 0;
 		ITERATE_RDEV_ORDERED(mddev,rdev2,j2) {
-			printk("raid0:   comparing %s(%d) with %s(%d)\n", partition_name(rdev1->dev), rdev1->size, partition_name(rdev2->dev), rdev2->size);
+			printk("raid0:   comparing %s(%ld) with %s(%ld)\n", partition_name(rdev1->dev), rdev1->size, partition_name(rdev2->dev), rdev2->size);
 			if (rdev2 == rdev1) {
 				printk("raid0:   END\n");
 				break;
@@ -95,7 +95,7 @@ static int create_strip_zones (mddev_t *mddev)
 				c++;
 				if (!smallest || (rdev->size <smallest->size)) {
 					smallest = rdev;
-					printk("  (%d) is smallest!.\n", rdev->size);
+					printk("  (%ld) is smallest!.\n", rdev->size);
 				}
 			} else
 				printk(" nope.\n");
@@ -326,13 +326,11 @@ static int raid0_status (char *page, mddev_t *mddev)
 static mdk_personality_t raid0_personality=
 {
 	"raid0",
-	NULL,				/* no special map */
 	raid0_make_request,
 	NULL,				/* no special end_request */
 	raid0_run,
 	raid0_stop,
 	raid0_status,
-	NULL,				/* no ioctls */
 	0,
 	NULL,				/* no error_handler */
 	NULL,				/* no diskop */

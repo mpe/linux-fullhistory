@@ -163,4 +163,7 @@ extern int * max_segments[MAX_BLKDEV];
 #define blkdev_next_request(req) blkdev_entry_to_request((req)->queue.next)
 #define blkdev_prev_request(req) blkdev_entry_to_request((req)->queue.prev)
 
+extern void drive_stat_acct (kdev_t dev, int rw,
+					unsigned long nr_sectors, int new_io);
+
 #endif

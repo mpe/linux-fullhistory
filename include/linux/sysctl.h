@@ -511,7 +511,8 @@ enum
 enum {
 	DEV_CDROM=1,
 	DEV_HWMON=2,
-	DEV_PARPORT=3
+	DEV_PARPORT=3,
+	DEV_RAID=4
 };
 
 /* /proc/sys/dev/cdrom */
@@ -527,6 +528,12 @@ enum {
 /* /proc/sys/dev/parport */
 enum {
 	DEV_PARPORT_DEFAULT=-3
+};
+
+/* /proc/sys/dev/raid */
+enum {
+	DEV_RAID_SPEED_LIMIT_MIN=1,
+	DEV_RAID_SPEED_LIMIT_MAX=2
 };
 
 /* /proc/sys/dev/parport/default */

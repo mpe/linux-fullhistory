@@ -15,8 +15,8 @@
 static kmem_cache_t *filp_cache;
 
 /* sysctl tunables... */
-int nr_files = 0;	/* read only */
-int nr_free_files = 0;	/* read only */
+int nr_files;		/* read only */
+int nr_free_files;	/* read only */
 int max_files = NR_FILE;/* tunable */
 
 /* Here the new files go */

@@ -1,9 +1,9 @@
 (C)Copyright 1998-2000 SysKonnect,
 ===========================================================================
 
-skfp.txt created 17-Feb-2000
+skfp.txt created 11-May-2000
 
-Readme File for skfp.o v2.05
+Readme File for skfp.o v2.06
 
 
 This file contains
@@ -142,6 +142,12 @@ please ensure that the following information is available:
 
 (6) HISTORY
 ===========
+
+v2.06 (20000511) (In-Kernel version)
+    New features:
+	- 64 bit support
+	- new pci dma interface
+	- in kernel 2.3.99
 
 v2.05 (20000217) (In-Kernel version)
     New features:

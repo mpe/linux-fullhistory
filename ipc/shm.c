@@ -188,9 +188,9 @@ static int shm_ctlall;
 static int shm_ctlmni;
 static int shm_mode;
 
-static int shm_tot = 0; /* total number of shared memory pages */
-static int shm_rss = 0; /* number of shared memory pages that are in memory */
-static int shm_swp = 0; /* number of shared memory pages that are in swap */
+static int shm_tot; /* total number of shared memory pages */
+static int shm_rss; /* number of shared memory pages that are in memory */
+static int shm_swp; /* number of shared memory pages that are in swap */
 
 /* locks order:
 	pagecache_lock
@@ -208,9 +208,9 @@ static int shm_swp = 0; /* number of shared memory pages that are in swap */
  */
 
 /* some statistics */
-static ulong swap_attempts = 0;
-static ulong swap_successes = 0;
-static ulong used_segs = 0;
+static ulong swap_attempts;
+static ulong swap_successes;
+static ulong used_segs;
 
 void __init shm_init (void)
 {
@@ -1348,7 +1348,7 @@ static struct page * shm_nopage_core(struct shmid_kernel *shp, unsigned int idx,
 		   could potentially fault on our pte under us */
 		if (pte_none(pte)) {
 			shm_unlock(shp->id);
-			page = alloc_page(GFP_HIGHUSER);
+			page = page_cache_alloc();
 			if (!page)
 				goto oom;
 			clear_user_highpage(page, address);
@@ -1380,7 +1380,7 @@ static struct page * shm_nopage_core(struct shmid_kernel *shp, unsigned int idx,
 	}
 
 	/* pte_val(pte) == SHM_ENTRY (shp, idx) */
-	get_page(pte_page(pte));
+	page_cache_get(pte_page(pte));
 	return pte_page(pte);
 
 oom:
@@ -1448,7 +1448,7 @@ static void shm_swap_postop(struct page *page)
 	lock_kernel();
 	rw_swap_page(WRITE, page, 0);
 	unlock_kernel();
-	__free_page(page);
+	page_cache_release(page);
 }
 
 static int shm_swap_preop(swp_entry_t *swap_entry)
@@ -1470,8 +1470,8 @@ static int shm_swap_preop(swp_entry_t *swap_entry)
 /*
  * Goes through counter = (shm_rss >> prio) present shm pages.
  */
-static unsigned long swap_id = 0; /* currently being swapped */
-static unsigned long swap_idx = 0; /* next to swap */
+static unsigned long swap_id; /* currently being swapped */
+static unsigned long swap_idx; /* next to swap */
 
 int shm_swap (int prio, int gfp_mask)
 {
@@ -1537,7 +1537,7 @@ static void shm_unuse_page(struct shmid_kernel *shp, unsigned long idx,
 
 	pte = pte_mkdirty(mk_pte(page, PAGE_SHARED));
 	SHM_ENTRY(shp, idx) = pte;
-	get_page(page);
+	page_cache_get(page);
 	shm_rss++;
 
 	shm_swp--;
@@ -1652,7 +1652,7 @@ done:
 #define VMA_TO_SHP(vma)		((vma)->vm_file->private_data)
 
 static spinlock_t zmap_list_lock = SPIN_LOCK_UNLOCKED;
-static unsigned long zswap_idx = 0; /* next to swap */
+static unsigned long zswap_idx; /* next to swap */
 static struct shmid_kernel *zswap_shp = &zshmid_kernel;
 static int zshm_rss;
 

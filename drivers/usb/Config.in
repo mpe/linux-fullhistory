@@ -43,7 +43,7 @@ comment 'USB Devices'
    dep_tristate '  USB Kodak DC-2xx Camera support' CONFIG_USB_DC2XX $CONFIG_USB
    if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
 	   dep_tristate '  USB Mustek MDC800 Digital Camera support (EXPERIMENTAL)' CONFIG_USB_MDC800 $CONFIG_USB
-      dep_tristate '  USB Mass Storage support (EXPERIMENTAL)' CONFIG_USB_STORAGE $CONFIG_USB m
+      dep_tristate '  USB Mass Storage support (EXPERIMENTAL)' CONFIG_USB_STORAGE $CONFIG_USB
       if [ "$CONFIG_USB_STORAGE" != "n" ]; then
          bool '    USB Mass Storage verbose debug' CONFIG_USB_STORAGE_DEBUG
       fi

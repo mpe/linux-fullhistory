@@ -1,3 +1,11 @@
+/*
+ * Update: The Berkeley copyright was changed, and the change 
+ * is retroactive to all "true" BSD software (ie everything
+ * from UCB as opposed to other peoples code that just carried
+ * the same license). The new copyright doesn't clash with the
+ * GPL, so the module-only restriction has been removed..
+ */
+
 /* Because this code is derived from the 4.3BSD compress source:
  *
  * Copyright (c) 1985, 1986 The Regents of the University of California.
@@ -52,10 +60,6 @@
  *
  * From: bsd_comp.c,v 1.3 1994/12/08 01:59:58 paulus Exp
  */
-
-#ifndef MODULE
-#error This file must be compiled as a module.
-#endif
 
 #include <linux/module.h>
 #include <linux/init.h>

@@ -456,7 +456,7 @@ u_char		*mac_addr ;	/* canonical address */
 	/*
 	 * make sure that the start pointer is 16 byte aligned
 	 */
-	i = 16 - ((int)smc->os.hwm.descr_p & 0xf) ;
+	i = 16 - ((long)smc->os.hwm.descr_p & 0xf) ;
 	if (i != 16) {
 		DB_GEN("i = %d",i,0,3) ;
 		smc->os.hwm.descr_p = (union s_fp_descr volatile *)
@@ -1087,9 +1087,8 @@ struct s_smc *smc ;
 			DB_RX("Check RxD %x for OWN and EOF",(void *)r,0,5) ;
 			DRV_BUF_FLUSH(r,DDI_DMA_SYNC_FORCPU) ;
 			rbctrl = CR_READ(r->rxd_rbctrl) ;
-#ifdef	AIX
 			rbctrl = AIX_REVERSE(rbctrl) ;
-#endif
+
 			if (rbctrl & BMU_OWN) {
 				NDD_TRACE("RHxE",r,rfsw,rbctrl) ;
 				DB_RX("End of RxDs",0,0,4) ;
@@ -1425,26 +1424,19 @@ int len ;
 int frame_status ;
 {
 	struct s_smt_fp_rxd volatile *r ;
-#ifdef	AIX
-	u_long	rbctrl ;
-#endif
+	u_int	rbctrl ;
 
 	NDD_TRACE("RHfB",virt,len,frame_status) ;
 	DB_RX("hwm_rx_frag: len = %d, frame_status = %x\n",len,frame_status,2) ;
 	r = smc->hw.fp.rx_q[QUEUE_R1].rx_curr_put ;
 	r->rxd_virt = virt ;
 	r->rxd_rbadr = AIX_REVERSE(phys) ;
-#ifndef	AIX
-	r->rxd_rbctrl = (((u_long)frame_status & (FIRST_FRAG|LAST_FRAG))<<26) |
-		(((u_long) frame_status & FIRST_FRAG) << 21) |
-		BMU_OWN | BMU_CHECK | BMU_EN_IRQ_EOF | len ;
-#else
 	rbctrl = AIX_REVERSE( (((u_long)frame_status &
 		(FIRST_FRAG|LAST_FRAG))<<26) |
 		(((u_long) frame_status & FIRST_FRAG) << 21) |
 		BMU_OWN | BMU_CHECK | BMU_EN_IRQ_EOF | len) ;
 	r->rxd_rbctrl = rbctrl ;
-#endif
+
 	DRV_BUF_FLUSH(r,DDI_DMA_SYNC_FORDEV) ;
 	outpd(ADDR(B0_R1_CSR),CSR_START) ;
 	smc->hw.fp.rx_q[QUEUE_R1].rx_free-- ;
@@ -1687,9 +1679,7 @@ int frame_status ;
 {
 	struct s_smt_fp_txd volatile *t ;
 	struct s_smt_tx_queue *queue ;
-#ifdef	AIX
-	u_long	tbctrl ;
-#endif
+	u_int	tbctrl ;
 
 	queue = smc->os.hwm.tx_p ;
 
@@ -1708,19 +1698,15 @@ int frame_status ;
 		t->txd_virt = virt ;
 		t->txd_txdscr = AIX_REVERSE(smc->os.hwm.tx_descr) ;
 		t->txd_tbadr = AIX_REVERSE(phys) ;
-#ifndef	AIX
-		t->txd_tbctrl = (((u_long)frame_status &
-			(FIRST_FRAG|LAST_FRAG|EN_IRQ_EOF))<< 26) |
-			BMU_OWN|BMU_CHECK |len ;
-		DRV_BUF_FLUSH(t,DDI_DMA_SYNC_FORDEV) ;
-		outpd(queue->tx_bmu_ctl,CSR_START) ;
-
-#else	/* ifndef AIX */
 		tbctrl = AIX_REVERSE((((u_long)frame_status &
 			(FIRST_FRAG|LAST_FRAG|EN_IRQ_EOF))<< 26) |
 			BMU_OWN|BMU_CHECK |len) ;
 		t->txd_tbctrl = tbctrl ;
 
+#ifndef	AIX
+		DRV_BUF_FLUSH(t,DDI_DMA_SYNC_FORDEV) ;
+		outpd(queue->tx_bmu_ctl,CSR_START) ;
+#else	/* ifndef AIX */
 		DRV_BUF_FLUSH(t,DDI_DMA_SYNC_FORDEV) ;
 		if (frame_status & QUEUE_A0) {
 			outpd(ADDR(B0_XA_CSR),CSR_START) ;
@@ -1888,9 +1874,7 @@ int		fc;
 	struct s_smt_tx_queue *queue ;
 	struct s_smt_fp_txd volatile *t ;
 	u_long	phys ;
-#ifdef	AIX
-	u_long	tbctrl ;
-#endif
+	u_int	tbctrl ;
 
 	NDD_TRACE("THSB",mb,fc,0) ;
 	DB_TX("smt_send_mbuf: mb = 0x%x, fc = 0x%x",mb,fc,4) ;
@@ -1908,7 +1892,7 @@ int		fc;
 	frag_count = 0 ;
 	len = mb->sm_len ;
 	while (len) {
-		n = SMT_PAGESIZE - ((int)data & (SMT_PAGESIZE-1)) ;
+		n = SMT_PAGESIZE - ((long)data & (SMT_PAGESIZE-1)) ;
 		if (n >= len) {
 			n = len ;
 		}
@@ -1964,17 +1948,14 @@ int		fc;
 			phys = dma_master(smc, (void far *)virt[i],
 				frag_len[i], DMA_RD|SMT_BUF) ;
 			t->txd_tbadr = AIX_REVERSE(phys) ;
-#ifndef	AIX
-			t->txd_tbctrl = (((u_long) frame_status &
-				(FIRST_FRAG|LAST_FRAG)) << 26) |
-				BMU_OWN | BMU_CHECK | BMU_SMT_TX |frag_len[i] ;
-			DRV_BUF_FLUSH(t,DDI_DMA_SYNC_FORDEV) ;
-			outpd(queue->tx_bmu_ctl,CSR_START) ;
-#else
 			tbctrl = AIX_REVERSE((((u_long) frame_status &
 				(FIRST_FRAG|LAST_FRAG)) << 26) |
 				BMU_OWN | BMU_CHECK | BMU_SMT_TX |frag_len[i]) ;
 			t->txd_tbctrl = tbctrl ;
+#ifndef	AIX
+			DRV_BUF_FLUSH(t,DDI_DMA_SYNC_FORDEV) ;
+			outpd(queue->tx_bmu_ctl,CSR_START) ;
+#else
 			DRV_BUF_FLUSH(t,DDI_DMA_SYNC_FORDEV) ;
 			outpd(ADDR(B0_XA_CSR),CSR_START) ;
 #endif
@@ -2039,9 +2020,8 @@ struct s_smc *smc ;
 				DRV_BUF_FLUSH(t1,DDI_DMA_SYNC_FORCPU) ;
 				DB_TX("check OWN/EOF bit of TxD 0x%x",t1,0,5) ;
 				tbctrl = CR_READ(t1->txd_tbctrl) ;
-#ifdef	AIX
 				tbctrl = AIX_REVERSE(tbctrl) ;
-#endif
+
 				if (tbctrl & BMU_OWN || !queue->tx_used){
 					DB_TX("End of TxDs queue %d",i,0,4) ;
 					goto free_next_queue ;	/* next queue */

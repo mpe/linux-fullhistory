@@ -400,6 +400,26 @@ ENTRY(soft_irq_mask)
 		.macro	irq_prio_table
 		.endm
 
+#elif defined(CONFIG_ARCH_L7200)
+/* Don't use fast interrupts */
+		.macro  disable_fiq
+		.endm
+ 
+		.macro  get_irqnr_and_base, irqnr, irqstat, base
+		ldr     r4, =0xe0001000			@ Virt addr status reg
+		ldr     \irqstat, [r4]			@ get interrupts
+		mov     \irqnr, #0
+1001:		tst     \irqstat, #1
+		addeq   \irqnr, \irqnr, #1
+		moveq   \irqstat, \irqstat, lsr #1
+		tsteq   \irqnr, #32
+		beq     1001b
+		teq     \irqnr, #32
+		.endm
+
+		.macro  irq_prio_table
+		.endm
+
 #else
 #error Unknown architecture
 #endif

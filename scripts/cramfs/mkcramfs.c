@@ -59,6 +59,9 @@ struct entry {
 
 	/* FS data */
 	void *uncompressed;
+        /* points to other identical file */
+        struct entry *same;
+        unsigned int offset;            /* pointer to compressed data in archive */
 	unsigned int dir_offset;	/* Where in the archive is the directory entry? */
 
 	/* organization */
@@ -84,7 +87,28 @@ struct entry {
  */
 #define MAX_INPUT_NAMELEN 255
 
-static unsigned int parse_directory(const char *name, struct entry **prev, loff_t *fslen_ub)
+static int find_identical_file(struct entry *orig,struct entry *newfile)
+{
+        if(orig==newfile) return 1;
+        if(!orig) return 0;
+        if(orig->size==newfile->size && orig->uncompressed && !memcmp(orig->uncompressed,newfile->uncompressed,orig->size)) {
+                newfile->same=orig;
+                return 0;
+        }
+        return find_identical_file(orig->child,newfile) ||
+                   find_identical_file(orig->next,newfile);
+}
+
+static void eliminate_doubles(struct entry *root,struct entry *orig) {
+        if(orig) {
+                if(orig->size && orig->uncompressed) 
+			find_identical_file(root,orig);
+                eliminate_doubles(root,orig->child);
+                eliminate_doubles(root,orig->next);
+        }
+}
+
+static unsigned int parse_directory(struct entry *root_entry, const char *name, struct entry **prev, loff_t *fslen_ub)
 {
 	DIR *dir;
 	int count = 0, totalsize = 0;
@@ -173,7 +197,7 @@ static unsigned int parse_directory(const char *name, struct entry **prev, loff_
 		size = sizeof(struct cramfs_inode) + ((namelen + 3) & ~3);
 		*fslen_ub += size;
 		if (S_ISDIR(st.st_mode)) {
-			entry->size = parse_directory(path, &entry->child, fslen_ub);
+			entry->size = parse_directory(root_entry, path, &entry->child, fslen_ub);
 		} else if (S_ISREG(st.st_mode)) {
 			/* TODO: We ought to open files in do_compress, one
 			   at a time, instead of amassing all these memory
@@ -233,10 +257,14 @@ static unsigned int parse_directory(const char *name, struct entry **prev, loff_
 				warn_dev = 1;
 		}
 
-		if (S_ISREG(st.st_mode) || S_ISLNK(st.st_mode))
+		if (S_ISREG(st.st_mode) || S_ISLNK(st.st_mode)) {
 			/* block pointers & data expansion allowance + data */
-			*fslen_ub += ((4+26)*((entry->size - 1) / blksize + 1)
-				      + MIN(entry->size + 3, st.st_blocks << 9));
+                        if(entry->size) 
+                                *fslen_ub += ((4+26)*((entry->size - 1) / blksize + 1)
+                                              + MIN(entry->size + 3, st.st_blocks << 9));
+                        else 
+                                *fslen_ub += MIN(entry->size + 3, st.st_blocks << 9);
+                }
 
 		/* Link it into the list */
 		*prev = entry;
@@ -448,7 +476,7 @@ static unsigned int do_compress(char *base, unsigned int offset, char const *nam
 	   st_blocks * 512.  But if you say that then perhaps
 	   administrative data should also be included in both. */
 	change = new_size - original_size;
-	printf("%5.2f%% (%d bytes)\t%s\n",
+	printf("%6.2f%% (%+d bytes)\t%s\n",
 	       (change * 100) / (double) original_size, change, name);
 
 	return curr;
@@ -459,26 +487,23 @@ static unsigned int do_compress(char *base, unsigned int offset, char const *nam
  * Traverse the entry tree, writing data for every item that has
  * non-null entry->compressed (i.e. every symlink and non-empty
  * regfile).
- *
- * Frees the entry pointers as it goes.
  */
 static unsigned int write_data(struct entry *entry, char *base, unsigned int offset)
 {
 	do {
 		if (entry->uncompressed) {
-			set_data_offset(entry, base, offset);
-			offset = do_compress(base, offset, entry->name, entry->uncompressed, entry->size);
+                        if(entry->same) {
+                                set_data_offset(entry, base, entry->same->offset);
+                                entry->offset=entry->same->offset;
+                        } else {
+                                set_data_offset(entry, base, offset);
+                                entry->offset=offset;
+                                offset = do_compress(base, offset, entry->name, entry->uncompressed, entry->size);
+                        }
 		}
 		else if (entry->child)
 			offset = write_data(entry->child, base, offset);
-
-		/* Free the old before processing the next. */
-		{
-			struct entry *tmp = entry;
-			entry = entry->next;
-			free(tmp->name);
-			free(tmp);
-		}
+                entry=entry->next;
 	} while (entry);
 	return offset;
 }
@@ -537,7 +562,7 @@ int main(int argc, char **argv)
 	root_entry->uid = st.st_uid;
 	root_entry->gid = st.st_gid;
 
-	root_entry->size = parse_directory(argv[1], &root_entry->child, &fslen_ub);
+	root_entry->size = parse_directory(root_entry, argv[1], &root_entry->child, &fslen_ub);
 	if (fslen_ub > MAXFSLEN) {
 		fprintf(stderr,
 			"warning: guestimate of required size (upper bound) is %luMB, but maximum image size is %uMB.  We might die prematurely.\n",
@@ -545,6 +570,11 @@ int main(int argc, char **argv)
 			MAXFSLEN >> 20);
 		fslen_ub = MAXFSLEN;
 	}
+
+        /* find duplicate files. TODO: uses the most inefficient algorithm
+           possible. */
+        eliminate_doubles(root_entry,root_entry);
+
 
 	/* TODO: Why do we use a private/anonymous mapping here
            followed by a write below, instead of just a shared mapping

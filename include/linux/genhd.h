@@ -11,6 +11,7 @@
 
 #include <linux/config.h>
 #include <linux/types.h>
+#include <linux/major.h>
 
 /* These three have identical behaviour; use the second one if DOS fdisk gets
    confused about extended/logical partitions starting past cylinder 1023. */
@@ -232,6 +233,35 @@ extern void devfs_register_partitions (struct gendisk *dev, int minor,
 				       int unregister);
 
 int get_hardsect_size(kdev_t dev);
+
+/*
+ * FIXME: this should use genhd->minor_shift, but that is slow to look up.
+ */
+static inline unsigned int disk_index (kdev_t dev)
+{
+	int major = MAJOR(dev);
+	int minor = MINOR(dev);
+	unsigned int index;
+
+	switch (major) {
+		case DAC960_MAJOR+0:
+			index = (minor & 0x00f8) >> 3;
+			break;
+		case SCSI_DISK0_MAJOR:
+			index = (minor & 0x00f0) >> 4;
+			break;
+		case IDE0_MAJOR:	/* same as HD_MAJOR */
+		case XT_DISK_MAJOR:
+			index = (minor & 0x0040) >> 6;
+			break;
+		case IDE1_MAJOR:
+			index = ((minor & 0x0040) >> 6) + 2;
+			break;
+		default:
+			return 0;
+	}
+	return index;
+}
 
 #endif
 

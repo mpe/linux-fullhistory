@@ -73,7 +73,7 @@ static inline int find_ping_match(const struct ipt_entry_match *m)
 {
 	const struct ipt_icmp *icmpinfo = (const struct ipt_icmp *)m->data;
 
-	if (strcmp(m->u.match->name, "icmp") == 0
+	if (strcmp(m->u.kernel.match->name, "icmp") == 0
 	    && icmpinfo->type == ICMP_ECHO
 	    && !(icmpinfo->invflags & IPT_ICMP_INV))
 		return 1;

@@ -59,7 +59,7 @@ static int do_remount_sb(struct super_block *sb, int flags, char * data);
 /* this is initialized in init/main.c */
 kdev_t ROOT_DEV;
 
-int nr_super_blocks = 0;
+int nr_super_blocks;
 int max_super_blocks = NR_SUPER;
 LIST_HEAD(super_blocks);
 
@@ -684,7 +684,7 @@ out_fail:
  * filesystems which don't use real block-devices.  -- jrs
  */
 
-static unsigned int unnamed_dev_in_use[256/(8*sizeof(unsigned int))] = { 0, };
+static unsigned int unnamed_dev_in_use[256/(8*sizeof(unsigned int))];
 
 kdev_t get_unnamed_dev(void)
 {

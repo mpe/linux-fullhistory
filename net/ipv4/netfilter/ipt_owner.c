@@ -21,7 +21,7 @@ match_pid(const struct sk_buff *skb, pid_t pid)
 	p = find_task_by_pid(pid);
 	if(p && p->files) {
 		for (i=0; i < p->files->max_fds; i++) {
-			if (fcheck_task(p, i) == skb->sk->socket->file) {
+			if (fcheck_files(p->files, i) == skb->sk->socket->file) {
 				read_unlock(&tasklist_lock);
 				return 1;
 			}
@@ -43,7 +43,7 @@ match_sid(const struct sk_buff *skb, pid_t sid)
 			continue;
 
 		for (i=0; i < p->files->max_fds; i++) {
-			if (fcheck_task(p, i) == skb->sk->socket->file) {
+			if (fcheck_files(p->files, i) == skb->sk->socket->file) {
 				found = 1;
 				break;
 			}

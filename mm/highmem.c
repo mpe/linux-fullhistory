@@ -108,7 +108,7 @@ struct page * replace_with_highmem(struct page * page)
  *  n means that there are (n-1) current users of it.
  */
 static int pkmap_count[LAST_PKMAP];
-static unsigned int last_pkmap_nr = 0;
+static unsigned int last_pkmap_nr;
 static spinlock_t kmap_lock = SPIN_LOCK_UNLOCKED;
 
 pte_t * pkmap_page_table;

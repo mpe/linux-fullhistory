@@ -5,7 +5,6 @@
  */
 #include <linux/linkage.h>
 
-		.section ".start", #alloc, #execinstr
 
 /*
  * Debugging stuff
@@ -47,6 +46,10 @@
 #endif
 		.endm
 
+/*
+ * Note that these macros must not contain any code which is not
+ * 100% relocatable.  Any attempt to do so will result in a crash.
+ */
 #if 0
 		.macro	loadsp,	rb
 		mov	\rb, #0x7c000000
@@ -66,6 +69,8 @@
 		.endm
 #endif
 
+
+		.section ".start", #alloc, #execinstr
 /*
  * sort out different calling conventions
  */
@@ -79,11 +84,13 @@ start:
 		b	1f
 		.word	0x016f2818		@ Magic numbers to help the loader
 		.word	start	
-1:
+1:		adr	r8, start		@ get the start address of the code
+						@ (used for locating the page tables)
 
 		/*
-		 * some architecture specific code can
-		 * be inserted by the linker here
+		 * some architecture specific code can be inserted
+		 * by the linker here, but it should preserve r0, r1
+		 * and r8.
 		 */
 
 		.text
@@ -142,31 +149,6 @@ start:
 		bl	cache_clean_flush
 		add	pc, r5, r0		@ call relocation code
 
-/*
- * Page table physical address list
- */
-		.align	5
-		.type	pgtable,#object
-pgtable:	.word	0x00004000		@ 0x00
-		.word	0x10004000		@ 0x01
-		.word	0x00000000		@ 0x02
-		.word	0x40004000		@ 0x03
-		.word	0x00004000		@ 0x04
-		.word	0x00004000		@ 0x05
-		.word	0x00004000		@ 0x06
-		.word	0x80004000		@ 0x07
-		.word	0x00004000		@ 0x08
-		.word	0x00000000		@ 0x09
-		.word	0x00000000		@ 0x0a
-		.word	0x00000000		@ 0x0b
-		.word	0x00000000		@ 0x0c
-		.word	0x00000000		@ 0x0d
-		.word	0x10004000		@ 0x0e
-		.word	0x08004000		@ 0x0f
-		.word	0xc0004000		@ 0x10
-		.size	pgtable,. - pgtable
-1:
-
 		.type	LC0, #object
 LC0:		.word	__bss_start
 		.word	_end
@@ -175,17 +157,33 @@ LC0:		.word	__bss_start
 		.word	user_stack+4096
 		.size	LC0, . - LC0
 
+/*
+ * Turn on the cache.  We need to setup some page tables so that we
+ * can have both the I and D caches on.
+ *
+ * We place the page tables 16k down from the kernel execution address,
+ * and we hope that nothing else is using it.  If we're using it, we
+ * will go pop!
+ *
+ * On entry,
+ *  r4 = kernel execution address
+ *  r6 = processor ID
+ *  r7 = architecture number
+ *  r8 = run-time address of "start"
+ * On exit,
+ *  r0, r1, r2, r3, r8, r9 corrupted
+ * This routine must preserve:
+ *  r4, r5, r6, r7
+ */
 		.align	5
 cache_on:	ldr	r1, proc_sa110_type
 		eor	r1, r1, r6
 		movs	r1, r1, lsr #5
 		movne	pc, lr
-		cmp	r7, #(1b - pgtable) >> 2
-		movge	pc, lr
-		adr	r3, pgtable
-		ldr	r3, [r3, r7, lsl #2]
-		teq	r3, #0
-		moveq	pc, lr
+
+		sub	r3, r4, #16384		@ Page directory size
+		bic	r3, r3, #0xff		@ Align the pointer
+		bic	r3, r3, #0x3f
 /*
  * Initialise the page tables
  */
@@ -220,6 +218,9 @@ cache_on:	ldr	r1, proc_sa110_type
 		mov	pc, lr
 
 /*
+ * This code is relocatable.  It is relocated by the above code to the end
+ * of the kernel and executed there.  During this time, we have no stacks.
+ *
  * r0     = decompressed kernel length
  * r1-r3  = unused
  * r4     = kernel execution address
@@ -248,13 +249,26 @@ call_kernel:	bl	cache_clean_flush
 		mov	r1, r7			@ restore architecture number
 		mov	pc, r4			@ call kernel
 
+/*
+ * Here follow the relocatable cache support functions for
+ * the various processors.
+ */
+
 		.type	proc_sa110_type,#object
 proc_sa110_type:
 		.word	0x4401a100
 		.size	proc_sa110_type, . - proc_sa110_type
 
 /*
- * Turn off StrongARM cache and MMU
+ * Turn off StrongARM cache and MMU.  It is safe to
+ * leave the I-cache on.
+ *
+ * On entry,
+ *  r6 = processor ID
+ * On exit,
+ *  r0, r1 corrupted
+ * This routine must preserve:
+ *  r4, r6, r7
  */
 		.align	5
 cache_off:	ldr	r1, proc_sa110_type
@@ -268,6 +282,13 @@ cache_off:	ldr	r1, proc_sa110_type
 
 /*
  * Clean and flush the cache to maintain consistency.
+ *
+ * On entry,
+ *  r6 = processor ID
+ * On exit,
+ *  r1, r2, r12 corrupted
+ * This routine must preserve:
+ *  r4, r6, r7
  */
 		.align	5
 cache_clean_flush:
@@ -278,7 +299,7 @@ cache_clean_flush:
 
 		bic	r1, pc, #31
 		add	r2, r1, #32768
-1:		ldr	r12, [r1], #32
+1:		ldr	r12, [r1], #32		@ s/w flush D cache
 		teq	r1, r2
 		bne	1b
 
@@ -286,6 +307,10 @@ cache_clean_flush:
 		mcr	p15, 0, r1, c7, c10, 4	@ drain WB
 		mov	pc, lr
 
+/*
+ * Various debugging routines for printing hex characters and
+ * memory, which again must be relocatable.
+ */
 #ifdef DEBUG
 		.type	phexbuf,#object
 phexbuf:	.space	12

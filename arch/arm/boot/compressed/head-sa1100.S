@@ -8,27 +8,31 @@
 
 #include <linux/config.h>
 
+#ifndef CONFIG_ARCH_SA1100
+#error What am I doing here...
+#endif
 
 		.section        ".start", #alloc, #execinstr
 
 __SA1100_start:
 
-#ifndef CONFIG_ARCH_SA1100
-#error What am I doing here...
-#endif
+		@ Preserve r0/r1 i.e. kernel entry values
+		mov	r8, r0
+		mov	r9, r1
 
-#if	defined( CONFIG_SA1100_BRUTUS ) || \
+#if	defined( CONFIG_SA1100_ASSABET ) || \
+	defined( CONFIG_SA1100_BRUTUS ) || \
 	defined( CONFIG_SA1100_THINCLIENT )
 @ Booting from Angel -- need to enter SVC mode
 #define angel_SWIreason_EnterSVC 0x17   /* from arm.h, in angel source */
-#define angel_SWI_ARM (0xEF123456 & 0xffffff)
+#define angel_SWI_ARM (0x123456)
 		mov	r0, #angel_SWIreason_EnterSVC
 		swi	#angel_SWI_ARM
 
 		@ turn off interrupts to prevent the angel from running
 		mrs	r0, cpsr
 		orr	r0, r0, #0xc0
-		msr	cpsr, r0
+		msr	cpsr_c, r0
 #endif
 
 #ifdef CONFIG_SA1100_VICTOR
@@ -55,17 +59,22 @@ __SA1100_start:
 		mcr	p15, 0, r0, c7, c10, 4	@ drain WB
 		mcr	p15, 0, r0, c7, c7, 0	@ flush I & D caches
 
-		@ disabling MMU, enabling I cache
+		@ disabling MMU and caches
 		mrc	p15, 0, r0, c1, c0, 0	@ read control reg
 		bic	r0, r0, #0x0d		@ clear WB, DC, MMU
-		orr	r0, r0, #0x1000		@ set Icache
+		bic	r0, r0, #0x1000		@ clear Icache
 		mcr	p15, 0, r0, c1, c0, 0
 
-#ifdef CONFIG_SA1100_BRUTUS
+#if	defined( CONFIG_SA1100_ASSABET ) || \
+	defined( CONFIG_SA1100_BRUTUS )
 		@ Initialize UART1 for early serial communication
 		@ since UART3 is used by angelboot.  It is routed to
 		@ alternate GPIO functions on Brutus.
 		b	1f
+
+#ifdef CONFIG_SA1100_BRUTUS
+#define ALT_UART
+#endif
 
 GPIO_BASE:	.long	0x90040000
 #define GPDR	0x04
@@ -90,7 +99,9 @@ UART1_BASE:	.long	0x80010000
 #define BAUD_DIV_9600	0x017
 #define BAUD_DIV	BAUD_DIV_9600
 
-1:		ldr	r0, GPIO_BASE
+1:		
+#ifdef ALT_UART
+		ldr	r0, GPIO_BASE
 		ldr	r1, [r0, #GPDR]
 		bic	r1, r1, #1<<15
 		orr	r1, r1, #1<<14
@@ -102,6 +113,7 @@ UART1_BASE:	.long	0x80010000
 		ldr	r1, [r0, #PPAR]
 		orr	r1, r1, #1<<12
 		str	r1, [r0, #PPAR]
+#endif
 		ldr	r0, UART1_BASE
 1:		ldr	r1, [r0, #UTSR1]
 		tst	r1, #1<<0	@ TBY
@@ -120,8 +132,7 @@ UART1_BASE:	.long	0x80010000
 		str	r1, [r0, #UTSR0]
 #endif
 
-		@ set registers for entry
-		mov	r0, #0
-		mov	r1, #16
-
-
+		@ Restore initial r0/r1
+		@ (r8 preserved)
+		mov	r0, r8
+		mov	r1, r9

@@ -248,66 +248,6 @@ out:
 	return error;
 }
 
-/* Compatability functions - we used to pass 5 parameters as r0, r1, r2, *r3, *(r3+4)
- * We now use r0 - r4, and return an error if the old style calling standard is used.
- * Eventually these functions will disappear.
- */
-asmlinkage int sys_uname(struct old_utsname * name)
-{
-	static int warned = 0;
-	int err;
-	
-	if (warned == 0) {
-		warned ++;
-		printk (KERN_NOTICE "%s (%d): obsolete uname call\n",
-			current->comm, current->pid);
-	}
-
-	if(!name)
-		return -EFAULT;
-	down_read(&uts_sem);
-	err=copy_to_user (name, &system_utsname, sizeof (*name));
-	up_read(&uts_sem);
-	return err?-EFAULT:0;
-}
-
-asmlinkage int sys_olduname(struct oldold_utsname * name)
-{
-	int error;
-	static int warned = 0;
-
-	if (warned == 0) {
-		warned ++;
-		printk (KERN_NOTICE "%s (%d): obsolete olduname call\n",
-			current->comm, current->pid);
-	}
-
-	if (!name)
-		return -EFAULT;
-
-	if (!access_ok(VERIFY_WRITE,name,sizeof(struct oldold_utsname)))
-		return -EFAULT;
-
-	down_read(&uts_sem);
-	
-	error = __copy_to_user(&name->sysname,&system_utsname.sysname,__OLD_UTS_LEN);
-	error |= __put_user(0,name->sysname+__OLD_UTS_LEN);
-	error |= __copy_to_user(&name->nodename,&system_utsname.nodename,__OLD_UTS_LEN);
-	error |= __put_user(0,name->nodename+__OLD_UTS_LEN);
-	error |= __copy_to_user(&name->release,&system_utsname.release,__OLD_UTS_LEN);
-	error |= __put_user(0,name->release+__OLD_UTS_LEN);
-	error |= __copy_to_user(&name->version,&system_utsname.version,__OLD_UTS_LEN);
-	error |= __put_user(0,name->version+__OLD_UTS_LEN);
-	error |= __copy_to_user(&name->machine,&system_utsname.machine,__OLD_UTS_LEN);
-	error |= __put_user(0,name->machine+__OLD_UTS_LEN);
-	
-	up_read(&uts_sem);
-	
-	error = error ? -EFAULT : 0;
-
-	return error;
-}
-
 asmlinkage int sys_pause(void)
 {
 	current->state = TASK_INTERRUPTIBLE;

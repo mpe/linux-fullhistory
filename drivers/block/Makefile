@@ -149,43 +149,29 @@ else
   endif
 endif
 
-ifeq ($(CONFIG_MD_STRIPED),y)
+ifeq ($(CONFIG_MD_RAID0),y)
 L_OBJS += raid0.o
 else
-  ifeq ($(CONFIG_MD_STRIPED),m)
+  ifeq ($(CONFIG_MD_RAID0),m)
   M_OBJS += raid0.o
   endif
 endif
 
-ifeq ($(CONFIG_MD_MIRRORING),y)
+ifeq ($(CONFIG_MD_RAID1),y)
 L_OBJS += raid1.o
 else
-  ifeq ($(CONFIG_MD_MIRRORING),m)
+  ifeq ($(CONFIG_MD_RAID1),m)
   M_OBJS += raid1.o
   endif
 endif
 
 ifeq ($(CONFIG_MD_RAID5),y)
+LX_OBJS += xor.o
 L_OBJS += raid5.o
 else
   ifeq ($(CONFIG_MD_RAID5),m)
+  LX_OBJS += xor.o
   M_OBJS += raid5.o
-  endif
-endif
-
-ifeq ($(CONFIG_MD_TRANSLUCENT),y)
-L_OBJS += translucent.o
-else
-  ifeq ($(CONFIG_MD_TRANSLUCENT),m)
-  M_OBJS += translucent.o
-  endif
-endif
-
-ifeq ($(CONFIG_MD_HSM),y)
-L_OBJS += hsm.o
-else
-  ifeq ($(CONFIG_MD_HSM),m)
-  M_OBJS += hsm.o
   endif
 endif
 

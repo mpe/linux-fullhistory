@@ -58,7 +58,7 @@
 
 #define __DQUOT_VERSION__	"dquot_6.4.0"
 
-int nr_dquots = 0, nr_free_dquots = 0;
+int nr_dquots, nr_free_dquots;
 int max_dquots = NR_DQUOTS;
 
 static char quotamessage[MAX_QUOTA_MESSAGE];
@@ -91,7 +91,7 @@ static inline struct quota_mount_options *sb_dqopt(struct super_block *sb)
  * mechanism to lcoate a specific dquot.
  */
 
-static struct dquot *inuse_list = NULL;
+static struct dquot *inuse_list;
 static LIST_HEAD(free_dquots);
 static struct dquot *dquot_hash[NR_DQHASH];
 static int dquot_updating[NR_DQHASH];

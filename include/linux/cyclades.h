@@ -7,6 +7,10 @@
  *
  * This file contains the general definitions for the cyclades.c driver
  *$Log: cyclades.h,v $
+ *Revision 3.1  2000/04/19 18:52:52  ivan
+ *converted address fields to unsigned long and added fields for physical
+ *addresses on cyclades_card structure;
+ *
  *Revision 3.0  1998/11/02 14:20:59  ivan
  *added nports field on cyclades_card structure;
  *
@@ -500,8 +504,10 @@ struct ZFW_CTRL {
 
 /* Per card data structure */
 struct cyclades_card {
-    long base_addr;
-    long ctl_addr;
+    unsigned long base_phys;
+    unsigned long ctl_phys;
+    unsigned long base_addr;
+    unsigned long ctl_addr;
     int irq;
     int num_chips;	/* 0 if card absent, -1 if Z/PCI, else Y */
     int first_line;	/* minor number of first channel on card */

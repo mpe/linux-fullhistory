@@ -232,8 +232,8 @@ int do_match(struct ipt_entry_match *m,
 	     int *hotdrop)
 {
 	/* Stop iteration if it doesn't match */
-	if (!m->u.match->match(skb, in, out, m->data,
-			       offset, hdr, datalen, hotdrop))
+	if (!m->u.kernel.match->match(skb, in, out, m->data,
+				      offset, hdr, datalen, hotdrop))
 		return 1;
 	else
 		return 0;
@@ -318,9 +318,9 @@ ipt_do_table(struct sk_buff **pskb,
 			ADD_COUNTER(e->counters, ntohs(ip->tot_len), 1);
 
 			t = ipt_get_target(e);
-			IP_NF_ASSERT(t->u.target);
+			IP_NF_ASSERT(t->u.kernel.target);
 			/* Standard target? */
-			if (!t->u.target->target) {
+			if (!t->u.kernel.target->target) {
 				int v;
 
 				v = ((struct ipt_standard_target *)t)->verdict;
@@ -354,17 +354,18 @@ ipt_do_table(struct sk_buff **pskb,
 				((struct ipt_entry *)table_base)->comefrom
 					= 0xeeeeeeec;
 #endif
-				verdict = t->u.target->target(pskb, hook,
-							      in, out,
-							      t->data,
-							      userdata);
+				verdict = t->u.kernel.target->target(pskb,
+								     hook,
+								     in, out,
+								     t->data,
+								     userdata);
 
 #ifdef CONFIG_NETFILTER_DEBUG
 				if (((struct ipt_entry *)table_base)->comefrom
 				    != 0xeeeeeeec
 				    && verdict == IPT_CONTINUE) {
 					printk("Target %s reentered!\n",
-					       t->u.target->name);
+					       t->u.kernel.target->name);
 					verdict = NF_DROP;
 				}
 				((struct ipt_entry *)table_base)->comefrom
@@ -521,8 +522,8 @@ mark_source_chains(struct ipt_table_info *newinfo, unsigned int valid_hooks)
 
 			/* Unconditional return/END. */
 			if (e->target_offset == sizeof(struct ipt_entry)
-			    && (strcmp(t->target.u.name, IPT_STANDARD_TARGET)
-				== 0)
+			    && (strcmp(t->target.u.user.name,
+				       IPT_STANDARD_TARGET) == 0)
 			    && t->verdict < 0
 			    && unconditional(&e->ip)) {
 				unsigned int oldpos, size;
@@ -561,7 +562,7 @@ mark_source_chains(struct ipt_table_info *newinfo, unsigned int valid_hooks)
 			} else {
 				int newpos = t->verdict;
 
-				if (strcmp(t->target.u.name,
+				if (strcmp(t->target.u.user.name,
 					   IPT_STANDARD_TARGET) == 0
 				    && newpos >= 0) {
 					/* This a jump; chase it. */
@@ -589,11 +590,12 @@ cleanup_match(struct ipt_entry_match *m, unsigned int *i)
 	if (i && (*i)-- == 0)
 		return 1;
 
-	if (m->u.match->destroy)
-		m->u.match->destroy(m->data, m->match_size - sizeof(*m));
+	if (m->u.kernel.match->destroy)
+		m->u.kernel.match->destroy(m->data,
+					   m->u.match_size - sizeof(*m));
 
-	if (m->u.match->me)
-		__MOD_DEC_USE_COUNT(m->u.match->me);
+	if (m->u.kernel.match->me)
+		__MOD_DEC_USE_COUNT(m->u.kernel.match->me);
 
 	return 0;
 }
@@ -605,9 +607,11 @@ standard_check(const struct ipt_entry_target *t,
 	struct ipt_standard_target *targ = (void *)t;
 
 	/* Check standard info. */
-	if (t->target_size != sizeof(struct ipt_standard_target)) {
+	if (t->u.target_size
+	    != IPT_ALIGN(sizeof(struct ipt_standard_target))) {
 		duprintf("standard_check: target size %u != %u\n",
-			 t->target_size, sizeof(struct ipt_standard_target));
+			 t->u.target_size,
+			 IPT_ALIGN(sizeof(struct ipt_standard_target)));
 		return 0;
 	}
 
@@ -636,24 +640,24 @@ check_match(struct ipt_entry_match *m,
 	int ret;
 	struct ipt_match *match;
 
-	match = find_match_lock(m->u.name, &ret, &ipt_mutex);
+	match = find_match_lock(m->u.user.name, &ret, &ipt_mutex);
 	if (!match) {
 		duprintf("check_match: `%s' not found\n", m->u.name);
 		return ret;
 	}
 	if (match->me)
 		__MOD_INC_USE_COUNT(match->me);
-	m->u.match = match;
+	m->u.kernel.match = match;
 	up(&ipt_mutex);
 
-	if (m->u.match->checkentry
-	    && !m->u.match->checkentry(name, ip, m->data,
-				       m->match_size - sizeof(*m),
-				       hookmask)) {
-		if (m->u.match->me)
-			__MOD_DEC_USE_COUNT(m->u.match->me);
+	if (m->u.kernel.match->checkentry
+	    && !m->u.kernel.match->checkentry(name, ip, m->data,
+					      m->u.match_size - sizeof(*m),
+					      hookmask)) {
+		if (m->u.kernel.match->me)
+			__MOD_DEC_USE_COUNT(m->u.kernel.match->me);
 		duprintf("ip_tables: check failed for `%s'.\n",
-			 m->u.match->name);
+			 m->u.kernel.match->name);
 		return -EINVAL;
 	}
 
@@ -683,29 +687,30 @@ check_entry(struct ipt_entry *e, const char *name, unsigned int size,
 		goto cleanup_matches;
 
 	t = ipt_get_target(e);
-	target = find_target_lock(t->u.name, &ret, &ipt_mutex);
+	target = find_target_lock(t->u.user.name, &ret, &ipt_mutex);
 	if (!target) {
 		duprintf("check_entry: `%s' not found\n", t->u.name);
 		return ret;
 	}
 	if (target->me)
 		__MOD_INC_USE_COUNT(target->me);
-	t->u.target = target;
+	t->u.kernel.target = target;
 	up(&ipt_mutex);
 
-	if (t->u.target == &ipt_standard_target) {
+	if (t->u.kernel.target == &ipt_standard_target) {
 		if (!standard_check(t, size)) {
 			ret = -EINVAL;
 			goto cleanup_matches;
 		}
-	} else if (t->u.target->checkentry
-		   && !t->u.target->checkentry(name, e, t->data,
-					       t->target_size - sizeof(*t),
-					       e->comefrom)) {
-		if (t->u.target->me)
-			__MOD_DEC_USE_COUNT(t->u.target->me);
+	} else if (t->u.kernel.target->checkentry
+		   && !t->u.kernel.target->checkentry(name, e, t->data,
+						      t->u.target_size
+						      - sizeof(*t),
+						      e->comefrom)) {
+		if (t->u.kernel.target->me)
+			__MOD_DEC_USE_COUNT(t->u.kernel.target->me);
 		duprintf("ip_tables: check failed for `%s'.\n",
-			 t->u.target->name);
+			 t->u.kernel.target->name);
 		ret = -EINVAL;
 		goto cleanup_matches;
 	}
@@ -772,10 +777,11 @@ cleanup_entry(struct ipt_entry *e, unsigned int *i)
 	/* Cleanup all matches */
 	IPT_MATCH_ITERATE(e, cleanup_match, NULL);
 	t = ipt_get_target(e);
-	if (t->u.target->destroy)
-		t->u.target->destroy(t->data, t->target_size - sizeof(*t));
-	if (t->u.target->me)
-		__MOD_DEC_USE_COUNT(t->u.target->me);
+	if (t->u.kernel.target->destroy)
+		t->u.kernel.target->destroy(t->data,
+					    t->u.target_size - sizeof(*t));
+	if (t->u.kernel.target->me)
+		__MOD_DEC_USE_COUNT(t->u.kernel.target->me);
 
 	return 0;
 }
@@ -980,14 +986,15 @@ copy_entries_to_user(unsigned int total_size,
 
 		for (i = sizeof(struct ipt_entry);
 		     i < e->target_offset;
-		     i += m->match_size) {
+		     i += m->u.match_size) {
 			m = (void *)e + i;
 
 			if (copy_to_user(userptr + off + i
 					 + offsetof(struct ipt_entry_match,
-						    u.name),
-					 m->u.match->name,
-					 strlen(m->u.match->name)+1) != 0) {
+						    u.user.name),
+					 m->u.kernel.match->name,
+					 strlen(m->u.kernel.match->name)+1)
+			    != 0) {
 				ret = -EFAULT;
 				goto free_counters;
 			}
@@ -996,9 +1003,9 @@ copy_entries_to_user(unsigned int total_size,
 		t = ipt_get_target(e);
 		if (copy_to_user(userptr + off + e->target_offset
 				 + offsetof(struct ipt_entry_target,
-					    u.name),
-				 t->u.target->name,
-				 strlen(t->u.target->name)+1) != 0) {
+					    u.user.name),
+				 t->u.kernel.target->name,
+				 strlen(t->u.kernel.target->name)+1) != 0) {
 			ret = -EFAULT;
 			goto free_counters;
 		}
@@ -1048,6 +1055,10 @@ do_replace(void *user, unsigned int len)
 
 	if (copy_from_user(&tmp, user, sizeof(tmp)) != 0)
 		return -EFAULT;
+
+	/* Hack: Causes ipchains to give correct error msg --RR */
+	if (len != sizeof(tmp) + tmp.size)
+		return -ENOPROTOOPT;
 
 	newinfo = vmalloc(sizeof(struct ipt_table_info)
 			  + SMP_ALIGN(tmp.size) * smp_num_cpus);

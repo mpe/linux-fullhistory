@@ -38,7 +38,6 @@ dummy:;		@echo '*** 2.3 kernels no longer build correctly with old versions of b
 		@false
 endif
 
-
 # GCC 2.7 uses different options to later compilers; sort out which we have
 NEW_GCC		:= $(shell if $(CC) --version 2>&1 | grep '^2\.7' > /dev/null; then echo n; else echo y; fi)
 
@@ -52,13 +51,16 @@ CFLAGS_PROC_CPU_32v3	:= -march=armv3
 CFLAGS_PROC_CPU_32v4	:= -march=armv4
 CFLAGS_ARM6		:= -mtune=arm6
 CFLAGS_ARM7		:= -mtune=arm7
+CFLAGS_ARM720		:= -mtune=arm7tdmi
 CFLAGS_SA110		:= -mtune=strongarm110
 else
+CFLAGS			+= -DNO_TEXT_SECTIONS
 CFLAGS_PROC_CPU_26	:= -m3
 CFLAGS_PROC_CPU_32v3	:=
 CFLAGS_PROC_CPU_32v4	:=
 CFLAGS_ARM6		:= -m6
 CFLAGS_ARM7		:= -m6
+CFLAGS_ARM720		:= -m6
 CFLAGS_SA110		:= -m6
 endif
 
@@ -91,8 +93,16 @@ ifeq ($(CONFIG_CPU_32),y)
  ifeq ($(CONFIG_CPU_ARM7),y)
   CFLAGS	+= $(CFLAGS_ARM7)
  else
+ ifeq ($(CONFIG_CPU_ARM720),y)
+  CFLAGS	+= $(CFLAGS_ARM720)
+ else
  ifeq ($(CONFIG_CPU_SA110),y)
   CFLAGS	+= $(CFLAGS_SA110)
+ else
+ ifeq ($(CONFIG_CPU_SA1100),y)
+  CFLAGS	+= $(CFLAGS_SA110)
+ endif
+ endif
  endif
  endif
  endif
@@ -149,6 +159,11 @@ endif
 ifeq ($(CONFIG_ARCH_SA1100),y)
 MACHINE		 = sa1100
 ARCHDIR		 = sa1100
+endif
+
+ifeq ($(CONFIG_ARCH_L7200),y)
+MACHINE		 = l7200
+ARCHDIR		 = l7200
 endif
 
 HEAD		:= arch/arm/kernel/head-$(PROCESSOR).o \
@@ -261,3 +276,14 @@ thinclient_config:
 	$(RM) arch/arm/defconfig
 	cp arch/arm/def-configs/thinclient arch/arm/defconfig
 
+assabet_config:
+	$(RM) arch/arm/defconfig
+	cp arch/arm/def-configs/assabet arch/arm/defconfig
+
+lart_config:
+	$(RM) arch/arm/defconfig
+	cp arch/arm/def-configs/lart arch/arm/defconfig
+
+l7200_config:
+	$(RM) arch/arm/defconfig
+	cp arch/arm/def-configs/lusl7200 arch/arm/defconfig

@@ -245,8 +245,7 @@ new /proc/net/dev format.  This will also provide support for new
 features like IPv6.
 
    The IP firewalling and NAT code has been replaced again.  The
-actual modules (including ipfwadm and ipchains backwards-compatibility
-modules) are currently distributed separately: see
+userspace tool `iptables' is distributed at:
 	http://antarctica.penguincomputing.com/~netfilter/
 	http://www.samba.org/netfilter/
 	http://netfilter.kernelnotes.org
@@ -737,12 +736,13 @@ PPP
 The 2.4.0b1 release:
 ftp://linuxcare.com.au/pub/ppp/ppp-2.4.0b1.tar.gz
 
-IP Chains
+iptables
 =========
 
-The 1.3.8 release:
-ftp://ftp.rustcorp.com/ipchains/ipchains-1.3.8.tar.gz
-ftp://ftp.rustcorp.com/ipchains/ipchains-1.3.8.tar.bz2
+The 1.1.0 release:
+http://antarctica.penguincomputing.com/~netfilter/iptables-1.1.0.tar.bz2
+http://www.samba.org/netfilter/iptables-1.1.0.tar.bz2
+http://netfilter.kernelnotes.org/iptables-1.1.0.tar.bz2
 
 IP Masq Adm
 ===========
