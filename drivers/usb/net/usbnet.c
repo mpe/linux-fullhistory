@@ -185,6 +185,7 @@ struct usbnet {
 
 	// i/o info: pipes etc
 	unsigned		in, out;
+	struct usb_host_endpoint *status;
 	unsigned		maxpacket;
 	struct timer_list	delay;
 
@@ -200,6 +201,7 @@ struct usbnet {
 	struct sk_buff_head	rxq;
 	struct sk_buff_head	txq;
 	struct sk_buff_head	done;
+	struct urb		*interrupt;
 	struct tasklet_struct	bh;
 
 	struct work_struct	kevent;
@@ -207,6 +209,7 @@ struct usbnet {
 #		define EVENT_TX_HALT	0
 #		define EVENT_RX_HALT	1
 #		define EVENT_RX_MEMORY	2
+#		define EVENT_STS_SPLIT	3
 };
 
 // device-specific info used by the driver
@@ -236,6 +239,9 @@ struct driver_info {
 
 	/* see if peer is connected ... can sleep */
 	int	(*check_connect)(struct usbnet *);
+
+	/* for status polling */
+	void	(*status)(struct usbnet *, struct urb *);
 
 	/* fixup rx packet (strip framing) */
 	int	(*rx_fixup)(struct usbnet *dev, struct sk_buff *skb);
@@ -312,38 +318,52 @@ static int
 get_endpoints (struct usbnet *dev, struct usb_interface *intf)
 {
 	int				tmp;
-	struct usb_host_interface	*alt;
-	struct usb_host_endpoint	*in, *out;
+	struct usb_host_interface	*alt = NULL;
+	struct usb_host_endpoint	*in = NULL, *out = NULL;
+	struct usb_host_endpoint	*status = NULL;
 
 	for (tmp = 0; tmp < intf->num_altsetting; tmp++) {
 		unsigned	ep;
 
-		in = out = NULL;
+		in = out = status = NULL;
 		alt = intf->altsetting + tmp;
 
 		/* take the first altsetting with in-bulk + out-bulk;
+		 * remember any status endpoint, just in case;
 		 * ignore other endpoints and altsetttings.
 		 */
 		for (ep = 0; ep < alt->desc.bNumEndpoints; ep++) {
 			struct usb_host_endpoint	*e;
+			int				intr = 0;
 
 			e = alt->endpoint + ep;
-			if (e->desc.bmAttributes != USB_ENDPOINT_XFER_BULK)
+			switch (e->desc.bmAttributes) {
+			case USB_ENDPOINT_XFER_INT:
+				if (!(e->desc.bEndpointAddress & USB_DIR_IN))
+					continue;
+				intr = 1;
+				/* FALLTHROUGH */
+			case USB_ENDPOINT_XFER_BULK:
+				break;
+			default:
 				continue;
+			}
 			if (e->desc.bEndpointAddress & USB_DIR_IN) {
-				if (!in)
+				if (!intr && !in)
 					in = e;
+				else if (intr && !status)
+					status = e;
 			} else {
 				if (!out)
 					out = e;
 			}
-			if (in && out)
-				goto found;
 		}
+		if (in && out)
+			break;
 	}
-	return -EINVAL;
+	if (!alt || !in || !out)
+		return -EINVAL;
 
-found:
 	if (alt->desc.bAlternateSetting != 0
 			|| !(dev->driver_info->flags & FLAG_NO_SETINT)) {
 		tmp = usb_set_interface (dev->udev, alt->desc.bInterfaceNumber,
@@ -356,7 +376,46 @@ found:
 			in->desc.bEndpointAddress & USB_ENDPOINT_NUMBER_MASK);
 	dev->out = usb_sndbulkpipe (dev->udev,
 			out->desc.bEndpointAddress & USB_ENDPOINT_NUMBER_MASK);
+	dev->status = status;
 	return 0;
+}
+
+static void intr_complete (struct urb *urb, struct pt_regs *regs);
+
+static int init_status (struct usbnet *dev, struct usb_interface *intf)
+{
+	char		*buf = NULL;
+	unsigned	pipe = 0;
+	unsigned	maxp;
+	unsigned	period;
+
+	if (!dev->driver_info->status)
+		return -ENODEV;
+
+	pipe = usb_rcvintpipe (dev->udev,
+			dev->status->desc.bEndpointAddress
+				& USB_ENDPOINT_NUMBER_MASK);
+	maxp = usb_maxpacket (dev->udev, pipe, 0);
+
+	/* avoid 1 msec chatter:  min 8 msec poll rate */
+	period = max ((int) dev->status->desc.bInterval,
+		(dev->udev->speed == USB_SPEED_HIGH) ? 7 : 3);
+
+	buf = kmalloc (maxp, SLAB_KERNEL);
+	if (buf) {
+		dev->interrupt = usb_alloc_urb (0, SLAB_KERNEL);
+		if (!dev->interrupt) {
+			kfree (buf);
+			return -ENOMEM;
+		} else {
+			usb_fill_int_urb(dev->interrupt, dev->udev, pipe,
+				buf, maxp, intr_complete, dev, period);
+			dev_dbg(&intf->dev,
+				"status ep%din, %d bytes period %d\n",
+				usb_pipeendpoint(pipe), maxp, period);
+		}
+	}
+	return  0;
 }
 
 static void skb_return (struct usbnet *dev, struct sk_buff *skb)
@@ -1414,6 +1473,29 @@ next_desc:
 		usb_driver_release_interface (&usbnet_driver, info->data);
 		return status;
 	}
+
+	/* status endpoint: optional for CDC Ethernet, not RNDIS (or ACM) */
+	dev->status = NULL;
+	if (info->control->cur_altsetting->desc.bNumEndpoints == 1) {
+		struct usb_endpoint_descriptor	*desc;
+
+		dev->status = &info->control->cur_altsetting->endpoint [0];
+		desc = &dev->status->desc;
+		if (desc->bmAttributes != USB_ENDPOINT_XFER_INT
+				|| !(desc->bEndpointAddress & USB_DIR_IN)
+				|| (le16_to_cpu(desc->wMaxPacketSize)
+					< sizeof (struct usb_cdc_notification))
+				|| !desc->bInterval) {
+			dev_dbg (&intf->dev, "bad notification endpoint\n");
+			dev->status = NULL;
+		}
+	}
+	if (rndis && !dev->status) {
+		dev_dbg (&intf->dev, "missing RNDIS status endpoint\n");
+		usb_set_intfdata(info->data, NULL);
+		usb_driver_release_interface (&usbnet_driver, info->data);
+		return -ENODEV;
+	}
 	return 0;
 
 bad_desc:
@@ -1439,6 +1521,51 @@ static void cdc_unbind (struct usbnet *dev, struct usb_interface *intf)
 		usb_set_intfdata(info->control, NULL);
 		usb_driver_release_interface (&usbnet_driver, info->control);
 		info->control = NULL;
+	}
+}
+
+
+static void dumpspeed (struct usbnet *dev, __le32 *speeds)
+{
+	devinfo (dev, "link speeds: %u kbps up, %u kbps down",
+		__le32_to_cpu(speeds[0]) / 1000,
+		__le32_to_cpu(speeds[1]) / 1000);
+}
+
+static void cdc_status (struct usbnet *dev, struct urb *urb)
+{
+	struct usb_cdc_notification	*event;
+
+	if (urb->actual_length < sizeof *event)
+		return;
+	
+	/* SPEED_CHANGE can get split into two 8-byte packets */
+	if (test_and_clear_bit (EVENT_STS_SPLIT, &dev->flags)) {
+		dumpspeed (dev, (__le32 *) urb->transfer_buffer);
+		return;
+	}
+
+	event = urb->transfer_buffer;
+	switch (event->bNotificationType) {
+	case USB_CDC_NOTIFY_NETWORK_CONNECTION:
+		devdbg (dev, "CDC: carrier %s", event->wValue ? "on" : "off");
+		if (event->wValue)
+			netif_carrier_on(dev->net);
+		else
+			netif_carrier_off(dev->net);
+		break;
+	case USB_CDC_NOTIFY_SPEED_CHANGE:	/* tx/rx rates */
+		devdbg (dev, "CDC: speed change (len %d)", urb->actual_length);
+		if (urb->actual_length != (sizeof *event + 8))
+			set_bit (EVENT_STS_SPLIT, &dev->flags);
+		else
+			dumpspeed (dev, (__le32 *) &event[1]);
+		break;
+	// case USB_CDC_NOTIFY_RESPONSE_AVAILABLE:	/* RNDIS; or unsolicited */
+	default:
+		deverr (dev, "CDC: unexpected notification %02x!",
+				 event->bNotificationType);
+		break;
 	}
 }
 
@@ -1520,6 +1647,7 @@ static const struct driver_info	cdc_info = {
 	// .check_connect = cdc_check_connect,
 	.bind =		cdc_bind,
 	.unbind =	cdc_unbind,
+	.status =	cdc_status,
 };
 
 #endif	/* CONFIG_USB_CDCETHER */
@@ -2871,6 +2999,42 @@ block:
 #endif /* VERBOSE */
 }
 
+static void intr_complete (struct urb *urb, struct pt_regs *regs)
+{
+	struct usbnet	*dev = urb->context;
+	int		status = urb->status;
+
+	switch (status) {
+	    /* success */
+	    case 0:
+		dev->driver_info->status(dev, urb);
+		break;
+
+	    /* software-driven interface shutdown */
+	    case -ENOENT:		// urb killed
+	    case -ESHUTDOWN:		// hardware gone
+#ifdef	VERBOSE
+		devdbg (dev, "intr shutdown, code %d", status);
+#endif
+		return;
+
+	    /* NOTE:  not throttling like RX/TX, since this endpoint
+	     * already polls infrequently
+	     */
+	    default:
+		devdbg (dev, "intr status %d", status);
+		break;
+	}
+
+	if (!netif_running (dev->net))
+		return;
+
+	memset(urb->transfer_buffer, 0, urb->transfer_buffer_length);
+	status = usb_submit_urb (urb, GFP_ATOMIC);
+	if (status != 0)
+		deverr(dev, "intr resubmit --> %d", status);
+}
+
 /*-------------------------------------------------------------------------*/
 
 // unlink pending rx/tx; completion handlers do all other cleanup
@@ -2938,6 +3102,8 @@ static int usbnet_stop (struct net_device *net)
 	dev->wait = NULL;
 	remove_wait_queue (&unlink_wakeup, &wait); 
 
+	usb_kill_urb(dev->interrupt);
+
 	/* deferred work (task, timer, softirq) must also stop.
 	 * can't flush_scheduled_work() until we drop rtnl (later),
 	 * else workers could deadlock; so make workers a NOP.
@@ -2974,6 +3140,15 @@ static int usbnet_open (struct net_device *net)
 	if (info->check_connect && (retval = info->check_connect (dev)) < 0) {
 		devdbg (dev, "can't open; %d", retval);
 		goto done;
+	}
+
+	/* start any status interrupt transfer */
+	if (dev->interrupt) {
+		retval = usb_submit_urb (dev->interrupt, GFP_KERNEL);
+		if (retval < 0) {
+			deverr (dev, "intr submit %d", retval);
+			goto done;
+		}
 	}
 
 	netif_start_queue (net);
@@ -3479,6 +3654,8 @@ usbnet_probe (struct usb_interface *udev, const struct usb_device_id *prod)
 			status = 0;
 
 	}
+	if (status == 0 && dev->status)
+		status = init_status (dev, udev);
 	if (status < 0)
 		goto out1;
 
