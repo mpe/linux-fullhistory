@@ -2,16 +2,14 @@
  * OHCI HCD (Host Controller Driver) for USB.
  *
  * (C) Copyright 1999 Roman Weissgaerber <weissg@vienna.at>
- * (C) Copyright 2000-2004 David Brownell <dbrownell@users.sourceforge.net>
+ * (C) Copyright 2000-2005 David Brownell
  * (C) Copyright 2002 Hewlett-Packard Company
  * 
  * OMAP Bus Glue
  *
- * Written by Christopher Hoover <ch@hpl.hp.com>
- * Based on fragments of previous driver by Russell King et al.
- *
- * Modified for OMAP from ohci-sa1111.c by Tony Lindgren <tony@atomide.com>
+ * Modified for OMAP by Tony Lindgren <tony@atomide.com>
  * Based on the 2.4 OMAP OHCI driver originally done by MontaVista Software Inc.
+ * and on ohci-sa1111.c by Christopher Hoover <ch@hpl.hp.com>
  *
  * This file is licenced under the GPL.
  */
@@ -26,8 +24,20 @@
 #include <asm/arch/gpio.h>
 #include <asm/arch/fpga.h>
 #include <asm/arch/usb.h>
+#include <asm/hardware/clock.h>
 
-#include "ohci-omap.h"
+
+/* OMAP-1510 OHCI has its own MMU for DMA */
+#define OMAP1510_LB_MEMSIZE	32	/* Should be same as SDRAM size */
+#define OMAP1510_LB_CLOCK_DIV	0xfffec10c
+#define OMAP1510_LB_MMU_CTL	0xfffec208
+#define OMAP1510_LB_MMU_LCK	0xfffec224
+#define OMAP1510_LB_MMU_LD_TLB	0xfffec228
+#define OMAP1510_LB_MMU_CAM_H	0xfffec22c
+#define OMAP1510_LB_MMU_CAM_L	0xfffec230
+#define OMAP1510_LB_MMU_RAM_H	0xfffec234
+#define OMAP1510_LB_MMU_RAM_L	0xfffec238
+
 
 #ifndef CONFIG_ARCH_OMAP
 #error "This file is OMAP bus glue.  CONFIG_OMAP must be defined."
@@ -52,45 +62,17 @@ static inline int tps65010_set_gpio_out_value(unsigned gpio, unsigned value)
 extern int usb_disabled(void);
 extern int ocpi_enable(void);
 
-/*
- * OHCI clock initialization for OMAP-1510 and 16xx
- */
-static int omap_ohci_clock_power(int on)
+static struct clk *usb_host_ck;
+
+static void omap_ohci_clock_power(int on)
 {
 	if (on) {
-		/* for 1510, 48MHz DPLL is set up in usb init */
-
-		if (cpu_is_omap16xx()) {
-			/* Enable OHCI */
-			omap_writel(omap_readl(ULPD_SOFT_REQ) | SOFT_USB_OTG_REQ,
-				ULPD_SOFT_REQ);
-
-			/* USB host clock request if not using OTG */
-			omap_writel(omap_readl(ULPD_SOFT_REQ) | SOFT_USB_REQ,
-				ULPD_SOFT_REQ);
-
-			omap_writel(omap_readl(ULPD_STATUS_REQ) | USB_HOST_DPLL_REQ,
-			     ULPD_STATUS_REQ);
-		}
-
-		/* Enable 48MHz clock to USB */
-		omap_writel(omap_readl(ULPD_CLOCK_CTRL) | USB_MCLK_EN,
-		       ULPD_CLOCK_CTRL);
-
-		omap_writel(omap_readl(ARM_IDLECT2) | (1 << EN_LBFREECK) | (1 << EN_LBCK),
-		       ARM_IDLECT2);
-
-		omap_writel(omap_readl(MOD_CONF_CTRL_0) | USB_HOST_HHC_UHOST_EN,
-		       MOD_CONF_CTRL_0);
+		clk_enable(usb_host_ck);
+		/* guesstimate for T5 == 1x 32K clock + APLL lock time */
+		udelay(100);
 	} else {
-		/* Disable 48MHz clock to USB */
-		omap_writel(omap_readl(ULPD_CLOCK_CTRL) & ~USB_MCLK_EN,
-		       ULPD_CLOCK_CTRL);
-
-		/* FIXME: The DPLL stays on for now */
+		clk_disable(usb_host_ck);
 	}
-
-	return 0;
 }
 
 /*
@@ -204,7 +186,7 @@ static int omap_start_hc(struct ohci_hcd *ohci, struct platform_device *pdev)
 
 	/* boards can use OTG transceivers in non-OTG modes */
 	need_transceiver = need_transceiver
-			|| machine_is_omap_h2();
+			|| machine_is_omap_h2() || machine_is_omap_h3();
 
 	if (cpu_is_omap16xx())
 		ocpi_enable();
@@ -261,7 +243,7 @@ static int omap_start_hc(struct ohci_hcd *ohci, struct platform_device *pdev)
 			omap_cfg_reg(W4_USB_HIGHZ);
 		}
 		ohci_writel(ohci, rh, &ohci->regs->roothub.a);
-		// distrust_firmware = 0;
+		distrust_firmware = 0;
 	}
 
 	/* FIXME khubd hub requests should manage power switching */
@@ -278,20 +260,13 @@ static int omap_start_hc(struct ohci_hcd *ohci, struct platform_device *pdev)
 static void omap_stop_hc(struct platform_device *pdev)
 {
 	dev_dbg(&pdev->dev, "stopping USB Controller\n");
-
-	/*
-	 * FIXME: Put the USB host controller into reset.
-	 */
-
-	/*
-	 * FIXME: Stop the USB clock.
-	 */
-	//omap_disable_device(dev);
-
+	omap_ohci_clock_power(0);
 }
 
 
 /*-------------------------------------------------------------------------*/
+
+void usb_hcd_omap_remove (struct usb_hcd *, struct platform_device *);
 
 /* configure so an HC device and id are always provided */
 /* always called with process context; sleeping is OK */
@@ -309,7 +284,7 @@ int usb_hcd_omap_probe (const struct hc_driver *driver,
 			  struct platform_device *pdev)
 {
 	int retval;
-	struct usb_hcd *hcd;
+	struct usb_hcd *hcd = 0;
 	struct ohci_hcd *ohci;
 
 	if (pdev->num_resources != 2) {
@@ -319,14 +294,20 @@ int usb_hcd_omap_probe (const struct hc_driver *driver,
 	}
 
 	if (pdev->resource[0].flags != IORESOURCE_MEM 
-	    || pdev->resource[1].flags != IORESOURCE_IRQ) {
+			|| pdev->resource[1].flags != IORESOURCE_IRQ) {
 		printk(KERN_ERR "hcd probe: invalid resource type\n");
 		return -ENODEV;
 	}
 
+	usb_host_ck = clk_get(0, "usb_hhc_ck");
+	if (IS_ERR(usb_host_ck))
+		return PTR_ERR(usb_host_ck);
+
 	hcd = usb_create_hcd (driver, &pdev->dev, pdev->dev.bus_id);
-	if (!hcd)
-		return -ENOMEM;
+	if (!hcd) {
+		retval = -ENOMEM;
+		goto err0;
+	}
 	hcd->rsrc_start = pdev->resource[0].start;
 	hcd->rsrc_len = pdev->resource[0].end - pdev->resource[0].start + 1;
 
@@ -336,9 +317,7 @@ int usb_hcd_omap_probe (const struct hc_driver *driver,
 		goto err1;
 	}
 
-	/* FIXME: Cast to pointer from integer of different size!
-	 * Needs ioremap */
-	hcd->regs = (void __iomem *) (u32) hcd->rsrc_start;
+	hcd->regs = (void __iomem *) (int) IO_ADDRESS(hcd->rsrc_start);
 
 	ohci = hcd_to_ohci(hcd);
 	ohci_hcd_init(ohci);
@@ -347,20 +326,21 @@ int usb_hcd_omap_probe (const struct hc_driver *driver,
 	if (retval < 0)
 		goto err2;
 
-	retval = usb_add_hcd(hcd, pdev->resource[1].start, SA_INTERRUPT);
+	retval = usb_add_hcd(hcd, platform_get_irq(pdev, 0), SA_INTERRUPT);
 	if (retval == 0)
 		return retval;
 
 	omap_stop_hc(pdev);
- err2:
+err2:
 	release_mem_region(hcd->rsrc_start, hcd->rsrc_len);
- err1:
+err1:
 	usb_put_hcd(hcd);
+err0:
+	clk_put(usb_host_ck);
 	return retval;
 }
 
 
-/* may be called without controller electrically present */
 /* may be called with controller, bus, and devices active */
 
 /**
@@ -381,6 +361,7 @@ void usb_hcd_omap_remove (struct usb_hcd *hcd, struct platform_device *pdev)
 	omap_stop_hc(pdev);
 	release_mem_region(hcd->rsrc_start, hcd->rsrc_len);
 	usb_put_hcd(hcd);
+	clk_put(usb_host_ck);
 }
 
 /*-------------------------------------------------------------------------*/
@@ -397,7 +378,7 @@ ohci_omap_start (struct usb_hcd *hcd)
 		writel(OHCI_CTRL_RWC, &ohci->regs->control);
 
 	if ((ret = ohci_run (ohci)) < 0) {
-		err ("can't start %s", hcd->self.bus_name);
+		dev_err(hcd->self.controller, "can't start\n");
 		ohci_stop (hcd);
 		return ret;
 	}
@@ -466,13 +447,14 @@ static int ohci_hcd_omap_drv_remove(struct device *dev)
 		(void) otg_set_host(ohci->transceiver, 0);
 		put_device(ohci->transceiver->dev);
 	}
+	dev_set_drvdata(dev, NULL);
 
 	return 0;
 }
 
 /*-------------------------------------------------------------------------*/
 
-#if	defined(CONFIG_USB_SUSPEND) || defined(CONFIG_PM)
+#ifdef	CONFIG_PM
 
 /* states match PCI usage, always suspending the root hub except that
  * 4 ~= D3cold (ACPI D3) with clock off (resume sees reset).
@@ -493,8 +475,7 @@ static int ohci_omap_suspend(struct device *dev, u32 state, u32 level)
 	status = ohci_hub_suspend(ohci_to_hcd(ohci));
 	if (status == 0) {
 		if (state >= 4) {
-			/* power off + reset */
-			OTG_SYSCON_2_REG &= ~UHOST_EN;
+			omap_ohci_clock_power(0);
 			ohci_to_hcd(ohci)->self.root_hub->state =
 					USB_STATE_SUSPENDED;
 			state = 4;
@@ -521,7 +502,7 @@ static int ohci_omap_resume(struct device *dev, u32 level)
 		if (time_before(jiffies, ohci->next_statechange))
 			msleep(5);
 		ohci->next_statechange = jiffies;
-		OTG_SYSCON_2_REG |= UHOST_EN;
+		omap_ohci_clock_power(1);
 		/* FALLTHROUGH */
 	default:
 		dev_dbg(dev, "resume from %d\n", dev->power.power_state);
@@ -552,7 +533,7 @@ static struct device_driver ohci_hcd_omap_driver = {
 	.bus		= &platform_bus_type,
 	.probe		= ohci_hcd_omap_drv_probe,
 	.remove		= ohci_hcd_omap_drv_remove,
-#if	defined(CONFIG_USB_SUSPEND) || defined(CONFIG_PM)
+#ifdef	CONFIG_PM
 	.suspend	= ohci_omap_suspend,
 	.resume		= ohci_omap_resume,
 #endif
