@@ -1290,10 +1290,12 @@ static int ax25_getname(struct socket *sock, struct sockaddr *uaddr, int *uaddr_
 		fsa.fsa_ax25.sax25_call   = sk->protinfo.ax25->dest_addr;
 		fsa.fsa_ax25.sax25_ndigis = 0;
 
-		ndigi = sk->protinfo.ax25->digipeat->ndigi;
-		fsa.fsa_ax25.sax25_ndigis = ndigi;
-		for (i = 0; i < ndigi; i++)
-			fsa.fsa_digipeater[i] = sk->protinfo.ax25->digipeat->calls[i];
+		if (sk->protinfo.ax25->digipeat != NULL) {
+			ndigi = sk->protinfo.ax25->digipeat->ndigi;
+			fsa.fsa_ax25.sax25_ndigis = ndigi;
+			for (i = 0; i < ndigi; i++)
+				fsa.fsa_digipeater[i] = sk->protinfo.ax25->digipeat->calls[i];
+		}
 	} else {
 		fsa.fsa_ax25.sax25_family = AF_AX25;
 		fsa.fsa_ax25.sax25_call   = sk->protinfo.ax25->source_addr;

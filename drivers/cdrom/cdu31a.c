@@ -160,6 +160,7 @@
 #include <linux/string.h>
 #include <linux/malloc.h>
 #include <linux/init.h>
+#include <linux/interrupt.h>
 
 #include <asm/system.h>
 #include <asm/io.h>
@@ -1690,7 +1691,7 @@ do_cdu31a_request(void)
    /* Make sure we have a valid TOC. */
    sony_get_toc(); 
 
-   sti();
+   spin_unlock_irq(&io_request_lock);
 
    /* Make sure the timer is cancelled. */
    del_timer(&cdu31a_abort_timer);
@@ -1849,7 +1850,7 @@ try_read_again:
    }
 
 end_do_cdu31a_request:
-   cli();
+   spin_lock_irq(&io_request_lock);
 #if 0
    /* After finished, cancel any pending operations. */
    abort_read();

@@ -37,28 +37,28 @@
    as { byte2, byte3, byte0, byte1 }. We need conversions.
 */
 
-typedef unsigned long coh_ulong;
+typedef u32 coh_ulong;
 
-static inline coh_ulong to_coh_ulong (unsigned long x)
+static inline coh_ulong to_coh_ulong (u32 x)
 {
 	return ((x & 0xffff) << 16) | ((x & 0xffff0000) >> 16);
 }
 
-static inline unsigned long from_coh_ulong (coh_ulong x)
+static inline u32 from_coh_ulong (coh_ulong x)
 {
 	return ((x & 0xffff) << 16) | ((x & 0xffff0000) >> 16);
 }
 
 /* inode numbers are 16 bit */
 
-typedef unsigned short sysv_ino_t;
+typedef u16 sysv_ino_t;
 
 /* Block numbers are 24 bit, sometimes stored in 32 bit.
    On Coherent FS, they are always stored in PDP-11 manner: the least
    significant 16 bits come last.
 */
 
-typedef unsigned long sysv_zone_t;
+typedef u32 sysv_zone_t;
 
 /* Among the blocks ... */
 /* Xenix FS, Coherent FS: block 0 is the boot block, block 1 the super-block.
@@ -75,36 +75,36 @@ typedef unsigned long sysv_zone_t;
 #define XENIX_NICINOD	100	/* number of inode cache entries */
 #define XENIX_NICFREE	100	/* number of free block list chunk entries */
 struct xenix_super_block {
-	unsigned short s_isize; /* index of first data zone */
-	unsigned long  s_fsize __packed2__; /* total number of zones of this fs */
+	u16		s_isize; /* index of first data zone */
+	u32		s_fsize __packed2__; /* total number of zones of this fs */
 	/* the start of the free block list: */
-	unsigned short s_nfree;	/* number of free blocks in s_free, <= XENIX_NICFREE */
-	unsigned long  s_free[XENIX_NICFREE]; /* first free block list chunk */
+	u16		s_nfree;	/* number of free blocks in s_free, <= XENIX_NICFREE */
+	u32		s_free[XENIX_NICFREE]; /* first free block list chunk */
 	/* the cache of free inodes: */
-	unsigned short s_ninode; /* number of free inodes in s_inode, <= XENIX_NICINOD */
-	sysv_ino_t     s_inode[XENIX_NICINOD]; /* some free inodes */
+	u16		s_ninode; /* number of free inodes in s_inode, <= XENIX_NICINOD */
+	sysv_ino_t	s_inode[XENIX_NICINOD]; /* some free inodes */
 	/* locks, not used by Linux: */
-	char	       s_flock;	/* lock during free block list manipulation */
-	char	       s_ilock;	/* lock during inode cache manipulation */
-	char	       s_fmod;	/* super-block modified flag */
-	char	       s_ronly;	/* flag whether fs is mounted read-only */
-	unsigned long  s_time __packed2__; /* time of last super block update */
-	unsigned long  s_tfree __packed2__; /* total number of free zones */
-	unsigned short s_tinode;	/* total number of free inodes */
-	short	       s_dinfo[4];	/* device information ?? */
-	char	       s_fname[6];	/* file system volume name */
-	char	       s_fpack[6];	/* file system pack name */
-	char	       s_clean;		/* set to 0x46 when filesystem is properly unmounted */
-	char	       s_fill[371];
-	long	       s_magic;		/* version of file system */
-	long	       s_type;		/* type of file system: 1 for 512 byte blocks
+	char		s_flock;	/* lock during free block list manipulation */
+	char		s_ilock;	/* lock during inode cache manipulation */
+	char		s_fmod;		/* super-block modified flag */
+	char		s_ronly;	/* flag whether fs is mounted read-only */
+	u32		s_time __packed2__; /* time of last super block update */
+	u32		s_tfree __packed2__; /* total number of free zones */
+	u16		s_tinode;	/* total number of free inodes */
+	s16		s_dinfo[4];	/* device information ?? */
+	char		s_fname[6];	/* file system volume name */
+	char		s_fpack[6];	/* file system pack name */
+	char		s_clean;	/* set to 0x46 when filesystem is properly unmounted */
+	char		s_fill[371];
+	s32		s_magic;	/* version of file system */
+	s32		s_type;		/* type of file system: 1 for 512 byte blocks
 								2 for 1024 byte blocks */
 };
 
 /* Xenix free list block on disk */
 struct xenix_freelist_chunk {
-	unsigned short fl_nfree;	/* number of free blocks in fl_free, <= XENIX_NICFREE] */
-	unsigned long  fl_free[XENIX_NICFREE] __packed2__;
+	u16	fl_nfree;	/* number of free blocks in fl_free, <= XENIX_NICFREE] */
+	u32	fl_free[XENIX_NICFREE] __packed2__;
 };
 
 /* SystemV FS comes in two variants:
@@ -116,116 +116,120 @@ struct xenix_freelist_chunk {
 
 /* SystemV4 super-block data on disk */
 struct sysv4_super_block {
-	unsigned short s_isize; /* index of first data zone */
-	unsigned long  s_fsize;	/* total number of zones of this fs */
+	u16	s_isize;	/* index of first data zone */
+	u16	s_pad0;
+	u32	s_fsize;	/* total number of zones of this fs */
 	/* the start of the free block list: */
-	unsigned short s_nfree;	/* number of free blocks in s_free, <= SYSV_NICFREE */
-	unsigned long  s_free[SYSV_NICFREE]; /* first free block list chunk */
+	u16	s_nfree;	/* number of free blocks in s_free, <= SYSV_NICFREE */
+	u16	s_pad1;
+	u32	s_free[SYSV_NICFREE]; /* first free block list chunk */
 	/* the cache of free inodes: */
-	unsigned short s_ninode; /* number of free inodes in s_inode, <= SYSV_NICINOD */
+	u16	s_ninode;	/* number of free inodes in s_inode, <= SYSV_NICINOD */
+	u16	s_pad2;
 	sysv_ino_t     s_inode[SYSV_NICINOD]; /* some free inodes */
 	/* locks, not used by Linux: */
-	char	       s_flock;	/* lock during free block list manipulation */
-	char	       s_ilock;	/* lock during inode cache manipulation */
-	char	       s_fmod;	/* super-block modified flag */
-	char	       s_ronly;	/* flag whether fs is mounted read-only */
-	unsigned long  s_time;	/* time of last super block update */
-	short	       s_dinfo[4];	/* device information ?? */
-	unsigned long  s_tfree;	/* total number of free zones */
-	unsigned short s_tinode;	/* total number of free inodes */
-	char	       s_fname[6];	/* file system volume name */
-	char	       s_fpack[6];	/* file system pack name */
-	long	       s_fill[12];
-	long	       s_state;		/* file system state: 0x7c269d38-s_time means clean */
-	long	       s_magic;		/* version of file system */
-	long	       s_type;		/* type of file system: 1 for 512 byte blocks
+	char	s_flock;	/* lock during free block list manipulation */
+	char	s_ilock;	/* lock during inode cache manipulation */
+	char	s_fmod;		/* super-block modified flag */
+	char	s_ronly;	/* flag whether fs is mounted read-only */
+	u32	s_time;		/* time of last super block update */
+	s16	s_dinfo[4];	/* device information ?? */
+	u32	s_tfree;	/* total number of free zones */
+	u16	s_tinode;	/* total number of free inodes */
+	u16	s_pad3;
+	char	s_fname[6];	/* file system volume name */
+	char	s_fpack[6];	/* file system pack name */
+	s32	s_fill[12];
+	s32	s_state;	/* file system state: 0x7c269d38-s_time means clean */
+	s32	s_magic;	/* version of file system */
+	s32	s_type;		/* type of file system: 1 for 512 byte blocks
 								2 for 1024 byte blocks */
 };
 
 /* SystemV4 free list block on disk */
 struct sysv4_freelist_chunk {
-	unsigned short fl_nfree;	/* number of free blocks in fl_free, <= SYSV_NICFREE] */
-	unsigned long  fl_free[SYSV_NICFREE];
+	u16 fl_nfree;	/* number of free blocks in fl_free, <= SYSV_NICFREE] */
+	u32  fl_free[SYSV_NICFREE];
 };
 
 /* SystemV2 super-block data on disk */
 struct sysv2_super_block {
-	unsigned short s_isize; /* index of first data zone */
-	unsigned long  s_fsize __packed2__; /* total number of zones of this fs */
+	u16	s_isize; 		/* index of first data zone */
+	u32	s_fsize __packed2__;	/* total number of zones of this fs */
 	/* the start of the free block list: */
-	unsigned short s_nfree;	/* number of free blocks in s_free, <= SYSV_NICFREE */
-	unsigned long  s_free[SYSV_NICFREE]; /* first free block list chunk */
+	u16	s_nfree;		/* number of free blocks in s_free, <= SYSV_NICFREE */
+	u32	s_free[SYSV_NICFREE];	/* first free block list chunk */
 	/* the cache of free inodes: */
-	unsigned short s_ninode; /* number of free inodes in s_inode, <= SYSV_NICINOD */
+	u16	s_ninode;		/* number of free inodes in s_inode, <= SYSV_NICINOD */
 	sysv_ino_t     s_inode[SYSV_NICINOD]; /* some free inodes */
 	/* locks, not used by Linux: */
-	char	       s_flock;	/* lock during free block list manipulation */
-	char	       s_ilock;	/* lock during inode cache manipulation */
-	char	       s_fmod;	/* super-block modified flag */
-	char	       s_ronly;	/* flag whether fs is mounted read-only */
-	unsigned long  s_time __packed2__; /* time of last super block update */
-	short	       s_dinfo[4];	/* device information ?? */
-	unsigned long  s_tfree __packed2__; /* total number of free zones */
-	unsigned short s_tinode;	/* total number of free inodes */
-	char	       s_fname[6];	/* file system volume name */
-	char	       s_fpack[6];	/* file system pack name */
-	long	       s_fill[14];
-	long	       s_state;		/* file system state: 0xcb096f43 means clean */
-	long	       s_magic;		/* version of file system */
-	long	       s_type;		/* type of file system: 1 for 512 byte blocks
+	char	s_flock;		/* lock during free block list manipulation */
+	char	s_ilock;		/* lock during inode cache manipulation */
+	char	s_fmod;			/* super-block modified flag */
+	char	s_ronly;		/* flag whether fs is mounted read-only */
+	u32	s_time __packed2__;	/* time of last super block update */
+	s16	s_dinfo[4];		/* device information ?? */
+	u32	s_tfree __packed2__;	/* total number of free zones */
+	u16	s_tinode;		/* total number of free inodes */
+	char	s_fname[6];		/* file system volume name */
+	char	s_fpack[6];		/* file system pack name */
+	s32	s_fill[14];
+	s32	s_state;		/* file system state: 0xcb096f43 means clean */
+	s32	s_magic;		/* version of file system */
+	s32	s_type;			/* type of file system: 1 for 512 byte blocks
 								2 for 1024 byte blocks */
 };
 
 /* SystemV2 free list block on disk */
 struct sysv2_freelist_chunk {
-	unsigned short fl_nfree;	/* number of free blocks in fl_free, <= SYSV_NICFREE] */
-	unsigned long  fl_free[SYSV_NICFREE] __packed2__;
+	u16	fl_nfree;	/* number of free blocks in fl_free, <= SYSV_NICFREE] */
+	u32	fl_free[SYSV_NICFREE] __packed2__;
 };
 
 /* Coherent super-block data on disk */
 #define COH_NICINOD	100	/* number of inode cache entries */
 #define COH_NICFREE	64	/* number of free block list chunk entries */
 struct coh_super_block {
-	unsigned short s_isize; /* index of first data zone */
-	coh_ulong      s_fsize __packed2__; /* total number of zones of this fs */
+	u16		s_isize;	/* index of first data zone */
+	coh_ulong	s_fsize __packed2__; /* total number of zones of this fs */
 	/* the start of the free block list: */
-	unsigned short s_nfree;	/* number of free blocks in s_free, <= COH_NICFREE */
-	coh_ulong      s_free[COH_NICFREE] __packed2__; /* first free block list chunk */
+	u16 s_nfree;	/* number of free blocks in s_free, <= COH_NICFREE */
+	coh_ulong	s_free[COH_NICFREE] __packed2__; /* first free block list chunk */
 	/* the cache of free inodes: */
-	unsigned short s_ninode; /* number of free inodes in s_inode, <= COH_NICINOD */
-	sysv_ino_t     s_inode[COH_NICINOD]; /* some free inodes */
+	u16		s_ninode;	/* number of free inodes in s_inode, <= COH_NICINOD */
+	sysv_ino_t	s_inode[COH_NICINOD]; /* some free inodes */
 	/* locks, not used by Linux: */
-	char	       s_flock;	/* lock during free block list manipulation */
-	char	       s_ilock;	/* lock during inode cache manipulation */
-	char	       s_fmod;	/* super-block modified flag */
-	char	       s_ronly;	/* flag whether fs is mounted read-only */
-	coh_ulong      s_time __packed2__; /* time of last super block update */
-	coh_ulong      s_tfree __packed2__; /* total number of free zones */
-	unsigned short s_tinode;	/* total number of free inodes */
-	unsigned short s_interleave_m;	/* interleave factor */
-	unsigned short s_interleave_n;
-	char	       s_fname[6];	/* file system volume name */
-	char	       s_fpack[6];	/* file system pack name */
-	unsigned long  s_unique;	/* zero, not used */
+	char		s_flock;	/* lock during free block list manipulation */
+	char		s_ilock;	/* lock during inode cache manipulation */
+	char		s_fmod;		/* super-block modified flag */
+	char		s_ronly;	/* flag whether fs is mounted read-only */
+	coh_ulong	s_time __packed2__; /* time of last super block update */
+	coh_ulong	s_tfree __packed2__; /* total number of free zones */
+	u16		s_tinode;	/* total number of free inodes */
+	u16		s_interleave_m;	/* interleave factor */
+	u16		s_interleave_n;
+	char		s_fname[6];	/* file system volume name */
+	char		s_fpack[6];	/* file system pack name */
+	u32		s_unique;	/* zero, not used */
 };
 
 /* Coherent free list block on disk */
 struct coh_freelist_chunk {
-	unsigned short fl_nfree;	/* number of free blocks in fl_free, <= COH_NICFREE] */
-	unsigned long  fl_free[COH_NICFREE] __packed2__;
+	u16 fl_nfree;	/* number of free blocks in fl_free, <= COH_NICFREE] */
+	u32  fl_free[COH_NICFREE] __packed2__;
 };
 
 
 /* SystemV/Coherent inode data on disk */
 
 struct sysv_inode {
-	unsigned short i_mode;
-	unsigned short i_nlink;
-	unsigned short i_uid;
-	unsigned short i_gid;
-	unsigned long  i_size;
+	u16 i_mode;
+	u16 i_nlink;
+	u16 i_uid;
+	u16 i_gid;
+	u32 i_size;
 	union { /* directories, regular files, ... */
-		char i_addb[3*(10+1+1+1)+1]; /* zone numbers: max. 10 data blocks,
+		unsigned char i_addb[3*(10+1+1+1)+1]; /* zone numbers: max. 10 data blocks,
 					      * then 1 indirection block,
 					      * then 1 double indirection block,
 					      * then 1 triple indirection block.
@@ -236,14 +240,14 @@ struct sysv_inode {
 		/* named pipes on Coherent */
 		struct {
 			char p_addp[30];
-			short p_pnc;
-			short p_prx;
-			short p_pwx;
+			s16 p_pnc;
+			s16 p_prx;
+			s16 p_pwx;
 		} i_p;
 	} i_a;
-	unsigned long i_atime;	/* time of last access */
-	unsigned long i_mtime;	/* time of last modification */
-	unsigned long i_ctime;	/* time of creation */
+	u32 i_atime;	/* time of last access */
+	u32 i_mtime;	/* time of last modification */
+	u32 i_ctime;	/* time of creation */
 };
 
 /* The admissible values for i_mode are listed in <linux/stat.h> :
@@ -301,7 +305,7 @@ extern inline unsigned short to_coh_imode(mode_t mode)
 /* The number of inodes per block is
    sb->sv_inodes_per_block = block_size / sizeof(struct sysv_inode) */
 /* The number of indirect pointers per block is
-   sb->sv_ind_per_block = block_size / sizeof(unsigned long) */
+   sb->sv_ind_per_block = block_size / sizeof(u32) */
 
 
 /* SystemV/Coherent directory entry on disk */

@@ -201,8 +201,8 @@ isofs_find_entry(struct inode *dir, struct dentry *dentry, unsigned long *ino)
 		 * Skip hidden or associated files unless unhide is set 
 		 */
 		match = 0;
-		if(   !(de->flags[-dir->i_sb->u.isofs_sb.s_high_sierra] & 5)
-		   || dir->i_sb->u.isofs_sb.s_unhide == 'y' )
+		if ((!(de->flags[-dir->i_sb->u.isofs_sb.s_high_sierra] & 5)
+		    || dir->i_sb->u.isofs_sb.s_unhide == 'y') && dlen)
 		{
 			match = (isofs_cmp(dentry,dpnt,dlen) == 0);
 		}

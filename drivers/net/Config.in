@@ -152,12 +152,12 @@ fi
 #
 # AppleTalk
 #
-if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+if [ "$CONFIG_ATALK" != "n" ]; then
   dep_tristate 'Apple/Farallon LocalTalk PC support' CONFIG_LTPC $CONFIG_ATALK
-  dep_tristate 'COPS LocalTalk PC support' CONFIG_COPS
+  dep_tristate 'COPS LocalTalk PC support' CONFIG_COPS $CONFIG_ATALK
   if [ "$CONFIG_COPS" != "n" ]; then
-    bool 'Dayna firmware support' CONFIG_COPS_DAYNA
-    bool 'Tangent firmware support' CONFIG_COPS_TANGENT
+     bool 'Dayna firmware support' CONFIG_COPS_DAYNA
+     bool 'Tangent firmware support' CONFIG_COPS_TANGENT
   fi
   dep_tristate 'Appletalk-IP driver support' CONFIG_IPDDP $CONFIG_ATALK
   if [ "$CONFIG_IPDDP" != "n" ]; then

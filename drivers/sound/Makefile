@@ -235,6 +235,50 @@ endif
 
 
 
+# Turtle Beach MultiSound
+
+ifeq ($(CONFIG_MSNDCLAS_HAVE_BOOT),y)
+    msnd_classic.o: msndperm.c msndinit.c
+
+    msndperm.c: $(patsubst "%", %, $(CONFIG_MSNDCLAS_PERM_FILE)) bin2hex
+	./bin2hex msndperm < $(CONFIG_MSNDCLAS_PERM_FILE) > $@
+	@ ( \
+	    echo 'ifeq ($(strip $(CONFIG_MSNDCLAS_HAVE_BOOT) $(CONFIG_MSNDCLAS_PERM_FILE)),$$(strip $$(CONFIG_MSNDCLAS_HAVE_BOOT) $$(CONFIG_MSNDCLAS_PERM_FILE)))'; \
+	    echo 'FILES_BOOT_UP_TO_DATE += $@'; \
+	    echo 'endif' \
+	) > .$@.boot
+
+    msndinit.c: $(patsubst "%", %, $(CONFIG_MSNDCLAS_INIT_FILE)) bin2hex
+	./bin2hex msndinit < $(CONFIG_MSNDCLAS_INIT_FILE) > $@
+	@ ( \
+	    echo 'ifeq ($(strip $(CONFIG_MSNDCLAS_HAVE_BOOT) $(CONFIG_MSNDCLAS_INIT_FILE)),$$(strip $$(CONFIG_MSNDCLAS_HAVE_BOOT) $$(CONFIG_MSNDCLAS_INIT_FILE)))'; \
+	    echo 'FILES_BOOT_UP_TO_DATE += $@'; \
+	    echo 'endif' \
+	) > .$@.boot
+endif
+
+ifeq ($(CONFIG_MSNDPIN_HAVE_BOOT),y)
+    msnd_pinnacle.o: pndsperm.c pndspini.c
+
+    pndsperm.c: $(patsubst "%", %, $(CONFIG_MSNDPIN_PERM_FILE)) bin2hex
+	./bin2hex pndsperm < $(CONFIG_MSNDPIN_PERM_FILE) > $@
+	@ ( \
+	    echo 'ifeq ($(strip $(CONFIG_MSNDPIN_HAVE_BOOT) $(CONFIG_MSNDPIN_PERM_FILE)),$$(strip $$(CONFIG_MSNDPIN_HAVE_BOOT) $$(CONFIG_MSNDPIN_PERM_FILE)))'; \
+	    echo 'FILES_BOOT_UP_TO_DATE += $@'; \
+	    echo 'endif' \
+	) > .$@.boot
+
+    pndspini.c: $(patsubst "%", %, $(CONFIG_MSNDPIN_INIT_FILE)) bin2hex
+	./bin2hex pndspini < $(CONFIG_MSNDPIN_INIT_FILE) > $@
+	@ ( \
+	    echo 'ifeq ($(strip $(CONFIG_MSNDPIN_HAVE_BOOT) $(CONFIG_MSNDPIN_INIT_FILE)),$$(strip $$(CONFIG_MSNDPIN_HAVE_BOOT) $$(CONFIG_MSNDPIN_INIT_FILE)))'; \
+	    echo 'FILES_BOOT_UP_TO_DATE += $@'; \
+	    echo 'endif' \
+	) > .$@.boot
+endif
+
+
+
 # PSS (ECHO-ADI2111)
 
 pss.o: pss_boot.h

@@ -15,8 +15,7 @@
 #include <asm/uaccess.h>
 #include <asm/system.h>
 #include <asm/ldt.h>
-
-#include "desc.h"
+#include <asm/desc.h>
 
 static int read_ldt(void * ptr, unsigned long bytecount)
 {

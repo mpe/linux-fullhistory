@@ -612,7 +612,7 @@ software-update notification.
 6.3.1 CRYSTAL'S WEB SITE
 
 Crystal Semiconductor maintains a web page at http://www.crystal.com with the
-the latest drivers and technical publications.
+latest drivers and technical publications.
 
 
 6.3.2 CRYSTAL'S BULLETIN BOARD SERVICE

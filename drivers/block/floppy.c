@@ -4115,7 +4115,9 @@ __initfunc(int floppy_init(void))
 	for (drive = 0; drive < N_DRIVE; drive++) {
 		CLEARSTRUCT(UDRS);
 		CLEARSTRUCT(UDRWE);
-		UDRS->flags = FD_VERIFY | FD_DISK_NEWCHANGE | FD_DISK_CHANGED;
+		USETF(FD_DISK_NEWCHANGE);
+		USETF(FD_DISK_CHANGED);
+		USETF(FD_VERIFY);
 		UDRS->fd_device = -1;
 		floppy_track_buffer = NULL;
 		max_buffer_sectors = 0;

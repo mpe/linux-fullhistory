@@ -10,15 +10,7 @@
 #ifndef _PPA_H
 #define _PPA_H
 
-#define   PPA_VERSION   "1.39a"
-
-/* Use the following to enable certain chipset support
- * Default is PEDANTIC = 3
- */
-#include <linux/config.h> /* for CONFIG_SCSI_PPA_HAVE_PEDANTIC */
-#ifndef CONFIG_SCSI_PPA_HAVE_PEDANTIC
-#define CONFIG_SCSI_PPA_HAVE_PEDANTIC	3
-#endif
+#define   PPA_VERSION   "2.01"
 
 /* 
  * this driver has been hacked by Matteo Frigo (athena@theory.lcs.mit.edu)
@@ -32,34 +24,23 @@
  *
  * [ Stuff removed ]
  *
- * Compiled against 2.1.53.
- *	Rebuilt ppa_abort() function, should handle unplugged cable.
- *							[1.35s]
+ * Corrected ppa.h for 2.1.x kernels (>=2.1.85)
+ * Modified "Nat Semi Kludge" for extended chipsets
+ *							[1.41]
  *
- * PPA now auto probes for EPP on base address which are aligned on
- * 8 byte boundaries (0x278 & 0x378) using the attached devices.
- * This hopefully avoids the nasty problem of trying to detect EPP.
- *	Tested on 2.1.53				[1.36]
+ * Fixed id_probe for EPP 1.9 chipsets (misdetected as EPP 1.7)
+ *							[1.42]
  *
- * The id_probe utility no longer performs read/write tests.
- * Additional code included for checking the Intel ECP bug
- * (Bit 0 of STR stuck low which fools the EPP detection routine)
- *							[1.37]
+ * Development solely for 2.1.x kernels from now on!
+ *							[2.00]
  *
- * Oops! Got the bit sign mixed up for the Intel bug check.
- * Found that an additional delay is required during SCSI resets
- * to allow devices to settle down.
- *							[1.38]
+ * Hack and slash at the init code (EPP device check routine)
+ * Added INSANE option.
+ *							[2.01]
  *
- * Fixed all problems in the parport sharing scheme. Now ppa can be safe
- * used with lp or other parport devices on the same parallel port.
- *		1997 by Andrea Arcangeli
- *							[1.39]
- *
- * Little fix in ppa engine to ensure that ppa don' t release parport
- * or disconnect in wrong cases.
- *		1997 by Andrea Arcangeli
- *							[1.39a]
+ * Patch applied to sync against the 2.1.x kernel code
+ * Included qboot_zip.sh
+ *							[2.02]
  */
 /* ------ END OF USER CONFIGURABLE PARAMETERS ----- */
 
@@ -117,6 +98,23 @@ int ppa_sg = SG_ALL;		/* enable/disable scatter-gather. */
 #define CONNECT_EPP_MAYBE 1
 #define CONNECT_NORMAL  0
 
+/* INSANE code */
+#define PPA_INSANE 0
+#if PPA_INSANE > 0
+#define r_dtr(x)        (unsigned char)inb_p((x))
+#define r_str(x)        (unsigned char)inb_p((x)+1)
+#define r_ctr(x)        (unsigned char)inb_p((x)+2)
+#define r_epp(x)        (unsigned char)inb_p((x)+4)
+#define r_fifo(x)       (unsigned char)inb_p((x)+0x400)
+#define r_ecr(x)        (unsigned char)inb_p((x)+0x402)
+
+#define w_dtr(x,y)      outb_p(y, (x))
+#define w_str(x,y)      outb_p(y, (x)+1)
+#define w_ctr(x,y)      outb_p(y, (x)+2)
+#define w_epp(x,y)      outb_p(y, (x)+4)
+#define w_fifo(x,y)     outb_p(y, (x)+0x400)
+#define w_ecr(x,y)      outb_p(y, (x)+0x402)
+#else /* PPA_INSANE */
 #define r_dtr(x)        (unsigned char)inb((x))
 #define r_str(x)        (unsigned char)inb((x)+1)
 #define r_ctr(x)        (unsigned char)inb((x)+2)
@@ -130,6 +128,7 @@ int ppa_sg = SG_ALL;		/* enable/disable scatter-gather. */
 #define w_epp(x,y)      outb(y, (x)+4)
 #define w_fifo(x,y)     outb(y, (x)+0x400)
 #define w_ecr(x,y)      outb(y, (x)+0x402)
+#endif	/* PPA_INSANE */
 
 static int ppa_engine(ppa_struct *, Scsi_Cmnd *);
 static int ppa_in(int, char *, int);
@@ -149,23 +148,25 @@ const char *ppa_info(struct Scsi_Host *);
 int ppa_command(Scsi_Cmnd *);
 int ppa_queuecommand(Scsi_Cmnd *, void (*done) (Scsi_Cmnd *));
 int ppa_abort(Scsi_Cmnd *);
-int ppa_reset(Scsi_Cmnd *, unsigned int);
+int ppa_reset(Scsi_Cmnd *);
 int ppa_proc_info(char *, char **, off_t, int, int, int);
 int ppa_biosparam(Disk *, kdev_t, int *);
 
-#define PPA {	proc_dir:		&proc_scsi_ppa,			\
-		proc_info:		ppa_proc_info,			\
-		name:			"Iomega parport ZIP drive",	\
-		detect:			ppa_detect,			\
-		release:		ppa_release,			\
-		command:		ppa_command,			\
-		queuecommand:		ppa_queuecommand,		\
-		abort:			ppa_abort,			\
-		reset:			ppa_reset,			\
-		bios_param:		ppa_biosparam,			\
-		this_id:		-1,				\
-		sg_tablesize:		SG_ALL,				\
-		cmd_per_lun:		1,				\
-		use_clustering:		ENABLE_CLUSTERING		\
+#define PPA {	proc_dir:			&proc_scsi_ppa,		\
+		proc_info:			ppa_proc_info,		\
+		name:				"Iomega parport ZIP drive",\
+		detect:				ppa_detect,		\
+		release:			ppa_release,		\
+		command:			ppa_command,		\
+		queuecommand:			ppa_queuecommand,	\
+		eh_abort_handler:		ppa_abort,		\
+		eh_device_reset_handler:	NULL,			\
+		eh_bus_reset_handler:		ppa_reset,		\
+		eh_host_reset_handler:		ppa_reset,		\
+		bios_param:			ppa_biosparam,		\
+		this_id:			-1,			\
+		sg_tablesize:			SG_ALL,			\
+		cmd_per_lun:			1,			\
+		use_clustering:			ENABLE_CLUSTERING	\
 }
 #endif				/* _PPA_H */

@@ -379,6 +379,8 @@ static unsigned long load_aout_interp(struct exec * interp_ex,
 	retval = read_exec(interpreter_dentry, offset, addr, text_data, 0);
 	if (retval < 0)
 		goto out;
+	flush_icache_range((unsigned long)addr,
+	                   (unsigned long)addr + text_data);
 
 	do_mmap(NULL, ELF_PAGESTART(text_data + ELF_EXEC_PAGESIZE - 1),
 		interp_ex->a_bss,

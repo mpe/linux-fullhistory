@@ -160,6 +160,9 @@ static int devpts_root_lookup(struct inode * dir, struct dentry * dentry)
 			entry += (*p++ - '0');
 		}
 	}
+
+	if (entry > sbi->max_ptys)
+		return -ENOENT;
 	
 	dentry->d_inode = sbi->inodes[entry];
 	if ( dentry->d_inode )

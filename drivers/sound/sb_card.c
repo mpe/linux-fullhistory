@@ -22,6 +22,8 @@
 #include "sb_mixer.h"
 #include "sb.h"
 
+static int sbmpu = 0;
+
 void attach_sb_card(struct address_info *hw_config)
 {
 #if defined(CONFIG_AUDIO) || defined(CONFIG_MIDI)
@@ -43,7 +45,7 @@ int probe_sb(struct address_info *hw_config)
 void unload_sb(struct address_info *hw_config)
 {
 	if(hw_config->slots[0]!=-1)
-		sb_dsp_unload(hw_config);
+		sb_dsp_unload(hw_config, sbmpu);
 }
 
 int sb_be_quiet=0;
@@ -82,8 +84,6 @@ MODULE_PARM(trix, "i");
 MODULE_PARM(pas2, "i");
 MODULE_PARM(sm_games, "i");
 
-static int sbmpu = 0;
-
 void *smw_free = NULL;
 
 int init_module(void)
@@ -113,8 +113,6 @@ int init_module(void)
 		config_mpu.io_base = mpu_io;
 		if (mpu_io && probe_sbmpu(&config_mpu))
 			sbmpu = 1;
-#endif
-#ifdef CONFIG_MIDI
 		if (sbmpu)
 			attach_sbmpu(&config_mpu);
 #endif

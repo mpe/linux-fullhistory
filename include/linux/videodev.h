@@ -48,6 +48,7 @@ extern void video_unregister_device(struct video_device *);
 #define VID_TYPE_SCALES		128	/* Scalable */
 #define VID_TYPE_MONOCHROME	256	/* Monochrome only */
 #define VID_TYPE_SUBCAPTURE	512	/* Can capture subareas of the image */
+#define VID_TYPE_OUTPUT		1024	/* Can output video data */
 
 struct video_capability
 {

@@ -493,6 +493,7 @@ __initfunc(void identify_cpu(struct cpuinfo_x86 *c))
 			switch (edx) {
 				case 0x40:
 					cache_size = 0;
+					break;
 
 				case 0x41:
 					cache_size = 128;
@@ -532,7 +533,7 @@ __initfunc(void identify_cpu(struct cpuinfo_x86 *c))
 			    && (cpu_models[i].x86 == 6) 
 			    && (c->x86_model == 5)
 			    && (c->x86_cache_size == 0)) {
-				p = "Celeron";
+				p = "Celeron (Covington)";
 			}
 		}
 			

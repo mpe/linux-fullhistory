@@ -236,7 +236,7 @@ static hfs_rwret_t cap_info_write(struct file *filp, const char *buf,
 		end = pos + mem_count;
 
 		cap_build_meta(&meta, entry);
-		copy_from_user(((char *)&meta) + pos, buf, mem_count);
+		mem_count -= copy_from_user(((char *)&meta) + pos, buf, mem_count);
 
 		/* Update finder attributes if changed */
 		if (OVERLAPS(pos, end, struct hfs_cap_info, fi_fndr)) {

@@ -39,6 +39,8 @@ static int mpu_initialized = 0;
 
 static int *trix_osp = NULL;
 
+static int mpu = 0;
+
 static unsigned char trix_read(int addr)
 {
 	outb(((unsigned char) addr), 0x390);	/* MT-0002-PC ASIC address */
@@ -445,7 +447,7 @@ void unload_trix_mpu(struct address_info *hw_config)
 void unload_trix_sb(struct address_info *hw_config)
 {
 #ifdef CONFIG_SBDSP
-	sb_dsp_unload(hw_config);
+	sb_dsp_unload(hw_config, mpu);
 #endif
 }
 
@@ -479,7 +481,6 @@ struct address_info config;
 struct address_info sb_config;
 struct address_info mpu_config;
 
-static int      mpu = 0;
 static int      sb = 0;
 
 static int      fw_load;

@@ -213,10 +213,50 @@ printk(" %d -> %d\n", signal_pending(current), sig);
 	return sig;
 }
 
+/*
+ * Determine whether a signal should be posted or not.
+ *
+ * Signals with SIG_IGN can be ignored, except for the
+ * special case of a SIGCHLD. 
+ *
+ * Some signals with SIG_DFL default to a non-action.
+ */
+static int ignored_signal(int sig, struct task_struct *t)
+{
+	struct signal_struct *signals;
+	struct k_sigaction *ka;
+
+	/* Don't ignore traced or blocked signals */
+	if ((t->flags & PF_PTRACED) || sigismember(&t->blocked, sig))
+		return 0;
+	
+	signals = t->sig;
+	if (!signals)
+		return 1;
+
+	ka = &signals->action[sig-1];
+	switch ((unsigned long) ka->sa.sa_handler) {
+	case (unsigned long) SIG_DFL:
+		if (sig == SIGCONT ||
+		    sig == SIGWINCH ||
+		    sig == SIGCHLD ||
+		    sig == SIGURG)
+			break;
+		return 0;
+
+	case (unsigned long) SIG_IGN:
+		if (sig != SIGCHLD)
+			break;
+	/* fallthrough */
+	default:
+		return 0;
+	}
+	return 1;
+}
+
 int
 send_sig_info(int sig, struct siginfo *info, struct task_struct *t)
 {
-	struct k_sigaction *ka;
 	unsigned long flags;
 	int ret;
 
@@ -227,13 +267,6 @@ printk("SIG queue (%s:%d): %d ", t->comm, t->pid, sig);
 	ret = -EINVAL;
 	if (sig < 0 || sig > _NSIG)
 		goto out_nolock;
-
-	/* If t->sig is gone, we must be trying to kill the task.  So
-	   pretend that it doesn't exist anymore.  */
-	ret = -ESRCH;
-	if (t->sig == NULL)
-		goto out_nolock;
-
 	/* The somewhat baroque permissions check... */
 	ret = -EPERM;
 	if ((!info || ((unsigned long)info != 1 && SI_FROMUSER(info)))
@@ -249,9 +282,7 @@ printk("SIG queue (%s:%d): %d ", t->comm, t->pid, sig);
 	if (!sig)
 		goto out_nolock;
 
-	ka = &t->sig->action[sig-1];
 	spin_lock_irqsave(&t->sigmask_lock, flags);
-
 	switch (sig) {
 	case SIGKILL: case SIGCONT:
 		/* Wake up the process if stopped.  */
@@ -277,16 +308,8 @@ printk("SIG queue (%s:%d): %d ", t->comm, t->pid, sig);
 	   handled immediately (ie non-blocked and untraced) and
 	   that is ignored (either explicitly or by default).  */
 
-	if (!(t->flags & PF_PTRACED) && !sigismember(&t->blocked, sig)
-	    /* Don't bother with ignored sigs (SIGCHLD is special) */
-	    && ((ka->sa.sa_handler == SIG_IGN && sig != SIGCHLD)
-		/* Some signals are ignored by default.. (but SIGCONT
-		   already did its deed) */
-		|| (ka->sa.sa_handler == SIG_DFL
-		    && (sig == SIGCONT || sig == SIGCHLD
-			|| sig == SIGWINCH || sig == SIGURG)))) {
+	if (ignored_signal(sig, t))
 		goto out;
-	}
 
 	if (sig < SIGRTMIN) {
 		/* Non-real-time signals are not queued.  */
@@ -372,12 +395,18 @@ printk(" %d -> %d\n", signal_pending(t), ret);
 int
 force_sig_info(int sig, struct siginfo *info, struct task_struct *t)
 {
-	if (t->sig == NULL)
+	unsigned long int flags;
+
+	spin_lock_irqsave(&t->sigmask_lock, flags);
+	if (t->sig == NULL) {
+		spin_unlock_irqrestore(&t->sigmask_lock, flags);
 		return -ESRCH;
+	}
 
 	if (t->sig->action[sig-1].sa.sa_handler == SIG_IGN)
 		t->sig->action[sig-1].sa.sa_handler = SIG_DFL;
 	sigdelset(&t->blocked, sig);
+	spin_unlock_irqrestore(&t->sigmask_lock, flags);
 
 	return send_sig_info(sig, info, t);
 }

@@ -87,10 +87,10 @@ else
 endif
 
 ifeq ($(CONFIG_BLK_DEV_LOOP),y)
-L_OBJS += loop.o
+LX_OBJS += loop.o
 else
   ifeq ($(CONFIG_BLK_DEV_LOOP),m)
-  M_OBJS += loop.o
+  MX_OBJS += loop.o
   endif
 endif
 

@@ -42,6 +42,12 @@
 #define MAX_SCSI_DEVICE_CODE 10
 extern const char *const scsi_device_types[MAX_SCSI_DEVICE_CODE];
 
+#ifdef DEBUG
+    #define SCSI_TIMEOUT (5*HZ)
+#else
+    #define SCSI_TIMEOUT (2*HZ)
+#endif
+
 /*
  *  Use these to separate status msg and our bytes
  *

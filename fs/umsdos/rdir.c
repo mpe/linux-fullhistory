@@ -20,6 +20,7 @@
 
 
 extern struct inode *pseudo_root;
+extern struct dentry_operations umsdos_dentry_operations;
 
 struct RDIR_FILLDIR {
 	void *dirbuf;
@@ -96,7 +97,7 @@ printk (KERN_WARNING "umsdos_rlookup_x: we are at pseudo-root thingy?\n");
 		goto out;
 	}
 
-	ret = umsdos_real_lookup (dir, dentry);
+	ret = msdos_lookup (dir, dentry);
 	inode = dentry->d_inode;
 	if ((ret == 0) && inode) {
 		if (inode == pseudo_root && !nopseudo) {
@@ -119,6 +120,8 @@ inode->i_ino));
 		}
 	}
 out:
+	/* always install our dentry ops ... */
+	dentry->d_op = &umsdos_dentry_operations;
 	PRINTK ((KERN_DEBUG "umsdos_rlookup_x: returning %d\n", ret));
 	return ret;
 }
@@ -170,28 +173,19 @@ static int UMSDOS_rrmdir ( struct inode *dir, struct dentry *dentry)
 
 	ret = msdos_rmdir (dir, dentry);
 	if (ret != -ENOTEMPTY)
-		goto out_check;
-
-#if 0	/* why do this? we have the dentry ... */
-	ret = UMSDOS_rlookup (dir, dentry);
-	PRINTK (("rrmdir lookup %d ", ret));
-	if (ret)
 		goto out_unlock;
-	ret = -ENOTEMPTY;
-#endif
 
 	empty = umsdos_isempty (dentry);
 	if (empty == 1) {
-		struct dentry *temp;
+		struct dentry *demd;
 		/* We have to remove the EMD file. */
-		temp = umsdos_lookup_dentry(dentry, UMSDOS_EMD_FILE, 
-						UMSDOS_EMD_NAMELEN);
-		ret = PTR_ERR(temp);
-		if (!IS_ERR(temp)) {
+		demd = umsdos_get_emd_dentry(dentry);
+		ret = PTR_ERR(demd);
+		if (!IS_ERR(demd)) {
 			ret = 0;
-			if (temp->d_inode)
-				ret = msdos_unlink (dentry->d_inode, temp);
-			dput(temp);
+			if (demd->d_inode)
+				ret = msdos_unlink (dentry->d_inode, demd);
+			dput(demd);
 		}
 		if (ret)
 			goto out_unlock;
@@ -199,15 +193,9 @@ static int UMSDOS_rrmdir ( struct inode *dir, struct dentry *dentry)
 	/* now retry the original ... */
 	ret = msdos_rmdir (dir, dentry);
 
-out_check:
-	/* Check whether we succeeded ... */
-	if (!ret)
-		d_delete(dentry);
-
 out_unlock:
 	umsdos_unlockcreate (dir);
 out:
-	check_inode (dir);
 	return ret;
 }
 

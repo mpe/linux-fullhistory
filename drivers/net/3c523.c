@@ -474,7 +474,7 @@ elmc_probe(struct device *dev)) {
 	to use.  I suspect that whoever sets the thing up initially would
 	prefer we don't screw with those things.
 
-	Note we we read the status info when we found the card...
+	Note that we read the status info when we found the card...
 
 	See 3c523.h for more details.
 	*/

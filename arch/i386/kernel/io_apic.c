@@ -1224,7 +1224,27 @@ void __init setup_IO_APIC(void)
 	setup_IO_APIC_irqs();
 	init_IRQ_SMP();
 	check_timer();
- 
+
+	/*
+	 * Get rid of any pending interrupt sources by just blindly
+	 * ACK'ing the IO-APIC. There is apparently no other way to
+	 * remove stale bits in the ISR.
+	 *
+	 * I'd love to be proven wrong, please tell me how to clear
+	 * the ISR bit for specific interrupts..
+	 *
+	 * Oh, how do we clear the IRR bit? I'd like to be able to
+	 * make sure that we get one interrupt for something that 
+	 * is pending when we enable it, even if it is edge-triggered.
+	 * How to fool the IO-APIC to think it got an edge when
+	 * enabled?
+	 */
+	{
+		int i = 10;
+		do {
+			ack_APIC_irq();
+		} while (--i);
+	}
+
 	print_IO_APIC();
 }
-

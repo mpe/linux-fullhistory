@@ -30,6 +30,8 @@ static const char *version =
 #include <linux/nubus.h>
 #include <asm/io.h>
 #include <asm/system.h>
+#include <asm/hwtest.h>
+#include <linux/delay.h>
 
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
@@ -57,6 +59,13 @@ static void sane_block_input(struct device *dev, int count,
 static void sane_block_output(struct device *dev, int count,
 							const unsigned char *buf, const start_page);
 
+static void slow_sane_get_8390_hdr(struct device *dev, struct e8390_pkt_hdr *hdr,
+						int ring_page);
+static void slow_sane_block_input(struct device *dev, int count,
+						  struct sk_buff *skb, int ring_offset);
+static void slow_sane_block_output(struct device *dev, int count,
+						   const unsigned char *buf, const int start_page);
+
 
 #define WD_START_PG	0x00	/* First page of TX buffer */
 #define WD03_STOP_PG	0x20	/* Last page +1 of RX ring */
@@ -81,11 +90,11 @@ static int test_8390(volatile char *ptr, int scale)
 	int regd;
 	int v;
 	
-	if(nubus_hwreg_present(&ptr[0x00])==0)
+	if(hwreg_present(&ptr[0x00])==0)
 		return -EIO;
-	if(nubus_hwreg_present(&ptr[0x0D<<scale])==0)
+	if(hwreg_present(&ptr[0x0D<<scale])==0)
 		return -EIO;
-	if(nubus_hwreg_present(&ptr[0x0D<<scale])==0)
+	if(hwreg_present(&ptr[0x0D<<scale])==0)
 		return -EIO;
 	ptr[0x00]=E8390_NODMA+E8390_PAGE1+E8390_STOP;
 	regd=ptr[0x0D<<scale];
@@ -135,6 +144,51 @@ int ns8390_ident(struct nubus_type *nb)
 	return -1;
 }
 
+/*
+ *	Memory probe for 8390 cards
+ */
+ 
+int apple_8390_mem_probe(volatile unsigned short *p)
+{
+	int i, j;
+	/*
+	 *	Algorithm.
+	 *	1.	Check each block size of memory doesn't fault
+	 *	2.	Write a value to it
+	 *	3.	Check all previous blocks are unaffected
+	 */
+	
+	for(i=0;i<2;i++)
+	{
+		volatile unsigned short *m=p+4096*i;
+		/* Unwriteable - we have a fully decoded card and the
+		   RAM end located */
+		   
+		if(hwreg_present(m)==0)
+			return 8192*i;
+			
+		*m=0xA5A0|i;
+		
+		for(j=0;j<i;j++)
+		{
+			/* Partial decode and wrap ? */
+			if(p[4096*j]!=(0xA5A0|j))
+			{
+				/* This is the first misdecode, so it had
+				   one less page than we tried */
+				return 8192*i;
+			}
+ 			j++;
+ 		}
+ 		/* Ok it still decodes.. move on 8K */
+ 	}
+ 	/* 
+ 	 *	We don't look past 16K. That should cover most cards
+ 	 *	and above 16K there isnt really any gain.
+ 	 */
+ 	return 16384;
+ }
+ 		
 /*
  *    Probe for 8390 cards.  
  *    The ns8390_probe1() routine initializes the card and fills the
@@ -216,16 +270,21 @@ int ns8390_probe(struct nubus_device_specifier *d, int slot, struct nubus_type *
 	/* Apple, Farallon, Asante */
 	if(id==NS8390_APPLE|| id==NS8390_FARALLON || id==NS8390_ASANTE)
 	{
+		int memsize;
+		
 		dev->base_addr=(int)(nubus_slot_addr(slot)+APPLE_8390_BASE);
 		dev->mem_start=(int)(nubus_slot_addr(slot)+APPLE_8390_MEM);
-		dev->mem_end=dev->mem_start+APPLE_MEMSIZE; /* 8K it seems */
+		
+		memsize = apple_8390_mem_probe((void *)dev->mem_start);
+		
+		dev->mem_end=dev->mem_start+memsize;
 		dev->irq=slot;
 		printk("apple/clone: testing board: ");
 
-		printk("memory - ");		
+		printk("%dK memory - ", memsize>>10);		
 
 		i=(void *)dev->mem_start;
-		memset((void *)i,0xAA, DAYNA_MEMSIZE);
+		memset((void *)i,0xAA, memsize);
 		while(i<(volatile unsigned short *)dev->mem_end)
 		{
 			if(*i!=0xAAAA)
@@ -366,8 +425,15 @@ int ns8390_probe1(struct device *dev, int word16, char *model_name, int type, in
 			ei_status.get_8390_hdr = &dayna_get_8390_hdr;
 			ei_status.reg_offset = fwrd4_offsets;
 			break;
-		case NS8390_APPLE:	/* Apple/Asante/Farallon */
 		case NS8390_FARALLON:
+		case NS8390_APPLE:	/* Apple/Asante/Farallon */
+			/*      16 bit card, register map is reversed */
+			ei_status.reset_8390 = &ns8390_no_reset;
+			ei_status.block_input = &slow_sane_block_input;
+			ei_status.block_output = &slow_sane_block_output;
+			ei_status.get_8390_hdr = &slow_sane_get_8390_hdr;
+			ei_status.reg_offset = back4_offsets;
+			break;
 		case NS8390_ASANTE:
 			/*      16 bit card, register map is reversed */
 			ei_status.reset_8390 = &ns8390_no_reset;
@@ -442,7 +508,7 @@ static void interlan_reset(struct device *dev)
 {
 	unsigned char *target=nubus_slot_addr(dev->irq);
 	if (ei_debug > 1) 
-	printk("Need to reset the NS8390 t=%lu...", jiffies);
+		printk("Need to reset the NS8390 t=%lu...", jiffies);
 	ei_status.txing = 0;
 	/* This write resets the card */
 	target[0xC0000]=0;
@@ -585,12 +651,88 @@ static void sane_block_input(struct device *dev, int count, struct sk_buff *skb,
 	}
 }
 
+
 static void sane_block_output(struct device *dev, int count, const unsigned char *buf,
 				int start_page)
 {
 	long shmem = (start_page - WD_START_PG)<<8;
 	
 	memcpy((char *)dev->mem_start+shmem, buf, count);
+}
+
+static void word_memcpy_tocard(void *tp, const void *fp, int count)
+{
+	volatile unsigned short *to = tp;
+	const unsigned short *from = fp;
+	
+	count++;
+	count/=2;
+	
+	while(count--)
+		*to++=*from++;
+}
+
+static void word_memcpy_fromcard(void *tp, const void *fp, int count)
+{
+	unsigned short *to = tp;
+	const volatile unsigned short *from = fp;
+	
+	count++;
+	count/=2;
+	
+	while(count--)
+		*to++=*from++;
+}
+
+static void slow_sane_get_8390_hdr(struct device *dev, struct e8390_pkt_hdr *hdr, int ring_page)
+{
+	unsigned long hdr_start = (ring_page - WD_START_PG)<<8;
+	word_memcpy_fromcard((void *)hdr, (char *)dev->mem_start+hdr_start, 4);
+	/* Register endianism - fix here rather than 8390.c */
+	hdr->count=(hdr->count&0xFF)<<8|(hdr->count>>8);
+}
+
+static void slow_sane_block_input(struct device *dev, int count, struct sk_buff *skb, int ring_offset)
+{
+	unsigned long xfer_base = ring_offset - (WD_START_PG<<8);
+	unsigned long xfer_start = xfer_base+dev->mem_start;
+
+	if (xfer_start + count > dev->rmem_end) 
+	{
+		/* We must wrap the input move. */
+		int semi_count = dev->rmem_end - xfer_start;
+		word_memcpy_fromcard(skb->data, (char *)dev->mem_start+xfer_base, semi_count);
+		count -= semi_count;
+		word_memcpy_fromcard(skb->data + semi_count, 
+			(char *)dev->rmem_start, count);
+	}
+	else
+	{
+		word_memcpy_fromcard(skb->data, (char *)dev->mem_start+xfer_base, count);
+	}
+}
+
+static void slow_sane_block_output(struct device *dev, int count, const unsigned char *buf,
+				int start_page)
+{
+	long shmem = (start_page - WD_START_PG)<<8;
+	
+	word_memcpy_tocard((char *)dev->mem_start+shmem, buf, count);
+#if 0
+	long shmem = (start_page - WD_START_PG)<<8;
+	volatile unsigned short *to=(unsigned short *)(dev->mem_start+shmem);
+	volatile int p;
+	unsigned short *bp=(unsigned short *)buf;
+	
+	count=(count+1)/2;
+	
+	while(count--)
+	{
+		*to++=*bp++;
+		for(p=0;p<10;p++)
+			p++;
+	}
+#endif	
 }
 
 /*

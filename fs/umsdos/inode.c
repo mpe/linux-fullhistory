@@ -19,6 +19,7 @@
 #include <linux/umsdos_fs.h>
 #include <linux/list.h>
 
+extern struct dentry_operations umsdos_dentry_operations;
 extern struct inode_operations umsdos_rdir_inode_operations;
 
 
@@ -59,7 +60,7 @@ struct dentry *geti_dentry (struct inode *inode)
 void fill_new_filp (struct file *filp, struct dentry *dentry)
 {
 	if (!dentry)
-		printk("fill_new_filp: NULL dentry!\n");
+		printk(KERN_ERR "fill_new_filp: NULL dentry!\n");
 
 	memset (filp, 0, sizeof (struct file));
 	filp->f_reada = 1;
@@ -133,7 +134,7 @@ void UMSDOS_put_inode (struct inode *inode)
 		 ,inode->u.umsdos_i.i_emd_owner, inode->u.umsdos_i.pos
 		 ,inode->u.umsdos_i.i_emd_dir, inode->i_count));
 
-	if (inode && pseudo_root && inode == pseudo_root) {
+	if (inode == pseudo_root) {
 		printk (KERN_ERR "Umsdos: Oops releasing pseudo_root."
 			" Notify jacques@solucorp.qc.ca\n");
 	}
@@ -149,23 +150,6 @@ void UMSDOS_put_super (struct super_block *sb)
 	MOD_DEC_USE_COUNT;
 }
 
-
-/*
- * Call msdos_lookup, but set back the original msdos function table.
- * Return 0 if OK, or a negative error code if not.
- * Dentry will hold inode of the file, if successful
- */
-int umsdos_real_lookup (struct inode *dir, struct dentry *dentry)
-{
-	int ret;
-
-	PRINTK ((KERN_DEBUG "umsdos_real_lookup: looking for %s/%s /",
-		dentry->d_parent->d_name.name, dentry->d_name.name));
-	ret = msdos_lookup (dir, dentry);
-	PRINTK (("/ returned %d\n", ret));
-
-	return ret;
-}
 
 /*
  * Complete the setup of an directory dentry.
@@ -229,6 +213,34 @@ void umsdos_setup_dir_inode (struct inode *inode)
 
 /*
  * Add some info into an inode so it can find its owner quickly
+ */
+void umsdos_set_dirinfo_new (struct dentry *dentry, off_t f_pos)
+{
+	struct inode *inode = dentry->d_inode;
+	struct inode *dir = dentry->d_parent->d_inode;
+	struct dentry *demd;
+
+	inode->u.umsdos_i.i_dir_owner = dir->i_ino;
+	inode->u.umsdos_i.i_emd_owner = 0;
+	inode->u.umsdos_i.pos = f_pos;
+
+	/* now check the EMD file */
+	demd = umsdos_get_emd_dentry(dentry->d_parent);
+	if (IS_ERR(demd)) {
+		goto out;
+	}
+	if (demd->d_inode) {
+		inode->u.umsdos_i.i_emd_owner = demd->d_inode->i_ino;
+	}
+	dput (demd);
+out:
+	return;
+}
+
+
+/*
+ * Add some info into an inode so it can find its owner quickly
+ * Note: Deprecated; use above function if possible.
  */
 void umsdos_set_dirinfo (struct inode *inode, struct inode *dir, off_t f_pos)
 {
@@ -405,15 +417,14 @@ void UMSDOS_read_inode (struct inode *inode)
 }
 
 
-/* #Specification: notify_change / i_nlink > 0
- * notify change is only done for inode with nlink > 0. An inode
- * with nlink == 0 is no longer associated with any entry in
- * the EMD file, so there is nothing to update.
- */
-static int internal_notify_change (struct inode *inode, struct iattr *attr)
+int UMSDOS_notify_change (struct dentry *dentry, struct iattr *attr)
 {
+	struct inode *inode = dentry->d_inode;
 	unsigned long i_emd_owner = inode->u.umsdos_i.i_emd_owner;
+	struct dentry *demd;
 	int ret;
+	struct file filp;
+	struct umsdos_dirent entry;
 
 	Printk ((KERN_DEBUG "UMSDOS_notify_change: entering\n"));
 
@@ -425,62 +436,61 @@ static int internal_notify_change (struct inode *inode, struct iattr *attr)
 
 	if (inode->i_ino == UMSDOS_ROOT_INO)
 		goto out_nolink;
+	if (i_emd_owner != 0)
+		goto out_nolink;
 
-	if (i_emd_owner != 0xffffffff && i_emd_owner != 0) {
-		/* This inode is not a EMD file nor an inode used internally
-		 * by MSDOS, so we can update its status.
-		 * See emd.c
-		 */
-		struct inode *emd_owner;
-		struct file filp;
-		struct umsdos_dirent entry;
-		struct dentry *emd_dentry;
+	/* get the EMD file dentry */
+	demd = umsdos_get_emd_dentry(dentry->d_parent);
+	ret = PTR_ERR(demd);
+	if (IS_ERR(demd))
+		goto out_nolink;
+	ret = -EPERM;
+	if (!demd->d_inode)
+		goto out_dput;
 
-		Printk (("notify change %p ", inode));
-		ret = -EPERM;
-		emd_owner = iget (inode->i_sb, i_emd_owner);
-		if (!emd_owner) {
-			printk ("UMSDOS: emd_owner = NULL ???");
-			goto out_nolink;
-		}
-		emd_dentry = geti_dentry (emd_owner); /* FIXME? */
-		fill_new_filp (&filp, emd_dentry);
+	ret = 0;
+	if (inode == demd->d_inode)
+		goto out_dput;
+	/* This inode is not a EMD file nor an inode used internally
+	 * by MSDOS, so we can update its status.
+	 * See emd.c
+	 */
 
+	Printk (("notify change %p ", inode));
+	fill_new_filp (&filp, demd);
+	filp.f_pos = inode->u.umsdos_i.pos;
+
+	Printk (("pos = %Lu ", filp.f_pos));
+	/* Read only the start of the entry since we don't touch the name */
+	ret = umsdos_emd_dir_read (&filp, (char *) &entry, UMSDOS_REC_SIZE);
+	if (!ret) {
+		if (attr->ia_valid & ATTR_UID)
+			entry.uid = attr->ia_uid;
+		if (attr->ia_valid & ATTR_GID)
+			entry.gid = attr->ia_gid;
+		if (attr->ia_valid & ATTR_MODE)
+			entry.mode = attr->ia_mode;
+		if (attr->ia_valid & ATTR_ATIME)
+			entry.atime = attr->ia_atime;
+		if (attr->ia_valid & ATTR_MTIME)
+			entry.mtime = attr->ia_mtime;
+		if (attr->ia_valid & ATTR_CTIME)
+			entry.ctime = attr->ia_ctime;
+
+		entry.nlink = inode->i_nlink;
 		filp.f_pos = inode->u.umsdos_i.pos;
-		filp.f_reada = 0;
-		Printk (("pos = %Lu ", filp.f_pos));
-		/* Read only the start of the entry since we don't touch */
-		/* the name */
-		ret = umsdos_emd_dir_read (&filp, (char *) &entry, 
-						UMSDOS_REC_SIZE);
-		if (!ret) {
-			if (attr->ia_valid & ATTR_UID)
-				entry.uid = attr->ia_uid;
-			if (attr->ia_valid & ATTR_GID)
-				entry.gid = attr->ia_gid;
-			if (attr->ia_valid & ATTR_MODE)
-				entry.mode = attr->ia_mode;
-			if (attr->ia_valid & ATTR_ATIME)
-				entry.atime = attr->ia_atime;
-			if (attr->ia_valid & ATTR_MTIME)
-				entry.mtime = attr->ia_mtime;
-			if (attr->ia_valid & ATTR_CTIME)
-				entry.ctime = attr->ia_ctime;
+		ret = umsdos_emd_dir_write (&filp, (char *) &entry,
+						 UMSDOS_REC_SIZE);
 
-			entry.nlink = inode->i_nlink;
-			filp.f_pos = inode->u.umsdos_i.pos;
-			ret = umsdos_emd_dir_write (&filp, (char *) &entry,
-							 UMSDOS_REC_SIZE);
-
-			Printk (("notify pos %lu ret %d nlink %d ",
-				inode->u.umsdos_i.pos, ret, entry.nlink));
-			/* #Specification: notify_change / msdos fs
-			 * notify_change operation are done only on the
-			 * EMD file. The msdos fs is not even called.
-			 */
-		}
-		iput(emd_owner);
+		Printk (("notify pos %lu ret %d nlink %d ",
+			inode->u.umsdos_i.pos, ret, entry.nlink));
+		/* #Specification: notify_change / msdos fs
+		 * notify_change operation are done only on the
+		 * EMD file. The msdos fs is not even called.
+		 */
 	}
+out_dput:
+	dput(demd);
 out_nolink:
 	if (ret == 0)
 		inode_setattr (inode, attr);
@@ -488,11 +498,6 @@ out:
 	return ret;
 }
 
-
-int UMSDOS_notify_change (struct dentry *dentry, struct iattr *attr)
-{
-	return internal_notify_change (dentry->d_inode, attr);
-}
 
 /*
  * Update the disk with the inode content
@@ -558,9 +563,8 @@ struct super_block *UMSDOS_read_super (struct super_block *sb, void *data,
 	sb->s_op = &umsdos_sops;
 	MSDOS_SB(sb)->options.dotsOK = 0;	/* disable hidden==dotfile */
 
-	/* FIXME:?? clear d_op on root so it will not be inherited */
-	sb->s_root->d_op = NULL;
-
+	/* install our dentry operations ... */
+	sb->s_root->d_op = &umsdos_dentry_operations;
 	pseudo = sb->s_root->d_inode;
 	umsdos_setup_dir(sb->s_root);
 
@@ -599,7 +603,7 @@ void pseudo_root_stuff(void)
 	sbin = creat_dentry ("sbin", 4, NULL, root);
 
 	Printk ((KERN_DEBUG "Mounting root\n"));
-	if (umsdos_real_lookup (pseudo, root) == 0
+	if (msdos_lookup (pseudo, root) == 0
 	    && (root->d_inode != NULL)
 	    && S_ISDIR (root->d_inode->i_mode)) {
 
@@ -609,7 +613,7 @@ Printk ((KERN_DEBUG "/%s is there\n", UMSDOS_PSDROOT_NAME));
 		etc = creat_dentry ("etc", 3, NULL, root);
 
 
-		if (umsdos_real_lookup (pseudo, etc) == 0
+		if (msdos_lookup (pseudo, etc) == 0
 		    && S_ISDIR (etc->d_inode->i_mode)) {
 
 Printk ((KERN_DEBUG "/%s/etc is there\n", UMSDOS_PSDROOT_NAME));
@@ -617,9 +621,9 @@ Printk ((KERN_DEBUG "/%s/etc is there\n", UMSDOS_PSDROOT_NAME));
 			init = creat_dentry ("init", 4, NULL, etc);
 			etc_rc = creat_dentry ("rc", 2, NULL, etc);
 
-			if ((umsdos_real_lookup (pseudo, init) == 0
+			if ((msdos_lookup (pseudo, init) == 0
 			     && S_ISREG (init->d_inode->i_mode))
-			    || (umsdos_real_lookup (pseudo, etc_rc) == 0
+			    || (msdos_lookup (pseudo, etc_rc) == 0
 			 && S_ISREG (etc_rc->d_inode->i_mode))) {
 				pseudo_ok = 1;
 			}
@@ -629,12 +633,12 @@ Printk ((KERN_DEBUG "/%s/etc is there\n", UMSDOS_PSDROOT_NAME));
 			/* iput(rc); */
 		}
 		if (!pseudo_ok
-		/* && umsdos_real_lookup (pseudo, "sbin", 4, sbin)==0 */
-		    && umsdos_real_lookup (pseudo, sbin) == 0
+		/* && msdos_lookup (pseudo, "sbin", 4, sbin)==0 */
+		    && msdos_lookup (pseudo, sbin) == 0
 		    && S_ISDIR (sbin->d_inode->i_mode)) {
 
 Printk ((KERN_DEBUG "/%s/sbin is there\n", UMSDOS_PSDROOT_NAME));
-			if (umsdos_real_lookup (pseudo, init) == 0
+			if (msdos_lookup (pseudo, init) == 0
 			    && S_ISREG (init->d_inode->i_mode)) {
 				pseudo_ok = 1;
 			}

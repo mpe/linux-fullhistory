@@ -4,9 +4,6 @@
         Written 1994-1996 by Avery Pennarun,
 	which was in turn derived from skeleton.c by Donald Becker.
 
-	Contact Avery at: apenwarr@bond.net or
-	RR #5 Pole Line Road, Thunder Bay, ON, Canada P7C 5M9
-
 	**********************
 
 	The original copyright of skeleton.c was as follows:
@@ -130,7 +127,7 @@ extern int arcnet_num_devs;
 #define SETCONF	writeb(lp->config,_CONFIG)
 
 static const char *version =
-"arc-rimi.c: v3.00 97/11/09 Avery Pennarun <apenwarr@bond.net> et al.\n";
+"arc-rimi.c: v3.00 97/11/09 Avery Pennarun <apenwarr@worldvisions.ca> et al.\n";
 
 /****************************************************************************
  *                                                                          *

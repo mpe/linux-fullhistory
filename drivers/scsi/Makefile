@@ -243,6 +243,14 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_SCSI_IMM),y)
+L_OBJS += imm.o
+else
+  ifeq ($(CONFIG_SCSI_IMM),m)
+  M_OBJS += imm.o
+  endif
+endif
+
 ifeq ($(CONFIG_SCSI_QLOGIC_FAS),y)
 L_OBJS += qlogicfas.o
 else

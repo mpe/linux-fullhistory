@@ -29,7 +29,7 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
- * $Id: msnd_pinnacle.c,v 1.17 1998/09/04 18:41:27 andrewtv Exp $
+ * $Id: msnd_pinnacle.c,v 1.63 1998/09/10 18:37:19 andrewtv Exp $
  *
  ********************************************************************/
 
@@ -45,6 +45,7 @@
 #ifndef LINUX20
 #  include <linux/init.h>
 #endif
+#include <asm/irq.h>
 #include "sound_config.h"
 #include "sound_firmware.h"
 #ifdef MSND_CLASSIC
@@ -52,12 +53,28 @@
 #endif
 #include "msnd.h"
 #ifdef MSND_CLASSIC
+#  ifdef CONFIG_MSNDCLAS_HAVE_BOOT
+#    define HAVE_DSPCODEH
+#  endif
 #  include "msnd_classic.h"
 #  define LOGNAME			"msnd_classic"
 #else
+#  ifdef CONFIG_MSNDPIN_HAVE_BOOT
+#    define HAVE_DSPCODEH
+#  endif
 #  include "msnd_pinnacle.h"
 #  define LOGNAME			"msnd_pinnacle"
 #endif
+
+#define get_play_delay_jiffies(size)	((size) * HZ *			\
+					 dev.play_sample_size / 8 /	\
+					 dev.play_sample_rate /		\
+					 dev.play_channels)
+
+#define get_rec_delay_jiffies(size)	((size) * HZ *			\
+					 dev.rec_sample_size / 8 /	\
+					 dev.rec_sample_rate /		\
+					 dev.rec_channels)
 
 static multisound_dev_t			dev;
 
@@ -66,71 +83,86 @@ static char				*dspini, *permini;
 static int				sizeof_dspini, sizeof_permini;
 #endif
 
+static int				dsp_full_reset(void);
+static void				dsp_write_flush(void);
+
+static __inline__ int chk_send_dsp_cmd(multisound_dev_t *dev, register BYTE cmd)
+{
+	if (msnd_send_dsp_cmd(dev, cmd) == 0)
+		return 0;
+	dsp_full_reset();
+	return msnd_send_dsp_cmd(dev, cmd);
+}
+
 static void reset_play_queue(void)
 {
 	int n;
 	LPDAQD lpDAQ;
 
-	msnd_fifo_make_empty(&dev.DAPF);
-	writew(0, dev.DAPQ + JQS_wHead);
-	writew(PCTODSP_OFFSET(2 * DAPQ_STRUCT_SIZE), dev.DAPQ + JQS_wTail);
-	dev.CurDAQD = (LPDAQD)(dev.base + 1 * DAPQ_DATA_BUFF);
-	outb(HPBLKSEL_0, dev.io + HP_BLKS);
-	memset_io(dev.base, 0, DAP_BUFF_SIZE * 3);
+	dev.last_playbank = -1;
+	writew(PCTODSP_OFFSET(0 * DAQDS__size), dev.DAPQ + JQS_wHead);
+	writew(PCTODSP_OFFSET(0 * DAQDS__size), dev.DAPQ + JQS_wTail);
 
-	for (n = 0, lpDAQ = dev.CurDAQD; n < 3; ++n, lpDAQ += DAQDS__size) {
+	for (n = 0, lpDAQ = dev.base + DAPQ_DATA_BUFF; n < 3; ++n, lpDAQ += DAQDS__size) {
 		writew(PCTODSP_BASED((DWORD)(DAP_BUFF_SIZE * n)), lpDAQ + DAQDS_wStart);
-		writew(DAP_BUFF_SIZE, lpDAQ + DAQDS_wSize);
+		writew(0, lpDAQ + DAQDS_wSize);
 		writew(1, lpDAQ + DAQDS_wFormat);
-		writew(dev.sample_size, lpDAQ + DAQDS_wSampleSize);
-		writew(dev.channels, lpDAQ + DAQDS_wChannels);
-		writew(dev.sample_rate, lpDAQ + DAQDS_wSampleRate);
+		writew(dev.play_sample_size, lpDAQ + DAQDS_wSampleSize);
+		writew(dev.play_channels, lpDAQ + DAQDS_wChannels);
+		writew(dev.play_sample_rate, lpDAQ + DAQDS_wSampleRate);
 		writew(HIMT_PLAY_DONE * 0x100 + n, lpDAQ + DAQDS_wIntMsg);
-		writew(n + 1, lpDAQ + DAQDS_wFlags);
+		writew(n, lpDAQ + DAQDS_wFlags);
 	}
-	dev.lastbank = -1;
 }
 
 static void reset_record_queue(void)
 {
 	int n;
 	LPDAQD lpDAQ;
+	unsigned long flags;
 
-	msnd_fifo_make_empty(&dev.DARF);
-	writew(0, dev.DARQ + JQS_wHead);
-	writew(PCTODSP_OFFSET(2 * DARQ_STRUCT_SIZE), dev.DARQ + JQS_wTail);
-	dev.CurDARQD = (LPDAQD)(dev.base + 1 * DARQ_DATA_BUFF);
+	dev.last_recbank = 2;
+	writew(PCTODSP_OFFSET(0 * DAQDS__size), dev.DARQ + JQS_wHead);
+	writew(PCTODSP_OFFSET(dev.last_recbank * DAQDS__size), dev.DARQ + JQS_wTail);
+
+	/* Critical section: bank 1 access */
+	spin_lock_irqsave(&dev.lock, flags);
 	outb(HPBLKSEL_1, dev.io + HP_BLKS);
 	memset_io(dev.base, 0, DAR_BUFF_SIZE * 3);
 	outb(HPBLKSEL_0, dev.io + HP_BLKS);
+	spin_unlock_irqrestore(&dev.lock, flags);
 
-	for (n = 0, lpDAQ = dev.CurDARQD; n < 3; ++n, lpDAQ += DAQDS__size) {
+	for (n = 0, lpDAQ = dev.base + DARQ_DATA_BUFF; n < 3; ++n, lpDAQ += DAQDS__size) {
 		writew(PCTODSP_BASED((DWORD)(DAR_BUFF_SIZE * n)) + 0x4000, lpDAQ + DAQDS_wStart);
 		writew(DAR_BUFF_SIZE, lpDAQ + DAQDS_wSize);
 		writew(1, lpDAQ + DAQDS_wFormat);
-		writew(dev.sample_size, lpDAQ + DAQDS_wSampleSize);
-		writew(dev.channels, lpDAQ + DAQDS_wChannels);
-		writew(dev.sample_rate, lpDAQ + DAQDS_wSampleRate);
+		writew(dev.rec_sample_size, lpDAQ + DAQDS_wSampleSize);
+		writew(dev.rec_channels, lpDAQ + DAQDS_wChannels);
+		writew(dev.rec_sample_rate, lpDAQ + DAQDS_wSampleRate);
 		writew(HIMT_RECORD_DONE * 0x100 + n, lpDAQ + DAQDS_wIntMsg);
-		writew(n + 1, lpDAQ + DAQDS_wFlags);
+		writew(n, lpDAQ + DAQDS_wFlags);
 	}
 }
 
 static void reset_queues(void)
 {
-	writew(0, dev.DSPQ + JQS_wHead);
-	writew(0, dev.DSPQ + JQS_wTail);
-	reset_play_queue();
-	reset_record_queue();
+	if (dev.mode & FMODE_WRITE) {
+		msnd_fifo_make_empty(&dev.DAPF);
+		reset_play_queue();
+	}
+	if (dev.mode & FMODE_READ) {
+		msnd_fifo_make_empty(&dev.DARF);
+		reset_record_queue();
+	}
 }
 
-static int dsp_set_format(int val)
+static int dsp_set_format(struct file *file, int val)
 {
 	int data, i;
 	LPDAQD lpDAQ, lpDARQ;
 
-	lpDAQ = (LPDAQD)(dev.base + DAPQ_DATA_BUFF);
-	lpDARQ = (LPDAQD)(dev.base + DARQ_DATA_BUFF);
+	lpDAQ = dev.base + DAPQ_DATA_BUFF;
+	lpDARQ = dev.base + DARQ_DATA_BUFF;
 
 	switch (val) {
 	case AFMT_U8:
@@ -143,28 +175,43 @@ static int dsp_set_format(int val)
 	}
 
 	for (i = 0; i < 3; ++i, lpDAQ += DAQDS__size, lpDARQ += DAQDS__size) {
-
-		writew(data, lpDAQ + DAQDS_wSampleSize);
-		writew(data, lpDARQ + DAQDS_wSampleSize);
+		if (file->f_mode & FMODE_WRITE)
+			writew(data, lpDAQ + DAQDS_wSampleSize);
+		if (file->f_mode & FMODE_READ)
+			writew(data, lpDARQ + DAQDS_wSampleSize);
 	}
-		
-	dev.sample_size = data;
+	if (file->f_mode & FMODE_WRITE)
+		dev.play_sample_size = data;
+	if (file->f_mode & FMODE_READ)
+		dev.rec_sample_size = data;
 
 	return data;
 }
 
-static int dsp_ioctl(unsigned int cmd, unsigned long arg)
+static int dsp_get_frag_size(void)
+{
+	int size;
+	size = dev.fifosize / 4;
+	if (size > 32 * 1024)
+		size = 32 * 1024;
+	return size;
+}
+
+static int dsp_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 {
 	int val, i, data, tmp;
 	LPDAQD lpDAQ, lpDARQ;
+        audio_buf_info abinfo;
+	unsigned long flags;
 
-	lpDAQ = (LPDAQD)(dev.base + DAPQ_DATA_BUFF);
-	lpDARQ = (LPDAQD)(dev.base + DARQ_DATA_BUFF);
+	lpDAQ = dev.base + DAPQ_DATA_BUFF;
+	lpDARQ = dev.base + DARQ_DATA_BUFF;
 
 	switch (cmd) {
 	case SNDCTL_DSP_SUBDIVIDE:
 	case SNDCTL_DSP_SETFRAGMENT:
 	case SNDCTL_DSP_SETDUPLEX:
+	case SNDCTL_DSP_POST:
 		return 0;
 
 	case SNDCTL_DSP_GETIPTR:
@@ -173,14 +220,39 @@ static int dsp_ioctl(unsigned int cmd, unsigned long arg)
 	case SNDCTL_DSP_MAPOUTBUF:
 		return -EINVAL;
 
-	case SNDCTL_DSP_SYNC:
+	case SNDCTL_DSP_GETOSPACE:
+		if (!(file->f_mode & FMODE_WRITE))
+			return -EINVAL;
+		spin_lock_irqsave(&dev.lock, flags);
+		abinfo.fragsize = dsp_get_frag_size();
+                abinfo.bytes = dev.DAPF.n - dev.DAPF.len;
+                abinfo.fragstotal = dev.DAPF.n / abinfo.fragsize;
+                abinfo.fragments = abinfo.bytes / abinfo.fragsize;
+		spin_unlock_irqrestore(&dev.lock, flags);
+		return copy_to_user((void *)arg, &abinfo, sizeof(abinfo)) ? -EFAULT : 0;
+
+	case SNDCTL_DSP_GETISPACE:
+		if (!(file->f_mode & FMODE_READ))
+			return -EINVAL;
+		spin_lock_irqsave(&dev.lock, flags);
+		abinfo.fragsize = dsp_get_frag_size();
+                abinfo.bytes = dev.DARF.n - dev.DARF.len;
+                abinfo.fragstotal = dev.DARF.n / abinfo.fragsize;
+                abinfo.fragments = abinfo.bytes / abinfo.fragsize;
+		spin_unlock_irqrestore(&dev.lock, flags);
+		return copy_to_user((void *)arg, &abinfo, sizeof(abinfo)) ? -EFAULT : 0;
+
 	case SNDCTL_DSP_RESET:
-		reset_play_queue();
-		reset_record_queue();
+		dev.nresets = 0;
+		reset_queues();
+		return 0;
+
+	case SNDCTL_DSP_SYNC:
+		dsp_write_flush();
 		return 0;
 		
 	case SNDCTL_DSP_GETBLKSIZE:
-		tmp = dev.fifosize / 4;
+		tmp = dsp_get_frag_size();
 		if (put_user(tmp, (int *)arg))
                         return -EFAULT;
 		return 0;
@@ -195,14 +267,24 @@ static int dsp_ioctl(unsigned int cmd, unsigned long arg)
 		if (get_user(val, (int *)arg))
 			return -EFAULT;
 
-		data = (val == AFMT_QUERY) ? dev.sample_size : dsp_set_format(val);
+		if (file->f_mode & FMODE_WRITE)
+			data = val == AFMT_QUERY
+				? dev.play_sample_size
+				: dsp_set_format(file, val);
+		else
+			data = val == AFMT_QUERY
+				? dev.rec_sample_size
+				: dsp_set_format(file, val);
 
 		if (put_user(data, (int *)arg))
 			return -EFAULT;
 		return 0;
 
 	case SNDCTL_DSP_NONBLOCK:
-		dev.mode |= O_NONBLOCK;
+		if (file->f_mode & FMODE_WRITE)
+			dev.play_ndelay = 1;
+		if (file->f_mode & FMODE_READ)
+			dev.rec_ndelay = 1;
 		return 0;
 
 	case SNDCTL_DSP_GETCAPS:
@@ -224,65 +306,58 @@ static int dsp_ioctl(unsigned int cmd, unsigned long arg)
 		data = val;
 
 		for (i = 0; i < 3; ++i, lpDAQ += DAQDS__size, lpDARQ += DAQDS__size) {
-			
-			writew(data, lpDAQ + DAQDS_wSampleRate);
-			writew(data, lpDARQ + DAQDS_wSampleRate);
+			if (file->f_mode & FMODE_WRITE)
+				writew(data, lpDAQ + DAQDS_wSampleRate);
+			if (file->f_mode & FMODE_READ)
+				writew(data, lpDARQ + DAQDS_wSampleRate);
 		}
-		
-		dev.sample_rate = data;
+		if (file->f_mode & FMODE_WRITE)
+			dev.play_sample_rate = data;
+		if (file->f_mode & FMODE_READ)
+			dev.rec_sample_rate = data;
 
 		if (put_user(data, (int *)arg))
 			return -EFAULT;
 		return 0;
 
 	case SNDCTL_DSP_CHANNELS:
-		if (get_user(val, (int *)arg))
-			return -EFAULT;
-			
-		switch (val) {
-		case 1:
-		case 2:
-			data = val;
-			break;
-		default:
-			val = data = 2;
-			break;
-		}
-									
-		for (i = 0; i < 3; ++i, lpDAQ += DAQDS__size, lpDARQ += DAQDS__size) {
-
-			writew(data, lpDAQ + DAQDS_wChannels);
-			writew(data, lpDARQ + DAQDS_wChannels);
-		}
-
-		dev.channels = data;
-
-		if (put_user(val, (int *)arg))
-			return -EFAULT;
-		return 0;
-
 	case SNDCTL_DSP_STEREO:
 		if (get_user(val, (int *)arg))
 			return -EFAULT;
-			
-		switch (val) {
-		case 0:
-			data = 1;
-			break;
-		default:
-			val = 1;
-		case 1:
-			data = 2;
-			break;
+
+		if (cmd == SNDCTL_DSP_CHANNELS) {
+			switch (val) {
+			case 1:
+			case 2:
+				data = val;
+				break;
+			default:
+				val = data = 2;
+				break;
+			}
+		} else {
+			switch (val) {
+			case 0:
+				data = 1;
+				break;
+			default:
+				val = 1;
+			case 1:
+				data = 2;
+				break;
+			}
 		}
 									
 		for (i = 0; i < 3; ++i, lpDAQ += DAQDS__size, lpDARQ += DAQDS__size) {
-
-			writew(data, lpDAQ + DAQDS_wChannels);
-			writew(data, lpDARQ + DAQDS_wChannels);
+			if (file->f_mode & FMODE_WRITE)
+				writew(data, lpDAQ + DAQDS_wChannels);
+			if (file->f_mode & FMODE_READ)
+				writew(data, lpDARQ + DAQDS_wChannels);
 		}
-
-		dev.channels = data;
+		if (file->f_mode & FMODE_WRITE)
+			dev.play_channels = data;
+		if (file->f_mode & FMODE_READ)
+			dev.rec_channels = data;
 
 		if (put_user(val, (int *)arg))
 			return -EFAULT;
@@ -320,6 +395,12 @@ static int mixer_get(int d)
 	writew(dev.right_levels[a] * readw(dev.SMA + SMA_wCurrMastVolRight) / 0xffff / s,	\
 	       dev.SMA + SMA_##b##Right);
 
+#define update_pot(d,s,ar)						\
+	writeb(dev.left_levels[d] >> 8, dev.SMA + SMA_##s##Left);	\
+	writeb(dev.right_levels[d] >> 8, dev.SMA + SMA_##s##Right);	\
+	if (msnd_send_word(&dev, 0, 0, ar) == 0)			\
+		chk_send_dsp_cmd(&dev, HDEX_AUX_REQ);
+
 static int mixer_set(int d, int value)
 {
 	int left = value & 0x000000ff;
@@ -350,7 +431,7 @@ static int mixer_set(int d, int value)
 		writeb(bLeft, dev.SMA + SMA_bInPotPosLeft);
 		writeb(bRight, dev.SMA + SMA_bInPotPosRight);
 		if (msnd_send_word(&dev, 0, 0, HDEXAR_IN_SET_POTS) == 0)
-			msnd_send_dsp_cmd(&dev, HDEX_AUX_REQ);
+			chk_send_dsp_cmd(&dev, HDEX_AUX_REQ);
 		break;
 
 #ifndef MSND_CLASSIC
@@ -358,7 +439,7 @@ static int mixer_set(int d, int value)
 		writeb(bLeft, dev.SMA + SMA_bMicPotPosLeft);
 		writeb(bRight, dev.SMA + SMA_bMicPotPosRight);
 		if (msnd_send_word(&dev, 0, 0, HDEXAR_MIC_SET_POTS) == 0)
-			msnd_send_dsp_cmd(&dev, HDEX_AUX_REQ);
+			chk_send_dsp_cmd(&dev, HDEX_AUX_REQ);
 		break;
 #endif
 
@@ -366,7 +447,7 @@ static int mixer_set(int d, int value)
 		writeb(bLeft, dev.SMA + SMA_bAuxPotPosLeft);
 		writeb(bRight, dev.SMA + SMA_bAuxPotPosRight);
 		if (msnd_send_word(&dev, 0, 0, HDEXAR_AUX_SET_POTS) == 0)
-			msnd_send_dsp_cmd(&dev, HDEX_AUX_REQ);
+			chk_send_dsp_cmd(&dev, HDEX_AUX_REQ);
 		break;
 
 		/* digital controls */
@@ -389,6 +470,20 @@ static int mixer_set(int d, int value)
 	return mixer_get(d);
 }
 
+static void mixer_setup(void)
+{
+	update_pot(SOUND_MIXER_LINE, bInPotPos, HDEXAR_IN_SET_POTS);
+#ifndef MSND_CLASSIC
+	update_pot(SOUND_MIXER_MIC, bMicPotPos, HDEXAR_MIC_SET_POTS);
+#endif
+	update_pot(SOUND_MIXER_LINE1, bAuxPotPos, HDEXAR_AUX_SET_POTS);
+	update_vol(SOUND_MIXER_PCM, wCurrPlayVol, 1);
+	update_vol(SOUND_MIXER_IMIX, wCurrInVol, 1);
+#ifndef MSND_CLASSIC
+	update_vol(SOUND_MIXER_SYNTH, wCurrMHdrVol, 1);
+#endif
+}
+
 static unsigned long set_recsrc(unsigned long recsrc)
 {
 	if (dev.recsrc == recsrc)
@@ -403,17 +498,15 @@ static unsigned long set_recsrc(unsigned long recsrc)
 #ifndef MSND_CLASSIC
 	if (dev.recsrc & SOUND_MASK_LINE) {
 		if (msnd_send_word(&dev, 0, 0, HDEXAR_SET_ANA_IN) == 0)
-			msnd_send_dsp_cmd(&dev, HDEX_AUX_REQ);
+			chk_send_dsp_cmd(&dev, HDEX_AUX_REQ);
 	}
 	else if (dev.recsrc & SOUND_MASK_SYNTH) {
 		if (msnd_send_word(&dev, 0, 0, HDEXAR_SET_SYNTH_IN) == 0)
-			msnd_send_dsp_cmd(&dev, HDEX_AUX_REQ);
+			chk_send_dsp_cmd(&dev, HDEX_AUX_REQ);
 	}
 	else if ((dev.recsrc & SOUND_MASK_DIGITAL1) && test_bit(F_HAVEDIGITAL, &dev.flags)) {
-		if (msnd_send_word(&dev, 0, 0, HDEXAR_SET_DAT_IN) == 0) {
-			udelay(50);
-      			msnd_send_dsp_cmd(&dev, HDEX_AUX_REQ);
-		}
+		if (msnd_send_word(&dev, 0, 0, HDEXAR_SET_DAT_IN) == 0)
+      			chk_send_dsp_cmd(&dev, HDEX_AUX_REQ);
 	}
 	else {
 #ifdef HAVE_NORECSRC
@@ -422,12 +515,18 @@ static unsigned long set_recsrc(unsigned long recsrc)
 #else
 		dev.recsrc = SOUND_MASK_LINE;
 		if (msnd_send_word(&dev, 0, 0, HDEXAR_SET_ANA_IN) == 0)
-			msnd_send_dsp_cmd(&dev, HDEX_AUX_REQ);
+			chk_send_dsp_cmd(&dev, HDEX_AUX_REQ);
 #endif
 	}
 #endif /* MSND_CLASSIC */
 
 	return dev.recsrc;
+}
+
+static unsigned long force_recsrc(unsigned long recsrc)
+{
+	dev.recsrc = 0;
+	return set_recsrc(recsrc);
 }
 
 #define set_mixer_info()							\
@@ -446,10 +545,6 @@ static int mixer_ioctl(unsigned int cmd, unsigned long arg)
 		_old_mixer_info info;
 		set_mixer_info();
 		return copy_to_user((void *)arg, &info, sizeof(info));
-	}
-	else if (cmd == OSS_GETVERSION) {
-		int sound_version = SOUND_VERSION;
-		return put_user(sound_version, (int *)arg);
 	}
 	else if (((cmd >> 8) & 0xff) == 'M') {
 		int val = 0;
@@ -521,64 +616,114 @@ static int dev_ioctl(struct inode *inode, struct file *file, unsigned int cmd, u
 {
 	int minor = MINOR(inode->i_rdev);
 
+	if (cmd == OSS_GETVERSION) {
+		int sound_version = SOUND_VERSION;
+		return put_user(sound_version, (int *)arg);
+	}
+
 	if (minor == dev.dsp_minor)
-		return dsp_ioctl(cmd, arg);
+		return dsp_ioctl(file, cmd, arg);
 	else if (minor == dev.mixer_minor)
 		return mixer_ioctl(cmd, arg);
 
 	return -EINVAL;
 }
 
-static void dsp_halt(void)
+static void dsp_write_flush(void)
 {
-	mdelay(1);
-#ifdef LINUX20
-	if (test_bit(F_READING, &dev.flags)) {
-		clear_bit(F_READING, &dev.flags);
-#else
-	if (test_and_clear_bit(F_READING, &dev.flags)) {
-#endif
-		msnd_send_dsp_cmd(&dev, HDEX_RECORD_STOP);
-		msnd_disable_irq(&dev);
-
-	}
-	mdelay(1);
-#ifdef LINUX20
-	if (test_bit(F_WRITING, &dev.flags)) {
-		clear_bit(F_WRITING, &dev.flags);
-#else
-	if (test_and_clear_bit(F_WRITING, &dev.flags)) {
-#endif
-		set_bit(F_WRITEFLUSH, &dev.flags);
-		interruptible_sleep_on(&dev.writeflush);
+	if (!(dev.mode & FMODE_WRITE) || !test_bit(F_WRITING, &dev.flags))
+		return;
+	set_bit(F_WRITEFLUSH, &dev.flags);
+	current->timeout = jiffies + get_play_delay_jiffies(dev.DAPF.len) + HZ / 8;
+	interruptible_sleep_on(&dev.writeflush);
+	clear_bit(F_WRITEFLUSH, &dev.flags);
+	if (!signal_pending(current)) {
 		current->state = TASK_INTERRUPTIBLE;
-		current->timeout = 
-			jiffies + DAP_BUFF_SIZE / 2 * HZ /
-			dev.sample_rate / dev.channels;
+		current->timeout = jiffies + get_play_delay_jiffies(DAP_BUFF_SIZE);
 		schedule();
 		current->timeout = 0;
-		msnd_send_dsp_cmd(&dev, HDEX_PLAY_STOP);
-		msnd_disable_irq(&dev);
-		memset_io(dev.base, 0, DAP_BUFF_SIZE * 3);
+	} else
+		current->timeout = 0;
+	clear_bit(F_WRITING, &dev.flags);
+}
 
+static void dsp_halt(struct file *file)
+{
+	if ((file ? file->f_mode : dev.mode) & FMODE_READ) {
+		clear_bit(F_READING, &dev.flags);
+		chk_send_dsp_cmd(&dev, HDEX_RECORD_STOP);
+		msnd_disable_irq(&dev);
+		if (file) {
+			printk(KERN_DEBUG LOGNAME ": Stopping read for %p\n", file);
+			dev.mode &= ~FMODE_READ;
+		}
+		clear_bit(F_AUDIO_READ_INUSE, &dev.flags);
 	}
-	mdelay(1);
-	reset_queues();
+	if ((file ? file->f_mode : dev.mode) & FMODE_WRITE) {
+		if (test_bit(F_WRITING, &dev.flags)) {
+			dsp_write_flush();
+			chk_send_dsp_cmd(&dev, HDEX_PLAY_STOP);
+		}
+		msnd_disable_irq(&dev);
+		if (file) {
+			printk(KERN_DEBUG LOGNAME ": Stopping write for %p\n", file);
+			dev.mode &= ~FMODE_WRITE;
+		}
+		clear_bit(F_AUDIO_WRITE_INUSE, &dev.flags);
+	}
+}
+
+static int dsp_release(struct file *file)
+{
+	dsp_halt(file);
+	return 0;
 }
 
 static int dsp_open(struct file *file)
 {
-	dev.mode = file->f_mode;
-	set_bit(F_AUDIO_INUSE, &dev.flags);
-	reset_queues();
+	if ((file ? file->f_mode : dev.mode) & FMODE_WRITE) {
+		set_bit(F_AUDIO_WRITE_INUSE, &dev.flags);
+		clear_bit(F_WRITING, &dev.flags);
+		msnd_fifo_make_empty(&dev.DAPF);
+		reset_play_queue();
+		if (file) {
+			printk(KERN_DEBUG LOGNAME ": Starting write for %p\n", file);
+			dev.mode |= FMODE_WRITE;
+		}
+		msnd_enable_irq(&dev);
+	}
+	if ((file ? file->f_mode : dev.mode) & FMODE_READ) {
+		set_bit(F_AUDIO_READ_INUSE, &dev.flags);
+		clear_bit(F_READING, &dev.flags);
+		msnd_fifo_make_empty(&dev.DARF);
+		reset_record_queue();
+		if (file) {
+			printk(KERN_DEBUG LOGNAME ": Starting read for %p\n", file);
+			dev.mode |= FMODE_READ;
+		}
+		msnd_enable_irq(&dev);
+	}
 	return 0;
 }
 
-static int dsp_close(void)
+static void set_default_play_audio_parameters(void)
 {
-	dsp_halt();
-	clear_bit(F_AUDIO_INUSE, &dev.flags);
-	return 0;
+	dev.play_sample_size = DEFSAMPLESIZE;
+	dev.play_sample_rate = DEFSAMPLERATE;
+	dev.play_channels = DEFCHANNELS;
+}
+
+static void set_default_rec_audio_parameters(void)
+{
+	dev.rec_sample_size = DEFSAMPLESIZE;
+	dev.rec_sample_rate = DEFSAMPLERATE;
+	dev.rec_channels = DEFCHANNELS;
+}
+
+static void set_default_audio_parameters(void)
+{
+	set_default_play_audio_parameters();
+	set_default_rec_audio_parameters();
 }
 
 static int dev_open(struct inode *inode, struct file *file)
@@ -587,11 +732,23 @@ static int dev_open(struct inode *inode, struct file *file)
 	int err = 0;
 
 	if (minor == dev.dsp_minor) {
-
-		if (test_bit(F_AUDIO_INUSE, &dev.flags))
+		if ((file->f_mode & FMODE_WRITE &&
+		     test_bit(F_AUDIO_WRITE_INUSE, &dev.flags)) ||
+		    (file->f_mode & FMODE_READ &&
+		     test_bit(F_AUDIO_READ_INUSE, &dev.flags)))
 			return -EBUSY;
 
-		err = dsp_open(file);
+		if ((err = dsp_open(file)) >= 0) {
+			dev.nresets = 0;
+			if (file->f_mode & FMODE_WRITE) {
+				set_default_play_audio_parameters();
+				dev.play_ndelay = (file->f_mode & O_NDELAY) ? 1 : 0;
+			}
+			if (file->f_mode & FMODE_READ) {
+				set_default_rec_audio_parameters();
+				dev.rec_ndelay = (file->f_mode & O_NDELAY) ? 1 : 0;
+			}
+		}
 	}
 	else if (minor == dev.mixer_minor) {
 		/* nothing */
@@ -605,9 +762,9 @@ static int dev_open(struct inode *inode, struct file *file)
 }
 
 #ifdef LINUX20
-static void dev_close(struct inode *inode, struct file *file)
+static void dev_release(struct inode *inode, struct file *file)
 #else
-static int dev_close(struct inode *inode, struct file *file)
+static int dev_release(struct inode *inode, struct file *file)
 #endif
 {
 	int minor = MINOR(inode->i_rdev);
@@ -619,7 +776,7 @@ static int dev_close(struct inode *inode, struct file *file)
 #ifndef LINUX20
 		err = 
 #endif
-			dsp_close();
+			dsp_release(file);
 	}
 	else if (minor == dev.mixer_minor) {
 		/* nothing */
@@ -637,62 +794,137 @@ static int dev_close(struct inode *inode, struct file *file)
 #endif
 }
 
-static int DAPF_to_bank(int bank)
+static __inline__ int pack_DARQ_to_DARF(register int bank)
 {
-	return msnd_fifo_read(&dev.DAPF, dev.base + bank * DAP_BUFF_SIZE, DAP_BUFF_SIZE, 0);
+	register int size, n, timeout = 3;
+	register WORD wTmp;
+	LPDAQD DAQD;
+
+	/* Increment the tail and check for queue wrap */
+	wTmp = readw(dev.DARQ + JQS_wTail) + PCTODSP_OFFSET(DAQDS__size);
+	if (wTmp > readw(dev.DARQ + JQS_wSize))
+		wTmp = 0;
+	while (wTmp == readw(dev.DARQ + JQS_wHead) && timeout--)
+		udelay(1);
+	writew(wTmp, dev.DARQ + JQS_wTail);
+
+	/* Get our digital audio queue struct */
+	DAQD = bank * DAQDS__size + dev.base + DARQ_DATA_BUFF;
+
+	/* Get length of data */
+	size = readw(DAQD + DAQDS_wSize);
+
+	/* Read data from the head (unprotected bank 1 access okay
+           since this is only called inside an interrupt) */
+	outb(HPBLKSEL_1, dev.io + HP_BLKS);
+	if ((n = msnd_fifo_write(
+		&dev.DARF,
+		(char *)(dev.base + bank * DAR_BUFF_SIZE),
+		size, 0)) < 0) {
+		outb(HPBLKSEL_0, dev.io + HP_BLKS);
+		return n;
+	}
+	outb(HPBLKSEL_0, dev.io + HP_BLKS);
+
+	return 1;
 }
 
-static int bank_to_DARF(int bank)
+static __inline__ int pack_DAPF_to_DAPQ(register int start)
 {
-	return msnd_fifo_write(&dev.DARF, dev.base + bank * DAR_BUFF_SIZE, DAR_BUFF_SIZE, 0);
+	register WORD DAPQ_tail;
+	register int protect = start, nbanks = 0;
+	LPDAQD DAQD;
+
+	DAPQ_tail = readw(dev.DAPQ + JQS_wTail);
+	while (DAPQ_tail != readw(dev.DAPQ + JQS_wHead) || start) {
+		register int bank_num = DAPQ_tail / PCTODSP_OFFSET(DAQDS__size);
+		register int n;
+		unsigned long flags;
+		
+		/* Write the data to the new tail */
+		if (protect) {
+			/* Critical section: protect fifo in non-interrupt */
+			spin_lock_irqsave(&dev.lock, flags);
+			if ((n = msnd_fifo_read(
+				&dev.DAPF,
+				(char *)(dev.base + bank_num * DAP_BUFF_SIZE),
+				DAP_BUFF_SIZE, 0)) < 0) {
+				spin_unlock_irqrestore(&dev.lock, flags);
+				return n;
+			}
+			spin_unlock_irqrestore(&dev.lock, flags);
+		} else {
+			if ((n = msnd_fifo_read(
+				&dev.DAPF,
+				(char *)(dev.base + bank_num * DAP_BUFF_SIZE),
+				DAP_BUFF_SIZE, 0)) < 0) {
+				return n;
+			}
+		}
+		if (!n)
+			break;
+
+		if (start)
+			start = 0;
+
+		/* Get our digital audio queue struct */
+		DAQD = bank_num * DAQDS__size + dev.base + DAPQ_DATA_BUFF;
+
+		/* Write size of this bank */
+		writew(n, DAQD + DAQDS_wSize);
+		++nbanks;
+
+		/* Then advance the tail */
+		DAPQ_tail = (++bank_num % 3) * PCTODSP_OFFSET(DAQDS__size);
+		writew(DAPQ_tail, dev.DAPQ + JQS_wTail);
+		
+		/* Tell the DSP to play the bank */
+		msnd_send_dsp_cmd(&dev, HDEX_PLAY_START);
+	}
+	
+	return nbanks;
 }
 
 static int dsp_read(char *buf, size_t len)
 {
-	int err = 0;
 	int count = len;
 
 	while (count > 0) {
-		
 		int n;
+		unsigned long flags;
 
+		/* Critical section: protect fifo in non-interrupt */
+		spin_lock_irqsave(&dev.lock, flags);
 		if ((n = msnd_fifo_read(&dev.DARF, buf, count, 1)) < 0) {
-
 			printk(KERN_WARNING LOGNAME ": FIFO read error\n");
+			spin_unlock_irqrestore(&dev.lock, flags);
 			return n;
 		}
-
+		spin_unlock_irqrestore(&dev.lock, flags);
 		buf += n;
 		count -= n;
 
-#ifdef LINUX20		
-		if (!test_bit(F_READING, &dev.flags) && (dev.mode & FMODE_READ)) {
-			set_bit(F_READING, &dev.flags);
-#else
-		if (!test_and_set_bit(F_READING, &dev.flags) && (dev.mode & FMODE_READ)) {
-#endif
-			reset_record_queue();
-			msnd_enable_irq(&dev);
-			msnd_send_dsp_cmd(&dev, HDEX_RECORD_START);
-
+		if (!test_bit(F_READING, &dev.flags) && dev.mode & FMODE_READ) {
+			dev.last_recbank = -1;
+			if (chk_send_dsp_cmd(&dev, HDEX_RECORD_START) == 0)
+				set_bit(F_READING, &dev.flags);
 		}
 
-		if (dev.mode & O_NONBLOCK)
+		if (dev.rec_ndelay)
 			return count == len ? -EAGAIN : len - count;
 
 		if (count > 0) {
-
 			set_bit(F_READBLOCK, &dev.flags);
+			current->timeout = jiffies + get_rec_delay_jiffies(DAR_BUFF_SIZE);
 			interruptible_sleep_on(&dev.readblock);
+			if (current->timeout == 0)
+				clear_bit(F_READING, &dev.flags);
+			else
+				current->timeout = 0;
 			clear_bit(F_READBLOCK, &dev.flags);
-
 			if (signal_pending(current))
-				err = -EINTR;
-
+				return -EINTR;
 		}
-
-		if (err != 0)
-			return err;
 	}
 
 	return len - count;
@@ -700,50 +932,41 @@ static int dsp_read(char *buf, size_t len)
 
 static int dsp_write(const char *buf, size_t len)
 {
-	int err = 0;
 	int count = len;
 
 	while (count > 0) {
-
 		int n;
+		unsigned long flags;
 
+		/* Critical section: protect fifo in non-interrupt */
+		spin_lock_irqsave(&dev.lock, flags);
 		if ((n = msnd_fifo_write(&dev.DAPF, buf, count, 1)) < 0) {
-
 			printk(KERN_WARNING LOGNAME ": FIFO write error\n");
+			spin_unlock_irqrestore(&dev.lock, flags);
 			return n;
 		}
-
+		spin_unlock_irqrestore(&dev.lock, flags);
 		buf += n;
 		count -= n;
 
-#ifdef LINUX20
 		if (!test_bit(F_WRITING, &dev.flags) && (dev.mode & FMODE_WRITE)) {
-			set_bit(F_WRITING, &dev.flags);
-#else
-		if (!test_and_set_bit(F_WRITING, &dev.flags) && (dev.mode & FMODE_WRITE)) {
-#endif
-			reset_play_queue();
-			msnd_enable_irq(&dev);
-			msnd_send_dsp_cmd(&dev, HDEX_PLAY_START);
-
+			dev.last_playbank = -1;
+			if (pack_DAPF_to_DAPQ(1) > 0)
+				set_bit(F_WRITING, &dev.flags);
 		}
 
-		if (dev.mode & O_NONBLOCK)
+		if (dev.play_ndelay)
 			return count == len ? -EAGAIN : len - count;
 
 		if (count > 0) {
-			
 			set_bit(F_WRITEBLOCK, &dev.flags);
+			current->timeout = jiffies + get_play_delay_jiffies(DAP_BUFF_SIZE);
 			interruptible_sleep_on(&dev.writeblock);
+			current->timeout = 0;
 			clear_bit(F_WRITEBLOCK, &dev.flags);
-
 			if (signal_pending(current))
-				err = -EINTR;
-
+				return -EINTR;
 		}
-
-		if (err != 0)
-			return err;
 	}
 	
 	return len - count;
@@ -758,12 +981,9 @@ static ssize_t dev_read(struct file *file, char *buf, size_t count, loff_t *off)
 {
 	int minor = MINOR(file->f_dentry->d_inode->i_rdev);
 #endif
-
-	if (minor == dev.dsp_minor) {
-
+	if (minor == dev.dsp_minor)
 		return dsp_read(buf, count);
-
-	} else
+	else
 		return -EINVAL;
 }
 
@@ -776,44 +996,22 @@ static ssize_t dev_write(struct file *file, const char *buf, size_t count, loff_
 {
 	int minor = MINOR(file->f_dentry->d_inode->i_rdev);
 #endif
-
-	if (minor == dev.dsp_minor) {
-
+	if (minor == dev.dsp_minor)
 		return dsp_write(buf, count);
-
-	} else
+	else
 		return -EINVAL;
 }
 
-static void eval_dsp_msg(WORD wMessage)
+static __inline__ void eval_dsp_msg(register WORD wMessage)
 {
-	WORD wTmp;
-
 	switch (HIBYTE(wMessage)) {
 	case HIMT_PLAY_DONE:
-		if (dev.lastbank == LOBYTE(wMessage))
+		if (dev.last_playbank == LOBYTE(wMessage) || !test_bit(F_WRITING, &dev.flags))
 			break;
-		
-		dev.lastbank = LOBYTE(wMessage);
+		dev.last_playbank = LOBYTE(wMessage);
 
-		writew(DAP_BUFF_SIZE, dev.CurDAQD + DAQDS_wSize);
-
-		wTmp = readw(dev.DAPQ + JQS_wTail) + PCTODSP_OFFSET(DAPQ_STRUCT_SIZE);
-		if (wTmp > readw(dev.DAPQ + JQS_wSize))
-			writew(0, dev.DAPQ + JQS_wTail);
-		else
-			writew(wTmp, dev.DAPQ + JQS_wTail);
-
-		if ((dev.CurDAQD += DAQDS__size) > (LPDAQD)(dev.base + DAPQ_DATA_BUFF + 2 * DAPQ_STRUCT_SIZE))
-			dev.CurDAQD = (LPDAQD)(dev.base + DAPQ_DATA_BUFF);
-
-		if (dev.lastbank < 3) {
-			if (DAPF_to_bank(dev.lastbank) > 0) {
-				mdelay(1);
-				msnd_send_dsp_cmd(&dev, HDEX_PLAY_START);
-			} 
-			else if (!test_bit(F_WRITEBLOCK, &dev.flags)) {
-				clear_bit(F_WRITING, &dev.flags);
+		if (pack_DAPF_to_DAPQ(0) <= 0) {
+			if (!test_bit(F_WRITEBLOCK, &dev.flags)) {
 #ifdef LINUX20
 				if (test_bit(F_WRITEFLUSH, &dev.flags)) {
 					clear_bit(F_WRITEFLUSH, &dev.flags);
@@ -824,6 +1022,7 @@ static void eval_dsp_msg(WORD wMessage)
 					wake_up_interruptible(&dev.writeflush);
 #endif
 			}
+			clear_bit(F_WRITING, &dev.flags);
 		}
 
 		if (test_bit(F_WRITEBLOCK, &dev.flags))
@@ -831,21 +1030,11 @@ static void eval_dsp_msg(WORD wMessage)
 		break;
 
 	case HIMT_RECORD_DONE:
-		wTmp = readw(dev.DARQ + JQS_wTail) + DARQ_STRUCT_SIZE / 2;
+		if (dev.last_recbank == LOBYTE(wMessage))
+			break;
+		dev.last_recbank = LOBYTE(wMessage);
 
-		if (wTmp > readw(dev.DARQ + JQS_wSize))
-			wTmp = 0;
-
-		while (wTmp == readw(dev.DARQ + JQS_wHead));
-
-		writew(wTmp, dev.DARQ + JQS_wTail);
-
-		outb(HPBLKSEL_1, dev.io + HP_BLKS);
-		if (bank_to_DARF(LOBYTE(wMessage)) == 0 && !test_bit(F_READBLOCK, &dev.flags)) {
-			memset_io(dev.base, 0, DAR_BUFF_SIZE * 3);
-			clear_bit(F_READING, &dev.flags);
-		}
-		outb(HPBLKSEL_0, dev.io + HP_BLKS);
+		pack_DARQ_to_DARF(dev.last_recbank);
 
 		if (test_bit(F_READBLOCK, &dev.flags))
 			wake_up_interruptible(&dev.readblock);
@@ -857,17 +1046,17 @@ static void eval_dsp_msg(WORD wMessage)
 		case HIDSP_PLAY_UNDER:
 #endif
 		case HIDSP_INT_PLAY_UNDER:
-/*			printk(KERN_INFO LOGNAME ": Write underflow\n"); */
-			reset_play_queue();
+/*			printk(KERN_DEBUG LOGNAME ": Play underflow\n"); */
+			clear_bit(F_WRITING, &dev.flags);
 			break;
 
 		case HIDSP_INT_RECORD_OVER:
-/*			printk(KERN_INFO LOGNAME ": Read overflow\n"); */
-			reset_record_queue();
+/*			printk(KERN_DEBUG LOGNAME ": Record overflow\n"); */
+			clear_bit(F_READING, &dev.flags);
 			break;
 
 		default:
-			printk(KERN_DEBUG LOGNAME ": DSP message %u\n", LOBYTE(wMessage));
+/*			printk(KERN_DEBUG LOGNAME ": DSP message %d 0x%02x\n", LOBYTE(wMessage), LOBYTE(wMessage)); */
 			break;
 		}
 		break;
@@ -877,85 +1066,66 @@ static void eval_dsp_msg(WORD wMessage)
 			(*dev.midi_in_interrupt)(&dev);
 		break;
 
-	case HIMT_MIDI_OUT:
-		printk(KERN_DEBUG LOGNAME ": MIDI out event\n");
-		break;
-
 	default:
-		printk(KERN_DEBUG LOGNAME ": HIMT message %u\n", HIBYTE(wMessage));
+/*		printk(KERN_DEBUG LOGNAME ": HIMT message %d 0x%02x\n", HIBYTE(wMessage), HIBYTE(wMessage)); */
 		break;
 	}
 }
 
 static void intr(int irq, void *dev_id, struct pt_regs *regs)
 {
-	if (test_bit(F_INTERRUPT, &dev.flags))
-		return;
-
-	set_bit(F_INTERRUPT, &dev.flags);
-	
-	if (test_bit(F_BANKONE, &dev.flags))
-		outb(HPBLKSEL_0, dev.io + HP_BLKS);
-
+	/* Send ack to DSP */
 	inb(dev.io + HP_RXL);
- 
-	while (readw(dev.DSPQ + JQS_wTail) != readw(dev.DSPQ + JQS_wHead)) {
-		WORD wTmp;
 
-		eval_dsp_msg(*(dev.pwDSPQData + readw(dev.DSPQ + JQS_wHead)));
-		
-		wTmp = readw(dev.DSPQ + JQS_wHead) + 1;
-		if (wTmp > readw(dev.DSPQ + JQS_wSize))
+	/* Evaluate queued DSP messages */
+	while (readw(dev.DSPQ + JQS_wTail) != readw(dev.DSPQ + JQS_wHead)) {
+		register WORD wTmp;
+
+		eval_dsp_msg(readw(dev.pwDSPQData + readw(dev.DSPQ + JQS_wHead)));
+
+		if ((wTmp = readw(dev.DSPQ + JQS_wHead) + 1) > readw(dev.DSPQ + JQS_wSize))
 			writew(0, dev.DSPQ + JQS_wHead);
 		else
 			writew(wTmp, dev.DSPQ + JQS_wHead);
 	}
-
-	if (test_bit(F_BANKONE, &dev.flags))
-		outb(HPBLKSEL_1, dev.io + HP_BLKS);
-
-	clear_bit(F_INTERRUPT, &dev.flags);
 }
 
 static struct file_operations dev_fileops = {
-	NULL,
-	dev_read,
-	dev_write,
-	NULL,
-	NULL,
-	dev_ioctl,
-	NULL,
-	dev_open,
+	NULL,		/* llseek */
+	dev_read,	/* read */
+	dev_write,	/* write */
+	NULL,		/* readdir */
+	NULL,		/* poll */
+	dev_ioctl,	/* ioctl */
+	NULL,		/* mmap */
+	dev_open,	/* open */
+	NULL,		/* flush */
+	dev_release,	/* release */
+	NULL,		/* fsync */
+	NULL,		/* fasync */
+	NULL,		/* check_media_change */
+	NULL,		/* revalidate */
 #ifndef LINUX20
-#  if LINUX_VERSION_CODE >= 0x020100 + 118
-	NULL,
-#  endif /* >= 2.1.118 */
+	NULL,		/* lock */
 #endif
-	dev_close,
 };
 
-__initfunc(static int reset_dsp(void))
+static int reset_dsp(void)
 {
 	int timeout = 100;
 		
 	outb(HPDSPRESET_ON, dev.io + HP_DSPR);
-	
 	mdelay(1);
-
+#ifndef MSND_CLASSIC
 	dev.info = inb(dev.io + HP_INFO);
-
+#endif
 	outb(HPDSPRESET_OFF, dev.io + HP_DSPR);
-
 	mdelay(1);
-
 	while (timeout-- > 0) {
-
 		if (inb(dev.io + HP_CVR) == HP_CVR_DEF)
 			return 0;
-		
 		mdelay(1);
 	}
-
 	printk(KERN_ERR LOGNAME ": Cannot reset DSP\n");
 
 	return -EIO;
@@ -973,7 +1143,6 @@ __initfunc(static int probe_multisound(void))
 		printk(KERN_ERR LOGNAME ": I/O port conflict\n");
 		return -ENODEV;
 	}
-
 	request_region(dev.io, dev.numio, "probing");
 
 	if (reset_dsp() < 0) {
@@ -1024,127 +1193,82 @@ __initfunc(static int probe_multisound(void))
 	return 0;
 }
 
-__initfunc(static int init_sma(void))
+static void msnd_init_queue(volatile BYTE *base, int start, int size)
 {
-	int n;
-	LPDAQD lpDAQ;
+	writew(PCTODSP_BASED(start), base + JQS_wStart);
+	writew(PCTODSP_OFFSET(size) - 1, base + JQS_wSize);
+	writew(0, base + JQS_wHead);
+	writew(0, base + JQS_wTail);
+}
+
+static int init_sma(void)
+{
+	static int initted;
+	WORD mastVolLeft, mastVolRight;
+	unsigned long flags;
 
 #ifdef MSND_CLASSIC
 	outb(dev.memid, dev.io + HP_MEMM);
 #endif
 	outb(HPBLKSEL_0, dev.io + HP_BLKS);
+	if (initted) {
+		mastVolLeft = readw(dev.SMA + SMA_wCurrMastVolLeft);
+		mastVolRight = readw(dev.SMA + SMA_wCurrMastVolRight);
+	} else
+		mastVolLeft = mastVolRight = 0;
 	memset_io(dev.base, 0, 0x8000);
-	
+
+	/* Critical section: bank 1 access */
+	spin_lock_irqsave(&dev.lock, flags);
 	outb(HPBLKSEL_1, dev.io + HP_BLKS);
 	memset_io(dev.base, 0, 0x8000);
-	
 	outb(HPBLKSEL_0, dev.io + HP_BLKS);
+	spin_unlock_irqrestore(&dev.lock, flags);
 
-	dev.DAPQ = (BYTE *)(dev.base + DAPQ_OFFSET);
-	dev.DARQ = (BYTE *)(dev.base + DARQ_OFFSET);
-	dev.MODQ = (BYTE *)(dev.base + MODQ_OFFSET);
-	dev.MIDQ = (BYTE *)(dev.base + MIDQ_OFFSET);
-	dev.DSPQ = (BYTE *)(dev.base + DSPQ_OFFSET);
-	dev.SMA = (BYTE *)(dev.base + SMA_STRUCT_START);
+	dev.pwDSPQData = (volatile WORD *)(dev.base + DSPQ_DATA_BUFF);
+	dev.pwMODQData = (volatile WORD *)(dev.base + MODQ_DATA_BUFF);
+	dev.pwMIDQData = (volatile WORD *)(dev.base + MIDQ_DATA_BUFF);
 
-	dev.CurDAQD = (LPDAQD)(dev.base + DAPQ_DATA_BUFF);
-	dev.CurDARQD = (LPDAQD)(dev.base + DARQ_DATA_BUFF);
+	/* Motorola 56k shared memory base */
+	dev.SMA = dev.base + SMA_STRUCT_START;
 
-	dev.sample_size = DEFSAMPLESIZE;
-	dev.sample_rate = DEFSAMPLERATE;
-	dev.channels = DEFCHANNELS;
+	/* Digital audio play queue */
+	dev.DAPQ = dev.base + DAPQ_OFFSET;
+	msnd_init_queue(dev.DAPQ, DAPQ_DATA_BUFF, DAPQ_BUFF_SIZE);
 
-	for (n = 0, lpDAQ = dev.CurDAQD; n < 3; ++n, lpDAQ += DAQDS__size) {
-		
-		writew(PCTODSP_BASED((DWORD)(DAP_BUFF_SIZE * n)), lpDAQ + DAQDS_wStart);
-		writew(DAP_BUFF_SIZE, lpDAQ + DAQDS_wSize);
-		writew(1, lpDAQ + DAQDS_wFormat);
-		writew(dev.sample_size, lpDAQ + DAQDS_wSampleSize);
-		writew(dev.channels, lpDAQ + DAQDS_wChannels);
-		writew(dev.sample_rate, lpDAQ + DAQDS_wSampleRate);
-		writew(HIMT_PLAY_DONE * 0x100 + n, lpDAQ + DAQDS_wIntMsg);
-		writew(n + 1, lpDAQ + DAQDS_wFlags);
-	}
+	/* Digital audio record queue */
+	dev.DARQ = dev.base + DARQ_OFFSET;
+	msnd_init_queue(dev.DARQ, DARQ_DATA_BUFF, DARQ_BUFF_SIZE);
 
-	for (n = 0, lpDAQ = dev.CurDARQD; n < 3; ++n, lpDAQ += DAQDS__size) {
+	/* MIDI out queue */
+	dev.MODQ = dev.base + MODQ_OFFSET;
+	msnd_init_queue(dev.MODQ, MODQ_DATA_BUFF, MODQ_BUFF_SIZE);
 
-		writew(PCTODSP_BASED((DWORD)(DAR_BUFF_SIZE * n)) + 0x4000, lpDAQ + DAQDS_wStart);
-		writew(DAR_BUFF_SIZE, lpDAQ + DAQDS_wSize);
-		writew(1, lpDAQ + DAQDS_wFormat);
-		writew(dev.sample_size, lpDAQ + DAQDS_wSampleSize);
-		writew(dev.channels, lpDAQ + DAQDS_wChannels);
-		writew(dev.sample_rate, lpDAQ + DAQDS_wSampleRate);
-		writew(HIMT_RECORD_DONE * 0x100 + n, lpDAQ + DAQDS_wIntMsg);
-		writew(n + 1, lpDAQ + DAQDS_wFlags);
+	/* MIDI in queue */
+	dev.MIDQ = dev.base + MIDQ_OFFSET;
+	msnd_init_queue(dev.MIDQ, MIDQ_DATA_BUFF, MIDQ_BUFF_SIZE);
 
-	}	
+	/* DSP -> host message queue */
+	dev.DSPQ = dev.base + DSPQ_OFFSET;
+	msnd_init_queue(dev.DSPQ, DSPQ_DATA_BUFF, DSPQ_BUFF_SIZE);
 
-	dev.pwDSPQData = (WORD *)(dev.base + DSPQ_DATA_BUFF);
-	dev.pwMODQData = (WORD *)(dev.base + MODQ_DATA_BUFF);
-	dev.pwMIDQData = (WORD *)(dev.base + MIDQ_DATA_BUFF);
-
-	writew(PCTODSP_BASED(MIDQ_DATA_BUFF), dev.MIDQ + JQS_wStart);
-	writew(PCTODSP_OFFSET(MIDQ_BUFF_SIZE) - 1, dev.MIDQ + JQS_wSize);
-	writew(0, dev.MIDQ + JQS_wHead);
-	writew(0, dev.MIDQ + JQS_wTail);
-
-	writew(PCTODSP_BASED(MODQ_DATA_BUFF), dev.MODQ + JQS_wStart);
-	writew(PCTODSP_OFFSET(MODQ_BUFF_SIZE) - 1, dev.MODQ + JQS_wSize);
-	writew(0, dev.MODQ + JQS_wHead);
-	writew(0, dev.MODQ + JQS_wTail);
-
-	writew(PCTODSP_BASED(DAPQ_DATA_BUFF), dev.DAPQ + JQS_wStart);
-	writew(PCTODSP_OFFSET(DAPQ_BUFF_SIZE) - 1, dev.DAPQ + JQS_wSize);
-	writew(0, dev.DAPQ + JQS_wHead);
-	writew(0, dev.DAPQ + JQS_wTail);
-
-	writew(PCTODSP_BASED(DARQ_DATA_BUFF), dev.DARQ + JQS_wStart);
-	writew(PCTODSP_OFFSET(DARQ_BUFF_SIZE) - 1, dev.DARQ + JQS_wSize);
-	writew(0, dev.DARQ + JQS_wHead);
-	writew(0, dev.DARQ + JQS_wTail);
-
-	writew(PCTODSP_BASED(DSPQ_DATA_BUFF), dev.DSPQ + JQS_wStart);
-	writew(PCTODSP_OFFSET(DSPQ_BUFF_SIZE) - 1, dev.DSPQ + JQS_wSize);
-	writew(0, dev.DSPQ + JQS_wHead);
-	writew(0, dev.DSPQ + JQS_wTail);
-
-	writew(0, dev.SMA + SMA_wCurrPlayBytes);
-	writew(0, dev.SMA + SMA_wCurrRecordBytes);
-
-	writew(0, dev.SMA + SMA_wCurrPlayVolLeft);
-	writew(0, dev.SMA + SMA_wCurrPlayVolRight);
-
-	writew(0, dev.SMA + SMA_wCurrInVolLeft);
-	writew(0, dev.SMA + SMA_wCurrInVolRight);
-
-	writew(0, dev.SMA + SMA_wCurrMastVolLeft);
-	writew(0, dev.SMA + SMA_wCurrMastVolRight);
-
+	/* Setup some DSP values */
+#ifndef MSND_CLASSIC
+	writew(1, dev.SMA + SMA_wCurrPlayFormat);
+	writew(dev.play_sample_size, dev.SMA + SMA_wCurrPlaySampleSize);
+	writew(dev.play_channels, dev.SMA + SMA_wCurrPlayChannels);
+	writew(dev.play_sample_rate, dev.SMA + SMA_wCurrPlaySampleRate);
+#endif
+	writew(dev.play_sample_rate, dev.SMA + SMA_wCalFreqAtoD);
+	writew(mastVolLeft, dev.SMA + SMA_wCurrMastVolLeft);
+	writew(mastVolRight, dev.SMA + SMA_wCurrMastVolRight);
 #ifndef MSND_CLASSIC
 	writel(0x00010000, dev.SMA + SMA_dwCurrPlayPitch);
 	writel(0x00000001, dev.SMA + SMA_dwCurrPlayRate);
 #endif
-
-	writew(0x0000, dev.SMA + SMA_wCurrDSPStatusFlags);
-	writew(0x0000, dev.SMA + SMA_wCurrHostStatusFlags);
-
 	writew(0x303, dev.SMA + SMA_wCurrInputTagBits);
-	writew(0, dev.SMA + SMA_wCurrLeftPeak);
-	writew(0, dev.SMA + SMA_wCurrRightPeak);
 
-	writeb(0, dev.SMA + SMA_bInPotPosRight);
-	writeb(0, dev.SMA + SMA_bInPotPosLeft);
-
-	writeb(0, dev.SMA + SMA_bAuxPotPosRight);
-	writeb(0, dev.SMA + SMA_bAuxPotPosLeft);
-
-#ifndef MSND_CLASSIC
-	writew(1, dev.SMA + SMA_wCurrPlayFormat);
-	writew(dev.sample_size, dev.SMA + SMA_wCurrPlaySampleSize);
-	writew(dev.channels, dev.SMA + SMA_wCurrPlayChannels);
-	writew(dev.sample_rate, dev.SMA + SMA_wCurrPlaySampleRate);
-#endif
-	writew(dev.sample_rate, dev.SMA + SMA_wCalFreqAtoD);
+	initted = 1;
 
 	return 0;
 }
@@ -1164,7 +1288,7 @@ __initfunc(static int calibrate_adc(WORD srate))
 	writew(srate, dev.SMA + SMA_wCalFreqAtoD);
 
 	if (msnd_send_word(&dev, 0, 0, HDEXAR_CAL_A_TO_D) == 0 &&
-	    msnd_send_dsp_cmd(&dev, HDEX_AUX_REQ) == 0) {
+	    chk_send_dsp_cmd(&dev, HDEX_AUX_REQ) == 0) {
 		current->state = TASK_INTERRUPTIBLE;
 		current->timeout = jiffies + HZ / 3;
 		schedule();
@@ -1172,13 +1296,12 @@ __initfunc(static int calibrate_adc(WORD srate))
 		printk("successful\n");
 		return 0;
 	}
-
 	printk("failed\n");
 
 	return -EIO;
 }
 
-__initfunc(static int upload_dsp_code(void))
+static int upload_dsp_code(void)
 {
 	outb(HPBLKSEL_0, dev.io + HP_BLKS);
 
@@ -1214,7 +1337,7 @@ __initfunc(static int upload_dsp_code(void))
 }
 
 #ifdef MSND_CLASSIC
-__initfunc(static void reset_proteus(void))
+static void reset_proteus(void)
 {
 	outb(HPPRORESET_ON, dev.io + HP_PROR);
 	mdelay(TIME_PRO_RESET);
@@ -1223,7 +1346,7 @@ __initfunc(static void reset_proteus(void))
 }
 #endif
 
-__initfunc(static int initialize(void))
+static int initialize(void)
 {
 	int err, timeout;
 
@@ -1233,7 +1356,6 @@ __initfunc(static int initialize(void))
 
 	reset_proteus();
 #endif
-
 	if ((err = init_sma()) < 0) {
 		printk(KERN_WARNING LOGNAME ": Cannot initialize SMA\n");
 		return err;
@@ -1250,36 +1372,52 @@ __initfunc(static int initialize(void))
 		printk(KERN_INFO LOGNAME ": DSP upload successful\n");
 
 	timeout = 200;
-
 	while (readw(dev.base)) {
 		mdelay(1);
-		if (--timeout < 0)
+		if (!timeout--) {
+			printk(KERN_DEBUG LOGNAME ": DSP reset timeout\n");
 			return -EIO;
+		}
 	}
 
+	mixer_setup();
+
 	return 0;
+}
+
+static int dsp_full_reset(void)
+{
+	int rv;
+
+	if (test_bit(F_RESETTING, &dev.flags) || ++dev.nresets > 10)
+		return 0;
+
+	printk(KERN_INFO LOGNAME ": Resetting DSP\n");
+	set_bit(F_RESETTING, &dev.flags);
+	dsp_halt(NULL);			/* Unconditionally halt */
+	if ((rv = initialize()))
+		printk(KERN_WARNING LOGNAME ": DSP reset failed\n");
+	force_recsrc(dev.recsrc);
+	dsp_open(NULL);
+	clear_bit(F_RESETTING, &dev.flags);
+
+	return rv;
 }
 
 __initfunc(static int attach_multisound(void))
 {
 	int err;
 
-	printk(KERN_DEBUG LOGNAME ": Intializing DSP\n");
-
-	if ((err = request_irq(dev.irq, intr, SA_SHIRQ, dev.name, &dev)) < 0) {
+	if ((err = request_irq(dev.irq, intr, 0, dev.name, &dev)) < 0) {
 		printk(KERN_ERR LOGNAME ": Couldn't grab IRQ %d\n", dev.irq);
 		return err;
-	
 	}
-
 	request_region(dev.io, dev.numio, dev.name);
 
-        if ((err = initialize()) < 0) {
-		printk(KERN_WARNING LOGNAME ": Initialization failure\n");
+        if ((err = dsp_full_reset()) < 0) {
 		release_region(dev.io, dev.numio);
 		free_irq(dev.irq, &dev);
 		return err;
-
 	}
 
 	if ((err = msnd_register(&dev)) < 0) {
@@ -1307,15 +1445,17 @@ __initfunc(static int attach_multisound(void))
 	}
 	printk(KERN_INFO LOGNAME ": Using DSP minor %d, mixer minor %d\n", dev.dsp_minor, dev.mixer_minor);
 
-	calibrate_adc(dev.sample_rate);
+	disable_irq(dev.irq);
+	calibrate_adc(dev.play_sample_rate);
 #ifndef MSND_CLASSIC
 	printk(KERN_INFO LOGNAME ": Setting initial recording source to Line In\n");
-	set_recsrc(SOUND_MASK_LINE);
+	force_recsrc(SOUND_MASK_LINE);
 #endif
 	
 	return 0;
 }
 
+#ifdef MODULE
 static void unload_multisound(void)
 {
 	release_region(dev.io, dev.numio);
@@ -1324,6 +1464,7 @@ static void unload_multisound(void)
 	unregister_sound_dsp(dev.dsp_minor);
 	msnd_unregister(&dev);
 }
+#endif
 
 static void mod_inc_ref(void)
 {
@@ -1558,7 +1699,7 @@ static int mem __initdata =		CONFIG_MSNDPIN_MEM;
 #endif
 static int cfg __initdata =		CONFIG_MSNDPIN_CFG;
 /* If not a module, we don't need to bother with reset=1 */
-static int reset __initdata;
+static int reset;
 
 /* Extra Peripheral Configuration (Default: Disable) */
 #ifndef CONFIG_MSNDPIN_MPU_IO
@@ -1626,10 +1767,8 @@ __initfunc(int msnd_pinnacle_init(void))
 	printk(KERN_INFO LOGNAME ": Turtle Beach " LONGNAME " Linux Driver Version "
 	       VERSION ", Copyright (C) 1998 Andrew Veliath\n");
 	
-	if (io == -1 || irq == -1 || mem == -1) {
-
+	if (io == -1 || irq == -1 || mem == -1)
 		printk(KERN_WARNING LOGNAME ": io, irq and mem must be set\n");
-	}
 
 	if (io == -1 ||
 	    !(io == 0x290 ||
@@ -1640,7 +1779,6 @@ __initfunc(int msnd_pinnacle_init(void))
 	      io == 0x220 ||
 	      io == 0x210 ||
 	      io == 0x3e0)) {
-
 		printk(KERN_ERR LOGNAME ": \"io\" - DSP I/O base must be set to 0x210, 0x220, 0x230, 0x240, 0x250, 0x260, 0x290, or 0x3E0\n");
 		return -EINVAL;
 	}
@@ -1652,7 +1790,6 @@ __initfunc(int msnd_pinnacle_init(void))
 	      irq == 10 ||
 	      irq == 11 ||
 	      irq == 12)) {
-		
 		printk(KERN_ERR LOGNAME ": \"irq\" - must be set to 5, 7, 9, 10, 11 or 12\n");
 		return -EINVAL;
 	}
@@ -1664,7 +1801,6 @@ __initfunc(int msnd_pinnacle_init(void))
 	      mem == 0xd8000 ||
 	      mem == 0xe0000 ||
 	      mem == 0xe8000)) {
-		
 		printk(KERN_ERR LOGNAME ": \"mem\" - must be set to "
 		       "0xb0000, 0xc8000, 0xd0000, 0xd8000, 0xe0000 or 0xe8000\n");
 		return -EINVAL;
@@ -1734,9 +1870,10 @@ __initfunc(int msnd_pinnacle_init(void))
 	if (fifosize < 16)
 		fifosize = 16;
 
-	if (fifosize > 768)
-		fifosize = 768;
+	if (fifosize > 1024)
+		fifosize = 1024;
 
+	set_default_audio_parameters();
 #ifdef MSND_CLASSIC
 	dev.type = msndClassic;
 #else
@@ -1771,34 +1908,28 @@ __initfunc(int msnd_pinnacle_init(void))
 	printk(KERN_INFO LOGNAME ": Using %u byte digital audio FIFOs (x2)\n", dev.fifosize);
 
 	if ((err = msnd_fifo_alloc(&dev.DAPF, dev.fifosize)) < 0) {
-		
 		printk(KERN_ERR LOGNAME ": Couldn't allocate write FIFO\n");
 		return err;
 	}
 
 	if ((err = msnd_fifo_alloc(&dev.DARF, dev.fifosize)) < 0) {
-		
 		printk(KERN_ERR LOGNAME ": Couldn't allocate read FIFO\n");
 		msnd_fifo_free(&dev.DAPF);
 		return err;
 	}
 
 	if ((err = probe_multisound()) < 0) {
-
 		printk(KERN_ERR LOGNAME ": Probe failed\n");
 		msnd_fifo_free(&dev.DAPF);
 		msnd_fifo_free(&dev.DARF);
 		return err;
-
 	}
 	
 	if ((err = attach_multisound()) < 0) {
-
 		printk(KERN_ERR LOGNAME ": Attach failed\n");
 		msnd_fifo_free(&dev.DAPF);
 		msnd_fifo_free(&dev.DARF);
 		return err;
-
 	}
 
 	return 0;
@@ -1813,6 +1944,5 @@ void cleanup_module(void)
 
 	msnd_fifo_free(&dev.DAPF);
 	msnd_fifo_free(&dev.DARF);
-
 }
 #endif

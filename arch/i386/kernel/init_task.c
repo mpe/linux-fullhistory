@@ -3,8 +3,7 @@
 
 #include <asm/uaccess.h>
 #include <asm/pgtable.h>
-
-#include "desc.h"
+#include <asm/desc.h>
 
 static struct vm_area_struct init_mmap = INIT_MMAP;
 static struct fs_struct init_fs = INIT_FS;

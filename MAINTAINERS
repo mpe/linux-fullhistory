@@ -292,6 +292,12 @@ L:	linux-kernel@vger.rutgers.edu
 W:	http://www.nyx.net/~arobinso
 S:	Maintainted
 
+HFS FILESYSTEM
+P:      Adrian Sun
+M:      asun@u.washington.edu
+L:      linux-kernel@vger.rutgers.edu
+S:      Maintained
+
 HIGH-SPEED SCC DRIVER FOR AX.25
 P:	Klaus Kudielka
 M:	oe1kib@oe1kib.ampr.org
@@ -585,12 +591,6 @@ P:	Roger Wolff
 M:	R.E.Wolff@BitWizard.nl
 M:	io8-linux@specialix.co.uk
 L:	linux-kernel@vger.rutgers.edu ?
-S:	Supported
-
-SPX NETWORK LAYER
-P:	Jay Schulist
-M:	Jay.Schulist@spacs.k12.wi.us
-L:	linux-net@vger.rutgers.edu
 S:	Supported
 
 SPX NETWORK LAYER

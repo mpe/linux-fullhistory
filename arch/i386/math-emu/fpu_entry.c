@@ -27,6 +27,7 @@
 #include <linux/signal.h>
 
 #include <asm/uaccess.h>
+#include <asm/desc.h>
 
 #include "fpu_system.h"
 #include "fpu_emu.h"

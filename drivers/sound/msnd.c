@@ -20,7 +20,7 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
- * $Id: msnd.c,v 1.9 1998/09/04 18:41:27 andrewtv Exp $
+ * $Id: msnd.c,v 1.16 1998/09/08 04:05:56 andrewtv Exp $
  *
  ********************************************************************/
 
@@ -46,6 +46,7 @@
 #  include <asm/uaccess.h>
 #  include <asm/spinlock.h>
 #endif
+#include <asm/irq.h>
 #include "msnd.h"
 
 #define LOGNAME			"msnd"
@@ -224,7 +225,7 @@ int msnd_fifo_read(msnd_fifo *f, char *buf, size_t len, int user)
 int msnd_wait_TXDE(multisound_dev_t *dev)
 {
 	register unsigned int io = dev->io;
-	register int timeout = 100;
+	register int timeout = 1000;
     
 	while(timeout-- > 0)
 		if (inb(io + HP_ISR) & HPISR_TXDE)
@@ -236,7 +237,7 @@ int msnd_wait_TXDE(multisound_dev_t *dev)
 int msnd_wait_HC0(multisound_dev_t *dev)
 {
 	register unsigned int io = dev->io;
-	register int timeout = 100;
+	register int timeout = 1000;
 
 	while(timeout-- > 0)
 		if (!(inb(io + HP_CVR) & HPCVR_HC))
@@ -248,17 +249,16 @@ int msnd_wait_HC0(multisound_dev_t *dev)
 int msnd_send_dsp_cmd(multisound_dev_t *dev, BYTE cmd)
 {
 	unsigned long flags;
-	
+
 	spin_lock_irqsave(&dev->lock, flags);
 	if (msnd_wait_HC0(dev) == 0) {
-
 		outb(cmd, dev->io + HP_CVR);
 		spin_unlock_irqrestore(&dev->lock, flags);
 		return 0;
 	}
 	spin_unlock_irqrestore(&dev->lock, flags);
 
-	printk(KERN_WARNING LOGNAME ": Send DSP command timeout\n");
+	printk(KERN_DEBUG LOGNAME ": Send DSP command timeout\n");
 	
 	return -EIO;
 }
@@ -269,14 +269,13 @@ int msnd_send_word(multisound_dev_t *dev, unsigned char high,
 	register unsigned int io = dev->io;
 
 	if (msnd_wait_TXDE(dev) == 0) {
-		
 		outb(high, io + HP_TXH);
 		outb(mid, io + HP_TXM);
 		outb(low, io + HP_TXL);
 		return 0;
 	}
 
-	printk(KERN_WARNING LOGNAME ": Send host word timeout\n");
+	printk(KERN_DEBUG LOGNAME ": Send host word timeout\n");
 
 	return -EIO;
 }
@@ -286,7 +285,6 @@ int msnd_upload_host(multisound_dev_t *dev, char *bin, int len)
 	int i;
 
 	if (len % 3 != 0) {
-		
 		printk(KERN_WARNING LOGNAME ": Upload host data not multiple of 3!\n");		
 		return -EINVAL;
 	}
@@ -303,31 +301,27 @@ int msnd_upload_host(multisound_dev_t *dev, char *bin, int len)
 
 int msnd_enable_irq(multisound_dev_t *dev)
 {
-	printk(KERN_DEBUG LOGNAME ": enable_irq: count %d\n", dev->irq_ref);
+	unsigned long flags;
 
-	if (dev->irq_ref++ != 0)
+	if (dev->irq_ref++)
 		return 0;
 
 	printk(KERN_DEBUG LOGNAME ": Enabling IRQ\n");
-
+	
+	spin_lock_irqsave(&dev->lock, flags);
 	if (msnd_wait_TXDE(dev) == 0) {
-
-		unsigned long flags;
-		
-		spin_lock_irqsave(&dev->lock, flags);
-		
 		outb(inb(dev->io + HP_ICR) | HPICR_TREQ, dev->io + HP_ICR);
-
 		if (dev->type == msndClassic)
 			outb(dev->irqid, dev->io + HP_IRQM);
-
 		outb(inb(dev->io + HP_ICR) & ~HPICR_TREQ, dev->io + HP_ICR);
 		outb(inb(dev->io + HP_ICR) | HPICR_RREQ, dev->io + HP_ICR);
-
+		enable_irq(dev->irq);
 		spin_unlock_irqrestore(&dev->lock, flags);
-
 		return 0;
 	}
+	spin_unlock_irqrestore(&dev->lock, flags);
+
+	printk(KERN_DEBUG LOGNAME ": Enable IRQ failed\n");
 
 	return -EIO;
 }
@@ -336,29 +330,28 @@ int msnd_disable_irq(multisound_dev_t *dev)
 {
 	unsigned long flags;
 
-	printk(KERN_DEBUG LOGNAME ": disable_irq: count %d\n", dev->irq_ref);
-
 	if (--dev->irq_ref > 0)
 		return 0;
 
-	if (dev->irq_ref < 0) {
-		printk(KERN_WARNING LOGNAME ": IRQ ref count is %d\n", dev->irq_ref);
-/*		dev->irq_ref = 0; */
-	}
+	if (dev->irq_ref < 0)
+		printk(KERN_DEBUG LOGNAME ": IRQ ref count is %d\n", dev->irq_ref);
 
 	printk(KERN_DEBUG LOGNAME ": Disabling IRQ\n");
-	
-	udelay(50);
 
 	spin_lock_irqsave(&dev->lock, flags);
-	outb(inb(dev->io + HP_ICR) & ~HPICR_RREQ, dev->io + HP_ICR);
-	
-	if (dev->type == msndClassic)
-		outb(HPIRQ_NONE, dev->io + HP_IRQM);
-
+	if (msnd_wait_TXDE(dev) == 0) {
+		outb(inb(dev->io + HP_ICR) & ~HPICR_RREQ, dev->io + HP_ICR);
+		if (dev->type == msndClassic)
+			outb(HPIRQ_NONE, dev->io + HP_IRQM);
+		disable_irq(dev->irq);
+		spin_unlock_irqrestore(&dev->lock, flags);
+		return 0;
+	}
 	spin_unlock_irqrestore(&dev->lock, flags);
 
-	return 0;
+	printk(KERN_DEBUG LOGNAME ": Disable IRQ failed\n");
+
+	return -EIO;
 }
 
 #ifndef LINUX20

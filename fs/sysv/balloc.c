@@ -52,8 +52,8 @@ void sysv_free_block(struct super_block * sb, unsigned int block)
 	 * into this block being freed:
 	 */
 	if (*sb->sv_sb_flc_count == sb->sv_flc_size) {
-		unsigned short * flc_count;
-		unsigned long * flc_blocks;
+		u16 * flc_count;
+		u32 * flc_blocks;
 
 		bh = sv_getblk(sb, sb->s_dev, block);
 		if (!bh) {
@@ -154,8 +154,8 @@ int sysv_new_block(struct super_block * sb)
 		return 0;
 	}
 	if (*sb->sv_sb_flc_count == 0) { /* the last block continues the free list */
-		unsigned short * flc_count;
-		unsigned long * flc_blocks;
+		u16 * flc_count;
+		u32 * flc_blocks;
 
 		if (!(bh = sv_bread(sb, sb->s_dev, block))) {
 			printk("sysv_new_block: cannot read free-list block\n");
@@ -247,8 +247,8 @@ unsigned long sysv_count_free_blocks(struct super_block * sb)
 		}
 		/* block = sb->sv_sb_flc_blocks[0], the last block continues the free list */
 		while (1) {
-			unsigned short * flc_count;
-			unsigned long * flc_blocks;
+			u16 * flc_count;
+			u32 * flc_blocks;
 
 			if (block < sb->sv_firstdatazone || block >= sb->sv_nzones) {
 				printk("sysv_count_free_blocks: new block %d is not in data zone\n",block);

@@ -3,15 +3,15 @@
 
 		     Paul Barton-Davis, July 1998
 
-			  VERSION 0.2.4
+			  VERSION 0.2.5
 
 Driver Status
 -------------
 
-Requires: Kernel 2.1.106 or later (a version of the driver is included
-with kernels 2.1.109 and above)
+Requires: Kernel 2.1.106 or later (the driver is included with kernels
+2.1.109 and above)
 	  
-As of 7/20/1998, this driver is currently in *BETA* state. This means
+As of 7/22/1998, this driver is currently in *BETA* state. This means
 that it compiles and runs, and that I use it on my system (Linux
 2.1.106) with some reasonably demanding applications and uses.  I
 believe the code is approaching an initial "finished" state that

@@ -41,12 +41,12 @@
 #include <asm/io.h>
 #include <asm/ldt.h>
 #include <asm/processor.h>
+#include <asm/desc.h>
 #ifdef CONFIG_MATH_EMULATION
 #include <asm/math_emu.h>
 #endif
 
 #include "irq.h"
-#include "desc.h"
 
 spinlock_t semaphore_wake_lock = SPIN_LOCK_UNLOCKED;
 

@@ -150,10 +150,6 @@ typedef unsigned char UCHAR8;
 #define WF_MIDI_VIRTUAL_IS_EXTERNAL 0x2
 #define WF_MIDI_IN_TO_SYNTH_DISABLED 0x4
 
-/* See wavefront.c for details */
-
-#define WAVEFRONT_MAX_DEVICES 1 /* How many WaveFront cards we can handle */
-
 /* slot indexes for struct address_info: makes code a little more mnemonic */
 
 #define WF_SYNTH_SLOT         0
@@ -502,11 +498,11 @@ typedef union wf_any {
     wavefront_drum d;
 } wavefront_any;
 
-/* Hannu Savolainen hoped that his "patch_info" struct in soundcard.h
-   might work for other wavetable-based patch-loading situations.
-   Alas, his fears were correct.  The WaveFront doesn't even come with
-   just "patches", but several different kinds of structures that
-   control the process of generating sound.
+/* Hannu Solvainen hoped that his "patch_info" struct in soundcard.h
+   might work for other wave-table based patch loading situations.
+   Alas, his fears were correct. The WaveFront doesn't even come with
+   just "patches", but several different kind of structures that
+   control the sound generation process.
  */
 
 typedef struct wf_patch_info {
@@ -662,7 +658,7 @@ typedef struct wf_fx_info {
 
 /* Allow direct user-space control over FX memory/coefficient data.
    In theory this could be used to download the FX microprogram,
-   but it would be a little slower, and involve some weird code.
+   but it would be a little slower, and involve some wierd code.
  */
 
 #define WFFX_MEMSET              69

@@ -49,7 +49,7 @@
  * aspects of configuring a WaveFront soundcard, particularly the
  * effects processor.
  *
- * $Id: wavfront.c,v 0.4 1998/07/22 02:12:11 pbd Exp $
+ * $Id: wavfront.c,v 0.5 1998/07/22 16:16:41 pbd Exp $
  *
  * This program is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
  * Version 2 (June 1991). See the "COPYING" file distributed with this software
@@ -667,16 +667,16 @@ wavefront_cmd (wf_config *hw, int cmd,
 /***********************************************************************
 WaveFront: data munging   
 
-Things here are weird.  All data written to the board cannot 
-have its most significant bit set.  Any data item with values 
+Things here are wierd. All data written to the board cannot 
+have its most significant bit set. Any data item with values 
 potentially > 0x7F (127) must be split across multiple bytes.
 
 Sometimes, we need to munge numeric values that are represented on
-the x86 side as 8- to 32-bit values.  Sometimes, we need to munge data
-that is represented on the x86 side as an array of bytes.  The most
+the x86 side as 8-32 bit values. Sometimes, we need to munge data
+that is represented on the x86 side as an array of bytes. The most
 efficient approach to handling both cases seems to be to use 2
-different functions for munging and 2 for de-munging.  This avoids
-weird casting and worrying about bit-level offsets.
+different functions for munging and 2 for de-munging. This avoids
+wierd casting and worrying about bit-level offsets.
 
 **********************************************************************/
 
@@ -1198,14 +1198,14 @@ wavefront_send_sample (wf_config      *hw,
 	shptr = munge_int32 (*((UINT32 *) &header->hdr.s.sampleEndOffset),
 			     shptr, 4);
 	
-	/* This one is truly weird.  What kind of weirdo decided that in
-	   a system dominated by 16- and 32-bit integers, they would use
-	   just 12 bits ?
+	/* This one is truly wierd. What kind of wierdo decided that in
+	   a system dominated by 16 and 32 bit integers, they would use
+	   a just 12 bits ?
 	*/
 	
 	shptr = munge_int32 (header->hdr.s.FrequencyBias, shptr, 3);
 	
-	/* Why is this nybblified, when the MSB is *always* zero? 
+	/* Why is this nybblified, when the MSB is *always* zero ? 
 	   Anyway, we can't take address of bitfield, so make a
 	   good-faith guess at where it starts.
 	*/
@@ -2278,6 +2278,12 @@ wavefront_hw_reset (wf_config *hw)
 	int bits;
 	int hwv[2];
 
+	/* Check IRQ is legal */
+
+	if ((bits = wavefront_interrupt_bits (hw->irq)) < 0) {
+		return 1;
+	}
+
 	if (request_irq (hw->irq, wavefrontintr,
 			 0, "WaveFront", (void *) hw) < 0) {
 		printk (KERN_WARNING "WaveFront: IRQ %d not available!\n",
@@ -2325,10 +2331,6 @@ wavefront_hw_reset (wf_config *hw)
 	   plus external 9-pin MIDI interface selected
 	*/
 
-	if ((bits = wavefront_interrupt_bits (hw->irq)) < 0) {
-		return 1;
-	}
-
 	outb (0x80 | 0x40 | bits, hw->data_port);	
   
 	/* CONTROL REGISTER
@@ -2349,7 +2351,6 @@ wavefront_hw_reset (wf_config *hw)
 	   board is ready. We actually have to send it a command, and
 	   wait till it gets back to use. After a cold boot, this can
 	   take some time.
-	   
 	   
 	   I think this is because its only after a cold boot that the
 	   onboard ROM does its memory check, which can take "up to 4
@@ -2797,51 +2798,50 @@ wavefront_do_reset (wf_config *hw, int atboot)
 	if (hw->israw || wf_raw) {
 		if (wavefront_download_firmware (hw, ospath)) {
 			goto gone_bad;
-			return 1;
 		}
+
+		/* Wait for the OS to get running. The protocol for
+		   this is non-obvious, and was determined by
+		   using port-IO tracing in DOSemu and some
+		   experimentation here.
+		   
+		   Rather than busy-wait, use interrupts creatively.
+		*/
+
+		wavefront_should_cause_interrupt (hw, WFC_NOOP,
+					  hw->data_port, (10*HZ));
+		
+		if (!hw->irq_ok) {
+			printk (KERN_WARNING
+				"WaveFront: no post-OS interrupt.\n");
+			goto gone_bad;
+		}
+		
+		/* Now, do it again ! */
+		
+		wavefront_should_cause_interrupt (hw, WFC_NOOP,
+						  hw->data_port, (10*HZ));
+		
+		if (!hw->irq_ok) {
+			printk (KERN_WARNING
+				"WaveFront: no post-OS interrupt(2).\n");
+			goto gone_bad;
+		}
+
+		/* OK, no (RX/TX) interrupts any more, but leave mute
+		   on. Master interrupts get enabled when we're done here.
+		*/
+		
+		outb (0x80, hw->control_port); 
+		
+		/* No need for the IRQ anymore */
+		
+		free_irq (hw->irq, hw);
 	}
 
-	if (fx_raw) {
+	if (/*XXX has_fx_device() && */ fx_raw) {
 		wffx_init (hw);
 	}
-
-	/* If we loaded the OS, we now have to wait for it to be ready
-	   to roll. We can't guarantee that interrupts are enabled,
-	   because we might be reloading the module without forcing a
-	   reset/reload of the firmware.
-	   
-	   Rather than busy-wait, lets just turn interrupts on.
-	*/
-
-	outb (0x80|0x40|0x10|0x1, hw->control_port);
-
-	wavefront_should_cause_interrupt (hw, WFC_NOOP,
-					  hw->data_port, (10*HZ));
-	
-	if (!hw->irq_ok) {
-		printk (KERN_WARNING "WaveFront: no post-OS interrupt.\n");
-		goto gone_bad;
-	}
-
-	/* Now, do it again ! */
-
-	wavefront_should_cause_interrupt (hw, WFC_NOOP,
-					  hw->data_port, (10*HZ));
-	
-	if (!hw->irq_ok) {
-		printk (KERN_WARNING "WaveFront: no post-OS interrupt(2).\n");
-		goto gone_bad;
-	}
-	
-	/* OK, no (RX/TX) interrupts any more, but leave mute
-	   on. Master interrupts get enabled when we're done here.
-	*/
-
-	outb (0x80, hw->control_port); 
-
-	/* No need for the IRQ anymore */
-
-	free_irq (hw->irq, hw);
 
 	/* SETUPSND.EXE asks for sample memory config here, but since i
 	   have no idea how to interpret the result, we'll forget
@@ -3109,14 +3109,14 @@ wffx_ioctl (struct wf_config *hw, wavefront_fx_info *r)
 
 /* YSS225 initialization.
 
-   This code was developed using DOSEmu.  The Turtle Beach SETUPSND
-   utility was run with I/O tracing in DOSEmu enabled, and a reconstruction
+   This code was developed using DOSEMU. The Turtle Beach SETUPSND
+   utility was run with I/O tracing in DOSEMU enabled, and a reconstruction
    of the port I/O done, using the Yamaha faxback document as a guide
-   to add more logic to the code.  It's really pretty weird.
+   to add more logic to the code. Its really pretty wierd.
 
    There was an alternative approach of just dumping the whole I/O
    sequence as a series of port/value pairs and a simple loop
-   that output it.  However, I hope that eventually I'll get more
+   that output it. However, I hope that eventually I'll get more
    control over what this code does, and so I tried to stick with
    a somewhat "algorithmic" approach.
 */
@@ -3592,7 +3592,7 @@ int init_module (void)
 
 {
 	printk ("Turtle Beach WaveFront Driver\n"
-		"Copyright (C) by Hannu Savolainen, "
+		"Copyright (C) by Hannu Solvainen, "
 		"Paul Barton-Davis 1993-1998.\n");
 
 	if (io == -1 || irq == -1) {

@@ -1,3 +1,17 @@
+1998-09-11  a sun  <asun@purgatorius.zoology.washington.edu>
+
+	* mdb.c: altered mdb struct to reflect hfs plus usage.
+
+1998-08-27  a sun  <asun@purgatorius.zoology.washington.edu>
+
+	* file.c, file_hdr.c, file_cap.c: dealt with the remaining
+	copy_to/from_user() error cases.
+
+1998-08-26  a sun  <asun@purgatorius.zoology.washington.edu>
+
+	* super.c (hfs_read_super): fixed to deal with cdroms. why doesn't
+	the cdrom layer call the partition table code?
+
 Wed Jan 21 14:04:26 1998  a sun  <asun@zoology.washington.edu>
 
 	* inode.c, sysdep.c

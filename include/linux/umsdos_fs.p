@@ -11,6 +11,7 @@ int  dummy_dir_read ( struct file *filp,
 	 char *buf,
 	 size_t size,
 	 loff_t *count);
+char * umsdos_d_path(struct dentry *, char *, int);
 void umsdos_lookup_patch_new(struct dentry *, struct umsdos_dirent *, off_t);
 void umsdos_lookup_patch (struct inode *dir,
 	 struct inode *inode,
@@ -27,7 +28,7 @@ int umsdos_lookup_x (
 			    struct dentry *dentry,
 			    int nopseudo);
 int UMSDOS_lookup(struct inode *, struct dentry *);
-struct dentry *umsdos_lookup_dentry(struct dentry *, char *, int);
+struct dentry *umsdos_lookup_dentry(struct dentry *, char *, int, int);
 
 struct dentry *umsdos_solve_hlink (struct dentry *hlink);
 
@@ -80,15 +81,11 @@ int UMSDOS_statfs (struct super_block *, struct statfs *, int);
 struct super_block *UMSDOS_read_super (struct super_block *, void *, int);
 void UMSDOS_put_super (struct super_block *);
 
-struct dentry *compat_umsdos_real_lookup (struct dentry *d_dir,
-	 const char *name,
-	 int len);
 int umsdos_real_lookup(struct inode *, struct dentry *);	 
 void umsdos_setup_dir(struct dentry *);
 void umsdos_setup_dir_inode (struct inode *inode);
-void umsdos_set_dirinfo (struct inode *inode,
-	 struct inode *dir,
-	 off_t f_pos);
+void umsdos_set_dirinfo_new(struct dentry *, off_t);
+void umsdos_set_dirinfo (struct inode *, struct inode *, off_t);
 int umsdos_isinit (struct inode *inode);
 void umsdos_patch_dentry_inode (struct dentry *, off_t);
 void umsdos_patch_inode (struct inode *, struct inode *, off_t);

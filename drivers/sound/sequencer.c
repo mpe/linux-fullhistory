@@ -1540,12 +1540,12 @@ int sequencer_ioctl(int dev, struct file *file, unsigned int cmd, caddr_t arg)
 			return 0;
 
 		case SNDCTL_MIDI_INFO:
-			if (get_user(dev, (int *)(&(((struct synth_info *)arg)->device))))
+			if (get_user(dev, (int *)(&(((struct midi_info *)arg)->device))))
 				return -EFAULT;
 			if (dev < 0 || dev >= max_mididev)
 				return -ENXIO;
 			midi_devs[dev]->info.device = dev;
-			return copy_to_user(arg, &midi_devs[dev]->info, sizeof(struct synth_info))?-EFAULT:0;
+			return copy_to_user(arg, &midi_devs[dev]->info, sizeof(struct midi_info))?-EFAULT:0;
 
 		case SNDCTL_SEQ_THRESHOLD:
 			if (get_user(val, (int *)arg))

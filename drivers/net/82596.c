@@ -1194,7 +1194,7 @@ static int i596_close(struct device *dev)
 
 	while (lp->scb.command)
 		if (--boguscnt == 0) {
-			printk("%s: close1 timed timed out with status %4.4x, cmd %4.4x.\n",
+			printk("%s: close1 timed out with status %4.4x, cmd %4.4x.\n",
 			     dev->name, lp->scb.status, lp->scb.command);
 			break;
 		}
@@ -1205,7 +1205,7 @@ static int i596_close(struct device *dev)
 
 	while (lp->scb.command)
 		if (--boguscnt == 0) {
-			printk("%s: close2 timed timed out with status %4.4x, cmd %4.4x.\n",
+			printk("%s: close2 timed out with status %4.4x, cmd %4.4x.\n",
 			     dev->name, lp->scb.status, lp->scb.command);
 			break;
 		}

@@ -27,8 +27,7 @@
 #include <asm/spinlock.h>
 #include <asm/atomic.h>
 #include <asm/debugreg.h>
-
-#include "desc.h"
+#include <asm/desc.h>
 
 asmlinkage int system_call(void);
 asmlinkage void lcall7(void);
@@ -205,6 +204,14 @@ static void die_if_no_fixup(const char * str, struct pt_regs * regs, long err)
 		unsigned long fixup;
 		fixup = search_exception_table(regs->eip);
 		if (fixup) {
+			/*
+			 * The GP fault might have been due to
+			 * bad segments, so clean up the ones
+			 * we care about here..
+			 */
+			regs->xds = __KERNEL_DS;
+			regs->xes = __KERNEL_DS;
+			regs->xss = __KERNEL_DS;
 			regs->eip = fixup;
 			return;
 		}

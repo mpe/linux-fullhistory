@@ -54,6 +54,15 @@
 #include <asm/uaccess.h>
 #include <asm/system.h>
 
+static int unloadable = 0; /* XX: Turn to one when all is ok within the
+			      module for allowing unload */
+
+#if defined(MODULE) && LINUX_VERSION_CODE > 0x20115
+MODULE_AUTHOR("Cast of dozens");
+MODULE_DESCRIPTION("IPv6 protocol stack for Linux");
+MODULE_PARM(unloadable, "i");
+#endif
+
 extern struct proto_ops inet6_stream_ops;
 extern struct proto_ops inet6_dgram_ops;
 
@@ -463,6 +472,7 @@ static struct proc_dir_entry proc_net_snmp6 = {
 #ifdef MODULE
 int ipv6_unload(void)
 {
+	if (!unloadable) return 1;
 	/* We keep internally 3 raw sockets */
 	return __this_module.usecount - 3;
 }

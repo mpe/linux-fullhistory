@@ -796,7 +796,7 @@ static int pss_coproc_ioctl(void *dev_info, unsigned int cmd, caddr_t arg, int l
 			data = (unsigned short *)mbuf->data;
 			save_flags(flags);
 			cli();
-			for (i = 0; i < mbuf->len; i++) {
+			for (i = 0; i < sizeof(mbuf->data)/sizeof(unsigned short); i++) {
 				mbuf->len = i;	/* feed back number of WORDs read */
 				if (!pss_get_dspword(devc, data++)) {
 					if (i == 0)

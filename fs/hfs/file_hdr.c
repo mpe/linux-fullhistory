@@ -610,7 +610,7 @@ static hfs_rwret_t hdr_write(struct file *filp, const char *buf,
 			left = count;
 		}
 
-		copy_from_user(((char *)&meta) + pos, buf, left);
+		left -= copy_from_user(((char *)&meta) + pos, buf, left);
 		layout->magic   = hfs_get_nl(meta.magic);
 		layout->version = hfs_get_nl(meta.version);
 		layout->entries = hfs_get_hs(meta.entries);
@@ -642,7 +642,7 @@ static hfs_rwret_t hdr_write(struct file *filp, const char *buf,
 			left = count;
 		}
 
-		copy_from_user(((char *)&meta) + pos, buf, left);
+		left -= copy_from_user(((char *)&meta) + pos, buf, left);
 		init_layout(layout, meta.descrs);
 
 		count -= left;
@@ -782,7 +782,7 @@ static hfs_rwret_t hdr_write(struct file *filp, const char *buf,
 
 		/* transfer the data from user space */
 		if (p) {
-			copy_from_user(p + offset, buf, left);
+			left -= copy_from_user(p + offset, buf, left);
 		} else if (fork) {
 			left = hfs_do_write(inode, fork, offset, buf, left);
 		}

@@ -336,6 +336,7 @@
 #include <linux/string.h>
 #include <linux/vmalloc.h>
 #include <linux/init.h>
+#include <linux/interrupt.h>
 
 #include <asm/system.h>
 #include <asm/io.h>
@@ -1487,13 +1488,14 @@ static int cmd_out(void)
 	
 	if (flags_cmd_out&f_putcmd)
 	{ 
+		unsigned long flags;
 		for (i=0;i<7;i++)
 			sprintf(&msgbuf[i*3], " %02X", drvcmd[i]);
 		msgbuf[i*3]=0;
 		msg(DBG_CMD,"cmd_out:%s\n", msgbuf);
-		cli();
+		save_flags(flags); cli();
 		for (i=0;i<7;i++) OUT(CDo_command,drvcmd[i]);
-		sti();
+		restore_flags(flags);
 	}
 	if (response_count!=0)
 	{
@@ -4824,7 +4826,7 @@ static void DO_SBPCD_REQUEST(void)
 	INIT_REQUEST;
 	req=CURRENT;		/* take out our request so no other */
 	CURRENT=req->next;	/* task can fuck it up         GTL  */
-	sti();
+	spin_unlock_irq(&io_request_lock);		/* FIXME!!!! */
 	
 	down(&ioctl_read_sem);
 	if (req->rq_status == RQ_INACTIVE)
@@ -4869,6 +4871,7 @@ static void DO_SBPCD_REQUEST(void)
 			xnr, req, req->sector, req->nr_sectors, jiffies);
 #endif
 		sbpcd_end_request(req, 1);
+		spin_lock_irq(&io_request_lock);		/* FIXME!!!! */
 		goto request_loop;
 	}
 
@@ -4908,6 +4911,7 @@ static void DO_SBPCD_REQUEST(void)
 				xnr, req, req->sector, req->nr_sectors, jiffies);
 #endif
 			sbpcd_end_request(req, 1);
+			spin_lock_irq(&io_request_lock);	/* FIXME!!!! */
 			goto request_loop;
 		}
 	}
@@ -4922,6 +4926,7 @@ static void DO_SBPCD_REQUEST(void)
 #endif
 	sbpcd_end_request(req, 0);
 	sbp_sleep(0);    /* wait a bit, try again */
+	spin_lock_irq(&io_request_lock);		/* FIXME!!!! */
 	goto request_loop;
 }
 /*==========================================================================*/
@@ -5098,13 +5103,11 @@ static int sbp_data(struct request *req)
 		{
 			msg(DBG_INF,"sbp_data: CDi_status timeout (timed_out_data) (%02X).\n", j);
 			error_flag++;
-			break;
 		}
 		if (try==0)
 		{
 			msg(DBG_INF,"sbp_data: CDi_status timeout (try=0) (%02X).\n", j);
 			error_flag++;
-			break;
 		}
 		if (!(j&s_not_result_ready))
 		{
@@ -5119,10 +5122,10 @@ static int sbp_data(struct request *req)
 				msg(DBG_INF, "CD contains no data tracks.\n");
 			else msg(DBG_INF, "sbp_data: DATA_READY timeout (%02X).\n", j);
 			error_flag++;
-			break;
 		}
 		SBPCD_STI;
-		error_flag=0;
+		if (error_flag) break;
+
 		msg(DBG_000, "sbp_data: beginning to read.\n");
 		p = D_S[d].sbp_buf + frame *  CD_FRAMESIZE;
 		if (sbpro_type==1) OUT(CDo_sel_i_d,1);

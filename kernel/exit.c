@@ -239,7 +239,11 @@ static inline void __exit_sighand(struct task_struct *tsk)
 	struct signal_struct * sig = tsk->sig;
 
 	if (sig) {
+		unsigned long flags;
+
+		spin_lock_irqsave(&tsk->sigmask_lock, flags);
 		tsk->sig = NULL;
+		spin_unlock_irqrestore(&tsk->sigmask_lock, flags);
 		if (atomic_dec_and_test(&sig->count))
 			kfree(sig);
 	}

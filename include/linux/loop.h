@@ -1,6 +1,8 @@
 #ifndef _LINUX_LOOP_H
 #define _LINUX_LOOP_H
 
+#include <linux/kdev_t.h>
+
 /*
  * include/linux/loop.h
  *
@@ -28,19 +30,20 @@ struct loop_device {
 				    char *raw_buf, char *loop_buf, int size);
 	char		lo_name[LO_NAME_SIZE];
 	char		lo_encrypt_key[LO_KEY_SIZE];
-#ifdef DES_AVAILABLE
-	des_key_schedule lo_des_key;
-	unsigned long	lo_des_init[2];
-#endif
-#ifdef IDEA_AVAILABLE
-        idea_key        lo_idea_en_key;
-        idea_key        lo_idea_de_key;
-#endif
+	__u32           lo_init[2];
+	uid_t		lo_key_owner;	/* Who set the key */
+	int		(*ioctl)(struct loop_device *, int cmd, 
+				 unsigned long arg); 
+
 	struct file *	lo_backing_file;
+	void		*key_data; 
+	char		key_reserved[48]; /* for use by the filter modules */
 };
 
 typedef	int (* transfer_proc_t)(struct loop_device *, int cmd,
 				char *raw_buf, char *loop_buf, int size);
+
+#endif /* __KERNEL__ */
 
 /*
  * Loop flags
@@ -48,7 +51,20 @@ typedef	int (* transfer_proc_t)(struct loop_device *, int cmd,
 #define LO_FLAGS_DO_BMAP	0x00000001
 #define LO_FLAGS_READ_ONLY	0x00000002
 
-#endif /* __KERNEL__ */
+/* 
+ * Note that this structure gets the wrong offsets when directly used
+ * from a glibc program, because glibc has a 32bit dev_t.
+ * Prevent people from shooting in their own foot.  
+ */
+#if __GLIBC__ >= 2 && !defined(dev_t)
+#error "Wrong dev_t in loop.h"
+#endif 
+
+/*
+ *	This uses kdev_t because glibc currently has no appropiate
+ *	conversion version for the loop ioctls. 
+ * 	The situation is very unpleasant	
+ */
 
 struct loop_info {
 	int		lo_number;	/* ioctl r/o */
@@ -66,15 +82,31 @@ struct loop_info {
 };
 
 /*
- * Loop encryption types --- LO_CRYPT_IDEA isn't supported yet
+ * Loop filter types
  */
 
 #define LO_CRYPT_NONE	0
 #define LO_CRYPT_XOR	1
 #define LO_CRYPT_DES	2
-#define LO_CRYPT_IDEA	3
-#define MAX_LO_CRYPT	4
+#define LO_CRYPT_DUMMY     9
+#define LO_CRYPT_SKIPJACK 10
+#define MAX_LO_CRYPT	20
 
+#ifdef __KERNEL__
+/* Support for loadable transfer modules */
+struct loop_func_table {
+	int number; 	/* filter type */ 
+	int (*transfer)(struct loop_device *lo, int cmd, 
+			char *raw_buf, char *loop_buf, int size);
+	int (*init)(struct loop_device *, struct loop_info *); 
+	int (*release)(struct loop_device *);  
+	int (*ioctl)(struct loop_device *, int cmd, unsigned long arg);
+}; 
+
+int  loop_register_transfer(struct loop_func_table *funcs);
+int loop_unregister_transfer(int number); 
+
+#endif
 /*
  * IOCTL commands --- we will commandeer 0x4C ('L')
  */

@@ -305,6 +305,7 @@ EXPORT_SYMBOL(tcp_transmit_skb);
 EXPORT_SYMBOL(tcp_connect);
 EXPORT_SYMBOL(tcp_make_synack);
 EXPORT_SYMBOL(tcp_tw_death_row_slot);
+EXPORT_SYMBOL(tcp_sync_mss);
 EXPORT_SYMBOL(net_statistics); 
 
 EXPORT_SYMBOL(xrlim_allow);

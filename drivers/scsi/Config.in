@@ -50,6 +50,13 @@ dep_tristate 'EATA ISA/EISA/PCI (DPT and generic EATA/DMA-compliant boards) supp
 dep_tristate 'Future Domain 16xx SCSI/AHA 2920 support' CONFIG_SCSI_FUTURE_DOMAIN $CONFIG_SCSI
 dep_tristate 'GDT SCSI Disk Array Controller support' CONFIG_SCSI_GDTH $CONFIG_SCSI
 dep_tristate 'Generic NCR5380/53c400 SCSI support' CONFIG_SCSI_GENERIC_NCR5380 $CONFIG_SCSI
+if [ "$CONFIG_PARPORT" != "n" ]; then
+  dep_tristate 'IOMEGA Parallel Port ZIP drive SCSI support' CONFIG_SCSI_PPA $CONFIG_SCSI $CONFIG_PARPORT
+  if [ "$CONFIG_SCSI_PPA" != "n" ]; then
+    int  '  Pedantic EPP-checking'   CONFIG_SCSI_PPA_HAVE_PEDANTIC 2 0 3
+  fi
+  dep_tristate 'IOMEGA ZIP Plus drive SCSI support' CONFIG_SCSI_IMM $CONFIG_SCSI $CONFIG_PARPORT
+fi
 if [ "$CONFIG_SCSI_GENERIC_NCR5380" != "n" ]; then
 	bool '   Enable NCR53c400 extensions' CONFIG_SCSI_GENERIC_NCR53C400
 	choice 'NCR5380/53c400 mapping method (use Port for T130B)' \
@@ -86,12 +93,6 @@ if [ "$CONFIG_MCA" = "y" ]; then
   if [ "$CONFIG_SCSI_IBMMCA" != "n" ]; then
      bool '  Standard SCSI-order' CONFIG_IBMMCA_SCSI_ORDER_STANDARD
      bool '  Reset SCSI-devices at boottime' CONFIG_IBMMCA_SCSI_DEV_RESET
-  fi
-fi
-if [ "$CONFIG_PARPORT" != "n" ]; then
-  dep_tristate 'IOMEGA Parallel Port ZIP drive SCSI support' CONFIG_SCSI_PPA $CONFIG_SCSI $CONFIG_PARPORT
-  if [ "$CONFIG_SCSI_PPA" != "n" ]; then
-    int  '  Pedantic EPP-checking'   CONFIG_SCSI_PPA_HAVE_PEDANTIC 2 0 3
   fi
 fi
 dep_tristate 'PAS16 SCSI support' CONFIG_SCSI_PAS16 $CONFIG_SCSI

@@ -22,6 +22,7 @@
 #include "sd.h"
 #include "hosts.h"
 int ppa_release(struct Scsi_Host *);
+static void ppa_reset_pulse(unsigned int base);
 
 typedef struct {
     struct pardevice *dev;	/* Parport device entry         */
@@ -35,16 +36,16 @@ typedef struct {
     unsigned int p_busy:1;	/* Parport sharing busy flag    */
 } ppa_struct;
 
-#define PPA_EMPTY \
-{NULL,		/* dev */	\
--1,		/* base */	\
-PPA_AUTODETECT,	/* mode */	\
--1,		/* host */	\
-NULL,		/* cur_cmd */	\
-{0, 0, ppa_interrupt, NULL},	\
-0,		/* jstart */	\
-0,		/* failed */	\
-0		/* p_busy */	\
+#define PPA_EMPTY	\
+{	dev:		NULL,		\
+	base:		-1,		\
+	mode:		PPA_AUTODETECT,	\
+	host:		-1,		\
+	cur_cmd:	NULL,		\
+	ppa_tq:		{0, 0, ppa_interrupt, NULL},	\
+	jstart:		0,		\
+	failed:		0,		\
+	p_busy:		0		\
 }
 
 #include  "ppa.h"
@@ -139,7 +140,8 @@ int ppa_detect(Scsi_Host_Template * host)
 	 */
 	if (ppa_pb_claim(i))
 	    while (ppa_hosts[i].p_busy)
-		schedule(); /* Whe can safe schedule() here */
+		schedule();	/* We are safe to schedule here */
+
 	ppb = PPA_BASE(i) = ppa_hosts[i].dev->port->base;
 	w_ctr(ppb, 0x0c);
 	modes = ppa_hosts[i].dev->port->modes;
@@ -557,7 +559,7 @@ static inline int ppa_epp_out(unsigned short epp_p, unsigned short str_p, const 
     int i;
     for (i = len; i; i--) {
 	outb(*buffer++, epp_p);
-#if CONFIG_SCSI_PPA_HAVE_PEDANTIC > 2
+#ifdef CONFIG_SCSI_PPA_HAVE_PEDANTIC
 	if (inb(str_p) & 0x01)
 	    return 0;
 #endif
@@ -588,14 +590,12 @@ static int ppa_out(int host_no, char *buffer, int len)
     case PPA_EPP_8:
 	epp_reset(ppb);
 	w_ctr(ppb, 0x4);
-#if CONFIG_SCSI_PPA_HAVE_PEDANTIC > 1
+#ifdef CONFIG_SCSI_PPA_HAVE_PEDANTIC
 	r = ppa_epp_out(ppb + 4, ppb + 1, buffer, len);
 #else
-#if CONFIG_SCSI_PPA_HAVE_PEDANTIC == 0
 	if (!(((long) buffer | len) & 0x03))
 	    outsl(ppb + 4, buffer, len >> 2);
 	else
-#endif
 	    outsb(ppb + 4, buffer, len);
 	w_ctr(ppb, 0xc);
 	r = !(r_str(ppb) & 0x01);
@@ -616,7 +616,7 @@ static inline int ppa_epp_in(int epp_p, int str_p, char *buffer, int len)
     int i;
     for (i = len; i; i--) {
 	*buffer++ = inb(epp_p);
-#if CONFIG_SCSI_PPA_HAVE_PEDANTIC > 2
+#ifdef CONFIG_SCSI_PPA_HAVE_PEDANTIC
 	if (inb(str_p) & 0x01)
 	    return 0;
 #endif
@@ -655,14 +655,12 @@ static int ppa_in(int host_no, char *buffer, int len)
     case PPA_EPP_8:
 	epp_reset(ppb);
 	w_ctr(ppb, 0x24);
-#if CONFIG_SCSI_PPA_HAVE_PEDANTIC > 1
+#ifdef CONFIG_SCSI_PPA_HAVE_PEDANTIC
 	r = ppa_epp_in(ppb + 4, ppb + 1, buffer, len);
 #else
-#if CONFIG_SCSI_PPA_HAVE_PEDANTIC == 0
 	if (!(((long) buffer | len) & 0x03))
 	    insl(ppb + 4, buffer, len >> 2);
 	else
-#endif
 	    insb(ppb + 4, buffer, len);
 	w_ctr(ppb, 0x2c);
 	r = !(r_str(ppb) & 0x01);
@@ -773,7 +771,7 @@ static int ppa_init(int host_no)
 #if defined(CONFIG_PARPORT) || defined(CONFIG_PARPORT_MODULE)
     if (ppa_pb_claim(host_no))
 	while (ppa_hosts[host_no].p_busy)
-	    schedule(); /* Whe can safe schedule() here */
+	    schedule();		/* We can safe schedule here */
 #endif
 
     ppa_disconnect(host_no);
@@ -789,16 +787,11 @@ static int ppa_init(int host_no)
     if ((r_str(ppb) & 0x08) == 0x00)
 	retv--;
 
-    /* This is a SCSI BUS reset signal */
-    if (!retv) {
-	w_dtr(ppb, 0x40);
-	w_ctr(ppb, 0x08);
-	udelay(30);
-	w_ctr(ppb, 0x0c);
-	mdelay(1);		/* Allow devices to settle down */
-    }
+    if (!retv)
+	ppa_reset_pulse(ppb);
+    udelay(1000);		/* Allow devices to settle down */
     ppa_disconnect(host_no);
-    mdelay(1);		/* Another delay to allow devices to settle */
+    udelay(1000);		/* Another delay to allow devices to settle */
 
     if (!retv)
 	retv = device_check(host_no);
@@ -989,6 +982,7 @@ static void ppa_interrupt(void *data)
 	ppa_disconnect(cmd->host->unique_id);
     if (cmd->SCp.phase > 0)
 	ppa_pb_release(cmd->host->unique_id);
+
     tmp->cur_cmd = 0;
     cmd->scsi_done(cmd);
     return;
@@ -1017,7 +1011,7 @@ static int ppa_engine(ppa_struct * tmp, Scsi_Cmnd * cmd)
 	    ppa_fail(host_no, DID_BUS_BUSY);
 	    return 0;
 	}
-	return 1; /* wait that ppa_wakeup claims parport */
+	return 1;		/* wait until ppa_wakeup claims parport */
     case 1:			/* Phase 1 - Connected */
 	{			/* Perform a sanity check for cable unplugged */
 	    int retv = 2;	/* Failed */
@@ -1032,7 +1026,7 @@ static int ppa_engine(ppa_struct * tmp, Scsi_Cmnd * cmd)
 	    if ((r_str(ppb) & 0x08) == 0x00)
 		retv--;
 
-	    if (retv) {
+	    if (retv)
 		if ((jiffies - tmp->jstart) > (1 * HZ)) {
 		    printk("ppa: Parallel port cable is unplugged!!\n");
 		    ppa_fail(host_no, DID_BUS_BUSY);
@@ -1041,7 +1035,6 @@ static int ppa_engine(ppa_struct * tmp, Scsi_Cmnd * cmd)
 		    ppa_disconnect(host_no);
 		    return 1;	/* Try again in a jiffy */
 		}
-	    }
 	    cmd->SCp.phase++;
 	}
 
@@ -1136,7 +1129,7 @@ int ppa_queuecommand(Scsi_Cmnd * cmd, void (*done) (Scsi_Cmnd *))
 }
 
 /*
- * Apparently the disk->capacity attribute is off by 1 sector 
+ * Apparently the the disk->capacity attribute is off by 1 sector 
  * for all disk drives.  We add the one here, but it should really
  * be done in sd.c.  Even if it gets fixed there, this will still
  * work.
@@ -1158,6 +1151,7 @@ int ppa_biosparam(Disk * disk, kdev_t dev, int ip[])
 
 int ppa_abort(Scsi_Cmnd * cmd)
 {
+    int host_no = cmd->host->unique_id;
     /*
      * There is no method for aborting commands since Iomega
      * have tied the SCSI_MESSAGE line high in the interface
@@ -1166,60 +1160,37 @@ int ppa_abort(Scsi_Cmnd * cmd)
     switch (cmd->SCp.phase) {
     case 0:			/* Do not have access to parport */
     case 1:			/* Have not connected to interface */
-	cmd->result = DID_ABORT;
-	cmd->done(cmd);
-	return SCSI_ABORT_SUCCESS;
+	ppa_hosts[host_no].cur_cmd = NULL;	/* Forget the problem */
+	return SUCCESS;
 	break;
     default:			/* SCSI command sent, can not abort */
-	return SCSI_ABORT_BUSY;
+	return FAILED;
 	break;
     }
 }
 
-int ppa_reset(Scsi_Cmnd * cmd, unsigned int x)
+static void ppa_reset_pulse(unsigned int base)
+{
+    w_dtr(base, 0x40);
+    w_ctr(base, 0x8);
+    udelay(30);
+    w_ctr(base, 0xc);
+}
+
+int ppa_reset(Scsi_Cmnd * cmd)
 {
     int host_no = cmd->host->unique_id;
-    int ppb = PPA_BASE(host_no);
 
-    /*
-     * PHASE1:
-     * Bring the interface crashing down on whatever is running
-     * hopefully this will kill the request.
-     * Bring back up the interface, reset the drive (and anything
-     * attached for that manner)
-     */
-    if (cmd)
-	if (cmd->SCp.phase)
-	    ppa_disconnect(cmd->host->unique_id);
+    if (cmd->SCp.phase)
+	ppa_disconnect(host_no);
+    ppa_hosts[host_no].cur_cmd = NULL;	/* Forget the problem */
 
     ppa_connect(host_no, CONNECT_NORMAL);
-    w_dtr(ppb, 0x40);
-    w_ctr(ppb, 0x8);
-    udelay(30);
-    w_ctr(ppb, 0xc);
-    mdelay(1);		/* delay for devices to settle down */
+    ppa_reset_pulse(PPA_BASE(host_no));
+    udelay(1000);		/* device settle delay */
     ppa_disconnect(host_no);
-    mdelay(1);		/* Additional delay to allow devices to settle down */
-
-    /*
-     * PHASE2:
-     * Sanity check for the sake of mid-level driver
-     */
-    if (!cmd) {
-	printk("ppa bus reset called for invalid command.\n");
-	return SCSI_RESET_NOT_RUNNING;
-    }
-    /*
-     * PHASE3:
-     * Flag the current command as having died due to reset
-     */
-    ppa_connect(host_no, CONNECT_NORMAL);
-    ppa_fail(host_no, DID_RESET);
-
-    /* Since the command was already on the timer queue ppa_interrupt
-     * will be called shortly.
-     */
-    return SCSI_RESET_PENDING;
+    udelay(1000);		/* device settle delay */
+    return SUCCESS;
 }
 
 static int device_check(int host_no)
@@ -1261,9 +1232,9 @@ static int device_check(int host_no)
 	    w_ctr(ppb, 0x08);
 	    udelay(30);
 	    w_ctr(ppb, 0x0c);
-	    mdelay(1);
+	    udelay(1000);
 	    ppa_disconnect(host_no);
-	    mdelay(1);
+	    udelay(1000);
 	    if (ppa_hosts[host_no].mode == PPA_EPP_32) {
 		ppa_hosts[host_no].mode = old_mode;
 		goto second_pass;
@@ -1284,13 +1255,10 @@ static int device_check(int host_no)
 	if (l != 0xf0) {
 	    ppa_disconnect(host_no);
 	    ppa_connect(host_no, CONNECT_EPP_MAYBE);
-	    w_dtr(ppb, 0x40);
-	    w_ctr(ppb, 0x08);
-	    udelay(30);
-	    w_ctr(ppb, 0x0c);
-	    mdelay(1);
+	    ppa_reset_pulse(ppb);
+	    udelay(1000);
 	    ppa_disconnect(host_no);
-	    mdelay(1);
+	    udelay(1000);
 	    if (ppa_hosts[host_no].mode == PPA_EPP_32) {
 		ppa_hosts[host_no].mode = old_mode;
 		goto second_pass;
@@ -1301,6 +1269,11 @@ static int device_check(int host_no)
 	ppa_disconnect(host_no);
 	printk("ppa: Communication established with ID %i using %s\n", loop,
 	       PPA_MODE_STRING[ppa_hosts[host_no].mode]);
+	ppa_connect(host_no, CONNECT_EPP_MAYBE);
+	ppa_reset_pulse(ppb);
+	udelay(1000);
+	ppa_disconnect(host_no);
+	udelay(1000);
 	return 0;
     }
     printk("ppa: No devices found, aborting driver load.\n");

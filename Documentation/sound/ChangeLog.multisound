@@ -1,3 +1,66 @@
+1998-09-10  Andrew Veliath  <andrewtv@usa.net>
+
+	* Update version to 0.8.2
+
+	* Add SNDCTL_DSP_GETOSPACE and SNDCTL_DSP_GETISPACE ioctls.
+
+1998-09-09  Andrew Veliath  <andrewtv@usa.net>
+
+	* Update version to 0.8.1
+	
+	* msnd_pinnacle.c: Fix resetting of default audio parameters. Turn
+	flush code from dsp_halt into dsp_write_flush, and use that for
+	SNDCTL_DSP_SYNC.
+
+1998-09-07  Andrew Veliath  <andrewtv@usa.net>
+
+	* Update version to 0.8.0
+
+	* Provide separate signal parameters for play and record.
+	
+	* Cleanups to locking and interrupt handling, change default
+	fifosize to 128kB.
+
+	* Update version to 0.7.15
+
+	* Interprocess full-duplex support (ie `cat /dev/dsp > /dev/dsp').
+
+	* More mutex sections for read and write fifos (read + write locks
+	added).
+
+1998-09-05  Andrew Veliath  <andrewtv@usa.net>
+
+	* msnd_pinnacle.c: (chk_send_dsp_cmd) Do full DSP reset upon DSP
+	timeout (when not in interrupt; maintains mixer settings).  Fixes
+	to flushing and IRQ ref counting. Rewrote queuing for smoother
+	playback and fixed initial playback cutoff problem.
+
+1998-09-03  Andrew Veliath  <andrewtv@usa.net>
+
+	* Replaced packed structure accesses with standard C equivalents.
+
+1998-09-01  Andrew Veliath  <andrewtv@usa.net>
+
+	* msnd_pinnacle.c: Add non-PnP configuration to driver code, which
+	  will facilitate compiled-in operation.
+
+1998-08-29  Andrew Veliath  <andrewtv@usa.net>
+
+	* Update version to 0.7.6
+	
+	* msnd_pinnacle.c (dsp_ioctl): Add DSP_GETFMTS, change SAMPLESIZE
+	  to DSP_SETFMT.
+
+	* Update version to 0.7.5
+	
+	* Create pinnaclecfg.c and turn MultiSound doc into a shell
+	  archive with pinnaclecfg.c included.  pinnaclecfg.c can
+	  now fully configure the card in non-PnP mode, including the
+	  joystick and IDE controller.  Also add an isapnp conf
+	  example.
+
+	* Reduce DSP reset timeout from 20000 to 100
+
 1998-08-06  Andrew Veliath  <andrewtv@usa.net>
 
 	* Update version to 0.7.2

@@ -32,15 +32,12 @@ static ssize_t UMSDOS_file_read (
 	struct dentry *dentry = filp->f_dentry;
 	struct inode *inode = dentry->d_inode;
 
-	/* We have to set the access time because msdos don't care */
-	/* FIXME */
 	int ret = fat_file_read (filp, buf, count, ppos);
 
+	/* We have to set the access time because msdos don't care */
 	if (!IS_RDONLY (inode)) {
 		inode->i_atime = CURRENT_TIME;
-		/* FIXME 
-		 * inode->i_dirt = 1;
-		 */
+		mark_inode_dirty(inode);
 	}
 	return ret;
 }
@@ -65,10 +62,11 @@ static ssize_t UMSDOS_file_write (
 static void UMSDOS_truncate (struct inode *inode)
 {
 	Printk (("UMSDOS_truncate\n"));
-	fat_truncate (inode);
-	inode->i_ctime = inode->i_mtime = CURRENT_TIME;
-
-	/*FIXME inode->i_dirt = 1; */
+	if (!IS_RDONLY (inode)) {
+		fat_truncate (inode);
+		inode->i_ctime = inode->i_mtime = CURRENT_TIME;
+		mark_inode_dirty(inode);
+	}
 }
 
 /* Function for normal file system (512 bytes hardware sector size) */

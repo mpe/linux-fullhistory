@@ -37,7 +37,7 @@ If you think so, why not flame me in a quick little e-mail?  Please also
 include the type of card(s) you're using, software, size of network, and
 whether it's working or not.)
 
-My e-mail address is: apenwarr@bond.net
+My e-mail address is: apenwarr@worldvisions.ca
 
 
 ---------------------------------------------------------------------------
@@ -79,9 +79,8 @@ may not work right in the first place.
 Other Drivers and Info
 ----------------------
 
-You can (could - foxnet.net is no more - DW.) try my ARCNET page on the 
-World Wide Web at:
-	http://www.foxnet.net/~apenwarr/arcnet/
+You can try my ARCNET page on the World Wide Web at:
+	http://www.worldvisions.ca/~apenwarr/arcnet/
 
 Also, SMC (one of the companies that makes ARCnet cards) has a WWW site you
 might be interested in, which includes several drivers for various cards
@@ -494,7 +493,7 @@ It works: what now?
 Send mail describing your setup, preferably including driver version, kernel
 version, ARCnet card model, CPU type, number of systems on your network, and
 list of software in use to me at the following address:
-	apenwarr@bond.net
+	apenwarr@worldvisions.ca
 
 I do send (sometimes automated) replies to all messages I receive.  My email
 can be weird (and also usually gets forwarded all over the place along the

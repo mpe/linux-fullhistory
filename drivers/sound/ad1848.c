@@ -2401,7 +2401,6 @@ void attach_ms_sound(struct address_info *hw_config)
 
 void unload_ms_sound(struct address_info *hw_config)
 {
-	int mixer = audio_devs[hw_config->slots[0]]->mixer_dev;
 	ad1848_unload(hw_config->io_base + 4,
 		      hw_config->irq,
 		      hw_config->dma,

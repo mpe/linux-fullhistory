@@ -262,13 +262,13 @@ int UMSDOS_ioctl_dir(struct inode *dir, struct file *filp, unsigned int cmd,
 		 */
 		old_dentry = umsdos_lookup_dentry (dentry, 
 						data.dos_dirent.d_name,
-						data.dos_dirent.d_reclen);
+						data.dos_dirent.d_reclen ,1);
 		ret = PTR_ERR(old_dentry);
 		if (IS_ERR(old_dentry))
 			goto out;
 		new_dentry = umsdos_lookup_dentry (dentry,
 						data.umsdos_dirent.name,
-						data.umsdos_dirent.name_len);
+						data.umsdos_dirent.name_len, 1);
 		ret = PTR_ERR(new_dentry);
 		if (!IS_ERR(new_dentry)) {
 printk("umsdos_ioctl: renaming %s/%s to %s/%s\n",
@@ -314,7 +314,7 @@ new_dentry->d_parent->d_name.name, new_dentry->d_name.name);
 		 * Return 0 if success.
 		 */
 		temp = umsdos_lookup_dentry(dentry, data.dos_dirent.d_name,
-						    data.dos_dirent.d_reclen);
+						data.dos_dirent.d_reclen, 1);
 		ret = PTR_ERR(temp);
 		if (IS_ERR(temp))
 			goto out;
@@ -336,7 +336,7 @@ new_dentry->d_parent->d_name.name, new_dentry->d_name.name);
 		 * Return 0 if success.
 		 */
 		temp = umsdos_lookup_dentry(dentry, data.dos_dirent.d_name,
-						    data.dos_dirent.d_reclen);
+					    data.dos_dirent.d_reclen, 1);
 		ret = PTR_ERR(temp);
 		if (IS_ERR(temp))
 			goto out;
@@ -362,7 +362,7 @@ new_dentry->d_parent->d_name.name, new_dentry->d_name.name);
 		struct inode *inode;
 
 		dret = umsdos_lookup_dentry(dentry, data.dos_dirent.d_name,
-						    data.dos_dirent.d_reclen);
+					    data.dos_dirent.d_reclen, 1);
 		ret = PTR_ERR(dret);
 		if (IS_ERR(dret))
 			goto out;

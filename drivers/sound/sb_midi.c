@@ -182,8 +182,6 @@ void sb_dsp_midi_init(sb_devc * devc)
 		printk(KERN_ERR "sb_midi: too many MIDI devices detected\n");
 		return;
 	}
-	std_midi_synth.midi_dev = dev;
-	devc->my_mididev = dev;
 	std_midi_synth.midi_dev = devc->my_mididev = dev;
 	midi_devs[dev] = (struct midi_operations *)kmalloc(sizeof(struct midi_operations), GFP_KERNEL);
 	if (midi_devs[dev] == NULL)

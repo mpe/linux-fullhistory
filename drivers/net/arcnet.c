@@ -3,9 +3,6 @@
 	Written 1994-1996 by Avery Pennarun,
 	derived from skeleton.c by Donald Becker.
 
-	Contact Avery at: apenwarr@bond.net or
-	RR #5 Pole Line Road, Thunder Bay, ON, Canada P7C 5M9
-
 	**********************
 
 	The original copyright was as follows:
@@ -88,7 +85,7 @@
 
 	The following has been SUMMARIZED.  The complete ChangeLog is
 	available in the full Linux-ARCnet package at
-		http://www.foxnet.net/~apenwarr/arcnet
+		http://www.worldvisions.ca/~apenwarr/arcnet
 
 	v2.50 (96/02/24)
 	  - Massively improved autoprobe routines; they now work even as a
@@ -181,7 +178,7 @@
 */
 
 static const char *version =
- "arcnet.c: v3.02 98/06/07 Avery Pennarun <apenwarr@bond.net> et al.\n";
+ "arcnet.c: v3.02 98/06/07 Avery Pennarun <apenwarr@worldvisions.ca> et al.\n";
 
 #include <linux/module.h>
 #include <linux/config.h>

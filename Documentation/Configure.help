@@ -113,14 +113,14 @@ CONFIG_MATH_EMULATION
   If you are not sure, say Y; apart from resulting in a 45kB bigger
   kernel, it won't hurt.
 
-Normal floppy disk support
+Normal PC floppy disk support
 CONFIG_BLK_DEV_FD
-  If you want to use your floppy disk drive(s) under Linux, say
-  Y. Information about this driver, especially important for IBM
+  If you want to use the floppy disk drive(s) of your PC under Linux,
+  say Y. Information about this driver, especially important for IBM
   Thinkpad users, is contained in drivers/block/README.fd. This file
   also contains the location of the Floppy driver FAQ as well as
   location of the fdutils package used to configure additional
-  parameters of the driver at run time. 
+  parameters of the driver at run time.
 
   This driver is also available as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want).
@@ -174,12 +174,13 @@ CONFIG_BLK_DEV_LOOP
   ftp://ftp.replay.com/pub/crypto/linux/all, and then you need to say
   Y to this option.
 
-  Note that alternative ways use encrypted filesystems are provided by
-  the cfs package, which can be gotten via FTP (user: anonymous) from
-  ftp://ftp.replay.com/pub/crypto/disk/, and the newer tcfs package,
-  available at http://tcfs.dia.unisa.it/. These do not require any
-  kernel support and you can say N here if you want to use one of
-  them.
+  Note that alternative ways to use encrypted filesystems are provided
+  by the cfs package, which can be gotten via FTP (user: anonymous)
+  from ftp://ftp.replay.com/pub/crypto/disk/, and the newer tcfs
+  package, available at http://tcfs.dia.unisa.it/. You do not need to
+  say Y here if you want to use one of these. However, using cfs
+  requires saying Y to "NFS filesystem support" below while using tcfs
+  requires applying a kernel patch.
 
   To use the loop device, you need the losetup utility and a recent
   version of the mount program, both contained in the util-linux
@@ -199,7 +200,7 @@ CONFIG_BLK_DEV_LOOP
 Network Block Device support
 CONFIG_BLK_DEV_NBD
   Saying Y here will allow your computer to be a client for network
-  block devices - it will be able to use block devices exported by
+  block devices -- it will be able to use block devices exported by
   servers (mount filesystems on them etc.). Communication between
   client and server works over TCP/IP networking, but to the client
   program this is hidden: it looks like a regular local file access to
@@ -285,7 +286,7 @@ CONFIG_BLK_DEV_IDEDISK
 Include IDE/ATAPI CDROM support
 CONFIG_BLK_DEV_IDECD
   If you have a CDROM drive using the ATAPI protocol, say Y. ATAPI is
-  a new protocol used by IDE CDROM and TAPE drives, similar to the
+  a newer protocol used by IDE CDROM and TAPE drives, similar to the
   SCSI protocol. Most new CDROM drives use ATAPI, including the
   NEC-260, Mitsumi FX400, Sony 55E, and just about all non-SCSI
   double(2X), quad(4X), and six(6X) speed drives.
@@ -311,7 +312,7 @@ CONFIG_BLK_DEV_IDECD
 Include IDE/ATAPI TAPE support
 CONFIG_BLK_DEV_IDETAPE
   If you have an IDE tape drive using the ATAPI protocol, say Y.
-  ATAPI is a new protocol used by IDE tape and CDROM drives, similar
+  ATAPI is a newer protocol used by IDE tape and CDROM drives, similar
   to the SCSI protocol.  
 
   If you say Y here, the tape drive will be identified at boot time
@@ -329,7 +330,7 @@ CONFIG_BLK_DEV_IDETAPE
 Include IDE/ATAPI FLOPPY support
 CONFIG_BLK_DEV_IDEFLOPPY
   If you have an IDE floppy drive which uses the ATAPI protocol, say
-  Y.  ATAPI is a new protocol used by IDE CDROM/tape/floppy drives,
+  Y.  ATAPI is a newer protocol used by IDE CDROM/tape/floppy drives,
   similar to the SCSI protocol.  IDE floppy drives include the LS-120
   and the ATAPI ZIP (ATAPI PD-CD/CDR drives are not supported by this
   driver; support for PD-CD/CDR drives is available if you say Y to
@@ -417,11 +418,13 @@ Generic PCI bus-master DMA support
 CONFIG_BLK_DEV_IDEDMA
   If your PCI system uses IDE drive(s) (as opposed to SCSI, say) and
   is capable of bus-master DMA operation (most Pentium PCI systems),
-  you will want to say Y here to reduce CPU overhead.
-  You can use the "hdparm" utility to enable DMA for drives which
-  were not enabled automatically.  You can get the latest version of
-  the hdparm utility via anonymous FTP from
-  ftp://sunsite.unc.edu/pub/Linux/system/hardware/. 
+  you will want to say Y here to reduce CPU overhead. You can then use
+  the "hdparm" utility to enable DMA for drives for which it was not
+  enabled automatically. By default, DMA is not enabled automatically
+  for these drives, but you can change that by saying Y to the
+  following question "Use DMA by default when available". You can get
+  the latest version of the hdparm utility via anonymous FTP from
+  ftp://sunsite.unc.edu/pub/Linux/system/hardware/.
 
   Read the comments at the beginning of drivers/block/idedma.c and the
   file Documentation/ide.txt for more information. 
@@ -435,6 +438,7 @@ CONFIG_IDEDMA_AUTO
   about a couple of cases where buggy hardware may have caused damage,
   the default is now to NOT use DMA automatically.  To revert to the
   previous behaviour, say Y to this question.
+
   If you suspect your hardware is at all flakey, say N here.
   Do NOT email the IDE kernel people regarding this issue!
 
@@ -576,7 +580,7 @@ CONFIG_PARIDE
   etc.).
 
 Parallel port IDE disks
-CONFIG_PARIDE_PD 
+CONFIG_PARIDE_PD
   This option enables the high-level driver for IDE-type disk devices 
   connected through a parallel port.  If you chose to build PARIDE 
   support into your kernel, you may answer Y here to build in the 
@@ -588,7 +592,7 @@ CONFIG_PARIDE_PD
   hard drives from MicroSolutions.
 
 Parallel port ATAPI CD-ROMs
-CONFIG_PARIDE_PCD 
+CONFIG_PARIDE_PCD
   This option enables the high-level driver for ATAPI CD-ROM devices
   connected through a parallel port. If you chose to build PARIDE
   support into your kernel, you may answer Y here to build in the
@@ -602,7 +606,7 @@ CONFIG_PARIDE_PCD
   on CDROMs.
 
 Parallel port ATAPI disks
-CONFIG_PARIDE_PF 
+CONFIG_PARIDE_PF
   This option enables the high-level driver for ATAPI disk devices
   connected through a parallel port.  If you chose to build PARIDE
   support into your kernel, you may answer Y here to build in the
@@ -640,7 +644,7 @@ CONFIG_PARIDE_PG
   the required patches to cdrecord.
 
 ATEN EH-100 protocol
-CONFIG_PARIDE_ATEN 
+CONFIG_PARIDE_ATEN
   This option enables support for the ATEN EH-100 parallel port IDE
   protocol.  This protocol is used in some inexpensive low performance 
   parallel port kits made in Hong Kong. If you chose to build PARIDE 
@@ -651,7 +655,7 @@ CONFIG_PARIDE_ATEN
   support.
 
 MicroSolutions backpack protocol
-CONFIG_PARIDE_BPCK 
+CONFIG_PARIDE_BPCK
   This option enables support for the MicroSolutions backpack 
   parallel port IDE protocol.  If you chose to build PARIDE support
   into your kernel, you may answer Y here to build in the protocol
@@ -660,7 +664,7 @@ CONFIG_PARIDE_BPCK
   a high-level driver for the type of device that you want to support.
 
 DataStor Commuter protocol
-CONFIG_PARIDE_COMM 
+CONFIG_PARIDE_COMM
   This option enables support for the Commuter parallel port IDE 
   protocol from DataStor.  If you chose to build PARIDE support
   into your kernel, you may answer Y here to build in the protocol
@@ -669,7 +673,7 @@ CONFIG_PARIDE_COMM
   a high-level driver for the type of device that you want to support.
 
 DataStor EP-2000 protocol
-CONFIG_PARIDE_DSTR 
+CONFIG_PARIDE_DSTR
   This option enables support for the EP-2000 parallel port IDE 
   protocol from DataStor.  If you chose to build PARIDE support
   into your kernel, you may answer Y here to build in the protocol
@@ -678,37 +682,37 @@ CONFIG_PARIDE_DSTR
   a high-level driver for the type of device that you want to support.
 
 Shuttle EPAT/EPEZ protocol
-CONFIG_PARIDE_EPAT 
-  This option enables support for the EPAT parallel port IDE 
-  protocol.  EPAT is a parallel port IDE adapter manufactured by
-  Shuttle Technology and widely used in devices from major vendors
-  such as Hewlett-Packard, SyQuest, Imation and Avatar. If you 
-  chose to build PARIDE support into your kernel, you may answer Y 
-  here to build in the protocol driver, otherwise you should answer M 
-  to build it as a loadable module.  The module will be called epat.o.  
-  You must also have a high-level driver for the type of device that 
-  you want to support.
+CONFIG_PARIDE_EPAT
+  This option enables support for the EPAT parallel port IDE protocol.
+  EPAT is a parallel port IDE adapter manufactured by Shuttle
+  Technology and widely used in devices from major vendors such as
+  Hewlett-Packard, SyQuest, Imation and Avatar. If you chose to build
+  PARIDE support into your kernel, you may answer Y here to build in
+  the protocol driver, otherwise you should answer M to build it as a
+  loadable module. The module will be called epat.o. You must also
+  have a high-level driver for the type of device that you want to
+  support.
 
 Shuttle EPIA protocol
-CONFIG_PARIDE_EPIA 
-  This option enables support for the (obsolete) EPIA parallel port 
-  IDE protocol from Shuttle Technology.  This adapter can still be found
-  in some no-name kits. If you chose to build PARIDE support into your 
-  kernel, you may answer Y here to build in the protocol driver,
-  otherwise you should answer M to build it as a loadable module.  
-  The module will be called epia.o.  You must also have a high-level 
-  driver for the type of device that you want to support.
+CONFIG_PARIDE_EPIA
+  This option enables support for the (obsolete) EPIA parallel port
+  IDE protocol from Shuttle Technology. This adapter can still be
+  found in some no-name kits. If you chose to build PARIDE support
+  into your kernel, you may answer Y here to build in the protocol
+  driver, otherwise you should answer M to build it as a loadable
+  module. The module will be called epia.o. You must also have a
+  high-level driver for the type of device that you want to support.
 
 FIT TD-2000 protocol
 CONFIG_PARIDE_FIT2
-  This option enables support for the TD-2000 parallel port IDE protocol
-  from Fidelity International Technology.  This is a simple (low speed) 
-  adapter that is used in some portable hard drives.  If you chose to 
-  build PARIDE support into your kernel, you may answer Y here to 
-  build in the protocol driver, otherwise you should answer M to 
-  build it as a loadable module.  The module will be called ktti.o.  
-  You must also have a high-level driver for the type of device 
-  that you want to support.
+  This option enables support for the TD-2000 parallel port IDE
+  protocol from Fidelity International Technology. This is a simple
+  (low speed) adapter that is used in some portable hard drives. If
+  you chose to build PARIDE support into your kernel, you may answer Y
+  here to build in the protocol driver, otherwise you should answer M
+  to build it as a loadable module. The module will be called ktti.o.
+  You must also have a high-level driver for the type of device that
+  you want to support.
 
 FIT TD-3000 protocol
 CONFIG_PARIDE_FIT3
@@ -722,7 +726,7 @@ CONFIG_PARIDE_FIT3
   of device that you want to support.
 
 FreeCom power protocol
-CONFIG_PARIDE_FRPW 
+CONFIG_PARIDE_FRPW
   This option enables support for the Freecom power parallel port IDE 
   protocol.  If you chose to build PARIDE support into your kernel, you 
   may answer Y here to build in the protocol driver, otherwise you 
@@ -731,15 +735,15 @@ CONFIG_PARIDE_FRPW
   of device that you want to support.
 
 KingByte KBIC-951A/971A protocols
-CONFIG_PARIDE_KBIC 
-  This option enables support for the KBIC-951A and KBIC-971A parallel 
-  port IDE protocols from KingByte Information Corp.  KingByte's adapters
-  appear in many no-name portable disk and CD-ROM products, especially 
-  in Europe. If you chose to build PARIDE support into your kernel, you 
-  may answer Y here to build in the protocol driver, otherwise you should 
-  answer M to build it as a loadable module.  The module will be called 
-  kbic.o.  You must also have a high-level driver for the type of device 
-  that you want to support.
+CONFIG_PARIDE_KBIC
+  This option enables support for the KBIC-951A and KBIC-971A parallel
+  port IDE protocols from KingByte Information Corp. KingByte's
+  adapters appear in many no-name portable disk and CD-ROM products,
+  especially in Europe. If you chose to build PARIDE support into your
+  kernel, you may answer Y here to build in the protocol driver,
+  otherwise you should answer M to build it as a loadable module. The
+  module will be called kbic.o. You must also have a high-level driver
+  for the type of device that you want to support.
 
 KT PHd protocol
 CONFIG_PARIDE_KTTI
@@ -753,7 +757,7 @@ CONFIG_PARIDE_KTTI
   support.
 
 OnSpec 90c20 protocol
-CONFIG_PARIDE_ON20 
+CONFIG_PARIDE_ON20
   This option enables support for the (obsolete) 90c20 parallel port 
   IDE protocol from OnSpec (often marketed under the ValuStore brand
   name).  If you chose to build PARIDE support into your kernel, you 
@@ -763,7 +767,7 @@ CONFIG_PARIDE_ON20
   type of device that you want to support.
 
 OnSpec 90c26 protocol
-CONFIG_PARIDE_ON26 
+CONFIG_PARIDE_ON26
   This option enables support for the 90c26 parallel port IDE protocol 
   from OnSpec Electronics (often marketed under the ValuStore brand
   name).  If you chose to build PARIDE support into your kernel, you 
@@ -847,24 +851,6 @@ CONFIG_MD_RAID5
   in and removed from the running kernel whenever you want). If you
   want to compile it as a module, say M here and read
   Documentation/modules.txt. If unsure, say Y.
-
-IDE card support
-CONFIG_BLK_DEV_IDE_CARDS
-  On Acorn systems, say Y here if you wish to use an IDE interface
-  expansion card. If you do not or are unsure, say N.
-
-ICS IDE interface
-CONFIG_BLK_DEV_IDE_ICS
-  On Acorn systems, say Y here if you wish to use the ICS IDE
-  interface card. This is not required for ICS partition support. If
-  you are unsure, say.
-
-ADFS partition support
-CONFIG_BLK_DEV_PART
-  This allows Linux on Acorn systems to determine its partitions in
-  the 'non-ADFS' partition area of the hard disk - usually located
-  after the ADFS partition.  You are probably using this system, so
-  you should say Y here.
 
 Boot support (linear, striped)
 CONFIG_MD_BOOT
@@ -1008,7 +994,7 @@ CONFIG_FIREWALL
   network think they're talking to a remote computer, while in reality
   the traffic is redirected by your Linux firewall to a local proxy
   server).
-  
+
   Make sure to say N to "Fast switching" below if you intend to say Y
   here.
 
@@ -1110,7 +1096,7 @@ CONFIG_ALPHA_SRM
 
 Non-standard serial port support
 CONFIG_SERIAL_NONSTANDARD
-  Say Y here if you have any non-standard serial boards --- boards
+  Say Y here if you have any non-standard serial boards -- boards
   which aren't supported using the standard "dumb" serial driver.
   This includes intelligent serial boards such as Cyclades,
   Digiboards, etc. These are usually used for systems that need many
@@ -1169,26 +1155,6 @@ Support the Bell Technologies HUB6 card
 CONFIG_HUB6
   Say Y here to enable support in the dumb serial driver to support
   the HUB6 card.
-
-Unix98 PTY support
-CONFIG_UNIX98_PTYS
-  Linux traditionally uses BSD-like /dev/ptyxx and /dev/ttyxx names
-  for pseudo-ttys (PTYs).  This scheme has a number or problems.  The
-  GNU C library 2.1 and later, however, supports the Unix98 naming
-  standard, using a cloning device /dev/ptmx and numbered devices in a
-  subdirectory /dev/pts/xxx.  The device nodes in /dev/pts can be
-  automatically generated by the devpts virtual filesystem.
-
-  Say Y here if you are uncertain, unless you are very short on memory.
-
-Maximum number of Unix98 PTYs in use (0-2048)
-CONFIG_UNIX98_PTY_COUNT
-  The maximum number of Unix98 PTYs that can be used at any one time.
-  The default is 256, and should be enough for desktop systems,
-  however, server machines which support incoming telnet/rlogin/ssh
-  connections may want to increase this.  When not in use, each
-  additional set of 256 PTYs occupy approximately 8K of kernel memory
-  on 32-bit architectures.
 
 TGA Console Support
 CONFIG_TGA_CONSOLE
@@ -1328,7 +1294,7 @@ CONFIG_BINFMT_ELF
   want to say Y here. 
 
   Information about ELF is on the WWW at
-  http://www.sjc.ox.ac.uk/users/barlow/elf-howto.html (To browse the
+  http://www.sjc.ox.ac.uk/users/barlow/elf-howto.html (to browse the
   WWW, you need to have access to a machine on the Internet that has a
   program like lynx or netscape). If you find that after upgrading
   from Linux kernel 1.2 and saying Y here, you still can't run any ELF
@@ -1382,8 +1348,8 @@ CONFIG_BINFMT_JAVA
   any other Linux program: by simply typing in its name. (You also
   need to have the JDK installed for this to work).  As more and more
   Java programs become available, the use for this will gradually
-  increase. You can even execute HTML files containing JAVA applets (=
-  JAVA binaries) if those files start with the string
+  increase. You can even execute HTML files containing JAVA applets 
+  (= JAVA binaries) if those files start with the string
   "<!--applet-->". If you want to use this, say Y here and read
   Documentation/java.txt. 
 
@@ -1412,12 +1378,15 @@ CONFIG_BINFMT_EM86
 
 Kernel support for MISC binaries
 CONFIG_BINFMT_MISC
-  This enables the possibility to plug wrapper-driven binary formats
-  into the kernel. You will like this especially when you use programs
-  that need an interpreter to run like Java, Python or Emacs-Lisp.
-  Once you have registered such a binary class with the kernel, you
-  can start such a program simply by typing in its name; Linux will
-  feed it to the correct interpreter.
+  If you say Y here, it will be possible to plug wrapper-driven binary
+  formats into the kernel. You will like this especially when you use
+  programs that need an interpreter to run like Java, Python or
+  Emacs-Lisp. It's also useful if you often run DOS executables under
+  the Linux DOS emulator DOSEMU (read the DOSEMU-HOWTO, available in
+  ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO). Once you have
+  registered such a binary class with the kernel, you can start one of
+  those programs simply by typing in its name at a shell prompt; Linux
+  will automatically feed it to the correct interpreter.
 
   If you say Y here, you won't need "Kernel support for JAVA binaries"
   (CONFIG_BINFMT_JAVA) or "Kernel support for Linux/Intel ELF
@@ -1428,10 +1397,10 @@ CONFIG_BINFMT_MISC
   Documentation/java.txt for information about how to include Java
   support.
 
-  You must enable the "proc filesystem support" (CONFIG_PROC_FS) to
+  You must say Y to "proc filesystem support" (CONFIG_PROC_FS) to
   use this part of the kernel.
 
-  You may answer M for module support and later load the module when
+  You may say M here for module support and later load the module when
   you have use for it; the module is called binfmt_misc.o. If you
   don't know what to answer at this point, say Y.
 
@@ -1503,20 +1472,26 @@ CONFIG_FB
   hardware. It represents the frame buffer of some video hardware and
   allows application software to access the graphics hardware through
   a well-defined interface, so the software doesn't need to know
-  anything about the low-level (hardware register) stuff. This works
-  across the different architectures supported by Linux and makes the
-  implementation of application programs easier and more portable; at
-  this point, an X server exists which uses the frame buffer device
-  exclusively.
+  anything about the low-level (hardware register) stuff. 
 
+  Frame buffer devices work identically across the different
+  architectures supported by Linux and make the implementation of
+  application programs easier and more portable; at this point, an X
+  server exists which uses the frame buffer device exclusively.
+  On several non-X86 architectures, the frame buffer device is the
+  only way to use the graphics hardware.
+ 
   The device is accessed through special device nodes, usually located
   in the /dev directory, i.e. /dev/fb*.
 
-  Please read the file Documentation/fb/framebuffer.txt for more
-  information.
+  You need an utility program called fbset to make full use of frame
+  buffer devices. Please read the file
+  Documentation/fb/framebuffer.txt for more information.
 
-  If you want to play with it, say Y here and to the driver for your
-  graphics board, below. If unsure, say N.
+  If you want to play with it, say Y here and also to the driver for
+  your graphics board, below. If unsure, say N, unless you are
+  compiling a kernel for a non-X86 architecture, in which case you
+  should say Y.
 
 Acorn VIDC support
 CONFIG_FB_ACORN
@@ -1555,33 +1530,34 @@ CONFIG_FB_AMIGA_AGA
 
 Amiga CyberVision support
 CONFIG_FB_CYBER
-  This enables support for the Cybervision 64 graphics card from Phase5.
-  Please note that its use is not all that intuitive (i.e. if you have
-  any questions, be sure to ask!).  Say N unless you have a Cybervision
-  64 or plan to get one before you next recompile the kernel.         
-  Please note that this driver DOES NOT support the Cybervision 64 3D
-  card, as they use incompatible video chips.           
+  This enables support for the Cybervision 64 graphics card from
+  Phase5. Please note that its use is not all that intuitive (i.e. if
+  you have any questions, be sure to ask!). Say N unless you have a
+  Cybervision 64 or plan to get one before you next recompile the
+  kernel. Please note that this driver DOES NOT support the
+  Cybervision 64 3D card, as they use incompatible video chips.
 
 Amiga CyberVision3D support (EXPERIMENTAL)
 CONFIG_FB_VIRGE
-  This enables support for the Cybervision 64/3D graphics card from Phase5.
-  Please note that its use is not all that intuitive (i.e. if you have
-  any questions, be sure to ask!).  Say N unless you have a Cybervision
-  64/3D or plan to get one before you next recompile the kernel.         
-  Please note that this driver DOES NOT support the older Cybervision 64
-  card, as they use incompatible video chips.           
+  This enables support for the Cybervision 64/3D graphics card from
+  Phase5. Please note that its use is not all that intuitive (i.e. if
+  you have any questions, be sure to ask!). Say N unless you have a
+  Cybervision 64/3D or plan to get one before you next recompile the
+  kernel. Please note that this driver DOES NOT support the older
+  Cybervision 64 card, as they use incompatible video chips.
 
 Amiga RetinaZ3 support (EXPERIMENTAL)
 CONFIG_FB_RETINAZ3
-  This enables support for the Retina Z3 graphics card. Say N unless you
-  have a Retina Z3 or plan to get one before you next recompile the kernel.
+  This enables support for the Retina Z3 graphics card. Say N unless
+  you have a Retina Z3 or plan to get one before you next recompile
+  the kernel.
 
 Amiga CLgen driver (EXPERIMENTAL)
 CONFIG_FB_CLGEN
-  This enables support for Cirrus Logic GD542x/543x based boards on Amiga:
-  SD64, Piccolo, Picasso II/II+, Picasso IV, or EGS Spectrum.  Say N
-  unless you have such a graphics board or plan to get one before you next
-  recompile the kernel.
+  This enables support for Cirrus Logic GD542x/543x based boards on
+  Amiga: SD64, Piccolo, Picasso II/II+, Picasso IV, or EGS Spectrum.
+  Say N unless you have such a graphics board or plan to get one
+  before you next recompile the kernel.
 
 Atari native chipset support
 CONFIG_FB_ATARI
@@ -1628,8 +1604,10 @@ CONFIG_FB_HP300
 VGA chipset support (text only)
 CONFIG_FB_VGA
   This is the frame buffer device driver for generic VGA chips. This
-  driver works only in text mode; if you want graphics mode, say Y to
-  "VESA VGA graphics console" as well.
+  driver works only in text mode and is deprecated; it is preferable
+  to say Y to "VGA text console" instead. For a graphical frame buffer
+  device driver that works for VGA cards, say Y to "VESA VGA graphics
+  console" below.
 
 TGA frame buffer support' 
 CONFIG_FB_TGA
@@ -1638,15 +1616,17 @@ CONFIG_FB_TGA
 
 VESA VGA graphics console
 CONFIG_FB_VESA
-  This is the frame buffer device driver for generic VESA graphic cards.
-  Please read Documentation/fb/vesafb.txt.
+  This is the frame buffer device driver for generic VESA graphic
+  cards. You will get a boot time penguin logo at no additional cost.
+  Please read Documentation/fb/vesafb.txt. If unsure, say Y.
 
 MDA dual-headed support
 CONFIG_FB_MDA
   Say Y here if you have an old MDA or monochrome Hercules graphics
-  adapter in your system acting as a second head ( = video card).  Do 
-  not enable this driver if your MDA card is the primary card in your
-  system; the normal VGA driver will handle it.
+  adapter in your system acting as a second head ( = video card). You
+  will then be able to use two monitors with your Linux system. Do not
+  say Y here if your MDA card is the primary card in your system; the
+  normal VGA driver will handle it.
   
   This driver is also available as a module ( = code which can be
   inserted and removed from the running kernel whenever you want).
@@ -1683,13 +1663,14 @@ CONFIG_FB_TCX
 
 Virtual Frame Buffer support (ONLY FOR TESTING!)
 CONFIG_FB_VIRTUAL
-  This is a `virtual' frame buffer device.  It operates on a chunk of
-  unswapable kernel memory instead of on the memory of a graphics board.
-  This means you cannot see any output sent to this frame buffer device,
-  while it does consume precious memory.  The main use of this frame
-  buffer device is testing and debugging the frame buffer subsystem. Do
-  NOT enable it for normal systems! To protect the innocent, it has to
-  be enabled explicitly on boot time using the kernel option `video=vfb:'.
+  This is a `virtual' frame buffer device. It operates on a chunk of
+  unswapable kernel memory instead of on the memory of a graphics
+  board. This means you cannot see any output sent to this frame
+  buffer device, while it does consume precious memory. The main use
+  of this frame buffer device is testing and debugging the frame
+  buffer subsystem. Do NOT enable it for normal systems! To protect
+  the innocent, it has to be enabled explicitly at boot time using the
+  kernel option `video=vfb:'.
 
   This driver is also available as a module ( = code which can be
   inserted and removed from the running kernel whenever you want).
@@ -1706,12 +1687,12 @@ CONFIG_FBCON_ADVANCED
   drivers. Note that they are used for text console output only; they are
   NOT needed for graphical applications.
 
-  If you do not enable this option, the needed low level drivers are
-  automatically enabled, depending on what frame buffer devices you
-  selected. This is recommended for most users.
+  If you say N here, the needed low level drivers are automatically
+  enabled, depending on what frame buffer devices you selected above.
+  This is recommended for most users.
 
-  If you enable this option, you have more fine-grained control over which
-  low level drivers are enabled. You can e.g. leave out low level drivers
+  If you say Y here, you have more fine-grained control over which low
+  level drivers are enabled. You can e.g. leave out low level drivers
   for color depths you do not intend to use for text consoles.
 
   Low level frame buffer console drivers can be modules ( = code which
@@ -1785,13 +1766,13 @@ CONFIG_FBCON_IPLAN2P8
 Mac variable bpp packed pixels support
 CONFIG_FBCON_MAC
   This is the low level frame buffer console driver for 1/2/4/8/16/32
-  bits per pixel packed pixels on Mac. It supports variable fontwidths
+  bits per pixel packed pixels on Mac. It supports variable font widths
   for low resolution screens.
   
 VGA characters/attributes support
 CONFIG_FBCON_VGA
-  This is the low level frame buffer console driver for VGA text mode, as
-  used by vgafb.
+  This is the low level frame buffer console driver for VGA text mode;
+  it is used if you said Y to "VGA chipset support (text only)" above.
 
 Parallel-port support
 CONFIG_PARPORT
@@ -1809,8 +1790,8 @@ CONFIG_PARPORT
 
   It is possible to share a single parallel port among several devices
   and it is safe to compile all the corresponding drivers into the
-  kernel. If you want to compile parallel port support as a module ( =
-  code which can be inserted in and removed from the running kernel
+  kernel. If you want to compile parallel port support as a module 
+  ( = code which can be inserted in and removed from the running kernel
   whenever you want), say M here and read Documentation/modules.txt.
   The module will be called parport.o. If you have more than one
   parallel port and want to specify which port and IRQ to be used by
@@ -1851,8 +1832,8 @@ CONFIG_CPU_LITTLE_ENDIAN
 
 Plug and Play support
 CONFIG_PNP
-  Plug and Play support allows the kernel to automatically configure some
-  peripheral devices.  Say Y to enable PnP.
+  Plug and Play support allows the kernel to automatically configure
+  some peripheral devices. Say Y to enable PnP.
 
 Auto-probe for parallel devices
 CONFIG_PNP_PARPORT
@@ -2088,11 +2069,10 @@ CONFIG_IP_FIREWALL
 
 IP: firewall packet netlink device
 CONFIG_IP_FIREWALL_NETLINK
-  If you say Y here and then packets hit your Linux firewall and are
-  blocked, the first 128 bytes of each such packet are passed on to
-  optional user space monitoring software that can then look for
-  attacks and take actions such as paging the administrator of the
-  site. 
+  If you say Y here, then the first 128 bytes of each packet that hit
+  your Linux firewall and was blocked are passed on to optional user
+  space monitoring software that can then look for attacks and take
+  actions such as paging the administrator of the site.
 
   To use this, you need to create a character special file under /dev
   with major number 36 and minor number 3 using mknod ("man mknod"),
@@ -2218,13 +2198,14 @@ CONFIG_IP_MASQUERADE
   http://www.tor.shaw.wave.ca/~ambrose/kernel21.html. 
 
   If you say Y here, you should also say Y to "IP: always defragment",
-  below. If you say Y here, then the modules ip_masq_ftp.o (for ftp
-  transfers through the firewall), ip_masq_irc.o (for irc chats
-  through the firewall), and ip_masq_raudio.o (for RealAudio downloads
-  through the firewall) will automatically be compiled. Modules are
-  pieces of code which can be inserted in and removed from the running
-  kernel whenever you want; read Documentation/modules.txt for
-  details.
+  below. 
+
+  If you say Y here, then the modules ip_masq_ftp.o (for ftp transfers
+  through the firewall), ip_masq_irc.o (for irc chats through the
+  firewall), and ip_masq_raudio.o (for RealAudio downloads through the
+  firewall) will automatically be compiled. Modules are pieces of code
+  which can be inserted in and removed from the running kernel
+  whenever you want; read Documentation/modules.txt for details.
 
 IP: ICMP masquerading
 CONFIG_IP_MASQUERADE_ICMP
@@ -2441,16 +2422,16 @@ CONFIG_IP_NOSR
 
 IP: Allow large windows (not recommended if <16Mb of memory)
 CONFIG_SKB_LARGE
-  On high speed, long distance networks the performance limit on 
+  On high speed, long distance networks the performance limit on
   networking becomes the amount of data a machine can buffer until the
   other end confirms its reception. (At 45Mbit/second there are a lot
-  of bits between New York and London ..). This option allows larger
-  amounts of data to be "in flight" at a given time. It also means a user
-  process can require a lot more memory for network buffers and thus this
-  option is best only used on machines with 16Mb of memory or higher. 
-  Unless you are using long links with end to end speeds of over 2Mbit
-  a second or satellite links this option will make no difference to
-  performance.
+  of bits between New York and London ...). This option allows larger
+  amounts of data to be "in flight" at a given time. It also means a
+  user process can require a lot more memory for network buffers and
+  thus this option is best used only on machines with 16Mb of memory
+  or higher. Unless you are using long links with end to end speeds of
+  over 2Mbit a second or satellite links this option will make no
+  difference to performance.
 
 Unix domain sockets
 CONFIG_UNIX
@@ -2484,13 +2465,10 @@ CONFIG_IPV6
   and the file net/ipv6/README in the kernel source. 
 
   If you want to use IPv6, please upgrade to the newest net-tools as
-  given in Documentation/Changes.
+  given in Documentation/Changes. You will still be able to do regular
+  IPv4 networking as well.
 
-  The IPv6 support is also available as a module ( = code which can be
-  inserted in and removed from the running kernel whenever you want).
-  The module will be called ipv6.o. If you want to compile it as a
-  module, say M here and read Documentation/modules.txt. It's safe to
-  say N for now.
+  It is safe to say N here for now.
 
 IPv6: enable EUI-64 token format
 CONFIG_IPV6_EUI64
@@ -2522,7 +2500,7 @@ CONFIG_IPX
   to access Novell NetWare file or print servers using the Linux
   Novell client ncpfs (available via FTP (user: anonymous) from
   ftp://sunsite.unc.edu/pub/Linux/system/filesystems/) or from within
-  the Linux DOS emulator dosemu (read the DOSEMU-HOWTO, available in
+  the Linux DOS emulator DOSEMU (read the DOSEMU-HOWTO, available in
   ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO). In order to do the
   former, you'll also have to say Y to "NCP filesystem support",
   below.
@@ -2533,9 +2511,9 @@ CONFIG_IPX
 
   To turn your Linux box into a fully featured NetWare file server and
   IPX router, say Y here and fetch either lwared from
-  ftp://sunsite.unc.edu/pub/Linux/system/network/daemons/ or mars_nwe from
-  ftp://ftp.gwdg.de/pub/linux/misc/ncpfs. For more information, read the
-  IPX-HOWTO in ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO.
+  ftp://sunsite.unc.edu/pub/Linux/system/network/daemons/ or mars_nwe
+  from ftp://ftp.gwdg.de/pub/linux/misc/ncpfs. For more information,
+  read the IPX-HOWTO in ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO.
 
   General information about how to connect Linux, Windows machines and
   Macs is on the WWW at http://www.eats.com/linux_mac_win.html (to
@@ -2774,9 +2752,9 @@ CONFIG_ROSE
   A comprehensive listing of all the software for Linux amateur radio
   users as well as information about how to configure an AX.25 port is
   contained in the AX25-HOWTO, available via FTP (user: anonymous) in
-  ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO. You also might want to check
-  out the file Documentation/networking/ax25.txt. More information
-  about digital amateur radio in general is on the WWW at
+  ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO. You also might want to
+  check out the file Documentation/networking/ax25.txt. More
+  information about digital amateur radio in general is on the WWW at
   http://www.tapr.org/tapr/html/pkthome.html (To browse the WWW, you
   need to have access to a machine on the Internet that has a program
   like lynx or netscape).
@@ -2836,9 +2814,9 @@ CONFIG_DMASCC
 
   Currently, this driver supports Ottawa PI/PI2
   (http://hydra.carleton.ca/info/pi2.html) and Gracilis PackeTwin
-  (http://www.paccomm.com/) boards. They are detected automatically.
-  If you have one of these cards, say Y here and read the HAM-HOWTO,
-  available via FTP (user: anonymous) in
+  (http://www.paccomm.com/gracilis.html) boards. They are detected
+  automatically. If you have one of these cards, say Y here and read
+  the AX25-HOWTO, available via FTP (user: anonymous) in
   ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO/.
 
   This driver can operate multiple boards simultaneously. If you compile
@@ -2862,11 +2840,11 @@ CONFIG_DMASCC
 Z8530 SCC driver for AX.25
 CONFIG_SCC
   These cards are used to connect your Linux box to an amateur radio
-  in order to communicate with other computers.  If you want to use
+  in order to communicate with other computers. If you want to use
   this, read Documentation/networking/z8530drv.txt and the
-  AX.25-HOWTO, available via FTP (user: anonymous) at
-  ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO.  Also make sure to say Y to
-  "Amateur Radio AX.25 Level 2" support. 
+  AX25-HOWTO, available via FTP (user: anonymous) at
+  ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO. Also make sure to say Y
+  to "Amateur Radio AX.25 Level 2" support.
 
   If you want to compile this as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want),
@@ -3383,7 +3361,7 @@ CONFIG_OVERRIDE_CMDS
 Maximum number of commands per LUN
 CONFIG_AIC7XXX_CMDS_PER_LUN
   Specify the maximum number of commands you would like to allocate
-  per LUN (a LUN is a Logical Unit Number - some physical SCSI devices,
+  per LUN (a LUN is a Logical Unit Number -- some physical SCSI devices,
   e.g. CD jukeboxes, act logically as several separate units, each of
   which gets its own number).  
 
@@ -3618,7 +3596,7 @@ CONFIG_SCSI_NCR53C8XX_SYNC
   rates: FAST-5, FAST-10, FAST-20 and FAST-40. The numbers are
   respectively the maximum data transfer rates in mega-transfers per
   second for each class. For example, a FAST-20 Wide 16 device is able
-  to transfer data at 40 million 16 bit packets per second for a total
+  to transfer data at 20 million 16 bit packets per second for a total
   rate of 40 MB/s.
 
   You may specify 0 if you want to only use asynchronous data
@@ -3753,26 +3731,27 @@ Standard SCSI-order
 CONFIG_IBMMCA_SCSI_ORDER_STANDARD
   In the PC-world and in most modern SCSI-BIOS-setups, SCSI-hard disks
   are assigned to the drive letters, starting with the lowest SCSI-id
-  (physical number - pun) to be drive C:, as seen from DOS and similar
-  operating systems. When looking into papers describing the
+  (physical number -- pun) to be drive C:, as seen from DOS and
+  similar operating systems. When looking into papers describing the
   ANSI-SCSI-standard, this assignment of drives appears to be wrong.
-  The SCSI-standard follows a hardware-hierarchy which says that
-  id 7 has the highest priority and id 0 the lowest. Therefore, the
-  host adapters are still today everywhere placed as SCSI-id 7 by
-  default. In the SCSI-standard, the drive letters express the priority
-  of the disk. C: should be the hard disk, or a partition on it, with the
+  The SCSI-standard follows a hardware-hierarchy which says that id 7
+  has the highest priority and id 0 the lowest. Therefore, the host
+  adapters are still today everywhere placed as SCSI-id 7 by default.
+  In the SCSI-standard, the drive letters express the priority of the
+  disk. C: should be the hard disk, or a partition on it, with the
   highest priority. This must therefore be the disk with the highest
   SCSI-id (e.g. 6) and not the one with the lowest! IBM-BIOS kept the
   original definition of the SCSI-standard as also industrial- and
   process-control-machines, like VME-CPUs running under realtime-OSs
   (e.g. LynxOS, OS9) do.
 
-  If you like to run Linux on your MCA-machine with the same assignment
-  of hard disks as seen from e.g. DOS or OS/2 on your machine, which
-  is in addition conformant to the SCSI-standard, you must say Y here.
-  This is also necessary for MCA-Linux-users who want to keep downward-
-  compatibility to older releases of the IBM-MCA-SCSI-driver (older than
-  driver-release 2.00 and older than June 1997).
+  If you like to run Linux on your MCA-machine with the same
+  assignment of hard disks as seen from e.g. DOS or OS/2 on your
+  machine, which is in addition conformant to the SCSI-standard, you
+  must say Y here. This is also necessary for MCA-Linux users who want
+  to keep downward- compatibility to older releases of the
+  IBM-MCA-SCSI-driver (older than driver-release 2.00 and older than
+  June 1997).
 
   If you like to have the lowest SCSI-id assigned as drive C:, as
   modern SCSI-BIOSes do, which does not conform to the standard, but
@@ -4073,6 +4052,7 @@ CONFIG_FC4
   support, as well as the drivers for the storage array itself and
   for the interface adapter such as SOC. This subsystem could even
   serve for IP networking, with some code extensions.
+
   If unsure, say N.
 
 Sun SOC
@@ -4124,7 +4104,7 @@ CONFIG_SCSI_CUMANA_2
 
 EcoSCSI support
 CONFIG_SCSI_ECOSCSI
-  This enables support for the EcoSCSI card - a small card that sits in
+  This enables support for the EcoSCSI card -- a small card that sits in
   the Econet socket.  If you have an Acorn system with one of these,
   say Y.  If unsure, say N.
 
@@ -4353,58 +4333,6 @@ CONFIG_WAVELAN
   The module will be called wavelan.o. If you want to compile it as a
   module, say M here and read Documentation/modules.txt as well as
   Documentation/networking/net-modules.txt.
-
-AIMSlab RadioTrack (aka RadioReveal) support
-CONFIG_RADIO_RTRACK
-  Choose Y here if you have one of these FM radio cards, and then fill
-  in the port address below.
-
-  In order to control your radio card, you will need to use programs
-  that are compatible with the Video for Linux API.  Information on 
-  this API and pointers to "v4l" programs may be found on the WWW at
-  http://roadrunner.swansea.uk.linux.org/v4l.shtml; to browse the WWW,
-  you need to have access to a machine on the Internet that has a 
-  program like lynx or netscape.
-
-  If you want to compile this driver as a module ( = code which can be
-  inserted in and removed from the running kernel whenever you want),
-  say M here and read Documentation/modules.txt. The module will be
-  called radio-aimslab.o.
-
-RadioTrack i/o port
-CONFIG_RADIO_RTRACK_PORT
-  Enter either 0x30f or 0x20f here.  The card default is 0x30f, if you
-  haven't changed the jumper setting on the card.
-
-Aztech/Packard Bell Radio
-CONFIG_RADIO_AZTECH
-  Choose Y here if you have one of these FM radio cards, and then fill
-  in the port address below.
-  
-  If you want to compile this driver as a module ( = code which can be
-  inserted in and removed from the running kernel whenever you want),
-  say M here and read Documentation/modules.txt. The module will be
-  called radio-aztech.o.
-
-Aztech/Packard Bell radio card i/o port
-CONFIG_RADIO_AZTECH_PORT
-  Enter either 0x350 or 0x358 here.  The card default is 0x350, if you
-  haven't changed the setting of jumper JP3 on the card.  Removing the
-  jumper sets the card to 0x358.
-
-SF16FMI Radio
-CONFIG_RADIO_SF16FMI
-  Choose Y here if you have one of these FM radio cards, and then fill
-  in the port address below.
-
-  If you want to compile this driver as a module ( = code which can be
-  inserted in and removed from the running kernel whenever you want),
-  say M here and read Documentation/modules.txt. The module will be
-  called radio-sf16fmi.o
-
-SF16FMI I/O port (0x284 or 0x384)
-CONFIG_RADIO_SF16FMI_PORT
-  Enter the I/O port of your SF16FMI radio card.
 
 LAPB over Ethernet driver
 CONFIG_LAPBETHER
@@ -4645,7 +4573,7 @@ Forwarding between high speed interfaces
 CONFIG_NET_HW_FLOWCONTROL
   This option enables NIC (Network Interface Card) hardware throttling
   during periods of extremal congestion. At the moment only a couple
-  of device drivers support it (really only one ---tulip, modified
+  of device drivers support it (really only one -- tulip, modified
   8390 can be found at
   ftp://ftp.inr.ac.ru/ip-routing/fastroute-8390.tar.gz). Really, this
   option is applicable to any machine attached to a fast enough
@@ -4827,11 +4755,17 @@ CONFIG_NET_PROFILE
   performance will be written to /proc/net/profile. If you don't know
   what it is about, you don't need it: say N.
 
+#Comtrol Hostess SV-11 support
+#CONFIG_HOSTESS_SV11
+###
+### I don't know what this is.
+###  
+
 WAN Drivers
 CONFIG_WAN_DRIVERS
   Say Y to this option if your Linux box contains a WAN card and you
-  are planning to use the box as a WAN ( = Wide Area Network) router (
-  = device used to interconnect local area networks over wide area
+  are planning to use the box as a WAN ( = Wide Area Network) router
+  ( = device used to interconnect local area networks over wide area
   communication links, such as leased lines and public data networks,
   e.g. X.25 and frame relay) and you will be offered a list of drivers
   for WAN cards currently available. For more information, read
@@ -5650,7 +5584,7 @@ CONFIG_TLAN
 
   Devices currently supported by this driver are Compaq Netelligent,
   Compaq NetFlex and Olicom cards. Please read the file
-  Documentation/tlan.txt for details.
+  Documentation/networking/tlan.txt for more details.
 
   This driver is also available as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want).
@@ -5974,8 +5908,8 @@ Aztech/Orchid/Okano/Wearnes/TXC/CyDROM CDROM support
 CONFIG_AZTCD
   This is your driver if you have an Aztech CDA268-01A, Orchid
   CD-3110, Okano or Wearnes CDD110, Conrad TXC, or CyCDROM CR520 or
-  CR540 CDROM drive.  This driver - just like all these CDROM drivers
-  - is NOT for CDROM drives with IDE/ATAPI interfaces, such as Aztech
+  CR540 CDROM drive.  This driver -- just like all these CDROM drivers
+  -- is NOT for CDROM drives with IDE/ATAPI interfaces, such as Aztech
   CDA269-031SE. Please read the file Documentation/cdrom/aztcd. 
 
   If you say Y here, you should also say Y or M to "ISO 9660 CDROM
@@ -6143,8 +6077,10 @@ CONFIG_EXT2_FS
   directories on ext2 filesystems, use chattr ("man chattr").
   
   Ext2fs partitions can be read from within DOS using the ext2tool
-  package available via FTP (user: anonymous) from
-  ftp://sunsite.unc.edu/pub/Linux/system/filesystems/ext2.
+  package (available via FTP (user: anonymous) from
+  ftp://sunsite.unc.edu/pub/Linux/system/filesystems/ext2) and from
+  within Windows 95 and Windows NT using the ex2fs explorer available
+  from http://jnewbigin-pc.it.swin.edu.au/Linux/Explore2fs.htm.
 
   If you want to compile this filesystem as a module ( = code which
   can be inserted in and removed from the running kernel whenever you
@@ -6198,7 +6134,7 @@ CONFIG_FAT_FS
   want), say M here and read Documentation/modules.txt. The module
   will be called fat.o. Note that if you compile the FAT support as a
   module, you cannot compile any of the FAT-based filesystems into the
-  kernel - they will have to be modules as well. The filesystem of
+  kernel -- they will have to be modules as well. The filesystem of
   your root partition cannot be a module, so don't say M here if you
   intend to use UMSDOS as your root filesystem.
 
@@ -6288,7 +6224,7 @@ CONFIG_PROC_FS
   It's totally cool; for example, "cat /proc/interrupts" gives
   information about what the different IRQs are used for at the moment
   (there is a small number of Interrupt ReQuest lines in your computer
-  that are used by the attached devices to gain the CPU's attention -
+  that are used by the attached devices to gain the CPU's attention --
   often a source of trouble if two devices are mistakenly configured
   to use the same IRQ). This option will enlarge your kernel by about
   18 kB. Several programs depend on this, so everyone should say Y
@@ -6308,8 +6244,8 @@ CONFIG_NFS_FS
   ftp://sunsite.unc.edu/pub/Linux/docs/LDP, on its man page: "man
   nfs", and in the NFS-HOWTO.
   
-  An alternative to NFS is provided by the Coda filesystem; see "Coda
-  filesystem support" below.
+  An superior but less widely used alternative to NFS is provided by
+  the Coda filesystem; see "Coda filesystem support" below.
 
   If you say Y here, you should have said Y to TCP/IP networking also.
   This option would enlarge your kernel by about 27 kB. 
@@ -6480,8 +6416,8 @@ CONFIG_ROMFS_FS
 
 QNX filesystem support (EXPERIMENTAL)
 CONFIG_QNX4FS_FS  
-  This is the filesystem used by QNX 4. Say Y if you intend to mount
-  QNX hard disks and floppies.
+  This is the filesystem used by the operating system QNX 4. Say Y if
+  you intend to mount QNX hard disks or floppies.
 
   This filesystem support is also available as a module ( = code which
   can be inserted in and removed from the running kernel whenever you
@@ -6498,8 +6434,8 @@ CONFIG_AUTOFS_FS
   automounter (amd), which is a pure user space daemon.
 
   To use the automounter you need the user-space tools from
-  ftp://ftp.kernel.org/pub/linux/daemons/autofs; you also want to say Y to
-  "NFS filesystem support", above. 
+  ftp://ftp.kernel.org/pub/linux/daemons/autofs; you also want to say
+  Y to "NFS filesystem support", above.
 
   If you want to compile this as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want),
@@ -6509,31 +6445,33 @@ CONFIG_AUTOFS_FS
   If you are not a part of a fairly large, distributed network, you
   probably do not need an automounter, and can say N here.
 
-UFS filesystem support (read only)
+UFS filesystem support
 CONFIG_UFS_FS
   BSD and derivate versions of Unix (such as SunOS, FreeBSD, NetBSD,
   OpenBSD and NeXTstep) use a filesystem called UFS. Some System V
   Unixes can create and mount hard disk partitions and diskettes using
   this filesystem as well. Saying Y here allows you to mount these
-  partitions and diskettes read-only.
+  partitions and diskettes.
 
   If you only intend to mount files from some other Unix over the
   network using NFS, you don't need the UFS filesystem support (but
-  you need NFS filesystem support obviously). Note that this option is
-  generally not needed for floppies, since a good portable way to
-  transport files and directories between unixes (and even other
-  operating systems) is given by the tar program ("man tar" or
-  preferably "info tar"). 
+  you need NFS filesystem support obviously). 
+
+  Note that this option is generally not needed for floppies, since a
+  good portable way to transport files and directories between unixes
+  (and even other operating systems) is given by the tar program ("man
+  tar" or preferably "info tar").
 
   When accessing NeXTstep files, you may need to convert them from the
   NeXT character set to the Latin1 character set; use the program
   recode ("info recode") for this purpose. 
 
-  If you want to compile this as a module ( = code which can be
-  inserted in and removed from the running kernel whenever you want),
-  say M here and read Documentation/modules.txt. The module will be
-  called ufs.o. If you haven't heard about all of this before, it's
-  safe to say N.
+  If you want to compile the UFS filesystem support as a module ( =
+  code which can be inserted in and removed from the running kernel
+  whenever you want), say M here and read Documentation/modules.txt.
+  The module will be called ufs.o. 
+
+  If you haven't heard about all of this before, it's safe to say N.
 
 BSD disklabel (FreeBSD partition tables) support
 CONFIG_BSD_DISKLABEL
@@ -6588,18 +6526,22 @@ CONFIG_ADFS_FS
 
 /dev/pts filesystem (experimental)
 CONFIG_DEVPTS_FS
-  If you say Y here, you'll get a virtual filesystem which can be
-  mounted on /dev/pts with "mount -t devpts". This, together with the
-  pseudo terminal master multiplexer /dev/ptmx, is used for pseudo
-  terminal support as described in the Open Group's Unix98 standard:
-  in order to acquire a pseudo terminal, a process opens /dev/ptmx;
-  the number of the pseudo terminal is then made available to the
-  process and the pseudo terminal slave can be accessed as
-  /dev/pts/<number>. What was traditionally /dev/ttyp2 will then be
-  /dev/pts/2, for example. The GNU C library glibc 2.1 contains the
-  requisite support for this mode of operation.
+  You should say Y here if you said Y to "Unix98 PTY support" above.
+  You'll then get a virtual filesystem which can be mounted on
+  /dev/pts with "mount -t devpts". This, together with the pseudo
+  terminal master multiplexer /dev/ptmx, is used for pseudo terminal
+  support as described in the Open Group's Unix98 standard: in order
+  to acquire a pseudo terminal, a process opens /dev/ptmx; the number
+  of the pseudo terminal is then made available to the process and the
+  pseudo terminal slave can be accessed as /dev/pts/<number>. What was
+  traditionally /dev/ttyp2 will then be /dev/pts/2, for example. The
+  GNU C library glibc 2.1 contains the requisite support for this mode
+  of operation.
 
-  Say Y here if you have enabled support for Unix98 PTYs.
+  This code is also available as a module called devpts.o ( = code
+  which can be inserted in and removed from the running kernel
+  whenever you want). If you want to compile it as a module, say M
+  here and read Documentation/modules.txt.
 
 Macintosh partition map support
 CONFIG_MAC_PARTITION
@@ -6804,7 +6746,7 @@ CONFIG_NLS_CODEPAGE_850
   DOS/Windows partitions correctly. This does apply to the filenames
   only, not to the file contents. You can include several codepages;
   say Y here if you want to include the DOS codepage that is used for
-  much of Europe--United Kingdom, Germany, Spain, Italy, and [add more
+  much of Europe -- United Kingdom, Germany, Spain, Italy, and [add more
   countries here]. It has some characters useful to many European
   languages that are not part of the US codepage 437. If unsure, say
   Y.
@@ -7235,6 +7177,42 @@ CONFIG_ESPSERIAL
   and read Documentation/modules.txt. The module will be called esp.o.
   If unsure, say N.
 
+Unix98 PTY support
+CONFIG_UNIX98_PTYS
+  A pseudo terminal (PTY) is a software device consisting of two
+  halves: a master and a slave. The slave device behaves identical to
+  a physical terminal; the master device is used by a process to
+  read data from and write data to the slave, thereby emulating a
+  terminal. Typical programs for the master side are xterm and telnet
+  servers. 
+  
+  Linux has traditionally used the BSD-like names /dev/ptyxx for
+  masters and /dev/ttyxx for slaves of pseudo terminals. This scheme
+  has a number of problems. The GNU C library glibc 2.1 and later,
+  however, supports the Unix98 naming standard: in order to acquire a
+  pseudo terminal, a process opens /dev/ptmx; the number of the pseudo
+  terminal is then made available to the process and the pseudo
+  terminal slave can be accessed as /dev/pts/<number>. What was
+  traditionally /dev/ttyp2 will then be /dev/pts/2, for example.
+
+  The entries in /dev/pts/ are created on the fly by a virtual
+  filesystem; therefore, if you say Y here you should say Y to
+  "/dev/pts filesystem for Unix98 PTYs" as well.
+
+  Say Y here if you are uncertain, unless you are very short on
+  memory.
+
+Maximum number of Unix98 PTYs in use (0-2048)
+CONFIG_UNIX98_PTY_COUNT
+  The maximum number of Unix98 PTYs that can be used at any one time.
+  The default is 256, and should be enough for desktop systems. Server
+  machines which support incoming telnet/rlogin/ssh connections and/or
+  serve several X terminals may want to increase this: every incoming
+  connection and every xterm uses up one PTY.
+
+  When not in use, each additional set of 256 PTYs occupy
+  approximately 8K of kernel memory on 32-bit architectures.
+
 Parallel printer support
 CONFIG_PRINTER
   If you intend to attach a printer to the parallel port of your Linux
@@ -7355,7 +7333,7 @@ CONFIG_MS_BUSMOUSE
 
   If you are unsure, say N and read the HOWTO nevertheless: it will
   tell you what you have. Also be aware that several vendors talk
-  about 'Microsoft busmouse' and actually mean PS/2 busmouse - so
+  about 'Microsoft busmouse' and actually mean PS/2 busmouse -- so
   count the pins on the connector.
 
   If you want to compile this as a module ( = code which can be
@@ -7807,12 +7785,12 @@ CONFIG_APM_DO_ENABLE
 Do CPU IDLE calls
 CONFIG_APM_CPU_IDLE
   Enable calls to APM CPU Idle/CPU Busy inside the kernel's idle loop.
-  On some machines, this can activate improved power savings, such as a
-  slowed CPU clock rate, when the machine is idle.  These idle calls are
-  made after the idle loop has run for some length of time (e.g., 333
-  mS).  On some machines, this will cause a hang at boot time or whenever
-  the CPU becomes idle.  (On machines with more than one CPU, this option
-  does nothing.)
+  On some machines, this can activate improved power savings, such as
+  a slowed CPU clock rate, when the machine is idle. These idle calls
+  are made after the idle loop has run for some length of time (e.g.,
+  333 mS). On some machines, this will cause a hang at boot time or
+  whenever the CPU becomes idle. (On machines with more than one CPU,
+  this option does nothing.)
 
 Enable console blanking using APM
 CONFIG_APM_DISPLAY_BLANK
@@ -7899,8 +7877,8 @@ CONFIG_WDT_501
 
 Fan Tachometer
 CONFIG_WDT_501_FAN
-  Enable the Fan Tachometer on the WDT501. Only do this if you have a fan
-  tachometer actually set up.
+  Enable the Fan Tachometer on the WDT501. Only do this if you have a
+  fan tachometer actually set up.
 
 Software Watchdog
 CONFIG_SOFT_WATCHDOG
@@ -8027,7 +8005,7 @@ CONFIG_SOUND
   from ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO. There is also some
   information in various README files in drivers/sound, esp. in
   Readme.cards which you should read first to find out whether your
-  card is supported by Linux.
+  card is supported by Linux, and, if yes, which driver to use.
 
   If you have a PnP sound card and you want to configure it at boot
   time using the ISA PnP tools (read
@@ -8046,11 +8024,25 @@ CONFIG_SOUND
   ftp://sunsite.unc.edu/pub/Linux/kernel/patches/console/ and in the
   pcsp patch at ftp://dwmw2.robinson.cam.ac.uk/pub/kernel/ .
 
+OSS sound modules
+CONFIG_SOUND_OSS
+  OSS is the Open Sound System suite of sound card drivers. They make
+  sound programming easier since they provide a common API. Say Y or M
+  here (the module will be called sound.o) if you haven't found a
+  driver for your sound card above, then pick your driver from the
+  list below.
+ 
 Support for Aztech Sound Galaxy (non-PnP) cards
 CONFIG_SOUND_SGALAXY
-  This module initializes the older non Plug and Play sound galaxy cards
-  from Aztech. It supports the Waverider Pro 32 - 3D and the Galaxy
-  Washington 16.
+  This module initializes the older non Plug and Play sound galaxy
+  cards from Aztech. It supports the Waverider Pro 32 - 3D and the
+  Galaxy Washington 16.
+
+Yamaha OPL3-SA1 audio controller
+CONFIG_SOUND_OPL3SA1
+  Say Y or M if you have a Yamaha OPL3-SA1 sound chip, which is
+  usually built into motherboards. Read Documentation/sound/OPL3-SA
+  for details.
 
 ProAudioSpectrum 16 support
 CONFIG_SOUND_PAS
@@ -8065,15 +8057,21 @@ CONFIG_SOUND_SB
   Creative Labs or a 100% hardware compatible clone (like the
   Thunderboard or SM Games). If your card was in the list of supported
   cards look at the card specific instructions in the
-  drivers/sound/Readme.cards file before answering this question. For
+  drivers/sound/Readme.cards file before answering this question.  For
   an unknown card you may answer Y if the card claims to be
   Sound Blaster-compatible. 
 
-  Please read Documentation/sound/Soundblaster.
+  You can say M here to compile this driver as a module; the module is
+  called sb.o.
 
-  If you have an SB AWE 32 or SB AWE 64, say
-  Y here and to "Additional lowlevel drivers" and to "SB32/AWE
-  support" below.
+  You should also say Y here for cards based on the Avance Logic
+  ALS-007 chip (read Documentation/sound/ALS007) and for ESS1688 and
+  ESS1868 cards (read Documentation/sound/ESS1868). If you have an SB
+  AWE 32 or SB AWE 64, say Y here and also to "Additional lowlevel
+  drivers" and to "SB32/AWE support" below. If you have an IBM Mwave
+  card, say Y here and read Documentation/sound/mwave.
+  
+  Please read Documentation/sound/Soundblaster.
 
 Generic OPL2/OPL3 FM synthesizer support
 CONFIG_SOUND_ADLIB
@@ -8081,7 +8079,13 @@ CONFIG_SOUND_ADLIB
   Answering Y is usually a safe and recommended choice, however some
   cards may have software (TSR) FM emulation. Enabling FM support with
   these cards may cause trouble (I don't currently know of any such
-  cards, however). If unsure, say Y.
+  cards, however). 
+
+  Please read the file Documentation/sound/OPL3 if your card has an
+  OPL3 chip.
+
+  If unsure, say Y.
+  
 
 #Loopback MIDI device support
 #CONFIG_SOUND_VMIDI
@@ -8114,24 +8118,33 @@ CONFIG_SOUND_UART6850
 
 PSS (AD1848, ADSP-2115, ESC614) support
 CONFIG_SOUND_PSS
-  Answer Y only if you have Orchid SW32, Cardinal DSP16 or some other
-  card based on the PSS chipset (AD1848 codec + ADSP-2115 DSP chip +
-  Echo ESC614 ASIC CHIP).
+  Answer Y or M if you have an Orchid SW32, Cardinal DSP16, Beethoven
+  ADSP-16 or some other card based on the PSS chipset (AD1848 codec +
+  ADSP-2115 DSP chip + Echo ESC614 ASIC CHIP). For more information on
+  how to compile it into the kernel or as a module see the file
+  Documentation/sound/PSS.
 
-#Enable PSS mixer (Beethoven ADSP-16 and other compatible)
-#CONFIG_PSS_MIXER
-###
-### Don't know what this is
-###
-#
+Enable PSS mixer (Beethoven ADSP-16 and other compatible)
+CONFIG_PSS_MIXER
+  Answer Y for Beethoven ADSP-16. You may try to say Y also for other
+  cards if they have master volume, bass, treble, and you can't
+  control it under Linux. If you answer N for Beethoven ADSP-16, you
+  can't control master volume, bass, treble and synth volume.
+
+  If you said M to "PSS support" above, you may enable or disable this
+  PSS mixer with the module parameter pss_mixer. For more information
+  see the file Documentation/sound/PSS.
+
 Have DSPxxx.LD firmware file
 CONFIG_PSS_HAVE_BOOT
-  If you want to emulate the Sound Blaster card and you have a DSPxxx.LD
-  file, then answer Y here to include this file.
+  If you have the DSPxxx.LD file or SYNTH.LD file for you card, answer
+  Y to include this file. Without this file the synth device (OPL) may
+  not work.
 
 Full pathname of DSPxxx.LD firmware file
 CONFIG_PSS_BOOT_FILE
-  Enter the full pathname of your DSPxxx.LD file, starting from /.
+  Enter the full pathname of your DSPxxx.LD file or SYNTH.LD file,
+  starting from /.
 
 16 bit sampling option of GUS (_NOT_ GUS MAX)
 CONFIG_SOUND_GUS16
@@ -8200,9 +8213,19 @@ CONFIG_SOUND_MAD16
   quite common so it's possible that many no-name cards have one of
   them. In addition the MAD16 chip is used in some cards made by known
   manufacturers such as Turtle Beach (Tropez), Reveal (some models)
-  and Diamond (latest ones). See also Documentation/sound/Opti for
+  and Diamond (latest ones). Note however that the Tropez sound cards
+  have their own driver; if you have one of those, say N here and Y or
+  M to "Full support for Turtle Beach WaveFront", below. 
+
+  See also Documentation/sound/Opti and Documentation/sound/MAD16 for
   more information on setting these cards up as modules.
 
+Full support for Turtle Beach WaveFront synth/sound cards
+CONFIG_SOUND_WAVEFRONT
+  Answer Y or M if you have a Tropez Plus, Tropez or Maui sound card
+  and read the files Documentation/sound/Wavefront and
+  Documentation/sound/Tropez+.
+  
 Support MIDI in older MAD16 based cards (requires SB)
 CONFIG_MAD16_OLDCARD
   Answer Y (or M) if you have an older card based on the C928
@@ -8272,7 +8295,15 @@ CONFIG_MSNDPIN_PERM_FILE
   obtained from Turtle Beach.  See Documentation/sound/MultiSound for
   information on how to obtain this.
 
-MSND Pinnacle Non-PnP Mode
+MSND Pinnacle have S/PDIF I/O
+CONFIG_MSNDPIN_DIGITAL
+  If you have the S/PDIF daughterboard for the Pinnacle or Fiji, say Y
+  here; otherwise, say N.  If you have this, you will be able to play
+  and record from the S/PDIF port (digital signal). See
+  Documentation/sound/MultiSound for information on how to make use of
+  this capability.
+
+MSND Pinnacle non-PnP Mode
 CONFIG_MSNDPIN_NONPNP
   The Pinnacle and Fiji card resources can be configured either with
   PnP, or through a configuration port.  For the Pinnacle,
@@ -8283,12 +8314,19 @@ CONFIG_MSNDPIN_NONPNP
   you must say N here and use isapnptools to configure the card's
   resources.
 
-MSND Pinnacle Config Port
+MSND Pinnacle config port
 CONFIG_MSNDPIN_CFG
   This is the port which the Pinnacle and Fiji uses to configure
   the card's resources when not in PnP mode.  If your card is in
   PnP mode, then be sure to say N to the previous option,
   CONFIG_MSNDPIN_NONPNP.
+
+MSND buffer size (kB)
+CONFIG_MSND_FIFOSIZE
+  Configures the size of each audio buffer, in kilobytes, for
+  recording and playing in the MultiSound drivers (both the Classic
+  and Pinnacle).  Larger values reduce the chance of data overruns at
+  the expense of overall latency. If unsure, use the default.
 
 /dev/dsp and /dev/audio support
 CONFIG_SOUND_AUDIO
@@ -8339,18 +8377,22 @@ CONFIG_AWE32_SYNTH
 
 Gallant's Audio Excel DSP 16 support (SC-6000 and SC-6600)
 CONFIG_AEDSP16
-  Answer Y if you have a Gallant's Audio Excel DSP 16 card. This card
-  can emulate either an SBPro or a Microsoft Sound System card, so you
-  should have said Y to either "Sound Blaster (SB, SBPro, SB16, clones)
-  support" or "Microsoft Sound System support", above, and you need to
-  answer the "MSS emulation" and "SBPro emulation" questions below
+  Answer Y if you have a Gallant's Audio Excel DSP 16 card. This
+  driver supports Audio Excel DSP 16 but not the III nor PnP versions
+  of this card.
+
+  The Gallant's Audio Excel DSP 16 card can emulate either an SBPro or
+  a Microsoft Sound System card, so you should have said Y to either
+  "100% Sound Blaster compatibles (SB16/32/64, ESS, Jazz16) support"
+  or "Microsoft Sound System support", above, and you need to answer
+  the "MSS emulation" and "SBPro emulation" questions below
   accordingly. You should say Y to one and only one of these two
-  questions.  Read the drivers/sound/lowlevel/README.aedsp16 file and
-  the head of drivers/sound/lowlevel/aedsp16.c to get more information
-  about this driver and its configuration.  This driver supports Audio
-  Excel DSP 16 but not the III nor PnP versions of this card. Read
-  drivers/sound/lowlevel/README.aedsp16 if you want to know something
-  more on how to use the III version with this sound driver.
+  questions.
+
+  Read the drivers/sound/lowlevel/README.aedsp16 file and the head of
+  drivers/sound/lowlevel/aedsp16.c as well as
+  Documentation/sound/AudioExcelDSP16 to get more information about
+  this driver and its configuration.
 
 SC-6600 based audio cards (new Audio Excel DSP 16)
 CONFIG_SC6600
@@ -8367,8 +8409,9 @@ CONFIG_AEDSP16_MSS
 Audio Excel DSP 16 (SBPro emulation)
 CONFIG_AEDSP16_SBPRO
   Answer Y if you want your audio card to emulate Sound Blaster Pro.
-  You should then say Y to "Sound Blaster (SB, SBPro, SB16, clones)
-  support" and N to "Audio Excel DSP 16 (MSS emulation)".
+  You should then say Y to "100% Sound Blaster compatibles
+  (SB16/32/64, ESS, Jazz16) support" and N to "Audio Excel DSP 16 (MSS
+  emulation)".
 
 Ensoniq ES1370 based PCI sound cards
 CONFIG_SOUND_ES1370
@@ -8404,11 +8447,11 @@ Magic System Request Key support
 CONFIG_MAGIC_SYSRQ
   If you say Y here, you will have some control over the system even
   if the system crashes for example during kernel debugging (e.g., you
-  will be able to flush the disks, reboot the system immediately or
-  dump some status information). This is accomplished by pressing
-  various keys while holding SysRq (Alt+PrintScreen). The keys are
-  documented in Documentation/sysrq.txt. Don't say Y unless you really
-  know what this hack does.
+  will be able to flush the buffer cache to disk, reboot the system
+  immediately or dump some status information). This is accomplished
+  by pressing various keys while holding SysRq (Alt+PrintScreen). The
+  keys are documented in Documentation/sysrq.txt. Don't say Y unless
+  you really know what this hack does.
 
 ISDN subsystem
 CONFIG_ISDN
@@ -8640,8 +8683,8 @@ Support for German tariff info
 CONFIG_DE_AOC
   If you want that the HiSax hardware driver sends messages to the
   upper level of the isdn code on each AOCD (Advice Of Charge, During
-  the call - transmission of the fee information during a call) and on
-  each AOCE (Advice Of Charge, at the End of the call - transmission
+  the call -- transmission of the fee information during a call) and on
+  each AOCE (Advice Of Charge, at the End of the call -- transmission
   of fee information at the end of the call), say Y here. This works
   only in Germany.
 
@@ -8719,9 +8762,9 @@ IBM Active 2000 support (EXPERIMENTAL)
 CONFIG_ISDN_DRV_ACT2000
   Say Y here if you have an IBM Active 2000 ISDN card. In order to use
   this card, additional firmware is necessary, which has to be loaded
-  into the card using a utility which is part of the latest isdn4k-utils
-  package. Please read the file Documentation/isdn/README.act2000 for
-  more information.
+  into the card using a utility which is part of the latest
+  isdn4k-utils package. Please read the file
+  Documentation/isdn/README.act2000 for more information.
 
 Support for AP1000 multicomputer
 CONFIG_AP1000
@@ -8733,9 +8776,9 @@ CONFIG_AP1000
 
 Support for Sun4 architecture
 CONFIG_SUN4
-  Use this option if, and only if, your machine is sun4. Note that
-  kernel compiled with this option will run on sun4 only.
-  (And in current version, it will probably work on sun4/330, only.)
+  Say Y here if, and only if, your machine is a Sun4. Note that
+  a kernel compiled with this option will run only on Sun4.
+  (And the current version will probably work only on sun4/330.)
 
 SPARC ESP SCSI support
 CONFIG_SCSI_SUNESP
@@ -8760,6 +8803,7 @@ CONFIG_SUN_OPENPROMIO
 ###
 ### Please someone fill these in.
 ###
+
 #
 # m68k-specific kernel options
 # Documented by Chris Lawrence <quango@themall.net> et al.
@@ -8844,14 +8888,14 @@ Use read-modify-write instructions
 CONFIG_RMW_INSNS
   This allows to use certain instructions that work with indivisible
   read-modify-write bus cycles. While this is faster than the
-  workaround of disabling interrupts, it can conflict with DMA (=
-  direct memory access) on many Amiga systems, and it is also said to
-  destabilize other machines. It is very likely that this will cause
-  serious problems on any Amiga or Atari Medusa if set. The only
+  workaround of disabling interrupts, it can conflict with DMA 
+  ( = direct memory access) on many Amiga systems, and it is also said
+  to destabilize other machines. It is very likely that this will
+  cause serious problems on any Amiga or Atari Medusa if set. The only
   configuration where it should work are 68030-based Ataris, where it
   apparently improves performance. But you've been warned! Unless you
-  really know what you are doing, say N. Try Y only if you're
-  quite adventurous.
+  really know what you are doing, say N. Try Y only if you're quite
+  adventurous.
 
 Amiga AutoConfig Identification
 CONFIG_ZORRO
@@ -8885,15 +8929,6 @@ CONFIG_AMIFB_AGA
   and CD32.  If you intend to run Linux on any of these systems, say Y;
   otherwise say N.
 
-Amiga Cybervision support
-CONFIG_FB_CYBER
-  This enables support for the Cybervision 64 graphics card from Phase5.
-  Please note that its use is not all that intuitive (i.e. if you have
-  any questions, be sure to ask!).  Say N unless you have a Cybervision
-  64 or plan to get one before you next recompile the kernel.
-  Please note that this driver DOES NOT support the Cybervision 64 3D
-  card at present, as they use incompatible video chips.
-
 Amiga GSP (TMS340x0) support
 CONFIG_AMIGA_GSP
   Include support for Amiga graphics cards that use the Texas
@@ -8915,17 +8950,17 @@ Amiga Zorro II ramdisk support
 CONFIG_AMIGA_Z2RAM
   This enables support for using Chip RAM and Zorro II RAM as a
   ramdisk or as a swap partition.  Say Y if you want to include this
-  driver in the kernel.  This driver is also available as a module ( =
-  code which can be inserted in and removed from the running kernel
-  whenever you want). The module is called z2ram.o. If you want to
-  compile it as a module, say M here and read
+  driver in the kernel.  This driver is also available as a module 
+  ( = code which can be inserted in and removed from the running
+  kernel whenever you want). The module is called z2ram.o. If you want
+  to compile it as a module, say M here and read
   Documentation/modules.txt.
 
 Atari ST-RAM swap support
 CONFIG_STRAM_SWAP
   This enables support for using (parts of) ST-RAM as swap space,
   instead of as normal system memory. This can first enhance system
-  performace if you have lots of alternate RAM (compared to the size
+  performance if you have lots of alternate RAM (compared to the size
   of ST-RAM), because executable code always will reside in faster
   memory. ST-RAM will remain as ultra-fast swap space. On the other
   hand, it allows much improved dynamic allocations of ST-RAM buffers
@@ -9006,12 +9041,13 @@ CONFIG_CYBERSTORM_SCSI
 Cyberstorm II SCSI support
 CONFIG_CYBERSTORMII_SCSI
   If you have an Amiga with a Phase5 Cyberstorm MkII accelerator board
-  and the optional Cyberstorm SCSI controller, say Y.  Otherwise, say N.
+  and the optional Cyberstorm SCSI controller, say Y. Otherwise, say
+  N.
 
 Blizzard 2060 SCSI support
 CONFIG_BLZ2060_SCSI
   If you have an Amiga with a Phase5 Blizzard 2060 accelerator board
-  and want to use the onboard SCSI controller, say Y.  Otherwise, say
+  and want to use the onboard SCSI controller, say Y. Otherwise, say
   N.
 
 Blizzard 1230IV/1260 SCSI support
@@ -9235,23 +9271,23 @@ CONFIG_MSDOS_PARTITION
   Say Y if you need this feature; users who are only using their
   system-native partitioning scheme can say N here.
 
-Board Type
-CONFIG_PMAC
-  There are currently several different kinds of PowerPC-based machines
-  available: Apple Power Macintoshes and clones (such as the Motorola
-  Starmax series, PReP (PowerPC Reference Platform) machines such
-  as the Motorola PowerStack, Amiga Power-Up systems (APUS), CHRP and the
-  embedded MBX boards from Motorola.  Currently, a single kernel binary
-  only supports one type or the other.  However, there is very early work
-  on support CHRP, PReP and PowerMac's from a single binary.
-
-
 Processor Type
 CONFIG_6xx
   There are two types of PowerPC chips supported.  The more common
   types (601,603,604,740,750) and the embedded versions (821 and 860).
   Unless you are building a kernel for one of the embedded boards using
   the 821 or 860 choose 6xx.
+
+Machine Type
+CONFIG_PMAC
+  Linux currently supports several different kinds of PowerPC-based
+  machines: Apple Power Macintoshes and clones (such as the
+  Motorola Starmax series), PReP (PowerPC Reference Platform) machines
+  such as the Motorola PowerStack, Amiga Power-Up systems (APUS), CHRP
+  and the embedded MBX boards from Motorola. Currently, a single
+  kernel binary only supports one type or the other. However, there is
+  very early work on support for CHRP, PReP and PowerMac's from a
+  single binary.
 
 Support for Open Firmware device tree in /proc
 CONFIG_PROC_DEVICETREE
@@ -9275,10 +9311,10 @@ CONFIG_SCSI_MESH
   Many Power Macintoshes and clones have a MESH (Macintosh Enhanced
   SCSI Hardware) SCSI bus adaptor (the 7200 doesn't, but all of the
   other Power Macintoshes do).  Say Y to include support for this SCSI
-  adaptor.  This driver is also available as a module called mesh.o (
-  = code which can be inserted in and removed from the running kernel
-  whenever you want). If you want to compile it as a module, say M
-  here and read Documentation/modules.txt.
+  adaptor.  This driver is also available as a module called mesh.o
+  ( = code which can be inserted in and removed from the running
+  kernel whenever you want). If you want to compile it as a module,
+  say M here and read Documentation/modules.txt.
 
 Maximum synchronous transfer rate
 CONFIG_SCSI_MESH_SYNC_RATE
@@ -9309,12 +9345,21 @@ CONFIG_MACE
   motherboard will usually use a MACE (Medium Access Control for
   Ethernet) interface.  Say Y to include support for the MACE chip.
 
+BMAC (G3 ethernet) support
+CONFIG_BMAC
+  Say Y for support of BMAC Ethernet interfaces. These are used on G3
+  computers. 
+
 Video For Linux
 CONFIG_VIDEO_DEV
   Support for audio/video capture and overlay devices and FM radio
   cards. The exact capabilities of each device vary. User tools for
   this are available from
   ftp://ftp.uk.linux.org/pub/linux/video4linux.
+
+  If you are interested in writing a driver for such an audio/video
+  device or user software interacting with such a driver, please read
+  the file Documentation/video4linux/API.html.
 
   This driver is also available as a module called videodev.o ( = code
   which can be inserted in and removed from the running kernel
@@ -9326,16 +9371,17 @@ CONFIG_RADIO_RTRACK
   Choose Y here if you have one of these FM radio cards, and then fill
   in the port address below.
 
-  Note that newer AIMSlab RadioTrack cards have a different chipset,
-  not supported by this driver.  For these cards, use the RadioTrack II
-  driver below.  
+  Note that newer AIMSlab RadioTrack cards have a different chipset
+  and are not supported by this driver. For these cards, use the
+  RadioTrack II driver below.
 
   In order to control your radio card, you will need to use programs
   that are compatible with the Video for Linux API.  Information on 
   this API and pointers to "v4l" programs may be found on the WWW at
   http://roadrunner.swansea.uk.linux.org/v4l.shtml; to browse the WWW,
   you need to have access to a machine on the Internet that has a 
-  program like lynx or netscape.
+  program like lynx or netscape. More information is contained in the
+  file Documentation/video4linux/radiotrack.txt.
 
   If you want to compile this driver as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want),
@@ -9434,10 +9480,28 @@ ZOLTRIX I/O port (0x20c or 0x30c)
 CONFIG_RADIO_ZOLTRIX_PORT
   Enter the I/O port of your Zoltrix radio card.
 
+Miro PCM20 Radio
+CONFIG_RADIO_MIROPCM20
+  Choose Y here if you have one of these FM radio cards, and then fill
+  in the port address below.
+
+  In order to control your radio card, you will need to use programs
+  that are compatible with the Video for Linux API.  Information on 
+  this API and pointers to "v4l" programs may be found on the WWW at
+  http://roadrunner.swansea.uk.linux.org/v4l.shtml; to browse the WWW,
+  you need to have access to a machine on the Internet that has a 
+  program like lynx or netscape.
+
+  If you want to compile this driver as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want),
+  say M here and read Documentation/modules.txt. The module will be
+  called radio-miropcm20.o
+
 BT848 Video For Linux
 CONFIG_VIDEO_BT848
   Support for BT848 based frame grabber/overlay boards. This includes
-  the Miro, Hauppauge and STB boards. 
+  the Miro, Hauppauge and STB boards. Please read the material in
+  Documentation/video4linux/bttv for more information.
 
   This driver is also available as a module called bttv.o ( = code
   which can be inserted in and removed from the running kernel
@@ -9497,13 +9561,15 @@ CONFIG_ARCH_ARC
 
 Build Tools Selection
 CONFIG_BINUTILS_NEW
-  Say Y here if you're using GCC 2.8.1/EGCS with a binutils 
-  version >= 2.8.1 to compile the kernel. Otherwise, say N.
+  Say Y here if and only if you're using GCC 2.8.1/EGCS with a
+  binutils version >= 2.8.1 to compile the kernel (check with "gcc
+  --version" and "ld -v").
 
 Compile kernel with frame pointer
 CONFIG_FRAME_POINTER
-  In order to give useful debugging/error results, say Y here, otherwise
-  say N.
+  If you say Y here, the resulting kernel will be slightly larger, but
+  it will give useful debugging/error results. If you don't debug the
+  kernel, you can say N.
 
 VIDC Sound
 CONFIG_VIDC_SOUND
@@ -9515,7 +9581,7 @@ CONFIG_VIDC_SOUND
 #   capitalize: AppleTalk, Ethernet, DMA, FTP, Internet, Intel, IRQ, 
 #               Linux, NetWare, NFS, PCI, SCSI, SPARC
 #   two words:  hard drive, hard disk, sound card, home page
-#   other:      it's safe to save; daemon
+#   other:      it's safe to save; daemon; use --, not - or ---
 #
 # This is used by Emacs' spell checker ispell.el:
 #
@@ -9605,7 +9671,7 @@ CONFIG_VIDC_SOUND
 # LocalWords:  YAMADA tetsu cauchy nslab ntt nevod perm su doc kaf kheops wsc
 # LocalWords:  traduc Bourgin dbourgin menuconfig kfill READMEs HOWTOs Virge WA
 # LocalWords:  IDEDISK IDEFLOPPY EIDE firewalls QMAGIC ZMAGIC LocalWords opti
-# LocalWords:  SVGATextMode vga svga Xterminal Xkernel syr jmwobus comfaqs dhcp
+# LocalWords:  SVGATextMode vga svga Xkernel syr jmwobus comfaqs dhcp flakey GD
 # LocalWords:  IPv IPng interoperability ipng ipv radio's tapr pkthome PLP nano
 # LocalWords:  Ses Mhz sethdlc SOUNDMODEM WindowsSoundSystem smdiag pcf inka ES
 # LocalWords:  smmixer ptt circ soundmodem MKISS FDDI DEFEA DEFPA DEFXX redhat
@@ -9646,7 +9712,7 @@ CONFIG_VIDC_SOUND
 # LocalWords:  hardlinked NAMETRANS env mtab fstab umount nologin runlevel gid
 # LocalWords:  transname filespace adm Nodename hostname uname Kernelname bootp
 # LocalWords:  KERNNAME kname ktype kernelname Kerneltype KERNTYPE Alt RX mdafb
-# LocalWords:  dataless kerneltype SYSNAME Comtrol Rocketport palmtop
+# LocalWords:  dataless kerneltype SYSNAME Comtrol Rocketport palmtop fbset EGS
 # LocalWords:  nvram SYSRQ SysRq PrintScreen sysrq NVRAMs NvRAM Shortwave RTTY
 # LocalWords:  HFMODEM shortwave Sitor Amtor Pactor GTOR hfmodem hayes TX TMOUT
 # LocalWords:  IDEPCI IDEDMA idedma PDC pdc TRM trm raidtools luthien nuclecu
@@ -9693,10 +9759,16 @@ CONFIG_VIDC_SOUND
 # LocalWords:  AcornSCSI EcoSCSI EESOX EESOXSCSI Powertec POWERTECSCSI dec SF
 # LocalWords:  RadioReveal gatekeeper aimslab aztech FMI sf fmi RTL rtl cesdis
 # LocalWords:  Yellowfin gsfc nasa gov yellowfin pcnet Mylex LNE lne EtherH hs
-# LocalWords:  EBSA chattr RiscOS Winmodem AGP Atomwide DUALSP pcsp robinson
+# LocalWords:  EBSA chattr RiscOS Winmodem AGP Atomwide DUALSP pcsp robinson CT
 # LocalWords:  SGALAXY Waverider DSPxxx TRXPRO AudioTrix OSWF MOT CFB DSY kbps
 # LocalWords:  tuwien kkudielk LVD mega lun MAXTAGS Gbps arcnet Olicom SKTR SNA
-# LocalWords:  SysKonnect sktr sna etherboot ufs NetBEUI MultiSound MSNDCLAS
-# LocalWords:  MSNDINIT MSNDPERM MSNDPIN PNDSPINI PNDSPERM Ensoniq's
-# LocalWords:  AudioPCI lspci SonicVibes sonicvibes SPARCs roadrunner
+# LocalWords:  SysKonnect sktr sna etherboot ufs NetBEUI MultiSound MSNDCLAS GX
+# LocalWords:  MSNDINIT MSNDPERM MSNDPIN PNDSPINI PNDSPERM Ensoniq's RetinaZ SS
+# LocalWords:  AudioPCI lspci SonicVibes sonicvibes SPARCs roadrunner CLgen UPA
 # LocalWords:  swansea shtml Zoltrix zoltrix BINUTILS EGCS binutils VIDC DACs
+# LocalWords:  CyberVision Cirrus PowerBooks Topcat SBUS CGsix TurboGX BWtwo SS
+# LocalWords:  CGthree TCX unswapable vfb fbcon hicolor truecolor AFB ILBM SOC
+# LocalWords:  IPLAN gracilis Fibre SBus SparcSTORAGE SV jnewbigin swin QNX qnx
+# LocalWords:  PTY PTYS ptyxx ttyxx PTYs ssh sb Avance ALS pss
+# LocalWords:  synth WaveFront MSND NONPNP AudioExcelDSP STRAM APUS CHRP MBX
+# LocalWords:  PowerMac's BMAC radiotrack rtrack miropcm

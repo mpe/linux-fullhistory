@@ -219,15 +219,17 @@
 
 /* Read Register 15 (value of WR 15) */
 
-/* 8580/85180/85280 Enhanced SCC register definitions */
+/* Z85C30/Z85230 Enhanced SCC register definitions */
 
 /* Write Register 7' (SDLC/HDLC Programmable Enhancements) */
 #define AUTOTXF	0x01		/* Auto Tx Flag */
 #define AUTOEOM 0x02		/* Auto EOM Latch Reset */
 #define AUTORTS	0x04		/* Auto RTS */
 #define TXDNRZI 0x08		/* TxD Pulled High in SDLC NRZI mode */
+#define RXFIFOH 0x08		/* Z85230: Int on RX FIFO half full */
 #define FASTDTR 0x10		/* Fast DTR/REQ Mode */
 #define CRCCBCR	0x20		/* CRC Check Bytes Completely Received */
+#define TXFIFOE 0x20		/* Z85230: Int on TX FIFO completely empty */
 #define EXTRDEN	0x40		/* Extended Read Enabled */
 
 /* Write Register 15 (external/status interrupt control) */
@@ -240,4 +242,4 @@
 /* Read Register 7 (frame status FIFO) */
 #define BCMSB	0x3f		/* MSB of 14 bits count */
 #define FDA	0x40		/* FIFO Data Available Status */
-#define FOY	0x80		/* FIFO Overflow Status */
+#define FOS	0x80		/* FIFO Overflow Status */

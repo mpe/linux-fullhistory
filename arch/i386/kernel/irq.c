@@ -37,9 +37,9 @@
 #include <asm/smp.h>
 #include <asm/pgtable.h>
 #include <asm/delay.h>
+#include <asm/desc.h>
 
 #include "irq.h"
-#include "desc.h"
 
 unsigned int local_bh_count[NR_CPUS];
 unsigned int local_irq_count[NR_CPUS];
@@ -683,7 +683,8 @@ void disable_irq(unsigned int irq)
 	irq_desc[irq].handler->disable(irq);
 	spin_unlock_irqrestore(&irq_controller_lock, flags);
 
-	synchronize_irq();
+	if (irq_desc[irq].status & IRQ_INPROGRESS)
+		synchronize_irq();
 }
 
 void enable_irq(unsigned int irq)
@@ -886,7 +887,7 @@ unsigned long probe_irq_on(void)
 	for (i = NR_IRQS-1; i > 0; i--) {
 		if (!irq_desc[i].action) {
 			unsigned int status = irq_desc[i].status | IRQ_AUTODETECT;
-			irq_desc[i].status = status & ~(IRQ_INPROGRESS | IRQ_PENDING);
+			irq_desc[i].status = status & ~IRQ_INPROGRESS;
 			irq_desc[i].handler->enable(i);
 		}
 	}

@@ -10,11 +10,11 @@
 ----------
 
 N: Matti Aarnio
-E: mea@utu.fi
-D: LILO for AHA1542, modularized several of drivers/net/,
-D: dynamic SLIP devices, dynamic /proc/net/, true size /proc/ksyms,
-D: and other hacks..
-D: Documenting various parts of network subsystem (kernel side)
+E: mea@nic.funet.fi
+D: Alpha systems hacking, IPv6 and other network related stuff
+D: One of assisting postmasters for vger.rutgers.edu's lists
+S: (ask for current address)
+S: Finland
 
 N: Werner Almesberger
 E: werner.almesberger@lrc.di.epfl.ch
@@ -1403,7 +1403,8 @@ S: Albuquerque, New Mexico 87131
 S: USA
 
 N: Avery Pennarun
-E: apenwarr@bond.net
+E: apenwarr@worldvisions.ca
+W: http://www.worldvisions.ca/~apenwarr/
 D: ARCnet driver
 D: "make xconfig" improvements
 D: Various minor hacking
@@ -1696,6 +1697,14 @@ S: 22 Irvington Cres.
 S: Willowdale, Ontario
 S: Canada M2N 2Z1
 
+N: Adrian Sun
+E: asun@u.washington.edu
+D: hfs support
+D: alpha rtc port, random appletalk fixes
+S: Department of Zoology, University of Washington
+S: Seattle, WA  98195-1800
+S: USA
+
 N: Tommy Thorn
 E: Tommy.Thorn@irisa.fr
 W: http://www.irisa.fr/prive/thorn/index.html
@@ -1883,9 +1892,9 @@ S: The Netherlands
 N: Tim Waugh
 E: tim@cyberelk.demon.co.uk
 D: Co-architect of the parallel-port sharing system
-S: 110 Twyford Road
-S: EASTLEIGH
-S: SO50 4HN
+S: 4 Fox Close
+S: Bishopstoke
+S: SO50 8NB
 S: United Kingdom
 
 N: Juergen Weigert

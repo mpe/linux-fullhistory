@@ -146,6 +146,7 @@ EXPORT_SYMBOL(d_move);
 EXPORT_SYMBOL(d_instantiate);
 EXPORT_SYMBOL(d_alloc);
 EXPORT_SYMBOL(d_lookup);
+EXPORT_SYMBOL(d_path);
 EXPORT_SYMBOL(__mark_inode_dirty);
 EXPORT_SYMBOL(get_empty_filp);
 EXPORT_SYMBOL(init_private_file);

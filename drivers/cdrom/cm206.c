@@ -186,6 +186,7 @@ History:
 #include <linux/mm.h>
 #include <linux/malloc.h>
 #include <linux/init.h>
+#include <linux/interrupt.h>
 
 /* #include <linux/ucdrom.h> */
 
@@ -816,6 +817,7 @@ static void do_cm206_request(void)
       end_request(0);
       continue;
     }
+    spin_unlock_irq(&io_request_lock);
     error=0;
     for (i=0; i<CURRENT->nr_sectors; i++) {
       int e1, e2;
@@ -838,6 +840,7 @@ static void do_cm206_request(void)
 	debug(("cm206_request: %d %d\n", e1, e2));
       }
     }
+    spin_lock_irq(&io_request_lock);
     end_request(!error);
   }
 }

@@ -41,8 +41,8 @@ static int trunc_direct(struct inode * inode)
 {
 	struct super_block * sb;
 	unsigned int i;
-	unsigned long * p;
-	unsigned long block;
+	u32 * p;
+	u32 block;
 	struct buffer_head * bh;
 	int retry = 0;
 
@@ -71,7 +71,7 @@ repeat:
 	return retry;
 }
 
-static int trunc_indirect(struct inode * inode, unsigned long offset, unsigned long * p, int convert, unsigned char * dirt)
+static int trunc_indirect(struct inode * inode, unsigned long offset, sysv_zone_t * p, int convert, unsigned char * dirt)
 {
 	unsigned long indtmp, indblock;
 	struct super_block * sb;
@@ -140,14 +140,14 @@ done:
 	return retry;
 }
 
-static int trunc_dindirect(struct inode * inode, unsigned long offset, unsigned long * p, int convert, unsigned char * dirt)
+static int trunc_dindirect(struct inode * inode, unsigned long offset, sysv_zone_t * p, int convert, unsigned char * dirt)
 {
-	unsigned long indtmp, indblock;
+	u32 indtmp, indblock;
 	struct super_block * sb;
 	struct buffer_head * indbh;
 	unsigned int i;
 	sysv_zone_t * ind;
-	unsigned long tmp, block;
+	u32 tmp, block;
 	int retry = 0;
 
 	indblock = indtmp = *p;
@@ -197,14 +197,14 @@ done:
 	return retry;
 }
 
-static int trunc_tindirect(struct inode * inode, unsigned long offset, unsigned long * p, int convert, unsigned char * dirt)
+static int trunc_tindirect(struct inode * inode, unsigned long offset, sysv_zone_t * p, int convert, unsigned char * dirt)
 {
-	unsigned long indtmp, indblock;
+	u32 indtmp, indblock;
 	struct super_block * sb;
 	struct buffer_head * indbh;
 	unsigned int i;
 	sysv_zone_t * ind;
-	unsigned long tmp, block;
+	u32 tmp, block;
 	int retry = 0;
 
 	indblock = indtmp = *p;

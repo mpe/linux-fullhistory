@@ -78,9 +78,6 @@
 #include <linux/config.h>
 #include <linux/module.h>
 
-#include <asm/system.h>
-#include <asm/uaccess.h>
-
 #include <linux/poll.h>
 #include <linux/types.h>
 #include <linux/stddef.h>
@@ -96,7 +93,9 @@
 #include <linux/apm_bios.h>
 #include <linux/init.h>
 
-#include "desc.h"
+#include <asm/system.h>
+#include <asm/uaccess.h>
+#include <asm/desc.h>
 
 EXPORT_SYMBOL(apm_register_callback);
 EXPORT_SYMBOL(apm_unregister_callback);

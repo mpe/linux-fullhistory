@@ -545,6 +545,7 @@ static int ariadne_start_xmit(struct sk_buff *skb, struct device *dev)
     struct ariadne_private *priv = (struct ariadne_private *)dev->priv;
     struct AriadneBoard *board = priv->board;
     int entry;
+    unsigned long flags;
 
     /* Transmitter timeout, serious problems. */
     if (dev->tbusy) {
@@ -625,6 +626,9 @@ static int ariadne_start_xmit(struct sk_buff *skb, struct device *dev)
     printk(" data 0x%08x len %d\n", (int)skb->data, (int)skb->len);
 #endif
 
+    save_flags(flags);
+    cli();
+
     entry = priv->cur_tx % TX_RING_SIZE;
 
     /* Caution: the write order is important here, set the base address with
@@ -675,13 +679,12 @@ static int ariadne_start_xmit(struct sk_buff *skb, struct device *dev)
 
     dev->trans_start = jiffies;
 
-    cli();
     priv->lock = 0;
     if (lowb(priv->tx_ring[(entry+1) % TX_RING_SIZE]->TMD1) == 0)
 	dev->tbusy = 0;
     else
 	priv->tx_full = 1;
-    sti();
+    restore_flags(flags);
 
     return(0);
 }
@@ -780,13 +783,15 @@ static struct net_device_stats *ariadne_get_stats(struct device *dev)
     struct ariadne_private *priv = (struct ariadne_private *)dev->priv;
     struct AriadneBoard *board = priv->board;
     short saved_addr;
+    unsigned long flags;
 
+    save_flags(flags);
     cli();
     saved_addr = board->Lance.RAP;
     board->Lance.RAP = CSR112;	/* Missed Frame Count */
     priv->stats.rx_missed_errors = swapw(board->Lance.RDP);
     board->Lance.RAP = saved_addr;
-    sti();
+    restore_flags(flags);
 
     return(&priv->stats);
 }

@@ -267,15 +267,19 @@ static inline void xlate_to_user(char *buf, const char *data, int count)
  *
  * Like copy_from_user() while translating NL->CR;
  */
-static inline void xlate_from_user(char *data, const char *buf, int count)
+static inline int xlate_from_user(char *data, const char *buf, int count)
 {
-	count -= copy_from_user(data, buf, count);
+	int i;
+
+	i = copy_from_user(data, buf, count);
+	count -= i;
 	while (count--) {
 		if (*data == '\n') {
 			*data = '\r';
 		}
 		++data;
 	}
+	return i;
 }
 
 /*================ Global functions ================*/
@@ -404,6 +408,13 @@ hfs_s32 hfs_do_read(struct inode *inode, struct hfs_fork * fork, hfs_u32 pos,
 				xlate_to_user(buf, p, chars);
 			} else {
 				chars -= copy_to_user(buf, p, chars);
+				if (!chars) {
+					brelse(*bhe);
+					count = 0;
+					if (!read)
+						read = -EFAULT;
+					break;
+				}
 			}
 			brelse(*bhe);
 			count -= chars;
@@ -477,10 +488,13 @@ hfs_s32 hfs_do_write(struct inode *inode, struct hfs_fork * fork, hfs_u32 pos,
 			}
 		}
 		p = (pos % HFS_SECTOR_SIZE) + bh->b_data;
-		if (convert) {
-			xlate_from_user(p, buf, c);
-		} else {
-			c -= copy_from_user(p, buf, c);
+		c -= convert ? xlate_from_user(p, buf, c) :
+			copy_from_user(p, buf, c);
+		if (!c) {
+			brelse(bh);
+			if (!written)
+				written = -EFAULT;
+			break;
 		}
 		update_vm_cache(inode,pos,p,c);
 		pos += c;

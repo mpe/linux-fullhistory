@@ -90,14 +90,6 @@ static const char RCSid[] = "$Header: /vger/u4/cvs/linux/drivers/scsi/scsi.c,v 1
 # error You lose.
 #endif
 
-#define MAX_SCSI_DEVICE_CODE 10
-
-#ifdef DEBUG
-    #define SCSI_TIMEOUT (5*HZ)
-#else
-    #define SCSI_TIMEOUT (2*HZ)
-#endif
-
 #define MIN_RESET_DELAY (2*HZ)
 
 /* Do not call reset on error if we just did a reset within 15 sec. */

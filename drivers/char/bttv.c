@@ -684,7 +684,7 @@ int palette2fmt[] = {
        BT848_COLOR_FMT_YCrCb422,
        BT848_COLOR_FMT_YCrCb411,
 };
-#define PALETTEFMT_MAX 11
+#define PALETTEFMT_MAX 15
 
 static int make_rawrisctab(struct bttv *btv, unsigned int *ro,
                             unsigned int *re, unsigned int *vbuf)
@@ -2924,7 +2924,7 @@ int configure_bt848(struct pci_dev *dev, int bttv_num)
         printk("memory: 0x%08x.\n", btv->bt848_adr);
         
         btv->pll.pll_ifreq=0;
-        btv->pll.pll_ifreq=0;
+        btv->pll.pll_ofreq=0;
         btv->pll.pll_crystal=0;
         if(pll[btv->nr])
                 if (!(btv->id==848 && btv->revision==0x11))

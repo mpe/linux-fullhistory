@@ -10,8 +10,8 @@
 Because so many people (myself included) seem to have obtained ARCnet cards
 without manuals, this file contains a quick introduction to ARCnet hardware,
 some cabling tips, and a listing of all jumper settings I can find. Please
-e-mail apenwarr@bond.net with any settings for your particular card, or any
-other information you have!
+e-mail apenwarr@worldvisions.ca with any settings for your particular card,
+or any other information you have!
 
 
 INTRODUCTION TO ARCNET
@@ -80,7 +80,7 @@ CABLING ARCNET NETWORKS
 This section was rewritten by 
         Vojtech Pavlik     <Vojtech.Pavlik@st.mff.cuni.cz>
 using information from several people, including:
-        Avery Pennraun     <apenwarr@bond.net>
+        Avery Pennraun     <apenwarr@worldvisions.ca>
  	Stephen A. Wood    <saw@hallc1.cebaf.gov>
  	John Paul Morrison <jmorriso@bogomips.ee.ubc.ca>
  	Joachim Koenig     <jojo@repas.de>
@@ -438,8 +438,8 @@ Unclassified Stuff
 PC100, PC110, PC120, PC130 (8-bit cards)
 PC500, PC600 (16-bit cards)
 ---------------------------------
-  - mainly from Avery Pennarun <apenwarr@foxnet.net>.  Values depicted are
-    from Avery's setup.
+  - mainly from Avery Pennarun <apenwarr@worldvisions.ca>.  Values depicted
+    are from Avery's setup.
   - special thanks to Timo Hilbrink <timoh@xs4all.nl> for noting that PC120,
     130, 500, and 600 all have the same switches as Avery's PC100. 
     PC500/600 have several extra, undocumented pins though. (?)
@@ -3129,6 +3129,6 @@ Other Cards
 
 I have no information on other models of ARCnet cards at the moment.  Please
 send any and all info to:
-	apenwarr@bond.net
+	apenwarr@worldvisions.ca
 
 Thanks.

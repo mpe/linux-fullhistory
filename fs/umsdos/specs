@@ -147,6 +147,7 @@
  * same target at the same time. Again, I am not sure it
  * is a problem at all.
  */
+
 /* #Specification: hard link / strategy
  * Hard links are difficult to implement on top of an MS-DOS FAT file
  * system. Unlike Unix file systems, there are no inodes. A directory
@@ -180,6 +181,7 @@
  * The entry -LINK1 will be hidden. It will hold a link count.
  * When all link are erased, the hidden file is erased too.
  */
+
 /* #Specification: weakness / hard link
  * The strategy for hard link introduces a side effect that
  * may or may not be acceptable. Here is the sequence

@@ -1175,7 +1175,7 @@ void plip_setup(char *str, int *ints)
 		timid = 1;
 	} else {
 		if (ints[0] == 0 || ints[1] == 0) {
-			/* disable driver on "parport=" or "parport=0" */
+			/* disable driver on "plip=" or "plip=0" */
 			parport[0] = -2;
 		} else {
 			printk(KERN_WARNING "warning: 'plip=0x%x' ignored\n", 

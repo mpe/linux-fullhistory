@@ -634,7 +634,7 @@ unsigned long put_dirty_page(struct task_struct * tsk, unsigned long page, unsig
  * and potentially makes it more efficient.
  */
 static void do_wp_page(struct task_struct * tsk, struct vm_area_struct * vma,
-	unsigned long address, int write_access, pte_t *page_table)
+	unsigned long address, pte_t *page_table)
 {
 	pte_t pte;
 	unsigned long old_page, new_page;
@@ -914,7 +914,7 @@ static inline void handle_pte_fault(struct task_struct *tsk,
 		flush_tlb_page(vma, address);
 		return;
 	}
-	do_wp_page(tsk, vma, address, write_access, pte);
+	do_wp_page(tsk, vma, address, pte);
 }
 
 /*

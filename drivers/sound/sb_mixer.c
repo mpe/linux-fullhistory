@@ -337,7 +337,10 @@ static int sb_mixer_ioctl(int dev, unsigned int cmd, caddr_t arg)
 				  
 			case SOUND_MIXER_STEREODEVS:
 				ret = devc->supported_devices;
-				if (devc->model != MDL_JAZZ && devc->model != MDL_SMW)
+				/* The ESS seems to have stereo mic controls */
+				if (devc->model == MDL_ESS)
+					ret &= ~(SOUND_MASK_SPEAKER|SOUND_MASK_IMIX);
+				else if (devc->model != MDL_JAZZ && devc->model != MDL_SMW)
 					ret &= ~(SOUND_MASK_MIC | SOUND_MASK_SPEAKER | SOUND_MASK_IMIX);
 				break;
 				  

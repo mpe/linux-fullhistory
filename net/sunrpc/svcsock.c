@@ -677,7 +677,7 @@ error:
 /*
  * Send out data on TCP socket.
  * FIXME: Make the sendto call non-blocking in order not to hang
- * a daemon on a a dead client. Requires write queue maintenance.
+ * a daemon on a dead client. Requires write queue maintenance.
  */
 static int
 svc_tcp_sendto(struct svc_rqst *rqstp)

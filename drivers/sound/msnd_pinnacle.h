@@ -24,7 +24,7 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
- * $Id: msnd_pinnacle.h,v 1.8 1998/09/03 06:39:47 andrewtv Exp $
+ * $Id: msnd_pinnacle.h,v 1.10 1998/09/10 04:11:18 andrewtv Exp $
  *
  ********************************************************************/
 #ifndef __MSND_PINNACLE_H

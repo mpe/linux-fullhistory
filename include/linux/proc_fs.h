@@ -23,6 +23,7 @@ enum root_directory_inos {
 	PROC_CPUINFO,
 	PROC_PCI,
 	PROC_MCA,
+	PROC_NUBUS,
 	PROC_SELF,	/* will change inode # */
 	PROC_NET,
         PROC_SCSI,

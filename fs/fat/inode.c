@@ -221,13 +221,13 @@ static int parse_options(char *options,int *fat, int *blksize, int *debug,
 			if (value) ret = 0;
 			else opts->sys_immutable = 1;
 		}
-		else if (!strcmp(this_char,"codepage")) {
+		else if (!strcmp(this_char,"codepage") && value) {
 			opts->codepage = simple_strtoul(value,&value,0);
 			if (*value) ret = 0;
 			else printk ("MSDOS FS: Using codepage %d\n",
 					opts->codepage);
 		}
-		else if (!strcmp(this_char,"iocharset")) {
+		else if (!strcmp(this_char,"iocharset") && value) {
 			p = value;
 			while (*value && *value != ',') value++;
 			len = value - p;

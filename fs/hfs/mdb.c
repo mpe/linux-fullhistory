@@ -29,6 +29,8 @@
  * the HFS equivalent of a superblock.
  *
  * Reference: _Inside Macintosh: Files_ pages 2-59 through 2-62
+ *
+ * modified for HFS Extended
  */
 struct raw_mdb {
 	hfs_word_t	drSigWord;	/* Signature word indicating fs type */
@@ -60,9 +62,11 @@ struct raw_mdb {
 	hfs_lword_t	drFilCnt;	/* number of files in the fs */
 	hfs_lword_t	drDirCnt;	/* number of directories in the fs */
 	hfs_byte_t	drFndrInfo[32];	/* data used by the Finder */
-	hfs_word_t	drVCSize;	/* MacOS caching parameter */
-	hfs_word_t	drVCBMSize;	/* MacOS caching parameter */
-	hfs_word_t	drCtlCSize;	/* MacOS caching parameter */
+	hfs_word_t	drEmbedSigWord;	/* embedded volume signature */
+	hfs_lword_t     drEmbedExtent;  /* starting block number (xdrStABN) 
+					   and number of allocation blocks 
+					   (xdrNumABlks) occupied by embedded
+					   volume */
 	hfs_lword_t	drXTFlSize;	/* bytes in the extents B-tree */
 	hfs_byte_t	drXTExtRec[12];	/* extents B-tree's first 3 extents */
 	hfs_lword_t	drCTFlSize;	/* bytes in the catalog B-tree */

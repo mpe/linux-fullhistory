@@ -125,7 +125,7 @@ if [ "$CONFIG_VIDEO_DEV" != "n" ]; then
     hex '  SF16FMI I/O port (0x284 or 0x384)' CONFIG_RADIO_SF16FMI_PORT 284
   fi
   dep_tristate 'Zoltrix Radio' CONFIG_RADIO_ZOLTRIX $CONFIG_VIDEO_DEV
-  if [ "$CONFIG_RADIO_ZOLTRIX" != "n" ]; then
+  if [ "$CONFIG_RADIO_ZOLTRIX" = "y" ]; then
     hex '  ZOLTRIX I/O port (0x20c or 0x30c)' CONFIG_RADIO_ZOLTRIX_PORT 20c
   fi
 fi

@@ -844,7 +844,7 @@ static int get_stat(int pid, char * buffer)
 
 	return sprintf(buffer,"%d (%s) %c %d %d %d %d %d %lu %lu \
 %lu %lu %lu %lu %lu %ld %ld %ld %ld %ld %ld %lu %lu %ld %lu %lu %lu %lu %lu \
-%lu %lu %lu %lu %lu %lu %lu %lu\n",
+%lu %lu %lu %lu %lu %lu %lu %lu %d\n",
 		pid,
 		tsk->comm,
 		state,
@@ -885,7 +885,8 @@ static int get_stat(int pid, char * buffer)
 		sigcatch    .sig[0] & 0x7fffffffUL,
 		wchan,
 		tsk->nswap,
-		tsk->cnswap);
+		tsk->cnswap,
+		tsk->exit_signal);
 }
 		
 static inline void statm_pte_range(pmd_t * pmd, unsigned long address, unsigned long size,
@@ -1224,6 +1225,11 @@ static long get_root_array(char * page, int type, char **start,
   	        case PROC_PCI:
 			return get_pci_list(page);
 #endif
+
+#ifdef CONFIG_NUBUS
+		case PROC_NUBUS:
+			return get_nubus_list(page);
+#endif			
 			
 		case PROC_CPUINFO:
 			return get_cpuinfo(page);

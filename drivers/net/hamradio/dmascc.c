@@ -1,5 +1,5 @@
 /*
- * $Id: dmascc.c,v 1.2.1.4 1998/06/10 02:24:11 kudielka Exp $
+ * $Id: dmascc.c,v 1.3 1998/09/07 04:41:56 kudielka Exp $
  *
  * Driver for high-speed SCC boards (those with DMA support)
  * Copyright (C) 1997 Klaus Kudielka
@@ -62,6 +62,14 @@
 #define test_and_set_bit(x,y) set_bit(x,y)
 #define register_netdevice(x) register_netdev(x)
 #define unregister_netdevice(x) unregister_netdev(x)
+#define dev_kfree_skb(x) dev_kfree_skb(x,FREE_WRITE)
+#define SET_DEV_INIT(x) (x=dmascc_dev_init)
+
+#define SHDLCE  0x01 /* WR15 */
+
+#define AUTOEOM 0x02 /* WR7' */
+#define RXFIFOH 0x08
+#define TXFIFOE 0x20
 
 static int dmascc_dev_init(struct device *dev)
 {
@@ -83,7 +91,7 @@ static void dev_init_buffers(struct device *dev)
 #include <linux/init.h>
 #include <asm/uaccess.h>
 
-#define dmascc_dev_init NULL
+#define SET_DEV_INIT(x)
 
 
 #endif
@@ -286,7 +294,7 @@ static unsigned long rand;
 #ifdef MODULE
 
 
-MODULE_AUTHOR("Klaus Kudielka <oe1kib@oe1xtu.ampr.org>");
+MODULE_AUTHOR("Klaus Kudielka");
 MODULE_DESCRIPTION("Driver for high-speed SCC boards");
 MODULE_PARM(io, "1-" __MODULE_STRING(MAX_NUM_DEVS) "i");
 
@@ -462,8 +470,8 @@ __initfunc(int setup_adapter(int io, int h, int n))
   /* Reset 8530 */
   write_scc(cmd, R9, FHWRES | MIE | NV);
 
-  /* Determine type of chip */
-  write_scc(cmd, R15, 1);
+  /* Determine type of chip by enabling SDLC/HDLC enhancements */
+  write_scc(cmd, R15, SHDLCE);
   if (!read_scc(cmd, R15)) {
     /* WR7' not present. This is an ordinary Z8530 SCC. */
     chip = Z8530;
@@ -575,7 +583,7 @@ __initfunc(int setup_adapter(int io, int h, int n))
     dev->hard_header = ax25_encapsulate;
     dev->rebuild_header = ax25_rebuild_header;
     dev->set_mac_address = scc_set_mac_address;
-    dev->init = dmascc_dev_init;
+    SET_DEV_INIT(dev->init);
     dev->type = ARPHRD_AX25;
     dev->hard_header_len = 73;
     dev->mtu = 1500;
@@ -662,17 +670,17 @@ static int scc_open(struct device *dev)
   switch (info->chip) {
   case Z85C30:
     /* Select WR7' */
-    write_scc(cmd, R15, 1);
+    write_scc(cmd, R15, SHDLCE);
     /* Auto EOM reset */
-    write_scc(cmd, R7, 0x02);
+    write_scc(cmd, R7, AUTOEOM);
     write_scc(cmd, R15, 0);
     break;
   case Z85230:
     /* Select WR7' */
-    write_scc(cmd, R15, 1);
+    write_scc(cmd, R15, SHDLCE);
     /* RX FIFO half full (interrupt only), Auto EOM reset,
        TX FIFO empty (DMA only) */
-    write_scc(cmd, R7, dev->dma ? 0x22 : 0x0a);
+    write_scc(cmd, R7, AUTOEOM | (dev->dma ? TXFIFOE : RXFIFOH));
     write_scc(cmd, R15, 0);
     break;
   }

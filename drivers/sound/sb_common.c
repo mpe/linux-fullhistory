@@ -932,7 +932,10 @@ void sb_dsp_disable_recording(int io_base)
 {
 }
 
-void sb_dsp_unload(struct address_info *hw_config)
+/* if (sbmpu) below we allow mpu401 to manage the midi devs
+   otherwise we have to unload them. (Andrzej Krzysztofowicz) */
+   
+void sb_dsp_unload(struct address_info *hw_config, int sbmpu)
 {
 	sb_devc *devc;
 
@@ -951,10 +954,13 @@ void sb_dsp_unload(struct address_info *hw_config)
 		if (!(devc->caps & SB_NO_AUDIO && devc->caps & SB_NO_MIDI) && devc->irq > 0)
 		{
 			free_irq(devc->irq, devc);
-			sound_unload_mixerdev(devc->my_mixerdev);
+			if (devc->my_mixerdev)
+				sound_unload_mixerdev(devc->my_mixerdev);
 			/* We don't have to do this bit any more the UART401 is its own
 				master  -- Krzysztof Halasa */
-			/* sound_unload_mididev(devc->my_mididev); */
+			/* But we have to do it, if UART401 is not detected */
+			if (!sbmpu && devc->my_mididev)
+				sound_unload_mididev(devc->my_mididev);
 			sound_unload_audiodev(devc->my_dev);
 		}
 		kfree(devc);
@@ -1301,10 +1307,8 @@ int probe_sbmpu(struct address_info *hw_config)
 			}
 			hw_config->name = "Sound Blaster 16";
 			hw_config->irq = -devc->irq;
-#if defined(CONFIG_MIDI) && defined(CONFIG_UART401)
 			if (devc->minor > 12)		/* What is Vibra's version??? */
 				sb16_set_mpu_port(devc, hw_config);
-#endif
 			break;
 
 		case MDL_ESS:

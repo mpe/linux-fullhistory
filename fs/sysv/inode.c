@@ -30,7 +30,7 @@
 #include <linux/string.h>
 #include <linux/locks.h>
 #include <linux/init.h>
-
+#include <asm/byteorder.h>
 #include <asm/uaccess.h>
 
 #if 0
@@ -532,7 +532,7 @@ void sysv_write_super (struct super_block *sb)
 
 void sysv_put_super(struct super_block *sb)
 {
-	/* we can assume sysv_write_super() has already been called, and
+	/* we can assume sysv_write_super() has already been called,
 	   and that the superblock is locked */
 	brelse(sb->sv_bh1);
 	if (sb->sv_bh1 != sb->sv_bh2) brelse(sb->sv_bh2);
@@ -648,8 +648,8 @@ int sysv_bmap(struct inode * inode,int block_nr)
 static struct buffer_head * inode_getblk(struct inode * inode, int nr, int create)
 {
 	struct super_block *sb;
-	unsigned long tmp;
-	unsigned long *p;
+	u32 tmp;
+	u32 *p;
 	struct buffer_head * result;
 
 	sb = inode->i_sb;
@@ -684,7 +684,7 @@ static struct buffer_head * block_getblk(struct inode * inode,
 	struct buffer_head * bh, int nr, int create)
 {
 	struct super_block *sb;
-	unsigned long tmp, block;
+	u32 tmp, block;
 	sysv_zone_t *p;
 	struct buffer_head * result;
 
@@ -782,26 +782,43 @@ struct buffer_head * sysv_file_bread(struct inode * inode, int block, int create
 	return NULL;
 }
 
+#ifdef __BIG_ENDIAN
 
-static inline unsigned long read3byte (char * p)
+static inline unsigned long read3byte (unsigned char * p)
+{
+	return (p[2] | (p[1]<<8) | (p[0]<<16));
+}
+
+static inline void write3byte (unsigned char *p , unsigned long val)
+{
+	p[2]=val&0xFF;
+	p[1]=(val>>8)&0xFF;
+	p[0]=(val>>16)&0xFF;
+}
+
+#else
+
+static inline unsigned long read3byte (unsigned char * p)
 {
 	return (unsigned long)(*(unsigned short *)p)
 	     | (unsigned long)(*(unsigned char *)(p+2)) << 16;
 }
 
-static inline void write3byte (char * p, unsigned long val)
+static inline void write3byte (unsigned char * p, unsigned long val)
 {
 	*(unsigned short *)p = (unsigned short) val;
 	*(unsigned char *)(p+2) = val >> 16;
 }
 
-static inline unsigned long coh_read3byte (char * p)
+#endif
+
+static inline unsigned long coh_read3byte (unsigned char * p)
 {
 	return (unsigned long)(*(unsigned char *)p) << 16
 	     | (unsigned long)(*(unsigned short *)(p+1));
 }
 
-static inline void coh_write3byte (char * p, unsigned long val)
+static inline void coh_write3byte (unsigned char * p, unsigned long val)
 {
 	*(unsigned char *)p = val >> 16;
 	*(unsigned short *)(p+1) = (unsigned short) val;

@@ -6,9 +6,6 @@
 	Written 1994-1996 by Avery Pennarun,
 	which was in turn derived from skeleton.c by Donald Becker.
 
-	Contact Avery at: apenwarr@bond.net or
-	RR #5 Pole Line Road, Thunder Bay, ON, Canada P7C 5M9
-
 	**********************
 
 	The original copyright of skeleton.c was as follows:
@@ -214,7 +211,7 @@ void put_whole_buffer (struct device *dev, unsigned offset, unsigned length, cha
 
 
 static const char *version =
- "com20020.c: v3.00 97/11/09 Avery Pennarun <apenwarr@bond.net> et al.\n";
+ "com20020.c: v3.00 97/11/09 Avery Pennarun <apenwarr@worldvisions.ca> et al.\n";
 
 /****************************************************************************
  *                                                                          *

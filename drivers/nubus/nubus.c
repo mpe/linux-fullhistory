@@ -14,8 +14,11 @@
 #include <asm/setup.h>
 #include <asm/system.h>
 #include <asm/page.h>
+#include <asm/hwtest.h>
 /* for LCIII stuff; better find a general way like MACH_HAS_NUBUS */
 #include <asm/macintosh.h>
+#include <linux/proc_fs.h>
+
 
 #undef LCIII_WEIRDNESS
  
@@ -26,49 +29,6 @@ static struct nubus_slot nubus_slots[16];
  *				-- Alan
  */
  
- 
- 
-/* This function tests for the presence of an address, specially a
- * hardware register address. It is called very early in the kernel
- * initialization process, when the VBR register isn't set up yet. On
- * an Atari, it still points to address 0, which is unmapped. So a bus
- * error would cause another bus error while fetching the exception
- * vector, and the CPU would do nothing at all. So we needed to set up
- * a temporary VBR and a vector table for the duration of the test.
- *
- * See the atari/config.c code we nicked it from for more clues.
- */
-
-int nubus_hwreg_present( volatile void *regp )
-{
-    int	ret = 0;
-    long	save_sp, save_vbr;
-    long	tmp_vectors[3];
-    unsigned long flags;
-    
-    save_flags(flags);
-    cli();
-
-    __asm__ __volatile__
-	(	"movec	%/vbr,%2\n\t"
-		"movel	#Lberr1,%4@(8)\n\t"
-                "movec	%4,%/vbr\n\t"
-		"movel	%/sp,%1\n\t"
-		"moveq	#0,%0\n\t"
-		"tstb	%3@\n\t"  
-		"nop\n\t"
-		"moveq	#1,%0\n"
-                "Lberr1:\n\t"
-		"movel	%1,%/sp\n\t"
-		"movec	%2,%/vbr"
-		: "=&d" (ret), "=&r" (save_sp), "=&r" (save_vbr)
-		: "a" (regp), "a" (tmp_vectors)
-                );
-    restore_flags(flags);
-    return( ret );
-}
-
-
 
 /*
  *	Yes this sucks. The ROM can appear on arbitary bytes of the long
@@ -104,7 +64,7 @@ static void nubus_rewind(unsigned char **ptr, int len, int map)
 {
 	unsigned char *p=*ptr;
 	
-	if(len>8192)
+	if(len>65536)
 		printk("rewind of %d!\n", len);
 	while(len)
 	{
@@ -121,7 +81,7 @@ static void nubus_rewind(unsigned char **ptr, int len, int map)
 static void nubus_advance(unsigned char **ptr, int len, int map)
 {
 	unsigned char *p=*ptr;
-	if(len>8192)
+	if(len>65536)
 		printk("advance of %d!\n", len);
 	while(len)
 	{
@@ -375,7 +335,7 @@ void nubus_probe_slot(int slot, int mode)
 	{
 		rp--;
 		
-		if(!nubus_hwreg_present(rp))
+		if(!hwreg_present(rp))
 			continue;
 			
 		dp=*rp;
@@ -596,6 +556,52 @@ int nubus_ethernet_addr(int slot, unsigned char *addr)
 	return ng;
 }
 
+#ifdef CONFIG_PROC_FS
+
+/*
+ *	/proc for Nubus devices
+ */
+ 
+static int sprint_nubus_config(int slot, char *ptr, int len)
+{
+	if(len<150)
+		return -1;
+	sprintf(ptr, "Device: %s %s\n", nubus_slots[slot].slot_cardname,
+		(nubus_slots[slot].slot_flags&NUBUS_DEVICE_ACTIVE)?
+			"[active]":"[unused]");
+	return strlen(ptr);
+}
+
+int get_nubus_list(char *buf)
+{
+	int nprinted, len, size;
+	int slot;
+#define MSG "\nwarning: page-size limit reached!\n"
+
+	/* reserve same for truncation warning message: */
+	size  = PAGE_SIZE - (strlen(MSG) + 1);
+	len   = sprintf(buf, "Nubus devices found:\n");
+
+	for (slot=0; slot< 16; slot++) 
+	{
+		if(!(nubus_slots[slot].slot_flags&NUBUS_DEVICE_PRESENT))
+			continue;
+		nprinted = sprint_nubus_config(slot, buf + len, size - len);
+		if (nprinted < 0) {
+			return len + sprintf(buf + len, MSG);
+		}
+		len += nprinted;
+	}
+	return len;
+}
+
+static struct proc_dir_entry proc_nubus = {
+	PROC_NUBUS, 5, "nubus",
+	S_IFREG | S_IRUGO, 1, 0, 0,
+	0, &proc_array_inode_operations
+};
+#endif
+
 void nubus_init(void)
 {
 	/* 
@@ -626,4 +632,7 @@ void nubus_init(void)
 	nubus_init_via();
 	printk("Scanning nubus slots.\n");
 	nubus_probe_bus();
+	proc_register(&proc_root, &proc_nubus);
 }
+
+	

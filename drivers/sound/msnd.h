@@ -24,19 +24,19 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
- * $Id: msnd.h,v 1.18 1998/09/04 18:43:40 andrewtv Exp $
+ * $Id: msnd.h,v 1.31 1998/09/10 14:02:58 andrewtv Exp $
  *
  ********************************************************************/
 #ifndef __MSND_H
 #define __MSND_H
 
-#define VERSION			"0.7.13"
+#define VERSION			"0.8.2"
 
 #define DEFSAMPLERATE		DSP_DEFAULT_SPEED
 #define DEFSAMPLESIZE		AFMT_U8
 #define DEFCHANNELS		1
 
-#define DEFFIFOSIZE		64
+#define DEFFIFOSIZE		128
 
 #define SNDCARD_MSND		38
 
@@ -151,6 +151,7 @@
 
 #define PCTODSP_OFFSET(w)	(USHORT)((w)/2)
 #define PCTODSP_BASED(w)	(USHORT)(((w)/2) + DSP_BASE_ADDR)
+#define DSPTOPC_BASED(w)	(((w) - DSP_BASE_ADDR) * 2)
 
 #ifdef SLOWIO
 #  undef outb
@@ -207,14 +208,10 @@ typedef struct multisound_dev {
 	int memid, irqid;
 	int irq, irq_ref;
 	unsigned char info;
-	char *base;
-#ifndef LINUX20
-	spinlock_t lock;
-#endif
+	volatile BYTE *base;
 
 	/* Motorola 56k DSP SMA */
 	volatile BYTE *SMA;
-	volatile BYTE *CurDAQD, *CurDARQD;
 	volatile BYTE *DAPQ, *DARQ, *MODQ, *MIDQ, *DSPQ;
 	volatile WORD *pwDSPQData, *pwMIDQData, *pwMODQData;
 
@@ -222,27 +219,32 @@ typedef struct multisound_dev {
 	enum { msndClassic, msndPinnacle } type;
 	mode_t mode;
 	unsigned long flags;
-#define F_BANKONE			0
-#define F_INTERRUPT			1
-#define F_WRITING			2
-#define F_WRITEBLOCK			3
-#define F_READING			4
-#define F_READBLOCK			5
-#define F_AUDIO_INUSE			6
-#define F_EXT_MIDI_INUSE		7
-#define F_INT_MIDI_INUSE		8
-#define F_WRITEFLUSH			9
-#define F_HAVEDIGITAL			10
+#define F_RESETTING			0
+#define F_HAVEDIGITAL			1
+#define F_AUDIO_WRITE_INUSE		2
+#define F_WRITING			3
+#define F_WRITEBLOCK			4
+#define F_WRITEFLUSH			5
+#define F_AUDIO_READ_INUSE		6
+#define F_READING			7
+#define F_READBLOCK			8
+#define F_EXT_MIDI_INUSE		9
+#define F_INT_MIDI_INUSE		10
 	struct wait_queue *writeblock, *readblock;
 	struct wait_queue *writeflush;
+#ifndef LINUX20
+	spinlock_t lock;
+#endif
+	int nresets;
 	unsigned long recsrc;
 	int left_levels[16];
 	int right_levels[16];
 	int mixer_mod_count;
 	int calibrate_signal;
-	int sample_size;
-	int sample_rate;
-	int channels;
+	int play_sample_size, play_sample_rate, play_channels;
+	int play_ndelay;
+	int rec_sample_size, rec_sample_rate, rec_channels;
+	int rec_ndelay;
 	BYTE bCurrentMidiPatch;
 	void (*inc_ref)(void);
 	void (*dec_ref)(void);
@@ -250,7 +252,7 @@ typedef struct multisound_dev {
 	/* Digital audio FIFOs */
 	msnd_fifo DAPF, DARF;
 	int fifosize;
-	int lastbank;
+	int last_playbank, last_recbank;
 
 	/* MIDI in callback */
 	void (*midi_in_interrupt)(struct multisound_dev *);

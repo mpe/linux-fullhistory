@@ -500,6 +500,7 @@ void udp_err(struct sk_buff *skb, unsigned char *dp, int len)
 	}
   	
 	switch (type) {
+	case ICMP_TIME_EXCEEDED:
 	case ICMP_SOURCE_QUENCH:
 		return;
 	case ICMP_PARAMETERPROB:

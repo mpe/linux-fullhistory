@@ -197,10 +197,6 @@
 #include "AM53C974.h"
 #endif
 
-#ifdef CONFIG_SCSI_PPA
-#include "ppa.h"
-#endif
-
 #ifdef CONFIG_SCSI_SUNESP
 #include "esp.h"
 #endif
@@ -271,6 +267,20 @@
 
 #ifdef CONFIG_JAZZ_ESP
 #include "jazz_esp.h"
+#endif
+
+/*
+ * Moved ppa driver to the end of the probe list
+ * since it is a removable host adapter.
+ * This means the parallel ZIP drive will not bump
+ * the order of the /dev/sd devices - campbell@torque.net
+ */
+#ifdef CONFIG_SCSI_PPA
+#include "ppa.h"
+#endif
+
+#ifdef CONFIG_SCSI_IMM
+#include "imm.h"
 #endif
 
 /*
@@ -441,9 +451,6 @@ static Scsi_Host_Template builtin_scsi_hosts[] =
 #ifdef CONFIG_SCSI_AM53C974
     AM53C974,
 #endif
-#ifdef CONFIG_SCSI_PPA
-    PPA,
-#endif
 #ifdef CONFIG_SCSI_SUNESP
     SCSI_SPARC_ESP,
 #endif
@@ -484,6 +491,13 @@ static Scsi_Host_Template builtin_scsi_hosts[] =
 #ifdef CONFIG_SCSI_POWERTECSCSI
     POWERTECSCSI,
 #endif
+#endif
+/* "Removable host adapters" below this line (Parallel Port/USB/other) */
+#ifdef CONFIG_SCSI_PPA
+    PPA,
+#endif
+#ifdef CONFIG_SCSI_IMM
+    IMM,
 #endif
 #ifdef CONFIG_SCSI_DEBUG
     SCSI_DEBUG,

@@ -849,7 +849,7 @@ unload_mad16_mpu(struct address_info *hw_config)
 #if defined(CONFIG_MIDI) && defined(CONFIG_MAD16_OLDCARD)
 	if (board_type < C929)	/* Early chip. No MPU support. Just SB MIDI */
 	{
-		sb_dsp_unload(hw_config);
+		sb_dsp_unload(hw_config, 0);
 		return;
 	}
 #endif
