@@ -1,4 +1,4 @@
-/* $Id: pgtable.h,v 1.116 1999/12/15 22:18:55 davem Exp $
+/* $Id: pgtable.h,v 1.118 1999/12/21 21:24:35 davem Exp $
  * pgtable.h: SpitFire page table operations.
  *
  * Copyright 1996,1997 David S. Miller (davem@caip.rutgers.edu)
@@ -207,8 +207,8 @@ extern inline pte_t pte_modify(pte_t orig_pte, pgprot_t new_prot)
 #define pte_mkold(pte)		(__pte(((pte_val(pte)<<1UL)>>1UL) & ~_PAGE_ACCESSED))
 
 /* Permanent address of a page. */
-#define page_address(page)   (PAGE_OFFSET + (((page) - mem_map) << PAGE_SHIFT))
-#define __page_address(page) ({ page_address(page); })
+#define __page_address(page)	((page)->virtual)
+#define page_address(page)	({ __page_address(page); })
 
 #define pte_page(x) (mem_map+pte_pagenr(x))
 

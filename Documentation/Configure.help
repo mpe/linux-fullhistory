@@ -7873,7 +7873,7 @@ CONFIG_USB
   The module will be called usbcore.o. If you want to compile it as a
   module, say M here and read Documentation/modules.txt.
 
-UHCI (intel PIIX4 and others) support?
+UHCI (intel PIIX4, VIA, and others) support?
 CONFIG_USB_UHCI
   The Universal Host Controller Interface is a standard by Intel for
   accessing the USB hardware in the PC (which is also called the USB
@@ -7886,7 +7886,7 @@ CONFIG_USB_UHCI
   The module will be called usb-uhci.o. If you want to compile it as a
   module, say M here and read Documentation/modules.txt.
   
-OHCI-HCD (compaq and some others) support?
+OHCI-HCD (Compaq, iMacs, OPTi, SiS, and others) support?
 CONFIG_USB_OHCI_HCD
   The Open Host Controller Interface is a standard by
   Compaq/Microsoft/National for accessing the USB PC hardware (also
@@ -7954,9 +7954,10 @@ CONFIG_USB_ACM
   The module will be called acm.o. If you want to compile it as a
   module, say M here and read Documentation/modules.txt.
 
-USB Belkin and Peracom serial support
+USB serial converter support
 CONFIG_USB_SERIAL
-  Say Y here if you want to connect a Belkin, Peracom, or eTek
+  Say Y here if you want to connect a Connect Tech WhiteHEAT 
+  multi-port USB to serial converter, or a Belkin, Peracom, or eTek
   single port USB to serial converter.
   
   This code is also available as a module ( = code which can be
@@ -8052,8 +8053,8 @@ CONFIG_USB_PROC
 
 DABUSB driver
 CONFIG_USB_DABUSB
-  A Digital Audio Broadcasting (DAB) Receiver for USB and Linux brought to
-  you by the DAB-Team (http://dab.in.tum.de). 
+  A Digital Audio Broadcasting (DAB) Receiver for USB and Linux brought
+  to you by the DAB-Team (http://dab.in.tum.de). 
   This driver can be taken as an example for URB-based bulk, control, and
   isochronous transactions.
 

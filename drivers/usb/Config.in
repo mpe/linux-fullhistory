@@ -10,7 +10,7 @@ comment 'USB Controllers'
    dep_tristate '  UHCI (Intel PIIX4, VIA, and others) support' CONFIG_USB_UHCI \
 	$CONFIG_USB
 
-   dep_tristate '  OHCI-HCD (Compaq, iMacs, OPTi, and some others) support' \
+   dep_tristate '  OHCI-HCD (Compaq, iMacs, OPTi, SiS, and others) support' \
 		CONFIG_USB_OHCI_HCD $CONFIG_USB
 
 comment 'Miscellaneous USB options'
@@ -25,7 +25,7 @@ comment 'USB Devices'
    dep_tristate '  USB HP scanner support' CONFIG_USB_HP_SCANNER $CONFIG_USB
    dep_tristate '  USB Audio support' CONFIG_USB_AUDIO $CONFIG_USB
    dep_tristate '  USB Communications Device Class (ACM) support' CONFIG_USB_ACM $CONFIG_USB
-   dep_tristate '  USB Belkin and Peracom serial support' CONFIG_USB_SERIAL $CONFIG_USB
+   dep_tristate '  USB Serial Converter support' CONFIG_USB_SERIAL $CONFIG_USB
    dep_tristate '  USB CPiA Camera support' CONFIG_USB_CPIA $CONFIG_USB
    dep_tristate '  USB Kodak DC-2xx Camera support' CONFIG_USB_DC2XX $CONFIG_USB
    dep_tristate '  USB SCSI (mass storage) support' CONFIG_USB_SCSI $CONFIG_USB

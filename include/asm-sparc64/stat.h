@@ -1,4 +1,4 @@
-/* $Id: stat.h,v 1.5 1998/07/26 05:24:41 davem Exp $ */
+/* $Id: stat.h,v 1.6 1999/12/21 14:09:48 jj Exp $ */
 #ifndef _SPARC64_STAT_H
 #define _SPARC64_STAT_H
 
@@ -41,5 +41,46 @@ struct stat {
 	off_t   st_blocks;
 	unsigned long  __unused4[2];
 };
+
+#ifdef __KERNEL__
+/* This is sparc32 stat64 structure. */
+
+struct stat64 {
+	unsigned char	__pad0[6];
+	unsigned short	st_dev;
+	unsigned char	__pad1[4];
+
+	unsigned int	st_ino;
+	unsigned int	st_mode;
+	unsigned int	st_nlink;
+
+	unsigned int	st_uid;
+	unsigned int	st_gid;
+
+	unsigned char	__pad2[6];
+	unsigned short	st_rdev;
+
+	unsigned char	__pad3[8];
+
+	long long	st_size;
+	unsigned int	st_blksize;
+
+	unsigned char	__pad4[8];
+	unsigned int	st_blocks;
+
+	unsigned int	st_atime;
+	unsigned int	__unused1;
+
+	unsigned int	st_mtime;
+	unsigned int	__unused2;
+
+	unsigned int	st_ctime;
+	unsigned int	__unused3;
+
+	unsigned int	__unused4;
+	unsigned int	__unused5;
+};
+
+#endif
 
 #endif

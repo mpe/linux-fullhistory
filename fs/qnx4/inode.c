@@ -1,12 +1,12 @@
-/* 
+/*
  * QNX4 file system, Linux implementation.
- * 
- * Version : 0.1
- * 
+ *
+ * Version : 0.2.1
+ *
  * Using parts of the xiafs filesystem.
- * 
+ *
  * History :
- * 
+ *
  * 01-06-1998 by Richard Frowijn : first release.
  * 20-06-1998 by Frank Denis : Linux 2.1.99+ support, boot signature, misc.
  * 30-06-1998 by Frank Denis : first step to write inodes.
@@ -49,7 +49,7 @@ int qnx4_sync_inode(struct inode *inode)
 				kdevname(inode->i_dev), inode->i_ino);
 			err = -1;
 		}
-	        brelse (bh);	   
+	        brelse (bh);
 	} else if (!bh) {
 		err = -1;
 	}
@@ -120,28 +120,17 @@ static int qnx4_statfs(struct super_block *, struct statfs *, int);
 
 static struct super_operations qnx4_sops =
 {
-	qnx4_read_inode,
+	read_inode:	qnx4_read_inode,
 #ifdef CONFIG_QNX4FS_RW
-	qnx4_write_inode,
-#else
-	NULL,
+	write_inode:	qnx4_write_inode,
+	delete_inode:	qnx4_delete_inode,
 #endif
-	NULL,			/* put_inode */
+	put_super:	qnx4_put_super,
 #ifdef CONFIG_QNX4FS_RW
-	qnx4_delete_inode,
-#else
-	NULL,			/* delete_inode */
+	write_super:	qnx4_write_super,
 #endif
-	NULL,			/* notify_change */
-	qnx4_put_super,
-#ifdef CONFIG_QNX4FS_RW
-	qnx4_write_super,
-#else
-	NULL,
-#endif
-	qnx4_statfs,
-	qnx4_remount,
-	NULL			/* clear_inode */
+	statfs:		qnx4_statfs,
+	remount_fs:	qnx4_remount,
 };
 
 static int qnx4_remount(struct super_block *sb, int *flags, char *data)
@@ -215,6 +204,89 @@ struct buffer_head *qnx4_bread(struct inode *inode, int block, int create)
 	return NULL;
 }
 
+int qnx4_get_block( struct inode *inode, long iblock, struct buffer_head *bh, int create )
+{
+	unsigned long phys;
+
+	QNX4DEBUG(("qnx4: qnx4_get_block inode=[%ld] iblock=[%ld]\n",inode->i_ino,iblock));
+
+	phys = qnx4_block_map( inode, iblock );
+	if ( phys )
+	{
+		// logical block is before EOF
+		bh->b_dev     = inode->i_dev;
+		bh->b_blocknr = phys;
+		bh->b_state  |= (1UL << BH_Mapped);
+	}
+	else if ( create )
+	{
+		// to be done.
+	}
+	return 0;
+}
+
+unsigned long qnx4_block_map( struct inode *inode, long iblock )
+{
+	int ix;
+	long offset, i_xblk;
+	unsigned long block = 0;
+	struct buffer_head *bh = 0;
+	struct qnx4_xblk *xblk = 0;
+	struct qnx4_inode_info *qnx4_inode = &inode->u.qnx4_i;
+	qnx4_nxtnt_t nxtnt = qnx4_inode->i_num_xtnts;
+
+	if ( iblock < qnx4_inode->i_first_xtnt.xtnt_size )
+	{
+		// iblock is in the first extent. This is easy.
+		block = qnx4_inode->i_first_xtnt.xtnt_blk + iblock - 1;
+	}
+	else
+	{
+		// iblock is beyond first extent. We have to follow the extent chain.
+		i_xblk = qnx4_inode->i_xblk;
+		offset = iblock - qnx4_inode->i_first_xtnt.xtnt_size;
+		ix = 0;
+		while ( --nxtnt > 0 )
+		{
+			if ( ix == 0 )
+			{
+				// read next xtnt block.
+				bh = bread( inode->i_dev, i_xblk - 1, QNX4_BLOCK_SIZE );
+				if ( !bh )
+				{
+					QNX4DEBUG(("qnx4: I/O error reading xtnt block [%ld])\n", i_xblk - 1));
+					return -EIO;
+				}
+				xblk = (struct qnx4_xblk*)bh->b_data;
+				if ( memcmp( xblk->xblk_signature, "IamXblk", 7 ) )
+				{
+					QNX4DEBUG(("qnx4: block at %ld is not a valid xtnt\n", qnx4_inode->i_xblk));
+					break;
+				}
+			}
+			if ( offset < xblk->xblk_xtnts[ix].xtnt_size )
+			{
+				// got it!
+				block = xblk->xblk_xtnts[ix].xtnt_blk + offset - 1;
+				break;
+			}
+			offset -= xblk->xblk_xtnts[ix].xtnt_size;
+			if ( ++ix > QNX4_MAX_XTNTS_PER_XBLK )
+			{
+				i_xblk = xblk->xblk_next_xblk;
+				ix = 0;
+				brelse( bh );
+				bh = 0;
+			}
+		}
+		if ( bh )
+			brelse( bh );
+	}
+
+	QNX4DEBUG(("qnx4: mapping block %ld of inode %ld = %ld\n",iblock,inode->i_ino,block));
+	return block;
+}
+
 static int qnx4_statfs(struct super_block *sb,
 		       struct statfs *buf, int bufsize)
 {
@@ -238,7 +310,7 @@ static int qnx4_statfs(struct super_block *sb,
  * it really _is_ a qnx4 filesystem, and to check the size
  * of the directory entry.
  */
-static const char *qnx4_checkroot(struct super_block *s)
+static const char *qnx4_checkroot(struct super_block *sb)
 {
 	struct buffer_head *bh;
 	struct qnx4_inode_entry *rootdir;
@@ -246,14 +318,14 @@ static const char *qnx4_checkroot(struct super_block *s)
 	int i, j;
 	int found = 0;
 
-	if (*(s->u.qnx4_sb.sb->RootDir.di_fname) != '/') {
+	if (*(sb->u.qnx4_sb.sb->RootDir.di_fname) != '/') {
 		return "no qnx4 filesystem (no root dir).";
 	} else {
-		QNX4DEBUG(("QNX4 filesystem found on dev %s.\n", kdevname(s->s_dev)));
-		rd = s->u.qnx4_sb.sb->RootDir.di_first_xtnt.xtnt_blk - 1;
-		rl = s->u.qnx4_sb.sb->RootDir.di_first_xtnt.xtnt_size;
+		QNX4DEBUG(("QNX4 filesystem found on dev %s.\n", kdevname(sb->s_dev)));
+		rd = sb->u.qnx4_sb.sb->RootDir.di_first_xtnt.xtnt_blk - 1;
+		rl = sb->u.qnx4_sb.sb->RootDir.di_first_xtnt.xtnt_size;
 		for (j = 0; j < rl; j++) {
-			bh = bread(s->s_dev, rd + j, QNX4_BLOCK_SIZE);	/* root dir, first block */
+			bh = bread(sb->s_dev, rd + j, QNX4_BLOCK_SIZE);	/* root dir, first block */
 			if (bh == NULL) {
 				return "unable to read root entry.";
 			}
@@ -263,13 +335,12 @@ static const char *qnx4_checkroot(struct super_block *s)
 					QNX4DEBUG(("Rootdir entry found : [%s]\n", rootdir->di_fname));
 					if (!strncmp(rootdir->di_fname, QNX4_BMNAME, sizeof QNX4_BMNAME)) {
 						found = 1;
-						s->u.qnx4_sb.BitMap = rootdir;	/* keep bitmap inode known */
+						sb->u.qnx4_sb.BitMap = kmalloc( sizeof( struct qnx4_inode_entry ), GFP_KERNEL );
+						memcpy( sb->u.qnx4_sb.BitMap, rootdir, sizeof( struct qnx4_inode_entry ) );	/* keep bitmap inode known */
 						break;
 					}
 				}
 			}
-			/* WAIT! s->u.qnx4_sb.BitMap points into bh->b_data
-			   and now we release bh?? */
 			brelse(bh);
 			if (found != 0) {
 				break;
@@ -282,13 +353,12 @@ static const char *qnx4_checkroot(struct super_block *s)
 	return NULL;
 }
 
-static struct super_block *qnx4_read_super(struct super_block *s, 
+static struct super_block *qnx4_read_super(struct super_block *s,
 					   void *data, int silent)
 {
 	struct buffer_head *bh;
 	kdev_t dev = s->s_dev;
 	struct inode *root;
-	char *tmpc;
 	const char *errmsg;
 
 	MOD_INC_USE_COUNT;
@@ -306,9 +376,7 @@ static struct super_block *qnx4_read_super(struct super_block *s,
 		printk("qnx4: unable to read the boot sector\n");
 		goto outnobh;
 	}
-	tmpc = (char *) bh->b_data;
-	if (tmpc[4] != 'Q' || tmpc[5] != 'N' || tmpc[6] != 'X' ||
-	    tmpc[7] != '4' || tmpc[8] != 'F' || tmpc[9] != 'S') {
+	if ( memcmp( (char*)bh->b_data + 4, "QNX4FS", 6 ) ) {
 		if (!silent)
 			printk("qnx4: wrong fsid in boot sector.\n");
 		goto out;
@@ -328,7 +396,7 @@ static struct super_block *qnx4_read_super(struct super_block *s,
 	s->u.qnx4_sb.sb_buf = bh;
 	s->u.qnx4_sb.sb = (struct qnx4_super_block *) bh->b_data;
 
- 
+
  	/* check before allocating dentries, inodes, .. */
 	errmsg = qnx4_checkroot(s);
 	if (errmsg != NULL) {
@@ -336,18 +404,18 @@ static struct super_block *qnx4_read_super(struct super_block *s,
  			printk("qnx4: %s\n", errmsg);
 		goto out;
 	}
- 
+
  	/* does root not have inode number QNX4_ROOT_INO ?? */
  	root = iget(s, QNX4_ROOT_INO * QNX4_INODES_PER_BLOCK);
  	if (!root) {
  		printk("qnx4: get inode failed\n");
  		goto out;
  	}
- 
+
  	s->s_root = d_alloc_root(root);
  	if (s->s_root == NULL)
  		goto outi;
- 
+
 	brelse(bh);
 	unlock_super(s);
 	s->s_dirt = 1;
@@ -368,6 +436,7 @@ static struct super_block *qnx4_read_super(struct super_block *s,
 
 static void qnx4_put_super(struct super_block *sb)
 {
+	kfree_s( sb->u.qnx4_sb.BitMap, sizeof( struct qnx4_inode_entry ) );
 	MOD_DEC_USE_COUNT;
 	return;
 }
@@ -434,7 +503,7 @@ static struct file_system_type qnx4_fs_type =
 
 int __init init_qnx4_fs(void)
 {
-	printk("QNX4 filesystem v0.2 registered.\n");
+	printk("QNX4 filesystem 0.2.1 registered.\n");
 	return register_filesystem(&qnx4_fs_type);
 }
 

@@ -1,4 +1,4 @@
-/* $Id: unistd.h,v 1.58 1999/12/15 17:52:01 jj Exp $ */
+/* $Id: unistd.h,v 1.59 1999/12/21 14:09:43 jj Exp $ */
 #ifndef _SPARC_UNISTD_H
 #define _SPARC_UNISTD_H
 
@@ -71,14 +71,14 @@
 /* #define __NR_mctl             53    SunOS specific                              */
 #define __NR_ioctl               54 /* Common                                      */
 #define __NR_reboot              55 /* Common                                      */
-/* #define __NR_ni_syscall       56    ENOSYS under SunOS                          */
+#define __NR_mmap2		 56 /* Linux sparc32 Specific			   */
 #define __NR_symlink             57 /* Common                                      */
 #define __NR_readlink            58 /* Common                                      */
 #define __NR_execve              59 /* Common                                      */
 #define __NR_umask               60 /* Common                                      */
 #define __NR_chroot              61 /* Common                                      */
 #define __NR_fstat               62 /* Common                                      */
-/* #define __NR_ni_syscall       63    ENOSYS under SunOS                          */
+#define __NR_fstat64		 63 /* Linux sparc32 Specific			   */
 #define __NR_getpagesize         64 /* Common                                      */
 #define __NR_msync               65 /* Common in newer 1.3.x revs...               */
 #define __NR_vfork               66 /* Common                                      */
@@ -92,14 +92,14 @@
 #define __NR_mprotect            74 /* Common                                      */
 /* #define __NR_madvise          75    SunOS Specific                              */
 #define __NR_vhangup             76 /* Common                                      */
-/* #define __NR_ni_syscall       77    ENOSYS under SunOS                          */
+#define __NR_truncate64		 77 /* Linux sparc32 Specific			   */
 /* #define __NR_mincore          78    SunOS Specific                              */
 #define __NR_getgroups           79 /* Common                                      */
 #define __NR_setgroups           80 /* Common                                      */
 #define __NR_getpgrp             81 /* Common                                      */
 /* #define __NR_setpgrp          82    setpgid, same difference...                 */
 #define __NR_setitimer           83 /* Common                                      */
-/* #define __NR_ni_syscall       84    ENOSYS under SunOS                          */
+#define __NR_ftruncate64	 84 /* Linux sparc32 Specific			   */
 #define __NR_swapon              85 /* Common                                      */
 #define __NR_getitimer           86 /* Common                                      */
 /* #define __NR_gethostname      87    SunOS Specific                              */
@@ -147,14 +147,14 @@
 #define __NR_truncate           129 /* Common                                      */
 #define __NR_ftruncate          130 /* Common                                      */
 #define __NR_flock              131 /* Common                                      */
-/* #define __NR_ni_syscall      132    ENOSYS under SunOS                          */
+#define __NR_lstat64		132 /* Linux sparc32 Specific			   */
 #define __NR_sendto             133 /* Common                                      */
 #define __NR_shutdown           134 /* Common                                      */
 #define __NR_socketpair         135 /* Common                                      */
 #define __NR_mkdir              136 /* Common                                      */
 #define __NR_rmdir              137 /* Common                                      */
 #define __NR_utimes             138 /* SunOS Specific                              */
-/* #define __NR_ni_syscall      139    ENOSYS under SunOS                          */
+#define __NR_stat64		139 /* Linux sparc32 Specific			   */
 /* #define __NR_adjtime         140    SunOS Specific                              */
 #define __NR_getpeername        141 /* Common                                      */
 /* #define __NR_gethostid       142    SunOS Specific                              */

@@ -746,6 +746,10 @@ static int __init detect_auxiliary_port(void)
 	int loops = 10;
 	int retval = 0;
 
+	/* Check if the BIOS detected a device on the auxiliary port. */
+	if (aux_device_present == 0xaa)
+		return 1;
+
 	spin_lock_irqsave(&kbd_controller_lock, flags);
 
 	/* Put the value 0x5A in the output buffer using the "Write

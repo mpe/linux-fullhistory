@@ -87,8 +87,8 @@ void cleanup_drivers(void)
 	proc_usb_cleanup ();
 #endif
 	usb_hub_cleanup();	
-#ifndef MODULE
 
+#ifndef MODULE
 #	ifdef CONFIG_USB_MOUSE
         	usb_mouse_cleanup();
 #	endif
@@ -97,6 +97,18 @@ void cleanup_drivers(void)
 #       endif
 #	ifdef CONFIG_USB_DABUSB
 		dabusb_cleanup();
+#	endif
+#	ifdef CONFIG_USB_KBD
+		usb_kbd_cleanup();
+#	endif
+#	ifdef CONFIG_USB_ACM
+		usb_acm_cleanup();
+#	endif
+#	ifdef CONFIG_USB_CPIA
+		usb_cpia_cleanup();
+#	endif
+#	ifdef CONFIG_USB_DC2XX
+		usb_dc2xx_cleanup();
 #	endif
 #endif
 }

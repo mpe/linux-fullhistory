@@ -589,22 +589,21 @@ static void tcic_timer(u_long data)
 
 /*====================================================================*/
 
-static int tcic_register_callback(u_short lsock, ss_callback_t *call)
+static int tcic_register_callback(unsigned int lsock, void (*handler)(void *, unsigned int), void * info)
 {
-    if (call == NULL) {
-	socket_table[lsock].handler = NULL;
+    socket_table[lsock].handler = handler;
+    socket_table[lsock].info = info;
+    if (handler == NULL) {
 	MOD_DEC_USE_COUNT;
     } else {
 	MOD_INC_USE_COUNT;
-	socket_table[lsock].handler = call->handler;
-	socket_table[lsock].info = call->info;
     }
     return 0;
 } /* tcic_register_callback */
 
 /*====================================================================*/
 
-static int tcic_get_status(u_short lsock, u_int *value)
+static int tcic_get_status(unsigned int lsock, u_int *value)
 {
     u_short psock = socket_table[lsock].psock;
     u_char reg;
@@ -630,7 +629,7 @@ static int tcic_get_status(u_short lsock, u_int *value)
   
 /*====================================================================*/
 
-static int tcic_inquire_socket(u_short lsock, socket_cap_t *cap)
+static int tcic_inquire_socket(unsigned int lsock, socket_cap_t *cap)
 {
     *cap = tcic_cap;
     return 0;
@@ -638,7 +637,7 @@ static int tcic_inquire_socket(u_short lsock, socket_cap_t *cap)
 
 /*====================================================================*/
 
-static int tcic_get_socket(u_short lsock, socket_state_t *state)
+static int tcic_get_socket(unsigned int lsock, socket_state_t *state)
 {
     u_short psock = socket_table[lsock].psock;
     u_char reg;
@@ -691,7 +690,7 @@ static int tcic_get_socket(u_short lsock, socket_state_t *state)
 
 /*====================================================================*/
 
-static int tcic_set_socket(u_short lsock, socket_state_t *state)
+static int tcic_set_socket(unsigned int lsock, socket_state_t *state)
 {
     u_short psock = socket_table[lsock].psock;
     u_char reg;
@@ -766,7 +765,7 @@ static int tcic_set_socket(u_short lsock, socket_state_t *state)
   
 /*====================================================================*/
 
-static int tcic_get_io_map(u_short lsock, struct pccard_io_map *io)
+static int tcic_get_io_map(unsigned int lsock, struct pccard_io_map *io)
 {
     u_short psock = socket_table[lsock].psock;
     u_short base, ioctl;
@@ -804,7 +803,7 @@ static int tcic_get_io_map(u_short lsock, struct pccard_io_map *io)
 
 /*====================================================================*/
 
-static int tcic_set_io_map(u_short lsock, struct pccard_io_map *io)
+static int tcic_set_io_map(unsigned int lsock, struct pccard_io_map *io)
 {
     u_short psock = socket_table[lsock].psock;
     u_int addr;
@@ -841,7 +840,7 @@ static int tcic_set_io_map(u_short lsock, struct pccard_io_map *io)
 
 /*====================================================================*/
 
-static int tcic_get_mem_map(u_short lsock, struct pccard_mem_map *mem)
+static int tcic_get_mem_map(unsigned int lsock, struct pccard_mem_map *mem)
 {
     u_short psock = socket_table[lsock].psock;
     u_short addr, ctl;
@@ -886,7 +885,7 @@ static int tcic_get_mem_map(u_short lsock, struct pccard_mem_map *mem)
 
 /*====================================================================*/
   
-static int tcic_set_mem_map(u_short lsock, struct pccard_mem_map *mem)
+static int tcic_set_mem_map(unsigned int lsock, struct pccard_mem_map *mem)
 {
     u_short psock = socket_table[lsock].psock;
     u_short addr, ctl;
@@ -930,16 +929,15 @@ static int tcic_set_mem_map(u_short lsock, struct pccard_mem_map *mem)
 
 /*====================================================================*/
 
-int tcic_get_bridge(u_short sock, struct cb_bridge_map *m)
+int tcic_get_bridge(unsigned int sock, struct cb_bridge_map *m)
 {
 	return -EINVAL;
 }
 
 #define tcic_set_bridge tcic_get_bridge
 
-void tcic_proc_setup(u_short sock, struct proc_dir_entry *base)
+void tcic_proc_setup(unsigned int sock, struct proc_dir_entry *base)
 {
-	return -EINVAL;
 }
 
 static struct pccard_operations tcic_operations = {

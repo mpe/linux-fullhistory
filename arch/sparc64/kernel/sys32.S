@@ -1,4 +1,4 @@
-/* $Id: sys32.S,v 1.8 1998/10/28 08:10:37 jj Exp $
+/* $Id: sys32.S,v 1.9 1999/12/21 14:09:18 jj Exp $
  * sys32.S: I-cache tricks for 32-bit compatability layer simple
  *          conversions.
  *
@@ -74,3 +74,12 @@ sys32_bdflush:
 	sethi		%hi(sys_bdflush), %g1
 	jmpl		%g1 + %lo(sys_bdflush), %g0
 	 sra		%o1, 0, %o1
+
+	.align		32
+	.globl		sys32_mmap2
+sys32_mmap2:
+	srl		%o4, 0, %o4
+	sethi		%hi(sys_mmap), %g1
+	srl		%o5, 0, %o5
+	jmpl		%g1 + %lo(sys_mmap), %g0
+	 sllx		%o5, 12, %o5

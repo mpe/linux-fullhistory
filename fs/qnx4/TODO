@@ -1,5 +1,8 @@
 Name       : QNX4 TODO list
-Last update: 29-06-1998
+Last update: 1999-12-23
+
+    - Writing is still unsupported (it may compile, but it certainly won't
+      bring you any joy).
 
     - qnx4_checkroot (inode.c), currently there's a look for the '/' in
       the root direntry, if so then the current mounted device is a qnx4
@@ -11,10 +14,6 @@ Last update: 29-06-1998
       
     - Bitmap functions. To find out the free space, largest free block, etc.
       Partly done (RO), Richard, 05/06/1998. Optimized 20-06-1998, Frank.
-    
-    - Symbolic links. symlinks.c have to be rewritten.
-    
-    - Extended files.
     
     - Complete write, unlink and truncate functions : the bitmap should be
 updated.

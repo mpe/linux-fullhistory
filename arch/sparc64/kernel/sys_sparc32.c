@@ -1,4 +1,4 @@
-/* $Id: sys_sparc32.c,v 1.125 1999/12/20 05:02:15 davem Exp $
+/* $Id: sys_sparc32.c,v 1.126 1999/12/21 14:09:21 jj Exp $
  * sys_sparc32.c: Conversion between 32bit and 64bit native syscalls.
  *
  * Copyright (C) 1997,1998 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -713,6 +713,25 @@ asmlinkage int sys32_fstatfs(unsigned int fd, struct statfs32 *buf)
 	if (put_statfs(buf, &s))
 		return -EFAULT;
 	return ret;
+}
+
+extern asmlinkage long sys_truncate(const char * path, unsigned long length);
+extern asmlinkage long sys_ftruncate(unsigned int fd, unsigned long length);
+
+asmlinkage int sys32_truncate64(const char * path, unsigned long high, unsigned long low)
+{
+	if ((int)high < 0)
+		return -EINVAL;
+	else
+		return sys_truncate(path, (high << 32) | low);
+}
+
+asmlinkage int sys32_ftruncate64(unsigned int fd, unsigned long high, unsigned long low)
+{
+	if ((int)high < 0)
+		return -EINVAL;
+	else
+		return sys_ftruncate(fd, (high << 32) | low);
 }
 
 extern asmlinkage int sys_utime(char * filename, struct utimbuf * times);

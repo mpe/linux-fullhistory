@@ -1,4 +1,4 @@
-/* $Id: sys_sparc.c,v 1.54 1999/11/19 04:11:36 davem Exp $
+/* $Id: sys_sparc.c,v 1.55 1999/12/21 14:09:09 jj Exp $
  * linux/arch/sparc/kernel/sys_sparc.c
  *
  * This file contains various random system calls that
@@ -176,20 +176,21 @@ out:
 }
 
 /* Linux version of mmap */
-asmlinkage unsigned long sys_mmap(unsigned long addr, unsigned long len,
+static unsigned long do_mmap2(unsigned long addr, unsigned long len,
 	unsigned long prot, unsigned long flags, unsigned long fd,
-	unsigned long off)
+	unsigned long pgoff)
 {
 	struct file * file = NULL;
 	unsigned long retval = -EBADF;
 
-	down(&current->mm->mmap_sem);
-	lock_kernel();
 	if (!(flags & MAP_ANONYMOUS)) {
 		file = fget(fd);
 		if (!file)
 			goto out;
 	}
+
+	down(&current->mm->mmap_sem);
+	lock_kernel();
 	retval = -ENOMEM;
 	len = PAGE_ALIGN(len);
 	if(!(flags & MAP_FIXED) &&
@@ -211,15 +212,29 @@ asmlinkage unsigned long sys_mmap(unsigned long addr, unsigned long len,
 		goto out_putf;
 
 	flags &= ~(MAP_EXECUTABLE | MAP_DENYWRITE);
-	retval = do_mmap(file, addr, len, prot, flags, off);
+	retval = do_mmap_pgoff(file, addr, len, prot, flags, pgoff);
 
 out_putf:
+	unlock_kernel();
+	up(&current->mm->mmap_sem);
 	if (file)
 		fput(file);
 out:
-	unlock_kernel();
-	up(&current->mm->mmap_sem);
 	return retval;
+}
+
+asmlinkage unsigned long sys_mmap2(unsigned long addr, unsigned long len,
+	unsigned long prot, unsigned long flags, unsigned long fd,
+	unsigned long pgoff)
+{
+	return do_mmap2(addr, len, prot, flags, fd, pgoff);
+}
+
+asmlinkage unsigned long sys_mmap(unsigned long addr, unsigned long len,
+	unsigned long prot, unsigned long flags, unsigned long fd,
+	unsigned long off)
+{
+	return do_mmap2(addr, len, prot, flags, fd, off >> PAGE_SHIFT);
 }
 
 /* we come to here via sys_nis_syscall so it can setup the regs argument */

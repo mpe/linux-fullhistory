@@ -624,7 +624,7 @@ static int init_irq (ide_hwif_t *hwif)
 		hwif->io_ports[IDE_DATA_OFFSET]+7,
 		hwif->io_ports[IDE_CONTROL_OFFSET], hwif->irq);
 #elif defined(__sparc__)
-	printk("%s at 0x%03x-0x%03x,0x%03x on irq %s", hwif->name,
+	printk("%s at 0x%03lx-0x%03lx,0x%03lx on irq %s", hwif->name,
 		hwif->io_ports[IDE_DATA_OFFSET],
 		hwif->io_ports[IDE_DATA_OFFSET]+7,
 		hwif->io_ports[IDE_CONTROL_OFFSET], __irq_itoa(hwif->irq));

@@ -30,12 +30,6 @@
 #ifndef _LINUX_SS_H
 #define _LINUX_SS_H
 
-/* For RegisterCallback */
-typedef struct ss_callback_t {
-    void	(*handler)(void *info, u_int events);
-    void	*info;
-} ss_callback_t;
-
 /* Definitions for card status flags for GetStatus */
 #define SS_WRPROT	0x0001
 #define SS_CARDLOCK	0x0002
@@ -124,18 +118,18 @@ typedef struct cb_bridge_map {
  * Socket operations.
  */
 struct pccard_operations {
-	int (*register_callback)(u_short sock, ss_callback_t *call);
-	int (*inquire_socket)(u_short sock, socket_cap_t *cap);
-	int (*get_status)(u_short sock, u_int *value);
-	int (*get_socket)(u_short sock, socket_state_t *state);
-	int (*set_socket)(u_short sock, socket_state_t *state);
-	int (*get_io_map)(u_short sock, struct pccard_io_map *io);
-	int (*set_io_map)(u_short sock, struct pccard_io_map *io);
-	int (*get_mem_map)(u_short sock, struct pccard_mem_map *mem);
-	int (*set_mem_map)(u_short sock, struct pccard_mem_map *mem);
-	int (*get_bridge)(u_short sock, struct cb_bridge_map *m);
-	int (*set_bridge)(u_short sock, struct cb_bridge_map *m);
-	void (*proc_setup)(u_short sock, struct proc_dir_entry *base);
+	int (*register_callback)(unsigned int sock, void (*handler)(void *, unsigned int), void * info);
+	int (*inquire_socket)(unsigned int sock, socket_cap_t *cap);
+	int (*get_status)(unsigned int sock, u_int *value);
+	int (*get_socket)(unsigned int sock, socket_state_t *state);
+	int (*set_socket)(unsigned int sock, socket_state_t *state);
+	int (*get_io_map)(unsigned int sock, struct pccard_io_map *io);
+	int (*set_io_map)(unsigned int sock, struct pccard_io_map *io);
+	int (*get_mem_map)(unsigned int sock, struct pccard_mem_map *mem);
+	int (*set_mem_map)(unsigned int sock, struct pccard_mem_map *mem);
+	int (*get_bridge)(unsigned int sock, struct cb_bridge_map *m);
+	int (*set_bridge)(unsigned int sock, struct cb_bridge_map *m);
+	void (*proc_setup)(unsigned int sock, struct proc_dir_entry *base);
 };
 
 /*

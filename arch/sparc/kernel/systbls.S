@@ -1,4 +1,4 @@
-/* $Id: systbls.S,v 1.87 1999/12/15 17:51:09 jj Exp $
+/* $Id: systbls.S,v 1.88 1999/12/21 14:09:06 jj Exp $
  * systbls.S: System call entry point tables for OS compatibility.
  *            The native Linux system call table lives here also.
  *
@@ -29,12 +29,12 @@ sys_call_table:
 /*40*/	.long sys_newlstat, sys_dup, sys_pipe, sys_times, sys_nis_syscall
 /*45*/	.long sys_umount, sys_setgid, sys_getgid, sys_signal, sys_geteuid
 /*50*/	.long sys_getegid, sys_acct, sys_nis_syscall, sys_nis_syscall, sys_ioctl
-/*55*/	.long sys_reboot, sys_nis_syscall, sys_symlink, sys_readlink, sys_execve
-/*60*/	.long sys_umask, sys_chroot, sys_newfstat, sys_nis_syscall, sys_getpagesize
+/*55*/	.long sys_reboot, sys_mmap2, sys_symlink, sys_readlink, sys_execve
+/*60*/	.long sys_umask, sys_chroot, sys_newfstat, sys_fstat64, sys_getpagesize
 /*65*/	.long sys_msync, sys_vfork, sys_pread, sys_pwrite, sys_nis_syscall
 /*70*/	.long sys_nis_syscall, sys_mmap, sys_nis_syscall, sys_munmap, sys_mprotect
-/*75*/	.long sys_nis_syscall, sys_vhangup, sys_nis_syscall, sys_nis_syscall, sys_getgroups
-/*80*/	.long sys_setgroups, sys_getpgrp, sys_nis_syscall, sys_setitimer, sys_nis_syscall
+/*75*/	.long sys_nis_syscall, sys_vhangup, sys_truncate64, sys_nis_syscall, sys_getgroups
+/*80*/	.long sys_setgroups, sys_getpgrp, sys_nis_syscall, sys_setitimer, sys_ftruncate64
 /*85*/	.long sys_swapon, sys_getitimer, sys_nis_syscall, sys_sethostname, sys_nis_syscall
 /*90*/	.long sys_dup2, sys_nis_syscall, sys_fcntl, sys_select, sys_nis_syscall
 /*95*/	.long sys_fsync, sys_setpriority, sys_nis_syscall, sys_nis_syscall, sys_nis_syscall
@@ -44,8 +44,8 @@ sys_call_table:
 /*115*/	.long sys_nis_syscall, sys_gettimeofday, sys_getrusage, sys_nis_syscall, sys_getcwd
 /*120*/	.long sys_readv, sys_writev, sys_settimeofday, sys_fchown, sys_fchmod
 /*125*/	.long sys_nis_syscall, sys_setreuid, sys_setregid, sys_rename, sys_truncate
-/*130*/	.long sys_ftruncate, sys_flock, sys_nis_syscall, sys_nis_syscall, sys_nis_syscall
-/*135*/	.long sys_nis_syscall, sys_mkdir, sys_rmdir, sys_utimes, sys_nis_syscall
+/*130*/	.long sys_ftruncate, sys_flock, sys_lstat64, sys_nis_syscall, sys_nis_syscall
+/*135*/	.long sys_nis_syscall, sys_mkdir, sys_rmdir, sys_utimes, sys_stat64
 /*140*/	.long sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys_getrlimit
 /*145*/	.long sys_setrlimit, sys_nis_syscall, sys_prctl, sys_pciconfig_read, sys_pciconfig_write
 /*150*/	.long sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys_poll, sys_nis_syscall

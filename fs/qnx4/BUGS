@@ -1,4 +1,13 @@
-Last update: 03-07-1998
+Last update: 1999-12-23
+
+- Fragmented files and directories were incorrectly handled.
+  Fixed 1999-12-23, Anders.
+
+- readdir sometimes returned the same dir entry more than once.
+  Fixed 1999-12-13, Anders.
+
+- File names with a length of exactly 16 chars were handled incorrectly.
+  Fixed 1999-12-11, Anders.
 
 - Files in a subdir can't be accessed, I think that the inode information
   is not correctly copied at some point. Solved 06-06-1998, Richard.

@@ -408,17 +408,18 @@ static char *usb_device_dump(char *start, char *end, const struct usb_device *us
 	 * index = parent's connector number;
 	 * count = device count at this level
 	 */
-	/* do not dump descriptors for root hub, but we do want to see the bandwidth */
-	if (usbdev->devnum == 1)
+	/* If this is the root hub, display the bandwidth information */
+	if (level == 0)
 		start += sprintf(start, format_bandwidth, bus->bandwidth_allocated, 
 				FRAME_TIME_MAX_USECS_ALLOC,
 				(100 * bus->bandwidth_allocated + FRAME_TIME_MAX_USECS_ALLOC / 2) / FRAME_TIME_MAX_USECS_ALLOC,
 			         bus->bandwidth_int_reqs, bus->bandwidth_isoc_reqs);
-	else
-		start = usb_dump_desc(start, end, usbdev);
 
+	/* show the descriptor information for this device */
+	start = usb_dump_desc(start, end, usbdev);
 	if (start > end)
 		return start + sprintf(start, "(truncated)\n");
+
 	/* Now look at all of this device's children. */
 	for (chix = 0; chix < usbdev->maxchild; chix++) {
 		if (start > end)

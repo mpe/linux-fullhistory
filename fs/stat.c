@@ -283,7 +283,7 @@ asmlinkage long sys_readlink(const char * path, char * buf, int bufsiz)
 
 
 /* ---------- LFS-64 ----------- */
-#if BITS_PER_LONG == 32
+#if !defined(__alpha__)
 
 static long cp_new_stat64(struct inode * inode, struct stat64 * statbuf)
 {
@@ -400,4 +400,4 @@ asmlinkage long sys_fstat64(unsigned long fd, struct stat64 * statbuf, long flag
 	return err;
 }
 
-#endif /* BITS_PER_LONG == 32 */
+#endif /* LFS-64 */

@@ -1,4 +1,4 @@
-/* $Id: systbls.S,v 1.60 1999/12/15 17:51:19 jj Exp $
+/* $Id: systbls.S,v 1.61 1999/12/21 14:09:15 jj Exp $
  * systbls.S: System call entry point tables for OS compatibility.
  *            The native Linux system call table lives here also.
  *
@@ -30,12 +30,12 @@ sys_call_table32:
 /*40*/	.word sys32_newlstat, sys_dup, sys_pipe, sys32_times, sys_nis_syscall
 	.word sys_umount, sys_setgid, sys_getgid, sys_signal, sys_geteuid
 /*50*/	.word sys_getegid, sys_acct, sys_nis_syscall, sys_nis_syscall, sys32_ioctl
-	.word sys_reboot, sys_nis_syscall, sys_symlink, sys_readlink, sys32_execve
-/*60*/	.word sys_umask, sys_chroot, sys32_newfstat, sys_nis_syscall, sys_getpagesize
+	.word sys_reboot, sys32_mmap2, sys_symlink, sys_readlink, sys32_execve
+/*60*/	.word sys_umask, sys_chroot, sys32_newfstat, sys_fstat64, sys_getpagesize
 	.word sys_msync, sys_vfork, sys32_pread, sys32_pwrite, sys_nis_syscall
 /*70*/	.word sys_nis_syscall, sys32_mmap, sys_nis_syscall, sys_munmap, sys_mprotect
-	.word sys_nis_syscall, sys_vhangup, sys_nis_syscall, sys_nis_syscall, sys32_getgroups
-/*80*/	.word sys32_setgroups, sys_getpgrp, sys_nis_syscall, sys32_setitimer, sys_nis_syscall
+	.word sys_nis_syscall, sys_vhangup, sys32_truncate64, sys_nis_syscall, sys32_getgroups
+/*80*/	.word sys32_setgroups, sys_getpgrp, sys_nis_syscall, sys32_setitimer, sys32_ftruncate64
 	.word sys_swapon, sys32_getitimer, sys_nis_syscall, sys_sethostname, sys_nis_syscall
 /*90*/	.word sys_dup2, sys_nis_syscall, sys32_fcntl, sys32_select, sys_nis_syscall
 	.word sys_fsync, sys_setpriority, sys_nis_syscall, sys_nis_syscall, sys_nis_syscall
@@ -45,8 +45,8 @@ sys_call_table32:
 	.word sys_nis_syscall, sys32_gettimeofday, sys32_getrusage, sys_nis_syscall, sys_getcwd
 /*120*/	.word sys32_readv, sys32_writev, sys32_settimeofday, sys_fchown, sys_fchmod
 	.word sys_nis_syscall, sys32_setreuid, sys32_setregid, sys_rename, sys_truncate
-/*130*/	.word sys_ftruncate, sys_flock, sys_nis_syscall, sys_nis_syscall, sys_nis_syscall
-	.word sys_nis_syscall, sys_mkdir, sys_rmdir, sys32_utimes, sys_nis_syscall
+/*130*/	.word sys_ftruncate, sys_flock, sys_lstat64, sys_nis_syscall, sys_nis_syscall
+	.word sys_nis_syscall, sys_mkdir, sys_rmdir, sys32_utimes, sys_stat64
 /*140*/	.word sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys32_getrlimit
 	.word sys32_setrlimit, sys_nis_syscall, sys32_prctl, sys32_pciconfig_read, sys32_pciconfig_write
 /*150*/	.word sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys_poll, sys_nis_syscall

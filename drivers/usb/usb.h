@@ -179,16 +179,6 @@ struct usb_proc_setinterface {
 
 #define USB_MAJOR 180
 
-extern int usb_hub_init(void);
-extern int usb_kbd_init(void);
-extern int usb_cpia_init(void);
-extern int usb_dc2xx_init(void);
-extern int usb_mouse_init(void);
-extern int usb_printer_init(void);
-
-extern void usb_hub_cleanup(void);
-extern void usb_mouse_cleanup(void);
-
 /* for 2.2-kernels */
  
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,3,0)

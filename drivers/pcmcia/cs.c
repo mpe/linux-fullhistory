@@ -246,9 +246,9 @@ static const lookup_t service_table[] = {
 
 ======================================================================*/
 
-static int register_callback(socket_info_t *s, ss_callback_t *call)
+static int register_callback(socket_info_t *s, void (*handler)(void *, unsigned int), void * info)
 {
-	return s->ss_entry->register_callback(s->sock, call);
+	return s->ss_entry->register_callback(s->sock, handler, info);
 }
 
 static int get_socket_status(socket_info_t *s, int *val)
@@ -975,7 +975,7 @@ int pcmcia_deregister_client(client_handle_t handle)
     }
 
     if (--s->real_clients == 0)
-        register_callback(s, NULL);
+        register_callback(s, NULL, NULL);
     
     return CS_SUCCESS;
 } /* deregister_client */
@@ -1360,11 +1360,8 @@ int pcmcia_register_client(client_handle_t *handle, client_reg_t *req)
 
     s = socket_table[ns];
     if (++s->real_clients == 1) {
-	ss_callback_t call;
 	int status;
-	call.handler = &parse_events;
-	call.info = s;
-	register_callback(s, &call);
+	register_callback(s, &parse_events, s);
 	get_socket_status(s, &status);
 	if ((status & SS_DETECT) &&
 	    !(s->state & SOCKET_SETUP_PENDING)) {

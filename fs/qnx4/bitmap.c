@@ -1,12 +1,12 @@
-/* 
+/*
  * QNX4 file system, Linux implementation.
- * 
- * Version : 0.1
- * 
+ *
+ * Version : 0.2.1
+ *
  * Using parts of the xiafs filesystem.
- * 
+ *
  * History :
- * 
+ *
  * 28-05-1998 by Richard Frowijn : first release.
  * 20-06-1998 by Frank Denis : basic optimisations.
  * 25-06-1998 by Frank Denis : qnx4_is_free, qnx4_set_bitmap, qnx4_bmap .
@@ -86,7 +86,7 @@ unsigned long qnx4_count_free_inodes(struct super_block *sb)
 	return qnx4_count_free_blocks(sb) * QNX4_INODES_PER_BLOCK;	/* FIXME */
 }
 
-int qnx4_is_free(struct super_block *sb, int block)
+int qnx4_is_free(struct super_block *sb, long block)
 {
 	int start = sb->u.qnx4_sb.BitMap->di_first_xtnt.xtnt_blk - 1;
 	int size = sb->u.qnx4_sb.BitMap->di_size;
@@ -115,18 +115,9 @@ int qnx4_is_free(struct super_block *sb, int block)
 	return ret;
 }
 
-int qnx4_bmap(struct inode *inode, int block)
-{
-   QNX4DEBUG(("qnx4: bmap on block [%d]\n", block));
-   if (block < 0) {
-      return 0;
-   }
-   return !qnx4_is_free(inode->i_sb, block);
-}
-
 #ifdef CONFIG_QNX4FS_RW
 
-int qnx4_set_bitmap(struct super_block *sb, int block, int busy)
+int qnx4_set_bitmap(struct super_block *sb, long block, int busy)
 {
 	int start = sb->u.qnx4_sb.BitMap->di_first_xtnt.xtnt_blk - 1;
 	int size = sb->u.qnx4_sb.BitMap->di_size;

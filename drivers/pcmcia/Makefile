@@ -24,6 +24,9 @@ ifeq ($(CONFIG_PCMCIA),y)
   ifeq ($(CONFIG_TCIC),y)
     O_OBJS += tcic.o
   endif
+  ifeq ($(CONFIG_YENTA),y)
+    OX_OBJS += yenta.o pci_socket.o
+  endif
   ifeq ($(CONFIG_CARDBUS),y)
     O_OBJS += cardbus.o
     OX_OBJS += cb_enabler.o

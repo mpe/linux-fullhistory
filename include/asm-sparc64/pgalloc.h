@@ -144,7 +144,7 @@ extern __inline__ pgd_t *get_pgd_fast(void)
 		(unsigned long)ret->pprev_hash = mask;
 		if (!mask)
 			pgd_quicklist = (unsigned long *)ret->next_hash;
-                ret = (struct page *)(page_address(ret) + off);
+                ret = (struct page *)(__page_address(ret) + off);
                 pgd_cache_size--;
         } else {
 		ret = (struct page *) __get_free_page(GFP_KERNEL);

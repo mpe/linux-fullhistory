@@ -66,7 +66,7 @@
 #include "o2micro.h"
 
 /* PCI-bus controllers */
-#include "yenta.h"
+#include "old-yenta.h"
 #include "ti113x.h"
 #include "smc34c90.h"
 #include "topic.h"
@@ -1887,22 +1887,21 @@ static void pcic_interrupt_wrapper(u_long data)
 
 /*====================================================================*/
 
-static int pcic_register_callback(u_short sock, ss_callback_t *call)
+static int pcic_register_callback(unsigned int sock, void (*handler)(void *, unsigned int), void * info)
 {
-    if (call == NULL) {
-	socket[sock].handler = NULL;
+    socket[sock].handler = handler;
+    socket[sock].info = info;
+    if (handler == NULL) {
 	MOD_DEC_USE_COUNT;
     } else {
 	MOD_INC_USE_COUNT;
-	socket[sock].handler = call->handler;
-	socket[sock].info = call->info;
     }
     return 0;
 } /* pcic_register_callback */
 
 /*====================================================================*/
 
-static int pcic_inquire_socket(u_short sock, socket_cap_t *cap)
+static int pcic_inquire_socket(unsigned int sock, socket_cap_t *cap)
 {
     *cap = socket[sock].cap;
     return 0;
@@ -2599,7 +2598,7 @@ static int proc_read_cardbus(char *buf, char **start, off_t pos,
 }
 #endif
 
-static void pcic_proc_setup(u_short sock, struct proc_dir_entry *base)
+static void pcic_proc_setup(unsigned int sock, struct proc_dir_entry *base)
 {
 #ifdef CONFIG_PROC_FS
     socket_info_t *s = &socket[sock];
@@ -2683,7 +2682,7 @@ static void pcic_proc_remove(u_short sock)
 #endif
 	
 
-static int pcic_get_status(u_short sock, u_int *value)
+static int pcic_get_status(unsigned int sock, u_int *value)
 {
 	if (socket[sock].flags & IS_ALIVE) {
 		*value = 0;
@@ -2697,7 +2696,7 @@ static int pcic_get_status(u_short sock, u_int *value)
 	LOCKED(i365_get_status(sock, value));
 }
 
-static int pcic_get_socket(u_short sock, socket_state_t *state)
+static int pcic_get_socket(unsigned int sock, socket_state_t *state)
 {
 	if (socket[sock].flags & IS_ALIVE)
 		return -EINVAL;
@@ -2709,7 +2708,7 @@ static int pcic_get_socket(u_short sock, socket_state_t *state)
 	LOCKED(i365_get_socket(sock, state));
 }
 
-static int pcic_set_socket(u_short sock, socket_state_t *state)
+static int pcic_set_socket(unsigned int sock, socket_state_t *state)
 {
 	if (socket[sock].flags & IS_ALIVE)
 		return -EINVAL;
@@ -2721,7 +2720,7 @@ static int pcic_set_socket(u_short sock, socket_state_t *state)
 	LOCKED(i365_set_socket(sock, state));
 }
 
-static int pcic_get_io_map(u_short sock, struct pccard_io_map *io)
+static int pcic_get_io_map(unsigned int sock, struct pccard_io_map *io)
 {
 	if (socket[sock].flags & IS_ALIVE)
 		return -EINVAL;
@@ -2729,7 +2728,7 @@ static int pcic_get_io_map(u_short sock, struct pccard_io_map *io)
 	LOCKED(i365_get_io_map(sock, io));
 }
 
-static int pcic_set_io_map(u_short sock, struct pccard_io_map *io)
+static int pcic_set_io_map(unsigned int sock, struct pccard_io_map *io)
 {
 	if (socket[sock].flags & IS_ALIVE)
 		return -EINVAL;
@@ -2737,7 +2736,7 @@ static int pcic_set_io_map(u_short sock, struct pccard_io_map *io)
 	LOCKED(i365_set_io_map(sock, io));
 }
 
-static int pcic_get_mem_map(u_short sock, struct pccard_mem_map *mem)
+static int pcic_get_mem_map(unsigned int sock, struct pccard_mem_map *mem)
 {
 	if (socket[sock].flags & IS_ALIVE)
 		return -EINVAL;
@@ -2745,7 +2744,7 @@ static int pcic_get_mem_map(u_short sock, struct pccard_mem_map *mem)
 	LOCKED(i365_get_mem_map(sock, mem));
 }
 
-static int pcic_set_mem_map(u_short sock, struct pccard_mem_map *mem)
+static int pcic_set_mem_map(unsigned int sock, struct pccard_mem_map *mem)
 {
 	if (socket[sock].flags & IS_ALIVE)
 		return -EINVAL;
@@ -2753,7 +2752,7 @@ static int pcic_set_mem_map(u_short sock, struct pccard_mem_map *mem)
 	LOCKED(i365_set_mem_map(sock, mem));
 }
 
-static int pcic_get_bridge(u_short sock, struct cb_bridge_map *m)
+static int pcic_get_bridge(unsigned int sock, struct cb_bridge_map *m)
 {
 #ifdef CONFIG_CARDBUS
 	return cb_get_bridge(sock, m);
@@ -2762,7 +2761,7 @@ static int pcic_get_bridge(u_short sock, struct cb_bridge_map *m)
 #endif
 }
 
-static int pcic_set_bridge(u_short sock, struct cb_bridge_map *m)
+static int pcic_set_bridge(unsigned int sock, struct cb_bridge_map *m)
 {
 #ifdef CONFIG_CARDBUS
 	return cb_set_bridge(sock, m);
@@ -2785,46 +2784,6 @@ static struct pccard_operations pcic_operations = {
 	pcic_set_bridge,
 	pcic_proc_setup
 };
-
-#if 0	
-static int pcic_service(u_int sock, u_int cmd, void *arg)
-{
-    subfn_t fn;
-    int ret;
-#ifdef CONFIG_ISA
-    u_long flags = 0;
-#endif
-    
-    DEBUG(2, "pcic_ioctl(%d, %d, 0x%p)\n", sock, cmd, arg);
-
-    if (cmd >= NFUNC)
-	return -EINVAL;
-
-    if (socket[sock].flags & IS_ALIVE) {
-	if (cmd == SS_GetStatus)
-	    *(u_int *)arg = 0;
-	return -EINVAL;
-    }
-    
-    fn = pcic_service_table[cmd];
-#ifdef CONFIG_CARDBUS
-    if ((socket[sock].flags & IS_CARDBUS) &&
-	(cb_readl(sock, CB_SOCKET_STATE) & CB_SS_32BIT)) {
-	if (cmd == SS_GetStatus)
-	    fn = (subfn_t)&cb_get_status;
-	else if (cmd == SS_GetSocket)
-	    fn = (subfn_t)&cb_get_socket;
-	else if (cmd == SS_SetSocket)
-	    fn = (subfn_t)&cb_set_socket;
-    }
-#endif
-
-    ISA_LOCK(sock, flags);
-    ret = (fn == NULL) ? -EINVAL : fn(sock, arg);
-    ISA_UNLOCK(sock, flags);
-    return ret;
-} /* pcic_service */
-#endif
 
 /*====================================================================*/
 
