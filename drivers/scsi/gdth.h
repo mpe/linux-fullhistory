@@ -126,7 +126,8 @@
 #endif
 
 /* limits */
-#define GDTH_SCRATCH    4096                    /* 4KB scratch buffer */
+#define GDTH_SCRATCH    PAGE_SIZE                    /* 4KB scratch buffer */
+#define GDTH_SCRATCH_ORD 0                      /* order 0 means 1 page */
 #define GDTH_MAXCMDS    124
 #define GDTH_MAXC_P_L   16                      /* max. cmds per lun */
 #define GDTH_MAX_RAW    2                       /* max. cmds per raw device */

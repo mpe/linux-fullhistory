@@ -3,7 +3,7 @@
  * 
  *(C) Copyright 1999 Roman Weissgaerber <weissg@vienna.at>
  * 
- * ohci-hcd.h
+ * usb-ohci.h
  * 
  */
 

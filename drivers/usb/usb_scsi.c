@@ -143,8 +143,7 @@ static int us_one_transfer(struct us_data *us, int pipe, char *buf, int length)
 			/* if we stall, we need to clear it before we go on */
 			if (result == USB_ST_STALL) {
 				US_DEBUGP("clearing endpoint halt for pipe %x\n", pipe);
-				usb_clear_halt(us->pusb_dev,
-					       usb_pipeendpoint(pipe) | (pipe & USB_DIR_IN));
+				usb_clear_halt(us->pusb_dev,pipe);
 			}
 
 			/* we want to retry if the device reported NAK */
@@ -296,8 +295,8 @@ static int pop_CB_reset(struct us_data *us)
 	schedule_timeout(HZ*6);
 
 	US_DEBUGP("pop_CB_reset: clearing endpoint halt\n");
-	usb_clear_halt(us->pusb_dev, us->ep_in | USB_DIR_IN);
-	usb_clear_halt(us->pusb_dev, us->ep_out | USB_DIR_OUT);
+	usb_clear_halt(us->pusb_dev, usb_rcvbulkpipe(us->pusb_dev, us->ep_in));
+	usb_clear_halt(us->pusb_dev, usb_sndbulkpipe(us->pusb_dev, us->ep_out));
 
 	US_DEBUGP("pop_CB_reset done\n");
 	return 0;
@@ -522,8 +521,8 @@ static int pop_Bulk_reset(struct us_data *us)
 				 NULL, 0, HZ*5);
 	if (result)
 		US_DEBUGP("Bulk hard reset failed %d\n", result);
-	usb_clear_halt(us->pusb_dev, us->ep_in | USB_DIR_IN);
-	usb_clear_halt(us->pusb_dev, us->ep_out | USB_DIR_OUT);
+	usb_clear_halt(us->pusb_dev, usb_rcvbulkpipe(us->pusb_dev, us->ep_in));
+	usb_clear_halt(us->pusb_dev, usb_sndbulkpipe(us->pusb_dev, us->ep_out));
 
 	/* long wait for reset */
 

@@ -63,13 +63,6 @@ extern int overflowgid;
 #define SET_STAT_UID(stat, uid)		(stat).st_uid = high2lowuid(uid)
 #define SET_STAT_GID(stat, gid)		(stat).st_gid = high2lowgid(gid)
 
-/* specific to kernel/signal.c */
-#ifdef UID16_SIGINFO_COMPAT_NEEDED
-#define SET_SIGINFO_UID16(var, uid)	var = high2lowuid(uid)
-#else
-#define SET_SIGINFO_UID16(var, uid)	do { ; } while (0)
-#endif
-
 #else
 
 #define SET_UID16(var, uid)	do { ; } while (0)
@@ -81,8 +74,6 @@ extern int overflowgid;
 #define SET_OLDSTAT_GID(stat, gid)	(stat).st_gid = gid
 #define SET_STAT_UID(stat, uid)		(stat).st_uid = uid
 #define SET_STAT_GID(stat, gid)		(stat).st_gid = gid
-
-#define SET_SIGINFO_UID16(var, uid)	do { ; } while (0)
 
 #endif /* CONFIG_UID16 */
 

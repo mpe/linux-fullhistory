@@ -37,7 +37,6 @@
 #include <linux/ptrace.h>
 #include <linux/unistd.h>
 #include <linux/stddef.h>
-#include <linux/highuid.h>
 
 #include <asm/setup.h>
 #include <asm/uaccess.h>
@@ -1049,7 +1048,6 @@ asmlinkage int do_signal(sigset_t *oldset, struct pt_regs *regs)
 				info.si_code = SI_USER;
 				info.si_pid = current->p_pptr->pid;
 				info.si_uid = current->p_pptr->uid;
-				info.si_uid16 = high2lowuid(current->p_pptr->uid);
 			}
 
 			/* If the (new) signal is now blocked, requeue it.  */

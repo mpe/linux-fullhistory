@@ -12,7 +12,6 @@
 #include <linux/smp_lock.h>
 #include <linux/init.h>
 #include <linux/sched.h>
-#include <linux/highuid.h>
 
 #include <asm/uaccess.h>
 
@@ -166,7 +165,6 @@ printk("SIG dequeue (%s:%d): %d ", current->comm, current->pid,
 			info->si_code = 0;
 			info->si_pid = 0;
 			info->si_uid = 0;
-			SET_SIGINFO_UID16(info->si_uid16, 0);
 		}
 
 		if (reset)
@@ -325,7 +323,6 @@ printk("SIG queue (%s:%d): %d ", t->comm, t->pid, sig);
 				q->info.si_code = SI_USER;
 				q->info.si_pid = current->pid;
 				q->info.si_uid = current->uid;
-				SET_SIGINFO_UID16(q->info.si_uid16, current->uid);
 				break;
 			case 1:
 				q->info.si_signo = sig;
@@ -333,7 +330,6 @@ printk("SIG queue (%s:%d): %d ", t->comm, t->pid, sig);
 				q->info.si_code = SI_KERNEL;
 				q->info.si_pid = 0;
 				q->info.si_uid = 0;
-				SET_SIGINFO_UID16(q->info.si_uid16, 0);
 				break;
 			default:
 				q->info = *info;
@@ -783,7 +779,6 @@ sys_kill(int pid, int sig)
 	info.si_code = SI_USER;
 	info.si_pid = current->pid;
 	info.si_uid = current->uid;
-	SET_SIGINFO_UID16(info.si_uid16, current->uid);
 
 	return kill_something_info(sig, &info, pid);
 }

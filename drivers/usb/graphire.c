@@ -1,11 +1,16 @@
 /*
- *  graphire.c  Version 0.1
+ *  graphire.c  Version 0.2
  *
- *  Copyright (c) 1999 Vojtech Pavlik
+ *  Copyright (c) 2000 Vojtech Pavlik		<vojtech@suse.cz>
+ *  Copyright (c) 2000 Andreas Bach Aaen	<abach@stofanet.dk>
  *
  *  USB Wacom Graphire tablet support
  *
  *  Sponsored by SuSE
+ *
+ *  ChangeLog:
+ *      v0.1 (vp)  - Initial release
+ *      v0.2 (aba) - Support for all buttons / combinations
  */
 
 /*
@@ -59,12 +64,11 @@ MODULE_AUTHOR("Vojtech Pavlik <vojtech@suse.cz>");
  * There are also two single-byte feature reports (2 and 3).
  */
 
-#define USB_VENDOR_ID_WACOM		0xffff	/* FIXME */
-#define USB_DEVICE_ID_WACOM_GRAPHIRE	0xffff	/* FIXME */
+#define USB_VENDOR_ID_WACOM		0x056a
+#define USB_DEVICE_ID_WACOM_GRAPHIRE	0x0010
 
 struct graphire {
 	signed char data[8];
-	int oldx, oldy;
 	struct input_dev dev;
 	struct urb irq;
 };
@@ -83,41 +87,33 @@ static void graphire_irq(struct urb *urb)
 	input_report_abs(dev, ABS_X, data[2] | ((__u32)data[3] << 8));
 	input_report_abs(dev, ABS_Y, data[4] | ((__u32)data[5] << 8));
 
-	input_report_key(dev, BTN_NEAR, !!(data[1] & 0x80));
-
 	switch ((data[1] >> 5) & 3) {
 
 		case 0:	/* Pen */
-			input_report_key(dev, BTN_PEN, !!(data[1] & 0x01));
-			input_report_key(dev, BTN_PEN_SIDE, !!(data[1] & 0x02));
-			input_report_key(dev, BTN_PEN_SIDE2, !!(data[1] & 0x04));
+			input_report_key(dev, BTN_TOOL_PEN, !!(data[1] & 0x80));
+			input_report_key(dev, BTN_TOUCH, !!(data[1] & 0x01));
+			input_report_key(dev, BTN_STYLUS, !!(data[1] & 0x02));
+			input_report_key(dev, BTN_STYLUS2, !!(data[1] & 0x04));
 			input_report_abs(dev, ABS_PRESSURE, data[6] | ((__u32)data[7] << 8));
 			break;
 
 		case 1: /* Rubber */
-			input_report_key(dev, BTN_RUBBER, !!(data[1] & 0x01));
-			input_report_key(dev, BTN_PEN_SIDE, !!(data[1] & 0x02));
-			input_report_key(dev, BTN_PEN_SIDE2, !!(data[1] & 0x04));
+	                input_report_key(dev, BTN_TOOL_RUBBER, !!(data[1] & 0x80));
+			input_report_key(dev, BTN_TOUCH, !!(data[1] & 0x01));
+			input_report_key(dev, BTN_STYLUS, !!(data[1] & 0x02));
+			input_report_key(dev, BTN_STYLUS2, !!(data[1] & 0x04));
 			input_report_abs(dev, ABS_PRESSURE, data[6] | ((__u32)data[7] << 8));
 			break;
 
 		case 2: /* Mouse */
-			input_report_key(dev, BTN_LEFT, !!(data[0] & 0x01));
-			input_report_key(dev, BTN_RIGHT, !!(data[0] & 0x02));
-			input_report_key(dev, BTN_MIDDLE, !!(data[0] & 0x04));
+	                input_report_key(dev, BTN_TOOL_MOUSE, data[7] > 27);
+			input_report_key(dev, BTN_LEFT, !!(data[1] & 0x01));
+			input_report_key(dev, BTN_RIGHT, !!(data[1] & 0x02));
+			input_report_key(dev, BTN_MIDDLE, !!(data[1] & 0x04));
 			input_report_abs(dev, ABS_DISTANCE, data[7]);
-
-			if (data[1] & 0x80) {
-				input_report_rel(dev, REL_X, dev->abs[ABS_X] - graphire->oldx);
-				input_report_rel(dev, REL_Y, dev->abs[ABS_Y] - graphire->oldy);
-			}
-
 			input_report_rel(dev, REL_WHEEL, (signed char) data[6]);
 			break;
 	}
-
-	graphire->oldx = dev->abs[ABS_X];
-	graphire->oldy = dev->abs[ABS_Y];
 }
 
 static void *graphire_probe(struct usb_device *dev, unsigned int ifnum)
@@ -136,10 +132,15 @@ static void *graphire_probe(struct usb_device *dev, unsigned int ifnum)
 
 	graphire->dev.evbit[0] |= BIT(EV_KEY) | BIT(EV_REL) | BIT(EV_ABS);
 	graphire->dev.keybit[LONG(BTN_MOUSE)] |= BIT(BTN_LEFT) | BIT(BTN_RIGHT) | BIT(BTN_MIDDLE);
-	graphire->dev.keybit[LONG(BTN_DIGI)] |= BIT(BTN_PEN) | BIT(BTN_RUBBER);
-	graphire->dev.keybit[LONG(BTN_DIGI)] |= BIT(BTN_PEN_SIDE) | BIT(BTN_PEN_SIDE2) | BIT(BTN_NEAR);
-	graphire->dev.relbit[0] |= BIT(REL_X) | BIT(REL_Y) | BIT(REL_WHEEL);
+	graphire->dev.keybit[LONG(BTN_DIGI)] |= BIT(BTN_TOOL_PEN) | BIT(BTN_TOOL_RUBBER) | BIT(BTN_TOOL_MOUSE);
+	graphire->dev.keybit[LONG(BTN_DIGI)] |= BIT(BTN_TOUCH) | BIT(BTN_STYLUS) | BIT(BTN_STYLUS2);
+	graphire->dev.relbit[0] |= BIT(REL_WHEEL);
 	graphire->dev.absbit[0] |= BIT(ABS_X) | BIT(ABS_Y) | BIT(ABS_PRESSURE) | BIT(ABS_DISTANCE);
+
+	graphire->dev.absmax[ABS_X] = 10000;
+	graphire->dev.absmax[ABS_Y] = 7500;
+	graphire->dev.absmax[ABS_PRESSURE] = 500;
+	graphire->dev.absmax[ABS_DISTANCE] = 32;
 
 	FILL_INT_URB(&graphire->irq, dev, usb_rcvintpipe(dev, endpoint->bEndpointAddress),
 			graphire->data, 8, graphire_irq, graphire, endpoint->bInterval);
@@ -151,7 +152,7 @@ static void *graphire_probe(struct usb_device *dev, unsigned int ifnum)
 
 	input_register_device(&graphire->dev);
 
-	printk(KERN_INFO "input%d: Wacom Graphire USB\n", graphire->dev.number);
+	printk(KERN_INFO "input%d: Wacom Graphire\n", graphire->dev.number);
 
 	return graphire;
 }

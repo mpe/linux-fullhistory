@@ -24,8 +24,7 @@ typedef struct siginfo {
 		/* kill() */
 		struct {
 			pid_t _pid;		/* sender's pid */
-			old_uid_t _uid;		/* backwards compatibility */
-			uid_t _uid32;		/* sender's uid */
+			uid_t _uid;		/* sender's uid */
 		} _kill;
 
 		/* POSIX.1b timers */
@@ -37,19 +36,17 @@ typedef struct siginfo {
 		/* POSIX.1b signals */
 		struct {
 			pid_t _pid;		/* sender's pid */
-			old_uid_t _uid;		/* backwards compatibility */
+			uid_t _uid;		/* sender's uid */
 			sigval_t _sigval;
-			uid_t _uid32;		/* sender's uid */
 		} _rt;
 
 		/* SIGCHLD */
 		struct {
 			pid_t _pid;		/* which child */
-			old_uid_t _uid;		/* backwards compatibility */
+			uid_t _uid;		/* sender's uid */
 			int _status;		/* exit code */
 			clock_t _utime;
 			clock_t _stime;
-			uid_t _uid32;		/* sender's uid */
 		} _sigchld;
 
 		/* SIGILL, SIGFPE, SIGSEGV, SIGBUS */
@@ -65,18 +62,11 @@ typedef struct siginfo {
 	} _sifields;
 } siginfo_t;
 
-#define UID16_SIGINFO_COMPAT_NEEDED
-
 /*
  * How these fields are to be accessed.
  */
 #define si_pid		_sifields._kill._pid
-#ifdef __KERNEL__
-#define si_uid		_sifields._kill._uid32
-#define si_uid16	_sifields._kill._uid
-#else
 #define si_uid		_sifields._kill._uid
-#endif /* __KERNEL__ */
 #define si_status	_sifields._sigchld._status
 #define si_utime	_sifields._sigchld._utime
 #define si_stime	_sifields._sigchld._stime

@@ -503,7 +503,7 @@ P:	Vojtech Pavlik
 M:	vojtech@suse.cz
 L:	linux-joystick@atrey.karlin.mff.cuni.cz
 W:	http://www.suse.cz/development/joystick/
-S:	Maintained
+S:	Supported
 
 KERNEL AUTOMOUNTER (AUTOFS)
 P:	H. Peter Anvin
@@ -979,6 +979,19 @@ L:	linux-usb@suse.com
 W:	http://www.linux-usb.org
 S:	Supported
 
+USB ACM DRIVER
+P:	Vojtech Pavlik
+M:	vojtech@suse.cz
+L:	linux-usb@suse.com
+S:	Supported
+
+USB HID/HIDBP/INPUT DRIVERS
+P:	Vojtech Pavlik
+M:	vojtech@suse.cz
+L:	linux-usb@suse.com
+W:	http://www.suse.cz/development/input/
+S:	Supported
+
 USB HUB
 P:	Johannes Erdfelt
 M:	jerdfelt@sventech.com
@@ -986,12 +999,16 @@ L:	linux-usb@suse.com
 S:	Maintained
 
 USB OHCI DRIVER
-P:	Gregory P. Smith
-M:	greg@electricrain.com
-M:	greg@suitenine.com
+P:	Roman Weissgaerber
+M:	weissg@vienna.at
 L:	linux-usb@suse.com
-S:	Maintained (not yet usable)
-W:	http://suitenine.com/usb/
+S:	Maintained
+
+USB PRINTER DRIVER
+P:	Vojtech Pavlik
+M:	vojtech@suse.cz
+L:	linux-usb@suse.com
+S:	Supported
 
 USB SERIAL DRIVER
 P:	Greg Kroah-Hartman

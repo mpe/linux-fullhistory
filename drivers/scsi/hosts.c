@@ -869,7 +869,6 @@ unsigned int __init scsi_init(void)
     printk ("scsi : %d host%s.\n", next_scsi_host,
 	    (next_scsi_host == 1) ? "" : "s");
     
-    
     /* Now attach the high level drivers */
 #ifdef CONFIG_BLK_DEV_SD
     scsi_register_device(&sd_template);

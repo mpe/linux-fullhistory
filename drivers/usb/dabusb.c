@@ -44,8 +44,7 @@
 #include "usb.h"
 
 #include "dabusb.h"
-#include "bitstream.h"
-#include "firmware.h"
+#include "dabfirmware.h"
 /* --------------------------------------------------------------------- */
 
 #define NRDABUSB 4

@@ -5,7 +5,7 @@
  * (C) Copyright 1999 Johannes Erdfelt
  * (C) Copyright 1999 Gregory P. Smith
  *
- * $Id: hub.c,v 1.15 1999/12/27 15:17:45 acher Exp $
+ * $Id: hub.c,v 1.21 2000/01/16 21:19:44 acher Exp $
  */
 
 #include <linux/kernel.h>
@@ -22,15 +22,6 @@
 #include "usb.h"
 #include "hub.h"
 
-#ifdef __alpha
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,3,0)
-extern long __kernel_thread(unsigned long, int (*)(void *), void *);
-static inline long kernel_thread(int (*fn)(void *), void * arg, unsigned long flags)
-{
-	return __kernel_thread(flags | CLONE_VM, fn, arg);
-}
-#endif
-#endif
 /* Wakes up khubd */
 static spinlock_t hub_event_lock = SPIN_LOCK_UNLOCKED;
 
@@ -112,6 +103,16 @@ static int hub_irq(int status, void *__buffer, int len, void *dev_id)
 	return 1;
 }
 
+static void usb_hub_power_on(struct usb_hub *hub)
+{
+	int i;
+
+	/* Enable power to the ports */
+	dbg("enabling power on all ports");
+	for (i = 0; i < hub->nports; i++)
+		usb_set_port_feature(hub->dev, i + 1, USB_PORT_FEAT_POWER);
+}
+
 static int usb_hub_configure(struct usb_hub *hub)
 {
 	struct usb_device *dev = hub->dev;
@@ -191,10 +192,8 @@ static int usb_hub_configure(struct usb_hub *hub)
 	dbg("%sover-current condition exists",
 		(le16_to_cpu(hubsts->wHubStatus) & HUB_STATUS_OVERCURRENT) ? "" : "no ");
 
-	/* Enable power to the ports */
-	dbg("enabling power on all ports");
-	for (i = 0; i < hub->nports; i++)
-		usb_set_port_feature(dev, i + 1, USB_PORT_FEAT_POWER);
+	usb_hub_power_on(hub);
+
 	return 0;
 }
 
@@ -322,13 +321,17 @@ static void usb_hub_port_connect_change(struct usb_device *hub, int port)
 	portchange = le16_to_cpu(portsts.wPortChange);
 	dbg("portstatus %x, change %x, %s", portstatus, portchange,
 		portstatus&(1<<USB_PORT_FEAT_LOWSPEED) ? "Low Speed" : "High Speed");
-	/* If it's not in CONNECT and ENABLE state, we're done */
-	if ((!(portstatus & USB_PORT_STAT_CONNECTION)) &&
-	    (!(portstatus & USB_PORT_STAT_ENABLE))) {
-		/* Disconnect anything that may have been there */
+
+	/* Clear the connection change status */
+	usb_clear_port_feature(hub, port + 1, USB_PORT_FEAT_C_CONNECTION);
+
+	/* Disconnect any existing devices under this port */
+	if (((!(portstatus & USB_PORT_STAT_CONNECTION)) &&
+	     (!(portstatus & USB_PORT_STAT_ENABLE)))|| (hub->children[port])) {
 		usb_disconnect(&hub->children[port]);
-		/* We're done now, we already disconnected the device */
-		return;
+		/* Return now if nothing is connected */
+		if (!(portstatus & USB_PORT_STAT_CONNECTION))
+			return;
 	}
 	wait_ms(400);	
 
@@ -350,7 +353,11 @@ static void usb_hub_port_connect_change(struct usb_device *hub, int port)
 		dbg("portstatus %x, change %x, %s", portstatus ,portchange,
 			portstatus&(1<<USB_PORT_FEAT_LOWSPEED) ? "Low Speed" : "High Speed");
 
-		if ((portstatus&(1<<USB_PORT_FEAT_ENABLE))) 
+		if ((portchange & USB_PORT_STAT_C_CONNECTION) ||
+		    !(portstatus & USB_PORT_STAT_CONNECTION))
+			return;
+
+		if (portstatus & USB_PORT_STAT_ENABLE)
 			break;
 
 		wait_ms(200);
@@ -361,6 +368,9 @@ static void usb_hub_port_connect_change(struct usb_device *hub, int port)
 		err("Maybe the USB cable is bad?");
 		return;
 	}
+
+	usb_clear_port_feature(hub, port + 1, USB_PORT_FEAT_C_RESET);
+
 	/* Allocate a new device struct for it */
 
 	usb = usb_alloc_dev(hub, hub->bus);
@@ -432,8 +442,6 @@ static void usb_hub_events(void)
 			if (portchange & USB_PORT_STAT_C_CONNECTION) {
 				dbg("port %d connection change", i + 1);
 
-				usb_clear_port_feature(dev, i + 1, USB_PORT_FEAT_C_CONNECTION);
-
 				usb_hub_port_connect_change(dev, i);
 			}
 
@@ -442,12 +450,15 @@ static void usb_hub_events(void)
 				usb_clear_port_feature(dev, i + 1, USB_PORT_FEAT_C_ENABLE);
 			}
 
-			if (portchange & USB_PORT_STAT_C_SUSPEND)
+			if (portstatus & USB_PORT_STAT_SUSPEND) {
 				dbg("port %d suspend change", i + 1);
-
+				usb_clear_port_feature(dev, i + 1,  USB_PORT_FEAT_SUSPEND);
+			}
+			
 			if (portchange & USB_PORT_STAT_C_OVERCURRENT) {
-				dbg("port %d over-current change", i + 1);
+				err("port %d over-current change", i + 1);
 				usb_clear_port_feature(dev, i + 1, USB_PORT_FEAT_C_OVER_CURRENT);
+				usb_hub_power_on(hub);
 			}
 
 			if (portchange & USB_PORT_STAT_C_RESET) {
@@ -468,7 +479,9 @@ static void usb_hub_events(void)
 			}
 			if (hubchange & HUB_CHANGE_OVERCURRENT) {
 				dbg("hub overcurrent change");
+				wait_ms(500); //Cool down
 				usb_clear_hub_feature(dev, C_HUB_OVER_CURRENT);
+                        	usb_hub_power_on(hub);
 			}
 		}
         } /* end while (1) */
@@ -491,6 +504,7 @@ static int usb_hub_thread(void *__hub)
 	 * This thread doesn't need any user-level access,
 	 * so get rid of all our resources
 	 */
+	exit_files(current);  /* daemonize doesn't do exit_files */
 	daemonize();
 
 	/* Setup a nice name */

@@ -6,8 +6,8 @@
  */
 
 static int gdth_set_info(char *buffer,int length,int vh,int hanum,int busnum);
-static int gdth_set_asc_info(char *buffer,int length,int hanum,Scsi_Cmnd scp);
-static int gdth_set_bin_info(char *buffer,int length,int hanum,Scsi_Cmnd scp);
+static int gdth_set_asc_info(char *buffer,int length,int hanum,Scsi_Cmnd * scp);
+static int gdth_set_bin_info(char *buffer,int length,int hanum,Scsi_Cmnd * scp);
 static int gdth_get_info(char *buffer,char **start,off_t offset,
                          int length,int vh,int hanum,int busnum);
 

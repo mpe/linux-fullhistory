@@ -113,16 +113,6 @@ static int fake_int_happened;
 static ulong int_counter = 0;
 static ulong queue_counter = 0;
 
-void eata_scsi_done (Scsi_Cmnd * scmd)
-{
-    scmd->request.rq_status = RQ_SCSI_DONE;
-
-    if (scmd->request.sem != NULL)
-	up(scmd->request.sem);
-    
-    return;
-}   
-
 void eata_fake_int_handler(s32 irq, void *dev_id, struct pt_regs * regs)
 {
     fake_int_result = inb((ulong)fake_int_base + HA_RSTATUS);

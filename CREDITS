@@ -1661,7 +1661,7 @@ E: vojtech@suse.cz
 D: Joystick driver
 D: arcnet-hardware readme
 D: Minor ARCnet hacking
-D: USB hacking
+D: USB (HID, ACM, Printer ...)
 S: Ucitelska 1576
 S: Prague 8
 S: 182 00 Czech Republic

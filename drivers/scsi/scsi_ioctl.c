@@ -90,18 +90,6 @@ static int ioctl_probe(struct Scsi_Host *host, void *buffer)
  * The output area is then filled in starting from the command byte. 
  */
 
-static void scsi_ioctl_done(Scsi_Cmnd * SCpnt)
-{
-	struct request *req;
-
-	req = &SCpnt->request;
-	req->rq_status = RQ_SCSI_DONE;	/* Busy, but indicate request done */
-
-	if (req->sem != NULL) {
-		up(req->sem);
-	}
-}
-
 static int ioctl_internal_command(Scsi_Device * dev, char *cmd,
 				  int timeout, int retries)
 {
@@ -117,7 +105,7 @@ static int ioctl_internal_command(Scsi_Device * dev, char *cmd,
                 return -EINTR;
         }
 
-        scsi_wait_cmd(SCpnt, cmd, NULL, 0, scsi_ioctl_done, timeout, retries);
+        scsi_wait_cmd(SCpnt, cmd, NULL, 0, timeout, retries);
 
 	SCSI_LOG_IOCTL(2, printk("Ioctl returned  0x%x\n", SCpnt->result));
 
@@ -201,7 +189,7 @@ static int ioctl_internal_command(Scsi_Device * dev, char *cmd,
 int scsi_ioctl_send_command(Scsi_Device * dev, Scsi_Ioctl_Command * sic)
 {
 	char *buf;
-	unsigned char cmd[12];
+	unsigned char cmd[MAX_COMMAND_SIZE];
 	char *cmd_in;
 	Scsi_Cmnd *SCpnt;
 	Scsi_Device *SDpnt;
@@ -300,8 +288,7 @@ int scsi_ioctl_send_command(Scsi_Device * dev, Scsi_Ioctl_Command * sic)
                 return -EINTR;
         }
 
-        scsi_wait_cmd(SCpnt, cmd, buf, needed, scsi_ioctl_done,
-                      timeout, retries);
+        scsi_wait_cmd(SCpnt, cmd, buf, needed, timeout, retries);
 
 	/* 
 	 * If there was an error condition, pass the info back to the user. 
@@ -358,7 +345,7 @@ int scsi_ioctl_send_command(Scsi_Device * dev, Scsi_Ioctl_Command * sic)
 int scsi_ioctl(Scsi_Device * dev, int cmd, void *arg)
 {
 	int result;
-	char scsi_cmd[12];
+	char scsi_cmd[MAX_COMMAND_SIZE];
 
 	/* No idea how this happens.... */
 	if (!dev)

@@ -285,11 +285,16 @@ struct input_event {
 #define BTN_MODE		0x13c
 
 #define BTN_DIGI		0x140
-#define BTN_PEN			0x140
-#define BTN_RUBBER		0x141
-#define BTN_PEN_SIDE		0x142
-#define BTN_PEN_SIDE2		0x143
-#define BTN_NEAR		0x144
+#define BTN_TOOL_PEN		0x140
+#define BTN_TOOL_RUBBER		0x141
+#define BTN_TOOL_BRUSH		0x142
+#define BTN_TOOL_PENCIL		0x143
+#define BTN_TOOL_AIRBRUSH	0x144
+#define BTN_TOOL_FINGER		0x145
+#define BTN_TOOL_MOUSE		0x146
+#define BTN_TOUCH		0x147
+#define BTN_STYLUS		0x148
+#define BTN_STYLUS2		0x149
 
 #define KEY_MAX			0x1ff
 

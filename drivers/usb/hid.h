@@ -164,6 +164,7 @@ struct hid_item {
 
 #define HID_USAGE		0x0000ffff
 
+#define HID_GD_POINTER		0x00010001
 #define HID_GD_MOUSE		0x00010002
 #define HID_GD_JOYSTICK		0x00010004
 #define HID_GD_GAMEPAD		0x00010005

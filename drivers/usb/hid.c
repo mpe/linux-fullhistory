@@ -742,7 +742,11 @@ static void hid_configure_usage(struct hid_device *device, struct hid_field *fie
 			switch (device->application) {
 				case HID_GD_GAMEPAD:  usage->code += 0x10;
 				case HID_GD_JOYSTICK: usage->code += 0x10;
-				case HID_GD_MOUSE:    usage->code += 0x10;
+				case HID_GD_MOUSE:    usage->code += 0x10; break;
+				default:
+					if (field->physical == HID_GD_POINTER)
+						usage->code += 0x10;
+					break;
 			}
 			break;
 
@@ -769,7 +773,49 @@ static void hid_configure_usage(struct hid_device *device, struct hid_field *fie
 			usage->type = EV_LED; bit = input->ledbit; max = LED_MAX; 
 			break;
 
+		case HID_UP_DIGITIZER:
+
+			switch (usage->hid & 0xff) {
+
+				case 0x30: /* TipPressure */
+
+					usage->type = EV_ABS; bit = input->absbit; max = ABS_MAX; 
+					usage->code = ABS_PRESSURE;
+					clear_bit(usage->code, bit);
+					break;
+
+				case 0x32: /* InRange */
+
+					usage->type = EV_KEY; bit = input->keybit; max = KEY_MAX;
+					switch (field->physical & 0xff) {	
+						case 0x21: usage->code = BTN_TOOL_MOUSE; break;
+						case 0x22: usage->code = BTN_TOOL_FINGER; break;
+						default: usage->code = BTN_TOOL_PEN; break;
+					}
+					break;
+
+				case 0x33: /* Touch */
+				case 0x42: /* TipSwitch */
+				case 0x43: /* TipSwitch2 */
+
+					usage->type = EV_KEY; bit = input->keybit; max = KEY_MAX;
+					usage->code = BTN_TOUCH;
+					clear_bit(usage->code, bit);
+					break;
+
+				case 0x44: /* BarrelSwitch */
+
+					usage->type = EV_KEY; bit = input->keybit; max = KEY_MAX;
+					usage->code = BTN_STYLUS;
+					clear_bit(usage->code, bit);
+					break;
+
+				default:  goto unknown;
+			}
+			break;
+
 		default:
+		unknown:
 
 			if (field->flags & HID_MAIN_ITEM_RELATIVE) {
 				usage->code = REL_MISC;
@@ -777,7 +823,7 @@ static void hid_configure_usage(struct hid_device *device, struct hid_field *fie
 				break;
 			}
 
-			if (field->logical_minimum == 0 && field->logical_maximum == 1) {
+			if (field->report_size == 1) {
 				usage->code = BTN_MISC;
 				usage->type = EV_KEY; bit = input->keybit; max = KEY_MAX;
 				break;

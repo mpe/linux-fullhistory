@@ -32,6 +32,7 @@ void usb_major_cleanup(void);
 int usb_acm_init(void);
 int usb_audio_init(void);
 int usb_cpia_init(void);
+int usb_ibmcam_init(void);
 int usb_ov511_init(void);
 int usb_dc2xx_init(void);
 int usb_scanner_init(void);
@@ -97,6 +98,9 @@ int usb_init(void)
 #endif
 #ifdef CONFIG_USB_CPIA
 	usb_cpia_init();
+#endif
+#ifdef CONFIG_USB_IBMCAM
+	usb_ibmcam_init();
 #endif
 #ifdef CONFIG_USB_OV511
 	usb_ov511_init();

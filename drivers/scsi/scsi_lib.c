@@ -51,6 +51,13 @@
  */
 
 /*
+ * For hosts that request single-file access to the ISA bus, this is a pointer to
+ * the currently active host.
+ */
+volatile struct Scsi_Host *host_active = NULL;
+
+
+/*
  * Function:    scsi_insert_special_cmd()
  *
  * Purpose:     Insert pre-formed command into request queue.
@@ -184,6 +191,7 @@ int scsi_init_cmd_errh(Scsi_Cmnd * SCpnt)
 	return 1;
 }
 
+
 /*
  * Function:    scsi_queue_next_request()
  *
@@ -202,6 +210,23 @@ int scsi_init_cmd_errh(Scsi_Cmnd * SCpnt)
  *              If SCpnt is NULL, it means that the previous command
  *              was completely finished, and we should simply start
  *              a new command, if possible.
+ *
+ *		This is where a lot of special case code has begun to
+ *		accumulate.  It doesn't really affect readability or
+ *		anything, but it might be considered architecturally
+ *		inelegant.  If more of these special cases start to
+ *		accumulate, I am thinking along the lines of implementing
+ *		an atexit() like technology that gets run when commands
+ *		complete.  I am not convinced that it is worth the
+ *		added overhead, however.  Right now as things stand,
+ *		there are simple conditional checks, and most hosts
+ *		would skip past.
+ *
+ *		Another possible solution would be to tailor different
+ *		handler functions, sort of like what we did in scsi_merge.c.
+ *		This is probably a better solution, but the number of different
+ *		permutations grows as 2**N, and if too many more special cases
+ *		get added, we start to get screwed.
  */
 void scsi_queue_next_request(request_queue_t * q, Scsi_Cmnd * SCpnt)
 {

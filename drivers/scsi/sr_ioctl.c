@@ -30,23 +30,6 @@ extern void get_sectorsize(int);
 /* In fact, it is very slow if it has to spin up first */
 #define IOCTL_TIMEOUT 30*HZ
 
-static void sr_ioctl_done(Scsi_Cmnd * SCpnt)
-{
-	struct request *req;
-
-	req = &SCpnt->request;
-	req->rq_status = RQ_SCSI_DONE;	/* Busy, but indicate request done */
-
-	if (SCpnt->buffer && req->buffer && SCpnt->buffer != req->buffer) {
-		memcpy(req->buffer, SCpnt->buffer, SCpnt->bufflen);
-		scsi_free(SCpnt->buffer, (SCpnt->bufflen + 511) & ~511);
-		SCpnt->buffer = req->buffer;
-	}
-	if (req->sem != NULL) {
-		up(req->sem);
-	}
-}
-
 /* We do our own retries because we want to know what the specific
    error code is.  Normally the UNIT_ATTENTION code will automatically
    clear after one error */
@@ -55,6 +38,7 @@ int sr_do_ioctl(int target, unsigned char *sr_cmd, void *buffer, unsigned buflen
 {
 	Scsi_Cmnd *SCpnt;
 	Scsi_Device *SDev;
+        struct request *req;
 	int result, err = 0, retries = 0;
 	char *bounce_buffer;
 
@@ -79,7 +63,14 @@ int sr_do_ioctl(int target, unsigned char *sr_cmd, void *buffer, unsigned buflen
 
 
 	scsi_wait_cmd(SCpnt, (void *) sr_cmd, (void *) buffer, buflength,
-		      sr_ioctl_done, IOCTL_TIMEOUT, IOCTL_RETRIES);
+		      IOCTL_TIMEOUT, IOCTL_RETRIES);
+
+        req = &SCpnt->request;
+        if (SCpnt->buffer && req->buffer && SCpnt->buffer != req->buffer) {
+                memcpy(req->buffer, SCpnt->buffer, SCpnt->bufflen);
+                scsi_free(SCpnt->buffer, (SCpnt->bufflen + 511) & ~511);
+                SCpnt->buffer = req->buffer;
+        }
 
 	result = SCpnt->result;
 
@@ -262,14 +253,14 @@ int sr_reset(struct cdrom_device_info *cdi)
 
 int sr_select_speed(struct cdrom_device_info *cdi, int speed)
 {
-	u_char sr_cmd[12];
+	u_char sr_cmd[MAX_COMMAND_SIZE];
 
 	if (speed == 0)
 		speed = 0xffff;	/* set to max */
 	else
 		speed *= 177;	/* Nx to kbyte/s */
 
-	memset(sr_cmd, 0, 12);
+	memset(sr_cmd, 0, MAX_COMMAND_SIZE);
 	sr_cmd[0] = GPCMD_SET_SPEED;	/* SET CD SPEED */
 	sr_cmd[1] = (scsi_CDs[MINOR(cdi->dev)].device->lun) << 5;
 	sr_cmd[2] = (speed >> 8) & 0xff;	/* MSB for speed (in kbytes/sec) */
@@ -370,14 +361,14 @@ int sr_audio_ioctl(struct cdrom_device_info *cdi, unsigned int cmd, void *arg)
 
 int sr_read_cd(int minor, unsigned char *dest, int lba, int format, int blksize)
 {
-	unsigned char cmd[12];
+	unsigned char cmd[MAX_COMMAND_SIZE];
 
 #ifdef DEBUG
 	printk("sr%d: sr_read_cd lba=%d format=%d blksize=%d\n",
 	       minor, lba, format, blksize);
 #endif
 
-	memset(cmd, 0, 12);
+	memset(cmd, 0, MAX_COMMAND_SIZE);
 	cmd[0] = GPCMD_READ_CD;	/* READ_CD */
 	cmd[1] = (scsi_CDs[minor].device->lun << 5) | ((format & 7) << 2);
 	cmd[2] = (unsigned char) (lba >> 24) & 0xff;
@@ -408,7 +399,7 @@ int sr_read_cd(int minor, unsigned char *dest, int lba, int format, int blksize)
 
 int sr_read_sector(int minor, int lba, int blksize, unsigned char *dest)
 {
-	unsigned char cmd[12];	/* the scsi-command */
+	unsigned char cmd[MAX_COMMAND_SIZE];	/* the scsi-command */
 	int rc;
 
 	/* we try the READ CD command first... */
@@ -429,7 +420,7 @@ int sr_read_sector(int minor, int lba, int blksize, unsigned char *dest)
 	printk("sr%d: sr_read_sector lba=%d blksize=%d\n", minor, lba, blksize);
 #endif
 
-	memset(cmd, 0, 12);
+	memset(cmd, 0, MAX_COMMAND_SIZE);
 	cmd[0] = GPCMD_READ_10;
 	cmd[1] = (scsi_CDs[minor].device->lun << 5);
 	cmd[2] = (unsigned char) (lba >> 24) & 0xff;

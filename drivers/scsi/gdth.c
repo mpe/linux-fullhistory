@@ -3157,7 +3157,7 @@ int __init gdth_detect(Scsi_Host_Template *shtp)
             NUMDATA(shp)->busnum= 0;
 
             ha->pccb = CMDDATA(shp);
-            ha->pscratch = scsi_init_malloc(GDTH_SCRATCH, GFP_ATOMIC | GFP_DMA);
+            ha->pscratch = (void *) __get_free_pages(GFP_ATOMIC | GFP_DMA, GDTH_SCRATCH_ORD);
             ha->scratch_busy = FALSE;
             ha->req_first = NULL;
             ha->tid_cnt = MAX_HDRIVES;
@@ -3172,7 +3172,7 @@ int __init gdth_detect(Scsi_Host_Template *shtp)
                 --gdth_ctr_count;
                 --gdth_ctr_vcount;
                 if (ha->pscratch != NULL)
-                    scsi_init_free((void *)ha->pscratch, GDTH_SCRATCH);
+                    free_pages((unsigned long)ha->pscratch, GDTH_SCRATCH_ORD);
                 free_irq(ha->irq,NULL);
                 scsi_unregister(shp);
                 continue;
@@ -3223,7 +3223,7 @@ int __init gdth_detect(Scsi_Host_Template *shtp)
                     NUMDATA(shp)->hanum));
 
             ha->pccb = CMDDATA(shp);
-            ha->pscratch = scsi_init_malloc(GDTH_SCRATCH, GFP_ATOMIC | GFP_DMA);
+            ha->pscratch = (void *) __get_free_pages(GFP_ATOMIC | GFP_DMA, GDTH_SCRATCH_ORD);
             ha->scratch_busy = FALSE;
             ha->req_first = NULL;
             ha->tid_cnt = MAX_HDRIVES;
@@ -3238,7 +3238,7 @@ int __init gdth_detect(Scsi_Host_Template *shtp)
                 --gdth_ctr_count;
                 --gdth_ctr_vcount;
                 if (ha->pscratch != NULL)
-                    scsi_init_free((void *)ha->pscratch, GDTH_SCRATCH);
+                    free_pages((unsigned long)ha->pscratch, GDTH_SCRATCH_ORD);
                 free_irq(ha->irq,NULL);
                 scsi_unregister(shp);
                 continue;
@@ -3293,7 +3293,7 @@ int __init gdth_detect(Scsi_Host_Template *shtp)
             NUMDATA(shp)->busnum= 0;
 
             ha->pccb = CMDDATA(shp);
-            ha->pscratch = scsi_init_malloc(GDTH_SCRATCH, GFP_ATOMIC | GFP_DMA);
+            ha->pscratch = (void *) __get_free_pages(GFP_ATOMIC | GFP_DMA, GDTH_SCRATCH_ORD);
             ha->scratch_busy = FALSE;
             ha->req_first = NULL;
             ha->tid_cnt = pcistr[ctr].device_id >= 0x200 ? MAXID : MAX_HDRIVES;
@@ -3308,7 +3308,7 @@ int __init gdth_detect(Scsi_Host_Template *shtp)
                 --gdth_ctr_count;
                 --gdth_ctr_vcount;
                 if (ha->pscratch != NULL)
-                    scsi_init_free((void *)ha->pscratch, GDTH_SCRATCH);
+                    free_pages((unsigned long)ha->pscratch, GDTH_SCRATCH_ORD);
                 free_irq(ha->irq,NULL);
                 scsi_unregister(shp);
                 continue;
@@ -3359,7 +3359,7 @@ int gdth_release(struct Scsi_Host *shp)
         if (shp->dma_channel != 0xff) {
             free_dma(shp->dma_channel);
         }
-        scsi_init_free((void *)ha->pscratch, GDTH_SCRATCH);
+        free_pages((unsigned long)ha->pscratch, GDTH_SCRATCH_ORD);
         gdth_ctr_released++;
         TRACE2(("gdth_release(): HA %d of %d\n", 
                 gdth_ctr_released, gdth_ctr_count));
@@ -3561,21 +3561,18 @@ static void gdth_flush(int hanum)
 {
     int             i;
     gdth_ha_str     *ha;
-    Scsi_Cmnd       scp;
-    Scsi_Device     sdev;
+    Scsi_Cmnd     * scp;
+    Scsi_Device   * sdev;
     gdth_cmd_str    gdtcmd;
 
     TRACE2(("gdth_flush() hanum %d\n",hanum));
     ha = HADATA(gdth_ctr_tab[hanum]);
-    memset(&sdev,0,sizeof(Scsi_Device));
-    memset(&scp, 0,sizeof(Scsi_Cmnd));
-    sdev.host = gdth_ctr_tab[hanum];
-    sdev.id = sdev.host->this_id;
-    scp.cmd_len = 12;
-    scp.host = gdth_ctr_tab[hanum];
-    scp.target = sdev.host->this_id;
-    scp.device = &sdev;
-    scp.use_sg = 0;
+
+    sdev = scsi_get_host_dev(gdth_ctr_tab[hanum]);
+    scp  = scsi_allocate_device(sdev, 1, FALSE);
+
+    scp->cmd_len = 12;
+    scp->use_sg = 0;
 
     for (i = 0; i < MAX_HDRIVES; ++i) {
         if (ha->hdr[i].present) {
@@ -3586,9 +3583,11 @@ static void gdth_flush(int hanum)
             gdtcmd.u.cache.BlockNo = 1;
             gdtcmd.u.cache.sg_canz = 0;
             TRACE2(("gdth_flush(): flush ha %d drive %d\n", hanum, i));
-            gdth_do_cmd(&scp, &gdtcmd, 30);
+            gdth_do_cmd(scp, &gdtcmd, 30);
         }
     }
+    scsi_release_command(scp);
+    scsi_free_host_dev(sdev);
 }
 
 /* shutdown routine */
@@ -3596,8 +3595,8 @@ static int gdth_halt(struct notifier_block *nb, ulong event, void *buf)
 {
     int             hanum;
 #ifndef __alpha__
-    Scsi_Cmnd       scp;
-    Scsi_Device     sdev;
+    Scsi_Cmnd     * scp;
+    Scsi_Device   * sdev;
     gdth_cmd_str    gdtcmd;
 #endif
 
@@ -3610,23 +3609,21 @@ static int gdth_halt(struct notifier_block *nb, ulong event, void *buf)
 
 #ifndef __alpha__
         /* controller reset */
-        memset(&sdev,0,sizeof(Scsi_Device));
-        memset(&scp, 0,sizeof(Scsi_Cmnd));
-        sdev.host = gdth_ctr_tab[hanum];
-        sdev.id = sdev.host->this_id;
-        scp.cmd_len = 12;
-        scp.host = gdth_ctr_tab[hanum];
-        scp.target = sdev.host->this_id;
-        scp.device = &sdev;
-        scp.use_sg = 0;
+	sdev = scsi_get_host_dev(gdth_ctr_tab[hanum]);
+	scp  = scsi_allocate_device(sdev, 1, FALSE);
+        scp->cmd_len = 12;
+        scp->use_sg = 0;
 
         gdtcmd.BoardNode = LOCALBOARD;
         gdtcmd.Service = CACHESERVICE;
         gdtcmd.OpCode = GDT_RESET;
         TRACE2(("gdth_halt(): reset controller %d\n", hanum));
-        gdth_do_cmd(&scp, &gdtcmd, 10);
+        gdth_do_cmd(scp, &gdtcmd, 10);
+	scsi_release_command(scp);
+	scsi_free_host_dev(sdev);
 #endif
     }
+
     printk("Done.\n");
 
 #ifdef GDTH_STATISTICS

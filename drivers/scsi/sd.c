@@ -640,17 +640,6 @@ static int check_scsidisk_media_change(kdev_t full_dev)
 	return retval;
 }
 
-static void sd_init_done(Scsi_Cmnd * SCpnt)
-{
-	struct request *req;
-
-	req = &SCpnt->request;
-	req->rq_status = RQ_SCSI_DONE;	/* Busy, but indicate request done */
-
-	if (req->sem != NULL) {
-		up(req->sem);
-	}
-}
 static int sd_init_onedisk(int i)
 {
 	unsigned char cmd[10];
@@ -698,7 +687,7 @@ static int sd_init_onedisk(int i)
 			SCpnt->sense_buffer[2] = 0;
 
 			scsi_wait_cmd (SCpnt, (void *) cmd, (void *) buffer,
-				0/*512*/, sd_init_done,  SD_TIMEOUT, MAX_RETRIES);
+				0/*512*/, SD_TIMEOUT, MAX_RETRIES);
 
 			the_result = SCpnt->result;
 			retries++;
@@ -724,7 +713,7 @@ static int sd_init_onedisk(int i)
 				SCpnt->sense_buffer[2] = 0;
 
 				scsi_wait_cmd(SCpnt, (void *) cmd, (void *) buffer,
-					    512, sd_init_done, SD_TIMEOUT, MAX_RETRIES);
+					    512, SD_TIMEOUT, MAX_RETRIES);
 			}
 			spintime = 1;
 			spintime_value = jiffies;
@@ -754,7 +743,7 @@ static int sd_init_onedisk(int i)
 		SCpnt->sense_buffer[2] = 0;
 
 		scsi_wait_cmd(SCpnt, (void *) cmd, (void *) buffer,
-			    8, sd_init_done, SD_TIMEOUT, MAX_RETRIES);
+			    8, SD_TIMEOUT, MAX_RETRIES);
 
 		the_result = SCpnt->result;
 		retries--;
@@ -905,7 +894,7 @@ static int sd_init_onedisk(int i)
 
 		/* same code as READCAPA !! */
 		scsi_wait_cmd(SCpnt, (void *) cmd, (void *) buffer,
-			    512, sd_init_done, SD_TIMEOUT, MAX_RETRIES);
+			    512, SD_TIMEOUT, MAX_RETRIES);
 
 		the_result = SCpnt->result;
 

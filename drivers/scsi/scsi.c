@@ -86,43 +86,10 @@ static void scsi_dump_status(int level);
  * Definitions and constants.
  */
 
-/*
- * PAGE_SIZE must be a multiple of the sector size (512).  True
- * for all reasonably recent architectures (even the VAX...).
- */
-#define SECTOR_SIZE		512
-#define SECTORS_PER_PAGE	(PAGE_SIZE/SECTOR_SIZE)
-
-#if SECTORS_PER_PAGE <= 8
-typedef unsigned char FreeSectorBitmap;
-#elif SECTORS_PER_PAGE <= 32
-typedef unsigned int FreeSectorBitmap;
-#else
-#error You lose.
-#endif
-
 #define MIN_RESET_DELAY (2*HZ)
 
 /* Do not call reset on error if we just did a reset within 15 sec. */
 #define MIN_RESET_PERIOD (15*HZ)
-
-/* The following devices are known not to tolerate a lun != 0 scan for
- * one reason or another.  Some will respond to all luns, others will
- * lock up.
- */
-
-#define BLIST_NOLUN     	0x001
-#define BLIST_FORCELUN  	0x002
-#define BLIST_BORKEN    	0x004
-#define BLIST_KEY       	0x008
-#define BLIST_SINGLELUN 	0x010
-#define BLIST_NOTQ		0x020
-#define BLIST_SPARSELUN 	0x040
-#define BLIST_MAX5LUN		0x080
-#define BLIST_ISDISK    	0x100
-#define BLIST_ISROM     	0x200
-#define BLIST_GHOST     	0x400   
-
 
 
 /*
@@ -139,12 +106,6 @@ const unsigned char scsi_command_size[8] =
 static unsigned long serial_number = 0;
 static Scsi_Cmnd *scsi_bh_queue_head = NULL;
 static Scsi_Cmnd *scsi_bh_queue_tail = NULL;
-static FreeSectorBitmap *dma_malloc_freelist = NULL;
-static int need_isa_bounce_buffers;
-static unsigned int dma_sectors = 0;
-unsigned int scsi_dma_free_sectors = 0;
-unsigned int scsi_need_isa_buffer = 0;
-static unsigned char **dma_malloc_pages = NULL;
 
 /*
  * Note - the initial logging level can be set here to log events at boot time.
@@ -173,12 +134,7 @@ const char *const scsi_device_types[MAX_SCSI_DEVICE_CODE] =
 /* 
  * Function prototypes.
  */
-static void resize_dma_pool(void);
-static void print_inquiry(unsigned char *data);
 extern void scsi_times_out(Scsi_Cmnd * SCpnt);
-static int scan_scsis_single(int channel, int dev, int lun, int *max_scsi_dev,
-		int *sparse_lun, Scsi_Device ** SDpnt, Scsi_Cmnd * SCpnt,
-			     struct Scsi_Host *shpnt, char *scsi_result);
 void scsi_build_commandblocks(Scsi_Device * SDpnt);
 static int scsi_unregister_device(struct Scsi_Device_Template *tpnt);
 
@@ -189,140 +145,40 @@ static int scsi_unregister_device(struct Scsi_Device_Template *tpnt);
 extern void scsi_old_done(Scsi_Cmnd * SCpnt);
 extern void scsi_old_times_out(Scsi_Cmnd * SCpnt);
 
-struct dev_info {
-	const char *vendor;
-	const char *model;
-	const char *revision;	/* Latest revision known to be bad.  Not used yet */
-	unsigned flags;
-};
 
 /*
- * This is what was previously known as the blacklist.  The concept
- * has been expanded so that we can specify other types of things we
- * need to be aware of.
+ * Function:    scsi_get_request_handler()
+ *
+ * Purpose:     Selects queue handler function for a device.
+ *
+ * Arguments:   SDpnt   - device for which we need a handler function.
+ *
+ * Returns:     Nothing
+ *
+ * Lock status: No locking assumed or required.
+ *
+ * Notes:       Most devices will end up using scsi_request_fn for the
+ *              handler function (at least as things are done now).
+ *              The "block" feature basically ensures that only one of
+ *              the blocked hosts is active at one time, mainly to work around
+ *              buggy DMA chipsets where the memory gets starved.
+ *              For this case, we have a special handler function, which
+ *              does some checks and ultimately calls scsi_request_fn.
+ *
+ *              As a future enhancement, it might be worthwhile to add support
+ *              for stacked handlers - there might get to be too many permutations
+ *              otherwise.  Then again, we might just have one handler that does
+ *              all of the special cases (a little bit slower), and those devices
+ *              that don't need the special case code would directly call 
+ *              scsi_request_fn.
+ *
+ *              As it stands, I can think of a number of special cases that
+ *              we might need to handle.  This would not only include the blocked
+ *              case, but single_lun (for changers), and any special handling
+ *              we might need for a spun-down disk to spin it back up again.
  */
-static struct dev_info device_list[] =
-{
-	{"Aashima", "IMAGERY 2400SP", "1.03", BLIST_NOLUN},	/* Locks up if polled for lun != 0 */
-	{"CHINON", "CD-ROM CDS-431", "H42", BLIST_NOLUN},	/* Locks up if polled for lun != 0 */
-	{"CHINON", "CD-ROM CDS-535", "Q14", BLIST_NOLUN},	/* Locks up if polled for lun != 0 */
-	{"DENON", "DRD-25X", "V", BLIST_NOLUN},			/* Locks up if probed for lun != 0 */
-	{"HITACHI", "DK312C", "CM81", BLIST_NOLUN},		/* Responds to all lun - dtg */
-	{"HITACHI", "DK314C", "CR21", BLIST_NOLUN},		/* responds to all lun */
-	{"IMS", "CDD521/10", "2.06", BLIST_NOLUN},		/* Locks-up when LUN>0 polled. */
-	{"MAXTOR", "XT-3280", "PR02", BLIST_NOLUN},		/* Locks-up when LUN>0 polled. */
-	{"MAXTOR", "XT-4380S", "B3C", BLIST_NOLUN},		/* Locks-up when LUN>0 polled. */
-	{"MAXTOR", "MXT-1240S", "I1.2", BLIST_NOLUN},		/* Locks up when LUN>0 polled */
-	{"MAXTOR", "XT-4170S", "B5A", BLIST_NOLUN},		/* Locks-up sometimes when LUN>0 polled. */
-	{"MAXTOR", "XT-8760S", "B7B", BLIST_NOLUN},		/* guess what? */
-	{"MEDIAVIS", "RENO CD-ROMX2A", "2.03", BLIST_NOLUN},	/*Responds to all lun */
-	{"MICROP", "4110", "*", BLIST_NOTQ},			/* Buggy Tagged Queuing */
-	{"NEC", "CD-ROM DRIVE:841", "1.0", BLIST_NOLUN},	/* Locks-up when LUN>0 polled. */
-	{"PHILIPS", "PCA80SC", "V4-2", BLIST_NOLUN},		/* Responds to all lun */
-	{"RODIME", "RO3000S", "2.33", BLIST_NOLUN},		/* Locks up if polled for lun != 0 */
-	{"SANYO", "CRD-250S", "1.20", BLIST_NOLUN},		/* causes failed REQUEST SENSE on lun 1
-								 * for aha152x controller, which causes
-								 * SCSI code to reset bus.*/
-	{"SEAGATE", "ST157N", "\004|j", BLIST_NOLUN},		/* causes failed REQUEST SENSE on lun 1
-								 * for aha152x controller, which causes
-								 * SCSI code to reset bus.*/
-	{"SEAGATE", "ST296", "921", BLIST_NOLUN},		/* Responds to all lun */
-	{"SEAGATE", "ST1581", "6538", BLIST_NOLUN},		/* Responds to all lun */
-	{"SONY", "CD-ROM CDU-541", "4.3d", BLIST_NOLUN},	
-	{"SONY", "CD-ROM CDU-55S", "1.0i", BLIST_NOLUN},
-	{"SONY", "CD-ROM CDU-561", "1.7x", BLIST_NOLUN},
-	{"SONY", "CD-ROM CDU-8012", "*", BLIST_NOLUN},
-	{"TANDBERG", "TDC 3600", "U07", BLIST_NOLUN},		/* Locks up if polled for lun != 0 */
-	{"TEAC", "CD-R55S", "1.0H", BLIST_NOLUN},		/* Locks up if polled for lun != 0 */
-	{"TEAC", "CD-ROM", "1.06", BLIST_NOLUN},		/* causes failed REQUEST SENSE on lun 1
-								 * for seagate controller, which causes
-								 * SCSI code to reset bus.*/
-	{"TEAC", "MT-2ST/45S2-27", "RV M", BLIST_NOLUN},	/* Responds to all lun */
-	{"TEXEL", "CD-ROM", "1.06", BLIST_NOLUN},		/* causes failed REQUEST SENSE on lun 1
-								 * for seagate controller, which causes
-								 * SCSI code to reset bus.*/
-	{"QUANTUM", "LPS525S", "3110", BLIST_NOLUN},		/* Locks sometimes if polled for lun != 0 */
-	{"QUANTUM", "PD1225S", "3110", BLIST_NOLUN},		/* Locks sometimes if polled for lun != 0 */
-	{"QUANTUM", "FIREBALL ST4.3S", "0F0C", BLIST_NOLUN},	/* Locks up when polled for lun != 0 */
-	{"MEDIAVIS", "CDR-H93MV", "1.31", BLIST_NOLUN},		/* Locks up if polled for lun != 0 */
-	{"SANKYO", "CP525", "6.64", BLIST_NOLUN},		/* causes failed REQ SENSE, extra reset */
-	{"HP", "C1750A", "3226", BLIST_NOLUN},			/* scanjet iic */
-	{"HP", "C1790A", "", BLIST_NOLUN},			/* scanjet iip */
-	{"HP", "C2500A", "", BLIST_NOLUN},			/* scanjet iicx */
-	{"YAMAHA", "CDR100", "1.00", BLIST_NOLUN},		/* Locks up if polled for lun != 0 */
-	{"YAMAHA", "CDR102", "1.00", BLIST_NOLUN},		/* Locks up if polled for lun != 0  
-								 * extra reset */
-	{"RELISYS", "Scorpio", "*", BLIST_NOLUN},		/* responds to all LUN */
-	{"MICROTEK", "ScanMaker II", "5.61", BLIST_NOLUN},	/* responds to all LUN */
-
-/*
- * Other types of devices that have special flags.
- */
-	{"SONY", "CD-ROM CDU-8001", "*", BLIST_BORKEN},
-	{"TEXEL", "CD-ROM", "1.06", BLIST_BORKEN},
-	{"IOMEGA", "Io20S         *F", "*", BLIST_KEY},
-	{"INSITE", "Floptical   F*8I", "*", BLIST_KEY},
-	{"INSITE", "I325VM", "*", BLIST_KEY},
-	{"NRC", "MBR-7", "*", BLIST_FORCELUN | BLIST_SINGLELUN},
-	{"NRC", "MBR-7.4", "*", BLIST_FORCELUN | BLIST_SINGLELUN},
-	{"REGAL", "CDC-4X", "*", BLIST_MAX5LUN | BLIST_SINGLELUN},
-	{"NAKAMICH", "MJ-4.8S", "*", BLIST_FORCELUN | BLIST_SINGLELUN},
-	{"NAKAMICH", "MJ-5.16S", "*", BLIST_FORCELUN | BLIST_SINGLELUN},
-    {"PIONEER", "CD-ROM DRM-600", "*", BLIST_FORCELUN | BLIST_SINGLELUN},
-   {"PIONEER", "CD-ROM DRM-602X", "*", BLIST_FORCELUN | BLIST_SINGLELUN},
-   {"PIONEER", "CD-ROM DRM-604X", "*", BLIST_FORCELUN | BLIST_SINGLELUN},
-	{"EMULEX", "MD21/S2     ESDI", "*", BLIST_SINGLELUN},
-	{"CANON", "IPUBJD", "*", BLIST_SPARSELUN},
-	{"nCipher", "Fastness Crypto", "*", BLIST_FORCELUN},
-	{"NEC", "PD-1 ODX654P", "*", BLIST_FORCELUN | BLIST_SINGLELUN},
-	{"MATSHITA", "PD-1", "*", BLIST_FORCELUN | BLIST_SINGLELUN},
-	{"iomega", "jaz 1GB", "J.86", BLIST_NOTQ | BLIST_NOLUN},
- 	{"CREATIVE","DVD-RAM RAM","*", BLIST_GHOST},
- 	{"MATSHITA","PD-2 LF-D100","*", BLIST_GHOST},
- 	{"HITACHI", "GF-1050","*", BLIST_GHOST},  /* Hitachi SCSI DVD-RAM */
- 	{"TOSHIBA","CDROM","*", BLIST_ISROM},
-	{"TOSHIBA","DVD-RAM SD-W1101","*", BLIST_GHOST},
-	{"TOSHIBA","DVD-RAM SD-W1111","*", BLIST_GHOST},
-
-	/*
-	 * Must be at end of list...
-	 */
-	{NULL, NULL, NULL}
-};
-
-static int get_device_flags(unsigned char *response_data)
-{
-	int i = 0;
-	unsigned char *pnt;
-	for (i = 0; 1; i++) {
-		if (device_list[i].vendor == NULL)
-			return 0;
-		pnt = &response_data[8];
-		while (*pnt && *pnt == ' ')
-			pnt++;
-		if (memcmp(device_list[i].vendor, pnt,
-			   strlen(device_list[i].vendor)))
-			continue;
-		pnt = &response_data[16];
-		while (*pnt && *pnt == ' ')
-			pnt++;
-		if (memcmp(device_list[i].model, pnt,
-			   strlen(device_list[i].model)))
-			continue;
-		return device_list[i].flags;
-	}
-	return 0;
-}
-
-
-static void scan_scsis_done(Scsi_Cmnd * SCpnt)
-{
-
-	SCSI_LOG_MLCOMPLETE(1, printk("scan_scsis_done(%p, %06x)\n", SCpnt->host, SCpnt->result));
-	SCpnt->request.rq_status = RQ_SCSI_DONE;
-
-	if (SCpnt->request.sem != NULL)
-		up(SCpnt->request.sem);
+request_fn_proc * scsi_get_request_handler(Scsi_Device * SDpnt, struct Scsi_Host * SHpnt) {
+        return scsi_request_fn;
 }
 
 #ifdef MODULE
@@ -349,43 +205,24 @@ __setup("scsi_logging=", scsi_logging_setup);
 
 #endif
 
-#ifdef CONFIG_SCSI_MULTI_LUN
-static int max_scsi_luns = 8;
-#else
-static int max_scsi_luns = 1;
-#endif
-
-#ifdef MODULE
-
-MODULE_PARM(max_scsi_luns, "i");
-MODULE_PARM_DESC(max_scsi_luns, "last scsi LUN (should be between 1 and 8)");
-
-#else
-
-static int __init scsi_luns_setup(char *str)
-{
-	int tmp;
-
-	if (get_option(&str, &tmp) == 1) {
-		max_scsi_luns = tmp;
-		return 1;
-	} else {
-		printk("scsi_luns_setup : usage max_scsi_luns=n "
-		       "(n should be between 1 and 8)\n");
-		return 0;
-	}
-}
-
-__setup("max_scsi_luns=", scsi_luns_setup);
-
-#endif
-
 /*
  *	Issue a command and wait for it to complete
  */
  
+static void scsi_wait_done(Scsi_Cmnd * SCpnt)
+{
+	struct request *req;
+
+	req = &SCpnt->request;
+	req->rq_status = RQ_SCSI_DONE;	/* Busy, but indicate request done */
+
+	if (req->sem != NULL) {
+		up(req->sem);
+	}
+}
+
 void scsi_wait_cmd (Scsi_Cmnd * SCpnt, const void *cmnd ,
-		  void *buffer, unsigned bufflen, void (*done)(Scsi_Cmnd *),
+		  void *buffer, unsigned bufflen, 
 		  int timeout, int retries)
 {
 	DECLARE_MUTEX_LOCKED(sem);
@@ -393,592 +230,10 @@ void scsi_wait_cmd (Scsi_Cmnd * SCpnt, const void *cmnd ,
 	SCpnt->request.sem = &sem;
 	SCpnt->request.rq_status = RQ_SCSI_BUSY;
 	scsi_do_cmd (SCpnt, (void *) cmnd,
-		buffer, bufflen, done, timeout, retries);
+		buffer, bufflen, scsi_wait_done, timeout, retries);
 	down (&sem);
 	SCpnt->request.sem = NULL;
 }
-
-
-/*
- *  Detecting SCSI devices :
- *  We scan all present host adapter's busses,  from ID 0 to ID (max_id).
- *  We use the INQUIRY command, determine device type, and pass the ID /
- *  lun address of all sequential devices to the tape driver, all random
- *  devices to the disk driver.
- */
-static void scan_scsis(struct Scsi_Host *shpnt,
-		       unchar hardcoded,
-		       unchar hchannel,
-		       unchar hid,
-		       unchar hlun)
-{
-	int channel;
-	int dev;
-	int lun;
-	int max_dev_lun;
-	Scsi_Cmnd *SCpnt;
-	unsigned char *scsi_result;
-	unsigned char scsi_result0[256];
-	Scsi_Device *SDpnt;
-	Scsi_Device *SDtail;
-	int sparse_lun;
-
-	scsi_result = NULL;
-	SCpnt = (Scsi_Cmnd *) scsi_init_malloc(sizeof(Scsi_Cmnd),
-					       GFP_ATOMIC | GFP_DMA);
-	if (SCpnt) {
-		SDpnt = (Scsi_Device *) scsi_init_malloc(sizeof(Scsi_Device),
-							 GFP_ATOMIC);
-		if (SDpnt) {
-			/*
-			 * Register the queue for the device.  All I/O requests will come
-			 * in through here.  We also need to register a pointer to
-			 * ourselves, since the queue handler won't know what device
-			 * the queue actually represents.   We could look it up, but it
-			 * is pointless work.
-			 */
-			blk_init_queue(&SDpnt->request_queue, scsi_request_fn);
-			blk_queue_headactive(&SDpnt->request_queue, 0);
-			SDpnt->request_queue.queuedata = (void *) SDpnt;
-			/* Make sure we have something that is valid for DMA purposes */
-			scsi_result = ((!shpnt->unchecked_isa_dma)
-				       ? &scsi_result0[0] : scsi_init_malloc(512, GFP_DMA));
-		}
-	}
-	if (scsi_result == NULL) {
-		printk("Unable to obtain scsi_result buffer\n");
-		goto leave;
-	}
-	/*
-	 * We must chain ourself in the host_queue, so commands can time out 
-	 */
-	SCpnt->next = NULL;
-	SDpnt->device_queue = SCpnt;
-	SDpnt->host = shpnt;
-	SDpnt->online = TRUE;
-
-	initialize_merge_fn(SDpnt);
-
-        /*
-         * Initialize the object that we will use to wait for command blocks.
-         */
-	init_waitqueue_head(&SDpnt->scpnt_wait);
-
-	/*
-	 * Next, hook the device to the host in question.
-	 */
-	SDpnt->prev = NULL;
-	SDpnt->next = NULL;
-	if (shpnt->host_queue != NULL) {
-		SDtail = shpnt->host_queue;
-		while (SDtail->next != NULL)
-			SDtail = SDtail->next;
-
-		SDtail->next = SDpnt;
-		SDpnt->prev = SDtail;
-	} else {
-		shpnt->host_queue = SDpnt;
-	}
-
-	/*
-	 * We need to increment the counter for this one device so we can track when
-	 * things are quiet.
-	 */
-	atomic_inc(&shpnt->host_active);
-	atomic_inc(&SDpnt->device_active);
-
-	if (hardcoded == 1) {
-		Scsi_Device *oldSDpnt = SDpnt;
-		struct Scsi_Device_Template *sdtpnt;
-		channel = hchannel;
-		if (channel > shpnt->max_channel)
-			goto leave;
-		dev = hid;
-		if (dev >= shpnt->max_id)
-			goto leave;
-		lun = hlun;
-		if (lun >= shpnt->max_lun)
-			goto leave;
-		scan_scsis_single(channel, dev, lun, &max_dev_lun, &sparse_lun,
-				  &SDpnt, SCpnt, shpnt, scsi_result);
-		if (SDpnt != oldSDpnt) {
-
-			/* it could happen the blockdevice hasn't yet been inited */
-			for (sdtpnt = scsi_devicelist; sdtpnt; sdtpnt = sdtpnt->next)
-				if (sdtpnt->init && sdtpnt->dev_noticed)
-					(*sdtpnt->init) ();
-
-			for (sdtpnt = scsi_devicelist; sdtpnt; sdtpnt = sdtpnt->next) {
-				if (sdtpnt->attach) {
-					(*sdtpnt->attach) (oldSDpnt);
-					if (oldSDpnt->attached) {
-						scsi_build_commandblocks(oldSDpnt);
-						if (0 == oldSDpnt->has_cmdblocks) {
-							printk("scan_scsis: DANGER, no command blocks\n");
-							/* What to do now ?? */
-						}
-					}
-				}
-			}
-			resize_dma_pool();
-
-			for (sdtpnt = scsi_devicelist; sdtpnt; sdtpnt = sdtpnt->next) {
-				if (sdtpnt->finish && sdtpnt->nr_dev) {
-					(*sdtpnt->finish) ();
-				}
-			}
-		}
-	} else {
-		/* Actual LUN. PC ordering is 0->n IBM/spec ordering is n->0 */
-		int order_dev;
-
-		for (channel = 0; channel <= shpnt->max_channel; channel++) {
-			for (dev = 0; dev < shpnt->max_id; ++dev) {
-				if (shpnt->reverse_ordering)
-					/* Shift to scanning 15,14,13... or 7,6,5,4, */
-					order_dev = shpnt->max_id - dev - 1;
-				else
-					order_dev = dev;
-
-				if (shpnt->this_id != order_dev) {
-
-					/*
-					 * We need the for so our continue, etc. work fine. We put this in
-					 * a variable so that we can override it during the scan if we
-					 * detect a device *KNOWN* to have multiple logical units.
-					 */
-					max_dev_lun = (max_scsi_luns < shpnt->max_lun ?
-					 max_scsi_luns : shpnt->max_lun);
-					sparse_lun = 0;
-					for (lun = 0; lun < max_dev_lun; ++lun) {
-						if (!scan_scsis_single(channel, order_dev, lun, &max_dev_lun,
-								       &sparse_lun, &SDpnt, SCpnt, shpnt,
-							     scsi_result)
-						    && !sparse_lun)
-							break;	/* break means don't probe further for luns!=0 */
-					}	/* for lun ends */
-				}	/* if this_id != id ends */
-			}	/* for dev ends */
-		}		/* for channel ends */
-	}			/* if/else hardcoded */
-
-	/*
-	 * We need to decrement the counter for this one device
-	 * so we know when everything is quiet.
-	 */
-	atomic_dec(&shpnt->host_active);
-	atomic_dec(&SDpnt->device_active);
-
-      leave:
-
-	{			/* Unchain SCpnt from host_queue */
-		Scsi_Device *prev, *next;
-		Scsi_Device *dqptr;
-
-		for (dqptr = shpnt->host_queue; dqptr != SDpnt; dqptr = dqptr->next)
-			continue;
-		if (dqptr) {
-			prev = dqptr->prev;
-			next = dqptr->next;
-			if (prev)
-				prev->next = next;
-			else
-				shpnt->host_queue = next;
-			if (next)
-				next->prev = prev;
-		}
-	}
-
-	/* Last device block does not exist.  Free memory. */
-	if (SDpnt != NULL)
-		scsi_init_free((char *) SDpnt, sizeof(Scsi_Device));
-
-	if (SCpnt != NULL)
-		scsi_init_free((char *) SCpnt, sizeof(Scsi_Cmnd));
-
-	/* If we allocated a buffer so we could do DMA, free it now */
-	if (scsi_result != &scsi_result0[0] && scsi_result != NULL) {
-		scsi_init_free(scsi_result, 512);
-	} {
-		Scsi_Device *sdev;
-		Scsi_Cmnd *scmd;
-
-		SCSI_LOG_SCAN_BUS(4, printk("Host status for host %p:\n", shpnt));
-		for (sdev = shpnt->host_queue; sdev; sdev = sdev->next) {
-			SCSI_LOG_SCAN_BUS(4, printk("Device %d %p: ", sdev->id, sdev));
-			for (scmd = sdev->device_queue; scmd; scmd = scmd->next) {
-				SCSI_LOG_SCAN_BUS(4, printk("%p ", scmd));
-			}
-			SCSI_LOG_SCAN_BUS(4, printk("\n"));
-		}
-	}
-}
-
-/*
- * The worker for scan_scsis.
- * Returning 0 means Please don't ask further for lun!=0, 1 means OK go on.
- * Global variables used : scsi_devices(linked list)
- */
-int scan_scsis_single(int channel, int dev, int lun, int *max_dev_lun,
-	       int *sparse_lun, Scsi_Device ** SDpnt2, Scsi_Cmnd * SCpnt,
-		      struct Scsi_Host *shpnt, char *scsi_result)
-{
-	unsigned char scsi_cmd[12];
-	struct Scsi_Device_Template *sdtpnt;
-	Scsi_Device *SDtail, *SDpnt = *SDpnt2;
-	int bflags, type = -1;
-	static int ghost_channel=-1, ghost_dev=-1;
-	int org_lun = lun;
-
-	SDpnt->host = shpnt;
-	SDpnt->id = dev;
-	SDpnt->lun = lun;
-	SDpnt->channel = channel;
-	SDpnt->online = TRUE;
-
- 
-	if ((channel == ghost_channel) && (dev == ghost_dev) && (lun == 1)) {
-		SDpnt->lun = 0;
-	} else {
-		ghost_channel = ghost_dev = -1;
-	}
-	     
-
-	/* Some low level driver could use device->type (DB) */
-	SDpnt->type = -1;
-
-	/*
-	 * Assume that the device will have handshaking problems, and then fix this
-	 * field later if it turns out it doesn't
-	 */
-	SDpnt->borken = 1;
-	SDpnt->was_reset = 0;
-	SDpnt->expecting_cc_ua = 0;
-	SDpnt->starved = 0;
-
-	scsi_cmd[0] = TEST_UNIT_READY;
-	scsi_cmd[1] = lun << 5;
-	scsi_cmd[2] = scsi_cmd[3] = scsi_cmd[4] = scsi_cmd[5] = 0;
-
-	SCpnt->host = SDpnt->host;
-	SCpnt->device = SDpnt;
-	SCpnt->target = SDpnt->id;
-	SCpnt->lun = SDpnt->lun;
-	SCpnt->channel = SDpnt->channel;
-
-	scsi_wait_cmd (SCpnt, (void *) scsi_cmd,
-	          (void *) NULL,
-	          0, scan_scsis_done, SCSI_TIMEOUT + 4 * HZ, 5);
-
-	SCSI_LOG_SCAN_BUS(3, printk("scsi: scan_scsis_single id %d lun %d. Return code 0x%08x\n",
-				    dev, lun, SCpnt->result));
-	SCSI_LOG_SCAN_BUS(3, print_driverbyte(SCpnt->result));
-	SCSI_LOG_SCAN_BUS(3, print_hostbyte(SCpnt->result));
-	SCSI_LOG_SCAN_BUS(3, printk("\n"));
-
-	if (SCpnt->result) {
-		if (((driver_byte(SCpnt->result) & DRIVER_SENSE) ||
-		     (status_byte(SCpnt->result) & CHECK_CONDITION)) &&
-		    ((SCpnt->sense_buffer[0] & 0x70) >> 4) == 7) {
-			if (((SCpnt->sense_buffer[2] & 0xf) != NOT_READY) &&
-			    ((SCpnt->sense_buffer[2] & 0xf) != UNIT_ATTENTION) &&
-			    ((SCpnt->sense_buffer[2] & 0xf) != ILLEGAL_REQUEST || lun > 0))
-				return 1;
-		} else
-			return 0;
-	}
-	SCSI_LOG_SCAN_BUS(3, printk("scsi: performing INQUIRY\n"));
-	/*
-	 * Build an INQUIRY command block.
-	 */
-	scsi_cmd[0] = INQUIRY;
-	scsi_cmd[1] = (lun << 5) & 0xe0;
-	scsi_cmd[2] = 0;
-	scsi_cmd[3] = 0;
-	scsi_cmd[4] = 255;
-	scsi_cmd[5] = 0;
-	SCpnt->cmd_len = 0;
-
-	scsi_wait_cmd (SCpnt, (void *) scsi_cmd,
-	          (void *) scsi_result,
-	          256, scan_scsis_done, SCSI_TIMEOUT, 3);
-
-	SCSI_LOG_SCAN_BUS(3, printk("scsi: INQUIRY %s with code 0x%x\n",
-		SCpnt->result ? "failed" : "successful", SCpnt->result));
-
-	if (SCpnt->result)
-		return 0;	/* assume no peripheral if any sort of error */
-
-	/*
-	 * Check the peripheral qualifier field - this tells us whether LUNS
-	 * are supported here or not.
-	 */
-	if ((scsi_result[0] >> 5) == 3) {
-		return 0;	/* assume no peripheral if any sort of error */
-	}
-
-	/*
-	 * Get any flags for this device.  
-	 */
-	bflags = get_device_flags (scsi_result);
-
-
-	 /*   The Toshiba ROM was "gender-changed" here as an inline hack.
-	      This is now much more generic.
-	      This is a mess: What we really want is to leave the scsi_result
-	      alone, and just change the SDpnt structure. And the SDpnt is what
-	      we want print_inquiry to print.  -- REW
-	 */
-	if (bflags & BLIST_ISDISK) {
-		scsi_result[0] = TYPE_DISK;                                                
-		scsi_result[1] |= 0x80;     /* removable */
-	}
-
-	if (bflags & BLIST_ISROM) {
-		scsi_result[0] = TYPE_ROM;
-		scsi_result[1] |= 0x80;     /* removable */
-	}
-    
-  	if (bflags & BLIST_GHOST) {
-		if ((ghost_channel == channel) && (ghost_dev == dev) && (org_lun == 1)) {
-			lun=1;
-		} else {
-			ghost_channel = channel;
-			ghost_dev = dev;
-			scsi_result[0] = TYPE_MOD;
-			scsi_result[1] |= 0x80;     /* removable */
-		}
-	}
-       
-
-	memcpy(SDpnt->vendor, scsi_result + 8, 8);
-	memcpy(SDpnt->model, scsi_result + 16, 16);
-	memcpy(SDpnt->rev, scsi_result + 32, 4);
-
-	SDpnt->removable = (0x80 & scsi_result[1]) >> 7;
-	SDpnt->online = TRUE;
-	SDpnt->lockable = SDpnt->removable;
-	SDpnt->changed = 0;
-	SDpnt->access_count = 0;
-	SDpnt->busy = 0;
-	SDpnt->has_cmdblocks = 0;
-	/*
-	 * Currently, all sequential devices are assumed to be tapes, all random
-	 * devices disk, with the appropriate read only flags set for ROM / WORM
-	 * treated as RO.
-	 */
-	switch (type = (scsi_result[0] & 0x1f)) {
-	case TYPE_TAPE:
-	case TYPE_DISK:
-	case TYPE_MOD:
-	case TYPE_PROCESSOR:
-	case TYPE_SCANNER:
-	case TYPE_MEDIUM_CHANGER:
-	case TYPE_ENCLOSURE:
-		SDpnt->writeable = 1;
-		break;
-	case TYPE_WORM:
-	case TYPE_ROM:
-		SDpnt->writeable = 0;
-		break;
-	default:
-		printk("scsi: unknown type %d\n", type);
-	}
-
-	SDpnt->device_blocked = FALSE;
-	SDpnt->device_busy = 0;
-	SDpnt->single_lun = 0;
-	SDpnt->soft_reset =
-	    (scsi_result[7] & 1) && ((scsi_result[3] & 7) == 2);
-	SDpnt->random = (type == TYPE_TAPE) ? 0 : 1;
-	SDpnt->type = (type & 0x1f);
-
-	print_inquiry(scsi_result);
-
-	for (sdtpnt = scsi_devicelist; sdtpnt;
-	     sdtpnt = sdtpnt->next)
-		if (sdtpnt->detect)
-			SDpnt->attached +=
-			    (*sdtpnt->detect) (SDpnt);
-
-	SDpnt->scsi_level = scsi_result[2] & 0x07;
-	if (SDpnt->scsi_level >= 2 ||
-	    (SDpnt->scsi_level == 1 &&
-	     (scsi_result[3] & 0x0f) == 1))
-		SDpnt->scsi_level++;
-
-	/*
-	 * Accommodate drivers that want to sleep when they should be in a polling
-	 * loop.
-	 */
-	SDpnt->disconnect = 0;
-
-
-	/*
-	 * Set the tagged_queue flag for SCSI-II devices that purport to support
-	 * tagged queuing in the INQUIRY data.
-	 */
-	SDpnt->tagged_queue = 0;
-	if ((SDpnt->scsi_level >= SCSI_2) &&
-	    (scsi_result[7] & 2) &&
-	    !(bflags & BLIST_NOTQ)) {
-		SDpnt->tagged_supported = 1;
-		SDpnt->current_tag = 0;
-	}
-	/*
-	 * Some revisions of the Texel CD ROM drives have handshaking problems when
-	 * used with the Seagate controllers.  Before we know what type of device
-	 * we're talking to, we assume it's borken and then change it here if it
-	 * turns out that it isn't a TEXEL drive.
-	 */
-	if ((bflags & BLIST_BORKEN) == 0)
-		SDpnt->borken = 0;
-
-	/*
-	 * If we want to only allow I/O to one of the luns attached to this device
-	 * at a time, then we set this flag.
-	 */
-	if (bflags & BLIST_SINGLELUN)
-		SDpnt->single_lun = 1;
-
-	/*
-	 * These devices need this "key" to unlock the devices so we can use it
-	 */
-	if ((bflags & BLIST_KEY) != 0) {
-		printk("Unlocked floptical drive.\n");
-		SDpnt->lockable = 0;
-		scsi_cmd[0] = MODE_SENSE;
-		scsi_cmd[1] = (lun << 5) & 0xe0;
-		scsi_cmd[2] = 0x2e;
-		scsi_cmd[3] = 0;
-		scsi_cmd[4] = 0x2a;
-		scsi_cmd[5] = 0;
-		SCpnt->cmd_len = 0;
-		scsi_wait_cmd (SCpnt, (void *) scsi_cmd,
-	        	(void *) scsi_result, 0x2a,
-	        	scan_scsis_done, SCSI_TIMEOUT, 3);
-	}
-	/*
-	 * Detach the command from the device. It was just a temporary to be used while
-	 * scanning the bus - the real ones will be allocated later.
-	 */
-	SDpnt->device_queue = NULL;
-
-	/*
-	 * This device was already hooked up to the host in question,
-	 * so at this point we just let go of it and it should be fine.  We do need to
-	 * allocate a new one and attach it to the host so that we can further scan the bus.
-	 */
-	SDpnt = (Scsi_Device *) scsi_init_malloc(sizeof(Scsi_Device), GFP_ATOMIC);
-	*SDpnt2 = SDpnt;
-	if (!SDpnt) {
-		printk("scsi: scan_scsis_single: Cannot malloc\n");
-		return 0;
-	}
-	/*
-	 * Register the queue for the device.  All I/O requests will come
-	 * in through here.  We also need to register a pointer to
-	 * ourselves, since the queue handler won't know what device
-	 * the queue actually represents.   We could look it up, but it
-	 * is pointless work.
-	 */
-	blk_init_queue(&SDpnt->request_queue, scsi_request_fn);
-	blk_queue_headactive(&SDpnt->request_queue, 0);
-	SDpnt->request_queue.queuedata = (void *) SDpnt;
-	SDpnt->host = shpnt;
-	initialize_merge_fn(SDpnt);
-
-	/*
-	 * And hook up our command block to the new device we will be testing
-	 * for.
-	 */
-	SDpnt->device_queue = SCpnt;
-	SDpnt->online = TRUE;
-
-        /*
-         * Initialize the object that we will use to wait for command blocks.
-         */
-	init_waitqueue_head(&SDpnt->scpnt_wait);
-
-	/*
-	 * Since we just found one device, there had damn well better be one in the list
-	 * already.
-	 */
-	if (shpnt->host_queue == NULL)
-		panic("scan_scsis_single: Host queue == NULL\n");
-
-	SDtail = shpnt->host_queue;
-	while (SDtail->next) {
-		SDtail = SDtail->next;
-	}
-
-	/* Add this device to the linked list at the end */
-	SDtail->next = SDpnt;
-	SDpnt->prev = SDtail;
-	SDpnt->next = NULL;
-
-	/*
-	 * Some scsi devices cannot be polled for lun != 0 due to firmware bugs
-	 */
-	if (bflags & BLIST_NOLUN)
-		return 0;	/* break; */
-
-	/*
-	 * If this device is known to support sparse multiple units, override the
-	 * other settings, and scan all of them.
-	 */
-	if (bflags & BLIST_SPARSELUN) {
-		*max_dev_lun = 8;
-		*sparse_lun = 1;
-		return 1;
-	}
-	/*
-	 * If this device is known to support multiple units, override the other
-	 * settings, and scan all of them.
-	 */
-	if (bflags & BLIST_FORCELUN) {
-		*max_dev_lun = 8;
-		return 1;
-	}
-	/*
-	 * REGAL CDC-4X: avoid hang after LUN 4
-	 */
-	if (bflags & BLIST_MAX5LUN) {
-		*max_dev_lun = 5;
-		return 1;
-	}
-
-	/*
-	 * If this device is Ghosted, scan upto two luns. (It physically only
-	 * has one). -- REW
-	 */
-	if (bflags & BLIST_GHOST) {
-	        *max_dev_lun = 2;
-	        return 1;
-	}  
-
-
-	/*
-	 * We assume the device can't handle lun!=0 if: - it reports scsi-0 (ANSI
-	 * SCSI Revision 0) (old drives like MAXTOR XT-3280) or - it reports scsi-1
-	 * (ANSI SCSI Revision 1) and Response Data Format 0
-	 */
-	if (((scsi_result[2] & 0x07) == 0)
-	    ||
-	    ((scsi_result[2] & 0x07) == 1 &&
-	     (scsi_result[3] & 0x0f) == 0))
-		return 0;
-	return 1;
-}
-
-/*
- *  Flag bits for the internal_timeout array
- */
-#define NORMAL_TIMEOUT 0
-#define IN_ABORT  1
-#define IN_RESET  2
-#define IN_RESET2 4
-#define IN_RESET3 8
 
 
 /*
@@ -988,11 +243,6 @@ int scan_scsis_single(int channel, int dev, int lun, int *max_dev_lun,
  * on this lock.
  */
 static spinlock_t device_request_lock = SPIN_LOCK_UNLOCKED;
-
-/*
- * Used for access to internal allocator used for DMA safe buffers.
- */
-static spinlock_t allocator_request_lock = SPIN_LOCK_UNLOCKED;
 
 /*
  * Used to protect insertion into and removal from the queue of
@@ -1465,7 +715,8 @@ void scsi_do_cmd(Scsi_Cmnd * SCpnt, const void *cmnd,
 	 * the completion function for the high level driver.
 	 */
 
-	memcpy((void *) SCpnt->data_cmnd, (const void *) cmnd, 12);
+	memcpy((void *) SCpnt->data_cmnd, (const void *) cmnd, 
+               sizeof(SCpnt->data_cmnd));
 	SCpnt->reset_chain = NULL;
 	SCpnt->serial_number = 0;
 	SCpnt->serial_number_at_timeout = 0;
@@ -1477,7 +728,8 @@ void scsi_do_cmd(Scsi_Cmnd * SCpnt, const void *cmnd,
 	SCpnt->done = done;
 	SCpnt->timeout_per_command = timeout;
 
-	memcpy((void *) SCpnt->cmnd, (const void *) cmnd, 12);
+	memcpy((void *) SCpnt->cmnd, (const void *) cmnd, 
+               sizeof(SCpnt->cmnd));
 	/* Zero the sense buffer.  Some host adapters automatically request
 	 * sense on error.  0 is not a valid sense code.
 	 */
@@ -1820,127 +1072,6 @@ static int scsi_register_host(Scsi_Host_Template *);
 static void scsi_unregister_host(Scsi_Host_Template *);
 #endif
 
-/*
- * Function:    scsi_malloc
- *
- * Purpose:     Allocate memory from the DMA-safe pool.
- *
- * Arguments:   len       - amount of memory we need.
- *
- * Lock status: No locks assumed to be held.  This function is SMP-safe.
- *
- * Returns:     Pointer to memory block.
- *
- * Notes:       Prior to the new queue code, this function was not SMP-safe.
- *              This function can only allocate in units of sectors
- *              (i.e. 512 bytes).
- *
- *              We cannot use the normal system allocator becuase we need
- *              to be able to guarantee that we can process a complete disk
- *              I/O request without touching the system allocator.  Think
- *              about it - if the system were heavily swapping, and tried to
- *              write out a block of memory to disk, and the SCSI code needed
- *              to allocate more memory in order to be able to write the
- *              data to disk, you would wedge the system.
- */
-void *scsi_malloc(unsigned int len)
-{
-	unsigned int nbits, mask;
-	unsigned long flags;
-
-	int i, j;
-	if (len % SECTOR_SIZE != 0 || len > PAGE_SIZE)
-		return NULL;
-
-	nbits = len >> 9;
-	mask = (1 << nbits) - 1;
-
-	spin_lock_irqsave(&allocator_request_lock, flags);
-
-	for (i = 0; i < dma_sectors / SECTORS_PER_PAGE; i++)
-		for (j = 0; j <= SECTORS_PER_PAGE - nbits; j++) {
-			if ((dma_malloc_freelist[i] & (mask << j)) == 0) {
-				dma_malloc_freelist[i] |= (mask << j);
-				scsi_dma_free_sectors -= nbits;
-#ifdef DEBUG
-				SCSI_LOG_MLQUEUE(3, printk("SMalloc: %d %p [From:%p]\n", len, dma_malloc_pages[i] + (j << 9)));
-				printk("SMalloc: %d %p [From:%p]\n", len, dma_malloc_pages[i] + (j << 9));
-#endif
-				spin_unlock_irqrestore(&allocator_request_lock, flags);
-				return (void *) ((unsigned long) dma_malloc_pages[i] + (j << 9));
-			}
-		}
-	spin_unlock_irqrestore(&allocator_request_lock, flags);
-	return NULL;		/* Nope.  No more */
-}
-
-/*
- * Function:    scsi_free
- *
- * Purpose:     Free memory into the DMA-safe pool.
- *
- * Arguments:   ptr       - data block we are freeing.
- *              len       - size of block we are freeing.
- *
- * Lock status: No locks assumed to be held.  This function is SMP-safe.
- *
- * Returns:     Nothing
- *
- * Notes:       This function *must* only be used to free memory
- *              allocated from scsi_malloc().
- *
- *              Prior to the new queue code, this function was not SMP-safe.
- *              This function can only allocate in units of sectors
- *              (i.e. 512 bytes).
- */
-int scsi_free(void *obj, unsigned int len)
-{
-	unsigned int page, sector, nbits, mask;
-	unsigned long flags;
-
-#ifdef DEBUG
-	unsigned long ret = 0;
-
-#ifdef __mips__
-	__asm__ __volatile__("move\t%0,$31":"=r"(ret));
-#else
-	ret = __builtin_return_address(0);
-#endif
-	printk("scsi_free %p %d\n", obj, len);
-	SCSI_LOG_MLQUEUE(3, printk("SFree: %p %d\n", obj, len));
-#endif
-
-	spin_lock_irqsave(&allocator_request_lock, flags);
-
-	for (page = 0; page < dma_sectors / SECTORS_PER_PAGE; page++) {
-		unsigned long page_addr = (unsigned long) dma_malloc_pages[page];
-		if ((unsigned long) obj >= page_addr &&
-		    (unsigned long) obj < page_addr + PAGE_SIZE) {
-			sector = (((unsigned long) obj) - page_addr) >> 9;
-
-			nbits = len >> 9;
-			mask = (1 << nbits) - 1;
-
-			if ((mask << sector) >= (1 << SECTORS_PER_PAGE))
-				panic("scsi_free:Bad memory alignment");
-
-			if ((dma_malloc_freelist[page] &
-			     (mask << sector)) != (mask << sector)) {
-#ifdef DEBUG
-				printk("scsi_free(obj=%p, len=%d) called from %08lx\n",
-				       obj, len, ret);
-#endif
-				panic("scsi_free:Trying to free unused memory");
-			}
-			scsi_dma_free_sectors += nbits;
-			dma_malloc_freelist[page] &= ~(mask << sector);
-			spin_unlock_irqrestore(&allocator_request_lock, flags);
-			return 0;
-		}
-	}
-	panic("scsi_free:Bad offset");
-}
-
 
 int scsi_loadable_module_flag;	/* Set after we scan builtin drivers */
 
@@ -2124,7 +1255,7 @@ int __init scsi_dev_init(void)
 	/*
 	 * This should build the DMA pool.
 	 */
-	resize_dma_pool();
+	scsi_resize_dma_pool();
 
 	/*
 	 * OK, now we finish the initialization by doing spin-up, read
@@ -2139,47 +1270,6 @@ int __init scsi_dev_init(void)
 	return 0;
 }
 #endif	/* MODULE */		/* } */
-
-static void print_inquiry(unsigned char *data)
-{
-	int i;
-
-	printk("  Vendor: ");
-	for (i = 8; i < 16; i++) {
-		if (data[i] >= 0x20 && i < data[4] + 5)
-			printk("%c", data[i]);
-		else
-			printk(" ");
-	}
-
-	printk("  Model: ");
-	for (i = 16; i < 32; i++) {
-		if (data[i] >= 0x20 && i < data[4] + 5)
-			printk("%c", data[i]);
-		else
-			printk(" ");
-	}
-
-	printk("  Rev: ");
-	for (i = 32; i < 36; i++) {
-		if (data[i] >= 0x20 && i < data[4] + 5)
-			printk("%c", data[i]);
-		else
-			printk(" ");
-	}
-
-	printk("\n");
-
-	i = data[0] & 0x1f;
-
-	printk("  Type:   %s ",
-	       i < MAX_SCSI_DEVICE_CODE ? scsi_device_types[i] : "Unknown          ");
-	printk("                 ANSI SCSI revision: %02x", data[2] & 0x07);
-	if ((data[2] & 0x07) == 1 && (data[3] & 0x0f) == 1)
-		printk(" CCS\n");
-	else
-		printk("\n");
-}
 
 #ifdef CONFIG_PROC_FS
 static int scsi_proc_info(char *buffer, char **start, off_t offset, int length)
@@ -2475,217 +1565,6 @@ out:
 }
 #endif
 
-/*
- * Function:    resize_dma_pool
- *
- * Purpose:     Ensure that the DMA pool is sufficiently large to be
- *              able to guarantee that we can always process I/O requests
- *              without calling the system allocator.
- *
- * Arguments:   None.
- *
- * Lock status: No locks assumed to be held.  This function is SMP-safe.
- *
- * Returns:     Nothing
- *
- * Notes:       Prior to the new queue code, this function was not SMP-safe.
- *              Go through the device list and recompute the most appropriate
- *              size for the dma pool.  Then grab more memory (as required).
- */
-static void resize_dma_pool(void)
-{
-	int i, k;
-	unsigned long size;
-	unsigned long flags;
-	struct Scsi_Host *shpnt;
-	struct Scsi_Host *host = NULL;
-	Scsi_Device *SDpnt;
-	FreeSectorBitmap *new_dma_malloc_freelist = NULL;
-	unsigned int new_dma_sectors = 0;
-	unsigned int new_need_isa_buffer = 0;
-	unsigned char **new_dma_malloc_pages = NULL;
-	int out_of_space = 0;
-
-	spin_lock_irqsave(&allocator_request_lock, flags);
-
-	if (!scsi_hostlist) {
-		/*
-		 * Free up the DMA pool.
-		 */
-		if (scsi_dma_free_sectors != dma_sectors)
-			panic("SCSI DMA pool memory leak %d %d\n", scsi_dma_free_sectors, dma_sectors);
-
-		for (i = 0; i < dma_sectors / SECTORS_PER_PAGE; i++)
-			scsi_init_free(dma_malloc_pages[i], PAGE_SIZE);
-		if (dma_malloc_pages)
-			scsi_init_free((char *) dma_malloc_pages,
-				       (dma_sectors / SECTORS_PER_PAGE) * sizeof(*dma_malloc_pages));
-		dma_malloc_pages = NULL;
-		if (dma_malloc_freelist)
-			scsi_init_free((char *) dma_malloc_freelist,
-				       (dma_sectors / SECTORS_PER_PAGE) * sizeof(*dma_malloc_freelist));
-		dma_malloc_freelist = NULL;
-		dma_sectors = 0;
-		scsi_dma_free_sectors = 0;
-		spin_unlock_irqrestore(&allocator_request_lock, flags);
-		return;
-	}
-	/* Next, check to see if we need to extend the DMA buffer pool */
-
-	new_dma_sectors = 2 * SECTORS_PER_PAGE;		/* Base value we use */
-
-	if (__pa(high_memory) - 1 > ISA_DMA_THRESHOLD)
-		need_isa_bounce_buffers = 1;
-	else
-		need_isa_bounce_buffers = 0;
-
-	if (scsi_devicelist)
-		for (shpnt = scsi_hostlist; shpnt; shpnt = shpnt->next)
-			new_dma_sectors += SECTORS_PER_PAGE;	/* Increment for each host */
-
-	for (host = scsi_hostlist; host; host = host->next) {
-		for (SDpnt = host->host_queue; SDpnt; SDpnt = SDpnt->next) {
-			/*
-			 * sd and sr drivers allocate scatterlists.
-			 * sr drivers may allocate for each command 1x2048 or 2x1024 extra
-			 * buffers for 2k sector size and 1k fs.
-			 * sg driver allocates buffers < 4k.
-			 * st driver does not need buffers from the dma pool.
-			 * estimate 4k buffer/command for devices of unknown type (should panic).
-			 */
-			if (SDpnt->type == TYPE_WORM || SDpnt->type == TYPE_ROM ||
-			    SDpnt->type == TYPE_DISK || SDpnt->type == TYPE_MOD) {
-				new_dma_sectors += ((host->sg_tablesize *
-				sizeof(struct scatterlist) + 511) >> 9) *
-				 SDpnt->queue_depth;
-				if (SDpnt->type == TYPE_WORM || SDpnt->type == TYPE_ROM)
-					new_dma_sectors += (2048 >> 9) * SDpnt->queue_depth;
-			} else if (SDpnt->type == TYPE_SCANNER ||
-				   SDpnt->type == TYPE_PROCESSOR ||
-				   SDpnt->type == TYPE_MEDIUM_CHANGER ||
-				   SDpnt->type == TYPE_ENCLOSURE) {
-				new_dma_sectors += (4096 >> 9) * SDpnt->queue_depth;
-			} else {
-				if (SDpnt->type != TYPE_TAPE) {
-					printk("resize_dma_pool: unknown device type %d\n", SDpnt->type);
-					new_dma_sectors += (4096 >> 9) * SDpnt->queue_depth;
-				}
-			}
-
-			if (host->unchecked_isa_dma &&
-			    need_isa_bounce_buffers &&
-			    SDpnt->type != TYPE_TAPE) {
-				new_dma_sectors += (PAGE_SIZE >> 9) * host->sg_tablesize *
-				    SDpnt->queue_depth;
-				new_need_isa_buffer++;
-			}
-		}
-	}
-
-#ifdef DEBUG_INIT
-	printk("resize_dma_pool: needed dma sectors = %d\n", new_dma_sectors);
-#endif
-
-	/* limit DMA memory to 32MB: */
-	new_dma_sectors = (new_dma_sectors + 15) & 0xfff0;
-
-	/*
-	 * We never shrink the buffers - this leads to
-	 * race conditions that I would rather not even think
-	 * about right now.
-	 */
-#if 0				/* Why do this? No gain and risks out_of_space */
-	if (new_dma_sectors < dma_sectors)
-		new_dma_sectors = dma_sectors;
-#endif
-	if (new_dma_sectors <= dma_sectors) {
-		spin_unlock_irqrestore(&allocator_request_lock, flags);
-		return;		/* best to quit while we are in front */
-        }
-
-	for (k = 0; k < 20; ++k) {	/* just in case */
-		out_of_space = 0;
-		size = (new_dma_sectors / SECTORS_PER_PAGE) *
-		    sizeof(FreeSectorBitmap);
-		new_dma_malloc_freelist = (FreeSectorBitmap *)
-		    scsi_init_malloc(size, GFP_ATOMIC);
-		if (new_dma_malloc_freelist) {
-			size = (new_dma_sectors / SECTORS_PER_PAGE) *
-			    sizeof(*new_dma_malloc_pages);
-			new_dma_malloc_pages = (unsigned char **)
-			    scsi_init_malloc(size, GFP_ATOMIC);
-			if (!new_dma_malloc_pages) {
-				size = (new_dma_sectors / SECTORS_PER_PAGE) *
-				    sizeof(FreeSectorBitmap);
-				scsi_init_free((char *) new_dma_malloc_freelist, size);
-				out_of_space = 1;
-			}
-		} else
-			out_of_space = 1;
-
-		if ((!out_of_space) && (new_dma_sectors > dma_sectors)) {
-			for (i = dma_sectors / SECTORS_PER_PAGE;
-			   i < new_dma_sectors / SECTORS_PER_PAGE; i++) {
-				new_dma_malloc_pages[i] = (unsigned char *)
-				    scsi_init_malloc(PAGE_SIZE, GFP_ATOMIC | GFP_DMA);
-				if (!new_dma_malloc_pages[i])
-					break;
-			}
-			if (i != new_dma_sectors / SECTORS_PER_PAGE) {	/* clean up */
-				int k = i;
-
-				out_of_space = 1;
-				for (i = 0; i < k; ++i)
-					scsi_init_free(new_dma_malloc_pages[i], PAGE_SIZE);
-			}
-		}
-		if (out_of_space) {	/* try scaling down new_dma_sectors request */
-			printk("scsi::resize_dma_pool: WARNING, dma_sectors=%u, "
-			       "wanted=%u, scaling\n", dma_sectors, new_dma_sectors);
-			if (new_dma_sectors < (8 * SECTORS_PER_PAGE))
-				break;	/* pretty well hopeless ... */
-			new_dma_sectors = (new_dma_sectors * 3) / 4;
-			new_dma_sectors = (new_dma_sectors + 15) & 0xfff0;
-			if (new_dma_sectors <= dma_sectors)
-				break;	/* stick with what we have got */
-		} else
-			break;	/* found space ... */
-	}			/* end of for loop */
-	if (out_of_space) {
-		spin_unlock_irqrestore(&allocator_request_lock, flags);
-		scsi_need_isa_buffer = new_need_isa_buffer;	/* some useful info */
-		printk("      WARNING, not enough memory, pool not expanded\n");
-		return;
-	}
-	/* When we dick with the actual DMA list, we need to
-	 * protect things
-	 */
-	if (dma_malloc_freelist) {
-		size = (dma_sectors / SECTORS_PER_PAGE) * sizeof(FreeSectorBitmap);
-		memcpy(new_dma_malloc_freelist, dma_malloc_freelist, size);
-		scsi_init_free((char *) dma_malloc_freelist, size);
-	}
-	dma_malloc_freelist = new_dma_malloc_freelist;
-
-	if (dma_malloc_pages) {
-		size = (dma_sectors / SECTORS_PER_PAGE) * sizeof(*dma_malloc_pages);
-		memcpy(new_dma_malloc_pages, dma_malloc_pages, size);
-		scsi_init_free((char *) dma_malloc_pages, size);
-	}
-	scsi_dma_free_sectors += new_dma_sectors - dma_sectors;
-	dma_malloc_pages = new_dma_malloc_pages;
-	dma_sectors = new_dma_sectors;
-	scsi_need_isa_buffer = new_need_isa_buffer;
-
-	spin_unlock_irqrestore(&allocator_request_lock, flags);
-
-#ifdef DEBUG_INIT
-	printk("resize_dma_pool: dma free sectors   = %d\n", scsi_dma_free_sectors);
-	printk("resize_dma_pool: dma sectors        = %d\n", dma_sectors);
-	printk("resize_dma_pool: need isa buffers   = %d\n", scsi_need_isa_buffer);
-#endif
-}
-
 #ifdef CONFIG_MODULES		/* a big #ifdef block... */
 
 /*
@@ -2819,7 +1698,7 @@ static int scsi_register_host(Scsi_Host_Template * tpnt)
 		 * Now that we have all of the devices, resize the DMA pool,
 		 * as required.  */
 		if (!out_of_space)
-			resize_dma_pool();
+			scsi_resize_dma_pool();
 
 
 		/* This does any final handling that is required. */
@@ -3037,7 +1916,7 @@ static void scsi_unregister_host(Scsi_Host_Template * tpnt)
 	 * do the right thing and free everything.
 	 */
 	if (!scsi_hosts)
-		resize_dma_pool();
+		scsi_resize_dma_pool();
 
 	printk("scsi : %d host%s.\n", next_scsi_host,
 	       (next_scsi_host == 1) ? "" : "s");
@@ -3048,7 +1927,6 @@ static void scsi_unregister_host(Scsi_Host_Template * tpnt)
 	       (scsi_init_memory_start - scsi_memory_lower_value) / 1024,
 	       (scsi_memory_upper_value - scsi_init_memory_start) / 1024);
 #endif
-
 
 	/* There were some hosts that were loaded at boot time, so we cannot
 	   do any more than this */
@@ -3132,7 +2010,7 @@ static int scsi_register_device_module(struct Scsi_Device_Template *tpnt)
 	if (tpnt->finish && tpnt->nr_dev)
 		(*tpnt->finish) ();
 	if (!out_of_space)
-		resize_dma_pool();
+		scsi_resize_dma_pool();
 	MOD_INC_USE_COUNT;
 
 	if (out_of_space) {
@@ -3382,39 +2260,11 @@ int init_module(void)
 
 	scsi_loadable_module_flag = 1;
 
-	dma_sectors = PAGE_SIZE / SECTOR_SIZE;
-	scsi_dma_free_sectors = dma_sectors;
-	/*
-	 * Set up a minimal DMA buffer list - this will be used during scan_scsis
-	 * in some cases.
-	 */
+        if( scsi_init_minimal_dma_pool() == 0 )
+        {
+                return 1;
+        }
 
-	/* One bit per sector to indicate free/busy */
-	size = (dma_sectors / SECTORS_PER_PAGE) * sizeof(FreeSectorBitmap);
-	dma_malloc_freelist = (FreeSectorBitmap *)
-	    scsi_init_malloc(size, GFP_ATOMIC);
-	if (dma_malloc_freelist) {
-		/* One pointer per page for the page list */
-		dma_malloc_pages = (unsigned char **) scsi_init_malloc(
-									      (dma_sectors / SECTORS_PER_PAGE) * sizeof(*dma_malloc_pages),
-							     GFP_ATOMIC);
-		if (dma_malloc_pages) {
-			dma_malloc_pages[0] = (unsigned char *)
-			    scsi_init_malloc(PAGE_SIZE, GFP_ATOMIC | GFP_DMA);
-			if (dma_malloc_pages[0])
-				has_space = 1;
-		}
-	}
-	if (!has_space) {
-		if (dma_malloc_freelist) {
-			scsi_init_free((char *) dma_malloc_freelist, size);
-			if (dma_malloc_pages)
-				scsi_init_free((char *) dma_malloc_pages,
-					       (dma_sectors / SECTORS_PER_PAGE) * sizeof(*dma_malloc_pages));
-		}
-		printk("scsi::init_module: failed, out of memory\n");
-		return 1;
-	}
 	/*
 	 * This is where the processing takes place for most everything
 	 * when commands are completed.
@@ -3437,7 +2287,7 @@ void cleanup_module(void)
 	/*
 	 * Free up the DMA pool.
 	 */
-	resize_dma_pool();
+	scsi_resize_dma_pool();
 
 }
 
@@ -3491,7 +2341,7 @@ Scsi_Device * scsi_get_host_dev(struct Scsi_Host * SHpnt)
 
         SDpnt->device_queue = SCpnt;
 
-        blk_init_queue(&SDpnt->request_queue, scsi_request_fn);
+        blk_init_queue(&SDpnt->request_queue, scsi_get_request_handler(SDpnt, SDpnt->host));
         blk_queue_headactive(&SDpnt->request_queue, 0);
         SDpnt->request_queue.queuedata = (void *) SDpnt;
 
@@ -3519,7 +2369,7 @@ Scsi_Device * scsi_get_host_dev(struct Scsi_Host * SHpnt)
  */
 void scsi_free_host_dev(Scsi_Device * SDpnt)
 {
-        if( SDpnt->id != SDpnt->host->this_id )
+        if( (unsigned char) SDpnt->id != (unsigned char) SDpnt->host->this_id )
         {
                 panic("Attempt to delete wrong device\n");
         }

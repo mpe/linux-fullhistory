@@ -1,0 +1,167 @@
+README for Linux device driver for the IBM "C-It" USB video camera
+
+INTRODUCTION:
+
+This driver does not use all features known to exist in
+the IBM camera. However most of needed features work well.
+
+This driver was developed using logs of observed USB traffic
+which was produced by standard Windows driver (c-it98.sys).
+I did not have any input from Xirlink. Some people asked about
+data sheets, but nothing came out of that. I didn't try.
+
+Video formats: 128x96, 176x144, 352x288
+Frame rate: 3 - 30 frames per second (FPS)
+External interface: USB
+Internal interface: Video For Linux (V4L)
+Supported controls:
+- by V4L: Contrast,  Brightness, Color, Hue
+- by driver options: frame rate, lighting conditions, video format,
+                     default picture settings, sharpness.
+
+SUPPORTED CAMERAS:
+
+IBM "C-It" camera, also known as "Xirlink PC Camera"
+The device uses proprietary ASIC (and compression method);
+it is manufactured by Xirlink. See http://www.xirlink.com
+
+WHAT YOU NEED:
+
+- A camera
+
+- A Linux box with USB support (2.3/2.4 or 2.2 w/backport)
+
+- A Video4Linux compatible frame grabber program such as xawtv.
+  
+HOW TO COMPILE THE DRIVER:
+
+You need to compile the driver only if you are a developer
+or if you want to make changes to the code. Most distributions
+precompile all modules, so you can go directly to the next
+section "HOW TO USE THE DRIVER".
+
+The driver consists of two files in usb/ directory:
+ibmcam.c and ibmcam.h These files are included into the
+Linux kernel build process if you configure the kernel
+for CONFIG_USB_IBMCAM. Run "make xconfig" and in USB section
+you will find the IBM camera driver. Select it, save the
+configuration and recompile.
+
+HOW TO USE THE DRIVER:
+
+I recommend to compile driver as a module. This gives you an
+easier access to its configuration. The camera has many more
+settings than V4L can operate, so some settings are done using
+module options.
+
+Typically module is installed with command 'modprobe', like this:
+
+# modprobe ibmcam framerate=1
+
+Alternatively you can use 'insmod' in similar fashion:
+
+# insmod /lib/modules/2.x.y/usb/ibmcam.o framerate=1
+
+Module can be inserted with camera connected or disconnected.
+
+The driver can have options, though some defaults are provided.
+
+Driver options:
+
+Name            Type            Range [default] Example
+--------------  --------------  --------------  ------------------
+debug           Integer         0-9 [0]         debug=1
+flags           Integer         0-0xFF [0]      flags=0x0d
+framerate       Integer         0-6 [2]         framerate=1
+init_brightness Integer         0-255 [128]     init_brightness=100
+init_contrast   Integer         0-255 [192]     init_contrast=200
+init_color      Integer         0-255 [128]     init_color=130
+init_hue        Integer         0-255 [128]     init_hue=115
+lighting        Integer         0-2 [1]         lighting=2
+sharpness       Integer         0-6 [4]         sharpness=3
+videosize       Integer         0-2 [2]         videosize=1
+
+debug           You don't need this option unless you are a developer.
+                If you are a developer then you will see in the code
+                what values do what. 0=off.
+
+flags           This is a bit mask, and you can combine any number of
+                bits to produce what you want. Usually you don't want
+                any of extra features this option provides:
+
+                FLAGS_RETRY_VIDIOCSYNC  1  This bit allows to retry failed
+                                           VIDIOCSYNC ioctls without failing.
+                                           Will work with xawtv, will not
+                                           with xrealproducer. Default is
+                                           not set.
+                FLAGS_MONOCHROME	2  Forces monochrome (b/w) mode.
+                FLAGS_DISPLAY_HINTS     4  Shows colored pixels which have
+                                           magic meaning to developers.
+                FLAGS_OVERLAY_STATS     8  Shows tiny numbers on screen,
+                                           useful only for debugging.
+                FLAGS_FORCE_TESTPATTERN 16 Shows blue screen with numbers.
+
+framerate       This setting controls frame rate of the camera. This is
+                an approximate setting (in terms of "worst" ... "best")
+                because camera changes frame rate depending on amount
+                of light available. Setting 0 is slowest, 6 is fastest.
+                Beware - fast settings are very demanding and may not
+                work well with all video sizes. Be conservative.
+
+init_brightness These settings specify _initial_ values which will be
+init_contrast   used to set up the camera. If your V4L application has
+init_color      its own controls to adjust the picture then these
+init_hue        controls will be used too. These options allow you to
+                preconfigure the camera when it gets connected, before
+                any V4L application connects to it. Good for webcams.
+
+lighting        This option selects one of three hardware-defined
+                photosensitivity settings of the camera. 0=bright light,
+                1=Medium (default), 2=Low light. This setting affects
+                frame rate: the dimmer the lighting the lower the frame
+                rate (because longer exposition time is needed).
+
+sharpness       This option controls smoothing (noise reduction)
+                made by camera. Setting 0 is most smooth, setting 6
+                is most sharp. Be aware that CMOS sensor used in the
+                camera is pretty noisy, so if you choose 6 you will
+                be greeted with "snowy" image. Default is 4.
+
+videosize       This setting chooses one if three image sizes that are
+                supported by this driver. Camera supports more, but
+                it's difficult to reverse-engineer all formats.
+                Following video sizes are supported:
+
+                videosize=0     128x96
+                videosize=1     176x144
+                videosize=2     352x288
+
+                The last one (352x288) is the native size of the sensor
+                array, so it's the best resolution camera can yield.
+                Choose the image size you need. The smaller image can
+                support faster frame rate. Default is 352x288.
+
+WHAT NEEDS TO BE DONE:
+
+- The box freezes if working camera (with xawtv) is unplugged (OHCI).
+  Workaround: don't do that :) End the V4L application first.
+- Some USB frames are lost on high frame rates, though they shouldn't
+- ViCE compression (Xirlink proprietary) may improve frame rate
+- On occasion camera does not start properly; xawtv reports errors.
+  Workaround: reload the driver module. Reason: [1].
+- On occasion camera produces negative image (funny colors.)
+  Workaround: reload the driver module. Reason: [1].
+- The button on the camera is not used. I don't know how to get to it.
+- The LED on the camera goes off after video init.
+
+[1]
+- I2O interface does not read what camera reports back. Actually, it
+  reads it, but I don't know what returned data means. If camera fails
+  at some initialization stage then something should be done, and I don't
+  do that because I don't even know that some command failed.
+
+CREDITS:
+
+The code is based in no small part on the CPiA driver by Johannes Erdfelt,
+Randy Dunlap, and others. Big thanks to them for their pioneering work on that
+and the USB stack.

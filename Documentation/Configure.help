@@ -7937,8 +7937,8 @@ CONFIG_USB_UHCI
   The module will be called usb-uhci.o. If you want to compile it as a
   module, say M here and read Documentation/modules.txt.
   
-OHCI-HCD (Compaq, iMacs, OPTi, SiS, ALi, ...) support?
-CONFIG_USB_OHCI_HCD
+OHCI (Compaq, iMacs, OPTi, SiS, ALi, ...) support?
+CONFIG_USB_OHCI
   The Open Host Controller Interface is a standard by
   Compaq/Microsoft/National for accessing the USB PC hardware (also
   called USB host controller). If your USB host controller conforms
@@ -7947,11 +7947,11 @@ CONFIG_USB_OHCI_HCD
   chipsets - like SiS (actual 610, 610 and so on) or ALi (ALi IV, ALi V,
   Aladdin Pro..) - conform to this standard.
 
-  You may want to read the file Documentation/usb/ohci-hcd.txt.
+  You may want to read the file Documentation/usb/ohci.txt.
 
   This code is also available as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want).
-  The module will be called usb-ohci-hcd.o. If you want to compile it
+  The module will be called usb-ohci.o. If you want to compile it
   as a module, say M here and read Documentation/modules.txt.
 
 USB Human Interface Device (HID) support
@@ -8102,6 +8102,18 @@ CONFIG_USB_CPIA
   inserted in and removed from the running kernel whenever you want).
   The module will be called cpia.o. If you want to compile it as a
   module, say M here and read Documentation/modules.txt.
+
+USB IBM (Xirlink) C-It Camera support
+CONFIG_USB_IBMCAM
+  Say Y here if you want to connect this type of camera to your
+  computer's USB port.
+
+  This code is also available as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want).
+  The module will be called ibmcam.o. If you want to compile it as a
+  module, say M here and read Documentation/modules.txt. This camera
+  has several configuration options which can be specified when you
+  load the module. Read Documentation/usb/ibmcam.txt to learn more.
 
 USB OV511 Camera support
 CONFIG_USB_OV511

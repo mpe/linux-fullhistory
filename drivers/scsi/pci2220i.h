@@ -248,7 +248,7 @@ typedef struct _IDENTIFY_DATA
 	USHORT	SupportLBA			:1;		// 49 LBA supported
 	USHORT	SupportIORDYDisable	:1;		// 49 IORDY can be disabled
 	USHORT	SupportIORDY		:1;		// 49 IORDY supported
-	USHORT	ReservedPsuedoDMA	:1;		// 49 reserved for pseudo DMA mode support
+	USHORT	ReservedPseudoDMA	:1;		// 49 reserved for pseudo DMA mode support
 	USHORT	Reserved3			:3;		// 49
 	USHORT	Reserved4;					// 50
 	USHORT	Reserved5			:8;		// 51 Transfer Cycle Timing - PIO

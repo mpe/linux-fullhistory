@@ -227,7 +227,7 @@ static inline int zone_balance_memory (zone_t *zone, int gfp_mask)
 	freed = try_to_free_pages(gfp_mask, zone);
 	current->flags &= ~PF_MEMALLOC;
 
-	if (!freed && !(gfp_mask & (__GFP_MED | __GFP_HIGH)))
+	if (!freed && !(gfp_mask & __GFP_HIGH))
 		return 0;
 	return 1;
 }
@@ -267,7 +267,7 @@ static inline int balance_memory (zone_t *zone, int gfp_mask)
 	freed = try_to_free_pages(gfp_mask, zone);
 	current->flags &= ~PF_MEMALLOC;
 
-	if (!freed && !(gfp_mask & (__GFP_MED | __GFP_HIGH)))
+	if (!freed && !(gfp_mask & __GFP_HIGH))
 		return 0;
 	return 1;
 }

@@ -14,6 +14,13 @@
  *
  * See Documentation/usb/usb-serial.txt for more information on using this driver
  * 
+ * (01/21/2000) gkh
+ *	Fixed bug in visor_startup with patch from Miles Lott (milos@insync.net)
+ *	Fixed get_serial_by_minor which was all messed up for multi port 
+ *	devices. Fixed multi port problem for generic devices. Now the number
+ *	of ports is determined by the number of bulk out endpoints for the
+ *	generic device.
+ *
  * (01/19/2000) gkh
  *	Removed lots of cruft that was around from the old (pre urb) driver 
  *	interface.
@@ -438,13 +445,19 @@ static struct usb_serial *get_serial_by_minor (int minor)
 
 	dbg("get_serial_by_minor %d", minor);
 
-	for (i = 0; i < SERIAL_TTY_MINORS; ++i)
-		if (serial_table[i])
-			if (serial_table[i] != SERIAL_PTR_EMPTY)
-				if (serial_table[i]->minor == minor)
-					return (serial_table[i]);
+	if (serial_table[minor] == NULL)
+		return (NULL);
 
-	return (NULL);
+	if (serial_table[minor] != SERIAL_PTR_EMPTY)
+		return (serial_table[minor]);
+
+	i = minor;
+	while (serial_table[i] == SERIAL_PTR_EMPTY) {
+		if (i == 0)
+			return (NULL);
+		--i;
+		}
+	return (serial_table[i]);
 }
 
 
@@ -537,6 +550,9 @@ static int serial_open (struct tty_struct *tty, struct file * filp)
 	struct usb_serial *serial;
 	
 	dbg("serial_open");
+
+	/* initialize the pointer incase something fails */
+	tty->driver_data = NULL;
 
 	/* get the serial object associated with this tty pointer */
 	serial = get_serial_by_minor (MINOR(tty->device));
@@ -1079,6 +1095,7 @@ static int  visor_startup (struct usb_serial *serial)
 {
 	/* send out two unknown commands that I found by looking at a Win98 trace */
 	int response;
+	int i;
 	unsigned char *transfer_buffer =  kmalloc (256, GFP_KERNEL);
 
 	if (!transfer_buffer) {
@@ -1091,18 +1108,22 @@ static int  visor_startup (struct usb_serial *serial)
 	dbg("visor_setup: Set config to 1");
 	usb_set_configuration (serial->dev, 1);
 
-	response = usb_control_msg (serial->dev, usb_sndctrlpipe(serial->dev, 0), 0x03, 0xc2, 0x0000, 0x0000, transfer_buffer, 0x12, 300);
+	response = usb_control_msg (serial->dev, usb_rcvctrlpipe(serial->dev, 0), 0x03, 0xc2, 0x0000, 0x0000, transfer_buffer, 0x12, 300);
 	if (response < 0) {
 		err("visor_startup: error getting first vendor specific message");
 	} else {
-		dbg("visor_startup: First vendor specific message successful");
+		dbg("visor_startup: First vendor specific message successful, data received:");
+		for (i = 0; i < response; ++i)
+			dbg("    0x%.2x", transfer_buffer[i]);
 	}
 
-	response = usb_control_msg (serial->dev, usb_sndctrlpipe(serial->dev, 0), 0x01, 0xc2, 0x0000, 0x0005, transfer_buffer, 0x02, 300);
+	response = usb_control_msg (serial->dev, usb_rcvctrlpipe(serial->dev, 0), 0x01, 0xc2, 0x0000, 0x0005, transfer_buffer, 0x02, 300);
 	if (response < 0) {
 		err("visor_startup: error getting second vendor specific message");
 	} else {
-		dbg("visor_startup: Second vendor specific message successful");
+		dbg("visor_startup: Second vendor specific message successful, data received:");
+		for (i = 0; i < response; ++i)
+			dbg("    0x%.2x", transfer_buffer[i]);
 	}
 
 	kfree (transfer_buffer);
@@ -1260,6 +1281,7 @@ static void * usb_serial_probe(struct usb_device *dev, unsigned int ifnum)
 	int num_interrupt_in = 0;
 	int num_bulk_in = 0;
 	int num_bulk_out = 0;
+	int num_ports;
 	
 	/* loop through our list of known serial converters, and see if this device matches */
 	device_num = 0;
@@ -1317,7 +1339,14 @@ static void * usb_serial_probe(struct usb_device *dev, unsigned int ifnum)
 				/* found all that we need */
 				info("%s converter detected", type->name);
 
-				serial = get_free_serial (type->num_ports, &minor);
+#ifdef CONFIG_USB_SERIAL_GENERIC
+				if (type == &generic_device)
+					num_ports = num_bulk_out;
+				else
+#endif
+					num_ports = type->num_ports;
+
+				serial = get_free_serial (num_ports, &minor);
 				if (serial == NULL) {
 					err("No more free serial devices");
 					return NULL;
@@ -1326,7 +1355,7 @@ static void * usb_serial_probe(struct usb_device *dev, unsigned int ifnum)
 			       	serial->dev = dev;
 				serial->type = type;
 				serial->minor = minor;
-				serial->num_ports = type->num_ports;
+				serial->num_ports = num_ports;
 				serial->num_bulk_in = num_bulk_in;
 				serial->num_bulk_out = num_bulk_out;
 				serial->num_interrupt_in = num_interrupt_in;

@@ -456,18 +456,6 @@ static int sr_attach(Scsi_Device * SDp)
 }
 
 
-static void sr_init_done(Scsi_Cmnd * SCpnt)
-{
-	struct request *req;
-
-	req = &SCpnt->request;
-	req->rq_status = RQ_SCSI_DONE;	/* Busy, but indicate request done */
-
-	if (req->sem != NULL) {
-		up(req->sem);
-	}
-}
-
 void get_sectorsize(int i)
 {
 	unsigned char cmd[10];
@@ -494,7 +482,7 @@ void get_sectorsize(int i)
 		/* Do the command and wait.. */
 
 		scsi_wait_cmd(SCpnt, (void *) cmd, (void *) buffer,
-			      512, sr_init_done, SR_TIMEOUT, MAX_RETRIES);
+			      512, SR_TIMEOUT, MAX_RETRIES);
 
 		the_result = SCpnt->result;
 		retries--;
@@ -671,11 +659,11 @@ static int sr_packet(struct cdrom_device_info *cdi, struct cdrom_generic_command
 
 	/* do the locking and issue the command */
 	SCpnt->request.rq_dev = cdi->dev;
-	/* scsi_do_cmd sets the command length */
+	/* scsi_wait_cmd sets the command length */
 	SCpnt->cmd_len = 0;
 
 	scsi_wait_cmd(SCpnt, (void *) cgc->cmd, (void *) buffer, cgc->buflen,
-		      sr_init_done, SR_TIMEOUT, MAX_RETRIES);
+		      SR_TIMEOUT, MAX_RETRIES);
 
 	if ((cgc->stat = SCpnt->result))
 		cgc->sense = (struct request_sense *) SCpnt->sense_buffer;

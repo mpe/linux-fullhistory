@@ -451,24 +451,22 @@ extern struct page *filemap_nopage(struct vm_area_struct * area,
  * GFP bitmasks..
  */
 #define __GFP_WAIT	0x01
-#define __GFP_LOW	0x02
-#define __GFP_MED	0x04
-#define __GFP_HIGH	0x08
-#define __GFP_IO	0x10
-#define __GFP_SWAP	0x20
+#define __GFP_HIGH	0x02
+#define __GFP_IO	0x04
+#define __GFP_SWAP	0x08
 #ifdef CONFIG_HIGHMEM
-#define __GFP_HIGHMEM	0x40
+#define __GFP_HIGHMEM	0x10
 #else
 #define __GFP_HIGHMEM	0x0 /* noop */
 #endif
 
-#define __GFP_DMA	0x80
+#define __GFP_DMA	0x20
 
-#define GFP_BUFFER	(__GFP_LOW | __GFP_WAIT)
+#define GFP_BUFFER	(__GFP_WAIT)
 #define GFP_ATOMIC	(__GFP_HIGH)
-#define GFP_USER	(__GFP_LOW | __GFP_WAIT | __GFP_IO)
+#define GFP_USER	(__GFP_WAIT | __GFP_IO)
 #define GFP_HIGHUSER	(GFP_USER | __GFP_HIGHMEM)
-#define GFP_KERNEL	(__GFP_MED | __GFP_WAIT | __GFP_IO)
+#define GFP_KERNEL	(__GFP_HIGH | __GFP_WAIT | __GFP_IO)
 #define GFP_NFS		(__GFP_HIGH | __GFP_WAIT | __GFP_IO)
 #define GFP_KSWAPD	(__GFP_IO | __GFP_SWAP)
 

@@ -67,10 +67,10 @@ int eata_proc_info(char *buffer, char **start, off_t offset, int length,
 		   int hostno, int inout)
 {
 
-    Scsi_Device *scd, SDev;
+    Scsi_Device *scd, *SDev;
     struct Scsi_Host *HBA_ptr;
-    Scsi_Cmnd scmd;
-    char cmnd[10];
+    Scsi_Cmnd  * scmd;
+    char cmnd[MAX_COMMAND_SIZE];
     static u8 buff[512];
     static u8 buff2[512];
     hst_cmd_stat *rhcs, *whcs;
@@ -152,13 +152,8 @@ int eata_proc_info(char *buffer, char **start, off_t offset, int length,
 	pos = begin + len;
 
     } else {
-	memset(&SDev, 0, sizeof(Scsi_Device));
-	memset(&scmd, 0, sizeof(Scsi_Cmnd));
-
-	SDev.host = HBA_ptr;
-	SDev.id = HBA_ptr->this_id;
-	SDev.lun = 0;
-	SDev.channel = 0;
+        SDev = scsi_get_host_dev(HBA_ptr);
+	scmd  = scsi_allocate_device(SDev, 1, FALSE);
 
 	cmnd[0] = LOG_SENSE;
 	cmnd[1] = 0;
@@ -171,26 +166,13 @@ int eata_proc_info(char *buffer, char **start, off_t offset, int length,
 	cmnd[8] = 0x66;
 	cmnd[9] = 0;
 
-	scmd.cmd_len = 10;
+	scmd->cmd_len = 10;
 	
-	scmd.host = HBA_ptr; 
-	scmd.device = &SDev;
-	scmd.target = HBA_ptr->this_id; 
-	scmd.lun = 0; 
-	scmd.channel = 0;
-	scmd.use_sg = 0;
-
 	/*
 	 * Do the command and wait for it to finish.
 	 */	
-	{
-	    DECLARE_MUTEX_LOCKED(sem);
-	    scmd.request.rq_status = RQ_SCSI_BUSY;
-	    scmd.request.sem = &sem;
-	    scsi_do_cmd (&scmd, cmnd, buff + 0x144, 0x66,  
-			 eata_scsi_done, 1 * HZ, 1);
-	    down(&sem);
-	}
+	scsi_wait_cmd (scmd, cmnd, buff + 0x144, 0x66,  
+		       1 * HZ, 1);
 
 	size = sprintf(buffer + len, "IRQ: %2d, %s triggered\n", cc->interrupt,
 		       (cc->intt == TRUE)?"level":"edge");
@@ -308,19 +290,13 @@ int eata_proc_info(char *buffer, char **start, off_t offset, int length,
 	    cmnd[8] = 0x44;
 	    cmnd[9] = 0;
 	    
-	    scmd.cmd_len = 10;
+	    scmd->cmd_len = 10;
 
 	    /*
 	     * Do the command and wait for it to finish.
 	     */	
-	    {
-	        DECLARE_MUTEX_LOCKED(sem);
-		scmd.request.rq_status = RQ_SCSI_BUSY;
-		scmd.request.sem = &sem;
-		scsi_do_cmd (&scmd, cmnd, buff2, 0x144,
-			     eata_scsi_done, 1 * HZ, 1);
-		down(&sem);
-	    }
+	    scsi_wait_cmd (scmd, cmnd, buff2, 0x144,
+			   1 * HZ, 1);
 
 	    swap_statistics(buff2);
 	    rhcs = (hst_cmd_stat *)(buff2 + 0x2c); 
@@ -354,6 +330,9 @@ int eata_proc_info(char *buffer, char **start, off_t offset, int length,
 	    len += size; 
 	    pos = begin + len;
 	}
+
+	scsi_release_command(scmd);
+	scsi_free_host_dev(SDev);
     }
     
     if (pos < offset) {

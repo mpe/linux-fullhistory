@@ -365,90 +365,120 @@ typedef struct scsi_cmnd Scsi_Cmnd;
  *  Initializes all SCSI devices.  This scans all scsi busses.
  */
 
-extern int scsi_dev_init(void);
-
-
-
-void *scsi_malloc(unsigned int);
-int scsi_free(void *, unsigned int);
 extern unsigned int scsi_logging_level;		/* What do we log? */
 extern unsigned int scsi_dma_free_sectors;	/* How much room do we have left */
 extern unsigned int scsi_need_isa_buffer;	/* True if some devices need indirection
 						   * buffers */
-extern void scsi_make_blocked_list(void);
 extern volatile int in_scan_scsis;
 extern const unsigned char scsi_command_size[8];
+
 
 /*
  * These are the error handling functions defined in scsi_error.c
  */
+extern void scsi_times_out(Scsi_Cmnd * SCpnt);
 extern void scsi_add_timer(Scsi_Cmnd * SCset, int timeout,
 			   void (*complete) (Scsi_Cmnd *));
-extern void scsi_done(Scsi_Cmnd * SCpnt);
 extern int scsi_delete_timer(Scsi_Cmnd * SCset);
 extern void scsi_error_handler(void *host);
-extern int scsi_retry_command(Scsi_Cmnd *);
-extern void scsi_finish_command(Scsi_Cmnd *);
 extern int scsi_sense_valid(Scsi_Cmnd *);
 extern int scsi_decide_disposition(Scsi_Cmnd * SCpnt);
 extern int scsi_block_when_processing_errors(Scsi_Device *);
 extern void scsi_sleep(int);
+
+/*
+ * Prototypes for functions in scsicam.c
+ */
 extern int  scsi_partsize(struct buffer_head *bh, unsigned long capacity,
                     unsigned int *cyls, unsigned int *hds,
                     unsigned int *secs);
 
 /*
+ * Prototypes for functions in scsi_dma.c
+ */
+void scsi_resize_dma_pool(void);
+int scsi_init_minimal_dma_pool(void);
+void *scsi_malloc(unsigned int);
+int scsi_free(void *, unsigned int);
+
+/*
  * Prototypes for functions in scsi_merge.c
  */
 extern void recount_segments(Scsi_Cmnd * SCpnt);
+extern void initialize_merge_fn(Scsi_Device * SDpnt);
+
+/*
+ * Prototypes for functions in scsi_queue.c
+ */
+extern int scsi_mlqueue_insert(Scsi_Cmnd * cmd, int reason);
 
 /*
  * Prototypes for functions in scsi_lib.c
  */
-extern void initialize_merge_fn(Scsi_Device * SDpnt);
-extern void scsi_request_fn(request_queue_t * q);
-extern void scsi_queue_next_request(request_queue_t * q, Scsi_Cmnd * SCpnt);
-
+extern void scsi_maybe_unblock_host(Scsi_Device * SDpnt);
+extern void scsi_blocked_request_fn(request_queue_t * q);
+extern Scsi_Cmnd *scsi_end_request(Scsi_Cmnd * SCpnt, int uptodate,
+				   int sectors);
+extern struct Scsi_Device_Template *scsi_get_request_dev(struct request *);
+extern int scsi_init_cmd_errh(Scsi_Cmnd * SCpnt);
 extern int scsi_insert_special_cmd(Scsi_Cmnd * SCpnt, int);
-extern int scsi_dispatch_cmd(Scsi_Cmnd * SCpnt);
+extern void scsi_io_completion(Scsi_Cmnd * SCpnt, int good_sectors,
+			       int block_sectors);
+extern void scsi_queue_next_request(request_queue_t * q, Scsi_Cmnd * SCpnt);
+extern void scsi_request_fn(request_queue_t * q);
+
 
 /*
  * Prototypes for functions in scsi.c
  */
-
-/*
- *  scsi_abort aborts the current command that is executing on host host.
- *  The error code, if non zero is returned in the host byte, otherwise 
- *  DID_ABORT is returned in the hostbyte.
- */
-
+extern int scsi_dispatch_cmd(Scsi_Cmnd * SCpnt);
+extern void scsi_bottom_half_handler(void);
+extern void scsi_build_commandblocks(Scsi_Device * SDpnt);
+extern void scsi_done(Scsi_Cmnd * SCpnt);
+extern void scsi_finish_command(Scsi_Cmnd *);
+extern int scsi_retry_command(Scsi_Cmnd *);
+extern Scsi_Cmnd *scsi_allocate_device(Scsi_Device *, int, int);
+extern void scsi_release_command(Scsi_Cmnd *);
 extern void scsi_do_cmd(Scsi_Cmnd *, const void *cmnd,
 			void *buffer, unsigned bufflen,
 			void (*done) (struct scsi_cmnd *),
 			int timeout, int retries);
-
 extern void scsi_wait_cmd(Scsi_Cmnd *, const void *cmnd,
 			  void *buffer, unsigned bufflen,
-			  void (*done) (struct scsi_cmnd *),
 			  int timeout, int retries);
+extern int scsi_dev_init(void);
 
-extern Scsi_Cmnd *scsi_allocate_device(Scsi_Device *, int, int);
 
-extern void scsi_release_command(Scsi_Cmnd *);
-
+/*
+ * Prototypes for functions/data in hosts.c
+ */
 extern int max_scsi_hosts;
 
+/*
+ * Prototypes for functions in scsi_proc.c
+ */
 extern void proc_print_scsidevice(Scsi_Device *, char *, int *, int);
 extern struct proc_dir_entry *proc_scsi;
 
+/*
+ * Prototypes for functions in constants.c
+ */
 extern void print_command(unsigned char *);
 extern void print_sense(const char *, Scsi_Cmnd *);
 extern void print_driverbyte(int scsiresult);
 extern void print_hostbyte(int scsiresult);
+extern void print_status (int status);
 
 /*
  *  The scsi_device struct contains what we know about each given scsi
  *  device.
+ *
+ * FIXME(eric) - one of the great regrets that I have is that I failed to define
+ * these structure elements as something like sdev_foo instead of foo.  This would
+ * make it so much easier to grep through sources and so forth.  I propose that
+ * all new elements that get added to these structures follow this convention.
+ * As time goes on and as people have the stomach for it, it should be possible to 
+ * go back and retrofit at least some of the elements here with with the prefix.
  */
 
 struct scsi_device {
@@ -538,6 +568,14 @@ typedef struct scsi_pointer {
 } Scsi_Pointer;
 
 
+/*
+ * FIXME(eric) - one of the great regrets that I have is that I failed to define
+ * these structure elements as something like sc_foo instead of foo.  This would
+ * make it so much easier to grep through sources and so forth.  I propose that
+ * all new elements that get added to these structures follow this convention.
+ * As time goes on and as people have the stomach for it, it should be possible to 
+ * go back and retrofit at least some of the elements here with with the prefix.
+ */
 struct scsi_cmnd {
 /* private: */
 	/*
@@ -593,14 +631,14 @@ struct scsi_cmnd {
 	unsigned char old_cmd_len;
 
 	/* These elements define the operation we are about to perform */
-	unsigned char cmnd[12];
+	unsigned char cmnd[MAX_COMMAND_SIZE];
 	unsigned request_bufflen;	/* Actual request size */
 
 	struct timer_list eh_timeout;	/* Used to time out the command. */
 	void *request_buffer;	/* Actual requested buffer */
 
 	/* These elements define the operation we ultimately want to perform */
-	unsigned char data_cmnd[12];
+	unsigned char data_cmnd[MAX_COMMAND_SIZE];
 	unsigned short old_use_sg;	/* We save  use_sg here when requesting
 					 * sense info */
 	unsigned short use_sg;	/* Number of pieces of scatter-gather */
@@ -667,29 +705,15 @@ struct scsi_cmnd {
 };
 
 /*
- *  Flag bits for the internal_timeout array
+ *  Flag bit for the internal_timeout array
  */
 #define NORMAL_TIMEOUT 0
-#define IN_ABORT  1
-#define IN_RESET  2
-#define IN_RESET2 4
-#define IN_RESET3 8
 
 /*
  * Definitions and prototypes used for scsi mid-level queue.
  */
 #define SCSI_MLQUEUE_HOST_BUSY   0x1055
 #define SCSI_MLQUEUE_DEVICE_BUSY 0x1056
-
-extern int scsi_mlqueue_insert(Scsi_Cmnd * cmd, int reason);
-
-extern Scsi_Cmnd *scsi_end_request(Scsi_Cmnd * SCpnt, int uptodate,
-				   int sectors);
-
-extern void scsi_io_completion(Scsi_Cmnd * SCpnt, int good_sectors,
-			       int block_sectors);
-
-extern struct Scsi_Device_Template *scsi_get_request_dev(struct request *);
 
 #define SCSI_SLEEP(QUEUE, CONDITION) {		    \
     if (CONDITION) {			            \

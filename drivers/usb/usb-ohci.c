@@ -50,7 +50,7 @@
 #define OHCI_USE_NPS
 
 #include "usb.h"
-#include "ohci-hcd.h"
+#include "usb-ohci.h"
 
 #ifdef CONFIG_APM
 #include <linux/apm_bios.h>
@@ -544,7 +544,7 @@ static int ep_link (ohci_t * ohci, ed_t * edi)
 			ohci->ed_controltail->hwNextED = cpu_to_le32 (virt_to_bus (ed));
 		}
 		ed->ed_prev = ohci->ed_controltail;
-		ohci->ed_controltail = ed;	  
+		ohci->ed_controltail = edi;	  
 		break;
 		
 	case BULK:  
@@ -555,7 +555,7 @@ static int ep_link (ohci_t * ohci, ed_t * edi)
 			ohci->ed_bulktail->hwNextED = cpu_to_le32 (virt_to_bus (ed));
 		}
 		ed->ed_prev = ohci->ed_bulktail;
-		ohci->ed_bulktail = ed;	  
+		ohci->ed_bulktail = edi;	  
 		break;
 		
 	case INT:
@@ -596,7 +596,7 @@ static int ep_link (ohci_t * ohci, ed_t * edi)
 			}	
 			ed->ed_prev = NULL;
 		}	
-		ohci->ed_isotail = ed;  
+		ohci->ed_isotail = edi;  
 #ifdef DEBUG
 		ep_print_int_eds (ohci, "LINK_ISO");
 #endif
@@ -711,13 +711,14 @@ static int ep_unlink (ohci_t * ohci, ed_t * ed)
 static ed_t * ep_add_ed (struct usb_device * usb_dev, unsigned int pipe, int interval, int load)
 {
    	ohci_t * ohci = usb_dev->bus->hcpriv;
-	td_t * td;  
+	td_t * td;
+	ed_t * ed_ret;
 	volatile ed_t * ed; 
  	
  	
 	spin_lock (&usb_ed_lock);
 
-	ed = &(usb_to_ohci (usb_dev)->ed[(usb_pipeendpoint (pipe) << 1) | 
+	ed = ed_ret = &(usb_to_ohci (usb_dev)->ed[(usb_pipeendpoint (pipe) << 1) | 
 			(usb_pipecontrol (pipe)? 0: usb_pipeout (pipe))]);
 
 	if((ed->state & ED_DEL) || (ed->state & ED_URB_DEL)) 
@@ -749,7 +750,7 @@ static ed_t * ep_add_ed (struct usb_device * usb_dev, unsigned int pipe, int int
   	}
   	
 	spin_unlock(&usb_ed_lock);
-	return ed; 
+	return ed_ret; 
 }
 
 /*-------------------------------------------------------------------------*/
@@ -802,7 +803,7 @@ static void td_fill (unsigned int info, void * data, int len, urb_t * urb, int t
 	
 	td_pt = urb_priv->td [index];
 	/* fill the old dummy TD */
-	td = (td_t *) bus_to_virt (le32_to_cpup (&urb_priv->ed->hwTailP) & 0xfffffff0);
+	td = urb_priv->td [index] = (td_t *) bus_to_virt (le32_to_cpup (&urb_priv->ed->hwTailP) & 0xfffffff0);
 	td->ed = urb_priv->ed;
 	td->index = index;
 	td->urb = urb; 
@@ -820,7 +821,6 @@ static void td_fill (unsigned int info, void * data, int len, urb_t * urb, int t
 	td->hwPSW [0] = cpu_to_le16 ((virt_to_bus (data) & 0x0FFF) | 0xE000);
 	td_pt->hwNextTD = 0;
 	td->ed->hwTailP = td->hwNextTD;
-	urb_priv->td [index] = td;
    
 	td->next_dl_td = NULL; //td_pt;
 }

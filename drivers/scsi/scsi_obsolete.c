@@ -132,7 +132,6 @@ static void scsi_dump_status(void);
 /*
  *  Flag bits for the internal_timeout array
  */
-#define NORMAL_TIMEOUT 0
 #define IN_ABORT  1
 #define IN_RESET  2
 #define IN_RESET2 4

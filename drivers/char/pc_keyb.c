@@ -412,8 +412,11 @@ static inline void handle_mouse_event(unsigned char scancode)
 #endif
 }
 
+static unsigned char kbd_exists = 1;
+
 static inline void handle_keyboard_event(unsigned char scancode)
 {
+	kbd_exists = 1;
 #ifdef CONFIG_VT
 	if (do_acknowledge(scancode))
 		handle_scancode(scancode, !(scancode & 0x80));
@@ -482,6 +485,8 @@ static int send_data(unsigned char data)
 {
 	int retries = 3;
 
+	if (!kbd_exists) return 0;
+
 	do {
 		unsigned long timeout = KBD_TIMEOUT;
 
@@ -497,8 +502,9 @@ static int send_data(unsigned char data)
 			mdelay(1);
 			if (!--timeout) {
 #ifdef KBD_REPORT_TIMEOUTS
-				printk(KERN_WARNING "Keyboard timeout[2]\n");
+				printk(KERN_WARNING "keyboard: Timeout - AT keyboard not present?\n");
 #endif
+				kbd_exists = 0;
 				return 0;
 			}
 		}
@@ -506,6 +512,7 @@ static int send_data(unsigned char data)
 #ifdef KBD_REPORT_TIMEOUTS
 	printk(KERN_WARNING "keyboard: Too many NACKs -- noisy kbd cable?\n");
 #endif
+	kbd_exists = 0;
 	return 0;
 }
 

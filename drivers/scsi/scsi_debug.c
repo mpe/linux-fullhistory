@@ -544,18 +544,6 @@ int scsi_debug_queuecommand(Scsi_Cmnd * SCpnt, void (*done) (Scsi_Cmnd *))
 	return 0;
 }
 
-static void sd_test_done(Scsi_Cmnd * SCpnt)
-{
-	struct request *req;
-
-	req = &SCpnt->request;
-	req->rq_status = RQ_SCSI_DONE;	/* Busy, but indicate request done */
-
-	if (req->sem != NULL) {
-		up(req->sem);
-	}
-}
-
 static void scsi_debug_send_self_command(struct Scsi_Host * shpnt)
 {
 	static unsigned char cmd[6] =
@@ -575,7 +563,7 @@ static void scsi_debug_send_self_command(struct Scsi_Host * shpnt)
         
         printk("Sending command\n");
         scsi_wait_cmd (scp, (void *) cmd, (void *) NULL,
-                       0, sd_test_done,  100, 3);
+                       0, 100, 3);
         
         printk("Releasing command\n");
         scsi_release_command(scp);

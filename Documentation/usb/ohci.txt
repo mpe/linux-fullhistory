@@ -21,7 +21,7 @@ The layer (functions) on top of it, is for interfacing to the alternate-usb devi
  * v0.1.0 1999/04/27 initial release
  
 to remove the module try:
-rmmod usb-ohci-hcd
+rmmod usb-ohci
 
 Features:
 - virtual root hub, all basic hub descriptors and commands (state: complete) 

@@ -334,7 +334,6 @@ struct Scsi_Host
     unsigned int max_lun;
     unsigned int max_channel;
 
-
     /* These parameters should be set by the detect routine */
     unsigned long base;
     unsigned long io_port;
@@ -434,6 +433,17 @@ extern int scsi_loadable_module_flag;
 unsigned int scsi_init(void);
 extern struct Scsi_Host * scsi_register(Scsi_Host_Template *, int j);
 extern void scsi_unregister(struct Scsi_Host * i);
+
+extern request_fn_proc * scsi_get_request_handler(Scsi_Device * SDpnt, struct Scsi_Host * SHpnt);
+
+/*
+ * Prototypes for functions/data in scsi_scan.c
+ */
+extern void scan_scsis(struct Scsi_Host *shpnt,
+		       unchar hardcoded,
+		       unchar hchannel,
+		       unchar hid,
+                       unchar hlun);
 
 extern void scsi_mark_host_reset(struct Scsi_Host *Host);
 

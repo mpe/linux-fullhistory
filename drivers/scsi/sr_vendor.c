@@ -106,7 +106,7 @@ void sr_vendor_init(int minor)
 int sr_set_blocklength(int minor, int blocklength)
 {
 	unsigned char *buffer;	/* the buffer for the ioctl */
-	unsigned char cmd[12];	/* the scsi-command */
+	unsigned char cmd[MAX_COMMAND_SIZE];	/* the scsi-command */
 	struct ccs_modesel_head *modesel;
 	int rc, density = 0;
 
@@ -122,7 +122,7 @@ int sr_set_blocklength(int minor, int blocklength)
 #ifdef DEBUG
 	printk("sr%d: MODE SELECT 0x%x/%d\n", minor, density, blocklength);
 #endif
-	memset(cmd, 0, 12);
+	memset(cmd, 0, MAX_COMMAND_SIZE);
 	cmd[0] = MODE_SELECT;
 	cmd[1] = (scsi_CDs[minor].device->lun << 5) | (1 << 4);
 	cmd[4] = 12;
@@ -153,7 +153,7 @@ int sr_cd_check(struct cdrom_device_info *cdi)
 {
 	unsigned long sector;
 	unsigned char *buffer;	/* the buffer for the ioctl */
-	unsigned char cmd[12];	/* the scsi-command */
+	unsigned char cmd[MAX_COMMAND_SIZE];	/* the scsi-command */
 	int rc, no_multi, minor;
 
 	minor = MINOR(cdi->dev);
@@ -171,7 +171,7 @@ int sr_cd_check(struct cdrom_device_info *cdi)
 	switch (VENDOR_ID) {
 
 	case VENDOR_SCSI3:
-		memset(cmd, 0, 12);
+		memset(cmd, 0, MAX_COMMAND_SIZE);
 		cmd[0] = READ_TOC;
 		cmd[1] = (scsi_CDs[minor].device->lun << 5);
 		cmd[8] = 12;
@@ -196,7 +196,7 @@ int sr_cd_check(struct cdrom_device_info *cdi)
 #ifdef CONFIG_BLK_DEV_SR_VENDOR
 	case VENDOR_NEC:{
 			unsigned long min, sec, frame;
-			memset(cmd, 0, 12);
+			memset(cmd, 0, MAX_COMMAND_SIZE);
 			cmd[0] = 0xde;
 			cmd[1] = (scsi_CDs[minor].device->lun << 5) | 0x03;
 			cmd[2] = 0xb0;
@@ -221,7 +221,7 @@ int sr_cd_check(struct cdrom_device_info *cdi)
 
 			/* we request some disc information (is it a XA-CD ?,
 			 * where starts the last session ?) */
-			memset(cmd, 0, 12);
+			memset(cmd, 0, MAX_COMMAND_SIZE);
 			cmd[0] = 0xc7;
 			cmd[1] = (scsi_CDs[minor].device->lun << 5) | 3;
 			rc = sr_do_ioctl(minor, cmd, buffer, 4, 1);
@@ -244,7 +244,7 @@ int sr_cd_check(struct cdrom_device_info *cdi)
 		}
 
 	case VENDOR_WRITER:
-		memset(cmd, 0, 12);
+		memset(cmd, 0, MAX_COMMAND_SIZE);
 		cmd[0] = READ_TOC;
 		cmd[1] = (scsi_CDs[minor].device->lun << 5);
 		cmd[8] = 0x04;

@@ -1,9 +1,9 @@
 /*
  *  wmforce.c  Version 0.1
  *
- *  Copyright (c) 1999 Vojtech Pavlik
+ *  Copyright (c) 2000 Vojtech Pavlik
  *
- *  USB Logitech WingMan Force tablet support
+ *  USB Logitech WingMan Force joystick support
  *
  *  Sponsored by SuSE
  */

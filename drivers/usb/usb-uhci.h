@@ -2,9 +2,10 @@
 #define __LINUX_UHCI_H
 
 /*
-   $Id: uhci.h,v 1.30 1999/12/15 17:57:25 fliegl Exp $
+   $Id: usb-uhci.h,v 1.31 2000/01/15 22:02:30 acher Exp $
  */
 #define MODNAME "usb-uhci"
+#define MODSTR MODNAME": "
 #define VERSTR "version v0.9 time " __TIME__ " " __DATE__
 
 /* Command register */
@@ -160,6 +161,7 @@ typedef struct uhci {
 	unsigned int io_addr;
 	unsigned int io_size;
 	unsigned int maxports;
+	int running;
 
 	int apm_state;
 

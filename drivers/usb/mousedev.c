@@ -51,10 +51,10 @@ struct mousedev_list {
 	struct fasync_struct *fasync;
 	struct mousedev *mousedev;
 	struct mousedev_list *next;
-	int dx, dy, dz;
+	int dx, dy, dz, oldx, oldy;
 	unsigned char ps2[6];
 	unsigned long buttons;
-	unsigned char ready, buffer, bufsiz;
+	unsigned char ready, inrange, buffer, bufsiz;
 	unsigned char mode, genseq, impseq;
 };
 
@@ -79,6 +79,23 @@ static void mousedev_event(struct input_handle *handle, unsigned int type, unsig
 
 	while (list) {
 		switch (type) {
+			case EV_ABS:
+				if (test_bit(EV_REL, handle->dev->evbit) && test_bit(REL_X, handle->dev->relbit))
+					return;
+				switch (code) {
+					case ABS_X:	
+						if (list->inrange) list->dx += (value - list->oldx) * 2000 /
+							(handle->dev->absmax[ABS_X] - handle->dev->absmin[ABS_X]);
+						list->oldx = value;
+						break;
+					case ABS_Y:
+						if (list->inrange) list->dy += (value - list->oldy) * 2000 /
+							(handle->dev->absmax[ABS_X] - handle->dev->absmin[ABS_X]);
+						list->oldy = value;
+						break;
+				}
+				break;
+
 			case EV_REL:
 				switch (code) {
 					case REL_X:	list->dx += value; break;
@@ -89,12 +106,20 @@ static void mousedev_event(struct input_handle *handle, unsigned int type, unsig
 
 			case EV_KEY:
 				switch (code) {
+					case BTN_TOUCH:
 					case BTN_LEFT:   index = 0; break;
 					case BTN_EXTRA:  if (list->mode > 1) { index = 4; break; }
+					case BTN_STYLUS:
 					case BTN_RIGHT:  index = 1; break;
 					case BTN_SIDE:   if (list->mode > 1) { index = 3; break; }
+					case BTN_STYLUS2:
 					case BTN_MIDDLE: index = 2; break;	
-					default: index = 0;
+					default: 
+						if (code >= BTN_TOOL_PEN && code <= BTN_TOOL_MOUSE) {
+							list->inrange = value;	
+							return;
+						}
+						index = 0;
 				}
 				switch (value) {
 					case 0: clear_bit(index, &list->buttons); break;
@@ -330,15 +355,14 @@ struct file_operations mousedev_fops = {
 static int mousedev_connect(struct input_handler *handler, struct input_dev *dev)
 {
 
-	if (!(test_bit(EV_KEY, dev->evbit) && test_bit(EV_REL, dev->evbit)))	/* The device must have both rels and keys */
+	if (!test_bit(EV_KEY, dev->evbit) ||
+	   (!test_bit(BTN_LEFT, dev->keybit) && !test_bit(BTN_TOUCH, dev->keybit)))
 		return -1;
 
-	if (!(test_bit(REL_X, dev->relbit) && test_bit(REL_Y, dev->relbit)))	/* It must be a pointer device */
+	if ((!test_bit(EV_REL, dev->evbit) || !test_bit(REL_X, dev->relbit)) &&
+	    (!test_bit(EV_ABS, dev->evbit) || !test_bit(ABS_X, dev->absbit)))
 		return -1;
 	
-	if (!test_bit(BTN_LEFT, dev->keybit))				/* And have at least one mousebutton */
-		return -1;
-
 #ifdef CONFIG_INPUT_MOUSEDEV_MIX
 	{
 		struct input_handle *handle;

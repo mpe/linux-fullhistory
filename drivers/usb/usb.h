@@ -4,6 +4,9 @@
 #include <linux/types.h>
 #include <linux/ioctl.h>
 #include <linux/version.h>
+#include <linux/sched.h>
+#include <linux/delay.h>
+#include <linux/interrupt.h>	/* for in_interrupt() */
 
 /* USB constants */
 
@@ -159,8 +162,12 @@ typedef struct wait_queue *wait_queue_head_t;
 
 static __inline__ void wait_ms(unsigned int ms)
 {
-	current->state = TASK_UNINTERRUPTIBLE;
-	schedule_timeout(1 + ms * HZ / 1000);
+	if(!in_interrupt()) {
+		current->state = TASK_UNINTERRUPTIBLE;
+		schedule_timeout(1 + ms * HZ / 1000);
+	}
+	else
+		mdelay(ms);
 }
 
 typedef struct {
@@ -261,6 +268,23 @@ struct usb_endpoint_descriptor {
 
    	unsigned char *extra;   /* Extra descriptors */
 	int extralen;
+} __attribute__ ((packed));
+
+/* HID descriptor */
+struct usb_hid_class_descriptor {
+        __u8  bDescriptorType;
+        __u16 wDescriptorLength;
+} __attribute__ ((packed));
+
+
+struct usb_hid_descriptor {
+        __u8  bLength;
+        __u8  bDescriptorType;
+        __u16 bcdHID;
+        __u8  bCountryCode;
+        __u8  bNumDescriptors;
+
+        struct usb_hid_class_descriptor desc[1];
 } __attribute__ ((packed));
 
 /* Interface descriptor */
@@ -428,7 +452,7 @@ void usb_free_urb (purb_t purb);
 int usb_submit_urb(purb_t purb);
 int usb_unlink_urb(purb_t purb);
 int usb_internal_control_msg(struct usb_device *usb_dev, unsigned int pipe, devrequest *cmd,  void *data, int len, int timeout);
-int usb_bulk_msg(struct usb_device *usb_dev, unsigned int pipe, void *data, int len, unsigned long *rval, int timeout);
+int usb_bulk_msg(struct usb_device *usb_dev, unsigned int pipe, void *data, int len, int *actual_length, int timeout);
 
 /*-------------------------------------------------------------------*
  *                         COMPATIBILITY STUFF                       *
@@ -676,7 +700,7 @@ int usb_get_report(struct usb_device *dev, unsigned char type,
 int usb_set_report(struct usb_device *dev, unsigned char type,
 	unsigned char id, unsigned char index, void *buf, int size);
 int usb_string(struct usb_device *dev, int index, char *buf, size_t size);
-int usb_clear_halt(struct usb_device *dev, int endp);
+int usb_clear_halt(struct usb_device *dev, int pipe);
 
 #define usb_get_extra_descriptor(ifpoint,type,ptr)\
 	__usb_get_extra_descriptor((ifpoint)->extra,(ifpoint)->extralen,type,(void**)ptr)
