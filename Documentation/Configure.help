@@ -85,11 +85,11 @@ CONFIG_SMP
   a system with only one CPU, like most personal computers, say N. If
   you have a system with more than one CPU, say Y.
 
-  If you say Y here, the kernel will run on single and multiprocessor
+  If you say N here, the kernel will run on single and multiprocessor
   machines, but will use only one CPU of a multiprocessor machine. If
   you say Y here, the kernel will run on many, but not all,
   singleprocessor machines. On a singleprocessor machine, the kernel
-  will run faster if you say Y here.
+  will run faster if you say N here.
 
   Note that if you say Y here and choose architecture "586" or
   "Pentium" under "Processor family", the kernel will not work on 486

@@ -385,6 +385,7 @@ static void try_to_free_inodes(int goal)
 	goal -= inodes_stat.nr_free_inodes;
 	if (goal > 0) {
 		spin_unlock(&inode_lock);
+		select_dcache(goal, 0);
 		prune_dcache(goal);
 		spin_lock(&inode_lock);
 		sync_all_inodes();

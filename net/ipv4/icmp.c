@@ -402,6 +402,10 @@ static inline int icmpv4_xrlim_allow(struct rtable *rt, int type, int code)
 	if (type == ICMP_DEST_UNREACH && code == ICMP_FRAG_NEEDED)
 		return 1;
 
+	/* No rate limit on loopback */
+	if (dst->dev && (dst->dev->flags&IFF_LOOPBACK))
+ 		return 1;
+
 	return xrlim_allow(dst, *(icmp_pointers[type].timeout));
 }
 

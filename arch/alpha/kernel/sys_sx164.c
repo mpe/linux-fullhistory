@@ -183,7 +183,7 @@ sx164_pci_fixup(void)
 {
 	layout_all_busses(DEFAULT_IO_BASE, DEFAULT_MEM_BASE);
 	common_pci_fixup(sx164_map_irq, common_swizzle);
-	SMC669_Init();
+	SMC669_Init(0);
 }
 
 

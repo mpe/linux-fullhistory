@@ -416,10 +416,8 @@ static struct sv11_device *sv11_unit;
 
 int init_module(void)
 {
-	printk(KERN_INFO "SV-11 Z85230 Synchronous Driver v 0.01.\n");
+	printk(KERN_INFO "SV-11 Z85230 Synchronous Driver v 0.02.\n");
 	printk(KERN_INFO "(c) Copyright 1998, Building Number Three Ltd.\n");	
-	if(dma)
-		printk(KERN_WARNING "DMA mode probably wont work right now.\n");
 	if((sv11_unit=sv11_init(io,irq))==NULL)
 		return -ENODEV;
 	return 0;

@@ -317,8 +317,8 @@ static int do_osf_statfs(struct dentry * dentry, struct osf_statfs *buffer, unsi
 	struct super_block * sb = inode->i_sb;
 	int error;
 
-	error = -ENOSYS;
-	if (sb->s_op->statfs) {
+	error = -ENODEV;
+	if (sb && sb->s_op && sb->s_op->statfs) {
 		set_fs(KERNEL_DS);
 		error = sb->s_op->statfs(sb, &linux_stat, sizeof(linux_stat));
 		set_fs(USER_DS);

@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp.c,v 1.134 1999/01/09 08:50:09 davem Exp $
+ * Version:	$Id: tcp.c,v 1.135 1999/02/22 13:54:21 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -1393,9 +1393,6 @@ void tcp_shutdown(struct sock *sk, int how)
 	if ((1 << sk->state) &
 	    (TCPF_ESTABLISHED|TCPF_SYN_SENT|TCPF_SYN_RECV|TCPF_CLOSE_WAIT)) {
 		lock_sock(sk);
-
-		/* Flag that the sender has shutdown. */
-		sk->shutdown |= SEND_SHUTDOWN;
 
 		/* Clear out any half completed packets.  FIN if needed. */
 		if (tcp_close_state(sk,0))

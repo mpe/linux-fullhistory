@@ -518,7 +518,7 @@ __initfunc(static int fddiif_probe(struct device *dev))
 	&& dfx_probe(dev)
 #endif
 #ifdef CONFIG_APFDDI
-	&& apfddi_init(dev);
+	&& apfddi_init(dev)
 #endif
 	&& 1 ) {
 	    return 1;	/* -ENODEV or -EAGAIN would be more accurate. */

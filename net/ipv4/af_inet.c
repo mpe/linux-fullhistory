@@ -5,7 +5,7 @@
  *
  *		PF_INET protocol family socket handler.
  *
- * Version:	$Id: af_inet.c,v 1.82 1999/01/04 20:36:44 davem Exp $
+ * Version:	$Id: af_inet.c,v 1.83 1999/02/22 13:54:18 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -828,6 +828,8 @@ int inet_shutdown(struct socket *sock, int how)
 	sk->shutdown |= how;
 	if (sk->prot->shutdown)
 		sk->prot->shutdown(sk, how);
+	/* Wake up anyone sleeping in poll. */
+	sk->state_change(sk);
 	return(0);
 }
 

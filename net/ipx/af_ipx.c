@@ -766,11 +766,10 @@ static int ipxitf_rcv(ipx_interface *intrfc, struct sk_buff *skb)
 
 		i = 0;
 
-		/* Dump packet if too many hops or already seen this net */
-		if(ipx->ipx_tctrl < 8)
-			for( ; i < ipx->ipx_tctrl; i++)
-				if(*l++ == intrfc->if_netnum)
-					break;
+		/* Dump packet if already seen this net */
+		for( ; i < ipx->ipx_tctrl; i++)
+			if(*l++ == intrfc->if_netnum)
+				break;
 
 		if(i == ipx->ipx_tctrl) 
 		{ 
@@ -779,6 +778,10 @@ static int ipxitf_rcv(ipx_interface *intrfc, struct sk_buff *skb)
 			/* xmit on all other interfaces... */
 			for(ifcs = ipx_interfaces; ifcs != NULL; ifcs = ifcs->if_next) 
 			{
+				/* Except unconfigured interfaces */
+				if(ifcs->if_netnum == 0)
+					continue;
+					
 				/* That aren't in the list */
 				l = (__u32 *) c;
 				for(i = 0; i <= ipx->ipx_tctrl; i++)
@@ -2074,18 +2077,16 @@ int ipx_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	
 	/* Too small? */
 	if(ntohs(ipx->ipx_pktsize) < sizeof(struct ipxhdr))
-	{
-		kfree_skb(skb);
-		return (0);
-	}
-	
+		goto drop;
+		
+	/* Not ours */	
+        if (skb->pkt_type == PACKET_OTHERHOST)
+        	goto drop;
+                        
 	if(ipx->ipx_checksum != IPX_NO_CHECKSUM) 
 	{
 		if(ipx_set_checksum(ipx, ntohs(ipx->ipx_pktsize)) != ipx->ipx_checksum)
-		{
-			kfree_skb(skb);
-			return (0);
-		}
+			goto drop;
 	}
 
 	/* Determine what local ipx endpoint this is */
@@ -2099,13 +2100,14 @@ int ipx_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 		}
 
 		if(intrfc == NULL)	/* Not one of ours */
-		{
-			kfree_skb(skb);
-			return (0);
-		}
+			goto drop;
 	}
 
 	return (ipxitf_rcv(intrfc, skb));
+	
+drop:
+	kfree_skb(skb);
+	return (0);
 }
 
 static int ipx_sendmsg(struct socket *sock, struct msghdr *msg, int len,
@@ -2133,8 +2135,11 @@ static int ipx_sendmsg(struct socket *sock, struct msghdr *msg, int len,
 			uaddr.sipx_port = 0;
 			uaddr.sipx_network = 0L;
 #ifdef CONFIG_IPX_INTERN
-			memcpy(uaddr.sipx_node, sk->protinfo.af_ipx.intrfc
-				->if_node, IPX_NODE_LEN);
+			if(sk->protinfo.af_ipx.intrfc)
+				memcpy(uaddr.sipx_node, sk->protinfo.af_ipx.intrfc
+						->if_node,IPX_NODE_LEN);
+			else
+				return -ENETDOWN;               /* Someone zonked the iface */
 #endif
 			ret = ipx_bind(sock, (struct sockaddr *)&uaddr,
 					sizeof(struct sockaddr_ipx));

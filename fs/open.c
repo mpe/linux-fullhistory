@@ -22,10 +22,11 @@ asmlinkage int sys_statfs(const char * path, struct statfs * buf)
 	error = PTR_ERR(dentry);
 	if (!IS_ERR(dentry)) {
 		struct inode * inode = dentry->d_inode;
+		struct super_block * sb = inode->i_sb;
 
-		error = -ENOSYS;
-		if (inode->i_sb->s_op->statfs)
-			error = inode->i_sb->s_op->statfs(inode->i_sb, buf, sizeof(struct statfs));
+		error = -ENODEV;
+		if (sb && sb->s_op && sb->s_op->statfs)
+			error = sb->s_op->statfs(sb, buf, sizeof(struct statfs));
 
 		dput(dentry);
 	}
@@ -52,10 +53,8 @@ asmlinkage int sys_fstatfs(unsigned int fd, struct statfs * buf)
 	if (!(inode = dentry->d_inode))
 		goto out_putf;
 	error = -ENODEV;
-	if (!(sb = inode->i_sb))
-		goto out_putf;
-	error = -ENOSYS;
-	if (sb->s_op->statfs)
+	sb = inode->i_sb;
+	if (sb && sb->s_op && sb->s_op->statfs)
 		error = sb->s_op->statfs(sb, buf, sizeof(struct statfs));
 out_putf:
 	fput(file);

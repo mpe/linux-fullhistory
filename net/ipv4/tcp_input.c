@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_input.c,v 1.155 1999/01/26 05:33:50 davem Exp $
+ * Version:	$Id: tcp_input.c,v 1.156 1999/02/22 13:54:13 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -130,11 +130,15 @@ static __inline__ void tcp_remember_ack(struct tcp_opt *tp, struct tcphdr *th,
 {
 	tp->delayed_acks++; 
 
-	/* Tiny-grams with PSH set make us ACK quickly.
-	 * Note: This also clears the "quick ack mode" bit.
+	/* Tiny-grams with PSH set artifically deflate our
+	 * ato measurement, but with a lower bound.
 	 */
-	if(th->psh && (skb->len < (tp->mss_cache >> 1)))
-		tp->ato = HZ/50;
+	if(th->psh && (skb->len < (tp->mss_cache >> 1))) {
+		/* Preserve the quickack state. */
+		if((tp->ato & 0x7fffffff) > HZ/50)
+			tp->ato = ((tp->ato & 0x80000000) |
+				   (HZ/50));
+	}
 } 
 
 /* Called to compute a smoothed rtt estimate. The data fed to this

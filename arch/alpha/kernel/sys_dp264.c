@@ -316,7 +316,7 @@ dp264_pci_fixup(void)
 {
 	layout_all_busses(DEFAULT_IO_BASE, DEFAULT_MEM_BASE);
 	common_pci_fixup(dp264_map_irq, common_swizzle);
-	SMC669_Init();
+	SMC669_Init(0);
 }
 
 static void __init
@@ -325,7 +325,7 @@ monet_pci_fixup(void)
 	layout_all_busses(DEFAULT_IO_BASE, DEFAULT_MEM_BASE);
 	common_pci_fixup(monet_map_irq, monet_swizzle);
 	/* es1888_init(); */ /* later? */
-	SMC669_Init();
+	SMC669_Init(1);
 }
 
 static void __init
@@ -333,7 +333,7 @@ webbrick_pci_fixup(void)
 {
 	layout_all_busses(DEFAULT_IO_BASE, DEFAULT_MEM_BASE);
 	common_pci_fixup(webbrick_map_irq, common_swizzle);
-	SMC669_Init();
+	SMC669_Init(0);
 }
 
 

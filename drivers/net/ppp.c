@@ -2062,7 +2062,11 @@ rcv_proto_vjc_comp(struct ppp *ppp, struct sk_buff *skb)
 			       "ppp: error in VJ decompression\n");
 		return 0;
 	}
-	skb_put(skb, new_count + PPP_HDRLEN - skb->len);
+	new_count += PPP_HDRLEN;
+	if (new_count > skb->len)
+		skb_put(skb, new_count - skb->len);
+	else
+		skb_trim(skb, new_count);
 	return rcv_proto_ip(ppp, skb);
 }
 

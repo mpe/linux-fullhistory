@@ -52,7 +52,7 @@ int parport_ieee1284_nibble_mode_ok(struct parport *port, unsigned char mode)
 		& ~1 ) & ~2);
 	udelay(1);
 	parport_write_data(port, mode);
-	udelay(1);
+	udelay(400);
 	/* nSelectIn high, nAutoFd low */
 	parport_write_control(port, (parport_read_control(port) & ~8) | 2);
 	if (parport_wait_peripheral(port, 0x78, 0x38)) {

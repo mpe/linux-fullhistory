@@ -464,8 +464,17 @@ void add_timer(struct timer_list *timer)
 	unsigned long flags;
 
 	spin_lock_irqsave(&timerlist_lock, flags);
+	if (timer->prev)
+		goto bug;
 	internal_add_timer(timer);
+out:
 	spin_unlock_irqrestore(&timerlist_lock, flags);
+	return;
+
+bug:
+	printk("bug: kernel timer added twice at %p.\n",
+			__builtin_return_address(0));
+	goto out;
 }
 
 static inline int detach_timer(struct timer_list *timer)

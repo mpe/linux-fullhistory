@@ -5,7 +5,7 @@
  *
  *		TIMER - implementation of software timers for IP.
  *
- * Version:	$Id: timer.c,v 1.14 1998/11/07 11:55:43 davem Exp $
+ * Version:	$Id: timer.c,v 1.15 1999/02/22 13:54:29 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>

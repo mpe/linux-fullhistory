@@ -267,7 +267,7 @@ miata_pci_fixup(void)
 {
 	layout_all_busses(DEFAULT_IO_BASE, DEFAULT_MEM_BASE);
 	common_pci_fixup(miata_map_irq, miata_swizzle);
-	SMC669_Init(); /* it might be a GL (fails harmlessly if not) */
+	SMC669_Init(0); /* it might be a GL (fails harmlessly if not) */
 	es1888_init();
 }
 

@@ -51,7 +51,7 @@
 #include <asm/byteorder.h>
 #include "syncppp.h"
 
-#define MAXALIVECNT     3               /* max. alive packets */
+#define MAXALIVECNT     6               /* max. alive packets */
 
 #define PPP_ALLSTATIONS 0xff            /* All-Stations broadcast address */
 #define PPP_UI          0x03            /* Unnumbered Information */

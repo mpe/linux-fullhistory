@@ -99,13 +99,17 @@ static void autofs_notify_daemon(struct autofs_sb_info *sbi, struct autofs_wait_
 		autofs_catatonic_mode(sbi);
 }
 
-int autofs_wait(struct autofs_sb_info *sbi, struct qstr * name)
+int autofs_wait(struct autofs_sb_info *sbi, struct qstr *name)
 {
 	struct autofs_wait_queue *wq;
 	int status;
 
 	/* In catatonic mode, we don't wait for nobody */
 	if ( sbi->catatonic )
+		return -ENOENT;
+	
+	/* We shouldn't be able to get here, but just in case */
+	if ( name->len > NAME_MAX )
 		return -ENOENT;
 
 	for ( wq = sbi->queues ; wq ; wq = wq->next ) {

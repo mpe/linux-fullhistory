@@ -862,7 +862,7 @@ typedef struct _SMC37c669_DRQ_TRANSLATION_ENTRY {
 */
 
 SMC37c669_CONFIG_REGS *SMC37c669_detect( 
-    void 
+    int
 );
 
 unsigned int SMC37c669_enable_device( 
@@ -1015,6 +1015,29 @@ __initdata =
     };
 
 /*
+** The following definition is for the MONET (XP1000) IRQ 
+** translation table.
+*/
+static SMC37c669_IRQ_TRANSLATION_ENTRY SMC37c669_monet_irq_table[]
+__initdata = 
+    { 
+	{ SMC37c669_DEVICE_IRQ_A, -1 }, 
+	{ SMC37c669_DEVICE_IRQ_B, -1 }, 
+	{ SMC37c669_DEVICE_IRQ_C, 6 }, 
+	{ SMC37c669_DEVICE_IRQ_D, 7 }, 
+	{ SMC37c669_DEVICE_IRQ_E, 4 }, 
+	{ SMC37c669_DEVICE_IRQ_F, 3 }, 
+	{ SMC37c669_DEVICE_IRQ_H, -1 }, 
+	{ -1, -1 } /* End of table */
+    };
+
+static SMC37c669_IRQ_TRANSLATION_ENTRY *SMC37c669_irq_tables[] __initdata =
+    {
+	SMC37c669_default_irq_table,
+	SMC37c669_monet_irq_table
+    }; 
+
+/*
 ** DRQ Translation Table
 **
 ** The DRQ translation table is a list of SMC37c669 device and
@@ -1163,7 +1186,7 @@ struct DDB smc_ddb = {
 **
 **--
 */
-SMC37c669_CONFIG_REGS * __init SMC37c669_detect( void )
+SMC37c669_CONFIG_REGS * __init SMC37c669_detect( int index )
 {
     int i;
     SMC37c669_DEVICE_ID_REGISTER id;
@@ -1196,7 +1219,7 @@ SMC37c669_CONFIG_REGS * __init SMC37c669_detect( void )
 /*
 ** Initialize the IRQ and DRQ translation tables.
 */
-    	    SMC37c669_irq_table = SMC37c669_default_irq_table;
+    	    SMC37c669_irq_table = SMC37c669_irq_tables[ index ];
 	    SMC37c669_drq_table = SMC37c669_default_drq_table;
 /*
 ** erfix
@@ -2516,13 +2539,13 @@ SMC37c669_dump_registers(void)
  *      None
  *
  */
-void __init SMC669_Init ( void )
+void __init SMC669_Init ( int index )
 {
     SMC37c669_CONFIG_REGS *SMC_base;
     unsigned long flags;
 
     __save_and_cli(flags);
-    if ( ( SMC_base = SMC37c669_detect( ) ) != NULL ) {
+    if ( ( SMC_base = SMC37c669_detect( index ) ) != NULL ) {
 #if SMC_DEBUG
 	SMC37c669_config_mode( TRUE );
 	SMC37c669_dump_registers( );

@@ -5,8 +5,8 @@
    these silly disclaimers.
 
    Copyright 1994, Tom Zerucha.   
-   zerucha@shell.portal.com
-
+   tz@execpc.com
+   
    Additional Code, and much appreciated help by
    Michael A. Griffith
    grif@cs.ucr.edu
