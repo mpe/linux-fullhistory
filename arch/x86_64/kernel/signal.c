@@ -160,9 +160,8 @@ asmlinkage long sys_rt_sigreturn(struct pt_regs *regs)
 	recalc_sigpending();
 	spin_unlock_irq(&current->sighand->siglock);
 	
-	if (restore_sigcontext(regs, &frame->uc.uc_mcontext, &eax)) {
+	if (restore_sigcontext(regs, &frame->uc.uc_mcontext, &eax))
 		goto badframe;
-	} 
 
 #ifdef DEBUG_SIG
 	printk("%d sigreturn rip:%lx rsp:%lx frame:%p rax:%lx\n",current->pid,regs.rip,regs.rsp,frame,eax);
@@ -253,27 +252,24 @@ static void setup_rt_frame(int sig, struct k_sigaction *ka, siginfo_t *info,
 
 	if (used_math()) {
 		fp = get_stack(ka, regs, sizeof(struct _fpstate)); 
-		frame = (void __user *)round_down((unsigned long)fp - sizeof(struct rt_sigframe), 16) - 8;
+		frame = (void __user *)round_down(
+			(unsigned long)fp - sizeof(struct rt_sigframe), 16) - 8;
 
-		if (!access_ok(VERIFY_WRITE, fp, sizeof(struct _fpstate))) { 
-		goto give_sigsegv;
-		}
+		if (!access_ok(VERIFY_WRITE, fp, sizeof(struct _fpstate)))
+			goto give_sigsegv;
 
 		if (save_i387(fp) < 0) 
 			err |= -1; 
-	} else {
+	} else
 		frame = get_stack(ka, regs, sizeof(struct rt_sigframe)) - 8;
-	}
 
-	if (!access_ok(VERIFY_WRITE, frame, sizeof(*frame))) {
+	if (!access_ok(VERIFY_WRITE, frame, sizeof(*frame)))
 		goto give_sigsegv;
-	}
 
 	if (ka->sa.sa_flags & SA_SIGINFO) { 
 		err |= copy_siginfo_to_user(&frame->info, info);
-		if (err) { 
+		if (err)
 			goto give_sigsegv;
-	}
 	}
 		
 	/* Create the ucontext.  */
@@ -288,9 +284,8 @@ static void setup_rt_frame(int sig, struct k_sigaction *ka, siginfo_t *info,
 	if (sizeof(*set) == 16) { 
 		__put_user(set->sig[0], &frame->uc.uc_sigmask.sig[0]);
 		__put_user(set->sig[1], &frame->uc.uc_sigmask.sig[1]); 
-	} else { 		
-	err |= __copy_to_user(&frame->uc.uc_sigmask, set, sizeof(*set));
-	}
+	} else
+		err |= __copy_to_user(&frame->uc.uc_sigmask, set, sizeof(*set));
 
 	/* Set up to return from userspace.  If provided, use a stub
 	   already in userspace.  */
@@ -302,9 +297,8 @@ static void setup_rt_frame(int sig, struct k_sigaction *ka, siginfo_t *info,
 		goto give_sigsegv; 
 	}
 
-	if (err) { 
+	if (err)
 		goto give_sigsegv;
-	} 
 
 #ifdef DEBUG_SIG
 	printk("%d old rip %lx old rsp %lx old rax %lx\n", current->pid,regs->rip,regs->rsp,regs->rax);
@@ -357,7 +351,8 @@ handle_signal(unsigned long sig, siginfo_t *info, struct k_sigaction *ka,
 		sigset_t *oldset, struct pt_regs *regs)
 {
 #ifdef DEBUG_SIG
-	printk("handle_signal pid:%d sig:%lu rip:%lx rsp:%lx regs=%p\n", current->pid, sig, 
+	printk("handle_signal pid:%d sig:%lu rip:%lx rsp:%lx regs=%p\n",
+		current->pid, sig,
 		regs->rip, regs->rsp, regs);
 #endif
 
@@ -375,10 +370,11 @@ handle_signal(unsigned long sig, siginfo_t *info, struct k_sigaction *ka,
 					regs->rax = -EINTR;
 					break;
 				}
-			/* fallthrough */
+				/* fallthrough */
 			case -ERESTARTNOINTR:
 				regs->rax = regs->orig_rax;
 				regs->rip -= 2;
+				break;
 		}
 	}
 
@@ -418,9 +414,8 @@ int do_signal(struct pt_regs *regs, sigset_t *oldset)
 	 * kernel mode. Just return without doing anything
 	 * if so.
 	 */
-	if ((regs->cs & 3) != 3) {
+	if ((regs->cs & 3) != 3)
 		return 1;
-	} 	
 
 	if (try_to_freeze(0))
 		goto no_signal;
