@@ -16,6 +16,15 @@ bool 'Prompt for development and/or incomplete code/drivers' CONFIG_EXPERIMENTAL
 endmenu
 
 mainmenu_option next_comment
+comment 'Loadable module support'
+bool 'Enable loadable module support' CONFIG_MODULES
+if [ "$CONFIG_MODULES" = "y" ]; then
+   bool '  Set version information on all module symbols' CONFIG_MODVERSIONS
+   bool '  Kernel module loader' CONFIG_KMOD
+fi
+endmenu
+
+mainmenu_option next_comment
 comment 'Processor type and features'
 choice 'Processor family' \
 	"386				CONFIG_M386 \
@@ -142,15 +151,6 @@ if [ "$CONFIG_SMP" != "y" ]; then
 fi
 if [ "$CONFIG_SMP" = "y" -a "$CONFIG_X86_CMPXCHG" = "y" ]; then
     define_bool CONFIG_HAVE_DEC_LOCK y
-fi
-endmenu
-
-mainmenu_option next_comment
-comment 'Loadable module support'
-bool 'Enable loadable module support' CONFIG_MODULES
-if [ "$CONFIG_MODULES" = "y" ]; then
-   bool '  Set version information on all module symbols' CONFIG_MODVERSIONS
-   bool '  Kernel module loader' CONFIG_KMOD
 fi
 endmenu
 

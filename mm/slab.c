@@ -1966,7 +1966,7 @@ int slabinfo_read_proc (char *page, char **start, off_t off,
 #define MAX_SLABINFO_WRITE 128
 /**
  * slabinfo_write_proc - SMP tuning for the slab allocator
- * @file:
+ * @file: unused
  * @buffer: user buffer
  * @count: data len
  * @data: unused

@@ -309,6 +309,7 @@ struct parport {
 	rwlock_t cad_lock;
 
 	int spintime;
+	atomic_t ref_count;
 };
 
 #define DEFAULT_SPIN_TIME 500 /* us */
@@ -337,12 +338,9 @@ void parport_announce_port (struct parport *port);
 /* Unregister a port. */
 extern void parport_unregister_port(struct parport *port);
 
-/* parport_in_use returns nonzero if there are devices attached to a
-   port. */
-#define parport_in_use(x)  ((x)->devices != NULL)
-
 /* parport_enumerate returns a pointer to the linked list of all the
-   ports in this machine. */
+   ports in this machine.  DON'T USE THIS.  Use
+   parport_register_driver instead. */
 struct parport *parport_enumerate(void);
 
 /* Register a new high-level driver. */
@@ -350,6 +348,15 @@ extern int parport_register_driver (struct parport_driver *);
 
 /* Unregister a high-level driver. */
 extern void parport_unregister_driver (struct parport_driver *);
+
+/* If parport_register_driver doesn't fit your needs, perhaps
+ * parport_find_xxx does. */
+extern struct parport *parport_find_number (int);
+extern struct parport *parport_find_base (unsigned long);
+
+/* Reference counting for ports. */
+extern struct parport *parport_get_port (struct parport *);
+extern void parport_put_port (struct parport *);
 
 /* parport_register_device declares that a device is connected to a
    port, and tells the kernel all it needs to know.

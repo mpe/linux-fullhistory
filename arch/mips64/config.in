@@ -11,6 +11,15 @@ bool 'Prompt for development and/or incomplete code/drivers' CONFIG_EXPERIMENTAL
 endmenu
 
 mainmenu_option next_comment
+comment 'Loadable module support'
+bool 'Enable loadable module support' CONFIG_MODULES
+if [ "$CONFIG_MODULES" = "y" ]; then
+   bool '  Set version information on all module symbols' CONFIG_MODVERSIONS
+   bool '  Kernel module loader' CONFIG_KMOD
+fi
+endmenu
+
+mainmenu_option next_comment
 comment 'Machine selection'
 bool 'Support for SGI IP22' CONFIG_SGI_IP22
 bool 'Support for SGI IP27' CONFIG_SGI_IP27
@@ -108,14 +117,6 @@ fi
 tristate 'Kernel support for MISC binaries' CONFIG_BINFMT_MISC
 
 endmenu
-
-mainmenu_option next_comment
-comment 'Loadable module support'
-bool 'Enable loadable module support' CONFIG_MODULES
-if [ "$CONFIG_MODULES" = "y" ]; then
-   bool 'Set version information on all symbols for modules' CONFIG_MODVERSIONS
-   bool 'Kernel module loader' CONFIG_KMOD
-fi
 
 source drivers/pci/Config.in
 

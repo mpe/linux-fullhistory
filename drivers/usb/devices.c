@@ -45,6 +45,9 @@
  *   up an eventual usbd
  * 2000-01-04: Thomas Sailer <sailer@ife.ee.ethz.ch>
  *   Turned into its own filesystem
+ * 2000-07-05: Ashley Montanaro <ashley@compsoc.man.ac.uk>
+ *   Converted file reading routine to dump to buffer once
+ *   per device, not per bus
  *
  * $Id: devices.c,v 1.5 2000/01/11 13:58:21 tom Exp $
  */
@@ -367,23 +370,40 @@ static char *usb_dump_string(char *start, char *end, const struct usb_device *de
 
 /*****************************************************************/
 
-static char *usb_device_dump(char *start, char *end, struct usb_device *usbdev,
-			     struct usb_bus *bus, int level, int index, int count)
+/* This is a recursive function. Parameters:
+ * buffer - the user-space buffer to write data into
+ * nbytes - the maximum number of bytes to write
+ * skip_bytes - the number of bytes to skip before writing anything
+ * file_offset - the offset into the devices file on completion
+ */
+static ssize_t usb_device_dump(char **buffer, size_t *nbytes, loff_t *skip_bytes, loff_t *file_offset,
+				struct usb_device *usbdev, struct usb_bus *bus, int level, int index, int count)
 {
 	int chix;
-	int cnt = 0;
+	int ret, cnt = 0;
 	int parent_devnum = 0;
-
+	char *pages_start, *data_end;
+	unsigned int length;
+	ssize_t total_written = 0;
+	
+	/* don't bother with anything else if we're not writing any data */
+	if (*nbytes <= 0)
+		return 0;
+	
 	if (level > MAX_TOPO_LEVEL)
-		return start;
+		return total_written;
+	/* allocate 2^1 pages = 8K (on i386); should be more than enough for one device */
+        if (!(pages_start = (char*) __get_free_pages(GFP_KERNEL,1)))
+                return -ENOMEM;
+		
 	if (usbdev->parent && usbdev->parent->devnum != -1)
 		parent_devnum = usbdev->parent->devnum;
 	/*
 	 * So the root hub's parent is 0 and any device that is
 	 * plugged into the root hub has a parent of 0.
 	 */
-	start += sprintf(start, format_topo, bus->busnum, level, parent_devnum, index, count,
-			 usbdev->devnum, usbdev->slow ? "1.5" : "12 ", usbdev->maxchild);
+	data_end = pages_start + sprintf(pages_start, format_topo, bus->busnum, level, parent_devnum, index, count,
+					usbdev->devnum, usbdev->slow ? "1.5" : "12 ", usbdev->maxchild);
 	/*
 	 * level = topology-tier level;
 	 * parent_devnum = parent device number;
@@ -392,30 +412,58 @@ static char *usb_device_dump(char *start, char *end, struct usb_device *usbdev,
 	 */
 	/* If this is the root hub, display the bandwidth information */
 	if (level == 0)
-		start += sprintf(start, format_bandwidth, bus->bandwidth_allocated, 
+		data_end += sprintf(data_end, format_bandwidth, bus->bandwidth_allocated,
 				FRAME_TIME_MAX_USECS_ALLOC,
 				(100 * bus->bandwidth_allocated + FRAME_TIME_MAX_USECS_ALLOC / 2) / FRAME_TIME_MAX_USECS_ALLOC,
 			         bus->bandwidth_int_reqs, bus->bandwidth_isoc_reqs);
-	start = usb_dump_desc(start, end, usbdev);
-	if (start > end)
-		return start + sprintf(start, "(truncated)\n");
+	
+	data_end = usb_dump_desc(data_end, pages_start + (2 * PAGE_SIZE) - 256, usbdev);
+	
+	if (data_end > (pages_start + (2 * PAGE_SIZE) - 256))
+		data_end += sprintf(data_end, "(truncated)\n");
+	
+	length = data_end - pages_start;
+	/* if we can start copying some data to the user */
+	if (length > *skip_bytes) {
+		length -= *skip_bytes;
+		if (length > *nbytes)
+			length = *nbytes;
+		if (copy_to_user(*buffer, pages_start + *skip_bytes, length)) {
+			free_pages((unsigned long)pages_start, 1);
+			
+			if (total_written == 0)
+				return -EFAULT;
+			return total_written;
+		}
+		*nbytes -= length;
+		*file_offset += length;
+		total_written += length;
+		*buffer += length;
+		*skip_bytes = 0;
+	} else
+		*skip_bytes -= length;
+	
+	free_pages((unsigned long)pages_start, 1);
+	
 	/* Now look at all of this device's children. */
 	for (chix = 0; chix < usbdev->maxchild; chix++) {
-		if (start > end)
-			return start;
-		if (usbdev->children[chix])
-			start = usb_device_dump(start, end, usbdev->children[chix], bus, level + 1, chix, ++cnt);
+		if (usbdev->children[chix]) {
+			ret = usb_device_dump(buffer, nbytes, skip_bytes, file_offset, usbdev->children[chix],
+					bus, level + 1, chix, ++cnt);
+			if (ret == -EFAULT)
+				return total_written;
+			total_written += ret;
+		}
 	}
-	return start;
+	return total_written;
 }
 
 static ssize_t usb_device_read(struct file *file, char *buf, size_t nbytes, loff_t *ppos)
 {
 	struct list_head *buslist;
 	struct usb_bus *bus;
-	char *page, *end;
-	ssize_t ret = 0;
-	unsigned int pos, len;
+	ssize_t ret, total_written = 0;
+	loff_t skip_bytes = *ppos;
 
 	if (*ppos < 0)
 		return -EINVAL;
@@ -423,34 +471,18 @@ static ssize_t usb_device_read(struct file *file, char *buf, size_t nbytes, loff
 		return 0;
 	if (!access_ok(VERIFY_WRITE, buf, nbytes))
 		return -EFAULT;
-        if (!(page = (char*) __get_free_pages(GFP_KERNEL,1)))
-                return -ENOMEM;
-	pos = *ppos;
+
 	/* enumerate busses */
 	for (buslist = usb_bus_list.next; buslist != &usb_bus_list; buslist = buslist->next) {
 		/* print devices for this bus */
 		bus = list_entry(buslist, struct usb_bus, bus_list);
-		end = usb_device_dump(page, page + (2*PAGE_SIZE - 256), bus->root_hub, bus, 0, 0, 0);
-		len = end - page;
-		if (len > pos) {
-			len -= pos;
-			if (len > nbytes)
-				len = nbytes;
-			if (copy_to_user(buf, page + pos, len)) {
-				if (!ret)
-					ret = -EFAULT;
-				break;
-			}
-			nbytes -= len;
-			buf += len;
-			ret += len;
-			pos = 0;
-			*ppos += len;
-		} else
-			pos -= len;
+		/* recurse through all children of the root hub */
+		ret = usb_device_dump(&buf, &nbytes, &skip_bytes, ppos, bus->root_hub, bus, 0, 0, 0);
+		if (ret < 0)
+			return ret;
+		total_written += ret;
 	}
-	free_pages((unsigned long)page, 1);
-	return ret;
+	return total_written;
 }
 
 /* Kernel lock for "lastev" protection */

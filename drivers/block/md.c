@@ -3412,7 +3412,7 @@ repeat:
 		currspeed = (j-mddev->resync_mark_cnt)/((jiffies-mddev->resync_mark)/HZ +1) +1;
 
 		if (currspeed > sysctl_speed_limit_min) {
-			current->priority = 19;
+			current->nice = 19;
 
 			if ((currspeed > sysctl_speed_limit_max) ||
 					!is_mddev_idle(mddev)) {
@@ -3422,7 +3422,7 @@ repeat:
 					goto repeat;
 			}
 		} else
-			current->priority = -20;
+			current->nice = -20;
 	}
 	fsync_dev(read_disk);
 	printk(KERN_INFO "md: md%d: sync done.\n",mdidx(mddev));

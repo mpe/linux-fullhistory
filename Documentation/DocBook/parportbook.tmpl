@@ -386,7 +386,7 @@
     announces it.  The <function>parport_announce_port</function>
     function walks down the list of parallel port device drivers
     (<structname>struct parport_driver</structname>s) calling the
-    <function>attach</function> function of each.
+    <function>attach</function> function of each (which may block).
    </para>
 
    <para>
@@ -394,7 +394,7 @@
     registering a port with the
     <function>parport_unregister_port</function> function, and device
     drivers are notified using the <function>detach</function>
-    callback.
+    callback (which may not block).
    </para>
 
    <para>
@@ -656,8 +656,30 @@ struct parport_driver {
    to the <function>attach</function> function when it is called, or
    alternatively can be found from the list of detected parallel ports
    directly with the (now deprecated)
-   <function>parport_enumerate</function> function.
+   <function>parport_enumerate</function> function.  A better way of
+   doing this is with <function>parport_find_number</function> or
+   <function>parport_find_base</function> functions, which find ports
+   by number and by base I/O address respectively.
   </para>
+
+  <funcsynopsis>
+   <funcsynopsisinfo>
+#include &lt;parport.h&gt;
+   </funcsynopsisinfo>
+   <funcprototype>
+    <funcdef>struct parport *<function>parport_find_number</function></funcdef>
+    <paramdef>int <parameter>number</parameter></paramdef>
+   </funcprototype>
+  </funcsynopsis>
+  <funcsynopsis>
+   <funcsynopsisinfo>
+#include &lt;parport.h&gt;
+   </funcsynopsisinfo>
+   <funcprototype>
+    <funcdef>struct parport *<function>parport_find_base</function></funcdef>
+    <paramdef>unsigned long <parameter>base</parameter></paramdef>
+   </funcprototype>
+  </funcsynopsis>
 
   <para>
    The next three parameters, <parameter>pf</parameter>,
@@ -2202,6 +2224,9 @@ ssize_t write_printer (int fd, const void *ptr, size_t count)
 !Fdrivers/parport/daisy.c parport_find_class
 !Fdrivers/parport/share.c parport_register_driver
 !Fdrivers/parport/share.c parport_unregister_driver
+!Fdrivers/parport/share.c parport_get_port
+!Fdrivers/parport/share.c parport_put_port
+!Fdrivers/parport/share.c parport_find_number parport_find_base
 !Fdrivers/parport/share.c parport_register_device
 !Fdrivers/parport/share.c parport_unregister_device
 !Fdrivers/parport/daisy.c parport_open

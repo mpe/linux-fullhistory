@@ -1,10 +1,10 @@
-/* $Id: param.h,v 1.1 1999/08/18 23:37:51 ralf Exp $
- *
+/*
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
  * for more details.
  *
- * Copyright 1994 - 1999 Ralf Baechle (ralf@gnu.org)
+ * Copyright 1994 - 2000 Ralf Baechle (ralf@gnu.org)
+ * Copyright 2000 Silicon Graphics, Inc.
  */
 #ifndef _ASM_PARAM_H
 #define _ASM_PARAM_H
@@ -13,7 +13,7 @@
 #define HZ 100
 #  define HZ 100
 #ifdef __KERNEL__
-#  define HZ_TO_STD(a) (a)
+#  define hz_to_std(a) (a)
 #endif
 #endif
 

@@ -1,16 +1,16 @@
-/* $Id$
- *
+/*
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
  * for more details.
  *
- * Copyright (C) 1992 - 1997, 1999 Silicon Graphics, Inc.
- * Copyright (C) 1999 by Ralf Baechle
+ * Copyright (C) 1992 - 1997, 1999, 2000 Silicon Graphics, Inc.
+ * Copyright (C) 1999, 2000 by Ralf Baechle
  */
 #ifndef _ASM_SN_ADDRS_H
 #define _ASM_SN_ADDRS_H
 
 #include <linux/config.h>
+
 #if _LANGUAGE_C
 #include <linux/types.h>
 #endif /* _LANGUAGE_C */

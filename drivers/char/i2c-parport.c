@@ -75,7 +75,7 @@ static void i2c_parport_attach(struct parport *port)
   struct parport_i2c_bus *b = kmalloc(sizeof(struct parport_i2c_bus), 
 				      GFP_KERNEL);
   b->i2c = parport_i2c_bus_template;
-  b->i2c.data = port;
+  b->i2c.data = parport_get_port (port);
   strncpy(b->i2c.name, port->name, 32);
   spin_lock(&bus_list_lock);
   b->next = bus_list;

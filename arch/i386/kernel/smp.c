@@ -392,6 +392,8 @@ void smp_send_reschedule(int cpu)
  * Structure and data for smp_call_function(). This is designed to minimise
  * static memory requirements. It also looks cleaner.
  */
+static spinlock_t call_lock = SPIN_LOCK_UNLOCKED;
+
 static volatile struct call_data_struct {
 	void (*func) (void *info);
 	void *info;
@@ -422,9 +424,8 @@ int smp_call_function (void (*func) (void *info), void *info, int nonatomic,
 {
 	struct call_data_struct data;
 	int ret, cpus = smp_num_cpus-1;
-	static spinlock_t lock = SPIN_LOCK_UNLOCKED;
 
-	if(cpus == 0)
+	if (!cpus)
 		return 0;
 
 	data.func = func;
@@ -434,21 +435,21 @@ int smp_call_function (void (*func) (void *info), void *info, int nonatomic,
 	if (wait)
 		atomic_set(&data.finished, 0);
 
-	spin_lock_bh(&lock);
+	spin_lock_bh(&call_lock);
 	call_data = &data;
 	/* Send a message to all other CPUs and wait for them to respond */
 	send_IPI_allbutself(CALL_FUNCTION_VECTOR);
 
 	/* Wait for response */
-	/* FIXME: lock-up detection, backtrace on lock-up */
-	while(atomic_read(&data.started) != cpus)
+	while (atomic_read(&data.started) != cpus)
 		barrier();
 
 	ret = 0;
 	if (wait)
 		while (atomic_read(&data.finished) != cpus)
 			barrier();
-	spin_unlock_bh(&lock);
+	spin_unlock_bh(&call_lock);
+
 	return 0;
 }
 

@@ -83,6 +83,15 @@ SECTIONS
    *(COMMON)
   _end = . ;
   }
+
+  /* Sections to be discarded */
+  /DISCARD/ : 
+  {
+        *(.text.exit)
+        *(.data.exit)
+        *(.exitcall.exit)
+  }
+
   /* These are needed for ELF backends which have not yet been
      converted to the new style linker.  */
   .stab 0 : { *(.stab) }

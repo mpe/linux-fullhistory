@@ -1,4 +1,40 @@
-2000-06-30  Gunther Mayer  <gunther.mayer@braunschweig.okersurf.de>
+2000-07-12  Tim Waugh  <twaugh@redhat.com>
+
+	* share.c: Documentation for parport_{get,port}_port,
+	parport_find_{number,base}.
+
+2000-07-12  Tim Waugh  <twaugh@redhat.com>
+
+	* share.c (parport_unregister_device): Remove unneeded locking
+	(test cad==dev).
+	(parport_claim): Likewise.
+	(parport_find_number): New function.
+
+2000-07-12  Tim Waugh  <twaugh@redhat.com>
+
+	* share.c (parport_register_port): Hold the parportlist_lock while
+	looking for a free parport number.
+	(parport_register_driver): Make sure that attach can block.
+	(attach_driver_chain): Likewise.
+
+2000-07-12  Tim Waugh  <twaugh@redhat.com>
+
+	* share.c (call_driver_chain): Do reference counting things.
+	(parport_get_port): New function.
+	(parport_put_port): New function.
+	(parport_register_port): Initialise reference count to zero.
+	(parport_unregister_port): Check reference count rather than
+	driver list to see if we can free the port.
+
+2000-07-12  Tim Waugh  <twaugh@redhat.com>
+
+	* share.c: Clarifications in doc comments.
+
+2000-07-12  Tim Waugh  <twaugh@redhat.com>
+
+	* share.c (parport_unregister_port): Fix typo in comment.
+
+2000-07-11  Gunther Mayer  <gunther.mayer@braunschweig.okersurf.de>
 
 	* parport_pc.c: Support for the full range of Timedia cards.
 

@@ -233,7 +233,7 @@ static void reschedule_idle(struct task_struct * p, unsigned long flags)
 		 * its preferred CPU. (this is a shortcut):
 		 */
 		tsk = cpu_curr(best_cpu);
-		if (preemption_goodness(tsk, p, best_cpu) > 1)
+		if (preemption_goodness(tsk, p, best_cpu) > 0)
 			goto preempt_now;
 	}
 
@@ -290,7 +290,7 @@ send_now_idle:
 	 * altogether, tsk->need_resched is actively watched by the
 	 * idle thread.
 	 */
-	if (!tsk->need_resched)
+	if ((tsk->processor != current->processor) && !tsk->need_resched)
 		smp_send_reschedule(tsk->processor);
 	tsk->need_resched = 1;
 	spin_unlock_irqrestore(&runqueue_lock, flags);

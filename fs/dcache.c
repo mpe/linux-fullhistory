@@ -933,6 +933,9 @@ void d_move(struct dentry * dentry, struct dentry * target)
 /**
  * d_path - return the path of a dentry
  * @dentry: dentry to report
+ * @vfsmnt: vfsmnt to which the dentry belongs
+ * @root: root dentry
+ * @rootmnt: vfsmnt to which the root dentry belongs
  * @buffer: buffer to return value in
  * @buflen: buffer length
  *

@@ -10,6 +10,15 @@ bool 'Prompt for development and/or incomplete code/drivers' CONFIG_EXPERIMENTAL
 endmenu
 
 mainmenu_option next_comment
+comment 'Loadable module support'
+bool 'Enable loadable module support' CONFIG_MODULES
+if [ "$CONFIG_MODULES" = "y" ]; then
+   bool '  Set version information on all module symbols' CONFIG_MODVERSIONS
+   bool '  Kernel module loader' CONFIG_KMOD
+fi
+endmenu
+
+mainmenu_option next_comment
 comment 'Machine selection'
 if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
    bool 'Support for Acer PICA 1 chipset' CONFIG_ACER_PICA_61
@@ -158,12 +167,6 @@ comment 'General setup'
 	bool 'Sysctl support' CONFIG_SYSCTL
 
         source drivers/parport/Config.in
-
-	bool 'Enable loadable module support' CONFIG_MODULES
-	if [ "$CONFIG_MODULES" = "y" ]; then
-	   bool '  Set version information on all symbols for modules' CONFIG_MODVERSIONS
-	   bool '  Kernel module loader' CONFIG_KMOD
-	fi
 
 	if [ "$CONFIG_DECSTATION" = "y" ]; then
             bool 'TURBOchannel support' CONFIG_TC

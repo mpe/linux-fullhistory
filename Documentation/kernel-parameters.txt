@@ -1,4 +1,4 @@
-June 2000		  Kernel Parameters			v2.4.0
+July 2000		  Kernel Parameters			v2.4.0
 			  ~~~~~~~~~~~~~~~~~
 
 The following is a consolidated list of the kernel parameters as implemented
@@ -80,6 +80,8 @@ running once the system is up.
 
 	AM53C974=	[HW,SCSI]
 
+	amijoy=		[HW,JOY] Amiga joystick support 
+ 
 	apm=		[APM] Advanced Power Management.
 
 	applicom=	[HW]
@@ -139,6 +141,12 @@ running once the system is up.
  
 	dasd=		[HW,NET]    
 
+	db9=		[HW,JOY]
+
+	db9_2=		[HW,JOY]
+
+	db9_3=		[HW,JOY]
+ 
 	debug		[KNL] Enable kernel debugging (events log level).
 
 	decnet=		[HW,NET]
@@ -179,6 +187,12 @@ running once the system is up.
 
 	ftape=		[HW] Floppy Tape subsystem debugging options.
 
+	gc=		[HW,JOY]
+
+	gc_2=		[HW,JOY]
+	 
+	gc_3=		[HW,JOY]
+ 
 	gdth=		[HW,SCSI]
 
 	gscd=		[HW,CD]
@@ -194,10 +208,6 @@ running once the system is up.
 
 	hisax=		[HW,ISDN]
 
-	in2000=		[HW,SCSI]
-
-	init=		[KNL]
-
 	ibmmcascsi=	[HW,MCA,SCSI] IBM MicroChannel SCSI adapter.
 
 	icn=		[HW,ISDN]
@@ -208,40 +218,20 @@ running once the system is up.
 	
 	idebus=		[HW] (E)IDE subsystem : VLB/PCI bus speed.
 
+	idle=		[HW]
+ 
+	in2000=		[HW,SCSI]
+
+	init=		[KNL]
+
 	ip=		[PNP]
 
 	isp16=		[HW,CD]
 
 	iucv=		[HW,NET] 
 
-	js_am=		[HW,JOY]
-
-	js_an=		[HW,JOY]
-
-	js_as=		[HW.JOY]
-
-	js_console=	[HW,JOY]
-
-	js_console2=	[HW,JOY]
-
-	js_console3=	[HW,JOY]
-
-	js_db9=		[HW,JOY]
-
-	js_db9_2=	[HW,JOY]
-
-	js_db9_3=	[HW,JOY]
-
-	js_l4=		[HW,JOY]
-
-	js_pci=		[HW,JOY,PCI]
+	js=		[HW,JOY] Analog joystick
  
-	js_tg=		[HW,JOY]
-
-	js_tg_2=	[HW,JOY]
-
-	js_tg_3=	[HW,JOY]
-
 	kbd-reset	[VT]
 
 	load_ramdisk=	[RAM] List of ramdisks to load from floppy.
@@ -353,6 +343,8 @@ running once the system is up.
 	nosmp		[SMP] Tells an SMP kernel to act as a UP kernel.
 
 	nosync		[HW, M68K] Disables sync negotiation for all devices.
+
+	notsc           [BUGS=ix86] Disable Time Stamp Counter
 
 	nowb		[ARM]
  
@@ -483,6 +475,12 @@ running once the system is up.
 	t128=		[HW,SCSI]
 
 	tdfx=		[HW,DRM]
+ 
+	tgfx=		[HW,JOY]
+
+	tgfx_2=		[HW,JOY]
+
+	tgfx_3=		[HW,JOY]
  
 	tmc8xx=		[HW,SCSI]
 

@@ -261,6 +261,7 @@ static void sync_all_inodes(void)
 /**
  *	write_inode_now	-	write an inode to disk
  *	@inode: inode to write to disk
+ *	@sync: whether the write should be synchronous or not
  *
  *	This function commits an inode to disk immediately if it is
  *	dirty. This is primarily needed by knfsd.

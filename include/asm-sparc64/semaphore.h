@@ -7,6 +7,7 @@
 #include <asm/atomic.h>
 #include <asm/bitops.h>
 #include <asm/system.h>
+#include <linux/wait.h>
 
 struct semaphore {
 	atomic_t count;

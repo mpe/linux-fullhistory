@@ -14,6 +14,15 @@ bool 'Prompt for development and/or incomplete code/drivers' CONFIG_EXPERIMENTAL
 endmenu
 
 mainmenu_option next_comment
+comment 'Loadable module support'
+bool 'Enable loadable module support' CONFIG_MODULES
+if [ "$CONFIG_MODULES" = "y" ]; then
+   bool '  Set version information on all module symbols' CONFIG_MODVERSIONS
+   bool '  Kernel module loader' CONFIG_KMOD
+fi
+endmenu
+
+mainmenu_option next_comment
 comment 'Processor type and features'
 choice 'SuperH system type'					\
 	"Generic		CONFIG_SH_GENERIC		\
@@ -44,15 +53,6 @@ if [ "$CONFIG_SH_SOLUTION_ENGINE" = "y" -o "$CONFIG_SH_HP600" = "y" -o \
 else
   hex 'Physical memory start address' CONFIG_MEMORY_START 08000000
   hex 'I/O port offset address' CONFIG_IOPORT_START ba000000
-fi
-endmenu
-
-mainmenu_option next_comment
-comment 'Loadable module support'
-bool 'Enable loadable module support' CONFIG_MODULES
-if [ "$CONFIG_MODULES" = "y" ]; then
-   bool 'Set version information on all symbols for modules' CONFIG_MODVERSIONS
-   bool 'Kernel module loader' CONFIG_KMOD
 fi
 endmenu
 

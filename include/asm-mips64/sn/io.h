@@ -1,6 +1,4 @@
-
-/* $Id: io.h,v 1.2 2000/02/02 16:35:57 ralf Exp $
- *
+/*
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
  * for more details.
@@ -12,6 +10,7 @@
 #define _ASM_SN_IO_H
 
 #include <linux/config.h>
+
 #if !defined(CONFIG_SGI_IO)
 #include <asm/sn/sn0/addrs.h>
 

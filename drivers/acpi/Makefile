@@ -11,7 +11,7 @@ O_TARGET := acpi.o
 O_OBJS   :=
 M_OBJS   :=
 
-ACPI_OBJS := osd.o
+ACPI_OBJS := driver.o ec.o cpu.o os.o sys.o tables.o
 ACPI_OBJS += $(patsubst %.c,%.o,$(wildcard */*.c))
 
 EXTRA_CFLAGS += -I./include -D_LINUX

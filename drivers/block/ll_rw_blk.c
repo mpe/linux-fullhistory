@@ -792,8 +792,7 @@ int generic_make_request (request_queue_t *q, int rw, struct buffer_head * bh)
    device. Currently the only restriction is that all buffers must belong to
    the same device */
 
-static void __ll_rw_block(int rw, int nr, struct buffer_head * bhs[],
-								int haslock)
+void ll_rw_block(int rw, int nr, struct buffer_head * bhs[])
 {
 	struct buffer_head *bh;
 	request_queue_t *q;
@@ -840,13 +839,9 @@ static void __ll_rw_block(int rw, int nr, struct buffer_head * bhs[],
 		bh = bhs[i];
 
 		/* Only one thread can actually submit the I/O. */
-		if (haslock) {
-			if (!buffer_locked(bh))
-				BUG();
-		} else {
-			if (test_and_set_bit(BH_Lock, &bh->b_state))
-				continue;
-		}
+		if (test_and_set_bit(BH_Lock, &bh->b_state))
+			continue;
+
 		set_bit(BH_Req, &bh->b_state);
 
 		/*
@@ -865,15 +860,6 @@ sorry:
 		buffer_IO_error(bhs[i]);
 }
 
-void ll_rw_block(int rw, int nr, struct buffer_head * bh[])
-{
-	__ll_rw_block(rw, nr, bh, 0);
-}
-
-void ll_rw_block_locked(int rw, int nr, struct buffer_head * bh[])
-{
-	__ll_rw_block(rw, nr, bh, 1);
-}
 
 #ifdef CONFIG_STRAM_SWAP
 extern int stram_device_init (void);

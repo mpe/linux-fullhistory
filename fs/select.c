@@ -164,6 +164,8 @@ int do_select(int n, fd_set_bits *fds, long *timeout)
 
 	poll_initwait(&table);
 	wait = &table;
+	if (!__timeout)
+		wait = NULL;
 	retval = 0;
 	for (;;) {
 		set_current_state(TASK_INTERRUPTIBLE);
@@ -385,7 +387,7 @@ asmlinkage long sys_poll(struct pollfd * ufds, unsigned int nfds, long timeout)
 {
 	int i, j, fdcount, err;
 	struct pollfd **fds;
-	poll_table table;
+	poll_table table, *wait;
 	int nchunks, nleft;
 
 	/* Do a sanity check on nfds ... */
@@ -401,8 +403,11 @@ asmlinkage long sys_poll(struct pollfd * ufds, unsigned int nfds, long timeout)
 	}
 
 	poll_initwait(&table);
-	err = -ENOMEM;
+	wait = &table;
+	if (!timeout)
+		wait = NULL;
 
+	err = -ENOMEM;
 	fds = NULL;
 	if (nfds != 0) {
 		fds = (struct pollfd **)kmalloc(
@@ -437,7 +442,7 @@ asmlinkage long sys_poll(struct pollfd * ufds, unsigned int nfds, long timeout)
 			goto out_fds1;
 	}
 
-	fdcount = do_poll(nfds, nchunks, nleft, fds, &table, timeout);
+	fdcount = do_poll(nfds, nchunks, nleft, fds, wait, timeout);
 
 	/* OK, now copy the revents fields back to user space. */
 	for(i=0; i < nchunks; i++)

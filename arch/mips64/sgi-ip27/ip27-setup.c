@@ -26,6 +26,7 @@
 #include <asm/pci/bridge.h>
 #include <asm/paccess.h>
 #include <asm/sn/sn0/ip27.h>
+#include <asm/sn/sn0/hubio.h>
 
 /* Check against user dumbness.  */
 #ifdef CONFIG_VT

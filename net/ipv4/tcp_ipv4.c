@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_ipv4.c,v 1.208 2000/05/03 06:37:06 davem Exp $
+ * Version:	$Id: tcp_ipv4.c,v 1.209 2000/07/12 03:49:30 davem Exp $
  *
  *		IPv4 specific functions
  *
@@ -69,8 +69,8 @@ extern int sysctl_ip_dynaddr;
 #define ICMP_MIN_LENGTH 8
 
 /* Socket used for sending RSTs */ 	
-struct inode tcp_inode;
-struct socket *tcp_socket=&tcp_inode.u.socket_i;
+static struct inode tcp_inode;
+static struct socket *tcp_socket=&tcp_inode.u.socket_i;
 
 void tcp_v4_send_check(struct sock *sk, struct tcphdr *th, int len, 
 		       struct sk_buff *skb);

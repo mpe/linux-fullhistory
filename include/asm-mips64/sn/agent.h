@@ -1,13 +1,12 @@
-/* $Id$
- *
+/*
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
  * for more details.
  *
  * This file has definitions for the hub and snac interfaces.
  *
- * Copyright (C) 1992 - 1997, 1999 Silcon Graphics, Inc.
- * Copyright (C) 1999 Ralf Baechle (ralf@gnu.org)
+ * Copyright (C) 1992 - 1997, 1999, 2000 Silcon Graphics, Inc.
+ * Copyright (C) 1999, 2000 Ralf Baechle (ralf@gnu.org)
  */
 #ifndef _ASM_SGI_SN_AGENT_H
 #define _ASM_SGI_SN_AGENT_H

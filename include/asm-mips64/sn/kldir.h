@@ -1,18 +1,18 @@
-/* $Id$
- *
+/*
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
  * for more details.
  *
  * Derived from IRIX <sys/SN/kldir.h>, revision 1.21.
  *
- * Copyright (C) 1992 - 1997, 1999 Silicon Graphics, Inc.
- * Copyright (C) 1999 by Ralf Baechle
+ * Copyright (C) 1992 - 1997, 1999, 2000 Silicon Graphics, Inc.
+ * Copyright (C) 1999, 2000 by Ralf Baechle
  */
 #ifndef _ASM_SN_KLDIR_H
 #define _ASM_SN_KLDIR_H
 
 #include <linux/config.h>
+
 #if defined(CONFIG_SGI_IO)
 #include <asm/hack.h>
 #endif

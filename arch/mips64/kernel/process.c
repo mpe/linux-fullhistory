@@ -1,11 +1,10 @@
-/* $Id: process.c,v 1.4 2000/01/16 01:34:01 ralf Exp $
- *
+/*
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
  * for more details.
  *
- * Copyright (C) 1994 - 1999 by Ralf Baechle and others.
- * Copyright (C) 1999 Silicon Graphics, Inc.
+ * Copyright (C) 1994 - 1999, 2000 by Ralf Baechle and others.
+ * Copyright (C) 1999, 2000 Silicon Graphics, Inc.
  */
 #include <linux/errno.h>
 #include <linux/sched.h>

@@ -100,10 +100,6 @@ NESTED(kernel_entry, 16, sp)			# kernel entry point
 
 	ARC64_TWIDDLE_PC
 
-	/* Note that all firmware passed argument registers still
-	   have their values.  */
-	jal	prom_init			# initialize firmware
-
 	CLI					# disable interrupts
 
 	mfc0	t0, CP0_STATUS
@@ -127,6 +123,10 @@ NESTED(kernel_entry, 16, sp)			# kernel entry point
 	dsrl32	t0, t0, 0
 	mtc0	t0, CP0_WATCHHI
 #endif
+	/* Note that all firmware passed argument registers still
+	   have their values.  */
+	jal	prom_init			# initialize firmware
+
 	jal	start_kernel
 1:	b	1b				# just in case ...
 	END(kernel_entry)

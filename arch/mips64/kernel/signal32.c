@@ -4,8 +4,8 @@
  * for more details.
  *
  * Copyright (C) 1991, 1992  Linus Torvalds
- * Copyright (C) 1994 - 1999  Ralf Baechle
- * Copyright (C) 1999 Silicon Graphics, Inc.
+ * Copyright (C) 1994 - 2000  Ralf Baechle
+ * Copyright (C) 1999, 2000 Silicon Graphics, Inc.
  */
 #include <linux/sched.h>
 #include <linux/mm.h>

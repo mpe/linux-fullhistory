@@ -1,20 +1,17 @@
-/* $Id$
- *
+/*
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
  * for more details.
  *
  * Derived from IRIX <sys/SN/klconfig.h>.
  *
- * Copyright (C) 1992 - 1997, 1999 Silicon Graphics, Inc.
- * Copyright (C) 1999 by Ralf Baechle
+ * Copyright (C) 1992 - 1997, 1999, 2000 Silicon Graphics, Inc.
+ * Copyright (C) 1999, 2000 by Ralf Baechle
  */
 #ifndef	_ASM_SN_KLCONFIG_H
 #define	_ASM_SN_KLCONFIG_H
 
-/*
- * klconfig.h
- */
+#include <linux/config.h>
 
 /*
  * The KLCONFIG structures store info about the various BOARDs found
@@ -32,34 +29,37 @@
  *      that offsets of existing fields do not change.
  */
 
-#include <linux/config.h>
 #include <linux/types.h>
 #include <asm/sn/types.h>
-#if defined(CONFIG_SGI_IP27) || defined(CONFIG_SGI_IP35)
-#include <asm/sn/agent.h>
-#include <asm/arc/types.h>
-#include <asm/arc/hinv.h>
-#endif /* CONFIG_SGI_IP27 || CONFIG_SGI_IP35 */
 #if defined(CONFIG_SGI_IP27)
 #include <asm/sn/sn0/addrs.h>
 //#include <sys/SN/router.h>
 // XXX Stolen from <sys/SN/router.h>:
 #define MAX_ROUTER_PORTS (6)    /* Max. number of ports on a router */
 #include <asm/sn/sn0/sn0_fru.h>
+#include <asm/sn/agent.h>
 //#include <sys/graph.h>
+#include <asm/arc/types.h>
+#include <asm/arc/hinv.h>
 //#include <sys/xtalk/xbow.h>
-#elif defined(CONFIG_SGI_IP35)
-#include <asm/sn/sn1/addrs.h>
-#include <sys/sn/router.h>
-#include <sys/graph.h>
-#include <asm/xtalk/xbow.h>
-#endif  /* !CONFIG_SGI_IP27 && !CONFIG_SGI_IP35 */
-#if (defined(CONFIG_SGI_IP27)&&defined(CONFIG_SGI_IO))||defined(CONFIG_SGI_IP35)
+#if defined(CONFIG_SGI_IO)
 // The hack file has to be before vector and after sn0_fru....
 #include <asm/hack.h>
 #include <asm/sn/vector.h>
 #include <asm/xtalk/xtalk.h>
-#endif  /* (CONFIG_SGI_IP27 && CONFIG_SGI_IO) || CONFIG_SGI_IP35 */
+#endif  /* CONFIG_SGI_IO */
+#elif defined(CONFIG_SGI_IP35)
+#include <asm/hack.h>
+#include <asm/sn/sn1/addrs.h>
+#include <asm/sn/vector.h>
+#include <sys/sn/router.h>
+#include <asm/sn/agent.h>
+#include <sys/graph.h>
+#include <asm/arc/types.h>
+#include <asm/arc/hinv.h>
+#include <asm/xtalk/xbow.h>
+#include <asm/xtalk/xtalk.h>
+#endif  /* !CONFIG_SGI_IP27 && !CONFIG_SGI_IP35 */
 
 #define KLCFGINFO_MAGIC	0xbeedbabe
 
