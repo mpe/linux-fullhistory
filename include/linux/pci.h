@@ -561,7 +561,7 @@ struct pci_dev {
 	int rom_attr_enabled;		/* has display of the rom attribute been enabled? */
 	struct bin_attribute *res_attr[DEVICE_COUNT_RESOURCE]; /* sysfs file for resources */
 #ifdef CONFIG_PCI_NAMES
-#define PCI_NAME_SIZE	96
+#define PCI_NAME_SIZE	255
 #define PCI_NAME_HALF	__stringify(43)	/* less than half to handle slop */
 	char		pretty_name[PCI_NAME_SIZE];	/* pretty name for users to see */
 #endif

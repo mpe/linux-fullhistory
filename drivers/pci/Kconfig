@@ -47,3 +47,13 @@ config PCI_NAMES
 
 	  When in doubt, say Y.
 
+config PCI_DEBUG
+	bool "PCI Debugging"
+	depends on PCI && DEBUG_KERNEL
+	help
+	  Say Y here if you want the PCI core to produce a bunch of debug
+	  messages to the system log.  Select this if you are having a
+	  problem with PCI support and want to see more of what is going on.
+
+	  When in doubt, say N.
+

@@ -361,7 +361,7 @@ void pcibios_update_resource(struct pci_dev *dev, struct resource *root,
         if (resource < 6) {
                 reg = PCI_BASE_ADDRESS_0 + 4 * resource;
         } else if (resource == PCI_ROM_RESOURCE) {
-                res->flags |= PCI_ROM_ADDRESS_ENABLE;
+		res->flags |= IORESOURCE_ROM_ENABLE;
                 reg = dev->rom_base_reg;
         } else {
                 /*
