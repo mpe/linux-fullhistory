@@ -844,7 +844,7 @@ static int usb_stor_scan_thread(void * __us)
 		printk(KERN_DEBUG "usb-storage: waiting for device "
 				"to settle before scanning\n");
 retry:
-		wait_event_interruptible_timeout(us->scsi_scan_wait,
+		wait_event_interruptible_timeout(us->delay_wait,
 				test_bit(US_FLIDX_DISCONNECTING, &us->flags),
 				delay_use * HZ);
 		if (current->flags & PF_FREEZE) {
@@ -893,9 +893,7 @@ static int storage_probe(struct usb_interface *intf,
 	init_MUTEX(&(us->dev_semaphore));
 	init_MUTEX_LOCKED(&(us->sema));
 	init_completion(&(us->notify));
-	init_waitqueue_head(&us->dev_reset_wait);
-	init_waitqueue_head(&us->scsi_scan_wait);
-	init_completion(&us->scsi_scan_done);
+	init_waitqueue_head(&us->delay_wait);
 
 	/* Associate the us_data structure with the USB device */
 	result = associate_dev(us, intf);
@@ -988,13 +986,13 @@ static void storage_disconnect(struct usb_interface *intf)
 	US_DEBUGP("storage_disconnect() called\n");
 
 	/* Prevent new USB transfers, stop the current command, and
-	 * interrupt a device-reset delay */
+	 * interrupt a SCSI-scan or device-reset delay */
 	set_bit(US_FLIDX_DISCONNECTING, &us->flags);
 	usb_stor_stop_transport(us);
-	wake_up(&us->dev_reset_wait);
+	wake_up(&us->delay_wait);
 
-	/* Interrupt the SCSI-device-scanning thread's time delay */
-	wake_up(&us->scsi_scan_wait);
+	/* It doesn't matter if the SCSI-scanning thread is still running.
+	 * The thread will exit when it sees the DISCONNECTING flag. */
 
 	/* Wait for the current command to finish, then remove the host */
 	down(&us->dev_semaphore);

@@ -1159,7 +1159,7 @@ static int usb_stor_reset_common(struct us_data *us,
 
  	/* Give the device some time to recover from the reset,
  	 * but don't delay disconnect processing. */
- 	wait_event_interruptible_timeout(us->dev_reset_wait,
+ 	wait_event_interruptible_timeout(us->delay_wait,
  			test_bit(US_FLIDX_DISCONNECTING, &us->flags),
  			HZ*6);
 	if (test_bit(US_FLIDX_DISCONNECTING, &us->flags)) {
