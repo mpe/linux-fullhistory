@@ -1316,7 +1316,7 @@ static int es1370_mmap(struct file *file, struct vm_area_struct *vma)
 		db = &s->dma_adc;
 	} else 
 		return -EINVAL;
-	if (vma->vm_offset != 0)
+	if (vma->vm_pgoff != 0)
 		return -EINVAL;
 	size = vma->vm_end - vma->vm_start;
 	if (size > (PAGE_SIZE << db->buforder))
@@ -1840,7 +1840,7 @@ static int es1370_mmap_dac(struct file *file, struct vm_area_struct *vma)
 		return -EINVAL;
 	if ((ret = prog_dmabuf_dac1(s)) != 0)
 		return ret;
-	if (vma->vm_offset != 0)
+	if (vma->vm_pgoff != 0)
 		return -EINVAL;
 	size = vma->vm_end - vma->vm_start;
 	if (size > (PAGE_SIZE << s->dma_dac1.buforder))

@@ -223,15 +223,16 @@ ncp_invalidate_dircache_entries(struct dentry *parent)
 }
 
 struct ncp_cache_head {
-	unsigned long			time;	/* cache age */
-	unsigned long			end;	/* last valid fpos in cache */
-	int				eof;
+	time_t		mtime;
+	unsigned long	time;	/* cache age */
+	unsigned long	end;	/* last valid fpos in cache */
+	int		eof;
 };
 
 #define NCP_DIRCACHE_SIZE	((int)(PAGE_CACHE_SIZE/sizeof(struct dentry *)))
 union ncp_dir_cache {
-	struct ncp_cache_head head;
-	struct dentry *dentry[NCP_DIRCACHE_SIZE];
+	struct ncp_cache_head	head;
+	struct dentry		*dentry[NCP_DIRCACHE_SIZE];
 };
 
 #define NCP_FIRSTCACHE_SIZE	((int)((NCP_DIRCACHE_SIZE * \

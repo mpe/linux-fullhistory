@@ -719,7 +719,7 @@ repeat:
 	 * Check whether we need to expand the fd array.
 	 */
 	if (fd >= files->max_fds) {
-		error = expand_fd_array(files, 0);
+		error = expand_fd_array(files, fd);
 		if (!error) {
 			error = -EMFILE;
 			goto repeat;

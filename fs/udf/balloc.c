@@ -402,7 +402,7 @@ search_back:
 
 got_block:
 	newblock = bit + (block_group << (sb->s_blocksize_bits + 3)) -
-		(group_start << 3);
+		(sizeof(struct SpaceBitmapDesc) << 3);
 
 	tmp = udf_get_pblock(sb, newblock, partition, 0);
 	if (!udf_clear_bit(bit, bh->b_data))
@@ -412,16 +412,6 @@ got_block:
 	}
 
 	mark_buffer_dirty(bh, 1);
-	if (!(bh = getblk(sb->s_dev, tmp, sb->s_blocksize)))
-	{
-		udf_debug("cannot get block %d\n", tmp);
-		unlock_super(sb);
-		return 0;
-	}
-	memset(bh->b_data, 0, sb->s_blocksize);
-	mark_buffer_uptodate(bh, 1);
-	mark_buffer_dirty(bh, 1);
-	udf_release_data(bh);
 
 	if (UDF_SB_LVIDBH(sb))
 	{

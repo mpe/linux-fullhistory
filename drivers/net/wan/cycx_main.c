@@ -1,5 +1,5 @@
 /*
-* cycx_main.c	Cyclades Cyclom X Multiprotocol WAN Link Driver. Main module.
+* cycx_main.c	Cyclades Cyclom 2X WAN Link Driver. Main module.
 *
 * Author:	Arnaldo Carvalho de Melo <acme@conectiva.com.br>
 *
@@ -40,7 +40,7 @@
 
 #ifdef MODULE
 MODULE_AUTHOR("Arnaldo Carvalho de Melo");
-MODULE_DESCRIPTION("Cyclades Sync Cards Driver.");
+MODULE_DESCRIPTION("Cyclom 2X Sync Card Driver.");
 #endif
 
 /* Defines & Macros */
@@ -73,7 +73,7 @@ static void cycx_isr (int irq, void *dev_id, struct pt_regs *regs);
 
 /* private data */
 static char drvname[]	= "cyclomx";
-static char fullname[]	= "CYCLOM X(tm) Multiprotocol Driver";
+static char fullname[]	= "CYCLOM 2X(tm) Sync Card Driver";
 static char copyright[]	= "(c) 1998, 1999 Arnaldo Carvalho de Melo";
 static int ncards = CONFIG_CYCLOMX_CARDS;
 static cycx_t *card_array = NULL;	/* adapter data space */
@@ -214,7 +214,6 @@ static int setup (wan_device_t *wandev, wandev_conf_t *conf)
 	card->hw.irq = (conf->irq == 9) ? 2 : conf->irq;
 	card->hw.dpmbase = conf->maddr;
 	card->hw.dpmsize = CYCX_WINDOWSIZE;
-	card->hw.type = conf->hw_opt[0];
 	card->hw.fwid = CFID_X25_2X;
 	card->lock = SPIN_LOCK_UNLOCKED;
 #if LINUX_VERSION_CODE >= 0x020300
@@ -234,9 +233,7 @@ static int setup (wan_device_t *wandev, wandev_conf_t *conf)
 	wandev->dma       = wandev->ioport = 0;
 	wandev->maddr     = (unsigned long*)card->hw.dpmbase;
 	wandev->msize     = card->hw.dpmsize;
-	wandev->hw_opt[0] = card->hw.type;
-	wandev->hw_opt[1] = card->hw.pclk;
-	wandev->hw_opt[2] = card->hw.memory;
+	wandev->hw_opt[2] = 0;
 	wandev->hw_opt[3] = card->hw.fwid;
 
 	/* Protocol-specific initialization */
@@ -251,7 +248,6 @@ static int setup (wan_device_t *wandev, wandev_conf_t *conf)
 	}
 
 	if (err) {
-		cycx_down(&card->hw);
 		free_irq(irq, card);
 		return err;
 	}
@@ -278,7 +274,6 @@ static int shutdown (wan_device_t *wandev)
 
 	card = wandev->private;
 	wandev->state = WAN_UNCONFIGURED;
-	cycx_down(&card->hw);
 	printk(KERN_INFO "%s: irq %d being freed!\n", wandev->name,wandev->irq);
 	free_irq(wandev->irq, card);
 	return 0;

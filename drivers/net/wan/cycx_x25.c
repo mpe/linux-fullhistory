@@ -1,5 +1,5 @@
 /*
-* cycx_x25.c	CYCLOM X Multiprotocol WAN Link Driver.  X.25 module.
+* cycx_x25.c	CYCLOM X WAN Link Driver.  X.25 module.
 *
 * Author:	Arnaldo Carvalho de Melo <acme@conectiva.com.br>
 * Copyright:	(c) 1998, 1999 Arnaldo Carvalho de Melo
@@ -11,6 +11,13 @@
 *		as published by the Free Software Foundation; either version
 *		2 of the License, or (at your option) any later version.
 * ============================================================================
+* 1999/10/27	acme		use ARPHRD_HWX25 so that the x25 stack know
+*				that we have a X.25 stack implemented in
+*				firmware onboard
+* 1999/10/18	acme		support for X.25 sockets in if_send,
+*				beware: socket(AF_X25...) IS WORK IN PROGRESS,
+*				TCP/IP over X.25 via wanrouter not affected,
+*				working.
 * 1999/10/09	acme		chan_disc renamed to chan_disconnect,
 * 				began adding support for X.25 sockets:
 * 				conf->protocol in new_if
@@ -52,14 +59,14 @@
 *				memset is put into the unresolved symbols
 *				instead of using the inline memset functions...
 * 1999/01/02    acme 		began chan_connect, chan_send, x25_send
-* Dec 31, 1998	Arnaldo		x25_configure
+* 1998/12/31	acme		x25_configure
 *				this code can be compiled as non module
-* Dec 27, 1998	Arnaldo		code cleanup
+* 1998/12/27	acme		code cleanup
 *				IPX code wiped out! let's decrease code
 *				complexity for now, remember: I'm learning! :)
 *                               bps_to_speed_code OK
-* Dec 26, 1998	Arnaldo		Minimal debug code cleanup
-* Aug 08, 1998	Arnaldo		Initial version.
+* 1998/12/26	acme		Minimal debug code cleanup
+* 1998/08/08	acme		Initial version.
 */
 #define CYCLOMX_X25_DEBUG 1
 
@@ -71,7 +78,7 @@
 #include <linux/malloc.h>	/* kmalloc(), kfree() */
 #include <linux/wanrouter.h>	/* WAN router definitions */
 #include <asm/byteorder.h>	/* htons(), etc. */
-#include <linux/if_arp.h>       /* ARPHRD_X25 */
+#include <linux/if_arp.h>       /* ARPHRD_HWX25 */
 #include <linux/cyclomx.h>	/* CYCLOM X common user API definitions */
 #include <linux/cycx_x25.h>	/* X.25 firmware API definitions */
 
@@ -137,10 +144,11 @@ static int x25_configure (cycx_t *card, TX25Config *conf),
 	   x25_disconnect_response (cycx_t *card, u8 link, u8 lcn);
 
 /* channel functions */
-int chan_connect (struct net_device *dev),
-    chan_send (struct net_device *dev, struct sk_buff *skb);
+static int chan_connect (struct net_device *dev),
+    	   chan_send (struct net_device *dev, struct sk_buff *skb);
 
-static void chan_disconnect (struct net_device *dev);
+static void chan_disconnect (struct net_device *dev),
+	    chan_x25_send_event(struct net_device *dev, u8 event);
 
 /* Miscellaneous functions */
 static void set_chan_state (struct net_device *dev, u8 state),
@@ -288,11 +296,11 @@ int cyx_init (cycx_t *card, wandev_conf_t *conf)
 	card->wandev.interface	= conf->interface;
 	card->wandev.clocking	= conf->clocking;
 	card->wandev.station	= conf->station;
-	card->isr		= &cyx_isr;
+	card->isr		= cyx_isr;
 	card->exec		= NULL;
-	card->wandev.update	= &update;
-	card->wandev.new_if	= &new_if;
-	card->wandev.del_if	= &del_if;
+	card->wandev.update	= update;
+	card->wandev.new_if	= new_if;
+	card->wandev.del_if	= del_if;
 	card->wandev.state	= WAN_DISCONNECTED;
 	return 0;
 }
@@ -328,7 +336,7 @@ static int new_if (wan_device_t *wandev, struct net_device *dev, wanif_conf_t *c
 	x25_channel_t *chan;
 	int err = 0;
 
-	if (conf->name[0] == '\0' || strlen(conf->name) > WAN_IFNAME_SZ) {
+	if (!conf->name[0] || strlen(conf->name) > WAN_IFNAME_SZ) {
 		printk(KERN_INFO "%s: invalid interface name!\n",card->devname);
 		return -EINVAL;
 	}
@@ -403,7 +411,7 @@ static int new_if (wan_device_t *wandev, struct net_device *dev, wanif_conf_t *c
 
 	/* prepare network device data space for registration */
 	dev->name = chan->name;
-	dev->init = &if_init;
+	dev->init = if_init;
 	dev->priv = chan;
 	return 0;
 }
@@ -411,11 +419,6 @@ static int new_if (wan_device_t *wandev, struct net_device *dev, wanif_conf_t *c
 /* Delete logical channel. */
 static int del_if (wan_device_t *wandev, struct net_device *dev)
 {
-	if (!dev) {
-		printk(KERN_ERR "cycx_x25:del_if:dev == NULL!\n");
-		return 0;
-	}
-
 	if (dev->priv) {
 		x25_channel_t *chan = dev->priv;
 
@@ -447,16 +450,16 @@ static int if_init (struct net_device *dev)
 	wan_device_t *wandev = &card->wandev;
 
 	/* Initialize device driver entry points */
-	dev->open = &if_open;
-	dev->stop = &if_close;
-	dev->hard_header = &if_header;
-	dev->rebuild_header = &if_rebuild_hdr;
-	dev->hard_start_xmit = &if_send;
-	dev->get_stats = &if_stats;
+	dev->open = if_open;
+	dev->stop = if_close;
+	dev->hard_header = if_header;
+	dev->rebuild_header = if_rebuild_hdr;
+	dev->hard_start_xmit = if_send;
+	dev->get_stats = if_stats;
 
 	/* Initialize media-specific parameters */
 	dev->mtu = X25_CHAN_MTU;
-	dev->type = ARPHRD_X25;		/* ARP h/w type */
+	dev->type = ARPHRD_HWX25;	/* ARP h/w type */
 	dev->hard_header_len = 0;	/* media header length */
 	dev->addr_len = 0;		/* hardware address length */
 
@@ -577,27 +580,57 @@ static int if_send (struct sk_buff *skb, struct net_device *dev)
                         "%s: unsupported Ethertype 0x%04X on interface %s!\n",
                         card->devname, skb->protocol, dev->name);
                 ++chan->ifstats.tx_errors;
-        } else switch (chan->state) {
-		case WAN_DISCONNECTED:
-			if (chan_connect(dev)) {
+        } else if (chan->protocol == ETH_P_IP) {
+		switch (chan->state) {
+			case WAN_DISCONNECTED:
+				if (chan_connect(dev)) {
+					dev->tbusy = 1;
+					return -EBUSY;
+				}
+				/* fall thru */
+			case WAN_CONNECTED:
+				reset_timer(dev);
+				dev->trans_start = jiffies;
 				dev->tbusy = 1;
-				return -EBUSY;
-			}
-			/* fall thru */
-		case WAN_CONNECTED:
-			reset_timer(dev);
-			dev->trans_start = jiffies;
-			dev->tbusy = 1;
 
-			if (chan_send(dev, skb)) {
-				return -EBUSY;
-			}
-			break;
-		default:
-			++chan->ifstats.tx_dropped;	
-			++card->wandev.stats.tx_dropped;
+				if (chan_send(dev, skb))
+					return -EBUSY;
+
+				break;
+			default:
+				++chan->ifstats.tx_dropped;	
+				++card->wandev.stats.tx_dropped;
+		} 
+	} else { /* chan->protocol == ETH_P_X25 */
+		switch (skb->data[0]) {
+			case 0: break;
+			case 1: /* Connect request */
+				chan_connect(dev);
+				goto free_packet;
+		        case 2: /* Disconnect request */
+				chan_disconnect(dev);
+				goto free_packet;
+		        default:
+				printk(KERN_INFO
+				       "%s: unknown %d x25-iface request on %s!\n",
+                       			card->devname, skb->data[0], dev->name);
+               			++chan->ifstats.tx_errors;
+				goto free_packet;
+		}
+
+		skb_pull(skb, 1); /* Remove control byte */
+		reset_timer(dev);
+		dev->trans_start = jiffies;
+		dev->tbusy = 1;
+
+		if (chan_send(dev, skb)) {
+			/* prepare for future retransmissions */
+			skb_push(skb, 1);
+			return -EBUSY;
+		}
 	}
 
+free_packet:
 	dev_kfree_skb(skb);
 	return 0;
 }
@@ -733,7 +766,8 @@ static void rx_intr (cycx_t *card, TX25Cmd *cmd)
 		/* Allocate new socket buffer */
 		int bufsize = bitm ? dev->mtu : pktlen;
 
-		if ((skb = dev_alloc_skb(bufsize +
+		if ((skb = dev_alloc_skb((chan->protocol == ETH_P_X25 ? 1 : 0) +
+					 bufsize +
 					 dev->hard_header_len)) == NULL) {
 			printk(KERN_INFO "%s: no socket buffers available!\n",
 					 card->devname);
@@ -741,6 +775,10 @@ static void rx_intr (cycx_t *card, TX25Cmd *cmd)
 			++chan->ifstats.rx_dropped;
 			return;
 		}
+
+		if (chan->protocol == ETH_P_X25) /* X.25 socket layer control */
+			/* 0 = data packet (dev_alloc_skb zeroed skb->data) */
+			skb_put(skb, 1); 
 
 		skb->dev = dev;
 		skb->protocol = htons(chan->protocol);
@@ -770,12 +808,11 @@ static void rx_intr (cycx_t *card, TX25Cmd *cmd)
 	dev->last_rx = jiffies;		/* timestamp */
 	chan->rx_skb = NULL;		/* dequeue packet */
 
-	skb->protocol = htons(chan->protocol);
-	skb->dev = dev;
-	skb->mac.raw = skb->data;
-	netif_rx(skb);
 	++chan->ifstats.rx_packets;
 	chan->ifstats.rx_bytes += skb->len;
+
+	skb->mac.raw = skb->data;
+	netif_rx(skb);
 }
 
 /* Connect interrupt handler. */
@@ -1236,7 +1273,7 @@ static struct net_device *get_dev_by_dte_addr (wan_device_t *wandev, char *dte)
  * Return:	0	connected
  *		>0	connection in progress
  *		<0	failure */
-int chan_connect (struct net_device *dev)
+static int chan_connect (struct net_device *dev)
 {
 	x25_channel_t *chan = dev->priv;
 	cycx_t *card = chan->card;
@@ -1307,6 +1344,10 @@ static void set_chan_state (struct net_device *dev, u8 state)
 				*(u16*)dev->dev_addr = htons(chan->lcn);
 				dev->tbusy = 0;
 				reset_timer(dev);
+
+				if (chan->protocol == ETH_P_X25)
+					chan_x25_send_event(dev, 1);
+
 				break;
 
 			case WAN_CONNECTING:
@@ -1329,6 +1370,10 @@ static void set_chan_state (struct net_device *dev, u8 state)
 					*(unsigned short*)dev->dev_addr = 0;
 					chan->lcn = 0;
                                 }
+
+				if (chan->protocol == ETH_P_X25)
+					chan_x25_send_event(dev, 2);
+
 				dev->tbusy = 0;
 				break;
 		}
@@ -1352,7 +1397,7 @@ static void set_chan_state (struct net_device *dev, u8 state)
  *    the packet into 'complete sequence' using M-bit.
  * 2. When transmission is complete, an event notification should be issued
  *    to the router.  */
-int chan_send (struct net_device *dev, struct sk_buff *skb)
+static int chan_send (struct net_device *dev, struct sk_buff *skb)
 {
 	x25_channel_t *chan = dev->priv;
 	cycx_t *card = chan->card;
@@ -1375,6 +1420,29 @@ int chan_send (struct net_device *dev, struct sk_buff *skb)
 	++chan->ifstats.tx_packets;
 	chan->ifstats.tx_bytes += len;
 	return 0;
+}
+
+/* Send event (connection, disconnection, etc) to X.25 socket layer */
+
+static void chan_x25_send_event(struct net_device *dev, u8 event)
+{
+        struct sk_buff *skb;
+        unsigned char *ptr;
+
+        if ((skb = dev_alloc_skb(1)) == NULL) {
+                printk(KERN_ERR __FUNCTION__ ": out of memory\n");
+                return;
+        }
+
+        ptr  = skb_put(skb, 1);
+        *ptr = event;
+
+        skb->dev = dev;
+        skb->protocol = htons(ETH_P_X25);
+        skb->mac.raw = skb->data;
+        skb->pkt_type = PACKET_HOST;
+
+        netif_rx(skb);
 }
 
 /* Convert line speed in bps to a number used by cyclom 2x code. */

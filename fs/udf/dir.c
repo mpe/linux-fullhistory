@@ -180,7 +180,7 @@ do_udf_readdir(struct inode * dir, struct file *filp, filldir_t filldir, void *d
 		&bloc, &extoffset, &eloc, &elen, &offset, &bh) == EXTENT_RECORDED_ALLOCATED)
 	{
 		block = udf_get_lb_pblock(dir->i_sb, eloc, offset);
-		if (++offset < (elen >> dir->i_sb->s_blocksize_bits))
+		if ((++offset << dir->i_sb->s_blocksize_bits) < elen)
 		{
 			if (UDF_I_ALLOCTYPE(dir) == ICB_FLAG_AD_SHORT)
 				extoffset -= sizeof(short_ad);
@@ -207,8 +207,6 @@ do_udf_readdir(struct inode * dir, struct file *filp, filldir_t filldir, void *d
 		filp->f_pos = nf_pos;
 
 		fi = udf_fileident_read(dir, &nf_pos, &fibh, &cfi, &bloc, &extoffset, &offset, &bh);
-		liu = le16_to_cpu(cfi.lengthOfImpUse);
-		lfi = cfi.lengthFileIdent;
 
 		if (!fi)
 		{
@@ -218,6 +216,9 @@ do_udf_readdir(struct inode * dir, struct file *filp, filldir_t filldir, void *d
 			udf_release_data(bh);
 			return 1;
 		}
+
+		liu = le16_to_cpu(cfi.lengthOfImpUse);
+		lfi = cfi.lengthFileIdent;
 
 		if (fibh.sbh == fibh.ebh)
 			nameptr = fi->fileIdent + liu;

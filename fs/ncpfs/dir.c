@@ -371,24 +371,31 @@ finished:
 static struct page *
 ncp_get_cache_page(struct inode *inode, unsigned long offset, int used)
 {
-	struct page *page, **hash;
-	struct page *page_cache;
+	struct address_space *i_data = &inode->i_data;
+	struct page *new_page, *page, **hash;
 
-	hash = page_hash(&inode->i_data, offset);
-	page = __find_lock_page(&inode->i_data, offset, hash);
+	hash = page_hash(i_data, offset);
 
+	page = __find_lock_page(i_data, offset, hash);
 	if (used || page)
 		return page;
 
-	page_cache = page_cache_alloc();
-	if (page_cache) {
-		page = page_cache;
-		if (add_to_page_cache_unique(page, &inode->i_data, offset, hash)) {
-			page_cache_release(page);
-			page = NULL;
-			page_cache_free(page_cache);
+	new_page = page_cache_alloc();
+	if (!new_page)
+		return NULL;
+
+	for (;;) {
+		page = new_page;
+		if (!add_to_page_cache_unique(page, i_data, offset, hash))
+			break;
+		page_cache_release(page);
+		page = __find_lock_page(i_data, offset, hash);
+		if (page) {
+			page_cache_free(new_page);
+			break;
 		}
 	}
+
 	return page;
 }
 
@@ -460,6 +467,29 @@ out:
 	return NULL;
 }
 
+static time_t ncp_obtain_mtime(struct dentry *dentry)
+{
+	struct inode *inode = dentry->d_inode;
+	struct inode *parent = dentry->d_parent->d_inode;
+	struct ncp_server *server = NCP_SERVER(inode);
+	struct nw_info_struct i;
+	int len = dentry->d_name.len;
+	__u8 __name[len + 1];
+
+	if (!ncp_conn_valid(server) ||
+	    (inode == inode->i_sb->s_root->d_inode) ||
+	    ncp_is_server_root(parent))
+		return 0;
+
+	memcpy(__name, dentry->d_name.name, len);
+	io2vol(server, __name, !ncp_preserve_case(parent));
+	if (ncp_obtain_info(server, parent, __name, &i))
+		return 0;
+
+	return ncp_date_dos2unix(le16_to_cpu(i.modifyTime),
+						le16_to_cpu(i.modifyDate));
+}
+
 static int ncp_readdir(struct file *filp, void *dirent, filldir_t filldir)
 {
 	struct dentry *dentry = filp->f_dentry;
@@ -497,36 +527,31 @@ static int ncp_readdir(struct file *filp, void *dirent, filldir_t filldir)
 	page = ncp_get_cache_page(inode, 0, 0);
 	if (!page)
 		goto read_really;
- 
+
 	ctl.cache = cache = (union ncp_dir_cache *) page_address(page);
 	ctl.head  = cache->head;
- 
+
 	if (!Page_Uptodate(page) || !ctl.head.eof)
 		goto init_cache;
- 
-	if ((filp->f_pos == 2) &&
-	    (jiffies - ctl.head.time >= NCP_MAX_AGE(server)))
-		/* Test, whether inode is changed. */
-/*		if (...)	*/
+
+	if (filp->f_pos == 2) {
+		time_t mtime;
+
+		if (jiffies - ctl.head.time >= NCP_MAX_AGE(server))
 			goto init_cache;
-		/* Todo, if inode is unchanged? */
-/*		else {
-			ncp_renew_dentries(dentry);
-			ctl.head.time = jiffies;
-		}	*/
- 
+
+		mtime = ncp_obtain_mtime(dentry);
+		if ((!mtime) || (mtime != ctl.head.mtime))
+			goto init_cache;
+	}
+
 	if (filp->f_pos > ctl.head.end)
 		goto finished;
- 
-	/*
-	 * Should we check the complete cache before using?
-	 * If we have big dirs, it can take a long time.
-	 */
- 
+
 	ctl.fpos = filp->f_pos + (NCP_DIRCACHE_START - 2);
 	ctl.ofs  = ctl.fpos / NCP_DIRCACHE_SIZE;
 	ctl.idx  = ctl.fpos % NCP_DIRCACHE_SIZE;
- 
+
 	for (;;) {
 		if (ctl.ofs != 0) {
 			ctl.page = ncp_get_cache_page(inode, ctl.ofs, 1);
@@ -540,7 +565,7 @@ static int ncp_readdir(struct file *filp, void *dirent, filldir_t filldir)
 		while (ctl.idx < NCP_DIRCACHE_SIZE) {
 			struct dentry *dent;
 			int res;
- 
+
 			dent = ncp_dget_fpos(ctl.cache->dentry[ctl.idx],
 						dentry, filp->f_pos);
 			if (!dent)
@@ -574,6 +599,7 @@ invalid_cache:
 	ctl.cache = cache;
 init_cache:
 	ncp_invalidate_dircache_entries(dentry);
+	ctl.head.mtime = ncp_obtain_mtime(dentry);
 	ctl.head.time = jiffies;
 	ctl.head.eof = 0;
 	ctl.fpos = 2;

@@ -1025,14 +1025,14 @@ asmlinkage long sys_mount(char * dev_name, char * dir_name, char * type,
 	struct dentry * dentry = NULL;
 	struct inode * inode = NULL;
 	kdev_t dev;
-	int retval = -EPERM;
+	int retval;
 	unsigned long flags = 0;
 	unsigned long page = 0;
 	struct file dummy;	/* allows read-write or read-only flag */
 
-	lock_kernel();
 	if (!capable(CAP_SYS_ADMIN))
-		goto out;
+		return -EPERM;
+	lock_kernel();
 	if ((new_flags &
 	     (MS_MGC_MSK | MS_REMOUNT)) == (MS_MGC_VAL | MS_REMOUNT)) {
 		retval = copy_mount_options (data, &page);

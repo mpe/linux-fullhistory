@@ -1,7 +1,7 @@
 #ifndef __UDF_DECL_H
 #define __UDF_DECL_H
 
-#define UDF_VERSION_NOTICE "v0.8.9"
+#define UDF_VERSION_NOTICE "v0.8.9.3"
 
 #ifdef __KERNEL__
 
@@ -249,7 +249,7 @@ extern Uint32 udf64_low32(Uint64);
 extern Uint32 udf64_high32(Uint64);
 
 
-extern time_t *udf_stamp_to_time(time_t *, timestamp);
+extern time_t *udf_stamp_to_time(time_t *, long *, timestamp);
 extern timestamp *udf_time_to_stamp(timestamp *, time_t, long);
 extern time_t udf_converttime (struct ktm *);
 

@@ -54,15 +54,23 @@
 #ifdef __KERNEL__
 #include <linux/types.h>
 #define Uint8	__u8
+#define Sint8	__s8
 #define Uint16	__u16
+#define Sint16	__s16
 #define Uint32	__u32
+#define Sint32	__s32
 #define Uint64	__u64
+#define Sint64	__s64
 typedef Uint8	dstring;
 #else
 #define Uint8	unsigned char
+#define Sint8	char
 #define Uint16	unsigned short
+#define Sint16	short
 #define Uint32	unsigned int
+#define Sint32	int
 #define Uint64	unsigned long long
+#define Sint64	long long
 typedef Uint8	dstring;
 #endif
 

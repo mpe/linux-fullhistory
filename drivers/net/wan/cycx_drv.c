@@ -1,9 +1,8 @@
 /*
-* cycx_drv.c	cycx Support Module.
+* cycx_drv.c	Cyclom 2X Support Module.
 *
 *		This module is a library of common hardware-specific
-*		functions used by all Cyclades sync and some async (8x & 16x)
-*		drivers.
+*		functions used by the Cyclades Cyclom 2X sync card.
 *
 * Copyright:	(c) 1998, 1999 Arnaldo Carvalho de Melo <acme@conectiva.com.br>
 *
@@ -16,6 +15,11 @@
 *		as published by the Free Software Foundation; either version
 *		2 of the License, or (at your option) any later version.
 * ============================================================================
+* 1999/10/26	acme		use isa_read[bw], isa_write[bw] and isa_memcpy_to
+*				and fromio
+* 1999/10/23	acme		cleanup to only supports cyclom2x: all the other
+*				boards are no longer manufactured by cyclades, if
+*				someone wants to support them... be my guest!
 * 1999/05/28    acme		cycx_intack & cycx_intde gone for good
 * 1999/05/18	acme		lots of unlogged work, submitting to Linus...
 * 1999/01/03	acme		more judicious use of data types
@@ -27,16 +31,16 @@
 *				to ack an int in cycx_drv.c, only handle it in
 *				cyx_isr (or in the other protocols: cyp_isr,
 *				cyf_isr, when they get implemented.
-* Dec 31, 1998	Arnaldo         cycx_data_boot & cycx_code_boot fixed, crossing
+* Dec 31, 1998	acme		cycx_data_boot & cycx_code_boot fixed, crossing
 *				fingers to see x25_configure in cycx_x25.c
 *				work... :)
-* Dec 26, 1998	Arnaldo         load implementation fixed, seems to work! :)
+* Dec 26, 1998	acme		load implementation fixed, seems to work! :)
 *				cycx_2x_dpmbase_options with all the possible
 *				DPM addresses (20).
 *				cycx_intr implemented (test this!)
 *				general code cleanup
 * Dec  8, 1998	Ivan Passos	Cyclom-2X firmware load implementation.
-* Aug  8, 1998	Arnaldo		Initial version.
+* Aug  8, 1998	acme		Initial version.
 */
 
 #ifdef MODULE
@@ -57,11 +61,11 @@
 #include <asm/io.h>		/* for inb(), outb(), etc. */
 
 #define	MOD_VERSION	0
-#define	MOD_RELEASE	2
+#define	MOD_RELEASE	3
 
 #ifdef MODULE
 MODULE_AUTHOR("Arnaldo Carvalho de Melo");
-MODULE_DESCRIPTION("Cyclades Sync Cards Driver.");
+MODULE_DESCRIPTION("Cyclom 2x Sync Card Driver");
 #endif
 
 /* Function Prototypes */
@@ -70,15 +74,12 @@ int init_module (void);
 void cleanup_module (void);
 
 /* Hardware-specific functions */
-static int cycx_detect (cycxhw_t *hw);
-static int cycx_load (cycxhw_t *hw, cfm_t *cfm, u32 len);
-static int cycx_init (cycxhw_t *hw);
-static int cycx_reset (cycxhw_t *hw);
+static int load_cyc2x (cycxhw_t *hw, cfm_t *cfm, u32 len);
 static void cycx_bootcfg (cycxhw_t *hw);
 
-static int init_cycx_2x (cycxhw_t *hw);
-static int reset_cycx_2x (u32 addr);
-static int detect_cycx_2x (u32 addr);
+static int init_cyc2x (cycxhw_t *hw);
+static int reset_cyc2x (u32 addr);
+static int detect_cyc2x (u32 addr);
 
 /* Miscellaneous functions */
 static void delay_cycx (int sec);
@@ -87,19 +88,25 @@ static u16 checksum (u8 *buf, u32 len);
 
 #define wait_cyc(addr) cycx_exec(addr + CMD_OFFSET)
 
-/* Global Data
- * Note: All data must be explicitly initialized!!! */
+#define cyc2x_readb(b) isa_readb(b)
+#define cyc2x_readw(b) isa_readw(b)
+#define cyc2x_writeb(b, addr) isa_writeb(b, addr)
+#define cyc2x_writew(w, addr) isa_writew(w, addr)
+#define cyc2x_memcpy_toio(addr, buf, len) isa_memcpy_toio((addr), buf, len)
+#define cyc2x_memcpy_fromio(buf, addr, len) isa_memcpy_fromio(buf, (addr), len)
+
+/* Global Data */
 
 /* private data */
 static char modname[] = "cycx_drv";
-static char fullname[] = "Cyclom X Support Module";
+static char fullname[] = "Cyclom 2X Support Module";
 static char copyright[]	= "(c) 1998, 1999 Arnaldo Carvalho de Melo";
 
 /* Hardware configuration options.
  * These are arrays of configuration options used by verification routines.
  * The first element of each array is its size (i.e. number of options).
  */
-static u32 cycx_2x_dpmbase_options[] =
+static u32 cyc2x_dpmbase_options[] =
 {
 	20,
 	0xA0000, 0xA4000, 0xA8000, 0xAC000, 0xB0000, 0xB4000, 0xB8000,
@@ -143,32 +150,18 @@ void cleanup_module (void)
 EXPORT_SYMBOL(cycx_setup);
 int cycx_setup (cycxhw_t *hw, void *cfm, u32 len)
 {
-	u32 *irq_opt = NULL;	/* IRQ options */
-	u32 *dpmbase_opt = NULL;/* DPM window base options */
-	int err = 0;
-
-	if (cycx_detect(hw)) {
-		printk(KERN_ERR "%s: adapter Cyclom %uX not found at "
+	if (!detect_cyc2x(hw->dpmbase)) {
+		printk(KERN_ERR "%s: adapter Cyclom 2X not found at "
 				"address 0x%lX!\n",
-			modname, hw->type, (unsigned long) hw->dpmbase);
+			modname, (unsigned long) hw->dpmbase);
 		return -EINVAL;
 	}
 
-	printk(KERN_INFO "%s: found Cyclom %uX card at address 0x%lx.\n",
-			 modname, hw->type, (unsigned long) hw->dpmbase);
-
-	switch (hw->type) {
-		case CYCX_2X:
-			irq_opt	= cycx_2x_irq_options;
-			dpmbase_opt = cycx_2x_dpmbase_options;
-			break;
-		default:
-			printk(KERN_ERR "%s: unknown card.\n", modname);
-			return -EINVAL;
-	}
+	printk(KERN_INFO "%s: found Cyclom 2X card at address 0x%lx.\n",
+			 modname, (unsigned long) hw->dpmbase);
 
 	/* Verify IRQ configuration options */
-	if (!get_option_index(irq_opt, hw->irq)) {
+	if (!get_option_index(cycx_2x_irq_options, hw->irq)) {
 		printk (KERN_ERR "%s: IRQ %d is illegal!\n", modname, hw->irq);
 		return -EINVAL;
 	} 
@@ -179,60 +172,35 @@ int cycx_setup (cycxhw_t *hw, void *cfm, u32 len)
 				modname);
  		return -EINVAL;
 	}
-	else if (!get_option_index(dpmbase_opt, hw->dpmbase)) {
+	else if (!get_option_index(cyc2x_dpmbase_options, hw->dpmbase)) {
 		printk(KERN_ERR "%s: memory address 0x%lX is illegal!\n",
 				modname, (unsigned long) hw->dpmbase);
 		return -EINVAL;
 	}
 
 	hw->dpmsize = CYCX_WINDOWSIZE;
-	/* FIXME! Is this the only amount ever available? */
-	hw->memory = 0x40000;
 
-	cycx_init(hw);
+	init_cyc2x(hw);
 
 	printk(KERN_INFO "%s: dual-port memory window is set at 0x%lX.\n",
 			 modname, (unsigned long) hw->dpmbase);
-	printk(KERN_INFO "%s: found %luK bytes of on-board memory.\n",
-			 modname, (unsigned long) hw->memory / 1024);
 
 	/* Load firmware. If loader fails then shut down adapter */
-	err = cycx_load(hw, cfm, len);
-	if (err) cycx_down(hw);		/* shutdown adapter */
-	return err;
+	return load_cyc2x(hw, cfm, len);
 } 
-
-/* Shut down CYCX: disable shared memory access and interrupts, stop CPU,etc.*/ 
-EXPORT_SYMBOL(cycx_down);
-int cycx_down (cycxhw_t *hw)
-{
-	return 0; /* FIXME: anything needed here? */
-}
 
 /* Enable interrupt generation.  */
 EXPORT_SYMBOL(cycx_inten);
-int cycx_inten (cycxhw_t *hw)
+void cycx_inten (cycxhw_t *hw)
 {
-	switch (hw->type) {
-		case CYCX_2X: writeb (0, hw->dpmbase); break;
-		default: return -EINVAL;
-	}
-
-	return 0;
+	cyc2x_writeb (0, hw->dpmbase);
 }
 
 /* Generate an interrupt to adapter's CPU. */
 EXPORT_SYMBOL(cycx_intr);
-int cycx_intr (cycxhw_t *hw)
+void cycx_intr (cycxhw_t *hw)
 {
-	switch (hw->type) {
-		case CYCX_2X:
-			writew(0, hw->dpmbase + GEN_CYCX_INTR);
-			return 0;
-		default: return -EINVAL;
-	}
-
-	return 0;
+	cyc2x_writew(0, hw->dpmbase + GEN_CYCX_INTR);
 }
 
 /* Execute Adapter Command.
@@ -244,7 +212,7 @@ int cycx_exec (u32 addr)
 	u16 i = 0;
 	/* wait till addr content is zeroed */
 
-	while (readw(addr) != 0) {
+	while (cyc2x_readw(addr)) {
 		udelay(1000);
 		if (++i > 50) return -1;
 	}
@@ -257,8 +225,8 @@ int cycx_exec (u32 addr)
 EXPORT_SYMBOL(cycx_peek);
 int cycx_peek (cycxhw_t *hw, u32 addr, void *buf, u32 len)
 {
-	if (len == 1)	*(u8*)buf = readb (hw->dpmbase + addr);
-	else 		memcpy_fromio(buf, hw->dpmbase + addr, len);
+	if (len == 1)	*(u8*)buf = cyc2x_readb (hw->dpmbase + addr);
+	else 		cyc2x_memcpy_fromio(buf, hw->dpmbase + addr, len);
 
 	return 0;
 }
@@ -268,38 +236,13 @@ int cycx_peek (cycxhw_t *hw, u32 addr, void *buf, u32 len)
 EXPORT_SYMBOL(cycx_poke);
 int cycx_poke (cycxhw_t *hw, u32 addr, void *buf, u32 len)
 {
-	if (len == 1) writeb (*(u8*)buf, hw->dpmbase + addr);
-	else	      memcpy_toio(hw->dpmbase + addr, buf, len);
+	if (len == 1) cyc2x_writeb (*(u8*)buf, hw->dpmbase + addr);
+	else	      cyc2x_memcpy_toio(hw->dpmbase + addr, buf, len);
 
 	return 0;
 }
 
 /* Hardware-Specific Functions */
-/* Detect adapter type.
- * o if adapter type is specified then call detection routine for that adapter
- *   type.  Otherwise call detection routines for every adapter types until
- *   adapter is detected.
- *
- * Notes:
- * 1) Detection tests are destructive! Adapter will be left in shutdown state
- *    after the test. */
-static int cycx_detect (cycxhw_t *hw)
-{
-	int err = 0;
-
-	if (!hw->dpmbase) return -EFAULT;
-
-	switch (hw->type) {
-		case CYCX_2X:
-			if (!detect_cycx_2x(hw->dpmbase)) err = -ENODEV;
-			break;
-		default:
-			if (detect_cycx_2x(hw->dpmbase)) hw->type = CYCX_2X;
-			else err = -ENODEV;
-	}
-
-	return err;
-}
 
 /* Load Aux Routines */
 /* Reset board hardware.
@@ -309,26 +252,15 @@ static int memory_exists(u32 addr)
 	int timeout = 0;
 
 	for (; timeout < 3 ; timeout++) {
-		writew (TEST_PATTERN, addr + 0x10);
+		cyc2x_writew (TEST_PATTERN, addr + 0x10);
 
-		if (readw (addr + 0x10) == TEST_PATTERN)
-			if (readw (addr + 0x10) == TEST_PATTERN) return 1;
+		if (cyc2x_readw (addr + 0x10) == TEST_PATTERN)
+			if (cyc2x_readw (addr + 0x10) == TEST_PATTERN) return 1;
 
 		delay_cycx(1);
 	}
 
 	return 0;
-}
-
-/* Reset board hardware. */
-static int cycx_reset(cycxhw_t *hw)
-{
-	/* Reset board */
-	switch (hw->type) {
-		case CYCX_2X: return reset_cycx_2x(hw->dpmbase);
-	}
-
-	return -EINVAL;
 }
 
 /* Load reset code. */
@@ -339,7 +271,7 @@ static void reset_load(u32 addr, u8 *buffer, u32 cnt)
 
 	for ( i = 0 ; i < cnt ; i++) {
 		for (j = 0 ; j < 50 ; j++); /* Delay - FIXME busy waiting... */
-		writeb(*buffer++, pt_code++);
+		cyc2x_writeb(*buffer++, pt_code++);
 	}
 }
 
@@ -348,8 +280,8 @@ static void reset_load(u32 addr, u8 *buffer, u32 cnt)
  * o wait for reset code to copy it to right portion of memory */
 static int buffer_load(u32 addr, u8 *buffer, u32 cnt)
 {
-	memcpy_toio(addr + DATA_OFFSET, buffer, cnt);
-	writew(GEN_BOOT_DAT, addr + CMD_OFFSET);
+	cyc2x_memcpy_toio(addr + DATA_OFFSET, buffer, cnt);
+	cyc2x_writew(GEN_BOOT_DAT, addr + CMD_OFFSET);
 	return wait_cyc(addr);
 }
 
@@ -357,14 +289,14 @@ static int buffer_load(u32 addr, u8 *buffer, u32 cnt)
 static void cycx_start (u32 addr)
 {
 	/* put in 0x30 offset the jump instruction to the code entry point */
-	writeb(0xea, addr + 0x30);
-	writeb(0x00, addr + 0x31);
-	writeb(0xc4, addr + 0x32);
-	writeb(0x00, addr + 0x33);
-	writeb(0x00, addr + 0x34);
+	cyc2x_writeb(0xea, addr + 0x30);
+	cyc2x_writeb(0x00, addr + 0x31);
+	cyc2x_writeb(0xc4, addr + 0x32);
+	cyc2x_writeb(0x00, addr + 0x33);
+	cyc2x_writeb(0x00, addr + 0x34);
 
 	/* cmd to start executing code */
-	writew(GEN_START, addr + CMD_OFFSET);
+	cyc2x_writew(GEN_START, addr + CMD_OFFSET);
 }         
 
 /* Load and boot reset code. */
@@ -372,15 +304,15 @@ static void cycx_reset_boot(u32 addr, u8 *code, u32 len)
 {
 	u32 pt_start = addr + START_OFFSET;
 
-        writeb(0xea, pt_start++); /* jmp to f000:3f00 */
-        writeb(0x00, pt_start++);
-        writeb(0xfc, pt_start++);
-        writeb(0x00, pt_start++);
-        writeb(0xf0, pt_start);
+        cyc2x_writeb(0xea, pt_start++); /* jmp to f000:3f00 */
+        cyc2x_writeb(0x00, pt_start++);
+        cyc2x_writeb(0xfc, pt_start++);
+        cyc2x_writeb(0x00, pt_start++);
+        cyc2x_writeb(0xf0, pt_start);
 	reset_load(addr, code, len);
 
 	/* 80186 was in hold, go */
-	writeb(0, addr + START_CPU);
+	cyc2x_writeb(0, addr + START_CPU);
 	delay_cycx(1);
 }
 
@@ -391,14 +323,14 @@ static int cycx_data_boot(u32 addr, u8 *code, u32 len)
 	u32 i;
 
 	/* boot buffer lenght */
-	writew(CFM_LOAD_BUFSZ, pt_boot_cmd + sizeof(u16));
-	writew(GEN_DEFPAR, pt_boot_cmd);
+	cyc2x_writew(CFM_LOAD_BUFSZ, pt_boot_cmd + sizeof(u16));
+	cyc2x_writew(GEN_DEFPAR, pt_boot_cmd);
 
 	if (wait_cyc(addr) < 0) return 2;
 
-	writew(0, pt_boot_cmd + sizeof(u16));
-	writew(0x4000, pt_boot_cmd + 2 * sizeof(u16));
-	writew(GEN_SET_SEG, pt_boot_cmd);
+	cyc2x_writew(0, pt_boot_cmd + sizeof(u16));
+	cyc2x_writew(0x4000, pt_boot_cmd + 2 * sizeof(u16));
+	cyc2x_writew(GEN_SET_SEG, pt_boot_cmd);
 
 	if (wait_cyc(addr) < 0) return 2;
 
@@ -420,14 +352,14 @@ static int cycx_code_boot(u32 addr, u8 *code, u32 len)
 	u32 i;
 
 	/* boot buffer lenght */
-	writew(CFM_LOAD_BUFSZ, pt_boot_cmd + sizeof(u16));
-	writew(GEN_DEFPAR, pt_boot_cmd);
+	cyc2x_writew(CFM_LOAD_BUFSZ, pt_boot_cmd + sizeof(u16));
+	cyc2x_writew(GEN_DEFPAR, pt_boot_cmd);
 
 	if (wait_cyc(addr) == -1) return 2;
 
-	writew(0x0000, pt_boot_cmd + sizeof(u16));
-	writew(0xc400, pt_boot_cmd + 2 * sizeof(u16));
-	writew(GEN_SET_SEG, pt_boot_cmd);
+	cyc2x_writew(0x0000, pt_boot_cmd + sizeof(u16));
+	cyc2x_writew(0xc400, pt_boot_cmd + 2 * sizeof(u16));
+	cyc2x_writew(GEN_SET_SEG, pt_boot_cmd);
 
 	if (wait_cyc(addr) == -1) return 1;
 
@@ -440,22 +372,12 @@ static int cycx_code_boot(u32 addr, u8 *code, u32 len)
 	return 0;
 }
 
-/* Initialize CYCX hardware: setup memory window, IRQ, etc. */
-static int cycx_init (cycxhw_t *hw)
-{
-	switch (hw->type) {
-		case CYCX_2X: return init_cycx_2x(hw);
-	}
-
-	return -EINVAL;
-}
-
 /* Load adapter from the memory image of the CYCX firmware module. 
  * o verify firmware integrity and compatibility
  * o start adapter up */
-static int cycx_load (cycxhw_t *hw, cfm_t *cfm, u32 len)
+static int load_cyc2x (cycxhw_t *hw, cfm_t *cfm, u32 len)
 {
-	int i, j, status;
+	int i, j;
 	cycx_header_t *img_hdr;
 	u8 *reset_image,
 	   *data_image,
@@ -469,7 +391,7 @@ static int cycx_load (cycxhw_t *hw, cfm_t *cfm, u32 len)
 
 	/* Verify firmware signature */
 	if (strcmp(cfm->signature, CFM_SIGNATURE)) {
-		printk(KERN_ERR "%s:cycx_load: not Cyclom-2X firmware!\n",
+		printk(KERN_ERR "%s:load_cyc2x: not Cyclom-2X firmware!\n",
 				modname);
 		return -EINVAL;
 	}
@@ -478,7 +400,7 @@ static int cycx_load (cycxhw_t *hw, cfm_t *cfm, u32 len)
 
 	/* Verify firmware module format version */
 	if (cfm->version != CFM_VERSION) {
-		printk(KERN_ERR "%s:cycx_load: firmware format %u rejected! "
+		printk(KERN_ERR "%s:" __FUNCTION__ ": firmware format %u rejected! "
 				"Expecting %u.\n",
 				modname, cfm->version, CFM_VERSION);
 		return -EINVAL;
@@ -492,7 +414,7 @@ static int cycx_load (cycxhw_t *hw, cfm_t *cfm, u32 len)
 	if (((len - sizeof(cfm_t) - 1) != cfm->info.codesize) ||
 */
 	if (cksum != cfm->checksum) {
-		printk(KERN_ERR "%s:cycx_load: firmware corrupted!\n", modname);
+		printk(KERN_ERR "%s:" __FUNCTION__ ": firmware corrupted!\n", modname);
 		printk(KERN_ERR " cdsize = 0x%x (expected 0x%lx)\n",
                        len - sizeof(cfm_t) - 1, cfm->info.codesize);
                 printk(KERN_ERR " chksum = 0x%x (expected 0x%x)\n",
@@ -504,7 +426,7 @@ static int cycx_load (cycxhw_t *hw, cfm_t *cfm, u32 len)
 
 	img_hdr = (cycx_header_t*)(((u8*) cfm) + sizeof(cfm_t) - 1);
 #ifdef FIRMWARE_DEBUG
-	printk(KERN_INFO "%s:cycx_load: image sizes\n", modname);
+	printk(KERN_INFO "%s:" __FUNCTION__ ": image sizes\n", modname);
 	printk(KERN_INFO " reset=%lu\n", img_hdr->reset_size);
 	printk(KERN_INFO "  data=%lu\n", img_hdr->data_size);
 	printk(KERN_INFO "  code=%lu\n", img_hdr->code_size);
@@ -521,20 +443,20 @@ static int cycx_load (cycxhw_t *hw, cfm_t *cfm, u32 len)
 
 	for (i = 0 ; i < 5 ; i++) {
 		/* Reset Cyclom hardware */
-		if ((status = cycx_reset(hw)) != 0) {
+		if (!reset_cyc2x(hw->dpmbase)) {
 			printk(KERN_ERR "%s: dpm problem or board not "
-					"found (%d).\n", modname, status);
+					"found.\n", modname);
 			return -EINVAL;
 		}
 
 		/* Load reset.bin */
                 cycx_reset_boot(hw->dpmbase, reset_image, img_hdr->reset_size);
 		/* reset is waiting for boot */
-		writew(GEN_POWER_ON, pt_cycld);
+		cyc2x_writew(GEN_POWER_ON, pt_cycld);
 		delay_cycx(1);
 
 		for (j = 0 ; j < 3 ; j++)
-			if (!readw(pt_cycld)) goto reset_loaded;
+			if (!cyc2x_readw(pt_cycld)) goto reset_loaded;
 			else delay_cycx(1);
 	}
 
@@ -542,18 +464,16 @@ static int cycx_load (cycxhw_t *hw, cfm_t *cfm, u32 len)
 	return -EINVAL;
 reset_loaded:
 	/* Load data.bin */
-	if((status = cycx_data_boot(hw->dpmbase, data_image, 
-		                    img_hdr->data_size)) != 0) {
-		printk(KERN_ERR "%s: cannot load data file (%d).\n",
-				modname, status);
+	if(cycx_data_boot(hw->dpmbase, data_image, 
+				       img_hdr->data_size)) {
+		printk(KERN_ERR "%s: cannot load data file.\n", modname);
 		return -EINVAL;
 	}
 
 	/* Load code.bin */
-	if((status = cycx_code_boot(hw->dpmbase, code_image, 
-		                    img_hdr->code_size)) != 0) {
-		printk(KERN_ERR "%s: cannot load code file (%d).\n",
-				modname, status);
+	if(cycx_code_boot(hw->dpmbase, code_image, 
+				       img_hdr->code_size)) {
+		printk(KERN_ERR "%s: cannot load code file.\n", modname);
 		return -EINVAL;
 	}
 
@@ -569,10 +489,7 @@ reset_loaded:
 	printk(KERN_INFO "%s: firmware loaded!\n", modname);
 
 	/* enable interrupts */
-        if (cycx_inten(hw)) {
-		printk(KERN_ERR "%s: adapter hardware failure!\n", modname);
-		return -EIO;
-	}
+        cycx_inten(hw);
 
 	return 0;
 }
@@ -586,13 +503,15 @@ reset_loaded:
 static void cycx_bootcfg (cycxhw_t *hw)
 {
 	/* use fixed buffers */
-	writeb(FIXED_BUFFERS, hw->dpmbase + CONF_OFFSET); 
+	cyc2x_writeb(FIXED_BUFFERS, hw->dpmbase + CONF_OFFSET); 
 }
 
 /* Initialize CYCX_2X adapter. */
-static int init_cycx_2x (cycxhw_t *hw)
+static int init_cyc2x (cycxhw_t *hw)
 {
-	if (!detect_cycx_2x(hw->dpmbase)) return -ENODEV;
+	if (!detect_cyc2x(hw->dpmbase))
+		return -ENODEV;
+
 	return 0;
 }
 
@@ -602,12 +521,12 @@ static int init_cycx_2x (cycxhw_t *hw)
  *	Return 1 if detected o.k. or 0 if failed.
  *	Note:	This test is destructive! Adapter will be left in shutdown
  *		state after the test. */
-static int detect_cycx_2x (u32 addr)
+static int detect_cyc2x (u32 addr)
 {
 	printk(KERN_INFO "%s: looking for a cyclom 2x at 0x%lX...\n",
 			 modname, (unsigned long) addr);
 
-	reset_cycx_2x(addr);
+	reset_cyc2x(addr);
 	return memory_exists(addr);
 }
 
@@ -622,11 +541,11 @@ static int get_option_index (u32 *optlist, u32 optval)
 }
 
 /* Reset adapter's CPU. */
-static int reset_cycx_2x (u32 addr)
+static int reset_cyc2x (u32 addr)
 {
-	writeb (0, addr + RST_ENABLE);  delay_cycx (2);
-	writeb (0, addr + RST_DISABLE); delay_cycx (2);
-	return memory_exists(addr) ? 0 : 1;
+	cyc2x_writeb (0, addr + RST_ENABLE);  delay_cycx (2);
+	cyc2x_writeb (0, addr + RST_DISABLE); delay_cycx (2);
+	return memory_exists(addr);
 }
 
 /* Delay */

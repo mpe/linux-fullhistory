@@ -13,6 +13,7 @@
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
  *		Florian La Roche,
  *		Jonathan Layes <layes@loran.com>
+ *		Arnaldo Carvalho de Melo <acme@conectiva.com.br> ARPHRD_HWX25
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -47,6 +48,7 @@
 #define ARPHRD_ADAPT	264
 #define ARPHRD_ROSE	270
 #define ARPHRD_X25	271		/* CCITT X.25			*/
+#define ARPHRD_HWX25	272		/* Boards with X.25 in firmware	*/
 #define ARPHRD_PPP	512
 #define ARPHRD_HDLC	513		/* (Cisco) HDLC 		*/
 #define ARPHRD_LAPB	516		/* LAPB				*/

@@ -64,7 +64,7 @@ int expand_fd_array(struct files_struct *files, int nr)
 
 	
 	error = -EMFILE;
-	if (files->max_fds >= NR_OPEN || nr > NR_OPEN)
+	if (files->max_fds >= NR_OPEN || nr >= NR_OPEN)
 		goto out;
 
 	nfds = files->max_fds;
@@ -88,7 +88,7 @@ int expand_fd_array(struct files_struct *files, int nr)
 			if (nfds > NR_OPEN)
 				nfds = NR_OPEN;
 		}
-	} while (nfds < nr);
+	} while (nfds <= nr);
 
 	error = -ENOMEM;
 	new_fds = alloc_fd_array(nfds);

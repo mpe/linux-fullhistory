@@ -106,18 +106,48 @@ void udf_delete_inode(struct inode * inode)
 void udf_discard_prealloc(struct inode * inode)
 {
 #ifdef UDF_PREALLOCATE
-#if 0
-	unsigned short total;
-	lb_addr loc = UDF_I_LOCATION(inode);
+	lb_addr bloc, eloc;
+	Uint32 extoffset, elen, nelen, offset, adsize = 0;
+	struct buffer_head *bh = NULL;
 
-	if (UDF_I_PREALLOC_COUNT(inode))
+	if ((inode->i_size > 0) &&
+		(inode_bmap(inode, (inode->i_size-1) >> inode->i_sb->s_blocksize_bits,
+			&bloc, &extoffset, &eloc, &elen, &offset, &bh) ==
+				EXTENT_RECORDED_ALLOCATED))
 	{
-		total = UDF_I_PREALLOC_COUNT(inode);
-		UDF_I_PREALLOC_COUNT(inode) = 0;
-		loc.logicalBlockNum = UDF_I_PREALLOC_BLOCK(inode);
-		udf_free_blocks(inode, loc, 0, total);
+		if (UDF_I_ALLOCTYPE(inode) == ICB_FLAG_AD_SHORT)
+			adsize = sizeof(short_ad);
+		else if (UDF_I_ALLOCTYPE(inode) == ICB_FLAG_AD_LONG)
+			adsize = sizeof(long_ad);
+		else
+		{
+			udf_release_data(bh);
+			return;
+		}
+
+		nelen = (EXTENT_RECORDED_ALLOCATED << 30) |
+			((((elen - 1) & ~(inode->i_sb->s_blocksize - 1)) |
+			((inode->i_size - 1) & (inode->i_sb->s_blocksize - 1))) + 1);
+
+		if (nelen != ((EXTENT_RECORDED_ALLOCATED << 30) | elen))
+		{
+			extoffset -= adsize;
+			udf_write_aext(inode, bloc, &extoffset, eloc, nelen, &bh, 1);
+		}
+
+		if (udf_next_aext(inode, &bloc, &extoffset, &eloc, &elen, &bh, 0) ==
+			EXTENT_NOT_RECORDED_ALLOCATED)
+		{
+			udf_free_blocks(inode, eloc, 0, elen >> inode->i_sb->s_blocksize_bits);
+			memset(&eloc, 0x00, sizeof(lb_addr));
+			udf_write_aext(inode, bloc, &extoffset, eloc, 0, &bh, 1);
+			UDF_I_LENALLOC(inode) -= adsize;
+			udf_write_inode(inode);
+		}
+		udf_release_data(bh);
 	}
-#endif
+	else if (bh)
+		udf_release_data(bh);
 #endif
 }
 
@@ -144,6 +174,9 @@ struct buffer_head * udf_expand_adinicb(struct inode *inode, int *block, int isd
 		{
 			UDF_I_EXT0OFFS(inode) = 0;
 			UDF_I_ALLOCTYPE(inode) = ICB_FLAG_AD_LONG;
+			mark_inode_dirty(inode);
+			if (inode->i_op == &udf_file_inode_operations_adinicb)
+				inode->i_op = &udf_file_inode_operations;
 			return NULL;
 		}
 
@@ -208,6 +241,7 @@ struct buffer_head * udf_expand_adinicb(struct inode *inode, int *block, int isd
 		memset(sbh->b_data + udf_file_entry_alloc_offset(inode),
 			0, UDF_I_LENALLOC(inode));
 
+		memset(&newad, 0x00, sizeof(long_ad));
 		newad.extLength = UDF_I_EXT0LEN(inode) = inode->i_size;
 		newad.extLocation.logicalBlockNum = *block;
 		newad.extLocation.partitionReferenceNum = UDF_I_LOCATION(inode).partitionReferenceNum;
@@ -248,7 +282,7 @@ struct buffer_head * udf_getblk(struct inode * inode, long block,
 		bh = getblk(dummy.b_dev, dummy.b_blocknr, inode->i_sb->s_blocksize);
 		if (buffer_new(&dummy))
 		{
-			memset(bh->b_data, 0, inode->i_sb->s_blocksize);
+			memset(bh->b_data, 0x00, inode->i_sb->s_blocksize);
 			mark_buffer_uptodate(bh, 1);
 			mark_buffer_dirty(bh, 1);
 		}
@@ -340,6 +374,7 @@ static struct buffer_head * inode_getblk(struct inode * inode, long block,
 		if (pbh != cbh)
 		{
 			udf_release_data(pbh);
+			pbh = cbh;
 			atomic_inc(&cbh->b_count);
 			pbloc = cbloc;
 		}
@@ -462,7 +497,6 @@ static struct buffer_head * inode_getblk(struct inode * inode, long block,
 			UDF_I_LOCATION(inode).partitionReferenceNum, goal, err)))
 		{
 			udf_release_data(pbh);
-			udf_release_data(cbh);
 			*err = -ENOSPC;
 			return NULL;
 		}
@@ -488,7 +522,7 @@ static struct buffer_head * inode_getblk(struct inode * inode, long block,
 
 	udf_release_data(pbh);
 
-	if (c == 0 || c == 1)
+	if (pextoffset == udf_file_entry_alloc_offset(inode))
 	{
 		UDF_I_EXT0LEN(inode) = laarr[0].extLength;
 		UDF_I_EXT0LOC(inode) = laarr[0].extLocation;
@@ -889,7 +923,8 @@ static void udf_fill_inode(struct inode *inode, struct buffer_head *bh)
 {
 	struct FileEntry *fe;
 	struct ExtendedFileEntry *efe;
-    time_t convtime;
+	time_t convtime;
+	long convtime_usec;
 	int offset, alen;
 
 	fe = (struct FileEntry *)bh->b_data;
@@ -940,21 +975,33 @@ static void udf_fill_inode(struct inode *inode, struct buffer_head *bh)
 		inode->i_blocks = le64_to_cpu(fe->logicalBlocksRecorded) <<
 			(inode->i_sb->s_blocksize_bits - 9);
 
-		if ( udf_stamp_to_time(&convtime, lets_to_cpu(fe->modificationTime)) )
+		if ( udf_stamp_to_time(&convtime, &convtime_usec,
+			lets_to_cpu(fe->modificationTime)) )
 		{
 			inode->i_mtime = convtime;
+			UDF_I_UMTIME(inode) = convtime_usec;
 			inode->i_ctime = convtime;
+			UDF_I_UCTIME(inode) = convtime_usec;
 		}
 		else
 		{
 			inode->i_mtime = UDF_SB_RECORDTIME(inode->i_sb);
+			UDF_I_UMTIME(inode) = 0;
 			inode->i_ctime = UDF_SB_RECORDTIME(inode->i_sb);
+			UDF_I_UCTIME(inode) = 0;
 		}
 
-		if ( udf_stamp_to_time(&convtime, lets_to_cpu(fe->accessTime)) ) 
+		if ( udf_stamp_to_time(&convtime, &convtime_usec,
+			lets_to_cpu(fe->accessTime)) ) 
+		{
 			inode->i_atime = convtime;
+			UDF_I_UATIME(inode) = convtime_usec;
+		}
 		else
+		{
 			inode->i_atime = UDF_SB_RECORDTIME(inode->i_sb);
+			UDF_I_UATIME(inode) = convtime_usec;
+		}
 
 		UDF_I_UNIQUE(inode) = le64_to_cpu(fe->uniqueID);
 		UDF_I_LENEATTR(inode) = le32_to_cpu(fe->lengthExtendedAttr);
@@ -967,20 +1014,41 @@ static void udf_fill_inode(struct inode *inode, struct buffer_head *bh)
 		inode->i_blocks = le64_to_cpu(efe->logicalBlocksRecorded) << 
 			(inode->i_sb->s_blocksize_bits - 9);
 
-		if ( udf_stamp_to_time(&convtime, lets_to_cpu(efe->modificationTime)) )
+		if ( udf_stamp_to_time(&convtime, &convtime_usec,
+			lets_to_cpu(efe->modificationTime)) )
+		{
 			inode->i_mtime = convtime;
+			UDF_I_UMTIME(inode) = convtime_usec;
+		}
 		else
+		{
 			inode->i_mtime = UDF_SB_RECORDTIME(inode->i_sb);
+			UDF_I_UMTIME(inode) = 0;
+		}
 
-		if ( udf_stamp_to_time(&convtime, lets_to_cpu(efe->accessTime)) )
+		if ( udf_stamp_to_time(&convtime, &convtime_usec,
+			lets_to_cpu(efe->accessTime)) )
+		{
 			inode->i_atime = convtime;
+			UDF_I_UATIME(inode) = convtime_usec;
+		}
 		else
+		{
 			inode->i_atime = UDF_SB_RECORDTIME(inode->i_sb);
+			UDF_I_UATIME(inode) = 0;
+		}
 
-		if ( udf_stamp_to_time(&convtime, lets_to_cpu(efe->createTime)) )
+		if ( udf_stamp_to_time(&convtime, &convtime_usec,
+			lets_to_cpu(efe->createTime)) )
+		{
 			inode->i_ctime = convtime;
+			UDF_I_UCTIME(inode) = convtime_usec;
+		}
 		else
+		{
 			inode->i_ctime = UDF_SB_RECORDTIME(inode->i_sb);
+			UDF_I_UCTIME(inode) = 0;
+		}
 
 		UDF_I_UNIQUE(inode) = le64_to_cpu(efe->uniqueID);
 		UDF_I_LENEATTR(inode) = le32_to_cpu(efe->lengthExtendedAttr);
@@ -1274,8 +1342,8 @@ udf_update_inode(struct inode *inode, int do_sync)
 		efe->impIdent.identSuffix[0] = UDF_OS_CLASS_UNIX;
 		efe->impIdent.identSuffix[1] = UDF_OS_ID_LINUX;
 		efe->uniqueID = cpu_to_le64(UDF_I_UNIQUE(inode));
-        efe->lengthExtendedAttr = cpu_to_le32(UDF_I_LENEATTR(inode));
-        efe->lengthAllocDescs = cpu_to_le32(UDF_I_LENALLOC(inode));
+		efe->lengthExtendedAttr = cpu_to_le32(UDF_I_LENEATTR(inode));
+		efe->lengthAllocDescs = cpu_to_le32(UDF_I_LENALLOC(inode));
 		efe->descTag.tagIdent = le16_to_cpu(TID_EXTENDED_FILE_ENTRY);
 		crclen = sizeof(struct ExtendedFileEntry);
 	}
@@ -1764,6 +1832,8 @@ int udf_insert_aext(struct inode *inode, lb_addr bloc, int extoffset,
 			return -1;
 		}
 	}
+	else
+		atomic_inc(&bh->b_count);
 
 	while ((type = udf_next_aext(inode, &bloc, &extoffset, &oeloc, &oelen, &bh, 0)) != -1)
 	{
@@ -1773,6 +1843,7 @@ int udf_insert_aext(struct inode *inode, lb_addr bloc, int extoffset,
 		nelen = (type << 30) | oelen;
 	}
 	udf_add_aext(inode, &bloc, &extoffset, neloc, nelen, &bh, 1);
+	udf_release_data(bh);
 	return (nelen >> 30);
 }
 
@@ -1879,12 +1950,12 @@ int inode_bmap(struct inode *inode, int block, lb_addr *bloc, Uint32 *extoffset,
 	if (block < 0)
 	{
 		printk(KERN_ERR "udf: inode_bmap: block < 0\n");
-		return 0;
+		return -1;
 	}
 	if (!inode)
 	{
 		printk(KERN_ERR "udf: inode_bmap: NULL inode\n");
-		return 0;
+		return -1;
 	}
 
 	b_off = block << inode->i_sb->s_blocksize_bits;

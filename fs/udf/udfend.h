@@ -42,13 +42,13 @@
 #define cpu_to_le32(x) (x)
 #define cpu_to_le64(x) (x)
 
-#endif
+#endif /* __BYTE_ORDER == 0 */
 
-#endif
+#else /* __KERNEL__ */
 
-#ifdef __KERNEL__
 #include <linux/string.h>
-#endif
+
+#endif /* ! __KERNEL__ */
 
 static inline lb_addr lelb_to_cpu(lb_addr in)
 {
