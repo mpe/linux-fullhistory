@@ -302,20 +302,6 @@ static inline unsigned char xchgb(unsigned char reg,
   return reg;
 }
 
-static inline void outl(unsigned int value, unsigned short port)
-{
-__asm__ __volatile__ ("outl %%al,%%dx"
-		: :"a" (value),"d" ((unsigned short) port));
-}
-
-static inline unsigned int inl(unsigned short port)
-{
-	unsigned int _v;
-__asm__ __volatile__ ("inl %%dx,%%eax"
-		:"=a" (_v):"d" ((unsigned short) port),"0" (0));
-	return _v;
-}
-
 #if ULTRASTOR_DEBUG & (UD_COMMAND | UD_ABORT)
 
 static void log_ultrastor_abort(register struct ultrastor_config *config,

@@ -1267,6 +1267,7 @@ ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
   }
   
   /* Point into the IP datagram, just past the header. */
+  skb->h.raw += iph->ihl*4;
   hash = iph->protocol & (MAX_INET_PROTOS -1);
   for (ipprot = (struct inet_protocol *)inet_protos[hash];
        ipprot != NULL;
@@ -1305,7 +1306,7 @@ ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	* check the protocol handler's return values here...
 	*/
 	ipprot->handler(skb2, dev, opts_p ? &opt : 0, iph->daddr,
-			ntohs(iph->tot_len),
+			(ntohs(iph->tot_len) - (iph->ihl * 4)),
 			iph->saddr, 0, ipprot);
 
   }

@@ -1,6 +1,6 @@
 VERSION = 0.99
 PATCHLEVEL = 14
-ALPHA = k
+ALPHA = l
 
 all:	Version zImage
 
@@ -209,6 +209,9 @@ lib: dummy
 
 mm: dummy
 	$(MAKE) linuxsubdirs SUBDIRS=mm
+
+ipc: dummy
+	$(MAKE) linuxsubdirs SUBDIRS=ipc
 
 kernel: dummy
 	$(MAKE) linuxsubdirs SUBDIRS=kernel

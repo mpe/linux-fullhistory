@@ -357,6 +357,7 @@ icmp_rcv(struct sk_buff *skb1, struct device *dev, struct options *opt,
 	 unsigned long saddr, int redo, struct inet_protocol *protocol)
 {
   struct icmphdr *icmph;
+  unsigned char *buff;
 
   /* Drop broadcast packets. */
   if (chk_addr(daddr) == IS_BROADCAST) {
@@ -367,10 +368,8 @@ icmp_rcv(struct sk_buff *skb1, struct device *dev, struct options *opt,
 	return(0);
   }
 
-  /* Skip IP-Header */
-  len -= skb1->h.iph->ihl << 2;
-  skb1->h.raw += skb1->h.iph->ihl << 2;
-  icmph = (struct icmphdr *) skb1->h.raw;
+  buff = skb1->h.raw;
+  icmph = (struct icmphdr *) buff;
 
   /* Validate the packet first */
   if (ip_compute_csum((unsigned char *) icmph, len)) {

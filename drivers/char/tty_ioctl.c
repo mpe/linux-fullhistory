@@ -1,7 +1,7 @@
 /*
- *  linux/kernel/chr_drv/tty_ioctl.c
+ *  linux/kernel/drivers/char/tty_ioctl.c
  *
- *  Copyright (C) 1991, 1992  Linus Torvalds
+ *  Copyright (C) 1991, 1992, 1993, 1994  Linus Torvalds
  *
  * Modified by Fred N. van Kempen, 01/29/93, to add line disciplines
  * which can be dynamically activated and de-activated by the line
@@ -406,6 +406,25 @@ static int tty_set_ldisc(struct tty_struct *tty, int ldisc)
 		return 0;
 }
 
+static int inq_canon(struct tty_struct * tty)
+{
+	int nr, head, tail;
+
+	if (!tty->secondary.data)
+		return 0;
+	head = tty->secondary.head;
+	tail = tty->secondary.tail;
+	nr = (head - tail) & (TTY_BUF_SIZE-1);
+	/* Skip EOF-chars.. */
+	if (EOF_CHAR(tty) == __DISABLED_CHAR)
+		return nr;
+	while (head != tail) {
+		if (tty->secondary.buf[tail] == EOF_CHAR(tty))
+			nr--;
+		INC(tail);
+	}
+	return nr;
+}
 
 int tty_ioctl(struct inode * inode, struct file * file,
 	unsigned int cmd, unsigned long arg)
@@ -557,8 +576,9 @@ int tty_ioctl(struct inode * inode, struct file * file,
 			retval = verify_area(VERIFY_WRITE, (void *) arg,4);
 			if (retval)
 				return retval;
-			if (L_CANON(tty) && !tty->secondary.data)
-				put_fs_long(0, (unsigned long *) arg);
+			if (L_CANON(tty))
+				put_fs_long(inq_canon(tty),
+					(unsigned long *) arg);
 			else
 				put_fs_long(CHARS(&tty->secondary),
 					(unsigned long *) arg);
