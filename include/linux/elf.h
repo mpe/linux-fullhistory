@@ -227,6 +227,14 @@ typedef struct {
 #define	ELFCLASS64	2
 #define	ELFCLASSNUM	3
 
+#define ELFDATANONE	0		/* e_ident[EI_DATA] */
+#define ELFDATA2LSB	1
+#define ELFDATA2MSB	2
+
+#define EV_NONE		0		/* e_version, EI_VERSION */
+#define EV_CURRENT	1
+#define EV_NUM		2
+
 #define ELF_START_MMAP 0x80000000
 
 #endif /* _LINUX_ELF_H */

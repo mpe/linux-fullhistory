@@ -120,9 +120,8 @@
 #define DBG_AUD		25      /* "read audio" debugging */
 #define DBG_SEQ		26      /* Sequoia interface configuration trace */
 #define DBG_LCS		27      /* Longshine LCS-7260 debugging trace */
-#define DBG_TEA		28      /* TEAC CD-55A debugging trace */
-#define DBG_CD2		29      /* MKE CD200 debugging trace */
-#define DBG_000		30      /* unnecessary information */
+#define DBG_CD2		28      /* MKE CD200 debugging trace */
+#define DBG_000		29      /* unnecessary information */
 
 /*==========================================================================*/
 /*==========================================================================*/
@@ -254,13 +253,11 @@
 #define drv_099 (drv_fam1+0x01)    /* <100 */
 #define drv_100 (drv_fam1+0x02)    /* >=100 */
 
-#define drv_famT 0x40    /* TEAC CD-55A */
 #define drv_fam2 0x80    /* CD200 family */
 
 #define fam0_drive (DriveStruct[d].drv_type&drv_fam0)
 #define famL_drive (DriveStruct[d].drv_type&drv_famL)
 #define fam1_drive (DriveStruct[d].drv_type&drv_fam1)
-#define famT_drive (DriveStruct[d].drv_type&drv_famT)
 #define fam2_drive (DriveStruct[d].drv_type&drv_fam2)
 #define fam0L_drive (DriveStruct[d].drv_type&(drv_fam0|drv_famL))
 #define fam1L_drive (DriveStruct[d].drv_type&(drv_fam1|drv_famL))
@@ -522,19 +519,15 @@ Read XA Parameter:
  * CR-56x:      CMD1_
  * CD200:       CMD2_
  * LCS-7260:    CMDL_
- * TEAC CD-55A: CMDT_
  */
 #define CMD1_RESET	0x0a
 #define CMD2_RESET	0x01
-#define CMDT_RESET	0xc0
 #define CMD1_LOCK_CTL	0x0c
 #define CMD2_LOCK_CTL	0x1e
 #define CMDL_LOCK_CTL	0x0e
-#define CMDT_LOCK_CTL	0x1e
 #define CMD1_TRAY_CTL	0x07
 #define CMD2_TRAY_CTL	0x1b
 #define CMDL_TRAY_CTL	0x0d
-#define CMDT_TRAY_CTL	0x1b
 #define CMD1_MULTISESS	0x8d
 #define CMDL_MULTISESS	0x8c
 #define CMD1_SUBCHANINF	0x11
@@ -542,7 +535,6 @@ Read XA Parameter:
 #define CMD2_x02	0x02
 #define CMD1_x08	0x08
 #define CMD2_x08	0x08
-#define CMDT_x08	0x08
 #define CMD2_SETSPEED	0xda
 
 #define CMD0_PATH_CHECK	0x00
@@ -553,12 +545,10 @@ Read XA Parameter:
 #define CMD1_SEEK	0x01
 #define CMD2_SEEK	0x2b
 #define CMDL_SEEK	0x01
-#define CMDT_SEEK	0x2b
 #define CMD0_READ	0x02
 #define CMD1_READ	0x10
 #define CMD2_READ	0x28
 #define CMDL_READ	0x02
-#define CMDT_READ	0x28
 #define CMD0_READ_XA	0x03
 #define CMD2_READ_XA	0xd4
 #define CMDL_READ_XA	0x03 /* really ?? */
@@ -585,33 +575,27 @@ Read XA Parameter:
 #define CMD1_PLAY_MSF	0x0e
 #define CMD2_PLAY_MSF	0x47
 #define CMDL_PLAY_MSF	0x
-#define CMDT_PLAY_MSF	0x47
 #define CMD0_PLAY_TI	0x0c
 #define CMD0_STATUS	0x81
 #define CMD1_STATUS	0x05
 #define CMD2_STATUS	0x00
 #define CMDL_STATUS	0x81
-#define CMDT_STATUS	0x00
 #define CMD0_READ_ERR	0x82
 #define CMD1_READ_ERR	0x82
 #define CMD2_READ_ERR	0x03
 #define CMDL_READ_ERR	0x82
-#define CMDT_READ_ERR	0x03 /* get audio status */
 #define CMD0_READ_VER	0x83
 #define CMD1_READ_VER	0x83
 #define CMD2_READ_VER	0x12
-#define CMDT_READ_VER	0x12 /* ??? (unused) */
 #define CMDL_READ_VER	0x83
 #define CMD0_SETMODE	0x84
 #define CMD1_SETMODE	0x09
 #define CMD2_SETMODE	0x55
 #define CMDL_SETMODE	0x84
-#define CMDT_SETMODE	0x55
 #define CMD0_GETMODE	0x85
 #define CMD1_GETMODE	0x84
 #define CMD2_GETMODE	0x5a
 #define CMDL_GETMODE	0x85
-#define CMDT_GETMODE	0x5a
 #define CMD0_SET_XA	0x86
 #define CMD0_GET_XA	0x87
 #define CMD0_CAPACITY	0x88
@@ -622,13 +606,11 @@ Read XA Parameter:
 #define CMD1_READSUBQ	0x87
 #define CMD2_READSUBQ	0x42
 #define CMDL_READSUBQ	0x89
-#define CMDT_READSUBQ	0x42
 #define CMD0_DISKCODE	0x8a
 #define CMD0_DISKINFO	0x8b
 #define CMD1_DISKINFO	0x8b
 #define CMD2_DISKINFO	0x43
 #define CMDL_DISKINFO	0x8b
-#define CMDT_DISKINFO	0x43
 #define CMD0_READTOC	0x8c
 #define CMD1_READTOC	0x8c
 #define CMD2_READTOC	0x
@@ -637,7 +619,6 @@ Read XA Parameter:
 #define CMD1_PAU_RES	0x0d
 #define CMD2_PAU_RES	0x4b
 #define CMDL_PAU_RES	0x8d
-#define CMDT_PAU_RES	0x4b
 #define CMD0_PACKET	0x8e
 #define CMD1_PACKET	0x8e
 #define CMD2_PACKET	0x

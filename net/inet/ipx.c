@@ -465,6 +465,7 @@ ipxitf_send(ipx_interface *intrfc, struct sk_buff *skb, char *node)
 	struct datalink_proto	*dl = intrfc->if_dlink;
 	char		dest_node[IPX_NODE_LEN];
 	int		send_to_wire = 1;
+	int		addr_len;
 	
 	/* We need to know how many skbuffs it will take to send out this
 	 * packet to avoid unnecessary copies.
@@ -501,8 +502,13 @@ ipxitf_send(ipx_interface *intrfc, struct sk_buff *skb, char *node)
 		return 0;
 	}
 
-	/* In some case, ipxitf_adjust_skbuff can overwrite node */
-	memcpy(dest_node, node, IPX_NODE_LEN);
+	/* determine the appropriate hardware address */
+	addr_len = dev->addr_len;
+	if (memcmp(ipx_broadcast_node, node, IPX_NODE_LEN) == 0) {
+		memcpy(dest_node, dev->broadcast, addr_len);
+	} else {
+		memcpy(dest_node, &(node[IPX_NODE_LEN-addr_len]), addr_len);
+	}
 
 	/* make any compensation for differing physical/data link size */
 	skb = ipxitf_adjust_skbuff(intrfc, skb);
@@ -699,9 +705,6 @@ ipxitf_create(ipx_interface_definition *idef)
 	if(dev->addr_len>IPX_NODE_LEN)
 		return -EINVAL;
 
-	if(dev->addr_len<2)
-		return -EINVAL;
-
 	if ((intrfc = ipxitf_find_using_phys(dev, dlink_type)) == NULL) {
 
 		/* Ok now create */
@@ -781,8 +784,6 @@ ipxitf_auto_create(struct device *dev, unsigned short dlink_type)
 
 	/* Check addresses are suitable */
 	if(dev->addr_len>IPX_NODE_LEN) return NULL;
-
-	if(dev->addr_len<2) return NULL;
 
 	intrfc=(ipx_interface *)kmalloc(sizeof(ipx_interface),GFP_ATOMIC);
 	if (intrfc!=NULL) {

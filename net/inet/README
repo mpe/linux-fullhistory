@@ -1,21 +1,42 @@
-Changes for NET3.017
+Upgrade Notes from 1.0
+[Alan Cox -  Alan.Cox@linux.org]
 
-This is mostly small stuff as follows:
+Upgrading to 1.2.0 from a 1.0 kernel networking set. If you are using
+a complete 1.2 distribution you can ignore this.
 
-o	accept()ed socket don't end up with an invalid sk->socket and give bogus
-	netstat output.
-o	FASYNC/SIGIO now works with sockets.
-o	Fixed the permissions on F_SETOWN for all. Its now as broken/working
-	as other systems. Really we need something like a 32bit generation
-	number on processes.
-o	ARP allows proxy for whole networks (a la cisco routers)
-o	TCP sendto() reports ENOTCONN in the right cases
-o	Removed some surplus uncommented code from tcp.c
-o	Fixed protocol violation during closedown in tcp.c
-	[Still not got the window < MSS bug fix included]
+This doesn't attempt to list the changes. That would be too large. Instead
+just what you need and can change
 
-Fixes for 1.1.58
+arp,ifconfig, etc. Get net-tools-1.1.95 (or 1.2.0 if its out) from
+ftp.linux.org.uk:/pub/Linux/Networking/PROGRAMS/NetTools, and install
+these. You will also acquire a couple of new tools "plipconfig" for tuning
+plip links and "ipfw" for ip firewall management.
 
-o	non blocking connect fail gets the error code right.
-o	select() not reporting read ok after an urgent read fixed.
+bootpd: The original bootpd has a bug that the 1.2 kernel spots. You will
+need to upgrade this to the version in
+ftp.linux.org.uk:/pub/Linux/Networking/PROGRAMS/Upgrades
 
+
+Standard programs that you ought to update are
+
+named 4.7.x	to 4.9.x	Stops named dying occasionally
+pop3d 1.001     to 1.004	Fixes a bug that can lose mail
+
+A complete current networking set for Linux can be obtained by getting
+the NetKit[A,B...] series archives from ftp.funet.fi. Funet also carries
+binaries for Linux mbone applications if you now wish to make use of
+these facilities.
+
+For commercial UK custom Linux networking projects, drivers and development
+(but not free support!) I can be contacted via
+
+	I^2IT Ltd, The Innovation Centre, University Of Wales
+		Swansea SA2 8PP.  
+	Fax: +44 1792 295811
+	Tel: +44 1792 295213
+
+Please don't send commercial queries to my email address as I have that
+in an academic and _not_ commercial capacity. On the other hand feel
+free to send bug reports, queries and enhancements that way.
+
+Alan

@@ -1,4 +1,4 @@
-This README belongs to release 3.2 or newer of the SoundBlaster Pro
+This README belongs to release 3.4 or newer of the SoundBlaster Pro
 (Matsushita, Kotobuki, Panasonic, CreativeLabs, Longshine and soon TEAC, too)
 CD-ROM driver for Linux.
 
@@ -18,12 +18,14 @@ a soundcard).
 
 The quad-speed TEAC CD-55A drive uses the same interface types, but has a
 totally different command and flow control scheme. Support is under
-construction.
+construction, but splitted: Greg Nowicki (nowicki@tardis.larc.nasa.gov)
+cares about the separate driver "teaccd". Please, do not mail him merely for
+asking "user questions" at the moment - the project is still a "baby".
 
 CreativeLabs has a new drive "CD-200". Support is under construction.
 Detection should already work.
 
-Regarding CD200 and CD-55A support:
+Regarding CD200 support:
     Please, don't mail me about it if you are not a competent BETA tester 
             (if you are: mail!; I do not have such drives).
     Please, don't drop simple questions about the new drives in the
@@ -189,15 +191,27 @@ and see the contents of your CD in the /CD directory, and/or hear music with
 "workman -c /dev/sbpcd &".
 
 
+Using sbpcd as a "loadable module":
+-----------------------------------
+
+If you do NOT select "Matsushita/Panasonic CDROM driver support" during the
+"make config" of your kernel, you can build the "loadable module" sbpcd.o.
+Read /usr/src/linux/README.modules on this.
+
+If sbpcd gets used as a module, the "audio copy" feature is disabled, and the
+internal read-ahead buffer has a reduced size (the latter may affect throughput
+a little bit under "slow" CPUs). Further, support of more than one interface
+card (i.e. drives 4...15) is disabled.
+
+
 Things of interest:
 -------------------
 
-The driver is configured to try the SoundBlaster Pro type of interface at
-I/O port 0x0230 first. If this is not appropriate, sbpcd.h should get changed
+The driver is configured to try the LaserMate type of interface at I/O port
+0x0340 first. If this is not appropriate, sbpcd.h should get changed
 (you will find the right place - just at the beginning).
 
-No DMA and no IRQ is used, so the IRQ line stays free for the SB Pro sound
-drivers.
+No DMA and no IRQ is used.
 
 To reduce or increase the amount of kernel messages, edit sbpcd.c and play
 with the "DBG_xxx" switches (initialization of the variable "sbpcd_debug").
@@ -355,6 +369,20 @@ right setup.
 
 For every-day use, address and type should get configured within sbpcd.h. That
 will stop the auto-probing due to success with the first try.
+
+The kernel command "sbpcd=0" suppresses each auto-probing and causes
+the driver not to find any drive; it is meant for people who love sbpcd
+so much that they do not want to miss it, even if they miss the drives. ;-)  
+
+If you configure "#define CDROM_PORT 0" in sbpcd.h, the auto-probing is
+initially disabled and needs an explicit kernel command to get activated.
+Once activated, it does not stop before success or end-of-list. This may be
+useful within "universal" CDROM installation boot floppies (but using the 
+loadable module would be better because it allows an "extended" auto-probing
+without fearing NE2000 cards).
+
+To shorten the auto-probing list to a single entry, set DISTRIBUTION 0 within
+sbpcd.c.
 
 
 Setting up address and interface type:
@@ -532,9 +560,7 @@ is an all-zero number. I guess now almost no CD holds such a number.
 Bug reports, comments, wishes, donations (technical information is a donation,
 too :-) etc. to
                          emoenke@gwdg.de
- or to                   eberhard_moenkeberg@rollo.central.de
  or to my FIDO address:  Eberhard Moenkeberg, 2:2437/210.27
-
 
 SnailMail address, preferable for CD editors if they want to submit a free
 "cooperation" copy:

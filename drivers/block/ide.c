@@ -1,5 +1,5 @@
 /*
- *  linux/drivers/block/ide.c	Version 3.13  February 23, 1995
+ *  linux/drivers/block/ide.c	Version 3.14  March 7, 1995
  *
  *  Copyright (C) 1994, 1995  Linus Torvalds & authors (see below)
  */
@@ -104,6 +104,9 @@
  *  Version 3,12	simplify logic for selecting initial mult_count
  *			  (fixes problems with buggy WD drives)
  *  Version 3.13	remove excess "multiple mode disabled" messages
+ *  Version 3.14	fix ide_error() handling of BUSY_STAT
+ *			fix byte-swapped cdrom strings (again.. arghh!)
+ *			ignore INDEX bit when checking the ALTSTATUS reg
  *
  *  To do:
  *	- special 32-bit controller-type detection & support
@@ -612,17 +615,21 @@ static void ide_error (ide_dev_t *dev, const char *msg, byte stat)
 		return;
 	}
 #endif	/* IDE_DRIVE_CMD */
-	if (dev->type == disk && (stat & ERR_STAT)) {
-		/* err has different meaning on cdrom */
-		if (err & BBD_ERR)		/* retries won't help this! */
-			rq->errors = ERROR_MAX;
-		else if (err & TRK0_ERR)	/* help it find track zero */
-			rq->errors |= ERROR_RECAL;
-	}
-	if ((stat & DRQ_STAT) && rq->cmd == READ) {
-		int i = dev->mult_count ? dev->mult_count<<8 : 1<<8;
-		while (i-- > 0)			/* try to flush data */
-			(void) IN_BYTE(HD_DATA, dev->hwif);
+	if (stat & BUSY_STAT) {		/* other bits are useless when BUSY */
+		rq->errors |= ERROR_RESET;
+	} else {
+		if (dev->type == disk && (stat & ERR_STAT)) {
+			/* err has different meaning on cdrom */
+			if (err & BBD_ERR)		/* retries won't help this! */
+				rq->errors = ERROR_MAX;
+			else if (err & TRK0_ERR)	/* help it find track zero */
+				rq->errors |= ERROR_RECAL;
+		}
+		if ((stat & DRQ_STAT) && rq->cmd == READ) {
+			int i = dev->mult_count ? dev->mult_count<<8 : 1<<8;
+			while (i-- > 0)			/* try to flush data */
+				(void) IN_BYTE(HD_DATA, dev->hwif);
+		}
 	}
 	if (GET_STAT(dev->hwif) & (BUSY_STAT|DRQ_STAT))
 		rq->errors |= ERROR_RESET;	/* Mmmm.. timing problem */
@@ -1612,9 +1619,14 @@ static void do_identify (ide_dev_t *dev, byte cmd)
 
 	/*
 	 *  WIN_IDENTIFY returns little-endian info,
-	 *  WIN_PIDENTIFY return big-endian info.
+	 *  WIN_PIDENTIFY *usually* returns little-endian info.
 	 */
-	bswap = (cmd == WIN_IDENTIFY);
+	bswap = 1;
+	if (cmd == WIN_PIDENTIFY) {
+		if ((id->model[0] == 'N' && id->model[1] == 'E')
+		 || (id->model[0] == 'F' && id->model[1] == 'X'))
+			bswap = 0;	/* NEC and *some* Mitsumi units */
+	}				/* Vertos drives may still be weird */
 	fixstring (id->model,     sizeof(id->model),     bswap);
 	fixstring (id->fw_rev,    sizeof(id->fw_rev),    bswap);
 	fixstring (id->serial_no, sizeof(id->serial_no), bswap);
@@ -1738,10 +1750,11 @@ static int try_to_identify (ide_dev_t *dev, byte cmd)
 	}
 #endif	/* PROBE_FOR_IRQS */
 	delay_10ms();				/* take a deep breath */
-	if (IN_BYTE(HD_ALTSTATUS,DEV_HWIF) == IN_BYTE(HD_STATUS,DEV_HWIF))
-		hd_status = HD_ALTSTATUS;	/* use non-intrusive polling */
-	else
+	if ((IN_BYTE(HD_ALTSTATUS,DEV_HWIF) ^ IN_BYTE(HD_STATUS,DEV_HWIF)) & ~INDEX_STAT) {
 		hd_status = HD_STATUS;		/* an ancient Seagate drive */
+		printk("%s: probing with STATUS instead of ALTSTATUS\n", dev->name);
+	} else
+		hd_status = HD_ALTSTATUS;	/* use non-intrusive polling */
 	OUT_BYTE(cmd,HD_COMMAND);		/* ask drive for ID */
 	timeout = ((cmd == WIN_IDENTIFY) ? WAIT_WORSTCASE : WAIT_PIDENTIFY) / 2;
 	timeout += jiffies;

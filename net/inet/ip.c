@@ -109,6 +109,7 @@
 #include "protocol.h"
 #include "route.h"
 #include "tcp.h"
+#include "udp.h"
 #include <linux/skbuff.h>
 #include "sock.h"
 #include "arp.h"
@@ -1270,7 +1271,7 @@ static void ip_forward(struct sk_buff *skb, struct device *dev, int is_frag)
 #ifdef CONFIG_IP_FIREWALL
 	int err;
 	
-	if((err=ip_fw_chk(skb->h.iph, dev, ip_fw_fwd_chain, ip_fw_fwd_policy))!=1)
+	if((err=ip_fw_chk(skb->h.iph, dev, ip_fw_fwd_chain, ip_fw_fwd_policy, 0))!=1)
 	{
 		if(err==-1)
 			icmp_send(skb, ICMP_DEST_UNREACH, ICMP_HOST_UNREACH, 0, dev);
@@ -1500,7 +1501,7 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 
 #ifdef	CONFIG_IP_FIREWALL
 	
-	if ((err=ip_fw_chk(iph,dev,ip_fw_blk_chain,ip_fw_blk_policy))!=1)
+	if ((err=ip_fw_chk(iph,dev,ip_fw_blk_chain,ip_fw_blk_policy, 0))!=1)
 	{
 		if(err==-1)
 			icmp_send(skb, ICMP_DEST_UNREACH, ICMP_PORT_UNREACH, 0, dev);
@@ -1816,6 +1817,12 @@ void ip_queue_xmit(struct sock *sk, struct device *dev,
 	iph = (struct iphdr *)ptr;
 	skb->ip_hdr = iph;
 	iph->tot_len = ntohs(skb->len-dev->hard_header_len);
+
+#ifdef CONFIG_IP_FIREWALL
+	if(ip_fw_chk(iph, dev, ip_fw_blk_chain, ip_fw_blk_policy, 0) != 1)
+		/* just don't send this packet */
+		return;
+#endif	
 
 	/*
 	 *	No reassigning numbers to fragments...

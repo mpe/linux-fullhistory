@@ -45,6 +45,7 @@ bad_clone_list[] = {
     {"DE100", "DE200", {0x00, 0xDE, 0x01,}},
     {"DE120", "DE220", {0x00, 0x80, 0xc8,}},
     {"DFI1000", "DFI2000", {'D', 'F', 'I',}}, /* Original, eh?  */
+    {"EtherNext UTP8", "EtherNext UTP16", {0x00, 0x00, 0x79}},
     {0,}
 };
 

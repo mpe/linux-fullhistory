@@ -16,6 +16,9 @@
  *	appear it's not practical - Read: It works, it's not clean but please
  *	don't consider it to be his standard of finished work.
  *		Alan Cox 12/Feb/1995
+ *	Porting bidirectional entries from BSD, fixing accounting issues,
+ *	adding struct ip_fwpkt for checking packets with interface address
+ *		Jos Vos 5/Mar/1995.
  *
  *	All the real work was done by .....
  */
@@ -133,12 +136,17 @@ extern inline int port_match(unsigned short *portptr,int nports,unsigned short p
 
 
 /*
- *	Returns 0 if packet should be dropped, 1 or more if it should be accepted.
+ *	Returns 0 if packet should be dropped, 1 if it should be accepted,
+ *	and -1 if an ICMP host unreachable packet should be sent.
  *	Also does accounting so you can feed it the accounting chain.
+ *	If opt is set to 1, it means that we do this for accounting
+ *	purposes (searches all entries and handles fragments different).
+ *	If opt is set to 2, it doesn't count a matching packet, which
+ *	is used when calling this for checking purposes (IP_FW_CHK_*).
  */
 
 
-int ip_fw_chk(struct iphdr *ip, struct device *rif, struct ip_fw *chain, int policy)
+int ip_fw_chk(struct iphdr *ip, struct device *rif, struct ip_fw *chain, int policy, int opt)
 {
 	struct ip_fw *f;
 	struct tcphdr		*tcp=(struct tcphdr *)((unsigned long *)ip+ip->ihl);
@@ -146,7 +154,7 @@ int ip_fw_chk(struct iphdr *ip, struct device *rif, struct ip_fw *chain, int pol
 	__u32			src, dst;
 	__u16			src_port=0, dst_port=0;
 	unsigned short		f_prt=0, prt;
-	char			notcpsyn=1;
+	char			notcpsyn=1, frag1, match;
 	unsigned short		f_flag;
 
 	/*
@@ -172,7 +180,9 @@ int ip_fw_chk(struct iphdr *ip, struct device *rif, struct ip_fw *chain, int pol
 	 *	of system.
 	 */
 
-	if (ip->frag_off&IP_OFFSET)
+	frag1 = ((ntohs(ip->frag_off) & IP_OFFSET) == 0);
+	if (!frag1 && (opt != 1) && (ip->protocol == IPPROTO_TCP ||
+			ip->protocol == IPPROTO_UDP))
 		return(1);
 
 	src = ip->saddr;
@@ -191,16 +201,23 @@ int ip_fw_chk(struct iphdr *ip, struct device *rif, struct ip_fw *chain, int pol
 	{
 		case IPPROTO_TCP:
 			dprintf1("TCP ");
-			src_port=ntohs(tcp->source);
-			dst_port=ntohs(tcp->dest);
-			if(tcp->syn && !tcp->ack)
-				notcpsyn=0; /* We *DO* have SYN, value FALSE */
+			/* ports stay 0 if it is not the first fragment */
+			if (frag1) {
+				src_port=ntohs(tcp->source);
+				dst_port=ntohs(tcp->dest);
+				if(tcp->syn && !tcp->ack)
+					/* We *DO* have SYN, value FALSE */
+					notcpsyn=0;
+			}
 			prt=IP_FW_F_TCP;
 			break;
 		case IPPROTO_UDP:
 			dprintf1("UDP ");
-			src_port=ntohs(udp->source);
-			dst_port=ntohs(udp->dest);
+			/* ports stay 0 if it is not the first fragment */
+			if (frag1) {
+				src_port=ntohs(udp->source);
+				dst_port=ntohs(udp->dest);
+			}
 			prt=IP_FW_F_UDP;
 			break;
 		case IPPROTO_ICMP:
@@ -214,10 +231,12 @@ int ip_fw_chk(struct iphdr *ip, struct device *rif, struct ip_fw *chain, int pol
 	}
 	dprint_ip(ip->saddr);
 	
-	if (ip->protocol==IPPROTO_TCP || ip->protocol==IPPROTO_UDP) 
+	if (ip->protocol==IPPROTO_TCP || ip->protocol==IPPROTO_UDP)
+		/* This will print 0 when it is not the first fragment! */
 		dprintf2(":%d ", src_port);
 	dprint_ip(ip->daddr);
-	if ( ip->protocol==IPPROTO_TCP || ip->protocol==IPPROTO_UDP) 
+	if (ip->protocol==IPPROTO_TCP || ip->protocol==IPPROTO_UDP)
+		/* This will print 0 when it is not the first fragment! */
 		dprintf2(":%d ",dst_port);
 	dprintf1("\n");
 
@@ -228,8 +247,32 @@ int ip_fw_chk(struct iphdr *ip, struct device *rif, struct ip_fw *chain, int pol
 		 *	an interface chain as you do in BSD - same logic
 		 *	however.
 		 */
+
+		/*
+		 *	Match can become 0x01 (a "normal" match was found),
+		 *	0x02 (a reverse match was found), and 0x03 (the
+		 *	IP addresses match in both directions).
+		 *	Now we know in which direction(s) we should look
+		 *	for a match for the TCP/UDP ports.  Both directions
+		 *	might match (e.g., when both addresses are on the
+		 *	same network for which an address/mask is given), but
+		 *	the ports might only match in one direction.
+		 *	This was obviously wrong in the original BSD code.
+		 */
+		match = 0x00;
+
 		if ((src&f->fw_smsk.s_addr)==f->fw_src.s_addr
-		&&  (dst&f->fw_dmsk.s_addr)==f->fw_dst.s_addr) 
+		&&  (dst&f->fw_dmsk.s_addr)==f->fw_dst.s_addr)
+			/* normal direction */
+			match |= 0x01;
+
+		if ((f->fw_flg & IP_FW_F_BIDIR) &&
+		    (dst&f->fw_smsk.s_addr)==f->fw_src.s_addr
+		&&  (src&f->fw_dmsk.s_addr)==f->fw_dst.s_addr)
+			/* reverse direction */
+			match |= 0x02;
+
+		if (match)
 		{
 			/*
 			 *	Look for a VIA match 
@@ -270,11 +313,15 @@ int ip_fw_chk(struct iphdr *ip, struct device *rif, struct ip_fw *chain, int pol
 			if(prt!=f_prt)
 				continue;
 				
-			if(!(prt==IP_FW_F_ICMP ||(
+			if(!(prt==IP_FW_F_ICMP || ((match & 0x01) &&
 				port_match(&f->fw_pts[0], f->fw_nsp, src_port,
 					f->fw_flg&IP_FW_F_SRNG) &&
 				port_match(&f->fw_pts[f->fw_nsp], f->fw_ndp, dst_port,
-					f->fw_flg&IP_FW_F_SRNG))))
+					f->fw_flg&IP_FW_F_DRNG)) || ((match & 0x02) &&
+				port_match(&f->fw_pts[0], f->fw_nsp, dst_port,
+					f->fw_flg&IP_FW_F_SRNG) &&
+				port_match(&f->fw_pts[f->fw_nsp], f->fw_ndp, src_port,
+					f->fw_flg&IP_FW_F_DRNG))))
 			{
 				continue;
 			}
@@ -287,10 +334,14 @@ int ip_fw_chk(struct iphdr *ip, struct device *rif, struct ip_fw *chain, int pol
 
 		if (f->fw_flg & IP_FW_F_PRN)
 		{
-			if(f->fw_flg&IP_FW_F_ACCEPT)
-				printk("Accept ");
-			else
-				printk("Deny ");
+			if(opt != 1) {
+				if(f->fw_flg&IP_FW_F_ACCEPT)
+					printk("Accept ");
+				else if(f->fw_flg&IP_FW_F_ICMPRPL)
+					printk("Reject ");
+				else
+					printk("Deny ");
+			}
 			switch(ip->protocol)
 			{
 				case IPPROTO_TCP:
@@ -315,22 +366,24 @@ int ip_fw_chk(struct iphdr *ip, struct device *rif, struct ip_fw *chain, int pol
 			printk("\n");
 		}
 #endif		
-		if(f->fw_flg&IP_FW_F_ACCEPT)
-		{
+		if (opt != 2) {
 			f->fw_bcnt+=ntohs(ip->tot_len);
 			f->fw_pcnt++;
-			return 1;
 		}
-		break;
+		if (opt != 1)
+			break;
 	} /* Loop */
 	
+	if(opt == 1)
+		return 0;
+
 	/*
-	 * If we get here then none of the firewalls matched or one matched
-	 * but was a no. So now we rely on policy defined in the rejecting
-	 * entry or if none was found in the policy variable
+	 * We rely on policy defined in the rejecting entry or, if no match
+	 * was found, we rely on the general policy variable for this type
+	 * of firewall.
 	 */
 
-	if(f!=NULL)	/* A deny match */
+	if(f!=NULL)	/* A match was found */
 		f_flag=f->fw_flg;
 	else
 		f_flag=policy;
@@ -340,9 +393,6 @@ int ip_fw_chk(struct iphdr *ip, struct device *rif, struct ip_fw *chain, int pol
 		return -1;
 	return 0;
 }
-
-
-
 
 
 static void zero_fw_chain(struct ip_fw *chainptr)
@@ -526,6 +576,10 @@ static int add_to_chain(struct ip_fw *volatile* chainptr, struct ip_fw *frwl)
 						addb4--;
 skip_check:
 				}
+				/* finally look at the interface address */
+				if ((addb4 == 0) && ftmp->fw_via.s_addr &&
+						!(chtmp->fw_via.s_addr))
+					addb4++;
 			}
 			if (addb4>0) 
 			{
@@ -686,9 +740,10 @@ struct ip_fw *check_ipfw_struct(struct ip_fw *frwl, int len)
 
 #ifdef CONFIG_IP_ACCT
 
-int ip_acct_cnt(struct iphdr *iph, struct device *dev, struct ip_fw *f)
+void ip_acct_cnt(struct iphdr *iph, struct device *dev, struct ip_fw *f)
 {
-	return ip_fw_chk(iph, dev, f, 0);
+	(void) ip_fw_chk(iph, dev, f, 0, 1);
+	return;
 }
 
 int ip_acct_ctl(int stage, void *m, int len)
@@ -738,6 +793,8 @@ int ip_acct_ctl(int stage, void *m, int len)
 #ifdef CONFIG_IP_FIREWALL
 int ip_fw_ctl(int stage, void *m, int len)
 {
+	int ret;
+
 	if ( stage == IP_FW_FLUSH_BLK )
 	{
 		free_fw_chain(&ip_fw_blk_chain);
@@ -775,18 +832,21 @@ int ip_fw_ctl(int stage, void *m, int len)
 
 	if ( stage == IP_FW_CHK_BLK || stage == IP_FW_CHK_FWD )
 	{
+		struct device viadev;
+		struct ip_fwpkt *ipfwp;
 		struct iphdr *ip;
 
-		if ( len < sizeof(struct iphdr) + 2 * sizeof(unsigned short) )
+		if ( len < sizeof(struct ip_fwpkt) )
 		{
 #ifdef DEBUG_CONFIG_IP_FIREWALL
-			printf("ip_fw_ctl: len=%d, want at least %d\n",
-				len,sizeof(struct ip) + 2 * sizeof(unsigned short));
+			printf("ip_fw_ctl: length=%d, expected %d\n",
+				len, sizeof(struct ip_fwpkt));
 #endif
 			return( EINVAL );
 		}
 
-	 	ip = (struct iphdr *)m;
+	 	ipfwp = (struct ip_fwpkt *)m;
+	 	ip = &(ipfwp->fwp_iph);
 
 		if ( ip->ihl != sizeof(struct iphdr) / sizeof(int))
 		{
@@ -797,15 +857,19 @@ int ip_fw_ctl(int stage, void *m, int len)
 			return(EINVAL);
 		}
 
-		if ( ip_fw_chk(ip, NULL,
+		viadev.pa_addr = ipfwp->fwp_via.s_addr;
+
+		if ((ret = ip_fw_chk(ip, &viadev,
 			stage == IP_FW_CHK_BLK ?
 	                ip_fw_blk_chain : ip_fw_fwd_chain,
 			stage == IP_FW_CHK_BLK ?
-	                ip_fw_blk_policy : ip_fw_fwd_policy )
-		       ) 
+	                ip_fw_blk_policy : ip_fw_fwd_policy, 2 )) > 0
+		   )
 			return(0);
-	    	else	
-			return(EACCES);
+	    	else if (ret == -1)	
+			return(ECONNREFUSED);
+		else
+			return(ETIMEDOUT);
 	}
 
 /*
@@ -858,7 +922,7 @@ static int ip_chain_procinfo(int stage, char *buffer, char **start,
 	off_t pos=0, begin=0;
 	struct ip_fw *i;
 	unsigned long flags;
-	int len;
+	int len, p;
 	
 
 	switch(stage)
@@ -866,12 +930,12 @@ static int ip_chain_procinfo(int stage, char *buffer, char **start,
 #ifdef CONFIG_IP_FIREWALL
 		case IP_INFO_BLK:
 			i = ip_fw_blk_chain;
-			len=sprintf(buffer, "IP firewall block rules, policy = %d\n",
+			len=sprintf(buffer, "IP firewall block rules, default %d\n",
 				ip_fw_blk_policy);
 			break;
 		case IP_INFO_FWD:
 			i = ip_fw_fwd_chain;
-			len=sprintf(buffer, "IP firewall forward rules, policy = %d\n",
+			len=sprintf(buffer, "IP firewall forward rules, default %d\n",
 				ip_fw_fwd_policy);
 			break;
 #endif
@@ -897,12 +961,12 @@ static int ip_chain_procinfo(int stage, char *buffer, char **start,
 			ntohl(i->fw_src.s_addr),ntohl(i->fw_smsk.s_addr),
 			ntohl(i->fw_dst.s_addr),ntohl(i->fw_dmsk.s_addr),
 			ntohl(i->fw_via.s_addr),i->fw_flg);
-		len+=sprintf(buffer+len,"%u %u %lu %lu ",
+		len+=sprintf(buffer+len,"%u %u %lu %lu",
 			i->fw_nsp,i->fw_ndp, i->fw_pcnt,i->fw_bcnt);
-		len+=sprintf(buffer+len,"%u %u %u %u %u %u %u %u %u %u\n",
-			i->fw_pts[0],i->fw_pts[1],i->fw_pts[2],i->fw_pts[3],	
-			i->fw_pts[4],i->fw_pts[5],i->fw_pts[6],i->fw_pts[7],	
-			i->fw_pts[8],i->fw_pts[9]);	
+		for (p = 0; p < IP_FW_MAX_PORTS; p++)
+			len+=sprintf(buffer+len, " %u", i->fw_pts[p]);
+		buffer[len++]='\n';
+		buffer[len]='\0';
 		pos=begin+len;
 		if(pos<offset)
 		{

@@ -23,6 +23,7 @@
 
 OBJS := ll_rw_blk.o ramdisk.o genhd.o 
 SRCS := ll_rw_blk.c ramdisk.c genhd.c 
+BLOCK_MODULE_OBJS =
 
 ifdef CONFIG_BLK_DEV_FD
 OBJS := $(OBJS) floppy.o
@@ -47,6 +48,8 @@ endif
 ifdef CONFIG_SBPCD
 OBJS := $(OBJS) sbpcd.o
 SRCS := $(SRCS) sbpcd.c
+else
+BLOCK_MODULE_OBJS := $(BLOCK_MODULE_OBJS) sbpcd.o
 endif #CONFIG_SBPCD
 
 ifdef CONFIG_SBPCD2
@@ -82,6 +85,8 @@ endif
 ifdef CONFIG_CDU535
 OBJS := $(OBJS) sonycd535.o
 SRCS := $(SRCS) sonycd535.c
+else
+BLOCK_MODULE_OBJS := $(BLOCK_MODULE_OBJS) sonycd535.o
 endif
 
 all: block.a
@@ -94,7 +99,10 @@ block.a: $(OBJS)
 dep:
 	$(CPP) -M $(SRCS) > .depend
 
-modules:
+modules: $(BLOCK_MODULE_OBJS)
+	echo $(BLOCK_MODULE_OBJS) > ../../modules/BLOCK_MODULES
+	(cd ../../modules;for i in $(BLOCK_MODULE_OBJS); do ln -sf ../drivers/block/$$i .; done)
+
 dummy:
 
 #

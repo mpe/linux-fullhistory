@@ -130,9 +130,15 @@ struct arp_table
 
 #define ARP_CHECK_INTERVAL	(60 * HZ)
 
+enum proxy {
+   PROXY_EXACT=0,
+   PROXY_ANY,
+   PROXY_NONE,
+};
+
 /* Forward declarations. */
 static void arp_check_expire (unsigned long);  
-static struct arp_table *arp_lookup(unsigned long paddr, int exact);
+static struct arp_table *arp_lookup(unsigned long paddr, enum proxy proxy);
 
 
 static struct timer_list arp_timer =
@@ -497,6 +503,7 @@ void arp_destroy(unsigned long ip_addr, int force)
 	struct arp_table **pentry;
 	unsigned long hash = HASH(ip_addr);
 
+ugly:
 	cli();
 	pentry = &arp_tables[hash];
 	if (! *pentry) /* also check proxy entries */
@@ -512,7 +519,12 @@ void arp_destroy(unsigned long ip_addr, int force)
 			del_timer(&entry->timer);
 			sti();
 			arp_release_entry(entry);
-			return;
+			/* this would have to be cleaned up */
+			goto ugly;
+			/* perhaps like this ?
+			cli();
+			entry = *pentry;
+			*/
 		}
 		pentry = &entry->next;
 		if (!checked_proxies && ! *pentry)
@@ -842,7 +854,7 @@ int arp_find(unsigned char *haddr, unsigned long paddr, struct device *dev,
 	/*
 	 *	Find an entry
 	 */
-	entry = arp_lookup(paddr, 1);
+	entry = arp_lookup(paddr, PROXY_NONE);
 
 	if (entry != NULL) 	/* It exists */
 	{
@@ -1006,11 +1018,11 @@ int arp_get_info(char *buffer, char **start, off_t offset, int length)
 
 /*
  *	This will find an entry in the ARP table by looking at the IP address.
- *      If exact is true then only exact IP matches will be allowed
+ *      If proxy is PROXY_EXACT then only exact IP matches will be allowed
  *      for proxy entries, otherwise the netmask will be used
  */
 
-static struct arp_table *arp_lookup(unsigned long paddr, int exact)
+static struct arp_table *arp_lookup(unsigned long paddr, enum proxy proxy)
 {
 	struct arp_table *entry;
 	unsigned long hash = HASH(paddr);
@@ -1019,9 +1031,10 @@ static struct arp_table *arp_lookup(unsigned long paddr, int exact)
 		if (entry->ip == paddr) break;
 
 	/* it's possibly a proxy entry (with a netmask) */
-	if (!entry)
+	if (!entry && proxy != PROXY_NONE)
 	for (entry=arp_tables[PROXY_HASH]; entry != NULL; entry = entry->next)
-	  if (exact? (entry->ip==paddr) : !((entry->ip^paddr)&entry->mask)) 
+	  if ((proxy==PROXY_EXACT) ? (entry->ip==paddr)
+	                           : !((entry->ip^paddr)&entry->mask)) 
 	    break;	  
 
 	return entry;
@@ -1099,7 +1112,7 @@ static int arp_req_set(struct arpreq *req)
 	/*
 	 *	Find the entry
 	 */
-	entry = arp_lookup(ip, 1);
+	entry = arp_lookup(ip, PROXY_EXACT);
 	if (entry && (entry->flags & ATF_PUBL) != (r.arp_flags & ATF_PUBL))
 	{
 		sti();
@@ -1179,7 +1192,7 @@ static int arp_req_get(struct arpreq *req)
 	
 	si = (struct sockaddr_in *) &r.arp_pa;
 	cli();
-	entry = arp_lookup(si->sin_addr.s_addr,0);
+	entry = arp_lookup(si->sin_addr.s_addr,PROXY_ANY);
 
 	if (entry == NULL)
 	{

@@ -1,13 +1,9 @@
 
-	Linux kernel release 1.1.xx
+	Linux kernel release 1.2.xx
 
-These are the release notes for linux version 1.1.  Read them carefully,
+These are the release notes for linux version 1.2.  Read them carefully,
 as they tell you what this is all about, explain how to install the
 kernel, and what to do if something goes wrong. 
-
-Warning: This is a work in progress. If you are not reasonably at ease with
-the C programming language, GCC, installing Linux, and recovering from
-system crashes, please use the 1.0 version, or wait for 1.2.
 
 WHAT IS LINUX?
 
@@ -23,12 +19,21 @@ WHAT IS LINUX?
   It is distributed under the GNU General Public License - see the
   accompanying COPYING file for more details. 
 
+DOCUMENTATION:
+
+ - there is a lot of documentation available both in electronic form on
+   the internet and in books, both Linux-specific and pertaining to
+   general UNIX questions.  I'd recommend looking into the documentation
+   subdirectories on any Linux ftp site for the LDP (Linux Documentation
+   Project) books.  This README is not meant to be documentation on the
+   system: there are much better sources available.
+
 INSTALLING the kernel:
 
  - If you install the full sources, do a
 
 		cd /usr/src
-		gzip -cd linux-1.1.XX.tar.gz | tar xfv -
+		gzip -cd linux-1.2.XX.tar.gz | tar xfv -
 
    to get it all put in place. Replace "XX" with the version number of the
    latest kernel.

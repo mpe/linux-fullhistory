@@ -6,10 +6,11 @@
  *            Panasonic CI-101P.
  *            Also for the Longshine LCS-7260 drive.
  *            Also for the IBM "External ISA CD-Rom" drive.
- *            Not for the TEAC CD-55A drive (yet).
- *            Not for the CreativeLabs CD200 drive (who knows?).
+ *            Still not for the CreativeLabs CD200 drive (but should work soon).
+ *            Not for the TEAC CD-55A drive (separate project now).
+ *            Not for Funai or Sanyo drives.
  *
- *  NOTE:     This is release 3.3.
+ *  NOTE:     This is release 3.4.
  *            It works with my SbPro & drive CR-521 V2.11 from 2/92
  *            and with the CR-562-B V0.75 on a "naked" Panasonic
  *            CI-101P interface. And vice versa. 
@@ -180,6 +181,12 @@
  *
  *  3.3  Working with CD200 support. Maybe a simple read is already possible.
  *
+ *  3.4  Auto-probing stops if an address of 0 is seen (to be entered with
+ *       the kernel command line).
+ *       Made the driver "loadable". If used as a module, "audio copy" is
+ *       disabled, and the internal read ahead data buffer has a reduced size
+ *       of 4 kB; so, throughput may be reduced a little bit with slow CPUs.
+ *
  *  TODO
  *
  *     disk change detection
@@ -196,7 +203,6 @@
  * 
  *
  *   Copyright (C) 1993, 1994, 1995  Eberhard Moenkeberg <emoenke@gwdg.de>
- *                               or <eberhard_moenkeberg@rollo.central.de>
  *
  *                  If you change this software, you should mail a .diff
  *                  file with some description lines to emoenke@gwdg.de.
@@ -224,9 +230,17 @@
 #include <linux/config.h>
 #include <linux/errno.h>
 
+#ifdef MODULE
+#include <linux/malloc.h>
+#include <linux/module.h>
+#include <linux/version.h>
+#ifndef CONFIG_MODVERSIONS
+char kernel_version[]=UTS_RELEASE;
+#endif
+#endif MODULE
+
 #include <linux/sched.h>
 #include <linux/mm.h>
-/* #undef DS */
 #include <linux/timer.h>
 #include <linux/fs.h>
 #include <linux/kernel.h>
@@ -253,18 +267,19 @@
 #define MAJOR_NR MATSUSHITA_CDROM4_MAJOR /* fourth driver issue */
 #endif
 
+#ifdef MODULE
+#include "/usr/src/linux/drivers/block/blk.h"
+#else
 #include "blk.h"
+#define MOD_INC_USE_COUNT
+#define MOD_DEC_USE_COUNT
+#endif MODULE
 
-#define VERSION "3.3 Eberhard Moenkeberg <emoenke@gwdg.de>"
+#define VERSION "3.4 Eberhard Moenkeberg <emoenke@gwdg.de>"
 
 /*
- * still testing around...
+ *
  */
-#define TEAC 0 /* set to 1 for TEAC CD-55A detection test (not more) */
-
-#define MULTISESSION_BY_DRIVER 0 /* if set to 0 here, we need the counterpart
-                                  * in linux/fs/isofs/inode.c
-                                  */
 #define READ_AUDIO 4 /* max. number of audio frames to read with one */
                      /* request (allocates n* 2352 bytes kernel memory!) */
 #define JUKEBOX 1 /* tray control: eject tray if no disk is in */
@@ -368,18 +383,18 @@ static int sbpcd_probe[] =
 /* due to incomplete address decoding of the SbPro card, these must be last */
   0x630, 0, /* "sound card #9" (default) */
   0x650, 0, /* "sound card #9" */
+#ifdef MODULE
 /*
- * some "hazardous" locations
+ * some "hazardous" locations (no harm with the loadable version)
  * (will stop the bus if a NE2000 ethernet card resides at offset -0x10)
  */
-#if 0
   0x330, 0, /* Lasermate, CI-101P, WDH-7001C */
   0x350, 0, /* Lasermate, CI-101P */
   0x350, 2, /* SPEA Media FX */
   0x370, 0, /* Lasermate, CI-101P */
   0x290, 1, /* Soundblaster 16 */
   0x310, 0, /* Lasermate, CI-101P, WDH-7001C */
-#endif
+#endif MODULE
 #endif DISTRIBUTION
 };
 #else
@@ -448,7 +463,6 @@ static int sbpcd_chk_disk_change(dev_t);
  * (1<<DBG_AUD)  "read audio" debugging
  * (1<<DBG_SEQ)  Sequoia interface configuration trace
  * (1<<DBG_LCS)  Longshine LCS-7260 debugging trace
- * (1<<DBG_TEA)  TEAC CD-55A debugging trace
  * (1<<DBG_CD2)  MKE CD200 debugging trace
  * (1<<DBG_000)  unnecessary information
  */
@@ -480,8 +494,10 @@ static struct cdrom_read_audio read_audio;
 static struct cdrom_multisession ms_info;
 
 static char *str_sb = "SoundBlaster";
+static char *str_sb_l = "soundblaster";
 static char *str_lm = "LaserMate";
 static char *str_sp = "SPEA";
+static char *str_sp_l = "spea";
 char *type;
 #if !(SBPCD_ISSUE-1)
 static char *major_name="sbpcd";
@@ -503,16 +519,20 @@ static struct wait_queue *sbp_waitq = NULL;
 #endif FUTURE
 
 /*==========================================================================*/
+#ifdef MODULE
+/* some restrictions for the "loadable" version */
+#define SBP_BUFFER_FRAMES 2 /* kmalloc() limit */
+#define SBP_BUFFER_AUDIO_FRAMES 0
+#else
 #define SBP_BUFFER_FRAMES 4 /* driver's own read_ahead, data mode */
 #define SBP_BUFFER_AUDIO_FRAMES READ_AUDIO /* buffer for read audio mode */
-
+#endif MODULE
 /*==========================================================================*/
 
 static u_char family0[]="MATSHITA"; /* MKE CR-52x */
 static u_char family1[]="CR-56"; /* MKE CR-56x */
 static u_char family2[]="CD200"; /* MKE CD200 */
 static u_char familyL[]="LCS-7260"; /* Longshine LCS-7260 */
-static u_char familyT[]="CD-55A"; /* TEAC CD-55A (still unknown)*/
 
 static u_int response_count=0;
 static u_int flags_cmd_out;
@@ -580,9 +600,6 @@ static struct {
   
   u_char f_multisession;
   u_int lba_multi;
-#if MULTISESSION_BY_DRIVER
-  u_int last_redirect;
-#endif MULTISESSION_BY_DRIVER
   int first_session;
   int last_session;
   
@@ -829,6 +846,10 @@ static void flush_status(void)
 #ifdef CDMKE
   int i;
 
+#ifdef MODULE
+  sbp_sleep(150);
+  for (i=maxtim_data;i!=0;i--) inb(CDi_status);
+#else
   if (current == task[0])
     for (i=maxtim02;i!=0;i--) inb(CDi_status);
   else 
@@ -836,6 +857,7 @@ static void flush_status(void)
       sbp_sleep(150);
       for (i=maxtim_data;i!=0;i--) inb(CDi_status);
     }
+#endif MODULE
 #else
   timed_out=0;
 #if 0
@@ -857,6 +879,20 @@ static int CDi_stat_loop(void)
   int i,j;
   u_long timeout;
   
+#ifdef MODULE
+    for(timeout = jiffies + 1000, i=maxtim_data; timeout > jiffies; )
+      {
+	for ( ;i!=0;i--)
+	  {
+	    j=inb(CDi_status);
+	    if (!(j&s_not_data_ready)) return (j);
+	    if (!(j&s_not_result_ready)) return (j);
+	    if (fam0L_drive) if (j&s_attention) return (j);
+	  }
+	sbp_sleep(1);
+	i = 1;
+      }
+#else
   if (current == task[0])
     for(i=maxtim16;i!=0;i--)
       {
@@ -878,40 +914,10 @@ static int CDi_stat_loop(void)
 	sbp_sleep(1);
 	i = 1;
       }
+#endif MODULE
   DPRINTF((DBG_LCS,"SBPCD: CDi_stat_loop failed\n"));
   return (-1);
 }
-/*==========================================================================*/
-#if TEAC-X
-/*==========================================================================*/
-static int tst_DataReady(void)
-{
-  int i;
-  
-  i=inb(CDi_status);
-  if (i&s_not_data_ready) return (0);
-  return (1);
-}
-/*==========================================================================*/
-static int tst_ResultReady(void)
-{
-  int i;
-  
-  i=inb(CDi_status);
-  if (i&s_not_result_ready) return (0);
-  return (1);
-}
-/*==========================================================================*/
-static int tst_Attention(void)
-{
-  int i;
-  
-  i=inb(CDi_status);
-  if (i&s_attention) return (1);
-  return (0);
-}
-/*==========================================================================*/
-#endif TEAC-X
 /*==========================================================================*/
 static int ResponseInfo(void)
 {
@@ -919,6 +925,24 @@ static int ResponseInfo(void)
   u_long timeout;
 
   DPRINTF((DBG_000,"SBPCD: ResponseInfo entered.\n"));
+#ifdef MODULE
+  for (i=0, timeout = jiffies + 100; i < response_count; i++) 
+    {
+      for (j=maxtim_data; ; )
+	{
+	  for ( ;j!=0;j-- )
+	    {
+	      st=inb(CDi_status);
+	      if (!(st&s_not_result_ready)) break;
+	    }
+	  if (j != 0 || timeout <= jiffies) break;
+	  sbp_sleep(0);
+	  j = 1;
+	}
+      if (timeout <= jiffies) return (-1);
+      infobuf[i]=inb(CDi_info);
+    }
+#else
   if (current == task[0])
     for (i=0;i<response_count;i++)
       {
@@ -953,15 +977,16 @@ static int ResponseInfo(void)
 	  infobuf[i]=inb(CDi_info);
 	}
     }
+#endif MODULE
   DPRINTF((DBG_000,"SBPCD: ResponseInfo: done.\n"));
   return (0);
 }
 /*==========================================================================*/
-static int EvaluateStatus(int st)
+static void EvaluateStatus(int st)
 {
+  DriveStruct[d].status_byte=0;
   if (fam0_drive)
     {
-      DriveStruct[d].status_byte=0;
       if (st&p_caddin_old) DriveStruct[d].status_byte |= p_door_closed|p_caddy_in;
       if (st&p_spinning) DriveStruct[d].status_byte |= p_spinning;
       if (st&p_check) DriveStruct[d].status_byte |= p_check;
@@ -970,23 +995,26 @@ static int EvaluateStatus(int st)
     }
   else if (famL_drive)
     {
-      DriveStruct[d].status_byte=0;
       if (st&p_caddin_old) DriveStruct[d].status_byte |= p_disk_ok|p_caddy_in;
       if (st&p_spinning) DriveStruct[d].status_byte |= p_spinning;
       if (st&p_check) DriveStruct[d].status_byte |= p_check;
       if (st&p_busy_old) DriveStruct[d].status_byte |= p_busy_new;
       if (st&p_lcs_door_closed) DriveStruct[d].status_byte |= p_door_closed;
       if (st&p_lcs_door_locked) DriveStruct[d].status_byte |= p_door_locked;
-      }
-  else if (fam1_drive)
-    {
-      DriveStruct[d].status_byte=st;
-      st=p_success_old; /* for new drives: fake "successful" bit of old drives */
     }
-  else /* CD200, CD-55A */
+  else if (fam2_drive)
     {
+      if (st&p2_check) DriveStruct[d].status_byte |= p1_check;
+      if (st&p2_door_closed) DriveStruct[d].status_byte |= p1_door_closed;
+      if (st&p2_disk_in) DriveStruct[d].status_byte |= p1_disk_in;
+      if (st&p2_busy1) DriveStruct[d].status_byte |= p1_busy;
+      if (st&p2_busy2) DriveStruct[d].status_byte |= p1_busy;
+      if (st&p2_spinning) DriveStruct[d].status_byte |= p1_spinning;
+      if (st&p2_door_locked) DriveStruct[d].status_byte |= p1_door_locked;
+      if (st&p2_disk_ok) DriveStruct[d].status_byte |= p1_disk_ok;
     }
-  return (st);
+  else if (fam1_drive) DriveStruct[d].status_byte=st;
+  return;
 }
 /*==========================================================================*/
 static int ResponseStatus(void)
@@ -995,7 +1023,24 @@ static int ResponseStatus(void)
   u_long timeout;
 
   DPRINTF((DBG_STA,"SBPCD: doing ResponseStatus...\n"));
-
+#ifdef MODULE
+  if (flags_cmd_out & f_respo3) timeout = jiffies;
+  else if (flags_cmd_out & f_respo2) timeout = jiffies + 1600;
+  else timeout = jiffies + 400;
+  j=maxtim_8;
+  do
+    {
+      for ( ;j!=0;j--)
+	{ 
+	  i=inb(CDi_status);
+	  if (!(i&s_not_result_ready)) break;
+	}
+      if (j != 0 || timeout <= jiffies) break;
+      sbp_sleep(0);
+      j = 1;
+    }
+  while (1);
+#else
   if (current == task[0])
     {
       if (flags_cmd_out & f_respo3) j = maxtim_8;
@@ -1026,16 +1071,17 @@ static int ResponseStatus(void)
 	}
       while (1);
     }
+#endif MODULE
   if (j==0) 
     { if ((flags_cmd_out & f_respo3) == 0)
 	DPRINTF((DBG_STA,"SBPCD: ResponseStatus: timeout.\n"));
-      EvaluateStatus(0);
+      DriveStruct[d].status_byte=0;
       return (-1);
     }
   i=inb(CDi_info);
   DPRINTF((DBG_STA,"SBPCD: ResponseStatus: response %2X.\n", i));
-  i=EvaluateStatus(i);
-  return (i);
+  EvaluateStatus(i);
+  return (0);
 }
 /*==========================================================================*/
 static void xx_ReadStatus(void)
@@ -1046,9 +1092,7 @@ static void xx_ReadStatus(void)
   SBPCD_CLI;
   if (fam0L_drive) OUT(CDo_command,CMD0_STATUS);
   else if (fam1_drive) OUT(CDo_command,CMD1_STATUS);
-  else /* CD200, CD-55A */
-    {
-    }
+  else if (fam2_drive) OUT(CDo_command,CMD2_STATUS);
   if (!fam0L_drive) for (i=0;i<6;i++) OUT(CDo_command,0);
   SBPCD_STI;
 }
@@ -1078,13 +1122,6 @@ static int xx_ReadError(void)
     {
       drvcmd[0]=CMD2_READ_ERR;
       response_count=6;
-      flags_cmd_out=f_putcmd;
-    }
-  else /* CD-55A */
-    {
-      return (-1);
-      drvcmd[0]=CMDT_READ_ERR;
-      response_count=5;
       flags_cmd_out=f_putcmd;
     }
   i=cmd_out(7);
@@ -1201,10 +1238,6 @@ static int xx_Seek(u_int pos, char f_blk_msf)
       drvcmd[5]=pos&0x00FF;
       flags_cmd_out=f_putcmd|f_ResponseStatus;
     }
-  else /* CD-55A */
-    {
-      return (-1);
-    }
   response_count=0;
   i=cmd_out(7);
   return (i);
@@ -1233,10 +1266,6 @@ static int xx_SpinUp(void)
       drvcmd[0]=CMD2_TRAY_CTL;
       drvcmd[4]=0x01;
       flags_cmd_out=f_putcmd|f_respo2|f_ResponseStatus|f_obey_p_check;
-    }
-  else /* CD-55A */
-    {
-      return (-1);
     }
   response_count=0;
   i=cmd_out(7);
@@ -1267,10 +1296,6 @@ static int yy_SpinDown(void)
       drvcmd[0]=CMDL_SPINDOWN;
       drvcmd[1]=1;
       flags_cmd_out=f_putcmd|f_respo2|f_lopsta|f_getsta|f_ResponseStatus|f_obey_p_check|f_bit1;
-    }
-  else /* CD-55A */
-    {
-      return (-1);
     }
   i=cmd_out(7);
   return (i);
@@ -1306,10 +1331,6 @@ static int yy_SetSpeed(u_char speed, u_char x1, u_char x2)
 	  drvcmd[3]=150;
 	}
       flags_cmd_out=f_putcmd|f_ResponseStatus;
-    }
-  else /* CD-55A */
-    {
-      return (-1);
     }
   i=cmd_out(7);
   return (i);
@@ -1462,10 +1483,6 @@ static int xx_SetVolume(void)
       drvcmd[5]=value0;
       flags_cmd_out=f_putcmd|f_getsta|f_ResponseStatus|f_obey_p_check;
     }
-  else /* CD-55A */
-    {
-      return (-1);
-    }
   response_count=0;
   i=cmd_out(7);
   if (i>0) return (i);
@@ -1504,10 +1521,6 @@ static int xy_DriveReset(void)
       flags_cmd_out=f_putcmd;
       i=cmd_out(7);
       OUT(CDo_reset,0x00);
-    }
-  else /* CD-55A */
-    {
-      return (-1);
     }
   if (famL_drive) sbp_sleep(500); /* wait 5 seconds */
   else sbp_sleep(100); /* wait a second */
@@ -1586,10 +1599,6 @@ static int xx_Pause_Resume(int pau_res)
 	flags_cmd_out=f_putcmd|f_respo2|f_lopsta|f_getsta|f_ResponseStatus|
 	  f_obey_p_check;
     }
-  else /* CD-55A */
-    {
-      return (-1);
-    }
   i=cmd_out(7);
   return (i);
 }
@@ -1620,10 +1629,6 @@ static int yy_LockDoor(char lock)
       drvcmd[0]=CMDL_LOCK_CTL;
       if (lock==1) drvcmd[1]=0x01;
       flags_cmd_out=f_putcmd|f_respo2|f_lopsta|f_getsta|f_ResponseStatus|f_obey_p_check|f_bit1;
-    }
-  else /* CD-55A */
-    {
-      return (-1);
     }
   i=cmd_out(7);
   DPRINTF((DBG_LCS,"SBPCD: p_door_locked bit %d after\n", st_door_locked));
@@ -1657,10 +1662,6 @@ static int yy_CloseTray(void)
       drvcmd[0]=CMDL_TRAY_CTL;
       flags_cmd_out=f_putcmd|f_respo2|f_lopsta|f_getsta|
  	f_ResponseStatus|f_obey_p_check|f_bit1;
-    }
-  else /* CD-55A */
-    {
-      return (-1);
     }
   i=cmd_out(7);
   DPRINTF((DBG_LCS,"SBPCD: p_door_closed bit %d after\n", st_door_closed));
@@ -1698,10 +1699,6 @@ static int xx_ReadSubQ(void)
  	  else
  	    flags_cmd_out=f_putcmd|f_getsta|f_ResponseStatus|f_obey_p_check;
 	  response_count=13;
-	}
-      else /* CD-55A */
-	{
-	  return (-1);
 	}
       i=cmd_out(7);
       if (i<0) return (i);
@@ -1755,18 +1752,11 @@ static int xx_ModeSense(void)
 	flags_cmd_out=f_putcmd|f_getsta|f_ResponseStatus|f_obey_p_check;
       response_count=2;
     }
-  else /* CD-55A */
-    {
-      return (-1);
-    }
   i=cmd_out(7);
   if (i<0) return (i);
   i=0;
   if (fam1_drive) DriveStruct[d].sense_byte=infobuf[i++];
   else if (fam0L_drive) DriveStruct[d].sense_byte=0;
-  else /* CD-55A */
-    {
-    }
   DriveStruct[d].frame_size=make16(infobuf[i],infobuf[i+1]);
 
   DPRINTF((DBG_XA,"SBPCD: xx_ModeSense: "));
@@ -1816,10 +1806,6 @@ static int xx_ModeSelect(int framesize)
       else
 	flags_cmd_out=f_putcmd|f_getsta|f_ResponseStatus|f_obey_p_check;
     }
-  else /* CD-55A */
-    {
-      return (-1);
-    }
   response_count=0;
   i=cmd_out(7);
   if (i<0) return (i);
@@ -1859,10 +1845,6 @@ static int xx_TellVolume(void)
 	flags_cmd_out=f_putcmd;
       else
 	flags_cmd_out=f_putcmd|f_getsta|f_ResponseStatus|f_obey_p_check;
-    }
-  else /* CD-55A */
-    {
-      return (-1);
     }
   i=cmd_out(7);
   if (i<0) return (i);
@@ -1931,10 +1913,6 @@ static int xx_TellVolume(void)
             }
         }
     }
-  else /* CD-55A */
-    {
-      return (-1);
-    }
   DriveStruct[d].vol_chan0=chan0;
   DriveStruct[d].vol_ctrl0=vol0;
   DriveStruct[d].vol_chan1=chan1;
@@ -1976,10 +1954,6 @@ static int xx_ReadCapacity(void)
       else
 	flags_cmd_out=f_putcmd|f_getsta|f_ResponseStatus|f_obey_p_check;
     }
-  else /* CD-55A */
-    {
-      return (-1);
-    }
   i=cmd_out(7);
   if (i<0) return (i);
   if (fam1_drive) DriveStruct[d].CDsize_frm=msf2blk(make32(make16(0,infobuf[0]),make16(infobuf[1],infobuf[2])))+CD_BLOCK_OFFSET;
@@ -2020,10 +1994,6 @@ static int xx_ReadTocDescr(void)
       drvcmd[3]=0xFF; /* session */
       response_count=8;
       flags_cmd_out=f_putcmd;
-    }
-  else /* CD-55A */
-    {
-      return (-1);
     }
   i=cmd_out(7);
   if (i<0) return (i);
@@ -2117,10 +2087,6 @@ static int xx_ReadTocEntry(int num)
       else
 	flags_cmd_out=f_putcmd|f_getsta|f_ResponseStatus|f_obey_p_check;
     }
-  else /* CD-55A */
-    {
-      return (-1);
-    }
   drvcmd[2]=num;
   i=cmd_out(7);
   if (i<0) return (i);
@@ -2159,10 +2125,7 @@ static int xx_ReadPacket(void)
     flags_cmd_out=f_putcmd;
   else if (fam01_drive)
     flags_cmd_out=f_putcmd|f_getsta|f_ResponseStatus|f_obey_p_check;
-  else /* CD200, CD-55A */
-    {
-      return (-1);
-    }
+  else if (fam2_drive) return (-1); /* not implemented yet */
   i=cmd_out(7);
   return (i);
 }
@@ -2181,7 +2144,7 @@ static int convert_UPC(u_char *p)
 	  DriveStruct[d].UPC_buf[i]=((*p++)<<4)&0xFF;
 	  DriveStruct[d].UPC_buf[i] |= *p++;
 	}
-      else /* CD200, CD-55A */
+      else /* CD200 */
 	{
 	  return (-1);
 	}
@@ -2196,6 +2159,8 @@ static int xx_ReadUPC(void)
 #if TEST_UPC
   int block, checksum;
 #endif TEST_UPC
+
+  if (fam2_drive) return (0); /* not implemented yet */
 
   DriveStruct[d].diskstate_flags &= ~upc_bit;
 #if TEST_UPC
@@ -2225,7 +2190,7 @@ static int xx_ReadUPC(void)
 	  response_count=0;
 	  flags_cmd_out=f_putcmd|f_lopsta|f_getsta|f_ResponseStatus|f_obey_p_check|f_bit1;
 	}
-      else /* CD200, CD-55A */
+      else /* CD200 */
 	{
 	  return (-1);
 	}
@@ -2296,9 +2261,6 @@ static int yy_CheckMultiSession(void)
 	  DriveStruct[d].f_multisession=1;
 	  DriveStruct[d].lba_multi=msf2blk(make32(make16(0,infobuf[1]),
 						  make16(infobuf[2],infobuf[3])));
-#if MULTISESSION_BY_DRIVER
-	  DriveStruct[d].last_redirect=19;
-#endif MULTISESSION_BY_DRIVER
 	  DPRINTF((DBG_MUL,"SBPCD: MultiSession CD detected: %02X %02X %02X %02X %02X %02X (%d)\n",
 		   infobuf[0], infobuf[1], infobuf[2],
 		   infobuf[3], infobuf[4], infobuf[5],
@@ -2324,14 +2286,7 @@ static int yy_CheckMultiSession(void)
 	{
 	  DPRINTF((DBG_MUL,"SBPCD: MultiSession base: %06X\n", DriveStruct[d].lba_multi));
 	  DriveStruct[d].f_multisession=1;
-#if MULTISESSION_BY_DRIVER
-	  DriveStruct[d].last_redirect=19;
-#endif MULTISESSION_BY_DRIVER
 	}
-    }
-  else /* CD-55A */
-    {
-      return (-1);
     }
   return (0);
 }
@@ -2408,53 +2363,6 @@ static void check_datarate(void)
 #endif CDMKE
 }
 /*==========================================================================*/
-#if TEAC-X
-/*==========================================================================*/
-static void teac_reset(int drv_id)
-{
-  int i;
-
-  OUT(CDo_sel_i_d,0);
-  OUT(CDo_enable,drv_id);
-  OUT(CDo_command,CMDT_RESET);
-  for (i=0;i<9;i++) OUT(CDo_command,0);
-  DPRINTF((DBG_TEA,"SBPCD: TEAC soft reset.\n"));
-  sbp_sleep(100); /* wait a second */
-}
-/*==========================================================================*/
-static int look_for_TEAC_drive(int drv_id)
-{
-  int i;
-  if (sbpro_type!=1) teac_reset(drv_id);
-
-  OUT(CDo_enable,drv_id);
-  OUT(CDo_sel_i_d,0);
-  i=inb(CDi_status);
-  if (i&s_not_result_ready) return (-1); /* drive not present */
-  i=inb(CDi_info);
-  DPRINTF((DBG_TEA,"SBPCD: TEAC look_for_drive: %02X.\n",i));
-  if (i!=0x55) return (-2); /* something else present */
-  return (1); /* drive found */
-}
-/*==========================================================================*/
-static int find_teac_drives(void)
-{
-  int i, j, found;
-
-  found=0;
-  for (i=0;i<4;i++)
-    {
-      j=look_for_TEAC_drive(i);
-      if (j<1) continue;
-      found++;
-      DPRINTF((DBG_TEA,"SBPCD: TEAC drive (id=%d) found.\n",i));
-    }
-  return (found);
-}
-/*==========================================================================*/
-#endif TEAC-X
-/*==========================================================================*/
-/*==========================================================================*/
 #ifdef CD200
 
 #if 0
@@ -2510,6 +2418,7 @@ static void ask_mail(void)
   int i;
 
   printk("SBPCD: please mail the following lines to emoenke@gwdg.de:\n");
+  printk("SBPCD: address %03X, type %s, drive ID %d\n", CDo_command, type, DriveStruct[d].drv_id);
   printk("SBPCD: infobuf = \"");
   for (i=0;i<12;i++) printk("%02X ",infobuf[i]);
   printk("\"\nSBPCD: infobuf = \"");
@@ -2525,25 +2434,6 @@ static int check_version(void)
   DPRINTF((DBG_INI,"SBPCD: check_version entered.\n"));
   DriveStruct[d].drv_type=0;
 
-#if TEAC
-  /* check for CD-55A */
-  clr_cmdbuf();
-  drvcmd[0]=CMDT_READ_ERR;
-  response_count=5;
-  flags_cmd_out=f_putcmd;
-  i=cmd_out(7);
-  if (i<0) DPRINTF((DBG_INI,"SBPCD: CMDT_READERR returns %d (ok anyway).\n",i));
-  /* read drive version */
-  clr_cmdbuf();
-  for (i=0;i<12;i++) infobuf[i]=0;
-  if (sbpro_type==1) OUT(CDo_sel_i_d,0);
-  response_count=12; /* may be too much */
-  drvcmd[0]=CMDT_READ_VER;
-  drvcmd[4]=response_count;
-  flags_cmd_out=f_putcmd;
-  i=cmd_out(10); /* possibly only 6 */
-  if (i<0) DPRINTF((DBG_INI,"SBPCD: CMDT_READ_VER returns %d\n",i));
-#else
   /* check for CD200 */
   clr_cmdbuf();
   drvcmd[0]=CMD2_READ_ERR;
@@ -2565,8 +2455,7 @@ static int check_version(void)
   flags_cmd_out=f_putcmd;
   i=cmd_out(7);
   if (i<0) DPRINTF((DBG_INI,"SBPCD: CMD2_READ_VER returns %d\n",i));
-#endif TEAC
-  if (i>=0) /* either from CD200 or CD-55A */
+  if (i>=0) /* from CD200 */
     {
       for (i=0, j=0;i<12;i++) j+=infobuf[i];
       if (j)
@@ -2588,23 +2477,6 @@ static int check_version(void)
 	  DriveStruct[d].drive_model[6]=infobuf[i++];
 	  DriveStruct[d].drive_model[7]=0;
 	  DriveStruct[d].drv_type=drv_fam2;
-	}
-      else
-	{
-	  for (i=0;i<5;i++) if (infobuf[i]!=familyT[i]) break;
-	  if (i==5)
-	    {
-	      DriveStruct[d].drive_model[0]='C';
-	      DriveStruct[d].drive_model[1]='D';
-	      DriveStruct[d].drive_model[2]='-';
-	      DriveStruct[d].drive_model[3]='5';
-	      DriveStruct[d].drive_model[4]='5';
-	      DriveStruct[d].drive_model[5]='A';
-	      DriveStruct[d].drive_model[6]=infobuf[i++];
-	      DriveStruct[d].drive_model[7]=infobuf[i++];
-	      DriveStruct[d].drive_model[8]=0;
-	    }
-	  DriveStruct[d].drv_type=drv_famT; /* assumed, not sure here */
 	}
     }
 
@@ -2692,14 +2564,6 @@ static int check_version(void)
       if (j!=4) ask_mail();
       DriveStruct[d].drv_type=drv_260;
     }
-  else if (famT_drive)
-    {
-      printk("\n\nSBPCD: possibly TEAC CD-55A present.\n");
-      printk("SBPCD: support is not fulfilled yet - drive gets ignored.\n");
-      ask_mail();
-      DriveStruct[d].drv_type=0;
-      return (-1);
-    }
   else
     {
       j = (DriveStruct[d].firmware_version[0] & 0x0F) * 100 +
@@ -2717,15 +2581,18 @@ static int check_version(void)
       else if (fam1_drive)
 	{
 	  if (j<100) DriveStruct[d].drv_type=drv_099;
-	  else DriveStruct[d].drv_type=drv_100;
+	  else
+	    {
+	      DriveStruct[d].drv_type=drv_100;
+	      ask_mail();
+	    }
 	}
       else if (fam2_drive)
 	{
 	  printk("\n\nSBPCD: new drive CD200 (%s)detected.\n",
 		 DriveStruct[d].firmware_version);
 	  printk("SBPCD: support is not fulfilled yet.\n");
-	  if (j!=101) /* only 1.01 known at time */
-	    ask_mail();
+	  if (j!=101) ask_mail(); /* only 1.01 known at time */
 	}
     }
   DPRINTF((DBG_LCS,"SBPCD: drive type %02X\n",DriveStruct[d].drv_type));
@@ -3035,9 +2902,7 @@ static int prepare(u_char func, u_char subfunc)
       if (i&s_attention) GetStatus();
     }
   else if (fam1_drive) GetStatus();
-  else /* CD200, CD-55A */
-    {
-    }
+  else if (fam2_drive) GetStatus();
   if (DriveStruct[d].CD_changed==0xFF)
     {
 #if MANY_SESSION
@@ -3134,14 +2999,16 @@ static int xx_PlayAudio(int pos_audio_start,int pos_audio_end)
 	  flags_cmd_out = f_putcmd | f_respo2 | f_ResponseStatus |
 	    f_obey_p_check | f_wait_if_busy;
 	}
+      else if (fam2_drive)
+	{
+	  drvcmd[0]=CMD2_PLAY_MSF;
+	  flags_cmd_out = f_putcmd | f_ResponseStatus;
+	}
       else if (fam0_drive)
 	{
 	  drvcmd[0]=CMD0_PLAY_MSF;
 	  flags_cmd_out = f_putcmd | f_respo2 | f_lopsta | f_getsta |
 	    f_ResponseStatus | f_obey_p_check | f_wait_if_busy;
-	}
-      else /* CD200, CD-55A */
-	{
 	}
       drvcmd[1]=(pos_audio_start>>16)&0x00FF;
       drvcmd[2]=(pos_audio_start>>8)&0x00FF;
@@ -3495,7 +3362,6 @@ static int sbpcd_ioctl(struct inode *inode, struct file *file, u_int cmd,
 	if (fam0_drive) return (-EINVAL);
 	if (famL_drive) return (-EINVAL);
 	if (fam2_drive) return (-EINVAL);
-	if (famT_drive) return (-EINVAL);
 	if (DriveStruct[d].aud_buf==NULL) return (-EINVAL);
 	i=verify_area(VERIFY_READ, (void *) arg, sizeof(struct cdrom_read_audio));
 	if (i) return (i);
@@ -3559,7 +3425,7 @@ static int sbpcd_ioctl(struct inode *inode, struct file *file, u_int cmd,
 		drvcmd[5]=0;
 		drvcmd[6]=read_audio.nframes; /* # of frames */
 	      }
-	    else /* CD200, CD-55A */
+	    else if (fam2_drive) /* CD200: not implemented yet */
 	      {
 	      }
 	    DPRINTF((DBG_AUD,"SBPCD: read_audio: before giving \"read\" command.\n"));
@@ -3743,29 +3609,26 @@ static void DO_SBPCD_REQUEST(void)
   int i, status_tries, data_tries;
   
 request_loop:
-
+  INIT_REQUEST;
   sti();
 
-  if ((CURRENT==NULL)||(CURRENT->dev<0)) goto done;
-  if (CURRENT -> sector == -1) goto done;
-
+  if ((CURRENT==NULL)||(CURRENT->dev<0)) goto err_done;
+  if (CURRENT -> sector == -1) goto err_done;
+  if (CURRENT->cmd != READ)
+    {
+      printk("SBPCD: bad cmd %d\n", CURRENT->cmd);
+      goto err_done;
+    }
   i = MINOR(CURRENT->dev);
   if ( (i<0) || (i>=NR_SBPCD) || (DriveStruct[i].drv_id==-1))
     {
       printk("SBPCD: do_request: bad device: %04X\n", CURRENT->dev);
-      goto done;
+      goto err_done;
     }
   switch_drive(i);
 
-  INIT_REQUEST;
   block = CURRENT->sector; /* always numbered as 512-byte-pieces */
   nsect = CURRENT->nr_sectors; /* always counted as 512-byte-pieces */
-  if (CURRENT->cmd != READ)
-    {
-      printk("SBPCD: bad cmd %d\n", CURRENT->cmd);
-      end_request(0);
-      goto request_loop;
-    }
 
   DPRINTF((DBG_BSZ,"SBPCD: read sector %d (%d sectors)\n", block, nsect));
 #if 0
@@ -3822,13 +3685,11 @@ request_loop:
 	}
     }
   
+err_done:
+  busy_data=0;
   end_request(0);
   sbp_sleep(10);    /* wait a bit, try again */
   goto request_loop;
-
-done:
-  busy_data=0;
-  return;
 }
 /*==========================================================================*/
 /*
@@ -3842,32 +3703,6 @@ static void sbp_read_cmd(void)
 
   DriveStruct[d].sbp_first_frame=DriveStruct[d].sbp_last_frame=-1;      /* purge buffer */
   block=CURRENT->sector/4;
-
-#if MULTISESSION_BY_DRIVER
-  if (!fam0_drive)
-    {
-#if MANY_SESSION
-      DPRINTF((DBG_MUL,"SBPCD: read MSF %08X\n", blk2msf(block)));
-      if (DriveStruct[d].f_multisession)
-	{
-	  DPRINTF((DBG_MUL,"SBPCD: ManySession: use %08X for %08X (msf)\n",
-		         blk2msf(DriveStruct[d].lba_multi+block),
-                         blk2msf(block)));
-	  block=DriveStruct[d].lba_multi+block;
-	}
-#else
-      if ((block<=DriveStruct[d].last_redirect)
-	  && (DriveStruct[d].f_multisession))
-	  {
-	    DPRINTF((DBG_MUL,"SBPCD: MultiSession: use %08X for %08X (msf)\n",
-		     blk2msf(DriveStruct[d].lba_multi+block),
-		     blk2msf(block)));
-	    block=DriveStruct[d].lba_multi+block;
-	  }
-#endif MANY_SESSION
-    }
-#endif MULTISESSION_BY_DRIVER
-
   if (block+SBP_BUFFER_FRAMES <= DriveStruct[d].CDsize_frm)
     DriveStruct[d].sbp_read_frames = SBP_BUFFER_FRAMES;
   else
@@ -3939,9 +3774,6 @@ static void sbp_read_cmd(void)
       drvcmd[4]=0;
       drvcmd[5]=DriveStruct[d].sbp_read_frames;
       drvcmd[6]=0x02;
-    }
-  else /* CD-55A */
-    {
     }
   SBPCD_CLI;
   for (i=0;i<7;i++) OUT(CDo_command,drvcmd[i]);
@@ -4152,6 +3984,7 @@ static int sbpcd_open(struct inode *ip, struct file *fp)
 /*
  * try to keep an "open" counter here and lock the door if 0->1.
  */
+  MOD_INC_USE_COUNT;
   DPRINTF((DBG_LCK,"SBPCD: open_count: %d -> %d\n",
 	   DriveStruct[d].open_count,DriveStruct[d].open_count+1));
   if (++DriveStruct[d].open_count==1)
@@ -4190,6 +4023,7 @@ static void sbpcd_release(struct inode * ip, struct file * file)
 /*
  * try to keep an "open" counter here and unlock the door if 1->0.
  */
+  MOD_DEC_USE_COUNT;
   DPRINTF((DBG_LCK,"SBPCD: open_count: %d -> %d\n",
 	   DriveStruct[d].open_count,DriveStruct[d].open_count-1));
   if (DriveStruct[d].open_count!=0) /* CDROMEJECT may have been done */
@@ -4254,7 +4088,9 @@ void sbpcd_setup(char *s, int *p)
   DPRINTF((DBG_INI,"SBPCD: sbpcd_setup called with %04X,%s\n",p[1], s));
   sbpro_type=0;
   if (!strcmp(s,str_sb)) sbpro_type=1;
+  else if (!strcmp(s,str_sb_l)) sbpro_type=1;
   else if (!strcmp(s,str_sp)) sbpro_type=2;
+  else if (!strcmp(s,str_sp_l)) sbpro_type=2;
   if (p[0]>0) sbpcd_ioaddr=p[1];
 
   CDo_command=sbpcd_ioaddr;
@@ -4329,7 +4165,11 @@ static int config_spea(void)
 /*
  *  Test for presence of drive and initialize it.  Called at boot time.
  */
+#ifdef MODULE
+int init_module(void)
+#else
 unsigned long SBPCD_INIT(u_long mem_start, u_long mem_end)
+#endif MODULE
 {
   int i=0, j=0;
   int addr[2]={1, CDROM_PORT};
@@ -4339,9 +4179,10 @@ unsigned long SBPCD_INIT(u_long mem_start, u_long mem_end)
 
   DPRINTF((DBG_INF,"SBPCD version %s\n", VERSION));
 
+#ifndef MODULE
   if (!setup_done)
     {
-      DPRINTF((DBG_INF,"SBPCD: Looking for Matsushita, Panasonic, CreativeLabs, IBM, Longshine, TEAC CD-ROM drives\n"));
+      DPRINTF((DBG_INF,"SBPCD: Looking for Matsushita, Panasonic, CreativeLabs, IBM, Longshine CD-ROM drives\n"));
       DPRINTF((DBG_WRN,"SBPCD: \n"));
       DPRINTF((DBG_WRN,"SBPCD: = = = = = = = = = = W A R N I N G = = = = = = = = = =\n"));
       DPRINTF((DBG_WRN,"SBPCD: Auto-Probing can cause a hang (f.e. touching an ethernet card).\n"));
@@ -4358,12 +4199,14 @@ unsigned long SBPCD_INIT(u_long mem_start, u_long mem_end)
       DPRINTF((DBG_WRN,"SBPCD: = = = = = = = = = = END of WARNING = = = = = = = = = =\n"));
       DPRINTF((DBG_WRN,"SBPCD: \n"));
     }
+#endif MODULE
   sbpcd_probe[0]=sbpcd_ioaddr; /* possibly changed by kernel command line */
   sbpcd_probe[1]=sbpro_type; /* possibly changed by kernel command line */
 
   for (port_index=0;port_index<NUM_PROBE;port_index+=2)
     {
       addr[1]=sbpcd_probe[port_index];
+      if (addr[1]==0) break;
       if (check_region(addr[1],4))
 	{
 	  DPRINTF((DBG_INI,"SBPCD: check_region: %03X is not free.\n",addr[1]));
@@ -4384,14 +4227,6 @@ unsigned long SBPCD_INIT(u_long mem_start, u_long mem_end)
 	      continue;
 	    }
 	}
-#if TEAC
-      i=find_teac_drives();
-      if (i>0)
-	{
-	  DPRINTF((DBG_INF,"SBPCD: found %d TEAC drives. A wonder.\n",i));
-	  DPRINTF((DBG_INF,"SBPCD: - "));
-	}
-#endif TEAC
       i=check_drives();
       DPRINTF((DBG_INI,"SBPCD: check_drives done.\n"));
       if (i>=0) break; /* drive found */
@@ -4404,7 +4239,11 @@ unsigned long SBPCD_INIT(u_long mem_start, u_long mem_end)
 #if PRINTK_BUG
       sti(); /* to avoid possible "printk" bug */
 #endif
+#ifdef MODULE
+      return -EIO;
+#else
       goto init_done;
+#endif MODULE
     }
 
   if (port_index>0)
@@ -4501,7 +4340,11 @@ unsigned long SBPCD_INIT(u_long mem_start, u_long mem_end)
 #if PRINTK_BUG
       sti(); /* to avoid possible "printk" bug */
 #endif
+#ifdef MODULE
+      return -EIO;
+#else
       goto init_done;
+#endif MODULE
     }
   blk_dev[MAJOR_NR].request_fn = DEVICE_REQUEST;
   read_ahead[MAJOR_NR] = SBP_BUFFER_FRAMES * (CD_FRAMESIZE / 512);
@@ -4514,7 +4357,11 @@ unsigned long SBPCD_INIT(u_long mem_start, u_long mem_end)
       switch_drive(j);
 /*
  * allocate memory for the frame buffers
- */ 
+ */
+#ifdef MODULE
+      DriveStruct[j].sbp_buf=(u_char *) kmalloc(SBP_BUFFER_FRAMES*CD_FRAMESIZE, GFP_KERNEL);
+      DriveStruct[j].aud_buf=NULL;
+#else
       DriveStruct[j].sbp_buf=(u_char *)mem_start;
       mem_start += SBP_BUFFER_FRAMES*CD_FRAMESIZE;
       if ((fam1_drive) && (SBP_BUFFER_AUDIO_FRAMES>0))
@@ -4523,6 +4370,7 @@ unsigned long SBPCD_INIT(u_long mem_start, u_long mem_end)
 	  mem_start += SBP_BUFFER_AUDIO_FRAMES*CD_FRAMESIZE_RAW;
 	}
       else DriveStruct[j].aud_buf=NULL;
+#endif MODULE
 /*
  * set the block size
  */
@@ -4530,6 +4378,9 @@ unsigned long SBPCD_INIT(u_long mem_start, u_long mem_end)
     }
   blksize_size[MAJOR_NR]=sbpcd_blocksizes;
 
+#ifdef MODULE
+return (0);
+#else
 init_done:
 #if !(SBPCD_ISSUE-1)
 #ifdef CONFIG_SBPCD2
@@ -4546,7 +4397,34 @@ init_done:
   DPRINTF((DBG_INF,"SBPCD: init done.\n"));
 #endif
   return (mem_start);
+#endif MODULE
 }
+/*==========================================================================*/
+#ifdef MODULE
+void cleanup_module(void)
+{
+  int j;
+
+  if (MOD_IN_USE)
+    {
+      printk("%s module in use - can't remove it.\n", major_name);
+      return;
+    }
+  if ((unregister_blkdev(MAJOR_NR, major_name) == -EINVAL))
+    {
+      printk("What's that: can't unregister %s\n", major_name);
+      return;
+    }
+  release_region(CDo_command,4);
+
+  for (j=0;j<NR_SBPCD;j++)
+    {
+      if (DriveStruct[j].drv_id==-1) continue;
+      kfree_s(DriveStruct[j].sbp_buf, SBP_BUFFER_FRAMES*CD_FRAMESIZE);
+    }
+  printk("%s module released.\n", major_name);
+}
+#endif MODULE
 /*==========================================================================*/
 /*
  * Check if the media has changed in the CD-ROM drive.

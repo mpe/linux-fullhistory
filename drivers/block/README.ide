@@ -1,4 +1,4 @@
-README.ide -- Information regarding ide.c and ide-cd.c (IDE driver in 1.1.95)
+README.ide -- Information regarding ide.c and ide-cd.c (IDE driver in 1.2.x)
 ================================================================================
 Supported by:  mlord@bnr.ca           -- disks, interfaces, probing
                snyder@fnald0.fnal.gov -- cdroms, ATAPI, audio
@@ -9,8 +9,8 @@ Major features of ide.c & ide-cd.c:
 
 	- support for up to two IDE interfaces on one or two IRQs
 	- support for any mix of up to four disk and/or cdrom drives
-	- support for reading IDE ATAPI cdrom drives (NEC, MITSUMI, VERSA, SONY)
-	- support for audio functions on FX400,NEC-260 cdrom drives (others?)
+	- support for reading IDE ATAPI cdrom drives (NEC,MITSUMI,VERTOS,SONY)
+	- support for audio functions
 	- auto-detection of interfaces, drives, IRQs, and disk geometries
 	  -- "single" drives should be jumpered as "master", not "slave"
 	- support for BIOSs which report "more than 16 heads" on disk drives

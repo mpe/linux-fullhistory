@@ -1051,7 +1051,9 @@ static void release_dev(struct file * filp)
 		if (o_tty->ldisc.close)
 			(o_tty->ldisc.close)(o_tty);
 		o_tty->ldisc = ldiscs[N_TTY];
+#if 0 /* No way! We just released the termios struct! */
 		o_tty->termios->c_line = N_TTY;
+#endif
 	}
 	
 	tty->driver.table[idx] = NULL;
@@ -1659,7 +1661,7 @@ int tty_unregister_driver(struct tty_driver *driver)
 	int	retval;
 	struct tty_driver *p;
 	int	found = 0;
-	int	major_inuse = 0;
+	char *othername = NULL;
 	
 	if (*driver->refcount)
 		return -EBUSY;
@@ -1668,14 +1670,15 @@ int tty_unregister_driver(struct tty_driver *driver)
 		if (p == driver)
 			found++;
 		else if (p->major == driver->major)
-			major_inuse++;
+			othername = p->name;
 	}
 
-	if (!major_inuse) {
+	if (othername == NULL) {
 		retval = unregister_chrdev(driver->major, driver->name);
 		if (retval)
 			return retval;
-	}
+	} else
+		register_chrdev(driver->major, othername, &tty_fops);
 
 	if (driver->prev)
 		driver->prev->next = driver->next;
