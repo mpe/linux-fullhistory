@@ -424,7 +424,7 @@ ncr885e_tx( struct net_device *dev )
 	/* look for any channel status (?) */
 	if ( xfer ) {
 
-		dev_kfree_skb( sp->tx_skbufs[i] );
+		dev_kfree_skb_irq( sp->tx_skbufs[i] );
 
 		if ( txbits & TX_STATUS_TXOK ) {
 			sp->stats.tx_packets++;

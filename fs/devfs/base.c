@@ -555,7 +555,7 @@ typedef struct wait_queue *wait_queue_head_t;
 
 #define OOPS(format, args...) {printk (format, ## args); \
                                printk ("Forcing Oops\n"); \
-                               *(int *) 0 = 0;}
+                               BUG();}
 
 struct directory_type
 {
@@ -2722,7 +2722,7 @@ static void devfs_d_iput (struct dentry *dentry, struct inode *inode)
     iput (inode);
 }   /*  End Function devfs_d_iput  */
 
-static void devfs_d_delete (struct dentry *dentry);
+static int devfs_d_delete (struct dentry *dentry);
 
 static struct dentry_operations devfs_dops =
 {
@@ -2746,7 +2746,7 @@ static struct dentry_operations devfs_wait_dops =
  *	@detry: The dentry.
  */
 
-static void devfs_d_delete (struct dentry *dentry)
+static int devfs_d_delete (struct dentry *dentry)
 {
     struct inode *inode = dentry->d_inode;
     struct devfs_inode *di;
@@ -2761,8 +2761,7 @@ static void devfs_d_delete (struct dentry *dentry)
 	    printk ("%s: d_delete(): dropping negative dentry: %p\n",
 		    DEVFS_NAME, dentry);
 #endif
-	d_drop (dentry);
-	return;
+	return 1;
     }
     fs_info = inode->i_sb->u.generic_sbp;
     di = get_devfs_inode_from_vfs_inode (inode);
@@ -2771,16 +2770,16 @@ static void devfs_d_delete (struct dentry *dentry)
 	printk ("%s: d_delete(): dentry: %p  inode: %p  devfs_inode: %p\n",
 		DEVFS_NAME, dentry, inode, di);
 #endif
-    if (di == NULL) return;
-    if (di->de == NULL) return;
+    if (di == NULL) return 0;
+    if (di->de == NULL) return 0;
     if ( !S_ISCHR (di->mode) && !S_ISBLK (di->mode) && !S_ISREG (di->mode) )
-	return;
-    if (!di->de->u.fcb.open) return;
+	return 0;
+    if (!di->de->u.fcb.open) return 0;
     di->de->u.fcb.open = FALSE;
     if (di->de->u.fcb.aopen_notify)
 	devfsd_notify_one (di->de, DEVFSD_NOTIFY_CLOSE, inode->i_mode,
 			   current->euid, current->egid, fs_info);
-    if (!di->de->u.fcb.auto_owner) return;
+    if (!di->de->u.fcb.auto_owner) return 0;
     /*  Change the ownership/protection back  */
     di->mode = (di->mode & ~S_IALLUGO) | S_IRUGO | S_IWUGO;
     di->uid = di->de->u.fcb.default_uid;
@@ -2788,6 +2787,7 @@ static void devfs_d_delete (struct dentry *dentry)
     inode->i_mode = di->mode;
     inode->i_uid = di->uid;
     inode->i_gid = di->gid;
+    return 0;
 }   /*  End Function devfs_d_delete  */
 
 static int devfs_d_revalidate_wait (struct dentry *dentry, int flags)
@@ -3569,11 +3569,9 @@ int __init init_devfs_fs (void)
 void __init mount_devfs_fs (void)
 {
     int err;
-    extern long do_sys_mount (char *dev_name, char *dir_name,
-			      char *type, int flags, void *data);
 
     if ( (boot_options & OPTION_NOMOUNT) ) return;
-    err = do_sys_mount ("none", "/dev", "devfs", 0, "");
+    err = do_mount ("none", "/dev", "devfs", 0, "");
     if (err == 0) printk ("Mounted devfs on /dev\n");
     else printk ("Warning: unable to mount devfs, err: %d\n", err);
 }   /*  End Function mount_devfs_fs  */

@@ -296,6 +296,8 @@ static int coda_psdev_release(struct inode * inode, struct file * file)
 	       vcp->vc_inuse, vcp->vc_pid, current->pid);
 
 	if ( vcp->vc_pid != current->pid ) {
+		/* FIXME: this is broken. If venus does fork(), accounting goes wrong */
+		printk( "Closed by someone else than caller?\n" );
 		return 0;
 	}
         

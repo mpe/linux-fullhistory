@@ -32,6 +32,53 @@ out:
 	return res;
 }
 
+int dcache_readdir(struct file * filp, void * dirent, filldir_t filldir)
+{
+	int i;
+	struct dentry *dentry = filp->f_dentry;
+
+	i = filp->f_pos;
+	switch (i) {
+		case 0:
+			if (filldir(dirent, ".", 1, i, dentry->d_inode->i_ino) < 0)
+				break;
+			i++;
+			filp->f_pos++;
+			/* fallthrough */
+		case 1:
+			if (filldir(dirent, "..", 2, i, dentry->d_parent->d_inode->i_ino) < 0)
+				break;
+			i++;
+			filp->f_pos++;
+			/* fallthrough */
+		default: {
+			struct list_head *list = dentry->d_subdirs.next;
+
+			int j = i-2;
+			for (;;) {
+				if (list == &dentry->d_subdirs)
+					return 0;
+				if (!j)
+					break;
+				j--;
+				list = list->next;
+			}
+
+			do {
+				struct dentry *de = list_entry(list, struct dentry, d_child);
+
+				if (!d_unhashed(de) && de->d_inode) {
+					if (filldir(dirent, de->d_name.name, de->d_name.len, filp->f_pos, de->d_inode->i_ino) < 0)
+						break;
+				}
+				filp->f_pos++;
+				list = list->next;
+			} while (list != &dentry->d_subdirs);
+		}
+	}
+	return 0;
+}
+
 /*
  * Traditional linux readdir() handling..
  *

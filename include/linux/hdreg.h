@@ -317,10 +317,6 @@ struct hd_driveid {
  */
 #include <linux/config.h>
 
-#ifdef CONFIG_BLK_DEV_HD
-void hd_setup(char *, int *);
-#endif	/* CONFIG_BLK_DEV_HD */
-
 #if defined(CONFIG_BLK_DEV_IDE) || defined(CONFIG_BLK_DEV_IDE_MODULE)
 int ide_register(int io_port, int ctl_port, int irq);
 void ide_unregister(unsigned int);

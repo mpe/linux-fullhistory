@@ -93,6 +93,7 @@ static int write_ldt(void * ptr, unsigned long bytecount, int oldmode)
 		mm->segments = vmalloc(LDT_ENTRIES*LDT_ENTRY_SIZE);
 		if (!mm->segments)
 			goto out_unlock;
+		memset(mm->segments, 0, LDT_ENTRIES*LDT_ENTRY_SIZE);
 		
 		if (atomic_read(&mm->mm_users) > 1)
 			printk(KERN_WARNING "LDT allocated for cloned task!\n");

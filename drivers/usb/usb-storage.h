@@ -77,16 +77,17 @@ struct bulk_cs_wrap {
 #define US_BULK_STAT_FAIL	1
 #define US_BULK_STAT_PHASE	2
 
-#define US_BULK_RESET		0xff
-#define US_BULK_RESET_SOFT	1
-#define US_BULK_RESET_HARD	0
+/* bulk-only class specific requests */
+#define US_BULK_RESET_REQUEST	0xff
+#define US_BULK_GET_MAX_LUN	0xfe
 
 /*
  * us_bulk_transfer() return codes
  */
-#define US_BULK_TRANSFER_GOOD	0
-#define US_BULK_TRANSFER_SHORT	1
-#define US_BULK_TRANSFER_FAILED 2
+#define US_BULK_TRANSFER_GOOD		0  /* good transfer                 */
+#define US_BULK_TRANSFER_SHORT		1  /* transfered less than expected */
+#define US_BULK_TRANSFER_FAILED		2  /* transfer died in the middle   */
+#define US_BULK_TRANSFER_ABORTED	3  /* transfer canceled             */
 
 /*
  * Transport return codes
@@ -95,6 +96,7 @@ struct bulk_cs_wrap {
 #define USB_STOR_TRANSPORT_GOOD	   0   /* Transport good, command good	   */
 #define USB_STOR_TRANSPORT_FAILED  1   /* Transport good, command failed   */
 #define USB_STOR_TRANSPORT_ERROR   2   /* Transport bad (i.e. device dead) */
+#define USB_STOR_TRANSPORT_ABORTED 3   /* Transport aborted                */
 
 /*
  * CBI accept device specific command

@@ -32,11 +32,6 @@ static int bfs_readdir(struct file * f, void * dirent, filldir_t filldir)
 	unsigned int offset;
 	int block;
 
-	if (!dir || !dir->i_sb || !S_ISDIR(dir->i_mode)) {
-		printf("Bad inode or not a directory %s:%08lx\n", bdevname(dev), dir->i_ino);
-		return -EBADF;
-	}
-
 	if (f->f_pos & (BFS_DIRENT_SIZE-1)) {
 		printf("Bad f_pos=%08lx for %s:%08lx\n", (unsigned long)f->f_pos, 
 			bdevname(dev), dir->i_ino);
@@ -188,7 +183,6 @@ static int bfs_unlink(struct inode * dir, struct dentry * dentry)
 	inode->i_nlink--;
 	inode->i_ctime = dir->i_ctime;
 	mark_inode_dirty(inode);
-	d_delete(dentry);
 	error = 0;
 
 out_brelse:

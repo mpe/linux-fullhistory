@@ -35,6 +35,7 @@ static char *_rioparam_c_sccs_ = "@(#)rioparam.c	1.3";
 #endif
 
 #define __NO_VERSION__
+#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/malloc.h>
 #include <linux/errno.h>

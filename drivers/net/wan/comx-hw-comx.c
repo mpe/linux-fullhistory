@@ -1234,7 +1234,6 @@ static int COMX_init(struct net_device *dev)
 	new_file->data = (void *)new_file;
 	new_file->read_proc = &comxhw_read_proc;
 	new_file->write_proc = &comxhw_write_proc;
-	new_file->proc_iops = &comx_normal_inode_ops;
 	new_file->size = 6;
 	new_file->nlink = 1;
 
@@ -1245,7 +1244,6 @@ static int COMX_init(struct net_device *dev)
 	new_file->data = (void *)new_file;
 	new_file->read_proc = &comxhw_read_proc;
 	new_file->write_proc = &comxhw_write_proc;
-	new_file->proc_iops = &comx_normal_inode_ops;
 	new_file->size = 5;
 	new_file->nlink = 1;
 
@@ -1256,7 +1254,6 @@ static int COMX_init(struct net_device *dev)
 	new_file->data = (void *)new_file;
 	new_file->read_proc = &comxhw_read_proc;
 	new_file->write_proc = &comxhw_write_proc;
-	new_file->proc_iops = &comx_normal_inode_ops;
 	new_file->size = 2;		// Ezt tudjuk
 	new_file->nlink = 1;
 
@@ -1268,7 +1265,6 @@ static int COMX_init(struct net_device *dev)
 		new_file->data = (void *)new_file;
 		new_file->read_proc = &comxhw_read_proc;
 		new_file->write_proc = &comxhw_write_proc;
-		new_file->proc_iops = &comx_normal_inode_ops;
 		new_file->size = 9;
 		new_file->nlink = 1;
 	}
@@ -1280,7 +1276,6 @@ static int COMX_init(struct net_device *dev)
 	new_file->data = (void *)new_file;
 	new_file->read_proc = &comxhw_read_proc;
 	new_file->write_proc = &comxhw_write_proc;
-	new_file->proc_iops = &comx_normal_inode_ops;
 	new_file->size = 8;
 	new_file->nlink = 1;
 
@@ -1291,7 +1286,6 @@ static int COMX_init(struct net_device *dev)
 	new_file->data = (void *)new_file;
 	new_file->read_proc = &comxhw_read_proc;
 	new_file->write_proc = NULL;
-	new_file->proc_iops = &comx_normal_inode_ops;
 	new_file->nlink = 1;
 
 	if ((new_file = create_proc_entry(FILENAME_FIRMWARE, S_IFREG | 0644, 
@@ -1301,7 +1295,6 @@ static int COMX_init(struct net_device *dev)
 	new_file->data = (void *)new_file;
 	new_file->read_proc = &comxhw_read_proc;
 	new_file->write_proc = &comxhw_write_proc;
-	new_file->proc_iops = &comx_normal_inode_ops;
 	new_file->nlink = 1;
 
 	if (ch->hardware == &comx_hw) {

@@ -14,8 +14,4 @@
 #define        L1_CACHE_BYTES  32
 #endif
 
-extern void cache_flush_area(unsigned long start, unsigned long end);
-extern void cache_purge_area(unsigned long start, unsigned long end);
-extern void cache_wback_area(unsigned long start, unsigned long end);
-
 #endif /* __ASM_SH_CACHE_H */

@@ -1742,9 +1742,6 @@ static int copy_mount_stuff_to_kernel(const void *user, unsigned long *kernel)
 	return 0;
 }
 
-extern long do_sys_mount(char * dev_page, char * dir_page, char * type_page,
-			 unsigned long new_flags, char * data_page);
-
 #define SMBFS_NAME	"smbfs"
 #define NCPFS_NAME	"ncpfs"
 
@@ -1784,7 +1781,7 @@ asmlinkage int sys32_mount(char *dev_name, char *dir_name, char *type, unsigned 
 		goto dev_out;
 
 	if (!is_smb && !is_ncp) {
-		err = do_sys_mount((char*)dev_page, (char*)dir_page,
+		err = do_mount((char*)dev_page, (char*)dir_page,
 				(char*)type_page, new_flags, (char*)data_page);
 	} else {
 		if (is_ncp)
@@ -1792,7 +1789,7 @@ asmlinkage int sys32_mount(char *dev_name, char *dir_name, char *type, unsigned 
 		else
 			do_smb_super_data_conv((void *)data_page);
 
-		err = do_sys_mount((char*)dev_page, (char*)dir_page,
+		err = do_mount((char*)dev_page, (char*)dir_page,
 				(char*)type_page, new_flags, (char*)data_page);
 	}
 	free_page(dir_page);

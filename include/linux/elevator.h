@@ -22,6 +22,8 @@ struct elevator_s
 	int read_pendings;
 
 	elevator_fn * elevator_fn;
+
+	unsigned int queue_ID;
 };
 
 #define ELEVATOR_DEFAULTS				\
@@ -40,14 +42,14 @@ struct elevator_s
 
 
 typedef struct blkelv_ioctl_arg_s {
-	void * queue_ID;
+	int queue_ID;
 	int read_latency;
 	int write_latency;
 	int max_bomb_segments;
 } blkelv_ioctl_arg_t;
 
-#define BLKELVGET   _IO(0x12,106)
-#define BLKELVSET   _IO(0x12,107)
+#define BLKELVGET   _IOR(0x12,106,sizeof(blkelv_ioctl_arg_t))
+#define BLKELVSET   _IOW(0x12,107,sizeof(blkelv_ioctl_arg_t))
 
 extern int blkelvget_ioctl(elevator_t *, blkelv_ioctl_arg_t *);
 extern int blkelvset_ioctl(elevator_t *, const blkelv_ioctl_arg_t *);

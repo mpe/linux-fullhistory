@@ -609,6 +609,7 @@ static struct super_block * pipefs_read_super(struct super_block *sb, void *data
 	root->i_atime = root->i_mtime = root->i_ctime = CURRENT_TIME;
 	sb->s_blocksize = 1024;
 	sb->s_blocksize_bits = 10;
+	sb->s_magic = PIPEFS_MAGIC;
 	sb->s_op	= &pipefs_ops;
 	sb->s_root = d_alloc(NULL, &(const struct qstr) { "pipe:", 5, 0 });
 	if (!sb->s_root) {

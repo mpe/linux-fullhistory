@@ -227,7 +227,6 @@ static int ramfs_unlink(struct inode * dir, struct dentry *dentry)
 
 		inode->i_nlink--;
 		dput(dentry);			/* Undo the count from "create" - this does all the work */
-		d_delete(dentry);
 		retval = 0;
 	}
 	return retval;
@@ -269,57 +268,6 @@ static int ramfs_symlink(struct inode * dir, struct dentry *dentry, const char *
 	return error;
 }
 
-/*
- * This really should be the same as the proc filldir,
- * once proc does the "one dentry tree" thing..
- */
-static int ramfs_readdir(struct file * filp, void * dirent, filldir_t filldir)
-{
-	int i;
-	struct dentry *dentry = filp->f_dentry;
-
-	i = filp->f_pos;
-	switch (i) {
-		case 0:
-			if (filldir(dirent, ".", 1, i, dentry->d_inode->i_ino) < 0)
-				break;
-			i++;
-			filp->f_pos++;
-			/* fallthrough */
-		case 1:
-			if (filldir(dirent, "..", 2, i, dentry->d_parent->d_inode->i_ino) < 0)
-				break;
-			i++;
-			filp->f_pos++;
-			/* fallthrough */
-		default: {
-			struct list_head *list = dentry->d_subdirs.next;
-
-			int j = i-2;
-			for (;;) {
-				if (list == &dentry->d_subdirs)
-					return 0;
-				if (!j)
-					break;
-				j--;
-				list = list->next;
-			}
-
-			do {
-				struct dentry *de = list_entry(list, struct dentry, d_child);
-
-				if (ramfs_positive(de)) {
-					if (filldir(dirent, de->d_name.name, de->d_name.len, filp->f_pos, de->d_inode->i_ino) < 0)
-						break;
-				}
-				filp->f_pos++;
-				list = list->next;
-			} while (list != &dentry->d_subdirs);
-		}
-	}
-	return 0;
-}
-
 static struct address_space_operations ramfs_aops = {
 	readpage:	ramfs_readpage,
 	writepage:	ramfs_writepage,
@@ -335,7 +283,7 @@ static struct file_operations ramfs_file_operations = {
 
 static struct file_operations ramfs_dir_operations = {
 	read:		generic_read_dir,
-	readdir:	ramfs_readdir,
+	readdir:	dcache_readdir,
 };
 
 static struct inode_operations ramfs_dir_inode_operations = {
@@ -350,9 +298,15 @@ static struct inode_operations ramfs_dir_inode_operations = {
 	rename:		ramfs_rename,
 };
 
+static void ramfs_put_super(struct super_block *sb)
+{
+	d_genocide(sb->s_root);
+	shrink_dcache_parent(sb->s_root);
+}
 
 static struct super_operations ramfs_ops = {
-	statfs:	 ramfs_statfs,
+	put_super:	ramfs_put_super,
+	statfs:		ramfs_statfs,
 };
 
 static struct super_block *ramfs_read_super(struct super_block * sb, void * data, int silent)

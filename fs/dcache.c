@@ -131,7 +131,8 @@ repeat:
 	 * Each fs will have to watch for this.
 	 */
 	if (dentry->d_op && dentry->d_op->d_delete) {
-		dentry->d_op->d_delete(dentry);
+		if (dentry->d_op->d_delete(dentry))
+			d_drop(dentry);
 
 		count = dentry->d_count - 1;
 		if (count != 0)
@@ -218,6 +219,33 @@ int d_invalidate(struct dentry * dentry)
 
 	d_drop(dentry);
 	return 0;
+}
+
+/**
+ * d_find_alias - grab a hashed alias of inode
+ * @inode: inode in question
+ *
+ * If inode has a hashed alias - acquire the reference to alias and
+ * return it. Otherwise return NULL. Notice that if inode is a directory
+ * there can be only one alias and it can be unhashed only if it has
+ * no children.
+ */
+
+struct dentry * d_find_alias(struct inode *inode)
+{
+	struct list_head *head, *next, *tmp;
+	struct dentry *alias;
+
+	head = &inode->i_dentry;
+	next = inode->i_dentry.next;
+	while (next != head) {
+		tmp = next;
+		next = tmp->next;
+		alias = list_entry(tmp, struct dentry, d_alias);
+		if (!d_unhashed(alias))
+			return dget(alias);
+	}
+	return NULL;
 }
 
 /*
@@ -382,37 +410,6 @@ resume:
 		goto resume;
 	}
 	return 0; /* No mount points found in tree */
-}
-
-int d_active_refs(struct dentry *root)
-{
-	struct dentry *this_parent = root;
-	struct list_head *next;
-	int count = root->d_count;
-
-repeat:
-	next = this_parent->d_subdirs.next;
-resume:
-	while (next != &this_parent->d_subdirs) {
-		struct list_head *tmp = next;
-		struct dentry *dentry = list_entry(tmp, struct dentry, d_child);
-		next = tmp->next;
-		/* Decrement count for unused children */
-		count += (dentry->d_count - 1);
-		if (!list_empty(&dentry->d_subdirs)) {
-			this_parent = dentry;
-			goto repeat;
-		}
-	}
-	/*
-	 * All done at this level ... ascend and resume the search.
-	 */
-	if (this_parent != root) {
-		next = this_parent->d_child.next; 
-		this_parent = this_parent->d_parent;
-		goto resume;
-	}
-	return count;
 }
 
 /*
@@ -948,7 +945,12 @@ global_root:
 asmlinkage long sys_getcwd(char *buf, unsigned long size)
 {
 	int error;
-	struct dentry *pwd = current->fs->pwd; 
+	struct vfsmount *pwdmnt;
+	struct dentry *pwd;
+
+	lock_kernel();
+	pwdmnt = mntget(current->fs->pwdmnt);
+	pwd = dget(current->fs->pwd);
 
 	error = -ENOENT;
 	/* Has the current directory has been unlinked? */
@@ -959,9 +961,7 @@ asmlinkage long sys_getcwd(char *buf, unsigned long size)
 			unsigned long len;
 			char * cwd;
 
-			lock_kernel();
 			cwd = d_path(pwd, current->fs->pwdmnt, page, PAGE_SIZE);
-			unlock_kernel();
 
 			error = -ERANGE;
 			len = PAGE_SIZE + page - cwd;
@@ -973,6 +973,9 @@ asmlinkage long sys_getcwd(char *buf, unsigned long size)
 			free_page((unsigned long) page);
 		}
 	}
+	dput(pwd);
+	mntput(pwdmnt);
+	unlock_kernel();
 	return error;
 }
 
@@ -1008,6 +1011,34 @@ int is_subdir(struct dentry * new_dentry, struct dentry * old_dentry)
 		break;
 	}
 	return result;
+}
+
+void d_genocide(struct dentry *root)
+{
+	struct dentry *this_parent = root;
+	struct list_head *next;
+
+repeat:
+	next = this_parent->d_subdirs.next;
+resume:
+	while (next != &this_parent->d_subdirs) {
+		struct list_head *tmp = next;
+		struct dentry *dentry = list_entry(tmp, struct dentry, d_child);
+		next = tmp->next;
+		if (d_unhashed(dentry)||!dentry->d_inode)
+			continue;
+		if (!list_empty(&dentry->d_subdirs)) {
+			this_parent = dentry;
+			goto repeat;
+		}
+		dentry->d_count--;
+	}
+	if (this_parent != root) {
+		next = this_parent->d_child.next; 
+		this_parent->d_count--;
+		this_parent = this_parent->d_parent;
+		goto resume;
+	}
 }
 
 /**

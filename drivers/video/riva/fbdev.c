@@ -69,7 +69,7 @@
 	if(!(expr)) { \
         printk( "Assertion failed! %s,%s,%s,line=%d\n",\
         #expr,__FILE__,__FUNCTION__,__LINE__); \
-	*(int*)0 = 0; \
+	BUG();
         }
 #else
 #define assert(expr)

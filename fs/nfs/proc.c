@@ -315,12 +315,14 @@ nfs_proc_rmdir(struct dentry *dir, struct qstr *name)
  * from nfs_readdir by calling the decode_entry function directly.
  */
 static int
-nfs_proc_readdir(struct dentry *dir, __u64 cookie, void *entry, 
+nfs_proc_readdir(struct file *file, __u64 cookie, void *entry, 
 		 unsigned int size, int plus)
 {
+	struct dentry		*dir = file->f_dentry;
+	struct rpc_cred		*cred = nfs_file_cred(file);
 	struct nfs_readdirargs	arg;
 	struct nfs_readdirres	res;
-	struct rpc_message	msg = { NFSPROC_READDIR, &arg, &res, NULL };
+	struct rpc_message	msg = { NFSPROC_READDIR, &arg, &res, cred };
 	struct nfs_server       *server = NFS_DSERVER(dir);
 	int			status;
 

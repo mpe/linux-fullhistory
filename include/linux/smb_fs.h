@@ -130,7 +130,6 @@ int smb_get_wsize(struct smb_sb_info *);
 int smb_newconn(struct smb_sb_info *, struct smb_conn_opt *);
 int smb_errno(struct smb_sb_info *);
 int smb_close(struct inode *);
-void smb_close_dentry(struct dentry *);
 int smb_close_fileid(struct dentry *, __u16);
 int smb_open(struct dentry *, int);
 int smb_proc_read(struct dentry *, off_t, int, char *);

@@ -367,14 +367,6 @@ struct super_block *UMSDOS_read_super (struct super_block *sb, void *data,
 		sb->s_root = new_root;
 		printk(KERN_INFO "UMSDOS: changed to alternate root\n");
 	}
-
-	/* if d_count is not 1, mount will fail with -EBUSY! */
-	if (sb->s_root->d_count > 1) {
-		shrink_dcache_sb(sb);
-		if (sb->s_root->d_count > 1) {
-			printk(KERN_ERR "UMSDOS: root count %d > 1 !", sb->s_root->d_count);
-		}
-	}
 	return sb;
 
 out_fail:

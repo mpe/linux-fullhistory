@@ -52,6 +52,10 @@ int gs_debug = 0;
 
 #define RS_EVENT_WRITE_WAKEUP	1
 
+#ifdef MODULE
+MODULE_PARM(gs_debug, "i");
+#endif
+
 #ifdef DEBUG
 static void my_hd (unsigned char *addr, int len)
 {
@@ -209,12 +213,9 @@ int gs_write(struct tty_struct * tty, int from_user,
 	if (!port || !port->xmit_buf || !tmp_buf)
 		return -EIO;
 
-	/* printk ("from_user = %d.\n", from_user); */
 	save_flags(flags);
 	if (from_user) {
-		/* printk ("Going into the semaphore\n"); */
 		down(&tmp_buf_sem);
-		/* printk ("got out of the semaphore\n"); */
 		while (1) {
 			c = count;
 
@@ -363,19 +364,14 @@ static int gs_wait_tx_flushed (void * ptr, int timeout)
 	func_exit();
 		return -EINVAL;  /* This is an error which we don't know how to handle. */
 	}
-	gs_dprintk (GS_DEBUG_FLUSH, "checkpoint 1\n");
 
 	rcib = gs_real_chars_in_buffer(port->tty);
-
-	gs_dprintk (GS_DEBUG_FLUSH, "checkpoint 2\n");
 
 	if(rcib <= 0) {
 		gs_dprintk (GS_DEBUG_FLUSH, "nothing to wait for.\n");
 		func_exit();
 		return rv;
 	}
-	gs_dprintk (GS_DEBUG_FLUSH, "checkpoint 3\n");
-
 	/* stop trying: now + twice the time it would normally take +  seconds */
 	end_jiffies  = jiffies; 
 	if (timeout !=  MAX_SCHEDULE_TIMEOUT)
@@ -520,11 +516,10 @@ void gs_hangup(struct tty_struct *tty)
 	func_enter ();
 
 	tty = port->tty;
-	if (!tty) return;
+	if (!tty) 
+		return;
 
 	gs_shutdown_port (port);
-
-	/* gs_flush_buffer (tty); */
 	port->flags &= ~(ASYNC_NORMAL_ACTIVE|ASYNC_CALLOUT_ACTIVE |GS_ACTIVE);
 	port->tty = NULL;
 	port->count = 0;
@@ -576,7 +571,6 @@ int block_til_ready(void *port_, struct file * filp)
 		else
 			return -ERESTARTSYS;
 	}
-
 	gs_dprintk (GS_DEBUG_BTR, "after hung up\n"); 
 
 	/*
@@ -599,7 +593,6 @@ int block_til_ready(void *port_, struct file * filp)
 	}
 
 	gs_dprintk (GS_DEBUG_BTR, "after subtype\n");
-
 	/*
 	 * If non-blocking mode is set, or the port is not enabled,
 	 * then make the check up front and then exit.
@@ -613,7 +606,6 @@ int block_til_ready(void *port_, struct file * filp)
 	}
 
 	gs_dprintk (GS_DEBUG_BTR, "after nonblock\n"); 
- 
 	if (port->flags & ASYNC_CALLOUT_ACTIVE) {
 		if (port->normal_termios.c_cflag & CLOCAL) 
 			do_clocal = 1;
@@ -622,8 +614,7 @@ int block_til_ready(void *port_, struct file * filp)
 			do_clocal = 1;
 	}
 
-	gs_dprintk (GS_DEBUG_BTR, "after clocal check.\n"); 
-
+	gs_dprintk (GS_DEBUG_BTR, "after clocal check.\n");
 	/*
 	 * Block waiting for the carrier detect and the line to become
 	 * free (i.e., not in use by the callout).  While we are in
@@ -632,10 +623,10 @@ int block_til_ready(void *port_, struct file * filp)
 	 * exit, either normal or abnormal.
 	 */
 	retval = 0;
+	
 	add_wait_queue(&port->open_wait, &wait);
-
+	
 	gs_dprintk (GS_DEBUG_BTR, "after add waitq.\n"); 
-
 	cli();
 	if (!tty_hung_up_p(filp))
 		port->count--;
@@ -667,7 +658,7 @@ int block_til_ready(void *port_, struct file * filp)
 	}
 	gs_dprintk (GS_DEBUG_BTR, "Got out of the loop. (%d)\n",
 		    port->blocked_open);
-	current->state = TASK_RUNNING;
+	set_current_state (TASK_RUNNING);
 	remove_wait_queue(&port->open_wait, &wait);
 	if (!tty_hung_up_p(filp))
 		port->count++;
@@ -687,10 +678,8 @@ void gs_close(struct tty_struct * tty, struct file * filp)
 	struct gs_port *port;
 
 	func_enter ();
-	port = (struct gs_port *) tty->driver_data;
 
-	gs_dprintk (GS_DEBUG_CLOSE, "tty=%p, port=%p port->tty=%p\n",
-	            tty, port, port->tty);
+	port = (struct gs_port *) tty->driver_data;
 
 	if(! port) {
 		func_exit();
@@ -703,9 +692,7 @@ void gs_close(struct tty_struct * tty, struct file * filp)
 		port->tty = tty;
 	}
 
-
 	save_flags(flags); cli();
-
 	if (tty_hung_up_p(filp)) {
 		restore_flags(flags);
 		port->rd->hungup (port);

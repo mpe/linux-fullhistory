@@ -564,7 +564,7 @@ static void yenta_clear_maps(pci_socket_t *socket)
  */
 static void yenta_power_sense(pci_socket_t *socket)
 {
-	u32 status = config_readl(socket, CB_SOCKET_STATE);
+	u32 status = cb_readl(socket, CB_SOCKET_STATE);
 
 	/*
 	 * Nothing inserted, nothing to sense..

@@ -49,7 +49,7 @@ struct    UnixRup
     uint             Id;		/* Id number */
     uint             BaseSysPort;	/* SysPort of first tty on this RTA */
     uint             ModTypes;		/* Modules on this RTA */
-    spinlock_t       RupLock;		/* Lock structure for MPX */
+    spinlock_t	     RupLock;		/* Lock structure for MPX */
 /*    struct lockb     RupLock;	*/	/* Lock structure for MPX */
 };
 

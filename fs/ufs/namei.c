@@ -673,7 +673,6 @@ static int ufs_rmdir (struct inode * dir, struct dentry *dentry)
 	dir->i_nlink--;
 	inode->i_ctime = dir->i_ctime = dir->i_mtime = CURRENT_TIME;
 	mark_inode_dirty(dir);
-	d_delete(dentry);
 
 end_rmdir:
 	brelse (bh);
@@ -730,7 +729,6 @@ static int ufs_unlink(struct inode * dir, struct dentry *dentry)
 	mark_inode_dirty(inode);
 	inode->i_ctime = dir->i_ctime;
 	retval = 0;
-	d_delete(dentry);	/* This also frees the inode */
 
 end_unlink:
 	brelse (bh);

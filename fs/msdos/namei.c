@@ -337,7 +337,6 @@ int msdos_rmdir(struct inode *dir, struct dentry *dentry)
 	dir->i_nlink--;
 	mark_inode_dirty(inode);
 	mark_inode_dirty(dir);
-	d_delete(dentry);
 	res = 0;
 
 rmdir_done:
@@ -432,7 +431,6 @@ int msdos_unlink( struct inode *dir, struct dentry *dentry)
 	inode->i_ctime = dir->i_ctime = dir->i_mtime = CURRENT_TIME;
 	mark_inode_dirty(inode);
 	mark_inode_dirty(dir);
-	d_delete(dentry);	/* This also frees the inode */
 	res = 0;
 unlink_done:
 	return res;

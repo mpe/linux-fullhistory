@@ -251,6 +251,14 @@ S: Bouwensstraat 22
 S: 6369 BG Simpelveld
 S: The Netherlands
 
+N: Peter Berger
+E: pberger@brimson.com
+W: http://www.brimson.com
+D: Author/maintainer of Digi AccelePort USB driver
+S: 1549 Hiironen Rd.
+S: Brimson, MN  55602
+S: USA
+
 N: Hennus Bergman
 E: hennus@cybercomm.nl
 W: http://www.cybercomm.nl/~hennus/
@@ -317,6 +325,13 @@ W: http://home.pages.de/~andreas.bombe/
 P: 1024/04880A44 72E5 7031 4414 2EB6 F6B4  4CBD 1181 7032 0488 0A44
 D: IEEE 1394 subsystem rewrite and maintainer
 D: Texas Instruments PCILynx IEEE 1394 driver
+
+N: Al Borchers
+E: alborchers@steinerpoint.com
+D: Author/maintainer of Digi AccelePort USB driver
+S: 4912 Zenith Ave. S.
+S: Minneapolis, MN  55410
+S: USA
 
 N: Marc Boucher
 E: marc@mbsi.ca
@@ -1613,12 +1628,30 @@ D: XF86_Mach8
 D: XF86_8514
 D: cfdisk (curses based disk partitioning program)
 
+N: Claudio S. Matsuoka
+E: claudio@conectiva.com
+E: claudio@helllabs.org
+W: http://helllabs.org/~claudio
+D: OV511 driver hacks
+S: Conectiva S.A.
+S: R. Tocantins 89
+S: 80050-430  Curitiba PR
+S: Brazil
+
 N: Heinz Mauelshagen
 E: mge@EZ-Darmstadt.Telekom.de
 D: Logical Volume Manager
 S: Bartningstr. 12
 S: 64289 Darmstadt
 S: Germany 
+
+N: Mark W. McClelland
+E: mmcclelland@delphi.com
+E: mark@alpha.dyndns.org
+W: http://alpha.dyndns.org/ov511/
+D: OV511 driver
+S: (address available on request)
+S: USA
 
 N: Mike McLagan
 E: mike.mclagan@linux.org

@@ -22,7 +22,7 @@ The driver currently supports ECKD-devices and there are stubs for
 support of the FBA and CKD architectures. For the FBA architecture
 only some smart data structures are missing to make the support
 complete. 
-We performed our testing on 3380 and 3390 type disksof different
+We performed our testing on 3380 and 3390 type disks of different
 sizes, under VM and on the bare hardware (LPAR), using internal disks
 of the multiprise as well as a RAMAC virtual array. Disks exported by
 an Enterprise Storage Server (Seascape) should work fine as well.

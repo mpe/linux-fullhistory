@@ -71,7 +71,7 @@ struct inode_operations ncp_dir_inode_operations =
 static int ncp_lookup_validate(struct dentry *, int);
 static int ncp_hash_dentry(struct dentry *, struct qstr *);
 static int ncp_compare_dentry (struct dentry *, struct qstr *, struct qstr *);
-static void ncp_delete_dentry(struct dentry *);
+static int ncp_delete_dentry(struct dentry *);
 
 struct dentry_operations ncp_dentry_operations =
 {
@@ -119,32 +119,22 @@ ncp_compare_dentry(struct dentry *dentry, struct qstr *a, struct qstr *b)
 
 /*
  * This is the callback from dput() when d_count is going to 0.
- * We use this to unhash dentries with bad inodes and close files.
+ * We use this to unhash dentries with bad inodes.
+ * Closing files can be safely postponed until iput() - it's done there anyway.
  */
-static void
+static int
 ncp_delete_dentry(struct dentry * dentry)
 {
 	struct inode *inode = dentry->d_inode;
 
-	if (inode)
-	{
+	if (inode) {
 		if (is_bad_inode(inode))
-		{
-			d_drop(dentry);
-		}
-		/*
-		 * Lock the superblock, then recheck the dentry count.
-		 * (Somebody might have used it again ...)
-		 */
-		if (dentry->d_count == 1 && NCP_FINFO(inode)->opened) {
-			PPRINTK("ncp_delete_dentry: closing file %s/%s\n",
-			dentry->d_parent->d_name.name, dentry->d_name.name);
-			ncp_make_closed(inode);
-		}
+			return 1;
 	} else
 	{
 	/* N.B. Unhash negative dentries? */
 	}
+	return 0;
 }
 
 static inline int
@@ -1000,7 +990,6 @@ static int ncp_unlink(struct inode *dir, struct dentry *dentry)
 		case 0x00:
 			DPRINTK("ncp: removed %s/%s\n",
 				dentry->d_parent->d_name.name, dentry->d_name.name);
-			d_delete(dentry);
 			break;
 		case 0x85:
 		case 0x8A:

@@ -72,6 +72,7 @@ static struct adb_driver *adb_driver_list[] = {
 struct adb_driver *adb_controller;
 struct notifier_block *adb_client_list = NULL;
 static int adb_got_sleep = 0;
+static int adb_inited = 0;
 
 #ifdef CONFIG_PMAC_PBOOK
 static int adb_notify_sleep(struct pmu_sleep_notifier *self, int when);
@@ -213,6 +214,11 @@ int __init adb_init(void)
 		return 0;
 #endif
 
+	/* xmon may do early-init */
+	if (adb_inited)
+		return 0;
+	adb_inited = 1;
+		
 	adb_controller = NULL;
 
 	i = 0;

@@ -132,6 +132,20 @@ And thanks to every supporter free software.
 
 
 
+Submitting Bug Reports
+----------------------
+Obtain and compile the modified rtl8139-diag source code from the 
+8139too driver Web site.  This diagnostics programs, originally
+from Donald Becker, has been modified to display all registers
+on your RTL8139 chip, not just the first 0x80.
+
+If possible, send the output of a working and broken driver with
+	rtl8139-diag -mmmaaavvveefN > my-output-file.txt
+
+Send "lspci -vvv" or "cat /proc/pci" output for PCI information.
+
+
+
 Known Bugs / Errata / To-Do
 ---------------------------
 The following issues are known, and are actively being pursued.  Patches
@@ -149,7 +163,7 @@ It is included only for enterprising hackers willing to help fix it.
 
 4) Sparc64 platform not tested at all.
 
-5) Identify and fix "rx wedge" when ping flooded.
+5) Identify and fix "rx wedge" when ping flooded. (WIP)
 
 7) N-Way auto-negotiation is known to fail in some cases.  This problem
 also occurs in the rtl8139 driver in kernels 2.2.x/2.3.x.  Solution:
@@ -158,17 +172,30 @@ manually perform autonegotiation in case the network or card cannot do
 it automatically.  (patches welcome)
 
 8) Much improved command line / module parameter setup.  (patches and
-suggestions welcome)
+suggestions welcome)  (WIP)
 
 9) Better documentation.  (patches welcome)
 
-10) User-mode (or maybe optional /proc) diagnostics program.
+10) (rtl8139-diag modified from Becker version, DONE)
+User-mode (or maybe optional /proc) diagnostics program.
+
+11) RTL8139C support untested.
 
 
 
 
 Change History
 --------------
+Version 0.9.5 - May 17, 2000
+
+* Improved chip version recognition
+* Continue banging away at receiver hang problem
+* Use spin_lock_irq in another spot
+* Don't print anything on pci_enable_device, it does so for us
+* Disable buggy NWay code
+* Define TxConfig bitmasks
+
+
 Version 0.9.4.1 - April 27, 2000 - third public beta release
 
 * Replace several "magic numbers" with symbolic constants

@@ -31,6 +31,8 @@
 #ifndef _LINUX_USBDEVICE_FS_H
 #define _LINUX_USBDEVICE_FS_H
 
+#include <linux/types.h>
+
 /* --------------------------------------------------------------------- */
 
 #define USBDEVICE_SUPER_MAGIC 0x9fa2

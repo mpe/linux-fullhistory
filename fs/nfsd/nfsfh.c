@@ -812,17 +812,11 @@ fh_put(struct svc_fh *fhp)
 {
 	struct dentry * dentry = fhp->fh_dentry;
 	if (fhp->fh_dverified) {
+		fhp->fh_dentry = NULL;
 		fh_unlock(fhp);
 		fhp->fh_dverified = 0;
-		if (!dentry->d_count)
-			goto out_bad;
 		dput(dentry);
 		nfsd_nr_put++;
 	}
-	return;
-
-out_bad:
-	printk(KERN_ERR "fh_put: %s/%s has d_count 0!\n",
-		dentry->d_parent->d_name.name, dentry->d_name.name);
 	return;
 }

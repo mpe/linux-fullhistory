@@ -282,7 +282,7 @@ system_call:
 	 mov	$r0, $r9
 #endif
 	! New Syscall ABI
-	sub	$r9, $r8
+	add	#-0x40, $r8
 	shlr2	$r8
 	shll8	$r8
 	shll8	$r8
@@ -492,7 +492,16 @@ restore_all:
 	mov.l	2f, $k1
 	and	$k1, $k2	! Mask orignal SR value
 	or	$k0, $k2	! Inherit current FD-bit
-	or	$g_imask, $k2	! Inherit the IMASK-bits
+	!
+	mov	$k3, $k0	! Calculate IMASK-bits
+	shlr2	$k0
+	and	#0x3c, $k0
+	cmp/eq	#0x3c, $k0
+	bf/s	7f
+	 mov	$g_imask, $k0
+	shll2	$k0
+	!
+7:	or	$k0, $k2	! Set the IMASK-bits
 	ldc	$k2, $ssr
 	!
 #if defined(__SH4__)
@@ -507,7 +516,7 @@ restore_all:
 	! There's the case we don't get FPU now
 	stc	$sr, $k2
 	tst	$k1, $k2
-	bt	7f
+	bt	8f
 	! We need to grab FPU here
 	xor	$k1, $k2
 	ldc	$k2, $sr		! Grab FPU
@@ -519,7 +528,7 @@ restore_all:
 	!
 	! Restoring FPU...
 	!
-7:	mov.l	3f, $k1
+8:	mov.l	3f, $k1
 	lds	$k1, $fpscr
 	fmov.s	@$r15+, $fr0
 	fmov.s	@$r15+, $fr1

@@ -133,8 +133,8 @@ void autofs_hash_insert(struct autofs_dirhash *dh, struct autofs_dir_ent *ent)
 	autofs_say(ent->name,ent->len);
 
 	autofs_init_usage(dh,ent);
-	if ( ent->dentry )
-		ent->dentry->d_count++;
+	if (ent->dentry)
+		dget(ent->dentry);
 
 	dhnp = &dh->h[(unsigned) ent->hash % AUTOFS_HASH_SIZE];
 	ent->next = *dhnp;

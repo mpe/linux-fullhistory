@@ -59,6 +59,13 @@ Current status:
   properly enumerated, assigned a port, and then communication _should_ be
   possible. The driver cleans up properly when the device is removed, or
   the connection is canceled on the Visor.
+
+  NOTE:
+    This means that in order to talk to the Visor, the sync button must be
+    pressed BEFORE trying to get any program to communicate to the Visor.
+    This goes against the current documentation for pilot-xfer and other
+    packages, but is the only way that it will work due to the hardware
+    in the Visor.
   
   When the device is connected, try talking to it on the second port
   (this is usually /dev/ttyUSB1 if you do not have any other usb-serial
@@ -105,6 +112,24 @@ ZyXEL omni.net lcd plus ISDN TA
 
   This is an ISDN TA. Please report both successes and troubles to the
   author at omninet@kroah.com
+
+
+Digi AccelePort Driver
+
+  This driver supports the Digi AccelePort USB 4 device, a 4 port
+  USB serial converter.  The driver does NOT yet support the Digi
+  AccelePort USB 2 or 8.
+
+  The driver supports open, close, read, write, termios settings (baud
+  rate, word size, parity, stop bits, hardware/software flow control,
+  CREAD), DTR/RTS, and TIOCMGET/SET/BIS/BIC ioctls.  It has not been
+  thoroughly tested, but it seems to be working reasonable well.  There
+  is more work to do, including flow control, ioctls, and support for
+  the Digi AccelePort USB 2 and 8.
+
+  Please contact Peter Berger (pberger@brimson.com) or Al Borchers
+  (alborchers@steinerpoint.com) for questions or problems with this
+  driver.
 
 
 Generic Serial driver

@@ -25,6 +25,8 @@
 #define FBIOPUT_CON2FBMAP	0x4610
 #define FBIOBLANK		0x4611		/* arg: 0 or vesa level + 1 */
 #define FBIOGET_VBLANK		_IOR('F', 0x12, struct fb_vblank)
+#define FBIO_ALLOC              0x4613
+#define FBIO_FREE               0x4614
 
 #define FB_TYPE_PACKED_PIXELS		0	/* Packed Pixels	*/
 #define FB_TYPE_PLANES			1	/* Non interleaved planes */
@@ -85,6 +87,7 @@
 #define FB_ACCEL_IGS_CYBER2000	33	/* CyberPro 2000		*/
 #define FB_ACCEL_IGS_CYBER2010	34	/* CyberPro 2010		*/
 #define FB_ACCEL_IGS_CYBER5000	35	/* CyberPro 5000		*/
+#define FB_ACCEL_SIS_GLAMOUR    36	/* SiS 300/630/540              */
 
 struct fb_fix_screeninfo {
 	char id[16];			/* identification string eg "TT Builtin" */

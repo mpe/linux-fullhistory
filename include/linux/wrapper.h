@@ -5,7 +5,6 @@
 #define inode_handle struct inode
 #define select_table_handle select_table
 #define vm_area_handle struct vm_area_struct
-#define file_operation_handle file_operations
 
 #define connect_wrapper(x) 0
 #define current_got_fatal_signal() (signal_pending(current))

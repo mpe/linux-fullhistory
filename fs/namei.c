@@ -902,20 +902,18 @@ int open_namei(const char * pathname, int flag, int mode, struct nameidata *nd)
 		if (nd->last.name[nd->last.len])
 			goto exit;
 
-		dir = dget(nd->dentry);
+		dir = nd->dentry;
 		down(&dir->d_inode->i_sem);
 
 		dentry = lookup_hash(&nd->last, nd->dentry);
 		error = PTR_ERR(dentry);
 		if (IS_ERR(dentry)) {
 			up(&dir->d_inode->i_sem);
-			dput(dir);
 			goto exit;
 		}
 
 		if (dentry->d_inode) {
 			up(&dir->d_inode->i_sem);
-			dput(dir);
 			error = -EEXIST;
 			if (flag & O_EXCL)
 				goto exit_dput;
@@ -940,12 +938,12 @@ int open_namei(const char * pathname, int flag, int mode, struct nameidata *nd)
 				goto exit;
 		} else {
 			error = vfs_create(dir->d_inode, dentry, mode);
+			up(&dir->d_inode->i_sem);
 			/* Don't check for write permission, don't truncate */
 			acc_mode = 0;
 			flag &= ~O_TRUNC;
 			dput(nd->dentry);
 			nd->dentry = dentry;
-			unlock_dir(dir);
 			if (error)
 				goto exit;
 		}
@@ -1219,6 +1217,8 @@ int vfs_rmdir(struct inode *dir, struct dentry *dentry)
 	if (!error)
 		dentry->d_inode->i_flags |= S_DEAD;
 	double_up(&dir->i_zombie, &dentry->d_inode->i_zombie);
+	if (!error)
+		d_delete(dentry);
 	dput(dentry);
 
 	return error;
@@ -1276,6 +1276,8 @@ int vfs_unlink(struct inode *dir, struct dentry *dentry)
 		if (dir->i_op && dir->i_op->unlink) {
 			DQUOT_INIT(dir);
 			error = dir->i_op->unlink(dir, dentry);
+			if (!error)
+				d_delete(dentry);
 		}
 	}
 	up(&dir->i_zombie);

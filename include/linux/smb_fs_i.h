@@ -29,6 +29,7 @@ struct smb_inode_info {
 	__u16 cache_valid;	/* dircache valid? */
 	unsigned long oldmtime;	/* last time refreshed */
 	unsigned long closed;	/* timestamp when closed */
+	unsigned openers;	/* number of fileid users */
 };
 
 #endif

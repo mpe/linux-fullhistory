@@ -104,8 +104,8 @@ struct wacom_features {
 	int distance_max;
 	void (*irq)(struct urb *urb);
 	unsigned long evbit;
-	unsigned long relbit;
 	unsigned long absbit;
+	unsigned long relbit;
 	unsigned long btnbit;
 	unsigned long digibit;
 };

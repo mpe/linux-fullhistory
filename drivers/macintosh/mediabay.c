@@ -3,6 +3,8 @@
  *
  * Copyright (C) 1998 Paul Mackerras.
  *
+ * Various evolutions by Benjamin Herrenschmidt & Henry Worth
+ *
  *  This program is free software; you can redistribute it and/or
  *  modify it under the terms of the GNU General Public License
  *  as published by the Free Software Foundation; either version
@@ -56,12 +58,15 @@ struct media_bay_hw {
 
 struct media_bay_info {
 	volatile struct media_bay_hw*	addr;
+	volatile u8*			extint_gpio;
 	int				content_id;
 	int				state;
 	int				last_value;
 	int				value_count;
 	int				timer;
 	struct device_node*		dev_node;
+	int				pismo;	/* New PowerBook3,1 */
+	int				gpio_cache;
 #ifdef CONFIG_BLK_DEV_IDE
 	unsigned long			cd_base;
 	int 				cd_index;
@@ -75,7 +80,25 @@ struct media_bay_info {
 static volatile struct media_bay_info media_bays[MAX_BAYS];
 int media_bay_count = 0;
 
-#define MB_CONTENTS(i)	((in_8(&media_bays[i].addr->contents) >> 4) & 7)
+inline int mb_content(volatile struct media_bay_info *bay)
+{
+        if (bay->pismo) {
+                unsigned char new_gpio = in_8(bay->extint_gpio + 0xe) & 2;
+                if (new_gpio) {
+                	bay->gpio_cache = new_gpio;
+                        return MB_NO;
+                } else if (bay->gpio_cache != new_gpio) {
+                        /* make sure content bits are set */
+                        feature_set(bay->dev_node, FEATURE_Mediabay_content);
+                        udelay(5);
+                        bay->gpio_cache = new_gpio;
+                }
+                return (in_le32((unsigned*)bay->addr) >> 4) & 0xf;
+        } else {
+                int cont = (in_8(&bay->addr->contents) >> 4) & 7;
+                return (cont == 7) ? MB_NO : cont;
+        }
+}
 
 #ifdef CONFIG_BLK_DEV_IDE
 /* check the busy bit in the media-bay ide interface
@@ -184,12 +207,22 @@ media_bay_init(void)
 		media_bays[n].addr = (volatile struct media_bay_hw *)
 			ioremap(np->addrs[0].address, sizeof(struct media_bay_hw));
 
+		media_bays[n].pismo = device_is_compatible(np, "keylargo-media-bay");
+		if (media_bays[n].pismo) {
+			if (!np->parent || strcmp(np->parent->name, "mac-io")) {
+				printk(KERN_ERR "Pismo media-bay has no mac-io parent !\n");
+				continue;
+			}
+			media_bays[n].extint_gpio = ioremap(np->parent->addrs[0].address
+				+ 0x58, 0x10);
+		}
+
 #ifdef MB_USE_INTERRUPTS
 		if (np->n_intrs == 0) {
 			printk(KERN_ERR "media bay %d has no irq\n",n);
 			continue;
 		}
-		
+
 		if (request_irq(np->intrs[0].line, media_bay_intr, 0, "Media bay", (void *)n)) {
 			printk(KERN_ERR "Couldn't get IRQ %d for media bay %d\n",
 				np->intrs[0].line, n);
@@ -203,10 +236,11 @@ media_bay_init(void)
 		/* Force an immediate detect */
 		set_mb_power(n,0);
 		mdelay(MB_POWER_DELAY);
-		out_8(&media_bays[n].addr->contents, 0x70);
+		if(!media_bays[n].pismo)
+			out_8(&media_bays[n].addr->contents, 0x70);
 		mdelay(MB_STABLE_DELAY);
 		media_bays[n].content_id = MB_NO;
-		media_bays[n].last_value = MB_CONTENTS(n);
+		media_bays[n].last_value = mb_content(&media_bays[n]);
 		media_bays[n].value_count = MS_TO_HZ(MB_STABLE_DELAY);
 		media_bays[n].state = mb_empty;
 		do {
@@ -214,11 +248,11 @@ media_bay_init(void)
 			media_bay_step(n);
 		} while((media_bays[n].state != mb_empty) &&
 			(media_bays[n].state != mb_up));
-		
+
 		n++;
 		np=np->next;
 	}
-	
+
 	if (media_bay_count)
 	{
 		printk(KERN_INFO "Registered %d media-bay(s)\n", media_bay_count);
@@ -227,7 +261,8 @@ media_bay_init(void)
 		pmu_register_sleep_notifier(&mb_sleep_notifier);
 #endif /* CONFIG_PMAC_PBOOK */
 
-		kernel_thread(media_bay_task, NULL, 0);
+		kernel_thread(media_bay_task, NULL,
+			      CLONE_FS | CLONE_FILES | CLONE_SIGHAND);
 	}
 }
 
@@ -252,7 +287,11 @@ set_mb_power(int which, int onoff)
 		MBDBG("mediabay%d: powering up\n", which);
 	} else {
 		feature_clear(mb->dev_node, FEATURE_Mediabay_floppy_enable);
-		feature_clear(mb->dev_node, FEATURE_IDE1_enable);
+		if (mb->pismo)
+			feature_clear(mb->dev_node, FEATURE_IDE0_enable);
+		else
+			feature_clear(mb->dev_node, FEATURE_IDE1_enable);
+		feature_clear(mb->dev_node, FEATURE_Mediabay_IDE_switch);
 		feature_clear(mb->dev_node, FEATURE_Mediabay_PCI_enable);
 		feature_clear(mb->dev_node, FEATURE_SWIM3_enable);
 		feature_clear(mb->dev_node, FEATURE_Mediabay_power);
@@ -271,9 +310,17 @@ set_media_bay(int which, int id)
 	
 	switch (id) {
 	case MB_CD:
-		feature_set(bay->dev_node, FEATURE_IDE1_enable);
-		udelay(10);
-		feature_set(bay->dev_node, FEATURE_IDE1_reset);
+		if (bay->pismo) {
+			feature_set(bay->dev_node, FEATURE_Mediabay_IDE_switch);
+			udelay(10);
+			feature_set(bay->dev_node, FEATURE_IDE0_enable);
+			udelay(10);
+			feature_set(bay->dev_node, FEATURE_IDE0_reset);
+		} else {
+			feature_set(bay->dev_node, FEATURE_IDE1_enable);
+			udelay(10);
+			feature_set(bay->dev_node, FEATURE_IDE1_reset);
+		}
 		printk(KERN_INFO "media bay %d contains a CD-ROM drive\n", which);
 		break;
 	case MB_FD:
@@ -345,8 +392,8 @@ media_bay_set_ide_infos(struct device_node* which_bay, unsigned long base,
 
 			if ((MB_CD != media_bays[i].content_id) || media_bays[i].state != mb_up)
 				return 0;
-				
-			printk(KERN_DEBUG "Registered ide %d for media bay %d\n", index, i);			
+
+			printk(KERN_DEBUG "Registered ide %d for media bay %d\n", index, i);
 			do {
 				if (MB_IDE_READY(i)) {
 					media_bays[i].cd_index	= index;
@@ -354,7 +401,7 @@ media_bay_set_ide_infos(struct device_node* which_bay, unsigned long base,
 				}
 				mdelay(1);
 			} while(--timeout);
-			printk(KERN_DEBUG "Timeout waiting IDE in bay %d\n", i);			
+			printk(KERN_DEBUG "Timeount waiting IDE in bay %d\n", i);
 			return -ENODEV;
 		} 
 #endif
@@ -397,7 +444,10 @@ media_bay_step(int i)
 	    	}
 #ifdef CONFIG_BLK_DEV_IDE
 		MBDBG("mediabay%d: waiting IDE reset (kind:%d)\n", i, bay->content_id);
-	    	feature_clear(bay->dev_node, FEATURE_IDE1_reset);
+		if (bay->pismo)
+	    		feature_clear(bay->dev_node, FEATURE_IDE0_reset);
+		else
+	    		feature_clear(bay->dev_node, FEATURE_IDE1_reset);
 	    	bay->timer = MS_TO_HZ(MB_IDE_WAIT);
 	    	bay->state = mb_ide_resetting;
 #else
@@ -476,23 +526,21 @@ media_bay_step(int i)
 int __pmac
 media_bay_task(void *x)
 {
-	int	i = 0;
-	
+	int	i;
+
 	strcpy(current->comm, "media-bay");
 #ifdef MB_IGNORE_SIGNALS
 	sigfillset(&current->blocked);
 #endif
 
 	for (;;) {
-	    media_bay_step(i);
+		for (i = 0; i < media_bay_count; ++i)
+			media_bay_step(i);
 
-	    if (++i >= media_bay_count) {
-		i = 0;
 		current->state = TASK_INTERRUPTIBLE;
 		schedule_timeout(1);
 		if (signal_pending(current))
 			return 0;
-	    }
 	}
 }
 
@@ -500,7 +548,7 @@ void __pmac
 poll_media_bay(int which)
 {
 	volatile struct media_bay_info* bay = &media_bays[which];
-	int id = MB_CONTENTS(which);
+	int id = mb_content(bay);
 
 	if (id == bay->last_value) {
 	    if (id != bay->content_id
@@ -548,27 +596,26 @@ mb_notify_sleep(struct pmu_sleep_notifier *self, int when)
 			bay = &media_bays[i];
 			set_mb_power(i, 0);
 			mdelay(10);
-			out_8(&bay->addr->contents, 0x70);
 		}
 		break;
 	case PBOOK_WAKE:
 		for (i=0; i<media_bay_count; i++) {
 			bay = &media_bays[i];
 			/* We re-enable the bay using it's previous content
-			   only if it did not change. Note those bozo timings, they seem
-			   to help the 3400 get it right
+			   only if it did not change. Note those bozo timings,
+			   they seem to help the 3400 get it right.
 			 */
 			mdelay(MB_STABLE_DELAY);
-			out_8(&bay->addr->contents, 0x70);
+			if (!bay->pismo)
+				out_8(&bay->addr->contents, 0x70);
 			mdelay(MB_STABLE_DELAY);
-			if (MB_CONTENTS(i) != bay->content_id)
+			if (mb_content(bay) != bay->content_id)
 				continue;
 			set_mb_power(i, 1);
-			mdelay(MB_POWER_DELAY);
-			media_bays[i].last_value = bay->content_id;
-			media_bays[i].value_count = MS_TO_HZ(MB_STABLE_DELAY);
-			media_bays[i].timer = 0;
-			media_bays[i].cd_retry = 0;
+			bay->last_value = bay->content_id;
+			bay->value_count = MS_TO_HZ(MB_STABLE_DELAY);
+			bay->timer = MS_TO_HZ(MB_POWER_DELAY);
+			bay->cd_retry = 0;
 			do {
 				mdelay(1000/HZ);
 				media_bay_step(i);
@@ -580,3 +627,4 @@ mb_notify_sleep(struct pmu_sleep_notifier *self, int when)
 	return PBOOK_SLEEP_OK;
 }
 #endif /* CONFIG_PMAC_PBOOK */
+

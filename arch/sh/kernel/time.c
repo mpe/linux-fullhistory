@@ -47,9 +47,6 @@
 #define RCR2_RESET	0x02	/* Reset bit               */
 #define RCR2_START	0x01	/* Start bit               */
 
-#define RTC_IRQ		22
-#define RTC_IPR_OFFSET	0
-
 #if defined(__sh3__)
 #define TMU_TOCR	0xfffffe90	/* Byte access */
 #define TMU_TSTR	0xfffffe92	/* Byte access */
@@ -204,13 +201,6 @@ static long last_rtc_update = 0;
 static inline void do_timer_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
 	do_timer(regs);
-#ifdef TAKESHI
-	{
-		unsigned long what_is_this=0xa4000124;
-
-		ctrl_outb(ctrl_inb(what_is_this)+1,what_is_this);
-	}
-#endif
 #if 0
 	if (!user_mode(regs))
 		sh_do_profile(regs->pc);
@@ -393,23 +383,23 @@ static struct irqaction irq1  = { rtc_interrupt, SA_INTERRUPT, 0, "rtc", NULL, N
 
 void __init time_init(void)
 {
-	unsigned int cpu_clock, master_clock, module_clock;
-	unsigned short ifc, pfc;
+	unsigned int cpu_clock, master_clock, bus_clock, module_clock;
+	unsigned short frqcr, ifc, pfc;
 	unsigned long interval;
 #if defined(__sh3__)
 	static int ifc_table[] = { 1, 2, 4, 1, 3, 1, 1, 1 };
 	static int pfc_table[] = { 1, 2, 4, 1, 3, 6, 1, 1 };
+	static int stc_table[] = { 1, 2, 3, 4, 6, 8, 1, 1 };
 #elif defined(__SH4__)
 	static int ifc_table[] = { 1, 2, 3, 4, 6, 8, 1, 1 };
+#define bfc_table ifc_table	/* Same */
 	static int pfc_table[] = { 2, 3, 4, 6, 8, 2, 2, 2 };
 #endif
 
 	xtime.tv_sec = get_rtc_time();
 	xtime.tv_usec = 0;
 
-	set_ipr_data(TIMER_IRQ, TIMER_IPR_OFFSET, TIMER_PRIORITY);
 	setup_irq(TIMER_IRQ, &irq0);
-	set_ipr_data(RTC_IRQ, RTC_IPR_OFFSET, TIMER_PRIORITY);
 	setup_irq(RTC_IRQ, &irq1);
 
 	/* Check how fast it is.. */
@@ -420,23 +410,37 @@ void __init time_init(void)
 	       (cpu_clock / 1000000), (cpu_clock % 1000000)/10000);
 #if defined(__sh3__)
 	{
-		unsigned short tmp;
-		tmp  = (ctrl_inw(FRQCR) & 0x000c) >> 2;
-		tmp |= (ctrl_inw(FRQCR) & 0x4000) >> 12;
-		ifc  = ifc_table[tmp & 0x0007];
-		tmp  = ctrl_inw(FRQCR) & 0x0003;
-		tmp |= (ctrl_inw(FRQCR) & 0x2000) >> 11;
-		pfc = pfc_table[ctrl_inw(FRQCR) & 0x0007];
+		unsigned short tmp, stc;
+		frqcr = ctrl_inw(FRQCR);
+		tmp  = (frqcr & 0x8000) >> 13;
+		tmp |= (frqcr & 0x0030) >>  4;
+		stc = stc_table[tmp];
+		tmp  = (frqcr & 0x4000) >> 12;
+		tmp |= (frqcr & 0x000c) >> 2;
+		ifc  = ifc_table[tmp];
+		tmp  = (frqcr & 0x2000) >> 11;
+		tmp |= frqcr & 0x0003;
+		pfc = pfc_table[tmp];
+		master_clock = cpu_clock;
+		bus_clock = master_clock/pfc;
 	}
 #elif defined(__SH4__)
-	ifc  = ifc_table[(ctrl_inw(FRQCR)>> 6) & 0x0007];
-	pfc = pfc_table[ctrl_inw(FRQCR) & 0x0007];
+	{
+		unsigned short bfc;
+		frqcr = ctrl_inw(FRQCR);
+		ifc  = ifc_table[(frqcr>> 6) & 0x0007];
+		bfc  = bfc_table[(frqcr>> 3) & 0x0007];
+		pfc = pfc_table[frqcr & 0x0007];
+		master_clock = cpu_clock * ifc;
+		bus_clock = master_clock/bfc;
+	}
 #endif
-	master_clock = cpu_clock * ifc;
+	printk("Bus clock: %d.%02dMHz\n",
+	       (bus_clock/1000000), (bus_clock % 1000000)/10000);
 	module_clock = master_clock/pfc;
 	printk("Module clock: %d.%02dMHz\n",
 	       (module_clock/1000000), (module_clock % 1000000)/10000);
-	interval = (module_clock/400);
+	interval = (module_clock/(HZ*4));
 
 	printk("Interval = %ld\n", interval);
 

@@ -1414,7 +1414,7 @@ struct rio_info *	p;
 	    (int)p->RIOHosts, sizeof(struct Host) ) );
 
 	for( host=0; host<RIO_HOSTS; host++ ) {
-		p->RIOHosts[host].HostLock = SPIN_LOCK_UNLOCKED; /* Let the first guy takes it */
+		spin_lock_init (&p->RIOHosts[host].HostLock);
 		p->RIOHosts[host].timeout_id = 0; /* Let the first guy takes it */
 	}
 	/*

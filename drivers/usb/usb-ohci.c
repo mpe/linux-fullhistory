@@ -497,12 +497,10 @@ static int sohci_submit_urb (urb_t * urb)
 	if (ed->state != ED_OPER)  /* link the ed into a chain if is not already */
 		ep_link (ohci, ed);
 	
+	urb->status = USB_ST_URB_PENDING; 
 	td_submit_urb (urb); /* fill the TDs and link it to the ed */
 
 	spin_unlock_irqrestore (&usb_ed_lock, flags);
-	
-	urb->status = USB_ST_URB_PENDING; 
-	// queue_urb(s, &urb->urb_list);
 
 	return 0;	
 }
@@ -1936,11 +1934,11 @@ static int hc_start_ohci (struct pci_dev * dev)
 {
 	unsigned long mem_base;
 
-	mem_base = dev->resource[0].start;
 	if (pci_enable_device(dev) < 0)
 		return -ENODEV;
 	
 	pci_set_master (dev);
+	mem_base = dev->resource[0].start;
 	mem_base = (unsigned long) ioremap_nocache (mem_base, 4096);
 
 	if (!mem_base) {

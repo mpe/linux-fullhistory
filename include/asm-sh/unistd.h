@@ -314,16 +314,16 @@ __syscall_return(type,__sc0); \
 #define _syscall5(type,name,type1,arg1,type2,arg2,type3,arg3,type4,arg4,type5,arg5) \
 type name (type1 arg1, type2 arg2, type3 arg3, type4 arg4, type5 arg5) \
 { \
-register long __sc0 __asm__ ("$r3") = __NR_##name; \
+register long __sc3 __asm__ ("$r3") = __NR_##name; \
 register long __sc4 __asm__ ("$r4") = (long) arg1; \
 register long __sc5 __asm__ ("$r5") = (long) arg2; \
 register long __sc6 __asm__ ("$r6") = (long) arg3; \
 register long __sc7 __asm__ ("$r7") = (long) arg4; \
-register long __sc2 __asm__ ("$r0") = (long) arg5; \
+register long __sc0 __asm__ ("$r0") = (long) arg5; \
 __asm__ __volatile__ ("trapa	#0x15" \
 	: "=z" (__sc0) \
 	: "0" (__sc0), "r" (__sc4), "r" (__sc5), "r" (__sc6), "r" (__sc7),  \
-	  "r" (__sc7), "r" (__sc2) \
+	  "r" (__sc3) \
 	: "memory" ); \
 __syscall_return(type,__sc0); \
 }

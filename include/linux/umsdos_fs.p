@@ -108,11 +108,3 @@ int UMSDOS_rename (struct inode *old_dir,
 /* rdir.c 22/03/95 03.31.42 */
 struct dentry *umsdos_rlookup_x (struct inode *dir, struct dentry *dentry, int nopseudo);
 struct dentry *UMSDOS_rlookup (struct inode *dir, struct dentry *dentry);
-
-/* symlink.c 23/01/95 03.38.30 */
-
-/* check.c */
-void checkd_inode (struct inode *inode);
-void check_inode (struct inode *inode);
-void check_dentry (struct dentry *dentry);
-void check_dentry_path (struct dentry *dentry, const char *desc);

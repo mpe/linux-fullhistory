@@ -28,6 +28,7 @@
 #include <asm/mmu_context.h>
 
 extern void die(const char *,struct pt_regs *,long);
+static void __flush_tlb_page(struct mm_struct *mm, unsigned long page);
 
 /*
  * Ugly, ugly, but the goto's result in better assembly..
@@ -167,12 +168,17 @@ good_area:
 	 * make sure we exit gracefully rather than endlessly redo
 	 * the fault.
 	 */
-	{
-		int fault = handle_mm_fault(mm, vma, address, writeaccess);
-		if (fault < 0)
-			goto out_of_memory;
-		if (!fault)
-			goto do_sigbus;
+	switch (handle_mm_fault(mm, vma, address, writeaccess)) {
+	case 1:
+		tsk->min_flt++;
+		break;
+	case 2:
+		tsk->maj_flt++;
+		break;
+	case 0:
+		goto do_sigbus;
+	default:
+		goto out_of_memory;
 	}
 
 	up(&mm->mmap_sem);
@@ -209,18 +215,20 @@ no_context:
 		printk(KERN_ALERT "Unable to handle kernel NULL pointer dereference");
 	else
 		printk(KERN_ALERT "Unable to handle kernel paging request");
-	printk(" at virtual address %08lx\n",address);
+	printk(" at virtual address %08lx\n", address);
 	printk(KERN_ALERT "pc = %08lx\n", regs->pc);
-	asm volatile("mov.l	%1,%0"
+	asm volatile("mov.l	%1, %0"
 		     : "=r" (page)
 		     : "m" (__m(MMU_TTB)));
-	page = ((unsigned long *) page)[address >> 22];
-	printk(KERN_ALERT "*pde = %08lx\n", page);
-	if (page & _PAGE_PRESENT) {
-		page &= PAGE_MASK;
-		address &= 0x003ff000;
-		page = ((unsigned long *) __va(page))[address >> PAGE_SHIFT];
-		printk(KERN_ALERT "*pte = %08lx\n", page);
+	if (page) {
+		page = ((unsigned long *) page)[address >> 22];
+		printk(KERN_ALERT "*pde = %08lx\n", page);
+		if (page & _PAGE_PRESENT) {
+			page &= PAGE_MASK;
+			address &= 0x003ff000;
+			page = ((unsigned long *) __va(page))[address >> PAGE_SHIFT];
+			printk(KERN_ALERT "*pte = %08lx\n", page);
+		}
 	}
 	die("Oops", regs, writeaccess);
 	do_exit(SIGKILL);
@@ -261,18 +269,24 @@ void update_mmu_cache(struct vm_area_struct * vma,
 	unsigned long pteaddr;
 
 	save_and_cli(flags);
+#if defined(__SH4__)
 	/*
-	 *  We don't need to set PTEH register.
-	 *  It's automatically set by the hardware.
+	 * ITLB is not affected by "ldtlb" instruction.
+	 * So, we need to flush the entry by ourselves.
 	 */
+	__flush_tlb_page(vma->vm_mm, address&PAGE_MASK);
+#endif
+
+	/* Set PTEH register */
+	pteaddr = (address & MMU_VPN_MASK) |
+		(vma->vm_mm->context & MMU_CONTEXT_ASID_MASK);
+	ctrl_outl(pteaddr, MMU_PTEH);
+
+	/* Set PTEL register */
 	pteval = pte_val(pte);
 	pteval &= _PAGE_FLAGS_HARDWARE_MASK; /* drop software flags */
 	pteval |= _PAGE_FLAGS_HARDWARE_DEFAULT; /* add default flags */
-	/* Set PTEL register */
 	ctrl_outl(pteval, MMU_PTEL);
-	/* Set PTEH register */
-	pteaddr = (address & MMU_VPN_MASK) | (vma->vm_mm->context & MMU_CONTEXT_ASID_MASK);
-	ctrl_outl(pteaddr, MMU_PTEH);
 
 	/* Load the TLB */
 	asm volatile("ldtlb": /* no output */ : /* no input */ : "memory");
@@ -306,20 +320,6 @@ static void __flush_tlb_page(struct mm_struct *mm, unsigned long page)
 	addr = MMU_UTLB_ADDRESS_ARRAY | MMU_PAGE_ASSOC_BIT;
 	data = page | asid; /* VALID bit is off */
 	ctrl_outl(data, addr);
-#if 0 	/* Not need when using ASSOC. ??? */
-	{
-		int i;
-		for (i=0; i<4; i++) {
-			addr = MMU_ITLB_ADDRESS_ARRAY | (i<<8);
-			data = ctrl_inl(addr);
-			data &= ~0x300;
-			if (data == (page | asid)) {
-				ctrl_outl(data, addr);
-				break;
-			}
-		}
-	}
-#endif
 	back_to_P1();
 #endif
 	if (saved_asid != MMU_NO_ASID)
@@ -383,9 +383,16 @@ void flush_tlb_all(void)
 {
 	unsigned long flags, status;
 
+	/*
+	 * Flush all the TLB.
+	 *
+	 * Write to the MMU control register's bit:
+	 * 	TF-bit for SH-3, TI-bit for SH-4.
+	 *      It's same position, bit #2.
+	 */
 	save_and_cli(flags);
 	status = ctrl_inl(MMUCR);
-	status |= 0x04;		/* Set TF-bit to flush */
-	ctrl_outl(status,MMUCR);
+	status |= 0x04;		
+	ctrl_outl(status, MMUCR);
 	restore_flags(flags);
 }

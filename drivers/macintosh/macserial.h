@@ -111,7 +111,7 @@ struct mac_serial {
 	char kgdb_channel;  /* Kgdb is running on this channel */
 	char is_cons;       /* Is this our console. */
 	char is_cobalt_modem;	/* is a gatwick-based cobalt modem */
-	char is_pwbk_ir;	/* is connected to an IR led on powerbooks */
+	char is_irda;		/* is connected to an IrDA codec */
 	unsigned char tx_active; /* character is being xmitted */
 	unsigned char tx_stopped; /* output is suspended */
 

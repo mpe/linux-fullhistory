@@ -165,8 +165,8 @@ extern int max_super_blocks, nr_super_blocks;
 #define BLKSSZGET  _IO(0x12,104)/* get block device sector size */
 #if 0
 #define BLKPG      _IO(0x12,105)/* See blkpg.h */
-#define BLKELVGET   _IO(0x12,106)/* elevator get */
-#define BLKELVSET   _IO(0x12,107)/* elevator set */
+#define BLKELVGET  _IOR(0x12,106,sizeof(blkelv_ioctl_arg_t))/* elevator get */
+#define BLKELVSET  _IOW(0x12,107,sizeof(blkelv_ioctl_arg_t))/* elevator set */
 /* This was here just to show that the number is taken -
    probably all these _IO(0x12,*) ioctls should be moved to blkpg.h. */
 #endif
@@ -794,6 +794,8 @@ extern int unregister_filesystem(struct file_system_type *);
 extern struct vfsmount *kern_mount(struct file_system_type *);
 extern void kern_umount(struct vfsmount *);
 extern int may_umount(struct vfsmount *);
+extern long do_mount(char *, char *, char *, unsigned long, void *);
+
 
 extern int vfs_statfs(struct super_block *, struct statfs *);
 
@@ -900,7 +902,7 @@ extern struct file_operations rdwr_pipe_fops;
 
 extern int fs_may_remount_ro(struct super_block *);
 
-extern int try_to_free_buffers(struct page *);
+extern int try_to_free_buffers(struct page *, int);
 extern void refile_buffer(struct buffer_head * buf);
 
 #define BUF_CLEAN	0
@@ -1116,6 +1118,7 @@ extern int page_follow_link(struct dentry *, struct nameidata *);
 extern struct inode_operations page_symlink_inode_operations;
 
 extern int vfs_readdir(struct file *, filldir_t, void *);
+extern int dcache_readdir(struct file *, void *, filldir_t);
 
 extern struct super_block *get_super(kdev_t);
 struct super_block *get_empty_super(void);

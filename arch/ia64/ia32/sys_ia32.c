@@ -2735,8 +2735,6 @@ copy_mount_stuff_to_kernel(const void *user, unsigned long *kernel)
 
 extern asmlinkage long sys_mount(char * dev_name, char * dir_name, char * type,
 				unsigned long new_flags, void *data);
-extern long do_sys_mount(char * dev_name, char * dir_name, char * type,
-				unsigned long new_flags, void *data);
 
 #define SMBFS_NAME	"smbfs"
 #define NCPFS_NAME	"ncpfs"
@@ -2784,7 +2782,7 @@ sys32_mount(char *dev_name, char *dir_name, char *type,
 			do_smb_super_data_conv((void *)data_page);
 		else
 			panic("The problem is here...");
-		err = do_sys_mount((char *)dev_page, (char *)dir_page,
+		err = do_mount((char *)dev_page, (char *)dir_page,
 				(char *)type_page, new_flags,
 				(void *)data_page);
 		if(data_page)

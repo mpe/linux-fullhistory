@@ -96,21 +96,18 @@ static struct miscdevice nvram_dev = {
 	&nvram_fops
 };
 
-int nvram_init(void)
+int __init nvram_init(void)
 {
 	printk(KERN_INFO "Macintosh non-volatile memory driver v%s\n",
 		NVRAM_VERSION);
 	misc_register(&nvram_dev);
 	return 0;
 }
-#ifdef MODULE
-int init_module (void)
-{
-        return( nvram_init() );
-}
 
-void cleanup_module (void)
+void __exit nvram_cleanup(void)
 {
         misc_deregister( &nvram_dev );
 }
-#endif
+
+module_init(nvram_init);
+module_exit(nvram_cleanup);

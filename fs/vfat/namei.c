@@ -961,24 +961,6 @@ static int vfat_find(struct inode *dir,struct qstr* qname,
 	return res ? res : -ENOENT;
 }
 
-/* Find a hashed dentry for inode; NULL if there are none */
-static struct dentry *find_alias(struct inode *inode)
-{
-	struct list_head *head, *next, *tmp;
-	struct dentry *alias;
-
-	head = &inode->i_dentry;
-	next = inode->i_dentry.next;
-	while (next != head) {
-		tmp = next;
-		next = tmp->next;
-		alias = list_entry(tmp, struct dentry, d_alias);
-		if (!d_unhashed(alias))
-			return dget(alias);
-	}
-	return NULL;
-}
-
 struct dentry *vfat_lookup(struct inode *dir,struct dentry *dentry)
 {
 	int res;
@@ -1005,7 +987,7 @@ struct dentry *vfat_lookup(struct inode *dir,struct dentry *dentry)
 	fat_brelse(dir->i_sb, bh);
 	if (res)
 		return ERR_PTR(res);
-	alias = find_alias(inode);
+	alias = d_find_alias(inode);
 	if (alias) {
 		if (d_invalidate(alias)==0)
 			dput(alias);
@@ -1116,7 +1098,6 @@ int vfat_unlink(struct inode *dir, struct dentry* dentry)
 	mark_inode_dirty(dentry->d_inode);
 	/* releases bh */
 	vfat_remove_entry(dir,&sinfo,bh,de);
-	d_delete(dentry);
 
 	return res;
 }

@@ -72,16 +72,16 @@ unsigned int csum_partial_copy( const char *src, char *dst, int len, int sum);
 static __inline__ unsigned int csum_fold(unsigned int sum)
 {
 	unsigned int __dummy;
-	__asm__("clrt\n\t"
-		"mov	%0, %1\n\t"
-		"shll16	%0\n\t"
-		"addc	%0, %1\n\t"
-		"movt	%0\n\t"
-		"shlr16	%1\n\t"
-		"add	%1, %0"
+	__asm__("swap.w %0, %1\n\t"
+		"extu.w	%0, %0\n\t"
+		"extu.w	%1, %1\n\t"
+		"add	%1, %0\n\t"
+		"swap.w	%0, %1\n\t"
+		"add	%1, %0\n\t"
+		"not	%0, %0\n\t"
 		: "=r" (sum), "=&r" (__dummy)
 		: "0" (sum));
-	return ~sum;
+	return sum;
 }
 
 /*
@@ -93,31 +93,26 @@ static __inline__ unsigned int csum_fold(unsigned int sum)
  */
 static __inline__ unsigned short ip_fast_csum(unsigned char * iph, unsigned int ihl)
 {
-	unsigned int sum, __dummy;
+	unsigned int sum, __dummy0, __dummy1;
 
 	__asm__ __volatile__(
 		"mov.l	@%1+, %0\n\t"
-		"add	#-4, %2\n\t"
+		"mov.l	@%1+, %3\n\t"
+		"add	#-2, %2\n\t"
 		"clrt\n\t"
-		"mov.l	@%1+, %3\n\t"
-		"addc	%3, %0\n\t"
-		"mov.l	@%1+, %3\n\t"
-		"addc	%3, %0\n\t"
-		"mov.l	@%1+, %3\n\t"
-		"addc	%3, %0\n"
 		"1:\t"
-		"mov.l	@%1+, %3\n\t"
 		"addc	%3, %0\n\t"
-		"movt	%3\n\t"
+		"movt	%4\n\t"
+		"mov.l	@%1+, %3\n\t"
 		"dt	%2\n\t"
 		"bf/s	1b\n\t"
-		" cmp/eq #1, %3\n\t"
-		"mov	#0, %3\n\t"
+		" cmp/eq #1, %4\n\t"
 		"addc	%3, %0\n\t"
+		"addc	%2, %0"	    /* Here %2 is 0, add carry-bit */
 	/* Since the input registers which are loaded with iph and ihl
 	   are modified, we must also specify them as outputs, or gcc
 	   will assume they contain their original values. */
-	: "=r" (sum), "=r" (iph), "=r" (ihl), "=&z" (__dummy)
+	: "=r" (sum), "=r" (iph), "=r" (ihl), "=&r" (__dummy0), "=&z" (__dummy1)
 	: "1" (iph), "2" (ihl));
 
 	return	csum_fold(sum);

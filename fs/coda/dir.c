@@ -45,7 +45,7 @@ static int coda_readdir(struct file *file, void *dirent, filldir_t filldir);
 
 /* dentry ops */
 static int coda_dentry_revalidate(struct dentry *de, int);
-static void coda_dentry_delete(struct dentry *);
+static int coda_dentry_delete(struct dentry *);
 
 /* support routines */
 static int coda_venus_readdir(struct file *filp, void *dirent, 
@@ -434,7 +434,6 @@ int coda_unlink(struct inode *dir, struct dentry *de)
         /* cache management: mtime has changed, ask Venus */
 	dircnp->c_flags |= C_VATTR;
 	de->d_inode->i_nlink--;
-	d_delete(de);
 
         return 0;
 }
@@ -801,20 +800,21 @@ static int coda_dentry_revalidate(struct dentry *de, int flags)
  * This is the callback from dput() when d_count is going to 0.
  * We use this to unhash dentries with bad inodes.
  */
-static void coda_dentry_delete(struct dentry * dentry)
+static int coda_dentry_delete(struct dentry * dentry)
 {
 	int flags;
 
 	if (!dentry->d_inode) 
-		return ;
+		return 0;
 
 	flags =  (ITOC(dentry->d_inode)->c_flags) & C_PURGE;
 	if (is_bad_inode(dentry->d_inode) || flags) {
 		CDEBUG(D_DOWNCALL, "bad inode, unhashing %s/%s, %ld\n", 
 		       dentry->d_parent->d_name.name, dentry->d_name.name,
 		       dentry->d_inode->i_ino);
-		d_drop(dentry);
+		return 1;
 	}
+	return 0;
 }
 
 

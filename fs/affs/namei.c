@@ -249,7 +249,6 @@ affs_unlink(struct inode *dir, struct dentry *dentry)
 	inode->i_ctime = dir->i_ctime = dir->i_mtime = CURRENT_TIME;
 	dir->i_version = ++event;
 	mark_inode_dirty(inode);
-	d_delete(dentry);
 	mark_inode_dirty(dir);
 	retval = 0;
 
@@ -380,7 +379,6 @@ affs_rmdir(struct inode *dir, struct dentry *dentry)
 	dir->i_version = ++event;
 	mark_inode_dirty(dir);
 	mark_inode_dirty(inode);
-	d_delete(dentry);
 
 rmdir_done:
 	affs_brelse(bh);

@@ -247,8 +247,7 @@ repeat:
 int shrink_mmap(int priority, int gfp_mask)
 {
 	int ret = 0, count;
-	LIST_HEAD(old);
-	struct list_head * page_lru, * dispose;
+	struct list_head * page_lru;
 	struct page * page = NULL;
 	
 	count = nr_lru_pages / (priority + 1);
@@ -259,24 +258,9 @@ int shrink_mmap(int priority, int gfp_mask)
 		page = list_entry(page_lru, struct page, lru);
 		list_del(page_lru);
 
-		dispose = &lru_cache;
+		count--;
 		if (PageTestandClearReferenced(page))
 			goto dispose_continue;
-
-		count--;
-
-		/*
-		 * I'm ambivalent on this one.. Should we try to
-		 * maintain LRU on the LRU list, and put pages that
-		 * are old at the end of the queue, even if that
-		 * means that we'll re-scan then again soon and
-		 * often waste CPU time? Or should be just let any
-		 * pages we do not want to touch now for one reason
-		 * or another percolate to be "young"?
-		 *
-		dispose = &old;
-		 *
-		 */
 
 		/*
 		 * Avoid unscalable SMP locking for pages we can
@@ -303,7 +287,7 @@ int shrink_mmap(int priority, int gfp_mask)
 		 * of zone - it's old.
 		 */
 		if (page->buffers) {
-			if (!try_to_free_buffers(page))
+			if (!try_to_free_buffers(page, 1))
 				goto unlock_continue;
 			/* page was locked, inode can't go away under us */
 			if (!page->mapping) {
@@ -362,7 +346,7 @@ unlock_continue:
 		UnlockPage(page);
 		page_cache_release(page);
 dispose_continue:
-		list_add(page_lru, dispose);
+		list_add(page_lru, &lru_cache);
 	}
 	goto out;
 
@@ -377,8 +361,6 @@ made_buffer_progress:
 	nr_lru_pages--;
 
 out:
-	list_splice(&old, lru_cache.prev);
-
 	spin_unlock(&pagemap_lru_lock);
 
 	return ret;
@@ -2319,7 +2301,8 @@ out:
 	return error;
 }
 
-struct page *read_cache_page(struct address_space *mapping,
+static inline
+struct page *__read_cache_page(struct address_space *mapping,
 				unsigned long index,
 				int (*filler)(void *,struct page*),
 				void *data)
@@ -2347,6 +2330,35 @@ repeat:
 	}
 	if (cached_page)
 		page_cache_free(cached_page);
+	return page;
+}
+
+/*
+ * Read into the page cache. If a page already exists,
+ * and Page_Uptodate() is not set, try to fill the page.
+ */
+struct page *read_cache_page(struct address_space *mapping,
+				unsigned long index,
+				int (*filler)(void *,struct page*),
+				void *data)
+{
+	struct page *page = __read_cache_page(mapping, index, filler, data);
+	int err;
+
+	if (IS_ERR(page) || Page_Uptodate(page))
+		goto out;
+
+	lock_page(page);
+	if (Page_Uptodate(page)) {
+		UnlockPage(page);
+		goto out;
+	}
+	err = filler(data, page);
+	if (err < 0) {
+		page_cache_release(page);
+		page = ERR_PTR(err);
+	}
+ out:
 	return page;
 }
 

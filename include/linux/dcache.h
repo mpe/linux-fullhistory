@@ -80,7 +80,7 @@ struct dentry_operations {
 	int (*d_revalidate)(struct dentry *, int);
 	int (*d_hash) (struct dentry *, struct qstr *);
 	int (*d_compare) (struct dentry *, struct qstr *, struct qstr *);
-	void (*d_delete)(struct dentry *);
+	int (*d_delete)(struct dentry *);
 	void (*d_release)(struct dentry *);
 	void (*d_iput)(struct dentry *, struct inode *);
 };
@@ -160,8 +160,10 @@ extern void prune_icache(int);
 /* only used at mount-time */
 extern struct dentry * d_alloc_root(struct inode *);
 
-/* test whether root is busy without destroying dcache */
-extern int d_active_refs(struct dentry *);
+/* <clickety>-<click> the ramfs-type tree */
+extern void d_genocide(struct dentry *);
+
+extern struct dentry *d_find_alias(struct inode *);
 
 /* test whether we have any submounts in a subdir tree */
 extern int have_submounts(struct dentry *);

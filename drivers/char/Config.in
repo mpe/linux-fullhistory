@@ -50,6 +50,10 @@ if [ "$CONFIG_SERIAL_NONSTANDARD" = "y" ]; then
       bool '  Specialix DTR/RTS pin is RTS' CONFIG_SPECIALIX_RTSCTS
    fi 
    tristate '  Specialix SX (and SI) card support' CONFIG_SX
+   tristate '  Specialix RIO system support' CONFIG_RIO
+   if [ "$CONFIG_RIO" != "n" ]; then
+     bool '    Support really old RIO/PCI cards' CONFIG_RIO_OLDPCI
+   fi
    bool '  Stallion multiport serial support' CONFIG_STALDRV
    if [ "$CONFIG_STALDRV" = "y" ]; then
      tristate '    Stallion EasyIO or EC8/32 support' CONFIG_STALLION

@@ -56,16 +56,16 @@ struct    Host
     uchar             	    Mode;      /* Control stuff */
     uchar                   Slot;      /* Slot */
     volatile caddr_t        Caddr;     /* KV address of DPRAM */
-    volatile struct DpRam   *CardP;    /* KV address of DPRAM, with overlay */
+    volatile struct DpRam  *CardP;     /* KV address of DPRAM, with overlay */
     paddr_t          	    PaddrP;    /* Phys. address of DPRAM */
     char                    Name[MAX_NAME_LEN];  /* The name of the host */
     uint            	    UniqueNum; /* host unique number */
-    spinlock_t		    HostLock;  /* Lock structure for MPX */
-    /*struct pci_devinfo	    PciDevInfo; *//* PCI Bus/Device/Function stuff */
+    spinlock_t	            HostLock;  /* Lock structure for MPX */
+    /*struct pci_devinfo    PciDevInfo; *//* PCI Bus/Device/Function stuff */
     /*struct lockb	    HostLock;  *//* Lock structure for MPX */
     uint                    WorkToBeDone; /* set to true each interrupt */
     uint                    InIntr;    /* Being serviced? */
-    uint                    IntSrvDone;	/* host's interrupt has been serviced */
+    uint                    IntSrvDone;/* host's interrupt has been serviced */
     int			    (*Copy)( caddr_t, caddr_t, int ); /* copy func */
     struct timer_list timer;
     /*

@@ -105,7 +105,7 @@ int blkelvget_ioctl(elevator_t * elevator, blkelv_ioctl_arg_t * arg)
 	int ret;
 	blkelv_ioctl_arg_t output;
 
-	output.queue_ID			= elevator;
+	output.queue_ID			= elevator->queue_ID;
 	output.read_latency		= elevator->read_latency;
 	output.write_latency		= elevator->write_latency;
 	output.max_bomb_segments	= elevator->max_bomb_segments;
@@ -146,5 +146,8 @@ int blkelvset_ioctl(elevator_t * elevator, const blkelv_ioctl_arg_t * arg)
 
 void elevator_init(elevator_t * elevator)
 {
+	static unsigned int queue_ID;
+
 	*elevator = ELEVATOR_DEFAULTS;
+	elevator->queue_ID = queue_ID++;
 }

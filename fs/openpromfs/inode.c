@@ -870,7 +870,6 @@ static int openpromfs_unlink (struct inode *dir, struct dentry *dentry)
 			buffer [10 + len] = 0;
 			prom_feval (buffer);
 		}
-	d_delete(dentry);
 	return 0;
 }
 

@@ -821,6 +821,7 @@ status_phase:
 	/* Control status phase */
 	status = uhci_status_bits(td->status);
 
+#ifdef I_HAVE_BUGGY_APC_BACKUPS
 	/* APC BackUPS Pro kludge */
 	/* It tries to send all of the descriptor instead of the amount */
 	/*  we requested */
@@ -828,6 +829,7 @@ status_phase:
 	    status & TD_CTRL_ACTIVE &&
 	    status & TD_CTRL_NAK)
 		return 0;
+#endif
 
 	if (status & TD_CTRL_ACTIVE)
 		return -EINPROGRESS;
@@ -2325,30 +2327,29 @@ static int found_uhci(struct pci_dev *dev)
 {
 	int i;
 
+	/* disable legacy emulation */
+	pci_write_config_word(dev, USBLEGSUP, USBLEGSUP_DEFAULT);
+
+	if (pci_enable_device(dev) < 0)
+		return -1;
+
+	if (!dev->irq) {
+		err("found UHCI device with no IRQ assigned. check BIOS settings!");
+		return -1;
+	}
+
 	/* Search for the IO base address.. */
 	for (i = 0; i < 6; i++) {
-		unsigned int io_addr = dev->resource[i].start;
-		unsigned int io_size =
-			dev->resource[i].end - dev->resource[i].start + 1;
+		unsigned int io_addr = pci_resource_start(dev, i);
+		unsigned int io_size = pci_resource_len(dev, i);
 
 		/* IO address? */
-		if (!(dev->resource[i].flags & IORESOURCE_IO))
+		if (!(pci_resource_flags(dev, i) & IORESOURCE_IO))
 			continue;
 
 		/* Is it already in use? */
 		if (check_region(io_addr, io_size))
 			break;
-
-		if (!dev->irq) {
-			err("found UHCI device with no IRQ assigned. check BIOS settings!");
-			continue;
-		}
-
-		/* disable legacy emulation */
-		pci_write_config_word(dev, USBLEGSUP, USBLEGSUP_DEFAULT);
-
-		if (pci_enable_device(dev) < 0)
-			continue;
 
 		return setup_uhci(dev, dev->irq, io_addr, io_size);
 	}

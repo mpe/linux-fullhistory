@@ -499,7 +499,6 @@ static struct proc_dir_entry *create_comxlapb_proc_entry(char *name, int mode,
 		new_file->data = (void *)new_file;
 		new_file->read_proc = &comxlapb_read_proc;
 		new_file->write_proc = &comxlapb_write_proc;
-		new_file->proc_iops = &comx_normal_inode_ops;
 		new_file->size = size;
 		new_file->nlink = 1;
 	}

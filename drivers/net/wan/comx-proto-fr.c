@@ -803,7 +803,6 @@ static int fr_master_init(struct net_device *dev)
 	new_file->data = (void *)new_file;
 	new_file->read_proc = &fr_read_proc;
 	new_file->write_proc = &fr_write_proc;
-	new_file->proc_iops = &comx_normal_inode_ops;
 	new_file->size = 5;
 	new_file->nlink = 1;
 
@@ -814,7 +813,6 @@ static int fr_master_init(struct net_device *dev)
 	new_file->data = (void *)new_file;
 	new_file->read_proc = &fr_read_proc;
 	new_file->write_proc = &fr_write_proc;
-	new_file->proc_iops = &comx_normal_inode_ops;
 	new_file->size = 4;
 	new_file->nlink = 1;
 
@@ -860,7 +858,6 @@ static int fr_slave_init(struct net_device *dev)
 	new_file->data = (void *)new_file;
 	new_file->read_proc = &fr_read_proc;
 	new_file->write_proc = &fr_write_proc;
-	new_file->proc_iops = &comx_normal_inode_ops;
 	new_file->size = 5;
 	new_file->nlink = 1;
 
@@ -871,7 +868,6 @@ static int fr_slave_init(struct net_device *dev)
 	new_file->data = (void *)new_file;
 	new_file->read_proc = &fr_read_proc;
 	new_file->write_proc = &fr_write_proc;
-	new_file->proc_iops = &comx_normal_inode_ops;
 	new_file->size = 10;
 	new_file->nlink = 1;
 	MOD_INC_USE_COUNT;

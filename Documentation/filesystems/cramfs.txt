@@ -27,8 +27,8 @@ Only the low 8 bits of gid are stored.  The current version of
 mkcramfs simply truncates to 8 bits, which is a potential security
 issue.
 
-Hard links are not supported, but symlinks are.  (See also the TODO
-comment in mkcramfs.c at the nlink test.)
+Hard links are supported, but hard linked files
+will still have a link count of 1 in the cramfs image.
 
 Cramfs directories have no `.' or `..' entries.  Directories (like
 every other file on cramfs) always have a link count of 1.  (There's

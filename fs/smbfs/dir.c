@@ -168,7 +168,7 @@ file->f_dentry->d_name.name);
 static int smb_lookup_validate(struct dentry *, int);
 static int smb_hash_dentry(struct dentry *, struct qstr *);
 static int smb_compare_dentry(struct dentry *, struct qstr *, struct qstr *);
-static void smb_delete_dentry(struct dentry *);
+static int smb_delete_dentry(struct dentry *);
 
 static struct dentry_operations smbfs_dentry_operations =
 {
@@ -259,9 +259,9 @@ out:
 
 /*
  * This is the callback from dput() when d_count is going to 0.
- * We use this to unhash dentries with bad inodes and close files.
+ * We use this to unhash dentries with bad inodes.
  */
-static void
+static int
 smb_delete_dentry(struct dentry * dentry)
 {
 	if (dentry->d_inode)
@@ -272,13 +272,13 @@ smb_delete_dentry(struct dentry * dentry)
 printk("smb_delete_dentry: bad inode, unhashing %s/%s\n", 
 dentry->d_parent->d_name.name, dentry->d_name.name);
 #endif
-			d_drop(dentry);
+			return 1;
 		}
-		smb_close_dentry(dentry);
 	} else
 	{
 	/* N.B. Unhash negative dentries? */
 	}
+	return 0;
 }
 
 /*
@@ -466,10 +466,7 @@ smb_unlink(struct inode *dir, struct dentry *dentry)
 	smb_invalid_dir_cache(dir);
 	error = smb_proc_unlink(dentry);
 	if (!error)
-	{
 		smb_renew_times(dentry);
-		d_delete(dentry);
-	}
 	return error;
 }
 

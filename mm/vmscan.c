@@ -439,7 +439,7 @@ static int do_try_to_free_pages(unsigned int gfp_mask)
 	/* Always trim SLAB caches when memory gets low. */
 	kmem_cache_reap(gfp_mask);
 
-	priority = 6;
+	priority = 32;
 	do {
 		while (shrink_mmap(priority, gfp_mask)) {
 			if (!--count)
@@ -546,7 +546,6 @@ int kswapd(void *unused)
 					something_to_do = 1;
 				do_try_to_free_pages(GFP_KSWAPD);
 			}
-			run_task_queue(&tq_disk);
 			pgdat = pgdat->node_next;
 		} while (pgdat);
 

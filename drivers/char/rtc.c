@@ -760,7 +760,7 @@ EXPORT_NO_SYMBOLS;
 
 static void rtc_dropped_irq(unsigned long data)
 {
-	printk(KERN_INFO "rtc: lost some interrupts at %ldHz.\n", rtc_freq);
+	unsigned long freq;
 
 	spin_lock_irq (&rtc_lock);
 
@@ -771,7 +771,12 @@ static void rtc_dropped_irq(unsigned long data)
 	rtc_irq_data += ((rtc_freq/HZ)<<8);
 	rtc_irq_data &= ~0xff;
 	rtc_irq_data |= (CMOS_READ(RTC_INTR_FLAGS) & 0xF0);	/* restart */
+
+	freq = rtc_freq;
+
 	spin_unlock_irq(&rtc_lock);
+
+	printk(KERN_INFO "rtc: lost some interrupts at %ldHz.\n", freq);
 
 	/* Now we have new data */
 	wake_up_interruptible(&rtc_wait);

@@ -881,3 +881,12 @@ static int revalidate_hddisk(kdev_t dev, int maxusage)
 	return 0;
 }
 
+static int parse_hd_setup (char *line) {
+	int ints[6];
+
+	(void) get_options(line, ARRAY_SIZE(ints), ints);
+	hd_setup(NULL, ints);
+
+	return 0;
+}
+__setup("hd=", parse_hd_setup);

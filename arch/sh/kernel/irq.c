@@ -300,7 +300,7 @@ asmlinkage int do_IRQ(unsigned long r4, unsigned long r5,
 		desc->handler->end(irq);
 	spin_unlock(&irq_controller_lock);
 
-#if 1
+#if 0
 	__sti();
 #endif
 	if (softirq_state[cpu].active&softirq_state[cpu].mask)
@@ -513,3 +513,10 @@ int setup_irq(unsigned int irq, struct irqaction * new)
 	spin_unlock_irqrestore(&irq_controller_lock,flags);
 	return 0;
 }
+
+#if defined(CONFIG_PROC_FS) && defined(CONFIG_SYSCTL)
+
+void init_irq_proc(void)
+{
+}
+#endif

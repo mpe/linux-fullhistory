@@ -1,4 +1,4 @@
-/* $Id: ptrace.c,v 1.4 2000/03/22 13:59:01 gniibe Exp $
+/* $Id: ptrace.c,v 1.5 2000/05/09 01:42:21 gniibe Exp $
  *
  * linux/arch/sh/kernel/ptrace.c
  *
@@ -137,7 +137,6 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 {
 	struct task_struct *child, *tsk = current;
 	struct user * dummy = NULL;
-	unsigned long flags;
 	int ret;
 
 	lock_kernel();
@@ -154,15 +153,19 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 	ret = -ESRCH;
 	read_lock(&tasklist_lock);
 	child = find_task_by_pid(pid);
-	read_unlock(&tasklist_lock);	/* FIXME!!! */
+	if (child)
+		get_task_struct(child);
+	read_unlock(&tasklist_lock);
 	if (!child)
 		goto out;
+
 	ret = -EPERM;
 	if (pid == 1)		/* you may not mess with init */
-		goto out;
+		goto out_tsk;
+
 	if (request == PTRACE_ATTACH) {
 		if (child == tsk)
-			goto out;
+			goto out_tsk;
 		if ((!child->dumpable ||
 		    (tsk->uid != child->euid) ||
 		    (tsk->uid != child->suid) ||
@@ -171,34 +174,33 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 	 	    (tsk->gid != child->sgid) ||
 	 	    (!cap_issubset(child->cap_permitted, tsk->cap_permitted)) ||
 	 	    (tsk->gid != child->gid)) && !capable(CAP_SYS_PTRACE))
-			goto out;
+			goto out_tsk;
 		/* the same process cannot be attached many times */
 		if (child->flags & PF_PTRACED)
-			goto out;
+			goto out_tsk;
 		child->flags |= PF_PTRACED;
 
-		write_lock_irqsave(&tasklist_lock, flags);
+		write_lock_irq(&tasklist_lock);
 		if (child->p_pptr != tsk) {
 			REMOVE_LINKS(child);
 			child->p_pptr = tsk;
 			SET_LINKS(child);
 		}
-		write_unlock_irqrestore(&tasklist_lock, flags);
+		write_unlock_irq(&tasklist_lock);
 
 		send_sig(SIGSTOP, child, 1);
 		ret = 0;
-		goto out;
+		goto out_tsk;
 	}
 	ret = -ESRCH;
 	if (!(child->flags & PF_PTRACED))
-		goto out;
+		goto out_tsk;
 	if (child->state != TASK_STOPPED) {
 		if (request != PTRACE_KILL)
-			goto out;
+			goto out_tsk;
 	}
 	if (child->p_pptr != tsk)
-		goto out;
-
+		goto out_tsk;
 	switch (request) {
 	/* when I and D space are separate, these will need to be fixed. */
 	case PTRACE_PEEKTEXT: /* read word at location addr. */ 
@@ -357,11 +359,11 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 			break;
 		child->flags &= ~(PF_PTRACED|PF_TRACESYS);
 		child->exit_code = data;
-		write_lock_irqsave(&tasklist_lock, flags);
+		write_lock_irq(&tasklist_lock);
 		REMOVE_LINKS(child);
 		child->p_pptr = child->p_opptr;
 		SET_LINKS(child);
-		write_unlock_irqrestore(&tasklist_lock, flags);
+		write_unlock_irq(&tasklist_lock);
 		wake_up_process(child);
 		ret = 0;
 		break;
@@ -371,6 +373,8 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 		ret = -EIO;
 		break;
 	}
+out_tsk:
+	free_task_struct(child);
 out:
 	unlock_kernel();
 	return ret;

@@ -577,7 +577,6 @@ static int ext2_rmdir (struct inode * dir, struct dentry *dentry)
 	inode->i_ctime = dir->i_ctime = dir->i_mtime = CURRENT_TIME;
 	dir->u.ext2_i.i_flags &= ~EXT2_BTREE_FL;
 	mark_inode_dirty(dir);
-	d_delete(dentry);
 
 end_rmdir:
 	brelse (bh);
@@ -619,7 +618,6 @@ static int ext2_unlink(struct inode * dir, struct dentry *dentry)
 	mark_inode_dirty(inode);
 	inode->i_ctime = dir->i_ctime;
 	retval = 0;
-	d_delete(dentry);	/* This also frees the inode */
 
 end_unlink:
 	brelse (bh);

@@ -1079,7 +1079,7 @@ inline void sx_receive_chars (struct sx_port *port)
 	struct tty_struct *tty;
 	int copied=0;
 
-	/* func_enter2 (); */
+	func_enter2 ();
 	tty = port->gs.tty;
 	while (1) {
 		rx_op = sx_read_channel_byte (port, hi_rxopos);
@@ -1134,7 +1134,7 @@ inline void sx_receive_chars (struct sx_port *port)
 		/*    tty_schedule_flip (tty); */
 	}
 
-	/* func_exit (); */
+	func_exit ();
 }
 
 /* Inlined: it is called only once. Remove the inline if you add another 
@@ -2343,6 +2343,12 @@ static int sx_init_portstructs (int nboards, int nports)
 #ifdef NEW_WRITE_LOCKING
 			port->gs.port_write_sem = MUTEX;
 #endif
+			/*
+			 * Initializing wait queue
+			 */
+			init_waitqueue_head(&port->gs.open_wait);
+			init_waitqueue_head(&port->gs.close_wait); 		
+			
 			port++;
 		}
 	}

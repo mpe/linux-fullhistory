@@ -2268,10 +2268,13 @@
 1164  Advanced Peripherals Technologies
 1165  Imagraph Corporation
 	0001  Motion TPEG Recorder/Player with audio
-1166  Relience Computer
+1166  ServerWorks
 	0007  CNB20-LE CPU to PCI Bridge
 	0008  CNB20HE
-	0009  CNB20HE
+	0009  CNB20LE
+	0010  CIOB30
+	0011  CMIC_HE
+	0201  CSB5
 1167  Mutoh Industries Inc
 1168  Thine Electronics Inc
 1169  Centre for Development of Advanced Computing

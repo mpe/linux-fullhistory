@@ -1111,7 +1111,6 @@ static char
 
 typedef struct buffer_head BufferHeader_T;
 typedef struct file File_T;
-typedef struct file_operations FileOperations_T;
 typedef struct gendisk GenericDiskInfo_T;
 typedef struct hd_geometry DiskGeometry_T;
 typedef struct hd_struct DiskPartition_T;

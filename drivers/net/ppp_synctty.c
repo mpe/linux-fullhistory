@@ -269,12 +269,22 @@ ppp_synctty_ioctl(struct tty_struct *tty, struct file *file,
 
 	err = -EFAULT;
 	switch (cmd) {
-	case PPPIOCGUNIT:
+	case PPPIOCGCHAN:
 		err = -ENXIO;
 		if (ap == 0)
 			break;
 		err = -EFAULT;
 		if (put_user(ppp_channel_index(&ap->chan), (int *) arg))
+			break;
+		err = 0;
+		break;
+
+	case PPPIOCGUNIT:
+		err = -ENXIO;
+		if (ap == 0)
+			break;
+		err = -EFAULT;
+		if (put_user(ppp_unit_number(&ap->chan), (int *) arg))
 			break;
 		err = 0;
 		break;

@@ -81,21 +81,18 @@ extern int comx_proto_fr_init(void);
 static struct comx_hardware *comx_channels = NULL;
 static struct comx_protocol *comx_lines = NULL;
 
-struct inode_operations comx_normal_inode_ops; 
-static struct inode_operations comx_root_inode_ops; // for mkdir
-static struct inode_operations comx_debug_inode_ops; // mas a file_ops
-static struct file_operations comx_normal_file_ops;  // with open/relase
-static struct file_operations comx_debug_file_ops;  // with lseek+read
+static struct inode_operations comx_root_inode_ops = {
+	lookup:	comx_lookup,
+	mkdir: comx_mkdir,
+	rmdir: comx_rmdir,
+};
 
-static void comx_delete_dentry(struct dentry *dentry);
+static int comx_delete_dentry(struct dentry *dentry);
 static struct proc_dir_entry *create_comx_proc_entry(char *name, int mode,
 	int size, struct proc_dir_entry *dir);
 
 static struct dentry_operations comx_dentry_operations = {
-	NULL,			/* revalidate */
-	NULL,			/* d_hash */
-	NULL, 			/* d_compare */
-	&comx_delete_dentry	/* d_delete */
+	d_delete:	comx_delete_dentry,
 };
 
 
@@ -761,83 +758,11 @@ static int comx_write_proc(struct file *file, const char *buffer, u_long count,
 	return count;
 }
 
-static loff_t comx_debug_lseek(struct file *file, loff_t offset, int orig)
-{
-	switch(orig) {
-		case 0:	
-			file->f_pos = max(0, min(offset, 
-				file->f_dentry->d_inode->i_size));
-			return(file->f_pos);
-		case 1: 
-			file->f_pos = max(0, min(offset + file->f_pos, 
-				file->f_dentry->d_inode->i_size));
-			return(file->f_pos);
-		case 2: 
-			file->f_pos = max(0, 
-				min(offset + file->f_dentry->d_inode->i_size, 
-				file->f_dentry->d_inode->i_size));
-			return(file->f_pos);
-	}
-	return(file->f_pos);
-}
-
-static int comx_file_open(struct inode *inode, struct file *file)
-{
-
-	if((file->f_mode & FMODE_WRITE) && !(inode->i_mode & 0200)) {
-		return -EACCES;
-	}
-
-	MOD_INC_USE_COUNT;
-	return 0;
-}
-
-static int comx_file_release(struct inode *inode, struct file *file)
-{
-	MOD_DEC_USE_COUNT;
-	return 0;
-}
-
-static ssize_t comx_debug_read(struct file *file, char *buffer, size_t count,
-	loff_t *ppos)
-{
-	struct proc_dir_entry *de = file->f_dentry->d_inode->u.generic_ip;
-	struct net_device *dev = de->parent->data;
-	struct comx_channel *ch = dev->priv;
-	loff_t copied = 0;
-	unsigned long flags;
-
-	save_flags(flags); cli(); // We may run into trouble when debug_area is filled
-				  // from irq inside read. no problem if the buffer is
-				  // large enough
-
-	while (count > 0 && ch->debug_start != ch->debug_end) {
-		int len;
-
-		len = min( (ch->debug_end - ch->debug_start + ch->debug_size)
-			%ch->debug_size, min (ch->debug_size - 
-			ch->debug_start, count));
-
-		if (len) copy_to_user(buffer + copied, 
-			ch->debug_area + ch->debug_start, len);
-		ch->debug_start = (ch->debug_start + len) % ch->debug_size;
-
-		de->size -= len;
-		count -= len;
-		copied += len;
-	}
-
-	restore_flags(flags);
-	return copied;
-}
-
 static int comx_mkdir(struct inode *dir, struct dentry *dentry, int mode)
 {
 	struct proc_dir_entry *new_dir, *debug_file;
 	struct net_device *dev;
 	struct comx_channel *ch;
-
-	if (dir->i_ino != comx_root_dir->low_ino) return -ENOTDIR;
 
 	if ((new_dir = create_proc_entry(dentry->d_name.name, mode | S_IFDIR, 
 		comx_root_dir)) == NULL) {
@@ -867,7 +792,6 @@ static int comx_mkdir(struct inode *dir, struct dentry *dentry, int mode)
 	    S_IFREG | 0644, new_dir)) == NULL) {
 		return -ENOMEM;
 	}
-	debug_file->proc_iops = &comx_debug_inode_ops;
 	debug_file->data = (void *)debug_file; 
 	debug_file->read_proc = NULL; // see below
 	debug_file->write_proc = &comx_write_proc;
@@ -911,9 +835,6 @@ static int comx_rmdir(struct inode *dir, struct dentry *dentry)
 	struct net_device *dev = entry->data;
 	struct comx_channel *ch = dev->priv;
 	int ret;
-
-	/* Egyelore miert ne ? */
-	if (dir->i_ino != comx_root_dir->low_ino) return -ENOTDIR;
 
 	if (dev->flags & IFF_UP) {
 		printk(KERN_ERR "%s: down interface before removing it\n", dev->name);
@@ -962,10 +883,6 @@ static struct dentry *comx_lookup(struct inode *dir, struct dentry *dentry)
 	struct proc_dir_entry *de;
 	struct inode *inode = NULL;
 
-	if (!dir || !S_ISDIR(dir->i_mode)) {
-		return ERR_PTR(-ENOTDIR);
-	}
-
 	if ((de = (struct proc_dir_entry *) dir->u.generic_ip) != NULL) {
 		for (de = de->subdir ; de ; de = de->next) {
 			if ((de && de->low_ino) && 
@@ -998,9 +915,9 @@ int comx_strcasecmp(const char *cs, const char *ct)
 	return __res;
 }
 
-static void comx_delete_dentry(struct dentry *dentry)
+static int comx_delete_dentry(struct dentry *dentry)
 {
-	d_drop(dentry);
+	return 1;
 }
 
 static struct proc_dir_entry *create_comx_proc_entry(char *name, int mode,
@@ -1009,7 +926,6 @@ static struct proc_dir_entry *create_comx_proc_entry(char *name, int mode,
 	struct proc_dir_entry *new_file;
 
 	if ((new_file = create_proc_entry(name, S_IFREG | mode, dir)) != NULL) {
-		new_file->proc_iops = &comx_normal_inode_ops;
 		new_file->data = (void *)new_file;
 		new_file->read_proc = &comx_read_proc;
 		new_file->write_proc = &comx_write_proc;
@@ -1115,23 +1031,6 @@ int __init comx_init(void)
 {
 	struct proc_dir_entry *new_file;
 
-	comx_root_inode_ops.lookup = &comx_lookup;
-	comx_root_inode_ops.mkdir = &comx_mkdir;
-	comx_root_inode_ops.rmdir = &comx_rmdir;
-
-	comx_normal_inode_ops.lookup = &comx_lookup;
-
-	memcpy(&comx_debug_inode_ops, &comx_normal_inode_ops, 
-		sizeof(struct inode_operations));
-
-	comx_normal_file_ops.open = &comx_file_open;
-	comx_normal_file_ops.release = &comx_file_release;
-
-	memcpy(&comx_debug_file_ops, &comx_normal_file_ops, 
-		sizeof(struct file_operations));
-	comx_debug_file_ops.llseek = &comx_debug_lseek;
-	comx_debug_file_ops.read = &comx_debug_read;
-
 	comx_root_dir = create_proc_entry("comx", 
 		S_IFDIR | S_IWUSR | S_IRUGO | S_IXUGO, &proc_root);
 	if (!comx_root_dir)
@@ -1143,7 +1042,6 @@ int __init comx_init(void)
 		return -ENOMEM;
 	}
 	
-	new_file->proc_iops = &comx_normal_inode_ops;
 	new_file->data = new_file;
 	new_file->read_proc = &comx_root_read_proc;
 	new_file->write_proc = NULL;
@@ -1154,7 +1052,6 @@ int __init comx_init(void)
 		return -ENOMEM;
 	}
 	
-	new_file->proc_iops = &comx_normal_inode_ops;
 	new_file->data = new_file;
 	new_file->read_proc = &comx_root_read_proc;
 	new_file->write_proc = NULL;
@@ -1211,5 +1108,4 @@ EXPORT_SYMBOL(comx_lineup_func);
 EXPORT_SYMBOL(comx_status);
 EXPORT_SYMBOL(comx_rx);
 EXPORT_SYMBOL(comx_strcasecmp);
-EXPORT_SYMBOL(comx_normal_inode_ops);
 EXPORT_SYMBOL(comx_root_dir);

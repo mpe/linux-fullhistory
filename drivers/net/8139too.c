@@ -24,6 +24,15 @@
 		Daniel Kobras - identified specific locations of
 			posted MMIO write bugginess
 
+		Gerard Sharp - bug fix
+
+	Submitting bug reports:
+
+		"rtl8139-diag -mmmaaavvveefN" output
+		enable RTL8139_DEBUG below, and look at 'dmesg' or kernel log
+
+		See 8139too.txt for more details.
+
 -----------------------------------------------------------------------------
 
 				Theory of Operation
@@ -88,7 +97,7 @@ an MMIO register read.
 #include <asm/io.h>
 
 
-#define RTL8139_VERSION "0.9.4.1"
+#define RTL8139_VERSION "0.9.5"
 #define RTL8139_MODULE_NAME "8139too"
 #define RTL8139_DRIVER_NAME   RTL8139_MODULE_NAME " Fast Ethernet driver " RTL8139_VERSION
 #define PFX RTL8139_MODULE_NAME ": "
@@ -304,6 +313,17 @@ enum rx_mode_bits {
 	AcceptAllPhys = 0x01,
 };
 
+/* Bits in TxConfig. */
+enum tx_config_bits {
+	TxIFG1 = (1 << 25),	/* Interframe Gap Time */
+	TxIFG0 = (1 << 24),	/* Enabling these bits violates IEEE 802.3 */
+	TxLoopBack = (1 << 18) | (1 << 17), /* enable loopback test mode */
+	TxCRC = (1 << 16),	/* DISABLE appending CRC to end of Tx packets */
+	TxClearAbt = (1 << 0),	/* Clear abort (WO) */
+
+	TxVersionMask = 0x7C800000, /* mask out version bits 30-26, 23 */
+};
+
 /* Bits in Config1 */
 enum Config1Bits {
 	Cfg1_PM_Enable = 0x01,
@@ -369,28 +389,53 @@ struct ring_info {
 	dma_addr_t mapping;
 };
 
+
 typedef enum {
 	CH_8139 = 0,
 	CH_8139A,
+	CH_8139A_G,
 	CH_8139B,
+	CH_8130,
+	CH_8139C,
 } chip_t;
+
 
 /* directly indexed by chip_t, above */
 const static struct {
 	const char *name;
+	u32 version; /* from RTL8139C docs */
 	u32 RxConfigMask; /* should clear the bits supported by this chip */
 } rtl_chip_info[] = {
 	{ "RTL-8139",
+	  0x60000000,
 	  0xf0fe0040, /* XXX copied from RTL8139A, verify */
 	},
 	
 	{ "RTL-8139A",
+	  0x70000000,
 	  0xf0fe0040,
 	},
 	
-	{ "RTL-8139B(L)",
+	{ "RTL-8139A rev. G",
+	  0x70800000,
+	  0xf0fe0040,
+	},
+	
+	{ "RTL-8139B",
+	  0x78000000,
 	  0xf0fc0040
 	},
+
+	{ "RTL-8130",
+	  0x7C000000,
+	  0xf0fe0040, /* XXX copied from RTL8139A, verify */
+	},
+
+	{ "RTL-8139C",
+	  0x74000000,
+	  0xf0fc0040, /* XXX copied from RTL8139B, verify */
+	},
+
 };
 
 
@@ -574,12 +619,8 @@ static int __devinit rtl8139_init_board (struct pci_dev *pdev,
 	
 	/* enable device (incl. PCI PM wakeup), and bus-mastering */
 	rc = pci_enable_device (pdev);
-	if (rc) {
-		printk (KERN_ERR PFX "cannot enable PCI device (bus %d, "
-			"devfn %d), aborting\n",
-			pdev->bus->number, pdev->devfn);
+	if (rc)
 		goto err_out_free_mmio;
-	}
 
 	pci_set_master (pdev);
 
@@ -631,15 +672,20 @@ static int __devinit rtl8139_init_board (struct pci_dev *pdev,
 	}
 	
 	/* identify chip attached to board */
-	tmp = RTL_R32 (TxConfig);
-	if (((tmp >> 28) & 7) == 7) {
-		if (pio_len == RTL8139B_IO_SIZE)
-			tp->chipset = CH_8139B;
-		else
-			tp->chipset = CH_8139A;
-	} else {
-		tp->chipset = CH_8139;
-	}
+	tmp = RTL_R32 (TxConfig) & TxVersionMask;
+	for (i = arraysize (rtl_chip_info) - 1; i >= 0; i--)
+		if (tmp == rtl_chip_info[i].version) {
+			tp->chipset = i;
+			goto match;
+		}
+
+	/* if unknown chip, assume array element #0, original RTL-8139 in this case */
+	printk (KERN_DEBUG PFX "PCI device %s: unknown chip version, assuming RTL-8139\n",
+		pdev->slot_name);
+	printk (KERN_DEBUG PFX "PCI device %s: TxConfig = 0x%x\n", pdev->slot_name, RTL_R32 (TxConfig));
+	tp->chipset = 0;
+
+match:
 	DPRINTK ("chipset id (%d/%d/%d) == %d, '%s'\n",
 		CH_8139,
 		CH_8139A,
@@ -738,7 +784,7 @@ static int __devinit rtl8139_init_one (struct pci_dev *pdev,
 
 	tp->phys[0] = 32;
 
-	printk (KERN_INFO "%s: '%s' board found at 0x%lx, IRQ %d\n",
+	printk (KERN_INFO "%s: %s board found at 0x%lx, IRQ %d\n",
 		dev->name, board_info[ent->driver_data].name,
 		dev->base_addr, dev->irq);
 
@@ -1122,6 +1168,7 @@ static void rtl8139_hw_start (struct net_device *dev)
 	/* Check this value: the documentation for IFG contradicts ifself. */
 	RTL_W32 (TxConfig, (TX_DMA_BURST << 8));
 
+#if 0
 	/* if link status not ok... */
 	if ((RTL_R16 (BasicModeStatus) & (1<<2)) == 0) {
 		printk (KERN_INFO "%s: no link, starting NWay\n", dev->name);
@@ -1144,10 +1191,13 @@ static void rtl8139_hw_start (struct net_device *dev)
 		/* XXX writing Config1 here is flat out wrong */
 		/* RTL_W8 (Config1, tp->full_duplex ? 0x60 : 0x20); */
 	}
+#endif
 
-	tmp = RTL_R8 (Config1) & Config1Clear;
-	tmp |= (tp->chipset == CH_8139B) ? 3 : 1; /* Enable PM/VPD */
-	RTL_W8_F (Config1, tmp);
+	if (tp->chipset > CH_8139) {
+		tmp = RTL_R8 (Config1) & Config1Clear;
+		tmp |= (tp->chipset == CH_8139B) ? 3 : 1; /* Enable PM/VPD */
+		RTL_W8_F (Config1, tmp);
+	}
 
 	if (tp->chipset == CH_8139B) {
 		tmp = RTL_R8 (Config4) & ~(1<<2);
@@ -1596,12 +1646,18 @@ static void rtl8139_rx_interrupt (struct net_device *dev,
 			/* A.C.: Reset the multicast list. */
 			rtl8139_set_rx_mode (dev);
 
+			/* XXX potentially temporary hack to
+			 * restart hung receiver */
 			while (--tmp_work > 0) {
-				tmp8 = RTL_R8 (ChipCmd) & ChipCmdClear;
+				tmp8 = RTL_R8 (ChipCmd);
 				if ((tmp8 & CmdRxEnb) && (tmp8 & CmdTxEnb))
 					break;
-				RTL_W8_F (ChipCmd, tmp8 | CmdRxEnb | CmdTxEnb);
+				RTL_W8_F (ChipCmd, (tmp8 & ChipCmdClear) | CmdRxEnb | CmdTxEnb);
 			}
+
+			/* G.S.: Re-enable receiver */
+			/* XXX temporary hack to work around receiver hang */
+			rtl8139_set_rx_mode (dev);
 
 			if (tmp_work <= 0)			
 				printk (KERN_WARNING PFX "tx/rx enable wait too long\n");
@@ -1973,7 +2029,6 @@ static void rtl8139_set_rx_mode (struct net_device *dev)
 	u32 mc_filter[2];	/* Multicast hash filter */
 	int i, rx_mode;
 	u32 tmp;
-	unsigned long flags=0;
 
 	DPRINTK ("ENTER\n");
 
@@ -2006,7 +2061,7 @@ static void rtl8139_set_rx_mode (struct net_device *dev)
 	
 	/* if called from irq handler, lock already acquired */
 	if (!in_irq ())
-		spin_lock_irqsave (&tp->lock, flags);
+		spin_lock_irq (&tp->lock);
 
 	/* We can safely update without stopping the chip. */
 	tmp = rtl8139_rx_config | rx_mode |
@@ -2016,7 +2071,7 @@ static void rtl8139_set_rx_mode (struct net_device *dev)
 	RTL_W32_F (MAR0 + 4, mc_filter[1]);
 
 	if (!in_irq ())
-		spin_unlock_irqrestore (&tp->lock, flags);
+		spin_unlock_irq (&tp->lock);
 
 	DPRINTK ("EXIT\n");
 }

@@ -1,3 +1,4 @@
+
 #ifndef __LINUX_OV511_H
 #define __LINUX_OV511_H
 
@@ -9,7 +10,7 @@
 
 #ifdef OV511_DEBUG
 #  define PDEBUG(level, fmt, args...) \
-if (debug >= level) printk("ov511: [" __PRETTY_FUNCTION__ ":%d] " fmt "\n", __LINE__ , ## args)
+if (debug >= level) info("[" __PRETTY_FUNCTION__ ":%d] " fmt, __LINE__ , ## args)
 #else
 #  define PDEBUG(level, fmt, args...) do {} while(0)
 #endif
@@ -119,48 +120,55 @@ if (debug >= level) printk("ov511: [" __PRETTY_FUNCTION__ ":%d] " fmt "\n", __LI
 #define OV511PLUS_ALT_SIZE_961	7
 
 /* OV7610 registers */
-#define OV7610_REG_GAIN          0x00
-#define OV7610_REG_BLUE          0x01
-#define OV7610_REG_RED           0x02
-#define OV7610_REG_SAT           0x03
-#define OV7610_REG_CNT           0x05
-#define OV7610_REG_BRT           0x06
-#define OV7610_REG_BLUE_BIAS     0x0C
-#define OV7610_REG_RED_BIAS      0x0D
-#define OV7610_REG_GAMMA_COEFF   0x0E
-#define OV7610_REG_WB_RANGE      0x0F
-#define OV7610_REG_EXP           0x10
-#define OV7610_REG_CLOCK         0x11
-#define OV7610_REG_COM_A         0x12
-#define OV7610_REG_COM_B         0x13
-#define OV7610_REG_COM_C         0x14
-#define OV7610_REG_COM_D         0x15
-#define OV7610_REG_FIELD_DIVIDE  0x16
-#define OV7610_REG_HWIN_START    0x17
-#define OV7610_REG_HWIN_END      0x18
-#define OV7610_REG_VWIN_START    0x19
-#define OV7610_REG_VWIN_END      0x1A
-#define OV7610_REG_PIXEL_SHIFT   0x1B
-#define OV7610_REG_ID_HIGH       0x1C
-#define OV7610_REG_ID_LOW        0x1D
-#define OV7610_REG_COM_E         0x20
-#define OV7610_REG_YOFFSET       0x21
-#define OV7610_REG_UOFFSET       0x22
-#define OV7610_REG_ECW           0x24
-#define OV7610_REG_ECB           0x25
-#define OV7610_REG_COM_F         0x26
-#define OV7610_REG_COM_G         0x27
-#define OV7610_REG_COM_H         0x28
-#define OV7610_REG_COM_I         0x29
-#define OV7610_REG_FRAMERATE_H   0x2A
-#define OV7610_REG_FRAMERATE_L   0x2B
-#define OV7610_REG_ALC           0x2C
-#define OV7610_REG_COM_J         0x2D
-#define OV7610_REG_VOFFSET       0x2E
-#define OV7610_REG_YGAMMA        0x33
-#define OV7610_REG_BIAS_ADJUST   0x34
-#define OV7610_REG_COM_L         0x35
-#define OV7610_REG_COM_K         0x38
+#define OV7610_REG_GAIN          0x00	/* gain setting (5:0) */
+#define OV7610_REG_BLUE          0x01	/* blue channel balance */
+#define OV7610_REG_RED           0x02	/* red channel balance */
+#define OV7610_REG_SAT           0x03	/* saturation */
+					/* 04 reserved */
+#define OV7610_REG_CNT           0x05	/* Y contrast */
+#define OV7610_REG_BRT           0x06	/* Y brightness */
+					/* 08-0b reserved */
+#define OV7610_REG_BLUE_BIAS     0x0C	/* blue channel bias (5:0) */
+#define OV7610_REG_RED_BIAS      0x0D	/* read channel bias (5:0) */
+#define OV7610_REG_GAMMA_COEFF   0x0E	/* gamma settings */
+#define OV7610_REG_WB_RANGE      0x0F	/* AEC/ALC/S-AWB settings */
+#define OV7610_REG_EXP           0x10	/* manual exposure setting */
+#define OV7610_REG_CLOCK         0x11	/* polarity/clock prescaler */
+#define OV7610_REG_COM_A         0x12	/* misc common regs */
+#define OV7610_REG_COM_B         0x13	/* misc common regs */
+#define OV7610_REG_COM_C         0x14	/* misc common regs */
+#define OV7610_REG_COM_D         0x15	/* misc common regs */
+#define OV7610_REG_FIELD_DIVIDE  0x16	/* field interval/mode settings */
+#define OV7610_REG_HWIN_START    0x17	/* horizontal window start */
+#define OV7610_REG_HWIN_END      0x18	/* horizontal window end */
+#define OV7610_REG_VWIN_START    0x19	/* vertical window start */
+#define OV7610_REG_VWIN_END      0x1A	/* vertical window end */
+#define OV7610_REG_PIXEL_SHIFT   0x1B	/* pixel shift */
+#define OV7610_REG_ID_HIGH       0x1C	/* manufacturer ID MSB */
+#define OV7610_REG_ID_LOW        0x1D	/* manufacturer ID LSB */
+					/* 0e-0f reserved */
+#define OV7610_REG_COM_E         0x20	/* misc common regs */
+#define OV7610_REG_YOFFSET       0x21	/* Y channel offset */
+#define OV7610_REG_UOFFSET       0x22	/* U channel offset */
+					/* 23 reserved */
+#define OV7610_REG_ECW           0x24	/* Exposure white level for AEC */
+#define OV7610_REG_ECB           0x25	/* Exposure black level for AEC */
+#define OV7610_REG_COM_F         0x26	/* misc settings */
+#define OV7610_REG_COM_G         0x27	/* misc settings */
+#define OV7610_REG_COM_H         0x28	/* misc settings */
+#define OV7610_REG_COM_I         0x29	/* misc settings */
+#define OV7610_REG_FRAMERATE_H   0x2A	/* frame rate MSB + misc */
+#define OV7610_REG_FRAMERATE_L   0x2B	/* frame rate LSB */
+#define OV7610_REG_ALC           0x2C	/* Auto Level Control settings */
+#define OV7610_REG_COM_J         0x2D	/* misc settings */
+#define OV7610_REG_VOFFSET       0x2E	/* V channel offset adjustment */
+#define OV7610_REG_ARRAY_BIAS	 0x2F	/* Array bias -- don't change */
+					/* 30-32 reserved */
+#define OV7610_REG_YGAMMA        0x33	/* misc gamma settings (7:6) */
+#define OV7610_REG_BIAS_ADJUST   0x34	/* misc bias settings */
+#define OV7610_REG_COM_L         0x35	/* misc settings */
+					/* 36-37 reserved */
+#define OV7610_REG_COM_K         0x38	/* misc registers */
 
 
 #define STREAM_BUF_SIZE	(PAGE_SIZE * 4)
@@ -171,8 +179,7 @@ if (debug >= level) printk("ov511: [" __PRETTY_FUNCTION__ ":%d] " fmt "\n", __LI
 #define FRAME_SIZE_PER_DESC	993	/* FIXME - Deprecated */
 #define MAX_FRAME_SIZE_PER_DESC	993	/* For statically allocated stuff */
 
-// FIXME - should this be 0x81 (endpoint address) or 0x01 (endpoint number)?
-#define OV511_ENDPOINT_ADDRESS 0x81	/* Address of isoc endpoint */
+#define OV511_ENDPOINT_ADDRESS 1	/* Isoc endpoint number */
 
 // CAMERA SPECIFIC
 // FIXME - these can vary between specific models
@@ -223,9 +230,9 @@ enum {
 
 struct ov511_regvals {
 	enum {
-	  OV511_DONE_BUS,
-	  OV511_REG_BUS,
-	  OV511_I2C_BUS,
+		OV511_DONE_BUS,
+		OV511_REG_BUS,
+		OV511_I2C_BUS,
 	} bus;
 	unsigned char reg;
 	unsigned char val;
@@ -269,14 +276,15 @@ struct usb_ov511 {
 	/* Device structure */
 	struct usb_device *dev;
 
-#if 0
-	unsigned char customid; /* Type of camera */
-#else
 	int customid;
 	int desc;
-#endif
-
 	unsigned char iface;
+
+	int brightness;
+	int colour;
+	int contrast;
+	int hue;
+	int whiteness;
 
 	struct semaphore lock;
 	int user;		/* user count for exclusive use */
@@ -318,10 +326,33 @@ struct usb_ov511 {
 	struct proc_dir_entry *proc_entry;	/* /proc/ov511/videoX */
 };
 
-
 struct cam_list {
 	int id;
 	char *description;
+};
+
+struct palette_list {
+	int num;
+	char *name;
+};
+
+struct mode_list {
+	int width;
+	int height;
+	int mode;
+	u8 pxcnt;
+	u8 lncnt;
+	u8 pxdv;
+	u8 lndv;
+	u8 s_pxcnt;
+	u8 s_lncnt;
+	u8 s_pxdv;
+	u8 s_lndv;
+	u8 clock;
+	u8 m420;
+	u8 common_A;
+	u8 common_C;
+	u8 common_L;
 };
 
 #endif

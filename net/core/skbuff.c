@@ -90,7 +90,7 @@ void skb_over_panic(struct sk_buff *skb, int sz, void *here)
 {
 	printk("skput:over: %p:%d put:%d dev:%s", 
 		here, skb->len, sz, skb->dev ? skb->dev->name : "<NULL>");
-	*(int*)0 = 0;
+	BUG();
 }
 
 /**
@@ -107,7 +107,7 @@ void skb_under_panic(struct sk_buff *skb, int sz, void *here)
 {
         printk("skput:under: %p:%d put:%d dev:%s",
                 here, skb->len, sz, skb->dev ? skb->dev->name : "<NULL>");
-	*(int*)0 = 0;
+	BUG();
 }
 
 static __inline__ struct sk_buff *skb_head_from_pool(void)
@@ -172,7 +172,7 @@ struct sk_buff *alloc_skb(unsigned int size,int gfp_mask)
 		if (++count < 5) {
 			printk(KERN_ERR "alloc_skb called nonatomically "
 			       "from interrupt %p\n", NET_CALLER(size));
- 			*(int*)0 = 0;
+ 			BUG();
 		}
 		gfp_mask &= ~__GFP_WAIT;
 	}
@@ -273,7 +273,7 @@ void __kfree_skb(struct sk_buff *skb)
 	if (skb->list) {
 	 	printk(KERN_WARNING "Warning: kfree_skb passed an skb still "
 		       "on a list (from %p).\n", NET_CALLER(skb));
-		*(int*)0 = 0;
+		BUG();
 	}
 
 	dst_release(skb->dst);

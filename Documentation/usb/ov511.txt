@@ -6,11 +6,8 @@ Author: Mark McClelland
 Homepage: http://alpha.dyndns.org/ov511
 
 NEW IN THIS VERSION:
- o Improvements to sensor detection code
- o Added "i2c_detect_tries" and "aperture" parameters
- o proc filesystem status support
- o read() fixed partially
- o code cleanups and minor fixes
+ o 352x288 mode
+ o force_rgb parameter for apps that expect RGB instead of BGR
 
 INTRODUCTION:
 
@@ -139,7 +136,7 @@ MODULE PARAMETERS:
         or so lines higher than the red component. This is only apparent in 
         images with white objects on black backgrounds at 640x480. Setting this
         to 1 will realign the color planes correctly. NOTE: This is still
-        experimental and very buggy.
+        experimental and very buggy. You will likely need a fast (500 Mhz) CPU.
 
   NAME: snapshot
   TYPE: integer (boolean)
@@ -148,8 +145,41 @@ MODULE PARAMETERS:
         button is pressed. Note that this does not yet work with most apps,
         including xawtv and vidcat. NOTE: See the section "TODO" for more info.
 
+  NAME: sensor
+  TYPE: integer ([0, 1, 3])
+  DEFAULT: [varies]
+  DESC: If you know that your camera sensor is not detected correctly, set this
+        parameter. This is a global option for all attached OV511 cameras. You
+        will probably never need to set this, but if you do, valid values are:
+        	0 for OV7620
+        	1 for OV7620AE
+        	3 for OV7610
+
+  NAME: i2c_detect_tries
+  TYPE: integer (don't set it insanely high!)
+  DEFAULT: 5
+  DESC: This is the number of times the driver will try to sync and detect the
+        internal i2c bus (which connects the OV511 and sensor). If you are
+        getting intermittant detection failures ("Failed to read sensor ID...")
+        you should increase this by a modest amount. If setting it to 20 or so
+        doesn't fix things, look elsewhere for the cause of the problem.
+
+  NAME: aperture
+  TYPE: integer (0 - 15)
+  DEFAULT: [varies by sensor]
+  DESC: For legal values, see the OV7610/7620 specs under register Common F.
+        This setting affects the upper nybble of that reg (bits 4-7). This is
+        for if you want to play with the camera's pixel saturation.
+
+  NAME: force_rgb
+  TYPE: integer (boolean)
+  DEFAULT: 0
+  DESC: Force image to be read in RGB instead of BGR. This option allow
+        programs that expect RGB data (e.g. gqcam) to work with this driver. If
+        your colors look VERY wrong, you may want to change this.
+
 WORKING FEATURES:
- o Color streaming/capture at 640x480 and 320x240
+ o Color streaming/capture at 640x480, 352x288, and 320x240
  o YUV420 color
  o Monochrome
  o Setting/getting of saturation, contrast and brightness (no hue yet; only
@@ -158,7 +188,7 @@ WORKING FEATURES:
 
 EXPERIMENTAL FEATURES:
  o fix_rgb_offset: Sometimes works, but other times causes errors with xawtv and
-   corrupted frames.
+   corrupted frames. If you have a very fast CPU, you can try it.
  o Snapshot mode (only works with some read() based apps; see below for more)
  o read() support
 
@@ -197,6 +227,6 @@ CREDITS:
 
 The code is based in no small part on the CPiA driver by Johannes Erdfelt,
 Randy Dunlap, and others. Big thanks to them for their pioneering work on that
-and the USB stack. Thanks to Bret Wallach for getting camera reg IO , ISOC, and
-image capture working. Thanks to Orion Sky Lawlor and Kevin Moore for their
-work as well.
+and the USB stack. Thanks to Bret Wallach for getting camera reg IO, ISOC, and
+image capture working. Thanks to Orion Sky Lawlor, Kevin Moore, and Claudio
+Matsuoka for their work as well.

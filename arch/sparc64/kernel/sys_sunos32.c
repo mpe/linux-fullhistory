@@ -598,7 +598,6 @@ struct sunos_nfs_mount_args {
 	char       *netname;   /* server's netname */
 };
 
-extern long do_sys_mount(const char *, const char *, char *, int, void *);
 extern dev_t get_unnamed_dev(void);
 extern void put_unnamed_dev(dev_t);
 extern asmlinkage int sys_mount(char *, char *, char *, unsigned long, void *);
@@ -727,7 +726,7 @@ static int sunos_nfs_mount(char *dir_name, int linux_flags, void *data)
 	linux_nfs_mount.hostname [255] = 0;
 	putname (the_name);
 	
-	return do_sys_mount ("", dir_name, "nfs", linux_flags, &linux_nfs_mount);
+	return do_mount ("", dir_name, "nfs", linux_flags, &linux_nfs_mount);
 }
 
 /* XXXXXXXXXXXXXXXXXXXX */
@@ -787,7 +786,7 @@ sunos_mount(char *type, char *dir, int flags, void *data)
 	ret = PTR_ERR(dev_fname);
 	if (IS_ERR(dev_fname))
 		goto out2;
-	ret = do_sys_mount(dev_fname, dir_page, type_page, linux_flags, NULL);
+	ret = do_mount(dev_fname, dir_page, type_page, linux_flags, NULL);
 	if (dev_fname)
 		putname(dev_fname);
 out2:

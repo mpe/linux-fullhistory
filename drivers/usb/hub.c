@@ -338,7 +338,7 @@ static void usb_hub_port_connect_change(struct usb_device *hub, int port)
 	portstatus = le16_to_cpu(portsts.wPortStatus);
 	portchange = le16_to_cpu(portsts.wPortChange);
 	dbg("portstatus %x, change %x, %s", portstatus, portchange,
-		portstatus&(1<<USB_PORT_FEAT_LOWSPEED) ? "Low Speed" : "High Speed");
+		portstatus&(1<<USB_PORT_FEAT_LOWSPEED) ? "1.5 Mb/s" : "12 Mb/s");
 
 	/* Clear the connection change status */
 	usb_clear_port_feature(hub, port + 1, USB_PORT_FEAT_C_CONNECTION);
@@ -369,7 +369,7 @@ static void usb_hub_port_connect_change(struct usb_device *hub, int port)
 		portstatus = le16_to_cpu(portsts.wPortStatus);
 		portchange = le16_to_cpu(portsts.wPortChange);
 		dbg("portstatus %x, change %x, %s", portstatus ,portchange,
-			portstatus&(1<<USB_PORT_FEAT_LOWSPEED) ? "Low Speed" : "High Speed");
+			portstatus&(1<<USB_PORT_FEAT_LOWSPEED) ? "1.5 Mb/s" : "12 Mb/s");
 
 		if ((portchange & USB_PORT_STAT_C_CONNECTION) ||
 		    !(portstatus & USB_PORT_STAT_CONNECTION))

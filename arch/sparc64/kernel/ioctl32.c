@@ -2400,39 +2400,6 @@ static int blkpg_ioctl_trans(unsigned int fd, unsigned int cmd, struct blkpg_ioc
 	return err;
 }
 
-typedef struct blkelv_ioctl32_arg_s {
-	u32 queue_ID;
-	int read_latency;
-	int write_latency;
-	int max_bomb_segments;
-} blkelv_ioctl32_arg_t;
-
-static int do_blkelv_ioctl(unsigned int fd, unsigned int cmd, blkelv_ioctl32_arg_t *arg)
-{
-	blkelv_ioctl_arg_t b;
-	int err;
-	mm_segment_t old_fs = get_fs();
-
-	if (cmd == BLKELVSET) {	
-		err = get_user((long)b.queue_ID, &arg->queue_ID);
-		err |= __get_user(b.read_latency, &arg->read_latency);
-		err |= __get_user(b.write_latency, &arg->write_latency);
-		err |= __get_user(b.max_bomb_segments, &arg->max_bomb_segments);
-		if (err) return err;
-	}
-	set_fs (KERNEL_DS);
-	err = sys_ioctl(fd, cmd, (unsigned long)&b);
-	set_fs (old_fs);
-	if (cmd == BLKELVGET && !err) {
-		err = put_user((long)b.queue_ID, &arg->queue_ID);
-		err |= __put_user(b.read_latency, &arg->read_latency);
-		err |= __put_user(b.write_latency, &arg->write_latency);
-		err |= __put_user(b.max_bomb_segments, &arg->max_bomb_segments);
-		if (err) return err;
-	}
-	return err;
-}
-
 static int ioc_settimeout(unsigned int fd, unsigned int cmd, unsigned long arg)
 {
 	return rw_long(fd, AUTOFS_IOC_SETTIMEOUT, arg);
@@ -2994,6 +2961,9 @@ COMPATIBLE_IOCTL(LV_SET_ACCESS)
 COMPATIBLE_IOCTL(LV_SET_STATUS)
 COMPATIBLE_IOCTL(LV_SET_ALLOCATION)
 #endif /* LVM */
+/* elevator */
+COMPATIBLE_IOCTL(BLKELVGET)
+COMPATIBLE_IOCTL(BLKELVSET)
 /* And these ioctls need translation */
 HANDLE_IOCTL(SIOCGIFNAME, dev_ifname32)
 HANDLE_IOCTL(SIOCGIFCONF, dev_ifconf)
@@ -3040,8 +3010,6 @@ HANDLE_IOCTL(0x1260, broken_blkgetsize)
 HANDLE_IOCTL(BLKFRAGET, w_long)
 HANDLE_IOCTL(BLKSECTGET, w_long)
 HANDLE_IOCTL(BLKPG, blkpg_ioctl_trans)
-HANDLE_IOCTL(BLKELVGET, do_blkelv_ioctl)
-HANDLE_IOCTL(BLKELVSET, do_blkelv_ioctl)
 HANDLE_IOCTL(FBIOPUTCMAP32, fbiogetputcmap)
 HANDLE_IOCTL(FBIOGETCMAP32, fbiogetputcmap)
 HANDLE_IOCTL(FBIOSCURSOR32, fbiogscursor)

@@ -45,7 +45,7 @@ static void usage(void)
 /* The kernel assumes PAGE_CACHE_SIZE as block size. */
 static unsigned int blksize = PAGE_CACHE_SIZE;
 
-static int warn_dev, warn_gid, warn_link, warn_namelen, warn_size, warn_uid;
+static int warn_dev, warn_gid, warn_namelen, warn_size, warn_uid;
 
 #ifndef MIN
 # define MIN(_a,_b) ((_a) < (_b) ? (_a) : (_b))
@@ -223,21 +223,6 @@ static unsigned int parse_directory(struct entry *root_entry, const char *name, 
 				if (-1 == (int) (long) entry->uncompressed) {
 					perror("mmap");
 					exit(5);
-				}
-				if (st.st_nlink > 1) {
-					/* TODO: Although cramfs doesn't
-					   support hard links, we could still
-					   share data offset values between
-					   different inodes (safe because
-					   read-only).  This would give at
-					   least the space saving of hard
-					   links.  Just keep a hash mapping
-					   <st_ino, st_dev> onto struct
-					   entry*.  Alternatively, steal some
-					   code from Roger Wolff's `same'
-					   program, which creates a hash of
-					   file data contents. */
-					warn_link = 1;
 				}
 			}
 			close(fd);
@@ -618,11 +603,6 @@ int main(int argc, char **argv)
 	if (warn_namelen) /* (can't happen when reading from ext2fs) */
 		fprintf(stderr, /* bytes, not chars: think UTF8. */
 			"warning: filenames truncated to 255 bytes.\n");
-	if (warn_link)
-		fprintf(stderr,
-			"warning: cramfs cannot represent hard links.  You may want to change hard links in\n"
-			" %s with symlinks to other files in %s.\n",
-			dirname, dirname);
 	if (warn_size)
 		fprintf(stderr,
 			"warning: file sizes truncated to %luMB (minus 1 byte).\n",

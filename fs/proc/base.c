@@ -651,6 +651,11 @@ static int pid_fd_revalidate(struct dentry * dentry, int flags)
 	return 0;
 }
 
+/*
+ *	Exceptional case: normally we are not allowed to unhash a busy
+ * directory. In this case, however, we can do it - no aliasing problems
+ * due to the way we treat inodes.
+ */
 static int pid_base_revalidate(struct dentry * dentry, int flags)
 {
 	if (dentry->d_inode->u.proc_i.task->p_pptr)
@@ -659,9 +664,9 @@ static int pid_base_revalidate(struct dentry * dentry, int flags)
 	return 0;
 }
 
-static void pid_delete_dentry(struct dentry * dentry)
+static int pid_delete_dentry(struct dentry * dentry)
 {
-	d_drop(dentry);
+	return 1;
 }
 
 static struct dentry_operations pid_fd_dentry_operations =

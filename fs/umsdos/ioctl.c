@@ -331,6 +331,8 @@ new_dentry->d_parent->d_name.name, new_dentry->d_name.name);
 			ret = -EISDIR;
 			if (!S_ISDIR(temp->d_inode->i_mode))
 				ret = msdos_unlink (dir, temp);
+			if (!ret)
+				d_delete(temp);
 		}
 		dput (temp);
 		goto out;
@@ -355,6 +357,8 @@ new_dentry->d_parent->d_name.name, new_dentry->d_name.name);
 			ret = -ENOTDIR;
 			if (S_ISDIR(temp->d_inode->i_mode))
 				ret = msdos_rmdir (dir, temp);
+			if (!ret)
+				d_delete(temp);
 		}
 		dput (temp);
 		goto out;

@@ -174,6 +174,8 @@ static int UMSDOS_rrmdir ( struct inode *dir, struct dentry *dentry)
 			ret = 0;
 			if (demd->d_inode)
 				ret = msdos_unlink (dentry->d_inode, demd);
+			if (!ret)
+				d_delete(demd);
 			dput(demd);
 		}
 	}

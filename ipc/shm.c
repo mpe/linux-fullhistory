@@ -541,8 +541,6 @@ static int shm_unlink (struct inode *dir, struct dentry *dent)
 	if (dent->d_name.len == SHM_FMT_LEN &&
 	    memcmp (SHM_FMT, dent->d_name.name, SHM_FMT_LEN - 8) == 0)
 		d_drop (dent);
-	else
-		d_delete (dent);
 	return 0;
 }
 
@@ -1251,6 +1249,8 @@ static int shm_remove_name(int id)
 		struct inode *inode = dir->d_inode;
 		down(&inode->i_zombie);
 		error = shm_unlink(inode, dentry);
+		if (!error)
+			d_delete(dentry);
 		up(&inode->i_zombie);
 		dput(dentry);
 	}
@@ -1468,7 +1468,7 @@ static int shm_swap_preop(swp_entry_t *swap_entry)
 }
 
 /*
- * Goes through counter = (shm_rss >> prio) present shm pages.
+ * Goes through counter = (shm_rss / (prio + 1)) present shm pages.
  */
 static unsigned long swap_id; /* currently being swapped */
 static unsigned long swap_idx; /* next to swap */
@@ -1483,7 +1483,7 @@ int shm_swap (int prio, int gfp_mask)
 	struct page * page_map;
 
 	zshm_swap(prio, gfp_mask);
-	counter = shm_rss >> prio;
+	counter = shm_rss / (prio + 1);
 	if (!counter)
 		return 0;
 	if (shm_swap_preop(&swap_entry))
@@ -1809,7 +1809,7 @@ static void zshm_swap (int prio, int gfp_mask)
 	int counter;
 	struct page * page_map;
 
-	counter = zshm_rss >> prio;
+	counter = zshm_rss / (prio + 1);
 	if (!counter)
 		return;
 next:

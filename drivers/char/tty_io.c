@@ -146,8 +146,8 @@ extern long vme_scc_console_init(void);
 extern int serial167_init(void);
 extern long serial167_console_init(void);
 #endif
-#ifdef CONFIG_8xx
-extern console_8xx_init(void);
+#if (defined(CONFIG_8xx) || defined(CONFIG_8260))
+extern void console_8xx_init(void);
 extern int rs_8xx_init(void);
 #endif /* CONFIG_8xx */
 #ifdef CONFIG_HWC
@@ -2194,7 +2194,7 @@ void __init console_init(void)
 	con_init();
 #endif
 #ifdef CONFIG_SERIAL_CONSOLE
-#ifdef CONFIG_8xx
+#if (defined(CONFIG_8xx) || defined(CONFIG_8260))
 	console_8xx_init();
 #elif defined(CONFIG_SERIAL) 	
 	serial_console_init();
@@ -2340,7 +2340,7 @@ void __init tty_init(void)
 #ifdef CONFIG_RIO
 	rio_init();
 #endif
-#ifdef CONFIG_8xx
+#if (defined(CONFIG_8xx) || defined(CONFIG_8260))
         rs_8xx_init();
 #endif /* CONFIG_8xx */
 	pty_init();

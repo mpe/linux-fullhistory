@@ -184,7 +184,6 @@ int qnx4_rmdir(struct inode *dir, struct dentry *dentry)
 	inode->i_ctime = dir->i_ctime = dir->i_mtime = CURRENT_TIME;
 	dir->i_nlink--;
 	mark_inode_dirty(dir);
-	d_delete(dentry);
 	retval = 0;
 
       end_rmdir:
@@ -228,7 +227,6 @@ int qnx4_unlink(struct inode *dir, struct dentry *dentry)
 	inode->i_nlink--;
 	inode->i_ctime = dir->i_ctime;
 	mark_inode_dirty(inode);
-	d_delete(dentry);
 	retval = 0;
 
       end_unlink:

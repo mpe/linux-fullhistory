@@ -26,12 +26,6 @@
 /* #define SMBFS_DEBUG_VERBOSE 1 */
 /* #define pr_debug printk */
 
-static inline int
-min(int a, int b)
-{
-	return a < b ? a : b;
-}
-
 static int
 smb_fsync(struct file *file, struct dentry * dentry)
 {
@@ -340,28 +334,15 @@ out:
 static int
 smb_file_open(struct inode *inode, struct file * file)
 {
-#ifdef SMBFS_DEBUG_VERBOSE
-printk("smb_file_open: opening %s/%s, d_count=%d\n",
-file->f_dentry->d_parent->d_name.name, file->f_dentry->d_name.name,
-file->f_dentry->d_count);
-#endif
+	inode->u.smbfs_i.openers++;
 	return 0;
 }
 
 static int
 smb_file_release(struct inode *inode, struct file * file)
 {
-	struct dentry * dentry = file->f_dentry;
-
-#ifdef SMBFS_DEBUG_VERBOSE
-printk("smb_file_release: closing %s/%s, d_count=%d\n",
-dentry->d_parent->d_name.name, dentry->d_name.name, dentry->d_count);
-#endif
-	
-	if (dentry->d_count == 1)
-	{
+	if (!--inode->u.smbfs_i.openers)
 		smb_close(inode);
-	}
 	return 0;
 }
 

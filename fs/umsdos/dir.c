@@ -36,12 +36,14 @@ static int umsdos_dentry_validate(struct dentry *dentry, int flags)
 }
 
 /* for now, drop everything to force lookups ... */
-static void umsdos_dentry_dput(struct dentry *dentry)
+/* ITYM s/everything/& positive/... */
+static int umsdos_dentry_dput(struct dentry *dentry)
 {
 	struct inode *inode = dentry->d_inode;
 	if (inode) {
-		d_drop(dentry);
+		return 1;
 	}
+	return 0;
 }
 
 struct dentry_operations umsdos_dentry_operations =

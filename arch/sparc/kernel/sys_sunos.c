@@ -634,7 +634,6 @@ struct sunos_nfs_mount_args {
 
 extern dev_t get_unnamed_dev(void);
 extern void put_unnamed_dev(dev_t);
-extern asmlinkage long do_sys_mount(char *, char *, char *, int, void *);
 extern asmlinkage int sys_connect(int fd, struct sockaddr *uservaddr, int addrlen);
 extern asmlinkage int sys_socket(int family, int type, int protocol);
 extern asmlinkage int sys_bind(int fd, struct sockaddr *umyaddr, int addrlen);
@@ -754,7 +753,7 @@ static int sunos_nfs_mount(char *dir_name, int linux_flags, void *data)
 	linux_nfs_mount.hostname [255] = 0;
 	putname (the_name);
 	
-	return do_sys_mount ("", dir_name, "nfs", linux_flags, &linux_nfs_mount);
+	return do_mount ("", dir_name, "nfs", linux_flags, &linux_nfs_mount);
 }
 
 asmlinkage int
@@ -814,7 +813,7 @@ sunos_mount(char *type, char *dir, int flags, void *data)
 	ret = PTR_ERR(dev_fname);
 	if (IS_ERR(dev_fname))
 		goto out2;
-	ret = do_sys_mount(dev_fname, dir_page, type_page, linux_flags, NULL);
+	ret = do_mount(dev_fname, dir_page, type_page, linux_flags, NULL);
 	if (dev_fname)
 		putname(dev_fname);
 out2:

@@ -56,7 +56,8 @@
 #define SCI_TEI_IRQ	26
 #define SCI_IRQ_END	27
 
-#define SCI_IPR_OFFSET	(16+4)
+#define SCI_IPR_ADDR	INTC_IPRB
+#define SCI_IPR_POS	1
 #endif
 
 #if defined(CONFIG_SH_SCIF_SERIAL)
@@ -69,12 +70,16 @@
 #define SC_RDR 0xA400015A
 #define SCFCR  (volatile unsigned char *)0xA400015C
 #define SCFDR  0xA400015E
-#undef  SCSPTR /* Is there any register for RTS?? */
+
+#undef  SCSPTR /* SH7709 doesn't have SCSPTR */
+#define SCPCR  0xA4000116 /* Instead, it has SCPCR and SCPDR */
+#define SCPDR  0xA4000136
 #undef  SCLSR
 
 #define SCSCR_INIT	0x30	/* TIE=0,RIE=0,TE=1,RE=1 */
 				/* 0x33 when external clock is used */
-#define SCI_IPR_OFFSET	(64+4)
+#define SCI_IPR_ADDR	INTC_IPRE
+#define SCI_IPR_POS	1
 
 #elif defined(__SH4__)
 #define SCSMR  (volatile unsigned short *)0xFFE80000
@@ -89,7 +94,8 @@
 #define SCLSR  0xFFE80024
 
 #define SCSCR_INIT	0x0038	/* TIE=0,RIE=0,TE=1,RE=1,REIE=1 */
-#define SCI_IPR_OFFSET	(32+4)
+#define SCI_IPR_ADDR	INTC_IPRC
+#define SCI_IPR_POS	1
 
 #endif
 
@@ -187,8 +193,17 @@ struct sci_port {
  * -- Greg Banks 27Feb2000
  */
 
+/*
+ * XXX: Well, this is not relevant...
+ * Should we have config option for peripheral clock?
+ * Or we get the value from time.c.
+ */
 #if defined(__sh3__)
-#define PCLK           14745600
+#if defined(CONFIG_CPU_SUBTYPE_SH7709)
+#define PCLK           33333333
+#else
+#define PCLK           14745600	/* Isn't it 15MHz? */
+#endif
 #elif defined(__SH4__)
 #define PCLK           33333333
 #endif

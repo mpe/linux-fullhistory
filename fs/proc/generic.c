@@ -218,10 +218,9 @@ static struct inode_operations proc_link_inode_operations = {
  * smarter: we could keep a "volatile" flag in the 
  * inode to indicate which ones to keep.
  */
-static void
-proc_delete_dentry(struct dentry * dentry)
+static int proc_delete_dentry(struct dentry * dentry)
 {
-	d_drop(dentry);
+	return 1;
 }
 
 static struct dentry_operations proc_dentry_operations =

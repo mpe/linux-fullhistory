@@ -122,7 +122,7 @@ typedef struct siginfo {
  * SIGSEGV si_codes
  */
 #define SEGV_MAPERR	1	/* address not mapped to object */
-#define SRGV_ACCERR	2	/* invalid permissions for mapped object */
+#define SEGV_ACCERR	2	/* invalid permissions for mapped object */
 #define NSIGSEGV	2
 
 /*

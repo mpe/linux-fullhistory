@@ -35,8 +35,6 @@
 #define NFS_PARANOIA 1
 /* #define NFS_DEBUG_VERBOSE 1 */
 
-static int nfs_safe_remove(struct dentry *);
-
 static int nfs_readdir(struct file *, void *, filldir_t);
 static struct dentry *nfs_lookup(struct inode *, struct dentry *);
 static int nfs_create(struct inode *, struct dentry *, int);
@@ -98,8 +96,8 @@ typedef struct {
 static
 int nfs_readdir_filler(nfs_readdir_descriptor_t *desc, struct page *page)
 {
-	struct dentry	*dir = desc->file->f_dentry;
-	struct inode	*inode = dir->d_inode;
+	struct file	*file = desc->file;
+	struct inode	*inode = file->f_dentry->d_inode;
 	void		*buffer = (void *)kmap(page);
 	int		plus = NFS_USE_READDIRPLUS(inode);
 	int		error;
@@ -107,7 +105,7 @@ int nfs_readdir_filler(nfs_readdir_descriptor_t *desc, struct page *page)
 	dfprintk(VFS, "NFS: nfs_readdir_filler() reading cookie %Lu into page %lu.\n", (long long)desc->entry->cookie, page->index);
 
  again:
-	error = NFS_PROTO(inode)->readdir(dir, desc->entry->cookie, buffer,
+	error = NFS_PROTO(inode)->readdir(file, desc->entry->cookie, buffer,
 					  NFS_SERVER(inode)->dtsize, plus);
 	/* We requested READDIRPLUS, but the server doesn't grok it */
 	if (desc->plus && error == -ENOTSUPP) {
@@ -309,8 +307,8 @@ static inline
 int uncached_readdir(nfs_readdir_descriptor_t *desc, void *dirent,
 		     filldir_t filldir)
 {
-	struct dentry	*dir = desc->file->f_dentry;
-	struct inode	*inode = dir->d_inode;
+	struct file	*file = desc->file;
+	struct inode	*inode = file->f_dentry->d_inode;
 	struct page	*page = NULL;
 	u32		*p;
 	int		status = -EIO;
@@ -327,7 +325,7 @@ int uncached_readdir(nfs_readdir_descriptor_t *desc, void *dirent,
 		goto out;
 	}
 	p = (u32 *)kmap(page);
-	status = NFS_PROTO(inode)->readdir(dir, desc->target, p,
+	status = NFS_PROTO(inode)->readdir(file, desc->target, p,
 					   NFS_SERVER(inode)->dtsize, 0);
 	if (status >= 0) {
 		p = desc->decode(p, desc->entry, 0);
@@ -559,26 +557,18 @@ out_bad:
 
 /*
  * This is called from dput() when d_count is going to 0.
- * We use it to clean up silly-renamed files.
  */
-static void nfs_dentry_delete(struct dentry *dentry)
+static int nfs_dentry_delete(struct dentry *dentry)
 {
 	dfprintk(VFS, "NFS: dentry_delete(%s/%s, %x)\n",
 		dentry->d_parent->d_name.name, dentry->d_name.name,
 		dentry->d_flags);
 
 	if (dentry->d_flags & DCACHE_NFSFS_RENAMED) {
-		int error;
-		
-		dentry->d_flags &= ~DCACHE_NFSFS_RENAMED;
-		/* Unhash it first */
-		d_drop(dentry);
-		error = nfs_safe_remove(dentry);
-		if (error)
-			printk("NFS: can't silly-delete %s/%s, error=%d\n",
-				dentry->d_parent->d_name.name,
-				dentry->d_name.name, error);
+		/* Unhash it, so that ->d_iput() would be called */
+		return 1;
 	}
+	return 0;
 
 }
 
@@ -603,36 +593,33 @@ static void nfs_dentry_release(struct dentry *dentry)
 		nfs_fh_free(dentry->d_fsdata);
 }
 
+/*
+ * Called when the dentry loses inode.
+ * We use it to clean up silly-renamed files.
+ */
+static void nfs_dentry_iput(struct dentry *dentry, struct inode *inode)
+{
+	if (dentry->d_flags & DCACHE_NFSFS_RENAMED) {
+		struct dentry *dir = dentry->d_parent;
+		struct inode *dir_i = dir->d_inode;
+		int error;
+		
+		nfs_zap_caches(dir_i);
+		error = NFS_PROTO(dir_i)->remove(dir, &dentry->d_name);
+		if (error >= 0) {
+			if (inode->i_nlink)
+				inode->i_nlink --;
+		}
+	}
+	iput(inode);
+}
+
 struct dentry_operations nfs_dentry_operations = {
 	d_revalidate:	nfs_lookup_revalidate,
 	d_delete:	nfs_dentry_delete,
 	d_release:	nfs_dentry_release,
+	d_iput:		nfs_dentry_iput,
 };
-
-#if 0 /* dead code */
-#ifdef NFS_PARANOIA
-/*
- * Display all dentries holding the specified inode.
- */
-static void show_dentry(struct list_head * dlist)
-{
-	struct list_head *tmp = dlist;
-
-	while ((tmp = tmp->next) != dlist) {
-		struct dentry * dentry = list_entry(tmp, struct dentry, d_alias);
-		const char * unhashed = "";
-
-		if (d_unhashed(dentry))
-			unhashed = "(unhashed)";
-
-		printk("show_dentry: %s/%s, d_count=%d%s\n",
-			dentry->d_parent->d_name.name,
-			dentry->d_name.name, dentry->d_count,
-			unhashed);
-	}
-}
-#endif /* NFS_PARANOIA */
-#endif /* 0 */
 
 static struct dentry *nfs_lookup(struct inode *dir_i, struct dentry * dentry)
 {
@@ -806,9 +793,8 @@ static int nfs_rmdir(struct inode *dir_i, struct dentry *dentry)
 	nfs_zap_caches(dir_i);
 	error = NFS_PROTO(dir_i)->rmdir(dir, &dentry->d_name);
 
-	/* Update i_nlink and invalidate dentry. */
+	/* Update i_nlink */
 	if (!error) {
-		d_drop(dentry);
 		if (dir_i->i_nlink)
 			dir_i->i_nlink--;
 	}
@@ -903,20 +889,11 @@ static int nfs_safe_remove(struct dentry *dentry)
 	struct dentry *dir = dentry->d_parent;
 	struct inode *dir_i = dir->d_inode;
 	struct inode *inode = dentry->d_inode;
-	int error, rehash = 0;
+	int error = -EBUSY, rehash = 0;
 		
 	dfprintk(VFS, "NFS: safe_remove(%s/%s, %ld)\n",
 		dentry->d_parent->d_name.name, dentry->d_name.name,
 		inode->i_ino);
-
-	/* N.B. not needed now that d_delete is done in advance? */
-	error = -EBUSY;
-	if (!inode) {
-#ifdef NFS_PARANOIA
-printk("nfs_safe_remove: %s/%s already negative??\n",
-dentry->d_parent->d_name.name, dentry->d_name.name);
-#endif
-	}
 
 	if (dentry->d_count > 1) {
 #ifdef NFS_PARANOIA
@@ -939,11 +916,9 @@ dentry->d_parent->d_name.name, dentry->d_name.name, dentry->d_count);
 	/*
 	 * Update i_nlink and free the inode
 	 */
-	if (inode) {
-		if (inode->i_nlink)
-			inode->i_nlink --;
-		d_delete(dentry);
-	}
+	if (inode->i_nlink)
+		inode->i_nlink --;
+	d_delete(dentry);
 	/*
 	 * Rehash the negative dentry if the operation succeeded.
 	 */

@@ -818,11 +818,6 @@ smb_open(struct dentry *dentry, int wish)
 		goto out;
 	}
 
-	/*
-	 * Note: If the caller holds an active dentry and the file is
-	 * currently open, we can be sure that the file isn't about
-	 * to be closed. (See smb_close_dentry() below.)
-	 */
 	if (!smb_is_open(inode))
 	{
 		struct smb_sb_info *server = SMB_SERVER(inode);
@@ -941,46 +936,6 @@ smb_close(struct inode *ino)
 		smb_unlock_server(server);
 	}
 	return result;
-}
-
-/*
- * This routine is called from dput() when d_count is going to 0.
- * We use this to close the file so that cached dentries don't
- * keep too many files open.
- *
- * There are some tricky race conditions here: the dentry may go
- * back into use while we're closing the file, and we don't want
- * the new user to be confused as to the open status.
- */
-void
-smb_close_dentry(struct dentry * dentry)
-{
-	struct inode *ino = dentry->d_inode;
-
-	if (ino)
-	{
-		if (smb_is_open(ino))
-		{
-			struct smb_sb_info *server = SMB_SERVER(ino);
-			smb_lock_server(server);
-			/*
-			 * Check whether the dentry is back in use.
-			 */
-			if (dentry->d_count <= 1)
-			{
-#ifdef SMBFS_DEBUG_VERBOSE
-printk("smb_close_dentry: closing %s/%s, count=%d\n",
-       DENTRY_PATH(dentry), dentry->d_count);
-#endif
-				smb_proc_close_inode(server, ino);
-			}
-			smb_unlock_server(server);
-		}
-#ifdef SMBFS_DEBUG_VERBOSE
-printk("smb_close_dentry: closed %s/%s, count=%d\n",
-       DENTRY_PATH(dentry), dentry->d_count);
-#endif
-	}
 }
 
 /*

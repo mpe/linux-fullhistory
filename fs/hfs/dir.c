@@ -274,7 +274,6 @@ int hfs_unlink(struct inode * dir, struct dentry *dentry)
 		inode->i_nlink--; 
 		inode->i_ctime = CURRENT_TIME;
 		mark_inode_dirty(inode);
-		d_delete(dentry);
 		update_dirs_minus(entry, 0);
 	}
 
@@ -328,7 +327,6 @@ int hfs_rmdir(struct inode * parent, struct dentry *dentry)
 	inode->i_nlink = 0;
 	inode->i_ctime = CURRENT_TIME;
 	mark_inode_dirty(inode);
-	d_delete(dentry);
 	update_dirs_minus(entry, 1);
 	 
 hfs_rmdir_put:

@@ -1,4 +1,4 @@
-/* $Id: checksum.S,v 1.2 1999/10/29 13:06:55 gniibe Exp $
+/* $Id: checksum.S,v 1.4 2000/05/14 08:41:26 gniibe Exp $
  *
  * INET		An implementation of the TCP/IP protocol suite for the LINUX
  *		operating system.  INET is implemented using the  BSD Socket
@@ -49,95 +49,99 @@ ENTRY(csum_partial)
 	   * Fortunately, it is easy to convert 2-byte alignment to 4-byte
 	   * alignment for the unrolled loop.
 	   */
-	mov	r5,r1
-	mov	r4,r0
-	tst	#2,r0		! Check alignment.
+	mov	$r5, $r1
+	mov	$r4, $r0
+	tst	#2, $r0		! Check alignment.
 	bt	2f		! Jump if alignment is ok.
 	!
-	add	#-2,r5		! Alignment uses up two bytes.
-	cmp/pz	r5		!
+	add	#-2, $r5	! Alignment uses up two bytes.
+	cmp/pz	$r5		!
 	bt/s	1f		! Jump if we had at least two bytes.
 	 clrt
 	bra	6f
-	 add	#2,r5		! r5 was < 2.  Deal with it.
+	 add	#2, $r5		! $r5 was < 2.  Deal with it.
 1:
-	mov.w	@r4+,r0
-	extu.w	r0,r0
-	addc	r0,r6
+	mov.w	@$r4+, $r0
+	extu.w	$r0, $r0
+	addc	$r0, $r6
 	bf	2f
-	add	#1,r6
+	add	#1, $r6
 2:
-	mov	#-5,r0
-	shld	r0,r5
-	tst	r5,r5
+	mov	#-5, $r0
+	shld	$r0, $r5
+	tst	$r5, $r5
 	bt/s	4f		! if it's =0, go to 4f
 	 clrt
+	.align	2
 3:
-	mov.l	@r4+,r0
-	addc	r0,r6
-	mov.l	@r4+,r0
-	addc	r0,r6
-	mov.l	@r4+,r0
-	addc	r0,r6
-	mov.l	@r4+,r0
-	addc	r0,r6
-	mov.l	@r4+,r0
-	addc	r0,r6
-	mov.l	@r4+,r0
-	addc	r0,r6
-	mov.l	@r4+,r0
-	addc	r0,r6
-	mov.l	@r4+,r0
-	addc	r0,r6
-	movt	r0
-	dt	r5
+	mov.l	@$r4+, $r0
+	mov.l	@$r4+, $r2
+	mov.l	@$r4+, $r3
+	addc	$r0, $r6
+	mov.l	@$r4+, $r0
+	addc	$r2, $r6
+	mov.l	@$r4+, $r2
+	addc	$r3, $r6
+	mov.l	@$r4+, $r3
+	addc	$r0, $r6
+	mov.l	@$r4+, $r0
+	addc	$r2, $r6
+	mov.l	@$r4+, $r2
+	addc	$r3, $r6
+	addc	$r0, $r6
+	addc	$r2, $r6
+	movt	$r0	
+	dt	$r5
 	bf/s	3b
-	 cmp/eq	#1,r0
-	mov	#0,r0
-	addc	r0,r6
+	 cmp/eq	#1, $r0
+	! here, we know $r5==0
+	addc	$r5, $r6		! add carry to $r6
 4:
-	mov	r1,r5
-	mov	#0x1c,r0
-	and	r0,r5
-	tst	r5,r5
+	mov	$r1, $r0
+	and	#0x1c, $r0
+	tst	$r0, $r0
 	bt/s	6f
-	 clrt
-	shlr2	r5
+	 mov	$r0, $r5
+	shlr2	$r5
+	mov	#0, $r2
 5:
-	mov.l	@r4+,r0
-	addc	r0,r6
-	movt	r0
-	dt	r5
+	addc	$r2, $r6
+	mov.l	@$r4+, $r2
+	movt	$r0
+	dt	$r5
 	bf/s	5b
-	 cmp/eq	#1,r0
-	mov	#0,r0
-	addc	r0,r6
+	 cmp/eq	#1, $r0
+	addc	$r2, $r6
+	addc	$r5, $r6	! $r5==0 here, so it means add carry-bit
 6:
-	mov	r1,r5
-	mov	#3,r0
-	and	r0,r5
-	tst	r5,r5
+	mov	$r1, $r5
+	mov	#3, $r0
+	and	$r0, $r5
+	tst	$r5, $r5
 	bt	9f		! if it's =0 go to 9f
-	mov	#2,r1
-	cmp/hs  r1,r5
+	mov	#2, $r1
+	cmp/hs  $r1, $r5
 	bf	7f
-	mov.w	@r4+,r0
-	extu.w	r0,r0
-	cmp/eq	r1,r5
+	mov.w	@r4+, $r0
+	extu.w	$r0, $r0
+	cmp/eq	$r1, $r5
 	bt/s	8f
 	 clrt
-	shll16	r0
-	addc	r0,r6
+	shll16	$r0
+	addc	$r0, $r6
 7:
-	mov.b	@r4+,r0
-	extu.b	r0,r0
+	mov.b	@$r4+, $r0
+	extu.b	$r0, $r0
+#ifndef	__LITTLE_ENDIAN__
+	shll8	$r0
+#endif
 8:
-	addc	r0,r6
-	mov	#0,r0
-	addc	r0,r6 
+	addc	$r0, $r6
+	mov	#0, $r0
+	addc	$r0, $r6 
 9:
 	rts
-	 mov	r6,r0
+	 mov	$r6, $r0
 
 /*
 unsigned int csum_partial_copy_generic (const char *src, char *dst, int len, 
@@ -167,6 +171,16 @@ unsigned int csum_partial_copy_generic (const char *src, char *dst, int len,
 	.long 9999b, 6002f	;	\
 	.previous
 
+!
+! r4:	const char *SRC
+! r5:	char *DST
+! r6:	int LEN
+! r7:	int SUM
+!
+! on stack:
+! int *SRC_ERR_PTR
+! int *DST_ERR_PTR
+!
 ENTRY(csum_partial_copy_generic)
 	mov.l	r5,@-r15
 	mov.l	r6,@-r15
@@ -179,7 +193,7 @@ ENTRY(csum_partial_copy_generic)
 	bt/s	1f
 	 clrt
 	bra	4f
-	 add	#2,r6			! ecx was < 2.  Deal with it.
+	 add	#2,r6			! $r6 was < 2.  Deal with it.
 SRC(1:	mov.w	@r4+,r0	)
 DST(	mov.w	r0,@r5	)
 	add	#2,r5
@@ -273,6 +287,9 @@ DST(	mov.w	r0,@r5	)
 SRC(5:	mov.b	@r4+,r0	)
 DST(	mov.b	r0,@r5	)
 	extu.b	r0,r0
+#ifndef	__LITTLE_ENDIAN__
+	shll8	r0
+#endif
 6:	addc	r0,r7
 	mov	#0,r0
 	addc	r0,r7
@@ -299,7 +316,7 @@ DST(	mov.b	r0,@r5	)
 	mov.l	8000f,r0
 	jmp	@r0
 	 nop
-	.balign 4
+	.align	2
 8000:	.long	5000b
 
 6002:
@@ -309,7 +326,7 @@ DST(	mov.b	r0,@r5	)
 	mov.l	8001f,r0
 	jmp	@r0
 	 nop
-	.balign 4
+	.align	2
 8001:	.long	5000b
 
 .previous

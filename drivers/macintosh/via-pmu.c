@@ -41,6 +41,7 @@
 #include <asm/feature.h>
 #include <asm/uaccess.h>
 #include <asm/mmu_context.h>
+#include <asm/heathrow.h>
 
 /* Misc minor number allocated for /dev/pmu */
 #define PMU_MINOR	154
@@ -201,7 +202,7 @@ static char *pbook_type[] = {
 	"PowerBook 2400/3400/3500(G3)",
 	"PowerBook G3 Series",
 	"1999 PowerBook G3",
-	"Core99 (iBook/iMac/G4)"
+	"Core99"
 };
 
 int __openfirmware
@@ -326,7 +327,7 @@ void via_pmu_start(void)
 	out_8(&via[IER], IER_SET | SR_INT | CB1_INT);
 
 	pmu_fully_inited = 1;
-	
+
 	/* Enable backlight */
 	pmu_enable_backlight(1);
 }
@@ -508,7 +509,7 @@ pmu_adb_reset_bus(void)
 
 	if (save_autopoll != 0)
 		pmu_adb_autopoll(save_autopoll);
-		
+
 	return 0;
 }
 
@@ -845,9 +846,9 @@ pmu_handle_data(unsigned char *data, int len, struct pt_regs *regs)
 		} else {
 #ifdef CONFIG_XMON
 			if (len == 4 && data[1] == 0x2c) {
-				extern int xmon_wants_key, xmon_pmu_keycode;
+				extern int xmon_wants_key, xmon_adb_keycode;
 				if (xmon_wants_key) {
-					xmon_pmu_keycode = data[2];
+					xmon_adb_keycode = data[2];
 					return;
 				}
 			}
@@ -886,7 +887,7 @@ pmu_enable_backlight(int on)
 
 	if ((vias == NULL) || !pmu_has_backlight)
 		return;
-		
+
 	/* first call: get current backlight value */
 	if (on && backlight_level < 0) {
 		switch (pmu_kind) {
@@ -983,12 +984,12 @@ pmu_restart(void)
 	struct adb_request req;
 
 	cli();
-	
+
 	pmu_request(&req, NULL, 2, PMU_SET_INTR_MASK, PMU_INT_ADB |
 					PMU_INT_TICK );
 	while(!req.complete)
 		pmu_poll();
-	
+
 	pmu_request(&req, NULL, 1, PMU_RESET);
 	while(!req.complete || (pmu_state != idle))
 		pmu_poll();
@@ -1002,7 +1003,7 @@ pmu_shutdown(void)
 	struct adb_request req;
 
 	cli();
-	
+
 	pmu_request(&req, NULL, 2, PMU_SET_INTR_MASK, PMU_INT_ADB |
 					PMU_INT_TICK );
 	while(!req.complete)
@@ -1065,6 +1066,8 @@ broadcast_sleep(int when, int fallback)
 		current = list_entry(list, struct pmu_sleep_notifier, list);
 		ret = current->notifier_call(current, when);
 		if (ret != PBOOK_SLEEP_OK) {
+			printk(KERN_DEBUG "sleep %d rejected by %p (%p)\n",
+			       when, current, current->notifier_call);
 			for (; list != &sleep_notifiers; list = list->next) {
 				current = list_entry(list, struct pmu_sleep_notifier, list);
 				current->notifier_call(current, fallback);
@@ -1179,7 +1182,7 @@ void pmu_blink(int n)
 		while (!req.complete) pmu_poll();
 		udelay(50000);
 	}
-	udelay(50000);
+	udelay(150000);
 }
 #endif
 
@@ -1240,20 +1243,14 @@ int __openfirmware powerbook_sleep_G3(void)
 
 	/* Make sure the decrementer won't interrupt us */
 	asm volatile("mtdec %0" : : "r" (0x7fffffff));
-#if 0
-	/* Save the state of PCI config space for some slots */
-	pbook_pci_save();
-#endif
+
 	/* For 750, save backside cache setting and disable it */
 	save_l2cr = _get_L2CR();	/* (returns 0 if not 750) */
 	if (save_l2cr)
 		_set_L2CR(0);
 
-	if (macio_base != 0) {
+	if (macio_base != 0)
 		save_fcr = in_le32(FEATURE_CTRL(macio_base));
-		/* Check if this is still valid on older powerbooks */
-		out_le32(FEATURE_CTRL(macio_base), save_fcr & ~(0x00000140UL));
-	}
 
 	if (current->thread.regs && (current->thread.regs->msr & MSR_FP) != 0)
 		giveup_fpu(current);
@@ -1267,11 +1264,14 @@ int __openfirmware powerbook_sleep_G3(void)
 	/* Ask the PMU to put us to sleep */
 	pmu_request(&sleep_req, NULL, 5, PMU_SLEEP, 'M', 'A', 'T', 'T');
 	while (!sleep_req.complete)
-		mb();
+		pmu_poll();
 
 	cli();
 	while (pmu_state != idle)
 		pmu_poll();
+
+	/* clear IOBUS enable */
+	out_le32(FEATURE_CTRL(macio_base), save_fcr & ~HRW_IOBUS_ENABLE);
 
 	/* Call low-level ASM sleep handler */
 	low_sleep_handler();
@@ -1281,17 +1281,15 @@ int __openfirmware powerbook_sleep_G3(void)
 	pmcr1 &= ~(GRACKLE_PM|GRACKLE_DOZE|GRACKLE_SLEEP|GRACKLE_NAP); 
 	grackle_pcibios_write_config_word(0, 0, 0x70, pmcr1);
 
+	/* reenable IOBUS */
+	out_le32(FEATURE_CTRL(macio_base), save_fcr | HRW_IOBUS_ENABLE);
+
 	/* Make sure the PMU is idle */
 	while (pmu_state != idle)
 		pmu_poll();
 
 	sti();
-#if 0
-	/* According to someone from Apple, this should not be needed,
-	   at least not for all devices. Let's keep it for now until we
-	   have something that works. */
-	pbook_pci_restore();
-#endif
+
 	set_context(current->mm->context);
 
 	/* Restore L2 cache */
@@ -1302,6 +1300,7 @@ int __openfirmware powerbook_sleep_G3(void)
 	sleep_restore_intrs();
 
 	/* Notify drivers */
+	mdelay(10);
 	broadcast_wake();
 
 	return 0;

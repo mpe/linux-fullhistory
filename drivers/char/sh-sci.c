@@ -189,10 +189,35 @@ static void sci_set_termios_cflag(struct sci_port *port)
 	ctrl_out(smr_val, SCSMR);
 
 #if defined(CONFIG_SH_SCIF_SERIAL)
+#if defined(__sh3__)
+	{ /* For SH7709, SH7709A, SH7729 */
+		unsigned short data;
+
+		/* We need to set SCPCR to enable RTS/CTS */
+		data = ctrl_inw(SCPCR);
+		/* Clear out SCP7MD1,0, SCP6MD1,0, SCP4MD1,0*/
+		ctrl_outw(data&0x0fcf, SCPCR); 
+	}
+#endif
 	if (C_CRTSCTS(port->gs.tty))
 		fcr_val |= 0x08;
-	else
+	else {
+#if defined(__sh3__)
+		unsigned short data;
+
+		/* We need to set SCPCR to enable RTS/CTS */
+		data = ctrl_inw(SCPCR);
+		/* Clear out SCP7MD1,0, SCP4MD1,0,
+		   Set SCP6MD1,0 = {01} (output)  */
+		ctrl_outw((data&0x0fcf)|0x1000, SCPCR);
+
+		data = ctrl_inb(SCPDR);
+		/* Set /RTS2 (bit6) = 0 */
+		ctrl_outb(data&0xbf, SCPDR);
+#elif defined(__SH4__)
 		ctrl_outw(0x0080, SCSPTR); /* Set RTS = 1 */
+#endif
+	}
 	ctrl_out(fcr_val, SCFCR);
 #endif
 
@@ -721,7 +746,7 @@ int __init sci_init(void)
 	int i;
 
 	for (i=SCI_ERI_IRQ; i<SCI_IRQ_END; i++)
-		set_ipr_data(i, SCI_IPR_OFFSET, SCI_PRIORITY);
+		set_ipr_data(i, SCI_IPR_ADDR, SCI_IPR_POS, SCI_PRIORITY);
 
 	port = &sci_ports[0];
 
@@ -789,6 +814,7 @@ static inline void put_char(char c)
 	while (!(status & SCI_TD_E));
 
 	ctrl_outb(c, SC_TDR);
+	ctrl_in(SC_SR);		/* Dummy read */
 	ctrl_out(SCI_TD_E_CLEAR, SC_SR);
 
 	restore_flags(flags);
@@ -817,6 +843,7 @@ static inline int get_char(void)
 		}
 	} while (!(status & SCI_RD_F));
 	c = ctrl_inb(SC_RDR);
+	ctrl_in(SC_SR);		/* Dummy read */
 	ctrl_out(SCI_RDRF_CLEAR, SC_SR);
 	restore_flags(flags);
 

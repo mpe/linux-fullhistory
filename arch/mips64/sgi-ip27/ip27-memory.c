@@ -46,7 +46,7 @@ bootmem_data_t plat_node_bdata[MAX_COMPACT_NODES];
 int numa_debug(void)
 {
 	printk("NUMA debug\n");
-	*(int *)0 = 0;
+	BUG();
 	return(0);
 }
 

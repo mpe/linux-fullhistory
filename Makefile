@@ -82,10 +82,6 @@ endif
 
 CPPFLAGS := -D__KERNEL__ -I$(HPATH)
 
-ifdef CONFIG_SMP
-CPPFLAGS += -D__SMP__
-endif
-
 CFLAGS := $(CPPFLAGS) -Wall -Wstrict-prototypes -O2 -fomit-frame-pointer
 AFLAGS := -D__ASSEMBLY__ $(CPPFLAGS)
 

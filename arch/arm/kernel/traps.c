@@ -399,13 +399,13 @@ void __bug(const char *file, int line, void *data)
 	printk(KERN_CRIT"kernel BUG at %s:%d!\n", file, line);
 	if (data)
 		printk(KERN_CRIT"extra data = %p\n", data);
-	*(int *)0 = 0;
+	BUG();
 }
 
 void __readwrite_bug(const char *fn)
 {
 	printk("%s called, but not implemented", fn);
-	*(int *)0 = 0;
+	BUG();
 }
 
 void __pte_error(const char *file, int line, unsigned long val)
@@ -436,7 +436,7 @@ void abort(void)
 	printk(KERN_CRIT "abort() called from %p!  (Please "
 	       "report to rmk@arm.linux.org.uk)\n", lr);
 
-	*(int *)0 = 0;
+	BUG();
 
 	/* if that doesn't kill us, halt */
 	panic("Oops failed to kill thread");

@@ -109,108 +109,6 @@ of boards in rio.h.  You'll have to allocate more majors if you need
 more than 512 ports.... */
 
 
-/* ************************************************************** */
-/* * This section can be removed when 2.0 becomes outdated....  * */
-/* ************************************************************** */
-
-#if LINUX_VERSION_CODE < 0x020100    /* Less than 2.1.0 */
-#define TWO_ZERO
-#else
-#if LINUX_VERSION_CODE < 0x020209   /* less than 2.2.x */
-#warning "Please use a recent 2.2.x kernel. "
-#endif
-#endif
-
-
-#ifdef TWO_ZERO
-
-/* Here is the section that makes the 2.2 compatible driver source 
-   work for 2.0 too! We mostly try to adopt the "new thingies" from 2.2, 
-   and provide for compatibility stuff here if possible. */
-
-#include <linux/bios32.h>
-
-#define Get_user(a,b)                a = get_user(b)
-#define Put_user(a,b)                0,put_user(a,b)
-#define copy_to_user(a,b,c)          memcpy_tofs(a,b,c)
-
-static inline int copy_from_user(void *to,const void *from, int c) 
-{
-  memcpy_fromfs(to, from, c);
-  return 0;
-}
-
-#define pci_present                  pcibios_present
-#define pci_read_config_word         pcibios_read_config_word
-#define pci_read_config_dword        pcibios_read_config_dword
-
-static inline unsigned char get_irq (unsigned char bus, unsigned char fn)
-{
-  unsigned char t; 
-  pcibios_read_config_byte (bus, fn, PCI_INTERRUPT_LINE, &t);
-  return t;
-}
-
-static inline void *ioremap(unsigned long base, long length)
-{
-  if (base < 0x100000) return (void *)base;
-  return vremap (base, length);
-}
-
-#define my_iounmap(x, b)             (((long)x<0x100000)?0:vfree ((void*)x))
-
-#define capable(x)                   suser()
-
-#define queue_task                   queue_task_irq_off
-#define tty_flip_buffer_push(tty)    queue_task(&tty->flip.tqueue, &tq_timer)
-#define signal_pending(current)      (current->signal & ~current->blocked)
-#define schedule_timeout(to)         do {current->timeout = jiffies + (to);schedule ();} while (0)
-#define time_after(t1,t2)            (((long)t1-t2) > 0)
-
-
-#define test_and_set_bit(nr, addr)   set_bit(nr, addr)
-#define test_and_clear_bit(nr, addr) clear_bit(nr, addr)
-
-/* Not yet implemented on 2.0 */
-#define ASYNC_SPD_SHI  -1
-#define ASYNC_SPD_WARP -1
-
-
-/* Ugly hack: the driver_name doesn't exist in 2.0.x . So we define it
-   to the "name" field that does exist. As long as the assignments are
-   done in the right order, there is nothing to worry about. */
-#define driver_name           name 
-
-/* Should be in a header somewhere. They are in tty.h on 2.2 */
-#define TTY_HW_COOK_OUT       14 /* Flag to tell ntty what we can handle */
-#define TTY_HW_COOK_IN        15 /* in hardware - output and input       */
-
-/* The return type of a "close" routine. */
-#define INT                   void
-#define NO_ERROR              /* Nothing */
-
-#else
-
-/* The 2.2.x compatibility section. */
-#include <asm/uaccess.h>
-
-#define Get_user(a,b)         get_user(a,b)
-#define Put_user(a,b)         put_user(a,b)
-#define get_irq(pdev)         pdev->irq
-
-#define INT                   int
-#define NO_ERROR              0              
-
-#define my_iounmap(x,b)       (iounmap((char *)(b)))
-
-#endif
-
-/* ************************************************************** */
-/* *                End of compatibility section..              * */
-/* ************************************************************** */
-
-
-
 /* Why the hell am I defining these here? */
 #define RIO_TYPE_NORMAL 1
 #define RIO_TYPE_CALLOUT 2
@@ -373,55 +271,15 @@ static struct real_driver rio_real_driver = {
   NULL
 };
 
-
-/* 
-   This driver can spew a whole lot of debugging output at you. If you
-   need maximum performance, you should disable the DEBUG define. To
-   aid in debugging in the field, I'm leaving the compile-time debug
-   features enabled, and disable them "runtime". That allows me to
-   instruct people with problems to enable debugging without requiring
-   them to recompile... 
-*/
-#define DEBUG
-
-#ifdef DEBUG
-#define rio_dprintk(f, str...) if (rio_debug & f) printk (str)
-#else
-#define rio_dprintk(f, str...) /* nothing */
-#endif
-
-
-#define func_enter() rio_dprintk (RIO_DEBUG_FLOW, "rio: enter " __FUNCTION__ "\n")
-#define func_exit()  rio_dprintk (RIO_DEBUG_FLOW, "rio: exit  " __FUNCTION__ "\n")
-
-#define func_enter2() rio_dprintk (RIO_DEBUG_FLOW, "rio: enter " __FUNCTION__ \
-                                  "(port %d)\n", port->line)
-
-
-
-
 /* 
  *  Firmware loader driver specific routines
  *
  */
 
 static struct file_operations rio_fw_fops = {
-	NULL,	/*	lseek	*/
-	NULL,	/*	read	*/
-	NULL,	/*	write	*/
-	NULL,	/*	readdir	*/
-	NULL,	/*	select	*/
-	rio_fw_ioctl,
-	NULL,	/*	mmap	*/
-	rio_fw_open,
-#ifndef TWO_ZERO
-	NULL,	/*	flush	*/
-#endif
-	rio_fw_release,
-	NULL,	/*	fsync	*/
-	NULL,	/*	fasync	*/
-	NULL,	/*	check_media_change	*/
-	NULL,	/*	revalidate	*/
+	ioctl:		rio_fw_ioctl,
+	open:		rio_fw_open,
+	release:	rio_fw_release,
 };
 
 struct miscdevice rio_fw_device = {
@@ -446,11 +304,11 @@ static inline int rio_paranoia_check(struct rio_port const * port,
     KERN_ERR "rio: Warning: null rio port for device %s in %s\n";
  
   if (!port) {
-    printk(badinfo, kdevname(device), routine);
+    printk (badinfo, kdevname(device), routine);
     return 1;
   }
   if (port->magic != RIO_MAGIC) {
-    printk(badmagic, kdevname(device), routine);
+    printk (badmagic, kdevname(device), routine);
     return 1;
   }
 
@@ -468,15 +326,15 @@ void my_hd (void *ad, int len)
   unsigned char *addr = ad;
   
   for (i=0;i<len;i+=16) {
-    printk ("%08x ", (int) addr+i);
+    rio_dprintk (RIO_DEBUG_PARAM, "%08x ", (int) addr+i);
     for (j=0;j<16;j++) {
-      printk ("%02x %s", addr[j+i], (j==7)?" ":"");
+      rio_dprintk (RIO_DEBUG_PARAM, "%02x %s", addr[j+i], (j==7)?" ":"");
     }
     for (j=0;j<16;j++) {
       ch = addr[j+i];
-      printk ("%c", (ch < 0x20)?'.':((ch > 0x7f)?'.':ch));
+      rio_dprintk (RIO_DEBUG_PARAM, "%c", (ch < 0x20)?'.':((ch > 0x7f)?'.':ch));
     }
-    printk ("\n");
+    rio_dprintk (RIO_DEBUG_PARAM, "\n");
   }
 }
 #else
@@ -568,21 +426,26 @@ static int rio_set_real_termios (void *ptr)
 
 void rio_reset_interrupt (struct Host *HostP)
 {
+  func_enter();
+
   switch( HostP->Type ) {
   case RIO_AT:
   case RIO_MCA:
   case RIO_PCI:
     WBYTE(HostP->ResetInt , 0xff);
   }
+
+  func_exit();
 }
 
 
 static void rio_interrupt (int irq, void *ptr, struct pt_regs *regs)
 {
   struct Host *HostP;
+  func_enter ();
 
-  HostP = &p->RIOHosts[(long)ptr];
-  /*   func_enter ();  */
+  HostP = (struct Host*)ptr; /* &p->RIOHosts[(long)ptr]; */
+  
   rio_dprintk (RIO_DEBUG_IFLOW, "rio: enter rio_interrupt (%d/%d)\n", 
                irq, HostP->Ivec); 
 
@@ -627,7 +490,7 @@ static void rio_interrupt (int irq, void *ptr, struct pt_regs *regs)
     }
   }
 #endif
-
+  rio_dprintk (RIO_DEBUG_IFLOW, "rio: We've have noticed the interrupt\n"); 
   if (HostP->Ivec == irq) {
     /* Tell the card we've noticed the interrupt. */
     rio_reset_interrupt (HostP);
@@ -649,7 +512,7 @@ static void rio_interrupt (int irq, void *ptr, struct pt_regs *regs)
   clear_bit (RIO_BOARD_INTR_LOCK, &HostP->locks);
   rio_dprintk (RIO_DEBUG_IFLOW, "rio: exit rio_interrupt (%d/%d)\n", 
                irq, HostP->Ivec); 
-  /*  func_exit ();  */
+  func_exit ();
 }
 
 
@@ -657,7 +520,7 @@ static void rio_pollfunc (unsigned long data)
 {
   func_enter ();
 
-  rio_interrupt (0, (void *)data, NULL);
+  rio_interrupt (0, &p->RIOHosts[data], NULL);
   p->RIOHosts[data].timer.expires = jiffies + rio_poll;
   add_timer (&p->RIOHosts[data].timer);
 
@@ -756,11 +619,11 @@ static void rio_shutdown_port (void * ptr)
 #if 0
   port->gs.flags &= ~ GS_ACTIVE;
   if (!port->gs.tty) {
-    printk ("No tty.\n");
+    rio_dprintk (RIO_DBUG_TTY, "No tty.\n");
     return;
   }
   if (!port->gs.tty->termios) {
-    printk ("No termios.\n");
+    rio_dprintk (RIO_DEBUG_TTY, "No termios.\n");
     return;
   }
   if (port->gs.tty->termios->c_cflag & HUPCL) {
@@ -1000,6 +863,8 @@ struct vpd_prom *get_VPD_PROM (struct Host *hp)
 
   if (rio_debug & RIO_DEBUG_PROBE)
     my_hd ((char *)&vpdp, 0x20);
+  
+  func_exit();
 
   return &vpdp;
 }
@@ -1099,7 +964,7 @@ static int rio_init_datastructures (void)
   /* However, the RIO driver allows users to configure their first
      RTA as the ports numbered 504-511. We therefore need to allocate 
      the whole range. :-(   -- REW */
-
+  
 #define RI_SZ   sizeof(struct rio_info)
 #define HOST_SZ sizeof(struct Host)
 #define PORT_SZ sizeof(struct Port *)
@@ -1138,11 +1003,20 @@ static int rio_init_datastructures (void)
     port->gs.close_delay = HZ/2;
     port->gs.closing_wait = 30 * HZ;
     port->gs.rd = &rio_real_driver;
+
+    /*
+     * Initializing wait queue
+     */
+    init_waitqueue_head(&port->gs.open_wait);
+    init_waitqueue_head(&port->gs.close_wait); 
+
   }
 #else
   /* We could postpone initializing them to when they are configured. */
 #endif
 
+
+  
   if (rio_debug & RIO_DEBUG_INIT) {
     my_hd (&rio_real_driver, sizeof (rio_real_driver));
   }
@@ -1166,7 +1040,6 @@ static int rio_init_datastructures (void)
 }
 
 
-#ifdef MODULE
 static void rio_release_drivers(void)
 {
   func_enter();
@@ -1176,7 +1049,6 @@ static void rio_release_drivers(void)
   tty_unregister_driver (&rio_driver);
   func_exit();
 }
-#endif
 
 #ifdef TWO_ZERO
 #define PDEV unsigned char pci_bus, unsigned pci_fun
@@ -1213,7 +1085,7 @@ void fix_rio_pci (PDEV)
   unsigned int t;
 
 #define CNTRL_REG_OFFSET        0x50
-#define CNTRL_REG_GOODVALUE     0x00260000
+#define CNTRL_REG_GOODVALUE     0x18260000
 
   pci_read_config_dword(pdev, PCI_BASE_ADDRESS_0, &hwbase);
   hwbase &= PCI_BASE_ADDRESS_MEM_MASK;
@@ -1294,7 +1166,6 @@ int rio_init(void)
       pci_read_config_dword (pdev, 0x2c, &tint);
       tshort = (tint >> 16) & 0xffff;
       rio_dprintk (RIO_DEBUG_PROBE, "Got a specialix card: %x.\n", tint);
-      /* rio_dprintk (RIO_DEBUG_PROBE, "pdev = %d/%d  (%x)\n", pdev, tint); */ 
       if (tshort != 0x0100) {
         rio_dprintk (RIO_DEBUG_PROBE, "But it's not a RIO card (%d)...\n", 
                     tshort);
@@ -1307,48 +1178,50 @@ int rio_init(void)
       hp = &p->RIOHosts[p->RIONumHosts];
       hp->PaddrP =  tint & PCI_BASE_ADDRESS_MEM_MASK;
       hp->Ivec = get_irq (pdev);
-      if (((1 << hp->Ivec) & rio_irqmask) == 0) hp->Ivec = 0;
+      if (((1 << hp->Ivec) & rio_irqmask) == 0)
+              hp->Ivec = 0;
       hp->CardP	= (struct DpRam *)
       hp->Caddr = ioremap(p->RIOHosts[p->RIONumHosts].PaddrP, RIO_WINDOW_LEN);
       hp->Type  = RIO_PCI;
       hp->Copy  = rio_pcicopy; 
-      hp->Mode  = RIO_PCI_DEFAULT_MODE;
- 
+      hp->Mode  = RIO_PCI_BOOT_FROM_RAM;
+      rio_reset_interrupt (hp);
+      rio_start_card_running (hp);
+
       rio_dprintk (RIO_DEBUG_PROBE, "Going to test it (%p/%p).\n",
                    (void *)p->RIOHosts[p->RIONumHosts].PaddrP,
                    p->RIOHosts[p->RIONumHosts].Caddr);
       if (RIOBoardTest( p->RIOHosts[p->RIONumHosts].PaddrP,
                         p->RIOHosts[p->RIONumHosts].Caddr, 
                         RIO_PCI, 0 ) == RIO_SUCCESS) {
-        WBYTE(p->RIOHosts[p->RIONumHosts].ResetInt, 0xff);
-        p->RIOHosts[p->RIONumHosts].UniqueNum  =
-          ((RBYTE(p->RIOHosts[p->RIONumHosts].Unique[0]) &0xFF)<< 0)|
-          ((RBYTE(p->RIOHosts[p->RIONumHosts].Unique[1]) &0xFF)<< 8)|
-          ((RBYTE(p->RIOHosts[p->RIONumHosts].Unique[2]) &0xFF)<<16)|
-          ((RBYTE(p->RIOHosts[p->RIONumHosts].Unique[3]) &0xFF)<<24);
-        rio_dprintk (RIO_DEBUG_PROBE, "Hmm Tested ok, uniqid = %x.\n",
-                   p->RIOHosts[p->RIONumHosts].UniqueNum);
-
-#if 1
-        fix_rio_pci (pdev);
-#endif
-        p->RIOLastPCISearch = RIO_SUCCESS;
-        p->RIONumHosts++;
-        found++;
+              rio_dprintk (RIO_DEBUG_INIT, "Done RIOBoardTest\n");
+              WBYTE(p->RIOHosts[p->RIONumHosts].ResetInt, 0xff);
+              p->RIOHosts[p->RIONumHosts].UniqueNum  =
+                      ((RBYTE(p->RIOHosts[p->RIONumHosts].Unique[0]) &0xFF)<< 0)|
+                      ((RBYTE(p->RIOHosts[p->RIONumHosts].Unique[1]) &0xFF)<< 8)|
+                      ((RBYTE(p->RIOHosts[p->RIONumHosts].Unique[2]) &0xFF)<<16)|
+                      ((RBYTE(p->RIOHosts[p->RIONumHosts].Unique[3]) &0xFF)<<24);
+              rio_dprintk (RIO_DEBUG_PROBE, "Hmm Tested ok, uniqid = %x.\n",
+                           p->RIOHosts[p->RIONumHosts].UniqueNum);
+              
+              fix_rio_pci (pdev);
+              p->RIOLastPCISearch = RIO_SUCCESS;
+              p->RIONumHosts++;
+              found++;
       } else {
-        my_iounmap (p->RIOHosts[p->RIONumHosts].PaddrP, 
-                    p->RIOHosts[p->RIONumHosts].Caddr);
+              my_iounmap (p->RIOHosts[p->RIONumHosts].PaddrP, 
+                          p->RIOHosts[p->RIONumHosts].Caddr);
       }
-
+      
 #ifdef TWO_ZERO
     }  /* We have two variants with the opening brace, so to prevent */
 #else
     }  /* Emacs from getting confused we have two closing braces too. */
 #endif
     
-
     /* Then look for the older PCI card.... : */
 #ifndef TWO_ZERO
+
 
   /* These older PCI cards have problems (only byte-mode access is
      supported), which makes them a bit awkward to support. 
@@ -1374,15 +1247,21 @@ int rio_init(void)
       hp = &p->RIOHosts[p->RIONumHosts];
       hp->PaddrP =  tint & PCI_BASE_ADDRESS_MEM_MASK;
       hp->Ivec = get_irq (pdev);
-      if (((1 << hp->Ivec) & rio_irqmask) == 0) hp->Ivec = 0;
+      if (((1 << hp->Ivec) & rio_irqmask) == 0) 
+      	hp->Ivec = 0;
       hp->Ivec |= 0x8000; /* Mark as non-sharable */
       hp->CardP	= (struct DpRam *)
       hp->Caddr = ioremap(p->RIOHosts[p->RIONumHosts].PaddrP, RIO_WINDOW_LEN);
       hp->Type  = RIO_PCI;
       hp->Copy  = rio_pcicopy;
-      hp->Mode  = RIO_PCI_DEFAULT_MODE;
- 
-      rio_dprintk (RIO_DEBUG_PROBE, "Going to test it (%p/%p).\n",
+      hp->Mode  = RIO_PCI_BOOT_FROM_RAM;
+
+      rio_dprintk (RIO_DEBUG_PROBE, "Ivec: %x\n", hp->Ivec);
+      rio_dprintk (RIO_DEBUG_PROBE, "Mode: %x\n", hp->Mode);
+
+      rio_reset_interrupt (hp);
+      rio_start_card_running (hp);
+       rio_dprintk (RIO_DEBUG_PROBE, "Going to test it (%p/%p).\n",
                    (void *)p->RIOHosts[p->RIONumHosts].PaddrP,
                    p->RIOHosts[p->RIONumHosts].Caddr);
       if (RIOBoardTest( p->RIOHosts[p->RIONumHosts].PaddrP,
@@ -1425,11 +1304,15 @@ int rio_init(void)
     hp->CardP = (struct DpRam *)
     hp->Caddr = ioremap(p->RIOHosts[p->RIONumHosts].PaddrP, RIO_WINDOW_LEN);
     hp->Type = RIO_AT;
-    hp->Copy = rio_pcicopy;
+    hp->Copy = rio_pcicopy; /* AT card PCI???? - PVDL
+                             * -- YES! this is now a normal copy. Only the 
+                             * old PCI card uses the special PCI copy. 
+                             * Moreover, the ISA card will work with the 
+                             * special PCI copy anyway. -- REW */
     hp->Mode = 0;
 
     vpdp = get_VPD_PROM (hp);
-
+    rio_dprintk (RIO_DEBUG_PROBE, "Got VPD ROM\n");
     okboard = 0;
     if ((strncmp (vpdp->identifier, RIO_ISA_IDENT, 16) == 0) ||
         (strncmp (vpdp->identifier, RIO_ISA2_IDENT, 16) == 0) ||
@@ -1460,11 +1343,21 @@ int rio_init(void)
     if (hp->Ivec) {
       int mode = SA_SHIRQ;
       if (hp->Ivec & 0x8000) {mode = 0; hp->Ivec &= 0x7fff;}
-      if (request_irq (hp->Ivec, rio_interrupt, mode, "rio", (void *)i)) {
-        printk(KERN_ERR "rio: Cannot allocate irq %d.\n", hp->Ivec);
-        hp->Ivec = 0;
+      rio_dprintk (RIO_DEBUG_INIT, "Requesting interrupt hp: %p rio_interrupt: %d Mode: %x\n", hp,hp->Ivec, hp->Mode);
+      retval = request_irq (hp->Ivec, rio_interrupt, mode, "rio", hp);
+      rio_dprintk (RIO_DEBUG_INIT, "Return value from request_irq: %d\n", retval);
+      if (retval) {
+              printk(KERN_ERR "rio: Cannot allocate irq %d.\n", hp->Ivec);
+              hp->Ivec = 0;
       }
       rio_dprintk (RIO_DEBUG_INIT, "Got irq %d.\n", hp->Ivec);
+      if (hp->Ivec != 0){
+              rio_dprintk (RIO_DEBUG_INIT, "Enabling interrupts on rio card.\n"); 
+              hp->Mode |= RIO_PCI_INT_ENABLE;
+      } else
+              hp->Mode &= !RIO_PCI_INT_ENABLE;
+      rio_dprintk (RIO_DEBUG_INIT, "New Mode: %x\n", hp->Mode);
+      rio_start_card_running (hp);
     }
     /* Init the timer "always" to make sure that it can safely be 
        deleted when we unload... */
@@ -1481,7 +1374,7 @@ int rio_init(void)
   }
 
   if (found) {
-    printk (KERN_INFO "rio: total of %d boards detected.\n", found);
+    rio_dprintk (RIO_DEBUG_INIT, "rio: total of %d boards detected.\n", found);
 
     if (misc_register(&rio_fw_device) < 0) {
       printk(KERN_ERR "RIO: Unable to register firmware loader driver.\n");
@@ -1506,7 +1399,7 @@ void cleanup_module(void)
   for (i=0,hp=p->RIOHosts;i<p->RIONumHosts;i++, hp++) {
     RIOHostReset (hp->Type, hp->CardP, hp->Slot);
     if (hp->Ivec) {
-      free_irq (hp->Ivec, (void *)i);
+      free_irq (hp->Ivec, hp);
       rio_dprintk (RIO_DEBUG_INIT, "freed irq %d.\n", hp->Ivec);
     }
     /* It is safe/allowed to del_timer a non-active timer */

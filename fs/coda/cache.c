@@ -315,24 +315,15 @@ void coda_flag_inode_children(struct inode *inode, int flag)
 	struct dentry *alias_de;
 
 	ENTRY;
-	if ( !inode ) 
+	if ( !inode || !S_ISDIR(inode->i_mode)) 
 		return; 
 
-	if (list_empty(&inode->i_dentry))
-	        return; 
-
-	/* I believe that shrink_dcache_parent will not
-	   remove dentries from the alias list. If it 
-	   does we are toast. 
-	*/
-	alias = inode->i_dentry.next; 
-	while ( alias != &inode->i_dentry ) {
-		alias_de = list_entry(alias, struct dentry, d_alias);
-		coda_flag_children(alias_de, flag);
-		alias = alias->next;
-		shrink_dcache_parent(alias_de);
-	}
-
+	alias_de = d_find_alias(inode);
+	if (!alias_de)
+		return;
+	coda_flag_children(alias_de, flag);
+	shrink_dcache_parent(alias_de);
+	dput(alias_de);
 }
 
 /* this will not zap the inode away */

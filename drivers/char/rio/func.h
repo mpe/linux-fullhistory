@@ -168,4 +168,6 @@ extern int rio_minor (kdev_t device);
 extern int rio_ismodem (kdev_t device);
 extern void rio_udelay (int usecs);
 
+extern void rio_start_card_running (struct Host * HostP);
+
 #endif	/* __func_h_def */

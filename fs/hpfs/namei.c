@@ -326,7 +326,6 @@ int hpfs_unlink(struct inode *dir, struct dentry *dentry)
 	if (r != 2) {
 		inode->i_nlink--;
 		hpfs_unlock_2inodes(dir, inode);
-		d_delete(dentry);
 	} else {	/* no space for deleting, try to truncate file */
 		struct iattr newattrs;
 		int err;
@@ -388,7 +387,6 @@ int hpfs_rmdir(struct inode *dir, struct dentry *dentry)
 		dir->i_nlink--;
 		inode->i_nlink = 0;
 		hpfs_unlock_2inodes(dir, inode);
-		d_delete(dentry);
 	} else hpfs_unlock_2inodes(dir, inode);
 	return r == 2 ? -ENOSPC : r == 1 ? -EFSERROR : 0;
 }

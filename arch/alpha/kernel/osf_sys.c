@@ -42,7 +42,6 @@
 #include <asm/hwrpb.h>
 #include <asm/processor.h>
 
-extern long do_sys_mount(char *, char *, char *, int, void *);
 extern int do_pipe(int *);
 
 extern asmlinkage int sys_swapon(const char *specialfile, int swap_flags);
@@ -377,7 +376,7 @@ static int osf_ufs_mount(char *dirname, struct ufs_args *args, int flags)
 	retval = PTR_ERR(devname);
 	if (IS_ERR(devname))
 		goto out;
-	retval = do_sys_mount(devname, dirname, "ext2", flags, NULL);
+	retval = do_mount(devname, dirname, "ext2", flags, NULL);
 	putname(devname);
 out:
 	return retval;
@@ -396,7 +395,7 @@ static int osf_cdfs_mount(char *dirname, struct cdfs_args *args, int flags)
 	retval = PTR_ERR(devname);
 	if (IS_ERR(devname))
 		goto out;
-	retval = do_sys_mount(devname, dirname, "iso9660", flags, NULL);
+	retval = do_mount(devname, dirname, "iso9660", flags, NULL);
 	putname(devname);
 out:
 	return retval;
@@ -409,7 +408,7 @@ static int osf_procfs_mount(char *dirname, struct procfs_args *args, int flags)
 	if (copy_from_user(&tmp, args, sizeof(tmp)))
 		return -EFAULT;
 
-	return do_sys_mount("", dirname, "proc", flags, NULL);
+	return do_mount("", dirname, "proc", flags, NULL);
 }
 
 asmlinkage int osf_mount(unsigned long typenr, char *path, int flag, void *data)

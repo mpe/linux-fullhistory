@@ -165,18 +165,18 @@ do {					\
 /*
  * Back to P1 area.
  */
-#define back_to_P1()				\
-do {						\
-	unsigned long __dummy;			\
-	__asm__ __volatile__(			\
-		"nop;nop;nop;nop;nop;nop\n\t"	\
-		"mov.l	1f, %0\n\t"		\
-		"jmp	@%0\n\t"		\
-		" nop\n\t"			\
-		".balign 4\n"			\
-		"1:	.long 2f\n"		\
-		"2:"				\
-		: "=&r" (__dummy));		\
+#define back_to_P1()					\
+do {							\
+	unsigned long __dummy;				\
+	__asm__ __volatile__(				\
+		"nop;nop;nop;nop;nop;nop;nop\n\t"	\
+		"mov.l	1f, %0\n\t"			\
+		"jmp	@%0\n\t"			\
+		" nop\n\t"				\
+		".balign 4\n"				\
+		"1:	.long 2f\n"			\
+		"2:"					\
+		: "=&r" (__dummy));			\
 } while (0)
 
 /* For spinlocks etc */

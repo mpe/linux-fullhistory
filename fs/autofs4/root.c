@@ -16,7 +16,6 @@
 #include <linux/param.h>
 #include "autofs_i.h"
 
-static int autofs4_dir_readdir(struct file *,void *,filldir_t);
 static struct dentry *autofs4_dir_lookup(struct inode *,struct dentry *);
 static int autofs4_dir_symlink(struct inode *,struct dentry *,const char *);
 static int autofs4_dir_unlink(struct inode *,struct dentry *);
@@ -27,13 +26,13 @@ static struct dentry *autofs4_root_lookup(struct inode *,struct dentry *);
 
 struct file_operations autofs4_root_operations = {
 	read:		generic_read_dir,
-	readdir:	autofs4_dir_readdir,
+	readdir:	dcache_readdir,
 	ioctl:		autofs4_root_ioctl,
 };
 
 struct file_operations autofs4_dir_operations = {
 	read:		generic_read_dir,
-	readdir:	autofs4_dir_readdir,
+	readdir:	dcache_readdir,
 };
 
 struct inode_operations autofs4_root_inode_operations = {
@@ -51,67 +50,6 @@ struct inode_operations autofs4_dir_inode_operations = {
 	mkdir:		autofs4_dir_mkdir,
 	rmdir:		autofs4_dir_rmdir,
 };
-
-static inline struct dentry *nth_child(struct dentry *dir, int nr)
-{
-	struct list_head *tmp = dir->d_subdirs.next;
-
-	while(tmp != &dir->d_subdirs) {
-		if (nr-- == 0)
-			return list_entry(tmp, struct dentry, d_child);
-		tmp = tmp->next;
-	}
-	return NULL;
-}
-
-static int autofs4_dir_readdir(struct file *filp, void *dirent,
-			      filldir_t filldir)
-{
-	struct autofs_sb_info *sbi;
-	struct autofs_info *ino;
-	struct dentry *dentry = filp->f_dentry;
-	struct dentry *dent_ptr;
-	struct inode *dir = dentry->d_inode;
-	struct list_head *cursor;
-	off_t nr;
-
-	sbi = autofs4_sbi(dir->i_sb);
-	ino = autofs4_dentry_ino(dentry);
-	nr = filp->f_pos;
-
-	switch(nr)
-	{
-	case 0:
-		if (filldir(dirent, ".", 1, nr, dir->i_ino) < 0)
-			return 0;
-		filp->f_pos = ++nr;
-		/* fall through */
-	case 1:
-		if (filldir(dirent, "..", 2, nr, dentry->d_parent->d_inode->i_ino) < 0)
-			return 0;
-		filp->f_pos = ++nr;
-		/* fall through */
-	default:
-		dent_ptr = nth_child(dentry, nr-2);
-		if (dent_ptr == NULL)
-			break;
-
-		cursor = &dent_ptr->d_child;
-
-		while(cursor != &dentry->d_subdirs) {
-			dent_ptr = list_entry(cursor, struct dentry, d_child);
-			if (dent_ptr->d_inode &&
-			    filldir(dirent, dent_ptr->d_name.name, dent_ptr->d_name.len, nr,
-				    dent_ptr->d_inode->i_ino) < 0)
-				return 0;
-			filp->f_pos = ++nr;
-			cursor = cursor->next;
-		}
-		break;
-	}
-
-	return 0;
-}
 
 /* Update usage from here to top of tree, so that scan of
    top-level directories will give a useful result */

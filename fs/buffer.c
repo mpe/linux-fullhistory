@@ -1324,7 +1324,7 @@ int block_flushpage(struct page *page, unsigned long offset)
 	 * instead.
 	 */
 	if (!offset) {
-		if (!try_to_free_buffers(page)) {
+		if (!try_to_free_buffers(page, 0)) {
 			atomic_inc(&buffermem_pages);
 			return 0;
 		}
@@ -2121,15 +2121,17 @@ out:
  * This all is required so that we can free up memory
  * later.
  */
-static void sync_page_buffers(struct buffer_head *bh)
+static void sync_page_buffers(struct buffer_head *bh, int wait)
 {
-	struct buffer_head * tmp;
+	struct buffer_head * tmp = bh;
 
-	tmp = bh;
 	do {
 		struct buffer_head *p = tmp;
 		tmp = tmp->b_this_page;
-		if (buffer_dirty(p) && !buffer_locked(p))
+		if (buffer_locked(p)) {
+			if (wait)
+				__wait_on_buffer(p);
+		} else if (buffer_dirty(p))
 			ll_rw_block(WRITE, 1, &p);
 	} while (tmp != bh);
 }
@@ -2151,7 +2153,7 @@ static void sync_page_buffers(struct buffer_head *bh)
  *       obtain a reference to a buffer head within a page.  So we must
  *	 lock out all of these paths to cleanly toss the page.
  */
-int try_to_free_buffers(struct page * page)
+int try_to_free_buffers(struct page * page, int wait)
 {
 	struct buffer_head * tmp, * bh = page->buffers;
 	int index = BUFSIZE_INDEX(bh->b_size);
@@ -2201,7 +2203,7 @@ busy_buffer_page:
 	spin_unlock(&free_list[index].lock);
 	write_unlock(&hash_table_lock);
 	spin_unlock(&lru_list_lock);	
-	sync_page_buffers(bh);
+	sync_page_buffers(bh, wait);
 	return 0;
 }
 

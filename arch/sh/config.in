@@ -15,6 +15,10 @@ endmenu
 
 mainmenu_option next_comment
 comment 'Processor type and features'
+choice 'SuperH system type'					\
+	"Generic		CONFIG_SH_GENERIC		\
+	 SolutionEngine		CONFIG_SH_SOLUTION_ENGINE" Generic
+
 choice 'Processor type' \
    "SH7708 CONFIG_CPU_SUBTYPE_SH7708 \
     SH7709 CONFIG_CPU_SUBTYPE_SH7709 \
@@ -32,7 +36,12 @@ if [ "$CONFIG_CPU_SUBTYPE_SH7750" = "y" ]; then
    define_bool CONFIG_CPU_SH4 y
 fi
 bool 'Little Endian' CONFIG_LITTLE_ENDIAN
-hex 'Physical memory start address' CONFIG_MEMORY_START 08000000
+if [ "$CONFIG_SH_SOLUTION_ENGINE" = "y" ]; then
+  define_hex CONFIG_MEMORY_START 0c000000
+else
+  hex 'Physical memory start address' CONFIG_MEMORY_START 08000000
+  hex 'I/O port offset address' CONFIG_IOPORT_START ba000000
+fi
 endmenu
 
 mainmenu_option next_comment
@@ -52,7 +61,9 @@ define_bool CONFIG_SBUS n
 
 bool 'Networking support' CONFIG_NET
 
-bool 'Directy Connected Compact Flash support' CONFIG_CF_ENABLER
+if [ "$CONFIG_SH_SOLUTION_ENGINE" != "y" ]; then
+   bool 'Directly Connected Compact Flash support' CONFIG_CF_ENABLER
+fi
 
 bool 'PCI support' CONFIG_PCI
 if [ "$CONFIG_PCI" = "y" ]; then

@@ -373,13 +373,15 @@ nfs3_proc_rmdir(struct dentry *dir, struct qstr *name)
  * readdirplus.
  */
 static int
-nfs3_proc_readdir(struct dentry *dir, u64 cookie, void *entry,
+nfs3_proc_readdir(struct file *file, u64 cookie, void *entry,
 		  unsigned int size, int plus)
 {
+	struct dentry		*dir = file->f_dentry;
+	struct rpc_cred		*cred = nfs_file_cred(file);
 	struct nfs_fattr	dir_attr;
 	struct nfs3_readdirargs	arg = { NFS_FH(dir), cookie, {0, 0}, 0, 0, 0 };
 	struct nfs3_readdirres	res = { &dir_attr, 0, 0, 0, 0 };
-	struct rpc_message	msg = { NFS3PROC_READDIR, &arg, &res, NULL };
+	struct rpc_message	msg = { NFS3PROC_READDIR, &arg, &res, cred };
 	u32			*verf = NFS_COOKIEVERF(dir->d_inode);
 	int			status;
 

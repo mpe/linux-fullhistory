@@ -844,15 +844,15 @@ static void __init pci_fixup_i450gx(struct pci_dev *d)
 	pcibios_last_bus = -1;
 }
 
-static void __init pci_fixup_rcc(struct pci_dev *d)
+static void __init pci_fixup_serverworks(struct pci_dev *d)
 {
 	/*
-	 * RCC host bridges -- Find and scan all secondary buses.
+	 * ServerWorks host bridges -- Find and scan all secondary buses.
 	 * Register 0x44 contains first, 0x45 last bus number routed there.
 	 */
 	u8 busno;
 	pci_read_config_byte(d, 0x44, &busno);
-	printk("PCI: RCC host bridge: secondary bus %02x\n", busno);
+	printk("PCI: ServerWorks host bridge: secondary bus %02x\n", busno);
 	pci_scan_bus(busno, pci_root_ops, NULL);
 	pcibios_last_bus = -1;
 }
@@ -928,8 +928,9 @@ static void __init pci_fixup_latency(struct pci_dev *d)
 struct pci_fixup pcibios_fixups[] = {
 	{ PCI_FIXUP_HEADER,	PCI_VENDOR_ID_INTEL,	PCI_DEVICE_ID_INTEL_82451NX,	pci_fixup_i450nx },
 	{ PCI_FIXUP_HEADER,	PCI_VENDOR_ID_INTEL,	PCI_DEVICE_ID_INTEL_82454GX,	pci_fixup_i450gx },
-	{ PCI_FIXUP_HEADER,	PCI_VENDOR_ID_RCC,	PCI_DEVICE_ID_RCC_HE,		pci_fixup_rcc },
-	{ PCI_FIXUP_HEADER,	PCI_VENDOR_ID_RCC,	PCI_DEVICE_ID_RCC_LE,		pci_fixup_rcc },
+	{ PCI_FIXUP_HEADER,	PCI_VENDOR_ID_SERVERWORKS,	PCI_DEVICE_ID_SERVERWORKS_HE,		pci_fixup_serverworks },
+	{ PCI_FIXUP_HEADER,	PCI_VENDOR_ID_SERVERWORKS,	PCI_DEVICE_ID_SERVERWORKS_LE,		pci_fixup_serverworks },
+	{ PCI_FIXUP_HEADER,	PCI_VENDOR_ID_SERVERWORKS,	PCI_DEVICE_ID_SERVERWORKS_CMIC_HE,	pci_fixup_serverworks },
 	{ PCI_FIXUP_HEADER,	PCI_VENDOR_ID_COMPAQ,	PCI_DEVICE_ID_COMPAQ_6010,	pci_fixup_compaq },
 	{ PCI_FIXUP_HEADER,	PCI_VENDOR_ID_UMC,	PCI_DEVICE_ID_UMC_UM8886BF,	pci_fixup_umc_ide },
 	{ PCI_FIXUP_HEADER,	PCI_VENDOR_ID_SI,	PCI_DEVICE_ID_SI_5513,		pci_fixup_ide_trash },

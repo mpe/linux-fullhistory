@@ -22,7 +22,10 @@ extern void paging_init(void);
  *  - flush_cache_mm(mm) flushes the specified mm context's cache lines
  *  - flush_cache_page(mm, vmaddr) flushes a single page
  *  - flush_cache_range(mm, start, end) flushes a range of pages
+ *
  *  - flush_page_to_ram(page) write back kernel page to ram
+ *  - flush_icache_range(start, end) flushes(invalidates) a range for icache
+ *  - flush_icache_page(vma, pg) flushes(invalidates) a page for icache
  *
  *  Caches are indexed (effectively) by physical address on SH-3, so
  *  we don't need them.
@@ -43,8 +46,7 @@ extern void flush_cache_mm(struct mm_struct *mm);
 extern void flush_cache_range(struct mm_struct *mm, unsigned long start,
 			      unsigned long end);
 extern void flush_cache_page(struct vm_area_struct *vma, unsigned long addr);
-extern void __flush_page_to_ram(unsigned long page_va);
-#define flush_page_to_ram(page)	__flush_page_to_ram(page_address(page))
+extern void flush_page_to_ram(struct page *page);
 extern void flush_icache_range(unsigned long start, unsigned long end);
 extern void flush_icache_page(struct vm_area_struct *vma, struct page *pg);
 #endif

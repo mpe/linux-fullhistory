@@ -343,7 +343,7 @@ struct nfs_rpc_ops {
 	int	(*mkdir)   (struct dentry *, struct qstr *, struct iattr *,
 			    struct nfs_fh *, struct nfs_fattr *);
 	int	(*rmdir)   (struct dentry *, struct qstr *);
-	int	(*readdir) (struct dentry *, u64 cookie, void *, unsigned int,
+	int	(*readdir) (struct file *, u64 cookie, void *, unsigned int,
 			    int);
 	int	(*mknod)   (struct dentry *, struct qstr *, struct iattr *,
 			    dev_t, struct nfs_fh *, struct nfs_fattr *);

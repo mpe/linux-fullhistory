@@ -14,9 +14,6 @@
 
 #include <asm/cache.h>
 
-#define inb_p	inb
-#define outb_p	outb
-
 #define inw_p	inw
 #define outw_p	outw
 
@@ -53,103 +50,62 @@ extern __inline__ void writel(unsigned int b, unsigned long addr)
         *(volatile unsigned long*)addr = b;
 }
 
-extern __inline__ unsigned long inb_local(unsigned long addr)
-{
-	return readb(addr);
-}
+extern unsigned long inb(unsigned int port);
+extern unsigned long inb_p(unsigned int port);
+extern unsigned long inw(unsigned int port);
+extern unsigned long inl(unsigned int port);
+extern void insb(unsigned int port, void *addr, unsigned long count);
+extern void insw(unsigned int port, void *addr, unsigned long count);
+extern void insl(unsigned int port, void *addr, unsigned long count);
 
-extern __inline__ void outb_local(unsigned char b, unsigned long addr)
-{
-	return writeb(b,addr);
-}
+extern void outb(unsigned long value, unsigned int port);
+extern void outb_p(unsigned long value, unsigned int port);
+extern void outw(unsigned long value, unsigned int port);
+extern void outl(unsigned long value, unsigned int port);
+extern void outsb(unsigned int port, const void *addr, unsigned long count);
+extern void outsw(unsigned int port, const void *addr, unsigned long count);
+extern void outsl(unsigned int port, const void *addr, unsigned long count);
 
-extern __inline__ unsigned long inb(unsigned long addr)
-{
-	return readb(addr);
-}
+/*
+ * If the platform has PC-like I/O, this function gives us the address
+ * from the offset.
+ */
+extern unsigned long sh_isa_slot(unsigned long offset);
 
-extern __inline__ unsigned long inw(unsigned long addr)
-{
-	return readw(addr);
-}
-
-extern __inline__ unsigned long inl(unsigned long addr)
-{
-	return readl(addr);
-}
-
-extern __inline__ void insb(unsigned long addr, void *buffer, int count)
-{
-	unsigned char *buf=buffer;
-	while(count--) *buf++=inb(addr);
-}
-
-extern __inline__ void insw(unsigned long addr, void *buffer, int count)
-{
-	unsigned short *buf=buffer;
-	while(count--) *buf++=inw(addr);
-}
-
-extern __inline__ void insl(unsigned long addr, void *buffer, int count)
-{
-	unsigned long *buf=buffer;
-	while(count--) *buf++=inl(addr);
-}
-
-extern __inline__ void outb(unsigned char b, unsigned long addr)
-{
-       return writeb(b,addr);
-}
-
-extern __inline__ void outw(unsigned short b, unsigned long addr)
-{
-       return writew(b,addr);
-}
-
-extern __inline__ void outl(unsigned int b, unsigned long addr)
-{
-       return writel(b,addr);
-}
-
-extern __inline__ void outsb(unsigned long addr, const void *buffer, int count)
-{
-	const unsigned char *buf=buffer;
-	while(count--) outb(*buf++, addr);
-}
-
-extern __inline__ void outsw(unsigned long addr, const void *buffer, int count)
-{
-	const unsigned short *buf=buffer;
-	while(count--) outw(*buf++, addr);
-}
-
-extern __inline__ void outsl(unsigned long addr, const void *buffer, int count)
-{
-	const unsigned long *buf=buffer;
-	while(count--) outl(*buf++, addr);
-}
+#define isa_readb(a) readb(sh_isa_slot(a))
+#define isa_readw(a) readw(sh_isa_slot(a))
+#define isa_readl(a) readl(sh_isa_slot(a))
+#define isa_writeb(b,a) writeb(b,sh_isa_slot(a))
+#define isa_writew(w,a) writew(w,sh_isa_slot(a))
+#define isa_writel(l,a) writel(l,sh_isa_slot(a))
+#define isa_memset_io(a,b,c) \
+  memset((void *)(sh_isa_slot((unsigned long)a)),(b),(c))
+#define isa_memcpy_fromio(a,b,c) \
+  memcpy((a),(void *)(sh_isa_slot((unsigned long)(b))),(c))
+#define isa_memcpy_toio(a,b,c) \
+  memcpy((void *)(sh_isa_slot((unsigned long)(a))),(b),(c))
 
 #define ctrl_in(addr)		*(addr)
 #define ctrl_out(data,addr)	*(addr) = (data)
 
 extern __inline__ unsigned long ctrl_inb(unsigned long addr)
 {
-       return *(volatile unsigned char*)addr;
+	return *(volatile unsigned char*)addr;
 }
 
 extern __inline__ unsigned long ctrl_inw(unsigned long addr)
 {
-       return *(volatile unsigned short*)addr;
+	return *(volatile unsigned short*)addr;
 }
 
 extern __inline__ unsigned long ctrl_inl(unsigned long addr)
 {
-       return *(volatile unsigned long*)addr;
+	return *(volatile unsigned long*)addr;
 }
 
 extern __inline__ void ctrl_outb(unsigned char b, unsigned long addr)
 {
-       *(volatile unsigned char*)addr = b;
+	*(volatile unsigned char*)addr = b;
 }
 
 extern __inline__ void ctrl_outw(unsigned short b, unsigned long addr)

@@ -300,7 +300,6 @@ void use_config(const char * name, int len)
  *    m|#\s*include\s*<(.*?>"|
  *    m|#\s*(?define|undef)\s*CONFIG_(\w*)|
  *    m|(?!\w)CONFIG_|
- *    m|__SMP__|
  *
  * About 98% of the CPU time is spent here, and most of that is in
  * the 'start' paragraph.  Because the current characters are
@@ -325,7 +324,6 @@ __start:
 	CASE('"',  dquote);
 	CASE('#',  pound);
 	CASE('C',  cee);
-	CASE('_',  underscore);
 	goto start;
 
 /* / */
@@ -464,18 +462,6 @@ cee_CONFIG_word:
 		goto cee_CONFIG_word;
 	use_config(map_dot, next - map_dot - 1);
 	goto __start;
-
-/* __SMP__ */
-underscore:
-	GETNEXT NOTCASE('_', __start);
-	GETNEXT NOTCASE('S', __start);
-	GETNEXT NOTCASE('M', __start);
-	GETNEXT NOTCASE('P', __start);
-	GETNEXT NOTCASE('_', __start);
-	GETNEXT NOTCASE('_', __start);
-	use_config("SMP", 3);
-	goto __start;
-
     }
 }
 
