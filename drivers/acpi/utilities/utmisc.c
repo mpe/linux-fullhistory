@@ -372,7 +372,7 @@ acpi_ut_strtoul64 (
 	u32                             base,
 	acpi_integer                    *ret_integer)
 {
-	u32                             this_digit;
+	u32                             this_digit = 0;
 	acpi_integer                    return_value = 0;
 	acpi_integer                    quotient;
 
@@ -441,21 +441,25 @@ acpi_ut_strtoul64 (
 			this_digit = ((u8) *string) - '0';
 		}
 		else {
+			if (base == 10) {
+				/* Digit is out of range */
+
+				goto error_exit;
+			}
+
 			this_digit = (u8) ACPI_TOUPPER (*string);
-			if (ACPI_IS_UPPER ((char) this_digit)) {
+			if (ACPI_IS_XDIGIT ((char) this_digit)) {
 				/* Convert ASCII Hex char to value */
 
 				this_digit = this_digit - 'A' + 10;
 			}
 			else {
-				goto error_exit;
+				/*
+				 * We allow non-hex chars, just stop now, same as end-of-string.
+				 * See ACPI spec, string-to-integer conversion.
+				 */
+				break;
 			}
-		}
-
-		/* Check to see if digit is out of range */
-
-		if (this_digit >= base) {
-			goto error_exit;
 		}
 
 		/* Divide the digit into the correct position */
@@ -470,6 +474,8 @@ acpi_ut_strtoul64 (
 		return_value += this_digit;
 		string++;
 	}
+
+	/* All done, normal exit */
 
 	*ret_integer = return_value;
 	return_ACPI_STATUS (AE_OK);
