@@ -2235,7 +2235,7 @@ struct proto tcpv6_prot = {
 	.sysctl_wmem		= sysctl_tcp_wmem,
 	.sysctl_rmem		= sysctl_tcp_rmem,
 	.max_header		= MAX_TCP_HEADER,
-	.slab_obj_size		= sizeof(struct tcp6_sock),
+	.obj_size		= sizeof(struct tcp6_sock),
 };
 
 static struct inet6_protocol tcpv6_protocol = {

@@ -281,14 +281,11 @@ static int inet_create(struct socket *sock, int protocol)
 	BUG_TRAP(answer_prot->slab != NULL);
 
 	err = -ENOBUFS;
-	sk = sk_alloc(PF_INET, GFP_KERNEL,
-		      answer_prot->slab_obj_size,
-		      answer_prot->slab);
+	sk = sk_alloc(PF_INET, GFP_KERNEL, answer_prot, 1);
 	if (sk == NULL)
 		goto out;
 
 	err = 0;
-	sk->sk_prot = answer_prot;
 	sk->sk_no_check = answer_no_check;
 	if (INET_PROTOSW_REUSE & answer_flags)
 		sk->sk_reuse = 1;
@@ -309,7 +306,6 @@ static int inet_create(struct socket *sock, int protocol)
 	inet->id = 0;
 
 	sock_init_data(sock, sk);
-	sk_set_owner(sk, sk->sk_prot->owner);
 
 	sk->sk_destruct	   = inet_sock_destruct;
 	sk->sk_family	   = PF_INET;
@@ -1026,17 +1022,17 @@ static int __init inet_init(void)
 		goto out;
 	}
 
-	rc = sk_alloc_slab(&tcp_prot, "tcp_sock");
+	rc = proto_register(&tcp_prot, 1);
 	if (rc)
 		goto out;
 
-	rc = sk_alloc_slab(&udp_prot, "udp_sock");
+	rc = proto_register(&udp_prot, 1);
 	if (rc)
-		goto out_tcp_free_slab;
+		goto out_unregister_tcp_proto;
 
-	rc = sk_alloc_slab(&raw_prot, "raw_sock");
+	rc = proto_register(&raw_prot, 1);
 	if (rc)
-		goto out_udp_free_slab;
+		goto out_unregister_udp_proto;
 
 	/*
 	 *	Tell SOCKET that we are alive... 
@@ -1110,10 +1106,10 @@ static int __init inet_init(void)
 	rc = 0;
 out:
 	return rc;
-out_tcp_free_slab:
-	sk_free_slab(&tcp_prot);
-out_udp_free_slab:
-	sk_free_slab(&udp_prot);
+out_unregister_tcp_proto:
+	proto_unregister(&tcp_prot);
+out_unregister_udp_proto:
+	proto_unregister(&udp_prot);
 	goto out;
 }
 

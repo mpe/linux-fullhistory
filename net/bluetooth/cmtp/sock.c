@@ -158,6 +158,12 @@ static struct proto_ops cmtp_sock_ops = {
 	.mmap		= sock_no_mmap
 };
 
+static struct proto cmtp_proto = {
+	.name		= "CMTP",
+	.owner		= THIS_MODULE,
+	.obj_size	= sizeof(struct bt_sock)
+};
+
 static int cmtp_sock_create(struct socket *sock, int protocol)
 {
 	struct sock *sk;
@@ -167,12 +173,11 @@ static int cmtp_sock_create(struct socket *sock, int protocol)
 	if (sock->type != SOCK_RAW)
 		return -ESOCKTNOSUPPORT;
 
-	if (!(sk = sk_alloc(PF_BLUETOOTH, GFP_KERNEL, sizeof(struct bt_sock), NULL)))
+	sk = sk_alloc(PF_BLUETOOTH, GFP_KERNEL, &cmtp_proto, 1);
+	if (!sk)
 		return -ENOMEM;
 
 	sock_init_data(sock, sk);
-
-	sk_set_owner(sk, THIS_MODULE);
 
 	sock->ops = &cmtp_sock_ops;
 
@@ -194,13 +199,28 @@ static struct net_proto_family cmtp_sock_family_ops = {
 
 int cmtp_init_sockets(void)
 {
-	bt_sock_register(BTPROTO_CMTP, &cmtp_sock_family_ops);
+	int err;
+
+	err = proto_register(&cmtp_proto, 0);
+	if (err < 0)
+		return err;
+
+	err = bt_sock_register(BTPROTO_CMTP, &cmtp_sock_family_ops);
+	if (err < 0)
+		goto error;
 
 	return 0;
+
+error:
+	BT_ERR("Can't register CMTP socket");
+	proto_unregister(&cmtp_proto);
+	return err;
 }
 
 void cmtp_cleanup_sockets(void)
 {
-	if (bt_sock_unregister(BTPROTO_CMTP))
+	if (bt_sock_unregister(BTPROTO_CMTP) < 0)
 		BT_ERR("Can't unregister CMTP socket");
+
+	proto_unregister(&cmtp_proto);
 }

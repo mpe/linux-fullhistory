@@ -4768,7 +4768,7 @@ struct proto sctp_prot = {
 	.hash        =	sctp_hash,
 	.unhash      =	sctp_unhash,
 	.get_port    =	sctp_get_port,
-	.slab_obj_size = sizeof(struct sctp_sock),
+	.obj_size    =  sizeof(struct sctp_sock),
 };
 
 #if defined(CONFIG_IPV6) || defined(CONFIG_IPV6_MODULE)
@@ -4792,6 +4792,6 @@ struct proto sctpv6_prot = {
 	.hash		= sctp_hash,
 	.unhash		= sctp_unhash,
 	.get_port	= sctp_get_port,
-	.slab_obj_size	= sizeof(struct sctp6_sock),
+	.obj_size	= sizeof(struct sctp6_sock),
 };
 #endif /* defined(CONFIG_IPV6) || defined(CONFIG_IPV6_MODULE) */

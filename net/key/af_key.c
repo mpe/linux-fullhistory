@@ -129,6 +129,12 @@ static void pfkey_remove(struct sock *sk)
 	pfkey_table_ungrab();
 }
 
+static struct proto key_proto = {
+	.name	  = "KEY",
+	.owner	  = THIS_MODULE,
+	.obj_size = sizeof(struct pfkey_sock),
+};
+
 static int pfkey_create(struct socket *sock, int protocol)
 {
 	struct sock *sk;
@@ -142,13 +148,12 @@ static int pfkey_create(struct socket *sock, int protocol)
 		return -EPROTONOSUPPORT;
 
 	err = -ENOMEM;
-	sk = sk_alloc(PF_KEY, GFP_KERNEL, sizeof(struct pfkey_sock), NULL);
+	sk = sk_alloc(PF_KEY, GFP_KERNEL, &key_proto, 1);
 	if (sk == NULL)
 		goto out;
 	
 	sock->ops = &pfkey_ops;
 	sock_init_data(sock, sk);
-	sk_set_owner(sk, THIS_MODULE);
 
 	sk->sk_family = PF_KEY;
 	sk->sk_destruct = pfkey_sock_destruct;
@@ -2858,16 +2863,38 @@ static void __exit ipsec_pfkey_exit(void)
 	xfrm_unregister_km(&pfkeyv2_mgr);
 	remove_proc_entry("net/pfkey", NULL);
 	sock_unregister(PF_KEY);
+	proto_unregister(&key_proto);
 }
 
 static int __init ipsec_pfkey_init(void)
 {
-	sock_register(&pfkey_family_ops);
+	int err = proto_register(&key_proto, 0);
+
+	if (err != 0)
+		goto out;
+
+	err = sock_register(&pfkey_family_ops);
+	if (err != 0)
+		goto out_unregister_key_proto;
 #ifdef CONFIG_PROC_FS
-	create_proc_read_entry("net/pfkey", 0, NULL, pfkey_read_proc, NULL);
+	err = -ENOMEM;
+	if (create_proc_read_entry("net/pfkey", 0, NULL, pfkey_read_proc, NULL) == NULL)
+		goto out_sock_unregister;
 #endif
-	xfrm_register_km(&pfkeyv2_mgr);
-	return 0;
+	err = xfrm_register_km(&pfkeyv2_mgr);
+	if (err != 0)
+		goto out_remove_proc_entry;
+out:
+	return err;
+out_remove_proc_entry:
+#ifdef CONFIG_PROC_FS
+	remove_proc_entry("net/pfkey", NULL);
+out_sock_unregister:
+#endif
+	sock_unregister(PF_KEY);
+out_unregister_key_proto:
+	proto_unregister(&key_proto);
+	goto out;
 }
 
 module_init(ipsec_pfkey_init);

@@ -555,6 +555,12 @@ static int econet_release(struct socket *sock)
 	return 0;
 }
 
+static struct proto econet_proto = {
+	.name	  = "ECONET",
+	.owner	  = THIS_MODULE,
+	.obj_size = sizeof(struct econet_sock),
+};
+
 /*
  *	Create an Econet socket
  */
@@ -572,15 +578,13 @@ static int econet_create(struct socket *sock, int protocol)
 	sock->state = SS_UNCONNECTED;
 
 	err = -ENOBUFS;
-	sk = sk_alloc(PF_ECONET, GFP_KERNEL,
-		      sizeof(struct econet_sock), NULL);
+	sk = sk_alloc(PF_ECONET, GFP_KERNEL, &econet_proto, 1);
 	if (sk == NULL)
 		goto out;
 
 	sk->sk_reuse = 1;
 	sock->ops = &econet_ops;
-	sock_init_data(sock,sk);
-	sk_set_owner(sk, THIS_MODULE);
+	sock_init_data(sock, sk);
 
 	eo = ec_sk(sk);
 	sock_reset_flag(sk, SOCK_ZAPPED);
@@ -1096,10 +1100,15 @@ static void __exit econet_proto_exit(void)
 #endif
 	unregister_netdevice_notifier(&econet_netdev_notifier);
 	sock_unregister(econet_family_ops.family);
+	proto_unregister(&econet_proto);
 }
 
 static int __init econet_proto_init(void)
 {
+	int err = proto_register(&econet_proto, 0);
+
+	if (err != 0)
+		goto out;
 	sock_register(&econet_family_ops);
 #ifdef CONFIG_ECONET_AUNUDP
 	spin_lock_init(&aun_queue_lock);
@@ -1109,7 +1118,8 @@ static int __init econet_proto_init(void)
 	econet_hw_initialise();
 #endif
 	register_netdevice_notifier(&econet_netdev_notifier);
-	return 0;
+out:
+	return err;
 }
 
 module_init(econet_proto_init);

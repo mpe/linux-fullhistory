@@ -1071,6 +1071,12 @@ static int irda_connect(struct socket *sock, struct sockaddr *uaddr,
 	return 0;
 }
 
+static struct proto irda_proto = {
+	.name	  = "IRDA",
+	.owner	  = THIS_MODULE,
+	.obj_size = sizeof(struct irda_sock),
+};
+
 /*
  * Function irda_create (sock, protocol)
  *
@@ -1095,8 +1101,7 @@ static int irda_create(struct socket *sock, int protocol)
 	}
 
 	/* Allocate networking socket */
-	sk = sk_alloc(PF_IRDA, GFP_ATOMIC,
-		      sizeof(struct irda_sock), NULL);
+	sk = sk_alloc(PF_IRDA, GFP_ATOMIC, &irda_proto, 1);
 	if (sk == NULL)
 		return -ENOMEM;
 
@@ -1107,7 +1112,6 @@ static int irda_create(struct socket *sock, int protocol)
 
 	/* Initialise networking socket struct */
 	sock_init_data(sock, sk);	/* Note : set sk->sk_refcnt to 1 */
-	sk_set_owner(sk, THIS_MODULE);
 	sk->sk_family = PF_IRDA;
 	sk->sk_protocol = protocol;
 
@@ -2561,9 +2565,12 @@ SOCKOPS_WRAP(irda_ultra, PF_IRDA);
  */
 int __init irsock_init(void)
 {
-	sock_register(&irda_family_ops);
+	int rc = proto_register(&irda_proto, 0);
 
-	return 0;
+	if (rc == 0)
+		rc = sock_register(&irda_family_ops);
+
+	return rc;
 }
 
 /*
@@ -2575,6 +2582,5 @@ int __init irsock_init(void)
 void __exit irsock_cleanup(void)
 {
 	sock_unregister(PF_IRDA);
-
-        return;
+	proto_unregister(&irda_proto);
 }

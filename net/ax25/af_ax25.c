@@ -760,6 +760,16 @@ out:
 	return res;
 }
 
+/*
+ * XXX: when creating ax25_sock we should update the .obj_size setting
+ * below.
+ */
+static struct proto ax25_proto = {
+	.name	  = "AX25",
+	.owner	  = THIS_MODULE,
+	.obj_size = sizeof(struct sock),
+};
+
 static int ax25_create(struct socket *sock, int protocol)
 {
 	struct sock *sk;
@@ -810,7 +820,7 @@ static int ax25_create(struct socket *sock, int protocol)
 		return -ESOCKTNOSUPPORT;
 	}
 
-	if ((sk = sk_alloc(PF_AX25, GFP_ATOMIC, 1, NULL)) == NULL)
+	if ((sk = sk_alloc(PF_AX25, GFP_ATOMIC, &ax25_proto, 1)) == NULL)
 		return -ENOMEM;
 
 	ax25 = sk->sk_protinfo = ax25_create_cb();
@@ -820,7 +830,6 @@ static int ax25_create(struct socket *sock, int protocol)
 	}
 
 	sock_init_data(sock, sk);
-	sk_set_owner(sk, THIS_MODULE);
 
 	sk->sk_destruct = ax25_free_sock;
 	sock->ops    = &ax25_proto_ops;
@@ -836,7 +845,7 @@ struct sock *ax25_make_new(struct sock *osk, struct ax25_dev *ax25_dev)
 	struct sock *sk;
 	ax25_cb *ax25, *oax25;
 
-	if ((sk = sk_alloc(PF_AX25, GFP_ATOMIC, 1, NULL)) == NULL)
+	if ((sk = sk_alloc(PF_AX25, GFP_ATOMIC, osk->sk_prot, 1)) == NULL)
 		return NULL;
 
 	if ((ax25 = ax25_create_cb()) == NULL) {
@@ -856,7 +865,6 @@ struct sock *ax25_make_new(struct sock *osk, struct ax25_dev *ax25_dev)
 	}
 
 	sock_init_data(NULL, sk);
-	sk_set_owner(sk, THIS_MODULE);
 
 	sk->sk_destruct = ax25_free_sock;
 	sk->sk_type     = osk->sk_type;
@@ -1998,6 +2006,11 @@ EXPORT_SYMBOL(ax25_display_timer);
 
 static int __init ax25_init(void)
 {
+	int rc = proto_register(&ax25_proto, 0);
+
+	if (rc != 0)
+		goto out;
+
 	sock_register(&ax25_family_ops);
 	dev_add_pack(&ax25_packet_type);
 	register_netdevice_notifier(&ax25_dev_notifier);
@@ -2006,8 +2019,8 @@ static int __init ax25_init(void)
 	proc_net_fops_create("ax25_route", S_IRUGO, &ax25_route_fops);
 	proc_net_fops_create("ax25", S_IRUGO, &ax25_info_fops);
 	proc_net_fops_create("ax25_calls", S_IRUGO, &ax25_uid_fops);
-
-	return 0;
+out:
+	return rc;
 }
 module_init(ax25_init);
 
@@ -2032,5 +2045,6 @@ static void __exit ax25_exit(void)
 	dev_remove_pack(&ax25_packet_type);
 
 	sock_unregister(PF_AX25);
+	proto_unregister(&ax25_proto);
 }
 module_exit(ax25_exit);
