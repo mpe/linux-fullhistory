@@ -29,7 +29,8 @@
  * 1) We use only one TLB entry for large number of on-chip I/O devices.
  *
  * 2) We can easily set the Section attributes to XCB=101 on the IXP2400
- *    as required per erratum #66.
+ *    as required per erratum #66.  We accomplish this by using a
+ *    new MT_IXP2000_DEVICE memory type with the bits set as required.
  *
  * CAP stands for CSR Access Proxy
  */

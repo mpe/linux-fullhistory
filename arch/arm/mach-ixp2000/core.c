@@ -133,6 +133,22 @@ static struct uart_port ixp2000_serial_port = {
 
 void __init ixp2000_map_io(void)
 {
+	extern unsigned int processor_id;
+
+	/*
+	 * On IXP2400 CPUs we need to use MT_IXP2000_DEVICE for
+	 * tweaking the PMDs so XCB=101. On IXP2800s we use the normal
+	 * PMD flags.
+	 */
+	if ((processor_id & 0xfffffff0) == 0x69054190) {
+		int i;
+
+		printk(KERN_INFO "Enabling IXP2400 erratum #66 workaround\n");
+
+		for(i=0;i<ARRAY_SIZE(ixp2000_io_desc);i++)
+			ixp2000_io_desc[i].type = MT_IXP2000_DEVICE;
+	}
+
 	iotable_init(ixp2000_io_desc, ARRAY_SIZE(ixp2000_io_desc));
 	early_serial_setup(&ixp2000_serial_port);
 
