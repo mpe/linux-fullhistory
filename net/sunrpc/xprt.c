@@ -573,7 +573,6 @@ udp_data_ready(struct sock *sk, int len)
 	struct rpc_rqst *rovr;
 	struct sk_buff	*skb;
 	struct iovec	iov[MAX_IOVEC];
-	mm_segment_t	oldfs;
 	int		err, repsize, copied;
 
 	dprintk("RPC:      udp_data_ready...\n");
@@ -603,9 +602,8 @@ udp_data_ready(struct sock *sk, int len)
 
 	/* Okay, we have it. Copy datagram... */
 	memcpy(iov, rovr->rq_rvec, rovr->rq_rnr * sizeof(iov[0]));
-	oldfs = get_fs(); set_fs(get_ds());
-	skb_copy_datagram_iovec(skb, 8, iov, copied);
-	set_fs(oldfs);
+	/* This needs to stay tied with the usermode skb_copy_dagram... */
+	memcpy_tokerneliovec(iov, skb->data+8, copied);
 
 	xprt_complete_rqst(xprt, rovr, copied);
 

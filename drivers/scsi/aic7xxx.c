@@ -6791,6 +6791,7 @@ aic7xxx_alloc(Scsi_Host_Template *sht, struct aic7xxx_host *temp)
       p->type = temp->type;
       p->unpause = temp->unpause;
       p->pause = temp->pause;
+      p->pdev = temp->pdev;
       p->pci_bus = temp->pci_bus;
       p->pci_device_fn = temp->pci_device_fn;
       p->bios_address = temp->bios_address;

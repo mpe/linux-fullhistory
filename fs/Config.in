@@ -67,11 +67,9 @@ if [ "$CONFIG_AFFS_FS" != "n" ]; then
   define_bool CONFIG_AMIGA_PARTITION y
 fi
 tristate 'UFS filesystem support' CONFIG_UFS_FS
-if [ "$CONFIG_UFS_FS" != "n" ]; then
-  bool 'BSD disklabel (FreeBSD partition tables) support' CONFIG_BSD_DISKLABEL
-  bool 'SMD disklabel (Sun partition tables) support' CONFIG_SMD_DISKLABEL
-  bool 'Solaris (x86) partition table support' CONFIG_SOLARIS_X86_PARTITION
-fi
+bool 'BSD disklabel (BSD partition tables) support' CONFIG_BSD_DISKLABEL
+bool 'SMD disklabel (Sun partition tables) support' CONFIG_SMD_DISKLABEL
+bool 'Solaris (x86) partition table support' CONFIG_SOLARIS_X86_PARTITION
 if [ "$CONFIG_UNIX98_PTYS" = "y" ]; then
   tristate '/dev/pts filesystem for Unix98 PTYs' CONFIG_DEVPTS_FS
 fi

@@ -1027,6 +1027,7 @@ static int ppa_engine(ppa_struct * tmp, Scsi_Cmnd * cmd)
 		retv--;
 
 	    if (retv)
+	    {
 		if ((jiffies - tmp->jstart) > (1 * HZ)) {
 		    printk("ppa: Parallel port cable is unplugged!!\n");
 		    ppa_fail(host_no, DID_BUS_BUSY);
@@ -1035,6 +1036,7 @@ static int ppa_engine(ppa_struct * tmp, Scsi_Cmnd * cmd)
 		    ppa_disconnect(host_no);
 		    return 1;	/* Try again in a jiffy */
 		}
+	    }
 	    cmd->SCp.phase++;
 	}
 

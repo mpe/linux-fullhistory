@@ -32,6 +32,7 @@
 #include <linux/major.h>
 #include <linux/blk.h>
 #include <linux/init.h>
+#include <linux/smp_lock.h>
 
 #include <asm/system.h>
 #include <asm/io.h>
@@ -1115,15 +1116,47 @@ asmlinkage void __init start_kernel(void)
 	check_bugs();
 	printk("POSIX conformance testing by UNIFIX\n");
 
-	smp_init();
-
-	/*
-	 * Ok, the machine is now initialized. None of the devices
-	 * have been touched yet, but the CPU subsystem is up and
-	 * running, and memory management works.
-	 *
-	 * Now we can finally start doing some real work..
+	/* 
+	 *	We count on the initial thread going ok 
+	 *	Like idlers init is an unlocked kernel thread, which will
+	 *	make syscalls (and thus be locked).
 	 */
+	smp_init();
+	kernel_thread(init, NULL, CLONE_FS | CLONE_FILES | CLONE_SIGHAND);
+ 	cpu_idle(NULL);
+}
+
+#ifdef CONFIG_BLK_DEV_INITRD
+static int do_linuxrc(void * shell)
+{
+	static char *argv[] = { "linuxrc", NULL, };
+
+	close(0);close(1);close(2);
+	setsid();
+	(void) open("/dev/console",O_RDWR,0);
+	(void) dup(0);
+	(void) dup(0);
+	return execve(shell, argv, envp_init);
+}
+
+static void __init no_initrd(char *s,int *ints)
+{
+	mount_initrd = 0;
+}
+#endif
+
+/*
+ * Ok, the machine is now initialized. None of the devices
+ * have been touched yet, but the CPU subsystem is up and
+ * running, and memory and process management works.
+ *
+ * Now we can finally start doing some real work..
+ */
+static void __init do_basic_setup(void)
+{
+#ifdef CONFIG_BLK_DEV_INITRD
+	int real_root_mountflags;
+#endif
 
 #if defined(CONFIG_MTRR)	/* Do this after SMP initialization */
 /*
@@ -1161,49 +1194,6 @@ asmlinkage void __init start_kernel(void)
 	ecard_init();
 #endif
 
-	/* 
-	 *	We count on the initial thread going ok 
-	 *	Like idlers init is an unlocked kernel thread, which will
-	 *	make syscalls (and thus be locked).
-	 */
-	kernel_thread(init, NULL, CLONE_FS | CLONE_FILES | CLONE_SIGHAND);
-/*
- * task[0] is meant to be used as an "idle" task: it may not sleep, but
- * it might do some general things like count free pages or it could be
- * used to implement a reasonable LRU algorithm for the paging routines:
- * anything that can be useful, but shouldn't take time from the real
- * processes.
- *
- * Right now task[0] just does an infinite idle loop.
- */
- 	cpu_idle(NULL);
-}
-
-#ifdef CONFIG_BLK_DEV_INITRD
-static int do_linuxrc(void * shell)
-{
-	static char *argv[] = { "linuxrc", NULL, };
-
-	close(0);close(1);close(2);
-	setsid();
-	(void) open("/dev/console",O_RDWR,0);
-	(void) dup(0);
-	(void) dup(0);
-	return execve(shell, argv, envp_init);
-}
-
-static void __init no_initrd(char *s,int *ints)
-{
-	mount_initrd = 0;
-}
-#endif
-
-static void __init do_basic_setup(void)
-{
-#ifdef CONFIG_BLK_DEV_INITRD
-	int real_root_mountflags;
-#endif
-
 	/* Networking initialization needs a process context */ 
 	sock_init();
 
@@ -1222,6 +1212,7 @@ static void __init do_basic_setup(void)
 #endif
 
 #ifdef CONFIG_BLK_DEV_INITRD
+
 	real_root_dev = ROOT_DEV;
 	real_root_mountflags = root_mountflags;
 	if (initrd_start && mount_initrd) root_mountflags &= ~MS_RDONLY;
@@ -1278,6 +1269,7 @@ static void __init do_basic_setup(void)
 
 static int init(void * unused)
 {
+	lock_kernel();
 	do_basic_setup();
 
 	/*
@@ -1286,6 +1278,7 @@ static int init(void * unused)
 	 * initmem segments and start the user-mode stuff..
 	 */
 	free_initmem();
+	unlock_kernel();
 
 	if (open("/dev/console", O_RDWR, 0) < 0)
 		printk("Warning: unable to open an initial console.\n");

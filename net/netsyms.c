@@ -93,6 +93,7 @@ EXPORT_SYMBOL(sock_unregister);
 
 /* Socket layer support routines */
 EXPORT_SYMBOL(memcpy_fromiovec);
+EXPORT_SYMBOL(memcpy_tokerneliovec);
 EXPORT_SYMBOL(sock_create);
 EXPORT_SYMBOL(sock_alloc);
 EXPORT_SYMBOL(sock_release);

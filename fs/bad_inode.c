@@ -15,7 +15,7 @@
  * so that a bad root inode can at least be unmounted. To do this
  * we must dput() the base and return the dentry with a dget().
  */
-static struct dentry * bad_follow_link(struct dentry *dent, struct dentry *base)
+static struct dentry * bad_follow_link(struct dentry *dent, struct dentry *base, unsigned int follow)
 {
 	dput(base);
 	return dget(dent);

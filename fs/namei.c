@@ -361,10 +361,6 @@ struct dentry * lookup_dentry(const char * name, struct dentry * base, unsigned 
 		unsigned int follow;
 		unsigned int c;
 
-		dentry = ERR_PTR(-ENOENT);
-		if (!inode)
-			break;
-			
 		err = permission(inode, MAY_EXEC);
 		dentry = ERR_PTR(err);
  		if (err)
@@ -429,16 +425,17 @@ struct dentry * lookup_dentry(const char * name, struct dentry * base, unsigned 
 		if (IS_ERR(base))
 			goto return_base;
 
-		dentry = ERR_PTR(-ENOTDIR);
+		dentry = ERR_PTR(-ENOENT);
 		inode = base->d_inode;
 		if (follow & FOLLOW_DIRECTORY) {
-			if (!inode || !inode->i_op || !inode->i_op->lookup)
+			if (!inode)
 				break;
+			dentry = ERR_PTR(-ENOTDIR); 
+			if (!inode->i_op || !inode->i_op->lookup)
+				break;
+			if (follow & FOLLOW_CONTINUE)
+				continue;
 		}
-
-		if (follow & FOLLOW_CONTINUE)
-			continue;
-
 return_base:
 		return base;
 	}

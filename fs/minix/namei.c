@@ -88,7 +88,7 @@ static int minix_hash(struct dentry *dentry, struct qstr *qstr)
 {
 	unsigned long hash;
 	int i;
-	const char *name;
+	const unsigned char *name;
 
 	i = dentry->d_inode->i_sb->u.minix_sb.s_namelen;
 	if (i >= qstr->len)

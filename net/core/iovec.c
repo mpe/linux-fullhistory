@@ -95,6 +95,30 @@ out:
 }
 
 /*
+ *	In kernel copy to iovec. Returns -EFAULT on error.
+ *
+ *	Note: this modifies the original iovec.
+ */
+ 
+void memcpy_tokerneliovec(struct iovec *iov, unsigned char *kdata, int len)
+{
+	while(len>0)
+	{
+		if(iov->iov_len)
+		{
+			int copy = min(iov->iov_len, len);
+			memcpy(iov->iov_base, kdata, copy);
+			kdata+=copy;
+			len-=copy;
+			iov->iov_len-=copy;
+			iov->iov_base+=copy;
+		}
+		iov++;
+	}
+}
+
+
+/*
  *	Copy iovec to kernel. Returns -EFAULT on error.
  *
  *	Note: this modifies the original iovec.

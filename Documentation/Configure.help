@@ -2457,8 +2457,9 @@ CONFIG_UNIX
   be inserted in and removed from the running kernel whenever you
   want). The module will be called unix.o. If you want to compile it
   as a module, say M here and read Documentation/modules.txt. If you
-  try building this as a module and you are running kerneld, be sure
-  to add 'alias net-pf-1 unix' to your /etc/conf.module file. 
+  try building this as a module and you have said Y to "Kernel module
+  loader support" above, be sure to add 'alias net-pf-1 unix' to your
+  /etc/conf.modules file.
 
   If unsure, say Y.
 
@@ -7033,8 +7034,8 @@ CONFIG_SERIAL
   Documentation/modules.txt. The module will be called serial.o.
   [WARNING: Do not compile this driver as a module if you are using
   non-standard serial ports, since the configuration information will
-  be lost when kerneld automatically unloads the driver. This
-  limitation may be lifted in the future.] 
+  be lost if you unload the driver. This limitation may be lifted in
+  the future.]
 
   BTW1: If you have a mouseman serial mouse which is not recognized by
   the X window system, try running gpm first. 
