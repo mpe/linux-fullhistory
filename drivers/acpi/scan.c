@@ -383,7 +383,15 @@ setup_sys_fs_device_files (
 	struct acpi_device *dev,
 	acpi_device_sysfs_files *func)
 {
-	if (dev->flags.ejectable == 1)
+	acpi_status		status;
+	acpi_handle		temp = NULL;
+
+	/*
+	 * If device has _EJ0, 'eject' file is created that is used to trigger
+	 * hot-removal function from userland.
+	 */
+	status = acpi_get_handle(dev->handle, "_EJ0", &temp);
+	if (ACPI_SUCCESS(status))
 		(*(func))(&dev->kobj,&acpi_device_attr_eject.attr);
 }
 
