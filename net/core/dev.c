@@ -1427,13 +1427,10 @@ int netif_rx(struct sk_buff *skb)
 	struct softnet_data *queue;
 	unsigned long flags;
 
-#ifdef CONFIG_NETPOLL
-	if (skb->dev->netpoll_rx && netpoll_rx(skb)) {
-		kfree_skb(skb);
+	/* if netpoll wants it, pretend we never saw it */
+	if (netpoll_rx(skb))
 		return NET_RX_DROP;
-	}
-#endif
-	
+
 	if (!skb->stamp.tv_sec)
 		net_timestamp(&skb->stamp);
 
@@ -1629,12 +1626,9 @@ int netif_receive_skb(struct sk_buff *skb)
 	int ret = NET_RX_DROP;
 	unsigned short type;
 
-#ifdef CONFIG_NETPOLL
-	if (skb->dev->netpoll_rx && skb->dev->poll && netpoll_rx(skb)) {
-		kfree_skb(skb);
+	/* if we've gotten here through NAPI, check netpoll */
+	if (skb->dev->poll && netpoll_rx(skb))
 		return NET_RX_DROP;
-	}
-#endif
 
 	if (!skb->stamp.tv_sec)
 		net_timestamp(&skb->stamp);

@@ -368,7 +368,7 @@ static void arp_reply(struct sk_buff *skb)
 	netpoll_send_skb(np, send_skb);
 }
 
-int netpoll_rx(struct sk_buff *skb)
+int __netpoll_rx(struct sk_buff *skb)
 {
 	int proto, len, ulen;
 	struct iphdr *iph;
@@ -440,12 +440,18 @@ int netpoll_rx(struct sk_buff *skb)
 				    (char *)(uh+1),
 				    ulen - sizeof(struct udphdr));
 
+		kfree_skb(skb);
 		return 1;
 	}
 	spin_unlock_irqrestore(&rx_list_lock, flags);
 
 out:
-	return atomic_read(&trapped);
+	if (atomic_read(&trapped)) {
+		kfree_skb(skb);
+		return 1;
+	}
+
+	return 0;
 }
 
 int netpoll_parse_options(struct netpoll *np, char *opt)
