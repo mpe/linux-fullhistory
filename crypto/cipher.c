@@ -117,17 +117,21 @@ static int crypt(struct crypto_tfm *tfm,
 
 		in_place = scatterwalk_samebuf(&walk_in, &walk_out);
 
-		src_p = prepare_src(&walk_in, bsize, tmp_src, in_place);
-		dst_p = prepare_dst(&walk_out, bsize, tmp_dst, in_place);
+		do {
+			src_p = prepare_src(&walk_in, bsize, tmp_src,
+					    in_place);
+			dst_p = prepare_dst(&walk_out, bsize, tmp_dst,
+					    in_place);
 
-		nbytes -= bsize;
+			prfn(tfm, dst_p, src_p, crfn, enc, info);
 
-		prfn(tfm, dst_p, src_p, crfn, enc, info);
+			complete_src(&walk_in, bsize, src_p, in_place);
+			complete_dst(&walk_out, bsize, dst_p, in_place);
 
-		complete_src(&walk_in, bsize, src_p, in_place);
+			nbytes -= bsize;
+		} while (nbytes && !scatterwalk_across_pages(&walk_in, bsize));
+
 		scatterwalk_done(&walk_in, 0, nbytes);
-
-		complete_dst(&walk_out, bsize, dst_p, in_place);
 		scatterwalk_done(&walk_out, 1, nbytes);
 
 		if (!nbytes)
