@@ -1,4 +1,4 @@
-/*  $Id: process.c,v 1.148 2000/07/10 23:22:32 anton Exp $
+/*  $Id: process.c,v 1.150 2000/07/11 18:49:22 anton Exp $
  *  linux/arch/sparc/kernel/process.c
  *
  *  Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -126,9 +126,10 @@ int cpu_idle(void)
 
 extern char reboot_command [];
 
+extern int serial_console;
+
 #ifdef CONFIG_SUN_CONSOLE
 extern void (*prom_palette)(int);
-extern int serial_console;
 #endif
 
 void machine_halt(void)
@@ -169,7 +170,7 @@ void machine_restart(char * cmd)
 void machine_power_off(void)
 {
 #ifdef CONFIG_SUN_AUXIO
-	if (auxio_power_register)
+	if (auxio_power_register && !serial_console)
 		*auxio_power_register |= AUXIO_POWER_OFF;
 #endif
 	machine_halt();

@@ -1,4 +1,4 @@
-/* $Id: entry.S,v 1.116 2000/06/19 06:24:37 davem Exp $
+/* $Id: entry.S,v 1.117 2000/07/11 02:21:12 davem Exp $
  * arch/sparc64/kernel/entry.S:  Sparc64 trap low-level entry points.
  *
  * Copyright (C) 1995,1997 David S. Miller (davem@caip.rutgers.edu)
@@ -1094,3 +1094,58 @@ __flushw_user:
 	 restore	%g0, %g0, %g0
 2:	retl
 	 nop
+
+/* This need not obtain the xtime_lock as it is coded in
+ * an implicitly SMP safe way already.
+ */
+	.align		64
+	.globl		do_gettimeofday
+do_gettimeofday:	/* %o0 = timevalp */
+	/* Load doubles must be used on xtime so that what we get
+	 * is guarenteed to be atomic, this is why we can run this
+	 * with interrupts on full blast.  Don't touch this... -DaveM
+	 *
+	 * Note with time_t changes to the timeval type, I must now use
+	 * nucleus atomic quad 128-bit loads.
+	 */
+	sethi	%hi(timer_tick_offset), %g3
+	sethi	%hi(xtime), %g2
+	sethi	%hi(timer_tick_compare), %g1
+	ldx	[%g3 + %lo(timer_tick_offset)], %g3
+	or	%g2, %lo(xtime), %g2
+	or	%g1, %lo(timer_tick_compare), %g1
+1:	ldda	[%g2] ASI_NUCLEUS_QUAD_LDD, %o4
+	rd	%tick, %o1
+	ldx	[%g1], %g7
+	ldda	[%g2] ASI_NUCLEUS_QUAD_LDD, %o2
+	xor	%o4, %o2, %o2
+	xor	%o5, %o3, %o3
+	orcc	%o2, %o3, %g0
+	bne,pn	%xcc, 1b
+	 sethi	%hi(wall_jiffies), %o2
+	sethi	%hi(jiffies), %o3
+	ldx	[%o2 + %lo(wall_jiffies)], %o2
+	ldx	[%o3 + %lo(jiffies)], %o3
+	sub	%o3, %o2, %o2
+	sethi	%hi(timer_ticks_per_usec_quotient), %o3
+	add	%g3, %o1, %o1
+	ldx	[%o3 + %lo(timer_ticks_per_usec_quotient)], %o3
+	sub	%o1, %g7, %o1
+	mulx	%o3, %o1, %o1
+	brz,pt	%o2, 1f
+	 srlx	%o1, 32, %o1
+	sethi	%hi(10000), %g2
+	or	%g2, %lo(10000), %g2
+	add	%o1, %g2, %o1
+1:	sethi	%hi(1000000), %o2
+	srlx	%o5, 32, %o5
+	or	%o2, %lo(1000000), %o2
+	add	%o5, %o1, %o5
+	cmp	%o5, %o2
+	bl,a,pn	%xcc, 1f
+	 stx	%o4, [%o0 + 0x0]
+	add	%o4, 0x1, %o4
+	sub	%o5, %o2, %o5
+	stx	%o4, [%o0 + 0x0]
+1:	retl
+	 st	%o5, [%o0 + 0x8]

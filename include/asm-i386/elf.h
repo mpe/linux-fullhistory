@@ -19,7 +19,8 @@ typedef struct user_fxsr_struct elf_fpxregset_t;
 /*
  * This is used to ensure we don't load something for the wrong architecture.
  */
-#define elf_check_arch(x) ( ((x) == EM_386) || ((x) == EM_486) )
+#define elf_check_arch(x) \
+	(((x)->e_machine == EM_386) || ((x)->e_machine == EM_486))
 
 /*
  * These are used to set parameters in the core dumps.

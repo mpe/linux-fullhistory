@@ -36,7 +36,7 @@ typedef struct {
  * This is used to ensure we don't load something for the wrong architecture.
  */
 #ifndef elf_check_arch
-#define elf_check_arch(x) ((x) == ELF_ARCH)	/* Might be EM_SPARCV9 or EM_SPARC */
+#define elf_check_arch(x) ((x)->e_machine == ELF_ARCH)	/* Might be EM_SPARCV9 or EM_SPARC */
 #endif
 
 #define USE_ELF_CORE_DUMP

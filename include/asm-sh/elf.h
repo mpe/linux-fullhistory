@@ -19,7 +19,7 @@ typedef struct user_fpu_struct elf_fpregset_t;
 /*
  * This is used to ensure we don't load something for the wrong architecture.
  */
-#define elf_check_arch(x) ( (x) == EM_SH )
+#define elf_check_arch(x) ( (x)->e_machine == EM_SH )
 
 /*
  * These are used to set parameters in the core dumps.

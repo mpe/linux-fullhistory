@@ -59,7 +59,7 @@ typedef struct {
 /*
  * This is used to ensure we don't load something for the wrong architecture.
  */
-#define elf_check_arch(x) ((x) == EM_SPARC)
+#define elf_check_arch(x) ((x)->e_machine == EM_SPARC)
 
 /*
  * These are used to set parameters in the core dumps.

@@ -19,7 +19,7 @@ typedef struct user_m68kfp_struct elf_fpregset_t;
 /*
  * This is used to ensure we don't load something for the wrong architecture.
  */
-#define elf_check_arch(x) ((x) == EM_68K)
+#define elf_check_arch(x) ((x)->e_machine == EM_68K)
 
 /*
  * These are used to set parameters in the core dumps.

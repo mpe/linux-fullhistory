@@ -15,9 +15,33 @@ typedef double elf_fpreg_t;
 typedef elf_fpreg_t elf_fpregset_t[ELF_NFPREG];
 
 /*
- * This is used to ensure we don't load something for the wrong architecture.
+ * This is used to ensure we don't load something for the wrong architecture
+ * and also rejects IRIX binaries.
  */
-#define elf_check_arch(x) ((x) == EM_MIPS || (x) == EM_MIPS_RS4_BE)
+#define elf_check_arch(hdr)						\
+({									\
+	int __res = 0;							\
+	struct elfhdr *__h = (hdr);					\
+									\
+	if ((__h->e_machine != EM_MIPS) && (__h->e_machine != EM_MIPS))	\
+		__res = -ENOEXEC;					\
+	if (__h->e_flags & EF_MIPS_ARCH)				\
+		__res = -ENOEXEC;					\
+									\
+	__res;								\
+})
+
+/* This one accepts IRIX binaries.  */
+#define irix_elf_check_arch(hdr)					\
+({									\
+	int __res = 0;							\
+	struct elfhdr *__h = (hdr);					\
+									\
+	if ((__h->e_machine != EM_MIPS) && (__h->e_machine != EM_MIPS))	\
+		__res = -ENOEXEC;					\
+									\
+	__res;								\
+})
 
 /*
  * These are used to set parameters in the core dumps.

@@ -1,4 +1,4 @@
-/* $Id: time.c,v 1.26 2000/05/09 17:40:14 davem Exp $
+/* $Id: time.c,v 1.28 2000/07/11 02:21:12 davem Exp $
  * time.c: UltraSparc timer and TOD clock support.
  *
  * Copyright (C) 1997 David S. Miller (davem@caip.rutgers.edu)
@@ -46,8 +46,8 @@ static int set_rtc_mmss(unsigned long);
  *       interrupts, one at level14 and one with softint bit 0.
  */
 unsigned long timer_tick_offset;
-static unsigned long timer_tick_compare;
-static unsigned long timer_ticks_per_usec_quotient;
+unsigned long timer_tick_compare;
+unsigned long timer_ticks_per_usec_quotient;
 
 static __inline__ void timer_check_rtc(void)
 {
@@ -500,58 +500,6 @@ static __inline__ unsigned long do_gettimeoffset(void)
 		: "g1", "g2");
 
 	return (ticks * timer_ticks_per_usec_quotient) >> 32UL;
-}
-
-/* This need not obtain the xtime_lock as it is coded in
- * an implicitly SMP safe way already.
- */
-void do_gettimeofday(struct timeval *tv)
-{
-	/* Load doubles must be used on xtime so that what we get
-	 * is guarenteed to be atomic, this is why we can run this
-	 * with interrupts on full blast.  Don't touch this... -DaveM
-	 *
-	 * Note with time_t changes to the timeval type, I must now use
-	 * nucleus atomic quad 128-bit loads.
-	 */
-	__asm__ __volatile__("
-	sethi	%hi(timer_tick_offset), %g3
-	sethi	%hi(xtime), %g2
-	sethi	%hi(timer_tick_compare), %g1
-	ldx	[%g3 + %lo(timer_tick_offset)], %g3
-	or	%g2, %lo(xtime), %g2
-	or	%g1, %lo(timer_tick_compare), %g1
-1:	ldda	[%g2] 0x24, %o4
-	rd	%tick, %o1
-	ldx	[%g1], %g7
-	ldda	[%g2] 0x24, %o2
-	xor	%o4, %o2, %o2
-	xor	%o5, %o3, %o3
-	orcc	%o2, %o3, %g0
-	bne,pn	%xcc, 1b
-	 sethi	%hi(lost_ticks), %o2
-	sethi	%hi(timer_ticks_per_usec_quotient), %o3
-	ldx	[%o2 + %lo(lost_ticks)], %o2
-	add	%g3, %o1, %o1
-	ldx	[%o3 + %lo(timer_ticks_per_usec_quotient)], %o3
-	sub	%o1, %g7, %o1
-	mulx	%o3, %o1, %o1
-	brz,pt	%o2, 1f
-	 srlx	%o1, 32, %o1
-	sethi	%hi(10000), %g2
-	or	%g2, %lo(10000), %g2
-	add	%o1, %g2, %o1
-1:	sethi	%hi(1000000), %o2
-	srlx	%o5, 32, %o5
-	or	%o2, %lo(1000000), %o2
-	add	%o5, %o1, %o5
-	cmp	%o5, %o2
-	bl,a,pn	%xcc, 1f
-	 stx	%o4, [%o0 + 0x0]
-	add	%o4, 0x1, %o4
-	sub	%o5, %o2, %o5
-	stx	%o4, [%o0 + 0x0]
-1:	st	%o5, [%o0 + 0x8]");
 }
 
 void do_settimeofday(struct timeval *tv)

@@ -220,7 +220,7 @@ static unsigned long load_elf_interp(struct elfhdr * interp_elf_ex,
 	if (interp_elf_ex->e_type != ET_EXEC &&
 	    interp_elf_ex->e_type != ET_DYN)
 		goto out;
-	if (!elf_check_arch(interp_elf_ex->e_machine))
+	if (!elf_check_arch(interp_elf_ex))
 		goto out;
 	if (!interpreter->f_op->mmap)
 		goto out;
@@ -405,23 +405,8 @@ static int load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 
 	if (elf_ex.e_type != ET_EXEC && elf_ex.e_type != ET_DYN)
 		goto out;
-	if (!elf_check_arch(elf_ex.e_machine))
+	if (!elf_check_arch(&elf_ex))
 		goto out;
-#if defined(__mips__) && !defined(__mips64)
-	/* IRIX5 binaries handled elsewhere.  */
-	if (elf_ex.e_flags & EF_MIPS_ARCH) {
-		retval = -ENOEXEC;
-		goto out;
-	}
-#endif
-#if defined(__mips__) && defined(__mips64)
-	/* Linux/MIPS 32-bit binaries handled elsewhere.  */
-	if (sizeof(elf_caddr_t) == 8 &&
-	    elf_ex.e_ident[EI_CLASS] == ELFCLASS32) {
-		retval = -ENOEXEC;
-		goto out;
-	}
-#endif
 	if (!bprm->file->f_op||!bprm->file->f_op->mmap)
 		goto out;
 
@@ -794,7 +779,7 @@ static int load_elf_library(struct file *file)
 
 	/* First of all, some simple consistency checks */
 	if (elf_ex.e_type != ET_EXEC || elf_ex.e_phnum > 2 ||
-	   !elf_check_arch(elf_ex.e_machine) || !file->f_op->mmap)
+	   !elf_check_arch(&elf_ex) || !file->f_op->mmap)
 		goto out;
 
 	/* Now read in all of the header information */

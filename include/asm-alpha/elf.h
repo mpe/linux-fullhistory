@@ -22,7 +22,7 @@ typedef elf_fpreg_t elf_fpregset_t[ELF_NFPREG];
 /*
  * This is used to ensure we don't load something for the wrong architecture.
  */
-#define elf_check_arch(x) ((x) == EM_ALPHA)
+#define elf_check_arch(x) ((x)->e_machine == EM_ALPHA)
 
 /*
  * These are used to set parameters in the core dumps.

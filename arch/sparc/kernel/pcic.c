@@ -1,4 +1,4 @@
-/* $Id: pcic.c,v 1.15 2000/06/20 01:10:00 anton Exp $
+/* $Id: pcic.c,v 1.16 2000/07/11 01:38:57 davem Exp $
  * pcic.c: Sparc/PCI controller support
  *
  * Copyright (C) 1998 V. Roganov and G. Raiko
@@ -808,7 +808,7 @@ static __inline__ unsigned long do_gettimeoffset(void)
 	return offset + count;
 }
 
-extern volatile unsigned long lost_ticks;
+extern volatile unsigned long wall_jiffies;
 
 static void pci_do_gettimeofday(struct timeval *tv)
 {
@@ -819,10 +819,11 @@ static void pci_do_gettimeofday(struct timeval *tv)
 	tv->tv_usec += do_gettimeoffset();
 
 	/*
-	 * xtime is atomically updated in timer_bh. lost_ticks is
-	 * nonzero if the timer bottom half hasnt executed yet.
+	 * xtime is atomically updated in timer_bh. The difference
+	 * between jiffies and wall_jiffies is nonzero if the timer
+	 * bottom half hasnt executed yet.
 	 */
-	if (lost_ticks)
+	if ((jiffies - wall_jiffies) != 0)
 		tv->tv_usec += USECS_PER_JIFFY;
 
 	restore_flags(flags);

@@ -255,7 +255,7 @@ static unsigned int load_irix_interp(struct elfhdr * interp_elf_ex,
 	/* First of all, some simple consistency checks */
 	if ((interp_elf_ex->e_type != ET_EXEC &&
 	     interp_elf_ex->e_type != ET_DYN) ||
-	     !elf_check_arch(interp_elf_ex->e_machine) ||
+	     !irix_elf_check_arch(interp_elf_ex) ||
 	     !interpreter->f_op->mmap) {
 		printk("IRIX interp has bad e_type %d\n", interp_elf_ex->e_type);
 		return 0xffffffff;
@@ -395,7 +395,7 @@ static int verify_binary(struct elfhdr *ehp, struct linux_binprm *bprm)
 
 	/* First of all, some simple consistency checks */
 	if((ehp->e_type != ET_EXEC && ehp->e_type != ET_DYN) || 
-	    !elf_check_arch(ehp->e_machine) || !bprm->file->f_op->mmap) {
+	    !irix_elf_check_arch(ehp) || !bprm->file->f_op->mmap) {
 		return -ENOEXEC;
 	}
 
@@ -810,7 +810,7 @@ static int load_irix_library(struct file *file)
 
 	/* First of all, some simple consistency checks. */
 	if(elf_ex.e_type != ET_EXEC || elf_ex.e_phnum > 2 ||
-	   !elf_check_arch(elf_ex.e_machine) || !file->f_op->mmap)
+	   !irix_elf_check_arch(&elf_ex) || !file->f_op->mmap)
 		return -ENOEXEC;
 	
 	/* Now read in all of the header information. */

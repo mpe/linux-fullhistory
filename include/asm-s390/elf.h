@@ -22,7 +22,7 @@ typedef s390_regs elf_gregset_t;
 /*
  * This is used to ensure we don't load something for the wrong architecture.
  */
-#define elf_check_arch(x) ((x) == EM_S390) 
+#define elf_check_arch(x) ((x)->elf_machine == EM_S390) 
 
 /*
  * These are used to set parameters in the core dumps.
