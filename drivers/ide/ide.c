@@ -1408,6 +1408,7 @@ int generic_ide_ioctl(ide_drive_t *drive, struct file *file, struct block_device
 			unsigned int cmd, unsigned long arg)
 {
 	ide_settings_t *setting;
+	ide_driver_t *drv;
 	int err = 0;
 	void __user *p = (void __user *)arg;
 
@@ -1507,7 +1508,8 @@ int generic_ide_ioctl(ide_drive_t *drive, struct file *file, struct block_device
 			if (arg != (arg & ((1 << IDE_NICE_DSC_OVERLAP) | (1 << IDE_NICE_1))))
 				return -EPERM;
 			drive->dsc_overlap = (arg >> IDE_NICE_DSC_OVERLAP) & 1;
-			if (drive->dsc_overlap && !DRIVER(drive)->supports_dsc_overlap) {
+			drv = *(ide_driver_t **)bdev->bd_disk->private_data;
+			if (drive->dsc_overlap && !drv->supports_dsc_overlap) {
 				drive->dsc_overlap = 0;
 				return -EPERM;
 			}

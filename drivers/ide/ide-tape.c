@@ -783,6 +783,7 @@ typedef struct {
  */
 typedef struct ide_tape_obj {
 	ide_drive_t	*drive;
+	ide_driver_t	*driver;
 	struct gendisk	*disk;
 	struct kref	kref;
 
@@ -1014,7 +1015,8 @@ static DECLARE_MUTEX(idetape_ref_sem);
 
 #define to_ide_tape(obj) container_of(obj, struct ide_tape_obj, kref)
 
-#define ide_tape_g(disk)	((disk)->private_data)
+#define ide_tape_g(disk) \
+	container_of((disk)->private_data, struct ide_tape_obj, driver)
 
 static struct ide_tape_obj *ide_tape_get(struct gendisk *disk)
 {
@@ -4873,7 +4875,10 @@ static int idetape_attach (ide_drive_t *drive)
 	kref_init(&tape->kref);
 
 	tape->drive = drive;
+	tape->driver = &idetape_driver;
 	tape->disk = g;
+
+	g->private_data = &tape->driver;
 
 	drive->driver_data = tape;
 
@@ -4894,7 +4899,6 @@ static int idetape_attach (ide_drive_t *drive)
 
 	g->number = devfs_register_tape(drive->devfs_name);
 	g->fops = &idetape_block_ops;
-	g->private_data = tape;
 	ide_register_region(g);
 
 	return 0;

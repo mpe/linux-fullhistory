@@ -328,7 +328,8 @@ static DECLARE_MUTEX(idecd_ref_sem);
 
 #define to_ide_cd(obj) container_of(obj, struct cdrom_info, kref) 
 
-#define ide_cd_g(disk)	((disk)->private_data)
+#define ide_cd_g(disk) \
+	container_of((disk)->private_data, struct cdrom_info, driver)
 
 static struct cdrom_info *ide_cd_get(struct gendisk *disk)
 {
@@ -3462,7 +3463,10 @@ static int ide_cdrom_attach (ide_drive_t *drive)
 	kref_init(&info->kref);
 
 	info->drive = drive;
+	info->driver = &ide_cdrom_driver;
 	info->disk = g;
+
+	g->private_data = &info->driver;
 
 	drive->driver_data = info;
 
@@ -3492,7 +3496,6 @@ static int ide_cdrom_attach (ide_drive_t *drive)
 
 	cdrom_read_toc(drive, &sense);
 	g->fops = &idecd_ops;
-	g->private_data = info;
 	g->flags |= GENHD_FL_REMOVABLE;
 	add_disk(g);
 	return 0;

@@ -73,6 +73,7 @@
 
 struct ide_disk_obj {
 	ide_drive_t	*drive;
+	ide_driver_t	*driver;
 	struct gendisk	*disk;
 	struct kref	kref;
 };
@@ -81,7 +82,8 @@ static DECLARE_MUTEX(idedisk_ref_sem);
 
 #define to_ide_disk(obj) container_of(obj, struct ide_disk_obj, kref)
 
-#define ide_disk_g(disk) ((disk)->private_data)
+#define ide_disk_g(disk) \
+	container_of((disk)->private_data, struct ide_disk_obj, driver)
 
 static struct ide_disk_obj *ide_disk_get(struct gendisk *disk)
 {
@@ -1230,7 +1232,10 @@ static int idedisk_attach(ide_drive_t *drive)
 	kref_init(&idkp->kref);
 
 	idkp->drive = drive;
+	idkp->driver = &idedisk_driver;
 	idkp->disk = g;
+
+	g->private_data = &idkp->driver;
 
 	drive->driver_data = idkp;
 
@@ -1249,7 +1254,6 @@ static int idedisk_attach(ide_drive_t *drive)
 	g->flags = drive->removable ? GENHD_FL_REMOVABLE : 0;
 	set_capacity(g, idedisk_capacity(drive));
 	g->fops = &idedisk_ops;
-	g->private_data = idkp;
 	add_disk(g);
 	return 0;
 

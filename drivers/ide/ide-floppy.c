@@ -276,6 +276,7 @@ typedef struct {
  */
 typedef struct ide_floppy_obj {
 	ide_drive_t	*drive;
+	ide_driver_t	*driver;
 	struct gendisk	*disk;
 	struct kref	kref;
 
@@ -520,7 +521,8 @@ static DECLARE_MUTEX(idefloppy_ref_sem);
 
 #define to_ide_floppy(obj) container_of(obj, struct ide_floppy_obj, kref)
 
-#define ide_floppy_g(disk)	((disk)->private_data)
+#define ide_floppy_g(disk) \
+	container_of((disk)->private_data, struct ide_floppy_obj, driver)
 
 static struct ide_floppy_obj *ide_floppy_get(struct gendisk *disk)
 {
@@ -2160,7 +2162,10 @@ static int idefloppy_attach (ide_drive_t *drive)
 	kref_init(&floppy->kref);
 
 	floppy->drive = drive;
+	floppy->driver = &idefloppy_driver;
 	floppy->disk = g;
+
+	g->private_data = &floppy->driver;
 
 	drive->driver_data = floppy;
 
@@ -2172,7 +2177,6 @@ static int idefloppy_attach (ide_drive_t *drive)
 	strcpy(g->devfs_name, drive->devfs_name);
 	g->flags = drive->removable ? GENHD_FL_REMOVABLE : 0;
 	g->fops = &idefloppy_ops;
-	g->private_data = floppy;
 	drive->attach = 1;
 	add_disk(g);
 	return 0;

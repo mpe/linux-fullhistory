@@ -98,6 +98,7 @@ typedef struct idescsi_pc_s {
 
 typedef struct ide_scsi_obj {
 	ide_drive_t		*drive;
+	ide_driver_t		*driver;
 	struct gendisk		*disk;
 	struct Scsi_Host	*host;
 
@@ -109,7 +110,8 @@ typedef struct ide_scsi_obj {
 
 static DECLARE_MUTEX(idescsi_ref_sem);
 
-#define ide_scsi_g(disk)	((disk)->private_data)
+#define ide_scsi_g(disk) \
+	container_of((disk)->private_data, struct ide_scsi_obj, driver)
 
 static struct ide_scsi_obj *ide_scsi_get(struct gendisk *disk)
 {
@@ -328,6 +330,8 @@ static int idescsi_check_condition(ide_drive_t *drive, struct request *failed_co
 	return ide_do_drive_cmd(drive, rq, ide_preempt);
 }
 
+static int idescsi_end_request(ide_drive_t *, int, int);
+
 static ide_startstop_t
 idescsi_atapi_error(ide_drive_t *drive, struct request *rq, u8 stat, u8 err)
 {
@@ -336,7 +340,9 @@ idescsi_atapi_error(ide_drive_t *drive, struct request *rq, u8 stat, u8 err)
 		HWIF(drive)->OUTB(WIN_IDLEIMMEDIATE,IDE_COMMAND_REG);
 
 	rq->errors++;
-	DRIVER(drive)->end_request(drive, 0, 0);
+
+	idescsi_end_request(drive, 0, 0);
+
 	return ide_stopped;
 }
 
@@ -348,7 +354,9 @@ idescsi_atapi_abort(ide_drive_t *drive, struct request *rq)
 			((idescsi_pc_t *) rq->special)->scsi_cmd->serial_number);
 #endif
 	rq->errors |= ERROR_MAX;
-	DRIVER(drive)->end_request(drive, 0, 0);
+
+	idescsi_end_request(drive, 0, 0);
+
 	return ide_stopped;
 }
 
@@ -1126,13 +1134,14 @@ static int idescsi_attach(ide_drive_t *drive)
 	drive->driver_data = host;
 	idescsi = scsihost_to_idescsi(host);
 	idescsi->drive = drive;
+	idescsi->driver = &idescsi_driver;
 	idescsi->host = host;
 	idescsi->disk = g;
+	g->private_data = &idescsi->driver;
 	err = ide_register_subdriver(drive, &idescsi_driver);
 	if (!err) {
 		idescsi_setup (drive, idescsi);
 		g->fops = &idescsi_ops;
-		g->private_data = idescsi;
 		ide_register_region(g);
 		err = scsi_add_host(host, &drive->gendev);
 		if (!err) {
