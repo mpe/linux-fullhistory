@@ -226,35 +226,6 @@ memcpy_last7:
 	retl
  	 nop
 
-	/* Placed here for cache reasons. */
-	.globl	C_LABEL(__copy_to_user), C_LABEL(__copy_from_user)
-C_LABEL(__copy_to_user):
-	b	copy_user_common
-	 st	%o0, [%g6 + THREAD_EX_ADDR]
-
-C_LABEL(__copy_from_user):
-	st	%o1, [%g6 + THREAD_EX_ADDR]
-
-copy_user_common:
-	ld	[%g6 + THREAD_EX_COUNT], %g1
-	set	copy_user_failure, %g2
-	add	%g1, 1, %g1
-	st	%o7, [%g6 + THREAD_EX_PC]
-	st	%g1, [%g6 + THREAD_EX_COUNT]
-	call	C_LABEL(__memcpy)
-	 st	%g2, [%g6 + THREAD_EX_EXPC]
-
-copy_user_success:
-	ldd	[%g6 + THREAD_EX_COUNT], %g2
-	mov	0, %o0
-	sub	%g2, 1, %g1
-	jmpl	%g3 + 0x8, %g0
-	 st	%g1, [%g6 + THREAD_EX_COUNT]
-
-copy_user_failure:
-	jmpl	%g3 + 0x8, %g0
-	 mov	%g2, %o0
-
 ldd_std:
 	MOVE_BIGALIGNCHUNK(o1, o0, 0x00, o2, o3, o4, o5, g2, g3, g4, g5)
 	MOVE_BIGALIGNCHUNK(o1, o0, 0x20, o2, o3, o4, o5, g2, g3, g4, g5)

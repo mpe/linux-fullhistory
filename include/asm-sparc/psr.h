@@ -1,4 +1,4 @@
-/* $Id: psr.h,v 1.12 1996/09/30 02:23:19 davem Exp $
+/* $Id: psr.h,v 1.13 1996/12/10 06:06:36 davem Exp $
  * psr.h: This file holds the macros for masking off various parts of
  *        the processor status register on the Sparc. This is valid
  *        for Version 8. On the V9 this is renamed to the PSTATE
@@ -41,16 +41,28 @@
 extern __inline__ unsigned int get_psr(void)
 {
 	unsigned int psr;
-	__asm__ __volatile__("rd\t%%psr, %0" :
-			     "=r" (psr));
+	__asm__ __volatile__("
+		rd	%%psr, %0
+		nop
+		nop
+		nop
+"	: "=r" (psr)
+	: /* no inputs */
+	: "memory");
+
 	return psr;
 }
 
 extern __inline__ void put_psr(unsigned int new_psr)
 {
-	__asm__ __volatile__("wr\t%0, 0x0, %%psr\n\t"
-			     "nop; nop; nop;" : :
-			     "r" (new_psr));
+	__asm__ __volatile__("
+		wr	%0, 0x0, %%psr
+		nop
+		nop
+		nop
+"	: /* no outputs */
+	: "r" (new_psr)
+	: "memory");
 }
 
 /* Get the %fsr register.  Be careful, make sure the floating point
@@ -64,10 +76,12 @@ extern __inline__ unsigned int get_fsr(void)
 {
 	unsigned int fsr = 0;
 
-	__asm__ __volatile__("st\t%%fsr, %1\n\t"
-			     "ld\t%1, %0" :
-			     "=r" (fsr) :
-			     "m" (fsr_storage));
+	__asm__ __volatile__("
+		st	%%fsr, %1
+		ld	%1, %0
+"	: "=r" (fsr)
+	: "m" (fsr_storage));
+
 	return fsr;
 }
 

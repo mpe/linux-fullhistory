@@ -13,10 +13,10 @@ if [ "$CONFIG_STALDRV" = "y" ]; then
   tristate '  Stallion EC8/64, ONboard, Brumby support' CONFIG_ISTALLION
 fi
 tristate 'SDL RISCom/8 card support' CONFIG_RISCOM8
-tristate 'Hayes ESP serial port support' CONFIG_ESP
-if [ "$CONFIG_ESP" = "y" -o "$CONFIG_ESP" = "m" ]; then
-  int '  DMA channel' CONFIG_ESP_DMA_CHANNEL 1
-  int '  FIFO trigger level' CONFIG_ESP_TRIGGER_LEVEL 768
+tristate 'Hayes ESP serial port support' CONFIG_ESPSERIAL
+if [ "$CONFIG_ESPSERIAL" = "y" -o "$CONFIG_ESPSERIAL" = "m" ]; then
+  int '  DMA channel' CONFIG_ESPSERIAL_DMA_CHANNEL 1
+  int '  FIFO trigger level' CONFIG_ESPSERIAL_TRIGGER_LEVEL 768
 fi
 tristate 'Parallel printer support' CONFIG_PRINTER
 

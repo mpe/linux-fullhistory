@@ -824,7 +824,7 @@ int udp_rcv(struct sk_buff *skb, unsigned short len)
 
 #ifdef CONFIG_IP_TRANSPARENT_PROXY
 	if (IPCB(skb)->redirport)
-		sk = get_sock_proxy(&udp_prot, uh->dest, saddr, uh->source, daddr, dev->pa_addr, IPCB(skb)->redirport);
+		sk = get_sock_proxy(&udp_prot, uh->dest, saddr, uh->source, daddr, skb->dev->pa_addr, IPCB(skb)->redirport);
 	else
 #endif
 	sk = get_udp_sock(uh->dest, saddr, uh->source, daddr);

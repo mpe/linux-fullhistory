@@ -93,7 +93,7 @@ static int rose_header(struct sk_buff *skb, struct device *dev, unsigned short t
 
 static int rose_rebuild_header(struct sk_buff *skb)
 {
-	struct device *dev=skb->dev;
+	struct device *dev = skb->dev;
 	struct enet_statistics *stats = (struct enet_statistics *)dev->priv;
 	unsigned char *bp = (unsigned char *)skb->data;
 	struct sk_buff *skbn;

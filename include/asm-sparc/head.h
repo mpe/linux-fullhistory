@@ -1,4 +1,4 @@
-/* $Id: head.h,v 1.30 1996/07/29 21:00:28 miguel Exp $ */
+/* $Id: head.h,v 1.32 1996/12/04 00:12:48 ecd Exp $ */
 #ifndef __SPARC_HEAD_H
 #define __SPARC_HEAD_H
 
@@ -54,16 +54,16 @@
 
 /* Software trap for Slowaris system calls. */
 #define SOLARIS_SYSCALL_TRAP \
-        sethi %hi(C_LABEL(sys_call_table)), %l7; \
-        or %l7, %lo(C_LABEL(sys_call_table)), %l7; \
         b solaris_syscall; \
-        rd %psr, %l0;
+        rd %psr, %l0; \
+        nop; \
+        nop;
 
 #define INDIRECT_SOLARIS_SYSCALL(x) \
-        sethi %hi(C_LABEL(sys_call_table)), %l7; \
-	or %g0,%lo(x),%g1; \
-	b solaris_indirect_syscall; \
-        rd %psr, %l0; 
+	mov x, %g1; \
+	b solaris_syscall; \
+	rd %psr, %l0; \
+	nop;
 
 #define BREAKPOINT_TRAP \
 	b breakpoint_trap; \

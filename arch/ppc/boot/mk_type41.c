@@ -8,7 +8,11 @@
 
 #include <stdio.h>
 #include <errno.h>
+#ifdef linux
+#include <asm/stat.h>
+#else
 #include <sys/stat.h>
+#endif
 
 _LE(long val, unsigned char *le)
 {
@@ -187,7 +191,7 @@ write_prep_boot_partition(int out_fd)
      *     (2 tracks/cylinder)(18 sectors/tracks)(80 cylinders/diskette)
      *   - unlike the above sector numbers, the beginning sector is zero-based!
      */
-#if 0     
+#if 0
     pe->beginning_sector  = LeDword(1);
 #else
     /* This has to be 0 on the PowerStack? */   

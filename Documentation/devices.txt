@@ -283,6 +283,8 @@ reply.
 		137 = /dev/qcam1	QuickCam on lp1
 		138 = /dev/qcam2	QuickCam on lp2
 		139 = /dev/openprom	SPARC OpenBoot PROM
+		140 = /dev/relay8	Berkshire Products Octal relay card
+		141 = /dev/relay16	Berkshire Products ISO-16 relay card
 
  11 char	Raw keyboard device
 		  0 = /dev/kbd		Raw keyboard device
@@ -838,7 +840,12 @@ reply.
 		This is a commercial driver; contact James Howes
 		<jth@prosig.demon.co.uk> for information.
 
- 66-119		UNALLOCATED
+ 66 char	YARC PowerPC PCI coprocessor card
+		  0 = /dev/yppcpci00	First YARC card
+		  1 = /dev/yppcpci01	Second YARC card
+		      ...
+
+ 67-119		UNALLOCATED
 
 120-127		LOCAL/EXPERIMENTAL USE
 

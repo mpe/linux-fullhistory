@@ -34,12 +34,14 @@
  * c-code can be called.
  */
 #ifndef SMP_DEBUG
-#define SAVE_ALL \
+#define SAVE_ALL_HEAD \
 	sethi	%hi(trap_setup), %l4; \
-	jmpl	%l4 + %lo(trap_setup), %l6; \
+	jmpl	%l4 + %lo(trap_setup), %l6;
+#define SAVE_ALL \
+	SAVE_ALL_HEAD \
 	 nop;
 #else
-#define SAVE_ALL \
+#define SAVE_ALL_HEAD \
 	GET_PROCESSOR_ID(l4); \
 	set	C_LABEL(trap_log), %l5; \
 	sll	%l4, 11, %l6; \
@@ -59,7 +61,9 @@
 	and	%l6, 255, %l6; \
 	st	%l6, [%l5]; \
 	sethi	%hi(trap_setup), %l4; \
-	jmpl	%l4 + %lo(trap_setup), %l6; \
+	jmpl	%l4 + %lo(trap_setup), %l6;
+#define SAVE_ALL \
+	SAVE_ALL_HEAD \
 	 nop;
 #endif
 

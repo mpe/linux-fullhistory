@@ -45,8 +45,10 @@
 #define ESI_SET_PRESCALAR	0x23
 #define ESI_NO_COMMAND		0xff
 
-#define STAT_RX_TIMEOUT		0x01
-#define STAT_NEED_DMA		0x02
+#define ESP_STAT_RX_TIMEOUT	0x01
+#define ESP_STAT_NEED_DMA	0x02
+#define ESP_STAT_DMA_RX		0x04
+#define ESP_STAT_DMA_TX		0x08
 
 #define ESP_EVENT_WRITE_WAKEUP	0
 #define ESP_MAGIC		0x53ee
@@ -54,11 +56,9 @@
 
 struct esp_struct {
 	int			magic;
-	int			baud_base;
 	int			port;
 	int			irq;
 	int			flags; 		/* defined in tty.h */
-	int			type; 		/* UART type */
 	struct tty_struct 	*tty;
 	int			read_status_mask;
 	int			ignore_status_mask;
@@ -70,7 +70,6 @@ struct esp_struct {
 	unsigned short		closing_wait2;
 	int			IER; 	/* Interrupt Enable Register */
 	int			MCR; 	/* Modem control register */
-	int			MCR_noint; /* MCR with interrupts off */
 	unsigned long		event;
 	unsigned long		last_active;
 	int			line;

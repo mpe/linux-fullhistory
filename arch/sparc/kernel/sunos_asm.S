@@ -1,4 +1,4 @@
-/* $Id: sunos_asm.S,v 1.12 1996/04/03 02:14:57 davem Exp $
+/* $Id: sunos_asm.S,v 1.14 1996/12/04 18:25:48 jj Exp $
  * sunos_asm.S: SunOS system calls which must have a low-level
  *              entry point to operate correctly.
  *
@@ -15,53 +15,44 @@
 	.text
 	.align 4
 
+	/* When calling ret_sys_call, %o0 should contain the same
+	 * value as in [%sp + REGWIN_SZ + PT_I0] */
+
 	/* SunOS getpid() returns pid in %o0 and ppid in %o1 */
 	.globl	C_LABEL(sunos_getpid)
 C_LABEL(sunos_getpid):
-	call	C_LABEL(sys_getpid)
+	call	C_LABEL(sys_getppid)
 	 nop
 
-	st	%o0, [%sp + REGWIN_SZ + PT_I0]
-
-	call	C_LABEL(sys_getppid)
-	 nop	
-
-	st	%o0, [%sp + REGWIN_SZ + PT_I1]
+	call	C_LABEL(sys_getpid)
+	 st	%o0, [%sp + REGWIN_SZ + PT_I1]
 
 	b	C_LABEL(ret_sys_call)
-	 nop
+	 st	%o0, [%sp + REGWIN_SZ + PT_I0]
 
 	/* SunOS getuid() returns uid in %o0 and euid in %o1 */
 	.globl	C_LABEL(sunos_getuid)
 C_LABEL(sunos_getuid):
-	call	C_LABEL(sys_getuid)
-	 nop
-
-	st	%o0, [%sp + REGWIN_SZ + PT_I0]
-
 	call	C_LABEL(sys_geteuid)
 	 nop
 
-	st	%o0, [%sp + REGWIN_SZ + PT_I1]
+	call	C_LABEL(sys_getuid)
+	 st	%o0, [%sp + REGWIN_SZ + PT_I1]
 
 	b	C_LABEL(ret_sys_call)
-	 nop
+	 st	%o0, [%sp + REGWIN_SZ + PT_I0]
 
 	/* SunOS getgid() returns gid in %o0 and egid in %o1 */
 	.globl	C_LABEL(sunos_getgid)
 C_LABEL(sunos_getgid):
-	call	C_LABEL(sys_getgid)
-	 nop
-
-	st	%o0, [%sp + REGWIN_SZ + PT_I0]
-
 	call	C_LABEL(sys_getegid)
 	 nop
 
-	st	%o0, [%sp + REGWIN_SZ + PT_I1]
+	call	C_LABEL(sys_getgid)
+	 st	%o0, [%sp + REGWIN_SZ + PT_I1]
 
 	b	C_LABEL(ret_sys_call)
-	 nop
+	 st	%o0, [%sp + REGWIN_SZ + PT_I0]
 
 	/* SunOS's execv() call only specifies the argv argument, the
 	 * environment settings are the same as the calling processes.
@@ -74,7 +65,4 @@ C_LABEL(sunos_execv):
 	 add	%sp, REGWIN_SZ, %o0
 
 	b	C_LABEL(ret_sys_call)
-	 nop
-
-	 
-
+	 ld	[%sp + REGWIN_SZ + PT_I0], %o0

@@ -152,6 +152,62 @@ typedef struct {
 #define R_386_GOTPC	10
 #define R_386_NUM	11
 
+/*
+ * Sparc ELF relocation types
+ */
+#define	R_SPARC_NONE		0
+#define	R_SPARC_8		1
+#define	R_SPARC_16		2
+#define	R_SPARC_32		3
+#define	R_SPARC_DISP8		4
+#define	R_SPARC_DISP16		5
+#define	R_SPARC_DISP32		6
+#define	R_SPARC_WDISP30		7
+#define	R_SPARC_WDISP22		8
+#define	R_SPARC_HI22		9
+#define	R_SPARC_22		10
+#define	R_SPARC_13		11
+#define	R_SPARC_LO10		12
+#define	R_SPARC_GOT10		13
+#define	R_SPARC_GOT13		14
+#define	R_SPARC_GOT22		15
+#define	R_SPARC_PC10		16
+#define	R_SPARC_PC22		17
+#define	R_SPARC_WPLT30		18
+#define	R_SPARC_COPY		19
+#define	R_SPARC_GLOB_DAT	20
+#define	R_SPARC_JMP_SLOT	21
+#define	R_SPARC_RELATIVE	22
+#define	R_SPARC_UA32		23
+#define	R_SPARC_NUM		24
+
+/*
+ * 68k ELF relocation types
+ */
+#define R_68K_NONE	0
+#define R_68K_32	1
+#define R_68K_16	2
+#define R_68K_8		3
+#define R_68K_PC32	4
+#define R_68K_PC16	5
+#define R_68K_PC8	6
+#define R_68K_GOT32	7
+#define R_68K_GOT16	8
+#define R_68K_GOT8	9
+#define R_68K_GOT32O	10
+#define R_68K_GOT16O	11
+#define R_68K_GOT8O	12
+#define R_68K_PLT32	13
+#define R_68K_PLT16	14
+#define R_68K_PLT8	15
+#define R_68K_PLT32O	16
+#define R_68K_PLT16O	17
+#define R_68K_PLT8O	18
+#define R_68K_COPY	19
+#define R_68K_GLOB_DAT	20
+#define R_68K_JMP_SLOT	21
+#define R_68K_RELATIVE	22
+
 typedef struct elf32_rel {
   Elf32_Addr	r_offset;
   Elf32_Word	r_info;

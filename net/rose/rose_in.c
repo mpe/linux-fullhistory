@@ -94,13 +94,14 @@ static int rose_state1_machine(struct sock *sk, struct sk_buff *skb, int framety
 	switch (frametype) {
 
 		case ROSE_CALL_ACCEPTED:
-			sk->protinfo.rose->timer = 0;
-			sk->protinfo.rose->vs    = 0;
-			sk->protinfo.rose->va    = 0;
-			sk->protinfo.rose->vr    = 0;
-			sk->protinfo.rose->vl    = 0;
-			sk->protinfo.rose->state = ROSE_STATE_3;
-			sk->state                = TCP_ESTABLISHED;
+			sk->protinfo.rose->condition = 0x00;
+			sk->protinfo.rose->timer     = 0;
+			sk->protinfo.rose->vs        = 0;
+			sk->protinfo.rose->va        = 0;
+			sk->protinfo.rose->vr        = 0;
+			sk->protinfo.rose->vl        = 0;
+			sk->protinfo.rose->state     = ROSE_STATE_3;
+			sk->state                    = TCP_ESTABLISHED;
 			if (!sk->dead)
 				sk->state_change(sk);
 			break;
@@ -167,6 +168,7 @@ static int rose_state3_machine(struct sock *sk, struct sk_buff *skb, int framety
 			rose_clear_queues(sk);
 			rose_write_internal(sk, ROSE_RESET_CONFIRMATION);
 			sk->protinfo.rose->condition = 0x00;
+			sk->protinfo.rose->timer     = 0;
 			sk->protinfo.rose->vs        = 0;
 			sk->protinfo.rose->vr        = 0;
 			sk->protinfo.rose->va        = 0;
@@ -241,10 +243,17 @@ static int rose_state3_machine(struct sock *sk, struct sk_buff *skb, int framety
 				}
 			}
 			/*
-			 * If the window is full, ack the frame.
+			 * If the window is full, ack the frame, else start the
+			 * acknowledge hold back timer.
 			 */
-			if (((sk->protinfo.rose->vl + sk->window) % ROSE_MODULUS) == sk->protinfo.rose->vr)
+			if (((sk->protinfo.rose->vl + ROSE_DEFAULT_WINDOW) % ROSE_MODULUS) == sk->protinfo.rose->vr) {
+				sk->protinfo.rose->condition &= ~ACK_PENDING_CONDITION;
+				sk->protinfo.rose->timer      = 0;
 				rose_enquiry_response(sk);
+			} else {
+				sk->protinfo.rose->condition |= ACK_PENDING_CONDITION;
+				sk->protinfo.rose->timer      = sk->protinfo.rose->hb;
+			}
 			break;
 
 		default:

@@ -1,7 +1,8 @@
-/* strlen.S: Sparc optimized strlen().
- *
- * This was hand optimized by davem@caip.rutgers.edu from
- * the C-code in GNU-libc.
+/* strlen.S: Sparc optimized strlen code
+ * Hand optimized from GNU libc's strlen
+ * Copyright (C) 1991,1996 Free Software Foundation
+ * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
+ * Copyright (C) 1996 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
  */
 
 #include <asm/cprefix.h>
@@ -9,80 +10,74 @@
 #define LO_MAGIC 0x01010101
 #define HI_MAGIC 0x80808080
 
+0:
+	ldub	[%o0], %o5
+	cmp	%o5, 0
+	be	1f
+	 add	%o0, 1, %o0
+	andcc	%o0, 3, %g0
+	be	4f
+	 or	%o4, %lo(HI_MAGIC), %o3
+	ldub	[%o0], %o5
+	cmp	%o5, 0
+	be	2f
+	 add	%o0, 1, %o0
+	andcc	%o0, 3, %g0
+	be	5f
+	 sethi	%hi(LO_MAGIC), %o4
+	ldub	[%o0], %o5
+	cmp	%o5, 0
+	be	3f
+	 add	%o0, 1, %o0
+	b	8f
+	 or	%o4, %lo(LO_MAGIC), %o2
+1:
+	retl
+	 mov	0, %o0
+2:
+	retl
+	 mov	1, %o0
+3:
+	retl
+	 mov	2, %o0
+
 	.align 4
 	.global C_LABEL(strlen)
 C_LABEL(strlen):
 	mov	%o0, %o1
-	andcc	%o0, 3, %g0		! and with %o0 so no dependency problems
-	be	scan_words
-	 sethi	%hi(HI_MAGIC), %g2	! common case and most Sparcs predict taken
-
-	ldsb	[%o0], %g2
-still_not_word_aligned:
-	cmp	%g2, 0
-	bne,a	1f
-	 add	%o0, 1, %o0
-
-	/* Ok, so there are tons of quick interlocks above for the
-	 * < 4 length string unaligned... not too common so I'm not
-	 * very concerned.
-	 */
-	retl
-	 sub	%o0, %o1, %o0
-
-1:
 	andcc	%o0, 3, %g0
-	bne,a	still_not_word_aligned
-	 ldsb	[%o0], %g2
-
-	/* HyperSparc executes each sethi/or pair in 1 cycle. */
-	sethi	%hi(HI_MAGIC), %g2
-scan_words:
-	or	%g2, %lo(HI_MAGIC), %o3
-	sethi	%hi(LO_MAGIC), %g3
-	or	%g3, %lo(LO_MAGIC), %o2
-next_word:
-	ld	[%o0], %g2		! no dependencies
-next_word_preloaded:
-	sub	%g2, %o2, %g2		! lots of locks here
-	andcc	%g2, %o3, %g0		! and I dont like it...
-	be	next_word
+	bne	0b
+	 sethi	%hi(HI_MAGIC), %o4
+	or	%o4, %lo(HI_MAGIC), %o3
+4:
+	sethi	%hi(LO_MAGIC), %o4
+5:
+	or	%o4, %lo(LO_MAGIC), %o2
+8:
+	ld	[%o0], %o5
+2:
+	sub	%o5, %o2, %o4
+	andcc	%o4, %o3, %g0
+	be	8b
 	 add	%o0, 4, %o0
 
 	/* Check every byte. */
-byte_zero:
-	ldsb	[%o0 - 0x4], %g2
-	cmp	%g2, 0
-	bne	byte_one
-	 add	%o0, -4, %g3
-
+	srl	%o5, 24, %g5
+	andcc	%g5, 0xff, %g0
+	be	1f
+	 add	%o0, -4, %o4
+	srl	%o5, 16, %g5
+	andcc	%g5, 0xff, %g0
+	be	1f
+	 add	%o4, 1, %o4
+	srl	%o5, 8, %g5
+	andcc	%g5, 0xff, %g0
+	be	1f
+	 add	%o4, 1, %o4
+	andcc	%o5, 0xff, %g0
+	bne,a	2b
+	 ld	[%o0], %o5
+	add	%o4, 1, %o4
+1:
 	retl
-	 sub	%g3, %o1, %o0
-
-byte_one:
-	ldsb	[%o0 - 0x3], %g2
-	cmp	%g2, 0
-	bne,a	byte_two_and_three
-	 ldsb	[%o0 - 0x2], %g2
-
-	sub	%g3, %o1, %o0
-	retl
-	 add	%o0, 1, %o0
-
-byte_two_and_three:
-	cmp	%g2, 0
-	be,a	found_it
-	 sub	%g3, %o1, %o0
-
-	ldsb	[%o0 - 0x1], %g2
-	cmp	%g2, 0
-	bne,a	next_word_preloaded
-	 ld	[%o0], %g2
-
-	sub	%g3, %o1, %o0
-	retl
-	 add	%o0, 3, %o0
-
-found_it:
-	retl
-	 add	%o0, 2, %o0
+	 sub	%o4, %o1, %o0

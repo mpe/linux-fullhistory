@@ -6,7 +6,7 @@
  * Laboratory for Computer Science Research Computing Facility
  * Rutgers, The State University of New Jersey
  *
- * $Id: ufs_symlink.c,v 1.5 1996/05/19 03:55:56 krioles Exp $
+ * $Id: ufs_symlink.c,v 1.6 1996/10/30 06:00:36 davem Exp $
  *
  */
 

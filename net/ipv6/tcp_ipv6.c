@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: tcp_ipv6.c,v 1.15 1996/10/29 22:45:53 roque Exp $
+ *	$Id: tcp_ipv6.c,v 1.6 1996/12/12 19:22:18 davem Exp $
  *
  *	Based on: 
  *	linux/net/ipv4/tcp.c
@@ -598,7 +598,7 @@ static struct sock * tcp_v6_syn_recv_sock(struct sock *sk, struct sk_buff *skb,
 		return newsk;
 	}
 
-	newsk = (struct sock *) kmalloc(sizeof(struct sock), GFP_ATOMIC);
+	newsk = sk_alloc(GFP_ATOMIC);
 	if (newsk == NULL)
 	{
 		return NULL;

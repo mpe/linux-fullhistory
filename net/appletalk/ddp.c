@@ -2110,7 +2110,7 @@ void cleanup_module(void)
 	dev_remove_pack(&ltalk_packet_type);
 	dev_remove_pack(&ppptalk_packet_type);
 	unregister_snap_client(ddp_snap_id);
-	sock_unregister(atalk_proto_ops.family);
+	sock_unregister(&atalk_family_ops);
 
 	free_route_list();
 	free_interface_list();

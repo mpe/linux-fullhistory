@@ -173,6 +173,8 @@ int register_cl2llc_client(llcptr lp, const char *device, llc_ops *ops, u8 *rmac
 	lp->state = 0;
 	lp->llc_mode = MODE_ADM;
 	lp->remote_sap = dsap;
+	skb_queue_head_init(&lp->atq);
+	skb_queue_head_init(&lp->rtq);
 	MOD_INC_USE_COUNT;
 	return 0;
 }

@@ -1,4 +1,4 @@
-/*  $Id: process.c,v 1.77 1996/11/03 08:25:43 davem Exp $
+/*  $Id: process.c,v 1.83 1996/12/10 07:38:39 davem Exp $
  *  linux/arch/sparc/kernel/process.c
  *
  *  Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -40,6 +40,8 @@ extern void fpsave(unsigned long *, unsigned long *, void *, unsigned long *);
 
 #ifndef __SMP__
 
+#define SUN4C_FAULT_HIGH 100
+
 /*
  * the idle loop on a Sparc... ;)
  */
@@ -51,6 +53,36 @@ asmlinkage int sys_idle(void)
 	/* endless idle loop with no priority at all */
 	current->counter = -100;
 	for (;;) {
+		if (sparc_cpu_model == sun4c) {
+			static int count = HZ;
+			static unsigned long last_jiffies = 0;
+			static unsigned long last_faults = 0;
+			static unsigned long fps = 0;
+			unsigned long now;
+			unsigned long faults;
+			unsigned long flags;
+
+			extern unsigned long sun4c_kernel_faults;
+			extern void sun4c_grow_kernel_ring(void);
+
+			save_and_cli(flags);
+			now = jiffies;
+			count -= (now - last_jiffies);
+			last_jiffies = now;
+			if (count < 0) {
+				count += HZ;
+				faults = sun4c_kernel_faults;
+				fps = (fps + (faults - last_faults)) >> 1;
+				last_faults = faults;
+#if 0
+				printk("kernel faults / second = %d\n", fps);
+#endif
+				if (fps >= SUN4C_FAULT_HIGH) {
+					sun4c_grow_kernel_ring();
+				}
+			}
+			restore_flags(flags);
+		}
 		schedule();
 	}
 	return 0;
@@ -273,6 +305,8 @@ void flush_thread(void)
 	current->tss.sstk_info.cur_status = 0;
 	current->tss.sstk_info.the_stack = 0;
 
+	/* No new signal delivey by default */
+	current->tss.new_signal = 0;
 #ifndef __SMP__
 	if(last_task_used_math == current) {
 #else
@@ -292,6 +326,7 @@ void flush_thread(void)
 	mmu_flush_hook();
 	/* Now, this task is no longer a kernel thread. */
 	current->tss.flags &= ~SPARC_FLAG_KTHREAD;
+	current->tss.current_ds = USER_DS;
 }
 
 static __inline__ void copy_regs(struct pt_regs *dst, struct pt_regs *src)

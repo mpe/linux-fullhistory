@@ -294,6 +294,33 @@ no_disk1:
 	stosb
 is_disk1:
 
+! check for Micro Channel (MCA) bus
+	mov ax,cs		! aka #SETUPSEG
+	sub ax,#DELTA_INITSEG	! aka #INITSEG
+	mov ds,ax
+	mov ds,ax
+	xor ax,ax
+	mov [0x220], ax		! set table length to 0
+	mov ah, #0xc0
+	stc
+	int 0x15		! puts feature table at es:bx
+	jc no_mca
+	push ds
+	mov ax,es
+	mov ds,ax
+	mov ax,cs		! aka #SETUPSEG
+	sub ax, #DELTA_INITSEG	! aka #INITSEG
+	mov es,ax
+	mov si,bx
+	mov di,#0x220
+	mov cx,(si)
+	add cx,#2		! table length is a short
+	rep
+	movsb
+	pop ds
+
+no_mca:
+
 ! Check for PS/2 pointing device
 
 	mov	ax,cs		! aka #SETUPSEG

@@ -162,8 +162,9 @@ void llc_sendpdu(llcptr lp, char type, char pf, int data_len, char *pdu_data)
 		lp->dev->hard_header(skb, lp->dev, ETH_P_802_3,
 			 lp->remote_mac, NULL, fl);
 		skb->arp = 1;
-		skb->free = 1;
-		dev_queue_xmit(skb, lp->dev, SOPRI_NORMAL);
+		skb->priority=SOPRI_NORMAL;
+		skb->dev=lp->dev;
+		dev_queue_xmit(skb);
 	}
 	else
 		printk(KERN_DEBUG "cl2llc: skb_alloc() in llc_sendpdu() failed\n");     
@@ -196,7 +197,8 @@ void llc_unit_data_request(llcptr lp, int ll, char * data)
 void llc_sendipdu(llcptr lp, char type, char pf, struct sk_buff *skb)
 {
 	frameptr fr;                /* ptr to output pdu buffer */
-
+	struct sk_buff *tmp;
+	
 	fr = (frameptr) skb->data;
 
 	fr->pdu_hdr.dsap = lp->remote_sap;
@@ -213,9 +215,14 @@ void llc_sendipdu(llcptr lp, char type, char pf, struct sk_buff *skb)
 	lp->dev->hard_header(skb, lp->dev, ETH_P_802_3,
 		lp->remote_mac, NULL, skb->len);
 	skb->arp = 1;
-	skb->free = 0;              /* thanks, Alan */
 	ADD_TO_RTQ(skb);		/* add skb to the retransmit queue */
-	dev_queue_xmit(skb, lp->dev, SOPRI_NORMAL);
+	tmp=skb_clone(skb, GFP_ATOMIC);
+	if(tmp!=NULL)
+	{
+		tmp->dev=lp->dev;
+		tmp->priority=SOPRI_NORMAL;
+		dev_queue_xmit(tmp);
+	}
 }
 
 
@@ -230,22 +237,21 @@ void llc_sendipdu(llcptr lp, char type, char pf, struct sk_buff *skb)
 
 int llc_resend_ipdu(llcptr lp, unsigned char ack_nr, unsigned char type, char p)
 {
-	struct sk_buff *skb;
+	struct sk_buff *skb,*tmp;
 	int resend_count;
 	frameptr fr;
+	unsigned long flags;
+	
 
 	resend_count = 0;
-	skb = lp->rtq_front;
+	
+	save_flags(flags);
+	cli();
+	
+	skb = skb_peek(&lp->rtq);
 
-	while(skb != NULL)
+	while(skb && skb != (struct sk_buff *)&lp->rtq)
 	{
-		/* 
-		 *	Should not occur: 
-		 */
-		 
-		if (skb_device_locked(skb)) 
-			return resend_count;
-		
 		fr = (frameptr) (skb->data + lp->dev->hard_header_len);
 		if (resend_count == 0) 
 		{
@@ -277,38 +283,22 @@ int llc_resend_ipdu(llcptr lp, unsigned char ack_nr, unsigned char type, char p)
 		lp->vs++;
 		if (lp->vs > 127) 
 			lp->vs = 0;
-		skb->arp = 1;
-		skb->free = 0;
-		dev_queue_xmit(skb, lp->dev, SOPRI_NORMAL);
+		tmp=skb_clone(skb, GFP_ATOMIC);
+		if(tmp!=NULL)
+		{
+			tmp->arp = 1;
+			tmp->dev = lp->dev;
+			tmp->priority = SOPRI_NORMAL;
+			dev_queue_xmit(skb);
+		}
 		resend_count++;
-		skb = skb->link3;
+		skb = skb->next;
 	}
+	restore_flags(flags);
 	return resend_count;
 }
 
 /* ************** internal queue management code ****************** */
-
-
-/*
- *	Add_to_queue() adds an skb at back of an I-frame queue.
- *	this function is used for both atq and rtq.
- *	the front and back pointers identify the queue being edited.
- *	this function is called with macros ADD_TO_RTQ() and ADD_TO_ATQ() .
- */
-
-void llc_add_to_queue(struct sk_buff *skb,
-	struct sk_buff **front, struct sk_buff **back) 
-{
-	struct sk_buff *t;
-
-	skb->link3 = NULL;		/* there is no more recent skb */ 
-	t = *back;			/* save current back ptr */
-	*back = skb;
-	if (t != NULL) 
-		t->link3 = skb;
-	if (*front == NULL) 
-		*front = *back;
-}
 
 
 /*
@@ -319,18 +309,7 @@ void llc_add_to_queue(struct sk_buff *skb,
 
 struct sk_buff *llc_pull_from_atq(llcptr lp) 
 {
-	struct sk_buff *t;
-
-	if (lp->atq_front == NULL) 
-		return NULL;     /* empty queue */
-
-	t = lp->atq_front;
-	lp->atq_front = t->link3;
-	if (lp->atq_front == NULL) 
-	{
-		lp->atq_back = lp->atq_front;
-	}
-	return t;
+	return skb_dequeue(&lp->atq);
 }
  
 /*
@@ -346,6 +325,7 @@ int llc_free_acknowledged_skbs(llcptr lp, unsigned char pdu_ack)
 	int ack_count;
 	unsigned char ack; 	/* N(S) of most recently ack'ed pdu */
 	unsigned char ns_save; 
+	unsigned long flags;
 
 	if (pdu_ack > 0) 
 		ack = pdu_ack -1;
@@ -353,28 +333,31 @@ int llc_free_acknowledged_skbs(llcptr lp, unsigned char pdu_ack)
 		ack = 127;
 
 	ack_count = 0;
-	pp = lp->rtq_front; 
+
+	save_flags(flags);
+	cli();
+
+	pp = skb_dequeue(&lp->rtq); 
 	while (pp != NULL)
 	{
 		/* 
 		 *	Locate skb with N(S) == ack 
 		 */
-		lp->rtq_front = pp->link3;
+
+		/*
+		 *	BUG: FIXME - use skb->h.*
+		 */
 		fr = (frameptr) (pp->data + lp->dev->hard_header_len);
 		ns_save = fr->i_hdr.ns;
-		if (skb_device_locked(pp)) 
-			return ack_count;
 
 		kfree_skb(pp, FREE_WRITE);
 		ack_count++;
 
 		if (ns_save == ack) 
 			break;  
-		pp = lp->rtq_front;   
+		pp = skb_dequeue(&lp->rtq);
 	}
-	if (pp == NULL)			/* if rtq empty now */ 
-		lp->rtq_back = NULL;		/* correct back pointer */
-
+	restore_flags(flags);
 	return ack_count; 
 }
 

@@ -18,6 +18,7 @@
 #include <linux/smp.h>
 #include <linux/interrupt.h>
 #include <linux/malloc.h>
+#include <linux/init.h>
 
 #include <asm/ptrace.h>
 #include <asm/processor.h>
@@ -195,7 +196,7 @@ static void sun4m_lvl14_handler(int irq, void *dev_id, struct pt_regs * regs)
 }
 #endif /* HANDLE_LVL14_IRQ */
 
-static void sun4m_init_timers(void (*counter_fn)(int, void *, struct pt_regs *))
+__initfunc(static void sun4m_init_timers(void (*counter_fn)(int, void *, struct pt_regs *)))
 {
 	int reg_count, irq, cpu;
 	struct linux_prom_registers cnt_regs[PROMREG_MAX];
@@ -266,7 +267,7 @@ static void sun4m_init_timers(void (*counter_fn)(int, void *, struct pt_regs *))
 	}
 }
 
-void sun4m_init_IRQ(void)
+__initfunc(void sun4m_init_IRQ(void))
 {
 	int ie_node,i;
 	struct linux_prom_registers int_regs[PROMREG_MAX];

@@ -49,18 +49,20 @@
  *  picpar: This is a redesign of the par96 modem by Henning Rech, DF9IC. The
  *          modem is protocol compatible to par96, but uses only three low
  *          power ICs and can therefore be fed from the parallel port and
- *          does not require an additional power supply.
+ *          does not require an additional power supply. It features
+ *          built in DCD circuitry. The driver should therefore be configured
+ *          for hardware DCD.
  *
  *
  *  Command line options (insmod command line)
  * 
- *  modem    modem type of the first channel; 1=ser12,
+ *  mode     driver mode string. Valid choices are ser12 and par96. An
+ *           optional * enables software DCD.
  *           2=par96/par97, any other value invalid
  *  iobase   base address of the port; common values are for ser12 0x3f8,
  *           0x2f8, 0x3e8, 0x2e8 and for par96/par97 0x378, 0x278, 0x3bc
  *  irq      interrupt line of the port; common values are for ser12 3,4
  *           and for par96/par97 7
- *  options  0=use hardware DCD, 1=use software DCD
  * 
  *
  *  History:
@@ -94,6 +96,18 @@
 
 #define BAYCOM_DEBUG
 
+/*
+ * modem options; bit mask
+ */
+#define BAYCOM_OPTIONS_SOFTDCD  1
+
+
+/* --------------------------------------------------------------------- */
+
+static const char bc_drvname[] = "baycom";
+static const char bc_drvinfo[] = KERN_INFO "baycom: (C) 1996 Thomas Sailer, HB9JNX/AE4WA\n"
+KERN_INFO "baycom: version 0.3 compiled " __TIME__ " " __DATE__ "\n";
+
 /* --------------------------------------------------------------------- */
 
 #define NR_PORTS 4
@@ -101,8 +115,9 @@
 static struct device baycom_device[NR_PORTS];
 
 static struct {
-	int modem, iobase, irq, options;
-} baycom_ports[NR_PORTS] = { { BAYCOM_MODEM_INVALID, 0, 0, 0, }, };
+	char *mode;
+	int iobase, irq;
+} baycom_ports[NR_PORTS] = { { NULL, 0, 0 }, };
 
 /* --------------------------------------------------------------------- */
 
@@ -184,8 +199,6 @@ struct baycom_state {
 #define min(a, b) (((a) < (b)) ? (a) : (b))
 #define max(a, b) (((a) > (b)) ? (a) : (b))
 
-/* --------------------------------------------------------------------- */
-/* --------------------------------------------------------------------- */
 /* --------------------------------------------------------------------- */
 
 static void inline baycom_int_freq(struct baycom_state *bc)
@@ -496,6 +509,7 @@ static int ser12_open(struct device *dev)
 	if (check_region(dev->base_addr, SER12_EXTENT))
 		return -EACCES;
 	memset(&bc->modem, 0, sizeof(bc->modem));
+	bc->hdrv.par.bitrate = 1200;
 	if ((u = ser12_check_uart(dev->base_addr)) == c_uart_unknown)
 		return -EIO;
 	outb(0, FCR(dev->base_addr));  /* disable FIFOs */
@@ -516,9 +530,9 @@ static int ser12_open(struct device *dev)
 	 * depending on the usage of the software DCD routine
 	 */
 	ser12_set_divisor(dev, (bc->options & BAYCOM_OPTIONS_SOFTDCD) ? 4 : 6);
-	printk(KERN_INFO "baycom: ser12 at iobase 0x%lx irq %u options "
-	       "0x%x uart %s\n", dev->base_addr, dev->irq, bc->options, 
-	       uart_str[u]);
+	printk(KERN_INFO "%s: ser12 at iobase 0x%lx irq %u options "
+	       "0x%x uart %s\n", bc_drvname, dev->base_addr, dev->irq, 
+	       bc->options, uart_str[u]);
 	MOD_INC_USE_COUNT;
 	return 0;
 }
@@ -538,8 +552,8 @@ static int ser12_close(struct device *dev)
 	outb(1, MCR(dev->base_addr));
 	free_irq(dev->irq, dev);	
 	release_region(dev->base_addr, SER12_EXTENT);
-	printk(KERN_INFO "baycom: close ser12 at iobase 0x%lx irq %u\n",
-	       dev->base_addr, dev->irq);
+	printk(KERN_INFO "%s: close ser12 at iobase 0x%lx irq %u\n",
+	       bc_drvname, dev->base_addr, dev->irq);
 	MOD_DEC_USE_COUNT;
 	return 0;
 }
@@ -702,14 +716,15 @@ static int par96_open(struct device *dev)
 	if (check_region(dev->base_addr, PAR96_EXTENT))
 		return -EACCES;
 	memset(&bc->modem, 0, sizeof(bc->modem));
+	bc->hdrv.par.bitrate = 9600;
 	if (par96_check_lpt(dev->base_addr))
 		return -EIO;
 	/* disable interrupt */
 	outb(0, LPT_CONTROL(dev->base_addr));          
 	 /* switch off PTT */
 	outb(PAR96_PTT | PAR97_POWER, LPT_DATA(dev->base_addr));
-	printk(KERN_INFO "baycom: par96 at iobase 0x%lx irq %u "
-	       "options 0x%x\n", dev->base_addr, dev->irq, bc->options);
+	printk(KERN_INFO "%s: par96 at iobase 0x%lx irq %u options 0x%x\n",
+	       bc_drvname, dev->base_addr, dev->irq, bc->options);
 	if (request_irq(dev->irq, par96_interrupt, SA_INTERRUPT, 
 			"baycom_par96", dev))
 		return -EBUSY;
@@ -734,8 +749,8 @@ static int par96_close(struct device *dev)
 	outb(PAR96_PTT | PAR97_POWER, LPT_DATA(dev->base_addr));
 	free_irq(dev->irq, dev);	
 	release_region(dev->base_addr, PAR96_EXTENT);
-	printk(KERN_INFO "baycom: close par96 at iobase 0x%lx irq %u\n",
-	       dev->base_addr, dev->irq);
+	printk(KERN_INFO "%s: close par96 at iobase 0x%lx irq %u\n",
+	       bc_drvname, dev->base_addr, dev->irq);
 	MOD_DEC_USE_COUNT;
 	return 0;
 }
@@ -747,12 +762,14 @@ static int par96_close(struct device *dev)
 
 /* --------------------------------------------------------------------- */
 
-static int baycom_ioctl(struct device *dev, struct ifreq *ifr, int cmd);
+static int baycom_ioctl(struct device *dev, struct ifreq *ifr, 
+			struct hdlcdrv_ioctl *hi, int cmd);
 
 /* --------------------------------------------------------------------- */
 
 static struct hdlcdrv_ops ser12_ops = {
-	1200,
+	bc_drvname,
+	bc_drvinfo,
 	ser12_open,
 	ser12_close,
 	baycom_ioctl
@@ -761,7 +778,8 @@ static struct hdlcdrv_ops ser12_ops = {
 /* --------------------------------------------------------------------- */
 
 static struct hdlcdrv_ops par96_ops = {
-	9600,
+	bc_drvname,
+	bc_drvinfo,
 	par96_open,
 	par96_close,
 	baycom_ioctl
@@ -770,7 +788,8 @@ static struct hdlcdrv_ops par96_ops = {
 /* --------------------------------------------------------------------- */
 
 static struct hdlcdrv_ops dummy_ops = {
-	0,
+	bc_drvname,
+	bc_drvinfo,
 	NULL,
 	NULL,
 	baycom_ioctl
@@ -778,17 +797,35 @@ static struct hdlcdrv_ops dummy_ops = {
 
 /* --------------------------------------------------------------------- */
 
-static struct hdlcdrv_ops *ops_tab[3] = {
-	&dummy_ops, &ser12_ops, &par96_ops
-};
+static int baycom_setmode(struct baycom_state *bc, char *modestr)
+{
+	struct hdlcdrv_ops *newops = NULL;
+	unsigned long flags;
+	
+	if (!strncmp(modestr, "off", 3))
+		newops = &dummy_ops;
+	else if (!strncmp(modestr, "ser12", 5))
+		newops = &ser12_ops;
+	else if (!strncmp(modestr, "par96", 5))
+		newops = &par96_ops;
+	else
+		return -EINVAL;
+	save_flags(flags);
+	cli();
+	bc->hdrv.ops = newops;
+	bc->options = !!strchr(modestr, '*');
+	restore_flags(flags);
+	return 0;
+}
 
 /* --------------------------------------------------------------------- */
 
-static int baycom_ioctl(struct device *dev, struct ifreq *ifr, int cmd)
+static int baycom_ioctl(struct device *dev, struct ifreq *ifr, 
+			struct hdlcdrv_ioctl *hi, int cmd)
 {
 	struct baycom_state *bc;
 	struct baycom_ioctl bi;
-	unsigned long flags;
+	int cmd2;
 		
 	if (!dev || !dev->priv || 
 	    ((struct baycom_state *)dev->priv)->hdrv.magic != HDLCDRV_MAGIC) {
@@ -799,38 +836,49 @@ static int baycom_ioctl(struct device *dev, struct ifreq *ifr, int cmd)
 
 	if (cmd != SIOCDEVPRIVATE)
 		return -ENOIOCTLCMD;
+	if (get_user(cmd2, (int *)ifr->ifr_data))
+		return -EFAULT;
+	switch (hi->cmd) {
+	default:
+		break;
+		
+	case HDLCDRVCTL_GETMODE:
+		if (bc->hdrv.ops == &ser12_ops)
+			strcpy(hi->data.modename, "ser12");
+		else if (bc->hdrv.ops == &par96_ops)
+			strcpy(hi->data.modename, "par96");
+		else if (bc->hdrv.ops == &dummy_ops)
+			strcpy(hi->data.modename, "off");
+		else
+			strcpy(hi->data.modename, "invalid");
+		if (bc->options & 1)
+			strcat(hi->data.modename, "*");
+		if (copy_to_user(ifr->ifr_data, hi, sizeof(struct hdlcdrv_ioctl)))
+			return -EFAULT;
+		return 0;
+
+	case HDLCDRVCTL_SETMODE:
+		if (!suser() || dev->start)
+			return -EACCES;
+		hi->data.modename[sizeof(hi->data.modename)-1] = '\0';
+		return baycom_setmode(bc, hi->data.modename);
+
+	case HDLCDRVCTL_MODELIST:
+		strcpy(hi->data.modename, "ser12,par96");
+		if (copy_to_user(ifr->ifr_data, hi, sizeof(struct hdlcdrv_ioctl)))
+			return -EFAULT;
+		return 0;
+		
+	case HDLCDRVCTL_MODEMPARMASK:
+		return HDLCDRV_PARMASK_IOBASE | HDLCDRV_PARMASK_IRQ;
+
+	}
+
 	if (copy_from_user(&bi, ifr->ifr_data, sizeof(bi)))
 		return -EFAULT;
-
 	switch (bi.cmd) {
 	default:
 		return -ENOIOCTLCMD;
-
-	case BAYCOMCTL_GETMODEMTYPE:
-		bi.data.mt.modem_type = BAYCOM_MODEM_INVALID;
-		if (bc->hdrv.ops == &ser12_ops)
-			bi.data.mt.modem_type = BAYCOM_MODEM_SER12;
-		else if (bc->hdrv.ops == &par96_ops)
-			bi.data.mt.modem_type = BAYCOM_MODEM_PAR96;
-		else if (bc->hdrv.ops != &dummy_ops) {
-			printk(KERN_ERR "baycom: BAYCOMCTL_GETMODEMTYPE: "
-			       "modem ops invalid\n");
-		}
-		bi.data.mt.options = bc->options;
-		break;
-
-	case BAYCOMCTL_SETMODEMTYPE:
-		if (!suser() || dev->start)
-			return -EACCES;
-		if (bi.data.mt.modem_type < BAYCOM_MODEM_SER12 ||
-		    bi.data.mt.modem_type > BAYCOM_MODEM_PAR96)
-			return -EINVAL;
-		save_flags(flags);
-		cli();
-		bc->hdrv.ops = ops_tab[bi.data.mt.modem_type];
-		bc->options = bi.data.mt.options;
-		restore_flags(flags);
-		return 0;
 
 #ifdef BAYCOM_DEBUG
 	case BAYCOMCTL_GETDEBUG:
@@ -860,7 +908,7 @@ int baycom_init(void)
 	char ifname[HDLCDRV_IFNAMELEN];
 
 	
-	printk(KERN_INFO "baycom: compiled %s %s\n", __TIME__, __DATE__);
+	printk(bc_drvinfo);
 	/*
 	 * register net devices
 	 */
@@ -868,27 +916,23 @@ int baycom_init(void)
 		struct device *dev = baycom_device+i;
 		sprintf(ifname, "bc%d", i);
 
-		if (baycom_ports[i].modem < BAYCOM_MODEM_SER12 ||
-		    baycom_ports[i].modem > BAYCOM_MODEM_PAR96)
+		if (!baycom_ports[i].mode)
 			set_hw = 0;
-		if (set_hw) {
-			j = hdlcdrv_register_hdlcdrv(dev, ops_tab[baycom_ports[i].modem], 
-						     sizeof(struct baycom_state), 
-						     ifname, baycom_ports[i].iobase,
-						     baycom_ports[i].irq, 0);
-			if (!j) {
-				bc = (struct baycom_state *)dev->priv;
-				bc->options = baycom_ports[i].options;
-			}
-		} else 
-			j = hdlcdrv_register_hdlcdrv(dev, &dummy_ops, 
-						     sizeof(struct baycom_state), 
-						     ifname, 0, 0, 0);
-		if (j) {
-			printk(KERN_WARNING "baycom: cannot register net "
-			       "device\n");
-		} else
+		if (!set_hw)
+			baycom_ports[i].iobase = baycom_ports[i].irq = 0;
+		j = hdlcdrv_register_hdlcdrv(dev, &dummy_ops, 
+					     sizeof(struct baycom_state), 
+					     ifname, baycom_ports[i].iobase,
+					     baycom_ports[i].irq, 0);
+		if (!j) {
+			bc = (struct baycom_state *)dev->priv;
+			if (set_hw && baycom_setmode(bc, baycom_ports[i].mode))
+				set_hw = 0;
 			found++;
+		} else {
+			printk(KERN_WARNING "%s: cannot register net device\n",
+			       bc_drvname);
+		}
 	}
 	if (!found)
 		return -ENXIO;
@@ -902,20 +946,16 @@ int baycom_init(void)
 /*
  * command line settable parameters
  */
-int modem = BAYCOM_MODEM_INVALID;
+char *mode = NULL;
 int iobase = 0x3f8;
 int irq = 4;
-int options = BAYCOM_OPTIONS_SOFTDCD;
 
 int init_module(void)
 {
-	printk(KERN_INFO "baycom: v0.1 (C) 1996 Thomas Sailer HB9JNX/AE4WA\n");
-
-	baycom_ports[0].modem = modem;
+	baycom_ports[0].mode = mode;
 	baycom_ports[0].iobase = iobase;
 	baycom_ports[0].irq = irq;
-	baycom_ports[0].options = options;
-	baycom_ports[1].modem = BAYCOM_MODEM_INVALID;
+	baycom_ports[1].mode = NULL;
 
 	return baycom_init();
 }
@@ -925,8 +965,6 @@ int init_module(void)
 void cleanup_module(void)
 {
 	int i;
-
-	printk(KERN_INFO "baycom: cleanup_module called\n");
 
 	for(i = 0; i < NR_PORTS; i++) {
 		struct device *dev = baycom_device+i;
@@ -945,24 +983,26 @@ void cleanup_module(void)
 #else /* MODULE */
 /* --------------------------------------------------------------------- */
 /*
- * format: baycom=modem,io,irq,options[,modem,io,irq,options]
- * modem=1: ser12, modem=2: par96
- * options=0: hardware DCD, options=1: software DCD
+ * format: baycom=io,irq,mode
+ * mode: {ser12,par96}[*]
+ * * indicates sofware DCD
  */
 
 void baycom_setup(char *str, int *ints)
 {
 	int i;
 
-	for (i = 0; i < NR_PORTS; i++) 
-		if (ints[0] >= 4*i+4) {
-			baycom_ports[i].modem = ints[4*i+1];
-			baycom_ports[i].iobase = ints[4*i+2];
-			baycom_ports[i].irq = ints[4*i+3];
-			baycom_ports[i].options = ints[4*i+4];
-		} else
-			baycom_ports[i].modem = BAYCOM_MODEM_INVALID;
-
+	for (i = 0; (i < NR_PORTS) && (baycom_ports[i].mode); i++);
+	if ((i >= NR_PORTS) || (ints[0] < 3)) {
+		printk(KERN_INFO "%s: too many or invalid interface "
+		       "specifications\n", bc_drvname);
+		return;
+	}
+	baycom_ports[i].mode = str;
+	baycom_ports[i].iobase = ints[1];
+	baycom_ports[i].irq = ints[2];
+	if (i < NR_PORTS-1)
+		baycom_ports[i+1].mode = NULL;
 }
 
 #endif /* MODULE */

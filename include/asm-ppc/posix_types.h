@@ -22,6 +22,7 @@ typedef long		__kernel_time_t;
 typedef long		__kernel_clock_t;
 typedef int		__kernel_daddr_t;
 typedef char *		__kernel_caddr_t;
+typedef short             __kernel_ipc_pid_t;
 
 #ifdef __GNUC__
 typedef long long	__kernel_loff_t;
@@ -74,7 +75,7 @@ static __inline__ int __FD_ISSET(unsigned long fd, __kernel_fd_set *p)
 #undef __FD_ZERO
 static __inline__ void __FD_ZERO(__kernel_fd_set *p)
 {
-	unsigned int *tmp = p->fds_bits;
+	unsigned int *tmp = (unsigned int *)p->fds_bits;
 	int i;
 
 	if (__builtin_constant_p(__FDSET_LONGS)) {

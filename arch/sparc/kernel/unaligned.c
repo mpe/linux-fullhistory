@@ -1,9 +1,11 @@
-/* $Id: unaligned.c,v 1.10 1996/11/10 21:25:47 davem Exp $
+/* $Id: unaligned.c,v 1.13 1996/11/26 14:01:57 jj Exp $
  * unaligned.c: Unaligned load/store trap handling with special
  *              cases for the kernel to do them more quickly.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
+ * Copyright (C) 1996 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
  */
+
 
 #include <linux/kernel.h>
 #include <linux/sched.h>
@@ -64,22 +66,16 @@ static inline int decode_access_size(unsigned int insn)
 	}
 }
 
-/* 1 = signed, 0 = unsigned */
+/* 0x400000 = signed, 0 = unsigned */
 static inline int decode_signedness(unsigned int insn)
 {
-	return (insn >> 22) & 1;
+	return (insn & 0x400000);
 }
 
 static inline void maybe_flush_windows(unsigned int rs1, unsigned int rs2,
 				       unsigned int rd)
 {
-	int yep;
-
-	if(rs2 >= 16 || rs1 >= 16 || rd >= 16)
-		yep = 1;
-	else
-		yep = 0;
-	if(yep) {
+	if(rs2 >= 16 || rs1 >= 16 || rd >= 16) {
 		/* Wheee... */
 		__asm__ __volatile__("save %sp, -0x40, %sp\n\t"
 				     "save %sp, -0x40, %sp\n\t"
@@ -91,11 +87,6 @@ static inline void maybe_flush_windows(unsigned int rs1, unsigned int rs2,
 				     "restore; restore; restore; restore;\n\t"
 				     "restore; restore; restore;\n\t");
 	}
-}
-
-static inline int sign_extend_halfword(int hword)
-{
-	return hword << 16 >> 16;
 }
 
 static inline int sign_extend_imm13(int imm)
@@ -131,123 +122,168 @@ static inline unsigned long compute_effective_address(struct pt_regs *regs,
 	unsigned int rs1 = (insn >> 14) & 0x1f;
 	unsigned int rs2 = insn & 0x1f;
 	unsigned int rd = (insn >> 25) & 0x1f;
-	unsigned int imm13 = (insn & 0x1fff);
 
 	if(insn & 0x2000) {
 		maybe_flush_windows(rs1, 0, rd);
-		return (fetch_reg(rs1, regs) + sign_extend_imm13(imm13));
+		return (fetch_reg(rs1, regs) + sign_extend_imm13(insn));
 	} else {
 		maybe_flush_windows(rs1, rs2, rd);
 		return (fetch_reg(rs1, regs) + fetch_reg(rs2, regs));
 	}
 }
 
-static inline void do_integer_load(unsigned long *dest_reg, int size,
-				   unsigned long *saddr, int is_signed)
+/* This is just to make gcc think panic does return... */
+static void unaligned_panic(char *str)
 {
-	unsigned char bytes[4];
-
-	switch(size) {
-	case 2:
-		bytes[0] = *((unsigned char *)saddr + 1);
-		bytes[1] = *((unsigned char *)saddr + 0);
-		*dest_reg = (bytes[0] | (bytes[1] << 8));
-		if(is_signed)
-			*dest_reg = sign_extend_halfword(*dest_reg);
-		break;
-
-	case 4:
-		bytes[0] = *((unsigned char *)saddr + 3);
-		bytes[1] = *((unsigned char *)saddr + 2);
-		bytes[2] = *((unsigned char *)saddr + 1);
-		bytes[3] = *((unsigned char *)saddr + 0);
-		*dest_reg = (bytes[0] | (bytes[1] << 8) |
-			     (bytes[2] << 16) | (bytes[3] << 24));
-		break;
-
-	case 8:
-		bytes[0] = *((unsigned char *)saddr + 3);
-		bytes[1] = *((unsigned char *)saddr + 2);
-		bytes[2] = *((unsigned char *)saddr + 1);
-		bytes[3] = *((unsigned char *)saddr + 0);
-		*dest_reg++ = (bytes[0] | (bytes[1] << 8) |
-			     (bytes[2] << 16) | (bytes[3] << 24));
-		saddr++;
-		bytes[0] = *((unsigned char *)saddr + 3);
-		bytes[1] = *((unsigned char *)saddr + 2);
-		bytes[2] = *((unsigned char *)saddr + 1);
-		bytes[3] = *((unsigned char *)saddr + 0);
-		*dest_reg = (bytes[0] | (bytes[1] << 8) |
-			     (bytes[2] << 16) | (bytes[3] << 24));
-		break;
-
-	default:
-		panic("Impossible unaligned load.");
-	};
+	panic(str);
 }
 
-static inline void store_common(unsigned long *src_val,
-				int size, unsigned long *dst_addr)
-{
-	unsigned char *daddr = (unsigned char *) dst_addr;
-	switch(size) {
-	case 2:
-		daddr[0] = ((*src_val) >> 8) & 0xff;
-		daddr[1] = (*src_val & 0xff);
-		break;
+#define do_integer_load(dest_reg, size, saddr, is_signed, errh) ({		\
+__asm__ __volatile__ (								\
+	"cmp	%1, 8\n\t"							\
+	"be	9f\n\t"								\
+	" cmp	%1, 4\n\t"							\
+	"be	6f\n"								\
+"4:\t"	" ldub	[%2], %%l1\n"							\
+"5:\t"	"ldub	[%2 + 1], %%l2\n\t"						\
+	"sll	%%l1, 8, %%l1\n\t"						\
+	"tst	%3\n\t"								\
+	"be	3f\n\t"								\
+	" add	%%l1, %%l2, %%l1\n\t"						\
+	"sll	%%l1, 16, %%l1\n\t"						\
+	"sra	%%l1, 16, %%l1\n"						\
+"3:\t"	"b	0f\n\t"								\
+	" st	%%l1, [%0]\n"							\
+"6:\t"	"ldub	[%2 + 1], %%l2\n\t"						\
+	"sll	%%l1, 24, %%l1\n"						\
+"7:\t"	"ldub	[%2 + 2], %%g7\n\t"						\
+	"sll	%%l2, 16, %%l2\n"						\
+"8:\t"	"ldub	[%2 + 3], %%g1\n\t"						\
+	"sll	%%g7, 8, %%g7\n\t"						\
+	"or	%%l1, %%l2, %%l1\n\t"						\
+	"or	%%g7, %%g1, %%g7\n\t"						\
+	"or	%%l1, %%g7, %%l1\n\t"						\
+	"b	0f\n\t"								\
+	" st	%%l1, [%0]\n"							\
+"9:\t"	"ldub	[%2], %%l1\n"							\
+"10:\t"	"ldub	[%2 + 1], %%l2\n\t"						\
+	"sll	%%l1, 24, %%l1\n"						\
+"11:\t"	"ldub	[%2 + 2], %%g7\n\t"						\
+	"sll	%%l2, 16, %%l2\n"						\
+"12:\t"	"ldub	[%2 + 3], %%g1\n\t"						\
+	"sll	%%g7, 8, %%g7\n\t"						\
+	"or	%%l1, %%l2, %%l1\n\t"						\
+	"or	%%g7, %%g1, %%g7\n\t"						\
+	"or	%%l1, %%g7, %%g7\n"						\
+"13:\t"	"ldub	[%2 + 4], %%l1\n\t"						\
+	"st	%%g7, [%0]\n"							\
+"14:\t"	"ldub	[%2 + 5], %%l2\n\t"						\
+	"sll	%%l1, 24, %%l1\n"						\
+"15:\t"	"ldub	[%2 + 6], %%g7\n\t"						\
+	"sll	%%l2, 16, %%l2\n"						\
+"16:\t"	"ldub	[%2 + 7], %%g1\n\t"						\
+	"sll	%%g7, 8, %%g7\n\t"						\
+	"or	%%l1, %%l2, %%l1\n\t"						\
+	"or	%%g7, %%g1, %%g7\n\t"						\
+	"or	%%l1, %%g7, %%g7\n\t"						\
+	"st	%%g7, [%0 + 4]\n"						\
+"0:\n\n\t"									\
+	".section __ex_table\n\t"						\
+	".word	4b, " #errh "\n\t"						\
+	".word	5b, " #errh "\n\t"						\
+	".word	6b, " #errh "\n\t"						\
+	".word	7b, " #errh "\n\t"						\
+	".word	8b, " #errh "\n\t"						\
+	".word	9b, " #errh "\n\t"						\
+	".word	10b, " #errh "\n\t"						\
+	".word	11b, " #errh "\n\t"						\
+	".word	12b, " #errh "\n\t"						\
+	".word	13b, " #errh "\n\t"						\
+	".word	14b, " #errh "\n\t"						\
+	".word	15b, " #errh "\n\t"						\
+	".word	16b, " #errh "\n\n\t"						\
+	".text\n\t"								\
+	: : "r" (dest_reg), "r" (size), "r" (saddr), "r" (is_signed)		\
+	: "l1", "l2", "g7", "g1");						\
+})
+	
+#define store_common(dst_addr, size, src_val, errh) ({				\
+__asm__ __volatile__ (								\
+	"ld	[%2], %%l1\n"							\
+	"cmp	%1, 2\n\t"							\
+	"be	2f\n\t"								\
+	" cmp	%1, 4\n\t"							\
+	"be	1f\n\t"								\
+	" srl	%%l1, 24, %%l2\n\t"						\
+	"srl	%%l1, 16, %%g7\n"						\
+"4:\t"	"stb	%%l2, [%0]\n\t"							\
+	"srl	%%l1, 8, %%l2\n"						\
+"5:\t"	"stb	%%g7, [%0 + 1]\n\t"						\
+	"ld	[%2 + 4], %%g7\n"						\
+"6:\t"	"stb	%%l2, [%0 + 2]\n\t"						\
+	"srl	%%g7, 24, %%l2\n"						\
+"7:\t"	"stb	%%l1, [%0 + 3]\n\t"						\
+	"srl	%%g7, 16, %%l1\n"						\
+"8:\t"	"stb	%%l2, [%0 + 4]\n\t"						\
+	"srl	%%g7, 8, %%l2\n"						\
+"9:\t"	"stb	%%l1, [%0 + 5]\n"						\
+"10:\t"	"stb	%%l2, [%0 + 6]\n\t"						\
+	"b	0f\n"								\
+"11:\t"	" stb	%%g7, [%0 + 7]\n"						\
+"1:\t"	"srl	%%l1, 16, %%g7\n"						\
+"12:\t"	"stb	%%l2, [%0]\n\t"							\
+	"srl	%%l1, 8, %%l2\n"						\
+"13:\t"	"stb	%%g7, [%0 + 1]\n"						\
+"14:\t"	"stb	%%l2, [%0 + 2]\n\t"						\
+	"b	0f\n"								\
+"15:\t"	" stb	%%l1, [%0 + 3]\n"						\
+"2:\t"	"srl	%%l1, 8, %%l2\n"						\
+"16:\t"	"stb	%%l2, [%0]\n"							\
+"17:\t"	"stb	%%l1, [%0 + 1]\n"						\
+"0:\n\n\t"									\
+	".section __ex_table\n\t"						\
+	".word	4b, " #errh "\n\t"						\
+	".word	5b, " #errh "\n\t"						\
+	".word	6b, " #errh "\n\t"						\
+	".word	7b, " #errh "\n\t"						\
+	".word	8b, " #errh "\n\t"						\
+	".word	9b, " #errh "\n\t"						\
+	".word	10b, " #errh "\n\t"						\
+	".word	11b, " #errh "\n\t"						\
+	".word	12b, " #errh "\n\t"						\
+	".word	13b, " #errh "\n\t"						\
+	".word	14b, " #errh "\n\t"						\
+	".word	15b, " #errh "\n\t"						\
+	".word	16b, " #errh "\n\t"						\
+	".word	17b, " #errh "\n\n\t"						\
+	".text\n\t"								\
+	: : "r" (dst_addr), "r" (size), "r" (src_val)				\
+	: "l1", "l2", "g7", "g1");						\
+})
 
-	case 4:
-		daddr[0] = ((*src_val) >> 24) & 0xff;
-		daddr[1] = ((*src_val) >> 16) & 0xff;
-		daddr[2] = ((*src_val) >> 8) & 0xff;
-		daddr[3] = (*src_val & 0xff);
-		break;
+#define do_integer_store(reg_num, size, dst_addr, regs, errh) ({		\
+	unsigned long *src_val;							\
+	static unsigned long zero[2] = { 0, };					\
+										\
+	if (reg_num) src_val = fetch_reg_addr(reg_num, regs);			\
+	else {									\
+		src_val = &zero[0];						\
+		if (size == 8)							\
+			zero[1] = fetch_reg(1, regs);				\
+	}									\
+	store_common(dst_addr, size, src_val, errh);				\
+})
 
-	case 8:
-		daddr[0] = ((*src_val) >> 24) & 0xff;
-		daddr[1] = ((*src_val) >> 16) & 0xff;
-		daddr[2] = ((*src_val) >> 8) & 0xff;
-		daddr[3] = (*src_val & 0xff);
-		daddr += 4;
-		src_val++;
-		daddr[0] = ((*src_val) >> 24) & 0xff;
-		daddr[1] = ((*src_val) >> 16) & 0xff;
-		daddr[2] = ((*src_val) >> 8) & 0xff;
-		daddr[3] = (*src_val & 0xff);
-		break;
-
-	default:
-		panic("Impossible unaligned store.");
-	}
-}
-
-static inline void do_integer_store(int reg_num, int size,
-				    unsigned long *dst_addr,
-				    struct pt_regs *regs)
-{
-	unsigned long *src_val;
-	static unsigned long zero[2] = { 0, 0 };
-
-	if(reg_num)
-		src_val = fetch_reg_addr(reg_num, regs);
-	else
-		src_val = &zero[0];
-	store_common(src_val, size, dst_addr);
-}
-
-static inline void do_atomic(unsigned long *srcdest_reg, unsigned long *mem)
-{
-	unsigned long flags, tmp;
-
-#ifdef __SMP__
-	/* XXX Need to capture/release other cpu's around this. */
-#endif
-	save_and_cli(flags);
-	tmp = *srcdest_reg;
-	do_integer_load(srcdest_reg, 4, mem, 0);
-	store_common(&tmp, 4, mem);
-	restore_flags(flags);
-}
+/* XXX Need to capture/release other cpu's for SMP around this. */
+#define do_atomic(srcdest_reg, mem, errh) ({					\
+	unsigned long flags, tmp;						\
+										\
+	save_and_cli(flags);							\
+	tmp = *srcdest_reg;							\
+	do_integer_load(srcdest_reg, 4, mem, 0, errh);				\
+	store_common(mem, 4, &tmp, errh);					\
+	restore_flags(flags);							\
+})
 
 static inline void advance(struct pt_regs *regs)
 {
@@ -265,6 +301,32 @@ static inline int ok_for_kernel(unsigned int insn)
 	return !floating_point_load_or_store_p(insn);
 }
 
+void kernel_mna_trap_fault(struct pt_regs *regs, unsigned int insn) __asm__ ("kernel_mna_trap_fault");
+
+void kernel_mna_trap_fault(struct pt_regs *regs, unsigned int insn)
+{
+	unsigned long g2 = regs->u_regs [UREG_G2];
+	unsigned long fixup = search_exception_table (regs->pc, &g2);
+	
+	if (!fixup) {
+		unsigned long address = compute_effective_address(regs, insn);
+        	if(address < PAGE_SIZE) {
+                	printk(KERN_ALERT "Unable to handle kernel NULL pointer dereference in mna handler");
+        	} else
+                	printk(KERN_ALERT "Unable to handle kernel paging request in mna handler");
+	        printk(KERN_ALERT " at virtual address %08lx\n",address);
+        	printk(KERN_ALERT "current->mm->context = %08lx\n",
+	               (unsigned long) current->mm->context);
+	        printk(KERN_ALERT "current->mm->pgd = %08lx\n",
+        	       (unsigned long) current->mm->pgd);
+	        die_if_kernel("Oops", regs);
+		/* Not reached */
+	}
+	regs->pc = fixup;
+	regs->npc = regs->pc + 4;
+	regs->u_regs [UREG_G2] = g2;
+}
+
 asmlinkage void kernel_unaligned_trap(struct pt_regs *regs, unsigned int insn)
 {
 	enum direction dir = decode_direction(insn);
@@ -273,8 +335,17 @@ asmlinkage void kernel_unaligned_trap(struct pt_regs *regs, unsigned int insn)
 	if(!ok_for_kernel(insn) || dir == both) {
 		printk("Unsupported unaligned load/store trap for kernel at <%08lx>.\n",
 		       regs->pc);
-		panic("Wheee. Kernel does fpu/atomic unaligned load/store.");
-		/* Not reached... */
+		unaligned_panic("Wheee. Kernel does fpu/atomic unaligned load/store.");
+		
+		__asm__ __volatile__ ("\n"
+"kernel_unaligned_trap_fault:\n\t"
+		"mov	%0, %%o0\n\t"
+		"call	kernel_mna_trap_fault\n\t"
+		" mov	%1, %%o1\n\t"
+		: : "r" (regs), "r" (insn)
+		: "o0", "o1", "o2", "o3", "o4", "o5", "o7", "g1", "g2", "g3", "g4", "g5", "g7");
+		
+		return;
 	} else {
 		unsigned long addr = compute_effective_address(regs, insn);
 
@@ -286,17 +357,20 @@ asmlinkage void kernel_unaligned_trap(struct pt_regs *regs, unsigned int insn)
 		case load:
 			do_integer_load(fetch_reg_addr(((insn>>25)&0x1f), regs),
 					size, (unsigned long *) addr,
-					decode_signedness(insn));
+					decode_signedness(insn),
+					kernel_unaligned_trap_fault);
 			break;
 
 		case store:
 			do_integer_store(((insn>>25)&0x1f), size,
-					 (unsigned long *) addr, regs);
+					 (unsigned long *) addr, regs,
+					 kernel_unaligned_trap_fault);
 			break;
-		case both:
 #if 0 /* unsupported */
+		case both:
 			do_atomic(fetch_reg_addr(((insn>>25)&0x1f), regs),
-				  (unsigned long *) addr);
+				  (unsigned long *) addr, 
+				  kernel_unaligned_trap_fault);
 			break;
 #endif
 		default:
@@ -344,6 +418,15 @@ static inline int ok_for_user(struct pt_regs *regs, unsigned int insn,
 #undef WINREG_ADDR
 }
 
+void user_mna_trap_fault(struct pt_regs *regs, unsigned int insn) __asm__ ("user_mna_trap_fault");
+
+void user_mna_trap_fault(struct pt_regs *regs, unsigned int insn)
+{
+	current->tss.sig_address = regs->pc;
+	current->tss.sig_desc = SUBSIG_PRIVINST;
+	send_sig(SIGBUS, current, 1);
+}
+
 asmlinkage void user_unaligned_trap(struct pt_regs *regs, unsigned int insn)
 {
 	enum direction dir;
@@ -368,21 +451,34 @@ asmlinkage void user_unaligned_trap(struct pt_regs *regs, unsigned int insn)
 		case load:
 			do_integer_load(fetch_reg_addr(((insn>>25)&0x1f), regs),
 					size, (unsigned long *) addr,
-					decode_signedness(insn));
+					decode_signedness(insn),
+					user_unaligned_trap_fault);
 			break;
 
 		case store:
 			do_integer_store(((insn>>25)&0x1f), size,
-					 (unsigned long *) addr, regs);
+					 (unsigned long *) addr, regs,
+					 user_unaligned_trap_fault);
 			break;
 
 		case both:
 			do_atomic(fetch_reg_addr(((insn>>25)&0x1f), regs),
-				  (unsigned long *) addr);
+				  (unsigned long *) addr,
+				  user_unaligned_trap_fault);
 			break;
 
 		default:
-			panic("Impossible user unaligned trap.");
+			unaligned_panic("Impossible user unaligned trap.");
+
+			__asm__ __volatile__ ("\n"
+"user_unaligned_trap_fault:\n\t"
+			"mov	%0, %%o0\n\t"
+			"call	user_mna_trap_fault\n\t"
+			" mov	%1, %%o1\n\t"
+			: : "r" (regs), "r" (insn)
+			: "o0", "o1", "o2", "o3", "o4", "o5", "o7", "g1", "g2", "g3", "g4", "g5", "g7");
+		
+			return;
 		}
 		advance(regs);
 		return;

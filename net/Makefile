@@ -9,7 +9,7 @@
 
 MOD_SUB_DIRS := ipv4
 ALL_SUB_DIRS := 802 ax25 bridge core ethernet ipv4 ipv6 ipx unix appletalk \
-		netrom rose #decnet
+		netrom rose x25 #decnet
 SUB_DIRS     := core ethernet unix
 MOD_LIST_NAME := NET_MISC_MODULES
 
@@ -46,6 +46,14 @@ SUB_DIRS += appletalk
 else
   ifeq ($(CONFIG_ATALK),m)
   MOD_SUB_DIRS += appletalk
+  endif
+endif
+
+ifeq ($(CONFIG_X25),y)
+SUB_DIRS += x25
+else
+  ifeq ($(CONFIG_X25),m)
+  MOD_SUB_DIRS += x25
   endif
 endif
 

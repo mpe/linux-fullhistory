@@ -113,7 +113,7 @@ bad_area:
 		fault_pc = regs->pc;
 	if ((fixup = search_exception_table(fault_pc)) != 0) {
 		struct pt_regs *tregs;
-		printk("Exception at %lx (%lx)\n", fault_pc, fixup);
+		printk("Exception at [<%lx>] (%lx)\n", fault_pc, fixup);
 		/* Create a new four word stack frame, discarding the old
 		   one.  */
 		regs->stkadj = frame_extra_sizes[regs->format];

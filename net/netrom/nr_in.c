@@ -109,7 +109,7 @@ static int nr_state1_machine(struct sock *sk, struct sk_buff *skb, int frametype
 			sk->protinfo.nr->vl	    = 0;
 			sk->protinfo.nr->state      = NR_STATE_3;
 			sk->protinfo.nr->n2count    = 0;
-			sk->window                  = skb->data[20];
+			sk->protinfo.nr->window     = skb->data[20];
 			sk->state                   = TCP_ESTABLISHED;
 			/* For WAIT_SABM connections we will produce an accept ready socket here */
 			if (!sk->dead)
@@ -290,7 +290,7 @@ static int nr_state3_machine(struct sock *sk, struct sk_buff *skb, int frametype
 			/*
 			 * Window is full, ack it immediately.
 			 */
-			if (((sk->protinfo.nr->vl + sk->window) % NR_MODULUS) == sk->protinfo.nr->vr) {
+			if (((sk->protinfo.nr->vl + sk->protinfo.nr->window) % NR_MODULUS) == sk->protinfo.nr->vr) {
 				nr_enquiry_response(sk);
 			} else {
 				if (!(sk->protinfo.nr->condition & ACK_PENDING_CONDITION)) {

@@ -7,7 +7,7 @@
  *
  *	Adapted from linux/net/ipv4/af_inet.c
  *
- *	$Id: af_inet6.c,v 1.13 1996/10/31 19:47:17 roque Exp $
+ *	$Id: af_inet6.c,v 1.6 1996/12/12 19:22:09 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -127,7 +127,7 @@ static int inet6_create(struct socket *sock, int protocol)
 		case SOCK_SEQPACKET:
 			if (protocol && protocol != IPPROTO_TCP) 
 			{
-				kfree_s((void *)sk, sizeof(*sk));
+				sk_free(sk);
 				return(-EPROTONOSUPPORT);
 			}
 			protocol = IPPROTO_TCP;
@@ -139,7 +139,7 @@ static int inet6_create(struct socket *sock, int protocol)
 		case SOCK_DGRAM:
 			if (protocol && protocol != IPPROTO_UDP) 
 			{
-				kfree_s((void *)sk, sizeof(*sk));
+				sk_free(sk);
 				return(-EPROTONOSUPPORT);
 			}
 			protocol = IPPROTO_UDP;
@@ -151,12 +151,12 @@ static int inet6_create(struct socket *sock, int protocol)
 		case SOCK_RAW:
 			if (!suser()) 
 			{
-				kfree_s((void *)sk, sizeof(*sk));
+				sk_free(sk);
 				return(-EPERM);
 			}
 			if (!protocol) 
 			{
-				kfree_s((void *)sk, sizeof(*sk));
+				sk_free(sk);
 				return(-EPROTONOSUPPORT);
 			}
 			prot = &rawv6_prot;
@@ -165,7 +165,7 @@ static int inet6_create(struct socket *sock, int protocol)
 			sk->num = protocol;
 			break;
 		default:
-			kfree_s((void *)sk, sizeof(*sk));
+			sk_free(sk);
 			return(-ESOCKTNOSUPPORT);
 	}
 

@@ -295,8 +295,7 @@ void sock_release(struct socket *sock)
 	iput(sock->inode);
 }
 
-int
-sock_sendmsg(struct socket *sock, struct msghdr *msg, int size)
+int sock_sendmsg(struct socket *sock, struct msghdr *msg, int size)
 {
 	int err;
 	struct scm_cookie scm;
@@ -315,8 +314,7 @@ sock_sendmsg(struct socket *sock, struct msghdr *msg, int size)
 	return err;
 }
 
-int
-sock_recvmsg(struct socket *sock, struct msghdr *msg, int size, int flags)
+int sock_recvmsg(struct socket *sock, struct msghdr *msg, int size, int flags)
 {
 	struct scm_cookie scm;
 
@@ -361,8 +359,6 @@ static long sock_read(struct inode *inode, struct file *file,
 
 	sock = socki_lookup(inode); 
   
-	if (size<0)
-		return -EINVAL;
 	if (size==0)		/* Match SYS5 behaviour */
 		return 0;
 	if ((err=verify_area(VERIFY_WRITE,ubuf,size))<0)
@@ -396,8 +392,6 @@ static long sock_write(struct inode *inode, struct file *file,
 	
 	sock = socki_lookup(inode); 
 
-	if(size<0)
-		return -EINVAL;
 	if(size==0)		/* Match SYS5 behaviour */
 		return 0;
 	
@@ -955,8 +949,6 @@ asmlinkage int sys_sendto(int fd, void * buff, size_t len, unsigned flags,
 	if (!(sock = sockfd_lookup(fd,&err)))
 		return err;
 
-	if(len<0)
-		return -EINVAL;
 	err=verify_area(VERIFY_READ,buff,len);
 	if(err)
 	  	return err;
@@ -964,17 +956,17 @@ asmlinkage int sys_sendto(int fd, void * buff, size_t len, unsigned flags,
 	iov.iov_base=buff;
 	iov.iov_len=len;
 	msg.msg_name=NULL;
-	msg.msg_namelen=0;
 	msg.msg_iov=&iov;
 	msg.msg_iovlen=1;
 	msg.msg_control=NULL;
 	msg.msg_controllen=0;
-	if (addr_len) {
+	msg.msg_namelen=addr_len;
+	if(addr)
+	{
 		err=move_addr_to_kernel(addr,addr_len,address);
 		if (err < 0)
 			return err;
 		msg.msg_name=address;
-		msg.msg_namelen=addr_len;
 	}
 	  	
 	if (current->files->fd[fd]->f_flags & O_NONBLOCK)
@@ -999,8 +991,6 @@ asmlinkage int sys_recv(int fd, void * ubuf, size_t size, unsigned flags)
 	if (!(sock = sockfd_lookup(fd, &err))) 
 		return err;
 		
-	if(size<0)
-		return -EINVAL;
 	if(size==0)
 		return 0;
 	err=verify_area(VERIFY_WRITE, ubuf, size);
@@ -1036,8 +1026,6 @@ asmlinkage int sys_recvfrom(int fd, void * ubuf, size_t size, unsigned flags,
 
 	if (!(sock = sockfd_lookup(fd, &err)))
 	  	return err;
-	if (size<0)
-		return -EINVAL;
 	if (size==0)
 		return 0;
 
@@ -1053,14 +1041,16 @@ asmlinkage int sys_recvfrom(int fd, void * ubuf, size_t size, unsigned flags,
   	iov.iov_base=ubuf;
   	msg.msg_name=address;
   	msg.msg_namelen=MAX_SOCK_ADDR;
-	size=sock_recvmsg(sock, &msg, size,
+	err=sock_recvmsg(sock, &msg, size,
 			  (current->files->fd[fd]->f_flags & O_NONBLOCK) ? (flags | MSG_DONTWAIT) : flags);
 
-	if(size<0)
-	 	return size;
+	if(err<0)
+	 	return err;
+	size=err;
+	
 	if(addr!=NULL && (err=move_addr_to_user(address, msg.msg_namelen, addr, addr_len))<0)
 	  	return err;
-
+	
 	return size;
 }
 

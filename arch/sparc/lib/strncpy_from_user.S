@@ -5,6 +5,7 @@
 
 #include <asm/cprefix.h>
 #include <asm/ptrace.h>
+#include <asm/errno.h>
 
 	.text
 	.align	4
@@ -19,19 +20,12 @@
 	.globl	C_LABEL(__strncpy_from_user)
 C_LABEL(__strncpy_from_user):
 	/* %o0=dest, %o1=src, %o2=count */
-	ld	[%g6 + THREAD_EX_COUNT], %g1
-	set	strncpy_user_failure, %g2
-	add	%g1, 1, %g3
-	st	%o7, [%g6 + THREAD_EX_PC]
-	st	%g3, [%g6 + THREAD_EX_COUNT]
-	st	%g2, [%g6 + THREAD_EX_EXPC]
-
 	mov	%o2, %o3
 1:
 	subcc	%o2, 1, %o2
 	bneg	2f
 	 nop
-
+10:
 	ldub	[%o1], %o4
 	add	%o0, 1, %o0
 	cmp	%o4, 0
@@ -40,10 +34,15 @@ C_LABEL(__strncpy_from_user):
 	 stb	%o4, [%o0 - 1]
 2:
 	add	%o2, 1, %o0
-	st	%g1, [%g6 + THREAD_EX_COUNT]
 	retl
 	 sub	%o3, %o0, %o0
 
-strncpy_user_failure:
-	jmpl	%g3 + 0x8, %g0
-	 mov	%g1, %o0
+	.section .fixup,#alloc,#execinstr
+	.align	4
+4:
+	retl
+	 mov	-EFAULT, %o0
+
+	.section __ex_table,#alloc
+	.align	4
+	.word	10b, 4b

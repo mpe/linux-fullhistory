@@ -1,4 +1,4 @@
-/* $Id: idprom.c,v 1.21 1996/10/12 13:12:48 davem Exp $
+/* $Id: idprom.c,v 1.22 1996/11/13 05:09:25 davem Exp $
  * idprom.c: Routines to load the idprom into kernel addresses and
  *           interpret the data contained within.
  *
@@ -7,6 +7,7 @@
 
 #include <linux/kernel.h>
 #include <linux/types.h>
+#include <linux/init.h>
 
 #include <asm/oplib.h>
 #include <asm/idprom.h>
@@ -35,12 +36,12 @@ struct Sun_Machine_Models Sun_Machines[NUM_SUN_MACHINES] = {
 { "Sun4c SparcStation IPX", (SM_SUN4C | SM_4C_IPX) },
 /* Finally, early Sun4m's */
 { "Sun4m SparcSystem600", (SM_SUN4M | SM_4M_SS60) },
-{ "Sun4m SparcStation10", (SM_SUN4M | SM_4M_SS50) },
+{ "Sun4m SparcStation10/20", (SM_SUN4M | SM_4M_SS50) },
 { "Sun4m SparcStation5", (SM_SUN4M | SM_4M_SS40) },
 /* One entry for the OBP arch's which are sun4d, sun4e, and newer sun4m's */
 { "Sun4M OBP based system", (SM_SUN4M_OBP | 0x0) } };
 
-static void display_system_type(unsigned char machtype)
+__initfunc(static void display_system_type(unsigned char machtype))
 {
 	char sysname[128];
 	register int i;
@@ -63,7 +64,7 @@ static void display_system_type(unsigned char machtype)
 }
 
 /* Calculate the IDPROM checksum (xor of the data bytes). */
-static unsigned char calc_idprom_cksum(struct idprom *idprom)
+__initfunc(static unsigned char calc_idprom_cksum(struct idprom *idprom))
 {
 	unsigned char cksum, i, *ptr = (unsigned char *)idprom;
 
@@ -74,7 +75,7 @@ static unsigned char calc_idprom_cksum(struct idprom *idprom)
 }
 
 /* Create a local IDPROM copy, verify integrity, and display information. */
-void idprom_init(void)
+__initfunc(void idprom_init(void))
 {
 	prom_get_idprom((char *) &idprom_buffer, sizeof(idprom_buffer));
 

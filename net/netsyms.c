@@ -88,10 +88,13 @@ static struct symbol_table net_syms = {
 	X(sk_free),
 	X(sock_wake_async),
 	X(sock_alloc_send_skb),
+	X(sock_rfree),
+	X(sock_wfree),
 	X(skb_recv_datagram),
 	X(skb_free_datagram),
 	X(skb_copy_datagram),
 	X(skb_copy_datagram_iovec),
+	X(skb_realloc_headroom),
 	X(datagram_select),
 
 	/* ?? needed by smbfs.o */
@@ -119,6 +122,8 @@ static struct symbol_table net_syms = {
 	X(arp_send),
 	X(ip_id_count),
 	X(ip_send_check),
+	X(ip_fragment),
+	X(ip_dev_find_tunnel),
 	X(inet_family_ops),
 
 	X(__scm_send),

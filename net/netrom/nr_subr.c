@@ -131,7 +131,7 @@ int nr_validate_nr(struct sock *sk, unsigned short nr)
 int nr_in_rx_window(struct sock *sk, unsigned short ns)
 {
 	unsigned short vc = sk->protinfo.nr->vr;
-	unsigned short vt = (sk->protinfo.nr->vl + sk->window) % NR_MODULUS;
+	unsigned short vt = (sk->protinfo.nr->vl + sk->protinfo.nr->window) % NR_MODULUS;
 
 	while (vc != vt) {
 		if (ns == vc) return 1;
@@ -188,7 +188,7 @@ void nr_write_internal(struct sock *sk, int frametype)
 			*dptr++  = 0;
 			*dptr++  = 0;
 			*dptr++  = frametype;
-			*dptr++  = sk->window;
+			*dptr++  = sk->protinfo.nr->window;
 			memcpy(dptr, &sk->protinfo.nr->user_addr, AX25_ADDR_LEN);
 			dptr[6] &= ~LAPB_C;
 			dptr[6] &= ~LAPB_E;
@@ -209,7 +209,7 @@ void nr_write_internal(struct sock *sk, int frametype)
 			*dptr++ = sk->protinfo.nr->my_index;
 			*dptr++ = sk->protinfo.nr->my_id;
 			*dptr++ = frametype;
-			*dptr++ = sk->window;
+			*dptr++ = sk->protinfo.nr->window;
 			if (sk->protinfo.nr->bpqext) *dptr++ = sysctl_netrom_network_ttl_initialiser;
 			break;
 

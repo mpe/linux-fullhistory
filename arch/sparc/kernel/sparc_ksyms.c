@@ -1,4 +1,4 @@
-/* $Id: sparc_ksyms.c,v 1.24 1996/10/27 08:36:08 davem Exp $
+/* $Id: sparc_ksyms.c,v 1.30 1996/12/03 08:44:44 jj Exp $
  * arch/sparc/kernel/ksyms.c: Sparc specific ksyms support.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -24,9 +24,11 @@
 #include <asm/mostek.h>
 #include <asm/ptrace.h>
 #include <asm/user.h>
+#include <asm/uaccess.h>
 #ifdef CONFIG_SBUS
 #include <asm/sbus.h>
 #endif
+#include <asm/a.out.h>
 
 struct poll {
 	int fd;
@@ -50,8 +52,7 @@ extern void *__memscan_generic(void *, int, size_t);
 extern int __memcmp(const void *, const void *, __kernel_size_t);
 extern int __strncmp(const char *, const char *, __kernel_size_t);
 
-extern int __copy_to_user(unsigned long to, unsigned long from, int size);
-extern int __copy_from_user(unsigned long to, unsigned long from, int size);
+extern int __copy_user(unsigned long to, unsigned long from, int size);
 extern int __clear_user(unsigned long addr, int size);
 extern int __strncpy_from_user(unsigned long dest, unsigned long src, int count);
 
@@ -86,6 +87,7 @@ static struct symbol_table arch_symbol_table = {
 	X(syscall_count),
 #endif
 	X(page_offset),
+	X(stack_top),
 
 	X(udelay),
 	X(mstk48t02_regs),
@@ -95,8 +97,16 @@ static struct symbol_table arch_symbol_table = {
 	X(request_fast_irq),
 	X(sparc_alloc_io),
 	X(sparc_free_io),
+	X(mmu_v2p),
 	X(mmu_unlockarea),
 	X(mmu_lockarea),
+	X(mmu_get_scsi_sgl),
+	X(mmu_get_scsi_one),
+	X(mmu_release_scsi_sgl),
+	X(mmu_release_scsi_one),
+	X(sparc_dvma_malloc),
+	X(sun4c_unmapioaddr),
+	X(srmmu_unmapioaddr),
 	X(SBus_chain),
 
 	/* Solaris/SunOS binary compatibility */
@@ -125,6 +135,9 @@ static struct symbol_table arch_symbol_table = {
 	X(prom_apply_obio_ranges),
 	X(prom_getname),
 	X(prom_feval),
+	X(prom_getstring),
+	X(prom_apply_sbus_ranges),
+	X(prom_getintdefault),
 	X(romvec),
 
 	/* sparc library symbols */
@@ -158,10 +171,14 @@ static struct symbol_table arch_symbol_table = {
 	X(__strncmp),
 
 	/* Moving data to/from userspace. */
-	X(__copy_to_user),
-	X(__copy_from_user),
+	X(__copy_user),
 	X(__clear_user),
 	X(__strncpy_from_user),
+
+	/* No version information on this, heavily used in inline asm,
+	 * and will always be 'void __ret_efault(void)'.
+	 */
+	XNOVERS(__ret_efault),
 
 	/* No version information on these, as gcc produces such symbols. */
 	XNOVERS(memcmp),

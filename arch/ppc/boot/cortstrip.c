@@ -7,7 +7,7 @@
 #define PLACE 65536
 
 /* size of read buffer */
-#define SIZE 0x200000
+#define SIZE 0x100000
 
 /* crude program to strip the elf header to make a bootable
    image via tftp
@@ -20,11 +20,13 @@ int main(int argc, char **argv )
   unsigned char data[SIZE];
   int i, n, skip;
 
+#if 0
   if ( argc != 3 )
   {
     fprintf(stderr,"%s infile outfile\n", argv[0]);
     exit(-1);
   }
+#endif
 
 
   fd = open(argv[1], O_RDONLY);
@@ -49,7 +51,7 @@ int main(int argc, char **argv )
   skip = PLACE;
 #endif
   i = lseek(fd, skip, SEEK_SET);
-  printf("lseek'd %d bytes\n", i);
+ /*printf("lseek'd %d bytes\n", i);*/
   if ( i == -1 )
   {
       perror("lseek()");
@@ -57,9 +59,9 @@ int main(int argc, char **argv )
 
   while ( (n = read(fd, data, SIZE)) > 0 )
   {
-    printf("Read %d bytes\n", n);
+    /*printf("Read %d bytes\n", n);*/
     i = write(fdo, data, n);
-    printf("Wrote %d bytes\n", i);    
+    /*printf("Wrote %d bytes\n", i);    */
   }
 
 

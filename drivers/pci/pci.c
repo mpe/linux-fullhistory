@@ -149,6 +149,7 @@ struct pci_dev_info dev_info[] = {
 	DEVICE( 3COM,		3COM_3C595TX,	"3C595 100bTX"),
 	DEVICE( 3COM,		3COM_3C595T4,	"3C595 100bT4"),
 	DEVICE( 3COM,		3COM_3C595MII,	"3C595 100b-MII"),
+	DEVICE( 3COM,		3COM_3C900TPO,	"3C900 10bTPO"),
 	DEVICE( AL,		AL_M1445,	"M1445"),
 	DEVICE( AL,		AL_M1449,	"M1449"),
 	DEVICE( AL,		AL_M1451,	"M1451"),
@@ -208,6 +209,11 @@ struct pci_dev_info dev_info[] = {
 	DEVICE( CYCLADES,	CYCLOM_Y_Hi,	"Cyclom-Y above 1Mbyte"),
 	DEVICE( CYCLADES,	CYCLOM_Z_Lo,	"Cyclom-Z below 1Mbyte"),
 	DEVICE( CYCLADES,	CYCLOM_Z_Hi,	"Cyclom-Z above 1Mbyte"),
+	DEVICE( OPTIBASE,	OPTIBASE_FORGE,	"MPEG Forge"),
+	DEVICE( OPTIBASE,	OPTIBASE_FUSION,"MPEG Fusion"),
+	DEVICE( OPTIBASE,	OPTIBASE_VPLEX,	"VideoPlex"),
+	DEVICE( OPTIBASE,	OPTIBASE_VPLEXCC,"VideoPlex CC"),
+	DEVICE( OPTIBASE,	OPTIBASE_VQUEST,"VideoQuest"),
 	DEVICE( SYMPHONY,	SYMPHONY_101,	"82C101"),
 	DEVICE( TEKRAM,		TEKRAM_DC290,	"DC-290"),
 	DEVICE( 3DLABS,		3DLABS_300SX,	"GLINT 300SX"),
@@ -523,6 +529,7 @@ const char *pci_strvendor(unsigned int vendor)
 	      case PCI_VENDOR_ID_COMPEX:	return "Compex";
 	      case PCI_VENDOR_ID_RP:		return "Comtrol";
 	      case PCI_VENDOR_ID_CYCLADES:	return "Cyclades";
+	      case PCI_VENDOR_ID_OPTIBASE:	return "Optibase";
 	      case PCI_VENDOR_ID_SYMPHONY:	return "Symphony";
 	      case PCI_VENDOR_ID_TEKRAM:	return "Tekram";
 	      case PCI_VENDOR_ID_3DLABS:	return "3Dlabs";

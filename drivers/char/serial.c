@@ -2365,6 +2365,9 @@ static void rs_wait_until_sent(struct tty_struct *tty, int timeout)
 	if (serial_paranoia_check(info, tty->device, "rs_wait_until_sent"))
 		return;
 
+	if (info->state->type == PORT_UNKNOWN)
+		return;
+
 	orig_jiffies = jiffies;
 	/*
 	 * Set the check interval to be 1/5 of the estimated time to
@@ -2817,9 +2820,6 @@ static void autoconfig(struct serial_state * state)
 	info->port = state->port;
 	info->flags = state->flags;
 
-	if(check_region(info->port,8))
-		return;		/* Area in use */
-
 	save_flags(flags); cli();
 	
 	/*
@@ -3102,6 +3102,12 @@ int register_serial(struct serial_struct *req)
 	state->irq = req->irq;
 	state->port = req->port;
 	state->flags = req->flags;
+
+	if (check_region(state->port,8)) {
+		restore_flags(flags);
+		printk("register_serial(): I/O region in use\n");
+		return -1;		/* Area in use */
+	}
 	autoconfig(state);
 	if (state->type == PORT_UNKNOWN) {
 		restore_flags(flags);

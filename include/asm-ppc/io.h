@@ -1,16 +1,28 @@
 #ifndef _PPC_IO_H
 #define _PPC_IO_H
 
-/* Define the particulars of outb/outw/outl "instructions" */
+#include <asm/page.h>
 
+/* from the Carolina Technical Spec -- Cort */
+#define IBM_ACORN 0x82A
+#define SIO_CONFIG_RA	0x398
+#define SIO_CONFIG_RD	0x399
+
+#define IBM_HDD_LED       0x808
+#define IBM_EQUIP_PRESENT 0x80c	
+#define IBM_L2_STATUS     0x80d
+#define IBM_L2_INVALIDATE 0x814
+#define IBM_SYS_CTL       0x81c
+
+
+
+/* Define the particulars of outb/outw/outl "instructions" */
 #define SLOW_DOWN_IO
 
 #ifndef PCI_DRAM_OFFSET
 #define PCI_DRAM_OFFSET  0x80000000
 #endif
-#ifndef KERNELBASE
-#define KERNELBASE 0x90000000
-#endif
+
 
 /*
  * The PCI bus is inherently Little-Endian.  The PowerPC is being
@@ -39,10 +51,10 @@ extern inline void * bus_to_virt(unsigned long address)
 #define readb(addr) (*(volatile unsigned char *) (addr))
 #define readw(addr) (*(volatile unsigned short *) (addr))
 #define readl(addr) (*(volatile unsigned int *) (addr))
-
 #define writeb(b,addr) ((*(volatile unsigned char *) (addr)) = (b))
 #define writew(b,addr) ((*(volatile unsigned short *) (addr)) = (b))
 #define writel(b,addr) ((*(volatile unsigned int *) (addr)) = (b))
+
 
 /*
  * Change virtual addresses to physical addresses and vv.

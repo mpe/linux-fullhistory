@@ -337,7 +337,7 @@ struct icmp_control
 	struct icmp_xrlim *xrlim;	/* Transmit rate limit control structure or NULL for no limits */
 };
 
-static struct icmp_control icmp_pointers[19];
+static struct icmp_control icmp_pointers[NR_ICMP_TYPES+1];
 
 /*
  *	Build xmit assembly blocks
@@ -378,7 +378,7 @@ static void xrlim_init(void)
 	int type, entry;
 	struct icmp_xrlim *xr;
 
-	for (type=0; type<=18; type++) {
+	for (type=0; type<=NR_ICMP_TYPES; type++) {
 		xr = icmp_pointers[type].xrlim;
 		if (xr) {
 			for (entry=0; entry<XRLIM_CACHE_SIZE; entry++)
@@ -401,7 +401,7 @@ static int xrlim_allow(int type, __u32 addr)
 	struct icmp_xrl_cache *c;
 	unsigned long now;
 
-	if (type > 18)			/* No time limit present */
+	if (type > NR_ICMP_TYPES)		/* No time limit present */
 		return 1;
 	r = icmp_pointers[type].xrlim;
 	if (!r)
@@ -466,7 +466,7 @@ static int xrlim_allow(int type, __u32 addr)
  
 static void icmp_out_count(int type)
 {
-	if (type>18)
+	if (type>NR_ICMP_TYPES)
 		return;
 	(*icmp_pointers[type].output)++;
 	icmp_statistics.IcmpOutMsgs++;
@@ -602,7 +602,7 @@ void icmp_send(struct sk_buff *skb_in, int type, int code, unsigned long info)
 			 *	Assume any unknown ICMP type is an error. This isn't
 			 *	specified by the RFC, but think about it..
 			 */
-			if (icmph->type>18 || icmp_pointers[icmph->type].error)
+			if (icmph->type>NR_ICMP_TYPES || icmp_pointers[icmph->type].error)
 				return;
 		}
 	}
@@ -985,7 +985,7 @@ int icmp_chkaddr(struct sk_buff *skb)
 {
 	struct icmphdr *icmph=(struct icmphdr *)(skb->nh.raw + skb->nh.iph->ihl*4);
 	struct iphdr *iph = (struct iphdr *) (icmph + 1);
-	void (*handler)(struct icmphdr *icmph, struct sk_buff *skb, struct device *dev, __u32 saddr, __u32 daddr, int len) = icmp_pointers[icmph->type].handler;
+	void (*handler)(struct icmphdr *icmph, struct sk_buff *skb, int len) = icmp_pointers[icmph->type].handler;
 
 	if (handler == icmp_unreach || handler == icmp_redirect) {
 		struct sock *sk;
@@ -1064,7 +1064,7 @@ int icmp_rcv(struct sk_buff *skb, unsigned short len)
 	 *	RFC 1122: 3.2.2  Unknown ICMP messages types MUST be silently discarded.
 	 */
 	 
-	if (icmph->type > 18) {
+	if (icmph->type > NR_ICMP_TYPES) {
 		icmp_statistics.IcmpInErrors++;		/* Is this right - or do we ignore ? */
 		kfree_skb(skb,FREE_READ);
 		return(0);
@@ -1108,7 +1108,7 @@ static struct icmp_xrlim
  *	This table is the definition of how we handle ICMP.
  */
  
-static struct icmp_control icmp_pointers[19] = {
+static struct icmp_control icmp_pointers[NR_ICMP_TYPES+1] = {
 /* ECHO REPLY (0) */
  { &icmp_statistics.IcmpOutEchoReps, &icmp_statistics.IcmpInEchoReps, icmp_discard, 0, NULL },
  { &dummy, &icmp_statistics.IcmpInErrors, icmp_discard, 1, NULL },

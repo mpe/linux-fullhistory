@@ -169,6 +169,10 @@
 #include "esp.h"
 #endif
 
+#ifdef CONFIG_SCSI_QLOGICPTI
+#include "qlogicpti.h"
+#endif
+
 #ifdef CONFIG_BLK_DEV_IDESCSI
 #include "ide-scsi.h"
 #endif
@@ -179,7 +183,7 @@
 
 
 /*
-static const char RCSid[] = "$Header: /usr/src/linux-1.3.95/drivers/scsi/RCS/hosts.c,v 1.7 1996/04/25 22:21:56 root Exp root $";
+static const char RCSid[] = "$Header: /vger/u4/cvs/linux/drivers/scsi/hosts.c,v 1.20 1996/12/12 19:18:32 davem Exp $";
 */
 
 /*
@@ -313,6 +317,9 @@ static Scsi_Host_Template builtin_scsi_hosts[] =
 #endif
 #ifdef CONFIG_SCSI_SUNESP
     SCSI_SPARC_ESP,
+#endif
+#ifdef CONFIG_SCSI_QLOGICPTI
+    QLOGICPTI,
 #endif
 #ifdef CONFIG_BLK_DEV_IDESCSI
     IDESCSI,

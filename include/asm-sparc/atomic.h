@@ -23,58 +23,93 @@ static __inline__ void atomic_add(atomic_t i, atomic_t *v)
 {
 	__asm__ __volatile__("
 	rd	%%psr, %%g2
+	nop
+	nop
+	nop
 	andcc	%%g2, %2, %%g0
-	be,a	1f
-	 wr	%%g2, %2, %%psr
-1:	ld	[%0], %%g3
+	bne	1f
+	 nop
+	wr	%%g2, %2, %%psr
+	nop
+	nop
+	nop
+1:
+	ld	[%0], %%g3
 	add	%%g3, %1, %%g3
 	andcc	%%g2, %2, %%g0
 	st	%%g3, [%0]
-	be,a	1f
-	 wr	%%g2, 0x0, %%psr
-1:	nop; nop;
-        "
-        : : "r" (__atomic_fool_gcc(v)), "r" (i), "i" (PSR_PIL)
-        : "g2", "g3");
+	bne	1f
+	 nop
+	wr	%%g2, 0x0, %%psr
+	nop
+	nop
+	nop
+1:
+"	: /* no outputs */
+	: "r" (__atomic_fool_gcc(v)), "r" (i), "i" (PSR_PIL)
+	: "g2", "g3");
 }
 
 static __inline__ void atomic_sub(atomic_t i, atomic_t *v)
 {
 	__asm__ __volatile__("
 	rd	%%psr, %%g2
+	nop
+	nop
+	nop
 	andcc	%%g2, %2, %%g0
-	be,a	1f
-	 wr	%%g2, %2, %%psr
-1:	ld	[%0], %%g3
+	bne	1f
+	 nop
+	wr	%%g2, %2, %%psr
+	nop
+	nop
+	nop
+1:
+	ld	[%0], %%g3
 	sub	%%g3, %1, %%g3
 	andcc	%%g2, %2, %%g0
 	st	%%g3, [%0]
-	be,a	1f
-	 wr	%%g2, 0x0, %%psr
-1:       nop; nop;
-        "
-        : : "r" (__atomic_fool_gcc(v)), "r" (i), "i" (PSR_PIL)
-        : "g2", "g3");
+	bne	1f
+	 nop
+	wr	%%g2, 0x0, %%psr
+	nop
+	nop
+	nop
+1:
+"	: /* no outputs */
+	: "r" (__atomic_fool_gcc(v)), "r" (i), "i" (PSR_PIL)
+	: "g2", "g3");
 }
 
 static __inline__ int atomic_add_return(atomic_t i, atomic_t *v)
 {
 	__asm__ __volatile__("
 	rd	%%psr, %%g2
+	nop
+	nop
+	nop
 	andcc	%%g2, %3, %%g0
-	be,a	1f
-	 wr	%%g2, %3, %%psr
-1:	ld	[%1], %%g3
+	bne	1f
+	 nop
+	wr	%%g2, %3, %%psr
+	nop
+	nop
+	nop
+1:
+	ld	[%1], %%g3
 	add	%%g3, %2, %0
 	andcc	%%g2, %3, %%g0
 	st	%0, [%1]
-	be,a	1f
-	 wr	%%g2, 0x0, %%psr
-1:	nop; nop;
-        "
-        : "=&r" (i)
-        : "r" (__atomic_fool_gcc(v)), "0" (i), "i" (PSR_PIL)
-        : "g2", "g3");
+	bne	1f
+	 nop
+	wr	%%g2, 0x0, %%psr
+	nop
+	nop
+	nop
+1:
+"	: "=&r" (i)
+	: "r" (__atomic_fool_gcc(v)), "0" (i), "i" (PSR_PIL)
+	: "g2", "g3");
 
 	return i;
 }
@@ -83,20 +118,31 @@ static __inline__ int atomic_sub_return(atomic_t i, atomic_t *v)
 {
 	__asm__ __volatile__("
 	rd	%%psr, %%g2
+	nop
+	nop
+	nop
 	andcc	%%g2, %3, %%g0
-	be,a	1f
-	 wr	%%g2, %3, %%psr
-1:	ld	[%1], %%g3
+	bne	1f
+	 nop
+	wr	%%g2, %3, %%psr
+	nop
+	nop
+	nop
+1:
+	ld	[%1], %%g3
 	sub	%%g3, %2, %0
 	andcc	%%g2, %3, %%g0
 	st	%0, [%1]
-	be,a	1f
-	 wr	%%g2, 0x0, %%psr
-1:	nop; nop;
-        "
-        : "=&r" (i)
-        : "r" (__atomic_fool_gcc(v)), "0" (i), "i" (PSR_PIL)
-        : "g2", "g3");
+	bne	1f
+	 nop
+	wr	%%g2, 0x0, %%psr
+	nop
+	nop
+	nop
+1:
+"	: "=&r" (i)
+	: "r" (__atomic_fool_gcc(v)), "0" (i), "i" (PSR_PIL)
+	: "g2", "g3");
 
 	return i;
 }

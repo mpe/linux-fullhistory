@@ -7,7 +7,63 @@
 #
 # Note 2! The CFLAGS definitions are now in the main makefile...
 
+# Dave Redman Frame Buffer tuning support.
+# OK this is kind of ugly but it does allow drivers to be added fairly
+# easily. and you can even choose what sort of support you want.
+ifdef SUN_FB_CGSIX
+ FB_OBJS +=	cgsix.o
+endif
+ifdef SUN_FB_CGTHREE
+ FB_OBJS +=	cgthree.o
+endif
+ifdef SUN_FB_TCX
+  FB_OBJS +=	tcx.o
+endif
+ifdef SUN_FB_BWTWO
+ FB_OBJS +=	bwtwo.o
+endif
+ifdef SUN_FB_LEO
+ FB_OBJS +=	leo.o
+endif
+ifdef SUN_FB_CGFOURTEEN
+ FB_OBJS +=	cgfourteen.o
+endif
+ifdef TADPOLE_FB_WEITEK
+ FB_OBJS +=	weitek.o
+endif
+#ifdef SUN_FB_FAST_ONE
+# FB_OBJS +=	sun_8bit_fast1.o
+#endif
+#ifdef SUN_FB_FAST_TWO
+# FB_OBJS +=	sun_8bit_fast2.o
+#endif
+#ifdef SUN_FB_FAST_MONO
+# FB_OBJS +=	sun_mono_fast1.o
+#endif
+#ifdef SUN_FB_GENERIC
+# FB_OBJS +=	sun_8bit_generic.o
+#endif
+
 O_TARGET := sunchar.o
-O_OBJS   := suncons.o sunkbd.o sunkeymap.o sunmouse.o sunserial.o
+O_OBJ    := ${FB_OBJS} suncons.o  sunfb.o
+O_OBJS   := ${O_OBJ} sunkbd.o sunkeymap.o sunmouse.o sunserial.o
+M_OBJS   :=
+
+ifeq ($(CONFIG_SUN_OPENPROMIO),y)
+O_OBJS += openprom.o
+else
+  ifeq ($(CONFIG_SUN_OPENPROMIO),m)
+  M_OBJS += openprom.o
+  endif
+endif
+
+ifeq ($(CONFIG_SUN_MOSTEK_RTC),y)
+O_OBJS += rtc.o
+else
+  ifeq ($(CONFIG_SUN_MOSTEK_RTC),m)
+  M_OBJS += rtc.o
+  endif
+endif
 
 include $(TOPDIR)/Rules.make
+

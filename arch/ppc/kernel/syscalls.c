@@ -2,6 +2,7 @@
  * linux/arch/ppc/kernel/sys_ppc.c
  *
  * Adapted from the i386 version by Gary Thomas
+ * Modified by Cort Dougan (cort@cs.nmt.edu)
  *
  * This file contains various random system calls that
  * have a non-standard calling sequence on the Linux/PPC
@@ -16,6 +17,7 @@
 #include <linux/shm.h>
 #include <linux/stat.h>
 #include <linux/mman.h>
+#include <asm/uaccess.h>
 
 /*
  * sys_pipe() is the normal C calling standard for creating
@@ -47,7 +49,6 @@ asmlinkage unsigned long sys_mmap(unsigned long addr, size_t len, int prot,
 	return do_mmap(file, addr, len, prot, flags, offset);
 }
 
-#if 0
 /*
  * Perform the select(nd, in, out, ex, tv) and mmap() system
  * calls. Linux/i386 didn't use to be able to handle more than
@@ -58,20 +59,24 @@ asmlinkage int old_mmap(unsigned long *buffer)
 {
 	int error;
 	unsigned long flags;
+	long a,b,c,d,e;
 	struct file * file = NULL;
 
 	error = verify_area(VERIFY_READ, buffer, 6*sizeof(long));
 	if (error)
 		return error;
-	flags = get_user(buffer+3);
+	get_user(flags,buffer+3);
 	if (!(flags & MAP_ANONYMOUS)) {
-		unsigned long fd = get_user(buffer+4);
+		unsigned long fd;
+		get_user(fd,buffer+4);
 		if (fd >= NR_OPEN || !(file = current->files->fd[fd]))
 			return -EBADF;
 	}
 	flags &= ~(MAP_EXECUTABLE | MAP_DENYWRITE);
-	return do_mmap(file, get_user(buffer), get_user(buffer+1),
-		       get_user(buffer+2), flags, get_user(buffer+5));
+	if ( get_user(a,buffer) || get_user(b,buffer+1) ||
+	     get_user(c,buffer+2)||get_user(d,buffer+5)	)
+	  return -EFAULT;
+	return do_mmap(file,a,b,c, flags, d);
 }
 
 extern asmlinkage int sys_select(int, fd_set *, fd_set *, fd_set *, struct timeval *);
@@ -87,13 +92,14 @@ asmlinkage int old_select(unsigned long *buffer)
 	n = verify_area(VERIFY_READ, buffer, 5*sizeof(unsigned long));
 	if (n)
 		return n;
-	n = get_user(buffer);
-	inp = (fd_set *) get_user(buffer+1);
-	outp = (fd_set *) get_user(buffer+2);
-	exp = (fd_set *) get_user(buffer+3);
-	tvp = (struct timeval *) get_user(buffer+4);
+	get_user(n,buffer);
+	get_user(inp,buffer+1);
+	get_user(outp,buffer+2);
+	get_user(exp,buffer+3);
+	get_user(tvp,buffer+4);
 	return sys_select(n, inp, outp, exp, tvp);
 }
+#if 0
 
 /*
  * sys_ipc() is the de-multiplexer for the SysV IPC calls..

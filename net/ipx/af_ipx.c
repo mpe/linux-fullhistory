@@ -403,7 +403,7 @@ static int ipxitf_def_skb_handler(struct sock *sock, struct sk_buff *skb)
 static int
 ipxitf_demux_socket(ipx_interface *intrfc, struct sk_buff *skb, int copy) 
 {
-	ipx_packet	*ipx = (ipx_packet *)(skb->h.raw);
+	struct ipxhdr	*ipx = skb->nh.ipxh;
 	struct sock	*s;
 
 	int is_broadcast = (memcmp(ipx->ipx_dest.node, ipx_broadcast_node,
@@ -467,7 +467,7 @@ ipxitf_demux_socket(ipx_interface *intrfc, struct sk_buff *skb, int copy)
 static int
 ipxitf_demux_socket(ipx_interface *intrfc, struct sk_buff *skb, int copy) 
 {
-	ipx_packet	*ipx = (ipx_packet *)(skb->h.raw);
+	struct ipxhdr	*ipx = skb->nh.ipxh;
 	struct sock	*sock1 = NULL, *sock2 = NULL;
 	struct sk_buff	*skb1 = NULL, *skb2 = NULL;
 
@@ -581,6 +581,7 @@ ipxitf_adjust_skbuff(ipx_interface *intrfc, struct sk_buff *skb)
 	skb2 = alloc_skb(len, GFP_ATOMIC);
 	if (skb2 != NULL) {
 		skb_reserve(skb2,out_offset);
+		skb2->nh.raw=
 		skb2->h.raw=skb_put(skb2,skb->len);
 		skb2->arp=1;
 		memcpy(skb2->h.raw, skb->h.raw, skb->len);
@@ -591,7 +592,7 @@ ipxitf_adjust_skbuff(ipx_interface *intrfc, struct sk_buff *skb)
 
 static int ipxitf_send(ipx_interface *intrfc, struct sk_buff *skb, char *node)
 {
-	ipx_packet	*ipx = (ipx_packet *)(skb->h.raw);
+	struct ipxhdr	*ipx = skb->nh.ipxh;
 	struct device	*dev = intrfc->if_dev;
 	struct datalink_proto	*dl = intrfc->if_dlink;
 	char		dest_node[IPX_NODE_LEN];
@@ -617,8 +618,10 @@ static int ipxitf_send(ipx_interface *intrfc, struct sk_buff *skb, char *node)
 	{
 		/*
 		 *	To our own node, loop and free the original.
+		 *	The internal net will receive on all node address.
 		 */
-		if (memcmp(intrfc->if_node, node, IPX_NODE_LEN) == 0) 
+		if ((intrfc == ipx_internal_net)
+		    || memcmp(intrfc->if_node, node, IPX_NODE_LEN) == 0) 
 		{
 			/*
 			 *	Don't charge sender
@@ -695,8 +698,8 @@ static int ipxitf_send(ipx_interface *intrfc, struct sk_buff *skb, char *node)
 	 *	Now log the packet just before transmission 
 	 */
 	 
-	dump_pkt("IPX snd:", (ipx_packet *)skb->h.raw);
-	dump_data("ETH hdr:", skb->sk, skb->h.raw - skb->sk);
+	dump_pkt("IPX snd:", skb->nh.ipxh);
+	dump_data("ETH hdr:", skb->mac.raw, skb->nh.raw - skb->mac.raw);
 #endif
 
 	/*
@@ -720,7 +723,7 @@ static int ipxrtr_route_skb(struct sk_buff *);
 
 static int ipxitf_rcv(ipx_interface *intrfc, struct sk_buff *skb)
 {
-	ipx_packet	*ipx = (ipx_packet *) (skb->h.raw);
+	struct ipxhdr	*ipx = skb->nh.ipxh;
 	ipx_interface	*i;
 
 #ifdef CONFIG_FIREWALL	
@@ -782,7 +785,7 @@ static int ipxitf_rcv(ipx_interface *intrfc, struct sk_buff *skb)
 #endif
 
 	  c = (char *) skb->data;
-	  c += sizeof( struct ipx_packet );
+	  c += sizeof( struct ipxhdr );
 
 	  l = (long *) c;
 
@@ -1280,7 +1283,7 @@ ipxrtr_delete(long net)
  
 /* Note: We assume ipx_tctrl==0 and htons(length)==ipx_pktsize */
 
-static __u16 ipx_set_checksum(ipx_packet *packet,int length) 
+static __u16 ipx_set_checksum(struct ipxhdr *packet,int length) 
 {
 	/* 
 	 *	NOTE: sum is a net byte order quantity, which optimizes the 
@@ -1341,7 +1344,7 @@ static int ipxrtr_route_packet(struct sock *sk, struct sockaddr_ipx *usipx, stru
 {
 	struct sk_buff *skb;
 	ipx_interface *intrfc;
-	ipx_packet *ipx;
+	struct ipxhdr *ipx;
 	int size;
 	int ipx_offset;
 	ipx_route *rt = NULL;
@@ -1363,7 +1366,7 @@ static int ipxrtr_route_packet(struct sock *sk, struct sockaddr_ipx *usipx, stru
 	}
 	
 	ipx_offset = intrfc->if_ipx_offset;
-	size=sizeof(ipx_packet)+len;
+	size=sizeof(struct ipxhdr)+len;
 	size += ipx_offset;
 
 	skb=sock_alloc_send_skb(sk, size, 0, noblock, &err);
@@ -1375,11 +1378,11 @@ static int ipxrtr_route_packet(struct sock *sk, struct sockaddr_ipx *usipx, stru
 	skb->sk=sk;
 
 	/* Fill in IPX header */
-	ipx=(ipx_packet *)skb_put(skb,sizeof(ipx_packet));
-	ipx->ipx_pktsize=htons(len+sizeof(ipx_packet));
+	ipx=(struct ipxhdr *)skb_put(skb,sizeof(struct ipxhdr));
+	ipx->ipx_pktsize=htons(len+sizeof(struct ipxhdr));
 	ipx->ipx_tctrl=0;
 	ipx->ipx_type=usipx->sipx_type;
-	skb->h.raw = (unsigned char *)ipx;
+	skb->h.raw = (void *)skb->nh.ipxh = ipx;
 
 	ipx->ipx_source.net = sk->protinfo.af_ipx.intrfc->if_netnum;
 #ifdef CONFIG_IPX_INTERN
@@ -1416,7 +1419,7 @@ static int ipxrtr_route_packet(struct sock *sk, struct sockaddr_ipx *usipx, stru
 	if(sk->no_check || intrfc->if_dlink_type==IPX_FRAME_8023)
 		ipx->ipx_checksum=0xFFFF;
 	else
-		ipx->ipx_checksum=ipx_set_checksum(ipx, len+sizeof(ipx_packet));
+		ipx->ipx_checksum=ipx_set_checksum(ipx, len+sizeof(struct ipxhdr));
 
 #ifdef CONFIG_FIREWALL	
 	if(call_out_firewall(PF_IPX, skb->dev, ipx, NULL)!=FW_ACCEPT)
@@ -1433,7 +1436,7 @@ static int ipxrtr_route_packet(struct sock *sk, struct sockaddr_ipx *usipx, stru
 static int
 ipxrtr_route_skb(struct sk_buff *skb)
 {
-	ipx_packet	*ipx = (ipx_packet *) (skb->h.raw);
+	struct ipxhdr	*ipx = skb->nh.ipxh;
 	ipx_route	*r;
 	ipx_interface	*i;
 
@@ -2076,25 +2079,25 @@ void dump_data(char *str,unsigned char *d, int len) {
 			*(p++) = ' ';
     *p = '\000';
     d += i;
-    printk("%s-%04X: %s\n",str,l*8,b);
+    printk(KERN_DEBUG"%s-%04X: %s\n",str,l*8,b);
   }
 }
 
 void dump_addr(char *str,ipx_address *p) {
-  printk("%s: %08X:%02X%02X%02X%02X%02X%02X:%04X\n",
+  printk(KERN_DEBUG"%s: %08X:%02X%02X%02X%02X%02X%02X:%04X\n",
    str,ntohl(p->net),p->node[0],p->node[1],p->node[2],
    p->node[3],p->node[4],p->node[5],ntohs(p->sock));
 }
 
-void dump_hdr(char *str,ipx_packet *p) {
-  printk("%s: CHKSUM=%04X SIZE=%d (%04X) HOPS=%d (%02X) TYPE=%02X\n",
+void dump_hdr(char *str,struct ipxhdr *p) {
+  printk(KERN_DEBUG"%s: CHKSUM=%04X SIZE=%d (%04X) HOPS=%d (%02X) TYPE=%02X\n",
    str,p->ipx_checksum,ntohs(p->ipx_pktsize),ntohs(p->ipx_pktsize),
    p->ipx_tctrl,p->ipx_tctrl,p->ipx_type);
   dump_addr("  IPX-DST",&p->ipx_dest);
   dump_addr("  IPX-SRC",&p->ipx_source);
 }
 
-void dump_pkt(char *str,ipx_packet *p) {
+void dump_pkt(char *str,struct ipxhdr *p) {
   int len = ntohs(p->ipx_pktsize);
   dump_hdr(str,p);
   if (len > 30)
@@ -2106,13 +2109,12 @@ int ipx_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 {
 	/* NULL here for pt means the packet was looped back */
 	ipx_interface	*intrfc;
-	ipx_packet *ipx;
+	struct ipxhdr *ipx;
+
+	skb->h.raw = (void *)ipx = skb->nh.ipxh;
 	
-	ipx=(ipx_packet *)skb->h.raw;
-	
-	/* Too small */
-	
-	if(ntohs(ipx->ipx_pktsize)<sizeof(ipx_packet)) {
+	/* Too small? */
+	if(ntohs(ipx->ipx_pktsize)<sizeof(struct ipxhdr)) {
 		kfree_skb(skb,FREE_READ);
 		return 0;
 	}
@@ -2208,7 +2210,7 @@ static int ipx_recvmsg(struct socket *sock, struct msghdr *msg, int size,
 {
 	struct sock *sk=sock->sk;
 	struct sockaddr_ipx *sipx=(struct sockaddr_ipx *)msg->msg_name;
-	struct ipx_packet *ipx = NULL;
+	struct ipxhdr *ipx = NULL;
 	int copied = 0;
 	int truesize;
 	struct sk_buff *skb;
@@ -2220,9 +2222,9 @@ static int ipx_recvmsg(struct socket *sock, struct msghdr *msg, int size,
 	skb=skb_recv_datagram(sk,flags&~MSG_DONTWAIT,flags&MSG_DONTWAIT,&err);
 	if(skb==NULL)
 		return err;
-	
-	ipx = (ipx_packet *)(skb->h.raw);
-	truesize=ntohs(ipx->ipx_pktsize) - sizeof(ipx_packet);
+
+	ipx = skb->nh.ipxh;
+	truesize=ntohs(ipx->ipx_pktsize) - sizeof(struct ipxhdr);
 	
 	copied = truesize;
 	if(copied > size)
@@ -2230,8 +2232,8 @@ static int ipx_recvmsg(struct socket *sock, struct msghdr *msg, int size,
 		copied=size;
 		msg->msg_flags|=MSG_TRUNC;
 	}
-	
-	err = skb_copy_datagram_iovec(skb,sizeof(struct ipx_packet),msg->msg_iov,copied);
+
+	err = skb_copy_datagram_iovec(skb,sizeof(struct ipxhdr),msg->msg_iov,copied);
 	
 	if (err)
 		return err;
@@ -2247,6 +2249,7 @@ static int ipx_recvmsg(struct socket *sock, struct msghdr *msg, int size,
 		sipx->sipx_type = ipx->ipx_type;
 	}
 	skb_free_datagram(sk, skb);
+
 	return(copied);
 }		
 
@@ -2272,7 +2275,7 @@ static int ipx_ioctl(struct socket *sock,unsigned int cmd, unsigned long arg)
 			struct sk_buff *skb;
 			/* These two are safe on a single CPU system as only user tasks fiddle here */
 			if((skb=skb_peek(&sk->receive_queue))!=NULL)
-				amount=skb->len-sizeof(struct ipx_packet);
+				amount=skb->len-sizeof(struct ipxhdr);
 			return put_user(amount, (int *)arg);
 		}
 		case SIOCADDRT:

@@ -601,11 +601,6 @@ void smp_commence(void)
 	smp_commenced=1;
 }
 
-void pointless_func(void)
-{
-	;
-}
- 
 void smp_callin(void)
 {
 	extern void calibrate_delay(void);

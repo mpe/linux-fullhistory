@@ -278,6 +278,7 @@ static struct proc_fs_info {
 	{ MS_NODEV, ",nodev" },
 	{ MS_SYNCHRONOUS, ",sync" },
 	{ MS_MANDLOCK, ",mand" },
+	{ MS_NOATIME, ",noatime" },
 #ifdef MS_NOSUB			/* Can't find this except in mount.c */
 	{ MS_NOSUB, ",nosub" },
 #endif

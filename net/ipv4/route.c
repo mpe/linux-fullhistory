@@ -132,7 +132,7 @@ static int rt_cache_get_info(char *buffer, char **start, off_t offset, int lengt
 	pos = 128;
 
 	if (offset<128)	{
-		sprintf(buffer,"%-127s\n","Iface\tDestination\tGateway \tFlags\tRefCnt\tUse\tMetric\tSource\t\tMTU\tWindow\tIRTT\tTOS\tHH\tARP");
+		sprintf(buffer,"%-127s\n", "Iface\tDestination\tGateway \tFlags\t\tRefCnt\tUse\tMetric\tSource\t\tMTU\tWindow\tIRTT\tTOS\tHHRef\tHHUptod\tSpecDst\tHash");
 		len = 128;
   	}
 	
@@ -151,7 +151,7 @@ static int rt_cache_get_info(char *buffer, char **start, off_t offset, int lengt
 				continue;
 			}
 					
-			sprintf(temp, "%s\t%08lX\t%08lX\t%X\t%d\t%u\t%d\t%08lX\t%d\t%u\t%u\t%02x\t%d\t%1d\t%08x\t%02x",
+			sprintf(temp, "%s\t%08lX\t%08lX\t%8X\t%d\t%u\t%d\t%08lX\t%d\t%u\t%u\t%02X\t%d\t%1d\t%08X\t%02X",
 				r->u.dst.dev ? r->u.dst.dev->name : "*",
 				(unsigned long)r->rt_dst,
 				(unsigned long)r->rt_gateway,

@@ -1,4 +1,4 @@
-/* $Id: wuf.S,v 1.27 1996/10/11 01:00:06 davem Exp $
+/* $Id: wuf.S,v 1.28 1996/12/10 06:06:20 davem Exp $
  * wuf.S: Window underflow trap handler for the Sparc.
  *
  * Copyright (C) 1995 David S. Miller
@@ -338,14 +338,21 @@ C_LABEL(srmmu_fwin_stackchk):
 	mov	AC_M_SFSR, %twin_tmp2
 	lda	[%twin_tmp2] ASI_M_MMUREGS, %twin_tmp2	! read fault status
 	andcc	%twin_tmp2, 0x2, %g0			! did fault occur?
-	be,a	fwin_user_finish_up + 0x4
-	 wr	%t_psr, 0x0, %psr
+
+	bne	1f					! yep, cleanup
+	 nop
+
+	wr	%t_psr, 0x0, %psr
+	WRITE_PAUSE
+	b	fwin_user_finish_up + 0x4
+	 nop
 
 	/* Did I ever tell you about my window lobotomy?
 	 * anyways... fwin_user_stack_is_bolixed expects
 	 * to be in window 'W' so make it happy or else
 	 * we watchdog badly.
 	 */
+1:
 	restore	%g0, %g0, %g0
 	b	fwin_user_stack_is_bolixed	! oh well
 	 restore	%g0, %g0, %g0

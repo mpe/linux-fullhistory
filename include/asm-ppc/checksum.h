@@ -54,5 +54,5 @@ unsigned int csum_partial_copy( const char *src, char *dst, int len, int sum);
 A */
 
 extern unsigned short ip_compute_csum(unsigned char * buff, int len);
-
+extern unsigned int csum_fold(unsigned int sum);
 #endif

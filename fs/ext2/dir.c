@@ -211,7 +211,7 @@ revalidate:
 		offset = 0;
 		brelse (bh);
 	}
-	if (!IS_RDONLY(inode)) {
+	if (DO_UPDATE_ATIME(inode)) {
 		inode->i_atime = CURRENT_TIME;
 		inode->i_dirt = 1;
 	}

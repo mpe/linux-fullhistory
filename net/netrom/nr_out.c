@@ -145,7 +145,7 @@ void nr_kick(struct sock *sk)
 	del_timer(&sk->timer);
 
 	start = (skb_peek(&sk->protinfo.nr->ack_queue) == NULL) ? sk->protinfo.nr->va : sk->protinfo.nr->vs;
-	end   = (sk->protinfo.nr->va + sk->window) % NR_MODULUS;
+	end   = (sk->protinfo.nr->va + sk->protinfo.nr->window) % NR_MODULUS;
 
 	if (!(sk->protinfo.nr->condition & PEER_RX_BUSY_CONDITION) &&
 	    start != end                                  &&

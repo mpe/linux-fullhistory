@@ -3,6 +3,7 @@
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
  */
 
+#include <linux/init.h>
 #include <asm/oplib.h>
 #include <asm/io.h>
 #include <asm/auxio.h>
@@ -10,8 +11,7 @@
 /* Probe and map in the Auxiliary I/O register */
 unsigned char *auxio_register;
 
-void
-auxio_probe(void)
+__initfunc(void auxio_probe(void))
 {
 	int node, auxio_nd;
 	struct linux_prom_registers auxregs[1];
@@ -27,6 +27,11 @@ auxio_probe(void)
 		node = prom_getchild(node);
 		auxio_nd = prom_searchsiblings(node, "auxio");
 		if(!auxio_nd) {
+			if(prom_searchsiblings(node, "leds")) {
+				/* VME chassis sun4m machine, no auxio exists. */
+				auxio_register = 0;
+				return;
+			}
 			prom_printf("Cannot find auxio node, cannot continue...\n");
 			prom_halt();
 		}

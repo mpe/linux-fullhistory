@@ -590,13 +590,13 @@ device_exists (int ldn, int *is_disk, int *block_length)
       scb.command = IM_DEVICE_INQUIRY_CMD;
       scb.enable = IM_READ_CONTROL | IM_SUPRESS_EXCEPTION_SHORT;
       /* I think this virt_to_bus is needed.. ??? AC */
-      scb.sys_buf_adr = virt_to_bus((unsigned long) buf);
+      scb.sys_buf_adr = virt_to_bus(buf);
       scb.sys_buf_length = 255;
-      scb.tsb_adr = virt_to_bus((unsigned long) &tsb);
+      scb.tsb_adr = virt_to_bus(&tsb);
 
       /*issue scb to passed ldn, and busy wait for interrupt */
       got_interrupt = 0;
-      issue_cmd (virt_to_bus((unsigned long)) &scb, IM_SCB | ldn);
+      issue_cmd (virt_to_bus(&scb), IM_SCB | ldn);
       while (!got_interrupt)
 	barrier ();
 
@@ -627,13 +627,13 @@ device_exists (int ldn, int *is_disk, int *block_length)
 	  /*fill scb with read capacity command */
 	  scb.command = IM_READ_CAPACITY_CMD;
 	  scb.enable = IM_READ_CONTROL;
-	  scb.sys_buf_adr = virt_to_bus((unsigned long) buf);
+	  scb.sys_buf_adr = virt_to_bus(buf);
 	  scb.sys_buf_length = 8;
-	  scb.tsb_adr = virt_to_bus((unsigned long) &tsb);
+	  scb.tsb_adr = virt_to_bus(&tsb);
 
 	  /*issue scb to passed ldn, and busy wait for interrupt */
 	  got_interrupt = 0;
-	  issue_cmd (virt_to_bus((unsigned long) &scb), IM_SCB | ldn);
+	  issue_cmd (virt_to_bus(&scb), IM_SCB | ldn);
 	  while (!got_interrupt)
 	    barrier ();
 
@@ -740,7 +740,7 @@ ibmmca_queuecommand (Scsi_Cmnd * cmd, void (*done) (Scsi_Cmnd *))
   /*fill scb information independent of the scsi command */
   scb = &(ld[ldn].scb);
   scb->enable = IM_REPORT_TSB_ONLY_ON_ERROR;
-  scb->tsb_adr = virt_to_bus((unsigned long) &(ld[ldn].tsb));
+  scb->tsb_adr = virt_to_bus(&(ld[ldn].tsb));
   if (cmd->use_sg)
     {
       int i = cmd->use_sg;
@@ -749,16 +749,16 @@ ibmmca_queuecommand (Scsi_Cmnd * cmd, void (*done) (Scsi_Cmnd *))
 	panic ("IBM MCA SCSI: scatter-gather list too long.\n");
       while (--i >= 0)
 	{
-	  ld[ldn].sge[i].address = virt_to_bus(sl[i].address);
+	  ld[ldn].sge[i].address = (void *) virt_to_bus(sl[i].address);
 	  ld[ldn].sge[i].byte_length = sl[i].length;
 	}
       scb->enable |= IM_POINTER_TO_LIST;
-      scb->sys_buf_adr = virt_to_bus((unsigned long) &(ld[ldn].sge[0]));
+      scb->sys_buf_adr = virt_to_bus(&(ld[ldn].sge[0]));
       scb->sys_buf_length = cmd->use_sg * sizeof (struct im_sge);
     }
   else
     {
-      scb->sys_buf_adr = virt_to_bus((unsigned long) cmd->request_buffer);
+      scb->sys_buf_adr = virt_to_bus(cmd->request_buffer);
       scb->sys_buf_length = cmd->request_bufflen;
     }
 
@@ -833,7 +833,7 @@ ibmmca_queuecommand (Scsi_Cmnd * cmd, void (*done) (Scsi_Cmnd *))
     }
 
   /*issue scb command, and return */
-  issue_cmd (virt_to_bus((unsigned long) scb), IM_SCB | ldn);
+  issue_cmd (virt_to_bus(scb), IM_SCB | ldn);
   return 0;
 }
 

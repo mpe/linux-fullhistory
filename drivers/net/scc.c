@@ -85,6 +85,8 @@
    		  The move to version number 3.0 reflects theses changes.
    		  You can use version 2.4a if you need a KISS TNC emulator.
 
+   961213	- Fixed for Linux networking changes.
+
    Thanks to all who contributed to this driver with ideas and bug
    reports!
    
@@ -2015,9 +2017,9 @@ scc_net_set_mac_address(struct device *dev, void *addr)
 /* ----> rebuild header <---- */
 
 static int 
-scc_net_rebuild_header(void *buff, struct device *dev, unsigned long raddr, struct sk_buff *skb)
+scc_net_rebuild_header(struct sk_buff *skb)
 {
-    return ax25_rebuild_header(buff, dev, raddr, skb);
+    return ax25_rebuild_header(skb);
 }
 
 /* ----> "hard" header <---- */

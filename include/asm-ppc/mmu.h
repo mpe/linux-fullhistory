@@ -6,7 +6,6 @@
 #define _PPC_MMU_H_
 
 /* Hardware Page Table Entry */
- 
 typedef struct _PTE
    {
       unsigned long v:1;	/* Entry is valid */
@@ -32,7 +31,6 @@ typedef struct _PTE
 #define PP_RXRX 3	/* Supervisor read,       User read */
 
 /* Segment Register */
-
 typedef struct _SEGREG
    {
       unsigned long t:1;	/* Normal or I/O  type */
@@ -44,7 +42,6 @@ typedef struct _SEGREG
    } SEGREG;
 
 /* Block Address Translation (BAT) Registers */
-
 typedef struct _BATU		/* Upper part of BAT */
    {
       unsigned long bepi:15;	/* Effective page index (virtual address) */
@@ -146,8 +143,6 @@ unsigned long sdr;	/* Hardware image of SDR */
 #define HASH_TABLE_MASK_2M	0x01F   
 #define HASH_TABLE_MASK_4M	0x03F   
 
-#define MMU_PAGE_SIZE	4096
-
-extern int MMU_hash_page(struct thread_struct *tss, unsigned long va, pte *pg);
+extern inline int MMU_hash_page(struct thread_struct *tss, unsigned long va, pte *pg);
 
 #endif

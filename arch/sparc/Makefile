@@ -1,4 +1,4 @@
-# $Id: Makefile,v 1.20 1996/04/16 08:02:50 davem Exp $
+# $Id: Makefile,v 1.21 1996/11/13 05:09:12 davem Exp $
 # sparc/Makefile
 #
 # Makefile for the architecture dependent flags and dependencies on the
@@ -29,6 +29,9 @@ ARCHIVES := arch/sparc/kernel/kernel.o arch/sparc/mm/mm.o $(ARCHIVES)
 
 LIBS := $(TOPDIR)/lib/lib.a $(LIBS) $(TOPDIR)/arch/sparc/prom/promlib.a \
 	$(TOPDIR)/arch/sparc/lib/lib.a
+
+INITOBJ = $(TOPDIR)/arch/sparc/kernel/initobj.o
+FINITOBJ = $(TOPDIR)/arch/sparc/kernel/finitobj.o
 
 ifdef CONFIG_AP1000
 SUBDIRS := $(SUBDIRS) arch/sparc/ap1000

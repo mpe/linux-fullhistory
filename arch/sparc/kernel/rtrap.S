@@ -1,4 +1,4 @@
-/* $Id: rtrap.S,v 1.39 1996/10/28 07:49:01 davem Exp $
+/* $Id: rtrap.S,v 1.40 1996/12/10 06:06:18 davem Exp $
  * rtrap.S: Return from Sparc trap low-level code.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -69,8 +69,10 @@ ret_trap_entry:
 	be	1f
 	 sethi	%hi(C_LABEL(need_resched)), %twin_tmp1
 
+	wr	%t_psr, 0x0, %psr
+	WRITE_PAUSE
 	b	ret_trap_kernel
-	 wr	%t_psr, 0x0, %psr
+	 nop
 
 1:
 	ld	[%twin_tmp1 + %lo(C_LABEL(need_resched))], %g2
@@ -99,6 +101,7 @@ signal_p:
 	clr	%l6
 ret_trap_continue:
 	wr	%t_psr, 0x0, %psr
+	WRITE_PAUSE
 
 	ld	[%curptr + THREAD_W_SAVED], %twin_tmp1
 	orcc	%g0, %twin_tmp1, %g0

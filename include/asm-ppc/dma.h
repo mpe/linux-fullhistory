@@ -7,6 +7,7 @@
 
 /*
  * Note: Adapted for PowerPC by Gary Thomas
+ * Modified by Cort Dougan <cort@cs.nmt.edu>
  *
  * There may be some comments or restrictions made here which are
  * not valid for the PowerPC (PreP) platform.  Take what you read
@@ -292,7 +293,6 @@ static __inline__ int get_dma_residue(unsigned int dmanr)
 
 
 /* These are in kernel/dma.c: */
-/*extern int request_dma(unsigned int dmanr, char * device_id);*/	/* reserve a DMA channel */
 extern void free_dma(unsigned int dmanr);	/* release it again */
 
 

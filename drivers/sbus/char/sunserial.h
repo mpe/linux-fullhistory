@@ -1,6 +1,8 @@
-/* serial.h: Definitions for the Sparc Zilog serial driver.
+/* $Id: sunserial.h,v 1.5 1996/10/16 13:13:41 zaitcev Exp $
+ * serial.h: Definitions for the Sparc Zilog serial driver.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
+ * Copyright (C) 1996 Eddie C. Dost   (ecd@skynet.be)
  */
 #ifndef _SPARC_SERIAL_H
 #define _SPARC_SERIAL_H
@@ -114,6 +116,9 @@ struct sun_serial {
 	char kgdb_channel;  /* Kgdb is running on this channel */
 	char is_cons;       /* Is this our console. */
 
+	char channelA;      /* This is channel A. */
+	char parity_mask;   /* Mask out parity bits in data register. */
+
 	/* We need to know the current clock divisor
 	 * to read the bps rate the chip has currently
 	 * loaded.
@@ -123,9 +128,6 @@ struct sun_serial {
 
 	/* Current write register values */
 	unsigned char curregs[NUM_ZSREGS];
-
-	/* Values we need to set next opportunity */
-	unsigned char pendregs[NUM_ZSREGS];
 
 	char change_needed;
 
@@ -231,6 +233,7 @@ struct sun_serial {
 #define	RxINT_FCERR	0x8	/* Rx Int on First Character Only or Error */
 #define	INT_ALL_Rx	0x10	/* Int on all Rx Characters or error */
 #define	INT_ERR_Rx	0x18	/* Int on error only */
+#define RxINT_MASK	0x18
 
 #define	WT_RDY_RT	0x20	/* Wait/Ready on R/T */
 #define	WT_FN_RDYFN	0x40	/* Wait/FN/Ready FN */
@@ -240,7 +243,7 @@ struct sun_serial {
 
 /* Write Register 3 */
 
-#define	RxENABLE	0x1	/* Rx Enable */
+#define	RxENAB  	0x1	/* Rx Enable */
 #define	SYNC_L_INH	0x2	/* Sync Character Load Inhibit */
 #define	ADD_SM		0x4	/* Address Search Mode (SDLC) */
 #define	RxCRC_ENAB	0x8	/* Rx CRC Enable */
@@ -250,10 +253,11 @@ struct sun_serial {
 #define	Rx7		0x40	/* Rx 7 Bits/Character */
 #define	Rx6		0x80	/* Rx 6 Bits/Character */
 #define	Rx8		0xc0	/* Rx 8 Bits/Character */
+#define RxN_MASK	0xc0
 
 /* Write Register 4 */
 
-#define	PAR_ENA		0x1	/* Parity Enable */
+#define	PAR_ENAB	0x1	/* Parity Enable */
 #define	PAR_EVEN	0x2	/* Parity Even/Odd* */
 
 #define	SYNC_ENAB	0	/* Sync Modes Enable */
@@ -282,6 +286,7 @@ struct sun_serial {
 #define	Tx7		0x20	/* Tx 7 bits/character */
 #define	Tx6		0x40	/* Tx 6 bits/character */
 #define	Tx8		0x60	/* Tx 8 bits/character */
+#define TxN_MASK	0x60
 #define	DTR		0x80	/* DTR */
 
 /* Write Register 6 (Sync bits 0-7/SDLC Address Field) */
@@ -334,7 +339,7 @@ struct sun_serial {
 /* Write Register 13 (upper byte of baud rate generator time constant) */
 
 /* Write Register 14 (Misc control bits) */
-#define	BRENABL	1	/* Baud rate generator enable */
+#define	BRENAB 	1	/* Baud rate generator enable */
 #define	BRSRC	2	/* Baud rate generator source */
 #define	DTRREQ	4	/* DTR/Request function */
 #define	AUTOECHO 8	/* Auto Echo */
@@ -408,7 +413,9 @@ struct sun_serial {
 /* Read Register 15 (value of WR 15) */
 
 /* Misc macros */
-#define ZS_CLEARERR(channel)    (channel->control = ERR_RES)
+#define ZS_CLEARERR(channel)    do { channel->control = ERR_RES; \
+				     udelay(5); } while(0)
+
 #define ZS_CLEARFIFO(channel)   do { volatile unsigned char garbage; \
 				     garbage = channel->data; \
 				     udelay(2); \

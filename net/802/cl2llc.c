@@ -422,7 +422,7 @@ void llc_interpret_pseudo_code(llcptr lp, int pc_label, struct sk_buff *skb,
 				{
 					lp->retry_count = 0;
 					llc_stop_timer(lp, ACK_TIMER);  
-					if (lp->rtq_front != NULL)
+					if (skb_peek(&lp->rtq) != NULL)
 					{
 						/*
  						 *	Re-transmit queue not empty 

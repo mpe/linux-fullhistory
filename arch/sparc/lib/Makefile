@@ -1,4 +1,4 @@
-# $Id: Makefile,v 1.12 1996/10/27 08:36:26 davem Exp $
+# $Id: Makefile,v 1.15 1996/11/22 11:57:00 ecd Exp $
 # Makefile for Sparc library files..
 #
 
@@ -6,7 +6,8 @@ CFLAGS := $(CFLAGS) -ansi
 
 OBJS  = mul.o rem.o sdiv.o udiv.o umul.o urem.o ashrdi3.o memcpy.o memset.o \
         strlen.o checksum.o blockops.o memscan.o memcmp.o strncmp.o \
-	strncpy_from_user.o
+	strncpy_from_user.o divdi3.o udivdi3.o strlen_user.o \
+	copy_user.o clear_user.o
 
 lib.a: $(OBJS)
 	$(AR) rcs lib.a $(OBJS)
@@ -30,6 +31,15 @@ strncmp.o: strncmp.S
 strncpy_from_user.o: strncpy_from_user.S
 	$(CC) -D__ASSEMBLY__ -ansi -c -o strncpy_from_user.o strncpy_from_user.S
 
+strlen_user.o: strlen_user.S
+	$(CC) -D__ASSEMBLY__ -ansi -c -o strlen_user.o strlen_user.S
+
+copy_user.o: copy_user.S
+	$(CC) -D__ASSEMBLY__ -ansi -c -o copy_user.o copy_user.S
+
+clear_user.o: clear_user.S
+	$(CC) -D__ASSEMBLY__ -ansi -c -o clear_user.o clear_user.S
+
 blockops.o: blockops.S
 	$(CC) -ansi -c -o blockops.o blockops.S
 
@@ -38,6 +48,12 @@ memset.o: memset.S
 
 strlen.o: strlen.S
 	$(CC) -ansi -c -o strlen.o strlen.S
+
+divdi3.o: divdi3.S
+	$(CC) -ansi -c -o divdi3.o divdi3.S
+
+udivdi3.o: udivdi3.S
+	$(CC) -ansi -c -o udivdi3.o udivdi3.S
 
 mul.o: mul.S
 	$(CC) -c -o mul.o mul.S

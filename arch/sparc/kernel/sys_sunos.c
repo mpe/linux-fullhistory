@@ -1,4 +1,4 @@
-/* $Id: sys_sunos.c,v 1.61 1996/11/03 20:58:11 davem Exp $
+/* $Id: sys_sunos.c,v 1.65 1996/12/10 07:08:09 tridge Exp $
  * sys_sunos.c: SunOS specific syscall compatibility support.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -107,6 +107,11 @@ asmlinkage unsigned long sunos_mmap(unsigned long addr, unsigned long len,
 		addr = 0;
 	ret_type = flags & _MAP_NEW;
 	flags &= ~_MAP_NEW;
+
+	/* See asm-sparc/uaccess.h */
+	if((len > (TASK_SIZE - PAGE_SIZE)) || (addr > (TASK_SIZE-len-PAGE_SIZE)))
+		return -EINVAL;
+
 	retval = do_mmap(file, addr, len, prot, flags, off);
 	if(ret_type)
 		return retval;
@@ -178,7 +183,7 @@ asmlinkage int sunos_brk(unsigned long brk)
 	freepages >>= 1;
 	freepages += nr_free_pages;
 	freepages += nr_swap_pages;
-	freepages -= max_mapnr >> 4;
+	freepages -= num_physpages >> 4;
 	freepages -= (newbrk-oldbrk) >> PAGE_SHIFT;
 	if (freepages < 0)
 		return -ENOMEM;
@@ -1153,26 +1158,82 @@ extern asmlinkage int sys_sigaction(int, const struct sigaction *, struct sigact
 asmlinkage int sunos_sigaction(int signum, const struct sigaction *action,
 	struct sigaction *oldaction)
 {
-	struct sigaction tmp_sa;
+	struct sigaction tmp_sa, *tmp_sap;
 	const  int sigaction_size = sizeof (struct sigaction) - sizeof (void *);
 	int err;
 	int old_fs;
-	
-	if(copy_from_user(&tmp_sa, action, sigaction_size))
-		return -EFAULT;
-	if (tmp_sa.sa_flags & SUNOS_SV_INTERRUPT)
-		tmp_sa.sa_flags &= ~SUNOS_SV_INTERRUPT;
-	else
-		tmp_sa.sa_flags |= SA_RESTART;
-	old_fs = get_fs ();
-	set_fs (get_ds ());
-	err = sys_sigaction (signum, &tmp_sa, oldaction);
+
+	current->personality |= PER_BSD;
+
+	if (action) {
+		if(copy_from_user(&tmp_sa, action, sigaction_size))
+			return -EFAULT;
+		if (oldaction) {
+			err = verify_area(VERIFY_WRITE,oldaction,sigaction_size);
+			if (err)
+				return err;
+		}
+			
+		if (tmp_sa.sa_flags & SUNOS_SV_INTERRUPT)
+			tmp_sa.sa_flags &= ~SUNOS_SV_INTERRUPT;
+		else
+			tmp_sa.sa_flags |= SA_RESTART;
+		old_fs = get_fs ();
+		set_fs (get_ds ());
+		tmp_sap = &tmp_sa;
+	} else {
+		tmp_sap = action;
+	}
+
+	err = sys_sigaction (signum, tmp_sap, oldaction);
+
 	if (err == 0 && oldaction){
 		if (oldaction->sa_flags & SA_RESTART)
 			oldaction->sa_flags &= ~SA_RESTART;
 		else
 			oldaction->sa_flags |= SUNOS_SV_INTERRUPT;
 	}
-	set_fs (old_fs);
+	if (action)
+		set_fs (old_fs);
 	return err;
+}
+
+
+extern asmlinkage int sys_setsockopt(int fd, int level, int optname, char *optval, int optlen);
+extern asmlinkage int sys_getsockopt(int fd, int level, int optname, char *optval, int *optlen);
+
+asmlinkage int sunos_setsockopt(int fd, int level, int optname, char *optval,
+				int optlen)
+{
+	int tr_opt = optname;
+
+	if (level == SOL_IP)
+	{
+		/*
+		 *	Multicast socketopts (ttl, membership)
+		 */
+		if (tr_opt >=2 && tr_opt <= 6)
+		{
+			tr_opt += 30;
+		}
+	}
+	return sys_setsockopt(fd, level, tr_opt, optval, optlen);
+}
+
+asmlinkage int sunos_getsockopt(int fd, int level, int optname, char *optval,
+				int *optlen)
+{
+	int tr_opt = optname;
+
+	if (level == SOL_IP)
+	{
+		/*
+		 *	Multicast socketopts (ttl, membership)
+		 */
+		if (tr_opt >=2 && tr_opt <= 6)
+		{
+			tr_opt += 30;
+		}
+	}
+	return sys_getsockopt(fd, level, tr_opt, optval, optlen);
 }

@@ -127,7 +127,7 @@ csum_tcpudp_magic(unsigned long saddr, unsigned long daddr, unsigned short len, 
  *	Fold a partial checksum without adding pseudo headers
  */
 
-unsigned short csum_fold(unsigned int sum)
+unsigned int csum_fold(unsigned int sum)
 {
 	sum = (sum & 0xffff) + (sum >> 16);
 	sum = (sum & 0xffff) + (sum >> 16);

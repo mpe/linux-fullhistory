@@ -112,7 +112,7 @@ bad_area:
 	if ((fixup = search_exception_table(regs->pc)) != 0) {
 		unsigned long newpc;
 		newpc = fixup_exception(dpf_reg, fixup, regs->pc);
-		printk("Taking exception at %lx (%lx)\n", regs->pc, newpc);
+		printk("Taking exception at [<%lx>] (%lx)\n", regs->pc, newpc);
 		regs->pc = newpc;
 		return;
 	}

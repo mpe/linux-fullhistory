@@ -270,9 +270,10 @@ void ax25_transmit_buffer(ax25_cb *ax25, struct sk_buff *skb, int type)
 	ptr = skb_push(skb, size_ax25_addr(ax25->digipeat));
 	build_ax25_addr(ptr, &ax25->source_addr, &ax25->dest_addr, ax25->digipeat, type, ax25->modulus);
 
-	skb->arp = 1;
-	skb->dev=ax25->device;
-	skb->priority=SOPRI_NORMAL;
+	skb->arp      = 1;
+	skb->dev      = ax25->device;
+	skb->priority = SOPRI_NORMAL;
+
 	ax25_queue_xmit(skb);
 }
 

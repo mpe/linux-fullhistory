@@ -1,4 +1,4 @@
-/*  $Id: signal.c,v 1.57 1996/10/31 00:59:01 davem Exp $
+/*  $Id: signal.c,v 1.64 1996/12/03 08:44:34 jj Exp $
  *  linux/arch/sparc/kernel/signal.c
  *
  *  Copyright (C) 1991, 1992  Linus Torvalds
@@ -19,23 +19,63 @@
 #include <asm/bitops.h>
 #include <asm/ptrace.h>
 #include <asm/svr4.h>
+#include <asm/pgtable.h>
 
 #define _S(nr) (1<<((nr)-1))
 
 #define _BLOCKABLE (~(_S(SIGKILL) | _S(SIGSTOP)))
 
 asmlinkage int sys_waitpid(pid_t pid, unsigned long *stat_addr, int options);
+extern void fpload(unsigned long *fpregs, unsigned long *fsr);
 asmlinkage int do_signal(unsigned long oldmask, struct pt_regs * regs,
 			 unsigned long orig_o0, int ret_from_syscall);
 
 /* This turned off for production... */
-/* #define DEBUG_FATAL_SIGNAL 1 */
+/* #define DEBUG_SIGNALS 1 */
 
-#ifdef DEBUG_FATAL_SIGNAL
-extern void instruction_dump (unsigned long *pc);
-#endif
+/* Signal frames: the original one (compatible with SunOS):
+ *
+ * Set up a signal frame... Make the stack look the way SunOS
+ * expects it to look which is basically:
+ *
+ * ---------------------------------- <-- %sp at signal time
+ * Struct sigcontext
+ * Signal address
+ * Ptr to sigcontext area above
+ * Signal code
+ * The signal number itself
+ * One register window
+ * ---------------------------------- <-- New %sp
+ */
+struct signal_sframe {
+	struct reg_window sig_window;
+	int sig_num;
+	int sig_code;
+	struct sigcontext *sig_scptr;
+	int sig_address;
+	struct sigcontext sig_context;
+};
 
-/* atomically swap in the new signal mask, and wait for a signal.
+/* 
+ * And the new one, intended to be used for Linux applications only
+ * (we have enough in there to work with clone).
+ * All the interesting bits are in the info field.
+ */
+
+struct new_signal_frame {
+	struct      sparc_stackf ss;
+	struct      reg_window sig_window;
+	__siginfo_t info;
+	unsigned    long __pad;
+	unsigned    long insns [2];
+};
+
+/* Align macros */
+#define SF_ALIGNEDSZ  (((sizeof(struct signal_sframe) + 7) & (~7)))
+#define NF_ALIGNEDSZ  (((sizeof(struct new_signal_frame) + 7) & (~7)))
+
+/*
+ * atomically swap in the new signal mask, and wait for a signal.
  * This is really tricky on the Sparc, watch out...
  */
 asmlinkage inline void _sigpause_common(unsigned int set, struct pt_regs *regs)
@@ -76,14 +116,49 @@ asmlinkage void do_sigsuspend (struct pt_regs *regs)
 	_sigpause_common(regs->u_regs[UREG_I0], regs);
 }
 
+void do_new_sigreturn (struct pt_regs *regs)
+{
+	struct new_signal_frame *sf;
+	unsigned long up_psr;
+	
+	sf = (struct new_signal_frame *) regs->u_regs [UREG_FP];
+	/* 1. Make sure we are not getting garbage from the user */
+	if (verify_area (VERIFY_READ, sf, sizeof (*sf))){
+		do_exit (SIGSEGV);
+		return;
+	}
+	if (((uint) sf) & 3){
+		do_exit (SIGSEGV);
+		return;
+	}
+	if ((sf->info.si_regs.pc | sf->info.si_regs.npc) & 3){
+		do_exit (SIGSEGV);
+		return;
+	}
+	
+	/* 2. Restore the state */
+	up_psr = regs->psr;
+	memcpy (regs, &sf->info.si_regs, sizeof (struct pt_regs));
+
+	/* User can only change condition codes in %psr. */
+	regs->psr = (up_psr & ~(PSR_ICC)) | (regs->psr & PSR_ICC);
+	
+	if (regs->psr & PSR_EF)
+		fpload (&sf->info.si_float_regs [0], &sf->info.si_fsr);
+	current->blocked = sf->info.si_mask & _BLOCKABLE;
+}
+
 asmlinkage void do_sigreturn(struct pt_regs *regs)
 {
-	struct sigcontext *scptr =
-		(struct sigcontext *) regs->u_regs[UREG_I0];
+	struct sigcontext *scptr;
 	unsigned long pc, npc, psr;
 
 	synchronize_user_stack();
-
+	if (current->tss.new_signal){
+		do_new_sigreturn (regs);
+		return;
+	}
+	scptr = (struct sigcontext *) regs->u_regs[UREG_I0];
 	/* Check sanity of the user arg. */
 	if(verify_area(VERIFY_READ, scptr, sizeof(struct sigcontext)) ||
 	   (((unsigned long) scptr) & 3)) {
@@ -113,29 +188,6 @@ asmlinkage void do_sigreturn(struct pt_regs *regs)
 	regs->psr |= (psr & PSR_ICC);
 }
 
-/* Set up a signal frame... Make the stack look the way SunOS
- * expects it to look which is basically:
- *
- * ---------------------------------- <-- %sp at signal time
- * Struct sigcontext
- * Signal address
- * Ptr to sigcontext area above
- * Signal code
- * The signal number itself
- * One register window
- * ---------------------------------- <-- New %sp
- */
-struct signal_sframe {
-	struct reg_window sig_window;
-	int sig_num;
-	int sig_code;
-	struct sigcontext *sig_scptr;
-	int sig_address;
-	struct sigcontext sig_context;
-};
-/* To align the structure properly. */
-#define SF_ALIGNEDSZ  (((sizeof(struct signal_sframe) + 7) & (~7)))
-
 /* Checks if the fp is valid */
 int invalid_frame_pointer (void *fp, int fplen)
 {
@@ -161,7 +213,7 @@ setup_frame(struct sigaction *sa, unsigned long pc, unsigned long npc,
 	sframep = (struct signal_sframe *) regs->u_regs[UREG_FP];
 	sframep = (struct signal_sframe *) (((unsigned long) sframep)-SF_ALIGNEDSZ);
 	if (invalid_frame_pointer (sframep, sizeof(*sframep))){
-#if 0 /* fills up the console logs during crashme runs, yuck... */
+#ifdef DEBUG_SIGNALS /* fills up the console logs during crashme runs, yuck... */
 		printk("%s [%d]: User has trashed signal stack\n",
 		       current->comm, current->pid);
 		printk("Sigstack ptr %p handler at pc<%08lx> for sig<%d>\n",
@@ -217,6 +269,56 @@ setup_frame(struct sigaction *sa, unsigned long pc, unsigned long npc,
 	regs->npc = (regs->pc + 4);
 }
 
+/* To align the structure properly. */
+
+static inline void
+new_setup_frame(struct sigaction *sa, struct pt_regs *regs, int signo, unsigned long oldmask)
+{
+	struct new_signal_frame *sf;
+
+	/* 1. Make sure everything is clean */
+	synchronize_user_stack();
+	sf = (struct new_signal_frame *) regs->u_regs[UREG_FP];
+	sf = (struct new_signal_frame *) (((unsigned long) sf)-NF_ALIGNEDSZ);
+	
+	if (invalid_frame_pointer (sf, sizeof(struct new_signal_frame))){
+		do_exit(SIGILL);
+		return;
+	}
+
+	if (current->tss.w_saved != 0){
+		printk ("Ay Caramba!  w_saved not zero!\n");
+		do_exit (SIGILL);
+		return;
+	}
+
+	/* 2. Save the state current process state */
+	memcpy (&sf->info.si_regs, regs, sizeof (struct pt_regs));
+	if (regs->psr & PSR_EF){
+		fpsave (&sf->info.si_float_regs [0], &sf->info.si_fsr,
+			&sf->info.si_fpqueue[0], &sf->info.si_fpqdepth);
+	}
+	sf->info.si_mask = oldmask;
+	memcpy (sf, (char *) regs->u_regs [UREG_FP], sizeof (struct reg_window));
+	
+	/* 3. return to kernel instructions */
+	sf->insns [0] = 0x821020d8; /* mov __NR_sigreturn,%g1 */
+	sf->insns [1] = 0x91d02010; /* t 0x10 */
+
+	/* 4. signal handler back-trampoline and parameters */
+	regs->u_regs[UREG_FP] = (unsigned long) sf;
+	regs->u_regs[UREG_I0] = signo;
+	regs->u_regs[UREG_I1] = (unsigned long) &sf->info;
+	regs->u_regs[UREG_I7] = (unsigned long) (&(sf->insns[0]) - 2);
+
+	/* 5. signal handler */
+	regs->pc = (unsigned long) sa->sa_handler;
+	regs->npc = (regs->pc + 4);
+
+	/* Flush cache, replace this with a generic thingie */
+	flush_sig_insns(current->mm, (unsigned long) &(sf->insns[0]));
+}
+
 /* Setup a Solaris stack frame */
 static inline void
 setup_svr4_frame(struct sigaction *sa, unsigned long pc, unsigned long npc,
@@ -235,7 +337,7 @@ setup_svr4_frame(struct sigaction *sa, unsigned long pc, unsigned long npc,
 	sfp = (svr4_signal_frame_t *) (((unsigned long) sfp)-SVR4_SF_ALIGNED);
 
 	if (invalid_frame_pointer (sfp, sizeof (*sfp))){
-#if 0
+#ifdef DEBUG_SIGNALS
 		printk ("Invalid stack frame\n");
 #endif
 		do_exit(SIGILL);
@@ -265,8 +367,8 @@ setup_svr4_frame(struct sigaction *sa, unsigned long pc, unsigned long npc,
 	__put_user(regs->y, &((*gr) [SVR4_Y]));
 	
 	/* Copy g [1..7] and o [0..7] registers */
-	copy_to_user(&(*gr)[SVR4_G1], &regs->u_regs [UREG_G1], sizeof (uint) * 7);
-	copy_to_user(&(*gr)[SVR4_O0], &regs->u_regs [UREG_I0], sizeof (uint) * 8);
+	copy_to_user(&(*gr)[SVR4_G1], &regs->u_regs [UREG_G1], sizeof (long) * 7);
+	copy_to_user(&(*gr)[SVR4_O0], &regs->u_regs [UREG_I0], sizeof (long) * 8);
 
 	/* Setup sigaltstack, FIXME */
 	__put_user(0xdeadbeef, &uc->stack.sp);
@@ -313,6 +415,9 @@ setup_svr4_frame(struct sigaction *sa, unsigned long pc, unsigned long npc,
 	regs->pc = (unsigned long) sa->sa_handler;
 	regs->npc = (regs->pc + 4);
 
+#ifdef DEBUG_SIGNALS
+	printk ("Solaris-frame: %x %x\n", (int) regs->pc, (int) regs->npc);
+#endif
 	/* Arguments passed to signal handler */
 	if (regs->u_regs [14]){
 		struct reg_window *rw = (struct reg_window *) regs->u_regs [14];
@@ -321,11 +426,9 @@ setup_svr4_frame(struct sigaction *sa, unsigned long pc, unsigned long npc,
 		__put_user(si, &rw->ins [1]);
 		__put_user(uc, &rw->ins [2]);
 		__put_user(sfp, &rw->ins [6]);	/* frame pointer */
-#if 0
 		regs->u_regs[UREG_I0] = signr;
 		regs->u_regs[UREG_I1] = (uint) si;
 		regs->u_regs[UREG_I2] = (uint) uc;
-#endif
 	}
 }
 
@@ -407,20 +510,21 @@ asmlinkage int svr4_setcontext (svr4_ucontext_t *c, struct pt_regs *regs)
 		do_exit (SIGSEGV);
 	}
 	/* Retrieve information from passed ucontext */
+	    /* note that nPC is ored a 1, this is used to inform entry.S */
+	    /* that we don't want it to mess with our PC and nPC */
 	__get_user(current->blocked, &c->sigmask.sigbits [0]);
 	current->blocked &= _BLOCKABLE;
 	regs->pc = pc;
-	regs->npc = npc;
+	regs->npc = npc | 1;
 	__get_user(regs->y, &((*gr) [SVR4_Y]));
 	__get_user(psr, &((*gr) [SVR4_PSR]));
 	regs->psr &= ~(PSR_ICC);
 	regs->psr |= (psr & PSR_ICC);
 
 	/* Restore g[1..7] and o[0..7] registers */
-	copy_from_user(&regs->u_regs [UREG_G1], &(*gr)[SVR4_G1], sizeof (uint) * 7);
-	copy_from_user(&regs->u_regs [UREG_I0], &(*gr)[SVR4_O0], sizeof (uint) * 8);
+	copy_from_user(&regs->u_regs [UREG_G1], &(*gr)[SVR4_G1], sizeof (long) * 7);
+	copy_from_user(&regs->u_regs [UREG_I0], &(*gr)[SVR4_O0], sizeof (long) * 8);
 
-	printk ("Setting PC=%lx nPC=%lx\n", regs->pc, regs->npc);
 	return -EINTR;
 }
 
@@ -430,9 +534,12 @@ static inline void handle_signal(unsigned long signr, struct sigaction *sa,
 {
 	if(svr4_signal)
 		setup_svr4_frame(sa, regs->pc, regs->npc, regs, signr, oldmask);
-	else
-		setup_frame(sa, regs->pc, regs->npc, regs, signr, oldmask);
-
+	else {
+		if (current->tss.new_signal)
+			new_setup_frame (sa, regs, signr, oldmask);
+		else
+			setup_frame(sa, regs->pc, regs->npc, regs, signr, oldmask);
+	}
 	if(sa->sa_flags & SA_ONESHOT)
 		sa->sa_handler = NULL;
 	if(!(sa->sa_flags & SA_NOMASK))
@@ -525,6 +632,11 @@ asmlinkage int do_signal(unsigned long oldmask, struct pt_regs * regs,
 					if(current->binfmt->core_dump(signr, regs))
 						signr |= 0x80;
 				}
+#ifdef DEBUG_SIGNALS
+				/* Very useful to debug dynamic linker problems */
+				printk ("Sig ILL going...\n");
+				show_regs (regs);
+#endif
 				/* fall through */
 			default:
 				current->signal |= _S(signr & 0x7f);

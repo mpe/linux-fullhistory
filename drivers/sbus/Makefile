@@ -8,7 +8,7 @@
 # Note 2! The CFLAGS definitions are now in the main makefile...
 
 SUB_DIRS     :=
-MOD_SUB_DIRS := $(SUB_DIRS)
+MOD_SUB_DIRS := $(SUB_DIRS) char
 ALL_SUB_DIRS := $(SUB_DIRS) char
 
 L_OBJS   := sbus.o dvma.o

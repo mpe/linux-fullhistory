@@ -3,6 +3,7 @@
  *
  *  Copyright (C) 1995  Linus Torvalds
  *  Adapted for PowerPC by Gary Thomas
+ *  Modified by Cort Dougan (cort@cs.nmt.edu) 
  */
 
 /*
@@ -17,22 +18,84 @@
 #include <linux/unistd.h>
 #include <linux/ptrace.h>
 #include <linux/malloc.h>
-#include <linux/ldt.h>
 #include <linux/user.h>
 #include <linux/a.out.h>
 
 #include <asm/pgtable.h>
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 #include <asm/system.h>
 #include <asm/io.h>
 
 #include <asm/ppc_machine.h>
+int dump_fpu(void);
+void hard_reset_now(void);
+void switch_to(struct task_struct *, struct task_struct *);
+void copy_thread(int,unsigned long,unsigned long,struct task_struct *,
+		 struct pt_regs *);
+void print_backtrace(unsigned long *);
 
 int
-dump_fpu()
+dump_fpu(void)
 {
-	return (1);
+  return (1);
 }
+
+
+/* check to make sure the kernel stack is healthy */
+int check_stack(struct task_struct *tsk)
+{
+  extern unsigned long init_kernel_stack[PAGE_SIZE/sizeof(long)];
+  int ret = 0;
+  int i;
+  
+  /* skip check in init_kernel_task -- swapper */
+  if ( tsk->kernel_stack_page == (unsigned long)&init_kernel_stack )
+    return;
+  /* check bounds on stack -- above/below kstack page */
+  if ( (tsk->tss.ksp-1 & KERNEL_STACK_MASK) != tsk->kernel_stack_page )
+  {
+    printk("check_stack(): not in bounds %s/%d ksp %x/%x\n",
+	   tsk->comm,tsk->pid,tsk->tss.ksp,tsk->kernel_stack_page);
+    ret |= 1;
+  }
+
+  /* check for magic on kstack */
+  if ( *(unsigned long *)(tsk->kernel_stack_page) != STACK_MAGIC)
+  {
+    printk("check_stack(): no magic %s/%d ksp %x/%x magic %x\n",
+	   tsk->comm,tsk->pid,tsk->tss.ksp,tsk->kernel_stack_page,
+	   *(unsigned long *)(tsk->kernel_stack_page));
+    ret |= 2;
+  }
+
+#ifdef KERNEL_STACK_BUFFER
+  /* check extra padding page under kernel stack */
+  for ( i = PAGE_SIZE/sizeof(long) ; i >= 1; i--)
+  {
+    struct pt_regs *regs;
+    
+    if ( *((unsigned long *)(tsk->kernel_stack_page)-1) )
+    {
+      printk("check_stack(): padding touched %s/%d ksp %x/%x value %x/%d\n",
+	     tsk->comm,tsk->pid,tsk->tss.ksp,tsk->kernel_stack_page,
+	     *(unsigned long *)(tsk->kernel_stack_page-i),i*sizeof(long));
+      regs = (struct pt_regs *)(tsk->kernel_stack_page-(i*sizeof(long)));
+      printk("marker %x trap %x\n", regs->marker,regs->trap);
+      print_backtrace((unsigned long *)(tsk->tss.ksp));
+      
+      ret |= 4;
+      break;
+    }
+  }
+#endif
+  
+#if 0
+  if (ret)
+    panic("bad stack");
+#endif
+  return(ret);
+}
+
 
 void
 switch_to(struct task_struct *prev, struct task_struct *new)
@@ -40,46 +103,55 @@ switch_to(struct task_struct *prev, struct task_struct *new)
 	struct pt_regs *regs;
 	struct thread_struct *new_tss, *old_tss;
 	int s = _disable_interrupts();
-	regs = new->tss.ksp;
+	regs = (struct pt_regs *)(new->tss.ksp);
+#if 1
+	check_stack(prev);
+	check_stack(new);
+#endif
+ 	/* if a process has used fp 15 times, then turn
+	   on the fpu for good otherwise turn it on with the fp
+	   exception handler as needed.
+	   skip this for kernel tasks.
+	            -- Cort */
+	if ( (regs->msr & MSR_FP)&&(regs->msr & MSR_PR)&&(new->tss.fp_used < 15) )
+	{
 #if 0
-	printk("Task %x(%d) -> %x(%d)", current, current->pid, new, new->pid);
-	printk(" - IP: %x, SR: %x, SP: %x\n", regs->nip, regs->msr, regs);
+	  printk("turning off fpu: %s/%d fp_used %d\n",
+		 new->comm,new->pid,new->tss.fp_used);
+#endif
+	  regs->msr = regs->msr & ~MSR_FP;
+	}
+#if 0
+	printk("%s/%d -> %s/%d\n",prev->comm,prev->pid,new->comm,new->pid);
 #endif
 	new_tss = &new->tss;
 	old_tss = &current->tss;
-	current_set[0] = new;	/* FIX ME! */
+	current_set[0] = new;
 	_switch(old_tss, new_tss);
-#if 0
-	printk("Back in task %x(%d)\n", current, current->pid);
-#endif
 	_enable_interrupts(s);
+}
+
+asmlinkage int sys_debug(unsigned long r3)
+{
+  if ( !strcmp(current->comm,"crashme"))
+    printk("sys_debug(): r3 (syscall) %d\n", r3);
 }
 
 asmlinkage int sys_idle(void)
 {
-	if (current->pid != 0)
-		return -EPERM;
-
-	/* endless idle loop with no priority at all */
-	current->counter = -100;
-	for (;;) {
-		schedule();
-	}
-}
-
-void hard_reset_now(void)
-{
-	halt();
+  if (current->pid != 0)
+    return -EPERM;
+  /* endless idle loop with no priority at all */
+  current->counter = -100;
+  for (;;) {
+    schedule();
+  }
 }
 
 void show_regs(struct pt_regs * regs)
 {
-	_panic("show_regs");
 }
 
-/*
- * Free current thread data structures etc..
- */
 void exit_thread(void)
 {
 }
@@ -102,24 +174,28 @@ void copy_thread(int nr, unsigned long clone_flags, unsigned long usp,
 	int i;
 	SEGREG *segs;
 	struct pt_regs * childregs;
-#if 0
-printk("copy thread - NR: %d, Flags: %x, USP: %x, Task: %x, Regs: %x\n", nr, clone_flags, usp, p, regs);
-#endif
+	
 	/* Construct segment registers */
-	segs = p->tss.segs;
+	segs = (SEGREG *)(p->tss.segs);
 	for (i = 0;  i < 8;  i++)
 	{
 		segs[i].ks = 0;
 		segs[i].kp = 1;
+#if 0
 		segs[i].vsid = i | (nr << 4);
+#else
+		segs[i].vsid = i | ((nr * 10000) << 4);		
+#endif
 	}
 	if ((p->mm->context == 0) || (p->mm->count == 1))
 	{
-		p->mm->context = (nr<<4);
-#if 0		
-printk("Setting MM[%x] Context = %x Task = %x Current = %x/%x\n", p->mm, p->mm->context, p, current, current->mm);
+#if 0
+	  p->mm->context = ((nr)<<4);
+#else	  
+	  p->mm->context = ((nr*10000)<<4);	  
 #endif
 	}
+	
 	/* Last 8 are shared with kernel & everybody else... */
 	for (i = 8;  i < 16;  i++)
 	{
@@ -127,22 +203,21 @@ printk("Setting MM[%x] Context = %x Task = %x Current = %x/%x\n", p->mm, p->mm->
 		segs[i].kp = 1;
 		segs[i].vsid = i;
 	}
+	
 	/* Copy registers */
-#ifdef STACK_HAS_TWO_PAGES
-	childregs = ((struct pt_regs *) (p->kernel_stack_page + 2*PAGE_SIZE)) - 2;
-#else	
-	childregs = ((struct pt_regs *) (p->kernel_stack_page + 1*PAGE_SIZE)) - 2;
-#endif	
+	childregs = ((struct pt_regs *) (p->kernel_stack_page + PAGE_SIZE)) - 2;
+
 	*childregs = *regs;	/* STRUCT COPY */
 	childregs->gpr[3] = 0;  /* Result from fork() */
-	p->tss.ksp = childregs;
+	p->tss.ksp = (unsigned long)(childregs);
 	if (usp >= (unsigned long)regs)
 	{ /* Stack is in kernel space - must adjust */
-		childregs->gpr[1] = childregs+1;
+		childregs->gpr[1] = (long)(childregs+1);
 	} else
 	{ /* Provided stack is in user space */
 		childregs->gpr[1] = usp;
 	}
+	p->tss.fp_used = 0;
 }
 
 /*
@@ -152,43 +227,12 @@ void dump_thread(struct pt_regs * regs, struct user * dump)
 {
 }
 
-#if 0
-/*
- * Do necessary setup to start up a newly executed thread.
- */
-void start_thread(struct pt_regs * regs, unsigned long eip, unsigned long esp)
-{
-	regs->nip = eip;
-	regs->gpr[1] = esp;
-	regs->msr = MSR_USER;
-#if 0
-{
-	int len;
-	len = (unsigned long)0x80000000 - esp;
-	if (len > 128) len = 128;
-	printk("Start thread [%x] at PC: %x, SR: %x, SP: %x\n", regs, eip, regs->msr, esp);
-	dump_buf(esp, len);
-	dump_buf(eip, 0x80);
-}
-#endif	
-}
-#endif
 
 asmlinkage int sys_fork(int p1, int p2, int p3, int p4, int p5, int p6, struct pt_regs *regs)
 {
-	return do_fork(SIGCHLD, regs->gpr[1], regs);
+  return do_fork(SIGCHLD, regs->gpr[1], regs);
 }
 
-/*
- * sys_execve() executes a new program.
- *
- * This works due to the PowerPC calling sequence: the first 6 args
- * are gotten from registers, while the rest is on the stack, so
- * we get a0-a5 for free, and then magically find "struct pt_regs"
- * on the stack for us..
- *
- * Don't do this at home.
- */
 asmlinkage int sys_execve(unsigned long a0, unsigned long a1, unsigned long a2,
 	unsigned long a3, unsigned long a4, unsigned long a5,
 	struct pt_regs *regs)
@@ -196,11 +240,31 @@ asmlinkage int sys_execve(unsigned long a0, unsigned long a1, unsigned long a2,
 	int error;
 	char * filename;
 
+	/* getname does it's own verification of the address
+	   when it calls get_max_filename() but
+	   it will assume it's valid if get_fs() == KERNEL_DS
+	   which is always true on the ppc so we check
+	   it here
+	   
+	   this doesn't completely check any of these data structures,
+	   it just makes sure that the 1st long is in a good area
+	   and from there we assume that it's safe then
+	   -- Cort
+	   */
+	/* works now since get_fs/set_fs work properly */
+#if 0
+	if ( verify_area(VERIFY_READ,(void *)a0,1)
+	     && verify_area(VERIFY_READ,(void *)a1,1)
+	     && verify_area(VERIFY_READ,(void *)a2,1)
+	     )
+	{
+	  return -EFAULT;
+	}
+#endif
 	error = getname((char *) a0, &filename);
 	if (error)
 	{
-printk("Error getting EXEC name: %d\n", error);		
-		return error;
+	  return error;
 	}
 	flush_instruction_cache();
 	error = do_execve(filename, (char **) a1, (char **) a2, regs);
@@ -214,10 +278,6 @@ printk("EXECVE - file = '%s', error = %d\n", filename, error);
 	return error;
 }
 
-/*
- * This doesn't actually work correctly like this: we need to do the
- * same stack setups that fork() does first.
- */
 asmlinkage int sys_clone(int p1, int p2, int p3, int p4, int p5, int p6, struct pt_regs *regs)
 {
 	unsigned long clone_flags = p1;
@@ -229,12 +289,13 @@ asmlinkage int sys_clone(int p1, int p2, int p3, int p4, int p5, int p6, struct 
 void
 print_backtrace(unsigned long *sp)
 {
+#if 0
 	int cnt = 0;
 	printk("... Call backtrace:\n");
-	while (*sp)
+	while (verify_area(VERIFY_READ,sp,sizeof(long)) && *sp)
 	{
 		printk("%08X ", sp[1]);
-		sp = *sp;
+		sp = (unsigned long *)*sp;
 		if (++cnt == 8)
 		{
 			printk("\n");
@@ -242,17 +303,19 @@ print_backtrace(unsigned long *sp)
 		if (cnt > 32) break;
 	}
 	printk("\n");
+#endif
 }
 
 void
 print_user_backtrace(unsigned long *sp)
 {
+#if 0
 	int cnt = 0;
 	printk("... [User] Call backtrace:\n");
-	while (valid_addr(sp) && *sp)
+	while (verify_area(VERIFY_READ,sp,sizeof(long)) && *sp)
 	{
 		printk("%08X ", sp[1]);
-		sp = *sp;
+		sp = (unsigned long *)*sp;
 		if (++cnt == 8)
 		{
 			printk("\n");
@@ -260,11 +323,23 @@ print_user_backtrace(unsigned long *sp)
 		if (cnt > 16) break;
 	}
 	printk("\n");
+#endif
 }
 
 void
 print_kernel_backtrace(void)
 {
+#if 0
 	unsigned long *_get_SP(void);
 	print_backtrace(_get_SP());
+#endif
 }
+inline void start_thread(struct pt_regs * regs,
+                         unsigned long eip, unsigned long esp)
+{
+  regs->nip = eip;
+  regs->gpr[1] = esp;
+  regs->msr = MSR_USER;
+  set_fs(USER_DS);
+}
+

@@ -21,15 +21,9 @@ struct baycom_debug_data {
 	long debug3;
 };
 
-struct baycom_modem_type {
-	unsigned char modem_type;
-	unsigned int options;
-};
-
 struct baycom_ioctl {
 	int cmd;
 	union {
-		struct baycom_modem_type mt;
 		struct baycom_debug_data dbg;
 	} data;
 };
@@ -37,22 +31,8 @@ struct baycom_ioctl {
 /* -------------------------------------------------------------------- */
 
 /*
- * modem types
+ * ioctl values change for baycom
  */
-#define BAYCOM_MODEM_INVALID 0
-#define BAYCOM_MODEM_SER12   1
-#define BAYCOM_MODEM_PAR96   2
-
-/*
- * modem options; bit mask
- */
-#define BAYCOM_OPTIONS_SOFTDCD  1
-
-/*
- * ioctl values change for baycom_net
- */
-#define BAYCOMCTL_GETMODEMTYPE   0x90
-#define BAYCOMCTL_SETMODEMTYPE   0x91
 #define BAYCOMCTL_GETDEBUG       0x92
 
 /* -------------------------------------------------------------------- */

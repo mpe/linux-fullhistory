@@ -1,0 +1,50 @@
+comment 'SBUS Frame Buffer support'
+bool 'Sun FB drivers appear in PROCFS' SUN_FBS_IN_PROCFS
+bool 'Load All Supported Drivers' CONFIG_SUN_FB_DISPLAY
+
+if [ "$CONFIG_SUN_FB_DISPLAY" = "n" ]; then
+	bool 'cgsix support' SUN_FB_CGSIX
+	bool 'tcx support' SUN_FB_TCX
+	bool 'cgthree support' SUN_FB_CGTHREE
+	bool 'cgfourteen support' SUN_FB_CGFOURTEEN
+	bool 'bwtwo support' SUN_FB_BWTWO
+	bool 'leo/zx support' SUN_FB_LEO
+	bool 'weitek P9X00 support' TADPOLE_FB_WEITEK
+	bool 'Fast 8 bit 1152x900  mode' SUN_FB_FAST_ONE
+	bool 'Fast mono  1152x900  mode' SUN_FB_FAST_TWO
+	bool 'Fast 8 bit 1280x1024 mode' SUN_FB_FAST_MONO
+	if [ "$TADPOLE_FB_WEITEK" = "n" ]; then
+		bool 'Generic AutoResolution mode' SUN_FB_GENERIC
+		fbs=$SUN_FB_CGSIX
+		fbs=$fbs$SUN_FB_TCX
+		fbs=$fbs$SUN_FB_CGTHREE
+		fbs=$fbs$SUN_FB_BWTWO
+		fbs=$fbs$SUN_FB_CGFOURTEEN
+		fbs=$fbs$SUN_FB_LEO
+		fbs=$fbs$TADPOLE_FB_WEITEK
+		fbs=$fbs$SUN_FB_GENERIC
+		if [ "$fbs" = "nnnnnnnn" ]; then
+			echo "Warning: You have excluded ALL FB Support"
+			echo "Notice:  Enabling Generic AutoResolution"
+			define_bool SUN_FB_GENERIC y
+		fi
+	else
+		define_bool SUN_FB_GENERIC y
+	fi
+else
+	define_bool SUN_FB_CGSIX y
+	define_bool SUN_FB_TCX y
+	define_bool SUN_FB_CGTHREE y
+	define_bool SUN_FB_CGFOURTEEN y
+	define_bool SUN_FB_BWTWO y
+	define_bool SUN_FB_LEO y
+	define_bool TADPOLE_FB_WEITEK y
+	define_bool SUN_FB_FAST_ONE y
+	define_bool SUN_FB_FAST_TWO y
+	define_bool SUN_FB_FAST_MONO y
+	define_bool SUN_FB_GENERIC y
+fi
+
+comment 'Misc Linux/SPARC drivers'
+tristate '/dev/openprom device support' CONFIG_SUN_OPENPROMIO
+tristate 'Mostek real time clock support' CONFIG_SUN_MOSTEK_RTC

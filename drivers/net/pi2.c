@@ -54,6 +54,7 @@
    		       to the proper set_mac_address semantics which will break 
    		       a few programs I suspect.
    Aug  18, 1996 (jsn) Converted to be used as a module.
+   Dec  13, 1996 (jsn) Fixed to match Linux networking changes.
 */
 
 /* The following #define invokes a hack that will improve performance (baud)
@@ -86,6 +87,7 @@
    the PI2 - but it's safer to leave it in. */
 #define REALLY_SLOW_IO 1
 
+#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
@@ -1065,20 +1067,6 @@ static void rts(struct pi_local *lp, int x)
     }
 }
 
-/* Fill in the MAC-level header. */
-static int pi_header(struct sk_buff *skb, struct device *dev, unsigned short type,
-	     void *daddr, void *saddr, unsigned len)
-{
-    return ax25_encapsulate(skb, dev, type, daddr, saddr, len);
-}
-
-/* Rebuild the MAC-level header. */
-static int pi_rebuild_header(void *buff, struct device *dev, unsigned long raddr,
-			     struct sk_buff *skb)
-{
-    return ax25_rebuild_header(buff, dev, raddr, skb);
-}
-
 static void scc_init(struct device *dev)
 {
     unsigned long flags;
@@ -1415,9 +1403,11 @@ static int pi_probe(struct device *dev, int card_type)
     for (i = 0; i < DEV_NUMBUFFS; i++)
 	skb_queue_head_init(&dev->buffs[i]);
 
+#if defined(CONFIG_AX25) || defined(CONFIG_AX25_MODULE)
+    dev->hard_header    = ax25_encapsulate;
+    dev->rebuild_header = ax25_rebuild_header;
+#endif
 
-    dev->hard_header = pi_header;
-    dev->rebuild_header = pi_rebuild_header;
     dev->set_mac_address = pi_set_mac_address;
 
     dev->type = ARPHRD_AX25;			/* AF_AX25 device */

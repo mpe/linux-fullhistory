@@ -1,4 +1,4 @@
-/* $Id: wof.S,v 1.29 1996/10/11 01:00:04 davem Exp $
+/* $Id: wof.S,v 1.30 1996/12/10 06:06:19 davem Exp $
  * wof.S: Sparc window overflow handler.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -205,6 +205,7 @@ spwin_user_stack_is_bolixed:
 	 * c-code to gun down the process.
 	 */
 	rd	%psr, %glob_tmp
+	WRITE_PAUSE
 	andcc	%glob_tmp, PSR_PS, %g0
 	bne	spwin_bad_ustack_from_kernel
 	 nop
@@ -314,8 +315,10 @@ C_LABEL(spwin_sun4c_stackchk):
 	be	1f
 	 sra	%sp, 29, %glob_tmp
 
+	rd	%psr, %glob_tmp
+	WRITE_PAUSE
 	b	spwin_user_stack_is_bolixed + 0x4
-	 rd	%psr, %glob_tmp
+	 nop
 
 1:
 	add	%glob_tmp, 0x1, %glob_tmp
@@ -323,8 +326,10 @@ C_LABEL(spwin_sun4c_stackchk):
 	be	1f
 	 and	%sp, 0xfff, %glob_tmp		! delay slot
 
+	rd	%psr, %glob_tmp
+	WRITE_PAUSE
 	b	spwin_user_stack_is_bolixed + 0x4
-	 rd	%psr, %glob_tmp
+	 nop
 
 	/* See if our dump area will be on more than one
 	 * page.
@@ -342,8 +347,10 @@ spwin_sun4c_twopages:
 	be	1f
 	 add	%sp, 0x38, %glob_tmp	/* Is second page in vma hole? */
 
+	rd	%psr, %glob_tmp
+	WRITE_PAUSE
 	b	spwin_user_stack_is_bolixed + 0x4
-	 rd	%psr, %glob_tmp
+	 nop
 
 1:
 	sra	%glob_tmp, 29, %glob_tmp
@@ -352,8 +359,10 @@ spwin_sun4c_twopages:
 	be	1f
 	 add	%sp, 0x38, %glob_tmp
 
+	rd	%psr, %glob_tmp
+	WRITE_PAUSE
 	b	spwin_user_stack_is_bolixed + 0x4
-	 rd	%psr, %glob_tmp
+	 nop
 
 1:
 	lda	[%glob_tmp] ASI_PTE, %glob_tmp
@@ -364,8 +373,10 @@ spwin_sun4c_onepage:
 	be	spwin_good_ustack			! success
 	 nop
 
+	rd	%psr, %glob_tmp
+	WRITE_PAUSE
 	b	spwin_user_stack_is_bolixed + 0x4
-	 rd	%psr, %glob_tmp
+	 nop
 
 	/* This is a generic SRMMU routine.  As far as I know this
 	 * works for all current v8/srmmu implementations, we'll
@@ -417,5 +428,7 @@ C_LABEL(spwin_srmmu_stackchk):
 	be,a	spwin_finish_up + 0x4			! cool beans, success
 	 restore %g0, %g0, %g0
 
+	rd	%psr, %glob_tmp
+	WRITE_PAUSE
 	b	spwin_user_stack_is_bolixed + 0x4	! we faulted, ugh
-	 rd	%psr, %glob_tmp
+	 nop

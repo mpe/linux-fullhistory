@@ -141,3 +141,9 @@ unsigned char  outb_p(unsigned char val,int port) { return (outb(val,port)); }
 unsigned short outw_p(unsigned short val,int port) { return (outw(val,port)); }
 unsigned long  outl_p(unsigned long val,int port) { return (outl(val,port)); }
 
+
+/* makes writing to the ibm acorn power management stuff easier -- Cort */
+/* args in forn of PA.B as in tech spec for ibm carolina */
+void ibm_write(unsigned char val,unsigned int port)
+{
+}

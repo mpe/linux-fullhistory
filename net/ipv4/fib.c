@@ -66,7 +66,7 @@ static struct fib_info 	*fib_info_list;
 
 static int fib_stamp;
 
-static int rtmsg_process(struct nlmsghdr *n, struct in_rtmsg *r);
+int rtmsg_process(struct nlmsghdr *n, struct in_rtmsg *r);
 
 
 #ifdef CONFIG_RTNETLINK
@@ -119,7 +119,7 @@ static void rtmsg_dev(unsigned long type, struct device *dev, struct nlmsghdr *n
 static struct wait_queue *fib_wait;
 atomic_t fib_users;
 
-static void fib_lock(void)
+void fib_lock(void)
 {
 	while (fib_users)
 		sleep_on(&fib_wait);
@@ -127,7 +127,7 @@ static void fib_lock(void)
 	dev_lock_list();
 }
 
-static void fib_unlock(void)
+void fib_unlock(void)
 {
 	dev_unlock_list();
 	if (atomic_dec_and_test(&fib_users)) {
@@ -566,7 +566,7 @@ static int fib_autopublish(int op, struct fib_node *f, int logmask)
 	if (op)
 		return arp_req_set(&r, NULL);
 	
-	fz = &local_class.fib_zone_list[logmask];
+	fz = local_class.fib_zones[logmask];
 
 	for (f1 = fz_hash(f->fib_key, fz); f1; f1=f1->fib_next)	{
 		if (f->fib_key != f1->fib_key || f1->fib_flag ||
@@ -838,7 +838,7 @@ static int fib_create(struct in_rtmsg *r, struct device *dev,
 	struct fib_zone * fz;
 	struct fib_info * fi;
 
-	int logmask = 32 - r->rtmsg_prefixlen;
+	long logmask = 32L - r->rtmsg_prefixlen;	/* gcc bug work-around: must be "L" and "long" */
 	u32 dst = ntohl(r->rtmsg_prefix.s_addr);
 	u32 gw  = r->rtmsg_gateway.s_addr;
 	short metric = r->rtmsg_metric;
@@ -1397,7 +1397,7 @@ done:
 
 #endif
 
-static int rtmsg_process(struct nlmsghdr *n, struct in_rtmsg *r)
+int rtmsg_process(struct nlmsghdr *n, struct in_rtmsg *r)
 {
 	unsigned long cmd=n->nlmsg_type;
 	struct device * dev = NULL;

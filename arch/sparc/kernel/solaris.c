@@ -10,6 +10,8 @@
 #include <asm/errno.h>
 #include <asm/solerrno.h>
 
+#if 0
+/* Not used - actually translated in iBCS */
 unsigned long solaris_xlatb_rorl[] = {
 	0, SOL_EPERM, SOL_ENOENT, SOL_ESRCH, SOL_EINTR, SOL_EIO,
 	SOL_ENXIO, SOL_E2BIG, SOL_ENOEXEC, SOL_EBADF, SOL_ECHILD,
@@ -33,6 +35,7 @@ unsigned long solaris_xlatb_rorl[] = {
 	SOL_ESRMNT, SOL_ECOMM, SOL_EPROTO, SOL_EMULTIHOP, SOL_EINVAL,
 	SOL_EREMCHG, SOL_ENOSYS
 };
+#endif
 
 extern asmlinkage int sys_open(const char *,int,int);
 

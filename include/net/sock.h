@@ -49,7 +49,7 @@
 #include <linux/skbuff.h>	/* struct sk_buff */
 #include <net/protocol.h>		/* struct inet_protocol */
 #if defined(CONFIG_X25) || defined(CONFIG_X25_MODULE)
-#/* notyet */include <net/x25.h>
+#include <net/x25.h>
 #endif
 #if defined(CONFIG_AX25) || defined(CONFIG_AX25_MODULE)
 #include <net/ax25.h>
@@ -376,8 +376,6 @@ struct sock
 	unsigned short		cong_count;
 	atomic_t		packets_out;
 	unsigned short		shutdown;
-
-	unsigned short		window;		/* used by netrom/ax.25 */
 
 #if defined(CONFIG_IPV6) || defined (CONFIG_IPV6_MODULE)
 	union {

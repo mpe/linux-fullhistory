@@ -116,6 +116,7 @@ CONFIG_EL3=y
 # CONFIG_PLIP is not set
 # CONFIG_PPP is not set
 # CONFIG_NET_RADIO is not set
+# CONFIG_NET_HAM is not set
 # CONFIG_SLIP is not set
 # CONFIG_TR is not set
 
@@ -159,7 +160,7 @@ CONFIG_SERIAL=y
 # CONFIG_CYCLADES is not set
 # CONFIG_STALDRV is not set
 # CONFIG_RISCOM8 is not set
-# CONFIG_ESP is not set
+# CONFIG_ESPSERIAL is not set
 # CONFIG_PRINTER is not set
 # CONFIG_MOUSE is not set
 # CONFIG_UMISC is not set

@@ -1,4 +1,4 @@
-/* $Id: pgtable.h,v 1.51 1996/10/27 08:55:32 davem Exp $ */
+/* $Id: pgtable.h,v 1.54 1996/12/03 02:38:31 davem Exp $ */
 #ifndef _SPARC_PGTABLE_H
 #define _SPARC_PGTABLE_H
 
@@ -255,6 +255,8 @@ extern void (*pgd_free)(pgd_t *);
 
 extern pgd_t * (*pgd_alloc)(void);
 
+extern void (*pgd_flush)(pgd_t *);
+
 /* Fine grained cache/tlb flushing. */
 
 #ifdef __SMP__
@@ -272,6 +274,8 @@ extern void (*local_flush_tlb_page)(struct vm_area_struct *, unsigned long addre
 
 extern void (*local_flush_page_to_ram)(unsigned long address);
 
+extern void (*local_flush_sig_insns)(struct mm_struct *mm, unsigned long insn_addr);
+
 extern void smp_flush_cache_all(void);
 extern void smp_flush_cache_mm(struct mm_struct *mm);
 extern void smp_flush_cache_range(struct mm_struct *mm,
@@ -286,6 +290,7 @@ extern void smp_flush_tlb_range(struct mm_struct *mm,
 				  unsigned long end);
 extern void smp_flush_tlb_page(struct vm_area_struct *mm, unsigned long page);
 extern void smp_flush_page_to_ram(unsigned long page);
+extern void smp_flush_sig_insns(struct mm_struct *mm, unsigned long insn_addr);
 #endif
 
 extern void (*flush_cache_all)(void);
@@ -300,6 +305,8 @@ extern void (*flush_tlb_range)(struct mm_struct *, unsigned long start, unsigned
 extern void (*flush_tlb_page)(struct vm_area_struct *, unsigned long address);
 
 extern void (*flush_page_to_ram)(unsigned long page);
+
+extern void (*flush_sig_insns)(struct mm_struct *mm, unsigned long insn_addr);
 
 /* The permissions for pgprot_val to make a page mapped on the obio space */
 extern unsigned int pg_iobits;
@@ -329,9 +336,9 @@ extern void (*update_mmu_cache)(struct vm_area_struct *vma, unsigned long addres
 
 extern int invalid_segment;
 
-#define SWP_TYPE(entry) (((entry)>>2) & 0x7f)
-#define SWP_OFFSET(entry) (((entry) >> 9) & 0x7ffff)
-#define SWP_ENTRY(type,offset) (((type) << 2) | ((offset) << 9))
+#define SWP_TYPE(entry) (((entry) >> 2) & 0x7f)
+#define SWP_OFFSET(entry) (((entry) >> 9) & 0x3ffff)
+#define SWP_ENTRY(type,offset) ((((type) & 0x7f) << 2) | (((offset) & 0x3ffff) << 9))
 
 struct ctx_list {
 	struct ctx_list *next;

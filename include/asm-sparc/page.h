@@ -1,4 +1,4 @@
-/* $Id: page.h,v 1.30 1996/10/27 08:55:30 davem Exp $
+/* $Id: page.h,v 1.33 1996/12/03 08:44:55 jj Exp $
  * page.h:  Various defines and such for MMU operations on the Sparc for
  *          the Linux kernel.
  *
@@ -129,6 +129,10 @@ extern unsigned long sparc_unmapped_base;
  * place the page pool both above the kernel and below the kernel.
  */
 #define MAP_NR(addr) ((((unsigned long) (addr)) - PAGE_OFFSET) >> PAGE_SHIFT)
+
+#else /* !(__ASSEMBLY__) */
+
+#define __pgprot(x)	(x)
 
 #endif /* !(__ASSEMBLY__) */
 

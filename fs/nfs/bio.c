@@ -210,6 +210,9 @@ nfs_readpage(struct inode *inode, struct page *page)
 	unsigned long	address;
 	int		error = -1;
 
+	/* In case we're called from a page fault we want to */
+	/* make sure we're runnable before we schedule.. */
+	current->state = TASK_RUNNING;
 	dprintk("NFS: nfs_readpage %08lx\n", page_address(page));
 	address = page_address(page);
 	page->count++;

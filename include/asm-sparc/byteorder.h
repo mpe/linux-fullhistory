@@ -1,4 +1,4 @@
-/* $Id: byteorder.h,v 1.9 1996/08/30 05:21:34 davem Exp $ */
+/* $Id: byteorder.h,v 1.11 1996/11/19 11:26:13 davem Exp $ */
 #ifndef _SPARC_BYTEORDER_H
 #define _SPARC_BYTEORDER_H
 
@@ -20,5 +20,37 @@
 #ifndef __BIG_ENDIAN_BITFIELD
 #define __BIG_ENDIAN_BITFIELD
 #endif
+
+#ifdef __KERNEL__
+
+/* Convert from CPU byte order, to specified byte order. */
+extern __inline__ __u16 cpu_to_le16(__u16 value)
+{
+	return (value >> 8) | (value << 8);
+}
+
+extern __inline__ __u32 cpu_to_le32(__u32 value)
+{
+	return((value>>24) | ((value>>8)&0xff00) |
+	       ((value<<8)&0xff0000) | (value<<24));
+}
+#define cpu_to_be16(x)  (x)
+#define cpu_to_be32(x)  (x)
+
+/* Convert from specified byte order, to CPU byte order. */
+extern __inline__ __u16 le16_to_cpu(__u16 value)
+{
+	return (value >> 8) | (value << 8);
+}
+
+extern __inline__ __u32 le32_to_cpu(__u32 value)
+{
+	return((value>>24) | ((value>>8)&0xff00) |
+	       ((value<<8)&0xff0000) | (value<<24));
+}
+#define be16_to_cpu(x)  (x)
+#define be32_to_cpu(x)  (x)
+
+#endif /* __KERNEL__ */
 
 #endif /* !(_SPARC_BYTEORDER_H) */

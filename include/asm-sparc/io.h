@@ -1,4 +1,4 @@
-/* $Id: io.h,v 1.10 1996/08/29 09:48:14 davem Exp $ */
+/* $Id: io.h,v 1.11 1996/11/19 11:26:14 davem Exp $ */
 #ifndef __SPARC_IO_H
 #define __SPARC_IO_H
 
@@ -138,5 +138,8 @@ extern __inline__ void unmapioaddr(unsigned long virt_addr)
 extern void *sparc_alloc_io (void *, void *, int, char *, int, int);
 extern void sparc_free_io (void *, int);
 extern void *sparc_dvma_malloc (int, char *);
+
+#define virt_to_phys(x) __pa((unsigned long)(x))
+#define phys_to_virt(x) __va((unsigned long)(x))
 
 #endif /* !(__SPARC_IO_H) */

@@ -580,7 +580,6 @@ static int nr_create(struct socket *sock, int protocol)
 	sk->priority      = SOPRI_NORMAL;
 	sk->mtu           = NETROM_MTU;	/* 236 */
 	sk->zapped        = 1;
-	sk->window	  = sysctl_netrom_transport_requested_window_size;
 
 	sk->state_change = def_callback1;
 	sk->data_ready   = def_callback2;
@@ -588,8 +587,8 @@ static int nr_create(struct socket *sock, int protocol)
 	sk->error_report = def_callback1;
 
 	if (sock != NULL) {
-		sock->sk = sk;
-		sk->sleep  = &sock->wait;
+		sock->sk  = sk;
+		sk->sleep = &sock->wait;
 	}
 
 	skb_queue_head_init(&nr->ack_queue);
@@ -605,6 +604,7 @@ static int nr_create(struct socket *sock, int protocol)
 	nr->t4       = sysctl_netrom_transport_busy_delay;
 	nr->idle     = sysctl_netrom_transport_no_activity_timeout;
 	nr->paclen   = sysctl_netrom_transport_packet_length;
+	nr->window   = sysctl_netrom_transport_requested_window_size;
 
 	nr->t1timer   = 0;
 	nr->t2timer   = 0;
@@ -669,7 +669,6 @@ static struct sock *nr_make_new(struct sock *osk)
 	sk->sndbuf      = osk->sndbuf;
 	sk->debug       = osk->debug;
 	sk->state       = TCP_ESTABLISHED;
-	sk->window      = osk->window;
 	sk->mtu         = osk->mtu;
 	sk->sleep       = osk->sleep;
 	sk->zapped      = osk->zapped;
@@ -690,6 +689,7 @@ static struct sock *nr_make_new(struct sock *osk)
 	nr->t4       = osk->protinfo.nr->t4;
 	nr->idle     = osk->protinfo.nr->idle;
 	nr->paclen   = osk->protinfo.nr->paclen;
+	nr->window   = osk->protinfo.nr->window;
 
 	nr->device   = osk->protinfo.nr->device;
 	nr->bpqext   = osk->protinfo.nr->bpqext;
@@ -774,8 +774,8 @@ static int nr_release(struct socket *sock, struct socket *peer)
 			break;
 	}
 
-	sock->sk = NULL;	
-	sk->socket = NULL;	/* Not used, but we should do this. **/
+	sock->sk   = NULL;	
+	sk->socket = NULL;	/* Not used, but we should do this */
 
 	return 0;
 }
@@ -1090,8 +1090,8 @@ int nr_rx_frame(struct sk_buff *skb, struct device *dev)
 	circuit++;
 
 	/* Window negotiation */
-	if (window < make->window)
-		make->window = window;
+	if (window < make->protinfo.nr->window)
+		make->protinfo.nr->window = window;
 
 	/* L4 timeout negotiation */
 	if (skb->len == 37) {
@@ -1136,7 +1136,7 @@ static int nr_sendmsg(struct socket *sock, struct msghdr *msg, int len, struct s
 	unsigned char *asmptr;
 	int size;
 	
-	if (msg->msg_flags&~MSG_DONTWAIT)
+	if (msg->msg_flags & ~MSG_DONTWAIT)
 		return -EINVAL;
 
 	if (sk->zapped)
@@ -1174,7 +1174,7 @@ static int nr_sendmsg(struct socket *sock, struct msghdr *msg, int len, struct s
 
 	size = len + AX25_BPQ_HEADER_LEN + AX25_MAX_HEADER_LEN + NR_NETWORK_LEN + NR_TRANSPORT_LEN;
 
-	if ((skb = sock_alloc_send_skb(sk, size, 0, msg->msg_flags&MSG_DONTWAIT, &err)) == NULL)
+	if ((skb = sock_alloc_send_skb(sk, size, 0, msg->msg_flags & MSG_DONTWAIT, &err)) == NULL)
 		return err;
 
 	skb->sk   = sk;
@@ -1248,7 +1248,7 @@ static int nr_recvmsg(struct socket *sock, struct msghdr *msg, int size,
 		return -ENOTCONN;
 
 	/* Now we can treat all alike */
-	if ((skb = skb_recv_datagram(sk, flags, msg->msg_flags&MSG_DONTWAIT, &er)) == NULL)
+	if ((skb = skb_recv_datagram(sk, flags, msg->msg_flags & MSG_DONTWAIT, &er)) == NULL)
 		return er;
 
 	if (!sk->protinfo.nr->hdrincl) {
@@ -1272,12 +1272,12 @@ static int nr_recvmsg(struct socket *sock, struct msghdr *msg, int size,
 		memcpy(&addr.sax25_call, skb->data + 7, AX25_ADDR_LEN);
 
 		*sax = addr;
-
 	}
 
 	msg->msg_namelen=sizeof(*sax);
 
 	skb_free_datagram(sk, skb);
+
 	return copied;
 }
 
@@ -1389,7 +1389,7 @@ static int nr_get_info(char *buffer, char **start, off_t offset, int length, int
 			s->protinfo.nr->t2      / PR_SLOWHZ,
 			s->protinfo.nr->n2count, s->protinfo.nr->n2,
 			s->protinfo.nr->rtt     / PR_SLOWHZ,
-			s->window, s->protinfo.nr->paclen,
+			s->protinfo.nr->window, s->protinfo.nr->paclen,
 			s->wmem_alloc, s->rmem_alloc);
 		
 		pos = begin + len;

@@ -1,4 +1,4 @@
-/* $Id: systbls.S,v 1.51 1996/11/03 20:58:04 davem Exp $
+/* $Id: systbls.S,v 1.54 1996/12/03 08:44:37 jj Exp $
  * systbls.S: System call entry point tables for OS compatibility.
  *            The native Linux system call table lives here also.
  *
@@ -111,7 +111,7 @@ C_LABEL(sys_call_table):
 	.long C_LABEL(sys_nis_syscall), C_LABEL(sys_newuname), C_LABEL(sys_init_module)
 	.long C_LABEL(sys_personality), C_LABEL(sys_prof), C_LABEL(sys_break)
 	.long C_LABEL(sys_lock), C_LABEL(sys_mpx), C_LABEL(sys_ulimit)
-	.long C_LABEL(sys_getppid), C_LABEL(sys_sigaction), C_LABEL(sys_sgetmask)
+	.long C_LABEL(sys_getppid), C_LABEL(sparc_sigaction), C_LABEL(sys_sgetmask)
 /*200*/	.long C_LABEL(sys_ssetmask), C_LABEL(sys_sigsuspend), C_LABEL(sys_newlstat)
 	.long C_LABEL(sys_uselib), C_LABEL(old_readdir), C_LABEL(sys_nis_syscall)
 	.long C_LABEL(sys_socketcall), C_LABEL(sys_syslog), C_LABEL(sys_olduname)
@@ -176,12 +176,12 @@ C_LABEL(sunos_sys_table):
 	.long C_LABEL(sys_fsync), C_LABEL(sys_setpriority), C_LABEL(sys_socket)
 	.long C_LABEL(sys_connect), C_LABEL(sunos_accept)
 /*100*/	.long C_LABEL(sys_getpriority), C_LABEL(sunos_send), C_LABEL(sunos_recv)
-	.long C_LABEL(sunos_nosys), C_LABEL(sys_bind), C_LABEL(sys_setsockopt)
+	.long C_LABEL(sunos_nosys), C_LABEL(sys_bind), C_LABEL(sunos_setsockopt)
 	.long C_LABEL(sys_listen), C_LABEL(sunos_nosys), C_LABEL(sunos_sigaction)
 	.long C_LABEL(sunos_sigblock), C_LABEL(sunos_sigsetmask), C_LABEL(sys_sigpause)
 	.long C_LABEL(sys_sigstack), C_LABEL(sys_recvmsg), C_LABEL(sys_sendmsg)
 	.long C_LABEL(sunos_nosys), C_LABEL(sys_gettimeofday), C_LABEL(sys_getrusage)
-	.long C_LABEL(sys_getsockopt), C_LABEL(sunos_nosys), C_LABEL(sunos_readv)
+	.long C_LABEL(sunos_getsockopt), C_LABEL(sunos_nosys), C_LABEL(sunos_readv)
 	.long C_LABEL(sunos_writev), C_LABEL(sys_settimeofday), C_LABEL(sys_fchown)
 	.long C_LABEL(sys_fchmod), C_LABEL(sys_recvfrom), C_LABEL(sys_setreuid)
 	.long C_LABEL(sys_setregid), C_LABEL(sys_rename), C_LABEL(sys_truncate)
@@ -229,6 +229,8 @@ C_LABEL(sunos_sys_table):
 /*250*/	.long C_LABEL(sunos_nosys), C_LABEL(sunos_nosys), C_LABEL(sunos_nosys)
 	.long C_LABEL(sunos_nosys), C_LABEL(sunos_nosys)
 
+#if 0
+/* Not used yet - {net, open}bsd is a TODO */
 	/* {net, open}bsd system call table. */
 
 	.align	4
@@ -368,7 +370,10 @@ C_LABEL(bsd_sys_table):
 	.long C_LABEL(sunos_nosys)/*NOTHING*/, C_LABEL(sunos_nosys)/*NOTHING*/
 	.long C_LABEL(sunos_nosys)/*NOTHING*/, C_LABEL(sunos_nosys)/*NOTHING*/
 	.long C_LABEL(sunos_nosys)/*MINHERIT*/, C_LABEL(sunos_nosys)/*RFORK*/
+#endif
 
+#if 0
+/* Not needed - iBCS has its own */
 	/* One thing left, Solaris syscall table, TODO */
 	.globl	C_LABEL(solaris_sys_table)
 C_LABEL(solaris_sys_table):
@@ -476,3 +481,4 @@ C_LABEL(solaris_sys_table):
 /*250*/	.long C_LABEL(sys_nis_syscall), C_LABEL(sys_nis_syscall)
 	.long C_LABEL(sys_nis_syscall), C_LABEL(sys_nis_syscall), C_LABEL(sys_nis_syscall)
 /*255*/	.long C_LABEL(sys_nis_syscall)
+#endif

@@ -245,6 +245,12 @@ ncp_read_super(struct super_block *sb, void *raw_data, int silent)
 	server->conn_status = 0;
 
         server->m = *data;
+	/* Althought anything producing this is buggy, it happens
+	   now because of PATH_MAX changes.. */
+	if (server->m.time_out < 10) {
+		server->m.time_out = 10;
+		printk("You need to recompile your ncpfs utils..\n");
+	}
 	server->m.file_mode = (server->m.file_mode &
 			       (S_IRWXU|S_IRWXG|S_IRWXO)) | S_IFREG;
 	server->m.dir_mode  = (server->m.dir_mode &

@@ -114,7 +114,7 @@ void rose_kick(struct sock *sk)
 	del_timer(&sk->timer);
 
 	start = (skb_peek(&sk->protinfo.rose->ack_queue) == NULL) ? sk->protinfo.rose->va : sk->protinfo.rose->vs;
-	end   = (sk->protinfo.rose->va + sk->window) % ROSE_MODULUS;
+	end   = (sk->protinfo.rose->va + ROSE_DEFAULT_WINDOW) % ROSE_MODULUS;
 
 	if (!(sk->protinfo.rose->condition & PEER_RX_BUSY_CONDITION) &&
 	    start != end                                  &&

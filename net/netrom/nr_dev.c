@@ -112,10 +112,11 @@ static int nr_header(struct sk_buff *skb, struct device *dev, unsigned short typ
 
 static int nr_rebuild_header(struct sk_buff *skb)
 {
-	struct device *dev=skb->dev;
+	struct device *dev = skb->dev;
 	struct enet_statistics *stats = (struct enet_statistics *)dev->priv;
 	struct sk_buff *skbn;
-	unsigned char *bp=skb->data;
+	unsigned char *bp = skb->data;
+
 	if (!arp_find(bp + 7, skb)) {
 		kfree_skb(skb, FREE_WRITE);
 		return 1;

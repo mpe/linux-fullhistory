@@ -34,6 +34,7 @@
  * 21/12/95 cs  Got rid of those nasty warnings when compiling, for 1.3.48
  * 08/08/96 jsn Convert to use as a module. Removed send_kiss, empty_scc and
  *		pt_loopback functions - they were unused.
+ * 13/12/96 jsn Fixed to match Linux networking changes.
  */
  
 /* 
@@ -66,6 +67,7 @@
 #define	PARAM_HARDWARE	6
 #define	PARAM_RETURN	255
 
+#include <linux/config.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/sched.h>
@@ -314,24 +316,6 @@ static void free_p(struct sk_buff *skb)
 {
     dev_kfree_skb(skb, FREE_WRITE);
 }
-
-/* Fill in the MAC-level header */
-static int pt_header (struct sk_buff *skb, struct device *dev, unsigned short type,
-		void *daddr, void *saddr, unsigned len)
-{
-	return ax25_encapsulate(skb, dev, type, daddr, saddr, len);
-}
-
-
-/* Rebuild the MAC-level header */
-static int pt_rebuild_header(void *buff, struct device *dev, unsigned long raddr,
-				struct sk_buff *skb)
-{
-	return ax25_rebuild_header(buff, dev, raddr, skb);
-}
-
-					
-					
 
 
 /*
@@ -870,8 +854,11 @@ static int pt_probe(struct device *dev)
     for (i=0; i < DEV_NUMBUFFS; i++)
         skb_queue_head_init(&dev->buffs[i]);
 
-    dev->hard_header = pt_header;
-    dev->rebuild_header = pt_rebuild_header;
+#if defined(CONFIG_AX25) || defined(CONFIG_AX25_MODULE)
+    dev->hard_header    = ax25_encapsulate;
+    dev->rebuild_header = ax25_rebuild_header;
+#endif
+
     dev->set_mac_address = pt_set_mac_address;
 
     dev->type = ARPHRD_AX25;            /* AF_AX25 device */

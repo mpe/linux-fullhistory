@@ -224,6 +224,14 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_SCSI_QLOGICPTI),y)
+L_OBJS += qlogicpti.o
+else
+  ifeq ($(CONFIG_SCSI_QLOGICPTI),m)
+  M_OBJS += qlogicpti.o
+  endif
+endif
+
 ifeq ($(CONFIG_SCSI_DEBUG),y)
 L_OBJS += scsi_debug.o
 else

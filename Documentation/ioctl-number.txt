@@ -1,5 +1,5 @@
 Ioctl Numbers
-2 Dec 1996
+16 Dec 1996
 Michael Chastain
 <mec@shout.net>
 
@@ -21,8 +21,7 @@ The first argument to _IO, _IOW, _IOR, or _IOWR is an identifying letter
 or number from the table below.  If you are writing a driver for a new
 device and need a letter, pick an unused letter.  You can register the
 letter by patching this file and submitting the patch to Linus Torvalds.
-Or you can e-mail me at <mec@duracef.shout.net> and I'll register one
-for you.
+Or you can e-mail me at <mec@shout.net> and I'll register one for you.
 
 The second argument to _IO, _IOW, _IOR, or _IOWR is a sequence number
 to distinguish ioctls from each other.  The third argument is the size
@@ -51,7 +50,7 @@ Following the convention is good because:
     code to call verify_area to validate parameters.
 
 This table lists ioctls visible from user land for Linux/i386.  It is
-current to Linux 2.1.14.
+current to Linux 2.1.15.
 
 Code	Seq#	Include File		Comments
 ========================================================
@@ -82,7 +81,9 @@ Code	Seq#	Include File		Comments
 'T'	all	linux/soundcard.h	conflict!
 'T'	all	asm-i386/ioctls.h	conflict!
 'V'	all	linux/vt.h
-'W'	00-1F	linux/pcwd.h
+'W'	00-1F	linux/watchdog.h
+'W'	20-27	linux/octal-relay.h	in development
+'W'	28-2F	linux/iso16-relay.h	in development
 'Y'	all	linux/cyclades.h
 'a'	all	various, see http://lrcwww.epfl.ch/linux-atm/magic.html
 'c'	all	linux/comstats.h
@@ -97,11 +98,12 @@ Code	Seq#	Include File		Comments
 't'	80-8F	linux/isdn_ppp.h
 'u'	all	linux/smb_fs.h
 'v'	all	linux/ext2_fs.h
-'w'	all	CERN SCI driver (in development)
+'w'	all	CERN SCI driver		in development
 0x89	00-0F	asm-i386/sockios.h
 0x89	10-DF	linux/sockios.h
 0x89	E0-EF	linux/sockios.h		SIOCPROTOPRIVATE range
 0x89	F0-FF	linux/sockios.h		SIOCDEVPRIVATE range
+0x8B	all	linux/wireless.h
 0x90	00	linux/sbpcd.h
-0x99	00-0F	537-Addinboard driver (in development, e-mail contact:
-					b.kohl@ipn-b.comlink.apc.org)
+0x99	00-0F	537-Addinboard driver	in development, e-mail contact:
+					b.kohl@ipn-b.comlink.apc.org

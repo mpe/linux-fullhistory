@@ -17,6 +17,7 @@
 #include <linux/sched.h>
 #include <linux/interrupt.h>
 #include <linux/malloc.h>
+#include <linux/init.h>
 
 #include <asm/ptrace.h>
 #include <asm/processor.h>
@@ -120,7 +121,7 @@ static void sun4c_load_profile_irq(unsigned int limit)
 	/* Errm.. not sure how to do this.. */
 }
 
-static void sun4c_init_timers(void (*counter_fn)(int, void *, struct pt_regs *))
+__initfunc(static void sun4c_init_timers(void (*counter_fn)(int, void *, struct pt_regs *)))
 {
 	int irq;
 
@@ -155,7 +156,7 @@ static void sun4c_init_timers(void (*counter_fn)(int, void *, struct pt_regs *))
 static void sun4c_nop(void) {}
 #endif
 
-void sun4c_init_IRQ(void)
+__initfunc(void sun4c_init_IRQ(void))
 {
 	struct linux_prom_registers int_regs[2];
 	int ie_node;

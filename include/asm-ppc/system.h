@@ -16,7 +16,6 @@ extern int _disable_interrupts(void);
 extern void _enable_interrupts(int);
 
 /*extern void memcpy(void *, void *, int);*/
-extern void bzero(void *, int);
 
 struct task_struct;
 extern void switch_to(struct task_struct *prev, struct task_struct *next);

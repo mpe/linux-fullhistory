@@ -1,4 +1,4 @@
-/* $Id: fault.c,v 1.77 1996/10/28 00:56:02 davem Exp $
+/* $Id: fault.c,v 1.84 1996/12/10 06:06:23 davem Exp $
  * fault.c:  Page fault handlers for the Sparc.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -26,6 +26,7 @@
 #include <asm/smp.h>
 #include <asm/traps.h>
 #include <asm/kdebug.h>
+#include <asm/uaccess.h>
 
 #define ELEMENTS(arr) (sizeof (arr)/sizeof (arr[0]))
 
@@ -70,8 +71,10 @@ int prom_probe_memory (void)
 		bytes = mlist->num_bytes;
 		tally += bytes;
 		if (i >= SPARC_PHYS_BANKS-1) {
-			printk ("The machine has more banks that this kernel can support\n"
-				"Increase the SPARC_PHYS_BANKS setting (currently %d)\n",
+			printk ("The machine has more banks than "
+				"this kernel can support\n"
+				"Increase the SPARC_PHYS_BANKS "
+				"setting (currently %d)\n",
 				SPARC_PHYS_BANKS);
 			i = SPARC_PHYS_BANKS-1;
 			break;
@@ -134,6 +137,8 @@ asmlinkage void do_sparc_fault(struct pt_regs *regs, int text_fault, int write,
 	struct vm_area_struct *vma;
 	struct task_struct *tsk = current;
 	struct mm_struct *mm = tsk->mm;
+	unsigned int fixup;
+	unsigned long g2;
 	int from_user = !(regs->psr & PSR_PS);
 #if 0
 	static unsigned long last_one;
@@ -162,15 +167,12 @@ asmlinkage void do_sparc_fault(struct pt_regs *regs, int text_fault, int write,
 #endif
 	}
 #endif
-	/* Now actually handle the fault.  Do kernel faults special,
-	 * because on the sun4c we could have faulted trying to read
-	 * the vma area of the task and without the following code
-	 * we'd fault recursively until all our stack is gone. ;-(
+
+	/* The kernel referencing a bad kernel pointer can lock up
+	 * a sun4c machine completely, so we must attempt recovery.
 	 */
-	if(!from_user && address >= PAGE_OFFSET) {
-		quick_kernel_fault(address);
-		return;
-	}
+	if(!from_user && address >= PAGE_OFFSET)
+		goto bad_area;
 
 	vma = find_vma(mm, address);
 	if(!vma)
@@ -203,6 +205,18 @@ good_area:
 	 */
 bad_area:
 	up(&mm->mmap_sem);
+	/* Is this in ex_table? */
+	
+	g2 = regs->u_regs[UREG_G2];
+	if (!from_user && (fixup = search_exception_table (regs->pc, &g2))) {
+		printk("Exception: PC<%08lx> faddr<%08lx>\n", regs->pc, address);
+		printk("EX_TABLE: insn<%08lx> fixup<%08x> g2<%08lx>\n",
+			regs->pc, fixup, g2);
+		regs->pc = fixup;
+		regs->npc = regs->pc + 4;
+		regs->u_regs[UREG_G2] = g2;
+		return;
+	}
 	/* Did we have an exception handler installed? */
 	if(current->tss.ex.count == 1) {
 		if(from_user) {
@@ -235,10 +249,12 @@ bad_area:
 		return;
 	}
 	if((unsigned long) address < PAGE_SIZE) {
-		printk(KERN_ALERT "Unable to handle kernel NULL pointer dereference");
-	} else
-		printk(KERN_ALERT "Unable to handle kernel paging request");
-	printk(KERN_ALERT " at virtual address %08lx\n",address);
+		printk(KERN_ALERT "Unable to handle kernel NULL "
+		       "pointer dereference");
+	} else {
+		printk(KERN_ALERT "Unable to handle kernel paging request "
+		       "at virtual address %08lx\n", address);
+	}
 	printk(KERN_ALERT "tsk->mm->context = %08lx\n",
 	       (unsigned long) tsk->mm->context);
 	printk(KERN_ALERT "tsk->mm->pgd = %08lx\n",
@@ -249,27 +265,62 @@ bad_area:
 asmlinkage void do_sun4c_fault(struct pt_regs *regs, int text_fault, int write,
 			       unsigned long address)
 {
-	extern void sun4c_update_mmu_cache(struct vm_area_struct *,unsigned long,pte_t);
+	extern void sun4c_update_mmu_cache(struct vm_area_struct *,
+					   unsigned long,pte_t);
 	extern pgd_t *sun4c_pgd_offset(struct mm_struct *,unsigned long);
 	extern pte_t *sun4c_pte_offset(pmd_t *,unsigned long);
 	struct task_struct *tsk = current;
 	struct mm_struct *mm = tsk->mm;
-	pgd_t *pgd;
-	pte_t *pte;
+	pgd_t *pgdp;
+	pte_t *ptep;
 
-	if(text_fault)
+	if (text_fault)
 		address = regs->pc;
 
-	pgd = sun4c_pgd_offset(mm, address);
-	pte = sun4c_pte_offset((pmd_t *) pgd, address);
+	pgdp = sun4c_pgd_offset(mm, address);
+	ptep = sun4c_pte_offset((pmd_t *) pgdp, address);
+
+	if (pgd_val(*pgdp)) {
+	    if (write) {
+		if ((pte_val(*ptep) & (_SUN4C_PAGE_WRITE|_SUN4C_PAGE_PRESENT))
+				   == (_SUN4C_PAGE_WRITE|_SUN4C_PAGE_PRESENT)) {
+
+			pte_val(*ptep) |= (_SUN4C_PAGE_ACCESSED |
+					   _SUN4C_PAGE_MODIFIED |
+					   _SUN4C_PAGE_VALID |
+					   _SUN4C_PAGE_DIRTY);
+
+			if (sun4c_get_segmap(address) != invalid_segment) {
+				sun4c_put_pte(address, pte_val(*ptep));
+				return;
+			}
+		}
+	    } else {
+		if ((pte_val(*ptep) & (_SUN4C_PAGE_READ|_SUN4C_PAGE_PRESENT))
+				   == (_SUN4C_PAGE_READ|_SUN4C_PAGE_PRESENT)) {
+
+			pte_val(*ptep) |= (_SUN4C_PAGE_ACCESSED |
+					   _SUN4C_PAGE_VALID);
+
+			if (sun4c_get_segmap(address) != invalid_segment) {
+				sun4c_put_pte(address, pte_val(*ptep));
+				return;
+			}
+		}
+	    }
+	}
 
 	/* This conditional is 'interesting'. */
-	if(pgd_val(*pgd) && !(write && !(pte_val(*pte) & _SUN4C_PAGE_WRITE))
-	   && (pte_val(*pte) & _SUN4C_PAGE_VALID))
-		/* XXX Very bad, can't do this optimization when VMA arg is actually
-		 * XXX used by update_mmu_cache()!
+	if (pgd_val(*pgdp) && !(write && !(pte_val(*ptep) & _SUN4C_PAGE_WRITE))
+	    && (pte_val(*ptep) & _SUN4C_PAGE_VALID))
+		/* Note: It is safe to not grab the MMAP semaphore here because
+		 *       we know that update_mmu_cache() will not sleep for
+		 *       any reason (at least not in the current implementation)
+		 *       and therefore there is no danger of another thread getting
+		 *       on the CPU and doing a shrink_mmap() on this vma.
 		 */
-		sun4c_update_mmu_cache((struct vm_area_struct *) 0, address, *pte);
+		sun4c_update_mmu_cache (find_vma(current->mm, address), address,
+					*ptep);
 	else
 		do_sparc_fault(regs, text_fault, write, address);
 }

@@ -1028,7 +1028,7 @@ static int sprintf_wireless_stats(char *buffer, struct device *dev)
 			       stats->qual.noise,
 			       stats->qual.updated & 3 ? '.' : ' ',
 			       stats->discard.nwid,
-			       stats->discard.crypt,
+			       stats->discard.codec,
 			       stats->discard.misc);
 	else
 		size = 0;

@@ -104,7 +104,9 @@ static void rose_timer(unsigned long param)
 			 */
 			if (sk->rmem_alloc < (sk->rcvbuf / 2) && (sk->protinfo.rose->condition & OWN_RX_BUSY_CONDITION)) {
 				sk->protinfo.rose->condition &= ~OWN_RX_BUSY_CONDITION;
+				sk->protinfo.rose->condition &= ~ACK_PENDING_CONDITION;
 				sk->protinfo.rose->vl         = sk->protinfo.rose->vr;
+				sk->protinfo.rose->timer      = 0;
 				rose_write_internal(sk, ROSE_RR);
 				break;
 			}
@@ -124,10 +126,17 @@ static void rose_timer(unsigned long param)
 	}
 
 	/*
-	 * Timer has expired, it may have been T1, T2, or T3. We can tell
+	 * Timer has expired, it may have been T1, T2, T3 or HB. We can tell
 	 * by the socket state.
 	 */
 	switch (sk->protinfo.rose->state) {
+		case ROSE_STATE_3:	/* HB */
+			if (sk->protinfo.rose->condition & ACK_PENDING_CONDITION) {
+				sk->protinfo.rose->condition &= ~ACK_PENDING_CONDITION;
+				rose_enquiry_response(sk);
+			}
+			break;
+
 		case ROSE_STATE_1:	/* T1 */
 		case ROSE_STATE_4:	/* T2 */
 			rose_write_internal(sk, ROSE_CLEAR_REQUEST);

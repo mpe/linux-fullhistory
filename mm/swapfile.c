@@ -83,7 +83,9 @@ unsigned long get_swap_page(void)
 
 	type = swap_list.next;
 	if (type < 0)
-	  return 0;
+		return 0;
+	if (nr_swap_pages == 0)
+		return 0;
 
 	while (1) {
 		p = &swap_info[type];

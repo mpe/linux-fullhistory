@@ -1,4 +1,4 @@
-/*  $Id: init.c,v 1.42 1996/10/27 08:36:44 davem Exp $
+/*  $Id: init.c,v 1.45 1996/12/11 10:23:06 davem Exp $
  *  linux/arch/sparc/mm/init.c
  *
  *  Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -20,6 +20,7 @@
 #ifdef CONFIG_BLK_DEV_INITRD
 #include <linux/blk.h>
 #endif
+#include <linux/init.h>
 
 #include <asm/system.h>
 #include <asm/segment.h>
@@ -88,7 +89,7 @@ void show_mem(void)
 
 extern pgprot_t protection_map[16];
 
-unsigned long sparc_context_init(unsigned long start_mem, int numctx)
+__initfunc(unsigned long sparc_context_init(unsigned long start_mem, int numctx))
 {
 	int ctx;
 
@@ -117,7 +118,8 @@ extern unsigned long sun4c_paging_init(unsigned long, unsigned long);
 extern unsigned long srmmu_paging_init(unsigned long, unsigned long);
 extern unsigned long device_scan(unsigned long);
 
-unsigned long paging_init(unsigned long start_mem, unsigned long end_mem)
+__initfunc(unsigned long 
+paging_init(unsigned long start_mem, unsigned long end_mem))
 {
 	switch(sparc_cpu_model) {
 	case sun4c:
@@ -166,7 +168,7 @@ extern void srmmu_frob_mem_map(unsigned long);
 
 int physmem_mapped_contig = 1;
 
-static void taint_real_pages(unsigned long start_mem, unsigned long end_mem)
+__initfunc(static void taint_real_pages(unsigned long start_mem, unsigned long end_mem))
 {
 	unsigned long addr, tmp2 = 0;
 
@@ -194,7 +196,7 @@ static void taint_real_pages(unsigned long start_mem, unsigned long end_mem)
 	}
 }
 
-void mem_init(unsigned long start_mem, unsigned long end_mem)
+__initfunc(void mem_init(unsigned long start_mem, unsigned long end_mem))
 {
 	int codepages = 0;
 	int datapages = 0;
@@ -209,6 +211,7 @@ void mem_init(unsigned long start_mem, unsigned long end_mem)
 	high_memory = (void *) end_mem;
 
 	start_mem = PAGE_ALIGN(start_mem);
+	num_physpages = (start_mem - KERNBASE) >> PAGE_SHIFT;
 
 	addr = KERNBASE;
 	while(addr < start_mem) {
@@ -231,6 +234,7 @@ void mem_init(unsigned long start_mem, unsigned long end_mem)
 			continue;
 		}
 		mem_map[MAP_NR(addr)].count = 1;
+		num_physpages++;
 #ifdef CONFIG_BLK_DEV_INITRD
 		if (!initrd_start ||
 		    (addr < initrd_start || addr >= initrd_end))
@@ -250,6 +254,32 @@ void mem_init(unsigned long start_mem, unsigned long end_mem)
 		min_free_pages = 16;
 	free_pages_low = min_free_pages + (min_free_pages >> 1);
 	free_pages_high = min_free_pages + min_free_pages;
+}
+
+void free_initmem (void)
+{
+	extern int text_init_begin, text_init_end, data_init_begin, data_init_end;
+	unsigned long addr, addrend;
+	int savec, saved;
+	
+	addr = PAGE_ALIGN((unsigned long)(&text_init_begin));
+	addrend = ((unsigned long)(&text_init_end)) & PAGE_MASK;
+	for (savec = addrend - addr; addr < addrend; addr += PAGE_SIZE) {
+		mem_map[MAP_NR(addr)].flags &= ~(1 << PG_reserved);
+		mem_map[MAP_NR(addr)].count = 1;
+		free_page(addr);
+	}
+	if (savec < 0) savec = 0;
+	addr = PAGE_ALIGN((unsigned long)(&data_init_begin));
+	addrend = ((unsigned long)(&data_init_end)) & PAGE_MASK;
+	for (saved = addrend - addr; addr < addrend; addr += PAGE_SIZE) {
+		mem_map[MAP_NR(addr)].flags &= ~(1 << PG_reserved);
+		mem_map[MAP_NR(addr)].count = 1;
+		free_page(addr);
+	}
+	if (saved < 0) saved = 0;
+	printk ("Freeing unused kernel memory: %dk code, %dk data\n",
+        	savec >> 10, saved >> 10);
 }
 
 void si_meminfo(struct sysinfo *val)

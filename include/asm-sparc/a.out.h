@@ -1,4 +1,4 @@
-/* $Id: a.out.h,v 1.9 1996/05/29 13:44:54 ecd Exp $ */
+/* $Id: a.out.h,v 1.11 1996/12/03 08:44:56 jj Exp $ */
 #ifndef __SPARC_A_OUT_H__
 #define __SPARC_A_OUT_H__
 
@@ -89,7 +89,9 @@ struct relocation_info /* used when header.a_machtype == M_SPARC */
 
 #ifdef __KERNEL__
 
-#define STACK_TOP	TASK_SIZE
+extern unsigned long	stack_top;
+
+#define STACK_TOP	(stack_top)
 
 #endif
 

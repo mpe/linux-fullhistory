@@ -1,4 +1,4 @@
-/* $Id: init.c,v 1.7 1996/04/04 16:31:00 tridge Exp $
+/* $Id: init.c,v 1.8 1996/11/13 05:10:06 davem Exp $
  * init.c:  Initialize internal variables used by the PROM
  *          library functions.
  *
@@ -7,6 +7,7 @@
 
 #include <linux/config.h>
 #include <linux/kernel.h>
+#include <linux/init.h>
 
 #include <asm/openprom.h>
 #include <asm/oplib.h>
@@ -29,8 +30,7 @@ struct linux_nodeops *prom_nodeops;
 extern void prom_meminit(void);
 extern void prom_ranges_init(void);
 
-void
-prom_init(struct linux_romvec *rp)
+__initfunc(void prom_init(struct linux_romvec *rp))
 {
 	romvec = rp;
 

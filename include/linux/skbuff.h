@@ -93,11 +93,11 @@ struct sk_buff
 	struct neighbour *nexthop;
 #endif		
 	struct  dst_entry *dst;
+	char    	cb[32];
 
 	__u32		seq;			/* TCP sequence number				*/
 	__u32		end_seq;		/* seq [+ fin] [+ syn] + datalen		*/
 	__u32		ack_seq;		/* TCP ack sequence number			*/
-	char    	cb[32];
   
 	unsigned int 	len;			/* Length of actual data			*/
 	unsigned int	csum;			/* Checksum 					*/

@@ -16,6 +16,7 @@
 #define	ROSE_T3		4
 #define	ROSE_IDLE	5
 #define	ROSE_HDRINCL	6
+#define	ROSE_HOLDBACK	7
 
 #define	ROSE_KILL	99
 

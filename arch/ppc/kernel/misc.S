@@ -3,9 +3,12 @@
  * set of code at specific locations, based on function
  */
 
-#include <linux/sys.h>
 #include "ppc_asm.tmpl"
-
+#include <linux/sys.h>
+#include <asm/errno.h>
+#include "ppc_defs.h"
+#include <asm/processor.h>
+		
 /* Keep track of low-level exceptions - rather crude, but informative */	
 #define STATS
 
@@ -23,6 +26,7 @@
 	addze	r3,r3; \
 	stw	r3,0(r2)
 
+/*#ifdef CONFIG_603*/
 /* This instruction is not implemented on the PPC 603 */
 #define tlbia \
 	li	r4,64; \
@@ -31,9 +35,195 @@
 0:	tlbie	r4; \
 	addi	r4,r4,0x1000; \
 	bdnz	0b
+/*#endif*/ /* CONFIG_603*/
 	
 _TEXT()
+#define CPU_CTL     0x80000092
+_GLOBAL(hard_reset_now)
+        mfmsr   r3              /* Disable interrupts */
+        li      r4,0            
+        ori     r4,r4,MSR_EE    
+        andc    r3,r3,r4        
+        ori     r3,r3,MSR_IP    /* Set FLASH/ROM interrupt handlers */
+        sync
+        mtmsr   r3
+        lis     r3,CPU_CTL>>16
+        ori     r3,r3,(CPU_CTL&0xFFFF)
+        lbz     r4,0(r3)        /* Turn on SRESET */
+        li      r5,1
+        andc    r4,r4,r5        /* Make sure we go from 0->1 */
+        stb     r4,0(r3)
+        ori     r4,r4,1
+        stb     r4,0(r3)        /* This should do it! */
+99:     nop
+        b       99b
 
+#if 0	
+/*
+  unsigned short
+     le16_to_cpu(unsigned short val)
+*/
+_GLOBAL(le16_to_cpu)
+	lis	r4,_le_scratch@h
+	ori	r4,r4,_le_scratch@l
+	sth	r3,0(r4)
+	li	r5,0
+	lhbrx	r3,r4,r5
+	blr
+
+_GLOBAL(le32_to_cpu)
+	lis	r4,_le_scratch@h
+	ori	r4,r4,_le_scratch@l
+	stw	r3,0(r4)
+	li	r5,0
+	lwbrx	r3,r4,r5
+	blr
+_GLOBAL(_le_scratch)
+	.space 4
+#endif	
+#if 1
+/*	
+extern int __put_user_8(char, char *);
+extern int __put_user_16(short, short *);
+extern int __put_user_32(long, long *);
+*/
+_GLOBAL(__put_user_8)
+	/* setup exception stuff */
+	lis	r2,current_set@ha
+	lwz	r2,current_set@l(r2)
+	/* increment excount */
+	lwz	r6,TSS+TSS_EXCOUNT(r2)
+	addi	r6,r6,1
+	stw	r6,TSS+TSS_EXCOUNT(r2)
+	/* set expc */
+	lis	r6,1f@h
+	ori	r6,r6,1f@l
+	stw	r6,TSS+TSS_EXPC(r2)
+	
+	stb	r3,0(r4)
+	li	r3,0		/* successful return */
+	li	r6,0
+	stw	r6,TSS+TSS_EXCOUNT(r2)
+	blr
+1:	li	r3,-EFAULT	/* bad access */
+	li	r6,0
+	stw	r6,TSS+TSS_EXCOUNT(r2)
+	blr
+		
+_GLOBAL(__put_user_16)
+	/* setup exception stuff */
+	lis	r2,current_set@ha
+	lwz	r2,current_set@l(r2)
+	/* increment excount */
+	lwz	r6,TSS+TSS_EXCOUNT(r2)
+	addi	r6,r6,1
+	stw	r6,TSS+TSS_EXCOUNT(r2)
+	/* set expc */
+	lis	r6,1f@h
+	ori	r6,r6,1f@l
+	stw	r6,TSS+TSS_EXPC(r2)
+	
+	sth	r3,0(r4)
+	li	r3,0		/* successful return */
+	li	r6,0
+	stw	r6,TSS+TSS_EXCOUNT(r2)
+	blr
+1:	li	r3,-EFAULT	/* bad access */
+	li	r6,0
+	stw	r6,TSS+TSS_EXCOUNT(r2)
+	blr
+
+_GLOBAL(__put_user_32)
+	/* setup exception stuff */
+	lis	r2,current_set@ha
+	lwz	r2,current_set@l(r2)
+	/* increment excount */
+	lwz	r6,TSS+TSS_EXCOUNT(r2)
+	addi	r6,r6,1
+	stw	r6,TSS+TSS_EXCOUNT(r2)
+	/* set expc */
+	lis	r6,1f@h
+	ori	r6,r6,1f@l
+	stw	r6,TSS+TSS_EXPC(r2)
+	
+	stw	r3,0(r4)
+	li	r3,0		/* successful return */
+	li	r6,0
+	stw	r6,TSS+TSS_EXCOUNT(r2)
+	blr
+1:	li	r3,-EFAULT	/* bad access */
+	li	r6,0
+	stw	r6,TSS+TSS_EXCOUNT(r2)
+	blr
+	
+_GLOBAL(__get_user_8)
+	/* setup exception stuff */
+	lis	r2,current_set@ha
+	lwz	r2,current_set@l(r2)
+	/* increment excount */
+	lwz	r6,TSS+TSS_EXCOUNT(r2)
+	addi	r6,r6,1
+	stw	r6,TSS+TSS_EXCOUNT(r2)
+	/* set expc */
+	lis	r6,1f@h
+	ori	r6,r6,1f@l
+	stw	r6,TSS+TSS_EXPC(r2)
+	
+	lbz	r3,0(r4)
+	li	r4,0		/* successful return */
+	li	r6,0
+	stw	r6,TSS+TSS_EXCOUNT(r2)
+	blr
+1:	li	r4,-EFAULT	/* bad access */
+	li	r6,0
+	stw	r6,TSS+TSS_EXCOUNT(r2)
+	blr
+	
+_GLOBAL(__get_user_16)
+	/* setup exception stuff */
+	lis	r2,current_set@ha
+	lwz	r2,current_set@l(r2)
+	/* increment excount */
+	lwz	r6,TSS+TSS_EXCOUNT(r2)
+	addi	r6,r6,1
+	stw	r6,TSS+TSS_EXCOUNT(r2)
+	/* set expc */
+	lis	r6,1f@h
+	ori	r6,r6,1f@l
+	stw	r6,TSS+TSS_EXPC(r2)
+	
+	lhz	r3,0(r4)
+	li	r4,0		/* successful return */
+	li	r6,0
+	stw	r6,TSS+TSS_EXCOUNT(r2)
+	blr
+1:	li	r4,-EFAULT	/* bad access */
+	li	r6,0
+	stw	r6,TSS+TSS_EXCOUNT(r2)
+	blr
+	
+_GLOBAL(__get_user_32)
+	/* setup exception stuff */
+	lis	r2,current_set@ha
+	lwz	r2,current_set@l(r2)
+	/* increment excount */
+	lwz	r6,TSS+TSS_EXCOUNT(r2)
+	addi	r6,r6,1
+	stw	r6,TSS+TSS_EXCOUNT(r2)
+	/* set expc */
+	lis	r6,1f@h
+	ori	r6,r6,1f@l
+	stw	r6,TSS+TSS_EXPC(r2)
+	lwz	r3,0(r4)
+	li	r4,0		/* successful return */
+	li	r6,0
+	stw	r6,TSS+TSS_EXCOUNT(r2)
+	blr
+1:	li	r4,-EFAULT	/* bad access */
+	li	r6,0
+	stw	r6,TSS+TSS_EXCOUNT(r2)
+	blr
+#endif	
 /*
  * Disable interrupts
  *	rc = _disable_interrupts()
@@ -418,7 +608,9 @@ _GLOBAL(__ashldi3)
 	
 _GLOBAL(abort)
 	.long	0
-
+	
+/* in include/asm/string.h now -- Cort */
+#if 0
 _GLOBAL(bzero)
 #define bufp r3
 #define len  r4
@@ -447,7 +639,9 @@ _GLOBAL(bzero)
 20:	stbu	pat,1(bufp)	/* Store value */
 	bdnz	20b		/* Loop [based on counter] */
 99:	blr
+#endif
 
+	
 _GLOBAL(abs)
 	cmpi	0,r3,0
 	bge	10f
@@ -474,18 +668,22 @@ _GLOBAL(_get_PVR)
  * Create a kernel thread
  *   __kernel_thread(flags, fn, arg)
  */
-#if 0
+#if 1
 #define SYS_CLONE 	120
 _GLOBAL(__kernel_thread)
 __kernel_thread:
 	li	r0,SYS_CLONE
 	sc
-	cmpi	0,r3,0
-	bnelr
-	mtlr	r4
-	mr	r3,r5
+	cmpi	0,r3,0		/* parent or child? */
+	bnelr			/* return if parent */
+	mtlr	r4              /* fn addr in lr */
+	mr	r3,r5	        /* load arg and call fn */
 	blr
+	li	0, 1 		/* exit after child exits */
+        li	3, 0
+	sc
 #endif
+	
 /* Why isn't this a) automatic, b) written in 'C'? */	
 	.data
 	.align 4
@@ -655,5 +853,7 @@ sys_call_table:
 	.long sys_sched_rr_get_interval
 	.long sys_nanosleep
 	.long sys_mremap
-	.space (NR_syscalls-163)*4
+	.long SYMBOL_NAME(sys_setresuid)
+	.long SYMBOL_NAME(sys_getresuid)
+	.space (NR_syscalls-165)*4
 

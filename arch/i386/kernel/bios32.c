@@ -46,6 +46,8 @@
  * Apr 16, 1995 : Source merge with the DEC Alpha PCI support. Most of the code
  *	moved to drivers/pci/pci.c.
  *
+ * Dec 7, 1996  : Added support for direct configuration access of boards
+ *      with Intel compatible access schemes (tsbogend@alpha.franken.de)
  *
  */
 
@@ -57,6 +59,7 @@
 
 #include <asm/page.h>
 #include <asm/segment.h>
+#include <asm/io.h>
 
 #define PCIBIOS_PCI_FUNCTION_ID 	0xb1XX
 #define PCIBIOS_PCI_BIOS_PRESENT 	0xb101
@@ -116,6 +119,28 @@ static struct {
 } bios32_indirect = { 0, KERNEL_CS };
 
 #ifdef CONFIG_PCI
+
+/*
+ * function table for accessing PCI configuration space
+ */
+struct pci_access {
+    int (*find_device)(unsigned short, unsigned short, unsigned short, unsigned char *, unsigned char *);
+    int (*find_class)(unsigned int, unsigned short, unsigned char *, unsigned char *);
+    int (*read_config_byte)(unsigned char, unsigned char, unsigned char, unsigned char *);
+    int (*read_config_word)(unsigned char, unsigned char, unsigned char, unsigned short *);
+    int (*read_config_dword)(unsigned char, unsigned char, unsigned char, unsigned int *);
+    int (*write_config_byte)(unsigned char, unsigned char, unsigned char, unsigned char);
+    int (*write_config_word)(unsigned char, unsigned char, unsigned char, unsigned short);
+    int (*write_config_dword)(unsigned char, unsigned char, unsigned char, unsigned int);
+};
+
+/*
+ * pointer to selected PCI access function table
+ */
+struct pci_access *access_pci = NULL;
+
+
+
 /*
  * Returns the entry point for the given service, NULL on error
  */
@@ -201,12 +226,8 @@ extern unsigned long check_pcibios(unsigned long memory_start, unsigned long mem
 	return memory_start;
 }
 
-int pcibios_present(void)
-{
-	return pcibios_entry ? 1 : 0;
-}
 
-int pcibios_find_class (unsigned int class_code, unsigned short index,
+int pci_bios_find_class (unsigned int class_code, unsigned short index,
 	unsigned char *bus, unsigned char *device_fn)
 {
 	unsigned long bx;
@@ -228,7 +249,7 @@ int pcibios_find_class (unsigned int class_code, unsigned short index,
 }
 
 
-int pcibios_find_device (unsigned short vendor, unsigned short device_id,
+int pci_bios_find_device (unsigned short vendor, unsigned short device_id,
 	unsigned short index, unsigned char *bus, unsigned char *device_fn)
 {
 	unsigned short bx;
@@ -250,7 +271,7 @@ int pcibios_find_device (unsigned short vendor, unsigned short device_id,
 	return (int) (ret & 0xff00) >> 8;
 }
 
-int pcibios_read_config_byte(unsigned char bus,
+int pci_bios_read_config_byte(unsigned char bus,
 	unsigned char device_fn, unsigned char where, unsigned char *value)
 {
 	unsigned long ret;
@@ -269,7 +290,7 @@ int pcibios_read_config_byte(unsigned char bus,
 	return (int) (ret & 0xff00) >> 8;
 }
 
-int pcibios_read_config_word (unsigned char bus,
+int pci_bios_read_config_word (unsigned char bus,
 	unsigned char device_fn, unsigned char where, unsigned short *value)
 {
 	unsigned long ret;
@@ -288,7 +309,7 @@ int pcibios_read_config_word (unsigned char bus,
 	return (int) (ret & 0xff00) >> 8;
 }
 
-int pcibios_read_config_dword (unsigned char bus,
+int pci_bios_read_config_dword (unsigned char bus,
 	unsigned char device_fn, unsigned char where, unsigned int *value)
 {
 	unsigned long ret;
@@ -307,7 +328,7 @@ int pcibios_read_config_dword (unsigned char bus,
 	return (int) (ret & 0xff00) >> 8;
 }
 
-int pcibios_write_config_byte (unsigned char bus,
+int pci_bios_write_config_byte (unsigned char bus,
 	unsigned char device_fn, unsigned char where, unsigned char value)
 {
 	unsigned long ret;
@@ -326,7 +347,7 @@ int pcibios_write_config_byte (unsigned char bus,
 	return (int) (ret & 0xff00) >> 8;
 }
 
-int pcibios_write_config_word (unsigned char bus,
+int pci_bios_write_config_word (unsigned char bus,
 	unsigned char device_fn, unsigned char where, unsigned short value)
 {
 	unsigned long ret;
@@ -345,7 +366,7 @@ int pcibios_write_config_word (unsigned char bus,
 	return (int) (ret & 0xff00) >> 8;
 }
 
-int pcibios_write_config_dword (unsigned char bus,
+int pci_bios_write_config_dword (unsigned char bus,
 	unsigned char device_fn, unsigned char where, unsigned int value)
 {
 	unsigned long ret;
@@ -362,6 +383,356 @@ int pcibios_write_config_dword (unsigned char bus,
 		  "D" ((long) where),
 		  "S" (&pci_indirect));
 	return (int) (ret & 0xff00) >> 8;
+}
+
+/*
+ * function table for BIOS32 access
+ */
+struct pci_access pci_bios_access = {
+      pci_bios_find_device,
+      pci_bios_find_class,
+      pci_bios_read_config_byte,
+      pci_bios_read_config_word,
+      pci_bios_read_config_dword,
+      pci_bios_write_config_byte,
+      pci_bios_write_config_word,
+      pci_bios_write_config_dword
+};
+
+
+
+/*
+ * Given the vendor and device ids, find the n'th instance of that device
+ * in the system.  
+ */
+int pci_direct_find_device (unsigned short vendor, unsigned short device_id,
+			   unsigned short index, unsigned char *bus,
+			   unsigned char *devfn)
+{
+    unsigned int curr = 0;
+    struct pci_dev *dev;
+
+    for (dev = pci_devices; dev; dev = dev->next) {
+	if (dev->vendor == vendor && dev->device == device_id) {
+	    if (curr == index) {
+		*devfn = dev->devfn;
+		*bus = dev->bus->number;
+		return PCIBIOS_SUCCESSFUL;
+	    }
+	    ++curr;
+	}
+    }
+    return PCIBIOS_DEVICE_NOT_FOUND;
+}
+
+
+/*
+ * Given the class, find the n'th instance of that device
+ * in the system.
+ */
+int pci_direct_find_class (unsigned int class_code, unsigned short index,
+			  unsigned char *bus, unsigned char *devfn)
+{
+    unsigned int curr = 0;
+    struct pci_dev *dev;
+
+    for (dev = pci_devices; dev; dev = dev->next) {
+	if (dev->class == class_code) {
+	    if (curr == index) {
+		*devfn = dev->devfn;
+		*bus = dev->bus->number;
+		return PCIBIOS_SUCCESSFUL;
+	    }
+	    ++curr;
+	}
+    }
+    return PCIBIOS_DEVICE_NOT_FOUND;
+}
+
+/*
+ * Functions for accessing PCI configuration space with type 1 accesses
+ */
+#define CONFIG_CMD(bus, device_fn, where)   (0x80000000 | (bus << 16) | (device_fn << 8) | (where & ~3))
+
+int pci_conf1_read_config_byte(unsigned char bus, unsigned char device_fn,
+			       unsigned char where, unsigned char *value)
+{
+    outl(CONFIG_CMD(bus,device_fn,where), 0xCF8);
+    switch (where & 3) {
+	case 0: *value = inb(0xCFC);
+		break;
+	case 1: *value = inb(0xCFD);
+		break;
+	case 2: *value = inb(0xCFE);
+		break;
+	case 3: *value = inb(0xCFF);
+		break;
+    }
+    return PCIBIOS_SUCCESSFUL;
+}
+
+int pci_conf1_read_config_word (unsigned char bus,
+    unsigned char device_fn, unsigned char where, unsigned short *value)
+{
+    outl(CONFIG_CMD(bus,device_fn,where), 0xCF8);    
+    if (where & 2)
+    	*value = inw(0xCFE);
+    else
+    	*value = inw(0xCFC);
+    return PCIBIOS_SUCCESSFUL;    
+}
+
+int pci_conf1_read_config_dword (unsigned char bus, unsigned char device_fn, 
+				 unsigned char where, unsigned int *value)
+{
+    outl(CONFIG_CMD(bus,device_fn,where), 0xCF8);
+    *value = inl(0xCFC);
+    return PCIBIOS_SUCCESSFUL;    
+}
+
+int pci_conf1_write_config_byte (unsigned char bus, unsigned char device_fn, 
+				 unsigned char where, unsigned char value)
+{
+    outl(CONFIG_CMD(bus,device_fn,where), 0xCF8);    
+    outb(value, 0xCFC);
+    return PCIBIOS_SUCCESSFUL;
+}
+
+int pci_conf1_write_config_word (unsigned char bus, unsigned char device_fn, 
+				 unsigned char where, unsigned short value)
+{
+    outl(CONFIG_CMD(bus,device_fn,where), 0xCF8);
+    outw(value, 0xCFC);
+    return PCIBIOS_SUCCESSFUL;
+}
+
+int pci_conf1_write_config_dword (unsigned char bus, unsigned char device_fn, 
+				  unsigned char where, unsigned int value)
+{
+    outl(CONFIG_CMD(bus,device_fn,where), 0xCF8);
+    outl(value, 0xCFC);
+    return PCIBIOS_SUCCESSFUL;
+}
+
+#undef CONFIG_CMD
+
+/*
+ * functiontable for type 1
+ */
+struct pci_access pci_direct_conf1 = {
+      pci_direct_find_device,
+      pci_direct_find_class,
+      pci_conf1_read_config_byte,
+      pci_conf1_read_config_word,
+      pci_conf1_read_config_dword,
+      pci_conf1_write_config_byte,
+      pci_conf1_write_config_word,
+      pci_conf1_write_config_dword
+};
+
+/*
+ * Functions for accessing PCI configuration space with type 2 accesses
+ */
+#define IOADDR(devfn, where)   ((0xC000 | ((devfn & 0x78) << 5)) + where)
+#define FUNC(devfn)            (((devfn & 7) << 1) | 0xf0)
+
+int pci_conf2_read_config_byte(unsigned char bus, unsigned char device_fn, 
+			       unsigned char where, unsigned char *value)
+{
+    if (device_fn & 0x80)
+	return PCIBIOS_DEVICE_NOT_FOUND;
+    outb (FUNC(device_fn), 0xCF8);
+    outb (bus, 0xCFA);
+    *value = inb(IOADDR(device_fn,where));
+    outb (0, 0xCF8);
+    return PCIBIOS_SUCCESSFUL;
+}
+
+int pci_conf2_read_config_word (unsigned char bus, unsigned char device_fn, 
+				unsigned char where, unsigned short *value)
+{
+    if (device_fn & 0x80)
+	return PCIBIOS_DEVICE_NOT_FOUND;
+    outb (FUNC(device_fn), 0xCF8);
+    outb (bus, 0xCFA);
+    *value = inw(IOADDR(device_fn,where));
+    outb (0, 0xCF8);    
+    return PCIBIOS_SUCCESSFUL;
+}
+
+int pci_conf2_read_config_dword (unsigned char bus, unsigned char device_fn, 
+				 unsigned char where, unsigned int *value)
+{
+    if (device_fn & 0x80)
+	return PCIBIOS_DEVICE_NOT_FOUND;
+    outb (FUNC(device_fn), 0xCF8);
+    outb (bus, 0xCFA);
+    *value = inl (IOADDR(device_fn,where));    
+    outb (0, 0xCF8);    
+    return PCIBIOS_SUCCESSFUL;
+}
+
+int pci_conf2_write_config_byte (unsigned char bus, unsigned char device_fn, 
+				 unsigned char where, unsigned char value)
+{
+    outb (FUNC(device_fn), 0xCF8);
+    outb (bus, 0xCFA);
+    outb (value, IOADDR(device_fn,where));
+    outb (0, 0xCF8);    
+    return PCIBIOS_SUCCESSFUL;
+}
+
+int pci_conf2_write_config_word (unsigned char bus, unsigned char device_fn, 
+				 unsigned char where, unsigned short value)
+{
+    outb (FUNC(device_fn), 0xCF8);
+    outb (bus, 0xCFA);
+    outw (value, IOADDR(device_fn,where));
+    outb (0, 0xCF8);    
+    return PCIBIOS_SUCCESSFUL;
+}
+
+int pci_conf2_write_config_dword (unsigned char bus, unsigned char device_fn, 
+				  unsigned char where, unsigned int value)
+{
+    outb (FUNC(device_fn), 0xCF8);
+    outb (bus, 0xCFA);
+    outl (value, IOADDR(device_fn,where));    
+    outb (0, 0xCF8);    
+    return PCIBIOS_SUCCESSFUL;
+}
+
+#undef IOADDR
+#undef FUNC
+
+/*
+ * functiontable for type 2
+ */
+struct pci_access pci_direct_conf2 = {
+      pci_direct_find_device,
+      pci_direct_find_class,
+      pci_conf2_read_config_byte,
+      pci_conf2_read_config_word,
+      pci_conf2_read_config_dword,
+      pci_conf2_write_config_byte,
+      pci_conf2_write_config_word,
+      pci_conf2_write_config_dword
+};
+
+#endif
+
+struct pci_access *check_direct_pci(void)
+{
+    unsigned int tmp;
+
+    /*
+     * check if configuration type 1 works
+     */
+    outb (0x01, 0xCFB);
+    tmp = inl (0xCF8);
+    outl (0x80000000, 0xCF8);
+    if (inl (0xCF8) == 0x80000000) {
+	outl (tmp, 0xCF8);
+	printk("pcibios_init: Using configuration type 1\n");
+	return &pci_direct_conf1;
+    }
+    outl (tmp, 0xCF8);
+
+    /*
+     * check if configuration type 2 works
+     */
+    outb (0x00, 0xCFB);
+    outb (0x00, 0xCF8);
+    outb (0x00, 0xCFA);
+    if (inb (0xCF8) == 0x00 && inb (0xCFC) == 0x00) {
+	printk("pcibios_init: Using configuration type 2\n");
+	return &pci_direct_conf2;
+    }
+    printk("pcibios_init: Not supported chipset for direct PCI access !\n");
+    return NULL;
+}
+
+
+/*
+ * access defined pcibios functions via
+ * the function table
+ */
+
+int pcibios_present(void)
+{
+	return access_pci ? 1 : 0;
+}
+
+int pcibios_find_class (unsigned int class_code, unsigned short index,
+	unsigned char *bus, unsigned char *device_fn)
+{
+   if (access_pci && access_pci->find_class)
+      return access_pci->find_class(class_code, index, bus, device_fn);
+    
+    return PCIBIOS_FUNC_NOT_SUPPORTED;
+}
+
+int pcibios_find_device (unsigned short vendor, unsigned short device_id,
+	unsigned short index, unsigned char *bus, unsigned char *device_fn)
+{
+    if (access_pci && access_pci->find_device)
+      return access_pci->find_device(vendor, device_id, index, bus, device_fn);
+    
+    return PCIBIOS_FUNC_NOT_SUPPORTED;
+}
+
+int pcibios_read_config_byte (unsigned char bus,
+	unsigned char device_fn, unsigned char where, unsigned char *value)
+{
+    if (access_pci && access_pci->read_config_byte)
+      return access_pci->read_config_byte(bus, device_fn, where, value);
+    
+    return PCIBIOS_FUNC_NOT_SUPPORTED;
+}
+
+int pcibios_read_config_word (unsigned char bus,
+	unsigned char device_fn, unsigned char where, unsigned short *value)
+{
+    if (access_pci && access_pci->read_config_word)
+      return access_pci->read_config_word(bus, device_fn, where, value);
+    
+    return PCIBIOS_FUNC_NOT_SUPPORTED;
+}
+
+int pcibios_read_config_dword (unsigned char bus,
+	unsigned char device_fn, unsigned char where, unsigned int *value)
+{
+    if (access_pci && access_pci->read_config_dword)
+      return access_pci->read_config_dword(bus, device_fn, where, value);
+    
+    return PCIBIOS_FUNC_NOT_SUPPORTED;
+}
+
+int pcibios_write_config_byte (unsigned char bus,
+	unsigned char device_fn, unsigned char where, unsigned char value)
+{
+    if (access_pci && access_pci->write_config_byte)
+      return access_pci->write_config_byte(bus, device_fn, where, value);
+    
+    return PCIBIOS_FUNC_NOT_SUPPORTED;
+}
+
+int pcibios_write_config_word (unsigned char bus,
+	unsigned char device_fn, unsigned char where, unsigned short value)
+{
+    if (access_pci && access_pci->write_config_word)
+      return access_pci->write_config_word(bus, device_fn, where, value);
+    
+    return PCIBIOS_FUNC_NOT_SUPPORTED;    
+}
+
+int pcibios_write_config_dword (unsigned char bus,
+	unsigned char device_fn, unsigned char where, unsigned int value)
+{
+    if (access_pci && access_pci->write_config_dword)
+      return access_pci->write_config_dword(bus, device_fn, where, value);
+    
+    return PCIBIOS_FUNC_NOT_SUPPORTED;
 }
 
 const char *pcibios_strerror (int error)
@@ -399,11 +770,9 @@ const char *pcibios_strerror (int error)
 
 unsigned long pcibios_fixup(unsigned long mem_start, unsigned long mem_end)
 {
-return mem_start;
+    return mem_start;
 }
 
-
-#endif
 
 unsigned long pcibios_init(unsigned long memory_start, unsigned long memory_end)
 {
@@ -439,11 +808,13 @@ unsigned long pcibios_init(unsigned long memory_start, unsigned long memory_end)
 		printk ("pcibios_init : BIOS32 Service Directory structure at 0x%p\n", check);
 		if (!bios32_entry) {
 			if (check->fields.entry >= 0x100000) {
-				printk("pcibios_init: entry in high memory, unable to access\n");
+				printk("pcibios_init: entry in high memory, trying direct PCI access\n");
+ 				access_pci = check_direct_pci();
 			} else {
 				bios32_entry = check->fields.entry;
 				printk ("pcibios_init : BIOS32 Service Directory entry at 0x%lx\n", bios32_entry);
 				bios32_indirect.address = bios32_entry + PAGE_OFFSET;
+ 				access_pci = &pci_bios_access;
 			}
 		}
 	}

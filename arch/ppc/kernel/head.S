@@ -1,16 +1,15 @@
 #include "ppc_asm.tmpl"
 #include "ppc_defs.h"
 #include <linux/errno.h>
-#define NEWMM
+#include <linux/sys.h>
+#include <asm/ppc_machine.h>
+	
+#define NEWMM 1
 #define SYNC() \
 	isync; \
 	sync
 
-/* #define TLB_STATS */
-
-/* Keep track of low-level exceptions - rather crude, but informative */  
 #define STATS
-
 /*
  * Increment a [64 bit] statistic counter
  * Uses R2, R3
@@ -40,179 +39,9 @@
 	mtspr	XER,r0; \
 	stw	r3,0(r2)
 
-/* These macros can be used to generate very raw traces of low-level */
-/* operations (where printf, etc. can't help).  All they provide is */
-/* some after-the-fact documentation of what took place.  Since [in */
-/* most instances] they have no registers to work with, they use the */
-/* hardware "special" registers SPRx for storage.  Because of this, */
-/* defining more than one of them simultaneously will yield incorrect */
-/* results and a non-functional system.  Note: the trick here is to */
-/* gather some data without disturbing anything - Heisenberg are you watching? */
-
-/* CAUTION! Don't turn on more than one of these at once! */	
-/* #define DO_TRAP_TRACE   */ 
-/* #define DO_TLB_TRACE    */
-/* #define DO_RFI_TRACE    */
-
-#ifdef DO_RFI_TRACE
-#define DO_RFI_TRACE_UNMAPPED(mark) \
-	mtspr	SPR0,r1; \
-	mtspr	SPR1,r2; \
-	mtspr	SPR2,r3; \
-	mfcr	r3; \
-	mtspr	SPR3,r3; \
-	lis	r1,_RFI_ptr@h; \
-	ori	r1,r1,_RFI_ptr@l; \
-	lis	r3,0xF000; \
-	andc	r1,r1,r3; \
-	lwz	r1,0(r1); \
-	andc	r1,r1,r3; \
-	subi	r1,r1,4; \
-	lis	r2,(mark>>16); \
-	ori	r2,r2,(mark&0xFFFF); \
-	stwu	r2,4(r1); \
-	mfspr	r2,SRR0; \
-	stwu	r2,4(r1); \
-	mfspr	r2,SRR1; \
-	stwu	r2,4(r1); \
-	addi	r1,r1,4+4; \
-	lis	r2,_RFI_ptr@h; \
-	ori	r2,r2,_RFI_ptr@l; \
-	andc	r2,r2,r3; \
-	stw	r1,0(r2); \
-	mfspr	r3,SPR3; \
-	mtcrf	0xFF,r3; \
-	mfspr	r1,SPR0; \
-	mfspr	r2,SPR1; \
-	mfspr	r3,SPR2
-#define DO_RFI_TRACE_MAPPED(mark) \
-	mtspr	SPR0,r1; \
-	mtspr	SPR1,r2; \
-	mtspr	SPR2,r3; \
-	mfcr	r3; \
-	mtspr	SPR3,r3; \
-	lis	r1,_RFI_ptr@h; \
-	ori	r1,r1,_RFI_ptr@l; \
-	lwz	r1,0(r1); \
-	lis	r3,0x9000; \
-	or	r1,r1,r3; \
-	subi	r1,r1,4; \
-	lis	r2,(mark>>16); \
-	ori	r2,r2,(mark&0xFFFF); \
-	stwu	r2,4(r1); \
-	mfspr	r2,SRR0; \
-	stwu	r2,4(r1); \
-	mfspr	r2,SRR1; \
-	stwu	r2,4(r1); \
-	addi	r1,r1,4+4; \
-	lis	r2,_RFI_ptr@h; \
-	ori	r2,r2,_RFI_ptr@l; \
-	stw	r1,0(r2); \
-	mfspr	r3,SPR3; \
-	mtcrf	0xFF,r3; \
-	mfspr	r1,SPR0; \
-	mfspr	r2,SPR1; \
-	mfspr	r3,SPR2
-#else
 #define DO_RFI_TRACE_UNMAPPED(mark)
 #define DO_RFI_TRACE_MAPPED(mark)
-#endif
 
-#ifdef DO_TRAP_TRACE
-#define DEFAULT_TRAP(offset) \
-	mtspr	SPR0,r1; \
-	mtspr	SPR1,r2; \
-	mtspr	SPR2,r3; \
-	lis	r1,_TRAP_ptr@h; \
-	ori	r1,r1,_TRAP_ptr@l; \
-	lis	r3,0xF000; \
-	andc	r1,r1,r3; \
-	lwz	r1,0(r1); \
-	andc	r1,r1,r3; \
-	subi	r1,r1,4; \
-	lis	r2,0xCACA; \
-	ori	r2,r2,offset; \
-	stwu	r2,4(r1); \
-	mfspr	r2,SRR0; \
-	stwu	r2,4(r1); \
-	mfspr	r2,SRR1; \
-	stwu	r2,4(r1); \
-	mfspr	r2,SPR0; \
-	stwu	r2,4(r1); \
-	addi	r1,r1,4; \
-	lis	r2,_TRAP_ptr@h; \
-	ori	r2,r2,_TRAP_ptr@l; \
-	andc	r2,r2,r3; \
-	stw	r1,0(r2); \
-	mfspr	r1,SPR0; \
-	mfspr	r2,SPR1; \
-	mfspr	r3,SPR2; \
-	li	r13,0; \
-	ori	r13,r13,HID0_ICE; \
-	mtspr	HID0,r13; \
-	lis	r13,0xFFF00000>>16; \
-	ori	r13,r13,offset; \
-	mtlr	r13; \
-	b	hang
-#define TRACE_TRAP(offset) \
-	mtspr	SPR0,r1; \
-	mtspr	SPR1,r2; \
-	mtspr	SPR2,r3; \
-	mfcr	r3; \
-	mtspr	SPR3,r3; \
-	lis	r1,_TRAP_ptr@h; \
-	ori	r1,r1,_TRAP_ptr@l; \
-	lis	r3,0xF000; \
-	andc	r1,r1,r3; \
-	lwz	r1,0(r1); \
-	andc	r1,r1,r3; \
-	subi	r1,r1,4; \
-	lis	r2,0xCABB; \
-	ori	r2,r2,offset; \
-	stwu	r2,4(r1); \
-	dcbst	0,r1; \
-	mfspr	r2,SRR0; \
-	stwu	r2,4(r1); \
-	dcbst	0,r1; \
-	mfspr	r2,SRR1; \
-	stwu	r2,4(r1); \
-	dcbst	0,r1; \
-	li	r2,offset; \
-	cmpi	0,r2,0x0C00; \
-	beq	01f; \
-	cmpi	0,r2,0x0300; \
-	beq	00f; \
-	cmpi	0,r2,0x0400; \
-	beq	00f; \
-	mfspr	r2,SPR0; \
-	b	02f; \
-00:	mfspr	r2,DAR; \
-	b	02f; \
-01:	mr	r2,r0; \
-02:	stwu	r2,4(r1); \
-	dcbst	0,r1; \
-	addi	r1,r1,4; \
-	mflr	r2; \
-	stw	r2,0(r1); \
-	bl	check_trace; \
-	lwz	r2,0(r1); \
-	mtlr	r2; \
-02:	lis	r2,_TRAP_ptr@h; \
-	ori	r2,r2,_TRAP_ptr@l; \
-	oris	r1,r1,0x9000; \
-	cmp	0,r1,r2; \
-	bne	00f; \
-	lis	r1,_TRAP_TRACE@h; \
-	ori	r1,r1,_TRAP_TRACE@l; \
-00:	lis	r3,0xF000; \
-	andc	r2,r2,r3; \
-	stw	r1,0(r2); \
-	mfspr	r1,SPR0; \
-	mfspr	r2,SPR1; \
-	mfspr	r3,SPR3; \
-	mtcrf	0xFF,r3; \
-	mfspr	r3,SPR2
-#else
 #define DEFAULT_TRAP(offset) \
 	li	r13,0; \
 	ori	r13,r13,HID0_ICE; \
@@ -222,7 +51,6 @@
 	mtlr	r13; \
 	blr
 #define TRACE_TRAP(offset)	
-#endif
 
 #define DATA_CACHE_OFF() \
 	mfspr	r2,HID0; \
@@ -246,27 +74,147 @@
 	bdnz	0b
 
 /* Validate kernel stack - check for overflow */
-#define CHECK_STACK()
+/* all regs are considered scratch since the C function will stomp them */
+#define CHECK_STACK() \
+	/*lis	r3,current_set@ha; \
+	lwz	r3,current_set@l(r3); \
+	bl	_EXTERN(check_stack)*/
+#if 0
 #define _CHECK_STACK() \
 	mtspr	SPR0,r3; \
+	mtspr	SPR1,r4;    /* use r3,4 as scratch */ \
 	lis	r2,current_set@ha; \
 	lwz	r2,current_set@l(r2); \
 	lwz	r2,KERNEL_STACK_PAGE(r2); \
-	lis	r3,sys_stack@h; \
+	/* if kernel stack is sys_stack skip check */ \
+	/*lis	r3,sys_stack@h; \
 	ori	r3,r3,sys_stack@l; \
-	cmpl	0,r1,r3; \
-	ble	02f; \
-	li	r3,0x0FFF; \
+	cmpl	0,r1,r3;*/ \
+	/* check for STACK_MAGIC on kernel stack page */ \
+	lis	r3, 0xdead; /* STACK_MAGIC */ \
+	ori	r3,r3,0xbeef; \
+	lwz	r4,0(r2);      /* get *kernel_stack_page */ \
+	cmpl	0,r4,r3; \
+	bne	01f; \
+	/* check that ksp is > kernel page */ \
+	/*li	r3,0x0FFF; \
 	andc	r2,r2,r3; \
 	andc	r3,r1,r3; \
 	cmp	0,r3,r2; \
-	beq	02f; \
-	mr	r3,r1; \
+	beq	02f;*/ \
+	/* check that ksp and kernel stack page are on same page */ \
+	cmp	0,r1,r2; \
+	bge	02f; \
+01:	mr	r6,r1; /* setup info for call to bad_stack() */ \
+	mr	r5,r2; \
 	bl	_EXTERN(bad_stack); \
-02:	mfspr	r3,SPR0
+02:	mfspr	r4,SPR1; \
+	mfspr	r3,SPR0
+#endif
+	
+/* save fp regs if fp is used */
+/* assumes that r1 contains ptr to regs of task and r2 is scratch 
+	  -- Cort  */
+#define SAVE_FP_REGS() \
+       	/* check if fp has been used by checking msr_fp bit */ \
+	lwz	r2,_MSR(r1);  \
+	andi.	r2,r2,MSR_FP; \
+	bne	00f; \
+	/* floating point has been used -- save fp regs */ \
+	lis	r2,current_set@h; \
+	ori	r2,r2,current_set@l; \
+	addi	r2,r2,TSS; \
+	/*mr	r2,r1;*/ \
+	stfd	fr0,TSS_FPR0(r2); \
+	stfd	fr1,TSS_FPR1(r2); \
+	stfd	fr2,TSS_FPR2(r2); \
+	stfd	fr3,TSS_FPR3(r2); \
+	stfd	fr4,TSS_FPR4(r2); \
+	stfd	fr5,TSS_FPR5(r2); \
+	stfd	fr6,TSS_FPR6(r2); \
+	stfd	fr7,TSS_FPR7(r2); \
+	stfd	fr8,TSS_FPR8(r2); \
+	stfd	fr9,TSS_FPR9(r2); \
+	stfd	fr10,TSS_FPR10(r2); \
+	stfd	fr11,TSS_FPR11(r2); \
+	stfd	fr12,TSS_FPR12(r2); \
+	stfd	fr13,TSS_FPR13(r2); \
+	stfd	fr14,TSS_FPR14(r2); \
+	stfd	fr15,TSS_FPR15(r2); \
+	stfd	fr16,TSS_FPR16(r2); \
+	stfd	fr17,TSS_FPR17(r2); \
+	stfd	fr18,TSS_FPR18(r2); \
+	stfd	fr19,TSS_FPR19(r2); \
+	stfd	fr20,TSS_FPR20(r2); \
+	stfd	fr21,TSS_FPR21(r2); \
+	stfd	fr22,TSS_FPR22(r2); \
+	stfd	fr23,TSS_FPR23(r2); \
+	stfd	fr24,TSS_FPR24(r2); \
+	stfd	fr25,TSS_FPR25(r2); \
+	stfd	fr26,TSS_FPR26(r2); \
+	stfd	fr27,TSS_FPR27(r2); \
+	stfd	fr28,TSS_FPR28(r2); \
+	stfd	fr29,TSS_FPR29(r2); \
+	stfd	fr30,TSS_FPR30(r2); \
+	stfd	fr31,TSS_FPR31(r2); \
+00:
 
-/* Save all registers on kernel stack during an exception */	
-#define SAVE_REGS(mark) \
+
+/* restores fp regs if fp has been used -- always restores fpscr */
+/* assumes that r1 contains ptr to regs, r2 is scratch and srr1 holds
+   what will become the msr when this process executes 	-- Cort*/
+#define RESTORE_FP_REGS(mark) \
+	/* check if restoring from _switch() */ \
+	li	r2, mark; \
+	cmpi	0,r2,0x0f0f; \
+	bne	00f; /* only need to save if called from _switch() with 0x0f0f */\
+       	/* check if fp has been used by checking msr_fp bit */ \
+	/* srr1 contains msr */ \
+	mfspr	r2,SRR1; \
+	andi.	r2,r2,MSR_FP; \
+	bne	00f; \
+	/* floating point has been used -- restore fp regs */ \
+	/* Hey, Rocky!  Watch me pull fp regs from my stack! */ \
+	lis	r2,current_set@h; \
+	ori	r2,r2,current_set@l; \
+	addi	r2,r2,TSS; \
+	/*mr	r2,r1;*/\
+	lfd	fr0,TSS_FPR0(r2); \
+	lfd	fr1,TSS_FPR1(r2); \
+	lfd	fr2,TSS_FPR2(r2); \
+	lfd	fr3,TSS_FPR3(r2); \
+	lfd	fr4,TSS_FPR4(r2); \
+	lfd	fr5,TSS_FPR5(r2); \
+	lfd	fr6,TSS_FPR6(r2); \
+	lfd	fr7,TSS_FPR7(r2); \
+	lfd	fr8,TSS_FPR8(r2); \
+	lfd	fr9,TSS_FPR9(r2); \
+	lfd	fr10,TSS_FPR10(r2); \
+	lfd	fr11,TSS_FPR11(r2); \
+	lfd	fr12,TSS_FPR12(r2); \
+	lfd	fr13,TSS_FPR13(r2); \
+	lfd	fr14,TSS_FPR14(r2); \
+	lfd	fr15,TSS_FPR15(r2); \
+	lfd	fr16,TSS_FPR16(r2); \
+	lfd	fr17,TSS_FPR17(r2); \
+	lfd	fr18,TSS_FPR18(r2); \
+	lfd	fr19,TSS_FPR19(r2); \
+	lfd	fr20,TSS_FPR20(r2); \
+	lfd	fr21,TSS_FPR21(r2); \
+	lfd	fr22,TSS_FPR22(r2); \
+	lfd	fr23,TSS_FPR23(r2); \
+	lfd	fr24,TSS_FPR24(r2); \
+	lfd	fr25,TSS_FPR25(r2); \
+	lfd	fr26,TSS_FPR26(r2); \
+	lfd	fr27,TSS_FPR27(r2); \
+	lfd	fr28,TSS_FPR28(r2); \
+	lfd	fr29,TSS_FPR29(r2); \
+	lfd	fr30,TSS_FPR30(r2); \
+	lfd	fr31,TSS_FPR31(r2); \
+00:
+
+/* save all registers */
+#define SAVE_ALL_REGS(mark) \
 	subi	r1,r1,INT_FRAME_SIZE;	/* Make room for frame */ \
 	stmw	r3,GPR3(r1);	/* Save R3..R31 */ \
 	stw	r3,ORIG_GPR3(r1); \
@@ -287,10 +235,6 @@
 	stw	r2,_CCR(r1); \
 	mfspr	r2,XER; \
 	stw	r2,_XER(r1); \
-	stfd	fr0,FPR0(r1); \
-	stfd	fr1,FPR1(r1); \
-	stfd	fr2,FPR2(r1); \
-	stfd	fr3,FPR3(r1); \
 	mffs	fr0; \
 	stfd	fr0,FPCSR(r1); \
 	lis	r2,_break_lwarx@h; \
@@ -304,9 +248,11 @@
 	li	r2,0; \
 	stw	r2,RESULT(r1)
 
+
+/* save registers clobbered by a page fault handler */
 #define SAVE_PAGE_FAULT_REGS(offset) \
 	mfspr	r2,DAR; \
-	stw	r2,_DAR(r1); \
+ 	stw	r2,_DAR(r1); \
 	mfspr	r2,DSISR; \
 	stw	r2,_DSISR(r1); \
 	mfspr	r2,PVR;			/* Check for 603/603e */ \
@@ -328,7 +274,7 @@
 	mfspr	r2,DCMP; \
 	stw	r2,_DCMP(r1); \
 24:	
-	
+
 #define SAVE_INT_REGS(mark) \
 	mtspr	SPR0,r1;	/* Save current stack pointer */ \
 	mtspr	SPR1,r2;	/* Scratch */ \
@@ -375,7 +321,7 @@
 	mtspr	SRR1,r2; \
 	SYNC(); \
 	rfi; \
-20:	SAVE_REGS(mark); \
+20:	SAVE_ALL_REGS(mark); \
 	CHECK_STACK()
 
 #define RETURN_FROM_INT(mark) \
@@ -412,7 +358,10 @@
 	bl	_EXTERN(flush_instruction_cache); */ \
 05:	lis	r3,current_set@ha;	/* need to save kernel stack pointer */ \
 	lwz	r3,current_set@l(r3); \
-	addi	r4,r1,INT_FRAME_SIZE;	/* size of frame */ \
+	/*addi	r4,r1,INT_FRAME_SIZE*/;	/* size of frame */ \
+	lwz	r4, KERNEL_STACK_PAGE(r3); \
+	addi	r4,r4,KERNEL_STACK_SIZE; /* reset stack pointer to top of stack page */ \
+	/* stack isn't 0'd so show_task():sched.c shows highwater of stack */ \
 	stw	r4,TSS+KSP(r3); \
 	lwz	r4,STATE(r3);	/* If state != 0, can't run */ \
 	cmpi	0,r4,0; \
@@ -442,20 +391,18 @@
 	mtlr	r2; \
 	lwz	r2,_XER(r1); \
 	mtspr	XER,r2; \
-	lwz	r2,_CCR(r1); \
-	mtcrf	0xFF,r2; \
 	lfd	fr0,FPCSR(r1); \
 	mtfsf	0xFF,fr0; \
-	lfd	fr0,FPR0(r1); \
-	lfd	fr1,FPR1(r1); \
-	lfd	fr2,FPR2(r1); \
-	lfd	fr3,FPR3(r1); \
+	RESTORE_FP_REGS(mark) ; \
+	lwz	r2,_CCR(r1); \
+	mtcrf	0xFF,r2; \
 	lwz	r0,GPR0(r1); \
 	lwz	r2,GPR2(r1); \
 	lwz	r1,GPR1(r1); \
 	SYNC(); \
 	rfi
 
+	
 _TEXT()
 /*
  * This code may be executed by a bootstrap process.  If so, the
@@ -578,35 +525,6 @@ _ORG(0x1000)
 /* Note: It is *unsafe* to use the TRACE TRAP macro here since there */
 /* could be a 'trace' in progress when the TLB miss occurs.          */
 /* TRACE_TRAP(0x1000) */
-#ifdef TLB_STATS
-	lis	r2,DataLoadTLB_trace_ptr@h
-	ori	r2,r2,DataLoadTLB_trace_ptr@l
-	lis	r3,0xF000
-	andc	r2,r2,r3
-	lwz	r1,0(r2)
-	andc	r1,r1,r3
-	li	r0,0x1000
-	stw	r0,0(r1)
-	mftbu	r0
-	stw	r0,4(r1)
-	mftb	r0
-	stw	r0,8(r1)
-	mfspr	r0,IMISS
-	mfspr	r3,SRR1
-	extrwi	r3,r3,1,14
-	or	r0,r0,r3
-	stw	r0,12(r1)
-	addi	r1,r1,16
-	mfcr	r0
-	cmpl	0,r1,r2
-	blt	00f
-	lis	r1,DataLoadTLB_trace_buf@h
-	ori	r1,r1,DataLoadTLB_trace_buf@l
-	lis	r3,0xF000
-	andc	r1,r1,r3
-00:	mtcrf	0xFF,r0
-	stw	r1,0(r2)
-#endif	
 	b	InstructionTLBMiss
 
 /*
@@ -614,41 +532,6 @@ _ORG(0x1000)
  */
 _ORG(0x1100)
 /* TRACE_TRAP(0x1100) */
-#ifdef TLB_STATS
-	lis	r2,DataLoadTLB_trace_ptr@h
-	ori	r2,r2,DataLoadTLB_trace_ptr@l
-	lis	r3,0xF000
-	andc	r2,r2,r3
-	lwz	r1,0(r2)
-	andc	r1,r1,r3
-	li	r0,0x1100
-	stw	r0,0(r1)
-	mftbu	r0
-	stw	r0,4(r1)
-	mftb	r0
-	stw	r0,8(r1)
-	mfspr	r0,DMISS
-	mfspr	r3,SRR1
-	extrwi	r3,r3,1,14
-	or	r0,r0,r3
-	stw	r0,12(r1)
-	addi	r1,r1,16
-	mfcr	r0
-	cmpl	0,r1,r2
-	blt	00f
-	lis	r1,DataLoadTLB_trace_buf@h
-	ori	r1,r1,DataLoadTLB_trace_buf@l
-	lis	r3,0xF000
-	andc	r1,r1,r3
-00:	mtcrf	0xFF,r0
-	stw	r1,0(r2)
-	.data
-DataLoadTLB_trace_buf:
-	.space	64*1024*4
-DataLoadTLB_trace_ptr:
-	.long	DataLoadTLB_trace_buf
-	.text
-#endif	
 	b	DataLoadTLBMiss
 
 /*
@@ -656,35 +539,6 @@ DataLoadTLB_trace_ptr:
  */
 _ORG(0x1200)
 /* TRACE_TRAP(0x1200) */
-#ifdef TLB_STATS
-	lis	r2,DataLoadTLB_trace_ptr@h
-	ori	r2,r2,DataLoadTLB_trace_ptr@l
-	lis	r3,0xF000
-	andc	r2,r2,r3
-	lwz	r1,0(r2)
-	andc	r1,r1,r3
-	li	r0,0x1200
-	stw	r0,0(r1)
-	mftbu	r0
-	stw	r0,4(r1)
-	mftb	r0
-	stw	r0,8(r1)
-	mfspr	r0,DMISS
-	mfspr	r3,SRR1
-	extrwi	r3,r3,1,14
-	or	r0,r0,r3
-	stw	r0,12(r1)
-	addi	r1,r1,16
-	mfcr	r0
-	cmpl	0,r1,r2
-	blt	00f
-	lis	r1,DataLoadTLB_trace_buf@h
-	ori	r1,r1,DataLoadTLB_trace_buf@l
-	lis	r3,0xF000
-	andc	r1,r1,r3
-00:	mtcrf	0xFF,r0
-	stw	r1,0(r2)
-#endif	
 	b	DataStoreTLBMiss
 
 _ORG(0x1300)
@@ -718,16 +572,40 @@ _ORG(0x4000)
 #endif
 
 
+/* changed to use r3 as residual pointer (as firmware does), that's all -- Cort */
 /*
  * Hardware reset [actually from bootstrap]
  * Initialize memory management & call secondary init
  * Registers initialized by bootstrap:
  *   R11: Start of command line string
  *   R12: End of command line string
+ *   R28: Residual data
+ *   R29: Total Memory Size
  *   R30: 'BeBx' if this is a BeBox
  */	
 Reset:
 	lis	r7,0xF000		/* To mask upper 4 bits */
+/* set pointer to residual data */
+	lis	r1,resptr@h
+	ori	r1,r1,resptr@l
+	andc	r1,r1,r7
+/* changed to use r3 as residual pointer (as firmware does) -- Cort */
+/* this is only a ptr, the actual data is copied in mmu_init */
+	stw	r3,0(r1)
+	
+/* Copy argument string */
+	li	r0,0		/* Null terminate string */
+	stb	r0,0(r12)
+	lis	r1,cmd_line@h
+	ori	r1,r1,cmd_line@l
+	andc	r1,r1,r7	/* No MMU yet - need unmapped address */
+	subi	r1,r1,1
+	subi	r11,r11,1
+00:	lbzu	r0,1(r11)
+	cmpi	0,r0,0
+	stbu	r0,1(r1)
+	bne	00b
+
 #define IS_BE_BOX	0x42654278	/* 'BeBx' */
 	lis	r1,isBeBox@h
 	ori	r1,r1,isBeBox@l
@@ -751,21 +629,19 @@ Reset:
 	andc	r5,r5,r7		/* Tell CPU #1 where to go */
 00:	stw	r2,0(r1)
 	stw	r30,4(r1)
-/* Copy argument string */
-	li	r0,0		/* Null terminate string */
-	stb	r0,0(r12)
-	lis	r1,cmd_line@h
-	ori	r1,r1,cmd_line@l
-	andc	r1,r1,r7	/* No MMU yet - need unmapped address */
-	subi	r1,r1,1
-	subi	r11,r11,1
-00:	lbzu	r0,1(r11)
-	cmpi	0,r0,0
-	stbu	r0,1(r1)
-	bne	00b	
+	
+
+#if 0	
 	lis	r1,sys_stack@h
 	ori	r1,r1,sys_stack@l
+#else
+	lis	r1,init_kernel_stack@h
+	ori	r1,r1,init_kernel_stack@l
+#endif
+	addi	r1,r1,0x1000	/* top of stack */
+#if 0	
 	li	r2,0x0FFF	/* Mask stack address down to page boundary */
+#endif
 	andc	r1,r1,r2
 	subi	r1,r1,INT_FRAME_SIZE	/* Padding for first frame */
 	li	r2,0		/* TOC pointer for nanokernel */
@@ -782,6 +658,13 @@ Reset:
 00:	stwu	r0,4(r3)
 	cmp	0,r3,r4
 	blt	00b
+#if 0	
+/* Save total memory size (passed from bootstrap) */
+	lis	r3,_TotalMemory@h
+	ori	r3,r3,_TotalMemory@l
+	andc	r3,r3,r7	/* make unmapped address */
+	stw	r29,0(r3)
+#endif	
 /* Initialize BAT registers */
 	lis	r3,BAT0@h
 	ori	r3,r3,BAT0@l
@@ -816,7 +699,7 @@ Reset:
 	lwz	r0,4(r3)
 	mtspr	IBAT2L,r0
 	mtspr	DBAT2L,r0
-#if 0	
+#if 1
 	lis	r3,BAT3@h
 	ori	r3,r3,BAT3@l
 	andc	r3,r3,r7	/* make unmapped address */
@@ -837,7 +720,7 @@ Reset:
 DO_RFI_TRACE_UNMAPPED(0xDEAD0000)	
 	SYNC
 	rfi				/* enables MMU */
-10:	bl	_EXTERN(MMU_init)	/* initialize MMU environment */
+10:    	bl	_EXTERN(MMU_init)	/* initialize MMU environment */
 DO_RFI_TRACE_MAPPED(0xDEAD0100)	
 /* Withdraw BAT2->RAM mapping */
 	lis	r7,0xF000		/* To mask upper 4 bits */
@@ -1017,14 +900,17 @@ MachineCheck:
  * Data Access exception
  */
 DataAccess:
-/*	TRACE_TRAP(0x0300) */
 	SAVE_INT_REGS(0x0300)
-	SAVE_PAGE_FAULT_REGS(0x0300)
-	BUMP(__Data_Page_Faults)
-	mr	r3,r1		/* Set pointer to saved regs */
+#if 1
+	mfspr	r3, DAR
+	mfspr	r4, DSISR
+	li	r5, 0		/* not a text fault */
+	mr	r6, r1
+	bl	_EXTERN(new_page_fault)
+#else
+	SAVE_PAGE_FAULT_REGS(0x0D00)	
+	mr	r3,r1
 	bl	_EXTERN(DataAccessException)
-#if 0
-	bl	_EXTERN(flush_instruction_cache)
 #endif	
 	RETURN_FROM_INT(0x0300)
 
@@ -1032,14 +918,17 @@ DataAccess:
  * Instruction Access Exception
  */
 InstructionAccess:
-/*	TRACE_TRAP(0x0400) */
 	SAVE_INT_REGS(0x0400)
-	SAVE_PAGE_FAULT_REGS(0x0400)
-	BUMP(__Instruction_Page_Faults)
-	mr	r3,r1		/* Set pointer to saved regs */
+#if 1
+	mfspr	r3, SPR2 /* srr0 was saved here */
+	mfspr	r4, SPR3 /* srr1 was saved here */
+	li	r5, 1	 /* a text fault */
+	mr	r6, r1
+	bl	_EXTERN(new_page_fault)
+#else
+	SAVE_PAGE_FAULT_REGS(0x0D00)	
+	mr	r3,r1
 	bl	_EXTERN(InstructionAccessException)
-#if 0
-	bl	_EXTERN(flush_instruction_cache)
 #endif	
 	RETURN_FROM_INT(0x0400)
 
@@ -1090,17 +979,18 @@ SingleStep:
  * Floating point [not available, etc]
  */
 FloatingPointCheck:	
-	TRACE_TRAP(0x0800)
 	SAVE_INT_REGS(0x0800)
 	mr	r3,r1		/* Set pointer to saved regs */
 	bl	_EXTERN(FloatingPointCheckException)
-	RETURN_FROM_INT(0x0200)
+	cmpi	0,r3,MSR_FP    /* check if fp was turned on by handler */
+	bne	00f
+	RETURN_FROM_INT(0x0f0f) /* 0xf0f tells to restore fp regs */
+00:	RETURN_FROM_INT(0x0200)
 
 /*
  * System Call exception
  */
 SystemCall:
-/*	TRACE_TRAP(0x0C00) */
 	SAVE_INT_REGS(0x0C00)
 	lwz	r2,_CCR(r1)	/* Clear SO bit in CR */
 	lis	r9,0x1000
@@ -1118,13 +1008,21 @@ SystemCall:
 	lwz	r2,TASK_FLAGS(r2)
 	andi.	r2,r2,PF_TRACESYS
 	bne	50f
+	
 	lis	r2,sys_call_table@h
 	ori	r2,r2,sys_call_table@l
 	slwi	r0,r0,2
 	lwzx	r2,r2,r0	/* Fetch system call handler [ptr] */
+#if 1
+	cmpi	0,r2,0		/* make sure syscall handler not 0 */
+	beq	99f
+	cmpi	0,r0,NR_syscalls<<2 /* make sure syscallnum in bounds */
+	bgt	99f
+#endif	
 	mtlr	r2
 	mr	r9,r1
 	blrl			/* Call handler */
+	
 20:	stw	r3,RESULT(r1)	/* Save result */	
 	cmpi	0,r3,0
 	bge	30f
@@ -1136,10 +1034,6 @@ SystemCall:
 	oris	r2,r2,0x1000
 	stw	r2,_CCR(r1)
 30:	stw	r3,GPR3(r1)	/* Update return value */
-#if 0
-	mr	r3,r1
-	bl	_EXTERN(trace_syscall)
-#endif
 	b	99f
 /* Traced system call support */
 50:	bl	_EXTERN(syscall_trace)
@@ -1171,14 +1065,6 @@ SystemCall:
 60:	stw	r3,GPR3(r1)	/* Update return value */
 	bl	_EXTERN(syscall_trace)
 99:
-#if 0 /* This isn't needed here - already in RETURN_FROM_INT */
-	lis	r2,kernel_pages_are_copyback@ha
-	lwz	r2,kernel_pages_are_copyback@l(r2)
-	cmpi	0,r2,0
-	beq	00f
-	bl	_EXTERN(flush_instruction_cache)	/* Ensure cache coherency */
-00:
-#endif
 	RETURN_FROM_INT(0x0C00)
 
 /*
@@ -1186,36 +1072,6 @@ SystemCall:
  */
 InstructionTLBMiss:
 	BUMP_UNMAPPED(__Instruction_TLB_Misses)
-#ifdef DO_TLB_TRACE
-	lis	r1,_TLB_ptr@h
-	ori	r1,r1,_TLB_ptr@l
-	lis	r2,0xF000
-	andc	r1,r1,r2
-	lwz	r1,0(r1)
-	andc	r1,r1,r2
-	subi	r1,r1,4
-	lis	r2,0xBEBE
-	ori	r2,r2,0x0100
-	stwu	r2,4(r1)
-	mfspr	r2,SRR0
-	stwu	r2,4(r1)
-	mfspr	r2,SRR1
-	stwu	r2,4(r1)
-	mfspr	r2,HASH1
-	stwu	r2,4(r1)
-	mfspr	r2,HASH2
-	stwu	r2,4(r1)
-	mfspr	r2,ICMP
-	stwu	r2,4(r1)
-	mfspr	r2,IMISS
-	stwu	r2,4(r1)
-	addi	r1,r1,4+(1*4)
-	lis	r3,_TLB_ptr@h
-	ori	r3,r3,_TLB_ptr@l
-	lis	r2,0xF000
-	andc	r3,r3,r2
-	stw	r1,0(r3)
-#endif	
 	mfctr	r0		/* Need to save this - CTR can't be touched! */
 	mfspr	r2,HASH1	/* Get PTE pointer */
 	mfspr	r3,ICMP		/* Partial item compare value */
@@ -1256,37 +1112,6 @@ InstructionTLBMiss:
  * Handle TLB miss for DATA Load operation
  */	
 DataLoadTLBMiss:
-	BUMP_UNMAPPED(__DataLoad_TLB_Misses)
-#ifdef DO_TLB_TRACE
-	lis	r1,_TLB_ptr@h
-	ori	r1,r1,_TLB_ptr@l
-	lis	r2,0xF000
-	andc	r1,r1,r2
-	lwz	r1,0(r1)
-	andc	r1,r1,r2
-	subi	r1,r1,4
-	lis	r2,0xBEBE
-	ori	r2,r2,0x0200
-	stwu	r2,4(r1)
-	mfspr	r2,SRR0
-	stwu	r2,4(r1)
-	mfspr	r2,SRR1
-	stwu	r2,4(r1)
-	mfspr	r2,HASH1
-	stwu	r2,4(r1)
-	mfspr	r2,HASH2
-	stwu	r2,4(r1)
-	mfspr	r2,DCMP
-	stwu	r2,4(r1)
-	mfspr	r2,DMISS
-	stwu	r2,4(r1)
-	addi	r1,r1,4+(1*4)
-	lis	r3,_TLB_ptr@h
-	ori	r3,r3,_TLB_ptr@l
-	lis	r2,0xF000
-	andc	r3,r3,r2
-	stw	r1,0(r3)
-#endif	
 	mfctr	r0		/* Need to save this - CTR can't be touched! */
 	mfspr	r2,HASH1	/* Get PTE pointer */
 	mfspr	r3,DCMP		/* Partial item compare value */
@@ -1325,36 +1150,6 @@ DataLoadTLBMiss:
  */
 DataStoreTLBMiss:
 	BUMP_UNMAPPED(__DataStore_TLB_Misses)
-#ifdef DO_TLB_TRACE
-	lis	r1,_TLB_ptr@h
-	ori	r1,r1,_TLB_ptr@l
-	lis	r2,0xF000
-	andc	r1,r1,r2
-	lwz	r1,0(r1)
-	andc	r1,r1,r2
-	subi	r1,r1,4
-	lis	r2,0xBEBE
-	ori	r2,r2,0x0300
-	stwu	r2,4(r1)
-	mfspr	r2,SRR0
-	stwu	r2,4(r1)
-	mfspr	r2,SRR1
-	stwu	r2,4(r1)
-	mfspr	r2,HASH1
-	stwu	r2,4(r1)
-	mfspr	r2,HASH2
-	stwu	r2,4(r1)
-	mfspr	r2,DCMP
-	stwu	r2,4(r1)
-	mfspr	r2,DMISS
-	stwu	r2,4(r1)
-	addi	r1,r1,4+(1*4)
-	lis	r3,_TLB_ptr@h
-	ori	r3,r3,_TLB_ptr@l
-	lis	r2,0xF000
-	andc	r3,r3,r2
-	stw	r1,0(r3)
-#endif	
 	mfctr	r0		/* Need to save this - CTR can't be touched! */
 	mfspr	r2,HASH1	/* Get PTE pointer */
 	mfspr	r3,DCMP		/* Partial item compare value */
@@ -1531,7 +1326,7 @@ _GLOBAL(flush_page)
 	addi	r3,r3,CACHE_LINE_SIZE
 	bdnz	00b
 	blr
-	
+
 /*
  * This routine switches between two different tasks.  The process
  * state of one is saved on its kernel stack.  Then the state
@@ -1543,24 +1338,25 @@ _GLOBAL(flush_page)
  * of this code; either by coming in via the entry (_switch)
  * or via "fork" which must set up an environment equivalent
  * to the "_switch" path.  If you change this (or in particular, the
- * SAVE_REGS macro), you'll have to change the fork code also.
+ * SAVE_ALL_REGS macro), you'll have to change the fork code also.
  *
  * The code which creates the new task context is in 'copy_thread'
  * in arch/ppc/kernel/process.c
  */	
 _GLOBAL(_switch)
-	mtspr	SPR0,r1		/* SAVE_REGS prologue */
+	mtspr	SPR0,r1		/* SAVE_ALL_REGS prologue */
 	mtspr	SPR1,r2
 	mflr	r2		/* Return to switch caller */
 	mtspr	SPR2,r2
 	mfmsr	r2
 	mtspr	SPR3,r2
-	SAVE_REGS(0x0FF0)
+	SAVE_ALL_REGS(0x0FF0)
+	SAVE_FP_REGS()
+	CHECK_STACK()
 	SYNC()
 	stw	r1,KSP(r3)	/* Set old stack pointer */
 	BUMP(__Context_Switches)
 	lwz	r1,KSP(r4)	/* Load new stack pointer */
-	CHECK_STACK()
 	lwz	r0,MMU_SEG0(r4)
 	mtsr	SR0,r0
 	lwz	r0,MMU_SEG1(r4)
@@ -1577,6 +1373,8 @@ _GLOBAL(_switch)
 	mtsr	SR6,r0
 	lwz	r0,MMU_SEG7(r4)
 	mtsr	SR7,r0
+#if 0
+	/* segs 8-15 are shared by everyone -- don't need to be changed */
 	lwz	r0,MMU_SEG8(r4)
 	mtsr	SR8,r0
 	lwz	r0,MMU_SEG9(r4)
@@ -1593,34 +1391,22 @@ _GLOBAL(_switch)
 	mtsr	SR14,r0
 	lwz	r0,MMU_SEG15(r4)
 	mtsr	SR15,r0
+#endif
+	/* no need to invalidate tlb since each process has a distinct
+	   set of vsid's.	 -- Cort */
+#if 0	  
 	tlbia				/* Invalidate entire TLB */
 	BUMP(__TLBIAs)
-	bl	_EXTERN(flush_instruction_cache)
-#ifdef TLB_STATS
-/* TEMP */
-	lis	r2,DataLoadTLB_trace_ptr@h
-	ori	r2,r2,DataLoadTLB_trace_ptr@l
-	lis	r3,0x9000
-	lwz	r4,0(r2)
-	or	r4,r4,r3
-	li	r0,0
-	stw	r0,0(r4)
-	stw	r0,4(r4)
-	stw	r0,8(r4)
-	stw	r0,12(r4)
-	addi	r4,r4,4
-	cmpl	0,r4,r2
-	blt	00f
-	lis	r4,DataLoadTLB_trace_buf@h
-	ori	r4,r4,DataLoadTLB_trace_buf@l
-00:	stw	r4,0(r2)
-/* TEMP */	
-#endif
-#if 0
-	lwz	r2,_NIP(r1)	/* Force TLB/MMU hit */
-	lwz	r2,0(r2)
 #endif	
-	RETURN_FROM_INT(0xF000)
+	/* p5.2 603 users manual - with addr transl. enabled, 
+	   the memory access is performed under the control of 
+	   the page table entry.  I interpret this to mean that
+	   it is tagged with the vsid -- so no need to flush here
+	   since each process has a distinct set of vsid's.
+	   Of course, my intepretation may be wrong.
+	              -- Cort */
+	/*bl	_EXTERN(flush_instruction_cache)*/
+	RETURN_FROM_INT(0x0f0f)
 	
 
 /*
@@ -1629,50 +1415,16 @@ _GLOBAL(_switch)
 _GLOBAL(__main)
 	blr
 
-#ifdef DO_TRAP_TRACE
-check_trace:
-	sync				/* Force all writes out */
-	lwz	r2,-8(r1)
-	andi.	r2,r2,MSR_PR
-	bne	99f
-	lwz	r2,-32(r1)
-	lwz	r3,-16(r1)
-	cmp	0,r2,r3
-	bne	99f
-	andi.	r2,r2,0x7FFF
-	cmpi	0,r2,0x0C00
-	bge	99f
-	lwz	r2,-32+4(r1)
-	lwz	r3,-16+4(r1)
-	cmp	0,r2,r3
-	bne	99f
-	lwz	r2,-32+8(r1)
-	lwz	r3,-16+8(r1)
-	cmp	0,r2,r3
-	bne	99f
-	lwz	r2,-32(r1)
-	lwz	r3,-16(r1)
-	cmp	0,r2,r3
-	bne	99f
-	andi.	r2,r2,0x7FFF
-	cmpi	0,r2,0x0600
-	beq	00f
-	lwz	r2,-32+12(r1)
-	lwz	r3,-16+12(r1)
-	cmp	0,r2,r3
-	bne	99f
-00:	li	r2,0x7653
-	stw	r2,0(r1)
-	b	00b
-99:	blr
-#endif	
-
 	.data
 	.globl	sdata
 sdata:
 	.space	2*4096
+
+#if 0
+_GLOBAL(sys_stack)
 sys_stack:
-	.space	2*4096
+	.space	4096
+#endif
 CPU1_stack:	
 
 	.globl	empty_zero_page
@@ -1689,32 +1441,40 @@ swapper_pg_dir:
  */	
 	.globl	cmd_line
 cmd_line:
-	.space	512	
-
+	.space	512
+	
 #ifdef STATS	
 /*
  * Miscellaneous statistics - gathered just for performance info
  */
-
  	.globl	_INTR_stats
 _INTR_stats:
+	.globl __Instruction_TLB_Misses
 __Instruction_TLB_Misses:
 	.long	0,0	/* Instruction TLB misses */
+	.globl __DataLoad_TLB_Misses
 __DataLoad_TLB_Misses:
 	.long	0,0	/* Data [load] TLB misses */
+	.globl __DataStore_TLB_Misses
 __DataStore_TLB_Misses:
 	.long	0,0	/* Data [store] TLB misses */
+	.globl __Instruction_Page_Faults
 __Instruction_Page_Faults:	
 	.long	0,0	/* Instruction page faults */
+	.globl __Data_Page_Faults
 __Data_Page_Faults:	
 	.long	0,0	/* Data page faults */
+	.globl __Cache_Flushes
 __Cache_Flushes:	
 	.long	0,0	/* Explicit cache flushes */
+	.globl __Context_Switches
 __Context_Switches:	
 	.long	0,0	/* Context switches */
+	.globl __Hardware_Interrupts
 __Hardware_Interrupts:	
 	.long	0,0	/* I/O interrupts (disk, timer, etc) */
 	.globl	__TLBIAs
+	.globl __TLBIAs
 __TLBIAs:
 	.long	0,0	/* TLB cache forceably flushed */
 	.globl	__TLBIEs
@@ -1722,33 +1482,14 @@ __TLBIEs:
 	.long	0,0	/* Specific TLB entry flushed */	
 #endif
 
+	.globl	_TotalMemory
+_TotalMemory:
+	.long	0,0	
+	
 /*
  * This location is used to break any outstanding "lock"s when
  * changing contexts.
  */
 _break_lwarx:	.long	0
-
-/*
- * Various trace buffers
- */	
-#ifdef DO_TRAP_TRACE
-	.data
-_TRAP_TRACE: .space	32*1024
-_TRAP_ptr:   .long	_TRAP_TRACE
-	.text
-#endif
-
-#ifdef DO_TLB_TRACE
-	.data
-_TLB_TRACE: .space	128*1024
-_TLB_ptr:   .long	_TLB_TRACE
-	.text
-#endif
-
-#ifdef DO_RFI_TRACE
-	.data
-_RFI_DATA: .space	128*1024
-_RFI_ptr:  .long	_RFI_DATA
-	.text	
-#endif
+	
 

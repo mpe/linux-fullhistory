@@ -1,4 +1,4 @@
-/* $Id: loadmmu.c,v 1.36 1996/10/27 08:36:46 davem Exp $
+/* $Id: loadmmu.c,v 1.42 1996/12/03 08:44:47 jj Exp $
  * loadmmu.c:  This code loads up all the mm function pointers once the
  *             machine type has been determined.  It also sets the static
  *             mmu values such as PAGE_NONE, etc.
@@ -8,12 +8,15 @@
 
 #include <linux/kernel.h>
 #include <linux/mm.h>
+#include <linux/init.h>
 
 #include <asm/system.h>
 #include <asm/page.h>
 #include <asm/pgtable.h>
+#include <asm/a.out.h>
 
 unsigned long page_offset = 0xf0000000;
+unsigned long stack_top = 0xf0000000 - PAGE_SIZE;
 
 struct ctx_list *ctx_list_pool;
 struct ctx_list ctx_free;
@@ -58,6 +61,7 @@ void (*local_flush_tlb_range)(struct mm_struct *, unsigned long start,
 			      unsigned long end);
 void (*local_flush_tlb_page)(struct vm_area_struct *, unsigned long address);
 void (*local_flush_page_to_ram)(unsigned long address);
+void (*local_flush_sig_insns)(struct mm_struct *mm, unsigned long insn_addr);
 #endif
 
 void (*flush_cache_all)(void);
@@ -73,6 +77,8 @@ void (*flush_tlb_range)(struct mm_struct *, unsigned long start,
 void (*flush_tlb_page)(struct vm_area_struct *, unsigned long address);
 
 void (*flush_page_to_ram)(unsigned long page);
+
+void (*flush_sig_insns)(struct mm_struct *mm, unsigned long insn_addr);
 
 void (*set_pte)(pte_t *pteptr, pte_t pteval);
 
@@ -128,6 +134,7 @@ pmd_t * (*pmd_alloc)(pgd_t *, unsigned long);
 void (*pgd_free)(pgd_t *);
 
 pgd_t * (*pgd_alloc)(void);
+void (*pgd_flush)(pgd_t *);
 
 int (*pte_write)(pte_t);
 int (*pte_dirty)(pte_t);
@@ -145,8 +152,7 @@ char *(*mmu_info)(void);
 extern void ld_mmu_sun4c(void);
 extern void ld_mmu_srmmu(void);
 
-void
-load_mmu(void)
+__initfunc(void load_mmu(void))
 {
 	switch(sparc_cpu_model) {
 	case sun4c:

@@ -37,4 +37,7 @@
 #define SO_PRIORITY	12
 #define SO_BSDCOMPAT	14
 
+#define SO_PASSCRED	17
+#define SO_PEERCRED	18
+
 #endif /* _ASM_SOCKET_H */

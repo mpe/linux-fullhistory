@@ -64,21 +64,17 @@ void ax25_clear_queues(ax25_cb *ax25)
 {
 	struct sk_buff *skb;
 
-	while ((skb = skb_dequeue(&ax25->write_queue)) != NULL) {
+	while ((skb = skb_dequeue(&ax25->write_queue)) != NULL)
 		kfree_skb(skb, FREE_WRITE);
-	}
 
-	while ((skb = skb_dequeue(&ax25->ack_queue)) != NULL) {
+	while ((skb = skb_dequeue(&ax25->ack_queue)) != NULL)
 		kfree_skb(skb, FREE_WRITE);
-	}
 
-	while ((skb = skb_dequeue(&ax25->reseq_queue)) != NULL) {
+	while ((skb = skb_dequeue(&ax25->reseq_queue)) != NULL)
 		kfree_skb(skb, FREE_READ);
-	}
 
-	while ((skb = skb_dequeue(&ax25->frag_queue)) != NULL) {
+	while ((skb = skb_dequeue(&ax25->frag_queue)) != NULL)
 		kfree_skb(skb, FREE_READ);
-	}
 }
 
 /*
@@ -271,8 +267,8 @@ void ax25_return_dm(struct device *dev, ax25_address *src, ax25_address *dest, a
 	dptr  = skb_push(skb, size_ax25_addr(digi));
 	dptr += build_ax25_addr(dptr, dest, src, &retdigi, C_RESPONSE, MODULUS);
 
-	skb->arp  = 1;
-	skb->dev = dev;
+	skb->arp      = 1;
+	skb->dev      = dev;
 	skb->priority = SOPRI_NORMAL;
 
 	ax25_queue_xmit(skb);
@@ -534,11 +530,12 @@ void ax25_kiss_cmd(ax25_cb *ax25, unsigned char cmd, unsigned char param)
 
 	p = skb_put(skb, 2);
 
-	*p++=cmd;
-	*p  =param;
+	*p++ = cmd;
+	*p++ = param;
 
-	skb->dev=ax25->device;
-	skb->priority=SOPRI_NORMAL;
+	skb->dev      = ax25->device;
+	skb->priority = SOPRI_NORMAL;
+
 	dev_queue_xmit(skb);
 }
 

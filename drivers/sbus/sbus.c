@@ -5,6 +5,8 @@
 
 #include <linux/kernel.h>
 #include <linux/malloc.h>
+#include <linux/config.h>
+#include <linux/init.h>
 
 #include <asm/system.h>
 #include <asm/sbus.h>
@@ -19,6 +21,8 @@ struct linux_sbus *SBus_chain;
 
 static char lbuf[128];
 
+extern void prom_sbus_ranges_init (int, struct linux_sbus *);
+
 /* Perhaps when I figure out more about the iommu we'll put a
  * device registration routine here that probe_sbus() calls to
  * setup the iommu for each Sbus.
@@ -30,8 +34,8 @@ static char lbuf[128];
  */
 
 /* #define DEBUG_FILL */
-void
-fill_sbus_device(int nd, struct linux_sbus_device *sbus_dev)
+__initfunc(static void
+fill_sbus_device(int nd, struct linux_sbus_device *sbus_dev))
 {
 	int grrr, len;
 	unsigned long dev_base_addr, base;
@@ -46,6 +50,8 @@ fill_sbus_device(int nd, struct linux_sbus_device *sbus_dev)
 
 	len = prom_getproperty(nd, "reg", (void *) sbus_dev->reg_addrs,
 			       sizeof(sbus_dev->reg_addrs));
+	if(len == -1)
+		goto no_regs;
 	if(len%sizeof(struct linux_prom_registers)) {
 		prom_printf("WHOOPS:  proplen for %s was %d, need multiple of %d\n",
 		       sbus_dev->prom_name, len,
@@ -79,6 +85,7 @@ fill_sbus_device(int nd, struct linux_sbus_device *sbus_dev)
 		panic("sbus device register overflow");
 	}
 
+no_regs:
 	len = prom_getproperty(nd, "address", (void *) sbus_dev->sbus_vaddrs,
 			       sizeof(sbus_dev->sbus_vaddrs));
 	if(len == -1) len=0;
@@ -130,12 +137,53 @@ fill_sbus_device(int nd, struct linux_sbus_device *sbus_dev)
  * devices.
  */
 
-extern void sun_console_init(void);
+extern unsigned long sun_console_init(unsigned long);
 extern unsigned long iommu_init(int iommu_node, unsigned long memstart,
 				unsigned long memend, struct linux_sbus *sbus);
+extern void iommu_sun4d_init(int sbi_node, struct linux_sbus *sbus);
+#ifdef CONFIG_SUN_OPENPROMIO
+extern int openprom_init(void);
+#endif
+#ifdef CONFIG_SUN_MOSTEK_RTC
+extern int rtc_init(void);
+#endif
 
-unsigned long
-sbus_init(unsigned long memory_start, unsigned long memory_end)
+__initfunc(static unsigned long 
+sbus_do_child_siblings(unsigned long memory_start, int start_node,
+		       struct linux_sbus_device *child,
+		       struct linux_sbus *sbus))
+{
+	struct linux_sbus_device *this_dev = child;
+	int this_node = start_node;
+
+	/* Child already filled in, just need to traverse siblings. */
+	while((this_node = prom_getsibling(this_node)) != 0) {
+		this_dev->next = (struct linux_sbus_device *) memory_start;
+		memory_start += sizeof(struct linux_sbus_device);
+		this_dev = this_dev->next;
+		this_dev->next = 0;
+
+		fill_sbus_device(this_node, this_dev);
+		this_dev->my_bus = sbus;
+
+		if(prom_getchild(this_node)) {
+			this_dev->child = (struct linux_sbus_device *) memory_start;
+			memory_start += sizeof(struct linux_sbus_device);
+			fill_sbus_device(prom_getchild(this_node), this_dev->child);
+			this_dev->child->my_bus = sbus;
+			memory_start = sbus_do_child_siblings(memory_start,
+							      prom_getchild(this_node),
+							      this_dev->child,
+							      sbus);
+		} else {
+			this_dev->child = 0;
+		}
+	}
+	return memory_start;
+}
+
+__initfunc(unsigned long
+sbus_init(unsigned long memory_start, unsigned long memory_end))
 {
 	register int nd, this_sbus, sbus_devs, topnd, iommund;
 	unsigned int sbus_clock;
@@ -149,7 +197,13 @@ sbus_init(unsigned long memory_start, unsigned long memory_end)
 
 	/* Finding the first sbus is a special case... */
 	iommund = 0;
-	if((nd = prom_searchsiblings(topnd, "sbus")) == 0) {
+	if (sparc_cpu_model == sun4d) {
+		if((iommund = prom_searchsiblings(topnd, "io-unit")) == 0 ||
+		   (nd = prom_getchild(iommund)) == 0 ||
+		   (nd = prom_searchsiblings(nd, "sbi")) == 0) {
+		   	panic("sbi not found");
+		}
+	} else if((nd = prom_searchsiblings(topnd, "sbus")) == 0) {
 		if((iommund = prom_searchsiblings(topnd, "iommu")) == 0 ||
 		   (nd = prom_getchild(iommund)) == 0 ||
 		   (nd = prom_searchsiblings(nd, "sbus")) == 0) {
@@ -167,8 +221,12 @@ sbus_init(unsigned long memory_start, unsigned long memory_end)
 	this_sbus=nd;
 
 	/* Have IOMMU will travel. XXX grrr - this should be per sbus... */
-	if(iommund)
-		memory_start = iommu_init(iommund, memory_start, memory_end, sbus);
+	if(iommund) {
+		if (sparc_cpu_model == sun4d)
+			iommu_sun4d_init(this_sbus, sbus);
+		else
+			memory_start = iommu_init(iommund, memory_start, memory_end, sbus);
+	}
 
 	/* Loop until we find no more SBUS's */
 	while(this_sbus) {
@@ -183,6 +241,8 @@ sbus_init(unsigned long memory_start, unsigned long memory_end)
 		sbus->prom_node = this_sbus;
 		strcpy(sbus->prom_name, lbuf);
 		sbus->clock_freq = sbus_clock;
+		
+		prom_sbus_ranges_init (iommund, sbus);
 
 		sbus_devs = prom_getchild(this_sbus);
 
@@ -196,14 +256,17 @@ sbus_init(unsigned long memory_start, unsigned long memory_end)
 		this_dev->my_bus = sbus;
 
 		/* Should we traverse for children? */
-		if(strcmp(this_dev->prom_name, "espdma")==0 ||
-		   strcmp(this_dev->prom_name, "ledma")==0) {
+		if(prom_getchild(sbus_devs)) {
 			/* Allocate device node */
 			this_dev->child = (struct linux_sbus_device *) memory_start;
 			memory_start += sizeof(struct linux_sbus_device);
 			/* Fill it */
 			fill_sbus_device(prom_getchild(sbus_devs), this_dev->child);
 			this_dev->child->my_bus = sbus;
+			memory_start = sbus_do_child_siblings(memory_start,
+							      prom_getchild(sbus_devs),
+							      this_dev->child,
+							      sbus);
 		} else {
 			this_dev->child = 0;
 		}
@@ -220,8 +283,7 @@ sbus_init(unsigned long memory_start, unsigned long memory_end)
 			this_dev->my_bus = sbus;
 
 			/* Is there a child node hanging off of us? */
-			if(strcmp(this_dev->prom_name, "espdma")==0 ||
-			   strcmp(this_dev->prom_name, "ledma")==0) {
+			if(prom_getchild(sbus_devs)) {
 				/* Get new device struct */
 				this_dev->child =
 					(struct linux_sbus_device *) memory_start;
@@ -231,6 +293,11 @@ sbus_init(unsigned long memory_start, unsigned long memory_end)
 				fill_sbus_device(prom_getchild(sbus_devs),
 						 this_dev->child);
 				this_dev->child->my_bus = sbus;
+				memory_start = sbus_do_child_siblings(
+						     memory_start,
+						     prom_getchild(sbus_devs),
+						     this_dev->child,
+						     sbus);
 			} else {
 				this_dev->child = 0;
 			}
@@ -239,9 +306,17 @@ sbus_init(unsigned long memory_start, unsigned long memory_end)
 		memory_start = dvma_init(sbus, memory_start);
 
 		num_sbus++;
-		this_sbus = prom_getsibling(this_sbus);
-		if(!this_sbus) break;
-		this_sbus = prom_searchsiblings(this_sbus, "sbus");
+		if (sparc_cpu_model == sun4d) {
+			iommund = prom_getsibling(iommund);
+			if(!iommund) break;
+			iommund = prom_searchsiblings(iommund, "io-unit");
+			if(!iommund) break;
+			this_sbus = prom_searchsiblings(prom_getchild(iommund), "sbi");
+		} else {
+			this_sbus = prom_getsibling(this_sbus);
+			if(!this_sbus) break;
+			this_sbus = prom_searchsiblings(this_sbus, "sbus");
+		}
 		if(this_sbus) {
 			sbus->next = (struct linux_sbus *) memory_start;
 			memory_start += sizeof(struct linux_sbus);
@@ -251,6 +326,12 @@ sbus_init(unsigned long memory_start, unsigned long memory_end)
 			break;
 		}
 	} /* while(this_sbus) */
-	sun_console_init(); /* whee... */
+	memory_start = sun_console_init(memory_start); /* whee... */
+#ifdef CONFIG_SUN_OPENPROMIO
+	openprom_init();
+#endif
+#ifdef CONFIG_SUN_MOSTEK_RTC
+	rtc_init();
+#endif
 	return memory_start;
 }

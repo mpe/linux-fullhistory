@@ -5,75 +5,16 @@
 #include <asm/page.h>
 #include <asm/mmu.h>
 
-/*
- * Memory management on the PowerPC is a software emulation of the i386
- * MMU folded onto the PowerPC hardware MMU.  The emulated version looks
- * and behaves like the two-level i386 MMU.  Entries from these tables
- * are merged into the PowerPC hashed MMU tables, on demand, treating the
- * hashed tables like a special cache.
- *
- * Since the PowerPC does not have separate kernel and user address spaces,
- * the user virtual address space must be a [proper] subset of the kernel
- * space.  Thus, all tasks will have a specific virtual mapping for the
- * user virtual space and a common mapping for the kernel space.  The
- * simplest way to split this was literally in half.  Also, life is so
- * much simpler for the kernel if the machine hardware resources are
- * always mapped in.  Thus, some additional space is given up to the
- * kernel space to accommodate this.
- *
- * CAUTION! Some of the trade-offs make sense for the PreP platform on
- * which this code was originally developed.  When it migrates to other
- * PowerPC environments, some of the assumptions may fail and the whole
- * setup may need to be reevaluated.
- *
- * On the PowerPC, page translations are kept in a hashed table.  There
- * is exactly one of these tables [although the architecture supports
- * an arbitrary number].  Page table entries move in/out of this hashed
- * structure on demand, with the kernel filling in entries as they are
- * needed.  Just where a page table entry hits in the hashed table is a
- * function of the hashing which is in turn based on the upper 4 bits
- * of the logical address.  These 4 bits address a "virtual segment id"
- * which is unique per task/page combination for user addresses and
- * fixed for the kernel addresses.  Thus, the kernel space can be simply
- * shared [indeed at low overhead] among all tasks.
- *
- * The basic virtual address space is thus:
- *
- * 0x0XXXXXX  --+
- * 0x1XXXXXX    |
- * 0x2XXXXXX    |  User address space. 
- * 0x3XXXXXX    |
- * 0x4XXXXXX    |
- * 0x5XXXXXX    |
- * 0x6XXXXXX    |
- * 0x7XXXXXX  --+
- * 0x8XXXXXX       PCI/ISA I/O space
- * 0x9XXXXXX  --+
- * 0xAXXXXXX    |  Kernel virtual memory
- * 0xBXXXXXX  --+
- * 0xCXXXXXX       PCI/ISA Memory space
- * 0xDXXXXXX
- * 0xEXXXXXX
- * 0xFXXXXXX       Board I/O space
- *
- * CAUTION!  One of the real problems here is keeping the software
- * managed tables coherent with the hardware hashed tables.  When
- * the software decides to update the table, it's normally easy to
- * update the hardware table.  But when the hardware tables need
- * changed, e.g. as the result of a page fault, it's more difficult
- * to reflect those changes back into the software entries.  Currently,
- * this process is quite crude, with updates causing the entire set
- * of tables to become invalidated.  Some performance could certainly
- * be regained by improving this.
- *
- * The Linux memory management assumes a three-level page table setup. On
- * the i386, we use that, but "fold" the mid level into the top-level page
- * table, so that we physically have the same two-level page table as the
- * i386 mmu expects.
- *
- * This file contains the functions and defines necessary to modify and use
- * the i386 page table tree.
- */
+inline void flush_tlb(void);
+inline void flush_tlb_all(void);
+inline void flush_tlb_mm(struct mm_struct *mm);
+inline void flush_tlb_page(struct vm_area_struct *vma, long vmaddr);
+inline void flush_tlb_range(struct mm_struct *mm, long start, long end);
+inline void flush_page_to_ram(unsigned long);
+inline void really_flush_cache_all(void);
+
+/* only called from asm in head.S, so why bother? */
+/*void MMU_init(void);*/
 
 /* PMD_SHIFT determines the size of the area a second-level page table can map */
 #define PMD_SHIFT	22
@@ -100,8 +41,17 @@
  * The vmalloc() routines leaves a hole of 4kB between each vmalloced
  * area for the same reason. ;)
  */
-#define VMALLOC_OFFSET	(8*1024*1024)
-#define VMALLOC_START ((high_memory + VMALLOC_OFFSET) & ~(VMALLOC_OFFSET-1))
+/* this must be a decent size since the ppc bat's can map only certain sizes
+   but these can be different from the physical ram size configured.
+   bat mapping must map at least physical ram size and vmalloc start addr
+   must beging AFTER the area mapped by the bat.
+   32 works for now, but may need to be changed with larger differences.
+   offset = next greatest bat mapping to ramsize - ramsize
+   (ie would be 0 if batmapping = ramsize)
+        -- Cort 10/6/96
+   */
+#define VMALLOC_OFFSET	(32*1024*1024)
+#define VMALLOC_START ((((long)high_memory + VMALLOC_OFFSET) & ~(VMALLOC_OFFSET-1)))
 #define VMALLOC_VMADDR(x) ((unsigned long)(x))
 
 #define _PAGE_PRESENT	0x001
@@ -146,36 +96,16 @@
 #define __S111	PAGE_SHARED
 
 /*
- * TLB invalidation:
- *
- *  - invalidate() invalidates the current mm struct TLBs
- *  - invalidate_all() invalidates all processes TLBs
- *  - invalidate_mm(mm) invalidates the specified mm context TLB's
- *  - invalidate_page(mm, vmaddr) invalidates one page
- *  - invalidate_range(mm, start, end) invalidates a range of pages
- *
- * FIXME: This could be done much better!
- */
-
-#define invalidate_all() printk("invalidate_all()\n");invalidate()
-#if 0
-#define invalidate_mm(mm_struct) \
-do { if ((mm_struct) == current->mm) invalidate(); else printk("Can't invalidate_mm(%x)\n", mm_struct);} while (0)
-#define invalidate_page(mm_struct,addr) \
-do { if ((mm_struct) == current->mm) invalidate(); else printk("Can't invalidate_page(%x,%x)\n", mm_struct, addr);} while (0)
-#define invalidate_range(mm_struct,start,end) \
-do { if ((mm_struct) == current->mm) invalidate(); else printk("Can't invalidate_range(%x,%x,%x)\n", mm_struct, start, end);} while (0)
-#endif
-
-/*
- * Define this if things work differently on an i386 and an i486:
- * it will (on an i486) warn about kernel memory accesses that are
+ * Define this if things work differently on a i386 and a i486:
+ * it will (on a i486) warn about kernel memory accesses that are
  * done without a 'verify_area(VERIFY_WRITE,..)'
  */
 #undef CONFIG_TEST_VERIFY_AREA
 
+#if 0
 /* page table for 0-4MB for everybody */
 extern unsigned long pg0[1024];
+#endif
 
 /*
  * BAD_PAGETABLE is used when we need a bogus page-table, while
@@ -187,11 +117,11 @@ extern unsigned long pg0[1024];
 extern pte_t __bad_page(void);
 extern pte_t * __bad_pagetable(void);
 
-extern unsigned long __zero_page(void);
+extern unsigned long empty_zero_page[1024];
 
 #define BAD_PAGETABLE __bad_pagetable()
 #define BAD_PAGE __bad_page()
-#define ZERO_PAGE __zero_page()
+#define ZERO_PAGE ((unsigned long) empty_zero_page)
 
 /* number of bits that fit into a memory pointer */
 #define BITS_PER_PTR			(8*sizeof(unsigned long))
@@ -218,29 +148,13 @@ do { \
 	} \
 } while (0)
 
-extern unsigned long high_memory;
+/* comes from include/linux/mm.h now -- Cort */
+/*extern void *high_memory;*/
 
 extern inline int pte_none(pte_t pte)		{ return !pte_val(pte); }
 extern inline int pte_present(pte_t pte)	{ return pte_val(pte) & _PAGE_PRESENT; }
-#if 0
-extern inline int pte_inuse(pte_t *ptep)	{ return mem_map[MAP_NR(ptep)].reserved; }
-/*extern inline int pte_inuse(pte_t *ptep)	{ return mem_map[MAP_NR(ptep)] != 1; }*/
-#endif
 extern inline void pte_clear(pte_t *ptep)	{ pte_val(*ptep) = 0; }
-#if 0
-extern inline void pte_reuse(pte_t * ptep)
-{
-	if (!mem_map[MAP_NR(ptep)].reserved)
-		mem_map[MAP_NR(ptep)].count++;
-}
-#endif
-/*
-   extern inline void pte_reuse(pte_t * ptep)
-{
-	if (!(mem_map[MAP_NR(ptep)] & MAP_PAGE_RESERVED))
-		mem_map[MAP_NR(ptep)]++;
-}
-*/
+
 extern inline int pmd_none(pmd_t pmd)		{ return !pmd_val(pmd); }
 extern inline int pmd_bad(pmd_t pmd)		{ return (pmd_val(pmd) & ~PAGE_MASK) != _PAGE_TABLE; }
 extern inline int pmd_present(pmd_t pmd)	{ return pmd_val(pmd) & _PAGE_PRESENT; }
@@ -256,19 +170,8 @@ extern inline void pmd_reuse(pmd_t * pmdp)	{ }
 extern inline int pgd_none(pgd_t pgd)		{ return 0; }
 extern inline int pgd_bad(pgd_t pgd)		{ return 0; }
 extern inline int pgd_present(pgd_t pgd)	{ return 1; }
-#if 0
-/*extern inline int pgd_inuse(pgd_t * pgdp)	{ return mem_map[MAP_NR(pgdp)] != 1; }*/
-extern inline int pgd_inuse(pgd_t *pgdp)	{ return mem_map[MAP_NR(pgdp)].reserved;  }
-#endif
 extern inline void pgd_clear(pgd_t * pgdp)	{ }
 
-/*
-extern inline void pgd_reuse(pgd_t * pgdp)
-{
-	if (!mem_map[MAP_NR(pgdp)].reserved)
-		mem_map[MAP_NR(pgdp)].count++;
-}
-*/
 
 /*
  * The following only work if pte_present() is true.
@@ -298,15 +201,24 @@ extern inline pte_t pte_mkcow(pte_t pte)	{ pte_val(pte) |= _PAGE_COW; return pte
  * Conversion functions: convert a page and protection to a page entry,
  * and a page entry and page directory to the page they refer to.
  */
+
+/* Certain architectures need to do special things when pte's
+ * within a page table are directly modified.  Thus, the following
+ * hook is made available.
+ */
+#define set_pte(pteptr, pteval) ((*(pteptr)) = (pteval))
+
+static pte_t mk_pte_phys(unsigned long page, pgprot_t pgprot)
+{ pte_t pte; pte_val(pte) = (page) | pgprot_val(pgprot); return pte; }
+/*#define mk_pte_phys(physpage, pgprot) \
+({ pte_t __pte; pte_val(__pte) = physpage + pgprot_val(pgprot); __pte; })*/
+
 extern inline pte_t mk_pte(unsigned long page, pgprot_t pgprot)
 { pte_t pte; pte_val(pte) = page | pgprot_val(pgprot); return pte; }
 
 extern inline pte_t pte_modify(pte_t pte, pgprot_t newprot)
 { pte_val(pte) = (pte_val(pte) & _PAGE_CHG_MASK) | pgprot_val(newprot); return pte; }
 
-/*extern inline void pmd_set(pmd_t * pmdp, pte_t * ptep)
-{ pmd_val(*pmdp) = _PAGE_TABLE | ((((unsigned long) ptep) - PAGE_OFFSET) << (32-PAGE_SHIFT)); }
-*/
 extern inline unsigned long pte_page(pte_t pte)
 { return pte_val(pte) & PAGE_MASK; }
 
@@ -342,75 +254,6 @@ extern inline void pte_free_kernel(pte_t * pte)
 {
 	free_page((unsigned long) pte);
 }
-/*extern inline void pte_free_kernel(pte_t * pte)
-{
-	mem_map[MAP_NR(pte)] = 1;
-	free_page((unsigned long) pte);
-}
-*/
-
-/*
-extern inline pte_t * pte_alloc_kernel(pmd_t * pmd, unsigned long address)
-{
-	address = (address >> PAGE_SHIFT) & (PTRS_PER_PTE - 1);
-	if (pmd_none(*pmd)) {
-		pte_t * page = (pte_t *) get_free_page(GFP_KERNEL);
-		if (pmd_none(*pmd)) {
-			if (page) {
-				pmd_val(*pmd) = _PAGE_TABLE | (unsigned long) page;
-				mem_map[MAP_NR(page)] = MAP_PAGE_RESERVED;
-				return page + address;
-			}
-			pmd_val(*pmd) = _PAGE_TABLE | (unsigned long) BAD_PAGETABLE;
-			return NULL;
-		}
-		free_page((unsigned long) page);
-	}
-	if (pmd_bad(*pmd)) {
-		printk("Bad pmd in pte_alloc: %08lx\n", pmd_val(*pmd));
-		pmd_val(*pmd) = _PAGE_TABLE | (unsigned long) BAD_PAGETABLE;
-		return NULL;
-	}
-	return (pte_t *) pmd_page(*pmd) + address;
-}*/
-/*
-extern inline pte_t * pte_alloc_kernel(pmd_t *pmd, unsigned long address)
-{
-printk("pte_alloc_kernel pmd = %08X, address = %08X\n", pmd, address);
-	address = (address >> PAGE_SHIFT) & (PTRS_PER_PTE - 1);
-printk("address now = %08X\n", address);
-	if (pmd_none(*pmd)) {
-		pte_t *page;
-printk("pmd_none(*pmd) true\n");
-		page = (pte_t *) get_free_page(GFP_KERNEL);
-printk("page = %08X after get_free_page(%08X)\n",page,GFP_KERNEL);
-		if (pmd_none(*pmd)) {
-printk("pmd_none(*pmd=%08X) still\n",*pmd);		  
-			if (page) {
-printk("page true = %08X\n",page);			  
-				pmd_set(pmd, page);
-printk("pmd_set(%08X,%08X)\n",pmd,page);			  
-				mem_map[MAP_NR(page)].reserved = 1;
-printk("did mem_map\n",pmd,page);			  
-				return page + address;
-			}
-printk("did pmd_set(%08X, %08X\n",pmd,BAD_PAGETABLE);			  
-			pmd_set(pmd, (pte_t *) BAD_PAGETABLE);
-			return NULL;
-		}
-printk("did free_page(%08X)\n",page);			  		
-		free_page((unsigned long) page);
-	}
-	if (pmd_bad(*pmd)) {
-		printk("Bad pmd in pte_alloc: %08lx\n", pmd_val(*pmd));
-		pmd_set(pmd, (pte_t *) BAD_PAGETABLE);
-		return NULL;
-	}
-printk("returning pmd_page(%08X) + %08X\n",pmd_page(*pmd) , address);	  
-
-	return (pte_t *) pmd_page(*pmd) + address;
-}
-*/
 extern inline pte_t * pte_alloc_kernel(pmd_t * pmd, unsigned long address)
 {
 	address = (address >> PAGE_SHIFT) & (PTRS_PER_PTE - 1);
@@ -501,30 +344,15 @@ extern inline pgd_t * pgd_alloc(void)
 	return (pgd_t *) get_free_page(GFP_KERNEL);
 }
 
-extern pgd_t swapper_pg_dir[1024*8];
-/*extern pgd_t *swapper_pg_dir;*/
+extern pgd_t swapper_pg_dir[1024];
 
 /*
  * Software maintained MMU tables may have changed -- update the
  * hardware [aka cache]
  */
 extern inline void update_mmu_cache(struct vm_area_struct * vma,
-	unsigned long address, pte_t _pte)
-{
-#if 0
-	printk("Update MMU cache - VMA: %x, Addr: %x, PTE: %x\n", vma, address, *(long *)&_pte);
-	_printk("Update MMU cache - VMA: %x, Addr: %x, PTE: %x\n", vma, address, *(long *)&_pte);
-/*	MMU_hash_page(&(vma->vm_task)->tss, address & PAGE_MASK, (pte *)&_pte);*/
-#endif	
-	MMU_hash_page(&(current)->tss, address & PAGE_MASK, (pte *)&_pte);
+	unsigned long address, pte_t _pte);
 
-}
-
-
-#ifdef _SCHED_INIT_
-#define INIT_MMAP { &init_task, 0, 0x40000000, PAGE_SHARED, VM_READ | VM_WRITE | VM_EXEC }
-
-#endif	
 
 #define SWP_TYPE(entry) (((entry) >> 1) & 0x7f)
 #define SWP_OFFSET(entry) ((entry) >> 8)

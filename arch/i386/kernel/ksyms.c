@@ -17,6 +17,7 @@ static struct symbol_table arch_symbol_table = {
 #include <linux/symtab_begin.h>
 	/* platform dependent support */
 	X(EISA_bus),
+	X(MCA_bus),
 	X(wp_works_ok),
 	X(__verify_write),
 	X(dump_thread),

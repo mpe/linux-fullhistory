@@ -18,6 +18,7 @@
  * Hans Alblas Hansa@cuci.nl
  *
  *	History
+ *	Jonathan (G4KLX)	Fixed to match Linux networking changes - 2.1.15.
  */
 
 #include <linux/config.h>
@@ -422,6 +423,7 @@ static int ax_xmit(struct sk_buff *skb, struct device *dev)
 	return 0;
 }
 
+#if defined(CONFIG_AX25) || defined(CONFIG_AX25_MODULE)
 
 /* Return the frame type ID */
 static int ax_header(struct sk_buff *skb, struct device *dev, unsigned short type,
@@ -435,14 +437,16 @@ static int ax_header(struct sk_buff *skb, struct device *dev, unsigned short typ
 }
 
 
-static int ax_rebuild_header(void *buff, struct device *dev, unsigned long raddr, struct sk_buff *skb)
+static int ax_rebuild_header(struct sk_buff *skb)
 {
 #ifdef CONFIG_INET
-	return ax25_rebuild_header(buff, dev, raddr, skb);
-#endif
+	return ax25_rebuild_header(skb);
+#else
 	return 0;
+#endif
 }
 
+#endif	/* CONFIG_{AX25,AX25_MODULE} */
 
 /* Open the low-level part of the AX25 channel. Easy! */
 static int ax_open(struct device *dev)
@@ -881,7 +885,6 @@ static int ax25_init(struct device *dev)
 	dev->hard_start_xmit = ax_xmit;
 	dev->open            = ax_open_dev;
 	dev->stop            = ax_close;
-	dev->hard_header     = ax_header;
 	dev->get_stats	     = ax_get_stats;
 #ifdef HAVE_SET_MAC_ADDR
 	dev->set_mac_address = ax_set_dev_mac_address;
@@ -894,7 +897,10 @@ static int ax25_init(struct device *dev)
 	memcpy(dev->broadcast, ax25_bcast, AX25_ADDR_LEN);
 	memcpy(dev->dev_addr,  ax25_test,  AX25_ADDR_LEN);
 
+#if defined(CONFIG_AX25) || defined(CONFIG_AX25_MODULE)
+	dev->hard_header     = ax_header;
 	dev->rebuild_header  = ax_rebuild_header;
+#endif
 
 	for (i = 0; i < DEV_NUMBUFFS; i++)
 		skb_queue_head_init(&dev->buffs[i]);

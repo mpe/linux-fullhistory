@@ -1,4 +1,4 @@
-/* $Id: time.c,v 1.19 1996/10/31 06:28:26 davem Exp $
+/* $Id: time.c,v 1.20 1996/11/13 05:09:40 davem Exp $
  * linux/arch/sparc/kernel/time.c
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -15,6 +15,7 @@
 #include <linux/mm.h>
 #include <linux/interrupt.h>
 #include <linux/timex.h>
+#include <linux/init.h>
 
 #include <asm/oplib.h>
 #include <asm/segment.h>
@@ -155,7 +156,7 @@ static int has_low_battery(void)
 }
 
 /* Probe for the real time clock chip. */
-static void clock_probe(void)
+__initfunc(static void clock_probe(void))
 {
 	struct linux_prom_registers clk_reg[2];
 	char model[128];
@@ -236,7 +237,7 @@ static void clock_probe(void)
 		kick_start_clock();
 }
 
-void time_init(void)
+__initfunc(void time_init(void))
 {
 	unsigned int year, mon, day, hour, min, sec;
 	struct mostek48t02 *mregs;

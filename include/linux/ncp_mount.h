@@ -22,6 +22,9 @@
 #define NCP_MOUNT_SOFT 0x0001
 #define NCP_MOUNT_INTR 0x0002
 
+/* Gosh... */
+#define NCP_PATH_MAX 1024
+
 struct ncp_mount_data {
 	int version;
 	unsigned int ncp_fd;	/* The socket to the ncp port */
@@ -32,7 +35,7 @@ struct ncp_mount_data {
 	struct sockaddr_ipx serv_addr;
 	unsigned char server_name[NCP_BINDERY_NAME_LEN];
 
-	unsigned char mount_point[PATH_MAX+1];
+	unsigned char mount_point[NCP_PATH_MAX+1];
 	unsigned char mounted_vol[NCP_VOLNAME_LEN+1];
 
 	unsigned int time_out;	/* How long should I wait after

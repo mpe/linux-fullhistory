@@ -73,6 +73,7 @@ extern int max_files, nr_files;
 #define S_WRITE		128	/* Write on file/directory/symlink */
 #define S_APPEND	256	/* Append-only file */
 #define S_IMMUTABLE	512	/* Immutable file */
+#define MS_NOATIME	1024	/* Do not update access times. */
 
 /*
  * Flags that can be altered by MS_REMOUNT
@@ -94,6 +95,7 @@ extern int max_files, nr_files;
  * Exception: MS_RDONLY is always applied to the entire file system.
  */
 #define IS_RDONLY(inode) (((inode)->i_sb) && ((inode)->i_sb->s_flags & MS_RDONLY))
+#define DO_UPDATE_ATIME(inode) (!((inode)->i_flags & MS_NOATIME) && !IS_RDONLY(inode))
 #define IS_NOSUID(inode) ((inode)->i_flags & MS_NOSUID)
 #define IS_NODEV(inode) ((inode)->i_flags & MS_NODEV)
 #define IS_NOEXEC(inode) ((inode)->i_flags & MS_NOEXEC)

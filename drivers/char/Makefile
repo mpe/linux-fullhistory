@@ -78,10 +78,10 @@ else
   endif
 endif
 
-ifeq ($(CONFIG_ESP),y)
+ifeq ($(CONFIG_ESPSERIAL),y)
 L_OBJS += esp.o
 else
-  ifeq ($(CONFIG_ESP),m)
+  ifeq ($(CONFIG_ESPSERIAL),m)
   M_OBJS += esp.o
   endif
 endif
@@ -227,3 +227,6 @@ conmakehash: conmakehash.c
 
 uni_hash.tbl: $(FONTMAPFILE) conmakehash
 	./conmakehash $(FONTMAPFILE) > uni_hash.tbl
+
+defkeymap.c: defkeymap.map
+	loadkeys --mktable defkeymap.map > defkeymap.c

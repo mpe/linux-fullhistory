@@ -48,6 +48,7 @@
 #define ROSE_DEFAULT_T1		(200 * PR_SLOWHZ)	/* Default T11 T21 value */
 #define ROSE_DEFAULT_T2		(180 * PR_SLOWHZ)	/* Default T12 T22 value */
 #define	ROSE_DEFAULT_T3		(180 * PR_SLOWHZ)	/* Default T13 T23 value */
+#define	ROSE_DEFAULT_HB		(5 * PR_SLOWHZ)		/* Default Holdback value */
 #define	ROSE_DEFAULT_IDLE	(20 * 60 * PR_SLOWHZ)	/* Default No Activity value */
 #define	ROSE_DEFAULT_WINDOW	2			/* Default Window Size	*/
 #define ROSE_MODULUS 		8
@@ -104,7 +105,7 @@ typedef struct {
 	unsigned char		state, condition, hdrincl;
 	unsigned short		vs, vr, va, vl;
 	unsigned short		timer;
-	unsigned short		t1, t2, t3, idle;
+	unsigned short		t1, t2, t3, hb, idle;
 	unsigned short		fraglen;
 	struct sk_buff_head	ack_queue;
 	struct sk_buff_head	frag_queue;
@@ -117,6 +118,7 @@ extern int  sysctl_rose_call_request_timeout;
 extern int  sysctl_rose_reset_request_timeout;
 extern int  sysctl_rose_clear_request_timeout;
 extern int  sysctl_rose_no_activity_timeout;
+extern int  sysctl_rose_ack_hold_back_timeout;
 extern int  sysctl_rose_routing_control;
 extern int  rosecmp(rose_address *, rose_address *);
 extern char *rose2asc(rose_address *);

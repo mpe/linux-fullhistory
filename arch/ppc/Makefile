@@ -12,35 +12,41 @@
 #
 # Copyright (C) 1994 by Linus Torvalds
 # Changes for PPC by Gary Thomas
+# Modified by Cort Dougan
 #
 
 # PowerPC (cross) tools
-SUFFIX		=.ppc
-#AS		= /u/cort/ppc/gcc/ppc-linux-elf/bin/as
+SUFFIX		= 
 AS		= as$(SUFFIX)
 ASFLAGS		= 
-#LD		= /u/cort/ppc/gcc/ppc-linux-elf/bin/ld
 LD		= ld$(SUFFIX)
 LINKFLAGS	= -T arch/ppc/ld.script -Ttext 0x90000000 
 HOSTCC		= gcc
-#CC		= /u/cort/ppc/gcc/bin/gcc
 CC		= gcc$(SUFFIX)
-#CC 		= /u/cort/ppc/gcc/bin/gcc.ppc
-CFLAGS		= -D__KERNEL__ -I$(TOPDIR)/include -D__powerpc__ \
+CFLAGSINC	= -D__KERNEL__ -I$(TOPDIR)/include -D__powerpc__
+CFLAGS		= $(CFLAGSINC) \
 		-Wstrict-prototypes \
 		-fomit-frame-pointer \
 		-fno-builtin \
-		-finhibit-size-directive \
-		-O2 -fsigned-char
+		-finhibit-size-directive -fno-strength-reduce\
+		-O2 -fsigned-char -pipe -mstring -mmultiple
 CPP		= $(CC) -E $(CFLAGS)
-#AR		= /u/cort/ppc/gcc/ppc-linux-elf/bin/ar
 AR		= ar$(SUFFIX)
-#RANLIB		= /u/cort/ppc/gcc/ppc-linux-elf/bin/ranlib
-RANLIB		= ar$(SUFFIX)
-#STRIP		= /u/cort/ppc/gcc/ppc-linux-elf/bin/strip
+RANLIB		= ranlib$(SUFFIX)
 STRIP		= strip$(SUFFIX)
-#NM		= /u/cort/ppc/gcc/ppc-linux-elf/bin/nm
 NM		= nm$(SUFFIX)
+
+ifdef CONFIG_603
+CFLAGS := $(CFLAGS) -mcpu=603 -DCPU=603
+endif
+
+ifdef CONFIG_603e
+CFLAGS := $(CFLAGS) -mcpu=603e -DCPU=603e
+endif
+
+ifdef CONFIG_604
+CFLAGS := $(CFLAGS) -mcpu=604 -DCPU=604
+endif
 
 #
 # NFS_ROOT_NAME specifies the default name of the directory to mount
@@ -48,7 +54,7 @@ NM		= nm$(SUFFIX)
 # the boot loader. The "%s" will be replaced by the IP-number of the
 # local system.
 #
-NFS_ROOT = -DNFS_ROOT="\"/joplin/ppc/root/\""
+NFS_ROOT = -DNFS_ROOT="\"/joplin/ppc/root\""
 
 HEAD := arch/ppc/kernel/head.o
 
@@ -59,10 +65,20 @@ ARCHIVES := arch/ppc/kernel/kernel.o arch/ppc/mm/mm.o arch/ppc/lib/lib.o $(ARCHI
 
 MAKEBOOT = $(MAKE) -C arch/$(ARCH)/boot
 
-tImage: vmlinux
-	@$(MAKEBOOT) tImage
+netboot: vmlinux
+	@$(MAKEBOOT) netboot
 
+znetboot: vmlinux
+	@$(MAKEBOOT) znetboot
 
+zImage: vmlinux
+	@$(MAKEBOOT) zImage
+
+floppy: vmlinux
+	@$(MAKEBOOT) floppy
+
+install: vmlinux
+	@$(MAKEBOOT) install
 
 arch/ppc/kernel: dummy
 	$(MAKE) linuxsubdirs SUBDIRS=arch/ppc/kernel
@@ -75,10 +91,10 @@ arch/ppc/lib: dummy
 
 
 archclean:
-	/bin/rm -f arch/ppc/*/*.o #arch/ppc/kernel/mk_defs arch/ppc/kernel/ppc_defs.h
-	/bin/rm -f arch/ppc/*~ arch/ppc/*/*~ include/asm-ppc/*~ arch/ppc/boot/mkboot
+	rm -f arch/ppc/kernel/mk_defs arch/ppc/kernel/ppc_defs.h TAGS
+	@$(MAKEBOOT) clean
 
 archdep:
 
 corttags :
-	etags arch/ppc/*/*.c include/asm-ppc/* drivers/*/*.c net/*.c */*.c
+	etags arch/ppc/*/*.c include/asm/* */*.c drivers/*/*.c net/*.c

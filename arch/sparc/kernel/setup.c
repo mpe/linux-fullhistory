@@ -1,4 +1,4 @@
-/*  $Id: setup.c,v 1.75 1996/10/12 12:37:27 davem Exp $
+/*  $Id: setup.c,v 1.76 1996/11/13 05:09:32 davem Exp $
  *  linux/arch/sparc/kernel/setup.c
  *
  *  Copyright (C) 1995  David S. Miller (davem@caip.rutgers.edu)
@@ -23,6 +23,7 @@
 #include <linux/major.h>
 #include <linux/string.h>
 #include <linux/blk.h>
+#include <linux/init.h>
 
 #include <asm/segment.h>
 #include <asm/system.h>
@@ -140,7 +141,7 @@ int obp_system_intr(void)
  * Process kernel command line switches that are specific to the
  * SPARC or that require special low-level processing.
  */
-static void process_switch(char c)
+__initfunc(static void process_switch(char c))
 {
 	switch (c) {
 	case 'd':
@@ -159,7 +160,7 @@ static void process_switch(char c)
 	}
 }
 
-static void boot_flags_init(char *commands)
+__initfunc(static void boot_flags_init(char *commands))
 {
 	while (*commands) {
 		/* Move to the start of the next "argument". */
@@ -224,13 +225,13 @@ static void boot_flags_init(char *commands)
  * physical memory probe as on the alpha.
  */
 
-extern void load_mmu(void);
 extern int prom_probe_memory(void);
 extern void sun4c_probe_vac(void);
 extern char cputypval;
 extern unsigned long start, end;
 extern void panic_setup(char *, int *);
 extern unsigned long srmmu_endmem_fixup(unsigned long);
+extern unsigned long sun_serial_setup(unsigned long);
 
 extern unsigned short root_flags;
 extern unsigned short root_dev;
@@ -251,8 +252,8 @@ struct tt_entry *sparc_ttable;
 
 static struct pt_regs fake_swapper_regs = { 0, 0, 0, 0, { 0, } };
 
-void setup_arch(char **cmdline_p,
-	unsigned long * memory_start_p, unsigned long * memory_end_p)
+__initfunc(void setup_arch(char **cmdline_p,
+	unsigned long * memory_start_p, unsigned long * memory_end_p))
 {
 	int total, i, packed;
 
@@ -384,6 +385,7 @@ not_relevant:
 	init_task.mm->mmap->vm_end = *memory_end_p;
 	init_task.tss.kregs = &fake_swapper_regs;
 
+	*memory_start_p = sun_serial_setup(*memory_start_p); /* set this up ASAP */
 	{
 		extern int serial_console;  /* in console.c, of course */
 #if !CONFIG_SUN_SERIAL
@@ -435,6 +437,7 @@ int get_cpuinfo(char *buffer)
 	return sprintf(buffer, "cpu\t\t: %s\n"
             "fpu\t\t: %s\n"
             "promlib\t\t: Version %d Revision %d\n"
+            "prom\t\t: %d.%d\n"
             "type\t\t: %s\n"
 	    "ncpus probed\t: %d\n"
 	    "ncpus active\t: %d\n"
@@ -454,9 +457,9 @@ int get_cpuinfo(char *buffer)
             sparc_cpu_type[cpuid],
             sparc_fpu_type[cpuid],
 #if CONFIG_AP1000
-            0, 0,
+            0, 0, 0, 0
 #else
-            romvec->pv_romvers, prom_rev,
+            romvec->pv_romvers, prom_rev, romvec->pv_printrev >> 16, (short)romvec->pv_printrev,
 #endif
             &cputypval,
 	    linux_num_cpus, smp_num_cpus,

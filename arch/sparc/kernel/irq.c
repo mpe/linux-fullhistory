@@ -1,4 +1,4 @@
-/*  $Id: irq.c,v 1.53 1996/10/16 12:30:18 zaitcev Exp $
+/*  $Id: irq.c,v 1.57 1996/11/30 02:13:53 davem Exp $
  *  arch/sparc/kernel/irq.c:  Interrupt request handling routines. On the
  *                            Sparc the IRQ's are basically 'cast in stone'
  *                            and you are supposed to probe the prom's device
@@ -20,6 +20,7 @@
 #include <linux/interrupt.h>
 #include <linux/malloc.h>
 #include <linux/random.h>
+#include <linux/init.h>
 
 #include <asm/ptrace.h>
 #include <asm/processor.h>
@@ -139,7 +140,8 @@ void free_irq(unsigned int irq, void *dev_id)
 	}
 	if (dev_id) {
 		for (; action; action = action->next) {
-			if (action->dev_id == dev_id) break;
+			if (action->dev_id == dev_id)
+				break;
 			tmp = action;
 		}
 		if (!action) {
@@ -205,9 +207,6 @@ void handler_irq(int irq, struct pt_regs * regs)
 	cpu_irq = irq & NR_IRQS;
 	action = *(cpu_irq + irq_action);
 	kstat.interrupts[cpu_irq]++;
-#if 0
-	printk("I<%d,%d,%d>", smp_processor_id(), irq, smp_proc_in_lock[smp_processor_id()]);
-#endif
 	do {
 		if (!action || !action->handler)
 			unexpected_irq(irq, 0, regs);
@@ -244,6 +243,7 @@ int request_fast_irq(unsigned int irq,
 			panic("Trying to register fast irq as shared.\n");
 
 		/* Anyway, someone already owns it so cannot be made fast. */
+		printk("request_fast_irq: Trying to register yet already owned.\n");
 		return -EBUSY;
 	}
 
@@ -296,6 +296,7 @@ int request_fast_irq(unsigned int irq,
 	action->mask = 0;
 	action->name = devname;
 	action->dev_id = NULL;
+	action->next = NULL;
 
 	*(cpu_irq + irq_action) = action;
 
@@ -329,6 +330,7 @@ int request_irq(unsigned int irq,
 			printk("Attempt to mix fast and slow interrupts on IRQ%d denied\n", irq);
 			return -EBUSY;
 		}   
+		action = NULL;		/* Or else! */
 	}
 
 	save_and_cli(flags);
@@ -389,7 +391,7 @@ int probe_irq_off(unsigned long mask)
  *
  */
 
-void init_IRQ(void)
+__initfunc(void init_IRQ(void))
 {
 	extern void sun4c_init_IRQ( void );
 	extern void sun4m_init_IRQ( void );

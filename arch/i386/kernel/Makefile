@@ -66,6 +66,6 @@ trampoline32.s: trampoline32.S $(CONFIGURE) $(TOPDIR)/include/linux/config.h Mak
 	$(CPP) -D__SMP__ -traditional $< -o $@
 
 clean:
-	rm -f trampoline hexify
+	rm -f trampoline hexify trampoline.hex
 
 include $(TOPDIR)/Rules.make

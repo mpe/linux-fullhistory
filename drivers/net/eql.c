@@ -377,7 +377,7 @@ static int eql_slave_xmit(struct sk_buff *skb, struct device *dev)
 	{
 #ifdef EQL_DEBUG
 		if (eql_debug >= 100)
-			printk ("%s: %d slaves xmitng %ld B %s\n", 
+			printk ("%s: %d slaves xmitng %d B %s\n", 
 				dev->name, eql_number_slaves (eql->queue), skb->len,
 				slave_dev->name);
 #endif

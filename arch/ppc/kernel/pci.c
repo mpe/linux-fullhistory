@@ -145,7 +145,38 @@ static char BeBox_pci_IRQ_routes[] =
    	15	/* Line 4 */
    };
 
-/* #define PCI_DEBUG */
+/* IBM Nobis */
+static char Nobis_pci_IRQ_map[16] =
+  {
+  	0,	/* Slot 0  - unused */
+  	0,	/* Slot 1  - unused */
+  	0,	/* Slot 2  - unused */
+  	0,	/* Slot 3  - unused */
+  	0,	/* Slot 4  - unused */
+  	0,	/* Slot 5  - unused */
+  	0,	/* Slot 6  - unused */
+  	0,	/* Slot 7  - unused */
+  	0,	/* Slot 8  - unused */
+  	0,	/* Slot 9  - unused */
+  	0,	/* Slot 10 - unused */
+  	0,	/* Slot 11 - unused */
+  	3,	/* Slot 12 - SCSI */
+  	0,	/* Slot 13 - unused */
+  	0,	/* Slot 14 - unused */
+  	0,	/* Slot 15 - unused */
+  };
+
+static char Nobis_pci_IRQ_routes[] =
+   {
+   	0,	/* Line 0 - Unused */
+   	13,	/* Line 1 */
+   	13,	/* Line 2 */
+   	13,	/* Line 3 */
+   	13      /* Line 4 */
+   };
+
+#define PCI_DEBUG
+#undef  PCI_DEBUG
 
 #ifdef PCI_STATS
 int PCI_conversions[2];
@@ -459,6 +490,11 @@ void route_PCI_interrupts(void)
 	{
 		Motherboard_map = BeBox_pci_IRQ_map;
 		Motherboard_routes = BeBox_pci_IRQ_routes;
+	} else
+	if ((_get_PVR()>>16) == 1)
+	{ /* Nobis */
+		Motherboard_map = Nobis_pci_IRQ_map;
+		Motherboard_routes = Nobis_pci_IRQ_routes;
 	} else
 	{ /* Motorola hardware */
 		switch (inb(0x800) & 0xF0)

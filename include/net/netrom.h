@@ -53,7 +53,7 @@ typedef struct {
 	struct device		*device;
 	unsigned char		my_index,   my_id;
 	unsigned char		your_index, your_id;
-	unsigned char		state, condition, bpqext, hdrincl;
+	unsigned char		state, condition, bpqext, hdrincl, window;
 	unsigned short		vs, vr, va, vl;
 	unsigned char		n2, n2count;
 	unsigned short		t1, t2, t4, idle, rtt;

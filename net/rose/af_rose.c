@@ -55,6 +55,7 @@ int sysctl_rose_call_request_timeout    = ROSE_DEFAULT_T1;
 int sysctl_rose_reset_request_timeout   = ROSE_DEFAULT_T2;
 int sysctl_rose_clear_request_timeout   = ROSE_DEFAULT_T3;
 int sysctl_rose_no_activity_timeout     = ROSE_DEFAULT_IDLE;
+int sysctl_rose_ack_hold_back_timeout   = ROSE_DEFAULT_HB;
 int sysctl_rose_routing_control         = 1;
 
 static unsigned int lci = 1;
@@ -389,6 +390,14 @@ static int rose_ctl_ioctl(const unsigned int cmd, void *arg)
 	  		restore_flags(flags);
 	  		break;
 
+	  	case ROSE_HOLDBACK:
+	  		if (rose_ctl.arg < 1) 
+	  			return -EINVAL;
+	  		save_flags(flags); cli();
+	  		sk->protinfo.rose->hb = rose_ctl.arg * PR_SLOWHZ;
+	  		restore_flags(flags);
+	  		break;
+
 	  	case ROSE_IDLE:
 	  		if (rose_ctl.arg < 1) 
 	  			return -EINVAL;
@@ -449,6 +458,12 @@ static int rose_setsockopt(struct socket *sock, int level, int optname,
 			sk->protinfo.rose->t3 = opt * PR_SLOWHZ;
 			return 0;
 			
+		case ROSE_HOLDBACK:
+			if (opt < 1)
+				return -EINVAL;
+			sk->protinfo.rose->hb = opt * PR_SLOWHZ;
+			return 0;
+			
 		case ROSE_IDLE:
 			if (opt < 1)
 				return -EINVAL;
@@ -494,6 +509,10 @@ static int rose_getsockopt(struct socket *sock, int level, int optname,
 			
 		case ROSE_T3:
 			val = sk->protinfo.rose->t3 / PR_SLOWHZ;
+			break;
+						
+		case ROSE_HOLDBACK:
+			val = sk->protinfo.rose->hb / PR_SLOWHZ;
 			break;
 						
 		case ROSE_IDLE:
@@ -583,7 +602,6 @@ static int rose_create(struct socket *sock, int protocol)
 	sk->priority      = SOPRI_NORMAL;
 	sk->mtu           = ROSE_MTU;	/* 128 */
 	sk->zapped        = 1;
-	sk->window	  = ROSE_DEFAULT_WINDOW;
 
 	sk->state_change = def_callback1;
 	sk->data_ready   = def_callback2;
@@ -591,7 +609,7 @@ static int rose_create(struct socket *sock, int protocol)
 	sk->error_report = def_callback1;
 
 	if (sock != NULL) {
-		sock->sk = sk;
+		sock->sk  = sk;
 		sk->sleep = &sock->wait;
 	}
 
@@ -603,6 +621,7 @@ static int rose_create(struct socket *sock, int protocol)
 	rose->t1       = sysctl_rose_call_request_timeout;
 	rose->t2       = sysctl_rose_reset_request_timeout;
 	rose->t3       = sysctl_rose_clear_request_timeout;
+	rose->hb       = sysctl_rose_ack_hold_back_timeout;
 	rose->idle     = sysctl_rose_no_activity_timeout;
 
 	rose->timer    = 0;
@@ -664,7 +683,6 @@ static struct sock *rose_make_new(struct sock *osk)
 	sk->sndbuf      = osk->sndbuf;
 	sk->debug       = osk->debug;
 	sk->state       = TCP_ESTABLISHED;
-	sk->window      = osk->window;
 	sk->mtu         = osk->mtu;
 	sk->sleep       = osk->sleep;
 	sk->zapped      = osk->zapped;
@@ -680,6 +698,7 @@ static struct sock *rose_make_new(struct sock *osk)
 	rose->t1       = osk->protinfo.rose->t1;
 	rose->t2       = osk->protinfo.rose->t2;
 	rose->t3       = osk->protinfo.rose->t3;
+	rose->hb       = osk->protinfo.rose->hb;
 	rose->idle     = osk->protinfo.rose->idle;
 
 	rose->device   = osk->protinfo.rose->device;
@@ -1073,7 +1092,7 @@ static int rose_sendmsg(struct socket *sock, struct msghdr *msg, int len,
 	unsigned char *asmptr;
 	int size;
 	
-	if (msg->msg_flags&~MSG_DONTWAIT)
+	if (msg->msg_flags & ~MSG_DONTWAIT)
 		return -EINVAL;
 
 	if (sk->zapped)
@@ -1087,7 +1106,7 @@ static int rose_sendmsg(struct socket *sock, struct msghdr *msg, int len,
 	if (sk->protinfo.rose->device == NULL)
 		return -ENETUNREACH;
 		
-	if (usrose) {
+	if (usrose != NULL) {
 		if (msg->msg_namelen < sizeof(srose))
 			return -EINVAL;
 		srose = *usrose;
@@ -1124,8 +1143,7 @@ static int rose_sendmsg(struct socket *sock, struct msghdr *msg, int len,
 
 	size = len + AX25_BPQ_HEADER_LEN + AX25_MAX_HEADER_LEN + ROSE_MIN_LEN;
 
-	if ((skb = sock_alloc_send_skb(sk, size, 0, msg->msg_flags&MSG_DONTWAIT,
-			&err)) == NULL)
+	if ((skb = sock_alloc_send_skb(sk, size, 0, msg->msg_flags & MSG_DONTWAIT, &err)) == NULL)
 		return err;
 
 	skb->sk   = sk;
@@ -1196,7 +1214,7 @@ static int rose_recvmsg(struct socket *sock, struct msghdr *msg, int size,
 		return -ENOTCONN;
 
 	/* Now we can treat all alike */
-	if ((skb = skb_recv_datagram(sk, flags, flags&MSG_DONTWAIT, &er)) == NULL)
+	if ((skb = skb_recv_datagram(sk, flags, msg->msg_flags & MSG_DONTWAIT, &er)) == NULL)
 		return er;
 
 	if (!sk->protinfo.rose->hdrincl) {
@@ -1227,9 +1245,9 @@ static int rose_recvmsg(struct socket *sock, struct msghdr *msg, int size,
 		}
 
 		*srose = addr;
-
 	}
-	msg->msg_namelen=sizeof(*srose);
+
+	msg->msg_namelen = sizeof(struct sockaddr_rose);
 
 	skb_free_datagram(sk, skb);
 
@@ -1319,7 +1337,7 @@ static int rose_get_info(char *buffer, char **start, off_t offset, int length, i
   
 	cli();
 
-	len += sprintf(buffer, "dest_addr  dest_call dest_digi src_addr   src_call  src_digi  dev   lci st vs vr va   t  t1  t2  t3 Snd-Q Rcv-Q\n");
+	len += sprintf(buffer, "dest_addr  dest_call dest_digi src_addr   src_call  src_digi  dev   lci st vs vr va   t  t1  t2  t3  hb  Snd-Q Rcv-Q\n");
 
 	for (s = rose_list; s != NULL; s = s->next) {
 		if ((dev = s->protinfo.rose->device) == NULL)
@@ -1341,7 +1359,7 @@ static int rose_get_info(char *buffer, char **start, off_t offset, int length, i
 		len += sprintf(buffer + len, "%-10s %-9s ",
 			rose2asc(&s->protinfo.rose->source_addr),
 			callsign);
-		len += sprintf(buffer + len, "%-9s %-5s %3.3X  %d  %d  %d  %d %3d %3d %3d %3d %5d %5d\n",
+		len += sprintf(buffer + len, "%-9s %-5s %3.3X  %d  %d  %d  %d %3d %3d %3d %3d %3d %5d %5d\n",
 			ax2asc(&s->protinfo.rose->source_digi),
 			devname,  s->protinfo.rose->lci & 0x0FFF,
 			s->protinfo.rose->state,
@@ -1350,6 +1368,7 @@ static int rose_get_info(char *buffer, char **start, off_t offset, int length, i
 			s->protinfo.rose->t1    / PR_SLOWHZ,
 			s->protinfo.rose->t2    / PR_SLOWHZ,
 			s->protinfo.rose->t3    / PR_SLOWHZ,
+			s->protinfo.rose->hb    / PR_SLOWHZ,
 			s->wmem_alloc, s->rmem_alloc);
 		
 		pos = begin + len;

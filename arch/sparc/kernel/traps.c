@@ -1,4 +1,4 @@
-/* $Id: traps.c,v 1.47 1996/10/27 08:36:17 davem Exp $
+/* $Id: traps.c,v 1.48 1996/11/13 05:09:42 davem Exp $
  * arch/sparc/kernel/traps.c
  *
  * Copyright 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -125,6 +125,11 @@ void do_illegal_instruction(struct pt_regs *regs, unsigned long pc, unsigned lon
 	printk("Ill instr. at pc=%08lx instruction is %08lx\n",
 	       regs->pc, *(unsigned long *)regs->pc);
 #endif
+	if (sparc_cpu_model == sun4c || sparc_cpu_model == sun4) {
+		extern int do_user_muldiv (struct pt_regs *, unsigned long);
+		if (!do_user_muldiv (regs, pc))
+			return;
+	}
 	current->tss.sig_address = pc;
 	current->tss.sig_desc = SUBSIG_ILLINST;
 	send_sig(SIGILL, current, 1);

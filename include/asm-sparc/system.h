@@ -1,4 +1,4 @@
-/* $Id: system.h,v 1.42 1996/09/30 02:23:21 davem Exp $ */
+/* $Id: system.h,v 1.43 1996/12/10 06:06:37 davem Exp $ */
 #ifndef __SPARC_SYSTEM_H
 #define __SPARC_SYSTEM_H
 
@@ -88,14 +88,23 @@ extern void fpsave(unsigned long *fpregs, unsigned long *fsr,
 	task_pc = ((unsigned long) &&here) - 0x8;					\
 	__asm__ __volatile__(								\
 	"rd\t%%psr, %%g4\n\t"								\
+	"nop\n\t"									\
+	"nop\n\t"									\
+	"nop\n\t"									\
 	"std\t%%sp, [%%g6 + %3]\n\t"							\
 	"rd\t%%wim, %%g5\n\t"								\
 	"wr\t%%g4, 0x20, %%psr\n\t"							\
+	"nop\n\t"									\
+	"nop\n\t"									\
+	"nop\n\t"									\
 	"std\t%%g4, [%%g6 + %2]\n\t"							\
 	"mov\t%1, %%g6\n\t"								\
 	"ldd\t[%%g6 + %2], %%g4\n\t"							\
 	"st\t%1, [%0]\n\t"								\
 	"wr\t%%g4, 0x20, %%psr\n\t"							\
+	"nop\n\t"									\
+	"nop\n\t"									\
+	"nop\n\t"									\
 	"ldd\t[%%g6 + %3], %%sp\n\t"							\
 	"wr\t%%g5, 0x0, %%wim\n\t"							\
 	"ldd\t[%%sp + 0x00], %%l0\n\t"							\
@@ -107,6 +116,8 @@ extern void fpsave(unsigned long *fpregs, unsigned long *fsr,
 	"ldd\t[%%sp + 0x30], %%i4\n\t"							\
 	"ldd\t[%%sp + 0x38], %%i6\n\t"							\
 	"wr\t%%g4, 0x0, %%psr\n\t"							\
+	"nop\n\t"									\
+	"nop\n\t"									\
 	"nop\n\t"									\
 	"jmpl\t%%o7 + 0x8, %%g0\n\t"							\
 	" nop\n\t" : : "r" (&(current_set[smp_processor_id()])), "r" (next),		\
@@ -120,43 +131,70 @@ here: SWITCH_EXIT } while(0)
  */
 extern __inline__ void setipl(unsigned long __orig_psr)
 {
-	__asm__ __volatile__("wr\t%0, 0x0, %%psr\n\t"
-			     "nop; nop; nop;" : : "r" (__orig_psr) : "memory");
+	__asm__ __volatile__("
+		wr	%0, 0x0, %%psr
+		nop
+		nop
+		nop
+"		: /* no outputs */
+		: "r" (__orig_psr)
+		: "memory");
 }
 
 extern __inline__ void cli(void)
 {
 	unsigned long tmp;
 
-	__asm__ __volatile__("rd\t%%psr, %0\n\t"
-			     "andcc\t%0, %1, %%g0\n\t"
-			     "be,a\t1f\n\t"
-			     " wr\t%0, %1, %%psr\n"
-			     "1:\tnop; nop"
-			     : "=r" (tmp)
-			     : "i" (PSR_PIL)
-			     : "memory");
+	__asm__ __volatile__("
+		rd	%%psr, %0
+		nop
+		nop
+		nop
+		andcc	%0, %1, %%g0
+		bne	1f
+		 nop
+		wr	%0, %1, %%psr
+		nop
+		nop
+		nop
+1:
+"		: "=r" (tmp)
+		: "i" (PSR_PIL)
+		: "memory");
 }
 
 extern __inline__ void sti(void)
 {
 	unsigned long tmp;
 
-	__asm__ __volatile__("rd\t%%psr, %0\n\t"
-			     "andcc\t%0, %1, %%g0\n\t"
-			     "bne,a\t1f\n\t"
-			     " wr\t%0, %1, %%psr\n"
-			     "1:\tnop; nop"
-			     : "=r" (tmp)
-			     : "i" (PSR_PIL)
-			     : "memory");
+	__asm__ __volatile__("
+		rd	%%psr, %0
+		nop
+		nop
+		nop
+		andcc	%0, %1, %%g0
+		be	1f
+		 nop
+		wr	%0, %1, %%psr
+		nop
+		nop
+		nop
+1:
+"		: "=r" (tmp)
+		: "i" (PSR_PIL)
+		: "memory");
 }
 
 extern __inline__ unsigned long getipl(void)
 {
 	unsigned long retval;
 
-	__asm__ __volatile__("rd\t%%psr, %0" : "=r" (retval));
+	__asm__ __volatile__("
+		rd	%%psr, %0
+		nop
+		nop
+		nop
+"	: "=r" (retval));
 	return retval;
 }
 
@@ -164,16 +202,25 @@ extern __inline__ unsigned long swap_pil(unsigned long __new_psr)
 {
 	unsigned long retval, tmp1, tmp2;
 
-	__asm__ __volatile__("rd\t%%psr, %0\n\t"
-			     "and\t%0, %4, %1\n\t"
-			     "and\t%3, %4, %2\n\t"
-			     "xorcc\t%1, %2, %%g0\n\t"
-			     "bne,a\t1f\n\t"
-			     " wr %0, %4, %%psr\n"
-			     "1:\tnop; nop"
-			     : "=r" (retval), "=r" (tmp1), "=r" (tmp2)
-			     : "r" (__new_psr), "i" (PSR_PIL)
-			     : "memory");
+	__asm__ __volatile__("
+		rd	%%psr, %0
+		nop
+		nop
+		nop
+		and	%0, %4, %1
+		and	%3, %4, %2
+		xorcc	%1, %2, %%g0
+		be	1f
+		 nop
+		wr %0, %4, %%psr
+		nop
+		nop
+		nop
+1:
+"		: "=r" (retval), "=r" (tmp1), "=r" (tmp2)
+		: "r" (__new_psr), "i" (PSR_PIL)
+		: "memory");
+
 	return retval;
 }
 
@@ -181,14 +228,23 @@ extern __inline__ unsigned long read_psr_and_cli(void)
 {
 	unsigned long retval;
 
-	__asm__ __volatile__("rd\t%%psr, %0\n\t"
-			     "andcc\t%0, %1, %%g0\n\t"
-			     "be,a\t1f\n\t"
-			     " wr\t%0, %1, %%psr\n"
-			     "1:\tnop; nop"
-			     : "=r" (retval)
-			     : "i" (PSR_PIL)
-			     : "memory");
+	__asm__ __volatile__("
+		rd	%%psr, %0
+		nop
+		nop
+		nop
+		andcc	%0, %1, %%g0
+		bne	1f
+		 nop
+		wr	%0, %1, %%psr
+		nop
+		nop
+		nop
+1:
+"		: "=r" (retval)
+		: "i" (PSR_PIL)
+		: "memory");
+
 	return retval;
 }
 
@@ -207,15 +263,27 @@ extern __inline__ unsigned long xchg_u32(__volatile__ unsigned long *m, unsigned
 {
 	__asm__ __volatile__("
 	rd	%%psr, %%g3
+	nop
+	nop
+	nop
 	andcc	%%g3, %3, %%g0
-	be,a	1f
-	 wr	%%g3, %3, %%psr
-1:	ld	[%1], %%g2
+	bne	1f
+	 nop
+	wr	%%g3, %3, %%psr
+	nop
+	nop
+	nop
+1:
+	ld	[%1], %%g2
 	andcc	%%g3, %3, %%g0
 	st	%2, [%1]
-	be,a	1f
-	 wr	%%g3, 0x0, %%psr
-1:	nop
+	bne	1f
+	 nop
+	wr	%%g3, 0x0, %%psr
+	nop
+	nop
+	nop
+1:
 	mov	%%g2, %0
 	"
         : "=&r" (val)

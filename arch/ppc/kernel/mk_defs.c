@@ -25,6 +25,8 @@ main(int argc, char *argv[])
 	FILE *out;
 	struct task_struct task;
 	struct thread_struct tss;
+	int i;
+	char s[256];
 	struct pt_regs regs;
 	if (!(out = fopen(argv[1], "w")))
 	{
@@ -62,6 +64,8 @@ main(int argc, char *argv[])
 	put_line(out, "MMU_SEG13", (int)&tss.segs[13]-(int)&tss);
 	put_line(out, "MMU_SEG14", (int)&tss.segs[14]-(int)&tss);
 	put_line(out, "MMU_SEG15", (int)&tss.segs[15]-(int)&tss);
+	put_line(out, "TSS_EXPC", (int)&tss.expc-(int)&tss);
+	put_line(out, "TSS_EXCOUNT", (int)&tss.excount-(int)&tss);		
 	put_line(out, "TSS_FPR0", (int)&tss.fpr[0]-(int)&tss);
 	put_line(out, "TSS_FPR1", (int)&tss.fpr[1]-(int)&tss);
 	put_line(out, "TSS_FPR2", (int)&tss.fpr[2]-(int)&tss);
@@ -94,6 +98,7 @@ main(int argc, char *argv[])
 	put_line(out, "TSS_FPR29", (int)&tss.fpr[29]-(int)&tss);
 	put_line(out, "TSS_FPR30", (int)&tss.fpr[30]-(int)&tss);
 	put_line(out, "TSS_FPR31", (int)&tss.fpr[31]-(int)&tss);
+	put_line(out, "TSS_FP_USED", (int)&tss.fp_used-(int)&tss);
 	/* Interrupt register frame */
 	put_line(out, "INT_FRAME_SIZE", sizeof(regs));
 	put_line(out, "GPR0", (int)&regs.gpr[0]-(int)&regs);
@@ -128,14 +133,19 @@ main(int argc, char *argv[])
 	put_line(out, "GPR29", (int)&regs.gpr[29]-(int)&regs);
 	put_line(out, "GPR30", (int)&regs.gpr[30]-(int)&regs);
 	put_line(out, "GPR31", (int)&regs.gpr[31]-(int)&regs);
-	put_line(out, "FPR0", (int)&regs.fpr[0]-(int)&regs);
-	put_line(out, "FPR1", (int)&regs.fpr[1]-(int)&regs);
-	put_line(out, "FPR2", (int)&regs.fpr[2]-(int)&regs);
-	put_line(out, "FPR3", (int)&regs.fpr[3]-(int)&regs);
+#if 0	
+	for ( i = 0 ; i <= 31 ; i++)
+	{
+	  sprintf(s,"FPR%d",i);
+	  put_line(out, s, (int)&regs.fpr[i]-(int)&regs);
+	}
+#endif
 	put_line(out, "FPCSR", (int)&regs.fpcsr-(int)&regs);
 	/* Note: these symbols include "_" because they overlap with special register names */
 	put_line(out, "_NIP", (int)&regs.nip-(int)&regs);
 	put_line(out, "_MSR", (int)&regs.msr-(int)&regs);
+	/*		put_line(out, "_SRR1", (int)&regs.srr1-(int)&regs);	
+	put_line(out, "_SRR0", (int)&regs.srr0-(int)&regs);	*/
 	put_line(out, "_CTR", (int)&regs.ctr-(int)&regs);
 	put_line(out, "_LINK", (int)&regs.link-(int)&regs);
 	put_line(out, "_CCR", (int)&regs.ccr-(int)&regs);

@@ -3,7 +3,7 @@
 
 #include <linux/types.h>
 
-struct old_stat {
+struct __old_kernel_stat {
 	unsigned short st_dev;
 	unsigned short st_ino;
 	unsigned short st_mode;
@@ -16,8 +16,7 @@ struct old_stat {
 	unsigned long  st_mtime;
 	unsigned long  st_ctime;
 };
-
-struct new_stat {
+struct stat {
 	dev_t		st_dev;
 	ino_t		st_ino;
 	mode_t		st_mode;
@@ -37,5 +36,4 @@ struct new_stat {
 	unsigned long  	__unused4;
 	unsigned long  	__unused5;
 };
-
 #endif

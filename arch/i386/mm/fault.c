@@ -165,7 +165,7 @@ bad_area:
 
 	/* Are we prepared to handle this fault?  */
 	if ((fixup = search_exception_table(regs->eip)) != 0) {
-		printk(KERN_DEBUG "Exception at %lx (%lx)\n", regs->eip, fixup);
+		printk(KERN_DEBUG "Exception at [<%lx>] (%lx)\n", regs->eip, fixup);
 		regs->eip = fixup;
 		return;
 	}

@@ -1,4 +1,4 @@
-# $Id: Makefile,v 1.34 1996/09/21 04:07:31 davem Exp $
+# $Id: Makefile,v 1.35 1996/11/13 05:09:15 davem Exp $
 # Makefile for the linux kernel.
 #
 # Note! Dependencies are done automagically by 'make dep', which also
@@ -27,7 +27,7 @@ else
 
 endif
 
-all: kernel.o head.o
+all: kernel.o head.o initobj.o finitobj.o
 
 O_TARGET := kernel.o
 IRQ_OBJS := irq.o sun4m_irq.o sun4c_irq.o
@@ -36,7 +36,7 @@ O_OBJS   := entry.o wof.o wuf.o etrap.o rtrap.o traps.o ${IRQ_OBJS} \
 	    sys_sparc.o sunos_asm.o sparc-stub.o systbls.o sys_sunos.o  \
 	    sunos_ioctl.o time.o windows.o cpu.o devices.o \
 	    sclow.o solaris.o tadpole.o tick14.o ptrace.o sys_solaris.o \
-	    unaligned.o
+	    unaligned.o muldiv.o
 
 OX_OBJS  := sparc_ksyms.o
 
@@ -47,8 +47,6 @@ endif
 ifdef CONFIG_SUN_AUXIO
 O_OBJS += auxio.o
 endif
-
-all: kernel.o head.o
 
 ifdef SMP
 
@@ -61,5 +59,12 @@ head.o: head.S
 	$(CC) -D__ASSEMBLY__ -ansi -c $*.S -o $*.o
 
 endif
+
+initobj.o: initobj.S
+	$(CC) -D__ASSEMBLY__ -ansi -c initobj.S -o initobj.o
+
+finitobj.o: initobj.S
+	$(CC) -D__ASSEMBLY__ -ansi -c finitobj.S -o finitobj.o
+
 
 include $(TOPDIR)/Rules.make

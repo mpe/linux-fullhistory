@@ -855,7 +855,7 @@ static int unix_accept(struct socket *sock, struct socket *newsock, int flags)
 		newsk->protinfo.af_unix.inode=sk->protinfo.af_unix.inode;
 	}
 		
-	do
+	for (;;)
 	{
 		skb=skb_dequeue(&sk->receive_queue);
 		if(skb==NULL)
@@ -865,15 +865,17 @@ static int unix_accept(struct socket *sock, struct socket *newsock, int flags)
 			interruptible_sleep_on(sk->sleep);
 			if(current->signal & ~current->blocked)
 				return -ERESTARTSYS;
+			continue;
 		}
 		if (!(UNIXCB(skb).attr & MSG_SYN))
 		{
 			tsk=skb->sk;
 			tsk->state_change(tsk);
 			kfree_skb(skb, FREE_WRITE);
-			skb = NULL;
+			continue;
 		}
-	} while(skb==NULL);
+		break;
+	}
 
 	tsk=skb->sk;
 	sk->ack_backlog--;

@@ -105,18 +105,32 @@ struct llc_struct
 #define MODE_ADM 1
 #define MODE_ABM 2
 
-	struct sk_buff *rtq_front;	/* oldest skb in the re-transmit queue */
-	struct sk_buff *rtq_back;
+	int llc_callbacks;		/* Pending callbacks */
+#define LLC_CONNECT_INDICATION	1	
+#define LLC_CONNECT_CONFIRM	2
+#define LLC_DATA_INDICATION	4
+#define LLC_DISC_INDICATION	8
+#define LLC_RESET_INDIC_LOC	16
+#define LLC_RESET_INDIC_REM	32
+#define LLC_RESET_CONFIRM	64
+#define LLC_FRMR_RECV		128
+#define LLC_FRMR_SENT		256
+#define LLC_REMOTE_BUSY		512
+#define LLC_REMOTE_NOTBUSY	1024
+#define LLC_SET_REMOTE_BUSY	2048
 
-	struct sk_buff *atq_front;	/* oldest skb in the await-transmit queue */
-	struct sk_buff *atq_back; 
+	struct sk_buff *inc_skb;	/* Saved data buffer for indications */
+	
+	struct sk_buff_head rtq;	/* Retransmit queue */
+	struct sk_buff_head atq;	/* Await transit queue */
       
 	unsigned char xid_count;
-	char * nextllc;			/* ptr to next llc struct in proto chain */
+
+	struct llc_struct *nextllc;	/* ptr to next llc struct in proto chain */
 };
 
-#define ADD_TO_RTQ(skb) llc_add_to_queue(skb, &lp->rtq_front, &lp->rtq_back) 
-#define ADD_TO_ATQ(skb) llc_add_to_queue(skb, &lp->atq_front, &lp->atq_back) 
+#define ADD_TO_RTQ(skb) skb_queue_tail(&lp->rtq,skb)
+#define ADD_TO_ATQ(skb) skb_queue_tail(&lp->atq,skb)
 
 void 		llc_cancel_timers(llcptr lp);
 int		llc_decode_frametype(frameptr fr);

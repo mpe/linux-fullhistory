@@ -1074,7 +1074,7 @@ static void arp_start_resolution(struct arp_table *entry)
 	add_timer(&entry->timer);
 #ifdef CONFIG_ARPD
 	if (!arpd_not_running)
-		arpd_lookup(entry->ip, entry->dev);
+		arpd_lookup(entry->ip, dev);
 	else
 #endif
 		arp_send(ARPOP_REQUEST, ETH_P_ARP, entry->ip, dev,

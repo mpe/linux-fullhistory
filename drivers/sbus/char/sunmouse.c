@@ -9,6 +9,7 @@
  * Dec/19/95 Added SunOS mouse ioctls - miguel.
  * Jan/5/96  Added VUID support, sigio support - miguel.
  * Mar/5/96  Added proper mouse stream support - miguel.
+ * Sep/96    Allow more than one reader -miguel.
  */
 
 /* The mouse is run off of one of the Zilog serial ports.  On
@@ -31,7 +32,9 @@
  * set when the device is opened and allows the application to see the
  * mouse character stream as we get it from the serial (for gpm for
  * example).  The second method, VUID_FIRM_EVENT will provide cooked
- * events in Firm_event records.
+ * events in Firm_event records as expected by SunOS/Solaris applications.
+ *
+ * FIXME: We need to support more than one mouse.
  * */
 
 #include <linux/kernel.h>
@@ -42,7 +45,8 @@
 #include <linux/errno.h>
 #include <linux/miscdevice.h>
 #include <linux/mm.h>
-#include <asm/segment.h>
+#include <linux/init.h>
+#include <asm/uaccess.h>
 #include <asm/system.h>
 #include <asm/vuid_event.h>
 #include <linux/random.h>
@@ -259,11 +263,10 @@ sun_mouse_inbyte(unsigned char byte, unsigned char status)
 static int
 sun_mouse_open(struct inode * inode, struct file * file)
 {
+	if(sunmouse.active++)
+		return 0;
 	if(!sunmouse.present)
 		return -EINVAL;
-	if(sunmouse.active)
-		return -EBUSY;
-	sunmouse.active = 1;
 	sunmouse.ready = sunmouse.delta_x = sunmouse.delta_y = 0;
 	sunmouse.button_state = 0x80;
 	sunmouse.vuid_mode = VUID_NATIVE;
@@ -284,20 +287,22 @@ sun_mouse_fasync (struct inode *inode, struct file *filp, int on)
 static void
 sun_mouse_close(struct inode *inode, struct file *file)
 {
-	sunmouse.active = sunmouse.ready = 0;
 	sun_mouse_fasync (inode, file, 0);
+	if (--sunmouse.active)
+		return;
+	sunmouse.ready = 0;
 }
 
-static int
+static long
 sun_mouse_write(struct inode *inode, struct file *file, const char *buffer,
-		int count)
+		unsigned long count)
 {
 	return -EINVAL;  /* foo on you */
 }
 
-static int
+static long
 sun_mouse_read(struct inode *inode, struct file *file, char *buffer,
-	       int count)
+	       unsigned long count)
 {
 	struct wait_queue wait = { current, NULL };
 
@@ -316,7 +321,8 @@ sun_mouse_read(struct inode *inode, struct file *file, char *buffer,
 		char *p = buffer, *end = buffer+count;
 		
 		while (p < end && !queue_empty ()){
-			*(Firm_event *)p = *get_from_queue ();
+			copy_to_user_ret((Firm_event *)p, get_from_queue(),
+				     sizeof(Firm_event), -EFAULT);
 			p += sizeof (Firm_event);
 		}
 		sunmouse.ready = !queue_empty ();
@@ -325,11 +331,12 @@ sun_mouse_read(struct inode *inode, struct file *file, char *buffer,
 	} else {
 		int c;
 		
-		for (c = count; !queue_empty () && c; c--){
-			*buffer++ = sunmouse.queue.stream [sunmouse.tail];
+		for (c = count; !queue_empty() && c; c--){
+			put_user_ret(sunmouse.queue.stream[sunmouse.tail], buffer, -EFAULT);
+			buffer++;
 			sunmouse.tail = (sunmouse.tail + 1) % STREAM_SIZE;
 		}
-		sunmouse.ready = !queue_empty ();
+		sunmouse.ready = !queue_empty();
 		inode->i_atime = CURRENT_TIME;
 		return count-c;
 	}
@@ -358,21 +365,27 @@ sun_mouse_ioctl (struct inode *inode, struct file *file, unsigned int cmd, unsig
 	switch (cmd){
 		/* VUIDGFORMAT - Get input device byte stream format */
 	case _IOR('v', 2, int):
-		i = verify_area (VERIFY_WRITE, (void *)arg, sizeof (int));
-		if (i) return i;
-		*(int *)arg = sunmouse.vuid_mode;
+		put_user_ret(sunmouse.vuid_mode, (int *) arg, -EFAULT);
 		break;
 
 		/* VUIDSFORMAT - Set input device byte stream format*/
 	case _IOW('v', 1, int):
-		i = verify_area (VERIFY_READ, (void *)arg, sizeof (int));
-	        if (i) return i;
-		i = *(int *) arg;
+		get_user_ret(i, (int *) arg, -EFAULT);
 		if (i == VUID_NATIVE || i == VUID_FIRM_EVENT){
-			sunmouse.vuid_mode = *(int *)arg;
+			int value;
+
+			get_user_ret(value, (int *)arg, -EFAULT);
+			sunmouse.vuid_mode = value;
 			sunmouse.head = sunmouse.tail = 0;
 		} else
 			return -EINVAL;
+		break;
+
+	case 0x8024540b:
+	case 0x40245408:
+		/* This is a buggy application doing termios on the mouse driver */
+		/* we ignore it.  I keep this check here so that we will notice   */
+		/* future mouse vuid ioctls */
 		break;
 		
 	default:
@@ -400,8 +413,7 @@ static struct miscdevice sun_mouse_mouse = {
 	SUN_MOUSE_MINOR, "sunmouse", &sun_mouse_fops
 };
 
-int
-sun_mouse_init(void)
+__initfunc(int sun_mouse_init(void))
 {
 	printk("Sun Mouse-Systems mouse driver version 1.00\n");
 	sunmouse.present = 1;

@@ -24,6 +24,7 @@
 #include <asm/io.h>
 #include <asm/nvram.h>
 #include <asm/mc146818rtc.h>
+#include <asm/processor.h>
 
 #include <linux/timex.h>
 #include <linux/config.h>
@@ -41,6 +42,13 @@ static inline int CMOS_READ(int addr)
 	outb(addr>>8, NVRAM_AS1);
 	outb(addr, NVRAM_AS0);
 	return (inb(NVRAM_DATA));
+}
+
+static inline int CMOS_WRITE(int addr, int val)
+{
+	outb(addr>>8, NVRAM_AS1);
+	outb(addr, NVRAM_AS0);
+	return (outb(val, NVRAM_DATA));
 }
 
 /* This function must be called with interrupts disabled 
@@ -138,9 +146,110 @@ void do_settimeofday(struct timeval *tv)
 	time_state = TIME_BAD;
 	time_maxerror = 0x70000000;
 	time_esterror = 0x70000000;
+	set_rtc(xtime.tv_sec);
 	sti();
 }
 
+static int      month_days[12] = {
+	31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31
+};
+
+#define FEBRUARY	2
+#define	STARTOFTIME	1970
+#define SECDAY		86400L
+#define SECYR		(SECDAY * 365)
+#define	leapyear(year)		((year) % 4 == 0)
+#define	days_in_year(a) 	(leapyear(a) ? 366 : 365)
+#define	days_in_month(a) 	(month_days[(a) - 1])
+
+struct _tm
+{
+	int             tm_sec;
+	int             tm_min;
+	int             tm_hour;
+	int             tm_day;
+	int             tm_month;
+	int             tm_year;
+};
+
+static _to_tm(int tim, struct _tm * tm)
+{
+	register int    i;
+	register long   hms, day;
+
+	day = tim / SECDAY;
+	hms = tim % SECDAY;
+
+	/* Hours, minutes, seconds are easy */
+	tm->tm_hour = hms / 3600;
+	tm->tm_min = (hms % 3600) / 60;
+	tm->tm_sec = (hms % 3600) % 60;
+
+	/* Number of years in days */
+	for (i = STARTOFTIME; day >= days_in_year(i); i++)
+		day -= days_in_year(i);
+	tm->tm_year = i;
+
+	/* Number of months in days left */
+	if (leapyear(tm->tm_year))
+		days_in_month(FEBRUARY) = 29;
+	for (i = 1; day >= days_in_month(i); i++)
+		day -= days_in_month(i);
+	days_in_month(FEBRUARY) = 28;
+	tm->tm_month = i;
+
+	/* Days are what is left over (+1) from all that. */
+	tm->tm_day = day + 1;
+}
+
+/*
+ * Set the time into the CMOS
+ */
+static void set_rtc(unsigned long nowtime)
+{
+  int retval = 0;
+  struct _tm tm;
+  unsigned char save_control, save_freq_select;
+  
+  /*if (_Processor != _PROC_IBM) return;*/
+  
+  _to_tm(nowtime, &tm);
+  
+  /* tell the clock it's being set */  
+  save_control = CMOS_MCRTC_READ(MCRTC_CONTROL); 
+  CMOS_MCRTC_WRITE((save_control|MCRTC_SET), MCRTC_CONTROL);
+  /* stop and reset prescaler */  
+  save_freq_select = CMOS_MCRTC_READ(MCRTC_FREQ_SELECT);
+  CMOS_MCRTC_WRITE((save_freq_select|MCRTC_DIV_RESET2), MCRTC_FREQ_SELECT);
+
+  printk("Set RTC H:M:S M/D/Y %d:%02d:%02d %d/%d/%d\n", 
+       tm.tm_hour, tm.tm_min, tm.tm_sec, tm.tm_month, tm.tm_day, tm.tm_year);
+	if (!(save_control & MCRTC_DM_BINARY) || MCRTC_ALWAYS_BCD) {
+		BIN_TO_BCD(tm.tm_sec);
+		BIN_TO_BCD(tm.tm_min);
+		BIN_TO_BCD(tm.tm_hour);
+		BIN_TO_BCD(tm.tm_month);
+		BIN_TO_BCD(tm.tm_day);
+		BIN_TO_BCD(tm.tm_year);
+	}
+
+	CMOS_MCRTC_WRITE(tm.tm_sec,  MCRTC_SECONDS);
+	CMOS_MCRTC_WRITE(tm.tm_min,  MCRTC_MINUTES);
+	CMOS_MCRTC_WRITE(tm.tm_hour, MCRTC_HOURS);
+	CMOS_MCRTC_WRITE(tm.tm_month,  MCRTC_MONTH);
+	CMOS_MCRTC_WRITE(tm.tm_day,  MCRTC_MINUTES);
+	CMOS_MCRTC_WRITE(tm.tm_year - 1900, MCRTC_MINUTES);
+
+	/* The following flags have to be released exactly in this order,
+	 * otherwise the DS12887 (popular MC146818A clone with integrated
+	 * battery and quartz) will not reset the oscillator and will not
+	 * update precisely 500 ms later. You won't find this mentioned in
+	 * the Dallas Semiconductor data sheets, but who believes data
+	 * sheets anyway ...                           -- Markus Kuhn
+	 */
+	CMOS_MCRTC_WRITE(save_control, MCRTC_CONTROL);
+	CMOS_MCRTC_WRITE(save_freq_select, MCRTC_FREQ_SELECT);
+}
 
 /*
  * In order to set the CMOS clock precisely, set_rtc_mmss has to be
@@ -156,17 +265,19 @@ static int set_rtc_mmss(unsigned long nowtime)
 	unsigned char save_control, save_freq_select;
 
 #ifdef __powerpc__
+printk("%s: %d - set TOD\n", __FILE__, __LINE__);
 return (-1);  /* Not implemented */
 #else	
 
-	save_control = CMOS_READ(RTC_CONTROL); /* tell the clock it's being set */
-	CMOS_WRITE((save_control|RTC_SET), RTC_CONTROL);
+printk("%s: %d - set TOD\n", __FILE__, __LINE__);
+	save_control = CMOS_MCRTC_READ(MCRTC_CONTROL); /* tell the clock it's being set */
+	CMOS_MCRTC_WRITE((save_control|MCRTC_SET), MCRTC_CONTROL);
 
-	save_freq_select = CMOS_READ(RTC_FREQ_SELECT); /* stop and reset prescaler */
-	CMOS_WRITE((save_freq_select|RTC_DIV_RESET2), RTC_FREQ_SELECT);
+	save_freq_select = CMOS_MCRTC_READ(MCRTC_FREQ_SELECT); /* stop and reset prescaler */
+	CMOS_MCRTC_WRITE((save_freq_select|MCRTC_DIV_RESET2), MCRTC_FREQ_SELECT);
 
-	cmos_minutes = CMOS_READ(RTC_MINUTES);
-	if (!(save_control & RTC_DM_BINARY) || RTC_ALWAYS_BCD)
+	cmos_minutes = CMOS_MCRTC_READ(MCRTC_MINUTES);
+	if (!(save_control & MCRTC_DM_BINARY) || MCRTC_ALWAYS_BCD)
 		BCD_TO_BIN(cmos_minutes);
 
 	/*
@@ -182,12 +293,12 @@ return (-1);  /* Not implemented */
 	real_minutes %= 60;
 
 	if (abs(real_minutes - cmos_minutes) < 30) {
-		if (!(save_control & RTC_DM_BINARY) || RTC_ALWAYS_BCD) {
+		if (!(save_control & MCRTC_DM_BINARY) || MCRTC_ALWAYS_BCD) {
 			BIN_TO_BCD(real_seconds);
 			BIN_TO_BCD(real_minutes);
 		}
-		CMOS_WRITE(real_seconds,RTC_SECONDS);
-		CMOS_WRITE(real_minutes,RTC_MINUTES);
+		CMOS_MCRTC_WRITE(real_seconds,MCRTC_SECONDS);
+		CMOS_MCRTC_WRITE(real_minutes,MCRTC_MINUTES);
 	} else
 		retval = -1;
 
@@ -198,8 +309,8 @@ return (-1);  /* Not implemented */
 	 * the Dallas Semiconductor data sheets, but who believes data
 	 * sheets anyway ...                           -- Markus Kuhn
 	 */
-	CMOS_WRITE(save_control, RTC_CONTROL);
-	CMOS_WRITE(save_freq_select, RTC_FREQ_SELECT);
+	CMOS_MCRTC_WRITE(save_control, MCRTC_CONTROL);
+	CMOS_MCRTC_WRITE(save_freq_select, MCRTC_FREQ_SELECT);
 
 	return retval;
 #endif	
@@ -214,27 +325,42 @@ static long last_rtc_update = 0;
  */
 static inline void timer_interrupt(int irq, void *dev, struct pt_regs * regs)
 {
-	do_timer(regs);
+  static int timeints = 0;
+  
+  do_timer(regs);
 
-	/*
-	 * If we have an externally synchronized Linux clock, then update
-	 * CMOS clock accordingly every ~11 minutes. Set_rtc_mmss() has to be
-	 * called as close as possible to 500 ms before the new second starts.
-	 */
-	if (time_state != TIME_BAD && xtime.tv_sec > last_rtc_update + 660 &&
-	    xtime.tv_usec > 500000 - (tick >> 1) &&
-	    xtime.tv_usec < 500000 + (tick >> 1))
-	  if (set_rtc_mmss(xtime.tv_sec) == 0)
-	    last_rtc_update = xtime.tv_sec;
-	  else
-	    last_rtc_update = xtime.tv_sec - 600; /* do it again in 60 s */
-#if 0
-	/* As we return to user mode fire off the other CPU schedulers.. this is 
-	   basically because we don't yet share IRQ's around. This message is
-	   rigged to be safe on the 386 - basically its a hack, so don't look
-	   closely for now.. */
-	smp_message_pass(MSG_ALL_BUT_SELF, MSG_RESCHEDULE, 0L, 0); 
-#endif	    
+  /*
+   * If we have an externally synchronized Linux clock, then update
+   * CMOS clock accordingly every ~11 minutes. Set_rtc_mmss() has to be
+   * called as close as possible to 500 ms before the new second starts.
+   */
+  if (time_state != TIME_BAD && xtime.tv_sec > last_rtc_update + 660 &&
+      xtime.tv_usec > 500000 - (tick >> 1) &&
+      xtime.tv_usec < 500000 + (tick >> 1))
+    if (set_rtc_mmss(xtime.tv_sec) == 0)
+      last_rtc_update = xtime.tv_sec;
+    else
+      last_rtc_update = xtime.tv_sec - 600; /* do it again in 60 s */
+
+
+  /* use hard disk LED as a heartbeat instead -- much more useful
+     -- Cort */
+  switch(timeints)
+  {
+    /* act like an actual heart beat -- ie thump-thump-pause... */
+    case 0:
+    case 20:
+      hard_disk_LED(1);
+      break;
+    case 7:
+    case 27:
+      hard_disk_LED(0);
+      break;
+    case 100:
+      timeints = -1;
+      break;
+  }
+  timeints++;
 }
 
 /* Converts Gregorian date to seconds since 1970-01-01 00:00:00.
@@ -270,49 +396,52 @@ static inline unsigned long mktime(unsigned int year, unsigned int mon,
 
 unsigned long get_cmos_time(void)
 {
-	unsigned int year, mon, day, hour, min, sec;
-	int i;
-
-	if (isBeBox[0])
-	{
-#ifndef __powerpc__	
-	/* The Linux interpretation of the CMOS clock register contents:
-	 * When the Update-In-Progress (UIP) flag goes from 1 to 0, the
-	 * RTC registers show the second which has precisely just started.
-	 * Let's hope other operating systems interpret the RTC the same way.
-	 */
-	/* read RTC exactly on falling edge of update flag */
-	for (i = 0 ; i < 1000000 ; i++)	/* may take up to 1 second... */
-		if (CMOS_READ(RTC_FREQ_SELECT) & RTC_UIP)
-			break;
-	for (i = 0 ; i < 1000000 ; i++)	/* must try at least 2.228 ms */
-		if (!(CMOS_READ(RTC_FREQ_SELECT) & RTC_UIP))
-			break;
-#endif			
-		do { /* Isn't this overkill ? UIP above should guarantee consistency */
-			sec = CMOS_MCRTC_READ(MCRTC_SECONDS);
-			min = CMOS_MCRTC_READ(MCRTC_MINUTES);
-			hour = CMOS_MCRTC_READ(MCRTC_HOURS);
-			day = CMOS_MCRTC_READ(MCRTC_DAY_OF_MONTH);
-			mon = CMOS_MCRTC_READ(MCRTC_MONTH);
-			year = CMOS_MCRTC_READ(MCRTC_YEAR);
-		} while (sec != CMOS_MCRTC_READ(MCRTC_SECONDS));
-	} else
+  unsigned int year, mon, day, hour, min, sec;
+  int i;
+  
+  if (_Processor == _PROC_IBM)
+  {
+    do { /* Isn't this overkill ? UIP above should guarantee consistency */
+      sec = CMOS_MCRTC_READ(MCRTC_SECONDS);
+      min = CMOS_MCRTC_READ(MCRTC_MINUTES);
+      hour = CMOS_MCRTC_READ(MCRTC_HOURS);
+      day = CMOS_MCRTC_READ(MCRTC_DAY_OF_MONTH);
+      mon = CMOS_MCRTC_READ(MCRTC_MONTH);
+      year = CMOS_MCRTC_READ(MCRTC_YEAR);
+    } while (sec != CMOS_MCRTC_READ(MCRTC_SECONDS));
+    BCD_TO_BIN(sec);
+    BCD_TO_BIN(min);
+    BCD_TO_BIN(hour);
+    BCD_TO_BIN(day);
+    BCD_TO_BIN(mon);
+    BCD_TO_BIN(year);
+  } else
+    if (_Processor == _PROC_Be)
+      {
+	do { /* Isn't this overkill ? UIP above should guarantee consistency */
+	  sec = CMOS_MCRTC_READ(MCRTC_SECONDS);
+	  min = CMOS_MCRTC_READ(MCRTC_MINUTES);
+	  hour = CMOS_MCRTC_READ(MCRTC_HOURS);
+	  day = CMOS_MCRTC_READ(MCRTC_DAY_OF_MONTH);
+	  mon = CMOS_MCRTC_READ(MCRTC_MONTH);
+	  year = CMOS_MCRTC_READ(MCRTC_YEAR);
+	} while (sec != CMOS_MCRTC_READ(MCRTC_SECONDS));
+      } else
 	{ /* Motorola PowerStack etc. */
-		do { /* Isn't this overkill ? UIP above should guarantee consistency */
-			sec = CMOS_READ(RTC_SECONDS);
-			min = CMOS_READ(RTC_MINUTES);
-			hour = CMOS_READ(RTC_HOURS);
-			day = CMOS_READ(RTC_DAY_OF_MONTH);
-			mon = CMOS_READ(RTC_MONTH);
-			year = CMOS_READ(RTC_YEAR);
-		} while (sec != CMOS_READ(RTC_SECONDS));
-		BCD_TO_BIN(sec);
-		BCD_TO_BIN(min);
-		BCD_TO_BIN(hour);
-		BCD_TO_BIN(day);
-		BCD_TO_BIN(mon);
-		BCD_TO_BIN(year);
+	  do { /* Isn't this overkill ? UIP above should guarantee consistency */
+	    sec = CMOS_READ(RTC_SECONDS);
+	    min = CMOS_READ(RTC_MINUTES);
+	    hour = CMOS_READ(RTC_HOURS);
+	    day = CMOS_READ(RTC_DAY_OF_MONTH);
+	    mon = CMOS_READ(RTC_MONTH);
+	    year = CMOS_READ(RTC_YEAR);
+	  } while (sec != CMOS_READ(RTC_SECONDS));
+	  BCD_TO_BIN(sec);
+	  BCD_TO_BIN(min);
+	  BCD_TO_BIN(hour);
+	  BCD_TO_BIN(day);
+	  BCD_TO_BIN(mon);
+	  BCD_TO_BIN(year);
 	}
 #if 0	
 printk("CMOS TOD - M/D/Y H:M:S = %d/%d/%d %d:%02d:%02d\n", mon, day, year, hour, min, sec);
@@ -324,13 +453,13 @@ printk("CMOS TOD - M/D/Y H:M:S = %d/%d/%d %d:%02d:%02d\n", mon, day, year, hour,
 
 void time_init(void)
 {
-	void (*irq_handler)(int, struct pt_regs *);
-	xtime.tv_sec = get_cmos_time();
-	xtime.tv_usec = 0;
-
-	/* If we have the CPU hardware time counters, use them */
-	irq_handler = timer_interrupt;
-	if (request_irq(TIMER_IRQ, irq_handler, 0, "timer", NULL) != 0)
-		panic("Could not allocate timer IRQ!");
+  void (*irq_handler)(int, struct pt_regs *);
+  xtime.tv_sec = get_cmos_time();
+  xtime.tv_usec = 0;
+  
+  /* If we have the CPU hardware time counters, use them */
+  irq_handler = timer_interrupt;
+  if (request_irq(TIMER_IRQ, irq_handler, 0, "timer", NULL) != 0)
+    panic("Could not allocate timer IRQ!");
 }
 

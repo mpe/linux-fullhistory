@@ -558,6 +558,9 @@ void smp_flush_tlb_page(struct vm_area_struct *vma, unsigned long page)
 void smp_flush_page_to_ram(unsigned long page)
 { xc1((smpfunc_t) local_flush_page_to_ram, page); }
 
+void smp_flush_sig_insns(struct mm_struct *mm, unsigned long insn_addr)
+{ xc2((smpfunc_t) local_flush_sig_insns, (unsigned long) mm, insn_addr); }
+
 /* Reschedule call back. */
 void smp_reschedule_irq(void)
 {

@@ -101,6 +101,10 @@ static int do_securelevel_strategy (ctl_table *, int *, int, void *, size_t *,
 
 extern char binfmt_java_interpreter[], binfmt_java_appletviewer[];
 
+#ifdef __sparc__
+extern char reboot_command [];
+#endif
+
 /* The default sysctl tables: */
 
 static ctl_table root_table[] = {
@@ -148,6 +152,10 @@ static ctl_table kern_table[] = {
 	 64, 0644, NULL, &proc_dostring, &sysctl_string },
 	{KERN_JAVA_APPLETVIEWER, "java-appletviewer", binfmt_java_appletviewer,
 	 64, 0644, NULL, &proc_dostring, &sysctl_string },
+#endif
+#ifdef __sparc__
+	{KERN_SPARC_REBOOT, "reboot-cmd", reboot_command,
+	 256, 0644, NULL, &proc_dostring, &sysctl_string },
 #endif
 	{0}
 };

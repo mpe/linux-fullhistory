@@ -1,4 +1,4 @@
-/*	$Id: if_pppvar.h,v 1.2 1995/06/12 11:36:51 paulus Exp $	*/
+/*	$Id: if_pppvar.h,v 1.3 1996/09/01 07:45:23 davem Exp $	*/
 /*
  * if_pppvar.h - private structures and declarations for PPP.
  *
@@ -93,7 +93,7 @@ struct ppp {
 	__s32		magic;		/* magic value for structure	*/
 
 	/* Bitmapped flag fields. */
-	__u8		inuse;		/* are we allocated?		*/
+	__u32		inuse;		/* are we allocated?		*/
 	__u8		escape;		/* 0x20 if prev char was PPP_ESC*/
 	__u8		toss;		/* toss this frame		*/
 

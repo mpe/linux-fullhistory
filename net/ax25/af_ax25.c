@@ -1165,7 +1165,8 @@ static int ax25_create(struct socket *sock, int protocol)
 		return -ENOMEM;
 	}
 
-	sock->ops=&ax25_proto_ops;
+	sock->ops = &ax25_proto_ops;
+
 	skb_queue_head_init(&sk->receive_queue);
 	skb_queue_head_init(&sk->write_queue);
 	skb_queue_head_init(&sk->back_log);
@@ -1188,8 +1189,8 @@ static int ax25_create(struct socket *sock, int protocol)
 	sk->error_report = def_callback1;
 
 	if (sock != NULL) {
-		sock->sk = sk;
-		sk->sleep  = &sock->wait;
+		sock->sk  = sk;
+		sk->sleep = &sock->wait;
 	}
 
 	ax25->sk          = sk;
@@ -1238,7 +1239,6 @@ static struct sock *ax25_make_new(struct sock *osk, struct device *dev)
 	sk->sndbuf      = osk->sndbuf;
 	sk->debug       = osk->debug;
 	sk->state       = TCP_ESTABLISHED;
-	sk->window      = osk->window;
 	sk->mtu         = osk->mtu;
 	sk->sleep       = osk->sleep;
 	sk->zapped      = osk->zapped;
@@ -1356,8 +1356,8 @@ static int ax25_release(struct socket *sock, struct socket *peer)
 		ax25_destroy_socket(sk->protinfo.ax25);
 	}
 
-	sock->sk = NULL;	
-	sk->socket = NULL;	/* Not used, but we should do this. **/
+	sock->sk   = NULL;	
+	sk->socket = NULL;	/* Not used, but we should do this */
 
 	return 0;
 }
@@ -1965,7 +1965,7 @@ static int ax25_sendmsg(struct socket *sock, struct msghdr *msg, int len,
 	int lv;
 	int addr_len = msg->msg_namelen;
 	
-	if ((msg->msg_flags&~MSG_DONTWAIT) || msg->msg_control)
+	if (msg->msg_flags & ~MSG_DONTWAIT)
 		return -EINVAL;
 
 	if (sk->zapped)
@@ -2033,8 +2033,7 @@ static int ax25_sendmsg(struct socket *sock, struct msghdr *msg, int len,
 	/* Assume the worst case */
 	size = len + 3 + size_ax25_addr(dp) + AX25_BPQ_HEADER_LEN;
 
-	if ((skb = sock_alloc_send_skb(sk, size, 0, 
-		msg->msg_flags&MSG_DONTWAIT, &err)) == NULL)
+	if ((skb = sock_alloc_send_skb(sk, size, 0, msg->msg_flags & MSG_DONTWAIT, &err)) == NULL)
 		return err;
 
 	skb->sk   = sk;
@@ -2088,8 +2087,9 @@ static int ax25_sendmsg(struct socket *sock, struct msghdr *msg, int len,
 		*asmptr = LAPB_UI;
 
 		/* Datagram frames go straight out of the door as UI */
-		skb->dev=sk->protinfo.ax25->device;
-		skb->priority=SOPRI_NORMAL;
+		skb->dev      = sk->protinfo.ax25->device;
+		skb->priority = SOPRI_NORMAL;
+
 		ax25_queue_xmit(skb);
 
 		return len;
@@ -2115,7 +2115,7 @@ static int ax25_recvmsg(struct socket *sock, struct msghdr *msg, int size, int f
 		return -ENOTCONN;
 
 	/* Now we can treat all alike */
-	if ((skb = skb_recv_datagram(sk, flags, flags&MSG_DONTWAIT, &er)) == NULL)
+	if ((skb = skb_recv_datagram(sk, flags, msg->msg_flags & MSG_DONTWAIT, &er)) == NULL)
 		return er;
 
 	if (sk->protinfo.ax25->hdrincl) {
@@ -2136,8 +2136,7 @@ static int ax25_recvmsg(struct socket *sock, struct msghdr *msg, int size, int f
 
 	skb_copy_datagram_iovec(skb, 0, msg->msg_iov, copied);
 	
-	if (sax) 
-	{
+	if (sax != NULL) {
 		ax25_digi digi;
 		ax25_address dest;
 
@@ -2150,8 +2149,7 @@ static int ax25_recvmsg(struct socket *sock, struct msghdr *msg, int size, int f
 		sax->sax25_ndigis = digi.ndigi;
 		sax->sax25_call   = dest;
 
-		if (sax->sax25_ndigis != 0) 
-		{
+		if (sax->sax25_ndigis != 0) {
 			int ct           = 0;
 			struct full_sockaddr_ax25 *fsa = (struct full_sockaddr_ax25 *)sax;
 
@@ -2159,11 +2157,11 @@ static int ax25_recvmsg(struct socket *sock, struct msghdr *msg, int size, int f
 				fsa->fsa_digipeater[ct] = digi.calls[ct];
 				ct++;
 			}
-
 		}
 	}
 
-	msg->msg_namelen=sizeof(struct full_sockaddr_ax25);
+	msg->msg_namelen = sizeof(struct full_sockaddr_ax25);
+
 	skb_free_datagram(sk, skb);
 
 	return copied;
@@ -2460,6 +2458,7 @@ void ax25_queue_xmit(struct sk_buff *skb)
 
 	ptr = skb_push(skb, 1);
 	*ptr++ = 0;			/* KISS */
+
 	dev_queue_xmit(skb);
 }
 
@@ -2526,8 +2525,8 @@ int ax25_rebuild_header(struct sk_buff *skb)
 {
 	struct sk_buff *ourskb;
 	int mode;
-	unsigned char *bp=skb->data;
-	struct device *dev=skb->dev;
+	unsigned char *bp  = skb->data;
+	struct device *dev = skb->dev;
 
   	if (arp_find(bp + 1, skb))
   		return 1;
@@ -2576,8 +2575,10 @@ int ax25_rebuild_header(struct sk_buff *skb)
   	 *		  over ethernet. I don't know if this is valid, though.
   	 */
 	ax25_dg_build_path(skb, (ax25_address *)(bp + 1), dev);
-	skb->dev=dev;
-	skb->priority=SOPRI_NORMAL;
+
+	skb->dev      = dev;
+	skb->priority = SOPRI_NORMAL;
+
 	ax25_queue_xmit(skb);
 
   	return 1;

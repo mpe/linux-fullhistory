@@ -296,7 +296,10 @@ extern __inline__ void  dev_unlock_list(void)
 
 /*
  *	This almost never occurs, isn't in performance critical paths
- *	and we can thus be relaxed about it
+ *	and we can thus be relaxed about it. 
+ *
+ *	FIXME: What if this is being run as a real time process ??
+ *		Linus: We need a way to force a yield here ?
  */
  
 extern __inline__ void dev_lock_wait(void)
@@ -347,6 +350,8 @@ extern void		dev_mc_upload(struct device *dev);
 extern void 		dev_mc_delete(struct device *dev, void *addr, int alen, int all);
 extern void		dev_mc_add(struct device *dev, void *addr, int alen, int newonly);
 extern void		dev_mc_discard(struct device *dev);
+/* Load a device via the kerneld */
+extern void		dev_load(const char *name);
 
 #endif /* __KERNEL__ */
 

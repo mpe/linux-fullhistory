@@ -1,4 +1,4 @@
-/* $Id: head.S,v 1.70 1996/10/31 06:28:29 davem Exp $
+/* $Id: head.S,v 1.74 1996/12/08 08:18:59 davem Exp $
  * head.S: The initial boot code for the Sparc port of Linux.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -8,6 +8,7 @@
 
 #include <linux/version.h>
 #include <linux/config.h>
+#include <linux/init.h>
 
 #include <asm/cprefix.h>
 #include <asm/head.h>
@@ -162,7 +163,7 @@ t_bad9b:BAD_TRAP(0x9b) BAD_TRAP(0x9c) BAD_TRAP(0x9d) BAD_TRAP(0x9e) BAD_TRAP(0x9
 t_getcc:GETCC_TRAP                          /* Get Condition Codes           */
 t_setcc:SETCC_TRAP                          /* Set Condition Codes           */
 t_bada2:BAD_TRAP(0xa2) BAD_TRAP(0xa3) BAD_TRAP(0xa4) BAD_TRAP(0xa5) BAD_TRAP(0xa6)
-t_bada7:INDIRECT_SOLARIS_SYSCALL(156)
+t_slowi:INDIRECT_SOLARIS_SYSCALL(156)
 t_bada8:BAD_TRAP(0xa8) BAD_TRAP(0xa9) BAD_TRAP(0xaa) BAD_TRAP(0xab)
 t_badac:BAD_TRAP(0xac) BAD_TRAP(0xad) BAD_TRAP(0xae) BAD_TRAP(0xaf) BAD_TRAP(0xb0)
 t_badb1:BAD_TRAP(0xb1) BAD_TRAP(0xb2) BAD_TRAP(0xb3) BAD_TRAP(0xb4) BAD_TRAP(0xb5)
@@ -737,6 +738,10 @@ go_to_highmem:
 		jmpl	%g1, %g0
 		 nop
 
+/* The code above should be at beginning and we have to take care about
+ * short jumps, as branching to .text.init section from .text is usually
+ * impossible */
+		__INIT
 /* Acquire boot time privileged register values, this will help debugging.
  * I figure out and store nwindows and nwindowsm1 later on.
  */
@@ -852,7 +857,22 @@ got_prop:
 		 nop
 
 sun4m_init:
-	/* All sun4m processors can do hw mul/div/rem, patch 'em. */
+	/* XXX Fucking Cypress... */
+	lda	[%g0] ASI_M_MMUREGS, %g5
+	srl	%g5, 28, %g4
+
+	cmp	%g4, 1
+	bne	1f
+	 srl	%g5, 24, %g4
+
+	and	%g4, 0xf, %g4
+	cmp	%g4, 7		/* This would be a HyperSparc. */
+
+	bne	2f
+	 nop
+
+1:
+
 #define PATCH_IT(dst, src)	\
 	set	(dst), %g5;	\
 	set	(src), %g4;	\
@@ -902,7 +922,7 @@ sun4m_init:
  * clear them so we don't get magic faults later on.
  */
 /* This sucks, apparently this makes Vikings call prom panic, will fix later */
-
+2:
 		rd	%psr, %o1
 		srl	%o1, 28, %o1		! Get a type of the CPU
 
@@ -1128,6 +1148,8 @@ halt_me:
 		ld	[%g7 + 0x74], %o0
 		call	%o0			! Get us out of here...
 		 nop				! Apparently Solaris is better.
+
+/* Ok, now we continue in the .data/.text sections */
 
 	.data
 	.align 4

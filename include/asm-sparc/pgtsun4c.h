@@ -1,4 +1,4 @@
-/* $Id: pgtsun4c.h,v 1.27 1996/10/30 06:01:32 davem Exp $
+/* $Id: pgtsun4c.h,v 1.32 1996/12/08 08:39:04 davem Exp $
  * pgtsun4c.h:  Sun4c specific pgtable.h defines and code.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -44,29 +44,35 @@
 /*
  * Sparc SUN4C pte fields.
  */
-#define _SUN4C_PAGE_VALID     0x80000000   /* valid page */
-#define _SUN4C_PAGE_WRITE     0x40000000   /* can be written to */
-#define _SUN4C_PAGE_PRIV      0x20000000   /* bit to signify privileged page */
-#define _SUN4C_PAGE_USER      0x00000000   /* User page */
-#define _SUN4C_PAGE_NOCACHE   0x10000000   /* non-cacheable page */
-#define _SUN4C_PAGE_IO        0x04000000   /* I/O page */
-#define _SUN4C_PAGE_REF       0x02000000   /* Page has been accessed/referenced */
-#define _SUN4C_PAGE_DIRTY     0x01000000   /* Page has been modified, is dirty */
-#define _SUN4C_PAGE_PRESENT   0x00400000   /* present (known) page */
+#define _SUN4C_PAGE_VALID        0x80000000
+#define _SUN4C_PAGE_SILENT_READ  0x80000000   /* synonym */
+#define _SUN4C_PAGE_DIRTY        0x40000000
+#define _SUN4C_PAGE_SILENT_WRITE 0x40000000   /* synonym */
+#define _SUN4C_PAGE_PRIV         0x20000000   /* privileged page */
+#define _SUN4C_PAGE_NOCACHE      0x10000000   /* non-cacheable page */
+#define _SUN4C_PAGE_PRESENT      0x08000000   /* implemented in software */
+#define _SUN4C_PAGE_IO           0x04000000   /* I/O page */
+#define _SUN4C_PAGE_READ         0x00800000   /* implemented in software */
+#define _SUN4C_PAGE_WRITE        0x00400000   /* implemented in software */
+#define _SUN4C_PAGE_ACCESSED     0x00200000   /* implemented in software */
+#define _SUN4C_PAGE_MODIFIED     0x00100000   /* implemented in software */
 
-#define _SUN4C_PAGE_CHG_MASK  (0xffff | _SUN4C_PAGE_REF | _SUN4C_PAGE_DIRTY)
+#define _SUN4C_READABLE		(_SUN4C_PAGE_READ|_SUN4C_PAGE_SILENT_READ|\
+				 _SUN4C_PAGE_ACCESSED)
+#define _SUN4C_WRITEABLE	(_SUN4C_PAGE_WRITE|_SUN4C_PAGE_SILENT_WRITE|\
+				 _SUN4C_PAGE_MODIFIED)
 
-#define SUN4C_PAGE_NONE     __pgprot(_SUN4C_PAGE_VALID | _SUN4C_PAGE_PRIV | \
-				     _SUN4C_PAGE_REF)
-#define SUN4C_PAGE_SHARED   __pgprot(_SUN4C_PAGE_VALID | _SUN4C_PAGE_WRITE | \
-				     _SUN4C_PAGE_USER | _SUN4C_PAGE_REF)
-#define SUN4C_PAGE_COPY     __pgprot(_SUN4C_PAGE_VALID | _SUN4C_PAGE_USER | \
-				     _SUN4C_PAGE_REF)
-#define SUN4C_PAGE_READONLY __pgprot(_SUN4C_PAGE_VALID | _SUN4C_PAGE_USER | \
-				     _SUN4C_PAGE_REF)
-#define SUN4C_PAGE_KERNEL   __pgprot(_SUN4C_PAGE_VALID | _SUN4C_PAGE_WRITE | \
-				     _SUN4C_PAGE_PRIV | _SUN4C_PAGE_DIRTY | \
-				     _SUN4C_PAGE_REF | _SUN4C_PAGE_NOCACHE)
+#define _SUN4C_PAGE_CHG_MASK	(0xffff|_SUN4C_PAGE_ACCESSED|_SUN4C_PAGE_MODIFIED)
+
+#define SUN4C_PAGE_NONE		__pgprot(_SUN4C_PAGE_PRESENT)
+#define SUN4C_PAGE_SHARED	__pgprot(_SUN4C_PAGE_PRESENT|_SUN4C_READABLE|\
+					 _SUN4C_PAGE_WRITE)
+#define SUN4C_PAGE_COPY		__pgprot(_SUN4C_PAGE_PRESENT|_SUN4C_READABLE)
+#define SUN4C_PAGE_READONLY	__pgprot(_SUN4C_PAGE_PRESENT|_SUN4C_READABLE)
+#define SUN4C_PAGE_KERNEL	__pgprot(_SUN4C_READABLE|_SUN4C_WRITEABLE|\
+					 _SUN4C_PAGE_DIRTY|_SUN4C_PAGE_PRIV)
+
+#ifndef __ASSEMBLY__
 
 extern __inline__ unsigned long sun4c_get_synchronous_error(void)
 {
@@ -124,7 +130,7 @@ extern __inline__ void sun4c_put_pte(unsigned long addr, unsigned long entry)
 {
   __asm__ __volatile__("\n\tsta %1, [%0] %2\n\t" : :
 		       "r" (addr), 
-		       "r" (entry), "i" (ASI_PTE));
+		       "r" ((entry & ~(_SUN4C_PAGE_PRESENT))), "i" (ASI_PTE));
 
   return;
 }
@@ -147,5 +153,7 @@ extern __inline__ int sun4c_set_context(int ctx)
 
   return ctx;
 }
+
+#endif /* !(__ASSEMBLY__) */
 
 #endif /* !(_SPARC_PGTSUN4C_H) */

@@ -53,6 +53,8 @@
  *						and accepted source address
  *						can be configured by an ioctl()
  *						call.
+ *						Fixed to match Linux networking
+ *						changes - 2.1.15.
  */
 
 #include <linux/config.h>
@@ -329,22 +331,13 @@ static int bpq_xmit(struct sk_buff *skb, struct device *dev)
 /*
  *	Statistics
  */
-static struct enet_statistics * bpq_get_stats(struct device *dev)
+static struct enet_statistics *bpq_get_stats(struct device *dev)
 {
 	struct bpqdev *bpq;
 
 	bpq = (struct bpqdev *)dev->priv;
 
 	return &bpq->stats;
-}
-
-
-/*
- *	Rebuild header...
- */
-static int bpq_rebuild_header(void *buff, struct device *dev, unsigned long raddr, struct sk_buff *skb)
-{
-	return ax25_rebuild_header((unsigned char *)buff, dev, raddr, skb);
 }
 
 /*
@@ -554,8 +547,6 @@ static int bpq_new_device(struct device *dev)
 		skb_queue_head_init(&dev->buffs[k]);
 
 	dev->hard_start_xmit = bpq_xmit;
-	dev->hard_header     = ax25_encapsulate;
-	dev->rebuild_header  = bpq_rebuild_header;
 	dev->open	     = bpq_open;
 	dev->stop	     = bpq_close;
 	dev->set_mac_address = bpq_set_mac_address;
@@ -574,6 +565,11 @@ static int bpq_new_device(struct device *dev)
 	dev->pa_brdaddr = 0;
 	dev->pa_mask    = 0;
 	dev->pa_alen    = 4;
+#endif
+
+#if defined(CONFIG_AX25) || defined(CONFIG_AX25_MODULE)
+	dev->hard_header     = ax25_encapsulate;
+	dev->rebuild_header  = ax25_rebuild_header;
 #endif
 
 	dev->type            = ARPHRD_AX25;

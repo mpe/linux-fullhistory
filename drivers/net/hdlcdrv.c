@@ -29,6 +29,7 @@
  *  History:
  *   0.1  21.09.96  Started
  *        18.10.96  Changed to new user space access routines (copy_{to,from}_user)
+ *	  13.12.96  Fixed for Linux networking changes. (JSN)
  */
 
 /*****************************************************************************/
@@ -737,11 +738,9 @@ static int hdlcdrv_header(struct sk_buff *skb, struct device *dev,
  * Rebuild the MAC-level header
  */
 
-static int hdlcdrv_rebuild_header(void *buff, struct device *dev,
-				 unsigned long raddr,
-				 struct sk_buff *skb)
+static int hdlcdrv_rebuild_header(struct sk_buff *skb)
 {
-        return ax25_rebuild_header(buff, dev, raddr, skb);
+        return ax25_rebuild_header(skb);
 }
 #endif /* CONFIG_AX25 */
 

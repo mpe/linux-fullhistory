@@ -721,7 +721,7 @@ struct sock * tcp_v4_syn_recv_sock(struct sock *sk, struct sk_buff *skb,
 	struct rtable *rt;
 	int snd_mss;
 
-	newsk = (struct sock *) kmalloc(sizeof(struct sock), GFP_ATOMIC);
+	newsk = sk_alloc(GFP_ATOMIC);
 	if (newsk == NULL)
 	{
 		return NULL;
@@ -1018,7 +1018,7 @@ int tcp_v4_rcv(struct sk_buff *skb, unsigned short len)
 
 #ifdef CONFIG_IP_TRANSPARENT_PROXY
 	if (IPCB(skb)->redirport)
-		sk = get_sock_proxy(&tcp_prot, th->dest, saddr, th->source, daddr, dev->pa_addr, IPCB(skb)->redirport);
+		sk = get_sock_proxy(&tcp_prot, th->dest, saddr, th->source, daddr, skb->dev->pa_addr, IPCB(skb)->redirport);
 	else
 #endif
 	sk = get_tcp_sock(saddr, th->source, daddr, th->dest);

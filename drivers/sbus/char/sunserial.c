@@ -1,6 +1,8 @@
-/* serial.c: Serial port driver for the Sparc.
+/* $Id: sunserial.c,v 1.24 1996/11/21 16:57:56 jj Exp $
+ * serial.c: Serial port driver for the Sparc.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
+ * Copyright (C) 1996 Eddie C. Dost   (ecd@skynet.be)
  */
 
 #include <linux/errno.h>
@@ -16,37 +18,39 @@
 #include <linux/fcntl.h>
 #include <linux/mm.h>
 #include <linux/kernel.h>
+#include <linux/init.h>
 
 #include <asm/io.h>
 #include <asm/irq.h>
 #include <asm/oplib.h>
 #include <asm/system.h>
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 #include <asm/bitops.h>
 #include <asm/delay.h>
 #include <asm/kdebug.h>
 
 #include "sunserial.h"
 
-#define NUM_SERIAL 2     /* Two chips on board. */
+static int num_serial = 2; /* sun4/sun4c/sun4m - Two chips on board. */
+#define NUM_SERIAL num_serial
 #define NUM_CHANNELS (NUM_SERIAL * 2)
 
 #define KEYBOARD_LINE 0x2
 #define MOUSE_LINE    0x3
 
-struct sun_zslayout *zs_chips[NUM_SERIAL] = { 0, 0, };
-struct sun_zschannel *zs_channels[NUM_CHANNELS] = { 0, 0, 0, 0, };
+struct sun_zslayout **zs_chips;
+struct sun_zschannel **zs_channels;
 struct sun_zschannel *zs_conschan;
 struct sun_zschannel *zs_mousechan;
 struct sun_zschannel *zs_kbdchan;
 struct sun_zschannel *zs_kgdbchan;
-int zs_nodes[NUM_SERIAL] = { 0, 0, };
+int *zs_nodes;
 
-struct sun_serial zs_soft[NUM_CHANNELS];
+struct sun_serial *zs_soft;
 struct sun_serial *zs_chain;  /* IRQ servicing chain */
 int zilog_irq;
 
-struct tty_struct zs_ttys[NUM_CHANNELS];
+struct tty_struct *zs_ttys;
 /** struct tty_struct *zs_constty; **/
 
 /* Console hooks... */
@@ -66,16 +70,32 @@ extern void sun_mouse_inbyte(unsigned char byte, unsigned char status);
 
 static unsigned char kgdb_regs[16] = {
 	0, 0, 0,                     /* write 0, 1, 2 */
-	(Rx8 | RxENABLE),            /* write 3 */
+	(Rx8 | RxENAB),              /* write 3 */
 	(X16CLK | SB1 | PAR_EVEN),   /* write 4 */
-	(Tx8 | TxENAB),              /* write 5 */
+	(DTR | Tx8 | TxENAB),        /* write 5 */
 	0, 0, 0,                     /* write 6, 7, 8 */
 	(NV),                        /* write 9 */
 	(NRZ),                       /* write 10 */
 	(TCBR | RCBR),               /* write 11 */
 	0, 0,                        /* BRG time constant, write 12 + 13 */
-	(BRSRC | BRENABL),           /* write 14 */
+	(BRSRC | BRENAB),            /* write 14 */
 	(DCDIE)                      /* write 15 */
+};
+
+static unsigned char zscons_regs[16] = {
+	0,                           /* write 0 */
+	(EXT_INT_ENAB | INT_ALL_Rx), /* write 1 */
+	0,                           /* write 2 */
+	(Rx8 | RxENAB),              /* write 3 */
+	(X16CLK),                    /* write 4 */
+	(DTR | Tx8 | TxENAB),        /* write 5 */
+	0, 0, 0,                     /* write 6, 7, 8 */
+	(NV | MIE),                  /* write 9 */
+	(NRZ),                       /* write 10 */
+	(TCBR | RCBR),               /* write 11 */
+	0, 0,                        /* BRG time constant, write 12 + 13 */
+	(BRSRC | BRENAB),            /* write 14 */
+	(DCDIE | CTSIE | TxUIE | BRKIE) /* write 15 */
 };
 
 #define ZS_CLOCK         4915200   /* Zilog input clock rate */
@@ -106,9 +126,9 @@ static int serial_refcount;
 
 static void change_speed(struct sun_serial *info);
 
-static struct tty_struct *serial_table[NUM_CHANNELS];
-static struct termios *serial_termios[NUM_CHANNELS];
-static struct termios *serial_termios_locked[NUM_CHANNELS];
+static struct tty_struct **serial_table;
+static struct termios **serial_termios;
+static struct termios **serial_termios_locked;
 
 #ifndef MIN
 #define MIN(a,b)	((a) < (b) ? (a) : (b))
@@ -160,7 +180,8 @@ static int baud_table[] = {
  * register access, other machines handle this in hardware via auxiliary
  * flip-flops which implement the settle time we do in software.
  */
-static inline unsigned char read_zsreg(struct sun_zschannel *channel, unsigned char reg)
+static inline unsigned char read_zsreg(struct sun_zschannel *channel,
+				       unsigned char reg)
 {
 	unsigned char retval;
 
@@ -171,48 +192,76 @@ static inline unsigned char read_zsreg(struct sun_zschannel *channel, unsigned c
 	return retval;
 }
 
-static inline void write_zsreg(struct sun_zschannel *channel, unsigned char reg, unsigned char value)
+static inline void write_zsreg(struct sun_zschannel *channel,
+			       unsigned char reg, unsigned char value)
 {
 	channel->control = reg;
 	udelay(5);
 	channel->control = value;
 	udelay(5);
-	return;
 }
 
-static inline void load_zsregs(struct sun_zschannel *channel, unsigned char *regs)
+static inline void load_zsregs(struct sun_serial *info, unsigned char *regs)
 {
+	unsigned long flags;
+	struct sun_zschannel *channel = info->zs_channel;
+
 	ZS_CLEARERR(channel);
 	ZS_CLEARFIFO(channel);
 	/* Load 'em up */
+	save_flags(flags); cli();
+	if (info->channelA)
+		write_zsreg(channel, R9, CHRA);
+	else
+		write_zsreg(channel, R9, CHRB);
+	udelay(20);	/* wait for some old sun4's */
 	write_zsreg(channel, R4, regs[R4]);
-	write_zsreg(channel, R10, regs[R10]);
-	write_zsreg(channel, R3, regs[R3] & ~RxENABLE);
+	write_zsreg(channel, R3, regs[R3] & ~RxENAB);
 	write_zsreg(channel, R5, regs[R5] & ~TxENAB);
-	write_zsreg(channel, R1, regs[R1]);
-	write_zsreg(channel, R9, regs[R9]);
+	write_zsreg(channel, R9, regs[R9] & ~MIE);
+	write_zsreg(channel, R10, regs[R10]);
 	write_zsreg(channel, R11, regs[R11]);
 	write_zsreg(channel, R12, regs[R12]);
 	write_zsreg(channel, R13, regs[R13]);
+	write_zsreg(channel, R14, regs[R14] & ~BRENAB);
 	write_zsreg(channel, R14, regs[R14]);
-	write_zsreg(channel, R15, regs[R15]);
+	write_zsreg(channel, R14, (regs[R14] & ~SNRZI) | BRENAB);
 	write_zsreg(channel, R3, regs[R3]);
 	write_zsreg(channel, R5, regs[R5]);
-	return;
+	write_zsreg(channel, R15, regs[R15]);
+	write_zsreg(channel, R0, RES_EXT_INT);
+	write_zsreg(channel, R0, RES_EXT_INT);
+	write_zsreg(channel, R1, regs[R1]);
+	write_zsreg(channel, R9, regs[R9]);
+	restore_flags(flags);
+}
+
+static inline void zs_put_char(struct sun_zschannel *channel, char ch)
+{
+	int loops = 0;
+
+	while((channel->control & Tx_BUF_EMP) == 0 && loops < 10000) {
+		loops++;
+		udelay(5);
+	}
+	channel->data = ch;
+	udelay(5);
 }
 
 /* Sets or clears DTR/RTS on the requested line */
 static inline void zs_rtsdtr(struct sun_serial *ss, int set)
 {
+	unsigned long flags;
+
+	save_flags(flags); cli();
 	if(set) {
 		ss->curregs[5] |= (RTS | DTR);
-		ss->pendregs[5] = ss->curregs[5];
 		write_zsreg(ss->zs_channel, 5, ss->curregs[5]);
 	} else {
 		ss->curregs[5] &= ~(RTS | DTR);
-		ss->pendregs[5] = ss->curregs[5];
 		write_zsreg(ss->zs_channel, 5, ss->curregs[5]);
 	}
+	restore_flags(flags);
 	return;
 }
 
@@ -230,23 +279,7 @@ static inline void kgdb_chaninit(struct sun_serial *ss, int intson, int bps)
 	brg = BPS_TO_BRG(bps, ZS_CLOCK/16);
 	kgdb_regs[R12] = (brg & 255);
 	kgdb_regs[R13] = ((brg >> 8) & 255);
-	load_zsregs(ss->zs_channel, kgdb_regs);
-}
-
-/* Utility routines for the Zilog */
-static inline int get_zsbaud(struct sun_serial *ss)
-{
-	struct sun_zschannel *channel = ss->zs_channel;
-	int brg;
-
-	/* The baud rate is split up between two 8-bit registers in
-	 * what is termed 'BRG time constant' format in my docs for
-	 * the chip, it is a function of the clk rate the chip is
-	 * receiving which happens to be constant.
-	 */
-	brg = ((read_zsreg(channel, 13)&0xff) << 8);
-	brg |= (read_zsreg(channel, 12)&0xff);
-	return BRG_TO_BPS(brg, (ZS_CLOCK/(ss->clk_divisor)));
+	load_zsregs(ss, kgdb_regs);
 }
 
 /*
@@ -268,7 +301,6 @@ static void rs_stop(struct tty_struct *tty)
 	save_flags(flags); cli();
 	if (info->curregs[5] & TxENAB) {
 		info->curregs[5] &= ~TxENAB;
-		info->pendregs[5] &= ~TxENAB;
 		write_zsreg(info->zs_channel, 5, info->curregs[5]);
 	}
 	restore_flags(flags);
@@ -285,7 +317,6 @@ static void rs_start(struct tty_struct *tty)
 	save_flags(flags); cli();
 	if (info->xmit_cnt && info->xmit_buf && !(info->curregs[5] & TxENAB)) {
 		info->curregs[5] |= TxENAB;
-		info->pendregs[5] = info->curregs[5];
 		write_zsreg(info->zs_channel, 5, info->curregs[5]);
 	}
 	restore_flags(flags);
@@ -307,7 +338,7 @@ static void batten_down_hatches(void)
 	   (((unsigned long)linux_dbvec)<=DEBUG_LASTVADDR))
 		sp_enter_debugger();
 	else
-		prom_halt();
+		prom_cmdline();
 
 	/* XXX We want to notify the keyboard driver that all
 	 * XXX keys are in the up state or else weird things
@@ -320,10 +351,14 @@ static void batten_down_hatches(void)
 /* On receive, this clears errors and the receiver interrupts */
 static inline void rs_recv_clear(struct sun_zschannel *zsc)
 {
+	unsigned long flags;
+
+	save_flags(flags); cli();
 	zsc->control = ERR_RES;
 	udelay(5);
 	zsc->control = RES_H_IUS;
 	udelay(5);
+	restore_flags(flags);
 }
 
 /*
@@ -366,7 +401,7 @@ static _INLINE_ void receive_chars(struct sun_serial *info, struct pt_regs *regs
 	struct tty_struct *tty = info->tty;
 	unsigned char ch, stat;
 
-	ch = info->zs_channel->data;
+	ch = (info->zs_channel->data) & info->parity_mask;
 	udelay(5);
 	stat = read_zsreg(info->zs_channel, R1);
 	udelay(5);
@@ -408,12 +443,14 @@ static _INLINE_ void receive_chars(struct sun_serial *info, struct pt_regs *regs
 			batten_down_hatches();
 			rs_recv_clear(info->zs_channel);
 			return;
+#if 0
 		} else if (ch == 1) {
 			show_state();
 			return;
 		} else if (ch == 2) {
 			show_buffers();
 			return;
+#endif
 		}
 		/* It is a 'keyboard interrupt' ;-) */
 		wake_up(&keypress_wait);
@@ -452,16 +489,9 @@ clear_and_exit:
 
 static _INLINE_ void transmit_chars(struct sun_serial *info)
 {
-	/* P3: In theory we have to test readiness here because a
-	 * serial console can clog the chip through rs_put_char().
-	 * David did not do this. I think he relies on 3-chars FIFO in 8530.
-	 * Let's watch for lost _output_ characters. XXX
-	 */
-
 	if (info->x_char) {
 		/* Send next char */
-		info->zs_channel->data = info->x_char;
-		udelay(5);
+		zs_put_char(info->zs_channel, info->x_char);
 		info->x_char = 0;
 		goto clear_and_return;
 	}
@@ -474,8 +504,7 @@ static _INLINE_ void transmit_chars(struct sun_serial *info)
 	}
 
 	/* Send char */
-	info->zs_channel->data = info->xmit_buf[info->xmit_tail++];
-	udelay(5);
+	zs_put_char(info->zs_channel, info->xmit_buf[info->xmit_tail++]);
 	info->xmit_tail = info->xmit_tail & (SERIAL_XMIT_SIZE-1);
 	info->xmit_cnt--;
 
@@ -514,13 +543,11 @@ static _INLINE_ void status_handle(struct sun_serial *info)
 		if((info->tty->termios->c_cflag & CRTSCTS) &&
 		   ((info->curregs[3] & AUTO_ENAB)==0)) {
 			info->curregs[3] |= AUTO_ENAB;
-			info->pendregs[3] |= AUTO_ENAB;
 			write_zsreg(info->zs_channel, 3, info->curregs[3]);
 		}
 	} else {
 		if((info->curregs[3] & AUTO_ENAB)) {
 			info->curregs[3] &= ~AUTO_ENAB;
-			info->pendregs[3] &= ~AUTO_ENAB;
 			write_zsreg(info->zs_channel, 3, info->curregs[3]);
 		}
 	}
@@ -543,74 +570,46 @@ static _INLINE_ void status_handle(struct sun_serial *info)
  */
 void rs_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 {
-	struct sun_serial * info;
+	struct sun_serial * info = (struct sun_serial *)dev_id;
 	unsigned char zs_intreg;
+	int i;
 
-	info = zs_chain;
-	if (!info)
-		return;
+	for (i = 0; i < NUM_SERIAL; i++) {
+		zs_intreg = read_zsreg(info->zs_channel, 3);
 
-	zs_intreg = read_zsreg(info->zs_channel, 3);
-
-	/* NOTE: The read register 3, which holds the irq status,
-	 *       does so for both channels on each chip.  Although
-	 *       the status value itself must be read from the A
-	 *       channel and is only valid when read from channel A.
-	 *       Yes... broken hardware...
-	 */
+		/* NOTE: The read register 3, which holds the irq status,
+		 *       does so for both channels on each chip.  Although
+		 *       the status value itself must be read from the A
+		 *       channel and is only valid when read from channel A.
+		 *       Yes... broken hardware...
+		 */
 #define CHAN_A_IRQMASK (CHARxIP | CHATxIP | CHAEXT)
 #define CHAN_B_IRQMASK (CHBRxIP | CHBTxIP | CHBEXT)
 
-	/* *** Chip 1 *** */
-	/* Channel A -- /dev/ttya, could be the console */
-	if(zs_intreg & CHAN_A_IRQMASK) {
-		if (zs_intreg & CHARxIP)
-			receive_chars(info, regs);
-		if (zs_intreg & CHATxIP)
-			transmit_chars(info);
-		if (zs_intreg & CHAEXT)
-			status_handle(info);
+		/* Channel A -- /dev/ttya or /dev/kbd, could be the console */
+		if(zs_intreg & CHAN_A_IRQMASK) {
+			if (zs_intreg & CHARxIP)
+				receive_chars(info, regs);
+			if (zs_intreg & CHATxIP)
+				transmit_chars(info);
+			if (zs_intreg & CHAEXT)
+				status_handle(info);
+		}
+
+		info=info->zs_next;
+
+		/* Channel B -- /dev/ttyb or /dev/mouse, could be the console */
+		if(zs_intreg & CHAN_B_IRQMASK) {
+			if (zs_intreg & CHBRxIP)
+				receive_chars(info, regs);
+			if (zs_intreg & CHBTxIP)
+				transmit_chars(info);
+			if (zs_intreg & CHBEXT)
+				status_handle(info);
+		}
+
+		info = info->zs_next;
 	}
-
-	info=info->zs_next;
-
-	/* Channel B -- /dev/ttyb, could be the console */
-	if(zs_intreg & CHAN_B_IRQMASK) {
-		if (zs_intreg & CHBRxIP)
-			receive_chars(info, regs);
-		if (zs_intreg & CHBTxIP)
-			transmit_chars(info);
-		if (zs_intreg & CHBEXT)
-			status_handle(info);
-	}
-
-	info = info->zs_next;
-
-	zs_intreg = read_zsreg(info->zs_channel, 3);
-	/* *** Chip 2 *** */
-	/* Channel A -- /dev/kbd, pass communication to keyboard driver */
-	if(zs_intreg & CHAN_A_IRQMASK) {
-		if (zs_intreg & CHARxIP)
-			receive_chars(info, regs);
-		if (zs_intreg & CHATxIP)
-			transmit_chars(info);
-		if (zs_intreg & CHAEXT)
-			status_handle(info);
-	}
-
-	info=info->zs_next;
-
-	/* Channel B -- /dev/mouse, pass communication to mouse driver */
-	if(zs_intreg & CHAN_B_IRQMASK) {
-		if (zs_intreg & CHBRxIP)
-			receive_chars(info, regs);
-		if (zs_intreg & CHBTxIP)
-			transmit_chars(info);
-		if (zs_intreg & CHBEXT)
-			status_handle(info);
-	}
-
-	return;
 }
 
 /*
@@ -727,15 +726,12 @@ static int startup(struct sun_serial * info)
 	/*
 	 * Finally, enable sequencing and interrupts
 	 */
-	info->curregs[1] |= (info->curregs[1] & ~0x18) | (EXT_INT_ENAB|INT_ALL_Rx);
-	info->pendregs[1] = info->curregs[1];
-	info->curregs[3] |= (RxENABLE | Rx8);
-	info->pendregs[3] = info->curregs[3];
+	info->curregs[1] |= (info->curregs[1] & ~(RxINT_MASK)) |
+				(EXT_INT_ENAB | INT_ALL_Rx);
+	info->curregs[3] |= (RxENAB | Rx8);
 	/* We enable Tx interrupts as needed. */
 	info->curregs[5] |= (TxENAB | Tx8);
-	info->pendregs[5] = info->curregs[5];
 	info->curregs[9] |= (NV | MIE);
-	info->pendregs[9] = info->curregs[9];
 	write_zsreg(info->zs_channel, 3, info->curregs[3]);
 	write_zsreg(info->zs_channel, 5, info->curregs[5]);
 	write_zsreg(info->zs_channel, 9, info->curregs[9]);
@@ -817,57 +813,58 @@ static void change_speed(struct sun_serial *info)
 	if (!(port = info->port))
 		return;
 	i = cflag & CBAUD;
-	if (i & CBAUDEX) {
+	if (cflag & CBAUDEX) {
 		/* XXX CBAUDEX is not obeyed.
 		 * It is impossible at a 32bits SPARC.
 		 * But we have to report this to user ... someday.
 		 */
 		i = B9600;
 	}
-	info->zs_baud = baud_table[i];
-	info->clk_divisor = 16;
+	if (i == 0) {
+		/* XXX B0, hangup the line. */
+		do_serial_hangup(info);
+	} else if (baud_table[i]) {
+		info->zs_baud = baud_table[i];
+		info->clk_divisor = 16;
 
-	info->curregs[4] = X16CLK;
-	info->curregs[11] = TCBR | RCBR;
-	brg = BPS_TO_BRG(info->zs_baud, ZS_CLOCK/info->clk_divisor);
-	info->curregs[12] = (brg & 255);
-	info->curregs[13] = ((brg >> 8) & 255);
-	info->curregs[14] = BRSRC | BRENABL;
+		info->curregs[4] = X16CLK;
+		info->curregs[11] = TCBR | RCBR;
+		brg = BPS_TO_BRG(info->zs_baud, ZS_CLOCK/info->clk_divisor);
+		info->curregs[12] = (brg & 255);
+		info->curregs[13] = ((brg >> 8) & 255);
+		info->curregs[14] = BRSRC | BRENAB;
+	}
 
 	/* byte size and parity */
 	switch (cflag & CSIZE) {
 	case CS5:
-		info->curregs[3] &= ~(0xc0);
+		info->curregs[3] &= ~(RxN_MASK);
 		info->curregs[3] |= Rx5;
-		info->pendregs[3] = info->curregs[3];
-		info->curregs[5] &= ~(0xe0);
+		info->curregs[5] &= ~(TxN_MASK);
 		info->curregs[5] |= Tx5;
-		info->pendregs[5] = info->curregs[5];
+		info->parity_mask = 0x1f;
 		break;
 	case CS6:
-		info->curregs[3] &= ~(0xc0);
+		info->curregs[3] &= ~(RxN_MASK);
 		info->curregs[3] |= Rx6;
-		info->pendregs[3] = info->curregs[3];
-		info->curregs[5] &= ~(0xe0);
+		info->curregs[5] &= ~(TxN_MASK);
 		info->curregs[5] |= Tx6;
-		info->pendregs[5] = info->curregs[5];
+		info->parity_mask = 0x3f;
 		break;
 	case CS7:
-		info->curregs[3] &= ~(0xc0);
+		info->curregs[3] &= ~(RxN_MASK);
 		info->curregs[3] |= Rx7;
-		info->pendregs[3] = info->curregs[3];
-		info->curregs[5] &= ~(0xe0);
+		info->curregs[5] &= ~(TxN_MASK);
 		info->curregs[5] |= Tx7;
-		info->pendregs[5] = info->curregs[5];
+		info->parity_mask = 0x7f;
 		break;
 	case CS8:
 	default: /* defaults to 8 bits */
-		info->curregs[3] &= ~(0xc0);
+		info->curregs[3] &= ~(RxN_MASK);
 		info->curregs[3] |= Rx8;
-		info->pendregs[3] = info->curregs[3];
-		info->curregs[5] &= ~(0xe0);
+		info->curregs[5] &= ~(TxN_MASK);
 		info->curregs[5] |= Tx8;
-		info->pendregs[5] = info->curregs[5];
+		info->parity_mask = 0xff;
 		break;
 	}
 	info->curregs[4] &= ~(0x0c);
@@ -876,24 +873,19 @@ static void change_speed(struct sun_serial *info)
 	} else {
 		info->curregs[4] |= SB1;
 	}
-	info->pendregs[4] = info->curregs[4];
 	if (cflag & PARENB) {
-		info->curregs[4] |= PAR_ENA;
-		info->pendregs[4] |= PAR_ENA;
+		info->curregs[4] |= PAR_ENAB;
 	} else {
-		info->curregs[4] &= ~PAR_ENA;
-		info->pendregs[4] &= ~PAR_ENA;
+		info->curregs[4] &= ~PAR_ENAB;
 	}
 	if (!(cflag & PARODD)) {
 		info->curregs[4] |= PAR_EVEN;
-		info->pendregs[4] |= PAR_EVEN;
 	} else {
 		info->curregs[4] &= ~PAR_EVEN;
-		info->pendregs[4] &= ~PAR_EVEN;
 	}
 
 	/* Load up the new values */
-	load_zsregs(info->zs_channel, info->curregs);
+	load_zsregs(info, info->curregs);
 
 	return;
 }
@@ -904,38 +896,26 @@ static void change_speed(struct sun_serial *info)
 void kbd_put_char(unsigned char ch)
 {
 	struct sun_zschannel *chan = zs_kbdchan;
-	int flags, loops = 0;
+	int flags;
 
 	if(!chan)
 		return;
 
 	save_flags(flags); cli();
-	while((chan->control & Tx_BUF_EMP)==0 && loops < 10000) {
-		loops++;
-		udelay(5);
-	}
-
-	chan->data = ch;
-	udelay(5);
+	zs_put_char(chan, ch);
 	restore_flags(flags);
 }
 
 void mouse_put_char(char ch)
 {
 	struct sun_zschannel *chan = zs_mousechan;
-	int flags, loops = 0;
+	int flags;
 
 	if(!chan)
 		return;
 
 	save_flags(flags); cli();
-	while((chan->control & Tx_BUF_EMP)==0 && loops < 10000) {
-		loops++;
-		udelay(5);
-	}
-
-	chan->data = ch;
-	udelay(5);
+	zs_put_char(chan, ch);
 	restore_flags(flags);
 }
 
@@ -944,19 +924,13 @@ void mouse_put_char(char ch)
 static void rs_put_char(char ch)
 {
 	struct sun_zschannel *chan = zs_conschan;
-	int flags, loops = 0;
+	int flags;
 
 	if(!chan)
 		return;
 
 	save_flags(flags); cli();
-	while((chan->control & Tx_BUF_EMP)==0 && loops < 10000) {
-		loops++;
-		udelay(5);
-	}
-
-	chan->data = ch;
-	udelay(5);
+	zs_put_char(chan, ch);
 	restore_flags(flags);
 }
 
@@ -969,7 +943,6 @@ void putDebugChar(char kgdb_char)
 
 	while((chan->control & Tx_BUF_EMP)==0)
 		udelay(5);
-
 	chan->data = kgdb_char;
 }
 
@@ -1051,10 +1024,8 @@ static void rs_flush_chars(struct tty_struct *tty)
 	/* Enable transmitter */
 	save_flags(flags); cli();
 	info->curregs[1] |= TxINT_ENAB|EXT_INT_ENAB;
-	info->pendregs[1] |= TxINT_ENAB|EXT_INT_ENAB;
 	write_zsreg(info->zs_channel, 1, info->curregs[1]);
 	info->curregs[5] |= TxENAB;
-	info->pendregs[5] |= TxENAB;
 	write_zsreg(info->zs_channel, 5, info->curregs[5]);
 
 	/*
@@ -1064,13 +1035,10 @@ static void rs_flush_chars(struct tty_struct *tty)
 	 * but resets interrupts also what we do not desire here.
 	 * XXX Discuss with David.
 	 */
-	if (info->zs_channel->control & Tx_BUF_EMP) {
-		/* Send char */
-		info->zs_channel->data = info->xmit_buf[info->xmit_tail++];
-		udelay(5);
-		info->xmit_tail = info->xmit_tail & (SERIAL_XMIT_SIZE-1);
-		info->xmit_cnt--;
-	}
+	zs_put_char(info->zs_channel, info->xmit_buf[info->xmit_tail++]);
+	info->xmit_tail = info->xmit_tail & (SERIAL_XMIT_SIZE-1);
+	info->xmit_cnt--;
+
 	restore_flags(flags);
 }
 
@@ -1084,7 +1052,7 @@ static int rs_write(struct tty_struct * tty, int from_user,
 	if (serial_paranoia_check(info, tty->device, "rs_write"))
 		return 0;
 
-	if (!tty || !info->xmit_buf)
+	if (!info || !info->xmit_buf)
 		return 0;
 
 	save_flags(flags);
@@ -1097,7 +1065,7 @@ static int rs_write(struct tty_struct * tty, int from_user,
 
 		if (from_user) {
 			down(&tmp_buf_sem);
-			memcpy_fromfs(tmp_buf, buf, c);
+			copy_from_user(tmp_buf, buf, c);
 			c = MIN(c, MIN(SERIAL_XMIT_SIZE - info->xmit_cnt - 1,
 				       SERIAL_XMIT_SIZE - info->xmit_head));
 			memcpy(info->xmit_buf + info->xmit_head, tmp_buf, c);
@@ -1111,16 +1079,22 @@ static int rs_write(struct tty_struct * tty, int from_user,
 		count -= c;
 		total += c;
 	}
-	if (info->xmit_cnt && !tty->stopped && !tty->hw_stopped &&
-	    !(info->curregs[5] & TxENAB)) {
+
+	if (info->xmit_cnt && !tty->stopped && !tty->hw_stopped) {
 		/* Enable transmitter */
 		info->curregs[1] |= TxINT_ENAB|EXT_INT_ENAB;
-		info->pendregs[1] |= TxINT_ENAB|EXT_INT_ENAB;
 		write_zsreg(info->zs_channel, 1, info->curregs[1]);
 		info->curregs[5] |= TxENAB;
-		info->pendregs[5] |= TxENAB;
 		write_zsreg(info->zs_channel, 5, info->curregs[5]);
 	}
+#if 1
+	if (info->xmit_cnt && !tty->stopped && !tty->hw_stopped) {
+		zs_put_char(info->zs_channel,
+			    info->xmit_buf[info->xmit_tail++]);
+		info->xmit_tail = info->xmit_tail & (SERIAL_XMIT_SIZE-1);
+		info->xmit_cnt--;
+	}
+#endif
 	restore_flags(flags);
 	return total;
 }
@@ -1189,7 +1163,6 @@ static void rs_throttle(struct tty_struct * tty)
 	/* Turn off RTS line */
 	cli();
 	info->curregs[5] &= ~RTS;
-	info->pendregs[5] &= ~RTS;
 	write_zsreg(info->zs_channel, 5, info->curregs[5]);
 	sti();
 }
@@ -1217,7 +1190,6 @@ static void rs_unthrottle(struct tty_struct * tty)
 	/* Assert RTS line */
 	cli();
 	info->curregs[5] |= RTS;
-	info->pendregs[5] |= RTS;
 	write_zsreg(info->zs_channel, 5, info->curregs[5]);
 	sti();
 }
@@ -1245,7 +1217,7 @@ static int get_serial_info(struct sun_serial * info,
 	tmp.close_delay = info->close_delay;
 	tmp.closing_wait = info->closing_wait;
 	tmp.custom_divisor = info->custom_divisor;
-	memcpy_tofs(retinfo,&tmp,sizeof(*retinfo));
+	copy_to_user_ret(retinfo,&tmp,sizeof(*retinfo), -EFAULT);
 	return 0;
 }
 
@@ -1256,9 +1228,8 @@ static int set_serial_info(struct sun_serial * info,
 	struct sun_serial old_info;
 	int 			retval = 0;
 
-	if (!new_info)
+	if (!new_info || copy_from_user(&new_serial,new_info,sizeof(new_serial)))
 		return -EFAULT;
-	memcpy_fromfs(&new_serial,new_info,sizeof(new_serial));
 	old_info = *info;
 
 	if (!suser()) {
@@ -1311,7 +1282,7 @@ static int get_lsr_info(struct sun_serial * info, unsigned int *value)
 	cli();
 	status = info->zs_channel->control;
 	sti();
-	put_user(status,value);
+	put_user_ret(status,value, -EFAULT);
 	return 0;
 }
 
@@ -1334,7 +1305,6 @@ static void send_break(	struct sun_serial * info, int duration)
 static int rs_ioctl(struct tty_struct *tty, struct file * file,
 		    unsigned int cmd, unsigned long arg)
 {
-	int error;
 	struct sun_serial * info = (struct sun_serial *)tty->driver_data;
 	int retval;
 
@@ -1365,44 +1335,26 @@ static int rs_ioctl(struct tty_struct *tty, struct file * file,
 			send_break(info, arg ? arg*(HZ/10) : HZ/4);
 			return 0;
 		case TIOCGSOFTCAR:
-			return put_user(C_CLOCAL(tty) ? 1 : 0,
-			    (unsigned int *) arg);
+			put_user_ret(C_CLOCAL(tty) ? 1 : 0, (unsigned long *) arg, -EFAULT);
+			return 0;
 		case TIOCSSOFTCAR:
-			{
-			    unsigned int value;
-			    retval = get_user(value, (unsigned int *) arg);
-			    if (retval)
-				return retval;
-			    tty->termios->c_cflag =
-				    ((tty->termios->c_cflag & ~CLOCAL) |
-				     (value ? CLOCAL : 0));
-			}
+			get_user_ret(arg, (unsigned long *) arg, -EFAULT);
+			tty->termios->c_cflag =
+				((tty->termios->c_cflag & ~CLOCAL) |
+				 (arg ? CLOCAL : 0));
 			return 0;
 		case TIOCGSERIAL:
-			error = verify_area(VERIFY_WRITE, (void *) arg,
-						sizeof(struct serial_struct));
-			if (error)
-				return error;
 			return get_serial_info(info,
 					       (struct serial_struct *) arg);
 		case TIOCSSERIAL:
 			return set_serial_info(info,
 					       (struct serial_struct *) arg);
 		case TIOCSERGETLSR: /* Get line status register */
-			error = verify_area(VERIFY_WRITE, (void *) arg,
-				sizeof(unsigned int));
-			if (error)
-				return error;
-			else
-			    return get_lsr_info(info, (unsigned int *) arg);
+			return get_lsr_info(info, (unsigned int *) arg);
 
 		case TIOCSERGSTRUCT:
-			error = verify_area(VERIFY_WRITE, (void *) arg,
-						sizeof(struct sun_serial));
-			if (error)
-				return error;
-			memcpy_tofs((struct sun_serial *) arg,
-				    info, sizeof(struct sun_serial));
+			copy_to_user_ret((struct sun_serial *) arg,
+				    info, sizeof(struct sun_serial), -EFAULT);
 			return 0;
 			
 		default:
@@ -1499,11 +1451,9 @@ static void rs_close(struct tty_struct *tty, struct file * filp)
 	 * line status register.
 	 */
 	/** if (!info->iscons) ... **/
-	info->curregs[3] &= ~RxENABLE;
-	info->pendregs[3] = info->curregs[3];
+	info->curregs[3] &= ~RxENAB;
 	write_zsreg(info->zs_channel, 3, info->curregs[3]);
-	info->curregs[1] &= ~(0x18);
-	info->pendregs[1] = info->curregs[1];
+	info->curregs[1] &= ~(RxINT_MASK);
 	write_zsreg(info->zs_channel, 1, info->curregs[1]);
 	ZS_CLEARFIFO(info->zs_channel);
 
@@ -1636,7 +1586,10 @@ static int block_til_ready(struct tty_struct *tty, struct file * filp,
 	printk("block_til_ready before block: ttys%d, count = %d\n",
 	       info->line, info->count);
 #endif
-	info->count--;
+	cli();
+	if(!tty_hung_up_p(filp))
+		info->count--;
+	sti();
 	info->blocked_open++;
 	while (1) {
 		cli();
@@ -1656,8 +1609,10 @@ static int block_til_ready(struct tty_struct *tty, struct file * filp,
 #endif
 			break;
 		}
+
 		if (!(info->flags & ZILOG_CALLOUT_ACTIVE) &&
-		    !(info->flags & ZILOG_CLOSING) && do_clocal)
+		    !(info->flags & ZILOG_CLOSING) &&
+		    (do_clocal || (DCD & read_zsreg(info->zs_channel, R0))))
 			break;
 		if (current->signal & ~current->blocked) {
 			retval = -ERESTARTSYS;
@@ -1754,16 +1709,28 @@ int rs_open(struct tty_struct *tty, struct file * filp)
 
 static void show_serial_version(void)
 {
-	printk("Sparc Zilog8530 serial driver version 1.00\n");
+	char *revision = "$Revision: 1.24 $";
+	char *version, *p;
+
+	version = strchr(revision, ' ');
+	p = strchr(++version, ' ');
+	*p = '\0';
+	printk("Sparc Zilog8530 serial driver version %s\n", version);
+	*p = ' ';
 }
 
-/* Probe the PROM for the request zs chip number. */
+/* Probe the PROM for the request zs chip number.
+ *
+ * Note: The Sun Voyager shows two addresses and two intr for it's
+ *       Zilogs, what the second does, I don't know. It does work
+ *       with using only the first number of each property.
+ */
 static inline struct sun_zslayout *get_zs(int chip)
 {
-	struct linux_prom_irqs tmp_irq;
+	struct linux_prom_irqs tmp_irq[2];
 	unsigned long paddr = 0;
-	unsigned long vaddr = 0;
-	int zsnode, tmpnode, iospace, slave;
+	unsigned long vaddr[2] = { 0, 0 };
+	int zsnode, tmpnode, iospace, slave, len;
 	static int irq = 0;
 
 #if CONFIG_AP1000
@@ -1789,15 +1756,34 @@ static inline struct sun_zslayout *get_zs(int chip)
 		zs_nodes[chip] = 0;
 		if(!irq)
 			zilog_irq = irq = 12;
-		vaddr = (unsigned long)
-			sparc_alloc_io((char *) paddr, 0, 8,
-				       "Zilog Serial", iospace, 0);
+		vaddr[0] = (unsigned long)
+				sparc_alloc_io((char *) paddr, 0, 8,
+					       "Zilog Serial", iospace, 0);
 	} else {
 		/* Can use the prom for other machine types */
 		zsnode = prom_getchild(prom_root_node);
-		tmpnode = prom_searchsiblings(zsnode, "obio");
-		if(tmpnode)
-			zsnode = prom_getchild(tmpnode);
+		if (sparc_cpu_model == sun4d) {
+			int board, node;
+			
+			tmpnode = zsnode;
+			while (tmpnode && (tmpnode = prom_searchsiblings(tmpnode, "cpu-unit"))) {
+				board = prom_getintdefault (tmpnode, "board#", -1);
+				if (board == (chip >> 1)) {
+					node = prom_getchild(tmpnode);
+					if (node && (node = prom_searchsiblings(node, "bootbus"))) {
+						zsnode = node;
+						break;
+					}
+				}
+				tmpnode = prom_getsibling(tmpnode);
+			}
+			if (!tmpnode)
+				panic ("get_zs: couldn't find board%d's bootbus\n", chip >> 1);
+		} else {
+			tmpnode = prom_searchsiblings(zsnode, "obio");
+			if(tmpnode)
+				zsnode = prom_getchild(tmpnode);
+		}
 		if(!zsnode)
 			panic("get_zs no zs serial prom node");
 		while(zsnode) {
@@ -1805,22 +1791,34 @@ static inline struct sun_zslayout *get_zs(int chip)
 			slave = prom_getintdefault(zsnode, "slave", -1);
 			if(slave==chip) {
 				/* The one we want */
-				vaddr = (unsigned long)
-					prom_getintdefault(zsnode, "address",
-							       0xdeadbeef);
-				if(vaddr == 0xdeadbeef)
-					prom_halt();
+				len = prom_getproperty(zsnode, "address",
+						       (void *) vaddr,
+						       sizeof(vaddr));
+        			if (len % sizeof(unsigned long)) {
+					prom_printf("WHOOPS:  proplen for %s "
+						"was %d, need multiple of "
+						"%d\n", "address", len,
+						sizeof(unsigned long));
+					panic("zilog: address property");
+				}
 				zs_nodes[chip] = zsnode;
-				prom_getproperty(zsnode, "intr",
-						 (char *) &tmp_irq,
-						 sizeof(tmp_irq));
+				len = prom_getproperty(zsnode, "intr",
+						       (char *) tmp_irq,
+						       sizeof(tmp_irq));
+        			if (len % sizeof(struct linux_prom_irqs)) {
+					prom_printf("WHOOPS:  proplen for %s "
+						"was %d, need multiple of "
+						"%d\n", "address", len,
+						sizeof(struct linux_prom_irqs));
+					panic("zilog: address property");
+				}
 #ifdef OLD_STYLE_IRQ
-				tmp_irq.pri &= 0xf;
+				tmp_irq[0].pri &= 0xf;
 #endif
 				if(!irq) {
-					irq = zilog_irq = tmp_irq.pri;
+					irq = zilog_irq = tmp_irq[0].pri;
 				} else {
-					if(tmp_irq.pri != irq)
+					if(tmp_irq[0].pri != irq)
 						panic("zilog: bogon irqs");
 				}
 				break;
@@ -1830,13 +1828,181 @@ static inline struct sun_zslayout *get_zs(int chip)
 		if(!zsnode)
 			panic("get_zs whee chip not found");
 	}
-	if(!vaddr)
+	if(!vaddr[0])
 		panic("get_zs whee no serial chip mappable");
 
-	return (struct sun_zslayout *) vaddr;
-
+	return (struct sun_zslayout *) vaddr[0];
 }
 
+static inline void
+init_zscons_termios(struct termios *termios)
+{
+	char mode[16], buf[16];
+	char *mode_prop = "ttyX-mode";
+	char *cd_prop = "ttyX-ignore-cd";
+	char *dtr_prop = "ttyX-rts-dtr-off";
+	char *s;
+	int baud, bits, cflag;
+	char parity;
+	int topnd, nd;
+	int channel, stop;
+	int carrier = 0;
+	int rtsdtr = 1;
+	extern int serial_console;
+
+	if (!serial_console)
+		return;
+
+	if (serial_console == 1) {
+		mode_prop[3] = 'a';
+		cd_prop[3] = 'a';
+		dtr_prop[3] = 'a';
+	} else {
+		mode_prop[3] = 'b';
+		cd_prop[3] = 'b';
+		dtr_prop[3] = 'b';
+	}
+
+	topnd = prom_getchild(prom_root_node);
+	nd = prom_searchsiblings(topnd, "options");
+	if (!nd) {
+		strcpy(mode, "9600,8,n,1,-");
+		goto no_options;
+	}
+
+	if (!prom_node_has_property(nd, mode_prop)) {
+		strcpy(mode, "9600,8,n,1,-");
+		goto no_options;
+	}
+
+	memset(mode, 0, sizeof(mode));
+	prom_getstring(nd, mode_prop, mode, sizeof(mode));
+
+	if (prom_node_has_property(nd, cd_prop)) {
+		memset(buf, 0, sizeof(buf));
+		prom_getstring(nd, cd_prop, buf, sizeof(buf));
+		if (!strcmp(buf, "false"))
+			carrier = 1;
+
+		/* XXX this is unused below. */
+	}
+
+	if (prom_node_has_property(nd, cd_prop)) {
+		memset(buf, 0, sizeof(buf));
+		prom_getstring(nd, cd_prop, buf, sizeof(buf));
+		if (!strcmp(buf, "false"))
+			rtsdtr = 0;
+
+		/* XXX this is unused below. */
+	}
+
+no_options:
+	cflag = CREAD | HUPCL | CLOCAL;
+
+	s = mode;
+	baud = simple_strtoul(s, 0, 0);
+	s = strchr(s, ',');
+	bits = simple_strtoul(++s, 0, 0);
+	s = strchr(s, ',');
+	parity = *(++s);
+	s = strchr(s, ',');
+	stop = simple_strtoul(++s, 0, 0);
+	s = strchr(s, ',');
+	/* XXX handshake is not handled here. */
+
+	for (channel = 0; channel < NUM_CHANNELS; channel++)
+		if (zs_soft[channel].is_cons)
+			break;
+
+	switch (baud) {
+		case 150:
+			cflag |= B150;
+			break;
+		case 300:
+			cflag |= B300;
+			break;
+		case 600:
+			cflag |= B600;
+			break;
+		case 1200:
+			cflag |= B1200;
+			break;
+		case 2400:
+			cflag |= B2400;
+			break;
+		case 4800:
+			cflag |= B4800;
+			break;
+		default:
+			baud = 9600;
+		case 9600:
+			cflag |= B9600;
+			break;
+		case 19200:
+			cflag |= B19200;
+			break;
+		case 38400:
+			cflag |= B38400;
+			break;
+	}
+	zs_soft[channel].zs_baud = baud;
+
+	switch (bits) {
+		case 5:
+			zscons_regs[3] = Rx5 | RxENAB;
+			zscons_regs[5] = Tx5 | TxENAB;
+			zs_soft[channel].parity_mask = 0x1f;
+			cflag |= CS5;
+			break;
+		case 6:
+			zscons_regs[3] = Rx6 | RxENAB;
+			zscons_regs[5] = Tx6 | TxENAB;
+			zs_soft[channel].parity_mask = 0x3f;
+			cflag |= CS6;
+			break;
+		case 7:
+			zscons_regs[3] = Rx7 | RxENAB;
+			zscons_regs[5] = Tx7 | TxENAB;
+			zs_soft[channel].parity_mask = 0x7f;
+			cflag |= CS7;
+			break;
+		default:
+		case 8:
+			zscons_regs[3] = Rx8 | RxENAB;
+			zscons_regs[5] = Tx8 | TxENAB;
+			zs_soft[channel].parity_mask = 0xff;
+			cflag |= CS8;
+			break;
+	}
+	zscons_regs[5] |= DTR;
+
+	switch (parity) {
+		case 'o':
+			zscons_regs[4] |= PAR_ENAB;
+			cflag |= (PARENB | PARODD);
+			break;
+		case 'e':
+			zscons_regs[4] |= (PAR_ENAB | PAR_EVEN);
+			cflag |= PARENB;
+			break;
+		default:
+		case 'n':
+			break;
+	}
+
+	switch (stop) {
+		default:
+		case 1:
+			zscons_regs[4] |= SB1;
+			break;
+		case 2:
+			cflag |= CSTOPB;
+			zscons_regs[4] |= SB2;
+			break;
+	}
+
+	termios->c_cflag = cflag;
+}
 
 extern void register_console(void (*proc)(const char *));
 
@@ -1861,6 +2027,9 @@ rs_cons_check(struct sun_serial *ss, int channel)
 		o = 1;
 		/* double whee.. */
 		if(!consout_registered) {
+			extern void serial_finish_init (void (*)(const char *));
+
+			serial_finish_init (zs_console_print);
 			register_console(zs_console_print);
 			consout_registered = 1;
 		}
@@ -1875,8 +2044,6 @@ rs_cons_check(struct sun_serial *ss, int channel)
 	}
 	if(o && i)
 		io = 1;
-	if(ss->zs_baud != 9600)
-		panic("Console baud rate weirdness");
 
 	/* Set flag variable for this port so that it cannot be
 	 * opened for other uses by accident.
@@ -1894,15 +2061,52 @@ rs_cons_check(struct sun_serial *ss, int channel)
 	}
 }
 
-volatile int test_done;
 extern void keyboard_zsinit(void);
 extern void sun_mouse_zsinit(void);
 
-/* rs_init inits the driver */
-int rs_init(void)
+__initfunc(unsigned long sun_serial_setup (unsigned long memory_start))
 {
-	int chip, channel, i, flags;
+	char *p;
+	int i;
+	
+	if (sparc_cpu_model == sun4d) {
+		int node = prom_searchsiblings(prom_getchild(prom_root_node), "boards");
+		NUM_SERIAL = 0;
+		if (!node)
+			panic ("Cannot find out count of boards");
+		else
+			node = prom_getchild(node);
+		while (node && (node = prom_searchsiblings(node, "bif"))) {
+			NUM_SERIAL += 2;
+			node = prom_getsibling(node);
+		}
+	}
+	p = (char *)((memory_start + 7) & ~7);
+	zs_chips = (struct sun_zslayout **)(p);
+	i = NUM_SERIAL * sizeof (struct sun_zslayout *);
+	zs_channels = (struct sun_zschannel **)(p + i);
+	i += NUM_CHANNELS * sizeof (struct sun_zschannel *);
+	zs_nodes = (int *)(p + i);
+	i += NUM_SERIAL * sizeof (int);
+	zs_soft = (struct sun_serial *)(p + i);
+	i += NUM_CHANNELS * sizeof (struct sun_serial);
+	zs_ttys = (struct tty_struct *)(p + i);
+	i += NUM_CHANNELS * sizeof (struct tty_struct);
+	serial_table = (struct tty_struct **)(p + i);
+	i += NUM_CHANNELS * sizeof (struct tty_struct *);
+	serial_termios = (struct termios **)(p + i);
+	i += NUM_CHANNELS * sizeof (struct termios *);
+	serial_termios_locked = (struct termios **)(p + i);
+	i += NUM_CHANNELS * sizeof (struct termios *);
+	memset (p, 0, i);
+	return (((unsigned long)p) + i + 7) & ~7;
+}
+
+__initfunc(int rs_init(void))
+{
+	int chip, channel, brg, i, flags;
 	struct sun_serial *info;
+	char dummy;
 
 #if CONFIG_AP1000
         printk("not doing rs_init()\n");
@@ -1952,6 +2156,8 @@ int rs_init(void)
 	serial_driver.start = rs_start;
 	serial_driver.hangup = rs_hangup;
 
+	init_zscons_termios(&serial_driver.init_termios);
+
 	/*
 	 * The callout device is just like normal device except for
 	 * major number and the subtype code.
@@ -1970,11 +2176,11 @@ int rs_init(void)
 
 	/* Set up our interrupt linked list */
 	zs_chain = &zs_soft[0];
-	zs_soft[0].zs_next = &zs_soft[1];
-	zs_soft[1].zs_next = &zs_soft[2];
-	zs_soft[2].zs_next = &zs_soft[3];
-	zs_soft[3].zs_next = 0;
+	for(channel = 0; channel < NUM_CHANNELS - 1; channel++)
+		zs_soft[channel].zs_next = &zs_soft[channel + 1];
+	zs_soft[channel + 1].zs_next = 0;
 
+	/* Initialize Softinfo */
 	for(chip = 0; chip < NUM_SERIAL; chip++) {
 		/* If we are doing kgdb over one of the channels on
 		 * chip zero, kgdb_channel will be set to 1 by the
@@ -1988,103 +2194,173 @@ int rs_init(void)
 			zs_soft[(chip*2)].kgdb_channel = 0;
 			zs_soft[(chip*2)+1].kgdb_channel = 0;
 		}
+
 		/* First, set up channel A on this chip. */
 		channel = chip * 2;
 		zs_soft[channel].zs_channel = zs_channels[channel];
 		zs_soft[channel].change_needed = 0;
 		zs_soft[channel].clk_divisor = 16;
-		zs_soft[channel].zs_baud = get_zsbaud(&zs_soft[channel]);
+		zs_soft[channel].cons_keyb = 0;
 		zs_soft[channel].cons_mouse = 0;
-		/* If not keyboard/mouse and is console serial
-		 * line, then enable receiver interrupts.
-		 */
-		if((channel<KEYBOARD_LINE) && (zs_soft[channel].is_cons)) {
-			write_zsreg(zs_soft[channel].zs_channel, R1,
-				    (EXT_INT_ENAB | INT_ALL_Rx));
-			write_zsreg(zs_soft[channel].zs_channel, R9, (NV | MIE));
-			write_zsreg(zs_soft[channel].zs_channel, R10, (NRZ));
-			write_zsreg(zs_soft[channel].zs_channel, R3, (Rx8|RxENABLE));
-			write_zsreg(zs_soft[channel].zs_channel, R5, (Tx8 | TxENAB));
-		}
-		/* If this is the kgdb line, enable interrupts because we
-		 * now want to receive the 'control-c' character from the
-		 * client attached to us asynchronously.
-		 */
-		if(zs_soft[channel].kgdb_channel)
-			kgdb_chaninit(&zs_soft[channel], 1, zs_soft[channel].zs_baud);
-
-		if(channel == KEYBOARD_LINE) {
-			/* Tell keyboard driver about our presence. */
-			if(zs_soft[channel].zs_baud != 1200)
-				panic("Weird keyboard serial baud rate");
-			zs_soft[channel].cons_keyb = 1;
-			zs_kbdchan = zs_soft[channel].zs_channel;
-			/* Enable Rx/Tx, IRQs, and inform kbd driver */
-			write_zsreg(zs_soft[channel].zs_channel, R1,
-				    (EXT_INT_ENAB | INT_ALL_Rx));
-			write_zsreg(zs_soft[channel].zs_channel, R4,
-				    (PAR_EVEN | X16CLK | SB1));
-			write_zsreg(zs_soft[channel].zs_channel, R9, (NV|MIE));
-			write_zsreg(zs_soft[channel].zs_channel, R10, (NRZ));
-			write_zsreg(zs_soft[channel].zs_channel, R11,
-				    (TCBR | RCBR));
-			write_zsreg(zs_soft[channel].zs_channel, R14,
-				    (BRSRC | BRENABL));
-			write_zsreg(zs_soft[channel].zs_channel, R3, (Rx8|RxENABLE));
-			write_zsreg(zs_soft[channel].zs_channel, R5,
-				    (Tx8 | TxENAB | DTR | RTS));
-#if 0
-			write_zsreg(zs_soft[channel].zs_channel, R15,
-				    (DCDIE | CTSIE | TxUIE | BRKIE));
-#endif
-			ZS_CLEARERR(zs_soft[channel].zs_channel);
-			ZS_CLEARFIFO(zs_soft[channel].zs_channel);
-		}
+		zs_soft[channel].channelA = 1;
 
 		/* Now, channel B */
 		channel++;
 		zs_soft[channel].zs_channel = zs_channels[channel];
 		zs_soft[channel].change_needed = 0;
 		zs_soft[channel].clk_divisor = 16;
-		zs_soft[channel].zs_baud = get_zsbaud(&zs_soft[channel]);
 		zs_soft[channel].cons_keyb = 0;
-		/* If not keyboard/mouse and is console serial
-		 * line, then enable receiver interrupts.
-		 */
-		if(channel<KEYBOARD_LINE && zs_soft[channel].is_cons) {
+		zs_soft[channel].cons_mouse = 0;
+		zs_soft[channel].channelA = 0;
+	}
+
+	/* Initialize Hardware */
+	for(channel = 0; channel < NUM_CHANNELS; channel++) {
+
+		/* Hardware reset each chip */
+		if (!(channel & 1)) {
+			write_zsreg(zs_soft[channel].zs_channel, R9, FHWRES);
+			udelay(20);	/* wait for some old sun4's */
+			dummy = read_zsreg(zs_soft[channel].zs_channel, R0);
+		}
+
+		if(channel == KEYBOARD_LINE) {
+			zs_soft[channel].cons_keyb = 1;
+			zs_soft[channel].parity_mask = 0xff;
+			zs_kbdchan = zs_soft[channel].zs_channel;
+
+			write_zsreg(zs_soft[channel].zs_channel, R4,
+				    (PAR_EVEN | X16CLK | SB1));
+			write_zsreg(zs_soft[channel].zs_channel, R3, Rx8);
+			write_zsreg(zs_soft[channel].zs_channel, R5, Tx8);
+			write_zsreg(zs_soft[channel].zs_channel, R9, NV);
+			write_zsreg(zs_soft[channel].zs_channel, R10, NRZ);
+			write_zsreg(zs_soft[channel].zs_channel, R11,
+				    (TCBR | RCBR));
+			zs_soft[channel].zs_baud = 1200;
+			brg = BPS_TO_BRG(zs_soft[channel].zs_baud,
+					 ZS_CLOCK/zs_soft[channel].clk_divisor);
+			write_zsreg(zs_soft[channel].zs_channel, R12,
+				    (brg & 0xff));
+			write_zsreg(zs_soft[channel].zs_channel, R13,
+				    ((brg >> 8) & 0xff));
+			write_zsreg(zs_soft[channel].zs_channel, R14, BRSRC);
+
+			/* Enable Rx/Tx, IRQs, and inform kbd driver */
+			write_zsreg(zs_soft[channel].zs_channel, R14,
+				    (BRSRC | BRENAB));
+			write_zsreg(zs_soft[channel].zs_channel, R3,
+				    (Rx8 | RxENAB));
+			write_zsreg(zs_soft[channel].zs_channel, R5,
+				    (Tx8 | TxENAB | DTR | RTS));
+
+			write_zsreg(zs_soft[channel].zs_channel, R15,
+				    (DCDIE | CTSIE | TxUIE | BRKIE));
+			write_zsreg(zs_soft[channel].zs_channel, R0,
+				    RES_EXT_INT);
+			write_zsreg(zs_soft[channel].zs_channel, R0,
+				    RES_EXT_INT);
+
 			write_zsreg(zs_soft[channel].zs_channel, R1,
 				    (EXT_INT_ENAB | INT_ALL_Rx));
 			write_zsreg(zs_soft[channel].zs_channel, R9,
 				    (NV | MIE));
-			write_zsreg(zs_soft[channel].zs_channel, R10,
-				    (NRZ));
-			write_zsreg(zs_soft[channel].zs_channel, R3,
-				    (Rx8|RxENABLE));
-			write_zsreg(zs_soft[channel].zs_channel, R5,
-				    (Tx8 | TxENAB | RTS | DTR));
-		}
-		if(channel == MOUSE_LINE) {
-			/* Tell mouse driver about our presence. */
-			if(zs_soft[channel].zs_baud != 1200)
-				panic("Weird mouse serial baud rate");
+			ZS_CLEARERR(zs_soft[channel].zs_channel);
+			ZS_CLEARFIFO(zs_soft[channel].zs_channel);
+		} else if(channel == MOUSE_LINE) {
 			zs_soft[channel].cons_mouse = 1;
+			zs_soft[channel].parity_mask = 0xff;
 			zs_mousechan = zs_soft[channel].zs_channel;
+
+			write_zsreg(zs_soft[channel].zs_channel, R4,
+				    (PAR_EVEN | X16CLK | SB1));
+			write_zsreg(zs_soft[channel].zs_channel, R3, Rx8);
+			write_zsreg(zs_soft[channel].zs_channel, R5, Tx8);
+			write_zsreg(zs_soft[channel].zs_channel, R9, NV);
+			write_zsreg(zs_soft[channel].zs_channel, R10, NRZ);
+			write_zsreg(zs_soft[channel].zs_channel, R11,
+				    (TCBR | RCBR));
+
+			zs_soft[channel].zs_baud = 1200;
+			brg = BPS_TO_BRG(zs_soft[channel].zs_baud,
+					 ZS_CLOCK/zs_soft[channel].clk_divisor);
+			write_zsreg(zs_soft[channel].zs_channel, R12,
+				    (brg & 0xff));
+			write_zsreg(zs_soft[channel].zs_channel, R13,
+				    ((brg >> 8) & 0xff));
+			write_zsreg(zs_soft[channel].zs_channel, R14, BRSRC);
+
 			/* Enable Rx, IRQs, and inform mouse driver */
-			write_zsreg(zs_soft[channel].zs_channel, R1, (INT_ALL_Rx));
-			write_zsreg(zs_soft[channel].zs_channel, R9, (NV|MIE));
-			write_zsreg(zs_soft[channel].zs_channel, R3, (Rx8|RxENABLE));
-#if 0 /* XXX hangs sun4c's sometimes */
+			write_zsreg(zs_soft[channel].zs_channel, R14,
+				    (BRSRC | BRENAB));
+			write_zsreg(zs_soft[channel].zs_channel, R3,
+				    (Rx8 | RxENAB));
+			write_zsreg(zs_soft[channel].zs_channel, R5, Tx8);
+
 			write_zsreg(zs_soft[channel].zs_channel, R15,
 				    (DCDIE | CTSIE | TxUIE | BRKIE));
-#endif
+			write_zsreg(zs_soft[channel].zs_channel, R0,
+				    RES_EXT_INT);
+			write_zsreg(zs_soft[channel].zs_channel, R0,
+				    RES_EXT_INT);
+
+			write_zsreg(zs_soft[channel].zs_channel, R1,
+				    (EXT_INT_ENAB | INT_ALL_Rx));
+			write_zsreg(zs_soft[channel].zs_channel, R9,
+				    (NV | MIE));
+
 			sun_mouse_zsinit();
+		} else if (zs_soft[channel].is_cons) {
+			brg = BPS_TO_BRG(zs_soft[channel].zs_baud,
+					 ZS_CLOCK/zs_soft[channel].clk_divisor);
+			zscons_regs[12] = brg & 0xff;
+			zscons_regs[13] = (brg >> 8) & 0xff;
+
+			memcpy(zs_soft[channel].curregs, zscons_regs, sizeof(zscons_regs));
+			load_zsregs(&zs_soft[channel], zscons_regs);
+
+			ZS_CLEARERR(zs_soft[channel].zs_channel);
+			ZS_CLEARFIFO(zs_soft[channel].zs_channel);
+		} else if (zs_soft[channel].kgdb_channel) {
+			/* If this is the kgdb line, enable interrupts because
+			 * we now want to receive the 'control-c' character
+			 * from the client attached to us asynchronously.
+			 */
+			zs_soft[channel].parity_mask = 0xff;
+        		kgdb_chaninit(&zs_soft[channel], 1,
+				      zs_soft[channel].zs_baud);
 		} else {
-			zs_soft[channel].cons_mouse = 0;
+			zs_soft[channel].parity_mask = 0xff;
+			write_zsreg(zs_soft[channel].zs_channel, R4,
+				    (PAR_EVEN | X16CLK | SB1));
+			write_zsreg(zs_soft[channel].zs_channel, R3, Rx8);
+			write_zsreg(zs_soft[channel].zs_channel, R5, Tx8);
+			write_zsreg(zs_soft[channel].zs_channel, R9, NV);
+			write_zsreg(zs_soft[channel].zs_channel, R10, NRZ);
+			write_zsreg(zs_soft[channel].zs_channel, R11,
+				    (RCBR | TCBR));
+			zs_soft[channel].zs_baud = 9600;
+			brg = BPS_TO_BRG(zs_soft[channel].zs_baud,
+					 ZS_CLOCK/zs_soft[channel].clk_divisor);
+			write_zsreg(zs_soft[channel].zs_channel, R12,
+				    (brg & 0xff));
+			write_zsreg(zs_soft[channel].zs_channel, R13,
+				    ((brg >> 8) & 0xff));
+			write_zsreg(zs_soft[channel].zs_channel, R14, BRSRC);
+			write_zsreg(zs_soft[channel].zs_channel, R14,
+				    (BRSRC | BRENAB));
+			write_zsreg(zs_soft[channel].zs_channel, R3, Rx8);
+			write_zsreg(zs_soft[channel].zs_channel, R5, Tx8);
+			write_zsreg(zs_soft[channel].zs_channel, R15, DCDIE);
+			write_zsreg(zs_soft[channel].zs_channel, R9, NV | MIE);
+			write_zsreg(zs_soft[channel].zs_channel, R0,
+				    RES_EXT_INT);
+			write_zsreg(zs_soft[channel].zs_channel, R0,
+				    RES_EXT_INT);
 		}
 	}
 
-	for(info=zs_chain, i=0; info; info = info->zs_next, i++)
-	{
+	for (info = zs_chain, i=0; info; info = info->zs_next, i++) {
 		info->magic = SERIAL_MAGIC;
 		info->port = (int) info->zs_channel;
 		info->line = i;
@@ -2101,7 +2377,7 @@ int rs_init(void)
 		info->tqueue.data = info;
 		info->tqueue_hangup.routine = do_serial_hangup;
 		info->tqueue_hangup.data = info;
-		info->callout_termios =callout_driver.init_termios;
+		info->callout_termios = callout_driver.init_termios;
 		info->normal_termios = serial_driver.init_termios;
 		info->open_wait = 0;
 		info->close_wait = 0;
@@ -2110,15 +2386,13 @@ int rs_init(void)
 		printk(" is a Zilog8530\n");
 	}
 
-	if (request_irq(zilog_irq,
-			rs_interrupt,
+	if (request_irq(zilog_irq, rs_interrupt,
 			(SA_INTERRUPT | SA_STATIC_ALLOC),
-			"Zilog8530", NULL))
+			"Zilog8530", zs_chain))
 		panic("Unable to attach zs intr\n");
 	restore_flags(flags);
 
 	keyboard_zsinit();
-
 	return 0;
 }
 
@@ -2144,10 +2418,15 @@ void unregister_serial(int line)
  * are addressed backwards, channel B is first, then channel A.
  */
 void
-rs_cons_hook(int chip, int out, int channel)
+rs_cons_hook(int chip, int out, int line)
 {
+	int channel;
+
 	if(chip)
 		panic("rs_cons_hook called with chip not zero");
+	if(line != 1 && line != 2)
+		panic("rs_cons_hook called with line not ttya or ttyb");
+	channel = line - 1;
 	if(!zs_chips[chip]) {
 		zs_chips[chip] = get_zs(chip);
 		/* Two channels per chip */
@@ -2157,13 +2436,11 @@ rs_cons_hook(int chip, int out, int channel)
 	zs_soft[channel].zs_channel = zs_channels[channel];
 	zs_soft[channel].change_needed = 0;
 	zs_soft[channel].clk_divisor = 16;
-	zs_soft[channel].zs_baud = get_zsbaud(&zs_soft[channel]);
-	rs_cons_check(&zs_soft[channel], channel);
 	if(out)
 		zs_cons_chanout = ((chip * 2) + channel);
 	else
 		zs_cons_chanin = ((chip * 2) + channel);
-
+	rs_cons_check(&zs_soft[channel], channel);
 }
 
 /* This is called at boot time to prime the kgdb serial debugging
@@ -2186,12 +2463,11 @@ rs_kgdb_hook(int tty_num)
 	zs_kgdbchan = zs_soft[tty_num].zs_channel;
 	zs_soft[tty_num].change_needed = 0;
 	zs_soft[tty_num].clk_divisor = 16;
-	zs_soft[tty_num].zs_baud = get_zsbaud(&zs_soft[tty_num]);
+	zs_soft[tty_num].zs_baud = 9600;
 	zs_soft[tty_num].kgdb_channel = 1;     /* This runs kgdb */
 	zs_soft[tty_num ^ 1].kgdb_channel = 0; /* This does not */
 	/* Turn on transmitter/receiver at 8-bits/char */
-	kgdb_chaninit(&zs_soft[tty_num], 0, 9600);
-	ZS_CLEARERR(zs_kgdbchan);
-	udelay(5);
-	ZS_CLEARFIFO(zs_kgdbchan);
+        kgdb_chaninit(&zs_soft[tty_num], 0, 9600);
+        ZS_CLEARERR(zs_kgdbchan);
+        ZS_CLEARFIFO(zs_kgdbchan);
 }

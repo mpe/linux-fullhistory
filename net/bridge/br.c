@@ -980,7 +980,7 @@ unsigned long flags;
 			skb->h.eth->h_dest[3],
 			skb->h.eth->h_dest[4],
 			skb->h.eth->h_dest[5]);
-	skb->h.eth->h_proto = htonl(0x8038);	/* XXX verify */
+	skb->h.eth->h_proto = htons(0x8038);
 
 	skb->h.raw += skb->dev->hard_header_len;
 	memcpy(skb->h.raw, config_bpdu, sizeof(Config_bpdu));
@@ -1036,12 +1036,12 @@ unsigned long flags;
 			skb->h.eth->h_dest[3],
 			skb->h.eth->h_dest[4],
 			skb->h.eth->h_dest[5]);
-	skb->h.eth->h_proto = 0x8038;	/* XXX verify */
+	skb->h.eth->h_proto = htons(0x8038);
 
 	skb->h.raw += skb->dev->hard_header_len;
 	memcpy(skb->h.raw, bpdu, sizeof(Tcn_bpdu));
 
-	/* mark that's we've been here... */
+	/* mark that we've been here... */
 	skb->pkt_bridged = IS_BRIDGED;
 	skb->arp = 1;	/* do not resolve... */
 	skb->h.raw = skb->data + ETH_HLEN;

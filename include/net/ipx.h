@@ -26,7 +26,7 @@ typedef struct
 #define ipx_broadcast_node	"\377\377\377\377\377\377"
 #define ipx_this_node           "\0\0\0\0\0\0"
 
-typedef struct ipx_packet
+struct ipxhdr
 {
 	unsigned short	ipx_checksum __attribute__ ((packed));
 #define IPX_NO_CHECKSUM	0xFFFF
@@ -41,7 +41,7 @@ typedef struct ipx_packet
 #define IPX_TYPE_PPROP		0x14	/* complicated flood fill brdcast [Not supported] */
 	ipx_address	ipx_dest __attribute__ ((packed));
 	ipx_address	ipx_source __attribute__ ((packed));
-} ipx_packet;
+};
 
 #include <net/ipxcall.h>
 extern int ipx_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt);

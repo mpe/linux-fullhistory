@@ -1,4 +1,4 @@
-/* $Id: etrap.S,v 1.21 1996/10/11 00:59:40 davem Exp $
+/* $Id: etrap.S,v 1.22 1996/12/03 08:44:33 jj Exp $
  * etrap.S: Sparc trap window preparation for entry into the
  *          Linux kernel.
  *
@@ -90,15 +90,12 @@ trap_setup:
 
 	/* See if we are in the trap window. */
 	andcc	%t_twinmask, %t_wim, %g0
-	be	1f
+	bne	trap_setup_kernel_spill		! in trap window, clean up
 	 nop
-
-	b,a	trap_setup_kernel_spill		! in trap window, clean up
 
 	/* Trap from kernel with a window available.
 	 * Just do it...
 	 */
-1:
 	jmpl	%t_retpc + 0x8, %g0	! return to caller
 	 mov	%t_kstack, %sp		! jump onto new stack
 
@@ -106,15 +103,15 @@ trap_setup_kernel_spill:
 	ld	[%curptr + THREAD_UMASK], %g1
 	orcc	%g0, %g1, %g0
 	bne	trap_setup_user_spill	! there are some user windows, yuck
-	 nop
-
-		/* Spill from kernel, but only kernel windows, adjust
-		 * %wim and go.
-		 */
-		srl	%t_wim, 0x1, %g2	! begin computation of new %wim
-tsetup_patch1:	sll	%t_wim, 0x7, %t_wim	! patched on 7 window Sparcs
-		or	%t_wim, %g2, %g2
-tsetup_patch2:	and	%g2, 0xff, %g2		! patched on 7 window Sparcs
+	/* Spill from kernel, but only kernel windows, adjust
+	 * %wim and go.
+	 */
+	 srl	%t_wim, 0x1, %g2	! begin computation of new %wim
+tsetup_patch1:
+	sll	%t_wim, 0x7, %t_wim	! patched on 7 window Sparcs
+	or	%t_wim, %g2, %g2
+tsetup_patch2:
+	and	%g2, 0xff, %g2		! patched on 7 window Sparcs
 
 	save	%g0, %g0, %g0
 
@@ -148,48 +145,52 @@ trap_setup_from_user:
 	bne	trap_setup_user_spill		! yep we are
 	 orn	%g0, %t_twinmask, %g1		! negate trap win mask into %g1
 
-		/* Trap from user, but not into the invalid window.
-		 * Calculate new umask.  The way this works is,
-		 * any window from the %wim at trap time until
-		 * the window right before the one we are in now,
-		 * is a user window.  A diagram:
-		 *
-		 *      7 6 5 4 3 2 1 0    window number
-		 *      ---------------
-		 *        I     L T        mnemonic
-		 *
-		 * Window 'I' is the invalid window in our example,
-		 * window 'L' is the window the user was in when
-		 * the trap occurred, window T is the trap window
-		 * we are in now.  So therefore, windows 5, 4 and
-		 * 3 are user windows.  The following sequence
-		 * computes the user winmask to represent this.
-		 */
-		subcc	%t_wim, %t_twinmask, %g2
-		bneg,a	1f
-		 sub	%g2, 0x1, %g2
+	/* Trap from user, but not into the invalid window.
+	 * Calculate new umask.  The way this works is,
+	 * any window from the %wim at trap time until
+	 * the window right before the one we are in now,
+	 * is a user window.  A diagram:
+	 *
+	 *      7 6 5 4 3 2 1 0    window number
+	 *      ---------------
+	 *        I     L T        mnemonic
+	 *
+	 * Window 'I' is the invalid window in our example,
+	 * window 'L' is the window the user was in when
+	 * the trap occurred, window T is the trap window
+	 * we are in now.  So therefore, windows 5, 4 and
+	 * 3 are user windows.  The following sequence
+	 * computes the user winmask to represent this.
+	 */
+	subcc	%t_wim, %t_twinmask, %g2
+	bneg,a	1f
+	 sub	%g2, 0x1, %g2
 1:
-		andn	%g2, %t_twinmask, %g2
-tsetup_patch3:	and	%g2, 0xff, %g2			! patched on 7win Sparcs
-		st	%g2, [%curptr + THREAD_UMASK]	! store new umask
+	andn	%g2, %t_twinmask, %g2
+tsetup_patch3:
+	and	%g2, 0xff, %g2			! patched on 7win Sparcs
+	st	%g2, [%curptr + THREAD_UMASK]	! store new umask
 
-		jmpl	%t_retpc + 0x8, %g0		! return to caller
-		 mov	%t_kstack, %sp			! and onto kernel stack
+	jmpl	%t_retpc + 0x8, %g0		! return to caller
+	 mov	%t_kstack, %sp			! and onto kernel stack
 
 trap_setup_user_spill:
-		/* A spill occurred from either kernel or user mode
-		 * and there exist some user windows to deal with.
-		 * A mask of the currently valid user windows
-		 * is in %g1 upon entry to here.
-		 */
+	/* A spill occurred from either kernel or user mode
+	 * and there exist some user windows to deal with.
+	 * A mask of the currently valid user windows
+	 * is in %g1 upon entry to here.
+	 */
 
-tsetup_patch4:	and	%g1, 0xff, %g1		! patched on 7win Sparcs, mask
-		srl	%t_wim, 0x1, %g2	! compute new %wim
-tsetup_patch5:	sll	%t_wim, 0x7, %t_wim	! patched on 7win Sparcs
-		or	%t_wim, %g2, %g2	! %g2 is new %wim
-tsetup_patch6:	and	%g2, 0xff, %g2		! patched on 7win Sparcs
-		andn	%g1, %g2, %g1		! clear this bit in %g1
-		st	%g1, [%curptr + THREAD_UMASK]
+tsetup_patch4:
+	and	%g1, 0xff, %g1		! patched on 7win Sparcs, mask
+	srl	%t_wim, 0x1, %g2	! compute new %wim
+tsetup_patch5:
+	sll	%t_wim, 0x7, %t_wim	! patched on 7win Sparcs
+	or	%t_wim, %g2, %g2	! %g2 is new %wim
+tsetup_patch6:
+	and	%g2, 0xff, %g2		! patched on 7win Sparcs
+	andn	%g1, %g2, %g1		! clear this bit in %g1
+	st	%g1, [%curptr + THREAD_UMASK]
 
 	save	%g0, %g0, %g0
 
@@ -199,27 +200,9 @@ tsetup_patch6:	and	%g2, 0xff, %g2		! patched on 7win Sparcs
 	 * routine.
 	 */
 	.globl	C_LABEL(tsetup_mmu_patchme)
-C_LABEL(tsetup_mmu_patchme):	b	C_LABEL(tsetup_sun4c_stackchk)
-				 andcc	%sp, 0x7, %g0
-
-trap_setup_user_stack_is_bolixed:
-	/* From user/kernel into invalid window w/bad user
-	 * stack. Save bad user stack, and return to caller.
-	 */
-	SAVE_BOLIXED_USER_STACK(curptr, g3)
-	restore	%g0, %g0, %g0
-
-	jmpl	%t_retpc + 0x8, %g0
-	 mov	%t_kstack, %sp
-
-trap_setup_good_ustack:
-	STORE_WINDOW(sp)
-
-trap_setup_finish_up:
-	restore %g0, %g0, %g0
-
-	jmpl	%t_retpc + 0x8, %g0
-	 mov	%t_kstack, %sp
+C_LABEL(tsetup_mmu_patchme):
+	b	C_LABEL(tsetup_sun4c_stackchk)
+	 andcc	%sp, 0x7, %g0
 
 	/* Architecture specific stack checking routines.  When either
 	 * of these routines are called, the globals are free to use
@@ -231,23 +214,17 @@ trap_setup_finish_up:
 	.globl	C_LABEL(tsetup_sun4c_stackchk)
 C_LABEL(tsetup_sun4c_stackchk):
 	/* Done by caller: andcc %sp, 0x7, %g0 */
-	be	1f
+	bne	trap_setup_user_stack_is_bolixed
 	 sra	%sp, 29, %glob_tmp
 
-	b,a	trap_setup_user_stack_is_bolixed
-
-1:
 	add	%glob_tmp, 0x1, %glob_tmp
 	andncc	%glob_tmp, 0x1, %g0
-	be	1f
+	bne	trap_setup_user_stack_is_bolixed
 	 and	%sp, 0xfff, %glob_tmp		! delay slot
-
-	b,a	trap_setup_user_stack_is_bolixed
 
 	/* See if our dump area will be on more than one
 	 * page.
 	 */
-1:
 	add	%glob_tmp, 0x38, %glob_tmp
 	andncc	%glob_tmp, 0xff8, %g0
 	be	tsetup_sun4c_onepage		! only one page to check
@@ -257,45 +234,50 @@ tsetup_sun4c_twopages:
 	/* Is first page ok permission wise? */
 	srl	%glob_tmp, 29, %glob_tmp
 	cmp	%glob_tmp, 0x6
-	be	1f
+	bne	trap_setup_user_stack_is_bolixed
 	 add	%sp, 0x38, %glob_tmp		/* Is second page in vma hole? */
 
-	b,a	trap_setup_user_stack_is_bolixed
-
-1:
 	sra	%glob_tmp, 29, %glob_tmp
 	add	%glob_tmp, 0x1, %glob_tmp
 	andncc	%glob_tmp, 0x1, %g0
-	be	1f
+	bne	trap_setup_user_stack_is_bolixed
 	 add	%sp, 0x38, %glob_tmp
 
-	b,a	trap_setup_user_stack_is_bolixed
-
-1:
 	lda	[%glob_tmp] ASI_PTE, %glob_tmp
 
 tsetup_sun4c_onepage:
 	srl	%glob_tmp, 29, %glob_tmp
 	cmp	%glob_tmp, 0x6				! can user write to it?
-	be	trap_setup_good_ustack			! success
+	bne	trap_setup_user_stack_is_bolixed	! failure
 	 nop
 
-	b,a	trap_setup_user_stack_is_bolixed
+	STORE_WINDOW(sp)
+
+	restore %g0, %g0, %g0
+
+	jmpl	%t_retpc + 0x8, %g0
+	 mov	%t_kstack, %sp
 
 	.globl	C_LABEL(tsetup_srmmu_stackchk)
 C_LABEL(tsetup_srmmu_stackchk):
 	/* Check results of callers andcc %sp, 0x7, %g0 */
 	sethi	%hi(C_LABEL(page_offset)), %glob_tmp
-	be	1f
+	bne	trap_setup_user_stack_is_bolixed
 	 ld	[%glob_tmp + %lo(C_LABEL(page_offset))], %glob_tmp
 
-	b,a	trap_setup_user_stack_is_bolixed
-1:
 	cmp	%glob_tmp, %sp
-	bgu,a	1f
+	bleu,a	1f
 	 lda	[%g0] ASI_M_MMUREGS, %glob_tmp		! read MMU control
 
-	b,a	trap_setup_user_stack_is_bolixed
+trap_setup_user_stack_is_bolixed:
+	/* From user/kernel into invalid window w/bad user
+	 * stack. Save bad user stack, and return to caller.
+	 */
+	SAVE_BOLIXED_USER_STACK(curptr, g3)
+	restore	%g0, %g0, %g0
+
+	jmpl	%t_retpc + 0x8, %g0
+	 mov	%t_kstack, %sp
 
 1:
 	/* Clear the fault status and turn on the no_fault bit. */
@@ -313,7 +295,11 @@ C_LABEL(tsetup_srmmu_stackchk):
 	mov	AC_M_SFSR, %glob_tmp
 	lda	[%glob_tmp] ASI_M_MMUREGS, %glob_tmp	! save away status of winstore
 	andcc	%glob_tmp, 0x2, %g0			! did we fault?
-	be,a	trap_setup_finish_up + 0x4		! cool beans, success
-	 restore %g0, %g0, %g0
+	bne	trap_setup_user_stack_is_bolixed	! failure
+	 nop
 
-	b,a	trap_setup_user_stack_is_bolixed	! we faulted, ugh
+	restore %g0, %g0, %g0
+
+	jmpl	%t_retpc + 0x8, %g0
+	 mov	%t_kstack, %sp
+

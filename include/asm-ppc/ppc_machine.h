@@ -5,6 +5,9 @@
 #ifndef _PPC_MACHINE_H_
 #define _PPC_MACHINE_H_ 
 
+#define KERNEL_STACK_SIZE (4096) /* usable stack -- not buffers at either end */
+#define KERNEL_STACK_MASK (~(KERNEL_STACK_SIZE-1))
+
 /* Bit encodings for Machine State Register (MSR) */
 #define MSR_POW		(1<<18)		/* Enable Power Management */
 #define MSR_TGPR	(1<<17)		/* TLB Update registers in use */
@@ -23,8 +26,8 @@
 #define MSR_RI		(1<<1)		/* Recoverable Exception */
 #define MSR_LE		(1<<0)		/* Little-Endian enable */
 
-#define MSR_		MSR_FP|MSR_FE0|MSR_FE1|MSR_ME
-#define MSR_USER	MSR_|MSR_PR|MSR_EE|MSR_IR|MSR_DR
+#define MSR_		MSR_FE0|MSR_FE1|MSR_ME|MSR_FP
+#define MSR_USER	MSR_FE0|MSR_FE1|MSR_ME|MSR_PR|MSR_EE|MSR_IR|MSR_DR
 
 /* Bit encodings for Hardware Implementation Register (HID0) */
 #define HID0_EMCP	(1<<31)		/* Enable Machine Check pin */
@@ -46,5 +49,8 @@
 #define HID0_DCI	(1<<10)		/* Data Cache Invalidate */
 #define HID0_SIED	(1<<7)		/* Serial Instruction Execution [Disable] */
 #define HID0_BHTE	(1<<2)		/* Branch History Table Enable */
- 
+
+/* fpscr settings */
+#define FPSCR_FX        (1<<31)
+#define FPSCR_FEX       (1<<30)
 #endif

@@ -5,7 +5,7 @@
  */
 
 #include <linux/kernel.h>
-
+#include <linux/init.h>
 #include <asm/oplib.h>
 #include <asm/page.h>
 #include <asm/head.h>
@@ -66,7 +66,7 @@ struct cpu_fp_info linux_sparc_fpu[] = {
   { 5, 5, "reserved"},
   { 5, 6, "reserved"},
   { 5, 7, "No FPU"},
-  { 9, 3, "Weitek on-chip FPU"},
+  { 9, 3, "Fujitsu or Weitek on-chip FPU"},
 };
 
 #define NSPARCFPU  (sizeof(linux_sparc_fpu)/sizeof(struct cpu_fp_info))
@@ -84,7 +84,7 @@ struct cpu_iu_info linux_sparc_chips[] = {
   { 1, 3, "Cypress/ROSS CY7C611"},
   /* Ross Technologies HyperSparc */
   { 1, 0xf, "ROSS HyperSparc RT620"},
-  { 1, 0xe, "ROSS HyperSparc RT625"},
+  { 1, 0xe, "ROSS HyperSparc RT625 or RT626"},
   /* ECL Implementation, CRAY S-MP Supercomputer... AIEEE! */
   /* Someone please write the code to support this beast! ;) */
   { 2, 0, "Bipolar Integrated Technology - B5010"},
@@ -101,10 +101,10 @@ struct cpu_iu_info linux_sparc_chips[] = {
   { 7, 0, "Harvest VLSI Design Center, Inc. - unknown"},
   /* Gallium arsenide 200MHz, BOOOOGOOOOMIPS!!! */
   { 8, 0, "Systems and Processes Engineering Corporation (SPEC)"},
-  { 9, 0, "Weitek Power-UP"},
-  { 9, 1, "Weitek Power-UP"},
-  { 9, 2, "Weitek Power-UP"},
-  { 9, 3, "Weitek Power-UP"},
+  { 9, 0, "Fujitsu or Weitek Power-UP"},
+  { 9, 1, "Fujitsu or Weitek Power-UP"},
+  { 9, 2, "Fujitsu or Weitek Power-UP"},
+  { 9, 3, "Fujitsu or Weitek Power-UP"},
   { 0xa, 0, "UNKNOWN CPU-VENDOR/TYPE"},
   { 0xb, 0, "UNKNOWN CPU-VENDOR/TYPE"},
   { 0xc, 0, "UNKNOWN CPU-VENDOR/TYPE"},
@@ -120,8 +120,7 @@ char *sparc_fpu_type[NCPUS] = { "fpu-oops", "fpu-oops1", "fpu-oops2", "fpu-oops3
 
 unsigned int fsr_storage;
 
-void
-cpu_probe(void)
+__initfunc(void cpu_probe(void))
 {
 	int psr_impl, psr_vers, fpu_vers;
 	int i, cpuid;

@@ -1,9 +1,10 @@
-/* $Id: entry.S,v 1.116 1996/10/27 08:35:47 davem Exp $
+/* $Id: entry.S,v 1.126 1996/12/10 06:06:12 davem Exp $
  * arch/sparc/kernel/entry.S:  Sparc trap low-level entry points.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
  * Copyright (C) 1996 Eddie C. Dost   (ecd@skynet.be)
  * Copyright (C) 1996 Miguel de Icaza (miguel@nuclecu.unam.mx)
+ * Copyright (C) 1996 Jakub Jelinek   (jj@sunsite.mff.cuni.cz)
  */
 
 #include <linux/config.h>
@@ -20,6 +21,7 @@
 #include <asm/vaddrs.h>
 #include <asm/memreg.h>
 #include <asm/page.h>
+#include <asm/pgtsun4c.h>
 #include <asm/winmacro.h>
 #include <asm/signal.h>
 
@@ -81,6 +83,7 @@ C_LABEL(trap_low):
 	/* We are increasing PIL, so two writes. */
 	or	%l0, PSR_PIL, %l0
 	wr	%l0, 0, %psr
+	WRITE_PAUSE
 	wr	%l0, PSR_ET, %psr
 	WRITE_PAUSE
 
@@ -248,6 +251,7 @@ floppy_dosoftint:
 	/* Set all IRQs off. */
 	or	%l0, PSR_PIL, %l4
 	wr	%l4, 0x0, %psr
+	WRITE_PAUSE
 	wr	%l4, PSR_ET, %psr
 	WRITE_PAUSE
 
@@ -337,12 +341,15 @@ real_irq_entry:
 	or	%l0, PSR_PIL, %g2
 	add	%l5, 0x1, %l4
 	wr	%g2, 0x0, %psr
+	WRITE_PAUSE
 	st	%l4, [%l6 + %lo(C_LABEL(intr_count))]
 	wr	%g2, PSR_ET, %psr
+	WRITE_PAUSE
 	mov	%l7, %o0		! irq level
 	call	C_LABEL(handler_irq)
 	 add	%sp, REGWIN_SZ, %o1	! pt_regs ptr
 	wr	%l0, PSR_ET, %psr
+	WRITE_PAUSE
 	st	%l5, [%l6 + %lo(C_LABEL(intr_count))]
 	LEAVE_IRQ
 	RESTORE_ALL
@@ -390,7 +397,7 @@ priv_instruction:
 mna_handler:
 	andcc	%l0, PSR_PS, %g0
 	be	mna_fromuser
-	 ld	[%l1], %l7
+	 nop
 
 	SAVE_ALL
 	ENTER_SYSCALL
@@ -398,7 +405,7 @@ mna_handler:
 	wr	%l0, PSR_ET, %psr
 	WRITE_PAUSE
 
-	mov	%l7, %o1
+	ld	[%l1], %o1
 	call	C_LABEL(kernel_unaligned_trap)
 	 add	%sp, REGWIN_SZ, %o0
 
@@ -411,7 +418,7 @@ mna_fromuser:
 	wr	%l0, PSR_ET, %psr		! re-enable traps
 	WRITE_PAUSE
 
-	mov	%l7, %o1
+	ld	[%l1], %o1
 	call	C_LABEL(user_unaligned_trap)
 	 add	%sp, REGWIN_SZ, %o0
 
@@ -865,12 +872,18 @@ C_LABEL(num_context_patch1_16):		mov	0x10, %l7
 C_LABEL(num_context_patch2_16):		mov	0x10, %l7
 
 	.align	4
-	.globl	C_LABEL(sun4c_kernel_buckets_patch_32)
-C_LABEL(sun4c_kernel_buckets_patch_32):	andn	%l7, 256, %l3
+	.globl	C_LABEL(vac_linesize_patch_32)
+C_LABEL(vac_linesize_patch_32):		subcc	%l7, 32, %l7
+
+	.align	4
+	.globl	C_LABEL(vac_hwflush_patch1_on), C_LABEL(vac_hwflush_patch2_on)
+C_LABEL(vac_hwflush_patch1_on):		subcc	%l7, (PAGE_SIZE - 4), %l7
+C_LABEL(vac_hwflush_patch2_on):		sta	%g0, [%l3 + %l7] ASI_HWFLUSHSEG
 
 	.globl	C_LABEL(invalid_segment_patch1), C_LABEL(invalid_segment_patch2)
 	.globl	C_LABEL(num_context_patch1), C_LABEL(num_context_patch2)
-	.globl	C_LABEL(sun4c_kernel_buckets_patch)
+	.globl	C_LABEL(vac_linesize_patch), C_LABEL(vac_hwflush_patch1)
+	.globl	C_LABEL(vac_hwflush_patch2)
 
 	.align	4
 	.globl	sun4c_fault
@@ -878,47 +891,115 @@ sun4c_fault:
 	sethi	%hi(AC_SYNC_ERR), %l4
 	add	%l4, 0x4, %l6			! AC_SYNC_VA in %l6
 	lda	[%l6] ASI_CONTROL, %l5		! Address
-	lda	[%l4] ASI_CONTROL, %l6
+	lda	[%l4] ASI_CONTROL, %l6		! Error, retained for a bit
 
 	andn	%l5, 0xfff, %l5			! Encode all info into l7
-	srl	%l6, 14, %l6
+	srl	%l6, 14, %l4
 
-	and	%l6, 2, %l6
-	or	%l5, %l6, %l6
+	and	%l4, 2, %l4
+	or	%l5, %l4, %l4
 
-	or	%l6, %l7, %l7			! l7 = [addr,write,txtfault]
+	or	%l4, %l7, %l7			! l7 = [addr,write,txtfault]
 
 	andcc	%l0, PSR_PS, %g0
 	be	sun4c_fault_fromuser
 	 andcc	%l7, 1, %g0			! Text fault?
 
 	be	1f
-	 sethi	%hi(KERNBASE), %l6
+	 sethi	%hi(KERNBASE), %l4
 
 	mov	%l1, %l5			! PC
 
 1:
-	cmp	%l5, %l6
+	cmp	%l5, %l4
 	blu	sun4c_fault_fromuser
-	 sethi	%hi(0xfffc0000), %l4		! SUN4C_REAL_PGDIR_MASK
+	 sethi	%hi(~((1 << SUN4C_REAL_PGDIR_SHIFT) - 1)), %l4
 
-	and	%l5, %l4, %l5
+	/* If the kernel references a bum kernel pointer, or a pte which
+	 * points to a non existant page in ram, we will run this code
+	 * _forever_ and lock up the machine!!!!! So we must check for
+	 * this condition, the AC_SYNC_ERR bits are what we must examine.
+	 * Also a parity error would make this happen as well.  So we just
+	 * check that we are in fact servicing a tlb miss and not some
+	 * other type of fault for the kernel.
+	 */
+	andcc	%l6, 0x80, %g0
+	be	sun4c_fault_fromuser
+	 and	%l5, %l4, %l5
 
 	lduba	[%l5] ASI_SEGMAP, %l4
 C_LABEL(invalid_segment_patch1):
 	cmp	%l4, 0x7f
 	bne	1f
-	 sethi	%hi(C_LABEL(sun4c_kernel_next)), %l4
+	 sethi	%hi(C_LABEL(sun4c_kfree_ring)), %l4
+	or	%l4, %lo(C_LABEL(sun4c_kfree_ring)), %l4
+	ld	[%l4 + 0x10], %l3
+	deccc	%l3			! do we have a free entry?
+	bcs,a	2f			! no, unmap one.
+	 sethi	%hi(C_LABEL(sun4c_kernel_ring)), %l4
 
-	ld	[%l4 + %lo(C_LABEL(sun4c_kernel_next))], %l6	! entry
+	st	%l3, [%l4 + 0x10]	! sun4c_kfree_ring.num_entries--
 
-	ld	[%l6], %l3		! entry->vaddr
-	cmp	%l3, 0			! is this segment available?
-	be	4f			! Yes, use it.
-	 st	%l5, [%l6]		! entry->vaddr = address
+	ld	[%l4 + 0x00], %l6	! entry = sun4c_kfree_ring.ringhd.next
+	st	%l5, [%l6 + 0x08]	! entry->vaddr = address
 
-	! use entry->vaddr to unmap the old segment
-	mov	%l3, %l5
+	ld	[%l6 + 0x00], %l3	! next = entry->next
+	ld	[%l6 + 0x04], %l7	! entry->prev
+
+	st	%l7, [%l3 + 0x04]	! next->prev = entry->prev
+	st	%l3, [%l7 + 0x00]	! entry->prev->next = next
+
+	sethi	%hi(C_LABEL(sun4c_kernel_ring)), %l4
+	or	%l4, %lo(C_LABEL(sun4c_kernel_ring)), %l4
+					! head = &sun4c_kernel_ring.ringhd
+
+	ld	[%l4 + 0x00], %l7	! head->next
+
+	st	%l4, [%l6 + 0x04]	! entry->prev = head
+	st	%l7, [%l6 + 0x00]	! entry->next = head->next
+	st	%l6, [%l7 + 0x04]	! head->next->prev = entry
+
+	st	%l6, [%l4 + 0x00]	! head->next = entry
+
+	ld	[%l4 + 0x10], %l3
+	inc	%l3			! sun4c_kernel_ring.num_entries++
+	b	4f
+	 st	%l3, [%l4 + 0x10]
+
+2:
+	or	%l4, %lo(C_LABEL(sun4c_kernel_ring)), %l4
+					! head = &sun4c_kernel_ring.ringhd
+
+	ld	[%l4 + 0x04], %l6	! entry = head->prev
+
+	ld	[%l6 + 0x08], %l3	! tmp = entry->vaddr
+
+	! Flush segment from the cache.
+	sethi	%hi((64 * 1024)), %l7
+1:
+C_LABEL(vac_hwflush_patch1):
+C_LABEL(vac_linesize_patch):
+	subcc	%l7, 16, %l7
+	bg	1b
+C_LABEL(vac_hwflush_patch2):
+	 sta	%g0, [%l3 + %l7] ASI_FLUSHSEG
+
+	st	%l5, [%l6 + 0x08]	! entry->vaddr = address
+
+	ld	[%l6 + 0x00], %l5	! next = entry->next
+	ld	[%l6 + 0x04], %l7	! entry->prev
+
+	st	%l7, [%l5 + 0x04]	! next->prev = entry->prev
+	st	%l5, [%l7 + 0x00]	! entry->prev->next = next
+	st	%l4, [%l6 + 0x04]	! entry->prev = head
+
+	ld	[%l4 + 0x00], %l7	! head->next
+
+	st	%l7, [%l6 + 0x00]	! entry->next = head->next
+	st	%l6, [%l7 + 0x04]	! head->next->prev = entry
+	st	%l6, [%l4 + 0x00]	! head->next = entry
+
+	mov	%l3, %l5		! address = tmp
 
 C_LABEL(num_context_patch1):
 	mov	0x08, %l7
@@ -939,22 +1020,16 @@ C_LABEL(invalid_segment_patch2):
 
 	! reload the entry
 
-	sethi	%hi(C_LABEL(sun4c_kernel_next)), %l4
-	ld	[%l4 + %lo(C_LABEL(sun4c_kernel_next))], %l6
+	sethi	%hi(C_LABEL(sun4c_kernel_ring)), %l4
+	ld	[%l4 + %lo(C_LABEL(sun4c_kernel_ring))], %l6
 
-	ld	[%l6], %l5	! restore address from entry->vaddr
+	ld	[%l6 + 0x08], %l5	! restore address from entry->vaddr
 
 4:
-	! advance sun4c_kernel_next
-	add	%l6, 8, %l7
-C_LABEL(sun4c_kernel_buckets_patch):
-	andn	%l7, 128, %l3
-	st	%l3, [%l4 + %lo(C_LABEL(sun4c_kernel_next))]
-
 C_LABEL(num_context_patch2):
 	mov	0x08, %l7
 
-	ldub	[%l6 + 0x4], %l4	! entry->pseg
+	ldub	[%l6 + 0x0c], %l4	! entry->pseg
 
 	sethi	%hi(AC_CONTEXT), %l3
 	lduba	[%l3] ASI_CONTROL, %l6
@@ -968,17 +1043,17 @@ C_LABEL(num_context_patch2):
 	stba	%l6, [%l3] ASI_CONTROL
 
 1:
-	sethi	%hi(0xfe200000), %l4		! SUN4C_VMALLOC_START
+	sethi	%hi(SUN4C_VMALLOC_START), %l4
 	cmp	%l5, %l4
 
 	bgeu	1f
-	 mov	0x40, %l7	! SUN4C_REAL_PGDIR_SIZE / PAGE_SIZE
+	 mov	1 << (SUN4C_REAL_PGDIR_SHIFT - PAGE_SHIFT), %l7
 
 	sethi	%hi(KERNBASE), %l6
 
 	sub	%l5, %l6, %l4
 	srl	%l4, PAGE_SHIFT, %l4
-	sethi	%hi(0xf3000000), %l3		! SUN4C_PAGE_KERNEL
+	sethi	%hi((SUN4C_PAGE_KERNEL & 0xf4000000)), %l3
 	or	%l3, %l4, %l3
 
 	sethi	%hi(PAGE_SIZE), %l4
@@ -990,22 +1065,19 @@ C_LABEL(num_context_patch2):
 	bne	2b
 	 add	%l5, %l4, %l5
 
-	/* Restore condition codes */
-	wr	%l0, 0x0, %psr
-	WRITE_PAUSE
-	jmp	%l1
-	 rett	%l2
+	b	7f
+	 sethi	%hi(C_LABEL(sun4c_kernel_faults)), %l4
 
 1:
-	srl	%l5, 22, %l3			! SUN4C_PGDIR_SHIFT
+	srl	%l5, SUN4C_PGDIR_SHIFT, %l3
 	sethi	%hi(C_LABEL(swapper_pg_dir)), %l4
 	or	%l4, %lo(C_LABEL(swapper_pg_dir)), %l4
 	sll	%l3, 2, %l3
 	ld	[%l4 + %l3], %l4
-	andn	%l4, 0xfff, %l4			! PAGE_MASK
+	and	%l4, PAGE_MASK, %l4
 
-	srl	%l5, PAGE_SHIFT - 2, %l6
-	and	%l6, 0xffc, %l6			! (SUN4C_PTRS_PER_PTE - 1) << 2
+	srl	%l5, (PAGE_SHIFT - 2), %l6
+	and	%l6, ((SUN4C_PTRS_PER_PTE - 1) << 2), %l6
 	add	%l6, %l4, %l6
 
 	sethi	%hi(PAGE_SIZE), %l4
@@ -1017,6 +1089,12 @@ C_LABEL(num_context_patch2):
 	add	%l6, 0x4, %l6
 	bne	2b
 	 add	%l5, %l4, %l5
+
+	sethi	%hi(C_LABEL(sun4c_kernel_faults)), %l4
+7:
+	ld	[%l4 + %lo(C_LABEL(sun4c_kernel_faults))], %l3
+	inc	%l3
+	st	%l3, [%l4 + %lo(C_LABEL(sun4c_kernel_faults))]
 
 	/* Restore condition codes */
 	wr	%l0, 0x0, %psr
@@ -1216,8 +1294,10 @@ C_LABEL(sys_fork):
 flush_patch_two:
 	FLUSH_ALL_KERNEL_WINDOWS;
 	rd	%psr, %g4
+	WRITE_PAUSE
 	mov	SIGCHLD, %o0			! arg0:	clone flags
 	rd	%wim, %g5
+	WRITE_PAUSE
 	mov	%fp, %o1			! arg1:	usp
 	std	%g4, [%curptr + THREAD_FORK_KPSR]
 	add	%sp, REGWIN_SZ, %o2		! arg2:	pt_regs ptr
@@ -1231,10 +1311,12 @@ C_LABEL(sys_clone):
 flush_patch_three:
 	FLUSH_ALL_KERNEL_WINDOWS;
 	rd	%psr, %g4
+	WRITE_PAUSE
 
 	/* arg0,1: flags,usp  -- loaded already */
 	cmp	%o1, 0x0			! Is new_usp NULL?
 	rd	%wim, %g5
+	WRITE_PAUSE
 	be,a	1f
 	 mov	%fp, %o1			! yes, use callers usp
 	andn	%o1, 7, %o1			! no, align to 8 bytes
@@ -1262,8 +1344,8 @@ linux_sparc_syscall:
 
 	.globl	syscall_is_too_hard
 syscall_is_too_hard:
-	rd	%wim, %l3
-	SAVE_ALL
+	SAVE_ALL_HEAD
+	 rd	%wim, %l3
 	ENTER_SYSCALL
 
 	wr	%l0, PSR_ET, %psr
@@ -1297,7 +1379,7 @@ C_LABEL(ret_sys_call):
 	bgeu	1f
 	 ld	[%sp + REGWIN_SZ + PT_PSR], %g3
 
-	/* System call success, clear Carry condition code. */		
+	/* System call success, clear Carry condition code. */
 	andn	%g3, %g2, %g3
 	clr	%l6
 	b	2f
@@ -1317,13 +1399,13 @@ C_LABEL(ret_sys_call):
 	ld	[%curptr + 0x14], %g2
 	andcc	%g2, 0x20, %g0
 	be,a	3f
-	 ld	[%sp + REGWIN_SZ + PT_NPC], %l1	/* pc  = npc   */
+	 ld	[%sp + REGWIN_SZ + PT_NPC], %l1 /* pc = npc */
 
 	call	C_LABEL(syscall_trace)
 	 nop
 
 	/* Advance the pc and npc over the trap instruction. */
-	ld	[%sp + REGWIN_SZ + PT_NPC], %l1	/* pc  = npc   */
+	ld	[%sp + REGWIN_SZ + PT_NPC], %l1 /* pc = npc */
 3:
 	add	%l1, 0x4, %l2			/* npc = npc+4 */
 	st	%l1, [%sp + REGWIN_SZ + PT_PC]
@@ -1334,38 +1416,30 @@ C_LABEL(ret_sys_call):
 	 * Solaris system calls and indirect system calls enter here.
          *
 	 * I have named the solaris indirect syscalls like that because
-	*  it seems like Solaris has some fast path syscalls that can
+	 * it seems like Solaris has some fast path syscalls that can
 	 * be handled as indirect system calls. - mig
 	 */
-	
-	.align  4
-	.globl  solaris_indirect_syscall
-solaris_indirect_syscall:
-	/* sethi done on the macro */
-        /* or %l7, %lo(C_LABEL(sys_call_table)), %l7; -- really needed? */
+
+linux_syscall_for_solaris:
+	sethi	%hi(sys_call_table), %l7
+	b	linux_sparc_syscall
+	 or	%l7, %lo(sys_call_table), %l7
 	
 	.align	4
 	.globl	solaris_syscall
 solaris_syscall:
-	/* Direct access to user regs, must faster. */
-	cmp	%g1, NR_SYSCALLS
-	blu,a	1f
-#ifdef OLD_SOLARIS
-	 sll	%g1, 2, %l4
-#else
-	 nop
-#endif
-	sethi	%hi(C_LABEL(sys_ni_syscall)), %l7
-	b	solaris_is_too_hard
-	 or	%l7, %lo(C_LABEL(sys_ni_syscall)), %l7
-1:
-#ifdef OLD_SOLARIS
-	ld	[%l7 + %l4], %l7
-#endif
-	.globl	solaris_is_too_hard
-solaris_is_too_hard:
-	rd	%wim, %l3
-	SAVE_ALL
+	cmp	%g1,59
+	be	linux_syscall_for_solaris
+	 cmp	%g1,2
+	be	linux_syscall_for_solaris
+	 cmp    %g1,42
+	be      linux_syscall_for_solaris
+	 cmp	%g1,119
+	be,a	linux_syscall_for_solaris
+	 mov	2, %g1
+1:	
+	SAVE_ALL_HEAD
+	 rd	%wim, %l3
 	ENTER_SYSCALL
 
 	wr	%l0, PSR_ET, %psr
@@ -1378,14 +1452,10 @@ solaris_is_too_hard:
 	mov	%i0, %l5
 	mov	%i3, %o3
 	mov	%i4, %o4
-#ifdef OLD_SOLARIS
-	call	%l7
-	 mov	%i5, %o5
-#else
 	mov	%i5, %o5
+
 	call	C_LABEL(do_solaris_syscall)
 	 add	%sp, REGWIN_SZ, %o0
-#endif
 
 	st	%o0, [%sp + REGWIN_SZ + PT_I0]
 	set	PSR_C, %g2
@@ -1404,22 +1474,31 @@ solaris_is_too_hard:
 	 * Also, get abs(errno) to return to the process.
 	 */
 	sub	%g0, %o0, %o0
-	sethi	%hi(C_LABEL(solaris_xlatb_rorl)), %o3
-	or	%o3, %lo(C_LABEL(solaris_xlatb_rorl)), %o3
-	sll	%o0, 2, %o0
-	ld	[%o3 + %o0], %o0
 	mov	1, %l6
 	st	%o0, [%sp + REGWIN_SZ + PT_I0]
 	or	%g3, %g2, %g3
 	st	%g3, [%sp + REGWIN_SZ + PT_PSR]
 
-	/* Advance the pc and npc over the trap instruction. */
+	/* Advance the pc and npc over the trap instruction.
+	 * If the npc is unaligned (has a 1 in the lower byte), it means
+	 * the kernel does not want us to play magic (ie, skipping over
+	 * traps).  Mainly when the Solaris code wants to set some PC and
+	 * nPC (setcontext).
+	 */
 2:
 	ld	[%sp + REGWIN_SZ + PT_NPC], %l1	/* pc  = npc   */
-	add	%l1, 0x4, %l2			/* npc = npc+4 */
+	andcc	%l1, 1, %g0
+	bne	1f
+	 add	%l1, 0x4, %l2			/* npc = npc+4 */
 	st	%l1, [%sp + REGWIN_SZ + PT_PC]
 	b	ret_trap_entry
 	 st	%l2, [%sp + REGWIN_SZ + PT_NPC]
+
+	/* kernel knows what it is doing, fixup npc and continue */
+1:
+	sub	%l1, 1, %l1
+ 	b	ret_trap_entry	
+	 st	%l1, [%sp + REGWIN_SZ + PT_NPC]
 
 	/* {net, open}bsd system calls enter here... */
 	.align	4

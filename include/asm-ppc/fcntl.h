@@ -48,6 +48,12 @@
 				   blocking */
 #define LOCK_UN		8	/* remove lock */
 
+#ifdef __KERNEL__
+#define F_POSIX		1
+#define F_FLOCK		2
+#define F_BROKEN	4	/* broken flock() emulation */
+#endif /* __KERNEL__ */
+
 struct flock {
 	short l_type;
 	short l_whence;

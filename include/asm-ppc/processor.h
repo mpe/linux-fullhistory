@@ -5,8 +5,8 @@
  * PowerPC machine specifics
  */
 
-#ifndef _PPC_MACHINE_H_
-#define _PPC_MACHINE_H_ 
+#define KERNEL_STACK_SIZE (4096) /* usable stack -- not buffers at either end */
+#define KERNEL_STACK_MASK (~(KERNEL_STACK_SIZE-1))
 
 /* Bit encodings for Machine State Register (MSR) */
 #define MSR_POW		(1<<18)		/* Enable Power Management */
@@ -26,8 +26,8 @@
 #define MSR_RI		(1<<1)		/* Recoverable Exception */
 #define MSR_LE		(1<<0)		/* Little-Endian enable */
 
-#define MSR_		MSR_FP|MSR_FE0|MSR_FE1|MSR_ME
-#define MSR_USER	MSR_|MSR_PR|MSR_EE|MSR_IR|MSR_DR
+#define MSR_		MSR_FE0|MSR_FE1|MSR_ME|MSR_FP
+#define MSR_USER	MSR_FE0|MSR_FE1|MSR_ME|MSR_PR|MSR_EE|MSR_IR|MSR_DR
 
 /* Bit encodings for Hardware Implementation Register (HID0) */
 #define HID0_EMCP	(1<<31)		/* Enable Machine Check pin */
@@ -47,15 +47,20 @@
 #define HID0_DLOCK	(1<<12)		/* Data Cache Lock */
 #define HID0_ICFI	(1<<11)		/* Instruction Cache Flash Invalidate */
 #define HID0_DCI	(1<<10)		/* Data Cache Invalidate */
- 
-#endif
+#define HID0_SIED	(1<<7)		/* Serial Instruction Execution [Disable] */
+#define HID0_BHTE	(1<<2)		/* Branch History Table Enable */
 
-static inline void start_thread(struct pt_regs * regs, unsigned long eip, unsigned long esp)
-{
-  regs->nip = eip;
-  regs->gpr[1] = esp;
-  regs->msr = MSR_USER;
-}
+/* fpscr settings */
+#define FPSCR_FX        (1<<31)
+#define FPSCR_FEX       (1<<30)
+
+
+
+#ifndef __ASSEMBLY__
+/*
+ * PowerPC machine specifics
+ */
+extern inline void start_thread(struct pt_regs *, unsigned long, unsigned long );
 
 
 /*
@@ -69,7 +74,6 @@ static inline void start_thread(struct pt_regs * regs, unsigned long eip, unsign
 /*
  * Write Protection works right in supervisor mode on the PowerPC
  */
-
 #define wp_works_ok 1
 #define wp_works_ok__is_a_macro /* for versions in ksyms.c */
 
@@ -82,27 +86,42 @@ static inline void start_thread(struct pt_regs * regs, unsigned long eip, unsign
 #define TASK_SIZE	(0x80000000UL)
 
 struct thread_struct 
-   {
-   	unsigned long	ksp;		/* Kernel stack pointer */
-	unsigned long	*pg_tables;	/* MMU information */
-	unsigned long	segs[16];	/* MMU Segment registers */
-	unsigned long	last_pc;	/* PC when last entered system */
-	unsigned long	user_stack;	/* [User] Stack when entered kernel */
-	double		fpr[32];	/* Complete floating point set */
-	unsigned long	wchan;		/* Event task is sleeping on */
-	unsigned long	*regs;		/* Pointer to saved register state */
-   };
+{
+  unsigned long	ksp;		/* Kernel stack pointer */
+  unsigned long	*pg_tables;	/* MMU information */
+  unsigned long	segs[16];	/* MMU Segment registers */
+  unsigned long	last_pc;	/* PC when last entered system */
+  unsigned long	user_stack;	/* [User] Stack when entered kernel */
+  double       	fpr[32];	/* Complete floating point set */
+  unsigned long	wchan;		/* Event task is sleeping on */
+  unsigned long	*regs;		/* Pointer to saved register state */
+  unsigned long fp_used;	/* number of quantums fp was used */
+  unsigned long fs;		/* for get_fs() validation */
+  unsigned long expc;		/* exception handler addr (see fault.c) */
+  unsigned long excount;	/* exception handler count */
+};
+
 
 #define INIT_TSS  { \
+	sizeof(init_kernel_stack) + (long) &init_kernel_stack,\
+	(long *)swapper_pg_dir, {0}, \
 	0, 0, {0}, \
-	0, 0, {0}, \
+	0, 0, 0, \
+	KERNEL_DS, 0, 0 \
 }
 
 #define INIT_MMAP { &init_mm, 0, 0x40000000, \
 		      PAGE_SHARED, VM_READ | VM_WRITE | VM_EXEC }
 
+#ifdef KERNEL_STACK_BUFFER
+/* give a 1 page buffer below the stack - if change then change ppc_machine.h */
+#define alloc_kernel_stack()  \
+          (memset((void *)__get_free_pages(GFP_KERNEL,1,0),0,KERNEL_STACK_SIZE+PAGE_SIZE)+PAGE_SIZE)
+#define free_kernel_stack(page) free_pages((page)-PAGE_SIZE,1)
+#else
 #define alloc_kernel_stack()    get_free_page(GFP_KERNEL)
 #define free_kernel_stack(page) free_page((page))
+#endif
 
 /*
  * Return saved PC of a blocked thread. For now, this is the "user" PC
@@ -111,6 +130,14 @@ static inline unsigned long thread_saved_pc(struct thread_struct *t)
 {
 	return (t->last_pc);
 }
+
+#define _PROC_Motorola 0
+#define _PROC_IBM      1
+#define _PROC_Be       2
+
+int _Processor;
+
+#endif /* ASSEMBLY*/
 
 #endif
 

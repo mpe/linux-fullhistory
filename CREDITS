@@ -308,7 +308,9 @@ D: Second extended file system co-designer
 N: Terry Dawson
 E: terry@perf.no.itg.telecom.com.au
 E: terry@albert.vk2ktj.ampr.org (Amateur Radio use only)
+D: trivial hack to add variable address length routing to Rose.
 D: AX25-HOWTO, HAM-HOWTO, IPX-HOWTO, NET-2-HOWTO
+D: ax25-utils maintainer.
 
 N: Todd J. Derr
 E: tjd@fore.com
@@ -349,7 +351,7 @@ E: drew@PoohSticks.ORG
 D: SCSI code
 D: Assorted snippets elsewhere
 D: Boot sector "..." printing
-S: 2255 Spruce
+S: 2037 Walnut #6
 S: Boulder, Colorado 80302
 S: USA
 
@@ -1009,8 +1011,8 @@ S: Finland
 N: Jonathan Naylor
 E: jsn@cs.nott.ac.uk
 E: g4klx@amsat.org
-E: G4KLX@GB7DAD (Packet Radio)
-D: AX.25 and NET/ROM protocol suites
+D: AX.25, NET/ROM and ROSE amateur radio protocol suites
+D: CCITT X.25 PLP and LAPB.
 S: 24 Castle View Drive
 S: Cromford
 S: Matlock

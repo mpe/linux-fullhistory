@@ -1,7 +1,8 @@
 # Maintained by Axel Boldt (boldt@math.ucsb.edu) 
 #
 # This version of the Linux kernel configuration help texts
-# corresponds to the kernel versions 2.1.x.
+# corresponds to the kernel versions 2.1.x. Be aware that these are
+# development kernels and need not be completely stable.
 #
 # International versions of this file available on the WWW:
 #   - http://jf.gee.kyoto-u.ac.jp/JF/JF-ftp/euc/Configure.help.euc
@@ -9,6 +10,10 @@
 # (tetsu@cauchy.nslab.ntt.jp). 
 #   - http://nevod.perm.su/service/linux/doc/kernel/Configure.help 
 # is a Russian translation, maintained by kaf@linux.nevod.perm.su.
+#   - http://www.linux-kheops.com/traduc/kernels/
+# has a French translation of the whole kernel, including
+# Configure.help. This is maintained by David Bourgin
+# (dbourgin@wsc.com). 
 #
 # Information about what a kernel is, what it does, how to patch and
 # compile it and much more is contained in the Kernel-HOWTO, available
@@ -119,12 +124,12 @@ CONFIG_BLK_DEV_LOOP
   before burning the CD, or want to use floppy images without first
   writing them to floppy.  This option also allows one to mount a
   filesystem with encryption.  To use these features, you need a
-  recent version of mount (check the file Documentation/Changes for
-  location and latest version).  Note that this loop device has
+  recent version of mount (available via ftp (user: anonymous) from
+  ftp.win.tue.nl/pub/linux/util/).  Note that this loop device has
   nothing to do with the loopback device used for network connections
   from the machine to itself.  Most users will answer N here.
 
-Enhanced IDE/MFM/RLL disk/cdrom/tape support
+Enhanced IDE/MFM/RLL disk/cdrom/tape/floppy support
 CONFIG_BLK_DEV_IDE 
   This will use the full-featured IDE driver to control up to four IDE
   interfaces, for a combination of up to eight IDE
@@ -168,9 +173,12 @@ CONFIG_BLK_DEV_HD_IDE
 
 Include IDE/ATA-2 DISK support
 CONFIG_BLK_DEV_IDEDISK
-  This will include enhanced support for MFM/RLL/IDE disks. If you
+  This will include enhanced support for MFM/RLL/IDE harddisks. If you
   have a MFM/RLL/IDE disk, and there is no special reason to use the
-  old harddisk driver instead, say Y.
+  old harddisk driver instead, say Y.  If you want to compile this
+  driver as a module ( = code which can be inserted in and removed
+  from the running kernel whenever you want), say M here and read
+  Documentation/modules.txt. If unsure, say Y.
 
 Include IDE/ATAPI CDROM support
 CONFIG_BLK_DEV_IDECD
@@ -189,31 +197,43 @@ CONFIG_BLK_DEV_IDECD
   linux boot loader) cannot properly deal with IDE/ATAPI CDROMs, so
   install lilo-16 or higher, available from
   sunsite.unc.edu:/pub/Linux/system/Linux-boot/lilo.
+  If you want to compile the driver as a module ( = code which
+  can be inserted in and removed from the running kernel whenever you
+  want), say M here and read Documentation/modules.txt.
 
 Include IDE/ATAPI TAPE support
 CONFIG_BLK_DEV_IDETAPE
   If you have an IDE tape drive using the ATAPI protocol, say Y.
-  ATAPI is a new protocol used by IDE TAPE and ATAPI drives,
-  similar to the SCSI protocol.  At boot time, the TAPE drive will
-  be identified along with other IDE devices, as "hdb" or "hdc",
-  or something similar, and will be mapped to a character device such
-  as "ht0".  Be sure to consult the drivers/block/ide-tape.c and
-  Documentation/ide.txt files for usage information.
+  ATAPI is a new protocol used by IDE tape and CDROM drives, similar
+  to the SCSI protocol.  At boot time, the tape drive will be
+  identified along with other IDE devices, as "hdb" or "hdc", or
+  something similar, and will be mapped to a character device such as
+  "ht0".  Be sure to consult the drivers/block/ide-tape.c and
+  Documentation/ide.txt files for usage information.  If you want to
+  compile the driver as a module ( = code which can be inserted in and
+  removed from the running kernel whenever you want), say M here and
+  read Documentation/modules.txt.
 
 Include IDE/ATAPI FLOPPY support
 CONFIG_BLK_DEV_IDEFLOPPY
-  If you have an IDE floppy drive using the ATAPI protocol, say Y.
-  ATAPI is a new protocol used by IDE CDROM/TAPE/FLOPPY drives,
+  If you have an IDE floppy drive which uses the ATAPI protocol, say
+  Y. Chances are that you don't, because these animals are rare.
+  ATAPI is a new protocol used by IDE CDROM/tape/floppy drives,
   similar to the SCSI protocol.  At boot time, the FLOPPY drive will
-  be identified along with other IDE devices, as "hdb" or "hdc",
-  or something similar.
+  be identified along with other IDE devices, as "hdb" or "hdc", or
+  something similar. If you want to compile the driver as a module ( =
+  code which can be inserted in and removed from the running kernel
+  whenever you want), say M here and read Documentation/modules.txt.
 
 SCSI emulation support
 CONFIG_BLK_DEV_IDESCSI
   This will provide SCSI host adapter emulation for IDE ATAPI devices,
-  and will allow you to use a SCSI driver instead of a native ATAPI
-  driver.  If both SCSI emulation and native support are compiled into
-  the kernel, the native support will be used.  Normally, say N.
+  and will allow you to use a SCSI device driver instead of a native
+  ATAPI driver. This is useful if you have an ATAPI device for which
+  no native driver has been written; you can then use this emulation
+  together with an appropriate SCSI device driver. If both this SCSI
+  emulation and native ATAPI support are compiled into the kernel, the
+  native support will be used.  Normally, say N.
 
 CMD640 chipset bugfix/support
 CONFIG_BLK_DEV_CMD640
@@ -250,6 +270,13 @@ CONFIG_BLK_DEV_RZ1000
   Linux.  This may slow disk throughput by a few percent, but at least
   things will operate 100% reliably. If unsure, say Y.
 
+Intel 82371 PIIX (Triton I/II) DMA support
+CONFIG_BLK_DEV_TRITON
+  This will improve performance if you have an Intel PCI Triton I/II
+  IDE interface chipset (i82371FB or i82371SB). For details, read the
+  comments at the beginning of drivers/block/triton.c and
+  Documentation/ide.txt. If unsure, say N.
+
 Other IDE chipset support
 CONFIG_IDE_CHIPSETS
   Say Y here if you want to include enhanced support for various IDE
@@ -274,6 +301,18 @@ CONFIG_BLK_DEV_HT6560B
   boot parameter.  It enables support for the secondary IDE interface
   of the Holtek card, and permits faster I/O speeds to be set as well.
   See the Documentation/ide.txt and ht6560b.c files for more info.
+
+PROMISE DC4030  support (EXPERIMENTAL)
+CONFIG_BLK_DEV_PROMISE
+  This driver provides support for the second port and cache of
+  Promise IDE interfaces, e.g. DC4030 and DC5030. It is enabled at
+  kernel runtime using the "ide0=dc4030" kernel boot parameter. See
+  the file drivers/block/promise.c file for more info.
+
+OPTi 82C621     support (EXPERIMENTAL)
+CONFIG_BLK_DEV_OPTI621
+  This is a driver for the OPTi 82C621 EIDE controller.
+  Please read the comments at the top of drivers/block/opti621.c.
 
 QDI QD6580 support
 CONFIG_BLK_DEV_QD6580
@@ -417,40 +456,49 @@ CONFIG_CPU_R3000
 Networking support
 CONFIG_NET
   Unless you really know what you are doing, you should say Y
-  here. The reason is that some programs need it even if you configure
-  a stand-alone machine that won't be connected to any other computer.
-  from an older kernel, you should consider updating your networking
-  tools too; read net/README for details.
+  here. The reason is that some programs need kernel networking
+  support even if you configure a stand-alone machine that won't be
+  connected to any other computer.  If you are upgrading from an older
+  kernel, you should consider updating your networking tools too
+  because changes in the kernel and the tools often go hand in hand;
+  see http://www.inka.de/sites/lina/linux/NetTools/index_en.html for
+  details. 
 
 Network aliasing
 CONFIG_NET_ALIAS
-  This is for setting multiple IP addresses on the same low-level
-  network device driver. Typically used for services that act
-  differently based on the address they listen on (e.g. "multihosting"
-  on Apache httpd) or for connecting to different logical networks
-  through the same physical interface.  This is the generic part,
-  later when configuring network protocol options you will be asked
-  for protocol-specific aliasing support.  See
-  Documentation/networking/alias.txt for more info.  If you need this
-  feature (for any protocol, like IP) say Y; if unsure, say N.
+  This will allow you to set multiple network addresses on the same
+  low-level network device driver. Typically used for services that
+  act differently based on the address they listen on
+  (e.g. "multihosting" or "virtual domains" on the web server apache
+  and the ftp server wuftpd) or for connecting to different logical
+  networks through the same physical interface (most commonly an
+  ethernet networking card).  This is the generic part, later when
+  configuring network protocol options you will be asked for
+  protocol-specific aliasing support, and you will have to say Y to at
+  least one of them.  See Documentation/networking/alias.txt for more
+  info.  If you need this feature (for any protocol, like IP) say Y;
+  if unsure, say N.
 
 Network firewalls
 CONFIG_FIREWALL
   A firewall is a computer which protects a local network from the
-  rest of the World: all traffic to and from computers on the local
-  net is inspected by the firewall first. If you want to configure
-  your Linux box as a firewall for a local network, say Y here. If
-  your local network is TCP/IP based, you will have to say Y to "IP:
-  firewalling", below.  You also need to say Y here and enable "IP
-  firewalling" below in order to be able to use IP masquerading
-  (i.e. local computers can chat with an outside host, but that
-  outside host is made to think that it is talking to the firewall
-  box. Makes the local network completely invisible and avoids the
-  need to allocate valid IP host addresses for the machines on the
-  local net) or to use the ip packet accounting to see what is using
-  all your network bandwidth. Chances are that you should use this on
-  any machine being run as a router and not on a host. If unsure, say
-  N.
+  rest of the world: all traffic to and from computers on the local
+  net is inspected by the firewall first, and sometimes blocked. If
+  you want to configure your Linux box as a firewall for a local
+  network, say Y here. If your local network is TCP/IP based, you will
+  then also have to say Y to "IP: firewalling", below.  
+  You also need to say Y here and enable "IP firewalling" below in
+  order to be able to use IP masquerading (i.e. local computers can
+  chat with an outside host, but that outside host is made to think
+  that it is talking to the firewall box -- makes the local network
+  completely invisible and avoids the need to allocate valid IP host
+  addresses for the machines on the local net) and IP packet
+  accounting (keeping track of what is using all your network
+  bandwidth) and IP transparent proxying (makes the computers on the
+  local network think they're talking to a remote computer, while in
+  reality the traffic is redirected by your Linux firewall to a local
+  proxy server). Chances are that you should use this on every machine
+  being run as a router and not on any regular host. If unsure, say N.
 
 Sun floppy controller support
 CONFIG_BLK_DEV_SUNFD
@@ -554,15 +602,15 @@ CONFIG_PCI
   Find out whether you have a PCI motherboard. PCI is the name of a
   bus system, i.e. the way the CPU talks to the other stuff inside
   your box. Other bus systems are ISA, EISA, Microchannel (MCA) or
-  VESA. If you have PCI, say Y, otherwise N. 
-  Note: some old PCI motherboards have BIOS bugs and may crash if 
-  "PCI bios support" is enabled (but they run fine without
-  this option). The PCI-HOWTO, available via ftp (user: anonymous) in
+  VESA. If you have PCI, say Y, otherwise N. Note: some old PCI
+  motherboards have BIOS bugs and may crash if "PCI bios support" is
+  enabled (but they run fine without this option). The PCI-HOWTO,
+  available via ftp (user: anonymous) in
   sunsite.unc.edu:/pub/Linux/docs/HOWTO, contains valuable information
   about which PCI hardware does work under Linux and which doesn't.
   If some of your PCI devices don't work and you get a warning during
   boot time ("man dmesg"), please follow the instructions at the top
-  of include/linux/pci.h. 
+  of include/linux/pci.h.
 
 PCI bridge optimization (experimental)
 CONFIG_PCI_OPTIMIZE
@@ -572,17 +620,21 @@ CONFIG_PCI_OPTIMIZE
 
 MCA support
 CONFIG_MCA
-  MicroChannel Architecture is found in some IBM PS/2 machines and laptops.
-  See Documentation/mca.txt before attempting to build an MCA bus kernel.
+  MicroChannel Architecture is found in some IBM PS/2 machines and
+  laptops. It is a bus system similar to PCI or ISA.  See
+  Documentation/mca.txt before attempting to build an MCA bus kernel.
+  Note that this is still experimental code.
 
 Intel 82371 PIIX (Triton I/II) DMA support
 CONFIG_BLK_DEV_TRITON
   If your PCI system uses an IDE harddrive (as opposed to SCSI, say)
   and includes the Intel 430FX PCI Triton chipset, you will want to
   enable this option to allow use of bus-mastering DMA data transfers.
-  Read the comments at the beginning of drivers/block/triton.c.  Check
-  the file Documentation/Changes for location and latest version of
-  the hdparm utility. It is safe to say Y to this question.
+  Read the comments at the beginning of drivers/block/triton.c.  You
+  can get the latest version of the hdparm utility via ftp (user:
+  anonymous) from
+  sunsite.unc.edu/pub/Linux/kernel/patches/diskdrives/; it is used to
+  tune your harddisk. It is safe to say Y to this question.
 
 System V IPC
 CONFIG_SYSVIPC
@@ -624,19 +676,6 @@ CONFIG_BINFMT_ELF
   and read Documentation/modules.txt. Saying M or N here is dangerous
   because some crucial programs on your system might be in ELF format.
 
-Compile kernel as ELF - if your GCC is ELF-GCC
-CONFIG_KERNEL_ELF
-  The gcc version 2.7.0 and newer produces the new ELF binary format
-  as default. If you have such a compiler (try "gcc -v"), say Y here,
-  otherwise N.  
-  It is possible, albeit almost pointless, to compile the kernel in
-  a.out (i.e. QMAGIC) format even if your compiler produces ELF as
-  default. For that, you would have to say N here and change the
-  variables LD and CC in the toplevel Makefile. Similarly, if your
-  compiler produces a.out by default but is able to produce ELF, you
-  can compile the kernel in ELF by saying Y here and editing the
-  variables CC and LD in the toplevel Makefile.
-
 Kernel support for A.OUT binaries
 CONFIG_BINFMT_AOUT
   A.out (Assembler.OUTput) is a set of formats for libraries and
@@ -659,25 +698,25 @@ CONFIG_BINFMT_AOUT
 Kernel support for JAVA binaries
 CONFIG_BINFMT_JAVA
   JAVA is an object oriented programming language developed by SUN;
-  JAVA programs are compiled into "JAVA bytecode" which can then be
-  interpreted by run time systems on many different operating systems.
-  These JAVA binaries are becoming a universal executable format. This
-  option allows you to run a Java binary just like any other Linux
-  program: by typing in its name. As more and more Java programs
-  become available, the use for this will gradually increase. You can
-  even execute HTML files containing JAVA applets (= JAVA binaries) if
-  those files start with the string "<!--applet-->". If you want to
-  use this, read Documentation/java.txt and the Java on Linux HOWTO,
-  available via ftp (user: anonymous) at
-  sunsite.unc.edu:/pub/Linux/docs/HOWTO. You will then need to install
-  the run time system contained in the Java Developers Kit (JDK) as
-  described in the HOWTO. If you disable this option it will reduce
-  your kernel by about 4kB. This is not much and by itself does not
-  warrant removing support. However its removal is a good idea if you
-  do not have the JDK installed. If you don't know what to answer at
-  this point then answer Y. You may answer M for module support and
-  later load the module when you install the JDK or find an interesting
-  Java program that you can't live without.
+  JAVA programs are compiled into "JAVA bytecode" binaries which can
+  then be interpreted by run time systems on many different operating
+  systems.  These JAVA binaries are becoming a universal executable
+  format. Saying Y here allows you to execute a JAVA bytecode binary
+  just like any other Linux program: by typing in its name. As more
+  and more Java programs become available, the use for this will
+  gradually increase. You can even execute HTML files containing JAVA
+  applets (= JAVA binaries) if those files start with the string
+  "<!--applet-->". If you want to use this, read
+  Documentation/java.txt and the Java on Linux HOWTO, available via
+  ftp (user: anonymous) at sunsite.unc.edu:/pub/Linux/docs/HOWTO. You
+  will then need to install the run time system contained in the Java
+  Developers Kit (JDK) as described in the HOWTO. If you disable this
+  option it will reduce your kernel by about 4kB. This is not much and
+  by itself does not warrant removing support. However its removal is
+  a good idea if you do not have the JDK installed. If you don't know
+  what to answer at this point then answer Y. You may answer M for
+  module support and later load the module when you install the JDK or
+  find an interesting Java program that you can't live without.
 
 Processor type
 CONFIG_M386
@@ -691,6 +730,16 @@ CONFIG_M386
   compiler before gcc 2.7 (say "gcc -v" to find out), then you have to
   say "386" or "486" here even if running on a Pentium or PPro
   machine. If you don't know what to do, say "386".
+
+Video mode selection support
+CONFIG_VIDEO_SELECT
+  This enables support for text mode selection on kernel startup. If you
+  want to take advantage of some high-resolution text mode your card's
+  BIOS offers, but the traditional Linux utilities like SVGATextMode
+  don't, you can enable this and set the mode using the "vga=" option
+  from your boot loader (LILO or LOADLIN) or set "vga=ask" which brings
+  up a video mode menu on kernel startup. Read Documentation/svga.txt
+  for more information. If unsure, say N.
 
 Compile the kernel into the ELF object format 
 CONFIG_ELF_KERNEL
@@ -745,12 +794,12 @@ CONFIG_KERNELD
   use it.  If you select Y here, the kernel will take care of this all
   by itself, together with the user level daemon "kerneld".  Note that
   "kerneld" will also automatically unload all unused modules, so you
-  don't have to use "rmmod" either.
-  kerneld will also provide support for different user-level beeper
-  and screen blanker programs later on.
-  The "kerneld" daemon is included in the package "modules-1.2.8" and
-  later. You will probably want to read the kerneld mini-HOWTO,
-  available via ftp (user: anonymous) from
+  don't have to use "rmmod" either.  kerneld will also provide support
+  for different user-level beeper and screen blanker programs later
+  on.  The "kerneld" daemon is included in the modules package (check
+  Documentation/Changes for latest version and location). You will
+  probably want to read the kerneld mini-HOWTO, available via ftp
+  (user: anonymous) from
   sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini. If unsure, say Y.
 
 ARP daemon support (EXPERIMENTAL)
@@ -851,27 +900,30 @@ CONFIG_IP_FIREWALL
   about 2kB. You may need to read the FIREWALL-HOWTO, available via
   ftp (user: anonymous) in
   sunsite.unc.edu:/pub/Linux/docs/HOWTO. Also, you will need the
-  ipfwadm tool (check the file Documentation/Changes for location and
-  latest version) to allow selective blocking of internet traffic
-  based on type, origin and destination.  You need to enable IP
-  firewalling in order to be able to use IP masquerading (i.e. local
-  computers can chat with an outside host, but that outside host is
-  made to think that it is talking to the firewall box. Makes the
-  local network completely invisible and avoids the need to allocate
-  valid IP host addresses for the machines on the local net) or to use
-  the IP packet accounting to see what is using all your network
-  bandwidth.  This option is also needed when you want to enable the
-  transparent proxying support (makes the computers on the local
-  network think they're talking to a remote computer, while in reality
-  the traffic is redirected by your Linux firewall to a local proxy
-  server).
+  ipfwadm tool (available via ftp (user: anonymous) from
+  ftp.xos.nl/pub/linux/ipfwadm/) to allow selective blocking of
+  internet traffic based on type, origin and destination.  You need to
+  enable IP firewalling in order to be able to use IP masquerading
+  (i.e. local computers can chat with an outside host, but that
+  outside host is made to think that it is talking to the firewall box
+  -- makes the local network completely invisible and avoids the need
+  to allocate valid IP host addresses for the machines on the local
+  net) and IP packet accounting (keeping track of what is using all
+  your network bandwidth) and IP transparent proxying (makes the
+  computers on the local network think they're talking to a remote
+  computer, while in reality the traffic is redirected by your Linux
+  firewall to a local proxy server). If unsure, say N.
 
 IP: firewall packet netlink device
 CONFIG_IP_FIREWALL_NETLINK
-  When packets hit the firewall and are blocked the first 128 bytes of each
-  datagram is passed to optional user space monitoring software that can
-  then look for attacks and take actions such as paging the administrator of
-  the site.
+  If you say Y here and when packets hit your Linux firewall and are
+  blocked, the first 128 bytes of each such packet are passed on to
+  optional user space monitoring software that can then look for
+  attacks and take actions such as paging the administrator of the
+  site. To use this, you need to create a character special file under
+  /dev with major number 36 and minor number 3 using mknod ("man
+  mknod"), and you need (to write) a program that reads from that
+  device and takes appropriate action.
 
 IP: accounting
 CONFIG_IP_ACCT
@@ -882,8 +934,8 @@ CONFIG_IP_ACCT
   firewalling. The data is accessible with "cat /proc/net/ip_acct", so
   you want to say Y to the /proc filesystem below, if you say Y
   here. To specify what exactly should be recorded, you need the tool
-  ipfwadm (check the file Documentation/Changes for location and
-  latest version).
+  ipfwadm (available via ftp (user: anonymous) from
+  ftp.xos.nl/pub/linux/ipfwadm/).
 
 IP: tunneling
 CONFIG_NET_IPIP
@@ -922,21 +974,28 @@ IP: masquerading
 CONFIG_IP_MASQUERADE
   If one of the computers on your local network for which your Linux
   box acts as a firewall wants to send something to the outside, your
-  box can "masquerade" as that host, i.e. it forwards the traffic to
-  the intended destination, but makes it look like it came from the
-  firewall box itself. It works both ways: if the outside host
-  answers, the firewall will silently forward the traffic to the
-  corresponding local computer. This way, the computers on your local
-  net are completely invisible to the outside world, even though they
-  can reach the outside and can be reached. This makes it possible to
-  have the computers on the local network participate on the internet
-  even if they don't have officially registered IP addresses.  (This
-  last problem can also be solved by connecting the Linux box to the
-  Internet using SLiRP [SLiRP is a SLIP/PPP emulator that works if you
-  have a regular dial up shell account on some UNIX computer; get it
-  from ftp://sunsite.unc.edu/pub/Linux/system/Network/serial/].)
-  Details on how to set things up are contained in the
-  IP Masquerading FAQ, available at http://www.indyramp.com/masq/
+  box can "masquerade" as that computer, i.e. it forwards the traffic
+  to the intended outside destination, but makes it look like it came
+  from the firewall box itself. It works both ways: if the outside
+  host replies, the Linux firewall will silently forward the traffic
+  to the corresponding local computer. This way, the computers on your
+  local net are completely invisible to the outside world, even though
+  they can reach the outside and can be reached. This makes it
+  possible to have the computers on the local network participate on
+  the internet even if they don't have officially registered IP
+  addresses.  (This last problem can also be solved by connecting the
+  Linux box to the Internet using SLiRP [SLiRP is a SLIP/PPP emulator
+  that works if you have a regular dial up shell account on some UNIX
+  computer; get it via ftp (user: anonymous) from
+  ftp://sunsite.unc.edu/pub/Linux/system/Network/serial/].)  Details
+  on how to set things up are contained in the IP Masquerading FAQ,
+  available at http://www.indyramp.com/masq/. If you say Y here, then
+  the modules ip_masq_ftp.o (for ftp transfers through the firewall),
+  ip_masq_irc.o (for irc chats through the firewall), and
+  ip_masq_raudio.o (for realaudio downloads through the firewall) will
+  automatically be compiled. Modules are pieces of code which can be
+  inserted in and removed from the running kernel whenever you want;
+  read Documentation/modules.txt for details.
 
 IP: always defragment 
 CONFIG_IP_ALWAYS_DEFRAG 
@@ -946,7 +1005,7 @@ CONFIG_IP_ALWAYS_DEFRAG
   reassembled (defragmented) before being processed, even if they are
   about to be forwarded.  This option is highly recommended if you
   have enabled the masquerading support (CONFIG_IP_MASQUERADE),
-  because this facility requires that second and further fragments can
+  because that facility requires that second and further fragments can
   be related to TCP or UDP port numbers, which are only stored in the
   first fragment.  When using IP firewall support
   (CONFIG_IP_FIREWALL), you might also want to enable this option, to
@@ -960,11 +1019,12 @@ CONFIG_IP_ALWAYS_DEFRAG
 
 IP: aliasing support
 CONFIG_IP_ALIAS
-  Sometimes it is useful to give several addresses to a single network
-  interface (= serial port or ethernet card). The most common case is
-  that you want to serve different WWW documents to the outside
-  according to which of your host names they used to connect to
-  you. This is explained in detail on the WWW at
+  Sometimes it is useful to give several IP addresses to a single
+  physical network interface (= serial port or ethernet card). The
+  most common case is that you want to serve different WWW or ftp
+  documents to the outside according to which of your host names was
+  used to connect to you. This is called "multihosting" or "virtual
+  domains" and is explained in detail on the WWW at
   http://www.thesphere.com/~dlp/TwoServers/ (to browse the WWW, you
   need to have access to a machine on the Internet that has one of the
   programs lynx, netscape or Mosaic). Another scenario would be that
@@ -1030,10 +1090,22 @@ CONFIG_NO_PATH_MTU_DISCOVERY
   sending very small chunks, we start out sending big ones and if we
   then discover that some host along the way likes its chunks smaller,
   we adjust to a smaller size. This is good, so most people say
-  N. However, some versions of DOS NCSA telnet (and other software)
+  N here. However, some versions of DOS NCSA telnet (and other software)
   are broken and can only connect to your Linux machine if you say Y
-  here. See also Documentation/networking/ncsa-telnet for the location
-  of fixed NCSA telnet clients.
+  here. See Documentation/networking/ncsa-telnet for the location
+  of fixed NCSA telnet clients. If in doubt, say N.
+
+Path MTU Discovery (normally enabled)
+CONFIG_PATH_MTU_DISCOVERY
+  MTU (maximal transfer unit) is the size of the chunks we send out
+  over the net. "Path MTU Discovery" means that, instead of always
+  sending very small chunks, we start out sending big ones and if we
+  then discover that some host along the way likes its chunks smaller,
+  we adjust to a smaller size. This is good, so most people say
+  Y here. However, some versions of DOS NCSA telnet (and other software)
+  are broken and can only connect to your Linux machine if you say N
+  here. See Documentation/networking/ncsa-telnet for the location
+  of fixed NCSA telnet clients. If in doubt, say Y.
 
 Disable NAGLE algorithm (normally enabled)
 CONFIG_TCP_NAGLE_OFF
@@ -1069,6 +1141,20 @@ CONFIG_SKB_LARGE
   Unless you are using long links with end to end speeds of over 2Mbit
   a second or   satellite links this option will make no difference to
   performance.
+
+The IPv6 protocol
+CONFIG_IPV6
+  This is experimental support for the next version of the Internet
+  Protocol IP version 6 (also called IPng "IP next
+  generation"). Features of this new protocol include: expanded
+  address space, authentication and privacy, and seamless
+  interoperability with the current version of IP. For details, see
+  http://playground.sun.com/pub/ipng/html/ipng-main.html and the file
+  net/ipv6/README in the kernel source.  The IPv6 support is also
+  available as a module ( = code which can be inserted in and removed
+  from the running kernel whenever you want). If you want to compile
+  it as a module, say M here and read Documentation/modules.txt.  It's
+  safe to say N for now.
 
 The IPX protocol
 CONFIG_IPX
@@ -1114,7 +1200,7 @@ CONFIG_IPX_PPROP_ROUTING
   across routers.  If you are using an internal network, have multiple
   interfaces that route IPX, or will want to route IPX connections over
   ppp to internal networks, setting this will allow the type 20 packets
-  to be propogated to all connected networks.  These packets are used by
+  to be propagated to all connected networks.  These packets are used by
   Novell NETBIOS and the NETBIOS name functions of SMB protocols that
   work over IPX (e.g. the "Network Neighborhood" on another popular OS
   cum GUI).  In brief, if your Linux box needs to route IPX packets,
@@ -1153,20 +1239,24 @@ CONFIG_AX25
   use a low speed TNC (a Terminal Node Controller acts as a kind of
   modem connecting your computer's serial port to your radio's
   microphone input and speaker output) supporting the KISS protocol or
-  the various SCC cards that are supported by the Ottawa PI, the
-  Gracilis Packetwin and the generic Z8530 driver. Another option are
-  the Baycom modem serial and parallel port hacks (supported by their
-  own driver) and the other baycom cards (SCC) (supported by the Z8530
-  driver).  Information about where to get supporting software for
-  Linux amateur radio as well as information about how to configure an
-  AX.25 port is contained in the HAM-HOWTO, available via ftp (user:
-  anonymous) in sunsite.unc.edu:/pub/Linux/docs/HOWTO. You might also
-  want to check out the file Documentation/networking/ax25.txt in the
-  kernel source. More information about digital amateur radio in
-  general is on the WWW at
-  http://www.cis.ohio-state.edu/hypertext/faq/usenet/radio/ham-radio/digital-faq/faq.html
-  (To browse the WWW, you need to have access to a machine on the
-  Internet that has one of the programs lynx, netscape or Mosaic).
+  one of the various SCC cards that are supported by the Ottawa PI,
+  the Gracilis Packetwin or the generic Z8530 driver. Another option
+  are the Baycom modem serial and parallel port hacks or the soundcard
+  modem (supported by their own drivers). If you say Y here, you also
+  have to say Y to one of those drivers. Information about where to
+  get supporting software for Linux amateur radio as well as
+  information about how to configure an AX.25 port is contained in the
+  HAM-HOWTO, available via ftp (user: anonymous) in
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO. You might also want to check
+  out the file Documentation/networking/ax25.txt in the kernel
+  source. More information about digital amateur radio in general is
+  on the WWW at http://www.tapr.org/tapr/html/pkthome.html.  (To
+  browse the WWW, you need to have access to a machine on the Internet
+  that has one of the programs lynx, netscape or Mosaic).  This driver
+  is also available as a module ( = code which can be inserted in and
+  removed from the running kernel whenever you want). If you want to
+  compile it as a module, say M here and read
+  Documentation/modules.txt.
 
 Amateur Radio NET/ROM
 CONFIG_NETROM
@@ -1175,13 +1265,15 @@ CONFIG_NETROM
   amateur radio users as well as information about how to configure an
   AX.25 port is contained in the HAM-HOWTO, available via ftp (user:
   anonymous) in sunsite.unc.edu:/pub/Linux/docs/HOWTO. You also might
-  also want to check out the file
-  Documentation/networking/ax25.txt. More information about digital
-  amateur radio in general is on the WWW at
-  http://www.cis.ohio-state.edu/hypertext/faq/usenet/radio/ham-radio/digital-faq/faq.html
-  (To browse the WWW, you need to have access to a machine on the
-  Internet that has one of the programs lynx, netscape or
-  Mosaic). 
+  want to check out the file Documentation/networking/ax25.txt. More
+  information about digital amateur radio in general is on the WWW at
+  http://www.tapr.org/tapr/html/pkthome.html (To browse the WWW, you
+  need to have access to a machine on the Internet that has one of the
+  programs lynx, netscape or Mosaic).
+  This driver is also available as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you
+  want). If you want to compile it as a module, say M here and read
+  Documentation/modules.txt.
 
 AX.25 over Ethernet
 CONFIG_BPQETHER
@@ -1190,6 +1282,24 @@ CONFIG_BPQETHER
   traffic over ethernet (also called "BPQ AX.25"), which could be
   useful if some other computer on your local network has a direct
   amateur radio connection.
+
+Amateur Radio X.25 PLP (Rose)
+CONFIG_ROSE
+  The Packet Layer Protocol (PLP) is a way to route packets over X.25
+  connections in general and amateur radio AX.25 connections in
+  particular, essentially an alternative to NET/ROM.  A comprehensive
+  listing of all the software for Linux amateur radio users as well as
+  information about how to configure an AX.25 port is contained in the
+  HAM-HOWTO, available via ftp (user: anonymous) in
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO. You also might want to check
+  out the file Documentation/networking/ax25.txt. More information
+  about digital amateur radio in general is on the WWW at
+  http://www.tapr.org/tapr/html/pkthome.html (To browse the WWW, you
+  need to have access to a machine on the Internet that has one of the
+  programs lynx, netscape or Mosaic).  This driver is also available
+  as a module ( = code which can be inserted in and removed from the
+  running kernel whenever you want). If you want to compile it as a
+  module, say M here and read Documentation/modules.txt.
 
 Bridging (EXPERIMENTAL)
 CONFIG_BRIDGE
@@ -1216,11 +1326,11 @@ CONFIG_NETLINK
   able to read from and write to character special files in the /dev
   directory having major mode 36. So far, the kernel uses it to
   publish some network related information if you enable "Routing
-  messages", below or firewall netlink.
-  You need to include this if you want to use arpd, a daemon that
-  helps keep the internal ARP cache (a mapping between IP addresses
-  and hardware addresses on the local network) small. If unsure, say
-  N.
+  messages", below. It is also used by the firewall code if you say Y
+  to "Kernel/User network link driver" further down.  You also need to
+  say Y here if you want to use arpd, a daemon that helps keep the
+  internal ARP cache (a mapping between IP addresses and hardware
+  addresses on the local network) small. If unsure, say N.
 
 Routing messages
 CONFIG_RTNETLINK
@@ -1277,12 +1387,12 @@ CONFIG_BLK_DEV_SR
   say M here and read Documentation/modules.txt and
   Documentation/scsi.txt .
 
-Enable vendor-specific extentions (for SCSI CDROM)
+Enable vendor-specific extensions (for SCSI CDROM)
 CONFIG_BLK_DEV_SR_VENDOR
   This enables the usage of vendor specific SCSI commands. This is
   required for some stuff which is newer than the SCSI-II standard,
-  most important is the multisession CD support. You'll probably want
-  to say y here, unless you have a _real old_ CD-ROM drive.
+  most important is the MultiSession CD support. You'll probably want
+  to say Y here, unless you have a _real old_ CD-ROM drive.
 
 SCSI generic support
 CONFIG_CHR_DEV_SG
@@ -1400,7 +1510,9 @@ EATA-DMA (DPT, NEC, AT&T, SNI, AST, Olivetti, Alphatronix) support
 CONFIG_SCSI_EATA_DMA
   This is support for the EATA-DMA protocol compliant SCSI Host
   Adaptors like the SmartCache III/IV, SmartRAID controller families
-  and the DPT PM2011B and PM2012B controllers.  Please read the
+  and the DPT PM2011B and PM2012B controllers.  Note that there is
+  also another driver for the same hardware: "EATA ISA/EISA/PCI
+  support". You should enable only one of them. Please read the
   SCSI-HOWTO, available via ftp (user: anonymous) at
   sunsite.unc.edu:/pub/Linux/docs/HOWTO.  This driver is also
   available as a module (= code which can be inserted in and removed
@@ -1526,20 +1638,22 @@ CONFIG_SCSI_NCR53C8XX_SYNC
   SCSI-2 specifications allow scsi devices to negotiate a synchronous 
   transfer period of 25 nano-seconds or more.
   The transfer period value is 4 times the agreed transfer period.
-  So, data can be transferred at a 10 MHz frequency, allowing 10 MB/second 
-  throughput with 8 bits scsi-2 devices and 20 MB/second with wide16 devices.
-  This frequency can be used safely with differential devices but may cause 
-  problems with singled-ended devices.
+  So, data can be transferred at a 10 MHz frequency, allowing 10
+  MB/second throughput with 8 bits scsi-2 devices and 20 MB/second
+  with wide16 devices.  This frequency can be used safely with
+  differential devices but may cause problems with singled-ended
+  devices.
   Specify 0 if you want to only use asynchronous data transfers.
-  Otherwise, specify a value between 5 and 10.
-  Commercial O/Ses generally use 5 Mhz frequency for synchronous transfers.
-  It is a reasonnable default value.
-  However, a flawless singled-ended scsi bus supports 10 MHz data transfers.
-  Regardless the value choosen in the Linux configuration, the synchronous 
-  period can be changed after boot-up through the /proc/scsi file system.
-  The generic command is:
+  Otherwise, specify a value between 5 and 10.  Commercial O/Ses
+  generally use 5 Mhz frequency for synchronous transfers.  It is a
+  reasonable default value.
+  However, a flawless singled-ended scsi bus supports 10 MHz data
+  transfers.  Regardless the value chosen in the Linux configuration,
+  the synchronous period can be changed after boot-up through the
+  /proc/scsi file system. The generic command is:
       echo "setsync #target period" >/proc/scsi/ncr53c8xx/0
   Use a 25 ns period for 10 Mhz synchronous data transfers.
+  If you don't know what to do now, go with the default.
 
 use normal IO
 CONFIG_SCSI_NCR53C8XX_IOMAPPED
@@ -1574,10 +1688,22 @@ CONFIG_SCSI_NCR53C8XX_TAGGED_QUEUE
 
 maximum number of queued commands
 CONFIG_SCSI_NCR53C8XX_MAX_TAGS
-  This option allows you to specify the maximum number of commands that 
-  can be queud to a device, when tagged command queuing is possible.
-  The default value is 4. Minimum is 2, maximum is 12.
-  The normal answer therefore is the default one.
+  This option allows you to specify the maximum number of commands
+  that can be queued to a device, when tagged command queuing is
+  possible.  The default value is 4. Minimum is 2, maximum is 12.  The
+  normal answer therefore is the default one.
+
+force asynchronous transfer mode
+CONFIG_SCSI_NCR53C8XX_FORCE_ASYNCHRONOUS
+  This option allows you to force asynchronous transfer mode for all
+  SCSI devices at linux startup. You can enable synchronous
+  negotiation with the "setsync" control command after boot-up, for
+  example:
+     echo "setsync 2 25" >/proc/scsi/ncr53c8xx/0
+  asks the driver to set the period to 25 ns (10MB/sec) for target 2
+  of controller 0 (please read drivers/scsi/README.ncr53c8xx for more
+  information). The safe answer therefore is Y.  The normal answer
+  therefore is N.
 
 force synchronous negotiation
 CONFIG_SCSI_NCR53C8XX_FORCE_SYNC_NEGO
@@ -1586,6 +1712,11 @@ CONFIG_SCSI_NCR53C8XX_FORCE_SYNC_NEGO
   Answer Y only if you suspect some device to be so humble.
   The normal answer therefore is N.
  
+IBMMCA SCSI support
+CONFIG_SCSI_IBMMCA
+  If your computer sports an MCA bus system architecture (IBM PS/2)
+  with an SCSI harddrive, say Y here.
+
 disable master parity checking
 CONFIG_SCSI_NCR53C8XX_DISABLE_MPARITY_CHECK
   Some hardware may have problems with parity during master cycles on
@@ -1676,7 +1807,7 @@ CONFIG_SCSI_ULTRASTOR
   drivers/scsi/ultrastor.h. If you want to compile this as a module (
   = code which can be inserted in and removed from the running kernel
   whenever you want), say M here and read Documentation/modules.txt.
-  Note that there is also another driver for UltraStor hardware:
+  Note that there is also another driver for the same hardware:
   "UltraStor 14F/34F support", above.
  
 7000FASST SCSI support
@@ -1693,8 +1824,8 @@ CONFIG_SCSI_EATA
   This driver supports all the EATA/DMA-compliant SCSI host adapters
   and does not need any BIOS32 service.
   DPT ISA and all EISA i/o addresses are probed looking for the "EATA"
-  signature. If "PCI bios support" is enabled, the addresses of all the
-  PCI SCSI controllers reported by BIOS32 are probed as well.
+  signature. If "PCI bios support" is enabled, the addresses of all
+  the PCI SCSI controllers reported by BIOS32 are probed as well.
   Note that there is also another driver for the same hardware:
   "EATA-DMA support". You should enable only one of them.
   You want to read the start of drivers/scsi/eata.c and the
@@ -1719,7 +1850,10 @@ CONFIG_SCSI_AM53C974
   This is support for the AM53/79C974 SCSI host adapters. Please read
   drivers/scsi/README.AM53C974 for details. Also, the SCSI-HOWTO,
   available via ftp (user: anonymous) at
-  sunsite.unc.edu:/pub/Linux/docs/HOWTO, is for you.
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO, is for you. If you want to
+  compile this driver as a module ( = code which can be inserted in
+  and removed from the running kernel whenever you want), say M here
+  and read Documentation/modules.txt.
 
 IOMEGA Parallel Port ZIP drive SCSI support
 CONFIG_SCSI_PPA
@@ -1888,13 +2022,7 @@ CONFIG_PPP
   will show up in the directory modules once you have said "make
   modules". If unsure, say N.
 
-16 channels instead of 4 
-CONFIG_PPP_LOTS
-  Saying Y here will allow you to have up to 16 PPP connections
-  running in parallel. This is mainly useful if you intend your linux
-  box to act as a dial-in PPP server. Most people can say N.
-
-STRIP (Starmode Radio IP) support
+STRIP (Metricom Starmode radio IP)
 CONFIG_STRIP
   Say Y if you have a Metricom radio and intend to use Starmode Radio
   IP.  STRIP is a radio protocol developed for the MosquitoNet project
@@ -1907,8 +2035,11 @@ CONFIG_STRIP
   phone line and use it as a modem.)  You can use STRIP on any Linux
   machine with a serial port, although it is obviously most useful for
   people with laptop computers. If you think you might get a Metricom
-  radio in the future, there is no harm in saying yes to STRIP now,
-  except that it makes the kernel a bit bigger.
+  radio in the future, there is no harm in saying Y to STRIP now,
+  except that it makes the kernel a bit bigger. You can also compile
+  this as a module ( = code which can be inserted in and removed from
+  the running kernel whenever you want), say M here and read
+  Documentation/modules.txt.
 
 WIC (Radio IP bridge)
 CONFIG_WIC
@@ -1923,7 +2054,8 @@ CONFIG_SCC
   in order to communicate with other computers.  If you want to use
   this, read Documentation/networking/z8530drv.txt and the AX.25-HOWTO,
   available via ftp (user: anonymous) at
-  sunsite.unc.edu:/pub/Linux/docs/HOWTO.  If you want to compile this
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO.  Also make sure to say Y to
+  "Amateur Radio AX.25 Level 2" support. If you want to compile this
   as a module ( = code which can be inserted in and removed from the
   running kernel whenever you want), say M here and read
   Documentation/modules.txt.
@@ -1933,12 +2065,14 @@ CONFIG_BAYCOM
   This is an experimental driver for Baycom style simple amateur radio
   modems that connect to either a serial interface or a parallel
   interface. The driver supports the ser12 and par96 designs. To
-  configure the driver, use the sethdlc utility available
-  in the standard ax25 utilities package. For information on the modems,
-  see http://www.baycom.de and drivers/net/README.baycom.
-  If you want to compile this as a module ( = code which can be
-  inserted in and removed from the running kernel whenever you want),
-  say M here and read Documentation/modules.txt. This is recommended.
+  configure the driver, use the sethdlc utility available in the
+  standard ax25 utilities package. For information on the modems, see
+  http://www.baycom.de and drivers/net/README.baycom.  If you want to
+  use this, you need to say Y to "Amateur Radio AX.25 Level 2" support
+  as well.  If you want to compile this driver as a module ( = code
+  which can be inserted in and removed from the running kernel
+  whenever you want), say M here and read
+  Documentation/modules.txt. This is recommended.
 
 Soundcard modem driver for AX.25
 CONFIG_SOUNDMODEM
@@ -1948,10 +2082,23 @@ CONFIG_SOUNDMODEM
   utilities available in the standard ax25 utilities package. For
   informations on how to key the transmitter, see
   http://www.ife.ee.ethz.ch/~sailer/pcf/ptt_circ/ptt.html and
-  drivers/net/README.soundmodem. If you want to compile this as a
-  module ( = code which can be inserted in and removed from the
-  running kernel whenever you want), say M here and read
-  Documentation/modules.txt. This is recommended.
+  drivers/net/README.soundmodem. To use this driver, you also need to
+  say Y to "Amateur Radio AX.25 Level 2" support. If you want to
+  compile this driver as a module ( = code which can be inserted in
+  and removed from the running kernel whenever you want), say M here
+  and read Documentation/modules.txt. This is recommended. Note that
+  this driver and the sound driver cannot both work at the same time.
+
+Serial port KISS driver for AX.25
+CONFIG_MKISS
+  KISS is the protocol used to send IP traffic over AX.25 radio
+  connections, somewhat similar to SLIP for telephone lines. Say Y
+  here if you intend to send internet traffic over amateur radio,
+  using some device connected to your machine's serial port. In that
+  case, you also have to say Y to "Amateur Radio AX.25 Level 2"
+  support.  If you want to compile this driver as a module ( = code
+  which can be inserted in and removed from the running kernel
+  whenever you want), say M here and read Documentation/modules.txt.
 
 PLIP (parallel port) support
 CONFIG_PLIP
@@ -2061,6 +2208,14 @@ Sun Intel Ethernet support
 CONFIG_SUN_INTEL
   This is support for the intel ethernet cards on some Sun workstations
   (all those with a network interface 'ie0' under SunOS).
+
+Ethernet (10 or 100Mbit)
+CONFIG_NET_ETHERNET
+  Ethernet is a widely used protocol on local area networks. If you
+  have a ethernet card in your computer and want to use it under
+  Linux, say Y here. Note that the answer to this question doesn't
+  directly affect the kernel: saying N will just cause this configure
+  script to skip all the questions about ethernet card drivers.
 
 Western Digital/SMC cards
 CONFIG_NET_VENDOR_SMC
@@ -2185,6 +2340,18 @@ CONFIG_ELPLUS
 
 3c507 support
 CONFIG_EL16
+  If you have a network (ethernet) card of this type, say Y and read
+  the Ethernet-HOWTO, available via ftp (user: anonymous) in
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO. This driver is also available
+  as a module ( = code which can be inserted in and removed from the
+  running kernel whenever you want). If you want to compile it as a
+  module, say M here and read Documentation/modules.txt as well as
+  Documentation/networking/net-modules.txt. If you plan to use more
+  than one network card under linux, read the
+  Multiple-Ethernet-mini-HOWTO, available from
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini.
+
+3c523 support CONFIG_ELMC
   If you have a network (ethernet) card of this type, say Y and read
   the Ethernet-HOWTO, available via ftp (user: anonymous) in
   sunsite.unc.edu:/pub/Linux/docs/HOWTO. This driver is also available
@@ -2399,9 +2566,12 @@ NI6510 support
 CONFIG_NI65
   If you have a network (ethernet) card of this type, say Y and read
   the Ethernet-HOWTO, available via ftp (user: anonymous) in
-  sunsite.unc.edu:/pub/Linux/docs/HOWTO. If you plan to use more than
-  one network card under linux, read the Multiple-Ethernet-mini-HOWTO,
-  available from sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini.
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO. If you want to compile it as
+  a module, say M here and read Documentation/modules.txt as well as
+  Documentation/networking/net-modules.txt. If you plan to use more
+  than one network card under linux, read the
+  Multiple-Ethernet-mini-HOWTO, available from
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini.
 
 Ottawa PI and PI/2 support
 CONFIG_PI
@@ -2414,16 +2584,23 @@ CONFIG_PI
   you can say Y here and should read the HAM-HOWTO, available via ftp
   (user: anonymous) in sunsite.unc.edu:/pub/Linux/docs/HOWTO. Also,
   you should have said Y to "AX.25 support" above, because AX.25 is
-  the protocol used for digital traffic over radio links.
+  the protocol used for digital traffic over radio links. If you want
+  to compile this as a module ( = code which can be inserted in and
+  removed from the running kernel whenever you want), say M here and
+  read Documentation/modules.txt.
 
 Gracilis PackeTwin support
 CONFIG_PT
-  This card is similar to the PI card (mentioned above).  It is used
-  mainly by amateur radio operators for packet radio.  You should have
-  already said Y to "AX.25 support" as this card uses that protocol.
-  More information about this driver can be found in the file
-  drivers/net/README.pt.  NOTE: The card is capable of DMA and full
-  duplex but neither of these have been coded in the driver as yet.
+  This is a card used mainly by amateur radio operators for packet
+  radio.  You should have already said Y to "AX.25 support" as this
+  card uses that protocol.  More information about this driver can be
+  found in the file drivers/net/README.pt.  NOTE: The card is capable
+  of DMA and full duplex but neither of these have been coded in the
+  driver as yet.  This driver is also available as a module ( = code
+  which can be inserted in and removed from the running kernel
+  whenever you want). If you want to compile it as a module, say M
+  here and read Documentation/modules.txt as well as
+  Documentation/networking/net-modules.txt.
 
 WaveLAN support
 CONFIG_WAVELAN
@@ -2702,10 +2879,35 @@ CONFIG_IBMTR
 
 Traffic Shaper (EXPERIMENTAL)
 CONFIG_SHAPER
-  The traffic shaper adds a set of devices that may be attached to the
-  other devices in the kernel and used to limit their bandwidth. The
-  shapecfg program for setting up shaper devices is available from
-  ftp://shadow.cabi.net/....
+  A traffic shaper is a special device (typically called /dev/shaper0)
+  that attaches to some other network device (such as your first
+  ethernet card /dev/eth0) and limits the outgoing bandwidth on that
+  device to a configurable upper bound, for example 64000 bits per
+  second. It works like this: you can send all the traffic that would
+  normally go to /dev/eth0 to /dev/shaper0 instead; the traffic will
+  be slowed down a bit and then forwarded to /dev/eth0. This could be
+  useful for something, but I don't know for what. To set up and
+  configure shaper devices, you need the shapecfg program, available
+  via ftp (user: anonymous) from shadow.cabi.net/pub/Linux in the
+  shaper package. Please read Documentation/networking/shaper.txt.
+  This driver is also available as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you
+  want). If you want to compile it as a module, say M here and read
+  Documentation/modules.txt. If unsure, say N.
+
+FDDI driver support
+CONFIG_FDDI
+  Fiber Distributed Data Interface is a high speed local area network
+  design; essentially a replacement for high speed ethernet. FDDI can
+  run over copper or fiber. If you are connected to such a network and
+  want a driver for the FDDI card in your computer, say Y here (and
+  then also Y to the driver for your FDDI card, below). Most people
+  will say N.
+
+Digital DEFEA and DEFPA adapter support
+CONFIG_DEFXX
+  This is support for the DIGITAL series of EISA (DEFEA) and PCI
+  (DEFPA) controllers which can connect you to a local FDDI network.
 
 Support non-SCSI/IDE/ATAPI drives
 CONFIG_CD_NO_IDESCSI
@@ -2867,21 +3069,10 @@ CONFIG_QUOTA
   If you say Y here, you will be able to set per user limits for disk
   usage (also called diskquotas). Currently, it works only for the
   ext2 filesystem. You need additional software in order to use quota
-  support; check the file Documentation/Changes for that. Probably the
+  support; it is available via ftp (user: anonymous) from
+  ftp.funet.fi/pub/Linux/kernel/src/subsystems/quota/. Probably the
   quota support is only useful for multi user systems. If unsure, say
   N.
-
-Mandatory lock support
-CONFIG_LOCK_MANDATORY
-  File locking is a system designed to prevent that several processes
-  write to the same file at the same time, causing data
-  corruption. Mandatory file locking is more secure than the usual
-  algorithm and is used by some Unix System 5 style database
-  applications. For details, read Documentation/mandatory.txt. To use
-  this option safely you must have newer NFS daemons, new samba, new
-  netatalk, new mars-nwe and other file servers. At the time of
-  writing none of these are available. So it's safest to say N here
-  unless you really know that you need this feature.
 
 Minix fs support
 CONFIG_MINIX_FS
@@ -3022,16 +3213,15 @@ CONFIG_PROC_FS
   your harddisk: the files are created on the fly when you access
   them. Also, you cannot read the files with less: you need to use
   more or cat. The filesystem is explained in the Kernel Hacker's
-  Guide, available via ftp (user: anonymous) in
-  sunsite.unc.edu:/pub/Linux/docs/LDP and also on the proc(8) manpage
-  ("man 8 proc").  This option will enlarge your kernel by about 18
-  kB. It's totally cool; for example, "cat /proc/interrupts" gives
-  information about what the different IRQs are used for at the moment
-  (there is a small number of Interrupt ReQuest lines in your computer
-  that are used by the periphery to gain the CPU's attention - often a
-  source of trouble if two devices are mistakenly configured to use
-  the same IRQ). Several programs depend on this, so everyone should
-  say Y here.
+  Guide at http://www.redhat.com:8080/HyperNews/get/khg.html on the
+  Web, and also on the proc(8) manpage ("man 8 proc").  This option
+  will enlarge your kernel by about 18 kB. It's totally cool; for
+  example, "cat /proc/interrupts" gives information about what the
+  different IRQs are used for at the moment (there is a small number
+  of Interrupt ReQuest lines in your computer that are used by the
+  periphery to gain the CPU's attention - often a source of trouble if
+  two devices are mistakenly configured to use the same IRQ). Several
+  programs depend on this, so everyone should say Y here.
   
 NFS filesystem support
 CONFIG_NFS_FS
@@ -3187,21 +3377,22 @@ SMB filesystem support (to mount WfW shares etc..)
 CONFIG_SMB_FS
   SMB (Server Message Buffer) is the protocol Windows for Workgroups
   (WfW), Windows NT and Lan Manager use to talk to each other over an
-  ethernet. Enabling this allows you to mount their filesystems and
-  access them just like any other unix directory. For details, read
-  Documentation/filesystems/smbfs.txt.  Note: if you just want your
-  box to act as an SMB *server* and make files and printing services
-  available to Windows clients (which need to have a TCP/IP stack),
-  you don't need to enable this filesystem support; you can use the
-  program samba (available via ftp (user: anonymous) in
-  sunsite.unc.edu:/pub/Linux/system/Network/samba) for that. General
-  information about how to connect Linux, Windows machines and Macs is
-  on the WWW at http://eats.com/linux_mac_win.html (to browse the WWW,
-  you need to have access to a machine on the Internet that has one of
-  the programs lynx, netscape or Mosaic).  If you want to compile the
-  SMB support as a module ( = code which can be inserted in and
-  removed from the running kernel whenever you want), say M here and
-  read Documentation/modules.txt. Most people say N, however.
+  ethernet. Enabling this allows you to mount their filesystems (often
+  called "shares") and access them just like any other unix
+  directory. For details, read Documentation/filesystems/smbfs.txt.
+  Note: if you just want your box to act as an SMB *server* and make
+  files and printing services available to Windows clients (which need
+  to have a TCP/IP stack), you don't need to enable this filesystem
+  support; you can use the program samba (available via ftp (user:
+  anonymous) in sunsite.unc.edu:/pub/Linux/system/Network/samba) for
+  that. General information about how to connect Linux, Windows
+  machines and Macs is on the WWW at
+  http://eats.com/linux_mac_win.html (to browse the WWW, you need to
+  have access to a machine on the Internet that has one of the
+  programs lynx, netscape or Mosaic).  If you want to compile the SMB
+  support as a module ( = code which can be inserted in and removed
+  from the running kernel whenever you want), say M here and read
+  Documentation/modules.txt. Most people say N, however.
 
 SMB Win95 bug work-around
 CONFIG_SMB_WIN95
@@ -3314,9 +3505,12 @@ CONFIG_ISTALLION
 
 Hayes ESP serial port support
 CONFIG_ESP
-  This is a driver which supports Hayes ESP serial ports.  It uses DMA to
-  transfer data to and from the host.  Make sure to read
-  drivers/char/README.esp.  This driver may be compiled as a loadable module.
+  This is a driver which supports Hayes ESP serial ports.  It uses DMA
+  to transfer data to and from the host.  Make sure to read
+  drivers/char/README.esp. To compile this driver as a module ( = code
+  which can be inserted in and removed from the running kernel
+  whenever you want), say M here and read Documentation/modules.txt.
+  This driver may be compiled as a loadable module.
 
 Hayes ESP serial port DMA channel
 CONFIG_ESP_DMA_CHANNEL
@@ -3357,7 +3551,6 @@ CONFIG_PRINTER
   tells you how to specify the port and IRQ to be used by PLIP at
   module load time.
 
-
 Mouse Support (not serial mice)
 CONFIG_MOUSE
   This is for machines with a bus mouse or a PS/2 mouse as opposed to
@@ -3397,11 +3590,15 @@ CONFIG_PSMOUSE
   particular, the C&T 82C710 mouse on TI Travelmates is a PS/2
   mouse. Although PS/2 mice are not technically bus mice, they are
   explained in detail in the Busmouse-HOWTO, available via ftp (user:
-  anonymous) in sunsite.unc.edu:/pub/Linux/docs/HOWTO.  If you want to
-  compile this as a module ( = code which can be inserted in and
-  removed from the running kernel whenever you want), say M here and
-  read Documentation/modules.txt. If you are unsure, say N and read
-  the HOWTO nevertheless: it will tell you what you have.
+  anonymous) in sunsite.unc.edu:/pub/Linux/docs/HOWTO.  When using a
+  PS/2 mouse, you can get problems if you want to use the mouse both
+  on the Linux console and under X. The mconv utility, available in
+  sunsite.unc.edu:/pub/Linux/system/Misc, solves this problem. If you
+  want to compile this mouse driver as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want),
+  say M here and read Documentation/modules.txt. If you are unsure,
+  say N and read the HOWTO nevertheless: it will tell you what you
+  have.
 
 C&T 82C710 mouse port support (as on TI Travelmate)
 CONFIG_82C710_MOUSE
@@ -3444,7 +3641,10 @@ CONFIG_UMISC
 
 QIC-02 tape support
 CONFIG_QIC02_TAPE
-  If you have a non-SCSI tape drive like that, say Y.
+  If you have a non-SCSI tape drive like that, say Y. Or, if you want
+  to compile this driver as a module ( = code which can be inserted in
+  and removed from the running kernel whenever you want), say M here
+  and read Documentation/modules.txt.
 
 Do you want runtime configuration for QIC-02
 CONFIG_QIC02_DYNCONF
@@ -3481,18 +3681,20 @@ CONFIG_APM
   APM compliant BIOSes.  Specifically, the time will be reset after a
   USER RESUME operation, the /proc/apm device will provide battery
   status information, and user-space programs will receive
-  notification of APM "events" (e.g., battery status change).  This
-  driver does not spin down disk drives (see hdparm(8) for that); and
-  it doesn't turn off VESA-compliant "green" monitors.  This driver
-  does not support the TI 4000M TravelMate and the ACER 486/DX4/75
-  because they don't have compliant BIOSes.  Many "green" desktop
-  machines also don't have compliant BIOSes, and this driver will
-  cause those machines to panic during the boot phase (typically,
-  these machines are using a data segment of 0040, which is reserved
-  for the Linux kernel). If you get random kernel OOPSes that don't
-  seem to be related to anything and you have a motherboard with APM
-  support, try disabling/enabling this option. Generally, if you don't
-  have a battery in your machine, there isn't much point in using this
+  notification of APM "events" (e.g., battery status
+  change). Supporting software can be gotten via ftp (user: anonymous)
+  from tsx-11.mit.edu/pub/linux/packages/laptops/apm/. This driver
+  does not spin down disk drives (see hdparm(8) for that); and it
+  doesn't turn off VESA-compliant "green" monitors.  This driver does
+  not support the TI 4000M TravelMate and the ACER 486/DX4/75 because
+  they don't have compliant BIOSes.  Many "green" desktop machines
+  also don't have compliant BIOSes, and this driver will cause those
+  machines to panic during the boot phase (typically, these machines
+  are using a data segment of 0040, which is reserved for the Linux
+  kernel). If you get random kernel OOPSes that don't seem to be
+  related to anything and you have a motherboard with APM support, try
+  disabling/enabling this option. Generally, if you don't have a
+  battery in your machine, there isn't much point in using this
   driver.
 
 Ignore USER SUSPEND
@@ -3669,13 +3871,13 @@ CONFIG_SOUND
 ProAudioSpectrum 16 support
 CONFIG_PAS
   Answer Y only if you have a Pro Audio Spectrum 16, ProAudio Studio
-  16 or Logitech SoundMan 16.  Don't answer 'y' if you have some other
+  16 or Logitech SoundMan 16.  Don't answer Y if you have some other
   card made by Media Vision or Logitech since they are not PAS16
   compatible.
 
 SoundBlaster (SB, SBPro, SB16, clones) support
 CONFIG_SB
-  Answer "y" if you have an original SoundBlaster card made by
+  Answer Y if you have an original SoundBlaster card made by
   Creative Labs or a 100% hardware compatible clone (like the
   Thunderboard or SM Games). If your card was in the list of supported
   cards look at the card specific instructions in the
@@ -3815,9 +4017,9 @@ CONFIG_PROFILE
   /proc/profile (enable the /proc filesystem!) and in order to read
   it, you need the readprofile package from sunsite.unc.edu. Its
   manpage gives information regarding the format of profiling data. To
-  become a kernel hacker, you can start with the Kernel Hacker's
-  Guide, available via ftp (user: anonymous) from
-  sunsite.unc.edu:/pub/Linux/docs/LDP. Mere mortals say N.
+  become a kernel hacker, you can start with the Kernel Hacker's Guide
+  at http://www.redhat.com:8080/HyperNews/get/khg.html. Mere mortals
+  say N.
  
 Profile shift count
 CONFIG_PROFILE_SHIFT
@@ -3911,16 +4113,6 @@ CONFIG_AP1000
   machine see http://cap.anu.edu.au/cap/projects/linux or mail to
   hackers@cafe.anu.edu.au
 
-Video mode selection support
-CONFIG_VIDEO_SELECT
-  This enables support for text mode selection on kernel startup. If you
-  want to take advantage of some high-resolution text mode your card's
-  BIOS offers, but the traditional Linux utilities like SVGATextMode
-  don't, you can enable this and set the mode using the "vga=" option
-  from your boot loader (LILO or LOADLIN) or set "vga=ask" which brings
-  up a video mode menu on kernel startup. Read Documentation/svga.txt
-  for more information. If unsure, say "n".
-
 # need an empty line after last entry, for sed script in Configure.
 
 #
@@ -4008,4 +4200,14 @@ CONFIG_VIDEO_SELECT
 # LocalWords:  mgetty sendfax gert greenie muc lowlevel Lasermate LanManager io
 # LocalWords:  OOPSes trackball binghamton mobileip ncr IOMAPPED settags ns ser
 # LocalWords:  setsync NEGO MPARITY autotuning prefetch PIIX cdwrite utils rc
-# LocalWords:  PCWATCHDOG berkprod bitgate
+# LocalWords:  PCWATCHDOG berkprod bitgate boldt ucsb jf kyoto jp euc Tetsuyasu
+# LocalWords:  YAMADA tetsu cauchy nslab ntt nevod perm su doc kaf kheops wsc
+# LocalWords:  traduc Bourgin dbourgin helptext menuconfig kfill READMEs HOWTOs
+# LocalWords:  IDEDISK IDEFLOPPY EIDE firewalls QMAGIC ZMAGIC LocalWords opti
+# LocalWords:  SVGATextMode vga svga Xterminal Xkernel syr jmwobus comfaqs dhcp
+# LocalWords:  IPv IPng interoperability ipng ipv radio's tapr pkthome PLP nano
+# LocalWords:  Ses Mhz sethdlc SOUNDMODEM WindowsSoundSystem smdiag pcf inka ES
+# LocalWords:  smmixer ptt circ soundmodem MKISS FDDI DEFEA DEFPA DEFXX redhat
+# LocalWords:  HyperNews khg mconv sed lina wuftpd MicroChannel netlink irc cum
+# LocalWords:  raudio realaudio PPROP NETBIOS GUI IBMMCA ELMC Racal Interlan fi
+# LocalWords:  eth shapecfg src esp PCWD PREVSTAT

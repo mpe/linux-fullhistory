@@ -1,4 +1,4 @@
-/* $Id: termios.h,v 1.20 1996/10/31 00:59:54 davem Exp $ */
+/* $Id: termios.h,v 1.21 1996/11/13 02:30:40 davem Exp $ */
 #ifndef _SPARC_TERMIOS_H
 #define _SPARC_TERMIOS_H
 
@@ -59,6 +59,8 @@ struct winsize {
 #define N_SLIP		1
 #define N_MOUSE		2
 #define N_PPP		3
+#define N_STRIP		4
+#define N_AX25		5
 
 #ifdef __KERNEL__
 

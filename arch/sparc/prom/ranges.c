@@ -1,9 +1,10 @@
-/* $Id: ranges.c,v 1.6 1996/11/03 08:12:01 davem Exp $
+/* $Id: ranges.c,v 1.7 1996/11/13 05:10:12 davem Exp $
  * ranges.c: Handle ranges in newer proms for obio/sbus.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
  */
 
+#include <linux/init.h>
 #include <asm/openprom.h>
 #include <asm/oplib.h>
 #include <asm/sbus.h>
@@ -63,8 +64,7 @@ prom_apply_sbus_ranges(struct linux_sbus *sbus, struct linux_prom_registers *reg
 	prom_adjust_regs(regs, nregs, sbus->sbus_ranges, sbus->num_sbus_ranges);
 }
 
-void
-prom_ranges_init(void)
+__initfunc(void prom_ranges_init(void))
 {
 	int node, obio_node;
 	int success;
@@ -89,8 +89,7 @@ prom_ranges_init(void)
 	return;
 }
 
-void
-prom_sbus_ranges_init(int parentnd, struct linux_sbus *sbus)
+__initfunc(void prom_sbus_ranges_init(int parentnd, struct linux_sbus *sbus))
 {
 	int success;
 	

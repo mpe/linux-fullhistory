@@ -1,4 +1,4 @@
-/* $Id: ptrace.h,v 1.22 1996/10/27 08:55:38 davem Exp $ */
+/* $Id: ptrace.h,v 1.23 1996/11/25 03:30:24 ecd Exp $ */
 #ifndef _SPARC_PTRACE_H
 #define _SPARC_PTRACE_H
 
@@ -73,7 +73,7 @@ extern void show_regs(struct pt_regs *);
 #define REGWIN_SZ         0x40
 #endif
 
-/* First generic task_struct offsets. sizeof(task_struct)=1616 */
+/* First generic task_struct offsets. sizeof(task_struct)=1552 */
 #define TASK_STATE        0x000
 #define TASK_PRIORITY     0x008
 #define TASK_SIGNAL       0x00c
@@ -83,28 +83,28 @@ extern void show_regs(struct pt_regs *);
 #define TASK_KSTACK_PG    0x058
 
 /* Thread stuff. */
-#define THREAD_UMASK      0x210
-#define THREAD_SADDR      0x218
-#define THREAD_SDESC      0x21c
-#define THREAD_KSP        0x220
-#define THREAD_KPC        0x224
-#define THREAD_KPSR       0x228
-#define THREAD_KWIM       0x22c
-#define THREAD_FORK_KPSR  0x230
-#define THREAD_FORK_KWIM  0x234
-#define THREAD_REG_WINDOW 0x238
-#define THREAD_STACK_PTRS 0x438
-#define THREAD_W_SAVED    0x458
-#define THREAD_FLOAT_REGS 0x460
-#define THREAD_FSR        0x560
-#define THREAD_SIGSTK     0x5e8
-#define THREAD_FLAGS      0x5f0
-#define THREAD_EX_COUNT   0x5f8
-#define THREAD_EX_PC      0x5fc
-#define THREAD_EX_EXPC    0x600
-#define THREAD_EX_ADDR    0x604
-#define THREAD_DS         0x608
-#define THREAD_MM         0x638
+#define THREAD_UMASK      0x1e0
+#define THREAD_SADDR      0x1e8
+#define THREAD_SDESC      0x1ec
+#define THREAD_KSP        0x1f0
+#define THREAD_KPC        0x1f4
+#define THREAD_KPSR       0x1f8
+#define THREAD_KWIM       0x1fc
+#define THREAD_FORK_KPSR  0x200
+#define THREAD_FORK_KWIM  0x204
+#define THREAD_REG_WINDOW 0x208
+#define THREAD_STACK_PTRS 0x408
+#define THREAD_W_SAVED    0x428
+#define THREAD_FLOAT_REGS 0x430
+#define THREAD_FSR        0x530
+#define THREAD_SIGSTK     0x5b8
+#define THREAD_FLAGS      0x5c0
+#define THREAD_EX_COUNT   0x5c8
+#define THREAD_EX_PC      0x5cc
+#define THREAD_EX_EXPC    0x5d0
+#define THREAD_EX_ADDR    0x5d4
+#define THREAD_DS         0x5d8
+#define THREAD_MM         0x608
 #define THREAD_MM_CTX     0x008
 
 /* These are for pt_regs. */

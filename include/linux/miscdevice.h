@@ -8,6 +8,8 @@
 #define AMIGAMOUSE_MINOR 4
 #define ATARIMOUSE_MINOR 5
 #define SUN_MOUSE_MINOR 6
+#define RTC_MINOR 135
+#define SUN_OPENPROM_MINOR 139
 #define MISC_DYNAMIC_MINOR 255
 
 extern int misc_init(void);

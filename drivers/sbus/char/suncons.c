@@ -1,8 +1,13 @@
-/* suncons.c: Sun SparcStation console support.
+/* $Id: suncons.c,v 1.42 1996/11/27 20:10:06 jj Exp $
+ *
+ * suncons.c: Sun SparcStation console support.
  *
  * Copyright (C) 1995 Peter Zaitcev (zaitcev@lab.ipmce.su)
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
- * Copyright (C) 1995 Miguel de Icaza (miguel@nuclecu.unam.mx)
+ * Copyright (C) 1995, 1996 Miguel de Icaza (miguel@nuclecu.unam.mx)
+ * Copyright (C) 1996 Dave Redman (djhr@tadpole.co.uk)
+ * Copyright (C) 1996 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
+ * Copyright (C) 1996 Eddie C. Dost (ecd@skynet.be)
  *
  * Added font loading Nov/21, Miguel de Icaza (miguel@nuclecu.unam.mx)
  * Added render_screen and faster scrolling Nov/27, miguel
@@ -11,14 +16,23 @@
  * Added cgsix and bwtwo drivers Jan/96, miguel
  * Added 4m, and cg3 driver Feb/96, miguel
  * Fixed the cursor on color displays Feb/96, miguel.
- *
  * Cleaned up the detection code, generic 8bit depth display 
- * code, Mar/96 miguel
+ *   code, Mar/96 miguel
+ * Hacked support for cg14 video cards -- Apr/96, miguel.
+ * Color support for cg14 video cards -- May/96, miguel.
+ * Code split, Dave Redman, May/96
+ * Be more VT change friendly, May/96, miguel.
+ * Support for hw cursor and graphics acceleration, Jun/96, jj.
+ * Added TurboGX+ detection (cgthree+), Aug/96, Iain Lea (iain@sbs.de)
+ * Added TCX support (8/24bit), Aug/96, jj.
+ * Support for multiple framebuffers, Sep/96, jj.
+ * Fix bwtwo inversion and handle inverse monochrome cells in
+ *   sun_blitc, Nov/96, ecd.
+ * Fix sun_blitc and screen size on displays other than 1152x900, 
+ *   128x54 chars, Nov/96, jj.
+ * Fix cursor spots left on some non-accelerated fbs, changed
+ *   software cursor to be like the hw one, Nov/96, jj.
  * 
- * This file contains the frame buffer device drivers.
- * Each driver is kept together in case we would like to
- * split this file.
- *
  * Much of this driver is derived from the DEC TGA driver by
  * Jay Estabrook who has done a nice job with the console
  * driver abstraction btw.
@@ -29,23 +43,12 @@
  * since not all Sparcs have the hardware to do it.
  *
  * TODO:
- * do not use minor to index into instances of the frame buffer,
- * since the numbers assigned to us are not consecutive.
- *
  * do not blank the screen when frame buffer is mapped.
  *
- * Change the detection loop to use more than one video card.
  */
 
 
-/* Define this one if you are debugging something in X, it will not disable the console output */
-/* #define DEBUGGING_X */
-/* See also: sparc/keyboard.c: CODING_NEW_DRIVER */
-
-#define GRAPHDEV_MAJOR 29
-
-#define FRAME_BUFFERS 1
-
+#include <linux/config.h>
 #include <linux/sched.h>
 #include <linux/timer.h>
 #include <linux/interrupt.h>
@@ -59,9 +62,10 @@
 #include <linux/major.h>
 #include <linux/mm.h>
 #include <linux/types.h>
+#include <linux/version.h>
 
 #include <asm/system.h>
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 #include <asm/page.h>
 #include <asm/pgtable.h>
 #include <asm/bitops.h>
@@ -69,7 +73,6 @@
 #include <asm/sbus.h>
 #include <asm/fbio.h>
 #include <asm/io.h>
-#include <asm/pgtsun4c.h>	/* for the sun4c_nocache */
 
 #include "../../char/kbd_kern.h"
 #include "../../char/vt_kern.h"
@@ -77,33 +80,34 @@
 #include "../../char/selection.h"
 #include "../../char/console_struct.h"
 
+#include "fb.h"
+
 #define cmapsz 8192
+
+#include "suncons_font.h"
+#include "linux_logo.h"
+
+fbinfo_t *fbinfo;
+int fbinfos;
+
+#define ASM_BLITC
+
+int sun_hw_cursor_shown = 0;
+
+void sun_hw_hide_cursor(void);
+void sun_hw_set_cursor(int,int);
 
 extern void register_console(void (*proc)(const char *));
 extern void console_print(const char *);
+extern void putconsxy(int, char *);
 extern unsigned char vga_font[];
-extern int graphics_on;
 extern int serial_console;
-
-/* Based upon what the PROM tells us, we can figure out where
- * the console is currently located.  The situation can be either
- * of the following two scenarios:
- *
- * 1) Console i/o is done over the serial line, ttya or ttyb
- * 2) Console output on frame buffer (video card) and input
- *    coming from the keyboard/mouse which each use a zilog8530
- *    serial channel a piece.
- */
+char *console_fb_path = NULL; /* Set in setup.c */
 
 /* The following variables describe a Sparc console. */
 
-/* From the PROM */
-static char con_name[40];
-
 /* Screen dimensions and color depth. */
 static int con_depth, con_width, con_height, con_type;
-
-static int con_linebytes;
 
 /* Base address of first line. */
 static unsigned char *con_fb_base;
@@ -111,16 +115,17 @@ static unsigned char *con_fb_base;
 /* Screen parameters: we compute those at startup to make the code faster */
 static int chars_per_line;	/* number of bytes per line */
 static int ints_per_line;	/* number of ints per  line */
-static int skip_bytes;		/* number of bytes we skip for the y margin */
+static int ints_per_cursor;  	/* 14 * ints_per_line */
+static int skip_bytes;		/* number of bytes we skip for the y margin + x_margin */
 static int x_margin, y_margin;	/* the x and y margins */
 static int bytes_per_row;	/* bytes used by one screen line (of 16 scan lines)  */
+int sun_prom_console_id = 0;
 
 /* Functions used by the SPARC dependent console code
- * to perform the restore_palette function.
+ * to perform the fb_restore_palette function.
  */
-static void (*restore_palette)(void);
+void (*fb_restore_palette)(fbinfo_t *fbinfo);
 void set_palette (void);
-
 
  /* Our screen looks like at 1152 X 900:
  *
@@ -157,9 +162,53 @@ void set_palette (void);
 	 ((NICE_X_MARGIN) + (((cindex)&127))))
 
 
-#define COLOR_FBUF_OFFSET(cindex) \
-        (((skip_bytes) + (((cindex)>>7) * bytes_per_row)) + \
-	 ((x_margin) + (((cindex)&127) << 3)))
+#define COLOR_FBUF_OFFSET(cindex) (*color_fbuf_offset)(cindex)
+
+/* These four routines are optimizations for the _generic routine for the most common cases.
+   I guess doing twice sll is much faster than doing .mul, sra faster than doing .div,
+   and the disadvantage that someone has to call it (it cannot be inline) runs away, 'cause
+   otherwise it would have to call .mul anyway. 
+   The shifting + addition only routines won't eat any stack frame :))
+   Names come from width, screen_num_columns */
+static int
+color_fbuf_offset_1152_128 (int cindex)
+{
+	register int i = (cindex>>7);
+	/* (1152 * CHAR_HEIGHT) == 10010000000.0000 */
+	return skip_bytes + (i << 14) + (i << 11) + ((cindex & 127) << 3);
+}
+
+static int
+color_fbuf_offset_1280_144 (int cindex)
+{
+	register int i = (cindex/144);
+	/* (1280 * CHAR_HEIGHT) == 10100000000.0000 */
+	return skip_bytes + (i << 14) + (i << 12) + ((cindex % 144) << 3);
+}
+	 
+static int
+color_fbuf_offset_1024_128 (int cindex)
+{
+	register int i = (cindex>>7);
+	return skip_bytes + (i << 14) + ((cindex & 127) << 3);
+}
+	 
+static int
+color_fbuf_offset_640_80 (int cindex)
+{
+	register int i = (cindex/80);
+	return skip_bytes + (i << 13) + (i << 11) + ((cindex % 80) << 3);
+}
+	 
+static int
+color_fbuf_offset_generic (int cindex)
+{
+	return skip_bytes + (cindex / video_num_columns) * bytes_per_row + ((cindex % video_num_columns) << 3);
+}
+
+static int (*color_fbuf_offset)(int) = color_fbuf_offset_generic;
+	 
+static int do_accel = 0;
 
 void
 __set_origin(unsigned short offset)
@@ -175,64 +224,55 @@ __set_origin(unsigned short offset)
  * Hide the cursor from view, during blanking, usually...
  */
 static int cursor_pos = -1;
+
+static unsigned int under_cursor[4];
+
 void
 hide_cursor(void)
 {
 	unsigned long flags;
 	int j;
 
-	save_flags(flags); cli();
+	if (fbinfo[0].setcursor) {
+		sun_hw_hide_cursor();
+		return;
+	}
+	
+	if (vt_cons[fg_console]->vc_mode == KD_GRAPHICS)
+		return; /* Don't paint anything on fb which is not ours,
+			   but turn off the hw cursor in such case */
+	
+	save_and_cli(flags);
 
 	if(cursor_pos == -1) {
 		restore_flags (flags);
 		return;
 	}
-	/* We just zero out the area for now.  Certain graphics
-	 * cards like the cg6 have a hardware cursor that we could
-	 * use, but this is an optimization for some time later.
-	 */
 	switch (con_depth){
 	case 1: {
 		unsigned char *dst;
 		dst = (unsigned char *)((unsigned long)con_fb_base +
 					FBUF_OFFSET(cursor_pos));
 		for(j = 0; j < CHAR_HEIGHT; j++, dst += CHARS_PER_LINE)
-			*dst = ~(0);
+			*dst = ~(*dst);
 		break;
 	}
 	case 8: {
-		unsigned long *dst;
-		const    int ipl = ints_per_line;
+		unsigned int *dst;
 		
-		dst = (unsigned long *)((unsigned long)con_fb_base + COLOR_FBUF_OFFSET(cursor_pos));
-		for(j = 0; j < CHAR_HEIGHT; j++, dst += ipl) {
-			*dst = ~(0UL);
-			*(dst + 1) = ~(0UL);
-		}
+		dst = (unsigned int *)((unsigned long)con_fb_base +
+					COLOR_FBUF_OFFSET(cursor_pos)) + ints_per_cursor;
+		dst[0] = under_cursor[0];
+		dst[1] = under_cursor[1];
+		dst[ints_per_line] = under_cursor[2];
+		dst[ints_per_line+1] = under_cursor[3];
 		break;
 	}
 	default:
 		break;
 	}
+	cursor_pos = -1;
 	restore_flags(flags);
-}
-
-/* The idea is the following:
- * we only use the colors in the range 0..15, and we only
- * setup the palette on that range, so we better keep the
- * pixel inversion using those colors, that's why we have
- * those constants below.
- */
-inline static void
-cursor_reverse (long *dst, int height, const int ints_on_line)
-{
-    int j;
-
-    for (j = 0; j < height; j++){
-	*dst     = ~(*dst)     & 0x0f0f0f0f;
-	*(dst+1) = ~(*(dst+1)) & 0x0f0f0f0f;
-	dst += ints_on_line;
-    }
 }
 
 void
@@ -244,19 +284,33 @@ set_cursor(int currcons)
 	if (currcons != fg_console || console_blanked || vcmode == KD_GRAPHICS)
 		return;
 
+#if 0
+/* This is a nop anyway */
 	if (__real_origin != __origin)
 		__set_origin(__real_origin);
+#endif
+		
+	if (fbinfo[0].setcursor) {
+		if (!deccm)
+			hide_cursor();
+		else {
+			idx = (pos - video_mem_base) >> 1;
+			
+			sun_hw_set_cursor(x_margin + ((idx % video_num_columns) << 3), y_margin + ((idx / video_num_columns) * CHAR_HEIGHT));
+		}
+		return;
+	}
 
-	save_flags(flags); cli();
+	save_and_cli(flags);
 
 	idx = (pos - video_mem_base) >> 1;
 	oldpos = cursor_pos;
-	cursor_pos = idx;
 	if (!deccm) {
 		hide_cursor ();
 		restore_flags (flags);
 		return;
 	}
+	cursor_pos = idx;
 	switch (con_depth){
 	case 1: {
 		unsigned char *dst, *opos;
@@ -275,13 +329,24 @@ set_cursor(int currcons)
 		break;
 	}
 	case 8: {
-		unsigned long *dst, *opos;
-		dst = (unsigned long *)((unsigned long)con_fb_base + COLOR_FBUF_OFFSET(idx));
-		opos = (unsigned long *)((unsigned long)con_fb_base + COLOR_FBUF_OFFSET(oldpos));
+		unsigned int *dst, *opos;
+		dst = (unsigned int *)((unsigned long)con_fb_base + COLOR_FBUF_OFFSET(idx)) + ints_per_cursor;
 			
-		if(oldpos != -1) 
-			cursor_reverse(opos, CHAR_HEIGHT, ints_per_line);
-		cursor_reverse (dst, CHAR_HEIGHT, ints_per_line);
+		if(oldpos != -1) {
+			opos = (unsigned int *)((unsigned long)con_fb_base + COLOR_FBUF_OFFSET(oldpos)) + ints_per_cursor;
+			opos[0] = under_cursor[0];
+			opos[1] = under_cursor[1];
+			opos[ints_per_line] = under_cursor[2];
+			opos[ints_per_line+1] = under_cursor[3];
+		}
+		under_cursor[0] = dst[0];
+		under_cursor[1] = dst[1];
+		under_cursor[2] = dst[ints_per_line];
+		under_cursor[3] = dst[ints_per_line+1];
+		dst[0] = 0x0f0f0f0f;
+		dst[1] = 0x0f0f0f0f;
+		dst[ints_per_line] = 0x0f0f0f0f;
+		dst[ints_per_line+1] = 0x0f0f0f0f;
 		break;
 	}
 	default:
@@ -291,9 +356,10 @@ set_cursor(int currcons)
 
 /*
  * Render the current screen
- * Only used at startup to avoid the caching that is being done in selection.h
+ * Only used at startup and when switching from KD_GRAPHICS to KD_TEXT
+ * to avoid the caching that is being done in selection.h
  */
-static void
+void
 render_screen(void)
 {
     int count;
@@ -306,8 +372,62 @@ render_screen(void)
 	sun_blitc (*contents, (unsigned long) contents);
 }
 
-unsigned long
-con_type_init(unsigned long kmem_start, const char **display_desc)
+__initfunc(void serial_finish_init(void (*printfunc)(const char *)))
+{
+	char buffer[2048];
+	
+	sprintf (buffer, linux_serial_image, UTS_RELEASE);
+	(*printfunc)(buffer);
+}
+
+__initfunc(void con_type_init_finish(void))
+{
+	int i;
+	char *p = con_fb_base + skip_bytes;
+	char q[2] = {0,5};
+	int currcons = 0;
+	unsigned short *ush;
+
+	if (serial_console)
+		return;
+	if (con_type == FBTYPE_SUNLEO) {
+		int rects [4];
+		
+		rects [0] = 0;
+		rects [1] = 0;
+		rects [2] = con_width;
+		rects [3] = con_height;
+		(*fbinfo[0].fill)(0, 1, rects);
+		return; /* Dunno how to display logo on leo/zx yet */
+	}
+	if (con_depth == 8 && fbinfo[0].loadcmap) {
+		for (i = 0; i < LINUX_LOGO_COLORS; i++) {
+			fbinfo[0].color_map CM(i+32,0) = linux_logo_red [i];
+			fbinfo[0].color_map CM(i+32,1) = linux_logo_green [i];
+			fbinfo[0].color_map CM(i+32,2) = linux_logo_blue [i];
+		}
+		(*fbinfo [0].loadcmap)(&fbinfo [0], 0, LINUX_LOGO_COLORS + 32);
+		for (i = 0; i < 80; i++, p += chars_per_line)
+			memcpy (p, linux_logo + 80 * i, 80);
+	} else if (con_depth == 1) {
+		for (i = 0; i < 80; i++, p += chars_per_line)
+			memcpy (p, linux_logo_bw + 10 * i, 10);
+	}
+	putconsxy(0, q);
+	ush = (unsigned short *) video_mem_base + video_num_columns * 2 + 20;
+
+	for (p = "Linux/SPARC version " UTS_RELEASE; *p; p++, ush++) {
+		*ush = (attr << 8) + *p;
+		sun_blitc (*ush, (unsigned long) ush);
+	}
+	for (i = 0; i < 5; i++) {
+		ush = (unsigned short *) video_mem_base + i * video_num_columns;
+		memset (ush, 0, 20);
+	}
+}
+
+__initfunc(unsigned long
+con_type_init(unsigned long kmem_start, const char **display_desc))
 {
         can_do_color = (con_type != FBTYPE_SUN2BW);
 
@@ -315,7 +435,7 @@ con_type_init(unsigned long kmem_start, const char **display_desc)
         *display_desc = "SUN";
 
 	if (!serial_console) {
-		/* If we fall back to PROM than our output have to remain readable. */
+		/* If we fall back to PROM then our output have to remain readable. */
 		prom_putchar('\033');  prom_putchar('[');  prom_putchar('H');
 
 		/*
@@ -324,8 +444,6 @@ con_type_init(unsigned long kmem_start, const char **display_desc)
 		video_mem_base = kmem_start;
 		kmem_start += video_screen_size;
 		video_mem_term = kmem_start;
-
-		render_screen();
 	}
 	return kmem_start;
 }
@@ -364,31 +482,37 @@ set_scrmem(int currcons, long offset)
 int
 set_get_font(char * arg, int set, int ch512)
 {
-	int error, i, line;
+	int i, line;
 
 	if (!arg)
 		return -EINVAL;
-	error = verify_area (set ? VERIFY_READ : VERIFY_WRITE, (void *) arg,
-			     ch512 ? 2* cmapsz : cmapsz);
-	if (error)
-		return error;
 
 	/* download the current font */
 	if (!set){
-		memset (arg, 0, cmapsz);
-		for (i = 0; i < 256; i++)
-		    for (line = 0; line < CHAR_HEIGHT; line++)
-			put_user (vga_font [i], arg+(i*32+line));
+		if(clear_user(arg, cmapsz))
+			return -EFAULT;
+		for (i = 0; i < 256; i++) {
+			for (line = 0; line < CHAR_HEIGHT; line++) {
+				unsigned char value = vga_font[i];
+
+				/* Access checked by the above clear_user */
+				__put_user_ret (value, (arg + (i * 32 + line)),
+						-EFAULT);
+			}
+		}
 		return 0;
 	}
 	
         /* set the font */
-	for (i = 0; i < 256; i++)
+        
+        if (verify_area (VERIFY_READ, arg, 256 * CHAR_HEIGHT)) return -EFAULT;
+	for (i = 0; i < 256; i++) {
 		for (line = 0; line < CHAR_HEIGHT; line++){
-			vga_font [i*CHAR_HEIGHT + line] = (get_user (arg + (i * 32 + line)));
-			if (con_depth == 1)
-				vga_font [i*CHAR_HEIGHT + line] = vga_font [i*CHAR_HEIGHT + line];
+			unsigned char value;
+			__get_user_ret(value, (arg + (i * 32 + line)),-EFAULT);
+			vga_font [i*CHAR_HEIGHT + line] = value;
 		}
+	}
 	return 0;
 }
 
@@ -411,20 +535,23 @@ set_get_cmap(unsigned char * arg, int set)
 {
 	int i;
 
-	i = verify_area(set ? VERIFY_READ : VERIFY_WRITE, (void *)arg, 16*3);
-	if (i)
-		return i;
-
+	if(set)
+		i = VERIFY_READ;
+	else
+		i = VERIFY_WRITE;
+	if(verify_area(i, arg, (16 * 3 * sizeof(unsigned char))))
+		return -EFAULT;
 	for (i=0; i<16; i++) {
 		if (set) {
-			default_red[i] = get_user(arg++) ;
-			default_grn[i] = get_user(arg++) ;
-			default_blu[i] = get_user(arg++) ;
+			__get_user_ret(default_red[i], (arg+0),-EFAULT);
+			__get_user_ret(default_grn[i], (arg+1),-EFAULT);
+			__get_user_ret(default_blu[i], (arg+2),-EFAULT);
 		} else {
-			put_user (default_red[i], arg++) ;
-			put_user (default_grn[i], arg++) ;
-			put_user (default_blu[i], arg++) ;
+			__put_user_ret(default_red[i], (arg+0),-EFAULT);
+			__put_user_ret(default_grn[i], (arg+1),-EFAULT);
+			__put_user_ret(default_blu[i], (arg+2),-EFAULT);
 		}
+		arg += 3;
 	}
 	if (set) {
 		for (i=0; i<MAX_NR_CONSOLES; i++)
@@ -442,14 +569,97 @@ set_get_cmap(unsigned char * arg, int set)
 	return 0;
 }
 
-
 void
 sun_clear_screen(void)
 {
-	memset (con_fb_base, (con_depth == 1 ? ~(0) : (0)),
-		(con_depth * con_height * con_width) / 8);
+	if (fbinfo[0].fill) {
+		int rects [4];
+		
+		rects [0] = 0;
+		rects [1] = 0;
+		rects [2] = con_width;
+		rects [3] = con_height;
+		(*fbinfo[0].fill)(0, 1, rects);
+	} else if (fbinfo[0].base && fbinfo[0].base_depth)
+		memset (con_fb_base, (con_depth == 1) ? ~(0) : 0,
+			(con_depth * con_height * con_width) / 8);
 	/* also clear out the "shadow" screen memory */
 	memset((char *)video_mem_base, 0, (video_mem_term - video_mem_base));
+	cursor_pos = -1;
+}
+
+void
+sun_clear_fb(int n)
+{
+	if (!n) sun_clear_screen ();
+#if 0
+/* This makes in some configurations serious problems. 
+ * Who cares if other screens are cleared?
+ */ 
+	else if (fbinfo[n].fill) { 
+		int rects [4];
+		
+		rects [0] = 0;
+		rects [1] = 0;
+		rects [2] = fbinfo[n].type.fb_width;
+		rects [3] = fbinfo[n].type.fb_height;
+		(*fbinfo[n].fill)(0, 1, rects);
+	} 
+#endif		
+	else if (fbinfo[n].base && fbinfo[n].base_depth) {
+		memset((void *)fbinfo[n].base,
+		       (fbinfo[n].base_depth == 1) ? ~(0) : 0,
+		       (fbinfo[n].base_depth * fbinfo[n].type.fb_height
+					     * fbinfo[n].type.fb_width) / 8);
+	}
+}
+
+void
+sun_clear_margin(void)
+{
+	int h, he, i;
+	unsigned char *p;
+
+	if (fbinfo[0].fill) {
+		int rects [16];
+
+		memset (rects, 0, sizeof (rects));
+		rects [2] = con_width;
+		rects [3] = y_margin;
+		rects [5] = y_margin;
+		rects [6] = x_margin;
+		rects [7] = con_height;
+		rects [8] = con_width - x_margin;
+		rects [9] = y_margin;
+		rects [10] = con_width;
+		rects [11] = con_height;
+		rects [12] = x_margin;
+		rects [13] = con_height - y_margin;
+		rects [14] = con_width - x_margin;
+		rects [15] = con_height;
+		(*fbinfo[0].fill)(0, 4, rects);
+	} else {
+		memset (con_fb_base, 
+			(con_depth == 1) ? ~(0) : 0,
+			skip_bytes - (x_margin<<1));
+		memset (con_fb_base + chars_per_line * con_height
+					- skip_bytes + (x_margin<<1),
+			(con_depth == 1) ? ~(0) : 0,
+			skip_bytes - (x_margin<<1));
+		he = con_height - 2 * y_margin;
+		i = 2 * x_margin;
+		if (con_depth == 1) {
+			for (p = con_fb_base+skip_bytes-(x_margin<<1), h = 0;
+			     h <= he; p += chars_per_line, h++)
+				memset (p, ~(0), i);			
+		} else {
+			for (p = con_fb_base+skip_bytes-(x_margin<<1), h = 0;
+			     h <= he; p += chars_per_line, h++)
+				memset (p, 0, i);
+		}
+	}
+	if (fbinfo [0].switch_from_graph)
+		(*fbinfo [0].switch_from_graph)();
 }
 
 /*
@@ -459,9 +669,11 @@ sun_clear_screen(void)
 void vesa_blank(void)
 {
 }
+
 void vesa_unblank(void)
 {
 }
+
 void set_vesa_blanking(const unsigned long arg)
 {
 }
@@ -469,244 +681,6 @@ void set_vesa_blanking(const unsigned long arg)
 void vesa_powerdown(void)
 {
 }
-
-#undef color
-/* cg6 cursor status, kernel tracked copy */
-struct cg6_cursor {
-        short   enable;	        /* cursor is enabled */
-        struct  fbcurpos cpos;	/* position */
-        struct  fbcurpos chot;	/* hot-spot */
-        struct  fbcurpos size;	/* size of mask & image fields */
-        int     bits[2][32];	/* space for mask & image bits */
-	char    color [6];	/* cursor colors */
-};
-
-struct cg6_info {
-	struct bt_regs *bt;	/* color control */
-	void *fbc;
-	struct cg6_fhc *fhc;
-	struct cg6_tec *tec;
-	struct cg6_thc *thc;
-	struct cg6_cursor cursor; /* cursor control */
-	void *dhc;
-};
-
-struct bwtwo_info {
-        struct bwtwo_regs *regs;
-};
-
-struct cg3_info {
-	struct bt_regs *bt;	/* brooktree (color) registers */
-};
-
-/* Array holding the information for the frame buffers */
-typedef struct {
-	union {
-		struct bwtwo_info bwtwo;
-		struct cg3_info   cg3;
-		struct cg6_info   cg6;
-	} info;		        /* per frame information */
-	int    space;           /* I/O space this card resides in */
-	int    blanked;		/* true if video blanked */
-	int    open;		/* is this fb open? */
-	int    mmaped;		/* has this fb been mmapped? */
-	int    vtconsole;	/* virtual console where it is opened */
-	long   base;		/* frame buffer base    */
-	struct fbtype type;	/* frame buffer type    */
-	int    (*mmap)(struct inode *, struct file *, struct vm_area_struct *, long fb_base, void *);
-	void   (*loadcmap)(void *this, int index, int count);
-	void   (*blank)(void *this);
-	void   (*unblank)(void *this);
-	int    (*ioctl)(struct inode *, struct file *, unsigned int, unsigned long, void *);
-} fbinfo_t;
-
-static fbinfo_t fbinfo [FRAME_BUFFERS];
-
-/* We need to keep a copy of the color map to answer ioctl requests */
-static union {
-	unsigned char   map[256][3];    /* reasonable way to access */
-        unsigned int    raw[256*3/4];   /* hardware wants it like this */
-} color_map;
-
-#define FB_MMAP_VM_FLAGS (VM_SHM| VM_LOCKED)
-
-static int
-fb_open (struct inode * inode, struct file * file)
-{
-	int minor = MINOR (inode->i_rdev);
-
-	if (minor >= FRAME_BUFFERS)
-		return -EBADF;
-	if (fbinfo [minor].open)
-		return -EBUSY;
-	fbinfo [minor].open = 1;
-	fbinfo [minor].mmaped = 0;
-	return 0;
-}
-
-static int
-fb_ioctl (struct inode *inode, struct file *file, unsigned int cmd, unsigned long arg)
-{
-	int minor = MINOR (inode->i_rdev);
-	fbinfo_t *fb;
-	struct fbcmap *cmap;
-	int i;
-	
-	if (minor >= FRAME_BUFFERS)
-		return -EBADF;
-	fb = &fbinfo [minor];
-	
-	switch (cmd){
-	case FBIOGTYPE:		/* return frame buffer type */
-		i = verify_area (VERIFY_WRITE, (void *) arg, sizeof (struct fbtype));
-		if (i) return i;
-		*(struct fbtype *)arg = (fb->type);
-		break;
-	case FBIOGATTR:{
-		struct fbgattr *fba = (struct fbgattr *) arg;
-		
-		i = verify_area (VERIFY_WRITE, (void *) arg, sizeof (struct fbgattr));
-		if (i) return i;
-		fba->real_type = fb->type.fb_type;
-		fba->owner = 0;
-		fba->fbtype = fb->type;
-		fba->sattr.flags = 0;
-		fba->sattr.emu_type = fb->type.fb_type;
-		fba->sattr.dev_specific [0] = -1;
-		fba->emu_types [0] = fb->type.fb_type;
-		fba->emu_types [1] = -1;
-		break;
-	}
-	case FBIOSVIDEO:
-		i = verify_area(VERIFY_READ, (void *)arg, sizeof(int));
-		if (i) return i;
-		
-		if (*(int *)arg){
-			if (!fb->blanked || !fb->unblank)
-				break;
-			(*fb->unblank)(fb);
-			fb->blanked = 0;
-		} else {
-			if (fb->blanked || !fb->blank)
-				break;
-			(*fb->blank)(fb);
-			fb->blanked = 1;
-		}
-		break;
-	case FBIOGVIDEO:
-		i = verify_area (VERIFY_WRITE, (void *) arg, sizeof (int));
-		if (i) return i;
-		*(int *) arg = fb->blanked;
-		break;
-	case FBIOPUTCMAP: {	/* load color map entries */
-		char *rp, *gp, *bp;
-		int end, count;;
-		
-		if (!fb->loadcmap)
-			return -EINVAL;
-		i = verify_area (VERIFY_READ, (void *) arg, sizeof (struct fbcmap));
-		if (i) return i;
-		cmap = (struct fbcmap *) arg;
-		count = cmap->count;
-		if ((cmap->index < 0) || (cmap->index > 255))
-			return -EINVAL;
-		if (cmap->index + count > 256)
-			count = 256 - cmap->index;
-		i = verify_area (VERIFY_READ, rp = cmap->red, cmap->count);
-		if (i) return i;
-		i = verify_area (VERIFY_READ, gp = cmap->green, cmap->count);
-		if (i) return i;
-		i = verify_area (VERIFY_READ, bp = cmap->blue, cmap->count);
-		if (i) return i;
-
-		end = cmap->index + count;
-		for (i = cmap->index; i < end; i++){
-			color_map.map [i][0] = *rp++;
-			color_map.map [i][1] = *gp++;
-			color_map.map [i][2] = *bp++;
-		}
-		(*fb->loadcmap)(fb, cmap->index, count);
-                break;			
-	}
-
-	default:
-		if (fb->ioctl){
-			i = fb->ioctl (inode, file, cmd, arg, fb);
-			if (i == -EINVAL)
-				printk ("[[FBIO: %8.8x]]\n", cmd);
-			return i;
-		}
-		printk ("[[FBIO: %8.8x]]\n", cmd);
-		return -EINVAL;
-	}
-	return 0;
-}
-
-static void
-fb_close (struct inode * inode, struct file *filp)
-{
-	int minor = MINOR(inode->i_rdev);
-	struct fbcursor cursor;
-	
-	if (minor >= FRAME_BUFFERS)
-		return;
-	if (fbinfo [minor].open)
-		fbinfo [minor].open = 0;
-	vt_cons [fbinfo [minor].vtconsole]->vc_mode = KD_TEXT;
-
-	/* Leaving graphics mode, turn off the cursor */
-	graphics_on = 0;
-	if (fbinfo [minor].mmaped)
-		sun_clear_screen ();
-	cursor.set    = FB_CUR_SETCUR;
-	cursor.enable = 0;
-	fb_ioctl (inode, filp, FBIOSCURPOS, (unsigned long) &cursor);
-	set_palette ();
-	render_screen ();
-	return;
-}
-
-static int
-fb_mmap (struct inode *inode, struct file *file, struct vm_area_struct *vma)
-{
-	int minor = MINOR (inode->i_rdev);
-	fbinfo_t *fb;
-
-	if (minor >= FRAME_BUFFERS)
-		return -ENXIO;
-	/* FIXME: the fg_console below should actually be the
-	 * console on which the invoking process is running
-	 */
-	if (vt_cons [fg_console]->vc_mode == KD_GRAPHICS)
-		return -ENXIO;
-	fbinfo [minor].vtconsole = fg_console;
-	fb = &fbinfo [minor];
-
-	if (fb->mmap){
-		int v;
-		
-		v = (*fb->mmap)(inode, file, vma, fb->base, fb);
-		if (v) return v;
-		fbinfo [minor].mmaped = 1;
-		vt_cons [fg_console]->vc_mode = KD_GRAPHICS;
-		graphics_on = 1;
-		return 0;
-	} else
-		return -ENXIO;
-}
-
-static struct file_operations graphdev_fops =
-{
-	NULL,			/* lseek */
-	NULL,			/* read */
-	NULL,			/* write */
-	NULL,			/* readdir */
-	NULL,			/* select */
-	fb_ioctl,
-	fb_mmap,
-	fb_open,		/* open */
-	fb_close,		/* close */
-};
 
 /* Call the frame buffer routine for setting the palette */
 void
@@ -721,11 +695,26 @@ set_palette (void)
 		/* First keep color_map with the palette colors */
 		for (i = 0; i < 16; i++){
 			j = color_table [i];
-			color_map.map [i][0] = default_red [j];
-			color_map.map [i][1] = default_grn [j];
-			color_map.map [i][2] = default_blu [j];
+			fbinfo[0].color_map CM(i,0) = default_red [j];
+			fbinfo[0].color_map CM(i,1) = default_grn [j];
+			fbinfo[0].color_map CM(i,2) = default_blu [j];
 		}
 		(*fbinfo [0].loadcmap)(&fbinfo [0], 0, 16);
+	}
+}
+
+void
+set_other_palette (int n)
+{
+	if (!n) {
+		set_palette ();
+		return;
+	}
+	if (fbinfo [n].loadcmap){
+		fbinfo[n].color_map CM(0,0) = 0;
+		fbinfo[n].color_map CM(0,1) = 0;
+		fbinfo[n].color_map CM(0,2) = 0;
+		(*fbinfo [n].loadcmap)(&fbinfo [n], 0, 1);
 	}
 }
 
@@ -733,12 +722,12 @@ set_palette (void)
 void
 console_restore_palette (void)
 {
-        if (restore_palette)
-	        (*restore_palette) ();
+        if (fb_restore_palette)
+	        (*fb_restore_palette) (&fbinfo[0]);
 }
 
 /* This routine should be moved to srmmu.c */
-static __inline__ unsigned int
+static __inline__ uint
 srmmu_get_pte (unsigned long addr)
 {
 	register unsigned long entry;
@@ -749,8 +738,8 @@ srmmu_get_pte (unsigned long addr)
 	return entry;
 }
 
-unsigned int
-get_phys (unsigned int addr)
+uint
+get_phys (uint addr)
 {
 	switch (sparc_cpu_model){
 	case sun4c:
@@ -763,475 +752,34 @@ get_phys (unsigned int addr)
 	}
 }
 
-/* CG6 support code */
-
-/* Offset of interesting structures in the OBIO space */
-/*
- * Brooktree is the video dac and is funny to program on the cg6.
- * (it's even funnier on the cg3)
- * The FBC could be the the frame buffer control
- * The FHC could be the frame buffer hardware control.
- */
-#define CG6_ROM_OFFSET       0x0
-#define CG6_BROOKTREE_OFFSET 0x200000
-#define CG6_DHC_OFFSET       0x240000
-#define CG6_ALT_OFFSET       0x280000
-#define CG6_FHC_OFFSET       0x300000
-#define CG6_THC_OFFSET       0x301000
-#define CG6_FBC_OFFSET       0x700000
-#define CG6_TEC_OFFSET       0x701000
-#define CG6_RAM_OFFSET       0x800000
-
-struct bt_regs {
-	unsigned int  addr;	/* address register */
-	unsigned int  color_map; /* color map */
-	unsigned int  control;	/* control register */
-	unsigned int  cursor;	/* cursor map register */
-};
-
-/* The contents are unknown */
-struct cg6_tec {
-	int tec_matrix;
-	int tec_clip;
-	int tec_vdc;
-};
-
-struct cg6_thc {
-        unsigned int thc_xxx0[512];  /* ??? */
-        unsigned int thc_hsync1;     /* hsync timing */
-        unsigned int thc_hsync2;
-        unsigned int thc_hsync3;
-        unsigned int thc_vsync1;     /* vsync timing */
-        unsigned int thc_vsync2;
-        unsigned int thc_refresh;
-        unsigned int thc_misc;
-        unsigned int thc_xxx1[56];
-        unsigned int thc_cursxy;             /* cursor x,y position (16 bits each) */
-        unsigned int thc_cursmask[32];       /* cursor mask bits */
-        unsigned int thc_cursbits[32];       /* what to show where mask enabled */
-};
-
-static void
-cg6_restore_palette (void)
+int
+get_iospace (uint addr)
 {
-	volatile struct bt_regs *bt;
-
-	bt = fbinfo [0].info.cg6.bt;
-	bt->addr = 0;
-	bt->color_map = 0xffffffff;
-	bt->color_map = 0xffffffff;
-	bt->color_map = 0xffffffff;
-}
-
-/* Ugh: X wants to mmap a bunch of cute stuff at the same time :-( */
-/* So, we just mmap the things that are being asked for */
-static int
-cg6_mmap (struct inode *inode, struct file *file, struct vm_area_struct *vma, long base, void *xx)
-{
-	unsigned int size, page, r, map_size;
-	unsigned int map_offset = 0;
-	fbinfo_t *fb = (fbinfo_t *) xx;
-	
-	size = vma->vm_end - vma->vm_start;
-        if (vma->vm_offset & ~PAGE_MASK)
-                return -ENXIO;
-
-	/* To stop the swapper from even considering these pages */
-	vma->vm_flags |= FB_MMAP_VM_FLAGS;
-	
-	/* Each page, see which map applies */
-	for (page = 0; page < size; ){
-		switch (vma->vm_offset+page){
-		case CG6_TEC:
-			map_size = PAGE_SIZE;
-			map_offset = get_phys ((uint)fb->info.cg6.tec);
-			break;
-		case CG6_FBC:
-			map_size = PAGE_SIZE;
-			map_offset = get_phys ((uint)fb->info.cg6.fbc);
-			break;
-		case CG6_FHC:
-			map_size = PAGE_SIZE;
-			map_offset = get_phys ((uint)fb->info.cg6.fhc);
-			break;
-		case CG6_THC:
-			map_size = PAGE_SIZE;
-			map_offset = get_phys ((uint)fb->info.cg6.thc);
-			break;
-		case CG6_BTREGS:
-			map_size = PAGE_SIZE;
-			map_offset = get_phys ((uint)fb->info.cg6.bt);
-			break;
-			
-		case CG6_DHC:
-			map_size = PAGE_SIZE * 40;
-			map_offset = get_phys ((uint)fb->info.cg6.dhc);
-			break;
-			
-		case CG6_ROM:
-			map_size = 0;
-			break;
-
-		case CG6_RAM:
-			map_size = size-page;
-			map_offset = get_phys ((uint) con_fb_base);
-			if (map_size < fb->type.fb_size)
-				map_size = fb->type.fb_size;
-			break;
-		default:
-			map_size = 0;
-			break;
-		}
-		if (!map_size){
-			page += PAGE_SIZE;
-			continue;
-		}
-		r = io_remap_page_range (vma->vm_start+page,
-					 map_offset,
-					 map_size, vma->vm_page_prot,
-					 fb->space);
-		if (r) return -EAGAIN;
-		page += map_size;
-	}
-        vma->vm_inode = inode;
-        inode->i_count++;
-        return 0;
-}
-
-#define BT_D4M3(x) ((((x) >> 2) << 1) + ((x) >> 2))     /* (x / 4) * 3 */
-#define BT_D4M4(x) ((x) & ~3)                           /* (x / 4) * 4 */
-
-static void
-cg6_loadcmap (void *fbinfo, int index, int count)
-{
-	fbinfo_t *fb = (fbinfo_t *) fbinfo;
-	struct bt_regs *bt = fb->info.cg6.bt;
-	int i;
-	
-	bt->addr = index << 24;
-	for (i = index; count--; i++){
-		bt->color_map = color_map.map [i][0] << 24;
-		bt->color_map = color_map.map [i][1] << 24;
-		bt->color_map = color_map.map [i][2] << 24;
-	}
-}
-
-/* Load cursor information */
-static void
-cg6_setcursor (struct cg6_info *info)
-{
-	unsigned int v;
-	struct cg6_cursor *c = &info->cursor;
-	
-	if (c->enable){
-		v = ((c->cpos.fbx - c->chot.fbx) << 16)
-		   |((c->cpos.fby - c->chot.fby) & 0xffff);
-	} else {
-		/* Magic constant to turn off the cursor */
-		v = ((65536-32) << 16) | (65536-32);
-	}
-	info->thc->thc_cursxy = v;
-}
-
-#undef pos
-static int
-cg6_scursor (struct fbcursor *cursor, fbinfo_t *fb)
-{
-	int op = cursor->set;
-	volatile struct cg6_thc *thc = fb->info.cg6.thc;
-	struct cg6_cursor *cursor_info = &fb->info.cg6.cursor;
-	int i, bytes = 0;
-	
-	if (op & FB_CUR_SETSHAPE){
-		if ((unsigned int) cursor->size.fbx > 32)
-			return -EINVAL;
-		if ((unsigned int) cursor->size.fby > 32)
-			return -EINVAL;
-		bytes = (cursor->size.fby * 32)/8;
-		i = verify_area (VERIFY_READ, cursor->image, bytes);
-		if (i) return i;
-		i = verify_area (VERIFY_READ, cursor->mask, bytes);
-		if (i) return i;
-	}
-	if (op & (FB_CUR_SETCUR | FB_CUR_SETPOS | FB_CUR_SETHOT)){
-		if (op & FB_CUR_SETCUR)
-			cursor_info->enable = cursor->enable;
-		if (op & FB_CUR_SETPOS)
-			cursor_info->cpos = cursor->pos;
-		if (op & FB_CUR_SETHOT)
-			cursor_info->chot = cursor->hot;
-		cg6_setcursor (&fb->info.cg6);
-	}
-	if (op & FB_CUR_SETSHAPE){
-		unsigned int u;
-		
-		cursor_info->size = cursor->size;
-		memset ((void *)&cursor_info->bits, 0, sizeof (cursor_info->size));
-		memcpy (cursor_info->bits [0], cursor->mask, bytes);
-		memcpy (cursor_info->bits [1], cursor->image, bytes);
-		u = ~0;
-		if (cursor_info->size.fbx < 32)
-			u = ~(u  >> cursor_info->size.fbx);
-		for (i = 0; i < 32; i++){
-			int m = cursor_info->bits [0][i] & u;
-			thc->thc_cursmask [i] = m;
-			thc->thc_cursbits [i] = m & cursor_info->bits [1][i];
-		}
-	}
-	return 0;
-}
-
-/* Handle cg6-specific ioctls */
-static int
-cg6_ioctl (struct inode *inode, struct file *file, unsigned cmd, unsigned long arg, fbinfo_t *fb)
-{
-	int i;
-
-	switch (cmd){
-	case FBIOGCURMAX:
-		i = verify_area (VERIFY_WRITE, (void *) arg, sizeof (struct fbcurpos));
-		if (i) return i;
-		((struct fbcurpos *) arg)->fbx = 32;
-		((struct fbcurpos *) arg)->fby = 32;
-		break;
-
-	case FBIOSVIDEO:
-		/* vesa_blank and vesa_unblank could do the job on fb [0] */
-		break;
-
-	case FBIOSCURSOR:
-		return cg6_scursor ((struct fbcursor *) arg, fb);
-
-	case FBIOSCURPOS:
-		/*
-		i= verify_area (VERIFY_READ, (void *) arg, sizeof (struct fbcurpos));
-		if (i) return i;
-		*/
-		fb->info.cg6.cursor.cpos = *(struct fbcurpos *)arg;
-		cg6_setcursor (&fb->info.cg6);
-		break;
+	switch (sparc_cpu_model){
+	case sun4c:
+		return -1; /* Don't check iospace on sun4c */
+	case sun4m:
+		return (srmmu_get_pte (addr) >> 28);
 	default:
-		return -EINVAL;
-	}
-	return 0;
-}
-
-static void
-cg6_setup (int slot, unsigned int cg6, int cg6_io)
-{
-	struct cg6_info *cg6info;
-
-	printk ("cgsix%d at 0x%8.8x\n", slot, (unsigned int) cg6);
-	
-	/* Fill in parameters we left out */
-	fbinfo [slot].type.fb_cmsize = 256;
-	fbinfo [slot].mmap = cg6_mmap;
-	fbinfo [slot].loadcmap = cg6_loadcmap;
-	fbinfo [slot].ioctl = (void *) cg6_ioctl;
-	fbinfo [slot].blank = 0;
-	fbinfo [slot].unblank = 0;
-	
-	cg6info = (struct cg6_info *) &fbinfo [slot].info.cg6;
-
-	/* Map the hardware registers */
-	cg6info->bt = sparc_alloc_io ((void *) cg6+CG6_BROOKTREE_OFFSET, 0,
-		 sizeof (struct bt_regs),"cgsix_dac", cg6_io, 0);
-	cg6info->fhc = sparc_alloc_io ((void *) cg6+CG6_FHC_OFFSET, 0,
-		 sizeof (int), "cgsix_fhc", cg6_io, 0);
-	cg6info->thc = sparc_alloc_io ((void *) cg6+CG6_THC_OFFSET, 0,
-		 sizeof (struct cg6_thc), "cgsix_thc", cg6_io, 0);
-	cg6info->tec = sparc_alloc_io ((void *) cg6+CG6_TEC_OFFSET, 0,
-		 sizeof (struct cg6_tec), "cgsix_tec", cg6_io, 0);
-	cg6info->dhc = sparc_alloc_io ((void *) cg6+CG6_DHC_OFFSET, 0,
-		 0x40000, "cgsix_dhc", cg6_io, 0);
-	cg6info->fbc = sparc_alloc_io ((void *) cg6+CG6_FBC_OFFSET, 0,
-		 0x1000, "cgsix_fbc", cg6_io, 0);
-	if (!con_fb_base){
-		con_fb_base = sparc_alloc_io ((void *) cg6+CG6_RAM_OFFSET, 0,
-                    fbinfo [slot].type.fb_size, "cgsix_ram", cg6_io, 0);
-	}
-	if (!slot)
-		restore_palette = cg6_restore_palette;
-}
-
-/* The cg3 driver, obio space addresses for mapping the cg3 stuff */
-#define CG3_REGS 0x400000
-#define CG3_RAM  0x800000
-#define D4M3(x) ((((x)>>2)<<1) + ((x)>>2))      /* (x/4)*3 */
-#define D4M4(x) ((x)&~0x3)                      /* (x/4)*4 */
-
-/* The cg3 palette is loaded with 4 color values at each time  */
-/* so you end up with: (rgb)(r), (gb)(rg), (b)(rgb), and so on */
-static void
-cg3_loadcmap (void *fbinfo, int index, int count)
-{
-	fbinfo_t *fb = (fbinfo_t *) fbinfo;
-	struct bt_regs *bt = fb->info.cg3.bt;
-	int *i, steps;
-
-	i = &color_map.raw [D4M3(index)];
-	steps = D4M3(index+count-1) - D4M3(index)+3;
-	bt->addr = D4M4(index);
-	while (steps--)
-		bt->color_map = *i++;
-}
-
-/* The cg3 is presumed to emulate a cg4, I guess older programs will want that */
-/* addresses above 0x4000000 are for cg3, below that it's cg4 emulation          */
-static int
-cg3_mmap (struct inode *inode, struct file *file, struct vm_area_struct *vma, long base, void *xx)
-{
-	unsigned int size, page, r, map_size;
-	unsigned int map_offset = 0;
-	fbinfo_t *fb = (fbinfo_t *) xx;
-	
-	size = vma->vm_end - vma->vm_start;
-        if (vma->vm_offset & ~PAGE_MASK)
-                return -ENXIO;
-
-	/* To stop the swapper from even considering these pages */
-	vma->vm_flags |= FB_MMAP_VM_FLAGS; 
-	
-	/* Each page, see which map applies */
-	for (page = 0; page < size; ){
-		switch (vma->vm_offset+page){
-		case CG3_MMAP_OFFSET:
-			map_size = size-page;
-			map_offset = get_phys ((uint) con_fb_base);
-			if (map_size > fb->type.fb_size)
-				map_size = fb->type.fb_size;
-			break;
-		default:
-			map_size = 0;
-			break;
-		}
-		if (!map_size){
-			page += PAGE_SIZE;
-			continue;
-		}
-		r = io_remap_page_range (vma->vm_start+page,
-					 map_offset,
-					 map_size, vma->vm_page_prot,
-					 fb->space);
-		if (r) return -EAGAIN;
-		page += map_size;
-	}
-        vma->vm_inode = inode;
-        inode->i_count++;
-        return 0;
-}
-
-static void
-cg3_setup (int slot, unsigned int cg3, int cg3_io)
-{
-	struct cg3_info *cg3info;
-
-	printk ("cgthree%d at 0x%8.8x\n", slot, cg3);
-	
-	/* Fill in parameters we left out */
-	fbinfo [slot].type.fb_cmsize = 256;
-	fbinfo [slot].mmap = cg3_mmap;
-	fbinfo [slot].loadcmap = cg3_loadcmap;
-	fbinfo [slot].ioctl = 0; /* no special ioctls */
-
-	cg3info = (struct cg3_info *) &fbinfo [slot].info.cg3;
-
-	/* Map the card registers */
-	cg3info->bt = sparc_alloc_io ((void *) cg3+CG3_REGS, 0,
-		 sizeof (struct bt_regs),"cg3_bt", cg3_io, 0);
-	
-	if (!con_fb_base){
-		con_fb_base=sparc_alloc_io ((void*) cg3+CG3_RAM, 0,
-                    fbinfo [slot].type.fb_size, "cg3_ram", cg3_io, 0);
+		panic ("get_iospace called for unsupported cpu model\n");
+		return -1;
 	}
 }
 
-/* OBio addresses for the bwtwo registers */
-#define BWTWO_REGISTER_OFFSET 0x400000
+__initfunc(unsigned long sun_cg_postsetup(fbinfo_t *fb, unsigned long start_mem))
+{
+	fb->color_map = (char *)start_mem;
+	return start_mem + 256*3;
+}
 
-struct bwtwo_regs {
-	char          unknown [16];
-#define BWTWO_ENABLE_VIDEO 0x40
-	unsigned char control;
-	char          unknown2 [15];
+static char *known_cards [] __initdata = {
+	"cgsix", "cgthree", "cgRDI", "cgthree+", "bwtwo", "SUNW,tcx", "cgfourteen", "SUNW,leo", 0
+};
+static char *v0_known_cards [] __initdata = {
+	"cgsix", "cgthree", "cgRDI", "cgthree+", "bwtwo", 0
 };
 
-static int
-bwtwo_mmap (struct inode *inode, struct file *file, struct vm_area_struct *vma, long base, void *xx)
-{
-	unsigned int size, map_offset, r;
-	fbinfo_t *fb = (fbinfo_t *) xx;
-	int map_size;
-	
-	map_size = size = vma->vm_end - vma->vm_start;
-	
-	if (vma->vm_offset & ~PAGE_MASK)
-		return -ENXIO;
-
-	/* To stop the swapper from even considering these pages */
-	vma->vm_flags |= FB_MMAP_VM_FLAGS;
-	printk ("base=%8.8xl start=%8.8xl size=%x offset=%8.8x\n",
-		(unsigned int) base,
-		(unsigned int) vma->vm_start, size,
-		(unsigned int) vma->vm_offset);
-
-	/* This routine should also map the register if asked for, but we don't do that yet */
-	map_offset = get_phys ((uint) con_fb_base);
-	r = io_remap_page_range (vma->vm_start, map_offset, map_size, vma->vm_page_prot,
-				 fb->space);
-	if (r) return -EAGAIN;
-	vma->vm_inode = inode;
-	inode->i_count++;
-	return 0;
-}
-
-static void
-bwtwo_blank (void *xx)
-{
-	fbinfo_t *fb = (fbinfo_t *) xx;
-
-	fb->info.bwtwo.regs->control &= ~BWTWO_ENABLE_VIDEO;
-}
-
-static void
-bwtwo_unblank (void *xx)
-{
-	fbinfo_t *fb = (fbinfo_t *) xx;
-	fb->info.bwtwo.regs->control |= BWTWO_ENABLE_VIDEO;
-}
-
-static void
-bwtwo_setup (int slot, unsigned int bwtwo, int bw2_io)
-{
-	printk ("bwtwo%d at 0x%8.8x\n", slot, bwtwo);
-	fbinfo [slot].type.fb_cmsize = 2;
-	fbinfo [slot].mmap = bwtwo_mmap;
-	fbinfo [slot].loadcmap = 0;
-	fbinfo [slot].ioctl = 0;
-	fbinfo [slot].blank = bwtwo_blank;
-	fbinfo [slot].unblank = bwtwo_unblank;
-	fbinfo [slot].info.bwtwo.regs = sparc_alloc_io ((void *) bwtwo+BWTWO_REGISTER_OFFSET,
-		0, sizeof (struct bwtwo_regs), "bwtwo_regs", bw2_io, 0);
-}
-
-static void
-cg14_setup (int slot, unsigned int cg14, int cg14_io)
-{
-	printk ("cgfourteen%d at 0x%8.8x\n", slot, cg14);
-	fbinfo [slot].type.fb_cmsize = 256;
-	fbinfo [slot].mmap =  0;
-	fbinfo [slot].loadcmap = 0;
-	fbinfo [slot].ioctl = 0;
-	fbinfo [slot].blank = 0;
-	fbinfo [slot].unblank = 0;
-}
-
-static char *known_cards [] = {
-	"cgsix", "cgthree", "bwtwo", "SUNW,tcx", "cgfourteen", 0
-};
-
-static int
-known_card (char *name)
+__initfunc(static int known_card (char *name, char **known_cards))
 {
 	int i;
 
@@ -1248,17 +796,17 @@ static struct {
 } scr_def [] = {
 	{ 1, 1152, 900,  8,  18 },
 	{ 8, 1152, 900,  64, 18 },
-	{ 8, 1280, 1024, 96, 80 },
+	{ 8, 1152, 1024, 64, 80 },
+	{ 8, 1280, 1024, 64, 80 },
 	{ 8, 1024, 768,  0,  0 },
+	{ 8, 640, 480, 0, 0 },
 	{ 0 },
 };
 
-static int
-cg14_present(void)
+__initfunc(static int cg14_present(void))
 {
 	int root, n;
 
-	prom_printf ("Looking for cg14\n");
 	root = prom_getchild (prom_root_node);
 	if ((n = prom_searchsiblings (root, "obio")) == 0)
 		return 0;
@@ -1266,21 +814,179 @@ cg14_present(void)
 	n = prom_getchild (n);
 	if ((n = prom_searchsiblings (n, "cgfourteen")) == 0)
 		return 0;
-	prom_printf ("Cg14 found!\n");
 	return n;
 }
 
-static int
-sparc_console_probe(void)
+__initfunc(static void
+sparc_framebuffer_setup(int primary, int con_node, int type, struct linux_sbus_device *sbdp, 
+			uint base, uint con_base, int prom_fb, int parent_node))
 {
-	int propl, con_node, i;
-	struct linux_sbus_device *sbdp;
-	unsigned int fbbase = 0xb001b001;
-	int fbiospace = 0;
-	int cg14 = 0;
+	static int frame_buffers = 1;
+	int n, i;
+	int linebytes;
+	uint io = 0;
+	char *p;
+	
+	if (primary)
+		n = 0;
+	else {
+		if (frame_buffers == FRAME_BUFFERS) return; /* Silently ignore */
+		n = frame_buffers++;
+	}
+	
+	if (prom_fb) sun_prom_console_id = n;
+		
+	if (sbdp) io = sbdp->reg_addrs [0].which_io;
 
-	/* XXX The detection code needs to support multiple video cards in one system */
-	con_node = 0;
+	/* Fill in common fb information */
+	fbinfo [n].type.fb_type   = type;
+	fbinfo [n].real_type	  = type;
+	fbinfo [n].prom_node	  = con_node;
+	memset (&(fbinfo [n].emulations), 0xff, sizeof (fbinfo [n].emulations));
+	fbinfo [n].type.fb_height = prom_getintdefault(con_node, "height", 900);
+	fbinfo [n].type.fb_width  = prom_getintdefault(con_node, "width", 1152);
+	fbinfo [n].type.fb_depth  = (type == FBTYPE_SUN2BW) ? 1 : 8;
+	linebytes = prom_getint(con_node, "linebytes");
+	if (linebytes == -1) linebytes = fbinfo [n].type.fb_width;
+	fbinfo [n].type.fb_size   = PAGE_ALIGN((linebytes) * (fbinfo [n].type.fb_height));
+	fbinfo [n].space = io;
+	fbinfo [n].blanked = 0;
+	fbinfo [n].base = con_base;
+	fbinfo [n].cursor.hwsize.fbx = 32;
+	fbinfo [n].cursor.hwsize.fby = 32;
+	fbinfo [n].proc_entry.node = parent_node;
+	fbinfo [n].proc_entry.rdev = MKDEV(GRAPHDEV_MAJOR, n);
+	fbinfo [n].proc_entry.mode = S_IFCHR | S_IRUSR | S_IWUSR;
+	prom_getname (con_node, fbinfo [n].proc_entry.name, 32 - 3);
+	p = strchr (fbinfo [n].proc_entry.name, 0);
+        sprintf (p, ":%d", n);
+	
+	/* Should be filled in for supported video cards */
+	fbinfo [n].mmap = 0; 
+	fbinfo [n].loadcmap = 0;
+	fbinfo [n].ioctl = 0;
+	fbinfo [n].reset = 0;
+	fbinfo [n].blank = 0;
+	fbinfo [n].unblank = 0;
+	fbinfo [n].setcursor = 0;
+	fbinfo [n].base_depth = fbinfo [n].type.fb_depth;
+	
+	/* Per card setup */
+	switch (fbinfo [n].type.fb_type){
+#ifdef SUN_FB_CGTHREE
+	case FBTYPE_SUN3COLOR:
+		cg3_setup (&fbinfo [n], n, base, io, sbdp);
+		break;
+#endif
+#ifdef SUN_FB_TCX
+	case FBTYPE_TCXCOLOR:
+		tcx_setup (&fbinfo [n], n, con_node, base, sbdp);
+		break;
+#endif
+#ifdef SUN_FB_CGSIX
+	case FBTYPE_SUNFAST_COLOR:
+		cg6_setup (&fbinfo [n], n, base, io);
+		break;
+#endif
+#ifdef SUN_FB_BWTWO
+	case FBTYPE_SUN2BW:
+		bwtwo_setup (&fbinfo [n], n, base, io);
+		break;
+#endif
+#ifdef SUN_FB_CGFOURTEEN
+	case FBTYPE_MDICOLOR:
+		cg14_setup (&fbinfo [n], n, con_node, base, io);
+		break;
+#endif
+#ifdef SUN_FB_LEO
+	case FBTYPE_SUNLEO:
+		leo_setup (&fbinfo [n], n, base, io);
+		break;
+#endif
+	default:
+		fbinfo [n].type.fb_type = FBTYPE_NOTYPE;
+		return;
+	}
+	if (!n) {
+		con_type = type;
+		con_height = fbinfo [n].type.fb_height;
+		con_width = fbinfo [n].type.fb_width;
+		con_depth = (type == FBTYPE_SUN2BW) ? 1 : 8;
+		for (i = 0; scr_def [i].depth; i++){
+			if ((scr_def [i].resx != con_width) ||
+			    (scr_def [i].resy != con_height))
+				continue;
+			if (scr_def [i].depth != con_depth)
+		        	continue;
+			x_margin = scr_def [i].x_margin;
+			y_margin = scr_def [i].y_margin;
+			chars_per_line = (con_width * con_depth) / 8;
+			skip_bytes = chars_per_line * y_margin + x_margin;
+			ints_per_line = chars_per_line / 4;
+			ints_per_cursor = 14 * ints_per_line;
+			bytes_per_row = CHAR_HEIGHT * chars_per_line;
+			ORIG_VIDEO_COLS = con_width / 8 -
+						2 * x_margin / con_depth;
+			ORIG_VIDEO_LINES = (con_height - 2 * y_margin) / 16;
+			switch (chars_per_line) {
+			case 1152:
+				if (ORIG_VIDEO_COLS == 128)
+					color_fbuf_offset =
+						color_fbuf_offset_1152_128;
+				break;
+			case 1280:
+				if (ORIG_VIDEO_COLS == 144)
+					color_fbuf_offset =
+						color_fbuf_offset_1280_144;
+				break;
+			case 1024:
+				if (ORIG_VIDEO_COLS == 128)
+					color_fbuf_offset =
+						color_fbuf_offset_1024_128;
+				break;
+			case 640:
+				if (ORIG_VIDEO_COLS == 80)
+					color_fbuf_offset =
+						color_fbuf_offset_640_80;
+				break;
+			}
+			break;
+		}
+
+		if (!scr_def [i].depth){
+			x_margin = y_margin = 0;
+			prom_printf ("console: unknown video resolution %dx%d, depth %d\n",
+			      	     con_width, con_height, con_depth);
+			prom_halt ();
+		}
+
+		/* P3: I fear this strips 15inch 1024/768 PC-like
+		 * monitors out. */
+		if ((linebytes*8) / con_depth != con_width) {
+			prom_printf("console: unusual video, linebytes=%d, "
+			    	    "width=%d, height=%d depth=%d\n",
+			    	    linebytes, con_width, con_height,
+				    con_depth);
+			prom_halt ();
+		}
+	}
+}
+
+__initfunc(static int sparc_console_probe(void))
+{
+	int propl, con_node, default_node = 0, i;
+	char prop[16];
+	struct linux_sbus_device *sbdp, *sbdprom;
+	struct linux_sbus *sbus;
+	int cg14 = 0;
+	char prom_name[40];	
+	int type;
+	uint con_base;
+	u32 prom_console_node = 0;
+
+	for (i = 0; i < FRAME_BUFFERS; i++)
+		fbinfo [i].type.fb_type = FBTYPE_NOTYPE;
+	sbdprom = 0;
 	switch(prom_vers) {
 	case PROM_V0:
 		/* V0 proms are at sun4c only. Can skip many checks. */
@@ -1290,206 +996,191 @@ sparc_console_probe(void)
 			prom_halt();
 		}
 		for_each_sbusdev(sbdp, SBus_chain) {
-			con_node = sbdp->prom_node;
-
 			/* If no "address" than it is not the PROM console. */
 			if(sbdp->num_vaddrs) {
-				if(!strncmp(sbdp->prom_name, "cgsix", 5)) {
-					con_type = FBTYPE_SUNFAST_COLOR;
-					fbbase = (uint) sbdp->reg_addrs [0].phys_addr;
-					fbiospace = sbdp->reg_addrs[0].which_io;
-					break;
-				} else if(!strncmp(sbdp->prom_name, "cgthree", 7)) {
-					con_type = FBTYPE_SUN3COLOR;
-					fbbase = (uint) sbdp->reg_addrs [0].phys_addr;
-					fbiospace = sbdp->reg_addrs[0].which_io;
-					break;
-				} else if (!strncmp(sbdp->prom_name, "bwtwo", 5)) {
-					con_type = FBTYPE_SUN2BW;
-					fbbase = (uint) sbdp->reg_addrs [0].phys_addr;
-					fbiospace = sbdp->reg_addrs[0].which_io;
+				if(known_card(sbdp->prom_name, v0_known_cards)) {
+				   	sbdprom = sbdp;
+					strncpy(prom_name, sbdp->prom_name, sizeof (prom_name));
 					break;
 				}
 			}
 		}
-		if(con_type == FBTYPE_NOTYPE) return -1;
-		con_fb_base = (unsigned char *) sbdp->sbus_vaddrs[0];
-		strncpy(con_name, sbdp->prom_name, sizeof (con_name));
+		if(!sbdprom) return -1;
+		for_each_sbusdev(sbdp, SBus_chain) {
+			con_node = sbdp->prom_node;
+
+			if(!strncmp(sbdp->prom_name, "cgsix", 5) ||
+			   !strncmp(sbdp->prom_name, "cgthree+", 8)) {
+				type = FBTYPE_SUNFAST_COLOR;
+			} else if(!strncmp(sbdp->prom_name, "cgthree", 7) ||
+			   !strncmp(sbdp->prom_name, "cgRDI", 5)) {
+				type = FBTYPE_SUN3COLOR;
+			} else if (!strncmp(sbdp->prom_name, "bwtwo", 5)) {
+				type = FBTYPE_SUN2BW;
+			} else
+				continue;
+			sparc_framebuffer_setup (sbdprom == sbdp, con_node, type, sbdp, 
+						 (uint)sbdp->reg_addrs [0].phys_addr, sbdp->sbus_vaddrs[0], 0,
+						 sbdp->my_bus->prom_node);
+			/* XXX HACK */
+			if (sbdprom == sbdp && !strncmp(sbdp->prom_name, "cgRDI", 5))
+				break;
+		}
 		break;
 	case PROM_V2:
 	case PROM_V3:
 	case PROM_P1275:
-		for_each_sbusdev(sbdp, SBus_chain) {
-		        prom_printf ("Trying: %s\n", sbdp->prom_name);
-			if (known_card (sbdp->prom_name))
+		if (console_fb_path) {
+			char *q, c;
+
+			for (q = console_fb_path; *q && *q != ' '; q++);
+			c = *q;
+			*q = 0;
+			default_node = prom_pathtoinode(console_fb_path);
+			if (default_node) {
+				prom_printf ("Using %s for console\n", console_fb_path);
+				prom_console_node = prom_inst2pkg(*romvec->pv_v2bootargs.fd_stdout);
+				if (prom_console_node == default_node)
+					prom_console_node = 0;
+			}
+		}
+		if (!default_node)
+			default_node = prom_inst2pkg(*romvec->pv_v2bootargs.fd_stdout);
+		propl = prom_getproperty(default_node, "device_type",
+					 prop, sizeof (prop));
+		if (propl < 0) {
+			prom_printf ("output-device doesn't have device_type property\n");
+			prom_halt ();
+		} else if (propl != sizeof("display") || strncmp("display", prop, sizeof("display"))) {
+		    	prop [propl] = 0;
+			prom_printf ("console_probe: output-device is %s"
+				     " (not \"display\")\n", prop);
+			prom_halt ();
+		}
+		for_all_sbusdev(sbdp, sbus) {
+			if ((sbdp->prom_node == default_node)
+			    && known_card (sbdp->prom_name, known_cards)) {
+			    	sbdprom = sbdp;
 				break;
+			}
 		}
-		if (!sbdp){
-			if (!(cg14 = cg14_present ())){
-				prom_printf ("Could not find a known video card on this machine\n");
-				prom_halt ();
-			} 
+		if (!sbdprom) /* I'm just wondering if this if shouldn't be deleted.
+				 Is /obio/cgfourteen present only if /sbus/cgfourteen
+				 is not? If so, then the test here should be deleted.
+				 Otherwise, this comment should be deleted. */
+			cg14 = cg14_present ();
+		if (!sbdprom && !cg14) {
+			prom_printf ("Could not find a known video card on this machine\n");
+			prom_halt ();
 		}
-		if (!cg14){
-			prom_apply_sbus_ranges (&sbdp->reg_addrs [0], sbdp->num_registers);
-			fbbase = (long) sbdp->reg_addrs [0].phys_addr;
-			fbiospace = sbdp->reg_addrs[0].which_io;
-			con_node = (*romvec->pv_v2devops.v2_inst2pkg)
-				(*romvec->pv_v2bootargs.fd_stdout);
-			/*
-			 * Determine the type of hardware accelerator.
-			 */
-			propl = prom_getproperty(con_node, "emulation", con_name, sizeof (con_name));
-			if (propl < 0 || propl >= sizeof (con_name)) {
+		
+		for_all_sbusdev(sbdp, sbus) {
+			if (!known_card (sbdp->prom_name, known_cards)) continue;
+			con_node = sbdp->prom_node;
+			prom_apply_sbus_ranges (sbdp->my_bus, &sbdp->reg_addrs [0], sbdp->num_registers);
+
+			propl = prom_getproperty(con_node, "address", (char *) &con_base, 4);
+			if (propl != 4) con_base = 0;
+			propl = prom_getproperty(con_node, "emulation", prom_name, sizeof (prom_name));
+			if (propl < 0 || propl >= sizeof (prom_name)) {
 				/* Early cg3s had no "emulation". */
-				propl = prom_getproperty(con_node, "name", con_name, sizeof (con_name));
+				propl = prom_getproperty(con_node, "name", prom_name, sizeof (prom_name));
 				if (propl < 0) {
 					prom_printf("console: no device name!!\n");
 					return -1;
 				}
 			}
-			if(!strncmp(con_name, "cgsix", sizeof (con_name))) {
-				con_type = FBTYPE_SUNFAST_COLOR;
-			} else if(!strncmp(con_name, "cgthree", sizeof (con_name))) {
-				con_type = FBTYPE_SUN3COLOR;
-			} else if(!strncmp(con_name, "cgfourteen", sizeof (con_name))) {
-				con_type = FBTYPE_MDICOLOR;
-			} else if(!strncmp(con_name, "bwtwo", sizeof (con_name))) {
-				con_type = FBTYPE_SUN2BW;
-			} else if(!strncmp(con_name,"SUNW,tcx", sizeof (con_name))){
-				con_type = FBTYPE_SUN3COLOR;
+			prom_name [sizeof (prom_name) - 1] = 0;
+			if(!strcmp(prom_name, "cgsix") ||
+			   !strcmp(prom_name, "cgthree+")) {
+				type = FBTYPE_SUNFAST_COLOR;
+			} else if(!strcmp(prom_name, "cgthree") ||
+			   !strcmp(prom_name, "cgRDI")) {
+				type = FBTYPE_SUN3COLOR;
+			} else if(!strcmp(prom_name, "cgfourteen")) {
+				type = FBTYPE_MDICOLOR;
+			} else if(!strcmp(prom_name, "SUNW,leo")) {
+				type = FBTYPE_SUNLEO;
+			} else if(!strcmp(prom_name, "bwtwo")) {
+				type = FBTYPE_SUN2BW;
+			} else if(!strcmp(prom_name,"SUNW,tcx")){
+				sparc_framebuffer_setup (sbdprom == sbdp, con_node, FBTYPE_TCXCOLOR, sbdp,
+							 (uint)sbdp->reg_addrs [10].phys_addr, con_base, 
+							 prom_console_node == con_node, sbdp->my_bus->prom_node);
+				continue;
 			} else {
-				prom_printf("console: \"%s\" is unsupported\n", con_name);
-				return -1;
+				prom_printf("console: \"%s\" is unsupported\n", prom_name);
+				continue;
 			}
-			propl = prom_getproperty(con_node, "address", (char *) &con_fb_base, 4);
-			if (propl != 4) {
-				con_fb_base = 0;
-			}
-		} else {
-			int bases [2];
-
-			con_node = cg14;
-			prom_printf ("Found a cg14\n");
-			propl = prom_getproperty (cg14, "address",
-						  (char *) &bases[0], 8);
-			prom_printf ("Size=%d, %x\n", propl, bases [1]);
-			con_fb_base = (unsigned char *) bases [1];
-			con_type = FBTYPE_MDICOLOR;
+			sparc_framebuffer_setup (sbdprom == sbdp, con_node, type, sbdp,
+						 (uint)sbdp->reg_addrs [0].phys_addr, con_base,
+						 prom_console_node == con_node, sbdp->my_bus->prom_node);
+			/* XXX HACK */
+			if (sbdprom == sbdp && !strncmp(sbdp->prom_name, "cgRDI", 5))
+				break;
+		}
+		if (cg14) {
+			sparc_framebuffer_setup (!sbdprom, cg14, FBTYPE_MDICOLOR, 
+						 0, 0, 0, prom_console_node == cg14,
+						 prom_searchsiblings (prom_getchild (prom_root_node), "obio"));
 		}
 		break;
 	default:
 		return -1;
-	};
-
-	/* Get the device geometry */
-	con_linebytes = prom_getintdefault(con_node, "linebytes", 1152);
-	con_width = prom_getintdefault(con_node, "width", 1152);
-	con_height = prom_getintdefault(con_node, "height", 900);
-
-	/* Currently we just support 1-bit and 8-bit depth displays */
-	if (con_type == FBTYPE_SUN2BW) {
-		con_depth = 1;
-	} else {
-		con_depth = 8;
 	}
-	for (i = 0; scr_def [i].depth; i++){
-		if (scr_def [i].resx != con_width || scr_def [i].resy != con_height)
-			continue;
-		if (scr_def [i].depth != con_depth)
-		        continue;
-		x_margin = scr_def [i].x_margin;
-		y_margin = scr_def [i].y_margin;
-		chars_per_line = (con_width * con_depth) / 8;
-		skip_bytes = chars_per_line * y_margin;
-		ints_per_line = chars_per_line / 4;
-		bytes_per_row = CHAR_HEIGHT * chars_per_line;
-		break;
-	}
-	if (!scr_def [i].depth){
-		x_margin = y_margin = 0;
-		prom_printf ("PenguinCon: unknown video resolution %dx%d may be slow\n", con_width, con_height);
+	
+	if (fbinfo [0].type.fb_type == FBTYPE_NOTYPE) {
+		prom_printf ("Couldn't setup your primary frame buffer.\n");
 		prom_halt ();
 	}
-	/* P3: I fear this strips 15inch 1024/768 PC-like monitors out. */
-	if ((con_linebytes*8) / con_depth != con_width) {
-		prom_printf("console: UNUSUAL VIDEO, linebytes=%d, width=%d, depth=%d\n",
-			con_linebytes, con_width, con_depth);
-		return -1;
-	}
 
-	/* Negate the font table on 1 bit depth cards so we have white on black */
-	if (con_depth == 1)
-		for(i=0; i<(16 * 256); i++)
-			vga_font[i] = ~vga_font[i];
-
-	/* Fill in common fb information */
-	fbinfo [0].type.fb_type   = con_type;
-	fbinfo [0].type.fb_height = con_height;
-	fbinfo [0].type.fb_width  = con_width;
-	fbinfo [0].type.fb_depth  = con_depth;
-	fbinfo [0].type.fb_size   = PAGE_ALIGN((con_linebytes) * (con_height));
-	fbinfo [0].space = fbiospace;
-	fbinfo [0].blanked = 0;
-
-	/* Should be filled in for supported video cards */
-	fbinfo [0].mmap = 0; 
-	fbinfo [0].loadcmap = 0;
-	fbinfo [0].ioctl = 0;
-	fbinfo [0].blank = 0;
-	fbinfo [0].unblank = 0;
-
-	if (fbbase == 0xb001b001){
-		printk ("Mail miguel@nuclecu.unam.mx video_card=%d (%s)\n", con_type, con_name);
-	}
-
-	/* Per card setup */
-	switch (con_type){
-	case FBTYPE_SUN3COLOR:
-		cg3_setup (0, fbbase, fbiospace);
-		break;
-	case FBTYPE_SUNFAST_COLOR:
-		cg6_setup (0, fbbase, fbiospace);
-		break;
-	case FBTYPE_SUN2BW:
-		bwtwo_setup (0, fbbase, fbiospace);
-		break;
-	case FBTYPE_MDICOLOR:
-		cg14_setup (0, fbbase, fbiospace);
-		break;
-	default:
-		break;
-	}
+	if (fbinfo [0].blitc)
+		do_accel = 1;
+	
+	con_fb_base = (unsigned char *)fbinfo[0].base;
 	if (!con_fb_base){
 		prom_printf ("PROM does not have an 'address' property for this\n"
 			     "frame buffer and the Linux drivers do not know how\n"
 			     "to map the video of this device\n");
 		prom_halt ();
 	}
-	fbinfo [0].base = (long) con_fb_base;
-	
-	/* Register the frame buffer device */
-	if (register_chrdev (GRAPHDEV_MAJOR, "graphics", &graphdev_fops)){
-		printk ("Could not register graphics device\n");
-		return -EIO;
-	}
-	return 0; /* success */
+	return fb_init ();
 }
 
 /* video init code, called from within the SBUS bus scanner at
  * boot time.
  */
-void
-sun_console_init(void)
+__initfunc(unsigned long sun_console_init(unsigned long memory_start))
 {
+	int i, j;
 	if(serial_console)
-		return;
+		return memory_start;
 
+	fbinfo = (fbinfo_t *)memory_start;
+	memset (fbinfo, 0, FRAME_BUFFERS * sizeof (fbinfo_t));
 	if(sparc_console_probe()) {
 		prom_printf("Could not probe console, bailing out...\n");
 		prom_halt();
 	}
 	sun_clear_screen();
+	for (i = FRAME_BUFFERS; i > 1; i--)
+		if (fbinfo[i - 1].type.fb_type != FBTYPE_NOTYPE) break;
+	fbinfos = i;
+	memory_start = memory_start + i * sizeof (fbinfo_t);
+	for (j = 0; j < i; j++)
+		if (fbinfo[j].postsetup)
+			memory_start = (*fbinfo[j].postsetup)(fbinfo+j, memory_start);
+	for (j = 1; j < i; j++)
+		if (fbinfo[j].type.fb_type != FBTYPE_NOTYPE) {
+			sun_clear_fb(j);
+			set_other_palette(j);
+		}
+#if defined(CONFIG_PROC_FS) && ( defined(CONFIG_SUN_OPENPROMFS) || defined(CONFIG_SUN_OPENPROMFS_MODULE) )
+	for (j = 0; j < i; j++)
+		if (fbinfo[j].type.fb_type != FBTYPE_NOTYPE)
+			proc_openprom_regdev (&fbinfo[j].proc_entry);
+#endif
+	return memory_start;
 }
 
 /*
@@ -1501,7 +1192,7 @@ sun_console_init(void)
  * Called from scr_writew() when the destination is
  *  the "shadow" screen
  */
-static unsigned int
+static uint
 fontmask_bits[16] = {
     0x00000000,
     0x000000ff,
@@ -1522,53 +1213,229 @@ fontmask_bits[16] = {
 };
 
 int
-sun_blitc(unsigned int charattr, unsigned long addr)
+sun_blitc(uint charattr, unsigned long addr)
 {
+	unsigned int fgmask, bgmask;
 	int j, idx;
 	unsigned char *font_row;
 
-#ifndef DEBUGGING_X
-	if (graphics_on)
+	if (do_accel) {
+		(*fbinfo[0].blitc)(charattr, 
+			        x_margin + (((addr - video_mem_base) % video_size_row)<<2),
+		 	        y_margin + CHAR_HEIGHT * ((addr - video_mem_base) / video_size_row));
 		return 0;
-#endif
+	}
+
+  	/* Invalidate the cursor position if necessary. */
 	idx = (addr - video_mem_base) >> 1;
 
-	/* Invalidate the cursor position if necessary. */
-	if(idx == cursor_pos)
-		cursor_pos = -1;
-	font_row = &vga_font[(charattr & 0xff) << 4];
+	font_row = &vga_font[(j = (charattr & 0xff)) << 4];
 
 	switch (con_depth){
 	case 1: {
 		register unsigned char *dst;
+		unsigned long flags;
 		
 		dst = (unsigned char *)(((unsigned long)con_fb_base) + FBUF_OFFSET(idx));
-		for(j = 0; j < CHAR_HEIGHT; j++, font_row++, dst+=CHARS_PER_LINE)
-			*dst = *font_row;
+
+		save_and_cli(flags);
+		if ((!(charattr & 0xf000)) ^ (idx == cursor_pos)) {
+			for(j = 0; j < CHAR_HEIGHT; j++, font_row++, dst+=CHARS_PER_LINE)
+				*dst = ~(*font_row);
+		} else {
+			for(j = 0; j < CHAR_HEIGHT; j++, font_row++, dst+=CHARS_PER_LINE)
+				*dst = *font_row;
+		}
+		restore_flags(flags);
 		break;
 	}
 	case 8: {
-		register unsigned long *dst;
-		unsigned long fgmask, bgmask, data, rowbits, attrib;
+#ifdef ASM_BLITC		
+		const int cpl = chars_per_line;
+		/* The register assignment is important here, do not modify without touching the assembly code as well */
+		register unsigned int x1 __asm__("g4"), x2 __asm__("g5"), x3 __asm__("g2"), x4 __asm__("g3"), flags __asm__("g7");
+		register unsigned int *dst __asm__("g1");
+#else		
 		const int ipl = ints_per_line;
+		unsigned int data2, data3, data4;
+		unsigned int data, rowbits;
+		register unsigned int *dst;
+		unsigned long flags;
+#endif		
+		const uint *fontm_bits = fontmask_bits;
 		
-		dst = (unsigned long *)(((unsigned long)con_fb_base) + COLOR_FBUF_OFFSET(idx));
-		attrib = (charattr >> 8) & 0x0ff;
-		fgmask = attrib & 0x0f;
-		bgmask = (attrib >> 4) & 0x0f;
-		fgmask = fgmask << 8 | fgmask;
-		fgmask |= fgmask << 16;
-		bgmask = bgmask << 8 | bgmask;
-		bgmask |= bgmask << 16;
-		
-		for(j = 0; j < CHAR_HEIGHT; j++, font_row++, dst += ipl) {
-			rowbits = *font_row;
-			data = fontmask_bits[(rowbits>>4)&0xf];
-			data = (data & fgmask) | (~data & bgmask);
-			*dst = data;
-			data = fontmask_bits[rowbits&0xf];
-			data = (data & fgmask) | (~data & bgmask);
-			*(dst+1) = data;
+		dst = (unsigned int *)(((unsigned long)con_fb_base) + COLOR_FBUF_OFFSET(idx));
+		if (j == ' ') /* space is quite common, so we optimize a bit */ {
+#ifdef ASM_BLITC
+#define BLITC_SPACE \
+		"\n\t std	%%g4, [%%g1]" \
+		"\n\t std	%%g4, [%%g1 + %0]" \
+		"\n\t add	%%g1, %1, %%g1"
+#define BLITC_SPC \
+		"\n\t std	%0, [%1]" \
+		"\n\t std	%0, [%1 + %2]"
+
+			x1 = (charattr >> 12) & 0x0f;
+			x1 |= x1 << 8;
+			x1 |= x1 << 16;
+			x3 = cpl << 1;
+			
+			__asm__ __volatile__ (
+				"\n\t mov	%2, %3"
+				BLITC_SPACE
+				BLITC_SPACE
+				BLITC_SPACE
+				BLITC_SPACE
+				BLITC_SPACE
+				BLITC_SPACE
+				BLITC_SPACE
+					: : "r" (cpl), "r" (x3), "r" (x1), "r" (x2));
+			save_and_cli (flags);
+			if (idx != cursor_pos)
+				__asm__ __volatile__ (BLITC_SPC : : "r" (x1), "r" (dst), "r" (cpl));
+			else
+				__asm__ __volatile__ (BLITC_SPC : : "r" (x1), "r" (under_cursor), "i" (8));
+			restore_flags (flags);
+#else
+			bgmask = (charattr >> 12) & 0x0f;
+			bgmask |= bgmask << 8;
+			bgmask |= bgmask << 16;
+			
+	                for(j = 0; j < CHAR_HEIGHT - 2; j++, font_row++, dst += ipl) {
+        	                *dst = bgmask;
+        	                *(dst+1) = bgmask;
+                	}
+                	/* Prevent cursor spots left on the screen */
+			save_and_cli(flags);
+			if (idx != cursor_pos) {
+	                	*dst = bgmask;
+        	        	*(dst+1) = bgmask;
+                		dst += ipl;
+	                	*dst = bgmask;
+        	        	*(dst+1) = bgmask;
+                	} else {
+	                	under_cursor [0] = bgmask;
+        	        	under_cursor [1] = bgmask;
+                		under_cursor [2] = bgmask;
+	                	under_cursor [3] = bgmask;
+        	        }
+	                restore_flags(flags);
+#endif
+		} else /* non-space */ {
+			fgmask = (charattr >> 8) & 0x0f;
+			bgmask = (charattr >> 12) & 0x0f;
+			fgmask |= fgmask << 8;
+			fgmask |= fgmask << 16;
+			bgmask |= bgmask << 8;
+			bgmask |= bgmask << 16;
+
+#ifdef ASM_BLITC
+#define BLITC_INIT \
+			"\n\t ld	[%0], %%g2"
+#define BLITC_BODY(ST1,SC1,ST2,SC2)  \
+			"\n\t " #ST1 "	%%g2, " #SC1 ", %%g7"  \
+			"\n\t " #ST2 "	%%g2, " #SC2 ", %7"  \
+			"\n\t and	%%g7, 0x3c, %%g7"  \
+			"\n\t and	%7, 0x3c, %7"  \
+			"\n\t ld	[%1 + %%g7], %6"  \
+			"\n\t and	%6, %2, %%g7"  \
+			"\n\t andn	%3, %6, %6"  \
+			"\n\t or	%%g7, %6, %6"  \
+			"\n\t ld	[%1 + %7], %7"  \
+			"\n\t and	%7, %2, %%g7"  \
+			"\n\t andn	%3, %7, %7"  \
+			"\n\t or	%%g7, %7, %7"
+#define BLITC_BODYEND \
+			"\n\t sll	%3, 2, %%g7"  \
+			"\n\t srl	%3, 2, %3"  \
+			"\n\t and	%%g7, 0x3c, %%g7"  \
+			"\n\t and	%3, 0x3c, %3"  \
+			"\n\t ld	[%0 + %%g7], %4"  \
+			"\n\t and	%4, %1, %%g7"  \
+			"\n\t andn	%2, %4, %4"  \
+			"\n\t or	%%g7, %4, %4"  \
+			"\n\t ld	[%0 + %3], %3"  \
+			"\n\t and	%3, %1, %%g7"  \
+			"\n\t andn	%2, %3, %3"  \
+			"\n\t or	%%g7, %3, %3"
+#define BLITC_STOREIT \
+			"\n\t std	%6, [%5]"  \
+			"\n\t add	%5, %4, %5"  \
+			"\n\t" 
+#define BLITC_STORE \
+			"\n\t std	%%g4, [%0]"  \
+			"\n\t std	%%g2, [%0 + %1]"
+	
+			for (j = 0; j < 3; j++, font_row+=4) {
+				__asm__ __volatile__ (BLITC_INIT
+					BLITC_BODY(srl, 26, srl, 22)
+					BLITC_STOREIT
+					BLITC_BODY(srl, 18, srl, 14)
+					BLITC_STOREIT
+					BLITC_BODY(srl, 10, srl, 6)
+					BLITC_STOREIT
+					BLITC_BODY(srl, 2, sll, 2)
+					BLITC_STOREIT
+					: : "r" (font_row), "r" (fontm_bits), "r" (fgmask), "r" (bgmask), "r" (cpl), "r" (dst),
+					    "r" (x1), "r" (x2));
+			}
+			__asm__ __volatile__ (BLITC_INIT
+				BLITC_BODY(srl, 26, srl, 22)
+				BLITC_STOREIT
+				BLITC_BODY(srl, 18, srl, 14)
+				BLITC_STOREIT
+				/* Now prepare date for the 15th line, but don't put it anywhere yet (leave it in g4,g5) */
+				BLITC_BODY(srl, 10, srl, 6)
+				: : "r" (font_row), "r" (fontm_bits), "r" (fgmask), "r" (bgmask), "r" (cpl), "r" (dst),
+				    "r" (x1), "r" (x2));
+			/* Prepare the data the bottom line (and put it into g2,g3) */
+			__asm__ __volatile__ (BLITC_BODYEND : : "r" (fontm_bits), "r" (fgmask), "r" (bgmask),
+								"r" (x3), "r" (x4));
+			save_and_cli(flags);
+			if (idx != cursor_pos)
+				__asm__ __volatile__ (BLITC_STORE : : "r" (dst), "r" (cpl));
+			else
+				__asm__ __volatile__ (BLITC_STORE : : "r" (under_cursor), "i" (8));
+			restore_flags (flags);
+#else
+	                for(j = 0; j < CHAR_HEIGHT - 2; j++, font_row++, dst += ipl) {
+        	                rowbits = *font_row;
+                	        data = fontm_bits[(rowbits>>4)&0xf];
+	                        data = (data & fgmask) | (~data & bgmask);
+        	                *dst = data;
+                	        data = fontm_bits[rowbits&0xf];
+	                        data = (data & fgmask) | (~data & bgmask);
+        	                *(dst+1) = data;
+                	}
+	                rowbits = *font_row;
+        	        data = fontm_bits[(rowbits>>4)&0xf];
+                	data = (data & fgmask) | (~data & bgmask);
+	                data2 = fontm_bits[rowbits&0xf];
+        	        data2 = (data2 & fgmask) | (~data2 & bgmask);
+                	rowbits = font_row[1];
+	                data3 = fontm_bits[(rowbits>>4)&0xf];
+        	        data3 = (data3 & fgmask) | (~data3 & bgmask);
+                	data4 = fontm_bits[rowbits&0xf];
+	                data4 = (data4 & fgmask) | (~data4 & bgmask);
+        	        
+                	/* Prevent cursor spots left on the screen */
+			save_and_cli(flags);
+			
+			if (idx != cursor_pos) {
+	                	*dst = data;
+        	        	*(dst+1) = data2;
+                		dst += ipl;
+	                	*dst = data3;
+        	        	*(dst+1) = data4;
+                	} else {
+	                	under_cursor [0] = data;
+        	        	under_cursor [1] = data2;
+                		under_cursor [2] = data3;
+	                	under_cursor [3] = data4;
+        	        }
+                	
+	                restore_flags(flags);
+#endif
 		}
 		break;
 	} /* case */
@@ -1576,347 +1443,234 @@ sun_blitc(unsigned int charattr, unsigned long addr)
 	return (0);
 }
 
-unsigned char vga_font[cmapsz] = {
-0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
-0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x7e, 0x81, 0xa5, 0x81, 0x81, 0xbd, 
-0x99, 0x81, 0x81, 0x7e, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x7e, 0xff, 
-0xdb, 0xff, 0xff, 0xc3, 0xe7, 0xff, 0xff, 0x7e, 0x00, 0x00, 0x00, 0x00, 
-0x00, 0x00, 0x00, 0x00, 0x6c, 0xfe, 0xfe, 0xfe, 0xfe, 0x7c, 0x38, 0x10, 
-0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10, 0x38, 0x7c, 0xfe, 
-0x7c, 0x38, 0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x18, 
-0x3c, 0x3c, 0xe7, 0xe7, 0xe7, 0x18, 0x18, 0x3c, 0x00, 0x00, 0x00, 0x00, 
-0x00, 0x00, 0x00, 0x18, 0x3c, 0x7e, 0xff, 0xff, 0x7e, 0x18, 0x18, 0x3c, 
-0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x18, 0x3c, 
-0x3c, 0x18, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0xff, 0xff, 
-0xff, 0xff, 0xe7, 0xc3, 0xc3, 0xe7, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 
-0x00, 0x00, 0x00, 0x00, 0x00, 0x3c, 0x66, 0x42, 0x42, 0x66, 0x3c, 0x00, 
-0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0xff, 0xff, 0xff, 0xc3, 0x99, 0xbd, 
-0xbd, 0x99, 0xc3, 0xff, 0xff, 0xff, 0xff, 0xff, 0x00, 0x00, 0x1e, 0x0e, 
-0x1a, 0x32, 0x78, 0xcc, 0xcc, 0xcc, 0xcc, 0x78, 0x00, 0x00, 0x00, 0x00, 
-0x00, 0x00, 0x3c, 0x66, 0x66, 0x66, 0x66, 0x3c, 0x18, 0x7e, 0x18, 0x18, 
-0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x3f, 0x33, 0x3f, 0x30, 0x30, 0x30, 
-0x30, 0x70, 0xf0, 0xe0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x7f, 0x63, 
-0x7f, 0x63, 0x63, 0x63, 0x63, 0x67, 0xe7, 0xe6, 0xc0, 0x00, 0x00, 0x00, 
-0x00, 0x00, 0x00, 0x18, 0x18, 0xdb, 0x3c, 0xe7, 0x3c, 0xdb, 0x18, 0x18, 
-0x00, 0x00, 0x00, 0x00, 0x00, 0x80, 0xc0, 0xe0, 0xf0, 0xf8, 0xfe, 0xf8, 
-0xf0, 0xe0, 0xc0, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x06, 0x0e, 
-0x1e, 0x3e, 0xfe, 0x3e, 0x1e, 0x0e, 0x06, 0x02, 0x00, 0x00, 0x00, 0x00, 
-0x00, 0x00, 0x18, 0x3c, 0x7e, 0x18, 0x18, 0x18, 0x7e, 0x3c, 0x18, 0x00, 
-0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 
-0x66, 0x00, 0x66, 0x66, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x7f, 0xdb, 
-0xdb, 0xdb, 0x7b, 0x1b, 0x1b, 0x1b, 0x1b, 0x1b, 0x00, 0x00, 0x00, 0x00, 
-0x00, 0x7c, 0xc6, 0x60, 0x38, 0x6c, 0xc6, 0xc6, 0x6c, 0x38, 0x0c, 0xc6, 
-0x7c, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
-0xfe, 0xfe, 0xfe, 0xfe, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x18, 0x3c, 
-0x7e, 0x18, 0x18, 0x18, 0x7e, 0x3c, 0x18, 0x7e, 0x00, 0x00, 0x00, 0x00, 
-0x00, 0x00, 0x18, 0x3c, 0x7e, 0x18, 0x18, 0x18, 0x18, 0x18, 0x18, 0x18, 
-0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x18, 0x18, 0x18, 0x18, 0x18, 0x18, 
-0x18, 0x7e, 0x3c, 0x18, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
-0x00, 0x18, 0x0c, 0xfe, 0x0c, 0x18, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
-0x00, 0x00, 0x00, 0x00, 0x00, 0x30, 0x60, 0xfe, 0x60, 0x30, 0x00, 0x00, 
-0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xc0, 0xc0, 
-0xc0, 0xfe, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
-0x00, 0x24, 0x66, 0xff, 0x66, 0x24, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
-0x00, 0x00, 0x00, 0x00, 0x10, 0x38, 0x38, 0x7c, 0x7c, 0xfe, 0xfe, 0x00, 
-0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xfe, 0xfe, 0x7c, 0x7c, 
-0x38, 0x38, 0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
-0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
-0x00, 0x00, 0x18, 0x3c, 0x3c, 0x3c, 0x18, 0x18, 0x18, 0x00, 0x18, 0x18, 
-0x00, 0x00, 0x00, 0x00, 0x00, 0x66, 0x66, 0x66, 0x24, 0x00, 0x00, 0x00, 
-0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x6c, 
-0x6c, 0xfe, 0x6c, 0x6c, 0x6c, 0xfe, 0x6c, 0x6c, 0x00, 0x00, 0x00, 0x00, 
-0x18, 0x18, 0x7c, 0xc6, 0xc2, 0xc0, 0x7c, 0x06, 0x06, 0x86, 0xc6, 0x7c, 
-0x18, 0x18, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xc2, 0xc6, 0x0c, 0x18, 
-0x30, 0x60, 0xc6, 0x86, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x38, 0x6c, 
-0x6c, 0x38, 0x76, 0xdc, 0xcc, 0xcc, 0xcc, 0x76, 0x00, 0x00, 0x00, 0x00, 
-0x00, 0x30, 0x30, 0x30, 0x60, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
-0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0c, 0x18, 0x30, 0x30, 0x30, 0x30, 
-0x30, 0x30, 0x18, 0x0c, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x30, 0x18, 
-0x0c, 0x0c, 0x0c, 0x0c, 0x0c, 0x0c, 0x18, 0x30, 0x00, 0x00, 0x00, 0x00, 
-0x00, 0x00, 0x00, 0x00, 0x00, 0x66, 0x3c, 0xff, 0x3c, 0x66, 0x00, 0x00, 
-0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x18, 0x18, 0x7e, 
-0x18, 0x18, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
-0x00, 0x00, 0x00, 0x00, 0x00, 0x18, 0x18, 0x18, 0x30, 0x00, 0x00, 0x00, 
-0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x7e, 0x00, 0x00, 0x00, 0x00, 
-0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
-0x00, 0x00, 0x18, 0x18, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
-0x02, 0x06, 0x0c, 0x18, 0x30, 0x60, 0xc0, 0x80, 0x00, 0x00, 0x00, 0x00, 
-0x00, 0x00, 0x7c, 0xc6, 0xc6, 0xce, 0xde, 0xf6, 0xe6, 0xc6, 0xc6, 0x7c, 
-0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x18, 0x38, 0x78, 0x18, 0x18, 0x18, 
-0x18, 0x18, 0x18, 0x7e, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x7c, 0xc6, 
-0x06, 0x0c, 0x18, 0x30, 0x60, 0xc0, 0xc6, 0xfe, 0x00, 0x00, 0x00, 0x00, 
-0x00, 0x00, 0x7c, 0xc6, 0x06, 0x06, 0x3c, 0x06, 0x06, 0x06, 0xc6, 0x7c, 
-0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0c, 0x1c, 0x3c, 0x6c, 0xcc, 0xfe, 
-0x0c, 0x0c, 0x0c, 0x1e, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xfe, 0xc0, 
-0xc0, 0xc0, 0xfc, 0x06, 0x06, 0x06, 0xc6, 0x7c, 0x00, 0x00, 0x00, 0x00, 
-0x00, 0x00, 0x38, 0x60, 0xc0, 0xc0, 0xfc, 0xc6, 0xc6, 0xc6, 0xc6, 0x7c, 
-0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xfe, 0xc6, 0x06, 0x06, 0x0c, 0x18, 
-0x30, 0x30, 0x30, 0x30, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x7c, 0xc6, 
-0xc6, 0xc6, 0x7c, 0xc6, 0xc6, 0xc6, 0xc6, 0x7c, 0x00, 0x00, 0x00, 0x00, 
-0x00, 0x00, 0x7c, 0xc6, 0xc6, 0xc6, 0x7e, 0x06, 0x06, 0x06, 0x0c, 0x78, 
-0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x18, 0x18, 0x00, 0x00, 
-0x00, 0x18, 0x18, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
-0x18, 0x18, 0x00, 0x00, 0x00, 0x18, 0x18, 0x30, 0x00, 0x00, 0x00, 0x00, 
-0x00, 0x00, 0x00, 0x06, 0x0c, 0x18, 0x30, 0x60, 0x30, 0x18, 0x0c, 0x06, 
-0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x7e, 0x00, 0x00, 
-0x7e, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x60, 
-0x30, 0x18, 0x0c, 0x06, 0x0c, 0x18, 0x30, 0x60, 0x00, 0x00, 0x00, 0x00, 
-0x00, 0x00, 0x7c, 0xc6, 0xc6, 0x0c, 0x18, 0x18, 0x18, 0x00, 0x18, 0x18, 
-0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x7c, 0xc6, 0xc6, 0xc6, 0xde, 0xde, 
-0xde, 0xdc, 0xc0, 0x7c, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10, 0x38, 
-0x6c, 0xc6, 0xc6, 0xfe, 0xc6, 0xc6, 0xc6, 0xc6, 0x00, 0x00, 0x00, 0x00, 
-0x00, 0x00, 0xfc, 0x66, 0x66, 0x66, 0x7c, 0x66, 0x66, 0x66, 0x66, 0xfc, 
-0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x3c, 0x66, 0xc2, 0xc0, 0xc0, 0xc0, 
-0xc0, 0xc2, 0x66, 0x3c, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xf8, 0x6c, 
-0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x6c, 0xf8, 0x00, 0x00, 0x00, 0x00, 
-0x00, 0x00, 0xfe, 0x66, 0x62, 0x68, 0x78, 0x68, 0x60, 0x62, 0x66, 0xfe, 
-0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xfe, 0x66, 0x62, 0x68, 0x78, 0x68, 
-0x60, 0x60, 0x60, 0xf0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x3c, 0x66, 
-0xc2, 0xc0, 0xc0, 0xde, 0xc6, 0xc6, 0x66, 0x3a, 0x00, 0x00, 0x00, 0x00, 
-0x00, 0x00, 0xc6, 0xc6, 0xc6, 0xc6, 0xfe, 0xc6, 0xc6, 0xc6, 0xc6, 0xc6, 
-0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x3c, 0x18, 0x18, 0x18, 0x18, 0x18, 
-0x18, 0x18, 0x18, 0x3c, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x1e, 0x0c, 
-0x0c, 0x0c, 0x0c, 0x0c, 0xcc, 0xcc, 0xcc, 0x78, 0x00, 0x00, 0x00, 0x00, 
-0x00, 0x00, 0xe6, 0x66, 0x66, 0x6c, 0x78, 0x78, 0x6c, 0x66, 0x66, 0xe6, 
-0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xf0, 0x60, 0x60, 0x60, 0x60, 0x60, 
-0x60, 0x62, 0x66, 0xfe, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xc3, 0xe7, 
-0xff, 0xff, 0xdb, 0xc3, 0xc3, 0xc3, 0xc3, 0xc3, 0x00, 0x00, 0x00, 0x00, 
-0x00, 0x00, 0xc6, 0xe6, 0xf6, 0xfe, 0xde, 0xce, 0xc6, 0xc6, 0xc6, 0xc6, 
-0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x7c, 0xc6, 0xc6, 0xc6, 0xc6, 0xc6, 
-0xc6, 0xc6, 0xc6, 0x7c, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xfc, 0x66, 
-0x66, 0x66, 0x7c, 0x60, 0x60, 0x60, 0x60, 0xf0, 0x00, 0x00, 0x00, 0x00, 
-0x00, 0x00, 0x7c, 0xc6, 0xc6, 0xc6, 0xc6, 0xc6, 0xc6, 0xd6, 0xde, 0x7c, 
-0x0c, 0x0e, 0x00, 0x00, 0x00, 0x00, 0xfc, 0x66, 0x66, 0x66, 0x7c, 0x6c, 
-0x66, 0x66, 0x66, 0xe6, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x7c, 0xc6, 
-0xc6, 0x60, 0x38, 0x0c, 0x06, 0xc6, 0xc6, 0x7c, 0x00, 0x00, 0x00, 0x00, 
-0x00, 0x00, 0xff, 0xdb, 0x99, 0x18, 0x18, 0x18, 0x18, 0x18, 0x18, 0x3c, 
-0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xc6, 0xc6, 0xc6, 0xc6, 0xc6, 0xc6, 
-0xc6, 0xc6, 0xc6, 0x7c, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xc3, 0xc3, 
-0xc3, 0xc3, 0xc3, 0xc3, 0xc3, 0x66, 0x3c, 0x18, 0x00, 0x00, 0x00, 0x00, 
-0x00, 0x00, 0xc3, 0xc3, 0xc3, 0xc3, 0xc3, 0xdb, 0xdb, 0xff, 0x66, 0x66, 
-0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xc3, 0xc3, 0x66, 0x3c, 0x18, 0x18, 
-0x3c, 0x66, 0xc3, 0xc3, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xc3, 0xc3, 
-0xc3, 0x66, 0x3c, 0x18, 0x18, 0x18, 0x18, 0x3c, 0x00, 0x00, 0x00, 0x00, 
-0x00, 0x00, 0xff, 0xc3, 0x86, 0x0c, 0x18, 0x30, 0x60, 0xc1, 0xc3, 0xff, 
-0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x3c, 0x30, 0x30, 0x30, 0x30, 0x30, 
-0x30, 0x30, 0x30, 0x3c, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x80, 
-0xc0, 0xe0, 0x70, 0x38, 0x1c, 0x0e, 0x06, 0x02, 0x00, 0x00, 0x00, 0x00, 
-0x00, 0x00, 0x3c, 0x0c, 0x0c, 0x0c, 0x0c, 0x0c, 0x0c, 0x0c, 0x0c, 0x3c, 
-0x00, 0x00, 0x00, 0x00, 0x10, 0x38, 0x6c, 0xc6, 0x00, 0x00, 0x00, 0x00, 
-0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
-0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0x00, 0x00, 
-0x30, 0x30, 0x18, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
-0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x78, 0x0c, 0x7c, 
-0xcc, 0xcc, 0xcc, 0x76, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xe0, 0x60, 
-0x60, 0x78, 0x6c, 0x66, 0x66, 0x66, 0x66, 0x7c, 0x00, 0x00, 0x00, 0x00, 
-0x00, 0x00, 0x00, 0x00, 0x00, 0x7c, 0xc6, 0xc0, 0xc0, 0xc0, 0xc6, 0x7c, 
-0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x1c, 0x0c, 0x0c, 0x3c, 0x6c, 0xcc, 
-0xcc, 0xcc, 0xcc, 0x76, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
-0x00, 0x7c, 0xc6, 0xfe, 0xc0, 0xc0, 0xc6, 0x7c, 0x00, 0x00, 0x00, 0x00, 
-0x00, 0x00, 0x38, 0x6c, 0x64, 0x60, 0xf0, 0x60, 0x60, 0x60, 0x60, 0xf0, 
-0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x76, 0xcc, 0xcc, 
-0xcc, 0xcc, 0xcc, 0x7c, 0x0c, 0xcc, 0x78, 0x00, 0x00, 0x00, 0xe0, 0x60, 
-0x60, 0x6c, 0x76, 0x66, 0x66, 0x66, 0x66, 0xe6, 0x00, 0x00, 0x00, 0x00, 
-0x00, 0x00, 0x18, 0x18, 0x00, 0x38, 0x18, 0x18, 0x18, 0x18, 0x18, 0x3c, 
-0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x06, 0x06, 0x00, 0x0e, 0x06, 0x06, 
-0x06, 0x06, 0x06, 0x06, 0x66, 0x66, 0x3c, 0x00, 0x00, 0x00, 0xe0, 0x60, 
-0x60, 0x66, 0x6c, 0x78, 0x78, 0x6c, 0x66, 0xe6, 0x00, 0x00, 0x00, 0x00, 
-0x00, 0x00, 0x38, 0x18, 0x18, 0x18, 0x18, 0x18, 0x18, 0x18, 0x18, 0x3c, 
-0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xe6, 0xff, 0xdb, 
-0xdb, 0xdb, 0xdb, 0xdb, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
-0x00, 0xdc, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x00, 0x00, 0x00, 0x00, 
-0x00, 0x00, 0x00, 0x00, 0x00, 0x7c, 0xc6, 0xc6, 0xc6, 0xc6, 0xc6, 0x7c, 
-0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xdc, 0x66, 0x66, 
-0x66, 0x66, 0x66, 0x7c, 0x60, 0x60, 0xf0, 0x00, 0x00, 0x00, 0x00, 0x00, 
-0x00, 0x76, 0xcc, 0xcc, 0xcc, 0xcc, 0xcc, 0x7c, 0x0c, 0x0c, 0x1e, 0x00, 
-0x00, 0x00, 0x00, 0x00, 0x00, 0xdc, 0x76, 0x66, 0x60, 0x60, 0x60, 0xf0, 
-0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x7c, 0xc6, 0x60, 
-0x38, 0x0c, 0xc6, 0x7c, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10, 0x30, 
-0x30, 0xfc, 0x30, 0x30, 0x30, 0x30, 0x36, 0x1c, 0x00, 0x00, 0x00, 0x00, 
-0x00, 0x00, 0x00, 0x00, 0x00, 0xcc, 0xcc, 0xcc, 0xcc, 0xcc, 0xcc, 0x76, 
-0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xc3, 0xc3, 0xc3, 
-0xc3, 0x66, 0x3c, 0x18, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
-0x00, 0xc3, 0xc3, 0xc3, 0xdb, 0xdb, 0xff, 0x66, 0x00, 0x00, 0x00, 0x00, 
-0x00, 0x00, 0x00, 0x00, 0x00, 0xc3, 0x66, 0x3c, 0x18, 0x3c, 0x66, 0xc3, 
-0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xc6, 0xc6, 0xc6, 
-0xc6, 0xc6, 0xc6, 0x7e, 0x06, 0x0c, 0xf8, 0x00, 0x00, 0x00, 0x00, 0x00, 
-0x00, 0xfe, 0xcc, 0x18, 0x30, 0x60, 0xc6, 0xfe, 0x00, 0x00, 0x00, 0x00, 
-0x00, 0x00, 0x0e, 0x18, 0x18, 0x18, 0x70, 0x18, 0x18, 0x18, 0x18, 0x0e, 
-0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x18, 0x18, 0x18, 0x18, 0x00, 0x18, 
-0x18, 0x18, 0x18, 0x18, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x70, 0x18, 
-0x18, 0x18, 0x0e, 0x18, 0x18, 0x18, 0x18, 0x70, 0x00, 0x00, 0x00, 0x00, 
-0x00, 0x00, 0x76, 0xdc, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
-0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10, 0x38, 0x6c, 0xc6, 
-0xc6, 0xc6, 0xfe, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x3c, 0x66, 
-0xc2, 0xc0, 0xc0, 0xc0, 0xc2, 0x66, 0x3c, 0x0c, 0x06, 0x7c, 0x00, 0x00, 
-0x00, 0x00, 0xcc, 0x00, 0x00, 0xcc, 0xcc, 0xcc, 0xcc, 0xcc, 0xcc, 0x76, 
-0x00, 0x00, 0x00, 0x00, 0x00, 0x0c, 0x18, 0x30, 0x00, 0x7c, 0xc6, 0xfe, 
-0xc0, 0xc0, 0xc6, 0x7c, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10, 0x38, 0x6c, 
-0x00, 0x78, 0x0c, 0x7c, 0xcc, 0xcc, 0xcc, 0x76, 0x00, 0x00, 0x00, 0x00, 
-0x00, 0x00, 0xcc, 0x00, 0x00, 0x78, 0x0c, 0x7c, 0xcc, 0xcc, 0xcc, 0x76, 
-0x00, 0x00, 0x00, 0x00, 0x00, 0x60, 0x30, 0x18, 0x00, 0x78, 0x0c, 0x7c, 
-0xcc, 0xcc, 0xcc, 0x76, 0x00, 0x00, 0x00, 0x00, 0x00, 0x38, 0x6c, 0x38, 
-0x00, 0x78, 0x0c, 0x7c, 0xcc, 0xcc, 0xcc, 0x76, 0x00, 0x00, 0x00, 0x00, 
-0x00, 0x00, 0x00, 0x00, 0x3c, 0x66, 0x60, 0x60, 0x66, 0x3c, 0x0c, 0x06, 
-0x3c, 0x00, 0x00, 0x00, 0x00, 0x10, 0x38, 0x6c, 0x00, 0x7c, 0xc6, 0xfe, 
-0xc0, 0xc0, 0xc6, 0x7c, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xc6, 0x00, 
-0x00, 0x7c, 0xc6, 0xfe, 0xc0, 0xc0, 0xc6, 0x7c, 0x00, 0x00, 0x00, 0x00, 
-0x00, 0x60, 0x30, 0x18, 0x00, 0x7c, 0xc6, 0xfe, 0xc0, 0xc0, 0xc6, 0x7c, 
-0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x66, 0x00, 0x00, 0x38, 0x18, 0x18, 
-0x18, 0x18, 0x18, 0x3c, 0x00, 0x00, 0x00, 0x00, 0x00, 0x18, 0x3c, 0x66, 
-0x00, 0x38, 0x18, 0x18, 0x18, 0x18, 0x18, 0x3c, 0x00, 0x00, 0x00, 0x00, 
-0x00, 0x60, 0x30, 0x18, 0x00, 0x38, 0x18, 0x18, 0x18, 0x18, 0x18, 0x3c, 
-0x00, 0x00, 0x00, 0x00, 0x00, 0xc6, 0x00, 0x10, 0x38, 0x6c, 0xc6, 0xc6, 
-0xfe, 0xc6, 0xc6, 0xc6, 0x00, 0x00, 0x00, 0x00, 0x38, 0x6c, 0x38, 0x00, 
-0x38, 0x6c, 0xc6, 0xc6, 0xfe, 0xc6, 0xc6, 0xc6, 0x00, 0x00, 0x00, 0x00, 
-0x18, 0x30, 0x60, 0x00, 0xfe, 0x66, 0x60, 0x7c, 0x60, 0x60, 0x66, 0xfe, 
-0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x6e, 0x3b, 0x1b, 
-0x7e, 0xd8, 0xdc, 0x77, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x3e, 0x6c, 
-0xcc, 0xcc, 0xfe, 0xcc, 0xcc, 0xcc, 0xcc, 0xce, 0x00, 0x00, 0x00, 0x00, 
-0x00, 0x10, 0x38, 0x6c, 0x00, 0x7c, 0xc6, 0xc6, 0xc6, 0xc6, 0xc6, 0x7c, 
-0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xc6, 0x00, 0x00, 0x7c, 0xc6, 0xc6, 
-0xc6, 0xc6, 0xc6, 0x7c, 0x00, 0x00, 0x00, 0x00, 0x00, 0x60, 0x30, 0x18, 
-0x00, 0x7c, 0xc6, 0xc6, 0xc6, 0xc6, 0xc6, 0x7c, 0x00, 0x00, 0x00, 0x00, 
-0x00, 0x30, 0x78, 0xcc, 0x00, 0xcc, 0xcc, 0xcc, 0xcc, 0xcc, 0xcc, 0x76, 
-0x00, 0x00, 0x00, 0x00, 0x00, 0x60, 0x30, 0x18, 0x00, 0xcc, 0xcc, 0xcc, 
-0xcc, 0xcc, 0xcc, 0x76, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xc6, 0x00, 
-0x00, 0xc6, 0xc6, 0xc6, 0xc6, 0xc6, 0xc6, 0x7e, 0x06, 0x0c, 0x78, 0x00, 
-0x00, 0xc6, 0x00, 0x7c, 0xc6, 0xc6, 0xc6, 0xc6, 0xc6, 0xc6, 0xc6, 0x7c, 
-0x00, 0x00, 0x00, 0x00, 0x00, 0xc6, 0x00, 0xc6, 0xc6, 0xc6, 0xc6, 0xc6, 
-0xc6, 0xc6, 0xc6, 0x7c, 0x00, 0x00, 0x00, 0x00, 0x00, 0x18, 0x18, 0x7e, 
-0xc3, 0xc0, 0xc0, 0xc0, 0xc3, 0x7e, 0x18, 0x18, 0x00, 0x00, 0x00, 0x00, 
-0x00, 0x38, 0x6c, 0x64, 0x60, 0xf0, 0x60, 0x60, 0x60, 0x60, 0xe6, 0xfc, 
-0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xc3, 0x66, 0x3c, 0x18, 0xff, 0x18, 
-0xff, 0x18, 0x18, 0x18, 0x00, 0x00, 0x00, 0x00, 0x00, 0xfc, 0x66, 0x66, 
-0x7c, 0x62, 0x66, 0x6f, 0x66, 0x66, 0x66, 0xf3, 0x00, 0x00, 0x00, 0x00, 
-0x00, 0x0e, 0x1b, 0x18, 0x18, 0x18, 0x7e, 0x18, 0x18, 0x18, 0x18, 0x18, 
-0xd8, 0x70, 0x00, 0x00, 0x00, 0x18, 0x30, 0x60, 0x00, 0x78, 0x0c, 0x7c, 
-0xcc, 0xcc, 0xcc, 0x76, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0c, 0x18, 0x30, 
-0x00, 0x38, 0x18, 0x18, 0x18, 0x18, 0x18, 0x3c, 0x00, 0x00, 0x00, 0x00, 
-0x00, 0x18, 0x30, 0x60, 0x00, 0x7c, 0xc6, 0xc6, 0xc6, 0xc6, 0xc6, 0x7c, 
-0x00, 0x00, 0x00, 0x00, 0x00, 0x18, 0x30, 0x60, 0x00, 0xcc, 0xcc, 0xcc, 
-0xcc, 0xcc, 0xcc, 0x76, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x76, 0xdc, 
-0x00, 0xdc, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x00, 0x00, 0x00, 0x00, 
-0x76, 0xdc, 0x00, 0xc6, 0xe6, 0xf6, 0xfe, 0xde, 0xce, 0xc6, 0xc6, 0xc6, 
-0x00, 0x00, 0x00, 0x00, 0x00, 0x3c, 0x6c, 0x6c, 0x3e, 0x00, 0x7e, 0x00, 
-0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x38, 0x6c, 0x6c, 
-0x38, 0x00, 0x7c, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
-0x00, 0x00, 0x30, 0x30, 0x00, 0x30, 0x30, 0x60, 0xc0, 0xc6, 0xc6, 0x7c, 
-0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xfe, 0xc0, 
-0xc0, 0xc0, 0xc0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
-0x00, 0x00, 0xfe, 0x06, 0x06, 0x06, 0x06, 0x00, 0x00, 0x00, 0x00, 0x00, 
-0x00, 0xc0, 0xc0, 0xc2, 0xc6, 0xcc, 0x18, 0x30, 0x60, 0xce, 0x9b, 0x06, 
-0x0c, 0x1f, 0x00, 0x00, 0x00, 0xc0, 0xc0, 0xc2, 0xc6, 0xcc, 0x18, 0x30, 
-0x66, 0xce, 0x96, 0x3e, 0x06, 0x06, 0x00, 0x00, 0x00, 0x00, 0x18, 0x18, 
-0x00, 0x18, 0x18, 0x18, 0x3c, 0x3c, 0x3c, 0x18, 0x00, 0x00, 0x00, 0x00, 
-0x00, 0x00, 0x00, 0x00, 0x00, 0x36, 0x6c, 0xd8, 0x6c, 0x36, 0x00, 0x00, 
-0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xd8, 0x6c, 0x36, 
-0x6c, 0xd8, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x11, 0x44, 0x11, 0x44, 
-0x11, 0x44, 0x11, 0x44, 0x11, 0x44, 0x11, 0x44, 0x11, 0x44, 0x11, 0x44, 
-0x55, 0xaa, 0x55, 0xaa, 0x55, 0xaa, 0x55, 0xaa, 0x55, 0xaa, 0x55, 0xaa, 
-0x55, 0xaa, 0x55, 0xaa, 0xdd, 0x77, 0xdd, 0x77, 0xdd, 0x77, 0xdd, 0x77, 
-0xdd, 0x77, 0xdd, 0x77, 0xdd, 0x77, 0xdd, 0x77, 0x18, 0x18, 0x18, 0x18, 
-0x18, 0x18, 0x18, 0x18, 0x18, 0x18, 0x18, 0x18, 0x18, 0x18, 0x18, 0x18, 
-0x18, 0x18, 0x18, 0x18, 0x18, 0x18, 0x18, 0xf8, 0x18, 0x18, 0x18, 0x18, 
-0x18, 0x18, 0x18, 0x18, 0x18, 0x18, 0x18, 0x18, 0x18, 0xf8, 0x18, 0xf8, 
-0x18, 0x18, 0x18, 0x18, 0x18, 0x18, 0x18, 0x18, 0x36, 0x36, 0x36, 0x36, 
-0x36, 0x36, 0x36, 0xf6, 0x36, 0x36, 0x36, 0x36, 0x36, 0x36, 0x36, 0x36, 
-0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xfe, 0x36, 0x36, 0x36, 0x36, 
-0x36, 0x36, 0x36, 0x36, 0x00, 0x00, 0x00, 0x00, 0x00, 0xf8, 0x18, 0xf8, 
-0x18, 0x18, 0x18, 0x18, 0x18, 0x18, 0x18, 0x18, 0x36, 0x36, 0x36, 0x36, 
-0x36, 0xf6, 0x06, 0xf6, 0x36, 0x36, 0x36, 0x36, 0x36, 0x36, 0x36, 0x36, 
-0x36, 0x36, 0x36, 0x36, 0x36, 0x36, 0x36, 0x36, 0x36, 0x36, 0x36, 0x36, 
-0x36, 0x36, 0x36, 0x36, 0x00, 0x00, 0x00, 0x00, 0x00, 0xfe, 0x06, 0xf6, 
-0x36, 0x36, 0x36, 0x36, 0x36, 0x36, 0x36, 0x36, 0x36, 0x36, 0x36, 0x36, 
-0x36, 0xf6, 0x06, 0xfe, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
-0x36, 0x36, 0x36, 0x36, 0x36, 0x36, 0x36, 0xfe, 0x00, 0x00, 0x00, 0x00, 
-0x00, 0x00, 0x00, 0x00, 0x18, 0x18, 0x18, 0x18, 0x18, 0xf8, 0x18, 0xf8, 
-0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
-0x00, 0x00, 0x00, 0xf8, 0x18, 0x18, 0x18, 0x18, 0x18, 0x18, 0x18, 0x18, 
-0x18, 0x18, 0x18, 0x18, 0x18, 0x18, 0x18, 0x1f, 0x00, 0x00, 0x00, 0x00, 
-0x00, 0x00, 0x00, 0x00, 0x18, 0x18, 0x18, 0x18, 0x18, 0x18, 0x18, 0xff, 
-0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
-0x00, 0x00, 0x00, 0xff, 0x18, 0x18, 0x18, 0x18, 0x18, 0x18, 0x18, 0x18, 
-0x18, 0x18, 0x18, 0x18, 0x18, 0x18, 0x18, 0x1f, 0x18, 0x18, 0x18, 0x18, 
-0x18, 0x18, 0x18, 0x18, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 
-0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x18, 0x18, 0x18, 0x18, 
-0x18, 0x18, 0x18, 0xff, 0x18, 0x18, 0x18, 0x18, 0x18, 0x18, 0x18, 0x18, 
-0x18, 0x18, 0x18, 0x18, 0x18, 0x1f, 0x18, 0x1f, 0x18, 0x18, 0x18, 0x18, 
-0x18, 0x18, 0x18, 0x18, 0x36, 0x36, 0x36, 0x36, 0x36, 0x36, 0x36, 0x37, 
-0x36, 0x36, 0x36, 0x36, 0x36, 0x36, 0x36, 0x36, 0x36, 0x36, 0x36, 0x36, 
-0x36, 0x37, 0x30, 0x3f, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
-0x00, 0x00, 0x00, 0x00, 0x00, 0x3f, 0x30, 0x37, 0x36, 0x36, 0x36, 0x36, 
-0x36, 0x36, 0x36, 0x36, 0x36, 0x36, 0x36, 0x36, 0x36, 0xf7, 0x00, 0xff, 
-0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
-0x00, 0xff, 0x00, 0xf7, 0x36, 0x36, 0x36, 0x36, 0x36, 0x36, 0x36, 0x36, 
-0x36, 0x36, 0x36, 0x36, 0x36, 0x37, 0x30, 0x37, 0x36, 0x36, 0x36, 0x36, 
-0x36, 0x36, 0x36, 0x36, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0x00, 0xff, 
-0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x36, 0x36, 0x36, 0x36, 
-0x36, 0xf7, 0x00, 0xf7, 0x36, 0x36, 0x36, 0x36, 0x36, 0x36, 0x36, 0x36, 
-0x18, 0x18, 0x18, 0x18, 0x18, 0xff, 0x00, 0xff, 0x00, 0x00, 0x00, 0x00, 
-0x00, 0x00, 0x00, 0x00, 0x36, 0x36, 0x36, 0x36, 0x36, 0x36, 0x36, 0xff, 
-0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
-0x00, 0xff, 0x00, 0xff, 0x18, 0x18, 0x18, 0x18, 0x18, 0x18, 0x18, 0x18, 
-0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0x36, 0x36, 0x36, 0x36, 
-0x36, 0x36, 0x36, 0x36, 0x36, 0x36, 0x36, 0x36, 0x36, 0x36, 0x36, 0x3f, 
-0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x18, 0x18, 0x18, 0x18, 
-0x18, 0x1f, 0x18, 0x1f, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
-0x00, 0x00, 0x00, 0x00, 0x00, 0x1f, 0x18, 0x1f, 0x18, 0x18, 0x18, 0x18, 
-0x18, 0x18, 0x18, 0x18, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x3f, 
-0x36, 0x36, 0x36, 0x36, 0x36, 0x36, 0x36, 0x36, 0x36, 0x36, 0x36, 0x36, 
-0x36, 0x36, 0x36, 0xff, 0x36, 0x36, 0x36, 0x36, 0x36, 0x36, 0x36, 0x36, 
-0x18, 0x18, 0x18, 0x18, 0x18, 0xff, 0x18, 0xff, 0x18, 0x18, 0x18, 0x18, 
-0x18, 0x18, 0x18, 0x18, 0x18, 0x18, 0x18, 0x18, 0x18, 0x18, 0x18, 0xf8, 
-0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
-0x00, 0x00, 0x00, 0x1f, 0x18, 0x18, 0x18, 0x18, 0x18, 0x18, 0x18, 0x18, 
-0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 
-0xff, 0xff, 0xff, 0xff, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 
-0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xf0, 0xf0, 0xf0, 0xf0, 
-0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 
-0x0f, 0x0f, 0x0f, 0x0f, 0x0f, 0x0f, 0x0f, 0x0f, 0x0f, 0x0f, 0x0f, 0x0f, 
-0x0f, 0x0f, 0x0f, 0x0f, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x00, 
-0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
-0x00, 0x76, 0xdc, 0xd8, 0xd8, 0xd8, 0xdc, 0x76, 0x00, 0x00, 0x00, 0x00, 
-0x00, 0x00, 0x78, 0xcc, 0xcc, 0xcc, 0xd8, 0xcc, 0xc6, 0xc6, 0xc6, 0xcc, 
-0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xfe, 0xc6, 0xc6, 0xc0, 0xc0, 0xc0, 
-0xc0, 0xc0, 0xc0, 0xc0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
-0xfe, 0x6c, 0x6c, 0x6c, 0x6c, 0x6c, 0x6c, 0x6c, 0x00, 0x00, 0x00, 0x00, 
-0x00, 0x00, 0x00, 0xfe, 0xc6, 0x60, 0x30, 0x18, 0x30, 0x60, 0xc6, 0xfe, 
-0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x7e, 0xd8, 0xd8, 
-0xd8, 0xd8, 0xd8, 0x70, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
-0x66, 0x66, 0x66, 0x66, 0x66, 0x7c, 0x60, 0x60, 0xc0, 0x00, 0x00, 0x00, 
-0x00, 0x00, 0x00, 0x00, 0x76, 0xdc, 0x18, 0x18, 0x18, 0x18, 0x18, 0x18, 
-0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x7e, 0x18, 0x3c, 0x66, 0x66, 
-0x66, 0x3c, 0x18, 0x7e, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x38, 
-0x6c, 0xc6, 0xc6, 0xfe, 0xc6, 0xc6, 0x6c, 0x38, 0x00, 0x00, 0x00, 0x00, 
-0x00, 0x00, 0x38, 0x6c, 0xc6, 0xc6, 0xc6, 0x6c, 0x6c, 0x6c, 0x6c, 0xee, 
-0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x1e, 0x30, 0x18, 0x0c, 0x3e, 0x66, 
-0x66, 0x66, 0x66, 0x3c, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
-0x00, 0x7e, 0xdb, 0xdb, 0xdb, 0x7e, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
-0x00, 0x00, 0x00, 0x03, 0x06, 0x7e, 0xdb, 0xdb, 0xf3, 0x7e, 0x60, 0xc0, 
-0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x1c, 0x30, 0x60, 0x60, 0x7c, 0x60, 
-0x60, 0x60, 0x30, 0x1c, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x7c, 
-0xc6, 0xc6, 0xc6, 0xc6, 0xc6, 0xc6, 0xc6, 0xc6, 0x00, 0x00, 0x00, 0x00, 
-0x00, 0x00, 0x00, 0x00, 0xfe, 0x00, 0x00, 0xfe, 0x00, 0x00, 0xfe, 0x00, 
-0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x18, 0x18, 0x7e, 0x18, 
-0x18, 0x00, 0x00, 0xff, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x30, 
-0x18, 0x0c, 0x06, 0x0c, 0x18, 0x30, 0x00, 0x7e, 0x00, 0x00, 0x00, 0x00, 
-0x00, 0x00, 0x00, 0x0c, 0x18, 0x30, 0x60, 0x30, 0x18, 0x0c, 0x00, 0x7e, 
-0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0e, 0x1b, 0x1b, 0x1b, 0x18, 0x18, 
-0x18, 0x18, 0x18, 0x18, 0x18, 0x18, 0x18, 0x18, 0x18, 0x18, 0x18, 0x18, 
-0x18, 0x18, 0x18, 0x18, 0xd8, 0xd8, 0xd8, 0x70, 0x00, 0x00, 0x00, 0x00, 
-0x00, 0x00, 0x00, 0x00, 0x18, 0x18, 0x00, 0x7e, 0x00, 0x18, 0x18, 0x00, 
-0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x76, 0xdc, 0x00, 
-0x76, 0xdc, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x38, 0x6c, 0x6c, 
-0x38, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
-0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x18, 0x18, 0x00, 0x00, 0x00, 
-0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
-0x18, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0f, 0x0c, 0x0c, 
-0x0c, 0x0c, 0x0c, 0xec, 0x6c, 0x6c, 0x3c, 0x1c, 0x00, 0x00, 0x00, 0x00, 
-0x00, 0xd8, 0x6c, 0x6c, 0x6c, 0x6c, 0x6c, 0x00, 0x00, 0x00, 0x00, 0x00, 
-0x00, 0x00, 0x00, 0x00, 0x00, 0x70, 0xd8, 0x30, 0x60, 0xc8, 0xf8, 0x00, 
-0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
-0x7c, 0x7c, 0x7c, 0x7c, 0x7c, 0x7c, 0x7c, 0x00, 0x00, 0x00, 0x00, 0x00, 
-0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
-0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
-};
+void memsetw(void * s, unsigned short c, unsigned int count)
+{
+	unsigned short * addr = (unsigned short *) s;
+
+	count /= 2;
+	if (vt_cons[fg_console]->vc_mode == KD_GRAPHICS) {
+		while (count) {
+			count--;
+			*addr++ = c;
+		}
+		return;
+	}
+	if ((unsigned long) addr + count > video_mem_term ||
+	    (unsigned long) addr < video_mem_base) {
+	    	if ((unsigned long) addr + count <= video_mem_term ||
+	    	    (unsigned long) addr > video_mem_base) {
+			while (count) {
+				count--;
+				*addr++ = c;
+			}
+			return;
+	    	} else {
+			while (count) {
+				count--;
+				scr_writew(c, addr++);
+			}
+		}
+#define GX_SETW (*fbinfo[0].setw)(x_margin + ((xoff - (addr - last)) << 3), y_margin + CHAR_HEIGHT * yoff, c, addr - last);
+	} else if (do_accel) {
+		int yoff = (addr - (unsigned short *)video_mem_base) / video_num_columns;
+		int xoff = (addr - (unsigned short *)video_mem_base) % video_num_columns;
+		unsigned short * last = addr;
+		
+		while (count) {
+			count--;
+			if (*addr != c) {
+				if (xoff == video_num_columns) {
+					if (last != addr)
+						GX_SETW
+					xoff = 0;
+					yoff++;
+					last = addr;
+				}
+				*addr++ = c;
+				xoff++;
+			} else {
+				if (last != addr)
+					GX_SETW
+				if (xoff == video_num_columns) {
+					xoff = 0;
+					yoff++;
+				}
+				addr++;
+				xoff++;
+				last = addr;
+			}
+		}
+		if (last != addr)
+			GX_SETW
+	} else {
+		while (count) {
+			count--;
+			if (*addr != c) {
+				sun_blitc(c, (unsigned long)addr);
+				*addr++ = c;
+			} else
+				addr++;
+		}
+	}
+}
+
+void memcpyw(unsigned short *to, unsigned short *from, unsigned int count)
+{
+	if (vt_cons[fg_console]->vc_mode == KD_GRAPHICS) {
+		memcpy(to, from, count);
+		return;
+	}
+	if ((unsigned long) to + count > video_mem_term ||
+	    (unsigned long) to < video_mem_base) {
+	    	if ((unsigned long) to + count <= video_mem_term ||
+	    	    (unsigned long) to > video_mem_base)
+	    	    	memcpy(to, from, count);
+	    	else {
+	    		count /= 2;
+			while (count) {
+				count--;
+				scr_writew(scr_readw(from++), to++);
+			}
+		}
+#define GX_CPYW (*fbinfo[0].cpyw)(x_margin + ((xoff - (to - last)) << 3), y_margin + CHAR_HEIGHT * yoff, last, to - last);
+	} else if (do_accel) {
+		int yoff = (to - (unsigned short *)video_mem_base) / video_num_columns;
+		int xoff = (to - (unsigned short *)video_mem_base) % video_num_columns;
+		unsigned short * last = to;
+		
+		count /= 2;
+		while (count) {
+			count--;
+			if (*to != *from) {
+				if (xoff == video_num_columns) {
+					if (last != to)
+						GX_CPYW
+					xoff = 0;
+					yoff++;
+					last = to;
+				} else if (last != to && (*last & 0xff00) != (*from & 0xff00)) {
+					GX_CPYW
+					last = to;
+				}
+				*to++ = *from++;
+				xoff++;
+			} else {
+				if (last != to)
+					GX_CPYW
+				if (xoff == video_num_columns) {
+					xoff = 0;
+					yoff++;
+				}
+				to++;
+				xoff++;
+				last = to;
+				from++;
+			}
+		}
+		if (last != to)
+			GX_CPYW
+	} else {
+		count /= 2;
+		while (count) {
+			count--;
+			if (*to != *from) {
+				sun_blitc(*from, (unsigned long)to);
+				*to++ = *from++;
+			} else {
+				from++;
+				to++;
+			}
+		}
+	}
+}
+
+#undef pos
+int
+sun_hw_scursor (struct fbcursor *cursor, fbinfo_t *fb)
+{
+	int op = cursor->set;
+	int i, bytes = 0;
+	
+	if (op & FB_CUR_SETSHAPE){
+		if ((uint) cursor->size.fbx > fb->cursor.hwsize.fbx)
+			return -EINVAL;
+		if ((uint) cursor->size.fby > fb->cursor.hwsize.fby)
+			return -EINVAL;
+		bytes = (cursor->size.fby * 32)/8;
+		i = verify_area (VERIFY_READ, cursor->image, bytes);
+		if (i) return i;
+		i = verify_area (VERIFY_READ, cursor->mask, bytes);
+		if (i) return i;
+	}
+	if (op & FB_CUR_SETCMAP){
+		if (cursor->cmap.index && cursor->cmap.count != 2)
+			return -EINVAL;
+		i = verify_area (VERIFY_READ, cursor->cmap.red, 2);
+		if (i) return i;
+		i = verify_area (VERIFY_READ, cursor->cmap.green, 2);
+		if (i) return i;
+		i = verify_area (VERIFY_READ, cursor->cmap.blue, 2);
+		if (i) return i;
+	}
+	if (op & (FB_CUR_SETCUR | FB_CUR_SETPOS | FB_CUR_SETHOT)){
+		if (op & FB_CUR_SETCUR)
+			fb->cursor.enable = cursor->enable;
+		if (op & FB_CUR_SETPOS)
+			fb->cursor.cpos = cursor->pos;
+		if (op & FB_CUR_SETHOT)
+			fb->cursor.chot = cursor->hot;
+		(*fb->setcursor) (fb);
+	}
+	if (op & FB_CUR_SETCMAP)
+		(*fb->setcursormap) (fb, cursor->cmap.red, cursor->cmap.green, cursor->cmap.blue);
+	if (op & FB_CUR_SETSHAPE){
+		uint u;
+		
+		fb->cursor.size = cursor->size;
+		memset ((void *)&fb->cursor.bits, 0, sizeof (fb->cursor.bits));
+		memcpy (fb->cursor.bits [0], cursor->mask, bytes);
+		memcpy (fb->cursor.bits [1], cursor->image, bytes);
+		u = ~0;
+		if (cursor->size.fbx < fb->cursor.hwsize.fbx)
+			u = ~(u  >> cursor->size.fbx);
+		for (i = fb->cursor.size.fby - 1; i >= 0; i--) {
+			fb->cursor.bits [0][i] &= u;
+			fb->cursor.bits [1][i] &= fb->cursor.bits [0][i];
+		}
+		(*fb->setcurshape) (fb);
+	}
+	return 0;
+}
+
+static unsigned char hw_cursor_cmap[2] = { 0, 0xff };
+
+void
+sun_hw_hide_cursor (void)
+{
+	fbinfo[0].cursor.enable = 0;
+	(*fbinfo[0].setcursor)(&fbinfo[0]);
+	sun_hw_cursor_shown = 0;
+}
+
+void
+sun_hw_set_cursor (int xoff, int yoff)
+{
+	if (!sun_hw_cursor_shown) {
+		fbinfo[0].cursor.size.fbx = CHAR_WIDTH;
+		fbinfo[0].cursor.size.fby = CHAR_HEIGHT;
+		fbinfo[0].cursor.chot.fbx = 0;
+		fbinfo[0].cursor.chot.fby = 0;
+		fbinfo[0].cursor.enable = 1;
+		memset (fbinfo[0].cursor.bits, 0, sizeof (fbinfo[0].cursor.bits));
+		fbinfo[0].cursor.bits[0][CHAR_HEIGHT - 2] = 0xff000000;
+		fbinfo[0].cursor.bits[1][CHAR_HEIGHT - 2] = 0xff000000;
+		fbinfo[0].cursor.bits[0][CHAR_HEIGHT - 1] = 0xff000000;
+		fbinfo[0].cursor.bits[1][CHAR_HEIGHT - 1] = 0xff000000;
+		(*fbinfo[0].setcursormap) (&fbinfo[0], hw_cursor_cmap, hw_cursor_cmap, hw_cursor_cmap);
+		(*fbinfo[0].setcurshape) (&fbinfo[0]);
+		sun_hw_cursor_shown = 1;
+	}
+	fbinfo[0].cursor.cpos.fbx = xoff;
+	fbinfo[0].cursor.cpos.fby = yoff;
+	(*fbinfo[0].setcursor)(&fbinfo[0]);
+}

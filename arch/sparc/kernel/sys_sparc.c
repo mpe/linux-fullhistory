@@ -1,4 +1,4 @@
-/* $Id: sys_sparc.c,v 1.25 1996/11/03 20:58:07 davem Exp $
+/* $Id: sys_sparc.c,v 1.28 1996/12/12 09:39:25 jj Exp $
  * linux/arch/sparc/kernel/sys_sparc.c
  *
  * This file contains various random system calls that
@@ -179,38 +179,14 @@ asmlinkage unsigned long sys_mmap(unsigned long addr, unsigned long len,
 			return -ENOMEM;
 		}
 	}
+
+	/* See asm-sparc/uaccess.h */
+	if((len > (TASK_SIZE - PAGE_SIZE)) || (addr > (TASK_SIZE-len-PAGE_SIZE)))
+		return -EINVAL;
+
 	retval = do_mmap(file, addr, len, prot, flags, off);
 	return retval;
 }
-
-extern int do_open_namei(const char * pathname, int flag, int mode,
-               struct inode ** res_inode, struct inode * base);
-
-#define BSD_EMUL "/usr/gnemul/sunos"
-#define SOL_EMUL "/usr/gnemul/solaris"
-
-int
-open_namei(const char * pathname, int flag, int mode,
-               struct inode ** res_inode, struct inode * base)
-{
-	if (!base && (current->personality & (PER_BSD|PER_SVR4)) && *pathname == '/'){
-		struct inode *emul_ino;
-		const char   *p = pathname;
-		char *emul_path = current->personality & PER_BSD ? BSD_EMUL : SOL_EMUL;
-		int v;
-
-		while (*p == '/')
-			p++;
-		
-		if (do_open_namei (emul_path, flag, mode, &emul_ino, NULL) >= 0 && emul_ino){
-			v = do_open_namei (p, flag, mode, res_inode, emul_ino);
-			if (v >= 0)
-				return v;
-		}
-	}
-	return do_open_namei (pathname, flag, mode, res_inode, base);
-}
-
 
 /* we come to here via sys_nis_syscall so it can setup the regs argument */
 asmlinkage unsigned long
@@ -235,3 +211,16 @@ sparc_breakpoint (struct pt_regs *regs)
 #endif
 }
 
+extern int
+sys_sigaction (int signum, const struct sigaction *action, struct sigaction *oldaction);
+
+asmlinkage int
+sparc_sigaction (int signum, const struct sigaction *action, struct sigaction *oldaction)
+{
+    if (signum >= 0){
+	return sys_sigaction (signum, action, oldaction);
+    } else {
+	current->tss.new_signal = 1;
+	return sys_sigaction (-signum, action, oldaction);
+    }
+}

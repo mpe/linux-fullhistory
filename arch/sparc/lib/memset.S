@@ -68,28 +68,6 @@ C_LABEL(memset):
 	 sub	%o0, %o2, %o0
 #endif /* HANDLE_UNALIGNED */
 
-	.globl	C_LABEL(__clear_user)
-C_LABEL(__clear_user):
-	st	%o0, [%g6 + THREAD_EX_ADDR]
-	ld	[%g6 + THREAD_EX_COUNT], %g1
-	set	clear_user_failure, %g2
-	add	%g1, 1, %g1
-	st	%o7, [%g6 + THREAD_EX_PC]
-	st	%g1, [%g6 + THREAD_EX_COUNT]
-	call	C_LABEL(__bzero)
-	 st	%g2, [%g6 + THREAD_EX_EXPC]
-
-clear_user_success:
-	ldd	[%g6 + THREAD_EX_COUNT], %g2
-	mov	0, %o0
-	sub	%g2, 1, %g1
-	jmpl	%g3 + 0x8, %g0
-	 st	%g1, [%g6 + THREAD_EX_COUNT]
-
-clear_user_failure:
-	jmpl	%g3 + 0x8, %g0
-	 mov	%g2, %o0
-
 C_LABEL(__bzero):
 	mov	%g0, %g3
 1:

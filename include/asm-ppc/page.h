@@ -6,8 +6,6 @@
 #define PAGE_SIZE	(1UL << PAGE_SHIFT)
 #define PAGE_MASK	(~(PAGE_SIZE-1))
 
-void invalidate(void);
-
 #ifdef __KERNEL__
 
 #define STRICT_MM_TYPECHECKS
@@ -59,30 +57,15 @@ typedef unsigned long pgprot_t;
 
 #define KERNELBASE	0x90000000
 #define PAGE_OFFSET	KERNELBASE
-#define MAP_NR(addr)	((((unsigned long)addr) - PAGE_OFFSET) >> PAGE_SHIFT)
+
+#define clear_page(page)        memset((void *)(page), 0, PAGE_SIZE)
+#define copy_page(to,from)	memcpy((void *)(to), (void *)(from), PAGE_SIZE)
+/* map phys->virtual and virtual->phys */
+#define __pa(x)			((unsigned long)(x)-PAGE_OFFSET)
+#define __va(x)			((void *)((unsigned long)(x)+PAGE_OFFSET))
+
+#define MAP_NR(addr)	(__pa(addr) >> PAGE_SHIFT)
 #define MAP_PAGE_RESERVED	(1<<15)
-
-
-#if 0  /* Now defined in "mm.h" */
-/*
- * This used to be an unsigned short...
- * 
- *                         -- Cort
- */
-/*typedef unsigned short mem_map_t;*/
-
-typedef struct {
-	unsigned count:30,
-		 dirty:1,
-		 reserved:1;
-} mem_map_t;
-#endif
-
-/* Certain architectures need to do special things when pte's
- * within a page table are directly modified.  Thus, the following
- * hook is made available.
- */
-#define set_pte(pteptr, pteval) ((*(pteptr)) = (pteval))
 
 
 #endif /* __KERNEL__ */

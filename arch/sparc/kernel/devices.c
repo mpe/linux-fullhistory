@@ -7,6 +7,7 @@
 #include <linux/kernel.h>
 #include <linux/tasks.h>
 #include <linux/config.h>
+#include <linux/init.h>
 
 #include <asm/page.h>
 #include <asm/oplib.h>
@@ -20,8 +21,8 @@ extern void cpu_probe(void);
 extern void clock_stop_probe(void); /* tadpole.c */
 extern void sun4c_probe_memerr_reg(void);
 
-unsigned long
-device_scan(unsigned long mem_start)
+__initfunc(unsigned long
+device_scan(unsigned long mem_start))
 {
 	char node_str[128];
 	int nd, prom_node_cpu, thismid;
