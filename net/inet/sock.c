@@ -324,10 +324,10 @@ destroy_sock(struct sock *sk)
   	delete_timer(sk);
 
 
-  	if (sk->send_tmp != NULL) 
+	while ((skb = tcp_dequeue_partial(sk)) != NULL) 
   	{
-  		IS_SKB(sk->send_tmp);
-  		kfree_skb(sk->send_tmp, FREE_WRITE);
+  		IS_SKB(skb);
+  		kfree_skb(skb, FREE_WRITE);
   	}
 
   /* Cleanup up the write buffer. */
@@ -869,7 +869,7 @@ inet_create(struct socket *sock, int protocol)
   sk->state = TCP_CLOSE;
   sk->dead = 0;
   sk->ack_timed = 0;
-  sk->send_tmp = NULL;
+  sk->partial = NULL;
   sk->user_mss = 0;
   sk->debug = 0;
 

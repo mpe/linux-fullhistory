@@ -648,31 +648,20 @@ static void tcp_send_skb(struct sock *sk, struct sk_buff *skb)
 	}
 }
 
-static struct sk_buff * dequeue_partial(struct sock * sk)
+struct sk_buff * tcp_dequeue_partial(struct sock * sk)
 {
 	struct sk_buff * skb;
 	unsigned long flags;
 
 	save_flags(flags);
 	cli();
-	skb = sk->send_tmp;
-	sk->send_tmp = NULL;
+	skb = sk->partial;
+	if (skb) {
+		sk->partial = NULL;
+		del_timer(&sk->partial_timer);
+	}
 	restore_flags(flags);
 	return skb;
-}
-
-static void enqueue_partial(struct sk_buff * skb, struct sock * sk)
-{
-	struct sk_buff * tmp;
-	unsigned long flags;
-
-	save_flags(flags);
-	cli();
-	tmp = sk->send_tmp;
-	sk->send_tmp = skb;
-	restore_flags(flags);
-	if (tmp)
-		tcp_send_skb(sk, tmp);
 }
 
 static void tcp_send_partial(struct sock *sk)
@@ -681,8 +670,28 @@ static void tcp_send_partial(struct sock *sk)
 
 	if (sk == NULL)
 		return;
-	while ((skb = dequeue_partial(sk)) != NULL)
+	while ((skb = tcp_dequeue_partial(sk)) != NULL)
 		tcp_send_skb(sk, skb);
+}
+
+void tcp_enqueue_partial(struct sk_buff * skb, struct sock * sk)
+{
+	struct sk_buff * tmp;
+	unsigned long flags;
+
+	save_flags(flags);
+	cli();
+	tmp = sk->partial;
+	if (tmp)
+		del_timer(&sk->partial_timer);
+	sk->partial = skb;
+	sk->partial_timer.expires = 5*HZ;
+	sk->partial_timer.function = (void (*)(unsigned long)) tcp_send_partial;
+	sk->partial_timer.data = (unsigned long) sk;
+	add_timer(&sk->partial_timer);
+	restore_flags(flags);
+	if (tmp)
+		tcp_send_skb(sk, tmp);
 }
 
 
@@ -897,7 +906,7 @@ tcp_write(struct sock *sk, unsigned char *from,
  */
 
 	/* Now we need to check if we have a half built packet. */
-	if ((skb = dequeue_partial(sk)) != NULL) {
+	if ((skb = tcp_dequeue_partial(sk)) != NULL) {
 	        int hdrlen;
 
 	         /* IP header + TCP header */
@@ -920,10 +929,12 @@ tcp_write(struct sock *sk, unsigned char *from,
 			len -= copy;
 			sk->send_seq += copy;
 		      }
-		enqueue_partial(skb, sk);
-		if ((skb->len - hdrlen) >= sk->mss || (flags & MSG_OOB)) {
-		  tcp_send_partial(sk);
-		}
+		if ((skb->len - hdrlen) >= sk->mss ||
+		    (flags & MSG_OOB) ||
+		    !sk->packets_out)
+			tcp_send_skb(sk, skb);
+		else
+			tcp_enqueue_partial(skb, sk);
 		continue;
 	}
 
@@ -949,7 +960,8 @@ tcp_write(struct sock *sk, unsigned char *from,
 	copy = min(copy, len);
 
   /* We should really check the window here also. */
-	if (sk->packets_out && copy < sk->mss && !(flags & MSG_OOB)) {
+	send_tmp = NULL;
+	if (copy < sk->mss && !(flags & MSG_OOB)) {
 	/* We will release the socket incase we sleep here. */
 	  release_sock(sk);
 	  /* NB: following must be mtu, because mss can be increased.
@@ -962,7 +974,6 @@ tcp_write(struct sock *sk, unsigned char *from,
 	  release_sock(sk);
 	  skb = prot->wmalloc(sk, copy + prot->max_header + sizeof(*skb), 0, GFP_KERNEL);
 	  sk->inuse = 1;
-	  send_tmp = NULL;
 	}
 
 	/* If we didn't get any memory, we need to sleep. */
@@ -1041,8 +1052,8 @@ tcp_write(struct sock *sk, unsigned char *from,
 	skb->free = 0;
 	sk->send_seq += copy;
 
-	if (send_tmp != NULL) {
-		enqueue_partial(send_tmp, sk);
+	if (send_tmp != NULL && sk->packets_out) {
+		tcp_enqueue_partial(send_tmp, sk);
 		continue;
 	}
 	tcp_send_skb(sk, skb);
@@ -1057,7 +1068,7 @@ tcp_write(struct sock *sk, unsigned char *from,
  */
 
   /* Avoid possible race on send_tmp - c/o Johannes Stille */
-  if(sk->send_tmp && 
+  if(sk->partial && 
      ((!sk->packets_out) 
      /* If not nagling we can send on the before case too.. */
       || (sk->nonagle && before(sk->send_seq , sk->window_seq))
@@ -1585,7 +1596,8 @@ tcp_shutdown(struct sock *sk, int how)
   sk->inuse = 1;
 
   /* Clear out any half completed packets. */
-  if (sk->send_tmp) tcp_send_partial(sk);
+  if (sk->partial)
+	tcp_send_partial(sk);
 
   prot =(struct proto *)sk->prot;
   th =(struct tcphdr *)&sk->dummy_th;
@@ -1898,7 +1910,7 @@ tcp_conn_request(struct sock *sk, struct sk_buff *skb,
   newsk->intr = 0;
   newsk->proc = 0;
   newsk->done = 0;
-  newsk->send_tmp = NULL;
+  newsk->partial = NULL;
   newsk->pair = NULL;
   newsk->wmem_alloc = 0;
   newsk->rmem_alloc = 0;
@@ -2081,7 +2093,7 @@ tcp_close(struct sock *sk, int timeout)
   sk->rqueue = NULL;
 
   /* Get rid off any half-completed packets. */
-  if (sk->send_tmp) {
+  if (sk->partial) {
 	tcp_send_partial(sk);
   }
 
@@ -2565,7 +2577,7 @@ tcp_ack(struct sock *sk, struct tcphdr *th, unsigned long saddr, int len)
 	}
   }
 
-  if (sk->packets_out == 0 && sk->send_tmp != NULL &&
+  if (sk->packets_out == 0 && sk->partial != NULL &&
       sk->wfront == NULL && sk->send_head == NULL) {
 	flag |= 1;
 	tcp_send_partial(sk);

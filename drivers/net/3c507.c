@@ -484,7 +484,7 @@ el16_send_packet(struct sk_buff *skb, struct device *dev)
 
 	/* For ethernet, fill in the header.  This should really be done by a
 	   higher level, rather than duplicated for each ethernet adaptor. */
-	if (!skb->arp  &&  dev->rebuild_header(skb+1, dev)) {
+	if (!skb->arp  &&  dev->rebuild_header(skb->data, dev)) {
 		skb->dev = dev;
 		arp_queue (skb);
 		return 0;
@@ -496,7 +496,7 @@ el16_send_packet(struct sk_buff *skb, struct device *dev)
 		printk("%s: Transmitter access conflict.\n", dev->name);
 	else {
 		short length = ETH_ZLEN < skb->len ? skb->len : ETH_ZLEN;
-		unsigned char *buf = (void *)(skb+1);
+		unsigned char *buf = skb->data;
 
 		/* Disable the 82586's input to the interrupt line. */
 		outb(0x80, ioaddr + MISC_CTRL);
@@ -855,8 +855,8 @@ el16_rx(struct device *dev)
 			skb->len = pkt_len;
 			skb->dev = dev;
 
-			/* 'skb+1' points to the start of sk_buff data area. */
-			memcpy((unsigned char *) (skb + 1), data_frame + 5, pkt_len);
+			/* 'skb->data' points to the start of sk_buff data area. */
+			memcpy(skb->data, data_frame + 5, pkt_len);
 		
 #ifdef HAVE_NETIF_RX
 			netif_rx(skb);

@@ -55,12 +55,14 @@ static inline void pty_copy(struct tty_struct * from, struct tty_struct * to)
 {
 	unsigned long count, n;
 	struct tty_queue *fq, *tq;
+	int skip_readq;
 
 	if (from->stopped || EMPTY(&from->write_q))
 		return;
 	fq = &from->write_q;
 	/* Bypass the read_q if this is a pty master. */
-	tq = IS_A_PTY_MASTER(to->line) ? &to->secondary : &to->read_q;
+	skip_readq = IS_A_PTY_MASTER(to->line) && to->disc == N_TTY;
+	tq = skip_readq ? &to->secondary : &to->read_q;
 	count = MIN(CHARS(fq), LEFT(tq));
 	while (count) {
 		n = MIN(MIN(TTY_BUF_SIZE - fq->tail, TTY_BUF_SIZE - tq->head),
@@ -70,8 +72,8 @@ static inline void pty_copy(struct tty_struct * from, struct tty_struct * to)
 		fq->tail = (fq->tail + n) & (TTY_BUF_SIZE - 1);
 		tq->head = (tq->head + n) & (TTY_BUF_SIZE - 1);
 	}
-	if (IS_A_PTY_MASTER(to->line))
-		wake_up_interruptible(&tq->proc_list);
+	if (skip_readq)
+		wake_up_interruptible(&to->secondary.proc_list);
 	else
 		TTY_READ_FLUSH(to);
 	if (LEFT(fq) > WAKEUP_CHARS)

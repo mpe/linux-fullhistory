@@ -89,7 +89,8 @@ struct sock {
   struct sk_buff		*volatile send_tail;
   struct sk_buff		*volatile send_head;
   struct sk_buff		*volatile back_log;
-  struct sk_buff		*send_tmp;
+  struct sk_buff		*partial;
+  struct timer_list		partial_timer;
   long				retransmits;
   struct sk_buff		*volatile wback,
 				*volatile wfront,

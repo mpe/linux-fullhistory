@@ -642,8 +642,8 @@ static void do_timer(struct pt_regs * regs)
 	calc_load();
 	if ((VM_MASK & regs->eflags) || (3 & regs->cs)) {
 		current->utime++;
-		if(current != task[0]) {
-			if(current->priority != 15)
+		if (current != task[0]) {
+			if (current->priority < 15)
 				kstat.cpu_nice++;
 			else
 				kstat.cpu_user++;

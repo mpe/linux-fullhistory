@@ -386,7 +386,7 @@ d_link_start_xmit(struct sk_buff *skb, struct device *dev)
 	int		transmit_from;
 	int		len;
 	int		tickssofar;
-	unsigned char	*buffer = (unsigned char *)(skb + 1);
+	unsigned char	*buffer = skb->data;
 
 	/*
 	 * If some higher layer thinks we've missed a
@@ -401,7 +401,7 @@ d_link_start_xmit(struct sk_buff *skb, struct device *dev)
 
 	/* For ethernet, fill in the header (hardware addresses) with an arp. */
 	if (!skb->arp)
-		if(dev->rebuild_header(skb + 1, dev)) {
+		if(dev->rebuild_header(skb->data, dev)) {
 			skb->dev = dev;
 			arp_queue (skb);
 			return 0;
@@ -590,8 +590,8 @@ d_link_rx_intr(struct device *dev)
 	skb->lock = 0;
 	skb->mem_len = sksize;
 	skb->mem_addr = skb;
-	/* 'skb + 1' points to the start of sk_buff data area. */
-	buffer = (unsigned char *)(skb + 1);
+	/* 'skb->data' points to the start of sk_buff data area. */
+	buffer = skb->data;
 
 	/* copy the packet into the buffer */
 	d_link_setup_address(read_from, RW_ADDR);

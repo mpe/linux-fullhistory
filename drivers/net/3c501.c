@@ -292,7 +292,7 @@ el_start_xmit(struct sk_buff *skb, struct device *dev)
     }
 
     /* Fill in the ethernet header. */
-    if (!skb->arp  &&  dev->rebuild_header(skb+1, dev)) {
+    if (!skb->arp  &&  dev->rebuild_header(skb->data, dev)) {
 	skb->dev = dev;
 	arp_queue (skb);
 	return 0;
@@ -310,7 +310,7 @@ el_start_xmit(struct sk_buff *skb, struct device *dev)
 	printk("%s: Transmitter access conflict.\n", dev->name);
     else {
 	int gp_start = 0x800 - (ETH_ZLEN < skb->len ? skb->len : ETH_ZLEN);
-	unsigned char *buf = (void *)(skb+1);
+	unsigned char *buf = skb->data;
 
 	el_status.tx_pkt_start = gp_start;
     	el_status.collisions = 0;
@@ -463,7 +463,7 @@ el_receive(struct device *dev)
 	skb->len = pkt_len;
 	skb->dev = dev;
 
-	insb(DATAPORT, (void *)(skb+1), pkt_len);
+	insb(DATAPORT, skb->data, pkt_len);
 
 #ifdef HAVE_NETIF_RX
 	    netif_rx(skb);

@@ -402,7 +402,7 @@ net_send_packet(struct sk_buff *skb, struct device *dev)
 
 	/* For ethernet, fill in the header.  This should really be done by a
 	   higher level, rather than duplicated for each ethernet adaptor. */
-	if (!skb->arp  &&  dev->rebuild_header(skb+1, dev)) {
+	if (!skb->arp  &&  dev->rebuild_header(skb->data, dev)) {
 		skb->dev = dev;
 		arp_queue (skb);
 		return 0;
@@ -415,7 +415,7 @@ net_send_packet(struct sk_buff *skb, struct device *dev)
 		printk("%s: Transmitter access conflict.\n", dev->name);
 	else {
 		short length = ETH_ZLEN < skb->len ? skb->len : ETH_ZLEN;
-		unsigned char *buf = (void *)(skb+1);
+		unsigned char *buf = skb->data;
 
 		if (net_debug > 4)
 			printk("%s: Transmitting a packet of length %d.\n", dev->name,
@@ -551,14 +551,14 @@ net_rx(struct device *dev)
 			skb->len = pkt_len;
 			skb->dev = dev;
 
-			/* 'skb+1' points to the start of sk_buff data area. */
-			insw(ioaddr + DATAPORT, (void *)(skb+1), (pkt_len + 1) >> 1);
+			/* 'skb->data' points to the start of sk_buff data area. */
+			insw(ioaddr + DATAPORT, skb->data, (pkt_len + 1) >> 1);
 
 			if (net_debug > 5) {
 				int i;
 				printk("%s: Rxed packet of length %d: ", dev->name, pkt_len);
 				for (i = 0; i < 14; i++)
-					printk(" %02x", ((unsigned char*)(skb + 1))[i]);
+					printk(" %02x", skb->data[i]);
 				printk(".\n");
 			}
 

@@ -285,7 +285,7 @@ plip_tx_packet(struct sk_buff *skb, struct device *dev)
 
     /* Pretend we are an ethernet and fill in the header.  This could use
        a simplified routine someday. */
-    if (!skb->arp  &&  dev->rebuild_header(skb+1, dev)) {
+    if (!skb->arp  &&  dev->rebuild_header(skb->data, dev)) {
 	skb->dev = dev;
 	arp_queue (skb);
 	return 0;
@@ -293,7 +293,7 @@ plip_tx_packet(struct sk_buff *skb, struct device *dev)
     skb->arp=1;
 
     dev->trans_start = jiffies;
-    ret_val = plip_send_packet(dev, (unsigned char *)(skb+1), skb->len);
+    ret_val = plip_send_packet(dev, skb->data, skb->len);
     if (skb->free)
 	kfree_skb (skb, FREE_WRITE);
     dev->tbusy = 0;
@@ -483,8 +483,8 @@ plip_receive_packet(struct device *dev)
     }
     {
 	/* phase of receiving the data */
-	/* 'skb+1' points to the start of sk_buff data area. */
-	unsigned char *buf = (unsigned char *) (skb+1);
+	/* 'skb->data' points to the start of sk_buff data area. */
+	unsigned char *buf = skb->data;
 	unsigned char *eth_p = (unsigned char *)&eth;
 	int i;
 	for ( i = 0; i < sizeof(eth); i++) {

@@ -366,7 +366,7 @@ el3_start_xmit(struct sk_buff *skb, struct device *dev)
 	}
 
 	/* Fill in the ethernet header. */
-	if (!skb->arp  &&  dev->rebuild_header(skb+1, dev)) {
+	if (!skb->arp  &&  dev->rebuild_header(skb->data, dev)) {
 		skb->dev = dev;
 		arp_queue (skb);
 		return 0;
@@ -404,7 +404,7 @@ el3_start_xmit(struct sk_buff *skb, struct device *dev)
 		outw(skb->len, ioaddr + TX_FIFO);
 		outw(0x00, ioaddr + TX_FIFO);
 		/* ... and the packet rounded to a doubleword. */
-		outsl(ioaddr + TX_FIFO, (void *)(skb+1), (skb->len + 3) >> 2);
+		outsl(ioaddr + TX_FIFO, skb->data, (skb->len + 3) >> 2);
 	
 		dev->trans_start = jiffies;
 		if (inw(ioaddr + TX_FREE) > 1536) {
@@ -576,8 +576,8 @@ el3_rx(struct device *dev)
 				skb->len = pkt_len;
 				skb->dev = dev;
 
-				/* 'skb+1' points to the start of sk_buff data area. */
-				insl(ioaddr+RX_FIFO, (void *)(skb+1),
+				/* 'skb->data' points to the start of sk_buff data area. */
+				insl(ioaddr+RX_FIFO, skb->data,
 							(pkt_len + 3) >> 2);
 
 #ifdef HAVE_NETIF_RX

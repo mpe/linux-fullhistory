@@ -124,5 +124,8 @@ extern int	tcp_rcv(struct sk_buff *skb, struct device *dev,
 
 extern int	tcp_ioctl(struct sock *sk, int cmd, unsigned long arg);
 
+extern void tcp_enqueue_partial(struct sk_buff *, struct sock *);
+extern struct sk_buff * tcp_dequeue_partial(struct sock *);
+
 
 #endif	/* _TCP_H */
