@@ -5,7 +5,7 @@
  *
  *		PF_INET protocol family socket handler.
  *
- * Version:	$Id: af_inet.c,v 1.118 2000/10/19 15:51:02 davem Exp $
+ * Version:	$Id: af_inet.c,v 1.120 2000/10/22 16:06:56 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -474,7 +474,8 @@ static int inet_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 	 * (ie. your servers still start up even if your ISDN link
 	 *  is temporarily down)
 	 */
-	if (sysctl_ip_nonlocal_bind == 0 &&
+	if (sysctl_ip_nonlocal_bind == 0 && 
+	    sk->protinfo.af_inet.freebind == 0 &&
 	    addr->sin_addr.s_addr != INADDR_ANY &&
 	    chk_addr_ret != RTN_LOCAL &&
 	    chk_addr_ret != RTN_MULTICAST &&

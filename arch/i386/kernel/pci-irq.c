@@ -125,35 +125,87 @@ static void eisa_set_level_irq(unsigned int irq)
 	}
 }
 
+/*
+ * Common IRQ routing practice: nybbles in config space,
+ * offset by some magic constant.
+ */
+static unsigned int read_config_nybble(struct pci_dev *router, unsigned offset, unsigned nr)
+{
+	u8 x;
+	unsigned reg = offset + (nr >> 1);
+
+	pci_read_config_byte(router, reg, &x);
+	return (nr & 1) ? (x >> 4) : (x & 0xf);
+}
+
+static void write_config_nybble(struct pci_dev *router, unsigned offset, unsigned nr, unsigned int val)
+{
+	u8 x;
+	unsigned reg = offset + (nr >> 1);
+
+	pci_read_config_byte(router, reg, &x);
+	x = (nr & 1) ? ((x & 0x0f) | (val << 4)) : ((x & 0xf0) | val);
+	pci_write_config_byte(router, reg, x);
+}
+
+/*
+ * ALI pirq entries are damn ugly, and completely undocumented.
+ * This has been figured out from pirq tables, and it's not a pretty
+ * picture.
+ */
 static int pirq_ali_get(struct pci_dev *router, struct pci_dev *dev, int pirq)
 {
 	static unsigned char irqmap[16] = { 0, 9, 3, 10, 4, 5, 7, 6, 1, 11, 0, 12, 0, 14, 0, 15 };
-	u8 x;
-	unsigned reg;
 
-	pirq--;
-	reg = 0x48 + (pirq >> 1);
+	switch (pirq) {
+	case 0x00:
+		return 0;
+	default:
+		return irqmap[read_config_nybble(router, 0x48, pirq-1)];
+	case 0xfe:
+		return irqmap[read_config_nybble(router, 0x44, 0)];
+	case 0xff:
+		return irqmap[read_config_nybble(router, 0x75, 0)];
+	}
+}
+
+static void pirq_ali_ide_interrupt(struct pci_dev *router, unsigned reg, unsigned val, unsigned irq)
+{
+	u8 x;
+
 	pci_read_config_byte(router, reg, &x);
-	return irqmap[(pirq & 1) ? (x >> 4) : (x & 0x0f)];
+	x = (x & 0xe0) | val;	/* clear the level->edge transform */
+	pci_write_config_byte(router, reg, x);
+	eisa_set_level_irq(irq);
 }
 
 static int pirq_ali_set(struct pci_dev *router, struct pci_dev *dev, int pirq, int irq)
 {
 	static unsigned char irqmap[16] = { 0, 8, 0, 2, 4, 5, 7, 6, 0, 1, 3, 9, 11, 0, 13, 15 };
 	unsigned int val = irqmap[irq];
-	pirq--;
+		
 	if (val) {
-		u8 x;
-		unsigned reg = 0x48 + (pirq >> 1);
-		pci_read_config_byte(router, reg, &x);
-		x = (pirq & 1) ? ((x & 0x0f) | (val << 4)) : ((x & 0xf0) | val);
-		pci_write_config_byte(router, reg, x);
+		switch (pirq) {
+		default:
+			write_config_nybble(router, 0x48, pirq-1, val);
+			break;
+		case 0xfe:
+			pirq_ali_ide_interrupt(router, 0x44, val, irq);
+			break;
+		case 0xff:
+			pirq_ali_ide_interrupt(router, 0x75, val, irq);
+			break;
+		}
 		eisa_set_level_irq(irq);
 		return 1;
 	}
 	return 0;
 }
 
+/*
+ * The Intel PIIX4 pirq rules are very sane, compared to
+ * the ALI ones (or anything else, for that matter).
+ */
 static int pirq_piix_get(struct pci_dev *router, struct pci_dev *dev, int pirq)
 {
 	u8 x;
@@ -167,39 +219,34 @@ static int pirq_piix_set(struct pci_dev *router, struct pci_dev *dev, int pirq, 
 	return 1;
 }
 
+/*
+ * The VIA pirq rules are nibble-based, like ALI,
+ * but without the ugly irq number munging or the
+ * strange special cases..
+ */
 static int pirq_via_get(struct pci_dev *router, struct pci_dev *dev, int pirq)
 {
-	u8 x;
-	int reg = 0x55 + (pirq >> 1);
-	pci_read_config_byte(router, reg, &x);
-	return (pirq & 1) ? (x >> 4) : (x & 0x0f);
+	return read_config_nybble(router, 0x55, pirq);
 }
 
 static int pirq_via_set(struct pci_dev *router, struct pci_dev *dev, int pirq, int irq)
 {
-	u8 x;
-	int reg = 0x55 + (pirq >> 1);
-	pci_read_config_byte(router, reg, &x);
-	x = (pirq & 1) ? ((x & 0x0f) | (irq << 4)) : ((x & 0xf0) | irq);
-	pci_write_config_byte(router, reg, x);
+	write_config_nybble(router, 0x55, pirq, irq);
 	return 1;
 }
 
+/*
+ * OPTI: high four bits are nibble pointer..
+ * I wonder what the low bits do?
+ */
 static int pirq_opti_get(struct pci_dev *router, struct pci_dev *dev, int pirq)
 {
-	u8 x;
-	int reg = 0xb8 + (pirq >> 5);
-	pci_read_config_byte(router, reg, &x);
-	return (pirq & 0x10) ? (x >> 4) : (x & 0x0f);
+	return read_config_nybble(router, 0xb8, pirq >> 4);
 }
 
 static int pirq_opti_set(struct pci_dev *router, struct pci_dev *dev, int pirq, int irq)
 {
-	u8 x;
-	int reg = 0xb8 + (pirq >> 5);
-	pci_read_config_byte(router, reg, &x);
-	x = (pirq & 0x10) ? ((x & 0x0f) | (irq << 4)) : ((x & 0xf0) | irq);
-	pci_write_config_byte(router, reg, x);
+	write_config_nybble(router, 0xb8, pirq >> 4, irq);
 	return 1;
 }
 

@@ -1239,9 +1239,6 @@ nfs_writeback_done(struct rpc_task *task)
 	}
 #endif
 
-	/* Update attributes as result of writeback. */
-	nfs_write_attributes(inode, resp->fattr);
-
 	while (!list_empty(&data->pages)) {
 		req = nfs_list_entry(data->pages.next);
 		nfs_list_remove_request(req);
@@ -1281,6 +1278,9 @@ nfs_writeback_done(struct rpc_task *task)
 	next:
 		nfs_unlock_request(req);
 	}
+	/* Update attributes as result of writeback. */
+	nfs_write_attributes(inode, resp->fattr);
+
 }
 
 
@@ -1395,7 +1395,6 @@ nfs_commit_done(struct rpc_task *task)
         dprintk("NFS: %4d nfs_commit_done (status %d)\n",
                                 task->tk_pid, task->tk_status);
 
-	nfs_refresh_inode(inode, resp->fattr);
 	while (!list_empty(&data->pages)) {
 		req = nfs_list_entry(data->pages.next);
 		nfs_list_remove_request(req);
@@ -1427,6 +1426,8 @@ nfs_commit_done(struct rpc_task *task)
 	next:
 		nfs_unlock_request(req);
 	}
+
+	nfs_write_attributes(inode, resp->fattr);
 }
 #endif
 

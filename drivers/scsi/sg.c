@@ -2578,7 +2578,7 @@ static int sg_proc_dressz_write(struct file * filp, const char * buffer,
 	return -EACCES;
     num = (count < 10) ? count : 10;
     copy_from_user(buff, buffer, num);
-    buff[count] = '\0';
+    buff[num] = '\0';
     k = simple_strtoul(buff, 0, 10);
     if (k <= 1048576) {
 	sg_big_buff = k;

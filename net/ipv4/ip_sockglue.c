@@ -5,7 +5,7 @@
  *
  *		The IP to API glue.
  *		
- * Version:	$Id: ip_sockglue.c,v 1.52 2000/09/09 08:26:04 davem Exp $
+ * Version:	$Id: ip_sockglue.c,v 1.53 2000/10/22 16:06:56 davem Exp $
  *
  * Authors:	see ip.c
  *
@@ -372,21 +372,23 @@ out:
 /*
  *	Socket option code for IP. This is the end of the line after any TCP,UDP etc options on
  *	an IP socket.
- *
- *	We implement IP_TOS (type of service), IP_TTL (time to live).
  */
 
 int ip_setsockopt(struct sock *sk, int level, int optname, char *optval, int optlen)
 {
 	int val=0,err;
 
-	if (optname == IP_PKTINFO || optname == IP_RECVTTL ||
-	    optname == IP_RECVTOS || optname == IP_RECVOPTS ||
-	    optname == IP_RETOPTS || optname == IP_TOS ||
-	    optname == IP_TTL || optname == IP_HDRINCL ||
-	    optname == IP_MTU_DISCOVER || optname == IP_RECVERR ||
-	    optname == IP_MULTICAST_TTL || optname == IP_MULTICAST_LOOP ||
-	    optname == IP_ROUTER_ALERT) {
+	if (level != SOL_IP)
+		return -ENOPROTOOPT;
+
+	if (((1<<optname) & ((1<<IP_PKTINFO) | (1<<IP_RECVTTL) | 
+			    (1<<IP_RECVOPTS) | (1<<IP_RECVTOS) | 
+			    (1<<IP_RETOPTS) | (1<<IP_TOS) | 
+			    (1<<IP_TTL) | (1<<IP_HDRINCL) | 
+			    (1<<IP_MTU_DISCOVER) | (1<<IP_RECVERR) | 
+			    (1<<IP_ROUTER_ALERT) | (1<<IP_FREEBIND))) || 
+				optname == IP_MULTICAST_TTL || 
+				optname == IP_MULTICAST_LOOP) { 
 		if (optlen >= sizeof(int)) {
 			if (get_user(val, (int *) optval))
 				return -EFAULT;
@@ -400,9 +402,6 @@ int ip_setsockopt(struct sock *sk, int level, int optname, char *optval, int opt
 	}
 
 	/* If optlen==0, it is equivalent to val == 0 */
-	
-	if (level != SOL_IP)
-		return -ENOPROTOOPT;
 
 #ifdef CONFIG_IP_MROUTE
 	if (optname >= MRT_BASE && optname <= (MRT_BASE + 10))
@@ -612,6 +611,12 @@ int ip_setsockopt(struct sock *sk, int level, int optname, char *optval, int opt
 		case IP_ROUTER_ALERT:	
 			err = ip_ra_control(sk, val ? 1 : 0, NULL);
 			break;
+
+		case IP_FREEBIND:
+			if (optlen<1)
+				goto e_inval;
+			sk->protinfo.af_inet.freebind = !!val; 
+	                break;			
  
 		default:
 #ifdef CONFIG_NETFILTER
@@ -771,6 +776,9 @@ int ip_getsockopt(struct sock *sk, int level, int optname, char *optval, int *op
 			len -= msg.msg_controllen;
 			return put_user(len, optlen);
 		}
+		case IP_FREEBIND: 
+			val = sk->protinfo.af_inet.freebind; 
+			break; 
 		default:
 #ifdef CONFIG_NETFILTER
 			val = nf_getsockopt(sk, PF_INET, optname, optval, 

@@ -103,7 +103,7 @@ static inline long do_sys_truncate(const char * path, loff_t length)
 	inode = nd.dentry->d_inode;
 
 	error = -EACCES;
-	if (S_ISDIR(inode->i_mode))
+	if (!S_ISREG(inode->i_mode))
 		goto dput_and_out;
 
 	error = permission(inode,MAY_WRITE);
@@ -164,7 +164,7 @@ static inline long do_sys_ftruncate(unsigned int fd, loff_t length)
 	dentry = file->f_dentry;
 	inode = dentry->d_inode;
 	error = -EACCES;
-	if (S_ISDIR(inode->i_mode) || !(file->f_mode & FMODE_WRITE))
+	if (!S_ISREG(inode->i_mode) || !(file->f_mode & FMODE_WRITE))
 		goto out_putf;
 	error = -EPERM;
 	if (IS_IMMUTABLE(inode) || IS_APPEND(inode))

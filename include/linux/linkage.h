@@ -9,7 +9,7 @@
 #define CPP_ASMLINKAGE
 #endif
 
-#if defined __i386__ && (__GNUC__ > 2 || __GNUC_MINOR__ > 7)
+#if defined __i386__
 #define asmlinkage CPP_ASMLINKAGE __attribute__((regparm(0)))
 #elif defined __ia64__
 #define asmlinkage CPP_ASMLINKAGE __attribute__((syscall_linkage))

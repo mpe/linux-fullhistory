@@ -3126,8 +3126,11 @@ static void idetape_create_load_unload_cmd (ide_drive_t *drive, idetape_pc_t *pc
 	idetape_init_pc (pc);
 	pc->c[0] = IDETAPE_LOAD_UNLOAD_CMD;
 	pc->c[4] = cmd;
-	if (tape->onstream)
+	if (tape->onstream) {
 		pc->c[1] = 1;
+		if (cmd == !IDETAPE_LU_LOAD_MASK)
+			pc->c[4] = 4;
+	}
 	set_bit (PC_WAIT_FOR_DSC, &pc->flags);
 	pc->callback = &idetape_pc_callback;
 }
@@ -3239,12 +3242,18 @@ static void idetape_create_locate_cmd (ide_drive_t *drive, idetape_pc_t *pc, uns
 	pc->callback = &idetape_pc_callback;
 }
 
-static void idetape_create_prevent_cmd (ide_drive_t *drive, idetape_pc_t *pc, int prevent)
+static int idetape_create_prevent_cmd (ide_drive_t *drive, idetape_pc_t *pc, int prevent)
 {
+	idetape_tape_t *tape = drive->driver_data;
+
+	if (!tape->capabilities.lock)
+		return 0;
+
 	idetape_init_pc(pc);
 	pc->c[0] = IDETAPE_PREVENT_CMD;
 	pc->c[4] = prevent;
 	pc->callback = &idetape_pc_callback;
+	return 1;
 }
 
 static int __idetape_discard_read_pipeline (ide_drive_t *drive)
@@ -5017,13 +5026,15 @@ static int idetape_mtioctop (ide_drive_t *drive,short mt_op,int mt_count)
 				}
 			}
 		case MTLOCK:
-			idetape_create_prevent_cmd(drive, &pc, 1);
+			if (!idetape_create_prevent_cmd(drive, &pc, 1))
+				return 0;
 			retval = idetape_queue_pc_tail (drive,&pc);
 			if (retval) return retval;
 			tape->door_locked = DOOR_EXPLICITLY_LOCKED;
 			return 0;
 		case MTUNLOCK:
-			idetape_create_prevent_cmd(drive, &pc, 0);
+			if (!idetape_create_prevent_cmd(drive, &pc, 0))
+				return 0;
 			retval = idetape_queue_pc_tail (drive,&pc);
 			if (retval) return retval;
 			tape->door_locked = DOOR_UNLOCKED;
@@ -5262,10 +5273,11 @@ static int idetape_chrdev_open (struct inode *inode, struct file *filp)
 	clear_bit (IDETAPE_PIPELINE_ERROR, &tape->flags);
 
 	if (tape->chrdev_direction == idetape_direction_none) {
-		idetape_create_prevent_cmd(drive, &pc, 1);
-		if (!idetape_queue_pc_tail (drive,&pc)) {
-			if (tape->door_locked != DOOR_EXPLICITLY_LOCKED)
-				tape->door_locked = DOOR_LOCKED;
+		if (idetape_create_prevent_cmd(drive, &pc, 1)) {
+			if (!idetape_queue_pc_tail (drive,&pc)) {
+				if (tape->door_locked != DOOR_EXPLICITLY_LOCKED)
+					tape->door_locked = DOOR_LOCKED;
+			}
 		}
 		idetape_analyze_headers(drive);
 	}
@@ -5320,9 +5332,9 @@ static int idetape_chrdev_release (struct inode *inode, struct file *filp)
 		(void) idetape_rewind_tape (drive);
 	if (tape->chrdev_direction == idetape_direction_none) {
 		if (tape->door_locked != DOOR_EXPLICITLY_LOCKED) {
-			idetape_create_prevent_cmd(drive, &pc, 0);
-			if (!idetape_queue_pc_tail (drive,&pc))
-				tape->door_locked = DOOR_UNLOCKED;
+			if (idetape_create_prevent_cmd(drive, &pc, 0))
+				if (!idetape_queue_pc_tail (drive,&pc))
+					tape->door_locked = DOOR_UNLOCKED;
 		}
 	}
 	clear_bit (IDETAPE_BUSY, &tape->flags);

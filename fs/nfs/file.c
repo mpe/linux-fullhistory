@@ -281,7 +281,9 @@ nfs_lock(struct file *filp, int cmd, struct file_lock *fl)
 	 * Flush all pending writes before doing anything
 	 * with locks..
 	 */
+	down(&filp->f_dentry->d_inode->i_sem);
 	status = nfs_wb_all(inode);
+	up(&filp->f_dentry->d_inode->i_sem);
 	if (status < 0)
 		return status;
 
@@ -296,8 +298,10 @@ nfs_lock(struct file *filp, int cmd, struct file_lock *fl)
 	 */
  out_ok:
 	if ((cmd == F_SETLK || cmd == F_SETLKW) && fl->fl_type != F_UNLCK) {
+		down(&filp->f_dentry->d_inode->i_sem);
 		nfs_wb_all(inode);      /* we may have slept */
 		nfs_zap_caches(inode);
+		up(&filp->f_dentry->d_inode->i_sem);
 	}
 	return status;
 }

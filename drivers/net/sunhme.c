@@ -1,4 +1,4 @@
-/* $Id: sunhme.c,v 1.97 2000/09/05 23:12:36 davem Exp $
+/* $Id: sunhme.c,v 1.98 2000/10/22 16:08:38 davem Exp $
  * sunhme.c: Sparc HME/BigMac 10/100baseT half/full duplex auto switching,
  *           auto carrier detecting ethernet driver.  Also known as the
  *           "Happy Meal Ethernet" found on SunSwift SBUS cards.
@@ -55,9 +55,7 @@ static char *version =
 
 #include "sunhme.h"
 
-#ifdef MODULE
 static struct happy_meal *root_happy_dev = NULL;
-#endif
 
 static struct quattro *qfe_sbus_list = NULL;
 #ifdef CONFIG_PCI
@@ -2669,14 +2667,14 @@ static int __init happy_meal_sbus_init(struct net_device *dev,
 	happy_meal_set_initial_advertisement(hp);
 
 	ether_setup(dev);
-#ifdef MODULE
+
 	/* We are home free at this point, link us in to the happy
-	 * module device list.
+	 * device list.
 	 */
 	dev->ifindex = dev_new_index();
 	hp->next_module = root_happy_dev;
 	root_happy_dev = hp;
-#endif
+
 	return 0;
 }
 #endif
@@ -2843,14 +2841,13 @@ static int __init happy_meal_pci_init(struct net_device *dev, struct pci_dev *pd
 
 	ether_setup(dev);
 
-#ifdef MODULE
 	/* We are home free at this point, link us in to the happy
-	 * module device list.
+	 * device list.
 	 */
 	dev->ifindex = dev_new_index();
 	hp->next_module = root_happy_dev;
 	root_happy_dev = hp;
-#endif
+
 	return 0;
 }
 #endif
@@ -2909,9 +2906,7 @@ static int __init happy_meal_probe(void)
 	static int called = 0;
 	int cards;
 
-#ifdef MODULE
 	root_happy_dev = NULL;
-#endif
 
 	if (called)
 		return -ENODEV;
@@ -2934,8 +2929,6 @@ static int __init happy_meal_probe(void)
 
 static void __exit happy_meal_cleanup_module(void)
 {
-#ifdef MODULE
-	/* No need to check MOD_IN_USE, as sys_delete_module() checks. */
 	while (root_happy_dev) {
 		struct happy_meal *hp = root_happy_dev;
 		struct happy_meal *next = root_happy_dev->next_module;
@@ -2965,7 +2958,6 @@ static void __exit happy_meal_cleanup_module(void)
 		kfree(hp->dev);
 		root_happy_dev = next;
 	}
-#endif /* MODULE */
 }
 
 module_init(happy_meal_probe);

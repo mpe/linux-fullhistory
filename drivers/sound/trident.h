@@ -52,6 +52,10 @@
 #define PCI_DEVICE_ID_ALI_5451		0x5451
 #endif
 
+#ifndef PCI_DEVICE_ID_ALI_1533
+#define PCI_DEVICE_ID_ALI_1533		0x1533
+#endif
+
 #ifndef FALSE
 #define FALSE 		0
 #define TRUE  		1
@@ -90,22 +94,65 @@ enum trident_op_registers {
 };
 
 enum ali_op_registers {
+	ALI_SCTRL		= 0x48,
 	ALI_GLOBAL_CONTROL	= 0xd4,
-	ALI_STIMER		= 0xc8
+	ALI_STIMER		= 0xc8,
+	ALI_SPDIF_CS		= 0x70,
+	ALI_SPDIF_CTRL		= 0x74
+};
+
+enum ali_registers_number {
+	ALI_GLOBAL_REGS		= 56,
+	ALI_CHANNEL_REGS	= 8,
+	ALI_MIXER_REGS		= 20
+};
+
+enum ali_sctrl_control_bit {
+	ALI_SPDIF_OUT_ENABLE	= 0x20
 };
 
 enum ali_global_control_bit {
+	ALI_SPDIF_OUT_SEL_PCM	= 0x00000400,
+	ALI_SPDIF_IN_SUPPORT	= 0x00000800,
+	ALI_SPDIF_OUT_CH_ENABLE	= 0x00008000,
+	ALI_SPDIF_IN_CH_ENABLE	= 0x00080000,
+	ALI_PCM_IN_DISABLE	= 0x7fffffff,
 	ALI_PCM_IN_ENABLE	= 0x80000000,
-	ALI_PCM_IN_DISABLE	= 0x7fffffff
+	ALI_SPDIF_IN_CH_DISABLE	= 0xfff7ffff,
+	ALI_SPDIF_OUT_CH_DISABLE = 0xffff7fff,
+	ALI_SPDIF_OUT_SEL_SPDIF	= 0xfffffbff
+	
+};
+
+enum ali_spdif_control_bit {
+	ALI_SPDIF_IN_FUNC_ENABLE	= 0x02,
+	ALI_SPDIF_IN_CH_STATUS		= 0x40,
+	ALI_SPDIF_OUT_CH_STATUS		= 0xbf
+	
+};
+
+enum ali_control_all {
+	ALI_DISABLE_ALL_IRQ	= 0,
+	ALI_CHANNELS		= 32,
+	ALI_STOP_ALL_CHANNELS	= 0xffffffff,
+	ALI_MULTI_CHANNELS_START_STOP	= 0x07800000
+
 };
 
 enum ali_pcm_in_channel_num {
+	ALI_NORMAL_CHANNEL	= 0,
+	ALI_SPDIF_OUT_CHANNEL	= 15,
+	ALI_SPDIF_IN_CHANNEL    = 19,
+	ALI_LEF_CHANNEL		= 23,
+	ALI_CENTER_CHANNEL	= 24,
+	ALI_SURR_RIGHT_CHANNEL	= 25,
+	ALI_SURR_LEFT_CHANNEL	= 26,
 	ALI_PCM_IN_CHANNEL	= 31
 };
 
 enum ali_pcm_out_channel_num {
-	ALI_PCM_OUT_CHANNEL_FIRST = 1,
-	ALI_PCM_OUT_CHANNEL_LAST = 30
+	ALI_PCM_OUT_CHANNEL_FIRST = 0,
+	ALI_PCM_OUT_CHANNEL_LAST = 31
 };
 
 enum ali_ac97_power_control_bit {
@@ -114,6 +161,17 @@ enum ali_ac97_power_control_bit {
 
 enum ali_update_ptr_flags {
 	ALI_ADDRESS_INT_UPDATE	= 0x01
+};
+
+enum ali_revision {
+	ALI_5451_V02	= 0x02
+};
+
+enum ali_spdif_out_control {
+	ALI_PCM_TO_SPDIF_OUT		= 0,
+	ALI_SPDIF_OUT_TO_SPDIF_OUT	= 1,
+	ALI_SPDIF_OUT_PCM		= 0,
+	ALI_SPDIF_OUT_NON_PCM		= 2
 };
 
 /* S/PDIF Operational Registers for 4D-NX */
@@ -259,7 +317,6 @@ enum miscint_bits {
 #define VALIDATE_STATE(a) VALIDATE_MAGIC(a,TRIDENT_STATE_MAGIC)
 #define VALIDATE_CARD(a) VALIDATE_MAGIC(a,TRIDENT_CARD_MAGIC)
 
- 
 extern __inline__ unsigned ld2(unsigned int x)
 {
 	unsigned r = 0;

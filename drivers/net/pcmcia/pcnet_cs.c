@@ -11,7 +11,7 @@
 
     Copyright (C) 1999 David A. Hinds -- dahinds@users.sourceforge.net
 
-    pcnet_cs.c 1.124 2000/07/21 19:47:31
+    pcnet_cs.c 1.126 2000/10/02 20:38:23
     
     The network driver code is based on Donald Becker's NE2000 code:
 
@@ -72,7 +72,7 @@ static int pc_debug = PCMCIA_DEBUG;
 MODULE_PARM(pc_debug, "i");
 #define DEBUG(n, args...) if (pc_debug>(n)) printk(KERN_DEBUG args)
 static char *version =
-"pcnet_cs.c 1.124 2000/07/21 19:47:31 (David Hinds)";
+"pcnet_cs.c 1.126 2000/10/02 20:38:23 (David Hinds)";
 #else
 #define DEBUG(n, args...)
 #endif
@@ -81,39 +81,22 @@ static char *version =
 
 /* Parameters that can be set with 'insmod' */
 
+#define INT_MODULE_PARM(n, v) static int n = v; MODULE_PARM(n, "i")
+
 /* Bit map of interrupts to choose from */
-static u_int irq_mask = 0xdeb8;
+INT_MODULE_PARM(irq_mask,	0xdeb8);
 static int irq_list[4] = { -1 };
+MODULE_PARM(irq_list, "1-4i");
 
-/* Transceiver type, for Socket EA and IBM CC cards. */
-static int if_port = 1;
-
-/* Use 64K packet buffer, for Socket EA cards. */
-static int use_big_buf = 1;
-
-/* Shared memory speed, in ns */
-static int mem_speed = 0;
-
-/* Insert a pause in block_output after sending a packet */
-static int delay_output = 0;
-
-/* Length of delay, in microseconds */
-static int delay_time = 4;
-
-/* Use shared memory, if available? */
-static int use_shmem = -1;
+INT_MODULE_PARM(if_port,	1);	/* Transceiver type */
+INT_MODULE_PARM(use_big_buf,	1);	/* use 64K packet buffer? */
+INT_MODULE_PARM(mem_speed,	0);	/* shared mem speed, in ns */
+INT_MODULE_PARM(delay_output,	0);	/* pause after xmit? */
+INT_MODULE_PARM(delay_time,	4);	/* in usec */
+INT_MODULE_PARM(use_shmem,	-1);	/* use shared memory? */
 
 /* Ugh!  Let the user hardwire the hardware address for queer cards */
 static int hw_addr[6] = { 0, /* ... */ };
-
-MODULE_PARM(irq_mask, "i");
-MODULE_PARM(irq_list, "1-4i");
-MODULE_PARM(if_port, "i");
-MODULE_PARM(use_big_buf, "i");
-MODULE_PARM(mem_speed, "i");
-MODULE_PARM(delay_output, "i");
-MODULE_PARM(delay_time, "i");
-MODULE_PARM(use_shmem, "i");
 MODULE_PARM(hw_addr, "6i");
 
 /*====================================================================*/
@@ -465,7 +448,7 @@ static hw_info_t *get_prom(dev_link_t *link)
     };
 
     pcnet_reset_8390(dev);
-    udelay(10000);
+    mdelay(10);
 
     for (i = 0; i < sizeof(program_seq)/sizeof(program_seq[0]); i++)
 	outb_p(program_seq[i].value, ioaddr + program_seq[i].offset);
@@ -1046,7 +1029,7 @@ static void pcnet_reset_8390(struct net_device *dev)
     for (i = 0; i < 100; i++) {
 	if ((inb_p(nic_base+EN0_ISR) & ENISR_RESET) != 0)
 	    break;
-	udelay(100L);
+	udelay(100);
     }
     outb_p(ENISR_RESET, nic_base + EN0_ISR); /* Ack intr. */
     

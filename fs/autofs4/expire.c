@@ -3,7 +3,7 @@
  * linux/fs/autofs/expire.c
  *
  *  Copyright 1997-1998 Transmeta Corporation -- All Rights Reserved
- *  Copyright 1999 Jeremy Fitzhardinge <jeremy@goop.org>
+ *  Copyright 1999-2000 Jeremy Fitzhardinge <jeremy@goop.org>
  *
  * This file is part of the Linux kernel and is made available under
  * the terms of the GNU General Public License, version 2, or at your
@@ -15,46 +15,139 @@
 
 /*
  * Determine if a subtree of the namespace is busy.
+ *
+ * mnt is the mount tree under the autofs mountpoint
  */
-static int is_tree_busy(struct vfsmount *mnt)
+static inline int is_vfsmnt_tree_busy(struct vfsmount *mnt)
 {
 	struct vfsmount *this_parent = mnt;
 	struct list_head *next;
 	int count;
 
-	spin_lock(&dcache_lock);
-	count = atomic_read(&mnt->mnt_count) - 2;
-	if (!is_autofs4_dentry(mnt->mnt_mountpoint))
-		count--;
+	count = atomic_read(&mnt->mnt_count) - 1;
+
 repeat:
 	next = this_parent->mnt_mounts.next;
+	DPRINTK(("is_vfsmnt_tree_busy: mnt=%p, this_parent=%p, next=%p\n",
+		 mnt, this_parent, next));
 resume:
-	while (next != &this_parent->mnt_mounts) {
-		struct list_head *tmp = next;
-		struct vfsmount *p = list_entry(tmp, struct vfsmount,
+	for( ; next != &this_parent->mnt_mounts; next = next->next) {
+		struct vfsmount *p = list_entry(next, struct vfsmount,
 						mnt_child);
-		next = tmp->next;
-		/* Decrement count for unused children */
-		count += atomic_read(&p->mnt_count) - 2;
+
+		/* -1 for struct vfs_mount's normal count, 
+		   -1 to compensate for child's reference to parent */
+		count += atomic_read(&p->mnt_count) - 1 - 1;
+
+		DPRINTK(("is_vfsmnt_tree_busy: p=%p, count now %d\n",
+			 p, count));
+
 		if (!list_empty(&p->mnt_mounts)) {
 			this_parent = p;
 			goto repeat;
 		}
 		/* root is busy if any leaf is busy */
-		if (atomic_read(&p->mnt_count) > 1) {
-			spin_unlock(&dcache_lock);
+		if (atomic_read(&p->mnt_count) > 1)
 			return 1;
-		}
 	}
-	/*
-	 * All done at this level ... ascend and resume the search.
-	 */
+
+	/* All done at this level ... ascend and resume the search. */
 	if (this_parent != mnt) {
 		next = this_parent->mnt_child.next; 
 		this_parent = this_parent->mnt_parent;
 		goto resume;
 	}
-	spin_unlock(&dcache_lock);
+
+	DPRINTK(("is_vfsmnt_tree_busy: count=%d\n", count));
+	return count != 0; /* remaining users? */
+}
+
+/* Traverse a dentry's list of vfsmounts and return the number of
+   non-busy mounts */
+static int check_vfsmnt(struct vfsmount *mnt, struct dentry *dentry)
+{
+	int ret = 0;
+	struct list_head *tmp;
+
+	list_for_each(tmp, &dentry->d_vfsmnt) {
+		struct vfsmount *vfs = list_entry(tmp, struct vfsmount, 
+						  mnt_clash);
+		DPRINTK(("check_vfsmnt: mnt=%p, dentry=%p, tmp=%p, vfs=%p\n",
+			 mnt, dentry, tmp, vfs));
+		if (vfs->mnt_parent != mnt || /* don't care about busy-ness of other namespaces */
+		    !is_vfsmnt_tree_busy(vfs))
+			ret++;
+	}
+
+	DPRINTK(("check_vfsmnt: ret=%d\n", ret));
+	return ret;
+}
+
+/* Check dentry tree for busyness.  If a dentry appears to be busy
+   because it is a mountpoint, check to see if the mounted
+   filesystem is busy. */
+static int is_tree_busy(struct vfsmount *topmnt, struct dentry *top)
+{
+	struct dentry *this_parent;
+	struct list_head *next;
+	int count;
+
+	count = atomic_read(&top->d_count);
+	
+	DPRINTK(("is_tree_busy: top=%p initial count=%d\n", 
+		 top, count));
+	this_parent = top;
+
+	count--;	/* top is passed in after being dgot */
+
+	if (is_autofs4_dentry(top)) {
+		count--;
+		DPRINTK(("is_tree_busy: autofs; count=%d\n", count));
+	}
+
+	if (d_mountpoint(top))
+		count -= check_vfsmnt(topmnt, top);
+
+ repeat:
+	next = this_parent->d_subdirs.next;
+ resume:
+	while (next != &this_parent->d_subdirs) {
+		int adj = 0;
+		struct dentry *dentry = list_entry(next, struct dentry,
+						   d_child);
+		next = next->next;
+
+		count += atomic_read(&dentry->d_count) - 1;
+
+		if (d_mountpoint(dentry))
+			adj += check_vfsmnt(topmnt, dentry);
+
+		if (is_autofs4_dentry(dentry)) {
+			adj++;
+			DPRINTK(("is_tree_busy: autofs; adj=%d\n",
+				 adj));
+		}
+
+		count -= adj;
+
+		if (!list_empty(&dentry->d_subdirs)) {
+			this_parent = dentry;
+			goto repeat;
+		}
+
+		if (atomic_read(&dentry->d_count) != adj) {
+			DPRINTK(("is_tree_busy: busy leaf (d_count=%d adj=%d)\n",
+				 atomic_read(&dentry->d_count), adj));
+			return 1;
+		}
+	}
+
+	/* All done at this level ... ascend and resume the search. */
+	if (this_parent != top) {
+		next = this_parent->d_child.next; 
+		this_parent = this_parent->d_parent;
+		goto resume;
+	}
 
 	DPRINTK(("is_tree_busy: count=%d\n", count));
 	return count != 0; /* remaining users? */
@@ -67,11 +160,11 @@ resume:
  *  - it has been unused for exp_timeout time
  */
 static struct dentry *autofs4_expire(struct super_block *sb,
-				    struct vfsmount *mnt,
-				    struct autofs_sb_info *sbi,
-				    int do_now)
+				     struct vfsmount *mnt,
+				     struct autofs_sb_info *sbi,
+				     int do_now)
 {
-	unsigned long now = jiffies; /* snapshot of now */
+	unsigned long now = jiffies;
 	unsigned long timeout;
 	struct dentry *root = sb->s_root;
 	struct list_head *tmp;
@@ -106,36 +199,32 @@ static struct dentry *autofs4_expire(struct super_block *sb,
 
 		if (!do_now) {
 			/* Too young to die */
-			if (time_after(ino->last_used+timeout, now))
+			if (time_after(ino->last_used + timeout, now))
 				continue;
 		
 			/* update last_used here :- 
 			   - obviously makes sense if it is in use now
 			   - less obviously, prevents rapid-fire expire
-			   attempts if expire fails the first time */
+			     attempts if expire fails the first time */
 			ino->last_used = now;
 		}
 		p = mntget(mnt);
-		d = dget(dentry);
-		spin_unlock(&dcache_lock);
-		while(d_mountpoint(d) && follow_down(&p, &d))
-			;
+		d = dget_locked(dentry);
 
-		if (!is_tree_busy(p)) {
-			dput(d);
-			mntput(p);
+		if (!is_tree_busy(p, d)) {
 			DPRINTK(("autofs_expire: returning %p %.*s\n",
-				 dentry, dentry->d_name.len, dentry->d_name.name));
+				 dentry, (int)dentry->d_name.len, dentry->d_name.name));
 			/* Start from here next time */
-			spin_lock(&dcache_lock);
 			list_del(&root->d_subdirs);
 			list_add(&root->d_subdirs, &dentry->d_child);
 			spin_unlock(&dcache_lock);
+
+			dput(d);
+			mntput(p);
 			return dentry;
 		}
 		dput(d);
 		mntput(p);
-		spin_lock(&dcache_lock);
 	}
 	spin_unlock(&dcache_lock);
 

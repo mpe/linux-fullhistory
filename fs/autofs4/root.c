@@ -3,7 +3,7 @@
  * linux/fs/autofs/root.c
  *
  *  Copyright 1997-1998 Transmeta Corporation -- All Rights Reserved
- *  Copyright 1999 Jeremy Fitzhardinge <jeremy@goop.org>
+ *  Copyright 1999-2000 Jeremy Fitzhardinge <jeremy@goop.org>
  *
  * This file is part of the Linux kernel and is made available under
  * the terms of the GNU General Public License, version 2, or at your
@@ -115,7 +115,6 @@ static int try_to_fill_dentry(struct dentry *dentry,
 			/* Return a negative dentry, but leave it "pending" */
 			return 1;
 		}
-		/* status = autofs4_wait(sbi, &dentry->d_name, NFY_MOUNT); */
 	}
 
 	/* If this is an unused directory that isn't a mount point,
@@ -201,30 +200,34 @@ static int autofs4_revalidate(struct dentry *dentry, int flags)
 
 static void autofs4_dentry_release(struct dentry *de)
 {
-	struct autofs_info *inf = autofs4_dentry_ino(de);
+	struct autofs_info *inf;
+
+	lock_kernel();
 
 	DPRINTK(("autofs4_dentry_release: releasing %p\n", de));
 
-	lock_kernel();
+	inf = autofs4_dentry_ino(de);
 	de->d_fsdata = NULL;
+
 	if (inf) {
 		inf->dentry = NULL;
 		inf->inode = NULL;
 
 		autofs4_free_ino(inf);
 	}
+
 	unlock_kernel();
 }
 
 /* For dentries of directories in the root dir */
 static struct dentry_operations autofs4_root_dentry_operations = {
-	d_revalidate:	autofs4_root_revalidate,	/* d_revalidate */
+	d_revalidate:	autofs4_root_revalidate,
 	d_release:	autofs4_dentry_release,
 };
 
 /* For other dentries */
 static struct dentry_operations autofs4_dentry_operations = {
-	d_revalidate:	autofs4_revalidate,	/* d_revalidate */
+	d_revalidate:	autofs4_revalidate,
 	d_release:	autofs4_dentry_release,
 };
 
@@ -521,11 +524,11 @@ static int autofs4_root_ioctl(struct inode *inode, struct file *filp,
 	/* return a single thing to expire */
 	case AUTOFS_IOC_EXPIRE:
 		return autofs4_expire_run(inode->i_sb,filp->f_vfsmnt,sbi,
-					 (struct autofs_packet_expire *)arg);
+					  (struct autofs_packet_expire *)arg);
 	/* same as above, but can send multiple expires through pipe */
 	case AUTOFS_IOC_EXPIRE_MULTI:
 		return autofs4_expire_multi(inode->i_sb,filp->f_vfsmnt,sbi,
-					(int *)arg);
+					    (int *)arg);
 
 	default:
 		return -ENOSYS;

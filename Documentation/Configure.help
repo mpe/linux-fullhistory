@@ -868,6 +868,10 @@ CONFIG_BLK_DEV_OPTI621
   This is a driver for the OPTi 82C621 EIDE controller.
   Please read the comments at the top of drivers/ide/opti621.c.
 
+ServerWorks OSB4 chipset support (EXPERIMENTAL)
+CONFIG_BLK_DEV_OSB4
+  This driver adds PIO/DMA support for the Serverworks OSB4 chipset
+
 Intel PIIXn chipsets support
 CONFIG_BLK_DEV_PIIX
   This driver adds PIO mode setting and tuning for all PIIX IDE
@@ -14330,6 +14334,25 @@ CONFIG_SOUND_TRIDENT
   for Trident 4Dwave. PCI ID 1039:7018 stands for SiS7018. PCI ID
   10B9:5451 stands for ALi5451.
 
+  This driver supports S/PDIF in/out (record/playback) for ALi 5451
+  embedded in ALi M1535+ and M1535D+. Note that they aren't all 
+  enabled by default; you can enable them by saying Y to "/proc file
+  system support" and "Sysctl support", and after the /proc file 
+  system has been mounted, executing the command
+
+	command			what is enabled
+  
+  echo 0>/proc/ALi5451	pcm out is also set to S/PDIF out. (Default).
+  
+  echo 1>/proc/ALi5451	use S/PDIF out to output pcm data.
+  
+  echo 2>/proc/ALi5451	use S/PDIF out to output non-pcm data.(AC3...).
+
+  echo 3>/proc/ALi5451	record from Ac97 in(MIC, Line in...). (Default).
+  
+  echo 4>/proc/ALi5451	no matter Ac97 settings, record from S/PDIF in.
+  
+  
   This driver differs slightly from OSS/Free, so PLEASE READ the
   comments at the top of driver/sound/trident.c
 

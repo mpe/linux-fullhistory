@@ -31,7 +31,7 @@ al español de este documento en varios formatos.
 Eine deutsche Version dieser Datei finden Sie unter
 <http://www.stefan-winter.de/Changes-2.4.0.txt>.
 
-Last updated: October 13, 2000
+Last updated: October 25, 2000
 
 Chris Ricker (kaboom@gatech.edu or chris.ricker@genetics.utah.edu).
 
@@ -48,7 +48,7 @@ necessary on all systems; obviously, if you don't have any PCMCIA (PC
 Card) hardware, for example, you probably needn't concern yourself
 with pcmcia-cs.
 
-o  Gnu C                  2.7.2.3                 # gcc --version
+o  Gnu C                  2.91.66                 # gcc --version
 o  Gnu make               3.77                    # make --version
 o  binutils               2.9.1.0.25              # ld -v
 o  util-linux             2.10o                   # kbdrate -v
@@ -64,13 +64,22 @@ Kernel compilation
 GCC
 ---
 
-You will need at least gcc 2.7.2 to compile the kernel.  You currently
-have several options for gcc-derived compilers:  gcc 2.7.2.3, various
-versions of egcs, the new gcc 2.95 and upcoming gcc 3.0, and experimental
-compilers like pgcc.  For absolute stability, it is still recommended
-that gcc 2.7.2.3 be used to compile your kernel.  egcs 1.1.2 should also
-work.  gcc 2.95 is known to have problems, and using pgcc for your kernel
-is just asking for trouble.
+The gcc version requirements may vary depending on the type of CPU in your
+computer. The next paragraph applies to users of x86 CPUs, but not
+necessarily to users of other CPUs. Users of other CPUs should obtain
+information about their gcc version requirements from another source.
+
+The recommended compiler for the kernel is egcs 1.1.2 (gcc 2.91.66), and it
+should be used when you need absolute stability. You may use gcc 2.95.2
+instead if you wish, although it may cause problems. Later versions of gcc
+have not received much testing for Linux kernel compilation, and there are
+almost certainly bugs (mainly, but not exclusively, in the kernel) that
+will need to be fixed in order to use these compilers. In any case, using
+pgcc instead of egcs or plain gcc is just asking for trouble.
+
+Note that gcc 2.7.2.3 is no longer a supported kernel compiler. The kernel
+no longer works around bugs in gcc 2.7.2.3 and, in fact, will refuse to
+be compiled with it.
 
 In addition, please pay attention to compiler optimization.  Anything
 greater than -O2 may not be wise.  Similarly, if you choose to use gcc-2.95
@@ -85,7 +94,7 @@ You will need Gnu make 3.77 or later to build the kernel.
 Binutils
 --------
 
-Linux on IA/32 has recently switched from using as86 to using gas for
+Linux on IA-32 has recently switched from using as86 to using gas for
 assembling the 16-bit boot code, removing the need for as86 to compile
 your kernel.  This change does, however, mean that you need a recent
 release of binutils.
@@ -245,12 +254,7 @@ Getting updated software
 Compilers
 *********
 
-gcc 2.7.2.3
------------
-o  <ftp://ftp.gnu.org/gnu/gcc/gcc-2.7.2.3.tar.gz>
-o  <ftp://metalab.unc.edu/pub/gnu/gcc-2.7.2.3.tar.gz>
-
-egcs 1.1.2
+egcs 1.1.2 (gcc 2.91.66)
 ---------
 o  <ftp://ftp.valinux.com/pub/support/hjl/gcc/egcs-1.1.2/egcs-1.1.2-glibc.x86.tar.bz2>
 o  <ftp://ftp.valinux.com/pub/support/hjl/gcc/egcs-1.1.2/egcs-1.1.2-libc5.x86.tar.bz2>

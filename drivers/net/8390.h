@@ -1,6 +1,6 @@
 /* Generic NS8390 register definitions. */
 /* This file is part of Donald Becker's 8390 drivers, and is distributed
-   under the same license. Auto-loading of 8390.o added by Paul Gortmaker.
+   under the same license. Auto-loading of 8390.o only in v2.2 - Paul G.
    Some of these names and comments originated from the Crynwr
    packet drivers, which are distributed under the GPL. */
 
@@ -11,11 +11,6 @@
 #include <linux/if_ether.h>
 #include <linux/ioport.h>
 #include <linux/skbuff.h>
-
-/* With kmod, drivers can now load the 8390 module themselves! */
-#if 0 /* def CONFIG_KMOD */
-#define LOAD_8390_BY_KMOD
-#endif
 
 #define TX_2X_PAGES 12
 #define TX_1X_PAGES 6
@@ -50,112 +45,15 @@ extern void autoirq_setup(int waittime);
 extern unsigned long autoirq_report(int waittime);
 #endif
 
-#if defined(LOAD_8390_BY_KMOD) && defined(MODULE) && !defined(NS8390_CORE)
-
-/* Function pointers to be mapped onto the 8390 core support */
-static int (*S_ethdev_init)(struct net_device *dev);
-static void (*S_NS8390_init)(struct net_device *dev, int startp);
-static int (*S_ei_open)(struct net_device *dev);
-static int (*S_ei_close)(struct net_device *dev);
-static void (*S_ei_interrupt)(int irq, void *dev_id, struct pt_regs *regs);
-
-extern __inline__ void unload_8390_module(void)
-{
-	if (S_ethdev_init) {
-		put_module_symbol((unsigned long)S_ethdev_init);
-		S_ethdev_init = NULL;
-	}
-	if (S_NS8390_init) {
-		put_module_symbol((unsigned long)S_NS8390_init);
-		S_NS8390_init = NULL;
-	}
-	if (S_ei_open) {
-		put_module_symbol((unsigned long)S_ei_open);
-		S_ei_open = NULL;
-	}
-	if (S_ei_close) {
-		put_module_symbol((unsigned long)S_ei_close);
-		S_ei_close = NULL;
-	}
-	if (S_ei_interrupt) {
-		put_module_symbol((unsigned long)S_ei_interrupt);
-		S_ei_interrupt = NULL;
-	}
-}
-
-extern __inline__ int load_8390_module(const char *driver)
-{
-	/* Do we actually need to handle this case? */
-	if (S_ethdev_init) {
-		printk(KERN_DEBUG "%s: load_8390_module called when pointers already present\n", driver);
-		return 0;
-	}
-	
-	/* Attempt to get the first symbol */
-	S_ethdev_init = (void *)get_module_symbol(NULL, "ethdev_init");
-
-	if (!S_ethdev_init) {
-		/* It failed. See if we have request_module() */
-		int (*request_mod)(const char *module_name);
-
-		if (get_module_symbol("", "request_module") == 0) {
-			printk("%s: module auto-load (kmod) support not present.\n", driver);
-			printk("%s: unable to auto-load required 8390 module.\n", driver);
-			printk("%s: try \"modprobe 8390\" as root 1st.\n", driver);
-			return -ENOSYS;
-		}
-
-		/* OK - we have request_module() - try it */
-		request_mod = (void*)get_module_symbol("", "request_module");
-		if (request_mod("8390")) {
-			printk("%s: request to load the 8390 module failed.\n", driver);
-			return -ENOSYS;
-		}
-
-		printk(KERN_INFO "%s: auto-loaded 8390 module.\n", driver);
-		
-		/* Retry getting ethdev_init */
-		S_ethdev_init = (void *)get_module_symbol(NULL, "ethdev_init");
-	}
-
-	/* Get addresses for the other functions */
-	S_NS8390_init = (void*)get_module_symbol(0, "NS8390_init");
-	S_ei_open = (void*)get_module_symbol(0, "ei_open");
-	S_ei_close = (void*)get_module_symbol(0, "ei_close");
-	S_ei_interrupt = (void*)get_module_symbol(0, "ei_interrupt");
-
-	/* Check if module really loaded and is valid */
-	if (!S_ethdev_init || !S_NS8390_init || !S_ei_open || !S_ei_close
-	    || !S_ei_interrupt) {
-		unload_8390_module();
-		printk("%s: 8390.o not found/invalid or failed to load.\n", driver);
-		return -ENOSYS;
-}
-	
-	return 0;
-}
-	
-/*
- * These are last so they only have scope over the driver
- * code (wd, ne, 3c503, etc.)  and not over the above code.
- */
-#define ethdev_init S_ethdev_init
-#define NS8390_init S_NS8390_init
-#define ei_open S_ei_open
-#define ei_close S_ei_close
-#define ei_interrupt S_ei_interrupt
-
-#else	/* not a module or kmod support not wanted */
-
+/* Currently unused - delete in v2.5.x after purging from drivers */
 #define load_8390_module(driver)	0
 #define unload_8390_module()		do { } while (0)
+
 extern int ethdev_init(struct net_device *dev);
 extern void NS8390_init(struct net_device *dev, int startp);
 extern int ei_open(struct net_device *dev);
 extern int ei_close(struct net_device *dev);
 extern void ei_interrupt(int irq, void *dev_id, struct pt_regs *regs);
-
-#endif
 
 /* Most of these entries should be in 'struct net_device' (or most of the
    things in there should be here!) */

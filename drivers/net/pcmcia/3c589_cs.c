@@ -4,7 +4,7 @@
     
     Copyright (C) 1999 David A. Hinds -- dahinds@users.sourceforge.net
 
-    3c589_cs.c 1.153 2000/06/12 21:27:25
+    3c589_cs.c 1.154 2000/09/30 17:39:04
 
     The network driver code is based on Donald Becker's 3c589 code:
     
@@ -117,7 +117,7 @@ static int pc_debug = PCMCIA_DEBUG;
 MODULE_PARM(pc_debug, "i");
 #define DEBUG(n, args...) if (pc_debug>(n)) printk(KERN_DEBUG args)
 static char *version =
-"3c589_cs.c 1.153 2000/06/12 21:27:25 (David Hinds)";
+"3c589_cs.c 1.154 2000/09/30 17:39:04 (David Hinds)";
 #else
 #define DEBUG(n, args...)
 #endif
@@ -1007,36 +1007,19 @@ static int el3_rx(struct net_device *dev)
     return 0;
 }
 
-/* Set or clear the multicast filter for this adapter.
-   num_addrs == -1	Promiscuous mode, receive all packets
-   num_addrs == 0	Normal mode, clear multicast list
-   num_addrs > 0	Multicast mode, receive normal and MC packets, and do
-			best-effort filtering.
- */
 static void set_multicast_list(struct net_device *dev)
 {
     struct el3_private *lp = dev->priv;
     dev_link_t *link = &lp->link;
     ioaddr_t ioaddr = dev->base_addr;
+    u_short opts = SetRxFilter | RxStation | RxBroadcast;
 
     if (!(DEV_OK(link))) return;
-#ifdef PCMCIA_DEBUG
-    if (pc_debug > 2) {
-	static int old = 0;
-	if (old != dev->mc_count) {
-	    old = dev->mc_count;
-	    DEBUG(0, "%s: setting Rx mode to %d addresses.\n",
-		  dev->name, old);
-	}
-    }
-#endif
     if (dev->flags & IFF_PROMISC)
-	outw(SetRxFilter | RxStation | RxMulticast | RxBroadcast | RxProm,
-	     ioaddr + EL3_CMD);
+	opts |= RxMulticast | RxProm;
     else if (dev->mc_count || (dev->flags & IFF_ALLMULTI))
-	outw(SetRxFilter|RxStation|RxMulticast|RxBroadcast, ioaddr + EL3_CMD);
-    else
-	outw(SetRxFilter | RxStation | RxBroadcast, ioaddr + EL3_CMD);
+	opts |= RxMulticast;
+    outw(opts, ioaddr + EL3_CMD);
 }
 
 static int el3_close(struct net_device *dev)

@@ -2,7 +2,7 @@
 
     PCMCIA Bulk Memory Services
 
-    bulkmem.c 1.37 2000/06/12 21:29:35
+    bulkmem.c 1.38 2000/09/25 19:29:51
 
     The contents of this file are subject to the Mozilla Public
     License Version 1.1 (the "License"); you may not use this file
@@ -156,8 +156,7 @@ static void retry_erase(erase_busy_t *busy, u_int cause)
 	case MTD_WAITRDY:
 	    if (req.Status == MTD_WAITRDY)
 		insert_queue(&s->erase_busy, busy);
-	    busy->timeout.expires = jiffies + req.Timeout*HZ/1000;
-	    add_timer(&busy->timeout);
+	    mod_timer(&busy->timeout, jiffies + req.Timeout*HZ/1000);
 	    break;
 	}
     } else {

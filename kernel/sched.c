@@ -223,16 +223,20 @@ static void reschedule_idle(struct task_struct * p)
 	best_cpu = p->processor;
 	if (can_schedule(p, best_cpu)) {
 		tsk = idle_task(best_cpu);
-		if (cpu_curr(best_cpu) == tsk)
-			goto send_now_idle;
-
-		/*
-		 * Maybe this process has enough priority to preempt
-		 * its preferred CPU. (this is a shortcut):
-		 */
-		tsk = cpu_curr(best_cpu);
-		if (preemption_goodness(tsk, p, best_cpu) > 0)
-			goto preempt_now;
+		if (cpu_curr(best_cpu) == tsk) {
+			int need_resched;
+send_now_idle:
+			/*
+			 * If need_resched == -1 then we can skip sending
+			 * the IPI altogether, tsk->need_resched is
+			 * actively watched by the idle thread.
+			 */
+			need_resched = tsk->need_resched;
+			tsk->need_resched = 1;
+			if ((best_cpu != this_cpu) && !need_resched)
+				smp_send_reschedule(best_cpu);
+			return;
+		}
 	}
 
 	/*
@@ -276,31 +280,13 @@ static void reschedule_idle(struct task_struct * p)
 	if (tsk) {
 		if (oldest_idle != -1ULL)
 			goto send_now_idle;
-		goto preempt_now;
+		tsk->need_resched = 1;
+		if (tsk->processor != this_cpu)
+			smp_send_reschedule(tsk->processor);
 	}
-
 	return;
 		
-send_now_idle:
-	/*
-	 * If need_resched == -1 then we can skip sending the IPI
-	 * altogether, tsk->need_resched is actively watched by the
-	 * idle thread.
-	 */
-	if ((tsk->processor != current->processor) && !tsk->need_resched)
-		smp_send_reschedule(tsk->processor);
-	tsk->need_resched = 1;
-	return;
 
-preempt_now:
-	tsk->need_resched = 1;
-	/*
-	 * the APIC stuff can go outside of the lock because
-	 * it uses no task information, only CPU#.
-	 */
-	if (tsk->processor != this_cpu)
-		smp_send_reschedule(tsk->processor);
-	return;
 #else /* UP */
 	int this_cpu = smp_processor_id();
 	struct task_struct *tsk;
@@ -444,37 +430,53 @@ signed long schedule_timeout(signed long timeout)
 static inline void __schedule_tail(struct task_struct *prev)
 {
 #ifdef CONFIG_SMP
-	int yield;
-	unsigned long flags;
+	int policy;
 
 	/*
-	 * fast path falls through. We have to take the runqueue lock
-	 * unconditionally to make sure that the test of prev->state
-	 * and setting has_cpu is atomic wrt. interrupts. It's not
-	 * a big problem in the common case because we recently took
-	 * the runqueue lock so it's likely to be in this processor's
-	 * cache.
+	 * fast path falls through. We have to clear has_cpu before
+	 * checking prev->state to avoid a wakeup race - thus we
+	 * also have to protect against the task exiting early.
 	 */
-	spin_lock_irqsave(&runqueue_lock, flags);
-	yield = prev->policy & SCHED_YIELD;
-	prev->policy &= ~SCHED_YIELD;
+	task_lock(prev);
+	policy = prev->policy;
+	prev->policy = policy & ~SCHED_YIELD;
 	prev->has_cpu = 0;
+	wmb();
 	if (prev->state == TASK_RUNNING)
-		goto running_again;
+		goto needs_resched;
+
 out_unlock:
-	spin_unlock_irqrestore(&runqueue_lock, flags);
+	task_unlock(prev);
 	return;
 
 	/*
 	 * Slow path - we 'push' the previous process and
 	 * reschedule_idle() will attempt to find a new
 	 * processor for it. (but it might preempt the
-	 * current process as well.)
+	 * current process as well.) We must take the runqueue
+	 * lock and re-check prev->state to be correct. It might
+	 * still happen that this process has a preemption
+	 * 'in progress' already - but this is not a problem and
+	 * might happen in other circumstances as well.
 	 */
-running_again:
-	if ((prev != idle_task(smp_processor_id())) && !yield)
-		reschedule_idle(prev);
-	goto out_unlock;
+needs_resched:
+	{
+		unsigned long flags;
+
+		/*
+		 * Avoid taking the runqueue lock in cases where
+		 * no preemption-check is necessery:
+		 */
+		if ((prev == idle_task(smp_processor_id())) ||
+						(policy & SCHED_YIELD))
+			goto out_unlock;
+
+		spin_lock_irqsave(&runqueue_lock, flags);
+		if (prev->state == TASK_RUNNING)
+			reschedule_idle(prev);
+		spin_unlock_irqrestore(&runqueue_lock, flags);
+		goto out_unlock;
+	}
 #else
 	prev->policy &= ~SCHED_YIELD;
 #endif /* CONFIG_SMP */
@@ -588,19 +590,13 @@ still_running_back:
 
 #ifdef CONFIG_SMP
  	/*
- 	 * maintain the per-process 'average timeslice' value.
+ 	 * maintain the per-process 'last schedule' value.
  	 * (this has to be recalculated even if we reschedule to
  	 * the same process) Currently this is only used on SMP,
 	 * and it's approximate, so we do not have to maintain
 	 * it while holding the runqueue spinlock.
  	 */
-	{
-		cycles_t t, this_slice;
-
-		t = get_cycles();
-		this_slice = t - sched_data->last_schedule;
-		sched_data->last_schedule = t;
-	}
+ 	sched_data->last_schedule = get_cycles();
 
 	/*
 	 * We drop the scheduler lock early (it's a global spinlock),
@@ -705,7 +701,7 @@ static inline void __wake_up_common (wait_queue_head_t *q, unsigned int mode,
 	unsigned long flags;
 	int best_cpu, irq;
 
-        if (!q)
+	if (!q || !waitqueue_active(q))
 		goto out;
 
 	best_cpu = smp_processor_id();
@@ -759,16 +755,13 @@ static inline void __wake_up_common (wait_queue_head_t *q, unsigned int mode,
 			}
 		}
 	}
-	if (best_exclusive)
-		best_exclusive->state = TASK_RUNNING;
-	wq_write_unlock_irqrestore(&q->lock, flags);
-
 	if (best_exclusive) {
 		if (sync)
 			wake_up_process_synchronous(best_exclusive);
 		else
 			wake_up_process(best_exclusive);
 	}
+	wq_write_unlock_irqrestore(&q->lock, flags);
 out:
 	return;
 }
@@ -1029,12 +1022,35 @@ out_unlock:
 asmlinkage long sys_sched_yield(void)
 {
 	/*
-	 * This process can only be rescheduled by us,
-	 * so this is safe without any locking.
+	 * Trick. sched_yield() first counts the number of truly 
+	 * 'pending' runnable processes, then returns if it's
+	 * only the current processes. (This test does not have
+	 * to be atomic.) In threaded applications this optimization
+	 * gets triggered quite often.
 	 */
-	if (current->policy == SCHED_OTHER)
-		current->policy |= SCHED_YIELD;
-	current->need_resched = 1;
+
+	int nr_pending = nr_running;
+
+#if CONFIG_SMP
+	int i;
+
+	// Substract non-idle processes running on other CPUs.
+	for (i = 0; i < smp_num_cpus; i++)
+		if (aligned_data[i].schedule_data.curr != idle_task(i))
+			nr_pending--;
+#else
+	// on UP this process is on the runqueue as well
+	nr_pending--;
+#endif
+	if (nr_pending) {
+		/*
+		 * This process can only be rescheduled by us,
+		 * so this is safe without any locking.
+		 */
+		if (current->policy == SCHED_OTHER)
+			current->policy |= SCHED_YIELD;
+		current->need_resched = 1;
+	}
 	return 0;
 }
 

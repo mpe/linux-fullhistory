@@ -1,4 +1,4 @@
-/* $Id: sunlance.c,v 1.104 2000/09/18 05:48:42 davem Exp $
+/* $Id: sunlance.c,v 1.105 2000/10/22 16:08:38 davem Exp $
  * lance.c: Linux/Sparc/Lance driver
  *
  *	Written 1995, 1996 by Miguel de Icaza
@@ -291,9 +291,7 @@ int sparc_lance_debug = 2;
 
 #define LANCE_ADDR(x) ((long)(x) & ~0xff000000)
 
-#ifdef MODULE
 static struct lance_private *root_lance_dev = NULL;
-#endif
 
 /* Load the CSR registers */
 static void load_csrs(struct lance_private *lp)
@@ -1489,11 +1487,10 @@ no_link_test:
 	lp->multicast_timer.data = (unsigned long) dev;
 	lp->multicast_timer.function = &lance_set_multicast_retry;
 
-#ifdef MODULE
 	dev->ifindex = dev_new_index();
 	lp->next_module = root_lance_dev;
 	root_lance_dev = lp;
-#endif
+
 	return 0;
 
 fail:
@@ -1524,9 +1521,7 @@ static int __init sparc_lance_probe(void)
 	static struct sbus_dev sdev;
 	static int called = 0;
 
-#ifdef MODULE
 	root_lance_dev = NULL;
-#endif
 
 	if (called)
 		return -ENODEV;
@@ -1554,9 +1549,7 @@ static int __init sparc_lance_probe(void)
 	static int called = 0;
 	int cards = 0, v;
 
-#ifdef MODULE
 	root_lance_dev = NULL;
-#endif
 
 	if (called)
 		return -ENODEV;
@@ -1597,7 +1590,6 @@ static int __init sparc_lance_probe(void)
 
 static void __exit sparc_lance_cleanup(void)
 {
-#ifdef MODULE
 	struct lance_private *lp;
 
 	while (root_lance_dev) {
@@ -1608,7 +1600,6 @@ static void __exit sparc_lance_cleanup(void)
 		kfree(root_lance_dev->dev);
 		root_lance_dev = lp;
 	}
-#endif /* MODULE */
 }
 
 module_init(sparc_lance_probe);

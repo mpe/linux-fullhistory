@@ -101,8 +101,8 @@ L:	linux-net@vger.kernel.org
 S:	Maintained
 
 ACPI
-P:	Andrew Henroid
-M:	andy_henroid@yahoo.com
+P:	Andy Grover
+M:	andrew.grover@intel.com
 L:	acpi@phobos.fs.tum.de
 W:	http://phobos.fs.tum.de/acpi/index.html
 S:	Maintained

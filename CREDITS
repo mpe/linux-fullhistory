@@ -795,13 +795,16 @@ S: 26506 Norden
 S: Germany
 
 N: Jeremy Fitzhardinge
-E: jeremy@zip.com.au
+E: jeremy@goop.org
+W: http://www.goop.org/~jeremy
+D: author of userfs filesystem
 D: Improved mmap and munmap handling
 D: General mm minor tidyups
-S: 67 Surrey St.
-S: Darlinghurst, Sydney
-S: New South Wales 2010
-S: Australia
+D: autofs v4 filesystem rework
+S: 987 Alabama St
+S: San Francisco
+S: SA, 94110
+S: USA
 
 N: Ralf Flaxa
 E: rfflaxa@immd4.informatik.uni-erlangen.de

@@ -73,6 +73,7 @@
 #define DEVID_AMD7403	((ide_pci_devid_t){PCI_VENDOR_ID_AMD,     PCI_DEVICE_ID_AMD_COBRA_7403})
 #define DEVID_AMD7409	((ide_pci_devid_t){PCI_VENDOR_ID_AMD,     PCI_DEVICE_ID_AMD_VIPER_7409})
 #define DEVID_SLC90E66	((ide_pci_devid_t){PCI_VENDOR_ID_EFAR,    PCI_DEVICE_ID_EFAR_SLC90E66_1})
+#define DEVID_OSB4	((ide_pci_devid_t){PCI_VENDOR_ID_SERVERWORKS, PCI_DEVICE_ID_SERVERWORKS_OSB4IDE})
 
 #define	IDE_IGNORE	((void *)-1)
 
@@ -204,6 +205,19 @@ extern void ide_init_opti621(ide_hwif_t *);
 #define INIT_OPTI621	&ide_init_opti621
 #else
 #define INIT_OPTI621	NULL
+#endif
+
+#ifdef CONFIG_BLK_DEV_OSB4
+extern unsigned int pci_init_osb4(struct pci_dev *, const char *);
+extern unsigned int ata66_osb4(ide_hwif_t *);
+extern void ide_init_osb4(ide_hwif_t *);
+#define PCI_OSB4        &pci_init_osb4
+#define ATA66_OSB4      &ata66_osb4
+#define INIT_OSB4       &ide_init_osb4
+#else
+#define PCI_OSB4        NULL
+#define ATA66_OSB4      NULL
+#define INIT_OSB4       NULL
 #endif
 
 #ifdef CONFIG_BLK_DEV_PDC202XX
@@ -366,6 +380,7 @@ static ide_pci_device_t ide_pci_chipsets[] __initdata = {
 	{DEVID_AMD7403,	"AMD7403",	NULL,		NULL,		NULL,		NULL,		{{0x00,0x00,0x00}, {0x00,0x00,0x00}},	ON_BOARD,	0 },
 	{DEVID_AMD7409,	"AMD7409",	PCI_AMD7409,	ATA66_AMD7409,	INIT_AMD7409,	DMA_AMD7409,	{{0x40,0x01,0x01}, {0x40,0x02,0x02}},	ON_BOARD,	0 },
 	{DEVID_SLC90E66,"SLC90E66",	PCI_SLC90E66,	ATA66_SLC90E66,	INIT_SLC90E66,	NULL,		{{0x41,0x80,0x80}, {0x43,0x80,0x80}},	ON_BOARD,	0 },
+        {DEVID_OSB4,    "ServerWorks OSB4",     PCI_OSB4,       ATA66_OSB4,     INIT_OSB4,      NULL,   {{0x00,0x00,0x00}, {0x00,0x00,0x00}},   ON_BOARD,       0 },
 	{IDE_PCI_DEVID_NULL, "PCI_IDE",	NULL,		NULL,		NULL,		NULL,		{{0x00,0x00,0x00}, {0x00,0x00,0x00}}, 	ON_BOARD,	0 }};
 
 /*
@@ -669,6 +684,7 @@ check_if_enabled:
 		    IDE_PCI_DEVID_EQ(d->devid, DEVID_CMD646) ||
 		    IDE_PCI_DEVID_EQ(d->devid, DEVID_CMD648) ||
 		    IDE_PCI_DEVID_EQ(d->devid, DEVID_CMD649) ||
+		    IDE_PCI_DEVID_EQ(d->devid, DEVID_OSB4) ||
 		    ((dev->class >> 8) == PCI_CLASS_STORAGE_IDE && (dev->class & 0x80))) {
 			unsigned long dma_base = ide_get_or_set_dma_base(hwif, (!mate && d->extra) ? d->extra : 0, d->name);
 			if (dma_base && !(pcicmd & PCI_COMMAND_MASTER)) {

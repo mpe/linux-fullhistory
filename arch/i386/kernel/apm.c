@@ -1427,7 +1427,7 @@ static int apm(void *unused)
 	atomic_inc(&current->files->count);
 	daemonize();
 
-	strcpy(current->comm, "kapmd");
+	strcpy(current->comm, "kapm-idled");
 	sigfillset(&current->blocked);
 	current->tty = NULL;	/* get rid of controlling tty */
 

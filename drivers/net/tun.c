@@ -214,7 +214,7 @@ static __inline__ ssize_t tun_get_user(struct tun_struct *tun, const char *buf, 
 	}
 
 	skb_reserve(skb, 2);
-	copy_from_user(skb_put(skb, count), ptr, len); 
+	copy_from_user(skb_put(skb, len), ptr, len); 
 
 	skb->dev = &tun->dev;
 	switch (tun->flags & TUN_TYPE_MASK) {

@@ -144,9 +144,9 @@ decode_sattr3(u32 *p, struct iattr *iap)
 		iap->ia_valid |= ATTR_SIZE;
 		p = dec64(p, &newsize);
 		if (newsize <= NFS_OFFSET_MAX)
-			iap->ia_size = (u32) newsize;
+			iap->ia_size = newsize;
 		else
-			iap->ia_size = ~(size_t) 0;
+			iap->ia_size = NFS_OFFSET_MAX;
 	}
 	if ((tmp = ntohl(*p++)) == 1) {	/* set to server time */
 		iap->ia_valid |= ATTR_ATIME;

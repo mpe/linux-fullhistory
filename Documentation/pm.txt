@@ -261,7 +261,6 @@ Q: Who do I contact for additional information about
    enabling power management for my specific driver/device?
 
 ACPI4Linux mailing list: acpi@phobos.fs.tum.de
-Linux ACPI maintainer: andy_henroid@yahoo.com
 
 System Interface
 ----------------

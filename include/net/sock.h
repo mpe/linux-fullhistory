@@ -202,7 +202,8 @@ struct inet_opt
 	unsigned char		hdrincl;		/* Include headers ? */
 	__u8			mc_ttl;			/* Multicasting TTL */
 	__u8			mc_loop;		/* Loopback */
-	__u8			recverr;
+	unsigned		recverr : 1,
+				freebind : 1;
 	__u8			pmtudisc;
 	int			mc_index;		/* Multicast device index */
 	__u32			mc_addr;

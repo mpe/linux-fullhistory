@@ -2,7 +2,7 @@
 
     PCMCIA Card Information Structure parser
 
-    cistpl.c 1.90 2000/08/30 20:23:47
+    cistpl.c 1.91 2000/09/16 03:48:28
 
     The contents of this file are subject to the Mozilla Public
     License Version 1.1 (the "License"); you may not use this file
@@ -96,6 +96,8 @@ INT_MODULE_PARM(cis_width,	0);		/* 16-bit CIS? */
 #define IS_ATTR		1
 #define IS_INDIRECT	8
 
+static int setup_cis_mem(socket_info_t *s);
+
 static void set_cis_map(socket_info_t *s, pccard_mem_map *mem)
 {
     s->ss_entry->set_mem_map(s->sock, mem);
@@ -118,8 +120,7 @@ void read_cis_mem(socket_info_t *s, int attr, u_int addr,
 	memset(ptr, 0xff, len);
 	return;
     }
-    mem->flags = MAP_ACTIVE;
-    if (cis_width) mem->flags |= MAP_16BIT;
+    mem->flags = MAP_ACTIVE | ((cis_width) ? MAP_16BIT : 0);
 
     if (attr & IS_INDIRECT) {
 	/* Indirect accesses use a bunch of special registers at fixed
@@ -165,8 +166,7 @@ void write_cis_mem(socket_info_t *s, int attr, u_int addr,
     
     DEBUG(3, "cs: write_cis_mem(%d, %#x, %u)\n", attr, addr, len);
     if (setup_cis_mem(s) != 0) return;
-    mem->flags = MAP_ACTIVE;
-    if (cis_width) mem->flags |= MAP_16BIT;
+    mem->flags = MAP_ACTIVE | ((cis_width) ? MAP_16BIT : 0);
 
     if (attr & IS_INDIRECT) {
 	/* Indirect accesses use a bunch of special registers at fixed
@@ -258,7 +258,7 @@ static int checksum_match(u_long base)
     return ((a == b) && (a >= 0));
 }
 
-int setup_cis_mem(socket_info_t *s)
+static int setup_cis_mem(socket_info_t *s)
 {
     if (!(s->cap.features & SS_CAP_STATIC_MAP) &&
 	(s->cis_mem.sys_start == 0)) {
@@ -273,7 +273,6 @@ int setup_cis_mem(socket_info_t *s)
 	    return CS_OUT_OF_RESOURCE;
 	}
 	s->cis_mem.sys_stop = s->cis_mem.sys_start+s->cap.map_size-1;
-	s->cis_mem.flags |= MAP_ACTIVE;
 	s->cis_virt = bus_ioremap(s->cap.bus, s->cis_mem.sys_start,
 				  s->cap.map_size);
     }

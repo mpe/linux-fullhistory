@@ -1641,10 +1641,6 @@ int sock_unregister(int family)
 
 extern void sk_init(void);
 
-#ifdef CONFIG_BRIDGE
-extern int br_init(void);
-#endif
-
 #ifdef CONFIG_WAN_ROUTER
 extern void wanrouter_init(void);
 #endif
@@ -1674,14 +1670,6 @@ void __init sock_init(void)
 	 *	Initialize skbuff SLAB cache 
 	 */
 	skb_init();
-#endif
-
-	/*
-	 *	Ethernet bridge layer.
-	 */
-
-#ifdef CONFIG_BRIDGE
-	br_init();
 #endif
 
 	/*

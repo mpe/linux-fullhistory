@@ -209,11 +209,11 @@ static void __init quirk_vt82c686_acpi(struct pci_dev *dev)
  *
  * Legacy Support Register (LEGSUP):
  *     bit13:  USB PIRQ Enable (USBPIRQDEN),
- *     bit4:   Trap/SMI ON IRQ Enable (USBSMIEN).
+ *     bit4:   Trap/SMI On IRQ Enable (USBSMIEN).
  *
  * We mask out all r/wc bits, too.
  */
-static void __init quirk_piix3usb(struct pci_dev *dev)
+static void __init quirk_piix3_usb(struct pci_dev *dev)
 {
 	u16 legsup;
 
@@ -267,7 +267,8 @@ static struct pci_fixup pci_fixups[] __initdata = {
 	{ PCI_FIXUP_HEADER,	PCI_VENDOR_ID_VIA,	PCI_DEVICE_ID_VIA_82C686_4,	quirk_vt82c686_acpi },
 	{ PCI_FIXUP_HEADER,	PCI_VENDOR_ID_INTEL,	PCI_DEVICE_ID_INTEL_82371AB_3,	quirk_piix4_acpi },
 	{ PCI_FIXUP_HEADER,	PCI_VENDOR_ID_AL,	PCI_DEVICE_ID_AL_M7101,		quirk_ali7101_acpi },
- 	{ PCI_FIXUP_HEADER,	PCI_VENDOR_ID_INTEL,	PCI_DEVICE_ID_INTEL_82371SB_2,	quirk_piix3usb },
+ 	{ PCI_FIXUP_HEADER,	PCI_VENDOR_ID_INTEL,	PCI_DEVICE_ID_INTEL_82371SB_2,	quirk_piix3_usb },
+	{ PCI_FIXUP_HEADER,	PCI_VENDOR_ID_INTEL,	PCI_DEVICE_ID_INTEL_82371AB_2,	quirk_piix3_usb },
 	{ 0 }
 };
 

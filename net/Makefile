@@ -7,7 +7,7 @@
 
 O_TARGET :=	network.o
 
-mod-subdirs :=	ipv4/netfilter ipv6/netfilter ipx irda atm
+mod-subdirs :=	ipv4/netfilter ipv6/netfilter ipx irda atm netlink
 export-objs :=	netsyms.o
 
 subdir-y :=	core ethernet

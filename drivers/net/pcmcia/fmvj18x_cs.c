@@ -1,5 +1,5 @@
 /*======================================================================
-    fmvj18x_cs.c,v 1.9 1996/08/06 03:13:53 root Exp
+    fmvj18x_cs.c,v 2.0 2000/10/01  03:13:53 root Exp
 
     A fmvj18x (and its compatibles) PCMCIA client driver
 
@@ -88,7 +88,7 @@ MODULE_PARM(sram_config, "i");
  */
 #ifdef PCMCIA_DEBUG
 static char *version =
- "fmvj18x_cs.c,v 1.9 1996/08/06 03:13:53 root Exp";
+ "fmvj18x_cs.c,v 2.0 2000/10/01 03:13:53 root Exp";
 #endif
 
 /*====================================================================*/
@@ -122,7 +122,9 @@ static dev_link_t *dev_list = NULL;
 /*
     card type
  */
-typedef enum { MBH10302, MBH10304, TDK, CONTEC, LA501 } cardtype_t;
+typedef enum { MBH10302, MBH10304, TDK, CONTEC, LA501, UNGERMANN } cardtype_t;
+
+#define MANFID_UNGERMANN 0x02c0
 
 /*
     driver specific data structure
@@ -169,6 +171,7 @@ typedef struct local_info_t {
 #define LAN_CTRL               16 /* LAN card control register */
 
 #define MAC_ID               0x1a /* hardware address */
+#define UNGERMANN_MAC_ID     0x18 /* UNGERMANN-BASS hardware address */
 
 /* 
     control bits 
@@ -236,6 +239,10 @@ typedef struct local_info_t {
 #define INTR_ON              0x1d /* LAN controler will catch interrupts */
 
 #define TX_TIMEOUT		((400*HZ)/1000)
+
+#define BANK_0U              0x20 /* bank 0 (CONFIG_1) */
+#define BANK_1U              0x24 /* bank 1 (CONFIG_1) */
+#define BANK_2U              0x28 /* bank 2 (CONFIG_1) */
 
 /*======================================================================
 
@@ -388,7 +395,7 @@ static void fmvj18x_config(dev_link_t *link)
     tuple_t tuple;
     cisparse_t parse;
     u_short buf[32];
-    int i, last_fn, last_ret;
+    int i, last_fn, last_ret, ret;
     ioaddr_t ioaddr;
     cardtype_t cardtype;
     char *card_name = "unknown";
@@ -424,9 +431,10 @@ static void fmvj18x_config(dev_link_t *link)
 	CS_CHECK(ParseTuple, handle, &tuple, &parse);
 	link->conf.ConfigIndex = parse.cftable_entry.index;
 	tuple.DesiredTuple = CISTPL_MANFID;
-	CS_CHECK(GetFirstTuple, handle, &tuple);
-	CS_CHECK(GetTupleData, handle, &tuple);
-
+	if (CardServices(GetFirstTuple, handle, &tuple) == CS_SUCCESS)
+	    CS_CHECK(GetTupleData, handle, &tuple);
+	else
+	    buf[0] = 0xffff;
 	switch (le16_to_cpu(buf[0])) {
 	case MANFID_TDK:
 	    cardtype = TDK;
@@ -447,10 +455,39 @@ static void fmvj18x_config(dev_link_t *link)
 	}
     } else {
 	/* old type card */
-	cardtype = MBH10302;
-	link->conf.ConfigIndex = 1;
+	tuple.DesiredTuple = CISTPL_MANFID;
+	if (CardServices(GetFirstTuple, handle, &tuple) == CS_SUCCESS)
+	    CS_CHECK(GetTupleData, handle, &tuple);
+	else
+	    buf[0] = 0xffff;
+	switch (le16_to_cpu(buf[0])) {
+	case MANFID_UNGERMANN:
+	    cardtype = UNGERMANN;
+	    /*
+	       Ungermann-Bass Access/CARD accepts 0x300,0x320,0x340,0x360
+	       0x380,0x3c0 only for ioport.
+	    */
+	    for (link->io.BasePort1 = 0x300; link->io.BasePort1 < 0x3e0;
+		link->io.BasePort1 += 0x20) {
+		ret = CardServices(RequestIO, link->handle, &link->io);
+		if (ret == CS_SUCCESS) {
+		/* calculate ConfigIndex value */
+		link->conf.ConfigIndex = 
+		    ((link->io.BasePort1 & 0x0f0) >> 3) | 0x22;
+		goto req_irq;
+		}
+	    }
+	    /* if ioport allocation is failed, goto failed */
+	    printk(KERN_NOTICE "fmvj18x_cs: register_netdev() failed\n");
+	    goto failed;
+	default:
+	    cardtype = MBH10302;
+	    link->conf.ConfigIndex = 1;
+	}
     }
+
     CS_CHECK(RequestIO, link->handle, &link->io);
+req_irq:
     CS_CHECK(RequestIRQ, link->handle, &link->irq);
     CS_CHECK(RequestConfiguration, link->handle, &link->conf);
     dev->irq = link->irq.AssignedIRQ;
@@ -463,7 +500,11 @@ static void fmvj18x_config(dev_link_t *link)
     ioaddr = dev->base_addr;
 
     /* Power On chip and select bank 0 */
-    outb(BANK_0, ioaddr + CONFIG_1);
+    if(cardtype == UNGERMANN)
+	outb(BANK_0U, ioaddr + CONFIG_1);
+    else
+	outb(BANK_0, ioaddr + CONFIG_1);
+
     /* Reset controler */
     if( sram_config == 0 ) 
 	outb(CONFIG0_RST, ioaddr + CONFIG_0);
@@ -502,6 +543,12 @@ static void fmvj18x_config(dev_link_t *link)
 	/* Read MACID from CIS */
 	for (i = 0; i < 6; i++)
 	    dev->dev_addr[i] = node_id[i];
+	break;
+    case UNGERMANN:
+	/* Read MACID from register */
+	for (i = 0; i < 6; i++) 
+	    dev->dev_addr[i] = inb(ioaddr + UNGERMANN_MAC_ID + i);
+	card_name = "Access/CARD";
 	break;
     case MBH10302:
     default:
@@ -806,7 +853,11 @@ static void fjn_reset(struct net_device *dev)
     DEBUG(4, "fjn_reset(%s) called.\n",dev->name);
 
     /* Power On chip and select bank 0 */
-    outb(BANK_0, ioaddr + CONFIG_1);
+    if( lp->cardtype == UNGERMANN)
+	outb(BANK_0U, ioaddr + CONFIG_1);
+    else
+	outb(BANK_0, ioaddr + CONFIG_1);
+
     /* Reset buffers */
     if( sram_config == 0 ) 
 	outb(CONFIG0_RST, ioaddr + CONFIG_0);
@@ -823,14 +874,20 @@ static void fjn_reset(struct net_device *dev)
         outb(dev->dev_addr[i], ioaddr + NODE_ID + i);
 
     /* Switch to bank 1 */
-    outb(BANK_1, ioaddr + CONFIG_1);
+    if ( lp->cardtype == UNGERMANN )
+	outb(BANK_1U, ioaddr + CONFIG_1);
+    else
+	outb(BANK_1, ioaddr + CONFIG_1);
 
     /* set the multicast table to accept none. */
     for (i = 0; i < 6; i++) 
         outb(0x00, ioaddr + MAR_ADR + i);
 
     /* Switch to bank 2 (runtime mode) */
-    outb(BANK_2, ioaddr + CONFIG_1);
+    if ( lp->cardtype == UNGERMANN )
+	outb(BANK_2U, ioaddr + CONFIG_1);
+    else
+	outb(BANK_2, ioaddr + CONFIG_1);
 
     /* set 16col ctrl bits */
     if( lp->cardtype == TDK ) 

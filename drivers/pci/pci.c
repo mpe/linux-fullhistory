@@ -585,10 +585,17 @@ void __init pci_read_bridge_bases(struct pci_bus *child)
 	base = ((io_base_lo & PCI_IO_RANGE_MASK) << 8) | (io_base_hi << 16);
 	limit = ((io_limit_lo & PCI_IO_RANGE_MASK) << 8) | (io_limit_hi << 16);
 	if (base && base <= limit) {
-		res->flags |= (io_base_lo & PCI_IO_RANGE_TYPE_MASK) | IORESOURCE_IO;
+		res->flags = (io_base_lo & PCI_IO_RANGE_TYPE_MASK) | IORESOURCE_IO;
 		res->start = base;
 		res->end = limit + 0xfff;
 		res->name = child->name;
+	} else {
+		/*
+		 * Ugh. We don't know enough about this bridge. Just assume
+		 * that it's entirely transparent.
+		 */
+		printk("Unknown bridge resource %d: assuming transparent\n", 0);
+		child->resource[0] = child->parent->resource[0];
 	}
 
 	res = child->resource[1];
@@ -597,10 +604,14 @@ void __init pci_read_bridge_bases(struct pci_bus *child)
 	base = (mem_base_lo & PCI_MEMORY_RANGE_MASK) << 16;
 	limit = (mem_limit_lo & PCI_MEMORY_RANGE_MASK) << 16;
 	if (base && base <= limit) {
-		res->flags |= (mem_base_lo & PCI_MEMORY_RANGE_TYPE_MASK) | IORESOURCE_MEM;
+		res->flags = (mem_base_lo & PCI_MEMORY_RANGE_TYPE_MASK) | IORESOURCE_MEM;
 		res->start = base;
 		res->end = limit + 0xfffff;
 		res->name = child->name;
+	} else {
+		/* See comment above. Same thing */
+		printk("Unknown bridge resource %d: assuming transparent\n", 1);
+		child->resource[1] = child->parent->resource[1];
 	}
 
 	res = child->resource[2];
@@ -620,10 +631,14 @@ void __init pci_read_bridge_bases(struct pci_bus *child)
 	}
 #endif
 	if (base && base <= limit) {
-		res->flags |= (mem_base_lo & PCI_MEMORY_RANGE_TYPE_MASK) | IORESOURCE_MEM | IORESOURCE_PREFETCH;
+		res->flags = (mem_base_lo & PCI_MEMORY_RANGE_TYPE_MASK) | IORESOURCE_MEM | IORESOURCE_PREFETCH;
 		res->start = base;
 		res->end = limit + 0xfffff;
 		res->name = child->name;
+	} else {
+		/* See comments above */
+		printk("Unknown bridge resource %d: assuming transparent\n", 2);
+		child->resource[2] = child->parent->resource[2];
 	}
 }
 

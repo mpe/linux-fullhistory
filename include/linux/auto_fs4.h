@@ -1,4 +1,4 @@
-/* -*- c-mode -*-
+/* -*- c -*-
  * linux/include/linux/auto_fs4.h
  *
  * Copyright 1999-2000 Jeremy Fitzhardinge <jeremy@goop.org>

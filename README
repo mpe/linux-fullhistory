@@ -161,12 +161,10 @@ CONFIGURING the kernel:
 
 COMPILING the kernel:
 
- - Make sure you have gcc-2.7.2 or newer available.  It seems older gcc
-   versions can have problems compiling newer versions of Linux.  This
-   is mainly because the older compilers can only generate "a.out"-format
-   executables.  As of Linux 2.1.0, the kernel must be compiled as an
-   "ELF" binary.  If you upgrade your compiler, remember to get the new
-   binutils package too (for as/ld/nm and company).
+ - Make sure you have gcc-2.91.66 (egcs-1.1.2) available.  gcc 2.95.2 may
+   also work but is not as safe, and *gcc 2.7.2.3 is no longer supported*.
+   Also remember to upgrade your binutils package (for as/ld/nm and company)
+   if necessary. For more information, refer to ./Documentation/Changes.
 
    Please note that you can still run a.out user programs with this
    kernel.

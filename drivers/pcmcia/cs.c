@@ -2,7 +2,7 @@
 
     PCMCIA Card Services -- core services
 
-    cs.c 1.267 2000/08/30 22:07:31
+    cs.c 1.271 2000/10/02 20:27:49
     
     The contents of this file are subject to the Mozilla Public
     License Version 1.1 (the "License"); you may not use this file
@@ -66,7 +66,7 @@
 int pc_debug = PCMCIA_DEBUG;
 MODULE_PARM(pc_debug, "i");
 static const char *version =
-"cs.c 1.267 2000/08/30 22:07:31 (David Hinds)";
+"cs.c 1.271 2000/10/02 20:27:49 (David Hinds)";
 #endif
 
 #ifdef CONFIG_PCI
@@ -1711,7 +1711,7 @@ int pcmcia_request_configuration(client_handle_t handle,
 	    if (!(c->irq.Attributes & IRQ_FORCED_PULSE))
 		c->Option |= COR_LEVEL_REQ;
 	write_cis_mem(s, 1, (base + CISREG_COR)>>1, 1, &c->Option);
-	udelay(40*1000);
+	mdelay(40);
     }
     if (req->Present & PRESENT_STATUS) {
 	c->Status = req->Status;
@@ -1726,14 +1726,14 @@ int pcmcia_request_configuration(client_handle_t handle,
 	write_cis_mem(s, 1, (base + CISREG_ESR)>>1, 1, &c->ExtStatus);
     }
     if (req->Present & PRESENT_IOBASE_0) {
-	i = c->io.BasePort1 & 0xff;
-	write_cis_mem(s, 1, (base + CISREG_IOBASE_0)>>1, 1, &i);
-	i = (c->io.BasePort1 >> 8) & 0xff;
-	write_cis_mem(s, 1, (base + CISREG_IOBASE_1)>>1, 1, &i);
+	u_char b = c->io.BasePort1 & 0xff;
+	write_cis_mem(s, 1, (base + CISREG_IOBASE_0)>>1, 1, &b);
+	b = (c->io.BasePort1 >> 8) & 0xff;
+	write_cis_mem(s, 1, (base + CISREG_IOBASE_1)>>1, 1, &b);
     }
     if (req->Present & PRESENT_IOSIZE) {
-	i = c->io.NumPorts1 + c->io.NumPorts2 - 1;
-	write_cis_mem(s, 1, (base + CISREG_IOSIZE)>>1, 1, &i);
+	u_char b = c->io.NumPorts1 + c->io.NumPorts2 - 1;
+	write_cis_mem(s, 1, (base + CISREG_IOSIZE)>>1, 1, &b);
     }
     
     /* Configure I/O windows */
@@ -1836,12 +1836,11 @@ int pcmcia_request_io(client_handle_t handle, io_req_t *req)
     
 ======================================================================*/
 
-int pcmcia_request_irq(client_handle_t handle, irq_req_t *req)
+static int cs_request_irq(client_handle_t handle, irq_req_t *req)
 {
     socket_info_t *s;
     config_t *c;
-    int try, ret = 0, irq = 0;
-    u_int mask;
+    int ret = 0, irq = 0;
     
     if (CHECK_HANDLE(handle))
 	return CS_BAD_HANDLE;
@@ -1855,21 +1854,22 @@ int pcmcia_request_irq(client_handle_t handle, irq_req_t *req)
 	return CS_IN_USE;
     
     /* Short cut: if there are no ISA interrupts, then it is PCI */
-    if (!s->cap.irq_mask)
+    if (!s->cap.irq_mask) {
 	irq = s->cap.pci_irq;
+	ret = (irq) ? 0 : CS_IN_USE;
 #ifdef CONFIG_ISA
-    else if (s->irq.AssignedIRQ != 0) {
+    } else if (s->irq.AssignedIRQ != 0) {
 	/* If the interrupt is already assigned, it must match */
 	irq = s->irq.AssignedIRQ;
 	if (req->IRQInfo1 & IRQ_INFO2_VALID) {
-	    mask = req->IRQInfo2 & s->cap.irq_mask;
+	    u_int mask = req->IRQInfo2 & s->cap.irq_mask;
 	    ret = ((mask >> irq) & 1) ? 0 : CS_BAD_ARGS;
 	} else
 	    ret = ((req->IRQInfo1&IRQ_MASK) == irq) ? 0 : CS_BAD_ARGS;
     } else {
 	ret = CS_IN_USE;
 	if (req->IRQInfo1 & IRQ_INFO2_VALID) {
-	    mask = req->IRQInfo2 & s->cap.irq_mask;
+	    u_int try, mask = req->IRQInfo2 & s->cap.irq_mask;
 	    for (try = 0; try < 2; try++) {
 		for (irq = 0; irq < 32; irq++)
 		    if ((mask >> irq) & 1) {
@@ -1882,8 +1882,8 @@ int pcmcia_request_irq(client_handle_t handle, irq_req_t *req)
 	    irq = req->IRQInfo1 & IRQ_MASK;
 	    ret = try_irq(req->Attributes, irq, 1);
 	}
-    }
 #endif
+    }
     if (ret != 0) return ret;
 
     if (req->Attributes & IRQ_HANDLE_PRESENT) {

@@ -2231,9 +2231,9 @@ int dev_ioctl(unsigned int cmd, void *arg)
 /**
  *	dev_new_index	-	allocate an ifindex
  *
- *	Returns a suitable unique value for a new device interface number.
- *	The caller must hold the rtnl semaphore to be sure it remains 
- *	unique.
+ *	Returns a suitable unique value for a new device interface
+ *	number.  The caller must hold the rtnl semaphore or the
+ *	dev_base_lock to be sure it remains unique.
  */
  
 int dev_new_index(void)
@@ -2257,6 +2257,10 @@ static int dev_boot_phase = 1;
  *	interfaces. A %NETDEV_REGISTER message is sent to the netdev notifier
  *	chain. 0 is returned on success. A negative errno code is returned
  *	on a failure to set up the device, or if the name is a duplicate.
+ *
+ *	Callers must hold the rtnl semaphore.  See the comment at the
+ *	end of Space.c for details about the locking.  You may want
+ *	register_netdev() instead of this.
  *
  *	BUGS:
  *	The locking appears insufficient to guarantee two parallel registers
@@ -2405,6 +2409,10 @@ int netdev_finish_unregister(struct net_device *dev)
  *	This function shuts down a device interface and removes it
  *	from the kernel tables. On success 0 is returned, on a failure
  *	a negative errno code is returned.
+ *
+ *	Callers must hold the rtnl semaphore.  See the comment at the
+ *	end of Space.c for details about the locking.  You may want
+ *	unregister_netdev() instead of this.
  */
 
 int unregister_netdevice(struct net_device *dev)
@@ -2538,6 +2546,11 @@ extern void ip_auto_config(void);
 extern void dv_init(void);
 #endif /* CONFIG_NET_DIVERT */
 
+
+/*
+ *       Callers must hold the rtnl semaphore.  See the comment at the
+ *       end of Space.c for details about the locking.
+ */
 int __init net_dev_init(void)
 {
 	struct net_device *dev, **dp;

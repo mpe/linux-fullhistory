@@ -66,6 +66,7 @@ struct in_addr {
 #define IP_RECVTTL	12
 #define	IP_RECVTOS	13
 #define IP_MTU		14
+#define IP_FREEBIND	15
 
 /* BSD compatibility */
 #define IP_RECVRETOPTS	IP_RETOPTS

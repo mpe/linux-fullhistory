@@ -511,11 +511,11 @@ static void tc574_config(dev_link_t *link)
 		
 		/* Roadrunner only: Turn on the MII transceiver */
 		outw(0x8040, ioaddr + Wn3_Options);
-		udelay(1000);
+		mdelay(1);
 		outw(0xc040, ioaddr + Wn3_Options);
 		wait_for_completion(dev, TxReset);
 		wait_for_completion(dev, RxReset);
-		udelay(1000);
+		mdelay(1);
 		outw(0x8040, ioaddr + Wn3_Options);
 		
 		EL3WINDOW(4);
@@ -783,11 +783,11 @@ static void tc574_reset(struct net_device *dev)
 	
 	/* Roadrunner only: Turn on the MII transceiver. */
 	outw(0x8040, ioaddr + Wn3_Options);
-	udelay(1000);
+	mdelay(1);
 	outw(0xc040, ioaddr + Wn3_Options);
 	wait_for_completion(dev, TxReset);
 	wait_for_completion(dev, RxReset);
-	udelay(1000);
+	mdelay(1);
 	outw(0x8040, ioaddr + Wn3_Options);
 
 	/* Switch to the stats window, and clear all stats by reading. */

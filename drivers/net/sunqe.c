@@ -1,4 +1,4 @@
-/* $Id: sunqe.c,v 1.46 2000/06/19 06:24:46 davem Exp $
+/* $Id: sunqe.c,v 1.47 2000/10/22 16:08:38 davem Exp $
  * sunqe.c: Sparc QuadEthernet 10baseT SBUS card driver.
  *          Once again I am out to prove that every ethernet
  *          controller out there can be most efficiently programmed
@@ -46,9 +46,7 @@ static char *version =
 
 #include "sunqe.h"
 
-#ifdef MODULE
 static struct sunqec *root_qec_dev = NULL;
-#endif
 
 static void qe_set_multicast(struct net_device *dev);
 
@@ -917,15 +915,13 @@ static int __init qec_ether_init(struct net_device *dev, struct sbus_dev *sdev)
 		printk("\n");
 	}
 
-#ifdef MODULE
 	/* We are home free at this point, link the qe's into
-	 * the master list for later module unloading.
+	 * the master list for later driver exit.
 	 */
 	for (i = 0; i < 4; i++)
 		qe_devs[i]->ifindex = dev_new_index();
 	qecp->next_module = root_qec_dev;
 	root_qec_dev = qecp;
-#endif
 
 	return 0;
 
@@ -994,9 +990,7 @@ static int __init qec_probe(void)
 	static int called = 0;
 	int cards = 0, v;
 
-#ifdef MODULE
 	root_qec_dev = NULL;
-#endif
 
 	if (called)
 		return -ENODEV;
@@ -1021,11 +1015,9 @@ static int __init qec_probe(void)
 
 static void __exit qec_cleanup(void)
 {
-#ifdef MODULE
 	struct sunqec *next_qec;
 	int i;
 
-	/* No need to check MOD_IN_USE, as sys_delete_module() checks. */
 	while (root_qec_dev) {
 		next_qec = root_qec_dev->next_module;
 
@@ -1049,7 +1041,6 @@ static void __exit qec_cleanup(void)
 		kfree(root_qec_dev);
 		root_qec_dev = next_qec;
 	}
-#endif /* MODULE */
 }
 
 module_init(qec_probe);
