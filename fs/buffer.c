@@ -949,6 +949,7 @@ static void put_unused_buffer_head(struct buffer_head * bh)
 	}
 
 //	memset(bh, 0, sizeof(*bh));
+	bh->b_blocknr = -1;
 	init_waitqueue_head(&bh->b_wait);
 	nr_unused_buffer_heads++;
 	bh->b_next_free = unused_list;
@@ -1197,9 +1198,8 @@ static void end_buffer_io_async(struct buffer_head * bh, int uptodate)
 	unlock_buffer(bh);
 	tmp = bh->b_this_page;
 	while (tmp != bh) {
-		if (buffer_locked(tmp)) {
+		if (buffer_locked(tmp))
 			goto still_busy;
-		}
 		tmp = tmp->b_this_page;
 	}
 
@@ -1332,6 +1332,7 @@ static inline void create_empty_buffers (struct page *page,
 	bh = head;
 	do {
 		bh->b_dev = inode->i_dev;
+		bh->b_blocknr = 0;
 		tail = bh;
 		bh = bh->b_this_page;
 	} while (bh);
