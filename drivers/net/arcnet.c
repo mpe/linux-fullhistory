@@ -310,7 +310,7 @@ static void careful_xmit_wait(struct device *dev);
 static int arcnet_tx(struct device *dev,struct ClientData *hdr,short length,
 			char *data);
 
-static void arcnet_interrupt(int reg_ptr);
+static void arcnet_interrupt(int irq, struct pt_regs *regs);
 static void arcnet_inthandler(struct device *dev);
 static void arcnet_rx(struct device *dev,int recbuf);
 
@@ -1086,9 +1086,8 @@ arcnet_tx(struct device *dev,struct ClientData *hdr,short length,
 /* The typical workload of the driver:
    Handle the network interface interrupts. */
 static void
-arcnet_interrupt(int reg_ptr)
+arcnet_interrupt(int irq, struct pt_regs *regs)
 {
-	int irq = -(((struct pt_regs *)reg_ptr)->orig_eax+2);
 	struct device *dev = (struct device *)(irq2dev_map[irq]);
 
 	if (dev == NULL) {

@@ -40,9 +40,9 @@
  * support I need.                                          *
  *                                                          *
  *  Thanks also to Greg Hosler who did a lot of testing and *
- *  found quite a number of bugs during the devellopment.   *
+ *  found quite a number of bugs during the development.   *
  ************************************************************
- *  last change: 95/01/08                                   *
+ *  last change: 95/01/15                                   *
  ************************************************************/
 
 /* Look in eata_dma.h for configuration information */
@@ -87,7 +87,7 @@ const char *eata_info(struct Scsi_Host *host)
     return information;
 }
 
-void eata_int_handler(int irq)
+void eata_int_handler(int irq, struct pt_regs * regs)
 {
     uint i, result;
     uint hba_stat, scsi_stat, eata_stat;
@@ -163,7 +163,7 @@ void eata_int_handler(int irq)
 	    HD(cmd)->t_timeout[cmd->target] = 0;
 	    break;
 	case 0x01:		/* Selection Timeout */
-	    result = DID_BAD_TARGET << 16;                  /* These two lines are new */
+	    result = DID_BAD_TARGET << 16;  
 	    break;
 	case 0x02:		/* Command Timeout   */
 	    if (HD(cmd)->t_timeout[cmd->target] > 1)
@@ -516,6 +516,41 @@ int eata_reset(Scsi_Cmnd * cmd)
     }
 }
 
+
+char * get_board_data(ulong base, uint irq, uint id)
+{
+    struct eata_ccb cp;
+    struct eata_sp  sp;
+    static char buff[256];
+
+    memset(&cp, 0, sizeof(struct eata_ccb));
+    memset(buff, 0, sizeof(buff));
+
+    cp.DataIn = TRUE;     
+    cp.Interpret = TRUE;   /* Interpret command */
+ 
+    cp.cp_datalen = htonl(255);  
+    cp.cp_dataDMA = htonl((long)buff);
+
+    cp.cp_id = id;
+    cp.cp_lun = 0;
+
+    cp.cp_cdb[0] = INQUIRY;
+    cp.cp_cdb[1] = 0;
+    cp.cp_cdb[2] = 0;
+    cp.cp_cdb[3] = 0;
+    cp.cp_cdb[4] = 255;
+    cp.cp_cdb[5] = 0;
+
+    cp.cp_statDMA = htonl((ulong) &sp);
+
+    eata_send_command((ulong) &cp, (uint) base, EATA_CMD_DMA_SEND_CP);
+    while (!(inb(base + HA_RAUXSTAT) & HA_AIRQ));
+    inb((uint) base + HA_RSTATUS);
+
+    return (buff);
+}
+    
 int check_blink_state(long base)
 {
     uint ret = 0;
@@ -602,13 +637,11 @@ int register_HBA(long base, struct get_conf *gc, Scsi_Host_Template * tpnt)
 {
     ulong size = 0;
     unchar dma_channel = 0;
+    char *buff;
     uint i;
     struct Scsi_Host *sh;
     hostdata *hd;
     
-    printk("EATA compliant HBA detected. EATA Level %x\n",
-	(uint) (gc->version));
-
     DBG(DBG_REGISTER, print_config(gc));
 
     if (!gc->DMA_support) {
@@ -648,7 +681,6 @@ int register_HBA(long base, struct get_conf *gc, Scsi_Host_Template * tpnt)
 	    reg_IRQ[gc->IRQ]++;
     }
 
-
     request_region(base, 9, "eata_dma");
 
     if(gc->HAA_valid == FALSE) gc->MAX_CHAN = 0;
@@ -660,6 +692,13 @@ int register_HBA(long base, struct get_conf *gc, Scsi_Host_Template * tpnt)
 	    printk("Warning: Queue size had to be corrected.\n"
 		   "This might be a PM2012 with a defective Firmware\n");
     }
+
+    buff = get_board_data((uint)base, gc->IRQ, gc->scsi_id[3]);
+
+    if(!(strncmp("PM2322", &buff[16], 6) || strncmp("PM3021", &buff[16], 6)
+       || strncmp("PM3222", &buff[16], 6) || strncmp("PM3224", &buff[16], 6)))
+      gc->MAX_CHAN = 0;
+    
     if (gc->MAX_CHAN) {
 	printk("This is a multichannel HBA. Linux doesn't support them,\n");
 	printk("so we'll try to register every channel as a virtual HBA.\n");
@@ -672,6 +711,17 @@ int register_HBA(long base, struct get_conf *gc, Scsi_Host_Template * tpnt)
 
 	memset(hd->ccb, 0, (sizeof(struct eata_ccb) * ntohs(gc->queuesiz)) / 
 	       (gc->MAX_CHAN + 1));
+
+	strncpy(SD(sh)->vendor, &buff[8], 8);
+	SD(sh)->vendor[8] = 0;
+	strncpy(SD(sh)->name, &buff[16], 17);
+	SD(sh)->name[17] = 0;
+	SD(sh)->revision[0] = buff[32];
+	SD(sh)->revision[1] = buff[33];
+	SD(sh)->revision[2] = buff[34];
+	SD(sh)->revision[3] = '.';
+	SD(sh)->revision[4] = buff[35];
+	SD(sh)->revision[5] = 0;
 
 	sh->base = (char *) base;
 	sh->irq = gc->IRQ;
@@ -697,9 +747,9 @@ int register_HBA(long base, struct get_conf *gc, Scsi_Host_Template * tpnt)
 
 	hd->channel = i;
 
-	if (gc->is_PCI)
+	if (buff[21] == '4')
 	    hd->bustype = 'P';
-	else if (gc->is_EISA)
+	else if (buff[21] == '2')
 	    hd->bustype = 'E';
 	else
 	    hd->bustype = 'I';
@@ -788,7 +838,7 @@ long find_EISA(struct get_conf *buf)
 			return ((long)base);
 		    } else {
 		        EISAbases[i] = 0;
-			printk("No vaild IRQ. HBA removed from list\n");
+			printk("No valid IRQ. HBA removed from list\n");
 		    }
                 } else
 		    /* Nothing found here so we take it from the list */
@@ -870,7 +920,7 @@ void find_PCI(struct get_conf *buf, Scsi_Host_Template * tpnt)
 	    if (!(error = pcibios_read_config_dword(pci_bus, pci_device_fn,
 						  PCI_BASE_ADDRESS_0, &base))) {
 
-	        /* Check if the address is vaild */
+	        /* Check if the address is valid */
 	        if (base & 0x01) {
 		    base &= 0xfffffffe;
 		                        /* EISA tag there ? */
@@ -963,13 +1013,18 @@ int eata_detect(Scsi_Host_Template * tpnt)
     for (i = 1; i < registered_HBAs; i++)
         HBA_ptr = SD(HBA_ptr)->prev;
 
-    printk("\nRegistered HBAs:\n");
-    printk(" # Type: BaseIO: IRQ: Chan: ID: Prim: QS: SG: CPL:\n");
+    printk("Registered HBAs:\n");
+    printk("HBA no. VID: Boardtype:  Revis: Bus: BaseIO: IRQ: Chan: ID: Prim: QS: SG: CPL:\n");
     for (i = 1; i <= registered_HBAs; i++) {
-        printk("%2d   %c   0x%04x   %2d     %d   %d     %d  %2d  %2d   %2d\n", 
-	       i, SD(HBA_ptr)->bustype, (uint) HBA_ptr->base, HBA_ptr->irq, 
-	       SD(HBA_ptr)->channel, HBA_ptr->this_id, SD(HBA_ptr)->primary, 
-	       HBA_ptr->can_queue, HBA_ptr->sg_tablesize, HBA_ptr->cmd_per_lun);
+        printk("scsi%-2d: %.4s %.11s v%s ", HBA_ptr->host_no, 
+	       SD(HBA_ptr)->vendor, SD(HBA_ptr)->name, SD(HBA_ptr)->revision);
+	if(SD(HBA_ptr)->bustype == 'P') printk("PCI "); 
+	else if(SD(HBA_ptr)->bustype == 'E') printk("EISA"); 
+	else printk(" ISA");
+	printk(" 0x%04x   %2d     %d   %d     %d  %2d  %2d   %2d\n", 
+	       (uint) HBA_ptr->base, HBA_ptr->irq, SD(HBA_ptr)->channel, 
+	       HBA_ptr->this_id, SD(HBA_ptr)->primary, HBA_ptr->can_queue, 
+	       HBA_ptr->sg_tablesize, HBA_ptr->cmd_per_lun);
         HBA_ptr = SD(HBA_ptr)->next;
       }
     DBG(DPT_DEBUG,DELAY(1200));

@@ -8,7 +8,7 @@
 
 /* Flush all VAC entries for the current context */
 
-extern int do_hw_vac_flushes, vac_size, vac_linesize;
+extern int vac_do_hw_vac_flushes, vac_size, vac_linesize;
 extern int vac_entries_per_context, vac_entries_per_segment;
 extern int vac_entries_per_page;
 
@@ -21,7 +21,7 @@ flush_vac_context()
   entries_left = vac_entries_per_context;
   address = (char *) 0;
 
-  if(do_hw_vac_flushes)
+  if(vac_do_hw_vac_flushes)
     {
       while(entries_left-- >=0)
 	{
@@ -44,14 +44,14 @@ void
 flush_vac_segment(register unsigned int segment)
 {
   register int entries_left, offset;
-  register char* address;
+  register char* address = (char *) 0;
   
   entries_left = vac_entries_per_segment;
   __asm__ __volatile__("sll %0, 18, %1\n\t"
 		       "sra %1, 0x2, %1\n\t"
 		       : "=r" (segment) : "0" (address));
 
-  if(do_hw_vac_flushes)
+  if(vac_do_hw_vac_flushes)
     {
       while(entries_left-- >=0)
 	{
@@ -75,9 +75,9 @@ flush_vac_page(register unsigned int addr)
 {
   register int entries_left, offset;
 
-  if(do_hw_vac_flushes)
+  if(vac_do_hw_vac_flushes)
     {
-      hw_flush_vac_page_entry(addr);
+      hw_flush_vac_page_entry((unsigned long *) addr);
     }
   else
     {
@@ -85,7 +85,7 @@ flush_vac_page(register unsigned int addr)
       offset = vac_linesize;
       while(entries_left-- >=0)
 	{
-	  sw_flush_vac_page_entry(addr);
+	  sw_flush_vac_page_entry((unsigned long *) addr);
 	  addr += offset;
 	}
     }

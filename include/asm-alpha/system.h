@@ -10,12 +10,23 @@
  * We leave one page for the initial stack page, and one page for
  * the initial process structure. Also, the console eats 3 MB for
  * the initial bootloader (one of which we can reclaim later).
- * So the initial load address is 0xfffffc0000304000UL
+ * With a few other pages for various reasons, we'll use an initial
+ * load address of 0xfffffc0000310000UL
  */
+#define BOOT_PCB	0x20000000
+#define BOOT_ADDR	0x20000000
+#define BOOT_SIZE	(16*1024)
+
+#define KERNEL_START	0xfffffc0000300000
 #define INIT_PCB	0xfffffc0000300000
 #define INIT_STACK	0xfffffc0000302000
-#define START_ADDR	0xfffffc0000304000
-#define START_SIZE	(32*1024)
+#define EMPTY_PGT	0xfffffc0000304000
+#define EMPTY_PGE	0xfffffc0000308000
+#define ZERO_PGE	0xfffffc000030A000
+#define SWAPPER_PGD	0xfffffc000030C000
+
+#define START_ADDR	0xfffffc0000310000
+#define START_SIZE	(1024*1024)
 
 /*
  * Common PAL-code
@@ -66,6 +77,8 @@
 
 extern void wrent(void *, unsigned long);
 extern void wrkgp(unsigned long);
+extern void wrusp(unsigned long);
+extern unsigned long rdusp(void);
 
 #define halt() __asm__ __volatile__(".long 0");
 #define move_to_user_mode() halt()

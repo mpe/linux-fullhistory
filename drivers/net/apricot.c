@@ -186,7 +186,7 @@ char init_setup[] = {
 
 static int i596_open(struct device *dev);
 static int i596_start_xmit(struct sk_buff *skb, struct device *dev);
-static void i596_interrupt(int reg_ptr);
+static void i596_interrupt(int irq, struct pt_regs *regs);
 static int i596_close(struct device *dev);
 static struct enet_statistics *i596_get_stats(struct device *dev);
 static void i596_add_cmd(struct device *dev, struct i596_cmd *cmd);
@@ -751,9 +751,8 @@ int apricot_probe(struct device *dev)
 }
 
 static void
-i596_interrupt(int reg_ptr)
+i596_interrupt(int irq, struct pt_regs *regs)
 {
-    int irq = -(((struct pt_regs *)reg_ptr)->orig_eax+2);
     struct device *dev = (struct device *)(irq2dev_map[irq]);
     struct i596_private *lp;
     short ioaddr;

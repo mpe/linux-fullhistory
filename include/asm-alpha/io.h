@@ -89,24 +89,82 @@
  * The "local" functions are those that don't go out to the EISA bus,
  * but instead act on the VL82C106 chip directly.. This is mainly the
  * keyboard, RTC,  printer and first two serial lines..
+ *
+ * The local stuff makes for some complications, but it seems to be
+ * gone in the PCI version. I hope I can get DEC suckered^H^H^H^H^H^H^H^H
+ * convinced that I need one of the newer machines.
  */
-extern inline unsigned long inb_local(unsigned long addr)
+extern inline unsigned int __local_inb(unsigned long addr)
 {
 	long result = *(volatile int *) ((addr << 9) + EISA_VL82C106);
 	return 0xffUL & result;
 }
 
-extern inline void outb_local(unsigned char b, unsigned long addr)
+extern inline void __local_outb(unsigned char b, unsigned long addr)
 {
 	*(volatile unsigned int *) ((addr << 9) + EISA_VL82C106) = b;
 	mb();
 }
 
-extern inline unsigned int inb(unsigned long addr)
+extern inline unsigned int __inb(unsigned long addr)
 {
 	long result = *(volatile int *) ((addr << 7) + EISA_IO + 0x00);
 	result >>= (addr & 3) * 8;
 	return 0xffUL & result;
+}
+
+extern inline void __outb(unsigned char b, unsigned long addr)
+{
+	*(volatile unsigned int *) ((addr << 7) + EISA_IO + 0x00) = b * 0x01010101;
+	mb();
+}
+
+/*
+ * This is a stupid one: I'll make it a bitmap soon, promise..
+ *
+ * On the other hand: this allows gcc to optimize. Hmm. I'll
+ * have to use the __constant_p() stuff here.
+ *
+ * The PCI version just returns zero all the time, I do believe..
+ */
+extern inline int __is_local(unsigned long addr)
+{
+	/* keyboard */
+	if (addr == 0x60 || addr == 0x64)
+		return 1;
+
+	/* RTC */
+	if (addr == 0x170 || addr == 0x171)
+		return 1;
+
+	/* motherboard COM2 */
+	if (addr >= 0x2f8 && addr <= 0x2ff)
+		return 1;
+
+	/* motherboard LPT1 */
+	if (addr >= 0x3bc && addr <= 0x3be)
+		return 1;
+
+	/* motherboard COM2 */
+	if (addr >= 0x3f8 && addr <= 0x3ff)
+		return 1;
+
+	return 0;
+}
+
+extern inline unsigned int inb(unsigned long addr)
+{
+	if (__is_local(addr))
+		return __local_inb(addr);
+	return __inb(addr);
+}
+
+extern inline void outb(unsigned char b, unsigned long addr)
+{
+	if (__is_local(addr))
+		__local_outb(b, addr);
+	else
+		__outb(b, addr);
 }
 
 extern inline unsigned int inw(unsigned long addr)
@@ -119,12 +177,6 @@ extern inline unsigned int inw(unsigned long addr)
 extern inline unsigned int inl(unsigned long addr)
 {
 	return *(volatile unsigned int *) ((addr << 7) + EISA_IO + 0x60);
-}
-
-extern inline void outb(unsigned char b, unsigned long addr)
-{
-	*(volatile unsigned int *) ((addr << 7) + EISA_IO + 0x00) = b * 0x01010101;
-	mb();
 }
 
 extern inline void outw(unsigned short b, unsigned long addr)

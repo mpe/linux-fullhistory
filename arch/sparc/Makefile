@@ -19,8 +19,9 @@ CFLAGS := $(CFLAGS) -pipe
 
 HEAD := arch/sparc/kernel/head.o
 
-SUBDIRS := $(SUBDIRS) arch/sparc/kernel arch/sparc/lib
-ARCHIVES := arch/sparc/kernel/kernel.o arch/sparc/lib/lib.a $(ARCHIVES)
+SUBDIRS := $(SUBDIRS) arch/sparc/kernel arch/sparc/lib arch/sparc/mm
+ARCHIVES := arch/sparc/kernel/kernel.o arch/sparc/mm/mm.o $(ARCHIVES)
+LIBS := arch/sparc/lib/lib.a $(LIBS)
 
 archclean:
 

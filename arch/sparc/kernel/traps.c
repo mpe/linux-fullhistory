@@ -39,3 +39,7 @@ void trap_init(void)
   return;
 }
 
+void die_if_kernel(char * str, struct pt_regs * regs, long err)
+{
+  return;
+}

@@ -112,7 +112,7 @@ static unsigned int net_debug = NET_DEBUG;
 #define writedatareg(val) {outw(val,PORT+L_DATAREG);inw(PORT+L_DATAREG);}
 
 static int   ni65_probe1(struct device *dev,int);
-static void  ni65_interrupt(int reg_ptr);
+static void  ni65_interrupt(int irq, struct pt_regs *regs);
   static void recv_intr(struct device *dev);
   static void xmit_intr(struct device *dev);
 static int   ni65_open(struct device *dev);
@@ -397,9 +397,8 @@ static int am7990_reinit(struct device *dev)
  * interrupt handler  
  */
 
-static void ni65_interrupt(int reg_ptr)
+static void ni65_interrupt(int irq, struct pt_regs * regs)
 {
-  int irq = -(((struct pt_regs *)reg_ptr)->orig_eax+2);
   int csr0;
   struct device *dev = (struct device *) irq2dev_map[irq];
 

@@ -109,7 +109,7 @@ int el1_probe(struct device *dev);
 static int  el1_probe1(struct device *dev, int ioaddr);
 static int  el_open(struct device *dev);
 static int  el_start_xmit(struct sk_buff *skb, struct device *dev);
-static void el_interrupt(int reg_ptr);
+static void el_interrupt(int irq, struct pt_regs *regs);
 static void el_receive(struct device *dev);
 static void el_reset(struct device *dev);
 static int  el1_close(struct device *dev);
@@ -396,9 +396,8 @@ el_start_xmit(struct sk_buff *skb, struct device *dev)
 /* The typical workload of the driver:
    Handle the ether interface interrupts. */
 static void
-el_interrupt(int reg_ptr)
+el_interrupt(int irq, struct pt_regs *regs)
 {
-    int irq = -(((struct pt_regs *)reg_ptr)->orig_eax+2);
     struct device *dev = (struct device *)(irq2dev_map[irq]);
     struct net_local *lp;
     int ioaddr;

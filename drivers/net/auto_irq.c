@@ -50,7 +50,7 @@ static volatile int irq_number;	/* The latest irq number we actually found. */
 static volatile int irq_bitmap; /* The irqs we actually found. */
 static int irq_handled;		/* The irq lines we have a handler on. */
 
-static void autoirq_probe(int irq)
+static void autoirq_probe(int irq, struct pt_regs * regs)
 {
 	irq_number = irq;
 	set_bit(irq, (void *)&irq_bitmap);	/* irq_bitmap |= 1 << irq; */

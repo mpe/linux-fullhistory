@@ -2146,7 +2146,7 @@ static int scsi_register_host(Scsi_Host_Template * tpnt)
   Scsi_Cmnd * SCpnt;
   struct Scsi_Device_Template * sdtpnt;
   int j, i;
-  char * name;
+  const char * name;
 
   if (tpnt->next || !tpnt->detect) return 1;  /* Must be already loaded, or
 					       no detect routine available */

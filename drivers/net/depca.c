@@ -321,7 +321,7 @@ struct depca_private {
 */
 static int depca_open(struct device *dev);
 static int depca_start_xmit(struct sk_buff *skb, struct device *dev);
-static void depca_interrupt(int reg_ptr);
+static void depca_interrupt(int irq, struct pt_regs * regs);
 static int depca_close(struct device *dev);
 static struct enet_statistics *depca_get_stats(struct device *dev);
 #ifdef HAVE_MULTICAST
@@ -955,9 +955,8 @@ depca_start_xmit(struct sk_buff *skb, struct device *dev)
 ** The DEPCA interrupt handler. 
 */
 static void
-depca_interrupt(int reg_ptr)
+depca_interrupt(int irq, struct pt_regs * regs)
 {
-    int irq = -(((struct pt_regs *)reg_ptr)->orig_eax+2);
     struct device *dev = (struct device *)(irq2dev_map[irq]);
     struct depca_private *lp;
     int csr0, ioaddr, nicsr;

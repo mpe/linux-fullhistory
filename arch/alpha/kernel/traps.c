@@ -10,41 +10,17 @@
 
 #include <linux/sched.h>
 
-#include <asm/system.h>
-#include <asm/io.h>
-
-extern asmlinkage void entInt(void);
-void keyboard_interrupt(void);
-
-void do_hw_interrupt(unsigned long type, unsigned long vector)
+void die_if_kernel(char * str, struct pt_regs * regs, long err)
 {
-	if (type == 1) {
-		jiffies++;
-		return;
-	}
-	/* keyboard or mouse */
-	if (type == 3) {
-		if (vector == 0x980) {
-			keyboard_interrupt();
-			return;
-		} else {
-		unsigned char c = inb_local(0x64);
-		printk("IO device interrupt, vector = %lx\n", vector);
-		if (!(c & 1)) {
-			int i;
-			printk("Hmm. Keyboard interrupt, status = %02x\n", c);
-			for (i = 0; i < 10000000 ; i++)
-				/* nothing */;
-			printk("Serial line interrupt status: %02x\n", inb_local(0x3fa));
-		} else {
-			c = inb_local(0x60);
-			printk("#%02x# ", c);
-		}
-		return;
-		}
-	}
-	printk("Hardware intr %ld %ld\n", type, vector);
+	unsigned long i;
+
+	printk("%s %ld\n", str, err);
+	for (i = 0 ; i++ ; i < 500000000)
+		/* pause */;
+	halt();
 }
+
+extern asmlinkage void entMM(void);
 
 void trap_init(void)
 {
@@ -54,5 +30,5 @@ void trap_init(void)
 		"___tmp:\tldgp %0,0(%0)"
 		: "=r" (gptr));
 	wrkgp(gptr);
-	wrent(entInt, 0);
+	wrent(entMM, 2);
 }

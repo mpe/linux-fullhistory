@@ -8,84 +8,85 @@
  * Copyright (C) 1994 by Ralf Baechle
  *
  */
+#ifndef __ASM_MIPS_SEGMENT_H
+#define __ASM_MIPS_SEGMENT_H
 
-#ifndef _ASM_MIPS_SEGMENT_H_
-#define _ASM_MIPS_SEGMENT_H_
+/*
+ * Memory segments (32bit kernel mode addresses)
+ */
+#define KUSEG                   0x00000000
+#define KSEG0                   0x80000000
+#define KSEG1                   0xa0000000
+#define KSEG2                   0xc0000000
+#define KSEG3                   0xe0000000
 
-static inline unsigned char get_user_byte(const char * addr)
-{
-	register unsigned char _v;
+/*
+ * returns the kernel segment base of a given address
+ * Address space is a scarce resource on a R3000, so
+ * emulate the Intel segment braindamage...
+ */
+#define KSEGX(a)                (a & 0xe0000000)
 
-	__asm__ ("lbu\t%0,%1":"=r" (_v):"r" (*addr));
+#define KERNEL_CS	KERNELBASE
+#define KERNEL_DS	KERNEL_CS
 
-	return _v;
-}
+#define USER_CS		0x00000000
+#define USER_DS		USER_CS
+
+#ifndef __ASSEMBLY__
+
+/*
+ * This variable is defined in arch/mips/kernel/head.S.
+ */
+extern unsigned long segment_fs;
 
 #define get_fs_byte(addr) get_user_byte((char *)(addr))
-
-static inline unsigned short get_user_word(const short *addr)
+static inline unsigned char get_user_byte(const char *addr)
 {
-	unsigned short _v;
-
-	__asm__ ("lhu\t%0,%1":"=r" (_v):"r" (*addr));
-
-	return _v;
+	return *(const char *)(((unsigned long)addr)+segment_fs);
 }
 
 #define get_fs_word(addr) get_user_word((short *)(addr))
-
-static inline unsigned long get_user_long(const int *addr)
+static inline unsigned short get_user_word(const short *addr)
 {
-	unsigned long _v;
-
-	__asm__ ("lwu\t%0,%1":"=r" (_v):"r" (*addr)); \
-	return _v;
+	return *(const short *)(((unsigned long)addr)+segment_fs);
 }
 
 #define get_fs_long(addr) get_user_long((int *)(addr))
-
-static inline unsigned long get_user_dlong(const int *addr)
+static inline unsigned long get_user_long(const int *addr)
 {
-	unsigned long _v;
-
-	__asm__ ("ld\t%0,%1":"=r" (_v):"r" (*addr)); \
-	return _v;
+	return *(const int *)(((unsigned long)addr)+segment_fs);
 }
 
-#define get_fs_dlong(addr) get_user_dlong((int *)(addr))
-
-static inline void put_user_byte(char val,char *addr)
+#define get_fs_dlong(addr) get_user_dlong((long long *)(addr))
+static inline unsigned long get_user_dlong(const long long *addr)
 {
-__asm__ ("sb\t%0,%1": /* no outputs */ :"r" (val),"r" (*addr));
+	return *(const long long *)(((unsigned long)addr)+segment_fs);
 }
 
 #define put_fs_byte(x,addr) put_user_byte((x),(char *)(addr))
-
-static inline void put_user_word(short val,short * addr)
+static inline void put_user_byte(char val,char *addr)
 {
-__asm__ ("sh\t%0,%1": /* no outputs */ :"r" (val),"r" (*addr));
+	*(char *)(((unsigned long)addr)+segment_fs) = val;
 }
 
 #define put_fs_word(x,addr) put_user_word((x),(short *)(addr))
-
-static inline void put_user_long(unsigned long val,int * addr)
+static inline void put_user_word(short val,short * addr)
 {
-__asm__ ("sw\t%0,%1": /* no outputs */ :"r" (val),"r" (*addr));
+	*(short *)(((unsigned long)addr)+segment_fs) = val;
 }
 
 #define put_fs_long(x,addr) put_user_long((x),(int *)(addr))
-
-static inline void put_user_dlong(unsigned long val,int * addr)
+static inline void put_user_long(unsigned long val,int * addr)
 {
-__asm__ ("sd\t%0,%1": /* no outputs */ :"r" (val),"r" (*addr));
+	*(int *)(((unsigned long)addr)+segment_fs) = val;
 }
 
 #define put_fs_dlong(x,addr) put_user_dlong((x),(int *)(addr))
-
-/*
- * These following two variables are defined in mips/head.S.
- */
-extern unsigned long segment_fs;
+static inline void put_user_dlong(unsigned long val,long long * addr)
+{
+	*(long long *)(((unsigned long)addr)+segment_fs) = val;
+}
 
 static inline void __generic_memcpy_tofs(void * to, const void * from, unsigned long n)
 {
@@ -101,7 +102,7 @@ static inline void __generic_memcpy_tofs(void * to, const void * from, unsigned 
 	".set\tat\n\t"
 	".set\treorder"
 	: /* no outputs */
-	:"d" (n),"d" (((long) to)| segment_fs),"d" ((long) from)
+	:"r" (n),"r" (((long) to)| segment_fs),"r" ((long) from)
 	:"$1");
 }
 
@@ -152,7 +153,7 @@ static inline void __generic_memcpy_fromfs(void * to, const void * from, unsigne
 	".set\tat\n\t"
 	".set\treorder"
 	: /* no outputs */
-	:"d" (n),"d" ((long) to),"d" (((long) from | segment_fs))
+	:"r" (n),"r" ((long) to),"r" (((long) from | segment_fs))
 	:"$1","memory");
 }
 
@@ -214,4 +215,6 @@ static inline void set_fs(unsigned long val)
 	segment_fs = val;
 }
 
-#endif /* _ASM_MIPS_SEGMENT_H_ */
+#endif
+
+#endif /* __ASM_MIPS_SEGMENT_H */

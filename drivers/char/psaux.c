@@ -192,7 +192,7 @@ static inline int queue_empty(void)
  * is waiting in the keyboard/aux controller.
  */
 
-static void aux_interrupt(int cpl)
+static void aux_interrupt(int cpl, struct pt_regs * regs)
 {
 	int head = queue->head;
 	int maxhead = (queue->tail-1) & (AUX_BUF_SIZE-1);
@@ -213,7 +213,7 @@ static void aux_interrupt(int cpl)
  */
 
 #ifdef CONFIG_82C710_MOUSE
-static void qp_interrupt(int cpl)
+static void qp_interrupt(int cpl, struct pt_regs * regs)
 {
 	int head = queue->head;
 	int maxhead = (queue->tail-1) & (AUX_BUF_SIZE-1);

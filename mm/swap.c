@@ -78,7 +78,7 @@ extern inline int add_to_swap_cache(unsigned long addr, unsigned long entry)
 	swap_cache_add_total++;
 #endif
 	if ((p->flags & SWP_WRITEOK) == SWP_WRITEOK) {
-		entry = (unsigned long) xchg_ptr(swap_cache + (addr >> PAGE_SHIFT), (void *) entry);
+		entry = (unsigned long) xchg_ptr(swap_cache + MAP_NR(addr), (void *) entry);
 		if (entry)  {
 			printk("swap_cache: replacing non-NULL entry\n");
 		}
@@ -97,7 +97,7 @@ static unsigned long init_swap_cache(unsigned long mem_start,
 
 	mem_start = (mem_start + 15) & ~15;
 	swap_cache = (unsigned long *) mem_start;
-	swap_cache_size = mem_end >> PAGE_SHIFT;
+	swap_cache_size = MAP_NR(mem_end);
 	memset(swap_cache, 0, swap_cache_size * sizeof (unsigned long));
 	return (unsigned long) (swap_cache + swap_cache_size);
 }
@@ -547,7 +547,7 @@ static inline void remove_mem_queue(struct mem_list * head, struct mem_list * en
  */
 static inline void free_pages_ok(unsigned long addr, unsigned long order)
 {
-	unsigned long index = addr >> (PAGE_SHIFT + 1 + order);
+	unsigned long index = MAP_NR(addr) >> (1 + order);
 	unsigned long mask = PAGE_MASK << order;
 
 	addr &= mask;
@@ -583,7 +583,7 @@ void free_pages(unsigned long addr, unsigned long order)
 {
 	if (addr < high_memory) {
 		unsigned long flag;
-		unsigned short * map = mem_map + MAP_NR(addr);
+		mem_map_t * map = mem_map + MAP_NR(addr);
 		if (*map) {
 			if (!(*map & MAP_PAGE_RESERVED)) {
 				save_flags(flag);
@@ -624,7 +624,7 @@ do { struct mem_list * queue = free_area_list+order; \
 
 static inline int mark_used(unsigned long addr, unsigned long order)
 {
-	return change_bit(addr >> (PAGE_SHIFT+1+order), free_area_map[order]);
+	return change_bit(MAP_NR(addr) >> (1+order), free_area_map[order]);
 }
 
 #define EXPAND(addr,low,high) \
@@ -1017,7 +1017,7 @@ void si_swapinfo(struct sysinfo *val)
  */
 unsigned long free_area_init(unsigned long start_mem, unsigned long end_mem)
 {
-	unsigned short * p;
+	mem_map_t * p;
 	unsigned long mask = PAGE_MASK;
 	int i;
 
@@ -1025,12 +1025,12 @@ unsigned long free_area_init(unsigned long start_mem, unsigned long end_mem)
 	 * select nr of pages we try to keep free for important stuff
 	 * with a minimum of 16 pages. This is totally arbitrary
 	 */
-	i = end_mem >> (PAGE_SHIFT+6);
+	i = (end_mem - PAGE_OFFSET) >> (PAGE_SHIFT+6);
 	if (i < 16)
 		i = 16;
 	min_free_pages = i;
 	start_mem = init_swap_cache(start_mem, end_mem);
-	mem_map = (unsigned short *) start_mem;
+	mem_map = (mem_map_t *) start_mem;
 	p = mem_map + MAP_NR(end_mem);
 	start_mem = (unsigned long) p;
 	while (p > mem_map)
@@ -1041,8 +1041,9 @@ unsigned long free_area_init(unsigned long start_mem, unsigned long end_mem)
 		free_area_list[i].prev = free_area_list[i].next = &free_area_list[i];
 		mask += mask;
 		end_mem = (end_mem + ~mask) & mask;
-		bitmap_size = end_mem >> (PAGE_SHIFT + i);
+		bitmap_size = (end_mem - PAGE_OFFSET) >> (PAGE_SHIFT + i);
 		bitmap_size = (bitmap_size + 7) >> 3;
+		bitmap_size = (bitmap_size + sizeof(unsigned long) - 1) & ~(sizeof(unsigned long)-1);
 		free_area_map[i] = (unsigned char *) start_mem;
 		memset((void *) start_mem, 0, bitmap_size);
 		start_mem += bitmap_size;

@@ -104,13 +104,6 @@ void free_irq(unsigned int irq)
   return;
 }
 
-static void math_error_irq(int cpl)
-{
-  return;
-}
-
-static void no_action(int cpl) { }
-
 unsigned int probe_irq_on (void)
 {
   unsigned int irqs = 0;

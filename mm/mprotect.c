@@ -16,8 +16,6 @@
 #include <asm/segment.h>
 #include <asm/system.h>
 
-#define CHG_MASK (PAGE_MASK | PAGE_ACCESSED | PAGE_DIRTY | PAGE_PWT | PAGE_PCD)
-
 static void change_protection(unsigned long start, unsigned long end, int prot)
 {
 	unsigned long *page_table, *dir;
@@ -43,7 +41,7 @@ static void change_protection(unsigned long start, unsigned long end, int prot)
 		do {
 			page = *page_table;
 			if (page & PAGE_PRESENT)
-				*page_table = (page & CHG_MASK) | prot;
+				*page_table = (page & PAGE_CHG_MASK) | prot;
 			++page_table;
 		} while (--offset);
 	}

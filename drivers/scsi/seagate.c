@@ -192,7 +192,7 @@ static const Signature signatures[] = {
  */
 
 static int hostno = -1;
-static void seagate_reconnect_intr(int);
+static void seagate_reconnect_intr(int, struct pt_regs *);
 
 #ifdef FAST
 static int fast = 1;
@@ -450,7 +450,7 @@ static int should_reconnect = 0;
  * asserting SEL.
  */
 
-static void seagate_reconnect_intr (int unused)
+static void seagate_reconnect_intr(int irq, struct pt_regs * regs)
 	{
 	int temp;
 	Scsi_Cmnd * SCtmp;

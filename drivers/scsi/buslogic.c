@@ -422,7 +422,7 @@ const char *buslogic_info(struct Scsi_Host *shpnt)
 }
 
 /* A "high" level interrupt handler. */
-static void buslogic_interrupt(int junk)
+static void buslogic_interrupt(int irq, struct pt_regs * regs)
 {
     void (*my_done)(Scsi_Cmnd *) = NULL;
     int errstatus, mbistatus = MBX_NOT_IN_USE, number_serviced, found;
@@ -430,15 +430,12 @@ static void buslogic_interrupt(int junk)
     struct Scsi_Host *shpnt;
     Scsi_Cmnd *sctmp;
     unsigned long flags;
-    int irqno, base, flag;
+    int base, flag;
     int needs_restart;
     struct mailbox *mb;
     struct ccb *ccb;
 
-    /* Magic - this -2 is only required for slow interrupt handlers */
-    irqno = ((int *)junk)[-2];
-
-    shpnt = host[irqno - 9];
+    shpnt = host[irq - 9];
     if (!shpnt)
 	panic("buslogic_interrupt: NULL SCSI host entry");
 

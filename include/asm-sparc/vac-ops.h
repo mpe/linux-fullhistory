@@ -1,8 +1,15 @@
+#ifndef _SPARC_VAC_OPS_H
+#define _SPARC_VAC_OPS_H
+
 /* vac-ops.h: Inline assembly routines to do operations on the Sparc
               VAC (virtual address cache).
 
    Copyright (C) 1994, David S. Miller (davem@caip.rutgers.edu)
 */
+
+extern void flush_vac_context(void);
+extern void flush_vac_segment(unsigned int foo_segment);
+extern void flush_vac_page(unsigned int foo_addr);
 
 /* enable_vac() enables the virtual address cache. It returns 0 on
    success, 1 on failure.
@@ -72,3 +79,4 @@ extern __inline__ void sw_flush_vac_page_entry(char* addr)
   __asm__ __volatile__("sta %%g0, [%0] 0xd" : : "r" (addr));
 }
  
+#endif /* !(_SPARC_VAC_OPS_H) */

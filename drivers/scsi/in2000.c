@@ -266,7 +266,7 @@ DEB(printk("FIer:%d %02x %08x\n", in2000_datalen,fic,(unsigned int )in2000_datap
 	ficmsk = 0;}
 }
 
-static void in2000_intr_handle(int foo)
+static void in2000_intr_handle(int irq, struct pt_regs *regs)
 {
     int result=0;
     unsigned int count,auxstatus,scsistatus,cmdphase,scsibyte;

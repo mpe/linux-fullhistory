@@ -99,3 +99,11 @@ asmlinkage int sys_execve(struct pt_regs regs)
 	putname(filename);
 	return error;
 }
+
+/*
+ * Bogon bios32 stuff...
+ */
+unsigned long bios32_init(unsigned long memory_start, unsigned long memory_end)
+{
+  return memory_start;
+}

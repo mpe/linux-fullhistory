@@ -357,7 +357,7 @@ static void sr_photocd(struct inode *inode)
     *((unsigned long*)buf+1) = 12;
     buf[8+0] = 0x15;
     buf[8+1] = (1 << 4);
-    buf[8+2] = 12;
+    buf[8+4] = 12;
     buf[14+ 3] = 0x08;
     buf[14+ 4] = 0x83;
     buf[14+10] = 0x08;
@@ -985,7 +985,7 @@ static void sr_detach(Scsi_Device * SDp)
   
   major = MAJOR_NR << 8;
 
-  for(cpnt = scsi_CDs, i=0; i<sg_template.dev_max; i++, cpnt++) 
+  for(cpnt = scsi_CDs, i=0; i<sr_template.dev_max; i++, cpnt++) 
     if(cpnt->device == SDp) {
       /*
        * Since the cdrom is read-only, no need to sync the device.

@@ -1,6 +1,10 @@
 /*
  *      u14-34f.c - Low-level driver for UltraStor 14F/34F SCSI host adapters.
  *
+ *      16 Jan 1995 rev. 1.13 for linux 1.1.81
+ *          Display a message if check_region detects a port address
+ *          already in use.
+ *
  *      15 Dec 1994 rev. 1.12 for linux 1.1.74
  *          The host->block flag is set for all the detected ISA boards.
  *
@@ -245,7 +249,7 @@ static unsigned int irqlist[MAX_IRQ], calls[MAX_IRQ];
 #define HD(board) ((struct hostdata *) &sh[board]->hostdata)
 #define BN(board) (HD(board)->board_name)
 
-static void u14_34f_interrupt_handler(int);
+static void u14_34f_interrupt_handler(int, struct pt_regs *);
 static int do_trace = FALSE;
 
 static inline unchar wait_on_busy(ushort iobase) {
@@ -301,7 +305,11 @@ static inline int port_detect(ushort *port_base, unsigned int j,
 
    sprintf(name, "%s%d", driver_name, j);
 
-   if(check_region(*port_base, REG_REGION)) return FALSE;
+   if(check_region(*port_base, REG_REGION)) {
+      printk("%s: address 0x%03x already in use, detaching.\n", 
+             name, *port_base);
+      return FALSE;
+      }
 
    if (inb(*port_base + REG_PRODUCT_ID1) != PRODUCT_ID1) return FALSE;
 
@@ -352,7 +360,7 @@ static inline int port_detect(ushort *port_base, unsigned int j,
    if (sh[j]->base == 0) outb(CMD_ENA_INTR, sh[j]->io_port + REG_SYS_MASK);
 
    /* Register the I/O space that we use */
-   request_region(sh[j]->io_port, REG_REGION,"u14-34f");
+   request_region(sh[j]->io_port, REG_REGION, driver_name);
 
    memset(HD(j), 0, sizeof(struct hostdata));
    HD(j)->heads = mapping_table[config_2.mapping_mode].heads;
@@ -706,7 +714,7 @@ int u14_34f_biosparam(Disk * disk, int dev, int * dkinfo) {
    return 0;
 }
 
-static void u14_34f_interrupt_handler(int irq) {
+static void u14_34f_interrupt_handler(int irq, struct pt_regs * regs) {
    Scsi_Cmnd *SCpnt;
    unsigned int i, j, k, flags, status, loops, total_loops = 0;
    struct mscp *spp;

@@ -18,14 +18,14 @@
 .S.o:
 	$(CC) -D__ASSEMBLY__ -traditional -c $< -o $*.o
 
-OBJS  = entry.o traps.o irq.o process.o
+OBJS  = entry.o traps.o irq.o process.o promops.o signal.o ioport.o
 
 all: kernel.o head.o
 
 head.o: head.s
 
 head.s: head.S $(TOPDIR)/include/asm-sparc/head.h
-	$(CPP) -traditional -o $*.s $<
+	$(CPP) -D__ASSEMBLY__ -traditional -o $*.s $<
 
 kernel.o: $(OBJS)
 	$(LD) -r -o kernel.o $(OBJS)

@@ -188,14 +188,14 @@ static struct {
 	short rate;
 	char *english;
 } aha274x_synctab[] = {
-	100,	0,	"10.0",
-	125,	1,	"8.0",
-	150,	2,	"6.67",
-	175,	3,	"5.7",
-	200,	4,	"5.0",
-	225,	5,	"4.4",
-	250,	6,	"4.0",
-	275,	7,	"3.6"
+	{100,	0,	"10.0"},
+	{125,	1,	"8.0"},
+	{150,	2,	"6.67"},
+	{175,	3,	"5.7"},
+	{200,	4,	"5.0"},
+	{225,	5,	"4.4"},
+	{250,	6,	"4.0"},
+	{275,	7,	"3.6"}
 };
 
 static int aha274x_synctab_max =
@@ -322,8 +322,8 @@ void aha274x_setup(char *s, int *dummy)
 		char *name;
 		int *flag;
 	} options[] = {
-		"extended",	&aha274x_extended,
-		NULL
+		{"extended",	&aha274x_extended},
+		{NULL, NULL }
 	};
 
 	for (p = strtok(s, ","); p; p = strtok(NULL, ",")) {
@@ -456,7 +456,7 @@ void aha274x_to_scsirate(unsigned char *rate,
  *  be disabled all through this function unless we say otherwise.
  */
 static
-void aha274x_isr(int irq)
+void aha274x_isr(int irq, struct pt_regs * regs)
 {
 	int base, intstat;
 	struct aha274x_host *p;
@@ -745,9 +745,9 @@ enum aha_type aha274x_probe(int slot, int s_base)
 		unsigned char signature[sizeof(buf)];
 		enum aha_type type;
 	} S[] = {
-		4, { 0x04, 0x90, 0x77, 0x71 }, T_274X,	/* host adapter 274x */
-		4, { 0x04, 0x90, 0x77, 0x70 }, T_274X,	/* motherboard 274x  */
-		4, { 0x04, 0x90, 0x77, 0x56 }, T_284X,	/* 284x, BIOS enabled */
+		{4, { 0x04, 0x90, 0x77, 0x71 }, T_274X},	/* host adapter 274x */
+		{4, { 0x04, 0x90, 0x77, 0x70 }, T_274X},	/* motherboard 274x  */
+		{4, { 0x04, 0x90, 0x77, 0x56 }, T_284X},	/* 284x, BIOS enabled */
 	};
 
 	for (i = 0; i < sizeof(buf); i++) {
@@ -887,7 +887,7 @@ int aha274x_register(Scsi_Host_Template *template,
 	/*
 	 *  Lock out other contenders for our i/o space.
 	 */
-	snarf_region(O_MINREG(base), O_MAXREG(base)-O_MINREG(base));
+	request_region(O_MINREG(base), O_MAXREG(base)-O_MINREG(base), "aha27x");
 
 	/*
 	 *  Any card-type-specific adjustments before we register

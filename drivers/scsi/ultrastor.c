@@ -283,7 +283,7 @@ static const unsigned short ultrastor_ports_14f[] = {
 };
 #endif
 
-static void ultrastor_interrupt(int cpl);
+static void ultrastor_interrupt(int, struct pt_regs *);
 static inline void build_sg_list(struct mscp *, Scsi_Cmnd *SCpnt);
 
 
@@ -1014,7 +1014,7 @@ int ultrastor_biosparam(Disk * disk, int dev, int * dkinfo)
     return 0;
 }
 
-static void ultrastor_interrupt(int cpl)
+static void ultrastor_interrupt(int irq, struct pt_regs *regs)
 {
     unsigned int status;
 #if ULTRASTOR_MAX_CMDS > 1

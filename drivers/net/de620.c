@@ -175,7 +175,7 @@ static void	de620_set_multicast_list(struct device *, int, void *);
 static int	de620_start_xmit(struct sk_buff *, struct device *);
 
 /* Dispatch from interrupts. */
-static void	de620_interrupt(int);
+static void	de620_interrupt(int, struct pt_regs *);
 static int	de620_rx_intr(struct device *);
 
 /* Initialization */
@@ -565,9 +565,8 @@ de620_start_xmit(struct sk_buff *skb, struct device *dev)
  *
  */
 static void
-de620_interrupt(int reg_ptr)
+de620_interrupt(int irq, struct pt_regs *regs)
 {
-	int irq = -(((struct pt_regs *)reg_ptr)->orig_eax+2);
 	struct device *dev = irq2dev_map[irq];
 	byte irq_status;
 	int bogus_count = 0;

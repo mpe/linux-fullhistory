@@ -263,7 +263,7 @@ int nfs_notify_change(struct inode *inode, struct iattr *attr)
 char kernel_version[] = UTS_RELEASE;
 
 static struct file_system_type nfs_fs_type = {
-	nfs_read_super, "nfs", 1, NULL
+	nfs_read_super, "nfs", 0, NULL
 };
 
 int init_module(void)

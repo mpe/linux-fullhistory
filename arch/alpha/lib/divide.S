@@ -11,7 +11,7 @@
  * by hand.  The compiler expects the functions
  *
  *	__divqu: 64-bit unsigned long divide
- *	__remqu: 64-bit unsigned long reminder
+ *	__remqu: 64-bit unsigned long remainder
  *	__divqs/__remqs: signed 64-bit
  *	__divlu/__remlu: unsigned 32-bit
  *	__divls/__remls: signed 32-bit

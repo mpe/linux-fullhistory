@@ -128,7 +128,7 @@ Wed Dec 14 14:46:30 1994  Eric Youngdale  (eric@andante)
 
 	* hosts.c: Spelling.
 
-	* qlogic.c: Update to version 0.38a.  Add more support for PCMIA.
+	* qlogic.c: Update to version 0.38a.  Add more support for PCMCIA.
 
 	* scsi.c: Mask device type with 0x1f during scan_scsis.
 	  Add support for deadlocking, err, make that getting out of

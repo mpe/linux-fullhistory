@@ -934,7 +934,7 @@ static struct gendisk hd_gendisk = {
 	NULL		/* next */
 };
 	
-static void hd_interrupt(int unused)
+static void hd_interrupt(int irq, struct pt_regs *regs)
 {
 	void (*handler)(void) = DEVICE_INTR;
 

@@ -1,6 +1,11 @@
 /*
  *      eata.c - Low-level driver for EATA/DMA SCSI host adapters.
  *
+ *      16 Jan 1995 rev. 1.12 for linux 1.1.81
+ *          Fix mscp structure comments (no functional change).
+ *          Display a message if check_region detects a port address
+ *          already in use.
+ *
  *      17 Dec 1994 rev. 1.11 for linux 1.1.74
  *          Use the scsicam_bios_param routine. This allows an easy
  *          migration path from disk partition tables created using 
@@ -196,11 +201,11 @@ struct mssp {
 /* MailBox SCSI Command Packet */
 struct mscp {
    unchar  sreset:1,     /* SCSI Bus Reset Signal should be asserted */
-           interp:1,     /* The controller interprets cp, not the target */ 
+             init:1,     /* Re-initialize controller and self test */
            reqsen:1,     /* Transfer Request Sense Data to addr using DMA */
                sg:1,     /* Use Scatter/Gather */
                  :1,
-             init:1,     /* Re-initialize controller and self test */
+           interp:1,     /* The controller interprets cp, not the target */ 
              dout:1,     /* Direction of Transfer is Out (Host to Target) */
               din:1;     /* Direction of Transfer is In (Target to Host) */
    unchar sense_len;     /* Request Sense Length */
@@ -251,7 +256,7 @@ static unsigned int irqlist[MAX_IRQ], calls[MAX_IRQ];
 #define HD(board) ((struct hostdata *) &sh[board]->hostdata)
 #define BN(board) (HD(board)->board_name)
 
-static void eata_interrupt_handler(int);
+static void eata_interrupt_handler(int, struct pt_regs *);
 static int do_trace = FALSE;
 
 static inline unchar wait_on_busy(ushort iobase) {
@@ -308,7 +313,11 @@ static inline int port_detect(ushort *port_base, unsigned int j,
 
    sprintf(name, "%s%d", driver_name, j);
 
-   if(check_region(*port_base, REG_REGION)) return FALSE;
+   if(check_region(*port_base, REG_REGION)) {
+      printk("%s: address 0x%03x already in use, detaching.\n", 
+             name, *port_base);
+      return FALSE;
+      }
 
    if (do_dma(*port_base, 0, READ_CONFIG_PIO)) return FALSE;
 
@@ -385,7 +394,7 @@ static inline int port_detect(ushort *port_base, unsigned int j,
    sh[j]->cmd_per_lun = MAX_CMD_PER_LUN;
 
    /* Register the I/O space that we use */
-   request_region(sh[j]->io_port, REG_REGION,"eata");
+   request_region(sh[j]->io_port, REG_REGION, driver_name);
 
    memset(HD(j), 0, sizeof(struct hostdata));
    HD(j)->subversion = subversion;
@@ -746,7 +755,7 @@ int eata_reset (Scsi_Cmnd *SCarg) {
       }
 }
 
-static void eata_interrupt_handler(int irq) {
+static void eata_interrupt_handler(int irq, struct pt_regs * regs) {
    Scsi_Cmnd *SCpnt;
    unsigned int i, j, k, flags, status, loops, total_loops = 0;
    struct mssp *spp;

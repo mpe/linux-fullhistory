@@ -313,7 +313,7 @@ static Scsi_Cmnd            *disconnected_SC = NULL;
 
 static int aborting=0, abortion_complete=0, abort_result;
 
-void aha152x_intr( int irqno );
+void aha152x_intr( int irq, struct pt_regs * );
 void aha152x_done( int error );
 void aha152x_setup( char *str, int *ints );
 
@@ -1163,7 +1163,7 @@ void aha152x_done( int error )
 /*
  * Interrupts handler (main routine of the driver)
  */
-void aha152x_intr( int irqno )
+void aha152x_intr( int irqno, struct pt_regs * regs )
 {
   int done=0, phase;
 

@@ -249,7 +249,7 @@ static struct netstats *get_stats(struct device *dev);
 static int	de600_start_xmit(struct sk_buff *skb, struct device *dev);
 
 /* Dispatch from interrupts. */
-static void	de600_interrupt(int reg_ptr);
+static void	de600_interrupt(int irq, struct pt_regs *regs);
 static int	de600_tx_intr(struct device *dev, int irq_status);
 static void	de600_rx_intr(struct device *dev);
 
@@ -495,9 +495,8 @@ de600_start_xmit(struct sk_buff *skb, struct device *dev)
  * Handle the network interface interrupts.
  */
 static void
-de600_interrupt(int reg_ptr)
+de600_interrupt(int irq, struct pt_regs * regs)
 {
-	int		irq = -(((struct pt_regs *)reg_ptr)->orig_eax+2);
 	struct device	*dev = irq2dev_map[irq];
 	byte		irq_status;
 	int		retrig = 0;

@@ -346,7 +346,7 @@ static void rs_start(struct tty_struct *tty)
  * This is the serial driver's interrupt routine while we are probing
  * for submarines.
  */
-static void rs_probe(int irq)
+static void rs_probe(int irq, struct pt_regs * regs)
 {
 	rs_irq_triggered = irq;
 	rs_triggered |= 1 << irq;
@@ -504,7 +504,7 @@ static _INLINE_ void check_modem_status(struct async_struct *info)
 /*
  * This is the serial driver's generic interrupt routine
  */
-static void rs_interrupt(int irq)
+static void rs_interrupt(int irq, struct pt_regs * regs)
 {
 	int status;
 	struct async_struct * info;
@@ -561,7 +561,7 @@ static void rs_interrupt(int irq)
 /*
  * This is the serial driver's interrupt routine for a single port
  */
-static void rs_interrupt_single(int irq)
+static void rs_interrupt_single(int irq, struct pt_regs * regs)
 {
 	int status;
 	int pass_counter = 0;
@@ -603,7 +603,7 @@ static void rs_interrupt_single(int irq)
 /*
  * This is the serial driver's generic interrupt routine
  */
-static void rs_interrupt(int irq)
+static void rs_interrupt(int irq, struct pt_regs * regs)
 {
 	int status;
 	struct async_struct * info;
@@ -660,7 +660,7 @@ static void rs_interrupt(int irq)
 /*
  * This is the serial driver's interrupt routine for a single port
  */
-static void rs_interrupt_single(int irq)
+static void rs_interrupt_single(int irq, struct pt_regs * regs)
 {
 	int status;
 	struct async_struct * info;
@@ -759,9 +759,9 @@ static void rs_timer(void)
 					serial_out(info, UART_IER, info->IER);
 					info = info->next_port;
 				} while (info);
-				rs_interrupt(i);
+				rs_interrupt(i, NULL);
 			} else
-				rs_interrupt_single(i);
+				rs_interrupt_single(i, NULL);
 			sti();
 		}
 	}
@@ -771,7 +771,7 @@ static void rs_timer(void)
 
 	if (IRQ_ports[0]) {
 		cli();
-		rs_interrupt(0);
+		rs_interrupt(0, NULL);
 		sti();
 
 		timer_table[RS_TIMER].expires = jiffies + IRQ_timeout[0] - 2;
@@ -849,7 +849,7 @@ static int startup(struct async_struct * info)
 	unsigned short ICP;
 	unsigned long flags;
 	int	retval;
-	void (*handler)(int);
+	void (*handler)(int, struct pt_regs *);
 
 	if (info->flags & ASYNC_INITIALIZED)
 		return 0;

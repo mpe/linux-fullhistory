@@ -518,7 +518,7 @@ cy_sched_event(struct cyclades_port *info, int event)
  * while we are probing for submarines.
  */
 static void
-cy_probe(int irq)
+cy_probe(int irq, struct pt_regs *regs)
 {
     cy_irq_triggered = irq;
     cy_triggered |= 1 << irq;
@@ -530,7 +530,7 @@ cy_probe(int irq)
    received, out buffer empty, modem change, etc.
  */
 static void
-cy_interrupt(int irq)
+cy_interrupt(int irq, struct pt_regs *regs)
 {
   struct tty_struct *tty;
   int status;

@@ -97,6 +97,40 @@
 #include "kbd_kern.h"
 #include "vt_kern.h"
 
+#ifdef __alpha__
+ 
+static inline void scrwritew(unsigned short val, unsigned short * addr)
+{
+	if ((long) addr < 0)
+		*addr = val;
+	else
+		writew(val, (unsigned long) addr);
+}
+
+static inline unsigned short scrreadw(unsigned short * addr)
+{
+	if ((long) addr < 0)
+		return *addr;
+	return readw((unsigned long) addr);
+}
+
+#else
+
+static inline void scrwritew(unsigned short val, unsigned short * addr)
+{
+	*addr = val;
+}
+
+static inline unsigned short scrreadw(unsigned short * addr)
+{
+	return *addr;
+}
+
+#endif
+
+#define writew(x,y) scrwritew((x),(y))
+#define readw(x) scrreadw(x)
+
 #ifndef MIN
 #define MIN(a,b)	((a) < (b) ? (a) : (b))
 #endif
@@ -300,7 +334,7 @@ static void memsetw(void * s, unsigned short c, unsigned int count)
 	count /= 2;
 	while (count) {
 		count--;
-		*(addr++) = c;
+		writew(c, addr++);
 	}
 }
 
@@ -688,12 +722,12 @@ static void scrup(int currcons, unsigned int t, unsigned int b)
 			count = (video_num_lines-1)*video_num_columns;
 			while (count) {
 				count--;
-				*(d++) = *(s++);
+				writew(readw(s++),d++);
 			}
 			count = video_num_columns;
 			while (count) {
 				count--;
-				*(d++) = video_erase_char;
+				writew(video_erase_char, d++);
 			}
 			scr_end -= origin-video_mem_start;
 			pos -= origin-video_mem_start;
@@ -707,7 +741,7 @@ static void scrup(int currcons, unsigned int t, unsigned int b)
 			count = video_num_columns;
 			while (count) {
 				count--;
-				*(d++) = video_erase_char;
+				writew(video_erase_char, d++);
 			}
 		}
 		set_origin(currcons);
@@ -718,12 +752,12 @@ static void scrup(int currcons, unsigned int t, unsigned int b)
 
 		while (count) {
 			count--;
-			*(d++) = *(s++);
+			writew(readw(s++), d++);
 		}
 		count = video_num_columns;
 		while (count) {
 			count--;
-			*(d++) = video_erase_char;
+			writew(video_erase_char, d++);
 		}
 	}
 }
@@ -740,12 +774,12 @@ static void scrdown(int currcons, unsigned int t, unsigned int b)
 	count = (b-t-1)*video_num_columns;
 	while (count) {
 		count--;
-		*(--d) = *(--s);
+		writew(readw(--s), --d);
 	}
 	count = video_num_columns;
 	while (count) {
 		count--;
-		*(--d) = video_erase_char;
+		writew(video_erase_char, --d);
 	}
 	has_scrolled = 1;
 }
@@ -821,7 +855,7 @@ static void csi_J(int currcons, int vpar)
 	}
 	while (count) {
 		count--;
-		*(start++) = video_erase_char;
+		writew(video_erase_char, start++);
 	}
 	need_wrap = 0;
 }
@@ -849,7 +883,7 @@ static void csi_K(int currcons, int vpar)
 	}
 	while (count) {
 		count--;
-		*(start++) = video_erase_char;
+		writew(video_erase_char, start++);
 	}
 	need_wrap = 0;
 }
@@ -867,7 +901,7 @@ static void csi_X(int currcons, int vpar) /* erase the following vpar positions 
 
 	while (count) {
 		count--;
-		*(start++) = video_erase_char;
+		writew(video_erase_char, start++);
 	}
 	need_wrap = 0;
 }
@@ -1043,14 +1077,18 @@ static inline void respond_ID(int currcons, struct tty_struct * tty)
 }
 
 static void invert_screen(int currcons) {
-	unsigned char *p;
+	unsigned short *p;
 
 	if (can_do_color)
-		for (p = (unsigned char *)origin+1; p < (unsigned char *)scr_end; p+=2)
-			*p = (*p & 0x88) | (((*p >> 4) | (*p << 4)) & 0x77);
+		for (p = (unsigned short *)origin; p < (unsigned short *)scr_end; p++) {
+			unsigned short old = readw(p);
+			writew((old & 0x88ff) | (((old >> 4) | (old << 4)) & 0x7700), p);
+		}
 	else
-		for (p = (unsigned char *)origin+1; p < (unsigned char *)scr_end; p+=2)
-			*p ^= *p & 0x07 == 1 ? 0x70 : 0x77;
+		for (p = (unsigned short *)origin; p < (unsigned short *)scr_end; p++) {
+			unsigned short old = readw(p);
+			writew(old ^ ((old & 0x0700 == 0x0100) ? 0x7000 : 0x7700), p);
+		}
 }
 
 static void set_mode(int currcons, int on_off)
@@ -1152,8 +1190,8 @@ static void insert_char(int currcons)
 	unsigned short * p = (unsigned short *) pos;
 
 	while (i++ < video_num_columns) {
-		tmp = *p;
-		*p = old;
+		tmp = readw(p);
+		writew(old, p);
 		old = tmp;
 		p++;
 	}
@@ -1172,10 +1210,10 @@ static void delete_char(int currcons)
 	unsigned short * p = (unsigned short *) pos;
 
 	while (++i < video_num_columns) {
-		*p = *(p+1);
+		writew(readw(p+1), p);
 		p++;
 	}
-	*p = video_erase_char;
+	writew(video_erase_char, p);
 	need_wrap = 0;
 }
 
@@ -1418,7 +1456,7 @@ static int con_write(struct tty_struct * tty, int from_user,
 			}
 			if (decim)
 				insert_char(currcons);
-			*(unsigned short *) pos = (attr << 8) + tc;
+			writew((attr << 8) + tc, (unsigned short *) pos);
 			if (x == video_num_columns - 1)
 				need_wrap = decawm;
 			else {
@@ -1792,7 +1830,7 @@ void console_print(const char * b)
 			if (c == 10 || c == 13)
 				continue;
 		}
-		*(unsigned short *) pos = (attr << 8) + c;
+		writew((attr << 8) + c, (unsigned short *) pos);
 		if (x == video_num_columns - 1) {
 			need_wrap = 1;
 			continue;
@@ -1965,6 +2003,7 @@ long con_init(long kmem_start)
 	origin = video_mem_start;
 	scr_end	= video_mem_start + video_num_lines * video_size_row;
 	gotoxy(currcons,orig_x,orig_y);
+	set_origin(currcons);
 	printable = 1;
 	printk("Console: %s %s %ldx%ld, %d virtual console%s (max %d)\n",
 		can_do_color ? "colour" : "mono",

@@ -1414,7 +1414,7 @@ struct tq_struct floppy_tq =
 { 0, 0, (void *) (void *) unexpected_floppy_interrupt, 0 };
 
 /* interrupt handler */
-static void floppy_interrupt(int unused)
+static void floppy_interrupt(int irq, struct pt_regs * regs)
 {
 	void (*handler)(void) = DEVICE_INTR;
 

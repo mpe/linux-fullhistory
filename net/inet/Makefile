@@ -56,7 +56,7 @@ inet.o:		$(OBJS)
 else
 
 inet.o:
-		echo | $(AS) -o inet.o
+		$(AR) rcs inet.o
 
 endif
 

@@ -68,7 +68,6 @@ static char printbuf[1024];
 
 extern int console_loglevel;
 
-extern char empty_zero_page[PAGE_SIZE];
 extern void init(void);
 extern void init_IRQ(void);
 extern void init_modules(void);
@@ -114,34 +113,21 @@ extern unsigned long scsi_dev_init(unsigned long, unsigned long);
 #endif
 
 /*
- * This is set up by the setup-routine at boot-time
- */
-#define PARAM	empty_zero_page
-#define EXT_MEM_K (*(unsigned short *) (PARAM+2))
-#define DRIVE_INFO (*(struct drive_info_struct *) (PARAM+0x80))
-#define SCREEN_INFO (*(struct screen_info *) (PARAM+0))
-#define MOUNT_ROOT_RDONLY (*(unsigned short *) (PARAM+0x1F2))
-#define RAMDISK_SIZE (*(unsigned short *) (PARAM+0x1F8))
-#define ORIG_ROOT_DEV (*(unsigned short *) (PARAM+0x1FC))
-#define AUX_DEVICE_INFO (*(unsigned char *) (PARAM+0x1FF))
-
-/*
  * Boot command-line arguments
  */
 #define MAX_INIT_ARGS 8
 #define MAX_INIT_ENVS 8
-#define COMMAND_LINE ((char *) (PARAM+2048))
-#define COMMAND_LINE_SIZE 256
 
 extern void time_init(void);
 
-static unsigned long memory_start = 0;	/* After mem_init, stores the */
-					/* amount of free user memory */
+static unsigned long memory_start = 0;
 static unsigned long memory_end = 0;
-static unsigned long low_memory_start = 0;
 
 static char term[21];
 int rows, cols;
+
+int ramdisk_size;
+int root_mountflags = 0;
 
 static char * argv_init[MAX_INIT_ARGS+2] = { "init", NULL, };
 static char * envp_init[MAX_INIT_ENVS+2] = { "HOME=/", term, NULL, };
@@ -151,15 +137,6 @@ static char * envp_rc[] = { "HOME=/", term, NULL };
 
 static char * argv[] = { "-/bin/sh",NULL };
 static char * envp[] = { "HOME=/usr/root", term, NULL };
-
-struct drive_info_struct { char dummy[32]; } drive_info;
-struct screen_info screen_info;
-
-unsigned char aux_device_present;
-int ramdisk_size;
-int root_mountflags = 0;
-
-static char command_line[COMMAND_LINE_SIZE] = { 0, };
 
 char *get_options(char *str, int *ints)
 {
@@ -379,62 +356,17 @@ static void parse_options(char *line)
 	envp_init[envs+1] = NULL;
 }
 
-static void copy_options(char * to, char * from)
-{
-	char c = ' ';
-	int len = 0;
-
-	for (;;) {
-		if (c == ' ' && *(unsigned long *)from == *(unsigned long *)"mem=") {
-			memory_end = simple_strtoul(from+4, &from, 0);
-			if ( *from == 'K' || *from == 'k' ) {
-				memory_end = memory_end << 10;
-				from++;
-			} else if ( *from == 'M' || *from == 'm' ) {
-				memory_end = memory_end << 20;
-				from++;
-			}
-		}
-		c = *(from++);
-		if (!c)
-			break;
-		if (COMMAND_LINE_SIZE <= ++len)
-			break;
-		*(to++) = c;
-	}
-	*to = '\0';
-}
-
 extern void check_bugs(void);
+extern void setup_arch(char **, unsigned long *, unsigned long *);
 
 asmlinkage void start_kernel(void)
 {
+	char * command_line;
 /*
  * Interrupts are still disabled. Do necessary setups, then
  * enable them
  */
- 	ROOT_DEV = ORIG_ROOT_DEV;
- 	drive_info = DRIVE_INFO;
- 	screen_info = SCREEN_INFO;
-	aux_device_present = AUX_DEVICE_INFO;
-	memory_end = (1<<20) + (EXT_MEM_K<<10);
-	memory_end &= PAGE_MASK;
-	ramdisk_size = RAMDISK_SIZE;
-	copy_options(command_line,COMMAND_LINE);
-#ifdef CONFIG_MAX_16M
-	if (memory_end > 16*1024*1024)
-		memory_end = 16*1024*1024;
-#endif
-	if (MOUNT_ROOT_RDONLY)
-		root_mountflags |= MS_RDONLY;
-	if ((unsigned long)&end >= (1024*1024)) {
-		memory_start = (unsigned long) &end;
-		low_memory_start = PAGE_SIZE;
-	} else {
-		memory_start = 1024*1024;
-		low_memory_start = (unsigned long) &end;
-	}
-	low_memory_start = PAGE_ALIGN(low_memory_start);
+	setup_arch(&command_line, &memory_start, &memory_end);
 	memory_start = paging_init(memory_start,memory_end);
 	trap_init();
 	init_IRQ();
@@ -466,7 +398,7 @@ asmlinkage void start_kernel(void)
 	memory_start = inode_init(memory_start,memory_end);
 	memory_start = file_table_init(memory_start,memory_end);
 	memory_start = name_cache_init(memory_start,memory_end);
-	mem_init(low_memory_start,memory_start,memory_end);
+	mem_init(memory_start,memory_end);
 	buffer_init();
 	time_init();
 	sock_init();

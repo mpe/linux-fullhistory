@@ -73,6 +73,7 @@ _cputypval:
 	.asciz "sun4c"
 	.ascii "     "
 
+	.align 4
 /*
  * Sun people can't spell worth damn. "compatability" indeed.
  * At least we *know* we can't spell, and use a spell-checker.
@@ -120,6 +121,8 @@ you_lose:
 /* XXX how to figure out vm mapped by prom? May have to scan magic addresses */
 
 mem_prop_physavail:	.asciz "available"
+	
+			.align 4
 mem_prop_phystot:	.asciz "reg"
 
 /* v2_memory descriptor struct kludged here for assembly, if it ain't broke */
@@ -129,6 +132,8 @@ v2_mem_struct: 	.skip 0xff
 
 			.align 4
 v2_printf_physavail:	.asciz "Physical Memory Available: 0x%x bytes"
+	
+			.align 4
 v2_printf_phystot:	.asciz "Physical Memory: 0x%x bytes"
 
 /* A place to store property strings returned from the prom 'node' funcs */
@@ -136,15 +141,16 @@ v2_printf_phystot:	.asciz "Physical Memory: 0x%x bytes"
 			.align 4
 prop_string_buf:	.skip 32
 
+		.align 4
 prop_name:	.asciz "name"
+	
 		.align 4
-
 current_node:	.skip 4
-		.align 4
 
 
 /* nice little boot message */
 
+		.align 4
 boot_msg:	
 	.ascii "Booting Sparc-Linux V0.00PRE-ALPHA "
 	.ascii WHO_COMPILED_ME 
@@ -497,7 +503,8 @@ _msgbufmapped:
 */
 
 gokernel:	or	%g0, %o0, %g7
-		st	%o0, [_prom_vector_p]   ! we will need it later
+		sethi	%hi(_prom_vector_p), %g1
+		st	%o0, [%g1 + %lo(_prom_vector_p)]   ! we will need it later
 		rd	%psr, %l2
 		rd	%wim, %l3
 		rd	%tbr, %l4
@@ -781,7 +788,7 @@ rest_of_boot:
 /* I want a kernel stack NOW! */
 
 		set	USRSTACK - C_STACK, %fp	
-		set	estack0 - C_STACK - 80, %sp
+		set	USRSTACK - C_STACK + 80, %sp
 		rd	%psr, %l0
 		wr	%l0, PSR_ET, %psr
 		WRITE_PAUSE
@@ -878,8 +885,12 @@ rest_of_boot:
 		add	%g2, 0x4, %g2
 #endif
 
+/* First we call init_prom() to set up romvec, then off to start_kernel() */
+
 		sethi	%hi(_prom_vector_p), %g5
-		ld	[%g5 + %lo(_prom_vector_p)], %o0
+		call	_init_prom
+		ld	[%g5 + %lo(_prom_vector_p)], %o0   /* delay slot */
+
 		call 	_start_kernel
 		nop
 	
@@ -964,4 +975,41 @@ _boot_psr:		.skip 4
 _boot_tbr:		.skip 4
 _boot_smp_ptr:		.skip 4
 
+
+	.align 4
+/* Miscellaneous pieces of information saved at kernel startup. */
+	.globl _kernel_text_len, _kernel_data_len, _kernel_bss_len
+_kernel_text_len:	.word 0
+_kernel_data_len:	.word 0
+_kernel_bss_len:	.word 0
+
+/* These are for page alignment/offset information as they change from
+   machine to machine.
+*/
+
+        .globl  _pgshift, _nbpg, _pgofset
+
+	.align 4
+_pgshift:
+        .word   1
+_nbpg:
+        .word   1
+_pgofset:
+        .word   1
+
+/* Just to get the kernel through the compiler for now */
+	.globl _swapper_pg_dir,_pg0
+	.globl _empty_bad_page
+	.globl _empty_bad_page_table
+	.globl _empty_zero_page
+	.globl _floppy_track_buffer
+_floppy_track_buffer:
+	.fill 512*2*36,1,0
+
+	.align 4
+_swapper_pg_dir:	.skip 0x1000
+_pg0:			.skip 0x1000
+_empty_bad_page:	.skip 0x1000
+_empty_bad_page_table:	.skip 0x1000
+_empty_zero_page:	.skip 0x1000
 

@@ -12,12 +12,11 @@
 
 #include <asm/system.h>
 
-#define NR_SECTORS (START_SIZE / 512)
-
 #define MAXSECT 10
 #define MAXBUF 8192
 
 int verbose = 0;
+int pad = 0;
 char * program = "tools/build";
 char buffer[MAXBUF];
 unsigned long bootblock[64];
@@ -25,7 +24,7 @@ struct filehdr fhdr;
 struct aouthdr ahdr;
 struct scnhdr  shdr[MAXSECT];
 
-char * usage = "'build system > secondary' or 'build > primary'";
+char * usage = "'build [-b] system > secondary' or 'build > primary'";
 
 static void die(char * str)
 {
@@ -41,10 +40,12 @@ static int comp(struct scnhdr * a, struct scnhdr * b)
 int main(int argc, char ** argv)
 {
 	int fd, i;
-	unsigned long tmp;
-	unsigned long start;
+	unsigned long tmp, start;
+	unsigned long system_start, system_size;
 	char * infile = NULL;
 
+	system_start = START_ADDR;
+	system_size = START_SIZE;
 	if (argc) {
 		program = *(argv++);
 		argc--;
@@ -53,6 +54,11 @@ int main(int argc, char ** argv)
 		if (**argv == '-') {
 			while (*++*argv) {
 				switch (**argv) {
+					case 'b':
+						system_start = BOOT_ADDR;
+						system_size = BOOT_SIZE;
+						pad = 1;
+						break;
 					case 'v':
 						verbose++;
 						break;
@@ -69,12 +75,12 @@ int main(int argc, char ** argv)
 	}
 	if (!infile) {
 		memcpy(bootblock, "Linux Test", 10);
-		bootblock[60] = NR_SECTORS;	/* count (32 kB) */
-		bootblock[61] = 1;		/* starting LBM */
-		bootblock[62] = 0;		/* flags */
+		bootblock[60] = BOOT_SIZE / 512;	/* count */
+		bootblock[61] = 1;			/* starting LBM */
+		bootblock[62] = 0;			/* flags */
 		tmp = 0;
 		for (i = 0 ; i < 63 ; i++)
-			tmp += ~bootblock[i];
+			tmp += bootblock[i];
 		bootblock[63] = tmp;
 		if (write(1, (char *) bootblock, 512) != 512) {
 			perror("bbwrite");
@@ -111,7 +117,7 @@ int main(int argc, char ** argv)
 		}
 	}
 	qsort(shdr, fhdr.f_nscns, sizeof(shdr[1]), comp);
-	start = START_ADDR;
+	start = system_start;
 	for (i = 0 ; i < fhdr.f_nscns ; i++) {
 		unsigned long size, offset;
 		memset(buffer, 0, MAXBUF);
@@ -143,9 +149,25 @@ int main(int argc, char ** argv)
 				shdr[i].s_scnptr);
 		}
 	}
-	if (start > START_ADDR + NR_SECTORS*512) {
+	if (start > system_start + system_size) {
 		fprintf(stderr, "Boot image too large\n");
 		exit(1);
 	}
+	if (pad) {
+		unsigned long count = (system_start + system_size) - start;
+		memset(buffer, 0, MAXBUF);
+		while (count > 0) {
+			int i = MAXBUF;
+			if (i > count)
+				i = count;
+			i = write(1, buffer, i);
+			if (i <= 0) {
+				perror("pad write");
+				exit(1);
+			}
+			count -= i;
+		}
+	}
+		
 	return 0;
 }

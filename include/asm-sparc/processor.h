@@ -9,8 +9,14 @@
 /*
  * Bus types
  */
-extern int EISA_bus;
+#define EISA_bus 1
 #define MCA_bus 0
+
+/*
+ * Write Protection works right in supervisor mode on the Sparc
+ */
+
+#define wp_works_ok 1
 
 /*
  * User space process size: 3GB. This is hardcoded into a few places,
@@ -135,7 +141,7 @@ extern inline void end_bh_atomic(void)
 			     "ld %1,%0\n\t"
 			     "sub %0,1,%0\n\t"
 			     "st %0,%1\n\t"
-			     "wr %2, 0x0, %2\n\t"
+			     "wr %2, 0x0, %%psr\n\t"
 			     : "=r" (dummy), "=m" (intr_count)
 			     : "0" (0), "r" (psr=0));
 }

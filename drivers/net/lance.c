@@ -235,7 +235,7 @@ static int lance_open(struct device *dev);
 static void lance_init_ring(struct device *dev);
 static int lance_start_xmit(struct sk_buff *skb, struct device *dev);
 static int lance_rx(struct device *dev);
-static void lance_interrupt(int reg_ptr);
+static void lance_interrupt(int irq, struct pt_regs *regs);
 static int lance_close(struct device *dev);
 static struct enet_statistics *lance_get_stats(struct device *dev);
 #ifdef HAVE_MULTICAST
@@ -750,9 +750,8 @@ lance_start_xmit(struct sk_buff *skb, struct device *dev)
 
 /* The LANCE interrupt handler. */
 static void
-lance_interrupt(int reg_ptr)
+lance_interrupt(int irq, struct pt_regs * regs)
 {
-	int irq = -(((struct pt_regs *)reg_ptr)->orig_eax+2);
 	struct device *dev = (struct device *)(irq2dev_map[irq]);
 	struct lance_private *lp;
 	int csr0, ioaddr, boguscnt=10;

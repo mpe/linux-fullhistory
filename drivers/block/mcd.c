@@ -597,7 +597,7 @@ mcd_transfer(void)
  */
 
 static void
-mcd_interrupt(int unused)
+mcd_interrupt(int irq, struct pt_regs * regs)
 {
 	int st;
 

@@ -179,7 +179,7 @@ struct net_local {
 
 /* Routines used internally. */
 static void plip_device_clear(struct device *dev);
-static void plip_interrupt(int reg_ptr);
+static void plip_interrupt(int irq, struct pt_regs *regs);
 
 static int plip_error(struct device *dev);
 static int plip_receive_packet(struct device *dev);
@@ -688,9 +688,8 @@ plip_receive_packet(struct device *dev)
 
 /* Handle the parallel port interrupts. */
 static void
-plip_interrupt(int reg_ptr)
+plip_interrupt(int irq, struct pt_regs * regs)
 {
-    int irq = -(((struct pt_regs *)reg_ptr)->orig_eax+2);
     struct device *dev = (struct device *) irq2dev_map[irq];
     struct net_local *nl = (struct net_local *)dev->priv;
     struct plip_local *rcv = &nl->rcv_data;

@@ -2,7 +2,7 @@
 * Header file for eata_dma.c Linux EATA-DMA SCSI driver *
 * (c) 1993,94,95 Michael Neuffer                        *
 *********************************************************
-* last change: 94/01/08                                 *
+* last change: 95/01/15                                 *
 ********************************************************/
 
 
@@ -16,7 +16,7 @@
 
 #define VER_MAJOR 2
 #define VER_MINOR 1
-#define VER_SUB   "0f"
+#define VER_SUB   "0g"
 
 /************************************************************************
  * Here you can configure your drives that are using a non-standard     *
@@ -76,7 +76,7 @@
 
 #define EATA_DMA {                   \
 	NULL, NULL,                  \
-        "EATA (Extended Attachment) driver\n", \
+        "EATA (Extended Attachment) driver", \
         eata_detect,                 \
         NULL,                        \
         eata_info,                   \
@@ -192,9 +192,9 @@ int eata_reset(Scsi_Cmnd *);
 
 struct reg_bit {        /* reading this one will clear the interrupt 	*/
   unchar error:1;     /* previous command ended in an error           */
-  unchar more:1;      /* more DATA comming soon, poll BSY & DRQ (PIO) */
+  unchar more:1;      /* more DATA coming soon, poll BSY & DRQ (PIO) */
   unchar corr:1;      /* data read was successfully corrected with ECC*/
-  unchar drq:1;       /* data request aktive  */     
+  unchar drq:1;       /* data request active  */     
   unchar sc:1;        /* seek complete        */
   unchar fault:1;     /* write fault          */
   unchar ready:1;     /* drive ready          */
@@ -332,6 +332,9 @@ struct eata_sp
 };
 
 typedef struct hstd{
+  char   vendor[9];
+  char   name[18];
+  char   revision[6];
   unchar bustype;              /* bustype of HBA             */
   unchar channel;              /* no. of scsi channel        */
   unchar state;                /* state of HBA               */
@@ -363,5 +366,26 @@ struct geom_emul {
   int bios_drives;               /* number of emulated drives */
   struct drive_geom_emul drv[2]; /* drive structures          */
 };
+
+struct lun_map {
+  unchar   id:5,
+         chan:3;
+  unchar lun;
+};
+
+typedef struct emul_pp {
+  unchar p_code:6,
+           null:1,
+         p_save:1;
+  unchar p_lenght;
+  ushort cylinder;
+  unchar heads;
+  unchar sectors;
+  unchar null2;
+  unchar s_lunmap:4,
+              ems:1;
+  ushort drive_type;   /* In Little Endian ! */
+  struct lun_map lunmap[4];
+}emulpp;
 
 #endif /* _EATA_H */

@@ -40,8 +40,8 @@
  * Much thought must go into this code.   (davem@caip.rutgers.edu)
  */
 
-#define PAGE_DIR_OFFSET(base, address)   ((void *) 0)
-#define PAGE_PTR(address)                ((void *) 0)
+#define PAGE_DIR_OFFSET(base, address)   ((unsigned long *) 0)
+#define PAGE_PTR(address)                ((unsigned long) 0)
 #define PTRS_PER_PAGE                    (64)  /* 64 pte's per phys_seg */
 
 /* Bitfields within a Sparc sun4c PTE (page table entry). */
@@ -123,6 +123,15 @@ extern __inline__ int get_context(void)
 
   return ctx;
 }
+
+/* to set the page-dir
+ *
+ * On the Sparc this is a nop for now. It will set the proper segmap
+ * in the real implementation.
+ */
+
+#define SET_PAGE_DIR(tsk,pgdir)
+
 
 #endif /* !(__ASSEMBLY__) */
 

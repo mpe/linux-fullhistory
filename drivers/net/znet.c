@@ -182,7 +182,7 @@ struct netidblk {
 int znet_probe(struct device *dev);
 static int	znet_open(struct device *dev);
 static int	znet_send_packet(struct sk_buff *skb, struct device *dev);
-static void	znet_interrupt(int reg_ptr);
+static void	znet_interrupt(int irq, struct pt_regs *regs);
 static void	znet_rx(struct device *dev);
 static int	znet_close(struct device *dev);
 static struct enet_statistics *net_get_stats(struct device *dev);
@@ -402,9 +402,8 @@ static int znet_send_packet(struct sk_buff *skb, struct device *dev)
 }
 
 /* The ZNET interrupt handler. */
-static void	znet_interrupt(int reg_ptr)
+static void	znet_interrupt(int irq, struct pt_regs * regs)
 {
-	int irq = -(((struct pt_regs *)reg_ptr)->orig_eax+2);
 	struct device *dev = irq2dev_map[irq];
 	int ioaddr;
 	int boguscnt = 20;

@@ -41,7 +41,7 @@
 
 static struct mouse_status mouse;
 
-static void ms_mouse_interrupt(int unused)
+static void ms_mouse_interrupt(int irq, struct pt_regs * regs)
 {
         char dx, dy;
 	unsigned char buttons;

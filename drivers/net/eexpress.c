@@ -290,7 +290,7 @@ extern int express_probe(struct device *dev);	/* Called from Space.c */
 static int	eexp_probe1(struct device *dev, short ioaddr);
 static int	eexp_open(struct device *dev);
 static int	eexp_send_packet(struct sk_buff *skb, struct device *dev);
-static void	eexp_interrupt(int reg_ptr);
+static void	eexp_interrupt(int irq, struct pt_regs *regs);
 static void eexp_rx(struct device *dev);
 static int	eexp_close(struct device *dev);
 static struct enet_statistics *eexp_get_stats(struct device *dev);
@@ -515,9 +515,8 @@ eexp_send_packet(struct sk_buff *skb, struct device *dev)
 /*	The typical workload of the driver:
 	Handle the network interface interrupts. */
 static void
-eexp_interrupt(int reg_ptr)
+eexp_interrupt(int irq, struct pt_regs *regs)
 {
-	int irq = -(((struct pt_regs *)reg_ptr)->orig_eax+2);
 	struct device *dev = (struct device *)(irq2dev_map[irq]);
 	struct net_local *lp;
 	int ioaddr, status, boguscount = 0;

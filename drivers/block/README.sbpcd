@@ -1,4 +1,4 @@
-This README belongs to release 3.1 or newer of the SoundBlaster Pro
+This README belongs to release 3.2 or newer of the SoundBlaster Pro
 (Matsushita, Kotobuki, Panasonic, CreativeLabs, Longshine and soon TEAC, too)
 CD-ROM driver for Linux.
 
@@ -32,7 +32,7 @@ If you like to help, you can mail me the "SBPCD:..." messages, regarding the
 new drives. But I mostly will not answer (just use) it.
 
 This driver is NOT for Mitsumi or Sony or Aztech or Philips or XXX drives,
-and this driver is in no way useable for any new IDE ATAPI drive.
+and this driver is in no way usable for any new IDE ATAPI drive.
 For Aztech CDA-268 drives (and for some Wearnes, Okano and Orchid drives),
 Werner Zimmermann has done a driver which currently resides at ftp.gwdg.de
 under /pub/linux/cdrom/drivers/aztech/.

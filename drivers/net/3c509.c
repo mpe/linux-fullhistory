@@ -102,7 +102,7 @@ static ushort id_read_eeprom(int index);
 static ushort read_eeprom(short ioaddr, int index);
 static int el3_open(struct device *dev);
 static int el3_start_xmit(struct sk_buff *skb, struct device *dev);
-static void el3_interrupt(int reg_ptr);
+static void el3_interrupt(int irq, struct pt_regs *regs);
 static void update_stats(int addr, struct device *dev);
 static struct enet_statistics *el3_get_stats(struct device *dev);
 static int el3_rx(struct device *dev);
@@ -460,9 +460,8 @@ el3_start_xmit(struct sk_buff *skb, struct device *dev)
 
 /* The EL3 interrupt handler. */
 static void
-el3_interrupt(int reg_ptr)
+el3_interrupt(int irq, struct pt_regs *regs)
 {
-	int irq = -(((struct pt_regs *)reg_ptr)->orig_eax+2);
 	struct device *dev = (struct device *)(irq2dev_map[irq]);
 	int ioaddr, status;
 	int i = 0;

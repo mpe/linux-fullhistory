@@ -8,8 +8,8 @@
  * Copyright (C) 1994 by Ralf Baechle
  */
 
-#ifndef _ASM_MIPS_MIPSREGS_H_
-#define _ASM_MIPS_MIPSREGS_H_
+#ifndef __ASM_MIPS_MIPSREGS_H
+#define __ASM_MIPS_MIPSREGS_H
 
 /*
  * The following macros are especially useful for __asm__
@@ -21,6 +21,19 @@
 #endif
 #ifndef STR
 #define STR(x) __STR(x)
+#endif
+
+/*
+ * On the R2000/3000 load instructions are not interlocked -
+ * we therefore sometimes need to fill load delay slots with a nop
+ * which are useless for >=R4000.
+ *
+ * FIXME: Don't know about R6000
+ */
+#if !defined (__R4000__)
+#define FILL_LDS nop
+#else
+#define FILL_LDS
 #endif
 
 /*
@@ -53,15 +66,15 @@
 #define CP0_ERROREPC $30
 
 /*
- * Values for pagemask register
+ * Values for PageMask register
  */
-#define PM_4K   0x000000000
-#define PM_16K  0x000060000
-#define PM_64K  0x0001e0000
-#define PM_256K 0x0007e0000
-#define PM_1M   0x001fe0000
-#define PM_4M   0x007fe0000
-#define PM_16M  0x01ffe0000
+#define PM_4K   0x00000000
+#define PM_16K  0x00006000
+#define PM_64K  0x0001e000
+#define PM_256K 0x0007e000
+#define PM_1M   0x001fe000
+#define PM_4M   0x007fe000
+#define PM_16M  0x01ffe000
 
 /*
  * Values used for computation of new tlb entries
@@ -80,4 +93,83 @@
 #define VPN(addr,pagesizeshift) ((addr) & ~((1 << (pagesizeshift))-1))
 #define PFN(addr,pagesizeshift) (((addr) & ((1 << (pagesizeshift))-1)) << 6)
 
-#endif /* _ASM_MIPS_MIPSREGS_H_ */
+/*
+ * Macros to access the system control copprocessor
+ */
+#define read_32bit_cp0_register(source)                                        \
+({ int __res;                                                                  \
+        __asm__ __volatile__(                                                  \
+        "mfc0\t%0,"STR(source)                                                 \
+        : "=r" (__res));                                                       \
+        __res;})
+
+#define read_64bit_cp0_register(source)                                        \
+({ int __res;                                                                  \
+        __asm__ __volatile__(                                                  \
+        "dmfc0\t%0,"STR(source)                                                \
+        : "=r" (__res));                                                       \
+        __res;})
+
+#define write_32bit_cp0_register(register,value)                               \
+        __asm__ __volatile__(                                                  \
+        "mtc0\t%0,"STR(register)                                               \
+        : : "r" (value));
+
+/*
+ * Inline code for use of the ll and sc instructions
+ *
+ * FIXME: This instruction is only available on MIPS ISA >=3.
+ * Since these operations are only being used for atomic operations
+ * the easiest workaround for the R[23]00 is to disable interrupts.
+ */
+#define load_linked(addr)                                                      \
+({                                                                             \
+	unsigned int __res;                                                    \
+                                                                               \
+	__asm__ __volatile__(                                                  \
+	"ll\t%0,(%1)"                                                          \
+	: "=r" (__res)                                                         \
+	: "r" ((unsigned int) (addr)));                                        \
+                                                                               \
+	__res;                                                                 \
+})
+
+#define store_conditional(addr,value)                                          \
+({                                                                             \
+	int	__res;                                                         \
+                                                                               \
+	__asm__ __volatile__(                                                  \
+	"sc\t%0,(%2)"                                                          \
+	: "=r" (__res)                                                         \
+	: "0" (value), "r" (addr));                                            \
+                                                                               \
+	__res;                                                                 \
+})
+
+/*
+ * Bitfields in the cp0 status register
+ *
+ * Refer to MIPS R4600 manual, page 5-4 for explanation
+ */
+#define ST0_IE  (1   <<  0)
+#define ST0_EXL (1   <<  1)
+#define ST0_ERL (1   <<  2)
+#define ST0_KSU (3   <<  3)
+#define ST0_UX  (1   <<  5)
+#define ST0_SX  (1   <<  6)
+#define ST0_KX  (1   <<  7)
+#define ST0_IM  (255 <<  8)
+#define ST0_DE  (1   << 16)
+#define ST0_CE  (1   << 17)
+#define ST0_CH  (1   << 18)
+#define ST0_SR  (1   << 20)
+#define ST0_BEV (1   << 22)
+#define ST0_RE  (1   << 25)
+#define ST0_FR  (1   << 26)
+#define ST0_CU  (15  << 28)
+#define ST0_CU0 (1   << 28)
+#define ST0_CU1 (1   << 29)
+#define ST0_CU2 (1   << 30)
+#define ST0_CU3 (1   << 31)
+
+#endif /* __ASM_MIPS_MIPSREGS_H */

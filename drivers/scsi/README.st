@@ -146,7 +146,7 @@ defining ST_NOWAIT.
 The MTEOM command is by default implemented as spacing over 32767
 filemarks. With this method the file number in the status is
 correct. The user can request using direct spacing to EOD by setting
-ST_FAST_EOM 1 (or using the MTSTOPTIONS ioctl). In this case the file
+ST_FAST_EOM 1 (or using the MT_ST_OPTIONS ioctl). In this case the file
 number will be invalid.
 
 When using read ahead or buffered writes the position within the file

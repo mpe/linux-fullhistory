@@ -164,7 +164,7 @@ int aha1740_test_port(void)
 }
 
 /* A "high" level interrupt handler */
-void aha1740_intr_handle(int foo)
+void aha1740_intr_handle(int irq, struct pt_regs * regs)
 {
     void (*my_done)(Scsi_Cmnd *);
     int errstatus, adapstat;

@@ -373,7 +373,7 @@ disable_interrupts(void)
 }
 
 static void
-cdu31a_interrupt(int unused)
+cdu31a_interrupt(int irq, struct pt_regs *regs)
 {
    disable_interrupts();
    if (cdu31a_irq_wait != NULL)

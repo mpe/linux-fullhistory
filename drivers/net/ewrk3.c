@@ -289,7 +289,7 @@ struct ewrk3_private {
 */
 static int ewrk3_open(struct device *dev);
 static int ewrk3_queue_pkt(struct sk_buff *skb, struct device *dev);
-static void ewrk3_interrupt(int reg_ptr);
+static void ewrk3_interrupt(int irq, struct pt_regs *regs);
 static int ewrk3_close(struct device *dev);
 static struct enet_statistics *ewrk3_get_stats(struct device *dev);
 static void set_multicast_list(struct device *dev, int num_addrs, void *addrs);
@@ -904,9 +904,8 @@ ewrk3_queue_pkt(struct sk_buff *skb, struct device *dev)
 ** The EWRK3 interrupt handler. 
 */
 static void
-ewrk3_interrupt(int reg_ptr)
+ewrk3_interrupt(int irq, struct pt_regs * regs)
 {
-    int irq = -(((struct pt_regs *)reg_ptr)->orig_eax+2);
     struct device *dev = (struct device *)(irq2dev_map[irq]);
     struct ewrk3_private *lp;
     int iobase;

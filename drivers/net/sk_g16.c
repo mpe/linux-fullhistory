@@ -487,7 +487,7 @@ static int   SK_probe(struct device *dev, short ioaddr);
 
 static int   SK_open(struct device *dev);
 static int   SK_send_packet(struct sk_buff *skb, struct device *dev);
-static void  SK_interrupt(int reg_ptr);
+static void  SK_interrupt(int irq, struct pt_regs * regs);
 static void  SK_rxintr(struct device *dev);
 static void  SK_txintr(struct device *dev);
 static int   SK_close(struct device *dev);
@@ -1300,7 +1300,7 @@ static int SK_send_packet(struct sk_buff *skb, struct device *dev)
  * Description    : SK_G16 interrupt handler which checks for LANCE
  *                  Errors, handles transmit and receive interrupts
  *
- * Parameters     : I : int reg_ptr -
+ * Parameters     : I : int irq, struct pt_regs * regs -
  * Return Value   : None
  * Errors         : None
  * Globals        : None
@@ -1309,9 +1309,8 @@ static int SK_send_packet(struct sk_buff *skb, struct device *dev)
  *     YY/MM/DD  uid  Description
 -*/
 
-static void SK_interrupt(int reg_ptr)
+static void SK_interrupt(int irq, struct pt_regs * regs)
 {
-    int irq = - (((struct pt_regs *)reg_ptr)->orig_eax+2);
     int csr0;
     struct device *dev = (struct device *) irq2dev_map[irq];
     struct priv *p = (struct priv *) dev->priv;

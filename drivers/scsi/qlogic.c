@@ -386,7 +386,7 @@ rtrc(0)
 #if QL_USE_IRQ
 /*----------------------------------------------------------------*/
 /* interrupt handler */
-static void		    ql_ihandl(int irq)
+static void		    ql_ihandl(int irq, struct pt_regs * regs)
 {
 Scsi_Cmnd	   *icmd;
 	REG0;

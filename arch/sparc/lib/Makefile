@@ -9,7 +9,7 @@
 .c.o:
 	$(CC) $(CFLAGS) -c $<
 
-OBJS  = mul.o rem.o sdiv.o udiv.o umul.o urem.o
+OBJS  = mul.o rem.o sdiv.o udiv.o umul.o urem.o ashrdi3.o
 
 lib.a: $(OBJS)
 	$(AR) rcs lib.a $(OBJS)
@@ -33,8 +33,10 @@ umul.o: umul.S
 urem.o: urem.S
 	$(CC) -DST_DIV0=0x2 -c -o urem.o urem.S
 
+ashrdi3.o: ashrdi3.S
+	$(CC) -c -o ashrdi3.o ashrdi3.S
+
 dep:
-	$(CPP) -M *.S > .depend
 
 #
 # include a dependency file if one exists

@@ -83,20 +83,14 @@ struct vm_operations_struct {
 	void (*sync)(struct vm_area_struct *area, unsigned long, size_t, unsigned int flags);
 	void (*advise)(struct vm_area_struct *area, unsigned long, size_t, unsigned int advise);
 	unsigned long (*nopage)(struct vm_area_struct * area, unsigned long address,
-		unsigned long page, int error_code);
+		unsigned long page, int write_access);
 	unsigned long (*wppage)(struct vm_area_struct * area, unsigned long address,
 		unsigned long page);
 	void (*swapout)(struct vm_area_struct *,  unsigned long, unsigned long *);
 	unsigned long (*swapin)(struct vm_area_struct *, unsigned long, unsigned long);
 };
 
-extern unsigned long __bad_page(void);
-extern unsigned long __bad_pagetable(void);
-extern unsigned long __zero_page(void);
-
-#define BAD_PAGETABLE __bad_pagetable()
-#define BAD_PAGE __bad_page()
-#define ZERO_PAGE __zero_page()
+extern mem_map_t * mem_map;
 
 /* planning stage.. */
 #define P_DIRTY		0x0001
@@ -172,14 +166,11 @@ extern int unmap_page_range(unsigned long from, unsigned long size);
 extern int remap_page_range(unsigned long from, unsigned long to, unsigned long size, int mask);
 extern int zeromap_page_range(unsigned long from, unsigned long size, int mask);
 
-extern void do_wp_page(struct vm_area_struct * vma, unsigned long address,
-	unsigned long error_code);
-extern void do_no_page(struct vm_area_struct * vma, unsigned long address,
-	unsigned long error_code);
+extern void do_wp_page(struct vm_area_struct * vma, unsigned long address, int write_access);
+extern void do_no_page(struct vm_area_struct * vma, unsigned long address, int write_access);
 
 extern unsigned long paging_init(unsigned long start_mem, unsigned long end_mem);
-extern void mem_init(unsigned long low_start_mem,
-		     unsigned long start_mem, unsigned long end_mem);
+extern void mem_init(unsigned long start_mem, unsigned long end_mem);
 extern void show_mem(void);
 extern void oom(struct task_struct * task);
 extern void si_meminfo(struct sysinfo * val);
@@ -213,26 +204,6 @@ extern unsigned long get_unmapped_area(unsigned long);
 	rw_swap_page(WRITE,(nr),(buf))
 
 extern unsigned long high_memory;
-
-#define MAP_NR(addr) ((addr) >> PAGE_SHIFT)
-#define MAP_PAGE_RESERVED (1<<15)
-
-extern unsigned short * mem_map;
-
-#define PAGE_PRESENT	0x001
-#define PAGE_RW		0x002
-#define PAGE_USER	0x004
-#define PAGE_PWT	0x008	/* 486 only - not used currently */
-#define PAGE_PCD	0x010	/* 486 only - not used currently */
-#define PAGE_ACCESSED	0x020
-#define PAGE_DIRTY	0x040
-#define PAGE_COW	0x200	/* implemented in software (one of the AVL bits) */
-
-#define PAGE_PRIVATE	(PAGE_PRESENT | PAGE_RW | PAGE_USER | PAGE_ACCESSED | PAGE_COW)
-#define PAGE_SHARED	(PAGE_PRESENT | PAGE_RW | PAGE_USER | PAGE_ACCESSED)
-#define PAGE_COPY	(PAGE_PRESENT | PAGE_USER | PAGE_ACCESSED | PAGE_COW)
-#define PAGE_READONLY	(PAGE_PRESENT | PAGE_USER | PAGE_ACCESSED)
-#define PAGE_TABLE	(PAGE_PRESENT | PAGE_RW | PAGE_USER | PAGE_ACCESSED)
 
 #define GFP_BUFFER	0x00
 #define GFP_ATOMIC	0x01
@@ -272,7 +243,7 @@ extern unsigned long swap_cache_find_success;
 
 extern inline unsigned long in_swap_cache(unsigned long addr)
 {
-	return swap_cache[addr >> PAGE_SHIFT]; 
+	return swap_cache[MAP_NR(addr)]; 
 }
 
 extern inline long find_in_swap_cache (unsigned long addr)
@@ -282,7 +253,7 @@ extern inline long find_in_swap_cache (unsigned long addr)
 #ifdef SWAP_CACHE_INFO
 	swap_cache_find_total++;
 #endif
-	entry = (unsigned long) xchg_ptr(swap_cache + (addr >> PAGE_SHIFT), NULL);
+	entry = (unsigned long) xchg_ptr(swap_cache + MAP_NR(addr), NULL);
 #ifdef SWAP_CACHE_INFO
 	if (entry)
 		swap_cache_find_success++;
@@ -297,7 +268,7 @@ extern inline int delete_from_swap_cache(unsigned long addr)
 #ifdef SWAP_CACHE_INFO
 	swap_cache_del_total++;
 #endif	
-	entry = (unsigned long) xchg_ptr(swap_cache + (addr >> PAGE_SHIFT), NULL);
+	entry = (unsigned long) xchg_ptr(swap_cache + MAP_NR(addr), NULL);
 	if (entry)  {
 #ifdef SWAP_CACHE_INFO
 		swap_cache_del_success++;

@@ -345,7 +345,7 @@ static int aha1542_test_port(int bse, struct Scsi_Host * shpnt)
 }
 
 /* A "high" level interrupt handler */
-static void aha1542_intr_handle(int foo)
+static void aha1542_intr_handle(int irq, struct pt_regs *regs)
 {
     void (*my_done)(Scsi_Cmnd *) = NULL;
     int errstatus, mbi, mbo, mbistatus;
@@ -353,16 +353,12 @@ static void aha1542_intr_handle(int foo)
     unsigned int flags;
     struct Scsi_Host * shost;
     Scsi_Cmnd * SCtmp;
-    int irqno, * irqp, flag;
+    int flag;
     int needs_restart;
     struct mailbox * mb;
     struct ccb  *ccb;
 
-    irqp = (int *) foo;
-    irqp -= 2;  /* Magic - this is only required for slow interrupt handlers */
-    irqno = *irqp;
-
-    shost = aha_host[irqno - 9];
+    shost = aha_host[irq - 9];
     if(!shost) panic("Splunge!");
 
     mb = HOSTDATA(shost)->mb;

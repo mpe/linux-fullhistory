@@ -283,8 +283,9 @@ fill_from_user:
 	sethi	%hi(lnx_winmask), %l6
 	or	%l6, %lo(lnx_winmask), %l6
 	ldub	[%l6 + %l3], %l5
-	b	back_to_userland_safety		! may need a sched()
 	rd	%wim, %l4
+	jmp	%l1
+	rett	%l2
 
 /* A window spill has occurred.  This presents a weird situation, a restore
  * was attempted and a trap occurred. Therefore the restore attempt had no
@@ -370,7 +371,7 @@ spill_bad_stack:
 	sethi	%hi(_current), %l6
 	ld	[%l6 + %lo(_current)], %l6
 	st	%l4, [%l6 + THREAD_UWINDOWS]	! update current->tss values
-	ld	[%l6 + THREAD_WIN], %l5
+	ld	[%l6 + THREAD_WIM], %l5
 	sll	%l4, %l5, %l4
 	wr	%l4, 0x0, %wim
 	ld	[%l6 + THREAD_KSP], %sp		! set to kernel stack pointer
@@ -389,7 +390,7 @@ spill_bad_stack:
 	std	%i0, [%sp + C_STACK + 0x30]
 	std	%i2, [%sp + C_STACK + 0x38]
 	std	%i4, [%sp + C_STACK + 0x40]
-	call	_sparc_trap
+	call	sparc_trap
 	std	%i6, [%sp + C_STACK + 0x48]
 	
 	ldd	[%sp + C_STACK], %l0
@@ -472,6 +473,29 @@ spill_stack_ok:
 	jmp	%l1
 	rett	%l2
 
+	.globl trap_entry
+trap_entry:
+	TRAP_WIN_CLEAN
+	jmp	%l1
+	rett	%l2
+
+	.globl linux_trap_nmi
+linux_trap_nmi:
+	TRAP_WIN_CLEAN
+	jmp	%l1
+	rett	%l2
+
+	.globl sparc_trap
+sparc_trap:
+	TRAP_WIN_CLEAN
+	jmp	%l1
+	rett	%l2
+
+	.globl leave_trap
+leave_trap:
+	jmp	%l1
+	rett	%l2
+
 /* The following two things point to window management tables. The first
    one is used to quickly look up how many user windows there are from
    trap-land. The second is used in a trap handler to determine if a rett
@@ -486,3 +510,147 @@ spill_stack_ok:
 lnx_winmask:	.byte	2, 4, 8, 16, 32, 64, 128,1  ! lnx_winmask[0..7]
 
 	
+		.align 4
+		.globl _sys_call_table
+_sys_call_table:
+	.long _sys_setup		/* 0 */
+	.long _sys_exit
+	.long _sys_fork
+	.long _sys_read
+	.long _sys_write
+	.long _sys_open			/* 5 */
+	.long _sys_close
+	.long _sys_waitpid
+	.long _sys_creat
+	.long _sys_link
+	.long _sys_unlink		/* 10 */
+	.long _sys_execve
+	.long _sys_chdir
+	.long _sys_time
+	.long _sys_mknod
+	.long _sys_chmod		/* 15 */
+	.long _sys_chown
+	.long _sys_break
+	.long _sys_stat
+	.long _sys_lseek
+	.long _sys_getpid		/* 20 */
+	.long _sys_mount
+	.long _sys_umount
+	.long _sys_setuid
+	.long _sys_getuid
+	.long _sys_stime		/* 25 */
+	.long _sys_ni_syscall		/* this will be sys_ptrace() */
+	.long _sys_alarm
+	.long _sys_fstat
+	.long _sys_pause
+	.long _sys_utime		/* 30 */
+	.long _sys_stty
+	.long _sys_gtty
+	.long _sys_access
+	.long _sys_nice
+	.long _sys_ftime		/* 35 */
+	.long _sys_sync
+	.long _sys_kill
+	.long _sys_rename
+	.long _sys_mkdir
+	.long _sys_rmdir		/* 40 */
+	.long _sys_dup
+	.long _sys_pipe
+	.long _sys_times
+	.long _sys_prof
+	.long _sys_brk			/* 45 */
+	.long _sys_setgid
+	.long _sys_getgid
+	.long _sys_signal
+	.long _sys_geteuid
+	.long _sys_getegid		/* 50 */
+	.long _sys_acct
+	.long _sys_phys
+	.long _sys_lock
+	.long _sys_ioctl
+	.long _sys_fcntl		/* 55 */
+	.long _sys_mpx
+	.long _sys_setpgid
+	.long _sys_ulimit
+	.long _sys_olduname
+	.long _sys_umask		/* 60 */
+	.long _sys_chroot
+	.long _sys_ustat
+	.long _sys_dup2
+	.long _sys_getppid
+	.long _sys_getpgrp		/* 65 */
+	.long _sys_setsid
+	.long _sys_sigaction
+	.long _sys_sgetmask
+	.long _sys_ssetmask
+	.long _sys_setreuid		/* 70 */
+	.long _sys_setregid
+	.long _sys_sigsuspend
+	.long _sys_sigpending
+	.long _sys_sethostname
+	.long _sys_setrlimit		/* 75 */
+	.long _sys_getrlimit
+	.long _sys_getrusage
+	.long _sys_gettimeofday
+	.long _sys_settimeofday
+	.long _sys_getgroups		/* 80 */
+	.long _sys_setgroups
+	.long _sys_select
+	.long _sys_symlink
+	.long _sys_lstat
+	.long _sys_readlink		/* 85 */
+	.long _sys_uselib
+	.long _sys_swapon
+	.long _sys_reboot
+	.long _sys_readdir
+	.long _sys_mmap			/* 90 */
+	.long _sys_munmap
+	.long _sys_truncate
+	.long _sys_ftruncate
+	.long _sys_fchmod
+	.long _sys_fchown		/* 95 */
+	.long _sys_getpriority
+	.long _sys_setpriority
+	.long _sys_profil
+	.long _sys_statfs
+	.long _sys_fstatfs		/* 100 */
+	.long _sys_ni_syscall
+	.long _sys_socketcall
+	.long _sys_syslog
+	.long _sys_setitimer
+	.long _sys_getitimer		/* 105 */
+	.long _sys_newstat
+	.long _sys_newlstat
+	.long _sys_newfstat
+	.long _sys_uname
+	.long _sys_ni_syscall		/* 110 */
+	.long _sys_vhangup
+	.long _sys_idle
+	.long _sys_ni_syscall           /* was vm86, meaningless on Sparc */
+	.long _sys_wait4
+	.long _sys_swapoff		/* 115 */
+	.long _sys_sysinfo
+	.long _sys_ipc
+	.long _sys_fsync
+	.long _sys_sigreturn
+	.long _sys_ni_syscall		/* 120 */
+	.long _sys_setdomainname
+	.long _sys_newuname
+	.long _sys_ni_syscall
+	.long _sys_adjtimex
+	.long _sys_mprotect		/* 125 */
+	.long _sys_sigprocmask
+	.long _sys_create_module
+	.long _sys_init_module
+	.long _sys_delete_module
+	.long _sys_get_kernel_syms	/* 130 */
+	.long _sys_ni_syscall
+	.long _sys_getpgid
+	.long _sys_fchdir
+	.long _sys_bdflush
+	.long _sys_sysfs		/* 135 */
+	.long _sys_personality
+	.long 0				/* for afs_syscall */
+	.long _sys_setfsuid
+	.long _sys_setfsgid
+	.long _sys_llseek		/* 140 */

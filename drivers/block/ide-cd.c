@@ -559,7 +559,7 @@ static int cdrom_read_from_buffer (ide_dev_t *dev)
       ++rq->sector;
     }
 
-  /* If we've statisfied the current request, terminate it successfully. */
+  /* If we've satisfied the current request, terminate it successfully. */
   if (rq->nr_sectors == 0)
     {
       cdrom_end_request (1, dev);

@@ -60,7 +60,7 @@ unsigned char * free_area_map[NR_MEM_LISTS];
 
 #define copy_page(from,to) memcpy((void *) to, (void *) from, PAGE_SIZE)
 
-unsigned short * mem_map = NULL;
+mem_map_t * mem_map = NULL;
 
 #define CODE_SPACE(addr,p) ((addr) < (p)->end_code)
 
@@ -540,7 +540,7 @@ unsigned long put_dirty_page(struct task_struct * tsk, unsigned long page, unsig
  * in better assembly code.. The "default" path will see no jumps at all.
  */
 void do_wp_page(struct vm_area_struct * vma, unsigned long address,
-	unsigned long error_code)
+	int write_access)
 {
 	unsigned long *pde, pte, old_page, prot;
 	unsigned long new_page;
@@ -780,7 +780,7 @@ static int try_to_share(unsigned long to_address, struct vm_area_struct * to_are
  * It should be >1 if there are other tasks sharing this inode.
  */
 static int share_page(struct vm_area_struct * area, unsigned long address,
-	unsigned long error_code, unsigned long newpage)
+	int write_access, unsigned long newpage)
 {
 	struct inode * inode;
 	unsigned long offset;
@@ -792,7 +792,7 @@ static int share_page(struct vm_area_struct * area, unsigned long address,
 		return 0;
 	/* do we need to copy or can we just share? */
 	give_page = 0;
-	if ((area->vm_page_prot & PAGE_COW) && (error_code & PAGE_RW)) {
+	if ((area->vm_page_prot & PAGE_COW) && write_access) {
 		if (!newpage)
 			return 0;
 		give_page = newpage;
@@ -882,7 +882,7 @@ static inline void do_swap_page(struct vm_area_struct * vma,
 }
 
 void do_no_page(struct vm_area_struct * vma, unsigned long address,
-	unsigned long error_code)
+	int write_access)
 {
 	unsigned long page, entry, prot;
 
@@ -907,7 +907,7 @@ void do_no_page(struct vm_area_struct * vma, unsigned long address,
 		return;
 	}
 	page = get_free_page(GFP_KERNEL);
-	if (share_page(vma, address, error_code, page)) {
+	if (share_page(vma, address, write_access, page)) {
 		++vma->vm_task->mm->min_flt;
 		++vma->vm_task->mm->rss;
 		return;
@@ -925,16 +925,17 @@ void do_no_page(struct vm_area_struct * vma, unsigned long address,
 	 * to copy, not share the page even if sharing is possible.  It's
 	 * essentially an early COW detection ("moo at 5 AM").
 	 */
-	page = vma->vm_ops->nopage(vma, address, page, (error_code & PAGE_RW) && (prot & PAGE_COW));
-	if (share_page(vma, address, error_code, 0)) {
+	page = vma->vm_ops->nopage(vma, address, page, write_access && (prot & PAGE_COW));
+	if (share_page(vma, address, write_access, 0)) {
 		free_page(page);
 		return;
 	}
 	/*
 	 * This silly early PAGE_DIRTY setting removes a race
-	 * due to the bad i386 page protection.
+	 * due to the bad i386 page protection. But it's valid
+	 * for other architectures too.
 	 */
-	if (error_code & PAGE_RW) {
+	if (write_access) {
 		prot |= PAGE_DIRTY;	/* can't be COW-shared: see "no_share" above */
 	} else if ((prot & PAGE_COW) && mem_map[MAP_NR(page)] > 1)
 		prot &= ~PAGE_RW;

@@ -522,8 +522,10 @@ int sock_queue_rcv_skb(struct sock *sk, struct sk_buff *skb)
 
 void release_sock(struct sock *sk)
 {
-	struct sk_buff *skb;
 	unsigned long flags;
+#ifdef CONFIG_INET
+	struct sk_buff *skb;
+#endif
 
 	if (!sk->prot)
 		return;

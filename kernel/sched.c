@@ -531,7 +531,7 @@ void immediate_bh(void * unused)
  * irq uses this to decide if it should update the user or system
  * times.
  */
-static void do_timer(struct pt_regs * regs)
+static void do_timer(int irq, struct pt_regs * regs)
 {
 	unsigned long mask;
 	struct timer_struct *tp;
@@ -766,11 +766,6 @@ void sched_init(void)
 	bh_base[TIMER_BH].routine = timer_bh;
 	bh_base[TQUEUE_BH].routine = tqueue_bh;
 	bh_base[IMMEDIATE_BH].routine = immediate_bh;
-	if (sizeof(struct sigaction) != 16)
-		panic("Struct sigaction MUST be 16 bytes");
-	outb_p(0x34,0x43);		/* binary, mode 2, LSB/MSB, ch 0 */
-	outb_p(LATCH & 0xff , 0x40);	/* LSB */
-	outb(LATCH >> 8 , 0x40);	/* MSB */
-	if (request_irq(TIMER_IRQ,(void (*)(int)) do_timer, 0, "timer") != 0)
+	if (request_irq(TIMER_IRQ, do_timer, 0, "timer") != 0)
 		panic("Could not allocate timer IRQ!");
 }

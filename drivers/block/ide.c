@@ -1189,13 +1189,13 @@ static void unexpected_intr (byte hwif)
 #if OPTIMIZE_IRQS
 
 /* entry point for all interrupts on ide0 when sharing_single_irq==0 */
-static void ide0_intr (int irq)
+static void ide0_intr (int irq, struct pt_regs *regs)
 {
 	IDE_INTR(0);
 }
 
 /* entry point for all interrupts on ide1 when sharing_single_irq==0 */
-static void ide1_intr (int irq)
+static void ide1_intr (int irq, struct pt_regs *regs)
 {
 	IDE_INTR(1);
 }
@@ -1206,7 +1206,7 @@ static void ide1_intr (int irq)
 #define ide1_intr	ide_intr
 
 /* entry point for all interrupts when sharing_single_irq==0 */
-static void ide_intr (int irq)
+static void ide_intr (int irq, struct pt_regs *regs)
 {
 #if SUPPORT_TWO_INTERFACES
 	byte hwif = (irq != ide_irq[0]);
@@ -1602,7 +1602,7 @@ static void do_identify (ide_dev_t *dev)
 	/*
 	 * Non-ATAPI drives seem to always use big-endian string ordering.
 	 * Most ATAPI cdrom drives, such as the NEC, Vertos, and some Mitsumi
-	 * models, use little-endian.  But otherMitsumi models appear to use
+	 * models, use little-endian.  But other Mitsumi models appear to use
 	 * big-endian, confusing the issue.  We try to take all of this into 
 	 * consideration, "knowing" that Mitsumi drive names begin with "FX".
 	 */
@@ -2080,7 +2080,7 @@ static byte setup_irq (byte hwif)
 	static byte rc = 0;
 	unsigned long flags;
 	const char *msg = "", *primary_secondary[] = {"primary", "secondary"};
-	void (*handler)(int) = HWIF ? &ide1_intr : &ide0_intr;
+	void (*handler)(int, struct pt_regs *) = HWIF ? &ide1_intr : &ide0_intr;
 
 #if SUPPORT_SHARING_IRQ
 	if (sharing_single_irq) {

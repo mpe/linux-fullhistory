@@ -71,6 +71,8 @@ dep:
 	$(MAKE) /usr/include/sys/soundcard.h
 	$(CPP) -M *.c > .depend
 
+modules:
+
 #
 # include a dependency file if one exists
 #

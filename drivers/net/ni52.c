@@ -190,7 +190,7 @@ extern void *irq2dev_map[16];
 #define NI52_ADDR2 0x01
 
 static int     ni52_probe1(struct device *dev,int ioaddr);
-static void    ni52_interrupt(int reg_ptr);
+static void    ni52_interrupt(int irq, struct pt_regs *regs);
 static int     ni52_open(struct device *dev);
 static int     ni52_close(struct device *dev);
 static int     ni52_send_packet(struct sk_buff *,struct device *);
@@ -713,9 +713,9 @@ static void *alloc_rfa(struct device *dev,void *ptr)
  * Interrupt Handler ...
  */
 
-static void ni52_interrupt(int reg_ptr)
+static void ni52_interrupt(int irq, struct pt_regs *regs)
 {
-  struct device *dev = (struct device *) irq2dev_map[-((struct pt_regs *)reg_ptr)->orig_eax-2];
+  struct device *dev = (struct device *) irq2dev_map[irq];
   unsigned short stat;
   int pd = 0;
   struct priv *p;
@@ -725,7 +725,7 @@ static void ni52_interrupt(int reg_ptr)
 #endif
 
   if (dev == NULL) {
-    printk ("ni52-interrupt: irq %d for unknown device.\n",(int) -(((struct pt_regs *)reg_ptr)->orig_eax+2));
+    printk ("ni52-interrupt: irq %d for unknown device.\n", irq);
     return;
   }
   p = (struct priv *) dev->priv;

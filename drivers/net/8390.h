@@ -24,7 +24,7 @@ extern int ethif_init(struct device *dev);
 extern int ethdev_init(struct device *dev);
 extern void NS8390_init(struct device *dev, int startp);
 extern int ei_open(struct device *dev);
-extern void ei_interrupt(int reg_ptr);
+extern void ei_interrupt(int irq, struct pt_regs *regs);
 
 #ifndef HAVE_AUTOIRQ
 /* From auto_irq.c */

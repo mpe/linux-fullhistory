@@ -153,7 +153,7 @@ static int lp_char_interrupt(char lpchar, int minor)
 	unsigned int lp_last_call = 0;
 #endif
 
-static void lp_interrupt(int irq)
+static void lp_interrupt(int irq, struct pt_regs *regs)
 {
 	struct lp_struct *lp = &lp_table[0];
 	struct lp_struct *lp_end = &lp_table[LP_NO];

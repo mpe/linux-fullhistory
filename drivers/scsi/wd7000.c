@@ -797,15 +797,8 @@ static void wd7000_scsi_done(Scsi_Cmnd * SCpnt)
 
 #define wd7000_intr_ack(host)  outb(0,host->iobase+ASC_INTR_ACK)
 
-void wd7000_intr_handle(int irq)
+void wd7000_intr_handle(int irq, struct pt_regs * regs)
 {
-#ifdef 0
-    /*
-     * Use irqp as the parm, and the following declaration, if
-     * SA_INTERRUPT is not used.
-     */
-    register int irq = *(((int *)irqp)-2);
-#endif
     register int flag, icmb, errstatus, icmb_status;
     register int host_error, scsi_error;
     register Scb *scb;             /* for SCSI commands */
@@ -1189,7 +1182,7 @@ int wd7000_abort(Scsi_Cmnd * SCpnt)
 
     if (inb(host->iobase+ASC_STAT) & INT_IM)  {
         printk("wd7000_abort: lost interrupt\n");
-	wd7000_intr_handle(host->irq);
+	wd7000_intr_handle(host->irq, NULL);
 	return SCSI_ABORT_SUCCESS;
     }
 

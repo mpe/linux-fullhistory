@@ -1,10 +1,10 @@
 /* fdomain.h -- Header for Future Domain TMC-16x0 driver
  * Created: Sun May  3 18:47:33 1992 by faith@cs.unc.edu
- * Revised: Sat Jul 30 20:20:31 1994 by faith@cs.unc.edu
+ * Revised: Sat Jan 14 20:56:52 1995 by faith@cs.unc.edu
  * Author: Rickard E. Faith, faith@cs.unc.edu
- * Copyright 1992, 1993, 1994 Rickard E. Faith
+ * Copyright 1992, 1993, 1994, 1995 Rickard E. Faith
  *
- * $Id: fdomain.h,v 5.7 1994/07/31 03:09:15 faith Exp $
+ * $Id: fdomain.h,v 5.10 1995/01/15 01:56:56 root Exp $
 
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -33,7 +33,8 @@ int        fdomain_16x0_reset( Scsi_Cmnd * );
 int        fdomain_16x0_queue( Scsi_Cmnd *, void (*done)(Scsi_Cmnd *) );
 int        fdomain_16x0_biosparam( Disk *, int, int * );
 
-#define FDOMAIN_16X0 { NULL, NULL,                            \
+#define FDOMAIN_16X0 { NULL,                             \
+		       NULL,                             \
 		       NULL,			         \
 		       fdomain_16x0_detect,              \
 		       NULL,				 \

@@ -189,6 +189,7 @@ static int minix_add_entry(struct inode * dir,
 			}
 		} else {
 			dir->i_mtime = dir->i_ctime = CURRENT_TIME;
+			dir->i_dirt = 1;
 			for (i = 0; i < info->s_namelen ; i++)
 				de->name[i] = (i < namelen) ? name[i] : 0;
 			dir->i_version = ++event;

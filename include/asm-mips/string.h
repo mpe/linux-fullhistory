@@ -5,15 +5,16 @@
  * License.  See the file "COPYING" in the main directory of this archive
  * for more details.
  *
- * Copyright (c) 1994 by Ralf Baechle
+ * Copyright (c) 1994, 1995  Waldorf Electronics
+ * written by Ralf Baechle
  */
 
-#ifndef _ASM_MIPS_STRING_H_
-#define _ASM_MIPS_STRING_H_
+#ifndef __ASM_MIPS_STRING_H
+#define __ASM_MIPS_STRING_H
 
-#define __USE_PORTABLE_STRINGS_H_
+#include <asm/mipsregs.h>
 
-extern inline char * strcpy(char * dest,const char *src)
+extern __inline__ char * strcpy(char * dest, const char *src)
 {
   char *xdest = dest;
 
@@ -23,18 +24,18 @@ extern inline char * strcpy(char * dest,const char *src)
 	"1:\tlbu\t$1,(%1)\n\t"
 	"addiu\t%1,%1,1\n\t"
 	"sb\t$1,(%0)\n\t"
-	"bne\t$0,$1,1b\n\t"
+	"bnez\t$1,1b\n\t"
 	"addiu\t%0,%0,1\n\t"
 	".set\tat\n\t"
 	".set\treorder"
-	: "=d" (dest), "=d" (src)
+	: "=r" (dest), "=r" (src)
         : "0" (dest), "1" (src)
 	: "$1","memory");
 
   return xdest;
 }
 
-extern inline char * strncpy(char *dest, const char *src, size_t n)
+extern __inline__ char * strncpy(char *dest, const char *src, size_t n)
 {
   char *xdest = dest;
 
@@ -45,26 +46,23 @@ extern inline char * strncpy(char *dest, const char *src, size_t n)
 	".set\tnoreorder\n\t"
 	".set\tnoat\n"
 	"1:\tlbu\t$1,(%1)\n\t"
-	"addiu\t%2,%2,-1\n\t"
+	"subu\t%2,%2,1\n\t"
 	"sb\t$1,(%0)\n\t"
-	"beq\t$0,$1,2f\n\t"
+	"beqz\t$1,2f\n\t"
 	"addiu\t%0,%0,1\n\t"
-	"bne\t$0,%2,1b\n\t"
+	"bnez\t%2,1b\n\t"
 	"addiu\t%1,%1,1\n"
 	"2:\n\t"
 	".set\tat\n\t"
 	".set\treorder\n\t"
-        : "=d" (dest), "=d" (src), "=d" (n)
+        : "=r" (dest), "=r" (src), "=r" (n)
         : "0" (dest), "1" (src), "2" (n)
         : "$1","memory");
 
   return dest;
 }
 
-#define __USE_PORTABLE_strcat
-#define __USE_PORTABLE_strncat
-
-extern inline int strcmp(const char * cs,const char * ct)
+extern __inline__ int strcmp(const char * cs, const char * ct)
 {
   int __res;
 
@@ -76,8 +74,9 @@ extern inline int strcmp(const char * cs,const char * ct)
 	"addiu\t%0,%0,1\n\t"
 	"bne\t$1,%2,2f\n\t"
 	"addiu\t%1,%1,1\n\t"
-	"bne\t$0,%2,1b\n\t"
-	"lbu\t%2,(%0)\n"
+	"bnez\t%2,1b\n\t"
+	"lbu\t%2,(%0)\n\t"
+	STR(FILL_LDS) "\n\t"
 	"move\t%2,$1\n"
 	"2:\tsub\t%2,%2,$1\n"
 	"3:\t.set\tat\n\t"
@@ -89,7 +88,7 @@ extern inline int strcmp(const char * cs,const char * ct)
   return __res;
 }
 
-extern inline int strncmp(const char * cs,const char * ct,size_t count)
+extern __inline__ int strncmp(const char * cs, const char * ct, size_t count)
 {
   char __res;
 
@@ -97,12 +96,12 @@ extern inline int strncmp(const char * cs,const char * ct,size_t count)
 	".set\tnoreorder\n\t"
 	".set\tnoat\n"
        	"1:\tlbu\t%3,(%0)\n\t"
-	"beq\t$0,%2,2f\n\t"
+	"beqz\t%2,2f\n\t"
         "lbu\t$1,(%1)\n\t"
        	"addiu\t%2,%2,-1\n\t"
         "bne\t$1,%3,3f\n\t"
         "addiu\t%0,%0,1\n\t"
-        "bne\t$0,%3,1b\n\t"
+        "bnez\t%3,1b\n\t"
         "addiu\t%1,%1,1\n"
 	"2:\tmove\t%3,$1\n"
 	"3:\tsub\t%3,%3,$1\n\t"
@@ -115,13 +114,7 @@ extern inline int strncmp(const char * cs,const char * ct,size_t count)
   return __res;
 }
 
-#define __USE_PORTABLE_strchr
-#define __USE_PORTABLE_strlen
-#define __USE_PORTABLE_strspn
-#define __USE_PORTABLE_strpbrk
-#define __USE_PORTABLE_strtok
-
-extern inline void * memset(void * s,char c,size_t count)
+extern __inline__ void * memset(void * s, int c, size_t count)
 {
   void *xs = s;
 
@@ -130,18 +123,17 @@ extern inline void * memset(void * s,char c,size_t count)
   __asm__ __volatile__(
 	".set\tnoreorder\n"
 	"1:\tsb\t%3,(%0)\n\t"
-	"addiu\t%1,%1,-1\n\t"
-	"bne\t$0,%1,1b\n\t"
-	"addiu\t%3,%3,1\n\t"
+	"bne\t%0,%1,1b\n\t"
+	"addiu\t%0,%0,1\n\t"
 	".set\treorder"
-	: "=d" (s), "=d" (count)
-        : "0" (s), "d" (c), "1" (count)
+	: "=r" (s), "=r" (count)
+        : "0" (s), "r" (c), "1" (s + count - 1)
 	: "memory");
 
   return xs;
 }
 
-extern inline void * memcpy(void * to, const void * from, size_t n)
+extern __inline__ void * memcpy(void * to, const void * from, size_t n)
 {
   void *xto = to;
 
@@ -153,18 +145,18 @@ extern inline void * memcpy(void * to, const void * from, size_t n)
 	"1:\tlbu\t$1,(%1)\n\t"
 	"addiu\t%1,%1,1\n\t"
 	"sb\t$1,(%0)\n\t"
-	"addiu\t%2,%2,-1\n\t"
-	"bne\t$0,%2,1b\n\t"
+	"subu\t%2,%2,1\n\t"
+	"bnez\t%2,1b\n\t"
 	"addiu\t%0,%0,1\n\t"
 	".set\tat\n\t"
 	".set\treorder"
-        : "=d" (to), "=d" (from), "=d" (n)
+        : "=r" (to), "=r" (from), "=r" (n)
         : "0" (to), "1" (from), "2" (n)
         : "$1","memory" );
   return xto;
 }
 
-extern inline void * memmove(void * dest,const void * src, size_t n)
+extern __inline__ void * memmove(void * dest,const void * src, size_t n)
 {
   void *xdest = dest;
 
@@ -178,12 +170,12 @@ extern inline void * memmove(void * dest,const void * src, size_t n)
 	"1:\tlbu\t$1,(%1)\n\t"
 	"addiu\t%1,%1,1\n\t"
 	"sb\t$1,(%0)\n\t"
-	"addiu\t%2,%2,-1\n\t"
-	"bne\t$0,%2,1b\n\t"
+	"subu\t%2,%2,1\n\t"
+	"bnez\t%2,1b\n\t"
 	"addiu\t%0,%0,1\n\t"
 	".set\tat\n\t"
 	".set\treorder"
-        : "=d" (dest), "=d" (src), "=d" (n)
+        : "=r" (dest), "=r" (src), "=r" (n)
         : "0" (dest), "1" (src), "2" (n)
         : "$1","memory" );
   else
@@ -191,19 +183,38 @@ extern inline void * memmove(void * dest,const void * src, size_t n)
 	".set\tnoreorder\n\t"
 	".set\tnoat\n"
 	"1:\tlbu\t$1,-1(%1)\n\t"
-	"addiu\t%1,%1,-1\n\t"
+	"subu\t%1,%1,1\n\t"
 	"sb\t$1,-1(%0)\n\t"
-	"addiu\t%2,%2,-1\n\t"
-	"bne\t$0,%2,1b\n\t"
-	"addiu\t%0,%0,-1\n\t"
+	"subu\t%2,%2,1\n\t"
+	"bnez\t%2,1b\n\t"
+	"subu\t%0,%0,1\n\t"
 	".set\tat\n\t"
 	".set\treorder"
-        : "=d" (dest), "=d" (src), "=d" (n)
+        : "=r" (dest), "=r" (src), "=r" (n)
         : "0" (dest+n), "1" (src+n), "2" (n)
         : "$1","memory" );
   return xdest;
 }
 
-#define __USE_PORTABLE_memcmp
+extern __inline__ void * memscan(void * addr, int c, size_t size)
+{
+	if (!size)
+		return addr;
+	__asm__(".set\tnoreorder\n\t"
+		".set\tnoat\n"
+		"1:\tbeq\t$0,%1,2f\n\t"
+		"lbu\t$1,(%0)\n\t"
+		"subu\t%1,%1,1\n\t"
+		"bnez\t%1,1b\n\t"
+		"addiu\t%0,%0,1\n\t"
+		".set\tat\n\t"
+		".set\treorder\n"
+		"2:"
+		: "=r" (addr), "=r" (size)
+		: "0" (addr), "1" (size), "r" (c)
+		: "$1");
 
-#endif /* _ASM_MIPS_STRING_H_ */
+	return addr;
+}
+
+#endif /* __ASM_MIPS_STRING_H */

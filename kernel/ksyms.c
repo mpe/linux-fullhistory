@@ -46,6 +46,7 @@
 #include <asm/irq.h>
 extern char floppy_track_buffer[];
 extern void set_device_ro(int dev,int flag);
+extern struct file_operations * get_blkfops(unsigned int);
   
 extern void *sys_call_table;
 
@@ -162,6 +163,7 @@ struct symbol_table symbol_table = { 0, 0, 0, /* for stacked module support */
 	X(set_device_ro),
 	X(bmap),
 	X(sync_dev),
+	X(get_blkfops),
 	
 	/* Module creation of serial units */
 	X(register_serial),

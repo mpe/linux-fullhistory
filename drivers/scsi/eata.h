@@ -7,7 +7,7 @@
 
 #include <linux/scsicam.h>
 
-#define EATA_VERSION "1.11.00"
+#define EATA_VERSION "1.12.00"
 
 int eata_detect(Scsi_Host_Template *);
 int eata_queuecommand(Scsi_Cmnd *, void (*done)(Scsi_Cmnd *));

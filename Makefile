@@ -1,6 +1,6 @@
 VERSION = 1
 PATCHLEVEL = 1
-SUBLEVEL = 81
+SUBLEVEL = 82
 
 ARCH = i386
 
@@ -18,6 +18,7 @@ CC	=gcc -D__KERNEL__ -I$(TOPDIR)/include
 MAKE	=make
 CPP	=$(CC) -E
 AR	=ar
+NM	=nm
 STRIP	=strip
 
 all:	do-it-all
@@ -88,7 +89,7 @@ FILESYSTEMS	=fs/filesystems.a
 DRIVERS		=drivers/block/block.a \
 		 drivers/char/char.a \
 		 drivers/net/net.a
-LIBS		=lib/lib.a
+LIBS		=$(TOPDIR)/lib/lib.a
 SUBDIRS		=kernel drivers mm fs net ipc lib
 
 ifdef CONFIG_SCSI
@@ -124,7 +125,7 @@ vmlinux: $(CONFIGURATION) init/main.o init/version.o linuxsubdirs
 		$(FILESYSTEMS) \
 		$(DRIVERS) \
 		$(LIBS) -o vmlinux
-	nm vmlinux | grep -v '\(compiled\)\|\(\.o$$\)\|\( a \)' | sort > System.map
+	$(NM) vmlinux | grep -v '\(compiled\)\|\(\.o$$\)\|\( a \)' | sort > System.map
 
 symlinks:
 	rm -f include/asm

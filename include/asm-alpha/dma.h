@@ -20,8 +20,8 @@
 
 #include <asm/io.h>		/* need byte IO */
 
-#define dma_outb	outb_local
-#define dma_inb		inb_local
+#define dma_outb	outb
+#define dma_inb		inb
 
 /*
  * NOTES about DMA transfers:

@@ -600,8 +600,8 @@ static void NCR5380_all_init (void) {
 
 
 static int probe_irq;
-static void probe_intr (int sig) {
-    probe_irq = sig;
+static void probe_intr (int irq, struct pt_regs * regs) {
+    probe_irq = irq;
 };
 
 static int NCR5380_probe_irq (struct Scsi_Host *instance, int possible) {

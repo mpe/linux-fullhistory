@@ -16,7 +16,7 @@
 .c.o:
 	$(CC) $(CFLAGS) -c $<
 
-OBJS  = sched.o dma.o fork.o exec_domain.o panic.o printk.o vsprintf.o sys.o \
+OBJS  = sched.o dma.o fork.o exec_domain.o panic.o printk.o sys.o \
 	module.o ksyms.o exit.o signal.o itimer.o info.o time.o softirq.o \
 	resource.o
 

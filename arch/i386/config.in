@@ -24,6 +24,9 @@ bool 'XT harddisk support' CONFIG_BLK_DEV_XD n
 bool 'Networking support' CONFIG_NET y
 bool 'Limit memory to low 16MB' CONFIG_MAX_16M n
 bool 'PCI bios support' CONFIG_PCI n
+if [ "$CONFIG_PCI" = "y" ]; then
+ bool '   PCI bridge optimisation (experimental)' CONFIG_PCI_OPTIMIZE n
+fi
 bool 'System V IPC' CONFIG_SYSVIPC y
 bool 'Kernel support for ELF binaries' CONFIG_BINFMT_ELF y
 #bool 'Use -mpentium flag for Pentium-specific optimizations' CONFIG_M586 n

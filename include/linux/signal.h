@@ -1,7 +1,7 @@
 #ifndef _LINUX_SIGNAL_H
 #define _LINUX_SIGNAL_H
 
-typedef unsigned int sigset_t;		/* 32 bits */
+typedef unsigned long sigset_t;		/* at least 32 bits */
 
 #define _NSIG             32
 #define NSIG		_NSIG
@@ -29,14 +29,14 @@ typedef unsigned int sigset_t;		/* 32 bits */
 #define SIGTSTP		20
 #define SIGTTIN		21
 #define SIGTTOU		22
-#define SIGIO		23
-#define SIGPOLL		SIGIO
-#define SIGURG		SIGIO
+#define SIGURG		23
 #define SIGXCPU		24
 #define SIGXFSZ		25
 #define SIGVTALRM	26
 #define SIGPROF		27
 #define SIGWINCH	28
+#define SIGIO		29
+#define SIGPOLL		SIGIO
 /*
 #define SIGLOST		29
 */
@@ -72,36 +72,13 @@ typedef void (*__sighandler_t)(int);
 struct sigaction {
 	__sighandler_t sa_handler;
 	sigset_t sa_mask;
-	int sa_flags;
+	unsigned long sa_flags;
 	void (*sa_restorer)(void);
 };
 
 #ifdef __KERNEL__
 
-struct sigcontext_struct {
-	unsigned short gs, __gsh;
-	unsigned short fs, __fsh;
-	unsigned short es, __esh;
-	unsigned short ds, __dsh;
-	unsigned long edi;
-	unsigned long esi;
-	unsigned long ebp;
-	unsigned long esp;
-	unsigned long ebx;
-	unsigned long edx;
-	unsigned long ecx;
-	unsigned long eax;
-	unsigned long trapno;
-	unsigned long err;
-	unsigned long eip;
-	unsigned short cs, __csh;
-	unsigned long eflags;
-	unsigned long esp_at_signal;
-	unsigned short ss, __ssh;
-	unsigned long i387;
-	unsigned long oldmask;
-	unsigned long cr2;
-};
+#include <asm/signal.h>
 
 #endif
 

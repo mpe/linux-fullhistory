@@ -238,9 +238,8 @@ static int ei_start_xmit(struct sk_buff *skb, struct device *dev)
 
 /* The typical workload of the driver:
    Handle the ether interface interrupts. */
-void ei_interrupt(int reg_ptr)
+void ei_interrupt(int irq, struct pt_regs * regs)
 {
-    int irq = -(((struct pt_regs *)reg_ptr)->orig_eax+2);
     struct device *dev = (struct device *)(irq2dev_map[irq]);
     int e8390_base;
     int interrupts, boguscount = 0;

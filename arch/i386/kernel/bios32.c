@@ -12,10 +12,6 @@
  *      Drew@Colorado.EDU
  *      +1 (303) 786-7975
  *
- * Pciprobe added by Frederic Potter 1994
- *	Potter@Cao-Vlsi.Ibp.FR
- *
- *
  * For more information, please consult
  *
  * PCI BIOS Specification Revision
@@ -37,9 +33,15 @@
  * Jun 17, 1994 : Modified to accommodate the broken pre-PCI BIOS SPECIFICATION
  *	Revision 2.0 present on <thys@dennis.ee.up.ac.za>'s ASUS mainboard.
  *
+ * Jan 5,  1995 : Modified to probe PCI hardware at boot time by Frederic
+ *     Potter, potter@cao-vlsi.ibp.fr
+ *
  * Jan 10, 1995 : Modified to store the information about configured pci
  *      devices into a list, which can be accessed via /proc/pci by
  *      Curtis Varner, cvarner@cs.ucr.edu
+ *
+ * Jan 12, 1995 : CPU-PCI bridge optimization support by Frederic Potter.
+ *	Alpha version. Intel & UMC chipset support only. See pci.h for more.
  */
 
 #include <linux/config.h>
@@ -485,7 +487,7 @@ int revision_decode(unsigned char bus,unsigned char dev_fn)
 
 int class_decode(unsigned char bus,unsigned char dev_fn)
 {
-	struct pci_class_type 	pci_class[PCI_CLASS_NUM+1] = PCI_CLASS_TYPE;
+	struct pci_class_type 	pci_class[PCI_CLASS_NUM] = PCI_CLASS_TYPE;
 	int 			i;
 	unsigned long   	class;
 		pcibios_read_config_dword(
@@ -497,9 +499,10 @@ int class_decode(unsigned char bus,unsigned char dev_fn)
 }
 
 
-int device_decode(unsigned char bus,unsigned char dev_fn,unsigned short vendor)
+int device_decode(unsigned char bus,unsigned char dev_fn,unsigned short vendor_num)
 {
-	struct pci_device_type 	pci_device[PCI_DEVICE_NUM+1] = PCI_DEVICE_TYPE;
+	struct pci_device_type 	pci_device[PCI_DEVICE_NUM] = PCI_DEVICE_TYPE;
+	struct pci_vendor_type 	pci_vendor[PCI_VENDOR_NUM] = PCI_VENDOR_TYPE;
 	int 			i;
 	unsigned short   	device;
 
@@ -507,26 +510,78 @@ int device_decode(unsigned char bus,unsigned char dev_fn,unsigned short vendor)
 		bus, dev_fn, (unsigned char) PCI_DEVICE_ID, &device);
 	for (i=0;i<PCI_DEVICE_NUM;i++)
 		if ((device==pci_device[i].device_id)
-		 && (vendor==pci_device[i].vendor_id)) return i;
-	printk("Device id=%x ",device);
-	return i;
+		 && (pci_vendor[vendor_num].vendor_id==pci_device[i].vendor_id)) return i;
+	return 0x10000 + (int) device;
 }
 
 
 int vendor_decode(unsigned char bus,unsigned char dev_fn)
 {
-	struct pci_vendor_type 	pci_vendor[PCI_VENDOR_NUM+1] = PCI_VENDOR_TYPE;
+	struct pci_vendor_type 	pci_vendor[PCI_VENDOR_NUM] = PCI_VENDOR_TYPE;
 	int			i;
 	unsigned short   	vendor;
 
-		pcibios_read_config_word(
-			bus, dev_fn, (unsigned char) PCI_VENDOR_ID, &vendor);
-		for (i=0;i<PCI_VENDOR_NUM;i++)
-			if (vendor==pci_vendor[i].vendor_id) return i;
-		printk("Vendor id=%x ",vendor);
-		return i;
+	pcibios_read_config_word(
+		bus, dev_fn, (unsigned char) PCI_VENDOR_ID, &vendor);
+	for (i=0;i<PCI_VENDOR_NUM;i++)
+		if (vendor==pci_vendor[i].vendor_id) return i;
+	return 0x10000 + (int) vendor;
 }
 
+#ifdef CONFIG_PCI_OPTIMIZE
+
+unsigned char bridge_decode(int device)
+{
+	struct pci_device_type	pci_device[PCI_DEVICE_NUM] = PCI_DEVICE_TYPE;
+	return (pci_device[device].bridge_id);
+}
+
+/* Turn on/off PCI bridge optimisation. This should allow benchmarking. */
+
+void burst_bridge(unsigned char bus,unsigned char dev_fn,unsigned char pos, int turn_on)
+{
+	struct bridge_mapping_type bridge_mapping[5*BRIDGE_MAPPING_NUM] = BRIDGE_MAPPING_TYPE;
+	struct optimisation_type optimisation[OPTIMISATION_NUM] = OPTIMISATION_TYPE;
+	int i;
+	unsigned char val;
+
+	pos*=OPTIMISATION_NUM;
+	printk("PCI bridge optimisation.\n");
+	for (i=0;i<OPTIMISATION_NUM;i++)
+	{
+		printk("    %s : ",optimisation[i].type);
+		if (bridge_mapping[pos+i].adress==0) printk("Not supported.");
+		else {
+			pcibios_read_config_byte(
+				bus, dev_fn, bridge_mapping[pos+i].adress, &val);
+			if ((val & bridge_mapping[pos+i].mask)==bridge_mapping[pos+i].value) 
+			{
+				printk("%s.",optimisation[i].on);
+				if (turn_on==0) 
+				{
+				pcibios_write_config_byte(
+					bus, dev_fn, bridge_mapping[pos+i].adress,
+					(val | bridge_mapping[pos+i].mask) -
+					bridge_mapping[pos+i].value);
+				printk("Changed! now %s.",optimisation[i].off);
+				}
+			} else {
+				printk("%s.",optimisation[i].off);
+				if (turn_on==1) 
+				{
+				pcibios_write_config_byte(
+					bus, dev_fn, bridge_mapping[pos+i].adress,
+					(val & (0xff-bridge_mapping[pos+i].mask)) +
+					bridge_mapping[pos+i].value);
+				printk("Changed! now %s.",optimisation[i].on);
+				}
+			}
+		}
+		printk("\n");
+	}
+}
+
+#endif
 
 /* In future version in case we detect a PCI to PCi bridge, we will go
 for a recursive device search*/
@@ -575,11 +630,38 @@ void add_pci_resource(unsigned char bus, unsigned char dev_fn)
 {
 	pci_resource_t* new_pci;
 	pci_resource_t* temp;
+	int vendor_id, device_id;
+#ifdef CONFIG_PCI_OPTIMIZE
+	unsigned char bridge_id;
+#endif
+	/*
+	 * Verify if we know about this chip. If not, print Vendor & Device id
+	 * + ask for report.
+	 */
+	vendor_id=vendor_decode(bus,dev_fn);
+	device_id=device_decode(bus,dev_fn,vendor_id);
+	if ((device_id & 0x10000)==0x10000)
+	{
+		printk("Unknown PCI device. PCI Vendor id=%x. PCI Device id=%x.\n",
+			vendor_id & 0xffff,device_id & 0xffff);
+		printk("PLEASE MAIL POTTER@CAO-VLSI.IBP.FR your harware description and /proc/pci.\n");
+		return;
+	}
+	/*
+	 * If the PCI agent is a known bridge, then configure it.
+	 */
+#ifdef CONFIG_PCI_OPTIMIZE
 
+	bridge_id=bridge_decode(device_id);
+	if (bridge_id != 0xff)
+	{
+		burst_bridge(bus,dev_fn,bridge_id,1); /* Burst bridge */
+	}
+#endif
 	/*
 	 * Request and verify allocation of kernel RAM
 	 */
-	if(pci_index > 31)
+	if(pci_index > PCI_LIST_SIZE-1)
 	{
 		printk("PCI resource list full.\n");
 		return;
@@ -618,11 +700,12 @@ int get_pci_list(char* buf)
 {
 	int pr, length;
 	pci_resource_t* temp = pci_list.next;
-	struct	pci_class_type	pci_class[PCI_CLASS_NUM+1] = PCI_CLASS_TYPE;
-	struct	pci_vendor_type	pci_vendor[PCI_VENDOR_NUM+1] = PCI_VENDOR_TYPE;
-	struct	pci_device_type	pci_device[PCI_DEVICE_NUM+1] = PCI_DEVICE_TYPE;
+	struct	pci_class_type	pci_class[PCI_CLASS_NUM] = PCI_CLASS_TYPE;
+	struct	pci_vendor_type	pci_vendor[PCI_VENDOR_NUM] = PCI_VENDOR_TYPE;
+	struct	pci_device_type	pci_device[PCI_DEVICE_NUM] = PCI_DEVICE_TYPE;
 
-	for (length = 0 ; (temp) && (length<4000); temp = temp->next)
+	pr = sprintf(buf, "PCI devices found :\n"); 
+	for (length = pr ; (temp) && (length<4000); temp = temp->next)
 	{
 		pr=vendor_decode(temp->bus,temp->dev_fn);
 
@@ -634,7 +717,7 @@ int get_pci_list(char* buf)
 		length += sprintf(buf+length, "    %s : %s %s (rev %d). ",
 			pci_class[class_decode(temp->bus, temp->dev_fn)].class_name,
 			pci_vendor[pr].vendor_name,
-			pci_device[device_decode(temp->bus, temp->dev_fn, pci_vendor[pr].vendor_id)].device_name,
+			pci_device[device_decode(temp->bus, temp->dev_fn, pr)].device_name,
 			revision_decode(temp->bus, temp->dev_fn));
 
 		if (bist_probe(temp->bus, temp->dev_fn))

@@ -63,7 +63,7 @@ static struct mouse_status {
 	struct wait_queue *wait;
 } mouse;
 
-void mouse_interrupt(int unused)
+void mouse_interrupt(int irq, struct pt_regs * regs)
 {
 	char dx, dy, buttons;
 

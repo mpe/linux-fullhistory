@@ -175,7 +175,7 @@
 static void abnormal_finished (struct NCR53c7x0_cmd *cmd, int result);
 static int NCR53c8xx_run_tests (struct Scsi_Host *host);
 static int NCR53c8xx_script_len;
-static void NCR53c7x0_intr (int irq);
+static void NCR53c7x0_intr(int irq, struct pt_regs * regs);
 static void intr_phase_mismatch (struct Scsi_Host *host, struct NCR53c7x0_cmd 
     *cmd);
 static void intr_dma (struct Scsi_Host *host, struct NCR53c7x0_cmd *cmd);
@@ -2927,7 +2927,7 @@ static void intr_scsi (struct Scsi_Host *host, struct NCR53c7x0_cmd *cmd) {
 }
 
 /*
- * Function : static void NCR53c7x0_intr (int irq)
+ * Function : static void NCR53c7x0_intr (int irq, struct pt_regs * regs)
  *
  * Purpose : handle NCR53c7x0 interrupts for all NCR devices sharing
  *	the same IRQ line.  
@@ -2937,7 +2937,7 @@ static void intr_scsi (struct Scsi_Host *host, struct NCR53c7x0_cmd *cmd) {
  *	this handler.  
  */
 
-static void NCR53c7x0_intr (int irq) {
+static void NCR53c7x0_intr (int irq, struct pt_regs * regs) {
     NCR53c7x0_local_declare();
     struct Scsi_Host *host;			/* Host we are looking at */
     unsigned char istat; 			/* Values of interrupt regs */

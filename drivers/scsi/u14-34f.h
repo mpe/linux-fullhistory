@@ -10,7 +10,7 @@ int u14_34f_abort(Scsi_Cmnd *);
 int u14_34f_reset(Scsi_Cmnd *);
 int u14_34f_biosparam(Disk *, int, int *);
 
-#define U14_34F_VERSION "1.12.04"
+#define U14_34F_VERSION "1.13.00"
 
 #define ULTRASTOR_14_34F {                                            \
                 NULL,                                                 \

@@ -330,14 +330,14 @@ int getkeycode(unsigned int scancode)
 	    e0_keys[scancode - 128];
 }
 
-static void keyboard_interrupt(int int_pt_regs)
+static void keyboard_interrupt(int irq, struct pt_regs *regs)
 {
 	unsigned char scancode, keycode;
 	static unsigned int prev_scancode = 0;   /* remember E0, E1 */
 	char up_flag;				 /* 0 or 0200 */
 	char raw_mode;
 
-	pt_regs = (struct pt_regs *) int_pt_regs;
+	pt_regs = regs;
 	send_cmd(0xAD);		/* disable keyboard */
 	kb_wait();
 	if ((inb_p(0x64) & kbd_read_mask) != 0x01)
@@ -1165,10 +1165,10 @@ long no_idt[2] = {0, 0};
  * controller to pulse the reset-line low. We try that for a while,
  * and if it doesn't work, we do some other stupid things.
  */
+#ifdef __i386__
 void hard_reset_now(void)
 {
 	int i, j;
-	extern unsigned long pg0[1024];
 
 	sti();
 /* rebooting needs to touch the page at absolute addr 0 */
@@ -1181,11 +1181,10 @@ void hard_reset_now(void)
 				/* nothing */;
 			outb(0xfe,0x64);	 /* pulse reset low */
 		}
-#ifdef __i386__
 		__asm__("\tlidt _no_idt");
-#endif
 	}
 }
+#endif
 
 unsigned long kbd_init(unsigned long kmem_start)
 {
@@ -1206,6 +1205,17 @@ unsigned long kbd_init(unsigned long kmem_start)
 
 	bh_base[KEYBOARD_BH].routine = kbd_bh;
 	request_irq(KEYBOARD_IRQ, keyboard_interrupt, 0, "keyboard");
+#ifdef __alpha__
+	/* enable keyboard interrupts */
+	outb(0x60,0x64);
+	while (inb(0x64) & 2)
+		/* nothing */;
+	outb(0x1,0x60);
+	while (inb(0x64) & 2)
+		/* nothing */;
+	send_data(0xf0);	/* Select scan code */
+	send_data(0x01);	/* type 1 */
+#endif		
 	mark_bh(KEYBOARD_BH);
 	return kmem_start;
 }

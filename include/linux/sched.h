@@ -9,7 +9,7 @@
  *  #define DEBUG
  */
 
-#define HZ 100
+#include <asm/param.h>	/* for HZ */
 
 extern unsigned long intr_count;
 extern unsigned long event;
@@ -261,7 +261,8 @@ extern void notify_parent(struct task_struct * tsk);
 extern int send_sig(unsigned long sig,struct task_struct * p,int priv);
 extern int in_group_p(gid_t grp);
 
-extern int request_irq(unsigned int irq,void (*handler)(int), unsigned long flags, const char *device);
+extern int request_irq(unsigned int irq,void (*handler)(int, struct pt_regs *),
+	unsigned long flags, const char *device);
 extern void free_irq(unsigned int irq);
 
 extern unsigned long copy_thread(int, unsigned long, struct task_struct *, struct pt_regs *);

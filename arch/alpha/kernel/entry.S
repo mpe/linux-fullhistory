@@ -9,52 +9,85 @@
 #define halt	.long PAL_halt
 #define rti	.long PAL_rti
 
+/*
+ * This defines the normal kernel pt-regs layout.
+ *
+ * regs 9-15 preserved by C code
+ * regs 16-18 saved by PAL-code
+ * regs 29-30 saved and set up by PAL-code
+ */
+#define SAVE_ALL			\
+	subq	$30,160,$30;		\
+	stq	$0,0($30);		\
+	stq	$1,8($30);		\
+	stq	$2,16($30);		\
+	stq	$3,24($30);		\
+	stq	$4,32($30);		\
+	stq	$5,40($30);		\
+	stq	$6,48($30);		\
+	stq	$7,56($30);		\
+	stq	$8,64($30);		\
+	stq	$19,72($30);		\
+	stq	$20,80($30);		\
+	stq	$21,88($30);		\
+	stq	$22,96($30);		\
+	stq	$23,104($30);		\
+	stq	$24,112($30);		\
+	stq	$25,120($30);		\
+	stq	$26,128($30);		\
+	stq	$27,136($30);		\
+	stq	$28,144($30)
+
+#define RESTORE_ALL			\
+	ldq	$0,0($30);		\
+	ldq	$1,8($30);		\
+	ldq	$2,16($30);		\
+	ldq	$3,24($30);		\
+	ldq	$4,32($30);		\
+	ldq	$5,40($30);		\
+	ldq	$6,48($30);		\
+	ldq	$7,56($30);		\
+	ldq	$8,64($30);		\
+	ldq	$19,72($30);		\
+	ldq	$20,80($30);		\
+	ldq	$21,88($30);		\
+	ldq	$22,96($30);		\
+	ldq	$23,104($30);		\
+	ldq	$24,112($30);		\
+	ldq	$25,120($30);		\
+	ldq	$26,128($30);		\
+	ldq	$27,136($30);		\
+	ldq	$28,144($30);		\
+	addq	$30,160,$30
+
 .text
-	.set noat
-	.align 6
-	.ent entInt
+.set noat
+
+.align 5
+.globl	entInt
+.ent	entInt
 entInt:
-	subq	$30,144,$30
-	stq	$0,0($30)
-	stq	$1,8($30)
-	stq	$2,16($30)
-	stq	$3,24($30)
-	stq	$4,32($30)
-	stq	$5,40($30)
-	stq	$6,48($30)
-	stq	$7,56($30)
-	stq	$8,64($30)
-	stq	$19,64($30)
-	stq	$20,72($30)
-	stq	$21,80($30)
-	stq	$22,88($30)
-	stq	$23,96($30)
-	stq	$24,104($30)
-	stq	$25,112($30)
-	stq	$26,120($30)
-	stq	$27,128($30)
-	stq	$28,136($30)
-	lda	$27,do_hw_interrupt
-	jsr	$26,($27),do_hw_interrupt
-	ldq	$0,0($30)
-	ldq	$1,8($30)
-	ldq	$2,16($30)
-	ldq	$3,24($30)
-	ldq	$4,32($30)
-	ldq	$5,40($30)
-	ldq	$6,48($30)
-	ldq	$7,56($30)
-	ldq	$8,64($30)
-	ldq	$19,64($30)
-	ldq	$20,72($30)
-	ldq	$21,80($30)
-	ldq	$22,88($30)
-	ldq	$23,96($30)
-	ldq	$24,104($30)
-	ldq	$25,112($30)
-	ldq	$26,120($30)
-	ldq	$27,128($30)
-	ldq	$28,136($30)
-	addq	$30,144,$30
+	SAVE_ALL
+	bis	$30,$30,$19
+	lda	$27,do_entInt
+	jsr	$26,($27),do_entInt
+	RESTORE_ALL
 	rti
-	.end entInt
+.end entInt
+
+.align 5
+.globl	entMM
+.ent	entMM
+entMM:
+	SAVE_ALL
+	bis	$30,$30,$19
+	lda	$27,do_page_fault
+	jsr	$26,($27),do_page_fault
+	RESTORE_ALL
+	rti
+.end entMM
+
+	.align 5
+	.globl sys_call_table
+sys_call_table:
+	.quad 0
