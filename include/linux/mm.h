@@ -117,7 +117,7 @@ typedef struct page {
 	unsigned long offset;
 	struct page *next_hash;
 	atomic_t count;
-	unsigned int age;
+	unsigned int unused;
 	unsigned long flags;	/* atomic flags, some possibly updated asynchronously */
 	struct wait_queue *wait;
 	struct page **pprev_hash;
@@ -226,8 +226,6 @@ typedef struct page {
  * For choosing which pages to swap out, inode pages carry a
  * page->referenced bit, which is set any time the system accesses
  * that page through the (inode,offset) hash table.
- * There is also the page->age counter, which implements a linear
- * decay (why not an exponential decay?), see swapctl.h.
  */
 
 extern mem_map_t * mem_map;

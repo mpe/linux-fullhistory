@@ -273,9 +273,9 @@ printk("SIG queue (%s:%d): %d ", t->comm, t->pid, sig);
 		goto out_nolock;
 
 	/* The null signal is a permissions and process existance probe.
-	   No signal is actually delivered.  */
+	   No signal is actually delivered.  Same goes for zombies. */
 	ret = 0;
-	if (!sig)
+	if (!sig || !t->sig)
 		goto out_nolock;
 
 	spin_lock_irqsave(&t->sigmask_lock, flags);

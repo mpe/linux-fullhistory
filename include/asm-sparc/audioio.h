@@ -88,6 +88,7 @@ typedef struct audio_info {
 #define	AUDIO_ENCODING_ULAW	(1)	/* u-law encoding	  */
 #define	AUDIO_ENCODING_ALAW	(2)	/* A-law encoding	  */
 #define	AUDIO_ENCODING_LINEAR	(3)	/* Linear PCM encoding	  */
+#define AUDIO_ENCODING_FLOAT    (4)     /* IEEE float (-1. <-> +1.) */
 #define	AUDIO_ENCODING_DVI	(104)	/* DVI ADPCM		  */
 #define	AUDIO_ENCODING_LINEAR8	(105)	/* 8 bit UNSIGNED	  */
 #define	AUDIO_ENCODING_LINEARLE	(106)	/* Linear PCM LE encoding */
@@ -139,8 +140,7 @@ typedef struct audio_info {
 #define	AUDIO_LINE_IN		0x02	/* input from line in	 */
 #define	AUDIO_CD		0x04	/* input from on-board CD inputs */
 #define	AUDIO_INTERNAL_CD_IN	AUDIO_CD	/* input from internal CDROM */
-/* Supposedly an undocumented feature of the 4231 */
-#define AUDIO_ANALOG_LOOPBACK   0x40
+#define AUDIO_ANALOG_LOOPBACK   0x40    /* input from output */
 
 
 /*
@@ -227,21 +227,9 @@ typedef struct audio_device {
  * if the hardware supports this.  The argument is TRUE to set loopback,
  * FALSE to reset to normal operation.  If the hardware does not support
  * internal loopback, the ioctl should fail with EINVAL.
+ * Causes ADC data to be digitally mixed in and sent to the DAC.
  */
 #define	AUDIO_DIAG_LOOPBACK	_IOW('A', 101, int)
-
-#ifdef notneeded
-/*
- * Structure sent up as a M_PROTO message on trace streams
- */
-typedef struct audtrace_hdr audtrace_hdr_t;
-struct audtrace_hdr {
-	unsigned int seq;		/* Sequence number (per-aud_stream) */
-	int type;		/* device-dependent */
-	struct timeval timestamp;
-	char _f[8];		/* filler */
-};
-#endif
 
 /*
  *	Linux kernel internal implementation.
@@ -257,48 +245,72 @@ struct audtrace_hdr {
 #define	SDF_OPEN_WRITE	0x00000001
 #define	SDF_OPEN_READ	0x00000002
 
+struct sparcaudio_ringbuffer
+{
+  __u8 *rb_start, *rb_end;		/* start, end of this memory buffer */
+  __u8 *rb_in, *rb_out;			/* input, output pointers */
+
+  int rb_fragsize;			/* size of an audio frag */
+  int rb_numfrags;			/* number of frags */
+
+  int rb_count, rb_hiwat, rb_lowat;	/* bytes in use, hi/lo wat points */
+
+  int rb_bufsize;			/* total size of buffer */
+};
+
 struct sparcaudio_driver
 {
 	const char * name;
 	struct sparcaudio_operations *ops;
 	void *private;
 	unsigned long flags;
+        struct strevent *sd_siglist;
+        /* duplex: 0=simplex, 1=duplex, 2=loop */
+        int sd_sigflags, duplex;
+
+        /* Which audio device are we? */
+        int index; 
 
         /* This device */
         struct linux_sbus_device *dev;
- 
+
 	/* Processes blocked on open() sit here. */
 	struct wait_queue *open_wait;
 
 	/* Task queue for this driver's bottom half. */
 	struct tq_struct tqueue;
 
+        /* Start of ring buffer support */
+        __u8 *input_buffer, *output_buffer;
+
 	/* Support for a circular queue of output buffers. */
 	__u8 **output_buffers;
-	size_t *output_sizes, output_size;
-	int num_output_buffers, output_front, output_rear;
-	int output_count, output_active, playing_count;
+	size_t *output_sizes, output_size, output_buffer_size;
+	int num_output_buffers, output_front, output_rear, output_offset;
+	int output_count, output_active, playing_count, output_eof;
 	struct wait_queue *output_write_wait, *output_drain_wait;
+        char *output_notify;
 
         /* Support for a circular queue of input buffers. */
         __u8 **input_buffers;
-        int input_offset;
-        int num_input_buffers, input_front, input_rear;
+	size_t *input_sizes, input_size, input_buffer_size;
+        int num_input_buffers, input_front, input_rear, input_offset;
         int input_count, input_active, recording_count;
         struct wait_queue *input_read_wait;
+
+        /* Hack to make it look like we support variable size buffers. */
+        int buffer_size;
 };
 
 struct sparcaudio_operations
 {
 	int (*open)(struct inode *, struct file *, struct sparcaudio_driver *);
-	void (*release)(struct inode *, struct file *, struct 
-			sparcaudio_driver *);
-	int (*ioctl)(struct inode *, struct file *, unsigned int, 
-		     unsigned long, struct sparcaudio_driver *);
+	void (*release)(struct inode *, struct file *, struct sparcaudio_driver *);
+	int (*ioctl)(struct inode *, struct file *, unsigned int, unsigned long,
+		     struct sparcaudio_driver *);
 
 	/* Ask driver to begin playing a buffer. */
-	void (*start_output)(struct sparcaudio_driver *, __u8 *, 
-			     unsigned long);
+	void (*start_output)(struct sparcaudio_driver *, __u8 *, unsigned long);
 
 	/* Ask driver to stop playing a buffer. */
 	void (*stop_output)(struct sparcaudio_driver *);
@@ -382,35 +394,125 @@ struct sparcaudio_operations
         /* Get and set output mute */
         int (*set_output_muted)(struct sparcaudio_driver *, int);
         int (*get_output_muted)(struct sparcaudio_driver *);
+
+        /* Get and set output pause */
+        int (*set_output_pause)(struct sparcaudio_driver *, int);
+        int (*get_output_pause)(struct sparcaudio_driver *);
+
+        /* Get and set input pause */
+        int (*set_input_pause)(struct sparcaudio_driver *, int);
+        int (*get_input_pause)(struct sparcaudio_driver *);
+
+        /* Get and set output samples */
+        int (*set_output_samples)(struct sparcaudio_driver *, int);
+        int (*get_output_samples)(struct sparcaudio_driver *);
+
+        /* Get and set input samples */
+        int (*set_input_samples)(struct sparcaudio_driver *, int);
+        int (*get_input_samples)(struct sparcaudio_driver *);
+
+        /* Get and set output error */
+        int (*set_output_error)(struct sparcaudio_driver *, int);
+        int (*get_output_error)(struct sparcaudio_driver *);
+
+        /* Get and set input error */
+        int (*set_input_error)(struct sparcaudio_driver *, int);
+        int (*get_input_error)(struct sparcaudio_driver *);
+
+        /* Get supported encodings */
+        int (*get_formats)(struct sparcaudio_driver *);
 };
 
-extern int register_sparcaudio_driver(struct sparcaudio_driver *);
-extern int unregister_sparcaudio_driver(struct sparcaudio_driver *);
+extern int register_sparcaudio_driver(struct sparcaudio_driver *, int);
+extern int unregister_sparcaudio_driver(struct sparcaudio_driver *, int);
 extern void sparcaudio_output_done(struct sparcaudio_driver *, int);
-extern void sparcaudio_input_done(struct sparcaudio_driver *);
+extern void sparcaudio_input_done(struct sparcaudio_driver *, int);
 extern int sparcaudio_init(void);
 extern int amd7930_init(void);
 extern int cs4231_init(void);
 
 #endif
 
+/* Mixer helper ioctls */
+#define right(a) (((a >> 8) & 0xff) % 101)
+#define left(a) ((a & 0xff) % 101)
+
 /* Macros to convert between mixer stereo volumes and gain (mono) */
-#define s_to_m(a) (((((a) >> 8) & 0x7f) + ((a) & 0x7f)) / 2)
-#define m_to_s(a) (((a) << 8) + (a))
+#define s_to_m(a) ((((left(a) + right(a)) * 255) / 200) % 256)
+#define m_to_s(a) ((a * 100 / 255) + ((a * 100 / 255) << 8))
 
 /* convert mixer stereo volume to balance */
-#define s_to_b(a) (AUDIO_RIGHT_BALANCE * ((((a) >> 8) & 0xff) /  (((((a) >> 8) & 0xff) + ((a) & 0xff)) / 2)))
+#define s_to_b(a) (s_to_g(a) == 0) ? 32 : ((left(a) * AUDIO_RIGHT_BALANCE / (left(a) + right(a))))
 
 /* convert mixer stereo volume to audio gain */
-#define s_to_g(a) (((((a) >> 8) & 0xff) + ((a) & 0xff)) / 2)
+#define s_to_g(a) ((((right(a) + left(a)) * 255) / 200) % 256)
 
 /* convert gain a and balance b to mixer volume */
-#define b_to_s(a,b) ((a * (b / AUDIO_RIGHT_BALANCE) << 8) + (a * (1 - (b / AUDIO_RIGHT_BALANCE))))
+#define b_to_s(a,b) (((((b * a * 200) / (AUDIO_RIGHT_BALANCE * 255)) % 100) << 8) + ((((AUDIO_RIGHT_BALANCE - b) * a * 200) / (AUDIO_RIGHT_BALANCE * 255)) % 100))
+
+/* Device minor numbers */
 
 #define SPARCAUDIO_MIXER_MINOR 0
-#define SPARCAUDIO_DSP16_MINOR 1
+/* No sequencer (1) */
+/* No midi (2) */
 #define SPARCAUDIO_DSP_MINOR   3
 #define SPARCAUDIO_AUDIO_MINOR 4
-#define SPARCAUDIO_AUDIOCTL_MINOR 5
+#define SPARCAUDIO_DSP16_MINOR 5
 #define SPARCAUDIO_STATUS_MINOR 6
+#define SPARCAUDIO_AUDIOCTL_MINOR 7
+/* No sequencer l2 (8) */
+/* No sound processor (9) */
+
+/* allocate 2^SPARCAUDIO_DEVICE_SHIFT minors per audio device */
+#define SPARCAUDIO_DEVICE_SHIFT 4
+
+/* With the coming of dummy devices this should perhaps be as high as 5? */
+#define SPARCAUDIO_MAX_DEVICES 3
+
+/* Streams crap for realaudio */
+
+typedef
+struct strevent {
+    struct strevent *se_next;   /* next event for this stream or NULL*/
+    struct strevent *se_prev;   /* previous event for this stream or last
+                                 * event if this is the first one*/
+    pid_t se_pid;               /* process to be signaled */
+    short se_evs;               /* events wanted */
+} strevent_t;
+
+typedef
+struct stdata
+{
+        struct stdata    *sd_next ;     /* all stdatas are linked together */
+        struct stdata    *sd_prev ;
+        struct strevent   *sd_siglist;  /* processes to be sent SIGPOLL */
+        int  sd_sigflags;               /* logical OR of all siglist events */
+} stdata_t;
+
+#define I_NREAD _IOR('S',01, int)
+#define I_NREAD_SOLARIS (('S'<<8)|1)
+
+#define I_FLUSH _IO('S',05)
+#define I_FLUSH_SOLARIS (('S'<<8)|5)
+#define FLUSHR  1                       /* flush read queue */
+#define FLUSHW  2                       /* flush write queue */
+#define FLUSHRW 3                       /* flush both queues */
+
+#define I_SETSIG _IO('S',011)
+#define I_SETSIG_SOLARIS (('S'<<8)|11)
+#define S_INPUT         0x01
+#define S_HIPRI         0x02           
+#define S_OUTPUT        0x04           
+#define S_MSG           0x08           
+#define S_ERROR         0x0010         
+#define S_HANGUP        0x0020         
+#define S_RDNORM        0x0040         
+#define S_WRNORM        S_OUTPUT
+#define S_RDBAND        0x0080         
+#define S_WRBAND        0x0100         
+#define S_BANDURG       0x0200         
+#define S_ALL           0x03FF
+
+#define I_GETSIG _IOR('S',012,int)
+#define I_GETSIG_SOLARIS (('S'<<8)|12)
 #endif

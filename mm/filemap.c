@@ -172,10 +172,8 @@ static inline int shrink_one_page(struct page *page, int gfp_mask)
 				delete_from_swap_cache(page);
 				return 1;
 			}
-			if (test_and_clear_bit(PG_referenced, &page->flags)) {
-				touch_page(page);
+			if (test_and_clear_bit(PG_referenced, &page->flags))
 				break;
-			}
 			if (pgcache_under_min())
 				break;
 			remove_inode_page(page);
@@ -209,8 +207,8 @@ int shrink_mmap(int priority, int gfp_mask)
 	struct page * page;
 	int count_max, count_min;
 
-	count_max = (limit<<2) >> (priority>>1);
-	count_min = (limit<<2) >> (priority);
+	count_max = (limit<<1) >> (priority>>1);
+	count_min = (limit<<1) >> (priority);
 
 	page = mem_map + clock;
 	do {

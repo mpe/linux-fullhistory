@@ -14,6 +14,7 @@
 #define _AMD7930_H_
 
 #include <linux/types.h>
+#include <linux/version.h>
 
 /* Register interface presented to the CPU by the amd7930. */
 struct amd7930

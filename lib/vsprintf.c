@@ -290,10 +290,9 @@ int vsprintf(char *buf, const char *fmt, va_list args)
 		if (qualifier == 'l')
 			num = va_arg(args, unsigned long);
 		else if (qualifier == 'h') {
+			num = (unsigned short) va_arg(args, int);
 			if (flags & SIGN)
-				num = va_arg(args, short);
-			else
-				num = va_arg(args, unsigned short);
+				num = (short) num;
 		} else if (flags & SIGN)
 			num = va_arg(args, int);
 		else

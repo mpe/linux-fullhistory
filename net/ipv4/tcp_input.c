@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_input.c,v 1.140 1998/11/12 06:45:15 davem Exp $
+ * Version:	$Id: tcp_input.c,v 1.141 1998/11/18 02:12:07 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -1978,8 +1978,27 @@ int tcp_rcv_state_process(struct sock *sk, struct sk_buff *skb,
 	struct tcp_opt *tp = &(sk->tp_pinfo.af_tcp);
 	int queued = 0;
 
-	/* state == CLOSED, hash lookup always fails, so no worries. -DaveM */
 	switch (sk->state) {
+	case TCP_CLOSE:
+		/* When state == CLOSED, hash lookup always fails.
+		 *
+		 * But, there is a back door, the backlog queue.
+		 * If we have a sequence of packets in the backlog
+		 * during __release_sock() which have a sequence such
+		 * that:
+		 *	packet X	causes entry to TCP_CLOSE state
+		 *	...
+		 *	packet X + N	has FIN bit set
+		 *
+		 * We report a (luckily) harmless error in this case.
+		 * The issue is that backlog queue processing bypasses
+		 * any hash lookups (we know which socket packets are for).
+		 * The correct behavior here is what 2.0.x did, since
+		 * a TCP_CLOSE socket does not exist.  Drop the frame
+		 * and send a RST back to the other end.
+		 */
+		return 1;
+
 	case TCP_LISTEN:
 		/* These use the socket TOS.. 
 		 * might want to be the received TOS 

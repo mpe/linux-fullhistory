@@ -1758,7 +1758,7 @@ int init_module(void) {
 
 void cleanup_module( void)
 {
-    struct gendisk * prev_sdgd;
+    struct gendisk ** prev_sdgd_link;
     struct gendisk * sdgd;
     int i;
     int removed = 0;
@@ -1778,16 +1778,20 @@ void cleanup_module( void)
 	scsi_init_free((char *) sd_hardsizes, sd_template.dev_max * sizeof(int));
 	scsi_init_free((char *) sd,
 		       (sd_template.dev_max << 4) * sizeof(struct hd_struct));
+
 	/*
 	 * Now remove sd_gendisks from the linked list
 	 */
-
-	for (sdgd = gendisk_head; sdgd; sdgd = sdgd->next)
-	{
-	    if (sdgd->next >= sd_gendisks && sdgd->next <= LAST_SD_GENDISK.max_nr)
-	    	    removed++, sdgd->next = sdgd->next->next;
-	    else sdgd = sdgd->next;
+	prev_sdgd_link = &gendisk_head;
+	while ((sdgd = *prev_sdgd_link) != NULL) {
+	    if (sdgd >= sd_gendisks && sdgd <= &LAST_SD_GENDISK) {
+		removed++;
+		*prev_sdgd_link = sdgd->next;
+		continue;
+	    }
+	    prev_sdgd_link = &sdgd->next;
 	}
+
 	if (removed != N_USED_SD_MAJORS)
 	    printk("%s %d sd_gendisks in disk chain",
 		removed > N_USED_SD_MAJORS ? "total" : "just", removed);

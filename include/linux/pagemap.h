@@ -83,7 +83,6 @@ static inline void remove_page_from_hash_queue(struct page * page)
 static inline void __add_page_to_hash_queue(struct page * page, struct page **p)
 {
 	page_cache_size++;
-	page->age = PAGE_AGE_VALUE;
 	if((page->next_hash = *p) != NULL)
 		(*p)->pprev_hash = &page->next_hash;
 	*p = page;

@@ -94,32 +94,6 @@ static inline int AGE_CLUSTER_SIZE(int resources)
 		return n;
 }
 
-static inline void touch_page(struct page *page)
-{
-	if (page->age < (MAX_PAGE_AGE - PAGE_ADVANCE))
-		page->age += PAGE_ADVANCE;
-	else
-		page->age = MAX_PAGE_AGE;
-}
-
-static inline void age_page(struct page *page)
-{
-	if (page->age > PAGE_DECLINE)
-		page->age -= PAGE_DECLINE;
-	else
-		page->age = 0;
-}
-
-static inline int age_of(unsigned long addr)
-{
-	return mem_map[MAP_NR(addr)].age;
-}
-
-static inline void set_page_new(unsigned long addr)
-{
-	mem_map[MAP_NR(addr)].age = PAGE_INITIAL_AGE;
-}
-
 #endif /* __KERNEL */
 
 #endif /* _LINUX_SWAPCTL_H */

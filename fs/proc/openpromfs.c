@@ -1,4 +1,4 @@
-/* $Id: openpromfs.c,v 1.31 1998/08/26 10:32:19 davem Exp $
+/* $Id: openpromfs.c,v 1.32 1998/11/18 06:15:20 davem Exp $
  * openpromfs.c: /proc/openprom handling routines
  *
  * Copyright (C) 1996-1998 Jakub Jelinek  (jj@sunsite.mff.cuni.cz)
@@ -822,6 +822,10 @@ static int openpromfs_lookup(struct inode * dir, struct dentry *dentry)
 		inode->i_rdev = d->rdev;
 		break;
 	}		
+
+	inode->i_gid = 0;
+	inode->i_uid = 0;
+
 	d_add(dentry, inode);
 	return 0;
 }

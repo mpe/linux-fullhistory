@@ -1,4 +1,4 @@
-/* $Id: parport_ax.c,v 1.13 1998/10/26 20:01:59 davem Exp $
+/* $Id: parport_ax.c,v 1.14 1998/11/16 04:48:02 davem Exp $
  * Parallel-port routines for Sun Ultra/AX architecture
  * 
  * Author: Eddie C. Dost <ecd@skynet.be>

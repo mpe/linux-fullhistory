@@ -273,6 +273,7 @@ static int do_acct_process(long exitcode, struct file *file)
 	struct acct ac;
 	mm_segment_t fs;
 	unsigned long vsize;
+	struct inode *inode;
 
 	/*
 	 * First check to see if there is enough free_space to continue
@@ -336,8 +337,11 @@ static int do_acct_process(long exitcode, struct file *file)
          */
 	fs = get_fs();
 	set_fs(KERNEL_DS);
+	inode = file->f_dentry->d_inode;
+	down(&inode->i_sem);
 	file->f_op->write(file, (char *)&ac,
 			       sizeof(struct acct), &file->f_pos);
+	up(&inode->i_sem);
 	set_fs(fs);
 	fput(file);
 	return 0;

@@ -231,7 +231,6 @@ do { unsigned long size = 1 << high; \
 		map += size; \
 	} \
 	atomic_set(&map->count, 1); \
-	map->age = PAGE_INITIAL_AGE; \
 } while (0)
 
 unsigned long __get_free_pages(int gfp_mask, unsigned long order)

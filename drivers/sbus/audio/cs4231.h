@@ -49,10 +49,13 @@ struct cs4231_chip {
   volatile __u8 * output_ptr;
   volatile unsigned long output_size;
   volatile __u32 * output_dma_handle, * output_next_dma_handle;
+  volatile unsigned long output_dma_size, output_next_dma_size;
 
   /* Current record buffer. */
   volatile __u8 * input_ptr;
   volatile unsigned long input_size;
+  volatile __u32 * input_dma_handle, * input_next_dma_handle;
+  volatile unsigned long input_dma_size, input_next_dma_size;
 
   /* Number of buffers in the pipe. */
   volatile unsigned long playing_count;
