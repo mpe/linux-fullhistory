@@ -30,7 +30,7 @@ extern void get_sectorsize(int);
 #define IOCTL_RETRIES 3
 /* The CDROM is fairly slow, so we need a little extra time */
 /* In fact, it is very slow if it has to spin up first */
-#define IOCTL_TIMEOUT 3000
+#define IOCTL_TIMEOUT 30*HZ
 
 static void sr_ioctl_done(Scsi_Cmnd * SCpnt)
 {
@@ -51,11 +51,15 @@ static void sr_ioctl_done(Scsi_Cmnd * SCpnt)
 int sr_do_ioctl(int target, unsigned char * sr_cmd, void * buffer, unsigned buflength, int quiet)
 {
     Scsi_Cmnd * SCpnt;
+    Scsi_Device * SDev;
     int result, err = 0, retries = 0;
 
+    SDev  = scsi_CDs[target].device;
     SCpnt = scsi_allocate_device(NULL, scsi_CDs[target].device, 1);
 
 retry:
+    if( !scsi_block_when_processing_errors(SDev) )
+        return -ENODEV;
     {
 	struct semaphore sem = MUTEX_LOCKED;
 	SCpnt->request.sem = &sem;
@@ -69,7 +73,7 @@ retry:
     result = SCpnt->result;
     
     /* Minimal error checking.  Ignore cases we know about, and report the rest. */
-    if(driver_byte(result) != 0)
+    if(driver_byte(result) != 0) {
 	switch(SCpnt->sense_buffer[2] & 0xf) {
 	case UNIT_ATTENTION:
 	    scsi_CDs[target].device->changed = 1;
@@ -86,9 +90,7 @@ retry:
                     printk(KERN_INFO "sr%d: CDROM not ready yet.\n", target);
 		if (retries++ < 10) {
 		    /* sleep 2 sec and try again */
-                    current->state = TASK_INTERRUPTIBLE;
-                    current->timeout = jiffies + 200;
-                    schedule ();
+		    scsi_sleep(2*HZ);
                     goto retry;
 		} else {
 		    /* 20 secs are enouth? */
@@ -123,7 +125,8 @@ retry:
 	    print_command(sr_cmd);
 	    print_sense("sr", SCpnt);
             err = -EIO;
-	};
+	}
+    }
     
     result = SCpnt->result;
     /* Wake up a process waiting for device*/
@@ -279,23 +282,10 @@ int sr_select_speed(struct cdrom_device_info *cdi, int speed)
 int sr_audio_ioctl(struct cdrom_device_info *cdi, unsigned int cmd, void* arg)
 {
     u_char  sr_cmd[10];    
-    Scsi_Device * SDev;
     int result, target;
     
     target = MINOR(cdi->dev);
     
-    SDev = scsi_CDs[target].device;
-    /*
-     * If we are in the middle of error recovery, don't let anyone
-     * else try and use this device.  Also, if error recovery fails, it
-     * may try and take the device offline, in which case all further
-     * access to the device is prohibited.
-     */
-    if( !scsi_block_when_processing_errors(SDev) )
-      {
-        return -ENODEV;
-      }
-
     switch (cmd) 
     {
 	/* Sun-compatible */
@@ -718,22 +708,9 @@ int sr_dev_ioctl(struct cdrom_device_info *cdi,
                  unsigned int cmd, unsigned long arg)
 {
     int target, err;
-    Scsi_Device * SDev;
     
     target = MINOR(cdi->dev);
     
-    SDev = scsi_CDs[target].device;
-    /*
-     * If we are in the middle of error recovery, don't let anyone
-     * else try and use this device.  Also, if error recovery fails, it
-     * may try and take the device offline, in which case all further
-     * access to the device is prohibited.
-     */
-    if( !scsi_block_when_processing_errors(SDev) )
-      {
-        return -ENODEV;
-      }
-
     switch (cmd) {
     case CDROMREADMODE1:
     case CDROMREADMODE2:

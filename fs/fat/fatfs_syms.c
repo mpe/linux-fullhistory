@@ -11,6 +11,7 @@
 
 #include <linux/mm.h>
 #include <linux/msdos_fs.h>
+#include <linux/fat_cvf.h>
 
 #include "msbuffer.h"
 #include "tables.h"
@@ -47,6 +48,11 @@ EXPORT_SYMBOL(fat_truncate);
 EXPORT_SYMBOL(fat_uni2esc);
 EXPORT_SYMBOL(fat_unlock_creation);
 EXPORT_SYMBOL(fat_write_inode);
+EXPORT_SYMBOL(register_cvf_format);
+EXPORT_SYMBOL(unregister_cvf_format);
+EXPORT_SYMBOL(fat_get_cluster);
+EXPORT_SYMBOL(lock_fat);
+EXPORT_SYMBOL(unlock_fat);
 
 int init_fat_fs(void)
 {

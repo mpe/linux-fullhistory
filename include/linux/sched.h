@@ -179,17 +179,18 @@ struct signal_struct {
 struct task_struct {
 /* these are hardcoded - don't touch */
 	volatile long state;	/* -1 unrunnable, 0 runnable, >0 stopped */
-	long counter;
-	long priority;
 	unsigned long flags;	/* per process flags, defined below */
 	int sigpending;
-	long debugreg[8];  /* Hardware debugging registers */
-	struct exec_domain *exec_domain;
-/* various fields */
 	mm_segment_t addr_limit;	/* thread address space:
 					 	0-0xBFFFFFFF for user-thead
 						0-0xFFFFFFFF for kernel-thread
 					 */
+	struct exec_domain *exec_domain;
+
+/* various fields */
+	long debugreg[8];  /* Hardware debugging registers */
+	long counter;
+	long priority;
 	struct linux_binfmt *binfmt;
 	struct task_struct *next_task, *prev_task;
 	struct task_struct *next_run,  *prev_run;
@@ -311,10 +312,9 @@ struct task_struct {
  * your own risk!. Base=0, limit=0x1fffff (=2MB)
  */
 #define INIT_TASK \
-/* state etc */	{ 0,DEF_PRIORITY,DEF_PRIORITY,0,0, \
+/* state etc */	{ 0,0,0,KERNEL_DS,&default_exec_domain, \
 /* debugregs */ { 0, },            \
-/* exec domain */&default_exec_domain, \
-/* mm_seg */	KERNEL_DS, \
+/* counter */	DEF_PRIORITY,DEF_PRIORITY, \
 /* binfmt */	NULL, \
 /* schedlink */	&init_task,&init_task, &init_task, &init_task, \
 /* ec,brk... */	0,0,0,0,0,0, \

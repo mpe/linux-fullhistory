@@ -244,6 +244,7 @@ struct proc_dir_entry {
 			 int count, int *eof, void *data);
 	int (*write_proc)(struct file *file, const char *buffer,
 			  unsigned long count, void *data);
+	int (*readlink_proc)(struct proc_dir_entry *de, char *page);
 	unsigned int count;	/* use count */
 	int deleted;		/* delete flag */
 };

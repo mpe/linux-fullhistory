@@ -65,7 +65,7 @@ extern int	affs_unlink(struct inode *dir, struct dentry *dentry);
 extern int	affs_create(struct inode *dir, struct dentry *dentry, int mode);
 extern int	affs_mkdir(struct inode *dir, struct dentry *dentry, int mode);
 extern int	affs_rmdir(struct inode *dir, struct dentry *dentry);
-extern int	affs_link(struct inode *oldinode, struct inode *dir,
+extern int	affs_link(struct dentry *olddentry, struct inode *dir,
 			  struct dentry *dentry);
 extern int	affs_symlink(struct inode *dir, struct dentry *dentry,
 			     const char *symname);
@@ -78,7 +78,7 @@ extern struct buffer_head	*affs_bread(kdev_t dev, int block, int size);
 extern void			 affs_brelse(struct buffer_head *buf);
 extern unsigned long		 affs_parent_ino(struct inode *dir);
 extern struct inode		*affs_new_inode(const struct inode *dir);
-extern int			 affs_notify_change(struct inode *inode, struct iattr *attr);
+extern int			 affs_notify_change(struct dentry *dentry, struct iattr *attr);
 extern int			 affs_add_entry(struct inode *dir, struct inode *link,
 					  struct inode *inode, struct dentry *dentry, s32 type);
 extern void			 affs_put_inode(struct inode *inode);
@@ -106,5 +106,8 @@ extern struct inode_operations	 affs_dir_inode_operations;
 extern struct inode_operations	 affs_symlink_inode_operations;
 extern struct inode_operations	 affs_chrdev_inode_operations;
 extern struct inode_operations	 affs_blkdev_inode_operations;
+
+extern struct dentry_operations	 affs_dentry_operations;
+extern struct dentry_operations	 affs_dentry_operations_intl;
 
 #endif

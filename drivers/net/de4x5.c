@@ -364,11 +364,16 @@
 			  Added generic MII PHY functionality to deal with
 			   newer PHY chips.
 			  Fix the mess in 2.1.67.
+      0.532   5-Jan-98    Fix bug in mii_get_phy() reported by 
+                           <redhat@cococo.net>.
+                          Fix bug in pci_probe() for 64 bit systems reported
+			   by <belliott@accessone.com>.
+      0.533   9-Jan-98    Fix more 64 bit bugs reported by <jal@cs.brown.edu>.
 
     =========================================================================
 */
 
-static const char *version = "de4x5.c:T0.531 1997/12/21 davies@maniac.ultranet.com\n";
+static const char *version = "de4x5.c:V0.533 1998/1/9 davies@maniac.ultranet.com\n";
 
 #include <linux/module.h>
 
@@ -763,7 +768,7 @@ struct de4x5_private {
     struct {
 	void *priv;                         /* Original kmalloc'd mem addr  */
 	void *buf;                          /* Original kmalloc'd mem addr  */
-	int lock;                           /* Lock the cache accesses      */
+	u_long lock;                        /* Lock the cache accesses      */
 	s32 csr0;                           /* Saved Bus Mode Register      */
 	s32 csr6;                           /* Saved Operating Mode Reg.    */
 	s32 csr7;                           /* Saved IRQ Mask Register      */
@@ -2076,8 +2081,8 @@ pci_probe(struct device *dev, u_long ioaddr))
 {
     u_char pb, pbus, dev_num, dnum, dev_fn, timer;
     u_short dev_id, vendor, index, status;
-    u_int irq = 0, device, class = DE4X5_CLASS_CODE;
-    u_long iobase;
+    u_int tmp, irq = 0, device, class = DE4X5_CLASS_CODE;
+    u_long iobase = 0;                     /* Clear upper 32 bits in Alphas */
     struct bus_type *lp = &bus;
 
     if (lastPCI == NO_MORE_PCI) return;
@@ -2137,8 +2142,8 @@ pci_probe(struct device *dev, u_long ioaddr))
 
 	    /* Get the board I/O address (64 bits on sparc64) */
 #ifndef __sparc_v9__
-	    pcibios_read_config_dword(pb, PCI_DEVICE, PCI_BASE_ADDRESS_0, 
-				                               (int *)&iobase);
+	    pcibios_read_config_dword(pb, PCI_DEVICE, PCI_BASE_ADDRESS_0, &tmp);
+	    iobase = tmp;
 #else
 	    iobase = pdev->base_address[0];
 #endif
@@ -2211,8 +2216,8 @@ srom_search(int index))
 {
     u_char pb, dev_fn;
     u_short dev_id, dev_num, vendor, status;
-    u_int irq = 0, device, class = DE4X5_CLASS_CODE;
-    u_long iobase;
+    u_int tmp, irq = 0, device, class = DE4X5_CLASS_CODE;
+    u_long iobase = 0;                     /* Clear upper 32 bits in Alphas */
     int i, j;
     struct bus_type *lp = &bus;
 
@@ -2250,8 +2255,8 @@ srom_search(int index))
 
 	/* Get the board I/O address (64 bits on sparc64) */
 #ifndef __sparc_v9__
-	pcibios_read_config_dword(pb, PCI_DEVICE, PCI_BASE_ADDRESS_0, 
-				                               (int *)&iobase);
+	pcibios_read_config_dword(pb, PCI_DEVICE, PCI_BASE_ADDRESS_0, &tmp);
+	iobase = tmp;
 #else
 	iobase = pdev->base_address[0];
 #endif
@@ -4985,7 +4990,9 @@ mii_get_phy(struct device *dev)
 	    lp->phy[k].spd.reg = GENERIC_REG;      /* ANLPA register         */
 	    lp->phy[k].spd.mask = GENERIC_MASK;    /* 100Mb/s technologies   */
 	    lp->phy[k].spd.value = GENERIC_VALUE;  /* TX & T4, H/F Duplex    */
-	    printk("%s: Found MII device not currently supported. Please mail the following dump to\nthe author:\n", dev->name);
+	    lp->mii_cnt++;
+	    lp->active++;
+	    printk("%s: Using generic MII device control. If the board doesn't operate, \nplease mail the following dump to the author:\n", dev->name);
 	    j = de4x5_debug;
 	    de4x5_debug |= DEBUG_MII;
 	    de4x5_dbg_mii(dev, k);

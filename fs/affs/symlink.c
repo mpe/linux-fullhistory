@@ -44,7 +44,7 @@ struct inode_operations affs_symlink_inode_operations = {
 };
 
 static int
-affs_readlink(struct inode *dentry, char *buffer, int buflen)
+affs_readlink(struct dentry *dentry, char *buffer, int buflen)
 {
 	struct inode *inode = dentry->d_inode;
 	struct buffer_head	*bh;

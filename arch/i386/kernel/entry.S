@@ -71,13 +71,10 @@ VM_MASK		= 0x00020000
  * these are offsets into the task-struct.
  */
 state		=  0
-counter		=  4
-priority	=  8
-flags		= 12
-sigpending	= 16
-dbgreg6		= 44
-dbgreg7		= 48
-exec_domain	= 52
+flags		=  4
+sigpending	=  8
+addr_limit	= 12
+exec_domain	= 16
 
 ENOSYS = 38
 

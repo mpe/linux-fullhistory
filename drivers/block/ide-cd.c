@@ -2772,6 +2772,17 @@ int ide_cdrom_probe_capabilities (ide_drive_t *drive)
 	return nslots;
 }
 
+static void ide_cdrom_add_settings(ide_drive_t *drive)
+{
+	int major = HWIF(drive)->major;
+	int minor = drive->select.b.unit << PARTN_BITS;
+
+	ide_add_setting(drive,	"breada_readahead",	SETTING_RW,					BLKRAGET,		BLKRASET,		TYPE_INT,	0,	255,				1,	2,	&read_ahead[major],		NULL);
+	ide_add_setting(drive,	"file_readahead",	SETTING_RW,					BLKFRAGET,		BLKFRASET,		TYPE_INTA,	0,	INT_MAX,			1,	1024,	&max_readahead[major][minor],	NULL);
+	ide_add_setting(drive,	"max_kb_per_request",	SETTING_RW,					BLKSECTGET,		BLKSECTSET,		TYPE_INTA,	1,	255,				1,	2,	&max_sectors[major][minor],	NULL);
+	ide_add_setting(drive,	"dsc_overlap",		SETTING_RW,					-1,			-1,			TYPE_BYTE,	0,	1,				1,	1,	&drive->dsc_overlap,		NULL);
+}
+
 static
 int ide_cdrom_setup (ide_drive_t *drive)
 {
@@ -2884,6 +2895,7 @@ int ide_cdrom_setup (ide_drive_t *drive)
 		info->devinfo.handle = NULL;
 		return 1;
 	}
+	ide_cdrom_add_settings(drive);
 	return 0;
 }
 
@@ -2942,13 +2954,6 @@ int ide_cdrom_cleanup(ide_drive_t *drive)
 	return 0;
 }
 
-int ide_cdrom_init (void);
-static ide_module_t ide_cdrom_module = {
-	IDE_DRIVER_MODULE,
-	ide_cdrom_init,
-	NULL
-};
-
 static ide_driver_t ide_cdrom_driver = {
 	"ide-cdrom",			/* name */
 	IDECD_VERSION,			/* version */
@@ -2969,6 +2974,13 @@ static ide_driver_t ide_cdrom_driver = {
 	NULL				/* proc */
 };
 
+int ide_cdrom_init (void);
+static ide_module_t ide_cdrom_module = {
+	IDE_DRIVER_MODULE,
+	ide_cdrom_init,
+	&ide_cdrom_driver,
+	NULL
+};
 
 #ifdef MODULE
 int init_module (void)
@@ -2981,7 +2993,7 @@ void cleanup_module(void)
 	ide_drive_t *drive;
 	int failed = 0;
 
-	while ((drive = ide_scan_devices (ide_cdrom, &ide_cdrom_driver, failed)) != NULL)
+	while ((drive = ide_scan_devices (ide_cdrom, ide_cdrom_driver.name, &ide_cdrom_driver, failed)) != NULL)
 		if (ide_cdrom_cleanup (drive)) {
 			printk ("%s: cleanup_module() called while still busy\n", drive->name);
 			failed++;
@@ -2997,7 +3009,7 @@ int ide_cdrom_init (void)
 	int failed = 0;
 
 	MOD_INC_USE_COUNT;
-	while ((drive = ide_scan_devices (ide_cdrom, NULL, failed++)) != NULL) {
+	while ((drive = ide_scan_devices (ide_cdrom, ide_cdrom_driver.name, NULL, failed++)) != NULL) {
 		info = (struct cdrom_info *) kmalloc (sizeof (struct cdrom_info), GFP_KERNEL);
 		if (info == NULL) {
 			printk ("%s: Can't allocate a cdrom structure\n", drive->name);

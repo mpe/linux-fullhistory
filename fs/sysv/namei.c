@@ -571,9 +571,10 @@ int sysv_symlink(struct inode * dir, struct dentry * dentry,
 	return 0;
 }
 
-int sysv_link(struct inode * oldinode, struct inode * dir, 
+int sysv_link(struct dentry * old_dentry, struct inode * dir, 
 	      struct dentry * dentry)
 {
+	struct inode *oldinode = old_dentry->d_inode;
 	int error;
 	struct sysv_dir_entry * de;
 	struct buffer_head * bh;

@@ -367,7 +367,7 @@ extern int sysv_mkdir(struct inode * dir, struct dentry * dentry, int mode);
 extern int sysv_rmdir(struct inode * dir, struct dentry * dentry);
 extern int sysv_unlink(struct inode * dir, struct dentry * dentry);
 extern int sysv_symlink(struct inode * inode, struct dentry * dentry, const char * symname);
-extern int sysv_link(struct inode * oldinode, struct inode * dir, struct dentry * dentry);
+extern int sysv_link(struct dentry * old_dentry, struct inode * dir, struct dentry * dentry);
 extern int sysv_mknod(struct inode * dir, struct dentry * dentry, int mode, int rdev);
 extern int sysv_rename(struct inode * old_dir, struct dentry * old_dentry,
 		       struct inode * new_dir, struct dentry * new_dentry);
@@ -390,7 +390,7 @@ extern struct super_block *sysv_read_super(struct super_block *,void *,int);
 extern int init_sysv_fs(void);
 extern void sysv_write_super(struct super_block *);
 extern void sysv_read_inode(struct inode *);
-extern int sysv_notify_change(struct inode *, struct iattr *);
+extern int sysv_notify_change(struct dentry *, struct iattr *);
 extern void sysv_write_inode(struct inode *);
 extern void sysv_put_inode(struct inode *);
 extern int sysv_statfs(struct super_block *, struct statfs *, int);

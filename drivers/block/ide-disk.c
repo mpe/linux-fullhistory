@@ -1,5 +1,5 @@
 /*
- *  linux/drivers/block/ide-disk.c	Version 1.03  Nov  30, 1997
+ *  linux/drivers/block/ide-disk.c	Version 1.04  Jan   7, 1998
  *
  *  Copyright (C) 1994-1998  Linus Torvalds & authors (see below)
  */
@@ -13,11 +13,12 @@
  * Version 1.00		move disk only code from ide.c to ide-disk.c
  *			support optional byte-swapping of all data
  * Version 1.01		fix previous byte-swapping code
- * Verions 1.02		remove ", LBA" from drive identification msgs
- * Verions 1.03		fix display of id->buf_size for big-endian
+ * Version 1.02		remove ", LBA" from drive identification msgs
+ * Version 1.03		fix display of id->buf_size for big-endian
+ * Version 1.04		add /proc configurable settings and S.M.A.R.T support
  */
 
-#define IDEDISK_VERSION	"1.03"
+#define IDEDISK_VERSION	"1.04"
 
 #undef REALLY_SLOW_IO		/* most systems can safely undef this */
 
@@ -372,17 +373,13 @@ static int idedisk_open (struct inode *inode, struct file *filp, ide_drive_t *dr
 {
 	MOD_INC_USE_COUNT;
 	if (drive->removable && drive->usage == 1) {
-		byte door_lock[] = {WIN_DOORLOCK,0,0,0};
-		struct request rq;
 		check_disk_change(inode->i_rdev);
-		ide_init_drive_cmd (&rq);
-		rq.buffer = door_lock;
 		/*
 		 * Ignore the return code from door_lock,
 		 * since the open() has already succeeded,
 		 * and the door_lock is irrelevant at this point.
 		 */
-		(void) ide_do_drive_cmd(drive, &rq, ide_wait);
+		(void) ide_wait_cmd(drive, WIN_DOORLOCK, 0, 0, 0, NULL);
 	}
 	return 0;
 }
@@ -390,12 +387,8 @@ static int idedisk_open (struct inode *inode, struct file *filp, ide_drive_t *dr
 static void idedisk_release (struct inode *inode, struct file *filp, ide_drive_t *drive)
 {
 	if (drive->removable && !drive->usage) {
-		byte door_unlock[] = {WIN_DOORUNLOCK,0,0,0};
-		struct request rq;
 		invalidate_buffers(inode->i_rdev);
-		ide_init_drive_cmd (&rq);
-		rq.buffer = door_unlock;
-		(void) ide_do_drive_cmd(drive, &rq, ide_wait);
+		(void) ide_wait_cmd(drive, WIN_DOORUNLOCK, 0, 0, 0, NULL);
 	}
 	MOD_DEC_USE_COUNT;
 }
@@ -481,18 +474,106 @@ static int proc_idedisk_read_cache
 	PROC_IDE_READ_RETURN(page,start,off,count,eof,len);
 }
 
+static int smart_enable(ide_drive_t *drive)
+{
+	return ide_wait_cmd(drive, WIN_SMART, 0, SMART_ENABLE, 0, NULL);
+}
+
+static int get_smart_values(ide_drive_t *drive, byte *buf)
+{
+	(void) smart_enable(drive);
+	return ide_wait_cmd(drive, WIN_SMART, 0, SMART_READ_VALUES, 1, buf);
+}
+
+static int get_smart_thresholds(ide_drive_t *drive, byte *buf)
+{
+	(void) smart_enable(drive);
+	return ide_wait_cmd(drive, WIN_SMART, 0, SMART_READ_THRESHOLDS, 1, buf);
+}
+
+static int proc_idedisk_read_smart_thresholds
+	(char *page, char **start, off_t off, int count, int *eof, void *data)
+{
+	ide_drive_t	*drive = (ide_drive_t *)data;
+	int		len = 0, i = 0;
+
+	if (!get_smart_thresholds(drive, page)) {
+		unsigned short *val = ((unsigned short *)page) + 2;
+		char *out = ((char *)val) + (SECTOR_WORDS * 4);
+		page = out;
+		do {
+			out += sprintf(out, "%04x%c", le16_to_cpu(*val), (++i & 7) ? ' ' : '\n');
+			val += 1;
+		} while (i < (SECTOR_WORDS * 2));
+		len = out - page;
+	}
+	PROC_IDE_READ_RETURN(page,start,off,count,eof,len);
+}
+
+static int proc_idedisk_read_smart_values
+	(char *page, char **start, off_t off, int count, int *eof, void *data)
+{
+	ide_drive_t	*drive = (ide_drive_t *)data;
+	int		len = 0, i = 0;
+
+	if (!get_smart_values(drive, page)) {
+		unsigned short *val = ((unsigned short *)page) + 2;
+		char *out = ((char *)val) + (SECTOR_WORDS * 4);
+		page = out;
+		do {
+			out += sprintf(out, "%04x%c", le16_to_cpu(*val), (++i & 7) ? ' ' : '\n');
+			val += 1;
+		} while (i < (SECTOR_WORDS * 2));
+		len = out - page;
+	}
+	PROC_IDE_READ_RETURN(page,start,off,count,eof,len);
+}
+
 static ide_proc_entry_t idedisk_proc[] = {
 	{ "cache", proc_idedisk_read_cache, NULL },
 	{ "geometry", proc_ide_read_geometry, NULL },
+	{ "smart_values", proc_idedisk_read_smart_values, NULL },
+	{ "smart_thresholds", proc_idedisk_read_smart_thresholds, NULL },
 	{ NULL, NULL, NULL }
 };
 
-int idedisk_init (void);
-static ide_module_t idedisk_module = {
-	IDE_DRIVER_MODULE,
-	idedisk_init,
-	NULL
-};
+static int set_multcount(ide_drive_t *drive, int arg)
+{
+	struct request rq;
+
+	if (drive->special.b.set_multmode)
+		return -EBUSY;
+	ide_init_drive_cmd (&rq);
+	drive->mult_req = arg;
+	drive->special.b.set_multmode = 1;
+	(void) ide_do_drive_cmd (drive, &rq, ide_wait);
+	return (drive->mult_count == arg) ? 0 : -EIO;
+}
+
+static int set_nowerr(ide_drive_t *drive, int arg)
+{
+	drive->nowerr = arg;
+	drive->bad_wstat = arg ? BAD_R_STAT : BAD_W_STAT;
+	return 0;
+}
+
+static void idedisk_add_settings(ide_drive_t *drive)
+{
+	struct hd_driveid *id = drive->id;
+	int major = HWIF(drive)->major;
+	int minor = drive->select.b.unit << PARTN_BITS;
+
+	ide_add_setting(drive,	"bios_cyl",		SETTING_RW,					-1,			-1,			TYPE_SHORT,	0,	1023,				1,	1,	&drive->bios_cyl,		NULL);
+	ide_add_setting(drive,	"bios_head",		SETTING_RW,					-1,			-1,			TYPE_BYTE,	0,	255,				1,	1,	&drive->bios_head,		NULL);
+	ide_add_setting(drive,	"bios_sect",		SETTING_RW,					-1,			-1,			TYPE_BYTE,	0,	63,				1,	1,	&drive->bios_sect,		NULL);
+	ide_add_setting(drive,	"bswap",		SETTING_READ,					-1,			-1,			TYPE_BYTE,	0,	1,				1,	1,	&drive->bswap,			NULL);
+	ide_add_setting(drive,	"multcount",		id ? SETTING_RW : SETTING_READ,			HDIO_GET_MULTCOUNT,	HDIO_SET_MULTCOUNT,	TYPE_BYTE,	0,	id ? id->max_multsect : 0,	1,	2,	&drive->mult_count,		set_multcount);
+	ide_add_setting(drive,	"nowerr",		SETTING_RW,					HDIO_GET_NOWERR,	HDIO_SET_NOWERR,	TYPE_BYTE,	0,	1,				1,	1,	&drive->nowerr,			set_nowerr);
+	ide_add_setting(drive,	"breada_readahead",	SETTING_RW,					BLKRAGET,		BLKRASET,		TYPE_INT,	0,	255,				1,	2,	&read_ahead[major],		NULL);
+	ide_add_setting(drive,	"file_readahead",	SETTING_RW,					BLKFRAGET,		BLKFRASET,		TYPE_INTA,	0,	INT_MAX,			1,	1024,	&max_readahead[major][minor],	NULL);
+	ide_add_setting(drive,	"max_kb_per_request",	SETTING_RW,					BLKSECTGET,		BLKSECTSET,		TYPE_INTA,	1,	255,				1,	2,	&max_sectors[major][minor],	NULL);
+
+}
 
 /*
  *	IDE subdriver functions, registered with ide.c
@@ -517,6 +598,14 @@ static ide_driver_t idedisk_driver = {
 	idedisk_proc		/* proc */
 };
 
+int idedisk_init (void);
+static ide_module_t idedisk_module = {
+	IDE_DRIVER_MODULE,
+	idedisk_init,
+	&idedisk_driver,
+	NULL
+};
+
 static int idedisk_cleanup (ide_drive_t *drive)
 {
 	return ide_unregister_subdriver(drive);
@@ -527,6 +616,8 @@ static void idedisk_setup (ide_drive_t *drive)
 	struct hd_driveid *id = drive->id;
 	unsigned long capacity, check;
 	
+	idedisk_add_settings(drive);
+
 	if (id == NULL)
 		return;
 
@@ -615,7 +706,7 @@ int idedisk_init (void)
 	int failed = 0;
 	
 	MOD_INC_USE_COUNT;
-	while ((drive = ide_scan_devices (ide_disk, NULL, failed++)) != NULL) {
+	while ((drive = ide_scan_devices (ide_disk, idedisk_driver.name, NULL, failed++)) != NULL) {
 
 		/* SunDisk drives: ignore "second" drive;   can mess up non-Sun systems!  FIXME */
 		struct hd_driveid *id = drive->id;
@@ -650,7 +741,7 @@ void cleanup_module (void)
 	ide_drive_t *drive;
 	int failed = 0;
 
-	while ((drive = ide_scan_devices (ide_disk, &idedisk_driver, failed)) != NULL)
+	while ((drive = ide_scan_devices (ide_disk, idedisk_driver.name, &idedisk_driver, failed)) != NULL)
 		if (idedisk_cleanup (drive)) {
 			printk (KERN_ERR "%s: cleanup_module() called while still busy\n", drive->name);
 			failed++;

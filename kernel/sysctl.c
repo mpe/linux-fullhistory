@@ -435,12 +435,16 @@ struct ctl_table_header *register_sysctl_table(ctl_table * table,
 	return tmp;
 }
 
-void unregister_sysctl_table(struct ctl_table_header * table)
+/*
+ * Unlink and free a ctl_table.
+ */
+void unregister_sysctl_table(struct ctl_table_header * header)
 {
-	DLIST_DELETE(table, ctl_entry);
+	DLIST_DELETE(header, ctl_entry);
 #ifdef CONFIG_PROC_FS
-	unregister_proc_table(table->ctl_table, &proc_sys_root);
+	unregister_proc_table(header->ctl_table, &proc_sys_root);
 #endif
+	kfree(header);
 }
 
 /*
@@ -457,18 +461,20 @@ static void register_proc_table(ctl_table * table, struct proc_dir_entry *root)
 	mode_t mode;
 	
 	for (; table->ctl_name; table++) {
-		de = 0;
 		/* Can't do anything without a proc name. */
 		if (!table->procname)
 			continue;
 		/* Maybe we can't do anything with it... */
-		if (!table->proc_handler &&
-		    !table->child)
+		if (!table->proc_handler && !table->child) {
+			printk(KERN_WARNING "SYSCTL: Can't register %s\n",
+				table->procname);
 			continue;
+		}
 
 		len = strlen(table->procname);
 		mode = table->mode;
 
+		de = NULL;
 		if (table->proc_handler)
 			mode |= S_IFREG;
 		else {
@@ -495,6 +501,9 @@ static void register_proc_table(ctl_table * table, struct proc_dir_entry *root)
 	}
 }
 
+/*
+ * Unregister a /proc sysctl table and any subdirectories.
+ */
 static void unregister_proc_table(ctl_table * table, struct proc_dir_entry *root)
 {
 	struct proc_dir_entry *de;
@@ -512,8 +521,11 @@ static void unregister_proc_table(ctl_table * table, struct proc_dir_entry *root
 		   entries... */
 		if (!((de->mode & S_IFDIR) && de->subdir)) {
 			proc_unregister(root, de->low_ino);
+			table->de = NULL;
 			kfree(de);
-		}
+		} else
+			printk("unregister_proc_table: %s not empty!\n",
+				table->procname);
 	}
 }
 

@@ -29,11 +29,10 @@
 /*
  * task structure offsets
  */
-#define TASK_STATE	0
-#define TASK_COUNTER	8
-#define TASK_PRIORITY	16
-#define TASK_FLAGS	24
-#define TASK_SIGPENDING	32	
+#define TASK_STATE	 0
+#define TASK_FLAGS	 8
+#define TASK_SIGPENDING	16
+#define TASK_SIZE	24	
 
 /*
  * task flags (must match include/linux/sched.h):

@@ -17,6 +17,7 @@
 #include <linux/stat.h>
 #include <linux/string.h>
 #include <linux/pagemap.h>
+#include <linux/fat_cvf.h>
 
 #include <asm/uaccess.h>
 #include <asm/system.h>
@@ -105,6 +106,40 @@ struct inode_operations fat_file_inode_operations_1024 = {
 	NULL,			/* readlink */
 	NULL,			/* follow_link */
 	NULL,			/* readpage */
+	NULL,			/* writepage */
+	NULL,			/* bmap */
+	fat_truncate,		/* truncate */
+	NULL,			/* permission */
+	NULL			/* smap */
+};
+
+static struct file_operations fat_file_operations_readpage = {
+	NULL,			/* lseek - default */
+	fat_file_read,		/* read */
+	fat_file_write,		/* write */
+	NULL,			/* readdir - bad */
+	NULL,			/* select v2.0.x/poll v2.1.x - default */
+	NULL,			/* ioctl - default */
+	generic_file_mmap,	/* mmap */
+	NULL,			/* no special open is needed */
+	NULL,			/* release */
+	file_fsync		/* fsync */
+};
+
+struct inode_operations fat_file_inode_operations_readpage = {
+	&fat_file_operations_readpage,	/* default file operations */
+	NULL,			/* create */
+	NULL,			/* lookup */
+	NULL,			/* link */
+	NULL,			/* unlink */
+	NULL,			/* symlink */
+	NULL,			/* mkdir */
+	NULL,			/* rmdir */
+	NULL,			/* mknod */
+	NULL,			/* rename */
+	NULL,			/* readlink */
+	NULL,			/* follow_link */
+	fat_readpage,		/* readpage */
 	NULL,			/* writepage */
 	NULL,			/* bmap */
 	fat_truncate,		/* truncate */
@@ -277,6 +312,10 @@ ssize_t fat_file_read(
 	loff_t *ppos)
 {
 	struct inode *inode = filp->f_dentry->d_inode;
+	if(MSDOS_SB(inode->i_sb)->cvf_format)
+          if(MSDOS_SB(inode->i_sb)->cvf_format->cvf_file_read)
+            return MSDOS_SB(inode->i_sb)->cvf_format->cvf_file_read(filp,buf,count,ppos);
+
 	if (!MSDOS_I(inode)->i_binary)
 		return fat_file_read_text(filp, buf, count, ppos);
 	return generic_file_read(filp, buf, count, ppos);
@@ -303,6 +342,10 @@ ssize_t fat_file_write(
 		printk("fat_file_write: inode = NULL\n");
 		return -EINVAL;
 	}
+        if(MSDOS_SB(sb)->cvf_format)
+          if(MSDOS_SB(sb)->cvf_format->cvf_file_write)
+            return MSDOS_SB(sb)->cvf_format->cvf_file_write(filp,buf,count,ppos);
+
 	/* S_ISLNK allows for UMSDOS. Should never happen for normal MSDOS */
 	if (!S_ISREG(inode->i_mode) && !S_ISLNK(inode->i_mode)) {
 		printk("fat_file_write: mode = %07o\n",inode->i_mode);

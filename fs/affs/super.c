@@ -494,7 +494,7 @@ affs_read_super(struct super_block *s,void *data, int silent)
 			if (bb) {
 				if (affs_checksum_block(s->s_blocksize,bb->b_data,NULL,NULL) &&
 				    !(s->s_flags & MS_RDONLY)) {
-					printk(KERN_WARNING "AFFS: Bitmap (%d,key=%lu) invalid - "
+					printk(KERN_WARNING "AFFS: Bitmap (%d,key=%u) invalid - "
 					       "mounting %s read only.\n",mapidx,be32_to_cpu(bm[i]),
 						kdevname(dev));
 					s->s_flags |= MS_RDONLY;
@@ -572,6 +572,8 @@ nobitmap:
 		MOD_DEC_USE_COUNT;
 		return NULL;
 	}
+	s->s_root->d_op = (s->u.affs_sb.s_flags & SF_INTL) ? &affs_dentry_operations_intl
+							   : &affs_dentry_operations;
 
 	/* Record date of last change if the bitmap was truncated and
 	 * create data zones if the volume is writable.

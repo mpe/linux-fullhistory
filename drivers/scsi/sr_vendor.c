@@ -56,8 +56,7 @@
 
 #define VENDOR_NEC             2
 #define VENDOR_TOSHIBA         3
-#define VENDOR_HP_4020         4   /* HP 4xxx writers, others too ?? */
-#define VENDOR_HP_6020         5   /* HP 6020 writers */
+#define VENDOR_WRITER          4   /* pre-scsi3 writers */
 
 #define VENDOR_ID (scsi_CDs[minor].vendor)
 
@@ -72,13 +71,12 @@ sr_vendor_init(int minor)
 
 	/* default */
 	VENDOR_ID = VENDOR_SCSI3;
+	if (scsi_CDs[minor].readcd_known)
+		/* this is true for scsi3/mmc drives - no more checks */
+		return;
 
-	if ((!strncmp(vendor,"HP",2) || !strncmp(vendor,"PHILIPS",7)) &&
-	    scsi_CDs[minor].device->type == TYPE_WORM) {
-		if (!strncmp(model,"CD-Writer 6020",14))
-                    VENDOR_ID = VENDOR_HP_6020;
-                else
-                    VENDOR_ID = VENDOR_HP_4020;
+	if (scsi_CDs[minor].device->type == TYPE_WORM) {
+		VENDOR_ID = VENDOR_WRITER;
 
 	} else if (!strncmp (vendor, "NEC", 3)) {
 		VENDOR_ID = VENDOR_NEC;
@@ -233,16 +231,13 @@ int sr_cd_check(struct cdrom_device_info *cdi)
 			sector -= CD_MSF_OFFSET;
 		break;
 
-	case VENDOR_HP_4020:
-		/* Fallthrough */
-	case VENDOR_HP_6020:
+	case VENDOR_WRITER:
+		memset(cmd,0,12);
 		cmd[0] = READ_TOC;
 		cmd[1] = (scsi_CDs[minor].device->lun << 5);
-		cmd[8] = (VENDOR_ID == VENDOR_HP_4020) ?
-			0x04 : 0x0c;
+		cmd[8] = 0x04;
 		cmd[9] = 0x40;
-		rc = sr_do_ioctl(minor, cmd, buffer,
-		    (VENDOR_ID == VENDOR_HP_4020) ? 0x04 : 0x0c, 0);
+		rc = sr_do_ioctl(minor, cmd, buffer, 0x04, 0);
 		if (rc != 0) {
 			break;
 		}
@@ -252,16 +247,14 @@ int sr_cd_check(struct cdrom_device_info *cdi)
 			break;
 		}
 
- 		if (VENDOR_ID == VENDOR_HP_4020) {
- 		    cmd[0] = READ_TOC; /* Read TOC */
- 		    cmd[1] = (scsi_CDs[minor].device->lun << 5);
- 		    cmd[6] = rc & 0x7f;  /* number of last session */
- 		    cmd[8] = 0x0c;
- 		    cmd[9] = 0x40;
- 		    rc = sr_do_ioctl(minor, cmd, buffer, 12, 0);	
- 		    if (rc != 0) {
- 			    break;
- 		    }
+		cmd[0] = READ_TOC; /* Read TOC */
+		cmd[1] = (scsi_CDs[minor].device->lun << 5);
+		cmd[6] = rc & 0x7f;  /* number of last session */
+		cmd[8] = 0x0c;
+		cmd[9] = 0x40;
+		rc = sr_do_ioctl(minor, cmd, buffer, 12, 0);	
+		if (rc != 0) {
+			break;
 		}
 
 		sector = buffer[11] + (buffer[10] << 8) +

@@ -95,7 +95,7 @@ extern int minix_rmdir(struct inode * dir, struct dentry *dentry);
 extern int minix_unlink(struct inode * dir, struct dentry *dentry);
 extern int minix_symlink(struct inode * inode, struct dentry *dentry,
 	const char * symname);
-extern int minix_link(struct inode * oldinode, struct inode * dir, struct dentry *dentry);
+extern int minix_link(struct dentry * old_dentry, struct inode * dir, struct dentry *dentry);
 extern int minix_mknod(struct inode * dir, struct dentry *dentry, int mode, int rdev);
 extern int minix_rename(struct inode * old_dir, struct dentry *old_dentry,
 			struct inode * new_dir, struct dentry *new_dentry);

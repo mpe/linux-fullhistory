@@ -1,5 +1,5 @@
 /*
- *  linux/drivers/block/ide-proc.c	Version 1.02	December 31, 1997
+ *  linux/drivers/block/ide-proc.c	Version 1.03	January   2, 1998
  *
  *  Copyright (C) 1997-1998	Mark Lord
  */
@@ -38,8 +38,15 @@
  * If there is an error *anywhere* in the string of registers/data
  * then *none* of the writes will be performed.
  *
- * Also useful, "cat /proc/ide0/hda/identify" will issue an IDENTIFY
- * (or PACKET_IDENTIFY) command to /dev/hda, and then dump out the
+ * Drive/Driver settings can be retrieved by reading the drive's
+ * "settings" files.  e.g.    "cat /proc/ide0/hda/settings"
+ * To write a new value "val" into a specific setting "name", use:
+ *   echo "name:val" >/proc/ide/ide0/hda/settings
+ *
+ * Also useful, "cat /proc/ide0/hda/[identify, smart_values,
+ * smart_thresholds, capabilities]" will issue an IDENTIFY /
+ * PACKET_IDENTIFY / SMART_READ_VALUES / SMART_READ_THRESHOLDS /
+ * SENSE CAPABILITIES command to /dev/hda, and then dump out the
  * returned data as 256 16-bit words.  The "hdparm" utility will
  * be updated someday soon to use this mechanism.
  *
@@ -75,6 +82,16 @@ static int ide_getxdigit(char c)
 		digit = c - '0';
 	else if (isxdigit(c))
 		digit = tolower(c) - 'a' + 10;
+	else
+		digit = -1;
+	return digit;
+}
+
+static int ide_getdigit(char c)
+{
+	int digit;
+	if (isdigit(c))
+		digit = c - '0';
 	else
 		digit = -1;
 	return digit;
@@ -237,6 +254,24 @@ parse_error:
 	return xx_xx_parse_error(start, startn, msg);
 }
 
+static int proc_ide_read_drivers
+	(char *page, char **start, off_t off, int count, int *eof, void *data)
+{
+	char		*out = page;
+	int		len;
+	ide_module_t	*p = ide_modules;
+	ide_driver_t	*driver;
+
+	while (p) {
+		driver = (ide_driver_t *) p->info;
+		if (p->type == IDE_DRIVER_MODULE && driver)
+			out += sprintf(out, "%s version %s\n", driver->name, driver->version);
+		p = p->next;
+	}
+	len = out - page;
+	PROC_IDE_READ_RETURN(page,start,off,count,eof,len);
+}
+
 static int proc_ide_read_config
 	(char *page, char **start, off_t off, int count, int *eof, void *data)
 {
@@ -325,22 +360,9 @@ static int proc_ide_read_channel
 	PROC_IDE_READ_RETURN(page,start,off,count,eof,len);
 }
 
-static int proc_ide_get_identify (ide_drive_t *drive, byte *buf)
+static int proc_ide_get_identify(ide_drive_t *drive, byte *buf)
 {
-	struct request rq;
-	byte *end;
-
-	ide_init_drive_cmd(&rq);
-	rq.buffer = buf;
-	*buf++ = (drive->media == ide_disk) ? WIN_IDENTIFY : WIN_PIDENTIFY;
-	*buf++ = 0;
-	*buf++ = 0;
-	*buf++ = 1;
-	end = buf + (SECTOR_WORDS * 4);
-	while (buf != end)
-		*buf++ = 0;	/* pre-zero it, in case identify fails */
-	(void) ide_do_drive_cmd(drive, &rq, ide_wait);
-	return 0;
+	return ide_wait_cmd(drive, (drive->media == ide_disk) ? WIN_IDENTIFY : WIN_PIDENTIFY, 0, 0, 1, buf);
 }
 
 static int proc_ide_read_identify
@@ -366,23 +388,128 @@ static int proc_ide_read_settings
 	(char *page, char **start, off_t off, int count, int *eof, void *data)
 {
 	ide_drive_t	*drive = (ide_drive_t *) data;
-	int		major = HWIF(drive)->major;
-	int		minor = drive->select.b.unit << PARTN_BITS;
+	ide_settings_t	*setting = (ide_settings_t *) drive->settings;
 	char		*out = page;
-	int		len;
+	int		len, rc, mul_factor, div_factor;
 
-	out += sprintf(out,"multcount    %i\n", drive->mult_count);
-	out += sprintf(out,"io_32bit     %i\n", drive->io_32bit);
-	out += sprintf(out,"unmaskirq    %i\n", drive->unmask);
-	out += sprintf(out,"using_dma    %i\n", drive->using_dma);
-	out += sprintf(out,"nowerr       %i\n", drive->bad_wstat == BAD_R_STAT);
-	out += sprintf(out,"keepsettings %i\n", drive->keep_settings);
-	out += sprintf(out,"nice         %i/%i/%i\n", drive->nice0, drive->nice1, drive->nice2);
-	out += sprintf(out,"dsc_overlap  %i\n", drive->dsc_overlap);
-	out += sprintf(out,"max_sectors  %i\n", max_sectors[major][minor]);
-	out += sprintf(out,"readahead    %i\n", max_readahead[major][minor] / 1024);
+	out += sprintf(out, "name\t\t\tvalue\t\tmin\t\tmax\t\tmode\n");
+	out += sprintf(out, "----\t\t\t-----\t\t---\t\t---\t\t----\n");
+	while(setting) {
+		mul_factor = setting->mul_factor;
+		div_factor = setting->div_factor;
+		out += sprintf(out, "%-24s", setting->name);
+		if ((rc = ide_read_setting(drive, setting)) >= 0)
+			out += sprintf(out, "%-16d", rc * mul_factor / div_factor);
+		else
+			out += sprintf(out, "%-16s", "write-only");
+		out += sprintf(out, "%-16d%-16d", (setting->min * mul_factor + div_factor - 1) / div_factor, setting->max * mul_factor / div_factor);
+		if (setting->rw & SETTING_READ)
+			out += sprintf(out, "r");
+		if (setting->rw & SETTING_WRITE)
+			out += sprintf(out, "w");
+		out += sprintf(out, "\n");
+		setting = setting->next;
+	}
 	len = out - page;
 	PROC_IDE_READ_RETURN(page,start,off,count,eof,len);
+}
+
+#define MAX_LEN	30
+
+static int proc_ide_write_settings
+	(struct file *file, const char *buffer, unsigned long count, void *data)
+{
+	ide_drive_t	*drive = (ide_drive_t *) data;
+	ide_hwif_t	*hwif = HWIF(drive);
+	char		name[MAX_LEN + 1];
+	int		for_real = 0, len;
+	unsigned long	n, flags;
+	const char	*start = NULL;
+	ide_settings_t	*setting;
+
+	if (!suser())
+		return -EACCES;
+
+	/*
+	 * Skip over leading whitespace
+	 */
+	while (count && isspace(*buffer)) {
+		--count;
+		++buffer;
+	}
+	/*
+	 * Do one full pass to verify all parameters,
+	 * then do another to actually write the pci regs.
+	 */
+	save_flags(flags);
+	do {
+		const char *p;
+		if (for_real) {
+			unsigned long timeout = jiffies + (3 * HZ);
+			ide_hwgroup_t *mygroup = (ide_hwgroup_t *)(hwif->hwgroup);
+			ide_hwgroup_t *mategroup = NULL;
+			if (hwif->mate && hwif->mate->hwgroup)
+				mategroup = (ide_hwgroup_t *)(hwif->mate->hwgroup);
+			cli();	/* ensure all PCI writes are done together */
+			while (mygroup->active || (mategroup && mategroup->active)) {
+				restore_flags(flags);
+				if (0 < (signed long)(jiffies - timeout)) {
+					printk("/proc/ide/%s/pci: channel(s) busy, cannot write\n", hwif->name);
+					return -EBUSY;
+				}
+				cli();
+			}
+		}
+		p = buffer;
+		n = count;
+		while (n > 0) {
+			int d, digits;
+			unsigned int val = 0;
+			start = p;
+
+			while (n > 0 && *p != ':') {
+				--n;
+				p++;
+			}
+			if (*p != ':')
+				goto parse_error;
+			len = IDE_MIN(p - start, MAX_LEN);
+			strncpy(name, start, IDE_MIN(len, MAX_LEN));
+			name[len] = 0;
+
+			if (n > 0) {
+				--n;
+				p++;
+			} else
+				goto parse_error;
+			
+			digits = 0;
+			while (n > 0 && (d = ide_getdigit(*p)) >= 0) {
+				val = (val * 10) + d;
+				--n;
+				++p;
+				++digits;
+			}
+			if (n > 0 && !isspace(*p))
+				goto parse_error;
+			while (n > 0 && isspace(*p)) {
+				--n;
+				++p;
+			}
+			setting = ide_find_setting_by_name(drive, name);
+			if (!setting)
+				goto parse_error;
+
+			if (for_real)
+				ide_write_setting(drive, setting, val * setting->div_factor / setting->mul_factor);
+		}
+	} while (!for_real++);
+	restore_flags(flags);
+	return count;
+parse_error:
+	restore_flags(flags);
+	printk("proc_ide_write_settings(): parse error\n");
+	return -EINVAL;
 }
 
 int proc_ide_read_capacity
@@ -437,6 +564,18 @@ static int proc_ide_read_driver
 	PROC_IDE_READ_RETURN(page,start,off,count,eof,len);
 }
 
+static int proc_ide_write_driver
+	(struct file *file, const char *buffer, unsigned long count, void *data)
+{
+	ide_drive_t	*drive = (ide_drive_t *) data;
+
+	if (!suser())
+		return -EACCES;
+	if (ide_replace_subdriver(drive, buffer))
+		return -EINVAL;
+	return count;
+}
+
 static int proc_ide_read_media
 	(char *page, char **start, off_t off, int count, int *eof, void *data)
 {
@@ -461,13 +600,12 @@ static int proc_ide_read_media
 	PROC_IDE_READ_RETURN(page,start,off,count,eof,len);
 }
 
-
 static ide_proc_entry_t generic_drive_entries[] = {
-	{ "driver", proc_ide_read_driver, NULL },
+	{ "driver", proc_ide_read_driver, proc_ide_write_driver },
 	{ "identify", proc_ide_read_identify, NULL },
 	{ "media", proc_ide_read_media, NULL },
 	{ "model", proc_ide_read_dmodel, NULL },
-	{ "settings", proc_ide_read_settings, NULL },
+	{ "settings", proc_ide_read_settings, proc_ide_write_settings },
 	{ NULL, NULL, NULL }
 };
 
@@ -497,9 +635,16 @@ void ide_remove_proc_entries(ide_drive_t *drive, ide_proc_entry_t *p)
 	}
 }
 
-static void create_proc_ide_drives (ide_hwif_t *hwif, struct proc_dir_entry *parent)
+static int proc_ide_readlink(struct proc_dir_entry *de, char *page)
+{
+	int n = (de->name[2] - 'a') / 2;
+	return sprintf(page, "ide%d/%s", n, de->name);
+}
+
+static void create_proc_ide_drives (ide_hwif_t *hwif, struct proc_dir_entry *parent, struct proc_dir_entry *root)
 {
 	int	d;
+	struct proc_dir_entry *ent;
 
 	for (d = 0; d < MAX_DRIVES; d++) {
 		ide_drive_t *drive = &hwif->drives[d];
@@ -509,6 +654,12 @@ static void create_proc_ide_drives (ide_hwif_t *hwif, struct proc_dir_entry *par
 		drive->proc = create_proc_entry(drive->name, S_IFDIR, parent);
 		if (drive->proc)
 			ide_add_proc_entries(drive, generic_drive_entries);
+
+		ent = create_proc_entry(drive->name, S_IFLNK | S_IRUGO | S_IWUGO | S_IXUGO, root);
+		if (!ent) return;
+		ent->data = drive;
+		ent->readlink_proc = proc_ide_readlink;
+		ent->nlink = 1;
 	}
 }
 
@@ -555,14 +706,18 @@ static void create_proc_ide_interfaces (struct proc_dir_entry *parent)
 		ent->data = hwif;
 		ent->read_proc  = proc_ide_read_type;
 
-		create_proc_ide_drives(hwif, hwif_ent);
+		create_proc_ide_drives(hwif, hwif_ent, parent);
 	}
 }
 
 void proc_ide_init(void)
 {
-	struct proc_dir_entry *ent;
-	ent = create_proc_entry("ide", S_IFDIR, 0);
+	struct proc_dir_entry *root, *ent;
+	root = create_proc_entry("ide", S_IFDIR, 0);
+	if (!root) return;
+	create_proc_ide_interfaces(root);
+
+	ent = create_proc_entry("drivers", 0, root);
 	if (!ent) return;
-	create_proc_ide_interfaces(ent);
+	ent->read_proc  = proc_ide_read_drivers;
 }

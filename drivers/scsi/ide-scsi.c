@@ -1,7 +1,7 @@
 /*
- * linux/drivers/scsi/ide-scsi.c	Version 0.4		Dec   7, 1997
+ * linux/drivers/scsi/ide-scsi.c	Version 0.5		Jan   2, 1998
  *
- * Copyright (C) 1996, 1997 Gadi Oxman <gadio@netvision.net.il>
+ * Copyright (C) 1996 - 1998 Gadi Oxman <gadio@netvision.net.il>
  */
 
 /*
@@ -18,9 +18,11 @@
  *                       Added Scatter/Gather and DMA support.
  * Ver 0.4   Dec  7 97   Add support for ATAPI PD/CD drives.
  *                       Use variable timeout for each command.
+ * Ver 0.5   Jan  2 98   Fix previous PD/CD support.
+ *                       Allow disabling of SCSI-6 to SCSI-10 transformation.
  */
 
-#define IDESCSI_VERSION "0.4"
+#define IDESCSI_VERSION "0.5"
 
 #include <linux/module.h>
 #include <linux/types.h>
@@ -71,6 +73,7 @@ typedef struct {
 	ide_drive_t *drive;
 	idescsi_pc_t *pc;			/* Current packet command */
 	unsigned int flags;			/* Status/Action flags */
+	int transform;				/* Transform SCSI-6 commands */
 } idescsi_scsi_t;
 
 /*
@@ -102,7 +105,7 @@ static void idescsi_output_zeros (ide_drive_t *drive, unsigned int bcount)
 }
 
 /*
- *	PIO data transfer routines using the scather gather table.
+ *	PIO data transfer routines using the scatter gather table.
  */
 static void idescsi_input_buffers (ide_drive_t *drive, idescsi_pc_t *pc, unsigned int bcount)
 {
@@ -110,7 +113,7 @@ static void idescsi_input_buffers (ide_drive_t *drive, idescsi_pc_t *pc, unsigne
 
 	while (bcount) {
 		if (pc->sg - (struct scatterlist *) pc->scsi_cmd->request_buffer > pc->scsi_cmd->use_sg) {
-			printk (KERN_ERR "ide-scsi: scather gather table too small, discarding data\n");
+			printk (KERN_ERR "ide-scsi: scatter gather table too small, discarding data\n");
 			idescsi_discard_data (drive, bcount);
 			return;
 		}
@@ -130,7 +133,7 @@ static void idescsi_output_buffers (ide_drive_t *drive, idescsi_pc_t *pc, unsign
 
 	while (bcount) {
 		if (pc->sg - (struct scatterlist *) pc->scsi_cmd->request_buffer > pc->scsi_cmd->use_sg) {
-			printk (KERN_ERR "ide-scsi: scather gather table too small, padding with zeros\n");
+			printk (KERN_ERR "ide-scsi: scatter gather table too small, padding with zeros\n");
 			idescsi_output_zeros (drive, bcount);
 			return;
 		}
@@ -150,14 +153,17 @@ static void idescsi_output_buffers (ide_drive_t *drive, idescsi_pc_t *pc, unsign
  */
 static inline void idescsi_transform_pc1 (ide_drive_t *drive, idescsi_pc_t *pc)
 {
+	idescsi_scsi_t *scsi = drive->driver_data;
 	u8 *c = pc->c, *buf = pc->buffer, *sc = pc->scsi_cmd->cmnd;
 	int i;
 
+	if (!scsi->transform)
+		return;
 	if (drive->media == ide_cdrom) {
 		if (c[0] == READ_6 || c[0] == WRITE_6) {
 			c[8] = c[4];		c[5] = c[3];		c[4] = c[2];
 			c[3] = c[1] & 0x1f;	c[2] = 0;		c[1] &= 0xe0;
-			c[0] = READ_10;
+			c[0] += (READ_10 - READ_6);
 		}
 		if (c[0] == MODE_SENSE || (c[0] == MODE_SELECT && buf[3] == 8)) {
 			pc->request_transfer -= 4;
@@ -172,9 +178,12 @@ static inline void idescsi_transform_pc1 (ide_drive_t *drive, idescsi_pc_t *pc)
 
 static inline void idescsi_transform_pc2 (ide_drive_t *drive, idescsi_pc_t *pc)
 {
+	idescsi_scsi_t *scsi = drive->driver_data;
 	u8 *buf = pc->buffer;
 	int i;
 
+	if (!scsi->transform)
+		return;
 	if (drive->media == ide_cdrom) {
 		if (pc->c[0] == MODE_SENSE_10 && pc->scsi_cmd->cmnd[0] == MODE_SENSE) {
 			buf[0] = buf[1];	buf[1] = buf[2];
@@ -182,6 +191,8 @@ static inline void idescsi_transform_pc2 (ide_drive_t *drive, idescsi_pc_t *pc)
 			for (i = pc->buffer_size - 1; i >= 12; i--) buf[i] = buf[i - 4];
 			for (i = 11; i >= 4; i--) buf[i] = 0;
 		}
+		if (pc->c[0] == INQUIRY)
+			buf[2] |= 2;
 	}
 }
 
@@ -400,6 +411,19 @@ static void idescsi_ide_release (struct inode *inode, struct file *filp, ide_dri
 static ide_drive_t *idescsi_drives[MAX_HWIFS * MAX_DRIVES];
 static int idescsi_initialized = 0;
 
+static void idescsi_add_settings(ide_drive_t *drive)
+{
+	idescsi_scsi_t *scsi = drive->driver_data;
+
+/*
+ *			drive	setting name	read/write	ioctl	ioctl		data type	min	max	mul_factor	div_factor	data pointer		set function
+ */
+	ide_add_setting(drive,	"bios_cyl",	SETTING_RW,	-1,	-1,		TYPE_SHORT,	0,	1023,	1,		1,		&drive->bios_cyl,	NULL);
+	ide_add_setting(drive,	"bios_head",	SETTING_RW,	-1,	-1,		TYPE_BYTE,	0,	255,	1,		1,		&drive->bios_head,	NULL);
+	ide_add_setting(drive,	"bios_sect",	SETTING_RW,	-1,	-1,		TYPE_BYTE,	0,	63,	1,		1,		&drive->bios_sect,	NULL);
+	ide_add_setting(drive,	"transform",	SETTING_RW,	-1,	-1,		TYPE_INT,	0,	1,	1,		1,		&scsi->transform,	NULL);
+}
+
 /*
  *	Driver initialization.
  */
@@ -413,6 +437,8 @@ static void idescsi_setup (ide_drive_t *drive, idescsi_scsi_t *scsi, int id)
 	scsi->drive = drive;
 	if (drive->id && (drive->id->config & 0x0060) == 0x20)
 		set_bit (IDESCSI_DRQ_INTERRUPT, &scsi->flags);
+	scsi->transform = 1;
+	idescsi_add_settings(drive);
 }
 
 static int idescsi_cleanup (ide_drive_t *drive)
@@ -425,13 +451,6 @@ static int idescsi_cleanup (ide_drive_t *drive)
 	kfree (scsi);
 	return 0;
 }
-
-int idescsi_init (void);
-static ide_module_t idescsi_module = {
-	IDE_DRIVER_MODULE,
-	idescsi_init,
-	NULL
-};
 
 /*
  *	IDE subdriver functions, registered with ide.c
@@ -456,6 +475,14 @@ static ide_driver_t idescsi_driver = {
 	NULL			/* proc */
 };
 
+int idescsi_init (void);
+static ide_module_t idescsi_module = {
+	IDE_DRIVER_MODULE,
+	idescsi_init,
+	&idescsi_driver,
+	NULL
+};
+
 static struct proc_dir_entry idescsi_proc_dir = {PROC_SCSI_IDESCSI, 8, "ide-scsi", S_IFDIR | S_IRUGO | S_IXUGO, 2};
 
 /*
@@ -476,7 +503,7 @@ int idescsi_init (void)
 	MOD_INC_USE_COUNT;
 	for (i = 0; media[i] != 255; i++) {
 		failed = 0;
-		while ((drive = ide_scan_devices (media[i], NULL, failed++)) != NULL) {
+		while ((drive = ide_scan_devices (media[i], idescsi_driver.name, NULL, failed++)) != NULL) {
 			if ((scsi = (idescsi_scsi_t *) kmalloc (sizeof (idescsi_scsi_t), GFP_KERNEL)) == NULL) {
 				printk (KERN_ERR "ide-scsi: %s: Can't allocate a scsi structure\n", drive->name);
 				continue;
@@ -664,10 +691,10 @@ int idescsi_bios (Disk *disk, kdev_t dev, int *parm)
 {
 	ide_drive_t *drive = idescsi_drives[disk->device->id];
 
-	if (drive->cyl && drive->head && drive->sect) {
-		parm[0] = drive->head;
-		parm[1] = drive->sect;
-		parm[2] = drive->cyl;
+	if (drive->bios_cyl && drive->bios_head && drive->bios_sect) {
+		parm[0] = drive->bios_head;
+		parm[1] = drive->bios_sect;
+		parm[2] = drive->bios_cyl;
 	}
 	return 0;
 }
@@ -692,7 +719,7 @@ void cleanup_module (void)
 	scsi_unregister_module (MODULE_SCSI_HA, &idescsi_template);
 	for (i = 0; media[i] != 255; i++) {
 		failed = 0;
-		while ((drive = ide_scan_devices (media[i], &idescsi_driver, failed)) != NULL)
+		while ((drive = ide_scan_devices (media[i], idescsi_driver.name, &idescsi_driver, failed)) != NULL)
 			if (idescsi_cleanup (drive)) {
 				printk ("%s: cleanup_module() called while still busy\n", drive->name);
 				failed++;

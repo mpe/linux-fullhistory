@@ -12,6 +12,7 @@
  *  affs regular file handling primitives
  */
 
+#define DEBUG 0
 #include <asm/uaccess.h>
 #include <asm/system.h>
 #include <linux/sched.h>
@@ -417,6 +418,7 @@ affs_getblock(struct inode *inode, s32 block)
 			nkey = affs_new_data(inode);
 			if (!nkey)
 				break;
+			inode->u.affs_i.i_lastblock++;
 			lock_super(inode->i_sb);
 			if (AFFS_BLOCK(bh->b_data,inode,j)) {
 				unlock_super(inode->i_sb);
@@ -436,7 +438,6 @@ affs_getblock(struct inode *inode, s32 block)
 					AFFS_BLOCK(bh->b_data,inode,j) = 0;
 					break;
 				}
-				inode->u.affs_i.i_lastblock++;
 				DATA_FRONT(ebh)->primary_type    = cpu_to_be32(T_DATA);
 				DATA_FRONT(ebh)->header_key      = cpu_to_be32(inode->i_ino);
 				DATA_FRONT(ebh)->sequence_number = cpu_to_be32(inode->u.affs_i.i_lastblock + 1);
@@ -750,7 +751,7 @@ affs_truncate(struct inode *inode)
 	int	 rem;
 	int	 ext;
 
-	pr_debug("AFFS: file_truncate(inode=%ld,size=%lu)\n",inode->i_ino,inode->i_size);
+	pr_debug("AFFS: truncate(inode=%ld,size=%lu)\n",inode->i_ino,inode->i_size);
 
 	blocksize = AFFS_I2BSIZE(inode) - ((inode->i_sb->u.affs_sb.s_flags & SF_OFS) ? 24 : 0);
 	first = (inode->i_size + blocksize - 1) / blocksize;
@@ -777,7 +778,7 @@ affs_truncate(struct inode *inode)
 			unlock_super(inode->i_sb);
 		}
 		if (!bh) {
-			affs_error(inode->i_sb,"truncate","Cannot extend file");
+			affs_warning(inode->i_sb,"truncate","Cannot extend file");
 			inode->i_size = blocksize * (inode->u.affs_i.i_lastblock + 1);
 		} else if (inode->i_sb->u.affs_sb.s_flags & SF_OFS) {
 			rem = inode->i_size % blocksize;
@@ -798,12 +799,6 @@ affs_truncate(struct inode *inode)
 		}
 		ptype = be32_to_cpu(((struct file_front *)bh->b_data)->primary_type);
 		stype = be32_to_cpu(FILE_END(bh->b_data,inode)->secondary_type);
-		if (ekey == inode->i_ino && ptype == T_SHORT && stype == ST_LINKFILE &&
-		    LINK_END(bh->b_data,inode)->original == 0) {
-			pr_debug("AFFS: truncate(): dumping link\n");
-			affs_brelse(bh);
-			break;
-		}
 		if (stype != ST_FILE || (ptype != T_SHORT && ptype != T_LIST)) {
 			affs_error(inode->i_sb,"truncate","Bad block (ptype=%d, stype=%d)",
 			           ptype,stype);

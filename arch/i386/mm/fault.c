@@ -192,11 +192,6 @@ bad_area:
 
 	/* Are we prepared to handle this kernel fault?  */
 	if ((fixup = search_exception_table(regs->eip)) != 0) {
-		printk(KERN_DEBUG "%s: Exception at [<%lx>] cr2=%lx (fixup: %lx)\n",
-			tsk->comm,
-			regs->eip,
-			address,
-			fixup);
 		regs->eip = fixup;
 		goto out;
 	}

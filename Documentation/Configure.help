@@ -333,17 +333,6 @@ CONFIG_BLK_DEV_IDEDMA
   enable DMA for drives which were not enabled automatically.
   You can get the latest version of the hdparm utility via anonymous
   FTP from sunsite.unc.edu/pub/Linux/system/hardware/
-   It is safe to say Y to this question.
-
-  If your PCI system uses IDE drive(s) (as opposed to SCSI, say)
-  and is capable of bus-master DMA operation (most Pentium PCI
-  systems), you will want to enable this option to allow use of 
-  bus-mastering DMA data transfers. Read the comments at the
-  beginning of drivers/block/idedma.c and Documentation/ide.txt.
-  You can get the latest version of the hdparm utility via 
-  ftp (user: anonymous) from
-  sunsite.unc.edu/pub/Linux/kernel/patches/diskdrives/; it is
-  used to tune your harddisk. 
   It is safe to say Y to this question.
 
 Other IDE chipset support

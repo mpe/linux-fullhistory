@@ -58,6 +58,7 @@
  *	Martin Mares	:	Default path now contains host name instead of
  *				host IP address (but host name defaults to IP
  *				address anyway).
+ *	Martin Mares	:	Use root_server_addr appropriately during setup.
  */
 
 #include <linux/types.h>
@@ -86,6 +87,7 @@
 
 /* Parameters passed from the kernel command line */
 static char nfs_root_name[NFS_ROOT_NAME_LEN] __initdata = "default";
+static int nfs_params_parsed = 0;
 
 /* Address of NFS server */
 static __u32 servaddr __initdata = 0;
@@ -157,6 +159,9 @@ __initfunc(static int root_nfs_name(char *name))
 	char *cp, *cq, *options, *val;
 	int octets = 0;
 
+	if (nfs_params_parsed)
+		return nfs_params_parsed;
+
 	/* It is possible to override the server IP number here */
 	cp = cq = name;
 	while (octets < 4) {
@@ -173,17 +178,12 @@ __initfunc(static int root_nfs_name(char *name))
 	if (octets == 4 && (*cp == ':' || *cp == '\0')) {
 		if (*cp == ':')
 			*cp++ = '\0';
-		servaddr = in_aton(name);
+		root_server_addr = in_aton(name);
 		name = cp;
-	} else if ((servaddr = root_server_addr) == INADDR_NONE) {
-		printk(KERN_ERR "Root-NFS: No NFS server available, giving up.\n");
-		return -1;
 	}
 
 	/* Clear the nfs_data structure and setup the server hostname */
 	memset(&nfs_data, 0, sizeof(nfs_data));
-	strncpy(nfs_data.hostname, in_ntoa(servaddr), sizeof(nfs_data.hostname)-1);
-	nfs_data.namlen = strlen(nfs_data.hostname);
 
 	/* Set the name of the directory to mount */
 	if (root_server_path[0] && !strcmp(name, "default"))
@@ -239,9 +239,24 @@ __initfunc(static int root_nfs_name(char *name))
 			cp = strtok(NULL, ",");
 		}
 	}
-	return 0;
+	return 1;
 }
 
+
+/*
+ *  Get NFS server address.
+ */
+__initfunc(static int root_nfs_addr(void))
+{
+	if ((servaddr = root_server_addr) == INADDR_NONE) {
+		printk(KERN_ERR "Root-NFS: No NFS server available, giving up.\n");
+		return -1;
+	}
+
+	strncpy(nfs_data.hostname, in_ntoa(servaddr), sizeof(nfs_data.hostname)-1);
+	nfs_data.namlen = strlen(nfs_data.hostname);
+	return 0;
+}
 
 /*
  *  Tell the user what's going on.
@@ -274,7 +289,8 @@ __initfunc(int root_nfs_init(void))
 	 * be able to use the client IP address for the remote root
 	 * directory (necessary for pure RARP booting).
 	 */
-	if (root_nfs_name(nfs_root_name) < 0)
+	if (root_nfs_name(nfs_root_name) < 0 ||
+	    root_nfs_addr() < 0)
 		return -1;
 
 #ifdef NFSROOT_DEBUG
@@ -301,6 +317,7 @@ __initfunc(void nfs_root_setup(char *line, int *ints))
 			line[sizeof(nfs_root_name) - strlen(NFS_ROOT) - 1] = '\0';
 		sprintf(nfs_root_name, NFS_ROOT, line);
 	}
+	nfs_params_parsed = root_nfs_name(nfs_root_name);
 }
 
 

@@ -97,6 +97,11 @@ unsigned short coda_flags_to_cflags(unsigned short flags)
 }
 
 
+int coda_fid_is_volroot(struct ViceFid *fid)
+{
+	return ( (fid->Vnode == 1) && (fid->Unique == 1 ) );
+}
+
 /* utility functions below */
 void coda_vattr_to_iattr(struct inode *inode, struct coda_vattr *attr)
 {
@@ -155,7 +160,6 @@ void coda_vattr_to_iattr(struct inode *inode, struct coda_vattr *attr)
 
 void coda_iattr_to_vattr(struct iattr *iattr, struct coda_vattr *vattr)
 {
-        umode_t mode;
         unsigned int valid;
 
         /* clean out */        
@@ -170,15 +174,16 @@ void coda_iattr_to_vattr(struct iattr *iattr, struct coda_vattr *vattr)
         vattr->va_mtime.tv_nsec = (time_t) -1;
 	vattr->va_ctime.tv_nsec = (time_t) -1;
         vattr->va_type = C_VNON;
-	vattr->va_fileid = (long)-1;
-	vattr->va_gen = (long)-1;
-	vattr->va_bytes = (long)-1;
-	vattr->va_nlink = (short)-1;
-	vattr->va_blocksize = (long)-1;
-	vattr->va_rdev = (dev_t)-1;
+	vattr->va_fileid = -1;
+	vattr->va_gen = -1;
+	vattr->va_bytes = -1;
+	vattr->va_nlink = -1;
+	vattr->va_blocksize = -1;
+	vattr->va_rdev = -1;
         vattr->va_flags = 0;
 
         /* determine the type */
+#if 0
         mode = iattr->ia_mode;
                 if ( S_ISDIR(mode) ) {
                 vattr->va_type = C_VDIR; 
@@ -190,6 +195,7 @@ void coda_iattr_to_vattr(struct iattr *iattr, struct coda_vattr *vattr)
                 /* don't do others */
                 vattr->va_type = C_VNON;
         }
+#endif 
 
         /* set those vattrs that need change */
         valid = iattr->ia_valid;
@@ -219,7 +225,6 @@ void coda_iattr_to_vattr(struct iattr *iattr, struct coda_vattr *vattr)
 	}
         
 }
-  
 
 void print_vattr(struct coda_vattr *attr)
 {

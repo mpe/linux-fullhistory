@@ -21,10 +21,31 @@ Known bugs:
   might leave a trashed file system with the
   bitmap flag set valid.
 
-- The blocks from deleted directories are 
-  sometimes reclaimed only at umount time.
+- When a file is truncated to a size that is not
+  a multiple of the blocksize, the rest of the
+  last allocated block is not cleared. Well,
+  this fs never claimed to be Posix conformant.
 
 Please direct bug reports to: hjw@zvw.de
+
+Version 3.7
+-----------
+
+- Added dentry callbacks to allow the dcache to
+  operate case insensitive and length ignorant
+  like the affs itself.
+
+- getblock() didn't update the lastblock field in the
+  inode if the fs was not an OFS. This bug only shows
+  up if a file was enlarged via truncate() and there
+  was not enough space.
+
+- Remove some more superfluous code left over from
+  the old link days ...
+
+- Fixed some oversights which were in patch 2.1.78.
+
+- Fixed a few typos.
 
 Version 3.6
 -----------

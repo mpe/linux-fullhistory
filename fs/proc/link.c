@@ -146,9 +146,9 @@ static int do_proc_readlink(struct dentry *dentry, char * buffer, int buflen)
 	pattern = NULL;
 	inode = dentry->d_inode;
 	if (inode && dentry->d_parent == dentry) {
-		if (inode->i_sock)
+		if (S_ISSOCK(inode->i_mode))
 			pattern = "socket:[%lu]";
-		if (inode->i_pipe)
+		if (S_ISFIFO(inode->i_mode))
 			pattern = "pipe:[%lu]";
 	}
 	

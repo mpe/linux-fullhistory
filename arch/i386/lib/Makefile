@@ -11,6 +11,6 @@ else
 endif
 
 L_TARGET = lib.a
-L_OBJS  = checksum.o semaphore.o locks.o delay.o
+L_OBJS  = checksum.o semaphore.o locks.o delay.o usercopy.o getuser.o putuser.o
 
 include $(TOPDIR)/Rules.make

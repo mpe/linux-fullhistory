@@ -247,20 +247,13 @@ static struct dentry * reserved_lookup(struct dentry * parent, struct qstr * nam
 
 /*
  * Internal lookup() using the new generic dcache.
- *
- * Note the revalidation: we have to drop the dcache
- * lock when we revalidate, so we need to update the
- * counts around it.
  */
 static struct dentry * cached_lookup(struct dentry * parent, struct qstr * name)
 {
 	struct dentry * dentry = d_lookup(parent, name);
 
 	if (dentry && dentry->d_op && dentry->d_op->d_revalidate) {
-		int validated, (*revalidate)(struct dentry *) = dentry->d_op->d_revalidate;
-
-		validated = revalidate(dentry) || d_invalidate(dentry);
-		if (!validated) {
+		if (!dentry->d_op->d_revalidate(dentry) && !d_invalidate(dentry)) {
 			dput(dentry);
 			dentry = NULL;
 		}
@@ -840,7 +833,7 @@ static inline int do_rmdir(const char * name)
 
 	/* Disallow removals of mountpoints. */
 	error = -EBUSY;
-	if (dentry == dir)
+	if (dentry->d_mounts != dentry->d_covers)
 		goto exit_lock;
 
 	error = -EPERM;

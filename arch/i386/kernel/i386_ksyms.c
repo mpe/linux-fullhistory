@@ -47,6 +47,20 @@ EXPORT_SYMBOL(__udelay);
 EXPORT_SYMBOL(__delay);
 EXPORT_SYMBOL(__const_udelay);
 
+EXPORT_SYMBOL_NOVERS(__get_user_1);
+EXPORT_SYMBOL_NOVERS(__get_user_2);
+EXPORT_SYMBOL_NOVERS(__get_user_4);
+EXPORT_SYMBOL_NOVERS(__put_user_1);
+EXPORT_SYMBOL_NOVERS(__put_user_2);
+EXPORT_SYMBOL_NOVERS(__put_user_4);
+
+EXPORT_SYMBOL(strncpy_from_user);
+EXPORT_SYMBOL(__strncpy_from_user);
+EXPORT_SYMBOL(clear_user);
+EXPORT_SYMBOL(__clear_user);
+EXPORT_SYMBOL(__generic_copy_from_user);
+EXPORT_SYMBOL(__generic_copy_to_user);
+EXPORT_SYMBOL(strlen_user);
 
 #ifdef __SMP__
 EXPORT_SYMBOL(apic_reg);	/* Needed internally for the I386 inlines */
@@ -79,3 +93,4 @@ EXPORT_SYMBOL(mca_set_adapter_procfn);
 EXPORT_SYMBOL(mca_isenabled);
 EXPORT_SYMBOL(mca_isadapter);
 #endif
+

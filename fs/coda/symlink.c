@@ -24,7 +24,7 @@
 #include <linux/coda_cnode.h>
 #include <linux/coda_cache.h>
 
-static int coda_readlink(struct dentry *dentry, char *buffer, int length);
+static int coda_readlink(struct dentry *de, char *buffer, int length);
 static struct dentry *coda_follow_link(struct dentry *, struct dentry *);
 
 struct inode_operations coda_symlink_inode_operations = {
@@ -39,41 +39,41 @@ struct inode_operations coda_symlink_inode_operations = {
 	NULL,			/* mknod */
 	NULL,			/* rename */
 	coda_readlink,		/* readlink */
-	coda_follow_link,     	/* follow_link */
+	coda_follow_link,	/* follow_link */
 	NULL,			/* readpage */
 	NULL,			/* writepage */
 	NULL,			/* bmap */
 	NULL,			/* truncate */
-	NULL,            	/* permission */
-	NULL,                   /* smap */
-	NULL,                   /* update page */
-        NULL                    /* revalidate */
+	NULL,			/* permission */
+	NULL,			/* smap */
+	NULL,			/* update page */
+	NULL			/* revalidate */
 };
 
-static int coda_readlink(struct inode *dentry, char *buffer, int length)
+static int coda_readlink(struct dentry *de, char *buffer, int length)
 {
-	struct inode *inode = dentry->d_inode;
-        int len;
+	struct inode *inode = de->d_inode;
+	int len;
 	int error;
-        char *buf;
+	char *buf;
 	struct cnode *cp;
-        ENTRY;
+	ENTRY;
 
-        cp = ITOC(inode);
-        CHECK_CNODE(cp);
+	cp = ITOC(inode);
+	CHECK_CNODE(cp);
 
-        /* the maximum length we receive is len */
-        if ( length > CFS_MAXPATHLEN ) 
-	        len = CFS_MAXPATHLEN;
+	/* the maximum length we receive is len */
+	if ( length > CFS_MAXPATHLEN ) 
+		len = CFS_MAXPATHLEN;
 	else
-	        len = length;
+		len = length;
 	CODA_ALLOC(buf, char *, len);
 	if ( !buf ) 
-	        return -ENOMEM;
+		return -ENOMEM;
 	
 	error = venus_readlink(inode->i_sb, &(cp->c_fid), buf, &len);
 
-        CDEBUG(D_INODE, "result %s\n", buf);
+	CDEBUG(D_INODE, "result %s\n", buf);
 	if (! error) {
 		copy_to_user(buffer, buf, len);
 		put_user('\0', buffer + len);
@@ -84,20 +84,20 @@ static int coda_readlink(struct inode *dentry, char *buffer, int length)
 	return error;
 }
 
-static struct dentry *coda_follow_link(struct dentry *dentry, 
-					struct dentry *base)
+static struct dentry *coda_follow_link(struct dentry *de, 
+				       struct dentry *base)
 {
-	struct inode *inode = dentry->d_inode;
+	struct inode *inode = de->d_inode;
 	int error;
 	struct cnode *cnp;
 	unsigned int len;
+	char mem[CFS_MAXPATHLEN];
 	char *path;
-	char mem[CFS_MAXPATHLEN]; /* N.B. too big for the stack? */
 ENTRY;
 	CDEBUG(D_INODE, "(%x/%ld)\n", inode->i_dev, inode->i_ino);
 	
-        cnp = ITOC(inode);
-        CHECK_CNODE(cnp);
+	cnp = ITOC(inode);
+	CHECK_CNODE(cnp);
 
 	len = CFS_MAXPATHLEN;
 	error = venus_readlink(inode->i_sb, &(cnp->c_fid), mem, &len);

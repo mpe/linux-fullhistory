@@ -21,7 +21,7 @@
 
 #include <linux/errno.h>
 
-/* Simple toupper() for DOS\1 */
+/* Simple toupper()/tolower() for DOS\1 */
 
 static inline unsigned int
 affs_toupper(unsigned int ch)
@@ -29,7 +29,13 @@ affs_toupper(unsigned int ch)
 	return ch >= 'a' && ch <= 'z' ? ch -= ('a' - 'A') : ch;
 }
 
-/* International toupper() for DOS\3 */
+static inline unsigned int
+affs_tolower(unsigned int ch)
+{
+	return ch >= 'A' && ch <= 'Z' ? ch + ('a' - 'A') : ch;
+}
+
+/* International toupper()/tolower() for DOS\3 ("international") */
 
 static inline unsigned int
 affs_intl_toupper(unsigned int ch)
@@ -37,6 +43,112 @@ affs_intl_toupper(unsigned int ch)
 	return (ch >= 'a' && ch <= 'z') || (ch >= 0xE0
 		&& ch <= 0xFE && ch != 0xF7) ?
 		ch - ('a' - 'A') : ch;
+}
+
+static inline unsigned int
+affs_intl_tolower(unsigned int ch)
+{
+	return (ch >= 'A' && ch <= 'Z') || (ch >= 0xC0
+		&& ch <= 0xDE && ch != 0xD7) ?
+		ch + ('a' - 'A') : ch;
+}
+
+/* We need 2 sets of dentry operations, since we cannot
+ * determine the fs flavour in the callback routines.
+ */
+
+static int	 affs_hash_dentry(struct dentry *, struct qstr *);
+static int       affs_compare_dentry(struct dentry *, struct qstr *, struct qstr *);
+static int	 affs_hash_dentry_intl(struct dentry *, struct qstr *);
+static int       affs_compare_dentry_intl(struct dentry *, struct qstr *, struct qstr *);
+
+struct dentry_operations affs_dentry_operations = {
+	NULL,			/* d_validate	*/
+	affs_hash_dentry,	/* d_hash	*/
+	affs_compare_dentry,	/* d_compare	*/
+	NULL			/* d_delete	*/
+};
+
+struct dentry_operations affs_dentry_operations_intl = {
+	NULL,				/* d_validate	*/
+	affs_hash_dentry_intl,		/* d_hash	*/
+	affs_compare_dentry_intl,	/* d_compare	*/
+	NULL				/* d_delete	*/
+};
+
+static int
+affs_hash_dentry(struct dentry *dentry, struct qstr *qstr)
+{
+	unsigned long	 hash;
+	int		 i;
+
+	if ((i = affs_check_name(qstr->name,qstr->len)))
+		return i;
+	hash = init_name_hash();
+	for (i = 0; i < qstr->len && i < 30; i++)
+		hash = partial_name_hash(affs_tolower(qstr->name[i]),hash);
+	qstr->hash = end_name_hash(hash);
+
+	return 0;
+}
+
+static int
+affs_compare_dentry(struct dentry *dentry, struct qstr *a, struct qstr *b)
+{
+	int	 i;
+
+	/* 'a' is the qstr of an already existing dentry, so the name
+	 * must be valid. 'b' must be validated first.
+	 */
+	
+	if (affs_check_name(b->name,b->len))
+		return 1;
+
+	/* If the names are longer than the allowed 30 chars,
+	 * the excess is ignored, so their length may differ.
+	 */
+
+	if ((a->len < 30 || b->len < 30) && a->len != b->len)
+		return 1;
+
+	for (i = 0; i < a->len && i < 30; i++)
+		if (affs_tolower(a->name[i]) != affs_tolower(b->name[i]))
+			return 1;
+	
+	return 0;
+}
+
+static int
+affs_hash_dentry_intl(struct dentry *dentry, struct qstr *qstr)
+{
+	unsigned long	 hash;
+	int		 i;
+
+	if ((i = affs_check_name(qstr->name,qstr->len)))
+		return i;
+	hash = init_name_hash();
+	for (i = 0; i < qstr->len && i < 30; i++)
+		hash = partial_name_hash(affs_intl_tolower(qstr->name[i]),hash);
+	qstr->hash = end_name_hash(hash);
+
+	return 0;
+}
+
+static int
+affs_compare_dentry_intl(struct dentry *dentry, struct qstr *a, struct qstr *b)
+{
+	int	 i;
+
+	if (affs_check_name(b->name,b->len))
+		return 1;
+	if ((a->len < 30 || b->len < 30) && a->len != b->len)
+		return 1;
+
+	for (i = 0; i < a->len && i < 30; i++)
+		if (affs_intl_tolower(a->name[i]) != affs_intl_tolower(b->name[i]))
+			return 1;
+	
+	return 0;
 }
 
 /*
@@ -162,6 +274,8 @@ affs_lookup(struct inode *dir, struct dentry *dentry)
 		if (!inode)
 			return -EACCES;
 	}
+	dentry->d_op = AFFS_I2FSTYPE(dir) ? &affs_dentry_operations_intl
+					  : &affs_dentry_operations;
 	d_add(dentry,inode);
 	return 0;
 }
@@ -422,8 +536,9 @@ affs_symlink(struct inode *dir, struct dentry *dentry, const char *symname)
 }
 
 int
-affs_link(struct inode *oldinode, struct inode *dir, struct dentry *dentry)
+affs_link(struct dentry *old_dentry, struct inode *dir, struct dentry *dentry)
 {
+	struct inode		*oldinode = old_dentry->d_inode;
 	struct inode		*inode;
 	struct buffer_head	*bh;
 	unsigned long		 i;

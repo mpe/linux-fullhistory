@@ -62,10 +62,24 @@
 #define WIN_READDMA		0xc8	/* read sectors using DMA transfers */
 #define WIN_WRITEDMA		0xca	/* write sectors using DMA transfers */
 
+#define WIN_SMART		0xb0	/* self-monitoring and reporting */
+
 /* Additional drive command codes used by ATAPI devices. */
 #define WIN_PIDENTIFY		0xA1	/* identify ATAPI device	*/
 #define WIN_SRST		0x08	/* ATAPI soft reset command */
 #define WIN_PACKETCMD		0xa0	/* Send a packet command. */
+
+/* WIN_SMART sub-commands */
+
+#define SMART_READ_VALUES	0xd0
+#define SMART_READ_THRESHOLDS	0xd1
+#define SMART_AUTOSAVE		0xd2
+#define SMART_SAVE		0xd3
+#define SMART_IMMEDIATE_OFFLINE	0xd4
+#define SMART_ENABLE		0xd8
+#define SMART_DISABLE		0xd9
+#define SMART_STATUS		0xda
+#define SMART_AUTO_OFFLINE	0xdb
 
 /* Bits for HD_ERROR */
 #define MARK_ERR	0x01	/* Bad address mark */

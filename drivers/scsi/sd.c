@@ -1494,12 +1494,19 @@ static int sd_init()
 
 static void sd_finish()
 {
+    struct gendisk *gendisk;
     int i;
 
     blk_dev[MAJOR_NR].request_fn = DEVICE_REQUEST;
 
-    sd_gendisk.next = gendisk_head;
-    gendisk_head = &sd_gendisk;
+    for (gendisk = gendisk_head; gendisk != NULL; gendisk = gendisk->next)
+      if (gendisk == &sd_gendisk)
+	break;
+    if (gendisk == NULL)
+      {
+	sd_gendisk.next = gendisk_head;
+	gendisk_head = &sd_gendisk;
+      }
 
     for (i = 0; i < sd_template.dev_max; ++i)
 	if (!rscsi_disks[i].capacity &&

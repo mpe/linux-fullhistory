@@ -20,6 +20,7 @@
 #include <linux/fs.h>
 #include <linux/stat.h>
 #include <linux/locks.h>
+#include <linux/fat_cvf.h>
 #include <linux/malloc.h>
 
 #include "msbuffer.h"
@@ -139,6 +140,10 @@ void fat_delete_inode(struct inode *inode)
 void fat_put_super(struct super_block *sb)
 {
 	lock_super(sb);
+	if(MSDOS_SB(sb)->cvf_format)
+	{ MSDOS_SB(sb)->cvf_format->unmount_cvf(sb);
+	  dec_cvf_format_use_count_by_version(MSDOS_SB(sb)->cvf_format->cvf_version);
+	}
 	if (MSDOS_SB(sb)->fat_bits == 32) {
 		fat_clusters_flush(sb);
 	}
@@ -169,7 +174,8 @@ void fat_put_super(struct super_block *sb)
 
 
 static int parse_options(char *options,int *fat, int *blksize, int *debug,
-			 struct fat_mount_options *opts)
+			 struct fat_mount_options *opts,
+			 char* cvf_format, char*cvf_options)
 {
 	char *this_char,*value,save,*savep;
 	char *p;
@@ -306,6 +312,16 @@ static int parse_options(char *options,int *fat, int *blksize, int *debug,
 					ret = 0;
 			}
 		}
+                else if (!strcmp(this_char,"cvf_format")) {
+                        if (!value)
+                                return 0;
+                        strncpy(cvf_format,value,20);
+                }
+                else if (!strcmp(this_char,"cvf_options")) {
+                        if (!value)
+                                return 0;
+                        strncpy(cvf_options,value,100);
+                }
 
 		if (this_char != options) *(this_char-1) = ',';
 		if (value) *savep = save;
@@ -335,6 +351,14 @@ fat_read_super(struct super_block *sb, void *data, int silent)
 	int fat32;
 	struct fat_mount_options opts;
 	char buf[50];
+	int i;
+	char cvf_format[21];
+	char cvf_options[101];
+
+	cvf_format[0]='\0';
+	cvf_options[0]='\0';
+	MSDOS_SB(sb)->cvf_format=NULL;
+	MSDOS_SB(sb)->private_data=NULL;
 
 	MOD_INC_USE_COUNT;
 	if (hardsect_size[MAJOR(sb->s_dev)] != NULL){
@@ -342,10 +366,12 @@ fat_read_super(struct super_block *sb, void *data, int silent)
 		if (blksize != 512){
 			printk ("MSDOS: Hardware sector size is %d\n",blksize);
 		}
+
 	}
 
 	opts.isvfat = MSDOS_SB(sb)->options.isvfat;
-	if (!parse_options((char *) data, &fat, &blksize, &debug, &opts)
+	if (!parse_options((char *) data, &fat, &blksize, &debug, &opts, 
+	                   cvf_format, cvf_options)
 	    || (blksize != 512 && blksize != 1024 && blksize != 2048))
 		goto out_fail;
 	/* N.B. we should parse directly into the sb structure */
@@ -458,6 +484,9 @@ fat_read_super(struct super_block *sb, void *data, int silent)
 				/* because clusters (DOS) are often aligned */
 				/* on odd sectors. */
 	sb->s_blocksize_bits = blksize == 512 ? 9 : (blksize == 1024 ? 10 : 11);
+	if(!strcmp(cvf_format,"none"))i=-1;
+	else i=detect_cvf(sb,cvf_format);
+	if(i>=0)error=cvf_formats[i]->mount_cvf(sb,cvf_options);
 	if (error || debug) {
 		/* The MSDOS_CAN_BMAP is obsolete, but left just to remember */
 		printk("[MS-DOS FS Rel. 12,FAT %d,check=%c,conv=%c,"
@@ -477,7 +506,7 @@ fat_read_super(struct super_block *sb, void *data, int silent)
 		       MSDOS_SB(sb)->root_cluster,MSDOS_SB(sb)->free_clusters);
 		printk ("Transaction block size = %d\n",blksize);
 	}
-	if (MSDOS_SB(sb)->clusters+2 > fat_clusters)
+	if (i<0) if (MSDOS_SB(sb)->clusters+2 > fat_clusters)
 		MSDOS_SB(sb)->clusters = fat_clusters-2;
 	if (error)
 		goto out_invalid;
@@ -517,6 +546,10 @@ fat_read_super(struct super_block *sb, void *data, int silent)
 	sb->s_root = d_alloc_root(root_inode, NULL);
 	if (!sb->s_root)
 		goto out_no_root;
+	if(i>=0)
+	{ MSDOS_SB(sb)->cvf_format=cvf_formats[i];
+	  ++cvf_format_use_count[i];
+	}
 	return sb;
 
 out_no_root:
@@ -540,6 +573,9 @@ out_fail:
 		kfree(opts.iocharset);
 	}
 	sb->s_dev = 0;
+	if(MSDOS_SB(sb)->private_data)kfree(MSDOS_SB(sb)->private_data);
+	MSDOS_SB(sb)->private_data=NULL;
+ 
 	MOD_DEC_USE_COUNT;
 	return NULL;
 }
@@ -548,7 +584,11 @@ int fat_statfs(struct super_block *sb,struct statfs *buf, int bufsiz)
 {
 	int free,nr;
 	struct statfs tmp;
-
+       
+        if(MSDOS_SB(sb)->cvf_format)
+          if(MSDOS_SB(sb)->cvf_format->cvf_statfs)
+            return MSDOS_SB(sb)->cvf_format->cvf_statfs(sb,buf,bufsiz);
+          
 	lock_fat(sb);
 	if (MSDOS_SB(sb)->free_clusters != -1)
 		free = MSDOS_SB(sb)->free_clusters;
@@ -577,12 +617,15 @@ int fat_bmap(struct inode *inode,int block)
 	int cluster,offset;
 
 	sb = MSDOS_SB(inode->i_sb);
+	if(sb->cvf_format)
+	  if(sb->cvf_format->cvf_bmap)
+	    return sb->cvf_format->cvf_bmap(inode,block);
 	if ((inode->i_ino == MSDOS_ROOT_INO) && (sb->fat_bits != 32)) {
 		return sb->dir_start + block;
 	}
 	cluster = block/sb->cluster_size;
 	offset = block % sb->cluster_size;
-	if (!(cluster = get_cluster(inode,cluster))) return 0;
+	if (!(cluster = fat_get_cluster(inode,cluster))) return 0;
 	return (cluster-2)*sb->cluster_size+sb->data_start+offset;
 }
 
@@ -689,7 +732,12 @@ void fat_read_inode(struct inode *inode, struct inode_operations *fs_dir_inode_o
 		       !is_exec(raw_entry->ext)))
 		    	? S_IRUGO|S_IWUGO : S_IRWXUGO)
 		    & ~MSDOS_SB(sb)->options.fs_umask) | S_IFREG;
-		inode->i_op = (sb->s_blocksize == 1024 || sb->s_blocksize == 2048)
+		if(MSDOS_SB(sb)->cvf_format)
+		  inode->i_op = (MSDOS_SB(sb)->cvf_format->flags&CVF_USE_READPAGE)
+			? &fat_file_inode_operations_readpage
+			: &fat_file_inode_operations_1024;
+		else
+		  inode->i_op = (sb->s_blocksize == 1024 || sb->s_blocksize == 2048)
 			? &fat_file_inode_operations_1024
 			: &fat_file_inode_operations;
 		MSDOS_I(inode)->i_start = CF_LE_W(raw_entry->start);

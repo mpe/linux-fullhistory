@@ -1327,6 +1327,20 @@ static int idefloppy_identify_device (ide_drive_t *drive,struct hd_driveid *id)
 	return 0;
 }
 
+static void idefloppy_add_settings(ide_drive_t *drive)
+{
+	int major = HWIF(drive)->major;
+	int minor = drive->select.b.unit << PARTN_BITS;
+
+	ide_add_setting(drive,	"bios_cyl",		SETTING_RW,					-1,			-1,			TYPE_SHORT,	0,	1023,				1,	1,	&drive->bios_cyl,		NULL);
+	ide_add_setting(drive,	"bios_head",		SETTING_RW,					-1,			-1,			TYPE_BYTE,	0,	255,				1,	1,	&drive->bios_head,		NULL);
+	ide_add_setting(drive,	"bios_sect",		SETTING_RW,					-1,			-1,			TYPE_BYTE,	0,	63,				1,	1,	&drive->bios_sect,		NULL);
+	ide_add_setting(drive,	"breada_readahead",	SETTING_RW,					BLKRAGET,		BLKRASET,		TYPE_INT,	0,	255,				1,	2,	&read_ahead[major],		NULL);
+	ide_add_setting(drive,	"file_readahead",	SETTING_RW,					BLKFRAGET,		BLKFRASET,		TYPE_INTA,	0,	INT_MAX,			1,	1024,	&max_readahead[major][minor],	NULL);
+	ide_add_setting(drive,	"max_kb_per_request",	SETTING_RW,					BLKSECTGET,		BLKSECTSET,		TYPE_INTA,	1,	255,				1,	2,	&max_sectors[major][minor],	NULL);
+
+}
+
 /*
  *	Driver initialization.
  */
@@ -1351,6 +1365,7 @@ static void idefloppy_setup (ide_drive_t *drive, idefloppy_floppy_t *floppy)
 	}
 
 	(void) idefloppy_get_capacity (drive);
+	idefloppy_add_settings(drive);
 }
 
 static int idefloppy_cleanup (ide_drive_t *drive)
@@ -1367,13 +1382,6 @@ static int idefloppy_cleanup (ide_drive_t *drive)
 static ide_proc_entry_t idefloppy_proc[] = {
 	{ "geometry", proc_ide_read_geometry, NULL },
 	{ NULL, NULL, NULL }
-};
-
-int idefloppy_init (void);
-static ide_module_t idefloppy_module = {
-	IDE_DRIVER_MODULE,
-	idefloppy_init,
-	NULL
 };
 
 /*
@@ -1399,6 +1407,14 @@ static ide_driver_t idefloppy_driver = {
 	idefloppy_proc		/* proc */
 };
 
+int idefloppy_init (void);
+static ide_module_t idefloppy_module = {
+	IDE_DRIVER_MODULE,
+	idefloppy_init,
+	&idefloppy_driver,
+	NULL
+};
+
 /*
  *	idefloppy_init will register the driver for each floppy.
  */
@@ -1409,7 +1425,7 @@ int idefloppy_init (void)
 	int failed = 0;
 
 	MOD_INC_USE_COUNT;
-	while ((drive = ide_scan_devices (ide_floppy, NULL, failed++)) != NULL) {
+	while ((drive = ide_scan_devices (ide_floppy, idefloppy_driver.name, NULL, failed++)) != NULL) {
 		if (!idefloppy_identify_device (drive, drive->id)) {
 			printk (KERN_ERR "ide-floppy: %s: not supported by this version of ide-floppy\n", drive->name);
 			continue;
@@ -1442,7 +1458,7 @@ void cleanup_module (void)
 	ide_drive_t *drive;
 	int failed = 0;
 
-	while ((drive = ide_scan_devices (ide_floppy, &idefloppy_driver, failed)) != NULL)
+	while ((drive = ide_scan_devices (ide_floppy, idefloppy_driver.name, &idefloppy_driver, failed)) != NULL)
 		if (idefloppy_cleanup (drive)) {
 			printk ("%s: cleanup_module() called while still busy\n", drive->name);
 			failed++;

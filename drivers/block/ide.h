@@ -206,23 +206,23 @@ typedef struct ide_drive_s {
 	special_t	special;	/* special action flags */
 	unsigned present	: 1;	/* drive is physically present */
 	unsigned noprobe 	: 1;	/* from:  hdx=noprobe */
-	unsigned keep_settings  : 1;	/* restore settings after drive reset */
+	byte     keep_settings;		/* restore settings after drive reset */
 	unsigned busy		: 1;	/* currently doing revalidate_disk() */
 	unsigned removable	: 1;	/* 1 if need to do check_media_change */
-	unsigned using_dma	: 1;	/* disk is using dma for read/write */
+	byte     using_dma;		/* disk is using dma for read/write */
 	unsigned forced_geom	: 1;	/* 1 if hdx=c,h,s was given at boot */
-	unsigned unmask		: 1;	/* flag: okay to unmask other irqs */
+	byte     unmask;		/* flag: okay to unmask other irqs */
 	unsigned no_unmask	: 1;	/* disallow setting unmask bit */
 	unsigned no_io_32bit	: 1;	/* disallow enabling 32bit I/O */
 	unsigned nobios		: 1;	/* flag: do not probe bios for drive */
-	unsigned slow		: 1;	/* flag: slow data port */
+	byte     slow;			/* flag: slow data port */
 	unsigned autotune	: 2;	/* 1=autotune, 2=noautotune, 0=default */
 	unsigned revalidate	: 1;	/* request revalidation */
-	unsigned bswap		: 1;	/* flag: byte swap data */
-	unsigned dsc_overlap	: 1;	/* flag: DSC overlap */
+	byte     bswap;			/* flag: byte swap data */
+	byte     dsc_overlap;		/* flag: DSC overlap */
 	unsigned atapi_overlap	: 1;	/* flag: ATAPI overlap (not supported) */
 	unsigned nice0		: 1;	/* flag: give obvious excess bandwidth */
-	unsigned nice1		: 1;	/* flag: give potential excess bandwidth */
+	byte     nice1;			/* flag: give potential excess bandwidth */
 	unsigned nice2		: 1;	/* flag: give a share in our own bandwidth */
 #if FAKE_FDISK_FOR_EZDRIVE
 	unsigned remap_0_to_1	: 1;	/* flag: partitioned with ezdrive */
@@ -236,6 +236,7 @@ typedef struct ide_drive_s {
 	byte 		tune_req;	/* requested drive tuning setting */
 	byte		io_32bit;	/* 0=16-bit, 1=32-bit, 2/3=32bit+sync */
 	byte		bad_wstat;	/* used for ignoring WRERR_STAT */
+	byte		nowerr;		/* used for ignoring WRERR_STAT */
 	byte		sect0;		/* offset of first sector for DM6:DDO */
 	byte 		usage;		/* current "open()" count for drive */
 	byte 		head;		/* "real" number of heads */
@@ -253,6 +254,8 @@ typedef struct ide_drive_s {
 	void 		*driver;	/* (ide_driver_t *) */
 	void		*driver_data;	/* extra driver data */
 	struct proc_dir_entry *proc;	/* /proc/ide/ directory entry */
+	void		*settings;	/* /proc/ide/ drive settings */
+	char		driver_req[10];	/* requests specific driver */
 	} ide_drive_t;
 
 /*
@@ -362,6 +365,43 @@ typedef struct hwgroup_s {
 	} ide_hwgroup_t;
 
 /*
+ * configurable drive settings
+ */
+
+#define TYPE_INT	0
+#define TYPE_INTA	1
+#define TYPE_BYTE	2
+#define TYPE_SHORT	3
+
+#define SETTING_READ	(1 << 0)
+#define SETTING_WRITE	(1 << 1)
+#define SETTING_RW	(SETTING_READ | SETTING_WRITE)
+
+typedef int (ide_procset_t)(ide_drive_t *, int);
+typedef struct ide_settings_s {
+	char			*name;
+	int			rw;
+	int			read_ioctl;
+	int			write_ioctl;
+	int			data_type;
+	int			min;
+	int			max;
+	int			mul_factor;
+	int			div_factor;
+	void			*data;
+	ide_procset_t		*set;
+	int			auto_remove;
+	struct ide_settings_s	*next;
+} ide_settings_t;
+
+void ide_add_setting(ide_drive_t *drive, char *name, int rw, int read_ioctl, int write_ioctl, int data_type, int min, int max, int mul_factor, int div_factor, void *data, ide_procset_t *set);
+void ide_remove_setting(ide_drive_t *drive, char *name);
+ide_settings_t *ide_find_setting_by_name(ide_drive_t *drive, char *name);
+int ide_read_setting(ide_drive_t *t, ide_settings_t *setting);
+int ide_write_setting(ide_drive_t *drive, ide_settings_t *setting, int val);
+void ide_add_generic_settings(ide_drive_t *drive);
+
+/*
  * /proc/ide interface
  */
 typedef struct {
@@ -407,6 +447,7 @@ typedef int	(ide_check_media_change_proc)(ide_drive_t *);
 typedef void	(ide_pre_reset_proc)(ide_drive_t *);
 typedef unsigned long (ide_capacity_proc)(ide_drive_t *);
 typedef void	(ide_special_proc)(ide_drive_t *);
+typedef void	(ide_setting_proc)(ide_drive_t *);
 
 typedef struct ide_driver_s {
 	const char			*name;
@@ -442,6 +483,7 @@ typedef int	(ide_module_init_proc)(void);
 typedef struct ide_module_s {
 	int				type;
 	ide_module_init_proc		*init;
+	void				*info;
 	struct ide_module_s		*next;
 } ide_module_t;
 
@@ -455,6 +497,7 @@ typedef struct ide_module_s {
  */
 #ifndef _IDE_C
 extern	ide_hwif_t	ide_hwifs[];		/* master data repository */
+extern  ide_module_t	*ide_modules;
 #endif
 
 /*
@@ -588,6 +631,11 @@ int ide_do_drive_cmd (ide_drive_t *drive, struct request *rq, ide_action_t actio
 void ide_end_drive_cmd (ide_drive_t *drive, byte stat, byte err);
 
 /*
+ * Issue ATA command and wait for completion.
+ */
+int ide_wait_cmd (ide_drive_t *drive, int cmd, int nsect, int feature, int sectors, byte *buf);
+
+/*
  * ide_system_bus_speed() returns what we think is the system VESA/PCI
  * bus speed (in MHz).  This is used for calculating interface PIO timings.
  * The default is 40 for known PCI systems, 50 otherwise.
@@ -651,9 +699,10 @@ int idescsi_init (void);
 
 int ide_register_module (ide_module_t *module);
 void ide_unregister_module (ide_module_t *module);
-ide_drive_t *ide_scan_devices (byte media, ide_driver_t *driver, int n);
+ide_drive_t *ide_scan_devices (byte media, const char *name, ide_driver_t *driver, int n);
 int ide_register_subdriver (ide_drive_t *drive, ide_driver_t *driver, int version);
 int ide_unregister_subdriver (ide_drive_t *drive);
+int ide_replace_subdriver(ide_drive_t *drive, const char *driver);
 
 #ifdef CONFIG_BLK_DEV_IDEPCI
 unsigned long ide_find_free_region (unsigned short size) __init;

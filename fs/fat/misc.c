@@ -221,6 +221,10 @@ if (last) printk("next set to %d\n",fat_access(sb,last,-1));
 #endif
 	sector = MSDOS_SB(sb)->data_start+(nr-2)*cluster_size;
 	last_sector = sector + cluster_size;
+	if(MSDOS_SB(sb)->cvf_format&&
+	  MSDOS_SB(sb)->cvf_format->zero_out_cluster)
+	    MSDOS_SB(sb)->cvf_format->zero_out_cluster(inode,nr);
+	else
 	for ( ; sector < last_sector; sector++) {
 		#ifdef DEBUG
 			printk("zeroing sector %d\n",sector);
@@ -279,9 +283,7 @@ int date_dos2unix(unsigned short time,unsigned short date)
 	    month < 2 ? 1 : 0)+3653);
 			/* days since 1.1.70 plus 80's leap day */
 	secs += sys_tz.tz_minuteswest*60;
-	if (sys_tz.tz_dsttime) {
-	    secs -= 3600;
-	}
+	if (sys_tz.tz_dsttime) secs -= 3600;
 	return secs;
 }
 
@@ -293,9 +295,6 @@ void fat_date_unix2dos(int unix_date,unsigned short *time,
 {
 	int day,year,nl_day,month;
 
-	if (sys_tz.tz_dsttime) {
-		unix_date += 3600;
-	}
 	unix_date -= sys_tz.tz_minuteswest*60;
 	if (sys_tz.tz_dsttime) unix_date += 3600;
 

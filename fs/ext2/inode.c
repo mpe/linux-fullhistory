@@ -219,6 +219,7 @@ repeat:
 	    (current->rlim[RLIMIT_FSIZE].rlim_cur >>
 	     EXT2_BLOCK_SIZE_BITS(inode->i_sb))) {
 		*err = -EFBIG;
+		send_sig(SIGXFSZ, current, 0);
 		return NULL;
 	}
 	if (inode->u.ext2_i.i_next_alloc_block == new_block)

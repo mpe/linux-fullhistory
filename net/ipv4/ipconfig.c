@@ -868,6 +868,9 @@ __initfunc(static void ic_bootp_recv(void))
 			}
 		}
 	}
+
+	if (ic_gateway == INADDR_NONE && b->relay_ip)
+		ic_gateway = b->relay_ip;
 }
 
 #endif

@@ -50,6 +50,9 @@ static struct file_operations proc_dir_operations = {
 	NULL			/* can't fsync */
 };
 
+int proc_readlink(struct dentry * dentry, char * buffer, int buflen);
+struct dentry * proc_follow_link(struct dentry *dentry, struct dentry *base);
+
 /*
  * proc directories can do almost nothing..
  */
@@ -332,6 +335,9 @@ int proc_register(struct proc_dir_entry * dir, struct proc_dir_entry * dp)
 		if (dp->ops == NULL)
 			dp->ops = &proc_dir_inode_operations;
 		dir->nlink++;
+	} else if (S_ISLNK(dp->mode)) {
+		if (dp->ops == NULL)
+			dp->ops = &proc_link_inode_operations;
 	} else {
 		if (dp->ops == NULL)
 			dp->ops = &proc_file_inode_operations;
@@ -389,6 +395,50 @@ static struct dentry * proc_self_follow_link(struct dentry *dentry,
 	return lookup_dentry(tmp, base, 1);
 }	
 
+int proc_readlink(struct dentry * dentry, char * buffer, int buflen)
+{
+	struct inode *inode = dentry->d_inode;
+	struct proc_dir_entry * de;
+	char 	*page;
+	int len = 0;
+
+	de = (struct proc_dir_entry *) inode->u.generic_ip;
+	if (!de)
+		return -ENOENT;
+	if (!(page = (char*) __get_free_page(GFP_KERNEL)))
+		return -ENOMEM;
+
+	if (de->readlink_proc)
+		len = de->readlink_proc(de, page);
+
+	if (len > buflen)
+		len = buflen;
+
+	copy_to_user(buffer, page, len);
+	free_page((unsigned long) page);
+	return len;
+}
+
+struct dentry * proc_follow_link(struct dentry * dentry, struct dentry *base)
+{
+	struct inode *inode = dentry->d_inode;
+	struct proc_dir_entry * de;
+	char 	*page;
+	struct dentry *d;
+	int len = 0;
+
+	de = (struct proc_dir_entry *) inode->u.generic_ip;
+	if (!(page = (char*) __get_free_page(GFP_KERNEL)))
+		return NULL;
+
+	if (de->readlink_proc)
+		len = de->readlink_proc(de, page);
+
+	d = lookup_dentry(page, base, 1);
+	free_page((unsigned long) page);
+	return d;
+}
+
 static struct inode_operations proc_self_inode_operations = {
 	NULL,			/* no file-ops */
 	NULL,			/* create */
@@ -402,6 +452,26 @@ static struct inode_operations proc_self_inode_operations = {
 	NULL,			/* rename */
 	proc_self_readlink,	/* readlink */
 	proc_self_follow_link,	/* follow_link */
+	NULL,			/* readpage */
+	NULL,			/* writepage */
+	NULL,			/* bmap */
+	NULL,			/* truncate */
+	NULL			/* permission */
+};
+
+static struct inode_operations proc_link_inode_operations = {
+	NULL,			/* no file-ops */
+	NULL,			/* create */
+	NULL,			/* lookup */
+	NULL,			/* link */
+	NULL,			/* unlink */
+	NULL,			/* symlink */
+	NULL,			/* mkdir */
+	NULL,			/* rmdir */
+	NULL,			/* mknod */
+	NULL,			/* rename */
+	proc_readlink,		/* readlink */
+	proc_follow_link,	/* follow_link */
 	NULL,			/* readpage */
 	NULL,			/* writepage */
 	NULL,			/* bmap */

@@ -562,10 +562,11 @@ int minix_symlink(struct inode * dir, struct dentry *dentry,
 	return 0;
 }
 
-int minix_link(struct inode * inode, struct inode * dir,
+int minix_link(struct dentry * old_dentry, struct inode * dir,
 	       struct dentry *dentry)
 {
 	int error;
+	struct inode *inode = old_dentry->d_inode;
 	struct minix_dir_entry * de;
 	struct buffer_head * bh;
 

@@ -146,8 +146,9 @@ out:
 int d_invalidate(struct dentry * dentry)
 {
 	/* Check whether to do a partial shrink_dcache */
-	if (dentry->d_count > 1 && !list_empty(&dentry->d_subdirs))
+	if (!list_empty(&dentry->d_subdirs))
 		shrink_dcache_parent(dentry);
+
 	if (dentry->d_count != 1)
 		return -EBUSY;
 

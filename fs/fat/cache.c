@@ -9,6 +9,7 @@
 #include <linux/errno.h>
 #include <linux/string.h>
 #include <linux/stat.h>
+#include <linux/fat_cvf.h>
 
 #include "msbuffer.h"
 
@@ -28,6 +29,10 @@ int fat_access(struct super_block *sb,int nr,int new_value)
 	struct buffer_head *bh,*bh2,*c_bh,*c_bh2;
 	unsigned char *p_first,*p_last;
 	int copy,first,last,next,b;
+
+	if(MSDOS_SB(sb)->cvf_format)
+	  if(MSDOS_SB(sb)->cvf_format->fat_access)
+	    return MSDOS_SB(sb)->cvf_format->fat_access(sb,nr,new_value);
 
 	if ((unsigned) (nr-2) >= MSDOS_SB(sb)->clusters)
 		return 0;
@@ -240,7 +245,7 @@ void fat_cache_inval_dev(kdev_t device)
 }
 
 
-int get_cluster(struct inode *inode,int cluster)
+int fat_get_cluster(struct inode *inode,int cluster)
 {
 	int nr,count;
 
@@ -262,6 +267,9 @@ int fat_smap(struct inode *inode,int sector)
 	int cluster,offset;
 
 	sb = MSDOS_SB(inode->i_sb);
+	if(sb->cvf_format)
+	  if(sb->cvf_format->cvf_smap)
+	    return sb->cvf_format->cvf_smap(inode,sector);
 	if ((sb->fat_bits != 32) &&
 	    (inode->i_ino == MSDOS_ROOT_INO || (S_ISDIR(inode->i_mode) &&
 	     !MSDOS_I(inode)->i_start))) {
@@ -271,7 +279,7 @@ int fat_smap(struct inode *inode,int sector)
 	}
 	cluster = sector/sb->cluster_size;
 	offset = sector % sb->cluster_size;
-	if (!(cluster = get_cluster(inode,cluster))) return 0;
+	if (!(cluster = fat_get_cluster(inode,cluster))) return 0;
 	return (cluster-2)*sb->cluster_size+sb->data_start+offset;
 }
 

@@ -1,7 +1,7 @@
 /*
- * linux/drivers/block/ide-tape.c	Version 1.12		Dec   7, 1997
+ * linux/drivers/block/ide-tape.c	Version 1.13		Jan   2, 1998
  *
- * Copyright (C) 1995, 1996 Gadi Oxman <gadio@netvision.net.il>
+ * Copyright (C) 1995 - 1998 Gadi Oxman <gadio@netvision.net.il>
  *
  * This driver was constructed as a student project in the software laboratory
  * of the faculty of electrical engineering in the Technion - Israel's
@@ -211,6 +211,7 @@
  *                        of bytes written to the tape was not an integral
  *                        number of tape blocks.
  *                       Add support for INTERRUPT DRQ devices.
+ * Ver 1.13  Jan  2 98   Add "speed == 0" work-around for HP COLORADO 5GB
  *
  * Here are some words from the first releases of hd.c, which are quoted
  * in ide.c and apply here as well:
@@ -320,7 +321,7 @@
  *		sharing a (fast) ATA-2 disk with any (slow) new ATAPI device.
  */
 
-#define IDETAPE_VERSION "1.12"
+#define IDETAPE_VERSION "1.13"
 
 #include <linux/config.h>
 #include <linux/module.h>
@@ -675,7 +676,7 @@ typedef struct {
 	 */
 	int nr_stages;				/* Number of currently used stages */
 	int nr_pending_stages;			/* Number of pending stages */
-	int max_stages;				/* We will not allocate more than this number of stages */
+	int max_stages, min_pipeline, max_pipeline; /* We will not allocate more than this number of stages */
 	idetape_stage_t *first_stage;		/* The first stage which will be removed from the pipeline */
 	idetape_stage_t *active_stage;		/* The currently active stage */
 	idetape_stage_t *next_stage;		/* Will be serviced after the currently active request */
@@ -1409,12 +1410,15 @@ static void idetape_switch_buffers (idetape_tape_t *tape, idetape_stage_t *stage
 static void idetape_increase_max_pipeline_stages (ide_drive_t *drive)
 {
 	idetape_tape_t *tape = drive->driver_data;
+	int increase = (tape->max_pipeline - tape->min_pipeline) / 10;
 	
 #if IDETAPE_DEBUG_LOG
 	printk (KERN_INFO "Reached idetape_increase_max_pipeline_stages\n");
 #endif /* IDETAPE_DEBUG_LOG */
 
-	tape->max_stages = IDE_MIN (tape->max_stages + IDETAPE_INCREASE_STAGES_RATE, IDETAPE_MAX_PIPELINE_STAGES);
+	tape->max_stages += increase;
+	tape->max_stages = IDE_MAX(tape->max_stages, tape->min_pipeline);
+	tape->max_stages = IDE_MIN(tape->max_stages, tape->max_pipeline);
 }
 
 /*
@@ -2520,7 +2524,7 @@ static void idetape_discard_read_pipeline (ide_drive_t *drive)
 	while (tape->first_stage != NULL)
 		idetape_remove_stage_head (drive);
 	tape->nr_pending_stages = 0;
-	tape->max_stages = IDETAPE_MIN_PIPELINE_STAGES;
+	tape->max_stages = tape->min_pipeline;
 }
 
 /*
@@ -2610,7 +2614,7 @@ static void idetape_empty_write_pipeline (ide_drive_t *drive)
 	 *	 as some systems are constantly on, and the system load
 	 *	 can be totally different on the next backup).
 	 */
-	tape->max_stages = IDETAPE_MIN_PIPELINE_STAGES;
+	tape->max_stages = tape->min_pipeline;
 #if IDETAPE_DEBUG_BUGS
 	if (tape->first_stage != NULL || tape->next_stage != NULL || tape->last_stage != NULL || tape->nr_stages != 0) {
 		printk (KERN_ERR "ide-tape: ide-tape pipeline bug\n");		
@@ -3460,6 +3464,15 @@ static void idetape_get_mode_sense_results (ide_drive_t *drive)
 	capabilities->speed = ntohs (capabilities->speed);
 	capabilities->buffer_size = ntohs (capabilities->buffer_size);
 
+	if (!capabilities->speed) {
+		printk("ide-tape: %s: overriding capabilities->speed (assuming 650KB/sec)\n", drive->name);
+		capabilities->speed = 650;
+	}
+	if (!capabilities->max_speed) {
+		printk("ide-tape: %s: overriding capabilities->max_speed (assuming 650KB/sec)\n", drive->name);
+		capabilities->max_speed = 650;
+	}
+
 	tape->capabilities = *capabilities;		/* Save us a copy */
 	tape->tape_block_size = capabilities->blk512 ? 512:1024;
 #if IDETAPE_DEBUG_LOG
@@ -3493,6 +3506,24 @@ static void idetape_get_mode_sense_results (ide_drive_t *drive)
 #endif /* IDETAPE_DEBUG_LOG */
 }
 
+static void idetape_add_settings(ide_drive_t *drive)
+{
+	idetape_tape_t *tape = drive->driver_data;
+
+/*
+ *			drive	setting name	read/write	ioctl	ioctl		data type	min			max			mul_factor			div_factor			data pointer				set function
+ */
+	ide_add_setting(drive,	"buffer",	SETTING_READ,	-1,	-1,		TYPE_SHORT,	0,			0xffff,			1,				2,				&tape->capabilities.buffer_size,	NULL);
+	ide_add_setting(drive,	"pipeline_min",	SETTING_RW,	-1,	-1,		TYPE_INT,	0,			0xffff,			tape->stage_size / 1024,	1,				&tape->min_pipeline,			NULL);
+	ide_add_setting(drive,	"pipeline",	SETTING_RW,	-1,	-1,		TYPE_INT,	0,			0xffff,			tape->stage_size / 1024,	1,				&tape->max_stages,			NULL);
+	ide_add_setting(drive,	"pipeline_max",	SETTING_RW,	-1,	-1,		TYPE_INT,	0,			0xffff,			tape->stage_size / 1024,	1,				&tape->max_pipeline,			NULL);
+	ide_add_setting(drive,	"pipeline_used",SETTING_READ,	-1,	-1,		TYPE_INT,	0,			0xffff,			tape->stage_size / 1024,	1,				&tape->nr_stages,			NULL);
+	ide_add_setting(drive,	"speed",	SETTING_READ,	-1,	-1,		TYPE_SHORT,	0,			0xffff,			1,				1,				&tape->capabilities.speed,		NULL);
+	ide_add_setting(drive,	"stage",	SETTING_READ,	-1,	-1,		TYPE_INT,	0,			0xffff,			1,				1024,				&tape->stage_size,			NULL);
+	ide_add_setting(drive,	"tdsc",		SETTING_RW,	-1,	-1,		TYPE_INT,	IDETAPE_DSC_RW_MIN,	IDETAPE_DSC_RW_MAX,	1000,				HZ,				&tape->best_dsc_rw_frequency,		NULL);
+	ide_add_setting(drive,	"dsc_overlap",	SETTING_RW,	-1,	-1,		TYPE_BYTE,	0,			1,			1,				1,				&drive->dsc_overlap,			NULL);
+}
+
 /*
  *	ide_setup is called to:
  *
@@ -3521,7 +3552,9 @@ static void idetape_setup (ide_drive_t *drive, idetape_tape_t *tape, int minor)
 	tape->name[0] = 'h'; tape->name[1] = 't'; tape->name[2] = '0' + minor;
 	tape->chrdev_direction = idetape_direction_none;
 	tape->pc = tape->pc_stack;
-	tape->max_stages = IDETAPE_MIN_PIPELINE_STAGES;
+	tape->min_pipeline = IDETAPE_MIN_PIPELINE_STAGES;
+	tape->max_pipeline = IDETAPE_MAX_PIPELINE_STAGES;
+	tape->max_stages = tape->min_pipeline;
 	*((unsigned short *) &gcw) = drive->id->config;
 	if (gcw.drq_type == 1)
 		set_bit(IDETAPE_DRQ_INTERRUPT, &tape->flags);
@@ -3577,6 +3610,8 @@ static void idetape_setup (ide_drive_t *drive, idetape_tape_t *tape, int minor)
 		drive->name, tape->name, tape->capabilities.speed, (tape->capabilities.buffer_size * 512) / tape->stage_size,
 		tape->stage_size / 1024, tape->max_stages * tape->stage_size / 1024,
 		tape->best_dsc_rw_frequency * 1000 / HZ, drive->using_dma ? ", DMA":"");
+
+	idetape_add_settings(drive);
 }
 
 static int idetape_cleanup (ide_drive_t *drive)
@@ -3605,18 +3640,6 @@ static int idetape_cleanup (ide_drive_t *drive)
 	return 0;
 }
 
-static int proc_idetape_read_buffer
-	(char *page, char **start, off_t off, int count, int *eof, void *data)
-{
-	ide_drive_t	*drive = (ide_drive_t *) data;
-	idetape_tape_t	*tape = drive->driver_data;
-	char		*out = page;
-	int		len;
-
-	len = sprintf(out,"%d\n", tape->capabilities.buffer_size / 2);
-	PROC_IDE_READ_RETURN(page,start,off,count,eof,len);
-}
-
 static int proc_idetape_read_name
 	(char *page, char **start, off_t off, int count, int *eof, void *data)
 {
@@ -3629,70 +3652,9 @@ static int proc_idetape_read_name
 	PROC_IDE_READ_RETURN(page,start,off,count,eof,len);
 }
 
-static int proc_idetape_read_pipeline
-	(char *page, char **start, off_t off, int count, int *eof, void *data)
-{
-	ide_drive_t	*drive = (ide_drive_t *) data;
-	idetape_tape_t	*tape = drive->driver_data;
-	char		*out = page;
-	int		len;
-
-	len = sprintf(out,"%d\n", tape->max_stages * tape->stage_size / 1024);
-	PROC_IDE_READ_RETURN(page,start,off,count,eof,len);
-}
-
-static int proc_idetape_read_speed
-	(char *page, char **start, off_t off, int count, int *eof, void *data)
-{
-	ide_drive_t	*drive = (ide_drive_t *) data;
-	idetape_tape_t	*tape = drive->driver_data;
-	char		*out = page;
-	int		len;
-
-	len = sprintf(out,"%d\n", tape->capabilities.speed);
-	PROC_IDE_READ_RETURN(page,start,off,count,eof,len);
-}
-
-static int proc_idetape_read_stage
-	(char *page, char **start, off_t off, int count, int *eof, void *data)
-{
-	ide_drive_t	*drive = (ide_drive_t *) data;
-	idetape_tape_t	*tape = drive->driver_data;
-	char		*out = page;
-	int		len;
-
-	len = sprintf(out,"%d\n", tape->stage_size / 1024);
-	PROC_IDE_READ_RETURN(page,start,off,count,eof,len);
-}
-
-static int proc_idetape_read_tdsc
-	(char *page, char **start, off_t off, int count, int *eof, void *data)
-{
-	ide_drive_t	*drive = (ide_drive_t *) data;
-	idetape_tape_t	*tape = drive->driver_data;
-	char		*out = page;
-	int		len;
-
-	len = sprintf(out,"%lu\n", tape->best_dsc_rw_frequency * 1000 / HZ);
-	PROC_IDE_READ_RETURN(page,start,off,count,eof,len);
-}
-
 static ide_proc_entry_t idetape_proc[] = {
-	{ "buffer", proc_idetape_read_buffer, NULL },
 	{ "name", proc_idetape_read_name, NULL },
-	{ "pipeline", proc_idetape_read_pipeline, NULL },
-	{ "speed", proc_idetape_read_speed, NULL },
-	{ "stage", proc_idetape_read_stage, NULL },
-	{ "tdsc", proc_idetape_read_tdsc, NULL },
 	{ NULL, NULL, NULL }
-};
-
-int idetape_init (void);
-
-static ide_module_t idetape_module = {
-	IDE_DRIVER_MODULE,
-	idetape_init,
-	NULL
 };
 
 /*
@@ -3716,6 +3678,14 @@ static ide_driver_t idetape_driver = {
 	NULL,			/* capacity */
 	NULL,			/* special */
 	idetape_proc		/* proc */
+};
+
+int idetape_init (void);
+static ide_module_t idetape_module = {
+	IDE_DRIVER_MODULE,
+	idetape_init,
+	&idetape_driver,
+	NULL
 };
 
 /*
@@ -3751,7 +3721,7 @@ int idetape_init (void)
 		for (minor = 0; minor < MAX_HWIFS * MAX_DRIVES; minor++ )
 			idetape_chrdevs[minor].drive = NULL;
 
-	if ((drive = ide_scan_devices (ide_tape, NULL, failed++)) == NULL) {
+	if ((drive = ide_scan_devices (ide_tape, idetape_driver.name, NULL, failed++)) == NULL) {
 		ide_register_module (&idetape_module);
 		MOD_DEC_USE_COUNT;
 		return 0;
@@ -3780,7 +3750,7 @@ int idetape_init (void)
 		idetape_setup (drive, tape, minor);
 		idetape_chrdevs[minor].drive = drive;
 		supported++; failed--;
-	} while ((drive = ide_scan_devices (ide_tape, NULL, failed++)) != NULL);
+	} while ((drive = ide_scan_devices (ide_tape, idetape_driver.name, NULL, failed++)) != NULL);
 	if (!idetape_chrdev_present && !supported) {
 		unregister_chrdev (IDETAPE_MAJOR, "ht");
 	} else

@@ -854,8 +854,6 @@ static int sr_attach(Scsi_Device * SDp){
     SDp->scsi_request_fn = do_sr_request;
     scsi_CDs[i].device = SDp;
 
-    sr_vendor_init(i);
-
     sr_template.nr_dev++;
     if(sr_template.nr_dev > sr_template.dev_max)
 	panic ("scsi_devices corrupt (sr)");
@@ -986,13 +984,11 @@ void get_capabilities(int i){
     if (-EINVAL == rc) {
         /* failed, drive has'nt this mode page */
         scsi_CDs[i].cdi.speed      = 1;
-        scsi_CDs[i].cdi.capacity   = 1;
         /* disable speed select, drive probably can't do this either */
         scsi_CDs[i].cdi.mask      |= CDC_SELECT_SPEED;
     } else {
         n = buffer[3]+4;
         scsi_CDs[i].cdi.speed    = ((buffer[n+8] << 8) + buffer[n+9])/176;
-        scsi_CDs[i].cdi.capacity = 1;
       	scsi_CDs[i].readcd_known = 1;
         scsi_CDs[i].readcd_cdda  = buffer[n+5] & 0x01;
         /* print some capability bits */
@@ -1085,7 +1081,9 @@ void sr_finish()
 	scsi_CDs[i].cdi.handle     = &scsi_CDs[i];
 	scsi_CDs[i].cdi.dev        = MKDEV(MAJOR_NR,i);
 	scsi_CDs[i].cdi.mask       = 0;
+        scsi_CDs[i].cdi.capacity   = 1;
 	get_capabilities(i);
+	sr_vendor_init(i);
 
 	sprintf(name, "sr%d", i);
 	strcpy(scsi_CDs[i].cdi.name, name);

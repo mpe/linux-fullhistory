@@ -69,6 +69,8 @@ EXPORT_SYMBOL(scsi_mark_host_reset);
 EXPORT_SYMBOL(scsi_logging_level);
 #endif
 
+EXPORT_SYMBOL(scsi_sleep);
+
 #if defined(CONFIG_PROC_FS)
 EXPORT_SYMBOL(proc_print_scsidevice);
 #endif

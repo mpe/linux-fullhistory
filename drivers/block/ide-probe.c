@@ -624,6 +624,11 @@ static void init_gendisk (ide_hwif_t *hwif)
 
 	for (gdp = &gendisk_head; *gdp; gdp = &((*gdp)->next)) ;
 	hwif->gd = *gdp = gd;			/* link onto tail of list */
+
+	for (unit = 0; unit < units; ++unit) {
+		if (hwif->drives[unit].present)
+			ide_add_generic_settings(hwif->drives + unit);
+	}
 }
 
 static int hwif_init (ide_hwif_t *hwif)

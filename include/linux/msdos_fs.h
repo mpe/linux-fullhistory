@@ -161,8 +161,9 @@ struct msdos_dir_slot {
 	__u8    name11_12[4];	/* last 2 characters in name */
 };
 
-struct slot_info {
+struct vfat_slot_info {
 	int is_long;		       /* was the found entry long */
+	int is_alias;		       /* was the found entry an alias */
 	int long_slots;		       /* number of long slots in filename */
 	int total_slots;	       /* total slots (long and short) */
 	loff_t longname_offset;	       /* dir offset for longname start */
@@ -248,12 +249,14 @@ extern int fat_dir_ioctl(struct inode * inode, struct file * filp,
 /* file.c */
 extern struct inode_operations fat_file_inode_operations;
 extern struct inode_operations fat_file_inode_operations_1024;
+extern struct inode_operations fat_file_inode_operations_readpage;
 extern ssize_t fat_file_read(struct file *, char *, size_t, loff_t *);
 extern ssize_t fat_file_write(struct file *, const char *, size_t, loff_t *);
 extern void fat_truncate(struct inode *inode);
 
 /* mmap.c */
 extern int fat_mmap(struct file *, struct vm_area_struct *);
+extern int fat_readpage(struct inode *, struct page *);
 
 
 /* vfat.c */

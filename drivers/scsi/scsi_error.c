@@ -62,7 +62,7 @@
 #define HOST_RESET_SETTLE_TIME  10*HZ
 
 
-static const char RCSid[] = "$Header: /mnt/ide/home/eric/CVSROOT/linux/drivers/scsi/scsi_error.c,v 1.9 1997/12/07 23:38:23 eric Exp $";
+static const char RCSid[] = "$Header: /mnt/ide/home/eric/CVSROOT/linux/drivers/scsi/scsi_error.c,v 1.10 1997/12/08 04:50:35 eric Exp $";
 
 STATIC int         scsi_check_sense (Scsi_Cmnd * SCpnt);
 STATIC int         scsi_request_sense(Scsi_Cmnd *);
@@ -1088,10 +1088,12 @@ STATIC  int scsi_check_sense (Scsi_Cmnd * SCpnt)
     case MEDIUM_ERROR:
 	return FAILED;
 
+    case ILLEGAL_REQUEST:
+	return SUCCESS;
+
     case BLANK_CHECK:
     case DATA_PROTECT:
     case HARDWARE_ERROR:
-    case ILLEGAL_REQUEST:
     default:
 	return FAILED;
     }
