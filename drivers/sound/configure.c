@@ -778,7 +778,7 @@ ask_parameters (void)
 		  "Check from manual of the card");
 
   ask_int_choice (B (OPT_SB), "SB_MPU_IRQ",
-		  "SB MPU401 IRQ (SB16, Jazz16 and ES1688)",
+		  "SB MPU401 IRQ (Jazz16 and ES1688)",
 		  FMT_INT,
 		  -1,
 		  "Check from manual of the card");

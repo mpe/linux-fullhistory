@@ -25,6 +25,7 @@
  *  Version 0.04        Updated for ide.c version 5.30
  *                      Changed initialization strategy
  *  Version 0.05	Kernel integration.  -ml
+ *  Version 0.06	Ooops. Add hwgroup to direct call of ide_intr() -ml
  */
 
 
@@ -58,6 +59,7 @@
 #include <linux/blkdev.h>
 #include <linux/hdreg.h>
 #include <asm/io.h>
+#include <asm/irq.h>
 #include "ide.h"
 #include "promise.h"
 
@@ -319,7 +321,13 @@ void do_promise_io (ide_drive_t *drive, struct request *rq)
 	    do {
 		stat=GET_STAT();
 		if(stat & DRQ_STAT) {
-		    ide_intr(HWIF(drive)->irq,NULL,NULL);
+                    unsigned long flags;
+                    save_flags(flags);
+                    cli();
+                    disable_irq(HWIF(drive)->irq);
+		    ide_intr(HWIF(drive)->irq,HWGROUP(drive),NULL);
+                    enable_irq(HWIF(drive)->irq);
+                    restore_flags(flags);
 		    return;
 		}
 		if(IN_BYTE(io_base+IDE_SELECT_OFFSET) & 0x01)

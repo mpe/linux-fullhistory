@@ -730,10 +730,13 @@ static int eexp_hw_probe(struct device *dev, unsigned short ioaddr)
 		outb(0,ioaddr+SET_IRQ);
 	}
 
-	eexp_hw_ASICrst(dev);
-
 	dev->priv = kmalloc(sizeof(struct net_local), GFP_KERNEL);
+	if (!dev->priv) 
+		return -ENOMEM;
+
 	memset(dev->priv, 0, sizeof(struct net_local));
+
+	eexp_hw_ASICrst(dev);
 
 	{
 		unsigned short i586mso = 0x023e;

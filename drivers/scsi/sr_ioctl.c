@@ -378,6 +378,44 @@ int sr_ioctl(struct inode * inode, struct file * file, unsigned int cmd, unsigne
 	return result;
     }
 	
+    case CDROMVOLREAD:
+    {
+	char * buffer;
+	struct cdrom_volctrl volctrl;
+	
+        err = verify_area (VERIFY_WRITE, (void *) arg, sizeof (struct cdrom_volctrl));
+        if (err) return err;
+	
+	/* Get the current params */
+	
+	sr_cmd[0] = MODE_SENSE;
+	sr_cmd[1] = (scsi_CDs[target].device -> lun) << 5;
+	sr_cmd[2] = 0xe;    /* Want mode page 0xe, CDROM audio params */
+	sr_cmd[3] = 0;
+	sr_cmd[4] = 28;
+	sr_cmd[5] = 0;
+	
+	buffer = (unsigned char *) scsi_malloc(512);
+	if(!buffer) return -ENOMEM;
+	
+	if ((result = do_ioctl (target, sr_cmd, buffer, 28))) {
+	    printk ("(CDROMVOLREAD) Hosed while obtaining audio mode page\n");
+	    scsi_free(buffer, 512);
+	    return result;
+	}
+
+	volctrl.channel0 = buffer[21];
+	volctrl.channel1 = buffer[23];
+	volctrl.channel2 = buffer[25];
+	volctrl.channel3 = buffer[27];
+
+	memcpy_tofs ((void *) arg, &volctrl, sizeof (struct cdrom_volctrl));
+
+	scsi_free(buffer, 512);
+
+	return 0;
+    }
+	
     case CDROMSUBCHNL:
     {
 	struct cdrom_subchnl subchnl;

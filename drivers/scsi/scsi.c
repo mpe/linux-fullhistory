@@ -271,6 +271,7 @@ static struct dev_info device_list[] =
 {"INSITE","I325VM","*", BLIST_KEY},
 {"PIONEER","CD-ROM DRM-602X","*", BLIST_FORCELUN | BLIST_SINGLELUN},
 {"PIONEER","CD-ROM DRM-604X","*", BLIST_FORCELUN | BLIST_SINGLELUN},
+{"EMULEX","MD21/S2     ESDI","*",BLIST_FORCELUN | BLIST_SINGLELUN},
 /*
  * Must be at end of list...
  */
@@ -768,8 +769,10 @@ int scan_scsis_single (int channel, int dev, int lun, int *max_dev_lun,
    * If this device is known to support multiple units, override the other
    * settings, and scan all of them.
    */
-  if (bflags & BLIST_FORCELUN)
+  if (bflags & BLIST_FORCELUN) {
     *max_dev_lun = 8;
+    return 1;
+  }
   /*
    * We assume the device can't handle lun!=0 if: - it reports scsi-0 (ANSI
    * SCSI Revision 0) (old drives like MAXTOR XT-3280) or - it reports scsi-1
@@ -1037,17 +1040,32 @@ Scsi_Cmnd * allocate_device (struct request ** reqp, Scsi_Device * device,
 	    restore_flags(flags);
 	    return NULL;
 	}
-	if (!SCpnt || SCpnt->request.rq_status != RQ_INACTIVE)  /* Might have changed */
+	if (!SCpnt || SCpnt->request.rq_status != RQ_INACTIVE)	/* Might have changed */
 	{
-	    restore_flags(flags);
-	    if(!wait) return NULL;
-	    if (!SCwait) {
-		printk("Attempt to allocate device channel %d, target %d, "
-		       "lun %d\n", device->channel, device->id, device->lun);
-		panic("No device found in allocate_device\n");
-	    }
-	    SCSI_SLEEP(&device->device_wait,
-		       (SCwait->request.rq_status != RQ_INACTIVE));
+#if 1	/* NEW CODE */
+		if (wait && SCwait && SCwait->request.rq_status != RQ_INACTIVE) {
+ 			sleep_on(&device->device_wait);
+ 			restore_flags(flags);
+	 	} else {
+ 			restore_flags(flags);
+	 		if (!wait) return NULL;
+ 			if (!SCwait) {
+	 			printk("Attempt to allocate device target %d, lun %d\n",
+ 					device->id ,device->lun);
+ 				panic("No device found in allocate_device\n");
+	 		}
+ 		}
+#else	/* ORIGINAL CODE */
+		    restore_flags(flags);
+		    if(!wait) return NULL;
+		    if (!SCwait) {
+			printk("Attempt to allocate device channel %d, target %d, "
+			       "lun %d\n", device->channel, device->id, device->lun);
+			panic("No device found in allocate_device\n");
+		    }
+		    SCSI_SLEEP(&device->device_wait,
+			       (SCwait->request.rq_status != RQ_INACTIVE));
+#endif
 	} else {
 	    if (req) {
 		memcpy(&SCpnt->request, req, sizeof(struct request));

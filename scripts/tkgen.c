@@ -24,6 +24,9 @@
  *                - Fixed a bug I introduced into Choice dependencies.  Thanks
  *                  to Robert Krawitz for pointing this out.
  *
+ * 1996 03 16
+ * Avery Pennarun - basic "do_make" support added to let sound config work.
+ *
  * TO DO:
  *   - clean up - there are useless ifdef's everywhere.
  *   - do more sensible things with the 'config -resizable" business.
@@ -41,6 +44,10 @@
  *   - choice buttons should default to the first menu option, rather than a
  *           blank.  Also look up the right variable when the help button
  *           is pressed.
+ *   - remove the remaining bits of the now-unnecessary "next/prev" submenu
+ *           code.
+ *   - clean up +/- 16 confusion for enabling/disabling variables; causes
+ *           problems with dependencies.
  *   
  */
 #include <stdio.h>
@@ -430,6 +437,9 @@ void generate_if_for_outfile(struct kconfig * item,
       printf("} then { write_hex $cfg $autocfg %s $%s $notmod }\n",
              item->optionname, item->optionname);
       break;
+    case tok_make:
+      printf("} then { do_make {%s} }\n",item->value);
+      break;
     case tok_choose:
     case tok_choice:
       fprintf(stderr,"Fixme\n");
@@ -610,7 +620,6 @@ static void find_menu_size(struct kconfig *cfg,
       case tok_int:
       case tok_hex:
       case tok_choose:
-      case tok_sound:
 	tot++;
 	break;
       case tok_choice:
@@ -667,7 +676,6 @@ void dump_tk_script(struct kconfig *scfg)
 	case tok_int:
 	case tok_hex:
 	case tok_choose:
-	case tok_sound:
 	  /*
 	   * If we have overfilled the menu, then go to the next one.
 	   */
@@ -820,19 +828,6 @@ void dump_tk_script(struct kconfig *scfg)
 		 cfg->label,
 		 cfg->optionname);
 	  break;
-#ifdef INCOMPAT_SOUND_CONFIG
-	case tok_sound:
-	  if( cfg->menu_number != menu_num )
-	    {
-	      end_proc(menu_num, menu_min, menu_max);
-	      start_proc(menulabel, cfg->menu_number, FALSE);
-	      menu_num = cfg->menu_number;
-	    }
-	  printf("\tdo_sound $w.config.f %d %d\n",
-		 cfg->menu_number,
-		 cfg->menu_line);
-	  break;
-#endif
 	default:
 	  break;
 	}
@@ -963,7 +958,8 @@ void dump_tk_script(struct kconfig *scfg)
 	  if(cfg->flags & GLOBAL_WRITTEN) break;
 	  cfg->flags |= GLOBAL_WRITTEN;
 	  printf("\tglobal %s\n", cfg->optionname);
-
+	  /* fall through */
+	case tok_make:
 	case tok_comment:
 	  if (cfg->cond != NULL ) 
 	    generate_if_for_outfile(cfg, cfg->cond);
@@ -1016,6 +1012,10 @@ void dump_tk_script(struct kconfig *scfg)
 		  printf("\twrite_hex $cfg $autocfg %s $%s $notmod\n",
 			 cfg->optionname,
 			 cfg->optionname);
+	        }
+	      else if (cfg->tok == tok_make )
+	        {
+	          printf("\tdo_make {%s}\n",cfg->value);
 	        }
 	      else
 		{

@@ -133,6 +133,7 @@ checkCPUtype:
 	je is486
 isnew:	pushl %ecx		# restore original EFLAGS
 	popfl
+	incl SYMBOL_NAME(have_cpuid)	# we have CPUID
 	/* get processor type */
 	movl $1, %eax		# Use the CPUID instruction to 
 	.byte 0x0f, 0xa2	# check the processor type

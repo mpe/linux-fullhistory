@@ -432,12 +432,13 @@ S: Atlanta, Georgia 30332
 S: USA
 
 N: Kai Harrekilde-Petersen
-E: khp@pip.dknet.dk
+E: khp@dolphinics.no
 W: http://www.pip.dknet.dk/~pip93
 D: ftape-HOWTO, i82078 fdc detection code, various ftape related stuff.
-S: Studsgade 40, 2tv
-S: DK-8000 Aarhus C
-S: Denmark
+S: Dolphin Interconnect Solutions A/S
+S: P.O. Box 70, Borgerud
+S: N-0621 Oslo
+S: Norway
 
 N: Andrew Haylett
 E: ajh@primag.co.uk
@@ -716,6 +717,7 @@ E: mj@k332.feld.cvut.cz
 D: BIOS video mode handling code
 D: Miscellaneous kernel fixes
 D: MOXA C-218 serial board driver
+D: BOOTP support
 S: Kankovskeho 1241
 S: 182 00 Praha 8
 S: Czech Republic 

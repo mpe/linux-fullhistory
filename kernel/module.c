@@ -81,62 +81,6 @@ void init_modules(void) {
 	kernel_module.name = "";
 }
 
-int
-rename_module_symbol(char *old_name, char *new_name)
-{
-	struct internal_symbol *sym;
-	int i = 0; /* keep gcc silent */
-
-	if (module_list->symtab) {
-		sym = module_list->symtab->symbol;
-		for (i = module_list->symtab->n_symbols; i > 0; ++sym, --i) {
-			if (strcmp(sym->name, old_name) == 0) { /* found it! */
-				sym->name = new_name; /* done! */
-				PRINTK(("renamed %s to %s\n", old_name, new_name));
-				return 1; /* it worked! */
-			}
-		}
-	}
-	printk("rename %s to %s failed!\n", old_name, new_name);
-	return 0; /* not there... */
-
-	/*
-	 * This one will change the name of the first matching symbol!
-	 *
-	 * With this function, you can replace the name of a symbol defined
-	 * in the current module with a new name, e.g. when you want to insert
-	 * your own function instead of a previously defined function
-	 * with the same name.
-	 *
-	 * "Normal" usage:
-	 *
-	 * bogus_function(int params)
-	 * {
-	 *	do something "smart";
-	 *	return real_function(params);
-	 * }
-	 *
-	 * ...
-	 *
-	 * init_module()
-	 * {
-	 *	if (rename_module_symbol("_bogus_function", "_real_function"))
-	 *		printk("yep!\n");
-	 *	else
-	 *		printk("no way!\n");
-	 * ...
-	 * }
-	 *
-	 * When loading this module, real_function will be resolved
-	 * to the real function address.
-	 * All later loaded modules that refer to "real_function()" will
-	 * then really call "bogus_function()" instead!!!
-	 *
-	 * This feature will give you ample opportunities to get to know
-	 * the taste of your foot when you stuff it into your mouth!!!
-	 */
-}
-
 /*
  * Allocate space for a module.
  */

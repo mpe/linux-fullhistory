@@ -1,4 +1,4 @@
-			Video Mode Selection Support 2.2
+			Video Mode Selection Support 2.4
 	      (c) 1995, 1996 Martin Mares, <mj@k332.feld.cvut.cz>
 --------------------------------------------------------------------------------
 
@@ -148,7 +148,8 @@ it's possible that the first variant doesn't work, while some of the others do
 -- in this case turn this switch off to see the rest.
 
    CONFIG_VIDEO_RETAIN - enables retaining of screen contents when switching
-video modes. Useful and probably harmless.
+video modes. Works only with some boot loaders leaving enough room for the
+buffer.
 
    CONFIG_VIDEO_LOCAL - enables inclusion of "local modes" in the list. The
 local modes are added automatically to the beginning of the list not depending
@@ -216,3 +217,8 @@ this must be done manually -- no autodetection mechanisms are available.
 		flag, 0xffff and 0xfffe became aliases instead of real ID's.
 		Screen contents retained during mode changes.
 2.3 (15-Mar-96)	Changed to work with 1.3.74 kernel.
+2.4 (18-Mar-96)	Added patches by Hans Lermen fixing a memory overwrite problem
+		with some boot loaders. Memory management rewritten to reflect
+		these changes. Unfortunately, screen contents retaining works
+		only with some loaders now.
+		Added a Tseng 132x60 mode.

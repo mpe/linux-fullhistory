@@ -1020,18 +1020,27 @@ static void get_sectorsize(int i){
 	    (buffer[1] << 16) | (buffer[2] << 8) | buffer[3];
 	scsi_CDs[i].sector_size = (buffer[4] << 24) |
 	    (buffer[5] << 16) | (buffer[6] << 8) | buffer[7];
-	if(scsi_CDs[i].sector_size == 0) scsi_CDs[i].sector_size = 2048;
-	/* Work around bug/feature in HP 4020i CD-Recorder... */
-	if(scsi_CDs[i].sector_size == 2340) scsi_CDs[i].sector_size = 2048;
-	if(scsi_CDs[i].sector_size != 2048 && 
-	   scsi_CDs[i].sector_size != 512) {
-	    printk ("scd%d : unsupported sector size %d.\n",
-		    i, scsi_CDs[i].sector_size);
-	    scsi_CDs[i].capacity = 0;
-	    scsi_CDs[i].needs_sector_size = 1;
-	};
-	if(scsi_CDs[i].sector_size == 2048)
-	    scsi_CDs[i].capacity *= 4;
+	switch (scsi_CDs[i].sector_size) {
+		/*
+		 * HP 4020i CD-Recorder reports 2340 byte sectors
+		 * Philips CD-Writers report 2352 byte sectors
+		 *
+		 * Use 2k sectors for them..
+		 */
+		case 0: case 2340: case 2352:
+			scsi_CDs[i].sector_size = 2048;
+			/* fall through */
+		case 2048:
+			scsi_CDs[i].capacity *= 4;
+			/* fall through */
+		case 512:
+			break;
+		default:
+			printk ("scd%d : unsupported sector size %d.\n",
+				i, scsi_CDs[i].sector_size);
+			scsi_CDs[i].capacity = 0;
+			scsi_CDs[i].needs_sector_size = 1;
+	}
 	scsi_CDs[i].needs_sector_size = 0;
 	sr_sizes[i] = scsi_CDs[i].capacity;
     };

@@ -494,6 +494,7 @@ void smp_store_cpu_info(int id)
 	c->fdiv_bug=fdiv_bug;
 	c->wp_works_ok=wp_works_ok;		/* Always assumed the same currently */
 	c->hlt_works_ok=hlt_works_ok;
+	c->have_cpuid=have_cpuid;
 	c->udelay_val=loops_per_sec;
 	strcpy(c->x86_vendor_id, x86_vendor_id);
 }

@@ -297,8 +297,8 @@ proc comment {w line text } {
 #nothing done for comments now.
 }
 
-proc do_make { w line option dir target target } {
-#nothing to do for now.
+proc do_make { command } {
+	exec sh -c $command
 }
 
 proc dohelp {w var }  {

@@ -168,6 +168,12 @@ CONFIG_BLK_DEV_IDETAPE
   or something similar.  Be sure to consult the drivers/block/ide-tape.c
   and README.ide files for usage information.
 
+Support removeable IDE interfaces (PCMCIA)
+CONFIG_BLK_DEV_IDE_PCMCIA
+  This option adds code to the IDE driver to handle hot insertion
+  and removal of IDE interfaces and drives, under direction of an
+  external utility (?).  Normally, just say N here.
+
 CMD640 chipset bugfix/support
 CONFIG_BLK_DEV_CMD640
   The CMD-Technologies CMD640 chip is used on many common 486 and
@@ -248,7 +254,7 @@ CONFIG_BLK_DEV_PROMISE
   card.  This driver is known to incur timeouts/retries during heavy
   I/O to drives attached to the secondary interface.  CDROM and
   TAPE devices are not supported yet.
-  See the README.ide and ali14xx.c files for more info.
+  See the README.ide and promise.c files for more info.
 
 XT harddisk support
 CONFIG_BLK_DEV_XD
@@ -2486,6 +2492,27 @@ CONFIG_ROOT_NFS
   pass options to the kernel. The lilo procedure is also explained in
   the SCSI-HOWTO, available via ftp (user: anonymous) in
   sunsite.unc.edu:/pub/Linux/docs/HOWTO.) Most people say N here.
+
+BOOTP support
+CONFIG_RNFS_BOOTP
+  If you want your Linux box to mount its whole root filesystem from
+  some other computer over the net via NFS and you want the address
+  of your computer to be discovered automatically using the BOOTP
+  protocol (a special protocol designed for doing this job), say Y
+  here. In case the boot ROM of your network card was designed for
+  booting Linux and does BOOTP itself, providing all necessary
+  information on the kernel command line, you can say N here.
+  If unsure, say Y. Note that in case you want to use BOOTP, a BOOTP
+  server must be operating on your network.
+
+RARP support
+CONFIG_RNFS_RARP
+  If you want your Linux box to mount its whole root filesystem from
+  some other computer over the net via NFS and you want the address
+  of your computer to be discovered automatically using the RARP
+  protocol (an older protocol which is being obsoleted by BOOTP), say
+  Y here. Note that in case you want to use RARP, a RARP server must be
+  operating on your network.
 
 ISO9660 cdrom filesystem support
 CONFIG_ISO9660_FS

@@ -107,9 +107,16 @@ extern __inline int between(__u32 seq1, __u32 seq2, __u32 seq3)
 
 static __inline__ int min(unsigned int a, unsigned int b)
 {
-	if (a < b) 
-		return(a);
-	return(b);
+	if (a > b)
+		a = b;
+	return a;
+}
+
+static __inline__ int max(unsigned int a, unsigned int b)
+{
+	if (a < b)
+		a = b;
+	return a;
 }
 
 extern struct proto tcp_prot;

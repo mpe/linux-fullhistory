@@ -12,13 +12,12 @@ enum token {
   tok_fi, 
   tok_int,
   tok_hex,
-  tok_sound,
+  tok_make,
   tok_define,
   tok_choose,
   tok_choice,
   tok_endmenu,
   tok_unknown
-
 };
 
 enum operator {

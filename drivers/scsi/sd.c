@@ -1126,10 +1126,10 @@ static int sd_init_onedisk(int i)
 	 */
 	rscsi_disks[i].ready = 1;
 
-	rscsi_disks[i].capacity = (buffer[0] << 24) |
-	    (buffer[1] << 16) |
-		(buffer[2] << 8) |
-		    buffer[3];
+	rscsi_disks[i].capacity = 1 + ((buffer[0] << 24) |
+				       (buffer[1] << 16) |
+				       (buffer[2] << 8) |
+				       buffer[3]);
 	
 	rscsi_disks[i].sector_size = (buffer[4] << 24) |
 	    (buffer[5] << 16) | (buffer[6] << 8) | buffer[7];

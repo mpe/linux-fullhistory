@@ -97,7 +97,7 @@ S:      Odd fixes (e.g., new signatures)
 
 FTAPE/QIC-117:
 P:	Kai Harrekilde-Petersen
-M:	khp@pip.dknet.dk [from 960401: khp@dolphinics.no]
+M:	khp@@dolphinics.no
 L:	linux-tape@vger.rutgers.edu
 S:	Maintained
 
@@ -165,6 +165,12 @@ SPARC:
 P:	David S. Miller
 M:	davem@caip.rutgers.edu
 L:	sparclinux@vger.rutgers.edu
+S:	Maintained
+
+SVGA HANDLING:
+P:	Martin Mares
+M:	mj@k332.feld.cvut.cz
+L:	linux-kernel@vger.rutgers.edu
 S:	Maintained
 
 REST:

@@ -27,7 +27,6 @@
 #include <linux/mm.h>
 #include <linux/smp.h>
 
-#include <asm/smp.h>
 #include <asm/system.h>
 #include <asm/io.h>
 #include <asm/segment.h>
@@ -581,6 +580,50 @@ int del_timer(struct timer_list * timer)
 #endif
 }
 
+static inline void run_timer_list(void)
+{
+	struct timer_list * timer;
+
+	while ((timer = timer_head.next) != &timer_head && timer->expires <= jiffies) {
+		void (*fn)(unsigned long) = timer->function;
+		unsigned long data = timer->data;
+		timer->next->prev = timer->prev;
+		timer->prev->next = timer->next;
+		timer->next = timer->prev = NULL;
+		sti();
+		fn(data);
+		cli();
+	}
+}
+
+static inline void run_old_timers(void)
+{
+	struct timer_struct *tp;
+	unsigned long mask;
+
+	for (mask = 1, tp = timer_table+0 ; mask ; tp++,mask += mask) {
+		if (mask > timer_active)
+			break;
+		if (!(mask & timer_active))
+			continue;
+		if (tp->expires > jiffies)
+			continue;
+		timer_active &= ~mask;
+		tp->fn();
+		sti();
+	}
+}
+
+void tqueue_bh(void)
+{
+	run_task_queue(&tq_timer);
+}
+
+void immediate_bh(void)
+{
+	run_task_queue(&tq_immediate);
+}
+
 unsigned long timer_active = 0;
 struct timer_struct timer_table[32];
 
@@ -611,18 +654,19 @@ static unsigned long count_active_tasks(void)
 	return nr;
 }
 
-static inline void calc_load(void)
+static inline void calc_load(unsigned long ticks)
 {
 	unsigned long active_tasks; /* fixed-point */
 	static int count = LOAD_FREQ;
 
-	if (count-- > 0)
-		return;
-	count = LOAD_FREQ;
-	active_tasks = count_active_tasks();
-	CALC_LOAD(avenrun[0], EXP_1, active_tasks);
-	CALC_LOAD(avenrun[1], EXP_5, active_tasks);
-	CALC_LOAD(avenrun[2], EXP_15, active_tasks);
+	count -= ticks;
+	if (count < 0) {
+		count += LOAD_FREQ;
+		active_tasks = count_active_tasks();
+		CALC_LOAD(avenrun[0], EXP_1, active_tasks);
+		CALC_LOAD(avenrun[1], EXP_5, active_tasks);
+		CALC_LOAD(avenrun[2], EXP_15, active_tasks);
+	}
 }
 
 /*
@@ -749,71 +793,20 @@ static void second_overflow(void)
 #endif
 }
 
-/*
- * disregard lost ticks for now.. We don't care enough.
- */
-static void timer_bh(void)
+static void update_wall_time_one_tick(void)
 {
-	unsigned long mask;
-	struct timer_struct *tp;
-	struct timer_list * timer;
-
-	cli();
-	while ((timer = timer_head.next) != &timer_head && timer->expires <= jiffies) {
-		void (*fn)(unsigned long) = timer->function;
-		unsigned long data = timer->data;
-		timer->next->prev = timer->prev;
-		timer->prev->next = timer->next;
-		timer->next = timer->prev = NULL;
-		sti();
-		fn(data);
-		cli();
-	}
-	sti();
-	
-	for (mask = 1, tp = timer_table+0 ; mask ; tp++,mask += mask) {
-		if (mask > timer_active)
-			break;
-		if (!(mask & timer_active))
-			continue;
-		if (tp->expires > jiffies)
-			continue;
-		timer_active &= ~mask;
-		tp->fn();
-		sti();
-	}
-}
-
-void tqueue_bh(void)
-{
-	run_task_queue(&tq_timer);
-}
-
-void immediate_bh(void)
-{
-	run_task_queue(&tq_immediate);
-}
-
-void do_timer(struct pt_regs * regs)
-{
-	unsigned long mask;
-	struct timer_struct *tp;
-	long ltemp, psecs;
-#ifdef  __SMP__
-	int cpu,i;
-#endif
-
-	/* Advance the phase, once it gets to one microsecond, then
+	/*
+	 * Advance the phase, once it gets to one microsecond, then
 	 * advance the tick more.
 	 */
 	time_phase += time_adj;
 	if (time_phase <= -FINEUSEC) {
-		ltemp = -time_phase >> SHIFT_SCALE;
+		long ltemp = -time_phase >> SHIFT_SCALE;
 		time_phase += ltemp << SHIFT_SCALE;
 		xtime.tv_usec += tick + time_adjust_step - ltemp;
 	}
 	else if (time_phase >= FINEUSEC) {
-		ltemp = time_phase >> SHIFT_SCALE;
+		long ltemp = time_phase >> SHIFT_SCALE;
 		time_phase -= ltemp << SHIFT_SCALE;
 		xtime.tv_usec += tick + time_adjust_step + ltemp;
 	} else
@@ -841,33 +834,194 @@ void do_timer(struct pt_regs * regs)
 	}
 	else
 	    time_adjust_step = 0;
+}
+
+/*
+ * Using a loop looks inefficient, but "ticks" is
+ * usually just one (we shouldn't be losing ticks,
+ * we're doing this this way mainly for interrupt
+ * latency reasons, not because we think we'll
+ * have lots of lost timer ticks
+ */
+static void update_wall_time(unsigned long ticks)
+{
+	do {
+		ticks--;
+		update_wall_time_one_tick();
+	} while (ticks);
 
 	if (xtime.tv_usec >= 1000000) {
 	    xtime.tv_usec -= 1000000;
 	    xtime.tv_sec++;
 	    second_overflow();
 	}
+}
 
-	jiffies++;
-	calc_load();
+static inline void do_process_times(struct task_struct *p,
+	unsigned long user, unsigned long system)
+{
+	long psecs;
+
+	p->utime += user;
+	if (p->priority < DEF_PRIORITY)
+		kstat.cpu_nice += user;
+	else
+		kstat.cpu_user += user;
+	kstat.cpu_system += system;
+	p->stime += system;
+
+	psecs = (p->stime + p->utime) / HZ;
+	if (psecs > p->rlim[RLIMIT_CPU].rlim_cur) {
+		/* Send SIGXCPU every second.. */
+		if (psecs * HZ == p->stime + p->utime)
+			send_sig(SIGXCPU, p, 1);
+		/* and SIGKILL when we go over max.. */
+		if (psecs > p->rlim[RLIMIT_CPU].rlim_max)
+			send_sig(SIGKILL, p, 1);
+	}
+}
+
+static inline void do_it_virt(struct task_struct * p, unsigned long ticks)
+{
+	unsigned long it_virt = p->it_virt_value;
+
+	if (it_virt) {
+		if (it_virt < ticks) {
+			it_virt = ticks + p->it_virt_incr;
+			send_sig(SIGVTALRM, p, 1);
+		}
+		p->it_virt_value = it_virt - ticks;
+	}
+}
+
+static inline void do_it_prof(struct task_struct * p, unsigned long ticks)
+{
+	unsigned long it_prof = p->it_prof_value;
+
+	if (it_prof) {
+		if (it_prof < ticks) {
+			it_prof = ticks + p->it_prof_incr;
+			send_sig(SIGPROF, p, 1);
+		}
+		p->it_prof_value = it_prof - ticks;
+	}
+}
+
+static __inline__ void update_one_process(struct task_struct *p,
+	unsigned long ticks, unsigned long user, unsigned long system)
+{
+	do_process_times(p, user, system);
+	do_it_virt(p, user);
+	do_it_prof(p, ticks);
+}	
+
+static void update_process_times(unsigned long ticks, unsigned long system)
+{
 #ifndef  __SMP__
-	if (user_mode(regs)) {
-		current->utime++;
-		if (current->pid) {
-			if (current->priority < DEF_PRIORITY)
-				kstat.cpu_nice++;
-			else
-				kstat.cpu_user++;
+	struct task_struct * p = current;
+	if (p->pid) {
+		p->counter -= ticks;
+		if (p->counter < 0) {
+			p->counter = 0;
+			need_resched = 1;
 		}
-		/* Update ITIMER_VIRT for current task if not in a system call */
-		if (current->it_virt_value && !(--current->it_virt_value)) {
-			current->it_virt_value = current->it_virt_incr;
-			send_sig(SIGVTALRM,current,1);
+
+		update_one_process(p, ticks, ticks-system, system);
+	}
+#else
+	int cpu,i;
+	cpu = smp_processor_id();
+	for (i=0;i<=smp_top_cpu;i++)
+	{
+		struct task_struct *p;
+		
+		if(cpu_number_map[i]==-1)
+			continue;
+#ifdef __SMP_PROF__
+		if (test_bit(i,&smp_idle_map)) 
+			smp_idle_count[i]++;
+#endif
+		p = current_set[i];
+		/*
+		 * Do we have a real process?
+		 */
+		if (p->pid) {
+			/* assume user-mode process */
+			unsigned long utime = ticks;
+			unsigned long stime = 0;
+			if (cpu == i) {
+				utime = ticks-system;
+				stime = system;
+			} else if (smp_proc_in_lock[i]) {
+				utime = 0;
+				stime = ticks;
+			}
+			update_one_process(p, ticks, utime, stime);
+
+			p->counter -= ticks;
+			if (p->counter >= 0)
+				continue;
+			p->counter = 0;
+		} else {
+			/*
+			 * Idle processor found, do we have anything
+			 * we could run?
+			 */
+			if (!(0x7fffffff & smp_process_available))
+				continue;
 		}
-	} else {
-		current->stime++;
-		if(current->pid)
-			kstat.cpu_system++;
+		/* Ok, we should reschedule, do the magic */
+		if (i==cpu)
+			need_resched = 1;
+		else
+			smp_message_pass(i, MSG_RESCHEDULE, 0L, 0);
+	}
+#endif
+}
+
+static unsigned long lost_ticks = 0;
+static unsigned long lost_ticks_system = 0;
+
+static void timer_bh(void)
+{
+	unsigned long ticks, system;
+
+	run_old_timers();
+
+	cli();
+	run_timer_list();
+	ticks = lost_ticks;
+	lost_ticks = 0;
+	system = lost_ticks_system;
+	lost_ticks_system = 0;
+	sti();
+
+	if (ticks) {
+		calc_load(ticks);
+		update_wall_time(ticks);
+		update_process_times(ticks, system);
+	}
+}
+
+/*
+ * Run the bottom half stuff only about 100 times a second,
+ * we'd just use up unnecessary CPU time for timer handling
+ * otherwise
+ */
+#if HZ > 100
+#define should_run_timers(x) ((x) >= HZ/100)
+#else
+#define should_run_timers(x) (1)
+#endif
+
+void do_timer(struct pt_regs * regs)
+{
+	(*(unsigned long *)&jiffies)++;
+	lost_ticks++;
+	if (should_run_timers(lost_ticks))
+		mark_bh(TIMER_BH);
+	if (!user_mode(regs)) {
+		lost_ticks_system++;
 		if (prof_buffer && current->pid) {
 			extern int _stext;
 			unsigned long ip = instruction_pointer(regs);
@@ -877,125 +1031,6 @@ void do_timer(struct pt_regs * regs)
 				prof_buffer[ip]++;
 		}
 	}
-	/*
-	 * check the cpu time limit on the process.
-	 */
-	if ((current->rlim[RLIMIT_CPU].rlim_max != RLIM_INFINITY) &&
-	    (((current->stime + current->utime) / HZ) >= current->rlim[RLIMIT_CPU].rlim_max))
-		send_sig(SIGKILL, current, 1);
-	if ((current->rlim[RLIMIT_CPU].rlim_cur != RLIM_INFINITY) &&
-	    (((current->stime + current->utime) % HZ) == 0)) {
-		psecs = (current->stime + current->utime) / HZ;
-		/* send when equal */
-		if (psecs == current->rlim[RLIMIT_CPU].rlim_cur)
-			send_sig(SIGXCPU, current, 1);
-		/* and every five seconds thereafter. */
-		else if ((psecs > current->rlim[RLIMIT_CPU].rlim_cur) &&
-			((psecs - current->rlim[RLIMIT_CPU].rlim_cur) % 5) == 0)
-			send_sig(SIGXCPU, current, 1);
-	}
-
-	if (current->pid && 0 > --current->counter) {
-		current->counter = 0;
-		need_resched = 1;
-	}
-	/* Update ITIMER_PROF for the current task */
-	if (current->it_prof_value && !(--current->it_prof_value)) {
-		current->it_prof_value = current->it_prof_incr;
-		send_sig(SIGPROF,current,1);
-	}
-#else
-	cpu = smp_processor_id();
-	for (i=0;i<=smp_top_cpu;i++)
-	{
-		if(cpu_number_map[i]==-1)
-			continue;
-#ifdef __SMP_PROF__
-		if (test_bit(i,&smp_idle_map)) 
-			smp_idle_count[i]++;
-#endif
-		if (((cpu==i) && user_mode(regs)) ||
-			((cpu!=i) && 0==smp_proc_in_lock[i])) 
-		{
-			current_set[i]->utime++;
-			if (current_set[i]->pid) 
-			{
-				if (current_set[i]->priority < DEF_PRIORITY)
-					kstat.cpu_nice++;
-				else
-					kstat.cpu_user++;
-			}
-			/* Update ITIMER_VIRT for current task if not in a system call */
-			if (current_set[i]->it_virt_value && !(--current_set[i]->it_virt_value)) {
-				current_set[i]->it_virt_value = current_set[i]->it_virt_incr;
-				send_sig(SIGVTALRM,current_set[i],1);
-			}
-		} else {
-			current_set[i]->stime++;
-			if(current_set[i]->pid)
-				kstat.cpu_system++;
-			if (prof_buffer && current_set[i]->pid) {
-				extern int _stext;
-				unsigned long ip = instruction_pointer(regs);
-				ip -= (unsigned long) &_stext;
-				ip >>= prof_shift;
-				if (ip < prof_len)
-					prof_buffer[ip]++;
-			}
-		}
-		/*
-		 * check the cpu time limit on the process.
-		 */
-		if ((current_set[i]->rlim[RLIMIT_CPU].rlim_max != RLIM_INFINITY) &&
-			  (((current_set[i]->stime + current_set[i]->utime) / HZ) >=
-			  current_set[i]->rlim[RLIMIT_CPU].rlim_max))
-			send_sig(SIGKILL, current_set[i], 1);
-		if ((current_set[i]->rlim[RLIMIT_CPU].rlim_cur != RLIM_INFINITY) &&
-			  (((current_set[i]->stime + current_set[i]->utime) % HZ) == 0)) {
-			psecs = (current_set[i]->stime + current_set[i]->utime) / HZ;
-			/* send when equal */
-			if (psecs == current_set[i]->rlim[RLIMIT_CPU].rlim_cur)
-				send_sig(SIGXCPU, current_set[i], 1);
-			/* and every five seconds thereafter. */
-			else if ((psecs > current_set[i]->rlim[RLIMIT_CPU].rlim_cur) &&
-				  ((psecs - current_set[i]->rlim[RLIMIT_CPU].rlim_cur) % 5) == 0)
-				send_sig(SIGXCPU, current_set[i], 1);
-		}
-		if (current_set[i]->pid && 0 > --current_set[i]->counter) {
-			current_set[i]->counter = 0;
-			if (i==cpu)
-				need_resched = 1;
-			else
-				smp_message_pass(i, MSG_RESCHEDULE, 0L, 0);
-		} else
-			if ((0==current_set[i]->pid) && (0x7fffffff & smp_process_available)){
-				/* runnable process found; wakeup idle process */
-				if (cpu==i)
-					need_resched = 1;
-				else
-					smp_message_pass(i, MSG_RESCHEDULE, 0L, 0);
-			}
-
-		/* Update ITIMER_PROF for the current task */
-		if (current_set[i]->it_prof_value && !(--current_set[i]->it_prof_value)) {
-			current_set[i]->it_prof_value = current_set[i]->it_prof_incr;
-			send_sig(SIGPROF,current_set[i],1);
-		}
-	}
-
-#endif
-
-	for (mask = 1, tp = timer_table+0 ; mask ; tp++,mask += mask) {
-		if (mask > timer_active)
-			break;
-		if (!(mask & timer_active))
-			continue;
-		if (tp->expires > jiffies)
-			continue;
-		mark_bh(TIMER_BH);
-	}
-	if (timer_head.next->expires <= jiffies)
-		mark_bh(TIMER_BH);
 	if (tq_timer != &tq_last)
 		mark_bh(TQUEUE_BH);
 }

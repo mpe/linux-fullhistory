@@ -12,6 +12,25 @@
 
 #include <asm/system.h>
 
+#define NR_IHASH 512
+
+/*
+ * Be VERY careful when you access the inode hash table. There
+ * are some rather scary race conditions you need to take care of:
+ *  - P1 tries to open file "xx", calls "iget()" with the proper
+ *    inode number, but blocks because it's not on the list.
+ *  - P2 deletes file "xx", gets the inode (which P1 has just read,
+ *    but P1 hasn't woken up to the fact yet)
+ *  - P2 iput()'s the inode, which now has i_nlink = 0
+ *  - P1 wakes up and has the inode, but now P2 has made that
+ *    inode invalid (but P1 has no way of knowing that).
+ *
+ * The "updating" counter makes sure that when P1 blocks on the
+ * iget(), P2 can't delete the inode from under it because P2
+ * will wait until P1 has been able to update the inode usage
+ * count so that the inode will stay in use until everybody has
+ * closed it..
+ */
 static struct inode_hash_entry {
 	struct inode * inode;
 	int updating;
@@ -563,6 +582,13 @@ repeat:
 		if (inode->i_dev == sb->s_dev && inode->i_ino == nr)
 			goto found_it;
 	if (!empty) {
+		/*
+		 * If we sleep here before we have found an inode
+		 * we need to make sure nobody does anything bad
+		 * to the inode while we sleep, because otherwise
+		 * we may return an inode that is not valid any
+		 * more when we wake up..
+		 */
 		h->updating++;
 		empty = get_empty_inode();
 		if (!--h->updating)

@@ -89,7 +89,7 @@ static inline int __get_order(unsigned long size)
 {
 	int order;
 
-	size >>= (PAGE_SHIFT-1);
+	size = (size-1) >> (PAGE_SHIFT-1);
 	order = -1;
 	do {
 		size >>= 1;

@@ -61,7 +61,7 @@ start:
 ! SETUP-header, must start at CS:2 (old 0x9020:2)
 !
 		.ascii	"HdrS"		! Signature for SETUP-header
-		.word	0x0200		! Version number of header format
+		.word	0x0201		! Version number of header format
 					! (must be >= 0x0105
 					! else old loadlin-1.5 will fail)
 realmode_swtch:	.word	0,0		! default_switch,SETUPSEG
@@ -80,6 +80,10 @@ type_of_loader:	.byte	0		! = 0, old one (LILO, Loadlin,
 loadflags:	.byte	0	! unused bits =0 (reserved for future development)
 LOADED_HIGH	= 1		! bit within loadflags,
 				! if set, then the kernel is loaded high
+CAN_USE_HEAP	= 0x80		! if set, the loader also has set heap_end_ptr
+				! to tell how much space behind setup.S
+				| can be used for heap purposes.
+				! Only the loader knows what is free!
 setup_move_size: .word  0x8000	! size to move, when we (setup) are not
 				! loaded at 0x90000. We will move ourselves
 				! to 0x90000 then just before jumping into
@@ -97,6 +101,9 @@ ramdisk_image:	.long	0	! address of loaded ramdisk image
 ramdisk_size:	.long	0	! its size in bytes
 bootsect_kludge:
 		.word   bootsect_helper,SETUPSEG
+heap_end_ptr:	.word	modelist+1024	! space from here (exclusive) down to
+				! end of setup code can be used by setup
+				! for local heap purposes.
 ! ------------------------ end of header ----------------------------------
 
 start_of_setup:
@@ -229,7 +236,7 @@ loader_ok:
 ! Check for video adapter and its parameters and allow the
 ! user to browse video modes.
 
-	call	video
+	call	video	! NOTE: we need DS pointing to bootsector
 
 ! Get hd0 data
 

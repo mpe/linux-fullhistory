@@ -212,16 +212,15 @@ static struct irqaction irq13 = { math_error_irq, 0, 0, "math error", NULL, NULL
 #endif
 
 /*
- * IRQ0 is timer, IRQ2 is cascade interrupt to second interrupt controller
+ * IRQ2 is cascade interrupt to second interrupt controller
  */
-extern struct irqaction irq0;
 static struct irqaction irq2  = { no_action, 0, 0, "cascade", NULL, NULL};
 
 static struct irqaction *irq_action[16] = {
-	&irq0, NULL, &irq2, NULL,
 	NULL, NULL, NULL, NULL,
 	NULL, NULL, NULL, NULL,
-	NULL, &irq13 , NULL, NULL
+	NULL, NULL, NULL, NULL,
+	NULL, NULL, NULL, NULL
 };
 
 int get_irq_list(char *buf)
@@ -385,45 +384,65 @@ asmlinkage void do_fast_IRQ(int irq)
 	}
 }
 
+int setup_x86_irq(int irq, struct irqaction * new)
+{
+	int shared = 0;
+	struct irqaction *old, **p;
+	unsigned long flags;
+
+	p = irq_action + irq;
+	if ((old = *p) != NULL) {
+		/* Can't share interrupts unless both agree to */
+		if (!(old->flags & new->flags & SA_SHIRQ))
+			return -EBUSY;
+
+		/* Can't share interrupts unless both are same type */
+		if ((old->flags ^ new->flags) & SA_INTERRUPT)
+			return -EBUSY;
+
+		/* add new interrupt at end of irq queue */
+		do {
+			p = &old->next;
+			old = *p;
+		} while (old);
+		shared = 1;
+	}
+
+	if (new->flags & SA_SAMPLE_RANDOM)
+		rand_initialize_irq(irq);
+
+	save_flags(flags);
+	cli();
+	*p = new;
+
+	if (!shared) {
+		if (new->flags & SA_INTERRUPT)
+			set_intr_gate(0x20+irq,fast_interrupt[irq]);
+		else
+			set_intr_gate(0x20+irq,interrupt[irq]);
+		unmask_irq(irq);
+	}
+	restore_flags(flags);
+	return 0;
+}
+
 int request_irq(unsigned int irq, 
 		void (*handler)(int, void *, struct pt_regs *),
 		unsigned long irqflags, 
 		const char * devname,
 		void *dev_id)
 {
-	int shared = 0;
-	struct irqaction * action, **p;
-	unsigned long flags;
+	int retval;
+	struct irqaction * action;
 
 	if (irq > 15)
 		return -EINVAL;
 	if (!handler)
 		return -EINVAL;
-	p = irq_action + irq;
-	action = *p;
-	if (action) {
-		/* Can't share interrupts unless both agree to */
-		if (!(action->flags & irqflags & SA_SHIRQ))
-			return -EBUSY;
-
-		/* Can't share interrupts unless both are same type */
-		if ((action->flags ^ irqflags) & SA_INTERRUPT)
-			return -EBUSY;
-
-		/* add new interrupt at end of irq queue */
-		do {
-			p = &action->next;
-			action = *p;
-		} while (action);
-		shared = 1;
-	}
 
 	action = (struct irqaction *)kmalloc(sizeof(struct irqaction), GFP_KERNEL);
 	if (!action)
 		return -ENOMEM;
-
-	if (irqflags & SA_SAMPLE_RANDOM)
-		rand_initialize_irq(irq);
 
 	action->handler = handler;
 	action->flags = irqflags;
@@ -432,19 +451,11 @@ int request_irq(unsigned int irq,
 	action->next = NULL;
 	action->dev_id = dev_id;
 
-	save_flags(flags);
-	cli();
-	*p = action;
+	retval = setup_x86_irq(irq, action);
 
-	if (!shared) {
-		if (action->flags & SA_INTERRUPT)
-			set_intr_gate(0x20+irq,fast_interrupt[irq]);
-		else
-			set_intr_gate(0x20+irq,interrupt[irq]);
-		unmask_irq(irq);
-	}
-	restore_flags(flags);
-	return 0;
+	if (retval)
+		kfree(action);
+	return retval;
 }
 		
 void free_irq(unsigned int irq, void *dev_id)
@@ -535,6 +546,6 @@ void init_IRQ(void)
 #endif	
 	request_region(0x20,0x20,"pic1");
 	request_region(0xa0,0x20,"pic2");
-	enable_irq(2);
-	enable_irq(13);
+	setup_x86_irq(2, &irq2);
+	setup_x86_irq(13, &irq13);
 } 

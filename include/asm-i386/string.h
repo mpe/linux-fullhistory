@@ -6,8 +6,11 @@
  * byte string operations. But on a 386 or a PPro the
  * byte string ops are faster than doing it by hand
  * (MUCH faster on a Pentium).
+ *
+ * Also, the byte strings actually work correctly. Forget
+ * the i486 routines for now as they may be broken..
  */
-#if CPU == 486 || CPU == 586
+#if FIXED_486_STRING && (CPU == 486 || CPU == 586)
 #include <asm/string-486.h>
 #else
 

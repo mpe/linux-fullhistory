@@ -236,7 +236,7 @@ struct sock
 						   'timed out' */
 	unsigned char		protocol;
 	volatile unsigned char	state;
-	volatile unsigned char	ack_backlog;
+	unsigned char		ack_backlog;
 	unsigned char		max_ack_backlog;
 	unsigned char		priority;
 	unsigned char		debug;

@@ -1,5 +1,5 @@
 /*
- *  linux/fs/nfs/nfsroot.c -- version 2.0
+ *  linux/fs/nfs/nfsroot.c -- version 2.1
  *
  *  Copyright (C) 1995  Gero Kuhlmann <gero@gkminix.han.de>
  *  Copyright (C) 1996  Martin Mares <mj@k332.feld.cvut.cz>
@@ -25,6 +25,8 @@
  *	Martin Mares	:	Randomized timer with exponential backoff
  *				installed to minimize network congestion.
  *	Martin Mares	:	Code cleanup.
+ *	Martin Mares	: (2.1)	BOOTP and RARP made configuration options.
+ *	Martin Mares	:	Server hostname generation fixed.
  *
  *
  *	Known bugs and caveats:
@@ -39,10 +41,6 @@
 /* Define this to allow debugging output */
 #undef NFSROOT_DEBUG
 #undef NFSROOT_MORE_DEBUG
-
-/* Choose default protocol(s) */
-#define CONFIG_USE_BOOTP
-#define CONFIG_USE_RARP
 
 /* Define the timeout for waiting for a RARP/BOOTP reply */
 #define CONF_BASE_TIMEOUT	(HZ*5)	/* Initial timeout: 5 seconds */
@@ -106,14 +104,19 @@ static struct sockaddr_in gateway;	/* Gateway IP address */
 static struct sockaddr_in netmask;	/* Netmask for local subnet */
 
 /* BOOTP/RARP variables */
+
 static int bootp_flag;			/* User said: Use BOOTP! */
 static int rarp_flag;			/* User said: Use RARP! */
 static int bootp_dev_count = 0;		/* Number of devices allowing BOOTP */
 static int rarp_dev_count = 0;		/* Number of devices allowing RARP */
+
+#if defined(CONFIG_RNFS_BOOTP) || defined(CONFIG_RNFS_RARP)
+#define CONFIG_RNFS_DYNAMIC		/* Enable dynamic IP config */
 volatile static int pkt_arrived;	/* BOOTP/RARP packet detected */
 
 #define ARRIVED_BOOTP 1
 #define ARRIVED_RARP 2
+#endif
 
 /* NFS-related data */
 static struct nfs_mount_data nfs_data;	/* NFS mount info */
@@ -211,6 +214,8 @@ static void root_dev_close(void)
 			      RARP Subroutines
 
  ***************************************************************************/
+
+#ifdef CONFIG_RNFS_RARP
 
 extern void arp_send(int type, int ptype, unsigned long target_ip,
 		     struct device *dev, unsigned long src_ip,
@@ -350,12 +355,15 @@ static void root_rarp_send(void)
 	}
 }
 
+#endif
 
 /***************************************************************************
 
 			     BOOTP Subroutines
 
  ***************************************************************************/
+
+#ifdef CONFIG_RNFS_BOOTP
 
 static struct device *bootp_dev = NULL;	/* Device selected as best BOOTP target */
 
@@ -827,12 +835,15 @@ static void root_bootp_recv(void)
 	}
 }
 
+#endif
 
 /***************************************************************************
 
 			Dynamic configuration of IP.
 
  ***************************************************************************/
+
+#ifdef CONFIG_RNFS_DYNAMIC
 
 /*
  *  Determine client and server IP numbers and appropriate device by using
@@ -843,24 +854,43 @@ static int root_auto_config(void)
 	int retries;
 	u32 timeout, jiff;
 	u32 start_jiffies;
+	int selected = 0;
 
 	/* Check devices */
-	if (bootp_flag && !bootp_dev_count) {
-		printk(KERN_ERR "BOOTP: No suitable device found.\n");
-		bootp_flag = 0;
+
+#ifdef CONFIG_RNFS_BOOTP
+	if (bootp_flag) {
+		if (bootp_dev_count)
+			selected = 1;
+		else {
+			printk(KERN_ERR "BOOTP: No suitable device found.\n");
+			bootp_flag = 0;
 		}
-	if (rarp_flag && !rarp_dev_count) {
-		printk(KERN_ERR "RARP: No suitable device found.\n");
-		rarp_flag = 0;
+	}
+#else
+	bootp_flag = 0;
+#endif
+
+#ifdef CONFIG_RNFS_RARP
+	if (rarp_flag) {
+		if (rarp_dev_count)
+			selected = 1;
+		else {
+			printk(KERN_ERR "RARP: No suitable device found.\n");
+			rarp_flag = 0;
 		}
+	}
+#else
+	rarp_flag = 0;
+#endif
 
 	/* If neither BOOTP nor RARP was selected manually, use both of them */
-	if (!bootp_flag && !rarp_flag) {
-#ifdef CONFIG_USE_BOOTP
+	if (!selected) {
+#ifdef CONFIG_RNFS_BOOTP
 		if (bootp_dev_count)
 			bootp_flag = 1;
 #endif
-#ifdef CONFIG_USE_RARP
+#ifdef CONFIG_RNFS_RARP
 		if (rarp_dev_count)
 			rarp_flag = 1;
 #endif
@@ -869,12 +899,16 @@ static int root_auto_config(void)
 	}
 
 	/* Setup RARP and BOOTP protocols */
+#ifdef CONFIG_RNFS_RARP
 	if (rarp_flag)
 		root_rarp_open();
+#endif
+#ifdef CONFIG_RNFS_BOOTP
 	if (bootp_flag && root_bootp_open()) {
 		root_bootp_close();
 		return -1;
 	}
+#endif
 
 	/*
 	 * Send requests and wait, until we get an answer. This loop
@@ -893,6 +927,7 @@ static int root_auto_config(void)
 	get_random_bytes(&timeout, sizeof(timeout));
 	timeout = CONF_BASE_TIMEOUT + (timeout % (unsigned) CONF_TIMEOUT_RANDOM);
 	for(;;) {
+#ifdef CONFIG_RNFS_BOOTP
 		if (bootp_flag && root_bootp_send(jiffies - start_jiffies)) {
 			printk("...BOOTP failed!\n");
 			root_bootp_close();
@@ -900,12 +935,19 @@ static int root_auto_config(void)
 			if (!rarp_flag)
 				break;
 		}
+#endif
+#ifdef CONFIG_RNFS_RARP
 		if (rarp_flag)
 			root_rarp_send();
+#endif
 		printk(".");
 		jiff = jiffies + timeout;
 		while (jiffies < jiff && !pkt_arrived)
+#ifdef CONFIG_RNFS_BOOTP
 			root_bootp_recv();
+#else
+			;
+#endif
 		if (pkt_arrived)
 			break;
 		if (! --retries) {
@@ -917,10 +959,14 @@ static int root_auto_config(void)
 			timeout = CONF_TIMEOUT_MAX;
 	}
 
+#ifdef CONFIG_RNFS_RARP
 	if (rarp_flag)
 		root_rarp_close();
+#endif
+#ifdef CONFIG_RNFS_BOOTP
 	if (bootp_flag)
 		root_bootp_close();
+#endif
 
 	if (!pkt_arrived)
 		return -1;
@@ -934,6 +980,7 @@ static int root_auto_config(void)
 	return 0;
 }
 
+#endif
 
 /***************************************************************************
 
@@ -998,10 +1045,6 @@ static int root_nfs_parse(char *name)
 		server.sin_addr.s_addr = in_aton(name);
 		name = cp;
 	}
-
-	/* Setup the server hostname */
-	cp = in_ntoa(server.sin_addr.s_addr);
-	strncpy(nfs_data.hostname, cp, 255);
 
 	/* Set the name of the directory to mount */
 	cp = in_ntoa(myaddr.sin_addr.s_addr);
@@ -1186,6 +1229,9 @@ static int root_nfs_setup(void)
 		system_utsname.nodename[__NEW_UTS_LEN] = '\0';
 	}
 
+	/* Setup the server hostname */
+	strncpy(nfs_data.hostname, in_ntoa(server.sin_addr.s_addr), 255);
+
 	/* Set the correct netmask */
 	if (netmask.sin_addr.s_addr == INADDR_NONE)
 		netmask.sin_addr.s_addr = ip_get_mask(myaddr.sin_addr.s_addr);
@@ -1273,8 +1319,11 @@ int nfs_root_init(char *nfsname, char *nfsaddrs)
 	 */
 	if ((myaddr.sin_addr.s_addr == INADDR_NONE ||
 	     server.sin_addr.s_addr == INADDR_NONE ||
-	     (open_base != NULL && open_base->next != NULL)) &&
-	     root_auto_config() < 0) {
+	     (open_base != NULL && open_base->next != NULL))
+#ifdef CONFIG_RNFS_DYNAMIC
+		&& root_auto_config() < 0
+#endif
+	   ) {
 		root_dev_close();
 		return -1;
 	}

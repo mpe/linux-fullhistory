@@ -444,14 +444,16 @@ int ip_fw_chk(struct iphdr *ip, struct device *rif, struct ip_fw *chain, int pol
 			if(opt != 1) {
 				if(f->fw_flg&IP_FW_F_ACCEPT) {
 					if(f->fw_flg&IP_FW_F_MASQ)
-						printk("Masquerade ");
+						printk("masq ");
 					else
-						printk("Accept ");
+						printk("acc  ");
 				} else if(f->fw_flg&IP_FW_F_ICMPRPL)
-					printk("Reject ");
+					printk("rej  ");
 				else
-					printk("Deny ");
+					printk("deny ");
 			}
+			if (rif)
+				printk("%s ", rif->name);
 			switch(ip->protocol)
 			{
 				case IPPROTO_TCP:
@@ -459,6 +461,7 @@ int ip_fw_chk(struct iphdr *ip, struct device *rif, struct ip_fw *chain, int pol
 					break;
 				case IPPROTO_UDP:
 					printk("UDP ");
+					break;
 				case IPPROTO_ICMP:
 					printk("ICMP:%d ", icmp_type);
 					break;

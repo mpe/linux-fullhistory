@@ -30,7 +30,6 @@
 #define NR_OPEN 256
 
 #define NR_SUPER 64
-#define NR_IHASH 131
 #define BLOCK_SIZE 1024
 #define BLOCK_SIZE_BITS 10
 

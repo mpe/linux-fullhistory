@@ -1,5 +1,5 @@
 !
-!	Display adapter & video mode setup, version 2.3 (15-Mar-96)
+!	Display adapter & video mode setup, version 2.4 (18-Mar-96)
 !
 !	Copyright (C) 1995, 1996 Martin Mares <mj@k332.feld.cvut.cz>
 !	Based on the original setup.S code (C) Linus Torvalds
@@ -66,6 +66,8 @@
 !
 ! This is the main entry point called by setup.S
 !
+! Input:
+!	DS pointing to the bootsector
 
 video:	push	ds		! We use different segments
 	push	ds		! FS contains original DS
@@ -543,26 +545,35 @@ set_80x43:
 store_screen:
 	cmpb	[do_restore],#0		! Already stored?
 	jnz	stsr
+	testb	[loadflags],#CAN_USE_HEAP	! Have we space for storing?
+	jz	stsr
 	push	ax
 	push	bx
-	incb	[do_restore]		! Screen will be restored later
 	mov	al,[def_mode]		! "Default mode" flag overriden
 	push	ax
 	movb	[def_mode],#0
-	call	mode_params		! Obtain and store basic parameters
+	call	mode_params		! Obtain params of current mode
 	pop	ax
 	mov	[def_mode],al
-	seg	fs			! of the current mode.
-	mov	ax,[PARAM_CURSOR_POS]
-	lea	di,modelist+8192
-	stosw
+
 	seg	fs
 	mov	ah,[PARAM_VIDEO_LINES]
 	seg	fs
 	mov	al,[PARAM_VIDEO_COLS]
-	stosw
+	mov	bx,ax			! BX=dimensions
 	mul	ah
 	mov	cx,ax			! CX=number of characters to store
+	add	ax,ax			! Calculate image size
+	add	ax,modelist+1024+4
+	cmp	ax,[heap_end_ptr]
+	jnc	sts1			! Unfortunately, out of memory
+
+	seg	fs			! Store mode params
+	mov	ax,[PARAM_CURSOR_POS]
+	lea	di,modelist+1024
+	stosw
+	mov	ax,bx
+	stosw
 
 	push	ds			! Store the screen
 	mov	ds,[video_segment]
@@ -570,7 +581,8 @@ store_screen:
 	rep
 	movsw
 	pop	ds
-	pop	bx
+	incb	[do_restore]		! Screen will be restored later
+sts1:	pop	bx
 	pop	ax
 stsr:	ret
 
@@ -586,7 +598,7 @@ restore_screen:
 	mov	cl,[PARAM_VIDEO_LINES]
 	seg	fs
 	mov	ch,[PARAM_VIDEO_COLS]
-	lea	si,modelist+8192	! Screen buffer
+	lea	si,modelist+1024	! Screen buffer
 	lodsw				! Set cursor position
 	mov	dx,ax
 	cmp	dh,cl
@@ -735,7 +747,7 @@ vesa_modes:
 	cmpb	[adapter],#2	! VGA only
 	jnz	ret0
 	mov	bp,di		! BP=original mode table end
-	add	di,#0x400	! Buffer space
+	add	di,#0x200	! Buffer space
 	mov	ax,#0x4f00	! VESA Get card info call
 	int	#0x10
 	mov	di,bp
@@ -1423,6 +1435,7 @@ tseng_md:
 	.byte	0x23, 0x19, 0x84
 	.byte	0x24, 0x1c, 0x84
 	.byte	0x22, 0x2c, 0x84
+	.byte	0x21, 0x3c, 0x84
 	.byte	0
 	.ascii	"Tseng"
 	.byte	0

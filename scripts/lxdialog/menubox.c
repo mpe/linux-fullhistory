@@ -53,7 +53,7 @@ print_item (WINDOW * win, const char *item, int choice, int selected, int hotkey
  * Print the scroll indicators.
  */
 static void
-print_arrows (WINDOW * win, int choice, int item_no, int scroll,
+print_arrows (WINDOW * win, int item_no, int scroll,
 		int y, int x, int height)
 {
     int cur_y, cur_x;
@@ -78,7 +78,7 @@ print_arrows (WINDOW * win, int choice, int item_no, int scroll,
    y = y + height + 1;
    wmove(win, y, x);
 
-   if ((height < item_no) && (scroll + choice < item_no - 1)) {
+   if ((height < item_no) && (scroll + height < item_no)) {
 	wattrset (win, darrow_attr);
 	waddch (win, ACS_DARROW);
 	waddstr (win, "(+)");
@@ -191,7 +191,7 @@ dialog_menu (const char *title, const char *prompt, int height, int width,
 
     wnoutrefresh (menu);
 
-    print_arrows(dialog, choice, item_no, scroll,
+    print_arrows(dialog, item_no, scroll,
 		 box_y, box_x+item_x+1, menu_height);
 
     print_buttons (dialog, height, width, 0);
@@ -211,75 +211,84 @@ dialog_menu (const char *title, const char *prompt, int height, int width,
                 		break;
 		}
 
-	if (i < max_choice || key == KEY_UP || key == KEY_DOWN || key == '-' || key == '+') {
+	if (i < max_choice || 
+            key == KEY_UP || key == KEY_DOWN ||
+            key == '-' || key == '+' ||
+            key == KEY_PPAGE || key == KEY_NPAGE) {
+
+            print_item (menu, items[(scroll+choice)*2+1], choice, FALSE,
+                       (items[(scroll+choice)*2][0] != ':'));
+
 	    if (key == KEY_UP || key == '-') {
-		if (choice == 0) {
-		    if (scroll) {
+                if (choice < 6 && scroll) {
+	            /* Scroll menu down */
+                    scrollok (menu, TRUE);
+                    wscrl (menu, -1);
+                    scrollok (menu, FALSE);
 
-			/* Scroll menu down */
-			if (menu_height > 1) {
-			    /* De-highlight current first item */
-			    print_item (menu, items[scroll*2+1], 0, FALSE,
-                                        (items[scroll*2][0] != ':'));
-			    scrollok (menu, TRUE);
-			    wscrl (menu, -1);
-			    scrollok (menu, FALSE);
-			}
-			scroll--;
-			print_item (menu, items[scroll * 2 + 1], 0, TRUE,
-                                   (items[scroll*2][0] != ':'));
-			wnoutrefresh (menu);
+                    scroll--;
 
-    			print_arrows(dialog, choice, item_no, scroll,
-		 			box_y, box_x+item_x+1, menu_height);
-
-		    }
-		    continue;	/* wait for another key press */
+                    print_item (menu, items[scroll * 2 + 1], 0, FALSE,
+                               (items[scroll*2][0] != ':'));
 		} else
-		    i = choice - 1;
-	    } else if (key == KEY_DOWN || key == '+')
-		if (choice == max_choice - 1) {
-		    if (scroll + choice < item_no - 1) {
-			/* Scroll menu up */
-			if (menu_height > 1) {
-			    /* De-highlight current last item */
-			    print_item (menu, items[(scroll + max_choice - 1)
-					   * 2 + 1], max_choice - 1, FALSE,
-                                           (items[(scroll+max_choice-1)*2][0] != ':'));
-			    scrollok (menu, TRUE);
-			    scroll (menu);
-			    scrollok (menu, FALSE);
-			}
-			scroll++;
-			print_item (menu, items[(scroll+max_choice-1)*2+1],
-				    max_choice-1, TRUE,
-                                    (items[(scroll+max_choice-1)*2][0] != ':'));
+		    choice = MAX(choice - 1, 0);
 
-			wnoutrefresh (menu);
+	    } else if (key == KEY_DOWN || key == '+')  {
 
-    			print_arrows(dialog, choice, item_no, scroll,
-		 			box_y, box_x+item_x+1, menu_height);
-
-			wrefresh (dialog);
-		    }
-		    continue;	/* wait for another key press */
-		} else
-		    i = choice + 1;
-
-	    if (i != choice) {
-		/* De-highlight current item */
 		print_item (menu, items[(scroll+choice)*2+1], choice, FALSE,
                                 (items[(scroll+choice)*2][0] != ':'));
 
-		/* Highlight new item */
-		choice = i;
-		print_item (menu, items[(scroll+choice)*2+1], choice, TRUE,
-                                (items[(scroll+choice)*2][0] != ':'));
-		wnoutrefresh (menu);
-		wrefresh (dialog);
-	    }
+                if ((choice > 4) && (scroll + max_choice < item_no)) {
+		    /* Scroll menu up */
+		    scrollok (menu, TRUE);
+                    scroll (menu);
+                    scrollok (menu, FALSE);
+
+                    scroll++;
+
+                    print_item (menu, items[(scroll+max_choice-1)*2+1],
+                               max_choice-1, FALSE,
+                               (items[(scroll+max_choice-1)*2][0] != ':'));
+                } else
+                    choice = MIN(choice+1, max_choice-1);
+
+	    } else if (key == KEY_PPAGE) {
+	        scrollok (menu, TRUE);
+                for (i=0; (i < max_choice) && (scroll > 0); i++) {
+                    wscrl (menu, -1);
+                    scroll--;
+                    print_item (menu, items[scroll * 2 + 1], 0, FALSE,
+                               (items[scroll*2][0] != ':'));
+                }
+                scrollok (menu, FALSE);
+                choice = 0;
+
+            } else if (key == KEY_NPAGE) {
+	        scrollok (menu, TRUE);
+                for (i=0; (i < max_choice) && (scroll+max_choice < item_no); i++) {
+		    scroll(menu);
+                    scroll++;
+                    print_item (menu, items[(scroll+max_choice-1)*2+1],
+                                max_choice-1, FALSE,
+                                (items[(scroll+max_choice-1)*2][0] != ':'));
+                }
+                scrollok (menu, FALSE);
+                choice = 0;
+
+            } else
+                choice = i;
+
+            print_item (menu, items[(scroll+choice)*2+1], choice, TRUE,
+                       (items[(scroll+choice)*2][0] != ':'));
+
+            print_arrows(dialog, item_no, scroll,
+                         box_y, box_x+item_x+1, menu_height);
+
+            wnoutrefresh (menu);
+            wrefresh (dialog);
+
 	    continue;		/* wait for another key press */
-	}
+        }
 
 	switch (key) {
 	case KEY_LEFT:

@@ -27,6 +27,8 @@
 #include <linux/timex.h>
 #include <linux/config.h>
 
+extern int setup_x86_irq(int, struct irqaction *);
+
 /* Cycle counter value at the previous timer interrupt.. */
 static unsigned long long last_timer_cc = 0;
 static unsigned long long init_timer_cc = 0;
@@ -353,7 +355,7 @@ unsigned long get_cmos_time(void)
 	return mktime(year, mon, day, hour, min, sec);
 }
 
-struct irqaction irq0  = { timer_interrupt, 0, 0, "timer", NULL, NULL};
+static struct irqaction irq0  = { timer_interrupt, 0, 0, "timer", NULL, NULL};
 
 void time_init(void)
 {
@@ -374,5 +376,5 @@ void time_init(void)
 		irq0.handler = pentium_timer_interrupt;
 	}
 #endif
-	enable_irq(0);
+	setup_x86_irq(0, &irq0);
 }

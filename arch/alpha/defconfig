@@ -121,6 +121,7 @@ CONFIG_SCSI_NCR53C7xx=y
 # CONFIG_SCSI_7000FASST is not set
 # CONFIG_SCSI_EATA is not set
 # CONFIG_SCSI_NCR53C406A is not set
+# CONFIG_SCSI_PPA is not set
 # CONFIG_SCSI_AM53C974 is not set
 
 #

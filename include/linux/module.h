@@ -74,9 +74,6 @@ struct mod_routines {
 	void (*cleanup)(void);		/* cleanup routine */
 };
 
-/* rename_module_symbol(old_name, new_name)  WOW! */
-extern int rename_module_symbol(char *, char *);
-
 /* insert new symbol table */
 extern int register_symtab(struct symbol_table *);
 

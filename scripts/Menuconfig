@@ -78,10 +78,10 @@ function help () {
 	if extract_help $1 >help.out
 	then
 		$DIALOG	--backtitle "$backtitle" --title "$2"\
-			--textbox help.out 20 75
+			--textbox help.out $LINES $COLS
 	else
 		$DIALOG	--backtitle "$backtitle" \
-			--textbox help.out 20 75
+			--textbox help.out $LINES $COLS
 	fi
 	rm help.out
 }
@@ -91,7 +91,7 @@ function help () {
 #
 function show_readme() {
 	$DIALOG --backtitle "$backtitle" \
-		--textbox scripts/README.Menuconfig 21 75
+		--textbox scripts/README.Menuconfig $LINES $COLS
 }
 
 #
@@ -102,7 +102,8 @@ function menu_name () {
 	echo -ne "$DIALOG --title '$1'\
 			--backtitle '$backtitle' \
 			--menu '$menu_instructions' \
-			21 75 11 '$default' " >MCmenu
+			$LINES $COLS $((LINES-10)) \
+			'$default' " >MCmenu
 	>MCradiolists
 }
 
@@ -840,6 +841,19 @@ cleanup1 () {
 cleanup2 () {
 	rm -f .tmpconfig .tmpconfig.h
 }
+
+x=`stty -a`
+case $x in
+*\ rows\ *\;*)
+	LINES=${x##*rows}    LINES=${LINES%%;*} LINES=$((${LINES:-25}-4))
+	COLS=${x##*columns}  COLS=${COLS%%;*}   COLS=$((${COLS:-80}-5))
+	;;
+*)
+	LINES=21
+	COLS=75
+	;;
+esac
+	
 
 menu_instructions="\
 Arrow keys navigate the menu.  \

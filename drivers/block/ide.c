@@ -1,5 +1,5 @@
 /*
- *  linux/drivers/block/ide.c	Version 5.33  Mar 15, 1996
+ *  linux/drivers/block/ide.c	Version 5.34  Mar 16, 1996
  *
  *  Copyright (C) 1994-1996  Linus Torvalds & authors (see below)
  */
@@ -218,7 +218,9 @@
  *			add config option for PCMCIA baggage
  *			try to make PCMCIA support safer to use
  *			improve security on ioctls(): all are suser() only
- * Version 5.33			improve handling of HDIO_DRIVE_CMDs that read data
+ * Version 5.33		improve handling of HDIO_DRIVE_CMDs that read data
+ * Version 5.34		fix irq-sharing problem from 5.33
+ *			fix cdrom ioctl problem from 5.33
  *
  *  Some additional driver compile-time options are in ide.h
  *
@@ -1893,8 +1895,6 @@ static int ide_ioctl (struct inode *inode, struct file *file,
 	unsigned long flags;
 	struct request rq;
 
-	if (!suser())
-		return -EACCES;
 	if (!inode || !(inode->i_rdev))
 		return -EINVAL;
 	if ((drive = get_info_ptr(inode->i_rdev)) == NULL)
@@ -1915,11 +1915,13 @@ static int ide_ioctl (struct inode *inode, struct file *file,
 			return 0;
 		}
 		case BLKFLSBUF:
+			if (!suser()) return -EACCES;
 			fsync_dev(inode->i_rdev);
 			invalidate_buffers(inode->i_rdev);
 			return 0;
 
 		case BLKRASET:
+			if (!suser()) return -EACCES;
 			if(arg > 0xff) return -EINVAL;
 			read_ahead[MAJOR(inode->i_rdev)] = arg;
 			return 0;
@@ -1930,6 +1932,7 @@ static int ide_ioctl (struct inode *inode, struct file *file,
 	 	case BLKGETSIZE:   /* Return device size */
 			return write_fs_long(arg, drive->part[MINOR(inode->i_rdev)&PARTN_MASK].nr_sects);
 		case BLKRRPART: /* Re-read partition tables */
+			if (!suser()) return -EACCES;
 			return revalidate_disk(inode->i_rdev);
 
 		case HDIO_GET_KEEPSETTINGS:
@@ -1961,6 +1964,7 @@ static int ide_ioctl (struct inode *inode, struct file *file,
 			return write_fs_long(arg, drive->bad_wstat == BAD_R_STAT);
 
 		case HDIO_SET_DMA:
+			if (!suser()) return -EACCES;
 #ifdef CONFIG_BLK_DEV_IDECD
 			if (drive->media == ide_cdrom)
 				return -EPERM;
@@ -1973,6 +1977,7 @@ static int ide_ioctl (struct inode *inode, struct file *file,
 			if (arg > 1)
 				return -EINVAL;
 		case HDIO_SET_32BIT:
+			if (!suser()) return -EACCES;
 			if ((MINOR(inode->i_rdev) & PARTN_MASK))
 				return -EINVAL;
 			save_flags(flags);
@@ -2012,6 +2017,7 @@ static int ide_ioctl (struct inode *inode, struct file *file,
 			return 0;
 
 		case HDIO_SET_MULTCOUNT:
+			if (!suser()) return -EACCES;
 			if (MINOR(inode->i_rdev) & PARTN_MASK)
 				return -EINVAL;
 			if (drive->id && arg > drive->id->max_multsect)
@@ -2032,6 +2038,7 @@ static int ide_ioctl (struct inode *inode, struct file *file,
 		{
 			byte args[4], *argbuf = args;
 			int argsize = 4;
+			if (!suser()) return -EACCES;
 			if (NULL == (void *) arg) {
 				err = ide_do_drive_cmd(drive, &rq, ide_wait);
 			} else if (!(err = verify_area(VERIFY_READ,(void *)arg, 4))) {
@@ -2057,6 +2064,7 @@ static int ide_ioctl (struct inode *inode, struct file *file,
 			return err;
 		}
 		case HDIO_SET_PIO_MODE:
+			if (!suser()) return -EACCES;
 			if (MINOR(inode->i_rdev) & PARTN_MASK)
 				return -EINVAL;
 			if (!HWIF(drive)->tuneproc)
@@ -2973,22 +2981,20 @@ static int init_irq (ide_hwif_t *hwif)
 	 * Handle serialization, regardless of init sequence
 	 */
 	mate_hwif = &ide_hwifs[hwif->index ^ 1];
-	if (hwif->serialized && mate_hwif->present) {
-		hwgroup = mate_hwif->hwgroup;
+	if (hwif->serialized && mate_hwif->present)
 		mate_irq = mate_hwif->irq;
-	}
 
 	/*
-	 * If another hwif is sharing our irq, then join its hwgroup.
+	 * Group up with any other hwifs that share our irq(s)
 	 */
-	if (hwgroup == NULL) {
-		for (index = 0; index < MAX_HWIFS; index++) {
-			if (index != hwif->index) {
-				ide_hwif_t *g = &ide_hwifs[index];
-				if (g->irq == hwif->irq || g->irq == mate_irq) {
-					hwgroup = ide_hwifs[index].hwgroup;
-					break;
-				}
+	for (index = 0; index < MAX_HWIFS; index++) {
+		if (index != hwif->index) {
+			ide_hwif_t *g = &ide_hwifs[index];
+			if (g->irq == hwif->irq || g->irq == mate_irq) {
+				if (hwgroup && !g->hwgroup)
+					g->hwgroup = hwgroup;
+				else if (!hwgroup)
+					hwgroup = g->hwgroup;
 			}
 		}
 	}
@@ -3001,7 +3007,10 @@ static int init_irq (ide_hwif_t *hwif)
 		hwgroup->hwif 	 = hwgroup->next_hwif = hwif->next = hwif;
 		hwgroup->rq      = NULL;
 		hwgroup->handler = NULL;
-		hwgroup->drive   = &hwif->drives[0];
+		if (hwif->drives[0].present)
+			hwgroup->drive   = &hwif->drives[0];
+		else
+			hwgroup->drive   = &hwif->drives[1];
 		hwgroup->poll_timeout = 0;
 		init_timer(&hwgroup->timer);
 		hwgroup->timer.function = &timer_expiry;
@@ -3016,7 +3025,11 @@ static int init_irq (ide_hwif_t *hwif)
 			restore_flags(flags);
 			return 1;
 		}
-		hwif->got_irq = 1;
+		for (index = 0; index < MAX_HWIFS; index++) {
+			ide_hwif_t *g = &ide_hwifs[index];
+			if (g->irq == hwif->irq)
+				g->got_irq = 1;
+		}
 	}
 
 	/*

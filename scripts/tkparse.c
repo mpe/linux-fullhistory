@@ -326,10 +326,9 @@ void parse(char * pnt) {
       tok = tok_menuoption;
       pnt += 15;
     }
-  else if      (strncmp(pnt, "$MAKE -C drivers/sound", 22) == 0) 
+  else if (strncmp(pnt, "$MAKE ", 6) == 0) 
     {
-      pnt += 22;
-      tok = tok_sound;
+      tok = tok_make;
     }
   else if (strncmp(pnt, "comment", 7) == 0) 
     {
@@ -508,9 +507,11 @@ void parse(char * pnt) {
 	  pnt = get_qstring(pnt, &kcfg->label);
 	}
       break;
+    case tok_make:
+      kcfg->value=strdup(pnt);
+      break;
     case tok_else:
     case tok_fi:
-    case tok_sound:
     case tok_endmenu:
       break;
     case tok_if:
