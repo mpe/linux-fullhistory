@@ -557,7 +557,7 @@ xfs_dir_shortform_validate_ondisk(xfs_mount_t *mp, xfs_dinode_t *dp)
 		return 1;
 	}
 	sf = (xfs_dir_shortform_t *)(&dp->di_u.di_dirsf);
-	ino = XFS_GET_DIR_INO(mp, sf->hdr.parent);
+	ino = XFS_GET_DIR_INO8(sf->hdr.parent);
 	if (xfs_dir_ino_validate(mp, ino))
 		return 1;
 
@@ -575,7 +575,7 @@ xfs_dir_shortform_validate_ondisk(xfs_mount_t *mp, xfs_dinode_t *dp)
 	namelen_sum = 0;
 	sfe = &sf->list[0];
 	for (i = sf->hdr.count - 1; i >= 0; i--) {
-		ino = XFS_GET_DIR_INO(mp, sfe->inumber);
+		ino = XFS_GET_DIR_INO8(sfe->inumber);
 		xfs_dir_ino_validate(mp, ino);
 		if (sfe->namelen >= XFS_LITINO(mp)) {
 			xfs_fs_cmn_err(CE_WARN, mp,

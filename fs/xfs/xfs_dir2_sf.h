@@ -59,17 +59,12 @@ struct xfs_trans;
  */
 typedef	struct { __uint8_t i[8]; } xfs_dir2_ino8_t;
 
-#define	XFS_DIR2_SF_GET_INO8(di)	\
-	(xfs_ino_t)(DIRINO_GET_ARCH(&di, ARCH_CONVERT))
-
 /*
  * Inode number stored as 4 8-bit values.
  * Works a lot of the time, when all the inode numbers in a directory
  * fit in 32 bits.
  */
 typedef struct { __uint8_t i[4]; } xfs_dir2_ino4_t;
-#define	XFS_DIR2_SF_GET_INO4(di)	\
-	(xfs_ino_t)(DIRINO4_GET_ARCH(&di, ARCH_CONVERT))
 
 typedef union {
 	xfs_dir2_ino8_t	i8;
@@ -135,8 +130,8 @@ xfs_intino_t xfs_dir2_sf_get_inumber(xfs_dir2_sf_t *sfp, xfs_dir2_inou_t *from);
 #else
 #define	XFS_DIR2_SF_GET_INUMBER(sfp, from)	\
 	((sfp)->hdr.i8count == 0 ? \
-		(xfs_intino_t)XFS_DIR2_SF_GET_INO4(*(from)) : \
-		(xfs_intino_t)XFS_DIR2_SF_GET_INO8(*(from)))
+		(xfs_intino_t)XFS_GET_DIR_INO4((from)->i4) : \
+		(xfs_intino_t)XFS_GET_DIR_INO8((from)->i8))
 #endif
 
 #if XFS_WANT_FUNCS || (XFS_WANT_SPACE && XFSSO_XFS_DIR2_SF_PUT_INUMBER)
@@ -147,9 +142,9 @@ void xfs_dir2_sf_put_inumber(xfs_dir2_sf_t *sfp, xfs_ino_t *from,
 #else
 #define	XFS_DIR2_SF_PUT_INUMBER(sfp,from,to)	\
 	if ((sfp)->hdr.i8count == 0) { \
-	    DIRINO4_COPY_ARCH(from,to,ARCH_CONVERT); \
+		XFS_PUT_DIR_INO4(*(from), (to)->i4); \
 	} else { \
-	    DIRINO_COPY_ARCH(from,to,ARCH_CONVERT); \
+		XFS_PUT_DIR_INO8(*(from), (to)->i8); \
 	}
 #endif
 

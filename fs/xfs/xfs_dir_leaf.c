@@ -470,7 +470,7 @@ xfs_dir_shortform_getdents(xfs_inode_t *dp, uio_t *uio, int *eofp,
 	sbp->entno = 1;
 	sbp->seqno = 0;
 	sbp->hash = xfs_dir_hash_dotdot;
-	sbp->ino = XFS_GET_DIR_INO(mp, sf->hdr.parent);
+	sbp->ino = XFS_GET_DIR_INO8(sf->hdr.parent);
 	sbp->name = "..";
 	sbp->namelen = 2;
 	sbp++;
@@ -494,7 +494,7 @@ xfs_dir_shortform_getdents(xfs_inode_t *dp, uio_t *uio, int *eofp,
 		sbp->entno = i + 2;
 		sbp->seqno = 0;
 		sbp->hash = xfs_da_hashname((char *)sfe->name, sfe->namelen);
-		sbp->ino = XFS_GET_DIR_INO(mp, sfe->inumber);
+		sbp->ino = XFS_GET_DIR_INO8(sfe->inumber);
 		sbp->name = (char *)sfe->name;
 		sbp->namelen = sfe->namelen;
 		sfe = XFS_DIR_SF_NEXTENTRY(sfe);
@@ -2140,7 +2140,7 @@ xfs_dir_leaf_getdents_int(
 		 * then restore the UIO to the first entry in the current
 		 * run of equal-hashval entries (probably one 1 entry long).
 		 */
-		p.ino = XFS_GET_DIR_INO(mp, namest->inumber);
+		p.ino = XFS_GET_DIR_INO8(namest->inumber);
 #if XFS_BIG_INUMS
 		p.ino += mp->m_inoadd;
 #endif
