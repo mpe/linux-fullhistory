@@ -691,7 +691,8 @@ register INTSTAT {
 	mask	NO_IDENT	0x20|SEQINT	/* no IDENTIFY after reconnect*/
 	mask	NO_MATCH	0x30|SEQINT	/* no cmd match for reconnect */
 	mask	EXTENDED_MSG	0x40|SEQINT	/* Extended message received */
-	mask	ABORT_REQUESTED 0x50|SEQINT	/* Reconect of aborted SCB */
+	mask	WIDE_RESIDUE	0x50|SEQINT	/* need kernel to back up */
+						/* the SG array for us */
 	mask	REJECT_MSG	0x60|SEQINT	/* Reject message received */
 	mask	BAD_STATUS	0x70|SEQINT	/* Bad status from target */
 	mask	RESIDUAL	0x80|SEQINT	/* Residual byte count != 0 */

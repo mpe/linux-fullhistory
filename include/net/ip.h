@@ -41,7 +41,6 @@
 struct inet_skb_parm
 {
 	struct ip_options	opt;		/* Compiled IP options		*/
-	u16			redirport;	/* Redirect port		*/
 	unsigned char		flags;
 
 #define IPSKB_MASQUERADED	1

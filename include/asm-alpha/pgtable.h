@@ -249,7 +249,7 @@ extern inline pte_t pte_mkyoung(pte_t pte)	{ pte_val(pte) |= __ACCESS_BITS; retu
 #define pgd_offset_k(address) pgd_offset(&init_mm, address)
 
 /* to find an entry in a page-table-directory. */
-#define __pgd_offset(address)	((address >> PGDIR_SHIFT) & (PTRS_PER_PGD-1))
+#define __pgd_offset(address)	((address >> PGDIR_SHIFT) & PTRS_PER_PGD)
 #define pgd_offset(mm, address)	((mm)->pgd+__pgd_offset(address))
 
 /* Find an entry in the second-level page table.. */

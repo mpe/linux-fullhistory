@@ -573,7 +573,7 @@ entSys:
 .align 3
 ret_from_sys_call:
 	cmovne	$26,0,$19		/* $19 = 0 => non-restartable */
-	ldq	$3,TASK_PROCESSOR($8)
+	ldl	$3,TASK_PROCESSOR($8)
 	lda	$4,softirq_state
 	sll	$3,5,$3
 	addq	$3,$4,$4

@@ -208,6 +208,19 @@ linux-1.1.x and fairly stable since linux-1.2.x, and are also in FreeBSD
 	will often result in the machine crashing or spontaneously rebooting
 	during startup.  Examples of machines that need this are the
 	Dell PowerEdge 6300 machines.
+
+    "aic7xxx=seltime:2" - This option controls how long the card waits
+        during a device selection sequence for the device to respond.
+	The original SCSI spec says that this "should be" 256ms.  This
+	is generally not required with modern devices.  However, some
+	very old SCSI I devices need the full 256ms.  Most modern devices
+	can run fine with only 64ms.  The default for this option is
+	64ms.  If you need to change this option, then use the following
+	table to set the proper value in the example above:
+	  0  -  256ms
+	  1  -  128ms
+	  2  -   64ms
+	  3  -   32ms
 	
     "aic7xxx=panic_on_abort" - This option is for debugging and will cause
         the driver to panic the linux kernel and freeze the system the first
@@ -485,12 +498,14 @@ linux-1.1.x and fairly stable since linux-1.2.x, and are also in FreeBSD
 
   Web sites
   ------------------------------
-    http://people.redhat.com/dledford/aic7xxx.html
-      - Primary web site maintained by Doug Ledford.
+    http://people.redhat.com/dledford/
+      - My web site, also the primary aic7xxx site with several related
+        pages.
 
 Dean W. Gehnert
 deang@teleport.com
 
 $Revision: 3.0 $
 
-Modified by Doug Ledford 1998-9
+Modified by Doug Ledford 1998-2000
+

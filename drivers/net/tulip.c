@@ -2148,10 +2148,10 @@ static void tulip_interrupt IRQ(int irq, void *dev_instance, struct pt_regs *reg
 		if (csr5 & (RxIntr | RxNoBuf))
 			work_budget -= tulip_rx(dev);
 
-		spin_lock(&tp->tx_lock);
-
 		if (csr5 & (TxNoBuf | TxDied | TxIntr)) {
 			unsigned int dirty_tx;
+
+			spin_lock(&tp->tx_lock);
 
 			for (dirty_tx = tp->dirty_tx; tp->cur_tx - dirty_tx > 0;
 				 dirty_tx++) {
@@ -2219,8 +2219,8 @@ static void tulip_interrupt IRQ(int irq, void *dev_instance, struct pt_regs *reg
 				outl(tp->csr6 | 0x0002, ioaddr + CSR6);
 				outl(tp->csr6 | 0x2002, ioaddr + CSR6);
 			}
+			spin_unlock(&tp->tx_lock);
 		}
-		spin_unlock(&tp->tx_lock);
 
 		/* Log errors. */
 		if (csr5 & AbnormalIntr) {	/* Abnormal error summary bit. */

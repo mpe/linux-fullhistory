@@ -464,6 +464,7 @@ static struct inode * find_inode(struct super_block * sb, unsigned long ino, str
  */
 static void clean_inode(struct inode *inode)
 {
+	static struct address_space_operations empty_aops = {};
 	memset(&inode->u, 0, sizeof(inode->u));
 	inode->i_sock = 0;
 	inode->i_op = NULL;
@@ -474,8 +475,9 @@ static void clean_inode(struct inode *inode)
 	memset(&inode->i_dquot, 0, sizeof(inode->i_dquot));
 	inode->i_pipe = NULL;
 	inode->i_bdev = NULL;
+	inode->i_data.a_ops = &empty_aops;
+	inode->i_data.host = (void*)inode;
 	inode->i_mapping = &inode->i_data;
-	inode->i_mapping->host = (void*)inode;
 }
 
 /*

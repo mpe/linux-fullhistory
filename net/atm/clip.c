@@ -223,10 +223,8 @@ static void clip_pop(struct atm_vcc *vcc,struct sk_buff *skb)
 	DPRINTK("clip_pop(vcc %p)\n",vcc);
 	CLIP_VCC(vcc)->old_pop(vcc,skb);
 	/* skb->dev == NULL in outbound ARP packets */
-	if (atm_may_send(vcc,0) && skb->dev) {
-		skb->dev->tbusy = 0;
-		mark_bh(NET_BH);
-	}
+	if (atm_may_send(vcc,0) && skb->dev)
+		netif_wake_queue(skb->dev);
 }
 
 
@@ -403,7 +401,8 @@ return 0;
 		((u16 *) here)[3] = skb->protocol;
 	}
 	atomic_add(skb->truesize,&vcc->tx_inuse);
-	dev->tbusy = !atm_may_send(vcc,0);
+	if (!atm_may_send(vcc,0))
+		netif_stop_queue(dev);
 	ATM_SKB(skb)->iovcnt = 0;
 	ATM_SKB(skb)->atm_options = vcc->atm_options;
 	entry->vccs->last_use = jiffies;

@@ -1043,11 +1043,7 @@ u32 TLan_HandleTxEOF( struct net_device *dev, u16 host_int )
 	head_list = priv->txList + priv->txHead;
 
 	if ( ! bbuf ) {
-		if (in_irq())
-			dev_kfree_skb_irq( (struct sk_buff *) head_list->buffer[9].address );
-		else
-			dev_kfree_skb( (struct sk_buff *) head_list->buffer[9].address );
-		
+		dev_kfree_skb_irq( (struct sk_buff *) head_list->buffer[9].address );		
 		head_list->buffer[9].address = 0;
 	}
 
@@ -1630,7 +1626,10 @@ void TLan_FreeLists( struct net_device *dev )
 			list = priv->txList + i;
 			skb = (struct sk_buff *) list->buffer[9].address;
 			if ( skb ) {
-				dev_kfree_skb( skb );
+				if (in_irq())
+					dev_kfree_skb_irq( skb );
+				else
+					dev_kfree_skb( skb );
 				list->buffer[9].address = 0;
 			}
 		}
@@ -1639,7 +1638,10 @@ void TLan_FreeLists( struct net_device *dev )
 			list = priv->rxList + i;
 			skb = (struct sk_buff *) list->buffer[9].address;
 			if ( skb ) {
-				dev_kfree_skb( skb );
+				if (in_irq())
+					dev_kfree_skb_irq( skb );
+				else
+					dev_kfree_skb( skb );
 				list->buffer[9].address = 0;
 			}
 		}

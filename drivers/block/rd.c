@@ -362,6 +362,7 @@ static int rd_open(struct inode * inode, struct file * filp)
 	if (DEVICE_NR(inode->i_rdev) >= NUM_RAMDISKS)
 		return -ENXIO;
 
+	filp->f_op = &def_blk_fops;
 	MOD_INC_USE_COUNT;
 
 	return 0;
@@ -560,7 +561,7 @@ done:
  */
 static void __init rd_load_image(kdev_t device, int offset, int unit)
 {
- 	struct inode inode, out_inode;
+ 	struct inode *inode, *out_inode;
 	struct file infile, outfile;
 	struct dentry in_dentry, out_dentry;
 	mm_segment_t fs;
@@ -574,25 +575,27 @@ static void __init rd_load_image(kdev_t device, int offset, int unit)
 	ram_device = MKDEV(MAJOR_NR, unit);
 
 	memset(&infile, 0, sizeof(infile));
-	memset(&inode, 0, sizeof(inode));
 	memset(&in_dentry, 0, sizeof(in_dentry));
-	inode.i_rdev = device;
-	init_waitqueue_head(&inode.i_wait);
+	inode = get_empty_inode();
+	inode->i_rdev = device;
+	inode->i_bdev = bdget(kdev_t_to_nr(device));
 	infile.f_mode = 1; /* read only */
 	infile.f_dentry = &in_dentry;
-	in_dentry.d_inode = &inode;
+	in_dentry.d_inode = inode;
 
 	memset(&outfile, 0, sizeof(outfile));
-	memset(&out_inode, 0, sizeof(out_inode));
 	memset(&out_dentry, 0, sizeof(out_dentry));
-	out_inode.i_rdev = ram_device;
-	init_waitqueue_head(&out_inode.i_wait);
+	out_inode = get_empty_inode();
+	out_inode->i_rdev = ram_device;
+	out_inode->i_bdev = bdget(kdev_t_to_nr(ram_device));
 	outfile.f_mode = 3; /* read/write */
 	outfile.f_dentry = &out_dentry;
-	out_dentry.d_inode = &out_inode;
+	out_dentry.d_inode = out_inode;
 
-	if (blkdev_open(&inode, &infile) != 0) return;
-	if (blkdev_open(&out_inode, &outfile) != 0) return;
+	if (blkdev_open(inode, &infile) != 0)
+		goto free_inodes;
+	if (blkdev_open(out_inode, &outfile) != 0)
+		goto free_inodes;
 
 	fs = get_fs();
 	set_fs(KERNEL_DS);
@@ -655,10 +658,10 @@ static void __init rd_load_image(kdev_t device, int offset, int unit)
 			rotate = 0;
 			invalidate_buffers(device);
 			if (infile.f_op->release)
-				infile.f_op->release(&inode, &infile);
+				infile.f_op->release(inode, &infile);
 			printk("Please insert disk #%d and press ENTER\n", i/devblocks+1);
 			wait_for_keypress();
-			if (blkdev_open(&inode, &infile) != 0)  {
+			if (blkdev_open(inode, &infile) != 0)  {
 				printk("Error opening disk.\n");
 				goto done;
 			}
@@ -681,8 +684,11 @@ successful_load:
 
 done:
 	if (infile.f_op->release)
-		infile.f_op->release(&inode, &infile);
+		infile.f_op->release(inode, &infile);
 	set_fs(fs);
+free_inodes:
+	iput(inode);
+	iput(out_inode);
 }
 
 
