@@ -261,6 +261,7 @@ int minix_mknod(struct inode * dir, const char * name, int len, int mode, int rd
 		inode->i_pipe = 1;
 		PIPE_BASE(*inode) = NULL;
 		PIPE_HEAD(*inode) = PIPE_TAIL(*inode) = 0;
+		PIPE_READ_WAIT(*inode) = PIPE_WRITE_WAIT(*inode) = NULL;
 		PIPE_READERS(*inode) = PIPE_WRITERS(*inode) = 0;
 	}
 	if (S_ISBLK(mode) || S_ISCHR(mode))

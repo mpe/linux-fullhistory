@@ -26,24 +26,24 @@ clean:
 
 dep:
 	sed '/\#\#\# Dependencies/q' < Makefile > tmp_make
-	for i in *.c;do $(CPP) -M $$i;done >> tmp_make
+	$(CPP) -M *.c >> tmp_make
 	cp tmp_make Makefile
 
 ### Dependencies:
-_exit.o : _exit.c /usr/src/linux/include/linux/unistd.h 
-close.o : close.c /usr/src/linux/include/linux/unistd.h 
-ctype.o : ctype.c /usr/src/linux/include/linux/ctype.h 
-dup.o : dup.c /usr/src/linux/include/linux/unistd.h 
+_exit.o : _exit.c /usr/include/linux/unistd.h 
+close.o : close.c /usr/include/linux/unistd.h 
+ctype.o : ctype.c /usr/include/linux/ctype.h 
+dup.o : dup.c /usr/include/linux/unistd.h 
 errno.o : errno.c 
-execve.o : execve.c /usr/src/linux/include/linux/unistd.h 
-malloc.o : malloc.c /usr/src/linux/include/linux/kernel.h /usr/src/linux/include/linux/mm.h \
-  /usr/src/linux/include/linux/fs.h /usr/src/linux/include/linux/limits.h /usr/src/linux/include/linux/wait.h \
-  /usr/src/linux/include/linux/types.h /usr/src/linux/include/linux/dirent.h /usr/src/linux/include/linux/vfs.h \
-  /usr/src/linux/include/linux/minix_fs_sb.h /usr/src/linux/include/linux/ext_fs_sb.h \
-  /usr/src/linux/include/linux/msdos_fs_sb.h /usr/src/linux/include/linux/signal.h \
-  /usr/src/linux/include/asm/system.h 
-open.o : open.c /usr/src/linux/include/linux/unistd.h /usr/src/linux/include/stdarg.h 
-setsid.o : setsid.c /usr/src/linux/include/linux/types.h /usr/src/linux/include/linux/unistd.h 
-string.o : string.c /usr/src/linux/include/linux/types.h /usr/src/linux/include/linux/string.h 
-wait.o : wait.c /usr/src/linux/include/linux/unistd.h /usr/src/linux/include/linux/types.h 
-write.o : write.c /usr/src/linux/include/linux/unistd.h /usr/src/linux/include/linux/types.h 
+execve.o : execve.c /usr/include/linux/unistd.h 
+malloc.o : malloc.c /usr/include/linux/kernel.h /usr/include/linux/mm.h /usr/include/linux/fs.h \
+  /usr/include/linux/limits.h /usr/include/linux/wait.h /usr/include/linux/types.h \
+  /usr/include/linux/dirent.h /usr/include/linux/vfs.h /usr/include/linux/pipe_fs_i.h \
+  /usr/include/linux/minix_fs_i.h /usr/include/linux/ext_fs_i.h /usr/include/linux/msdos_fs_i.h \
+  /usr/include/linux/minix_fs_sb.h /usr/include/linux/ext_fs_sb.h /usr/include/linux/msdos_fs_sb.h \
+  /usr/include/asm/system.h 
+open.o : open.c /usr/include/linux/unistd.h /usr/lib/gcc-lib/i386-linux/2.2.2d/include/stdarg.h 
+setsid.o : setsid.c /usr/include/linux/types.h /usr/include/linux/unistd.h 
+string.o : string.c /usr/include/linux/types.h /usr/include/linux/string.h 
+wait.o : wait.c /usr/include/linux/unistd.h /usr/include/linux/types.h 
+write.o : write.c /usr/include/linux/unistd.h /usr/include/linux/types.h 

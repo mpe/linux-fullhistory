@@ -355,8 +355,8 @@ static void recal_intr(void)
  */
 static void hd_times_out(void)
 {
-	sti();
 	DEVICE_INTR = NULL;
+	sti();
 	reset = 1;
 	if (!CURRENT)
 		return;
@@ -385,8 +385,9 @@ static void do_hd_request(void)
 	unsigned int sec,head,cyl,track;
 	unsigned int nsect;
 
+	if (DEVICE_INTR)
+		return;
 repeat:
-	DEVICE_INTR = NULL;
 	timer_active &= ~(1<<HD_TIMER);
 	sti();
 	INIT_REQUEST;

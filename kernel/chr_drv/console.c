@@ -7,9 +7,14 @@
 /*
  *	console.c
  *
- * This module implements the console io functions
+ * This module exports the console io functions:
+ * 
  *	'long con_init(long)'
- *	'void con_write(struct tty_queue * queue)'
+ *	'void con_open(struct tty_queue * queue, struct )'
+ * 	'void update_screen(int new_console)'
+ * 	'void blank_screen(void)'
+ * 	'void unblank_screen(void)'
+ * 
  * Hopefully this will be a rather complete VT102 implementation.
  *
  * Beeping thanks to John T Kohl.
@@ -55,6 +60,7 @@ extern void set_leds(void);
 extern unsigned char kapplic;
 extern unsigned char ckmode;
 extern unsigned char krepeat;
+extern unsigned char default_kleds;
 extern unsigned char kleds;
 extern unsigned char kmode;
 extern unsigned char kraw;
@@ -186,13 +192,6 @@ static int console_blanked = 0;
 #define kbdraw		(vt_cons[currcons].vc_kbdraw)
 #define kbdleds		(vt_cons[currcons].vc_kbdleds)
 #define vtmode		(vt_cons[currcons].vt_mode)
-
-#if defined KBD_NUMERIC_LOCK
-#define NUMLED_DEFAULT 0x02
-
-#else
-#define NUMLED_DEFAULT 0
-#endif
 
 #define SET(mode,fg,v) \
 	(mode) = (v); \
@@ -612,7 +611,7 @@ static inline void set_cursor(int currcons)
 static void respond_string(char * p, int currcons, struct tty_struct * tty)
 {
 	while (*p) {
-		put_tty_queue(*p,tty->read_q);
+		put_tty_queue(*p, &tty->read_q);
 		p++;
 	}
 	TTY_READ_FLUSH(tty);
@@ -628,19 +627,19 @@ static void respond_num(unsigned int n, int currcons, struct tty_struct * tty)
 		n /= 10;
 	} while(n && i < 3);	/* We'll take no chances */
 	while (i--) {
-		put_tty_queue(buff[i],tty->read_q);
+		put_tty_queue(buff[i], &tty->read_q);
 	}
 	/* caller must flush */
 }
 
 static void cursor_report(int currcons, struct tty_struct * tty)
 {
-	put_tty_queue('\033', tty->read_q);
-	put_tty_queue('[', tty->read_q);
+	put_tty_queue('\033', &tty->read_q);
+	put_tty_queue('[', &tty->read_q);
 	respond_num(y + (decom ? top+1 : 1), currcons, tty);
-	put_tty_queue(';', tty->read_q);
+	put_tty_queue(';', &tty->read_q);
 	respond_num(x+1, currcons, tty);
-	put_tty_queue('R', tty->read_q);
+	put_tty_queue('R', &tty->read_q);
 	TTY_READ_FLUSH(tty);
 }
 
@@ -873,7 +872,7 @@ static void reset_terminal(int currcons, int do_clear)
 		ckmode		= 0;
 		kapplic		= 0;
 		lfnlmode	= 0;
-		kleds		= NUMLED_DEFAULT;
+		kleds		= default_kleds;
 		kmode		= 0;
 		set_leds();
 	} else {
@@ -881,7 +880,7 @@ static void reset_terminal(int currcons, int do_clear)
 		decckm		= 0;
 		kbdapplic	= 0;
 		lnm		= 0;
-		kbdleds		= NUMLED_DEFAULT;
+		kbdleds		= default_kleds;
 		kbdmode		= 0;
 	}
 
@@ -906,13 +905,13 @@ void con_write(struct tty_struct * tty)
 	int c;
 	unsigned int currcons;
 
-	wake_up(&tty->write_q->proc_list);
-	currcons = tty - tty_table;
+	wake_up(&tty->write_q.proc_list);
+	currcons = tty->line - 1;
 	if (currcons >= NR_CONSOLES) {
-		printk("con_write: illegal tty\n\r");
+		printk("con_write: illegal tty (%d)\n", currcons);
 		return;
 	}
-	while (!tty->stopped &&	(c = get_tty_queue(tty->write_q)) >= 0) {
+	while (!tty->stopped &&	(c = get_tty_queue(&tty->write_q)) >= 0) {
 		if (state == ESnormal && translate[c]) {
 			if (need_wrap) {
 				cr(currcons);
@@ -1506,4 +1505,15 @@ void console_print(const char * b)
 		timer_table[BLANK_TIMER].expires = jiffies + blankinterval;
 		timer_active |= 1<<BLANK_TIMER;
 	}
+}
+
+/*
+ * All we do is set the write and ioctl subroutines; later on maybe we'll
+ * dynamically allocate the console screen memory.
+ */
+int con_open(struct tty_struct *tty, struct file * filp)
+{
+	tty->write = con_write;
+	tty->ioctl = vt_ioctl;
+	return 0;
 }

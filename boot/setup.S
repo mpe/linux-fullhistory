@@ -61,6 +61,12 @@ start:
 	mov	ax,#0x5019
 	cmp	bl,#0x10
 	je	novga
+	mov	ax,#0x1a00	! Added check for EGA/VGA discrimination
+	int	0x10
+	mov	bx,ax
+	mov	ax,#0x5019
+	cmp	bl,#0x1a	! 1a means VGA, anything else EGA or lower
+	jne	novga	
 	call	chsvga
 novga:	mov	[14],ax
 	mov	ah,#0x03	! read cursor pos

@@ -194,6 +194,7 @@ struct inode * get_pipe_inode(void)
 		return NULL;
 	}
 	inode->i_count = 2;	/* sum of readers/writers */
+	PIPE_READ_WAIT(*inode) = PIPE_WRITE_WAIT(*inode) = NULL;
 	PIPE_HEAD(*inode) = PIPE_TAIL(*inode) = 0;
 	PIPE_READERS(*inode) = PIPE_WRITERS(*inode) = 1;
 	inode->i_pipe = 1;

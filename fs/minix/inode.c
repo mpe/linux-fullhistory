@@ -344,6 +344,7 @@ void minix_read_inode(struct inode * inode)
 		inode->i_pipe = 1;
 		PIPE_BASE(*inode) = NULL;
 		PIPE_HEAD(*inode) = PIPE_TAIL(*inode) = 0;
+		PIPE_READ_WAIT(*inode) = PIPE_WRITE_WAIT(*inode) = NULL;
 		PIPE_READERS(*inode) = PIPE_WRITERS(*inode) = 0;
 	}
 }

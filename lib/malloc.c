@@ -1,6 +1,6 @@
 /*
  * malloc.c --- a general purpose kernel memory allocator for Linux.
- * 
+ *
  * Written by Theodore Ts'o (tytso@mit.edu), 11/29/91
  *
  * This routine is written to be as fast as possible, so that it
@@ -15,14 +15,14 @@
  * called, it looks for the smallest bucket size which will fulfill its
  * request, and allocate a piece of memory from that bucket pool.
  *
- * Each bucket has as its control block a bucket descriptor which keeps 
+ * Each bucket has as its control block a bucket descriptor which keeps
  * track of how many objects are in use on that page, and the free list
  * for that page.  Like the buckets themselves, bucket descriptors are
  * stored on pages requested from get_free_page().  However, unlike buckets,
  * pages devoted to bucket descriptor pages are never released back to the
  * system.  Fortunately, a system should probably only need 1 or 2 bucket
  * descriptor pages, since a page can hold 256 bucket descriptors (which
- * corresponds to 1 megabyte worth of bucket pages.)  If the kernel is using 
+ * corresponds to 1 megabyte worth of bucket pages.)  If the kernel is using
  * that much allocated memory, it's probably doing something wrong.  :-)
  *
  * Note: malloc() and free() both call get_free_page() and free_page()
@@ -36,11 +36,11 @@
  *	"pre-allocated" so that it can safely draw upon those pages if
  * 	it is called from an interrupt routine.
  *
- * 	Another concern is that get_free_page() should not sleep; if it 
- *	does, the code is carefully ordered so as to avoid any race 
- *	conditions.  The catch is that if malloc() is called re-entrantly, 
- *	there is a chance that unecessary pages will be grabbed from the 
- *	system.  Except for the pages for the bucket descriptor page, the 
+ * 	Another concern is that get_free_page() should not sleep; if it
+ *	does, the code is carefully ordered so as to avoid any race
+ *	conditions.  The catch is that if malloc() is called re-entrantly,
+ *	there is a chance that unecessary pages will be grabbed from the
+ *	system.  Except for the pages for the bucket descriptor page, the
  *	extra pages will eventually get released back to the system, though,
  *	so it isn't all that bad.
  */
@@ -72,7 +72,7 @@ struct _bucket_dir {	/* 8 bytes */
 
 /*
  * The following is the where we store a pointer to the first bucket
- * descriptor for a given size.  
+ * descriptor for a given size.
  *
  * If it turns out that the Linux kernel allocates a lot of objects of a
  * specific size, then we may want to add that specific size to this list,

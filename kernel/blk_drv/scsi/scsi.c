@@ -627,6 +627,27 @@ static int check_sense (int host)
 		return SUGGEST_RETRY;	
 	}	
 
+/* This function is the mid-level interrupt routine, which decides how
+ *  to handle error conditions.  Each invocation of this function must
+ *  do one and *only* one of the following:
+ *
+ *  (1) Call last_cmnd[host].done.  This is done for fatal errors and
+ *      normal completion, and indicates that the handling for this
+ *      request is complete.
+ *  (2) Call internal_cmnd to requeue the command.  This will result in
+ *      scsi_done being called again when the retry is complete.
+ *  (3) Call scsi_request_sense.  This asks the host adapter/drive for
+ *      more information about the error condition.  When the information
+ *      is available, scsi_done will be called again.
+ *  (4) Call reset().  This is sort of a last resort, and the idea is that
+ *      this may kick things loose and get the drive working again.  reset()
+ *      automatically calls scsi_request_sense, and thus scsi_done will be
+ *      called again once the reset is complete.
+ *
+ *      If none of the above actions are taken, the drive in question
+ * will hang. If more than one of the above actions are taken by
+ * scsi_done, then unpredictable behavior will result.
+ */
 static void scsi_done (int host, int result)
 	{
 	int status=0;
@@ -670,8 +691,11 @@ static void scsi_done (int host, int result)
 			internal_timeout[host] &= ~SENSE_TIMEOUT;
 			sti();
 
-			if (!(last_cmnd[host].flags & WAS_RESET)) 
+			if (!(last_cmnd[host].flags & WAS_RESET))
+				{
 				reset(host);
+				return;
+				}
 			else
 				{
 				exit = (DRIVER_HARD | SUGGEST_ABORT);
@@ -768,9 +792,12 @@ static void scsi_done (int host, int result)
 
 			case RESERVATION_CONFLICT:
 				reset(host);
+				return;
+#if 0
 				exit = DRIVER_SOFT | SUGGEST_ABORT;
 				status = MAYREDO;
 				break;
+#endif
 			default:
 				printk ("Internal error %s %s \n"
 					"status byte = %d \n", __FILE__, 
@@ -839,11 +866,13 @@ static void scsi_done (int host, int result)
 
 			if ((++last_cmnd[host].retries) < last_cmnd[host].allowed)
 			{
-			if ((last_cmnd[host].retries >= (last_cmnd[host].allowed >> 1)) 
+			if ((last_cmnd[host].retries >= (last_cmnd[host].allowed >> 1))
 			    && !(last_cmnd[host].flags & WAS_RESET))
-				reset(host);
-				break;
-			
+			        {
+					reset(host);
+					break;
+			        }
+
 			}
 			else
 				{

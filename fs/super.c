@@ -125,7 +125,7 @@ static struct super_block * read_super(int dev,char *name,int flags,void *data)
 	check_disk_change(dev);
 	if (s = get_super(dev))
 		return s;
-	if (!(type=get_fs_type(name))) {
+	if (!(type = get_fs_type(name))) {
 		printk("get fs type failed %s\n",name);
 		return NULL;
 	}
@@ -137,13 +137,15 @@ static struct super_block * read_super(int dev,char *name,int flags,void *data)
 	}
 	s->s_dev = dev;
 	s->s_flags = flags;
-	if (!type->read_super(s,data))
-		return(NULL);
+	if (!type->read_super(s,data)) {
+		s->s_dev = 0;
+		return NULL;
+	}
 	s->s_dev = dev;
 	s->s_covered = NULL;
 	s->s_rd_only = 0;
 	s->s_dirt = 0;
-	return(s);
+	return s;
 }
 
 static int do_umount(int dev)

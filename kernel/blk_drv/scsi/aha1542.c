@@ -72,6 +72,18 @@ static int aha1542_out(unchar *cmdp, int len)
     return 1;
 }
 
+static int aha1542_in(unchar *cmdp, int len)
+{
+    while (len--)
+      {
+	  WAIT(STATUS, DF, DF, 0);
+	  *cmdp++ = inb(DATA);
+      }
+    return 0;
+  fail:
+    printk("aha1542_in failed(%d): ", len+1); aha1542_stat();
+    return 1;
+}
 int makecode(unsigned hosterr, unsigned scsierr)
 {
     switch (hosterr) {
@@ -259,6 +271,7 @@ void aha1542_intr_handle(void)
 int aha1542_queuecommand(unchar target, const void *cmnd, void *buff, int bufflen, void (*done)(int, int))
 {
     unchar ahacmd = CMD_START_SCSI;
+    unchar direction;
     unchar *cmd = (unchar *) cmnd;
     DEB(int i);
 
@@ -289,12 +302,18 @@ int aha1542_queuecommand(unchar target, const void *cmnd, void *buff, int buffle
       return 0; /* we are still testing, so *don't* write */
 #endif
     memset(&ccb, 0, sizeof ccb);
-    
+
     ccb.cdblen = (*cmd<=0x1f)?6:10;	/* SCSI Command Descriptor Block Length */
-    
+
+    direction = 0;
+    if (*cmd == READ_10 || *cmd == READ_6)
+	direction = 8;
+    else if (*cmd == WRITE_10 || *cmd == WRITE_6)
+	direction = 16;
+
     memcpy(ccb.cdb, cmd, ccb.cdblen);
     ccb.op = 0;				/* SCSI Initiator Command */
-    ccb.idlun = (target&7)<<5;		/* SCSI Target Id */
+    ccb.idlun = (target&7)<<5 | direction;  /* SCSI Target Id */
     ccb.rsalen = 12;
     any2scsi(ccb.datalen, bufflen);
     any2scsi(ccb.dataptr, buff);
@@ -369,6 +388,28 @@ void call_buh()
     set_intr_gate(0x2b,&aha1542_interrupt);
 }
 
+/* Query the board to find out if it is a 1542 or a 1740, or whatever. */
+static void aha1542_query()
+{
+  static unchar inquiry_cmd[] = {CMD_INQUIRY };
+  static unchar inquiry_result[4];
+  int i;
+  i = inb(STATUS);
+  if (i & DF) {
+    i = inb(DATA);
+    printk("Stale data:%x ");
+  };
+  aha1542_out(inquiry_cmd, 1);
+  aha1542_in(inquiry_result, 4);
+  WAIT(INTRFLAGS, INTRMASK, HACC, 0);
+  while (0) {
+  fail:
+    printk("aha1542_detect: query card type\n");
+  }
+      aha1542_intr_reset();
+  printk("Inquiry:");
+  for(i=0;i<4;i++) printk("%x ",inquiry_result[i]);
+}
 /* return non-zero on detection */
 int aha1542_detect(int hostnum)
 {
@@ -397,6 +438,7 @@ int aha1542_detect(int hostnum)
 	}
 	aha1542_intr_reset();
     }
+    aha1542_query();
 
     DEB(aha1542_stat());
     setup_mailboxes();

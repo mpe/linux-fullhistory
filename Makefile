@@ -11,7 +11,7 @@ ROOT_DEV = /dev/hdb1
 # granularity of the profiling (5 = 32-byte granularity)
 #
 
-#PROFILING = -DPROFILE_SHIFT=2
+PROFILING = -DPROFILE_SHIFT=2
 
 #
 # uncomment the correct keyboard:
@@ -46,12 +46,6 @@ KEYBOARD = -DKBD_FINNISH -DKBDFLAGS=0
 # KEYBOARD = -DKDB_NO
 
 #
-# comment this line to turn off keyboard NUM LOCK
-#
-
-NUM_LOCK = -DKBD_NUMERIC_LOCK
-
-#
 # comment this line if you don't want the emulation-code
 #
 
@@ -79,7 +73,7 @@ LD86	=ld86 -0
 # Set it to -DSVGA_MODE=NORMAL_VGA if you just want the EGA/VGA mode.
 # The number is the same as you would ordinarily press at bootup.
 #
-#SVGA_MODE=	-DSVGA_MODE=1
+SVGA_MODE=	-DSVGA_MODE=1
 
 AS	=as
 LD	=ld
@@ -118,7 +112,7 @@ linuxsubdirs: dummy
 
 Version:
 	@./makever.sh
-	@echo \#define UTS_RELEASE \"0.97.pl5-`cat .version`\" > tools/version.h
+	@echo \#define UTS_RELEASE \"0.97.pl6-`cat .version`\" > tools/version.h
 	@echo \#define UTS_VERSION \"`date +%D`\" >> tools/version.h
 	@echo \#define LINUX_COMPILE_TIME \"`date +%T`\" >> tools/version.h
 	@echo \#define LINUX_COMPILE_BY \"`whoami`\" >> tools/version.h
@@ -196,14 +190,14 @@ depend dep:
 dummy:
 
 ### Dependencies:
-init/main.o : init/main.c /usr/src/linux/include/stdarg.h /usr/src/linux/include/time.h \
-  /usr/src/linux/include/asm/system.h /usr/src/linux/include/asm/io.h /usr/src/linux/include/linux/types.h \
-  /usr/src/linux/include/linux/fcntl.h /usr/src/linux/include/linux/config.h /usr/src/linux/include/linux/config_rel.h \
-  /usr/src/linux/include/linux/config_ver.h /usr/src/linux/include/linux/config.dist.h \
-  /usr/src/linux/include/linux/sched.h /usr/src/linux/include/linux/head.h /usr/src/linux/include/linux/fs.h \
-  /usr/src/linux/include/linux/limits.h /usr/src/linux/include/linux/wait.h /usr/src/linux/include/linux/dirent.h \
-  /usr/src/linux/include/linux/vfs.h /usr/src/linux/include/linux/minix_fs_sb.h \
-  /usr/src/linux/include/linux/ext_fs_sb.h /usr/src/linux/include/linux/msdos_fs_sb.h \
-  /usr/src/linux/include/linux/mm.h /usr/src/linux/include/linux/kernel.h /usr/src/linux/include/linux/signal.h \
-  /usr/src/linux/include/linux/time.h /usr/src/linux/include/linux/param.h /usr/src/linux/include/linux/resource.h \
-  /usr/src/linux/include/linux/tty.h /usr/src/linux/include/linux/termios.h /usr/src/linux/include/linux/unistd.h 
+init/main.o : init/main.c /usr/lib/gcc-lib/i386-linux/2.2.2d/include/stdarg.h /usr/include/asm/system.h \
+  /usr/include/asm/io.h /usr/include/linux/mktime.h /usr/include/linux/types.h \
+  /usr/include/linux/fcntl.h /usr/include/linux/config.h /usr/include/linux/config.dist.h \
+  /usr/include/linux/sched.h /usr/include/linux/head.h /usr/include/linux/fs.h \
+  /usr/include/linux/limits.h /usr/include/linux/wait.h /usr/include/linux/dirent.h \
+  /usr/include/linux/vfs.h /usr/include/linux/pipe_fs_i.h /usr/include/linux/minix_fs_i.h \
+  /usr/include/linux/ext_fs_i.h /usr/include/linux/msdos_fs_i.h /usr/include/linux/minix_fs_sb.h \
+  /usr/include/linux/ext_fs_sb.h /usr/include/linux/msdos_fs_sb.h /usr/include/linux/mm.h \
+  /usr/include/linux/kernel.h /usr/include/linux/signal.h /usr/include/linux/time.h \
+  /usr/include/linux/param.h /usr/include/linux/resource.h /usr/include/linux/vm86.h \
+  /usr/include/linux/tty.h /usr/include/linux/termios.h /usr/include/linux/unistd.h 

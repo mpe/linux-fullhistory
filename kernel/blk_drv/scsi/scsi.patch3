@@ -1,0 +1,191 @@
+*** aha1542.c.~1~	Sat Sep 12 15:29:26 1992
+--- aha1542.c	Thu Sep 17 22:11:55 1992
+***************
+*** 72,77 ****
+--- 72,90 ----
+      return 1;
+  }
+
++ static int aha1542_in(unchar *cmdp, int len)
++ {
++     while (len--)
++       {
++ 	  WAIT(STATUS, DF, DF, 0);
++ 	  *cmdp++ = inb(DATA);
++       }
++     return 0;
++   fail:
++     printk("aha1542_in failed(%d): ", len+1); aha1542_stat();
++     return 1;
++ }
++
+  int makecode(unsigned hosterr, unsigned scsierr)
+  {
+      switch (hosterr) {
+***************
+*** 259,264 ****
+--- 272,278 ----
+  int aha1542_queuecommand(unchar target, const void *cmnd, void *buff, int bufflen, void (*done)(int, int))
+  {
+      unchar ahacmd = CMD_START_SCSI;
++     unchar direction;
+      unchar *cmd = (unchar *) cmnd;
+      DEB(int i);
+
+***************
+*** 292,300 ****
+
+      ccb.cdblen = (*cmd<=0x1f)?6:10;	/* SCSI Command Descriptor Block Length */
+
+      memcpy(ccb.cdb, cmd, ccb.cdblen);
+      ccb.op = 0;				/* SCSI Initiator Command */
+!     ccb.idlun = (target&7)<<5;		/* SCSI Target Id */
+      ccb.rsalen = 12;
+      any2scsi(ccb.datalen, bufflen);
+      any2scsi(ccb.dataptr, buff);
+--- 306,318 ----
+
+      ccb.cdblen = (*cmd<=0x1f)?6:10;	/* SCSI Command Descriptor Block Length */
+
+      direction = 0;
+      if (*cmd == READ_10 || *cmd == READ_6)      direction = 8;
+      else if (*cmd == WRITE_10 || *cmd == WRITE_6)      direction = 16;
+
+      memcpy(ccb.cdb, cmd, ccb.cdblen);
+      ccb.op = 0;				/* SCSI Initiator Command */
+!     ccb.idlun = (target&7)<<5 | direction;   /* SCSI Target Id */
+      ccb.rsalen = 12;
+      any2scsi(ccb.datalen, bufflen);
+      any2scsi(ccb.dataptr, buff);
+***************
+*** 369,374 ****
+--- 387,416 ----
+      set_intr_gate(0x2b,&aha1542_interrupt);
+  }
+
++
++ /* Query the board to find out if it is a 1542 or a 1740, or whatever. */
++ static void aha1542_query()
++ {
++   static unchar inquiry_cmd[] = {CMD_INQUIRY };
++   static unchar inquiry_result[4];
++   int i;
++   i = inb(STATUS);
++   if (i & DF) {
++     i = inb(DATA);
++     printk("Stale data:%x ");
++   };
++   aha1542_out(inquiry_cmd, 1);
++   aha1542_in(inquiry_result, 4);
++   WAIT(INTRFLAGS, INTRMASK, HACC, 0);
++   while (0) {
++   fail:
++     printk("aha1542_detect: query card type\n");
++   }
++       aha1542_intr_reset();
++   printk("Inquiry:");
++   for(i=0;i<4;i++) printk("%x ",inquiry_result[i]);
++ }
++
+  /* return non-zero on detection */
+  int aha1542_detect(int hostnum)
+  {
+***************
+*** 397,402 ****
+--- 439,446 ----
+  	}
+  	aha1542_intr_reset();
+      }
++
++     aha1542_query();
+
+      DEB(aha1542_stat());
+      setup_mailboxes();
+*** scsi.c.~1~	Sat Sep 12 15:29:26 1992
+--- scsi.c	Wed Sep 16 01:00:44 1992
+***************
+*** 671,677 ****
+--- 671,680 ----
+  			sti();
+
+  			if (!(last_cmnd[host].flags & WAS_RESET))
++ 			  {
+  				reset(host);
++ 				return;
++ 			      }
+  			else
+  				{
+  				exit = (DRIVER_HARD | SUGGEST_ABORT);
+***************
+*** 768,773 ****
+--- 771,777 ----
+
+  			case RESERVATION_CONFLICT:
+  				reset(host);
++ 				return;
+  				exit = DRIVER_SOFT | SUGGEST_ABORT;
+  				status = MAYREDO;
+  				break;
+***************
+*** 841,848 ****
+--- 845,854 ----
+  			{
+  			if ((last_cmnd[host].retries >= (last_cmnd[host].allowed >> 1))
+  			    && !(last_cmnd[host].flags & WAS_RESET))
++ 			  {
+  				reset(host);
+  				break;
++ 			      };
+
+  			}
+  			else
+*** sd.c.~1~	Sat Sep 12 15:29:26 1992
+--- sd.c	Thu Sep 17 23:04:40 1992
+***************
+*** 39,45 ****
+  int NR_SD=0;
+  Scsi_Disk rscsi_disks[MAX_SD];
+  static int sd_sizes[MAX_SD << 4] = {0, };
+! static int this_count;
+  static int the_result;
+
+  static char sense_buffer[255];
+--- 39,45 ----
+  int NR_SD=0;
+  Scsi_Disk rscsi_disks[MAX_SD];
+  static int sd_sizes[MAX_SD << 4] = {0, };
+! static int this_count, total_count = 0;
+  static int the_result;
+
+  static char sense_buffer[255];
+***************
+*** 108,113 ****
+--- 108,120 ----
+
+  	if (!result) {
+  		CURRENT->nr_sectors -= this_count;
++ 		total_count -= this_count;
++ 		if(total_count){
++ 		  CURRENT->sector += this_count;
++ 		  CURRENT->buffer += (this_count << 9);
++ 		  do_sd_request();
++ 		  return;
++ 		};
+
+  #ifdef DEBUG
+  		printk("sd%d : %d sectors remain.\n", MINOR(CURRENT->dev), CURRENT->nr_sectors);
+***************
+*** 248,253 ****
+--- 255,266 ----
+  		this_count = CURRENT->nr_sectors;
+  	else
+  		this_count = (BLOCK_SIZE / 512);
++
++
++ /* This is a temporary hack for the AHA1742. */
++ 	if(total_count == 0)
++ 	  total_count = this_count;
++ 	this_count = 1;  /* Take only 512 bytes at a time */
+
+  #ifdef DEBUG
+  	printk("sd%d : %s %d/%d 512 byte blocks.\n", MINOR(CURRENT->dev),

@@ -13,10 +13,8 @@
  *
  * BEEP_TIMER		console beep timer
  *
- * SERx_TIMER		serial incoming characters timer
- *
- * SERx_TIMEOUT		timeout for serial writes
- *
+ * RS_TIMER		timer for the RS-232 ports
+ * 
  * HD_TIMER		harddisk timer
  *
  * FLOPPY_TIMER		floppy disk timer (not used right now)
@@ -28,16 +26,7 @@
 
 #define BLANK_TIMER	0
 #define BEEP_TIMER	1
-
-#define SER1_TIMER	2
-#define SER2_TIMER	3
-#define SER3_TIMER	4
-#define SER4_TIMER	5
-
-#define SER1_TIMEOUT	8
-#define SER2_TIMEOUT	9
-#define SER3_TIMEOUT	10
-#define SER4_TIMEOUT	11
+#define RS_TIMER	2
 
 #define HD_TIMER	16
 #define FLOPPY_TIMER	17
