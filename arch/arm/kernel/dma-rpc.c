@@ -1,25 +1,30 @@
 /*
- * arch/arm/kernel/dma-rpc.c
+ *  linux/arch/arm/kernel/dma-rpc.c
  *
- * Copyright (C) 1998 Russell King
+ *  Copyright (C) 1998 Russell King
  *
- * DMA functions specific to RiscPC architecture
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ *  DMA functions specific to RiscPC architecture
  */
 #include <linux/sched.h>
 #include <linux/malloc.h>
 #include <linux/mman.h>
 #include <linux/init.h>
+#include <linux/pci.h>
 
 #include <asm/page.h>
 #include <asm/dma.h>
 #include <asm/fiq.h>
 #include <asm/io.h>
-#include <asm/iomd.h>
 #include <asm/irq.h>
 #include <asm/hardware.h>
 #include <asm/uaccess.h>
 
-#include "dma.h"
+#include <asm/mach/dma.h>
+#include <asm/hardware/iomd.h>
 
 #if 0
 typedef enum {
@@ -47,13 +52,13 @@ typedef struct {
 #define state_wait_a	1
 #define state_wait_b	2
 
-static void iomd_get_next_sg(dmasg_t *sg, dma_t *dma)
+static void iomd_get_next_sg(struct scatterlist *sg, dma_t *dma)
 {
 	unsigned long end, offset, flags = 0;
 
 	if (dma->sg) {
-		sg->address = dma->sg->address;
-		offset = sg->address & ~PAGE_MASK;
+		sg->dma_address = dma->sg->dma_address;
+		offset = sg->dma_address & ~PAGE_MASK;
 
 		end = offset + dma->sg->length;
 
@@ -66,7 +71,7 @@ static void iomd_get_next_sg(dmasg_t *sg, dma_t *dma)
 		sg->length = end - TRANSFER_SIZE;
 
 		dma->sg->length -= end - offset;
-		dma->sg->address += end - offset;
+		dma->sg->dma_address += end - offset;
 
 		if (dma->sg->length == 0) {
 			if (dma->sgcount > 1) {
@@ -79,22 +84,22 @@ static void iomd_get_next_sg(dmasg_t *sg, dma_t *dma)
 		}
 	} else {
 		flags = DMA_END_S | DMA_END_L;
-		sg->address = 0;
+		sg->dma_address = 0;
 		sg->length = 0;
 	}
 
 	sg->length |= flags;
 }
 
-static inline void iomd_setup_dma_a(dmasg_t *sg, dma_t *dma)
+static inline void iomd_setup_dma_a(struct scatterlist *sg, dma_t *dma)
 {
-	outl_t(sg->address, dma->dma_base + CURA);
+	outl_t(sg->dma_address, dma->dma_base + CURA);
 	outl_t(sg->length, dma->dma_base + ENDA);
 }
 
-static inline void iomd_setup_dma_b(dmasg_t *sg, dma_t *dma)
+static inline void iomd_setup_dma_b(struct scatterlist *sg, dma_t *dma)
 {
-	outl_t(sg->address, dma->dma_base + CURB);
+	outl_t(sg->dma_address, dma->dma_base + CURB);
 	outl_t(sg->length, dma->dma_base + ENDB);
 }
 
@@ -160,17 +165,8 @@ static void iomd_dma_handle(int irq, void *dev_id, struct pt_regs *regs)
 
 static int iomd_request_dma(dmach_t channel, dma_t *dma)
 {
-	unsigned long flags;
-	int ret;
-
-	save_flags_cli(flags);
-	ret = request_irq(dma->dma_irq, iomd_dma_handle,
-			  SA_INTERRUPT, dma->device_id, dma);
-	if (!ret)
-		disable_irq(dma->dma_irq);
-	restore_flags(flags);
-
-	return ret;
+	return request_irq(dma->dma_irq, iomd_dma_handle,
+			   SA_INTERRUPT, dma->device_id, dma);
 }
 
 static void iomd_free_dma(dmach_t channel, dma_t *dma)
@@ -185,6 +181,17 @@ static void iomd_enable_dma(dmach_t channel, dma_t *dma)
 
 	if (dma->invalid) {
 		dma->invalid = 0;
+
+		/*
+		 * Cope with ISA-style drivers which expect cache
+		 * coherence.
+		 */
+		if (!dma->using_sg) {
+			dma->buf.dma_address = pci_map_single(NULL,
+				dma->buf.address, dma->buf.length,
+				dma->dma_mode == DMA_MODE_READ ?
+				PCI_DMA_FROMDEVICE : PCI_DMA_TODEVICE);
+		}
 
 		outb_t(DMA_CR_C, dma_base + CR);
 		dma->state = state_prog_a;
@@ -279,8 +286,8 @@ static void floppy_enable_dma(dmach_t channel, dma_t *dma)
 	}
 
 	regs.ARM_r9  = dma->buf.length;
-	regs.ARM_r10 = __bus_to_virt(dma->buf.address);
-	regs.ARM_fp  = (int)PCIO_FLOPPYDMABASE;
+	regs.ARM_r10 = (unsigned long)dma->buf.address;
+	regs.ARM_fp  = (unsigned long)PCIO_FLOPPYDMABASE;
 
 	if (claim_fiq(&fh)) {
 		printk("floppydma: couldn't claim FIQ.\n");

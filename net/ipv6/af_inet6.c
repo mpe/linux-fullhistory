@@ -7,7 +7,7 @@
  *
  *	Adapted from linux/net/ipv4/af_inet.c
  *
- *	$Id: af_inet6.c,v 1.57 2000/09/11 23:35:29 davem Exp $
+ *	$Id: af_inet6.c,v 1.58 2000/09/18 05:59:48 davem Exp $
  *
  * 	Fixes:
  * 	Hideaki YOSHIFUJI	:	sin6_scope_id support
@@ -296,10 +296,13 @@ static int inet6_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 		return -EADDRINUSE;
 	}
 
+	if (addr_type != IPV6_ADDR_ANY)
+		sk->userlocks |= SOCK_BINDADDR_LOCK;
+	if (snum)
+		sk->userlocks |= SOCK_BINDPORT_LOCK;
 	sk->sport = ntohs(sk->num);
 	sk->dport = 0;
 	sk->daddr = 0;
-	sk->prot->hash(sk);
 	release_sock(sk);
 
 	return 0;

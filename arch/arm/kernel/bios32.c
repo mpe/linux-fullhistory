@@ -1,9 +1,9 @@
 /*
- * arch/arm/kernel/bios32.c
+ *  linux/arch/arm/kernel/bios32.c
  *
- * PCI bios-type initialisation for PCI machines
+ *  PCI bios-type initialisation for PCI machines
  *
- * Bits taken from various places.
+ *  Bits taken from various places.
  */
 #include <linux/config.h>
 #include <linux/kernel.h>

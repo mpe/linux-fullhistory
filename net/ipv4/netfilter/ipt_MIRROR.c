@@ -89,7 +89,7 @@ static void ip_direct_send(struct sk_buff *skb)
 		dst->neighbour->output(skb);
 	else {
 		printk(KERN_DEBUG "khm in MIRROR\n");
-		kfree(skb);
+		kfree_skb(skb);
 	}
 }
 

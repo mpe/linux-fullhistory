@@ -827,18 +827,17 @@ int idescsi_bios (Disk *disk, kdev_t dev, int *parm)
 	return 0;
 }
 
-#ifdef MODULE
-Scsi_Host_Template idescsi_template = IDESCSI;
+static Scsi_Host_Template idescsi_template = IDESCSI;
 
-int init_module (void)
+static int __init init_idescsi_module(void)
 {
-	idescsi_init ();
-	idescsi_template.module = &__this_module;
+	idescsi_init();
+	idescsi_template.module = THIS_MODULE;
 	scsi_register_module (MODULE_SCSI_HA, &idescsi_template);
 	return 0;
 }
 
-void cleanup_module (void)
+static void __exit exit_idescsi_module(void)
 {
 	ide_drive_t *drive;
 	byte media[] = {TYPE_DISK, TYPE_TAPE, TYPE_PROCESSOR, TYPE_WORM, TYPE_ROM, TYPE_SCANNER, TYPE_MOD, 255};
@@ -855,4 +854,6 @@ void cleanup_module (void)
 	}
 	ide_unregister_module(&idescsi_module);
 }
-#endif /* MODULE */
+
+module_init(init_idescsi_module);
+module_exit(exit_idescsi_module);

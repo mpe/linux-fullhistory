@@ -1,18 +1,21 @@
 /*
- * linux/arch/arm/drivers/scsi/cumana_2.c
+ *  linux/drivers/acorn/scsi/cumana_2.c
  *
- * Copyright (C) 1997-2000 Russell King
+ *  Copyright (C) 1997-2000 Russell King
  *
- * Changelog:
- *  30-08-1997	RMK	0.0.0	Created, READONLY version.
- *  22-01-1998	RMK	0.0.1	Updated to 2.1.80.
- *  15-04-1998	RMK	0.0.1	Only do PIO if FAS216 will allow it.
- *  02-05-1998	RMK	0.0.2	Updated & added DMA support.
- *  27-06-1998	RMK		Changed asm/delay.h to linux/delay.h
- *  18-08-1998	RMK	0.0.3	Fixed synchronous transfer depth.
- *  02-04-2000	RMK	0.0.4	Updated for new error handling code.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ *  Changelog:
+ *   30-08-1997	RMK	0.0.0	Created, READONLY version.
+ *   22-01-1998	RMK	0.0.1	Updated to 2.1.80.
+ *   15-04-1998	RMK	0.0.1	Only do PIO if FAS216 will allow it.
+ *   02-05-1998	RMK	0.0.2	Updated & added DMA support.
+ *   27-06-1998	RMK		Changed asm/delay.h to linux/delay.h
+ *   18-08-1998	RMK	0.0.3	Fixed synchronous transfer depth.
+ *   02-04-2000	RMK	0.0.4	Updated for new error handling code.
  */
-
 #include <linux/module.h>
 #include <linux/blk.h>
 #include <linux/kernel.h>
@@ -23,6 +26,7 @@
 #include <linux/unistd.h>
 #include <linux/stat.h>
 #include <linux/delay.h>
+#include <linux/pci.h>
 
 #include <asm/dma.h>
 #include <asm/ecard.h>
@@ -151,15 +155,6 @@ cumanascsi_2_intr(int irq, void *dev_id, struct pt_regs *regs)
 	fas216_intr(host);
 }
 
-static void
-cumanascsi_2_invalidate(char *addr, long len, fasdmadir_t direction)
-{
-	if (direction == DMA_OUT)
-		dma_cache_wback((unsigned long)addr, (unsigned long)len);
-	else
-		dma_cache_inv((unsigned long)addr, (unsigned long)len);
-}
-
 /* Prototype: fasdmatype_t cumanascsi_2_dma_setup(host, SCpnt, direction, min_type)
  * Purpose  : initialises DMA/PIO
  * Params   : host      - host
@@ -179,33 +174,30 @@ cumanascsi_2_dma_setup(struct Scsi_Host *host, Scsi_Pointer *SCp,
 
 	if (dmach != NO_DMA &&
 	    (min_type == fasdma_real_all || SCp->this_residual >= 512)) {
-		int buf;
+		int bufs = SCp->buffers_residual;
+		int pci_dir, dma_dir, alatch_dir;
 
-		for (buf = 1; buf <= SCp->buffers_residual &&
-			      buf < NR_SG; buf++) {
-			info->dmasg[buf].address = __virt_to_bus(
-				(unsigned long)SCp->buffer[buf].address);
-			info->dmasg[buf].length = SCp->buffer[buf].length;
+		if (bufs)
+			memcpy(info->sg + 1, SCp->buffer + 1,
+				sizeof(struct scatterlist) * bufs);
+		info->sg[0].address = SCp->ptr;
+		info->sg[0].length  = SCp->this_residual;
 
-			cumanascsi_2_invalidate(SCp->buffer[buf].address,
-						SCp->buffer[buf].length,
-						direction);
-		}
+		if (direction == DMA_OUT)
+			pci_dir = PCI_DMA_TODEVICE,
+			dma_dir = DMA_MODE_WRITE,
+			alatch_dir = ALATCH_DMA_OUT;
+		else
+			pci_dir = PCI_DMA_FROMDEVICE,
+			dma_dir = DMA_MODE_READ,
+			alatch_dir = ALATCH_DMA_IN;
 
-		info->dmasg[0].address = __virt_to_phys((unsigned long)SCp->ptr);
-		info->dmasg[0].length = SCp->this_residual;
-		cumanascsi_2_invalidate(SCp->ptr,
-					SCp->this_residual, direction);
+		pci_map_sg(NULL, info->sg, bufs + 1, pci_dir);
 
 		disable_dma(dmach);
-		set_dma_sg(dmach, info->dmasg, buf);
-		if (direction == DMA_OUT) {
-			outb(ALATCH_DMA_OUT, info->alatch);
-			set_dma_mode(dmach, DMA_MODE_WRITE);
-		} else {
-			outb(ALATCH_DMA_IN, info->alatch);
-			set_dma_mode(dmach, DMA_MODE_READ);
-		}
+		set_dma_sg(dmach, info->sg, bufs + 1);
+		outb(alatch_dir, info->alatch);
+		set_dma_mode(dmach, dma_dir);
 		enable_dma(dmach);
 		outb(ALATCH_ENA_DMA, info->alatch);
 		outb(ALATCH_DIS_BIT32, info->alatch);

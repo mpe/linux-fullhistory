@@ -73,6 +73,9 @@ ifdef USE_STANDARD_AS_RULE
 
 endif
 
+%.lst: %.c
+	$(CC) $(CFLAGS) $(EXTRA_CFLAGS) $(CFLAGS_$@) -g -c -o $*.o $<
+	$(TOPDIR)/scripts/makelst $* $(TOPDIR) $(OBJDUMP)
 #
 #
 #

@@ -13,8 +13,8 @@
 
 
 #define ADS_CPLD_BASE		(0x10000000)
-#define ADS_p2v( x )		((x) - ADS_CPLD_BASE + 0xdc000000)
-#define ADS_v2p( x )		((x) - 0xdc000000 + ADS_CPLD_BASE)
+#define ADS_p2v( x )		((x) - ADS_CPLD_BASE + 0xf0000000)
+#define ADS_v2p( x )		((x) - 0xf0000000 + ADS_CPLD_BASE)
 
 
 /* Parallel Port */

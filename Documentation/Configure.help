@@ -5361,9 +5361,10 @@ CONFIG_AIC7XXX_RESET_DELAY
 IBM ServeRAID Support
 CONFIG_SCSI_IPS
   This is support for the IBM ServeRAID hardware RAID controllers.
-  
-  Please consult the SCSI-HOWTO, available from
-  http://www.linuxdoc.org/docs.html#howto . 
+  See http://www.developer.ibm.com/welcome/netfinity/serveraid.html
+  for more information.  If this driver does not work correctly
+  without modification please contact the author by email at
+  ipslinux@us.ibm.com.
 
   You can build this driver as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want),
@@ -7867,6 +7868,9 @@ CONFIG_COMX
   and using COMX interfaces. Further info on these cards can be found
   at http://www.itc.hu or <info@itc.hu>.
 
+  You must say Y to "/proc file system support" (CONFIG_PROC_FS) to
+  use this driver.
+
   If you want to compile this as a module, say M and read
   Documentation/modules.txt. The module will be called comx.o.
 
@@ -10268,7 +10272,8 @@ USB ADMtek Pegasus-based ethernet device support
 CONFIG_USB_PEGASUS
   Say Y if you want to use your USB ethernet device. Supported
   cards until now are:
-    ADMtek AN986 (eval. board)
+    ADMtek AN986 Pegasus (eval. board)
+    ADMtek ADM8511 Pegasus II (eval. board)
     Accton 10/100
     Billington USB-100
     Corega FEter USB-TX
@@ -10278,6 +10283,8 @@ CONFIG_USB_PEGASUS
     LANEED Ethernet LD-USB/TX
     SMC 202
     SOHOware NUB Ethernet
+    
+  Any Pegasus II based board also are supported.
   If you have devices with vendor IDs other than noted above
   you should add them in the driver code and send a message
   to me (petkan@dce.bg) for update.
@@ -15974,11 +15981,17 @@ CONFIG_BLK_CPQ_DA
 # ARM options
 #
 ARM System type
-CONFIG_ARCH_ARC
+CONFIG_ARCH_ARCA5K
   This selects what ARM system you wish to build the kernel for. It
   also selects to some extent the CPU type. If you are unsure what
   to set this option to, please consult any information supplied with
   your system.
+
+2MB physical memory
+CONFIG_PAGESIZE_16
+  Say Y here if your Archimedes or A5000 system has only 2MB of
+  memory, otherwise say N.  The resulting kernel will not run on a
+  machine with 4MB of memory.
 
 Include support for the CATS
 CONFIG_ARCH_CATS
@@ -16078,6 +16091,27 @@ CONFIG_SA1100_VICTOR
   SA-1100 based Victor Digital Talking Book Reader.  See
   http://www.visuaide.com/pagevictor.en.html for information on
   this system.
+
+Support ARM610 processor
+CONFIG_CPU_ARM6
+  Say Y here if you wish to include support for the ARM610 processor.
+
+Support ARM710 processor
+CONFIG_CPU_ARM7
+  Say Y here if you wish to include support for the ARM710 processor.
+
+Support StrongARM(R) SA-110 processor
+CONFIG_CPU_SA110
+  Say Y here if you wish to include support for the Intel(R)
+  StrongARM(R) SA-110 processor.
+
+Support ARM720 processor
+CONFIG_CPU_ARM720
+  Say Y here if you wish to include support for the ARM720 processor.
+
+Support ARM920
+CONFIG_CPU_ARM920
+  Say Y here if you wish to include support for the ARM920 processor.
 
 Math emulation
 CONFIG_NWFPE
@@ -16193,8 +16227,8 @@ CONFIG_ALIGNMENT_TRAP
 
 21285 serial port support
 CONFIG_SERIAL_21285
-  If you have a machine based on a 21285 (Footbridge) StrongARM/PCI
-  bridge you can enable its onboard serial port by enabling this
+  If you have a machine based on a 21285 (Footbridge) StrongARM(R)/
+  PCI bridge you can enable its onboard serial port by enabling this
   option. The device has major ID 4, minor 64.
 
 Console on 21285 serial port

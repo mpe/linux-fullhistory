@@ -291,10 +291,13 @@ nfs_lock(struct file *filp, int cmd, struct file_lock *fl)
 		status = 0;
 
 	/*
-	 * Make sure we re-validate anything we've got cached.
+	 * Make sure we clear the cache whenever we try to get the lock.
 	 * This makes locking act as a cache coherency point.
 	 */
  out_ok:
-	NFS_CACHEINV(inode);
+	if ((cmd == F_SETLK || cmd == F_SETLKW) && fl->fl_type != F_UNLCK) {
+		nfs_wb_all(inode);      /* we may have slept */
+		nfs_zap_caches(inode);
+	}
 	return status;
 }

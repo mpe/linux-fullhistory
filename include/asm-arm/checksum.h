@@ -1,5 +1,5 @@
 /*
- * linux/include/asm-arm/checksum.h
+ *  linux/include/asm-arm/checksum.h
  *
  * IP checksum routines
  *

@@ -18,8 +18,6 @@
 #define DC390_BANNER "Tekram DC390/AM53C974"
 #define DC390_VERSION "2.0d 1998/12/25"
 
-#if defined(HOSTS_C) || defined(MODULE)
-
 #include <scsi/scsicam.h>
 
 extern int DC390_detect(Scsi_Host_Template *psht);
@@ -52,7 +50,5 @@ extern int DC390_proc_info(char *buffer, char **start, off_t offset, int length,
    cmd_per_lun:    8,					\
    use_clustering: DISABLE_CLUSTERING			\
    }
-
-#endif /* defined(HOSTS_C) || defined(MODULE) */
 
 #endif /* DC390_H */

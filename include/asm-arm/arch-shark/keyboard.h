@@ -1,8 +1,8 @@
 /*
- * linux/include/asm-arm/arch-ebsa285/keyboard.h
- *
- * Keyboard driver definitions for EBSA285 architecture
- *
+ * linux/include/asm-arm/arch-shark/keyboard.h
+ * by Alexander.Schulz@stud.uni-karlsruhe.de
+ * 
+ * Derived from linux/include/asm-arm/arch-ebsa285/keyboard.h
  * (C) 1998 Russell King
  * (C) 1998 Phil Blundell
  */
@@ -24,45 +24,12 @@ extern unsigned char pckbd_sysrq_xlate[128];
 
 #define NR_SCANCODES 128
 
-#define kbd_setkeycode(sc,kc)				\
-	({						\
-		int __ret;				\
-		if (have_isa_bridge)			\
-			__ret = pckbd_setkeycode(sc,kc);\
-		else					\
-			__ret = -EINVAL;		\
-		__ret;					\
-	})
-
-#define kbd_getkeycode(sc)				\
-	({						\
-		int __ret;				\
-		if (have_isa_bridge)			\
-			__ret = pckbd_getkeycode(sc);	\
-		else					\
-			__ret = -EINVAL;		\
-		__ret;					\
-	})
-
-#define kbd_translate(sc, kcp, rm)			\
-	({						\
-		pckbd_translate(sc, kcp, rm);		\
-	})
-
+#define kbd_setkeycode(sc,kc)		pckbd_setkeycode(sc,kc)
+#define kbd_getkeycode(sc)		pckbd_getkeycode(sc)
+#define kbd_translate(sc, kcp, rm)	pckbd_translate(sc, kcp, rm)
 #define kbd_unexpected_up		pckbd_unexpected_up
-
-#define kbd_leds(leds)					\
-	do {						\
-		if (have_isa_bridge)			\
-			pckbd_leds(leds);		\
-	} while (0)
-
-#define kbd_init_hw()					\
-	do {						\
-		if (have_isa_bridge)			\
-			pckbd_init_hw();		\
-	} while (0)
-
+#define kbd_leds(leds)			pckbd_leds(leds)
+#define kbd_init_hw()			pckbd_init_hw()
 #define kbd_sysrq_xlate			pckbd_sysrq_xlate
 
 #define kbd_disable_irq()

@@ -51,12 +51,6 @@ SCR_loc:	.long	SYMBOL_NAME(SCR_value)
  * This is called from decompress_kernel() with the arch_decomp_setup() macro.
  */
 
-/*
- * void sa1100_setup( int arch_id );
- *
- * This is called from decompress_kernel() with the arch_decomp_setup() macro.
- */
-
 ENTRY(sa1100_setup)
 		mov	r3, r0			@ keep machine type in r3
 

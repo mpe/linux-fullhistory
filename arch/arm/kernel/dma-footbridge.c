@@ -1,27 +1,24 @@
 /*
- * arch/arm/kernel/dma-ebsa285.c
+ *  linux/arch/arm/kernel/dma-ebsa285.c
  *
- * Copyright (C) 1998 Phil Blundell
+ *  Copyright (C) 1998 Phil Blundell
  *
  * DMA functions specific to EBSA-285/CATS architectures
  *
- * Changelog:
- *  09-Nov-1998	RMK	Split out ISA DMA functions to dma-isa.c
- *  17-Mar-1999	RMK	Allow any EBSA285-like architecture to have
+ *  Changelog:
+ *   09-Nov-1998 RMK	Split out ISA DMA functions to dma-isa.c
+ *   17-Mar-1999 RMK	Allow any EBSA285-like architecture to have
  *			ISA DMA controllers.
  */
-
 #include <linux/config.h>
 #include <linux/sched.h>
 #include <linux/init.h>
 
-#include <asm/dec21285.h>
 #include <asm/dma.h>
 #include <asm/io.h>
 
-#include "dma.h"
-
-extern void isa_init_dma(dma_t *dma);
+#include <asm/mach/dma.h>
+#include <asm/hardware/dec21285.h>
 
 #if 0
 static int fb_dma_request(dmach_t channel, dma_t *dma)

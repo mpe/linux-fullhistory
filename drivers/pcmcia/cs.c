@@ -564,7 +564,7 @@ static void reset_socket(socket_info_t *s)
     udelay((long)reset_time);
     s->socket.flags &= ~SS_RESET;
     set_socket(s, &s->socket);
-    cs_sleep(unreset_delay/10);
+    cs_sleep(unreset_delay);
     unreset_socket(s);
 } /* reset_socket */
 

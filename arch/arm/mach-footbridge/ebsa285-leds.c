@@ -1,8 +1,11 @@
 /*
- * linux/arch/arm/mach-footbridge/ebsa285-leds.c
+ *  linux/arch/arm/mach-footbridge/ebsa285-leds.c
  *
- * Copyright (C) 1998-1999 Russell King
+ *  Copyright (C) 1998-1999 Russell King
  *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
  * EBSA-285 control routines.
  *
  * The EBSA-285 uses the leds as follows:

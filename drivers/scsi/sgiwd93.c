@@ -317,17 +317,13 @@ int __init sgiwd93_detect(Scsi_Host_Template *SGIblows)
 	return 1; /* Found one. */
 }
 
-#ifdef MODULE
-
 #define HOSTS_C
 
 #include "sgiwd93.h"
 
-Scsi_Host_Template driver_template = SGIWD93_SCSI;
+static Scsi_Host_Template driver_template = SGIWD93_SCSI;
 
 #include "scsi_module.c"
-
-#endif
 
 int sgiwd93_release(struct Scsi_Host *instance)
 {

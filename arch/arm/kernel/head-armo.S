@@ -1,9 +1,13 @@
 /*
- * linux/arch/arm/kernel/head-armo.S
+ *  linux/arch/arm/kernel/head-armo.S
  *
- * Copyright (C) 1994-2000 Russell King
+ *  Copyright (C) 1994-2000 Russell King
  *
- * 26-bit kernel startup code
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ *  26-bit kernel startup code
  */
 #include <linux/config.h>
 #include <linux/linkage.h>

@@ -1,9 +1,13 @@
 /*
- * arch/arm/mm/mm-footbridge.c
+ *  linux/arch/arm/mm/mm-footbridge.c
  *
- * Extra MM routines for the EBSA285 architecture
+ *  Copyright (C) 1998-2000 Russell King, Dave Gilbert.
  *
- * Copyright (C) 1998-1999 Russell King, Dave Gilbert.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ *  Extra MM routines for the EBSA285 architecture
  */
 #include <linux/config.h>
 #include <linux/sched.h>
@@ -13,73 +17,83 @@
 #include <asm/pgtable.h>
 #include <asm/page.h>
 #include <asm/io.h>
-#include <asm/dec21285.h>
+#include <asm/hardware/dec21285.h>
+#include <asm/mach-types.h>
 
-#include "map.h"
-
-#define SIZE(x) (sizeof(x) / sizeof(x[0]))
-
-/*
- * The first entry allows us to fiddle with the EEPROM from user-space.
- *  This entry will go away in time, once the fmu32 can mmap() the
- *  flash.  It can't at the moment.
- *
- * If you want to fiddle with PCI VGA cards from user space, then
- * change the '0, 1 }' for the PCI MEM and PCI IO to '1, 1 }'
- * You can then access the PCI bus at 0xe0000000 and 0xffe00000.
- */
-
-#ifdef CONFIG_FOOTBRIDGE_HOST
+#include <asm/mach/map.h>
 
 /*
- * The mapping when the footbridge is in host mode.
+ * Common mapping for all systems.  Note that the outbound write flush is
+ * commented out since there is a "No Fix" problem with it.  Not mapping
+ * it means that we have extra bullet protection on our feet.
  */
-#define MAPPING \
- { FLASH_BASE,   DC21285_FLASH,			FLASH_SIZE,	DOMAIN_IO, 0, 1, 0, 0 }, \
- { PCIMEM_BASE,  DC21285_PCI_MEM,		PCIMEM_SIZE,	DOMAIN_IO, 0, 1, 0, 0 }, \
- { PCICFG0_BASE, DC21285_PCI_TYPE_0_CONFIG,	PCICFG0_SIZE,	DOMAIN_IO, 0, 1, 0, 0 }, \
- { PCICFG1_BASE, DC21285_PCI_TYPE_1_CONFIG,	PCICFG1_SIZE,	DOMAIN_IO, 0, 1, 0, 0 }, \
- { PCIIACK_BASE, DC21285_PCI_IACK,		PCIIACK_SIZE,	DOMAIN_IO, 0, 1, 0, 0 }, \
- { WFLUSH_BASE,  DC21285_OUTBOUND_WRITE_FLUSH,	WFLUSH_SIZE,	DOMAIN_IO, 0, 1, 0, 0 }, \
- { ARMCSR_BASE,  DC21285_ARMCSR_BASE,		ARMCSR_SIZE,	DOMAIN_IO, 0, 1, 0, 0 }, \
- { PCIO_BASE,    DC21285_PCI_IO,		PCIO_SIZE,	DOMAIN_IO, 0, 1, 0, 0 }, \
- { XBUS_BASE,    0x40000000,			XBUS_SIZE,	DOMAIN_IO, 0, 1, 0, 0 }
-
-#else
-
-/*
- * The mapping when the footbridge is in add-in mode.
- */
-#define MAPPING \
- { PCIO_BASE,	 DC21285_PCI_IO,		PCIO_SIZE,	DOMAIN_IO, 0, 1, 0, 0 }, \
- { XBUS_BASE,	 0x40000000,			XBUS_SIZE,	DOMAIN_IO, 0, 1, 0, 0 }, \
- { ARMCSR_BASE,  DC21285_ARMCSR_BASE,		ARMCSR_SIZE,	DOMAIN_IO, 0, 1, 0, 0 }, \
- { WFLUSH_BASE,	 DC21285_OUTBOUND_WRITE_FLUSH,	WFLUSH_SIZE,	DOMAIN_IO, 0, 1, 0, 0 }, \
- { FLASH_BASE,	 DC21285_FLASH,			FLASH_SIZE,	DOMAIN_IO, 0, 1, 0, 0 }, \
- { PCIMEM_BASE,	 DC21285_PCI_MEM,		PCIMEM_SIZE,	DOMAIN_IO, 0, 1, 0, 0 }
-
-#endif
-
-struct map_desc io_desc[] __initdata = {
-	MAPPING
+static struct map_desc fb_common_io_desc[] __initdata = {
+ { ARMCSR_BASE,	 DC21285_ARMCSR_BASE,	    ARMCSR_SIZE,  DOMAIN_IO, 0, 1, 0, 0 },
+ { XBUS_BASE,    0x40000000,		    XBUS_SIZE,    DOMAIN_IO, 0, 1, 0, 0 },
+ LAST_DESC
 };
 
-unsigned int __initdata io_desc_size = SIZE(io_desc);
+/*
+ * The mapping when the footbridge is in host mode.  We don't map any of
+ * this when we are in add-in mode.
+ */
+static struct map_desc ebsa285_host_io_desc[] __initdata = {
+#if defined(CONFIG_ARCH_FOOTBRIDGE) && defined(CONFIG_FOOTBRIDGE_HOST)
+ { PCIMEM_BASE,  DC21285_PCI_MEM,	    PCIMEM_SIZE,  DOMAIN_IO, 0, 1, 0, 0 },
+ { PCICFG0_BASE, DC21285_PCI_TYPE_0_CONFIG, PCICFG0_SIZE, DOMAIN_IO, 0, 1, 0, 0 },
+ { PCICFG1_BASE, DC21285_PCI_TYPE_1_CONFIG, PCICFG1_SIZE, DOMAIN_IO, 0, 1, 0, 0 },
+ { PCIIACK_BASE, DC21285_PCI_IACK,	    PCIIACK_SIZE, DOMAIN_IO, 0, 1, 0, 0 },
+ { PCIO_BASE,    DC21285_PCI_IO,	    PCIO_SIZE,	  DOMAIN_IO, 0, 1, 0, 0 },
+#endif
+ LAST_DESC
+};
 
+/*
+ * The CO-ebsa285 mapping.
+ */
+static struct map_desc co285_io_desc[] __initdata = {
+#ifdef CONFIG_ARCH_CO285
+ { PCIO_BASE,	 DC21285_PCI_IO,	    PCIO_SIZE,    DOMAIN_IO, 0, 1, 0, 0 },
+ { PCIMEM_BASE,	 DC21285_PCI_MEM,	    PCIMEM_SIZE,  DOMAIN_IO, 0, 1, 0, 0 },
+#endif
+ LAST_DESC
+};
+
+void __init footbridge_map_io(void)
+{
+	struct map_desc *desc = NULL;
+
+	/*
+	 * Set up the common mapping first; we need this to
+	 * determine whether we're in host mode or not.
+	 */
+	iotable_init(fb_common_io_desc);
+
+	/*
+	 * Now, work out what we've got to map in addition on this
+	 * platform.
+	 */
+	if (machine_is_co285())
+		desc = co285_io_desc;
+	else if (footbridge_cfn_mode())
+		desc = ebsa285_host_io_desc;
+
+	if (desc)
+		iotable_init(desc);
+}
 
 #ifdef CONFIG_FOOTBRIDGE_ADDIN
 
 /*
- * These two functions convert virtual addresses to PCI addresses
- * and PCI addresses to virtual addresses.  Note that it is only
- * legal to use these on memory obtained via get_free_page or
- * kmalloc.
+ * These two functions convert virtual addresses to PCI addresses and PCI
+ * addresses to virtual addresses.  Note that it is only legal to use these
+ * on memory obtained via get_free_page or kmalloc.
  */
 unsigned long __virt_to_bus(unsigned long res)
 {
 #ifdef CONFIG_DEBUG_ERRORS
 	if (res < PAGE_OFFSET || res >= (unsigned long)high_memory) {
-		printk("__virt_to_phys: invalid virtual address 0x%08lx\n", res);
+		printk("__virt_to_bus: invalid virtual address 0x%08lx\n", res);
 		__backtrace();
 	}
 #endif
@@ -93,7 +107,7 @@ unsigned long __bus_to_virt(unsigned long res)
 
 #ifdef CONFIG_DEBUG_ERRORS
 	if (res < PAGE_OFFSET || res >= (unsigned long)high_memory) {
-		printk("__phys_to_virt: invalid virtual address 0x%08lx\n", res);
+		printk("__bus_to_virt: invalid virtual address 0x%08lx\n", res);
 		__backtrace();
 	}
 #endif

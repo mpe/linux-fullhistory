@@ -1037,7 +1037,7 @@ tcp_write_space(struct sock *sk)
 		return;
 
 	/* Wait until we have enough socket memory */
-	if (sock_wspace(sk) < min(sk->sndbuf,XPRT_MIN_WRITE_SPACE))
+	if (!sock_writeable(sk))
 		return;
 
 	spin_lock_bh(&xprt_sock_lock);
@@ -1212,9 +1212,6 @@ do_xprt_transmit(struct rpc_task *task)
 	 */
 	while (1) {
 		xprt->write_space = 0;
-		status = -ENOMEM;
-		if (sock_wspace(xprt->inet) < req->rq_slen + SOCK_MIN_WRITE_SPACE)
-			break;
 		status = xprt_sendmsg(xprt, req);
 
 		if (status < 0)

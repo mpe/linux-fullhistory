@@ -1989,8 +1989,6 @@ void isp1020_print_scsi_cmd(Scsi_Cmnd *cmd)
 #endif /* DEBUG_ISP1020 */
 
 
-#ifdef MODULE
-Scsi_Host_Template driver_template = QLOGICISP;
+static Scsi_Host_Template driver_template = QLOGICISP;
 
 #include "scsi_module.c"
-#endif /* MODULE */

@@ -70,8 +70,6 @@ int generic_NCR5380_proc_info(char* buffer, char** start, off_t offset, int leng
 #define CAN_QUEUE 16
 #endif
 
-#if defined(HOSTS_C) || defined(MODULE)
-
 #define GENERIC_NCR5380 {						\
 	proc_info:      generic_NCR5380_proc_info,			\
 	name:           "Generic NCR5380/NCR53C400 Scsi Driver",	\
@@ -87,8 +85,6 @@ int generic_NCR5380_proc_info(char* buffer, char** start, off_t offset, int leng
         sg_tablesize:   SG_ALL,						\
 	cmd_per_lun:    CMD_PER_LUN ,					\
         use_clustering: DISABLE_CLUSTERING}
-
-#endif
 
 #ifndef HOSTS_C
 

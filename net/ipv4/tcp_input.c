@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_input.c,v 1.200 2000/09/16 16:39:16 davem Exp $
+ * Version:	$Id: tcp_input.c,v 1.201 2000/09/18 05:59:48 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -58,7 +58,6 @@
  *		J Hadi Salim:		ECN support
  */
 
-#include <linux/config.h>
 #include <linux/mm.h>
 #include <linux/sysctl.h>
 #include <net/tcp.h>
@@ -1493,10 +1492,8 @@ tcp_fastretrans_alert(struct sock *sk, u32 prior_snd_una,
 
 		case TCP_CA_Disorder:
 			tcp_try_undo_dsack(sk, tp);
-			if (IsReno(tp) || !tp->undo_marker) {
-				tp->undo_marker = 0;
-				tp->ca_state = TCP_CA_Open;
-			}
+			tp->undo_marker = 0;
+			tp->ca_state = TCP_CA_Open;
 			break;
 
 		case TCP_CA_Recovery:
@@ -1824,7 +1821,9 @@ static int tcp_ack_update_window(struct sock *sk, struct tcp_opt *tp,
 #ifdef TCP_DEBUG
 	if (before(tp->snd_una + tp->snd_wnd, tp->snd_nxt)) {
 		if (net_ratelimit())
-			printk(KERN_DEBUG "TCP: peer shrinks window. Bad, what else can I say?\n");
+			printk(KERN_DEBUG "TCP: peer %u.%u.%u.%u:%u/%u shrinks window %u:%u:%u. Bad, what else can I say?\n",
+			       NIPQUAD(sk->daddr), htons(sk->dport), sk->num,
+			       tp->snd_una, tp->snd_wnd, tp->snd_nxt);
 	}
 #endif
 

@@ -15,6 +15,7 @@ bool 'Prompt for development and/or incomplete code/drivers' CONFIG_EXPERIMENTAL
 bool 'Prompt for obsolete code/drivers' CONFIG_OBSOLETE
 endmenu
 
+
 mainmenu_option next_comment
 comment 'Loadable module support'
 bool 'Enable loadable module support' CONFIG_MODULES
@@ -23,6 +24,7 @@ if [ "$CONFIG_MODULES" = "y" ]; then
    bool '  Kernel module loader' CONFIG_KMOD
 fi
 endmenu
+
 
 mainmenu_option next_comment
 comment 'System Type'
@@ -33,49 +35,60 @@ choice 'ARM system type'	\
 	 Co-EBSA285		CONFIG_ARCH_CO285 \
 	 EBSA-110		CONFIG_ARCH_EBSA110 \
 	 FootBridge		CONFIG_ARCH_FOOTBRIDGE \
+	 Integrator		CONFIG_ARCH_INTEGRATOR \
 	 RiscPC			CONFIG_ARCH_RPC \
  	 SA1100-based		CONFIG_ARCH_SA1100" RiscPC
 
 # the following are placeholders for when they are fully integrated
-#	 Cirrus CL-PS7500FE	CONFIG_ARCH_CLPS7500 \
 #	 LinkUp-L7200		CONFIG_ARCH_L7200
 
+mainmenu_option next_comment
+comment 'Archimedes/A5000 Implementations'
 if [ "$CONFIG_ARCH_ARCA5K" = "y" ]; then
    # These architectures will be combined.  However, until this
    # is complete...  Note that the ARC will take precidence over
    # A5K
    comment 'Archimedes/A5000 Implementations (select only ONE)'
-   bool '  Archimedes support' CONFIG_ARCH_ARC
-   bool '  A5000 support' CONFIG_ARCH_A5K
-fi
-if [ "$CONFIG_ARCH_FOOTBRIDGE" = "y" ]; then
-   comment 'Footbridge Implementations'
-   bool '  CATS support' CONFIG_ARCH_CATS
-   bool '  Compaq Personal Server support' CONFIG_ARCH_PERSONAL_SERVER
-   bool '  EBSA285 (addin mode) support' CONFIG_ARCH_EBSA285_ADDIN
-   bool '  EBSA285 (host mode) support' CONFIG_ARCH_EBSA285_HOST
-   bool '  NetWinder support' CONFIG_ARCH_NETWINDER
-fi
-if [ "$CONFIG_ARCH_SA1100" = "y" ]; then
-   comment 'SA11x0 Implementations'
-   bool '  Include support for Assabet' CONFIG_SA1100_ASSABET
-   if [ "$CONFIG_SA1100_ASSABET" = "y" ]; then
-      bool '  Include support for Neponset' CONFIG_ASSABET_NEPONSET
-   fi
-   bool '  Include support for Brutus' CONFIG_SA1100_BRUTUS
-   bool '  Include support for CerfBoard' CONFIG_SA1100_CERF
-   bool '  Include support for Compaq iPAQ H3600 (Bitsy)' CONFIG_SA1100_BITSY
-#   bool '  Include support for Empeg' CONFIG_SA1100_EMPEG
-#   bool '  Include support for Itsy' CONFIG_SA1100_ITSY
-   bool '  Include support for LART' CONFIG_SA1100_LART
-#   bool '  Include support for PLEB' CONFIG_SA1100_PLEB
-   bool '  Include support for ThinClient' CONFIG_SA1100_THINCLIENT
-   bool '  Include support for GraphicsClient' CONFIG_SA1100_GRAPHICSCLIENT
-   bool '  Include support for nanoEngine' CONFIG_SA1100_NANOENGINE
-   bool '  Include support for Victor' CONFIG_SA1100_VICTOR
-#   bool '  Include support for Tifon' CONFIG_SA1100_TIFON
-   bool '  Include support for XP860' CONFIG_SA1100_XP860
 
+   bool '  Archimedes' CONFIG_ARCH_ARC
+   bool '  A5000' CONFIG_ARCH_A5K
+fi
+endmenu
+
+mainmenu_option next_comment
+comment 'Footbridge Implementations'
+if [ "$CONFIG_ARCH_FOOTBRIDGE" = "y" ]; then
+   bool '  CATS' CONFIG_ARCH_CATS
+   bool '  Compaq Personal Server' CONFIG_ARCH_PERSONAL_SERVER
+   bool '  EBSA285 (addin mode)' CONFIG_ARCH_EBSA285_ADDIN
+   bool '  EBSA285 (host mode)' CONFIG_ARCH_EBSA285_HOST
+   bool '  NetWinder' CONFIG_ARCH_NETWINDER
+fi
+endmenu
+
+mainmenu_option next_comment
+comment 'SA11x0 Implementations'
+if [ "$CONFIG_ARCH_SA1100" = "y" ]; then
+
+   bool '  Assabet' CONFIG_SA1100_ASSABET
+   if [ "$CONFIG_SA1100_ASSABET" = "y" ]; then
+      bool '    Include support for Neponset' CONFIG_ASSABET_NEPONSET
+   fi
+   bool '  Brutus' CONFIG_SA1100_BRUTUS
+   bool '  CerfBoard' CONFIG_SA1100_CERF
+   bool '  Compaq iPAQ H3600 (Bitsy)' CONFIG_SA1100_BITSY
+#   bool '  Empeg' CONFIG_SA1100_EMPEG
+#   bool '  Itsy' CONFIG_SA1100_ITSY
+   bool '  LART' CONFIG_SA1100_LART
+#   bool '  PLEB' CONFIG_SA1100_PLEB
+   bool '  ThinClient' CONFIG_SA1100_THINCLIENT
+   bool '  GraphicsClient' CONFIG_SA1100_GRAPHICSCLIENT
+   bool '  nanoEngine' CONFIG_SA1100_NANOENGINE
+   bool '  Victor' CONFIG_SA1100_VICTOR
+#   bool '  Tifon' CONFIG_SA1100_TIFON
+   bool '  XP860' CONFIG_SA1100_XP860
+
+   # Someday, we'll support this as a general option.
    bool '  Load kernel using Angel Debug Monitor' CONFIG_ANGELBOOT
 
    # Determine if SA1111 support is required
@@ -84,6 +97,7 @@ if [ "$CONFIG_ARCH_SA1100" = "y" ]; then
       define_bool CONFIG_SA1111 y
    fi
 fi
+endmenu
 
 # Definitions to make life easier
 if [ "$CONFIG_ARCH_ARCA5K" = "y" -o \
@@ -129,12 +143,14 @@ else
    define_bool CONFIG_CPU_26 n
 fi
 
+comment 'Processor Type'
+
 # Select CPU and optimisation dependent on architecture
 if [ "$CONFIG_ARCH_RPC" = "y" ]; then
    define_bool CONFIG_CPU_32v3 y
-   bool 'Support ARM610' CONFIG_CPU_ARM6
-   bool 'Support ARM710' CONFIG_CPU_ARM7
-   bool 'Support StrongARM110' CONFIG_CPU_SA110
+   bool 'Support ARM610 processor' CONFIG_CPU_ARM6
+   bool 'Support ARM710 processor' CONFIG_CPU_ARM7
+   bool 'Support StrongARM(R) SA-110 processor' CONFIG_CPU_SA110
 fi
 if [ "$CONFIG_ARCH_EBSA110" = "y" -o \
      "$CONFIG_FOOTBRIDGE" = "y" -o \
@@ -152,10 +168,32 @@ if [ "$CONFIG_ARCH_L7200" = "y" ]; then
    define_bool CONFIG_CPU_32v4 y
    define_bool CONFIG_CPU_ARM720 y
 fi
+if [ "$CONFIG_ARCH_INTEGRATOR" = "y" ]; then
+   define_bool CONFIG_CPU_32v4 y
+   bool 'Support ARM720 processor' CONFIG_CPU_ARM720
+   bool 'Support ARM920 processor' CONFIG_CPU_ARM920
+#   bool 'Support ARM10 processor' CONFIG_CPU_ARM10
+fi
 if [ "$CONFIG_ARCH_SA1100" = "y" ]; then
    define_bool CONFIG_CPU_32v4 y
    define_bool CONFIG_CPU_SA1100 y
 fi
+
+if [ "$CONFIG_CPU_ARM920" = "y" ]; then
+   bool '  ARM920 CPU idle' CONFIG_CPU_ARM920_CPU_IDLE
+   bool '  ARM920 I-Cache on' CONFIG_CPU_ARM920_I_CACHE_ON
+   bool '  ARM920 D-Cache on' CONFIG_CPU_ARM920_D_CACHE_ON
+   if [ "$CONFIG_CPU_ARM920_D_CACHE_ON" = "y" ] ; then
+      bool '  Force write through caches on ARM920' CONFIG_CPU_ARM920_WRITETHROUGH
+   fi
+fi
+#if [ "$CONFIG_CPU_ARM10" = "y" ]; then
+#   bool '  ARM10 I-Cache on' CONFIG_CPU_ARM10_I_CACHE_ON
+#   bool '  ARM10 D-Cache on' CONFIG_CPU_ARM10_D_CACHE_ON
+#   if [ "$CONFIG_CPU_ARM10_D_CACHE_ON" = "y" ] ; then
+#      bool '  Force write through caches on ARM10' CONFIG_CPU_ARM10_FORCE_WRITE_THROUGH
+#   fi
+#fi
 
 # Select various configuration options depending on the machine type
 if [ "$CONFIG_ARCH_SA1100" = "y" ]; then
@@ -164,12 +202,21 @@ else
    define_bool CONFIG_DISCONTIGMEM n
 fi
 
+endmenu
+
+mainmenu_option next_comment
+comment 'General setup'
+
 # Now handle the bus types
 if [ "$CONFIG_ARCH_NEXUSPCI" = "y" -o \
      "$CONFIG_FOOTBRIDGE_HOST" = "y" ]; then
    define_bool CONFIG_PCI y
 else
-   define_bool CONFIG_PCI n
+   if [ "$CONFIG_ARCH_INTEGRATOR" = "y" ]; then
+      bool 'PCI support' CONFIG_PCI
+   else
+      define_bool CONFIG_PCI n
+   fi
 fi
 
 if [ "$CONFIG_FOOTBRIDGE_HOST" = "y" -o \
@@ -189,10 +236,7 @@ fi
 if [ "$CONFIG_SA1100_ASSABET" = "y" ]; then
    define_bool CONFIG_PC_KEYMAP y
 fi
-endmenu
 
-mainmenu_option next_comment
-comment 'General setup'
 source drivers/pci/Config.in
 bool 'Support hot-pluggable devices' CONFIG_HOTPLUG
 if [ "$CONFIG_HOTPLUG" = "y" ]; then
@@ -223,20 +267,23 @@ if [ "$CONFIG_ARCH_EBSA110" = "y" -o \
      "$CONFIG_ARCH_SA1100" = "y" -o \
      "$CONFIG_ARCH_CLPS7500" = "y" -o \
      "$CONFIG_ARCH_PERSONAL_SERVER" = "y" -o \
-     "$CONFIG_ARCH_CATS" = "y" ]; then
+     "$CONFIG_ARCH_CATS" = "y" -o \
+     "$CONFIG_ARCH_INTEGRATOR" = "y" ]; then
    string 'Default kernel command string' CONFIG_CMDLINE ""
 fi
 if [ "$CONFIG_ARCH_NETWINDER" = "y" -o \
      "$CONFIG_ARCH_EBSA110" = "y" -o   \
      "$CONFIG_ARCH_EBSA285" = "y" -o   \
      "$CONFIG_ARCH_CO285" = "y" -o     \
-     "$CONFIG_ARCH_SA1100" = "y" ]; then
+     "$CONFIG_ARCH_SA1100" = "y" -o    \
+     "$CONFIG_ARCH_INTEGRATOR" = "y" ]; then
    bool 'Timer and CPU usage LEDs' CONFIG_LEDS
    if [ "$CONFIG_LEDS" = "y" ]; then
       if [ "$CONFIG_ARCH_NETWINDER" = "y" -o \
 	   "$CONFIG_ARCH_EBSA285" = "y" -o   \
 	   "$CONFIG_ARCH_CO285" = "y" -o     \
-	   "$CONFIG_ARCH_SA1100" = "y" ]; then
+	   "$CONFIG_ARCH_SA1100" = "y" -o    \
+           "$CONFIG_ARCH_INTEGRATOR" = "y" ]; then
          bool '  Timer LED' CONFIG_LEDS_TIMER
          bool '  CPU usage LED' CONFIG_LEDS_CPU
       fi
@@ -322,10 +369,6 @@ if [ "$CONFIG_ARCH_ACORN" = "y" -a \
    fi
 fi
 
-#source drivers/misc/Config.in
-
-source drivers/media/Config.in
-
 source fs/Config.in
 
 if [ "$CONFIG_VT" = "y" ]; then
@@ -354,7 +397,6 @@ if [ "$CONFIG_ARCH_ACORN" = "y" -o \
 fi
 
 source drivers/usb/Config.in
-source drivers/input/Config.in
 
 
 mainmenu_option next_comment

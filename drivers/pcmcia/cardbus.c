@@ -68,10 +68,9 @@
 #include "cs_internal.h"
 #include "rsrc_mgr.h"
 
-#ifndef PCMCIA_DEBUG
-#define PCMCIA_DEBUG 1
-#endif
+#ifdef PCMCIA_DEBUG
 static int pc_debug = PCMCIA_DEBUG;
+#endif
 
 /*====================================================================*/
 
@@ -372,9 +371,9 @@ void cb_release(socket_info_t * s)
 void cb_enable(socket_info_t * s)
 {
 	struct pci_dev *dev;
-	u_char i, bus = s->cap.cb_dev->subordinate->number;
+	u_char i;
 
-	DEBUG(0, "cs: cb_enable(bus %d)\n", bus);
+	DEBUG(0, "cs: cb_enable(bus %d)\n", s->cap.cb_dev->subordinate->number);
 
 	/* Configure bridge */
 	cb_release_cis_mem(s);

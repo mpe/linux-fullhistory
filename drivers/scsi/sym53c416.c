@@ -813,7 +813,8 @@ MODULE_PARM(sym53c416_1, "1-2i");
 MODULE_PARM(sym53c416_2, "1-2i");
 MODULE_PARM(sym53c416_3, "1-2i");
 
-Scsi_Host_Template driver_template = SYM53C416;
+#endif
+
+static Scsi_Host_Template driver_template = SYM53C416;
 
 #include "scsi_module.c"
-#endif

@@ -572,7 +572,7 @@ static void uhci_inc_fsbr(struct uhci *uhci, struct urb *urb)
 
 	spin_lock_irqsave(&uhci->framelist_lock, flags);
 
-	if (!urbp->fsbr) {
+	if ((!(urb->transfer_flags & USB_NO_FSBR)) && (!urbp->fsbr)) {
 		urbp->fsbr = 1;
 		if (!uhci->fsbr++)
 			uhci->skel_term_qh.link = virt_to_bus(&uhci->skel_hs_control_qh) | UHCI_PTR_QH;
@@ -591,7 +591,7 @@ static void uhci_dec_fsbr(struct uhci *uhci, struct urb *urb)
 
 	spin_lock_irqsave(&uhci->framelist_lock, flags);
 
-	if (urbp->fsbr) {
+	if ((!(urb->transfer_flags & USB_NO_FSBR)) && urbp->fsbr) {
 		urbp->fsbr = 0;
 		if (!--uhci->fsbr)
 			uhci->skel_term_qh.link = UHCI_PTR_TERM;

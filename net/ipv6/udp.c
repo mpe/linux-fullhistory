@@ -7,7 +7,7 @@
  *
  *	Based on linux/ipv4/udp.c
  *
- *	$Id: udp.c,v 1.56 2000/08/09 11:59:04 davem Exp $
+ *	$Id: udp.c,v 1.57 2000/09/18 05:59:48 davem Exp $
  *
  *	Fixes:
  *	Hideaki YOSHIFUJI	:	sin6_scope_id support
@@ -119,6 +119,15 @@ gotit:
 	}
 
 	sk->num = snum;
+	if (sk->pprev == NULL) {
+		struct sock **skp = &udp_hash[snum & (UDP_HTABLE_SIZE - 1)];
+		if ((sk->next = *skp) != NULL)
+			(*skp)->pprev = &sk->next;
+		*skp = sk;
+		sk->pprev = skp;
+		sock_prot_inc_use(sk->prot);
+		sock_hold(sk);
+	}
 	write_unlock_bh(&udp_hash_lock);
 	return 0;
 
@@ -129,16 +138,7 @@ fail:
 
 static void udp_v6_hash(struct sock *sk)
 {
-	struct sock **skp = &udp_hash[sk->num & (UDP_HTABLE_SIZE - 1)];
-
-	write_lock_bh(&udp_hash_lock);
-	if ((sk->next = *skp) != NULL)
-		(*skp)->pprev = &sk->next;
-	*skp = sk;
-	sk->pprev = skp;
-	sock_prot_inc_use(sk->prot);
- 	sock_hold(sk);
- 	write_unlock_bh(&udp_hash_lock);
+	BUG();
 }
 
 static void udp_v6_unhash(struct sock *sk)
@@ -149,6 +149,7 @@ static void udp_v6_unhash(struct sock *sk)
 			sk->next->pprev = sk->pprev;
 		*sk->pprev = sk->next;
 		sk->pprev = NULL;
+		sk->num = 0;
 		sock_prot_dec_use(sk->prot);
 		__sock_put(sk);
 	}

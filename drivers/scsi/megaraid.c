@@ -2032,8 +2032,6 @@ static int __init megaraid_setup(char *str)
 
 __setup("megaraid=", megaraid_setup);
 
-#ifdef MODULE
-Scsi_Host_Template driver_template = MEGARAID;
+static Scsi_Host_Template driver_template = MEGARAID;
 
 #include "scsi_module.c"
-#endif

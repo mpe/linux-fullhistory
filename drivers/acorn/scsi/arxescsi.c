@@ -17,7 +17,6 @@
  *				(arxescsi_pseudo_dma_write)
  *  02-04-2000	RMK	0.1.1	Updated for new error handling code.
  */
-
 #include <linux/module.h>
 #include <linux/blk.h>
 #include <linux/kernel.h>

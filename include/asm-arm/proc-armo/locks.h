@@ -1,11 +1,14 @@
 /*
- * linux/include/asm-arm/proc-armo/locks.h
+ *  linux/include/asm-arm/proc-armo/locks.h
  *
- * Copyright (C) 2000 Russell King
- * Fixes for 26 bit machines, (C) 2000 Dave Gilbert
+ *  Copyright (C) 2000 Russell King
+ *  Fixes for 26 bit machines, (C) 2000 Dave Gilbert
  *
- * Interrupt safe locking assembler. 
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
  *
+ *  Interrupt safe locking assembler. 
  */
 #ifndef __ASM_PROC_LOCKS_H
 #define __ASM_PROC_LOCKS_H

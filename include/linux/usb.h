@@ -348,6 +348,7 @@ typedef int (*usb_device_irq)(int, void *, int, void *);
 #define USB_URB_EARLY_COMPLETE  0x0004
 #define USB_ASYNC_UNLINK        0x0008
 #define USB_QUEUE_BULK          0x0010
+#define USB_NO_FSBR		0x0020
 #define USB_TIMEOUT_KILLED	0x1000	// only set by HCD!
 
 typedef struct

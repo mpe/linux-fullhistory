@@ -1,3 +1,12 @@
+/*
+ *  linux/include/asm-arm/cpu-multi32.h
+ *
+ *  Copyright (C) 2000 Russell King
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ */
 #ifndef __ASSEMBLY__
 
 #include <asm/page.h>
@@ -27,79 +36,91 @@ extern struct processor {
 	 */
 	void (*_proc_fin)(void);
 	/*
-	 * Processor architecture specific
-	 */
-	/* CACHE
-	 *
-	 * flush all caches
-	 */
-	void (*_flush_cache_all)(void);
-	/*
-	 * flush a specific page or pages
-	 */
-	void (*_flush_cache_area)(unsigned long address, unsigned long end, int flags);
-	/*
-	 * flush cache entry for an address
-	 */
-	void (*_flush_cache_entry)(unsigned long address);
-	/*
-	 * clean a virtual address range from the
-	 * D-cache without flushing the cache.
-	 */
-	void (*_clean_cache_area)(unsigned long start, unsigned long size);
-	/*
-	 * flush a page to RAM
-	 */
-	void (*_flush_ram_page)(unsigned long page);
-	/* TLB
-	 *
-	 * flush all TLBs
-	 */
-	void (*_flush_tlb_all)(void);
-	/*
-	 * flush a specific TLB
-	 */
-	void (*_flush_tlb_area)(unsigned long address, unsigned long end, int flags);
-	/*
-	 * Set the page table
-	 */
-	void (*_set_pgd)(unsigned long pgd_phys);
-	/*
-	 * Set a PMD (handling IMP bit 4)
-	 */
-	void (*_set_pmd)(pmd_t *pmdp, pmd_t pmd);
-	/*
-	 * Set a PTE
-	 */
-	void (*_set_pte)(pte_t *ptep, pte_t pte);
-	/*
 	 * Special stuff for a reset
 	 */
 	volatile void (*reset)(unsigned long addr);
-	/*
-	 * flush an icached page
-	 */
-	void (*_flush_icache_area)(unsigned long start, unsigned long size);
-	/*
-	 * write back dirty cached data
-	 */
-	void (*_cache_wback_area)(unsigned long start, unsigned long end);
-	/*
-	 * purge cached data without (necessarily) writing it back
-	 */
-	void (*_cache_purge_area)(unsigned long start, unsigned long end);
-	/*
-	 * flush a specific TLB
-	 */
-	void (*_flush_tlb_page)(unsigned long address, int flags);
 	/*
 	 * Idle the processor
 	 */
 	int (*_do_idle)(int mode);
 	/*
-	 * flush I cache for a page
+	 * Processor architecture specific
 	 */
-	void (*_flush_icache_page)(unsigned long address);
+	struct {	/* CACHE */
+		/*
+		 * flush all caches
+		 */
+		void (*clean_invalidate_all)(void);
+		/*
+		 * flush a specific page or pages
+		 */
+		void (*clean_invalidate_range)(unsigned long address, unsigned long end, int flags);
+		/*
+		 * flush a page to RAM
+		 */
+		void (*_flush_ram_page)(void *virt_page);
+	} cache;
+
+	struct {	/* D-cache */
+		/*
+		 * invalidate the specified data range
+		 */
+		void (*invalidate_range)(unsigned long start, unsigned long end);
+		/*
+		 * clean specified data range
+		 */
+		void (*clean_range)(unsigned long start, unsigned long end);
+		/*
+		 * obsolete flush cache entry
+		 */
+		void (*clean_page)(void *virt_page);
+		/*
+		 * clean a virtual address range from the
+		 * D-cache without flushing the cache.
+		 */
+		void (*clean_entry)(unsigned long start);
+	} dcache;
+
+	struct {	/* I-cache */
+		/*
+		 * invalidate the I-cache for the specified range
+		 */
+		void (*invalidate_range)(unsigned long start, unsigned long end);
+		/*
+		 * invalidate the I-cache for the specified virtual page
+		 */
+		void (*invalidate_page)(void *virt_page);
+	} icache;
+
+	struct {	/* TLB */
+		/*
+		 * flush all TLBs
+		 */
+		void (*invalidate_all)(void);
+		/*
+		 * flush a specific TLB
+		 */
+		void (*invalidate_range)(unsigned long address, unsigned long end);
+		/*
+		 * flush a specific TLB
+		 */
+		void (*invalidate_page)(unsigned long address, int flags);
+	} tlb;
+
+	struct {	/* PageTable */
+		/*
+		 * Set the page table
+		 */
+		void (*set_pgd)(unsigned long pgd_phys);
+		/*
+		 * Set a PMD (handling IMP bit 4)
+		 */
+		void (*set_pmd)(pmd_t *pmdp, pmd_t pmd);
+		/*
+		 * Set a PTE
+		 */
+		void (*set_pte)(pte_t *ptep, pte_t pte);
+	} pgtable;
 } processor;
 
 extern const struct processor arm6_processor_functions;
@@ -110,24 +131,28 @@ extern const struct processor sa110_processor_functions;
 #define cpu_check_bugs()			processor._check_bugs()
 #define cpu_proc_init()				processor._proc_init()
 #define cpu_proc_fin()				processor._proc_fin()
+#define cpu_reset(addr)				processor.reset(addr)
 #define cpu_do_idle(mode)			processor._do_idle(mode)
 
-#define cpu_flush_cache_all()			processor._flush_cache_all()
-#define cpu_flush_cache_area(start,end,flags)	processor._flush_cache_area(start,end,flags)
-#define cpu_flush_cache_entry(addr)		processor._flush_cache_entry(addr)
-#define cpu_clean_cache_area(start,size)	processor._clean_cache_area(start,size)
-#define cpu_flush_ram_page(page)		processor._flush_ram_page(page)
-#define cpu_flush_tlb_all()			processor._flush_tlb_all()
-#define cpu_flush_tlb_area(start,end,flags)	processor._flush_tlb_area(start,end,flags)
-#define cpu_flush_tlb_page(addr,flags)		processor._flush_tlb_page(addr,flags)
-#define cpu_set_pgd(pgd)			processor._set_pgd(pgd)
-#define cpu_set_pmd(pmdp, pmd)			processor._set_pmd(pmdp, pmd)
-#define cpu_set_pte(ptep, pte)			processor._set_pte(ptep, pte)
-#define cpu_reset(addr)				processor.reset(addr)
-#define cpu_flush_icache_area(start,end)	processor._flush_icache_area(start,end)
-#define cpu_cache_wback_area(start,end)		processor._cache_wback_area(start,end)
-#define cpu_cache_purge_area(start,end)		processor._cache_purge_area(start,end)
-#define cpu_flush_icache_page(virt)		processor._flush_icache_page(virt)
+#define cpu_cache_clean_invalidate_all()	processor.cache.clean_invalidate_all()
+#define cpu_cache_clean_invalidate_range(s,e,f)	processor.cache.clean_invalidate_range(s,e,f)
+#define cpu_flush_ram_page(vp)			processor.cache._flush_ram_page(vp)
+
+#define cpu_dcache_clean_page(vp)		processor.dcache.clean_page(vp)
+#define cpu_dcache_clean_entry(addr)		processor.dcache.clean_entry(addr)
+#define cpu_dcache_clean_range(s,e)		processor.dcache.clean_range(s,e)
+#define cpu_dcache_invalidate_range(s,e)	processor.dcache.invalidate_range(s,e)
+
+#define cpu_icache_invalidate_range(s,e)	processor.icache.invalidate_range(s,e)
+#define cpu_icache_invalidate_page(vp)		processor.icache.invalidate_page(vp)
+
+#define cpu_tlb_invalidate_all()		processor.tlb.invalidate_all()
+#define cpu_tlb_invalidate_range(s,e)		processor.tlb.invalidate_range(s,e)
+#define cpu_tlb_invalidate_page(vp,f)		processor.tlb.invalidate_page(vp,f)
+
+#define cpu_set_pgd(pgd)			processor.pgtable.set_pgd(pgd)
+#define cpu_set_pmd(pmdp, pmd)			processor.pgtable.set_pmd(pmdp, pmd)
+#define cpu_set_pte(ptep, pte)			processor.pgtable.set_pte(ptep, pte)
 
 #define cpu_switch_mm(pgd,tsk)			cpu_set_pgd(__virt_to_phys((unsigned long)(pgd)))
 

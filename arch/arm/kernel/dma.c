@@ -1,11 +1,15 @@
 /*
- * linux/arch/arm/kernel/dma.c
+ *  linux/arch/arm/kernel/dma.c
  *
- * Copyright (C) 1995-2000 Russell King
+ *  Copyright (C) 1995-2000 Russell King
  *
- * Front-end to the DMA handling.  This handles the allocation/freeing
- * of DMA channels, and provides a unified interface to the machines
- * DMA facilities.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ *  Front-end to the DMA handling.  This handles the allocation/freeing
+ *  of DMA channels, and provides a unified interface to the machines
+ *  DMA facilities.
  */
 #include <linux/module.h>
 #include <linux/malloc.h>
@@ -16,7 +20,7 @@
 
 #include <asm/dma.h>
 
-#include "dma.h"
+#include <asm/mach/dma.h>
 
 spinlock_t dma_spin_lock = SPIN_LOCK_UNLOCKED;
 
@@ -111,12 +115,13 @@ bad_dma:
 
 /* Set DMA Scatter-Gather list
  */
-void set_dma_sg (dmach_t channel, dmasg_t *sg, int nr_sg)
+void set_dma_sg (dmach_t channel, struct scatterlist *sg, int nr_sg)
 {
 	dma_t *dma = dma_chan + channel;
 
 	dma->sg = sg;
 	dma->sgcount = nr_sg;
+	dma->using_sg = 1;
 	dma->invalid = 1;
 }
 
@@ -134,7 +139,8 @@ void set_dma_addr (dmach_t channel, unsigned long physaddr)
 
 	dma->sg = &dma->buf;
 	dma->sgcount = 1;
-	dma->buf.address = physaddr;
+	dma->buf.address = bus_to_virt(physaddr);
+	dma->using_sg = 0;
 	dma->invalid = 1;
 }
 
@@ -153,6 +159,7 @@ void set_dma_count (dmach_t channel, unsigned long count)
 	dma->sg = &dma->buf;
 	dma->sgcount = 1;
 	dma->buf.length = count;
+	dma->using_sg = 0;
 	dma->invalid = 1;
 }
 

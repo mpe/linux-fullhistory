@@ -140,8 +140,6 @@ int pas16_proc_info (char *buffer ,char **start, off_t offset,
  * macros when this is being used solely for the host stub.
  */
 
-#if defined(HOSTS_C) || defined(MODULE)
-
 #define MV_PAS16 {					\
 	name:           "Pro Audio Spectrum-16 SCSI", 	\
 	detect:         pas16_detect, 			\
@@ -155,7 +153,6 @@ int pas16_proc_info (char *buffer ,char **start, off_t offset,
 	cmd_per_lun:    CMD_PER_LUN ,			\
 	use_clustering: DISABLE_CLUSTERING}
 
-#endif
 #ifndef HOSTS_C
 
 #define NCR5380_implementation_fields \

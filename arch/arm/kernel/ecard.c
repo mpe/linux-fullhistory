@@ -1,27 +1,30 @@
 /*
- * linux/arch/arm/kernel/ecard.c
+ *  linux/arch/arm/kernel/ecard.c
+ *
+ *  Copyright 1995-1998 Russell King
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
  *
  *  Find all installed expansion cards, and handle interrupts from them.
  *
- * Copyright 1995-1998 Russell King
+ *  Created from information from Acorns RiscOS3 PRMs
  *
- * Created from information from Acorns RiscOS3 PRMs
- *
- * 08-Dec-1996	RMK	Added code for the 9'th expansion card - the ether
+ *  08-Dec-1996	RMK	Added code for the 9'th expansion card - the ether
  *			podule slot.
- * 06-May-1997  RMK	Added blacklist for cards whose loader doesn't work.
- * 12-Sep-1997	RMK	Created new handling of interrupt enables/disables
+ *  06-May-1997	RMK	Added blacklist for cards whose loader doesn't work.
+ *  12-Sep-1997	RMK	Created new handling of interrupt enables/disables
  *			- cards can now register their own routine to control
  *			interrupts (recommended).
- * 29-Sep-1997	RMK	Expansion card interrupt hardware not being re-enabled
+ *  29-Sep-1997	RMK	Expansion card interrupt hardware not being re-enabled
  *			on reset from Linux. (Caused cards not to respond
  *			under RiscOS without hard reset).
- * 15-Feb-1998	RMK	Added DMA support
- * 12-Sep-1998	RMK	Added EASI support
- * 10-Jan-1999	RMK	Run loaders in a simulated RISC OS environment.
- * 17-Apr-1999	RMK	Support for EASI Type C cycles.
+ *  15-Feb-1998	RMK	Added DMA support
+ *  12-Sep-1998	RMK	Added EASI support
+ *  10-Jan-1999	RMK	Run loaders in a simulated RISC OS environment.
+ *  17-Apr-1999	RMK	Support for EASI Type C cycles.
  */
-
 #define ECARD_C
 #define __KERNEL_SYSCALLS__
 
@@ -137,15 +140,10 @@ ecard_task_reset(struct ecard_request *req)
 	if (req->ec == NULL) {
 		ecard_t *ec;
 
-		for (ec = cards; ec; ec = ec->next) {
-			printk(KERN_DEBUG "Resetting card %d\n",
-			       ec->slot_no);
-
+		for (ec = cards; ec; ec = ec->next)
 			if (ec->loader)
 				ecard_loader_reset(POD_INT_ADDR(ec->podaddr),
 						   ec->loader);
-		}
-		printk(KERN_DEBUG "All cards reset\n");
 	} else if (req->ec->loader)
 		ecard_loader_reset(POD_INT_ADDR(req->ec->podaddr),
 				   req->ec->loader);

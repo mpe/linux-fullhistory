@@ -4982,13 +4982,9 @@ BusLogic_Setup(char *str)
 __setup("BusLogic=", BusLogic_Setup);
 
 /*
-  Include Module support if requested.
+  Get it all started
 */
 
-#ifdef MODULE
-
-SCSI_Host_Template_T driver_template = BUSLOGIC;
+static SCSI_Host_Template_T driver_template = BUSLOGIC;
 
 #include "scsi_module.c"
-
-#endif

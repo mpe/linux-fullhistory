@@ -529,10 +529,7 @@ static int sun3scsi_dma_finish(void)
 	
 #include "sun3_NCR5380.c"
 
-#ifdef MODULE
-
-Scsi_Host_Template driver_template = SUN3_NCR5380;
+static Scsi_Host_Template driver_template = SUN3_NCR5380;
 
 #include "scsi_module.c"
-#endif
 

@@ -1,11 +1,15 @@
 /*
- * linux/arch/arm/lib/uaccess.S
+ *  linux/arch/arm/lib/uaccess.S
  *
- * Copyright (C) 1995, 1996,1997,1998 Russell King
+ *  Copyright (C) 1995, 1996,1997,1998 Russell King
  *
- * Routines to block copy data to/from user memory
- *  These are highly optimised both for the 4k page size
- *  and for various alignments.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ *  Routines to block copy data to/from user memory
+ *   These are highly optimised both for the 4k page size
+ *   and for various alignments.
  */
 #include <linux/linkage.h>
 #include <asm/assembler.h>

@@ -72,6 +72,7 @@ comment 'USB Devices'
       dep_tristate '  USB Diamond Rio500 support (EXPERIMENTAL)' CONFIG_USB_RIO500 $CONFIG_USB
       dep_tristate '  D-Link USB FM radio support (EXPERIMENTAL)' CONFIG_USB_DSBR $CONFIG_USB $CONFIG_VIDEO_DEV
       dep_tristate '  USB Bluetooth support (EXPERIMENTAL)' CONFIG_USB_BLUETOOTH $CONFIG_USB
+      dep_tristate '  NetChip 1080-based USB Host-to-Host Link (EXPERIMENTAL)' CONFIG_USB_NET1080 $CONFIG_USB $CONFIG_NET
    fi
 
    comment 'USB Human Interface Devices (HID)'

@@ -2202,6 +2202,9 @@ void __init console_init(void)
 #ifdef CONFIG_SERIAL_SA1100_CONSOLE
 	sa1100_rs_console_init();
 #endif
+#ifdef CONFIG_SERIAL_AMBA_CONSOLE
+	ambauart_console_init();
+#endif
 }
 
 static struct tty_driver dev_tty_driver, dev_syscons_driver;

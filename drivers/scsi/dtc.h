@@ -55,8 +55,6 @@ int dtc_proc_info (char *buffer, char **start, off_t offset,
  * macros when this is being used solely for the host stub.
  */
 
-#if defined(HOSTS_C) || defined(MODULE)
-
 #define DTC3x80 {				\
 	name:           "DTC 3180/3280 ",	\
 	detect:         dtc_detect,		\
@@ -69,10 +67,6 @@ int dtc_proc_info (char *buffer, char **start, off_t offset,
 	sg_tablesize:   SG_ALL,			\
 	cmd_per_lun:    CMD_PER_LUN ,		\
 	use_clustering: DISABLE_CLUSTERING}
-
-#endif
-
-#ifndef HOSTS_C
 
 #define NCR5380_implementation_fields \
     volatile unsigned int base
@@ -124,6 +118,5 @@ int dtc_proc_info (char *buffer, char **start, off_t offset,
 #define DTC_IRQS 0x9c00
 
 
-#endif /* else def HOSTS_C */
 #endif /* ndef ASM */
 #endif /* DTC3280_H */

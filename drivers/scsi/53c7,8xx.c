@@ -6425,6 +6425,7 @@ NCR53c7x0_release(struct Scsi_Host *host) {
 	vfree ((void *)hostdata->events);
     return 1;
 }
-Scsi_Host_Template driver_template = NCR53c7xx;
-#include "scsi_module.c"
 #endif /* def MODULE */
+
+static Scsi_Host_Template driver_template = NCR53c7xx;
+#include "scsi_module.c"

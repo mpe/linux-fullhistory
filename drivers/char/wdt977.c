@@ -24,6 +24,7 @@
 
 #include <asm/io.h>
 #include <asm/system.h>
+#include <asm/mach-types.h>
 
 #define WATCHDOG_MINOR	130
 

@@ -10,6 +10,9 @@
  *
  * Copyright (C) 1995-1999 ITConsult-Pro Co.
  *
+ * Contributors:
+ * Arnaldo Carvalho de Melo <acme@conectiva.com.br> (0.85)
+ *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version
@@ -39,9 +42,13 @@
  * Version 0.84 (99/12/01):
  *		- comx_status should not check for IFF_UP (to report
  *		  line status from dev->open())
+ *
+ * Version 0.85 (00/08/15):
+ * 		- resource release on failure in comx_mkdir
+ * 		- fix return value on failure at comx_write_proc
  */
 
-#define VERSION "0.84"
+#define VERSION "0.85"
 
 #include <linux/config.h>
 #include <linux/module.h>
@@ -506,6 +513,7 @@ static int comx_init_dev(struct net_device *dev)
 	ch->loadavg_size = ch->loadavg[2] / ch->loadavg[0] + 1; 
 	if ((ch->avg_bytes = kmalloc(ch->loadavg_size * 
 		sizeof(unsigned long) * 2, GFP_KERNEL)) == NULL) {
+		kfree(ch);
 		return -ENOMEM;
 	}
 
@@ -629,7 +637,7 @@ static int comx_write_proc(struct file *file, const char *buffer, u_long count,
 			ch->debug_start = ch->debug_end = 0;
 			restore_flags(flags);
 			free_page((unsigned long)page);
-			return count;
+			return ret ? ret : count;
 		}
 		
 		if (*page != '+' && *page != '-') {
@@ -762,10 +770,16 @@ static int comx_mkdir(struct inode *dir, struct dentry *dentry, int mode)
 	struct proc_dir_entry *new_dir, *debug_file;
 	struct net_device *dev;
 	struct comx_channel *ch;
+	int ret = -EIO;
+
+	if ((dev = kmalloc(sizeof(struct net_device), GFP_KERNEL)) == NULL) {
+		return -ENOMEM;
+	}
+	memset(dev, 0, sizeof(struct net_device));
 
 	if ((new_dir = create_proc_entry(dentry->d_name.name, mode | S_IFDIR, 
 		comx_root_dir)) == NULL) {
-		return -EIO;
+		goto cleanup_dev;
 	}
 
 	new_dir->nlink = 2;
@@ -774,42 +788,38 @@ static int comx_mkdir(struct inode *dir, struct dentry *dentry, int mode)
 	/* Ezek kellenek */
 	if (!create_comx_proc_entry(FILENAME_HARDWARE, 0644, 
 	    strlen(HWNAME_NONE) + 1, new_dir)) {
-		return -ENOMEM;
+		goto cleanup_new_dir;
 	}
 	if (!create_comx_proc_entry(FILENAME_PROTOCOL, 0644, 
 	    strlen(PROTONAME_NONE) + 1, new_dir)) {
-		return -ENOMEM;
+		goto cleanup_filename_hardware;
 	}
 	if (!create_comx_proc_entry(FILENAME_STATUS, 0444, 0, new_dir)) {
-		return -ENOMEM;
+		goto cleanup_filename_protocol;
 	}
 	if (!create_comx_proc_entry(FILENAME_LINEUPDELAY, 0644, 2, new_dir)) {
-		return -ENOMEM;
+		goto cleanup_filename_status;
 	}
 
 	if ((debug_file = create_proc_entry(FILENAME_DEBUG, 
 	    S_IFREG | 0644, new_dir)) == NULL) {
-		return -ENOMEM;
+		goto cleanup_filename_lineupdelay;
 	}
 	debug_file->data = (void *)debug_file; 
 	debug_file->read_proc = NULL; // see below
 	debug_file->write_proc = &comx_write_proc;
 	debug_file->nlink = 1;
 
-	if ((dev = kmalloc(sizeof(struct net_device), GFP_KERNEL)) == NULL) {
-		return -ENOMEM;
-	}
-	memset(dev, 0, sizeof(struct net_device));
 	strcpy(dev->name, (char *)new_dir->name);
 	dev->init = comx_init_dev;
 
 	if (register_netdevice(dev)) {
-		return -EIO;
+		goto cleanup_filename_debug;
 	}
 	ch=dev->priv;
 	if((ch->if_ptr = (void *)kmalloc(sizeof(struct ppp_device), 
 				 GFP_KERNEL)) == NULL) {
-		return -ENOMEM;
+		goto cleanup_register;
 	}
 	memset(ch->if_ptr, 0, sizeof(struct ppp_device));
 	ch->debug_file = debug_file; 
@@ -819,13 +829,33 @@ static int comx_mkdir(struct inode *dir, struct dentry *dentry, int mode)
 	ch->debug_start = ch->debug_end = 0;
 	if ((ch->debug_area = kmalloc(ch->debug_size = DEFAULT_DEBUG_SIZE, 
 	    GFP_KERNEL)) == NULL) {
-		return -ENOMEM;
+		ret = -ENOMEM;
+		goto cleanup_if_ptr;
 	}
 
 	ch->lineup_delay = DEFAULT_LINEUP_DELAY;
 
 	MOD_INC_USE_COUNT;
 	return 0;
+cleanup_if_ptr:
+	kfree(ch->if_ptr);
+cleanup_register:
+	unregister_netdevice(dev);
+cleanup_filename_debug:
+	remove_proc_entry(FILENAME_DEBUG, new_dir);
+cleanup_filename_lineupdelay:
+	remove_proc_entry(FILENAME_LINEUPDELAY, new_dir);
+cleanup_filename_status:
+	remove_proc_entry(FILENAME_STATUS, new_dir);
+cleanup_filename_protocol:
+	remove_proc_entry(FILENAME_PROTOCOL, new_dir);
+cleanup_filename_hardware:
+	remove_proc_entry(FILENAME_HARDWARE, new_dir);
+cleanup_new_dir:
+	remove_proc_entry(dentry->d_name.name, &comx_root_dir);
+cleanup_dev:
+	kfree(dev);
+	return ret;
 }
 
 static int comx_rmdir(struct inode *dir, struct dentry *dentry)

@@ -1,7 +1,13 @@
 /*
- * Cumana SCSI II driver
+ *  linux/drivers/acorn/scsi/cumana_2.h
  *
- * Copyright (C) 1997-2000 Russell King
+ *  Copyright (C) 1997-2000 Russell King
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ *  Cumana SCSI II driver
  */
 #ifndef CUMANA_2_H
 #define CUMANA_2_H
@@ -76,7 +82,7 @@ typedef struct {
 	unsigned int	alatch;		/* Control register	*/
 	unsigned int	terms;		/* Terminator state	*/
 	unsigned int	dmaarea;	/* Pseudo DMA area	*/
-	dmasg_t		dmasg[NR_SG];	/* Scatter DMA list	*/
+	struct scatterlist sg[NR_SG];	/* Scatter DMA list	*/
 } CumanaScsi2_Info;
 
 #define CSTATUS_IRQ	(1 << 0)

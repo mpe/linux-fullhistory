@@ -2803,7 +2803,6 @@ static int SiSSetMode(u16 ModeNo)
 	u16 cr30flag, cr31flag;
 	unsigned long ROMAddr = rom_vbase;
 	u16 BaseAddr = (u16) ivideo.vga_base;
-	u_short i;
 
 	P3c4 = BaseAddr + 0x14;
 	P3d4 = BaseAddr + 0x24;
@@ -3419,7 +3418,6 @@ int __init sisfb_init(void)
 	struct board *b;
 	int pdev_valid = 0;
 	unsigned char jTemp;
-	u32 cmd;
 
 	outb(0x77, 0x80);
 
@@ -3447,10 +3445,8 @@ int __init sisfb_init(void)
 		return -1;
 
 #ifdef CONFIG_FB_SIS_LINUXBIOS
-	pci_read_config_dword(pdev, PCI_COMMAND, &cmd);
-	cmd |= PCI_COMMAND_IO;
-	cmd |= PCI_COMMAND_MEMORY;
-	pci_write_config_dword(pdev, PCI_COMMAND, cmd); 
+	if (pci_enable_device(pdev))
+		return -EIO;
 #endif
 
 	ivideo.video_base = pci_resource_start(pdev, 0);

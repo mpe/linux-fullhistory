@@ -11,6 +11,10 @@
  *
  * See Documentation/usb/usb-serial.txt for more information on using this driver
  *
+ * (09/11/2000) gkh
+ *	Added usb_serial_debug_data function to help get rid of #DEBUG in the
+ *	drivers.
+ *
  * (08/28/2000) gkh
  *	Added port_lock to port structure.
  *
@@ -204,6 +208,18 @@ static inline struct usb_serial* get_usb_serial (struct usb_serial_port *port, c
 	return port->serial;
 }
 
+
+static inline void usb_serial_debug_data (const char *file, const char *function, int size, const unsigned char *data)
+{
+#ifdef CONFIG_USB_SERIAL_DEBUG
+	int i;
+	printk (KERN_DEBUG "%s: %s - length = %d, data = ", file, function, size);
+	for (i = 0; i < size; ++i) {
+		printk ("%.2x ", data[i]);
+	}
+	printk ("\n");
+#endif
+}
 
 #endif	/* ifdef __LINUX_USB_SERIAL_H */
 

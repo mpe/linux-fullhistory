@@ -2417,8 +2417,8 @@ typedef PCMCIAPrtType	PCMCIAType [PCMCIASp/PCMCIAPrtSp] ;
                 	(0xF << FShft (DDAR_DS))
 #define DDAR_DA 	Fld (24, 8)	/* Device Address                  */
 #define DDAR_DevAdd(Add)        	/*  Device Address                 */ \
-                	((Add) & 0xF0000000 | \
-                	 ((Add) & 0X003FFFFC) << (FShft (DDAR_DA) - 2))
+                	(((Add) & 0xF0000000) | \
+                	 (((Add) & 0X003FFFFC) << (FShft (DDAR_DA) - 2)))
 #define DDAR_Ser0UDCWr	        	/* Ser. port 0 UDC Write           */ \
                 	(DDAR_DevWr + DDAR_Brst8 + DDAR_8BitDev + \
                 	 DDAR_Ser0UDCTr + DDAR_DevAdd (_Ser0UDCDR))

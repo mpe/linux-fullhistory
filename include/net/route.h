@@ -113,7 +113,7 @@ extern void		ip_rt_get_source(u8 *src, struct rtable *rt);
 extern int		ip_rt_dump(struct sk_buff *skb,  struct netlink_callback *cb);
 
 /* Deprecated: use ip_route_output_key directly */
-extern __inline__ int ip_route_output(struct rtable **rp,
+static inline int ip_route_output(struct rtable **rp,
 				      u32 daddr, u32 saddr, u32 tos, int oif)
 {
 	struct rt_key key = { dst:daddr, src:saddr, oif:oif, tos:tos };
@@ -122,7 +122,7 @@ extern __inline__ int ip_route_output(struct rtable **rp,
 }
 
 
-extern __inline__ void ip_rt_put(struct rtable * rt)
+static inline void ip_rt_put(struct rtable * rt)
 {
 	if (rt)
 		dst_release(&rt->u.dst);
@@ -137,12 +137,12 @@ extern __inline__ void ip_rt_put(struct rtable * rt)
 
 extern __u8 ip_tos2prio[16];
 
-extern __inline__ char rt_tos2priority(u8 tos)
+static inline char rt_tos2priority(u8 tos)
 {
 	return ip_tos2prio[IPTOS_TOS(tos)>>1];
 }
 
-extern __inline__ int ip_route_connect(struct rtable **rp, u32 dst, u32 src, u32 tos, int oif)
+static inline int ip_route_connect(struct rtable **rp, u32 dst, u32 src, u32 tos, int oif)
 {
 	int err;
 	err = ip_route_output(rp, dst, src, tos, oif);
@@ -157,7 +157,7 @@ extern __inline__ int ip_route_connect(struct rtable **rp, u32 dst, u32 src, u32
 
 extern void rt_bind_peer(struct rtable *rt, int create);
 
-extern __inline__ struct inet_peer *rt_get_peer(struct rtable *rt)
+static inline struct inet_peer *rt_get_peer(struct rtable *rt)
 {
 	if (rt->peer)
 		return rt->peer;

@@ -115,10 +115,6 @@ int dmx3191d_release_resources(struct Scsi_Host *instance)
 }
 
 
-#ifdef MODULE
-Scsi_Host_Template driver_template = DMX3191D;
-
+static Scsi_Host_Template driver_template = DMX3191D;
 #include "scsi_module.c"
-
-#endif	/* MODULE */
 

@@ -1,7 +1,11 @@
 /*
- * linux/arch/arm/lib/csumpartialcopyuser.S
+ *  linux/arch/arm/lib/csumpartialcopyuser.S
  *
- * Copyright (C) 1995-1998 Russell King
+ *  Copyright (C) 1995-1998 Russell King
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
  */
 #include <linux/config.h>
 #include <linux/linkage.h>
@@ -396,6 +400,12 @@ ENTRY(csum_partial_copy_from_user)
 		mov	r4, r4, lsr #8
 		b	.exit
 
+/*
+ * FIXME: minor buglet here
+ * We don't return the checksum for the data present in the buffer.  To do
+ * so properly, we would have to add in whatever registers were loaded before
+ * the fault, which, with the current asm above is not predictable.
+ */
 #if defined(CONFIG_CPU_32)
 		.section .fixup,"ax"
 #endif

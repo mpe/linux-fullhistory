@@ -23,7 +23,6 @@ extern int blk_dev_init(void);
 #ifdef CONFIG_BLK_DEV_DAC960
 extern void DAC960_Initialize(void);
 #endif
-extern int scsi_dev_init(void);
 extern int net_dev_init(void);
 extern void console_map_init(void);
 extern int soc_probe(void);
@@ -49,9 +48,6 @@ void __init device_init(void)
 #ifdef CONFIG_FC4_SOC
 	/* This has to be done before scsi_dev_init */
 	soc_probe();
-#endif
-#ifdef CONFIG_SCSI
-	scsi_dev_init();
 #endif
 #ifdef CONFIG_IEEE1394
         ieee1394_init();

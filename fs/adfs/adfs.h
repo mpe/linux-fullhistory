@@ -97,6 +97,7 @@ extern struct dentry *adfs_lookup(struct inode *dir, struct dentry *dentry);
 /* dir_*.c */
 extern struct inode_operations adfs_dir_inode_operations;
 extern struct file_operations adfs_dir_operations;
+extern struct dentry_operations adfs_dentry_operations;
 extern struct adfs_dir_ops adfs_f_dir_ops;
 extern struct adfs_dir_ops adfs_fplus_dir_ops;
 

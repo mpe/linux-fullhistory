@@ -10,7 +10,7 @@
 # License.  See the file "COPYING" in the main directory of this archive
 # for more details.
 #
-# Copyright (C) 1995-1999 by Russell King
+# Copyright (C) 1995-2000 by Russell King
 
 OBJCOPY		:= $(CROSS_COMPILE)objcopy -O binary -R .note -R .comment -S
 CPP		:= $(CC) -E
@@ -51,21 +51,11 @@ CFLAGS			+= -mshort-load-bytes
 CFLAGS_PROC_CPU_26	:= -mcpu=arm3 -mapcs-26 -Os
 CFLAGS_PROC_CPU_32v3	:= -march=armv3
 CFLAGS_PROC_CPU_32v4	:= -march=armv4
-CFLAGS_ARM6		:= -mtune=arm6
-CFLAGS_ARM7		:= -mtune=arm7
-CFLAGS_ARM720		:= -mtune=arm7tdmi
-CFLAGS_ARM920		:= -mtune=arm9tdmi
-CFLAGS_SA110		:= -mtune=strongarm110
 else
 CFLAGS			+= -DNO_TEXT_SECTIONS
 CFLAGS_PROC_CPU_26	:= -m3
-CFLAGS_PROC_CPU_32v3	:=
-CFLAGS_PROC_CPU_32v4	:=
-CFLAGS_ARM6		:= -m6
-CFLAGS_ARM7		:= -m6
-CFLAGS_ARM720		:= -m6
-CFLAGS_ARM920		:= -m6
-CFLAGS_SA110		:= -m6
+CFLAGS_PROC_CPU_32v3	:= -m6
+CFLAGS_PROC_CPU_32v4	:= -m6
 endif
 
 #
@@ -88,31 +78,16 @@ ifeq ($(CONFIG_CPU_32),y)
   CFLAGS	+= $(CFLAGS_PROC_CPU_32v3)
   AFLAGS	+= -mapcs-32 -marmv3m
  endif
- #
- # Exactly one of the following must be selected
- #
- ifeq ($(CONFIG_CPU_ARM6),y)
-  CFLAGS	+= $(CFLAGS_ARM6)
- else
- ifeq ($(CONFIG_CPU_ARM7),y)
-  CFLAGS	+= $(CFLAGS_ARM7)
- else
- ifeq ($(CONFIG_CPU_ARM720),y)
-  CFLAGS	+= $(CFLAGS_ARM720)
- else
- ifeq ($(CONFIG_CPU_ARM920),y)
-  CFLAGS	+= $(CFLAGS_ARM920)
- else
- ifeq ($(CONFIG_CPU_SA110),y)
-  CFLAGS	+= $(CFLAGS_SA110)
- else
- ifeq ($(CONFIG_CPU_SA1100),y)
-  CFLAGS	+= $(CFLAGS_SA110)
- endif
- endif
- endif
- endif
- endif
+
+ opt-$(CONFIG_CPU_ARM6)		:= -mtune=arm6
+ opt-$(CONFIG_CPU_ARM7)		:= -mtune=arm7
+ opt-$(CONFIG_CPU_ARM720)	:= -mtune=arm7tdmi
+ opt-$(CONFIG_CPU_ARM920)	:= -mtune=arm9tdmi
+ opt-$(CONFIG_CPU_SA110)	:= -mtune=strongarm110
+ opt-$(CONFIG_CPU_SA1100)	:= -mtune=strongarm110
+
+ ifneq ($(NEW_GCC),0)
+ CFLAGS	+= $(opt-y)
  endif
 endif
 
@@ -169,7 +144,10 @@ MACHINE		 = integrator
 endif
 
 # Only set INCDIR if its not already defined above
-INCDIR		?= $(MACHINE)
+# Grr, ?= doesn't work as all the other assignment operators do.  Make bug?
+ifeq ($(origin INCDIR), undefined)
+INCDIR		:= $(MACHINE)
+endif
 
 # If we have a machine-specific directory, then include it in the build.
 MACHDIR		:= arch/arm/mach-$(MACHINE)

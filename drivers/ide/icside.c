@@ -255,43 +255,7 @@ static int ide_build_sglist(ide_hwif_t *hwif, struct request *rq)
 static int
 icside_build_dmatable(ide_drive_t *drive, int reading)
 {
-	dmasg_t *ide_sg = (dmasg_t *)HWIF(drive)->dmatable_cpu;
-	unsigned int count = 0;
-	int i;
-	struct scatterlist *sg;
-
-	HWIF(drive)->sg_nents = i = ide_build_sglist(HWIF(drive), HWGROUP(drive)->rq);
-
-	sg = HWIF(drive)->sg_table;
-	while (i && sg_dma_len(sg)) {
-		u32 cur_addr;
-		u32 cur_len;
-
-		cur_addr = sg_dma_address(sg);
-		cur_len  = sg_dma_len(sg);
-
-		if (count >= (TABLE_SIZE / sizeof(dmasg_t))) {
-			printk("%s: DMA table too small\n",
-				drive->name);
-			pci_unmap_sg(NULL,
-				     HWIF(drive)->sg_table,
-				     HWIF(drive)->sg_nents,
-				     HWIF(drive)->sg_dma_direction);
-			return 0;
-		} else {
-			ide_sg[count].address = cur_addr;
-			ide_sg[count].length  = cur_len;
-		}
-
-		count++;
-		sg++;
-		i--;
-	}
-
-	if (!count)
-		printk("%s: empty DMA table?\n", drive->name);
-
-	return count;
+	return HWIF(drive)->sg_nents = ide_build_sglist(HWIF(drive), HWGROUP(drive)->rq);
 }
 
 /* Teardown mappings after DMA has completed.  */
@@ -435,7 +399,7 @@ icside_dmaproc(ide_dma_action_t func, ide_drive_t *drive)
 		 */
 		set_dma_speed(hwif->hw.dma, drive->drive_data);
 
-		set_dma_sg(hwif->hw.dma, (dmasg_t *)hwif->dmatable_cpu, count);
+		set_dma_sg(hwif->hw.dma, HWIF(drive)->sg_table, count);
 		set_dma_mode(hwif->hw.dma, reading ? DMA_MODE_READ
 			     : DMA_MODE_WRITE);
 
@@ -465,31 +429,6 @@ icside_dmaproc(ide_dma_action_t func, ide_drive_t *drive)
 	}
 }
 
-static void *icside_alloc_dmatable(void)
-{
-	static unsigned long dmatable;
-	static unsigned int leftover;
-	unsigned long table;
-
-	if (leftover < TABLE_SIZE) {
-#if PAGE_SIZE == TABLE_SIZE * 2
-		dmatable = __get_free_pages(GFP_KERNEL, 1);
-		leftover = PAGE_SIZE;
-#else
-		dmatable = kmalloc(TABLE_SIZE, GFP_KERNEL);
-		leftover = TABLE_SIZE;
-#endif
-	}
-
-	table = dmatable;
-	if (table) {
-		dmatable += TABLE_SIZE;
-		leftover -= TABLE_SIZE;
-	}
-
-	return (void *)table;
-}
-
 static int
 icside_setup_dma(ide_hwif_t *hwif, int autodma)
 {
@@ -500,14 +439,8 @@ icside_setup_dma(ide_hwif_t *hwif, int autodma)
 	if (!hwif->sg_table)
 		goto failed;
 
-	hwif->dmatable_cpu = icside_alloc_dmatable();
-
-	if (!hwif->dmatable_cpu) {
-		kfree(hwif->sg_table);
-		hwif->sg_table = NULL;
-		goto failed;
-	}
-
+	hwif->dmatable_cpu = NULL;
+	hwif->dmatable_dma = 0;
 	hwif->speedproc = icside_set_speed;
 	hwif->dmaproc = icside_dmaproc;
 	hwif->autodma = autodma;

@@ -1,10 +1,14 @@
 /*
- * linux/include/asm-arm/arch-rpc/ide.h
+ *  linux/include/asm-arm/arch-rpc/ide.h
  *
- * Copyright (c) 1997 Russell King
+ *  Copyright (C) 1997 Russell King
  *
- * Modifications:
- *  29-07-1998	RMK	Major re-work of IDE architecture specific code
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ *  Modifications:
+ *   29-07-1998	RMK	Major re-work of IDE architecture specific code
  */
 #include <asm/irq.h>
 

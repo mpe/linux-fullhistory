@@ -55,7 +55,7 @@ static void assabet_leds_event(led_event_t evt)
 {
 	unsigned long flags;
 
-	save_flags_cli(flags);
+	local_irq_save(flags);
 
 	switch (evt) {
 	case led_start:
@@ -132,7 +132,7 @@ static void assabet_leds_event(led_event_t evt)
 	if  (led_state & LED_STATE_ENABLED)
 		BCR = BCR_value = (BCR_value & ~BCR_LED_MASK) | hw_led_state;
 
-	restore_flags(flags);
+	local_irq_restore(flags);
 }
 
 #endif /* CONFIG_SA1100_ASSABET */
@@ -148,7 +148,7 @@ static void brutus_leds_event(led_event_t evt)
 {
 	unsigned long flags;
 
-	save_flags_cli(flags);
+	local_irq_save(flags);
 
 	switch (evt) {
 	case led_start:
@@ -222,7 +222,7 @@ static void brutus_leds_event(led_event_t evt)
 		GPCR = hw_led_state ^ LED_MASK;
 	}
 
-	restore_flags(flags);
+	local_irq_restore(flags);
 }
 
 #endif /* CONFIG_SA1100_BRUTUS */
@@ -237,7 +237,7 @@ static void lart_leds_event(led_event_t evt)
 {
 	unsigned long flags;
 
-	save_flags_cli(flags);
+	local_irq_save(flags);
 
 	switch(evt) {
 	case led_start:
@@ -301,7 +301,7 @@ static void lart_leds_event(led_event_t evt)
 		GPCR = hw_led_state ^ LED_MASK;
 	}
 
-	restore_flags(flags);
+	local_irq_restore(flags);
 }
 
 #endif /* CONFIG_SA1100_LART */
@@ -317,7 +317,7 @@ static void cerf_leds_event(led_event_t evt)
 {
         unsigned long flags;
 
-        save_flags_cli(flags);
+	local_irq_save(flags);
 
         switch (evt) {
         case led_start:
@@ -395,18 +395,10 @@ static void cerf_leds_event(led_event_t evt)
                 GPCR = hw_led_state ^ LED_MASK;
         }
 
-        restore_flags(flags);
+	local_irq_restore(flags);
 }
 
 #endif /* CONFIG_SA1100_CERF */
-
-static void dummy_leds_event(led_event_t evt)
-{
-}
-
-void (*leds_event)(led_event_t) = dummy_leds_event;
-
-EXPORT_SYMBOL(leds_event);
 
 static int __init
 sa1100_leds_init(void)

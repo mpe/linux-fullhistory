@@ -1161,9 +1161,7 @@ static void do_ultrastor_interrupt(int irq, void *dev_id, struct pt_regs *regs)
     spin_unlock_irqrestore(&io_request_lock, flags);
 }
 
-#ifdef MODULE
 /* Eventually this will go into an include file, but this will be later */
-Scsi_Host_Template driver_template = ULTRASTOR_14F;
+static Scsi_Host_Template driver_template = ULTRASTOR_14F;
 
 #include "scsi_module.c"
-#endif

@@ -885,12 +885,13 @@ int generic_NCR5380_proc_info(char* buffer, char** start, off_t offset, int leng
 #undef PRINTP
 #undef ANDP
 
-#ifdef MODULE
 /* Eventually this will go into an include file, but this will be later */
-Scsi_Host_Template driver_template = GENERIC_NCR5380;
+static Scsi_Host_Template driver_template = GENERIC_NCR5380;
 
 #include <linux/module.h>
 #include "scsi_module.c"
+
+#ifdef MODULE 
 
 MODULE_PARM(ncr_irq, "i");
 MODULE_PARM(ncr_dma, "i");

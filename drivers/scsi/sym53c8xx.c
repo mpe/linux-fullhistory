@@ -15062,7 +15062,5 @@ sym_read_Tekram_nvram (ncr_slot *np, u_short device_id, Tekram_nvram *nvram)
 **	Module stuff
 */
 
-#ifdef MODULE
-Scsi_Host_Template driver_template = SYM53C8XX;
+static Scsi_Host_Template driver_template = SYM53C8XX;
 #include "scsi_module.c"
-#endif

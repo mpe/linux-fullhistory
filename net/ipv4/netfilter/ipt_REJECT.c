@@ -27,6 +27,7 @@ static void send_reset(struct sk_buff *oldskb)
 	struct tcphdr *otcph, *tcph;
 	struct rtable *rt;
 	unsigned int otcplen;
+	u_int16_t tmp;
 	int needs_ack;
 
 	/* IP header checks: fragment, too short. */
@@ -64,8 +65,11 @@ static void send_reset(struct sk_buff *oldskb)
 
 	tcph = (struct tcphdr *)((u_int32_t*)nskb->nh.iph + nskb->nh.iph->ihl);
 
+	/* Swap source and dest */
 	nskb->nh.iph->daddr = xchg(&nskb->nh.iph->saddr, nskb->nh.iph->daddr);
-	tcph->source = xchg(&tcph->dest, tcph->source);
+	tmp = tcph->source;
+	tcph->source = tcph->dest;
+	tcph->dest = tmp;
 
 	/* Truncate to length (no data) */
 	tcph->doff = sizeof(struct tcphdr)/4;

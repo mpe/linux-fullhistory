@@ -1,9 +1,13 @@
 /*
  *  linux/arch/arm/mm/mm-armv.c
  *
- *  Page table sludge for ARM v3 and v4 processor architectures.
- *
  *  Copyright (C) 1998-2000 Russell King
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ *  Page table sludge for ARM v3 and v4 processor architectures.
  */
 #include <linux/sched.h>
 #include <linux/mm.h>
@@ -16,7 +20,7 @@
 #include <asm/io.h>
 #include <asm/setup.h>
 
-#include "map.h"
+#include <asm/mach/map.h>
 
 unsigned long *valid_addr_bitmap;
 
@@ -62,6 +66,10 @@ __setup("nowb", nowrite_setup);
 
 #define FIRST_KERNEL_PGD_NR	(FIRST_USER_PGD_NR + USER_PTRS_PER_PGD)
 
+#define clean_cache_area(start,size) \
+	cpu_cache_clean_invalidate_range((unsigned long)start, ((unsigned long)start) + size, 0);
+
+
 /*
  * need to get a 16k page for level 1
  */
@@ -72,10 +80,13 @@ pgd_t *get_pgd_slow(void)
 
 	if (pgd) {
 		pgd_t *init = pgd_offset_k(0);
-		
+
 		memzero(pgd, FIRST_KERNEL_PGD_NR * sizeof(pgd_t));
 		memcpy(pgd  + FIRST_KERNEL_PGD_NR, init + FIRST_KERNEL_PGD_NR,
 		       (PTRS_PER_PGD - FIRST_KERNEL_PGD_NR) * sizeof(pgd_t));
+		/*
+		 * FIXME: this should not be necessary
+		 */
 		clean_cache_area(pgd, PTRS_PER_PGD * sizeof(pgd_t));
 
 		/*
@@ -310,18 +321,17 @@ void setup_mm_for_reboot(char mode)
 	}
 }
 
-void __init pagetable_init(struct meminfo *mi)
+/*
+ * Setup initial mappings.  We use the page we allocated for zero page to hold
+ * the mappings, which will get overwritten by the vectors in traps_init().
+ * The mappings must be in virtual address order.
+ */
+void __init memtable_init(struct meminfo *mi)
 {
 	struct map_desc *init_maps, *p, *q;
 	unsigned long address = 0;
 	int i;
 
-	/*
-	 * Setup initial mappings.  We use the page we allocated
-	 * for zero page to hold the mappings, which will get
-	 * overwritten by the vectors in traps_init().  The
-	 * mappings must be in virtual address order.
-	 */
 	init_maps = p = alloc_bootmem_low_pages(PAGE_SIZE);
 
 	p->physical   = virt_to_phys(init_maps);
@@ -401,16 +411,21 @@ void __init pagetable_init(struct meminfo *mi)
 		}
 	} while (address != 0);
 
-	/*
-	 * Create the architecture specific mappings
-	 */
-	for (i = 0; i < io_desc_size; i++)
-		create_mapping(io_desc + i);
-
 	flush_cache_all();
 }
 
-static inline void free_memmap(unsigned long start, unsigned long end)
+/*
+ * Create the architecture specific mappings
+ */
+void __init iotable_init(struct map_desc *io_desc)
+{
+	int i;
+
+	for (i = 0; io_desc[i].last == 0; i++)
+		create_mapping(io_desc + i);
+}
+
+static inline void free_memmap(int node, unsigned long start, unsigned long end)
 {
 	unsigned long pg, pgend;
 
@@ -422,10 +437,8 @@ static inline void free_memmap(unsigned long start, unsigned long end)
 
 	start = __virt_to_phys(pg);
 	end   = __virt_to_phys(pgend);
-	/*
-	 * The mem_map is always stored in node 0
-	 */
-	free_bootmem_node(0, start, end - start);
+
+	free_bootmem_node(node, start, end - start);
 }
 
 static inline void free_unused_memmap_node(int node, struct meminfo *mi)
@@ -449,7 +462,7 @@ static inline void free_unused_memmap_node(int node, struct meminfo *mi)
 		 * between the current bank and the previous, free it.
 		 */
 		if (prev_bank_end && prev_bank_end != bank_start)
-			free_memmap(prev_bank_end, bank_start);
+			free_memmap(node, prev_bank_end, bank_start);
 
 		prev_bank_end = PAGE_ALIGN(mi->bank[i].start +
 					   mi->bank[i].size);

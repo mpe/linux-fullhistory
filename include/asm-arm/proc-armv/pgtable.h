@@ -1,11 +1,15 @@
 /*
- * linux/include/asm-arm/proc-armv/pgtable.h
+ *  linux/include/asm-arm/proc-armv/pgtable.h
  *
- * Copyright (C) 1995-1999 Russell King
+ *  Copyright (C) 1995-1999 Russell King
  *
- * 12-Jan-1997	RMK	Altered flushing routines to use function pointers
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ *  12-Jan-1997	RMK	Altered flushing routines to use function pointers
  *			now possible to combine ARM6, ARM7 and StrongARM versions.
- * 17-Apr-1999	RMK	Now pass an area size to clean_cache_area and
+ *  17-Apr-1999	RMK	Now pass an area size to clean_cache_area and
  *			flush_icache_area.
  */
 #ifndef __ASM_PROC_PGTABLE_H

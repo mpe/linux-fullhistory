@@ -1,5 +1,11 @@
 /*
- * linux/include/asm-arm/pgtable.h
+ *  linux/include/asm-arm/pgtable.h
+ *
+ *  Copyright (C) 2000 Russell King
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
  */
 #ifndef _ASMARM_PGTABLE_H
 #define _ASMARM_PGTABLE_H
@@ -88,7 +94,7 @@ extern void __handle_bad_pmd_kernel(pmd_t *pmd);
  * which, if __va and __pa are expensive causes twice the expense for
  * zero gain. --rmk
  */
-#define pte_page(x)		(mem_map + MAP_NR(__va(pte_val((x)))))
+#define pte_page(x)		(virt_to_page(__va(pte_val((x)))))
 #endif
 
 #define pmd_none(pmd)		(!pmd_val(pmd))
@@ -172,6 +178,10 @@ extern pgd_t swapper_pg_dir[PTRS_PER_PGD];
 
 #define module_map		vmalloc
 #define module_unmap		vfree
+
+/* Needs to be defined here and not in linux/mm.h, as it is arch dependent */
+/* FIXME: this is not correct */
+#define kern_addr_valid(addr)	(1)
 
 #define io_remap_page_range	remap_page_range
 

@@ -1,7 +1,11 @@
 /*
- * linux/include/asm-arm/arch-arc/system.h
+ *  linux/include/asm-arm/arch-arc/system.h
  *
- * Copyright (c) 1996-1999 Russell King and Dave Gilbert
+ *  Copyright (C) 1996-1999 Russell King and Dave Gilbert
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
  */
 
 static void arch_idle(void)

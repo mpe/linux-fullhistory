@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: mcast.c,v 1.32 2000/07/26 01:04:21 davem Exp $
+ *	$Id: mcast.c,v 1.33 2000/09/18 05:59:48 davem Exp $
  *
  *	Based on linux/ipv4/igmp.c and linux/ipv4/ip_sockglue.c 
  *
@@ -766,7 +766,6 @@ int __init igmp6_init(struct net_proto_family *ops)
 	return 0;
 }
 
-#ifdef MODULE
 void igmp6_cleanup(void)
 {
 	sock_release(igmp6_socket);
@@ -775,4 +774,3 @@ void igmp6_cleanup(void)
 	remove_proc_entry("net/igmp6", 0);
 #endif
 }
-#endif

@@ -67,13 +67,13 @@ void __init get_assabet_scr(void)
 {
 	unsigned long flags, scr, i;
 
-	save_flags_cli(flags);
+	local_irq_save(flags);
 	GPDR |= 0x3fc;			/* Configure GPIO 9:2 as outputs */
 	GPSR = 0x3fc;			/* Write 0xFF to GPIO 9:2 */
 	GPDR &= ~(0x3fc);		/* Configure GPIO 9:2 as inputs */
 	for(i = 100; i--; scr = GPLR);	/* Read GPIO 9:2 */
 	GPDR |= 0x3fc;			/*  restore correct pin direction */
-	restore_flags(flags);
+	local_irq_restore(flags);
 	scr &= 0x3fc;			/* save as system configuration byte. */
 
 	SCR_value = scr;
@@ -81,10 +81,11 @@ void __init get_assabet_scr(void)
 
 #endif  /* CONFIG_SA1100_ASSABET */
 
+
+#if defined(CONFIG_SA1100_BITSY)
 /*
  * Bitsy has extended, write-only memory-mapped GPIO's
  */
-#if defined(CONFIG_SA1100_BITSY)
 static int bitsy_egpio = EGPIO_BITSY_RS232_ON;
 void clr_bitsy_egpio(unsigned long x) 
 {
@@ -100,9 +101,10 @@ EXPORT_SYMBOL(clr_bitsy_egpio);
 EXPORT_SYMBOL(set_bitsy_egpio);
 #endif
 
+
 #ifdef CONFIG_SA1111
 
-void __init sa1111_init(void){
+static void __init sa1111_init(void){
   unsigned long id=SKID;
 
   if((id & SKID_ID_MASK) == SKID_SA1111_ID)
@@ -160,6 +162,8 @@ void __init sa1111_init(void){
   }
 }
 
+#else
+#define sa1111_init()  printk( "Warning: missing SA1111 support\n" )
 #endif
 
 

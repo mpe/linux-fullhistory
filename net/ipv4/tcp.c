@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp.c,v 1.173 2000/08/15 20:15:23 davem Exp $
+ * Version:	$Id: tcp.c,v 1.174 2000/09/18 05:59:48 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -1952,12 +1952,14 @@ int tcp_disconnect(struct sock *sk, int flags)
 
 	sk->dport = 0;
 
-	sk->rcv_saddr = 0;
-	sk->saddr = 0;
+	if (!(sk->userlocks&SOCK_BINDADDR_LOCK)) {
+		sk->rcv_saddr = 0;
+		sk->saddr = 0;
 #if defined(CONFIG_IPV6) || defined(CONFIG_IPV6_MODULE)
-	memset(&sk->net_pinfo.af_inet6.saddr, 0, 16);
-	memset(&sk->net_pinfo.af_inet6.rcv_saddr, 0, 16);
+		memset(&sk->net_pinfo.af_inet6.saddr, 0, 16);
+		memset(&sk->net_pinfo.af_inet6.rcv_saddr, 0, 16);
 #endif
+	}
 
 	sk->shutdown = 0;
 	sk->done = 0;
@@ -2281,6 +2283,68 @@ int tcp_getsockopt(struct sock *sk, int level, int optname, char *optval,
 	case TCP_WINDOW_CLAMP:
 		val = tp->window_clamp;
 		break;
+	case TCP_INFO:
+	{
+		struct tcp_info info;
+		u32 now = tcp_time_stamp;
+
+		if(get_user(len,optlen))
+			return -EFAULT;
+		info.tcpi_state = sk->state;
+		info.tcpi_ca_state = tp->ca_state;
+		info.tcpi_retransmits = tp->retransmits;
+		info.tcpi_probes = tp->probes_out;
+		info.tcpi_backoff = tp->backoff;
+		info.tcpi_options = 0;
+		if (tp->tstamp_ok)
+			info.tcpi_options |= TCPI_OPT_TIMESTAMPS;
+		if (tp->sack_ok)
+			info.tcpi_options |= TCPI_OPT_SACK;
+		if (tp->wscale_ok) {
+			info.tcpi_options |= TCPI_OPT_WSCALE;
+			info.tcpi_snd_wscale = tp->snd_wscale;
+			info.tcpi_rcv_wscale = tp->rcv_wscale;
+		} else {
+			info.tcpi_snd_wscale = 0;
+			info.tcpi_rcv_wscale = 0;
+		}
+#ifdef CONFIG_INET_ECN
+		if (tp->ecn_flags&TCP_ECN_OK)
+			info.tcpi_options |= TCPI_OPT_ECN;
+#endif
+
+		info.tcpi_rto = (1000000*tp->rto)/HZ;
+		info.tcpi_ato = (1000000*tp->ack.ato)/HZ;
+		info.tcpi_snd_mss = tp->mss_cache;
+		info.tcpi_rcv_mss = tp->ack.rcv_mss;
+
+		info.tcpi_unacked = tp->packets_out;
+		info.tcpi_sacked = tp->sacked_out;
+		info.tcpi_lost = tp->lost_out;
+		info.tcpi_retrans = tp->retrans_out;
+		info.tcpi_fackets = tp->fackets_out;
+
+		info.tcpi_last_data_sent = ((now - tp->lsndtime)*1000)/HZ;
+		info.tcpi_last_ack_sent = 0;
+		info.tcpi_last_data_recv = ((now - tp->ack.lrcvtime)*1000)/HZ;
+		info.tcpi_last_ack_recv = ((now - tp->rcv_tstamp)*1000)/HZ;
+
+		info.tcpi_pmtu = tp->pmtu_cookie;
+		info.tcpi_rcv_ssthresh = tp->rcv_ssthresh;
+		info.tcpi_rtt = ((1000000*tp->srtt)/HZ)>>3;
+		info.tcpi_rttvar = ((1000000*tp->mdev)/HZ)>>2;
+		info.tcpi_snd_ssthresh = tp->snd_ssthresh;
+		info.tcpi_snd_cwnd = tp->snd_cwnd;
+		info.tcpi_advmss = tp->advmss;
+		info.tcpi_reordering = tp->reordering;
+
+		len = min(len, sizeof(info));
+		if(put_user(len, optlen))
+			return -EFAULT;
+		if(copy_to_user(optval, &info,len))
+			return -EFAULT;
+		return 0;
+	}
 	default:
 		return -ENOPROTOOPT;
 	};

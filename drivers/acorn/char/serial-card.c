@@ -1,7 +1,11 @@
 /*
- * linux/arch/arm/drivers/char/serial-card.c
+ *  linux/drivers/acorn/char/serial-card.c
  *
- * Copyright (c) 1996-1999 Russell King.
+ *  Copyright (C) 1996-1999 Russell King.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
  *
  * A generic handler of serial expansion cards that use 16550s or
  * the like.

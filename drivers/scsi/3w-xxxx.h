@@ -338,7 +338,6 @@ int tw_state_request_finish(TW_Device_Extension *tw_dev,int request_id);
 int tw_state_request_start(TW_Device_Extension *tw_dev, int *request_id);
 void tw_unmask_command_interrupt(TW_Device_Extension *tw_dev);
 
-#if defined(HOSTS_C) || defined(MODULE)
 /* Scsi_Host_Template Initializer */
 #define TWXXXX {					\
 	next : NULL,					\
@@ -371,5 +370,4 @@ void tw_unmask_command_interrupt(TW_Device_Extension *tw_dev);
  	use_new_eh_code : 1,				\
 	emulated : 1					\
 }
-#endif /* HOSTS_C */
 #endif /* _3W_XXXX_H */

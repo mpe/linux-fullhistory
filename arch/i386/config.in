@@ -128,6 +128,7 @@ if [ "$CONFIG_MWINCHIP3D" = "y" ]; then
    define_bool CONFIG_X86_USE_PPRO_CHECKSUM y
    define_bool CONFIG_X86_USE_3DNOW y
 fi
+tristate 'Toshiba Laptop support' CONFIG_TOSHIBA
 
 tristate '/dev/cpu/microcode - Intel P6 CPU microcode support' CONFIG_MICROCODE
 tristate '/dev/cpu/*/msr - Model-specific register support' CONFIG_X86_MSR

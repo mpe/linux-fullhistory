@@ -1,9 +1,13 @@
 /*
- * linux/include/asm-arm/floppy.h
+ *  linux/include/asm-arm/floppy.h
  *
- * (C) 1996-2000 Russell King
+ *  Copyright (C) 1996-2000 Russell King
  *
- * Note that we don't touch FLOPPY_DMA nor FLOPPY_IRQ here
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ *  Note that we don't touch FLOPPY_DMA nor FLOPPY_IRQ here
  */
 #ifndef __ASM_ARM_FLOPPY_H
 #define __ASM_ARM_FLOPPY_H

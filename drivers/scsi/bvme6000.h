@@ -23,7 +23,6 @@ void NCR53c7x0_intr(int irq, void *dev_id, struct pt_regs * regs);
 #define CAN_QUEUE 24
 #endif
 
-#if defined(HOSTS_C) || defined(MODULE)
 #include <scsi/scsicam.h>
 
 #define BVME6000_SCSI  {name:                "BVME6000 NCR53c710 SCSI", \
@@ -37,5 +36,5 @@ void NCR53c7x0_intr(int irq, void *dev_id, struct pt_regs * regs);
 		       sg_tablesize:        63,          \
 		       cmd_per_lun:	    3,     \
 		       use_clustering:      DISABLE_CLUSTERING }
-#endif
+
 #endif /* BVME6000_SCSI_H */

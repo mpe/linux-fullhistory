@@ -1,13 +1,17 @@
 /*
- * linux/include/asm-arm/arch-arc/dma.h
+ *  linux/include/asm-arm/arch-arc/dma.h
  *
- * Copyright (C) 1996-1998 Russell King
+ *  Copyright (C) 1996-1998 Russell King
  *
- * Acorn Archimedes/A5000 architecture virtual DMA
- * implementation
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
  *
- * Modifications:
- *  04-04-1998	RMK	Merged arc and a5k versions
+ *  Acorn Archimedes/A5000 architecture virtual DMA
+ *  implementation
+ *
+ *  Modifications:
+ *   04-04-1998	RMK	Merged arc and a5k versions
  */
 #ifndef __ASM_ARCH_DMA_H
 #define __ASM_ARCH_DMA_H

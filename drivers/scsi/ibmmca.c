@@ -3294,12 +3294,10 @@ static int option_setup(char *str)
 __setup("ibmmcascsi=", option_setup);
 #endif
 
-#ifdef MODULE
 /* Eventually this will go into an include file, but this will be later */
-Scsi_Host_Template driver_template = IBMMCA;
+static Scsi_Host_Template driver_template = IBMMCA;
 
 #include "scsi_module.c"
-#endif
 
 /*--------------------------------------------------------------------*/
 

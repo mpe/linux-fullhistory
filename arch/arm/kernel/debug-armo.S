@@ -1,9 +1,13 @@
 /*
- * linux/arch/arm/kernel/debug-armo.S
+ *  linux/arch/arm/kernel/debug-armo.S
  *
- * Copyright (C) 1999 Russell King
+ *  Copyright (C) 1999 Russell King
  *
- * 26-bit debugging code
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ *  26-bit debugging code
  */
 #include <linux/linkage.h>
 

@@ -1,11 +1,10 @@
 /*
- * arch/arm/mm/mm-lusl7200.c
+ *  linux/arch/arm/mm/mm-lusl7200.c
  *
- * Extra MM routines for L7200 architecture
+ *  Copyright (C) 2000 Steve Hill (sjhill@cotw.com)
  *
- * Copyright (C) 2000 Steve Hill (sjhill@cotw.com)
+ *  Extra MM routines for L7200 architecture
  */
-
 #include <linux/init.h>
 
 #include <asm/hardware.h>
@@ -13,13 +12,15 @@
 #include <asm/proc/domain.h>
 #include <asm/setup.h>
 
-#include "map.h"
+#include <asm/mach/map.h>
 
-#define SIZE(x) (sizeof(x) / sizeof(x[0]))
-
-struct map_desc io_desc[] __initdata = {
+static struct map_desc l7200_io_desc[] __initdata = {
 	{ IO_BASE,	IO_START,	IO_SIZE,	DOMAIN_IO, 0, 1 ,0 ,0},
 	{ IO_BASE_2,	IO_START_2,	IO_SIZE_2,	DOMAIN_IO, 0, 1 ,0 ,0},
+	LAST_DESC
 };
 
-unsigned int __initdata io_desc_size = SIZE(io_desc);
+void __init l7200_map_io(void)
+{
+	iotable_init(l7200_io_desc);
+}

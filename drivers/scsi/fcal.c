@@ -292,11 +292,8 @@ static int fcal_encode_addr(Scsi_Cmnd *SCpnt, u16 *addr, fc_channel *fc, fcp_cmn
 	return 0;
 }
 
-#ifdef MODULE
-
-Scsi_Host_Template driver_template = FCAL;
+static Scsi_Host_Template driver_template = FCAL;
 
 #include "scsi_module.c"
 
 EXPORT_NO_SYMBOLS;
-#endif /* MODULE */

@@ -1,11 +1,15 @@
 /*
- * linux/include/asm-arm/arch-ebsa285/io.h
+ *  linux/include/asm-arm/arch-ebsa285/io.h
  *
- * Copyright (C) 1997-1999 Russell King
+ *  Copyright (C) 1997-1999 Russell King
  *
- * Modifications:
- *  06-12-1997	RMK	Created.
- *  07-04-1999	RMK	Major cleanup
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ *  Modifications:
+ *   06-12-1997	RMK	Created.
+ *   07-04-1999	RMK	Major cleanup
  */
 #ifndef __ASM_ARM_ARCH_IO_H
 #define __ASM_ARM_ARCH_IO_H
@@ -74,7 +78,7 @@ extern __inline__ void __arch_putw(unsigned int value, unsigned long a)
 #define outw(v,p)		__arch_putw(v,__io_pci(p))
 #define outl(v,p)		__arch_putl(v,__io_pci(p))
 
-#include <asm/dec21285.h>
+#include <asm/hardware/dec21285.h>
 
 /*
  * ioremap support - validate a PCI memory address,

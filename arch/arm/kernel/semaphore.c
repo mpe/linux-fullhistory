@@ -1,11 +1,15 @@
 /*
- * ARM semaphore implementation, taken from
+ *  ARM semaphore implementation, taken from
  *
- * i386 semaphore implementation.
+ *  i386 semaphore implementation.
  *
- * (C) Copyright 1999 Linus Torvalds
+ *  (C) Copyright 1999 Linus Torvalds
  *
- * Modified for ARM by Russell King
+ *  Modified for ARM by Russell King
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
  */
 #include <linux/config.h>
 #include <linux/sched.h>

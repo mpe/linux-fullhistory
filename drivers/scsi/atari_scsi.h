@@ -51,8 +51,6 @@ int atari_scsi_release (struct Scsi_Host *);
 #define	DEFAULT_USE_TAGGED_QUEUING	0
 
 
-#if defined (HOSTS_C) || defined (MODULE)
-
 #define ATARI_SCSI {    proc_info:         atari_scsi_proc_info,	\
 			name:              "Atari native SCSI",		\
 			detect:            atari_scsi_detect,		\
@@ -66,10 +64,6 @@ int atari_scsi_release (struct Scsi_Host *);
 			sg_tablesize:      0, /* initialized at run-time */	\
 			cmd_per_lun:       0, /* initialized at run-time */	\
 			use_clustering:	   DISABLE_CLUSTERING }
-
-#endif
-
-#ifndef HOSTS_C
 
 #define	NCR5380_implementation_fields	/* none */
 
@@ -267,7 +261,6 @@ int atari_scsi_release (struct Scsi_Host *);
 #define NDEBUG_ANY	0xffffffff
 
 
-#endif /* else def HOSTS_C */
 #endif /* ndef ASM */
 #endif /* ATARI_SCSI_H */
 

@@ -96,7 +96,7 @@ struct fib6_walker_t
 extern struct fib6_walker_t fib6_walker_list;
 extern rwlock_t fib6_walker_lock;
 
-extern __inline__ void fib6_walker_link(struct fib6_walker_t *w)
+static inline void fib6_walker_link(struct fib6_walker_t *w)
 {
 	write_lock_bh(&fib6_walker_lock);
 	w->next = fib6_walker_list.next;
@@ -106,7 +106,7 @@ extern __inline__ void fib6_walker_link(struct fib6_walker_t *w)
 	write_unlock_bh(&fib6_walker_lock);
 }
 
-extern __inline__ void fib6_walker_unlink(struct fib6_walker_t *w)
+static inline void fib6_walker_unlink(struct fib6_walker_t *w)
 {
 	write_lock_bh(&fib6_walker_lock);
 	w->next->prev = w->prev;

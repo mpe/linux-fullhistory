@@ -4,15 +4,20 @@
  *  Copyright (C) 1991, 1992, 1995  Linus Torvalds
  *  Modifications for ARM (C) 1994, 1995, 1996,1997 Russell King
  *
- * This file contains the ARM-specific time handling details:
- * reading the RTC at bootup, etc...
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
  *
- * 1994-07-02  Alan Modra
- *             fixed set_rtc_mmss, fixed time.year for >= 2000, new mktime
- * 1998-12-20  Updated NTP code according to technical memorandum Jan '96
- *             "A Kernel Model for Precision Timekeeping" by Dave Mills
+ *  This file contains the ARM-specific time handling details:
+ *  reading the RTC at bootup, etc...
+ *
+ *  1994-07-02  Alan Modra
+ *              fixed set_rtc_mmss, fixed time.year for >= 2000, new mktime
+ *  1998-12-20  Updated NTP code according to technical memorandum Jan '96
+ *              "A Kernel Model for Precision Timekeeping" by Dave Mills
  */
 #include <linux/config.h>
+#include <linux/module.h>
 #include <linux/sched.h>
 #include <linux/kernel.h>
 #include <linux/interrupt.h>
@@ -120,6 +125,16 @@ static inline void do_set_rtc(void)
 
 #include <asm/leds.h>
 
+static void dummy_leds_event(led_event_t evt)
+{
+}
+
+void (*leds_event)(led_event_t) = dummy_leds_event;
+
+#ifdef CONFIG_MODULES
+EXPORT_SYMBOL(leds_event);
+#endif
+
 static void do_leds(void)
 {
 #ifdef CONFIG_LEDS_CPU
@@ -203,7 +218,7 @@ void do_settimeofday(struct timeval *tv)
 }
 
 static struct irqaction timer_irq = {
-	NULL, 0, 0, "timer", NULL, NULL
+	name: "timer",
 };
 
 /*

@@ -166,7 +166,7 @@ struct tcp_tw_bucket {
 
 extern kmem_cache_t *tcp_timewait_cachep;
 
-extern __inline__ void tcp_tw_put(struct tcp_tw_bucket *tw)
+static inline void tcp_tw_put(struct tcp_tw_bucket *tw)
 {
 	if (atomic_dec_and_test(&tw->refcnt)) {
 #ifdef INET_REFCNT_DEBUG
@@ -495,7 +495,7 @@ extern kmem_cache_t *tcp_openreq_cachep;
 #define tcp_openreq_alloc()		kmem_cache_alloc(tcp_openreq_cachep, SLAB_ATOMIC)
 #define tcp_openreq_fastfree(req)	kmem_cache_free(tcp_openreq_cachep, req)
 
-extern __inline__ void tcp_openreq_free(struct open_request *req)
+static inline void tcp_openreq_free(struct open_request *req)
 {
 	req->class->destructor(req);
 	tcp_openreq_fastfree(req);
@@ -655,20 +655,6 @@ static __inline__ void tcp_delack_init(struct tcp_opt *tp)
 {
 	memset(&tp->ack, 0, sizeof(tp->ack));
 }
-
-enum tcp_ca_state
-{
-	TCP_CA_Open = 0,
-#define TCPF_CA_Open	(1<<TCP_CA_Open)
-	TCP_CA_Disorder = 1,
-#define TCPF_CA_Disorder (1<<TCP_CA_Disorder)
-	TCP_CA_CWR = 2,
-#define TCPF_CA_CWR	(1<<TCP_CA_CWR)
-	TCP_CA_Recovery = 3,
-#define TCPF_CA_Recovery (1<<TCP_CA_Recovery)
-	TCP_CA_Loss = 4
-#define TCPF_CA_Loss	(1<<TCP_CA_Loss)
-};
 
 
 enum tcp_tw_status
@@ -893,7 +879,7 @@ static __inline__ unsigned int tcp_current_mss(struct sock *sk)
  * Underestimations are more easy to detect and fix by tcp_measure_rcv_mss().
  */
 
-extern __inline__ void tcp_initialize_rcv_mss(struct sock *sk)
+static inline void tcp_initialize_rcv_mss(struct sock *sk)
 {
 	struct tcp_opt *tp = &sk->tp_pinfo.af_tcp;
 
@@ -1034,7 +1020,7 @@ static __inline__ int tcp_packets_in_flight(struct tcp_opt *tp)
  * 	one half the current congestion window, but no
  *	less than two segments
  */
-extern __inline__ __u32 tcp_recalc_ssthresh(struct tcp_opt *tp)
+static inline __u32 tcp_recalc_ssthresh(struct tcp_opt *tp)
 {
 	return max(tp->snd_cwnd>>1, 2);
 }
@@ -1043,7 +1029,7 @@ extern __inline__ __u32 tcp_recalc_ssthresh(struct tcp_opt *tp)
  * The exception is rate halving phase, when cwnd is decreasing towards
  * ssthresh.
  */
-extern __inline__ __u32 tcp_current_ssthresh(struct tcp_opt *tp)
+static inline __u32 tcp_current_ssthresh(struct tcp_opt *tp)
 {
 	if ((1<<tp->ca_state)&(TCPF_CA_CWR|TCPF_CA_Recovery))
 		return tp->snd_ssthresh;
@@ -1072,7 +1058,7 @@ static inline void tcp_cwnd_validate(struct sock *sk, struct tcp_opt *tp)
 }
 
 /* Set slow start threshould and cwnd not falling to slow start */
-extern __inline__ void __tcp_enter_cwr(struct tcp_opt *tp)
+static inline void __tcp_enter_cwr(struct tcp_opt *tp)
 {
 	tp->undo_marker = 0;
 	tp->snd_ssthresh = tcp_recalc_ssthresh(tp);
@@ -1083,7 +1069,7 @@ extern __inline__ void __tcp_enter_cwr(struct tcp_opt *tp)
 	TCP_ECN_queue_cwr(tp);
 }
 
-extern __inline__ void tcp_enter_cwr(struct tcp_opt *tp)
+static inline void tcp_enter_cwr(struct tcp_opt *tp)
 {
 	tp->prior_ssthresh = 0;
 	if (tp->ca_state < TCP_CA_CWR) {
@@ -1307,6 +1293,8 @@ static __inline__ void tcp_set_state(struct sock *sk, int state)
 
 	case TCP_CLOSE:
 		sk->prot->unhash(sk);
+		if (sk->prev && !(sk->userlocks&SOCK_BINDPORT_LOCK))
+			tcp_put_port(sk);
 		/* fall through */
 	default:
 		if (oldstate==TCP_ESTABLISHED)
@@ -1378,7 +1366,7 @@ static __inline__ void tcp_build_and_update_options(__u32 *ptr, struct tcp_opt *
  * MAX_SYN_SIZE to match the new maximum number of options that you
  * can generate.
  */
-extern __inline__ void tcp_syn_build_options(__u32 *ptr, int mss, int ts, int sack,
+static inline void tcp_syn_build_options(__u32 *ptr, int mss, int ts, int sack,
 					     int offer_wscale, int wscale, __u32 tstamp, __u32 ts_recent)
 {
 	/* We always get an MSS option.
@@ -1418,7 +1406,7 @@ extern __inline__ void tcp_syn_build_options(__u32 *ptr, int mss, int ts, int sa
  * be a multiple of mss if possible. We assume here that mss >= 1.
  * This MUST be enforced by all callers.
  */
-extern __inline__ void tcp_select_initial_window(int space, __u32 mss,
+static inline void tcp_select_initial_window(int space, __u32 mss,
 	__u32 *rcv_wnd,
 	__u32 *window_clamp,
 	int wscale_ok,
@@ -1477,32 +1465,32 @@ static inline int tcp_win_from_space(int space)
 }
 
 /* Note: caller must be prepared to deal with negative returns */ 
-extern __inline__ int tcp_space(struct sock *sk)
+static inline int tcp_space(struct sock *sk)
 {
 	return tcp_win_from_space(sk->rcvbuf - atomic_read(&sk->rmem_alloc));
 } 
 
-extern __inline__ int tcp_full_space( struct sock *sk)
+static inline int tcp_full_space( struct sock *sk)
 {
 	return tcp_win_from_space(sk->rcvbuf); 
 }
 
-extern __inline__ void tcp_acceptq_removed(struct sock *sk)
+static inline void tcp_acceptq_removed(struct sock *sk)
 {
 	sk->ack_backlog--;
 }
 
-extern __inline__ void tcp_acceptq_added(struct sock *sk)
+static inline void tcp_acceptq_added(struct sock *sk)
 {
 	sk->ack_backlog++;
 }
 
-extern __inline__ int tcp_acceptq_is_full(struct sock *sk)
+static inline int tcp_acceptq_is_full(struct sock *sk)
 {
 	return sk->ack_backlog > sk->max_ack_backlog;
 }
 
-extern __inline__ void tcp_acceptq_queue(struct sock *sk, struct open_request *req,
+static inline void tcp_acceptq_queue(struct sock *sk, struct open_request *req,
 					 struct sock *child)
 {
 	struct tcp_opt *tp = &sk->tp_pinfo.af_tcp;
@@ -1528,7 +1516,7 @@ struct tcp_listen_opt
 	struct open_request	*syn_table[TCP_SYNQ_HSIZE];
 };
 
-extern __inline__ void
+static inline void
 tcp_synq_removed(struct sock *sk, struct open_request *req)
 {
 	struct tcp_listen_opt *lopt = sk->tp_pinfo.af_tcp.listen_opt;
@@ -1539,7 +1527,7 @@ tcp_synq_removed(struct sock *sk, struct open_request *req)
 		lopt->qlen_young--;
 }
 
-extern __inline__ void tcp_synq_added(struct sock *sk)
+static inline void tcp_synq_added(struct sock *sk)
 {
 	struct tcp_listen_opt *lopt = sk->tp_pinfo.af_tcp.listen_opt;
 
@@ -1548,22 +1536,22 @@ extern __inline__ void tcp_synq_added(struct sock *sk)
 	lopt->qlen_young++;
 }
 
-extern __inline__ int tcp_synq_len(struct sock *sk)
+static inline int tcp_synq_len(struct sock *sk)
 {
 	return sk->tp_pinfo.af_tcp.listen_opt->qlen;
 }
 
-extern __inline__ int tcp_synq_young(struct sock *sk)
+static inline int tcp_synq_young(struct sock *sk)
 {
 	return sk->tp_pinfo.af_tcp.listen_opt->qlen_young;
 }
 
-extern __inline__ int tcp_synq_is_full(struct sock *sk)
+static inline int tcp_synq_is_full(struct sock *sk)
 {
 	return tcp_synq_len(sk)>>sk->tp_pinfo.af_tcp.listen_opt->max_qlen_log;
 }
 
-extern __inline__ void tcp_synq_unlink(struct tcp_opt *tp, struct open_request *req,
+static inline void tcp_synq_unlink(struct tcp_opt *tp, struct open_request *req,
 				       struct open_request **prev)
 {
 	write_lock(&tp->syn_wait_lock);
@@ -1571,7 +1559,7 @@ extern __inline__ void tcp_synq_unlink(struct tcp_opt *tp, struct open_request *
 	write_unlock(&tp->syn_wait_lock);
 }
 
-extern __inline__ void tcp_synq_drop(struct sock *sk, struct open_request *req,
+static inline void tcp_synq_drop(struct sock *sk, struct open_request *req,
 				     struct open_request **prev)
 {
 	tcp_synq_unlink(&sk->tp_pinfo.af_tcp, req, prev);
@@ -1679,7 +1667,7 @@ extern void tcp_listen_wlock(void);
  *   use plain read_(un)lock(&tcp_lhash_lock).
  */
 
-extern __inline__ void tcp_listen_lock(void)
+static inline void tcp_listen_lock(void)
 {
 	/* read_lock synchronizes to candidates to writers */
 	read_lock(&tcp_lhash_lock);
@@ -1687,7 +1675,7 @@ extern __inline__ void tcp_listen_lock(void)
 	read_unlock(&tcp_lhash_lock);
 }
 
-extern __inline__ void tcp_listen_unlock(void)
+static inline void tcp_listen_unlock(void)
 {
 	if (atomic_dec_and_test(&tcp_lhash_users))
 		wake_up(&tcp_lhash_wait);

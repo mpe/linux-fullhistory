@@ -11,7 +11,7 @@
 #define __ASM_ARCH_HARDWARE_H
 
 #include <asm/arch/memory.h>
-#include <asm/iomd.h>
+#include <asm/hardware/iomd.h>
 
 /*
  * What hardware must be present

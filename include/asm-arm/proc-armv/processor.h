@@ -1,15 +1,19 @@
 /*
- * linux/include/asm-arm/proc-armv/processor.h
+ *  linux/include/asm-arm/proc-armv/processor.h
  *
- * Copyright (c) 1996-1999 Russell King.
+ *  Copyright (C) 1996-1999 Russell King.
  *
- * Changelog:
- *  20-09-1996	RMK	Created
- *  26-09-1996	RMK	Added 'EXTRA_THREAD_STRUCT*'
- *  28-09-1996	RMK	Moved start_thread into the processor dependencies
- *  09-09-1998	PJB	Delete redundant `wp_works_ok'
- *  30-05-1999	PJB	Save sl across context switches
- *  31-07-1999	RMK	Added 'domain' stuff
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ *  Changelog:
+ *   20-09-1996	RMK	Created
+ *   26-09-1996	RMK	Added 'EXTRA_THREAD_STRUCT*'
+ *   28-09-1996	RMK	Moved start_thread into the processor dependencies
+ *   09-09-1998	PJB	Delete redundant `wp_works_ok'
+ *   30-05-1999	PJB	Save sl across context switches
+ *   31-07-1999	RMK	Added 'domain' stuff
  */
 #ifndef __ASM_PROC_PROCESSOR_H
 #define __ASM_PROC_PROCESSOR_H

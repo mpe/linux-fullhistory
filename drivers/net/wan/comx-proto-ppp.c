@@ -200,6 +200,8 @@ static int syncppp_init(struct net_device *dev)
 	struct ppp_device *pppdev = (struct ppp_device *)ch->if_ptr;
 
 	ch->LINE_privdata = kmalloc(sizeof(struct syncppp_data), GFP_KERNEL);
+	if (!ch->LINE_privdata)
+		return -ENOMEM;
 
 	pppdev->dev = dev;
 	sppp_attach(pppdev);

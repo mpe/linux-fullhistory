@@ -2456,11 +2456,10 @@ int AM53C974_release(struct Scsi_Host *shp)
 
 
 #ifdef MODULE
-static Scsi_Host_Template driver_template = AM53C974;
-
 /* You can specify overrides=a,b,c,d in the same format at AM53C974=a,b,c,d
    on boot up */
-   
 MODULE_PARM(overrides, "1-32i");
-#include "scsi_module.c"
 #endif
+
+static Scsi_Host_Template driver_template = AM53C974;
+#include "scsi_module.c"

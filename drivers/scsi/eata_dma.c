@@ -1520,11 +1520,9 @@ int eata_detect(Scsi_Host_Template * tpnt)
     return(registered_HBAs);
 }
 
-#ifdef MODULE
 /* Eventually this will go into an include file, but this will be later */
-Scsi_Host_Template driver_template = EATA_DMA;
+static Scsi_Host_Template driver_template = EATA_DMA;
 #include "scsi_module.c"
-#endif
 
 /*
  * Overrides for Emacs so that we almost follow Linus's tabbing style.

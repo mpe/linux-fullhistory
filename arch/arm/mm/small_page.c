@@ -3,12 +3,15 @@
  *
  *  Copyright (C) 1996  Russell King
  *
- * Changelog:
- *  26/01/1996	RMK	Cleaned up various areas to make little more generic
- *  07/02/1999	RMK	Support added for 16K and 32K page sizes
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ *  Changelog:
+ *   26/01/1996	RMK	Cleaned up various areas to make little more generic
+ *   07/02/1999	RMK	Support added for 16K and 32K page sizes
  *			containing 8K blocks
  */
-
 #include <linux/signal.h>
 #include <linux/sched.h>
 #include <linux/kernel.h>
@@ -70,6 +73,8 @@ static struct order orders[] = {
 #define TEST_AND_CLEAR_USED(pg,off)	(test_and_clear_bit(off, &USED_MAP(pg)))
 #define SET_USED(pg,off)		(set_bit(off, &USED_MAP(pg)))
 
+static spinlock_t small_page_lock = SPIN_LOCK_UNLOCKED;
+
 static void add_page_to_queue(struct page *page, struct page **p)
 {
 #ifdef PEDANTIC
@@ -99,11 +104,10 @@ static unsigned long __get_small_page(int priority, struct order *order)
 	struct page *page;
 	int offset;
 
-	save_flags(flags);
 	if (!order->queue)
 		goto need_new_page;
 
-	cli();
+	spin_lock_irqsave(&small_page_lock, flags);
 	page = order->queue;
 again:
 #ifdef PEDANTIC
@@ -114,12 +118,14 @@ again:
 	SET_USED(page, offset);
 	if (USED_MAP(page) == order->all_used)
 		remove_page_from_queue(page);
-	restore_flags(flags);
+	spin_unlock_irqrestore(&small_page_lock, flags);
 
 	return (unsigned long) page_address(page) + (offset << order->shift);
 
 need_new_page:
 	page = alloc_page(priority);
+
+	spin_lock_irqsave(&small_page_lock, flags);
 	if (!order->queue) {
 		if (!page)
 			goto no_page;
@@ -135,7 +141,7 @@ need_new_page:
 	goto again;
 
 no_page:
-	restore_flags(flags);
+	spin_unlock_irqrestore(&small_page_lock, flags);
 	return 0;
 }
 
@@ -164,7 +170,7 @@ static void __free_small_page(unsigned long spage, struct order *order)
 		/*
 		 * the following must be atomic wrt get_page
 		 */
-		save_flags_cli(flags);
+		spin_lock_irqsave(&small_page_lock, flags);
 
 		if (USED_MAP(page) == order->all_used)
 			add_page_to_queue(page, &order->queue);
@@ -175,7 +181,7 @@ static void __free_small_page(unsigned long spage, struct order *order)
 		if (USED_MAP(page) == 0)
 			goto free_page;
 
-		restore_flags(flags);
+		spin_unlock_irqrestore(&small_page_lock, flags);
 	}
 	return;
 
@@ -184,7 +190,7 @@ free_page:
 	 * unlink the page from the small page queue and free it
 	 */
 	remove_page_from_queue(page);
-	restore_flags(flags);
+	spin_unlock_irqrestore(&small_page_lock, flags);
 	ClearPageReserved(page);
 	__free_page(page);
 	return;

@@ -38,7 +38,6 @@
 #include <linux/smp.h>
 #include <linux/spinlock.h>
 
-#include <asm/dec21285.h>
 #include <asm/hardware.h>
 #include <asm/mach-types.h>
 #include <asm/system.h>

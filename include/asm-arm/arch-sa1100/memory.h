@@ -24,22 +24,22 @@
  */
 #define PHYS_OFFSET	(0xc0000000UL)
 
-
+/*
+ * We take advantage of the fact that physical and virtual address can be the
+ * same.  The NUMA code is handling the large holes that might exist between
+ * all memory banks.
+ */
 #define __virt_to_phys__is_a_macro
 #define __phys_to_virt__is_a_macro
-
-/*
- * The following gives a maximum memory size of 128MB (32MB in each bank).
- */
-#define __virt_to_phys(x)	(((x) & 0xf9ffffff) | ((x) & 0x06000000) << 2)
-#define __phys_to_virt(x)	(((x) & 0xe7ffffff) | ((x) & 0x18000000) >> 2)
+#define __virt_to_phys(x)	(x)
+#define __phys_to_virt(x)	(x)
 
 /*
  * Virtual view <-> DMA view memory address translations
  * virt_to_bus: Used to translate the virtual address to an
- *		 address suitable to be passed to set_dma_addr
+ *		address suitable to be passed to set_dma_addr
  * bus_to_virt: Used to convert an address for DMA operations
- *		 to an address that the kernel can use.
+ *		to an address that the kernel can use.
  *
  * On the SA1100, bus addresses are equivalent to physical addresses.
  */

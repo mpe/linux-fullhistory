@@ -2,6 +2,10 @@
  *  linux/arch/arm/kernel/setup.c
  *
  *  Copyright (C) 1995-2000 Russell King
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
  */
 #include <linux/config.h>
 #include <linux/kernel.h>
@@ -21,7 +25,7 @@
 #include <asm/setup.h>
 #include <asm/mach-types.h>
 
-#include "arch.h"
+#include <asm/mach/arch.h>
 
 #ifndef MEM_SIZE
 #define MEM_SIZE	(16*1024*1024)
@@ -31,7 +35,7 @@
 #define CONFIG_CMDLINE ""
 #endif
 
-extern void paging_init(struct meminfo *);
+extern void paging_init(struct meminfo *, struct machine_desc *desc);
 extern void bootmem_init(struct meminfo *);
 extern void reboot_setup(char *str);
 extern void disable_hlt(void);
@@ -163,7 +167,7 @@ static struct machine_desc * __init setup_architecture(unsigned int nr)
 
 	printk("Architecture: %s\n", list->name);
 	if (compat)
-		printk(KERN_WARNING "Using compatability code "
+		printk(KERN_WARNING "Using compatibility code "
 			"scheduled for removal in v%d.%d.%d\n",
 			compat >> 24, (compat >> 12) & 0x3ff,
 			compat & 0x3ff);
@@ -378,7 +382,7 @@ void __init setup_arch(char **cmdline_p)
 	saved_command_line[COMMAND_LINE_SIZE-1] = '\0';
 	parse_cmdline(&meminfo, cmdline_p, from);
 	bootmem_init(&meminfo);
-	paging_init(&meminfo);
+	paging_init(&meminfo, mdesc);
 	request_standard_resources(&meminfo, mdesc);
 
 #ifdef CONFIG_VT

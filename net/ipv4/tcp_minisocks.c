@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_minisocks.c,v 1.3 2000/09/05 23:13:48 davem Exp $
+ * Version:	$Id: tcp_minisocks.c,v 1.4 2000/09/18 05:59:48 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -662,6 +662,7 @@ struct sock *tcp_create_openreq_child(struct sock *sk, struct open_request *req,
 		sock_lock_init(newsk);
 		bh_lock_sock(newsk);
 
+		newsk->dst_lock	= RW_LOCK_UNLOCKED;
 		atomic_set(&newsk->rmem_alloc, 0);
 		skb_queue_head_init(&newsk->receive_queue);
 		atomic_set(&newsk->wmem_alloc, 0);
@@ -671,6 +672,7 @@ struct sock *tcp_create_openreq_child(struct sock *sk, struct open_request *req,
 		newsk->forward_alloc = 0;
 
 		newsk->done = 0;
+		newsk->userlocks = sk->userlocks & ~SOCK_BINDPORT_LOCK;
 		newsk->proc = 0;
 		newsk->backlog.head = newsk->backlog.tail = NULL;
 		newsk->callback_lock = RW_LOCK_UNLOCKED;

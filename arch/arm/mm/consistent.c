@@ -1,5 +1,13 @@
 /*
- * Dynamic DMA mapping support.
+ *  linux/arch/arm/mm/consistent.c
+ *
+ *  Copyright (C) 2000 Russell King
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ *  Dynamic DMA mapping support.
  */
 #include <linux/config.h>
 #include <linux/types.h>
@@ -43,18 +51,19 @@ void *consistent_alloc(int gfp, size_t size, dma_addr_t *dma_handle)
 	ret = __ioremap(virt_to_phys((void *)page), size, 0);
 	if (ret) {
 		/* free wasted pages */
-		unsigned long end = page + (PAGE_SIZE << order);
+		unsigned long end;
 
 		/*
 		 * we need to ensure that there are no
 		 * cachelines in use, or worse dirty in
 		 * this area.
 		 */
-		dma_cache_inv(page, size);
-		dma_cache_inv(ret, size);
+		invalidate_dcache_range(page, page + size);
+		invalidate_dcache_range((unsigned long)ret, (unsigned long)ret + size);
 
-		*dma_handle = virt_to_bus((void *)page);
+		*dma_handle = __virt_to_bus(page);
 
+		end = page + (PAGE_SIZE << order);
 		page += size;
 		while (page < end) {
 			free_page(page);
@@ -102,17 +111,20 @@ void consistent_free(void *vaddr)
  */
 void consistent_sync(void *vaddr, size_t size, int direction)
 {
+	unsigned long start = (unsigned long)vaddr;
+	unsigned long end   = start + size;
+
 	switch (direction) {
 	case PCI_DMA_NONE:
 		BUG();
 	case PCI_DMA_FROMDEVICE:	/* invalidate only */
-		dma_cache_inv(vaddr, size);
+		invalidate_dcache_range(start, end);
 		break;
 	case PCI_DMA_TODEVICE:		/* writeback only */
-		dma_cache_wback(vaddr, size);
+		clean_dcache_range(start, end);
 		break;
 	case PCI_DMA_BIDIRECTIONAL:	/* writeback and invalidate */
-		dma_cache_wback_inv(vaddr, size);
+		flush_dcache_range(start, end);
 		break;
 	}
 }

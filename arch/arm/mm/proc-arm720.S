@@ -1,27 +1,44 @@
 /*
- * linux/arch/arm/mm/proc-arm720.S: MMU functions for ARM720
+ *  linux/arch/arm/mm/proc-arm720.S: MMU functions for ARM720
  *
- * Copyright (C) 2000 Steve Hill (sjhill@cotw.com)
- *                    Rob Scott (rscott@mtrob.fdns.net)
+ *  Copyright (C) 2000 Steve Hill (sjhill@cotw.com)
+ *                     Rob Scott (rscott@mtrob.fdns.net)
+ *  Copyright (C) 2000 ARM Limited, Deep Blue Solutions Ltd.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+ *
  *
  * These are the low level assembler for performing cache and TLB
- * functions on the ARM720T.
+ * functions on the ARM720T.  The ARM720T has a writethrough IDC
+ * cache, so we don't need to clean it.
  *
- * Changelog:
- *  05-09-2000  SJH	Created by moving 720 specific functions
- *			out of 'proc-arm6,7.S' per RSK discussion
- *  07-25-2000  SJH	Added idle function.
+ *  Changelog:
+ *   05-09-2000 SJH	Created by moving 720 specific functions
+ *			out of 'proc-arm6,7.S' per RMK discussion
+ *   07-25-2000 SJH	Added idle function.
+ *   08-25-2000	DBS	Updated for integration of ARM Ltd version.
  */
 #include <linux/linkage.h>
 #include <asm/assembler.h>
 #include <asm/procinfo.h>
-#include <asm/errno.h>
 #include <asm/hardware.h>
 #include "../lib/constants.h"
 
 /*
- * Function: arm720_flush_cache_all (void)
- *	   : arm720_flush_cache_page (unsigned long address, int size,
+ * Function: arm720_cache_clean_invalidate_all (void)
+ *	   : arm720_cache_clean_invalidate_page (unsigned long address, int size,
  *                                    int flags)
  *
  * Params  : address	Area start address
@@ -30,33 +47,37 @@
  *
  * Purpose : Flush all cache lines
  */
-ENTRY(cpu_arm720_flush_cache_all)
-ENTRY(cpu_arm720_flush_cache_area)
-ENTRY(cpu_arm720_flush_cache_entry)
-ENTRY(cpu_arm720_flush_icache_area)
-ENTRY(cpu_arm720_flush_icache_page)
-ENTRY(cpu_arm720_cache_wback_area)
-ENTRY(cpu_arm720_cache_purge_area)
+ENTRY(cpu_arm720_cache_clean_invalidate_all)
+ENTRY(cpu_arm720_cache_clean_invalidate_range)
+ENTRY(cpu_arm720_icache_invalidate_range)
+ENTRY(cpu_arm720_icache_invalidate_page)
+ENTRY(cpu_arm720_dcache_invalidate_range)
 		mov	r0, #0
 		mcr	p15, 0, r0, c7, c7, 0		@ flush cache
 		mov	pc, lr
 
-ENTRY(cpu_arm720_clean_cache_area)
+/*
+ * These just expect cache lines to be cleaned.  Since we have a writethrough
+ * cache, we never have any dirty cachelines to worry about.
+ */
+ENTRY(cpu_arm720_dcache_clean_range)
+ENTRY(cpu_arm720_dcache_clean_page)
+ENTRY(cpu_arm720_dcache_clean_entry)
 ENTRY(cpu_arm720_flush_ram_page)
 		mov	pc, lr
 
 /*
- * Function: arm720_flush_tlb_all (void)
+ * Function: arm720_tlb_invalidate_all (void)
  *
  * Purpose : flush all TLB entries in all caches
  */
-ENTRY(cpu_arm720_flush_tlb_all)
+ENTRY(cpu_arm720_tlb_invalidate_all)
 		mov	r0, #0
 		mcr	p15, 0, r0, c8, c7, 0		@ flush TLB (v4)
 		mov	pc, lr
 
 /*
- * Function: arm720_flush_tlb_page (unsigned long address, int end, int flags)
+ * Function: arm720_tlb_invalidate_page (unsigned long address, int end, int flags)
  *
  * Params  : address	Area start address
  *	   : end	Area end address
@@ -64,7 +85,7 @@ ENTRY(cpu_arm720_flush_tlb_all)
  *
  * Purpose : flush a TLB entry
  */
-ENTRY(cpu_arm720_flush_tlb_area)
+ENTRY(cpu_arm720_tlb_invalidate_range)
 1:		mcr	p15, 0, r0, c8, c7, 1		@ flush TLB (v4)
 		add	r0, r0, #4096
 		cmp	r0, r1
@@ -72,14 +93,14 @@ ENTRY(cpu_arm720_flush_tlb_area)
 		mov	pc, lr
 
 /*
- * Function: arm720_flush_tlb_page (unsigned long address, int flags)
+ * Function: arm720_tlb_invalidate_page (unsigned long address, int flags)
  *
  * Params  : address	Address
  *	   : flags	b0 = I-TLB as well
  *
  * Purpose : flush a TLB entry
  */
-ENTRY(cpu_arm720_flush_tlb_page)
+ENTRY(cpu_arm720_tlb_invalidate_page)
 		mcr	p15, 0, r0, c8, c7, 1		@ flush TLB (v4)
 		mov	pc, lr
 
@@ -262,12 +283,15 @@ ENTRY(cpu_arm720_proc_init)
 		mov	pc, lr
 
 ENTRY(cpu_arm720_proc_fin)
-		mrs	r0, cpsr
-		orr	r0, r0, #F_BIT | I_BIT
-		msr	cpsr, r0
-		mov	r0, #0x31			@ ....S..DP...M
+		stmfd	sp!, {lr}
+		mov	ip, #F_BIT | I_BIT | SVC_MODE
+		msr	cpsr_c, ip
+		mrc	p15, 0, r0, c1, c0, 0
+		bic	r0, r0, #0x1000			@ ...i............
+		bic	r0, r0, #0x000e			@ ............wca.
 		mcr	p15, 0, r0, c1, c0, 0		@ disable caches
-		mov	pc, lr
+		mcr	p15, 0, r1, c7, c7, 0		@ invalidate cache
+		ldmfd	sp!, {pc}
 
 /*
  * Function: arm720_proc_do_idle (void)
@@ -281,10 +305,12 @@ ENTRY(cpu_arm720_proc_fin)
  * Purpose : put the processer in proper idle mode
  */
 ENTRY(cpu_arm720_do_idle)
+#if 0 /* FIXME: is this part of the processor? */
 		ldr	r2, =IO_BASE			@ Virt addr of IO
 		add	r2, r2, #0x00050000		@ Start of PMU regs
 		mov	r1, #0x01			@ Idle mode
-		str	r1, [r2, #4]			
+		str	r1, [r2, #4]
+#endif
 		mov	pc, lr
 
 /*
@@ -295,7 +321,7 @@ ENTRY(cpu_arm720_do_idle)
  */
 ENTRY(cpu_arm720_set_pgd)
 		mov	r1, #0
-		mcr	p15, 0, r1, c7, c7, 0		@ flush cache
+		mcr	p15, 0, r1, c7, c7, 0		@ invalidate cache
 		mcr	p15, 0, r0, c2, c0, 0		@ update page table ptr
 		mcr	p15, 0, r1, c8, c7, 0		@ flush TLB (v4)
 		mov	pc, lr
@@ -340,9 +366,6 @@ ENTRY(cpu_arm720_set_pte)
 		movne	r2, #0
 
 		str	r2, [r0]			@ hardware version
-
-		mcr	p15, 0, r0, c7, c7, 0		@ flush cache
-		mcr	p15, 0, r0, c8, c7, 0		@ flush TLB (v4)
 		mov	pc, lr
 
 /*
@@ -351,30 +374,37 @@ ENTRY(cpu_arm720_set_pte)
  * Notes   : This sets up everything for a reset
  */
 ENTRY(cpu_arm720_reset)
-		mov	r0, #0
-		mcr	p15, 0, r0, c7, c7, 0		@ flush cache
-		mcr	p15, 0, r0, c8, c7, 0		@ flush TLB (v4)
-		mov	pc, lr
+		mov	ip, #0
+		mcr	p15, 0, ip, c7, c7, 0		@ invalidate cache
+		mcr	p15, 0, ip, c8, c7, 0		@ flush TLB (v4)
+		mrc	p15, 0, ip, c1, c0, 0		@ get ctrl register
+		bic	ip, ip, #0x000f			@ ............wcam
+		bic	ip, ip, #0x2100			@ ..v....s........
+		mcr	p15, 0, ip, c1, c0, 0		@ ctrl register
+		mov	pc, r0
 
 	
 cpu_armvlsi_name:
 		.asciz	"ARM/VLSI"
 cpu_arm720_name:
-		.asciz	"ARM 720"
+		.asciz	"ARM720T"
 		.align
 
 		.section ".text.init", #alloc, #execinstr
 
 __arm720_setup:	mov	r0, #0
-		mcr	p15, 0, r0, c7, c7, 0		@ flush caches on v4
+		mcr	p15, 0, r0, c7, c7, 0		@ invalidate caches
 		mcr	p15, 0, r0, c8, c7, 0		@ flush TLB (v4)
 		mcr	p15, 0, r4, c2, c0		@ load page table pointer
 		mov	r0, #0x1f			@ Domains 0, 1 = client
 		mcr	p15, 0, r0, c3, c0		@ load domain access register
-	
-		/* Set CP15 Control reg bits		 (RSBLDPWCAM) */
-		mov	r0, #0x7d			@ ...LDPWC.M
-		orr	r0, r0, #0x100			@ .S.LDPWC.M
+
+		mrc	p15, 0, r0, c1, c0		@ get control register
+		bic	r0, r0, #0x2e00
+		bic	r0, r0, #0x000e
+		orr	r0, r0, #0x0031			@ ..V...RSBLDPWCAM
+		orr	r0, r0, #0x0100			@ .........111.... (old)
+		orr	r0, r0, #0x000c			@ ..0...01..111101 (new)
 		mov	pc, lr				@ __ret (head-armv.S)
 
 /*
@@ -387,23 +417,33 @@ ENTRY(arm720_processor_functions)
 		.word	cpu_arm720_check_bugs
 		.word	cpu_arm720_proc_init
 		.word	cpu_arm720_proc_fin
-		.word	cpu_arm720_flush_cache_all
-		.word	cpu_arm720_flush_cache_area
-		.word	cpu_arm720_flush_cache_entry
-		.word	cpu_arm720_clean_cache_area
+		.word	cpu_arm720_reset
+		.word	cpu_arm720_do_idle
+
+		/* cache */
+		.word	cpu_arm720_cache_clean_invalidate_all
+		.word	cpu_arm720_cache_clean_invalidate_range
 		.word	cpu_arm720_flush_ram_page
-		.word	cpu_arm720_flush_tlb_all
-		.word	cpu_arm720_flush_tlb_area
+
+		/* dcache */
+		.word	cpu_arm720_dcache_invalidate_range
+		.word	cpu_arm720_dcache_clean_range
+		.word	cpu_arm720_dcache_clean_page
+		.word	cpu_arm720_dcache_clean_entry
+
+		/* icache */
+		.word	cpu_arm720_icache_invalidate_range
+		.word	cpu_arm720_icache_invalidate_page
+
+		/* tlb */
+		.word	cpu_arm720_tlb_invalidate_all
+		.word	cpu_arm720_tlb_invalidate_range
+		.word	cpu_arm720_tlb_invalidate_page
+
+		/* pgtable */
 		.word	cpu_arm720_set_pgd
 		.word	cpu_arm720_set_pmd
 		.word	cpu_arm720_set_pte
-		.word	cpu_arm720_reset
-		.word	cpu_arm720_flush_icache_area
-		.word	cpu_arm720_cache_wback_area
-		.word	cpu_arm720_cache_purge_area
-		.word	cpu_arm720_flush_tlb_page
-		.word	cpu_arm720_do_idle
-		.word	cpu_arm720_flush_icache_page
 		.size	arm720_processor_functions, . - arm720_processor_functions
 
 		.type	cpu_arm720_info, #object
@@ -431,11 +471,11 @@ cpu_elf_name:	.asciz	"v4"
 __arm720_proc_info:
 		.long	0x41807200				@ cpu_val
 		.long	0xffffff00				@ cpu_mask
-		.long	0x00000c12				@ __cpu_mmu_flags
+		.long	0x00000c0e				@ __cpu_mmu_flags
 		b	__arm720_setup				@ --cpu_flush
 		.long	cpu_arch_name				@ arch_name
 		.long	cpu_elf_name				@ elf_name
-		.long	HWCAP_SWP | HWCAP_26BIT			@ elf_hwcap
+		.long	HWCAP_SWP | HWCAP_HALF | HWCAP_26BIT	@ elf_hwcap
 		.long	cpu_arm720_info				@ info
 		.long	arm720_processor_functions
 		.size	__arm720_proc_info, . - __arm720_proc_info

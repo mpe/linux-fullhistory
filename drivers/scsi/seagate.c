@@ -1710,9 +1710,7 @@ int seagate_st0x_reset (Scsi_Cmnd * SCpnt, unsigned int reset_flags)
 }
 
 
-#ifdef MODULE
 /* Eventually this will go into an include file, but this will be later */
-Scsi_Host_Template driver_template = SEAGATE_ST0X;
+static Scsi_Host_Template driver_template = SEAGATE_ST0X;
 
 #include "scsi_module.c"
-#endif

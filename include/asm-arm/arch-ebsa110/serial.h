@@ -1,10 +1,14 @@
 /*
- * linux/include/asm-arm/arch-ebsa110/serial.h
+ *  linux/include/asm-arm/arch-ebsa110/serial.h
  *
- * Copyright (c) 1996,1997,1998 Russell King.
+ *  Copyright (C) 1996,1997,1998 Russell King.
  *
- * Changelog:
- *  15-10-1996	RMK	Created
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ *  Changelog:
+ *   15-10-1996	RMK	Created
  */
 #ifndef __ASM_ARCH_SERIAL_H
 #define __ASM_ARCH_SERIAL_H

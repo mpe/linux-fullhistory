@@ -609,7 +609,7 @@ struct ace_private
 	struct timer_list	timer;
 
 	unsigned long		std_refill_busy
-				__attribute__ ((aligned (L1_CACHE_BYTES)));
+				__attribute__ ((aligned (SMP_CACHE_BYTES)));
 	unsigned long		mini_refill_busy, jumbo_refill_busy;
 	atomic_t		cur_rx_bufs,
 				cur_mini_bufs,
@@ -642,7 +642,7 @@ struct ace_private
 	char			name[48];
 #ifdef INDEX_DEBUG
 	spinlock_t		debug_lock
-				__attribute__ ((aligned (L1_CACHE_BYTES)));;
+				__attribute__ ((aligned (SMP_CACHE_BYTES)));;
 	u32			last_tx, last_std_rx, last_mini_rx;
 #endif
 	struct net_device_stats stats;

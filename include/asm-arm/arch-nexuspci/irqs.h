@@ -4,9 +4,18 @@
  * Copyright (C) 1997, 1998, 2000 Philip Blundell
  */
 
-/* The hardware is capable of routing any interrupt source (except the
-   DUART) to either IRQ or FIQ.  We ignore FIQ and use IRQ exclusively
-   for simplicity.  */
+/*
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License
+ * as published by the Free Software Foundation; either version
+ * 2 of the License, or (at your option) any later version.
+ */
+
+/*
+ * The hardware is capable of routing any interrupt source (except the
+ * DUART) to either IRQ or FIQ.  We ignore FIQ and use IRQ exclusively
+ * for simplicity.  
+ */
 
 #define IRQ_DUART		0
 #define IRQ_PLX 		1

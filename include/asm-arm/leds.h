@@ -1,11 +1,14 @@
 /*
- * include/asm-arm/leds.h
+ *  linux/include/asm-arm/leds.h
  *
- * Copyright (C) 1998 Russell King
+ *  Copyright (C) 1998 Russell King
  *
- * Event-driven interface for LEDs on machines
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
  *
- * Added led_start and led_stop- Alex Holden, 28th Dec 1998.
+ *  Event-driven interface for LEDs on machines
+ *  Added led_start and led_stop- Alex Holden, 28th Dec 1998.
  */
 #ifndef ASM_ARM_LEDS_H
 #define ASM_ARM_LEDS_H

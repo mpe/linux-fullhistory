@@ -1,9 +1,13 @@
 /*
- * include/asm-arm/dec21285.h
+ *  linux/include/asm-arm/hardware/dec21285.h
  *
- * Copyright (C) 1998 Russell King
+ *  Copyright (C) 1998 Russell King
  *
- * DC21285 registers
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ *  DC21285 registers
  */
 #define DC21285_PCI_IACK		0x79000000
 #define DC21285_ARMCSR_BASE		0x42000000

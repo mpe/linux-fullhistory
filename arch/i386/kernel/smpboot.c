@@ -774,7 +774,7 @@ static void __init do_boot_cpu (int apicid)
 }
 
 cycles_t cacheflush_time;
-extern unsigned long cpu_hz;
+extern unsigned long cpu_khz;
 
 static void smp_tune_scheduling (void)
 {
@@ -791,7 +791,7 @@ static void smp_tune_scheduling (void)
 	 *  the cache size)
 	 */
 
-	if (!cpu_hz) {
+	if (!cpu_khz) {
 		/*
 		 * this basically disables processor-affinity
 		 * scheduling on SMP without a TSC.
@@ -805,12 +805,12 @@ static void smp_tune_scheduling (void)
 			bandwidth = 100;
 		}
 
-		cacheflush_time = (cpu_hz>>20) * (cachesize<<10) / bandwidth;
+		cacheflush_time = (cpu_khz>>10) * (cachesize<<10) / bandwidth;
 	}
 
 	printk("per-CPU timeslice cutoff: %ld.%02ld usecs.\n",
-		(long)cacheflush_time/(cpu_hz/1000000),
-		((long)cacheflush_time*100/(cpu_hz/1000000)) % 100);
+		(long)cacheflush_time/(cpu_khz/1000),
+		((long)cacheflush_time*100/(cpu_khz/1000)) % 100);
 }
 
 /*

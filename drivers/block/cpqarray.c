@@ -85,6 +85,7 @@ static struct board_type products[] = {
 	{ 0x40330E11, "Smart Array 3100ES",	&smart2_access },
 	{ 0x40340E11, "Smart Array 221",	&smart2_access },
 	{ 0x40400E11, "Integrated Array",	&smart4_access },
+	{ 0x40480E11, "Compaq Raid LC2",        &smart4_access },
 	{ 0x40500E11, "Smart Array 4200",	&smart4_access },
 	{ 0x40510E11, "Smart Array 4250ES",	&smart4_access },
 	{ 0x40580E11, "Smart Array 431",	&smart4_access },

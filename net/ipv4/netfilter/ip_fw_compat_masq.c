@@ -85,7 +85,12 @@ do_masquerade(struct sk_buff **pskb, const struct net_device *dev)
 			     newsrc, newsrc,
 			     { htons(61000) }, { htons(65095) } } } });
 
-		ip_nat_setup_info(ct, &range, NF_IP_POST_ROUTING);
+		ret = ip_nat_setup_info(ct, &range, NF_IP_POST_ROUTING);
+		if (ret != NF_ACCEPT) {
+			WRITE_UNLOCK(&ip_nat_lock);
+			return ret;
+		}
+
 		place_in_hashes(ct, info);
 		info->initialized = 1;
 	} else

@@ -212,13 +212,13 @@ extern void			neigh_sysctl_unregister(struct neigh_parms *p);
  *	Neighbour references
  */
 
-extern __inline__ void neigh_release(struct neighbour *neigh)
+static inline void neigh_release(struct neighbour *neigh)
 {
 	if (atomic_dec_and_test(&neigh->refcnt))
 		neigh_destroy(neigh);
 }
 
-extern __inline__ struct neighbour * neigh_clone(struct neighbour *neigh)
+static inline struct neighbour * neigh_clone(struct neighbour *neigh)
 {
 	if (neigh)
 		atomic_inc(&neigh->refcnt);
@@ -227,23 +227,23 @@ extern __inline__ struct neighbour * neigh_clone(struct neighbour *neigh)
 
 #define neigh_hold(n)	atomic_inc(&(n)->refcnt)
 
-extern __inline__ void neigh_confirm(struct neighbour *neigh)
+static inline void neigh_confirm(struct neighbour *neigh)
 {
 	if (neigh)
 		neigh->confirmed = jiffies;
 }
 
-extern __inline__ int neigh_is_connected(struct neighbour *neigh)
+static inline int neigh_is_connected(struct neighbour *neigh)
 {
 	return neigh->nud_state&NUD_CONNECTED;
 }
 
-extern __inline__ int neigh_is_valid(struct neighbour *neigh)
+static inline int neigh_is_valid(struct neighbour *neigh)
 {
 	return neigh->nud_state&NUD_VALID;
 }
 
-extern __inline__ int neigh_event_send(struct neighbour *neigh, struct sk_buff *skb)
+static inline int neigh_event_send(struct neighbour *neigh, struct sk_buff *skb)
 {
 	neigh->used = jiffies;
 	if (!(neigh->nud_state&(NUD_CONNECTED|NUD_DELAY|NUD_PROBE)))
@@ -251,7 +251,7 @@ extern __inline__ int neigh_event_send(struct neighbour *neigh, struct sk_buff *
 	return 0;
 }
 
-extern __inline__ struct neighbour *
+static inline struct neighbour *
 __neigh_lookup(struct neigh_table *tbl, const void *pkey, struct net_device *dev, int creat)
 {
 	struct neighbour *n = neigh_lookup(tbl, pkey, dev);
@@ -263,7 +263,7 @@ __neigh_lookup(struct neigh_table *tbl, const void *pkey, struct net_device *dev
 	return IS_ERR(n) ? NULL : n;
 }
 
-extern __inline__ struct neighbour *
+static inline struct neighbour *
 __neigh_lookup_errno(struct neigh_table *tbl, const void *pkey,
   struct net_device *dev)
 {

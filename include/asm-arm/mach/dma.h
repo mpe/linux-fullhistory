@@ -1,10 +1,14 @@
 /*
- * linux/arch/arm/kernel/dma.h
+ *  linux/include/asm-arm/mach/dma.h
  *
- * Copyright (C) 1998-2000 Russell King
+ *  Copyright (C) 1998-2000 Russell King
  *
- * This header file describes the interface between the generic DMA handler
- * (dma.c) and the architecture-specific DMA backends (dma-*.c)
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ *  This header file describes the interface between the generic DMA handler
+ *  (dma.c) and the architecture-specific DMA backends (dma-*.c)
  */
 
 struct dma_struct;
@@ -46,4 +50,6 @@ struct dma_struct {
  * Purpose  : Initialise architecture specific DMA
  * Params   : dma - pointer to array of DMA structures
  */
-void arch_dma_init(dma_t *dma);
+extern void arch_dma_init(dma_t *dma);
+
+extern void isa_init_dma(dma_t *dma);

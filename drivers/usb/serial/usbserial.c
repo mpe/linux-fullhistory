@@ -15,6 +15,9 @@
  *
  * See Documentation/usb/usb-serial.txt for more information on using this driver
  * 
+ * (09/11/2000) gkh
+ *	Removed DEBUG #ifdefs with call to usb_serial_debug_data
+ *
  * (08/28/2000) gkh
  *	Added port_lock to port structure.
  *	Added locks for SMP safeness to generic driver
@@ -766,16 +769,7 @@ static int generic_write (struct usb_serial_port *port, int from_user, const uns
 		spin_lock_irqsave (&port->port_lock, flags);
 		count = (count > port->bulk_out_size) ? port->bulk_out_size : count;
 
-#ifdef DEBUG
-		{
-			int i;
-			printk (KERN_DEBUG __FILE__ ": " __FUNCTION__ " - length = %d, data = ", count);
-			for (i = 0; i < count; ++i) {
-				printk ("%.2x ", buf[i]);
-			}
-			printk ("\n");
-		}
-#endif
+		usb_serial_debug_data (__FILE__, __FUNCTION__, count, buf);
 
 		if (from_user) {
 			copy_from_user(port->write_urb->transfer_buffer, buf, count);
@@ -854,15 +848,7 @@ static void generic_read_bulk_callback (struct urb *urb)
 		return;
 	}
 
-#ifdef DEBUG
-	if (urb->actual_length) {
-		printk (KERN_DEBUG __FILE__ ": " __FUNCTION__ "- length = %d, data = ", urb->actual_length);
-		for (i = 0; i < urb->actual_length; ++i) {
-			printk ("%.2x ", data[i]);
-		}
-		printk ("\n");
-	}
-#endif
+	usb_serial_debug_data (__FILE__, __FUNCTION__, urb->actual_length, data);
 
 	tty = port->tty;
 	if (urb->actual_length) {

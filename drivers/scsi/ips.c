@@ -5205,13 +5205,9 @@ ips_verify_bios(ips_ha_t *ha, char *buffer, int buffersize) {
       return (0);
 }
 
-#if defined (MODULE)
+static Scsi_Host_Template driver_template = IPS;
+#include "scsi_module.c"
 
-Scsi_Host_Template driver_template = IPS;
-
-   #include "scsi_module.c"
-
-#endif
 
 
 /*

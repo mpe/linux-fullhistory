@@ -92,10 +92,8 @@
 #include <linux/malloc.h>
 #include "inia100.h"
 
-#ifdef MODULE
-Scsi_Host_Template driver_template = INIA100;
+static Scsi_Host_Template driver_template = INIA100;
 #include "scsi_module.c"
-#endif
 
 #define ORC_RDWORD(x,y)         (short)(inl((int)((ULONG)((ULONG)x+(UCHAR)y)) ))
 

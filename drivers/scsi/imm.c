@@ -114,10 +114,8 @@ static int imm_pb_claim(int host_no)
  *                   Parallel port probing routines                        *
  ***************************************************************************/
 
-#ifdef MODULE
-Scsi_Host_Template driver_template = IMM;
+static Scsi_Host_Template driver_template = IMM;
 #include  "scsi_module.c"
-#endif
 
 int imm_detect(Scsi_Host_Template * host)
 {

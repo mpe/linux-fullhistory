@@ -1964,12 +1964,11 @@ int u14_34f_release(struct Scsi_Host *shpnt) {
    return FALSE;
 }
 
-#if defined(MODULE)
-Scsi_Host_Template driver_template = ULTRASTOR_14_34F;
+static Scsi_Host_Template driver_template = ULTRASTOR_14_34F;
 
 #include "scsi_module.c"
 
-#else
+#ifndef MODULE
 
 #if LINUX_VERSION_CODE < LinuxVersionCode(2,3,18)
 void u14_34f_setup(char *str, int *ints) {

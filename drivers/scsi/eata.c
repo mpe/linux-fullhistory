@@ -2292,12 +2292,11 @@ int eata2x_release(struct Scsi_Host *shpnt) {
    return FALSE;
 }
 
-#if defined(MODULE)
-Scsi_Host_Template driver_template = EATA;
+static Scsi_Host_Template driver_template = EATA;
 
 #include "scsi_module.c"
 
-#else
+#ifndef MODULE
 
 #if LINUX_VERSION_CODE < LinuxVersionCode(2,3,18)
 void eata2x_setup(char *str, int *ints) {

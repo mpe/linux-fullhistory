@@ -141,6 +141,9 @@ _static void enable_desc_loop(uhci_t *s, urb_t *urb)
 {
 	int flags;
 
+	if (urb->transfer_flags & USB_NO_FSBR)
+		return;
+
 	spin_lock_irqsave (&s->qh_lock, flags);
 	s->chain_end->hw.qh.head&=~UHCI_PTR_TERM; 
 	mb();
@@ -153,8 +156,10 @@ _static void disable_desc_loop(uhci_t *s, urb_t *urb)
 {
 	int flags;
 
-	spin_lock_irqsave (&s->qh_lock, flags);
+	if (urb->transfer_flags & USB_NO_FSBR)
+		return;
 
+	spin_lock_irqsave (&s->qh_lock, flags);
 	if (((urb_priv_t*)urb->hcpriv)->use_loop) {
 		s->loop_usage--;
 
@@ -2842,6 +2847,7 @@ static int __init uhci_init (void)
 	
 	if(!urb_priv_kmem) {
 		err("kmem_cache_create for urb_priv_t failed (out of memory)");
+		kmem_cache_destroy(uhci_desc_kmem);
 		return -ENOMEM;
 	}
 #endif	
@@ -2876,6 +2882,15 @@ static int __init uhci_init (void)
 			i++;
 	}
 
+#ifdef DEBUG_SLAB
+	if (retval < 0 ) {
+		if (kmem_cache_destroy(urb_priv_kmem))
+			err("urb_priv_kmem remained");
+		if (kmem_cache_destroy(uhci_desc_kmem))
+			err("uhci_desc_kmem remained");
+	}
+#endif
+	
 	return retval;
 }
 

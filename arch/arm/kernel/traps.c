@@ -3,12 +3,14 @@
  *
  *  Copyright (C) 1995, 1996 Russell King
  *  Fragments that appear the same as linux/arch/i386/kernel/traps.c (C) Linus Torvalds
- */
-
-/*
- * 'traps.c' handles hardware exceptions after we have saved some state in
- * 'linux/arch/arm/lib/traps.S'.  Mostly a debugging aid, but will probably
- * kill the offending process.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ *  'traps.c' handles hardware exceptions after we have saved some state in
+ *  'linux/arch/arm/lib/traps.S'.  Mostly a debugging aid, but will probably
+ *  kill the offending process.
  */
 #include <linux/config.h>
 #include <linux/types.h>
@@ -314,7 +316,7 @@ asmlinkage int arm_syscall(int no, struct pt_regs *regs)
 	case 2:	/* sys_cacheflush */
 #ifdef CONFIG_CPU_32
 		/* r0 = start, r1 = end, r2 = flags */
-		cpu_flush_cache_area(regs->ARM_r0, regs->ARM_r1, 1);
+		cpu_cache_clean_invalidate_range(regs->ARM_r0, regs->ARM_r1, 1);
 #endif
 		break;
 

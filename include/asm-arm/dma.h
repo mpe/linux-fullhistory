@@ -22,11 +22,6 @@ typedef unsigned int dmamode_t;
 #define DMA_MODE_CASCADE 2
 #define DMA_AUTOINIT	 4
 
-typedef struct {
-	unsigned long address;
-	unsigned long length;
-} dmasg_t;
-
 extern spinlock_t  dma_spin_lock;
 
 extern __inline__ unsigned long claim_dma_lock(void)
@@ -85,7 +80,7 @@ extern void disable_dma(dmach_t channel);
  * especially since some DMA architectures don't update the
  * DMA address immediately, but defer it to the enable_dma().
  */
-extern void set_dma_sg(dmach_t channel, dmasg_t *sg, int nr_sg);
+extern void set_dma_sg(dmach_t channel, struct scatterlist *sg, int nr_sg);
 
 /* Set the DMA address for this channel
  *

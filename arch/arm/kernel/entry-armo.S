@@ -1,25 +1,29 @@
 /*
- * linux/arch/arm/kernel/entry-armo.S
+ *  linux/arch/arm/kernel/entry-armo.S
  *
- * Copyright (C) 1995,1996,1997,1998 Russell King.
+ *  Copyright (C) 1995,1996,1997,1998 Russell King.
  *
- * Low-level vector interface routines
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
  *
- * Design issues:
- *  - We have several modes that each vector can be called from,
- *    each with its own set of registers.  On entry to any vector,
- *    we *must* save the registers used in *that* mode.
+ *  Low-level vector interface routines
  *
- *  - This code must be as fast as possible.
+ *  Design issues:
+ *   - We have several modes that each vector can be called from,
+ *     each with its own set of registers.  On entry to any vector,
+ *     we *must* save the registers used in *that* mode.
  *
- * There are a few restrictions on the vectors:
- *  - the SWI vector cannot be called from *any* non-user mode
+ *   - This code must be as fast as possible.
  *
- *  - the FP emulator is *never* called from *any* non-user mode undefined
- *    instruction.
+ *  There are a few restrictions on the vectors:
+ *   - the SWI vector cannot be called from *any* non-user mode
  *
- * Ok, so this file may be a mess, but its as efficient as possible while
- * adhering to the above criteria.
+ *   - the FP emulator is *never* called from *any* non-user mode undefined
+ *     instruction.
+ *
+ *  Ok, so this file may be a mess, but its as efficient as possible while
+ *  adhering to the above criteria.
  */
 #include <linux/linkage.h>
 #include <linux/config.h>

@@ -1,10 +1,14 @@
 /*
- * linux/include/asm-arm/posix_types.h
+ *  linux/include/asm-arm/posix_types.h
  *
- * Copyright (c) 1996-1998 Russell King.
+ *  Copyright (C) 1996-1998 Russell King.
  *
- * Changelog:
- *  27-06-1996	RMK	Created
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ *  Changelog:
+ *   27-06-1996	RMK	Created
  */
 #ifndef __ARCH_ARM_POSIX_TYPES_H
 #define __ARCH_ARM_POSIX_TYPES_H

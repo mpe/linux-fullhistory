@@ -12217,12 +12217,10 @@ aic7xxx_print_scratch_ram(struct aic7xxx_host *p)
 
 #include "aic7xxx_proc.c"
 
-#ifdef MODULE
 /* Eventually this will go into an include file, but this will be later */
-Scsi_Host_Template driver_template = AIC7XXX;
+static Scsi_Host_Template driver_template = AIC7XXX;
 
 #include "scsi_module.c"
-#endif
 
 /*
  * Overrides for Emacs so that we almost follow Linus's tabbing style.

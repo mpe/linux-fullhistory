@@ -104,32 +104,32 @@ struct qdisc_rate_table
 	int		refcnt;
 };
 
-extern __inline__ void sch_tree_lock(struct Qdisc *q)
+static inline void sch_tree_lock(struct Qdisc *q)
 {
 	write_lock(&qdisc_tree_lock);
 	spin_lock_bh(&q->dev->queue_lock);
 }
 
-extern __inline__ void sch_tree_unlock(struct Qdisc *q)
+static inline void sch_tree_unlock(struct Qdisc *q)
 {
 	spin_unlock_bh(&q->dev->queue_lock);
 	write_unlock(&qdisc_tree_lock);
 }
 
-extern __inline__ void tcf_tree_lock(struct tcf_proto *tp)
+static inline void tcf_tree_lock(struct tcf_proto *tp)
 {
 	write_lock(&qdisc_tree_lock);
 	spin_lock_bh(&tp->q->dev->queue_lock);
 }
 
-extern __inline__ void tcf_tree_unlock(struct tcf_proto *tp)
+static inline void tcf_tree_unlock(struct tcf_proto *tp)
 {
 	spin_unlock_bh(&tp->q->dev->queue_lock);
 	write_unlock(&qdisc_tree_lock);
 }
 
 
-extern __inline__ unsigned long
+static inline unsigned long
 cls_set_class(struct tcf_proto *tp, unsigned long *clp, unsigned long cl)
 {
 	unsigned long old_cl;
@@ -141,7 +141,7 @@ cls_set_class(struct tcf_proto *tp, unsigned long *clp, unsigned long cl)
 	return old_cl;
 }
 
-extern __inline__ unsigned long
+static inline unsigned long
 __cls_set_class(unsigned long *clp, unsigned long cl)
 {
 	unsigned long old_cl;
@@ -401,7 +401,7 @@ extern struct tcf_police * tcf_police_locate(struct rtattr *rta, struct rtattr *
 extern int tcf_police_dump(struct sk_buff *skb, struct tcf_police *p);
 extern int tcf_police(struct sk_buff *skb, struct tcf_police *p);
 
-extern __inline__ void tcf_police_release(struct tcf_police *p)
+static inline void tcf_police_release(struct tcf_police *p)
 {
 	if (p && --p->refcnt == 0)
 		tcf_police_destroy(p);
@@ -433,7 +433,7 @@ int pktsched_init(void);
 
 extern int qdisc_restart(struct net_device *dev);
 
-extern __inline__ void qdisc_run(struct net_device *dev)
+static inline void qdisc_run(struct net_device *dev)
 {
 	while (!netif_queue_stopped(dev) &&
 	       qdisc_restart(dev)<0)
@@ -443,7 +443,7 @@ extern __inline__ void qdisc_run(struct net_device *dev)
 /* Calculate maximal size of packet seen by hard_start_xmit
    routine of this device.
  */
-extern __inline__ unsigned psched_mtu(struct net_device *dev)
+static inline unsigned psched_mtu(struct net_device *dev)
 {
 	unsigned mtu = dev->mtu;
 	return dev->hard_header ? mtu + dev->hard_header_len : mtu;

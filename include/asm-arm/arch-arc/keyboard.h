@@ -1,10 +1,14 @@
 /*
- * linux/include/asm-arm/arch-arc/keyboard.h
+ *  linux/include/asm-arm/arch-arc/keyboard.h
  *
- * Keyboard driver definitions for Acorn Archimedes/A5000
- * architecture
+ *  Copyright (C) 1998 Russell King
  *
- * Copyright (C) 1998 Russell King
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ *  Keyboard driver definitions for Acorn Archimedes/A5000
+ *  architecture
  */
 
 #include <asm/irq.h>

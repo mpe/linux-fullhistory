@@ -414,7 +414,7 @@ static struct sk_buff *netlink_build_message(ipq_queue_element_t *e, int *errp)
 	return skb;
 nlmsg_failure:
 	if (skb)
-		kfree(skb);
+		kfree_skb(skb);
 	*errp = 0;
 	printk(KERN_ERR "ip_queue: error creating netlink message\n");
 	return NULL;

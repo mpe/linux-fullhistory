@@ -15,9 +15,17 @@ AFLAGS_head-armo.o := -DTEXTADDR=$(TEXTADDR) -traditional
 
 O_OBJS_arc        = dma-arc.o oldlatches.o
 O_OBJS_rpc        = dma-rpc.o
-O_OBJS_footbridge = dma-footbridge.o hw-footbridge.o isa.o
-O_OBJS_sa1100     = hw-sa1100.o
+O_OBJS_footbridge = dma-footbridge.o isa.o
 O_OBJS_l7200      = fiq.o
+
+leds-ebsa110	  = leds-ebsa110.o
+
+pci-nexuspci	  = plx90x0.o
+pci-footbridge	  = dec21285.o
+pci-shark	  = via82c505.o
+
+pci-$(CONFIG_ARCH_NEXUSPCI) += ftv-pci.o
+
 
 O_TARGET := kernel.o
 
@@ -30,21 +38,18 @@ obj-m			:=
 obj-n			:=
 obj-			:=
 
-export-objs		:= armksyms.o dma.o ecard.o hw-footbridge.o \
-			   hw-sa1100.o leds-$(MACHINE).o oldlatches.o
+export-objs		:= armksyms.o dma.o ecard.o \
+			   $(leds-$(MACHINE)) oldlatches.o \
+			   time.o
 
 obj-$(CONFIG_ARCH_ACORN) += ecard.o fiq.o time-acorn.o
 obj-$(CONFIG_DEBUG_LL)	+= debug-$(PROCESSOR).o
 obj-$(CONFIG_MODULES)	+= armksyms.o
-obj-$(CONFIG_LEDS)	+= leds-$(MACHINE).o
+obj-$(CONFIG_LEDS)	+= $(leds-$(MACHINE))
 obj-$(CONFIG_ARTHUR)	+= arthur.o
 obj-$(CONFIG_ISA_DMA)	+= dma-isa.o
 
-ifeq ($(MACHINE),nexuspci)
-  obj-$(CONFIG_PCI)	+= plx9080.o
-else
-  obj-$(CONFIG_PCI)	+= bios32.o dec21285.o
-endif
+obj-$(CONFIG_PCI)	+= bios32.o $(pci-$(MACHINE)) $(pci-y)
 
 # Files that are both resident and modular; remove from modular.
 

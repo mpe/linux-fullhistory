@@ -4364,10 +4364,8 @@ int esp_revoke(Scsi_Device* SDptr)
 	return 0;
 }
 
-#ifdef MODULE
-Scsi_Host_Template driver_template = SCSI_SPARC_ESP;
+static Scsi_Host_Template driver_template = SCSI_SPARC_ESP;
 
 #include "scsi_module.c"
 
 EXPORT_NO_SYMBOLS;
-#endif /* MODULE */

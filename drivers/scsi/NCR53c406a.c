@@ -1059,12 +1059,10 @@ void __init calc_port_addr(void)
     /* CONFIG6		= (port_base+0x0F);*/
 }
 
-#ifdef MODULE
 /* Eventually this will go into an include file, but this will be later */
-Scsi_Host_Template driver_template = NCR53c406a;
+static Scsi_Host_Template driver_template = NCR53c406a;
 
 #include "scsi_module.c"
-#endif
 
 /*
  * Overrides for Emacs so that we get a uniform tabbing style.

@@ -1,5 +1,13 @@
 /*
- * Cache handling for 26-bit ARM processors.
+ *  linux/include/asm-arm/proc-armo/cache.h
+ *
+ *  Copyright (C) 1999-2000 Russell King
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ *  Cache handling for 26-bit ARM processors.
  */
 #define flush_cache_all()			do { } while (0)
 #define flush_cache_mm(mm)			do { } while (0)
@@ -74,6 +82,3 @@ memc_clear(struct mm_struct *mm, struct page *page)
 	if (mm == current->active_mm)
 		processor._set_pgd(mm->pgd);
 }
-
-#define __flush_entry_to_ram(entry)
-

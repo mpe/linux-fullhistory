@@ -1,4 +1,10 @@
-@  linux/arch/arm/drivers/scsi/acornscsi-io.S: Acorn SCSI card IO
+/*
+ *  linux/drivers/acorn/scsi/acornscsi-io.S: Acorn SCSI card IO
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ */
 #include <linux/linkage.h>
 
 #include <asm/assembler.h>

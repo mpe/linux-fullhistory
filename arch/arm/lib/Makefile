@@ -25,6 +25,7 @@ L_OBJS_l7200     	:= io-acorn.o
 L_OBJS_nexuspci		:= io-footbridge.o
 L_OBJS_sa1100		:= io-footbridge.o
 L_OBJS_shark		:= io-shark.o
+L_OBJS_integrator	:= io-shark.o
 
 ifeq ($(PROCESSOR),armo)
   L_OBJS += uaccess-armo.o

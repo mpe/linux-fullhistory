@@ -3,8 +3,11 @@
  *
  *  Copyright (C) 1995  Linus Torvalds
  *  Modifications for ARM processor (c) 1995-1999 Russell King
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
  */
-
 #include <linux/config.h>
 #include <linux/signal.h>
 #include <linux/sched.h>
@@ -399,7 +402,11 @@ do_DataAbort(unsigned long addr, int error_code, struct pt_regs *regs, int fsr)
 		return;
 bad:
 	force_sig(inf->sig, current);
-	die_if_kernel(inf->name, regs, fsr);
+
+	printk(KERN_ALERT "Unhandled fault: %s (%X) at 0x%08lx\n",
+		inf->name, fsr, addr);
+	show_pte(current->mm, addr);
+	die_if_kernel("Oops", regs, 0);
 	return;
 
 weirdness:

@@ -1,4 +1,4 @@
-/*
+/******************************************************************************
  *    ixj.h
  *
  *    Device Driver for the Internet PhoneJACK and
@@ -22,9 +22,20 @@
  * at our website:    http://www.quicknet.net
  *
  * Fixes:
- *	Linux 2.3 port, 	Alan Cox
- */
-static char ixj_h_rcsid[] = "$Id: ixj.h,v 3.4 1999/12/16 22:18:36 root Exp root $";
+ *
+ * IN NO EVENT SHALL QUICKNET TECHNOLOGIES, INC. BE LIABLE TO ANY PARTY FOR
+ * DIRECT, INDIRECT, SPECIAL, INCIDENTAL, OR CONSEQUENTIAL DAMAGES ARISING OUT
+ * OF THE USE OF THIS SOFTWARE AND ITS DOCUMENTATION, EVEN IF QUICKNET
+ * TECHNOLOGIES, INC.HAS BEEN ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
+ * QUICKNET TECHNOLOGIES, INC. SPECIFICALLY DISCLAIMS ANY WARRANTIES,
+ * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY
+ * AND FITNESS FOR A PARTICULAR PURPOSE.  THE SOFTWARE PROVIDED HEREUNDER IS
+ * ON AN "AS IS" BASIS, AND QUICKNET TECHNOLOGIES, INC. HAS NO OBLIGATION 
+ * TO PROVIDE MAINTENANCE, SUPPORT, UPDATES, ENHANCEMENTS, OR MODIFICATIONS.
+ *
+ *****************************************************************************/
+static char ixj_h_rcsid[] = "$Id: ixj.h,v 3.14 2000/03/30 22:06:48 eokerson Exp $";
 
 #ifndef _I386_TYPES_H
 #include <asm/types.h>
@@ -60,6 +71,27 @@ typedef struct {
 	unsigned char low;
 	unsigned char high;
 } BYTES;
+
+typedef union {
+        BYTES bytes;
+        short word;
+} IXJ_WORD;
+
+typedef struct{
+	unsigned int b0:1;
+	unsigned int b1:1;
+	unsigned int b2:1;
+	unsigned int b3:1;
+	unsigned int b4:1;
+	unsigned int b5:1;
+	unsigned int b6:1;
+	unsigned int b7:1;
+} IXJ_CBITS;
+
+typedef union{
+	IXJ_CBITS cbits;
+	  char  cbyte;
+} IXJ_CBYTE;
 
 int ixj_WriteDSPCommand(unsigned short, int board);
 
@@ -325,6 +357,199 @@ typedef struct {
 	unsigned int modcnt;
 	unsigned short micpreamp;
 } MIX;
+
+/******************************************************************************
+*
+*  These structures deal with the control logic on the Internet PhoneCARD
+*
+******************************************************************************/
+typedef struct {
+	unsigned int x0:4;	// unused bits
+
+	unsigned int ed:1;	// Event Detect
+
+	unsigned int drf:1;	// Smart Cable Removal Flag 1=no cable
+
+	unsigned int dspf:1;	// DSP Flag 1=DSP Ready
+
+	unsigned int crr:1;	// Control Register Ready
+
+} COMMAND_REG1;
+
+typedef union {
+	COMMAND_REG1 bits;
+	unsigned char byte;
+} PCMCIA_CR1;
+
+typedef struct {
+	unsigned int x0:4;	// unused bits
+
+	unsigned int rstc:1;	// Smart Cable Reset
+
+	unsigned int pwr:1;	// Smart Cable Power
+
+	unsigned int x1:2;	// unused bits
+
+} COMMAND_REG2;
+
+typedef union {
+	COMMAND_REG2 bits;
+	unsigned char byte;
+} PCMCIA_CR2;
+
+typedef struct {
+	unsigned int addr:5;	// R/W Smart Cable Register Address
+
+	unsigned int rw:1;	// Read / Write flag
+
+	unsigned int dev:2;	// 2 bit Smart Cable Device Address
+
+} CONTROL_REG;
+
+typedef union {
+	CONTROL_REG bits;
+	unsigned char byte;
+} PCMCIA_SCCR;
+
+typedef struct {
+	unsigned int hsw:1;
+	unsigned int det:1;
+	unsigned int led2:1;
+	unsigned int led1:1;
+	unsigned int ring1:1;
+	unsigned int ring0:1;
+	unsigned int x:1;
+	unsigned int powerdown:1;
+} PCMCIA_SLIC_REG;
+
+typedef union {
+	PCMCIA_SLIC_REG bits;
+	unsigned char byte;
+} PCMCIA_SLIC;
+
+typedef struct {
+	unsigned int cpd:1;	// Chip Power Down
+
+	unsigned int mpd:1;	// MIC Bias Power Down
+
+	unsigned int hpd:1;	// Handset Drive Power Down
+
+	unsigned int lpd:1;	// Line Drive Power Down
+
+	unsigned int spd:1;	// Speaker Drive Power Down
+
+	unsigned int x:2;	// unused bits
+
+	unsigned int sr:1;	// Software Reset
+
+} Si3CONTROL1;
+
+typedef union {
+	Si3CONTROL1 bits;
+	unsigned char byte;
+} Si3C1;
+
+typedef struct {
+	unsigned int al:1;	// Analog Loopback DAC analog -> ADC analog
+
+	unsigned int dl2:1;	// Digital Loopback DAC -> ADC one bit
+
+	unsigned int dl1:1;	// Digital Loopback ADC -> DAC one bit
+
+	unsigned int pll:1;	// 1 = div 10, 0 = div 5
+
+	unsigned int hpd:1;	// HPF disable
+
+	unsigned int x:3;	// unused bits
+
+} Si3CONTROL2;
+
+typedef union {
+	Si3CONTROL2 bits;
+	unsigned char byte;
+} Si3C2;
+
+typedef struct {
+	unsigned int iir:1;	// 1 enables IIR, 0 enables FIR
+
+	unsigned int him:1;	// Handset Input Mute
+
+	unsigned int mcm:1;	// MIC In Mute
+
+	unsigned int mcg:2;	// MIC In Gain
+
+	unsigned int lim:1;	// Line In Mute
+
+	unsigned int lig:2;	// Line In Gain
+
+} Si3RXGAIN;
+
+typedef union {
+	Si3RXGAIN bits;
+	unsigned char byte;
+} Si3RXG;
+
+typedef struct {
+	unsigned int hom:1;	// Handset Out Mute
+
+	unsigned int lom:1;	// Line Out Mute
+
+	unsigned int rxg:5;	// RX PGA Gain
+
+	unsigned int x:1;	// unused bit
+
+} Si3ADCVOLUME;
+
+typedef union {
+	Si3ADCVOLUME bits;
+	unsigned char byte;
+} Si3ADC;
+
+typedef struct {
+	unsigned int srm:1;	// Speaker Right Mute
+
+	unsigned int slm:1;	// Speaker Left Mute
+
+	unsigned int txg:5;	// TX PGA Gain
+
+	unsigned int x:1;	// unused bit
+
+} Si3DACVOLUME;
+
+typedef union {
+	Si3DACVOLUME bits;
+	unsigned char byte;
+} Si3DAC;
+
+typedef struct {
+	unsigned int x:5;	// unused bit
+
+	unsigned int losc:1;	// Line Out Short Circuit
+
+	unsigned int srsc:1;	// Speaker Right Short Circuit
+
+	unsigned int slsc:1;	// Speaker Left Short Circuit
+
+} Si3STATUSREPORT;
+
+typedef union {
+	Si3STATUSREPORT bits;
+	unsigned char byte;
+} Si3STAT;
+
+typedef struct {
+	unsigned int sot:2;	// Speaker Out Attenuation
+
+	unsigned int lot:2;	// Line Out Attenuation
+
+	unsigned int x:4;	// unused bits
+
+} Si3ANALOGATTN;
+
+typedef union {
+	Si3ANALOGATTN bits;
+	unsigned char byte;
+} Si3AATT;
 
 /******************************************************************************
 *
@@ -855,10 +1080,49 @@ enum IXJ_EXTENSIONS {
 };
 
 typedef struct {
+	char enable;
+	char en_filter;
+	unsigned int filter;
+	unsigned int state;	// State 0 when cadence has not started.
+
+	unsigned int on1;	// State 1
+
+	unsigned long on1min;	// State 1 - 10% + jiffies
+ 	unsigned long on1dot;	// State 1 + jiffies
+
+	unsigned long on1max;	// State 1 + 10% + jiffies
+
+	unsigned int off1;	// State 2
+
+	unsigned long off1min;
+	unsigned long off1max;
+	unsigned int on2;	// State 3
+
+	unsigned long on2min;
+	unsigned long on2dot;
+	unsigned long on2max;
+	unsigned int off2;	// State 4
+
+	unsigned long off2min;
+	unsigned long off2max;
+	unsigned int on3;	// State 5
+
+	unsigned long on3min;
+	unsigned long on3dot;
+	unsigned long on3max;
+	unsigned int off3;	// State 6
+
+	unsigned long off3min;
+	unsigned long off3max;
+} IXJ_CADENCE_F;
+
+typedef struct {
 	unsigned int busytone:1;
 	unsigned int dialtone:1;
 	unsigned int ringback:1;
 	unsigned int ringing:1;
+	unsigned int playing:1;
+	unsigned int recording:1;
 	unsigned int cringing:1;
 	unsigned int play_first_frame:1;
 	unsigned int pstn_present:1;
@@ -868,6 +1132,28 @@ typedef struct {
 	unsigned int g729_loaded:1;
 	unsigned int ts85_loaded:1;
 	unsigned int dtmf_oob:1;	// DTMF Out-Of-Band
+
+	unsigned int pcmciascp:1;	// Smart Cable Present
+
+	unsigned int pcmciasct:2;	// Smart Cable Type
+
+	unsigned int pcmciastate:3;	// Smart Cable Init State
+
+	unsigned int inwrite:1;	// Currently writing
+
+	unsigned int inread:1;	// Currently reading
+
+	unsigned int incheck:1;	// Currently checking the smart cable
+
+	unsigned int cidplay:1; // Currently playing Caller ID
+
+	unsigned int cidring:1; // This is the ring for Caller ID
+
+	unsigned int cidsent:1; // Caller ID has been sent
+
+	unsigned int cidcw_ack:1; // Caller ID CW ACK (from CPE)
+
+	unsigned int x:6;	// unsed bits
 
 } IXJ_FLAGS;
 
@@ -885,15 +1171,19 @@ typedef struct {
 	unsigned int serial;
 	struct phone_capability caplist[30];
 	unsigned int caps;
+	unsigned int country;
 	struct pci_dev *dev;
 	unsigned int cardtype;
 	unsigned int rec_codec;
 	char rec_mode;
 	unsigned int play_codec;
+	unsigned int cid_play_codec;
 	char play_mode;
 	IXJ_FLAGS flags;
 	unsigned int rec_frame_size;
 	unsigned int play_frame_size;
+	unsigned int cid_base_frame_size;
+	unsigned long cidcw_wait;
 	int aec_level;
 	int readers, writers;
 	wait_queue_head_t poll_q;
@@ -920,6 +1210,7 @@ typedef struct {
 	char maxrings;
 	IXJ_CADENCE *cadence_t;
 	int tone_cadence_state;
+	IXJ_CADENCE_F cadence_f[4];
 	DTMF dtmf;
 	CPTF cptf;
 	BYTES dsp;
@@ -934,30 +1225,50 @@ typedef struct {
 	PLD_SLICW pld_slicw;
 	PLD_SLICR pld_slicr;
 	PLD_CLOCK pld_clock;
+	PCMCIA_CR1 pccr1;
+	PCMCIA_CR2 pccr2;
+	PCMCIA_SCCR psccr;
+	PCMCIA_SLIC pslic;
+	char pscdd;
+	Si3C1 sic1;
+	Si3C2 sic2;
+	Si3RXG sirxg;
+	Si3ADC siadc;
+	Si3DAC sidac;
+	Si3STAT sistat;
+	Si3AATT siaatt;
 	MIX mix;
 	unsigned short ring_cadence;
 	int ring_cadence_t;
 	unsigned long ring_cadence_jif;
+	unsigned long checkwait;
 	int intercom;
 	int m_hook;
 	int r_hook;
 	char pstn_envelope;
 	char pstn_cid_intr;
+	unsigned char fskz;
+	unsigned char fskphase;
+	unsigned char fskcnt;
 	unsigned pstn_cid_recieved;
-	IXJ_CID cid;
+	PHONE_CID cid;
+	PHONE_CID cid_send;
 	unsigned long pstn_ring_start;
+	unsigned long pstn_ring_stop;
 	unsigned long pstn_winkstart;
 	unsigned int winktime;
+	unsigned long flash_end;
 	char port;
 	union telephony_exception ex;
 	char daa_mode;
+	char daa_country;
 	unsigned long pstn_sleeptil;
 	DAA_REGS m_DAAShadowRegs;
 	Proc_Info_Type Info_read;
 	Proc_Info_Type Info_write;
 	unsigned short frame_count;
-	unsigned int filter_cadence;
 	unsigned int filter_hist[4];
+	unsigned char filter_en[4];
 	unsigned short proc_load;
 	unsigned long framesread;
 	unsigned long frameswritten;
@@ -966,6 +1277,8 @@ typedef struct {
 	unsigned long timerchecks;
 	unsigned long txreadycheck;
 	unsigned long rxreadycheck;
+	short fskdata[8000];
+	int fskdcnt;
 } IXJ;
 
 typedef int (*IXJ_REGFUNC) (IXJ * j, unsigned long arg);

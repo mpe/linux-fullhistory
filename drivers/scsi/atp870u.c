@@ -1971,8 +1971,5 @@ int atp870u_release (struct Scsi_Host *pshost)
 
 }
 
-#ifdef MODULE
-Scsi_Host_Template driver_template = ATP870U;
-
+static Scsi_Host_Template driver_template = ATP870U;
 #include "scsi_module.c"
-#endif

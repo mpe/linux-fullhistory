@@ -1126,8 +1126,5 @@ static void atari_scsi_falcon_reg_write( unsigned char reg, unsigned char value 
 
 #include "atari_NCR5380.c"
 
-#ifdef MODULE
-Scsi_Host_Template driver_template = ATARI_SCSI;
-
+static Scsi_Host_Template driver_template = ATARI_SCSI;
 #include "scsi_module.c"
-#endif

@@ -117,7 +117,7 @@ static Scsi_Request * dummy_cmdp = 0;    /* only used for sizeof */
 static rwlock_t sg_dev_arr_lock = RW_LOCK_UNLOCKED;  /* Also used to lock
 			file descriptor list for device */
 
-struct Scsi_Device_Template sg_template =
+static struct Scsi_Device_Template sg_template =
 {
       tag:"sg",
       scsi_type:0xff,
@@ -1305,7 +1305,7 @@ MODULE_PARM_DESC(def_reserved_size, "size of buffer reserved for each fd");
 int init_module(void) {
     if (def_reserved_size >= 0)
 	sg_big_buff = def_reserved_size;
-    sg_template.module = &__this_module;
+    sg_template.module = THIS_MODULE;
     return scsi_register_module(MODULE_SCSI_DEV, &sg_template);
 }
 

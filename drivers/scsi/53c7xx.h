@@ -59,7 +59,6 @@
  * array.
  */
 
-#if defined(HOSTS_C) || defined(MODULE)
 #include <scsi/scsicam.h>
 
 extern int NCR53c7xx_abort(Scsi_Cmnd *);
@@ -79,8 +78,6 @@ extern int NCR53c7xx_release(struct Scsi_Host *);
 	NULL /* slave attach */, scsicam_bios_param, /* can queue */ 24, \
 	/* id */ 7, 127 /* old SG_ALL */, /* cmd per lun */ 3, 		\
 	/* present */ 0, /* unchecked isa dma */ 0, DISABLE_CLUSTERING} 
-
-#endif /* defined(HOSTS_C) || defined(MODULE) */ 
 
 #ifndef HOSTS_C
 

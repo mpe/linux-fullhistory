@@ -308,6 +308,30 @@ k) If your Linux kernel was compiled with inbuilt plug-and-play
 l) If during DMA operation you find erratic behavior or network data
    corruption you should use your PC's BIOS to slow the EISA bus clock.
 
+m) If the cs89x0 driver is compiled directly into the kernel
+   (non-modular) then its I/O address is automatically determined by
+   ISA bus probing.  The IRQ number, media options, etc are determined
+   from the card's EEPROM.
+
+n) If the cs89x0 driver is compiled directly into the kernel, DMA
+   mode may be selected by providing the kernel with a boot option
+   'cs89x0_dma=N' where 'N' is the desired DMA channel number (5, 6 or 7).
+
+   Kernel boot options may be provided on the LILO command line:
+
+	LILO boot: linux cs89x0_dma=5
+
+   or they may be placed in /etc/lilo.conf:
+
+	image=/boot/bzImage-2.3.48
+	  append="cs89x0_dma=5"
+	  label=linux
+	  root=/dev/hda5
+	  read-only
+
+   The DMA Rx buffer size is hardwired to 16 kbytes in this mode.
+   (64k mode is not available).
+
 
 4.0 COMPILING THE DRIVER
 ===============================================================================
@@ -662,5 +686,3 @@ the latest drivers and technical publications.
 
 In February 2000 the maintenance of this driver was assumed by Andrew
 Morton <andrewm@uow.edu.au>
-
-

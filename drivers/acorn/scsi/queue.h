@@ -1,16 +1,20 @@
 /*
- * queue.h: queue handling
+ *  linux/drivers/acorn/scsi/queue.h: queue handling
  *
- * Copyright (C) 1997 Russell King
+ *  Copyright (C) 1997 Russell King
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
  */
 #ifndef QUEUE_H
 #define QUEUE_H
 
 typedef struct {
-	struct queue_entry *head;		/* head of queue */
-	struct queue_entry *tail;		/* tail of queue */
-	struct queue_entry *free;		/* free list */
-	void *alloc;				/* start of allocated mem */
+	struct list_head head;
+	struct list_head free;
+	spinlock_t queue_lock;
+	void *alloc;			/* start of allocated mem */
 } Queue_t;
 
 /*
@@ -36,32 +40,27 @@ extern void queue_free (Queue_t *queue);
 extern Scsi_Cmnd *queue_remove (Queue_t *queue);
 
 /*
- * Function: Scsi_Cmnd *queue_remove_exclude_ref (queue, exclude, ref)
+ * Function: Scsi_Cmnd *queue_remove_exclude_ref (queue, exclude)
  * Purpose : remove a SCSI command from a queue
  * Params  : queue   - queue to remove command from
  *	     exclude - array of busy LUNs
- *	     ref     - a reference that can be used to put the command back
  * Returns : Scsi_Cmnd if successful (and a reference), or NULL if no command available
  */
-extern Scsi_Cmnd *queue_remove_exclude (Queue_t *queue, unsigned char *exclude);
+extern Scsi_Cmnd *queue_remove_exclude (Queue_t *queue, void *exclude);
 
+#define queue_add_cmd_ordered(queue,SCpnt) \
+	__queue_add(queue,SCpnt,(SCpnt)->cmnd[0] == REQUEST_SENSE)
+#define queue_add_cmd_tail(queue,SCpnt) \
+	__queue_add(queue,SCpnt,0)
 /*
- * Function: int queue_add_cmd_ordered (Queue_t *queue, Scsi_Cmnd *SCpnt)
- * Purpose : Add a new command onto a queue, queueing REQUEST_SENSE first
+ * Function: int __queue_add(Queue_t *queue, Scsi_Cmnd *SCpnt, int head)
+ * Purpose : Add a new command onto a queue
  * Params  : queue - destination queue
  *	     SCpnt - command to add
+ *	     head  - add command to head of queue
  * Returns : 0 on error, !0 on success
  */
-extern int queue_add_cmd_ordered (Queue_t *queue, Scsi_Cmnd *SCpnt);
-
-/*
- * Function: int queue_add_cmd_tail (Queue_t *queue, Scsi_Cmnd *SCpnt)
- * Purpose : Add a new command onto a queue, queueing at end of list
- * Params  : queue - destination queue
- *	     SCpnt - command to add
- * Returns : 0 on error, !0 on success
- */
-extern int queue_add_cmd_tail (Queue_t *queue, Scsi_Cmnd *SCpnt);
+extern int __queue_add(Queue_t *queue, Scsi_Cmnd *SCpnt, int head);
 
 /*
  * Function: Scsi_Cmnd *queue_remove_tgtluntag (queue, target, lun, tag)
@@ -86,21 +85,12 @@ extern Scsi_Cmnd *queue_remove_tgtluntag (Queue_t *queue, int target, int lun, i
 extern int queue_probetgtlun (Queue_t *queue, int target, int lun);
 
 /*
- * Function: int queue_cmdonqueue (queue, SCpnt)
- * Purpose : check to see if we have a command on the queue
- * Params  : queue - queue to look in
- *	     SCpnt - command to find
- * Returns : 0 if not found, != 0 if found
- */
-int queue_cmdonqueue (Queue_t *queue, Scsi_Cmnd *SCpnt);
-
-/*
- * Function: int queue_removecmd (Queue_t *queue, Scsi_Cmnd *SCpnt)
+ * Function: int queue_remove_cmd (Queue_t *queue, Scsi_Cmnd *SCpnt)
  * Purpose : remove a specific command from the queues
  * Params  : queue - queue to look in
  *	     SCpnt - command to find
  * Returns : 0 if not found
  */
-int queue_removecmd (Queue_t *queue, Scsi_Cmnd *SCpnt);
+int queue_remove_cmd(Queue_t *queue, Scsi_Cmnd *SCpnt);
 
 #endif /* QUEUE_H */

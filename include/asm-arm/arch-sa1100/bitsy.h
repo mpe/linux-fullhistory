@@ -38,6 +38,7 @@
 #define EGPIO_BITSY_LVDD_ON      (1 << 15)  /* enable 9V and -6.5V to LCD. */
 
 #ifndef __ASSEMBLY__
+#define BITSY_EGPIO  (*(volatile int *)0xf0000000)
 extern void clr_bitsy_egpio(unsigned long x);
 extern void set_bitsy_egpio(unsigned long x);
 #endif

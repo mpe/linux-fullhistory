@@ -1,9 +1,13 @@
 /*
- * include/asm-arm/arch-arc/irq.h
+ *  linux/include/asm-arm/arch-arc/irq.h
  *
- * Copyright (C) 1996 Russell King
+ *  Copyright (C) 1996 Russell King
  *
- * Changelog:
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ *  Changelog:
  *   24-09-1996	RMK	Created
  *   10-10-1996	RMK	Brought up to date with arch-sa110eval
  *   22-10-1996	RMK	Changed interrupt numbers & uses new inb/outb macros
@@ -11,7 +15,7 @@
  *   22-08-1998	RMK	Restructured IRQ routines
  */
 #include <linux/config.h>
-#include <asm/ioc.h>
+#include <asm/hardware/ioc.h>
 
 #ifdef CONFIG_ARCH_ARC
 #define a_clf()	clf()
@@ -168,7 +172,7 @@ static __inline__ void irq_init_irq(void)
 		}
 	}
 
-	irq_mask[IRQ_KEYBOARDTX].noautoenable = 1;
+	irq_desc[IRQ_KEYBOARDTX].noautoenable = 1;
 
 	init_FIQ();
 }

@@ -1,12 +1,15 @@
 /*
- * linux/include/asm-arm/proc-armv/shmparam.h
+ *  linux/include/asm-arm/proc-armv/shmparam.h
  *
- * Copyright (C) 1996 Russell King
+ *  Copyright (C) 1996 Russell King
  *
- * definitions for the shared process memory on ARM v3 or v4
- * processors
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ *  definitions for the shared process memory on ARM v3 or v4
+ *  processors
  */
-
 #ifndef __ASM_PROC_SHMPARAM_H
 #define __ASM_PROC_SHMPARAM_H
 

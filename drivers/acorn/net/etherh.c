@@ -1,12 +1,16 @@
 /*
- * linux/drivers/net/etherh.c
+ *  linux/drivers/acorn/net/etherh.c
+ *
+ *  Copyright (C) 2000 Russell King
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
  *
  * NS8390 ANT etherh specific driver
  *  For Acorn machines
  *
  * Thanks to I-Cubed for information on their cards.
- *
- * By Russell King.
  *
  * Changelog:
  *  08-12-1996	RMK	1.00	Created

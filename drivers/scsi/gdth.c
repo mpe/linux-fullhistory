@@ -3704,7 +3704,5 @@ void __init gdth_setup(char *str,int *ints)
 }
 
 
-#ifdef MODULE
-Scsi_Host_Template driver_template = GDTH;
+static Scsi_Host_Template driver_template = GDTH;
 #include "scsi_module.c"
-#endif

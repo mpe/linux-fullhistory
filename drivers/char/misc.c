@@ -81,6 +81,7 @@ extern int radio_init(void);
 extern int pc110pad_init(void);
 extern int pmu_device_init(void);
 extern int qpmouse_init(void);
+extern int tosh_init(void);
 
 static int misc_read_proc(char *buf, char **start, off_t offset,
 			  int len, int *eof, void *private)
@@ -298,6 +299,9 @@ int __init misc_init(void)
 #endif
 #ifdef CONFIG_SGI
 	streamable_init ();
+#endif
+#ifdef CONFIG_TOSHIBA
+	tosh_init();
 #endif
 	if (devfs_register_chrdev(MISC_MAJOR,"misc",&misc_fops)) {
 		printk("unable to get major %d for misc devices\n",

@@ -1,7 +1,11 @@
 /*
- * linux/include/asm-arm/proc-armo/ptrace.h
+ *  linux/include/asm-arm/proc-armo/ptrace.h
  *
- * Copyright (C) 1996-1999 Russell King
+ *  Copyright (C) 1996-1999 Russell King
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
  */
 #ifndef __ASM_PROC_PTRACE_H
 #define __ASM_PROC_PTRACE_H
@@ -53,6 +57,8 @@ struct pt_regs {
 
 #define user_mode(regs) \
 	(processor_mode(regs) == USR26_MODE)
+
+#define thumb_mode(regs) (0)
 
 #define interrupts_enabled(regs) \
 	(!((regs)->ARM_pc & I_BIT))

@@ -30,7 +30,7 @@ if [ "$CONFIG_FB" = "y" ]; then
    if [ "$CONFIG_ARCH_ACORN" = "y" ]; then
       bool '  Acorn VIDC support' CONFIG_FB_ACORN
    fi
-   tristate '  Cyber2000 support' CONFIG_FB_CYBER2000
+   dep_tristate '  Cyber2000 support' CONFIG_FB_CYBER2000 $CONFIG_PCI
    if [ "$CONFIG_ARCH_SA1100" = "y" ]; then
       bool '  SA-1100 LCD support' CONFIG_FB_SA1100
    fi

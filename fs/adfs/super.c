@@ -1,7 +1,11 @@
 /*
  *  linux/fs/adfs/super.c
  *
- * Copyright (C) 1997-1999 Russell King
+ *  Copyright (C) 1997-1999 Russell King
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
  */
 #include <linux/version.h>
 #include <linux/module.h>
@@ -425,7 +429,8 @@ struct super_block *adfs_read_super(struct super_block *sb, void *data, int sile
 		kfree(sb->u.adfs_sb.s_map);
 		adfs_error(sb, "get root inode failed\n");
 		goto error;
-	}
+	} else
+		sb->s_root->d_op = &adfs_dentry_operations;
 	return sb;
 
 error_free_bh:

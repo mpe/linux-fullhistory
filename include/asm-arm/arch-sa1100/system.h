@@ -5,13 +5,10 @@
  */
 #include <linux/config.h>
 
-static void arch_idle(void)
+static inline void arch_idle(void)
 {
-	while (!current->need_resched && !hlt_counter) {
-		cpu_do_idle(IDLE_CLOCK_SLOW);
-		cpu_do_idle(IDLE_WAIT_FAST);
-		cpu_do_idle(IDLE_CLOCK_FAST);
-	}
+	while (!current->need_resched && !hlt_counter)
+		cpu_do_idle(0);
 }
 
 #ifdef CONFIG_SA1100_VICTOR

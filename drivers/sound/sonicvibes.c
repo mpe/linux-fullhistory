@@ -2589,7 +2589,7 @@ static int __devinit sv_probe(struct pci_dev *pcidev, const struct pci_device_id
 	}
 	set_fs(fs);
        /* store it in the driver field */
-	pcidev->driver_data = s;
+	pci_set_drvdata(pcidev, s);
 	pcidev->dma_mask = 0x00ffffff;
 	/* put it into driver list */
 	list_add_tail(&s->devs, &devs);
@@ -2624,7 +2624,7 @@ static int __devinit sv_probe(struct pci_dev *pcidev, const struct pci_device_id
 
 static void __devinit sv_remove(struct pci_dev *dev)
 {
-       struct sv_state *s = (struct sv_state *)dev->driver_data;
+       struct sv_state *s = pci_get_drvdata(dev);
 
        if (!s)
                return;
@@ -2646,7 +2646,7 @@ static void __devinit sv_remove(struct pci_dev *dev)
        unregister_sound_midi(s->dev_midi);
        unregister_sound_special(s->dev_dmfm);
        kfree(s);
-       dev->driver_data = NULL;
+       pci_set_drvdata(dev, NULL);
 }
 
 static struct pci_device_id id_table[] __devinitdata = {

@@ -1,39 +1,56 @@
 /*
- * queue.c: queue handling primitives
+ *  linux/drivers/acorn/scsi/queue.c: queue handling primitives
  *
- * (c) 1997 Russell King
+ *  Copyright (C) 1997-2000 Russell King
  *
- * Changelog:
- *  15-Sep-1997 RMK	Created.
- *  11-Oct-1997	RMK	Corrected problem with queue_remove_exclude
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ *  Changelog:
+ *   15-Sep-1997 RMK	Created.
+ *   11-Oct-1997 RMK	Corrected problem with queue_remove_exclude
  *			not updating internal linked list properly
  *			(was causing commands to go missing).
+ *   30-Aug-2000 RMK	Use Linux list handling and spinlocks
  */
-
-#define SECTOR_SIZE 512
-
 #include <linux/module.h>
 #include <linux/blk.h>
 #include <linux/kernel.h>
 #include <linux/string.h>
 #include <linux/malloc.h>
+#include <linux/spinlock.h>
+#include <linux/list.h>
 
 #include "../../scsi/scsi.h"
 
 MODULE_AUTHOR("Russell King");
 MODULE_DESCRIPTION("SCSI command queueing");
 
+#define DEBUG
+
 typedef struct queue_entry {
-	struct queue_entry *next;
-	struct queue_entry *prev;
-	unsigned long	   magic;
+	struct list_head   list;
 	Scsi_Cmnd	   *SCpnt;
+#ifdef DEBUG
+	unsigned long	   magic;
+#endif
 } QE_t;
 
+#ifdef DEBUG
 #define QUEUE_MAGIC_FREE	0xf7e1c9a3
 #define QUEUE_MAGIC_USED	0xf7e1cc33
 
+#define SET_MAGIC(q,m)	((q)->magic = (m))
+#define BAD_MAGIC(q,m)	((q)->magic != (m))
+#else
+#define SET_MAGIC(q,m)	do { } while (0)
+#define BAD_MAGIC(q,m)	(0)
+#endif
+
 #include "queue.h"
+
+#define NR_QE	32
 
 /*
  * Function: void queue_initialise (Queue_t *queue)
@@ -42,24 +59,29 @@ typedef struct queue_entry {
  */
 int queue_initialise (Queue_t *queue)
 {
-	unsigned int nqueues;
+	unsigned int nqueues = NR_QE;
 	QE_t *q;
 
-	queue->alloc = queue->free = q = (QE_t *) kmalloc (SECTOR_SIZE, GFP_KERNEL);
-	if (q) {
-		nqueues = SECTOR_SIZE / sizeof (QE_t);
+	spin_lock_init(&queue->queue_lock);
+	INIT_LIST_HEAD(&queue->head);
+	INIT_LIST_HEAD(&queue->free);
 
+	/*
+	 * If life was easier, then SCpnt would have a
+	 * host-available list head, and we wouldn't
+	 * need to keep free lists or allocate this
+	 * memory.
+	 */
+	queue->alloc = q = kmalloc(sizeof(QE_t) * nqueues, GFP_KERNEL);
+	if (q) {
 		for (; nqueues; q++, nqueues--) {
-			q->next = q + 1;
-			q->prev = NULL;
-			q->magic = QUEUE_MAGIC_FREE;
+			SET_MAGIC(q, QUEUE_MAGIC_FREE);
 			q->SCpnt = NULL;
+			list_add(&q->list, &queue->free);
 		}
-		q -= 1;
-		q->next = NULL;
 	}
 
-	return q != NULL;
+	return queue->alloc != NULL;
 }
 
 /*
@@ -69,103 +91,69 @@ int queue_initialise (Queue_t *queue)
  */
 void queue_free (Queue_t *queue)
 {
+	if (!list_empty(&queue->head))
+		printk(KERN_WARNING "freeing non-empty queue %p\n", queue);
 	if (queue->alloc)
-		kfree (queue->alloc);
+		kfree(queue->alloc);
 }
      
 
 /*
- * Function: int queue_add_cmd_ordered (Queue_t *queue, Scsi_Cmnd *SCpnt)
+ * Function: int queue_add_cmd(Queue_t *queue, Scsi_Cmnd *SCpnt, int head)
  * Purpose : Add a new command onto a queue, adding REQUEST_SENSE to head.
  * Params  : queue - destination queue
  *	     SCpnt - command to add
+ *	     head  - add command to head of queue
  * Returns : 0 on error, !0 on success
  */
-int queue_add_cmd_ordered (Queue_t *queue, Scsi_Cmnd *SCpnt)
+int __queue_add(Queue_t *queue, Scsi_Cmnd *SCpnt, int head)
 {
 	unsigned long flags;
+	struct list_head *l;
 	QE_t *q;
+	int ret = 0;
 
-	save_flags_cli (flags);
-	q = queue->free;
-	if (q)
-		queue->free = q->next;
+	spin_lock_irqsave(&queue->queue_lock, flags);
+	if (list_empty(&queue->free))
+		goto empty;
 
-	if (q) {
-		if (q->magic != QUEUE_MAGIC_FREE) {
-			restore_flags (flags);
-			panic ("scsi queues corrupted - queue entry not free");
-		}
+	l = queue->free.next;
+	list_del(l);
 
-		q->magic = QUEUE_MAGIC_USED;
-		q->SCpnt = SCpnt;
+	q = list_entry(l, QE_t, list);
+	if (BAD_MAGIC(q, QUEUE_MAGIC_FREE))
+		BUG();
 
-		if (SCpnt->cmnd[0] == REQUEST_SENSE) { /* request_sense gets put on the queue head */
-			if (queue->head) {
-				q->prev = NULL;
-				q->next = queue->head;
-				queue->head->prev = q;
-				queue->head = q;
-			} else {
-			    	q->next = q->prev = NULL;
-			    	queue->head = queue->tail = q;
-			}
-		} else {				/* others get put on the tail */
-			if (queue->tail) {
-				q->next = NULL;
-				q->prev = queue->tail;
-				queue->tail->next = q;
-				queue->tail = q;
-			} else {
-				q->next = q->prev = NULL;
-				queue->head = queue->tail = q;
-			}
-		}    
-	}
-	restore_flags (flags);
+	SET_MAGIC(q, QUEUE_MAGIC_USED);
+	q->SCpnt = SCpnt;
 
-	return q != NULL;
+	if (head)
+		list_add(l, &queue->head);
+	else
+		list_add_tail(l, &queue->head);
+
+	ret = 1;
+empty:
+	spin_unlock_irqrestore(&queue->queue_lock, flags);
+	return ret;
 }
 
-/*
- * Function: int queue_add_cmd_tail (Queue_t *queue, Scsi_Cmnd *SCpnt)
- * Purpose : Add a new command onto a queue, adding onto tail of list
- * Params  : queue - destination queue
- *	     SCpnt - command to add
- * Returns : 0 on error, !0 on success
- */
-int queue_add_cmd_tail (Queue_t *queue, Scsi_Cmnd *SCpnt)
+static Scsi_Cmnd *__queue_remove(Queue_t *queue, struct list_head *ent)
 {
-	unsigned long flags;
 	QE_t *q;
 
-	save_flags_cli (flags);
-	q = queue->free;
-	if (q)
-		queue->free = q->next;
+	/*
+	 * Move the entry from the "used" list onto the "free" list
+	 */
+	list_del(ent);
+	q = list_entry(ent, QE_t, list);
+	if (BAD_MAGIC(q, QUEUE_MAGIC_USED))
+		BUG();
 
-	if (q) {
-		if (q->magic != QUEUE_MAGIC_FREE) {
-			restore_flags (flags);
-			panic ("scsi queues corrupted - queue entry not free");
-		}
+	SET_MAGIC(q, QUEUE_MAGIC_FREE);
+	list_add(ent, &queue->free);
 
-		q->magic = QUEUE_MAGIC_USED;
-		q->SCpnt = SCpnt;
-
-		if (queue->tail) {
-			q->next = NULL;
-			q->prev = queue->tail;
-			queue->tail->next = q;
-			queue->tail = q;
-		} else {
-			q->next = q->prev = NULL;
-			queue->head = queue->tail = q;
-		}    
-	}
-	restore_flags (flags);
-
-	return q != NULL;
+	return q->SCpnt;
 }
 
 /*
@@ -175,50 +163,21 @@ int queue_add_cmd_tail (Queue_t *queue, Scsi_Cmnd *SCpnt)
  *	     exclude - bit array of target&lun which is busy
  * Returns : Scsi_Cmnd if successful (and a reference), or NULL if no command available
  */
-Scsi_Cmnd *queue_remove_exclude (Queue_t *queue, unsigned char *exclude)
+Scsi_Cmnd *queue_remove_exclude(Queue_t *queue, void *exclude)
 {
 	unsigned long flags;
-	Scsi_Cmnd *SCpnt;
-	QE_t *q, *prev;
+	struct list_head *l;
+	Scsi_Cmnd *SCpnt = NULL;
 
-	save_flags_cli (flags);
-	for (q = queue->head, prev = NULL; q; q = q->next) {
-		if (exclude && !test_bit (q->SCpnt->target * 8 + q->SCpnt->lun, exclude))
+	spin_lock_irqsave(&queue->queue_lock, flags);
+	list_for_each(l, &queue->head) {
+		QE_t *q = list_entry(l, QE_t, list);
+		if (!test_bit(q->SCpnt->target * 8 + q->SCpnt->lun, exclude)) {
+			SCpnt = __queue_remove(queue, l);
 			break;
-		prev = q;
+		}
 	}
-
-	if (q) {
-		if (q->magic != QUEUE_MAGIC_USED) {
-			restore_flags (flags);
-			panic ("q_remove_exclude: scsi queues corrupted - queue entry not used");
-		}
-		if (q->prev != prev)
-			panic ("q_remove_exclude: scsi queues corrupted - q->prev != prev");
-
-		if (!prev) {
-			queue->head = q->next;
-			if (queue->head)
-				queue->head->prev = NULL;
-			else
-				queue->tail = NULL;
-		} else {
-			prev->next = q->next;
-			if (prev->next)
-				prev->next->prev = prev;
-			else
-				queue->tail = prev;
-		}
-
-		SCpnt = q->SCpnt;
-
-		q->next = queue->free;
-		queue->free = q;
-		q->magic = QUEUE_MAGIC_FREE;
-	} else
-		SCpnt = NULL;
-
-	restore_flags (flags);
+	spin_unlock_irqrestore(&queue->queue_lock, flags);
 
 	return SCpnt;
 }
@@ -229,35 +188,15 @@ Scsi_Cmnd *queue_remove_exclude (Queue_t *queue, unsigned char *exclude)
  * Params  : queue   - queue to remove command from
  * Returns : Scsi_Cmnd if successful (and a reference), or NULL if no command available
  */
-Scsi_Cmnd *queue_remove (Queue_t *queue)
+Scsi_Cmnd *queue_remove(Queue_t *queue)
 {
 	unsigned long flags;
-	Scsi_Cmnd *SCpnt;
-	QE_t *q;
+	Scsi_Cmnd *SCpnt = NULL;
 
-	save_flags_cli (flags);
-	q = queue->head;
-	if (q) {
-		queue->head = q->next;
-		if (queue->head)
-			queue->head->prev = NULL;
-		else
-			queue->tail = NULL;
-
-		if (q->magic != QUEUE_MAGIC_USED) {
-			restore_flags (flags);
-			panic ("scsi queues corrupted - queue entry not used");
-		}
-
-		SCpnt = q->SCpnt;
-
-		q->next = queue->free;
-		queue->free = q;
-		q->magic = QUEUE_MAGIC_FREE;
-	} else
-		SCpnt = NULL;
-
-	restore_flags (flags);
+	spin_lock_irqsave(&queue->queue_lock, flags);
+	if (!list_empty(&queue->head))
+		SCpnt = __queue_remove(queue, queue->head.next);
+	spin_unlock_irqrestore(&queue->queue_lock, flags);
 
 	return SCpnt;
 }
@@ -274,50 +213,19 @@ Scsi_Cmnd *queue_remove (Queue_t *queue)
 Scsi_Cmnd *queue_remove_tgtluntag (Queue_t *queue, int target, int lun, int tag)
 {
 	unsigned long flags;
-	Scsi_Cmnd *SCpnt;
-	QE_t *q, *prev;
+	struct list_head *l;
+	Scsi_Cmnd *SCpnt = NULL;
 
-	save_flags_cli (flags);
-	for (q = queue->head, prev = NULL; q; q = q->next) {
-		if (q->SCpnt->target == target &&
-		    q->SCpnt->lun == lun &&
-		    q->SCpnt->tag == tag)
+	spin_lock_irqsave(&queue->queue_lock, flags);
+	list_for_each(l, &queue->head) {
+		QE_t *q = list_entry(l, QE_t, list);
+		if (q->SCpnt->target == target && q->SCpnt->lun == lun &&
+		    q->SCpnt->tag == tag) {
+			SCpnt = __queue_remove(queue, l);
 			break;
-
-		prev = q;
+		}
 	}
-
-	if (q) {
-		if (q->magic != QUEUE_MAGIC_USED) {
-			restore_flags (flags);
-			panic ("q_remove_tgtluntag: scsi queues corrupted - queue entry not used");
-		}
-		if (q->prev != prev)
-			panic ("q_remove_tgtluntag: scsi queues corrupted - q->prev != prev");
-
-		if (!prev) {
-			queue->head = q->next;
-			if (queue->head)
-				queue->head->prev = NULL;
-			else
-				queue->tail = NULL;
-		} else {
-			prev->next = q->next;
-			if (prev->next)
-				prev->next->prev = prev;
-			else
-				queue->tail = prev;
-		}
-
-		SCpnt = q->SCpnt;
-
-		q->magic = QUEUE_MAGIC_FREE;
-		q->next = queue->free;
-		queue->free = q;
-	} else
-		SCpnt = NULL;
-
-	restore_flags (flags);
+	spin_unlock_irqrestore(&queue->queue_lock, flags);
 
 	return SCpnt;
 }
@@ -333,96 +241,58 @@ Scsi_Cmnd *queue_remove_tgtluntag (Queue_t *queue, int target, int lun, int tag)
  */
 int queue_probetgtlun (Queue_t *queue, int target, int lun)
 {
-	QE_t *q;
+	unsigned long flags;
+	struct list_head *l;
+	int found = 0;
 
-	for (q = queue->head; q; q = q->next)
-		if (q->SCpnt->target == target &&
-		    q->SCpnt->lun == lun)
+	spin_lock_irqsave(&queue->queue_lock, flags);
+	list_for_each(l, &queue->head) {
+		QE_t *q = list_entry(l, QE_t, list);
+		if (q->SCpnt->target == target && q->SCpnt->lun == lun) {
+			found = 1;
 			break;
+		}
+	}
+	spin_unlock_irqrestore(&queue->queue_lock, flags);
 
-	return q != NULL;
+	return found;
 }
 
 /*
- * Function: int queue_cmdonqueue (queue, SCpnt)
- * Purpose : check to see if we have a command on the queue
- * Params  : queue - queue to look in
- *	     SCpnt - command to find
- * Returns : 0 if not found, != 0 if found
- */
-int queue_cmdonqueue (Queue_t *queue, Scsi_Cmnd *SCpnt)
-{
-	QE_t *q;
-
-	for (q = queue->head; q; q = q->next)
-		if (q->SCpnt == SCpnt)
-			break;
-
-	return q != NULL;
-}
-
-/*
- * Function: int queue_removecmd (Queue_t *queue, Scsi_Cmnd *SCpnt)
+ * Function: int queue_remove_cmd(Queue_t *queue, Scsi_Cmnd *SCpnt)
  * Purpose : remove a specific command from the queues
  * Params  : queue - queue to look in
  *	     SCpnt - command to find
  * Returns : 0 if not found
  */
-int queue_removecmd (Queue_t *queue, Scsi_Cmnd *SCpnt)
+int queue_remove_cmd(Queue_t *queue, Scsi_Cmnd *SCpnt)
 {
 	unsigned long flags;
-	QE_t *q, *prev;
+	struct list_head *l;
+	int found = 0;
 
-	save_flags_cli (flags);
-	for (q = queue->head, prev = NULL; q; q = q->next) {
-		if (q->SCpnt == SCpnt)
+	spin_lock_irqsave(&queue->queue_lock, flags);
+	list_for_each(l, &queue->head) {
+		QE_t *q = list_entry(l, QE_t, list);
+		if (q->SCpnt == SCpnt) {
+			__queue_remove(queue, l);
+			found = 1;
 			break;
-
-		prev = q;
-	}
-
-	if (q) {
-		if (q->magic != QUEUE_MAGIC_USED) {
-			restore_flags (flags);
-			panic ("q_removecmd: scsi queues corrupted - queue entry not used");
 		}
-		if (q->prev != prev)
-			panic ("q_removecmd: scsi queues corrupted - q->prev != prev");
-
-		if (!prev) {
-			queue->head = q->next;
-			if (queue->head)
-				queue->head->prev = NULL;
-			else
-				queue->tail = NULL;
-		} else {
-			prev->next = q->next;
-			if (prev->next)
-				prev->next->prev = prev;
-			else
-				queue->tail = prev;
-		}
-
-		q->magic = QUEUE_MAGIC_FREE;
-		q->next = queue->free;
-		queue->free = q;
 	}
+	spin_unlock_irqrestore(&queue->queue_lock, flags);
 
-	restore_flags (flags);
-
-	return q != NULL;
+	return found;
 }
 
 EXPORT_SYMBOL(queue_initialise);
 EXPORT_SYMBOL(queue_free);
+EXPORT_SYMBOL(__queue_add);
 EXPORT_SYMBOL(queue_remove);
 EXPORT_SYMBOL(queue_remove_exclude);
-EXPORT_SYMBOL(queue_add_cmd_ordered);
-EXPORT_SYMBOL(queue_add_cmd_tail);
 EXPORT_SYMBOL(queue_remove_tgtluntag);
+EXPORT_SYMBOL(queue_remove_cmd);
 EXPORT_SYMBOL(queue_probetgtlun);
-EXPORT_SYMBOL(queue_cmdonqueue);
-EXPORT_SYMBOL(queue_removecmd);
 
 #ifdef MODULE
 int init_module (void)

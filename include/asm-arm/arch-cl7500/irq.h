@@ -9,7 +9,7 @@
  *   22-08-1998	RMK	Restructured IRQ routines
  *   11-08-1999	PJB	Created ARM7500 version, derived from RiscPC code
  */
-#include <asm/iomd.h>
+#include <asm/hardware/iomd.h>
 
 static inline int fixup_irq(unsigned int irq)
 {

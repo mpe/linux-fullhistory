@@ -4,7 +4,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>
  *
- *	$Id: ipv6.h,v 1.21 2000/07/07 22:29:42 davem Exp $
+ *	$Id: ipv6.h,v 1.22 2000/09/18 05:54:13 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -169,7 +169,7 @@ extern int			ipv6_flowlabel_opt(struct sock *sk, char *optval, int optlen);
 extern void			ip6_flowlabel_init(void);
 extern void			ip6_flowlabel_cleanup(void);
 
-extern __inline__ void fl6_sock_release(struct ip6_flowlabel *fl)
+static inline void fl6_sock_release(struct ip6_flowlabel *fl)
 {
 	if (fl)
 		atomic_dec(&fl->users);
@@ -206,23 +206,23 @@ typedef int		(*inet_getfrag_t) (const void *data,
 
 extern int		ipv6_addr_type(struct in6_addr *addr);
 
-extern __inline__ int ipv6_addr_scope(struct in6_addr *addr)
+static inline int ipv6_addr_scope(struct in6_addr *addr)
 {
 	return ipv6_addr_type(addr) & IPV6_ADDR_SCOPE_MASK;
 }
 
-extern __inline__ int ipv6_addr_cmp(struct in6_addr *a1, struct in6_addr *a2)
+static inline int ipv6_addr_cmp(struct in6_addr *a1, struct in6_addr *a2)
 {
 	return memcmp((void *) a1, (void *) a2, sizeof(struct in6_addr));
 }
 
-extern __inline__ void ipv6_addr_copy(struct in6_addr *a1, struct in6_addr *a2)
+static inline void ipv6_addr_copy(struct in6_addr *a1, struct in6_addr *a2)
 {
 	memcpy((void *) a1, (void *) a2, sizeof(struct in6_addr));
 }
 
 #ifndef __HAVE_ARCH_ADDR_SET
-extern __inline__ void ipv6_addr_set(struct in6_addr *addr, 
+static inline void ipv6_addr_set(struct in6_addr *addr, 
 				     __u32 w1, __u32 w2,
 				     __u32 w3, __u32 w4)
 {
@@ -233,7 +233,7 @@ extern __inline__ void ipv6_addr_set(struct in6_addr *addr,
 }
 #endif
 
-extern __inline__ int ipv6_addr_any(struct in6_addr *a)
+static inline int ipv6_addr_any(struct in6_addr *a)
 {
 	return ((a->s6_addr32[0] | a->s6_addr32[1] | 
 		 a->s6_addr32[2] | a->s6_addr32[3] ) == 0); 

@@ -12,19 +12,19 @@
 #include <asm/byteorder.h>
 
 
-extern __inline__ __u8 ipv4_get_dsfield(struct iphdr *iph)
+static inline __u8 ipv4_get_dsfield(struct iphdr *iph)
 {
 	return iph->tos;
 }
 
 
-extern __inline__ __u8 ipv6_get_dsfield(struct ipv6hdr *ipv6h)
+static inline __u8 ipv6_get_dsfield(struct ipv6hdr *ipv6h)
 {
 	return ntohs(*(__u16 *) ipv6h) >> 4;
 }
 
 
-extern __inline__ void ipv4_change_dsfield(struct iphdr *iph,__u8 mask,
+static inline void ipv4_change_dsfield(struct iphdr *iph,__u8 mask,
     __u8 value)
 {
         __u32 check = ntohs(iph->check);
@@ -40,7 +40,7 @@ extern __inline__ void ipv4_change_dsfield(struct iphdr *iph,__u8 mask,
 }
 
 
-extern __inline__ void ipv6_change_dsfield(struct ipv6hdr *ipv6h,__u8 mask,
+static inline void ipv6_change_dsfield(struct ipv6hdr *ipv6h,__u8 mask,
     __u8 value)
 {
         __u16 tmp;
@@ -53,7 +53,7 @@ extern __inline__ void ipv6_change_dsfield(struct ipv6hdr *ipv6h,__u8 mask,
 
 #if 0 /* put this later into asm-i386 or such ... */
 
-extern __inline__ void ip_change_dsfield(struct iphdr *iph,__u16 dsfield)
+static inline void ip_change_dsfield(struct iphdr *iph,__u16 dsfield)
 {
 	__u16 check;
 

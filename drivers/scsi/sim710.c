@@ -1603,7 +1603,8 @@ sim710_release(struct Scsi_Host *host)
     return 1;
 }
 
-Scsi_Host_Template driver_template = SIM710_SCSI;
+#endif
+
+static Scsi_Host_Template driver_template = SIM710_SCSI;
 
 #include "scsi_module.c"
-#endif

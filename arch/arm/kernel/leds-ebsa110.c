@@ -1,23 +1,32 @@
 /*
- * arch/arm/kernel/leds-ebsa110.c
+ *  linux/arch/arm/kernel/leds-ebsa110.c
  *
- * Copyright (C) 1998 Russell King
+ *  Copyright (C) 1998 Russell King
  *
- * EBSA-110 LED control routines.  We use the led as follows:
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
  *
- *  - Red - toggles state every 50 timer interrupts
+ *  EBSA-110 LED control routines.  We use the led as follows:
+ *
+ *   - Red - toggles state every 50 timer interrupts
  */
 #include <linux/module.h>
+#include <linux/spinlock.h>
+#include <linux/init.h>
 
 #include <asm/hardware.h>
 #include <asm/leds.h>
 #include <asm/system.h>
+#include <asm/mach-types.h>
+
+static spinlock_t leds_lock;
 
 static void ebsa110_leds_event(led_event_t ledevt)
 {
 	unsigned long flags;
 
-	save_flags_cli(flags);
+	spin_lock_irqsave(&leds_lock, flags);
 
 	switch(ledevt) {
 	case led_timer:
@@ -28,9 +37,15 @@ static void ebsa110_leds_event(led_event_t ledevt)
 		break;
 	}
 
-	restore_flags(flags);
+	spin_unlock_irqrestore(&leds_lock, flags);
 }
 
-void (*leds_event)(led_event_t) = ebsa110_leds_event;
+static int __init leds_init(void)
+{
+	if (machine_is_ebsa110())
+		leds_event = ebsa110_leds_event;
 
-EXPORT_SYMBOL(leds_event);
+	return 0;
+}
+
+__initcall(leds_init);

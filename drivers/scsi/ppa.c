@@ -99,10 +99,8 @@ static int ppa_pb_claim(int host_no)
  *                   Parallel port probing routines                        *
  ***************************************************************************/
 
-#ifdef MODULE
-Scsi_Host_Template driver_template = PPA;
+static Scsi_Host_Template driver_template = PPA;
 #include  "scsi_module.c"
-#endif
 
 /*
  * Start of Chipset kludges

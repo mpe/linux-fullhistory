@@ -1,13 +1,14 @@
 /*
- * linux/arch/arm/drivers/net/ether1.c
+ *  linux/drivers/acorn/net/ether1.c
  *
- * (C) Copyright 1996-2000 Russell King
+ *  Copyright (C) 1996-2000 Russell King
  *
- * Acorn ether1 driver (82586 chip)
- *  for Acorn machines
- */
-
-/*
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ *  Acorn ether1 driver (82586 chip) for Acorn machines
+ *
  * We basically keep two queues in the cards memory - one for transmit
  * and one for receive.  Each has a head and a tail.  The head is where
  * we/the chip adds packets to be transmitted/received, and the tail
@@ -15,9 +16,7 @@
  * Both of these queues are circular, and since the chip is running
  * all the time, we have to be careful when we modify the pointers etc
  * so that the buffer memory contents is valid all the time.
- */
-
-/*
+ *
  * Change log:
  * 1.00	RMK			Released
  * 1.01	RMK	19/03/1996	Transfers the last odd byte onto/off of the card now.
@@ -132,135 +131,128 @@ ether1_outw_p (struct net_device *dev, unsigned short val, int addr, int svflgs)
  * This routine is essentially an optimised memcpy from the card's
  * onboard RAM to kernel memory.
  */
-static inline void *
-ether1_inswb (unsigned int addr, void *data, unsigned int len)
-{
-	int used;
-
-	addr = ioaddr(addr);
-
-	__asm__ __volatile__(
-		"subs	%3, %3, #2
-		bmi	2f
-1:		ldr	%0, [%1], #4
-		strb	%0, [%2], #1
-		mov	%0, %0, lsr #8
-		strb	%0, [%2], #1
-		subs	%3, %3, #2
-		bmi	2f
-		ldr	%0, [%1], #4
-		strb	%0, [%2], #1
-		mov	%0, %0, lsr #8
-		strb	%0, [%2], #1
-		subs	%3, %3, #2
-		bmi	2f
-		ldr	%0, [%1], #4
-		strb	%0, [%2], #1
-		mov	%0, %0, lsr #8
-		strb	%0, [%2], #1
-		subs	%3, %3, #2
-		bmi	2f
-		ldr	%0, [%1], #4
-		strb	%0, [%2], #1
-		mov	%0, %0, lsr #8
-		strb	%0, [%2], #1
-		subs	%3, %3, #2
-		bpl	1b
-2:		adds	%3, %3, #1
-		ldreqb	%0, [%1]
-		streqb	%0, [%2]"
-	: "=&r" (used), "=&r" (addr), "=&r" (data), "=&r" (len)
-	:                "1"  (addr), "2"   (data), "3"   (len));
-
-	return data;
-}
-
-static inline void *
-ether1_outswb (unsigned int addr, void *data, unsigned int len)
-{
-	int used;
-
-	addr = ioaddr(addr);
-
-	__asm__ __volatile__(
-		"subs	%3, %3, #2
-		bmi	2f
-1:		ldr	%0, [%2], #2
-		mov	%0, %0, lsl #16
-		orr	%0, %0, %0, lsr #16
-		str	%0, [%1], #4
-		subs	%3, %3, #2
-		bmi	2f
-		ldr	%0, [%2], #2
-		mov	%0, %0, lsl #16
-		orr	%0, %0, %0, lsr #16
-		str	%0, [%1], #4
-		subs	%3, %3, #2
-		bmi	2f
-		ldr	%0, [%2], #2
-		mov	%0, %0, lsl #16
-		orr	%0, %0, %0, lsr #16
-		str	%0, [%1], #4
-		subs	%3, %3, #2
-		bmi	2f
-		ldr	%0, [%2], #2
-		mov	%0, %0, lsl #16
-		orr	%0, %0, %0, lsr #16
-		str	%0, [%1], #4
-		subs	%3, %3, #2
-		bpl	1b
-2:		adds	%3, %3, #1
-		ldreqb	%0, [%2]
-		streqb	%0, [%1]"
-	: "=&r" (used), "=&r" (addr), "=&r" (data), "=&r" (len)
-	:                "1"  (addr), "2"   (data), "3"   (len));
-
-	return data;
-}
-
-
 static void
 ether1_writebuffer (struct net_device *dev, void *data, unsigned int start, unsigned int length)
 {
-	unsigned int page, thislen, offset;
+	unsigned int page, thislen, offset, addr;
 
 	offset = start & 4095;
+	page = start >> 12;
+	addr = ioaddr(ETHER1_RAM + (offset >> 1));
 
-	for (page = start >> 12; length; page++) {
-		outb (page, REG_PAGE);
-		if (offset + length > 4096) {
-			length -= 4096 - offset;
-			thislen = 4096 - offset;
-		} else {
-			thislen = length;
-			length = 0;
-		}
+	if (offset + length > 4096)
+		thislen = 4096 - offset;
+	else
+		thislen = length;
 
-		data = ether1_outswb (ETHER1_RAM + (offset >> 1), data, thislen);
-		offset = 0;
-	}
+	do {
+		int used;
+
+		outb(page, REG_PAGE);
+		length -= thislen;
+
+		__asm__ __volatile__(
+	"subs	%3, %3, #2
+	bmi	2f
+1:	ldr	%0, [%1], #2
+	mov	%0, %0, lsl #16
+	orr	%0, %0, %0, lsr #16
+	str	%0, [%2], #4
+	subs	%3, %3, #2
+	bmi	2f
+	ldr	%0, [%1], #2
+	mov	%0, %0, lsl #16
+	orr	%0, %0, %0, lsr #16
+	str	%0, [%2], #4
+	subs	%3, %3, #2
+	bmi	2f
+	ldr	%0, [%1], #2
+	mov	%0, %0, lsl #16
+	orr	%0, %0, %0, lsr #16
+	str	%0, [%2], #4
+	subs	%3, %3, #2
+	bmi	2f
+	ldr	%0, [%1], #2
+	mov	%0, %0, lsl #16
+	orr	%0, %0, %0, lsr #16
+	str	%0, [%2], #4
+	subs	%3, %3, #2
+	bpl	1b
+2:	adds	%3, %3, #1
+	ldreqb	%0, [%1]
+	streqb	%0, [%2]"
+		: "=&r" (used), "=&r" (data)
+		: "r"  (addr), "r" (thislen), "1" (data));
+
+		addr = ioaddr(ETHER1_RAM);
+
+		thislen = length;
+		if (thislen > 4096)
+			thislen = 4096;
+		page++;
+	} while (thislen);
 }
 
 static void
 ether1_readbuffer (struct net_device *dev, void *data, unsigned int start, unsigned int length)
 {
-	unsigned int page, thislen, offset;
+	unsigned int page, thislen, offset, addr;
 
 	offset = start & 4095;
+	page = start >> 12;
+	addr = ioaddr(ETHER1_RAM + (offset >> 1));
 
-	for (page = start >> 12; length; page++) {
-		outb (page, REG_PAGE);
-		if (offset + length > 4096) {
-			length -= 4096 - offset;
-			thislen = 4096 - offset;
-		} else {
-			thislen = length;
-			length = 0;
-		}
+	if (offset + length > 4096)
+		thislen = 4096 - offset;
+	else
+		thislen = length;
 
-		data = ether1_inswb (ETHER1_RAM + (offset >> 1), data, thislen);
-		offset = 0;
-	}
+	do {
+		int used;
+
+		outb(page, REG_PAGE);
+		length -= thislen;
+
+		__asm__ __volatile__(
+	"subs	%3, %3, #2
+	bmi	2f
+1:	ldr	%0, [%2], #4
+	strb	%0, [%1], #1
+	mov	%0, %0, lsr #8
+	strb	%0, [%1], #1
+	subs	%3, %3, #2
+	bmi	2f
+	ldr	%0, [%2], #4
+	strb	%0, [%1], #1
+	mov	%0, %0, lsr #8
+	strb	%0, [%1], #1
+	subs	%3, %3, #2
+	bmi	2f
+	ldr	%0, [%2], #4
+	strb	%0, [%1], #1
+	mov	%0, %0, lsr #8
+	strb	%0, [%1], #1
+	subs	%3, %3, #2
+	bmi	2f
+	ldr	%0, [%2], #4
+	strb	%0, [%1], #1
+	mov	%0, %0, lsr #8
+	strb	%0, [%1], #1
+	subs	%3, %3, #2
+	bpl	1b
+2:	adds	%3, %3, #1
+	ldreqb	%0, [%2]
+	streqb	%0, [%1]"
+		: "=&r" (used), "=&r" (data)
+		: "r"  (addr), "r" (thislen), "1" (data));
+
+		addr = ioaddr(ETHER1_RAM);
+
+		thislen = length;
+		if (thislen > 4096)
+			thislen = 4096;
+		page++;
+	} while (thislen);
 }
 
 static int __init

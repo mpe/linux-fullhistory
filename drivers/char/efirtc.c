@@ -249,7 +249,7 @@ efi_rtc_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 
 			convert_from_efi_time(&eft, &wtime);
 
-			return copy_to_user((void *)&ewp->time, &wtime, sizeof(struct rtc_time));
+			return copy_to_user((void *)&ewp->time, &wtime, sizeof(struct rtc_time)) ? -EFAULT : 0;
 	}
 	return -EINVAL;
 }

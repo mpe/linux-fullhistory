@@ -24,6 +24,10 @@ ifeq ($(CONFIG_ARCH_NETWINDER),y)
 OBJS		+= head-netwinder.o
 endif
 
+ifeq ($(CONFIG_ARCH_INTEGRATOR),y)
+OBJS		+= head-netwinder.o
+endif
+
 ifeq ($(CONFIG_ARCH_NEXUSPCI),y)
 HEAD		 = head-nexuspci.o
 endif

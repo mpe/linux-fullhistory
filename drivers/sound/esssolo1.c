@@ -2305,7 +2305,7 @@ static int __devinit solo1_probe(struct pci_dev *pcidev, const struct pci_device
 	if (setup_solo1(s))
 		goto err;
 	/* store it in the driver field */
-	pcidev->driver_data = s;
+	pci_set_drvdata(pcidev, s);
 	pcidev->dma_mask = dma_mask;
 	/* put it into driver list */
 	list_add_tail(&s->devs, &devs);
@@ -2342,7 +2342,7 @@ static int __devinit solo1_probe(struct pci_dev *pcidev, const struct pci_device
 
 static void __devinit solo1_remove(struct pci_dev *dev)
 {
-	struct solo1_state *s = (struct solo1_state *)dev->driver_data;
+	struct solo1_state *s = pci_get_drvdata(dev);
 	
 	if (!s)
 		return;
@@ -2363,7 +2363,7 @@ static void __devinit solo1_remove(struct pci_dev *dev)
 	unregister_sound_midi(s->dev_midi);
 	unregister_sound_special(s->dev_dmfm);
 	kfree(s);
-	dev->driver_data = NULL;
+	pci_set_drvdata(dev, NULL);
 }
 
 static struct pci_device_id id_table[] __devinitdata = {

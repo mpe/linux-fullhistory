@@ -71,7 +71,7 @@ static void sr_detach(Scsi_Device *);
 
 static int sr_init_command(Scsi_Cmnd *);
 
-struct Scsi_Device_Template sr_template =
+static struct Scsi_Device_Template sr_template =
 {
 	name:"cdrom",
 	tag:"sr",

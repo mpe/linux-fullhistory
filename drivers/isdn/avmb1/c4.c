@@ -572,7 +572,8 @@ static void c4_handle_rx(avmcard *card)
 	avmctrl_info *cinfo;
 	struct sk_buff *skb;
 	void *p = dma->recvbuf;
-	__u32 ApplId, MsgLen, DataB3Len, NCCI, WindowSize;
+	__u32 ApplId, DataB3Len, NCCI, WindowSize;
+	__s32 MsgLen;
 	__u8 b1cmd =  _get_byte(&p);
 	__u32 cidx;
 

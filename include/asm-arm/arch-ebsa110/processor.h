@@ -1,10 +1,14 @@
 /*
- * linux/include/asm-arm/arch-ebsa110/processor.h
+ *  linux/include/asm-arm/arch-ebsa110/processor.h
  *
- * Copyright (C) 1996-1999 Russell King
+ *  Copyright (C) 1996-1999 Russell King
  *
- * Changelog:
- *  21-Mar-1999	RMK	Added asm/arch/memory.h
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ *  Changelog:
+ *   21-Mar-1999 RMK	Added asm/arch/memory.h
  */
 
 #ifndef __ASM_ARCH_PROCESSOR_H

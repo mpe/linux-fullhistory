@@ -1,8 +1,8 @@
 /*
- * linux/include/asm-arm/arch-ebsa285/time.h
+ *  linux/include/asm-arm/arch-ebsa285/time.h
  *
- * Copyright (c) 1998 Russell King.
- * Copyright (c) 1998 Phil Blundell
+ *  Copyright (C) 1998 Russell King.
+ *  Copyright (C) 1998 Phil Blundell
  *
  * CATS has a real-time clock, though the evaluation board doesn't.
  *
@@ -19,7 +19,7 @@
 
 #include <linux/mc146818rtc.h>
 
-#include <asm/dec21285.h>
+#include <asm/hardware/dec21285.h>
 #include <asm/leds.h>
 #include <asm/mach-types.h>
 

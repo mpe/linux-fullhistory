@@ -11,6 +11,9 @@
  *
  * See Documentation/usb/usb-serial.txt for more information on using this driver
  * 
+ * (09/11/2000) gkh
+ *	Removed DEBUG #ifdefs with call to usb_serial_debug_data
+ *
  * (07/19/2000) gkh
  *	Added module_init and module_exit functions to handle the fact that this
  *	driver is a loadable module now.
@@ -130,11 +133,6 @@ static inline void set_break	(struct usb_serial_port *port, unsigned char brk);
  *****************************************************************************/
 static void command_port_write_callback (struct urb *urb)
 {
-#ifdef DEBUG
-	int i;
-	unsigned char *data = urb->transfer_buffer;
-#endif
-
 	dbg (__FUNCTION__);
 
 	if (urb->status) {
@@ -142,15 +140,7 @@ static void command_port_write_callback (struct urb *urb)
 		return;
 	}
 
-#ifdef DEBUG
-	if (urb->actual_length) {
-		printk (KERN_DEBUG __FILE__ ": " __FUNCTION__ " - length = %d, data = ", urb->actual_length);
-		for (i = 0; i < urb->actual_length; ++i) {
-			printk ("%.2x ", data[i]);
-		}
-		printk ("\n");
-	}
-#endif
+	usb_serial_debug_data (__FILE__, __FUNCTION__, urb->actual_length, urb->transfer_buffer);
 
 	return;
 }
@@ -160,9 +150,6 @@ static void command_port_read_callback (struct urb *urb)
 {
 	struct whiteheat_private *info = (struct whiteheat_private *)urb->context;
 	unsigned char *data = urb->transfer_buffer;
-#ifdef DEBUG
-	int i;
-#endif
 
 	dbg (__FUNCTION__);
 
@@ -171,15 +158,7 @@ static void command_port_read_callback (struct urb *urb)
 		return;
 	}
 
-#ifdef DEBUG
-	if (urb->actual_length) {
-		printk (KERN_DEBUG __FILE__ ": " __FUNCTION__ " - length = %d, data = ", urb->actual_length);
-		for (i = 0; i < urb->actual_length; ++i) {
-			printk ("%.2x ", data[i]);
-		}
-		printk ("\n");
-	}
-#endif
+	usb_serial_debug_data (__FILE__, __FUNCTION__, urb->actual_length, data);
 
 	/* right now, if the command is COMMAND_COMPLETE, just flip the bit saying the command finished */
 	/* in the future we're going to have to pay attention to the actual command that completed */

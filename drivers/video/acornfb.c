@@ -1,7 +1,11 @@
 /*
- * linux/drivers/video/acornfb.c
+ *  linux/drivers/video/acornfb.c
  *
- * Copyright (C) 1998-2000 Russell King
+ *  Copyright (C) 1998-2000 Russell King
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
  *
  * Frame buffer code for Acorn platforms
  *
@@ -96,6 +100,8 @@ extern int acornfb_depth;	/* set by setup.c */
 extern unsigned int vram_size;	/* set by setup.c */
 
 #ifdef HAS_VIDC
+
+#define MAX_SIZE	480*1024
 
 /* CTL     VIDC	Actual
  * 24.000  0	 8.000
@@ -334,6 +340,8 @@ acornfb_palette_decode(u_int regno, u_int *red, u_int *green, u_int *blue,
 
 #ifdef HAS_VIDC20
 #include <asm/arch/acornfb.h>
+
+#define MAX_SIZE	2*1024*1024
 
 /* VIDC20 has a different set of rules from the VIDC:
  *  hcr  : must be multiple of 4
@@ -1561,7 +1569,7 @@ acornfb_init(void)
 	if (current_par.montype == -1 || current_par.montype > NR_MONTYPES)
 		current_par.montype = 4;
 
-	if (current_par.montype > 0) {
+	if (current_par.montype >= 0) {
 		fb_info.monspecs = monspecs[current_par.montype];
 		fb_info.monspecs.dpms = current_par.dpms;
 	}
@@ -1603,8 +1611,13 @@ acornfb_init(void)
 	} else if (current_par.dram_size)
 		size = current_par.dram_size;
 	else
-		size = (init_var.xres * init_var.yres *
-			init_var.bits_per_pixel) / 8;
+		size = MAX_SIZE;
+
+	/*
+	 * Limit maximum screen size.
+	 */
+	if (size > MAX_SIZE)
+		size = MAX_SIZE;
 
 	size = PAGE_ALIGN(size);
 
@@ -1640,13 +1653,6 @@ acornfb_init(void)
 	}
 #endif
 #if defined(HAS_VIDC)
-#define MAX_SIZE	480*1024
-	/*
-	 * Limit maximum screen size.
-	 */
-	if (size > MAX_SIZE)
-		size = MAX_SIZE;
-
 	/*
 	 * Free unused pages
 	 */
@@ -1661,17 +1667,41 @@ acornfb_init(void)
 	 * find it, then we can't restore it if we change
 	 * the resolution, so we disable this feature.
 	 */
-	rc = fb_find_mode(&init_var, &fb_info, NULL, modedb,
-			 sizeof(modedb) / sizeof(*modedb),
-			 &acornfb_default_mode, DEFAULT_BPP);
+	do {
+		rc = fb_find_mode(&init_var, &fb_info, NULL, modedb,
+				 sizeof(modedb) / sizeof(*modedb),
+				 &acornfb_default_mode, DEFAULT_BPP);
+		/*
+		 * If we found an exact match, all ok.
+		 */
+		if (rc == 1)
+			break;
+
+		rc = fb_find_mode(&init_var, &fb_info, NULL, NULL, 0,
+				  &acornfb_default_mode, DEFAULT_BPP);
+		/*
+		 * If we found an exact match, all ok.
+		 */
+		if (rc == 1)
+			break;
+
+		rc = fb_find_mode(&init_var, &fb_info, NULL, modedb,
+				 sizeof(modedb) / sizeof(*modedb),
+				 &acornfb_default_mode, DEFAULT_BPP);
+		if (rc)
+			break;
+
+		rc = fb_find_mode(&init_var, &fb_info, NULL, NULL, 0,
+				  &acornfb_default_mode, DEFAULT_BPP);
+	} while (0);
 
 	/*
 	 * If we didn't find an exact match, try the
 	 * generic database.
 	 */
-	if (rc != 1 && fb_find_mode(&init_var, &fb_info, NULL, NULL, 0,
-				    &acornfb_default_mode, DEFAULT_BPP)) {
+	if (rc == 0) {
 		printk("Acornfb: no valid mode found\n");
+		return -EINVAL;
 	}
 
 	h_sync = 1953125000 / init_var.pixclock;

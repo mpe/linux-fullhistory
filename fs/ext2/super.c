@@ -167,7 +167,7 @@ static int parse_options (char * options, unsigned long * sb_block,
 		else if (!strcmp (this_char, "errors")) {
 			if (!value || !*value) {
 				printk ("EXT2-fs: the errors option requires "
-					"an argument");
+					"an argument\n");
 				return 0;
 			}
 			if (!strcmp (value, "continue")) {

@@ -1092,7 +1092,7 @@ static int __devinit tulip_init_one (struct pci_dev *pdev,
 
 	dev->base_addr = ioaddr;
 	dev->irq = irq;
-	pdev->driver_data = dev;
+	pci_set_drvdata(pdev, dev);
 
 #ifdef TULIP_FULL_DUPLEX
 	tp->full_duplex = 1;
@@ -1393,7 +1393,7 @@ err_out_free_netdev:
 
 static void tulip_suspend (struct pci_dev *pdev)
 {
-	struct net_device *dev = pdev->driver_data;
+	struct net_device *dev = pci_get_drvdata(pdev);
 
 	if (dev && netif_device_present (dev)) {
 		netif_device_detach (dev);
@@ -1405,7 +1405,7 @@ static void tulip_suspend (struct pci_dev *pdev)
 
 static void tulip_resume(struct pci_dev *pdev)
 {
-	struct net_device *dev = pdev->driver_data;
+	struct net_device *dev = pci_get_drvdata(pdev);
 
 	pci_enable_device(pdev);
 	if (dev && !netif_device_present (dev)) {
@@ -1417,7 +1417,7 @@ static void tulip_resume(struct pci_dev *pdev)
 
 static void __devexit tulip_remove_one (struct pci_dev *pdev)
 {
-	struct net_device *dev = pdev->driver_data;
+	struct net_device *dev = pci_get_drvdata(pdev);
 
 	if (dev) {
 		struct tulip_private *tp = (struct tulip_private *)dev->priv;
@@ -1432,6 +1432,8 @@ static void __devexit tulip_remove_one (struct pci_dev *pdev)
 		release_region (pci_resource_start (pdev, 0),
 				pci_resource_len (pdev, 0));
 		kfree(dev);
+
+		pci_set_drvdata(pdev, NULL);
 	}
 }
 

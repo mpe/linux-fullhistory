@@ -1,20 +1,25 @@
 /*
- * linux/arch/arm/mm/proc-arm6,7.S: MMU functions for ARM6
+ *  linux/arch/arm/mm/proc-arm6,7.S
  *
- * (C) 1997-2000 Russell King
+ *  Copyright (C) 1997-2000 Russell King
  *
- * These are the low level assembler for performing cache and TLB
- * functions on the ARM6 & ARM7.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ *  MMU functions for ARM6
+ *
+ *  These are the low level assembler for performing cache and TLB
+ *  functions on the ARM6 & ARM7.
  */
 #include <linux/linkage.h>
 #include <asm/assembler.h>
 #include <asm/procinfo.h>
-#include <asm/errno.h>
 #include "../lib/constants.h"
 
 /*
- * Function: arm6_7_flush_cache_all (void)
- *	   : arm6_7_flush_cache_page (unsigned long address, int size, int flags)
+ * Function: arm6_7_cache_clean_invalidate_all (void)
+ *	   : arm6_7_cache_clean_invalidate_page (unsigned long address, int size, int flags)
  *
  * Params  : address	Area start address
  *	   : size	size of area
@@ -22,41 +27,41 @@
  *
  * Purpose : Flush all cache lines
  */
-ENTRY(cpu_arm6_flush_cache_all)
-ENTRY(cpu_arm7_flush_cache_all)
-ENTRY(cpu_arm6_flush_cache_area)
-ENTRY(cpu_arm7_flush_cache_area)
-ENTRY(cpu_arm6_flush_cache_entry)
-ENTRY(cpu_arm7_flush_cache_entry)
-ENTRY(cpu_arm6_flush_icache_area)
-ENTRY(cpu_arm7_flush_icache_area)
-ENTRY(cpu_arm6_flush_icache_page)
-ENTRY(cpu_arm7_flush_icache_page)
-ENTRY(cpu_arm6_cache_wback_area)
-ENTRY(cpu_arm7_cache_wback_area)
-ENTRY(cpu_arm6_cache_purge_area)
-ENTRY(cpu_arm7_cache_purge_area)
+ENTRY(cpu_arm6_cache_clean_invalidate_all)
+ENTRY(cpu_arm7_cache_clean_invalidate_all)
+ENTRY(cpu_arm6_cache_clean_invalidate_range)
+ENTRY(cpu_arm7_cache_clean_invalidate_range)
+ENTRY(cpu_arm6_invalidate_icache_range)
+ENTRY(cpu_arm7_invalidate_icache_range)
+ENTRY(cpu_arm6_invalidate_icache_page)
+ENTRY(cpu_arm7_invalidate_icache_page)
+ENTRY(cpu_arm6_dcache_clean_range)
+ENTRY(cpu_arm7_dcache_clean_range)
+ENTRY(cpu_arm6_dcache_invalidate_range)
+ENTRY(cpu_arm7_dcache_invalidate_range)
 		mov	r0, #0
 		mcr	p15, 0, r0, c7, c0, 0		@ flush cache
-ENTRY(cpu_arm6_clean_cache_area)
-ENTRY(cpu_arm7_clean_cache_area)
+ENTRY(cpu_arm6_dcache_clean_page)
+ENTRY(cpu_arm7_dcache_clean_page)
+ENTRY(cpu_arm6_dcache_clean_entry)
+ENTRY(cpu_arm7_dcache_clean_entry)
 ENTRY(cpu_arm6_flush_ram_page)
 ENTRY(cpu_arm7_flush_ram_page)
 		mov	pc, lr
 
 /*
- * Function: arm6_7_flush_tlb_all (void)
+ * Function: arm6_7_tlb_invalidate_all (void)
  *
  * Purpose : flush all TLB entries in all caches
  */
-ENTRY(cpu_arm6_flush_tlb_all)
-ENTRY(cpu_arm7_flush_tlb_all)
+ENTRY(cpu_arm6_tlb_invalidate_all)
+ENTRY(cpu_arm7_tlb_invalidate_all)
 		mov	r0, #0
 		mcr	p15, 0, r0, c5, c0, 0		@ flush TLB
 		mov	pc, lr
 
 /*
- * Function: arm6_7_flush_tlb_page (unsigned long address, int end, int flags)
+ * Function: arm6_7_tlb_invalidate_page (unsigned long address, int end, int flags)
  *
  * Params  : address	Area start address
  *	   : end	Area end address
@@ -64,8 +69,8 @@ ENTRY(cpu_arm7_flush_tlb_all)
  *
  * Purpose : flush a TLB entry
  */
-ENTRY(cpu_arm6_flush_tlb_area)
-ENTRY(cpu_arm7_flush_tlb_area)
+ENTRY(cpu_arm6_tlb_invalidate_range)
+ENTRY(cpu_arm7_tlb_invalidate_range)
 1:		mcr	p15, 0, r0, c6, c0, 0		@ flush TLB
 		add	r0, r0, #4096
 		cmp	r0, r1
@@ -73,15 +78,15 @@ ENTRY(cpu_arm7_flush_tlb_area)
 		mov	pc, lr
 
 /*
- * Function: arm6_7_flush_tlb_page (unsigned long address, int flags)
+ * Function: arm6_7_tlb_invalidate_page (unsigned long address, int flags)
  *
  * Params  : address	Address
  *	   : flags	b0 = I-TLB as well
  *
  * Purpose : flush a TLB entry
  */
-ENTRY(cpu_arm6_flush_tlb_page)
-ENTRY(cpu_arm7_flush_tlb_page)
+ENTRY(cpu_arm6_tlb_invalidate_page)
+ENTRY(cpu_arm7_tlb_invalidate_page)
 		mcr	p15, 0, r0, c6, c0, 0		@ flush TLB
 		mov	pc, lr
 
@@ -392,23 +397,33 @@ ENTRY(arm6_processor_functions)
 		.word	cpu_arm6_check_bugs
 		.word	cpu_arm6_proc_init
 		.word	cpu_arm6_proc_fin
-		.word	cpu_arm6_flush_cache_all
-		.word	cpu_arm6_flush_cache_area
-		.word	cpu_arm6_flush_cache_entry
-		.word	cpu_arm6_clean_cache_area
+		.word	cpu_arm6_reset
+		.word	cpu_arm6_do_idle
+
+		/* cache */
+		.word	cpu_arm6_cache_clean_invalidate_all
+		.word	cpu_arm6_cache_clean_invalidate_range
 		.word	cpu_arm6_flush_ram_page
-		.word	cpu_arm6_flush_tlb_all
-		.word	cpu_arm6_flush_tlb_area
+
+		/* dcache */
+		.word	cpu_arm6_dcache_invalidate_range
+		.word	cpu_arm6_dcache_clean_range
+		.word	cpu_arm6_dcache_clean_page
+		.word	cpu_arm6_dcache_clean_entry
+
+		/* icache */
+		.word	cpu_arm6_invalidate_icache_range
+		.word	cpu_arm6_invalidate_icache_page
+
+		/* tlb */
+		.word	cpu_arm6_tlb_invalidate_all
+		.word	cpu_arm6_tlb_invalidate_range
+		.word	cpu_arm6_tlb_invalidate_page
+
+		/* pgtable */
 		.word	cpu_arm6_set_pgd
 		.word	cpu_arm6_set_pmd
 		.word	cpu_arm6_set_pte
-		.word	cpu_arm6_reset
-		.word	cpu_arm6_flush_icache_area
-		.word	cpu_arm6_cache_wback_area
-		.word	cpu_arm6_cache_purge_area
-		.word	cpu_arm6_flush_tlb_page
-		.word	cpu_arm6_do_idle
-		.word	cpu_arm6_flush_icache_page
 		.size	arm6_processor_functions, . - arm6_processor_functions
 
 /*
@@ -421,23 +436,33 @@ ENTRY(arm7_processor_functions)
 		.word	cpu_arm7_check_bugs
 		.word	cpu_arm7_proc_init
 		.word	cpu_arm7_proc_fin
-		.word	cpu_arm7_flush_cache_all
-		.word	cpu_arm7_flush_cache_area
-		.word	cpu_arm7_flush_cache_entry
-		.word	cpu_arm7_clean_cache_area
+		.word	cpu_arm7_reset
+		.word	cpu_arm7_do_idle
+
+		/* cache */
+		.word	cpu_arm7_cache_clean_invalidate_all
+		.word	cpu_arm7_cache_clean_invalidate_range
 		.word	cpu_arm7_flush_ram_page
-		.word	cpu_arm7_flush_tlb_all
-		.word	cpu_arm7_flush_tlb_area
+
+		/* dcache */
+		.word	cpu_arm7_dcache_invalidate_range
+		.word	cpu_arm7_dcache_clean_range
+		.word	cpu_arm7_dcache_clean_page
+		.word	cpu_arm7_dcache_clean_entry
+
+		/* icache */
+		.word	cpu_arm7_invalidate_icache_range
+		.word	cpu_arm7_invalidate_icache_page
+
+		/* tlb */
+		.word	cpu_arm7_tlb_invalidate_all
+		.word	cpu_arm7_tlb_invalidate_range
+		.word	cpu_arm7_tlb_invalidate_page
+
+		/* pgtable */
 		.word	cpu_arm7_set_pgd
 		.word	cpu_arm7_set_pmd
 		.word	cpu_arm7_set_pte
-		.word	cpu_arm7_reset
-		.word	cpu_arm7_flush_icache_area
-		.word	cpu_arm7_cache_wback_area
-		.word	cpu_arm7_cache_purge_area
-		.word	cpu_arm7_flush_tlb_page
-		.word	cpu_arm7_do_idle
-		.word	cpu_arm7_flush_icache_page
 		.size	arm7_processor_functions, . - arm7_processor_functions
 
 		.type	cpu_arm6_info, #object
@@ -479,7 +504,7 @@ cpu_elf_name:	.asciz	"v3"
 __arm6_proc_info:
 		.long	0x41560600
 		.long	0xfffffff0
-		.long	0x00000c12
+		.long	0x00000c1e
 		b	__arm6_setup
 		.long	cpu_arch_name
 		.long	cpu_elf_name
@@ -492,7 +517,7 @@ __arm6_proc_info:
 __arm610_proc_info:
 		.long	0x41560610
 		.long	0xfffffff0
-		.long	0x00000c12
+		.long	0x00000c1e
 		b	__arm6_setup
 		.long	cpu_arch_name
 		.long	cpu_elf_name
@@ -505,7 +530,7 @@ __arm610_proc_info:
 __arm7_proc_info:
 		.long	0x41007000
 		.long	0xffffff00
-		.long	0x00000c12
+		.long	0x00000c1e
 		b	__arm7_setup
 		.long	cpu_arch_name
 		.long	cpu_elf_name
@@ -518,7 +543,7 @@ __arm7_proc_info:
 __arm710_proc_info:
 		.long	0x41007100
 		.long	0xfff8ff00
-		.long	0x00000c12
+		.long	0x00000c1e
 		b	__arm7_setup
 		.long	cpu_arch_name
 		.long	cpu_elf_name

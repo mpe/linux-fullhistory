@@ -1,12 +1,16 @@
 /*
- * linux/arch/arm/kernel/time-acorn.c
+ *  linux/arch/arm/kernel/time-acorn.c
  *
- * Copyright (c) 1996-2000 Russell King.
+ *  Copyright (c) 1996-2000 Russell King.
  *
- * Changelog:
- *  24-Sep-1996	RMK	Created
- *  10-Oct-1996	RMK	Brought up to date with arch-sa110eval
- *  04-Dec-1997	RMK	Updated for new arch/arm/time.c
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ *  Changelog:
+ *   24-Sep-1996	RMK	Created
+ *   10-Oct-1996	RMK	Brought up to date with arch-sa110eval
+ *   04-Dec-1997	RMK	Updated for new arch/arm/time.c
  */
 #include <linux/sched.h>
 #include <linux/interrupt.h>
@@ -14,8 +18,8 @@
 
 #include <asm/hardware.h>
 #include <asm/io.h>
-#include <asm/ioc.h>
 #include <asm/irq.h>
+#include <asm/hardware/ioc.h>
 
 extern unsigned long (*gettimeoffset)(void);
 

@@ -1,9 +1,13 @@
 /*
- * linux/drivers/net/am79c961.c
+ *  linux/drivers/net/am79c961.c
+ *
+ *  by Russell King <rmk@arm.linux.org.uk> 1995-2000.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
  *
  * Derived from various things including skeleton.c
- *
- * Russell King 1995-2000.
  *
  * This is a special driver for the am79c961A Lance chip used in the
  * Intel (formally Digital Equipment Corp) EBSA110 platform.
@@ -204,9 +208,12 @@ am79c961_init_for_open(struct net_device *dev)
 	u_int hdr_addr, first_free_addr;
 	int i;
 
-	save_flags_cli (flags);
+	/*
+	 * Stop the chip.
+	 */
+	spin_lock_irqsave(priv->chip_lock, flags);
 	write_rreg (dev->base_addr, CSR0, CSR0_BABL|CSR0_CERR|CSR0_MISS|CSR0_MERR|CSR0_TINT|CSR0_RINT|CSR0_STOP);
-	restore_flags (flags);
+	spin_unlock_irqrestore(priv->chip_lock, flags);
 
 	write_ireg (dev->base_addr, 5, 0x00a0); /* Receive address LED */
 	write_ireg (dev->base_addr, 6, 0x0081); /* Collision LED */
@@ -301,16 +308,15 @@ am79c961_open(struct net_device *dev)
 static int
 am79c961_close(struct net_device *dev)
 {
+	struct dev_priv *priv = (struct dev_priv *)dev->priv;
 	unsigned long flags;
 
 	netif_stop_queue(dev);
 
-	save_flags_cli (flags);
-
+	spin_lock_irqsave(priv->chip_lock, flags);
 	write_rreg (dev->base_addr, CSR0, CSR0_STOP);
 	write_rreg (dev->base_addr, CSR3, CSR3_MASKALL);
-
-	restore_flags (flags);
+	spin_unlock_irqrestore(priv->chip_lock, flags);
 
 	free_irq (dev->irq, dev);
 
@@ -368,6 +374,7 @@ static void am79c961_mc_hash(struct dev_mc_list *dmi, unsigned short *hash)
  */
 static void am79c961_setmulticastlist (struct net_device *dev)
 {
+	struct dev_priv *priv = (struct dev_priv *)dev->priv;
 	unsigned long flags;
 	unsigned short multi_hash[4], mode;
 	int i, stopped;
@@ -387,7 +394,7 @@ static void am79c961_setmulticastlist (struct net_device *dev)
 			am79c961_mc_hash(dmi, multi_hash);
 	}
 
-	save_flags_cli(flags);
+	spin_lock_irqsave(priv->chip_lock, flags);
 
 	stopped = read_rreg(dev->base_addr, CSR0) & CSR0_STOP;
 
@@ -401,9 +408,9 @@ static void am79c961_setmulticastlist (struct net_device *dev)
 		 * Spin waiting for chip to report suspend mode
 		 */
 		while ((read_rreg(dev->base_addr, CTRL1) & CTRL1_SPND) == 0) {
-			restore_flags(flags);
+			spin_unlock_irqrestore(priv->chip_lock, flags);
 			nop();
-			save_flags_cli(flags);
+			spin_lock_irqsave(priv->chip_lock, flags);
 		}
 	}
 
@@ -425,7 +432,7 @@ static void am79c961_setmulticastlist (struct net_device *dev)
 		write_rreg(dev->base_addr, CTRL1, 0);
 	}
 
-	restore_flags(flags);
+	spin_unlock_irqrestore(priv->chip_lock, flags);
 }
 
 static void am79c961_timeout(struct net_device *dev)
@@ -464,10 +471,10 @@ am79c961_sendpacket(struct sk_buff *skb, struct net_device *dev)
 	am_writeword (dev, hdraddr + 2, TMD_OWN|TMD_STP|TMD_ENP);
 	priv->txhead = head;
 
-	save_flags_cli (flags);
+	spin_lock_irqsave(priv->chip_lock, flags);
 	write_rreg (dev->base_addr, CSR0, CSR0_TDMD|CSR0_IENA);
 	dev->trans_start = jiffies;
-	restore_flags (flags);
+	spin_unlock_irqrestore(priv->chip_lock, flags);
 
 	/*
 	 * If the next packet is owned by the ethernet device,
@@ -611,20 +618,22 @@ am79c961_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 		priv->stats.rx_dropped ++;
 }
 
+/*
+ * Initialise the chip.  Note that we always expect
+ * to be entered with interrupts enabled.
+ */
 static int
 am79c961_hw_init(struct net_device *dev)
 {
-	unsigned long flags;
+	struct dev_priv *priv = (struct dev_priv *)dev->priv;
+
+	spin_lock_irq(priv->chip_lock);
+	write_rreg (dev->base_addr, CSR0, CSR0_STOP);
+	write_rreg (dev->base_addr, CSR3, CSR3_MASKALL);
+	spin_unlock_irq(priv->chip_lock);
 
 	am79c961_ramtest(dev, 0x66);
 	am79c961_ramtest(dev, 0x99);
-
-	save_flags_cli (flags);
-
-	write_rreg (dev->base_addr, CSR0, CSR0_STOP);
-	write_rreg (dev->base_addr, CSR3, CSR3_MASKALL);
-
-	restore_flags (flags);
 
 	return 0;
 }

@@ -1778,9 +1778,7 @@ int wd7000_biosparam (Disk *disk, kdev_t dev, int *ip)
     return (0);
 }
 
-#ifdef MODULE
 /* Eventually this will go into an include file, but this will be later */
-Scsi_Host_Template driver_template = WD7000;
+static Scsi_Host_Template driver_template = WD7000;
 
 #include "scsi_module.c"
-#endif

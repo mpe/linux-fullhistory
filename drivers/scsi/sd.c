@@ -96,9 +96,29 @@ static void sd_finish(void);
 static int sd_attach(Scsi_Device *);
 static int sd_detect(Scsi_Device *);
 static void sd_detach(Scsi_Device *);
-static void rw_intr(Scsi_Cmnd * SCpnt);
-
 static int sd_init_command(Scsi_Cmnd *);
+
+static struct Scsi_Device_Template sd_template = {
+	name:"disk",
+	tag:"sd",
+	scsi_type:TYPE_DISK,
+	major:SCSI_DISK0_MAJOR,
+        /*
+         * Secondary range of majors that this driver handles.
+         */
+	min_major:SCSI_DISK1_MAJOR,
+	max_major:SCSI_DISK7_MAJOR,
+	blk:1,
+	detect:sd_detect,
+	init:sd_init,
+	finish:sd_finish,
+	attach:sd_attach,
+	detach:sd_detach,
+	init_command:sd_init_command,
+};
+
+
+static void rw_intr(Scsi_Cmnd * SCpnt);
 
 #if defined(CONFIG_PPC)
 /*
@@ -242,25 +262,6 @@ static void sd_devname(unsigned int disknum, char *buffer)
 		sprintf(buffer, "sd%c%c", 'a' + min1 - 1, 'a' + min2);
 	}
 }
-
-struct Scsi_Device_Template sd_template = {
-	name:"disk",
-	tag:"sd",
-	scsi_type:TYPE_DISK,
-	major:SCSI_DISK0_MAJOR,
-        /*
-         * Secondary range of majors that this driver handles.
-         */
-	min_major:SCSI_DISK1_MAJOR,
-	max_major:SCSI_DISK7_MAJOR,
-	blk:1,
-	detect:sd_detect,
-	init:sd_init,
-	finish:sd_finish,
-	attach:sd_attach,
-	detach:sd_detach,
-	init_command:sd_init_command,
-};
 
 static request_queue_t *sd_find_queue(kdev_t dev)
 {
@@ -1030,7 +1031,7 @@ static int sd_init()
 		sd_template.dev_max = N_SD_MAJORS * SCSI_DISKS_PER_MAJOR;
 
 	if (!sd_registered) {
-		for (i = 0; i <= (sd_template.dev_max - 1) / SCSI_DISKS_PER_MAJOR; i++) {
+		for (i = 0; i < N_USED_SD_MAJORS; i++) {
 			if (devfs_register_blkdev(SD_MAJOR(i), "sd", &sd_fops)) {
 				printk("Unable to get major %d for SCSI disk\n", SD_MAJOR(i));
 				return 1;
@@ -1142,7 +1143,7 @@ static void sd_finish()
 	struct gendisk *gendisk;
 	int i;
 
-	for (i = 0; i <= (sd_template.dev_max - 1) / SCSI_DISKS_PER_MAJOR; i++) {
+	for (i = 0; i < N_USED_SD_MAJORS; i++) {
 		blk_dev[SD_MAJOR(i)].queue = sd_find_queue;
 	}
 	for (gendisk = gendisk_head; gendisk != NULL; gendisk = gendisk->next)
@@ -1335,13 +1336,13 @@ static void sd_detach(Scsi_Device * SDp)
 	return;
 }
 
-static int init_sd(void)
+static int __init init_sd(void)
 {
 	sd_template.module = THIS_MODULE;
 	return scsi_register_module(MODULE_SCSI_DEV, &sd_template);
 }
 
-static void exit_sd(void)
+static void __exit exit_sd(void)
 {
 	struct gendisk **prev_sdgd_link;
 	struct gendisk *sdgd;
@@ -1350,7 +1351,7 @@ static void exit_sd(void)
 
 	scsi_unregister_module(MODULE_SCSI_DEV, &sd_template);
 
-	for (i = 0; i <= (sd_template.dev_max - 1) / SCSI_DISKS_PER_MAJOR; i++)
+	for (i = 0; i < N_USED_SD_MAJORS; i++)
 		devfs_unregister_blkdev(SD_MAJOR(i), "sd");
 
 	sd_registered--;
@@ -1379,7 +1380,7 @@ static void exit_sd(void)
 			       removed > N_USED_SD_MAJORS ? "total" : "just", removed);
 
 	}
-	for (i = 0; i <= (sd_template.dev_max - 1) / SCSI_DISKS_PER_MAJOR; i++) {
+	for (i = 0; i < N_USED_SD_MAJORS; i++) {
 		blk_size[SD_MAJOR(i)] = NULL;
 		hardsect_size[SD_MAJOR(i)] = NULL;
 		read_ahead[SD_MAJOR(i)] = 0;

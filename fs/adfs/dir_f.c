@@ -3,7 +3,11 @@
  *
  * Copyright (C) 1997-1999 Russell King
  *
- * E and F format directory handling
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ *  E and F format directory handling
  */
 #include <linux/version.h>
 #include <linux/errno.h>

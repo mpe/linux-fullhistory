@@ -116,7 +116,7 @@ obj-$(CONFIG_SCSI_DECNCR)	+= NCR53C9x.o	dec_esp.o
 obj-$(CONFIG_SUN3X_ESP)		+= NCR53C9x.o	sun3x_esp.o
 obj-$(CONFIG_BLK_DEV_3W_XXXX_RAID) += 3w-xxxx.o
 
-scsi_mod-objs	:= hosts.o scsi.o scsi_ioctl.o constants.o \
+scsi_mod-objs	:= scsi.o hosts.o scsi_ioctl.o constants.o \
 			scsicam.o scsi_proc.o scsi_error.o \
 			scsi_obsolete.o scsi_queue.o scsi_lib.o \
 			scsi_merge.o scsi_dma.o scsi_scan.o \
@@ -137,7 +137,7 @@ obj-m		:= $(filter-out	$(obj-y), $(obj-m))
 int-m		:= $(filter-out	$(int-y), $(int-m))
 
 # Take multi-part drivers out of obj-y and put components in.
-obj-y		:= $(filter-out	$(list-multi), $(obj-y)) $(int-y)
+# obj-y		:= $(filter-out	$(list-multi), $(obj-y)) $(int-y)
 
 O_OBJS		:= $(filter-out	$(export-objs), $(obj-y))
 OX_OBJS		:= $(filter	$(export-objs), $(obj-y))

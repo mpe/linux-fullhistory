@@ -12,6 +12,9 @@
  *
  * See Documentation/usb/usb-serial.txt for more information on using this driver
  *
+ * (09/11/2000) gkh
+ *	Removed DEBUG #ifdefs with call to usb_serial_debug_data
+ *
  * (07/19/2000) gkh
  *	Added module_init and module_exit functions to handle the fact that this
  *	driver is a loadable module now.
@@ -331,26 +334,9 @@ static int ftdi_sio_write (struct usb_serial_port *port, int from_user,
 		first_byte = port->write_urb->transfer_buffer;
 		*first_byte = 1 | ((count-data_offset) << 2) ; 
 
-#ifdef CONFIG_USB_SERIAL_DEBUG
 		dbg("Bytes: %d, Control Byte: 0o%03o",count, first_byte[0]);
-
-		if (count) {
-			int i;
-			printk (KERN_DEBUG __FILE__ ": data written - length = %d, data = ", count);
-			for (i = 0; i < count; ++i) {
-				printk ( "0x%02x ", first_byte[i]);
-				if (first_byte[i] > ' ' && first_byte[i] < '~') {
-					printk( "%c ", first_byte[i]);
-				} else {
-					printk( "  ");
-				}
-			}
-
-		     
-			printk ( "\n");
-		}
-
-#endif
+		usb_serial_debug_data (__FILE__, __FUNCTION__, count, first_byte);
+		
 		/* send the data out the bulk port */
 		port->write_urb->transfer_buffer_length = count;
 
@@ -429,23 +415,11 @@ static void ftdi_sio_read_bulk_callback (struct urb *urb)
 		return;
 	}
 
-#ifdef CONFIG_USB_SERIAL_DEBUG
 	if (urb->actual_length > 2) {
-		printk (KERN_DEBUG __FILE__ ": data read - length = %d, data = ", urb->actual_length);
-		for (i = 0; i < urb->actual_length; ++i) {
-			printk ( "0x%.2x ", data[i]);
-			if (data[i] > ' ' && data[i] < '~') {
-				printk( "%c ", data[i]);
-			} else {
-				printk( "  ");
-			}
-		}
-		printk ( "\n");
+		usb_serial_debug_data (__FILE__, __FUNCTION__, urb->actual_length, data);
 	} else {
                 dbg("Just status");
         }
-#endif
-	
 
 	if (urb->actual_length > data_offset) {
 		for (i = data_offset ; i < urb->actual_length ; ++i) {

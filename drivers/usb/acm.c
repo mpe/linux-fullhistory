@@ -49,7 +49,7 @@
 #include <linux/tty_flip.h>
 #include <linux/tty.h>
 #include <linux/module.h>
-#define DEBUG
+#undef DEBUG
 #include <linux/usb.h>
 
 /*
@@ -559,9 +559,11 @@ static void *acm_probe(struct usb_device *dev, unsigned int ifnum)
 
 		FILL_BULK_URB(&acm->readurb, dev, usb_rcvbulkpipe(dev, epread->bEndpointAddress),
 			buf += ctrlsize, readsize, acm_read_bulk, acm);
+		acm->readurb.transfer_flags |= USB_NO_FSBR;
 
 		FILL_BULK_URB(&acm->writeurb, dev, usb_sndbulkpipe(dev, epwrite->bEndpointAddress),
 			buf += readsize, acm->writesize, acm_write_bulk, acm);
+		acm->writeurb.transfer_flags |= USB_NO_FSBR;
 	
 		printk(KERN_INFO "ttyACM%d: USB ACM device\n", minor);
 

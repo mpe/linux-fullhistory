@@ -9,6 +9,9 @@
  *
  * Copyright (C) 1995-2000 ITConsult-Pro Co. <info@itc.hu>
  *
+ * Contributors:
+ * Arnaldo Carvalho de Melo <acme@conectiva.com.br> - 0.86
+ *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version
@@ -37,9 +40,11 @@
  * Version 0.85 (00/01/14):
  *		- some additional workarounds :/
  *		- printk cleanups
+ * Version 0.86 (00/08/15):
+ * 		- resource release on failure at COMX_init
  */
 
-#define VERSION "0.85"
+#define VERSION "0.86"
 
 #include <asm/uaccess.h>
 #include <asm/io.h>
@@ -1224,7 +1229,7 @@ static int COMX_init(struct net_device *dev)
 
 	if ((new_file = create_proc_entry(FILENAME_IO, S_IFREG | 0644, ch->procdir))
 	    == NULL) {
-	    	return -EIO;
+	    goto cleanup_HW_privdata;
 	}
 	new_file->data = (void *)new_file;
 	new_file->read_proc = &comxhw_read_proc;
@@ -1234,7 +1239,7 @@ static int COMX_init(struct net_device *dev)
 
 	if ((new_file = create_proc_entry(FILENAME_IRQ, S_IFREG | 0644, ch->procdir))
 	    == NULL) {
-	    	return -EIO;
+	    goto cleanup_filename_io;
 	}
 	new_file->data = (void *)new_file;
 	new_file->read_proc = &comxhw_read_proc;
@@ -1244,7 +1249,7 @@ static int COMX_init(struct net_device *dev)
 
 	if ((new_file = create_proc_entry(FILENAME_CHANNEL, S_IFREG | 0644, 
 	    ch->procdir)) == NULL) {
-	    	return -EIO;
+	    goto cleanup_filename_irq;
 	}
 	new_file->data = (void *)new_file;
 	new_file->read_proc = &comxhw_read_proc;
@@ -1255,7 +1260,7 @@ static int COMX_init(struct net_device *dev)
 	if (ch->hardware == &hicomx_hw || ch->hardware == &cmx_hw) {
 		if ((new_file = create_proc_entry(FILENAME_CLOCK, S_IFREG | 0644, 
 		   ch->procdir)) == NULL) {
-		   	return -EIO;
+		    goto cleanup_filename_channel;
 		}
 		new_file->data = (void *)new_file;
 		new_file->read_proc = &comxhw_read_proc;
@@ -1266,7 +1271,7 @@ static int COMX_init(struct net_device *dev)
 
 	if ((new_file = create_proc_entry(FILENAME_MEMADDR, S_IFREG | 0644, 
 	    ch->procdir)) == NULL) {
-	    	return -EIO;
+		    goto cleanup_filename_clock;
 	}
 	new_file->data = (void *)new_file;
 	new_file->read_proc = &comxhw_read_proc;
@@ -1276,7 +1281,7 @@ static int COMX_init(struct net_device *dev)
 
 	if ((new_file = create_proc_entry(FILENAME_TWIN, S_IFREG | 0444, 
 	    ch->procdir)) == NULL) {
-		return -EIO;
+		    goto cleanup_filename_memaddr;
 	}
 	new_file->data = (void *)new_file;
 	new_file->read_proc = &comxhw_read_proc;
@@ -1285,7 +1290,7 @@ static int COMX_init(struct net_device *dev)
 
 	if ((new_file = create_proc_entry(FILENAME_FIRMWARE, S_IFREG | 0644, 
 	    ch->procdir)) == NULL) {
-	    	return -EIO;
+		    goto cleanup_filename_twin;
 	}
 	new_file->data = (void *)new_file;
 	new_file->read_proc = &comxhw_read_proc;
@@ -1326,6 +1331,23 @@ static int COMX_init(struct net_device *dev)
 
 	MOD_INC_USE_COUNT;
 	return 0;
+
+cleanup_filename_twin:
+	remove_proc_entry(FILENAME_TWIN, ch->procdir);
+cleanup_filename_memaddr:
+	remove_proc_entry(FILENAME_MEMADDR, ch->procdir);
+cleanup_filename_clock:
+	if (ch->hardware == &hicomx_hw || ch->hardware == &cmx_hw)
+		remove_proc_entry(FILENAME_CLOCK, ch->procdir);
+cleanup_filename_channel:
+	remove_proc_entry(FILENAME_CHANNEL, ch->procdir);
+cleanup_filename_irq:
+	remove_proc_entry(FILENAME_IRQ, ch->procdir);
+cleanup_filename_io:
+	remove_proc_entry(FILENAME_IO, ch->procdir);
+cleanup_HW_privdata:
+	kfree(ch->HW_privdata);
+	return -EIO;
 }
 
 /* Called on echo valami >boardtype */

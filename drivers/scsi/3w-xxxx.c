@@ -3,6 +3,7 @@
 
    Written By: Adam Radford <linux@3ware.com>
    Modifications By: Joel Jacobson <linux@3ware.com>
+   		     Arnaldo Carvalho de Melo <acme@conectiva.com.br>
 
    Copyright (C) 1999-2000 3ware Inc.
 
@@ -64,6 +65,8 @@
                  Bug fix so hot spare drives don't show up.
    1.02.00.002 - Fix bug with tw_setfeature() call that caused oops on some
                  systems.
+   08/21/00    - release previously allocated resources on failure at
+                 tw_allocate_memory (acme)
 */
 
 #include <linux/module.h>
@@ -410,35 +413,26 @@ int tw_aen_read_queue(TW_Device_Extension *tw_dev, int request_id)
 /* This function will allocate memory and check if it is 16 d-word aligned */
 int tw_allocate_memory(TW_Device_Extension *tw_dev, int request_id, int size, int which)
 {
-	u32 *virt_addr;
+	u32 *virt_addr = kmalloc(size, GFP_ATOMIC);
 
 	dprintk(KERN_NOTICE "3w-xxxx: tw_allocate_memory()\n");
 
+	if (!virt_addr) {
+		printk(KERN_WARNING "3w-xxxx: tw_allocate_memory(): kmalloc() failed.\n");
+		return 1;
+	}
+
+	if ((u32)virt_addr % TW_ALIGNMENT) {
+		kfree(virt_addr);
+		printk(KERN_WARNING "3w-xxxx: tw_allocate_memory(): Found unaligned address.\n");
+		return 1;
+	}
+
 	if (which == 0) {
-		/* Allocate command packet memory */
-		virt_addr = kmalloc(size, GFP_ATOMIC);
-		if (virt_addr == NULL) {
-			printk(KERN_WARNING "3w-xxxx: tw_allocate_memory(): kmalloc() failed.\n");
-			return 1;
-		}
-		if ((u32)virt_addr % TW_ALIGNMENT) {
-			printk(KERN_WARNING "3w-xxxx: tw_allocate_memory(): Found unaligned address.\n");
-			return 1;
-		}
 		tw_dev->command_packet_virtual_address[request_id] = virt_addr;
 		tw_dev->command_packet_physical_address[request_id] = 
 		virt_to_bus(virt_addr);
 	} else {
-		/* Allocate generic buffer */
-		virt_addr = kmalloc(size, GFP_ATOMIC);
-		if (virt_addr == NULL) {
-			printk(KERN_WARNING "3w-xxxx: tw_allocate_memory(): kmalloc() failed.\n");
-			return 1;
-		}
-		if ((u32)virt_addr % TW_ALIGNMENT) {
-			printk(KERN_WARNING "3w-xxxx: tw_allocate_memory(): Found unaligned address.\n");
-			return 1;
-		}
 		tw_dev->alignment_virtual_address[request_id] = virt_addr;
 		tw_dev->alignment_physical_address[request_id] = virt_to_bus(virt_addr);
 	}
@@ -2390,7 +2384,6 @@ void tw_unmask_command_interrupt(TW_Device_Extension *tw_dev)
 
 /* Now get things going */
 
-#ifdef MODULE
-Scsi_Host_Template driver_template = TWXXXX;
+static Scsi_Host_Template driver_template = TWXXXX;
 #include "scsi_module.c"
-#endif
+

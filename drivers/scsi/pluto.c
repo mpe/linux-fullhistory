@@ -331,11 +331,8 @@ static int pluto_encode_addr(Scsi_Cmnd *SCpnt, u16 *addr, fc_channel *fc, fcp_cm
 	return 0;
 }
 
-#ifdef MODULE
-
-Scsi_Host_Template driver_template = PLUTO;
+static Scsi_Host_Template driver_template = PLUTO;
 
 #include "scsi_module.c"
 
 EXPORT_NO_SYMBOLS;
-#endif /* MODULE */

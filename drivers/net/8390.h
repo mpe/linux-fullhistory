@@ -53,11 +53,11 @@ extern unsigned long autoirq_report(int waittime);
 #if defined(LOAD_8390_BY_KMOD) && defined(MODULE) && !defined(NS8390_CORE)
 
 /* Function pointers to be mapped onto the 8390 core support */
-static int (*S_ethdev_init)(struct net_device *dev) = NULL;
-static void (*S_NS8390_init)(struct net_device *dev, int startp) = NULL;
-static int (*S_ei_open)(struct net_device *dev) = NULL;
-static int (*S_ei_close)(struct net_device *dev) = NULL;
-static void (*S_ei_interrupt)(int irq, void *dev_id, struct pt_regs *regs) = NULL;
+static int (*S_ethdev_init)(struct net_device *dev);
+static void (*S_NS8390_init)(struct net_device *dev, int startp);
+static int (*S_ei_open)(struct net_device *dev);
+static int (*S_ei_close)(struct net_device *dev);
+static void (*S_ei_interrupt)(int irq, void *dev_id, struct pt_regs *regs);
 
 extern __inline__ void unload_8390_module(void)
 {

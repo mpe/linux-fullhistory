@@ -26,13 +26,6 @@ void usb_major_cleanup(void);
 
 
 /*
- * HCI drivers
- */
-
-int uhci_init(void);
-int ohci_hcd_init(void);
-
-/*
  * Cleanup
  */
 

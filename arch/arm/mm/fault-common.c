@@ -3,6 +3,10 @@
  *
  *  Copyright (C) 1995  Linus Torvalds
  *  Modifications for ARM processor (c) 1995-1999 Russell King
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
  */
 #include <linux/config.h>
 
@@ -12,7 +16,7 @@ extern void die(const char *msg, struct pt_regs *regs, int err);
  * This is useful to dump out the page tables associated with
  * 'addr' in mm 'mm'.
  */
-static void show_pte(struct mm_struct *mm, unsigned long addr)
+void show_pte(struct mm_struct *mm, unsigned long addr)
 {
 	pgd_t *pgd;
 
@@ -31,7 +35,7 @@ static void show_pte(struct mm_struct *mm, unsigned long addr)
 			break;
 
 		if (pgd_bad(*pgd)) {
-			printk("(bad)\n");
+			printk("(bad)");
 			break;
 		}
 
@@ -42,7 +46,7 @@ static void show_pte(struct mm_struct *mm, unsigned long addr)
 			break;
 
 		if (pmd_bad(*pmd)) {
-			printk("(bad)\n");
+			printk("(bad)");
 			break;
 		}
 

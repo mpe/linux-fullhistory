@@ -1465,9 +1465,7 @@ int fd_mcs_biosparam( Scsi_Disk *disk, kdev_t dev, int *info_array )
   return 0;
 }
 
-#ifdef MODULE
 /* Eventually this will go into an include file, but this will be later */
-Scsi_Host_Template driver_template = FD_MCS;
+static Scsi_Host_Template driver_template = FD_MCS;
 
 #include "scsi_module.c"
-#endif

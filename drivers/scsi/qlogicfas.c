@@ -676,10 +676,7 @@ const char	*qlogicfas_info(struct Scsi_Host * host)
 	return qinfo;
 }
 
-#ifdef MODULE
 /* Eventually this will go into an include file, but this will be later */
-Scsi_Host_Template driver_template = QLOGICFAS;
-
+static Scsi_Host_Template driver_template = QLOGICFAS;
 #include "scsi_module.c"
-#endif
 

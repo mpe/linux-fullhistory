@@ -12,7 +12,7 @@
 #include <linux/pm.h>
 #include <linux/init.h>
 
-#include <asm/dec21285.h>
+#include <asm/hardware/dec21285.h>
 #include <asm/elf.h>
 #include <asm/setup.h>
 #include <asm/mach-types.h>

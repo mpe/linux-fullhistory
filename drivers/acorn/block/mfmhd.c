@@ -124,7 +124,7 @@
 #include <asm/dma.h>
 #include <asm/hardware.h>
 #include <asm/ecard.h>
-#include <asm/ioc.h>
+#include <asm/hardware/ioc.h>
 
 /*
  * This sort of stuff should be in a header file shared with ide.c, hd.c, xd.c etc

@@ -1,13 +1,17 @@
 /*
- * linux/arch/arm/kernel/entry-armv.S
+ *  linux/arch/arm/kernel/entry-armv.S
  *
- * Copyright (C) 1996,1997,1998 Russell King.
- * ARM700 fix by Matthew Godbolt (linux-user@willothewisp.demon.co.uk)
+ *  Copyright (C) 1996,1997,1998 Russell King.
+ *  ARM700 fix by Matthew Godbolt (linux-user@willothewisp.demon.co.uk)
  *
- * Low-level vector interface routines
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
  *
- * Note:  there is a StrongARM bug in the STMIA rn, {regs}^ instruction that causes
- * it to save wrong values...  Be aware!
+ *  Low-level vector interface routines
+ *
+ *  Note:  there is a StrongARM bug in the STMIA rn, {regs}^ instruction that causes
+ *  it to save wrong values...  Be aware!
  */
 #include <linux/config.h> /* for CONFIG_ARCH_xxxx */
 #include <linux/linkage.h>
@@ -68,7 +72,7 @@
 
 #ifdef IOC_BASE
 /* IOC / IOMD based hardware */
-#include <asm/iomd.h>
+#include <asm/hardware/iomd.h>
 
 		.equ	ioc_base_high, IOC_BASE & 0xff000000
 		.equ	ioc_base_low, IOC_BASE & 0x00ff0000
@@ -226,7 +230,7 @@ irq_prio_ebsa110:
 		.endm
 
 #elif defined(CONFIG_FOOTBRIDGE)
-#include <asm/dec21285.h>
+#include <asm/hardware/dec21285.h>
 
 		.macro	disable_fiq
 		.endm
@@ -425,9 +429,9 @@ ENTRY(soft_irq_mask)
 		.endm
  
 		.macro  get_irqnr_and_base, irqnr, irqstat, base
-		mov     r4, #irq_base_addr		@ Virt addr IRQ regs
-		add	r4, r4, #0x00001000		@ Status reg
-		ldr     \irqstat, [r4]			@ get interrupts
+		mov     \irqstat, #irq_base_addr		@ Virt addr IRQ regs
+		add	\irqstat, \irqstat, #0x00001000		@ Status reg
+		ldr     \irqstat, [\irqstat, #0]		@ get interrupts
 		mov     \irqnr, #0
 1001:		tst     \irqstat, #1
 		addeq   \irqnr, \irqnr, #1
@@ -438,6 +442,32 @@ ENTRY(soft_irq_mask)
 		.endm
 
 		.macro  irq_prio_table
+		.endm
+
+#elif defined(CONFIG_ARCH_INTEGRATOR)
+
+		.macro	disable_fiq
+		.endm
+
+		.macro	get_irqnr_and_base, irqnr, irqstat, base
+/* FIXME: should not be using soo many LDRs here */
+		ldr	\irqnr, =IO_ADDRESS(INTEGRATOR_IC_BASE)
+		ldr	\irqstat, [\irqnr, #IRQ_STATUS]		@ get masked status
+		ldr	\irqnr, =IO_ADDRESS(INTEGRATOR_HDR_BASE)
+		ldr	\irqnr, [\irqnr, #(INTEGRATOR_HDR_IC_OFFSET+IRQ_STATUS)]
+		orr	\irqstat, \irqstat, \irqnr, lsl #INTEGRATOR_CM_INT0
+
+		mov	\irqnr, #0
+1001:		tst	\irqstat, #1
+		bne	1002f
+		add	\irqnr, \irqnr, #1
+		mov	\irqstat, \irqstat, lsr #1
+		cmp	\irqnr, #22
+		bcc	1001b
+1002:		/* EQ will be set if we reach 22 */
+		.endm
+
+		.macro	irq_prio_table
 		.endm
 
 #else

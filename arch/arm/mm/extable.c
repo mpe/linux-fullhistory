@@ -1,5 +1,5 @@
 /*
- * linux/arch/arm/mm/extable.c
+ *  linux/arch/arm/mm/extable.c
  */
 
 #include <linux/config.h>

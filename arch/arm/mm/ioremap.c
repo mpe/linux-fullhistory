@@ -1,5 +1,5 @@
 /*
- * arch/arm/mm/ioremap.c
+ *  linux/arch/arm/mm/ioremap.c
  *
  * Re-map IO memory to kernel address space so that we can access it.
  *

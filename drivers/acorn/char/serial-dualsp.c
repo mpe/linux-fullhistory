@@ -1,10 +1,14 @@
 /*
- * linux/arch/arm/drivers/char/serial-dualsp.c
+ *  linux/drivers/acorn/char/serial-dualsp.c
  *
- * Copyright (c) 1996 Russell King.
+ *  Copyright (C) 1996 Russell King.
  *
- * Changelog:
- *  30-07-1996	RMK	Created
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ *  Changelog:
+ *   30-07-1996	RMK	Created
  */
 #define MY_CARD_LIST { MANU_SERPORT, PROD_SERPORT_DSPORT }
 #define MY_NUMPORTS 2

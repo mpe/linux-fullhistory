@@ -43,7 +43,17 @@
  * 
  * 2000/08/09:
  * 	XP860 support added
- * 		Kunihiko IMAI <???>
+ * 		Kunihiko IMAI <imai@vasara.co.jp>
+ *
+ * 2000/08/19:
+ * 	Allows standard options to be passed on the kernel command line
+ * 	for most common passive displays.
+ * 		Mark Huang <mhuang@livetoy.com>
+ *
+ * 2000/08/29:
+ *	s/save_flags_cli/local_irq_save/
+ *      remove unneeded extra save_flags_cli in
+ *       sa1100fb_enable_lcd_controller
  */
 
 #include <linux/config.h>
@@ -164,6 +174,7 @@ struct sa1100fb_par {
 /* Shadows for LCD controller registers */
 struct sa1100fb_lcd_reg {
 	Address	dbar1;
+	Address dbar2;
 	Word	lccr0;
 	Word	lccr1;
 	Word	lccr2;
@@ -667,6 +678,16 @@ __init sa1100fb_init_fbinfo(void)
 		init_var.grayscale	= 0;
 		init_var.sync		= 0;
 		init_var.pixclock	= 171521;
+	} else if (machine_is_cerf()) {
+		current_par.max_xres	= 320;
+		current_par.max_yres	= 240;
+		current_par.max_bpp	= 8;
+		init_var.red.length	= 4;				
+		init_var.green.length	= 4;
+		init_var.blue.length	= 4;
+		init_var.grayscale	= 0;
+		init_var.sync		= 0;
+		init_var.pixclock	= 171521;
 	} else if (machine_is_bitsy()) {
 		current_par.max_xres	= 320;
 		current_par.max_yres	= 240;
@@ -784,8 +805,8 @@ __init sa1100fb_map_video_memory(void)
 	u_int  required_pages;
 	u_int  extra_pages;
 	u_int  order;
+        struct page *page;
         char   *allocated_region;
-	struct page *page;
 
 	if (VideoMemRegion != NULL)
 		return -EINVAL;
@@ -885,10 +906,11 @@ sa1100fb_activate_var(struct fb_var_screeninfo *var)
 	DPRINTK("activating\n");
 
 	/* Disable interrupts and save status */
-	save_flags_cli(flags);		// disable the interrupts and save flags
+	local_irq_save(flags);		// disable the interrupts and save flags
 
 	/* Reset the LCD Controller's DMA address if it has changed */
   	lcd_shadow.dbar1 = (Address)current_par.p_palette_base;
+	lcd_shadow.dbar2 = (Address)(current_par.p_screen_base + (current_par.xres * current_par.yres * current_par.bits_per_pixel / 8 / 2));
 
 	DPRINTK("Configuring xres = %d, yres = %d\n",var->xres, var->yres);
 
@@ -945,6 +967,22 @@ sa1100fb_activate_var(struct fb_var_screeninfo *var)
  			LCCR3_OutEnH + LCCR3_PixFlEdg + LCCR3_VrtSnchH + 
  			LCCR3_HorSnchH + LCCR3_ACBsCntOff + 
  			LCCR3_ACBsDiv(2) + LCCR3_PixClkDiv(44);
+	} else if (machine_is_cerf()) {
+		DPRINTK("Configuring Cerf LCD\n");
+		lcd_shadow.lccr0 = 
+			LCCR0_LEN + LCCR0_Color + LCCR0_Sngl + 
+			LCCR0_LDM + LCCR0_BAM + LCCR0_ERM + LCCR0_Pas +
+			LCCR0_LtlEnd + LCCR0_DMADel(0);
+		lcd_shadow.lccr1 = 
+			LCCR1_DisWdth(var->xres) + LCCR1_HorSnchWdth(6) + 
+			LCCR1_BegLnDel(61) + LCCR1_EndLnDel(9);
+		lcd_shadow.lccr2 = 
+			LCCR2_DisHght(var->yres) + LCCR2_VrtSnchWdth(1) + 
+			LCCR2_BegFrmDel(3) + LCCR2_EndFrmDel(0);
+		lcd_shadow.lccr3 = 
+			LCCR3_OutEnH + LCCR3_PixFlEdg + LCCR3_VrtSnchH + 
+			LCCR3_HorSnchH + LCCR3_ACBsCntOff + 
+			LCCR3_ACBsDiv(2) + LCCR3_PixClkDiv(38);
 	} else if (machine_is_lart()) {
 		DPRINTK("Configuring LART LCD\n");
 		lcd_shadow.lccr0 = 
@@ -1034,13 +1072,14 @@ sa1100fb_activate_var(struct fb_var_screeninfo *var)
 	}
 
 	/* Restore interrupt status */
-	restore_flags(flags);
+	local_irq_restore(flags);
 
 	if (( LCCR0 != lcd_shadow.lccr0 ) ||
 	    ( LCCR1 != lcd_shadow.lccr1 ) ||
 	    ( LCCR2 != lcd_shadow.lccr2 ) ||
             ( LCCR3 != lcd_shadow.lccr3 ) ||
-	    ( DBAR1 != lcd_shadow.dbar1 ))
+	    ( DBAR1 != lcd_shadow.dbar1 ) ||
+	    ( DBAR2 != lcd_shadow.dbar2 ))
 	{
 		sa1100fb_enable_lcd_controller();
 	}
@@ -1064,6 +1103,27 @@ static void sa1100fb_inter_handler(int irq, void *dev_id, struct pt_regs *regs)
 		if (controller_state == LCD_MODE_DISABLE_BEFORE_ENABLE) {
 		        DPRINTK("sa1100fb_inter_handler: re-enabling LCD controller\n");
 			sa1100fb_enable_lcd_controller();
+		} else {
+			/*
+			 * Second half of sa1100fb_disable_lcd_controller()
+			 */
+			if (machine_is_assabet()) {
+#ifdef CONFIG_SA1100_ASSABET
+				BCR_clear(BCR_LCD_ON);
+#endif
+			} else if (machine_is_bitsy()) {
+#ifdef CONFIG_SA1100_BITSY
+		                if (current_par.controller_state != LCD_MODE_DISABLE_BEFORE_ENABLE)
+		                        clr_bitsy_egpio(EGPIO_BITSY_LCD_ON | EGPIO_BITSY_LCD_PCI | EGPIO_BITSY_LCD_5V_ON | EGPIO_BITSY_LVDD_ON);
+#endif
+			} else if (machine_is_penny()) {
+#ifdef CONFIG_SA1100_PENNY
+				FpgaLcdCS1 = 0x000;	/* LCD Backlight to 0%    */
+				FpgaPortI &= ~LCD_ON;	/* Turn off LCD Backlight */
+#endif
+			} else if (machine_is_tifon()) {
+				GPCR = GPIO_GPIO(24);	/* turn off display */
+			}
 		}
 	}
 	LCSR = 0;		      /* Clear LCD Status Register */
@@ -1087,29 +1147,10 @@ static void sa1100fb_disable_lcd_controller(void)
 		return;
 	}
 
-	if (machine_is_assabet()) {
-#ifdef CONFIG_SA1100_ASSABET
-		BCR_clear(BCR_LCD_ON);
-#endif
-	} else if (machine_is_bitsy()) {
-#ifdef CONFIG_SA1100_BITSY
-                if (current_par.controller_state != LCD_MODE_DISABLE_BEFORE_ENABLE)
-                        clr_bitsy_egpio(EGPIO_BITSY_LCD_ON | EGPIO_BITSY_LCD_PCI | EGPIO_BITSY_LCD_5V_ON | EGPIO_BITSY_LVDD_ON);
-#endif
-	} else if (machine_is_penny()) {
-#ifdef CONFIG_SA1100_PENNY
-		FpgaLcdCS1 = 0x000;	/* LCD Backlight to 0%    */
-		FpgaPortI &= ~LCD_ON;	/* Turn off LCD Backlight */
-#endif
-	} else if (machine_is_tifon()) {
-		GPCR = GPIO_GPIO(24);	/* turn off display */
-	}
-	
 	LCSR = 0;	/* Clear LCD Status Register */
 	LCCR0 &= ~(LCCR0_LDM);	/* Enable LCD Disable Done Interrupt */
 	enable_irq(IRQ_LCD);	      /* Enable LCD IRQ */
 	LCCR0 &= ~(LCCR0_LEN);	/* Disable LCD Controller */
-
 }
 
 /*
@@ -1122,7 +1163,7 @@ static void sa1100fb_enable_lcd_controller(void)
 {
 	u_long	flags;
 
-	save_flags_cli(flags);		
+	local_irq_save(flags);		
 
         /* Disable controller before changing parameters */
 	if (current_par.controller_state == LCD_MODE_ENABLED) 	{
@@ -1135,14 +1176,20 @@ static void sa1100fb_enable_lcd_controller(void)
 		current_par.v_palette_base[0] &= 0x0FFF; 	           
 		current_par.v_palette_base[0] |= SA1100_PALETTE_MODE_VAL(current_par.bits_per_pixel); 	 
 
-		/* disable the interrupts and save flags */
-		save_flags_cli(flags);		
+		/* Enable GPIO<9:2> for LCD usage if dual-scan */
+		if (lcd_shadow.lccr0 & LCCR0_SDS) {
+		  GPDR |= 0x3fc;
+		  GAFR |= 0x3fc;
+		}
 
-		DBAR1 = lcd_shadow.dbar1;
+		/* Sequence from 11.7.10 */
 		LCCR3 = lcd_shadow.lccr3;
 		LCCR2 = lcd_shadow.lccr2;
 		LCCR1 = lcd_shadow.lccr1;
-		LCCR0 = lcd_shadow.lccr0;
+		LCCR0 = lcd_shadow.lccr0 & ~LCCR0_LEN;
+		DBAR1 = lcd_shadow.dbar1;
+		DBAR2 = lcd_shadow.dbar2;
+		LCCR0 |= LCCR0_LEN;
 
 		if (machine_is_assabet()) {
 #ifdef CONFIG_SA1100_ASSABET
@@ -1172,7 +1219,7 @@ static void sa1100fb_enable_lcd_controller(void)
 
 	}
 	/* Restore interrupt status */
-	restore_flags(flags);
+	local_irq_restore(flags);
 }
 
 /*
@@ -1263,6 +1310,9 @@ int __init sa1100fb_init(void)
 	} else if (machine_is_bitsy()) {
 		GPDR = (GPIO_LDD15 | GPIO_LDD14 | GPIO_LDD13 | GPIO_LDD12 | GPIO_LDD11 | GPIO_LDD10 | GPIO_LDD9 | GPIO_LDD8);
 		GAFR |= (GPIO_LDD15 | GPIO_LDD14 | GPIO_LDD13 | GPIO_LDD12 | GPIO_LDD11 | GPIO_LDD10 | GPIO_LDD9 | GPIO_LDD8);
+	} else if (machine_is_cerf()) {
+		GPDR |= 0x3fc;
+		GAFR |= 0x3fc;
 	} else if (machine_is_penny()) {
 #ifdef CONFIG_SA1100_PENNY
 		GPDR |= GPIO_GPDR_GFX;	/* GPIO Data Direction register for LCD data bits 8-11 */
@@ -1286,3 +1336,35 @@ int __init sa1100fb_init(void)
 
 	return 0;
 }
+
+int __init sa1100fb_setup(char *options)
+{
+	char *this_opt;
+
+	if (!options || !*options)
+		return 0;
+
+	for (this_opt = strtok(options, ","); this_opt;
+	     this_opt = strtok(NULL, ",")) {
+
+	  if (!strncmp(this_opt, "bpp:", 4))
+ 	    current_par.max_bpp = simple_strtoul(this_opt+4, NULL, 0);
+
+	  if (!strncmp(this_opt, "lccr0:", 6))
+	    lcd_shadow.lccr0 = simple_strtoul(this_opt+6, NULL, 0);
+	  if (!strncmp(this_opt, "lccr1:", 6)) {
+	    lcd_shadow.lccr1 = simple_strtoul(this_opt+6, NULL, 0);
+	    current_par.max_xres = (lcd_shadow.lccr1 & 0x3ff) + 16;
+	  }
+	  if (!strncmp(this_opt, "lccr2:", 6)) {
+	    lcd_shadow.lccr2 = simple_strtoul(this_opt+6, NULL, 0);
+	    current_par.max_yres = (lcd_shadow.lccr0 & LCCR0_SDS) ? 
+	      ((lcd_shadow.lccr2 & 0x3ff) + 1) * 2 :
+	      ((lcd_shadow.lccr2 & 0x3ff) + 1);
+	  }
+	  if (!strncmp(this_opt, "lccr3:", 6))
+	    lcd_shadow.lccr3 = simple_strtoul(this_opt+6, NULL, 0);
+	}
+	return 0;
+}
+

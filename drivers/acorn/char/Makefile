@@ -28,19 +28,15 @@ export-objs	:= mouse_rpc.o
 
 obj-arc		:= keyb_arc.o
 obj-rpc		:= keyb_ps2.o
+obj-clps7500	:= keyb_ps2.o defkeymap-acorn.o
 
 obj-$(CONFIG_RPCMOUSE)		+= mouse_rpc.o
 obj-$(CONFIG_ATOMWIDE_SERIAL)	+= serial-atomwide.o
 obj-$(CONFIG_DUALSP_SERIAL)	+= serial-dualsp.o
-obj-$(CONFIG_ARCH_ACORN)	+= defkeymap-acorn.o
+obj-$(CONFIG_ARCH_ACORN)	+= defkeymap-acorn.o i2c.o pcf8583.o
 
 # Do the i2c and rtc last
 obj-y		+= $(obj-$(MACHINE)) 
-
-# CL-PS7500 does not have these devices.
-ifneq ($(CONFIG_ARCH_CLPS7500),y)
-obj-y += i2c.o pcf8583.o
-endif
 
 O_OBJS		:= $(filter-out $(export-objs), $(obj-y))
 OX_OBJS		:= $(filter     $(export-objs), $(obj-y))

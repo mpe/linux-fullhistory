@@ -1,8 +1,12 @@
 /*
- * linux/arch/arm/drivers/scsi/acornscsi.c
+ *  linux/drivers/acorn/scsi/acornscsi.c
  *
  *  Acorn SCSI 3 driver
  *  By R.M.King.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
  *
  * Abandoned using the Select and Transfer command since there were
  * some nasty races between our software and the target devices that
@@ -2621,7 +2625,7 @@ acornscsi_do_abort(AS_Host *host, Scsi_Cmnd *SCpnt)
 {
 	enum res_abort res = res_not_running;
 
-	if (queue_removecmd(&host->queues.issue, SCpnt)) {
+	if (queue_remove_cmd(&host->queues.issue, SCpnt)) {
 		/*
 		 * The command was on the issue queue, and has not been
 		 * issued yet.  We can remove the command from the queue,
@@ -2632,7 +2636,7 @@ acornscsi_do_abort(AS_Host *host, Scsi_Cmnd *SCpnt)
 		printk("on issue queue ");
 //#endif
 		res = res_success;
-	} else if (queue_removecmd(&host->queues.disconnected, SCpnt)) {
+	} else if (queue_remove_cmd(&host->queues.disconnected, SCpnt)) {
 		/*
 		 * The command was on the disconnected queue.  Simply
 		 * acknowledge the abort condition, and when the target

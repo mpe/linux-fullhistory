@@ -1,13 +1,17 @@
 /*
- * linux/include/asm-arm/arch-arc/hardware.h
+ *  linux/include/asm-arm/arch-arc/hardware.h
  *
- * Copyright (C) 1996-1999 Russell King.
+ *  Copyright (C) 1996-1999 Russell King.
  *
- * This file contains the hardware definitions of the
- * Acorn Archimedes/A5000 machines.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
  *
- * Modifications:
- *  04-04-1998	PJB/RMK	Merged arc and a5k versions
+ *  This file contains the hardware definitions of the
+ *  Acorn Archimedes/A5000 machines.
+ *
+ *  Modifications:
+ *   04-04-1998	PJB/RMK	Merged arc and a5k versions
  */
 #ifndef __ASM_ARCH_HARDWARE_H
 #define __ASM_ARCH_HARDWARE_H
@@ -22,7 +26,7 @@
  */
 #define HAS_IOC
 #define HAS_MEMC
-#include <asm/memc.h>
+#include <asm/hardware/memc.h>
 #define HAS_VIDC
 
 /* Hardware addresses of major areas.

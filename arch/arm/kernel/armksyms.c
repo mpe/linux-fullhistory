@@ -1,3 +1,12 @@
+/*
+ *  linux/arch/arm/kernel/armksyms.c
+ *
+ *  Copyright (C) 2000 Russell King
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ */
 #include <linux/config.h>
 #include <linux/module.h>
 #include <linux/user.h>
@@ -110,23 +119,6 @@ EXPORT_SYMBOL(pm_idle);
 EXPORT_SYMBOL(pm_power_off);
 
 	/* processor dependencies */
-#ifdef MULTI_CPU
-EXPORT_SYMBOL(processor);
-#else
-EXPORT_SYMBOL(cpu_flush_cache_all);
-EXPORT_SYMBOL(cpu_flush_cache_area);
-EXPORT_SYMBOL(cpu_flush_cache_entry);
-EXPORT_SYMBOL(cpu_clean_cache_area);
-EXPORT_SYMBOL(cpu_flush_ram_page);
-EXPORT_SYMBOL(cpu_flush_tlb_all);
-EXPORT_SYMBOL(cpu_flush_tlb_area);
-EXPORT_SYMBOL(cpu_set_pgd);
-EXPORT_SYMBOL(cpu_set_pmd);
-EXPORT_SYMBOL(cpu_set_pte);
-EXPORT_SYMBOL(cpu_flush_icache_area);
-EXPORT_SYMBOL(cpu_cache_wback_area);
-EXPORT_SYMBOL(cpu_cache_purge_area);
-#endif
 EXPORT_SYMBOL(__machine_arch_type);
 
 	/* networking */

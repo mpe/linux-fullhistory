@@ -1,9 +1,13 @@
 /*
- * linux/fs/adfs/dir.c
+ *  linux/fs/adfs/dir.c
  *
- * Copyright (C) 1999-2000 Russell King
+ *  Copyright (C) 1999-2000 Russell King
  *
- * Common directory handling for ADFS
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ *  Common directory handling for ADFS
  */
 #include <linux/config.h>
 #include <linux/version.h>

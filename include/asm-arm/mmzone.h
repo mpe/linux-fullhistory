@@ -1,9 +1,12 @@
 /*
- * linux/include/asm-arm/mmzone.h
+ *  linux/include/asm-arm/mmzone.h
  *
- * 1999-12-29	Nicolas Pitre		Created
+ *  1999-12-29	Nicolas Pitre		Created
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
  */
-
 #ifndef __ASM_MMZONE_H
 #define __ASM_MMZONE_H
 

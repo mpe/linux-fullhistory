@@ -1,9 +1,12 @@
 /*
- * linux/include/asm-arm/proc-armv/system.h
+ *  linux/include/asm-arm/proc-armv/system.h
  *
- * Copyright (C) 1996 Russell King
+ *  Copyright (C) 1996 Russell King
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
  */
-
 #ifndef __ASM_PROC_SYSTEM_H
 #define __ASM_PROC_SYSTEM_H
 
@@ -72,36 +75,6 @@ extern unsigned long cr_alignment;	/* defined in entry-armv.S */
 	__asm__ __volatile__(					\
 	"mrs	%0, cpsr		@ cli\n"		\
 "	orr	%0, %0, #128\n"					\
-"	msr	cpsr_c, %0"					\
-	: "=r" (temp)						\
-	:							\
-	: "memory");						\
-	})
-
-/*
- * Enable FIQs
- */
-#define __stf()							\
-	({							\
-		unsigned long temp;				\
-	__asm__ __volatile__(					\
-	"mrs	%0, cpsr		@ stf\n"		\
-"	bic	%0, %0, #64\n"					\
-"	msr	cpsr_c, %0"					\
-	: "=r" (temp)						\
-	:							\
-	: "memory");						\
-	})
-
-/*
- * Disable FIQs
- */
-#define __clf()							\
-	({							\
-		unsigned long temp;				\
-	__asm__ __volatile__(					\
-	"mrs	%0, cpsr		@ clf\n"		\
-"	orr	%0, %0, #64\n"					\
 "	msr	cpsr_c, %0"					\
 	: "=r" (temp)						\
 	:							\

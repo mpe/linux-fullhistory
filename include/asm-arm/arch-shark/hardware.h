@@ -20,7 +20,7 @@
 /*
  * RAM definitions
  */
-#define FLUSH_BASE_PHYS		0x60000000
+#define FLUSH_BASE_PHYS		0x80000000
 
 #else
 
@@ -28,22 +28,26 @@
 
 #endif
 
-#define IO_SIZE			0x10000000
+#define IO_SIZE			0x08000000
 #define IO_START		0x40000000
+#define ROMCARD_SIZE		0x08000000
+#define ROMCARD_START		0x10000000
 
 #define FLUSH_BASE		0xdf000000
 #define PCIO_BASE		0xe0000000
 
 
 /* defines for the Framebuffer */
-#define FB_BASE                 0xd0000000
 #define FB_START                0x06000000
-#define FB_SIZE                 0x00200000
 
 /* Registers for Framebuffer */
-#define FBREG_BASE              (FB_BASE + FB_SIZE)
-#define FBREG_START             0x06800000
-#define FBREG_SIZE              0x000c0000
+/*#define FBREG_START             0x06800000*/
+
+#define UNCACHEABLE_ADDR        0xdf010000
+
+#define SEQUOIA_LED_GREEN       (1<<6)
+#define SEQUOIA_LED_AMBER       (1<<5)
+#define SEQUOIA_LED_BACK        (1<<7)
 
 #endif
 

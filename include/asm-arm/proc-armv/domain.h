@@ -1,7 +1,11 @@
 /*
- * linux/include/asm-arm/proc-armv/domain.h
+ *  linux/include/asm-arm/proc-armv/domain.h
  *
- * Copyright (C) 1999 Russell King.
+ *  Copyright (C) 1999 Russell King.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
  */
 #ifndef __ASM_PROC_DOMAIN_H
 #define __ASM_PROC_DOMAIN_H

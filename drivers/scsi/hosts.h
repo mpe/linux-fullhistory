@@ -506,11 +506,6 @@ struct Scsi_Device_Template
 
 void  scsi_initialize_queue(Scsi_Device * SDpnt, struct Scsi_Host * SHpnt);
 
-extern struct Scsi_Device_Template sd_template;
-extern struct Scsi_Device_Template st_template;
-extern struct Scsi_Device_Template sr_template;
-extern struct Scsi_Device_Template sg_template;
-
 int scsi_register_device(struct Scsi_Device_Template * sdpnt);
 
 /* These are used by loadable modules */

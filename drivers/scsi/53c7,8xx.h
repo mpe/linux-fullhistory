@@ -46,7 +46,6 @@
  * array.
  */
 
-#if defined(HOSTS_C) || defined(MODULE)
 #include <scsi/scsicam.h>
 
 extern int NCR53c7xx_abort(Scsi_Cmnd *);
@@ -71,8 +70,6 @@ extern int NCR53c7xx_release(struct Scsi_Host *);
 	  sg_tablesize:   127,				\
 	  cmd_per_lun:    3,				\
 	  use_clustering: DISABLE_CLUSTERING} 
-
-#endif /* defined(HOSTS_C) || defined(MODULE) */ 
 
 #ifndef HOSTS_C
 

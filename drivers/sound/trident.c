@@ -2484,7 +2484,7 @@ static int __init trident_probe(struct pci_dev *pci_dev, const struct pci_device
 		/* edited by HMSEO for GT sound*/
 	}
 
-	pci_dev->driver_data = card;
+	pci_set_drvdata(pci_dev, card);
 	pci_dev->dma_mask = TRIDENT_DMA_MASK;
 
 	/* Enable Address Engine Interrupts */
@@ -2496,7 +2496,7 @@ static int __init trident_probe(struct pci_dev *pci_dev, const struct pci_device
 static void __exit trident_remove(struct pci_dev *pci_dev)
 {
 	int i;
-	struct trident_card *card = pci_dev->driver_data;
+	struct trident_card *card = pci_get_drvdata(pci_dev);
 
 	/* Kill interrupts, and SP/DIF */
 	trident_disable_loop_interrupts(card);
@@ -2514,6 +2514,8 @@ static void __exit trident_remove(struct pci_dev *pci_dev)
 	unregister_sound_dsp(card->dev_audio);
 
 	kfree(card);
+
+	pci_set_drvdata(pci_dev, NULL);
 }
 
 MODULE_AUTHOR("Alan Cox, Aaron Holtzman, Ollie Lho, Ching Ling Lee");

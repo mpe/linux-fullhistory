@@ -13,17 +13,28 @@
 #define __ASM_ARCH_HARDWARE_H
 
 #include <linux/config.h>
+#include <asm/mach-types.h>
+
 
 /* Flushing areas */
 #define FLUSH_BASE_PHYS		0xe0000000	/* SA1100 zero bank */
-#define FLUSH_BASE		0xdf000000
-#define FLUSH_BASE_MINICACHE	0xdf800000
+#define FLUSH_BASE		0xf5000000
+#define FLUSH_BASE_MINICACHE	0xf5800000
 #define UNCACHEABLE_ADDR	0xfa050000
 
 
 /*
- * We requires absolute addresses i.e. (0xe00000 + 0x3f8) for in*()/out*()
- * macros to be useful for all cases.
+ * Those are statically mapped PCMCIA IO space for designs using it as a
+ * generic IO bus, typically with ISA parts, hardwired IDE interfaces, etc.
+ * The actual PCMCIA code is mapping required IO region at run time.
+ */
+#define PCMCIA_IO_0_BASE	0xf6000000
+#define PCMCIA_IO_1_BASE	0xf7000000
+
+
+/*
+ * We requires absolute addresses i.e. (PCMCIA_IO_0_BASE + 0x3f8) for 
+ * in*()/out*() macros to be usable for all cases.
  */
 #define PCIO_BASE		0
 
@@ -37,8 +48,6 @@
  *      90000000        fa000000
  *      a0000000        fc000000
  *      b0000000        fe000000
- *
- * Nb: PCMCIA is mapped from 0xe0000000 to f7ffffff in mm-sa1100.c
  */
 
 #define VIO_BASE        0xf8000000	/* virtual start of IO space */
@@ -89,8 +98,12 @@ extern void set_GPIO_IRQ_edge( int gpio_mask, int edge_mask );
 #include "bitsy.h"
 #endif
 
-#if defined(CONFIG_SA1100_GRAPHICSCLIENT) || defined(CONFIG_SA1100_THINCLIENT)
+#if defined(CONFIG_SA1100_THINCLIENT)
 #include "thinclient.h"
+#endif
+
+#if defined(CONFIG_SA1100_GRAPHICSCLIENT)
+#include "graphicsclient.h"
 #endif
 
 
@@ -98,11 +111,11 @@ extern void set_GPIO_IRQ_edge( int gpio_mask, int edge_mask );
 
 /*
  * We have mapped the sa1101 depending on the value of SA1101_BASE.
- * It then appears from 0xdc000000.
+ * It then appears from 0xf4000000.
  */
 
-#define SA1101_p2v( x )         ((x) - SA1101_BASE + 0xdc000000)
-#define SA1101_v2p( x )         ((x) - 0xdc000000  + SA1101_BASE)
+#define SA1101_p2v( x )         ((x) - SA1101_BASE + 0xf4000000)
+#define SA1101_v2p( x )         ((x) - 0xf4000000  + SA1101_BASE)
 
 #include "SA-1101.h"
 
@@ -111,8 +124,8 @@ extern void set_GPIO_IRQ_edge( int gpio_mask, int edge_mask );
 
 #ifdef CONFIG_SA1111
 
-#define SA1111_p2v( x )         ((x) - SA1111_BASE + 0xd8000000)
-#define SA1111_v2p( x )         ((x) - 0xd8000000 + SA1111_BASE)
+#define SA1111_p2v( x )         ((x) - SA1111_BASE + 0xf4000000)
+#define SA1111_v2p( x )         ((x) - 0xf4000000 + SA1111_BASE)
 
 #include "SA-1111.h"
 

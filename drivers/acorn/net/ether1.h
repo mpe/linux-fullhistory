@@ -1,9 +1,13 @@
 /*
- * linux/arch/arm/drivers/net/ether1.h
+ *  linux/drivers/acorn/net/ether1.h
  *
- * network driver for Acorn Ether1 cards.
+ *  Copyright (C) 1996 Russell King
  *
- * (c) 1996 Russell King
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ *  Network driver for Acorn Ether1 cards.
  */
 
 #ifndef _LINUX_ether1_H

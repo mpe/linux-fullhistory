@@ -6,8 +6,7 @@
  *
  *	SoftDog	0.05:	A Software Watchdog Device
  *
- *	(c) Copyright 1996 Alan Cox <alan@cymru.net>, All Rights Reserved.
- *				http://www.cymru.net
+ *	(c) Copyright 1996 Alan Cox <alan@redhat.com>, All Rights Reserved.
  *
  *	This program is free software; you can redistribute it and/or
  *	modify it under the terms of the GNU General Public License
@@ -32,7 +31,7 @@
 #include <asm/uaccess.h>
 #include <asm/hardware.h>
 #include <asm/mach-types.h>
-#include <asm/dec21285.h>
+#include <asm/hardware/dec21285.h>
 
 /*
  * Define this to stop the watchdog actually rebooting the machine.

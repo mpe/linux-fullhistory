@@ -159,7 +159,7 @@ static int proc_ide_write_config
 	unsigned long	startn = 0, n, flags;
 	const char	*start = NULL, *msg = NULL;
 
-	if (!capable(CAP_SYS_ADMIN))
+	if (!capable(CAP_SYS_ADMIN) || !capable(CAP_SYS_RAWIO))
 		return -EACCES;
 	/*
 	 * Skip over leading whitespace

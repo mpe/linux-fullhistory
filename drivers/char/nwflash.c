@@ -1,6 +1,9 @@
 /*
  * Flash memory interface rev.5 driver for the Intel
  * Flash chips used on the NetWinder.
+ *
+ * 20/08/2000	RMK	use __ioremap to map flash into virtual memory
+ *			make a few more places use "volatile"
  */
 
 #include <linux/module.h>
@@ -15,7 +18,7 @@
 #include <linux/spinlock.h>
 #include <linux/init.h>
 
-#include <asm/dec21285.h>
+#include <asm/hardware/dec21285.h>
 #include <asm/io.h>
 #include <asm/leds.h>
 #include <asm/mach-types.h>
@@ -33,7 +36,7 @@
 #define MSTATIC
 #endif
 
-#define	NWFLASH_VERSION "6.2"
+#define	NWFLASH_VERSION "6.3"
 
 MSTATIC void kick_open(void);
 MSTATIC int get_flash_id(void);
@@ -54,6 +57,7 @@ static int flashdebug;		//if set - we will display progress msgs
 
 static int gbWriteEnable;
 static int gbWriteBase64Enable;
+static volatile unsigned char *FLASH_BASE;
 MSTATIC int gbFlashSize = KFLASH_SIZE;
 
 extern spinlock_t gpio_lock;
@@ -93,25 +97,25 @@ MSTATIC int get_flash_id(void)
 	 */
 	kick_open();
 	c2 = inb(0x80);
-	*(unsigned char *) (FLASH_BASE + 0x8000) = 0x90;
+	*(volatile unsigned char *) (FLASH_BASE + 0x8000) = 0x90;
 	udelay(15);
-	c1 = *(unsigned char *) FLASH_BASE;
+	c1 = *(volatile unsigned char *) FLASH_BASE;
 	c2 = inb(0x80);
 
 	/*
 	 * on 4 Meg flash the second byte is actually at offset 2...
 	 */
 	if (c1 == 0xB0)
-		c2 = *(unsigned char *) (FLASH_BASE + 2);
+		c2 = *(volatile unsigned char *) (FLASH_BASE + 2);
 	else
-		c2 = *(unsigned char *) (FLASH_BASE + 1);
+		c2 = *(volatile unsigned char *) (FLASH_BASE + 1);
 
 	c2 += (c1 << 8);
 
 	/*
 	 * set it back to read mode
 	 */
-	*(unsigned char *) (FLASH_BASE + 0x8000) = 0xFF;
+	*(volatile unsigned char *) (FLASH_BASE + 0x8000) = 0xFF;
 
 	if (c2 == KFLASH_ID4)
 		gbFlashSize = KFLASH_SIZE4;
@@ -177,14 +181,9 @@ static ssize_t flash_read(struct file *file, char *buf, size_t count, loff_t * p
 	if (count > gbFlashSize - p)
 		count = gbFlashSize - p;
 
-	/*
-	 * flash virtual address
-	 */
-	p += FLASH_BASE;
-
 	read = 0;
 
-	if (copy_to_user(buf, (void *) p, count))
+	if (copy_to_user(buf, (void *)(FLASH_BASE + p), count))
 		return -EFAULT;
 	read += count;
 	file->f_pos += read;
@@ -193,15 +192,15 @@ static ssize_t flash_read(struct file *file, char *buf, size_t count, loff_t * p
 
 static ssize_t flash_write(struct file *file, const char *buf, size_t count, loff_t * ppos)
 {
+	struct inode *inode = file->f_dentry->d_inode;
 	unsigned long p = file->f_pos;
 	int written;
 	int nBlock, temp, rc;
 	int i, j;
 
-
 	if (flashdebug)
-		printk("Flash_dev: flash_write: offset=0x%X, buffer=0x%X, count=0x%X.\n",
-		       (unsigned int) p, (unsigned int) buf, count);
+		printk("flash_write: offset=0x%lX, buffer=0x%p, count=0x%X.\n",
+		       p, buf, count);
 
 	if (!gbWriteEnable)
 		return -EINVAL;
@@ -209,19 +208,24 @@ static ssize_t flash_write(struct file *file, const char *buf, size_t count, lof
 	if (p < 64 * 1024 && (!gbWriteBase64Enable))
 		return -EINVAL;
 
-	if (count < 0)
-		return -EINVAL;
-
 	/*
-	 * if write size to big - error!
+	 * if byte count is -ve or to big - error!
 	 */
-	if (count > gbFlashSize - p)
+	if (count < 0 || count > gbFlashSize - p)
 		return -EINVAL;
-
 
 	if (verify_area(VERIFY_READ, buf, count))
 		return -EFAULT;
 
+
+	/*
+	 * We now should lock around writes.  Really, we shouldn't
+	 * allow the flash to be opened more than once in write
+	 * mode though (note that you can't stop two processes having
+	 * it open even then). --rmk
+	 */
+	if (down_interruptible(&inode->i_sem))
+		return -ERESTARTSYS;
 
 	written = 0;
 
@@ -309,6 +313,8 @@ static ssize_t flash_write(struct file *file, const char *buf, size_t count, lof
 	 * restore reg on exit
 	 */
 	leds_event(led_release);
+
+	up(&inode->i_sem);
 
 	return written;
 }
@@ -586,7 +592,7 @@ MSTATIC int write_block(unsigned long p, const char *buf, int count)
 			if (time_before(jiffies, timeout)) {
 				if (flashdebug)
 					printk("FlashWrite: Retrying write (addr=0x%X)...\n",
-					       (unsigned int) pWritePtr - FLASH_BASE);
+					       pWritePtr - FLASH_BASE);
 
 				/*
 				 * no LED == waiting
@@ -604,7 +610,7 @@ MSTATIC int write_block(unsigned long p, const char *buf, int count)
 				goto WriteRetry;
 			} else {
 				printk("Timeout in flash write! (addr=0x%X) Aborting...\n",
-				 (unsigned int) pWritePtr - FLASH_BASE);
+				       pWritePtr - FLASH_BASE);
 				/*
 				 * return error -2
 				 */
@@ -666,6 +672,10 @@ MSTATIC int __init nwflash_init(void)
 	if (machine_is_netwinder()) {
 		int id;
 
+		FLASH_BASE = __ioremap(DC21285_FLASH, KFLASH_SIZE4, 0);
+		if (!FLASH_BASE)
+			goto out;
+
 		id = get_flash_id();
 		printk("Flash ROM driver v.%s, flash device ID 0x%04X, size %d Mb.\n",
 		       NWFLASH_VERSION, id, gbFlashSize / (1024 * 1024));
@@ -674,13 +684,14 @@ MSTATIC int __init nwflash_init(void)
 
 		ret = 0;
 	}
-
+out:
 	return ret;
 }
 
 MSTATIC void __exit nwflash_exit(void)
 {
 	misc_deregister(&flash_miscdev);
+	iounmap((void *)FLASH_BASE);
 }
 
 EXPORT_NO_SYMBOLS;

@@ -1,14 +1,17 @@
 /*
- * linux/arch/arm/drivers/char/serial-atomwide.c
+ *  linux/arch/arm/drivers/char/serial-atomwide.c
  *
- * Copyright (c) 1996 Russell King.
+ *  Copyright (C) 1996 Russell King.
  *
- * Changelog:
- *  02-05-1996	RMK	Created
- *  07-05-1996	RMK	Altered for greater number of cards.
- *  30-07-1996	RMK	Now uses generic card code.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ *  Changelog:
+ *   02-05-1996	RMK	Created
+ *   07-05-1996	RMK	Altered for greater number of cards.
+ *   30-07-1996	RMK	Now uses generic card code.
  */
-
 #define MY_CARD_LIST { MANU_ATOMWIDE, PROD_ATOMWIDE_3PSERIAL }
 #define MY_NUMPORTS 3
 #define MY_BAUD_BASE (7372800 / 16)

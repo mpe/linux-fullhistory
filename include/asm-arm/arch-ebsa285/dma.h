@@ -1,10 +1,10 @@
 /*
- * linux/include/asm-arm/arch-ebsa285/dma.h
+ *  linux/include/asm-arm/arch-ebsa285/dma.h
  *
- * Architecture DMA routines
+ *  Architecture DMA routines
  *
- * Copyright (C) 1998,1999 Russell King
- * Copyright (C) 1998,1999 Philip Blundell
+ *  Copyright (C) 1998,1999 Russell King
+ *  Copyright (C) 1998,1999 Philip Blundell
  */
 #ifndef __ASM_ARCH_DMA_H
 #define __ASM_ARCH_DMA_H

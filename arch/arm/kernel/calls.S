@@ -1,9 +1,13 @@
 /*
- * linux/arch/arm/lib/calls.h
+ *  linux/arch/arm/lib/calls.h
  *
- * Copyright (C) 1995-1998 Russell King
+ *  Copyright (C) 1995-1998 Russell King
  *
- * This file is included twice in entry-common.S
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ *  This file is included twice in entry-common.S
  */
 #ifndef NR_syscalls
 #define NR_syscalls 256

@@ -1,10 +1,14 @@
 /*
- * linux/asm-arm/proc-armo/assembler.h
+ *  linux/asm-arm/proc-armo/assembler.h
  *
- * Copyright (C) 1996 Russell King
+ *  Copyright (C) 1996 Russell King
  *
- * This file contains arm architecture specific defines
- * for the different processors
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ *  This file contains arm architecture specific defines
+ *  for the different processors
  */
 #define MODE_USR	USR26_MODE
 #define MODE_FIQ	FIQ26_MODE

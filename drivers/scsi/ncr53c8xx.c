@@ -9513,7 +9513,5 @@ const char *ncr53c8xx_info (struct Scsi_Host *host)
 **	Module stuff
 */
 
-#ifdef MODULE
-Scsi_Host_Template driver_template = NCR53C8XX;
+static Scsi_Host_Template driver_template = NCR53C8XX;
 #include "scsi_module.c"
-#endif

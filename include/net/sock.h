@@ -470,7 +470,6 @@ typedef struct {
 
 #define sock_lock_init(__sk) \
 do {	spin_lock_init(&((__sk)->lock.slock)); \
-	(__sk)->dst_lock = RW_LOCK_UNLOCKED; \
 	(__sk)->lock.users = 0; \
 	init_waitqueue_head(&((__sk)->lock.wq)); \
 } while(0);
@@ -749,6 +748,7 @@ static void __inline__ sock_prot_dec_use(struct proto *prot)
 #define SOCK_SNDBUF_LOCK	1
 #define SOCK_RCVBUF_LOCK	2
 #define SOCK_BINDADDR_LOCK	4
+#define SOCK_BINDPORT_LOCK	8
 
 
 /* Used by processes to "lock" a socket state, so that
@@ -818,7 +818,6 @@ extern struct sk_buff		*sock_rmalloc(struct sock *sk,
 					      int priority);
 extern void			sock_wfree(struct sk_buff *skb);
 extern void			sock_rfree(struct sk_buff *skb);
-extern unsigned long		sock_wspace(struct sock *sk);
 
 extern int			sock_setsockopt(struct socket *sock, int level,
 						int op, char *optval,
@@ -901,7 +900,7 @@ extern void sklist_destroy_socket(struct sock **list, struct sock *sk);
  * be accepted or 1 if the packet should be tossed.
  */
  
-extern __inline__ int sk_filter(struct sk_buff *skb, struct sk_filter *filter)
+static inline int sk_filter(struct sk_buff *skb, struct sk_filter *filter)
 {
 	int pkt_len;
 
@@ -922,7 +921,7 @@ extern __inline__ int sk_filter(struct sk_buff *skb, struct sk_filter *filter)
  *	Remove a filter from a socket and release its resources.
  */
  
-extern __inline__ void sk_filter_release(struct sock *sk, struct sk_filter *fp)
+static inline void sk_filter_release(struct sock *sk, struct sk_filter *fp)
 {
 	unsigned int size = sk_filter_len(fp);
 
@@ -932,7 +931,7 @@ extern __inline__ void sk_filter_release(struct sock *sk, struct sk_filter *fp)
 		kfree(fp);
 }
 
-extern __inline__ void sk_filter_charge(struct sock *sk, struct sk_filter *fp)
+static inline void sk_filter_charge(struct sock *sk, struct sk_filter *fp)
 {
 	atomic_inc(&fp->refcnt);
 	atomic_add(sk_filter_len(fp), &sk->omem_alloc);
@@ -971,7 +970,7 @@ extern __inline__ void sk_filter_charge(struct sock *sk, struct sk_filter *fp)
    modifications.
  */
 
-extern __inline__ void sock_hold(struct sock *sk)
+static inline void sock_hold(struct sock *sk)
 {
 	atomic_inc(&sk->refcnt);
 }
@@ -979,13 +978,13 @@ extern __inline__ void sock_hold(struct sock *sk)
 /* Ungrab socket in the context, which assumes that socket refcnt
    cannot hit zero, f.e. it is true in context of any socketcall.
  */
-extern __inline__ void __sock_put(struct sock *sk)
+static inline void __sock_put(struct sock *sk)
 {
 	atomic_dec(&sk->refcnt);
 }
 
 /* Ungrab socket and destroy it, if it was the last reference. */
-extern __inline__ void sock_put(struct sock *sk)
+static inline void sock_put(struct sock *sk)
 {
 	if (atomic_dec_and_test(&sk->refcnt))
 		sk_free(sk);
@@ -998,7 +997,7 @@ extern __inline__ void sock_put(struct sock *sk)
  * probably wants some additional cleanups or even continuing
  * to work with this socket (TCP).
  */
-extern __inline__ void sock_orphan(struct sock *sk)
+static inline void sock_orphan(struct sock *sk)
 {
 	write_lock_bh(&sk->callback_lock);
 	sk->dead = 1;
@@ -1007,7 +1006,7 @@ extern __inline__ void sock_orphan(struct sock *sk)
 	write_unlock_bh(&sk->callback_lock);
 }
 
-extern __inline__ void sock_graft(struct sock *sk, struct socket *parent)
+static inline void sock_graft(struct sock *sk, struct socket *parent)
 {
 	write_lock_bh(&sk->callback_lock);
 	sk->sleep = &parent->wait;
@@ -1036,13 +1035,13 @@ static inline unsigned long sock_i_ino(struct sock *sk)
 	return ino;
 }
 
-extern __inline__ struct dst_entry *
+static inline struct dst_entry *
 __sk_dst_get(struct sock *sk)
 {
 	return sk->dst_cache;
 }
 
-extern __inline__ struct dst_entry *
+static inline struct dst_entry *
 sk_dst_get(struct sock *sk)
 {
 	struct dst_entry *dst;
@@ -1055,7 +1054,7 @@ sk_dst_get(struct sock *sk)
 	return dst;
 }
 
-extern __inline__ void
+static inline void
 __sk_dst_set(struct sock *sk, struct dst_entry *dst)
 {
 	struct dst_entry *old_dst;
@@ -1065,7 +1064,7 @@ __sk_dst_set(struct sock *sk, struct dst_entry *dst)
 	dst_release(old_dst);
 }
 
-extern __inline__ void
+static inline void
 sk_dst_set(struct sock *sk, struct dst_entry *dst)
 {
 	write_lock(&sk->dst_lock);
@@ -1073,7 +1072,7 @@ sk_dst_set(struct sock *sk, struct dst_entry *dst)
 	write_unlock(&sk->dst_lock);
 }
 
-extern __inline__ void
+static inline void
 __sk_dst_reset(struct sock *sk)
 {
 	struct dst_entry *old_dst;
@@ -1083,7 +1082,7 @@ __sk_dst_reset(struct sock *sk)
 	dst_release(old_dst);
 }
 
-extern __inline__ void
+static inline void
 sk_dst_reset(struct sock *sk)
 {
 	write_lock(&sk->dst_lock);
@@ -1091,7 +1090,7 @@ sk_dst_reset(struct sock *sk)
 	write_unlock(&sk->dst_lock);
 }
 
-extern __inline__ struct dst_entry *
+static inline struct dst_entry *
 __sk_dst_check(struct sock *sk, u32 cookie)
 {
 	struct dst_entry *dst = sk->dst_cache;
@@ -1104,7 +1103,7 @@ __sk_dst_check(struct sock *sk, u32 cookie)
 	return dst;
 }
 
-extern __inline__ struct dst_entry *
+static inline struct dst_entry *
 sk_dst_check(struct sock *sk, u32 cookie)
 {
 	struct dst_entry *dst = sk_dst_get(sk);
@@ -1127,7 +1126,7 @@ sk_dst_check(struct sock *sk, u32 cookie)
  *	packet ever received.
  */
 
-extern __inline__ void skb_set_owner_w(struct sk_buff *skb, struct sock *sk)
+static inline void skb_set_owner_w(struct sk_buff *skb, struct sock *sk)
 {
 	sock_hold(sk);
 	skb->sk = sk;
@@ -1135,14 +1134,14 @@ extern __inline__ void skb_set_owner_w(struct sk_buff *skb, struct sock *sk)
 	atomic_add(skb->truesize, &sk->wmem_alloc);
 }
 
-extern __inline__ void skb_set_owner_r(struct sk_buff *skb, struct sock *sk)
+static inline void skb_set_owner_r(struct sk_buff *skb, struct sock *sk)
 {
 	skb->sk = sk;
 	skb->destructor = sock_rfree;
 	atomic_add(skb->truesize, &sk->rmem_alloc);
 }
 
-extern __inline__ int sock_queue_rcv_skb(struct sock *sk, struct sk_buff *skb)
+static inline int sock_queue_rcv_skb(struct sock *sk, struct sk_buff *skb)
 {
 	/* Cast skb->rcvbuf to unsigned... It's pointless, but reduces
 	   number of warnings when compiling with -W --ANK
@@ -1175,7 +1174,7 @@ extern __inline__ int sock_queue_rcv_skb(struct sock *sk, struct sk_buff *skb)
 	return 0;
 }
 
-extern __inline__ int sock_queue_err_skb(struct sock *sk, struct sk_buff *skb)
+static inline int sock_queue_err_skb(struct sock *sk, struct sk_buff *skb)
 {
 	/* Cast skb->rcvbuf to unsigned... It's pointless, but reduces
 	   number of warnings when compiling with -W --ANK
@@ -1193,13 +1192,13 @@ extern __inline__ int sock_queue_err_skb(struct sock *sk, struct sk_buff *skb)
  *	Recover an error report and clear atomically
  */
  
-extern __inline__ int sock_error(struct sock *sk)
+static inline int sock_error(struct sock *sk)
 {
 	int err=xchg(&sk->err,0);
 	return -err;
 }
 
-extern __inline__ unsigned long sock_wspace(struct sock *sk)
+static inline unsigned long sock_wspace(struct sock *sk)
 {
 	int amt = 0;
 
@@ -1211,7 +1210,7 @@ extern __inline__ unsigned long sock_wspace(struct sock *sk)
 	return amt;
 }
 
-extern __inline__ void sk_wake_async(struct sock *sk, int how, int band)
+static inline void sk_wake_async(struct sock *sk, int how, int band)
 {
 	if (sk->socket && sk->socket->fasync_list)
 		sock_wake_async(sk->socket, how, band);
@@ -1226,27 +1225,27 @@ extern __inline__ void sk_wake_async(struct sock *sk, int how, int band)
  *	Default write policy as shown to user space via poll/select/SIGIO
  *	Kernel internally doesn't use the MIN_WRITE_SPACE threshold.
  */
-extern __inline__ int sock_writeable(struct sock *sk) 
+static inline int sock_writeable(struct sock *sk) 
 {
 	return sock_wspace(sk) >= SOCK_MIN_WRITE_SPACE;
 }
 
-extern __inline__ int gfp_any(void)
+static inline int gfp_any(void)
 {
 	return in_softirq() ? GFP_ATOMIC : GFP_KERNEL;
 }
 
-extern __inline__ long sock_rcvtimeo(struct sock *sk, int noblock)
+static inline long sock_rcvtimeo(struct sock *sk, int noblock)
 {
 	return noblock ? 0 : sk->rcvtimeo;
 }
 
-extern __inline__ long sock_sndtimeo(struct sock *sk, int noblock)
+static inline long sock_sndtimeo(struct sock *sk, int noblock)
 {
 	return noblock ? 0 : sk->sndtimeo;
 }
 
-extern __inline__ int sock_rcvlowat(struct sock *sk, int waitall, int len)
+static inline int sock_rcvlowat(struct sock *sk, int waitall, int len)
 {
 	return (waitall ? len : min(sk->rcvlowat, len)) ? : 1;
 }
@@ -1254,7 +1253,7 @@ extern __inline__ int sock_rcvlowat(struct sock *sk, int waitall, int len)
 /* Alas, with timeout socket operations are not restartable.
  * Compare this to poll().
  */
-extern __inline__ int sock_intr_errno(long timeo)
+static inline int sock_intr_errno(long timeo)
 {
 	return timeo == MAX_SCHEDULE_TIMEOUT ? -ERESTARTSYS : -EINTR;
 }

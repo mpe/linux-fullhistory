@@ -2,6 +2,10 @@
  *  linux/arch/arm/mm/init.c
  *
  *  Copyright (C) 1995-2000 Russell King
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
  */
 #include <linux/config.h>
 #include <linux/signal.h>
@@ -27,7 +31,8 @@
 #include <asm/hardware.h>
 #include <asm/setup.h>
 
-#include "map.h"
+#include <asm/mach/arch.h>
+#include <asm/mach/map.h>
 
 #ifndef CONFIG_DISCONTIGMEM
 #define NR_NODES	1
@@ -387,6 +392,12 @@ static inline void reserve_node_zero(unsigned int bootmap_pfn, unsigned int boot
 	 */
 	reserve_bootmem_node(0, __pa(swapper_pg_dir),
 			     PTRS_PER_PGD * sizeof(void *));
+#else
+	/*
+	 * Stop this memory from being grabbed - its special DMA
+	 * memory that is required for the screen.
+	 */
+	reserve_bootmem_node(0, 0x02000000, 0x00080000);
 #endif
 	/*
 	 * And don't forget to reserve the allocator bitmap,
@@ -466,7 +477,7 @@ void __init bootmem_init(struct meminfo *mi)
  * paging_init() sets up the page tables, initialises the zone memory
  * maps, and sets up the zero page, bad page and bad page tables.
  */
-void __init paging_init(struct meminfo *mi)
+void __init paging_init(struct meminfo *mi, struct machine_desc *mdesc)
 {
 	void *zero_page, *bad_page, *bad_table;
 	int node;
@@ -474,16 +485,19 @@ void __init paging_init(struct meminfo *mi)
 	memcpy(&meminfo, mi, sizeof(meminfo));
 
 	/*
-	 * allocate what we need for the bad pages
+	 * allocate what we need for the bad pages.
+	 * note that we count on this going ok.
 	 */
 	zero_page = alloc_bootmem_low_pages(PAGE_SIZE);
 	bad_page  = alloc_bootmem_low_pages(PAGE_SIZE);
 	bad_table = alloc_bootmem_low_pages(TABLE_SIZE);
 
 	/*
-	 * initialise the page tables
+	 * initialise the page tables.
 	 */
-	pagetable_init(mi);
+	memtable_init(mi);
+	if (mdesc->map_io)
+		mdesc->map_io();
 	flush_tlb_all();
 
 	/*

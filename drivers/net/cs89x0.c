@@ -61,6 +61,11 @@
                     : MOD_INC/DEC race fix (see
                     : http://www.uwsg.indiana.edu/hypermail/linux/kernel/0003.3/1532.html)
 
+  Andrew Morton     : andrewm@uow.edu.au / Kernel 2.4.0-test7-pre2
+                    : Enhanced EEPROM support to cover more devices,
+                    :   abstracted IRQ mapping to support CONFIG_ARCH_CLPS7500 arch
+                    :   (Jason Gunthorpe <jgg@ualberta.ca>)
+
 */
 
 static char *version =
@@ -128,10 +133,26 @@ static char *version =
 
 #include "cs89x0.h"
 
-/* First, a few definitions that the brave might change. */
-/* A zero-terminated list of I/O addresses to be probed. */
+/* First, a few definitions that the brave might change.
+   A zero-terminated list of I/O addresses to be probed. Some special flags..
+      Addr & 1 = Read back the address port, look for signature and reset
+                 the page window before probing 
+      Addr & 3 = Reset the page window and probe 
+   The CLPS eval board has the Cirrus chip at 0x80090300, in ARM IO space,
+   but it is possible that a Cirrus board could be plugged into the ISA
+   slots. */
+/* The cs8900 has 4 IRQ pins, software selectable. cs8900_irq_map maps 
+   them to system IRQ numbers. This mapping is card specific and is set to
+   the configuration of the Cirrus Eval board for this chip. */
+#ifdef CONFIG_ARCH_CLPS7500
+static unsigned int netcard_portlist[] __initdata =
+   { 0x80090303, 0x300, 0x320, 0x340, 0x360, 0x200, 0x220, 0x240, 0x260, 0x280, 0x2a0, 0x2c0, 0x2e0, 0};
+static unsigned int cs8900_irq_map[] = {12,0,0,0};
+#else
 static unsigned int netcard_portlist[] __initdata =
    { 0x300, 0x320, 0x340, 0x360, 0x200, 0x220, 0x240, 0x260, 0x280, 0x2a0, 0x2c0, 0x2e0, 0};
+static unsigned int cs8900_irq_map[] = {10,11,12,5};
+#endif
 
 #if DEBUGGING
 static unsigned int net_debug = DEBUGGING;
@@ -343,7 +364,7 @@ cs89x0_probe1(struct net_device *dev, int ioaddr)
 		dev->priv = kmalloc(sizeof(struct net_local), GFP_KERNEL);
 		if (dev->priv == 0)
 		{
-			retval = ENOMEM;
+			retval = -ENOMEM;
 			goto out;
 		}
 		lp = (struct net_local *)dev->priv;
@@ -362,18 +383,20 @@ cs89x0_probe1(struct net_device *dev, int ioaddr)
 
 	/* if they give us an odd I/O address, then do ONE write to
            the address port, to get it back to address zero, where we
-           expect to find the EISA signature word. */
+           expect to find the EISA signature word. An IO with a base of 0x3
+	   will skip the test for the ADD_PORT. */
 	if (ioaddr & 1) {
-		ioaddr &= ~1;
-		if ((inw(ioaddr + ADD_PORT) & ADD_MASK) != ADD_SIG)
-			return -ENODEV;
+	        if ((ioaddr & 2) != 2)
+	        	if ((inw((ioaddr & ~3)+ ADD_PORT) & ADD_MASK) != ADD_SIG)
+		        	return -ENODEV;
+		ioaddr &= ~3;
 		outw(PP_ChipID, ioaddr + ADD_PORT);
 	}
 
-	if (inw(ioaddr + DATA_PORT) != CHIP_EISA_ID_SIG)
-	{
-		retval = ENODEV;
-		goto out1;
+        if (inw(ioaddr + DATA_PORT) != CHIP_EISA_ID_SIG)
+  	{
+  		retval = -ENODEV;
+  		goto out1;
 	}
 
 	/* Fill in the 'dev' fields. */
@@ -403,15 +426,77 @@ cs89x0_probe1(struct net_device *dev, int ioaddr)
 	       dev->base_addr);
 
 	reset_chip(dev);
+   
+        /* Here we read the current configuration of the chip. If there
+	   is no Extended EEPROM then the idea is to not disturb the chip
+	   configuration, it should have been correctly setup by automatic
+	   EEPROM read on reset. So, if the chip says it read the EEPROM
+	   the driver will always do *something* instead of complain that
+	   adapter_cnf is 0. */
+        if ((readreg(dev, PP_SelfST) & (EEPROM_OK | EEPROM_PRESENT)) == 
+	      (EEPROM_OK|EEPROM_PRESENT)) {
+	        /* Load the MAC. */
+		for (i=0; i < ETH_ALEN/2; i++) {
+	                unsigned int Addr;
+			Addr = readreg(dev, PP_IA+i*2);
+		        dev->dev_addr[i*2] = Addr & 0xFF;
+		        dev->dev_addr[i*2+1] = Addr >> 8;
+		}
+   
+	   	/* Load the Adapter Configuration. 
+		   Note:  Barring any more specific information from some 
+		   other source (ie EEPROM+Schematics), we would not know 
+		   how to operate a 10Base2 interface on the AUI port. 
+		   However, since we  do read the status of HCB1 and use 
+		   settings that always result in calls to control_dc_dc(dev,0) 
+		   a BNC interface should work if the enable pin 
+		   (dc/dc converter) is on HCB1. It will be called AUI 
+		   however. */
+	   
+		lp->adapter_cnf = 0;
+		i = readreg(dev, PP_LineCTL);
+		/* Preserve the setting of the HCB1 pin. */
+		if ((i & (HCB1 | HCB1_ENBL)) ==  (HCB1 | HCB1_ENBL))
+			lp->adapter_cnf |= A_CNF_DC_DC_POLARITY;
+		/* Save the sqelch bit */
+		if ((i & LOW_RX_SQUELCH) == LOW_RX_SQUELCH)
+			lp->adapter_cnf |= A_CNF_EXTND_10B_2 | A_CNF_LOW_RX_SQUELCH;
+		/* Check if the card is in 10Base-t only mode */
+		if ((i & (AUI_ONLY | AUTO_AUI_10BASET)) == 0)
+			lp->adapter_cnf |=  A_CNF_10B_T | A_CNF_MEDIA_10B_T;
+		/* Check if the card is in AUI only mode */
+		if ((i & (AUI_ONLY | AUTO_AUI_10BASET)) == AUI_ONLY)
+			lp->adapter_cnf |=  A_CNF_AUI | A_CNF_MEDIA_AUI;
+		/* Check if the card is in Auto mode. */
+		if ((i & (AUI_ONLY | AUTO_AUI_10BASET)) == AUTO_AUI_10BASET)
+			lp->adapter_cnf |=  A_CNF_AUI | A_CNF_10B_T | 
+			A_CNF_MEDIA_AUI | A_CNF_MEDIA_10B_T | A_CNF_MEDIA_AUTO;
+		
+		/* IRQ. Other chips already probe, see below. */
+		if (lp->chip_type == CS8900) 
+			lp->isa_config = readreg(dev, PP_CS8900_ISAINT) & INT_NO_MASK;
+	   
+		printk( "[Cirrus EEPROM] ");
+	}
 
-	/* First check to see if an EEPROM is attached*/
+        printk("\n");
+   
+	/* First check to see if an EEPROM is attached. */
 	if ((readreg(dev, PP_SelfST) & EEPROM_PRESENT) == 0)
-		printk(KERN_WARNING "\ncs89x0: No EEPROM, relying on command line....\n");
+		printk(KERN_WARNING "cs89x0: No EEPROM, relying on command line....\n");
 	else if (get_eeprom_data(dev, START_EEPROM_DATA,CHKSUM_LEN,eeprom_buff) < 0) {
 		printk(KERN_WARNING "\ncs89x0: EEPROM read failed, relying on command line.\n");
         } else if (get_eeprom_cksum(START_EEPROM_DATA,CHKSUM_LEN,eeprom_buff) < 0) {
-                printk(KERN_WARNING "\ncs89x0: EEPROM checksum bad, relying on command line\n");
+		/* Check if the chip was able to read its own configuration starting
+		   at 0 in the EEPROM*/
+		if ((readreg(dev, PP_SelfST) & (EEPROM_OK | EEPROM_PRESENT)) !=
+		    (EEPROM_OK|EEPROM_PRESENT)) 
+                	printk(KERN_WARNING "cs89x0: Extended EEPROM checksum bad and no Cirrus EEPROM, relying on command line\n");
+		   
         } else {
+		/* This reads an extended EEPROM that is not documented
+		   in the CS8900 datasheet. */
+		
                 /* get transmission control word  but keep the autonegotiation bits */
                 if (!lp->auto_neg_cnf) lp->auto_neg_cnf = eeprom_buff[AUTO_NEG_CNF_OFFSET/2];
                 /* Store adapter configuration */
@@ -464,17 +549,12 @@ cs89x0_probe1(struct net_device *dev, int ioaddr)
 	} else {
 		i = lp->isa_config & INT_NO_MASK;
 		if (lp->chip_type == CS8900) {
-			/* the table that follows is dependent upon how you wired up your cs8900
-			 * in your system.  The table is the same as the cs8900 engineering demo
-			 * board.  irq_map also depends on the contents of the table.  Also see
-			 * write_irq, which is the reverse mapping of the table below. */
-			switch(i) {
-			case 0: i = 10; break;
-			case 1: i = 11; break;
-			case 2: i = 12; break;
-			case 3: i =  5; break;
-			default: printk("\ncs89x0: bug: isa_config is %d\n", i);
-			}
+			/* Translate the IRQ using the IRQ mapping table. */
+			if (i > sizeof(cs8900_irq_map)/sizeof(cs8900_irq_map[0]))
+				printk("\ncs89x0: bug: isa_config is %d\n", i);
+			else
+				i = cs8900_irq_map[i];
+			
 			lp->irq_map = CS8900_IRQ_MAP; /* fixed IRQ map for CS8900 */
 		} else {
 			int irq_map_buff[IRQ_MAP_LEN/2];
@@ -490,7 +570,7 @@ cs89x0_probe1(struct net_device *dev, int ioaddr)
 			dev->irq = i;
 	}
 
-	printk(", IRQ %d", dev->irq);
+	printk(" IRQ %d", dev->irq);
 
 #if ALLOW_DMA
 	if (lp->use_dma)
@@ -741,7 +821,9 @@ control_dc_dc(struct net_device *dev, int on_not_off)
 	struct net_local *lp = (struct net_local *)dev->priv;
 	unsigned int selfcontrol;
 	int timenow = jiffies;
-	/* control the DC to DC convertor in the SelfControl register.  */
+	/* control the DC to DC convertor in the SelfControl register.  
+	   Note: This is hooked up to a general purpose pin, might not
+	   always be a DC to DC convertor. */
 
 	selfcontrol = HCB1_ENBL; /* Enable the HCB1 bit as an output */
 	if (((lp->adapter_cnf & A_CNF_DC_DC_POLARITY) != 0) ^ on_not_off)
@@ -753,7 +835,6 @@ control_dc_dc(struct net_device *dev, int on_not_off)
 	/* Wait for the DC/DC converter to power up - 500ms */
 	while (jiffies - timenow < HZ)
 		;
-
 }
 
 #define DETECTED_NONE  0
@@ -916,13 +997,13 @@ write_irq(struct net_device *dev, int chip_type, int irq)
 	int i;
 
 	if (chip_type == CS8900) {
-		switch(irq) {
-		case 10: i = 0; break;
-		case 11: i = 1; break;
-		case 12: i = 2; break;
-		case 5: i =  3; break;
-		default: i = 3; break;
-		}
+		/* Search the mapping table for the corrisponding IRQ pin. */
+		for (i = 0; i != sizeof(cs8900_irq_map)/sizeof(cs8900_irq_map[0]); i++)
+			if (cs8900_irq_map[i] == irq)
+				break;
+		/* Not found */
+		if (i == sizeof(cs8900_irq_map)/sizeof(cs8900_irq_map[0]))
+			i = 3;
 		writereg(dev, PP_CS8900_ISAINT, i);
 	} else {
 		writereg(dev, PP_CS8920_ISAINT, irq);

@@ -24,8 +24,32 @@
  *          To probe_pss_mss added test for initialize AD1848
  * 98-05-28: Vladimir Michl <vladimir.michl@upol.cz>
  *          Fixed computation of mixer volumes
+ * 04-05-1999: Anthony Barbachan <barbcode@xmen.cis.fordham.edu>
+ *          Added code that allows the user to enable his cdrom and/or 
+ *          joystick through the module parameters pss_cdrom_port and 
+ *          pss_enable_joystick.  pss_cdrom_port takes a port address as its
+ *          argument.  pss_enable_joystick takes either a 0 or a non-0 as its
+ *          argument.
+ * 04-06-1999: Anthony Barbachan <barbcode@xmen.cis.fordham.edu>
+ *          Separated some code into new functions for easier reuse.  
+ *          Cleaned up and streamlined new code.  Added code to allow a user 
+ *          to only use this driver for enabling non-sound components 
+ *          through the new module parameter pss_no_sound (flag).  Added 
+ *          code that would allow a user to decide whether the driver should 
+ *          reset the configured hardware settings for the PSS board through 
+ *          the module parameter pss_keep_settings (flag).   This flag will 
+ *          allow a user to free up resources in use by this card if needbe, 
+ *          furthermore it allows him to use this driver to just enable the 
+ *          emulations and then be unloaded as it is no longer needed.  Both 
+ *          new settings are only available to this driver if compiled as a 
+ *          module.  The default settings of all new parameters are set to 
+ *          load the driver as it did in previous versions.
+ * 04-07-1999: Anthony Barbachan <barbcode@xmen.cis.fordham.edu>
+ *          Added module parameter pss_firmware to allow the user to tell 
+ *          the driver where the fireware file is located.  The default 
+ *          setting is the previous hardcoded setting "/etc/sound/pss_synth".
  * 00-03-03: Christoph Hellwig <chhellwig@gmx.net>
- *          Adapted to module_init/module_exit
+ *	    Adapted to module_init/module_exit
  */
 
 
@@ -84,6 +108,7 @@
 #define NO_WSS_MIXER	-1
 
 #include "coproc.h"
+
 #include "pss_boot.h"
 
 /* If compiled into kernel, it enable or disable pss mixer */
@@ -116,6 +141,8 @@ static pss_confdata *devc = &pss_data;
 
 static int      pss_initialized = 0;
 static int      nonstandard_microcode = 0;
+static int	pss_cdrom_port = -1;	/* Parameter for the PSS cdrom port */
+static int	pss_enable_joystick = 0;/* Parameter for enabling the joystick */
 
 static void pss_write(pss_confdata *devc, int data)
 {
@@ -574,6 +601,49 @@ static struct mixer_operations pss_mixer_operations =
 	ioctl:	pss_mixer_ioctl
 };
 
+void disable_all_emulations(void)
+{
+	outw(0x0000, REG(CONF_PSS));	/* 0x0400 enables joystick */
+	outw(0x0000, REG(CONF_WSS));
+	outw(0x0000, REG(CONF_SB));
+	outw(0x0000, REG(CONF_MIDI));
+	outw(0x0000, REG(CONF_CDROM));
+}
+
+void configure_nonsound_components(void)
+{
+	/* Configure Joystick port */
+
+	if(pss_enable_joystick)
+	{
+		outw(0x0400, REG(CONF_PSS));	/* 0x0400 enables joystick */
+		printk(KERN_INFO "PSS: joystick enabled.\n");
+	}
+	else
+	{
+		printk(KERN_INFO "PSS: joystick port not enabled.\n");
+	}
+
+	/* Configure CDROM port */
+
+	if(pss_cdrom_port == -1)	/* If cdrom port enablation wasn't requested */
+	{
+		printk(KERN_INFO "PSS: CDROM port not enabled.\n");
+	}
+	else if(check_region(pss_cdrom_port, 2))
+	{
+		printk(KERN_ERR "PSS: CDROM I/O port conflict.\n");
+	}
+	else if(!set_io_base(devc, CONF_CDROM, pss_cdrom_port))
+	{
+		printk(KERN_ERR "PSS: CDROM I/O port could not be set.\n");
+	}
+	else					/* CDROM port successfully configured */
+	{
+		printk(KERN_INFO "PSS: CDROM I/O port set to 0x%x.\n", pss_cdrom_port);
+	}
+}
+
 void attach_pss(struct address_info *hw_config)
 {
 	unsigned short  id;
@@ -594,13 +664,10 @@ void attach_pss(struct address_info *hw_config)
 	id = inw(REG(PSS_ID)) & 0x00ff;
 
 	/*
-	   * Disable all emulations. Will be enabled later (if required).
+	 * Disable all emulations. Will be enabled later (if required).
 	 */
-	outw(0x0000, REG(CONF_PSS));	/* 0x0400 enables joystick */
-	outw(0x0000, REG(CONF_WSS));
-	outw(0x0000, REG(CONF_SB));
-	outw(0x0000, REG(CONF_MIDI));
-	outw(0x0000, REG(CONF_CDROM));
+	 
+	disable_all_emulations();
 
 #if YOU_REALLY_WANT_TO_ALLOCATE_THESE_RESOURCES
 	if (sound_alloc_dma(hw_config->dma, "PSS"))
@@ -620,6 +687,7 @@ void attach_pss(struct address_info *hw_config)
 	}
 #endif
 
+	configure_nonsound_components();
 	pss_initialized = 1;
 	sprintf(tmp, "ECHO-PSS  Rev. %d", id);
 	conf_printf(tmp, hw_config);
@@ -1028,6 +1096,9 @@ static int mss_irq __initdata	= -1;
 static int mss_dma __initdata	= -1;
 static int mpu_io __initdata	= -1;
 static int mpu_irq __initdata	= -1;
+static int pss_no_sound __initdata = 0;	/* Just configure non-sound components */
+static int pss_keep_settings  = 1;	/* Keep hardware settings at module exit */
+static char *pss_firmware = "/etc/sound/pss_synth";
 
 MODULE_PARM(pss_io, "i");
 MODULE_PARM_DESC(pss_io, "Set i/o base of PSS card (probably 0x220 or 0x240)");
@@ -1041,6 +1112,16 @@ MODULE_PARM(mpu_io, "i");
 MODULE_PARM_DESC(mpu_io, "Set MIDI i/o base (0x330 or other. Address must be on 4 location boundaries and must be from 0x100 to 0xFFC)");
 MODULE_PARM(mpu_irq, "i");
 MODULE_PARM_DESC(mpu_irq, "Set MIDI IRQ (3, 5, 7, 9, 10, 11, 12)");
+MODULE_PARM(pss_cdrom_port, "i");
+MODULE_PARM_DESC(pss_cdrom_port, "Set the PSS CDROM port i/o base (0x340 or other)");
+MODULE_PARM(pss_enable_joystick, "i");
+MODULE_PARM_DESC(pss_enable_joystick, "Enables the PSS joystick port (1 to enable, 0 to disable)");
+MODULE_PARM(pss_no_sound, "i");
+MODULE_PARM_DESC(pss_no_sound, "Configure sound compoents (0 - no, 1 - yes)");
+MODULE_PARM(pss_keep_settings, "i");
+MODULE_PARM_DESC(pss_keep_settings, "Keep hardware setting at driver unloading (0 - no, 1 - yes)");
+MODULE_PARM(pss_firmware, "s");
+MODULE_PARM_DESC(pss_firmware, "Location of the firmware file (default - /etc/sound/pss_synth)");
 MODULE_PARM(pss_mixer, "b");
 MODULE_PARM_DESC(pss_mixer, "Enable (1) or disable (0) PSS mixer (controlling of output volume, bass, treble, synth volume). The mixer is not available on all PSS cards.");
 MODULE_AUTHOR("Hannu Savolainen, Vladimir Michl");
@@ -1055,6 +1136,19 @@ static int pssmpu = 0, pssmss = 0;
 
 static int __init init_pss(void)
 {
+
+	if(pss_no_sound)		/* If configuring only nonsound components */
+	{
+		cfg.io_base = pss_io;
+		if(!probe_pss(&cfg))
+			return -ENODEV;
+		printk(KERN_INFO "ECHO-PSS  Rev. %d\n", inw(REG(PSS_ID)) & 0x00ff);
+		printk(KERN_INFO "PSS: loading in no sound mode.\n");
+		disable_all_emulations();
+		configure_nonsound_components();
+		return 0;
+	}
+
 	cfg.io_base = pss_io;
 
 	cfg2.io_base = mss_io;
@@ -1071,7 +1165,7 @@ static int __init init_pss(void)
 
 	if (!pss_synth) {
 		fw_load = 1;
-		pss_synthLen = mod_firmware_load("/etc/sound/pss_synth", (void *) &pss_synth);
+		pss_synthLen = mod_firmware_load(pss_firmware, (void *) &pss_synth);
 	}
 	if (!probe_pss(&cfg))
 		return -ENODEV;
@@ -1093,13 +1187,22 @@ static int __init init_pss(void)
 
 static void __exit cleanup_pss(void)
 {
-	if (fw_load && pss_synth)
-		vfree(pss_synth);
-	if (pssmss)
-		unload_pss_mss(&cfg2);
-	if (pssmpu)
-		unload_pss_mpu(&cfg_mpu);
-	unload_pss(&cfg);
+	if(!pss_no_sound)
+	{
+		if(fw_load && pss_synth)
+			vfree(pss_synth);
+		if(pssmss)
+			unload_pss_mss(&cfg2);
+		if(pssmpu)
+			unload_pss_mpu(&cfg_mpu);
+		unload_pss(&cfg);
+	}
+
+	if(!pss_keep_settings)	/* Keep hardware settings if asked */
+	{
+		disable_all_emulations();
+		printk(KERN_INFO "Resetting PSS sound card configurations.\n");
+	}
 }
 
 module_init(init_pss);

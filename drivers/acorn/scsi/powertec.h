@@ -1,7 +1,13 @@
 /*
- * PowerTec SCSI driver
+ *  linux/drivers/acorn/scsi/powertec.h
  *
- * Copyright (C) 1997-2000 Russell King
+ *  Copyright (C) 1997-2000 Russell King
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ *  PowerTec SCSI driver
  */
 #ifndef POWERTECSCSI_H
 #define POWERTECSCSI_H
@@ -74,7 +80,7 @@ typedef struct {
 	} control;
 
 	/* other info... */
-	dmasg_t		dmasg[NR_SG];	/* Scatter DMA list	*/
+	struct scatterlist sg[NR_SG];	/* Scatter DMA list	*/
 } PowerTecScsi_Info;
 
 #endif /* HOSTS_C */

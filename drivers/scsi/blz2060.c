@@ -236,17 +236,13 @@ static void dma_setup(struct NCR_ESP *esp, __u32 addr, int count, int write)
 	}
 }
 
-#ifdef MODULE
-
 #define HOSTS_C
 
 #include "blz2060.h"
 
-Scsi_Host_Template driver_template = SCSI_BLZ2060;
+static Scsi_Host_Template driver_template = SCSI_BLZ2060;
 
 #include "scsi_module.c"
-
-#endif
 
 int blz2060_esp_release(struct Scsi_Host *instance)
 {

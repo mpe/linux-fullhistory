@@ -251,17 +251,14 @@ static void dma_setup(struct NCR_ESP *esp, __u32 addr, int count, int write)
 	}
 }
 
-#ifdef MODULE
-
 #define HOSTS_C
 
 #include "cyberstormII.h"
 
-Scsi_Host_Template driver_template = SCSI_CYBERSTORMII;
+static Scsi_Host_Template driver_template = SCSI_CYBERSTORMII;
 
 #include "scsi_module.c"
 
-#endif
 
 int cyberII_esp_release(struct Scsi_Host *instance)
 {

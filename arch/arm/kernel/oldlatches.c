@@ -1,7 +1,14 @@
-/* Support for the latches on the old Archimedes which control the floppy,
- * hard disc and printer
+/*
+ *  linux/arch/arm/kernel/oldlatches.c
  *
- * (c) David Alan Gilbert 1995/1996,2000
+ *  Copyright (C) David Alan Gilbert 1995/1996,2000
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ *  Support for the latches on the old Archimedes which control the floppy,
+ *  hard disc and printer
  */
 #include <linux/module.h>
 #include <linux/kernel.h>

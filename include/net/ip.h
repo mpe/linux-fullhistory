@@ -115,7 +115,7 @@ extern int		ip_build_xmit(struct sock *sk,
  *      multicast packets.
  */
 
-extern __inline__ void ip_tr_mc_map(u32 addr, char *buf)
+static inline void ip_tr_mc_map(u32 addr, char *buf)
 {
 	buf[0]=0xC0;
 	buf[1]=0x00;
@@ -159,7 +159,7 @@ extern int sysctl_local_port_range[2];
 extern int sysctl_ip_default_ttl;
 
 #ifdef CONFIG_INET
-extern __inline__ int ip_send(struct sk_buff *skb)
+static inline int ip_send(struct sk_buff *skb)
 {
 	if (skb->len > skb->dst->pmtu)
 		return ip_fragment(skb, ip_finish_output);
@@ -169,7 +169,7 @@ extern __inline__ int ip_send(struct sk_buff *skb)
 
 /* The function in 2.2 was invalid, producing wrong result for
  * check=0xFEFF. It was noticed by Arthur Skawina _year_ ago. --ANK(000625) */
-extern __inline__
+static inline
 int ip_decrease_ttl(struct iphdr *iph)
 {
 	u32 check = iph->check;
@@ -178,7 +178,7 @@ int ip_decrease_ttl(struct iphdr *iph)
 	return --iph->ttl;
 }
 
-extern __inline__
+static inline
 int ip_dont_fragment(struct sock *sk, struct dst_entry *dst)
 {
 	return (sk->protinfo.af_inet.pmtudisc == IP_PMTUDISC_DO ||
@@ -188,7 +188,7 @@ int ip_dont_fragment(struct sock *sk, struct dst_entry *dst)
 
 extern void __ip_select_ident(struct iphdr *iph, struct dst_entry *dst);
 
-extern __inline__ void ip_select_ident(struct iphdr *iph, struct dst_entry *dst)
+static inline void ip_select_ident(struct iphdr *iph, struct dst_entry *dst)
 {
 	if (iph->frag_off&__constant_htons(IP_DF))
 		iph->id = 0;
@@ -200,7 +200,7 @@ extern __inline__ void ip_select_ident(struct iphdr *iph, struct dst_entry *dst)
  *	Map a multicast IP onto multicast MAC for type ethernet.
  */
 
-extern __inline__ void ip_eth_mc_map(u32 addr, char *buf)
+static inline void ip_eth_mc_map(u32 addr, char *buf)
 {
 	addr=ntohl(addr);
 	buf[0]=0x01;

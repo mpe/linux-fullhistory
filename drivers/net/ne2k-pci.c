@@ -286,7 +286,7 @@ static int __devinit ne2k_pci_init_one (struct pci_dev *pdev,
 	/* Set up the rest of the parameters. */
 	dev->irq = irq;
 	dev->base_addr = ioaddr;
-	pdev->driver_data = dev;
+	pci_set_drvdata(pdev, dev);
 
 	/* Allocate dev->priv and fill in 8390 specific dev fields. */
 	if (ethdev_init(dev)) {
@@ -535,16 +535,17 @@ ne2k_pci_block_output(struct net_device *dev, int count,
 
 static void __devexit ne2k_pci_remove_one (struct pci_dev *pdev)
 {
-	struct net_device *dev = pdev->driver_data;
+	struct net_device *dev = pci_get_drvdata(pdev);
 	
 	if (!dev) {
 		printk (KERN_ERR "bug! ne2k_pci_remove_one called w/o net_device\n");
 		return;
 	}
 	
-	unregister_netdev (dev);
-	release_region (dev->base_addr, NE_IO_EXTENT);
-	kfree (dev);
+	unregister_netdev(dev);
+	release_region(dev->base_addr, NE_IO_EXTENT);
+	kfree(dev);
+	pci_set_drvdata(pdev, NULL);
 }
 
 

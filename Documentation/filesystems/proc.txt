@@ -619,11 +619,6 @@ allocated file  handles  come close to the maximum, but the number of actually
 used ones  is  far  behind,  you've  encountered  a peak in your usage of file
 handles and you don't need to increase the maximum.
 
-However, there is still a per process limit of open files, which unfortunately
-can't be changed that easily. It is set to 1024 by default. To change this you
-have to  edit  the files limits.h and fs.h in the kernel source tree. Finally,
-change the definition of NR_OPEN and recompile the kernel.
-
 inode-state, inode-nr and inode-max
 -----------------------------------
 

@@ -2593,7 +2593,7 @@ static int __devinit es1370_probe(struct pci_dev *pcidev, const struct pci_devic
 	}
 	set_fs(fs);
 	/* store it in the driver field */
-	pcidev->driver_data = s;
+	pci_set_drvdata(pcidev, s);
 	pcidev->dma_mask = 0xffffffff;
 	/* put it into driver list */
 	list_add_tail(&s->devs, &devs);
@@ -2620,7 +2620,7 @@ static int __devinit es1370_probe(struct pci_dev *pcidev, const struct pci_devic
 
 static void __devinit es1370_remove(struct pci_dev *dev)
 {
-       struct es1370_state *s = (struct es1370_state *)dev->driver_data;
+       struct es1370_state *s = pci_get_drvdata(dev);
 
        if (!s)
                return;
@@ -2635,7 +2635,7 @@ static void __devinit es1370_remove(struct pci_dev *dev)
        unregister_sound_dsp(s->dev_dac);
        unregister_sound_midi(s->dev_midi);
        kfree(s);
-       dev->driver_data = NULL;
+       pci_set_drvdata(dev, NULL);
 }
 
 static struct pci_device_id id_table[] __devinitdata = {

@@ -1,7 +1,8 @@
-/*
+/******************************************************************************
+ *
  *    ixjuser.h
  *
- *    User-space include file for the Internet PhoneJACK and
+ *    Device Driver for the Internet PhoneJACK and
  *    Internet LineJACK Telephony Cards.
  *
  *    (c) Copyright 1999 Quicknet Technologies, Inc.
@@ -22,31 +23,48 @@
  * at our website:    http://www.quicknet.net
  *
  * Fixes:
- */
+ *
+ * IN NO EVENT SHALL QUICKNET TECHNOLOGIES, INC. BE LIABLE TO ANY PARTY FOR
+ * DIRECT, INDIRECT, SPECIAL, INCIDENTAL, OR CONSEQUENTIAL DAMAGES ARISING OUT
+ * OF THE USE OF THIS SOFTWARE AND ITS DOCUMENTATION, EVEN IF QUICKNET
+ * TECHNOLOGIES, INC.HAS BEEN ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
+ * QUICKNET TECHNOLOGIES, INC. SPECIFICALLY DISCLAIMS ANY WARRANTIES,
+ * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY
+ * AND FITNESS FOR A PARTICULAR PURPOSE.  THE SOFTWARE PROVIDED HEREUNDER IS
+ * ON AN "AS IS" BASIS, AND QUICKNET TECHNOLOGIES, INC. HAS NO OBLIGATION 
+ * TO PROVIDE MAINTENANCE, SUPPORT, UPDATES, ENHANCEMENTS, OR MODIFICATIONS.
+ *
+ *****************************************************************************/
 
-static char ixjuser_h_rcsid[] = "$Id: ixjuser.h,v 3.4 1999/12/16 22:18:36 root Exp root $";
+static char ixjuser_h_rcsid[] = "$Id: ixjuser.h,v 3.11 2000/03/30 22:06:48 eokerson Exp $";
 
-#include <linux/telephony.h>
+#include "telephony.h"
 
-/***************************************************************************
 
-  If you use the IXJCTL_TESTRAM command, the card must be power
-  cycled to reset the SRAM values before futher use.
+/******************************************************************************
+*
+* IOCTL's used for the Quicknet Cards
+*
+* If you use the IXJCTL_TESTRAM command, the card must be power cycled to
+* reset the SRAM values before futher use.
+*
+******************************************************************************/
 
-***************************************************************************/
 #define IXJCTL_DSP_RESET 		_IO  ('q', 0xC0)
 
-#define IXJCTL_RING         PHONE_RING
-#define IXJCTL_HOOKSTATE    PHONE_HOOKSTATE
+#define IXJCTL_RING                     PHONE_RING
+#define IXJCTL_HOOKSTATE                PHONE_HOOKSTATE
 #define IXJCTL_MAXRINGS			PHONE_MAXRINGS
-#define IXJCTL_RING_CADENCE	PHONE_RING_CADENCE
+#define IXJCTL_RING_CADENCE		PHONE_RING_CADENCE
 #define IXJCTL_RING_START		PHONE_RING_START
 #define IXJCTL_RING_STOP		PHONE_RING_STOP
 
 #define IXJCTL_CARDTYPE			_IOR ('q', 0xC1, int)
-#define IXJCTL_SERIAL			  _IOR ('q', 0xC2, int)
-#define IXJCTL_DSP_TYPE     _IOR ('q', 0xC3, int)
-#define IXJCTL_DSP_VERSION  _IOR ('q', 0xC4, int)
+#define IXJCTL_SERIAL			_IOR ('q', 0xC2, int)
+#define IXJCTL_DSP_TYPE                 _IOR ('q', 0xC3, int)
+#define IXJCTL_DSP_VERSION              _IOR ('q', 0xC4, int)
+#define IXJCTL_VERSION              	_IOR ('q', 0xDA, char *)
 #define IXJCTL_DSP_IDLE			_IO  ('q', 0xC5)
 #define IXJCTL_TESTRAM			_IO  ('q', 0xC6)
 
@@ -104,8 +122,22 @@ typedef struct {
 	char enable;
 } IXJ_FILTER;
 
+typedef struct {
+	char enable;
+	char en_filter;
+	unsigned int filter;
+	unsigned int on1;
+	unsigned int off1;
+	unsigned int on2;
+	unsigned int off2;
+	unsigned int on3;
+	unsigned int off3;
+} IXJ_FILTER_CADENCE;
+
 #define IXJCTL_SET_FILTER		_IOW ('q', 0xC7, IXJ_FILTER *)
 #define IXJCTL_GET_FILTER_HIST		_IOW ('q', 0xC8, int)
+#define IXJCTL_FILTER_CADENCE		_IOW ('q', 0xD6, IXJ_FILTER_CADENCE *)
+#define IXJCTL_PLAY_CID			_IO  ('q', 0xD7)
 /******************************************************************************
 *
 * This IOCTL allows you to reassign values in the tone index table.  The
@@ -222,7 +254,9 @@ typedef enum {
 	hz1800 = 0x1405,
 	hz1860 = 0xe0b,
 	hz2100 = 0xf5f6,
-	hz2450 = 0xd3b3
+	hz2130 = 0xf2f5,
+	hz2450 = 0xd3b3,
+	hz2750 = 0xb8e4
 } IXJ_FREQ;
 
 typedef enum {
@@ -344,6 +378,7 @@ typedef struct {
 #define AEC_LOW   1
 #define AEC_MED   2
 #define AEC_HIGH  3
+#define AEC_AUTO  4
 /******************************************************************************
 *
 * Call Progress Tones, DTMF, etc.
@@ -533,16 +568,16 @@ typedef struct {
 
 /******************************************************************************
 * 
-* The DAA Analog GAIN sets 2 parameters at one time, the receive gain (AGRR), 
+* The DAA Analog GAIN sets 2 parameters at one time, the recieve gain (AGRR), 
 * and the transmit gain (AGX).  OR together the components and pass them
 * as the parameter to IXJCTL_DAA_AGAIN.  The default setting is both at 0dB.
 * 
 ******************************************************************************/
 #define IXJCTL_DAA_AGAIN		_IOW ('q', 0xD2, int)
 
-#define AGRR00DB	0x00	// Analog gain in receive direction 0dB
-#define AGRR3_5DB	0x10	// Analog gain in receive direction 3.5dB
-#define AGRR06DB	0x30	// Analog gain in receive direction 6dB
+#define AGRR00DB	0x00	// Analog gain in recieve direction 0dB
+#define AGRR3_5DB	0x10	// Analog gain in recieve direction 3.5dB
+#define AGRR06DB	0x30	// Analog gain in recieve direction 6dB
 
 #define AGX00DB		0x00	// Analog gain in transmit direction 0dB
 #define AGX_6DB		0x04	// Analog gain in transmit direction -6dB
@@ -551,18 +586,9 @@ typedef struct {
 
 #define IXJCTL_PSTN_LINETEST		_IO  ('q', 0xD3)
 
-typedef struct {
-	char month[3];
-	char day[3];
-	char hour[3];
-	char min[3];
-	int numlen;
-	char number[11];
-	int namelen;
-	char name[80];
-} IXJ_CID;
-
-#define IXJCTL_CID			_IOR ('q', 0xD4, IXJ_CID *)
+#define IXJCTL_CID			_IOR ('q', 0xD4, PHONE_CID *)
+#define IXJCTL_VMWI			_IOR ('q', 0xD8, int)
+#define IXJCTL_CIDCW			_IOW ('q', 0xD9, PHONE_CID *)
 /******************************************************************************
 * 
 * The wink duration is tunable with this ioctl.  The default wink duration  

@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_ipv4.c,v 1.212 2000/08/18 17:10:04 davem Exp $
+ * Version:	$Id: tcp_ipv4.c,v 1.213 2000/09/18 05:59:48 davem Exp $
  *
  *		IPv4 specific functions
  *
@@ -300,6 +300,7 @@ __inline__ void __tcp_put_port(struct sock *sk)
 		sk->bind_next->bind_pprev = sk->bind_pprev;
 	*(sk->bind_pprev) = sk->bind_next;
 	sk->prev = NULL;
+	sk->num = 0;
 	if (tb->owners == NULL) {
 		if (tb->next)
 			tb->next->pprev = tb->pprev;

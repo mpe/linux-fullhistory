@@ -1,10 +1,14 @@
 /*
- * linux/asm-arm/proc-armv/assembler.h
+ *  linux/asm-arm/proc-armv/assembler.h
  *
- * Copyright (C) 1996-2000 Russell King
+ *  Copyright (C) 1996-2000 Russell King
  *
- * This file contains ARM processor specifics for
- * the ARM6 and better processors.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ *  This file contains ARM processor specifics for
+ *  the ARM6 and better processors.
  */
 #define MODE_USR	USR_MODE
 #define MODE_FIQ	FIQ_MODE

@@ -1,12 +1,14 @@
 /*
- * linux/include/asm-arm/arch-arc/oldlatches.h
+ *  linux/include/asm-arm/arch-arc/oldlatches.h
  *
- * Copyright (C) 1996 Russell King, Dave Gilbert
+ *  Copyright (C) 1996 Russell King, Dave Gilbert
  *
- * Dummy oldlatches.h
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
  *
- * Modifications:
- *  04-04-1998	PJB/RMK	Merged arc and a5k versions
+ *  Modifications:
+ *   04-04-1998	PJB/RMK	Merged arc and a5k versions
  */
 #ifndef _ASM_ARCH_OLDLATCH_H
 #define _ASM_ARCH_OLDLATCH_H

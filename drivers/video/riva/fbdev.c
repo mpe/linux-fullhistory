@@ -582,7 +582,7 @@ static int __devinit rivafb_init_one (struct pci_dev *pd,
 
 	riva_boards = riva_board_list_add(riva_boards, rinfo);
 
-	pd->driver_data = rinfo;
+	pci_set_drvdata (pd, rinfo);
 
 	printk ("PCI Riva NV%d framebuffer ver %s (%s, %dMB @ 0x%lX)\n",
 		rinfo->riva.Architecture,
@@ -610,7 +610,7 @@ err_out:
 
 static void __devexit rivafb_remove_one (struct pci_dev *pd)
 {
-	struct rivafb_info *board = pd->driver_data;
+	struct rivafb_info *board = pci_get_drvdata (pd);
 	
 	if (!board)
 		return;
@@ -630,6 +630,8 @@ static void __devexit rivafb_remove_one (struct pci_dev *pd)
 			    board->base1_region_size);
 
 	kfree (board);
+
+	pci_set_drvdata (pd, NULL);
 }
 
 

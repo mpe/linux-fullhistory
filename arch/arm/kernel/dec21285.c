@@ -1,7 +1,11 @@
 /*
- * arch/arm/kernel/dec21285.c: PCI functions for DC21285
+ *  linux/arch/arm/kernel/dec21285.c: PCI functions for DC21285
  *
- * Copyright (C) 1998-2000 Russell King, Phil Blundell
+ *  Copyright (C) 1998-2000 Russell King, Phil Blundell
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
  */
 #include <linux/sched.h>
 #include <linux/kernel.h>
@@ -12,12 +16,11 @@
 #include <linux/init.h>
 #include <linux/ioport.h>
 
-#include <asm/dec21285.h>
 #include <asm/io.h>
 #include <asm/irq.h>
 #include <asm/system.h>
-
 #include <asm/mach/pci.h>
+#include <asm/hardware/dec21285.h>
 
 #define MAX_SLOTS		21
 

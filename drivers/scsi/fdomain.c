@@ -2028,9 +2028,7 @@ int fdomain_16x0_biosparam( Scsi_Disk *disk, kdev_t dev, int *info_array )
    return 0;
 }
 
-#ifdef MODULE
 /* Eventually this will go into an include file, but this will be later */
-Scsi_Host_Template driver_template = FDOMAIN_16X0;
+static Scsi_Host_Template driver_template = FDOMAIN_16X0;
 
 #include "scsi_module.c"
-#endif

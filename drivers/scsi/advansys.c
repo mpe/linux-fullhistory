@@ -6785,10 +6785,8 @@ advansys_setup(char *str, int *ints)
  * --- Loadable Driver Support
  */
 
-#ifdef MODULE
-Scsi_Host_Template driver_template = ADVANSYS;
+static Scsi_Host_Template driver_template = ADVANSYS;
 # include "scsi_module.c"
-#endif /* MODULE */
 
 
 /*

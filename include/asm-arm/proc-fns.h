@@ -1,7 +1,12 @@
 /*
- * linux/include/asm-arm/proc-fns.h
+ *  linux/include/asm-arm/proc-fns.h
  *
- * Copyright (C) 1997-1999 Russell King
+ *  Copyright (C) 1997-1999 Russell King
+ *  Copyright (C) 2000 Deep Blue Solutions Ltd
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
  */
 #ifndef __ASM_PROCFNS_H
 #define __ASM_PROCFNS_H
@@ -39,6 +44,22 @@
 #   define CPU_NAME arm7
 #  endif
 # endif
+# ifdef CONFIG_CPU_ARM720
+#  ifdef CPU_NAME
+#   undef  MULTI_CPU
+#   define MULTI_CPU
+#  else
+#   define CPU_NAME arm720
+#  endif
+# endif
+# ifdef CONFIG_CPU_ARM920
+#  ifdef CPU_NAME
+#   undef  MULTI_CPU
+#   define MULTI_CPU
+#  else
+#   define CPU_NAME arm920
+#  endif
+# endif
 # ifdef CONFIG_CPU_SA110
 #  ifdef CPU_NAME
 #   undef  MULTI_CPU
@@ -53,14 +74,6 @@
 #   define MULTI_CPU
 #  else
 #   define CPU_NAME sa1100
-#  endif
-# endif
-# ifdef CONFIG_CPU_ARM720
-#  ifdef CPU_NAME
-#   undef  MULTI_CPU
-#   define MULTI_CPU
-#  else
-#   define CPU_NAME arm720
 #  endif
 # endif
 #endif

@@ -1,12 +1,16 @@
 /*
- * linux/drivers/char/mouse_rpc.c
+ *  linux/drivers/char/mouse_rpc.c
  *
- * Copyright (C) 1996-1998 Russell King
+ *  Copyright (C) 1996-1998 Russell King
  *
- * This handles the Acorn RiscPCs mouse.  We basically have a couple
- * of hardware registers that track the sensor count for the X-Y movement
- * and another register holding the button state.  On every VSYNC interrupt
- * we read the complete state and then work out if something has changed.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ *  This handles the Acorn RiscPCs mouse.  We basically have a couple
+ *  of hardware registers that track the sensor count for the X-Y movement
+ *  and another register holding the button state.  On every VSYNC interrupt
+ *  we read the complete state and then work out if something has changed.
  */
 #include <linux/module.h>
 #include <linux/sched.h>
@@ -17,7 +21,7 @@
 #include <asm/hardware.h>
 #include <asm/irq.h>
 #include <asm/io.h>
-#include <asm/iomd.h>
+#include <asm/hardware/iomd.h>
 
 #include "../../char/busmouse.h"
 

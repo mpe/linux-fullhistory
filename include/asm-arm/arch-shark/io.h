@@ -11,6 +11,8 @@
 #ifndef __ASM_ARM_ARCH_IO_H
 #define __ASM_ARM_ARCH_IO_H
 
+#define __arch_ioremap(off,size,nocache) __ioremap(off,size,0)
+
 #define IO_SPACE_LIMIT 0xffffffff
 
 /*

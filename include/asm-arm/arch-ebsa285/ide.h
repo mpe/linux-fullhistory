@@ -1,10 +1,14 @@
 /*
- * linux/include/asm-arm/arch-ebsa285/ide.h
+ *  linux/include/asm-arm/arch-ebsa285/ide.h
  *
- * Copyright (c) 1998 Russell King
+ *  Copyright (C) 1998 Russell King
  *
- * Modifications:
- *  29-07-1998	RMK	Major re-work of IDE architecture specific code
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ *  Modifications:
+ *   29-07-1998	RMK	Major re-work of IDE architecture specific code
  */
 #include <asm/irq.h>
 

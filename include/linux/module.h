@@ -279,14 +279,6 @@ extern struct module *module_list;
 #define EXPORT_SYMBOL(var)
 #define EXPORT_SYMBOL_NOVERS(var)
 
-#elif !defined(EXPORT_SYMTAB)
-
-/* If things weren't set up in the Makefiles to get EXPORT_SYMTAB defined,
-   then they weren't set up to run genksyms properly so MODVERSIONS breaks.  */
-#define __EXPORT_SYMBOL(sym,str)   error EXPORT_SYMTAB_not_defined
-#define EXPORT_SYMBOL(var)	   error EXPORT_SYMTAB_not_defined
-#define EXPORT_SYMBOL_NOVERS(var)  error EXPORT_SYMTAB_not_defined
-
 #else
 
 #define __EXPORT_SYMBOL(sym, str)			\

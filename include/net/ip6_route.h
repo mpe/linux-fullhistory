@@ -94,7 +94,7 @@ extern rwlock_t rt6_lock;
  *	For UDP/RAW sockets this is done on udp_connect.
  */
 
-extern __inline__ void ip6_dst_store(struct sock *sk, struct dst_entry *dst,
+static inline void ip6_dst_store(struct sock *sk, struct dst_entry *dst,
 				     struct in6_addr *daddr)
 {
 	struct ipv6_pinfo *np = &sk->net_pinfo.af_inet6;

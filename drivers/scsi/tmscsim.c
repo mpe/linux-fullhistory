@@ -2588,6 +2588,7 @@ int DC390_release(struct Scsi_Host *host)
     return( 1 );
 }
 
-Scsi_Host_Template driver_template = DC390_T;
+#endif
+
+static Scsi_Host_Template driver_template = DC390_T;
 #include "scsi_module.c"
-#endif /* def MODULE */

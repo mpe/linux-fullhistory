@@ -29,7 +29,16 @@
  *                                       infrastructure and Sparc support
  *   Pierrick Pinasseau (CERN): For lending me an Ultra 5 to test the
  *                              driver under Linux/Sparc64
- *   Matt Domsch <Matt_Domsch@dell.com>: Detect 1000baseT cards
+ *   Matt Domsch <Matt_Domsch@dell.com>: Detect Alteon 1000baseT cards
+ *   Chip Salzenberg <chip@valinux.com>: Fix race condition between tx
+ *                                       handler and close() cleanup.
+ *   Ken Aaker <kdaaker@rchland.vnet.ibm.com>: Correct check for whether
+ *                                       memory mapped IO is enabled to
+ *                                       make the driver work on RS/6000.
+ *   Takayoshi Kouchi <kouchi@hpc.bs1.fc.nec.co.jp>: Identifying problem
+ *                                       where the driver would disable
+ *                                       bus master mode if it had to disable
+ *                                       write and invalidate.
  */
 
 #include <linux/config.h>
@@ -83,8 +92,13 @@
 #define PCI_VENDOR_ID_NETGEAR		0x1385
 #define PCI_DEVICE_ID_NETGEAR_GA620	0x620a
 #endif
+#ifndef PCI_DEVICE_ID_NETGEAR_GA620T
+#define PCI_DEVICE_ID_NETGEAR_GA620T	0x630a
+#endif
+
 /*
- * They used the DEC vendor ID by mistake
+ * Farallon used the DEC vendor ID by mistake and they seem not
+ * to care - stinky!
  */
 #ifndef PCI_DEVICE_ID_FARALLON_PN9000SX
 #define PCI_DEVICE_ID_FARALLON_PN9000SX	0x1a
@@ -389,7 +403,7 @@ static int tx_ratio[ACE_MAX_MOD_PARMS] = {0, };
 static int dis_pci_mem_inval[ACE_MAX_MOD_PARMS] = {1, 1, 1, 1, 1, 1, 1, 1};
 
 static const char __initdata *version = 
-  "acenic.c: v0.44 05/11/2000  Jes Sorensen, linux-acenic@SunSITE.auc.dk\n"
+  "acenic.c: v0.47 09/18/2000  Jes Sorensen, linux-acenic@SunSITE.auc.dk\n"
   "                            http://home.cern.ch/~jes/gige/acenic.html\n";
 
 static struct net_device *root_dev = NULL;
@@ -429,7 +443,8 @@ int __init acenic_probe (struct net_device *dev)
 		    !((pdev->vendor == PCI_VENDOR_ID_3COM) &&
 		      (pdev->device == PCI_DEVICE_ID_3COM_3C985)) &&
 		    !((pdev->vendor == PCI_VENDOR_ID_NETGEAR) &&
-		      (pdev->device == PCI_DEVICE_ID_NETGEAR_GA620)) &&
+		      ((pdev->device == PCI_DEVICE_ID_NETGEAR_GA620) || 
+		       (pdev->device == PCI_DEVICE_ID_NETGEAR_GA620T))) &&
 		/*
 		 * Farallon used the DEC vendor ID on their cards by
 		 * mistake for a while
@@ -477,10 +492,17 @@ int __init acenic_probe (struct net_device *dev)
 			printk(version);
 		}
 
+		/*
+		 * Enable master mode before we start playing with the
+		 * pci_command word since pci_set_master() will modify
+		 * it.
+		 */
+		pci_set_master(pdev);
+
 		pci_read_config_word(pdev, PCI_COMMAND, &ap->pci_command);
 
 		/* OpenFirmware on Mac's does not set this - DOH.. */ 
-		if (!ap->pci_command & PCI_COMMAND_MEMORY) {
+		if (!(ap->pci_command & PCI_COMMAND_MEMORY)) {
 			printk(KERN_INFO "%s: Enabling PCI Memory Mapped "
 			       "access - was not enabled by BIOS/Firmware\n",
 			       dev->name);
@@ -497,8 +519,6 @@ int __init acenic_probe (struct net_device *dev)
 			pci_write_config_byte(pdev, PCI_LATENCY_TIMER,
 					      ap->pci_latency);
 		}
-
-		pci_set_master(pdev);
 
 		/*
 		 * Remap the regs into kernel space - this is abuse of
@@ -606,8 +626,8 @@ MODULE_PARM(tx_coal_tick, "1-" __MODULE_STRING(8) "i");
 MODULE_PARM(max_tx_desc, "1-" __MODULE_STRING(8) "i");
 MODULE_PARM(rx_coal_tick, "1-" __MODULE_STRING(8) "i");
 MODULE_PARM(max_rx_desc, "1-" __MODULE_STRING(8) "i");
-
 #endif
+
 
 void __exit ace_module_cleanup(void)
 {
@@ -712,6 +732,7 @@ int __init ace_module_init(void)
 	return status;
 }
 
+
 #ifdef MODULE
 #if (LINUX_VERSION_CODE < 0x02032a)
 int init_module(void)
@@ -729,6 +750,7 @@ module_init(ace_module_init);
 module_exit(ace_module_cleanup);
 #endif
 #endif
+
 
 static void ace_free_descriptors(struct net_device *dev)
 {
@@ -1994,18 +2016,34 @@ static void ace_interrupt(int irq, void *dev_id, struct pt_regs *ptregs)
 	if (txcsm != idx) {
 		do {
 			struct sk_buff *skb;
-			dma_addr_t mapping;
 
 			skb = ap->skb->tx_skbuff[idx].skb;
-			mapping = ap->skb->tx_skbuff[idx].mapping;
+			/*
+			 * Race condition between the code cleaning
+			 * the tx queue in the interrupt handler and the
+			 * interface close,
+			 *
+			 * This is a kludge that really should be fixed 
+			 * by preventing the driver from generating a tx
+			 * interrupt when the packet has already been
+			 * removed from the tx queue.
+			 *
+			 * Nailed by Don Dugger and Chip Salzenberg of
+			 * VA Linux.
+			 */
+			if (skb) {
+				dma_addr_t mapping;
 
-			ap->stats.tx_packets++;
-			ap->stats.tx_bytes += skb->len;
-			pci_unmap_single(ap->pdev, mapping, skb->len,
-					 PCI_DMA_TODEVICE);
-			dev_kfree_skb_irq(skb);
+				mapping = ap->skb->tx_skbuff[idx].mapping;
 
-			ap->skb->tx_skbuff[idx].skb = NULL;
+				ap->stats.tx_packets++;
+				ap->stats.tx_bytes += skb->len;
+				pci_unmap_single(ap->pdev, mapping, skb->len,
+						 PCI_DMA_TODEVICE);
+				dev_kfree_skb_irq(skb);
+
+				ap->skb->tx_skbuff[idx].skb = NULL;
+			}
 
 			/*
 			 * Question here is whether one should not skip
@@ -2966,6 +3004,6 @@ static int __init read_eeprom_byte(struct net_device *dev,
 
 /*
  * Local variables:
- * compile-command: "gcc -D__KERNEL__ -DMODULE -I../../include -Wall -Wstrict-prototypes -O2 -fomit-frame-pointer -pipe -fno-strength-reduce -DMODVERSIONS -include ../../include/linux/modversions.h   -c -o acenic.o acenic.c"
+ * compile-command: "gcc -D__SMP__ -D__KERNEL__ -DMODULE -I../../include -Wall -Wstrict-prototypes -O2 -fomit-frame-pointer -pipe -fno-strength-reduce -DMODVERSIONS -include ../../include/linux/modversions.h   -c -o acenic.o acenic.c"
  * End:
  */

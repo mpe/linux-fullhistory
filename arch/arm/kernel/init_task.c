@@ -1,6 +1,10 @@
+/*
+ *  linux/arch/arm/kernel/init_task.c
+ */
 #include <linux/mm.h>
 #include <linux/fs.h>
 #include <linux/sched.h>
+#include <linux/init.h>
 
 #include <asm/uaccess.h>
 #include <asm/pgtable.h>

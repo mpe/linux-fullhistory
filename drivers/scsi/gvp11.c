@@ -352,17 +352,13 @@ release:
 }
 
 
-#ifdef MODULE
-
 #define HOSTS_C
 
 #include "gvp11.h"
 
-Scsi_Host_Template driver_template = GVP11_SCSI;
+static Scsi_Host_Template driver_template = GVP11_SCSI;
 
 #include "scsi_module.c"
-
-#endif
 
 int gvp11_release(struct Scsi_Host *instance)
 {

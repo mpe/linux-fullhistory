@@ -1,9 +1,13 @@
 /*
- * linux/include/asm-arm/linux_logo.h
+ *  linux/include/asm-arm/linux_logo.h
  *
- * Copyright (C) 1998 Russell King
+ *  Copyright (C) 1998 Russell King
  *
- * Linux console driver logo definitions for ARM
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ *  Linux console driver logo definitions for ARM
  */
 
 #include <linux/init.h>

@@ -767,12 +767,10 @@ void *scsi_debug_get_handle(void)
 }
 #endif
 
-#ifdef MODULE
 /* Eventually this will go into an include file, but this will be later */
-Scsi_Host_Template driver_template = SCSI_DEBUG;
+static Scsi_Host_Template driver_template = SCSI_DEBUG;
 
 #include "scsi_module.c"
-#endif
 
 /*
  * Overrides for Emacs so that we almost follow Linus's tabbing style.

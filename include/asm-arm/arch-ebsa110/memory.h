@@ -1,13 +1,17 @@
 /*
- * linux/include/asm-arm/arch-ebsa110/memory.h
+ *  linux/include/asm-arm/arch-ebsa110/memory.h
  *
- * Copyright (c) 1996-1999 Russell King.
+ *  Copyright (C) 1996-1999 Russell King.
  *
- * Changelog:
- *  20-Oct-1996	RMK	Created
- *  31-Dec-1997	RMK	Fixed definitions to reduce warnings
- *  21-Mar-1999	RMK	Renamed to memory.h
- *		RMK	Moved TASK_SIZE and PAGE_OFFSET here
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ *  Changelog:
+ *   20-Oct-1996 RMK	Created
+ *   31-Dec-1997 RMK	Fixed definitions to reduce warnings
+ *   21-Mar-1999 RMK	Renamed to memory.h
+ *		 RMK	Moved TASK_SIZE and PAGE_OFFSET here
  */
 #ifndef __ASM_ARCH_MEMORY_H
 #define __ASM_ARCH_MEMORY_H

@@ -1,7 +1,11 @@
 /*
- * linux/arch/arm/boot/compressed/head.S
+ *  linux/arch/arm/boot/compressed/head.S
  *
- * Copyright (C) 1996-1999 Russell King
+ *  Copyright (C) 1996-1999 Russell King
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
  */
 #include <linux/config.h>
 #include <linux/linkage.h>

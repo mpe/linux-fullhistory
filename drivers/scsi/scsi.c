@@ -1372,11 +1372,8 @@ void scsi_finish_command(Scsi_Cmnd * SCpnt)
 	SCpnt->done(SCpnt);
 }
 
-#if defined(CONFIG_MODULES) || defined(CONFIG_BLK_DEV_IDESCSI) || defined(CONFIG_USB_STORAGE)
 static int scsi_register_host(Scsi_Host_Template *);
 static void scsi_unregister_host(Scsi_Host_Template *);
-#endif
-
 
 int scsi_loadable_module_flag;	/* Set after we scan builtin drivers */
 
@@ -1509,120 +1506,6 @@ void __init scsi_host_no_insert(char *str, int n)
 	    kfree((char *) shn);
     }
 }
-
-#ifndef MODULE			/* { */
-
-char scsi_host_no_table[20][10] __initdata = {};
-int scsi_host_no_set __initdata = 0;
-
-/*
- * scsi_dev_init() is our initialization routine, which in turn calls host
- * initialization, bus scanning, and sd/st initialization routines.
- * This is only used at boot time.
- */
-int __init scsi_dev_init(void)
-{
-	Scsi_Device *SDpnt;
-	struct Scsi_Host *shpnt;
-	struct Scsi_Device_Template *sdtpnt;
-	struct proc_dir_entry *generic;
-#ifdef FOO_ON_YOU
-	return;
-#endif
-
-        /* Initialize list of host_no if kernel parameter set */
-        if (scsi_host_no_set) {
-		int i;
-                for (i = 0;i < sizeof(scsi_host_no_table)/sizeof(scsi_host_no_table[0]);i++)
-			scsi_host_no_insert(scsi_host_no_table[i], i);
-        }
-
-	/* Yes we're here... */
-
-        scsi_devfs_handle = devfs_mk_dir (NULL, "scsi", NULL);
-	/*
-	 * This makes /proc/scsi and /proc/scsi/scsi visible.
-	 */
-#ifdef CONFIG_PROC_FS
-	proc_scsi = proc_mkdir("scsi", 0);
-	if (!proc_scsi) {
-		printk (KERN_ERR "cannot init /proc/scsi\n");
-		return -ENOMEM;
-	}
-	
-	generic = create_proc_info_entry ("scsi/scsi", 0, 0, scsi_proc_info);
-	if (!generic) {
-		printk (KERN_ERR "cannot init /proc/scsi/scsi\n");
-		remove_proc_entry("scsi", 0);
-		return -ENOMEM;
-	}
-	generic->write_proc = proc_scsi_gen_write;
-#endif
-
-	/* Init a few things so we can "malloc" memory. */
-	scsi_loadable_module_flag = 0;
-
-	/* initialize all hosts */
-	scsi_init();
-
-	/*
-	 * This is where the processing takes place for most everything
-	 * when commands are completed.  Until we do this, we will not be able
-	 * to queue any commands.
-	 */
-	init_bh(SCSI_BH, scsi_bottom_half_handler);
-
-	for (shpnt = scsi_hostlist; shpnt; shpnt = shpnt->next) {
-		scan_scsis(shpnt, 0, 0, 0, 0);	/* scan for scsi devices */
-		if (shpnt->select_queue_depths != NULL)
-			(shpnt->select_queue_depths) (shpnt, shpnt->host_queue);
-	}
-
-	printk("scsi : detected ");
-	for (sdtpnt = scsi_devicelist; sdtpnt; sdtpnt = sdtpnt->next)
-		if (sdtpnt->dev_noticed && sdtpnt->name)
-			printk("%d SCSI %s%s ", sdtpnt->dev_noticed, sdtpnt->name,
-			       (sdtpnt->dev_noticed != 1) ? "s" : "");
-	printk("total.\n");
-
-	for (sdtpnt = scsi_devicelist; sdtpnt; sdtpnt = sdtpnt->next)
-		if (sdtpnt->init && sdtpnt->dev_noticed)
-			(*sdtpnt->init) ();
-
-	for (shpnt = scsi_hostlist; shpnt; shpnt = shpnt->next) {
-		for (SDpnt = shpnt->host_queue; SDpnt; SDpnt = SDpnt->next) {
-			/* SDpnt->scsi_request_fn = NULL; */
-			for (sdtpnt = scsi_devicelist; sdtpnt; sdtpnt = sdtpnt->next)
-				if (sdtpnt->attach)
-					(*sdtpnt->attach) (SDpnt);
-			if (SDpnt->attached) {
-				scsi_build_commandblocks(SDpnt);
-				if (0 == SDpnt->has_cmdblocks) {
-					printk("scsi_dev_init: DANGER, no command blocks\n");
-					/* What to do now ?? */
-				}
-			}
-		}
-	}
-
-	/*
-	 * This should build the DMA pool.
-	 */
-	scsi_resize_dma_pool();
-
-	/*
-	 * OK, now we finish the initialization by doing spin-up, read
-	 * capacity, etc, etc
-	 */
-	for (sdtpnt = scsi_devicelist; sdtpnt; sdtpnt = sdtpnt->next)
-		if (sdtpnt->finish && sdtpnt->nr_dev)
-			(*sdtpnt->finish) ();
-
-	scsi_loadable_module_flag = 1;
-
-	return 0;
-}
-#endif	/* MODULE */		/* } */
 
 #ifdef CONFIG_PROC_FS
 static int scsi_proc_info(char *buffer, char **start, off_t offset, int length)
@@ -1917,13 +1800,6 @@ out:
 	return err;
 }
 #endif
-
-/*
- * Some host adapters that are plugging into other subsystems register
- * their hosts through the modules entrypoints, and don't use the big
- * list in hosts.c.
- */
-#if defined(CONFIG_MODULES) || defined(CONFIG_BLK_DEV_IDESCSI) || defined(CONFIG_USB_STORAGE) || defined(CONFIG_USB_MICROTEK)	/* a big #ifdef block... */
 
 /*
  * This entry point should be called by a loadable module if it is trying
@@ -2477,8 +2353,6 @@ void scsi_unregister_module(int module_type, void *ptr)
 	return;
 }
 
-#endif				/* CONFIG_MODULES */
-
 #ifdef CONFIG_PROC_FS
 /*
  * Function:    scsi_dump_status
@@ -2590,12 +2464,6 @@ static int scsi_host_no_init (char *str)
     static int next_no = 0;
     char *temp;
 
-#ifndef MODULE
-    int len;
-    scsi_host_no_set = 1;
-    memset(scsi_host_no_table, 0, sizeof(scsi_host_no_table));
-#endif /* MODULE */
-
     while (str) {
 	temp = str;
 	while (*temp && (*temp != ':') && (*temp != ','))
@@ -2604,16 +2472,7 @@ static int scsi_host_no_init (char *str)
 	    temp = NULL;
 	else
 	    *temp++ = 0;
-#ifdef MODULE
 	scsi_host_no_insert(str, next_no);
-#else
-	if (next_no < sizeof(scsi_host_no_table)/sizeof(scsi_host_no_table[0])) {
-	    if ((len = strlen(str)) >= sizeof(scsi_host_no_table[0]))
-		len = sizeof(scsi_host_no_table[0])-1;
-	    strncpy(scsi_host_no_table[next_no], str, len);
-	    scsi_host_no_table[next_no][len] = 0;
-	}
-#endif /* MODULE */
 	str = temp;
 	next_no++;
     }
@@ -2624,12 +2483,11 @@ static int scsi_host_no_init (char *str)
 __setup("scsihosts=", scsi_host_no_init);
 #endif
 
-#ifdef MODULE
 static char *scsihosts;
 
 MODULE_PARM(scsihosts, "s");
 
-int init_module(void)
+static int __init init_scsi(void)
 {
 	struct proc_dir_entry *generic;
 
@@ -2669,7 +2527,7 @@ int init_module(void)
 	return 0;
 }
 
-void cleanup_module(void)
+static void __exit exit_scsi(void)
 {
 	Scsi_Host_Name *shn, *shn2 = NULL;
 
@@ -2699,7 +2557,8 @@ void cleanup_module(void)
 
 }
 
-#endif				/* MODULE */
+module_init(init_scsi);
+module_exit(exit_scsi);
 
 /*
  * Function:    scsi_get_host_dev()

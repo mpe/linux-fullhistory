@@ -1,7 +1,11 @@
 /*
- * linux/include/asm-arm/arch-arc/uncompress.h
+ *  linux/include/asm-arm/arch-arc/uncompress.h
  *
- * Copyright (C) 1996 Russell King
+ *  Copyright (C) 1996 Russell King
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
  */
 #define VIDMEM ((char *)0x02000000)
  

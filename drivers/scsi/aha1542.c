@@ -1764,9 +1764,7 @@ int aha1542_biosparam(Scsi_Disk * disk, kdev_t dev, int *ip)
 }
 
 
-#ifdef MODULE
 /* Eventually this will go into an include file, but this will be later */
-Scsi_Host_Template driver_template = AHA1542;
+static Scsi_Host_Template driver_template = AHA1542;
 
 #include "scsi_module.c"
-#endif

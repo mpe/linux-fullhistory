@@ -65,6 +65,7 @@ obj-$(CONFIG_USB_RIO500)	+= rio500.o
 obj-$(CONFIG_USB_DSBR)		+= dsbr100.o
 obj-$(CONFIG_USB_MICROTEK)	+= microtek.o
 obj-$(CONFIG_USB_BLUETOOTH)	+= bluetooth.o
+obj-$(CONFIG_USB_NET1080)	+= net1080.o
 
 # Object files in subdirectories
 

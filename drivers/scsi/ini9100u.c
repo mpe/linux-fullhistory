@@ -143,10 +143,8 @@
 unsigned int i91u_debug = DEBUG_DEFAULT;
 #endif
 
-#ifdef MODULE
-Scsi_Host_Template driver_template = INI9100U;
+static Scsi_Host_Template driver_template = INI9100U;
 #include "scsi_module.c"
-#endif
 
 char *i91uCopyright = "Copyright (C) 1996-98";
 char *i91uInitioName = "by Initio Corporation";

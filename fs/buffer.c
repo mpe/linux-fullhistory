@@ -1497,6 +1497,10 @@ static int __block_prepare_write(struct inode *inode, struct page *page,
 				goto out;
 			if (buffer_new(bh)) {
 				unmap_underlying_metadata(bh);
+				if (Page_Uptodate(page)) {
+					set_bit(BH_Uptodate, &bh->b_state);
+					continue;
+				}
 				if (block_end > to)
 					memset(kaddr+to, 0, block_end-to);
 				if (block_start < from)
@@ -1505,6 +1509,10 @@ static int __block_prepare_write(struct inode *inode, struct page *page,
 					flush_dcache_page(page);
 				continue;
 			}
+		}
+		if (Page_Uptodate(page)) {
+			set_bit(BH_Uptodate, &bh->b_state);
+			continue; 
 		}
 		if (!buffer_uptodate(bh) &&
 		     (block_start < from || block_end > to)) {
@@ -1600,8 +1608,10 @@ int block_read_full_page(struct page *page, get_block_t *get_block)
 			continue;
 
 		if (!buffer_mapped(bh)) {
-			if (iblock < lblock)
-				get_block(inode, iblock, bh, 0);
+			if (iblock < lblock) {
+				if (get_block(inode, iblock, bh, 0))
+					continue;
+			}
 			if (!buffer_mapped(bh)) {
 				if (!kaddr)
 					kaddr = kmap(page);
@@ -1796,6 +1806,9 @@ int block_truncate_page(struct address_space *mapping, loff_t from, get_block_t 
 	}
 
 	/* Ok, it's mapped. Make sure it's up-to-date */
+	if (Page_Uptodate(page))
+		set_bit(BH_Uptodate, &bh->b_state);
+
 	if (!buffer_uptodate(bh)) {
 		err = -EIO;
 		bh->b_end_io = end_buffer_io_sync;

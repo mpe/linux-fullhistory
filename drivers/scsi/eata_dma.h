@@ -10,8 +10,6 @@
 #ifndef _EATA_DMA_H
 #define _EATA_DMA_H
 
-#ifndef HOSTS_C
-
 #include "eata_generic.h"
 
 
@@ -66,8 +64,6 @@
 #else
 #define DBG(x, y)
 #endif
-
-#endif /* !HOSTS_C */
 
 int eata_detect(Scsi_Host_Template *);
 const char *eata_info(struct Scsi_Host *);

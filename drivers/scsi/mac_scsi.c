@@ -662,9 +662,6 @@ void scsi_mac_polled (void)
 
 
 
-#ifdef MODULE
-
-Scsi_Host_Template driver_template = MAC_NCR5380;
+static Scsi_Host_Template driver_template = MAC_NCR5380;
 
 #include "scsi_module.c"
-#endif

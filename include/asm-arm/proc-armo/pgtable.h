@@ -1,9 +1,13 @@
 /*
- * linux/include/asm-arm/proc-armo/pgtable.h
+ *  linux/include/asm-arm/proc-armo/pgtable.h
  *
- * Copyright (C) 1995-1999 Russell King
+ *  Copyright (C) 1995-1999 Russell King
  *
- * 18-Oct-1997	RMK	Now two-level (32x32)
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ *  18-Oct-1997	RMK	Now two-level (32x32)
  */
 #ifndef __ASM_PROC_PGTABLE_H
 #define __ASM_PROC_PGTABLE_H

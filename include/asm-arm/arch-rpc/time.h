@@ -1,12 +1,16 @@
 /*
- * linux/include/asm-arm/arch-rpc/time.h
+ *  linux/include/asm-arm/arch-rpc/time.h
  *
- * Copyright (c) 1996-2000 Russell King.
+ *  Copyright (C) 1996-2000 Russell King.
  *
- * Changelog:
- *  24-Sep-1996	RMK	Created
- *  10-Oct-1996	RMK	Brought up to date with arch-sa110eval
- *  04-Dec-1997	RMK	Updated for new arch/arm/time.c
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ *  Changelog:
+ *   24-Sep-1996 RMK	Created
+ *   10-Oct-1996 RMK	Brought up to date with arch-sa110eval
+ *   04-Dec-1997 RMK	Updated for new arch/arm/time.c
  */
 extern void ioctime_init(void);
 

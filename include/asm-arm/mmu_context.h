@@ -1,10 +1,14 @@
 /*
- * linux/include/asm-arm/mmu_context.h
+ *  linux/include/asm-arm/mmu_context.h
  *
- * Copyright (c) 1996 Russell King.
+ *  Copyright (C) 1996 Russell King.
  *
- * Changelog:
- *  27-06-1996	RMK	Created
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ *  Changelog:
+ *   27-06-1996	RMK	Created
  */
 #ifndef __ASM_ARM_MMU_CONTEXT_H
 #define __ASM_ARM_MMU_CONTEXT_H

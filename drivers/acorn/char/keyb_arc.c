@@ -1,13 +1,18 @@
 /*
- * linux/arch/arm/drivers/char1/keyb_arc.c
+ *  linux/drivers/acorn/char/keyb_arc.c
  *
- * Acorn keyboard driver for ARM Linux.
+ *  Copyright (C) 2000 Russell King
  *
- * The Acorn keyboard appears to have a ***very*** buggy reset protocol -
- * every reset behaves differently.  We try to get round this by attempting
- * a few things...
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ *  Acorn keyboard driver for ARM Linux.
+ *
+ *  The Acorn keyboard appears to have a ***very*** buggy reset protocol -
+ *  every reset behaves differently.  We try to get round this by attempting
+ *  a few things...
  */
-
 #include <linux/config.h>
 #include <linux/sched.h>
 #include <linux/interrupt.h>
@@ -28,8 +33,8 @@
 #include <asm/bitops.h>
 #include <asm/keyboard.h>
 #include <asm/irq.h>
-#include <asm/ioc.h>
 #include <asm/hardware.h>
+#include <asm/hardware/ioc.h>
 
 #include "../../char/busmouse.h"
 
@@ -424,14 +429,11 @@ void __init a5kkbd_init_hw (void)
 {
 	unsigned long flags;
 
-	save_flags_cli (flags);
 	if (request_irq (IRQ_KEYBOARDTX, a5kkbd_tx, 0, "keyboard", NULL) != 0)
 		panic("Could not allocate keyboard transmit IRQ!");
-	disable_irq (IRQ_KEYBOARDTX);
+	(void)inb(IOC_KARTRX);
 	if (request_irq (IRQ_KEYBOARDRX, a5kkbd_rx, 0, "keyboard", NULL) != 0)
 		panic("Could not allocate keyboard receive IRQ!");
-	(void)inb(IOC_KARTRX);
-	restore_flags (flags);
 
 	a5kkbd_sendbyte (HRST);	/* send HRST (expect HRST) */
 

@@ -17,6 +17,7 @@ This driver is known to work with the following cards:
 	* SA 4200
 	* SA 4250ES
 	* SA 431
+	* RAID LC2 Controller
 
 It should also work with some really old Disk array adapters, but I am
 unable to test against these cards:

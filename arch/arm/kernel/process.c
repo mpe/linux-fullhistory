@@ -3,8 +3,11 @@
  *
  *  Copyright (C) 1996-2000 Russell King - Converted to ARM.
  *  Origional Copyright (C) 1995  Linus Torvalds
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
  */
-
 #include <stdarg.h>
 
 #include <linux/config.h>
@@ -173,10 +176,11 @@ void show_regs(struct pt_regs * regs)
 		flags & CC_Z_BIT ? 'Z' : 'z',
 		flags & CC_C_BIT ? 'C' : 'c',
 		flags & CC_V_BIT ? 'V' : 'v');
-	printk("  IRQs %s  FIQs %s  Mode %s  Segment %s\n",
+	printk("  IRQs %s  FIQs %s  Mode %s%s  Segment %s\n",
 		interrupts_enabled(regs) ? "on" : "off",
 		fast_interrupts_enabled(regs) ? "on" : "off",
 		processor_modes[processor_mode(regs)],
+		thumb_mode(regs) ? " (T)" : "",
 		get_fs() == get_ds() ? "kernel" : "user");
 #if defined(CONFIG_CPU_32)
 	{

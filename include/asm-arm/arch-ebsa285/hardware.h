@@ -1,9 +1,13 @@
 /*
- * linux/include/asm-arm/arch-ebsa285/hardware.h
+ *  linux/include/asm-arm/arch-ebsa285/hardware.h
  *
- * Copyright (C) 1998-1999 Russell King.
+ *  Copyright (C) 1998-1999 Russell King.
  *
- * This file contains the hardware definitions of the EBSA-285.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ *  This file contains the hardware definitions of the EBSA-285.
  */
 #ifndef __ASM_ARCH_HARDWARE_H
 #define __ASM_ARCH_HARDWARE_H

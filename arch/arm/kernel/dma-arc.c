@@ -1,9 +1,13 @@
 /*
- * arch/arm/kernel/dma-arc.c
+ *  linux/arch/arm/kernel/dma-arc.c
  *
- * Copyright (C) 1998-1999 Dave Gilbert / Russell King
+ *  Copyright (C) 1998-1999 Dave Gilbert / Russell King
  *
- * DMA functions specific to Archimedes and A5000 architecture
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ *  DMA functions specific to Archimedes and A5000 architecture
  */
 #include <linux/config.h>
 #include <linux/sched.h>
@@ -11,11 +15,12 @@
 
 #include <asm/dma.h>
 #include <asm/fiq.h>
+#include <asm/irq.h>
 #include <asm/io.h>
 #include <asm/hardware.h>
 #include <asm/mach-types.h>
 
-#include "dma.h"
+#include <asm/mach/dma.h>
 
 #define DPRINTK(x...) printk(KERN_DEBUG x)
 
@@ -30,11 +35,11 @@ static void arc_floppy_data_enable_dma(dmach_t channel, dma_t *dma)
 		unsigned long flags;
 		DPRINTK("enable_dma fdc1772 data read\n");
 		save_flags(flags);
-		cliIF();
+		clf();
 			
 		memcpy ((void *)0x1c, (void *)&fdc1772_dma_read,
 			&fdc1772_dma_read_end - &fdc1772_dma_read);
-		fdc1772_setupdma(dma->buf.length, __bus_to_virt(dma->buf.address)); /* Sets data pointer up */
+		fdc1772_setupdma(dma->buf.length, dma->buf.address); /* Sets data pointer up */
 		enable_irq (64);
 		restore_flags(flags);
 	   }
@@ -46,10 +51,10 @@ static void arc_floppy_data_enable_dma(dmach_t channel, dma_t *dma)
 		unsigned long flags;
 		DPRINTK("enable_dma fdc1772 data write\n");
 		save_flags(flags);
-		cliIF();
+		clf();
 		memcpy ((void *)0x1c, (void *)&fdc1772_dma_write,
 			&fdc1772_dma_write_end - &fdc1772_dma_write);
-		fdc1772_setupdma(dma->buf.length, __bus_to_virt(dma->buf.address)); /* Sets data pointer up */
+		fdc1772_setupdma(dma->buf.length, dma->buf.address); /* Sets data pointer up */
 		enable_irq (64);
 
 		restore_flags(flags);
@@ -77,7 +82,7 @@ static void arc_floppy_cmdend_enable_dma(dmach_t channel, dma_t *dma)
 	DPRINTK("arc_floppy_cmdend_enable_dma\n");
 	/*printk("enable_dma fdc1772 command end FIQ\n");*/
 	save_flags(flags);
-	cliIF();
+	clf();
 	
 	/* B fdc1772_comendhandler */
 	*((unsigned int *)0x1c)=0xea000000 |
@@ -150,7 +155,7 @@ static void a5k_floppy_enable_dma(dmach_t channel, dma_t *dma)
 	}
 	memcpy((void *)0x1c, fiqhandler_start, fiqhandler_length);
 	regs.ARM_r9 = dma->buf.length;
-	regs.ARM_r10 = __bus_to_virt(dma->buf.address);
+	regs.ARM_r10 = dma->buf.address;
 	regs.ARM_fp = (int)PCIO_FLOPPYDMABASE;
 	set_fiq_regs(&regs);
 	enable_irq(dma->dma_irq);
@@ -173,7 +178,7 @@ static struct dma_ops a5k_floppy_dma_ops = {
 /*
  * This is virtual DMA - we don't need anything here
  */
-static int sound_enable_disable_dma(dmach_t channel, dma_t *dma)
+static void sound_enable_disable_dma(dmach_t channel, dma_t *dma)
 {
 }
 
@@ -195,8 +200,8 @@ void __init arch_dma_init(dma_t *dma)
 #endif
 #ifdef CONFIG_ARCH_A5K
 	if (machine_is_a5k()) {
-		dma[DMA_VIRTUAL_FLOPPY].dma_irq = 64;
-		dma[DMA_VIRTUAL_FLOPPY].d_ops   = &a5k_floppy_dma_ops;
+		dma[DMA_VIRTUAL_FLOPPY0].dma_irq = 64;
+		dma[DMA_VIRTUAL_FLOPPY0].d_ops   = &a5k_floppy_dma_ops;
 	}
 #endif
 	dma[DMA_VIRTUAL_SOUND].d_ops = &sound_dma_ops;

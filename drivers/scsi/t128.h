@@ -117,8 +117,6 @@ int t128_proc_info (char *buffer, char **start, off_t offset,
  * macros when this is being used solely for the host stub.
  */
 
-#if defined(HOSTS_C) || defined(MODULE)
-
 #define TRANTOR_T128 {					\
 	name:           "Trantor T128/T128F/T228",	\
 	detect:         t128_detect,			\
@@ -131,8 +129,6 @@ int t128_proc_info (char *buffer, char **start, off_t offset,
 	sg_tablesize:   SG_ALL,				\
 	cmd_per_lun:    CMD_PER_LUN,			\
 	use_clustering: DISABLE_CLUSTERING}
-
-#endif
 
 #ifndef HOSTS_C
 

@@ -601,12 +601,10 @@ int aha1740_biosparam(Disk * disk, kdev_t dev, int* ip)
     return 0;
 }
 
-#ifdef MODULE
 /* Eventually this will go into an include file, but this will be later */
-Scsi_Host_Template driver_template = AHA1740;
+static Scsi_Host_Template driver_template = AHA1740;
 
 #include "scsi_module.c"
-#endif
 
 /* Okay, you made it all the way through.  As of this writing, 3/31/93, I'm
 brad@saturn.gaylord.com or brad@bradpc.gaylord.com.  I'll try to help as time

@@ -1,10 +1,16 @@
 /*
- * linux/arch/arm/mm/proc-arm2,3.S: MMU functions for ARM2,3
+ *  linux/arch/arm/mm/proc-arm2,3.S
  *
- * (C) 1997-1999 Russell King
+ *  Copyright (C) 1997-1999 Russell King
  *
- * These are the low level assembler for performing cache
- * and memory functions on ARM2, ARM250 and ARM3 processors.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ *  MMU functions for ARM2,3
+ *
+ *  These are the low level assembler for performing cache
+ *  and memory functions on ARM2, ARM250 and ARM3 processors.
  */
 #include <linux/linkage.h>
 #include <asm/assembler.h>

@@ -570,17 +570,14 @@ void dma_advance_sg(Scsi_Cmnd *sp)
   sp->SCp.ptr = sp->SCp.buffer->address;
 }
 
-#ifdef MODULE
 
 #define HOSTS_C
 
 #include "oktagon_esp.h"
 
-Scsi_Host_Template driver_template = SCSI_OKTAGON_ESP;
+static Scsi_Host_Template driver_template = SCSI_OKTAGON_ESP;
 
 #include "scsi_module.c"
-
-#endif
 
 int oktagon_esp_release(struct Scsi_Host *instance)
 {

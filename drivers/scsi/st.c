@@ -155,7 +155,7 @@ static int st_attach(Scsi_Device *);
 static int st_detect(Scsi_Device *);
 static void st_detach(Scsi_Device *);
 
-struct Scsi_Device_Template st_template =
+static struct Scsi_Device_Template st_template =
 {
 	name:"tape", 
 	tag:"st", 
@@ -3700,17 +3700,15 @@ static void st_detach(Scsi_Device * SDp)
 }
 
 
-#ifdef MODULE
-
-int __init init_module(void)
+static int __init init_st(void)
 {
 	validate_options();
 
-	st_template.module = &__this_module;
+	st_template.module = THIS_MODULE;
         return scsi_register_module(MODULE_SCSI_DEV, &st_template);
 }
 
-void cleanup_module(void)
+static void __exit exit_st(void)
 {
 	int i;
 
@@ -3736,4 +3734,6 @@ void cleanup_module(void)
 	st_template.dev_max = 0;
 	printk(KERN_INFO "st: Unloaded.\n");
 }
-#endif				/* MODULE */
+
+module_init(init_st);
+module_exit(exit_st);

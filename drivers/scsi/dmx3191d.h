@@ -32,7 +32,6 @@ int dmx3191d_release_resources(struct Scsi_Host *);
 int dmx3191d_reset(Scsi_Cmnd *, unsigned int);
 
 
-#if defined(HOSTS_C) || defined(MODULE)
 #define DMX3191D {				\
 	proc_info:	dmx3191d_proc_info,		\
 	name:		"Domex DMX3191D",		\
@@ -49,10 +48,8 @@ int dmx3191d_reset(Scsi_Cmnd *, unsigned int);
 	cmd_per_lun:	2,				\
         use_clustering:	DISABLE_CLUSTERING		\
 }
-#endif	/* HOSTS_C || MODULE */
 
 
-#ifndef HOSTS_C
 #define NCR5380_read(reg)			inb(port + reg)
 #define NCR5380_write(reg, value)		outb(value, port + reg)
 
@@ -67,7 +64,6 @@ int dmx3191d_reset(Scsi_Cmnd *, unsigned int);
 #define NCR5380_queue_command			dmx3191d_queue_command
 #define NCR5380_reset				dmx3191d_reset
 
-#endif	/* HOSTS_C */
 #endif	/* ASM */
 
 #endif	/* __DMX3191D_H */

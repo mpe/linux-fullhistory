@@ -7,6 +7,9 @@
  * Based on skeleton code and old LoCOMX driver by Tivadar Szemethy <tiv@itc.hu> 
  * and the hostess_sv11 driver
  *
+ * Contributors:
+ * Arnaldo Carvalho de Melo <acme@conectiva.com.br> (0.14)
+ *
  * Copyright (C) 1999 ITConsult-Pro Co. <info@itc.hu>
  *
  * This program is free software; you can redistribute it and/or
@@ -27,9 +30,11 @@
  * Version 0.13 (99/07/08):
  *		- Fix the transmitter status check
  *		- Handle the net device statistics better
+ * Version 0.14 (00/08/15):
+ * 		- resource release on failure at LOCOMX_init
  */
 
-#define VERSION "0.13"
+#define VERSION "0.14"
 
 #include <linux/module.h>
 #include <linux/version.h>
@@ -385,7 +390,7 @@ static int LOCOMX_init(struct net_device *dev)
 	/* Register /proc files */
 	if ((new_file = create_proc_entry(FILENAME_IO, S_IFREG | 0644, 
 	    ch->procdir)) == NULL) {
-		return -EIO;
+		goto cleanup_HW_privdata;
 	}
 	new_file->data = (void *)new_file;
 	new_file->read_proc = &locomx_read_proc;
@@ -394,7 +399,7 @@ static int LOCOMX_init(struct net_device *dev)
 
 	if ((new_file = create_proc_entry(FILENAME_IRQ, S_IFREG | 0644, 
 	    ch->procdir)) == NULL)  {
-		return -EIO;
+		goto cleanup_filename_io;
 	}
 	new_file->data = (void *)new_file;
 	new_file->read_proc = &locomx_read_proc;
@@ -432,6 +437,11 @@ static int LOCOMX_init(struct net_device *dev)
 	/* O.K. Count one more user on this module */
 	MOD_INC_USE_COUNT;
 	return 0;
+cleanup_filename_io:
+	remove_proc_entry(FILENAME_IO, ch->procdir);
+cleanup_HW_privdata:
+	kfree(ch->HW_privdata);
+	return -EIO;
 }
 
 

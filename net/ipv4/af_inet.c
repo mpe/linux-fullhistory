@@ -5,7 +5,7 @@
  *
  *		PF_INET protocol family socket handler.
  *
- * Version:	$Id: af_inet.c,v 1.113 2000/09/11 23:35:29 davem Exp $
+ * Version:	$Id: af_inet.c,v 1.114 2000/09/18 05:59:48 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -258,7 +258,6 @@ static int inet_autobind(struct sock *sk)
 			return -EAGAIN;
 		}
 		sk->sport = htons(sk->num);
-		sk->prot->hash(sk);
 	}
 	release_sock(sk);
 	return 0;
@@ -459,7 +458,7 @@ static int inet_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 
 	if (addr_len < sizeof(struct sockaddr_in))
 		return -EINVAL;
-		
+
 	chk_addr_ret = inet_addr_type(addr->sin_addr.s_addr);
 
 	snum = ntohs(addr->sin_port);
@@ -494,10 +493,11 @@ static int inet_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 
 	if (sk->rcv_saddr)
 		sk->userlocks |= SOCK_BINDADDR_LOCK;
+	if (snum)
+		sk->userlocks |= SOCK_BINDPORT_LOCK;
 	sk->sport = htons(sk->num);
 	sk->daddr = 0;
 	sk->dport = 0;
-	sk->prot->hash(sk);
 	sk_dst_reset(sk);
 	err = 0;
 out:

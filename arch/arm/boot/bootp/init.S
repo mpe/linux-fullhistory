@@ -1,6 +1,14 @@
 /*
- * Header file for splitting kernel + initrd.  Note that we pass
- * r0 through to r3 straight through.
+ *  linux/arch/arm/boot/bootp/init.S
+ *
+ *  Copyright (C) 2000 Russell King
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ *  Header file for splitting kernel + initrd.  Note that we pass
+ *  r0 through to r3 straight through.
  */
 		.section .start,#alloc,#execinstr
 		.type	_entry, #function

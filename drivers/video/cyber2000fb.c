@@ -1,7 +1,11 @@
 /*
- * Linux/drivers/video/cyber2000fb.c
+ *  linux/drivers/video/cyber2000fb.c
  *
- * Copyright (C) 1998-2000 Russell King
+ *  Copyright (C) 1998-2000 Russell King
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
  *
  * Integraphics CyberPro 2000, 2010 and 5000 frame buffer device
  *
@@ -268,9 +272,9 @@ cyber2000_setcolreg(u_int regno, u_int red, u_int green, u_int blue,
 	if (regno >= NR_PALETTE)
 		return 1;
 
-	red   >>= 10;
-	green >>= 10;
-	blue  >>= 10;
+	red   >>= 8;
+	green >>= 8;
+	blue  >>= 8;
 
 	cfb->palette[regno].red   = red;
 	cfb->palette[regno].green = green;
@@ -706,6 +710,7 @@ cyber2000fb_decode_var(struct fb_var_screeninfo *var, struct cfb_info *cfb,
 	int err;
 
 	hw->width = var->xres_virtual;
+	hw->palette_ctrl = 0x06;
 
 	switch (var->bits_per_pixel) {
 #ifdef FBCON_HAS_CFB8
@@ -713,7 +718,6 @@ cyber2000fb_decode_var(struct fb_var_screeninfo *var, struct cfb_info *cfb,
 		hw->pixformat		= PIXFORMAT_8BPP;
 		hw->visualid		= VISUALID_256;
 		hw->pitch		= hw->width >> 3;
-		hw->palette_ctrl	= 0x04;
 		break;
 #endif
 #ifdef FBCON_HAS_CFB16
@@ -722,14 +726,14 @@ cyber2000fb_decode_var(struct fb_var_screeninfo *var, struct cfb_info *cfb,
 		hw->pixformat		= PIXFORMAT_16BPP;
 		hw->visualid		= VISUALID_64K;
 		hw->pitch		= hw->width >> 2;
-		hw->palette_ctrl	= 0x14;
+		hw->palette_ctrl	|= 0x10;
 		break;
 #endif
 	case 15:/* DIRECTCOLOUR, 32k */
 		hw->pixformat		= PIXFORMAT_16BPP;
 		hw->visualid		= VISUALID_32K;
 		hw->pitch		= hw->width >> 2;
-		hw->palette_ctrl	= 0x14;
+		hw->palette_ctrl	|= 0x10;
 		break;
 
 #endif
@@ -739,7 +743,7 @@ cyber2000fb_decode_var(struct fb_var_screeninfo *var, struct cfb_info *cfb,
 		hw->visualid		= VISUALID_16M;
 		hw->width		*= 3;
 		hw->pitch		= hw->width >> 3;
-		hw->palette_ctrl	= 0x14;
+		hw->palette_ctrl	|= 0x10;
 		break;
 #endif
 	default:

@@ -1,7 +1,11 @@
 /*
- * linux/arch/arm/drivers/scsi/powertec.c
+ *  linux/drivers/acorn/scsi/powertec.c
  *
- * Copyright (C) 1997-2000 Russell King
+ *  Copyright (C) 1997-2000 Russell King
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
  *
  * This driver is based on experimentation.  Hence, it may have made
  * assumptions about the particular card that I have available, and
@@ -15,7 +19,6 @@
  *  27-06-1998	RMK	Changed asm/delay.h to linux/delay.h
  *  02-04-2000	RMK	Updated for new error handling code.
  */
-
 #include <linux/module.h>
 #include <linux/blk.h>
 #include <linux/kernel.h>
@@ -26,6 +29,7 @@
 #include <linux/unistd.h>
 #include <linux/stat.h>
 #include <linux/delay.h>
+#include <linux/pci.h>
 
 #include <asm/dma.h>
 #include <asm/ecard.h>
@@ -147,15 +151,6 @@ powertecscsi_intr(int irq, void *dev_id, struct pt_regs *regs)
 	fas216_intr(host);
 }
 
-static void
-powertecscsi_invalidate(char *addr, long len, fasdmadir_t direction)
-{
-	if (direction == DMA_OUT)
-		dma_cache_wback((unsigned long)addr, (unsigned long)len);
-	else
-		dma_cache_inv((unsigned long)addr, (unsigned long)len);
-}
-
 /* Prototype: fasdmatype_t powertecscsi_dma_setup(host, SCpnt, direction, min_type)
  * Purpose  : initialises DMA/PIO
  * Params   : host      - host
@@ -173,29 +168,27 @@ powertecscsi_dma_setup(struct Scsi_Host *host, Scsi_Pointer *SCp,
 
 	if (dmach != NO_DMA &&
 	    (min_type == fasdma_real_all || SCp->this_residual >= 512)) {
-		int buf;
+		int bufs = SCp->buffers_residual;
+		int pci_dir, dma_dir;
 
-		for (buf = 1; buf <= SCp->buffers_residual &&
-			      buf < NR_SG; buf++) {
-			info->dmasg[buf].address = __virt_to_bus(
-				(unsigned long)SCp->buffer[buf].address);
-			info->dmasg[buf].length = SCp->buffer[buf].length;
+		if (bufs)
+			memcpy(info->sg + 1, SCp->buffer + 1,
+				sizeof(struct scatterlist) * bufs);
+		info->sg[0].address = SCp->ptr;
+		info->sg[0].length = SCp->this_residual;
 
-			powertecscsi_invalidate(SCp->buffer[buf].address,
-						SCp->buffer[buf].length,
-						direction);
-		}
+		if (direction == DMA_OUT)
+			pci_dir = PCI_DMA_TODEVICE,
+			dma_dir = DMA_MODE_WRITE;
+		else
+			pci_dir = PCI_DMA_FROMDEVICE,
+			dma_dir = DMA_MODE_READ;
 
-		info->dmasg[0].address = __virt_to_phys((unsigned long)SCp->ptr);
-		info->dmasg[0].length = SCp->this_residual;
-		powertecscsi_invalidate(SCp->ptr,
-					SCp->this_residual, direction);
+		pci_map_sg(NULL, info->sg, bufs + 1, pci_dir);
 
 		disable_dma(dmach);
-		set_dma_sg(dmach, info->dmasg, buf);
-		set_dma_mode(dmach,
-			     direction == DMA_OUT ? DMA_MODE_WRITE :
-						    DMA_MODE_READ);
+		set_dma_sg(dmach, info->sg, bufs + 1);
+		set_dma_mode(dmach, dma_dir);
 		enable_dma(dmach);
 		return fasdma_real_all;
 	}

@@ -28,7 +28,7 @@
 
 /* Board Control Register */
 
-#define BCR_BASE  0xdc000000
+#define BCR_BASE  0xf1000000
 #define BCR (*(volatile unsigned int *)(BCR_BASE))
 
 #define BCR_DB1110	(0x00A07410)
@@ -105,8 +105,8 @@ extern unsigned long BCR_value;
 #define NEPONSET_USAR_IRQ	MISC_IRQ1
 
 #define NEPONSET_CPLD_BASE      (0x10000000)
-#define Nep_p2v( x )            ((x) - NEPONSET_CPLD_BASE + 0xd4000000)
-#define Nep_v2p( x )            ((x) - 0xd4000000 + NEPONSET_CPLD_BASE)
+#define Nep_p2v( x )            ((x) - NEPONSET_CPLD_BASE + 0xf0000000)
+#define Nep_v2p( x )            ((x) - 0xf0000000 + NEPONSET_CPLD_BASE)
 
 #define _IRR                    0x10000024      /* Interrupt Reason Register */
 #define _AUD_CTL                0x100000c0      /* Audio controls (RW)       */

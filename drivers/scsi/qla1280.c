@@ -6163,11 +6163,9 @@ qla1280_debounce_register(volatile uint16_t *addr)
 /*
  * Declarations for load module
  */
-#ifdef MODULE
-Scsi_Host_Template driver_template = QLA1280_LINUX_TEMPLATE;
+static Scsi_Host_Template driver_template = QLA1280_LINUX_TEMPLATE;
 
 #include "scsi_module.c"
-#endif
 
 /************************************************************************
  * qla1280_check_for_dead_scsi_bus                                      *

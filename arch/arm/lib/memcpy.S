@@ -1,9 +1,13 @@
 /*
- * linux/arch/arm/lib/memcpy.S
+ *  linux/arch/arm/lib/memcpy.S
  *
- * Copyright (C) 1995-1999 Russell King
+ *  Copyright (C) 1995-1999 Russell King
  *
- * ASM optimised string functions
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ *  ASM optimised string functions
  */
 #include <linux/linkage.h>
 #include <asm/assembler.h>

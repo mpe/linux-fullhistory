@@ -1,5 +1,9 @@
 /*
  * linux/drivers/net/am79c961.h
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
  */
 
 #ifndef _LINUX_am79c961a_H
@@ -118,6 +122,7 @@ struct dev_priv {
     unsigned char	rxtail;
     unsigned long	rxhdr;
     unsigned long	txhdr;
+    spinlock_t		chip_lock;
 };
 
 extern int	am79c961_probe (struct net_device *dev);

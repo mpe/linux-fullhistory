@@ -188,17 +188,13 @@ int __init a3000_detect(Scsi_Host_Template *tpnt)
     return 1;
 }
 
-#ifdef MODULE
-
 #define HOSTS_C
 
 #include "a3000.h"
 
-Scsi_Host_Template driver_template = A3000_SCSI;
+static Scsi_Host_Template driver_template = A3000_SCSI;
 
 #include "scsi_module.c"
-
-#endif
 
 int a3000_release(struct Scsi_Host *instance)
 {

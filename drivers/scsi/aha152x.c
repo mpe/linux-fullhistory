@@ -3813,9 +3813,7 @@ int aha152x_proc_info(char *buffer, char **start,
 	return thislength < length ? thislength : length;
 }
 
-#if defined(MODULE)
 /* Eventually this will go into an include file, but this will be later */
-Scsi_Host_Template driver_template = AHA152X;
+static Scsi_Host_Template driver_template = AHA152X;
 
 #include "scsi_module.c"
-#endif

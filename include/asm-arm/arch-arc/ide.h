@@ -1,15 +1,19 @@
 /*
- * linux/include/asm-arm/arch-arc/ide.h
+ *  linux/include/asm-arm/arch-arc/ide.h
  *
- * Copyright (c) 1997,1998 Russell King
+ *  Copyright (C) 1997,1998 Russell King
  *
- * IDE definitions for the Acorn Archimedes/A5000
- * architecture
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
  *
- * Modifications:
- *  04-04-1998	PJB	Merged `arc' and `a5k' versions
- *  01-07-1998	RMK	Added new ide_ioregspec_t
- *  29-07-1998	RMK	Major re-work of IDE architecture specific code
+ *  IDE definitions for the Acorn Archimedes/A5000
+ *  architecture
+ *
+ *  Modifications:
+ *   04-04-1998	PJB	Merged `arc' and `a5k' versions
+ *   01-07-1998	RMK	Added new ide_ioregspec_t
+ *   29-07-1998	RMK	Major re-work of IDE architecture specific code
  */
 #include <asm/irq.h>
 #include <asm/mach-types.h>

@@ -1,26 +1,36 @@
 /*
- * linux/arch/arm/kernel/head-armv.S
+ *  linux/arch/arm/kernel/head-armv.S
  *
- * Copyright (C) 1994-1999 Russell King
+ *  Copyright (C) 1994-1999 Russell King
  *
- * 32-bit kernel startup code for all architectures
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ *  32-bit kernel startup code for all architectures
  */
 #include <linux/config.h>
 #include <linux/linkage.h>
 
 #include <asm/assembler.h>
-#include <asm/hardware.h>
-#include <asm/dec21285.h>
-
-#include "arch.h"
+#include <asm/mach-types.h>
+#include <asm/mach/arch.h>
 
 #if (TEXTADDR & 0xffff) != 0x8000
 #error TEXTADDR must start at 0xXXXX8000
 #endif
 
-#define SWAPPER_PGDIR_OFFSET	0x4000
 #define K(a,b,c)	((a) << 24 | (b) << 12 | (c))
 
+/*
+ * swapper_pg_dir is the virtual address of the "init_task" page tables.
+ * SWAPPER_PGDIR_OFFSET is the offset from the start of memory of the
+ * page tables.
+ *
+ * Note that at the moment, we assume TEXTADDR is the virtual equivalent
+ * of start of memory + 0x8000
+ */
+#define SWAPPER_PGDIR_OFFSET	0x4000
 		.globl	SYMBOL_NAME(swapper_pg_dir)
 		.equ	SYMBOL_NAME(swapper_pg_dir),	TEXTADDR - 0x8000 + SWAPPER_PGDIR_OFFSET
 
@@ -50,7 +60,7 @@ ENTRY(_stext)
  *     ideal, but in this case, it should ONLY set r0 and r1 to the
  *     appropriate value.
  */
-#ifdef CONFIG_ARCH_NETWINDER
+#if defined(CONFIG_ARCH_NETWINDER) || defined(CONFIG_ARCH_INTEGRATOR)
 /*
  * Compatability cruft for old NetWinder NeTTroms.  This
  * code is currently scheduled for destruction in 2.5.xx
@@ -85,18 +95,23 @@ ENTRY(_stext)
 		mov	r5, #0
 		movne	pc, r0
 
-		mov	r1, #5			@ (will go in 2.5)
-		mov	r12, #2 << 24		@ scheduled for removal in 2.5.xx
+		mov	r1, #MACH_TYPE_NETWINDER	@ (will go in 2.5)
+		mov	r12, #2 << 24			@ scheduled for removal in 2.5.xx
 		orr	r12, r12, #5 << 12
+__entry:
 #endif
-#ifdef CONFIG_ARCH_L7200
+#if defined(CONFIG_ARCH_L7200)
 /*
  * FIXME - No bootloader, so manually set 'r1' with our architecture number.
  */
-		mov	r1, #19
+		mov	r1, #MACH_TYPE_L7200
+#elif defined(CONFIG_ARCH_INTEGRATOR)
+		mov	r1, #MACH_TYPE_INTEGRATOR
 #endif
 
-__entry:	bl	__lookup_processor_type
+		mov	r0, #F_BIT | I_BIT | MODE_SVC	@ make sure svc mode
+		msr	cpsr_c, r0			@ and all irqs diabled
+		bl	__lookup_processor_type
 		teq	r10, #0				@ invalid processor?
 		moveq	r0, #'p'			@ yes, error 'p'
 		beq	__error
@@ -140,7 +155,7 @@ __mmap_switched:
 							@ sp = stack pointer
 		str	r12, [r2]
 
-		mov	fp, #0				@ Clear BSS
+		mov	fp, #0				@ Clear BSS (and zero fp)
 1:		cmp	r4, r5
 		strcc	fp, [r4],#4
 		bcc	1b
@@ -182,17 +197,19 @@ __create_page_tables:
 		bne	1b
 		/*
 		 * Create identity mapping for first MB of kernel.
-		 * map in four sections (4MB) for kernel.
-		 * these are marked cacheable and bufferable.
+		 * This is marked cacheable and bufferable.
 		 *
 		 * The identity mapping will be removed by  paging_init()
 		 */
-		mov	r3, #0x0c			@ cacheable, bufferable
-		orr	r3, r3, r8			@ | pagetable flags
-		add	r3, r3, r5			@ + start of RAM
+		add	r3, r8, r5			@ mmuflags + start of RAM
 		add	r0, r4, r5, lsr #18
 		str	r3, [r0]			@ identity mapping
-		add	r0, r4, #(TEXTADDR - 0x8000) >> 18 @ start of kernel
+		/*
+		 * Now setup the pagetables for our kernel direct
+		 * mapped region.  We round TEXTADDR down to the
+		 * nearest megabyte boundary.
+		 */
+		add	r0, r4, #(TEXTADDR & 0xfff00000) >> 18 @ start of kernel
 		str	r3, [r0], #4			@ PAGE_OFFSET + 0MB
 		add	r3, r3, #1 << 20
 		str	r3, [r0], #4			@ PAGE_OFFSET + 1MB
@@ -200,6 +217,9 @@ __create_page_tables:
 		str	r3, [r0], #4			@ PAGE_OFFSET + 2MB
 		add	r3, r3, #1 << 20
 		str	r3, [r0], #4			@ PAGE_OFFSET + 3MB
+
+		bic	r8, r8, #0x0c			@ turn off cacheable
+							@ and bufferable bits
 #ifdef CONFIG_DEBUG_LL
 		/*
 		 * Map in IO space for serial debugging.

@@ -419,10 +419,8 @@ static void dma_led_off(struct NCR_ESP *esp)
 	outb(inb(PS2_SYS_CTR) & 0x3f, PS2_SYS_CTR);
 }
 
-#ifdef MODULE
-Scsi_Host_Template driver_template = MCA_53C9X;
+static Scsi_Host_Template driver_template = MCA_53C9X;
 #include "scsi_module.c"
-#endif
 
 /*
  * OK, here's the goods I promised.  The NCR 86C01 is an MCA interface chip 
